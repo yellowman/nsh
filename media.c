@@ -1,4 +1,4 @@
-/* $nsh: media.c,v 1.7 2003/04/03 23:41:40 chris Exp $ */
+/* $nsh: media.c,v 1.8 2003/04/20 02:02:38 chris Exp $ */
 /*
  * From: $OpenBSD: /usr/src/sbin/ifconfig/ifconfig.c,v 1.64 2002/05/22
  * 08:21:02 deraadt Exp $
@@ -442,10 +442,10 @@ conf_media_status(FILE *output, int s, char *ifname)
 		return(0);
 	}
 
-	if (ifmr.ifm_active == ifmr.ifm_current) {
+	if (ifmr.ifm_current >= ifmr.ifm_active) {
 		/* a media type was set manually */
 		rval = 1;
-		conf_print_media_word(output, ifmr.ifm_active);
+		conf_print_media_word(output, ifmr.ifm_current);
 	}
 
 	free(media_list);
