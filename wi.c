@@ -213,7 +213,7 @@ wi_printaplist(char *iface)
 	len = prism2 ? WI_PRISM2_RES_SIZE : WI_WAVELAN_RES_SIZE;
 
 	if (i >= (wreq.wi_len * 2) - len)
-		printf("%% No access point detected\n");
+		printf("%% No access point detected or link busy\n");
 	else
 		printf("%% AP Information:\n");
 
