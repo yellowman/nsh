@@ -1,7 +1,7 @@
 NSH // Network Shell User's Manual // Chris Cappuccio <chris@nmedia.net>
-$nsh: MANUAL,v 1.14 2004/03/22 06:28:19 chris Exp $
+$nsh: MANUAL,v 1.15 2004/03/22 09:35:09 chris Exp $
 
-Copyright (c) 2003 Chris Cappuccio
+Copyright (c) 2003, 2004 Chris Cappuccio
 
 
 Contents
@@ -859,6 +859,8 @@ nsh(interface-fxp0)/?
   media      Media type
   mediaopt   Media options
   tunnel     Source/destination for GIF tunnel
+  syncif     Control message interface
+  maxupd     Collapsable max updates for a single state
   vlan       802.1Q vlan tag and parent
   debug      Driver dependent debugging
   shutdown   Shutdown interface
@@ -989,6 +991,27 @@ tunnel assignments are only valid on gif and gre interfaces at this time.
 See Appendix E for more details.
 
 nsh(interface-gre0)/tunnel 12.3.3.3 12.6.6.6
+
+[no] syncif <syncif>
+--------------------
+
+This command is valid for pfsync interfaces only.  It configures the
+data interface through which pfsync update messages are sent.  Note
+that the pfsync protocol currently includes no authentication method.
+Therefore, the only secure way to use it is through a network plug connecting
+directly between two pfsync capable devices (such as a conenction made
+with an ethernet crossover cable).
+
+nsh(interface-pfsync0)/syncif fxp0
+
+[no] maxupd <updates>
+---------------------
+
+This command is valid for pfsync interfaces only.  It configures the maximum
+number of updates which are collapsable into one for a single state.  The
+default value is 128.
+
+nsh(interface-pfsync0)/maxupd 32
 
 [no] vlan <tag> <parent interface>
 ----------------------------------
