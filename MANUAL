@@ -1,5 +1,5 @@
 NSH // Network Shell User's Manual // Chris Cappuccio <chris@nmedia.net>
-$nsh: MANUAL,v 1.15 2004/03/22 09:35:09 chris Exp $
+$nsh: MANUAL,v 1.16 2004/03/22 11:33:29 chris Exp $
 
 Copyright (c) 2003, 2004 Chris Cappuccio
 
@@ -861,6 +861,10 @@ nsh(interface-fxp0)/?
   tunnel     Source/destination for GIF tunnel
   syncif     Control message interface
   maxupd     Collapsable max updates for a single state
+  vhid       CARP virtual host ID
+  advbase    CARP advertisement interval
+  advskew    CARP advertisement skew
+  cpass      CARP passphrase
   vlan       802.1Q vlan tag and parent
   debug      Driver dependent debugging
   shutdown   Shutdown interface
@@ -1012,6 +1016,40 @@ number of updates which are collapsable into one for a single state.  The
 default value is 128.
 
 nsh(interface-pfsync0)/maxupd 32
+
+[no] vhid <id>
+--------------
+
+This command is valid for carp interfaces only.  It configures the virtual
+host ID for the Common Address Redundancy Protocol.  
+
+nsh(interface-carp0)/vhid 1
+
+[no] advbase <seconds>
+----------------------
+
+This command is valid for carp interfaces only.  If configures the
+advertisement interval for the master host to advertise itself.  
+
+nsh(interface-carp0)/advbase 64
+
+[no] advskew <skew>
+-------------------
+
+This command is valid for carp interfaces only.  If configures the
+advertisement skew.  The formula is advbase + (advskew / 255).  If the
+master does not advertise within three times this interval, this host will
+begin advertising as master.
+
+nsh(interface-carp0)/advskew 20
+
+[no] cpass <passphrase>
+-----------------------
+
+This command is valid for carp interfaces only.  It configures
+the CARP passphrase.  There is no passphrase by default.
+
+nsh(interface-carp0)/cpass mekmitasdigoat
 
 [no] vlan <tag> <parent interface>
 ----------------------------------

@@ -1,4 +1,4 @@
-/* $nsh: if.c,v 1.16 2003/09/18 19:44:23 chris Exp $ */
+/* $nsh: if.c,v 1.17 2004/03/22 11:33:30 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -109,6 +109,7 @@ show_int(char *ifname)
 	int ippntd = 0;
 	time_t c;
 	char *type, *lladdr;
+	const char *carp;
 
 	u_long rate, bucket;
 	char rate_str[64], bucket_str[64], tmp_str[4096], tmp_str2[1024];
@@ -261,6 +262,8 @@ show_int(char *ifname)
 		    sizeof(tmp_str2)) > 0)
 			printf("  Tunnel source %s destination %s\n",
 			    tmp_str, tmp_str2);
+		if ((carp = carp_state(ifs, ifname)) != NULL)
+			printf("  CARP state %s\n", carp);
 		/*
 		 * Display MTU, line rate, and ALTQ token rate info
 		 * (if available)
@@ -535,6 +538,10 @@ get_ifflags(char *ifname, int ifs)
 	return(flags);
 }
 
+/*
+ * similar to set_ifflag in bridge.c but does not care about
+ * existing flags
+ */
 int
 set_ifflags(char *ifname, int ifs, int flags)
 {

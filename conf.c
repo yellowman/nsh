@@ -1,4 +1,4 @@
-/* $nsh: conf.c,v 1.20 2004/03/22 09:25:57 chris Exp $ */
+/* $nsh: conf.c,v 1.21 2004/03/22 11:33:30 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -318,6 +318,7 @@ conf(FILE *output)
 		}
 
 		conf_pfsync(output, ifs, ifnp->if_name);
+		conf_carp(output, ifs, ifnp->if_name);
 
 		/*
 		 * print various flags

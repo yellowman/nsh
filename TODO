@@ -1,4 +1,4 @@
-$nsh: TODO,v 1.13 2003/03/28 16:15:19 chris Exp $
+$nsh: TODO,v 1.14 2004/03/22 11:33:29 chris Exp $
 
 nsh is a work in progress, future versions will be released which
 implement much of the following (of course, diffs are welcome):
@@ -23,9 +23,10 @@ Cleanup:
 
 To be implemented:
 
-* Ask for a password when user requests enable
 * View other users logged in, clear their sessions, etc...
-* IPsec! Configure VPNs with simple CLI commands-isakmpd has a fifo interface
+* BGP (steal from bgpctl)
+* IPsec! Configure VPNs with simple CLI commands-use conf-less isakmpd with
+  certificates and ipsecadm flows
 * IPComp...
 * DHCP daemon control
 * Do we build in a simple ping, traceroute or just shell out for these??
@@ -36,7 +37,8 @@ To be implemented:
 
 Lower priority:
 
-* BGP, OSPF?? Hooks to integrate zebra(GPL)/gated(BSDlic)/mrtd(BSDlic)/???
+* ISIS(patents?) or OSPF?? Hooks to integrate zebra(GPL)/gated(BSDlic)/
+  mrtd(BSDlic)/???
 * IPv6?? (shouldn't be hard, considering that most of the functions
   we stole from other source already support it)
 * IPX?? AppleTalk??
@@ -68,33 +70,8 @@ Would be nice:
 Known Bugs (or, things that I don't want to bother with right now, but
 better not forget later...):
 
-* 'nwid ""' will cause a card in access point mode to freak out.  (Although,
-  lots of things seem to cause Prism cards in AP mode to freak out.  Apparently
-  these problems are due to the if_wi driver not properly checking and dealing
-  with error returns.  Apparently some/a lot of this is fixed in OpenBSD
-  3.3...)
 * The kernel does not keep count of information displayed in 'show rtstat'
   properly (what else??)
 * ALTQTBRSET was removed from the kernel with the migration to pf.  But,
   there is no equivalent.  Fix this.
-* We need to mask the rounding error for altq tbr 'rate' value
-
-  The error can be demonstrated with the test program at
-  ftp://nmedia.net/pub/nsh/tbrtest.c
-
-  From Kenjiro Cho:
-  "The rate is scaled by the clock frequency within the kernel.
-  So, you see a rounding error when you set and get the rate.  
-
-  When you set the rate, the internal rate is computed as:
-
-        u_int64_t internal_rate = ((rate / 8) << 32) / clock_freq;
-
-  When you get the rate, the rate is re-computed as:
-
-        u_int rate = (internal_rate * 8 * clock_freq) >> 32;
- 
-  One way to mask the rounding error is to convert the value to a
-  floating value, round off the mantissa, and convert it back to an
-  integer."
 * ...
