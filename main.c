@@ -1,4 +1,4 @@
-/* $nsh: main.c,v 1.15 2003/05/15 16:58:58 chris Exp $ */
+/* $nsh: main.c,v 1.16 2003/09/10 02:12:08 chris Exp $ */
 /*
  * Copyright (c) 2002, 2003
  *      Chris Cappuccio.  All rights reserved.
@@ -32,6 +32,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <sys/socket.h>
+#include <sys/syslimits.h>
 #include <histedit.h>
 #include "externs.h"
 #include "editing.h"
@@ -57,12 +58,14 @@ main(argc, argv)
 	char *argv[];
 {
 	int ch, iflag = 0;
+	char rc[PATH_MAX];
 	pid = getpid();
 
 	while ((ch = getopt(argc, argv, "i:v")) != -1)
 		switch (ch) {
 		case 'i':
 			iflag = 1;
+			strlcpy(rc, optarg, PATH_MAX);
 			break;
 		case 'v':
 			verbose = 1;
@@ -89,7 +92,7 @@ main(argc, argv)
 		 * Run initialization and then exit.
 		 */
 		rmtemp();
-		cmdrc(optarg);
+		cmdrc(rc);
 		exit(0);
 	}
 
