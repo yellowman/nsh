@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.30 2004/03/07 16:31:57 cyc Exp $ */
+/* $nsh: commands.c,v 1.31 2004/03/17 08:09:13 cyc Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -72,6 +72,7 @@
 #include <limits.h>
 #include <histedit.h>
 #include <util.h>
+#include <pwd.h>
 #include "externs.h"
 #include "editing.h"
 
@@ -141,7 +142,7 @@ typedef struct {
 static Command	*getcmd(char *);
 static Menu	*getip(char *);
 static int	quit(void);
-static int	enable(void);
+static int	enable(int, char**);
 static int	disable(void);
 static int	doverbose(int, char**);
 static int	doediting(int, char**);
@@ -865,7 +866,7 @@ static Command cmdtab[] = {
 	{ "show",	showhelp,	showcmd,	0, 0, 0, 0, 0 },
 	{ "ip",		iphelp,		ipcmd,		1, 0, 1, 0, 0 },
 	{ "flush",	flushhelp,	flushcmd,	1, 0, 0, 0, 0 },
-	{ "enable",	enablehelp,	enable,		0, 1, 0, 0, 0 },
+	{ "enable",	enablehelp,	enable,		0, 0, 0, 0, 0 },
 	{ "disable",	disablehelp,	disable,	1, 0, 0, 0, 0 },
 	{ "route",	routehelp,	route,		1, 0, 1, 0, 0 },
 	{ "pf",		pfhelp,		pf,		1, 0, 0, 1, 1 },
@@ -1180,10 +1181,120 @@ cmdarg(cmd, arg)
  * enable privileged mode
  */
 int
-enable(void)
+enable(int argc, char **argv)
 {
-	priv = 1;
-	return 0;
+
+	char *p, *cpass;
+	char salt[_PASSWORD_LEN];
+	char pass[_PASSWORD_LEN+1];
+	
+	switch(argc) {
+
+		case 1:
+
+			if (priv == 1) {
+				printf("%% Command invalid while privileged\n");
+				return 0;
+			}	
+	
+			/* try to read pass */
+			if (!(read_pass(pass, sizeof(pass)))) {
+				
+			   if(errno == ENOENT) {
+				   /* no password file, so enable */
+				   priv = 1;
+				   return 1;
+			   } else {
+				   /* cant read password file */
+				   printf("%% Unable to read password: %s\n",
+						   strerror(errno));
+				   return 0;
+			   }
+			}
+	
+			p = getpass("% Password:");
+			if (p == NULL || *p == '\0')
+				return 0;
+	
+			if (strcmp(crypt(p, pass), pass) == 0 ) {
+				priv = 1;
+				return 1;
+			} else {
+				printf("%% Password incorrect\n");
+				return 0;
+			}
+			
+			
+		case 2:
+			
+			if (CMP_ARG(argv[1], "?")) {
+
+				/* print help */
+				printf("%% enable\t\t\t\tenable privileged mode\n");
+				printf("%% enable ?\t\t\t\tShow Options\n");
+				printf("%% enable secret <password>\t\tSet password(plain)\n");
+				printf("%% enable secret <cipher> <hash>\t\tSet (crypted) password\n");
+		
+				return 1;
+				
+			} else {
+
+				printf("%% Invalid argument: %s\n", argv[1]);
+				return 0;
+			}
+			
+
+		case 3:
+
+			if(!(CMP_ARG(argv[1], "sec"))) {
+				printf("%% Invalid argument: %s\n", argv[1]);
+				return 0;
+			}
+			
+			if (priv != 1) {
+				printf("%% Privilege required\n");
+				return 0;
+			}
+
+			/* crypt plaintext and save as pass */
+			strlcpy(pass, argv[2], sizeof(pass));
+			/*gensalt*/
+			gen_salt(salt, sizeof(salt));
+			cpass = strdup(crypt(pass, salt));
+			return(write_pass(cpass, sizeof(cpass)));
+
+			
+		case 4:
+
+			/* 2nd == "secret" ? */
+			if (!(CMP_ARG(argv[1], "sec"))) {
+				printf("%% Invalid argument: %s\n", argv[2]);
+				return 0;
+			}
+
+			/* third == correct cipher? (only blowfish atm) */
+			if (!(CMP_ARG(argv[2], "blow"))) {
+				printf("%% Invalid cipher: %s\n", argv[3]);
+				return 0;
+			}
+
+			/* privileged? */
+			if (priv != 1) {
+				printf("%% Privilege required\n");
+				return 0;
+			}
+	
+			/* set crypted pass */
+			strlcpy(pass, argv[3], sizeof(pass));
+			return(write_pass(pass, sizeof(pass)));
+	
+
+		default:
+
+			printf("%% Too many arguments\n");
+			return 0;
+	}
+
 }
 
 /*

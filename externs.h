@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.18 2004/03/03 08:46:44 chris Exp $ */
+/* $nsh: externs.h,v 1.19 2004/03/17 08:09:13 cyc Exp $ */
 /*
  * nsh externs and more
  */
@@ -204,3 +204,9 @@ void wi_dumpstations(char *);
 int is_wavelan(int, char *);
 int wi_porttype(char *);
 int wi_printlevels(char *);
+
+/* passwd.c */
+#define NSHPASSWD_TEMP "/var/run/nshpasswd"
+int read_pass(char *, size_t);
+int write_pass(char *, size_t);
+int gen_salt(char *, size_t);

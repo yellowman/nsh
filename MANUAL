@@ -1,5 +1,5 @@
 NSH // Network Shell User's Manual // Chris Cappuccio <chris@nmedia.net>
-$nsh: MANUAL,v 1.12 2004/03/07 16:31:57 cyc Exp $
+$nsh: MANUAL,v 1.13 2004/03/17 08:09:13 cyc Exp $
 
 Copyright (c) 2003 Chris Cappuccio
 
@@ -98,6 +98,7 @@ into the nsh startup file.
 # nsh
 % NSH v20030208
 machine/enable
+Password:
 machine(priv)/write-config
 % Configuration saved
 machine(priv)/ 
@@ -216,6 +217,23 @@ nsh(priv)/?
   editing       Set command line editing
   !             Invoke a subshell
   ?             Print help information
+
+
+To set the password you must be in privileged mode. Set it either with
+"enable secret <yourpassword>" or 
+"enable secret <cipher> <crypted password>".
+NSH at the moment only supports blowfish as cipher.
+
+Examples:
+
+nsh(priv)/enable secret foo
+% Password crypted
+% Password saved
+
+nsh(priv)/enable secret blowfish $2a$06$eQYswZjAHop5UFC8yle85uEqi/MCBhnWBi8IRU60LmkVvgZmtBiOm
+% Password saved
+
+You can generate a blowfish-crypted password using encrypt -b6.
 
 hostname <hostname>
 -------------------

@@ -1,4 +1,4 @@
-/* $nsh: conf.c,v 1.17 2003/09/18 20:03:15 chris Exp $ */
+/* $nsh: conf.c,v 1.18 2004/03/17 08:09:13 cyc Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -31,6 +31,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
+#include <pwd.h>
 #include <sys/socket.h>
 #include <sys/param.h>
 #include <sys/sockio.h>
@@ -81,6 +82,7 @@ conf(FILE *output)
 	int ifs, flags, tmp;
 	long l_tmp;
 
+	char cpass[_PASSWORD_LEN+1];
 	char *iptype;
 	char hostbuf[MAXHOSTNAMELEN];
 	char tmp_str[4096], tmp_str2[1024];
@@ -94,7 +96,14 @@ conf(FILE *output)
 		return(1);
 	}
 
-	/* ready? begin. print the hostname ... */
+	/* ready? begin. print the password, then hostname ... */
+	if(read_pass(cpass, sizeof(cpass))) {
+		fprintf(output, "!\n");
+		fprintf(output, "enable secret blowfish %s\n", cpass);
+	} else {
+		printf("%% Cant read password: %s\n", strerror(errno));
+	}
+	
 	fprintf(output, "!\n");
 	gethostname (hostbuf, sizeof(hostbuf));
 	fprintf(output, "hostname %s\n", hostbuf);
