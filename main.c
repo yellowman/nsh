@@ -26,38 +26,47 @@
 
 #include <stdio.h>
 #include <unistd.h>
+#include <limits.h>
+#include <fcntl.h>
+#include <sys/socket.h>
 #include "externs.h"
 
-extern  char *__progname;
+void usage(void);
 
-void usage __P((void));
+char *vers = "20020302";
 
 main(argc, argv)
 	int argc;
 	char *argv[];
 {
-	int ch, iflag = 0;
-
+	int s, ch, iflag = 0;
+         
 	while ((ch = getopt(argc, argv, "i")) != -1)
 		switch (ch) {
 		case 'i':
 			iflag = 1;
 			break;
 		default:
+			break;
 		}
 
 	argc -= optind;
 	argv += optind;
 
+	printf("%% NSH v%s\r\n", vers);
+
 	if (argc > 0)
 		usage();
 
-	gethostname(hbuf, sizeof(hbuf));
-
 	/*
-	 * Initialize system stuff, perhaps hostname, routes and then exit
+	 * For future kvm access
 	 */
+	load_nlist();
+
 	if (iflag) {
+		/*
+		 * Run initialization and then exit.
+		 */
 		cmdrc("nshrc");
 		exit(0);
 	}
@@ -65,6 +74,7 @@ main(argc, argv)
 	for (;;) {
 		command(1, 0, 0);
 	}
+
 	return 0;
 }
 
@@ -74,3 +84,4 @@ usage()
 	(void)fprintf(stderr, "usage: %s [-i]\r\n", __progname);
 	exit(1);
 }
+

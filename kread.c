@@ -18,7 +18,6 @@
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
- *
  * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
@@ -32,24 +31,8 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/param.h>
-#include <sys/file.h>
-#include <sys/protosw.h>
-#include <sys/socket.h>
-
-#include <netinet/in.h>
-
-#include <ctype.h>
-#include <errno.h>
 #include <kvm.h>
-#include <limits.h>
-#include <netdb.h>
-#include <nlist.h>
-#include <paths.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
+#include "externs.h"
 
 kvm_t *kvmd;
 
@@ -58,9 +41,9 @@ kvm_t *kvmd;
  */
 int
 kread(addr, buf, size)
-	u_long          addr;
-	char           *buf;
-	int             size;
+	u_long addr;
+	char   *buf;
+	int    size;
 {
 
 	if (kvm_read(kvmd, addr, buf, size) != size) {
@@ -70,16 +53,16 @@ kread(addr, buf, size)
 	return (0);
 }
 
-char           *
+char *
 plural(n)
-	int             n;
+	int n;
 {
 	return (n != 1 ? "s" : "");
 }
 
-char           *
+char *
 plurales(n)
-	int             n;
+	int n;
 {
 	return (n != 1 ? "es" : "");
 }

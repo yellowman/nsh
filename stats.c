@@ -1,5 +1,4 @@
-/*	$OpenBSD: inet.c,v 1.55 2002/01/17 21:34:58 mickey Exp $	*/
-/*	$NetBSD: inet.c,v 1.14 1995/10/03 21:42:37 thorpej Exp $	*/
+/* From: $OpenBSD: inet.c,v 1.58 2002/02/19 21:11:23 miod Exp $ */
 
 /*
  * Copyright (c) 1983, 1988, 1993
@@ -33,14 +32,6 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-
-#ifndef lint
-#if 0
-static char sccsid[] = "from: @(#)inet.c	8.4 (Berkeley) 4/20/94";
-#else
-static char *rcsid = "$OpenBSD: inet.c,v 1.55 2002/01/17 21:34:58 mickey Exp $";
-#endif
-#endif /* not lint */
 
 #include <sys/param.h>
 #include <sys/queue.h>
@@ -86,11 +77,11 @@ static char *rcsid = "$OpenBSD: inet.c,v 1.55 2002/01/17 21:34:58 mickey Exp $";
 
 static int sflag = 1;
 
-static void protopr0 __P((u_long, char *, int));
+static void protopr0(u_long, char *, int);
 
 #ifdef INET6
-char	*inet6name __P((struct in6_addr *));
-void	inet6print __P((struct in6_addr *, int, char *, int));
+char	*inet6name(struct in6_addr *);
+void	inet6print(struct in6_addr *, int, char *, int);
 #endif
 
 /*
@@ -104,7 +95,7 @@ tcp_stats(off)
 
 	if (off == 0)
 		return;
-	printf ("%% Transmission Control Protocol statistics:\r\n");
+	printf ("%% tcp:\r\n");
 	kread(off, (char *)&tcpstat, sizeof (tcpstat));
 
 #define	p(f, m) if (tcpstat.f || sflag <= 1) \
@@ -152,7 +143,7 @@ tcp_stats(off)
 	p(tcps_rcvbadsum, "\t\t%u discarded for bad checksum%s\n");
 	p(tcps_rcvbadoff, "\t\t%u discarded for bad header offset field%s\n");
 	p1(tcps_rcvshort, "\t\t%u discarded because packet too short\n");
-	p1(tcps_rcvnosec, "\t\t%u discarded for missing IPSec protection\n");
+	p1(tcps_rcvnosec, "\t\t%u discarded for missing IPsec protection\n");
 	p(tcps_inhwcsum, "\t\t%u packet%s hardware-checksummed\n");
 	p(tcps_connattempt, "\t%u connection request%s\n");
 	p(tcps_accepts, "\t%u connection accept%s\n");
@@ -192,7 +183,7 @@ udp_stats(off)
 	if (off == 0)
 		return;
 	kread(off, (char *)&udpstat, sizeof (udpstat));
-	printf("%% User Datagram Protocol statistics:\r\n");
+	printf("%% udp:\r\n");
 #define	p(f, m) if (udpstat.f || sflag <= 1) \
     printf(m, udpstat.f, plural(udpstat.f))
 #define	p1(f, m) if (udpstat.f || sflag <= 1) \
@@ -206,7 +197,7 @@ udp_stats(off)
 	p(udps_outhwcsum, "\t%lu output packet%s hardware-checksummed\n");
 	p1(udps_noport, "\t%lu dropped due to no socket\n");
 	p(udps_noportbcast, "\t%lu broadcast/multicast datagram%s dropped due to no socket\n");
-	p1(udps_nosec, "\t%lu dropped due to missing IPSec protection\n");
+	p1(udps_nosec, "\t%lu dropped due to missing IPsec protection\n");
 	p1(udps_fullsock, "\t%lu dropped due to full socket buffers\n");
 	delivered = udpstat.udps_ipackets -
 		    udpstat.udps_hdrops -
@@ -235,7 +226,7 @@ ip_stats(off)
 	if (off == 0)
 		return;
 	kread(off, (char *)&ipstat, sizeof (ipstat));
-	printf("%% Internet Protocol statistics:\r\n");
+	printf("%% ip:\r\n");
 
 #define	p(f, m) if (ipstat.f || sflag <= 1) \
     printf(m, ipstat.f, plural(ipstat.f))
@@ -312,7 +303,7 @@ icmp_stats(off)
 	if (off == 0)
 		return;
 	kread(off, (char *)&icmpstat, sizeof (icmpstat));
-	printf("%% Internet Control Message Protocol statistics:\r\n");
+	printf("%% icmp:\r\n");
 
 #define	p(f, m) if (icmpstat.f || sflag <= 1) \
     printf(m, icmpstat.f, plural(icmpstat.f))
@@ -358,7 +349,7 @@ igmp_stats(off)
 	if (off == 0)
 		return;
 	kread(off, (char *)&igmpstat, sizeof (igmpstat));
-	printf("%% Internet Group Message Protocol statistics\r\n");
+	printf("%% igmp:\r\n");
 
 #define	p(f, m) if (igmpstat.f || sflag <= 1) \
     printf(m, igmpstat.f, plural(igmpstat.f))
@@ -389,7 +380,7 @@ ah_stats(off)
 	if (off == 0)
 		return;
 	kread(off, (char *)&ahstat, sizeof (ahstat));
-	printf("%% Authentication Header statistics\r\n");
+	printf("%% ah:\r\n");
 
 #define p(f, m) if (ahstat.f || sflag <= 1) \
     printf(m, ahstat.f, plural(ahstat.f))
@@ -431,7 +422,7 @@ esp_stats(off)
 	if (off == 0)
 		return;
 	kread(off, (char *)&espstat, sizeof (espstat));
-	printf("%% Encapsulating Security Payload statistics\r\n");
+	printf("%% esp:\r\n");
 
 #define p(f, m) if (espstat.f || sflag <= 1) \
     printf(m, espstat.f, plural(espstat.f))
@@ -471,7 +462,7 @@ ipip_stats(off)
 	if (off == 0)
 		return;
 	kread(off, (char *)&ipipstat, sizeof (ipipstat));
-	printf("%% IP-in-IP statistics:\r\n");
+	printf("%% ipip:\r\n");
 
 #define p(f, m) if (ipipstat.f || sflag <= 1) \
     printf(m, ipipstat.f, plural(ipipstat.f))
@@ -501,7 +492,7 @@ ipcomp_stats(off)
 	if (off == 0)
 		return;
 	kread(off, (char *)&ipcompstat, sizeof (ipcompstat));
-	printf("%% IP Compression statistics:\r\n");
+	printf("%% ipcomp:\r\n");
 
 #define p(f, m) if (ipcompstat.f || sflag <= 1) \
     printf(m, ipcompstat.f, plural(ipcompstat.f))
@@ -524,3 +515,29 @@ ipcomp_stats(off)
 
 #undef p
 }
+
+/*
+ * Print routing statistics
+ */
+void
+rt_stats(off)
+	u_long off;
+{
+	struct rtstat rtstat;
+ 
+	if (off == 0)
+                return;
+	kread(off, (char *)&rtstat, sizeof (rtstat));
+	printf("%% routing:\n");
+	printf("\t%u bad routing redirect%s\n",
+	    rtstat.rts_badredirect, plural(rtstat.rts_badredirect));   
+	printf("\t%u dynamically created route%s\n",
+	    rtstat.rts_dynamic, plural(rtstat.rts_dynamic));
+	printf("\t%u new gateway%s due to redirects\n",
+	    rtstat.rts_newgateway, plural(rtstat.rts_newgateway));
+	printf("\t%u destination%s found unreachable\n",
+	    rtstat.rts_unreach, plural(rtstat.rts_unreach));
+	printf("\t%u use%s of a wildcard route\n",
+	    rtstat.rts_wildcard, plural(rtstat.rts_wildcard));
+}
+

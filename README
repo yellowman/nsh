@@ -1,0 +1,32 @@
+nsh//network shell//Chris Cappuccio <chris@dqc.org> version 20020302
+
+A CLI intended for OpenBSD-based routers running little except for sshd,
+targeted towards CompactFlash-based Soekris Net4501 and similar embedded
+units.  The idea is to allow simple, quick management of a router *without*
+requiring the user to be familiar with ifconfig, route, netstat, pfctl,
+and the various configuration files in /etc which are otherwise required to
+manage this type of router (In fact, we eliminate the use of those
+commands and /etc configuration files entirely!).  In conjunction with the
+OpenBSD kernel, sshd, and maybe snmpd you have a fully functioning system.
+
+(nsh is BSD-licensed, with much code re-used from OpenBSD userland)
+
+nsh handles the following functions:
+
+* Gives the user a command-line interface to:
+  + Add/delete IP routes
+  + Configure interfaces for IP, MTU, VLAN
+  + Show IP routes
+  + Show host and router statistics
+  + Configure PF or NAT on an interface
+  + Configure the ALTQ tbr on an interface
+  + Save the current routes, interface configs to a file
+* This shell replaces most of /etc/rc, /etc/netstart on an embedded system,
+  simply started as nsh -i, it will read the previously saved configuration
+  into the system, setting up the IP configuration for future use.
+* Nsh can start as a user shell from ssh, or console.  Allows privileged user
+  to escape to bourne shell (for now anyways..)
+
+>> See TODO for details on implementation status and future ideas.
+
+>> See http://www.soekris.com/ for one possible example of embedded hardware.

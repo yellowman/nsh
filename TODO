@@ -1,0 +1,56 @@
+This code in its current state is nowhere near complete in meeting
+its original goals.  Thus, it is a work in progress, future versions
+will be released soon which implement much of the following:
+
+Cleanup:
+
+* All printf newlines should be \r\n, I think ?  Or will ssh take care of
+  this distinction ??? Make them all consistent in any event...
+  (And what about perror?)
+* Probably don't need to be using fprintf(stderr,...) anywhere, since
+  this is supposed to be a 'router' not really a unix environment
+  so far as user is concerned ?? Replace perror with non-FILENO_STDERR func?
+* Finish up externs.h 
+* And more stylistic cleanup...
+
+Required for intended functionality:
+
+* Add 'save' command which will read routes, hostname, interface configurations
+  and write them to a configuration file which can be read by cmdrc on
+  startup with -i (requires the following to be done _first_:)
+* Add a command which will configure interface IPs, vlans, and maybe media
+  types
+* Add a command which will add routes
+
+PF (required):
+
+* Allow simple block in all/pass out all keep state pf rules to be setup for
+  interfaces (default modulate state?)
+* Allow simple nat pf rules to be setup for interfaces
+* Allow nat rdrs to be setup
+* Allow pf holes to be setup
+* Do we want a more sophisticated interface into pf or just let the user
+  shell out to use pfctl?
+* To handle pf on 'save' .... Only save rules that are simple enough to be
+  represented by what we can setup for now.
+
+Cute features:
+
+* Perhaps some way for the shell to upgrade itself when given a network source
+  for a new binary? 
+* Hooks for a web interface?
+* Add more diagnostic messages for verbose output where useful
+* Do we hook into snmpd at all or just run it separately on the same box?
+* Do we build in a simple ping, traceroute or just shell out for these??
+* And what about telnet/ssh (maybe shell out for ssh and ignore telnet)??
+* ALTQ RED/CBQ/HFSC
+
+Future:
+
+* BGP, OSPF?? Steal from gated(BSDlic)? Or hooks to integrate zebra(GPL)?
+* IPv6?? (shouldn't be hard, considering that most of the functions
+  we stole from other source already support it)
+* IPsec! Configure VPNs with simple CLI commands-isakmpd has a fifo interface
+* IPcomp...
+* IPIP? GRE?? Tunnels??
+* IPX?? AppleTalk??

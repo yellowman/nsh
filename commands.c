@@ -60,6 +60,11 @@
 #include <kvm.h>
 #include <nlist.h>
 #include <sys/fcntl.h>
+#include <sys/socket.h>
+#include <sys/param.h>
+#include <sys/sockio.h>
+#include <sys/errno.h>
+#include <net/if.h>
 #include <limits.h>
 #include "externs.h"
 
@@ -69,6 +74,9 @@ static char line[256];
 static char saveline[256];
 static int  margc;
 static char *margv[20];
+static char hbuf[MAXHOSTNAMELEN];
+
+int verbose = 0, nflag = 1;
 
 /*
  * Basic
@@ -76,12 +84,15 @@ static char *margv[20];
 
 kvm_t *kvmd;
 
+/*
+ * Kernel namelist for our use
+ */
 struct nlist nl[] = {
-#define N_NULL 0
-	{ "_rtstat" },
-#define N_RTSTAT 1 
+#define N_MBSTAT 0
+	{ "_mbstat" },		/* mbuf stats */
+#define N_RTSTAT 1
 	{ "_rtstat" },		/* routing stats */
-#define N_RTREE 2 
+#define N_RTREE 2
 	{ "_rt_tables" },	/* routing tree */
 #define N_IPSTAT 3
 	{ "_ipstat" },		/* ip stats */
@@ -99,6 +110,10 @@ struct nlist nl[] = {
 	{ "_igmpstat" },	/* igmp stats */
 #define N_IPCOMPSTAT 10
 	{ "_ipcompstat" },	/* ipcomp stats */
+#define N_MCLPOOL 11
+	{ "_mclpool" },
+#define N_MBPOOL 12
+	{ "_mbpool" },
 	{ "" }
 };
 
@@ -111,22 +126,24 @@ typedef struct {
 }		Command;
 
 static Command *getcmd(char *name);
-static int     enable (void);
-static int     disable (void);
-static int     pr_routes (void);
-static int     pr_ip_stats (void);
-static int     pr_ah_stats (void);
-static int     pr_esp_stats (void);
-static int     pr_tcp_stats (void);
-static int     pr_udp_stats (void);
-static int     pr_icmp_stats (void);
-static int     pr_igmp_stats (void);
-static int     pr_ipcomp_stats (void);
+static int     enable(void);
+static int     disable(void);
+static int     togglev(void);
+static int     pr_routes(void);
+static int     pr_ip_stats(void);
+static int     pr_ah_stats(void);
+static int     pr_esp_stats(void);
+static int     pr_tcp_stats(void);
+static int     pr_udp_stats(void);
+static int     pr_icmp_stats(void);
+static int     pr_igmp_stats(void);
+static int     pr_ipcomp_stats(void);
+static int     pr_mbuf_stats(void);
 static int     show_help();
 static int     hostname (int, char **);
-static int     help (int, char**);
-static int     shell (int, char*[]);
-static int     pr_rt_stats (void);
+static int     help(int, char**);
+static int     shell(int, char*[]);
+static int     pr_rt_stats(void);
 static int     priv = 0;
 
 /*
@@ -158,25 +175,33 @@ noop()
 struct showlist {
 	char *name;		/* How user refers to it (case independent) */
 	char *help;		/* Help information (0 ==> no help) */
-	int narg;		/* Number of arguments */
+	int minarg;		/* Minimum number of arguments */
+	int maxarg;		/* Maximum number of arguments */
 	int (*handler)();	/* Routine to perform (for special ops) */
 };
 
 static struct showlist Showlist[] = {
-	{ "hostname",	"Show router hostname",	0, hostname },
-	{ "routes",	"Show IP routes",	0, pr_routes },
-	{ "rtstats",	"Show IP routing statistics", 0, pr_rt_stats },
-	{ "ipstats",	"Show IP statistics",	0, pr_ip_stats },
-	{ "ahstats",	"Show AH statistics",	0, pr_ah_stats },
-	{ "espstats",	"Show ESP statistics",	0, pr_esp_stats },
-	{ "tcpstats",	"Show TCP statistics",	0, pr_tcp_stats },
-	{ "udpstats",	"Show UDP statistics",	0, pr_udp_stats },
-	{ "icmpstats",	"Show ICMP statistics",	0, pr_icmp_stats },
-	{ "igmpstats",	"Show IGMP statistics",	0, pr_igmp_stats },
-	{ "ipcompstats","Show IPCOMP statistics",0,pr_ipcomp_stats},
-	{ "?",		"Display show options",	0, show_help },
-	{ "help",	0,			0, show_help },
-	{ 0, 0, 0, 0 }
+	{ "hostname",	"Router hostname",	0, 0, hostname },
+	{ "interface",	"Interface config",	0, 1, show_int },
+	{ "routes",	"IP route table",	0, 0, pr_routes },
+	{ "ipstats",	"IP statistics",	0, 0, pr_ip_stats },
+#ifdef IPSEC
+	{ "ahstats",	"AH statistics",	0, 0, pr_ah_stats },
+	{ "espstats",	"ESP statistics",	0, 0, pr_esp_stats },
+#endif
+	{ "tcpstats",	"TCP statistics",	0, 0, pr_tcp_stats },
+	{ "udpstats",	"UDP statistics",	0, 0, pr_udp_stats },
+	{ "icmpstats",	"ICMP statistics",	0, 0, pr_icmp_stats },
+	{ "igmpstats",	"IGMP statistics",	0, 0, pr_igmp_stats },
+#ifdef IPCOMP
+	{ "ipcompstats","IPCOMP statistics",	0, 0, pr_ipcomp_stats },
+#endif
+	{ "rtstats",	"Routing statistics",	0, 0, pr_rt_stats },
+	{ "mbufstats",	"Memory management statistics",	0, 0, pr_mbuf_stats },
+	{ "version",	"Software information",	0, 0, version },
+	{ "?",		"Options",		0, 0, show_help },
+	{ "help",	0,			0, 0, show_help },
+	{ 0, 0, 0, 0, 0 }
 };
 
 #define GETSHOW(name)	((struct showlist *) genget(name, (char **) Showlist, \
@@ -187,7 +212,6 @@ showcmd(argc, argv)
 	int argc;
 	char **argv;
 {
-	int i;
 	struct showlist *s;	/* pointer to current command */
 	int success = 0;
 
@@ -197,28 +221,24 @@ showcmd(argc, argv)
 	}
 
 	/*
-	 * Validate all show argument
+	 * Validate show argument
 	 */
-	for (i = 1; i < argc; i++) {
-		s = GETSHOW(argv[i]);
-		if (s == 0) {
-			printf("%% Invalid argument %s\r\n",argv[i]);
-			return 0;
-		} else if (Ambiguous(s)) {
-			printf("%% Ambiguous argument %s\r\n",argv[i]);
-			return 0;
-		}
-		if (i + s->narg >= argc) {
-			printf("%% Need %d argument%s to 'show %s' command.\r\n",
-			    s->narg, s->narg == 1 ? "" : "s", s->name);
-			return 0;
-		}
-		if (s->handler)	/* As if there was something else we do ? */
-			success = (*s->handler)((s->narg > 0) ? argv[i+1] : 0,
-			    (s->narg > 1) ? argv[i+2] : 0);
-
-		i += s->narg;
+	s = GETSHOW(argv[1]);
+	if (s == 0) {
+		printf("%% Invalid argument %s\r\n",argv[1]);
+		return 0;
+	} else if (Ambiguous(s)) {
+		printf("%% Ambiguous argument %s\r\n",argv[1]);
+		return 0;
 	}
+	if (((s->minarg + 2) > argc) || ((s->maxarg + 2) < argc)) {
+		printf("%% Wrong argument%s to 'show %s' command.\r\n",
+		    argc <= 2 ? "" : "s", s->name);
+		return 0;
+	}
+	if (s->handler)	/* As if there was something else we do ? */
+		success = (*s->handler)((s->maxarg > 0) ? argv[2] : 0,
+		    (s->maxarg > 1) ? argv[3] : 0);
 
 	return(success);
 }
@@ -248,7 +268,10 @@ static char
 	showhelp[] =	"Show system information",
 	enablehelp[] =	"Enable privileged mode",
 	disablehelp[] =	"Disable privileged mode",
+	ratehelp[] =	"Rate limit an interface",
+	monitorhelp[] = "Monitor routing table changes",
 	quithelp[] =	"Close current connection",
+	verbosehelp[] =	"Toggle verbose diagnostics",
 	shellhelp[] =	"Invoke a subshell",
 	helphelp[] =	"Print help information";
 
@@ -261,7 +284,10 @@ static Command  cmdtab[] = {
 	{ "show",	showhelp,	showcmd,	0, 0 },
 	{ "enable",	enablehelp,	enable,		0, 1 },
 	{ "disable",	disablehelp,	disable,	1, 0 },
+	{ "rate",	ratehelp,	rate,		1, 0 },
+	{ "monitor",	monitorhelp,	monitor,	0, 0 },
 	{ "quit",	quithelp,	quit,		0, 0 },
+	{ "verbose",	verbosehelp,	togglev,	0, 0 },
 	{ "!",		shellhelp,	shell,		1, 0 },
 	{ "?",		helphelp,	help,		0, 0 },
 	{ "help",	0,		help,		0, 0 },
@@ -349,8 +375,8 @@ command(top, tbuf, cnt)
 	if (!top) {
 		putchar('\n');
 	} else {
-		(void) signal(SIGINT, SIG_DFL);
-		(void) signal(SIGQUIT, SIG_DFL);
+		(void) signal(SIGINT, SIG_IGN);
+		(void) signal(SIGQUIT, SIG_IGN);
 	}
 	for (;;) {
 		if (tbuf) {
@@ -506,7 +532,7 @@ shell(argc, argv)
 }
 
 /*
- * enable command
+ * enable privileged mode
  */
 int
 enable(void)
@@ -516,7 +542,7 @@ enable(void)
 }
 
 /*
- * disable command
+ * disable privileged mode
  */
 int
 disable(void)
@@ -525,8 +551,27 @@ disable(void)
 	return 0;
 }
 
+/*
+ * toggle verbose diagnostics
+ */
 int
-dostat(void (*statfunc)(), u_long n_value)
+togglev(void)
+{
+	if (verbose)
+		verbose = 0;
+	else
+		verbose = 1;
+	printf("%% Diagnostic mode %s\r\n", verbose ? "enabled" : "disabled");
+
+	return 0;
+}
+
+/*
+ * initialize kvm access
+ * load nl with kvm_nlist
+ */
+int
+load_nlist(void)
 {
 	char *nlistf = NULL, *memf = NULL;
 	char buf[_POSIX2_LINE_MAX];
@@ -543,9 +588,7 @@ dostat(void (*statfunc)(), u_long n_value)
 			printf("%% kvm_nlist: no namelist\r\n");
 		return 1;
 	}
-	printf("n_value: %d\r\n");
-
-	(*statfunc)(n_value);
+	return 0;
 }
 
 /*
@@ -588,12 +631,12 @@ cmdrc(rcname)
 }
 
 /*
- * KVM namelist lookup wrappers
+ * Lookup wrappers
  */
 int
 pr_routes(void)
 {
-	dostat(*routepr,nl[N_RTREE].n_value);
+	show(AF_INET);
 	return 0;
 }
 
@@ -601,63 +644,75 @@ pr_routes(void)
 int
 pr_rt_stats(void)
 {
-	dostat(*rt_stats,nl[N_RTSTAT].n_value);
+	rt_stats(nl[N_RTSTAT].n_value);
 	return 0;
 }
 
 int
 pr_ip_stats(void)
 {
-	dostat(*ip_stats,nl[N_IPSTAT].n_value);
+	ip_stats(nl[N_IPSTAT].n_value);
 	return 0;
 }
 
+#ifdef IPSEC
 int
 pr_ah_stats(void)
 {
-	dostat(*ah_stats,nl[N_AHSTAT].n_value);
+	ah_stats(nl[N_AHSTAT].n_value);
 	return 0;
 }
 
 int
 pr_esp_stats(void)
 {
-	dostat(*esp_stats,nl[N_ESPSTAT].n_value);
+	esp_stats(nl[N_ESPSTAT].n_value);
 	return 0;
 }
+#endif
 
 int
 pr_tcp_stats(void)
 {
-	dostat(*tcp_stats,nl[N_TCPSTAT].n_value);
+	tcp_stats(nl[N_TCPSTAT].n_value);
 	return 0;
 }
 
 int
 pr_udp_stats(void)
 {
-	dostat(*udp_stats,nl[N_UDPSTAT].n_value);
+	udp_stats(nl[N_UDPSTAT].n_value);
 	return 0;
 }
 
 int
 pr_icmp_stats(void)
 {
-	dostat(*icmp_stats,nl[N_ICMPSTAT].n_value);
+	icmp_stats(nl[N_ICMPSTAT].n_value);
 	return 0;
 }
 
 int
 pr_igmp_stats(void)
 {
-	dostat(*igmp_stats,nl[N_IGMPSTAT].n_value);
+	igmp_stats(nl[N_IGMPSTAT].n_value);
 	return 0;
 }
 
+#ifdef IPCOMP
 int
 pr_ipcomp_stats(void)
 {
-	dostat(*ipcomp_stats,nl[N_IPCOMPSTAT].n_value);
+	ipcomp_stats(nl[N_IPCOMPSTAT].n_value);
+	return 0;
+}
+#endif
+
+int
+pr_mbuf_stats(void)
+{
+	mbpr(nl[N_MBSTAT].n_value, nl[N_MBPOOL].n_value,   
+	    nl[N_MCLPOOL].n_value);
 	return 0;
 }
 
