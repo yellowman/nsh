@@ -128,6 +128,19 @@ conf(FILE *output)
 		    ifnp->if_name);
 
 		/*
+		 * print vlan tag, parent if available.  if a tag is set
+		 * but there is no parent, discard.
+		 */
+		memset(&vreq, 0, sizeof(struct vlanreq));
+		ifr.ifr_data = (caddr_t)&vreq;  
+
+		if (ioctl(ifs, SIOCGETVLAN, (caddr_t)&ifr) != -1) {
+			if(vreq.vlr_tag && (vreq.vlr_parent[0] != '\0'))
+				fprintf(output, " vlan %d %s\n",
+				    vreq.vlr_tag, vreq.vlr_parent);
+		}
+
+		/*
 		 * Print interface IP address, and broadcast or
 		 * destination if available.  But, don't print broadcast
 		 * if it is what we would expect given the ip and netmask!
@@ -255,19 +268,6 @@ conf(FILE *output)
 				}
 
 			fprintf(output, " rate %s%s\n", rate_str, bucket_str);
-			}
-
-			/*
-			 * print vlan tag, parent if available.  if a tag is set
-			 * but there is no parent, discard.
-			 */
-			memset(&vreq, 0, sizeof(struct vlanreq));
-			ifr.ifr_data = (caddr_t)&vreq;
-
-			if (ioctl(ifs, SIOCGETVLAN, (caddr_t)&ifr) != -1) {
-				if(vreq.vlr_tag && (vreq.vlr_parent[0] != '\0'))
-					fprintf(output, " vlan %d %s\n",
-					    vreq.vlr_tag, vreq.vlr_parent);
 			}
 
 			if (get_nwinfo(ifnp->if_name, tmp_str, sizeof(tmp_str),
