@@ -1,4 +1,4 @@
-/* $nsh: passwd.c,v 1.3 2004/03/19 08:07:19 chris Exp $ */
+/* $nsh: passwd.c,v 1.4 2004/03/22 03:56:29 chris Exp $ */
 /*
  * Copyright (c) 2004
  *      Christian Gut.  All rights reserved.
@@ -29,13 +29,14 @@
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
+#include <pwd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include "externs.h"
 
-int		read_pass(char *, size_t);
-int		write_pass(char *, size_t);
-int		gen_salt(char*, size_t);
+int read_pass(char *, size_t);
+int write_pass(char *, size_t);
+int gen_salt(char *, size_t);
 
 char *bcrypt_gensalt(u_int8_t);
 
@@ -43,7 +44,7 @@ char *bcrypt_gensalt(u_int8_t);
 int
 read_pass(char *pass, size_t size)
 {
-	FILE           *pwdhandle;
+	FILE *pwdhandle;
 
 	pwdhandle = fopen(NSHPASSWD_TEMP, "r");
 	if (pwdhandle == NULL)
@@ -58,25 +59,134 @@ read_pass(char *pass, size_t size)
 int
 write_pass(char *cpass, size_t size)
 {
-	FILE           *pwdhandle;
+	FILE *pwdhandle;
 
-	umask(S_IWGRP|S_IRWXO);
+	umask(S_IWGRP | S_IRWXO);
+	/* maybe we should flock here? */
 	pwdhandle = fopen(NSHPASSWD_TEMP, "w");
 	if (pwdhandle == NULL) {
 		printf("%% Unable to write run-time crypt repository: %s\n",
-		    strerror(errno));
-		return(0);
+		       strerror(errno));
+		return (0);
 	}
-
 	fprintf(pwdhandle, "%s", cpass);
 	fclose(pwdhandle);
 
-	return(1);
+	return (1);
 }
 
 int
-gen_salt(char *salt, size_t saltlen) {
+gen_salt(char *salt, size_t saltlen)
+{
 	/* 6 is a rounds value like from localcipher option of login.conf */
 	strlcpy(salt, bcrypt_gensalt(6), saltlen);
 	return 1;
+}
+
+/*
+ * enable privileged mode
+ */
+int
+enable(int argc, char **argv)
+{
+
+	char *p, *cpass;
+	char salt[_PASSWORD_LEN];
+	char pass[_PASSWORD_LEN + 1];
+
+	switch (argc) {
+
+	case 1:
+		if (priv == 1) {
+			printf("%% Command invalid while privileged\n");
+			return 0;
+		}
+
+		/* try to read pass */
+		if (!(read_pass(pass, sizeof(pass)))) {
+			if (errno == ENOENT) {
+				/* no password file, so enable */
+				priv = 1;
+				return 1;
+			} else {
+				/* cant read password file */
+				printf("%% Unable to read password: %s\n",
+				       strerror(errno));
+				return 0;
+			}
+		}
+		p = getpass("% Password:");
+		if (p == NULL || *p == '\0')
+			return 0;
+
+		if (strcmp(crypt(p, pass), pass) == 0) {
+			priv = 1;
+			return 1;
+		} else {
+			printf("%% Password incorrect\n");
+			return 0;
+		}
+
+
+	case 2:
+		if (CMP_ARG(argv[1], "?")) {
+			/* print help */
+			printf("%% enable\t\t\t\tenable privileged mode\n");
+			printf("%% enable ?\t\t\t\tShow Options\n");
+			printf("%% enable secret <password>\t\tSet password"
+			       "(plaintext)\n");
+			printf("%% enable secret <cipher> <hash>\t\tSet"
+			       " password(ciphertext)\n");
+				return 1;
+		} else {
+			printf("%% Invalid argument: %s\n", argv[1]);
+			return 0;
+		}
+
+	case 3:
+		if (!(CMP_ARG(argv[1], "s"))) {
+			printf("%% Invalid argument: %s\n", argv[1]);
+			return 0;
+		}
+
+		if (priv != 1) {
+			printf("%% Privilege required\n");
+			return 0;
+		}
+
+		/* crypt plaintext and save as pass */
+		strlcpy(pass, argv[2], sizeof(pass));
+		gen_salt(salt, sizeof(salt));
+		cpass = strdup(crypt(pass, salt));
+		return (write_pass(cpass, sizeof(cpass)));
+
+
+	case 4:
+		/* 2nd == "secret" ? */
+		if (!(CMP_ARG(argv[1], "s"))) {
+			printf("%% Invalid argument: %s\n", argv[2]);
+			return 0;
+		}
+
+		/* third == correct cipher? (only blowfish atm) */
+		if (!(CMP_ARG(argv[2], "b"))) {
+			printf("%% Invalid cipher: %s\n", argv[3]);
+			return 0;
+		}
+
+		/* privileged? */
+		if (priv != 1) {
+			printf("%% Privilege required\n");
+			return 0;
+		}
+
+		/* set crypted pass */
+		strlcpy(pass, argv[3], sizeof(pass));
+		return (write_pass(pass, sizeof(pass)));
+
+	default:
+		printf("%% Too many arguments\n");
+		return 0;
+	}
+
 }

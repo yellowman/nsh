@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.19 2004/03/17 08:09:13 cyc Exp $ */
+/* $nsh: externs.h,v 1.20 2004/03/22 03:56:29 chris Exp $ */
 /*
  * nsh externs and more
  */
@@ -16,6 +16,7 @@ extern char *vers;		/* the version of nsh */
 extern int verbose;		/* is verbose mode on? */
 extern int editing;		/* is command line editing mode on? */
 extern int bridge;		/* are we in bridge mode (or interface mode?) */
+extern int priv;		/* privileged mode or not? */
 extern pid_t pid;		/* process id of nsh */
 #ifdef _HISTEDIT_H_
 extern HistEvent ev;		/* ev */
@@ -210,3 +211,4 @@ int wi_printlevels(char *);
 int read_pass(char *, size_t);
 int write_pass(char *, size_t);
 int gen_salt(char *, size_t);
+int enable(int, char **);

@@ -1,4 +1,4 @@
-/* $nsh: main.c,v 1.19 2004/03/03 08:46:44 chris Exp $ */
+/* $nsh: main.c,v 1.20 2004/03/22 03:56:29 chris Exp $ */
 /*
  * Copyright (c) 2002, 2003
  *      Chris Cappuccio.  All rights reserved.
@@ -43,6 +43,7 @@ void rmtemp(void);
 char *vers = "20030918";
 int bridge = 0;		/* bridge mode for interface() */
 int verbose = 0;	/* verbose mode for lots of stuff*/
+int priv = 0;
 int editing;
 pid_t pid;
 
