@@ -564,6 +564,11 @@ intip(char *ifname, int ifs, int argc, char **argv)
 	}
 
 	ip = parse_ip(argv[0], NO_NETMASK);
+
+	if (ip.family == 0)
+		/* bad IP specified */
+		return(0);
+
 	if (ip.bitlen == -1) {
 		printf("%% Netmask not specified\n");
 		return(0);
