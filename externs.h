@@ -74,5 +74,5 @@ extern int get_ifdata(const char *, int);
 extern int version(void);
 
 /* compile.c */
-extern char compiled[], compiledby[];
+extern char compiled[], compiledby[], compiledon[];
 

@@ -1,6 +1,5 @@
-This code in its current state is nowhere near complete in meeting
-its original goals.  Thus, it is a work in progress, future versions
-will be released soon which implement much of the following:
+This it is a work in progress, future versions will be released which
+implement much of the following:
 
 Cleanup:
 
@@ -8,18 +7,16 @@ Cleanup:
   this is supposed to be a 'router' not really a unix environment
   so far as user is concerned ?? Roll our own func with strerror?
 * Finish up externs.h 
-* More stylistic and bloat cleanup...
+* ...
 
 Required for intended functionality:
 
 * Add 'save' command which will read routes, hostname, interface configurations
   and write them to a configuration file which can be read by cmdrc on
   startup with -i (requires the following to be done _first_:)
-* Add a command which will configure interface IPs, vlans, and maybe media
-  types
-* Perhaps we can configure bridges, too
-
-PF (required):
+* Finish up interface mode handler commands
+* Create a bridge mode handler
+* Create pf commands under interface, generic mode handler:
 
 * Allow simple block in all/pass out all keep state pf rules to be setup for
   interfaces (default modulate state?)
@@ -43,6 +40,7 @@ Cute features:
 * ALTQ RED/CBQ/HFSC
 * Support for paging through displays of text 24 lines at a time
 * Something comparable to "| inc" from cisco-land
+* Command-line completion
 
 Future:
 
@@ -50,7 +48,7 @@ Future:
 * IPv6?? (shouldn't be hard, considering that most of the functions
   we stole from other source already support it)
 * IPsec! Configure VPNs with simple CLI commands-isakmpd has a fifo interface
-* IPcomp...
+* IPComp...
 * IPIP/GRE?? Other tunnels??
 * IPX?? AppleTalk??
 

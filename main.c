@@ -33,7 +33,8 @@
 
 void usage(void);
 
-char *vers = "20020412";
+char *vers = "20020415";
+int verbose = 0;
 
 int
 main(argc, argv)
@@ -42,10 +43,13 @@ main(argc, argv)
 {
 	int ch, iflag = 0;
          
-	while ((ch = getopt(argc, argv, "i")) != -1)
+	while ((ch = getopt(argc, argv, "iv")) != -1)
 		switch (ch) {
 		case 'i':
 			iflag = 1;
+			break;
+		case 'v':
+			verbose = 1;
 			break;
 		default:
 			break;
@@ -85,4 +89,3 @@ usage()
 	(void)fprintf(stderr, "usage: %s [-i]\n", __progname);
 	exit(1);
 }
-

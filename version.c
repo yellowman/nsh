@@ -37,6 +37,7 @@ int
 version(void)
 {
 	char cpubuf[1024];
+	char kernver[1024];
 	struct timeval tv, boottime;
 	struct utsname un;
 	size_t len;
@@ -63,6 +64,13 @@ version(void)
 	len = sizeof(boottime);
 	if (sysctl(mib, 2, &boottime, &len, NULL, 0) == -1) {
 		perror("% KERN_BOOTTIME");
+		return(1);
+	}
+	mib[0] = CTL_KERN;
+	mib[1] = KERN_VERSION;
+	len = sizeof(kernver);
+	if (sysctl(mib, 2, &kernver, &len, NULL, 0) == -1) {
+		perror("% KERN_VERSION");
 		return(1);
 	}
 	if (uname(&un)) {
@@ -109,7 +117,10 @@ version(void)
 	printf("\n");
 	printf("kernel: %s/%s version %s\n", un.sysname, un.machine,
 	    un.release);
-	printf("cpu: %s with %luK bytes of memory\n", cpubuf, physmem / 1024);
+	printf("cpu: %s\n", cpubuf);
+	printf("memory: %luK\n", physmem / 1024);
+	printf("compiled on: %s\n", compiledon);
+	printf("running on: %s", kernver);
 	return(0);
 }
 

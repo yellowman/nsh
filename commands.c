@@ -79,8 +79,6 @@ static int  margc;
 static char *margv[20];
 static char hbuf[MAXHOSTNAMELEN];
 
-int verbose = 0;
-
 kvm_t *kvmd;
 
 /*
@@ -123,33 +121,33 @@ typedef struct {
 	int  needpriv;		/* Do we need privilege to execute? */
 	int  ignoreifpriv;	/* Ignore while privileged? */
 	int  nocmd;		/* Can we specify 'no ...command...'? */
+	int  modh;		/* Is it a mode handler for cmdrc()? */
 } Command;
 
 static Command	*getcmd(char *name);
+static int	quit(void);
+static int	noop(void);
 static int	enable(void);
 static int	disable(void);
 static int	doverbose(int, char**);
 static int	pr_routes(void);
 static int	pr_ip_stats(void);
-#ifdef IPSEC
 static int	pr_ah_stats(void);
 static int	pr_esp_stats(void);
-#endif
 static int	pr_tcp_stats(void);
 static int	pr_udp_stats(void);
 static int	pr_icmp_stats(void);
 static int	pr_igmp_stats(void);
-#ifdef IPCOMP
 static int	pr_ipcomp_stats(void);
-#endif
 static int	pr_mbuf_stats(void);
-static int	show_help();
-static int	int_help();
-static void	makeargv();
+static int	show_help(void);
+static int	int_help(void);
+static void	makeargv(void);
 static int	hostname (int, char **);
 static int	help(int, char**);
 static int	shell(int, char*[]);
 static int	pr_rt_stats(void);
+static void	p_argv(int, char**);
 static int	priv = 0;
 
 /*
@@ -191,17 +189,13 @@ static struct showlist Showlist[] = {
 	{ "interface",	"Interface config",	0, 1, show_int },
 	{ "routes",	"IP route table",	0, 0, pr_routes },
 	{ "ipstats",	"IP statistics",	0, 0, pr_ip_stats },
-#ifdef IPSEC
 	{ "ahstats",	"AH statistics",	0, 0, pr_ah_stats },
 	{ "espstats",	"ESP statistics",	0, 0, pr_esp_stats },
-#endif
 	{ "tcpstats",	"TCP statistics",	0, 0, pr_tcp_stats },
 	{ "udpstats",	"UDP statistics",	0, 0, pr_udp_stats },
 	{ "icmpstats",	"ICMP statistics",	0, 0, pr_icmp_stats },
 	{ "igmpstats",	"IGMP statistics",	0, 0, pr_igmp_stats },
-#ifdef IPCOMP
 	{ "ipcompstats","IPCOMP statistics",	0, 0, pr_ipcomp_stats },
-#endif
 	{ "rtstats",	"Routing statistics",	0, 0, pr_rt_stats },
 	{ "mbufstats",	"Memory management statistics",	0, 0, pr_mbuf_stats },
 	{ "version",	"Software information",	0, 0, version },
@@ -309,22 +303,33 @@ static struct intlist Intlist[] = {
 #define GETINT(name)	((struct intlist *) genget(name, (char **) Intlist, \
 			    sizeof(struct intlist)))
 
+/*
+ * a big command input loop for interface mode
+ * if a function returns to interface() with a 1, interface() will break
+ * the user back to command() mode.  interface() will always break from
+ * mode handler calls.
+ */
 static int
-interface(int argc, char **argv)
+interface(int argc, char **argv, char *modhvar)
 {
+	int z;
 	struct intlist *i;	/* pointer to current command */
 	char ifname[IFNAMSIZ];	/* interface name */
 
 	(void) signal(SIGINT, SIG_IGN);
 	(void) signal(SIGQUIT, SIG_IGN);
 
-	if (argc != 2) {
+	if (argc != 2 && !modhvar) {
 		printf("%% interface <interface name>\n");
 		return(0);
 	}
 
 	ifname[IFNAMSIZ-1] = '\0';
-	strncpy(ifname, argv[1], sizeof(ifname));
+
+	if (modhvar)
+		strncpy(ifname, modhvar, sizeof(ifname));
+	else
+		strncpy(ifname, argv[1], sizeof(ifname));
 #if 0
         if (ifname not valid interface) {
                 printf("%% inteface %s not found\n", ifname);
@@ -332,19 +337,25 @@ interface(int argc, char **argv)
         }
 #endif
 	for (;;) {
-		printf("%s(interface-%s)/", hbuf, ifname);
-		if (fgets(line, sizeof(line), stdin) == NULL) {
-			if (feof(stdin) || ferror(stdin)) {
-				printf("\n");
-				return(0);
+		if (!modhvar) {
+			printf("%s(interface-%s)/", hbuf, ifname);
+			if (fgets(line, sizeof(line), stdin) == NULL) {
+				if (feof(stdin) || ferror(stdin)) {
+					printf("\n");
+					return(0);
+				}
+				break;
 			}
-			break;
-		}
-		if (line[0] == 0)
-			break;
-		makeargv();
-		if (margv[0] == 0) {
-			break;
+			if (line[0] == 0)
+				break;
+			makeargv();
+			if (margv[0] == 0) {
+				break;
+			}
+		} else {
+			for (z = 0; z < argc; z++)
+				strncpy(margv[z], argv[z], sizeof(margv[z]));
+			margc = argc;
 		}
 		if (strncasecmp(margv[0], "no", strlen("no")) == 0)
 			i = GETINT(margv[1]);
@@ -352,13 +363,17 @@ interface(int argc, char **argv)
 			i = GETINT(margv[0]);
 		if (Ambiguous(i)) {
 			printf("%% Ambiguous command\n");
-			continue;
+			goto next;
 		}
 		if (i == 0) {
 			printf("%% Invalid command\n");
-			continue;
+			goto next;
 		}
 		if ((*i->handler) (ifname, margc, margv)) {
+			break;
+		}
+next:
+		if (modhvar) {
 			break;
 		}
 	}
@@ -403,23 +418,26 @@ static char
  */
 
 static Command  cmdtab[] = {
-	{ "hostname",	hostnamehelp,	hostname,	1, 0, 0 },
-	{ "interface",	interfacehelp,	interface,	1, 0, 0 },
-	{ "show",	showhelp,	showcmd,	0, 0, 0 },
-	{ "enable",	enablehelp,	enable,		0, 1, 0 },
-	{ "disable",	disablehelp,	disable,	1, 0, 0 },
-	{ "route",	routehelp,	route,		1, 0, 1 },
-	{ "monitor",	monitorhelp,	monitor,	0, 0, 0 },
-	{ "quit",	quithelp,	quit,		0, 0, 0 },
-	{ "verbose",	verbosehelp,	doverbose,	0, 0, 1 },
-	{ "!",		shellhelp,	shell,		1, 0, 0 },
-	{ "?",		helphelp,	help,		0, 0, 0 },
-	{ "help",	0,		help,		0, 0, 0 },
-	{ 0,		0,		0,		0, 0, 0 }
+	{ "hostname",	hostnamehelp,	hostname,	1, 0, 0, 0 },
+	{ "interface",	interfacehelp,	interface,	1, 0, 0, 1 },
+#if 0
+	{ "bridge",	bridgehelp,	bridge,		1, 0, 0, 1 },
+#endif
+	{ "show",	showhelp,	showcmd,	0, 0, 0, 0 },
+	{ "enable",	enablehelp,	enable,		0, 1, 0, 0 },
+	{ "disable",	disablehelp,	disable,	1, 0, 0, 0 },
+	{ "route",	routehelp,	route,		1, 0, 1, 0 },
+	{ "monitor",	monitorhelp,	monitor,	0, 0, 0, 0 },
+	{ "quit",	quithelp,	quit,		0, 0, 0, 0 },
+	{ "verbose",	verbosehelp,	doverbose,	0, 0, 1, 0 },
+	{ "!",		shellhelp,	shell,		1, 0, 0, 0 },
+	{ "?",		helphelp,	help,		0, 0, 0, 0 },
+	{ "help",	0,		help,		0, 0, 0, 0 },
+	{ 0,		0,		0,		0, 0, 0, 0 }
 };
 
 /*
- * Mo bettah.  These commands escape ambiguous check and help listings.
+ * These commands escape ambiguous check and help listings
  */
 
 static Command  cmdtab2[] = {
@@ -557,7 +575,7 @@ command(top, tbuf, cnt)
 			printf("%% Command invalid while privileged\n");
 			continue;
 		}
-		if ((*c->handler) (margc, margv)) {
+		if ((*c->handler) (margc, margv, 0)) {
 			break;
 		}
 	}
@@ -729,19 +747,32 @@ load_nlist(void)
 
 /*
  * read a text file and execute commands
+ * take into account that we may have mode handlers int cmdtab that 
+ * execute indented commands from the rc file
  */
 int
 cmdrc(rcname)
 	char rcname[FILENAME_MAX];
 {
-	Command     *c;
-	FILE        *rcfile;
+	Command	*c;
+	FILE	*rcfile;
+	char	modhvar[128];	/* required variable name in mode handler cmd */
+	int	modhcmd; 	/* do we execute under another mode? */
+	int	lnum;		/* line number */
+	int	maxlen = 0;	/* max length of cmdtab argument */
+	int	z;
 
 	if ((rcfile = fopen(rcname, "r")) == 0) {
 		printf("%% %s not found\n",rcname);
 		return 1;
 	}
-	for (;;) {
+
+	for (c = cmdtab; c->name; c++)
+		if (maxlen < strlen(c->name))
+			maxlen = strlen(c->name);
+	c = 0;
+
+	for (lnum = 1; ; lnum++) {
 		if (fgets(line, sizeof(line), rcfile) == NULL)
 			break;
 		if (line[0] == 0)
@@ -751,28 +782,121 @@ cmdrc(rcname)
 		makeargv();
 		if (margv[0] == 0)
 			continue;
-		if (strncasecmp(margv[0], "no", strlen("no")) == 0)
-			c = getcmd(margv[1]);
-		else
-			c = getcmd(margv[0]);
+		if (line[0] == ' ') {
+			/*
+			 * here, if a command starts with a space, it is
+			 * considered part of a mode handler
+			 */
+			modhcmd = 0;
+			if (c)
+				if (c->modh)
+					modhcmd = 1;
+
+			if (!modhcmd) {
+				printf("%% No mode handler specified before indented command? (line %i) ", lnum);
+				p_argv(margc, margv);
+				printf("\n");
+				continue;
+			}
+		} else {
+			/*
+			 * command was not indented.  process normally.
+			 */
+			modhcmd = 0;
+			if (strncasecmp(margv[0], "no", strlen("no")) == 0) {
+				c = getcmd(margv[1]);
+				if (c)
+					if(c->modh) {
+						/*
+						 * ..command is a mode handler
+						 * then it cannot be 'no cmd'
+						 */
+						printf("%% Argument 'no' is invalid for a mode handler (line %i) ", lnum);
+						p_argv(margc, margv);
+						printf("\n");
+						continue;
+					}
+			} else {
+				c = getcmd(margv[0]);
+				if(c)
+					if(c->modh) {
+						/*
+						 * any mode handler should have
+						 * one value stored, passed on
+						 */
+						if (margv[1]) {
+							strncpy(modhvar,
+							    margv[1],
+							    sizeof(modhvar));
+						} else {
+							printf("%% No argument after mode handler (line %i) ", lnum);
+							p_argv(margc, margv);
+							printf("\n");
+							continue;
+						}
+					}
+			}
+		}
 		if (Ambiguous(c)) {
-			printf("%% Ambiguous rc command: %s\n", margv[0]);
+			printf("%% Ambiguous rc command (line %i) ", lnum);
+			p_argv(margc, margv);
+			printf("\n");
 			continue;
 		}
 		if (c == 0) {
-			printf("%% Invalid rc command: %s\n", margv[0]);
+			printf("%% Invalid rc command (line %i) ", lnum);
+			p_argv(margc, margv);
+			printf("\n");
 			continue;
+		} else if (verbose) {
+			printf("%% %4s: %*s%10s (line %i) margv ",
+			    c->modh ? "mode" : "cmd", maxlen, c->name,
+			    modhcmd ? "(sub-cmd)" : "", lnum);
+			p_argv(margc, margv);
+			printf("\n");
 		}
-		if ((strncasecmp(margv[0], "no", strlen("no")) == 0) && ! c->nocmd) {
-			printf("%% Invalid rc command: %s %s\n", margv[0],
-			    margv[1]);
-			continue;
+		if (!modhcmd) {
+			/*
+			 * normal processing, there is no sub-mode cmd to be
+			 * dealt with
+			 */
+			if ((strncasecmp(margv[0], "no", strlen("no")) == 0) &&
+		 	   !c->nocmd) {
+				printf("%% Invalid rc command (line %i) ",
+				    lnum);
+				p_argv(margc, margv);
+				printf("\n");
+				continue;
+			}
+			if (c->modh) {
+				/*
+				 * we took the first argument after the command
+				 * name, wait till the next line to actually do
+				 * something!
+				 */
+				continue;
+			}
 		}
-		(*c->handler) (margc, margv);
+		if (c->modh && modhcmd)
+			(*c->handler) (margc, margv, modhvar);
+		else
+			(*c->handler) (margc, margv, 0);
 	}
 	fclose(rcfile);
 	return 0;
 }
+
+void
+p_argv(int argc, char **argv)
+{
+	int z;
+
+	for (z = 0; z < argc; z++)
+		printf("%s%s", z ? " " : "[", argv[z]);
+	printf("]");
+	return;
+}
+
 
 /*
  * Lookup wrappers
@@ -799,7 +923,6 @@ pr_ip_stats(void)
 	return 0;
 }
 
-#ifdef IPSEC
 int
 pr_ah_stats(void)
 {
@@ -813,7 +936,6 @@ pr_esp_stats(void)
 	esp_stats(nl[N_ESPSTAT].n_value);
 	return 0;
 }
-#endif
 
 int
 pr_tcp_stats(void)
@@ -843,14 +965,12 @@ pr_igmp_stats(void)
 	return 0;
 }
 
-#ifdef IPCOMP
 int
 pr_ipcomp_stats(void)
 {
 	ipcomp_stats(nl[N_IPCOMPSTAT].n_value);
 	return 0;
 }
-#endif
 
 int
 pr_mbuf_stats(void)

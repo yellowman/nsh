@@ -114,6 +114,8 @@ u_long  rtm_inits;
 uid_t	uid;
 
 char	*routename_sa(struct sockaddr *);
+char	*any_ntoa(const struct sockaddr *);
+
 void	 flushroutes(int);
 int	 monitor(void);
 #ifdef INET6
@@ -123,6 +125,7 @@ void	 print_rtmsg(struct rt_msghdr *, int);
 void	 pmsg_common(struct rt_msghdr *);
 void	 pmsg_addrs(char *, int);
 void	 bprintf(FILE *, int, u_char *);
+int	 kernel_route(ip_t *, ip_t *, u_short);
 
 /*
  * Purge all entries in the routing tables not
@@ -517,8 +520,8 @@ bprintf(fp, b, s)
 }
 
 /*
- * Adapted from mrtd which adapted from 4.4bsd, looks like
- * this was rtmsg() at one point.
+ * Adapted from merit's mrtd (hence the copyright above) which appears to
+ * have adapted from 4.4bsd, as it looks like this was rtmsg() at one point
  */
 int
 kernel_route(ip_t *dest, ip_t *gate, u_short cmd)
@@ -634,7 +637,7 @@ kernel_route(ip_t *dest, ip_t *gate, u_short cmd)
 	m_rtmsg.m_rtm.rtm_msglen = l = cp - (char *) &m_rtmsg;
 
 	if(verbose)
-		print_rtmsg(&m_rtmsg, m_rtmsg.m_rtm.rtm_msglen);
+		print_rtmsg((struct rt_msghdr *)&m_rtmsg, m_rtmsg.m_rtm.rtm_msglen);
 
 	if ((rlen = write (s, (char *) &m_rtmsg, l)) < 0) {
 		if (errno == ESRCH || errno == ENETUNREACH)
