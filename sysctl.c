@@ -1,4 +1,4 @@
-/* $nsh: sysctl.c,v 1.3 2003/04/17 02:25:52 chris Exp $ */
+/* $nsh: sysctl.c,v 1.4 2003/04/17 16:46:44 chris Exp $ */
 /*
  * Copyright (c) 2003
  *      Chris Cappuccio.  All rights reserved.
@@ -178,35 +178,35 @@ conf_ipsysctl(FILE *output)
 		fprintf(output, "ip forwarding\n");
 	else if (tmp == 0)
 		fprintf(output, "no ip forwarding\n");
-	if (sysctl_inet(IPPROTO_IPIP, IPIPCTL_ALLOW, 0, 1))
+	if (sysctl_inet(IPPROTO_IPIP, IPIPCTL_ALLOW, 0, 1) == 1)
 		fprintf(output, "ip ipip\n");
-	if (sysctl_inet(IPPROTO_GRE, GRECTL_ALLOW, 0, 1))
+	if (sysctl_inet(IPPROTO_GRE, GRECTL_ALLOW, 0, 1) == 1)
 		fprintf(output, "ip gre\n");
-	if (sysctl_inet(IPPROTO_GRE, GRECTL_WCCP, 0, 1))
+	if (sysctl_inet(IPPROTO_GRE, GRECTL_WCCP, 0, 1) == 1)
 		fprintf(output, "ip wccp\n");
-	if (sysctl_inet(IPPROTO_GRE, MOBILEIPCTL_ALLOW, 0, 1))
+	if (sysctl_inet(IPPROTO_GRE, MOBILEIPCTL_ALLOW, 0, 1) == 1)
 		fprintf(output, "ip mobileip\n");
-	if (sysctl_inet(IPPROTO_ETHERIP, ETHERIPCTL_ALLOW, 0, 1))
+	if (sysctl_inet(IPPROTO_ETHERIP, ETHERIPCTL_ALLOW, 0, 1) == 1)
 		fprintf(output, "ip etherip\n");
-	if (sysctl_inet(IPPROTO_IPCOMP, IPCOMPCTL_ENABLE, 0, 1))
+	if (sysctl_inet(IPPROTO_IPCOMP, IPCOMPCTL_ENABLE, 0, 1) == 1)
 		fprintf(output, "ip ipcomp\n");
 	if (sysctl_inet(IPPROTO_ESP, ESPCTL_ENABLE, 0, 1) == 0)
 		fprintf(output, "no ip esp\n");
 	if (sysctl_inet(IPPROTO_AH, AHCTL_ENABLE, 0, 1) == 0)
 		fprintf(output, "no ip ah\n");
-	if (sysctl_inet(IPPROTO_IP, IPCTL_SOURCEROUTE, 0, 1))
+	if (sysctl_inet(IPPROTO_IP, IPCTL_SOURCEROUTE, 0, 1) == 1)
 		fprintf(output, "ip sourceroute\n");
 	/*
 	 * Your kernel must have option ENCDEBUG for this to do anything
 	 */
-	if (sysctl_inet(IPPROTO_IP, IPCTL_ENCDEBUG, 0, 1))
+	if (sysctl_inet(IPPROTO_IP, IPCTL_ENCDEBUG, 0, 1) == 1)
 		fprintf(output, "ip encdebug\n");
 	if ((tmp = sysctl_inet(IPPROTO_IP, IPCTL_IPPORT_MAXQUEUE, 0, 1)) !=
 	    DEFAULT_MAXQUEUE && tmp != -1)
 		fprintf(output, "ip maxqueue %i\n", tmp);
 	if (sysctl_inet(IPPROTO_IP, IPCTL_SENDREDIRECTS, 0, 1) == 0)
 		fprintf(output, "no ip send-redirects\n");
-	if (sysctl_inet(IPPROTO_IP, IPCTL_DIRECTEDBCAST, 0, 1))
+	if (sysctl_inet(IPPROTO_IP, IPCTL_DIRECTEDBCAST, 0, 1) == 1)
 		fprintf(output, "ip directed-broadcast\n");
 #ifdef notyet
 	if ((tmp = sysctl_inet(IPPROTO_IP, IPCTL_DEFMTU, 0, 1)) !=
