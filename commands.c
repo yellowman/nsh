@@ -1434,18 +1434,18 @@ int
 reload(void)
 {
 	printf ("%% Reload initiated\n");
-	reboot (RB_AUTOBOOT);
-	/* NOTREACHED */
-	return 1;
+	if (reboot (RB_AUTOBOOT) == -1)
+		printf("%% reboot: RB_AUTOBOOT: %s\n", strerror(errno));
+	return(1);
 }
                
 int
 shut_down(void)
 {
 	printf ("%% Shutdown initiated");
-	reboot (RB_HALT);
-	/* NOTREACHED */
-	return 1;
+	if (reboot (RB_HALT) == -1)
+		printf("%% reboot: RB_HALT: %s\n", strerror(errno));
+	return(1);
 }
 
 /*
