@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.13 2003/02/18 09:29:46 chris Exp $ */
+/* $nsh: commands.c,v 1.14 2003/02/18 09:39:02 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -1443,7 +1443,7 @@ reload(void)
 int
 shut_down(void)
 {
-	printf ("%% Shutdown initiated");
+	printf ("%% Shutdown initiated\n");
 	if (reboot (RB_HALT) == -1)
 		printf("%% reboot: RB_HALT: %s\n", strerror(errno));
 	return(1);
