@@ -1,4 +1,4 @@
-/* $nsh: rate.c,v 1.9 2003/02/18 09:29:46 chris Exp $ */
+/* $nsh: rate.c,v 1.10 2003/03/24 19:45:23 chris Exp $ */
 /* From: $OpenBSD: /usr/src/usr.sbin/altq/tbrconfig/tbrconfig.c,v 1.3 2002/02/15 03:31:16 deraadt Exp $ */
 
 /*
@@ -56,7 +56,7 @@ static int get_clockfreq(void);
 int list_rates(void);
 
 int 
-intrate(char *ifname, int argc, char **argv)
+intrate(char *ifname, int ifs, int argc, char **argv)
 {
 	struct tbrreq req;
 	u_int baudrate, rate = 0, depth = 0;
