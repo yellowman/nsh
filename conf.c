@@ -1,4 +1,4 @@
-/* $nsh: conf.c,v 1.11 2003/03/10 20:10:02 chris Exp $ */
+/* $nsh: conf.c,v 1.12 2003/03/28 16:15:19 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -79,11 +79,10 @@ conf(FILE *output)
 	short ippntd, br;
 	int ifs, flags, tmp;
 	long l_tmp;
-	u_long rate, bucket;
 
 	char *iptype;
 	char hostbuf[MAXHOSTNAMELEN];
-	char rate_str[64], bucket_str[64], tmp_str[4096], tmp_str2[1024];
+	char tmp_str[4096], tmp_str2[1024];
 
 	if ((ifn_list = if_nameindex()) == NULL) {
 		printf("%% conf: if_nameindex failed\n");
@@ -238,42 +237,6 @@ conf(FILE *output)
 				fprintf(output, " mtu %li\n", if_mtu);
 			if(if_metric)
 				fprintf(output, " metric %li\n", if_metric);
-
-			/*
-			 * print rate if available, print bucket value only if
-			 * it is not equivalent to the default value.  we try
-			 * and print values in megabits/kilobits only when they
-			 * round off to an integer value
-			 */
-			rate = get_tbr(ifnp->if_name, TBR_RATE);
-			bucket = get_tbr(ifnp->if_name, TBR_BUCKET);
-
-			if(rate && bucket) {
-				if (ROUNDMBPS(rate))
-					snprintf(rate_str, sizeof(rate_str),
-					    "%lim", rate/1000/1000);
-				else if (ROUNDKBPS(rate))
-					snprintf(rate_str, sizeof(rate_str),
-					    "%lik", rate/1000);
-				else
-					snprintf(rate_str, sizeof(rate_str),
-					    "%lu", rate);
-
-				if (size_bucket(ifnp->if_name, rate) == bucket)
-					bucket_str[0] = '\0';
-				else {
-					if (ROUNDKBYTES(bucket))
-						snprintf(bucket_str,
-						    sizeof(bucket_str),
-						    " %lik", bucket/1024);
-					else
-						snprintf(bucket_str,
-						    sizeof(bucket_str),
-						    " %lu", bucket);
-				}
-
-			fprintf(output, " rate %s%s\n", rate_str, bucket_str);
-			}
 
 			if (get_nwinfo(ifnp->if_name, tmp_str, sizeof(tmp_str),
 			    NWID) != NULL) {

@@ -1,5 +1,5 @@
 NSH // Network Shell User's Manual // Chris Cappuccio <chris@nmedia.net>
-$nsh: MANUAL,v 1.6 2003/03/28 00:03:42 chris Exp $
+$nsh: MANUAL,v 1.7 2003/03/28 16:15:19 chris Exp $
 
 Copyright (c) 2003 Chris Cappuccio
 
@@ -670,7 +670,6 @@ nsh(interface-fxp0)/?
   vlan       802.1Q vlan tag and parent
   debug      Driver dependent debugging
   shutdown   Shutdown interface
-  rate       Rate limit (token bucket regulator)
   ?          Options
 
 [no] ip <address>/<bitmaskORnetmask>
@@ -829,23 +828,6 @@ Using this command to shutdown and then turn up an interface will reset it.
 
 nsh(interface-de0)/shutdown
 nsh(interface-de0)/no shutdown
-
-[no] rate <tokenrate> [bucketsize]
-----------------------------------
-
-Setup outgoing rate limiting on an interface.  The tokenrate can be specified
-in Kbps, Mbps, or Gbps.  Using 'no rate' will remove any rate limit
-assigned to an interface.
-
-nsh(interface-fxp0)/rate 10m
-
-or
-
-nsh(interface-em0)/rate 1g
-
-or
-
-nsh(interface-vlan0)/rate 384k
 
 ?
 -

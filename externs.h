@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.12 2003/03/24 19:45:23 chris Exp $ */
+/* $nsh: externs.h,v 1.13 2003/03/28 16:15:19 chris Exp $ */
 /*
  * nsh externs and more
  */
@@ -94,6 +94,7 @@ int Ambiguous(void *);
 /* rate.c */
 #define TBR_RATE 1		/* request for TBR token rate */
 #define TBR_BUCKET 2		/* request for TBR bucket size */
+#define ALTQ_TICKET 3		/* request for ALTQ-pf ticket */
 int intrate(char *ifname, int, int, char**);
 u_int size_bucket(char *, u_int);
 u_int autosize_bucket(char *, u_int);

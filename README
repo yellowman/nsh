@@ -1,5 +1,5 @@
 nsh//network config shell//Chris Cappuccio <chris@dqc.org> version 20030318
-$nsh: README,v 1.12 2003/03/18 23:10:46 chris Exp $
+$nsh: README,v 1.13 2003/03/28 16:15:19 chris Exp $
 
 A CLI intended for OpenBSD-based routers running little except for sshd,
 targeted towards CompactFlash-based Soekris Net4501 and similar embedded
@@ -23,7 +23,7 @@ nsh handles the following functions:
   + Configure the ALTQ tbr on an interface
   + Configure bridge for members, rules
   + Save the current routes, bridge, interface configs to a file
-* Comes with a full manual (20%)
+* Comes with a full manual (30%)
 * This shell replaces most of /etc/rc, /etc/netstart on an embedded system.
   Simply started as nsh -i, it will read the previously saved configuration
   and execute it on the system.

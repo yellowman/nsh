@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.18 2003/03/27 23:30:54 chris Exp $ */
+/* $nsh: commands.c,v 1.19 2003/03/28 16:15:19 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -319,7 +319,6 @@ static struct intlist Intlist[] = {
 	{ "vlan",	"802.1Q vlan tag and parent",		intvlan, 0 },
 	{ "debug",	"Driver dependent debugging",		intflags, 0 },
 	{ "shutdown",	"Shutdown interface",			intflags, 2 },
-	{ "rate",	"Rate limit (token bucket regulator)",	intrate, 0 },
 /* Bridge mode commands */
 	{ "member",	"Bridge member(s)",			brport, 1 },
 	{ "span",	"Bridge spanning port(s)",		brport, 1 },

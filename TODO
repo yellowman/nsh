@@ -1,4 +1,4 @@
-$nsh: TODO,v 1.12 2003/02/18 09:29:46 chris Exp $
+$nsh: TODO,v 1.13 2003/03/28 16:15:19 chris Exp $
 
 nsh is a work in progress, future versions will be released which
 implement much of the following (of course, diffs are welcome):
@@ -47,6 +47,10 @@ Would be nice:
   flash image when given a network source for new binaries?
 * Build a web interface that works through the rc file handler
 * Turn pfctl into a library and use it directly
+* Separate the user interface from the kernel interface so that nsh doesn't
+  need to be run as root, maybe this would allow us to run an nsh daemon
+  in the background that could persistently keep other information which the
+  kernel doesn't store itself. 
 * Add more diagnostic messages for verbose output where useful
 * Can we hook into snmpd at all or just run it separately on the same box?
 * Support for paging through displays of text X lines at a time
@@ -67,9 +71,12 @@ better not forget later...):
 * 'nwid ""' will cause a card in access point mode to freak out.  (Although,
   lots of things seem to cause Prism cards in AP mode to freak out.  Apparently
   these problems are due to the if_wi driver not properly checking and dealing
-  with error returns)
-* The 3.2 kernel does not keep count of information displayed in 'show rtstat'
+  with error returns.  Apparently some/a lot of this is fixed in OpenBSD
+  3.3...)
+* The kernel does not keep count of information displayed in 'show rtstat'
   properly (what else??)
+* ALTQTBRSET was removed from the kernel with the migration to pf.  But,
+  there is no equivalent.  Fix this.
 * We need to mask the rounding error for altq tbr 'rate' value
 
   The error can be demonstrated with the test program at
