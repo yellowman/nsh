@@ -128,7 +128,21 @@ conf(FILE *output)
 		/*
 		 * print interface mtu
 		 */
-		fprintf(output, " mtu %li\n", if_mtu);
+		if(if_mtu != default_mtu(ifnp->if_name))
+			fprintf(output, " mtu %li\n", if_mtu);
+		if(if_metric > 0)
+			fprintf(output, " metric %li\n", if_metric);
+		if(flags & IFF_LINK0 || flags & IFF_LINK1 ||
+		    flags & IFF_LINK2) {
+			fprintf(output, " link ");
+			if(flags & IFF_LINK0)
+				fprintf(output, "0 ");
+			if(flags & IFF_LINK1)
+				fprintf(output, "1 ");
+			if(flags & IFF_LINK2)
+				fprintf(output, "2 ");
+			fprintf(output, "\n");
+		}
  
 		/*
 		 * print rate if available, print bucket value only if
@@ -177,8 +191,10 @@ conf(FILE *output)
 		}
 
 		/*
-		 * print shutdown if interface is not up
+		 * print various flags
 		 */
+		if (flags & IFF_DEBUG)
+			fprintf(output, " debug\n");
 		if (!(flags & IFF_UP))
 			fprintf(output, " shutdown\n");
         }
@@ -190,6 +206,39 @@ conf(FILE *output)
 #endif
 
 	return(0);
+}
+
+int
+default_mtu(const char *ifname)
+{
+	/*
+	 * I wish this could be pulled from the kernel.  Some of these
+	 * will need to be updated for newer kernels (current as of 5/20/2002)
+	 * Here we list everything that has a default mtu other than
+	 * 1500 (and a few that are commonly 1500).. If it isn't in
+	 * our list, we always return 1500...
+	 */
+	if(strncasecmp(ifname, "vlan", strlen("vlan")) == 0)
+		return(1500);
+	if(strncasecmp(ifname, "gre", strlen("gre")) == 0)
+		return(1450);
+	if(strncasecmp(ifname, "gif", strlen("gif")) == 0)
+		return(1280);
+	if(strncasecmp(ifname, "tun", strlen("tun")) == 0)
+		return(3000);
+	if(strncasecmp(ifname, "ppp", strlen("ppp")) == 0)
+		return(1500);
+	if(strncasecmp(ifname, "sl", strlen("sl")) == 0)
+		return(296);
+	if(strncasecmp(ifname, "enc", strlen("enc")) == 0)
+		return(1536);
+	if(strncasecmp(ifname, "bridge", strlen("bridge")) == 0)
+		return(1500);
+	if(strncasecmp(ifname, "pflog", strlen("pflog")) == 0)
+		return(33224);
+	if(strncasecmp(ifname, "lo", strlen("lo")) == 0)
+		return(33224);
+	return(1500);
 }
 
 #if 0

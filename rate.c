@@ -60,7 +60,7 @@ intrate(char *ifname, int argc, char **argv)
 	struct tbrreq req;
 	char buf[256];
 	u_int baudrate, rate = 0, depth = 0;
-	int fd, ch, delete = 0;
+	int fd, delete = 0;
 
 	if (strncasecmp(argv[0], "no", 2) == 0) {
 		delete = 1;

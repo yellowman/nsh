@@ -73,8 +73,6 @@
 #include "externs.h"
 #include "editing.h"
 
-#define HELPINDENT (7)
-
 char prompt[128];
 kvm_t *kvmd;
 
@@ -83,7 +81,7 @@ static char saveline[256];
 static int  margc;
 static char *margv[20];
 static char hbuf[MAXHOSTNAMELEN];	/* host name */
-static char ifname[IFNAMSIZ];		/* interface name */
+static char *ifname;		/* interface name */
 
 /*
  * Kernel namelist for our use
@@ -159,6 +157,7 @@ static int	help(int, char**);
 static int	shell(int, char*[]);
 static int	pr_rt_stats(void);
 static void	p_argv(int, char**);
+static int	config(void);
 static int	priv = 0;
 
 /*
@@ -210,9 +209,9 @@ static struct showlist Showlist[] = {
 	{ "rtstats",	"Routing statistics",	0, 0, pr_rt_stats },
 	{ "mbufstats",	"Memory management statistics",	0, 0, pr_mbuf_stats },
 	{ "version",	"Software information",	0, 0, version },
-	{ "running-c",	"Operating configuration", 0, 0, pr_conf },
+	{ "running-config",	"Operating configuration", 0, 0, pr_conf },
 #if 0
-	{ "startup-c",	"Startup configuration", 0, 0, pr_s_conf },
+	{ "startup-config",	"Startup configuration", 0, 0, pr_s_conf },
 #endif
 	{ "?",		"Options",		0, 0, show_help },
 	{ "help",	0,			0, 0, show_help },
@@ -262,14 +261,19 @@ static int
 show_help()
 {
 	struct showlist *s; /* pointer to current command */
+	int z = 0;
 
 	printf("%% Commands may be abbreviated.\n");
 	printf("%% 'show' commands are:\n\n");
 
 	for (s = Showlist; s->name; s++) {
+		if (strlen(s->name) > z)
+			z = strlen(s->name);
+	}
+
+	for (s = Showlist; s->name; s++) {
 		if (s->help)
-			printf("  %-*s\t%s\n", (int)HELPINDENT,
-			    s->name, s->help);
+			printf("  %-*s  %s\n", z, s->name, s->help);
 	}
 	return 0;
 }
@@ -285,30 +289,29 @@ struct intlist {
 };
 
 static struct intlist Intlist[] = {
+	{ "ip",		"IP address and other parameters",	intip },
+	{ "alias",	"Additional IP addresses and other parameters",	intip },
+	{ "mtu",	"Set Maximum Transmission Unit",	intmtu },
+	{ "metric",	"Set routing metric",			intmetric },
+	{ "link",	"Set link level options",		intlink },
+	{ "arp",	"Set Address Resolution Protocol",	intflags },
 #if 0
-	{ "ip",		"IP address and netmask",		intip },
-	{ "alias",	"Secondary IP address and netmask",	intalias },
-	{ "broadcast",	"Specify alternate broadcast",		intbroadcast },
-	{ "mtu",	"MTU",					intmtu },
 	{ "nwid",	"802.11 network ID",			intnwid },
 	{ "nwkey",	"802.11 network key",			intnwkey },
 	{ "powersave",	"802.11 powersaving mode",		intpowersave },
 	{ "media",	"Media type",				intmedia },
 	{ "mediaopt",	"Media options",			intmediaopt },
-	{ "metric",	"Metric",				intmetric },
 	{ "vlan",	"802.1Q vlan tag and parent",		intvlan },
-	{ "trailers",	"Trailer link level encapsulation",	inttrailers },
 	{ "tunnel",	"Source and destination on GIF tunnel",	inttunnel },
-	{ "link",	"Enable link level options",		intlink },
 #ifdef INET6
 	{ "vltime",	"IPv6 valid lifetime",			intvltime },
         { "pltime",	"IPv6 preferred lifetime",		intpltime },
 	{ "anycast",	"IPv6 anycast address bit",		intanycast },
 	{ "tentative",	"IPv6 tentative address bit",		inttentative },
 #endif
-	{ "debug",	"Driver dependent debugging",		intdebug },
-	{ "shutdown",	"Shutdown interface",			intdown },
 #endif
+	{ "debug",	"Driver dependent debugging",		intflags },
+	{ "shutdown",	"Shutdown interface",			intflags },
 	{ "rate",	"Rate limit (token bucket regulator)",	intrate },
 	{ "?",		"Options",				int_help },
 	{ "help",	0,					int_help },
@@ -382,14 +385,19 @@ static int
 flush_help()
 {
 	struct flushlist *f;
+	int z = 0;
 
 	printf("%% Commands may be abbreviated.\n");
 	printf("%% 'flush' commands are:\n\n");
 
 	for (f = Flushlist; f->name; f++) {
+		if (strlen(f->name) > z)
+			z = strlen(f->name);
+	}
+
+	for (f = Flushlist; f->name; f++) {
 		if (f->help)
-			printf("  %-*s\t%s\n", (int)HELPINDENT,
-			    f->name, f->help);
+			printf("  %-*s  %s\n", z, f->name, f->help);
 	}
 	return 0;
 }
@@ -403,7 +411,7 @@ flush_help()
 static int
 interface(int argc, char **argv, char *modhvar)
 {
-	int z, num;
+	int z = 0, num;
 	struct intlist *i;	/* pointer to current command */
 
 	(void) signal(SIGINT, SIG_IGN);
@@ -414,12 +422,18 @@ interface(int argc, char **argv, char *modhvar)
 		return(0);
 	}
 
+	if (ifname == 0)
+		if ((ifname = (char *)malloc(IFNAMSIZ)) == NULL) {
+			printf("%% interface: malloc\n");
+			return(0);
+		}
+
 	ifname[IFNAMSIZ-1] = '\0';
 
 	if (modhvar)
-		strncpy(ifname, modhvar, sizeof(ifname));
+		strlcpy(ifname, modhvar, IFNAMSIZ-1);
 	else
-		strncpy(ifname, argv[1], sizeof(ifname));
+		strlcpy(ifname, argv[1], IFNAMSIZ-1);
         if (!is_valid_ifname(ifname)) {
                 printf("%% inteface %s not found\n", ifname);
                 return(0);
@@ -499,15 +513,20 @@ static int
 int_help()
 {
 	struct intlist *i; /* pointer to current command */
+	int z = 0;
 
 	printf("%% Commands may be abbreviated.\n");
 	printf("%% Press enter at a prompt to leave interface configuration mode.\n");
 	printf("%% Interface configuration commands are:\n\n");
 
 	for (i = Intlist; i->name; i++) {
+		if (strlen(i->name) > z)
+			z = strlen(i->name);
+	}
+
+	for (i = Intlist; i->name; i++) {
 		if (i->help)
-			printf("  %-*s\t%s\n", (int)HELPINDENT,
-			    i->name, i->help);
+			printf("  %-*s  %s\n", z, i->name, i->help);
 	}
 	return 0;
 }
@@ -561,7 +580,8 @@ static Command cmdtab[] = {
  */
 
 static Command  cmdtab2[] = {
-	{ 0,		0,		0,		0 }
+	{ "config",	0,		config,		0, 0, 0, 0 },
+	{ 0,		0,		0,		0, 0, 0, 0 }
 };
 
 static Command *
@@ -719,21 +739,26 @@ command(top)
  * Help command.
  */
 static int
-help(argc, argv)
-	int argc;
-	char *argv[];
+help(int argc, char **argv)
 {
 	Command *c;
 
 	if (argc == 1) { 
+		int z = 0;
+
 		printf("%% Commands may be abbreviated.\n");
 		printf("%% Commands are:\n\n");
-		for (c = cmdtab; c->name; c++)
+
+		for (c = cmdtab; c->name; c++) {
+			if ((c->needpriv == priv) || (c->ignoreifpriv != priv))
+				if (strlen(c->name) > z)
+					z = strlen(c->name);
+		}
+		for (c = cmdtab; c->name; c++) {
 			if (c->help && ((c->needpriv == priv) ||
-			    (c->ignoreifpriv != priv))) {
-				printf("  %-*s\t%s\n", (int)HELPINDENT,
-				    c->name, c->help);
-			}
+			    (c->ignoreifpriv != priv)))
+				printf("  %-*s  %s\n", z, c->name, c->help);
+		}
 		return 0;
 	}
 	while (--argc > 0) {
@@ -830,6 +855,12 @@ disable(void)
 {
 	priv = 0;
 	return 0;
+}
+
+int
+config(void)
+{
+	printf("%% Configuration mode is unnecessary with nsh.\n");
 }
 
 /*
@@ -931,7 +962,7 @@ cmdrc(rcname)
 	char	modhvar[128];	/* required variable name in mode handler cmd */
 	int	modhcmd; 	/* do we execute under another mode? */
 	int	lnum;		/* line number */
-	int	maxlen;		/* max length of cmdtab argument */
+	int	z = 0;		/* max length of cmdtab argument */
 
 	if ((rcfile = fopen(rcname, "r")) == 0) {
 		printf("%% %s not found\n",rcname);
@@ -939,8 +970,8 @@ cmdrc(rcname)
 	}
 
 	for (c = cmdtab; c->name; c++)
-		if (maxlen < strlen(c->name))
-			maxlen = strlen(c->name);
+		if (strlen(c->name) > z)
+			z = strlen(c->name);
 	c = 0;
 
 	for (lnum = 1; ; lnum++) {
@@ -1022,7 +1053,7 @@ cmdrc(rcname)
 		}
 		if (verbose) {
 			printf("%% %4s: %*s%10s (line %i) margv ",
-			    c->modh ? "mode" : "cmd", maxlen, c->name,
+			    c->modh ? "mode" : "cmd", z, c->name,
 			    modhcmd ? "(sub-cmd)" : "", lnum);
 			p_argv(margc, margv);
 			printf("\n");

@@ -68,7 +68,7 @@ show_int(const char *ifname)
 	 */
 	if (ifname == 0) {
 		if ((ifn_list = if_nameindex()) == NULL) {
-			printf("%% show_int: if_namindex failed\n");
+			printf("%% show_int: if_nameindex failed\n");
 			return 1;
 		}
 		for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++) {
@@ -90,12 +90,7 @@ show_int(const char *ifname)
 	/*
 	 * Show up/down status and last change time
 	 */
-	if (ioctl(ifs, SIOCGIFFLAGS, (caddr_t)&ifr) < 0) {
-		perror("% show_int: SIOCGIFFLAGS");
-		close(ifs);
-		return(1);
-	}
-	flags = ifr.ifr_flags;
+	flags = get_ifflags(ifname);
 
 	ifr.ifr_data = (caddr_t)&if_data;
 	if (ioctl(ifs, SIOCGIFDATA, (caddr_t)&ifr) < 0) {
@@ -367,8 +362,9 @@ is_valid_ifname(const char *ifname)
 		return(0);
 	}
 	for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++) {
-		if (strncasecmp(ifname, ifnp->if_name,
-		    strlen(ifnp->if_name)) == 0)
+		if ((strncasecmp(ifname, ifnp->if_name,
+		    strlen(ifnp->if_name)) == 0) && (strlen(ifname) ==
+		    strlen(ifnp->if_name)))
 			count++;
 	}
 	if_freenameindex(ifn_list);
@@ -379,3 +375,381 @@ is_valid_ifname(const char *ifname)
 		return(0);
 }
 
+int
+get_ifflags(const char *ifname)
+{
+	int ifs, flags;
+	struct ifreq ifr;
+
+	if ((ifs = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+		perror("% get_ifflags");
+		return(0);
+	}
+	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
+
+	if (ioctl(ifs, SIOCGIFFLAGS, (caddr_t)&ifr) < 0) {
+		perror("% get_ifflags: SIOCGIFFLAGS");
+		flags = 0;
+	} else
+		flags = ifr.ifr_flags;
+	close(ifs);
+	return(flags);
+}
+
+int
+set_ifflags(const char *ifname, int flags)
+{
+	int ifs;
+	struct ifreq ifr;
+
+	if ((ifs = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+		perror("% get_ifflags");
+		return(0);
+	}
+	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
+
+	ifr.ifr_flags = flags;
+
+	if (ioctl(ifs, SIOCSIFFLAGS, (caddr_t)&ifr) < 0) {
+		perror("% get_ifflags: SIOCSIFFLAGS");
+	}
+
+        close(ifs);
+        return(0);
+}
+
+#define DELETE 0
+#define ADD 1
+
+int
+intip(const char *ifname, int argc, char **argv)
+{
+	int cmd, alias, ifs, flags, argcmax;
+	struct in_addr ip, mask, destbcast;
+	struct ifaliasreq addreq, ridreq;
+	struct sockaddr_in *sin;
+	char *q, *msg, *cmdname;
+
+	memset(&addreq, 0, sizeof(addreq));
+	memset(&ridreq, 0, sizeof(ridreq));
+
+	if (strncasecmp(argv[0], "no", strlen("no")) == 0) {
+		cmd = DELETE;
+		argc--;
+		argv++;
+	} else
+		cmd = ADD;
+
+	/*
+	 * We use this function for ip and alias setup since they are
+	 * the same thing.
+	 */
+	if (strncasecmp(argv[0], "a", strlen("a")) == 0) {
+		alias = 1;
+		cmdname = "alias";
+	} else {
+		alias = 0;
+		cmdname = "ip";
+	}
+
+	argc--;
+	argv++;
+
+	flags = get_ifflags(ifname);
+	if (flags & IFF_POINTOPOINT) {
+		argcmax = 2;
+		msg = " [destaddr]";
+	} else if (flags & IFF_BROADCAST) {
+		argcmax = 2;
+		msg = " [broadcast]";
+	} else {
+		argcmax = 1;
+		msg = "";
+	}
+
+	if (argc < 1 || argc > argcmax) {
+		printf("%% %s <address>/<bits>%s\n", cmdname, msg);
+		printf("%% %s <address>/<netmask>%s\n", cmdname, msg);
+		printf("%% no %s <address>[/bits]\n", cmdname);
+		printf("%% no %s <address>[/netmask]\n", cmdname);
+		return(0);
+	}
+
+	q = strchr(argv[0], '/');
+	if (q)
+		*q = '\0';
+	else if (cmd != DELETE) {
+		printf("%% Netmask not specified\n");
+		return(0);
+	}
+	if (!(inet_aton(argv[0], &ip) && strchr(argv[0], '.'))) {
+		printf("%% %s is not an IP address\n", argv[0]);
+		return(0);
+	}
+
+	if (q) {
+		char *s;
+
+		s = q + 1;
+		if (!(inet_aton(s, &mask) && strchr(s, '.'))) {
+			if(strspn(s, "0123456789") == strlen(s)) {
+				int bits;
+
+				/* assume bits after slash */
+				bits = strtoul(s, 0, 0);
+				if (bits > 32) {
+					printf("%% Invalid bit length\n");
+					return(0);
+				}
+				mask.s_addr = htonl(0xffffffff << (32 - bits));
+			} else {
+				printf("%% Invalid address mask\n");
+				return(0);
+			}
+		}
+	} else {
+		mask.s_addr = htonl(0xffffffff);
+	}
+	
+	if (argc == 2)
+		if (!inet_aton(argv[1], &destbcast)) {
+			printf("%% Invalid %s address\n",
+			    flags & IFF_POINTOPOINT ? "destination" :
+			    "broadcast");
+			return(0);
+		}
+	
+	ifs = socket(AF_INET, SOCK_DGRAM, 0);
+	if (ifs < 0) {
+		perror("% intip: socket");
+		return(1);
+	}
+	strlcpy(addreq.ifra_name, ifname, sizeof(addreq.ifra_name));
+	strlcpy(ridreq.ifra_name, ifname, sizeof(ridreq.ifra_name));
+
+	if (cmd == DELETE) {
+		sin = (struct sockaddr_in *)&ridreq.ifra_addr;
+		sin->sin_len = sizeof(ridreq.ifra_addr);
+		sin->sin_family = AF_INET;
+		sin->sin_addr.s_addr = ip.s_addr;
+	}
+
+	if (!alias || cmd == DELETE) {
+		/*
+		 * Here we remove the top IP on the interface before we
+		 * might add another one, or we delete the specified IP.
+		 */
+		if (ioctl(ifs, SIOCDIFADDR, &ridreq) < 0)
+			if (cmd == DELETE)
+				perror("% intip: SIOCDIFADDR");
+	}
+
+	if (cmd == ADD) {
+		sin = (struct sockaddr_in *)&addreq.ifra_addr;
+		sin->sin_family = AF_INET;
+		sin->sin_len = sizeof(addreq.ifra_addr);
+		sin->sin_addr.s_addr = ip.s_addr;
+		sin = (struct sockaddr_in *)&addreq.ifra_mask;
+		sin->sin_family = AF_INET;
+		sin->sin_len = sizeof(addreq.ifra_mask);
+		sin->sin_addr.s_addr = mask.s_addr;
+		if (argc == 2) {
+			sin = (struct sockaddr_in *)&addreq.ifra_dstaddr;
+			sin->sin_family = AF_INET;
+			sin->sin_len = sizeof(addreq.ifra_dstaddr);
+			sin->sin_addr.s_addr = destbcast.s_addr;
+		}
+		if (ioctl(ifs, SIOCAIFADDR, &addreq) < 0)
+			perror("% intip: SIOCAIFADDR");
+	}
+
+	close(ifs);
+	return(0);
+}
+
+int
+intmtu(const char *ifname, int argc, char **argv)
+{
+	struct ifreq ifr;
+	int cmd, ifs;
+
+	if (strncasecmp(argv[0], "no", strlen("no")) == 0) {
+		cmd = DELETE;
+		argc--;
+		argv++;
+	} else
+		cmd = ADD;
+
+	argc--;
+	argv++;
+
+	if ((cmd == DELETE && argc != 0) || (cmd == ADD && argc != 1)) {
+		printf("%% mtu <mtu>\n");
+		printf("%% no mtu\n");
+		return(0);
+	}
+
+	if (cmd == ADD)
+		ifr.ifr_mtu = atoi(argv[0]);
+	else
+		ifr.ifr_mtu = default_mtu(ifname);
+
+	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
+	ifs = socket(AF_INET, SOCK_DGRAM, 0);
+	if (ifs < 0) {
+		perror("% intmtu: socket");
+		return(1);
+	}     	
+	if (ioctl(ifs, SIOCSIFMTU, (caddr_t)&ifr) < 0)
+		perror("% intmtu: SIOCSIFMTU");
+
+	close(ifs);
+	return(0);
+}
+
+int
+intmetric(const char *ifname, int argc, char **argv)
+{
+	struct ifreq ifr;
+	int cmd, ifs;
+
+	if (strncasecmp(argv[0], "no", strlen("no")) == 0) {
+		cmd = DELETE;
+		argc--;
+		argv++;
+	} else
+		cmd = ADD;
+
+	argc--;
+	argv++;
+
+	if ((cmd == DELETE && argc != 0) || (cmd == ADD && argc != 1)) {
+		printf("%% metric <metric>\n");
+		printf("%% no metric\n");
+		return(0);
+	}
+
+	if (cmd == ADD)
+		ifr.ifr_metric = atoi(argv[0]);
+	else
+		ifr.ifr_metric = 0;
+
+	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
+	ifs = socket(AF_INET, SOCK_DGRAM, 0);
+	if (ifs < 0) {
+		perror("% intmetric: socket");
+		return(1);
+	}       
+	if (ioctl(ifs, SIOCSIFMETRIC, (caddr_t)&ifr) < 0)
+		perror("% intmetric: SIOCSIFMETRIC");
+
+	close(ifs);
+	return(0);
+}
+
+int
+intflags(const char *ifname, int argc, char **argv)
+{
+	int set, value, flags;
+
+	if (strncasecmp(argv[0], "no", strlen("no")) == 0) {
+		set = 0;
+		argv++;
+		argc--;
+	} else
+		set = 1;
+
+	if (strncasecmp(argv[0], "de", strlen("de")) == 0) {
+		value = IFF_DEBUG;
+	} else if (strncasecmp(argv[0], "sh", strlen("sh")) == 0) {
+		value = -IFF_UP;
+	} else if (strncasecmp(argv[0], "ar", strlen("ar")) == 0) {
+		value = -IFF_NOARP;
+	} else {
+		printf("%% intflags: Internal error\n");
+		return(0);
+	}
+
+	flags = get_ifflags(ifname);
+	if (value < 0) {
+		/*
+		 * Idea from ifconfig.  If value is negative then
+		 * we just reverse the operation. (e.g. 'shutdown' is
+		 * the opposite of the IFF_UP flag)
+		 */
+		if (set) {
+			value = -value;
+			flags &= ~value;
+		} else {
+			value = -value;
+			flags |= value;
+		}
+	} else if (value > 0) {
+		if (set)
+			flags |= value;
+		else
+			flags &= ~value;
+	} else {
+		printf("%% intflags: value internal error\n");
+	}
+	set_ifflags(ifname, flags);
+	return(0);
+}
+
+int
+intlink(const char *ifname, int argc, char **argv)
+{
+	int set, i, flags, value;
+	char *s;
+
+	if (strncasecmp(argv[0], "no", strlen("no")) == 0) {
+		set = 0;
+		argv++;
+		argc--;
+	} else
+		set = 1;
+
+	argv++;
+	argc--;
+
+	if ((set && argc < 1) || argc > 3) {
+		printf("%% link <012>\n");
+		printf("%% no link [012]\n");
+		return(0);
+	}
+
+	flags = get_ifflags(ifname);
+
+	if (!set && argc == 0) {
+		/*
+		 * just 'no link' was specified.  so we remove all flags
+		 */
+		flags &= ~IFF_LINK0&~IFF_LINK1&~IFF_LINK2;
+	} else 
+	for (i = 0; i < argc; i++) {
+		int a;
+
+		a = strlen(argv[i]);
+		if (a > 1 || a != strspn(argv[i], "012")) {
+			printf("%% Invalid argument: %s\n", argv[i]);
+			return(0);
+		}
+
+		a = atoi(argv[i]);
+		if (a == 0)
+			value = IFF_LINK0;
+		if (a == 1)
+			value = IFF_LINK1;
+		if (a == 2)
+			value = IFF_LINK2;
+
+		if (set)
+			flags |= value;
+		else
+			flags &= ~value;
+	}
+
+	set_ifflags(ifname, flags);
+
+	return(0);
+}

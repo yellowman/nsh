@@ -7,6 +7,7 @@ extern int verbose, editing;
 
 /* conf.c */
 int conf(FILE *);
+int default_mtu(const char *);
 
 /* routepr.c */
 void routepr(u_long, int);
@@ -80,6 +81,13 @@ int route(int, char**);
 int is_valid_ifname(const char *);
 int show_int(const char *);
 int get_ifdata(const char *, int);
+int get_ifflags(const char *);
+int set_ifflags(const char *, int);
+int intip(const char *, int, char **);
+int intmtu(const char *, int, char **);
+int intmetric(const char *, int, char **);
+int intflags(const char *, int, char **);
+int intlink(const char *, int, char **);
 
 /* version.c */
 int version(void);

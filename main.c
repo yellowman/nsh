@@ -35,8 +35,8 @@
 
 void usage(void);
 
-char *vers = "20020510";
-int verbose;			/* verbose mode */
+char *vers = "20020521";
+int verbose = 0;		/* verbose mode */
 int editing;			/* command line editing enabled ? */
 
 History *histi = NULL;

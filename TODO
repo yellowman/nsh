@@ -4,6 +4,7 @@ implement much of the following:
 Cleanup:
 
 * Finish up externs.h 
+* Factor out common code
 * ...
 
 Required for intended functionality:
@@ -12,7 +13,7 @@ Required for intended functionality:
   configurations to a file which can be read by cmdrc on
   startup with -i (requires the following to be done _first_:)
 * Finish up interface mode handler commands
-* Create a bridge mode handler
+* Extend interface mode handler with a bridge mode
 * Create pf commands under interface, generic mode handler:
 
 * Allow simple block in all/pass out all keep state pf rules to be setup for
@@ -37,7 +38,8 @@ Cute features:
 * ALTQ RED/CBQ/HFSC
 * Support for paging through displays of text X lines at a time
 * Something comparable to "| inc" from cisco-land
-* Tab command, argument completion
+* Tab command/argument completion
+* Context-sensitive help
 
 Future:
 
