@@ -1,4 +1,4 @@
-/* $nsh: ieee80211.c,v 1.6 2003/02/18 09:29:46 chris Exp $ */
+/* $nsh: ieee80211.c,v 1.7 2003/09/18 19:14:37 chris Exp $ */
 /* From: $OpenBSD: /usr/src/sbin/ifconfig/ifconfig.c,v 1.68 2002/06/19 18:53:53 millert Exp $ */
 /*
  * Copyright (c) 1983, 1993
@@ -279,7 +279,7 @@ get_nwpowersave(int ifs, char *ifname)
 int
 get_nwinfo(char *ifname, char *str, int str_len, int type)
 {
-	char *tmp;
+	char tmp[128];
 	int ifs, len, i, nwkey_verbose;
 
 	ifs = socket(AF_INET, SOCK_DGRAM, 0);
