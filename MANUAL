@@ -1,5 +1,5 @@
 NSH // Network Shell User's Manual // Chris Cappuccio <chris@nmedia.net>
-$nsh: MANUAL,v 1.5 2003/03/18 23:10:46 chris Exp $
+$nsh: MANUAL,v 1.6 2003/03/28 00:03:42 chris Exp $
 
 Copyright (c) 2003 Chris Cappuccio
 
@@ -70,19 +70,37 @@ Copy this to /bin/nsh or /usr/local/bin/nsh.
 
 # cp nsh /bin/nsh
 
+The next step is to copy over the appropriate script which will save the
+permanent configuration. 
+
+If /etc is read-only and /var/run is read-write, you need to use the
+save-ro.sh script:
+
+# cp save-ro.sh /usr/local/bin/save.sh
+
+Make sure that save-ro.sh actually takes the appropriate actions to make
+/etc a read-write partition.  (Or, modify it to move nshrc to a different
+location that can be written to.  Of course, the nsh startup command must
+reflect this location as well.)
+
+If /etc and /var/run are read-write, you need to use the save-rw.sh script:
+
+# cp save-rw.sh /usr/local/bin/save.sh
+
 To create nsh's initial configuration, run nsh on your router/firewall
-which is already configured, and save the running configuration to disk.
-Nsh will merge your PF/NAT/ALTQ rules into /etc/nshrc.  When you use the
-'write-config' command, NSH will learn your configurations from the running
-kernel.  It will enter everything that is currently configured into the
-nsh startup file.
+which is already configured, and save the running configuration to disk,
+as detailed below.  Nsh will merge your PF/NAT/ALTQ rules into /etc/nshrc.
+When you use the 'write-config' command, NSH will learn your configurations
+from the running kernel.  It will enter everything that is currently configured
+into the nsh startup file.
 
 # mv /etc/pf.conf /var/run/pf.conf
 # nsh
 % NSH v20030208
-machine/write-config
+machine/enable
+machine(priv)/write-config
 % Configuration saved
-machine/ 
+machine(priv)/ 
 
 At this point, you should inspect and edit /etc/nshrc by hand to ensure that
 it does exactly what you want.  Since it reads the entire configuration out of
@@ -101,10 +119,12 @@ if [ "X${pf}" != X"NO" ]; then
 fi
 
 Go ahead and remove (or just comment out) these lines from the startup script.
-You will need to position the cursor past the former network startup section.
-Most the cursor so it is just after the "clean up left-over files" section,
-or about 28 lines past the former network startup section.  You want the
-cursor to be positioned after these lines:
+None of the netstart or pfctl section from /etc/rc are used when nsh is 
+installed!
+
+Move the cursor so it is positioned just after the "clean up left-over files"
+section or about 28 lines past the former network startup section.   Position
+the cursor after the following lines in the startup script:
 
 (cd /var/run && { test -r dhclient.pid && dhclient_pid=`cat dhclient.pid`; rm -r
 f -- *; install -c -m 664 -g utmp /dev/null utmp; test -n "$dhclient_pid" && ech
@@ -126,25 +146,6 @@ and save nshrc to /etc/nshrc.  The default startup script (/etc/rc) with
 flashdist will automatically use NSH if it is present.  You may need to edit 
 it to specify "nsh -i /etc/nshrc" instead of simply "nsh -i nshrc" which 
 was the default with some versions of flashdist.
-
-The last step is to copy over the appropriate script to save the
-configuration.  NSH assumes that /var/run is always mounted read-write,
-and that /etc may be mounted read-only.  This is the case for users of
-flashdist.  You may also be using NSH on a system where /etc and /var/run
-are both read-write.
-
-If /etc is read-only and /var/run is read-write:
-
-# cp save-ro.sh /usr/local/bin/save.sh
-
-Make sure that save-ro.sh actually takes the appropriate actions to make
-/etc a read-write partition.  (Or modify it to move nshrc to a different
-location that can be written to.  Of course, the nsh startup command must
-reflect this location as well.)
-
-If /etc and /var/run are read-write:
-
-# cp save-rw.sh /usr/local/bin/save.sh
 
 You are done.  When NSH starts from /etc/rc, it will automatically load up
 the network configuration into the kernel.  At this point, you are free to
@@ -201,18 +202,22 @@ nsh(priv)/?
 % Commands may be abbreviated.
 % Commands are:
 
-  hostname   Set system hostname
-  interface  Modify interface parameters
-  bridge     Modify bridge parameters
-  show       Show system information
-  flush      Flush system tables
-  disable    Disable privileged mode
-  route      Add a host or network route
-  quit       Close current connection
-  verbose    Set verbose diagnostics
-  editing    Set command line editing
-  !          Invoke a subshell
-  ?          Print help information
+  hostname      Set system hostname
+  interface     Modify interface parameters
+  bridge        Modify bridge parameters
+  show          Show system information
+  flush         Flush system tables
+  disable       Disable privileged mode
+  route         Add a host or network route
+  pf            Packet filter rule handler
+  quit          Close current connection
+  reload        Reboot the system
+  shutdown      Shut the system down
+  write-config  Save the current configuration
+  verbose       Set verbose diagnostics
+  editing       Set command line editing
+  !             Invoke a subshell
+  ?             Print help information
 
 hostname <hostname>
 -------------------
@@ -237,6 +242,33 @@ disable verbose mode.
 
 nsh/no verbose
 % Diagnostic mode disabled
+
+write-config
+------------
+
+This will save the running configuration to the permanent configuration
+space.  Upon the next startup of the system, the saved configuration will
+be used.
+
+nsh(priv)/write-config
+% Configuration saved
+nsh(priv)/
+
+halt
+----
+
+This will shut down the system.  Requires privileged access.
+
+nsh(priv)/halt
+% Shutdown initiated
+
+reload
+------
+
+This will reboot the system.  Requires privileged access.
+
+nsh(priv)/reload
+% Reload initiated
 
 show
 ----
@@ -391,15 +423,16 @@ Destination        Gateway            Flags     Refs  Packets    Mtu  Interface
 
 The destination column is simply the destination network which the
 route describes.  The gateway is the next hop for this route to pass through.
-Gateways which are described as 'link#' are local area networks.
+Gateways which are described as 'link#' are local area networks or members
+of local area networks.
 
 The flags are useful to determine if the kernel is using a particular
 route or not.
 
 U - up
-  This route is on
+  This route is active
 G - gateway
-  The destination of this route is behind the gateway (next hop).
+  The destination of this route is behind a gateway (next hop).
 H - host
   This route describes a host on the local network.
 L - link layer
@@ -477,8 +510,7 @@ show monitor
 This causes the user to enter monitor mode for the routing socket.  The  
 monitor displays raw descriptions of the data passing into the kernel's
 routing socket and dumps of the kernel's routing messages to the machine.
-Once this mode is entered, there is no way to exit.  The login session must
-be disconnected.
+Press enter or control-C to exit this mode.
 
 show version
 ------------
@@ -487,9 +519,9 @@ This displays basic information about the host and about NSH, such as
 the version of NSH installed, the system's  uptime and kernel version.  
 It also shows both the kernel that NSH was compiled under, and the
 current kernel that NSH is running under.  NSH should always be running
-on a kernel that has a similar version to the one that NSH was compiled
-under.  This ensures that NSH was compiled with the same headers that
-the kernel uses.
+on a kernel that is of a similar version to the version of the kernel/header
+files that NSH was compiled under.  This ensures that NSH will talk to
+the kernel properly.
 
 nsh/sho version
 % NSH v20020619
@@ -687,7 +719,7 @@ Set any of the link flags on the interface.  Using 'no link XYZ' will remove
 the specified link flags.  Using 'no link' will remove all link flags from
 the interface.
 
-nsh(interface-gre0)/link 1 2
+nsh(interface-gre0)/no link 0
 
 Each different interface type uses link flags for different purposes.  See
 Appendix E for a detailed explanation of how to use link flags.
@@ -704,7 +736,7 @@ nsh(interface-fxp0)/no arp
 --------------
 
 Set the network ID for an 802.11 capable interface.  Using 'no nwid'
-will set it to the default value.
+will set it to the default value of a blank network ID.
 
 [no] nwkey <key>
 ----------------
@@ -828,6 +860,41 @@ Section 6 > PF mode commands
 
 Section 7 > Adding system users to nsh
 --------------------------------------
+
+OpenBSD has facilities for a user to be able to login directly to nsh without
+having access to a typical bourne or C shell.
+
+1a. Configure the user so they can run /bin/nsh from sudo.  You must
+do this in /etc/sudoers, like this:
+
+nshuser		ALL=NOPASSWD:/bin/nsh
+
+(replace 'nshuser' with the actual user name)
+
+1b. Another way to configure sudoers is to allow all users that are members
+of a certain group to run NSH through sudo, like this:
+
+%nshgroup	ALL=NOPASSWD:/bin/nsh
+
+(replace 'nshgroup' with the actual group name)
+
+2. Compile nwrapper (in the nsh distribution):
+
+cc -o nwrapper nwrapper.c
+
+3. Move nwrapper to a permanent location:
+
+mv nwrapper /bin/nwrapper
+
+4. Change the user's shell to nwrapper:
+
+usermod -s /bin/nwrapper nshuser
+
+(replace 'nshuser' with the actual user name)
+
+Do NOT add nwrapper (or nsh) to /etc/shells.  They should not be entered
+here.
+
 
 Appendix A > Common interface types
 -----------------------------------
