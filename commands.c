@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.24 2003/04/23 21:56:40 chris Exp $ */
+/* $nsh: commands.c,v 1.25 2003/07/25 21:00:04 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -220,6 +220,7 @@ static Menu showlist[] = {
 	{ "rtstats",	"Routing statistics",	0, 0, pr_rt_stats },
 	{ "mbufstats",	"Memory management statistics",	0, 0, pr_mbuf_stats },
 	{ "monitor",	"Monitor routing/arp table changes", 0, 0, monitor },
+	{ "ap",		"Wireless access points", 1, 1, wi_printaplist },
 	{ "version",	"Software information",	0, 0, version },
 	{ "running-config",	"Operating configuration", 0, 0, pr_conf },
 	{ "?",		"Options",		0, 0, show_help },
@@ -255,8 +256,9 @@ showcmd(argc, argv)
 		return 0;
 	}
 	if (((s->minarg + 2) > argc) || ((s->maxarg + 2) < argc)) {
-		printf("%% Wrong argument%s to 'show %s' command.\n",
-		    argc <= 2 ? "" : "s", s->name);
+		printf("%% Wrong number of argument%s to 'show %s' command"
+		    " (min %i, max %i)\n", argc <= 2 ? "" : "s", s->name,
+		    s->minarg, s->maxarg);
 		return 0;
 	}
 	if (s->handler)	/* As if there was something else we do ? */
@@ -807,6 +809,9 @@ static char
 	enablehelp[] =	"Enable privileged mode",
 	disablehelp[] =	"Disable privileged mode",
 	routehelp[] =	"Add a host or network route",
+#ifdef notyet
+	pinghelp[] = 	"Send ICMP echo request",
+#endif
 	quithelp[] =	"Close current connection",
 	verbosehelp[] =	"Set verbose diagnostics",
 	editinghelp[] = "Set command line editing",
@@ -832,6 +837,9 @@ static Command cmdtab[] = {
 	{ "route",	routehelp,	route,		1, 0, 1, 0, 0 },
 	{ "pf",		pfhelp,		pf,		1, 0, 0, 1, 1 },
 	{ "quit",	quithelp,	quit,		0, 0, 0, 0, 0 },
+#ifdef notyet
+	{ "ping",	pinghelp,	ping,		0, 0, 0, 0, 0 },
+#endif
 	{ "reload",	reloadhelp,	reload,		1, 0, 0, 0, 0 },
 	{ "halt",	halthelp,	halt,		1, 0, 0, 0, 0 },
 	{ "write-config", savehelp,	wr_conf,	1, 0, 0, 0, 0 },

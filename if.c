@@ -1,4 +1,4 @@
-/* $nsh: if.c,v 1.14 2003/04/23 16:23:10 chris Exp $ */
+/* $nsh: if.c,v 1.15 2003/07/25 21:00:04 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -310,6 +310,25 @@ show_int(char *ifname)
 				    "<none>" : vreq.vlr_parent);
 	}
 
+	if (get_nwinfo(ifname, tmp_str, sizeof(tmp_str), NWID) != NULL) {
+		printf("  802.11 network id %s", tmp_str);
+		if(get_nwinfo(ifname, tmp_str, sizeof(tmp_str), NWKEY) != NULL)
+			printf(", key %s", tmp_str);
+		if ((tmp = get_nwpowersave(ifs, (char *)ifname)) != NULL)
+			printf(", powersaving (%d ms)\n", tmp);
+		printf("\n");
+		if (is_wavelan(ifs, ifname)) {
+			wi_dumpstats(ifname);
+			if (wi_porttype(ifname) == WI_PORT_HOSTAP)
+				wi_dumpstations(ifname);
+			else {
+				printf("  Q/S/N: ");
+				wi_printlevels(ifname);
+				printf("\n");
+			}
+		}
+	}
+
 	/*
 	 * Display remaining info from if_data structure
 	 */
@@ -361,17 +380,6 @@ show_int(char *ifname)
 				printf("%s", tmp_str);
 			}
 			bridge_addrs(ifs, ifname, "  ", "    ");
-		}
-		if (get_nwinfo(ifname, tmp_str, sizeof(tmp_str), NWID) != NULL)
-		{
-			printf("  IEEE 802.11:\n");
-			printf("    network id %s\n", tmp_str);
-			if (get_nwinfo(ifname, tmp_str, sizeof(tmp_str), NWKEY)
-			    != NULL)
-				printf("    network key %s\n", tmp_str);
-			if ((tmp = get_nwpowersave(ifs, (char *)ifname))
-			    != NULL)
-				printf("    powersaving (%d ms)\n", tmp);
 		}
 		media_supported(ifs, ifname, "  ", "    ");
 	}
