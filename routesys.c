@@ -39,6 +39,7 @@
 #include <sys/mbuf.h>
 #include <sys/sysctl.h>
 #include <sys/signal.h>
+#include <sys/types.h>
 
 #include <net/if.h>
 #include <net/route.h>
@@ -60,6 +61,8 @@
 
 short ns_nullh[] = {0,0,0};
 short ns_bh[] = {-1,-1,-1};
+
+int 	sigflag = 0;
 
 union   sockunion {
 	struct  sockaddr sa;
@@ -388,10 +391,19 @@ prefixlen(s)
 }
 #endif
 
+static void
+_monitor_sig(int signo)
+{
+	sigflag = signo;
+	return;
+}
+
 int
 monitor()
 {
-	int s, n, saveverbose;
+	int s, m, n, saveverbose;
+	fd_set fds; 
+	struct timeval to;
 	char msg[2048];
 
 	s = socket(PF_ROUTE, SOCK_RAW, 0);
@@ -403,16 +415,46 @@ monitor()
 	saveverbose = verbose;
 	verbose = 1;
 
-	printf("%% Entering monitor mode...\n");
-
-	for(;;) {
-		time_t now;
-		n = read(s, msg, 2048);
-		now = time(NULL);
-		(void) printf("%% Message of size %d on %s", n, ctime(&now));
-		print_rtmsg((struct rt_msghdr *)msg, n);
+	/* set up signal handler */
+	if (signal (SIGINT, _monitor_sig) == SIG_ERR) {
+		perror (strerror(errno));
+		verbose = saveverbose;
+		close (s);
+		return (0);
 	}
 
+	printf("%% Entering monitor mode ... press ENTER or ^C to leave ...\n");
+
+	for(; sigflag != SIGINT ;) {
+		time_t now;
+
+		FD_ZERO (&fds);
+		FD_SET (s, &fds);
+		FD_SET (0, &fds);
+		to.tv_sec = 1;
+		to.tv_usec = 0;
+
+		m = select (s + 1, &fds, NULL, NULL, &to);
+
+		if (m < 0) {
+			perror ("select");
+			break;
+		}
+
+		if (m > 0) {
+			if (FD_ISSET (s, &fds)) {
+				ioctl (s, FIONBIO, 1); 	/* non-blocking io */
+				n = read (s, msg, 2048);
+				now = time(NULL);
+				printf("%% Message of size %d on %s", n, ctime(&now));
+				print_rtmsg((struct rt_msghdr *)msg, n);
+			}
+			if (FD_ISSET (0, &fds)) 
+				break; 
+		}
+	}
+
+	sigflag = -1;
 	verbose = saveverbose;
 	close(s);
 	return(0);
