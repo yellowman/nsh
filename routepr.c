@@ -77,9 +77,6 @@
 
 #define kget(p, d) (kread((u_long)(p), (char *)&(d), sizeof (d)))
 
-/* What is the max length of a pointer printed with %p (including 0x)? */
-#define PLEN	(LONG_BIT / 4 + 2)
-
 /*
  * Definitions for showing gateway flags.
  */
@@ -389,7 +386,7 @@ p_sockaddr(sa, mask, flags, width)
 			break;
 		    }
 		default:
-			cp = link_ntoa(sdl);
+			cp = (char *)mylink_ntoa(sdl);
 			break;
 		}
 		break;

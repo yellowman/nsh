@@ -1,4 +1,4 @@
-/* From: $OpenBSD: /usr/src/sbin/ifconfig/ifconfig.c,v 1.61 2002/04/10 18:52:27 millert Exp $ */
+/* From: $OpenBSD: /usr/src/sbin/ifconfig/ifconfig.c,v 1.68 2002/06/19 18:53:53 millert Exp $ */
 /*
  * Copyright (c) 1983, 1993
  *      The Regents of the University of California.  All rights reserved.
@@ -137,14 +137,15 @@ make_string(char *str, int str_len, const u_int8_t *buf, int buf_len)
 {
 	int i;
 	int hasspc;
-	char *tmp;
+	char tmp[128];
 
 	str_len--;
 	i = 0;
 	hasspc = 0;
 	if (buf_len < 2 || buf[0] != '0' || tolower(buf[1]) != 'x') {
 		for (; i < buf_len; i++) {
-			if (!isprint(buf[i]))
+			/* Only print 7-bit ASCII keys */
+			if (buf[i] & 0x80 || !isprint(buf[i]))
 				break;
 			if (isspace(buf[i]))
 				hasspc++;
@@ -166,14 +167,14 @@ make_string(char *str, int str_len, const u_int8_t *buf, int buf_len)
 
 /* was setifnwkey() */
 int
-intnwkey(const char *ifname, int ifs, int argc, char **argv)
+intnwkey(char *ifname, int ifs, int argc, char **argv)
 {
 	int i, len, set;
 	char *cp = NULL, *val;
 	struct ieee80211_nwkey nwkey;
 	u_int8_t keybuf[IEEE80211_WEP_NKID][16];
 
-	if (strncasecmp(argv[0], "no", 2) == 0) {
+	if (NO_ARG(argv[0])) {
 		set = 0;
 		argc--;
 		argv++;
@@ -205,7 +206,7 @@ intnwkey(const char *ifname, int ifs, int argc, char **argv)
 		nwkey.i_defkid = 0;
 		for (i = 0; i < IEEE80211_WEP_NKID; i++)
 			nwkey.i_key[i].i_keylen = -1;
-	} else if (strncasecmp("persist:", val, 8) == 0) {
+	} else if (strncasecmp(val, "persist:", 8) == 0) {
 		val += 8;
 		/* program keys in persistent memory */
 		nwkey.i_wepon |= IEEE80211_NWKEY_PERSIST;
@@ -249,11 +250,28 @@ set_nwkey:
 	return(0);
 }
 
+int
+get_nwpowersave(int ifs, char *ifname)
+{
+	struct ieee80211_power power;
+
+	memset(&power, 0, sizeof(power));
+	strlcpy(power.i_name, ifname, sizeof(power.i_name));
+
+	if (ioctl(ifs, SIOCG80211POWER, &power) == -1) {
+		perror("% get_nwpowersave: SIOCG80211POWER");
+		return(NULL);
+	}
+	if (!power.i_enabled)
+		return(NULL);
+	return(power.i_maxsleep);
+}
+
 /*
  * mangled ieee80211_status()
  */
 int
-get_nwinfo(const char *ifname, char *str, int str_len, int type)
+get_nwinfo(char *ifname, char *str, int str_len, int type)
 {
 	char *tmp;
 	int ifs, len, i, nwkey_verbose;
@@ -322,9 +340,9 @@ get_nwinfo(const char *ifname, char *str, int str_len, int type)
 					    ':')
 						nwkey_verbose = 1;
 					else if (nwkey.i_key[0].i_keylen >= 7 &&
-						    strncasecmp("persist",
-						    nwkey.i_key[0].i_keydat, 7)
-						    == 0)
+						    CMP_ARG(
+						    nwkey.i_key[0].i_keydat,
+						    "persist"))
 						nwkey_verbose = 1;
 				}
 				if (nwkey_verbose) {

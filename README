@@ -1,4 +1,4 @@
-nsh//network config shell//Chris Cappuccio <chris@dqc.org> version 20020607
+nsh//network config shell//Chris Cappuccio <chris@dqc.org> version 20020619
 
 A CLI intended for OpenBSD-based routers running little except for sshd,
 targeted towards CompactFlash-based Soekris Net4501 and similar embedded
@@ -16,12 +16,12 @@ nsh handles the following functions:
 * Gives the user a command-line interface to:
   + Add/delete/show/flush/monitor IP routes (done)
   + Display detailed information regarding an interface (done)
-  + Configure interfaces for IP, MTU, VLAN, media, ... (75%)
+  + Configure interfaces for IP, MTU, VLAN, media, ... (done)
   + Show host (IP, TCP, UDP) and router statistics (done)
   + Configure PF/NAT on an interface (0%)
   + Configure the ALTQ tbr on an interface (done)
   + Configure bridge for members, rules (done)
-  + Save the current routes, bridge, interface configs to a file (55%)
+  + Save the current routes, bridge, interface configs to a file (75%)
 * This shell replaces most of /etc/rc, /etc/netstart on an embedded system.
   Simply started as nsh -i, it will read the previously saved configuration
   and execute it on the system.
@@ -48,7 +48,9 @@ champion for packet forwarding on x86 hardware.  However, many of its
 specialized features are well suited for edge routers, where people often
 will have connections ranging from 256Kbps (or lower) to 45Mbps.  At
 these speeds, with a moderate packet-per-second count, OpenBSD excels (and,
-that is with relatively low-end x86 hardware).
+that is with relatively low-end x86 hardware....a system with a modern
+chipset and sub-1GHz processor can push several hundred Mbps, and
+hopefully a lot more as the kernel is optimized for this purpose).
 
 At the edge, I expect that people will find OpenBSD to be very useful,
 especially in conjunction with software like NSH.  OpenBSD is an excellent
@@ -94,6 +96,8 @@ I am scrambling to get home, it can be faster to get the job done with a
 minimalist interface.  It is easier to show someone the whole router
 configuration when it is all condensed into a uniform listing.  It
 is easier to manage that listing if I want to host it on a central server.
+(Of course, not in all cases is the Cisco-style faster for me, I hate
+Cisco access-lists, pf.conf and nat.conf are much nicer to work with.)
 
 Last, but not least, people tend to find the userland tools confusing.
 People who do not use OpenBSD in an administrative capacity (professional

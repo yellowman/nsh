@@ -35,10 +35,11 @@
 
 void usage(void);
 
-char *vers = "20020607";
-int bridge = 0;			/* bridge mode */
-int verbose = 0;		/* verbose mode */
-int editing;			/* command line editing enabled ? */
+char *vers = "20020619";
+int bridge = 0;		/* bridge mode for interface() */
+int verbose = 0;	/* verbose mode for lots of stuff*/
+int editing;
+pid_t pid;
 
 History *histi = NULL;
 History *histc = NULL;
@@ -52,6 +53,7 @@ main(argc, argv)
 	char *argv[];
 {
 	int ch, iflag = 0;
+	pid = getpid();
 
 	while ((ch = getopt(argc, argv, "iv")) != -1)
 		switch (ch) {

@@ -35,19 +35,25 @@
 #include <sys/sockio.h>
 #include <sys/errno.h>
 #include <sys/ioctl.h>
+#include <ifaddrs.h>
 #include <net/if.h>
 #include <net/if_types.h>
+#include <net/if_dl.h>
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
-#include <net/if_ieee80211.h>
 #include <net/if_vlan_var.h>
+#include <net/if_ieee80211.h>
 #include <arpa/inet.h>
 #include <limits.h>
+#include "ip.h"
 #include "externs.h"
 #include "bridge.h"
 
+char *iftype(int int_type);
+char *get_lladdr(int ifs, char *ifname);
+
 int
-show_int(const char *ifname)
+show_int(char *ifname)
 {
 	struct if_nameindex *ifn_list, *ifnp;
 	struct ifreq ifr;
@@ -58,10 +64,10 @@ show_int(const char *ifname)
 
 	in_addr_t mask;
 	short tmp;
-	int ifs, br, mbits, flags, days, hours, mins, pntd;
+	int ifs, br, flags, days, hours, mins, pntd;
 	int noaddr = 0;
 	time_t c;
-	char *type;
+	char *type, *lladdr;
 
 	u_long rate, bucket;
 	char rate_str[64], bucket_str[64], tmp_str[4096];
@@ -128,15 +134,231 @@ show_int(const char *ifname)
 	printf(", protocol is %s", flags & IFF_RUNNING ? "up" : "down");
 	printf("\n");
 
+	type = iftype(if_type);
+
+	printf("  Interface type %s", type);
+	if (flags & IFF_BROADCAST)
+		printf(" (Broadcast)");
+	else if (flags & IFF_POINTOPOINT)
+		printf(" (PointToPoint)");
+	printf("\n");
+
+	if ((lladdr = get_lladdr(ifs, ifname)) != NULL)
+		printf("  Hardware address %s\n", lladdr);
+
+	media_status(ifs, ifname, "  Media type ");
+
 	/*
-	 * Display interface type
+	 * Display IP address and CIDR netmask
 	 */
+	if (ioctl(ifs, SIOCGIFADDR, (caddr_t)&ifr) < 0) {
+		if (errno == EADDRNOTAVAIL) {
+			noaddr = 1;
+		} else {
+			perror("% show_int: SIOCGIFADDR");
+			close(ifs);
+			return(1);
+		}
+	}
+ 
+	if (!noaddr) {
+		sin.sin_addr = ((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr;
+
+		if (ioctl(ifs, SIOCGIFNETMASK, (caddr_t)&ifr) < 0)
+			if (errno != EADDRNOTAVAIL) {
+				perror("% show_int: SIOCGIFNETMASK");
+				close(ifs);
+				return(1);
+			}
+		sin2.sin_addr = ((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr;
+
+		printf("  Internet address is %s\n",
+		    (char *)netname(sin.sin_addr.s_addr, sin2.sin_addr.s_addr));
+	}
+
+	if (!br) {
+		/*
+		 * Display MTU, line rate, and ALTQ token rate info
+		 * (if available)
+		 */
+		printf("  MTU %li bytes", if_mtu);
+		if (if_baudrate)
+			printf(", Line Rate %li %s\n",
+			    MBPS(if_baudrate) ? MBPS(if_baudrate) :
+			    if_baudrate / 1000,
+			    MBPS(if_baudrate) ? "Mbps" : "Kbps");
+		else
+			printf("\n");
+ 
+		rate = get_tbr(ifname, TBR_RATE);
+		bucket = get_tbr(ifname, TBR_BUCKET);
+
+		if(rate && bucket) {
+			if (MBPS(rate))
+				snprintf(rate_str, sizeof(rate_str),
+				    "%.2f Mbps",
+				    (double)rate/1000.0/1000.0);
+			else
+				snprintf(rate_str, sizeof(rate_str),
+				    "%.2f Kbps",
+				    (double)rate/1000.0);
+
+			if (bucket < 10240)
+				snprintf(bucket_str, sizeof(bucket_str),
+				    "%lu bytes",
+				    bucket);
+			else
+				snprintf(bucket_str, sizeof(bucket_str),
+				    "%.2f Kbytes",
+				    (double)bucket/1024.0);
+
+			printf("  Token Rate %s, Bucket %s\n", rate_str,
+			    bucket_str);
+		}
+
+		memset(&vreq, 0, sizeof(struct vlanreq));
+		ifr.ifr_data = (caddr_t)&vreq;
+
+		if (ioctl(ifs, SIOCGETVLAN, (caddr_t)&ifr) != -1)
+			if(vreq.vlr_tag || (vreq.vlr_parent[0] != '\0'))
+				printf("  802.1Q vlan tag %d, parent %s\n",
+				    vreq.vlr_tag, vreq.vlr_parent[0] == '\0' ?
+				    "<none>" : vreq.vlr_parent);
+	}
+
+	/*
+	 * Display remaining info from if_data structure
+	 */
+	printf("  %lu packets input, %lu bytes, %lu errors, %lu drops\n",
+	    if_ipackets, if_ibytes, if_ierrors, if_iqdrops);
+	printf("  %lu packets output, %lu bytes, %lu errors, %lu unsupported\n",
+	    if_opackets, if_obytes, if_oerrors, if_noproto);
+	if (if_ibytes && if_ipackets) {
+		printf("  %lu avg input size", if_ibytes / if_ipackets);
+		pntd = 1;
+	} else
+		pntd = 0;
+	if (if_obytes && if_opackets) {
+		printf("%s%lu avg output size", pntd ? ", " : "  ",
+		    if_obytes / if_opackets);
+		pntd = 1;
+	}
+	if (pntd)
+		printf("\n");
+
 	switch(if_type) {
+	case IFT_ETHER:
+	case IFT_SLIP:
+	case IFT_PROPVIRTUAL:
+	case IFT_IEEE80211:
+		printf("  %lu collisions\n", if_collisions);
+		break;
+	default:
+		break;
+	}
+
+	if(verbose) {
+		if (flags) {
+			printf("  Flags:\n    ");
+			bprintf(stdout, flags, ifnetflags);
+			printf("\n");
+		}
+		if (br) {
+			if (tmp = bridge_list(ifs, ifname, "    ", tmp_str,
+			    sizeof(tmp_str), SHOW_STPSTATE)) {
+				printf("  STP member state%s:\n", tmp > 1 ?
+				    "s" : "");
+				printf("%s", tmp_str);
+			}
+			bridge_addrs(ifs, ifname, "  ", "    ");
+		}
+		if (get_nwinfo(ifname, tmp_str, sizeof(tmp_str), NWID) != NULL)
+		{
+			printf("  IEEE 802.11:\n");
+			printf("    network id %s\n", tmp_str);
+			if (get_nwinfo(ifname, tmp_str, sizeof(tmp_str), NWKEY)
+			    != NULL)
+				printf("    network key %s\n", tmp_str);
+			if ((tmp = get_nwpowersave(ifs, (char *)ifname))
+			    != NULL)
+				printf("    powersaving (%d ms)\n", tmp);
+		}
+		media_supported(ifs, ifname, "  ", "    ");
+	}
+
+	close(ifs);
+	return(0);
+}
+
+u_int32_t
+in4_netaddr(u_int32_t addr, u_int32_t mask)
+{
+	u_int32_t net;
+
+	net = ntohl(addr) & ntohl(mask);
+
+	return (net);
+}
+
+u_int32_t
+in4_brdaddr(u_int32_t addr, u_int32_t mask)
+{
+	u_int32_t net, bcast;
+
+	net = in4_netaddr(addr, mask);
+	bcast = net | ~ntohl(mask);
+
+	return(bcast);
+}
+
+char *
+get_lladdr(int ifs, char *ifname)
+{
+	 /* suprisingly, this actually works! */
+	int found = 0;
+	char *val = NULL;
+	struct ifaddrs *ifap, *ifa;
+	struct sockaddr_dl *sdl;
+
+	if (getifaddrs(&ifap) != 0) {
+		perror("% get_lladdr: getifaddrs");
+		return(NULL);
+	}
+
+	for (ifa = ifap; ifa; ifa = ifa->ifa_next)
+		if ((strcmp(ifname, ifa->ifa_name) == 0) &&
+		    ifa->ifa_addr->sa_family == AF_LINK) {
+			sdl = (struct sockaddr_dl *)ifa->ifa_addr;
+			found++;
+			break;
+		}
+
+	if (found && sdl != NULL && (sdl->sdl_type == IFT_IEEE80211 ||
+	    sdl->sdl_type == IFT_ETHER) && sdl->sdl_alen)
+		val = ether_ntoa((struct ether_addr *)LLADDR(sdl));
+
+	freeifaddrs(ifap);
+
+	if (val && strcmp(val, "00:00:00:00:00:00") == 0)
+		return(NULL);
+
+	return(val);
+}
+
+char *
+iftype(int int_type)
+{
+	char *type;
+
+	/*
+	 * Interface type to string
+	 */
+	switch(int_type) {
 	/*
 	 * Here we include all types that are used anywhere
-	 * in the 3.0 kernel.
+	 * in the 3.1 kernel.
 	 */
-	/* OpenBSD */
+	/* OpenBSD-specific types */
 	case IFT_PFLOG:
 		type = "Packet Filter Logging";
 		break;
@@ -152,7 +374,7 @@ show_int(const char *ifname)
 	case IFT_BRIDGE:
 		type = "Ethernet Bridge";
 		break;
-	/* IANA */
+	/* IANA-assigned types */
 	case IFT_ISO88025:
 		type = "Token Ring";
 		break;
@@ -225,169 +447,11 @@ show_int(const char *ifname)
 		type = "Unknown";
 		break;
 	}
-	printf("  Interface type %s", type);
-	if (flags & IFF_BROADCAST)
-		printf(" (Broadcast)");
-	else if (flags & IFF_POINTOPOINT)
-		printf(" (PointToPoint)");
-	printf("\n");
-
-	/*
-	 * Display IP address and CIDR netmask
-	 */
-	if (ioctl(ifs, SIOCGIFADDR, (caddr_t)&ifr) < 0) {
-		if (errno == EADDRNOTAVAIL) {
-			noaddr = 1;
-		} else {
-			perror("% show_int: SIOCGIFADDR");
-			close(ifs);
-			return(1);
-		}
-	}
- 
-	if (!noaddr) {
-		sin.sin_addr = ((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr;
-
-		if (ioctl(ifs, SIOCGIFNETMASK, (caddr_t)&ifr) < 0)
-			if (errno != EADDRNOTAVAIL) {
-				perror("% show_int: SIOCGIFNETMASK");
-				close(ifs);
-				return(1);
-			}
-		sin2.sin_addr = ((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr;
-
-		mask = ntohl(sin2.sin_addr.s_addr);
-		mbits = mask ? 33 - ffs(mask) : 0;
-
-		printf("  Internet address is %s/%i\n",
-		    inet_ntoa(sin.sin_addr), mbits);
-	}
-
-	if (!br) {
-		/*
-		 * Display MTU, line rate, and ALTQ token rate info
-		 * (if available)
-		 */
-		printf("  MTU %li bytes", if_mtu);
-		if (if_baudrate)
-			printf(", Line Rate %li %s\n",
-			    MBPS(if_baudrate) ? MBPS(if_baudrate) :
-			    if_baudrate / 1000,
-			    MBPS(if_baudrate) ? "Mbps" : "Kbps");
-		else
-			printf("\n");
- 
-		rate = get_tbr(ifname, TBR_RATE);
-		bucket = get_tbr(ifname, TBR_BUCKET);
-
-		if(rate && bucket) {
-			if (MBPS(rate))
-				snprintf(rate_str, sizeof(rate_str),
-				    "%.2f Mbps",
-				    (double)rate/1000.0/1000.0);
-			else
-				snprintf(rate_str, sizeof(rate_str),
-				    "%.2f Kbps",
-				    (double)rate/1000.0);
-
-			if (bucket < 10240)
-				snprintf(bucket_str, sizeof(bucket_str),
-				    "%lu bytes",
-				    bucket);
-			else
-				snprintf(bucket_str, sizeof(bucket_str),
-				    "%.2f Kbytes",
-				    (double)bucket/1024.0);
-
-			printf("  Token Rate %s, Bucket %s\n", rate_str,
-			    bucket_str);
-		}
-
-		memset(&vreq, 0, sizeof(struct vlanreq));
-		ifr.ifr_data = (caddr_t)&vreq;
-
-		if (ioctl(ifs, SIOCGETVLAN, (caddr_t)&ifr) != -1) {
-			if(vreq.vlr_tag || (vreq.vlr_parent[0] != '\0')) {
-				printf("  vlan tag %d on parent %s\n",
-				    vreq.vlr_tag, vreq.vlr_parent[0] == '\0' ?
-				    "<none>" : vreq.vlr_parent);
-			}
-		}
-		close(ifs);
-	}
-
-	/*
-	 * Display remaining info from if_data structure
-	 */
-	printf("  %lu packets input, %lu bytes, %lu errors, %lu drops\n",
-	    if_ipackets, if_ibytes, if_ierrors, if_iqdrops);
-	printf("  %lu packets output, %lu bytes, %lu errors, %lu unsupported\n",
-	    if_opackets, if_obytes, if_oerrors, if_noproto);
-	switch(if_type) {
-	case IFT_ETHER:
-	case IFT_SLIP:
-	case IFT_PROPVIRTUAL:
-		printf("  %lu collisions\n", if_collisions);
-		break;
-	default:
-		break;
-	}
-	if (if_ibytes && if_ipackets) {
-		printf("  %lu avg input size", if_ibytes / if_ipackets);
-		pntd = 1;
-	} else
-		pntd = 0;
-	if (if_obytes && if_opackets) {
-		printf("%s%lu avg output size", pntd ? ", " : "  ",
-		    if_obytes / if_opackets);
-		pntd = 1;
-	}
-	if (pntd)
-		printf("\n");
-
-	if(verbose) {
-		if (flags) {
-			printf("  Flags:\n    ");
-			bprintf(stdout, flags, ifnetflags);
-			printf("\n");
-		}
-		if (br) {
-			if (tmp = bridge_list(ifs, ifname, "    ", tmp_str,
-			    sizeof(tmp_str), SHOW_STPSTATE)) {
-				printf("  STP member state%s:\n", tmp > 1 ?
-				    "s" : "");
-				printf("%s", tmp_str);
-			}
-			bridge_addrs(ifs, ifname, "  ", "    ");
-		}
-	}
-
-	return(0);
-}
-
-u_int32_t
-in4_netaddr(u_int32_t addr, u_int32_t mask)
-{
-	u_int32_t net;
-
-	net = ntohl(addr) & ntohl(mask);
-
-	return (net);
-}
-
-u_int32_t
-in4_brdaddr(u_int32_t addr, u_int32_t mask)
-{
-	u_int32_t net, bcast;
-
-	net = in4_netaddr(addr, mask);
-	bcast = net | ~ntohl(mask);
-
-	return(bcast);
+	return(type);
 }
 
 int 
-get_ifdata(const char *ifname, int type)
+get_ifdata(char *ifname, int type)
 {
 	int ifs, value = 0;
 	struct ifreq ifr;
@@ -419,7 +483,7 @@ get_ifdata(const char *ifname, int type)
  * returns 0 for no valid or failure
  */
 int
-is_valid_ifname(const char *ifname)
+is_valid_ifname(char *ifname)
 {
 	struct if_nameindex *ifn_list, *ifnp;
 	int count = 0;
@@ -441,7 +505,7 @@ is_valid_ifname(const char *ifname)
 }
 
 int
-get_ifflags(const char *ifname, int ifs)
+get_ifflags(char *ifname, int ifs)
 {
 	int flags;
 	struct ifreq ifr;
@@ -457,7 +521,7 @@ get_ifflags(const char *ifname, int ifs)
 }
 
 int
-set_ifflags(const char *ifname, int ifs, int flags)
+set_ifflags(char *ifname, int ifs, int flags)
 {
 	struct ifreq ifr;
 
@@ -472,14 +536,12 @@ set_ifflags(const char *ifname, int ifs, int flags)
         return(0);
 }
 
-#define DELETE 0
-#define ADD 1
-
 int
-intip(const char *ifname, int ifs, int argc, char **argv)
+intip(char *ifname, int ifs, int argc, char **argv)
 {
-	int cmd, alias, flags, argcmax;
-	struct in_addr ip, mask, destbcast;
+	int set, alias, flags, argcmax;
+	ip_t ip;
+	struct in_addr destbcast;
 	struct ifaliasreq addreq, ridreq;
 	struct sockaddr_in *sin;
 	char *q, *msg, *cmdname;
@@ -487,23 +549,26 @@ intip(const char *ifname, int ifs, int argc, char **argv)
 	memset(&addreq, 0, sizeof(addreq));
 	memset(&ridreq, 0, sizeof(ridreq));
 
-	if (strncasecmp(argv[0], "no", 2) == 0) {
-		cmd = DELETE;
+	if (NO_ARG(argv[0])) {
+		set = 0;
 		argc--;
 		argv++;
 	} else
-		cmd = ADD;
+		set = 1;
 
 	/*
 	 * We use this function for ip and alias setup since they are
 	 * the same thing.
 	 */
-	if (strncasecmp(argv[0], "a", 1) == 0) {
+	if (CMP_ARG(argv[0], "a")) {
 		alias = 1;
 		cmdname = "alias";
-	} else {
+	} else if (CMP_ARG(argv[0], "i")) {
 		alias = 0;
 		cmdname = "ip";
+	} else {
+		printf("%% intip: Internal error\n");
+		return 0;
 	}
 
 	argc--;
@@ -531,40 +596,10 @@ intip(const char *ifname, int ifs, int argc, char **argv)
 		return(0);
 	}
 
-	q = strchr(argv[0], '/');
-	if (q)
-		*q = '\0';
-	else if (cmd != DELETE) {
+	ip = parse_ip(argv[0], NO_NETMASK);
+	if (ip.bitlen == -1) {
 		printf("%% Netmask not specified\n");
 		return(0);
-	}
-	if (!(inet_aton(argv[0], &ip) && strchr(argv[0], '.'))) {
-		printf("%% %s is not an IP address\n", argv[0]);
-		return(0);
-	}
-
-	if (q) {
-		char *s;
-
-		s = q + 1;
-		if (!(inet_aton(s, &mask) && strchr(s, '.'))) {
-			if(strspn(s, "0123456789") == strlen(s)) {
-				int bits;
-
-				/* assume bits after slash */
-				bits = strtoul(s, 0, 0);
-				if (bits > 32) {
-					printf("%% Invalid bit length\n");
-					return(0);
-				}
-				mask.s_addr = htonl(0xffffffff << (32 - bits));
-			} else {
-				printf("%% Invalid address mask\n");
-				return(0);
-			}
-		}
-	} else {
-		mask.s_addr = htonl(0xffffffff);
 	}
 	
 	if (argc == 2)
@@ -576,32 +611,32 @@ intip(const char *ifname, int ifs, int argc, char **argv)
 	strlcpy(addreq.ifra_name, ifname, sizeof(addreq.ifra_name));
 	strlcpy(ridreq.ifra_name, ifname, sizeof(ridreq.ifra_name));
 
-	if (cmd == DELETE) {
+	if (!set) {
 		sin = (struct sockaddr_in *)&ridreq.ifra_addr;
 		sin->sin_len = sizeof(ridreq.ifra_addr);
 		sin->sin_family = AF_INET;
-		sin->sin_addr.s_addr = ip.s_addr;
+		sin->sin_addr.s_addr = ip.addr.sin.s_addr;
 	}
 
-	if (!alias || cmd == DELETE) {
+	if (!alias || !set) {
 		/*
 		 * Here we remove the top IP on the interface before we
 		 * might add another one, or we delete the specified IP.
 		 */
 		if (ioctl(ifs, SIOCDIFADDR, &ridreq) < 0)
-			if (cmd == DELETE)
+			if (!set)
 				perror("% intip: SIOCDIFADDR");
 	}
 
-	if (cmd == ADD) {
+	if (set) {
 		sin = (struct sockaddr_in *)&addreq.ifra_addr;
 		sin->sin_family = AF_INET;
 		sin->sin_len = sizeof(addreq.ifra_addr);
-		sin->sin_addr.s_addr = ip.s_addr;
+		sin->sin_addr.s_addr = ip.addr.sin.s_addr;
 		sin = (struct sockaddr_in *)&addreq.ifra_mask;
 		sin->sin_family = AF_INET;
 		sin->sin_len = sizeof(addreq.ifra_mask);
-		sin->sin_addr.s_addr = mask.s_addr;
+		sin->sin_addr.s_addr = htonl(0xffffffff << (32 - ip.bitlen));
 		if (argc == 2) {
 			sin = (struct sockaddr_in *)&addreq.ifra_dstaddr;
 			sin->sin_family = AF_INET;
@@ -616,31 +651,37 @@ intip(const char *ifname, int ifs, int argc, char **argv)
 }
 
 int
-intmtu(const char *ifname, int ifs, int argc, char **argv)
+intmtu(char *ifname, int ifs, int argc, char **argv)
 {
 	struct ifreq ifr;
-	int cmd;
+	int set;
+	char *ep;
 
-	if (strncasecmp(argv[0], "no", 2) == 0) {
-		cmd = DELETE;
+	if (NO_ARG(argv[0])) {
+		set = 0;
 		argc--;
 		argv++;
 	} else
-		cmd = ADD;
+		set = 1;
 
 	argc--;
 	argv++;
 
-	if ((cmd == DELETE && argc != 0) || (cmd == ADD && argc != 1)) {
+	if ((!set && argc > 1) || (set && argc != 1)) {
 		printf("%% mtu <mtu>\n");
-		printf("%% no mtu\n");
+		printf("%% no mtu [mtu]\n");
 		return(0);
 	}
 
-	if (cmd == ADD)
-		ifr.ifr_mtu = atoi(argv[0]);
+	if (set)
+		ifr.ifr_mtu = strtoul(argv[0], &ep, 10);
 	else
 		ifr.ifr_mtu = default_mtu(ifname);
+
+	if (!ep || *ep) {
+		printf("%% Invalid MTU\n");
+		return(0);
+	}
 
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 	if (ioctl(ifs, SIOCSIFMTU, (caddr_t)&ifr) < 0)
@@ -650,31 +691,37 @@ intmtu(const char *ifname, int ifs, int argc, char **argv)
 }
 
 int
-intmetric(const char *ifname, int ifs, int argc, char **argv)
+intmetric(char *ifname, int ifs, int argc, char **argv)
 {
 	struct ifreq ifr;
-	int cmd;
+	int set;
+	char *ep = NULL;
 
-	if (strncasecmp(argv[0], "no", 2) == 0) {
-		cmd = DELETE;
+	if (NO_ARG(argv[0])) {
+		set = 0;
 		argc--;
 		argv++;
 	} else
-		cmd = ADD;
+		set = 1;
 
 	argc--;
 	argv++;
 
-	if ((cmd == DELETE && argc != 0) || (cmd == ADD && argc != 1)) {
+	if ((!set && argc > 1) || (set && argc != 1)) {
 		printf("%% metric <metric>\n");
-		printf("%% no metric\n");
+		printf("%% no metric [metric]\n");
 		return(0);
 	}
 
-	if (cmd == ADD)
-		ifr.ifr_metric = atoi(argv[0]);
+	if (set)
+		ifr.ifr_metric = strtoul(argv[0], &ep, 10);
 	else
 		ifr.ifr_metric = 0;
+
+	if (!ep || *ep) {
+		printf("%% Invalid metric\n");
+		return(0);
+	}
 
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 	if (ioctl(ifs, SIOCSIFMETRIC, (caddr_t)&ifr) < 0)
@@ -684,24 +731,85 @@ intmetric(const char *ifname, int ifs, int argc, char **argv)
 }
 
 int
-intflags(const char *ifname, int ifs, int argc, char **argv)
+intvlan(char *ifname, int ifs, int argc, char **argv)
+{
+	struct ifreq ifr;
+	struct vlanreq vreq;
+	int set;
+
+	if (NO_ARG(argv[0])) {
+		set = 0;
+		argc--;
+		argv++;
+	} else
+		set = 1;
+
+	argc--;
+	argv++;
+
+	memset(&vreq, 0, sizeof(vreq));
+
+	if ((set && argc != 2) || (!set && argc > 2)) {
+		printf("%% vlan <tag> <parent interface>\n");
+		printf("%% no vlan [tag] [parent interface]\n");
+		return(0);
+	}
+
+	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
+	ifr.ifr_data = (caddr_t)&vreq;
+
+	if (ioctl(ifs, SIOCGETVLAN, (caddr_t)&ifr) == -1) {
+		if (errno == EINVAL)
+			printf("%% This interface does not support vlan tagging\n");
+		else
+			perror("% intvlan: SIOCGETVLAN");
+		return(0);
+	}
+
+	if (set) {
+		if (!is_valid_ifname(argv[1]) || is_bridge(ifs, argv[1])) {
+			printf("%% Invalid vlan parent %s\n", argv[1]);
+			return(0);
+		}
+		strlcpy(vreq.vlr_parent, argv[1], sizeof(vreq.vlr_parent));
+		vreq.vlr_tag = atoi(argv[0]);
+		if (vreq.vlr_tag != EVL_VLANOFTAG(vreq.vlr_tag)) {
+			printf("%% Invalid vlan tag %s\n", argv[0]);
+			return(0);
+		}
+	} else {
+		memset(&vreq.vlr_parent, 0, sizeof(vreq.vlr_parent));
+		vreq.vlr_tag = 0;
+	}
+
+	if (ioctl(ifs, SIOCSETVLAN, (caddr_t)&ifr) == -1)
+		if (errno == EBUSY)
+			printf("%% Please disconnect the current vlan parent before setting a new one\n");
+		else
+			perror("% intvlan: SIOCSETVLAN");
+
+	return(0);
+}
+
+int
+intflags(char *ifname, int ifs, int argc, char **argv)
 {
 	int set, value, flags;
 
-	if (strncasecmp(argv[0], "no", 2) == 0) {
+	if (NO_ARG(argv[0])) {
 		set = 0;
 		argv++;
 		argc--;
 	} else
 		set = 1;
 
-	if (strncasecmp(argv[0], "d", 1) == 0) {
+	if (CMP_ARG(argv[0], "d")) {
 		/* debug */
 		value = IFF_DEBUG;
-	} else if (strncasecmp(argv[0], "s", 1) == 0) {
+	} else if (CMP_ARG(argv[0], "s")) {
 		/* shutdown */
 		value = -IFF_UP;
-	} else if (strncasecmp(argv[0], "a", 1) == 0) {
+	} else if (CMP_ARG(argv[0], "a")) {
 		/* arp */
 		value = -IFF_NOARP;
 	} else {
@@ -736,12 +844,12 @@ intflags(const char *ifname, int ifs, int argc, char **argv)
 }
 
 int
-intlink(const char *ifname, int ifs, int argc, char **argv)
+intlink(char *ifname, int ifs, int argc, char **argv)
 {
 	int set, i, flags, value;
 	char *s;
 
-	if (strncasecmp(argv[0], "no", 2) == 0) {
+	if (NO_ARG(argv[0])) {
 		set = 0;
 		argv++;
 		argc--;
@@ -763,7 +871,7 @@ intlink(const char *ifname, int ifs, int argc, char **argv)
 		/*
 		 * just 'no link' was specified.  so we remove all flags
 		 */
-		flags &= ~IFF_LINK0&~IFF_LINK1&~IFF_LINK2;
+		flags &= ~IFF_LINK0 & ~IFF_LINK1 & ~IFF_LINK2;
 	} else 
 	for (i = 0; i < argc; i++) {
 		int a;
@@ -799,14 +907,14 @@ intlink(const char *ifname, int ifs, int argc, char **argv)
 }
 
 int
-intnwid(const char *ifname, int ifs, int argc, char **argv)
+intnwid(char *ifname, int ifs, int argc, char **argv)
 {
 	struct ieee80211_nwid nwid;
 	struct ifreq ifr;
 	struct if_data if_data;
 	int set, len;
 
-	if (strncasecmp(argv[0], "no", 2) == 0) {
+	if (NO_ARG(argv[0])) {
 		set = 0;
 		argv++;
 		argc--;
@@ -830,7 +938,7 @@ intnwid(const char *ifname, int ifs, int argc, char **argv)
 			return(0);
 		}
 	} else
-		memset(&nwid, 0, sizeof(struct ieee80211_nwid));
+		len = 0; /* nwid "" */
 
 	nwid.i_len = len;
 	ifr.ifr_data = (caddr_t)&nwid;
@@ -843,12 +951,12 @@ intnwid(const char *ifname, int ifs, int argc, char **argv)
 }
 
 int
-intpowersave(const char *ifname, int ifs, int argc, char **argv)
+intpowersave(char *ifname, int ifs, int argc, char **argv)
 {
 	struct ieee80211_power power;
 	int  set;
 
-	if (strncasecmp(argv[0], "no", 2) == 0) {
+	if (NO_ARG(argv[0])) {
 		set = 0;
 		argv++;
 		argc--;
@@ -872,8 +980,8 @@ intpowersave(const char *ifname, int ifs, int argc, char **argv)
 
 	if (argc == 1)
 		power.i_maxsleep = atoi(argv[0]);
-	else if (set)
-		power.i_maxsleep = 100;	/* default 100 milliseconds */
+	else
+		power.i_maxsleep = DEFAULT_POWERSAVE;
 	power.i_enabled = set;
 
 	if (ioctl(ifs, SIOCS80211POWER, (caddr_t)&power) == -1) {

@@ -11,11 +11,15 @@ Cleanup:
 * More security auditing for string handling, off-by-one errors, and other
   problems
 * User args should be set to lowercase at early so that we dont have to use
-  strcasecmp/strncasecmp everywhere
-* User args should be sanity checked early for crap
+  strcasecmp/strncasecmp everywhere...Tokenize and then use yacc perhaps?
+* User args should be sanity checked early for bogus crap
+* Consistency in argument names and argument order
 * Consistency in how we perror() for commands called from interface(),
-  give user-friendly messages (but not from perror in conf() or other
-  things that are not called direct from CLI)
+  give user-friendly messages, as these errors generally represent user
+  error (but not from perror in conf() or other things that are not called
+  direct from CLI as these errors generally represent problems in nsh)
+# Consistency (decide, == -1 or < 0 for checking error return ???)
+* Consistency in how errors are returned, handled
 * ...
 
 Required for intended functionality:
@@ -23,7 +27,7 @@ Required for intended functionality:
 * Finish 'save' command which will write routes, hostname, and the interface
   configurations to a file which can be read by cmdrc on
   startup with -i (requires the following to be done _first_:)
-* Finish up interface mode handler commands
+
 * Create pf commands under interface, generic mode handler:
 
 * Allow simple block in all/pass out all keep state pf rules to be setup for
@@ -42,9 +46,10 @@ Cute features:
   for a new binary? 
 * Hooks for a web interface? Does this even make sense?
 * Add more diagnostic messages for verbose output where useful
+* DHCP client/server config through nsh??
 * Can we hook into snmpd at all or just run it separately on the same box?
 * Do we build in a simple ping, traceroute or just shell out for these??
-* And what about telnet/ssh (maybe shell out for ssh and ignore telnet)??
+* And what about telnet/ssh (maybe shell out for ssh, do a simple telnet?)
 * ALTQ RED/CBQ/HFSC
 * Support for paging through displays of text X lines at a time
 * Something comparable to "| inc" from cisco-land
@@ -53,6 +58,9 @@ Cute features:
 * Import unimplemented wicontrol features
 * Convenient/automatic way to centralize configurations for tracking/revision
   control
+* Get rid of routepr.c and use sysctl-based functions instead while still
+  displaying all that tasty info
+* While there, split out arp/route show
 
 Future:
 
@@ -67,16 +75,10 @@ Future:
 Known Bugs (or, things that I don't want to bother with right now, but
 better not forget later...):
 
-* Is it possible to properly implement a 'no nwid' command or should this be
-  removed? (It currently does not work in nsh, anyways ifconfig cannot do
-  this, and in any event the kernel does not appear to be able to remove
-  this setting from a card!) Maybe we just set xyz.len=0 instead of the
-  memset we do now?
-* Need some kind of sanity checking for nwid variable, 'nwid ""' will cause
-  some if_wi cards to stop responding properly.  Unsure of what is and isn't
-  sane for various cards?????
-* When 'no nwid' is used, a following 'show run' exposes other bugs in
-  make_string()
+* 'nwid ""' will cause a card in access point mode to freak out.  (Although,
+  lots of things seem to cause Prism cards in AP mode to freak out.  Apparently
+  these problems are due to the if_wi driver not properly checking and dealing
+  with error returns)
 * The 3.1 kernel does not keep count of information displayed in 'show rtstat'
   properly (what else??)
 * We need to mask the rounding error for altq tbr 'rate' value

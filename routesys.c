@@ -32,42 +32,6 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-/*
- * Copyright (c) 1997, 1998, 1999
- * The Regents of the University of Michigan ("The Regents") and Merit Network,
- * Inc.  All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1.  Redistributions of source code must retain the above 
- *     copyright notice, this list of conditions and the 
- *     following disclaimer.
- * 2.  Redistributions in binary form must reproduce the above
- *     copyright notice, this list of conditions and the 
- *     following disclaimer in the documentation and/or other 
- *     materials provided with the distribution.
- * 3.  All advertising materials mentioning features or use of 
- *     this software must display the following acknowledgement:  
- *       This product includes software developed by the University of Michigan,
- *       Merit Network, Inc., and their contributors. 
- * 4.  Neither the name of the University, Merit Network, nor the
- *     names of their contributors may be used to endorse or
- *     promote products derived from this software without 
- *     specific prior written permission.
- * 
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS "AS IS" AND ANY
- * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE FOR ANY
- * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
- * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
- * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.  
- *
- */
 
 #include <sys/param.h>
 #include <sys/socket.h>
@@ -91,8 +55,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <paths.h>
-#include "externs.h"
 #include "ip.h"
+#include "externs.h"
 
 short ns_nullh[] = {0,0,0};
 short ns_bh[] = {-1,-1,-1};
@@ -104,42 +68,92 @@ union   sockunion {
 	struct  sockaddr_in6 sin6;
 #endif
 	struct  sockaddr_dl sdl;
-} so_dst, so_gate, so_mask, so_genmask, so_ifa, so_ifp;
+} so_dst, so_gate, so_mask, so_ifp; /* no thanks:, so_genmask, so_ifa; */
 
 typedef union sockunion *sup;
-pid_t	pid;
-int	rtm_addrs, af, s;
-int	debugonly = 0;
+int	rtm_addrs;
 u_long  rtm_inits;
 
 char	*routename_sa(struct sockaddr *);
 char	*any_ntoa(const struct sockaddr *);
+char	*mylink_ntoa(const struct sockaddr_dl *);
 char	*touch;
 
-void	 flushroutes(int);
+void	 flushroutes(int, int);
 int	 monitor(void);
+int	 rtmsg(int, int);
 #ifdef INET6
 static int prefixlen(char *);
 #endif
 void	 print_rtmsg(struct rt_msghdr *, int);
+void	 print_getmsg(struct rt_msghdr *, int);
 void	 pmsg_common(struct rt_msghdr *);
 void	 pmsg_addrs(char *, int);
 void	 bprintf(FILE *, int, u_char *);
-int	 kernel_route(ip_t *, ip_t *, u_short);
+int	 ip_route(ip_t *, ip_t *, u_short);
 
 /*
- * Purge all entries in the routing tables not
- * associated with network interfaces.
+ * If struct returned is not NULL then caller is responsible to free
+ * rtdump->buf and rtdump!
  */
-void
-flushroutes(af)
-	int af;
+struct rtdump *getrtdump(int s)
 {
 	size_t needed;
-	int mib[6], rlen, seqno;
-	char *buf = NULL, *next, *lim = NULL;
+	int mib[6];
+	struct rtdump *rtdump;
+
+	mib[0] = CTL_NET;
+	mib[1] = PF_ROUTE;
+	mib[2] = 0;	/* protocol */
+	mib[3] = 0;	/* wildcard address family */
+	mib[4] = NET_RT_DUMP;
+	mib[5] = 0;	/* no flags */
+
+	if (sysctl(mib, 6, NULL, &needed, NULL, 0) < 0) {
+		perror("% getrtdump: unable to get estimate");
+		return(NULL);
+	}
+
+	if ((rtdump = malloc(sizeof(struct rtdump))) == NULL) {
+		perror("% getrtdump: rtdump malloc");
+		return(NULL);
+	}
+
+	if (needed) {
+		if ((rtdump->buf = malloc(needed)) == NULL) {
+			perror("% getrtdump: malloc");
+			free(rtdump);
+			return(NULL);
+		}
+		if (sysctl(mib, 6, rtdump->buf, &needed, NULL, 0) < 0) {
+			perror("% getrtdump: unable to get routing table");
+			free(rtdump);
+			free(rtdump->buf);
+			return(NULL);
+		}
+		rtdump->lim = rtdump->buf + needed;
+	}
+	if (rtdump->buf == NULL) {
+		printf ("%% No routing table\n");
+		free(rtdump);
+		return(NULL);
+	}
+
+	return(rtdump);
+}
+
+/*
+ * Purge entries in the routing table where the first two
+ * sockaddrs match requested address families
+ */
+void
+flushroutes(int af, int af2)
+{
+	int rlen, seqno, s;
+	char *next;
 	struct rt_msghdr *rtm;
-	struct sockaddr *sa;
+	struct sockaddr *sa, *sa2;
+	struct rtdump *rtdump;
 
 	s = socket(PF_ROUTE, SOCK_RAW, 0);
 	if (s < 0) {
@@ -148,82 +162,63 @@ flushroutes(af)
 	}
 
 	shutdown(s, 0); /* Don't want to read back our messages */
-	mib[0] = CTL_NET;
-	mib[1] = PF_ROUTE;
-	mib[2] = 0;		/* protocol */
-	mib[3] = 0;		/* wildcard address family */
-	mib[4] = NET_RT_DUMP;
-	mib[5] = 0;		/* no flags */
-	if (sysctl(mib, 6, NULL, &needed, NULL, 0) < 0) {
-		printf("%% route-sysctl-estimate\n");
-		close(s);
-		return;
-	}
-	if (needed) {
-		if ((buf = malloc(needed)) == NULL) {
-			printf("%% flushroutes: malloc\n");
-			close(s);
-			return;
-		}
-		if (sysctl(mib, 6, buf, &needed, NULL, 0) < 0) {
-			printf("%% flushroutes: actual retrieval of routing table\n");
-			free(buf);
-			close(s);
-			return;
-		}
-		lim = buf + needed;
-	}
-	if (verbose) {
-		(void) printf("%% Examining routing table from sysctl\n");
-		 if (af)
-			printf("%% (address family %d)\n", af);
-	}
-	if (buf == NULL) {
-		printf ("%% No routing table to flush\n");
+	rtdump = getrtdump(s);
+	if (rtdump == NULL) {
 		close(s);
 		return;
 	}
 
-	seqno = 0;		/* ??? */
-	for (next = buf; next < lim; next += rtm->rtm_msglen) {
+	seqno = 0;
+	for (next = rtdump->buf; next < rtdump->lim; next += rtm->rtm_msglen) {
 		rtm = (struct rt_msghdr *)next;
-		if (verbose)
-			print_rtmsg(rtm, rtm->rtm_msglen);
 		if ((rtm->rtm_flags & (RTF_GATEWAY|RTF_STATIC|RTF_LLINFO)) == 0)
 			continue;
-		sa = (struct sockaddr *)(rtm + 1);
-		if (af) {
-			if (sa->sa_family != af)
-				continue;
+		if (verbose) {
+			printf("\n%% Read message:\n");
+			print_rtmsg(rtm, rtm->rtm_msglen);
 		}
-		if (sa->sa_family == AF_KEY)
-			continue;  /* Don't flush SPD */
-		if (debugonly)
+		sa = (struct sockaddr *)(rtm + 1);
+		sa2 = (struct sockaddr *)(ROUNDUP(sa->sa_len) + (char *)sa);
+		if (sa->sa_family != af) {
+			if (verbose) {
+				printf("%% Ignoring message ");
+				printf("(af %d requested, message ", af);
+				printf("af %d)\n", sa->sa_family);
+			}
 			continue;
+		}
+		if (sa2->sa_family != af2) {
+			if (verbose) {
+				printf("%% Ignoring message ");
+				printf("(af2 %d requested, message ", af);
+				printf("af %d)\n", sa2->sa_family);
+			}
+			continue;
+		}
 		rtm->rtm_type = RTM_DELETE;
 		rtm->rtm_seq = seqno;
 		rlen = write(s, next, rtm->rtm_msglen);
 		if (rlen < (int)rtm->rtm_msglen) {
-			(void) fprintf(stderr,
-			    "route: write to routing socket: %s\n",
-			    strerror(errno));
-			(void) printf("%% flushroutes: got only %d for rlen\n", rlen);
+			perror("% Unable to write to routing socket");
 			break;
 		}
 		seqno++;
-		{
-			struct sockaddr *sa = (struct sockaddr *)(rtm + 1);
-			(void) printf("%-20.20s ", routename_sa(sa));
-/*rtm->rtm_flags & RTF_HOST ?
-			    routename_sa(sa) : netname(sa));*/
-			sa = (struct sockaddr *)(ROUNDUP(sa->sa_len) +
-			     (char *)sa);
-			(void) printf("%-20.20s ", routename_sa(sa));
-			(void) printf("deleted\n");
+		if (verbose) {
+			printf("\n%% Wrote message:\n");
+			print_rtmsg(rtm, rlen);
+		} else {
+			printf("%% %-20.20s ", routename_sa(sa));
+			printf("%-20.20s flushed\n", routename_sa(sa2));
 		}
 	}
-	free(buf);
+	if (verbose)
+		printf("\n");
+	if (!seqno)
+		printf("%% No entires found to flush\n");
+	free(rtdump);
+	free(rtdump->buf);
 	close(s);
+	return;
 }
 
 static char hexlist[] = "0123456789abcdef";
@@ -237,13 +232,46 @@ any_ntoa(sa)
 	char *out = obuf;
 	int len = sa->sa_len;
 
-/*	*out++ = 'Q'; */
+/*	*out++ = 'Q'; */ /* WTF ? */
 	do {
 		*out++ = hexlist[(*in >> 4) & 15];
 		*out++ = hexlist[(*in++)    & 15];
 		*out++ = '.';
 	} while (--len > 0 && (out + 3) < &obuf[sizeof obuf-1]);
 	out[-1] = '\0';
+	return (obuf);
+}
+
+/* print 00:00:00:00:00:00 style, not if:00.00.00.00.00.00 */
+char *
+mylink_ntoa(const struct sockaddr_dl *sdl)
+{
+	static char obuf[64];
+	char *out = obuf;
+	int i;
+	u_char *in = (u_char *)LLADDR(sdl);
+	u_char *inlim = in + sdl->sdl_alen;
+	int firsttime = 1;
+
+	if (sdl->sdl_nlen) {
+		/* skip interface name */
+		out += sdl->sdl_nlen;
+	}
+	while (in < inlim) {
+		if (firsttime)
+			firsttime = 0;
+		else
+			*out++ = ':';
+		i = *in++;
+		if (i > 0xf) {
+			out[1] = hexlist[i & 0xf];
+			i >>= 4;
+			out[0] = hexlist[i];
+			out += 2;
+		} else
+			*out++ = hexlist[i];
+	}
+	*out = 0;
 	return (obuf);
 }
 
@@ -315,7 +343,7 @@ routename_sa(sa)
 #endif
 
 	case AF_LINK:
-		return (link_ntoa((struct sockaddr_dl *)sa));
+		return (mylink_ntoa((struct sockaddr_dl *)sa));
 
 	default:
 		(void) snprintf(line, sizeof line, "(%d) %s",
@@ -355,7 +383,7 @@ prefixlen(s)
 int
 monitor()
 {
-	int n, saveverbose;
+	int s, n, saveverbose;
 	char msg[2048];
 
 	s = socket(PF_ROUTE, SOCK_RAW, 0);
@@ -365,6 +393,8 @@ monitor()
 	}
 	saveverbose = verbose;
 	verbose = 1;
+
+	printf("%% Entering monitor mode...\n");
 
 	for(;;) {
 		time_t now;
@@ -379,10 +409,10 @@ monitor()
 	return(0);
 }
 
-struct m_rtmsg {
+struct {
 	struct	rt_msghdr m_rtm;
 	char	m_space[512];
-};
+} m_rtmsg;
 
 char *msgtypes[] = {
 	"",
@@ -426,7 +456,7 @@ print_rtmsg(rtm, msglen)
 	if (verbose == 0)
 		return;
 	if (rtm->rtm_version != RTM_VERSION) {
-		(void) printf("routing message version %d not understood\n",
+		(void) printf("%% routing message version %d not understood\n",
 		    rtm->rtm_version);
 		return;
 	}
@@ -434,14 +464,14 @@ print_rtmsg(rtm, msglen)
 	switch (rtm->rtm_type) {
 	case RTM_IFINFO:
 		ifm = (struct if_msghdr *)rtm;
-		(void) printf("if# %d, flags:", ifm->ifm_index);
+		(void) printf("if# %d\n", ifm->ifm_index);
 		bprintf(stdout, ifm->ifm_flags, ifnetflags);
 		pmsg_addrs((char *)(ifm + 1), ifm->ifm_addrs);
 		break;
 	case RTM_NEWADDR:
 	case RTM_DELADDR:
 		ifam = (struct ifa_msghdr *)rtm;
-		(void) printf("metric %d, flags:", ifam->ifam_metric);
+		(void) printf("metric %d\n", ifam->ifam_metric);
 		bprintf(stdout, ifam->ifam_flags, routeflags);
 		pmsg_addrs((char *)(ifam + 1), ifam->ifam_addrs);
 		break;
@@ -449,18 +479,107 @@ print_rtmsg(rtm, msglen)
 		(void) printf("pid: %d, seq %d, errno %d, flags:",
 			rtm->rtm_pid, rtm->rtm_seq, rtm->rtm_errno);
 		bprintf(stdout, rtm->rtm_flags, routeflags);
+		printf("\n");
 		pmsg_common(rtm);
 	}
+}
+
+void
+print_getmsg(rtm, msglen)
+	struct rt_msghdr *rtm;
+	int msglen;
+{
+	struct sockaddr *dst = NULL, *gate = NULL, *mask = NULL;
+	struct sockaddr_dl *ifp = NULL;
+	struct sockaddr *sa;
+	char *cp;
+	int i;
+
+#if 0
+	(void) printf("%% route lookup for: %s\n", routename_sa(&so_dst.sa));
+#endif
+	if (rtm->rtm_msglen > msglen) {
+		(void)fprintf(stderr,
+		    "%% message length mismatch, in packet %d, returned %d\n",
+		    rtm->rtm_msglen, msglen);
+	}
+	if (rtm->rtm_errno)  {
+		(void) fprintf(stderr, "%% RTM_GET: %s (errno %d)\n",
+		    strerror(rtm->rtm_errno), rtm->rtm_errno);
+		return;
+	}
+	cp = ((char *)(rtm + 1));
+	if (rtm->rtm_addrs)
+		for (i = 1; i; i <<= 1)
+			if (i & rtm->rtm_addrs) {
+				sa = (struct sockaddr *)cp;
+				switch (i) {
+				case RTA_DST:
+					dst = sa;
+					break;
+				case RTA_GATEWAY:
+					gate = sa;
+					break;
+				case RTA_NETMASK:
+					mask = sa;
+					break;
+				case RTA_IFP:
+					if (sa->sa_family == AF_LINK &&
+					   ((struct sockaddr_dl *)sa)->sdl_nlen)
+					    ifp = (struct sockaddr_dl *)sa;
+					break;
+				}
+				ADVANCE(cp, sa);
+			}
+	if (dst && mask)
+		mask->sa_family = dst->sa_family;       /* XXX */
+	if (dst)
+		(void)printf("%% destination: %s\n", routename_sa(dst));
+	if (mask)
+		(void)printf("%% netmask: %s\n", routename_sa(mask));
+	if (gate && rtm->rtm_flags & RTF_GATEWAY)
+		(void)printf("%% gateway: %s\n", routename_sa(gate));
+	if (ifp)
+		(void)printf("%% interface: %.*s\n",
+		    ifp->sdl_nlen, ifp->sdl_data);
+	if (verbose) {
+		(void)printf("%% flags: ");
+		bprintf(stdout, rtm->rtm_flags, routeflags);
+		printf("\n");
+	}
+
+#define lock(f) ((rtm->rtm_rmx.rmx_locks & __CONCAT(RTV_,f)) ? 'L' : ' ')
+
+	/*
+	 * we ignore most statistics and locks right now for simplicity
+	 */
+	printf("%% mtu: %d\n", (int)rtm->rtm_rmx.rmx_mtu);
+	printf("%% hopcount: %d\n", (int)rtm->rtm_rmx.rmx_hopcount);
+	if (rtm->rtm_rmx.rmx_expire) {
+		rtm->rtm_rmx.rmx_expire -= time(0);
+		printf("%% expires: %d sec\n", (int)rtm->rtm_rmx.rmx_expire);
+	}
+
+#define RTA_IGN (RTA_DST|RTA_GATEWAY|RTA_NETMASK|RTA_IFP|RTA_IFA|RTA_BRD)
+        if (verbose)
+                pmsg_common(rtm);
+        else if (rtm->rtm_addrs &~ RTA_IGN) {
+		(void) printf("%% sockaddrs: ");
+		bprintf(stdout, rtm->rtm_addrs, addrnames);
+		putchar('\n');
+	}
+#undef  RTA_IGN
 }
 
 void
 pmsg_common(rtm)
 	struct rt_msghdr *rtm;
 {
-	(void) printf("\nlocks: ");
+	(void) printf("%% locks: ");
 	bprintf(stdout, rtm->rtm_rmx.rmx_locks, metricnames);
 	(void) printf(" inits: ");
 	bprintf(stdout, rtm->rtm_inits, metricnames);
+	printf("\n");
 	pmsg_addrs(((char *)(rtm + 1)), rtm->rtm_addrs);
 }
 
@@ -474,7 +593,7 @@ pmsg_addrs(cp, addrs)
 
 	if (addrs == 0)
 		return;
-	(void) printf("\nsockaddrs: ");
+	(void) printf("%% sockaddrs: ");
 	bprintf(stdout, addrs, addrnames);
 	(void) putchar('\n');
 	for (i = 1; i; i <<= 1)
@@ -517,43 +636,38 @@ bprintf(fp, b, s)
 }
 
 /*
- * Adapted from merit's mrtd (hence the copyright above) which appears to
- * have adapted from 4.4bsd (well.. it looks like this was rtmsg() at one point)
+ * this function converts ip_t to sockaddr_in, sets up rtm_addrs based
+ * on what the user/calling function supplied, and calls rtmsg()
+ *
+ * if destination bitlength is -1 then we ignore the netmask,
+ * if bitlength is 0 then we make sure to set a zero netmask.
+ *
+ * if rtmsg returns -1 then errno is checked, if it returns something
+ * that we know about then we try and give a sensible error message
  */
 int
-kernel_route(ip_t *dest, ip_t *gate, u_short cmd)
+ip_route(ip_t *dest, ip_t *gate, u_short cmd)
 {
-	int rlen;
-	struct m_rtmsg m_rtmsg;
-	char *cp = m_rtmsg.m_space;
-
-	int flags, rtm_addrs;
-	static int seq = 0;
-	struct rt_metrics rt_metrics;
-	register int l;
+	int flags, l;
 	int len = dest->bitlen;
 
-	s = socket(PF_ROUTE, SOCK_RAW, 0);
-	if (s < 0) {  
-		perror("% Unable to open routing socket");
-		return(1);
+	rtm_addrs = 0;
+	memset(&so_dst, 0, sizeof (so_dst));
+	memset(&so_gate, 0, sizeof (so_gate));
+	memset(&so_mask, 0, sizeof (so_mask));
+	memset(&so_ifp, 0, sizeof(so_ifp));
+
+	if (cmd == RTM_GET) {
+		so_ifp.sa.sa_family = AF_LINK;
+		so_ifp.sa.sa_len = sizeof(struct sockaddr_dl);
+		rtm_addrs |= RTA_IFP;
 	}
 
-	bzero ((char *) &m_rtmsg, sizeof(m_rtmsg));
-	bzero ((char *) &rt_metrics, sizeof (rt_metrics));
-	bzero (&so_dst, sizeof (so_dst));
-	bzero (&so_gate, sizeof (so_gate));
-	bzero (&so_mask, sizeof (so_mask));
-	bzero (&so_genmask, sizeof (so_genmask));
-	bzero (&so_ifp, sizeof (so_ifp));
-	bzero (&so_ifa, sizeof (so_ifa));
-
-	m_rtmsg.m_rtm.rtm_type = cmd;
-
-	rtm_addrs = 0;
 	flags = RTF_UP | RTF_STATIC;
 
-	if (dest->family == AF_INET) {
+	switch(dest->family) {
+	case AF_INET:
+	  {
 		if (len == 32)
 			flags |= RTF_HOST;
 		so_dst.sin.sin_addr.s_addr = dest->addr.sin.s_addr;
@@ -569,13 +683,22 @@ kernel_route(ip_t *dest, ip_t *gate, u_short cmd)
 			flags |= RTF_GATEWAY;
 		}
 
-		so_mask.sin.sin_len = sizeof (struct sockaddr_in);
-		so_mask.sin.sin_family = AF_INET;
-		so_mask.sin.sin_addr.s_addr = htonl(0xffffffff << (32 - len));
-		rtm_addrs |= RTA_NETMASK;
+		if (len >= 0) {
+			so_mask.sin.sin_len = sizeof (struct sockaddr_in);
+			so_mask.sin.sin_family = AF_INET;
+			if(len == 0)
+				so_mask.sin.sin_addr.s_addr = 0;
+			else
+				so_mask.sin.sin_addr.s_addr =
+				    htonl(0xffffffff << (32 - len));
+			rtm_addrs |= RTA_NETMASK;
+		}
+	  }
+		break;
 
-	} else if (dest->family == AF_INET6) {
 #ifdef INET6
+	case AF_INET6:
+	  {
 		if (len == 128)
 			flags |= RTF_HOST;
 		so_dst.sin6.sin6_addr = dest->addr.sin;
@@ -598,53 +721,91 @@ kernel_route(ip_t *dest, ip_t *gate, u_short cmd)
 		so_mask.sin6.sin6_family = AF_INET6;
 		so_mask.sin6.sin6_addr = htonl(0xffffffffffffffffffffffffffffffff << (128 - len));
 		rtm_addrs |= RTA_NETMASK;
-#else
-		close(s);
-		return(0);
+	  }
+		break;
 #endif
-	} else {
-		close(s);
+	default:
+		printf("%% ip_route: Internal error\n");
 		return(0);
+		break;
 	}
-
-#if 0
-	if (gate && prefix_is_loopback (gate))
-		flags |= RTF_REJECT;
-#endif
-
-#define NEXTADDRP(w, u)							      \
-	if (rtm_addrs & (w)) {						      \
-		int l;						 	      \
-		l = ROUNDUP(u.sa.sa_len); bcopy((char *)&(u), cp, l); cp += l;\
-	}
-
-	m_rtmsg.m_rtm.rtm_flags = flags;
-	m_rtmsg.m_rtm.rtm_version = RTM_VERSION;
-	m_rtmsg.m_rtm.rtm_seq = ++seq;
-	m_rtmsg.m_rtm.rtm_addrs = rtm_addrs;
-	m_rtmsg.m_rtm.rtm_rmx = rt_metrics;
-	/*m_rtmsg.m_rtm.rtm_inits = 0; */
-	NEXTADDRP (RTA_DST, so_dst);
-	NEXTADDRP (RTA_GATEWAY, so_gate);
-	NEXTADDRP (RTA_NETMASK, so_mask);
-	NEXTADDRP (RTA_GENMASK, so_genmask);
-	NEXTADDRP (RTA_IFP, so_ifp);
-	NEXTADDRP (RTA_IFA, so_ifa);
-
-	m_rtmsg.m_rtm.rtm_msglen = l = cp - (char *) &m_rtmsg;
-
-	if(verbose)
-		print_rtmsg((struct rt_msghdr *)&m_rtmsg, m_rtmsg.m_rtm.rtm_msglen);
-
-	if ((rlen = write (s, (char *) &m_rtmsg, l)) < 0) {
-		if (errno == ESRCH || errno == ENETUNREACH)
+	if (rtmsg(cmd, flags) < 0) {
+		if (cmd == RTM_ADD && gate &&
+		    (errno == ESRCH || errno == ENETUNREACH))
 			printf("%% Gateway is unreachable: %s\n",
-			    inet_ntoa(gate->addr.sin));
+			    inet_ntoa(gate->addr.sin)); /* XXX IPv6 */
+		else if (cmd == RTM_GET &&
+		    (errno == ESRCH || errno == ENETUNREACH))
+			printf("%% Unable to find route: %s\n",
+			    inet_ntoa(dest->addr.sin));
 		else
-			perror("% Writing to routing socket"); 
-		close(s);
-		return(-1);
+			perror("% ip_route: rtmsg");
 	}
+}
+
+/*
+ * handle routing messages for route get, route set, arp set
+ * we return -1 when caller handles error message (set) or 0 when
+ * there is no error or we displayed the error message (get)
+ */
+int
+rtmsg(cmd, flags)
+	int cmd, flags;
+{
+	static int seq;
+	int rlen;
+	char *cp = m_rtmsg.m_space;
+	int l, s;
+
+	s = socket(PF_ROUTE, SOCK_RAW, 0);
+	if (s < 0) {
+		perror("% Unable to open routing socket");
+		return(1);
+	}
+
+#define NEXTADDR(w, u)							\
+	if (rtm_addrs & (w)) {						\
+	    l = ROUNDUP(u.sa.sa_len); memcpy(cp, &(u), l); cp += l;	\
+	}
+
+	errno = 0;
+	memset(&m_rtmsg, 0, sizeof(m_rtmsg));
+#define rtm m_rtmsg.m_rtm
+	rtm.rtm_type = cmd;
+	rtm.rtm_flags = flags;
+	rtm.rtm_version = RTM_VERSION;
+	rtm.rtm_seq = ++seq;
+	rtm.rtm_addrs = rtm_addrs;
+#if 0 /* deal with this later when our cmdline handles metrics... */
+	rtm.rtm_rmx = rt_metrics;
+#endif
+	rtm.rtm_inits = rtm_inits;
+
+	NEXTADDR(RTA_DST, so_dst);
+	NEXTADDR(RTA_GATEWAY, so_gate);
+	NEXTADDR(RTA_NETMASK, so_mask);
+	NEXTADDR(RTA_IFP, so_ifp);
+	rtm.rtm_msglen = l = cp - (char *)&m_rtmsg;
+	if (verbose)
+		print_rtmsg(&rtm, l);
+	if ((rlen = write(s, (char *)&m_rtmsg, l)) < 0) {
+		/* on a write, the calling function will notify user of error */
+		close(s);
+		return (-1);
+	}
+	if (cmd == RTM_GET) {
+		do {
+			l = read(s, (char *)&m_rtmsg, sizeof(m_rtmsg));
+		} while (l > 0 && (rtm.rtm_seq != seq || rtm.rtm_pid != pid));
+		if (l < 0)
+			/* on a get we notify the user */
+			(void) fprintf(stderr,
+			    "%% rtmsg: read from routing socket: %s\n",
+			    strerror(errno));
+		else
+			print_getmsg(&rtm, l);
+	}
+#undef rtm
 	close(s);
-	return(1);
+	return (0);
 }

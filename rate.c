@@ -48,9 +48,9 @@
 
 u_long atobps(const char *s);
 u_long atobytes(const char *s);
-u_long get_tbr(const char *ifname, int);
-u_int size_bucket(const char *ifname, const u_int rate);
-u_int autosize_bucket(const char *ifname, const u_int rate);
+u_long get_tbr(char *ifname, int);
+u_int size_bucket(char *ifname, u_int rate);
+u_int autosize_bucket(char *ifname, u_int rate);
 static int get_clockfreq(void);
 int list_rates(void);
 
@@ -62,7 +62,7 @@ intrate(char *ifname, int argc, char **argv)
 	u_int baudrate, rate = 0, depth = 0;
 	int fd, delete = 0;
 
-	if (strncasecmp(argv[0], "no", 2) == 0) {
+	if (NO_ARG(argv[0])) {
 		delete = 1;
 
 		/* bye bye 'no' */
@@ -85,7 +85,7 @@ intrate(char *ifname, int argc, char **argv)
 	if (argc)
 		rate = (u_int)atobps(argv[0]);
 	if (argc > 1) {
-		if (strncasecmp(argv[1], "auto", 4) == 0)
+		if (CMP_ARG(argv[1], "auto"))
 			depth = autosize_bucket(req.ifname, rate);
 		else {
 			depth = (u_int)atobytes(argv[1]);
@@ -147,7 +147,7 @@ intrate(char *ifname, int argc, char **argv)
 }
 
 u_long
-get_tbr(const char *ifname, int type)
+get_tbr(char *ifname, int type)
 {
 	struct tbrreq req;
 	u_long value = 0;
@@ -214,7 +214,7 @@ atobytes(const char *s)
  * use heuristics to determine the bucket size
  */
 u_int
-size_bucket(const char *ifname, const u_int rate)
+size_bucket(char *ifname, u_int rate)
 {
 	u_int size, mtu;
 
@@ -240,7 +240,7 @@ size_bucket(const char *ifname, const u_int rate)
  * even when the rate is controlled only by the kernel timer.
  */
 u_int
-autosize_bucket(const char *ifname, const u_int rate)
+autosize_bucket(char *ifname, u_int rate)
 {
 	u_int size, freq, mtu;
 

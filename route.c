@@ -29,24 +29,24 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
+#include <sys/param.h>
 #include <sys/socket.h>
 #include <sys/errno.h>
 #include <sys/ioctl.h>
+#include <sys/sysctl.h>
 #include <netinet/in.h>
 #include <net/route.h>
 #include <arpa/inet.h>
-#include "externs.h"
 #include "ip.h"
+#include "externs.h"
 
 int
 route(int argc, char **argv)
 {
-	u_short cmd = 0, bits;
+	u_short cmd = 0;
 	ip_t dest, gate;
-	struct in_addr mask;
-	char *q, *s;
 
-	if (strncasecmp(argv[0], "no", 2) == 0) {
+	if (NO_ARG(argv[0])) {
 		cmd = RTM_DELETE; 
 		argc--;
 		argv++;
@@ -57,50 +57,20 @@ route(int argc, char **argv)
 	argv++;
 
 	if (argc < 1 || argc > 2) {
-		printf("%% [no] route <destination>[/bits] <gateway>\n");
-		printf("%% [no] route <destination>[/netmask] <gateway>\n");
+		printf("%% route <destination>[/bits] <gateway>\n");
+		printf("%% route <destination>[/netmask] <gateway>\n");
+		printf("%% no route <destination>[/bits] [gateway]\n");
+		printf("%% no route <destination>[/netmask] [gateway]\n");
 		return(1);
 	}
 
-	memset(&dest, 0, sizeof(ip_t));
 	memset(&gate, 0, sizeof(ip_t));
+	memset(&dest, 0, sizeof(ip_t));
 
-	/*
-	 * We parse this argument first so that we can give out error
-	 * messages in a sane order
-	 */
-	q = strchr(argv[0], '/');
-	if (q)
-		*q = '\0';
-	if (!(inet_aton(argv[0], &dest.addr.sin) && strchr(argv[0], '.'))) {
-		printf("%% %s is not an IP address\n", argv[0]);
+	dest = parse_ip(argv[0], ASSUME_NETMASK);
+	if (dest.family == 0)
+		/* bad arguments */
 		return(1);
-	}
-	if (q) {
-		s = q + 1;
-		if (inet_aton(s, &mask) && strchr(s, '.')) {
-			mask.s_addr = ntohl(mask.s_addr);
-			bits = mask.s_addr ? 33 - ffs(mask.s_addr) : 0;
-		} else {
-			if(strspn(s, "0123456789") == strlen(s)) {
-				/* assume bits after slash */
-				bits = strtoul(s, 0, 0);
-				if (bits > 32) {
-					printf("%% Invalid bit length\n");
-					return(1);
-				}
-			} else {
-				printf("%% Invalid destination mask\n");
-				return(1);
-			}
-		}
-	} else {
-		/*
-		 * If no netmask was specified, we assume the user refers to
-		 * a host and not a network.
-		 */
-		bits = 32;	
-	}
 
 	if (argc > 1) {
 		if (!(inet_aton(argv[1], &gate.addr.sin) &&
@@ -113,9 +83,97 @@ route(int argc, char **argv)
 		return(1);
 	}
 
-	dest.bitlen = bits;
-	dest.family = AF_INET;
-	kernel_route(&dest, &gate, cmd);
+	ip_route(&dest, &gate, cmd);
+	return(0);
+}
 
-	return 0;
+void show_route(char *arg)
+{
+	ip_t dest;
+
+	memset(&dest, 0, sizeof(ip_t));
+
+	dest = parse_ip(arg, NO_NETMASK);
+	if (dest.family == 0)
+		return;
+
+	ip_route(&dest, NULL, RTM_GET);
+	/*
+	 * ip_route() calls rtmsg() which calls
+	 * print_getmsg() on RTM_GET to show a route,
+	 * so nothing else needs to happen here...
+	 */
+
+	return;
+}
+
+/*
+ * A return value with ip_t.family == 0 means failure
+ * (and fail message was displayed to user) otherwise argument was parsed
+ * into ip_t
+ *
+ * 'int type' is used if the user does not specify a netmask in the argument.
+ *
+ * The type can be ASSUME_NETMASK in which case we assume a host netmask
+ * (all ones) or NO_NETMASK in which case ip_t.bitlen = -1
+ * 
+ * If ip_route() sees that the destination ip_t.bitlen == -1, it does not
+ * setup a netmask sockaddr in the routing message
+ */
+ip_t parse_ip(char *arg, int type)
+{
+	ip_t argip;
+	struct in_addr mask;
+	char *q, *s;
+
+	memset(&argip, 0, sizeof(ip_t));
+
+	/*
+	 * We parse this argument first so that we can give out error
+	 * messages in a sane order
+	 */
+	q = strchr(arg, '/');
+	if (q)
+		*q = '\0';
+	if (!(inet_aton(arg, &argip.addr.sin) && strchr(arg, '.'))) {
+		printf("%% %s is not an IP address\n", arg);
+		return(argip);
+	}
+	if (q) {
+		s = q + 1;
+		if (inet_aton(s, &mask) && strchr(s, '.')) {
+		    mask.s_addr = ntohl(mask.s_addr);
+			argip.bitlen = mask.s_addr ? 33 - ffs(mask.s_addr) : 0;
+		} else {
+			if(strspn(s, "0123456789") == strlen(s)) {
+				/* assume bits after slash */
+				argip.bitlen = strtoul(s, 0, 0);
+				if (argip.bitlen > 32) {
+					printf("%% Invalid bit length\n");
+					return(argip);
+				}
+			} else {
+				printf("%% Invalid mask specified\n");
+				return(argip);
+			}
+		}
+	} else {
+		/*
+		 * If no netmask was specified, we assume the user refers to
+		 * a host and not a network.  Or not, depending on type.
+		 */
+		switch (type) {
+		case NO_NETMASK:
+			argip.bitlen = -1;
+			break;
+		case ASSUME_NETMASK:
+			argip.bitlen = 32;
+			break;
+		default:
+			printf("%% parse_ip: Internal error\n");
+			break;
+		}
+	}
+	argip.family = AF_INET;
+	return(argip);
 }

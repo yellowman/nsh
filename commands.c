@@ -133,7 +133,7 @@ static int	enable(void);
 static int	disable(void);
 static int	doverbose(int, char**);
 static int	doediting(int, char**);
-static int	pr_routes(void);
+static int	pr_routes(char *);
 static int	pr_ip_stats(void);
 static int	pr_ah_stats(void);
 static int	pr_esp_stats(void);
@@ -148,6 +148,7 @@ static int	pr_conf(void);
 static int	show_help(void);
 static int	flush_help(void);
 static int	flush_ip_routes(void);
+static int	flush_arp_cache(void);
 static int	flush_history(void);
 static int	int_help(void);
 static int	el_burrito(EditLine *, int, char **);
@@ -197,7 +198,7 @@ struct showlist {
 static struct showlist Showlist[] = {
 	{ "hostname",	"Router hostname",	0, 0, hostname },
 	{ "interface",	"Interface config",	0, 1, show_int },
-	{ "routes",	"IP route table",	0, 0, pr_routes },
+	{ "route",	"IP route table or route lookup", 0, 1, pr_routes },
 	{ "ipstats",	"IP statistics",	0, 0, pr_ip_stats },
 	{ "ahstats",	"AH statistics",	0, 0, pr_ah_stats },
 	{ "espstats",	"ESP statistics",	0, 0, pr_esp_stats },
@@ -208,6 +209,7 @@ static struct showlist Showlist[] = {
 	{ "ipcompstats","IPCOMP statistics",	0, 0, pr_ipcomp_stats },
 	{ "rtstats",	"Routing statistics",	0, 0, pr_rt_stats },
 	{ "mbufstats",	"Memory management statistics",	0, 0, pr_mbuf_stats },
+	{ "monitor",	"Monitor routing/arp table changes", 0, 0, monitor },
 	{ "version",	"Software information",	0, 0, version },
 	{ "running-config",	"Operating configuration", 0, 0, pr_conf },
 #if 0
@@ -300,18 +302,16 @@ static struct intlist Intlist[] = {
 	{ "nwid",	"802.11 network ID",			intnwid, 0 },
 	{ "nwkey",	"802.11 network key",			intnwkey, 0 },
 	{ "powersave",	"802.11 powersaving mode",		intpowersave, 0 },
-#if 0
 	{ "media",	"Media type",				intmedia, 0 },
 	{ "mediaopt",	"Media options",			intmediaopt, 0 },
-	{ "vlan",	"802.1Q vlan tag and parent",		intvlan, 0 },
-	{ "tunnel",	"Source and destination on GIF tunnel",	inttunnel, 0 },
 #ifdef INET6
 	{ "vltime",	"IPv6 valid lifetime",			intvltime, 0 },
         { "pltime",	"IPv6 preferred lifetime",		intpltime, 0 },
 	{ "anycast",	"IPv6 anycast address bit",		intanycast, 0 },
 	{ "tentative",	"IPv6 tentative address bit",		inttentative, 0 },
 #endif
-#endif
+	{ "tunnel",	"Source/destination for GIF tunnel",	inttunnel, 0 },
+	{ "vlan",	"802.1Q vlan tag and parent",		intvlan, 0 },
 	{ "debug",	"Driver dependent debugging",		intflags, 0 },
 	{ "shutdown",	"Shutdown interface",			intflags, 2 },
 	{ "rate",	"Rate limit (token bucket regulator)",	intrate, 0 },
@@ -354,9 +354,7 @@ struct flushlist {
 
 static struct flushlist Flushlist[] = {
 	{ "routes",	"IP routes",		0, 0, flush_ip_routes },
-#if 0
 	{ "arp",	"ARP cache",		0, 0, flush_arp_cache },
-#endif
 	{ "bridge-dyn",	"Dynamically learned bridge addresses", 1, 1, flush_bridgedyn },
 	{ "bridge-all",	"Dynamic and static bridge addresses", 1, 1, flush_bridgeall },
 	{ "bridge-rule", "Layer 2 filter rules for a bridge member port", 2, 2, flush_bridgerule },
@@ -470,7 +468,7 @@ interface(int argc, char **argv, char *modhvar)
 	}
 
 	if (!modhvar) {
-		if (strncasecmp(argv[0], "br", 2) == 0) {
+		if (CMP_ARG(argv[0], "br")) {
 			if (!is_bridge(ifs, ifname)) {
 				printf("%% Using interface configuration mode for %s\n",
 				    ifname);
@@ -535,12 +533,13 @@ interface(int argc, char **argv, char *modhvar)
 				strncpy(margv[z], argv[z], sizeof(margv[z]));
 			margc = argc;
 		}
-		if (strncasecmp(margv[0], "no", 2) == 0)
+		if (NO_ARG(margv[0]))
 			i = GETINT(margv[1]);
 		else
 			i = GETINT(margv[0]);
 		if (Ambiguous(i)) {
 			printf("%% Ambiguous command\n");
+			continue;
 		}
 		if (i == 0) {
 			int val = 1;
@@ -549,6 +548,7 @@ interface(int argc, char **argv, char *modhvar)
 				val = el_burrito(eli, margc, margv);
 			if (val)
 				printf("%% Invalid command\n");
+			continue;
 		} else {
 			if ((bridge && !i->bridge) ||
 			    (!bridge && (i->bridge == 1))) {
@@ -606,7 +606,6 @@ static char
 	enablehelp[] =	"Enable privileged mode",
 	disablehelp[] =	"Disable privileged mode",
 	routehelp[] =	"Add a host or network route",
-	monitorhelp[] = "Monitor routing/arp table changes",
 	quithelp[] =	"Close current connection",
 	verbosehelp[] =	"Set verbose diagnostics",
 	editinghelp[] =  "Set command line editing",
@@ -626,7 +625,6 @@ static Command cmdtab[] = {
 	{ "enable",	enablehelp,	enable,		0, 1, 0, 0 },
 	{ "disable",	disablehelp,	disable,	1, 0, 0, 0 },
 	{ "route",	routehelp,	route,		1, 0, 1, 0 },
-	{ "monitor",	monitorhelp,	monitor,	0, 0, 0, 0 },
 	{ "quit",	quithelp,	quit,		0, 0, 0, 0 },
 	{ "verbose",	verbosehelp,	doverbose,	0, 0, 1, 0 },
 	{ "editing",	editinghelp,	doediting,	0, 0, 1, 0 },
@@ -760,7 +758,7 @@ command(top)
 		if (margv[0] == 0) {
 			break;
 		}
-		if (strncasecmp(margv[0], "no", 2) == 0)
+		if (NO_ARG(margv[0]))
 			c = getcmd(margv[1]);
 		else
 			c = getcmd(margv[0]);
@@ -777,7 +775,7 @@ command(top)
 				printf("%% Invalid command\n");
 			continue;
 		}
-		if ((strncasecmp(margv[0], "no", 2) == 0) && ! c->nocmd) {
+		if (NO_ARG(margv[0]) && ! c->nocmd) {
 			printf("%% Invalid command: %s %s\n", margv[0],
 			    margv[1]);
 			continue;
@@ -931,7 +929,7 @@ int
 doverbose(int argc, char **argv)
 {
 	if (argc > 1) {
-		if (strncasecmp(argv[0], "no", 2) == 0) {
+		if (NO_ARG(argv[0])) {
 			verbose = 0;
 		} else {
 			printf ("%% Invalid argument\n");
@@ -950,7 +948,7 @@ int
 doediting(int argc, char **argv)
 {
 	if (argc > 1) {
-		if (strncasecmp(argv[0], "no", 2) == 0) { 
+		if (NO_ARG(argv[0])) {
 			endedit();
                 } else {
 			printf ("%% Invalid argument\n");
@@ -1066,7 +1064,7 @@ cmdrc(rcname)
 			 * command was not indented.  process normally.
 			 */
 			modhcmd = 0;
-			if (strncasecmp(margv[0], "no", 2) == 0) {
+			if (NO_ARG(margv[0])) {
 				c = getcmd(margv[1]);
 				if (c)
 					if(c->modh) {
@@ -1124,8 +1122,7 @@ cmdrc(rcname)
 			 * normal processing, there is no sub-mode cmd to be
 			 * dealt with
 			 */
-			if ((strncasecmp(margv[0], "no", 2) == 0) &&
-		 	   !c->nocmd) {
+			if (NO_ARG(margv[0]) && !c->nocmd) {
 				printf("%% Invalid rc command (line %i) ",
 				    lnum);
 				p_argv(margc, margv);
@@ -1217,7 +1214,12 @@ iprompt(void)
 int
 flush_ip_routes(void)
 {
-	flushroutes(AF_INET);
+	flushroutes(AF_INET, AF_INET);
+}
+
+flush_arp_cache(void)
+{
+	flushroutes(AF_INET, AF_LINK);
 }
 
 /*
@@ -1236,9 +1238,15 @@ pr_s_conf(void)
 }
 
 int
-pr_routes(void)
+pr_routes(char *route)
 {
-	routepr(nl[N_RTREE].n_value, AF_INET);
+	if (route == 0)
+		/* show entire routing table */
+		routepr(nl[N_RTREE].n_value, AF_INET);
+	else
+		/* show a specific route */
+		show_route(route);
+		
 	return 0;
 }
 

@@ -1,6 +1,8 @@
 #include "editing.h"
 #include "externs.h"
 
+int editcmd(EditLine *, int);
+
 /*
  * this needs to be called before initedit()
  */
@@ -53,6 +55,10 @@ initedit()
 		el_set(eli, EL_HIST, history, histi);
 		el_set(eli, EL_EDITOR, "emacs");
 		el_set(eli, EL_PROMPT, iprompt);
+/*
+		el_set(eli, EL_ADDFN, "exit", "Exit", exitcmd);
+		el_set(eli, EL_BIND, "\z", "exit", NULL);
+*/
 		el_source(eli, NULL);
 		el_set(eli, EL_SIGNAL, 1);
 	}
@@ -71,4 +77,10 @@ endedit()
 		el_end(eli);
 		eli = NULL;
 	}
+}
+
+int
+editcmd(EditLine *e, int ch)
+{
+	return(CC_NEWLINE);
 }

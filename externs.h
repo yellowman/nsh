@@ -1,13 +1,23 @@
 /*
- * nsh externs
+ * nsh externs and more
  */
+
+#define NO_ARG(x) (strcasecmp(x, "no") == 0) /* absolute "no" */
+#define CMP_ARG(x,y) (strncasecmp(x, y, strlen(y)) == 0) /* mabye arg y */
+
+struct rtdump {
+	char *buf;	/* start of routing table */
+	char *lim;	/* end of routing table */
+};
 
 extern char *__progname, *vers;
 extern int verbose, editing, bridge;
+extern pid_t pid;
 
 /* conf.c */
 int conf(FILE *);
-int default_mtu(const char *);
+int default_mtu(char *);
+int conf_routes(FILE *, char *, int, int);
 
 /* routepr.c */
 void routepr(u_long, int);
@@ -18,8 +28,10 @@ void routepr(u_long, int);
 #define ADVANCE(x, n) (x += ROUNDUP((n)->sa_len))
 
 /* routesys.c */
+#define FLUSH 0
+struct rtdump *getrtdump(int);
 int monitor(void);
-void flushroutes(int);
+void flushroutes(int, int);
 void bprintf(FILE *, int, u_char *);
 extern char ifnetflags[];
 extern char routeflags[];
@@ -36,10 +48,12 @@ char *cprompt(void);
 /* ieee80211.c */
 #define NWID 0
 #define NWKEY 1
+#define DEFAULT_POWERSAVE 100	/* 100 ms */
 const char *get_string(const char *, const char *, u_int8_t *, int *);
-int get_nwinfo(const char *, char *, int, int);
+int get_nwinfo(char *, char *, int, int);
+int get_nwpowersave(int, char *);
 void make_string(char *str, int, const u_int8_t *buf, int);
-int intnwkey(const char *, int, int, char **);
+int intnwkey(char *, int, int, char **);
 
 /* stats.c */
 void rt_stats(u_long);
@@ -70,14 +84,20 @@ int Ambiguous(void *);
 #define TBR_RATE 1		/* request for TBR token rate */
 #define TBR_BUCKET 2		/* request for TBR bucket size */
 int intrate(char *ifname, int, char**);
-u_int size_bucket(const char *, const u_int);
-u_int autosize_bucket(const char *, const u_int);
-u_long get_tbr(const char *, int);
+u_int size_bucket(char *, u_int);
+u_int autosize_bucket(char *, u_int);
+u_long get_tbr(char *, int);
 u_long atobps(const char *);
 u_long atobytes(const char *);
 
 /* route.c */
+#define NO_NETMASK 0
+#define ASSUME_NETMASK 1
 int route(int, char**);
+void show_route(char *);
+#ifdef _IP_T_
+ip_t parse_ip(char *, int);
+#endif
 
 /* if.c */
 #define IFDATA_MTU 1		/* request for if_data.ifi_mtu */
@@ -86,20 +106,21 @@ int route(int, char**);
 #define ROUNDMBPS(bps) ((float)bps == ((bps / 1000 / 1000) * 1000 * 1000))
 #define ROUNDKBPS(bps) ((float)bps == ((bps / 1000) * 1000))
 #define ROUNDKBYTES(bytes) ((float)bytes == ((bytes / 1024) * 1024))
-int is_valid_ifname(const char *);
-int show_int(const char *);
-int get_ifdata(const char *, int);
-int get_ifflags(const char *, int);
-int set_ifflags(const char *, int, int);
+int is_valid_ifname(char *);
+int show_int(char *);
+int get_ifdata(char *, int);
+int get_ifflags(char *, int);
+int set_ifflags(char *, int, int);
 u_int32_t in4_netaddr(u_int32_t, u_int32_t);
 u_int32_t in4_brdaddr(u_int32_t, u_int32_t);
-int intip(const char *, int, int, char **);
-int intmtu(const char *, int, int, char **);
-int intmetric(const char *, int, int, char **);
-int intflags(const char *, int, int, char **);
-int intlink(const char *, int, int, char **);
-int intnwid(const char *, int, int, char **);
-int intpowersave(const char *, int, int, char **);
+int intip(char *, int, int, char **);
+int intmtu(char *, int, int, char **);
+int intmetric(char *, int, int, char **);
+int intvlan(char *, int, int, char **);
+int intflags(char *, int, int, char **);
+int intlink(char *, int, int, char **);
+int intnwid(char *, int, int, char **);
+int intpowersave(char *, int, int, char **);
 
 /* version.c */
 int version(void);
@@ -114,14 +135,27 @@ void initedit(void);
 void endedit(void);
 
 /* bridge.c */
-int set_ifflag(int, const char *, short);
-int clr_ifflag(int, const char *, short);
+int set_ifflag(int, char *, short);
+int clr_ifflag(int, char *, short);
 int is_bridge(int, char *);
-int brport(const char *, int, int, char **);
-int brval(const char *, int, int, char **);
-int brrule(const char *, int, int, char **);
-int brstatic(const char *, int, int, char **);
-int brpri(const char *, int, int, char **);
+int brport(char *, int, int, char **);
+int brval(char *, int, int, char **);
+int brrule(char *, int, int, char **);
+int brstatic(char *, int, int, char **);
+int brpri(char *, int, int, char **);
 int flush_bridgedyn(char *);
 int flush_bridgeall(char *);
 int flush_bridgerule(char *, char*);
+
+/* tunnel.c */
+int inttunnel(char *, int, int, char **);
+int settunnel(int, char *, char *, char *);
+int deletetunnel(int, char *);
+
+/* media.c */
+#define DEFAULT_MEDIA_TYPE	"autoselect"
+void media_status(int, char *, char *);
+void media_supported(int, char *, char *, char *);
+int intmedia(char *, int, int, char **);
+int intmediaopt(char *, int, int, char **);
+int conf_media_status(FILE *, int, char *);

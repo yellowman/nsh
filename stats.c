@@ -308,7 +308,7 @@ icmp_stats(off)
 
 	p(icps_error, "\t%lu call%s to icmp_error\n");
 	p(icps_oldicmp,
-	    "\t%lu error%s not generated 'cuz old message was icmp\n");
+	    "\t%lu error%s not generated because old message was icmp\n");
 	for (first = 1, i = 0; i < ICMP_MAXTYPE + 1; i++)
 		if (icmpstat.icps_outhist[i] != 0) {
 			if (first) {
