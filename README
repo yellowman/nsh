@@ -1,5 +1,5 @@
 nsh//network config shell//Chris Cappuccio <chris@dqc.org> version 20030318
-$nsh: README,v 1.13 2003/03/28 16:15:19 chris Exp $
+$nsh: README,v 1.14 2003/04/09 07:07:20 chris Exp $
 
 A CLI intended for OpenBSD-based routers running little except for sshd,
 targeted towards CompactFlash-based Soekris Net4501 and similar embedded
@@ -20,7 +20,6 @@ nsh handles the following functions:
   + Configure interfaces for IP, MTU, VLAN, media, ...
   + Show host (IP, TCP, UDP) and router statistics
   + Configure PF/NAT/ALTQ system-wide
-  + Configure the ALTQ tbr on an interface
   + Configure bridge for members, rules
   + Save the current routes, bridge, interface configs to a file
 * Comes with a full manual (30%)

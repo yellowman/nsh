@@ -1,4 +1,4 @@
-/* $nsh: routesys.c,v 1.11 2003/03/19 09:58:24 chris Exp $ */
+/* $nsh: routesys.c,v 1.12 2003/04/09 07:07:20 chris Exp $ */
 /* From: $OpenBSD: /usr/src/sbin/route/route.c,v 1.43 2001/07/07 18:26:20 deraadt Exp $ */
 
 /*
@@ -790,6 +790,9 @@ ip_route(ip_t *dest, ip_t *gate, u_short cmd)
 		else if (cmd == RTM_GET &&
 		    (errno == ESRCH || errno == ENETUNREACH))
 			printf("%% Unable to find route: %s\n",
+			    inet_ntoa(dest->addr.sin));
+		else if (cmd == RTM_DELETE && errno == ESRCH)
+			printf("%% No such route to delete: %s\n",
 			    inet_ntoa(dest->addr.sin));
 		else
 			printf("%% ip_route: rtmsg: %s\n", strerror(errno));
