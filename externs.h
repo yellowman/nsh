@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.16 2003/07/25 21:00:04 chris Exp $ */
+/* $nsh: externs.h,v 1.17 2003/09/18 19:17:41 chris Exp $ */
 /*
  * nsh externs and more
  */
@@ -195,7 +195,7 @@ int conf_media_status(FILE *, int, char *);
 #define WI_PORT_BSS	1
 #define WI_PORT_ADHOC	3
 #define WI_PORT_HOSTAP	6
-void wi_printaplist(char *);
+int wi_printaplist(char *);
 void wi_dumpstats(char *);
 void wi_dumpstations(char *);
 int is_wavelan(int, char *);

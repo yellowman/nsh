@@ -66,7 +66,7 @@ int wi_getval(char *, struct wi_req *);
 int wi_setval(char *, struct wi_req *);
 int wi_porttype(char *);
 int wi_printlevels(char *);
-void wi_printaplist(char *);
+int wi_printaplist(char *);
 void wi_dumpstats(char *);
 void wi_dumpstations(char *);
 void wi_printwords(struct wi_req *);
@@ -128,7 +128,7 @@ wi_setval(char *iface, struct wi_req * wreq)
 	return(0);
 }
 
-void
+int
 wi_printaplist(char *iface)
 {
 	int prism2, len, i = 0, j, s, flags, nap;
@@ -139,7 +139,7 @@ wi_printaplist(char *iface)
 	s = socket(AF_INET, SOCK_DGRAM, 0);
 	if (s == -1) {
 		printf("wi_printaplist: socket: %s\n", strerror(errno));
-		return;
+		return(-1);
 	}
 
 	if (!is_wavelan(s, iface)) {
@@ -149,14 +149,14 @@ wi_printaplist(char *iface)
 			printf("%% Interface not compatible with this"
 			    " function: %s\n", iface);
 		close(s);
-		return;
+		return(-1);
 	}
 
 	if (wi_porttype(iface) != WI_PORT_BSS) {
 		printf("%% Interface must be in BSS (infrastructure) mode to"
 		    " use this function\n");
 		close(s);
-		return;
+		return(-1);
 	}
 
 	flags = get_ifflags(iface, s);
@@ -169,7 +169,7 @@ wi_printaplist(char *iface)
 
 	if (wi_getval(iface, &wreq) != 0) {
 		close(s);
-		return;
+		return(-1);
 	}
 	prism2 = wreq.wi_val[0];
 
@@ -183,7 +183,7 @@ wi_printaplist(char *iface)
 	}
 	if (wi_setval(iface, &wreq) != 0) {
 		close(s);
-		return;
+		return(-1);
 	}
 
 	/*
@@ -198,7 +198,7 @@ wi_printaplist(char *iface)
 
 	if (wi_getval(iface, &wreq) != 0) {
 		close(s);
-		return;
+		return(-1);
 	}
 
 	if (prism2) {
@@ -206,7 +206,7 @@ wi_printaplist(char *iface)
 
 		/* if the reason is 0, this info is invalid */
 		if (wi_p2_h->wi_reason == 0)
-			return;
+			return(-1);
 
 		i = 4;
 	}
@@ -272,7 +272,7 @@ wi_printaplist(char *iface)
 	}
 	set_ifflags(iface, s, flags);
 	close(s);
-	return;
+	return(0);
 }
 
 void
