@@ -1,4 +1,4 @@
-/* $nsh: rate.c,v 1.12 2003/03/28 16:43:43 chris Exp $ */
+/* $nsh: rate.c,v 1.13 2003/04/14 08:44:20 chris Exp $ */
 /* From: $OpenBSD: /usr/src/usr.sbin/altq/tbrconfig/tbrconfig.c,v 1.3 2002/02/15 03:31:16 deraadt Exp $ */
 
 /*
@@ -255,8 +255,8 @@ size_bucket(char *ifname, u_int rate)
 	u_int size, mtu;
 
 	mtu = get_ifdata(ifname, IFDATA_MTU);
-	if (mtu > 1500)
-		mtu = 1500;	/* assume that the path mtu is still 1500 */
+	if (mtu > DEFAULT_MTU)
+		mtu = DEFAULT_MTU; /* assume that the path mtu is still 1500 */
 
 	if (rate <= 1*1000*1000)
 		size = 1;

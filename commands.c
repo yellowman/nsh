@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.19 2003/03/28 16:15:19 chris Exp $ */
+/* $nsh: commands.c,v 1.20 2003/04/14 08:44:20 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -132,7 +132,16 @@ typedef struct {
 				 * or pass them as arguments ? */
 } Command;
 
-static Command	*getcmd(char *name);
+typedef struct {
+	char *name;		/* How user refers to it (case independent) */
+	char *help;		/* Help information (0 ==> no help) */
+	int minarg;		/* Minimum number of arguments */
+	int maxarg;		/* Maximum number of arguments */
+	int (*handler)();	/* Routine to perform (for special ops) */
+} Menu;
+
+static Command	*getcmd(char *);
+static Menu	*getip(char *);
 static int	quit(void);
 static int	enable(void);
 static int	disable(void);
@@ -152,17 +161,18 @@ static int	pr_mbuf_stats(void);
 static int	pr_conf(void);
 static int	wr_conf(void);
 static int	show_help(void);
-static void	flush_help(void);
-static void	flush_ip_routes(void);
-static void	flush_arp_cache(void);
-static void	flush_history(void);
-static void	flush_pfall(void);
-static void	flush_pfnat(void);
-static void	flush_pfqueue(void);
-static void	flush_pfrules(void);
-static void	flush_pfstates(void);
-static void	flush_pfstats(void);
-static void	flush_pftables(void);
+static int	ip_help(void);
+static int	flush_help(void);
+static int	flush_ip_routes(void);
+static int	flush_arp_cache(void);
+static int	flush_history(void);
+static int	flush_pfall(void);
+static int	flush_pfnat(void);
+static int	flush_pfqueue(void);
+static int	flush_pfrules(void);
+static int	flush_pfstates(void);
+static int	flush_pfstats(void);
+static int	flush_pftables(void);
 static int	int_help(void);
 static int	el_burrito(EditLine *, int, char **);
 static void	makeargv(int);
@@ -172,7 +182,7 @@ static int	shell(int, char*[]);
 static int	cmdarg(char *, char *);
 static int	pr_rt_stats(void);
 static void	p_argv(int, char **);
-static int	config(void);
+static int	notvalid(void);
 static int	priv = 0;
 static int 	reload(void);
 static int 	halt(void);
@@ -194,15 +204,7 @@ quit()
  * Data structures and routines for the "show" command.
  */
 
-struct showlist {
-	char *name;		/* How user refers to it (case independent) */
-	char *help;		/* Help information (0 ==> no help) */
-	int minarg;		/* Minimum number of arguments */
-	int maxarg;		/* Maximum number of arguments */
-	int (*handler)();	/* Routine to perform (for special ops) */
-};
-
-static struct showlist Showlist[] = {
+static Menu showlist[] = {
 	{ "hostname",	"Router hostname",	0, 0, hostname },
 	{ "interface",	"Interface config",	0, 1, show_int },
 	{ "route",	"IP route table or route lookup", 0, 1, pr_routes },
@@ -225,15 +227,15 @@ static struct showlist Showlist[] = {
 	{ 0, 0, 0, 0, 0 }
 };
 
-#define GETSHOW(name)	((struct showlist *) genget(name, (char **) Showlist, \
-			    sizeof(struct showlist)))
+#define GETSHOW(name)	((Menu *) genget(name, (char **) showlist, \
+			    sizeof(Menu)))
 
 static int
 showcmd(argc, argv)
 	int argc;
 	char **argv;
 {
-	struct showlist *s;	/* pointer to current command */
+	Menu *s;	/* pointer to current command */
 	int success = 0;
 
 	if (argc < 2) {
@@ -267,18 +269,18 @@ showcmd(argc, argv)
 static int
 show_help()
 {
-	struct showlist *s; /* pointer to current command */
+	Menu *s; /* pointer to current command */
 	int z = 0;
 
 	printf("%% Commands may be abbreviated.\n");
 	printf("%% 'show' commands are:\n\n");
 
-	for (s = Showlist; s->name; s++) {
+	for (s = showlist; s->name; s++) {
 		if (strlen(s->name) > z)
 			z = strlen(s->name);
 	}
 
-	for (s = Showlist; s->name; s++) {
+	for (s = showlist; s->name; s++) {
 		if (s->help)
 			printf("  %-*s  %s\n", z, s->name, s->help);
 	}
@@ -286,77 +288,120 @@ show_help()
 }
 
 /*
- * Data structures and routines for the interface configuration mode
+ * Data structures and routines for the "ip" command.
  */
 
-struct intlist {
-	char *name;		/* How user refers to it (case independent) */
-	char *help;		/* Help information (0 ==> no help) */
-	int (*handler)();	/* Routine to perform (for special ops) */
-	int bridge;		/* 0 == Interface, 1 == Bridge, 2 == Both */
-};
-
-static struct intlist Intlist[] = {
-/* Interface mode commands */
-	{ "ip",		"IP address and other parameters",	intip,	0 },
-	{ "alias",	"Additional IP addresses and other parameters",	intip, 0},
-	{ "mtu",	"Set Maximum Transmission Unit",	intmtu, 0 },
-	{ "metric",	"Set routing metric",			intmetric, 0 },
-	{ "link",	"Set link level options",		intlink, 2 },
-	{ "arp",	"Set Address Resolution Protocol",	intflags, 0 },
-	{ "nwid",	"802.11 network ID",			intnwid, 0 },
-	{ "nwkey",	"802.11 network key",			intnwkey, 0 },
-	{ "powersave",	"802.11 powersaving mode",		intpowersave, 0 },
-	{ "media",	"Media type",				intmedia, 0 },
-	{ "mediaopt",	"Media options",			intmediaopt, 0 },
-#ifdef INET6
-	{ "vltime",	"IPv6 valid lifetime",			intvltime, 0 },
-        { "pltime",	"IPv6 preferred lifetime",		intpltime, 0 },
-	{ "anycast",	"IPv6 anycast address bit",		intanycast, 0 },
-	{ "tentative",	"IPv6 tentative address bit",		inttentative, 0 },
+static Menu iptab[] = {
+	{ "forwarding",	"Enable IPv4 Forwarding",	0, 0,	ipsysctl },
+	{ "ipip",	"Allow IP-in-IP Encapsulation", 0, 0,	ipsysctl },
+	{ "gre",	"Allow Generic Route Encapsulation",	0, 0,	ipsysctl },
+	{ "wccp",	"Allow Web Cache Control Protocol",	0, 0,	ipsysctl },
+	{ "mobileip",	"Allow Mobile IP Encapsulation",	0, 0,	ipsysctl },
+	{ "etherip",	"Allow Ether-IP Encapsulation",	0, 0,	ipsysctl },
+	{ "ipcomp",	"Allow IP Compression",		0, 0,	ipsysctl },	
+	{ "esp",	"Allow Encapsulated Security Payload", 0, 0,	ipsysctl },
+	{ "ah",		"Allow Authentication Header",	0, 0,	ipsysctl },
+	{ "sourceroute", "Process Loose/Strict Source Route Options", 0, 0, ipsysctl },
+	{ "encdebug",	"Enable if_enc debugging",		0, 0,	ipsysctl },
+	{ "maxqueue",	"Set Max queued packets",		1, 1,	ipsysctl },
+	{ "send-redirects", "Send ICMP redirects",	0, 0,	ipsysctl },
+	{ "directed-broadcast", "Allow directed broadcasts", 0, 0, ipsysctl },
+#ifdef notyet
+	{ "default-mtu", "Default interface MTU",	1, 1,	ipsysctl },
 #endif
-	{ "tunnel",	"Source/destination for GIF tunnel",	inttunnel, 0 },
-	{ "vlan",	"802.1Q vlan tag and parent",		intvlan, 0 },
-	{ "debug",	"Driver dependent debugging",		intflags, 0 },
-	{ "shutdown",	"Shutdown interface",			intflags, 2 },
-/* Bridge mode commands */
-	{ "member",	"Bridge member(s)",			brport, 1 },
-	{ "span",	"Bridge spanning port(s)",		brport, 1 },
-	{ "blocknonip",	"Block non-IP traffic forwarding on member(s)",	brport, 1 },
-	{ "discover",	"Mark member(s) as discovery port(s)",	brport, 1 },
-	{ "learning",	"Mark member(s) as learning port(s)",	brport, 1 },
-	{ "stp",	"Enable 802.1D spanning tree protocol on member(s)", brport, 1 },
-	{ "maxaddr",	"Maximum address cache size",		brval, 1 },
-	{ "timeout",	"Address cache timeout",		brval, 1 },
-	{ "maxage",	"Time for 802.1D configuration to remain valid", brval, 1 },
-	{ "fwddelay",	"Time before bridge begins forwarding packets", brval, 1 },
-	{ "hellotime",	"Time between broadcasting 802.1D configuration packets", brval, 1 },
-	{ "priority",	"Spanning priority for all members on an 802.1D bridge", brval, 1 },
-	{ "rule",	"Bridge layer 2 filtering rules",	brrule, 1 },
-	{ "static",	"Static bridge address entry",		brstatic, 1 },
-	{ "ifpriority",	"Spanning priority of a member on an 802.1D bridge", brpri, 1 },
-/* Help commands */
-	{ "?",		"Options",				int_help, 2 },
-	{ "help",	0,					int_help, 2 },
-	{ 0, 0, 0 }
+	{ "default-ttl", "Set Default IP packet TTL",	1, 1,	ipsysctl },
+	{ "classless",	0,			0, 0,	notvalid },
+	{ "?",		"Options",		0, 0,	ip_help },
+	{ "help",	0,			0, 0,	ip_help },
+	{ 0, 0, 0, 0, 0 }
 };
 
-#define GETINT(name)	((struct intlist *) genget(name, (char **) Intlist, \
-			    sizeof(struct intlist)))
+static Menu iptab2[] = {
+	{ "classless",	0,			0, 0,	notvalid },
+	{ "subnet-zero", 0,			0, 0,	notvalid },
+	{ 0, 0, 0, 0, 0 }
+};
+
+Menu *
+getip(name)
+	char *name;
+{
+	Menu *i;
+
+        if ((i = (Menu *) genget(name, (char **) iptab, sizeof(Menu))))
+                return i;
+        return (Menu *) genget(name, (char **) iptab2, sizeof(Menu));
+}
+
+static int
+ipcmd(argc, argv)
+	int argc;
+	char **argv;
+{
+	Menu *i;     /* pointer to current command */
+	int set, success = 0;
+
+	if (NO_ARG(argv[0])) {
+		argv++;
+		argc--;
+		set = 0;
+	} else
+		set = 1;
+
+	if (argc < 2) {
+		printf("%% Use 'ip ?' for help\n");
+		return 0;
+	}
+
+	/*
+	 * Validate ip argument
+	 */
+        i = getip(argv[1]);
+	if (i == 0) {
+		printf("%% Invalid argument %s\n", argv[1]);
+		return 0;
+	} else if (Ambiguous(i)) {
+		printf("%% Ambiguous argument %s\n", argv[1]);
+		return 0;
+	}
+	if (((i->minarg + 2) > argc) || ((i->maxarg + 2) < argc)) {
+		printf("%% Wrong argument%s to 'ip %s' command.\n",
+		    argc <= 2 ? "" : "s", i->name);
+		return 0;
+	}
+
+	if (i->handler)
+		success = (*i->handler)(set, argv[1],
+		    (i->maxarg > 0) ? argv[2] : 0);
+	return(success);
+}
+
+static int
+ip_help(void)
+{
+	Menu *i; /* pointer to current command */
+	int z = 0;
+
+	printf("%% Commands may be abbreviated.\n");
+	printf("%% 'ip' commands are:\n\n");
+
+	for (i = iptab; i->name; i++) {
+		if (strlen(i->name) > z)
+			z = strlen(i->name);
+	}
+
+	for (i = iptab; i->name; i++) {
+		if (i->help)
+			printf("  %-*s  %s\n", z, i->name, i->help);
+	}
+	return 0;
+}
 
 /*
  * Data structures and routines for the "flush" command.
  */
 
-struct flushlist {
-	char *name;		/* How user refers to it (case independent) */
-	char *help;		/* Help information (0 ==> no help) */
-	int minarg;		/* Minimum number of arguments */
-	int maxarg;		/* Maximum number of arguments */
-	void (*handler)();	/* Routine to perform (for special ops) */
-};
-
-static struct flushlist Flushlist[] = {
+static Menu flushlist[] = {
 	{ "routes",	"IP routes",		0, 0, flush_ip_routes },
 	{ "arp",	"ARP cache",		0, 0, flush_arp_cache },
 	{ "bridge-dyn",	"Dynamically learned bridge addresses", 1, 1, flush_bridgedyn },
@@ -375,13 +420,13 @@ static struct flushlist Flushlist[] = {
 	{ 0, 0, 0, 0, 0 }
 };
 
-#define GETFLUSH(name) ((struct flushlist *) genget(name, (char **) Flushlist, \
-			   sizeof(struct flushlist)))
+#define GETFLUSH(name) ((Menu *) genget(name, (char **) flushlist, \
+			   sizeof(Menu)))
 
 static int
 flushcmd(int argc, char **argv)
 {
-	struct flushlist *f;
+	Menu *f;
 
 	if (argc < 2) {
 		printf("%% Use 'flush ?' for help\n");
@@ -411,26 +456,84 @@ flushcmd(int argc, char **argv)
 	return(1);
 }
 
-static void
+static int
 flush_help()
 {
-	struct flushlist *f;
+	Menu *f;
 	int z = 0;
 
 	printf("%% Commands may be abbreviated.\n");
 	printf("%% 'flush' commands are:\n\n");
 
-	for (f = Flushlist; f->name; f++) {
+	for (f = flushlist; f->name; f++) {
 		if (strlen(f->name) > z)
 			z = strlen(f->name);
 	}
 
-	for (f = Flushlist; f->name; f++) {
+	for (f = flushlist; f->name; f++) {
 		if (f->help)
 			printf("  %-*s  %s\n", z, f->name, f->help);
 	}
-	return;
+	return 0;
 }
+
+/*
+ * Data structures and routines for the interface configuration mode
+ */
+
+struct intlist {
+	char *name;		/* How user refers to it (case independent) */
+	char *help;		/* Help information (0 ==> no help) */
+	int (*handler)();	/* Routine to perform (for special ops) */
+	int bridge;		/* 0 == Interface, 1 == Bridge, 2 == Both */
+};
+
+static struct intlist Intlist[] = {
+/* Interface mode commands */
+	{ "ip",		"IP address and other parameters",	intip,  0 },
+	{ "alias",	"Additional IP addresses and other parameters", intip, 0 },
+	{ "mtu",	"Set Maximum Transmission Unit",	intmtu, 0 },
+	{ "metric",	"Set routing metric",			intmetric, 0 },
+	{ "link",	"Set link level options",		intlink, 2 },
+	{ "arp",	"Set Address Resolution Protocol",	intflags, 0 },
+	{ "nwkey",	"802.11 network key",			intnwkey, 0 },
+	{ "powersave",	"802.11 powersaving mode",		intpowersave, 0 },
+	{ "media",	"Media type",				intmedia, 0 },
+	{ "mediaopt",	"Media options",			intmediaopt, 0 },
+#ifdef INET6
+	{ "vltime",	"IPv6 valid lifetime",			intvltime, 0 },
+	{ "pltime",	"IPv6 preferred lifetime",		intpltime, 0 },
+	{ "anycast",	"IPv6 anycast address bit",		intanycast, 0 },
+	{ "tentative",	"IPv6 tentative address bit",		inttentative, 0 },
+#endif
+	{ "tunnel",	"Source/destination for GIF tunnel",	inttunnel, 0 },
+	{ "vlan",	"802.1Q vlan tag and parent",		intvlan, 0 },
+	{ "debug",	"Driver dependent debugging",		intflags, 0 },
+	{ "shutdown",	"Shutdown interface",			intflags, 2 },
+/* Bridge mode commands */
+	{ "member",	"Bridge member(s)",			brport, 1 },
+	{ "span",	"Bridge spanning port(s)",		brport, 1 },
+	{ "blocknonip",	"Block non-IP traffic forwarding on member(s)", brport, 1 },
+	{ "discover",	"Mark member(s) as discovery port(s)",	brport, 1 },
+	{ "learning",	"Mark member(s) as learning port(s)",	brport, 1 },
+	{ "stp",	"Enable 802.1D spanning tree protocol on member(s)", brport, 1 },
+	{ "maxaddr",	"Maximum address cache size",		brval, 1 },
+	{ "timeout",	"Address cache timeout",		brval, 1 },
+	{ "maxage",	"Time for 802.1D configuration to remain valid", brval, 1 },
+	{ "fwddelay",	"Time before bridge begins forwarding packets", brval, 1 },
+	{ "hellotime",	"Time between broadcasting 802.1D configuration packets", brval, 1 },
+	{ "priority",	"Spanning priority for all members on an 802.1D bridge", brval, 1 },
+	{ "rule",	"Bridge layer 2 filtering rules",	brrule, 1 },
+	{ "static",	"Static bridge address entry",		brstatic, 1 },
+	{ "ifpriority",	"Spanning priority of a member on an 802.1D bridge", brpri, 1 },
+/* Help commands */
+	{ "?",		"Options",				int_help, 2 },
+	{ "help",	0,					int_help, 2 },
+	{ 0, 0, 0, 0 }
+};
+
+#define GETINT(name)	((struct intlist *) genget(name, (char **) Intlist, \
+			    sizeof(struct intlist)))
 
 /*
  * a big command input loop for interface mode
@@ -691,6 +794,7 @@ static char
 	pfhelp[] =	"Packet filter rule handler",
 	bridgehelp[] =	"Modify bridge parameters",
 	showhelp[] =	"Show system information",
+	iphelp[] =	"Set IP networking parameters",
 	flushhelp[] =	"Flush system tables",
 	enablehelp[] =	"Enable privileged mode",
 	disablehelp[] =	"Disable privileged mode",
@@ -713,6 +817,7 @@ static Command cmdtab[] = {
 	{ "interface",	interfacehelp,	interface,	1, 0, 0, 1, 0 },
 	{ "bridge",	bridgehelp,	interface,	1, 0, 0, 1, 0 },
 	{ "show",	showhelp,	showcmd,	0, 0, 0, 0, 0 },
+	{ "ip",		iphelp,		ipcmd,		1, 0, 1, 0, 0 },
 	{ "flush",	flushhelp,	flushcmd,	1, 0, 0, 0, 0 },
 	{ "enable",	enablehelp,	enable,		0, 1, 0, 0, 0 },
 	{ "disable",	disablehelp,	disable,	1, 0, 0, 0, 0 },
@@ -735,7 +840,7 @@ static Command cmdtab[] = {
  */
 
 static Command  cmdtab2[] = {
-	{ "config",	0,		config,		0, 0, 0, 0 },
+	{ "config",	0,		notvalid,	0, 0, 0, 0 },
 	{ 0,		0,		0,		0, 0, 0, 0 }
 };
 
@@ -1042,9 +1147,10 @@ disable(void)
 }
 
 int
-config(void)
+notvalid(void)
 {
-	printf("%% Configuration mode is unnecessary with this software.\n");
+	printf("%% The command you entered is not necessary with this"
+	    " software.\n");
 
 	return(0);
 }
@@ -1091,12 +1197,12 @@ doediting(int argc, char **argv)
 	return 0;
 }
 
-void
+int
 flush_history(void)
 {
 	if (!editing) {
 		printf("%% Command line editing not enabled\n");
-		return;
+		return(1);
 	}
 
 	/*
@@ -1108,75 +1214,75 @@ flush_history(void)
 	inithist();
 	initedit();
 
-	return;
+	return(0);
 }
 
 /*
  * pf toilet flusher
  */
 
-void
+int
 flush_pfall(void)
 {
 	printf("%% Flushing all pf filter rules, NAT rules, queue rules,"
 	    "   address tables, states, and statistics\n");
 	cmdarg(PFCTL, "-Fall");
 
-	return;
+	return(0);
 }
 
-void
+int
 flush_pfnat(void)
 {
 	printf("%% Flushing pf NAT rules\n");
 	cmdarg(PFCTL, "-Fnat");
 
-	return;
+	return(0);
 }
 
-void 
+int
 flush_pfqueue(void)
 {
 	printf("%% Flushing pf queue rules\n");
 	cmdarg(PFCTL, "-Fqueue");
 
-	return;
+	return(0);
 }
 
-void
+int
 flush_pfrules(void)
 {
 	printf("%% Flushing pf filter rules\n");
 	cmdarg(PFCTL, "-Frules");
 
-	return;
+	return(0);
 }
 
-void
+int
 flush_pfstates(void)
 {
 	printf("%% Flushing pf NAT/filter states\n");
 	cmdarg(PFCTL, "-Fstate");
 
-	return;
+	return(0);
 }
 
-void
+int
 flush_pfstats(void)
 {
 	printf("%% Flushing pf statistics\n");
 	cmdarg(PFCTL, "-Finfo");
 
-	return;
+	return(0);
 }
 
-void
+int
 flush_pftables(void)
 {
 	printf("%% Flushing pf address tables\n");
 	cmdarg(PFCTL, "-FTables");
 
-	return;
+	return(0);
 }
 
 /*
@@ -1461,16 +1567,20 @@ halt(void)
 /*
  * Flush wrappers
  */
-void
+int
 flush_ip_routes(void)
 {
 	flushroutes(AF_INET, AF_INET);
+
+	return(0);
 }
 
-void
+int
 flush_arp_cache(void)
 {
 	flushroutes(AF_INET, AF_LINK);
+
+	return(0);
 }
 
 /*
@@ -1576,4 +1686,3 @@ pr_mbuf_stats(void)
 	    nl[N_MCLPOOL].n_value);
 	return 0;
 }
-

@@ -1,4 +1,4 @@
-/* $nsh: bridge.c,v 1.4 2003/02/18 09:29:46 chris Exp $ */
+/* $nsh: bridge.c,v 1.5 2003/04/14 08:44:20 chris Exp $ */
 /* From: $OpenBSD: /usr/src/sbin/brconfig/brconfig.c,v 1.17 2002/02/16 21:27:33 millert Exp $	*/
 
 /*
@@ -433,7 +433,7 @@ brpri(char *ifname, int ifs, int argc, char **argv)
 /*
  * flush wrappers here
  */
-void
+int
 flush_bridgedyn(char *brdg)
 {
 	int ifs;
@@ -441,22 +441,22 @@ flush_bridgedyn(char *brdg)
 	ifs = socket(AF_INET, SOCK_DGRAM, 0);
 	if (ifs < 0) {
 		printf("%% socket: %s\n", strerror(errno));
-		return;
+		return(1);
 	}
 
 	if (!is_bridge(ifs, brdg)) {
 		printf("%% %s is not a bridge\n", brdg);
 		close(ifs);
-		return;
+		return(1);
 	}
 
 	bridge_flush(ifs, brdg);
 	close(ifs);
 
-	return;
+	return(0);
 }
 
-void
+int
 flush_bridgeall(char *brdg)
 {
 	int ifs;
@@ -464,22 +464,22 @@ flush_bridgeall(char *brdg)
 	ifs = socket(AF_INET, SOCK_DGRAM, 0);
 	if (ifs < 0) {
 		printf("%% socket: %s\n", strerror(errno));
-		return;
+		return(1);
 	}
 
 	if (!is_bridge(ifs, brdg)) {
 		printf("%% %s is not a bridge\n", brdg);
 		close(ifs);
-		return;
+		return(1);
 	}
 
 	bridge_flushall(ifs, brdg);
 	close(ifs);
 
-	return;
+	return(0);
 }
 
-void
+int
 flush_bridgerule(char *brdg, char *member)
 {
 	int ifs;
@@ -487,23 +487,23 @@ flush_bridgerule(char *brdg, char *member)
 	ifs = socket(AF_INET, SOCK_DGRAM, 0);
 	if (ifs < 0) {
 		printf("%% socket: %s\n", strerror(errno));
-		return;
+		return(1);
 	}
 
 	if (!is_bridge(ifs, brdg)) {
 		printf("%% %s is not a bridge\n", brdg);
 		close(ifs);
-		return;
+		return(1);
 	}
 	if (!is_valid_ifname(member) || is_bridge(ifs, member)) {
 		printf("%% %s is not a valid interface\n", member);
 		close(ifs);
-		return;
+		return(1);
 	}
 	bridge_flushrule(ifs, brdg, member);
 	close(ifs);
 
-	return;
+	return(0);
 }
 
 /*

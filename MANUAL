@@ -1,5 +1,5 @@
 NSH // Network Shell User's Manual // Chris Cappuccio <chris@nmedia.net>
-$nsh: MANUAL,v 1.7 2003/03/28 16:15:19 chris Exp $
+$nsh: MANUAL,v 1.8 2003/04/14 08:44:20 chris Exp $
 
 Copyright (c) 2003 Chris Cappuccio
 
@@ -646,6 +646,159 @@ nsh(priv)/!ls
 helloworld.c
 nsh(priv)/!
 $ 
+
+ip
+--
+
+Enable, allow, or set system parameters or features (requires privileged mode.)
+
+All commands in this category allow the 'no' modifier to disable the option.
+
+nsh(priv)/ip ?
+% Commands may be abbreviated.
+% 'ip' commands are:
+
+  forwarding          Enable IPv4 Forwarding
+  ipip                Allow IP-in-IP Encapsulation
+  gre                 Allow Generic Route Encapsulation
+  wccp                Allow Web Cache Control Protocol
+  mobileip            Allow Mobile IP Encapsulation
+  etherip             Allow Ether-IP Encapsulation
+  ipcomp              Allow IP Compression
+  esp                 Allow Encapsulated Security Payload
+  ah                  Allow Authentication Header
+  sourceroute         Process Loose/Strict Source Route Options
+  encdebug            Enable if_enc debugging
+  maxqueue            Set Max queued packets
+  send-redirects      Send ICMP redirects
+  directed-broadcast  Allow directed broadcasts
+  default-ttl         Set Default IP packet TTL
+  ?                   Options
+
+ip forwarding
+-------------
+
+nsh(priv)/ip forwarding
+
+Enable IP packet forwarding.  This must be set in order to use routing,
+NAT, IPsec or packet filter features.
+
+ip ipip
+-------
+
+nsh(priv)/ip ipip
+
+Allow IP-in-IP encapsulation.  
+
+ip gre
+------
+
+nsh(priv)/ip gre
+
+Allow Generic Route Encapsulation.  Must be used to enable gre interfaces.
+
+ip wccp
+-------
+
+nsh(priv)/ip wccp
+
+Allow GRE-based Web Cache Control Protocol packets to manage caching device.
+Must be used to enable WCCP on gre interfaces.
+
+ip mobileip
+-----------
+
+nsh(priv)/ip mobileip
+
+Allow GRE-based MobileIP encapsulation.  Must be used to enable MobileIP
+operation on gre interfaces.
+
+ip etherip
+----------
+
+nsh(priv)/ip etherip
+
+Allow Ether-IP encapsulation
+
+ip ipcomp
+---------
+
+nsh(priv)/ip ipcomp
+
+Allow IPComp compression to be used.
+
+ip esp
+------
+
+nsh(priv)/ip esp
+
+Allow IPsec Encapsulated Security Payload to be used.  Note this is a system
+default.
+
+ip ah
+-----
+
+nsh(priv)/ip ah
+
+Allow IPsec Authentication Header to be used. Note this is a sysdem default.
+
+ip sourceroute
+--------------
+
+nsh(priv)/ip sourceroute
+
+Process loose or strict source routing options on IP packet headers.  Do
+not enable this option on systems connected to the public internet.
+
+ip encdebug
+-----------
+
+nsh(priv)/ip encdebug
+
+Print debugging messages for the if_enc interface to the kernel output.  
+Requires a kernel compiled with option ENCDEBUG.
+
+ip maxqueue <argument>
+----------------------
+
+nsh(priv)/ip maxqueue 1000
+
+Maximum number of queued packets before they are dropped.  Increasing
+this option does not necessarily help with system performance.
+
+ip send-redirects
+-----------------
+
+nsh(priv)/ip send-redirects
+
+Controls whether or not the system sends ICMP redirects to local hosts.  This
+option is enabled by default.
+
+When there is a direct path on the local network from one host to another, but
+one of those hosts chooses to talk through the router instead, it will
+send an ICMP redirect to the originating host.  This redirect tells the host
+the direct path on the network to send further packets.
+
+ip default-ttl <ttl>
+--------------------
+
+nsh(priv)/ip default-ttl 128
+
+Sets the default ttl used on IP packets originating from this system.  
+
+The TTL, or time-to-live, is decremented by one each time the packet passes
+through another router on the internet.  The default TTL that the system
+uses is 64, therefore it allows for the packet to pass through up to 64
+routers (also called hops) before reaching its destination.  The main purpose
+of the TTL is to avoid routing loops in the network.  
+
+?
+-
+
+nsh(priv)/ip ?
+
+Help menu
+
 
 Section 4 > Interface mode commands
 -----------------------------------

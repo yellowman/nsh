@@ -1,4 +1,4 @@
-/* $nsh: conf.c,v 1.13 2003/04/03 21:40:23 chris Exp $ */
+/* $nsh: conf.c,v 1.14 2003/04/14 08:44:20 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -333,6 +333,18 @@ conf(FILE *output)
 	fprintf(output, "!\n");
 
 	/*
+	 * check out how sysctls are doing these days
+	 *
+	 * Each of these options, like most other things in the config output
+	 * (such as interface flags), must display if the kernel's default
+	 * setting is not currently set.
+	 */
+
+	conf_ipsysctl(output);
+
+	fprintf(output, "!\n");
+
+	/*
 	 * print static arp and route entries in configuration file format
 	 */
 	conf_routes(output, "arp ", AF_INET, (RTF_LLINFO & RTF_STATIC));
@@ -340,6 +352,9 @@ conf(FILE *output)
 
 	fprintf(output, "!\n");
 
+	/*
+	 * print pf rules
+	 */
 	if ((pfconf = fopen(PFCONF_TEMP, "r")) != NULL) {
 		fprintf(output, "pf rules\n");
 		for (;;) {
@@ -368,7 +383,7 @@ default_mtu(char *ifname)
 		    strlen(defmtus[i].name)) == 0)
 			return(defmtus[i].mtu);
 
-	return(1500); /* default mtu */
+	return(DEFAULT_MTU); /* default mtu */
 }
 
 /*

@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.13 2003/03/28 16:15:19 chris Exp $ */
+/* $nsh: externs.h,v 1.14 2003/04/14 08:44:20 chris Exp $ */
 /*
  * nsh externs and more
  */
@@ -11,9 +11,17 @@ struct rtdump {
 	char *lim;	/* end of routing table */
 };
 
-extern char *__progname, *vers;
-extern int verbose, editing, bridge;
-extern pid_t pid;
+extern char *__progname;	/* duh */
+extern char *vers;		/* the version of nsh */
+extern int verbose;		/* is verbose mode on? */
+extern int editing;		/* is command line editing mode on? */
+extern int bridge;		/* are we in bridge mode (or interface mode?) */
+extern pid_t pid;		/* process id of nsh */
+
+/* defaults */
+#define	DEFAULT_MTU	1500		/* net.inet.ip.defmtu */
+#define	DEFAULT_TTL	64		/* net.inet.ip.defttl */
+#define	DEFAULT_MAXQUEUE	300	/* net.inet.ip.maxqueue */
 
 /* conf.c */
 int conf(FILE *);
@@ -102,6 +110,11 @@ u_long get_tbr(char *, int);
 u_long atobps(const char *);
 u_long atobytes(const char *);
 
+/* sysctl.c */
+int sysctl_inet(int, int, int, int);
+int ipsysctl(int, char *, char *);
+void conf_ipsysctl(FILE *);
+
 /* route.c */
 #define NO_NETMASK 0
 #define ASSUME_NETMASK 1
@@ -161,9 +174,9 @@ int brval(char *, int, int, char **);
 int brrule(char *, int, int, char **);
 int brstatic(char *, int, int, char **);
 int brpri(char *, int, int, char **);
-void flush_bridgedyn(char *);
-void flush_bridgeall(char *);
-void flush_bridgerule(char *, char*);
+int flush_bridgedyn(char *);
+int flush_bridgeall(char *);
+int flush_bridgerule(char *, char*);
 
 /* tunnel.c */
 int inttunnel(char *, int, int, char **);
