@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.34 2004/03/22 11:33:29 chris Exp $ */
+/* $nsh: commands.c,v 1.35 2004/03/24 09:01:45 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -534,6 +534,7 @@ static struct intlist Intlist[] = {
 	{ "rule",	"Bridge layer 2 filtering rules",	brrule, 1 },
 	{ "static",	"Static bridge address entry",		brstatic, 1 },
 	{ "ifpriority",	"Spanning priority of a member on an 802.1D bridge", brpri, 1 },
+	{ "ifcost",	"Spanning tree path cost of a member on 802.1D bridge", brpri, 1},
 /* Help commands */
 	{ "?",		"Options",				int_help, 2 },
 	{ "help",	0,					int_help, 2 },

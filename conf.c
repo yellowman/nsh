@@ -1,4 +1,4 @@
-/* $nsh: conf.c,v 1.21 2004/03/22 11:33:30 chris Exp $ */
+/* $nsh: conf.c,v 1.22 2004/03/24 09:01:45 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -307,6 +307,9 @@ conf(FILE *output)
 				fprintf(output, " blocknonip %s\n", tmp_str);
 			if (bridge_list(ifs, ifnp->if_name, " ", tmp_str,
 			    sizeof(tmp_str), CONF_IFPRIORITY))
+				fprintf(output, "%s", tmp_str);
+			if (bridge_list(ifs, ifnp->if_name, " ", tmp_str,
+			    sizeof(tmp_str), CONF_IFCOST))
 				fprintf(output, "%s", tmp_str);
 			bridge_confaddrs(ifs, ifnp->if_name, " static ",
 			    output);

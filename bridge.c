@@ -1,5 +1,5 @@
-/* $nsh: bridge.c,v 1.7 2003/09/18 20:31:38 chris Exp $ */
-/* From: $OpenBSD: /usr/src/sbin/brconfig/brconfig.c,v 1.17 2002/02/16 21:27:33 millert Exp $	*/
+/* $nsh: bridge.c,v 1.8 2004/03/24 09:01:45 chris Exp $ */
+/* From: $OpenBSD: brconfig.c,v 1.27 2003/09/26 03:29:59 deraadt Exp $ */
 
 /*
  * Copyright (c) 1999, 2000 Jason L. Wright (jason@thought.net)
@@ -63,7 +63,8 @@ int bridge_priority(int, char *, u_int32_t);
 int bridge_fwddelay(int, char *, u_int32_t);
 int bridge_hellotime(int, char *, u_int32_t);
 int bridge_ifprio(int, char *, char *, int);
-int bridge_timeout(int, char *, u_int32_t);
+int bridge_ifcost(int, char *, char *, int);
+int bridge_timeout(int, char *, int);
 int bridge_flush(int, char *);
 int bridge_flushall(int, char *);
 int bridge_add(int, char *, char *);
@@ -272,7 +273,7 @@ brval(char *ifname, int ifs, int argc, char **argv)
 		break;
 	case BRVAL_TIMEOUT:
 		if (set)
-			bridge_timeout(ifs, ifname, val);
+			bridge_timeout(ifs, ifname, (int)val);
 		else
 			bridge_timeout(ifs, ifname, DEFAULT_TIMEOUT);
 		break;
@@ -377,11 +378,13 @@ brstatic(char *ifname, int ifs, int argc, char **argv)
 	return(0);
 }
 
+#define BRPRI_IFPRIORITY 0
+#define BRPRI_IFCOST     1
 int
 brpri(char *ifname, int ifs, int argc, char **argv)   
 {
-	int set, val;
-	char *endptr;
+	int set, val, type;
+	char *endptr, *name, *descr;
          
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -389,6 +392,20 @@ brpri(char *ifname, int ifs, int argc, char **argv)
 		argc--;
 	} else
 		set = 1;
+
+	if (CMP_ARG(argv[0], "ifp")) {
+		type = BRPRI_IFPRIORITY;
+		name = "ifpriority";
+		descr = "priority";
+	} else if (CMP_ARG(argv[0], "ifc")) {
+		type = BRPRI_IFCOST;
+		name = "ifcost";
+		descr = "cost";
+	} else {
+		printf("%% Internal error\n");
+		return(0);
+	}
+
 	argv++;
 	argc--;
 
@@ -398,8 +415,8 @@ brpri(char *ifname, int ifs, int argc, char **argv)
 	 * set form of this command
 	 */
 	if ((set && argc != 2) || (!set && (argc < 1 || argc > 2))) {
-		printf("%% ifpriority <member> <priority>\n");
-		printf("%% no ifpriority <member> [priority]\n");
+		printf("%% %s <member> <%s>\n", name, descr);
+		printf("%% no %s <member> [%s]\n", name, descr);
 		return(0);
 	}
 
@@ -417,10 +434,31 @@ brpri(char *ifname, int ifs, int argc, char **argv)
 		return (0);
         }
 
-	if (set)
-		bridge_ifprio(ifs, ifname, argv[0], val);
-	else
-		bridge_ifprio(ifs, ifname, argv[0], DEFAULT_IFPRIORITY);
+	switch(type) {
+	case BRPRI_IFPRIORITY:
+		if (set) {
+			if (val > 0xff) {
+				printf("%% %s exceeds limit\n",name);
+				return(0);
+			}
+			bridge_ifprio(ifs, ifname, argv[0], val);
+		} else {
+			bridge_ifprio(ifs, ifname, argv[0], DEFAULT_IFPRIORITY);
+		}	
+	break;
+	case BRPRI_IFCOST:
+		if (set) {
+			if (val > 65535) {
+				printf("%% %s exceeds limit\n",name);
+				return(0);
+			}
+			bridge_ifcost(ifs, ifname, argv[0], val);
+		} else {
+			bridge_ifcost(ifs, ifname, argv[0], DEFAULT_IFCOST);
+		}
+	break;
+	}
+	
 
 	return(0);
 }
@@ -705,8 +743,8 @@ bridge_cfg(s, brdg, type)
 		break;
 
 	case MAXAGE:
-		if (ioctl(s, SIOCBRDGGFD, (caddr_t)&ifbp)) {
-			printf("%% unable to get maxage: SIOCBRDGGFD: %s\n",
+		if (ioctl(s, SIOCBRDGGMA, (caddr_t)&ifbp)) {
+			printf("%% unable to get maxage: SIOCBRDGGMA: %s\n",
 			    strerror(errno));
 			return (-1);
 		}
@@ -751,16 +789,18 @@ bridge_list(s, brdg, delim, br_str, str_len, type)
 	struct ifbreq *reqp;
 	struct ifbifconf bifc;
 	int i, len = 8192, identified = 0;
-	char buf[256], *inbuf = NULL;
+	char buf[256], *inbuf = NULL, *inb;
 
 	while (1) {
 		strlcpy(bifc.ifbic_name, brdg, sizeof(bifc.ifbic_name));
 		bifc.ifbic_len = len;
-		bifc.ifbic_buf = inbuf = realloc(inbuf, len);
-		if (inbuf == NULL) {
+		inb = realloc(inbuf, len);
+		if (inb == NULL) {
+			free(inbuf);
 			printf("%% bridge_list: malloc: %s\n", strerror(errno));
 			return(0);
 		}
+		bifc.ifbic_buf = inbuf = inb;
 		if (ioctl(s, SIOCBRDGIFS, &bifc) < 0) {
 			printf("%% unable to get interfaces: SIOCBRDGIFS: %s\n",
 			    strerror(errno));
@@ -780,10 +820,20 @@ bridge_list(s, brdg, delim, br_str, str_len, type)
 		switch (type) {
 		case CONF_IFPRIORITY:
 			if(reqp->ifbr_priority != DEFAULT_IFPRIORITY) {
-			/* conf() should test for DEFAULT_IFPRIORITY XXX */
+			/* rework flow at some pointXXX */
 				snprintf(buf, sizeof(buf),
 				    "%sifpriority %s %u\n", delim,
 				    reqp->ifbr_ifsname, reqp->ifbr_priority);
+				strlcat(br_str, buf, str_len);
+				identified++;
+			}
+			break;
+		case CONF_IFCOST:
+			if(reqp->ifbr_path_cost != DEFAULT_IFCOST) {
+			/* rework flow at some pointXXX */
+				snprintf(buf, sizeof(buf),
+				    "%sifcost %s %u\n", delim,
+				    reqp->ifbr_ifsname, reqp->ifbr_path_cost);
 				strlcat(br_str, buf, str_len);
 				identified++;
 			}
@@ -937,7 +987,7 @@ int
 bridge_timeout(s, brdg, val)
 	int s;
 	char *brdg;
-	u_int32_t val;
+	int val;
 {
 	struct ifbrparam bp;
 
@@ -1092,6 +1142,28 @@ bridge_ifprio(s, brdg, ifname, val)
 }
 
 int
+bridge_ifcost(s, brdg, ifname, val)
+	int s;
+	char *brdg;
+	char *ifname;
+	int val;
+{
+	struct ifbreq breq;
+
+	strlcpy(breq.ifbr_name, brdg, sizeof(breq.ifbr_name));
+	strlcpy(breq.ifbr_ifsname, ifname, sizeof(breq.ifbr_ifsname));
+
+	breq.ifbr_path_cost = val;
+
+	if (ioctl(s, SIOCBRDGSIFCOST, (caddr_t)&breq) < 0) {
+		printf("%% bridge_ifcost: SIOCBRDGSIFCOST: %s\n",
+		    strerror(errno));
+		return (EX_IOERR);
+	}
+	return (0);
+}
+
+int
 bridge_addaddr(s, brdg, ifname, addr)
 	int s;
 	char *brdg;
@@ -1130,18 +1202,20 @@ bridge_addrs(s, brdg, hdr_delim, body_delim)
 {
 	struct ifbaconf ifbac;
 	struct ifbareq *ifba;
-	char *inbuf = NULL, buf[sizeof(ifba->ifba_ifsname) + 1];
+	char buf[sizeof(ifba->ifba_ifsname) + 1], *inbuf = NULL, *inb;
 	int i, len = 8192;
 
 	while (1) {
 		ifbac.ifbac_len = len;
-		ifbac.ifbac_buf = inbuf = realloc(inbuf, len);
-		strlcpy(ifbac.ifbac_name, brdg, sizeof(ifbac.ifbac_name));
-		if (inbuf == NULL) {
+		inb = realloc(inbuf, len);
+		if (inb == NULL) {
+			free(inbuf);
 			printf("%% bridge_addrs: malloc: %s\n",
 			    strerror(errno));
 			return(0);
 		}
+		ifbac.ifbac_buf = inbuf = inb;
+		strlcpy(ifbac.ifbac_name, brdg, sizeof(ifbac.ifbac_name));
 		if (ioctl(s, SIOCBRDGRTS, &ifbac) < 0) {
 			if (errno != ENETDOWN)
 				printf("%% bridge_addrs: SIOCBRDGRTS: %s\n",
@@ -1178,16 +1252,20 @@ bridge_confaddrs(s, brdg, delim, output)
 {
 	struct ifbaconf ifbac;
 	struct ifbareq *ifba;
-	char *inbuf = NULL, buf[sizeof(ifba->ifba_ifsname) + 1];
+	char buf[sizeof(ifba->ifba_ifsname) + 1], *inbuf = NULL, *inb;
 	int i, len = 8192;
 
 	while (1) {
 		ifbac.ifbac_len = len;
-		ifbac.ifbac_buf = inbuf = realloc(inbuf, len);
-		strlcpy(ifbac.ifbac_name, brdg, sizeof(ifbac.ifbac_name));
-		if (inbuf == NULL)
+		inb = realloc(inbuf, len);
+		if (inb == NULL) {
+			free(inbuf);
 			printf("%% bridge_confaddrs: malloc: %s\n",
-			    strerror(errno));
+				strerror(errno));
+			return(0);
+		}
+		ifbac.ifbac_buf = inbuf = inb;
+		strlcpy(ifbac.ifbac_name, brdg, sizeof(ifbac.ifbac_name));
 		if (ioctl(s, SIOCBRDGRTS, &ifbac) < 0) {
 			if (errno != ENETDOWN)
 				printf("%% bridge_confaddrs: SIOCBRDGRTS: %s\n",
@@ -1261,21 +1339,23 @@ bridge_rules(s, brdg, ifname, delim, output)
 	char *delim, *ifname;
 	FILE *output;
 {
-	char *inbuf = NULL;
+	char *inbuf = NULL, *inb;
 	struct ifbrlconf ifc;
 	struct ifbrlreq *ifrp, ifreq;
 	int len = 8192, i;
 
 	while (1) {
 		ifc.ifbrl_len = len;
-		ifc.ifbrl_buf = inbuf = realloc(inbuf, len);
-		strlcpy(ifc.ifbrl_name, brdg, sizeof(ifc.ifbrl_name));
-		strlcpy(ifc.ifbrl_ifsname, ifname, sizeof(ifc.ifbrl_ifsname));
-		if (inbuf == NULL) {
+		inb = realloc(inbuf, len);
+		if (inb == NULL) {
+			free(inbuf);
 			printf("%% bridge_rules: malloc: %s\n",
 			    strerror(errno));
 			return(0);
 		}
+		ifc.ifbrl_buf = inbuf = inb;
+		strlcpy(ifc.ifbrl_name, brdg, sizeof(ifc.ifbrl_name));
+		strlcpy(ifc.ifbrl_ifsname, ifname, sizeof(ifc.ifbrl_ifsname));
 		errno = 0;
 		if (ioctl(s, SIOCBRDGGRL, &ifc) < 0) {
 			if (errno != ESRCH) /* invalid interface name spec'd */
@@ -1333,6 +1413,8 @@ bridge_showrule(r, delim, output)
 		fprintf(output, " src %s", ether_ntoa(&r->ifbr_src));
 	if (r->ifbr_flags & BRL_FLAG_DSTVALID)
 		fprintf(output, " dst %s", ether_ntoa(&r->ifbr_dst));
+	if (r->ifbr_tagname[0])
+		fprintf(output, " tag %s", r->ifbr_tagname);
 
 	fprintf(output, "\n");
 }
@@ -1356,6 +1438,7 @@ bridge_rule(int s, char *brdg, int targc, char **targv, int ln)
 		printf("%% Invalid rule\n");
 		return (EX_USAGE);
 	}
+	rule.ifbr_tagname[0] = 0;
 	rule.ifbr_flags = 0;
 	rule.ifbr_action = 0;
 	strlcpy(rule.ifbr_name, brdg, sizeof(rule.ifbr_name));
@@ -1407,6 +1490,21 @@ bridge_rule(int s, char *brdg, int targc, char **targv, int ln)
 				goto bad_rule;
 			rule.ifbr_flags |= BRL_FLAG_SRCVALID;
 			dea = &rule.ifbr_src;
+		} else if (strcmp(argv[0], "tag") == 0) {
+			if (argc < 2) {
+				printf("%% missing tag name\n");
+				goto bad_rule;
+			}
+			if (rule.ifbr_tagname[0]) {
+				printf("%% tag already defined\n");
+				goto bad_rule;
+			}
+			if (strlcpy(rule.ifbr_tagname, argv[1],
+			    PF_TAG_NAME_SIZE) > PF_TAG_NAME_SIZE) {
+				printf("%% tag name too long\n");
+				goto bad_rule;
+			}
+			dea = NULL;
 		} else
 			goto bad_rule;
 
@@ -1415,12 +1513,14 @@ bridge_rule(int s, char *brdg, int targc, char **targv, int ln)
 
 		if (argc == 0)
 			goto bad_rule;
-		ea = ether_aton(argv[0]);
-		if (ea == NULL) {
-			printf("%% Invalid address: %s\n", argv[0]);
-			return (EX_USAGE);
-		}
-		bcopy(ea, dea, sizeof(*dea));
+		if (dea != NULL) {
+			ea = ether_aton(argv[0]);
+			if (ea == NULL) {
+				printf("%% Invalid address: %s\n", argv[0]);
+				return (0);
+			}
+			bcopy(ea, dea, sizeof(*dea));
+ 		}
 		argc--; argv++;
 		sec++;
 	}

@@ -1,4 +1,4 @@
-/* $nsh: bridge.h,v 1.2 2003/02/18 09:29:46 chris Exp $ */
+/* $nsh: bridge.h,v 1.3 2004/03/24 09:01:45 chris Exp $ */
 
 /* request types for bridge_cfg() */
 
@@ -16,6 +16,7 @@
 #define DEFAULT_MAXADDR		100
 #define DEFAULT_TIMEOUT		240
 #define DEFAULT_IFPRIORITY	128
+#define DEFAULT_IFCOST		55
 
 /* request types for bridge_list() */
 
@@ -27,6 +28,7 @@
 #define CONF_IFPRIORITY	100
 #define SHOW_STPSTATE	101
 #define MEMBER		102
+#define CONF_IFCOST	103
 
 /* blah */
 
