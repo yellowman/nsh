@@ -12,11 +12,12 @@ Cleanup:
 * Maybe user args should be set to lowercase at early so that we dont have to
   use strcasecmp/strncasecmp everywhere?
 * User args should be sanity checked early for interference
-* Consistency in how we perror() for commands called from interface(),
+* Consistency in how we print errors for commands called from interface(),
   give user-friendly messages, as these errors generally represent user
-  error (but not from perror in conf() or other things that are not called
-  direct from CLI as these errors generally represent problems in nsh)
-* Consistency in how errors are returned, handled
+  error (whereas an error in conf() or other things that are not called
+  direct from CLI generally represent problems in nsh, or strange user
+  alterations of the conf file)
+* Consistency in how errors are returned, handled between functions
 
 To be implemented:
 

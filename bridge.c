@@ -439,7 +439,7 @@ flush_bridgedyn(char *brdg)
 
 	ifs = socket(AF_INET, SOCK_DGRAM, 0);
 	if (ifs < 0) {
-		perror("% socket");
+		printf("%% socket: %s\n", strerror(errno));
 		return;
 	}
 
@@ -462,7 +462,7 @@ flush_bridgeall(char *brdg)
 
 	ifs = socket(AF_INET, SOCK_DGRAM, 0);
 	if (ifs < 0) {
-		perror("% socket");
+		printf("%% socket: %s\n", strerror(errno));
 		return;
 	}
 
@@ -485,7 +485,7 @@ flush_bridgerule(char *brdg, char *member)
 
 	ifs = socket(AF_INET, SOCK_DGRAM, 0);
 	if (ifs < 0) {
-		perror("% socket");
+		printf("%% socket: %s\n", strerror(errno));
 		return;
 	}
 
@@ -516,24 +516,21 @@ bridge_ifsetflag(s, brdg, ifsname, flag)
 	char *ifsname;
 	u_int32_t flag;
 {
-	char tmp[128];
 	struct ifbreq req;
 
 	strlcpy(req.ifbr_name, brdg, sizeof(req.ifbr_name));
 	strlcpy(req.ifbr_ifsname, ifsname, sizeof(req.ifbr_ifsname));
 	if (ioctl(s, SIOCBRDGGIFFLGS, (caddr_t)&req) < 0) {
-		snprintf(tmp, sizeof(tmp), "%% cannot get flags for %s on %s",
-		    ifsname, brdg);
-		perror(tmp);
+		printf("%% cannot get flags for %s on %s: %s\n", ifsname, brdg,
+		    strerror(errno));
 		return (EX_IOERR);
 	}
 
 	req.ifbr_ifsflags |= flag;
 
 	if (ioctl(s, SIOCBRDGSIFFLGS, (caddr_t)&req) < 0) {
-		snprintf(tmp, sizeof(tmp), "%% cannot set flags for %s on %s",
-		    ifsname, brdg);
-		perror(tmp);
+		printf("%% cannot set flags for %s on %s: %s\n", ifsname, brdg,
+		    strerror(errno));
 		return (EX_IOERR);
 	}
 	return (0);
@@ -546,25 +543,22 @@ bridge_ifclrflag(s, brdg, ifsname, flag)
 	char *ifsname;
 	u_int32_t flag;
 {
-	char tmp[128];
 	struct ifbreq req;
 
 	strlcpy(req.ifbr_name, brdg, sizeof(req.ifbr_name));
 	strlcpy(req.ifbr_ifsname, ifsname, sizeof(req.ifbr_ifsname));
 
 	if (ioctl(s, SIOCBRDGGIFFLGS, (caddr_t)&req) < 0) {
-		snprintf(tmp, sizeof(tmp), "%% cannot get flags for %s on %s",
-		    ifsname, brdg);
-		perror(tmp);
+		printf("%% cannot get flags for %s on %s: %s\n", ifsname, brdg,
+		    strerror(errno));
 		return (EX_IOERR);
 	}
 
 	req.ifbr_ifsflags &= ~flag;
 
 	if (ioctl(s, SIOCBRDGSIFFLGS, (caddr_t)&req) < 0) {
-		snprintf(tmp, sizeof(tmp), "%% cannot set flags for %s on %s",
-		    ifsname, brdg);
-		perror(tmp);
+		printf("%% cannot set flags for %s on %s: %s\n", ifsname, brdg,
+		    strerror(errno));
 		return (EX_IOERR);
 	}
 	return (0);
@@ -580,13 +574,12 @@ set_ifflag(s, brdg, f)
 	short f;
 {
 	struct ifreq ifr;
-	char tmp[128];
 
 	strlcpy(ifr.ifr_name, brdg, sizeof(ifr.ifr_name));
 
 	if (ioctl(s, SIOCGIFFLAGS, (caddr_t)&ifr) < 0) {
-		snprintf(tmp, sizeof(tmp), "%% cannot get flags for %s", brdg);
-		perror(tmp);
+		printf("%% cannot get flags for %s: %s\n", brdg,
+		    strerror(errno));
 		if (errno == EPERM)
 			return (EX_NOPERM);
 		return (EX_IOERR);
@@ -595,8 +588,8 @@ set_ifflag(s, brdg, f)
 	ifr.ifr_flags |= f;
 
 	if (ioctl(s, SIOCSIFFLAGS, (caddr_t)&ifr) < 0) {
-		snprintf(tmp, sizeof(tmp), "%% cannot set flags for %s", brdg);
-		perror(tmp);
+		printf("%% cannot set flags for %s: %s\n", brdg,
+		    strerror(errno));
 		if (errno == EPERM)
 			return (EX_NOPERM);
 		return (EX_IOERR);
@@ -612,13 +605,12 @@ clr_ifflag(s, brdg, f)
 	short f;
 {
 	struct ifreq ifr;
-	char tmp[128];
 
 	strlcpy(ifr.ifr_name, brdg, sizeof(ifr.ifr_name));
 
 	if (ioctl(s, SIOCGIFFLAGS, (caddr_t)&ifr) < 0) {
-		snprintf(tmp, sizeof(tmp), "%% cannot get flags for %s", brdg);
-		perror(tmp);
+		printf("%% cannot get flags for %s: %s\n", brdg,
+		    strerror(errno));
 		if (errno == EPERM)
 			return (EX_NOPERM);
 		return (EX_IOERR);
@@ -627,8 +619,8 @@ clr_ifflag(s, brdg, f)
 	ifr.ifr_flags &= ~(f);
 
 	if (ioctl(s, SIOCSIFFLAGS, (caddr_t)&ifr) < 0) {
-		snprintf(tmp, sizeof(tmp), "%% cannot set flags for %s", brdg);
-		perror(tmp);
+		printf("%% cannot set flags for %s: %s\n", brdg,
+		    strerror(errno));
 		if (errno == EPERM)
 			return (EX_NOPERM);
 		return (EX_IOERR);
@@ -647,7 +639,8 @@ bridge_flushall(s, brdg)
 	strlcpy(req.ifbr_name, brdg, sizeof(req.ifbr_name));
 	req.ifbr_ifsflags = IFBF_FLUSHALL;
 	if (ioctl(s, SIOCBRDGFLUSH, &req) < 0) {
-		perror("% cannot flush all: SIOCBRDGFLUSH");
+		printf("%% cannot flush all: SIOCBRDGFLUSH: %s\n",
+		    strerror(errno));
 		return (EX_IOERR);
 	}
 	return (0);
@@ -663,7 +656,8 @@ bridge_flush(s, brdg)
 	strlcpy(req.ifbr_name, brdg, sizeof(req.ifbr_name));
 	req.ifbr_ifsflags = IFBF_FLUSHDYN;
 	if (ioctl(s, SIOCBRDGFLUSH, &req) < 0) {
-		perror("% cannot flush: SIOCBRDGFLUSH");
+		printf("%% cannot flush: SIOCBRDGFLUSH: %s\n",
+		    strerror(errno));
 		return (EX_IOERR);
 	}
 	return (0);
@@ -683,7 +677,8 @@ bridge_cfg(s, brdg, type)
 	switch (type) {
 	case PRIORITY:
 		if (ioctl(s, SIOCBRDGGPRI, (caddr_t)&ifbp)) {
-			perror("% unable to get priority: SIOCBRDGGPRI");
+			printf("%% unable to get priority: SIOCBRDGGPRI: %s\n",
+			    strerror(errno));
 			return (-1);
 		}
 		val = ifbp.ifbrp_prio;
@@ -691,7 +686,8 @@ bridge_cfg(s, brdg, type)
 
 	case HELLOTIME:
 		if (ioctl(s, SIOCBRDGGHT, (caddr_t)&ifbp)) {
-			perror("% unable to get hellotime: SIOCBRDGGHT");
+			printf("%% unable to get hellotime: SIOCBRDGGHT: %s\n",
+			    strerror(errno));
 			return (-1);
 		}
 		val = ifbp.ifbrp_hellotime;
@@ -699,7 +695,8 @@ bridge_cfg(s, brdg, type)
 
 	case FWDDELAY:
 		if (ioctl(s, SIOCBRDGGFD, (caddr_t)&ifbp)) {
-			perror("% unable to get fwddelay: SIOCBRDGGFD");
+			printf("%% unable to get fwddelay: SIOCBRDGGFD: %s\n",
+			    strerror(errno));
 			return (-1);
 		}
 		val = ifbp.ifbrp_fwddelay;
@@ -707,7 +704,8 @@ bridge_cfg(s, brdg, type)
 
 	case MAXAGE:
 		if (ioctl(s, SIOCBRDGGFD, (caddr_t)&ifbp)) {
-			perror("% unable to get maxage: SIOCBRDGGFD");
+			printf("%% unable to get maxage: SIOCBRDGGFD: %s\n",
+			    strerror(errno));
 			return (-1);
 		}
 		val = ifbp.ifbrp_maxage;
@@ -715,7 +713,8 @@ bridge_cfg(s, brdg, type)
 
 	case MAXADDR:
 		if (ioctl(s, SIOCBRDGGCACHE, (caddr_t)&ifbp) < 0) {
-			perror("% unable to get maxaddr: SIOCBRDGGCACHE");
+			printf("%% unable to get maxaddr: SIOCBRDGGCACHE: %s\n",
+			    strerror(errno));
 			return (-1);
 		}
 		val = ifbp.ifbrp_csize;
@@ -723,7 +722,8 @@ bridge_cfg(s, brdg, type)
 
 	case TIMEOUT:
 		if (ioctl(s, SIOCBRDGGTO, (caddr_t)&ifbp) < 0) {
-			perror("% unable to get timeout: SIOCBRDGGTO");
+			printf("%% unable to get timeout: SIOCBRDGGTO: %s\n",
+			    strerror(errno));
 			return (-1);
 		}
 		val = ifbp.ifbrp_ctime;
@@ -756,11 +756,12 @@ bridge_list(s, brdg, delim, br_str, str_len, type)
 		bifc.ifbic_len = len;
 		bifc.ifbic_buf = inbuf = realloc(inbuf, len);
 		if (inbuf == NULL) {
-			perror("% bridge_list: malloc");
+			printf("%% bridge_list: malloc: %s\n", strerror(errno));
 			return(0);
 		}
 		if (ioctl(s, SIOCBRDGIFS, &bifc) < 0) {
-			perror("% unable to get interfaces: SIOCBRDGIFS");
+			printf("%% unable to get interfaces: SIOCBRDGIFS: %s\n",
+			    strerror(errno));
 			free(inbuf);
 			return(0);
 		}
@@ -857,14 +858,12 @@ bridge_add(s, brdg, ifn)
 	char *ifn;
 {
 	struct ifbreq req;
-	char tmp[128];
 
 	strlcpy(req.ifbr_name, brdg, sizeof(req.ifbr_name));
 	strlcpy(req.ifbr_ifsname, ifn, sizeof(req.ifbr_ifsname));
 	if (ioctl(s, SIOCBRDGADD, &req) < 0) {
-		snprintf(tmp, sizeof(tmp), "%% cannot add member %s on %s",
-		    ifn, brdg);
-		perror(tmp);
+		printf("%% cannot add member %s on %s: %s\n", ifn, brdg,
+			strerror(errno));
 		if (errno == EPERM)
 			return (EX_NOPERM);
 		return (EX_IOERR);
@@ -883,7 +882,8 @@ bridge_delete(s, brdg, ifn)
 	strlcpy(req.ifbr_name, (char *)brdg, sizeof(req.ifbr_name));
 	strlcpy(req.ifbr_ifsname, ifn, sizeof(req.ifbr_ifsname));
 	if (ioctl(s, SIOCBRDGDEL, &req) < 0) {
-		perror("% unable to delete member: SIOCBRDGDEL");
+		printf("%% unable to delete member: SIOCBRDGDEL: %s\n",
+		    strerror(errno));
 		if (errno == EPERM)
 			return (EX_NOPERM);
 		return (EX_IOERR);
@@ -898,14 +898,12 @@ bridge_addspan(s, brdg, ifn)
 	char *ifn;
 {
 	struct ifbreq req;
-	char tmp[128];
 
 	strlcpy(req.ifbr_name, brdg, sizeof(req.ifbr_name));
 	strlcpy(req.ifbr_ifsname, ifn, sizeof(req.ifbr_ifsname));
 	if (ioctl(s, SIOCBRDGADDS, &req) < 0) {
-		snprintf(tmp, sizeof(tmp), "%% cannot add span %s on %s",
-		    ifn, brdg);
-		perror(tmp);
+		printf("%% cannot add span %s on %s: %s\n", ifn, brdg,
+		    strerror(errno));
 		if (errno == EPERM)
 			return (EX_NOPERM);
 		return (EX_IOERR);
@@ -920,14 +918,12 @@ bridge_delspan(s, brdg, ifn)
 	char *ifn;
 {
 	struct ifbreq req;
-	char tmp[128];
 
 	strlcpy(req.ifbr_name, brdg, sizeof(req.ifbr_name));
 	strlcpy(req.ifbr_ifsname, ifn, sizeof(req.ifbr_ifsname));
 	if (ioctl(s, SIOCBRDGDELS, &req) < 0) {
-		snprintf(tmp, sizeof(tmp), "%% cannot delete span %s on %s",
-		    ifn, brdg);
-		perror(tmp);
+		printf("%% cannot delete span %s on %s: %s\n", ifn, brdg,
+		    strerror(errno));
 		if (errno == EPERM)
 			return (EX_NOPERM);
 		return (EX_IOERR);
@@ -946,7 +942,8 @@ bridge_timeout(s, brdg, val)
 	strlcpy(bp.ifbrp_name, brdg, sizeof(bp.ifbrp_name));
 	bp.ifbrp_ctime = val;
 	if (ioctl(s, SIOCBRDGSTO, (caddr_t)&bp) < 0) {
-		perror("% bridge_timeout: SIOCBRDGSTO");
+		printf("%% bridge_timeout: SIOCBRDGSTO: %s\n",
+		   strerror(errno));
 		return (EX_IOERR);
 	}
 	return (0);
@@ -963,7 +960,8 @@ bridge_maxage(s, brdg, val)
 	strlcpy(bp.ifbrp_name, brdg, sizeof(bp.ifbrp_name));
 	bp.ifbrp_maxage = val;
 	if (ioctl(s, SIOCBRDGSMA, (caddr_t)&bp) < 0) {
-		perror("% unable to set maxage: SIOCBRDGSMA");
+		printf("%% unable to set maxage: SIOCBRDGSMA: %s\n",
+		    strerror(errno));
 		return (EX_IOERR);
 	}
 	return (0);
@@ -981,7 +979,8 @@ bridge_priority(s, brdg, val)
 	strlcpy(bp.ifbrp_name, brdg, sizeof(bp.ifbrp_name));
 	bp.ifbrp_prio = val;
 	if (ioctl(s, SIOCBRDGSPRI, (caddr_t)&bp) < 0) {
-		perror("% unable to set priority: SIOCBRDGSPRI");
+		printf("%% unable to set priority: SIOCBRDGSPRI: %s\n",
+		    strerror(errno));
 		return (EX_IOERR);
 	}
 	return (0);
@@ -998,7 +997,8 @@ bridge_fwddelay(s, brdg, val)
 	strlcpy(bp.ifbrp_name, brdg, sizeof(bp.ifbrp_name));
 	bp.ifbrp_fwddelay = val;
 	if (ioctl(s, SIOCBRDGSFD, (caddr_t)&bp) < 0) {
-		perror("% unable to set fwddelay: SIOCBRDGSFD");
+		printf("%% unable to set fwddelay: SIOCBRDGSFD: %s\n",
+		    strerror(errno));
 		return (EX_IOERR);
 	}
 	return (0);
@@ -1016,7 +1016,8 @@ bridge_hellotime(s, brdg, val)
 	strlcpy(bp.ifbrp_name, brdg, sizeof(bp.ifbrp_name));
 	bp.ifbrp_hellotime = val;
 	if (ioctl(s, SIOCBRDGSHT, (caddr_t)&bp) < 0) {
-		perror("% unable to set hellotime: SIOCBRDGSHT");
+		printf("%% unable to set hellotime: SIOCBRDGSHT: %s\n",
+		    strerror(errno));
 		return (EX_IOERR);
 	}
 	return (0);
@@ -1034,7 +1035,8 @@ bridge_maxaddr(s, brdg, val)
 	strlcpy(bp.ifbrp_name, brdg, sizeof(bp.ifbrp_name));
 	bp.ifbrp_csize = val;
 	if (ioctl(s, SIOCBRDGSCACHE, (caddr_t)&bp) < 0) {
-		perror("% unable to set maxaddr: SIOCBRDGSCACHE");
+		printf("%% unable to set maxaddr: SIOCBRDGSCACHE: %s\n",
+		    strerror(errno));
 		return (EX_IOERR);
 	}
 	return (0);
@@ -1080,7 +1082,8 @@ bridge_ifprio(s, brdg, ifname, val)
 	breq.ifbr_priority = val;
 
 	if (ioctl(s, SIOCBRDGSIFPRIO, (caddr_t)&breq) < 0) {
-		perror("% bridge_ifprio: SIOCBRDGSIFPRIO");
+		printf("%% bridge_ifprio: SIOCBRDGSIFPRIO: %s\n",
+		    strerror(errno));
 		return (EX_IOERR);
 	}
 	return (0);
@@ -1133,12 +1136,14 @@ bridge_addrs(s, brdg, hdr_delim, body_delim)
 		ifbac.ifbac_buf = inbuf = realloc(inbuf, len);
 		strlcpy(ifbac.ifbac_name, brdg, sizeof(ifbac.ifbac_name));
 		if (inbuf == NULL) {
-			perror("% bridge_addrs: malloc");
+			printf("%% bridge_addrs: malloc: %s\n",
+			    strerror(errno));
 			return(0);
 		}
 		if (ioctl(s, SIOCBRDGRTS, &ifbac) < 0) {
 			if (errno != ENETDOWN)
-				perror("% bridge_addrs: SIOCBRDGRTS");
+				printf("%% bridge_addrs: SIOCBRDGRTS: %s\n",
+				    strerror(errno));
 			free(inbuf);
 			return(0);
 		}
@@ -1179,10 +1184,12 @@ bridge_confaddrs(s, brdg, delim, output)
 		ifbac.ifbac_buf = inbuf = realloc(inbuf, len);
 		strlcpy(ifbac.ifbac_name, brdg, sizeof(ifbac.ifbac_name));
 		if (inbuf == NULL)
-			perror("% bridge_confaddrs: malloc");
+			printf("%% bridge_confaddrs: malloc: %s\n",
+			    strerror(errno));
 		if (ioctl(s, SIOCBRDGRTS, &ifbac) < 0) {
 			if (errno != ENETDOWN)
-				perror("% bridge_confaddrs: SIOCBRDGRTS");
+				printf("%% bridge_confaddrs: SIOCBRDGRTS: %s\n",
+				    strerror(errno));
 			free(inbuf);
 			return(0);
 		}
@@ -1233,15 +1240,13 @@ bridge_flushrule(s, brdg, ifname)
 	int s;
 	char *brdg, *ifname;
 {
-	char tmp[128];
 	struct ifbrlreq req;
 
 	strlcpy(req.ifbr_name, brdg, sizeof(req.ifbr_name));
 	strlcpy(req.ifbr_ifsname, ifname, sizeof(req.ifbr_ifsname));
 	if (ioctl(s, SIOCBRDGFRL, &req) < 0) {
-		snprintf(tmp, sizeof(tmp), "%% unable to flush rules for %s",
-		    ifname);
-		perror(tmp);
+		printf("%% unable to flush rules for %s: %s\n", ifname,
+		    strerror(errno));
 		return (EX_USAGE);
 	}
 	return (0);
@@ -1265,13 +1270,15 @@ bridge_rules(s, brdg, ifname, delim, output)
 		strlcpy(ifc.ifbrl_name, brdg, sizeof(ifc.ifbrl_name));
 		strlcpy(ifc.ifbrl_ifsname, ifname, sizeof(ifc.ifbrl_ifsname));
 		if (inbuf == NULL) {
-			perror("% bridge_rules: malloc");
+			printf("%% bridge_rules: malloc: %s\n",
+			    strerror(errno));
 			return(0);
 		}
 		errno = 0;
 		if (ioctl(s, SIOCBRDGGRL, &ifc) < 0) {
 			if (errno != ESRCH) /* invalid interface name spec'd */
-				perror("% bridge_rules: SIOCBRDGGRL");
+				printf("%% bridge_rules: SIOCBRDGGRL: %s\n",
+				    strerror(errno));
 			free(inbuf);
 			return(0);
 		}
@@ -1417,7 +1424,8 @@ bridge_rule(int s, char *brdg, int targc, char **targv, int ln)
 	}
 
 	if (ioctl(s, SIOCBRDGARL, &rule) < 0) {
-		perror("% unable to add rule: SIOCBRDGARL");
+		printf("%% unable to add rule: SIOCBRDGARL: %s\n",
+		    strerror(errno));
 		return (EX_IOERR);
 	}
 	return (0);

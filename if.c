@@ -129,7 +129,7 @@ show_int(char *ifname)
 	}
 
 	if ((ifs = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-		perror("% show_int");
+		printf("%% show_int: %s\n", strerror(errno));
 		return(1);
 	}
 
@@ -145,7 +145,7 @@ show_int(char *ifname)
 
 	ifr.ifr_data = (caddr_t)&if_data;
 	if (ioctl(ifs, SIOCGIFDATA, (caddr_t)&ifr) < 0) {
-		perror("% show_int: SIOCGIFDATA");
+		printf("%% show_int: SIOCGIFDATA: %s\n", strerror(errno));
 		close(ifs);
 		return(1);
 	}
@@ -193,7 +193,8 @@ show_int(char *ifname)
 		if (errno == EADDRNOTAVAIL) {
 			noaddr = 1;
 		} else {
-			perror("% show_int: SIOCGIFADDR");
+			printf("%% show_int: SIOCGIFADDR: %s\n",
+			    strerror(errno));
 			close(ifs);
 			return(1);
 		}
@@ -204,7 +205,8 @@ show_int(char *ifname)
 
 		if (ioctl(ifs, SIOCGIFNETMASK, (caddr_t)&ifr) < 0)
 			if (errno != EADDRNOTAVAIL) {
-				perror("% show_int: SIOCGIFNETMASK");
+				printf("%% show_int: SIOCGIFNETMASK: %s\n",
+				    strerror(errno));
 				close(ifs);
 				return(1);
 			}
@@ -369,7 +371,7 @@ get_hwdaddr(int ifs, char *ifname)
 	struct sockaddr_dl *sdl;
 
 	if (getifaddrs(&ifap) != 0) {
-		perror("% get_hwdaddr: getifaddrs");
+		printf("%% get_hwdaddr: getifaddrs: %s\n", strerror(errno));
 		return(NULL);
 	}
 
@@ -478,7 +480,7 @@ get_ifflags(char *ifname, int ifs)
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 
 	if (ioctl(ifs, SIOCGIFFLAGS, (caddr_t)&ifr) < 0) {
-		perror("% get_ifflags: SIOCGIFFLAGS");
+		printf("%% get_ifflags: SIOCGIFFLAGS: %s\n", strerror(errno));
 		flags = 0;
 	} else
 		flags = ifr.ifr_flags;
@@ -495,7 +497,7 @@ set_ifflags(char *ifname, int ifs, int flags)
 	ifr.ifr_flags = flags;
 
 	if (ioctl(ifs, SIOCSIFFLAGS, (caddr_t)&ifr) < 0) {
-		perror("% get_ifflags: SIOCSIFFLAGS");
+		printf("%% get_ifflags: SIOCSIFFLAGS: %s\n", strerror(errno));
 	}
 
         return(0);
@@ -590,7 +592,8 @@ intip(char *ifname, int ifs, int argc, char **argv)
 		 */
 		if (ioctl(ifs, SIOCDIFADDR, &ridreq) < 0)
 			if (!set)
-				perror("% intip: SIOCDIFADDR");
+				printf("%% intip: SIOCDIFADDR: %s\n",
+				    strerror(errno));
 	}
 
 	if (set) {
@@ -609,7 +612,7 @@ intip(char *ifname, int ifs, int argc, char **argv)
 			sin->sin_addr.s_addr = destbcast.s_addr;
 		}
 		if (ioctl(ifs, SIOCAIFADDR, &addreq) < 0)
-			perror("% intip: SIOCAIFADDR");
+			printf("%% intip: SIOCAIFADDR: %s\n", strerror(errno));
 	}
 
 	return(0);
@@ -650,7 +653,7 @@ intmtu(char *ifname, int ifs, int argc, char **argv)
 
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 	if (ioctl(ifs, SIOCSIFMTU, (caddr_t)&ifr) < 0)
-		perror("% intmtu: SIOCSIFMTU");
+		printf("%% intmtu: SIOCSIFMTU: %s\n", strerror(errno));
 
 	return(0);
 }
@@ -690,7 +693,7 @@ intmetric(char *ifname, int ifs, int argc, char **argv)
 
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 	if (ioctl(ifs, SIOCSIFMETRIC, (caddr_t)&ifr) < 0)
-		perror("% intmetric: SIOCSIFMETRIC");
+		printf("%% intmetric: SIOCSIFMETRIC: %s\n", strerror(errno));
 
 	return(0);
 }
@@ -725,9 +728,11 @@ intvlan(char *ifname, int ifs, int argc, char **argv)
 
 	if (ioctl(ifs, SIOCGETVLAN, (caddr_t)&ifr) == -1) {
 		if (errno == EINVAL)
-			printf("%% This interface does not support vlan tagging\n");
+			printf("%% This interface does not support vlan"
+			    " tagging\n");
 		else
-			perror("% intvlan: SIOCGETVLAN");
+			printf("%% intvlan: SIOCGETVLAN: %s\n",
+			    strerror(errno));
 		return(0);
 	}
 
@@ -749,9 +754,11 @@ intvlan(char *ifname, int ifs, int argc, char **argv)
 
 	if (ioctl(ifs, SIOCSETVLAN, (caddr_t)&ifr) == -1) {
 		if (errno == EBUSY) {
-			printf("%% Please disconnect the current vlan parent before setting a new one\n");
+			printf("%% Please disconnect the current vlan parent"
+			    " before setting a new one\n");
 		} else {
-			perror("% intvlan: SIOCSETVLAN");
+			printf("%% intvlan: SIOCSETVLAN: %s\n",
+			    strerror(errno));
 		}
 	}
 
@@ -910,7 +917,7 @@ intnwid(char *ifname, int ifs, int argc, char **argv)
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 
 	if (ioctl(ifs, SIOCS80211NWID, (caddr_t)&ifr) < 0)
-		perror("% intnwid: SIOCS80211NWID");
+		printf("%% intnwid: SIOCS80211NWID: %s\n", strerror(errno));
 
 	return(0);
 }
@@ -939,7 +946,8 @@ intpowersave(char *ifname, int ifs, int argc, char **argv)
 	strlcpy(power.i_name, ifname, sizeof(power.i_name));
 
 	if (ioctl(ifs, SIOCG80211POWER, (caddr_t)&power) == -1) {
-		perror("% intpowersave: SIOCG80211POWER");
+		printf("%% intpowersave: SIOCG80211POWER: %s\n",
+		    strerror(errno));
 		return(0);
 	}
 
@@ -950,7 +958,8 @@ intpowersave(char *ifname, int ifs, int argc, char **argv)
 	power.i_enabled = set;
 
 	if (ioctl(ifs, SIOCS80211POWER, (caddr_t)&power) == -1) {
-		perror("% intpowersave: SIOCS80211POWER");
+		printf("%% intpowersave: SIOCS80211POWER: %s\n",
+		    strerror(errno));
 		return(0);
 	}
 

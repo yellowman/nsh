@@ -109,23 +109,25 @@ struct rtdump *getrtdump(int s)
 	mib[5] = 0;	/* no flags */
 
 	if (sysctl(mib, 6, NULL, &needed, NULL, 0) < 0) {
-		perror("% getrtdump: unable to get estimate");
+		printf("%% getrtdump: unable to get estimate: %s\n",
+		    strerror(errno));
 		return(NULL);
 	}
 
 	if ((rtdump = malloc(sizeof(struct rtdump))) == NULL) {
-		perror("% getrtdump: rtdump malloc");
+		printf("%% getrtdump: rtdump malloc: %s\n", strerror(errno));
 		return(NULL);
 	}
 
 	if (needed) {
 		if ((rtdump->buf = malloc(needed)) == NULL) {
-			perror("% getrtdump: malloc");
+			printf("%% getrtdump: malloc: %s\n", strerror(errno));
 			free(rtdump);
 			return(NULL);
 		}
 		if (sysctl(mib, 6, rtdump->buf, &needed, NULL, 0) < 0) {
-			perror("% getrtdump: unable to get routing table");
+			printf("%% getrtdump: sysctl routing table: %s\n",
+			    strerror(errno));
 			freertdump(rtdump);
 			return(NULL);
 		}
@@ -162,7 +164,8 @@ flushroutes(int af, int af2)
 
 	s = socket(PF_ROUTE, SOCK_RAW, 0);
 	if (s < 0) {
-		perror("% Unable to open routing socket");
+		printf("%% Unable to open routing socket: %s\n",
+		    strerror(errno));
 		return;
 	}
 
@@ -204,7 +207,8 @@ flushroutes(int af, int af2)
 		rtm->rtm_seq = seqno;
 		rlen = write(s, next, rtm->rtm_msglen);
 		if (rlen < (int)rtm->rtm_msglen) {
-			perror("% Unable to write to routing socket");
+			printf("%% Unable to write to routing socket: %s\n",
+			    strerror(errno));
 			break;
 		}
 		seqno++;
@@ -366,7 +370,7 @@ prefixlen(s)
 
 	rtm_addrs |= RTA_NETMASK;
 	if (len < -1 || len > 129) {
-		(void) fprintf(stderr, "%s: bad value\n", s);
+		printf("%% prefixlen: %s: bad value\n", s);
 		exit(1);
 	}
 
@@ -392,7 +396,8 @@ monitor()
 
 	s = socket(PF_ROUTE, SOCK_RAW, 0);
 	if (s < 0) {
-		perror("% Unable to open routing socket");
+		printf("%% Unable to open routing socket: %s\n",
+		    strerror(errno));
 		return 1;
 	}
 	saveverbose = verbose;
@@ -503,12 +508,11 @@ print_getmsg(rtm, msglen)
 	(void) printf("%% route lookup for: %s\n", routename_sa(&so_dst.sa));
 #endif
 	if (rtm->rtm_msglen > msglen) {
-		(void)fprintf(stderr,
-		    "%% message length mismatch, in packet %d, returned %d\n",
-		    rtm->rtm_msglen, msglen);
+		printf("%% message length mismatch, in packet %d,"
+		    " returned %d\n", rtm->rtm_msglen, msglen);
 	}
 	if (rtm->rtm_errno)  {
-		(void) fprintf(stderr, "%% RTM_GET: %s (errno %d)\n",
+		(void) printf("%% RTM_GET: %s (errno %d)\n", 
 		    strerror(rtm->rtm_errno), rtm->rtm_errno);
 		return;
 	}
@@ -745,7 +749,7 @@ ip_route(ip_t *dest, ip_t *gate, u_short cmd)
 			printf("%% Unable to find route: %s\n",
 			    inet_ntoa(dest->addr.sin));
 		else
-			perror("% ip_route: rtmsg");
+			printf("%% ip_route: rtmsg: %s\n", strerror(errno));
 	}
 	return(0);
 }
@@ -766,7 +770,8 @@ rtmsg(cmd, flags)
 
 	s = socket(PF_ROUTE, SOCK_RAW, 0);
 	if (s < 0) {
-		perror("% Unable to open routing socket");
+		printf("%% Unable to open routing socket: %s\n",
+		    strerror(errno));
 		return(1);
 	}
 
@@ -806,8 +811,7 @@ rtmsg(cmd, flags)
 		} while (l > 0 && (rtm.rtm_seq != seq || rtm.rtm_pid != pid));
 		if (l < 0)
 			/* on a get we notify the user */
-			(void) fprintf(stderr,
-			    "%% rtmsg: read from routing socket: %s\n",
+			printf("%% rtmsg: read from routing socket: %s\n",
 			    strerror(errno));
 		else
 			print_getmsg(&rtm, l);

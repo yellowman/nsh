@@ -47,7 +47,7 @@ kread(addr, buf, size)
 {
 
 	if (kvm_read(kvmd, addr, buf, size) != size) {
-		(void) fprintf(stderr, "%% kread: %s\n", kvm_geterr(kvmd));
+		printf("%% kread: %s\n", kvm_geterr(kvmd));
 		return (-1);
 	}
 	return (0);

@@ -50,7 +50,7 @@
 #include <net/if.h>
 #include <net/if_media.h>
 #include <netinet/in.h>
-#include <sys/errno.h>
+#include <errno.h>
 #include <netdb.h>
 #include "externs.h"
 
@@ -191,7 +191,8 @@ process_media_commands(int s, char *name, int media_current)
 	ifr.ifr_media = media_current;
 
 	if (ioctl(s, SIOCSIFMEDIA, (caddr_t)&ifr) < 0)
-		perror("% process_media_commands: SIOCSIFMEDIA");
+		printf("%% process_media_commands: SIOCSIFMEDIA: %s\n",
+		    strerror(errno));
 }
 
 int
@@ -209,7 +210,8 @@ init_current_media(int s, char *ifname)
 		 * that there are more, so we can ignore it.
 		 */
 		if (errno != E2BIG) {
-			perror("% init_current_media: SIOCGIFMEDIA");
+			printf("%% init_current_media: SIOCGIFMEDIA: %s\n",
+			    strerror(errno));
 			return(-1);
 		}
 	}
@@ -280,7 +282,7 @@ get_media_options(type, val)
 	/* We muck with the string, so copy it. */
 	optlist = (char *)strdup(val);
 	if (optlist == NULL) {
-		perror("%% get_media_options: strdup");
+		printf("%% get_media_options: strdup: %s\n", strerror(errno));
 		return(-1);
 	}
 	str = optlist;
@@ -417,7 +419,8 @@ conf_media_status(FILE *output, int s, char *ifname)
 
 	if (ioctl(s, SIOCGIFMEDIA, (caddr_t)&ifmr) < 0) {
 		if (errno != EINVAL)
-			perror("% conf_media_status: SIOCGIFMEDIA");
+			printf("%% conf_media_status: SIOCGIFMEDIA: %s\n",
+			    strerror(errno));
 		return(0);
 	}
 
@@ -426,13 +429,14 @@ conf_media_status(FILE *output, int s, char *ifname)
 
 	media_list = (int *)malloc(ifmr.ifm_count * sizeof(int));
 	if (media_list == NULL) {
-		perror("% conf_media_status: malloc");
+		printf("%% conf_media_status: malloc: %s\n", strerror(errno));
 		return(0);
 	}
 	ifmr.ifm_ulist = media_list;
 
 	if (ioctl(s, SIOCGIFMEDIA, (caddr_t)&ifmr) < 0) {
-		perror("% conf_media_status: SIOCGIFMEDIA");
+		printf("%% conf_media_status: SIOCGIFMEDIA: %s\n",
+		    strerror(errno));
 		free(media_list);
 		return(0);
 	}
@@ -458,7 +462,8 @@ media_status(int s, char *ifname, char *delim)
 
 	if (ioctl(s, SIOCGIFMEDIA, (caddr_t)&ifmr) < 0) {
 		if (errno != EINVAL)
-			perror("% media_status: SIOCGIFMEDIA");
+			printf("%% media_status: SIOCGIFMEDIA: %s\n",
+			    strerror(errno));
 		return;
 	}
 
@@ -470,13 +475,13 @@ media_status(int s, char *ifname, char *delim)
 
 	media_list = (int *)malloc(ifmr.ifm_count * sizeof(int));
 	if (media_list == NULL) {
-		perror("% media_status: malloc");
+		printf("%% media_status: malloc: %s\n", strerror(errno));
 		return;
 	}
 	ifmr.ifm_ulist = media_list;
 
 	if (ioctl(s, SIOCGIFMEDIA, (caddr_t)&ifmr) < 0) {
-		perror("% media_status: SIOCGIFMEDIA");
+		printf("%% media_status: SIOCGIFMEDIA: %s\n", strerror(errno));
 		free(media_list);
 		return;
 	}
@@ -537,13 +542,14 @@ media_supported(int s, char *ifname, char *hdr_delim, char *body_delim)
 
 	if (ioctl(s, SIOCGIFMEDIA, (caddr_t)&ifmr) < 0) {
 		if (errno != EINVAL)
-			perror("% media_supported: SIOCGIFMEDIA");
+			printf("%% media_supported: SIOCGIFMEDIA: %s\n",
+			    strerror(errno));
 		return;
 	}
 
 	media_list = (int *)malloc(ifmr.ifm_count * sizeof(int));
 	if (media_list == NULL) {
-		perror("% media_status: malloc");
+		printf("%% media_status: malloc: %s\n", strerror(errno));
 		return;
 	}
 	ifmr.ifm_ulist = media_list;

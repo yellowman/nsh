@@ -38,7 +38,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
-#include <err.h>
+#include <errno.h>
 
 #include <altq/altq.h>
 
@@ -58,7 +58,6 @@ int
 intrate(char *ifname, int argc, char **argv)
 {
 	struct tbrreq req;
-	char buf[256];
 	u_int baudrate, rate = 0, depth = 0;
 	int fd, delete = 0;
 
@@ -120,14 +119,14 @@ intrate(char *ifname, int argc, char **argv)
 		req.tb_prof.depth = depth;
 
 		if ((fd = open(ALTQ_DEVICE, O_RDWR)) < 0) {
-			perror("% rate: can't open altq device");
+			printf("%% rate: can't open altq device: %s\n",
+			    strerror(errno));
 			return(1);
 		}
 
 		if (ioctl(fd, ALTQTBRSET, &req) < 0) {
-			snprintf(buf, sizeof(buf),
-			    "%% rate: ALTQTBRSET for interface %s", req.ifname);
-			perror(buf);
+			printf("%% rate: ALTQTBRSET for interface %s: %s\n",
+			    req.ifname, strerror(errno));
 			close(fd);
 			return(0);
 		}
@@ -154,7 +153,8 @@ get_tbr(char *ifname, int type)
 	int fd;
 
 	if ((fd = open(ALTQ_DEVICE, O_RDONLY)) < 0) {
-		perror("% get_rate: can't open altq device");
+		printf("%% get_rate: can't open altq device: %s\n",
+		    strerror(errno));
 		return(0);
 	}
 
@@ -265,7 +265,8 @@ get_clockfreq(void)
 	mib[1] = KERN_CLOCKRATE;
 	len = sizeof(struct clockinfo);
 	if (sysctl(mib, 2, &clkinfo, &len, NULL, 0) == -1)
-		printf("%% get_clockfreq: can't get clockrate via sysctl! using %dHz\n",
+		printf("%% get_clockfreq: can't get clockrate via sysctl!"
+		    " using %dHz\n",
 		    clkinfo.hz);
 	return (clkinfo.hz);
 }

@@ -471,7 +471,7 @@ interface(int argc, char **argv, char *modhvar)
 
 	ifs = socket(AF_INET, SOCK_DGRAM, 0);
 	if (ifs < 0) {
-		perror("% socket");
+		printf("%% socket failed: %s\n", strerror(errno));
 		return(1);
 	}
 
@@ -635,7 +635,7 @@ pf(int argc, char **argv, char *modhvar)
 	if (CMP_ARG(modhvar, "rules")) {
 		rulefile = fopen(PFCONF_TEMP, "a");
 		if (rulefile == NULL) {
-			perror("%% Rule write failed");
+			printf("%% Rule write failed: %s\n", strerror(errno));
 			return(1);
 		}
 		for (z = 0; z < argc; z++)
@@ -946,10 +946,10 @@ hostname(argc, argv)
 
 	if (argc == 1) {
 		if (sethostname(*argv, strlen(*argv)))
-			perror("% sethostname");
+			printf("%% sethostname: %s\n", strerror(errno));
 	} else {
 		if (gethostname(hbuf, sizeof(hbuf)))
-			perror("% gethostname");
+			printf("%% gethostname: %s\n", strerror(errno));
 		printf("%% %s\n", hbuf);
         }
 	return 0;
@@ -965,7 +965,7 @@ shell(argc, argv)
 {
  	switch(vfork()) {
 		case -1:
-			perror("% Fork failed");
+			printf("%% fork failed: %s\n", strerror(errno));
 			break;
 
 		case 0:
@@ -980,7 +980,7 @@ shell(argc, argv)
 				execl(shellp, shellname, "-c", &saveline[1], (char *)NULL);
 			else
 				execl(shellp, shellname, (char *)NULL);
-			perror("% Execl");
+			printf("%% execl failed: %s\n", strerror(errno));
 			exit(0);
 		}
 		default:
@@ -1000,7 +1000,7 @@ cmdarg(cmd, arg)
 {
 	switch(vfork()) {
 		case -1:
-			perror("% Fork failed");
+			printf("%% fork failed: %s\n", strerror(errno));
 			break;
 
 		case 0:
@@ -1009,7 +1009,7 @@ cmdarg(cmd, arg)
 			char *shellname = shellp = cmd;
 
 			execl(shellp, shellname, arg, (char *)NULL);
-			perror("% Execl");
+			printf("%% execl failed: %s\n", strerror(errno));
 			exit(0);
 		}
 		default:
@@ -1417,7 +1417,8 @@ wr_conf(void)
 		printf("%% Saving configuration\n");
 		conf(rchandle);
 	} else {
-		perror("% Unable to save configuration");
+		printf("%% Unable to save configuration: %s\n",
+		    strerror(errno));
 	}
 	fclose(rchandle);
 

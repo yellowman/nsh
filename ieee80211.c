@@ -73,6 +73,7 @@
 #include <ctype.h>
 #include <string.h>
 #include <unistd.h>
+#include <errno.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
 #include <net/if.h>
@@ -249,7 +250,7 @@ set_nwkey:
 	}
 	(void) strlcpy(nwkey.i_name, ifname, sizeof(nwkey.i_name));
 	if (ioctl(ifs, SIOCS80211NWKEY, (caddr_t)&nwkey) == -1)
-		perror("% intnwkey: SIOCS80211NWKEY");
+		printf("%% intnwkey: SIOCS80211NWKEY: %s\n", strerror(errno));
 	return(0);
 }
 
@@ -262,7 +263,8 @@ get_nwpowersave(int ifs, char *ifname)
 	strlcpy(power.i_name, ifname, sizeof(power.i_name));
 
 	if (ioctl(ifs, SIOCG80211POWER, &power) == -1) {
-		perror("% get_nwpowersave: SIOCG80211POWER");
+		printf("%% get_nwpowersave: SIOCG80211POWER: %s\n",
+		    strerror(errno));
 		return(NULL);
 	}
 	if (!power.i_enabled)
@@ -281,7 +283,7 @@ get_nwinfo(char *ifname, char *str, int str_len, int type)
 
 	ifs = socket(AF_INET, SOCK_DGRAM, 0);
 	if (ifs < 0) {
-		perror("% get_nwinfo: socket");
+		printf("%% get_nwinfo: socket: %s\n", strerror(errno));
 		return(NULL);
         }
 

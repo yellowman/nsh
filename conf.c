@@ -82,11 +82,11 @@ conf(FILE *output)
 	char rate_str[64], bucket_str[64], tmp_str[4096], tmp_str2[1024];
 
 	if ((ifn_list = if_nameindex()) == NULL) {
-		fprintf(stderr, "%% conf: if_nameindex failed\n");
+		printf("%% conf: if_nameindex failed\n");
 		return(1);
 	}
 	if ((ifs = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-		perror("% conf");
+		printf("%% conf socket: %s\n", strerror(errno));
 		return(1);
 	}
 
@@ -98,14 +98,14 @@ conf(FILE *output)
 		strncpy(ifr.ifr_name, ifnp->if_name, sizeof(ifr.ifr_name));
 
 		if (ioctl(ifs, SIOCGIFFLAGS, (caddr_t)&ifr) < 0) {
-			perror("% save: SIOCGIFFLAGS");
+			printf("%% conf: SIOCGIFFLAGS: %s\n", strerror(errno));
 			continue;
 		}
 		flags = ifr.ifr_flags;
 
 		ifr.ifr_data = (caddr_t)&if_data;
 		if (ioctl(ifs, SIOCGIFDATA, (caddr_t)&ifr) < 0) {
-			perror("% save: SIOCGIFDATA");
+			printf("%% save: SIOCGIFDATA: %s\n", strerror(errno));
 			continue;
 		}
 
@@ -149,7 +149,8 @@ conf(FILE *output)
 			if (errno == EADDRNOTAVAIL) {
 				noaddr = 1;
 			} else {
-				perror("% save: SIOCGIFADDR");
+				printf("%% save: SIOCGIFADDR: %s\n",
+				    strerror(errno));
 				continue;
 			}
 		} else {
@@ -164,7 +165,8 @@ conf(FILE *output)
 		if (!br && !noaddr) { /* have an ip? not a bridge? no problem */
 			if (ioctl(ifs, SIOCGIFNETMASK, (caddr_t)&ifr) < 0) {
 				/* EADDRNOTAVAIL should not happen here */
-					perror("% save: SIOCGIFNETMASK");
+					printf("%% save: SIOCGIFNETMASK: %s\n",
+					    strerror(errno));
 					continue;
 				}
 			sin2.sin_addr =
@@ -179,8 +181,9 @@ conf(FILE *output)
 				if (ioctl(ifs, SIOCGIFDSTADDR, (caddr_t)&ifr)
 				    < 0) {
 					if (errno != EADDRNOTAVAIL) {
-						perror(
-						    "% save: SIOCGIFDSTADDR");
+						printf("%% conf: "
+						    "SIOCGIFDSTADDR: %s\n",
+						    strerror(errno));
 						continue;
 					} else
 						noaddr = 1;
@@ -196,7 +199,8 @@ conf(FILE *output)
 				if (ioctl(ifs, SIOCGIFBRDADDR, (caddr_t)&ifr)
 				    < 0) {
 				/* EADDRNOTAVAIL should not happen here */
-					perror("% save: SIOCGIFBRDADDR");
+					printf("%% conf: SIOCGIFBRDADDR: %s\n",
+					    strerror(errno));
 					continue;
 				}
 				sin3.sin_addr =
@@ -379,7 +383,7 @@ conf(FILE *output)
 		fclose(pfconf);
 		fprintf(output, "pf action\n enable\n reload\n");
 	} else if (verbose)
-		perror("% PFCONF_TEMP");
+		printf("%% PFCONF_TEMP: %s\n", strerror(errno));
 
 	return(0);
 }
@@ -410,7 +414,8 @@ conf_routes(FILE *output, char *delim, int af, int flags)
 
 	s = socket(PF_ROUTE, SOCK_RAW, 0);
 	if (s < 0) {
-		perror("% Unable to open routing socket");
+		printf("%% Unable to open routing socket: %s\n",
+		    strerror(errno));
 		return(-1);
 	}
 
@@ -429,7 +434,7 @@ conf_routes(FILE *output, char *delim, int af, int flags)
 			if (rtm->rtm_addrs)
 				conf_print_rtm(output, rtm, delim, af);
 		} else if (verbose)
-			fprintf(stderr, "%% conf_routes: rtm: %s (errno %d)\n",
+			printf("%% conf_routes: rtm: %s (errno %d)\n",
 			    strerror(rtm->rtm_errno), rtm->rtm_errno);
 	}
 	freertdump(rtdump);

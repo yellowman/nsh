@@ -660,7 +660,7 @@ netname6(sa6, mask)
 		return("default");
 
 	if (illegal)
-		fprintf(stderr, "illegal prefixlen\n");
+		printf("%% illegal prefixlen\n");
 
 	flag |= NI_NUMERICHOST;
 	error = getnameinfo((struct sockaddr *)&sin6, sin6.sin6_len,

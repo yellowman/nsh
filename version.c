@@ -27,6 +27,8 @@
 #include <stdio.h>
 #include <ctype.h>
 #include <tzfile.h>
+#include <errno.h>
+#include <string.h>
 #include <sys/param.h>
 #include <sys/sysctl.h>
 #include <sys/utsname.h>
@@ -49,32 +51,32 @@ version(void)
 	mib[1] = HW_PHYSMEM;
 	len = sizeof(physmem);
 	if (sysctl(mib, 2, &physmem, &len, NULL, 0) == -1) {
-		perror("% HW_PHYSMEM");
+		printf("%% HW_PHYSMEM: %s\n", strerror(errno));
 		return(1);
 	}
 	mib[0] = CTL_HW;
 	mib[1] = HW_MODEL;
 	len = sizeof(cpubuf);
 	if (sysctl(mib, 2, &cpubuf, &len, NULL, 0) == -1) {
-		perror("% HW_MODEL");
+		printf("%% HW_MODEL: %s\n", strerror(errno));
 		return(1);
 	}
 	mib[0] = CTL_KERN;
 	mib[1] = KERN_BOOTTIME;
 	len = sizeof(boottime);
 	if (sysctl(mib, 2, &boottime, &len, NULL, 0) == -1) {
-		perror("% KERN_BOOTTIME");
+		printf("%% KERN_BOOTTIME: %s\n", strerror(errno));
 		return(1);
 	}
 	mib[0] = CTL_KERN;
 	mib[1] = KERN_VERSION;
 	len = sizeof(kernver);
 	if (sysctl(mib, 2, &kernver, &len, NULL, 0) == -1) {
-		perror("% KERN_VERSION");
+		printf("%% KERN_VERSION: %s\n", strerror(errno));
 		return(1);
 	}
 	if (uname(&un)) {
-		perror("% uname");
+		printf("%% uname: %s\n", strerror(errno));
 		return(1);
 	}
 	gettimeofday(&tv, (struct timezone *)0);

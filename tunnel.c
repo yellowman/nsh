@@ -88,7 +88,8 @@ settunnel(int s, char *ifname, char *src, char *dst)
 			printf("%% tunnel cannot be used on %s interface\n",
 			    ifname);
 		else
-			perror("% settunnel: SIOCSLIFPHYADDR");
+			printf("%% settunnel: SIOCSLIFPHYADDR: %s\n",
+			    strerror(errno));
 	}
 
  end:
@@ -105,7 +106,8 @@ deletetunnel(int s, char *ifname)
 	strlcpy(ifr.ifr_name, ifname, IFNAMSIZ);
 
 	if (ioctl(s, SIOCDIFPHYADDR, &ifr) < 0) {
-		perror("% deletetunnel: SIOCDIFPHYADDR");
+		printf("%% deletetunnel: SIOCDIFPHYADDR: %s\n",
+		    strerror(errno));
 		return(0);
 	}
 	return(1);
