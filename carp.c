@@ -112,10 +112,9 @@ intcarp(char *ifname, int ifs, int argc, char **argv)
 			creq.carpr_advbase = CARP_DFLTINTV;
 		break;
 	case CARP_VHID:
-		if(set) {
+		if(set)
 			creq.carpr_vhid = (int)val;
-			set_ifflag(ifs, ifname, IFF_RUNNING);
-		} else
+		else
 			creq.carpr_vhid = -1;
 		break;
 	}
