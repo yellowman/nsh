@@ -79,6 +79,8 @@
 
 char *mylink_ntoa(const struct sockaddr_dl *);
 
+struct radix_node_head *rt_tables[AF_MAX+1];
+
 /*
  * Definitions for showing gateway flags.
  */
