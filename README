@@ -30,9 +30,9 @@ nsh handles the following functions:
   to escape to bourne shell (for now anyways..)
 
 >> Contributors:
-   * Jose Nazario <jose@monkey.org> contributed command functions for
-     reboot, shutdown, writing the config out, and some fixes to the
-     config generator
+   * Jose Nazario <jose@monkey.org> contributed command functions from the
+     OpenSoekris project for reboot, shutdown, writing the config out, 
+     and some fixes to the config generator. 
 
 >> See TODO for details on implementation status and future ideas.
 
