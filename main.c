@@ -35,7 +35,7 @@
 
 void usage(void);
 
-char *vers = "20020521";
+char *vers = "20020531";
 int verbose = 0;		/* verbose mode */
 int editing;			/* command line editing enabled ? */
 

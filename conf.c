@@ -56,16 +56,16 @@ conf(FILE *output)
 	in_addr_t mask;
 	int ifs, mbits, flags;
 	int noaddr;
-
 	u_long rate, bucket;
-	char rate_str[64], bucket_str[64];
+
+	char rate_str[64], bucket_str[64], nw_str[128];
 
 	if ((ifn_list = if_nameindex()) == NULL) {
-		fprintf(output, "%% save: if_nameindex failed\n");
+		fprintf(stderr, "%% conf: if_nameindex failed\n");
 		return(1);
 	}
 	if ((ifs = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-		perror("% save");
+		perror("% conf");
 		return(1);
 	}
 
@@ -122,28 +122,18 @@ conf(FILE *output)
 			mask = ntohl(sin2.sin_addr.s_addr);
 			mbits = mask ? 33 - ffs(mask) : 0;
 
-			fprintf(output, " ip %s/%i\n", inet_ntoa(sin.sin_addr), mbits);
+			fprintf(output, " ip %s/%i\n", inet_ntoa(sin.sin_addr),
+			    mbits);
 		}
 
 		/*
-		 * print interface mtu
+		 * print interface mtu, metric
 		 */
 		if(if_mtu != default_mtu(ifnp->if_name))
 			fprintf(output, " mtu %li\n", if_mtu);
-		if(if_metric > 0)
+		if(if_metric)
 			fprintf(output, " metric %li\n", if_metric);
-		if(flags & IFF_LINK0 || flags & IFF_LINK1 ||
-		    flags & IFF_LINK2) {
-			fprintf(output, " link ");
-			if(flags & IFF_LINK0)
-				fprintf(output, "0 ");
-			if(flags & IFF_LINK1)
-				fprintf(output, "1 ");
-			if(flags & IFF_LINK2)
-				fprintf(output, "2 ");
-			fprintf(output, "\n");
-		}
- 
+
 		/*
 		 * print rate if available, print bucket value only if
 		 * it is not equivalent to the default value.  we try
@@ -190,13 +180,34 @@ conf(FILE *output)
 				    vreq.vlr_parent);
 		}
 
+		if (get_nwinfo(ifnp->if_name, nw_str, sizeof(nw_str), NWID)
+		    != NULL)
+			fprintf(output, " nwid %s\n", nw_str);
+		if (get_nwinfo(ifnp->if_name, nw_str, sizeof(nw_str), NWKEY)
+		    != NULL)
+			fprintf(output, " nwkey %s\n", nw_str);
+
 		/*
 		 * print various flags
 		 */
 		if (flags & IFF_DEBUG)
 			fprintf(output, " debug\n");
+		if(flags & IFF_LINK0 || flags & IFF_LINK1 ||
+		    flags & IFF_LINK2) {
+			fprintf(output, " link ");
+			if(flags & IFF_LINK0)
+				fprintf(output, "0 ");
+			if(flags & IFF_LINK1)
+				fprintf(output, "1 ");
+			if(flags & IFF_LINK2)
+				fprintf(output, "2");
+			fprintf(output, "\n");
+		}
+		if(flags & IFF_NOARP)
+			fprintf(output, " no arp\n");
 		if (!(flags & IFF_UP))
 			fprintf(output, " shutdown\n");
+
         }
 	close(ifs);
 	if_freenameindex(ifn_list);

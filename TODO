@@ -1,10 +1,15 @@
 This it is a work in progress, future versions will be released which
-implement much of the following:
+implement much of the following (of course, diffs are welcome):
 
 Cleanup:
 
 * Finish up externs.h 
-* Factor out common code
+* Factor out common code, restructure, rewrite a few things after I have an
+  idea of what the big picture looks like
+* Check more errno values in various places for common mistakes and print out
+  the error in "plain english" instead of kernel/library jargon
+* More security auditing for string handling, off-by-one errors, and other
+  problems
 * ...
 
 Required for intended functionality:
@@ -30,7 +35,7 @@ Cute features:
 
 * Perhaps some way for the shell to upgrade itself when given a network source
   for a new binary? 
-* Hooks for a web interface?
+* Hooks for a web interface? Does this even make sense?
 * Add more diagnostic messages for verbose output where useful
 * Can we hook into snmpd at all or just run it separately on the same box?
 * Do we build in a simple ping, traceroute or just shell out for these??
@@ -43,7 +48,7 @@ Cute features:
 
 Future:
 
-* BGP, OSPF?? Steal from gated(BSDlic)? Or hooks to integrate zebra(GPL)?
+* BGP, OSPF?? Hooks to integrate zebra(GPL)/gated(BSDlic)/mrtd(BSDlic)/???
 * IPv6?? (shouldn't be hard, considering that most of the functions
   we stole from other source already support it)
 * IPsec! Configure VPNs with simple CLI commands-isakmpd has a fifo interface
@@ -51,3 +56,38 @@ Future:
 * IPIP/GRE?? Other tunnels??
 * IPX?? AppleTalk??
 
+Known Bugs (or, things that I would rather not think about right now, but
+better not forget later...):
+
+* Is it possible to properly implement a 'no nwid' command or should this be
+  removed? (It currently does not work in nsh, anyways ifconfig cannot do
+  this, and in any event the kernel does not appear to be able to remove
+  this setting from a card!)
+* Need some kind of sanity checking for nwid variable, 'nwid ""' will cause
+  if_wi to stop responding properly.  Unsure of what is and isn't sane for
+  nwid values.
+* When 'no nwid' is used, a following 'show run' exposes other bugs in
+  make_string()
+* The 3.1 kernel does not keep count of information displayed in 'show rtstat'
+  properly (what else??)
+* We need to mask the rounding error for altq tbr 'rate' value
+
+  The error can be demonstrated with the test program at
+  ftp://dqc.org/pub/nsh/tbrtest.c
+
+  From Kenjiro Cho:
+  "The rate is scaled by the clock frequency within the kernel.
+  So, you see a rounding error when you set and get the rate.  
+
+  When you set the rate, the internal rate is computed as:
+
+        u_int64_t internal_rate = ((rate / 8) << 32) / clock_freq;
+
+  When you get the rate, the rate is re-computed as:
+
+        u_int rate = (internal_rate * 8 * clock_freq) >> 32;
+ 
+  One way to mask the rounding error is to convert the value to a
+  floating value, round off the mantissa, and convert it back to an
+  integer."
+* ...

@@ -33,6 +33,14 @@ int load_nlist(void);
 char *iprompt(void);
 char *cprompt(void);
 
+/* ieee80211.c */
+#define NWID 0
+#define NWKEY 1
+const char *get_string(const char *, const char *, u_int8_t *, int *);
+int get_nwinfo(const char *, char *, int, int);
+void make_string(char *str, int, const u_int8_t *buf, int);
+int intnwkey(const char *, int, char **);
+
 /* stats.c */
 void rt_stats(u_long);
 void tcp_stats(u_long);
@@ -88,6 +96,8 @@ int intmtu(const char *, int, char **);
 int intmetric(const char *, int, char **);
 int intflags(const char *, int, char **);
 int intlink(const char *, int, char **);
+int intnwid(const char *, int, char **);
+int intpowersave(const char *, int, char **);
 
 /* version.c */
 int version(void);

@@ -39,6 +39,7 @@
 #include <net/if_types.h>
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
+#include <net/if_ieee80211.h>
 #include <net/if_vlan_var.h>
 #include <arpa/inet.h>
 #include <limits.h>
@@ -123,98 +124,98 @@ show_int(const char *ifname)
 	 * Display interface type
 	 */
 	switch(if_type) {
-		/*
-		 * Here we include all types that are used anywhere
-		 * in the 3.0 kernel.
-		 */
-		/* OpenBSD */
-		case IFT_PFLOG:
-			type = "Packet Filter Logging";
-			break;
-		case IFT_ENC:
-			type = "IPsec Loopback";
-			break;
-		case IFT_GIF:
-			type = "Generic Tunnel";
-			break;
-		case IFT_FAITH:
-			type = "IPv6-IPv4 TCP relay";
-			break;
-		case IFT_BRIDGE:
-			type = "Ethernet Bridge";
-			break;
-		/* IANA */
-		case IFT_ISO88025:
-			type = "Token Ring";
-			break;
-		case IFT_EON:
-			type = "ISO over IP";
-			break;
-		case IFT_NSIP:
-			type = "XNS over IP";
-			break;
-		case IFT_X25DDN:
-			type = "X.25 to IMP";
-			break;
-		case IFT_ATMDXI:
-		case IFT_ATMFUNI:
-		case IFT_ATMIMA:
-		case IFT_ATMLOGICAL:
-		case IFT_ATMVIRTUAL:
-			type = "ATM Virtual";
-			break;
-		case IFT_ATM:
-			type = "ATM";
-			break;
-		case IFT_FDDI:
-			type = "FDDI";
-			break;
-		case IFT_ETHER:
-			type = "Ethernet";
-			break;
-		case IFT_ARCNET:
-			type = "ARCNET";
-			break;
-		case IFT_HDLC:
-			type = "HDLC";
-			break;
-		case IFT_L2VLAN:
-			type = "IEEE 802.1Q Virtual";
-			break;
-		case IFT_PROPVIRTUAL:
-			type = "Virtual";
-			break;
-		case IFT_PPP:
-			type = "PPP";
-			break;
-		case IFT_SLIP:
-			type = "SLIP";
-			break;
-		case IFT_LOOP:
-			type = "Loopback";
-			break;
-		case IFT_ISDNS:
-		case IFT_ISDNU:
-		case IFT_ISDNBASIC:
-		case IFT_ISDNPRIMARY:
-			type = "ISDN";
-			break;
-		case IFT_V35:
-			type = "V.35";
-			break;
-		case IFT_HSSI:
-			type = "HSSI";
-			break;
-		case IFT_TUNNEL:
-			type = "Network Tunnel";
-			break;
-		case IFT_IEEE80211:
-			type = "IEEE 802.11 Wireless";
-			break;
-		case IFT_OTHER:
-		default:
-			type = "Unknown";
-			break;
+	/*
+	 * Here we include all types that are used anywhere
+	 * in the 3.0 kernel.
+	 */
+	/* OpenBSD */
+	case IFT_PFLOG:
+		type = "Packet Filter Logging";
+		break;
+	case IFT_ENC:
+		type = "IPsec Loopback";
+		break;
+	case IFT_GIF:
+		type = "Generic Tunnel";
+		break;
+	case IFT_FAITH:
+		type = "IPv6-IPv4 TCP relay";
+		break;
+	case IFT_BRIDGE:
+		type = "Ethernet Bridge";
+		break;
+	/* IANA */
+	case IFT_ISO88025:
+		type = "Token Ring";
+		break;
+	case IFT_EON:
+		type = "ISO over IP";
+		break;
+	case IFT_NSIP:
+		type = "XNS over IP";
+		break;
+	case IFT_X25DDN:
+		type = "X.25 to IMP";
+		break;
+	case IFT_ATMDXI:
+	case IFT_ATMFUNI:
+	case IFT_ATMIMA:
+	case IFT_ATMLOGICAL:
+	case IFT_ATMVIRTUAL:
+		type = "ATM Virtual";
+		break;
+	case IFT_ATM:
+		type = "ATM";
+		break;
+	case IFT_FDDI:
+		type = "FDDI";
+		break;
+	case IFT_ETHER:
+		type = "Ethernet";
+		break;
+	case IFT_ARCNET:
+		type = "ARCNET";
+		break;
+	case IFT_HDLC:
+		type = "HDLC";
+		break;
+	case IFT_L2VLAN:
+		type = "IEEE 802.1Q Virtual";
+		break;
+	case IFT_PROPVIRTUAL:
+		type = "Virtual";
+		break;
+	case IFT_PPP:
+		type = "PPP";
+		break;
+	case IFT_SLIP:
+		type = "SLIP";
+		break;
+	case IFT_LOOP:
+		type = "Loopback";
+		break;
+	case IFT_ISDNS:
+	case IFT_ISDNU:
+	case IFT_ISDNBASIC:
+	case IFT_ISDNPRIMARY:
+		type = "ISDN";
+		break;
+	case IFT_V35:
+		type = "V.35";
+		break;
+	case IFT_HSSI:
+		type = "HSSI";
+		break;
+	case IFT_TUNNEL:
+		type = "Network Tunnel";
+		break;
+	case IFT_IEEE80211:
+		type = "IEEE 802.11 Wireless";
+		break;
+	case IFT_OTHER:
+	default:
+		type = "Unknown";
+		break;
 	}
 	printf("  Interface type %s\n", type);
 
@@ -301,13 +302,13 @@ show_int(const char *ifname)
 	printf("  %lu packets output, %lu bytes, %lu errors, %lu unsupported\n",
 	    if_opackets, if_obytes, if_oerrors, if_noproto);
 	switch(if_type) {
-		case IFT_ETHER:
-		case IFT_SLIP:
-		case IFT_PROPVIRTUAL:
-			printf("  %lu collisions\n", if_collisions);
-			break;
-		default:
-			break;
+	case IFT_ETHER:
+	case IFT_SLIP:
+	case IFT_PROPVIRTUAL:
+		printf("  %lu collisions\n", if_collisions);
+		break;
+	default:
+		break;
 	}
 
 	if(verbose && flags) {
@@ -362,9 +363,7 @@ is_valid_ifname(const char *ifname)
 		return(0);
 	}
 	for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++) {
-		if ((strncasecmp(ifname, ifnp->if_name,
-		    strlen(ifnp->if_name)) == 0) && (strlen(ifname) ==
-		    strlen(ifnp->if_name)))
+		if (strcasecmp(ifname, ifnp->if_name) == 0)
 			count++;
 	}
 	if_freenameindex(ifn_list);
@@ -660,10 +659,13 @@ intflags(const char *ifname, int argc, char **argv)
 		set = 1;
 
 	if (strncasecmp(argv[0], "de", strlen("de")) == 0) {
+		/* debug */
 		value = IFF_DEBUG;
 	} else if (strncasecmp(argv[0], "sh", strlen("sh")) == 0) {
+		/* shutdown */
 		value = -IFF_UP;
 	} else if (strncasecmp(argv[0], "ar", strlen("ar")) == 0) {
+		/* arp */
 		value = -IFF_NOARP;
 	} else {
 		printf("%% intflags: Internal error\n");
@@ -736,12 +738,17 @@ intlink(const char *ifname, int argc, char **argv)
 		}
 
 		a = atoi(argv[i]);
-		if (a == 0)
+		switch(a) {
+		case 0:
 			value = IFF_LINK0;
-		if (a == 1)
+			break;
+		case 1:
 			value = IFF_LINK1;
-		if (a == 2)
+			break;
+		case 2:
 			value = IFF_LINK2;
+			break;
+		}
 
 		if (set)
 			flags |= value;
@@ -751,5 +758,105 @@ intlink(const char *ifname, int argc, char **argv)
 
 	set_ifflags(ifname, flags);
 
+	return(0);
+}
+
+int
+intnwid(const char *ifname, int argc, char **argv)
+{
+	struct ieee80211_nwid nwid;
+	struct ifreq ifr;
+	struct if_data if_data;
+	int ifs, set, len;
+
+	if (strncasecmp(argv[0], "no", strlen("no")) == 0) {
+		set = 0;
+		argv++;
+		argc--;
+	} else
+		set = 1;
+
+	argv++;
+	argc--;
+
+	if ((set && argc != 1) || (!set && argc > 1)) {
+		printf("%% nwid <nwid>\n");
+		printf("%% no nwid [nwid]\n");
+		return(0);
+	}
+
+	len = sizeof(nwid.i_nwid);
+
+	if (set) {
+		if (get_string(argv[0], NULL, nwid.i_nwid, &len) == NULL) {
+			printf("%% intnwid: bad input\n");
+			return(0);
+		}
+	} else
+		memset(&nwid, 0, sizeof(struct ieee80211_nwid));
+
+	nwid.i_len = len;
+	ifr.ifr_data = (caddr_t)&nwid;
+	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
+
+	ifs = socket(AF_INET, SOCK_DGRAM, 0);
+	if (ifs < 0) {
+		perror("% intnwid: socket");
+		return(1);
+	}
+	if (ioctl(ifs, SIOCS80211NWID, (caddr_t)&ifr) < 0)
+		perror("% intnwid: SIOCS80211NWID");
+
+	close(ifs);
+	return(0);
+}
+
+int
+intpowersave(const char *ifname, int argc, char **argv)
+{
+	struct ieee80211_power power;
+	int ifs, set;
+
+	if (strncasecmp(argv[0], "no", strlen("no")) == 0) {
+		set = 0;
+		argv++;
+		argc--;
+	} else
+		set = 1;
+
+	argv++;
+	argc--;
+
+ 	if (argc > 1) {
+		printf("%% powersave [milisec]\n");
+		printf("%% no powersave [milisec]\n");
+	}
+
+	strlcpy(power.i_name, ifname, sizeof(power.i_name));
+
+	ifs = socket(AF_INET, SOCK_DGRAM, 0);
+	if (ifs < 0) {
+		perror("% intpowersave: socket");
+		return(1);
+	}
+
+	if (ioctl(ifs, SIOCG80211POWER, (caddr_t)&power) == -1) {
+		perror("% intpowersave: SIOCG80211POWER");
+		return(0);
+	}
+
+	if (argc == 1)
+		power.i_maxsleep = atoi(argv[0]);
+	else if (set)
+		power.i_maxsleep = 100;	/* default 100 milliseconds */
+	power.i_enabled = set;
+
+	if (ioctl(ifs, SIOCS80211POWER, (caddr_t)&power) == -1) {
+		perror("% intpowersave: SIOCS80211POWER");
+		close(ifs);
+		return(0);
+	}
+
+	close(ifs);
 	return(0);
 }

@@ -81,7 +81,7 @@ static char saveline[256];
 static int  margc;
 static char *margv[20];
 static char hbuf[MAXHOSTNAMELEN];	/* host name */
-static char *ifname;		/* interface name */
+static char ifname[IFNAMSIZ];		/* interface name */
 
 /*
  * Kernel namelist for our use
@@ -295,10 +295,10 @@ static struct intlist Intlist[] = {
 	{ "metric",	"Set routing metric",			intmetric },
 	{ "link",	"Set link level options",		intlink },
 	{ "arp",	"Set Address Resolution Protocol",	intflags },
-#if 0
 	{ "nwid",	"802.11 network ID",			intnwid },
 	{ "nwkey",	"802.11 network key",			intnwkey },
 	{ "powersave",	"802.11 powersaving mode",		intpowersave },
+#if 0
 	{ "media",	"Media type",				intmedia },
 	{ "mediaopt",	"Media options",			intmediaopt },
 	{ "vlan",	"802.1Q vlan tag and parent",		intvlan },
@@ -412,6 +412,7 @@ static int
 interface(int argc, char **argv, char *modhvar)
 {
 	int z = 0, num;
+	char *tmp;
 	struct intlist *i;	/* pointer to current command */
 
 	(void) signal(SIGINT, SIG_IGN);
@@ -422,20 +423,20 @@ interface(int argc, char **argv, char *modhvar)
 		return(0);
 	}
 
-	if (ifname == 0)
-		if ((ifname = (char *)malloc(IFNAMSIZ)) == NULL) {
-			printf("%% interface: malloc\n");
-			return(0);
-		}
-
 	ifname[IFNAMSIZ-1] = '\0';
 
 	if (modhvar)
-		strlcpy(ifname, modhvar, IFNAMSIZ-1);
+		tmp = modhvar;
 	else
-		strlcpy(ifname, argv[1], IFNAMSIZ-1);
+		tmp = argv[1];
+	if (strlen(tmp) > IFNAMSIZ-1) {
+		printf("%% interface name too long\n");
+		return(0);
+	}
+	strlcpy(ifname, tmp, IFNAMSIZ);
+
         if (!is_valid_ifname(ifname)) {
-                printf("%% inteface %s not found\n", ifname);
+                printf("%% interface %s not found\n", ifname);
                 return(0);
         }
 
@@ -558,7 +559,7 @@ static Command cmdtab[] = {
 	{ "hostname",	hostnamehelp,	hostname,	1, 0, 0, 0 },
 	{ "interface",	interfacehelp,	interface,	1, 0, 0, 1 },
 #if 0
-	{ "bridge",	bridgehelp,	bridge,		1, 0, 0, 1 },
+	{ "bridge",	bridgehelp,	interface,	1, 0, 0, 1 },
 #endif
 	{ "show",	showhelp,	showcmd,	0, 0, 0, 0 },
 	{ "flush",	flushhelp,	flushcmd,	1, 0, 0, 0 },
@@ -860,7 +861,7 @@ disable(void)
 int
 config(void)
 {
-	printf("%% Configuration mode is unnecessary with nsh.\n");
+	printf("%% Configuration mode is unnecessary with this software.\n");
 }
 
 /*
