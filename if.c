@@ -1,4 +1,4 @@
-/* $nsh: if.c,v 1.12 2003/03/19 23:18:56 chris Exp $ */
+/* $nsh: if.c,v 1.13 2003/03/21 21:26:24 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -687,15 +687,14 @@ intmtu(char *ifname, int ifs, int argc, char **argv)
 		return(0);
 	}
 
-	if (set)
+	if (set) {
 		ifr.ifr_mtu = strtoul(argv[0], &ep, 10);
-	else
+		if (!ep || *ep) {
+			printf("%% Invalid MTU\n");
+			 return(0);
+		}
+	} else
 		ifr.ifr_mtu = default_mtu(ifname);
-
-	if (!ep || *ep) {
-		printf("%% Invalid MTU\n");
-		return(0);
-	}
 
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 	if (ioctl(ifs, SIOCSIFMTU, (caddr_t)&ifr) < 0)
