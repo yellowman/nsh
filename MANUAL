@@ -1,5 +1,5 @@
 NSH // Network Shell User's Manual // Chris Cappuccio <chris@nmedia.net>
-$nsh: MANUAL,v 1.4 2003/03/12 02:10:22 chris Exp $
+$nsh: MANUAL,v 1.5 2003/03/18 23:10:46 chris Exp $
 
 Copyright (c) 2003 Chris Cappuccio
 
@@ -15,9 +15,11 @@ Contents
 
 4. Interface mode commands
 
-5. PF mode commands
+5. Bridge mode commands
 
-6. Adding system users to nsh
+6. PF mode commands
+
+7. Adding system users to nsh
 
 Appendices
 
@@ -53,7 +55,8 @@ Section 2 > Installation
 
 NSH replaces /etc/netstart on a standard OpenBSD system.  To implement NSH on
 such a system, you first need to convert your standard configuration into one
-which is compatible with NSH's syntax.  The first step is to compile
+which is compatible with NSH's syntax.  You need to compile NSH in order
+to use it.  NSH currently requires OpenBSD 3.3 or a later version.  To compile
 NSH:
 
 $ tar xvf nsh.tar
@@ -109,12 +112,6 @@ o "$dhclient_pid" > dhclient.pid; })
 (cd /var/authpf && rm -rf -- *)
 
 After these lines, add the following commands:
-
-echo > /var/run/pf.conf
-nsh -i /etc/nshrc
-
-Depending on the level of debugging you desire, you may want to start nsh
-its output being logged, like this:
 
 echo > /var/run/pf.conf
 nsh -i /etc/nshrc | tee /var/run/nsh.out
@@ -312,9 +309,9 @@ Note that the total bytes in and/or out may not be accurate.  OpenBSD uses
 an unsigned long type to hold the byte count.  When the byte count exceeds
 the storage limit of an unsigned long (4,294,967,295 on a 32 bit architecture
 or 18,446,744,073,709,551,615 on a 64-bit architecture), the counter will
-overflow, causing it to roll over to 0.  As the total byte count is no
-longer accurate when it rolls over, the average packet size will also be
-inaccurate.
+overflow, causing it to roll over to 0.  The average packet size will be
+inaccurate when the total byte count rolls over, because the total number of
+packets will reflect bytes that are no longer counted.
 
 With verbose mode enabled, 'show interface' will display the raw kernel
 flags for an interface.  See Appendix B for an explanation of these flags.
@@ -564,8 +561,8 @@ disable
 Leave privileged mode, use this if you want to stay logged in but to not
 trust your terminal area
 
-route <destination> <gateway>
------------------------------
+route <destination>[/<bitmaskORnetmask>] <gateway>
+--------------------------------------------------
 
 You can add static routes with this command.  It takes CIDR netmasks
 (number of bits) or classic IP netmasks to describe routes.  This 
@@ -581,6 +578,11 @@ This command takes the 'no ' prefix to remove a route.  The gateway
 is not necessary when using the 'no route' notation.
 
 nsh(priv)/no route 192.168.0.0/16
+
+If you do not specify a mask, it will assume you are routing a host
+address
+
+nsh(priv)/route 10.6.6.4 1.2.3.4
 
 quit
 ----
@@ -616,10 +618,215 @@ $
 Section 4 > Interface mode commands
 -----------------------------------
 
-Section 5 > PF mode commands
+nsh(interface-fxp0)/?
+% Commands may be abbreviated.
+% Press enter at a prompt to leave interface configuration mode.
+% Interface configuration commands are:
+
+  ip         IP address and other parameters
+  alias      Additional IP addresses and other parameters
+  mtu        Set Maximum Transmission Unit
+  metric     Set routing metric
+  link       Set link level options
+  arp        Set Address Resolution Protocol
+  nwid       802.11 network ID
+  nwkey      802.11 network key
+  powersave  802.11 powersaving mode
+  media      Media type
+  mediaopt   Media options
+  tunnel     Source/destination for GIF tunnel
+  vlan       802.1Q vlan tag and parent
+  debug      Driver dependent debugging
+  shutdown   Shutdown interface
+  rate       Rate limit (token bucket regulator)
+  ?          Options
+
+[no] ip <address>/<bitmaskORnetmask>
+------------------------------------
+
+Set (or remove) the IP address on an interface 
+
+nsh(interface-fxp0)/ip 192.168.100.1/24
+
+or
+
+nsh(interface-fxp0)/ip 192.168.100.1/255.255.255.0
+
+[no] alias <address>/<bitmaskORnetmask>
+---------------------------------------
+
+Add (or remove) an IP address to the interface
+
+nsh(interface-fxp0)/alias 192.168.125.1/24
+
+or
+
+nsh(interface-fxp0)/alias 192.168.125.1/255.255.255.0
+
+[no] mtu <value>
+----------------
+
+Set the interface Maximum Transmission Unit.  This is the maximum packet
+size that the operating system will transmit.  Using 'no mtu' will set
+the interface MTU back to the default value for that interface type.
+
+nsh(interface-fxp0)/mtu 4000
+
+[no] metric <value>
+-------------------
+
+Set routing metric for the interface.  Using 'no metric' will set the
+interface metric to the default value of zero.
+
+nsh(interface-fxp0)/metric 2
+
+[no] link <0|1|2>
+-----------------
+
+Set any of the link flags on the interface.  Using 'no link XYZ' will remove
+the specified link flags.  Using 'no link' will remove all link flags from
+the interface.
+
+nsh(interface-gre0)/link 1 2
+
+Each different interface type uses link flags for different purposes.  See
+Appendix E for a detailed explanation of how to use link flags.
+
+[no] arp
+--------
+
+Turn on or off the Address Resolution Protocol.  The default is on.
+
+nsh(interface-fxp0)/arp
+nsh(interface-fxp0)/no arp
+
+[no] nwid <id>
+--------------
+
+Set the network ID for an 802.11 capable interface.  Using 'no nwid'
+will set it to the default value.
+
+[no] nwkey <key>
+----------------
+
+Set the WEP network key for an 802.11 capable interface.  Using 'no nwkey'
+will turn off WEP.
+
+[no] powersave [time]
+-------------------
+
+Set the 802.11 powersaving mode to X ms of time.  Using 'no powersave'
+will set it to the default time.
+
+[no] media <type> [instance]
 ----------------------------
 
-Section 6 > Adding system users to nsh
+Set the media type to X.  You can see the available media types on
+an interface by setting verbose mode and looking at the interface.
+
+nsh/v
+% Diagnostic mode enabled
+nsh/sho int fxp0
+% fxp0
+  Interface is up, protocol is up
+  Interface type Ethernet (Broadcast), hardware address 00:90:27:4c:f4:80
+  Media type autoselect (100baseTX full-duplex), status active
+  Internet address is 192.168.1.1/32
+  MTU 1500 bytes, Line Rate 100 Mbps
+  98305076 packets input, 3151445270 bytes, 1 errors, 0 drops
+  93539074 packets output, 1678432034 bytes, 0 errors, 0 unsupported
+  0 collisions
+  Flags:
+    <UP,BROADCAST,RUNNING,SIMPLEX,MULTICAST>
+  Supported media types on fxp0:
+    media none
+    media 10baseT
+    media 10baseT, mediaopt full-duplex
+    media 100baseTX
+    media 100baseTX, mediaopt full-duplex
+    media autoselect
+
+To force the interface to use a particular media type,
+
+nsh(interface-fxp0)/media 10baseT
+
+[no] mediaopt <option>
+----------------------
+
+You can set or remove media options with this command.
+
+nsh(interface-fxp0)/mediaopt full-duplex
+nsh(interface-fxp0)/no mediaopt full-duplex
+
+[no] tunnel <src ip> <dest ip>
+------------------------------
+
+You can set or remove tunnel assignments with this command.  Note that
+tunnel assignments are only valid on gif and gre interfaces at this time.
+See Appendix E for more details.
+
+nsh(interface-gre0)/tunnel 12.3.3.3 12.6.6.6
+
+[no] vlan <tag> <parent interface>
+----------------------------------
+
+You can set or remove vlan assignments with this command.  Note that vlan
+assignments are only valid on the vlan inteface.  See Appendix E for more
+details.
+
+nsh(interface-vlan0)/vlan 4 fxp3
+
+This would set vlan0 to use vlan ID 4 on parent (trunk) interface fxp3.
+
+The parent interface must be a real, physical interface on the system.
+
+[no] debug
+----------
+
+Set the driver-dependant debugging flag for an interface.  Useful for
+troubleshooting.
+
+nsh(interface-xyz)/debug
+
+[no] shutdown
+-------------
+
+Shut down or turn up an interface.
+
+Using this command to shutdown and then turn up an interface will reset it.
+
+nsh(interface-de0)/shutdown
+nsh(interface-de0)/no shutdown
+
+[no] rate <tokenrate> [bucketsize]
+----------------------------------
+
+Setup outgoing rate limiting on an interface.  The tokenrate can be specified
+in Kbps, Mbps, or Gbps.  Using 'no rate' will remove any rate limit
+assigned to an interface.
+
+nsh(interface-fxp0)/rate 10m
+
+or
+
+nsh(interface-em0)/rate 1g
+
+or
+
+nsh(interface-vlan0)/rate 384k
+
+?
+-
+
+This will display the command menu.
+
+Section 5 > Bridge mode commands
+--------------------------------
+
+Section 6 > PF mode commands
+----------------------------
+
+Section 7 > Adding system users to nsh
 --------------------------------------
 
 Appendix A > Common interface types
@@ -723,6 +930,88 @@ Appendix D > ALTQ notes
 
 Appendix E > Interface-specific notes
 -------------------------------------
+
+There are several special interfaces.  
+
+gre
+---
+The gre interface allows for tunnel construction using the Cisco GRE or
+Mobile-IP (RFC 2004) encapsulation protocols.  You can use the tunnel 
+command under interface mode to create a tunnel.
+
+nsh(interface-gre0)/tunnel 1.2.3.4 5.5.5.5
+
+Two link flags exist for gre.  Link flag 0, set by default, enables GRE mode.
+The lack of link flag 0 enables MobileIP mode.  
+
+nsh(interface-gre0)/no link 0
+
+lo
+--
+lo is the loopback interface.  It is used for traffic that does not
+leave the system/router.  
+
+Setting the link 1 flag will cause a loopback interface to answer for
+all addresses identified as being in the super-net which is specified
+in the address and netmask.  
+
+To make the router answer for 208.44.76.0 through 208.44.76.7, you would
+do this:
+
+nsh(interface-lo1)/ip 208.44.76.0/29
+nsh(interface-lo1)/link 1
+
+enc (IPsec Loopback)
+---
+enc (specifically, enc0) is the encapsulating interface.  It is a software
+loopback mechanism used to control non-encapsulated IPsec traffic using the
+pf firewall ruleset.  It allows an administrator to see outgoing packets
+before they have been processed by IPsec, or incoming packets after they
+have been processed.
+
+All traffic out of enc0 is already decrypted and authenticated via IPsec.
+Thus, it is helpful when writing firewall rulesets.
+
+ppp (Point to Point Protocol)
+---
+
+The serial line Point-to-Point protocol uses this interface.
+
+sl (Serial Line Interface Protocol)
+--
+
+The Serial Line Internet Protocol uses this interface.
+
+tun (Tunnel Interface)
+---
+
+This is another software loopback mechanism.  It allows user processes
+to create their own virtual network interfaces.  It is used by the 
+PPPoE implementation.
+
+gif
+---
+
+This interface is used for RFC 1933 IPv[46] to IPv[46] tunnels.
+
+nsh(interface-gif0)/tunnel 1.2.3.4 5.5.5.5
+
+pflog
+-----
+
+Packets logged from the packet filter are visible on this interface
+
+vlan
+----
+
+This interface type allows virtual LANs to be setup over an Ethernet
+port using the 802.1Q protocol.  For instance, if you wanted to setup
+a virtual interface with the 192.168.44.1 IP address, with 802.1Q trunking
+on the fxp3 physical interface, and a vlan ID of 4, you would do this:
+
+nsh(interface-vlan0)/vlan 4 fxp3
+nsh(interface-vlan0)/ip 192.168.44.1/24
+
 
 ----
 
