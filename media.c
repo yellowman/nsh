@@ -1,4 +1,4 @@
-/* $nsh: media.c,v 1.6 2003/04/03 22:45:16 chris Exp $ */
+/* $nsh: media.c,v 1.7 2003/04/03 23:41:40 chris Exp $ */
 /*
  * From: $OpenBSD: /usr/src/sbin/ifconfig/ifconfig.c,v 1.64 2002/05/22
  * 08:21:02 deraadt Exp $
@@ -543,7 +543,7 @@ media_supported(int s, char *ifname, char *hdr_delim, char *body_delim)
 
 	if (ioctl(s, SIOCGIFMEDIA, (caddr_t)&ifmr) < 0) {
 		if (errno != EINVAL)
-			printf("%% media_supported: SIOCGIFMEDIA: %s\n",
+			printf("%% media_supported: 1/SIOCGIFMEDIA: %s\n",
 			    strerror(errno));
 		return;
 	}
@@ -554,6 +554,12 @@ media_supported(int s, char *ifname, char *hdr_delim, char *body_delim)
 		return;
 	}
 	ifmr.ifm_ulist = media_list;
+
+	if (ioctl(s, SIOCGIFMEDIA, (caddr_t)&ifmr) < 0) {
+		printf("%% media_supported: 2/SIOCGIFMEDIA: %s\n", 
+		    strerror(errno));
+		return;
+	}
 
 	for (type = IFM_NMIN; type <= IFM_NMAX; type += IFM_NMIN) {
 		for (i = 0, printed_type = 0; i < ifmr.ifm_count; i++) {
