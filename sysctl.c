@@ -1,4 +1,4 @@
-/* $nsh: sysctl.c,v 1.2 2003/04/14 16:24:23 chris Exp $ */
+/* $nsh: sysctl.c,v 1.3 2003/04/17 02:25:52 chris Exp $ */
 /*
  * Copyright (c) 2003
  *      Chris Cappuccio.  All rights reserved.
@@ -68,7 +68,8 @@ sysctl_inet(int mib2, int mib3, int val, int read)
 	len = sizeof(old);
 
 	if (sysctl(mib, 4, &old, &len, valp, sizeof(int)) == -1) {
-		printf("%% sysctl_inet: sysctl: %s\n", strerror(errno));
+		if (read && errno != ENOPROTOOPT)
+			printf("%% sysctl_inet: sysctl: %s\n", strerror(errno));
 		return(-1);
 	}
 
