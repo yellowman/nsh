@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.15 2003/03/10 20:10:02 chris Exp $ */
+/* $nsh: commands.c,v 1.16 2003/03/12 02:55:36 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -716,7 +716,7 @@ static Command cmdtab[] = {
 	{ "enable",	enablehelp,	enable,		0, 1, 0, 0 },
 	{ "disable",	disablehelp,	disable,	1, 0, 0, 0 },
 	{ "route",	routehelp,	route,		1, 0, 1, 0 },
-	{ "pf",		pfhelp,		pf,		1, 0, 1, 0 },
+	{ "pf",		pfhelp,		pf,		1, 0, 0, 1 },
 	{ "quit",	quithelp,	quit,		0, 0, 0, 0 },
 	{ "reload",	reloadhelp,	reload,		1, 0, 0, 0 },
 	{ "shutdown",	shutdownhelp,	shut_down,	1, 0, 0, 0 },
@@ -1248,10 +1248,8 @@ cmdrc(rcname)
 			 */
 			if (c && c->modh)
 				modhcmd = 1;
-			else
+			} else {
 				modhcmd = 0;
-
-			if (!modhcmd) {
 				printf("%% No mode handler specified before"
 				    " indented command? (line %i) ", lnum);
 				p_argv(margc, margv);
