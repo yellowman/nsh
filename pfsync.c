@@ -28,6 +28,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/limits.h>
 #include <sys/socket.h>
 #include <sys/errno.h>
 #include <sys/ioctl.h>
@@ -97,8 +98,9 @@ intmaxupd(char *ifname, int ifs, int argc, char **argv)
 {
 	struct ifreq ifr;
 	struct pfsyncreq preq;
+	u_int32_t val;
 	int set;
-	char *ep;
+	char *endptr;
 
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -124,11 +126,15 @@ intmaxupd(char *ifname, int ifs, int argc, char **argv)
 		return (0);
 	}
 	if (set) {
-		preq.pfsyncr_maxupdates = strtoul(argv[0], &ep, 10);
-		if (!ep || *ep) {
+		errno = 0;
+		val = strtoul(argv[0], &endptr, 0);
+		if (argv[0][0] == '\0' || endptr[0] != '\0' ||
+		    (errno == ERANGE && val == ULONG_MAX) ||
+		    val > INT_MAX) {
 			printf("%% maxupd value out of range\n");
 			return (0);
 		}
+		preq.pfsyncr_maxupdates = (int)val;
 	} else
 		preq.pfsyncr_maxupdates = PFSYNC_MAXUPDATES;
 
