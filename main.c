@@ -100,6 +100,6 @@ usage()
 {
 	(void)fprintf(stderr, "usage: %s [-vi rcfile]\n", __progname);
 	(void)fprintf(stderr, "           -v indicates verbose operation\n");
-	(void)fprintf(stderr, "           -i rcfile loads configuration from rfile\n");
+	(void)fprintf(stderr, "           -i rcfile loads configuration from rcfile\n");
 	exit(1);
 }
