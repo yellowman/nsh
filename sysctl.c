@@ -1,4 +1,4 @@
-/* $nsh: sysctl.c,v 1.1 2003/04/14 08:44:20 chris Exp $ */
+/* $nsh: sysctl.c,v 1.2 2003/04/14 16:24:23 chris Exp $ */
 /*
  * Copyright (c) 2003
  *      Chris Cappuccio.  All rights reserved.
@@ -130,6 +130,8 @@ ipsysctl(int set, char *cmd, char *arg)
 	} else if (CMP_ARG(cmd, "ma")) { /* maxqueue */
 		mib2 = IPPROTO_IP;
 		mib3 = IPCTL_IPPORT_MAXQUEUE;
+		if (!set)
+			larg = DEFAULT_MAXQUEUE;
 	} else if (CMP_ARG(cmd, "se")) { /* send-redirects */
 		mib2 = IPPROTO_IP;
 		mib3 = IPCTL_SENDREDIRECTS;
@@ -140,10 +142,14 @@ ipsysctl(int set, char *cmd, char *arg)
 	} else if (CMP_ARG(cmd, "default-m")) { /* default-mtu */
 		mib2 = IPPROTO_IP;
 		mib3 = IPCTL_DEFMTU;
+		if (!set)
+			larg = DEFAULT_MTU;
 #endif
 	} else if (CMP_ARG(cmd, "de")) { /* default-ttl */
 		mib2 = IPPROTO_IP;
 		mib3 = IPCTL_DEFTTL;
+		if (!set)
+			larg = DEFAULT_TTL;
 	} else {
 		printf("%% Internal error\n");
 		return(0);
