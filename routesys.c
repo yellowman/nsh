@@ -1,4 +1,4 @@
-/* $nsh: routesys.c,v 1.12 2003/04/09 07:07:20 chris Exp $ */
+/* $nsh: routesys.c,v 1.13 2003/09/18 19:44:23 chris Exp $ */
 /* From: $OpenBSD: /usr/src/sbin/route/route.c,v 1.43 2001/07/07 18:26:20 deraadt Exp $ */
 
 /*
@@ -300,14 +300,14 @@ routename_sa(sa)
 		first = 0;
 		if (gethostname(domain, sizeof domain) == 0 &&
 		    (cp = strchr(domain, '.')))
-			(void) strcpy(domain, cp + 1);
+			(void) strlcpy(domain, cp + 1, sizeof(domain));
 		else
 			domain[0] = 0;
 		cp = NULL;
 	}
 
 	if (sa->sa_len == 0)
-		strcpy(line, "0.0.0.0");
+		strlcpy(line, "0.0.0.0", sizeof(line));
 	else switch (sa->sa_family) {
 
 	case AF_INET:
@@ -349,7 +349,7 @@ routename_sa(sa)
 #endif
 		if (getnameinfo((struct sockaddr *)&sin6, sin6.sin6_len,
 		    line, sizeof(line), NULL, 0, niflags) != 0)
-			strncpy(line, "invalid", sizeof(line));
+			strlcpy(line, "invalid", sizeof(line));
 		break;
 	    }
 #endif

@@ -1,4 +1,4 @@
-/* $nsh: route.c,v 1.7 2003/04/17 16:18:45 chris Exp $ */
+/* $nsh: route.c,v 1.8 2003/09/18 19:44:23 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -117,6 +117,7 @@ void show_route(char *arg)
 		return;
 
 	ip_route(&dest, NULL, RTM_GET);
+
 	/*
 	 * ip_route() calls rtmsg() which calls
 	 * print_getmsg() on RTM_GET to show a route,

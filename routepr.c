@@ -1,4 +1,4 @@
-/* $nsh: routepr.c,v 1.8 2003/02/18 09:37:44 chris Exp $ */
+/* $nsh: routepr.c,v 1.9 2003/09/18 19:44:23 chris Exp $ */
 /* From: $OpenBSD: /usr/src/usr.bin/netstat/route.c,v 1.45 2002/02/16 21:27:50 millert Exp $ */
 
 /*
@@ -536,14 +536,13 @@ routename(in)
 		first = 0;
 		if (gethostname(domain, sizeof domain) == 0 &&
 		    (cp = strchr(domain, '.')))
-			(void) strcpy(domain, cp + 1);
+			(void) strlcpy(domain, cp + 1, sizeof(domain));
 		else
-			domain[0] = 0;
+			domain[0] = '\0';
 	}
 	cp = 0;
 	if (cp) {
-		strncpy(line, cp, sizeof(line) - 1);
-		line[sizeof(line) - 1] = '\0';
+		strlcpy(line, cp, sizeof(line));
 	} else {
 #define C(x)	((x) & 0xff)
 		in = ntohl(in);
@@ -569,13 +568,14 @@ netname(in, mask)
 	mask = ntohl(mask);
 	mbits = mask ? 33 - ffs(mask) : 0;
 	if (cp) {
-		strncpy(line, cp, sizeof(line) - 1);
-		line[sizeof(line) - 1] = '\0';
+		strlcpy(line, cp, sizeof(line));
 	} else
 		snprintf(line, sizeof line, "%u.%u.%u.%u/%d", C(in >> 24),
 			C(in >> 16), C(in >> 8), C(in), mbits);
 	return (line);
 }
+
+#undef C
 
 #ifdef INET6
 char *
@@ -687,7 +687,7 @@ routename6(sa6)
 #endif
 	if (getnameinfo((struct sockaddr *)sa6, sa6->sin6_len,
 			line, sizeof(line), NULL, 0, niflag) != 0)
-		strcpy(line, "");
+		strlcpy(line, "", sizeof(line));
 	return line;
 }
 #endif /*INET6*/
@@ -756,7 +756,8 @@ ipx_phost(sa)
 	work.sipx_addr.ipx_net = ipx_zeronet;
 
 	p = ipx_print((struct sockaddr *)&work);
-	if (strncmp("0H.", p, 3) == 0) p += 3;
+	if (strncmp("0H.", p, 3) == 0)
+		p += 3;
 	return(p);
 }
 #endif

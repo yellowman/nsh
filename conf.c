@@ -1,4 +1,4 @@
-/* $nsh: conf.c,v 1.15 2003/05/15 16:57:28 chris Exp $ */
+/* $nsh: conf.c,v 1.16 2003/09/18 19:44:23 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -100,7 +100,7 @@ conf(FILE *output)
 	fprintf(output, "hostname %s\n", hostbuf);
 
 	for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++) {
-		strncpy(ifr.ifr_name, ifnp->if_name, sizeof(ifr.ifr_name));
+		strlcpy(ifr.ifr_name, ifnp->if_name, sizeof(ifr.ifr_name));
 
 		if (ioctl(ifs, SIOCGIFFLAGS, (caddr_t)&ifr) < 0) {
 			printf("%% conf: SIOCGIFFLAGS: %s\n", strerror(errno));
@@ -243,8 +243,7 @@ conf(FILE *output)
 			    NWID) != NULL) {
 				fprintf(output, " nwid %s\n", tmp_str);
 				if (get_nwinfo(ifnp->if_name, tmp_str,
-				    sizeof(tmp_str),
-				    NWKEY) != NULL)
+				    sizeof(tmp_str), NWKEY) != NULL)
 					fprintf(output, " nwkey %s\n", tmp_str);
 				if ((tmp = get_nwpowersave(ifs, ifnp->if_name))
 				    != NULL)

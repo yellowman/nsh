@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.25 2003/07/25 21:00:04 chris Exp $ */
+/* $nsh: commands.c,v 1.26 2003/09/18 19:44:23 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -694,7 +694,7 @@ pf(int argc, char **argv, char *modhvar)
 		(void) signal(SIGQUIT, SIG_IGN);
 	}
 
-	if ((argc != 2 && !modhvar) || (argc == 2 && CMP_ARG(argv[1],"?"))) {
+	if ((argc != 2 && !modhvar) || (argc == 2 && CMP_ARG(argv[1], "?"))) {
 		printf("%% pf edit\n");
 		printf("%% pf reload\n");
 		printf("%% pf enable\n");
@@ -714,7 +714,8 @@ pf(int argc, char **argv, char *modhvar)
 
 	if (action) {
 		if(CMP_ARG(aarg, "ed")) {	/* edit */
-			if ((editor = getenv("EDITOR")) == NULL)
+			if ((editor = getenv("EDITOR")) == NULL ||
+			    *editor == '\0')
 				editor = DEFAULT_EDITOR;
 			/* check for valid path from user supplied env var */
 			/* check for locking and return if already locked */
@@ -724,16 +725,16 @@ pf(int argc, char **argv, char *modhvar)
 			cmdarg(PFCTL, arg);
 			return(0);
 		}
-		if(CMP_ARG(aarg, "r")) {	/* reload */
+		if (CMP_ARG(aarg, "r")) {	/* reload */
 			snprintf(arg, sizeof(arg), "-f%s", PFCONF_TEMP);
 			cmdarg(PFCTL, arg);
 			return(0);
 		}
-		if(CMP_ARG(aarg, "en")) {	/* enable */
+		if (CMP_ARG(aarg, "en")) {	/* enable */
 			cmdarg(PFCTL, "-e");
 			return(0);
 		}
-		if(CMP_ARG(aarg, "d")) {	/* disable */
+		if (CMP_ARG(aarg, "d")) {	/* disable */
 			cmdarg(PFCTL, "-d");
 			return(0);
 		}
@@ -880,7 +881,8 @@ makeargv(int x)
 	margc = 0;
 	cp = line;
 	if (*cp == '!') {	/* Special case shell escape */
-		strcpy(saveline, line);	/* save for shell command */
+		strlcpy(saveline, line, sizeof(saveline));
+						/* save for shell command */
 		*argp++ = "!";	/* No room in string to get this */
 		margc++;
 		cp++;
@@ -1339,11 +1341,11 @@ cmdrc(rcname)
 	FILE	*rcfile;
 	char	modhvar[128];	/* required variable in mode handler cmd */
 	int	modhcmd; 	/* do we execute under another mode? */
-	int	lnum;		/* line number */
+	unsigned int lnum;	/* line number */
 	int	z = 0;		/* max length of cmdtab argument */
 
 	if ((rcfile = fopen(rcname, "r")) == 0) {
-		printf("%% %s not found\n",rcname);
+		printf("%% Unable to open %s: %s\n", rcname, strerror(errno));
 		return 1;
 	}
 
@@ -1382,7 +1384,7 @@ cmdrc(rcname)
 				 */
 				modhcmd = 0;
 				printf("%% No mode handler specified before"
-				    " indented command? (line %i) ", lnum);
+				    " indented command? (line %u) ", lnum);
 				p_argv(margc, margv);
 				printf("\n");
 				continue;
@@ -1400,7 +1402,7 @@ cmdrc(rcname)
 					 * then it cannot be 'no cmd'
 					 */
 					printf("%% Argument 'no' is invalid"
-					    " for a mode handler (line %i) ",
+					    " for a mode handler (line %u) ",
 					    lnum);
 					p_argv(margc, margv);
 					printf("\n");
@@ -1414,11 +1416,11 @@ cmdrc(rcname)
 					 * one value stored, passed on
 					 */
 					if (margv[1]) {
-						strncpy(modhvar, margv[1],
+						strlcpy(modhvar, margv[1],
 						    sizeof(modhvar));
 					} else {
 						printf("%% No argument after"
-						    " mode handler (line %i) ",
+						    " mode handler (line %u) ",
 						    lnum);
 						p_argv(margc, margv);
 						printf("\n");
@@ -1428,19 +1430,19 @@ cmdrc(rcname)
 			}
 		}
 		if (Ambiguous(c)) {
-			printf("%% Ambiguous rc command (line %i) ", lnum);
+			printf("%% Ambiguous rc command (line %u) ", lnum);
 			p_argv(margc, margv);
 			printf("\n");
 			continue;
 		}
 		if (c == 0) {
-			printf("%% Invalid rc command (line %i) ", lnum);
+			printf("%% Invalid rc command (line %u) ", lnum);
 			p_argv(margc, margv);
 			printf("\n");
 			continue;
 		}
 		if (verbose) {
-			printf("%% %4s: %*s%10s (line %i) margv ",
+			printf("%% %4s: %*s%10s (line %u) margv ",
 			    c->modh ? "mode" : "cmd", z, c->name,
 			    modhcmd ? "(sub-cmd)" : "", lnum);
 			p_argv(margc, margv);
@@ -1452,7 +1454,7 @@ cmdrc(rcname)
 			 * dealt with
 			 */
 			if (!c->nocmd && NO_ARG(margv[0])) {
-				printf("%% Invalid rc command (line %i) ",
+				printf("%% Invalid rc command (line %u) ",
 				    lnum);
 				p_argv(margc, margv);
 				printf("\n");
@@ -1497,7 +1499,7 @@ el_burrito(EditLine *el, int margc, char **margv)
 	char *colon;
 	int val;
 
-	if(!editing)	/* Nothing to parse, fail */
+	if (!editing)	/* Nothing to parse, fail */
 		return(1);
 
 	/*
@@ -1506,8 +1508,8 @@ el_burrito(EditLine *el, int margc, char **margv)
 	 * specific commands, which is really only useful in .editrc, so
 	 * it is invalid here.
 	 */
-	colon = (char *)strchr(margv[0], ':');
-	if(colon)
+	colon = strchr(margv[0], ':');
+	if (colon)
 		return(1);
 
 	val = el_parse(el, margc, margv);

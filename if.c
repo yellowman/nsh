@@ -1,4 +1,4 @@
-/* $nsh: if.c,v 1.15 2003/07/25 21:00:04 chris Exp $ */
+/* $nsh: if.c,v 1.16 2003/09/18 19:44:23 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -139,7 +139,7 @@ show_int(char *ifname)
 	if (!(br = is_bridge(ifs, (char *)ifname)))
 		br = 0;
 
-	strncpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
+	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 
 	/*
 	 * Show up/down status and last change time
@@ -481,7 +481,7 @@ get_ifdata(char *ifname, int type)
 
 	if ((ifs = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
 		return (value);
-	strncpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
+	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 	ifr.ifr_data = (caddr_t)&if_data;
 	if (ioctl(ifs, SIOCGIFDATA, (caddr_t)&ifr) == 0) {
 		if (type == IFDATA_MTU)

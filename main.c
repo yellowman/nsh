@@ -1,4 +1,4 @@
-/* $nsh: main.c,v 1.17 2003/09/18 19:19:32 chris Exp $ */
+/* $nsh: main.c,v 1.18 2003/09/18 19:44:23 chris Exp $ */
 /*
  * Copyright (c) 2002, 2003
  *      Chris Cappuccio.  All rights reserved.
@@ -104,7 +104,7 @@ main(argc, argv)
 }
 
 void
-rmtemp()
+rmtemp(void)
 {
 	if (unlink(PFCONF_TEMP) != 0)
 		if (errno != ENOENT)
@@ -113,7 +113,7 @@ rmtemp()
 }
 
 void
-usage()
+usage(void)
 {
 	(void)fprintf(stderr, "usage: %s [-vi rcfile]\n", __progname);
 	(void)fprintf(stderr, "           -v indicates verbose operation\n");
