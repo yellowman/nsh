@@ -20,6 +20,7 @@ int default_mtu(char *);
 int conf_routes(FILE *, char *, int, int);
 
 /* routepr.c */
+char *netname(in_addr_t, in_addr_t);
 void routepr(u_long, int);
 
 /* alignment constraint for routing socket */
@@ -30,6 +31,7 @@ void routepr(u_long, int);
 /* routesys.c */
 #define FLUSH 0
 struct rtdump *getrtdump(int);
+void freertdump(struct rtdump *);
 int monitor(void);
 void flushroutes(int, int);
 void bprintf(FILE *, int, u_char *);
@@ -39,11 +41,18 @@ extern char addrnames[];
 extern char metricnames[];
 
 /* commands.c */
+#define DEFAULT_EDITOR	"/usr/bin/vi"
+#define PFCONF_TEMP	"/var/run/pf.conf"
+#define NSHRC_TEMP	"/var/run/nshrc"
+#define NSHRC		"/etc/nshrc"
+#define PFCTL		"/sbin/pfctl"
+#define SAVESCRIPT	"/usr/local/bin/save.sh"
 void command(int);
 int cmdrc(char rcname[FILENAME_MAX]);
 int load_nlist(void);
 char *iprompt(void);
 char *cprompt(void);
+char *pprompt(void);
 
 /* ieee80211.c */
 #define NWID 0
@@ -56,6 +65,7 @@ void make_string(char *str, int, const u_int8_t *buf, int);
 int intnwkey(char *, int, int, char **);
 
 /* stats.c */
+extern char *tcpstates[];
 void rt_stats(u_long);
 void tcp_stats(u_long);
 void udp_stats(u_long);
@@ -97,6 +107,7 @@ int route(int, char**);
 void show_route(char *);
 #ifdef _IP_T_
 ip_t parse_ip(char *, int);
+int ip_route(ip_t *, ip_t *, u_short);
 #endif
 
 /* if.c */
@@ -126,7 +137,7 @@ int intpowersave(char *, int, int, char **);
 int version(void);
 
 /* compile.c */
-extern char compiled[], compiledby[], compiledon[];
+extern char compiled[], compiledby[], compiledon[], compilehost[];
 
 /* editing.c */
 void inithist(void);
@@ -135,6 +146,11 @@ void initedit(void);
 void endedit(void);
 
 /* bridge.c */
+long bridge_cfg(int, char *, int);
+int bridge_confaddrs(int, char *, char *, FILE *);
+int bridge_rules(int, char *, char *, char *, FILE *);
+int bridge_list(int, char *, char *, char *, int, int);
+int bridge_addrs(int, char *, char *, char *);
 int set_ifflag(int, char *, short);
 int clr_ifflag(int, char *, short);
 int is_bridge(int, char *);
@@ -143,9 +159,9 @@ int brval(char *, int, int, char **);
 int brrule(char *, int, int, char **);
 int brstatic(char *, int, int, char **);
 int brpri(char *, int, int, char **);
-int flush_bridgedyn(char *);
-int flush_bridgeall(char *);
-int flush_bridgerule(char *, char*);
+void flush_bridgedyn(char *);
+void flush_bridgeall(char *);
+void flush_bridgerule(char *, char*);
 
 /* tunnel.c */
 int inttunnel(char *, int, int, char **);
@@ -156,6 +172,8 @@ int deletetunnel(int, char *);
 #define DEFAULT_MEDIA_TYPE	"autoselect"
 void media_status(int, char *, char *);
 void media_supported(int, char *, char *, char *);
+int phys_status(int, char *, char *, char *, int, int);
 int intmedia(char *, int, int, char **);
 int intmediaopt(char *, int, int, char **);
 int conf_media_status(FILE *, int, char *);
+

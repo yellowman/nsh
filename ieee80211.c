@@ -70,6 +70,9 @@
  */
 
 #include <stdio.h>
+#include <ctype.h>
+#include <string.h>
+#include <unistd.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
 #include <net/if.h>
@@ -221,19 +224,19 @@ set_nwkey:
 				len = sizeof(keybuf[i]);
 				val = (char *)get_string(val, ",", keybuf[i], &len);
 				if (val == NULL)
-					return;
+					return(0);
 				nwkey.i_key[i].i_keylen = len;
 				nwkey.i_key[i].i_keydat = keybuf[i];
 			}
 			if (cp != NULL) {
 				printf("%% intnwkey: too many keys\n");
-				return;
+				return(0);
 			}
 		} else {
 			len = sizeof(keybuf[i]);
 			val = (char *)get_string(val, NULL, keybuf[0], &len);
 			if (val == NULL)
-				return;
+				return(0);
 			nwkey.i_key[0].i_keylen = len;
 			nwkey.i_key[0].i_keydat = keybuf[0];
 			i = 1;
@@ -313,7 +316,7 @@ get_nwinfo(char *ifname, char *str, int str_len, int type)
 			}
 			if (ioctl(ifs, SIOCG80211NWKEY, (caddr_t) & nwkey)
 			    == -1) {
-				strlcat(str, str_len, "*****");
+				strlcat(str, "*****", str_len);
 			} else {
 				nwkey_verbose = 0;
 				/*

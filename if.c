@@ -50,7 +50,46 @@
 #include "bridge.h"
 
 char *iftype(int int_type);
-char *get_lladdr(int ifs, char *ifname);
+char *get_hwdaddr(int ifs, char *ifname);
+
+static const struct {
+	char *name;
+	u_int8_t type;
+} iftypes[] = {
+	/* OpenBSD-specific types */
+	{ "Packet Filter Logging",	IFT_PFLOG },
+	{ "IPsec Loopback",		IFT_ENC },      
+	{ "Generic Tunnel",		IFT_GIF },
+	{ "IPv6-IPv4 TCP relay",	IFT_FAITH },
+	{ "Ethernet Bridge",		IFT_BRIDGE },
+	/* IANA-assigned types */
+	{ "Token Ring",			IFT_ISO88025 },
+	{ "ISO over IP",		IFT_EON },
+	{ "XNS over IP",		IFT_NSIP },
+	{ "X.25 to IMP",		IFT_X25DDN },
+	{ "ATM Data Exchange Interface", IFT_ATMDXI },
+	{ "ATM Logical",		IFT_ATMLOGICAL },
+	{ "ATM Virtual",		IFT_ATMVIRTUAL },
+	{ "ATM",			IFT_ATM },
+	{ "Ethernet",			IFT_ETHER },
+	{ "ARCNET",			IFT_ARCNET },
+	{ "HDLC",			IFT_HDLC },
+	{ "IEEE 802.1Q",		IFT_L2VLAN },
+	{ "Virtual",			IFT_PROPVIRTUAL },
+	{ "PPP",			IFT_PPP },
+	{ "SLIP",			IFT_SLIP },
+	{ "Loopback",			IFT_LOOP },
+	{ "ISDN S",			IFT_ISDNS },
+	{ "ISDN U",			IFT_ISDNU },
+	{ "ISDN BRI",			IFT_ISDNBASIC },
+	{ "ISDN PRI",			IFT_ISDNPRIMARY },
+	{ "V.35",			IFT_V35 },
+	{ "HSSI",			IFT_HSSI },
+	{ "Network Tunnel",		IFT_TUNNEL },
+	{ "Coffee Pot",			IFT_COFFEE },
+	{ "IEEE 802.11",		IFT_IEEE80211 },
+	{ "Unspecified",		IFT_OTHER },
+};
 
 int
 show_int(char *ifname)
@@ -62,7 +101,6 @@ show_int(char *ifname)
 	struct timeval tv;
 	struct vlanreq vreq;
 
-	in_addr_t mask;
 	short tmp;
 	int ifs, br, flags, days, hours, mins, pntd;
 	int noaddr = 0;
@@ -70,7 +108,7 @@ show_int(char *ifname)
 	char *type, *lladdr;
 
 	u_long rate, bucket;
-	char rate_str[64], bucket_str[64], tmp_str[4096];
+	char rate_str[64], bucket_str[64], tmp_str[4096], tmp_str2[1024];
 
 	/*
 	 * Show all interfaces when no ifname specified.
@@ -141,10 +179,10 @@ show_int(char *ifname)
 		printf(" (Broadcast)");
 	else if (flags & IFF_POINTOPOINT)
 		printf(" (PointToPoint)");
-	printf("\n");
 
-	if ((lladdr = get_lladdr(ifs, ifname)) != NULL)
-		printf("  Hardware address %s\n", lladdr);
+	if ((lladdr = get_hwdaddr(ifs, ifname)) != NULL)
+		printf(", hardware address %s", lladdr);
+	printf("\n");
 
 	media_status(ifs, ifname, "  Media type ");
 
@@ -177,6 +215,10 @@ show_int(char *ifname)
 	}
 
 	if (!br) {
+		if (phys_status(ifs, ifname, tmp_str, tmp_str2, sizeof(tmp_str),
+		    sizeof(tmp_str2)) > 0)
+			printf("  Tunnel source %s destination %s\n",
+			    tmp_str, tmp_str2);
 		/*
 		 * Display MTU, line rate, and ALTQ token rate info
 		 * (if available)
@@ -233,12 +275,14 @@ show_int(char *ifname)
 	    if_ipackets, if_ibytes, if_ierrors, if_iqdrops);
 	printf("  %lu packets output, %lu bytes, %lu errors, %lu unsupported\n",
 	    if_opackets, if_obytes, if_oerrors, if_noproto);
-	if (if_ibytes && if_ipackets) {
+	if (if_ibytes && if_ipackets && (if_ibytes / if_ipackets) >= ETHERMIN) {
+		/* < ETHERMIN means byte counter probably rolled over */
 		printf("  %lu avg input size", if_ibytes / if_ipackets);
 		pntd = 1;
 	} else
 		pntd = 0;
-	if (if_obytes && if_opackets) {
+	if (if_obytes && if_opackets && (if_obytes / if_opackets) >= ETHERMIN) {
+		/* < ETHERMIN means byte counter probably rolled over */
 		printf("%s%lu avg output size", pntd ? ", " : "  ",
 		    if_obytes / if_opackets);
 		pntd = 1;
@@ -247,6 +291,10 @@ show_int(char *ifname)
 		printf("\n");
 
 	switch(if_type) {
+	/*
+	 * These appear to be the only interface types to increase collision
+	 * count in the OpenBSD 3.2 kernel.
+	 */
 	case IFT_ETHER:
 	case IFT_SLIP:
 	case IFT_PROPVIRTUAL:
@@ -264,8 +312,8 @@ show_int(char *ifname)
 			printf("\n");
 		}
 		if (br) {
-			if (tmp = bridge_list(ifs, ifname, "    ", tmp_str,
-			    sizeof(tmp_str), SHOW_STPSTATE)) {
+			if ((tmp = bridge_list(ifs, ifname, "    ", tmp_str,
+			    sizeof(tmp_str), SHOW_STPSTATE))) {
 				printf("  STP member state%s:\n", tmp > 1 ?
 				    "s" : "");
 				printf("%s", tmp_str);
@@ -312,35 +360,45 @@ in4_brdaddr(u_int32_t addr, u_int32_t mask)
 }
 
 char *
-get_lladdr(int ifs, char *ifname)
+get_hwdaddr(int ifs, char *ifname)
 {
-	 /* suprisingly, this actually works! */
-	int found = 0;
+	int i, found = 0;
 	char *val = NULL;
 	struct ifaddrs *ifap, *ifa;
+	struct ether_addr *ea;
 	struct sockaddr_dl *sdl;
 
 	if (getifaddrs(&ifap) != 0) {
-		perror("% get_lladdr: getifaddrs");
+		perror("% get_hwdaddr: getifaddrs");
 		return(NULL);
 	}
 
 	for (ifa = ifap; ifa; ifa = ifa->ifa_next)
-		if ((strcmp(ifname, ifa->ifa_name) == 0) &&
-		    ifa->ifa_addr->sa_family == AF_LINK) {
+		if (ifa->ifa_addr->sa_family == AF_LINK &&
+		    (strcmp(ifname, ifa->ifa_name) == 0)) {
 			sdl = (struct sockaddr_dl *)ifa->ifa_addr;
 			found++;
 			break;
 		}
 
-	if (found && sdl != NULL && (sdl->sdl_type == IFT_IEEE80211 ||
-	    sdl->sdl_type == IFT_ETHER) && sdl->sdl_alen)
-		val = ether_ntoa((struct ether_addr *)LLADDR(sdl));
+	if (found && sdl && sdl->sdl_alen)
+		switch(sdl->sdl_type) {
+		case IFT_ETHER:
+		case IFT_IEEE80211:
+			ea = (struct ether_addr *)LLADDR(sdl);
+			val = ether_ntoa(ea);
+			for (found = 0, i = 0; i < ETHER_ADDR_LEN; i++)
+				if (ea->ether_addr_octet[i] == 0)
+					found++;
+			if (found == ETHER_ADDR_LEN)
+				val = NULL;
+			break;
+		default:
+			val = NULL;
+			break;
+		}
 
 	freeifaddrs(ifap);
-
-	if (val && strcmp(val, "00:00:00:00:00:00") == 0)
-		return(NULL);
 
 	return(val);
 }
@@ -348,106 +406,13 @@ get_lladdr(int ifs, char *ifname)
 char *
 iftype(int int_type)
 {
-	char *type;
+	int i;
 
-	/*
-	 * Interface type to string
-	 */
-	switch(int_type) {
-	/*
-	 * Here we include all types that are used anywhere
-	 * in the 3.1 kernel.
-	 */
-	/* OpenBSD-specific types */
-	case IFT_PFLOG:
-		type = "Packet Filter Logging";
-		break;
-	case IFT_ENC:
-		type = "IPsec Loopback";
-		break;
-	case IFT_GIF:
-		type = "Generic Tunnel";
-		break;
-	case IFT_FAITH:
-		type = "IPv6-IPv4 TCP relay";
-		break;
-	case IFT_BRIDGE:
-		type = "Ethernet Bridge";
-		break;
-	/* IANA-assigned types */
-	case IFT_ISO88025:
-		type = "Token Ring";
-		break;
-	case IFT_EON:
-		type = "ISO over IP";
-		break;
-	case IFT_NSIP:
-		type = "XNS over IP";
-		break;
-	case IFT_X25DDN:
-		type = "X.25 to IMP";
-		break;
-	case IFT_ATMDXI:
-	case IFT_ATMFUNI:
-	case IFT_ATMIMA:
-	case IFT_ATMLOGICAL:
-	case IFT_ATMVIRTUAL:
-		type = "ATM Virtual";
-		break;
-	case IFT_ATM:
-		type = "ATM";
-		break;
-	case IFT_FDDI:
-		type = "FDDI";
-		break;
-	case IFT_ETHER:
-		type = "Ethernet";
-		break;
-	case IFT_ARCNET:
-		type = "ARCNET";
-		break;
-	case IFT_HDLC:
-		type = "HDLC";
-		break;
-	case IFT_L2VLAN:
-		type = "IEEE 802.1Q Virtual";
-		break;
-	case IFT_PROPVIRTUAL:
-		type = "Virtual";
-		break;
-	case IFT_PPP:
-		type = "PPP";
-		break;
-	case IFT_SLIP:
-		type = "SLIP";
-		break;
-	case IFT_LOOP:
-		type = "Loopback";
-		break;
-	case IFT_ISDNS:
-	case IFT_ISDNU:
-	case IFT_ISDNBASIC:
-	case IFT_ISDNPRIMARY:
-		type = "ISDN";
-		break;
-	case IFT_V35:
-		type = "V.35";
-		break;
-	case IFT_HSSI:
-		type = "HSSI";
-		break;
-	case IFT_TUNNEL:
-		type = "Network Tunnel";
-		break;
-	case IFT_IEEE80211:
-		type = "IEEE 802.11 Wireless";
-		break;
-	case IFT_OTHER:
-	default:
-		type = "Unknown";
-		break;
-	}
-	return(type);
+	for (i = 0; i < sizeof(iftypes) / sizeof(iftypes[0]); i++)
+		if (int_type == iftypes[i].type)
+			return(iftypes[i].name);
+
+	return("Unknown");
 }
 
 int 
@@ -544,7 +509,7 @@ intip(char *ifname, int ifs, int argc, char **argv)
 	struct in_addr destbcast;
 	struct ifaliasreq addreq, ridreq;
 	struct sockaddr_in *sin;
-	char *q, *msg, *cmdname;
+	char  *msg, *cmdname;
 
 	memset(&addreq, 0, sizeof(addreq));
 	memset(&ridreq, 0, sizeof(ridreq));
@@ -782,11 +747,13 @@ intvlan(char *ifname, int ifs, int argc, char **argv)
 		vreq.vlr_tag = 0;
 	}
 
-	if (ioctl(ifs, SIOCSETVLAN, (caddr_t)&ifr) == -1)
-		if (errno == EBUSY)
+	if (ioctl(ifs, SIOCSETVLAN, (caddr_t)&ifr) == -1) {
+		if (errno == EBUSY) {
 			printf("%% Please disconnect the current vlan parent before setting a new one\n");
-		else
+		} else {
 			perror("% intvlan: SIOCSETVLAN");
+		}
+	}
 
 	return(0);
 }
@@ -847,7 +814,6 @@ int
 intlink(char *ifname, int ifs, int argc, char **argv)
 {
 	int set, i, flags, value;
-	char *s;
 
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -911,7 +877,6 @@ intnwid(char *ifname, int ifs, int argc, char **argv)
 {
 	struct ieee80211_nwid nwid;
 	struct ifreq ifr;
-	struct if_data if_data;
 	int set, len;
 
 	if (NO_ARG(argv[0])) {

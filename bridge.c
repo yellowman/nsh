@@ -213,7 +213,7 @@ brport(char *ifname, int ifs, int argc, char **argv)
 int
 brval(char *ifname, int ifs, int argc, char **argv)
 {
-	int set, type, i;
+	int set, type;
 	u_int32_t val;
 	char *name, *endptr;
 
@@ -361,26 +361,22 @@ brstatic(char *ifname, int ifs, int argc, char **argv)
 	argv++;
 	argc--;
 
-	/*
-	 * really, in the second example, the member is not necessary,
-	 * but in order to retain the cisco-like 'no' <cmd>, we require it
-	 */
-	if (argc != 2) {
-		printf("%% static <member> <mac address>\n");
-		printf("%% no static <member> <mac address>\n");
+	if ((set && argc != 2) || ((!set && argc <1) || (!set && argc > 2))) {
+		printf("%% static <mac address> <member>\n");
+		printf("%% no static <mac address> [member]\n");
 		return(0);
 	}
 
-	if (!is_valid_ifname(argv[0]) || is_bridge(ifs, argv[0]))
+	if (argv[1] && (!is_valid_ifname(argv[1]) || is_bridge(ifs, argv[1])))
 	{
-		printf("%% invalid member: %s\n", argv[0]);
+		printf("%% invalid member: %s\n", argv[1]);
 		return(0);
 	}
 
 	if (set)
-		bridge_addaddr(ifs, ifname, argv[0], argv[1]);
+		bridge_addaddr(ifs, ifname, argv[1], argv[0]);
 	else
-		bridge_deladdr(ifs, ifname, argv[1]);
+		bridge_deladdr(ifs, ifname, argv[0]);
 
 	return(0);
 }
@@ -436,7 +432,7 @@ brpri(char *ifname, int ifs, int argc, char **argv)
 /*
  * flush wrappers here
  */
-int
+void
 flush_bridgedyn(char *brdg)
 {
 	int ifs;
@@ -444,22 +440,22 @@ flush_bridgedyn(char *brdg)
 	ifs = socket(AF_INET, SOCK_DGRAM, 0);
 	if (ifs < 0) {
 		perror("% socket");
-		return(0);
+		return;
 	}
 
 	if (!is_bridge(ifs, brdg)) {
 		printf("%% %s is not a bridge\n", brdg);
 		close(ifs);
-		return(0);
+		return;
 	}
 
 	bridge_flush(ifs, brdg);
 	close(ifs);
 
-	return(1);
+	return;
 }
 
-int
+void
 flush_bridgeall(char *brdg)
 {
 	int ifs;
@@ -467,22 +463,22 @@ flush_bridgeall(char *brdg)
 	ifs = socket(AF_INET, SOCK_DGRAM, 0);
 	if (ifs < 0) {
 		perror("% socket");
-		return(0);
+		return;
 	}
 
 	if (!is_bridge(ifs, brdg)) {
 		printf("%% %s is not a bridge\n", brdg);
 		close(ifs);
-		return(0);
+		return;
 	}
 
 	bridge_flushall(ifs, brdg);
 	close(ifs);
 
-	return(1);
+	return;
 }
 
-int
+void
 flush_bridgerule(char *brdg, char *member)
 {
 	int ifs;
@@ -490,23 +486,23 @@ flush_bridgerule(char *brdg, char *member)
 	ifs = socket(AF_INET, SOCK_DGRAM, 0);
 	if (ifs < 0) {
 		perror("% socket");
-		return(0);
+		return;
 	}
 
 	if (!is_bridge(ifs, brdg)) {
 		printf("%% %s is not a bridge\n", brdg);
 		close(ifs);
-		return(0);
+		return;
 	}
 	if (!is_valid_ifname(member) || is_bridge(ifs, member)) {
 		printf("%% %s is not a valid interface\n", member);
 		close(ifs);
-		return(0);
+		return;
 	}
 	bridge_flushrule(ifs, brdg, member);
 	close(ifs);
 
-	return(1);
+	return;
 }
 
 /*
@@ -1113,9 +1109,9 @@ bridge_addaddr(s, brdg, ifname, addr)
 	if (ioctl(s, SIOCBRDGSADDR, &ifba) < 0) {
 		char tmp[128];
 
-		snprintf(tmp, sizeof(tmp), "%% unable to add %s to %s\n",
-		    addr, brdg);
-		perror(tmp);
+		snprintf(tmp, sizeof(tmp), "%% unable to add %s to %s: %s\n",
+		    addr, brdg, strerror(errno));
+		printf("%s", tmp);
 		return (EX_IOERR);
 	}
 
@@ -1200,7 +1196,7 @@ bridge_confaddrs(s, brdg, delim, output)
 		strlcpy(buf, ifba->ifba_ifsname, sizeof(buf));
 		if (ifba->ifba_flags & IFBAF_STATIC)
 			fprintf(output, "%s%s %s\n", delim,
-			    buf, ether_ntoa(&ifba->ifba_dst));
+			    ether_ntoa(&ifba->ifba_dst), buf);
 	}
 	free(inbuf);
 	return (0);

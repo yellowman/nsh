@@ -34,11 +34,6 @@
  * SUCH DAMAGE.
  */
 
-/* 
- * __POOL_EXPOSE is necessary for OpenBSD 3.0 and below
- */
-#define __POOL_EXPOSE
-
 #include <sys/param.h>
 #include <sys/protosw.h>
 #include <sys/socket.h>
@@ -123,9 +118,10 @@ mbpr(mbaddr, mbpooladdr, mclpooladdr)
 			    mbstat.m_mtypes[i],
 			    plural((int)mbstat.m_mtypes[i]), i);
 		}
-	printf("\t%lu/%lu mapped pages in use\n",
+	printf("\t%lu/%lu/%lu mbuf clusters in use (current/peak/max)\n",
 	    (u_long)(mclpool.pr_nget - mclpool.pr_nput),
-	    ((u_long)mclpool.pr_npages * mclpool.pr_itemsperpage));
+	    (u_long)(mclpool.pr_hiwat * mclpool.pr_itemsperpage),
+	    (u_long)(mclpool.pr_maxpages * mclpool.pr_itemsperpage));
 	totmem = (mbpool.pr_npages * page_size) +
 	    (mclpool.pr_npages * page_size);
 	totused = (mbpool.pr_nget - mbpool.pr_nput) * mbpool.pr_size +

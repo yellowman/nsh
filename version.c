@@ -81,7 +81,7 @@ version(void)
 	c = difftime(tv.tv_sec, boottime.tv_sec);
 
 	printf("%% NSH v%s\n", vers);
-	printf("Compiled %s by %s\n", compiled, compiledby);
+	printf("Compiled %s by %s@%s\n", compiled, compiledby, compilehost);
 	printf("uptime: ");
 	pntd = 0;
 #define SECSPERWEEK (SECSPERDAY * DAYSPERWEEK)
@@ -94,7 +94,7 @@ version(void)
 	mins = c / SECSPERMIN;
 	c %= SECSPERMIN;
 	if (weeks) {
-		printf("%d weeks", weeks);
+		printf("%d week%s", weeks, weeks == 1 ? "" : "s");
 		pntd = 1;
 	}
 	if (days) {

@@ -1,0 +1,717 @@
+NSH // Network Shell User's Manual // Chris Cappuccio <chris@nmedia.net>
+
+Copyright (c) 2003 Chris Cappuccio
+
+
+Contents
+--------
+
+1. Overview
+
+2. Installation
+
+3. Main mode commands
+
+4. Interface mode commands
+
+5. PF mode commands
+
+6. Adding system users to nsh
+
+Appendices
+
+A. Explanation of interface types
+
+B. Interface flags
+
+C. Configuration examples
+
+D. ALTQ notes
+
+E. Interface-specific notes
+
+Section 1 > Overview
+--------------------
+
+Network Shell is a command line interface designed to facilitate network
+configuration on the OpenBSD operating system.  The command line notation
+is simple and terse.  This manual explains NSH's functions to you.
+
+NSH is a shell to the OpenBSD kernel's networking functions.  The kernel
+handles routing of packets, firewalling, network address translation,
+rate limiting, bandwidth queueing, LAN bridging, IP tunneling, and
+encryption (IP security).  NSH provides simple wrappers around these
+functions to aid you in setting up a network.  The goal of this software
+is to make the command syntax uniform, and bring all configuration together
+with a single configuration file.  The command line interface is loosely
+modeled around the concepts used in Cisco's popular interface.  
+
+
+Section 2 > Installation
+------------------------
+
+NSH replaces /etc/netstart on a standard OpenBSD system.  To implement NSH on
+such a system, you first need to convert your standard configuration into one
+which is compatible with NSH's syntax.  The first step is to compile
+NSH:
+
+$ tar xvf nsh.tar
+...
+$ cd nsh
+$ make
+...
+
+When this is done, you will have a binary in the nsh directory named 'nsh'.
+Copy this to /bin/nsh or /usr/local/bin/nsh.  
+
+# cp nsh /bin/nsh
+
+To create nsh's initial configuration, run nsh on your router/firewall
+which is already configured, and save the running configuration to disk.
+Nsh will merge your PF/NAT/ALTQ rules into /etc/nshrc.  When you use the
+'write-config' command, NSH will learn your configurations from the running
+kernel.  It will enter everything that is currently configured into the
+nsh startup file.
+
+# mv /etc/pf.conf /var/run/pf.conf
+# nsh
+% NSH v20030208
+machine/write-config
+% Configuration saved
+machine/ 
+
+At this point, you should inspect and edit /etc/nshrc by hand to ensure that
+it does exactly what you want.  Since it reads the entire configuration out of
+the kernel, you may find things that you did not intend to save permanently.
+
+There is a small section in the /etc/rc startup script which reads:
+
+# set hostname, turn on network
+echo 'starting network'
+. /etc/netstart
+
+if [ "X${pf}" != X"NO" ]; then
+        if [ -f ${pf_rules} ]; then
+                pfctl -f ${pf_rules}
+        fi
+fi
+
+Go ahead and remove these lines from the startup script, or comment them
+out.  Replace them with the following commands:
+
+echo > /var/run/pf.conf
+nsh -i /etc/nshrc
+
+Depending on the level of debugging you desire, you may want to start nsh
+its output being logged, like this:
+
+nsh -i /etc/nshrc | logger -t nsh -p daemon.info
+
+You may even want verbose output to see how nsh parses its' rc file:
+
+nsh -vi /etc/nshrc | logger -t nsh -p daemon.info
+
+On a router created with flashdist, you can simply copy NSH into /bin/nsh
+and save nshrc to /etc/nshrc.  The default startup script (/etc/rc) with
+flashdist will automatically use NSH if it is present.  You may need to edit 
+it to specify "nsh -i /etc/nshrc" instead of simply "nsh -i nshrc" which 
+was the default with some versions of flashdist.
+
+The last step is to copy over the appropriate script to save the
+configuration.  NSH assumes that /var/run is always mounted read-write,
+and that /etc may be mounted read-only.  This is the case for users of
+flashdist.  You may also be using NSH on a system where /etc and /var/run
+are both read-write.
+
+If /etc is read-only and /var/run is read-write:
+
+# cp save-ro.sh /usr/local/bin/save.sh
+
+If /etc and /var/run are read-write:
+
+# cp save-rw.sh /usr/local/bin/save.sh
+
+You are done.  When NSH starts from /etc/rc, it will automatically load up
+the network configuration into the kernel.  At this point, you are free to
+view and manipulate the configuration from nsh.
+
+
+Section 3 > Main mode commands
+------------------------------
+
+All nsh modes give you basic command line editing features.  You can
+use the up arrow on most keyboards to go through the last commands
+you entered and repeate them.  Any command that takes action in the
+system can be reversed by prefixing it with 'no '.
+
+Any command can be abbreviated.  For example, 'show interface' can
+be written as 'show int'.  A command like 'show i' is too much of an
+abbreviation, since it matches 'show interface', 'show ipstats', 'show
+icmpstats', and so on.  If you enter an ambiguous command, nsh will
+tell you so.
+
+nsh/show i
+% Ambiguous argument i
+
+help
+----
+
+When you enter NSH, you will see the prompt.  It starts with your
+machine name and a forward slash.  For simplicity, our example machine
+name here is 'nsh'.  At the prompt, you can enter commands detailed in this
+document.  The first command is simply 'help' or '?', which brings up
+the main menu of commands.
+
+nsh/?
+% Commands may be abbreviated.
+% Commands are:
+
+  show     Show system information
+  enable   Enable privileged mode
+  quit     Close current connection
+  verbose  Set verbose diagnostics
+  editing  Set command line editing
+  ?        Print help information
+
+enable
+------
+
+Many commands require privileged access to execute.  If you know the
+correct password, you can obtain privileged access.  The menu of commands
+increases when you enter privileged mode.
+
+nsh/enable
+Password:
+nsh(priv)/?
+% Commands may be abbreviated.
+% Commands are:
+
+  hostname   Set system hostname
+  interface  Modify interface parameters
+  bridge     Modify bridge parameters
+  show       Show system information
+  flush      Flush system tables
+  disable    Disable privileged mode
+  route      Add a host or network route
+  quit       Close current connection
+  verbose    Set verbose diagnostics
+  editing    Set command line editing
+  !          Invoke a subshell
+  ?          Print help information
+
+hostname <hostname>
+-------------------
+
+Set system hostname.  Requires privileged mode.
+
+nsh(priv)/hostname firewall.xyz.com
+firewall.xyz.com(priv)/
+
+verbose
+-------
+
+Verbose mode causes many nsh commands to display extra information.  It is
+very useful in diagnostic and troubleshooting sessions to enable this
+mode.
+
+nsh/verbose
+% Diagnostic mode enabled
+
+If you do not wish to have the extra information displayed, you may
+disable verbose mode.
+
+nsh/no verbose
+% Diagnostic mode disabled
+
+show
+----
+
+The main diagnostic and informational command is 'show'.  
+
+nsh/show ?
+% Commands may be abbreviated.
+% 'show' commands are:
+
+  hostname        Router hostname
+  interface       Interface config
+  route           IP route table or route lookup
+  ipstats         IP statistics
+  ahstats         AH statistics
+  espstats        ESP statistics
+  tcpstats        TCP statistics
+  udpstats        UDP statistics
+  icmpstats       ICMP statistics
+  igmpstats       IGMP statistics
+  ipcompstats     IPCOMP statistics
+  rtstats         Routing statistics
+  mbufstats       Memory management statistics
+  monitor         Monitor routing/arp table changes
+  version         Software information
+  running-config  Operating configuration
+  ?               Options
+
+show hostname
+-------------
+
+This will display the system's currently assigned hostname.
+
+nsh/show hostname
+% nsh
+
+show interface
+--------------
+
+This command displays essential information about a system's network interfaces
+and network bridges.  Using 'show interface' by itself will show information
+about all interfaces and bridges available on a system.  Using 
+'show interface <ifname>' will show information about a specific interface.
+
+nsh/show interface lo0
+% lo0
+  Interface is up, protocol is up
+  Interface type Loopback
+  Internet address is 127.0.0.1/8
+  MTU 33224 bytes
+  124 packets input, 22396 bytes, 0 errors, 0 drops
+  124 packets output, 22396 bytes, 0 errors, 0 unsupported
+  180 avg input size, 180 avg output size
+
+"Interface is up" means that the interface is turned on in software. 
+"Protocol is up" means that the interface is configured and ready to run.
+The "Interface type" explains what the interface is used for on
+the system.  Some interfaces are not intended to pass traffic for network
+users, and instead handle internal functions on the system.  See
+Appendix A for more information on common interface types.
+
+"Internet address" shows the IP address configured for the interface,
+if any.  MTU describes the Maximum Transmission Unit, the largest size of
+a packet which the kernel will transmit on this interface.  
+
+The statistics show the number of packets, bytes, errors, and dropped
+packets in both incoming and outgoing directions.  The average input/output
+sizes describes the median size of packets going in and out the interface.
+Note that the total bytes in and/or out may not be accurate.  OpenBSD uses
+an unsigned long type to hold the byte count.  When the byte count exceeds
+the storage limit of an unsigned long (4,294,967,295 on a 32 bit architecture
+or 18,446,744,073,709,551,615 on a 64-bit architecture), the counter will
+overflow, causing it to roll over to 0.  As the total byte count is no
+longer accurate when it rolls over, the average packet size will also be
+inaccurate.
+
+With verbose mode enabled, 'show interface' will display the raw kernel
+flags for an interface.  See Appendix B for an explanation of these flags.
+
+nsh/show int lo0
+% lo0
+  Interface is up, protocol is up
+  Interface type Loopback
+  Internet address is 127.0.0.1/8
+  MTU 33224 bytes
+  124 packets input, 22396 bytes, 0 errors, 0 drops
+  124 packets output, 22396 bytes, 0 errors, 0 unsupported
+  180 avg input size, 180 avg output size
+  Flags:
+    <UP,LOOPBACK,RUNNING,MULTICAST>
+
+With a bridge, verbose mode will show spanning tree member states and
+bridge members.
+
+nsh/show int bridge0
+% bridge0
+  Bridge is up (last change 00:00:21), protocol is up
+  Interface type Ethernet Bridge
+  0 packets input, 0 bytes, 0 errors, 0 drops
+  0 packets output, 0 bytes, 0 errors, 0 unsupported
+  Flags:
+    <UP,RUNNING>
+  STP member state:
+    sis0: listening
+
+With an IEEE 802.11 wireless interface, verbose mode will show
+the network ID, network key, and powersaving mode (if enabled).
+
+nsh/show int wi0
+% wi0
+  BLah blah
+  IEEE 802.11
+    network id blah
+    network key blah
+    powersaving (111 ms)
+
+With an interface that supports media commands, including Ethernet
+and IEEE 802.11 wireless interfaces, verbose mode will show which
+media types are available.
+
+nsh/show int sis0
+% sis0
+...
+  Supported media types:
+    media none
+    media 10baseT
+    media 10baseT, mediaopt full-duplex
+    media 100baseTX
+    media 100baseTX, mediaopt full-duplex
+    media autoselect
+
+show route
+----------
+
+A dump of the routing table, including ARP entries.
+
+nsh/show route
+Flags: U - up, G - gateway, H - host, L - link layer, R - reject (unreachable),
+       D - dynamic, S - static
+
+% IPv4 routing table:
+Destination        Gateway            Flags     Refs  Packets    Mtu  Interface
+0.0.0.0/0          172.20.1.1         UGS         3     57502      -   sis0
+127.0.0.0/8        127.0.0.1          UGRS        0         0  33224   lo0
+127.0.0.1          127.0.0.1          UH          2        12  33224   lo0
+172.20.1.0/24      link#1             U           0         0      -   sis0
+172.20.1.1         8:0:20:71:22:e7    UHL         1         0      -   sis0
+172.20.1.2         127.0.0.1          UGHS        0         0  33224   lo0
+172.20.1.23        link#1             UHL         1      1764      -   sis0
+172.20.1.255       link#1             UHL         2      1555      -   sis0
+224.0.0.0/4        127.0.0.1          URS         0         0  33224   lo0
+
+The destination column is simply the destination network which the
+route describes.  The gateway is the next hop for this route to pass through.
+Gateways which are described as 'link#' are local area networks.
+
+The flags are useful to determine if the kernel is using a particular
+route or not.
+
+U - up
+  This route is on
+G - gateway
+  The destination of this route is behind the gateway (next hop).
+H - host
+  This route describes a host on the local network.
+L - link layer
+  The destination has been or needs to be discovered through a layer 2 protocol
+R - reject
+  This route is unreachable, and therefore marked unusable in the kernel
+D - dynamic
+  This is a dynamic route which has is managed through routing software on
+  the local system (such as GateD or Zebra)
+S - static
+  This is a static route set by a user
+
+show ipstats
+------------
+
+This displays a variety of statistics related to Internet Protocol usage
+related to both local machine and its gateway functions.
+
+show ahstats
+------------
+
+This displays a variety of statistics related to Authentication Header
+(IPsec) usage related to both the local machine and its gateway functions.
+
+show espstats
+-------------
+
+This displays a variety of statistics related to Encapsulated Security Payload
+(IPsec) usage related to both the local machine and its gateway functions.
+
+show tcpstats
+-------------
+
+This displays a variety of statistics related to Transmission Control Protocol
+usage on the local machine.
+
+show udpstats
+-------------
+
+This displays a variety of statistics related to User Datagram Protocol usage
+on the local machine.
+
+show icmpstats
+--------------
+
+This displays a variety of statistics related to Internet Control Message
+Protocol usage on the local machine.
+
+show igmpstats
+--------------
+
+This displays a variety of statistics related to Internet Group Message
+Protocol usage on the local machine.
+
+show ipcomptats
+---------------
+
+This displays a variety of statistics related to IP Compression Protocol
+(IPComp) usage related to both the local machine and its gateway functions.
+
+show rtstats
+------------
+
+This displays a variety of statistics kept in the kernel's routing engine.
+
+show mbufstats
+--------------
+
+The kernel has a private pool of memory buffers called 'mbufs'.  This
+displays a variety of statistics kept in the kernel's memory management
+
+show monitor
+------------
+
+This causes the user to enter monitor mode for the routing socket.  The  
+monitor displays raw descriptions of the data passing into the kernel's
+routing socket and dumps of the kernel's routing messages to the machine.
+Once this mode is entered, there is no way to exit.  The login session must
+be disconnected.
+
+show version
+------------
+
+This displays basic information about the host and about NSH, such as
+the version of NSH installed, the system's  uptime and kernel version.  
+It also shows both the kernel that NSH was compiled under, and the
+current kernel that NSH is running under.  NSH should always be running
+on a kernel that has a similar version to the one that NSH was compiled
+under.  This ensures that NSH was compiled with the same headers that
+the kernel uses.
+
+nsh/sho version
+% NSH v20020619
+Compiled 23-Jan-03 00:45 by chris
+uptime: 3 days, 6 hours, 3 minutes
+kernel: OpenBSD/i386 version 3.2
+cpu: AMD Athlon Model 4 (Thunderbird) ("AuthenticAMD" 686-class)
+memory: 130604K
+compiled on: OpenBSD 3.2-current (ZION) #3: Thu Nov 28 05:52:39 PST 2002
+    chris@ind0.nmedia.net:/usr/src/sys/arch/i386/compile/ZION
+running on: OpenBSD 3.2-current (ZION) #3: Thu Nov 28 05:52:39 PST 2002
+    chris@ind0.nmedia.net:/usr/src/sys/arch/i386/compile/ZION
+
+show running-config
+-------------------
+
+This shows the current running configuration on the system, including
+interface and bridge configurations, routes, the system hostname, firewall
+rules, and other information compiled by nsh.  See Appendix C for
+example configuration files.
+
+flush
+-----
+
+Flush will empty various system tables
+
+flush routes
+------------
+
+This will empty the system routing table
+
+flush arp
+---------
+
+This will empty the system arp cache and static arp table
+
+flush bridge-dyn <bridge>
+-------------------------
+
+This will flush dynamically learned members from the named bridge
+
+nsh/flush bridge-dyn bridge0
+
+This would delete all dynamically learned members from bridge0.  Any
+members set manually (static members) will not be removed.
+
+flush bridge-all <bridge>
+-------------------------
+
+This will flush dynamically and statically learned members from the named bridge
+
+nsh/flush bridge-all bridge0
+
+flush bridge-rule <bridge> <interface>
+--------------------------------------
+
+This will flush all rules on the named bridge for a specifc interface.
+
+nsh/flush bridge-all bridge0 sis0
+
+flush history
+-------------
+
+This will clear the command history
+
+disable
+-------
+
+Leave privileged mode, use this if you want to stay logged in but to not
+trust your terminal area
+
+route <destination> <gateway>
+-----------------------------
+
+You can add static routes with this command.  It takes CIDR netmasks
+(number of bits) or classic IP netmasks to describe routes.  This 
+command only runs in privileged mode.
+
+nsh(priv)/route 192.168.0.0/16 1.2.3.4
+
+is equivalent to:
+
+nsh(priv)/route 192.168.0.0/255.255.0.0 1.2.3.4
+
+This command takes the 'no ' prefix to remove a route.  The gateway
+is not necessary when using the 'no route' notation.
+
+nsh(priv)/no route 192.168.0.0/16
+
+quit
+----
+
+Leave NSH
+
+verbose
+-------
+
+Set verbose mode on.  (It defaults to off)
+
+This command takes the 'no ' prefix to turn off verbose mode.
+
+editing
+-------
+
+Set command line editing on.  (If defaults to on)
+
+This command takes the 'no ' prefix to turn off editing mode.
+
+!
+-
+
+Invoke a shell command (requires privileged mode.)
+
+Your system may have this feature disabled to enhance security.
+
+nsh(priv)/!ls
+helloworld.c
+nsh(priv)/!
+$ 
+
+Section 4 > Interface mode commands
+-----------------------------------
+
+Section 5 > PF mode commands
+----------------------------
+
+Section 6 > Adding system users to nsh
+--------------------------------------
+
+Appendix A > Common interface types
+-----------------------------------
+
+Packet Filter Logging: This interface is used to pass traffic logged by
+the firewall to software which can record it.  These interface names
+start with 'pflog'.
+
+IPsec Loopback: This interface is used internally in the system to
+pass decapsulated IPsec traffic.  All traffic from this interface has
+already been authenticated and unencrypted from the IPsec subsystem.  This
+is useful when writing firewall rules.  These interface names start with
+'enc'.
+
+Generic Tunnel: This interface is used to configure a network tunnel to
+another host or router.  It follows the RFC1933 tunneling standard.  These
+interface names start with 'gif'.
+
+Ethernet Bridge: This interface is used to configure layer 2 bridging
+between physical and virtual network ports on a system.  These interface
+names start with 'bridge'.
+
+Ethernet: This is a physical Ethernet interface, running at 10, 100, or
+1000 megabits per second.  These interface names are based on the name
+of the driver, and vary with different Ethernet chip types.
+
+IEEE 802.1Q Virtual: This is a virtual Ethernet, Token Ring, or FDDI
+interface.  It uses the IEEE 802.1Q protocol to segment real Ethernet
+interfaces into multiple layer 2 networks.  These interface names start
+with 'vlan'.
+
+Virtual: This is a virtual interface of any type.  Often several different
+interfaces will all use this type.  Several versions of OpenBSD use this
+type to denote virtual IEEE 802.1Q interfaces, described above.
+
+PPP: This interface implements the Point to Point Protocol (PPP).  PPP,
+described in RFC 1661, creates a network over serial communication lines.
+It is used over modem connections, direct serial links, leased lines, and
+over virtual IP based connections such as in SSH sessions.  These interface
+names start with 'ppp' when referring to a version which supports
+serial and modem connections.  Other interface types may also implement the
+Point to Point Protocol.
+
+IEEE 802.11 Wireless: This interface implements the IEEE 802.11 wireless
+LAN protocol.  Many implementations of this network have little or no
+security unless used with proper encryption such as IPsec.  These interface
+names are based on the name of the driver, and vary with different 
+wireless chip types.
+
+
+Appendix B > Interface flags
+----------------------------
+
+UP
+  Interface is up
+BROADCAST
+  Broadcast address valid
+DEBUG
+  Turn on debugging (only some network drivers use this)
+LOOPBACK
+  Interface is a loopback network (internal to the machine) 
+POINTOPOINT
+  Interface is point-to-point link
+NOARP
+  Address Resolution Protocol is disabled on this interface
+PROMISC
+  Interface is in promiscuous mode, it will cause the system's software to
+  receive all packets visible to the network card, even if they are not
+  destined for this host
+ALLMULTI
+  This causes the interface to receive all multicast traffic, even for
+  multicast networks that it was not signed up for
+OACTIVE
+  Transmission in progress
+  An interface that displays this flag continuously may be stuck.  You
+  may be able to reset an interface that is in this state by using and then
+  reversing the 'shutdown' command from the interface menu.  For example,
+
+nsh/interface fxp0
+nsh(interface-fxp0)/shutdown
+nsh(interface-fxp0)/no shutdown
+
+SIMPLEX
+  Can't hear own transmissions
+LINK0
+  This flag has different meanings with different interface types
+LINK1
+  This flag has different meanings with different interface types
+LINK2
+  This flag has different meanings with different interface types
+MULTICAST
+  This interface supports multicast
+
+
+Appendix C > Configuration examples
+-----------------------------------
+
+Appendix D > ALTQ notes
+-----------------------
+
+Appendix E > Interface-specific notes
+-------------------------------------
+
+----
+
+This product includes software developed by the University of California,
+Berkeley and its contributors.
+
+This product includes software developed by Jason L. Wright
+
+This product includes software developed by the NetBSD Foundation, Inc. and   
+its contributors.

@@ -49,6 +49,20 @@
 char *routename_sa(struct sockaddr *);
 void conf_print_rtm(FILE *, struct rt_msghdr *, char *, int);
 
+static const struct {
+	char *name;
+	int mtu;
+} defmtus[] = {
+	/* Current as of 2/08/03 */
+	{ "gre",	1450 },
+	{ "gif",	1280 },
+	{ "tun",	3000 },
+	{ "sl",		296 },
+	{ "enc",	1536 },
+	{ "pflog",	33224 },
+	{ "lo",		33224 },
+};
+
 int
 conf(FILE *output)
 {
@@ -58,13 +72,14 @@ conf(FILE *output)
 	struct sockaddr_in sin, sin2, sin3;
 	struct vlanreq vreq;
 
+	FILE *pfconf;
 	short noaddr, br;
 	int ifs, flags, tmp;
 	long l_tmp;
 	u_long rate, bucket;
-	in_addr_t mask;
 
-	char rate_str[64], bucket_str[64], tmp_str[4096];
+	char hostbuf[MAXHOSTNAMELEN];
+	char rate_str[64], bucket_str[64], tmp_str[4096], tmp_str2[1024];
 
 	if ((ifn_list = if_nameindex()) == NULL) {
 		fprintf(stderr, "%% conf: if_nameindex failed\n");
@@ -74,6 +89,10 @@ conf(FILE *output)
 		perror("% conf");
 		return(1);
 	}
+
+	/* ready? begin. print the hostname ... */
+	gethostname (hostbuf, sizeof(hostbuf));
+	fprintf(output, "hostname %s\n", hostbuf);
 
 	for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++) {
 		strncpy(ifr.ifr_name, ifnp->if_name, sizeof(ifr.ifr_name));
@@ -186,7 +205,14 @@ conf(FILE *output)
 		}
 
 		if (!br) { /* no shirt, no shoes, no problem */
+
+			if (phys_status(ifs, ifnp->if_name, tmp_str, tmp_str2,
+			    sizeof(tmp_str), sizeof(tmp_str2)) > 0)
+			/* future os may use this for more than tunnel? */
+			fprintf(output, " tunnel %s %s\n", tmp_str, tmp_str2);
+
 			conf_media_status(output, ifs, ifnp->if_name);
+
 			/*
 			 * print interface mtu, metric
 			 */
@@ -341,40 +367,34 @@ conf(FILE *output)
 	conf_routes(output, "arp ", AF_INET, (RTF_LLINFO & RTF_STATIC));
 	conf_routes(output, "route ", AF_INET, RTF_STATIC);
 
+	if ((pfconf = fopen(PFCONF_TEMP, "r")) != NULL) {
+		fprintf(output, "pf rules\n");
+		for (;;) {
+			if(fgets(tmp_str, sizeof(tmp_str), pfconf) == NULL)
+				break;
+			if(tmp_str[0] == 0)
+				break;
+			fprintf(output, " %s", tmp_str);
+		}
+		fclose(pfconf);
+		fprintf(output, "pf action\n enable\n reload\n");
+	} else if (verbose)
+		perror("% PFCONF_TEMP");
+
 	return(0);
 }
 
 int
 default_mtu(char *ifname)
 {
-	/*
-	 * I wish this could be pulled from the kernel.  Some of these
-	 * will need to be updated for newer kernels (current as of 5/20/2002)
-	 * Here we list everything that has a default mtu other than
-	 * 1500 (and a few that are commonly 1500).. If it isn't in
-	 * our list, we always return 1500...
-	 */
-	if(CMP_ARG(ifname, "vlan"))
-		return(1500);
-	if(CMP_ARG(ifname, "gre"))
-		return(1450);
-	if(CMP_ARG(ifname, "gif"))
-		return(1280);
-	if(CMP_ARG(ifname, "tun"))
-		return(3000);
-	if(CMP_ARG(ifname, "ppp"))
-		return(1500);
-	if(CMP_ARG(ifname, "sl"))
-		return(296);
-	if(CMP_ARG(ifname, "enc"))
-		return(1536);
-	if(CMP_ARG(ifname, "bridge"))
-		return(1500);
-	if(CMP_ARG(ifname, "pflog"))
-		return(33224);
-	if(CMP_ARG(ifname, "lo"))
-		return(33224);
-	return(1500);
+	int i;
+
+	for (i = 0; i < sizeof(defmtus) / sizeof(defmtus[0]); i++)
+		if (strncasecmp(defmtus[i].name, ifname,
+		    strlen(defmtus[i].name)) == 0)
+			return(defmtus[i].mtu);
+
+	return(1500); /* default mtu */
 }
 
 /*
@@ -412,10 +432,9 @@ conf_routes(FILE *output, char *delim, int af, int flags)
 			fprintf(stderr, "%% conf_routes: rtm: %s (errno %d)\n",
 			    strerror(rtm->rtm_errno), rtm->rtm_errno);
 	}
-	free(rtdump->buf);
-	free(rtdump);
+	freertdump(rtdump);
 	close(s);
-	return;
+	return(1);
 }
 
 void

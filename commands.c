@@ -57,13 +57,16 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <ctype.h>
 #include <kvm.h>
 #include <nlist.h>
 #include <unistd.h>
+#include <string.h>
 #include <sys/fcntl.h>
 #include <sys/socket.h>
 #include <sys/param.h>
+#include <sys/reboot.h>
 #include <sys/sockio.h>
 #include <sys/errno.h>
 #include <sys/wait.h>
@@ -128,12 +131,12 @@ typedef struct {
 
 static Command	*getcmd(char *name);
 static int	quit(void);
-static int	noop(void);
 static int	enable(void);
 static int	disable(void);
 static int	doverbose(int, char**);
 static int	doediting(int, char**);
 static int	pr_routes(char *);
+static int	pr_pf_stats(void);
 static int	pr_ip_stats(void);
 static int	pr_ah_stats(void);
 static int	pr_esp_stats(void);
@@ -143,23 +146,34 @@ static int	pr_icmp_stats(void);
 static int	pr_igmp_stats(void);
 static int	pr_ipcomp_stats(void);
 static int	pr_mbuf_stats(void);
-static int	pr_s_conf(void);
 static int	pr_conf(void);
+static int	wr_conf(void);
 static int	show_help(void);
-static int	flush_help(void);
-static int	flush_ip_routes(void);
-static int	flush_arp_cache(void);
-static int	flush_history(void);
+static void	flush_help(void);
+static void	flush_ip_routes(void);
+static void	flush_arp_cache(void);
+static void	flush_history(void);
+static void	flush_pfall(void);
+static void	flush_pfnat(void);
+static void	flush_pfqueue(void);
+static void	flush_pfrules(void);
+static void	flush_pfstates(void);
+static void	flush_pfstats(void);
+static void	flush_pftables(void);
 static int	int_help(void);
 static int	el_burrito(EditLine *, int, char **);
 static void	makeargv(void);
-static int	hostname (int, char **);
+static int	hostname(int, char **);
 static int	help(int, char**);
 static int	shell(int, char*[]);
+static int	cmdarg(char *, char *);
 static int	pr_rt_stats(void);
-static void	p_argv(int, char**);
+static void	p_argv(int, char **);
 static int	config(void);
 static int	priv = 0;
+static int 	reload(void);
+static int 	shut_down(void);
+static int	pf(int, char **, char *);
 
 /*
  * Quit command
@@ -170,16 +184,6 @@ quit()
 {
 	printf("%% Session terminated.\n");
 	exit(0);
-	return 0;
-}
-
-/*
- * do nothing
- */
-
-int
-noop()
-{
 	return 0;
 }
 
@@ -199,6 +203,7 @@ static struct showlist Showlist[] = {
 	{ "hostname",	"Router hostname",	0, 0, hostname },
 	{ "interface",	"Interface config",	0, 1, show_int },
 	{ "route",	"IP route table or route lookup", 0, 1, pr_routes },
+	{ "pfstats",	"PF statistics",	0, 0, pr_pf_stats },
 	{ "ipstats",	"IP statistics",	0, 0, pr_ip_stats },
 	{ "ahstats",	"AH statistics",	0, 0, pr_ah_stats },
 	{ "espstats",	"ESP statistics",	0, 0, pr_esp_stats },
@@ -212,9 +217,6 @@ static struct showlist Showlist[] = {
 	{ "monitor",	"Monitor routing/arp table changes", 0, 0, monitor },
 	{ "version",	"Software information",	0, 0, version },
 	{ "running-config",	"Operating configuration", 0, 0, pr_conf },
-#if 0
-	{ "startup-config",	"Startup configuration", 0, 0, pr_s_conf },
-#endif
 	{ "?",		"Options",		0, 0, show_help },
 	{ "help",	0,			0, 0, show_help },
 	{ 0, 0, 0, 0, 0 }
@@ -241,10 +243,10 @@ showcmd(argc, argv)
 	 */
 	s = GETSHOW(argv[1]);
 	if (s == 0) {
-		printf("%% Invalid argument %s\n",argv[1]);
+		printf("%% Invalid argument %s\n", argv[1]);
 		return 0;
 	} else if (Ambiguous(s)) {
-		printf("%% Ambiguous argument %s\n",argv[1]);
+		printf("%% Ambiguous argument %s\n", argv[1]);
 		return 0;
 	}
 	if (((s->minarg + 2) > argc) || ((s->maxarg + 2) < argc)) {
@@ -349,7 +351,7 @@ struct flushlist {
 	char *help;		/* Help information (0 ==> no help) */
 	int minarg;		/* Minimum number of arguments */
 	int maxarg;		/* Maximum number of arguments */
-	int (*handler)();	/* Routine to perform (for special ops) */
+	void (*handler)();	/* Routine to perform (for special ops) */
 };
 
 static struct flushlist Flushlist[] = {
@@ -358,6 +360,13 @@ static struct flushlist Flushlist[] = {
 	{ "bridge-dyn",	"Dynamically learned bridge addresses", 1, 1, flush_bridgedyn },
 	{ "bridge-all",	"Dynamic and static bridge addresses", 1, 1, flush_bridgeall },
 	{ "bridge-rule", "Layer 2 filter rules for a bridge member port", 2, 2, flush_bridgerule },
+	{ "pf",		"pf NAT/filter/queue rules, states, tables", 1, 1, flush_pfall },
+	{ "pf-nat",	"pf NAT rules only", 	0, 0, flush_pfnat },
+	{ "pf-queue",	"pf queue rules only",	0, 0, flush_pfqueue },
+	{ "pf-rules",	"pf filter rules only",	0, 0, flush_pfrules },
+	{ "pf-states",	"pf NAT/filter states",	0, 0, flush_pfstates },
+	{ "pf-stats",	"pf statistics",	0, 0, flush_pfstats },
+	{ "pf-tables",	"pf tables",		0, 0, flush_pftables },
 	{ "history",	"Command history",	0, 0, flush_history },
 	{ "?",		"Options",		0, 0, flush_help },
 	{ "help",	0,			0, 0, flush_help },
@@ -371,7 +380,6 @@ static int
 flushcmd(int argc, char **argv)
 {
 	struct flushlist *f;
-	int success = 0;
 
 	if (argc < 2) {
 		printf("%% Use 'flush ?' for help\n");
@@ -383,10 +391,10 @@ flushcmd(int argc, char **argv)
 	 */
 	f = GETFLUSH(argv[1]);
 	if (f == 0) {
-		printf("%% Invalid argument %s\n",argv[1]);
+		printf("%% Invalid argument %s\n", argv[1]);
 		return 0;
 	} else if (Ambiguous(f)) {
-		printf("%% Ambiguous argument %s\n",argv[1]);
+		printf("%% Ambiguous argument %s\n", argv[1]);
 		return 0;
 	}
 	if (((f->minarg + 2) > argc) || ((f->maxarg + 2) < argc)) {
@@ -395,13 +403,13 @@ flushcmd(int argc, char **argv)
 		return 0;
 	}
 	if (f->handler)
-		success = (*f->handler)((f->maxarg > 0) ? argv[2] : 0,
+		(*f->handler)((f->maxarg > 0) ? argv[2] : 0,
 		    (f->maxarg > 1) ? argv[3] : 0);
 
-	return(success);
+	return(1);
 }
 
-static int
+static void
 flush_help()
 {
 	struct flushlist *f;
@@ -419,7 +427,7 @@ flush_help()
 		if (f->help)
 			printf("  %-*s  %s\n", z, f->name, f->help);
 	}
-	return 0;
+	return;
 }
 
 /*
@@ -530,7 +538,7 @@ interface(int argc, char **argv, char *modhvar)
 			 * a command was supplied directly to interface()
 			 */
 			for (z = 0; z < argc; z++)
-				strncpy(margv[z], argv[z], sizeof(margv[z]));
+				margv[z] = argv[z];
 			margc = argc;
 		}
 		if (NO_ARG(margv[0]))
@@ -562,6 +570,84 @@ interface(int argc, char **argv, char *modhvar)
 		}
 	}
 	close(ifs);
+	return(0);
+}
+
+static int
+pf(int argc, char **argv, char *modhvar)
+{
+	int z = 0, action = 0;
+	char arg[256];
+	char *editor, *aarg;
+	FILE *rulefile;
+
+	(void) signal(SIGINT, SIG_IGN);
+	(void) signal(SIGQUIT, SIG_IGN);
+
+	if ((argc != 2 && !modhvar) || (argc == 2 && CMP_ARG(argv[1],"?"))) {
+		printf("%% pf edit\n");
+		printf("%% pf reload\n");
+		printf("%% pf enable\n");
+		printf("%% pf disable\n");
+		return(0);
+	}
+
+	aarg = argv[0];
+
+	if (modhvar && CMP_ARG(modhvar, "action"))
+		action = 1;
+
+	if (!modhvar) {
+		action = 1;
+		aarg = argv[1];
+	}
+
+	if (action) {
+		if(CMP_ARG(aarg, "ed")) {	/* edit */
+			if ((editor = getenv("EDITOR")) == NULL)
+				editor = DEFAULT_EDITOR;
+			/* check for valid path from user supplied env var */
+			/* check for locking and return if already locked */
+			cmdarg(editor, PFCONF_TEMP);
+			/* undo locking when we are done editing */
+			snprintf(arg, sizeof(arg), "-nf%s", PFCONF_TEMP);
+			cmdarg(PFCTL, arg);
+			return(0);
+		}
+		if(CMP_ARG(aarg, "r")) {	/* reload */
+			snprintf(arg, sizeof(arg), "-f%s", PFCONF_TEMP);
+			cmdarg(PFCTL, arg);
+			return(0);
+		}
+		if(CMP_ARG(aarg, "en")) {	/* enable */
+			cmdarg(PFCTL, "-e");
+			return(0);
+		}
+		if(CMP_ARG(aarg, "d")) {	/* disable */
+			cmdarg(PFCTL, "-d");
+			return(0);
+		}
+		printf("%% invalid or ambiguous argument: %s\n", argv[1]);
+		return(0);
+	}
+
+	/* nshrc routines */
+	if (CMP_ARG(modhvar, "rules")) {
+		rulefile = fopen(PFCONF_TEMP, "a");
+		if (rulefile == NULL) {
+			perror("%% Rule write failed");
+			return(1);
+		}
+		for (z = 0; z < argc; z++)
+			fprintf(rulefile, "%s%s", z ? " " : "", argv[z]);
+		fprintf(rulefile, "\n");
+		fclose(rulefile);
+		return(0);
+	}
+
+	if (modhvar)
+		printf ("%% Unknown rulefile modifier %s\n", modhvar);
+
 	return(0);
 }
 
@@ -600,6 +686,7 @@ int_help()
 static char
 	hostnamehelp[] = "Set system hostname",
 	interfacehelp[] = "Modify interface parameters",
+	pfhelp[] =	"Packet filter rule handler",
 	bridgehelp[] =	"Modify bridge parameters",
 	showhelp[] =	"Show system information",
 	flushhelp[] =	"Flush system tables",
@@ -608,8 +695,11 @@ static char
 	routehelp[] =	"Add a host or network route",
 	quithelp[] =	"Close current connection",
 	verbosehelp[] =	"Set verbose diagnostics",
-	editinghelp[] =  "Set command line editing",
+	editinghelp[] = "Set command line editing",
 	shellhelp[] =	"Invoke a subshell",
+	savehelp[] =	"Save the current configuration",
+	reloadhelp[] =	"Reboot the system",
+	shutdownhelp[] = "Shut the system down",
 	helphelp[] =	"Print help information";
 
 /*
@@ -625,7 +715,11 @@ static Command cmdtab[] = {
 	{ "enable",	enablehelp,	enable,		0, 1, 0, 0 },
 	{ "disable",	disablehelp,	disable,	1, 0, 0, 0 },
 	{ "route",	routehelp,	route,		1, 0, 1, 0 },
+	{ "pf",		pfhelp,		pf,		1, 0, 1, 0 },
 	{ "quit",	quithelp,	quit,		0, 0, 0, 0 },
+	{ "reload",	reloadhelp,	reload,		1, 0, 0, 0 },
+	{ "shutdown",	shutdownhelp,	shut_down,	1, 0, 0, 0 },
+	{ "write-config", savehelp,	wr_conf,	1, 0, 0, 0 },
 	{ "verbose",	verbosehelp,	doverbose,	0, 0, 1, 0 },
 	{ "editing",	editinghelp,	doediting,	0, 0, 1, 0 },
 	{ "!",		shellhelp,	shell,		1, 0, 0, 0 },
@@ -887,10 +981,39 @@ shell(argc, argv)
 			else
 				execl(shellp, shellname, (char *)NULL);
 			perror("% Execl");
-			break;
+			exit(0);
 		}
 		default:
 			(void)wait((int *)0);  /* Wait for shell to complete */
+			break;
+	}
+	return 1;
+}
+
+/*
+ * cmd, arg!@
+ */
+int
+cmdarg(cmd, arg)
+	char *cmd;
+	char *arg;
+{
+	switch(vfork()) {
+		case -1:
+			perror("% Fork failed");
+			break;
+
+		case 0:
+		{
+			char *shellp;
+			char *shellname = shellp = cmd;
+
+			execl(shellp, shellname, arg, (char *)NULL);
+			perror("% Execl");
+			exit(0);
+		}
+		default:
+			(void)wait((int *)0);  /* Wait for cmd to complete */
 			break;
 	}
 	return 1;
@@ -920,6 +1043,8 @@ int
 config(void)
 {
 	printf("%% Configuration mode is unnecessary with this software.\n");
+
+	return(0);
 }
 
 /*
@@ -964,12 +1089,12 @@ doediting(int argc, char **argv)
 	return 0;
 }
 
-int
+void
 flush_history(void)
 {
 	if (!editing) {
 		printf("%% Command line editing not enabled\n");
-		return(0);
+		return;
 	}
 
 	/*
@@ -980,6 +1105,76 @@ flush_history(void)
 	endhist();
 	inithist();
 	initedit();
+
+	return;
+}
+
+/*
+ * pf toilet flusher
+ */
+
+void
+flush_pfall(void)
+{
+	printf("%% Flushing all pf filter rules, NAT rules, queue rules,"
+	    "   address tables, states, and statistics\n");
+	cmdarg(PFCTL, "-Fall");
+
+	return;
+}
+
+void
+flush_pfnat(void)
+{
+	printf("%% Flushing pf NAT rules\n");
+	cmdarg(PFCTL, "-Fnat");
+
+	return;
+}
+
+void 
+flush_pfqueue(void)
+{
+	printf("%% Flushing pf queue rules\n");
+	cmdarg(PFCTL, "-Fqueue");
+
+	return;
+}
+
+void
+flush_pfrules(void)
+{
+	printf("%% Flushing pf filter rules\n");
+	cmdarg(PFCTL, "-Frules");
+
+	return;
+}
+
+void
+flush_pfstates(void)
+{
+	printf("%% Flushing pf NAT/filter states\n");
+	cmdarg(PFCTL, "-Fstate");
+
+	return;
+}
+
+void
+flush_pfstats(void)
+{
+	printf("%% Flushing pf statistics\n");
+	cmdarg(PFCTL, "-Finfo");
+
+	return;
+}
+
+void
+flush_pftables(void)
+{
+	printf("%% Flushing pf address tables\n");
+	cmdarg(PFCTL, "-FTables");
+
+	return;
 }
 
 /*
@@ -1018,7 +1213,7 @@ cmdrc(rcname)
 {
 	Command	*c;
 	FILE	*rcfile;
-	char	modhvar[128];	/* required variable name in mode handler cmd */
+	char	modhvar[128];	/* required variable in mode handler cmd */
 	int	modhcmd; 	/* do we execute under another mode? */
 	int	lnum;		/* line number */
 	int	z = 0;		/* max length of cmdtab argument */
@@ -1048,13 +1243,14 @@ cmdrc(rcname)
 			 * here, if a command starts with a space, it is
 			 * considered part of a mode handler
 			 */
-			modhcmd = 0;
-			if (c)
-				if (c->modh)
-					modhcmd = 1;
+			if (c && c->modh)
+				modhcmd = 1;
+			else
+				modhcmd = 0;
 
 			if (!modhcmd) {
-				printf("%% No mode handler specified before indented command? (line %i) ", lnum);
+				printf("%% No mode handler specified before"
+				    " indented command? (line %i) ", lnum);
 				p_argv(margc, margv);
 				printf("\n");
 				continue;
@@ -1066,36 +1262,37 @@ cmdrc(rcname)
 			modhcmd = 0;
 			if (NO_ARG(margv[0])) {
 				c = getcmd(margv[1]);
-				if (c)
-					if(c->modh) {
-						/*
-						 * ..command is a mode handler
-						 * then it cannot be 'no cmd'
-						 */
-						printf("%% Argument 'no' is invalid for a mode handler (line %i) ", lnum);
+				if (c && c->modh) {
+					/*
+					 * ..command is a mode handler
+					 * then it cannot be 'no cmd'
+					 */
+					printf("%% Argument 'no' is invalid"
+					    " for a mode handler (line %i) ",
+					    lnum);
+					p_argv(margc, margv);
+					printf("\n");
+					continue;
+				}
+			} else {
+				c = getcmd(margv[0]);
+				if(c && c->modh) {
+					/*
+					 * any mode handler should have
+					 * one value stored, passed on
+					 */
+					if (margv[1]) {
+						strncpy(modhvar, margv[1],
+						    sizeof(modhvar));
+					} else {
+						printf("%% No argument after"
+						    " mode handler (line %i) ",
+						    lnum);
 						p_argv(margc, margv);
 						printf("\n");
 						continue;
 					}
-			} else {
-				c = getcmd(margv[0]);
-				if(c)
-					if(c->modh) {
-						/*
-						 * any mode handler should have
-						 * one value stored, passed on
-						 */
-						if (margv[1]) {
-							strncpy(modhvar,
-							    margv[1],
-							    sizeof(modhvar));
-						} else {
-							printf("%% No argument after mode handler (line %i) ", lnum);
-							p_argv(margc, margv);
-							printf("\n");
-							continue;
-						}
-					}
+				}
 			}
 		}
 		if (Ambiguous(c)) {
@@ -1122,7 +1319,7 @@ cmdrc(rcname)
 			 * normal processing, there is no sub-mode cmd to be
 			 * dealt with
 			 */
-			if (NO_ARG(margv[0]) && !c->nocmd) {
+			if (!c->nocmd && NO_ARG(margv[0])) {
 				printf("%% Invalid rc command (line %i) ",
 				    lnum);
 				p_argv(margc, margv);
@@ -1209,14 +1406,57 @@ iprompt(void)
 }
 
 /*
- * Flush wrappers
+ * Save configuration
  */
 int
+wr_conf(void)
+{
+	FILE *rchandle;
+	rchandle = fopen(NSHRC_TEMP, "w");
+	if (rchandle != NULL) {
+		printf("%% Saving configuration\n");
+		conf(rchandle);
+	} else {
+		perror("% Unable to save configuration");
+	}
+	fclose(rchandle);
+
+	cmdarg(SAVESCRIPT, NSHRC_TEMP);
+
+	return (1);
+}
+
+/*
+ * Reboot
+ */
+int
+reload(void)
+{
+	printf ("%% Reload initiated\n");
+	reboot (RB_AUTOBOOT);
+	/* NOTREACHED */
+	return 1;
+}
+               
+int
+shut_down(void)
+{
+	printf ("%% Shutdown initiated");
+	reboot (RB_HALT);
+	/* NOTREACHED */
+	return 1;
+}
+
+/*
+ * Flush wrappers
+ */
+void
 flush_ip_routes(void)
 {
 	flushroutes(AF_INET, AF_INET);
 }
 
+void
 flush_arp_cache(void)
 {
 	flushroutes(AF_INET, AF_LINK);
@@ -1229,12 +1469,8 @@ int
 pr_conf(void)
 {
 	conf(stdout);
-}
 
-int
-pr_s_conf(void)
-{
-	printf("%% Not yet implemented\n");
+	return(1);
 }
 
 int
@@ -1255,6 +1491,14 @@ int
 pr_rt_stats(void)
 {
 	rt_stats(nl[N_RTSTAT].n_value);
+	return 0;
+}
+
+int 
+pr_pf_stats(void)
+{
+	printf("%% pf statistics:\n");
+	cmdarg(PFCTL, "-sinfo");
 	return 0;
 }
 

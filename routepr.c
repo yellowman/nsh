@@ -77,6 +77,8 @@
 
 #define kget(p, d) (kread((u_long)(p), (char *)&(d), sizeof (d)))
 
+char *mylink_ntoa(const struct sockaddr_dl *);
+
 /*
  * Definitions for showing gateway flags.
  */
@@ -100,7 +102,7 @@ struct bits {
 	{ RTF_PROTO1,	'1' },
 	{ RTF_PROTO2,	'2' },
 	{ RTF_PROTO3,	'3' },
-	{ 0 }
+	{ 0, 0 }
 };
 
 static union {

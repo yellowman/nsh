@@ -1,4 +1,4 @@
-nsh//network config shell//Chris Cappuccio <chris@dqc.org> version 20020619
+nsh//network config shell//Chris Cappuccio <chris@dqc.org> version 20030208
 
 A CLI intended for OpenBSD-based routers running little except for sshd,
 targeted towards CompactFlash-based Soekris Net4501 and similar embedded
@@ -14,19 +14,25 @@ OpenBSD kernel, sshd, and maybe snmpd you have a fully functioning system.
 nsh handles the following functions:
 
 * Gives the user a command-line interface to:
-  + Add/delete/show/flush/monitor IP routes (done)
-  + Display detailed information regarding an interface (done)
-  + Configure interfaces for IP, MTU, VLAN, media, ... (done)
-  + Show host (IP, TCP, UDP) and router statistics (done)
-  + Configure PF/NAT on an interface (0%)
-  + Configure the ALTQ tbr on an interface (done)
-  + Configure bridge for members, rules (done)
-  + Save the current routes, bridge, interface configs to a file (75%)
+  + Add/delete/show/flush/monitor IP routes
+  + Display detailed information regarding an interface
+  + Configure interfaces for IP, MTU, VLAN, media, ...
+  + Show host (IP, TCP, UDP) and router statistics
+  + Configure PF/NAT/ALTQ system-wide
+  + Configure the ALTQ tbr on an interface
+  + Configure bridge for members, rules
+  + Save the current routes, bridge, interface configs to a file
+* Comes with a full manual (20%)
 * This shell replaces most of /etc/rc, /etc/netstart on an embedded system.
   Simply started as nsh -i, it will read the previously saved configuration
   and execute it on the system.
 * Nsh can start as a user shell from ssh, or console.  Allows privileged user
   to escape to bourne shell (for now anyways..)
+
+>> Contributors:
+   * Jose Nazario <jose@monkey.org> contributed command functions for
+     reboot, shutdown, writing the config out, and some fixes to the
+     config generator
 
 >> See TODO for details on implementation status and future ideas.
 
@@ -43,9 +49,10 @@ Soekris and other embedded hardware manufacturers have solved the hardware
 problems.  Zebra almost solves the software problems.  However, Zebra does
 not handle the many features of OpenBSD beyond being able to add routes and
 configure IP addresses on an interface.  (Likewise, NSH does not facilitate
-routing protocols).  As of version 3.1, OpenBSD is not (yet) the speed
-champion for packet forwarding on x86 hardware.  However, many of its
-specialized features are well suited for edge routers, where people often
+routing protocols).  As of version 3.2, OpenBSD is not (yet) the speed
+champion for packet forwarding on x86 hardware (see Xorp.org and the Click
+Modular Router if you need high speed packet forwarding).  However, many of
+its specialized features are well suited for edge routers, where people often
 will have connections ranging from 256Kbps (or lower) to 45Mbps.  At
 these speeds, with a moderate packet-per-second count, OpenBSD excels (and,
 that is with relatively low-end x86 hardware....a system with a modern
@@ -67,11 +74,11 @@ comprised of all the major router vendors (vpnc.org). New IPsec products
 from Cisco, Nortel, Juniper, Microsoft, Wind River, PGP, SSH Communications,
 F-Secure, and many others are tested against OpenBSD IPsec and KAME IPsec,
 the consortium's reference standards.  Likewise, OpenBSD's OpenSSH comes on
-Cisco routers, HP switches, and Sun Solaris, not to mention just about every
-free OS out there.  OpenBSD was the first free OS to include the full
-source code for a cryptographic hardware accelerator driver and the first to
-fully implement it with IPsec.  Today it is still one of the few stable,
-free solutions to this end.
+Cisco routers, HP switches, MacOS X, IBM's AIX, and Sun Solaris, not to
+mention just about every free OS out there!  OpenBSD was the first free OS to
+include full source code for a cryptographic hardware accelerator driver and
+the first to fully implement it with IPsec.  Today it is still one of the few
+stable, free solutions to this end.
 
 In my job I get to manage routers from a variety of manufacturers.  Also, I've
 been using terminal servers for as long as I've used a modem.  On top of all
@@ -88,8 +95,8 @@ easier to create problems with than on a Cisco.
 
 A Cisco gives me the minimal information that is necessary, unless I ask for
 more.  It hides implementation details.  There are lots of reasons why 
-this is bad.  I urge everyone to learn to use the full suite of network
-tools in the OpenBSD userland.  
+this is bad.  Everyone should learn to use the full suite of network tools
+in the OpenBSD userland.  
 
 Despite the benefits, when I am on the phone with a customer, or when
 I am scrambling to get home, it can be faster to get the job done with a

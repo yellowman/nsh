@@ -44,7 +44,7 @@
 
 #include "externs.h"
 
-#define	ALTQ_DEVICE	"/dev/altq/altq"
+#define	ALTQ_DEVICE	"/dev/pf"
 
 u_long atobps(const char *s);
 u_long atobytes(const char *s);

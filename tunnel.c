@@ -4,6 +4,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/param.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
@@ -83,7 +84,7 @@ settunnel(int s, char *ifname, char *src, char *dst)
 	memcpy(&req.addr, srcres->ai_addr, srcres->ai_addrlen);
 	memcpy(&req.dstaddr, dstres->ai_addr, dstres->ai_addrlen);
 	if (ioctl(s, SIOCSLIFPHYADDR, &req) < 0) {
-		if (errno = EINVAL)
+		if (errno == EINVAL)
 			printf("%% tunnel cannot be used on %s interface\n",
 			    ifname);
 		else

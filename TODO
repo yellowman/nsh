@@ -3,74 +3,59 @@ implement much of the following (of course, diffs are welcome):
 
 Cleanup:
 
-* Finish up externs.h 
-* Factor out common code, restructure, rewrite a few things after I have an
-  idea of what the big picture looks like
+* Formatting for the manual.  Something that looks slick in PDF and print.
+* Restructure, rewrite a few things, etc..
 * Check more errno values in various places for common mistakes and print out
   the error in "plain english" instead of kernel/library jargon
-* More security auditing for string handling, off-by-one errors, and other
-  problems
-* User args should be set to lowercase at early so that we dont have to use
-  strcasecmp/strncasecmp everywhere...Tokenize and then use yacc perhaps?
-* User args should be sanity checked early for bogus crap
-* Consistency in argument names and argument order
+* More security auditing for string handling, off-by-one errors, data
+  passed to kernel, data passed elsewhere...
+* Maybe user args should be set to lowercase at early so that we dont have to
+  use strcasecmp/strncasecmp everywhere?
+* User args should be sanity checked early for interference
 * Consistency in how we perror() for commands called from interface(),
   give user-friendly messages, as these errors generally represent user
   error (but not from perror in conf() or other things that are not called
   direct from CLI as these errors generally represent problems in nsh)
-# Consistency (decide, == -1 or < 0 for checking error return ???)
 * Consistency in how errors are returned, handled
-* ...
 
-Required for intended functionality:
+To be implemented:
 
-* Finish 'save' command which will write routes, hostname, and the interface
-  configurations to a file which can be read by cmdrc on
-  startup with -i (requires the following to be done _first_:)
-
-* Create pf commands under interface, generic mode handler:
-
-* Allow simple block in all/pass out all keep state pf rules to be setup for
-  interfaces (default modulate state?)
-* Allow simple nat pf rules to be setup for interfaces
-* Allow nat rdrs to be setup
-* Allow pf holes to be setup
-* Do we want a more sophisticated interface into pf or just let the user
-  shell out to use pfctl?
-* To handle pf on 'save' .... Only save rules that are simple enough to be
-  represented by what we can setup for now.
-
-Cute features:
-
-* Perhaps some way for the shell to upgrade itself when given a network source
-  for a new binary? 
-* Hooks for a web interface? Does this even make sense?
-* Add more diagnostic messages for verbose output where useful
-* DHCP client/server config through nsh??
-* Can we hook into snmpd at all or just run it separately on the same box?
+* Ask for a password when user requests enable
+* View other users logged in, clear their sessions, etc...
+* IPsec! Configure VPNs with simple CLI commands-isakmpd has a fifo interface
+* IPComp...
+* DHCP daemon control
 * Do we build in a simple ping, traceroute or just shell out for these??
-* And what about telnet/ssh (maybe shell out for ssh, do a simple telnet?)
-* ALTQ RED/CBQ/HFSC
+* And what about telnet/ssh (maybe shell out for ssh, implement a simple
+  telnet?)
+
+Lower priority:
+
+* BGP, OSPF?? Hooks to integrate zebra(GPL)/gated(BSDlic)/mrtd(BSDlic)/???
+* IPv6?? (shouldn't be hard, considering that most of the functions
+  we stole from other source already support it)
+* IPIP/GRE?? Other tunnels??
+* IPX?? AppleTalk??
+
+Would be nice:
+
+* Perhaps some way for the shell to upgrade itself, or the entire system/
+  flash image when given a network source for new binaries?
+* Build a web interface that works through the rc file handler
+* Turn pfctl into a library and use it directly
+* Add more diagnostic messages for verbose output where useful
+* Can we hook into snmpd at all or just run it separately on the same box?
 * Support for paging through displays of text X lines at a time
 * Something comparable to "| inc" from cisco-land
 * Tab command/argument completion
 * Context-sensitive help
 * Import unimplemented wicontrol features
-* Convenient/automatic way to centralize configurations for tracking/revision
-  control
+* And what about sbecontrol?
+* Convenient/automatic mechanisms to centralize configurations for
+  tracking/revision control
 * Get rid of routepr.c and use sysctl-based functions instead while still
   displaying all that tasty info
 * While there, split out arp/route show
-
-Future:
-
-* BGP, OSPF?? Hooks to integrate zebra(GPL)/gated(BSDlic)/mrtd(BSDlic)/???
-* IPv6?? (shouldn't be hard, considering that most of the functions
-  we stole from other source already support it)
-* IPsec! Configure VPNs with simple CLI commands-isakmpd has a fifo interface
-* IPComp...
-* IPIP/GRE?? Other tunnels??
-* IPX?? AppleTalk??
 
 Known Bugs (or, things that I don't want to bother with right now, but
 better not forget later...):
@@ -79,7 +64,7 @@ better not forget later...):
   lots of things seem to cause Prism cards in AP mode to freak out.  Apparently
   these problems are due to the if_wi driver not properly checking and dealing
   with error returns)
-* The 3.1 kernel does not keep count of information displayed in 'show rtstat'
+* The 3.2 kernel does not keep count of information displayed in 'show rtstat'
   properly (what else??)
 * We need to mask the rounding error for altq tbr 'rate' value
 

@@ -43,6 +43,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/param.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
@@ -150,7 +151,7 @@ intmediaopt(char *ifname, int ifs, int argc, char **argv)
 	argv++;
 	argc--;
 
-	if (set && (argc != 1) || !set && (argc > 1)) {
+	if ((set && (argc != 1)) || (!set && (argc > 1))) {
 		printf("%% mediaopt <option>\n");
 		printf("%% no mediaopt [option]\n");
 		return(0);
@@ -373,12 +374,10 @@ conf_print_media_word(FILE *output, int ifmw)
 		fprintf(output, "\n");
 }
 
-static void
-phys_status(int s, char *ifname, char *delim)
+int
+phys_status(int s, char *ifname, char *tmp_buf, char *tmp_buf2, int buf_len,
+int buf2_len)
 {
-	char            psrcaddr[NI_MAXHOST];
-	char            pdstaddr[NI_MAXHOST];
-	const char     *ver = "";
 #ifdef NI_WITHSCOPEID
 	const int       niflag = NI_NUMERICHOST | NI_WITHSCOPEID;
 #else
@@ -386,21 +385,25 @@ phys_status(int s, char *ifname, char *delim)
 #endif
 	struct if_laddrreq req;
 
-	psrcaddr[0] = pdstaddr[0] = '\0';
-
 	memset(&req, 0, sizeof(req));
 	(void) strlcpy(req.iflr_name, ifname, sizeof(req.iflr_name));
 	if (ioctl(s, SIOCGLIFPHYADDR, (caddr_t) & req) < 0)
-		return;
+		return(0);
+#ifdef INET6
+	if (req.addr.ss_family == AF_INET6)
+		in6_fillscopeid((struct sockaddr_in6 *)&req.addr);
+#endif
+	getnameinfo((struct sockaddr *)&req.addr, req.addr.ss_len,
+	    tmp_buf, buf_len, 0, 0, niflag);
+
 #ifdef INET6
 	if (req.addr.ss_family == AF_INET6)
 		in6_fillscopeid((struct sockaddr_in6 *) & req.dstaddr);
 #endif
-	getnameinfo((struct sockaddr *) & req.dstaddr, req.dstaddr.ss_len,
-		    pdstaddr, sizeof(pdstaddr), 0, 0, niflag);
+	getnameinfo((struct sockaddr *) &req.dstaddr, req.dstaddr.ss_len,
+	    tmp_buf2, buf2_len, 0, 0, niflag);
 
-	printf("%sphysical address inet%s %s --> %s\n", delim, ver,
-	       psrcaddr, pdstaddr);
+	return(strlen(tmp_buf)+strlen(tmp_buf2));
 }
 
 int
@@ -415,23 +418,23 @@ conf_media_status(FILE *output, int s, char *ifname)
 	if (ioctl(s, SIOCGIFMEDIA, (caddr_t)&ifmr) < 0) {
 		if (errno != EINVAL)
 			perror("% conf_media_status: SIOCGIFMEDIA");
-		return;
+		return(0);
 	}
 
 	if (ifmr.ifm_count == 0)
-		return;
+		return(0);
 
 	media_list = (int *)malloc(ifmr.ifm_count * sizeof(int));
 	if (media_list == NULL) {
 		perror("% conf_media_status: malloc");
-		return;
+		return(0);
 	}
 	ifmr.ifm_ulist = media_list;
 
 	if (ioctl(s, SIOCGIFMEDIA, (caddr_t)&ifmr) < 0) {
 		perror("% conf_media_status: SIOCGIFMEDIA");
 		free(media_list);
-		return;
+		return(0);
 	}
 
 	if (ifmr.ifm_active == ifmr.ifm_current) {
@@ -447,7 +450,7 @@ conf_media_status(FILE *output, int s, char *ifname)
 void
 media_status(int s, char *ifname, char *delim)
 {
-	int *media_list, i, ss;
+	int *media_list;
 	struct ifmediareq ifmr;
 
 	memset(&ifmr, 0, sizeof(ifmr));
@@ -549,8 +552,8 @@ media_supported(int s, char *ifname, char *hdr_delim, char *body_delim)
 		for (i = 0, printed_type = 0; i < ifmr.ifm_count; i++) {
 			if (IFM_TYPE(media_list[i]) == type) {
 				if (printed_type == 0) {
-				    printf("%sSupported media types:\n",
-				        hdr_delim);
+				    printf("%sSupported media types on %s:\n",
+				        hdr_delim, ifname);
 				    printed_type = 1;
 				}
 				printf("%s", body_delim);

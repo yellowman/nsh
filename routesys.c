@@ -93,8 +93,7 @@ void	 bprintf(FILE *, int, u_char *);
 int	 ip_route(ip_t *, ip_t *, u_short);
 
 /*
- * If struct returned is not NULL then caller is responsible to free
- * rtdump->buf and rtdump!
+ * caller must freertdump() if rtdump not null
  */
 struct rtdump *getrtdump(int s)
 {
@@ -127,8 +126,7 @@ struct rtdump *getrtdump(int s)
 		}
 		if (sysctl(mib, 6, rtdump->buf, &needed, NULL, 0) < 0) {
 			perror("% getrtdump: unable to get routing table");
-			free(rtdump);
-			free(rtdump->buf);
+			freertdump(rtdump);
 			return(NULL);
 		}
 		rtdump->lim = rtdump->buf + needed;
@@ -140,6 +138,13 @@ struct rtdump *getrtdump(int s)
 	}
 
 	return(rtdump);
+}
+
+void
+freertdump(struct rtdump *rtdump)
+{
+	free(rtdump->buf);
+	free(rtdump);
 }
 
 /*
@@ -215,8 +220,7 @@ flushroutes(int af, int af2)
 		printf("\n");
 	if (!seqno)
 		printf("%% No entires found to flush\n");
-	free(rtdump);
-	free(rtdump->buf);
+	freertdump(rtdump);
 	close(s);
 	return;
 }
@@ -553,8 +557,10 @@ print_getmsg(rtm, msglen)
 	/*
 	 * we ignore most statistics and locks right now for simplicity
 	 */
-	printf("%% mtu: %d\n", (int)rtm->rtm_rmx.rmx_mtu);
-	printf("%% hopcount: %d\n", (int)rtm->rtm_rmx.rmx_hopcount);
+	if (rtm->rtm_rmx.rmx_mtu)
+		printf("%% mtu: %d\n", (int)rtm->rtm_rmx.rmx_mtu);
+	if (rtm->rtm_rmx.rmx_hopcount)
+		printf("%% hopcount: %d\n", (int)rtm->rtm_rmx.rmx_hopcount);
 	if (rtm->rtm_rmx.rmx_expire) {
 		rtm->rtm_rmx.rmx_expire -= time(0);
 		printf("%% expires: %d sec\n", (int)rtm->rtm_rmx.rmx_expire);
@@ -648,7 +654,7 @@ bprintf(fp, b, s)
 int
 ip_route(ip_t *dest, ip_t *gate, u_short cmd)
 {
-	int flags, l;
+	int flags;
 	int len = dest->bitlen;
 
 	rtm_addrs = 0;
@@ -741,6 +747,7 @@ ip_route(ip_t *dest, ip_t *gate, u_short cmd)
 		else
 			perror("% ip_route: rtmsg");
 	}
+	return(0);
 }
 
 /*

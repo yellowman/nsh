@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2002
+ * Copyright (c) 2002, 2003
  *      Chris Cappuccio.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -35,7 +35,7 @@
 
 void usage(void);
 
-char *vers = "20020619";
+char *vers = "20030208";
 int bridge = 0;		/* bridge mode for interface() */
 int verbose = 0;	/* verbose mode for lots of stuff*/
 int editing;
@@ -55,7 +55,7 @@ main(argc, argv)
 	int ch, iflag = 0;
 	pid = getpid();
 
-	while ((ch = getopt(argc, argv, "iv")) != -1)
+	while ((ch = getopt(argc, argv, "i:v")) != -1)
 		switch (ch) {
 		case 'i':
 			iflag = 1;
@@ -64,7 +64,7 @@ main(argc, argv)
 			verbose = 1;
 			break;
 		default:
-			break;
+			usage();
 		}
 
 	argc -= optind;
@@ -84,7 +84,7 @@ main(argc, argv)
 		/*
 		 * Run initialization and then exit.
 		 */
-		cmdrc("nshrc");
+		cmdrc(optarg);
 		exit(0);
 	}
 
@@ -98,6 +98,8 @@ main(argc, argv)
 void
 usage()
 {
-	(void)fprintf(stderr, "usage: %s [-i]\n", __progname);
+	(void)fprintf(stderr, "usage: %s [-vi rcfile]\n", __progname);
+	(void)fprintf(stderr, "           -v indicates verbose operation\n");
+	(void)fprintf(stderr, "           -i rcfile loads configuration from rfile\n");
 	exit(1);
 }
