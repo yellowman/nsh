@@ -1,4 +1,4 @@
-/* $nsh: if.c,v 1.13 2003/03/21 21:26:24 chris Exp $ */
+/* $nsh: if.c,v 1.14 2003/04/23 16:23:10 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -106,7 +106,7 @@ show_int(char *ifname)
 
 	short tmp;
 	int ifs, br, flags, days, hours, mins, pntd;
-	int ippntd;
+	int ippntd = 0;
 	time_t c;
 	char *type, *lladdr;
 
@@ -214,12 +214,11 @@ show_int(char *ifname)
 
 		sin.sin_addr = ((struct sockaddr_in *)ifa->ifa_addr)->
 		    sin_addr;
-
-		if (sin.sin_addr.s_addr == 0)
-			continue;
-
 		sin2.sin_addr = ((struct sockaddr_in *)ifa->ifa_netmask)->
 		    sin_addr;
+
+		if (sin.sin_addr.s_addr == 0 || sin2.sin_addr.s_addr == 0)
+			continue;
 
 		if (!ippntd)
 			printf("  Internet address");
