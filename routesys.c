@@ -437,7 +437,7 @@ monitor()
 		m = select (s + 1, &fds, NULL, NULL, &to);
 
 		if (m < 0) {
-			perror ("select");
+			printf ("%% select: %s\n", strerror(errno));
 			break;
 		}
 
