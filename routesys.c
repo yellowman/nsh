@@ -1,4 +1,4 @@
-/* $nsh: routesys.c,v 1.10 2003/02/18 09:29:46 chris Exp $ */
+/* $nsh: routesys.c,v 1.11 2003/03/19 09:58:24 chris Exp $ */
 /* From: $OpenBSD: /usr/src/sbin/route/route.c,v 1.43 2001/07/07 18:26:20 deraadt Exp $ */
 
 /*
@@ -605,12 +605,12 @@ print_getmsg(rtm, msglen)
 	 * we ignore most statistics and locks right now for simplicity
 	 */
 	if (rtm->rtm_rmx.rmx_mtu)
-		printf("%% mtu: %d\n", (int)rtm->rtm_rmx.rmx_mtu);
+		printf("%% mtu: %lu\n", rtm->rtm_rmx.rmx_mtu);
 	if (rtm->rtm_rmx.rmx_hopcount)
-		printf("%% hopcount: %d\n", (int)rtm->rtm_rmx.rmx_hopcount);
+		printf("%% hopcount: %lu\n", rtm->rtm_rmx.rmx_hopcount);
 	if (rtm->rtm_rmx.rmx_expire) {
 		rtm->rtm_rmx.rmx_expire -= time(0);
-		printf("%% expires: %d sec\n", (int)rtm->rtm_rmx.rmx_expire);
+		printf("%% expires: %lu sec\n", rtm->rtm_rmx.rmx_expire);
 	}
 
 #define RTA_IGN (RTA_DST|RTA_GATEWAY|RTA_NETMASK|RTA_IFP|RTA_IFA|RTA_BRD)
