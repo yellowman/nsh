@@ -75,10 +75,11 @@ intsyncif(char *ifname, int ifs, int argc, char **argv)
 			return (0);
 		}
 
-	if (set)
+	if (set) {
 		strlcpy(preq.pfsyncr_syncif, argv[0],
 			sizeof(preq.pfsyncr_syncif));
-	else
+		set_ifflag(ifs, ifname, IFF_UP);
+	} else
 		bzero((char *) &preq.pfsyncr_syncif,
 		      sizeof(preq.pfsyncr_syncif));
 
