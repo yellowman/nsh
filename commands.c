@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.16 2003/03/12 02:55:36 chris Exp $ */
+/* $nsh: commands.c,v 1.17 2003/03/18 19:11:37 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -128,6 +128,8 @@ typedef struct {
 	int ignoreifpriv;	/* Ignore while privileged? */
 	int nocmd;		/* Can we specify 'no ...command...'? */
 	int modh;		/* Is it a mode handler for cmdrc()? */
+	int noesc;		/* Does the shell interpret escape sequences
+				 * or pass them as arguments ? */
 } Command;
 
 static Command	*getcmd(char *name);
@@ -163,7 +165,7 @@ static void	flush_pfstats(void);
 static void	flush_pftables(void);
 static int	int_help(void);
 static int	el_burrito(EditLine *, int, char **);
-static void	makeargv(void);
+static void	makeargv(int);
 static int	hostname(int, char **);
 static int	help(int, char**);
 static int	shell(int, char*[]);
@@ -530,7 +532,7 @@ interface(int argc, char **argv, char *modhvar)
 			}
 			if (line[0] == 0)
 				break;
-			makeargv();
+			makeargv(0);
 			if (margv[0] == 0) {
 				break;
 			}
@@ -708,25 +710,25 @@ static char
  */
 
 static Command cmdtab[] = {
-	{ "hostname",	hostnamehelp,	hostname,	1, 0, 0, 0 },
-	{ "interface",	interfacehelp,	interface,	1, 0, 0, 1 },
-	{ "bridge",	bridgehelp,	interface,	1, 0, 0, 1 },
-	{ "show",	showhelp,	showcmd,	0, 0, 0, 0 },
-	{ "flush",	flushhelp,	flushcmd,	1, 0, 0, 0 },
-	{ "enable",	enablehelp,	enable,		0, 1, 0, 0 },
-	{ "disable",	disablehelp,	disable,	1, 0, 0, 0 },
-	{ "route",	routehelp,	route,		1, 0, 1, 0 },
-	{ "pf",		pfhelp,		pf,		1, 0, 0, 1 },
-	{ "quit",	quithelp,	quit,		0, 0, 0, 0 },
-	{ "reload",	reloadhelp,	reload,		1, 0, 0, 0 },
-	{ "shutdown",	shutdownhelp,	shut_down,	1, 0, 0, 0 },
-	{ "write-config", savehelp,	wr_conf,	1, 0, 0, 0 },
-	{ "verbose",	verbosehelp,	doverbose,	0, 0, 1, 0 },
-	{ "editing",	editinghelp,	doediting,	0, 0, 1, 0 },
-	{ "!",		shellhelp,	shell,		1, 0, 0, 0 },
-	{ "?",		helphelp,	help,		0, 0, 0, 0 },
-	{ "help",	0,		help,		0, 0, 0, 0 },
-	{ 0,		0,		0,		0, 0, 0, 0 }
+	{ "hostname",	hostnamehelp,	hostname,	1, 0, 0, 0, 0 },
+	{ "interface",	interfacehelp,	interface,	1, 0, 0, 1, 0 },
+	{ "bridge",	bridgehelp,	interface,	1, 0, 0, 1, 0 },
+	{ "show",	showhelp,	showcmd,	0, 0, 0, 0, 0 },
+	{ "flush",	flushhelp,	flushcmd,	1, 0, 0, 0, 0 },
+	{ "enable",	enablehelp,	enable,		0, 1, 0, 0, 0 },
+	{ "disable",	disablehelp,	disable,	1, 0, 0, 0, 0 },
+	{ "route",	routehelp,	route,		1, 0, 1, 0, 0 },
+	{ "pf",		pfhelp,		pf,		1, 0, 0, 1, 1 },
+	{ "quit",	quithelp,	quit,		0, 0, 0, 0, 0 },
+	{ "reload",	reloadhelp,	reload,		1, 0, 0, 0, 0 },
+	{ "shutdown",	shutdownhelp,	shut_down,	1, 0, 0, 0, 0 },
+	{ "write-config", savehelp,	wr_conf,	1, 0, 0, 0, 0 },
+	{ "verbose",	verbosehelp,	doverbose,	0, 0, 1, 0, 0 },
+	{ "editing",	editinghelp,	doediting,	0, 0, 1, 0, 0 },
+	{ "!",		shellhelp,	shell,		1, 0, 0, 0, 0 },
+	{ "?",		helphelp,	help,		0, 0, 0, 0, 0 },
+	{ "help",	0,		help,		0, 0, 0, 0, 0 },
+	{ 0,		0,		0,		0, 0, 0, 0, 0 }
 };
 
 /*
@@ -750,7 +752,7 @@ getcmd(name)
 }
 
 static void
-makeargv()
+makeargv(int x)
 {
 	char *cp, *cp2, c;
 	char **argp = margv;
@@ -764,7 +766,7 @@ makeargv()
 		cp++;
 	}
 	while ((c = *cp)) {
-		int             inquote = 0;
+		int inquote = 0;
 		while (isspace(c))
 			c = *++cp;
 		if (c == '\0')
@@ -778,13 +780,13 @@ makeargv()
 					continue;
 				}
 			} else {
-				if (c == '\\') {
+				if (!x && c == '\\') {
 					if ((c = *++cp) == '\0')
 						break;
-				} else if (c == '"') {
+				} else if (!x && c == '"') {
 					inquote = '"';
 					continue;
-				} else if (c == '\'') {
+				} else if (!x && c == '\'') {
 					inquote = '\'';
 					continue;
 				} else if (isspace(c))
@@ -849,7 +851,7 @@ command(top)
 
 		if (line[0] == 0)
 			break;
-		makeargv();
+		makeargv(0);
 		if (margv[0] == 0) {
 			break;
 		}
@@ -1238,7 +1240,10 @@ cmdrc(rcname)
 			continue;
 		if (line[0] == '!')
 			continue;
-		makeargv();
+		if (c && c->modh)
+			makeargv(c->noesc);
+		else
+			makeargv(0);
 		if (margv[0] == 0)
 			continue;
 		if (line[0] == ' ') {
@@ -1246,9 +1251,14 @@ cmdrc(rcname)
 			 * here, if a command starts with a space, it is
 			 * considered part of a mode handler
 			 */
-			if (c && c->modh)
+			if (c && c->modh) {
 				modhcmd = 1;
 			} else {
+				/*
+				 * a command was specified with indentation
+				 * but the last run of this loop was not a
+				 * mode handler!
+				 */
 				modhcmd = 0;
 				printf("%% No mode handler specified before"
 				    " indented command? (line %i) ", lnum);
