@@ -1,4 +1,4 @@
-/* $nsh: passwd.c,v 1.1 2004/03/17 08:09:13 cyc Exp $ */
+/* $nsh: passwd.c,v 1.2 2004/03/19 08:03:50 chris Exp $ */
 /*
  * Copyright (c) 2004
  *      Christian Gut.  All rights reserved.
@@ -63,17 +63,16 @@ write_pass(char *cpass, size_t size)
 	FILE           *pwdhandle;
 
 	umask(S_IWGRP|S_IRWXO);
-	pwdhandle = fopen(NSHPASSWD_TEMP, "w+");
-	if (pwdhandle != NULL) {
-		fprintf(pwdhandle, "%s", cpass);
-		fclose(pwdhandle);
-		return 1;
-	} else {
-		printf("%% Unable to save password: %s\n", strerror(errno));
+	pwdhandle = fopen(NSHPASSWD_TEMP, "w");
+	if (pwdhandle == NULL) {
+		printf("%% Unable to write run-time crypt repository: %s\n",
+		    strerror(errno));
+		return(0);
 	}
 
+	fprintf(pwdhandle, "%s", cpass);
 	fclose(pwdhandle);
-	return (0);
+	return(1);
 }
 
 int
