@@ -41,6 +41,7 @@
 #include <netinet/if_ether.h>
 #include <net/if_vlan_var.h>
 #include <net/route.h>
+#include <ifaddrs.h>
 #include <arpa/inet.h>
 #include <limits.h>
 #include "externs.h"
@@ -66,6 +67,7 @@ static const struct {
 int
 conf(FILE *output)
 {
+	struct ifaddrs *ifap, *ifa;
 	struct if_nameindex *ifn_list, *ifnp, *br_ifnp;
 	struct ifreq ifr;
 	struct if_data if_data;
@@ -73,11 +75,12 @@ conf(FILE *output)
 	struct vlanreq vreq;
 
 	FILE *pfconf;
-	short noaddr, br;
+	short ippntd, br;
 	int ifs, flags, tmp;
 	long l_tmp;
 	u_long rate, bucket;
 
+	char *iptype;
 	char hostbuf[MAXHOSTNAMELEN];
 	char rate_str[64], bucket_str[64], tmp_str[4096], tmp_str2[1024];
 
@@ -105,7 +108,7 @@ conf(FILE *output)
 
 		ifr.ifr_data = (caddr_t)&if_data;
 		if (ioctl(ifs, SIOCGIFDATA, (caddr_t)&ifr) < 0) {
-			printf("%% save: SIOCGIFDATA: %s\n", strerror(errno));
+			printf("%% conf: SIOCGIFDATA: %s\n", strerror(errno));
 			continue;
 		}
 
@@ -145,66 +148,59 @@ conf(FILE *output)
 		 * destination if available.  But, don't print broadcast
 		 * if it is what we would expect given the ip and netmask!
 		 */
-		if (ioctl(ifs, SIOCGIFADDR, (caddr_t)&ifr) < 0) {
-			if (errno == EADDRNOTAVAIL) {
-				noaddr = 1;
-			} else {
-				printf("%% save: SIOCGIFADDR: %s\n",
-				    strerror(errno));
-				continue;
-			}
-		} else {
-			sin.sin_addr = ((struct sockaddr_in *)&ifr.ifr_addr)->
-			    sin_addr;
-			noaddr = 0;
+		if (getifaddrs(&ifap) != 0) {
+			printf("%% conf: getifaddrs failed: %s\n",
+			    strerror(errno));
+			return(1);
 		}
 
-		if (sin.sin_addr.s_addr == 0)
-			noaddr = 1;
- 
-		if (!br && !noaddr) { /* have an ip? not a bridge? no problem */
-			if (ioctl(ifs, SIOCGIFNETMASK, (caddr_t)&ifr) < 0) {
-				/* EADDRNOTAVAIL should not happen here */
-					printf("%% save: SIOCGIFNETMASK: %s\n",
-					    strerror(errno));
-					continue;
-				}
-			sin2.sin_addr =
-			    ((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr;
+		/*
+		 * This short controls whether or not we print 'ip ....'
+		 * or 'alias ....'
+		 */
+		ippntd = 0;
 
-			fprintf(output, " ip %s", (char *)
-				    netname(sin.sin_addr.s_addr,
+		/*
+		 * Cycle through getifaddrs for interfaces with our
+		 * desired name that sport AF_INET, print the IP and
+		 * related information.
+		 */
+		for (ifa = ifap; ifa; ifa = ifa->ifa_next) {
+			if (strncmp(ifnp->if_name, ifa->ifa_name, IFNAMSIZ))
+				continue;
+
+			if (ifa->ifa_addr->sa_family != AF_INET)
+				continue;
+		
+			sin.sin_addr = ((struct sockaddr_in *)ifa->ifa_addr)->
+			    sin_addr;
+
+			if (sin.sin_addr.s_addr == 0)
+				continue;
+ 
+			sin2.sin_addr =
+			    ((struct sockaddr_in *)ifa->ifa_netmask)->sin_addr;
+
+			if (ippntd) {
+				iptype = "alias";
+			} else {
+				iptype = "ip";
+				ippntd = 1;
+			}
+
+			fprintf(output, " %s %s", iptype,
+				    (char *)netname(sin.sin_addr.s_addr,
 				    sin2.sin_addr.s_addr));
 
-			noaddr = 0;
 			if (flags & IFF_POINTOPOINT) {
-				if (ioctl(ifs, SIOCGIFDSTADDR, (caddr_t)&ifr)
-				    < 0) {
-					if (errno != EADDRNOTAVAIL) {
-						printf("%% conf: "
-						    "SIOCGIFDSTADDR: %s\n",
-						    strerror(errno));
-						continue;
-					} else
-						noaddr = 1;
-				}
-				if (!noaddr) {
-					sin3.sin_addr =
-					    ((struct sockaddr_in *)
-					    &ifr.ifr_addr)->sin_addr;
-					fprintf(output, " %s",
-					    inet_ntoa(sin3.sin_addr));
-				}
-			} else if (flags & IFF_BROADCAST) {
-				if (ioctl(ifs, SIOCGIFBRDADDR, (caddr_t)&ifr)
-				    < 0) {
-				/* EADDRNOTAVAIL should not happen here */
-					printf("%% conf: SIOCGIFBRDADDR: %s\n",
-					    strerror(errno));
-					continue;
-				}
 				sin3.sin_addr =
-				    ((struct sockaddr_in *)&ifr.ifr_addr)->
+				    ((struct sockaddr_in *)
+				    ifa->ifa_dstaddr)->sin_addr;
+				fprintf(output, " %s",
+				    inet_ntoa(sin3.sin_addr));
+			} else if (flags & IFF_BROADCAST) {
+				sin3.sin_addr =
+				    ((struct sockaddr_in *)ifa->ifa_broadaddr)->
 				    sin_addr;
 				/*
 				 * no reason to save the broadcast addr
@@ -220,6 +216,8 @@ conf(FILE *output)
 			}
 			fprintf(output, "\n");
 		}
+
+		freeifaddrs(ifap);
 
 		if (!br) { /* no shirt, no shoes, no problem */
 
