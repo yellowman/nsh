@@ -1,4 +1,4 @@
-/* $nsh: conf.c,v 1.12 2003/03/28 16:15:19 chris Exp $ */
+/* $nsh: conf.c,v 1.13 2003/04/03 21:40:23 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -55,12 +55,13 @@ static const struct {
 	char *name;
 	int mtu;
 } defmtus[] = {
-	/* Current as of 2/08/03 */
+	/* Current as of 4/2/03 */
 	{ "gre",	1450 },
 	{ "gif",	1280 },
 	{ "tun",	3000 },
 	{ "sl",		296 },
 	{ "enc",	1536 },
+	{ "pfsync",	2020 },
 	{ "pflog",	33224 },
 	{ "lo",		33224 },
 };
