@@ -1,4 +1,4 @@
-/* $nsh: routepr.c,v 1.7 2003/02/18 09:29:46 chris Exp $ */
+/* $nsh: routepr.c,v 1.8 2003/02/18 09:37:44 chris Exp $ */
 /* From: $OpenBSD: /usr/src/usr.bin/netstat/route.c,v 1.45 2002/02/16 21:27:50 millert Exp $ */
 
 /*
@@ -819,8 +819,10 @@ encap_print(rt)
 
 	    kget(sen3.sen_ipsp, ipo);
 
-	    getnameinfo(&ipo.ipo_dst.sa, ipo.ipo_dst.sa.sa_len,
-			hostn, NI_MAXHOST, NULL, 0, NI_NUMERICHOST);
+	    if (getnameinfo(&ipo.ipo_dst.sa, ipo.ipo_dst.sa.sa_len,
+	        hostn, NI_MAXHOST, NULL, 0, NI_NUMERICHOST) != 0);
+	 	    strlcpy(hostn, "none", NI_MAXHOST);
+
 	    printf("%s", hostn);
 
 	    printf("/%-u", ipo.ipo_sproto);
