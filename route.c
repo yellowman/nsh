@@ -1,4 +1,4 @@
-/* $nsh: route.c,v 1.6 2003/02/18 09:29:46 chris Exp $ */
+/* $nsh: route.c,v 1.7 2003/04/17 16:18:45 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -44,7 +44,9 @@
 int
 route(int argc, char **argv)
 {
+	struct in_addr tmp;
 	u_short cmd = 0;
+	u_int32_t net;
 	ip_t dest, gate;
 
 	if (NO_ARG(argv[0])) {
@@ -84,6 +86,22 @@ route(int argc, char **argv)
 		return(1);
 	}
 
+	/*
+	 * Detect if a user is adding a route with a non-network address.
+	 */
+	net = in4_netaddr(dest.addr.sin.s_addr,
+	    (u_int32_t)htonl(0xffffffff << (32 - dest.bitlen)));
+
+	if (ntohl(dest.addr.sin.s_addr) != net) {
+		tmp.s_addr = htonl(net);
+		printf("%% Inconsistent address and mask (%s/%i?)\n",
+		    inet_ntoa(tmp), dest.bitlen);
+		return(1);
+	}
+
+	/*
+	 * Do the route...
+	 */
 	ip_route(&dest, &gate, cmd);
 	return(0);
 }
