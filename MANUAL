@@ -1,5 +1,5 @@
 NSH // Network Shell User's Manual // Chris Cappuccio <chris@nmedia.net>
-$nsh: MANUAL,v 1.11 2004/03/03 09:19:40 chris Exp $
+$nsh: MANUAL,v 1.12 2004/03/07 16:31:57 cyc Exp $
 
 Copyright (c) 2003 Chris Cappuccio
 
@@ -293,6 +293,7 @@ nsh/show ?
   monitor         Monitor routing/arp table changes
   version         Software information
   running-config  Operating configuration
+  startup-config  Startup configuration
   ?               Options
 
 show hostname
@@ -539,6 +540,14 @@ show running-config
 This shows the current running configuration on the system, including
 interface and bridge configurations, routes, the system hostname, firewall
 rules, and other information compiled by nsh.  See Appendix C for
+example configuration files.
+
+show startup-config
+-------------------
+
+This shows the startup configuration on the system, read from nshrc,
+including interface and bridge configurations, routes, the system hostname,
+firewall rules, and other information compiled by nsh.  See Appendix C for
 example configuration files.
 
 flush

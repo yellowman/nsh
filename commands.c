@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.29 2004/03/03 09:19:40 chris Exp $ */
+/* $nsh: commands.c,v 1.30 2004/03/07 16:31:57 cyc Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -71,6 +71,7 @@
 #include <net/if.h>
 #include <limits.h>
 #include <histedit.h>
+#include <util.h>
 #include "externs.h"
 #include "editing.h"
 
@@ -156,6 +157,7 @@ static int	pr_igmp_stats(void);
 static int	pr_ipcomp_stats(void);
 static int	pr_mbuf_stats(void);
 static int	pr_conf(void);
+static int	pr_s_conf(void);
 static int	wr_conf(void);
 static int	show_help(void);
 static int	ip_help(void);
@@ -220,6 +222,7 @@ static Menu showlist[] = {
 	{ "ap",		"Wireless access points", 1, 1, wi_printaplist },
 	{ "version",	"Software information",	0, 0, version },
 	{ "running-config",	"Operating configuration", 0, 0, pr_conf },
+	{ "startup-config", "Startup configuration", 0, 0, pr_s_conf },
 	{ "?",		"Options",		0, 0, show_help },
 	{ "help",	0,			0, 0, show_help },
 	{ 0, 0, 0, 0, 0 }
@@ -1638,6 +1641,30 @@ pr_conf(void)
 {
 	conf(stdout);
 
+	return(1);
+}
+
+/*
+ * Show startup config
+ */
+int
+pr_s_conf(void)
+{
+	FILE   *f;
+	char   *input;
+	
+	f = fopen("NSHRC", "r");
+	if (NULL == f) {
+		printf ("%% no startup configuration found\n");
+		return(0);
+	}
+	
+	while ((input =(char *)fparseln(f, NULL, NULL, NULL, 0)) != NULL) {
+		printf("%s\n", input);
+	}
+	
+	fclose(f);
+	
 	return(1);
 }
 
