@@ -1,4 +1,4 @@
-/* $nsh: sysctl.c,v 1.4 2003/04/17 16:46:44 chris Exp $ */
+/* $nsh: sysctl.c,v 1.5 2003/04/23 18:58:42 chris Exp $ */
 /*
  * Copyright (c) 2003
  *      Chris Cappuccio.  All rights reserved.
@@ -108,7 +108,7 @@ ipsysctl(int set, char *cmd, char *arg)
 		mib2 = IPPROTO_GRE;
 		mib3 = GRECTL_WCCP;
 	} else if (CMP_ARG(cmd, "mo")) { /* mobileip */
-		mib2 = IPPROTO_GRE;
+		mib2 = IPPROTO_MOBILE;
 		mib3 = MOBILEIPCTL_ALLOW;
 	} else if (CMP_ARG(cmd, "et")) { /* etherip */
 		mib2 = IPPROTO_ETHERIP;
@@ -184,7 +184,7 @@ conf_ipsysctl(FILE *output)
 		fprintf(output, "ip gre\n");
 	if (sysctl_inet(IPPROTO_GRE, GRECTL_WCCP, 0, 1) == 1)
 		fprintf(output, "ip wccp\n");
-	if (sysctl_inet(IPPROTO_GRE, MOBILEIPCTL_ALLOW, 0, 1) == 1)
+	if (sysctl_inet(IPPROTO_MOBILE, MOBILEIPCTL_ALLOW, 0, 1) == 1)
 		fprintf(output, "ip mobileip\n");
 	if (sysctl_inet(IPPROTO_ETHERIP, ETHERIPCTL_ALLOW, 0, 1) == 1)
 		fprintf(output, "ip etherip\n");
