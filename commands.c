@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.21 2003/04/17 18:02:32 chris Exp $ */
+/* $nsh: commands.c,v 1.22 2003/04/18 00:15:26 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -496,6 +496,7 @@ static struct intlist Intlist[] = {
 	{ "metric",	"Set routing metric",			intmetric, 0 },
 	{ "link",	"Set link level options",		intlink, 2 },
 	{ "arp",	"Set Address Resolution Protocol",	intflags, 0 },
+	{ "nwid",	"802.11 network ID",			intnwid, 0 },
 	{ "nwkey",	"802.11 network key",			intnwkey, 0 },
 	{ "powersave",	"802.11 powersaving mode",		intpowersave, 0 },
 	{ "media",	"Media type",				intmedia, 0 },
@@ -585,8 +586,8 @@ interface(int argc, char **argv, char *modhvar)
 	if (!modhvar) {
 		if (CMP_ARG(argv[0], "br")) {
 			if (!is_bridge(ifs, ifname)) {
-				printf("%% Using interface configuration mode for %s\n",
-				    ifname);
+				printf("%% Using interface configuration mode"
+				    " for %s\n", ifname);
 				bridge = 0;
 			} else {
 				bridge = 1;
@@ -654,16 +655,13 @@ interface(int argc, char **argv, char *modhvar)
 			i = GETINT(margv[0]);
 		if (Ambiguous(i)) {
 			printf("%% Ambiguous command\n");
-			continue;
-		}
-		if (i == 0) {
+		} else if (i == 0) {
 			int val = 1;
 
 			if (editing)
 				val = el_burrito(eli, margc, margv);
 			if (val)
 				printf("%% Invalid command\n");
-			continue;
 		} else {
 			if ((bridge && !i->bridge) ||
 			    (!bridge && (i->bridge == 1))) {
