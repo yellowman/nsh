@@ -1,4 +1,4 @@
-/* $nsh: passwd.c,v 1.2 2004/03/19 08:03:50 chris Exp $ */
+/* $nsh: passwd.c,v 1.3 2004/03/19 08:07:19 chris Exp $ */
 /*
  * Copyright (c) 2004
  *      Christian Gut.  All rights reserved.
@@ -46,11 +46,9 @@ read_pass(char *pass, size_t size)
 	FILE           *pwdhandle;
 
 	pwdhandle = fopen(NSHPASSWD_TEMP, "r");
-	if (pwdhandle != NULL) {
-		fgets(pass, size, pwdhandle);
-	} else {
+	if (pwdhandle == NULL)
 		return (0);
-	}
+	fgets(pass, size, pwdhandle);
 	fclose(pwdhandle);
 
 	return (1);
@@ -72,6 +70,7 @@ write_pass(char *cpass, size_t size)
 
 	fprintf(pwdhandle, "%s", cpass);
 	fclose(pwdhandle);
+
 	return(1);
 }
 
@@ -81,6 +80,3 @@ gen_salt(char *salt, size_t saltlen) {
 	strlcpy(salt, bcrypt_gensalt(6), saltlen);
 	return 1;
 }
-
-
-	
