@@ -1,4 +1,4 @@
-/* $nsh: conf.c,v 1.14 2003/04/14 08:44:20 chris Exp $ */
+/* $nsh: conf.c,v 1.15 2003/05/15 16:57:28 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -323,7 +323,14 @@ conf(FILE *output)
 		}
 		if(flags & IFF_NOARP)
 			fprintf(output, " no arp\n");
-		if(!(flags & IFF_UP))
+		/*
+		 * ip X/Y turns the interface up (just like 'no shutdown')
+		 * ...but if we never had an ip address set and the interface
+		 * is up, we need to save this state explicitly.
+		 */
+		if(!ippntd && (flags & IFF_UP))
+			fprintf(output, " no shutdown\n");
+		else if(!(flags & IFF_UP))
 			fprintf(output, " shutdown\n");
 
         }
