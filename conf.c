@@ -1,4 +1,4 @@
-/* $nsh: conf.c,v 1.18 2004/03/17 08:09:13 cyc Exp $ */
+/* $nsh: conf.c,v 1.19 2004/03/22 06:28:19 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -96,17 +96,15 @@ conf(FILE *output)
 		return(1);
 	}
 
-	/* ready? begin. print the password, then hostname ... */
-	if(read_pass(cpass, sizeof(cpass))) {
-		fprintf(output, "!\n");
-		fprintf(output, "enable secret blowfish %s\n", cpass);
-	} else {
-		printf("%% Cant read password: %s\n", strerror(errno));
-	}
-	
+	/* ready? begin. print the hostname ... */
 	fprintf(output, "!\n");
 	gethostname (hostbuf, sizeof(hostbuf));
 	fprintf(output, "hostname %s\n", hostbuf);
+	if(read_pass(cpass, sizeof(cpass)))
+		fprintf(output, "enable secret blowfish %s\n", cpass);
+	else
+		printf("%% Unable to read run-time crypt repository:"
+		    " %s\n", strerror(errno));
 
 	for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++) {
 		strlcpy(ifr.ifr_name, ifnp->if_name, sizeof(ifr.ifr_name));

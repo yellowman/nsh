@@ -1,4 +1,4 @@
-/* $nsh: passwd.c,v 1.4 2004/03/22 03:56:29 chris Exp $ */
+/* $nsh: passwd.c,v 1.5 2004/03/22 06:28:19 chris Exp $ */
 /*
  * Copyright (c) 2004
  *      Christian Gut.  All rights reserved.
@@ -115,7 +115,7 @@ enable(int argc, char **argv)
 				return 0;
 			}
 		}
-		p = getpass("% Password:");
+		p = getpass("Password:");
 		if (p == NULL || *p == '\0')
 			return 0;
 
@@ -126,7 +126,6 @@ enable(int argc, char **argv)
 			printf("%% Password incorrect\n");
 			return 0;
 		}
-
 
 	case 2:
 		if (CMP_ARG(argv[1], "?")) {
@@ -159,7 +158,6 @@ enable(int argc, char **argv)
 		gen_salt(salt, sizeof(salt));
 		cpass = strdup(crypt(pass, salt));
 		return (write_pass(cpass, sizeof(cpass)));
-
 
 	case 4:
 		/* 2nd == "secret" ? */
