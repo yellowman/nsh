@@ -1,4 +1,4 @@
-/* $nsh: media.c,v 1.4 2003/02/18 09:29:46 chris Exp $ */
+/* $nsh: media.c,v 1.5 2003/04/03 22:39:56 chris Exp $ */
 /*
  * From: $OpenBSD: /usr/src/sbin/ifconfig/ifconfig.c,v 1.64 2002/05/22
  * 08:21:02 deraadt Exp $
@@ -420,7 +420,7 @@ conf_media_status(FILE *output, int s, char *ifname)
 
 	if (ioctl(s, SIOCGIFMEDIA, (caddr_t)&ifmr) < 0) {
 		if (errno != EINVAL)
-			printf("%% conf_media_status: SIOCGIFMEDIA: %s\n",
+			printf("%% conf_media_status: 1/SIOCGIFMEDIA: %s\n",
 			    strerror(errno));
 		return(0);
 	}
@@ -436,7 +436,7 @@ conf_media_status(FILE *output, int s, char *ifname)
 	ifmr.ifm_ulist = media_list;
 
 	if (ioctl(s, SIOCGIFMEDIA, (caddr_t)&ifmr) < 0) {
-		printf("%% conf_media_status: SIOCGIFMEDIA: %s\n",
+		printf("%% conf_media_status: 2/SIOCGIFMEDIA: %s\n",
 		    strerror(errno));
 		free(media_list);
 		return(0);
@@ -525,8 +525,8 @@ media_status(int s, char *ifname, char *delim)
 		}
 		if (found == 0)
 			printf("unknown");
-		putchar('\n');
 	}
+	putchar('\n');
 
 	free(media_list);
 	return;
