@@ -1,5 +1,5 @@
 NSH // Network Shell User's Manual // Chris Cappuccio <chris@nmedia.net>
-$nsh: MANUAL,v 1.2 2003/02/18 09:29:46 chris Exp $
+$nsh: MANUAL,v 1.3 2003/03/12 02:01:02 chris Exp $
 
 Copyright (c) 2003 Chris Cappuccio
 
@@ -106,11 +106,11 @@ nsh -i /etc/nshrc
 Depending on the level of debugging you desire, you may want to start nsh
 its output being logged, like this:
 
-nsh -i /etc/nshrc | logger -t nsh -p daemon.info
+nsh -i /etc/nshrc | tee /var/run/nsh.out
 
 You may even want verbose output to see how nsh parses its' rc file:
 
-nsh -vi /etc/nshrc | logger -t nsh -p daemon.info
+nsh -vi /etc/nshrc | tee /var/run/nsh.out
 
 On a router created with flashdist, you can simply copy NSH into /bin/nsh
 and save nshrc to /etc/nshrc.  The default startup script (/etc/rc) with
