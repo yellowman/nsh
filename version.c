@@ -1,4 +1,4 @@
-/* $nsh: version.c,v 1.7 2005/02/10 05:41:35 chris Exp $ */
+/* $nsh: version.c,v 1.8 2005/02/10 05:54:13 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -122,7 +122,7 @@ version(void)
 	    un.release);
 	printf("cpu: %s\n", cpubuf);
 	printf("memory: %luK\n", physmem / 1024);
-	printf("compiled on:%s\n", compiledon);
+	printf("compiled on: %s", compiledon);
 	printf("running on: %s", kernver);
 	return(0);
 }
