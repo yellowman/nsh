@@ -1,4 +1,4 @@
-/* $nsh: if.c,v 1.11 2003/02/18 09:29:46 chris Exp $ */
+/* $nsh: if.c,v 1.12 2003/03/19 23:18:56 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -44,6 +44,7 @@
 #include <netinet/if_ether.h>
 #include <net/if_vlan_var.h>
 #include <net/if_ieee80211.h>
+#include <ifaddrs.h>
 #include <arpa/inet.h>
 #include <limits.h>
 #include "ip.h"
@@ -95,16 +96,17 @@ static const struct {
 int
 show_int(char *ifname)
 {
+	struct ifaddrs *ifap, *ifa;
 	struct if_nameindex *ifn_list, *ifnp;
 	struct ifreq ifr;
 	struct if_data if_data;
-	struct sockaddr_in sin, sin2;
+	struct sockaddr_in sin, sin2, sin3;
 	struct timeval tv;
 	struct vlanreq vreq;
 
 	short tmp;
 	int ifs, br, flags, days, hours, mins, pntd;
-	int noaddr = 0;
+	int ippntd;
 	time_t c;
 	char *type, *lladdr;
 
@@ -188,34 +190,72 @@ show_int(char *ifname)
 	media_status(ifs, ifname, "  Media type ");
 
 	/*
-	 * Display IP address and CIDR netmask
+	 * Print interface IP address, and broadcast or
+	 * destination if available.  But, don't print broadcast
+	 * if it is what we would expect given the ip and netmask!
 	 */
-	if (ioctl(ifs, SIOCGIFADDR, (caddr_t)&ifr) < 0) {
-		if (errno == EADDRNOTAVAIL) {
-			noaddr = 1;
-		} else {
-			printf("%% show_int: SIOCGIFADDR: %s\n",
-			    strerror(errno));
-			close(ifs);
-			return(1);
-		}
+	if (getifaddrs(&ifap) != 0) {
+		printf("%% show_int: getifaddrs failed: %s\n",
+		    strerror(errno));
+		return(1);
 	}
  
-	if (!noaddr) {
-		sin.sin_addr = ((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr;
+	/*
+	 * Cycle through getifaddrs for interfaces with our
+	 * desired name that sport AF_INET, print the IP and
+	 * related information.
+	 */
+	for (ifa = ifap; ifa; ifa = ifa->ifa_next) {
+		if (strncmp(ifname, ifa->ifa_name, IFNAMSIZ))
+			continue;
 
-		if (ioctl(ifs, SIOCGIFNETMASK, (caddr_t)&ifr) < 0)
-			if (errno != EADDRNOTAVAIL) {
-				printf("%% show_int: SIOCGIFNETMASK: %s\n",
-				    strerror(errno));
-				close(ifs);
-				return(1);
-			}
-		sin2.sin_addr = ((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr;
+		if (ifa->ifa_addr->sa_family != AF_INET)
+			continue;
 
-		printf("  Internet address is %s\n",
+		sin.sin_addr = ((struct sockaddr_in *)ifa->ifa_addr)->
+		    sin_addr;
+
+		if (sin.sin_addr.s_addr == 0)
+			continue;
+
+		sin2.sin_addr = ((struct sockaddr_in *)ifa->ifa_netmask)->
+		    sin_addr;
+
+		if (!ippntd)
+			printf("  Internet address");
+
+		printf("%s %s", ippntd ? "," : "",
 		    (char *)netname(sin.sin_addr.s_addr, sin2.sin_addr.s_addr));
+
+		ippntd = 1;
+
+		if (flags & IFF_POINTOPOINT) {
+			sin3.sin_addr = ((struct sockaddr_in *)
+			ifa->ifa_dstaddr)->sin_addr;
+			printf(" (Destination %s)", inet_ntoa(sin3.sin_addr));
+		} else if (flags & IFF_BROADCAST) {
+			sin3.sin_addr =
+			    ((struct sockaddr_in *)ifa->ifa_broadaddr)->
+			    sin_addr;
+			/*
+			 * no reason to show the broadcast addr
+			 * if it is standard (this should always
+			 * be true unless someone has messed up their
+			 * network or they are playing around...)
+			 */
+			if (ntohl(sin3.sin_addr.s_addr) !=
+			    in4_brdaddr(sin.sin_addr.s_addr,
+			    sin2.sin_addr.s_addr))
+				printf(" (Broadcast %s)",
+				    inet_ntoa(sin3.sin_addr));
+		}
 	}
+
+	if (ippntd) {
+		ippntd = 0;
+		printf("\n");
+	}
+	freeifaddrs(ifap);
 
 	if (!br) {
 		if (phys_status(ifs, ifname, tmp_str, tmp_str2, sizeof(tmp_str),
