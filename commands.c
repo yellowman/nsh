@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.32 2004/03/22 03:56:29 chris Exp $ */
+/* $nsh: commands.c,v 1.33 2004/03/22 09:25:57 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -509,6 +509,8 @@ static struct intlist Intlist[] = {
 	{ "tentative",	"IPv6 tentative address bit",		inttentative, 0 },
 #endif
 	{ "tunnel",	"Source/destination for GIF tunnel",	inttunnel, 0 },
+	{ "syncif",	"Control message interface",		intsyncif, 0 },
+	{ "maxupd", 	"Collapsable max updates for a single state", intmaxupd, 0 },
 	{ "vlan",	"802.1Q vlan tag and parent",		intvlan, 0 },
 	{ "debug",	"Driver dependent debugging",		intflags, 0 },
 	{ "shutdown",	"Shutdown interface",			intflags, 2 },
@@ -1628,7 +1630,12 @@ flush_arp_cache(void)
 int
 pr_conf(void)
 {
-	conf(stdout);
+	if (priv == 1)
+		conf(stdout);
+	else {
+		printf ("%% Privilege required\n");
+		return(0);
+	}
 
 	return(1);
 }
@@ -1641,10 +1648,18 @@ pr_s_conf(void)
 {
 	FILE   *f;
 	char   *input;
+
+	if (priv != 1) {
+		printf ("%% Privilege required\n");
+		return(0);
+	}
 	
 	f = fopen("NSHRC", "r");
-	if (NULL == f) {
-		printf ("%% no startup configuration found\n");
+	if (f == NULL) {
+		if (errno == ENOENT)
+			printf ("%% No startup configuration found\n");
+		else
+			printf ("%% pr_s_conf: fopen: %s\n", strerror(errno));
 		return(0);
 	}
 	

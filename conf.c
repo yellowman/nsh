@@ -1,4 +1,4 @@
-/* $nsh: conf.c,v 1.19 2004/03/22 06:28:19 chris Exp $ */
+/* $nsh: conf.c,v 1.20 2004/03/22 09:25:57 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -43,6 +43,8 @@
 #include <netinet/if_ether.h>
 #include <net/if_vlan_var.h>
 #include <net/route.h>
+#include <net/pfvar.h>
+#include <net/if_pfsync.h>
 #include <ifaddrs.h>
 #include <arpa/inet.h>
 #include <limits.h>
@@ -56,13 +58,12 @@ static const struct {
 	char *name;
 	int mtu;
 } defmtus[] = {
-	/* Current as of 9/18/03 */
+	/* Current as of 3/20/04 */
 	{ "gre",	1450 },
 	{ "gif",	1280 },
 	{ "tun",	3000 },
 	{ "sl",		296 },
 	{ "enc",	1536 },
-	{ "pfsync",	1896 },
 	{ "pflog",	33224 },
 	{ "lo",		33224 },
 };
@@ -240,8 +241,12 @@ conf(FILE *output)
 
 			/*
 			 * print interface mtu, metric
+			 *
+			 * ignore interfaces named "pfsync" since their mtu
+			 * is dynamic and controlled by the kernel
 			 */
-			if(if_mtu != default_mtu(ifnp->if_name))
+			if(!CMP_ARG(ifnp->if_name, "pfsync") &&
+			    if_mtu != default_mtu(ifnp->if_name))
 				fprintf(output, " mtu %li\n", if_mtu);
 			if(if_metric)
 				fprintf(output, " metric %li\n", if_metric);
@@ -311,6 +316,8 @@ conf(FILE *output)
 				bridge_rules(ifs, ifnp->if_name,
 				    br_ifnp->if_name, " rule ", output);
 		}
+
+		conf_pfsync(output, ifs, ifnp->if_name);
 
 		/*
 		 * print various flags

@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.20 2004/03/22 03:56:29 chris Exp $ */
+/* $nsh: externs.h,v 1.21 2004/03/22 09:25:57 chris Exp $ */
 /*
  * nsh externs and more
  */
@@ -212,3 +212,9 @@ int read_pass(char *, size_t);
 int write_pass(char *, size_t);
 int gen_salt(char *, size_t);
 int enable(int, char **);
+
+/* pfsync.c */
+#define PFSYNC_MAXUPDATES 128
+int intsyncif(char *, int, int, char **);
+int intmaxupd(char *, int, int, char **);
+int conf_pfsync(FILE *, int, char *);
