@@ -1,4 +1,4 @@
-# $nsh: Makefile,v 1.9 2003/02/18 09:29:46 chris Exp $
+# $nsh: Makefile,v 1.10 2003/03/12 02:12:14 chris Exp $
 #
 PROG= nsh
 
@@ -8,7 +8,7 @@ SRCS=compile.c main.c genget.c commands.c kread.c stats.c mbuf.c routesys.c
 SRCS+=routepr.c rate.c if.c version.c route.c conf.c editing.c ieee80211.c
 SRCS+=bridge.c tunnel.c media.c
 CLEANFILES+=compile.c
-LDADD=-lkvm -ledit -ltermcap
+LDADD=-lkvm -ledit -ltermcap #-static
 
 NOMAN=1
 
