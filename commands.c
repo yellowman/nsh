@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.17 2003/03/18 19:11:37 chris Exp $ */
+/* $nsh: commands.c,v 1.18 2003/03/27 23:30:54 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -175,7 +175,7 @@ static void	p_argv(int, char **);
 static int	config(void);
 static int	priv = 0;
 static int 	reload(void);
-static int 	shut_down(void);
+static int 	halt(void);
 static int	pf(int, char **, char *);
 
 /*
@@ -702,7 +702,7 @@ static char
 	shellhelp[] =	"Invoke a subshell",
 	savehelp[] =	"Save the current configuration",
 	reloadhelp[] =	"Reboot the system",
-	shutdownhelp[] = "Shut the system down",
+	halthelp[] =	"Halt the system",
 	helphelp[] =	"Print help information";
 
 /*
@@ -721,7 +721,7 @@ static Command cmdtab[] = {
 	{ "pf",		pfhelp,		pf,		1, 0, 0, 1, 1 },
 	{ "quit",	quithelp,	quit,		0, 0, 0, 0, 0 },
 	{ "reload",	reloadhelp,	reload,		1, 0, 0, 0, 0 },
-	{ "shutdown",	shutdownhelp,	shut_down,	1, 0, 0, 0, 0 },
+	{ "halt",	halthelp,	halt,		1, 0, 0, 0, 0 },
 	{ "write-config", savehelp,	wr_conf,	1, 0, 0, 0, 0 },
 	{ "verbose",	verbosehelp,	doverbose,	0, 0, 1, 0, 0 },
 	{ "editing",	editinghelp,	doediting,	0, 0, 1, 0, 0 },
@@ -1451,7 +1451,7 @@ reload(void)
 }
                
 int
-shut_down(void)
+halt(void)
 {
 	printf ("%% Shutdown initiated\n");
 	if (reboot (RB_HALT) == -1)
