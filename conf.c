@@ -1,4 +1,4 @@
-/* $nsh: conf.c,v 1.10 2003/02/18 09:29:46 chris Exp $ */
+/* $nsh: conf.c,v 1.11 2003/03/10 20:10:02 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -95,6 +95,7 @@ conf(FILE *output)
 	}
 
 	/* ready? begin. print the hostname ... */
+	fprintf(output, "!\n");
 	gethostname (hostbuf, sizeof(hostbuf));
 	fprintf(output, "hostname %s\n", hostbuf);
 
@@ -126,6 +127,7 @@ conf(FILE *output)
 		/*
 		 * set interface/bridge mode
 		 */
+		fprintf(output, "!\n");
 		if (!(br = is_bridge(ifs, ifnp->if_name)))
 			br = 0;
 		fprintf(output, "%s %s\n", br ? "bridge" : "interface",
@@ -364,11 +366,15 @@ conf(FILE *output)
 	close(ifs);
 	if_freenameindex(ifn_list);
 
+	fprintf(output, "!\n");
+
 	/*
 	 * print static arp and route entries in configuration file format
 	 */
 	conf_routes(output, "arp ", AF_INET, (RTF_LLINFO & RTF_STATIC));
 	conf_routes(output, "route ", AF_INET, RTF_STATIC);
+
+	fprintf(output, "!\n");
 
 	if ((pfconf = fopen(PFCONF_TEMP, "r")) != NULL) {
 		fprintf(output, "pf rules\n");
@@ -380,6 +386,7 @@ conf(FILE *output)
 			fprintf(output, " %s", tmp_str);
 		}
 		fclose(pfconf);
+		fprintf(output, "!\n");
 		fprintf(output, "pf action\n enable\n reload\n");
 	} else if (verbose)
 		printf("%% PFCONF_TEMP: %s\n", strerror(errno));

@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.14 2003/02/18 09:39:02 chris Exp $ */
+/* $nsh: commands.c,v 1.15 2003/03/10 20:10:02 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -1235,6 +1235,8 @@ cmdrc(rcname)
 		if (line[0] == 0)
 			break;
 		if (line[0] == '#')
+			continue;
+		if (line[0] == '!')
 			continue;
 		makeargv();
 		if (margv[0] == 0)
