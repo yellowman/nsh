@@ -1,5 +1,5 @@
 NSH // Network Shell User's Manual // Chris Cappuccio <chris@nmedia.net>
-$nsh: MANUAL,v 1.3 2003/03/12 02:01:02 chris Exp $
+$nsh: MANUAL,v 1.4 2003/03/12 02:10:22 chris Exp $
 
 Copyright (c) 2003 Chris Cappuccio
 
@@ -97,8 +97,18 @@ if [ "X${pf}" != X"NO" ]; then
         fi
 fi
 
-Go ahead and remove these lines from the startup script, or comment them
-out.  Replace them with the following commands:
+Go ahead and remove (or just comment out) these lines from the startup script.
+You will need to position the cursor past the former network startup section.
+Most the cursor so it is just after the "clean up left-over files" section,
+or about 28 lines past the former network startup section.  You want the
+cursor to be positioned after these lines:
+
+(cd /var/run && { test -r dhclient.pid && dhclient_pid=`cat dhclient.pid`; rm -r
+f -- *; install -c -m 664 -g utmp /dev/null utmp; test -n "$dhclient_pid" && ech
+o "$dhclient_pid" > dhclient.pid; })
+(cd /var/authpf && rm -rf -- *)
+
+After these lines, add the following commands:
 
 echo > /var/run/pf.conf
 nsh -i /etc/nshrc
@@ -106,10 +116,12 @@ nsh -i /etc/nshrc
 Depending on the level of debugging you desire, you may want to start nsh
 its output being logged, like this:
 
+echo > /var/run/pf.conf
 nsh -i /etc/nshrc | tee /var/run/nsh.out
 
 You may even want verbose output to see how nsh parses its' rc file:
 
+echo > /var/run/pf.conf
 nsh -vi /etc/nshrc | tee /var/run/nsh.out
 
 On a router created with flashdist, you can simply copy NSH into /bin/nsh
@@ -127,6 +139,11 @@ are both read-write.
 If /etc is read-only and /var/run is read-write:
 
 # cp save-ro.sh /usr/local/bin/save.sh
+
+Make sure that save-ro.sh actually takes the appropriate actions to make
+/etc a read-write partition.  (Or modify it to move nshrc to a different
+location that can be written to.  Of course, the nsh startup command must
+reflect this location as well.)
 
 If /etc and /var/run are read-write:
 
