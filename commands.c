@@ -69,17 +69,21 @@
 #include <sys/wait.h>
 #include <net/if.h>
 #include <limits.h>
+#include <histedit.h>
 #include "externs.h"
+#include "editing.h"
 
 #define HELPINDENT (7)
+
+char prompt[128];
+kvm_t *kvmd;
 
 static char line[256];
 static char saveline[256];
 static int  margc;
 static char *margv[20];
-static char hbuf[MAXHOSTNAMELEN];
-
-kvm_t *kvmd;
+static char hbuf[MAXHOSTNAMELEN];	/* host name */
+static char ifname[IFNAMSIZ];		/* interface name */
 
 /*
  * Kernel namelist for our use
@@ -117,11 +121,11 @@ struct nlist nl[] = {
 typedef struct {
 	char *name;		/* command name */
 	char *help;		/* help string (NULL for no help) */
-	int  (*handler) ();	/* routine which executes command */
-	int  needpriv;		/* Do we need privilege to execute? */
-	int  ignoreifpriv;	/* Ignore while privileged? */
-	int  nocmd;		/* Can we specify 'no ...command...'? */
-	int  modh;		/* Is it a mode handler for cmdrc()? */
+	int (*handler) ();	/* routine which executes command */
+	int needpriv;		/* Do we need privilege to execute? */
+	int ignoreifpriv;	/* Ignore while privileged? */
+	int nocmd;		/* Can we specify 'no ...command...'? */
+	int modh;		/* Is it a mode handler for cmdrc()? */
 } Command;
 
 static Command	*getcmd(char *name);
@@ -130,6 +134,7 @@ static int	noop(void);
 static int	enable(void);
 static int	disable(void);
 static int	doverbose(int, char**);
+static int	doediting(int, char**);
 static int	pr_routes(void);
 static int	pr_ip_stats(void);
 static int	pr_ah_stats(void);
@@ -140,8 +145,14 @@ static int	pr_icmp_stats(void);
 static int	pr_igmp_stats(void);
 static int	pr_ipcomp_stats(void);
 static int	pr_mbuf_stats(void);
+static int	pr_s_conf(void);
+static int	pr_conf(void);
 static int	show_help(void);
+static int	flush_help(void);
+static int	flush_ip_routes(void);
+static int	flush_history(void);
 static int	int_help(void);
+static int	el_burrito(EditLine *, int, char **);
 static void	makeargv(void);
 static int	hostname (int, char **);
 static int	help(int, char**);
@@ -199,6 +210,10 @@ static struct showlist Showlist[] = {
 	{ "rtstats",	"Routing statistics",	0, 0, pr_rt_stats },
 	{ "mbufstats",	"Memory management statistics",	0, 0, pr_mbuf_stats },
 	{ "version",	"Software information",	0, 0, version },
+	{ "running-c",	"Operating configuration", 0, 0, pr_conf },
+#if 0
+	{ "startup-c",	"Startup configuration", 0, 0, pr_s_conf },
+#endif
 	{ "?",		"Options",		0, 0, show_help },
 	{ "help",	0,			0, 0, show_help },
 	{ 0, 0, 0, 0, 0 }
@@ -304,6 +319,82 @@ static struct intlist Intlist[] = {
 			    sizeof(struct intlist)))
 
 /*
+ * Data structures and routines for the "flush" command.
+ */
+
+struct flushlist {
+	char *name;		/* How user refers to it (case independent) */
+	char *help;		/* Help information (0 ==> no help) */
+	int minarg;		/* Minimum number of arguments */
+	int maxarg;		/* Maximum number of arguments */
+	int (*handler)();	/* Routine to perform (for special ops) */
+};
+
+static struct flushlist Flushlist[] = {
+	{ "routes",	"IP routes",		0, 0, flush_ip_routes },
+#if 0
+	{ "arp",	"ARP cache",		0, 0, flush_arp_cache },
+#endif
+	{ "history",	"Command history",	0, 0, flush_history },
+	{ "?",		"Options",		0, 0, flush_help },
+	{ "help",	0,			0, 0, flush_help },
+	{ 0, 0, 0, 0, 0 }
+};
+
+#define GETFLUSH(name) ((struct flushlist *) genget(name, (char **) Flushlist, \
+			   sizeof(struct flushlist)))
+
+static int
+flushcmd(int argc, char **argv)
+{
+	struct flushlist *f;
+	int success = 0;
+
+	if (argc < 2) {
+		printf("%% Use 'flush ?' for help\n");
+		return 0;
+	}
+
+	/*
+	 * Validate flush argument
+	 */
+	f = GETFLUSH(argv[1]);
+	if (f == 0) {
+		printf("%% Invalid argument %s\n",argv[1]);
+		return 0;
+	} else if (Ambiguous(f)) {
+		printf("%% Ambiguous argument %s\n",argv[1]);
+		return 0;
+	}
+	if (((f->minarg + 2) > argc) || ((f->maxarg + 2) < argc)) {
+		printf("%% Wrong argument%s to 'flush %s' command.\n",
+		    argc <= 2 ? "" : "s", f->name);
+		return 0;
+	}
+	if (f->handler) /* As if there was something else we do ? */
+		success = (*f->handler)((f->maxarg > 0) ? argv[2] : 0,
+		    (f->maxarg > 1) ? argv[3] : 0);
+
+	return(success);
+}
+
+static int
+flush_help()
+{
+	struct flushlist *f;
+
+	printf("%% Commands may be abbreviated.\n");
+	printf("%% 'flush' commands are:\n\n");
+
+	for (f = Flushlist; f->name; f++) {
+		if (f->help)
+			printf("  %-*s\t%s\n", (int)HELPINDENT,
+			    f->name, f->help);
+	}
+	return 0;
+}
+
+/*
  * a big command input loop for interface mode
  * if a function returns to interface() with a 1, interface() will break
  * the user back to command() mode.  interface() will always break from
@@ -312,9 +403,8 @@ static struct intlist Intlist[] = {
 static int
 interface(int argc, char **argv, char *modhvar)
 {
-	int z;
+	int z, num;
 	struct intlist *i;	/* pointer to current command */
-	char ifname[IFNAMSIZ];	/* interface name */
 
 	(void) signal(SIGINT, SIG_IGN);
 	(void) signal(SIGQUIT, SIG_IGN);
@@ -330,21 +420,43 @@ interface(int argc, char **argv, char *modhvar)
 		strncpy(ifname, modhvar, sizeof(ifname));
 	else
 		strncpy(ifname, argv[1], sizeof(ifname));
-#if 0
-        if (ifname not valid interface) {
+        if (!is_valid_ifname(ifname)) {
                 printf("%% inteface %s not found\n", ifname);
                 return(0);
         }
-#endif
+
 	for (;;) {
 		if (!modhvar) {
-			printf("%s(interface-%s)/", hbuf, ifname);
-			if (fgets(line, sizeof(line), stdin) == NULL) {
-				if (feof(stdin) || ferror(stdin)) {
-					printf("\n");
-					return(0);
+			/*
+			 * interface cli routines for editing and standard
+			 * mode
+			 */
+			if (!editing) {
+				printf("%s", iprompt());
+				if (fgets(line, sizeof(line), stdin) == NULL) {
+					if (feof(stdin) || ferror(stdin)) {
+						printf("\n");
+						return(0);
+					}
+					break;
 				}
-				break;
+			} else {
+				const char *buf;
+				cursor_pos = NULL;
+
+				if ((buf = el_gets(eli, &num)) == NULL || num == 0)
+					break;
+				if (buf[--num]  == '\n') {
+					if (num == 0)
+						break;
+				}
+				if (num >= sizeof(line)) {
+					printf("%% Input exceeds permitted length\n");
+					break;
+				}
+				memcpy(line, buf, (size_t)num);
+				line[num] = '\0';
+				history(histi, H_ENTER, buf);
 			}
 			if (line[0] == 0)
 				break;
@@ -353,6 +465,9 @@ interface(int argc, char **argv, char *modhvar)
 				break;
 			}
 		} else {
+			/*
+			 * a command was supplied directly to interface()
+			 */
 			for (z = 0; z < argc; z++)
 				strncpy(margv[z], argv[z], sizeof(margv[z]));
 			margc = argc;
@@ -363,16 +478,17 @@ interface(int argc, char **argv, char *modhvar)
 			i = GETINT(margv[0]);
 		if (Ambiguous(i)) {
 			printf("%% Ambiguous command\n");
-			goto next;
 		}
 		if (i == 0) {
-			printf("%% Invalid command\n");
-			goto next;
-		}
-		if ((*i->handler) (ifname, margc, margv)) {
+			int val = 1;
+
+			if (editing)
+				val = el_burrito(eli, margc, margv);
+			if (val)
+				printf("%% Invalid command\n");
+		} else if ((*i->handler) (ifname, margc, margv)) {
 			break;
 		}
-next:
 		if (modhvar) {
 			break;
 		}
@@ -404,12 +520,14 @@ static char
 	hostnamehelp[] = "Set system hostname",
 	interfacehelp[] = "Modify interface parameters",
 	showhelp[] =	"Show system information",
+	flushhelp[] =	"Flush system tables",
 	enablehelp[] =	"Enable privileged mode",
 	disablehelp[] =	"Disable privileged mode",
 	routehelp[] =	"Add a host or network route",
 	monitorhelp[] = "Monitor routing table changes",
 	quithelp[] =	"Close current connection",
-	verbosehelp[] =	"Toggle verbose diagnostics",
+	verbosehelp[] =	"Set verbose diagnostics",
+	editinghelp[] =  "Set command line editing",
 	shellhelp[] =	"Invoke a subshell",
 	helphelp[] =	"Print help information";
 
@@ -417,19 +535,21 @@ static char
  * Primary commands, will be included in help output
  */
 
-static Command  cmdtab[] = {
+static Command cmdtab[] = {
 	{ "hostname",	hostnamehelp,	hostname,	1, 0, 0, 0 },
 	{ "interface",	interfacehelp,	interface,	1, 0, 0, 1 },
 #if 0
 	{ "bridge",	bridgehelp,	bridge,		1, 0, 0, 1 },
 #endif
 	{ "show",	showhelp,	showcmd,	0, 0, 0, 0 },
+	{ "flush",	flushhelp,	flushcmd,	1, 0, 0, 0 },
 	{ "enable",	enablehelp,	enable,		0, 1, 0, 0 },
 	{ "disable",	disablehelp,	disable,	1, 0, 0, 0 },
 	{ "route",	routehelp,	route,		1, 0, 1, 0 },
 	{ "monitor",	monitorhelp,	monitor,	0, 0, 0, 0 },
 	{ "quit",	quithelp,	quit,		0, 0, 0, 0 },
 	{ "verbose",	verbosehelp,	doverbose,	0, 0, 1, 0 },
+	{ "editing",	editinghelp,	doediting,	0, 0, 1, 0 },
 	{ "!",		shellhelp,	shell,		1, 0, 0, 0 },
 	{ "?",		helphelp,	help,		0, 0, 0, 0 },
 	{ "help",	0,		help,		0, 0, 0, 0 },
@@ -507,12 +627,14 @@ makeargv()
 }
 
 void
-command(top, tbuf, cnt)
+command(top)
 	int top;
-	char *tbuf;
-	int cnt;
 {
 	Command  *c;
+	int num;
+
+	inithist();
+	initedit();
 
 	if (!top) {
 		putchar('\n');
@@ -521,20 +643,8 @@ command(top, tbuf, cnt)
 		(void) signal(SIGQUIT, SIG_IGN);
 	}
 	for (;;) {
-		if (tbuf) {
-			char           *cp;
-			cp = line;
-			while (cnt > 0 && (*cp++ = *tbuf++) != '\n')
-				cnt--;
-			tbuf = 0;
-			if (cp == line || *--cp != '\n' || cp == line)
-				goto getline;
-			*cp = '\0';
-			printf("%s\n", line);
-		} else {
-	getline:
-			gethostname(hbuf, sizeof(hbuf));
-			printf("%s%s/", hbuf, priv ? "(priv)" : "");
+		if (!editing) {
+			printf("%s", cprompt());
 			if (fgets(line, sizeof(line), stdin) == NULL) {
 				if (feof(stdin) || ferror(stdin)) {
 					printf("\n");
@@ -543,7 +653,26 @@ command(top, tbuf, cnt)
 				}
 				break;
 			}
+		} else {
+			const char *buf;
+			cursor_pos = NULL;
+
+			if ((buf = el_gets(elc, &num)) == NULL || num == 0)
+				break;
+
+			if (buf[--num]  == '\n') {
+				if (num == 0)
+					break;
+			}
+			if (num >= sizeof(line)) {
+				printf("%% Input exceeds permitted length\n");
+				break;
+			}
+			memcpy(line, buf, (size_t)num);
+			line[num] = '\0';
+			history(histc, H_ENTER, buf);
 		}
+
 		if (line[0] == 0)
 			break;
 		makeargv();
@@ -559,7 +688,12 @@ command(top, tbuf, cnt)
 			continue;
 		}
 		if (c == 0) {
-			printf("%% Invalid command\n");
+			int val = 1;
+
+			if (editing)                                
+				val = el_burrito(elc, margc, margv);
+			if (val)
+				printf("%% Invalid command\n");
 			continue;
 		}
 		if ((strncasecmp(margv[0], "no", strlen("no")) == 0) && ! c->nocmd) {
@@ -720,6 +854,44 @@ doverbose(int argc, char **argv)
 	return 0;
 }
 
+int
+doediting(int argc, char **argv)
+{
+	if (argc > 1) {
+		if (strncasecmp(argv[0], "no", strlen("no")) == 0) { 
+			endedit();
+                } else {
+			printf ("%% Invalid argument\n");
+			return 1;
+		}
+	} else {
+		initedit();
+	}
+
+	printf("%% Command line editing %s\n",
+	    editing ? "enabled" : "disabled");
+
+	return 0;
+}
+
+int
+flush_history(void)
+{
+	if (!editing) {
+		printf("%% Command line editing not enabled\n");
+		return(0);
+	}
+
+	/*
+	 * Editing mode needs to be reinitialized if the histi/histc
+	 * pointers are going to change.....
+	 */
+	endedit();
+	endhist();
+	inithist();
+	initedit();
+}
+
 /*
  * initialize kvm access
  * load nl with kvm_nlist
@@ -759,8 +931,7 @@ cmdrc(rcname)
 	char	modhvar[128];	/* required variable name in mode handler cmd */
 	int	modhcmd; 	/* do we execute under another mode? */
 	int	lnum;		/* line number */
-	int	maxlen = 0;	/* max length of cmdtab argument */
-	int	z;
+	int	maxlen;		/* max length of cmdtab argument */
 
 	if ((rcfile = fopen(rcname, "r")) == 0) {
 		printf("%% %s not found\n",rcname);
@@ -848,7 +1019,8 @@ cmdrc(rcname)
 			p_argv(margc, margv);
 			printf("\n");
 			continue;
-		} else if (verbose) {
+		}
+		if (verbose) {
 			printf("%% %4s: %*s%10s (line %i) margv ",
 			    c->modh ? "mode" : "cmd", maxlen, c->name,
 			    modhcmd ? "(sub-cmd)" : "", lnum);
@@ -897,10 +1069,79 @@ p_argv(int argc, char **argv)
 	return;
 }
 
+/*
+ * for the purpose of interface handler routines, 1 here is failure and
+ * 0 is success
+ */
+int
+el_burrito(EditLine *el, int margc, char **margv)
+{
+	char *colon;
+	int val;
+
+	if(!editing)	/* Nothing to parse, fail */
+		return(1);
+
+	/*
+	 * el_parse will always return a non-error status if someone specifies
+	 * argv[0] with a colon.  The idea of the colon is to allow host-
+	 * specific commands, which is really only useful in .editrc, so
+	 * it is invalid here.
+	 */
+	colon = (char *)strchr(margv[0], ':');
+	if(colon)
+		return(1);
+
+	val = el_parse(el, margc, margv);
+
+	if (val == 0)
+		return(0);
+	else
+		return(1);
+}
+
+char *
+cprompt(void)
+{
+	gethostname(hbuf, sizeof(hbuf));
+	snprintf(prompt, sizeof(prompt), "%s%s/", hbuf, priv ? "(priv)" : "");
+
+	return(prompt);
+}
+
+char *
+iprompt(void)
+{
+	gethostname(hbuf, sizeof(hbuf));
+	snprintf(prompt, sizeof(prompt), "%s(interface-%s)/", hbuf, ifname);
+
+	return(prompt);
+}
 
 /*
- * Lookup wrappers
+ * Flush wrappers
  */
+int
+flush_ip_routes(void)
+{
+	flushroutes(AF_INET);
+}
+
+/*
+ * Show wrappers
+ */
+int
+pr_conf(void)
+{
+	conf(stdout);
+}
+
+int
+pr_s_conf(void)
+{
+	printf("%% Not yet implemented\n");
+}
+
 int
 pr_routes(void)
 {

@@ -59,18 +59,7 @@ route(int argc, char **argv)
 	if (argc < 1 || argc > 2) {
 		printf("%% [no] route destination[/bits] gateway\n");
 		printf("%% [no] route destination[/netmask] gateway\n");
-		printf("%% route flush\n");
 		return(1);
-	}
-
-	if (strncasecmp(argv[0], "flush", strlen("flush")) == 0) {
-		if (cmd == RTM_DELETE) {
-			printf("%% Invalid command\n");
-			return(1);
-		} else {
-			flushroutes(AF_INET);
-			return(0);
-		}
 	}
 
 	memset(&dest, 0, sizeof(ip_t));

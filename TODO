@@ -3,16 +3,13 @@ implement much of the following:
 
 Cleanup:
 
-* Probably don't need to be using perror/fprintf(stderr,...) anywhere, since
-  this is supposed to be a 'router' not really a unix environment
-  so far as user is concerned ?? Roll our own func with strerror?
 * Finish up externs.h 
 * ...
 
 Required for intended functionality:
 
-* Add 'save' command which will read routes, hostname, interface configurations
-  and write them to a configuration file which can be read by cmdrc on
+* Finish 'save' command which will write routes, hostname, and the interface
+  configurations to a file which can be read by cmdrc on
   startup with -i (requires the following to be done _first_:)
 * Finish up interface mode handler commands
 * Create a bridge mode handler
@@ -38,9 +35,9 @@ Cute features:
 * Do we build in a simple ping, traceroute or just shell out for these??
 * And what about telnet/ssh (maybe shell out for ssh and ignore telnet)??
 * ALTQ RED/CBQ/HFSC
-* Support for paging through displays of text 24 lines at a time
+* Support for paging through displays of text X lines at a time
 * Something comparable to "| inc" from cisco-land
-* Command-line completion
+* Tab command, argument completion
 
 Future:
 

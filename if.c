@@ -48,13 +48,14 @@ int
 show_int(const char *ifname)
 {
 	struct if_nameindex *ifn_list, *ifnp;
-	struct ifreq ifr, ifr2;
+	struct ifreq ifr;
 	struct if_data if_data;
 	struct sockaddr_in sin, sin2;
 	struct timeval tv;
 	struct vlanreq vreq;
 
-	int ifs, mbits, flags, mask, days, hours, mins;
+	in_addr_t mask;
+	int ifs, mbits, flags, days, hours, mins;
 	int noaddr = 0;
 	time_t c;
 	char *type;
@@ -67,22 +68,24 @@ show_int(const char *ifname)
 	 */
 	if (ifname == 0) {
 		if ((ifn_list = if_nameindex()) == NULL) {
-			perror("% show_int: if_nameindex failed");
+			printf("%% show_int: if_namindex failed\n");
 			return 1;
 		}
 		for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++) {
 			show_int(ifnp->if_name);
 		}
 		if_freenameindex(ifn_list);
-		return 0;
+		return(0);
+	} else if (!is_valid_ifname(ifname)) {
+		printf("%% interface %s not found\n", ifname);
+		return(1);
 	}
 	
 	if ((ifs = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
 		perror("% show_int");
-		return 1;
+		return(1);
 	}
 	strncpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
-	strncpy(ifr2.ifr_name, ifname, sizeof(ifr2.ifr_name));
 
 	/*
 	 * Show up/down status and last change time
@@ -90,7 +93,7 @@ show_int(const char *ifname)
 	if (ioctl(ifs, SIOCGIFFLAGS, (caddr_t)&ifr) < 0) {
 		perror("% show_int: SIOCGIFFLAGS");
 		close(ifs);
-		return 1;
+		return(1);
 	}
 	flags = ifr.ifr_flags;
 
@@ -98,7 +101,7 @@ show_int(const char *ifname)
 	if (ioctl(ifs, SIOCGIFDATA, (caddr_t)&ifr) < 0) {
 		perror("% show_int: SIOCGIFDATA");
 		close(ifs);
-		return 1;
+		return(1);
 	}
 
 	printf("%% %s\n", ifname);
@@ -229,20 +232,20 @@ show_int(const char *ifname)
 		} else {
 			perror("% show_int: SIOCGIFADDR");
 			close(ifs);
-			return 1;
+			return(1);
 		}
 	}
  
 	if (!noaddr) {
 		sin.sin_addr = ((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr;
 
-		if (ioctl(ifs, SIOCGIFNETMASK, (caddr_t)&ifr2) < 0)
+		if (ioctl(ifs, SIOCGIFNETMASK, (caddr_t)&ifr) < 0)
 			if (errno != EADDRNOTAVAIL) {
 				perror("% show_int: SIOCGIFNETMASK");
 				close(ifs);
-				return 1;
+				return(1);
 			}
-		sin2.sin_addr = ((struct sockaddr_in *)&ifr2.ifr_addr)->sin_addr;
+		sin2.sin_addr = ((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr;
 
 		mask = ntohl(sin2.sin_addr.s_addr);
 		mbits = mask ? 33 - ffs(mask) : 0;
@@ -265,11 +268,7 @@ show_int(const char *ifname)
 	rate = get_tbr(ifname, TBR_RATE);
 	bucket = get_tbr(ifname, TBR_BUCKET);
 
-		/*
-		 * Hrmm, we could have a rate = 1 or bucket = 1 that is not 
-		 * an error, at least in theory
-		 */
-	if (rate > 1 && bucket > 1) {
+	if(rate && bucket) {
 		if (MBPS(rate))
 			snprintf(rate_str, sizeof(rate_str), "%.2f Mbps",
 			    (double)rate/1000.0/1000.0);
@@ -287,12 +286,6 @@ show_int(const char *ifname)
 		printf("  Token Rate %s, Bucket %s\n", rate_str, bucket_str);
 	}
 
-	close(ifs);
-
-	if ((ifs = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-		perror("% show_int");
-		return 1;
-	}
 	memset(&vreq, 0, sizeof(struct vlanreq));
 	ifr.ifr_data = (caddr_t)&vreq;
 
@@ -328,7 +321,7 @@ show_int(const char *ifname)
 		printf("\n");
         }
 
-	return 0;
+	return(0);
 }
 
 int 
@@ -358,3 +351,31 @@ get_ifdata(const char *ifname, int type)
 	close(ifs);
 	return (value);
 }
+
+/*
+ * returns 1 if one valid, matching interface name is found
+ * returns 0 for no valid or failure
+ */
+int
+is_valid_ifname(const char *ifname)
+{
+	struct if_nameindex *ifn_list, *ifnp;
+	int count = 0;
+
+	if ((ifn_list = if_nameindex()) == NULL) {
+		printf("%% is_valid_ifname: if_nameindex failed\n");
+		return(0);
+	}
+	for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++) {
+		if (strncasecmp(ifname, ifnp->if_name,
+		    strlen(ifnp->if_name)) == 0)
+			count++;
+	}
+	if_freenameindex(ifn_list);
+
+	if (count == 1)
+		return(1);
+	else
+		return(0);
+}
+

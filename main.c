@@ -29,12 +29,21 @@
 #include <limits.h>
 #include <fcntl.h>
 #include <sys/socket.h>
+#include <histedit.h>
 #include "externs.h"
+#include "editing.h"
 
 void usage(void);
 
-char *vers = "20020415";
-int verbose = 0;
+char *vers = "20020510";
+int verbose;			/* verbose mode */
+int editing;			/* command line editing enabled ? */
+
+History *histi = NULL;
+History *histc = NULL;
+EditLine *elc = NULL;
+EditLine *eli = NULL;
+char *cursor_pos = NULL;
 
 int
 main(argc, argv)
@@ -42,7 +51,7 @@ main(argc, argv)
 	char *argv[];
 {
 	int ch, iflag = 0;
-         
+
 	while ((ch = getopt(argc, argv, "iv")) != -1)
 		switch (ch) {
 		case 'i':
@@ -77,7 +86,7 @@ main(argc, argv)
 	}
 
 	for (;;) {
-		command(1, 0, 0);
+		command(1);
 	}
 
 	return 0;

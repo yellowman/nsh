@@ -49,7 +49,7 @@
 u_long atobps(const char *s);
 u_long atobytes(const char *s);
 u_long get_tbr(const char *ifname, int);
-static u_int size_bucket(const char *ifname, const u_int rate);
+u_int size_bucket(const char *ifname, const u_int rate);
 u_int autosize_bucket(const char *ifname, const u_int rate);
 static int get_clockfreq(void);
 int list_rates(void);
@@ -155,7 +155,7 @@ get_tbr(const char *ifname, int type)
 
 	if ((fd = open(ALTQ_DEVICE, O_RDONLY)) < 0) {
 		perror("% get_rate: can't open altq device");
-		return(1);
+		return(0);
 	}
 
 	req.ifname[IFNAMSIZ-1] = '\0';
@@ -213,7 +213,7 @@ atobytes(const char *s)
 /*
  * use heuristics to determine the bucket size
  */
-static u_int
+u_int
 size_bucket(const char *ifname, const u_int rate)
 {
 	u_int size, mtu;

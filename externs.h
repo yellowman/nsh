@@ -3,10 +3,13 @@
  */
 
 extern char *__progname, *vers;
-extern int verbose;
+extern int verbose, editing;
+
+/* conf.c */
+int conf(FILE *);
 
 /* routepr.c */
-extern void routepr(u_long, int);
+void routepr(u_long, int);
 
 /* alignment constraint for routing socket */
 #define ROUNDUP(a) \
@@ -14,65 +17,78 @@ extern void routepr(u_long, int);
 #define ADVANCE(x, n) (x += ROUNDUP((n)->sa_len))
 
 /* routesys.c */
-extern int monitor(void);
-extern void flushroutes(int);
-extern void bprintf(FILE *, int, u_char *);
+int monitor(void);
+void flushroutes(int);
+void bprintf(FILE *, int, u_char *);
 extern char ifnetflags[];
 extern char routeflags[];
 extern char addrnames[];
 extern char metricnames[];
 
 /* commands.c */
-extern void command(int, char *, int);
-extern int cmdrc(char rcname[FILENAME_MAX]);
-extern int load_nlist(void);
+void command(int);
+int cmdrc(char rcname[FILENAME_MAX]);
+int load_nlist(void);
+char *iprompt(void);
+char *cprompt(void);
 
 /* stats.c */
-extern void rt_stats(u_long);
-extern void tcp_stats(u_long);
-extern void udp_stats(u_long);
-extern void ip_stats(u_long);
-extern void icmp_stats(u_long);
-extern void igmp_stats(u_long);
-extern void ah_stats(u_long);
-extern void esp_stats(u_long);
-extern void ipip_stats(u_long);
-extern void ipcomp_stats(u_long);
+void rt_stats(u_long);
+void tcp_stats(u_long);
+void udp_stats(u_long);
+void ip_stats(u_long);
+void icmp_stats(u_long);
+void igmp_stats(u_long);
+void ah_stats(u_long);
+void esp_stats(u_long);
+void ipip_stats(u_long);
+void ipcomp_stats(u_long);
 
 /* mbuf.c */
-extern void mbpr(u_long, u_long, u_long);
+void mbpr(u_long, u_long, u_long);
 
 /* kread.c */
-extern int kread(u_long, char *, int);
-extern char *plural(int);
-extern char *plurales(int);
+int kread(u_long, char *, int);
+char *plural(int);
+char *plurales(int);
 
 /* genget.c */
-extern int isprefix(char *, char*);
-extern char **genget(char *, char **, int);
-extern int Ambiguous(void *);
+int isprefix(char *, char*);
+char **genget(char *, char **, int);
+int Ambiguous(void *);
 
 /* rate.c */
 #define TBR_RATE 1		/* request for TBR token rate */
 #define TBR_BUCKET 2		/* request for TBR bucket size */
-extern int intrate(char *ifname, int, char**);
-extern u_long get_tbr(const char *, int);
-extern u_long atobps(const char *);
-extern u_long atobytes(const char *);
+int intrate(char *ifname, int, char**);
+u_int size_bucket(const char *, const u_int);
+u_int autosize_bucket(const char *, const u_int);
+u_long get_tbr(const char *, int);
+u_long atobps(const char *);
+u_long atobytes(const char *);
 
 /* route.c */
-extern int route(int, char**);
+int route(int, char**);
 
 /* if.c */
 #define IFDATA_MTU 1		/* request for if_data.ifi_mtu */
 #define IFDATA_BAUDRATE 2	/* request for if_data.ifi_baudrate */
 #define MBPS(bps) (bps / 1000 / 1000)
-extern int show_int(const char *);
-extern int get_ifdata(const char *, int);
+#define ROUNDMBPS(bps) ((float)bps == ((bps / 1000 / 1000) * 1000 * 1000))
+#define ROUNDKBPS(bps) ((float)bps == ((bps / 1000) * 1000))
+#define ROUNDKBYTES(bytes) ((float)bytes == ((bytes / 1024) * 1024))
+int is_valid_ifname(const char *);
+int show_int(const char *);
+int get_ifdata(const char *, int);
 
 /* version.c */
-extern int version(void);
+int version(void);
 
 /* compile.c */
 extern char compiled[], compiledby[], compiledon[];
 
+/* editing.c */
+void inithist(void);
+void endhist(void);
+void initedit(void);
+void endedit(void);

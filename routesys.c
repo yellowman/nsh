@@ -111,7 +111,6 @@ pid_t	pid;
 int	rtm_addrs, af, s;
 int	debugonly = 0;
 u_long  rtm_inits;
-uid_t	uid;
 
 char	*routename_sa(struct sockaddr *);
 char	*any_ntoa(const struct sockaddr *);
@@ -140,12 +139,6 @@ flushroutes(af)
 	char *buf = NULL, *next, *lim = NULL;
 	struct rt_msghdr *rtm;
 	struct sockaddr *sa;
-
-	if (uid) {
-		errno = EACCES;
-		printf("%% flushroutes: must be root to alter routing table\n");
-		return;
-	}
 
 	s = socket(PF_ROUTE, SOCK_RAW, 0);
 	if (s < 0) {
