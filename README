@@ -1,5 +1,5 @@
-nsh//network config shell//Chris Cappuccio <chris@dqc.org> version 20030918
-$nsh: README,v 1.16 2003/09/18 19:19:32 chris Exp $
+nsh//network config shell//Chris Cappuccio <chris@dqc.org> version 20040324
+$nsh: README,v 1.17 2004/03/24 09:07:15 chris Exp $
 
 A CLI intended for OpenBSD-based routers running little except for sshd,
 targeted towards CompactFlash-based Soekris Net4501 and similar embedded
