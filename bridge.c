@@ -1,4 +1,4 @@
-/* $nsh: bridge.c,v 1.5 2003/04/14 08:44:20 chris Exp $ */
+/* $nsh: bridge.c,v 1.6 2003/04/23 06:17:53 chris Exp $ */
 /* From: $OpenBSD: /usr/src/sbin/brconfig/brconfig.c,v 1.17 2002/02/16 21:27:33 millert Exp $	*/
 
 /*
@@ -128,7 +128,7 @@ brport(char *ifname, int ifs, int argc, char **argv)
 		name = "discover";
 	} else if (CMP_ARG(argv[0], "l")) {
 		type = BRPORT_LEARN;
-		name = "learn";
+		name = "learning";
 	} else if (CMP_ARG(argv[0], "st")) {
 		type = BRPORT_STP;
 		name = "stp";
@@ -522,8 +522,11 @@ bridge_ifsetflag(s, brdg, ifsname, flag)
 	strlcpy(req.ifbr_name, brdg, sizeof(req.ifbr_name));
 	strlcpy(req.ifbr_ifsname, ifsname, sizeof(req.ifbr_ifsname));
 	if (ioctl(s, SIOCBRDGGIFFLGS, (caddr_t)&req) < 0) {
-		printf("%% cannot get flags for %s on %s: %s\n", ifsname, brdg,
-		    strerror(errno));
+		if (errno == ESRCH)
+			printf("%% %s is not a member of %s\n", ifsname, brdg);
+		else
+			printf("%% cannot get flags for %s on %s: %s\n",
+			    ifsname, brdg, strerror(errno));
 		return (EX_IOERR);
 	}
 
@@ -550,8 +553,11 @@ bridge_ifclrflag(s, brdg, ifsname, flag)
 	strlcpy(req.ifbr_ifsname, ifsname, sizeof(req.ifbr_ifsname));
 
 	if (ioctl(s, SIOCBRDGGIFFLGS, (caddr_t)&req) < 0) {
-		printf("%% cannot get flags for %s on %s: %s\n", ifsname, brdg,
-		    strerror(errno));
+		if (errno == ESRCH)
+			printf("%% %s is not a member of %s\n", ifsname, brdg);
+		else
+			printf("%% cannot get flags for %s on %s: %s\n",
+			    ifsname, brdg, strerror(errno));
 		return (EX_IOERR);
 	}
 
@@ -805,8 +811,8 @@ bridge_list(s, brdg, delim, br_str, str_len, type)
 			}
 			break;
 		case NOLEARNING:
-			if (reqp->ifbr_ifsflags ^ IFBIF_LEARNING &&
-			    reqp->ifbr_ifsflags ^ IFBIF_SPAN) {
+			if (!(reqp->ifbr_ifsflags & IFBIF_LEARNING) &&
+			    !(reqp->ifbr_ifsflags & IFBIF_SPAN)) {
 				snprintf(buf, sizeof(buf), "%s ",
 				    reqp->ifbr_ifsname);
 				strlcat(br_str, buf, str_len);
@@ -814,8 +820,8 @@ bridge_list(s, brdg, delim, br_str, str_len, type)
 			}
 			break;
 		case NODISCOVER:
-			if (reqp->ifbr_ifsflags ^ IFBIF_DISCOVER &&
-			    reqp->ifbr_ifsflags ^ IFBIF_SPAN) {
+			if (!(reqp->ifbr_ifsflags & IFBIF_DISCOVER) &&
+			    !(reqp->ifbr_ifsflags & IFBIF_SPAN)) {
 				snprintf(buf, sizeof(buf), "%s ",
 				    reqp->ifbr_ifsname);
 				strlcat(br_str, buf, str_len);
