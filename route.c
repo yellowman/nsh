@@ -46,7 +46,7 @@ route(int argc, char **argv)
 	struct in_addr mask;
 	char *q, *s;
 
-	if (strncasecmp(argv[0], "no", strlen("no")) == 0) {
+	if (strncasecmp(argv[0], "no", 2) == 0) {
 		cmd = RTM_DELETE; 
 		argc--;
 		argv++;
@@ -57,8 +57,8 @@ route(int argc, char **argv)
 	argv++;
 
 	if (argc < 1 || argc > 2) {
-		printf("%% [no] route destination[/bits] gateway\n");
-		printf("%% [no] route destination[/netmask] gateway\n");
+		printf("%% [no] route <destination>[/bits] <gateway>\n");
+		printf("%% [no] route <destination>[/netmask] <gateway>\n");
 		return(1);
 	}
 

@@ -43,22 +43,24 @@
 #include <arpa/inet.h>
 #include <limits.h>
 #include "externs.h"
+#include "bridge.h"
 
 int
 conf(FILE *output)
 {
-	struct if_nameindex *ifn_list, *ifnp;
+	struct if_nameindex *ifn_list, *ifnp, *br_ifnp;
 	struct ifreq ifr;
 	struct if_data if_data;
-	struct sockaddr_in sin, sin2;
+	struct sockaddr_in sin, sin2, sin3;
 	struct vlanreq vreq;
 
-	in_addr_t mask;
+	short noaddr, br;
 	int ifs, mbits, flags;
-	int noaddr;
+	long tmp;
 	u_long rate, bucket;
+	in_addr_t mask;
 
-	char rate_str[64], bucket_str[64], nw_str[128];
+	char rate_str[64], bucket_str[64], tmp_str[4096];
 
 	if ((ifn_list = if_nameindex()) == NULL) {
 		fprintf(stderr, "%% conf: if_nameindex failed\n");
@@ -74,7 +76,6 @@ conf(FILE *output)
 
 		if (ioctl(ifs, SIOCGIFFLAGS, (caddr_t)&ifr) < 0) {
 			perror("% save: SIOCGIFFLAGS");
-			close(ifs);
 			continue;
 		}
 		flags = ifr.ifr_flags;
@@ -82,38 +83,50 @@ conf(FILE *output)
 		ifr.ifr_data = (caddr_t)&if_data;
 		if (ioctl(ifs, SIOCGIFDATA, (caddr_t)&ifr) < 0) {
 			perror("% save: SIOCGIFDATA");
-			close(ifs);
 			continue;
 		}
 
 		/*
-		 * set interface mode
+		 * Keep in mind that the order in which things are displayed
+		 * here is important.  For instance, we want to setup the
+		 * vlan tag before setting the IP address since the vlan
+		 * interface does not have IFF_BROADCAST set until it
+		 * inherts the parent's flags.  Or, for a bridge,
+		 * we need to setup the members before we setup flags on
+		 * them...You know, uhh...things of that nature..
 		 */
-		fprintf(output, "interface %s\n", ifnp->if_name);
 
 		/*
-		 * print interface IP address if available
+		 * set interface/bridge mode
+		 */
+		if (!(br = is_bridge(ifs, ifnp->if_name)))
+			br = 0;
+		fprintf(output, "%s %s\n", br ? "bridge" : "interface",
+		    ifnp->if_name);
+
+		/*
+		 * Print interface IP address, and broadcast or
+		 * destination if available.  But, don't print broadcast
+		 * if it is what we would expect given the ip and netmask!
 		 */
 		if (ioctl(ifs, SIOCGIFADDR, (caddr_t)&ifr) < 0) {
 			if (errno == EADDRNOTAVAIL) {
 				noaddr = 1;
 			} else {
 				perror("% save: SIOCGIFADDR");
-				close(ifs);
 				continue;
 			}
 		} else {
 			noaddr = 0;
 		}
  
-		if (!noaddr) {
+		if (!br && !noaddr) { /* have an ip? not a bridge? no problem */
 			sin.sin_addr =
 			    ((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr;
 
-			if (ioctl(ifs, SIOCGIFNETMASK, (caddr_t)&ifr) < 0)
-				if (errno != EADDRNOTAVAIL) {
+			if (ioctl(ifs, SIOCGIFNETMASK, (caddr_t)&ifr) < 0) {
+				/* EADDRNOTAVAIL should not happen here */
 					perror("% save: SIOCGIFNETMASK");
-					close(ifs);
 					continue;
 				}
 			sin2.sin_addr =
@@ -122,70 +135,166 @@ conf(FILE *output)
 			mask = ntohl(sin2.sin_addr.s_addr);
 			mbits = mask ? 33 - ffs(mask) : 0;
 
-			fprintf(output, " ip %s/%i\n", inet_ntoa(sin.sin_addr),
+			fprintf(output, " ip %s/%i", inet_ntoa(sin.sin_addr),
 			    mbits);
+
+			noaddr = 0;
+			if (flags & IFF_POINTOPOINT) {
+				if (ioctl(ifs, SIOCGIFDSTADDR, (caddr_t)&ifr)
+				    < 0) {
+					if (errno != EADDRNOTAVAIL) {
+						perror(
+						    "% save: SIOCGIFDSTADDR");
+						continue;
+					} else
+						noaddr = 1;
+				}
+				if (!noaddr) {
+					sin3.sin_addr =
+					    ((struct sockaddr_in *)
+					    &ifr.ifr_addr)->sin_addr;
+					fprintf(output, " %s",
+					    inet_ntoa(sin3.sin_addr));
+				}
+			} else if (flags & IFF_BROADCAST) {
+				if (ioctl(ifs, SIOCGIFBRDADDR, (caddr_t)&ifr)
+				    < 0) {
+				/* EADDRNOTAVAIL should not happen here */
+					perror("% save: SIOCGIFBRDADDR");
+					continue;
+				}
+				sin3.sin_addr =
+				    ((struct sockaddr_in *)&ifr.ifr_addr)->
+				    sin_addr;
+				/*
+				 * no reason to save the broadcast addr
+				 * if it is standard (this should always 
+				 * be true unless someone has messed up their
+				 * network or they are playing around...)
+				 */
+				if (ntohl(sin3.sin_addr.s_addr) !=
+				    in4_brdaddr(sin.sin_addr.s_addr,
+				    sin2.sin_addr.s_addr))
+					fprintf(output, " %s",
+					    inet_ntoa(sin3.sin_addr));
+			}
+			fprintf(output, "\n");
 		}
 
-		/*
-		 * print interface mtu, metric
-		 */
-		if(if_mtu != default_mtu(ifnp->if_name))
-			fprintf(output, " mtu %li\n", if_mtu);
-		if(if_metric)
-			fprintf(output, " metric %li\n", if_metric);
+		if (!br) { /* no shirt, no shoes, no problem */
+			/*
+			 * print interface mtu, metric
+			 */
+			if(if_mtu != default_mtu(ifnp->if_name))
+				fprintf(output, " mtu %li\n", if_mtu);
+			if(if_metric)
+				fprintf(output, " metric %li\n", if_metric);
 
-		/*
-		 * print rate if available, print bucket value only if
-		 * it is not equivalent to the default value.  we try
-		 * to print values in megabits/kilobits only when they
-		 * round off to an integer value
-		 */
-		rate = get_tbr(ifnp->if_name, TBR_RATE);
-		bucket = get_tbr(ifnp->if_name, TBR_BUCKET);
+			/*
+			 * print rate if available, print bucket value only if
+			 * it is not equivalent to the default value.  we try
+			 * and print values in megabits/kilobits only when they
+			 * round off to an integer value
+			 */
+			rate = get_tbr(ifnp->if_name, TBR_RATE);
+			bucket = get_tbr(ifnp->if_name, TBR_BUCKET);
 
-		if(rate && bucket) {
-			if (ROUNDMBPS(rate))
-				snprintf(rate_str, sizeof(rate_str), "%lim",
-				    rate/1000/1000);
-			else if (ROUNDKBPS(rate))
-				snprintf(rate_str, sizeof(rate_str), "%lik",
-				    rate/1000);
-			else
-				snprintf(rate_str, sizeof(rate_str), "%lu",
-				    rate);
-
-			if (size_bucket(ifnp->if_name, rate) == bucket)
-				bucket_str[0] = '\0';
-			else {
-				if (ROUNDKBYTES(bucket))
-					snprintf(bucket_str, sizeof(bucket_str),
-					    " %lik", bucket/1024);
+			if(rate && bucket) {
+				if (ROUNDMBPS(rate))
+					snprintf(rate_str, sizeof(rate_str),
+					    "%lim", rate/1000/1000);
+				else if (ROUNDKBPS(rate))
+					snprintf(rate_str, sizeof(rate_str),
+					    "%lik", rate/1000);
 				else
-					snprintf(bucket_str, sizeof(bucket_str),					    " %lu", bucket);
-			}
+					snprintf(rate_str, sizeof(rate_str),
+					    "%lu", rate);
+
+				if (size_bucket(ifnp->if_name, rate) == bucket)
+					bucket_str[0] = '\0';
+				else {
+					if (ROUNDKBYTES(bucket))
+						snprintf(bucket_str,
+						    sizeof(bucket_str),
+						    " %lik", bucket/1024);
+					else
+						snprintf(bucket_str,
+						    sizeof(bucket_str),
+						    " %lu", bucket);
+				}
 
 			fprintf(output, " rate %s%s\n", rate_str, bucket_str);
+			}
+
+			/*
+			 * print vlan tag, parent if available.  if a tag is set
+			 * but there is no parent, discard.
+			 */
+			memset(&vreq, 0, sizeof(struct vlanreq));
+			ifr.ifr_data = (caddr_t)&vreq;
+
+			if (ioctl(ifs, SIOCGETVLAN, (caddr_t)&ifr) != -1) {
+				if(vreq.vlr_tag && (vreq.vlr_parent[0] != '\0'))
+					fprintf(output, " vlan %d %s\n",
+					    vreq.vlr_tag, vreq.vlr_parent);
+			}
+
+			if (get_nwinfo(ifnp->if_name, tmp_str, sizeof(tmp_str),
+			    NWID) != NULL)
+				fprintf(output, " nwid %s\n", tmp_str);
+			if (get_nwinfo(ifnp->if_name, tmp_str, sizeof(tmp_str),
+			    NWKEY) != NULL)
+				fprintf(output, " nwkey %s\n", tmp_str);
 		}
 
-		/*
-		 * print vlan tag, parent if available.  if a tag is set
-		 * but there is no parent, discard.
-		 */
-		memset(&vreq, 0, sizeof(struct vlanreq));
-		ifr.ifr_data = (caddr_t)&vreq;
+		if (br) {
+			if ((tmp = bridge_cfg(ifs, ifnp->if_name, PRIORITY))
+			    != -1 && tmp != DEFAULT_PRIORITY)
+				fprintf(output, " priority %lu\n", tmp);
+			if ((tmp = bridge_cfg(ifs, ifnp->if_name, HELLOTIME))
+			    != -1 && tmp != DEFAULT_HELLOTIME)
+				fprintf(output, " hellotime %lu\n", tmp);
+			if ((tmp = bridge_cfg(ifs, ifnp->if_name, FWDDELAY))
+			    != -1 && tmp != DEFAULT_FWDDELAY)
+				fprintf(output, " fwddelay %lu\n", tmp);
+			if ((tmp = bridge_cfg(ifs, ifnp->if_name, MAXAGE))
+			    != -1 && tmp != DEFAULT_MAXAGE)
+				fprintf(output, " maxage %lu\n", tmp);
+			if ((tmp = bridge_cfg(ifs, ifnp->if_name, MAXADDR))
+			    != -1 && tmp != DEFAULT_MAXADDR)
+				fprintf(output, " maxaddr %lu\n", tmp);
+			if ((tmp = bridge_cfg(ifs, ifnp->if_name, TIMEOUT))
+			    != -1 && tmp != DEFAULT_TIMEOUT)
+				fprintf(output, " timeout %lu\n", tmp);
 
-		if (ioctl(ifs, SIOCGETVLAN, (caddr_t)&ifr) != -1) {
-			if(vreq.vlr_tag && (vreq.vlr_parent[0] != '\0'))
-				fprintf(output, " vlan %d %s\n", vreq.vlr_tag,
-				    vreq.vlr_parent);
+			if (bridge_list(ifs, ifnp->if_name, NULL, tmp_str,
+			    sizeof(tmp_str), MEMBER))
+				fprintf(output, " member %s\n", tmp_str);
+			if (bridge_list(ifs, ifnp->if_name, NULL, tmp_str,
+			    sizeof(tmp_str), STP))
+				fprintf(output, " stp %s\n", tmp_str);
+			if (bridge_list(ifs, ifnp->if_name, NULL, tmp_str,
+			    sizeof(tmp_str), SPAN))
+				fprintf(output, " span %s\n", tmp_str);
+			if (bridge_list(ifs, ifnp->if_name, NULL, tmp_str,
+			    sizeof(tmp_str), NOLEARNING))
+				fprintf(output, " no learning %s\n", tmp_str);
+			if (bridge_list(ifs, ifnp->if_name, NULL, tmp_str,
+			    sizeof(tmp_str), NODISCOVER))
+				fprintf(output, " no discover %s\n", tmp_str);
+			if (bridge_list(ifs, ifnp->if_name, NULL, tmp_str,
+			    sizeof(tmp_str), BLOCKNONIP))
+				fprintf(output, " blocknonip %s\n", tmp_str);
+			if (bridge_list(ifs, ifnp->if_name, " ", tmp_str,
+			    sizeof(tmp_str), CONF_IFPRIORITY))
+				fprintf(output, "%s", tmp_str);
+			bridge_confaddrs(ifs, ifnp->if_name, " static ",
+			    output);
+			for (br_ifnp = ifn_list; br_ifnp->if_name != NULL;
+			    br_ifnp++)
+				bridge_rules(ifs, ifnp->if_name,
+				    br_ifnp->if_name, " rule ", output);
 		}
-
-		if (get_nwinfo(ifnp->if_name, nw_str, sizeof(nw_str), NWID)
-		    != NULL)
-			fprintf(output, " nwid %s\n", nw_str);
-		if (get_nwinfo(ifnp->if_name, nw_str, sizeof(nw_str), NWKEY)
-		    != NULL)
-			fprintf(output, " nwkey %s\n", nw_str);
 
 		/*
 		 * print various flags
@@ -213,7 +322,7 @@ conf(FILE *output)
 	if_freenameindex(ifn_list);
 
 #if 0
-	cfg_routes(SHOW_IP_CFG);
+	kern_routes(output, SHOW_IP_CFG);
 #endif
 
 	return(0);
@@ -229,137 +338,25 @@ default_mtu(const char *ifname)
 	 * 1500 (and a few that are commonly 1500).. If it isn't in
 	 * our list, we always return 1500...
 	 */
-	if(strncasecmp(ifname, "vlan", strlen("vlan")) == 0)
+	if(strncasecmp(ifname, "vlan", 4) == 0)
 		return(1500);
-	if(strncasecmp(ifname, "gre", strlen("gre")) == 0)
+	if(strncasecmp(ifname, "gre", 3) == 0)
 		return(1450);
-	if(strncasecmp(ifname, "gif", strlen("gif")) == 0)
+	if(strncasecmp(ifname, "gif", 3) == 0)
 		return(1280);
-	if(strncasecmp(ifname, "tun", strlen("tun")) == 0)
+	if(strncasecmp(ifname, "tun", 3) == 0)
 		return(3000);
-	if(strncasecmp(ifname, "ppp", strlen("ppp")) == 0)
+	if(strncasecmp(ifname, "ppp", 3) == 0)
 		return(1500);
-	if(strncasecmp(ifname, "sl", strlen("sl")) == 0)
+	if(strncasecmp(ifname, "sl", 2) == 0)
 		return(296);
-	if(strncasecmp(ifname, "enc", strlen("enc")) == 0)
+	if(strncasecmp(ifname, "enc", 3) == 0)
 		return(1536);
-	if(strncasecmp(ifname, "bridge", strlen("bridge")) == 0)
+	if(strncasecmp(ifname, "bridge", 6) == 0)
 		return(1500);
-	if(strncasecmp(ifname, "pflog", strlen("pflog")) == 0)
+	if(strncasecmp(ifname, "pflog", 5) == 0)
 		return(33224);
-	if(strncasecmp(ifname, "lo", strlen("lo")) == 0)
+	if(strncasecmp(ifname, "lo", 2) == 0)
 		return(33224);
 	return(1500);
 }
-
-#if 0
-/*
- * Here we can either SHOW_IP view routes in a regular view, SHOW_ARP view arp
- * table in a regular view, SHOW_IP_CFG static routes in a format for the
- * config file, SHOW_ARP_CFG static arps in a format for the config file
- */
-void
-kern_routes(FILE *output, int cmd);
-{
-	size_t needed;
-	int af = AF_INET;
-	int mib[6], rlen, seqno;
-	char *buf = NULL, *next, *lim = NULL;
-	struct rt_msghdr *rtm;
-	struct sockaddr *sa;
-
-	if (cmd != SHOW_IP && cmd != SHOW_ARP && cmd != SHOW_IP_CFG &&
-	    cmd != SHOW_ARP_CFG) {
-		printf ("%% cfg_routes: internal error");
-		return (1);
-	}
-
-	s = socket(PF_ROUTE, SOCK_RAW, 0);
-	if (s < 0) {
-		perror("% Unable to open routing socket");
-		return;
-	}
-
-	shutdown(s, 0); /* Don't want to read back our messages */
-
-	mib[0] = CTL_NET;
-	mib[1] = PF_ROUTE;
-	mib[2] = 0;		/* protocol */
-	mib[3] = 0;		/* wildcard address family */
-	mib[4] = NET_RT_DUMP;
-	mib[5] = 0;		/* no flags */
-	if (sysctl(mib, 6, NULL, &needed, NULL, 0) < 0) {
-		printf("%% route-sysctl-estimate\n");
-		close(s);
-		return;
-	}
-	if (needed) {
-		if ((buf = malloc(needed)) == NULL) {
-			printf("%% flushroutes: malloc\n");
-			close(s);
-			return;
-		}
-		if (sysctl(mib, 6, buf, &needed, NULL, 0) < 0) {
-			printf("%% flushroutes: actual retrieval of routing table\n");
-			free(buf);
-			close(s);
-			return;
-		}
-		lim = buf + needed;
-	}
-	if (verbose) {
-		(void) printf("%% Examining routing table from sysctl\n");
-		if (af)
-			printf("%% (address family %d)\n", af); 
-	}
-	if (buf == NULL) {
-		printf ("%% No routing table to flush\n");
-		close(s);
-		return;
-	}
-	seqno = 0;              /* ??? */
-	for (next = buf; next < lim; next += rtm->rtm_msglen) {
-		rtm = (struct rt_msghdr *)next;
-		if (verbose)
-			print_rtmsg(rtm, rtm->rtm_msglen);
-		if ((rtm->rtm_flags & (RTF_GATEWAY|RTF_STATIC|RTF_LLINFO)) == 0)
-			continue;
-		sa = (struct sockaddr *)(rtm + 1);
-		if (af) {
-			if (sa->sa_family != af)
-				continue;
-		}
-		if (sa->sa_family == AF_KEY)
-			continue;  /* Don't flush SPD */
-		if (debugonly)
-			continue;
-/*
-		rtm->rtm_type = RTM_DELETE;
-		rtm->rtm_seq = seqno;
-		rlen = write(s, next, rtm->rtm_msglen);
-		if (rlen < (int)rtm->rtm_msglen) {
-			(void) fprintf(stderr,
-			    "route: write to routing socket: %s\n",
-			    strerror(errno));
-			(void) printf("%% flushroutes: got only %d for rlen\n",
-			    rlen);
-			break;
-		}
-*/
-		seqno++;
-		{
-			struct sockaddr *sa = (struct sockaddr *)(rtm + 1);
-			(void) printf("%-20.20s ", routename_sa(sa));
-/*rtm->rtm_flags & RTF_HOST ?
-                            routename_sa(sa) : netname(sa));*/
-			sa = (struct sockaddr *)(ROUNDUP(sa->sa_len) +
-			    (char *)sa);
-			(void) printf("%-20.20s ", routename_sa(sa));
-			(void) printf("deleted\n");
-		}
-	}
-	free(buf);
-	close(s);
-}
-
-#endif

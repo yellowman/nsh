@@ -1,4 +1,4 @@
-/* From: $OpenBSD: ifconfig.c,v 1.61 2002/04/10 18:52:27 millert Exp $ */
+/* From: $OpenBSD: /usr/src/sbin/ifconfig/ifconfig.c,v 1.61 2002/04/10 18:52:27 millert Exp $ */
 /*
  * Copyright (c) 1983, 1993
  *      The Regents of the University of California.  All rights reserved.
@@ -166,14 +166,14 @@ make_string(char *str, int str_len, const u_int8_t *buf, int buf_len)
 
 /* was setifnwkey() */
 int
-intnwkey(const char *ifname, int argc, char **argv)
+intnwkey(const char *ifname, int ifs, int argc, char **argv)
 {
-	int i, len, ifs, set;
+	int i, len, set;
 	char *cp = NULL, *val;
 	struct ieee80211_nwkey nwkey;
 	u_int8_t keybuf[IEEE80211_WEP_NKID][16];
 
-	if (strncasecmp(argv[0], "no", strlen("no")) == 0) {
+	if (strncasecmp(argv[0], "no", 2) == 0) {
 		set = 0;
 		argc--;
 		argv++;
@@ -244,14 +244,8 @@ set_nwkey:
 		nwkey.i_key[i].i_keydat = NULL;
 	}
 	(void) strlcpy(nwkey.i_name, ifname, sizeof(nwkey.i_name));
-	ifs = socket(AF_INET, SOCK_DGRAM, 0);
-	if (ifs < 0) {
-		perror("% intnwkey: socket");
-		return(1);
-	}
 	if (ioctl(ifs, SIOCS80211NWKEY, (caddr_t)&nwkey) == -1)
 		perror("% intnwkey: SIOCS80211NWKEY");
-	close(ifs);
 	return(0);
 }
 

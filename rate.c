@@ -85,7 +85,7 @@ intrate(char *ifname, int argc, char **argv)
 	if (argc)
 		rate = (u_int)atobps(argv[0]);
 	if (argc > 1) {
-		if (strncasecmp(argv[1], "auto", strlen("auto")) == 0)
+		if (strncasecmp(argv[1], "auto", 4) == 0)
 			depth = autosize_bucket(req.ifname, rate);
 		else {
 			depth = (u_int)atobytes(argv[1]);

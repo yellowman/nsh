@@ -1,4 +1,4 @@
-This it is a work in progress, future versions will be released which
+nsh is a work in progress, future versions will be released which
 implement much of the following (of course, diffs are welcome):
 
 Cleanup:
@@ -10,6 +10,12 @@ Cleanup:
   the error in "plain english" instead of kernel/library jargon
 * More security auditing for string handling, off-by-one errors, and other
   problems
+* User args should be set to lowercase at early so that we dont have to use
+  strcasecmp/strncasecmp everywhere
+* User args should be sanity checked early for crap
+* Consistency in how we perror() for commands called from interface(),
+  give user-friendly messages (but not from perror in conf() or other
+  things that are not called direct from CLI)
 * ...
 
 Required for intended functionality:
@@ -18,7 +24,6 @@ Required for intended functionality:
   configurations to a file which can be read by cmdrc on
   startup with -i (requires the following to be done _first_:)
 * Finish up interface mode handler commands
-* Extend interface mode handler with a bridge mode
 * Create pf commands under interface, generic mode handler:
 
 * Allow simple block in all/pass out all keep state pf rules to be setup for
@@ -45,6 +50,9 @@ Cute features:
 * Something comparable to "| inc" from cisco-land
 * Tab command/argument completion
 * Context-sensitive help
+* Import unimplemented wicontrol features
+* Convenient/automatic way to centralize configurations for tracking/revision
+  control
 
 Future:
 
@@ -56,16 +64,17 @@ Future:
 * IPIP/GRE?? Other tunnels??
 * IPX?? AppleTalk??
 
-Known Bugs (or, things that I would rather not think about right now, but
+Known Bugs (or, things that I don't want to bother with right now, but
 better not forget later...):
 
 * Is it possible to properly implement a 'no nwid' command or should this be
   removed? (It currently does not work in nsh, anyways ifconfig cannot do
   this, and in any event the kernel does not appear to be able to remove
-  this setting from a card!)
+  this setting from a card!) Maybe we just set xyz.len=0 instead of the
+  memset we do now?
 * Need some kind of sanity checking for nwid variable, 'nwid ""' will cause
-  if_wi to stop responding properly.  Unsure of what is and isn't sane for
-  nwid values.
+  some if_wi cards to stop responding properly.  Unsure of what is and isn't
+  sane for various cards?????
 * When 'no nwid' is used, a following 'show run' exposes other bugs in
   make_string()
 * The 3.1 kernel does not keep count of information displayed in 'show rtstat'
@@ -73,7 +82,7 @@ better not forget later...):
 * We need to mask the rounding error for altq tbr 'rate' value
 
   The error can be demonstrated with the test program at
-  ftp://dqc.org/pub/nsh/tbrtest.c
+  ftp://nmedia.net/pub/nsh/tbrtest.c
 
   From Kenjiro Cho:
   "The rate is scaled by the clock frequency within the kernel.

@@ -114,6 +114,7 @@ u_long  rtm_inits;
 
 char	*routename_sa(struct sockaddr *);
 char	*any_ntoa(const struct sockaddr *);
+char	*touch;
 
 void	 flushroutes(int);
 int	 monitor(void);
@@ -369,7 +370,7 @@ monitor()
 		time_t now;
 		n = read(s, msg, 2048);
 		now = time(NULL);
-		(void) printf("got message of size %d on %s", n, ctime(&now));
+		(void) printf("%% Message of size %d on %s", n, ctime(&now));
 		print_rtmsg((struct rt_msghdr *)msg, n);
 	}
 
@@ -404,10 +405,13 @@ char *msgtypes[] = {
 
 char metricnames[] =
 "\011pksent\010rttvar\7rtt\6ssthresh\5sendpipe\4recvpipe\3expire\2hopcount\1mtu";
+
 char routeflags[] =
 "\1UP\2GATEWAY\3HOST\4REJECT\5DYNAMIC\6MODIFIED\7DONE\010MASK_PRESENT\011CLONING\012XRESOLVE\013LLINFO\014STATIC\017PROTO2\020PROTO1";
+
 char ifnetflags[] =
-"\1UP\2BROADCAST\3DEBUG\4LOOPBACK\5PTP\6NOTRAILERS\7RUNNING\010NOARP\011PPROMISC\012ALLMULTI\013OACTIVE\014SIMPLEX\015LINK0\016LINK1\017LINK2\020MULTICAST";
+"\1UP\2BROADCAST\3DEBUG\4LOOPBACK\5PTP\6NOTRAILERS\7RUNNING\010NOARP\011PROMISC\012ALLMULTI\013OACTIVE\014SIMPLEX\015LINK0\016LINK1\017LINK2\020MULTICAST";
+
 char addrnames[] =
 "\1DST\2GATEWAY\3NETMASK\4GENMASK\5IFP\6IFA\7AUTHOR\010BRD";
 
@@ -514,7 +518,7 @@ bprintf(fp, b, s)
 
 /*
  * Adapted from merit's mrtd (hence the copyright above) which appears to
- * have adapted from 4.4bsd, as it looks like this was rtmsg() at one point
+ * have adapted from 4.4bsd (well.. it looks like this was rtmsg() at one point)
  */
 int
 kernel_route(ip_t *dest, ip_t *gate, u_short cmd)

@@ -44,6 +44,7 @@
 #include <arpa/inet.h>
 #include <limits.h>
 #include "externs.h"
+#include "bridge.h"
 
 int
 show_int(const char *ifname)
@@ -56,13 +57,14 @@ show_int(const char *ifname)
 	struct vlanreq vreq;
 
 	in_addr_t mask;
-	int ifs, mbits, flags, days, hours, mins;
+	short tmp;
+	int ifs, br, mbits, flags, days, hours, mins, pntd;
 	int noaddr = 0;
 	time_t c;
 	char *type;
 
 	u_long rate, bucket;
-	char rate_str[64], bucket_str[64];
+	char rate_str[64], bucket_str[64], tmp_str[4096];
 
 	/*
 	 * Show all interfaces when no ifname specified.
@@ -81,17 +83,21 @@ show_int(const char *ifname)
 		printf("%% interface %s not found\n", ifname);
 		return(1);
 	}
-	
+
 	if ((ifs = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
 		perror("% show_int");
 		return(1);
 	}
+
+	if (!(br = is_bridge(ifs, (char *)ifname)))
+		br = 0;
+
 	strncpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 
 	/*
 	 * Show up/down status and last change time
 	 */
-	flags = get_ifflags(ifname);
+	flags = get_ifflags(ifname, ifs);
 
 	ifr.ifr_data = (caddr_t)&if_data;
 	if (ioctl(ifs, SIOCGIFDATA, (caddr_t)&ifr) < 0) {
@@ -101,7 +107,8 @@ show_int(const char *ifname)
 	}
 
 	printf("%% %s\n", ifname);
-	printf("  Interface is %s", flags & IFF_UP ? "up" : "down");
+	printf("  %s is %s", br ? "Bridge" : "Interface",
+	    flags & IFF_UP ? "up" : "down");
 
 	if (if_lastchange.tv_sec) {
 		gettimeofday(&tv, (struct timezone *)0);
@@ -118,7 +125,8 @@ show_int(const char *ifname)
 		printf("%02i:%02i:%02i)", hours, mins, c);
 	}
 
-	printf(", protocol is %s\n", flags & IFF_RUNNING ? "up" : "down");
+	printf(", protocol is %s", flags & IFF_RUNNING ? "up" : "down");
+	printf("\n");
 
 	/*
 	 * Display interface type
@@ -217,7 +225,12 @@ show_int(const char *ifname)
 		type = "Unknown";
 		break;
 	}
-	printf("  Interface type %s\n", type);
+	printf("  Interface type %s", type);
+	if (flags & IFF_BROADCAST)
+		printf(" (Broadcast)");
+	else if (flags & IFF_POINTOPOINT)
+		printf(" (PointToPoint)");
+	printf("\n");
 
 	/*
 	 * Display IP address and CIDR netmask
@@ -250,49 +263,58 @@ show_int(const char *ifname)
 		    inet_ntoa(sin.sin_addr), mbits);
 	}
 
-	/*
-	 * Display MTU, line rate, and ALTQ token rate info if applicable
-	 */
-	printf("  MTU %li bytes", if_mtu);
-	if (if_baudrate)
-		printf(", Line Rate %li %s\n",
-		    MBPS(if_baudrate) ? MBPS(if_baudrate) : if_baudrate / 1000,
-		    MBPS(if_baudrate) ? "Mbps" : "Kbps");
-	else
-		printf("\n");
+	if (!br) {
+		/*
+		 * Display MTU, line rate, and ALTQ token rate info
+		 * (if available)
+		 */
+		printf("  MTU %li bytes", if_mtu);
+		if (if_baudrate)
+			printf(", Line Rate %li %s\n",
+			    MBPS(if_baudrate) ? MBPS(if_baudrate) :
+			    if_baudrate / 1000,
+			    MBPS(if_baudrate) ? "Mbps" : "Kbps");
+		else
+			printf("\n");
  
-	rate = get_tbr(ifname, TBR_RATE);
-	bucket = get_tbr(ifname, TBR_BUCKET);
+		rate = get_tbr(ifname, TBR_RATE);
+		bucket = get_tbr(ifname, TBR_BUCKET);
 
-	if(rate && bucket) {
-		if (MBPS(rate))
-			snprintf(rate_str, sizeof(rate_str), "%.2f Mbps",
-			    (double)rate/1000.0/1000.0);
-		else
-			snprintf(rate_str, sizeof(rate_str), "%.2f Kbps",
-			    (double)rate/1000.0);
+		if(rate && bucket) {
+			if (MBPS(rate))
+				snprintf(rate_str, sizeof(rate_str),
+				    "%.2f Mbps",
+				    (double)rate/1000.0/1000.0);
+			else
+				snprintf(rate_str, sizeof(rate_str),
+				    "%.2f Kbps",
+				    (double)rate/1000.0);
 
-		if (bucket < 10240)
-			snprintf(bucket_str, sizeof(bucket_str),  "%lu bytes",
-			    bucket);
-		else
-			snprintf(bucket_str, sizeof(bucket_str), "%.2f Kbytes",
-			    (double)bucket/1024.0);
+			if (bucket < 10240)
+				snprintf(bucket_str, sizeof(bucket_str),
+				    "%lu bytes",
+				    bucket);
+			else
+				snprintf(bucket_str, sizeof(bucket_str),
+				    "%.2f Kbytes",
+				    (double)bucket/1024.0);
 
-		printf("  Token Rate %s, Bucket %s\n", rate_str, bucket_str);
-	}
-
-	memset(&vreq, 0, sizeof(struct vlanreq));
-	ifr.ifr_data = (caddr_t)&vreq;
-
-	if (ioctl(ifs, SIOCGETVLAN, (caddr_t)&ifr) != -1) {
-		if(vreq.vlr_tag || (vreq.vlr_parent[0] != '\0')) {
-			printf("  vlan tag %d on parent %s\n",
-			    vreq.vlr_tag, vreq.vlr_parent[0] == '\0' ?
-			    "<none>" : vreq.vlr_parent);
+			printf("  Token Rate %s, Bucket %s\n", rate_str,
+			    bucket_str);
 		}
+
+		memset(&vreq, 0, sizeof(struct vlanreq));
+		ifr.ifr_data = (caddr_t)&vreq;
+
+		if (ioctl(ifs, SIOCGETVLAN, (caddr_t)&ifr) != -1) {
+			if(vreq.vlr_tag || (vreq.vlr_parent[0] != '\0')) {
+				printf("  vlan tag %d on parent %s\n",
+				    vreq.vlr_tag, vreq.vlr_parent[0] == '\0' ?
+				    "<none>" : vreq.vlr_parent);
+			}
+		}
+		close(ifs);
 	}
-	close(ifs);
 
 	/*
 	 * Display remaining info from if_data structure
@@ -310,14 +332,58 @@ show_int(const char *ifname)
 	default:
 		break;
 	}
-
-	if(verbose && flags) {
-		printf("  Flags ");
-		bprintf(stdout, flags, ifnetflags);
+	if (if_ibytes && if_ipackets) {
+		printf("  %lu avg input size", if_ibytes / if_ipackets);
+		pntd = 1;
+	} else
+		pntd = 0;
+	if (if_obytes && if_opackets) {
+		printf("%s%lu avg output size", pntd ? ", " : "  ",
+		    if_obytes / if_opackets);
+		pntd = 1;
+	}
+	if (pntd)
 		printf("\n");
-        }
+
+	if(verbose) {
+		if (flags) {
+			printf("  Flags:\n    ");
+			bprintf(stdout, flags, ifnetflags);
+			printf("\n");
+		}
+		if (br) {
+			if (tmp = bridge_list(ifs, ifname, "    ", tmp_str,
+			    sizeof(tmp_str), SHOW_STPSTATE)) {
+				printf("  STP member state%s:\n", tmp > 1 ?
+				    "s" : "");
+				printf("%s", tmp_str);
+			}
+			bridge_addrs(ifs, ifname, "  ", "    ");
+		}
+	}
 
 	return(0);
+}
+
+u_int32_t
+in4_netaddr(u_int32_t addr, u_int32_t mask)
+{
+	u_int32_t net;
+
+	net = ntohl(addr) & ntohl(mask);
+
+	return (net);
+}
+
+u_int32_t
+in4_brdaddr(u_int32_t addr, u_int32_t mask)
+{
+	u_int32_t net, bcast;
+
+	net = in4_netaddr(addr, mask);
+	bcast = net | ~ntohl(mask);
+
+	return(bcast);
 }
 
 int 
@@ -375,15 +441,11 @@ is_valid_ifname(const char *ifname)
 }
 
 int
-get_ifflags(const char *ifname)
+get_ifflags(const char *ifname, int ifs)
 {
-	int ifs, flags;
+	int flags;
 	struct ifreq ifr;
 
-	if ((ifs = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-		perror("% get_ifflags");
-		return(0);
-	}
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 
 	if (ioctl(ifs, SIOCGIFFLAGS, (caddr_t)&ifr) < 0) {
@@ -391,20 +453,14 @@ get_ifflags(const char *ifname)
 		flags = 0;
 	} else
 		flags = ifr.ifr_flags;
-	close(ifs);
 	return(flags);
 }
 
 int
-set_ifflags(const char *ifname, int flags)
+set_ifflags(const char *ifname, int ifs, int flags)
 {
-	int ifs;
 	struct ifreq ifr;
 
-	if ((ifs = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-		perror("% get_ifflags");
-		return(0);
-	}
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 
 	ifr.ifr_flags = flags;
@@ -413,7 +469,6 @@ set_ifflags(const char *ifname, int flags)
 		perror("% get_ifflags: SIOCSIFFLAGS");
 	}
 
-        close(ifs);
         return(0);
 }
 
@@ -421,9 +476,9 @@ set_ifflags(const char *ifname, int flags)
 #define ADD 1
 
 int
-intip(const char *ifname, int argc, char **argv)
+intip(const char *ifname, int ifs, int argc, char **argv)
 {
-	int cmd, alias, ifs, flags, argcmax;
+	int cmd, alias, flags, argcmax;
 	struct in_addr ip, mask, destbcast;
 	struct ifaliasreq addreq, ridreq;
 	struct sockaddr_in *sin;
@@ -432,7 +487,7 @@ intip(const char *ifname, int argc, char **argv)
 	memset(&addreq, 0, sizeof(addreq));
 	memset(&ridreq, 0, sizeof(ridreq));
 
-	if (strncasecmp(argv[0], "no", strlen("no")) == 0) {
+	if (strncasecmp(argv[0], "no", 2) == 0) {
 		cmd = DELETE;
 		argc--;
 		argv++;
@@ -443,7 +498,7 @@ intip(const char *ifname, int argc, char **argv)
 	 * We use this function for ip and alias setup since they are
 	 * the same thing.
 	 */
-	if (strncasecmp(argv[0], "a", strlen("a")) == 0) {
+	if (strncasecmp(argv[0], "a", 1) == 0) {
 		alias = 1;
 		cmdname = "alias";
 	} else {
@@ -454,21 +509,23 @@ intip(const char *ifname, int argc, char **argv)
 	argc--;
 	argv++;
 
-	flags = get_ifflags(ifname);
+	flags = get_ifflags(ifname, ifs);
 	if (flags & IFF_POINTOPOINT) {
 		argcmax = 2;
-		msg = " [destaddr]";
+		msg = "destination";
 	} else if (flags & IFF_BROADCAST) {
 		argcmax = 2;
-		msg = " [broadcast]";
+		msg = "broadcast";
 	} else {
 		argcmax = 1;
-		msg = "";
+		msg = NULL;
 	}
 
 	if (argc < 1 || argc > argcmax) {
-		printf("%% %s <address>/<bits>%s\n", cmdname, msg);
-		printf("%% %s <address>/<netmask>%s\n", cmdname, msg);
+		printf("%% %s <address>/<bits> %s%s%s\n", cmdname,
+		    msg ? "[" : "", msg ? msg : "", msg ? "]" : "");
+		printf("%% %s <address>/<netmask> %s%s%s\n", cmdname,
+		    msg ? "[" : "", msg ? msg : "", msg ? "]" : "");
 		printf("%% no %s <address>[/bits]\n", cmdname);
 		printf("%% no %s <address>[/netmask]\n", cmdname);
 		return(0);
@@ -512,17 +569,10 @@ intip(const char *ifname, int argc, char **argv)
 	
 	if (argc == 2)
 		if (!inet_aton(argv[1], &destbcast)) {
-			printf("%% Invalid %s address\n",
-			    flags & IFF_POINTOPOINT ? "destination" :
-			    "broadcast");
+			printf("%% Invalid %s address\n", msg);
 			return(0);
 		}
 	
-	ifs = socket(AF_INET, SOCK_DGRAM, 0);
-	if (ifs < 0) {
-		perror("% intip: socket");
-		return(1);
-	}
 	strlcpy(addreq.ifra_name, ifname, sizeof(addreq.ifra_name));
 	strlcpy(ridreq.ifra_name, ifname, sizeof(ridreq.ifra_name));
 
@@ -562,17 +612,16 @@ intip(const char *ifname, int argc, char **argv)
 			perror("% intip: SIOCAIFADDR");
 	}
 
-	close(ifs);
 	return(0);
 }
 
 int
-intmtu(const char *ifname, int argc, char **argv)
+intmtu(const char *ifname, int ifs, int argc, char **argv)
 {
 	struct ifreq ifr;
-	int cmd, ifs;
+	int cmd;
 
-	if (strncasecmp(argv[0], "no", strlen("no")) == 0) {
+	if (strncasecmp(argv[0], "no", 2) == 0) {
 		cmd = DELETE;
 		argc--;
 		argv++;
@@ -594,25 +643,19 @@ intmtu(const char *ifname, int argc, char **argv)
 		ifr.ifr_mtu = default_mtu(ifname);
 
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
-	ifs = socket(AF_INET, SOCK_DGRAM, 0);
-	if (ifs < 0) {
-		perror("% intmtu: socket");
-		return(1);
-	}     	
 	if (ioctl(ifs, SIOCSIFMTU, (caddr_t)&ifr) < 0)
 		perror("% intmtu: SIOCSIFMTU");
 
-	close(ifs);
 	return(0);
 }
 
 int
-intmetric(const char *ifname, int argc, char **argv)
+intmetric(const char *ifname, int ifs, int argc, char **argv)
 {
 	struct ifreq ifr;
-	int cmd, ifs;
+	int cmd;
 
-	if (strncasecmp(argv[0], "no", strlen("no")) == 0) {
+	if (strncasecmp(argv[0], "no", 2) == 0) {
 		cmd = DELETE;
 		argc--;
 		argv++;
@@ -634,37 +677,31 @@ intmetric(const char *ifname, int argc, char **argv)
 		ifr.ifr_metric = 0;
 
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
-	ifs = socket(AF_INET, SOCK_DGRAM, 0);
-	if (ifs < 0) {
-		perror("% intmetric: socket");
-		return(1);
-	}       
 	if (ioctl(ifs, SIOCSIFMETRIC, (caddr_t)&ifr) < 0)
 		perror("% intmetric: SIOCSIFMETRIC");
 
-	close(ifs);
 	return(0);
 }
 
 int
-intflags(const char *ifname, int argc, char **argv)
+intflags(const char *ifname, int ifs, int argc, char **argv)
 {
 	int set, value, flags;
 
-	if (strncasecmp(argv[0], "no", strlen("no")) == 0) {
+	if (strncasecmp(argv[0], "no", 2) == 0) {
 		set = 0;
 		argv++;
 		argc--;
 	} else
 		set = 1;
 
-	if (strncasecmp(argv[0], "de", strlen("de")) == 0) {
+	if (strncasecmp(argv[0], "d", 1) == 0) {
 		/* debug */
 		value = IFF_DEBUG;
-	} else if (strncasecmp(argv[0], "sh", strlen("sh")) == 0) {
+	} else if (strncasecmp(argv[0], "s", 1) == 0) {
 		/* shutdown */
 		value = -IFF_UP;
-	} else if (strncasecmp(argv[0], "ar", strlen("ar")) == 0) {
+	} else if (strncasecmp(argv[0], "a", 1) == 0) {
 		/* arp */
 		value = -IFF_NOARP;
 	} else {
@@ -672,7 +709,7 @@ intflags(const char *ifname, int argc, char **argv)
 		return(0);
 	}
 
-	flags = get_ifflags(ifname);
+	flags = get_ifflags(ifname, ifs);
 	if (value < 0) {
 		/*
 		 * Idea from ifconfig.  If value is negative then
@@ -694,17 +731,17 @@ intflags(const char *ifname, int argc, char **argv)
 	} else {
 		printf("%% intflags: value internal error\n");
 	}
-	set_ifflags(ifname, flags);
+	set_ifflags(ifname, ifs, flags);
 	return(0);
 }
 
 int
-intlink(const char *ifname, int argc, char **argv)
+intlink(const char *ifname, int ifs, int argc, char **argv)
 {
 	int set, i, flags, value;
 	char *s;
 
-	if (strncasecmp(argv[0], "no", strlen("no")) == 0) {
+	if (strncasecmp(argv[0], "no", 2) == 0) {
 		set = 0;
 		argv++;
 		argc--;
@@ -720,7 +757,7 @@ intlink(const char *ifname, int argc, char **argv)
 		return(0);
 	}
 
-	flags = get_ifflags(ifname);
+	flags = get_ifflags(ifname, ifs);
 
 	if (!set && argc == 0) {
 		/*
@@ -756,20 +793,20 @@ intlink(const char *ifname, int argc, char **argv)
 			flags &= ~value;
 	}
 
-	set_ifflags(ifname, flags);
+	set_ifflags(ifname, ifs, flags);
 
 	return(0);
 }
 
 int
-intnwid(const char *ifname, int argc, char **argv)
+intnwid(const char *ifname, int ifs, int argc, char **argv)
 {
 	struct ieee80211_nwid nwid;
 	struct ifreq ifr;
 	struct if_data if_data;
-	int ifs, set, len;
+	int set, len;
 
-	if (strncasecmp(argv[0], "no", strlen("no")) == 0) {
+	if (strncasecmp(argv[0], "no", 2) == 0) {
 		set = 0;
 		argv++;
 		argc--;
@@ -799,25 +836,19 @@ intnwid(const char *ifname, int argc, char **argv)
 	ifr.ifr_data = (caddr_t)&nwid;
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 
-	ifs = socket(AF_INET, SOCK_DGRAM, 0);
-	if (ifs < 0) {
-		perror("% intnwid: socket");
-		return(1);
-	}
 	if (ioctl(ifs, SIOCS80211NWID, (caddr_t)&ifr) < 0)
 		perror("% intnwid: SIOCS80211NWID");
 
-	close(ifs);
 	return(0);
 }
 
 int
-intpowersave(const char *ifname, int argc, char **argv)
+intpowersave(const char *ifname, int ifs, int argc, char **argv)
 {
 	struct ieee80211_power power;
-	int ifs, set;
+	int  set;
 
-	if (strncasecmp(argv[0], "no", strlen("no")) == 0) {
+	if (strncasecmp(argv[0], "no", 2) == 0) {
 		set = 0;
 		argv++;
 		argc--;
@@ -834,12 +865,6 @@ intpowersave(const char *ifname, int argc, char **argv)
 
 	strlcpy(power.i_name, ifname, sizeof(power.i_name));
 
-	ifs = socket(AF_INET, SOCK_DGRAM, 0);
-	if (ifs < 0) {
-		perror("% intpowersave: socket");
-		return(1);
-	}
-
 	if (ioctl(ifs, SIOCG80211POWER, (caddr_t)&power) == -1) {
 		perror("% intpowersave: SIOCG80211POWER");
 		return(0);
@@ -853,10 +878,8 @@ intpowersave(const char *ifname, int argc, char **argv)
 
 	if (ioctl(ifs, SIOCS80211POWER, (caddr_t)&power) == -1) {
 		perror("% intpowersave: SIOCS80211POWER");
-		close(ifs);
 		return(0);
 	}
 
-	close(ifs);
 	return(0);
 }

@@ -286,35 +286,54 @@ struct intlist {
 	char *name;		/* How user refers to it (case independent) */
 	char *help;		/* Help information (0 ==> no help) */
 	int (*handler)();	/* Routine to perform (for special ops) */
+	int bridge;		/* 0 == Interface, 1 == Bridge, 2 == Both */
 };
 
 static struct intlist Intlist[] = {
-	{ "ip",		"IP address and other parameters",	intip },
-	{ "alias",	"Additional IP addresses and other parameters",	intip },
-	{ "mtu",	"Set Maximum Transmission Unit",	intmtu },
-	{ "metric",	"Set routing metric",			intmetric },
-	{ "link",	"Set link level options",		intlink },
-	{ "arp",	"Set Address Resolution Protocol",	intflags },
-	{ "nwid",	"802.11 network ID",			intnwid },
-	{ "nwkey",	"802.11 network key",			intnwkey },
-	{ "powersave",	"802.11 powersaving mode",		intpowersave },
+/* Interface mode commands */
+	{ "ip",		"IP address and other parameters",	intip,	0 },
+	{ "alias",	"Additional IP addresses and other parameters",	intip, 0},
+	{ "mtu",	"Set Maximum Transmission Unit",	intmtu, 0 },
+	{ "metric",	"Set routing metric",			intmetric, 0 },
+	{ "link",	"Set link level options",		intlink, 2 },
+	{ "arp",	"Set Address Resolution Protocol",	intflags, 0 },
+	{ "nwid",	"802.11 network ID",			intnwid, 0 },
+	{ "nwkey",	"802.11 network key",			intnwkey, 0 },
+	{ "powersave",	"802.11 powersaving mode",		intpowersave, 0 },
 #if 0
-	{ "media",	"Media type",				intmedia },
-	{ "mediaopt",	"Media options",			intmediaopt },
-	{ "vlan",	"802.1Q vlan tag and parent",		intvlan },
-	{ "tunnel",	"Source and destination on GIF tunnel",	inttunnel },
+	{ "media",	"Media type",				intmedia, 0 },
+	{ "mediaopt",	"Media options",			intmediaopt, 0 },
+	{ "vlan",	"802.1Q vlan tag and parent",		intvlan, 0 },
+	{ "tunnel",	"Source and destination on GIF tunnel",	inttunnel, 0 },
 #ifdef INET6
-	{ "vltime",	"IPv6 valid lifetime",			intvltime },
-        { "pltime",	"IPv6 preferred lifetime",		intpltime },
-	{ "anycast",	"IPv6 anycast address bit",		intanycast },
-	{ "tentative",	"IPv6 tentative address bit",		inttentative },
+	{ "vltime",	"IPv6 valid lifetime",			intvltime, 0 },
+        { "pltime",	"IPv6 preferred lifetime",		intpltime, 0 },
+	{ "anycast",	"IPv6 anycast address bit",		intanycast, 0 },
+	{ "tentative",	"IPv6 tentative address bit",		inttentative, 0 },
 #endif
 #endif
-	{ "debug",	"Driver dependent debugging",		intflags },
-	{ "shutdown",	"Shutdown interface",			intflags },
-	{ "rate",	"Rate limit (token bucket regulator)",	intrate },
-	{ "?",		"Options",				int_help },
-	{ "help",	0,					int_help },
+	{ "debug",	"Driver dependent debugging",		intflags, 0 },
+	{ "shutdown",	"Shutdown interface",			intflags, 2 },
+	{ "rate",	"Rate limit (token bucket regulator)",	intrate, 0 },
+/* Bridge mode commands */
+	{ "member",	"Bridge member(s)",			brport, 1 },
+	{ "span",	"Bridge spanning port(s)",		brport, 1 },
+	{ "blocknonip",	"Block non-IP traffic forwarding on member(s)",	brport, 1 },
+	{ "discover",	"Mark member(s) as discovery port(s)",	brport, 1 },
+	{ "learning",	"Mark member(s) as learning port(s)",	brport, 1 },
+	{ "stp",	"Enable 802.1D spanning tree protocol on member(s)", brport, 1 },
+	{ "maxaddr",	"Maximum address cache size",		brval, 1 },
+	{ "timeout",	"Address cache timeout",		brval, 1 },
+	{ "maxage",	"Time for 802.1D configuration to remain valid", brval, 1 },
+	{ "fwddelay",	"Time before bridge begins forwarding packets", brval, 1 },
+	{ "hellotime",	"Time between broadcasting 802.1D configuration packets", brval, 1 },
+	{ "priority",	"Spanning priority for all members on an 802.1D bridge", brval, 1 },
+	{ "rule",	"Bridge layer 2 filtering rules",	brrule, 1 },
+	{ "static",	"Static bridge address entry",		brstatic, 1 },
+	{ "ifpriority",	"Spanning priority of a member on an 802.1D bridge", brpri, 1 },
+/* Help commands */
+	{ "?",		"Options",				int_help, 2 },
+	{ "help",	0,					int_help, 2 },
 	{ 0, 0, 0 }
 };
 
@@ -338,6 +357,9 @@ static struct flushlist Flushlist[] = {
 #if 0
 	{ "arp",	"ARP cache",		0, 0, flush_arp_cache },
 #endif
+	{ "bridge-dyn",	"Dynamically learned bridge addresses", 1, 1, flush_bridgedyn },
+	{ "bridge-all",	"Dynamic and static bridge addresses", 1, 1, flush_bridgeall },
+	{ "bridge-rule", "Layer 2 filter rules for a bridge member port", 2, 2, flush_bridgerule },
 	{ "history",	"Command history",	0, 0, flush_history },
 	{ "?",		"Options",		0, 0, flush_help },
 	{ "help",	0,			0, 0, flush_help },
@@ -374,7 +396,7 @@ flushcmd(int argc, char **argv)
 		    argc <= 2 ? "" : "s", f->name);
 		return 0;
 	}
-	if (f->handler) /* As if there was something else we do ? */
+	if (f->handler)
 		success = (*f->handler)((f->maxarg > 0) ? argv[2] : 0,
 		    (f->maxarg > 1) ? argv[3] : 0);
 
@@ -411,7 +433,8 @@ flush_help()
 static int
 interface(int argc, char **argv, char *modhvar)
 {
-	int z = 0, num;
+	int z = 0;
+	int num, ifs;
 	char *tmp;
 	struct intlist *i;	/* pointer to current command */
 
@@ -440,6 +463,30 @@ interface(int argc, char **argv, char *modhvar)
                 return(0);
         }
 
+	ifs = socket(AF_INET, SOCK_DGRAM, 0);
+	if (ifs < 0) {
+		perror("% socket");
+		return(1);
+	}
+
+	if (!modhvar) {
+		if (strncasecmp(argv[0], "br", 2) == 0) {
+			if (!is_bridge(ifs, ifname)) {
+				printf("%% Using interface configuration mode for %s\n",
+				    ifname);
+				bridge = 0;
+			} else {
+				bridge = 1;
+			}
+		} else if (is_bridge(ifs, ifname)) {
+			printf("%% Using bridge configuration mode for %s\n",
+			    ifname);
+			bridge = 1;
+		} else {
+			bridge = 0;
+		}
+	}
+
 	for (;;) {
 		if (!modhvar) {
 			/*
@@ -451,6 +498,7 @@ interface(int argc, char **argv, char *modhvar)
 				if (fgets(line, sizeof(line), stdin) == NULL) {
 					if (feof(stdin) || ferror(stdin)) {
 						printf("\n");
+						close(ifs);
 						return(0);
 					}
 					break;
@@ -487,7 +535,7 @@ interface(int argc, char **argv, char *modhvar)
 				strncpy(margv[z], argv[z], sizeof(margv[z]));
 			margc = argc;
 		}
-		if (strncasecmp(margv[0], "no", strlen("no")) == 0)
+		if (strncasecmp(margv[0], "no", 2) == 0)
 			i = GETINT(margv[1]);
 		else
 			i = GETINT(margv[0]);
@@ -501,13 +549,20 @@ interface(int argc, char **argv, char *modhvar)
 				val = el_burrito(eli, margc, margv);
 			if (val)
 				printf("%% Invalid command\n");
-		} else if ((*i->handler) (ifname, margc, margv)) {
-			break;
+		} else {
+			if ((bridge && !i->bridge) ||
+			    (!bridge && (i->bridge == 1))) {
+				printf("%% Invalid command\n");
+			} else if ((*i->handler) (ifname, ifs, margc, margv)) {
+				break;
+			}
 		}
 		if (modhvar) {
 			break;
 		}
 	}
+	close(ifs);
+	return(0);
 }
 
 static int
@@ -517,15 +572,21 @@ int_help()
 	int z = 0;
 
 	printf("%% Commands may be abbreviated.\n");
-	printf("%% Press enter at a prompt to leave interface configuration mode.\n");
-	printf("%% Interface configuration commands are:\n\n");
+	printf("%% Press enter at a prompt to leave %s configuration mode.\n",
+	    bridge ? "bridge" : "interface");
+	printf("%% %s configuration commands are:\n\n",
+	    bridge ? "Bridge" : "Interface");
 
 	for (i = Intlist; i->name; i++) {
+		if ((bridge && !i->bridge) || (!bridge && (i->bridge == 1)))
+			continue;
 		if (strlen(i->name) > z)
 			z = strlen(i->name);
 	}
 
 	for (i = Intlist; i->name; i++) {
+		if ((bridge && !i->bridge) || (!bridge && (i->bridge == 1)))
+			continue;
 		if (i->help)
 			printf("  %-*s  %s\n", z, i->name, i->help);
 	}
@@ -539,12 +600,13 @@ int_help()
 static char
 	hostnamehelp[] = "Set system hostname",
 	interfacehelp[] = "Modify interface parameters",
+	bridgehelp[] =	"Modify bridge parameters",
 	showhelp[] =	"Show system information",
 	flushhelp[] =	"Flush system tables",
 	enablehelp[] =	"Enable privileged mode",
 	disablehelp[] =	"Disable privileged mode",
 	routehelp[] =	"Add a host or network route",
-	monitorhelp[] = "Monitor routing table changes",
+	monitorhelp[] = "Monitor routing/arp table changes",
 	quithelp[] =	"Close current connection",
 	verbosehelp[] =	"Set verbose diagnostics",
 	editinghelp[] =  "Set command line editing",
@@ -558,9 +620,7 @@ static char
 static Command cmdtab[] = {
 	{ "hostname",	hostnamehelp,	hostname,	1, 0, 0, 0 },
 	{ "interface",	interfacehelp,	interface,	1, 0, 0, 1 },
-#if 0
 	{ "bridge",	bridgehelp,	interface,	1, 0, 0, 1 },
-#endif
 	{ "show",	showhelp,	showcmd,	0, 0, 0, 0 },
 	{ "flush",	flushhelp,	flushcmd,	1, 0, 0, 0 },
 	{ "enable",	enablehelp,	enable,		0, 1, 0, 0 },
@@ -700,7 +760,7 @@ command(top)
 		if (margv[0] == 0) {
 			break;
 		}
-		if (strncasecmp(margv[0], "no", strlen("no")) == 0)
+		if (strncasecmp(margv[0], "no", 2) == 0)
 			c = getcmd(margv[1]);
 		else
 			c = getcmd(margv[0]);
@@ -717,7 +777,7 @@ command(top)
 				printf("%% Invalid command\n");
 			continue;
 		}
-		if ((strncasecmp(margv[0], "no", strlen("no")) == 0) && ! c->nocmd) {
+		if ((strncasecmp(margv[0], "no", 2) == 0) && ! c->nocmd) {
 			printf("%% Invalid command: %s %s\n", margv[0],
 			    margv[1]);
 			continue;
@@ -871,7 +931,7 @@ int
 doverbose(int argc, char **argv)
 {
 	if (argc > 1) {
-		if (strncasecmp(argv[0], "no", strlen("no")) == 0) {
+		if (strncasecmp(argv[0], "no", 2) == 0) {
 			verbose = 0;
 		} else {
 			printf ("%% Invalid argument\n");
@@ -890,7 +950,7 @@ int
 doediting(int argc, char **argv)
 {
 	if (argc > 1) {
-		if (strncasecmp(argv[0], "no", strlen("no")) == 0) { 
+		if (strncasecmp(argv[0], "no", 2) == 0) { 
 			endedit();
                 } else {
 			printf ("%% Invalid argument\n");
@@ -1006,7 +1066,7 @@ cmdrc(rcname)
 			 * command was not indented.  process normally.
 			 */
 			modhcmd = 0;
-			if (strncasecmp(margv[0], "no", strlen("no")) == 0) {
+			if (strncasecmp(margv[0], "no", 2) == 0) {
 				c = getcmd(margv[1]);
 				if (c)
 					if(c->modh) {
@@ -1064,7 +1124,7 @@ cmdrc(rcname)
 			 * normal processing, there is no sub-mode cmd to be
 			 * dealt with
 			 */
-			if ((strncasecmp(margv[0], "no", strlen("no")) == 0) &&
+			if ((strncasecmp(margv[0], "no", 2) == 0) &&
 		 	   !c->nocmd) {
 				printf("%% Invalid rc command (line %i) ",
 				    lnum);
@@ -1145,7 +1205,8 @@ char *
 iprompt(void)
 {
 	gethostname(hbuf, sizeof(hbuf));
-	snprintf(prompt, sizeof(prompt), "%s(interface-%s)/", hbuf, ifname);
+	snprintf(prompt, sizeof(prompt), "%s(%s-%s)/", hbuf,
+	    bridge ? "bridge" : "interface", ifname);
 
 	return(prompt);
 }

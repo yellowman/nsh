@@ -3,7 +3,7 @@
  */
 
 extern char *__progname, *vers;
-extern int verbose, editing;
+extern int verbose, editing, bridge;
 
 /* conf.c */
 int conf(FILE *);
@@ -39,7 +39,7 @@ char *cprompt(void);
 const char *get_string(const char *, const char *, u_int8_t *, int *);
 int get_nwinfo(const char *, char *, int, int);
 void make_string(char *str, int, const u_int8_t *buf, int);
-int intnwkey(const char *, int, char **);
+int intnwkey(const char *, int, int, char **);
 
 /* stats.c */
 void rt_stats(u_long);
@@ -89,15 +89,17 @@ int route(int, char**);
 int is_valid_ifname(const char *);
 int show_int(const char *);
 int get_ifdata(const char *, int);
-int get_ifflags(const char *);
-int set_ifflags(const char *, int);
-int intip(const char *, int, char **);
-int intmtu(const char *, int, char **);
-int intmetric(const char *, int, char **);
-int intflags(const char *, int, char **);
-int intlink(const char *, int, char **);
-int intnwid(const char *, int, char **);
-int intpowersave(const char *, int, char **);
+int get_ifflags(const char *, int);
+int set_ifflags(const char *, int, int);
+u_int32_t in4_netaddr(u_int32_t, u_int32_t);
+u_int32_t in4_brdaddr(u_int32_t, u_int32_t);
+int intip(const char *, int, int, char **);
+int intmtu(const char *, int, int, char **);
+int intmetric(const char *, int, int, char **);
+int intflags(const char *, int, int, char **);
+int intlink(const char *, int, int, char **);
+int intnwid(const char *, int, int, char **);
+int intpowersave(const char *, int, int, char **);
 
 /* version.c */
 int version(void);
@@ -110,3 +112,16 @@ void inithist(void);
 void endhist(void);
 void initedit(void);
 void endedit(void);
+
+/* bridge.c */
+int set_ifflag(int, const char *, short);
+int clr_ifflag(int, const char *, short);
+int is_bridge(int, char *);
+int brport(const char *, int, int, char **);
+int brval(const char *, int, int, char **);
+int brrule(const char *, int, int, char **);
+int brstatic(const char *, int, int, char **);
+int brpri(const char *, int, int, char **);
+int flush_bridgedyn(char *);
+int flush_bridgeall(char *);
+int flush_bridgerule(char *, char*);
