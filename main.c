@@ -1,4 +1,4 @@
-/* $nsh: main.c,v 1.18 2003/09/18 19:44:23 chris Exp $ */
+/* $nsh: main.c,v 1.19 2004/03/03 08:46:44 chris Exp $ */
 /*
  * Copyright (c) 2002, 2003
  *      Chris Cappuccio.  All rights reserved.
@@ -48,6 +48,7 @@ pid_t pid;
 
 History *histi = NULL;
 History *histc = NULL;
+HistEvent ev;
 EditLine *elc = NULL;
 EditLine *eli = NULL;
 char *cursor_pos = NULL;

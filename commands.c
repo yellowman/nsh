@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.27 2003/09/18 20:31:38 chris Exp $ */
+/* $nsh: commands.c,v 1.28 2004/03/03 08:46:44 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -632,7 +632,7 @@ interface(int argc, char **argv, char *modhvar)
 				}
 				memcpy(line, buf, (size_t)num);
 				line[num] = '\0';
-				history(histi, H_ENTER, buf);
+				history(histi, &ev, H_ENTER, buf);
 			}
 			if (line[0] == 0)
 				break;
@@ -964,7 +964,7 @@ command(top)
 			}
 			memcpy(line, buf, (size_t)num);
 			line[num] = '\0';
-			history(histc, H_ENTER, buf);
+			history(histc, &ev, H_ENTER, buf);
 		}
 
 		if (line[0] == 0)
@@ -1508,7 +1508,7 @@ el_burrito(EditLine *el, int margc, char **margv)
 	if (colon)
 		return(1);
 
-	val = el_parse(el, margc, margv);
+	val = el_parse(el, margc, (const char **)margv);
 
 	if (val == 0)
 		return(0);

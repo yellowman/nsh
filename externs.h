@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.17 2003/09/18 19:17:41 chris Exp $ */
+/* $nsh: externs.h,v 1.18 2004/03/03 08:46:44 chris Exp $ */
 /*
  * nsh externs and more
  */
@@ -17,6 +17,9 @@ extern int verbose;		/* is verbose mode on? */
 extern int editing;		/* is command line editing mode on? */
 extern int bridge;		/* are we in bridge mode (or interface mode?) */
 extern pid_t pid;		/* process id of nsh */
+#ifdef _HISTEDIT_H_
+extern HistEvent ev;		/* ev */
+#endif
 
 /* defaults */
 #define	DEFAULT_MTU	1500		/* net.inet.ip.defmtu */

@@ -1,4 +1,4 @@
-/* $nsh: editing.c,v 1.3 2003/02/18 09:29:46 chris Exp $ */
+/* $nsh: editing.c,v 1.4 2004/03/03 08:46:44 chris Exp $ */
 
 #include "editing.h"
 #include "externs.h"
@@ -13,11 +13,11 @@ inithist()
 {
 	if (!histc) {
 		histc = history_init();	/* init the builtin history */
-		history(histc, H_EVENT, 100); /* remember 100 events */
+		history(histc, &ev, H_SETSIZE, 100); /* remember 100 events */
 	}
 	if (!histi) {
 		histi = history_init();
-		history(histi, H_EVENT, 100);
+		history(histi, &ev, H_SETSIZE, 100);
 	}
 }
 
@@ -40,7 +40,7 @@ initedit()
 	editing = 1;
 
 	if (!elc && histc) {
-		elc = el_init(__progname, stdin, stdout);
+		elc = el_init(__progname, stdin, stdout, stderr);
 		el_set(elc, EL_HIST, history, histc); /* use history */
 		el_set(elc, EL_EDITOR, "emacs"); /* default type */
 		el_set(elc, EL_PROMPT, cprompt); /* set the prompt
@@ -53,14 +53,14 @@ initedit()
 		el_set(elc, EL_SIGNAL, 1);
 	}
 	if (!eli && histi) {
-		eli = el_init(__progname, stdin, stdout); /* again */
+		eli = el_init(__progname, stdin, stdout, stderr); /* again */
 		el_set(eli, EL_HIST, history, histi);
 		el_set(eli, EL_EDITOR, "emacs");
 		el_set(eli, EL_PROMPT, iprompt);
-/*
+#if 0
 		el_set(eli, EL_ADDFN, "exit", "Exit", exitcmd);
 		el_set(eli, EL_BIND, "\z", "exit", NULL);
-*/
+#endif
 		el_source(eli, NULL);
 		el_set(eli, EL_SIGNAL, 1);
 	}
