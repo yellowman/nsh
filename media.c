@@ -1,4 +1,4 @@
-/* $nsh: media.c,v 1.5 2003/04/03 22:39:56 chris Exp $ */
+/* $nsh: media.c,v 1.6 2003/04/03 22:45:16 chris Exp $ */
 /*
  * From: $OpenBSD: /usr/src/sbin/ifconfig/ifconfig.c,v 1.64 2002/05/22
  * 08:21:02 deraadt Exp $
@@ -419,7 +419,7 @@ conf_media_status(FILE *output, int s, char *ifname)
 	strlcpy(ifmr.ifm_name, ifname, sizeof(ifmr.ifm_name));
 
 	if (ioctl(s, SIOCGIFMEDIA, (caddr_t)&ifmr) < 0) {
-		if (errno != EINVAL)
+		if (errno != EINVAL && errno != ENOTTY)
 			printf("%% conf_media_status: 1/SIOCGIFMEDIA: %s\n",
 			    strerror(errno));
 		return(0);
