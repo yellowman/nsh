@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.20 2003/04/14 08:44:20 chris Exp $ */
+/* $nsh: commands.c,v 1.21 2003/04/17 18:02:32 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -549,8 +549,10 @@ interface(int argc, char **argv, char *modhvar)
 	char *tmp;
 	struct intlist *i;	/* pointer to current command */
 
-	(void) signal(SIGINT, SIG_IGN);
-	(void) signal(SIGQUIT, SIG_IGN);
+	if (!modhvar) {
+		(void) signal(SIGINT, SIG_IGN);
+		(void) signal(SIGQUIT, SIG_IGN);
+	}
 
 	if (argc != 2 && !modhvar) {
 		printf("%% interface <interface name>\n");
@@ -686,8 +688,10 @@ pf(int argc, char **argv, char *modhvar)
 	char *editor, *aarg;
 	FILE *rulefile;
 
-	(void) signal(SIGINT, SIG_IGN);
-	(void) signal(SIGQUIT, SIG_IGN);
+	if (!modhvar) {
+		(void) signal(SIGINT, SIG_IGN);
+		(void) signal(SIGQUIT, SIG_IGN);
+	}
 
 	if ((argc != 2 && !modhvar) || (argc == 2 && CMP_ARG(argv[1],"?"))) {
 		printf("%% pf edit\n");
