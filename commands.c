@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.22 2003/04/18 00:15:26 chris Exp $ */
+/* $nsh: commands.c,v 1.23 2003/04/23 16:24:34 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -538,6 +538,7 @@ static struct intlist Intlist[] = {
 
 /*
  * a big command input loop for interface mode
+ * XXX yes, i will totally rewrite this crap
  * if a function returns to interface() with a 1, interface() will break
  * the user back to command() mode.  interface() will always break from
  * mode handler calls.
@@ -547,7 +548,7 @@ interface(int argc, char **argv, char *modhvar)
 {
 	int z = 0;
 	int num, ifs;
-	char *tmp;
+	char *tmp, *brarg;
 	struct intlist *i;	/* pointer to current command */
 
 	if (!modhvar) {
@@ -583,23 +584,23 @@ interface(int argc, char **argv, char *modhvar)
 		return(1);
 	}
 
-	if (!modhvar) {
-		if (CMP_ARG(argv[0], "br")) {
-			if (!is_bridge(ifs, ifname)) {
-				printf("%% Using interface configuration mode"
-				    " for %s\n", ifname);
-				bridge = 0;
-			} else {
-				bridge = 1;
-			}
-		} else if (is_bridge(ifs, ifname)) {
-			printf("%% Using bridge configuration mode for %s\n",
-			    ifname);
-			bridge = 1;
-		} else {
-			bridge = 0;
-		}
+	if (!modhvar)
+		brarg = argv[0];
+	else
+		brarg = modhvar;
+
+	if (is_bridge(ifs, ifname)) {
+		bridge = 1;
+		if (CMP_ARG(brarg, "i"))
+			printf("%% Using bridge configuration mode"
+			    " for %s\n", ifname);
+	} else {
+		bridge = 0; 
+		if (CMP_ARG(brarg, "b"))
+			printf("%% Using interface configuration mode"
+			    " for %s\n", ifname);
 	}
+
 
 	for (;;) {
 		if (!modhvar) {
@@ -842,8 +843,8 @@ static Command cmdtab[] = {
  */
 
 static Command  cmdtab2[] = {
-	{ "config",	0,		notvalid,	0, 0, 0, 0 },
-	{ 0,		0,		0,		0, 0, 0, 0 }
+	{ "config",	0,		notvalid,	0, 0, 0, 0, 0 },
+	{ 0,		0,		0,		0, 0, 0, 0, 0 }
 };
 
 static Command *
