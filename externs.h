@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.22 2004/03/22 11:33:30 chris Exp $ */
+/* $nsh: externs.h,v 1.23 2004/12/31 19:09:13 chris Exp $ */
 /*
  * nsh externs and more
  */
@@ -101,17 +101,6 @@ char *plurales(int);
 int isprefix(char *, char*);
 char **genget(char *, char **, int);
 int Ambiguous(void *);
-
-/* rate.c */
-#define TBR_RATE 1		/* request for TBR token rate */
-#define TBR_BUCKET 2		/* request for TBR bucket size */
-#define ALTQ_TICKET 3		/* request for ALTQ-pf ticket */
-int intrate(char *ifname, int, int, char**);
-u_int size_bucket(char *, u_int);
-u_int autosize_bucket(char *, u_int);
-u_long get_tbr(char *, int);
-u_long atobps(const char *);
-u_long atobytes(const char *);
 
 /* sysctl.c */
 int sysctl_inet(int, int, int, int);

@@ -1,4 +1,4 @@
-/* $nsh: if.c,v 1.18 2004/03/24 07:11:00 chris Exp $ */
+/* $nsh: if.c,v 1.19 2004/12/31 19:09:13 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -43,7 +43,8 @@
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
 #include <net/if_vlan_var.h>
-#include <net/if_ieee80211.h>
+#include <net80211/ieee80211.h>
+#include <net80211/ieee80211_ioctl.h>
 #include <ifaddrs.h>
 #include <arpa/inet.h>
 #include <limits.h>
@@ -112,8 +113,7 @@ show_int(char *ifname)
 	char *type, *lladdr;
 	const char *carp;
 
-	u_long rate, bucket;
-	char rate_str[64], bucket_str[64], tmp_str[4096], tmp_str2[1024];
+	char tmp_str[4096], tmp_str2[1024];
 
 	/*
 	 * Show all interfaces when no ifname specified.
@@ -278,32 +278,6 @@ show_int(char *ifname)
 		else
 			printf("\n");
  
-		rate = get_tbr(ifname, TBR_RATE);
-		bucket = get_tbr(ifname, TBR_BUCKET);
-
-		if(rate && bucket) {
-			if (MBPS(rate))
-				snprintf(rate_str, sizeof(rate_str),
-				    "%.2f Mbps",
-				    (double)rate/1000.0/1000.0);
-			else
-				snprintf(rate_str, sizeof(rate_str),
-				    "%.2f Kbps",
-				    (double)rate/1000.0);
-
-			if (bucket < 10240)
-				snprintf(bucket_str, sizeof(bucket_str),
-				    "%lu bytes",
-				    bucket);
-			else
-				snprintf(bucket_str, sizeof(bucket_str),
-				    "%.2f Kbytes",
-				    (double)bucket/1024.0);
-
-			printf("  Token Rate %s, Bucket %s\n", rate_str,
-			    bucket_str);
-		}
-
 		memset(&vreq, 0, sizeof(struct vlanreq));
 		ifr.ifr_data = (caddr_t)&vreq;
 

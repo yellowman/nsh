@@ -1,4 +1,4 @@
-/* $nsh: ieee80211.c,v 1.8 2003/09/18 20:31:38 chris Exp $ */
+/* $nsh: ieee80211.c,v 1.9 2004/12/31 19:09:13 chris Exp $ */
 /* From: $OpenBSD: /usr/src/sbin/ifconfig/ifconfig.c,v 1.68 2002/06/19 18:53:53 millert Exp $ */
 /*
  * Copyright (c) 1983, 1993
@@ -76,7 +76,8 @@
 #include <net/if.h>
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
-#include <net/if_ieee80211.h>
+#include <net80211/ieee80211.h>
+#include <net80211/ieee80211_ioctl.h>
 #include "externs.h"
 
 const char *

@@ -46,7 +46,7 @@
 #include <net/if.h>
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
-#include <net/if_ieee80211.h>
+#include <net80211/ieee80211.h>
 
 #include <dev/ic/if_wi_ieee.h>
 #include <dev/ic/if_wireg.h>
