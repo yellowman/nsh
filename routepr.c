@@ -1,3 +1,4 @@
+/* $nsh: routepr.c,v 1.7 2003/02/18 09:29:46 chris Exp $ */
 /* From: $OpenBSD: /usr/src/usr.bin/netstat/route.c,v 1.45 2002/02/16 21:27:50 millert Exp $ */
 
 /*

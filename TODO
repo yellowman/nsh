@@ -1,3 +1,5 @@
+$nsh: TODO,v 1.12 2003/02/18 09:29:46 chris Exp $
+
 nsh is a work in progress, future versions will be released which
 implement much of the following (of course, diffs are welcome):
 

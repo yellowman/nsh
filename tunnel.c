@@ -1,3 +1,4 @@
+/* $nsh: tunnel.c,v 1.4 2003/02/18 09:29:46 chris Exp $ */
 /* From: $OpenBSD: /usr/src/sbin/ifconfig/ifconfig.c,v 1.64 2002/05/22 08:21:02 deraadt Exp $ */
 
 #include <stdio.h>

@@ -1,3 +1,4 @@
+/* $nsh: externs.h,v 1.11 2003/02/18 09:29:46 chris Exp $ */
 /*
  * nsh externs and more
  */

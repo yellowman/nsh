@@ -1,3 +1,4 @@
+/* $nsh: conf.c,v 1.10 2003/02/18 09:29:46 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.

@@ -1,4 +1,5 @@
 #!/bin/sh
+# $nsh: compile.sh,v 1.4 2003/02/18 09:29:46 chris Exp $
 
 cat >compile.c <<END
 char compiled[] = "`/bin/date +"%d-%b-%y %H:%M"`";

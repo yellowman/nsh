@@ -1,3 +1,4 @@
+/* $nsh: kread.c,v 1.4 2003/02/18 09:29:46 chris Exp $ */
 /*
  * Copyright (c) 1983, 1988, 1993
  *      Regents of the University of California.  All rights reserved.

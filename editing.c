@@ -1,3 +1,5 @@
+/* $nsh: editing.c,v 1.3 2003/02/18 09:29:46 chris Exp $ */
+
 #include "editing.h"
 #include "externs.h"
 

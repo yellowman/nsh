@@ -1,3 +1,4 @@
+/* $nsh: stats.c,v 1.5 2003/02/18 09:29:46 chris Exp $ */
 /* From: $OpenBSD: /usr/src/usr.bin/netstat/inet.c,v 1.58 2002/02/19 21:11:23 miod Exp $ */
 
 /*

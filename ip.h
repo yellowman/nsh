@@ -1,3 +1,4 @@
+/* $nsh: ip.h,v 1.3 2003/02/18 09:29:46 chris Exp $ */
 /*
  * A clean way to represent IPv4/IPv6 addresses for routines which purport to
  * handle either, inspiration from mrtd

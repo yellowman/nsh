@@ -1,4 +1,4 @@
-
+/* $nsh: mbuf.c,v 1.5 2003/02/18 09:29:46 chris Exp $ */
 /* From: $OpenBSD: /usr/src/usr.bin/netstat/mbuf.c,v 1.11 2002/01/17 21:34:58 mickey Exp $ */
 
 /*

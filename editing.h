@@ -1,3 +1,4 @@
+/* $nsh: editing.h,v 1.2 2003/02/18 09:29:46 chris Exp $ */
 #include <histedit.h>
 
 extern EditLine *elc;		/* editline(3) status structure */

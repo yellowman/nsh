@@ -1,3 +1,5 @@
+# $nsh: Makefile,v 1.9 2003/02/18 09:29:46 chris Exp $
+#
 PROG= nsh
 
 CFLAGS=-g -Wmissing-prototypes -Wformat -Wall -Wpointer-arith #-W -Wbad-function-cast -Wtraditional

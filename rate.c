@@ -1,3 +1,4 @@
+/* $nsh: rate.c,v 1.9 2003/02/18 09:29:46 chris Exp $ */
 /* From: $OpenBSD: /usr/src/usr.sbin/altq/tbrconfig/tbrconfig.c,v 1.3 2002/02/15 03:31:16 deraadt Exp $ */
 
 /*

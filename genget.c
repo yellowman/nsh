@@ -1,3 +1,4 @@
+/* $nsh: genget.c,v 1.3 2003/02/18 09:29:46 chris Exp $ */
 /*     $OpenBSD: genget.c,v 1.5 2001/05/25 10:23:06 hin Exp $  */
 
 /*-
