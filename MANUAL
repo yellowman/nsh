@@ -1,5 +1,5 @@
 NSH // Network Shell User's Manual // Chris Cappuccio <chris@nmedia.net>
-$nsh: MANUAL,v 1.8 2003/04/14 08:44:20 chris Exp $
+$nsh: MANUAL,v 1.9 2003/04/17 18:01:30 chris Exp $
 
 Copyright (c) 2003 Chris Cappuccio
 
@@ -675,99 +675,99 @@ nsh(priv)/ip ?
   default-ttl         Set Default IP packet TTL
   ?                   Options
 
-ip forwarding
--------------
+[no] ip forwarding
+------------------
 
 nsh(priv)/ip forwarding
 
 Enable IP packet forwarding.  This must be set in order to use routing,
 NAT, IPsec or packet filter features.
 
-ip ipip
--------
+[no] ip ipip
+------------
 
 nsh(priv)/ip ipip
 
 Allow IP-in-IP encapsulation.  
 
-ip gre
-------
+[no] ip gre
+-----------
 
 nsh(priv)/ip gre
 
 Allow Generic Route Encapsulation.  Must be used to enable gre interfaces.
 
-ip wccp
--------
+[no] ip wccp
+------------
 
 nsh(priv)/ip wccp
 
 Allow GRE-based Web Cache Control Protocol packets to manage caching device.
 Must be used to enable WCCP on gre interfaces.
 
-ip mobileip
------------
+[no] ip mobileip
+----------------
 
 nsh(priv)/ip mobileip
 
 Allow GRE-based MobileIP encapsulation.  Must be used to enable MobileIP
 operation on gre interfaces.
 
-ip etherip
-----------
+[no] ip etherip
+---------------
 
 nsh(priv)/ip etherip
 
 Allow Ether-IP encapsulation
 
-ip ipcomp
----------
+[no] ip ipcomp
+--------------
 
 nsh(priv)/ip ipcomp
 
 Allow IPComp compression to be used.
 
-ip esp
-------
+[no] ip esp
+-----------
 
 nsh(priv)/ip esp
 
 Allow IPsec Encapsulated Security Payload to be used.  Note this is a system
 default.
 
-ip ah
------
+[no] ip ah
+----------
 
 nsh(priv)/ip ah
 
 Allow IPsec Authentication Header to be used. Note this is a sysdem default.
 
-ip sourceroute
---------------
+[no] ip sourceroute
+-------------------
 
 nsh(priv)/ip sourceroute
 
 Process loose or strict source routing options on IP packet headers.  Do
 not enable this option on systems connected to the public internet.
 
-ip encdebug
------------
+[no] ip encdebug
+----------------
 
 nsh(priv)/ip encdebug
 
 Print debugging messages for the if_enc interface to the kernel output.  
 Requires a kernel compiled with option ENCDEBUG.
 
-ip maxqueue <argument>
-----------------------
+[no] ip maxqueue <argument>
+---------------------------
 
 nsh(priv)/ip maxqueue 1000
 
 Maximum number of queued packets before they are dropped.  Increasing
 this option does not necessarily help with system performance.
 
-ip send-redirects
------------------
+[no] ip send-redirects
+----------------------
 
 nsh(priv)/ip send-redirects
 
@@ -779,8 +779,8 @@ one of those hosts chooses to talk through the router instead, it will
 send an ICMP redirect to the originating host.  This redirect tells the host
 the direct path on the network to send further packets.
 
-ip default-ttl <ttl>
---------------------
+[no] ip default-ttl <ttl>
+-------------------------
 
 nsh(priv)/ip default-ttl 128
 
