@@ -1,4 +1,4 @@
-/* $nsh: if.c,v 1.17 2004/03/22 11:33:30 chris Exp $ */
+/* $nsh: if.c,v 1.18 2004/03/24 07:11:00 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -60,6 +60,7 @@ static const struct {
 } iftypes[] = {
 	/* OpenBSD-specific types */
 	{ "Packet Filter Logging",	IFT_PFLOG },
+	{ "Packet Filter State Synchronization", IFT_PFSYNC },
 	{ "IPsec Loopback",		IFT_ENC },      
 	{ "Generic Tunnel",		IFT_GIF },
 	{ "IPv6-IPv4 TCP relay",	IFT_FAITH },
