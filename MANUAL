@@ -1,5 +1,5 @@
 NSH // Network Shell User's Manual // Chris Cappuccio <chris@nmedia.net>
-$nsh: MANUAL,v 1.10 2003/04/23 21:56:40 chris Exp $
+$nsh: MANUAL,v 1.11 2004/03/03 09:19:40 chris Exp $
 
 Copyright (c) 2003 Chris Cappuccio
 
@@ -672,6 +672,21 @@ nsh(priv)/ip ?
   directed-broadcast  Allow directed broadcasts
   default-ttl         Set Default IP packet TTL
   ?                   Options
+
+[no] interface <ifname>
+-----------------------
+
+nsh(priv)/interface vlan0
+
+If vlan0 does not exist, this will create the interface.  If it was possible
+to create the interface, or if the named interface already exists, you
+will noe be in the interface command mode, documented below in Section 4.
+
+nsh(priv)/no interface vlan0
+
+Alternately, if vlan0 does exist, you can remove the interface with
+the 'no interface' syntax.  This only works for interface types which
+support creation and removal.
 
 [no] ip forwarding
 ------------------
