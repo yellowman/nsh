@@ -1,4 +1,4 @@
-/* $nsh: stats.c,v 1.6 2003/09/18 20:31:38 chris Exp $ */
+/* $nsh: stats.c,v 1.7 2004/03/03 08:45:27 chris Exp $ */
 /* From: $OpenBSD: /usr/src/usr.bin/netstat/inet.c,v 1.58 2002/02/19 21:11:23 miod Exp $ */
 
 /*
@@ -505,6 +505,7 @@ ipcomp_stats(off)
 	p(ipcomps_invalid, "\t%u packet%s attempted to use an invalid tdb\n");
 	p(ipcomps_toobig, "\t%u packet%s got larger than max IP packet size\n");
 	p(ipcomps_crypto, "\t%u packet%s that failed (de)compression processing\n");
+	p(ipcomps_minlen, "\t%u packet%s less than minimum compression length\n");
 	p(ipcomps_ibytes, "\t%qu input byte%s\n");
 	p(ipcomps_obytes, "\t%qu output byte%s\n");
 
