@@ -29,13 +29,14 @@ To be implemented:
 * Do we build in a simple ping, traceroute or just shell out for these??
 * And what about telnet/ssh (maybe shell out for ssh, implement a simple
   telnet?)
+* Persistent comments in the config file (to document routes, etc..)
+  or at least interface descriptions
 
 Lower priority:
 
 * BGP, OSPF?? Hooks to integrate zebra(GPL)/gated(BSDlic)/mrtd(BSDlic)/???
 * IPv6?? (shouldn't be hard, considering that most of the functions
   we stole from other source already support it)
-* IPIP/GRE?? Other tunnels??
 * IPX?? AppleTalk??
 
 Would be nice:
