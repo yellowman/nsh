@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.14 2003/04/14 08:44:20 chris Exp $ */
+/* $nsh: externs.h,v 1.15 2003/05/23 17:00:04 chris Exp $ */
 /*
  * nsh externs and more
  */
@@ -74,7 +74,6 @@ void make_string(char *str, int, const u_int8_t *buf, int);
 int intnwkey(char *, int, int, char **);
 
 /* stats.c */
-extern char *tcpstates[];
 void rt_stats(u_long);
 void tcp_stats(u_long);
 void udp_stats(u_long);
