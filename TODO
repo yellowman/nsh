@@ -4,14 +4,11 @@ will be released soon which implement much of the following:
 
 Cleanup:
 
-* All printf newlines should be \r\n, I think ?  Or will ssh take care of
-  this distinction ??? Make them all consistent in any event...
-  (And what about perror?)
-* Probably don't need to be using fprintf(stderr,...) anywhere, since
+* Probably don't need to be using perror/fprintf(stderr,...) anywhere, since
   this is supposed to be a 'router' not really a unix environment
-  so far as user is concerned ?? Replace perror with non-FILENO_STDERR func?
+  so far as user is concerned ?? Roll our own func with strerror?
 * Finish up externs.h 
-* And more stylistic cleanup...
+* More stylistic and bloat cleanup...
 
 Required for intended functionality:
 
@@ -20,7 +17,7 @@ Required for intended functionality:
   startup with -i (requires the following to be done _first_:)
 * Add a command which will configure interface IPs, vlans, and maybe media
   types
-* Add a command which will add routes
+* Perhaps we can configure bridges, too
 
 PF (required):
 
@@ -40,10 +37,12 @@ Cute features:
   for a new binary? 
 * Hooks for a web interface?
 * Add more diagnostic messages for verbose output where useful
-* Do we hook into snmpd at all or just run it separately on the same box?
+* Can we hook into snmpd at all or just run it separately on the same box?
 * Do we build in a simple ping, traceroute or just shell out for these??
 * And what about telnet/ssh (maybe shell out for ssh and ignore telnet)??
 * ALTQ RED/CBQ/HFSC
+* Support for paging through displays of text 24 lines at a time
+* Something comparable to "| inc" from cisco-land
 
 Future:
 
@@ -52,5 +51,6 @@ Future:
   we stole from other source already support it)
 * IPsec! Configure VPNs with simple CLI commands-isakmpd has a fifo interface
 * IPcomp...
-* IPIP? GRE?? Tunnels??
+* IPIP/GRE?? Other tunnels??
 * IPX?? AppleTalk??
+

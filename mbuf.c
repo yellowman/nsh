@@ -1,4 +1,5 @@
-/* From: $OpenBSD: mbuf.c,v 1.11 2002/01/17 21:34:58 mickey Exp $ */
+
+/* From: $OpenBSD: /usr/src/usr.bin/netstat/mbuf.c,v 1.11 2002/01/17 21:34:58 mickey Exp $ */
 
 /*
  * Copyright (c) 1983, 1988, 1993
@@ -44,6 +45,7 @@
 #include <sys/mbuf.h>
 #include <sys/pool.h>
 
+#include <unistd.h>
 #include <limits.h>
 #include <stdio.h>
 #include "externs.h"
@@ -86,11 +88,11 @@ mbpr(mbaddr, mbpooladdr, mclpooladdr)
 	int page_size = getpagesize();
 
 	if (nmbtypes != 256) {
-		printf("%% mbpr: unexpected change to mbstat; check source\r\n");
+		printf("%% mbpr: unexpected change to mbstat; check source\n");
 		return;
 	}
 	if (mbaddr == 0) {
-		printf("%% mbpr: mbstat: symbol not in namelist\r\n");
+		printf("%% mbpr: mbstat: symbol not in namelist\n");
 		return;
 	}
 	if (kread(mbaddr, (char *)&mbstat, sizeof (mbstat)))
@@ -101,7 +103,7 @@ mbpr(mbaddr, mbpooladdr, mclpooladdr)
 	if (kread(mclpooladdr, (char *)&mclpool, sizeof (mclpool)))
 		return;
 
-	printf("%% mbufs:\r\n");
+	printf("%% mbufs:\n");
 	totmbufs = 0;
 	for (mp = mbtypes; mp->mt_name; mp++)
 		totmbufs += mbstat.m_mtypes[mp->mt_type];

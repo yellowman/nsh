@@ -1,5 +1,4 @@
-
-/* From: $OpenBSD: tbrconfig.c,v 1.3 2002/02/15 03:31:16 deraadt Exp $ */
+/* From: $OpenBSD: /usr/src/usr.sbin/altq/tbrconfig/tbrconfig.c,v 1.3 2002/02/15 03:31:16 deraadt Exp $ */
 
 /*
  * Copyright (C) 2000
@@ -56,47 +55,45 @@ static int get_clockfreq(void);
 int list_rates(void);
 
 int 
-rate(int argc, char **argv)
+intrate(char *ifname, int argc, char **argv)
 {
 	struct tbrreq req;
 	char buf[256];
-	u_int rate = 0, depth = 0;
-	int fd, ch, baudrate, delete = 0;
+	u_int baudrate, rate = 0, depth = 0;
+	int fd, ch, delete = 0;
 
-	optind = 1;		/* this routine could run more then once */
+	if (strncasecmp(argv[0], "no", 2) == 0) {
+		delete = 1;
 
-	while ((ch = getopt(argc, argv, "d")) != -1) {
-		switch (ch) {
-		case 'd':
-			delete = 1;
-			break;
-		}
+		/* bye bye 'no' */
+		argc--;
+		argv++;
 	}
 
-	argc -= optind;
-	argv += optind;
+	/* bye bye 'rate' */
+	argc--;
+	argv++;
 
-	if (argc < 1 || argc > 3) {
-		printf("%% rate interface tokenrate [bucketsize]\r\n");
-		printf("%% rate -d interface\r\n");
-		return 1;
+	if ((delete && argc > 1) || (!delete && (argc < 1 || argc > 2))) {
+		printf("%% rate <tokenrate> [bucketsize]\n");
+		printf("%% no rate [tokenrate]\n");
+		return(0);
 	}
 
 	req.ifname[IFNAMSIZ-1] = '\0';
-	strncpy(req.ifname, argv[0], sizeof(req.ifname));
-	if (argc > 1)
-		rate = (u_int)atobps(argv[1]);
-	if (argc > 2) {
-		if (strncasecmp(argv[2], "auto", strlen("auto")) == 0)
+	strncpy(req.ifname, ifname, sizeof(req.ifname));
+	if (argc)
+		rate = (u_int)atobps(argv[0]);
+	if (argc > 1) {
+		if (strncasecmp(argv[1], "auto", strlen("auto")) == 0)
 			depth = autosize_bucket(req.ifname, rate);
 		else {
-			depth = (u_int)atobytes(argv[2]);
+			depth = (u_int)atobytes(argv[1]);
 			if (depth < 1) {
-				printf("%% Invalid bucket size argument\r\n");
+				printf("%% Invalid bucket size argument\n");
 				depth = autosize_bucket(req.ifname, rate);
 			}
 		}
-
 	}
 
 	if (delete || rate > 0) {
@@ -106,15 +103,17 @@ rate(int argc, char **argv)
 		else if (depth == 0)
 			depth = size_bucket(req.ifname, rate);
 
-		baudrate = get_ifdata(req.ifname, IFDATA_BAUDRATE);
+		if (!delete)
+			baudrate = get_ifdata(req.ifname, IFDATA_BAUDRATE);
 
 		if (baudrate > 0) {
 			if (rate > baudrate) {
-				printf("%% Rate set to interface max\r\n");
+				printf("%% Rate set to interface max\n");
 				rate = baudrate;
 			}
 		} else {
-			printf("%% Failed to determine interface line rate\r\n");
+			if (verbose)
+				printf("%% Failed to determine interface line rate\n");
 		}
 		
 		req.tb_prof.rate = rate;
@@ -122,16 +121,16 @@ rate(int argc, char **argv)
 
 		if ((fd = open(ALTQ_DEVICE, O_RDWR)) < 0) {
 			perror("% rate: can't open altq device");
-			return 1;
-			};
+			return(1);
+		}
 
 		if (ioctl(fd, ALTQTBRSET, &req) < 0) {
 			snprintf(buf, sizeof(buf),
 			    "%% rate: ALTQTBRSET for interface %s", req.ifname);
 			perror(buf);
 			close(fd);
-			return 1;
-			};
+			return(0);
+		}
 
 		close(fd);
 
@@ -141,10 +140,9 @@ rate(int argc, char **argv)
 			return (0);
 		}
 	} else {
-		printf("%% Invalid rate argument\r\n");
+		printf("%% Invalid rate argument\n");
 	}
 
-	close(fd);
 	return (0);
 }
 
@@ -152,23 +150,22 @@ u_long
 get_tbr(const char *ifname, int type)
 {
 	struct tbrreq req;
-	char buf[256];
 	u_long value = 0;
 	int fd;
 
 	if ((fd = open(ALTQ_DEVICE, O_RDONLY)) < 0) {
 		perror("% get_rate: can't open altq device");
-		return 1;
+		return(1);
 	}
 
 	req.ifname[IFNAMSIZ-1] = '\0';
-	strncpy(req.ifname, ifname, sizeof(req.ifname));
-	if (ioctl(fd, ALTQTBRGET, &req) == 0)
+	strncpy(req.ifname, ifname, sizeof(req.ifname)); 
+	if (ioctl(fd, ALTQTBRGET, &req) == 0) {
 		if (type == TBR_RATE)
 			value = req.tb_prof.rate;
 		else if (type == TBR_BUCKET)
 			value = req.tb_prof.depth;
-
+	}
 	close(fd);
 	return value;
 }
@@ -268,7 +265,7 @@ get_clockfreq(void)
 	mib[1] = KERN_CLOCKRATE;
 	len = sizeof(struct clockinfo);
 	if (sysctl(mib, 2, &clkinfo, &len, NULL, 0) == -1)
-		printf("%% get_clockfreq: can't get clockrate via sysctl! using %dHz\r\n",
+		printf("%% get_clockfreq: can't get clockrate via sysctl! using %dHz\n",
 		    clkinfo.hz);
 	return (clkinfo.hz);
 }

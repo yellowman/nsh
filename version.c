@@ -72,8 +72,8 @@ version(void)
 	gettimeofday(&tv, (struct timezone *)0);
 	c = difftime(tv.tv_sec, boottime.tv_sec);
 
-	printf("%% NSH v%s\r\n", vers);
-	printf("Compiled %s by %s\r\n", compiled, compiledby);
+	printf("%% NSH v%s\n", vers);
+	printf("Compiled %s by %s\n", compiled, compiledby);
 	printf("uptime: ");
 	pntd = 0;
 #define SECSPERWEEK (SECSPERDAY * DAYSPERWEEK)
@@ -106,10 +106,10 @@ version(void)
 	}
 	if (!pntd)
 		printf("%d second%s", c, c == 1 ? "" : "s");
-	printf("\r\n");
-	printf("kernel: %s/%s version %s\r\n", un.sysname, un.machine,
+	printf("\n");
+	printf("kernel: %s/%s version %s\n", un.sysname, un.machine,
 	    un.release);
-	printf("cpu: %s with %luK bytes of memory\r\n", cpubuf, physmem / 1024);
+	printf("cpu: %s with %luK bytes of memory\n", cpubuf, physmem / 1024);
 	return(0);
 }
 

@@ -27,13 +27,20 @@
 #include <stdio.h>
 #include <ctype.h>
 #include <tzfile.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
 #include <sys/socket.h>
 #include <sys/param.h>
 #include <sys/sockio.h>
 #include <sys/errno.h>
+#include <sys/ioctl.h>
 #include <net/if.h>
 #include <net/if_types.h>
 #include <netinet/in.h>
+#include <netinet/if_ether.h>
+#include <net/if_vlan_var.h>
+#include <arpa/inet.h>
 #include <limits.h>
 #include "externs.h"
 
@@ -45,6 +52,7 @@ show_int(const char *ifname)
 	struct if_data if_data;
 	struct sockaddr_in sin, sin2;
 	struct timeval tv;
+	struct vlanreq vreq;
 
 	int ifs, mbits, flags, mask, days, hours, mins;
 	int noaddr = 0;
@@ -93,7 +101,7 @@ show_int(const char *ifname)
 		return 1;
 	}
 
-	printf("%% %s\r\n", ifname);
+	printf("%% %s\n", ifname);
 	printf("  Interface is %s", flags & IFF_UP ? "up" : "down");
 
 	if (if_lastchange.tv_sec) {
@@ -111,7 +119,7 @@ show_int(const char *ifname)
 		printf("%02i:%02i:%02i)", hours, mins, c);
 	}
 
-	printf(", protocol is %s\r\n", flags & IFF_RUNNING ? "up" : "down");
+	printf(", protocol is %s\n", flags & IFF_RUNNING ? "up" : "down");
 
 	/*
 	 * Display interface type
@@ -210,12 +218,12 @@ show_int(const char *ifname)
 			type = "Unknown";
 			break;
 	}
-	printf("  Interface type %s\r\n", type);
+	printf("  Interface type %s\n", type);
 
 	/*
 	 * Display IP address and CIDR netmask
 	 */
-	if (ioctl(ifs, SIOCGIFADDR, (caddr_t)&ifr) < 0)
+	if (ioctl(ifs, SIOCGIFADDR, (caddr_t)&ifr) < 0) {
 		if (errno == EADDRNOTAVAIL) {
 			noaddr = 1;
 		} else {
@@ -223,6 +231,7 @@ show_int(const char *ifname)
 			close(ifs);
 			return 1;
 		}
+	}
  
 	if (!noaddr) {
 		sin.sin_addr = ((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr;
@@ -238,20 +247,20 @@ show_int(const char *ifname)
 		mask = ntohl(sin2.sin_addr.s_addr);
 		mbits = mask ? 33 - ffs(mask) : 0;
 
-		printf("  Internet address is %s/%i\r\n",
+		printf("  Internet address is %s/%i\n",
 		    inet_ntoa(sin.sin_addr), mbits);
 	}
 
 	/*
 	 * Display MTU, line rate, and ALTQ token rate info if applicable
 	 */
-	printf("  MTU %i bytes", if_mtu);
+	printf("  MTU %li bytes", if_mtu);
 	if (if_baudrate)
-		printf(", Line Rate %i %s\r\n",
+		printf(", Line Rate %li %s\n",
 		    MBPS(if_baudrate) ? MBPS(if_baudrate) : if_baudrate / 1000,
 		    MBPS(if_baudrate) ? "Mbps" : "Kbps");
 	else
-		printf("\r\n");
+		printf("\n");
  
 	rate = get_tbr(ifname, TBR_RATE);
 	bucket = get_tbr(ifname, TBR_BUCKET);
@@ -269,39 +278,56 @@ show_int(const char *ifname)
 			    (double)rate/1000.0);
 
 		if (bucket < 10240)
-			snprintf(bucket_str, sizeof(bucket_str),  "%u bytes",
+			snprintf(bucket_str, sizeof(bucket_str),  "%lu bytes",
 			    bucket);
 		else
 			snprintf(bucket_str, sizeof(bucket_str), "%.2f Kbytes",
 			    (double)bucket/1024.0);
 
-		printf("  Token Rate %s, Bucket %s\r\n", rate_str, bucket_str);
+		printf("  Token Rate %s, Bucket %s\n", rate_str, bucket_str);
 	}
+
+	close(ifs);
+
+	if ((ifs = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+		perror("% show_int");
+		return 1;
+	}
+	memset(&vreq, 0, sizeof(struct vlanreq));
+	ifr.ifr_data = (caddr_t)&vreq;
+
+	if (ioctl(ifs, SIOCGETVLAN, (caddr_t)&ifr) != -1) {
+		if(vreq.vlr_tag || (vreq.vlr_parent[0] != '\0')) {
+			printf("  vlan tag %d on parent %s\n",
+			    vreq.vlr_tag, vreq.vlr_parent[0] == '\0' ?
+			    "<none>" : vreq.vlr_parent);
+		}
+	}
+	close(ifs);
 
 	/*
 	 * Display remaining info from if_data structure
 	 */
-	printf("  %lu packets input, %lu bytes, %lu errors, %lu drops\r\n",
+	printf("  %lu packets input, %lu bytes, %lu errors, %lu drops\n",
 	    if_ipackets, if_ibytes, if_ierrors, if_iqdrops);
-	printf("  %lu packets output, %lu bytes, %lu errors, %lu unsupported\r\n",
+	printf("  %lu packets output, %lu bytes, %lu errors, %lu unsupported\n",
 	    if_opackets, if_obytes, if_oerrors, if_noproto);
 	switch(if_type) {
 		case IFT_ETHER:
 		case IFT_SLIP:
 		case IFT_PROPVIRTUAL:
-			printf("  %lu collisions\r\n", if_collisions);
+			printf("  %lu collisions\n", if_collisions);
 			break;
 		default:
 			break;
 	}
 
-	if(verbose) {
+	if(verbose && flags) {
 		printf("  Flags ");
 		bprintf(stdout, flags, ifnetflags);
-		printf("\r\n");
+		printf("\n");
         }
 
-	close(ifs);
 	return 0;
 }
 
@@ -323,12 +349,12 @@ get_ifdata(const char *ifname, int type)
 		return (value);
 	strncpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 	ifr.ifr_data = (caddr_t)&if_data;
-	if (ioctl(ifs, SIOCGIFDATA, (caddr_t)&ifr) == 0)
+	if (ioctl(ifs, SIOCGIFDATA, (caddr_t)&ifr) == 0) {
 		if (type == IFDATA_MTU)
 			value = if_mtu;
 		else if (type == IFDATA_BAUDRATE)
 			value = if_baudrate;
-
+	}
 	close(ifs);
 	return (value);
 }

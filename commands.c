@@ -57,13 +57,16 @@
  */
 
 #include <stdio.h>
+#include <ctype.h>
 #include <kvm.h>
 #include <nlist.h>
+#include <unistd.h>
 #include <sys/fcntl.h>
 #include <sys/socket.h>
 #include <sys/param.h>
 #include <sys/sockio.h>
 #include <sys/errno.h>
+#include <sys/wait.h>
 #include <net/if.h>
 #include <limits.h>
 #include "externs.h"
@@ -76,11 +79,7 @@ static int  margc;
 static char *margv[20];
 static char hbuf[MAXHOSTNAMELEN];
 
-int verbose = 0, nflag = 1;
-
-/*
- * Basic
- */
+int verbose = 0;
 
 kvm_t *kvmd;
 
@@ -123,28 +122,35 @@ typedef struct {
 	int  (*handler) ();	/* routine which executes command */
 	int  needpriv;		/* Do we need privilege to execute? */
 	int  ignoreifpriv;	/* Ignore while privileged? */
-}		Command;
+	int  nocmd;		/* Can we specify 'no ...command...'? */
+} Command;
 
-static Command *getcmd(char *name);
-static int     enable(void);
-static int     disable(void);
-static int     togglev(void);
-static int     pr_routes(void);
-static int     pr_ip_stats(void);
-static int     pr_ah_stats(void);
-static int     pr_esp_stats(void);
-static int     pr_tcp_stats(void);
-static int     pr_udp_stats(void);
-static int     pr_icmp_stats(void);
-static int     pr_igmp_stats(void);
-static int     pr_ipcomp_stats(void);
-static int     pr_mbuf_stats(void);
-static int     show_help();
-static int     hostname (int, char **);
-static int     help(int, char**);
-static int     shell(int, char*[]);
-static int     pr_rt_stats(void);
-static int     priv = 0;
+static Command	*getcmd(char *name);
+static int	enable(void);
+static int	disable(void);
+static int	doverbose(int, char**);
+static int	pr_routes(void);
+static int	pr_ip_stats(void);
+#ifdef IPSEC
+static int	pr_ah_stats(void);
+static int	pr_esp_stats(void);
+#endif
+static int	pr_tcp_stats(void);
+static int	pr_udp_stats(void);
+static int	pr_icmp_stats(void);
+static int	pr_igmp_stats(void);
+#ifdef IPCOMP
+static int	pr_ipcomp_stats(void);
+#endif
+static int	pr_mbuf_stats(void);
+static int	show_help();
+static int	int_help();
+static void	makeargv();
+static int	hostname (int, char **);
+static int	help(int, char**);
+static int	shell(int, char*[]);
+static int	pr_rt_stats(void);
+static int	priv = 0;
 
 /*
  * Quit command
@@ -153,7 +159,7 @@ static int     priv = 0;
 int
 quit()
 {
-	printf("%% Session terminated.\r\n");
+	printf("%% Session terminated.\n");
 	exit(0);
 	return 0;
 }
@@ -216,7 +222,7 @@ showcmd(argc, argv)
 	int success = 0;
 
 	if (argc < 2) {
-		printf("%% Use 'show ?' for help\r\n");
+		printf("%% Use 'show ?' for help\n");
 		return 0;
 	}
 
@@ -225,14 +231,14 @@ showcmd(argc, argv)
 	 */
 	s = GETSHOW(argv[1]);
 	if (s == 0) {
-		printf("%% Invalid argument %s\r\n",argv[1]);
+		printf("%% Invalid argument %s\n",argv[1]);
 		return 0;
 	} else if (Ambiguous(s)) {
-		printf("%% Ambiguous argument %s\r\n",argv[1]);
+		printf("%% Ambiguous argument %s\n",argv[1]);
 		return 0;
 	}
 	if (((s->minarg + 2) > argc) || ((s->maxarg + 2) < argc)) {
-		printf("%% Wrong argument%s to 'show %s' command.\r\n",
+		printf("%% Wrong argument%s to 'show %s' command.\n",
 		    argc <= 2 ? "" : "s", s->name);
 		return 0;
 	}
@@ -248,27 +254,144 @@ show_help()
 {
 	struct showlist *s; /* pointer to current command */
 
-	printf("%% Commands may be abbreviated.\r\n");
-	printf("%% 'show' commands are:\r\n\r\n");
+	printf("%% Commands may be abbreviated.\n");
+	printf("%% 'show' commands are:\n\n");
 
 	for (s = Showlist; s->name; s++) {
 		if (s->help)
-			printf("  %-*s\t%s\r\n", (int)HELPINDENT,
+			printf("  %-*s\t%s\n", (int)HELPINDENT,
 			    s->name, s->help);
 	}
 	return 0;
 }
- 
+
 /*
- * Data structures and routines for the "CLI"
+ * Data structures and routines for the interface configuration mode
+ */
+
+struct intlist {
+	char *name;		/* How user refers to it (case independent) */
+	char *help;		/* Help information (0 ==> no help) */
+	int (*handler)();	/* Routine to perform (for special ops) */
+};
+
+static struct intlist Intlist[] = {
+#if 0
+	{ "ip",		"IP address and netmask",		intip },
+	{ "alias",	"Secondary IP address and netmask",	intalias },
+	{ "broadcast",	"Specify alternate broadcast",		intbroadcast },
+	{ "mtu",	"MTU",					intmtu },
+	{ "nwid",	"802.11 network ID",			intnwid },
+	{ "nwkey",	"802.11 network key",			intnwkey },
+	{ "powersave",	"802.11 powersaving mode",		intpowersave },
+	{ "media",	"Media type",				intmedia },
+	{ "mediaopt",	"Media options",			intmediaopt },
+	{ "metric",	"Metric",				intmetric },
+	{ "vlan",	"802.1Q vlan tag and parent",		intvlan },
+	{ "trailers",	"Trailer link level encapsulation",	inttrailers },
+	{ "tunnel",	"Source and destination on GIF tunnel",	inttunnel },
+	{ "link",	"Enable link level options",		intlink },
+#ifdef INET6
+	{ "vltime",	"IPv6 valid lifetime",			intvltime },
+        { "pltime",	"IPv6 preferred lifetime",		intpltime },
+	{ "anycast",	"IPv6 anycast address bit",		intanycast },
+	{ "tentative",	"IPv6 tentative address bit",		inttentative },
+#endif
+	{ "debug",	"Driver dependent debugging",		intdebug },
+	{ "shutdown",	"Shutdown interface",			intdown },
+#endif
+	{ "rate",	"Rate limit (token bucket regulator)",	intrate },
+	{ "?",		"Options",				int_help },
+	{ "help",	0,					int_help },
+	{ 0, 0, 0 }
+};
+
+#define GETINT(name)	((struct intlist *) genget(name, (char **) Intlist, \
+			    sizeof(struct intlist)))
+
+static int
+interface(int argc, char **argv)
+{
+	struct intlist *i;	/* pointer to current command */
+	char ifname[IFNAMSIZ];	/* interface name */
+
+	(void) signal(SIGINT, SIG_IGN);
+	(void) signal(SIGQUIT, SIG_IGN);
+
+	if (argc != 2) {
+		printf("%% interface <interface name>\n");
+		return(0);
+	}
+
+	ifname[IFNAMSIZ-1] = '\0';
+	strncpy(ifname, argv[1], sizeof(ifname));
+#if 0
+        if (ifname not valid interface) {
+                printf("%% inteface %s not found\n", ifname);
+                return(0);
+        }
+#endif
+	for (;;) {
+		printf("%s(interface-%s)/", hbuf, ifname);
+		if (fgets(line, sizeof(line), stdin) == NULL) {
+			if (feof(stdin) || ferror(stdin)) {
+				printf("\n");
+				return(0);
+			}
+			break;
+		}
+		if (line[0] == 0)
+			break;
+		makeargv();
+		if (margv[0] == 0) {
+			break;
+		}
+		if (strncasecmp(margv[0], "no", strlen("no")) == 0)
+			i = GETINT(margv[1]);
+		else
+			i = GETINT(margv[0]);
+		if (Ambiguous(i)) {
+			printf("%% Ambiguous command\n");
+			continue;
+		}
+		if (i == 0) {
+			printf("%% Invalid command\n");
+			continue;
+		}
+		if ((*i->handler) (ifname, margc, margv)) {
+			break;
+		}
+	}
+}
+
+static int
+int_help()
+{
+	struct intlist *i; /* pointer to current command */
+
+	printf("%% Commands may be abbreviated.\n");
+	printf("%% Press enter at a prompt to leave interface configuration mode.\n");
+	printf("%% Interface configuration commands are:\n\n");
+
+	for (i = Intlist; i->name; i++) {
+		if (i->help)
+			printf("  %-*s\t%s\n", (int)HELPINDENT,
+			    i->name, i->help);
+	}
+	return 0;
+}
+
+/*
+ * Data structures and routines for the main CLI
  */
 
 static char
 	hostnamehelp[] = "Set system hostname",
+	interfacehelp[] = "Modify interface parameters",
 	showhelp[] =	"Show system information",
 	enablehelp[] =	"Enable privileged mode",
 	disablehelp[] =	"Disable privileged mode",
-	ratehelp[] =	"Rate limit an interface",
+	routehelp[] =	"Add a host or network route",
 	monitorhelp[] = "Monitor routing table changes",
 	quithelp[] =	"Close current connection",
 	verbosehelp[] =	"Toggle verbose diagnostics",
@@ -280,18 +403,19 @@ static char
  */
 
 static Command  cmdtab[] = {
-	{ "hostname",	hostnamehelp,	hostname,	1, 0 },
-	{ "show",	showhelp,	showcmd,	0, 0 },
-	{ "enable",	enablehelp,	enable,		0, 1 },
-	{ "disable",	disablehelp,	disable,	1, 0 },
-	{ "rate",	ratehelp,	rate,		1, 0 },
-	{ "monitor",	monitorhelp,	monitor,	0, 0 },
-	{ "quit",	quithelp,	quit,		0, 0 },
-	{ "verbose",	verbosehelp,	togglev,	0, 0 },
-	{ "!",		shellhelp,	shell,		1, 0 },
-	{ "?",		helphelp,	help,		0, 0 },
-	{ "help",	0,		help,		0, 0 },
-	{ 0,		0,		0,		0, 0 }
+	{ "hostname",	hostnamehelp,	hostname,	1, 0, 0 },
+	{ "interface",	interfacehelp,	interface,	1, 0, 0 },
+	{ "show",	showhelp,	showcmd,	0, 0, 0 },
+	{ "enable",	enablehelp,	enable,		0, 1, 0 },
+	{ "disable",	disablehelp,	disable,	1, 0, 0 },
+	{ "route",	routehelp,	route,		1, 0, 1 },
+	{ "monitor",	monitorhelp,	monitor,	0, 0, 0 },
+	{ "quit",	quithelp,	quit,		0, 0, 0 },
+	{ "verbose",	verbosehelp,	doverbose,	0, 0, 1 },
+	{ "!",		shellhelp,	shell,		1, 0, 0 },
+	{ "?",		helphelp,	help,		0, 0, 0 },
+	{ "help",	0,		help,		0, 0, 0 },
+	{ 0,		0,		0,		0, 0, 0 }
 };
 
 /*
@@ -388,17 +512,14 @@ command(top, tbuf, cnt)
 			if (cp == line || *--cp != '\n' || cp == line)
 				goto getline;
 			*cp = '\0';
-			printf("%s\r\n", line);
+			printf("%s\n", line);
 		} else {
 	getline:
 			gethostname(hbuf, sizeof(hbuf));
-			if(priv)
-				printf("%s(priv)/", hbuf);
-			else
-				printf("%s/", hbuf);
+			printf("%s%s/", hbuf, priv ? "(priv)" : "");
 			if (fgets(line, sizeof(line), stdin) == NULL) {
 				if (feof(stdin) || ferror(stdin)) {
-					printf("\r\n");
+					printf("\n");
 					(void) quit();
 					/* NOTREACHED */
 				}
@@ -411,21 +532,29 @@ command(top, tbuf, cnt)
 		if (margv[0] == 0) {
 			break;
 		}
-		c = getcmd(margv[0]);
+		if (strncasecmp(margv[0], "no", strlen("no")) == 0)
+			c = getcmd(margv[1]);
+		else
+			c = getcmd(margv[0]);
 		if (Ambiguous(c)) {
-			printf("%% Ambiguous command\r\n");
+			printf("%% Ambiguous command\n");
 			continue;
 		}
 		if (c == 0) {
-			printf("%% Invalid command\r\n");
+			printf("%% Invalid command\n");
+			continue;
+		}
+		if ((strncasecmp(margv[0], "no", strlen("no")) == 0) && ! c->nocmd) {
+			printf("%% Invalid command: %s %s\n", margv[0],
+			    margv[1]);
 			continue;
 		}
 		if (c->needpriv != 0 && priv != 1) {
-			printf("%% Privilege required\r\n");
+			printf("%% Privilege required\n");
 			continue;
 		}
 		if (c->ignoreifpriv == 1 && priv == 1) {
-			printf("%% Command invalid while privileged\r\n");
+			printf("%% Command invalid while privileged\n");
 			continue;
 		}
 		if ((*c->handler) (margc, margv)) {
@@ -445,12 +574,12 @@ help(argc, argv)
 	Command *c;
 
 	if (argc == 1) { 
-		printf("%% Commands may be abbreviated.\r\n");
-		printf("%% Commands are:\r\n\r\n");
+		printf("%% Commands may be abbreviated.\n");
+		printf("%% Commands are:\n\n");
 		for (c = cmdtab; c->name; c++)
 			if (c->help && ((c->needpriv == priv) ||
 			    (c->ignoreifpriv != priv))) {
-				printf("  %-*s\t%s\r\n", (int)HELPINDENT,
+				printf("  %-*s\t%s\n", (int)HELPINDENT,
 				    c->name, c->help);
 			}
 		return 0;
@@ -460,11 +589,11 @@ help(argc, argv)
 		arg = *++argv;
 		c = getcmd(arg);
 		if (Ambiguous(c))
-			printf("%% Ambiguous help command %s\r\n", arg);
+			printf("%% Ambiguous help command %s\n", arg);
 		else if (c == (Command *)0)
-			printf("%% Invalid help command %s\r\n", arg);
+			printf("%% Invalid help command %s\n", arg);
 		else
-			printf("%% %s: %s\r\n", arg, c->help);
+			printf("%% %s: %s\n", arg, c->help);
 	}
 	return 0;
 }
@@ -481,7 +610,7 @@ hostname(argc, argv)
 	argc--;
 
 	if (argc > 1) {
-		printf("%% Invalid arguments\r\n");
+		printf("%% Invalid arguments\n");
 		return 1;
 	}
 
@@ -491,7 +620,7 @@ hostname(argc, argv)
 	} else {
 		if (gethostname(hbuf, sizeof(hbuf)))
 			perror("% gethostname");
-		printf("%% %s\r\n", hbuf);
+		printf("%% %s\n", hbuf);
         }
 	return 0;
 }
@@ -552,16 +681,23 @@ disable(void)
 }
 
 /*
- * toggle verbose diagnostics
+ * verbose diagnostics
  */
 int
-togglev(void)
+doverbose(int argc, char **argv)
 {
-	if (verbose)
-		verbose = 0;
-	else
+	if (argc > 1) {
+		if (strncasecmp(argv[0], "no", strlen("no")) == 0) {
+			verbose = 0;
+		} else {
+			printf ("%% Invalid argument\n");
+			return 1;
+		}
+	} else {
 		verbose = 1;
-	printf("%% Diagnostic mode %s\r\n", verbose ? "enabled" : "disabled");
+	}
+	
+	printf("%% Diagnostic mode %s\n", verbose ? "enabled" : "disabled");
 
 	return 0;
 }
@@ -578,14 +714,14 @@ load_nlist(void)
 
 	if ((kvmd = kvm_openfiles(nlistf, memf, NULL, O_RDONLY,
 	    buf)) == NULL) {
-		printf("%% kvm_openfiles: %s\r\n", buf);
+		printf("%% kvm_openfiles: %s\n", buf);
 		return 1;
 	}
 	if(kvm_nlist(kvmd, nl) < 0 || nl[0].n_type == 0) {
 		if (nlistf)
-			printf("%% kvm_nlist: %s: no namelist\r\n", nlistf);
+			printf("%% kvm_nlist: %s: no namelist\n", nlistf);
 		else
-			printf("%% kvm_nlist: no namelist\r\n");
+			printf("%% kvm_nlist: no namelist\n");
 		return 1;
 	}
 	return 0;
@@ -602,7 +738,7 @@ cmdrc(rcname)
 	FILE        *rcfile;
 
 	if ((rcfile = fopen(rcname, "r")) == 0) {
-		printf("%% %s not found\r\n",rcname);
+		printf("%% %s not found\n",rcname);
 		return 1;
 	}
 	for (;;) {
@@ -615,13 +751,21 @@ cmdrc(rcname)
 		makeargv();
 		if (margv[0] == 0)
 			continue;
-		c = getcmd(margv[0]);
+		if (strncasecmp(margv[0], "no", strlen("no")) == 0)
+			c = getcmd(margv[1]);
+		else
+			c = getcmd(margv[0]);
 		if (Ambiguous(c)) {
-			printf("%% Ambiguous rc command: %s\r\n", margv[0]);
+			printf("%% Ambiguous rc command: %s\n", margv[0]);
 			continue;
 		}
 		if (c == 0) {
-			printf("%% Invalid rc command: %s\r\n", margv[0]);
+			printf("%% Invalid rc command: %s\n", margv[0]);
+			continue;
+		}
+		if ((strncasecmp(margv[0], "no", strlen("no")) == 0) && ! c->nocmd) {
+			printf("%% Invalid rc command: %s %s\n", margv[0],
+			    margv[1]);
 			continue;
 		}
 		(*c->handler) (margc, margv);
@@ -636,7 +780,7 @@ cmdrc(rcname)
 int
 pr_routes(void)
 {
-	show(AF_INET);
+	routepr(nl[N_RTREE].n_value, AF_INET);
 	return 0;
 }
 

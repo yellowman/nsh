@@ -1,4 +1,4 @@
-/* From: $OpenBSD: inet.c,v 1.58 2002/02/19 21:11:23 miod Exp $ */
+/* From: $OpenBSD: /usr/src/usr.bin/netstat/inet.c,v 1.58 2002/02/19 21:11:23 miod Exp $ */
 
 /*
  * Copyright (c) 1983, 1988, 1993
@@ -77,8 +77,6 @@
 
 static int sflag = 1;
 
-static void protopr0(u_long, char *, int);
-
 #ifdef INET6
 char	*inet6name(struct in6_addr *);
 void	inet6print(struct in6_addr *, int, char *, int);
@@ -95,7 +93,7 @@ tcp_stats(off)
 
 	if (off == 0)
 		return;
-	printf ("%% tcp:\r\n");
+	printf ("%% tcp:\n");
 	kread(off, (char *)&tcpstat, sizeof (tcpstat));
 
 #define	p(f, m) if (tcpstat.f || sflag <= 1) \
@@ -183,7 +181,7 @@ udp_stats(off)
 	if (off == 0)
 		return;
 	kread(off, (char *)&udpstat, sizeof (udpstat));
-	printf("%% udp:\r\n");
+	printf("%% udp:\n");
 #define	p(f, m) if (udpstat.f || sflag <= 1) \
     printf(m, udpstat.f, plural(udpstat.f))
 #define	p1(f, m) if (udpstat.f || sflag <= 1) \
@@ -226,7 +224,7 @@ ip_stats(off)
 	if (off == 0)
 		return;
 	kread(off, (char *)&ipstat, sizeof (ipstat));
-	printf("%% ip:\r\n");
+	printf("%% ip:\n");
 
 #define	p(f, m) if (ipstat.f || sflag <= 1) \
     printf(m, ipstat.f, plural(ipstat.f))
@@ -303,7 +301,7 @@ icmp_stats(off)
 	if (off == 0)
 		return;
 	kread(off, (char *)&icmpstat, sizeof (icmpstat));
-	printf("%% icmp:\r\n");
+	printf("%% icmp:\n");
 
 #define	p(f, m) if (icmpstat.f || sflag <= 1) \
     printf(m, icmpstat.f, plural(icmpstat.f))
@@ -349,7 +347,7 @@ igmp_stats(off)
 	if (off == 0)
 		return;
 	kread(off, (char *)&igmpstat, sizeof (igmpstat));
-	printf("%% igmp:\r\n");
+	printf("%% igmp:\n");
 
 #define	p(f, m) if (igmpstat.f || sflag <= 1) \
     printf(m, igmpstat.f, plural(igmpstat.f))
@@ -380,7 +378,7 @@ ah_stats(off)
 	if (off == 0)
 		return;
 	kread(off, (char *)&ahstat, sizeof (ahstat));
-	printf("%% ah:\r\n");
+	printf("%% ah:\n");
 
 #define p(f, m) if (ahstat.f || sflag <= 1) \
     printf(m, ahstat.f, plural(ahstat.f))
@@ -422,7 +420,7 @@ esp_stats(off)
 	if (off == 0)
 		return;
 	kread(off, (char *)&espstat, sizeof (espstat));
-	printf("%% esp:\r\n");
+	printf("%% esp:\n");
 
 #define p(f, m) if (espstat.f || sflag <= 1) \
     printf(m, espstat.f, plural(espstat.f))
@@ -462,7 +460,7 @@ ipip_stats(off)
 	if (off == 0)
 		return;
 	kread(off, (char *)&ipipstat, sizeof (ipipstat));
-	printf("%% ipip:\r\n");
+	printf("%% ipip:\n");
 
 #define p(f, m) if (ipipstat.f || sflag <= 1) \
     printf(m, ipipstat.f, plural(ipipstat.f))
@@ -475,8 +473,8 @@ ipip_stats(off)
 	p(ipips_qfull, "\t%u packet%s were dropped due to full output queue\n");
 	p(ipips_ibytes, "\t%qu input byte%s\n");
 	p(ipips_obytes, "\t%qu output byte%s\n");
-	p(ipips_family, "\t%u protocol family mismatches\n");
-	p(ipips_unspec, "\t%u attempts to use tunnel with unspecified endpoint(s)\n");
+	p(ipips_family, "\t%u protocol family mismatche%s\n");
+	p(ipips_unspec, "\t%u attempts to use tunnel with unspecified endpoint%s\n");
 #undef p
 }
 
@@ -492,7 +490,7 @@ ipcomp_stats(off)
 	if (off == 0)
 		return;
 	kread(off, (char *)&ipcompstat, sizeof (ipcompstat));
-	printf("%% ipcomp:\r\n");
+	printf("%% ipcomp:\n");
 
 #define p(f, m) if (ipcompstat.f || sflag <= 1) \
     printf(m, ipcompstat.f, plural(ipcompstat.f))

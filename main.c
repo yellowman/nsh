@@ -33,13 +33,14 @@
 
 void usage(void);
 
-char *vers = "20020302";
+char *vers = "20020412";
 
+int
 main(argc, argv)
 	int argc;
 	char *argv[];
 {
-	int s, ch, iflag = 0;
+	int ch, iflag = 0;
          
 	while ((ch = getopt(argc, argv, "i")) != -1)
 		switch (ch) {
@@ -53,7 +54,7 @@ main(argc, argv)
 	argc -= optind;
 	argv += optind;
 
-	printf("%% NSH v%s\r\n", vers);
+	printf("%% NSH v%s\n", vers);
 
 	if (argc > 0)
 		usage();
@@ -81,7 +82,7 @@ main(argc, argv)
 void
 usage()
 {
-	(void)fprintf(stderr, "usage: %s [-i]\r\n", __progname);
+	(void)fprintf(stderr, "usage: %s [-i]\n", __progname);
 	exit(1);
 }
 

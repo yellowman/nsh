@@ -6,26 +6,24 @@ extern char *__progname, *vers;
 extern int verbose;
 
 /* routepr.c */
-extern int show(int);
-extern int nflag; /* route.c too */
+extern void routepr(u_long, int);
 
-/* routemsg.c */
-#ifdef _NETINET_IN_H_
-extern char *routename(struct sockaddr *);
-extern char *netname(in_addr_t, in_addr_t);
-#endif
+/* alignment constraint for routing socket */
+#define ROUNDUP(a) \
+	((a) > 0 ? (1 + (((a) - 1) | (sizeof(long) - 1))) : sizeof(long))
+#define ADVANCE(x, n) (x += ROUNDUP((n)->sa_len))
+
+/* routesys.c */
 extern int monitor(void);
-extern void interfaces(void);
+extern void flushroutes(int);
+extern void bprintf(FILE *, int, u_char *);
 extern char ifnetflags[];
 extern char routeflags[];
 extern char addrnames[];
 extern char metricnames[];
 
-#define ROUNDUP(a) \
-	((a) > 0 ? (1 + (((a) - 1) | (sizeof(long) - 1))) : sizeof(long))
-#define ADVANCE(x, n) (x += ROUNDUP((n)->sa_len))
-
 /* commands.c */
+extern void command(int, char *, int);
 extern int cmdrc(char rcname[FILENAME_MAX]);
 extern int load_nlist(void);
 
@@ -57,10 +55,13 @@ extern int Ambiguous(void *);
 /* rate.c */
 #define TBR_RATE 1		/* request for TBR token rate */
 #define TBR_BUCKET 2		/* request for TBR bucket size */
-extern int rate(int, char**);
+extern int intrate(char *ifname, int, char**);
 extern u_long get_tbr(const char *, int);
 extern u_long atobps(const char *);
 extern u_long atobytes(const char *);
+
+/* route.c */
+extern int route(int, char**);
 
 /* if.c */
 #define IFDATA_MTU 1		/* request for if_data.ifi_mtu */
