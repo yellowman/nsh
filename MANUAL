@@ -1,5 +1,5 @@
 NSH // Network Shell User's Manual // Chris Cappuccio <chris@nmedia.net>
-$nsh: MANUAL,v 1.9 2003/04/17 18:01:30 chris Exp $
+$nsh: MANUAL,v 1.10 2003/04/23 21:56:40 chris Exp $
 
 Copyright (c) 2003 Chris Cappuccio
 
@@ -133,12 +133,10 @@ o "$dhclient_pid" > dhclient.pid; })
 
 After these lines, add the following commands:
 
-echo > /var/run/pf.conf
 nsh -i /etc/nshrc | tee /var/run/nsh.out
 
 You may even want verbose output to see how nsh parses its' rc file:
 
-echo > /var/run/pf.conf
 nsh -vi /etc/nshrc | tee /var/run/nsh.out
 
 On a router created with flashdist, you can simply copy NSH into /bin/nsh

@@ -1,4 +1,4 @@
-/* $nsh: main.c,v 1.13 2003/03/18 23:10:46 chris Exp $ */
+/* $nsh: main.c,v 1.14 2003/04/23 21:56:40 chris Exp $ */
 /*
  * Copyright (c) 2002, 2003
  *      Chris Cappuccio.  All rights reserved.
@@ -28,6 +28,8 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <limits.h>
+#include <string.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <sys/socket.h>
 #include <histedit.h>
@@ -35,6 +37,7 @@
 #include "editing.h"
 
 void usage(void);
+void rmtemp(void);
 
 char *vers = "20030318";
 int bridge = 0;		/* bridge mode for interface() */
@@ -85,6 +88,7 @@ main(argc, argv)
 		/*
 		 * Run initialization and then exit.
 		 */
+		rmtemp();
 		cmdrc(optarg);
 		exit(0);
 	}
@@ -94,6 +98,15 @@ main(argc, argv)
 	}
 
 	return 0;
+}
+
+void
+rmtemp()
+{
+	if (unlink(PFCONF_TEMP) != 0)
+		if (errno != ENOENT)
+			printf("%% Unable to remove temporary PF rules for "
+			    "reinitialization %s\n", strerror(errno));
 }
 
 void

@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.23 2003/04/23 16:24:34 chris Exp $ */
+/* $nsh: commands.c,v 1.24 2003/04/23 21:56:40 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -739,8 +739,13 @@ pf(int argc, char **argv, char *modhvar)
 		return(0);
 	}
 
-	/* nshrc routines */
-	if (CMP_ARG(modhvar, "rules")) {
+	/*
+	 * nshrc routines
+	 *
+	 * keep in mind...this gets called for each single configuration
+	 * line, which is why we append...
+	 */
+	if (argc > 0 && CMP_ARG(modhvar, "rules")) {
 		rulefile = fopen(PFCONF_TEMP, "a");
 		if (rulefile == NULL) {
 			printf("%% Rule write failed: %s\n", strerror(errno));
