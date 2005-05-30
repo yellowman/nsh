@@ -1,5 +1,5 @@
 NSH // Network Shell User's Manual // Chris Cappuccio <chris@nmedia.net>
-$nsh: MANUAL,v 1.16 2004/03/22 11:33:29 chris Exp $
+$nsh: MANUAL,v 1.17 2005/05/30 23:26:06 chris Exp $
 
 Copyright (c) 2003, 2004 Chris Cappuccio
 
@@ -859,7 +859,7 @@ nsh(interface-fxp0)/?
   media      Media type
   mediaopt   Media options
   tunnel     Source/destination for GIF tunnel
-  syncif     Control message interface
+  syncdev    Control message interface
   maxupd     Collapsable max updates for a single state
   vhid       CARP virtual host ID
   advbase    CARP advertisement interval
@@ -996,8 +996,8 @@ See Appendix E for more details.
 
 nsh(interface-gre0)/tunnel 12.3.3.3 12.6.6.6
 
-[no] syncif <syncif>
---------------------
+[no] syncdev <syncdev>
+----------------------
 
 This command is valid for pfsync interfaces only.  It configures the
 data interface through which pfsync update messages are sent.  Note
@@ -1006,7 +1006,7 @@ Therefore, the only secure way to use it is through a network plug connecting
 directly between two pfsync capable devices (such as a conenction made
 with an ethernet crossover cable).
 
-nsh(interface-pfsync0)/syncif fxp0
+nsh(interface-pfsync0)/syncdev fxp0
 
 [no] maxupd <updates>
 ---------------------

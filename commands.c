@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.35 2004/03/24 09:01:45 chris Exp $ */
+/* $nsh: commands.c,v 1.36 2005/05/30 23:26:06 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -509,7 +509,7 @@ static struct intlist Intlist[] = {
 	{ "tentative",	"IPv6 tentative address bit",		inttentative, 0 },
 #endif
 	{ "tunnel",	"Source/destination for GIF tunnel",	inttunnel, 0 },
-	{ "syncif",	"Control message interface",		intsyncif, 0 },
+	{ "syncdev",	"Control message interface",		intsyncdev, 0 },
 	{ "maxupd", 	"Collapsable max updates for a single state", intmaxupd, 0 },
 	{ "vhid",	"CARP virtual host ID",			intcarp, 0 },
 	{ "advbase",	"CARP advertisement interval",		intcarp, 0 },

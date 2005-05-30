@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.23 2004/12/31 19:09:13 chris Exp $ */
+/* $nsh: externs.h,v 1.24 2005/05/30 23:26:06 chris Exp $ */
 /*
  * nsh externs and more
  */
@@ -204,7 +204,7 @@ int enable(int, char **);
 
 /* pfsync.c */
 #define PFSYNC_MAXUPDATES 128
-int intsyncif(char *, int, int, char **);
+int intsyncdev(char *, int, int, char **);
 int intmaxupd(char *, int, int, char **);
 int conf_pfsync(FILE *, int, char *);
 

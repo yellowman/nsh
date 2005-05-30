@@ -39,7 +39,7 @@
 #include "externs.h"
 
 int
-intsyncif(char *ifname, int ifs, int argc, char **argv)
+intsyncdev(char *ifname, int ifs, int argc, char **argv)
 {
 	struct ifreq ifr;
 	struct pfsyncreq preq;
@@ -56,8 +56,8 @@ intsyncif(char *ifname, int ifs, int argc, char **argv)
 	argv++;
 
 	if ((!set && argc > 1) || (set && argc != 1)) {
-		printf("%% syncif <if>\n");
-		printf("%% no syncif [if]\n");
+		printf("%% syncdev <if>\n");
+		printf("%% no syncdev [if]\n");
 		return (0);
 	}
 	bzero((char *) &preq, sizeof(struct pfsyncreq));
@@ -65,7 +65,7 @@ intsyncif(char *ifname, int ifs, int argc, char **argv)
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 
 	if (ioctl(ifs, SIOCGETPFSYNC, (caddr_t) & ifr) == -1) {
-		printf("%% intsyncif: SIOCGETPFSYNC: %s\n", strerror(errno));
+		printf("%% intsyncdev: SIOCGETPFSYNC: %s\n", strerror(errno));
 		return (0);
 	}
 
@@ -76,19 +76,19 @@ intsyncif(char *ifname, int ifs, int argc, char **argv)
 		}
 
 	if (set) {
-		strlcpy(preq.pfsyncr_syncif, argv[0],
-			sizeof(preq.pfsyncr_syncif));
+		strlcpy(preq.pfsyncr_syncdev, argv[0],
+			sizeof(preq.pfsyncr_syncdev));
 		set_ifflag(ifs, ifname, IFF_UP);
 	} else
-		bzero((char *) &preq.pfsyncr_syncif,
-		      sizeof(preq.pfsyncr_syncif));
+		bzero((char *) &preq.pfsyncr_syncdev,
+		      sizeof(preq.pfsyncr_syncdev));
 
 	if (ioctl(ifs, SIOCSETPFSYNC, (caddr_t) & ifr) == -1) {
 		if (errno == ENOBUFS)
 			printf("%% Invalid synchronization interface: %s\n",
 			    argv[0]);
 		else
-			printf("%% intsyncif: SIOCSETPFSYNC: %s\n",
+			printf("%% intsyncdev: SIOCSETPFSYNC: %s\n",
 			    strerror(errno));
 	}
 	return (0);
@@ -162,8 +162,8 @@ conf_pfsync(FILE *output, int s, char *ifname)
 	if (ioctl(s, SIOCGETPFSYNC, (caddr_t) & ifr) == -1)
 		return (0);
 
-	if (preq.pfsyncr_syncif[0] != '\0') {
-		fprintf(output, " syncif %s\n", preq.pfsyncr_syncif);
+	if (preq.pfsyncr_syncdev[0] != '\0') {
+		fprintf(output, " syncdev %s\n", preq.pfsyncr_syncdev);
 		if (preq.pfsyncr_maxupdates != PFSYNC_MAXUPDATES)
 			fprintf(output, " maxupd %i\n",
 			    preq.pfsyncr_maxupdates);
