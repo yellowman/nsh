@@ -1,4 +1,4 @@
-$nsh: TODO,v 1.14 2004/03/22 11:33:29 chris Exp $
+$nsh: TODO,v 1.15 2005/05/31 02:48:15 chris Exp $
 
 nsh is a work in progress, future versions will be released which
 implement much of the following (of course, diffs are welcome):
@@ -13,7 +13,7 @@ Cleanup:
   passed to kernel, data passed elsewhere...
 * Maybe user args should be set to lowercase at early so that we dont have to
   use strcasecmp/strncasecmp everywhere?
-* User args should be sanity checked early for interference
+* User args should be sanity checked early on
 * Consistency in how we print errors for commands called from interface(),
   give user-friendly messages, as these errors generally represent user
   error (whereas an error in conf() or other things that are not called
@@ -23,22 +23,27 @@ Cleanup:
 
 To be implemented:
 
+* pfsync syncpeer
+* if description
+* Newer 802.11 gunk like txpower, bssid, whatever else
+* kernel pppoe
+* carp carpdev
+* handle TDM timeslots
+* lladdr
 * View other users logged in, clear their sessions, etc...
-* BGP (steal from bgpctl)
-* IPsec! Configure VPNs with simple CLI commands-use conf-less isakmpd with
-  certificates and ipsecadm flows
-* IPComp...
+* Interface wtth bgpd and ospfd
+* Configure IPsec VPNs with simple CLI commands (The easiest way to do this 
+  would be to use a conf-less isakmpd with certificates and ipsecadm flows)
+* IPComp
 * DHCP daemon control
 * Do we build in a simple ping, traceroute or just shell out for these??
 * And what about telnet/ssh (maybe shell out for ssh, implement a simple
   telnet?)
-* Persistent comments in the config file (to document routes, etc..)
+* Persistent comments/remarks in the config file (to document routes, etc..)
   or at least interface descriptions
 
 Lower priority:
 
-* ISIS(patents?) or OSPF?? Hooks to integrate zebra(GPL)/gated(BSDlic)/
-  mrtd(BSDlic)/???
 * IPv6?? (shouldn't be hard, considering that most of the functions
   we stole from other source already support it)
 * IPX?? AppleTalk??
