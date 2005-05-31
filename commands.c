@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.37 2005/05/31 07:56:44 chris Exp $ */
+/* $nsh: commands.c,v 1.38 2005/05/31 08:50:40 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -556,37 +556,39 @@ interface(int argc, char **argv, char *modhvar)
 {
 	int z = 0;
 	int num, ifs, set;
-	char *tmp, *brarg;
+	char *tmp;
 	struct intlist *i;	/* pointer to current command */
 	struct ifreq ifr;
 
 	if (!modhvar) {
+		/*
+		 * setup pieces which are valid ONLY for interactive routine
+		 */
 		(void) signal(SIGINT, SIG_IGN);
 		(void) signal(SIGQUIT, SIG_IGN);
-	}
 
-	if (NO_ARG(argv[0])) {
-		argv++;
-		argc--;
-		set = 0;
-	} else
-		set = 1;
+		if (NO_ARG(argv[0])) {
+			argv++;
+			argc--;
+			set = 0;
+		} else
+			set = 1;
 	
-	if (argc != 2 && !modhvar) {
-		printf("%% [no] interface <interface name>\n");
-		return(0);
+		if (argc != 2) {
+			printf("%% [no] interface <interface name>\n");
+			return(0);
+		}
+		tmp = argv[1];
+	} else {
+		tmp = modhvar;
 	}
 
-	ifname[IFNAMSIZ-1] = '\0';
-
-	if (modhvar)
-		tmp = modhvar;
-	else
-		tmp = argv[1];
 	if (strlen(tmp) > IFNAMSIZ-1) {
 		printf("%% interface name too long\n");
 		return(0);
 	}
+
+	ifname[IFNAMSIZ-1] = '\0';
 	strlcpy(ifname, tmp, IFNAMSIZ);
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 
@@ -624,23 +626,19 @@ interface(int argc, char **argv, char *modhvar)
 		return(0);
 	}
 
-	if (!modhvar)
-		brarg = argv[0];
-	else
-		brarg = modhvar;
-
-	if (is_bridge(ifs, ifname)) {
-		bridge = 1;
-		if (CMP_ARG(brarg, "i"))
-			printf("%% Using bridge configuration mode"
-			    " for %s\n", ifname);
-	} else {
-		bridge = 0; 
-		if (CMP_ARG(brarg, "b"))
-			printf("%% Using interface configuration mode"
-			    " for %s\n", ifname);
+	if (!modhvar) {
+		if (is_bridge(ifs, ifname)) {
+			bridge = 1;
+			if (CMP_ARG(argv[0], "i"))
+				printf("%% Using bridge configuration mode"
+				    " for %s\n", ifname);
+		} else {
+			bridge = 0; 
+			if (CMP_ARG(argv[0], "b"))
+				printf("%% Using interface configuration mode"
+				    " for %s\n", ifname);
+		}
 	}
-
 
 	for (;;) {
 		if (!modhvar) {
