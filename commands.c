@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.36 2005/05/30 23:26:06 chris Exp $ */
+/* $nsh: commands.c,v 1.37 2005/05/31 07:56:44 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -546,7 +546,7 @@ static struct intlist Intlist[] = {
 
 /*
  * a big command input loop for interface mode
- * XXX yes, i will totally rewrite this crap
+ * XXX yes, i will totally rewrite this crap, yes, it's horrible
  * if a function returns to interface() with a 1, interface() will break
  * the user back to command() mode.  interface() will always break from
  * mode handler calls.
@@ -597,7 +597,7 @@ interface(int argc, char **argv, char *modhvar)
 	}
 
 	if (!is_valid_ifname(ifname)) {
-		if (set == 0) {
+		if (set == 0 && !modhvar) {
 			printf("%% interface %s not found\n", ifname);
 			close(ifs);
 			return(0);
@@ -613,7 +613,7 @@ interface(int argc, char **argv, char *modhvar)
 		}
 	}
 
-	if (set == 0) {
+	if (set == 0 && !modhvar) {
 		if (ioctl(ifs, SIOCIFDESTROY, &ifr) == -1) {
 			printf("%% unable to remove interface %s: %s\n",
 			    ifname, strerror(errno));
