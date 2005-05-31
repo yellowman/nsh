@@ -1,4 +1,4 @@
-$nsh: TODO,v 1.15 2005/05/31 02:48:15 chris Exp $
+$nsh: TODO,v 1.16 2005/05/31 07:57:29 chris Exp $
 
 nsh is a work in progress, future versions will be released which
 implement much of the following (of course, diffs are welcome):
@@ -30,6 +30,7 @@ To be implemented:
 * carp carpdev
 * handle TDM timeslots
 * lladdr
+* trunk
 * View other users logged in, clear their sessions, etc...
 * Interface wtth bgpd and ospfd
 * Configure IPsec VPNs with simple CLI commands (The easiest way to do this 
