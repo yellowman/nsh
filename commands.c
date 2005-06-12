@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.38 2005/05/31 08:50:40 chris Exp $ */
+/* $nsh: commands.c,v 1.39 2005/06/12 07:20:41 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -626,18 +626,16 @@ interface(int argc, char **argv, char *modhvar)
 		return(0);
 	}
 
-	if (!modhvar) {
-		if (is_bridge(ifs, ifname)) {
-			bridge = 1;
-			if (CMP_ARG(argv[0], "i"))
-				printf("%% Using bridge configuration mode"
-				    " for %s\n", ifname);
-		} else {
-			bridge = 0; 
-			if (CMP_ARG(argv[0], "b"))
-				printf("%% Using interface configuration mode"
-				    " for %s\n", ifname);
-		}
+	if (is_bridge(ifs, ifname)) {
+		bridge = 1;
+		if (CMP_ARG(modhvar ? modhvar : argv[0], "i"))
+			printf("%% Using bridge configuration mode"
+			    " for %s\n", ifname);
+	} else {
+		bridge = 0; 
+		if (CMP_ARG(modhvar ? modhvar : argv[0], "b"))
+			printf("%% Using interface configuration mode"
+			    " for %s\n", ifname);
 	}
 
 	for (;;) {
