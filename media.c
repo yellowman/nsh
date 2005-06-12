@@ -1,4 +1,4 @@
-/* $nsh: media.c,v 1.9 2003/09/18 20:09:51 chris Exp $ */
+/* $nsh: media.c,v 1.10 2005/06/12 07:47:58 chris Exp $ */
 /*
  * From: $OpenBSD: /usr/src/sbin/ifconfig/ifconfig.c,v 1.64 2002/05/22
  * 08:21:02 deraadt Exp $
@@ -83,6 +83,7 @@ const struct ifmedia_description ifm_option_descriptions[] =
 int
 intmedia(char *ifname, int ifs, int argc, char **argv)
 {
+	const char *errmsg = NULL;
 	int set, media_current, type, subtype, inst;
 
 	if (NO_ARG(argv[0])) {
@@ -110,9 +111,10 @@ intmedia(char *ifname, int ifs, int argc, char **argv)
 	}
 
 	if (argc == 2) {
-		inst = atoi(argv[1]);
-		if (inst < 0 || inst > IFM_INST_MAX) {
-			printf("%% Invalid media instance: %s\n", argv[1]);
+		inst = strtonum(argv[1], 0, IFM_INST_MAX, &errmsg);
+		if (errmsg) {
+			printf("%% Invalid media instance: %s: %s\n", argv[1],
+			    errmsg);
 			return(0);
 		}
 	} else {

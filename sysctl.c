@@ -1,4 +1,4 @@
-/* $nsh: sysctl.c,v 1.5 2003/04/23 18:58:42 chris Exp $ */
+/* $nsh: sysctl.c,v 1.6 2005/06/12 07:47:58 chris Exp $ */
 /*
  * Copyright (c) 2003
  *      Chris Cappuccio.  All rights reserved.
@@ -81,13 +81,12 @@ ipsysctl(int set, char *cmd, char *arg)
 {
 	int mib2, mib3;
 	int32_t larg;
-	char *endptr;   
+	const char *errmsg = NULL;
 
 	if (arg) {
-		larg = strtol(arg, &endptr, 0);
-		if (arg[0] == '\0' || endptr[0] != '\0' ||
-		    (errno == ERANGE && larg == LONG_MAX) || larg > INT_MAX) {
-			printf("%% Invalid argument: %s\n", arg);
+		larg = strtonum(arg, 0, INT_MAX, &errmsg);
+		if (errmsg) {
+			printf("%% Invalid argument %s: %s\n", arg, errmsg);
 			return(0);
 		}
 	} else if (set)
@@ -166,14 +165,6 @@ conf_ipsysctl(FILE *output)
 {
 	int tmp;
 
-	/*
-	 * Some people use kernels with option IPFORWARDING/option
-	 * GATEWAY, and others don't, so let's have this set in the
-	 * config either way!!  The general rule in conf.c is to only display
-	 * a configuration entry if it is not a system default, but in this
-	 * case, we don't know the default, since the kernel could be
-	 * compiled either way.
-	 */
 	if ((tmp = sysctl_inet(IPPROTO_IP, IPCTL_FORWARDING, 0, 1)) == 1)
 		fprintf(output, "ip forwarding\n");
 	else if (tmp == 0)

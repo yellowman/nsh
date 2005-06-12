@@ -1,4 +1,4 @@
-/* $nsh: routesys.c,v 1.14 2003/09/18 20:31:38 chris Exp $ */
+/* $nsh: routesys.c,v 1.15 2005/06/12 07:47:58 chris Exp $ */
 /* From: $OpenBSD: /usr/src/sbin/route/route.c,v 1.43 2001/07/07 18:26:20 deraadt Exp $ */
 
 /*
@@ -366,13 +366,15 @@ int
 prefixlen(s)
 	char *s;
 {
-	int len = atoi(s), q, r;
+	const char *errmsg = NULL;
+
+	int len = strtonum(s, 0, 128, &errmsg), q, r;
+	if (errmsg) {
+		printf("%% prefixlen: bad value %s: %s\n", s, errmsg);
+		return(0);
+	}
 
 	rtm_addrs |= RTA_NETMASK;
-	if (len < -1 || len > 129) {
-		printf("%% prefixlen: %s: bad value\n", s);
-		exit(1);
-	}
 
 	q = len >> 3;
 	r = len & 7;

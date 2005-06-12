@@ -101,7 +101,7 @@ intmaxupd(char *ifname, int ifs, int argc, char **argv)
 	struct pfsyncreq preq;
 	u_int32_t val;
 	int set;
-	char *endptr;
+	const char *errmsg = NULL;
 
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -128,11 +128,10 @@ intmaxupd(char *ifname, int ifs, int argc, char **argv)
 	}
 	if (set) {
 		errno = 0;
-		val = strtoul(argv[0], &endptr, 0);
-		if (argv[0][0] == '\0' || endptr[0] != '\0' ||
-		    (errno == ERANGE && val == ULONG_MAX) ||
-		    val > INT_MAX) {
-			printf("%% maxupd value out of range\n");
+		val = strtonum(argv[0], 0, INT_MAX, &errmsg);
+		if (errmsg) {
+			printf("%% maxupd value out of range %s: %s\n", argv[0],
+			    errmsg);
 			return (0);
 		}
 		preq.pfsyncr_maxupdates = (int)val;

@@ -1,4 +1,4 @@
-/* $nsh: bridge.h,v 1.3 2004/03/24 09:01:45 chris Exp $ */
+/* $nsh: bridge.h,v 1.4 2005/06/12 07:47:58 chris Exp $ */
 
 /* request types for bridge_cfg() */
 
@@ -12,7 +12,7 @@
 #define DEFAULT_PRIORITY	32768
 #define DEFAULT_HELLOTIME	2
 #define DEFAULT_FWDDELAY	15
-#define DEFAULT_MAXAGE		15
+#define DEFAULT_MAXAGE		20
 #define DEFAULT_MAXADDR		100
 #define DEFAULT_TIMEOUT		240
 #define DEFAULT_IFPRIORITY	128

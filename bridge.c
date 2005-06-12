@@ -1,4 +1,4 @@
-/* $nsh: bridge.c,v 1.8 2004/03/24 09:01:45 chris Exp $ */
+/* $nsh: bridge.c,v 1.9 2005/06/12 07:47:58 chris Exp $ */
 /* From: $OpenBSD: brconfig.c,v 1.27 2003/09/26 03:29:59 deraadt Exp $ */
 
 /*
@@ -212,7 +212,8 @@ brval(char *ifname, int ifs, int argc, char **argv)
 {
 	int set, type;
 	u_int32_t val;
-	char *name, *endptr;
+	char *name;
+	const char *errmsg = NULL;
 
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -255,11 +256,10 @@ brval(char *ifname, int ifs, int argc, char **argv)
 
 	if (set) {
 		errno = 0;
-		val = strtoul(argv[0], &endptr, 0);
-		if (argv[0][0] == '\0' || endptr[0] != '\0' ||
-		    (errno == ERANGE && val == ULONG_MAX)) {
-			printf("%% invalid %s argument: %s\n", name,
-			    argv[0]);
+		val = strtonum(argv[0], 0, ULONG_MAX, &errmsg);
+		if (errmsg) {
+			printf("%% invalid %s argument %s: %s\n", name,
+			    argv[0], errmsg);
 			return(0);
 		}
 	}
@@ -384,7 +384,8 @@ int
 brpri(char *ifname, int ifs, int argc, char **argv)   
 {
 	int set, val, type;
-	char *endptr, *name, *descr;
+	char *name, *descr;
+	const char *errmsg = NULL;
          
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -427,10 +428,9 @@ brpri(char *ifname, int ifs, int argc, char **argv)
 	}
 
 	errno = 0;
-	val = strtoul(argv[1], &endptr, 0);
-	if (argv[0][0] == '\0' || endptr[0] != '\0' ||
-	    (errno == ERANGE && val == ULONG_MAX) || (val > 0xff)) {
-		printf("%% invalid priority: %s\n", argv[1]);
+	val = strtonum(argv[1], 0, 0xff, &errmsg);
+	if (errmsg) {
+		printf("%% invalid priority %s: %s\n", argv[1], errmsg);
 		return (0);
         }
 

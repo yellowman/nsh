@@ -40,7 +40,8 @@
 int
 intcarp(char *ifname, int ifs, int argc, char **argv)
 {
-	char *name, *descr, *endptr;
+	char *name, *descr;
+	const char *errmsg = NULL;
 	struct ifreq ifr;
 	struct carpreq creq;
 	int type, set;
@@ -89,11 +90,9 @@ intcarp(char *ifname, int ifs, int argc, char **argv)
 
 	if (set) {
 		errno = 0;
-		val = strtoul(argv[0], &endptr, 0);
-		if (argv[0][0] == '\0' || endptr[0] != '\0' ||
-		    (errno == ERANGE && val == ULONG_MAX) ||
-		    val > INT_MAX) {
-			printf("%% %s value out of range\n", name);
+		val = strtonum(argv[0], 0, INT_MAX, &errmsg);
+		if (errmsg) {
+			printf("%% %s value out of range: %s\n", name, errmsg);
 			return(0);
 		}
 	}

@@ -1,4 +1,4 @@
-/* $nsh: if.c,v 1.19 2004/12/31 19:09:13 chris Exp $ */
+/* $nsh: if.c,v 1.20 2005/06/12 07:47:58 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -658,7 +658,7 @@ intmtu(char *ifname, int ifs, int argc, char **argv)
 {
 	struct ifreq ifr;
 	int set;
-	char *ep;
+	const char *errmsg = NULL;
 
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -677,10 +677,10 @@ intmtu(char *ifname, int ifs, int argc, char **argv)
 	}
 
 	if (set) {
-		ifr.ifr_mtu = strtoul(argv[0], &ep, 10);
-		if (!ep || *ep) {
-			printf("%% Invalid MTU\n");
-			 return(0);
+		ifr.ifr_mtu = strtonum(argv[0], 0, ETHERMTU_JUMBO, &errmsg);
+		if (errmsg) {
+			printf("%% Invalid MTU %s: %s\n", argv[0], errmsg);
+			return(0);
 		}
 	} else
 		ifr.ifr_mtu = default_mtu(ifname);
@@ -697,7 +697,7 @@ intmetric(char *ifname, int ifs, int argc, char **argv)
 {
 	struct ifreq ifr;
 	int set;
-	char *ep = NULL;
+	const char *errmsg = NULL;
 
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -716,12 +716,12 @@ intmetric(char *ifname, int ifs, int argc, char **argv)
 	}
 
 	if (set)
-		ifr.ifr_metric = strtoul(argv[0], &ep, 10);
+		ifr.ifr_metric = strtonum(argv[0], 0, ULONG_MAX, &errmsg);
 	else
 		ifr.ifr_metric = 0;
 
-	if (!ep || *ep) {
-		printf("%% Invalid metric\n");
+	if (errmsg) {
+		printf("%% Invalid metric %s: %s\n", argv[0], errmsg);
 		return(0);
 	}
 
@@ -735,6 +735,7 @@ intmetric(char *ifname, int ifs, int argc, char **argv)
 int
 intvlan(char *ifname, int ifs, int argc, char **argv)
 {
+	const char *errmsg = NULL;
 	struct ifreq ifr;
 	struct vlanreq vreq;
 	int set;
@@ -776,7 +777,11 @@ intvlan(char *ifname, int ifs, int argc, char **argv)
 			return(0);
 		}
 		strlcpy(vreq.vlr_parent, argv[1], sizeof(vreq.vlr_parent));
-		vreq.vlr_tag = atoi(argv[0]);
+		vreq.vlr_tag = strtonum(argv[0], 1, 4096, &errmsg);
+		if (errmsg) {
+			printf("%% Invalid vlan tag %s: %s", argv[0], errmsg);
+			return(0);
+		}
 		if (vreq.vlr_tag != EVL_VLANOFTAG(vreq.vlr_tag)) {
 			printf("%% Invalid vlan tag %s\n", argv[0]);
 			return(0);
@@ -854,6 +859,7 @@ intflags(char *ifname, int ifs, int argc, char **argv)
 int
 intlink(char *ifname, int ifs, int argc, char **argv)
 {
+	const char *errmsg = NULL;
 	int set, i, flags, value;
 
 	if (NO_ARG(argv[0])) {
@@ -883,13 +889,12 @@ intlink(char *ifname, int ifs, int argc, char **argv)
 	for (i = 0; i < argc; i++) {
 		int a;
 
-		a = strlen(argv[i]);
-		if (a > 1 || a != strspn(argv[i], "012")) {
-			printf("%% Invalid argument: %s\n", argv[i]);
+		a = strtonum(argv[i], 0, 2, &errmsg);
+		if (errmsg) {
+			printf("%% Invalid link flag %s: %s\n", argv[i],
+			    errmsg);
 			return(0);
 		}
-
-		a = atoi(argv[i]);
 		switch(a) {
 		case 0:
 			value = IFF_LINK0;
@@ -959,6 +964,7 @@ intnwid(char *ifname, int ifs, int argc, char **argv)
 int
 intpowersave(char *ifname, int ifs, int argc, char **argv)
 {
+	const char *errmsg = NULL;
 	struct ieee80211_power power;
 	int  set;
 
@@ -986,7 +992,11 @@ intpowersave(char *ifname, int ifs, int argc, char **argv)
 	}
 
 	if (argc == 1)
-		power.i_maxsleep = atoi(argv[0]);
+		power.i_maxsleep = strtonum(argv[0], 0, 1000, &errmsg);
+		if (errmsg) {
+			printf("%% Power save invalid %s: %s", argv[0], errmsg);
+			return(0);
+		}
 	else
 		power.i_maxsleep = DEFAULT_POWERSAVE;
 	power.i_enabled = set;
