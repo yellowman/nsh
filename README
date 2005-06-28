@@ -1,9 +1,10 @@
-nsh//network config shell//Chris Cappuccio <chris@dqc.org> version 20040324
-$nsh: README,v 1.17 2004/03/24 09:07:15 chris Exp $
+nsh//network config shell//Chris Cappuccio <chris@dqc.org> version 20050628
+$nsh: README,v 1.18 2005/06/28 19:42:32 chris Exp $
 
 A CLI intended for OpenBSD-based routers running little except for sshd,
-targeted towards CompactFlash-based Soekris Net4501 and similar embedded
-units.  The idea is to allow simple, quick management of a router *without*
+targeted towards flash-based systems.
+
+The idea is to allow simple, quick management of a router *without*
 requiring the user to be familiar with ifconfig, route, netstat, pfctl,
 and the various configuration files in /etc which are otherwise required to
 manage this type of router (In fact, we eliminate the use of those
@@ -33,31 +34,11 @@ nsh handles the following functions:
    * Jose Nazario <jose@monkey.org> contributed command functions from the
      OpenSoekris project for reboot, shutdown, writing the config out, 
      and some fixes to the config generator. 
+   * Christian Gut contributed password save functions.
 
 >> See TODO for details on implementation status and future ideas.
 
 >> Why a Cisco-like interface? Why bother to use OpenBSD for routers?
-   Avi Freedman told me that PC based routers are horrible!
-
-CPU fans fail, and take down CPU chips with them.  Power supplies fail,
-and they can take a motherboard down for the count! Each new PC motherboard
-seems to have PCI slots numbered in a different order, sometimes in no
-logical order, making it hard to tell what port is what.  Hard disks fail,
-not a good thing for infrastructure equipment.
-
-Soekris and other embedded hardware manufacturers have solved the hardware
-problems.  Zebra almost solves the software problems.  However, Zebra does
-not handle the many features of OpenBSD beyond being able to add routes and
-configure IP addresses on an interface.  (Likewise, NSH does not facilitate
-routing protocols).  As of version 3.2, OpenBSD is not (yet) the speed
-champion for packet forwarding on x86 hardware (see Xorp.org and the Click
-Modular Router if you need high speed packet forwarding).  However, many of
-its specialized features are well suited for edge routers, where people often
-will have connections ranging from 256Kbps (or lower) to 45Mbps.  At
-these speeds, with a moderate packet-per-second count, OpenBSD excels (and,
-that is with relatively low-end x86 hardware....a system with a modern
-chipset and sub-1GHz processor can push several hundred Mbps, and
-hopefully a lot more as the kernel is optimized for this purpose).
 
 At the edge, I expect that people will find OpenBSD to be very useful,
 especially in conjunction with software like NSH.  OpenBSD is an excellent
@@ -77,22 +58,11 @@ the consortium's reference standards.  Likewise, OpenBSD's OpenSSH comes on
 Cisco routers, HP switches, MacOS X, IBM's AIX, and Sun Solaris, not to
 mention just about every free OS out there!  OpenBSD was the first free OS to
 include full source code for a cryptographic hardware accelerator driver and
-the first to fully implement it with IPsec.  Today it is still one of the few
-stable, free solutions to this end.
+the first to fully implement it with IPsec.
 
-In my job I get to manage routers from a variety of manufacturers.  Also, I've
-been using terminal servers for as long as I've used a modem.  On top of all
-this, I roll out OpenBSD-based routers with a variety of hardware.  In my own
-mind, I'm qualified to discriminate between a good router CLI and a bad one.
-
-The worst interfaces I've ever used are a tie between Allied Telesyn
-and Netro's Airstar.  The best that I've used is the Cisco CLI (although
-I am also fond of the old DEC teriminal servers and Merit's Hermes).
-Everything else is somewhere in-between.  I like interfaces that are clean
-and simple, ones that work as expected.  I know how to use OpenBSD's userland
-to configure the kernel, and no matter how long I use it, I still find it is
-easier to create problems with than on a Cisco.
-
+I like interfaces that are cleanand simple, ones that work as expected.  I know
+how to use OpenBSD's userland to configure the kernel, and no matter how long
+I use it, I still find it is easier to create problems with than on a Cisco.
 A Cisco gives me the minimal information that is necessary, unless I ask for
 more.  It hides implementation details.  There are lots of reasons why 
 this is bad.  Everyone should learn to use the full suite of network tools
@@ -104,7 +74,7 @@ minimalist interface.  It is easier to show someone the whole router
 configuration when it is all condensed into a uniform listing.  It
 is easier to manage that listing if I want to host it on a central server.
 (Of course, not in all cases is the Cisco-style faster for me, I hate
-Cisco access-lists, pf.conf and nat.conf are much nicer to work with.)
+Cisco access-lists, pf.conf and bgpd.conf are clear winners)
 
 Last, but not least, people tend to find the userland tools confusing.
 People who do not use OpenBSD in an administrative capacity (professional
@@ -113,7 +83,6 @@ Anyone who deploys routers based on Unix-like software in an organization
 where most networking folks are trained with Cisco routers knows about
 the resistance and training hassles there.
 
-A lot of people have been using OpenBSD (and Linux, FreeBSD, NetBSD)
-for routing, NAT and IPsec at the edge.  I hope that NSH can help to bring
-this to a wider audience.
-
+A lot of people have been using OpenBSD at the edge for functionality and
+security capabilities beyond those found in typical routers and firewalls.
+I hope NSH can help more people use it.
