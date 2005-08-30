@@ -1,4 +1,4 @@
-/* $nsh: conf.c,v 1.23 2005/08/30 01:24:22 chris Exp $ */
+/* $nsh: conf.c,v 1.24 2005/08/30 02:59:36 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -51,9 +51,17 @@
 #include "externs.h"
 #include "bridge.h"
 
+#define IPSIZ  256	/*
+			 * max theoretical size of ipv4 or ipv6
+			 * text representation
+			 */
+#define TMPSIZ 1024	/* size of temp strings */
+
 char *routename_sa(struct sockaddr *);
 void conf_print_rtm(FILE *, struct rt_msghdr *, char *, int);
-int print_ifaddrs(FILE *, char *, int);
+int conf_ifaddrs(FILE *, char *, int);
+void conf_brcfg(FILE *, int, struct if_nameindex *, char *);
+void conf_ifmetrics(FILE *, int, struct if_data, char *);
 
 static const struct {
 	char *name;
@@ -72,20 +80,18 @@ static const struct {
 int
 conf(FILE *output)
 {
-	struct if_nameindex *ifn_list, *ifnp, *br_ifnp;
+	struct if_nameindex *ifn_list, *ifnp;
 	struct ifreq ifr;
 	struct if_data if_data;
 	struct vlanreq vreq;
 
 	FILE *pfconf, *dhcpif;
 	short br;
-	int ifs, flags, ippntd, tmp;
-	long l_tmp;
+	int ifs, flags, ippntd;
 
 	char cpass[_PASSWORD_LEN+1];
 	char hostbuf[MAXHOSTNAMELEN];
-
-	char tmp_str[4096], tmp_str2[1024];	/* stack abuse */
+	char tmp_str[TMPSIZ];
 
 	/* dhcp client stuff */
 #define LEASEPREFIX	"/var/db/dhclient.leases."
@@ -101,7 +107,6 @@ conf(FILE *output)
 		return(1);
 	}
 
-	/* ready? begin. print the hostname ... */
 	fprintf(output, "!\n");
 	gethostname (hostbuf, sizeof(hostbuf));
 	fprintf(output, "hostname %s\n", hostbuf);
@@ -165,101 +170,17 @@ conf(FILE *output)
 			fclose(dhcpif);
 			ippntd = 1;
 		} else {
-			ippntd = print_ifaddrs(output, ifnp->if_name, flags);
-		}
-
-		if (!br) { /* no shirt, no shoes, no problem */
-
-			if (phys_status(ifs, ifnp->if_name, tmp_str, tmp_str2,
-			    sizeof(tmp_str), sizeof(tmp_str2)) > 0)
-			/* future os may use this for more than tunnel? */
-			fprintf(output, " tunnel %s %s\n", tmp_str, tmp_str2);
-
-			conf_media_status(output, ifs, ifnp->if_name);
-
-			/*
-			 * print interface mtu, metric
-			 *
-			 * ignore interfaces named "pfsync" since their mtu
-			 * is dynamic and controlled by the kernel
-			 */
-			if(!CMP_ARG(ifnp->if_name, "pfsync") &&
-			    if_mtu != default_mtu(ifnp->if_name))
-				fprintf(output, " mtu %li\n", if_mtu);
-			if(if_metric)
-				fprintf(output, " metric %li\n", if_metric);
-
-			if (get_nwinfo(ifnp->if_name, tmp_str, sizeof(tmp_str),
-			    NWID) != NULL) {
-				fprintf(output, " nwid %s\n", tmp_str);
-				if (get_nwinfo(ifnp->if_name, tmp_str,
-				    sizeof(tmp_str), NWKEY) != NULL)
-					fprintf(output, " nwkey %s\n", tmp_str);
-				if ((tmp = get_nwpowersave(ifs, ifnp->if_name))
-				    != NULL)
-				{
-					if (tmp != DEFAULT_POWERSAVE)
-						fprintf(output,
-						    " powersave %i\n", tmp);
-				}
-			}
+			ippntd = conf_ifaddrs(output, ifnp->if_name, flags);
 		}
 
 		if (br) {
-			if ((l_tmp = bridge_cfg(ifs, ifnp->if_name, PRIORITY))
-			    != -1 && l_tmp != DEFAULT_PRIORITY)
-				fprintf(output, " priority %lu\n", l_tmp);
-			if ((l_tmp = bridge_cfg(ifs, ifnp->if_name, HELLOTIME))
-			    != -1 && l_tmp != DEFAULT_HELLOTIME)
-				fprintf(output, " hellotime %lu\n", l_tmp);
-			if ((l_tmp = bridge_cfg(ifs, ifnp->if_name, FWDDELAY))
-			    != -1 && l_tmp != DEFAULT_FWDDELAY)
-				fprintf(output, " fwddelay %lu\n", l_tmp);
-			if ((l_tmp = bridge_cfg(ifs, ifnp->if_name, MAXAGE))
-			    != -1 && l_tmp != DEFAULT_MAXAGE)
-				fprintf(output, " maxage %lu\n", l_tmp);
-			if ((l_tmp = bridge_cfg(ifs, ifnp->if_name, MAXADDR))
-			    != -1 && l_tmp != DEFAULT_MAXADDR)
-				fprintf(output, " maxaddr %lu\n", l_tmp);
-			if ((l_tmp = bridge_cfg(ifs, ifnp->if_name, TIMEOUT))
-			    != -1 && l_tmp != DEFAULT_TIMEOUT)
-				fprintf(output, " timeout %lu\n", l_tmp);
-
-			if (bridge_list(ifs, ifnp->if_name, NULL, tmp_str,
-			    sizeof(tmp_str), MEMBER))
-				fprintf(output, " member %s\n", tmp_str);
-			if (bridge_list(ifs, ifnp->if_name, NULL, tmp_str,
-			    sizeof(tmp_str), STP))
-				fprintf(output, " stp %s\n", tmp_str);
-			if (bridge_list(ifs, ifnp->if_name, NULL, tmp_str,
-			    sizeof(tmp_str), SPAN))
-				fprintf(output, " span %s\n", tmp_str);
-			if (bridge_list(ifs, ifnp->if_name, NULL, tmp_str,
-			    sizeof(tmp_str), NOLEARNING))
-				fprintf(output, " no learning %s\n", tmp_str);
-			if (bridge_list(ifs, ifnp->if_name, NULL, tmp_str,
-			    sizeof(tmp_str), NODISCOVER))
-				fprintf(output, " no discover %s\n", tmp_str);
-			if (bridge_list(ifs, ifnp->if_name, NULL, tmp_str,
-			    sizeof(tmp_str), BLOCKNONIP))
-				fprintf(output, " blocknonip %s\n", tmp_str);
-			if (bridge_list(ifs, ifnp->if_name, " ", tmp_str,
-			    sizeof(tmp_str), CONF_IFPRIORITY))
-				fprintf(output, "%s", tmp_str);
-			if (bridge_list(ifs, ifnp->if_name, " ", tmp_str,
-			    sizeof(tmp_str), CONF_IFCOST))
-				fprintf(output, "%s", tmp_str);
-			bridge_confaddrs(ifs, ifnp->if_name, " static ",
-			    output);
-			for (br_ifnp = ifn_list; br_ifnp->if_name != NULL;
-			    br_ifnp++)
-				/* try all interface names for member rules */
-				bridge_rules(ifs, ifnp->if_name,
-				    br_ifnp->if_name, " rule ", output);
+			conf_brcfg(output, ifs, ifn_list, ifnp->if_name);
+		} else {
+			conf_media_status(output, ifs, ifnp->if_name);
+			conf_ifmetrics(output, ifs, if_data, ifnp->if_name);
+			conf_pfsync(output, ifs, ifnp->if_name);
+			conf_carp(output, ifs, ifnp->if_name);
 		}
-
-		conf_pfsync(output, ifs, ifnp->if_name);
-		conf_carp(output, ifs, ifnp->if_name);
 
 		/*
 		 * print various flags
@@ -335,7 +256,93 @@ conf(FILE *output)
 	return(0);
 }
 
-int print_ifaddrs(FILE *output, char *ifname, int flags)
+void conf_ifmetrics(FILE *output, int ifs, struct if_data if_data,
+    char *ifname)
+{
+	char tmpa[IPSIZ], tmpb[IPSIZ], tmpc[TMPSIZ];
+	int tmp;
+
+	/*
+	 * Various metrics valid for non-bridge interfaces
+	 */
+	if (phys_status(ifs, ifname, tmpa, tmpb, IPSIZ, IPSIZ) > 0)
+		/* future os may use this for more than tunnel? */
+		fprintf(output, " tunnel %s %s\n", tmpa, tmpb);
+
+	/*
+	 * print interface mtu, metric
+	 *
+	 * ignore interfaces named "pfsync" since their mtu
+	 * is dynamic and controlled by the kernel
+	 */
+	if(!CMP_ARG(ifname, "pfsync") && if_mtu != default_mtu(ifname))
+		fprintf(output, " mtu %li\n", if_mtu);
+	if(if_metric)
+		fprintf(output, " metric %li\n", if_metric);
+
+	if (get_nwinfo(ifname, tmpc, TMPSIZ, NWID) != NULL) {
+		fprintf(output, " nwid %s\n", tmpc);
+		if (get_nwinfo(ifname, tmpc, TMPSIZ, NWKEY) != NULL)
+			fprintf(output, " nwkey %s\n", tmpc);
+		if ((tmp = get_nwpowersave(ifs, ifname)) != NULL ) {
+			if (tmp != DEFAULT_POWERSAVE)
+				fprintf(output, " powersave %i\n", tmp);
+		}
+	}
+}
+
+void conf_brcfg(FILE *output, int ifs, struct if_nameindex *ifn_list,
+    char *ifname)
+{
+	struct if_nameindex *br_ifnp;
+
+	char tmp[TMPSIZ];
+	long l_tmp;
+
+	if ((l_tmp = bridge_cfg(ifs, ifname, PRIORITY))
+	    != -1 && l_tmp != DEFAULT_PRIORITY)
+		fprintf(output, " priority %lu\n", l_tmp);
+	if ((l_tmp = bridge_cfg(ifs, ifname, HELLOTIME))
+	    != -1 && l_tmp != DEFAULT_HELLOTIME)
+		fprintf(output, " hellotime %lu\n", l_tmp);
+	if ((l_tmp = bridge_cfg(ifs, ifname, FWDDELAY))
+	    != -1 && l_tmp != DEFAULT_FWDDELAY)
+		fprintf(output, " fwddelay %lu\n", l_tmp);
+	if ((l_tmp = bridge_cfg(ifs, ifname, MAXAGE))
+	    != -1 && l_tmp != DEFAULT_MAXAGE)
+		fprintf(output, " maxage %lu\n", l_tmp);
+	if ((l_tmp = bridge_cfg(ifs, ifname, MAXADDR))
+	    != -1 && l_tmp != DEFAULT_MAXADDR)
+		fprintf(output, " maxaddr %lu\n", l_tmp);
+	if ((l_tmp = bridge_cfg(ifs, ifname, TIMEOUT))
+	    != -1 && l_tmp != DEFAULT_TIMEOUT)
+		fprintf(output, " timeout %lu\n", l_tmp);
+
+	if (bridge_list(ifs, ifname, NULL, tmp, TMPSIZ, MEMBER))
+		fprintf(output, " member %s\n", tmp);
+	if (bridge_list(ifs, ifname, NULL, tmp, TMPSIZ, STP))
+		fprintf(output, " stp %s\n", tmp);
+	if (bridge_list(ifs, ifname, NULL, tmp, TMPSIZ, SPAN))
+		fprintf(output, " span %s\n", tmp);
+	if (bridge_list(ifs, ifname, NULL, tmp, TMPSIZ, NOLEARNING))
+		fprintf(output, " no learning %s\n", tmp);
+	if (bridge_list(ifs, ifname, NULL, tmp, TMPSIZ, NODISCOVER))
+		fprintf(output, " no discover %s\n", tmp);
+	if (bridge_list(ifs, ifname, NULL, tmp, TMPSIZ, BLOCKNONIP))
+		fprintf(output, " blocknonip %s\n", tmp);
+	if (bridge_list(ifs, ifname, " ", tmp, TMPSIZ, CONF_IFPRIORITY))
+		fprintf(output, "%s", tmp);
+	if (bridge_list(ifs, ifname, " ", tmp, TMPSIZ, CONF_IFCOST))
+		fprintf(output, "%s", tmp);
+	bridge_confaddrs(ifs, ifname, " static ", output);
+
+	for (br_ifnp = ifn_list; br_ifnp->if_name != NULL; br_ifnp++)
+		/* try all interface names for member rules */
+		bridge_rules(ifs, ifname, br_ifnp->if_name, " rule ",
+		    output);
+}
+
+int conf_ifaddrs(FILE *output, char *ifname, int flags)
 {
 	struct ifaddrs *ifa, *ifap;
 	struct sockaddr_in sin, sin2, sin3;
