@@ -1,5 +1,5 @@
 NSH // Network Shell User's Manual // Chris Cappuccio <chris@nmedia.net>
-$nsh: MANUAL,v 1.18 2005/08/30 01:43:54 chris Exp $
+$nsh: MANUAL,v 1.19 2005/08/30 01:57:54 chris Exp $
 
 Copyright (c) 2003, 2004 Chris Cappuccio
 
@@ -875,6 +875,7 @@ nsh(interface-fxp0)/?
   ?          Options
 
 [no] ip <address>/<bitmaskORnetmask>
+[no] ip dhcp
 ------------------------------------
 
 Set (or remove) the IP address on an interface 
@@ -884,6 +885,27 @@ nsh(interface-fxp0)/ip 192.168.100.1/24
 or
 
 nsh(interface-fxp0)/ip 192.168.100.1/255.255.255.0
+
+or
+
+nsh(interface-fxp0)/ip dhcp
+
+DHCP client notes:
+
+DHCP client mode will assume control of default gateway route.  There is
+currently no way to control default gateway if DHCP client is used on
+multiple interfaces.  The first DHCP client interface  to succeed in obtaining
+a lease will set the default gateway.  This behavior will be manually
+configurable in a future release of NSH.
+
+If /var/db is kept across reboots, (such as in a configuration where NSH is
+used on a hard disk) /var/db/dhclient.leasees.$if files may exist where not
+desired.  The presence of /var/db/dhclient.leases.$if (where $if is the
+interface name) will trigger DHCP mode to be turned on in saved NSH
+configurations (write) and in displayed NSH configurations
+(show running-config).  If you are using NSH on a system where /var is
+kept persistently, look at the running configuration and execute 'no ip dhcp'
+for insterfaces on which you do not intend to use DHCP.
 
 [no] alias <address>/<bitmaskORnetmask>
 ---------------------------------------
