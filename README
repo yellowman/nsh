@@ -1,5 +1,5 @@
-nsh//network config shell//Chris Cappuccio <chris@dqc.org> version 20050628
-$nsh: README,v 1.18 2005/06/28 19:42:32 chris Exp $
+nsh//network config shell//Chris Cappuccio <chris@dqc.org> version 20050829
+$nsh: README,v 1.19 2005/08/30 03:06:19 chris Exp $
 
 A CLI intended for OpenBSD-based routers running little except for sshd,
 targeted towards flash-based systems.
@@ -60,7 +60,7 @@ mention just about every free OS out there!  OpenBSD was the first free OS to
 include full source code for a cryptographic hardware accelerator driver and
 the first to fully implement it with IPsec.
 
-I like interfaces that are cleanand simple, ones that work as expected.  I know
+I like interfaces that are clean, simple, and work as expected.  I know
 how to use OpenBSD's userland to configure the kernel, and no matter how long
 I use it, I still find it is easier to create problems with than on a Cisco.
 A Cisco gives me the minimal information that is necessary, unless I ask for
