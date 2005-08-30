@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.24 2005/05/30 23:26:06 chris Exp $ */
+/* $nsh: externs.h,v 1.25 2005/08/30 01:43:54 chris Exp $ */
 /*
  * nsh externs and more
  */
@@ -62,6 +62,7 @@ extern char metricnames[];
 #define SAVESCRIPT	"/usr/local/bin/save.sh"
 void command(int);
 int cmdrc(char rcname[FILENAME_MAX]);
+int cmdarg(char *, char *);
 int load_nlist(void);
 char *iprompt(void);
 char *cprompt(void);
@@ -118,6 +119,8 @@ int ip_route(ip_t *, ip_t *, u_short);
 #endif
 
 /* if.c */
+#define DHCLIENT	"/sbin/dhclient"
+#define DHKILLSCRIPT	"/usr/local/bin/dhclient-kill.sh"
 #define IFDATA_MTU 1		/* request for if_data.ifi_mtu */
 #define IFDATA_BAUDRATE 2	/* request for if_data.ifi_baudrate */
 #define MBPS(bps) (bps / 1000 / 1000)

@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.39 2005/06/12 07:20:41 chris Exp $ */
+/* $nsh: commands.c,v 1.40 2005/08/30 01:43:54 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -178,7 +178,6 @@ static void	makeargv(int);
 static int	hostname(int, char **);
 static int	help(int, char**);
 static int	shell(int, char*[]);
-static int	cmdarg(char *, char *);
 static int	pr_rt_stats(void);
 static void	p_argv(int, char **);
 static int	notvalid(void);

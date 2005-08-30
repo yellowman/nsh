@@ -1,4 +1,4 @@
-/* $nsh: if.c,v 1.20 2005/06/12 07:47:58 chris Exp $ */
+/* $nsh: if.c,v 1.21 2005/08/30 01:43:54 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -590,6 +590,14 @@ intip(char *ifname, int ifs, int argc, char **argv)
 		    msg ? "[" : "", msg ? msg : "", msg ? "]" : "");
 		printf("%% no %s <address>[/bits]\n", cmdname);
 		printf("%% no %s <address>[/netmask]\n", cmdname);
+		return(0);
+	}
+
+	if (CMP_ARG(argv[0], "d")) {
+		if (set)
+			cmdarg(DHCLIENT, ifname);
+		else
+			cmdarg(DHKILLSCRIPT, ifname);
 		return(0);
 	}
 
