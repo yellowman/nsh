@@ -1,4 +1,4 @@
-/* $nsh: main.c,v 1.22 2005/06/28 19:42:32 chris Exp $ */
+/* $nsh: main.c,v 1.23 2005/08/30 00:07:41 chris Exp $ */
 /*
  * Copyright (c) 2002, 2003
  *      Chris Cappuccio.  All rights reserved.
@@ -27,6 +27,7 @@
 
 #include <stdio.h>
 #include <unistd.h>
+#include <stdlib.h>
 #include <limits.h>
 #include <string.h>
 #include <errno.h>
@@ -94,6 +95,11 @@ main(argc, argv)
 		 * Run initialization and then exit.
 		 */
 		rmtemp();
+		priv = 1;	/*
+				 * Necessary today for 'enable secret' to
+				 * work in -i mode, as CLI code is reworked
+				 * this will disappear
+				 */
 		cmdrc(rc);
 		exit(0);
 	}
