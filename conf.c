@@ -1,4 +1,4 @@
-/* $nsh: conf.c,v 1.22 2004/03/24 09:01:45 chris Exp $ */
+/* $nsh: conf.c,v 1.23 2005/08/30 01:24:22 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -53,13 +53,14 @@
 
 char *routename_sa(struct sockaddr *);
 void conf_print_rtm(FILE *, struct rt_msghdr *, char *, int);
+int print_ifaddrs(FILE *, char *, int);
 
 static const struct {
 	char *name;
 	int mtu;
 } defmtus[] = {
-	/* Current as of 3/20/04 */
-	{ "gre",	1450 },
+	/* Current as of 8/20/05 */
+	{ "gre",	1476 },
 	{ "gif",	1280 },
 	{ "tun",	3000 },
 	{ "sl",		296 },
@@ -71,22 +72,25 @@ static const struct {
 int
 conf(FILE *output)
 {
-	struct ifaddrs *ifap, *ifa;
 	struct if_nameindex *ifn_list, *ifnp, *br_ifnp;
 	struct ifreq ifr;
 	struct if_data if_data;
-	struct sockaddr_in sin, sin2, sin3;
 	struct vlanreq vreq;
 
-	FILE *pfconf;
-	short ippntd, br;
-	int ifs, flags, tmp;
+	FILE *pfconf, *dhcpif;
+	short br;
+	int ifs, flags, ippntd, tmp;
 	long l_tmp;
 
 	char cpass[_PASSWORD_LEN+1];
-	char *iptype;
 	char hostbuf[MAXHOSTNAMELEN];
-	char tmp_str[4096], tmp_str2[1024];
+
+	char tmp_str[4096], tmp_str2[1024];	/* stack abuse */
+
+	/* dhcp client stuff */
+#define LEASEPREFIX	"/var/db/dhclient.leases."
+#define LEASENAMELEN	IFNAMSIZ+sizeof(LEASEPREFIX)
+	char leasefile[LEASENAMELEN];
 
 	if ((ifn_list = if_nameindex()) == NULL) {
 		printf("%% conf: if_nameindex failed\n");
@@ -154,81 +158,15 @@ conf(FILE *output)
 				    vreq.vlr_tag, vreq.vlr_parent);
 		}
 
-		/*
-		 * Print interface IP address, and broadcast or
-		 * destination if available.  But, don't print broadcast
-		 * if it is what we would expect given the ip and netmask!
-		 */
-		if (getifaddrs(&ifap) != 0) {
-			printf("%% conf: getifaddrs failed: %s\n",
-			    strerror(errno));
-			return(1);
+		snprintf(leasefile, sizeof(leasefile), "%s%s",
+		    LEASEPREFIX, ifnp->if_name);
+		if ((dhcpif = fopen(leasefile, "r"))) {
+			fprintf(output, " ip dhcp\n");
+			fclose(dhcpif);
+			ippntd = 1;
+		} else {
+			ippntd = print_ifaddrs(output, ifnp->if_name, flags);
 		}
-
-		/*
-		 * This short controls whether or not we print 'ip ....'
-		 * or 'alias ....'
-		 */
-		ippntd = 0;
-
-		/*
-		 * Cycle through getifaddrs for interfaces with our
-		 * desired name that sport AF_INET, print the IP and
-		 * related information.
-		 */
-		for (ifa = ifap; ifa; ifa = ifa->ifa_next) {
-			if (strncmp(ifnp->if_name, ifa->ifa_name, IFNAMSIZ))
-				continue;
-
-			if (ifa->ifa_addr->sa_family != AF_INET)
-				continue;
-		
-			sin.sin_addr = ((struct sockaddr_in *)ifa->ifa_addr)->
-			    sin_addr;
-
-			if (sin.sin_addr.s_addr == 0)
-				continue;
- 
-			sin2.sin_addr =
-			    ((struct sockaddr_in *)ifa->ifa_netmask)->sin_addr;
-
-			if (ippntd) {
-				iptype = "alias";
-			} else {
-				iptype = "ip";
-				ippntd = 1;
-			}
-
-			fprintf(output, " %s %s", iptype,
-				    (char *)netname(sin.sin_addr.s_addr,
-				    sin2.sin_addr.s_addr));
-
-			if (flags & IFF_POINTOPOINT) {
-				sin3.sin_addr =
-				    ((struct sockaddr_in *)
-				    ifa->ifa_dstaddr)->sin_addr;
-				fprintf(output, " %s",
-				    inet_ntoa(sin3.sin_addr));
-			} else if (flags & IFF_BROADCAST) {
-				sin3.sin_addr =
-				    ((struct sockaddr_in *)ifa->ifa_broadaddr)->
-				    sin_addr;
-				/*
-				 * no reason to save the broadcast addr
-				 * if it is standard (this should always 
-				 * be true unless someone has messed up their
-				 * network or they are playing around...)
-				 */
-				if (ntohl(sin3.sin_addr.s_addr) !=
-				    in4_brdaddr(sin.sin_addr.s_addr,
-				    sin2.sin_addr.s_addr))
-					fprintf(output, " %s",
-					    inet_ntoa(sin3.sin_addr));
-			}
-			fprintf(output, "\n");
-		}
-
-		freeifaddrs(ifap);
 
 		if (!br) { /* no shirt, no shoes, no problem */
 
@@ -328,7 +266,7 @@ conf(FILE *output)
 		 */
 		if (flags & IFF_DEBUG)
 			fprintf(output, " debug\n");
-		if(flags & (IFF_LINK0|IFF_LINK1|IFF_LINK2)) {
+		if (flags & (IFF_LINK0|IFF_LINK1|IFF_LINK2)) {
 			fprintf(output, " link ");
 			if(flags & IFF_LINK0)
 				fprintf(output, "0 ");
@@ -338,16 +276,16 @@ conf(FILE *output)
 				fprintf(output, "2");
 			fprintf(output, "\n");
 		}
-		if(flags & IFF_NOARP)
+		if (flags & IFF_NOARP)
 			fprintf(output, " no arp\n");
 		/*
 		 * ip X/Y turns the interface up (just like 'no shutdown')
 		 * ...but if we never had an ip address set and the interface
 		 * is up, we need to save this state explicitly.
 		 */
-		if(!ippntd && (flags & IFF_UP))
+		if (!ippntd && (flags & IFF_UP))
 			fprintf(output, " no shutdown\n");
-		else if(!(flags & IFF_UP))
+		else if (!(flags & IFF_UP))
 			fprintf(output, " shutdown\n");
 
         }
@@ -395,6 +333,88 @@ conf(FILE *output)
 		printf("%% PFCONF_TEMP: %s\n", strerror(errno));
 
 	return(0);
+}
+
+int print_ifaddrs(FILE *output, char *ifname, int flags)
+{
+	struct ifaddrs *ifa, *ifap;
+	struct sockaddr_in sin, sin2, sin3;
+	char *iptype;
+	int ippntd;
+
+	/*
+	 * Print interface IP address, and broadcast or
+	 * destination if available.  But, don't print broadcast
+	 * if it is what we would expect given the ip and netmask!
+	 */
+	if (getifaddrs(&ifap) != 0) {
+		printf("%% conf: getifaddrs failed: %s\n",
+		strerror(errno));
+		return(-1);
+	}
+
+	/*
+	 * This short controls whether or not we print 'ip ....'
+	 * or 'alias ....'
+	 */
+	ippntd = 0;
+
+	/*
+	 * Cycle through getifaddrs for interfaces with our
+	 * desired name that sport AF_INET, print the IP and
+	 * related information.
+	 */
+	for (ifa = ifap; ifa; ifa = ifa->ifa_next) {
+		if (strncmp(ifname, ifa->ifa_name, IFNAMSIZ))
+			continue;
+
+		if (ifa->ifa_addr->sa_family != AF_INET)
+			continue;
+                
+		sin.sin_addr = ((struct sockaddr_in *)ifa->ifa_addr)->sin_addr;
+
+		if (sin.sin_addr.s_addr == 0)
+			continue;
+ 
+		sin2.sin_addr =
+		    ((struct sockaddr_in *)ifa->ifa_netmask)->sin_addr;
+
+		if (ippntd) {
+			iptype = "alias";
+		} else {
+			iptype = "ip";
+			ippntd = 1;
+		}
+
+		fprintf(output, " %s %s", iptype,
+		    (char *)netname(sin.sin_addr.s_addr,
+		    sin2.sin_addr.s_addr));
+
+		if (flags & IFF_POINTOPOINT) {
+			sin3.sin_addr =
+			    ((struct sockaddr_in *)ifa->ifa_dstaddr)->sin_addr;
+			fprintf(output, " %s", inet_ntoa(sin3.sin_addr));
+		} else if (flags & IFF_BROADCAST) {
+			sin3.sin_addr =
+			    ((struct sockaddr_in *)ifa->ifa_broadaddr)->
+			    sin_addr;
+			/*
+			 * no reason to save the broadcast addr
+			 * if it is standard (this should always 
+			 * be true unless someone has messed up their
+			 * network or they are playing around...)
+			 */
+			if (ntohl(sin3.sin_addr.s_addr) !=
+			    in4_brdaddr(sin.sin_addr.s_addr,
+			    sin2.sin_addr.s_addr))
+				fprintf(output, " %s",
+				    inet_ntoa(sin3.sin_addr));
+		}
+		fprintf(output, "\n");
+	}
+	freeifaddrs(ifap);
+
+	return ippntd;
 }
 
 int
