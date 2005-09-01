@@ -1,4 +1,4 @@
-/* $nsh: media.c,v 1.10 2005/06/12 07:47:58 chris Exp $ */
+/* $nsh: media.c,v 1.11 2005/09/01 04:31:36 chris Exp $ */
 /*
  * From: $OpenBSD: /usr/src/sbin/ifconfig/ifconfig.c,v 1.64 2002/05/22
  * 08:21:02 deraadt Exp $
@@ -106,7 +106,12 @@ intmedia(char *ifname, int ifs, int argc, char **argv)
 	media_current = init_current_media(ifs, ifname);
 
 	if (media_current == -1) {
-		printf("%% Failed to initialize media.  This device may not support media commands.\n");
+		if (errno == EINVAL)
+			printf("%% This device does not support "
+			    "media commands.\n");
+		else
+			printf("%% Failed to initialize media: %s\n",
+			    strerror(errno));
 		return(0);
 	}
 
@@ -163,7 +168,12 @@ intmediaopt(char *ifname, int ifs, int argc, char **argv)
         media_current = init_current_media(ifs, ifname);
 
 	if (media_current == -1) {
-		printf("%% Failed to initialize media.  This device may not support media commands.\n");
+		if (errno == EINVAL)
+			printf("%% This device does not support "
+			    "media commands.\n");
+		else
+			printf("%% Failed to initialize media: %s\n",
+			    strerror(errno));
 		return(0);
 	}
 
@@ -212,11 +222,8 @@ init_current_media(int s, char *ifname)
 		 * If we get E2BIG, the kernel is telling us
 		 * that there are more, so we can ignore it.
 		 */
-		if (errno != E2BIG) {
-			printf("%% init_current_media: SIOCGIFMEDIA: %s\n",
-			    strerror(errno));
+		if (errno != E2BIG)
 			return(-1);
-		}
 	}
 	media_current = ifmr.ifm_current;
 
