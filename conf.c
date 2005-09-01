@@ -1,6 +1,6 @@
-/* $nsh: conf.c,v 1.24 2005/08/30 02:59:36 chris Exp $ */
+/* $nsh: conf.c,v 1.25 2005/09/01 02:45:12 chris Exp $ */
 /*
- * Copyright (c) 2002
+ * Copyright (c) 2002, 2005
  *      Chris Cappuccio.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -58,10 +58,12 @@
 #define TMPSIZ 1024	/* size of temp strings */
 
 char *routename_sa(struct sockaddr *);
+void conf_interfaces(FILE *);
 void conf_print_rtm(FILE *, struct rt_msghdr *, char *, int);
 int conf_ifaddrs(FILE *, char *, int);
 void conf_brcfg(FILE *, int, struct if_nameindex *, char *);
 void conf_ifmetrics(FILE *, int, struct if_data, char *);
+void conf_pfrules(FILE *);
 
 static const struct {
 	char *name;
@@ -80,34 +82,11 @@ static const struct {
 int
 conf(FILE *output)
 {
-	struct if_nameindex *ifn_list, *ifnp;
-	struct ifreq ifr;
-	struct if_data if_data;
-	struct vlanreq vreq;
-
-	FILE *pfconf, *dhcpif;
-	short br;
-	int ifs, flags, ippntd;
-
 	char cpass[_PASSWORD_LEN+1];
 	char hostbuf[MAXHOSTNAMELEN];
-	char tmp_str[TMPSIZ];
-
-	/* dhcp client stuff */
-#define LEASEPREFIX	"/var/db/dhclient.leases."
-#define LEASENAMELEN	IFNAMSIZ+sizeof(LEASEPREFIX)
-	char leasefile[LEASENAMELEN];
-
-	if ((ifn_list = if_nameindex()) == NULL) {
-		printf("%% conf: if_nameindex failed\n");
-		return(1);
-	}
-	if ((ifs = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-		printf("%% conf socket: %s\n", strerror(errno));
-		return(1);
-	}
 
 	fprintf(output, "!\n");
+
 	gethostname (hostbuf, sizeof(hostbuf));
 	fprintf(output, "hostname %s\n", hostbuf);
 	if(read_pass(cpass, sizeof(cpass)))
@@ -115,6 +94,83 @@ conf(FILE *output)
 	else
 		printf("%% Unable to read run-time crypt repository:"
 		    " %s\n", strerror(errno));
+
+	conf_interfaces(output);
+
+	fprintf(output, "!\n");
+
+	/*
+	 * check out how sysctls are doing these days
+	 *
+	 * Each of these options, like most other things in the config output
+	 * (such as interface flags), must display if the kernel's default
+	 * setting is not currently set.
+	 */
+	conf_ipsysctl(output);
+
+	fprintf(output, "!\n");
+
+	/*
+	 * print static arp and route entries in configuration file format
+	 */
+	conf_routes(output, "arp ", AF_INET, (RTF_LLINFO & RTF_STATIC));
+	conf_routes(output, "route ", AF_INET, RTF_STATIC);
+
+	fprintf(output, "!\n");
+
+	conf_pfrules(output);
+
+	return(0);
+}
+
+void conf_pfrules(FILE *output)
+{
+	FILE *pfconf;
+	char tmp_str[TMPSIZ];
+
+	/*
+	 * print pf rules
+	 */
+	if ((pfconf = fopen(PFCONF_TEMP, "r")) != NULL) {
+		fprintf(output, "pf rules\n");
+		for (;;) {
+			if(fgets(tmp_str, TMPSIZ, pfconf) == NULL)
+				break;
+			if(tmp_str[0] == 0)
+				break;
+			fprintf(output, " %s", tmp_str);
+		}
+		fclose(pfconf);
+		fprintf(output, "!\n");
+		fprintf(output, "pf action\n enable\n reload\n");
+	} else if (verbose)
+		printf("%% PFCONF_TEMP: %s\n", strerror(errno));
+}
+
+void conf_interfaces(FILE *output)
+{
+	FILE *dhcpif;
+	short br;
+	int ifs, flags, ippntd;
+#define LEASEPREFIX     "/var/db/dhclient.leases."
+#define LEASENAMELEN    IFNAMSIZ+sizeof(LEASEPREFIX)
+	char leasefile[LEASENAMELEN];
+
+	struct if_nameindex *ifn_list, *ifnp;
+	struct ifreq ifr;
+	struct if_data if_data;
+	struct vlanreq vreq;
+
+	if ((ifn_list = if_nameindex()) == NULL) {
+		printf("%% conf_interfaces: if_nameindex failed\n");
+		return;
+	}
+
+	if ((ifs = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+		printf("%% conf_interfaces socket: %s\n", strerror(errno));
+		if_freenameindex(ifn_list);
+		return;
+	}
 
 	for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++) {
 		strlcpy(ifr.ifr_name, ifnp->if_name, sizeof(ifr.ifr_name));
@@ -135,10 +191,10 @@ conf(FILE *output)
 		 * Keep in mind that the order in which things are displayed
 		 * here is important.  For instance, we want to setup the
 		 * vlan tag before setting the IP address since the vlan
-		 * interface does not have IFF_BROADCAST set until it
-		 * inherts the parent's flags.  Or, for a bridge,
-		 * we need to setup the members before we setup flags on
-		 * them...You know, uhh...things of that nature..
+		 * must know what parent to inherit the parent interface
+		 * flags from before it is brought up.  Another example of
+		 * this would be that we need to setup the members on a
+		 * bridge before we setup flags on them.
 		 */
 
 		/*
@@ -209,51 +265,9 @@ conf(FILE *output)
 		else if (!(flags & IFF_UP))
 			fprintf(output, " shutdown\n");
 
-        }
+	}
 	close(ifs);
 	if_freenameindex(ifn_list);
-
-	fprintf(output, "!\n");
-
-	/*
-	 * check out how sysctls are doing these days
-	 *
-	 * Each of these options, like most other things in the config output
-	 * (such as interface flags), must display if the kernel's default
-	 * setting is not currently set.
-	 */
-
-	conf_ipsysctl(output);
-
-	fprintf(output, "!\n");
-
-	/*
-	 * print static arp and route entries in configuration file format
-	 */
-	conf_routes(output, "arp ", AF_INET, (RTF_LLINFO & RTF_STATIC));
-	conf_routes(output, "route ", AF_INET, RTF_STATIC);
-
-	fprintf(output, "!\n");
-
-	/*
-	 * print pf rules
-	 */
-	if ((pfconf = fopen(PFCONF_TEMP, "r")) != NULL) {
-		fprintf(output, "pf rules\n");
-		for (;;) {
-			if(fgets(tmp_str, sizeof(tmp_str), pfconf) == NULL)
-				break;
-			if(tmp_str[0] == 0)
-				break;
-			fprintf(output, " %s", tmp_str);
-		}
-		fclose(pfconf);
-		fprintf(output, "!\n");
-		fprintf(output, "pf action\n enable\n reload\n");
-	} else if (verbose)
-		printf("%% PFCONF_TEMP: %s\n", strerror(errno));
-
-	return(0);
 }
 
 void conf_ifmetrics(FILE *output, int ifs, struct if_data if_data,
@@ -275,9 +289,9 @@ void conf_ifmetrics(FILE *output, int ifs, struct if_data if_data,
 	 * ignore interfaces named "pfsync" since their mtu
 	 * is dynamic and controlled by the kernel
 	 */
-	if(!CMP_ARG(ifname, "pfsync") && if_mtu != default_mtu(ifname))
+	if (!CMP_ARG(ifname, "pfsync") && if_mtu != default_mtu(ifname))
 		fprintf(output, " mtu %li\n", if_mtu);
-	if(if_metric)
+	if (if_metric)
 		fprintf(output, " metric %li\n", if_metric);
 
 	if (get_nwinfo(ifname, tmpc, TMPSIZ, NWID) != NULL) {
@@ -296,7 +310,7 @@ void conf_brcfg(FILE *output, int ifs, struct if_nameindex *ifn_list,
 {
 	struct if_nameindex *br_ifnp;
 
-	char tmp[TMPSIZ];
+	char tmp_str[TMPSIZ];
 	long l_tmp;
 
 	if ((l_tmp = bridge_cfg(ifs, ifname, PRIORITY))
@@ -318,22 +332,22 @@ void conf_brcfg(FILE *output, int ifs, struct if_nameindex *ifn_list,
 	    != -1 && l_tmp != DEFAULT_TIMEOUT)
 		fprintf(output, " timeout %lu\n", l_tmp);
 
-	if (bridge_list(ifs, ifname, NULL, tmp, TMPSIZ, MEMBER))
-		fprintf(output, " member %s\n", tmp);
-	if (bridge_list(ifs, ifname, NULL, tmp, TMPSIZ, STP))
-		fprintf(output, " stp %s\n", tmp);
-	if (bridge_list(ifs, ifname, NULL, tmp, TMPSIZ, SPAN))
-		fprintf(output, " span %s\n", tmp);
-	if (bridge_list(ifs, ifname, NULL, tmp, TMPSIZ, NOLEARNING))
-		fprintf(output, " no learning %s\n", tmp);
-	if (bridge_list(ifs, ifname, NULL, tmp, TMPSIZ, NODISCOVER))
-		fprintf(output, " no discover %s\n", tmp);
-	if (bridge_list(ifs, ifname, NULL, tmp, TMPSIZ, BLOCKNONIP))
-		fprintf(output, " blocknonip %s\n", tmp);
-	if (bridge_list(ifs, ifname, " ", tmp, TMPSIZ, CONF_IFPRIORITY))
-		fprintf(output, "%s", tmp);
-	if (bridge_list(ifs, ifname, " ", tmp, TMPSIZ, CONF_IFCOST))
-		fprintf(output, "%s", tmp);
+	if (bridge_list(ifs, ifname, NULL, tmp_str, TMPSIZ, MEMBER))
+		fprintf(output, " member %s\n", tmp_str);
+	if (bridge_list(ifs, ifname, NULL, tmp_str, TMPSIZ, STP))
+		fprintf(output, " stp %s\n", tmp_str);
+	if (bridge_list(ifs, ifname, NULL, tmp_str, TMPSIZ, SPAN))
+		fprintf(output, " span %s\n", tmp_str);
+	if (bridge_list(ifs, ifname, NULL, tmp_str, TMPSIZ, NOLEARNING))
+		fprintf(output, " no learning %s\n", tmp_str);
+	if (bridge_list(ifs, ifname, NULL, tmp_str, TMPSIZ, NODISCOVER))
+		fprintf(output, " no discover %s\n", tmp_str);
+	if (bridge_list(ifs, ifname, NULL, tmp_str, TMPSIZ, BLOCKNONIP))
+		fprintf(output, " blocknonip %s\n", tmp_str);
+	if (bridge_list(ifs, ifname, " ", tmp_str, TMPSIZ, CONF_IFPRIORITY))
+		fprintf(output, "%s", tmp_str);
+	if (bridge_list(ifs, ifname, " ", tmp_str, TMPSIZ, CONF_IFCOST))
+		fprintf(output, "%s", tmp_str);
 	bridge_confaddrs(ifs, ifname, " static ", output);
 
 	for (br_ifnp = ifn_list; br_ifnp->if_name != NULL; br_ifnp++)
