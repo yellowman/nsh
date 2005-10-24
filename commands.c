@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.40 2005/08/30 01:43:54 chris Exp $ */
+/* $nsh: commands.c,v 1.41 2005/10/24 04:23:49 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -178,6 +178,9 @@ static void	makeargv(int);
 static int	hostname(int, char **);
 static int	help(int, char**);
 static int	shell(int, char*[]);
+static int	cmdargs(char*, char*[]);
+static int	ping(int, char*[]);
+static int	traceroute(int, char*[]);
 static int	pr_rt_stats(void);
 static void	p_argv(int, char **);
 static int	notvalid(void);
@@ -843,9 +846,8 @@ static char
 	enablehelp[] =	"Enable privileged mode",
 	disablehelp[] =	"Disable privileged mode",
 	routehelp[] =	"Add a host or network route",
-#ifdef notyet
 	pinghelp[] = 	"Send ICMP echo request",
-#endif
+	tracerthelp[] =	"Print the route to host",
 	quithelp[] =	"Close current connection",
 	verbosehelp[] =	"Set verbose diagnostics",
 	editinghelp[] = "Set command line editing",
@@ -871,9 +873,8 @@ static Command cmdtab[] = {
 	{ "route",	routehelp,	route,		1, 0, 1, 0, 0 },
 	{ "pf",		pfhelp,		pf,		1, 0, 0, 1, 1 },
 	{ "quit",	quithelp,	quit,		0, 0, 0, 0, 0 },
-#ifdef notyet
 	{ "ping",	pinghelp,	ping,		0, 0, 0, 0, 0 },
-#endif
+	{ "traceroute",	tracerthelp,	traceroute,	0, 0, 0, 0, 0 },
 	{ "reload",	reloadhelp,	reload,		1, 0, 0, 0, 0 },
 	{ "halt",	halthelp,	halt,		1, 0, 0, 0, 0 },
 	{ "write-config", savehelp,	wr_conf,	1, 0, 0, 0, 0 },
@@ -1114,6 +1115,40 @@ hostname(argc, argv)
 }
 
 /*
+ * ping command.
+ */
+int
+ping(argc, argv)
+	int argc;
+	char *argv[];
+{
+	if (argc < 2) {
+		printf("%% Invalid arguments\n");
+		return 1;
+	} else {
+		cmdargs(PING, argv);
+	}
+	return 0;
+}
+
+/*
+ * traceroute command.
+ */
+int
+traceroute(argc, argv)
+	int argc;
+	char *argv[];
+{
+	if (argc < 2) {
+		printf("%% Invalid arguments\n");
+		return 1;
+	} else {
+		cmdargs(TRACERT, argv);
+	}
+	return 0;
+}
+
+/*
  * Shell command.
  */
 int
@@ -1149,7 +1184,7 @@ shell(argc, argv)
 }
 
 /*
- * cmd, arg!@
+ * cmd, single arg
  */
 int
 cmdarg(cmd, arg)
@@ -1175,6 +1210,34 @@ cmdarg(cmd, arg)
 			break;
 	}
 	return 1;
+}
+
+/*
+ * cmd, multiple args
+ */
+int
+cmdargs(cmd, arg)
+	char *cmd;
+	char *arg[];
+{
+	switch(vfork()) {
+		case -1:
+			printf("%% fork failed: %s\n", strerror(errno));
+			break;
+
+		case 0:
+		{
+			char *shellp = cmd;
+
+			execv(shellp, arg);
+			printf("%% execl failed: %s\n", strerror(errno));
+			exit(0);
+		}
+		default:
+			(void)wait((int *)0);  /* Wait for cmd to complete */
+			break;
+	}
+	return 1; 
 }
 
 /*

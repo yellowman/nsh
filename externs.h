@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.25 2005/08/30 01:43:54 chris Exp $ */
+/* $nsh: externs.h,v 1.26 2005/10/24 04:23:49 chris Exp $ */
 /*
  * nsh externs and more
  */
@@ -59,6 +59,10 @@ extern char metricnames[];
 #define NSHRC_TEMP	"/var/run/nshrc"
 #define NSHRC		"/etc/nshrc"
 #define PFCTL		"/sbin/pfctl"
+#define PING		"/sbin/ping"
+#define PING6		"/sbin/ping6"
+#define TRACERT		"/usr/sbin/traceroute"
+#define TRACERT6	"/usr/sbin/traceroute6"
 #define SAVESCRIPT	"/usr/local/bin/save.sh"
 void command(int);
 int cmdrc(char rcname[FILENAME_MAX]);
