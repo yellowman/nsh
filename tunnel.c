@@ -1,4 +1,4 @@
-/* $nsh: tunnel.c,v 1.4 2003/02/18 09:29:46 chris Exp $ */
+/* $nsh: tunnel.c,v 1.5 2006/04/08 19:58:18 chris Exp $ */
 /* From: $OpenBSD: /usr/src/sbin/ifconfig/ifconfig.c,v 1.64 2002/05/22 08:21:02 deraadt Exp $ */
 
 #include <stdio.h>
@@ -6,13 +6,13 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 #include <sys/param.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
 #include <net/if.h>
 #include <net/if_dl.h>
 #include <netinet/in.h>
-#include <sys/errno.h>
 #include <netdb.h>
 
 #include "externs.h"

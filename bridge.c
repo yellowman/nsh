@@ -1,4 +1,4 @@
-/* $nsh: bridge.c,v 1.9 2005/06/12 07:47:58 chris Exp $ */
+/* $nsh: bridge.c,v 1.10 2006/04/08 19:58:17 chris Exp $ */
 /* From: $OpenBSD: brconfig.c,v 1.27 2003/09/26 03:29:59 deraadt Exp $ */
 
 /*
@@ -31,6 +31,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <errno.h>
 #include <sys/param.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
@@ -39,7 +40,6 @@
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
 #include <net/if_bridge.h>
-#include <sys/errno.h>
 #include <string.h>
 #include <err.h>
 #include <sysexits.h>

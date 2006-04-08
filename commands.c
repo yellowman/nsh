@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.41 2005/10/24 04:23:49 chris Exp $ */
+/* $nsh: commands.c,v 1.42 2006/04/08 19:58:17 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -60,12 +60,12 @@
 #include <nlist.h>
 #include <unistd.h>
 #include <string.h>
+#include <errno.h>
 #include <sys/fcntl.h>
 #include <sys/socket.h>
 #include <sys/param.h>
 #include <sys/reboot.h>
 #include <sys/sockio.h>
-#include <sys/errno.h>
 #include <sys/wait.h>
 #include <sys/ioctl.h>
 #include <net/if.h>

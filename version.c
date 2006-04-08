@@ -1,4 +1,4 @@
-/* $nsh: version.c,v 1.8 2005/02/10 05:54:13 chris Exp $ */
+/* $nsh: version.c,v 1.9 2006/04/08 19:58:18 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -28,12 +28,11 @@
 #include <stdio.h>
 #include <ctype.h>
 #include <tzfile.h>
-#include <errno.h>
 #include <string.h>
+#include <errno.h>
 #include <sys/param.h>
 #include <sys/sysctl.h>
 #include <sys/utsname.h>
-#include <sys/errno.h>
 #include "externs.h"
 
 int

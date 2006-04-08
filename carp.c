@@ -28,9 +28,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 #include <sys/limits.h>
 #include <sys/socket.h>
-#include <sys/errno.h>
 #include <sys/ioctl.h>
 #include <netinet/in.h>
 #include <netinet/ip_carp.h>

@@ -1,4 +1,4 @@
-/* $nsh: if.c,v 1.21 2005/08/30 01:43:54 chris Exp $ */
+/* $nsh: if.c,v 1.22 2006/04/08 19:58:17 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -31,10 +31,10 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
+#include <errno.h>
 #include <sys/socket.h>
 #include <sys/param.h>
 #include <sys/sockio.h>
-#include <sys/errno.h>
 #include <sys/ioctl.h>
 #include <ifaddrs.h>
 #include <net/if.h>

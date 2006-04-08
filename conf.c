@@ -1,4 +1,4 @@
-/* $nsh: conf.c,v 1.25 2005/09/01 02:45:12 chris Exp $ */
+/* $nsh: conf.c,v 1.26 2006/04/08 19:58:17 chris Exp $ */
 /*
  * Copyright (c) 2002, 2005
  *      Chris Cappuccio.  All rights reserved.
@@ -32,10 +32,10 @@
 #include <unistd.h>
 #include <string.h>
 #include <pwd.h>
+#include <errno.h>
 #include <sys/socket.h>
 #include <sys/param.h>
 #include <sys/sockio.h>
-#include <sys/errno.h>
 #include <sys/ioctl.h>
 #include <net/if.h>
 #include <net/if_types.h>

@@ -1,4 +1,4 @@
-/* $nsh: route.c,v 1.8 2003/09/18 19:44:23 chris Exp $ */
+/* $nsh: route.c,v 1.9 2006/04/08 19:58:18 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -32,7 +32,6 @@
 #include <string.h>
 #include <sys/param.h>
 #include <sys/socket.h>
-#include <sys/errno.h>
 #include <sys/ioctl.h>
 #include <sys/sysctl.h>
 #include <netinet/in.h>
