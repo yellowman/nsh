@@ -1,4 +1,4 @@
-/* $nsh: sysctl.c,v 1.6 2005/06/12 07:47:58 chris Exp $ */
+/* $nsh: sysctl.c,v 1.7 2006/04/08 20:10:17 chris Exp $ */
 /*
  * Copyright (c) 2003
  *      Chris Cappuccio.  All rights reserved.
@@ -52,8 +52,9 @@
 int
 sysctl_inet(int mib2, int mib3, int val, int read)
 {
-	int mib[4], old, len;
+	int mib[4], old;
 	int *valp;
+	size_t len;
 
 	if (read)
 		valp = NULL;
