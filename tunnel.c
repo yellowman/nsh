@@ -1,4 +1,4 @@
-/* $nsh: tunnel.c,v 1.5 2006/04/08 19:58:18 chris Exp $ */
+/* $nsh: tunnel.c,v 1.6 2006/04/11 19:55:54 pata Exp $ */
 /* From: $OpenBSD: /usr/src/sbin/ifconfig/ifconfig.c,v 1.64 2002/05/22 08:21:02 deraadt Exp $ */
 
 #include <stdio.h>
@@ -16,6 +16,9 @@
 #include <netdb.h>
 
 #include "externs.h"
+
+int settunnel(int, char *, char *, char *);
+int deletetunnel(int, char *);
 
 int
 inttunnel(char *ifname, int ifs, int argc, char **argv)
