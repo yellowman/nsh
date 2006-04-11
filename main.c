@@ -1,4 +1,4 @@
-/* $nsh: main.c,v 1.24 2005/08/30 03:06:19 chris Exp $ */
+/* $nsh: main.c,v 1.25 2006/04/11 11:08:50 pata Exp $ */
 /*
  * Copyright (c) 2002, 2003
  *      Chris Cappuccio.  All rights reserved.
@@ -56,10 +56,11 @@ EditLine *eli = NULL;
 char *cursor_pos = NULL;
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
+	if(getuid() != 0) 
+		printf("%% Functionality may be limited without root privileges.\n");
+
 	int ch, iflag = 0;
 	char rc[PATH_MAX];
 	pid = getpid();
