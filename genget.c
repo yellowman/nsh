@@ -1,4 +1,4 @@
-/* $nsh: genget.c,v 1.4 2003/09/18 20:31:38 chris Exp $ */
+/* $nsh: genget.c,v 1.5 2006/04/11 19:53:29 pata Exp $ */
 /*     $OpenBSD: genget.c,v 1.5 2001/05/25 10:23:06 hin Exp $  */
 
 /*-
@@ -37,6 +37,9 @@
 #include "externs.h"
 
 #define	LOWER(x) (isupper((int)x) ? tolower((int)x) : (x))
+
+int isprefix(char *, char*);
+
 /*
  * The prefix function returns 0 if *s1 is not a prefix
  * of *s2.  If *s1 exactly matches *s2, the negative of
