@@ -1,4 +1,4 @@
-/* $nsh: mbuf.c,v 1.6 2003/09/18 20:31:38 chris Exp $ */
+/* $nsh: mbuf.c,v 1.7 2006/04/11 19:58:19 pata Exp $ */
 /* From: $OpenBSD: /usr/src/usr.bin/netstat/mbuf.c,v 1.11 2002/01/17 21:34:58 mickey Exp $ */
 
 /*
@@ -69,9 +69,7 @@ bool seen[256];			/* "have we seen this type yet?" */
  * Print mbuf statistics.
  */
 void
-mbpr(mbaddr, mbpooladdr, mclpooladdr)
-	u_long mbaddr;
-	u_long mbpooladdr, mclpooladdr;
+mbpr(u_long mbaddr, u_long mbpooladdr, u_long mclpooladdr)
 {
 	int totmem, totused, totmbufs, totpct;
 	int i;
