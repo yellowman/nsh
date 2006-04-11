@@ -1,4 +1,4 @@
-/* $nsh: kread.c,v 1.5 2003/09/18 20:31:38 chris Exp $ */
+/* $nsh: kread.c,v 1.6 2006/04/11 19:50:55 pata Exp $ */
 /*
  * Copyright (c) 1983, 1988, 1993
  *      Regents of the University of California.  All rights reserved.
@@ -37,10 +37,7 @@ kvm_t *kvmd;
  * Read kernel memory, return 0 on success.
  */
 int
-kread(addr, buf, size)
-	u_long addr;
-	char   *buf;
-	int    size;
+kread(u_long addr, char *buf, int size)
 {
 
 	if (kvm_read(kvmd, addr, buf, size) != size) {
@@ -51,16 +48,13 @@ kread(addr, buf, size)
 }
 
 char *
-plural(n)
-	int n;
+plural(int n)
 {
 	return (n != 1 ? "s" : "");
 }
 
 char *
-plurales(n)
-	int n;
+plurales(int n)
 {
 	return (n != 1 ? "es" : "");
 }
-
