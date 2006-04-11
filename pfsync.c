@@ -38,6 +38,8 @@
 #include <net/if_pfsync.h>
 #include "externs.h"
 
+#define PFSYNC_MAXUPDATES 128
+
 int
 intsyncdev(char *ifname, int ifs, int argc, char **argv)
 {
