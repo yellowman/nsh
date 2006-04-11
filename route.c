@@ -1,4 +1,4 @@
-/* $nsh: route.c,v 1.9 2006/04/08 19:58:18 chris Exp $ */
+/* $nsh: route.c,v 1.10 2006/04/11 20:17:30 pata Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -39,6 +39,8 @@
 #include <arpa/inet.h>
 #include "ip.h"
 #include "externs.h"
+
+#define ASSUME_NETMASK 1
 
 int
 route(int argc, char **argv)
