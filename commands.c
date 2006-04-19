@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.42 2006/04/08 19:58:17 chris Exp $ */
+/* $nsh: commands.c,v 1.43 2006/04/19 10:37:26 pata Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -193,7 +193,7 @@ static int	pf(int, char **, char *);
  */
 
 int
-quit()
+quit(void)
 {
 	printf("%% Session terminated.\n");
 	exit(0);
@@ -233,9 +233,7 @@ static Menu showlist[] = {
 			    sizeof(Menu)))
 
 static int
-showcmd(argc, argv)
-	int argc;
-	char **argv;
+showcmd(int argc, char **argv)
 {
 	Menu *s;	/* pointer to current command */
 	int success = 0;
@@ -270,7 +268,7 @@ showcmd(argc, argv)
 }
 
 static int
-show_help()
+show_help(void)
 {
 	Menu *s; /* pointer to current command */
 	int z = 0;
@@ -326,8 +324,7 @@ static Menu iptab2[] = {
 };
 
 Menu *
-getip(name)
-	char *name;
+getip(char *name)
 {
 	Menu *i;
 
@@ -337,9 +334,7 @@ getip(name)
 }
 
 static int
-ipcmd(argc, argv)
-	int argc;
-	char **argv;
+ipcmd(int argc, char **argv)
 {
 	Menu *i;     /* pointer to current command */
 	int set, success = 0;
@@ -460,7 +455,7 @@ flushcmd(int argc, char **argv)
 }
 
 static int
-flush_help()
+flush_help(void)
 {
 	Menu *f;
 	int z = 0;
@@ -804,7 +799,7 @@ pf(int argc, char **argv, char *modhvar)
 }
 
 static int
-int_help()
+int_help(void)
 {
 	struct intlist *i; /* pointer to current command */
 	int z = 0;
@@ -896,8 +891,7 @@ static Command  cmdtab2[] = {
 };
 
 static Command *
-getcmd(name)
-	char *name;
+getcmd(char *name)
 {
 	Command *cm;
 
@@ -959,8 +953,7 @@ makeargv(int x)
 }
 
 void
-command(top)
-	int top;
+command(int top)
 {
 	Command  *c;
 	int num;
@@ -1091,9 +1084,7 @@ help(int argc, char **argv)
  * Hostname command.
  */
 int
-hostname(argc, argv)
-	int argc;
-	char *argv[];
+hostname(int argc, char *argv[])
 {
 	argv++;
 	argc--;
@@ -1118,9 +1109,7 @@ hostname(argc, argv)
  * ping command.
  */
 int
-ping(argc, argv)
-	int argc;
-	char *argv[];
+ping(int argc, char *argv[])
 {
 	if (argc < 2) {
 		printf("%% Invalid arguments\n");
@@ -1135,9 +1124,7 @@ ping(argc, argv)
  * traceroute command.
  */
 int
-traceroute(argc, argv)
-	int argc;
-	char *argv[];
+traceroute(int argc, char *argv[])
 {
 	if (argc < 2) {
 		printf("%% Invalid arguments\n");
@@ -1152,9 +1139,7 @@ traceroute(argc, argv)
  * Shell command.
  */
 int
-shell(argc, argv)
-	int argc;
-	char *argv[];
+shell(int argc, char *argv[])
 {
  	switch(vfork()) {
 		case -1:
@@ -1187,9 +1172,7 @@ shell(argc, argv)
  * cmd, single arg
  */
 int
-cmdarg(cmd, arg)
-	char *cmd;
-	char *arg;
+cmdarg(char *cmd, char *arg)
 {
 	switch(vfork()) {
 		case -1:
@@ -1216,9 +1199,7 @@ cmdarg(cmd, arg)
  * cmd, multiple args
  */
 int
-cmdargs(cmd, arg)
-	char *cmd;
-	char *arg[];
+cmdargs(char *cmd, char *arg[])
 {
 	switch(vfork()) {
 		case -1:
@@ -1420,8 +1401,7 @@ load_nlist(void)
  * execute indented commands from the rc file
  */
 int
-cmdrc(rcname)
-	char rcname[FILENAME_MAX];
+cmdrc(char rcname[FILENAME_MAX])
 {
 	Command	*c;
 	FILE	*rcfile;
