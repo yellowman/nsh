@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.27 2006/11/13 11:41:00 pata Exp $ */
+/* $nsh: externs.h,v 1.28 2006/11/13 12:41:46 pata Exp $ */
 /*
  * nsh externs and more
  */
@@ -224,3 +224,4 @@ int intcarp(char *, int, int, char **);
 int intcpass(char *, int, int, char **);
 int conf_carp(FILE *, int, char *);
 const char *carp_state(int, char *);
+int intcdev(char *, int, int, char **);
