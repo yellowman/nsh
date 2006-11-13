@@ -1,4 +1,4 @@
-/* $nsh: if.c,v 1.22 2006/04/08 19:58:17 chris Exp $ */
+/* $nsh: if.c,v 1.23 2006/11/13 11:41:00 pata Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -53,7 +53,7 @@
 #include "bridge.h"
 
 char *iftype(int int_type);
-char *get_hwdaddr(int ifs, char *ifname);
+char *get_hwdaddr(char *ifname);
 
 static const struct {
 	char *name;
@@ -185,7 +185,7 @@ show_int(char *ifname)
 	else if (flags & IFF_POINTOPOINT)
 		printf(" (PointToPoint)");
 
-	if ((lladdr = get_hwdaddr(ifs, ifname)) != NULL)
+	if ((lladdr = get_hwdaddr(ifname)) != NULL)
 		printf(", hardware address %s", lladdr);
 	printf("\n");
 
@@ -388,7 +388,7 @@ in4_brdaddr(u_int32_t addr, u_int32_t mask)
 }
 
 char *
-get_hwdaddr(int ifs, char *ifname)
+get_hwdaddr(char *ifname)
 {
 	int i, found = 0;
 	char *val = NULL;
@@ -685,7 +685,7 @@ intmtu(char *ifname, int ifs, int argc, char **argv)
 	}
 
 	if (set) {
-		ifr.ifr_mtu = strtonum(argv[0], 0, ETHERMTU_JUMBO, &errmsg);
+		ifr.ifr_mtu = strtonum(argv[0], 0, INT_MAX, &errmsg);
 		if (errmsg) {
 			printf("%% Invalid MTU %s: %s\n", argv[0], errmsg);
 			return(0);
@@ -1017,3 +1017,36 @@ intpowersave(char *ifname, int ifs, int argc, char **argv)
 
 	return(0);
 }
+
+int
+intlladdr(char *ifname, int ifs, int argc, char **argv)
+{
+	char *lladdr;
+	struct ether_addr *addr;
+	struct ifreq ifr;
+	
+	if ((lladdr = get_hwdaddr(ifname)) != NULL)
+		printf("%% Save your hardware address as you won't be able to recover it later. %s\n", lladdr);
+	else
+		return(1);
+
+	if(!argv[1]) return(1);
+ 
+	addr = ether_aton(argv[1]);
+	if(addr == NULL) {
+		printf("%% Your address does not consist of 6 hexadecimal numbers separated by colons!\n");
+		return(1);
+	}
+
+	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
+	ifr.ifr_addr.sa_len = ETHER_ADDR_LEN;
+	ifr.ifr_addr.sa_family = AF_LINK;
+	bcopy(addr, ifr.ifr_addr.sa_data, ETHER_ADDR_LEN);
+	if(ioctl(ifs, SIOCSIFLLADDR, (caddr_t)&ifr) < 0) {
+		printf("%% intlladdr: SIOCSIFLLADDR: %s\n", strerror(errno));
+		return(1);
+	}
+
+	return(0);
+}
+
