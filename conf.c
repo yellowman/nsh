@@ -1,4 +1,4 @@
-/* $nsh: conf.c,v 1.26 2006/04/08 19:58:17 chris Exp $ */
+/* $nsh: conf.c,v 1.27 2006/11/14 18:04:07 pata Exp $ */
 /*
  * Copyright (c) 2002, 2005
  *      Chris Cappuccio.  All rights reserved.
@@ -150,8 +150,7 @@ void conf_pfrules(FILE *output)
 void conf_interfaces(FILE *output)
 {
 	FILE *dhcpif;
-	short br;
-	int ifs, flags, ippntd;
+	int ifs, flags, ippntd, br;
 #define LEASEPREFIX     "/var/db/dhclient.leases."
 #define LEASENAMELEN    IFNAMSIZ+sizeof(LEASEPREFIX)
 	char leasefile[LEASENAMELEN];
@@ -236,6 +235,7 @@ void conf_interfaces(FILE *output)
 			conf_ifmetrics(output, ifs, if_data, ifnp->if_name);
 			conf_pfsync(output, ifs, ifnp->if_name);
 			conf_carp(output, ifs, ifnp->if_name);
+			conf_trunk(output, ifs, ifnp->if_name);
 		}
 
 		/*

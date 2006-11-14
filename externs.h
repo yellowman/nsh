@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.28 2006/11/13 12:41:46 pata Exp $ */
+/* $nsh: externs.h,v 1.29 2006/11/14 18:04:07 pata Exp $ */
 /*
  * nsh externs and more
  */
@@ -225,3 +225,9 @@ int intcpass(char *, int, int, char **);
 int conf_carp(FILE *, int, char *);
 const char *carp_state(int, char *);
 int intcdev(char *, int, int, char **);
+
+/* trunk.c */
+int inttrunkport(char *, int, int, char **);
+int inttrunkproto(char *, int, int, char **);
+int conf_trunk(FILE *output, int ifs, char *ifname);
+void show_trunk(int ifs, char *ifname);
