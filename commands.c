@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.46 2006/11/14 18:04:07 pata Exp $ */
+/* $nsh: commands.c,v 1.47 2006/11/16 07:35:08 pata Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -498,6 +498,7 @@ static struct intlist Intlist[] = {
 	{ "nwid",	"802.11 network ID",			intnwid, 0 },
 	{ "nwkey",	"802.11 network key",			intnwkey, 0 },
 	{ "powersave",	"802.11 powersaving mode",		intpowersave, 0 },
+	{ "txpower",	"802.11 transmit power",		inttxpower, 0 },
 	{ "media",	"Media type",				intmedia, 0 },
 	{ "mediaopt",	"Media options",			intmediaopt, 0 },
 #ifdef INET6

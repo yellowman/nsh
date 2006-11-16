@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.29 2006/11/14 18:04:07 pata Exp $ */
+/* $nsh: externs.h,v 1.30 2006/11/16 07:35:08 pata Exp $ */
 /*
  * nsh externs and more
  */
@@ -77,10 +77,11 @@ char *pprompt(void);
 #define NWKEY 1
 #define DEFAULT_POWERSAVE 100	/* 100 ms */
 const char *get_string(const char *, const char *, u_int8_t *, int *);
+void make_string(char *str, int, const u_int8_t *buf, int);
 int get_nwinfo(char *, char *, int, int);
 int get_nwpowersave(int, char *);
-void make_string(char *str, int, const u_int8_t *buf, int);
 int intnwkey(char *, int, int, char **);
+int inttxpower(char *ifname, int ifs, int argc, char **argv);
 
 /* stats.c */
 void rt_stats(u_long);

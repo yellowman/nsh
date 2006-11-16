@@ -1,4 +1,4 @@
-/* $nsh: ieee80211.c,v 1.9 2004/12/31 19:09:13 chris Exp $ */
+/* $nsh: ieee80211.c,v 1.10 2006/11/16 07:35:08 pata Exp $ */
 /* From: $OpenBSD: /usr/src/sbin/ifconfig/ifconfig.c,v 1.68 2002/06/19 18:53:53 millert Exp $ */
 /*
  * Copyright (c) 1983, 1993
@@ -67,10 +67,12 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <ctype.h>
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
+#include <sys/limits.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
 #include <net/if.h>
@@ -377,4 +379,47 @@ get_nwinfo(char *ifname, char *str, int str_len, int type)
 
 	close(ifs);
 	return(strlen(str));
+}
+
+int
+inttxpower(char *ifname, int ifs, int argc, char **argv)
+{
+	const char *errmsg = NULL;
+	struct ieee80211_txpower txpower;
+	short dbm, set;
+
+	if (NO_ARG(argv[0])) {
+		set = 0;
+		argv++;
+		argc--;
+	} else
+		set = 1;
+
+	argv++;
+	argc--;
+
+	if ((set && argc != 1) || (!set && argc > 1)) {
+		printf("%% txpower <dBm>\n");
+		printf("%% no txpower (this will set it back to auto)\n");
+		return(0);
+	}
+
+	strlcpy(txpower.i_name, ifname, sizeof(txpower.i_name));
+   
+	if (!set) {
+		txpower.i_mode = IEEE80211_TXPOWER_MODE_AUTO;
+	} else {
+		dbm = strtonum(argv[0], SHRT_MIN, SHRT_MAX, &errmsg);
+		if (errmsg) {
+			printf("%% inttxpower: txpower %sdBm: %s\n", argv[0], errmsg);
+			return(0);
+		}
+		txpower.i_val = (int16_t)dbm;
+		txpower.i_mode = IEEE80211_TXPOWER_MODE_FIXED;
+	}
+
+	if (ioctl(ifs, SIOCS80211TXPOWER, (caddr_t)&txpower) == -1)
+		printf("%% inttxpower: SIOCS80211TXPOWER\n");
+
+	return(0);
 }
