@@ -1,4 +1,4 @@
-/* $nsh: conf.c,v 1.27 2006/11/14 18:04:07 pata Exp $ */
+/* $nsh: conf.c,v 1.28 2007/01/17 08:54:59 chris Exp $ */
 /*
  * Copyright (c) 2002, 2005
  *      Chris Cappuccio.  All rights reserved.
@@ -149,11 +149,13 @@ void conf_pfrules(FILE *output)
 
 void conf_interfaces(FILE *output)
 {
-	FILE *dhcpif;
+	FILE *dhcpif, *llfile;
 	int ifs, flags, ippntd, br;
-#define LEASEPREFIX     "/var/db/dhclient.leases."
-#define LEASENAMELEN    IFNAMSIZ+sizeof(LEASEPREFIX)
-	char leasefile[LEASENAMELEN];
+#define LEASEPREFIX     "/var/db/dhclient.leases"
+#define	LLPREFIX	"/var/run/lladdr"
+	char leasefile[sizeof(LEASEPREFIX)+IFNAMSIZ+1];
+	char *lladdr, llorig[IFNAMSIZ+1];
+	char llfn[sizeof(LLPREFIX)+IFNAMSIZ+1];
 
 	struct if_nameindex *ifn_list, *ifnp;
 	struct ifreq ifr;
@@ -206,6 +208,26 @@ void conf_interfaces(FILE *output)
 		    ifnp->if_name);
 
 		/*
+		 * print lladdr if necessary
+		 * this is a heavy handed way of doing this, for something
+		 * that is more likely to not be set by default... and,
+		 * get_hwdaddr() is part of the dead weight...
+		 * soekris 486s run in spite of such measures to destroy them
+		 */
+		if ((lladdr = get_hwdaddr(ifnp->if_name)) != NULL) {
+			/* We assume lladdr only useful if we can get_hwdaddr */
+			snprintf(llfn, sizeof(llfn), "%s.%s", LLPREFIX,
+			    ifnp->if_name);
+			if ((llfile = fopen(llfn, "r"))) {
+				fgets(llorig, sizeof(llorig), llfile);
+				if (strcmp(llorig, lladdr) != 0) {
+					fprintf(output, " lladdr %s\n",
+					    lladdr);
+				}
+			}
+		}
+		 
+		/*
 		 * print vlan tag, parent if available.  if a tag is set
 		 * but there is no parent, discard.
 		 */
@@ -218,7 +240,7 @@ void conf_interfaces(FILE *output)
 				    vreq.vlr_tag, vreq.vlr_parent);
 		}
 
-		snprintf(leasefile, sizeof(leasefile), "%s%s",
+		snprintf(leasefile, sizeof(leasefile), "%s.%s",
 		    LEASEPREFIX, ifnp->if_name);
 		if ((dhcpif = fopen(leasefile, "r"))) {
 			fprintf(output, " ip dhcp\n");

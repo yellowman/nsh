@@ -1,4 +1,4 @@
-/* $nsh: if.c,v 1.23 2006/11/13 11:41:00 pata Exp $ */
+/* $nsh: if.c,v 1.24 2007/01/17 08:54:59 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -1021,32 +1021,98 @@ intpowersave(char *ifname, int ifs, int argc, char **argv)
 int
 intlladdr(char *ifname, int ifs, int argc, char **argv)
 {
-	char *lladdr;
+	char *lladdr, llorig[IFNAMSIZ+1];
 	struct ether_addr *addr;
 	struct ifreq ifr;
-	
-	if ((lladdr = get_hwdaddr(ifname)) != NULL)
-		printf("%% Save your hardware address as you won't be able to recover it later. %s\n", lladdr);
-	else
-		return(1);
+	FILE *llfile;
+#define LLPREFIX "/var/run/lladdr"
+	char llfn[sizeof(LLPREFIX)+IFNAMSIZ+1];
+	int set;
 
-	if(!argv[1]) return(1);
- 
-	addr = ether_aton(argv[1]);
-	if(addr == NULL) {
-		printf("%% Your address does not consist of 6 hexadecimal numbers separated by colons!\n");
+	if (NO_ARG(argv[0])) {
+		argv++;
+		argc--;
+		set = 0;
+	} else
+		set = 1;
+
+	if (set && argc < 2) {
+		printf ("%% lladdr <link level address>\n");
+		printf ("%% no lladdr\n");
 		return(1);
 	}
 
+	if ((lladdr = get_hwdaddr(ifname)) == NULL) {
+		printf("%% Failed to retrieve current link level address\n");
+		return(1);
+	}
+
+	/*
+	 * the expectation here is that, on first run of the lladdr command,
+	 * after system boot, /var/run/lladdr.%s will not exist and so we
+	 * will ALWAYS create it with the interface's current lladdr.
+	 * this file is used if 'no lladdr' is ever specified, that way
+	 * we know exactly what address to revert back to.  also, conf_lladdr
+	 * always knows about the default address this way.  finally, because
+	 * the output to /var/run/lladdr.%s is generated from get_hwdaddr,
+	 * and the comparisons will be with new data generated from get_hwdaddr
+	 * it will always have the same case and format for easy comparison.
+	 */
+	snprintf(llfn, sizeof(llfn), "%s.%s", LLPREFIX, ifname);
+	if ((llfile = fopen(llfn, "r")) == NULL) {
+		/* llfn not around? create it */
+		if (set && ((llfile = fopen(llfn, "w")) != NULL)) {
+			fprintf(llfile, "%s", lladdr);
+			fclose(llfile);
+		} else if (set) {
+			printf("%% Failed to open %s for writing: %s\n", llfn,
+			    strerror(errno));
+			return(1);
+		} else {
+			if (errno == ENOENT) {
+				printf("%% No saved lladdr to revert back\n");
+			} else {
+				printf("%% Failed to read %s: %s\n", llfn,
+				    strerror(errno));
+			}
+			return(1);
+		}
+	} else {
+		fgets(llorig, sizeof(llorig), llfile);
+		fclose(llfile);
+		if (!set && unlink(llfn) != 0)
+			printf("%% Failed to remove %s: %s\n", llfn,
+			    strerror(errno));
+	}
+
+	/* At this point, llorig will always represent the booted lladdr */
+
+	addr = ether_aton(set ? argv[1] : llorig); /* XXX Non-ethernet type ? */
+	if(addr == NULL) {		/* XXX Non-ethernet... */
+		if (set) {
+			printf("%% MAC addresses must be six hexadecimal "
+			    "fields, up to two digits each,\n");
+			printf("%% separated with colons (1:23:45:ab:cd:ef)\n");
+			return(1);
+		} else {
+			printf("%% %s corrupted, unable to retrieve original "
+			    "lladdr\n", llfn);
+			return(1);
+		}
+	} 
+
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
-	ifr.ifr_addr.sa_len = ETHER_ADDR_LEN;
+	ifr.ifr_addr.sa_len = ETHER_ADDR_LEN;	/* XXX */
 	ifr.ifr_addr.sa_family = AF_LINK;
 	bcopy(addr, ifr.ifr_addr.sa_data, ETHER_ADDR_LEN);
 	if(ioctl(ifs, SIOCSIFLLADDR, (caddr_t)&ifr) < 0) {
-		printf("%% intlladdr: SIOCSIFLLADDR: %s\n", strerror(errno));
+		if (errno == EINVAL)
+			printf("%% Requested link level address denied\n");
+		else
+			printf("%% intlladdr: SIOCSIFLLADDR: %s\n",
+			    strerror(errno));
 		return(1);
 	}
 
 	return(0);
 }
-

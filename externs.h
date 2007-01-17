@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.30 2006/11/16 07:35:08 pata Exp $ */
+/* $nsh: externs.h,v 1.31 2007/01/17 08:54:59 chris Exp $ */
 /*
  * nsh externs and more
  */
@@ -148,6 +148,7 @@ int intlink(char *, int, int, char **);
 int intnwid(char *, int, int, char **);
 int intpowersave(char *, int, int, char **);
 int intlladdr(char *, int, int, char **);
+char *get_hwdaddr(char *);
 
 /* version.c */
 int version(void);
