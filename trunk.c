@@ -42,7 +42,7 @@ int
 inttrunkport(char *ifname, int ifs, int argc, char **argv)
 {
 	struct trunk_reqport rp;
-	int set;  
+	int set, i;
 
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -54,26 +54,47 @@ inttrunkport(char *ifname, int ifs, int argc, char **argv)
 	argc--;
 	argv++;
 
-	if ((!set && argc != 1) || (set && argc != 1)) {
-		printf("%% trunkdevice <device>\n");
-		printf("%% no trunkdevice <device>\n");
+	if ((!set && argc < 1) || (set && argc < 1)) {
+		printf("%% trunkport <ifname> ...\n");
+		printf("%% no trunkport <ifname> ...\n");
 		return(0);   
 	}
 
 	bzero(&rp, sizeof(rp));
 	strlcpy(rp.rp_ifname, ifname, sizeof(rp.rp_ifname));
 
-	if (set) {  
-		strlcpy(rp.rp_portname, argv[0], sizeof(rp.rp_portname));
-		if (ioctl(ifs, SIOCSTRUNKPORT, &rp) < 0) {
-			printf("%% inttrunkport: SIOCSTRUNKPORT: %s\n", strerror(errno));
-			return 1;
-		}
-	} else {
-		strlcpy(rp.rp_portname, argv[0], sizeof(rp.rp_portname));
-		if (ioctl(ifs, SIOCSTRUNKDELPORT, &rp) < 0) {
-			printf("%% inttrunkport: SIOCSTRUNKDELPORT: %s\n", strerror(errno));
-			return 1;
+	for (i = 0; i < argc; i++) {
+		if (set) {  
+			strlcpy(rp.rp_portname, argv[i],
+			    sizeof(rp.rp_portname));
+			if (ioctl(ifs, SIOCSTRUNKPORT, &rp) < 0) {
+				if (errno == EBUSY) {
+					printf("%% Failed (port %s already"
+					    " assigned to a trunk group)\n",
+					    argv[i]);
+				} else if (errno == ENETDOWN) {
+					printf("%% Failed (port %s is "
+					    "shutdown)\n", argv[i]);
+				} else {
+					printf("%% inttrunkport:"
+					    " SIOCSTRUNKPORT: %s\n",
+				    strerror(errno));
+				}
+			}
+		} else {
+			strlcpy(rp.rp_portname, argv[i],
+			    sizeof(rp.rp_portname));
+			if (ioctl(ifs, SIOCSTRUNKDELPORT, &rp) < 0) {
+				if (errno == ENOENT) {
+					printf("%% Port %s not part of %s\n",
+					    argv[i], ifname);
+				} else {
+					printf("%% inttrunkport:"
+					    " SIOCSTRUNKDELPORT: %s\n,",
+				    strerror(errno));
+				}
+				return 1;
+			}
 		}
 	}
 	return 0;
@@ -141,8 +162,12 @@ conf_trunk(FILE *output, int ifs, char *ifname)
         if (ioctl(ifs, SIOCGTRUNK, (caddr_t)&ra) == 0) {
 		fprintf(output," trunkproto %d\n", ra.ra_proto);
                 for (i = 0; i < ra.ra_ports; i++) {
-                        fprintf(output, " trunkdevice %s\n", rpbuf[i].rp_portname);
+                        fprintf(output, " %s%s", i ? "" : "trunkport ",
+			    rpbuf[i].rp_portname);
                 }
+		if (i) {
+			printf("\n");
+		}
         } else return (1);
 
 	return (0);

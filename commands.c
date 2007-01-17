@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.48 2007/01/17 06:45:03 chris Exp $ */
+/* $nsh: commands.c,v 1.49 2007/01/17 09:38:09 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -535,8 +535,8 @@ static struct intlist Intlist[] = {
 	{ "static",	"Static bridge address entry",		brstatic, 1 },
 	{ "ifpriority",	"Spanning priority of a member on an 802.1D bridge", brpri, 1 },
 	{ "ifcost",	"Spanning tree path cost of a member on 802.1D bridge", brpri, 1},
-	{ "trunkdevice","Add child interface(trunkport)",	inttrunkport, 0 },
-	{ "trunkproto",	"Define trunkproto(roundrobin, failover, loadbalance, none)",	inttrunkproto, 0 },
+	{ "trunkport",  "Add child interface(s) to trunk",	inttrunkport, 0 },
+	{ "trunkproto",	"Define trunkproto",		 	inttrunkproto, 0 },
 
 /* Help commands */
 	{ "?",		"Options",				int_help, 2 },

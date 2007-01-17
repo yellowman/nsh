@@ -1,5 +1,5 @@
 nsh//network config shell//Chris Cappuccio <chris@dqc.org> version 20050829
-$nsh: README,v 1.20 2005/08/30 03:14:05 chris Exp $
+$nsh: README,v 1.21 2007/01/17 09:38:09 chris Exp $
 
 A CLI intended for OpenBSD-based routers running little except for sshd,
 targeted towards flash-based systems.
@@ -36,6 +36,8 @@ nsh handles the following functions:
      and some fixes to the config generator. 
    * Christian Gut contributed password save functions.
    * Mats Mellstrand <mats@exmandato.se> contributed dhclient functionality
+   * Manuel Pata <pata@alface.de> contributed various bits of cleanup,
+     and new commands for lladdr, carp, trunk and txpower
 
 >> See TODO for details on implementation status and future ideas.
 
