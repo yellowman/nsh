@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.47 2006/11/16 07:35:08 pata Exp $ */
+/* $nsh: commands.c,v 1.48 2007/01/17 06:45:03 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -494,7 +494,7 @@ static struct intlist Intlist[] = {
 	{ "metric",	"Set routing metric",			intmetric, 0 },
 	{ "link",	"Set link level options",		intlink, 2 },
 	{ "arp",	"Set Address Resolution Protocol",	intflags, 0 },
-	{ "mac",	"Set MAC Address",			intlladdr, 0 },
+	{ "lladdr",	"Set Link Level (MAC) Address",		intlladdr, 0 },
 	{ "nwid",	"802.11 network ID",			intnwid, 0 },
 	{ "nwkey",	"802.11 network key",			intnwkey, 0 },
 	{ "powersave",	"802.11 powersaving mode",		intpowersave, 0 },
