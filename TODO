@@ -1,4 +1,4 @@
-$nsh: TODO,v 1.16 2005/05/31 07:57:29 chris Exp $
+$nsh: TODO,v 1.17 2007/01/19 00:22:52 chris Exp $
 
 nsh is a work in progress, future versions will be released which
 implement much of the following (of course, diffs are welcome):
@@ -27,19 +27,14 @@ To be implemented:
 * if description
 * Newer 802.11 gunk like txpower, bssid, whatever else
 * kernel pppoe
-* carp carpdev
 * handle TDM timeslots
-* lladdr
-* trunk
 * View other users logged in, clear their sessions, etc...
 * Interface wtth bgpd and ospfd
 * Configure IPsec VPNs with simple CLI commands (The easiest way to do this 
   would be to use a conf-less isakmpd with certificates and ipsecadm flows)
 * IPComp
 * DHCP daemon control
-* Do we build in a simple ping, traceroute or just shell out for these??
-* And what about telnet/ssh (maybe shell out for ssh, implement a simple
-  telnet?)
+* telnet/ssh?
 * Persistent comments/remarks in the config file (to document routes, etc..)
   or at least interface descriptions
 
