@@ -1,4 +1,4 @@
-/* $nsh: if.c,v 1.24 2007/01/17 08:54:59 chris Exp $ */
+/* $nsh: if.c,v 1.25 2007/01/19 09:45:57 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -292,8 +292,9 @@ show_int(char *ifname)
 		printf("  802.11 network id %s", tmp_str);
 		if(get_nwinfo(ifname, tmp_str, sizeof(tmp_str), NWKEY) != NULL)
 			printf(", key %s", tmp_str);
-		if ((tmp = get_nwpowersave(ifs, (char *)ifname)) != NULL)
-			printf(", powersaving (%d ms)\n", tmp);
+		if ((tmp = get_nwinfo(ifname, tmp_str, sizeof(tmp_str),
+		    POWERSAVE) != NULL))
+			printf(", powersaving (%s ms)\n", tmp_str);
 		printf("\n");
 		if (is_wavelan(ifs, ifname)) {
 			wi_dumpstats(ifname);

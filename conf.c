@@ -1,4 +1,4 @@
-/* $nsh: conf.c,v 1.28 2007/01/17 08:54:59 chris Exp $ */
+/* $nsh: conf.c,v 1.29 2007/01/19 09:45:56 chris Exp $ */
 /*
  * Copyright (c) 2002, 2005
  *      Chris Cappuccio.  All rights reserved.
@@ -296,7 +296,6 @@ void conf_ifmetrics(FILE *output, int ifs, struct if_data if_data,
     char *ifname)
 {
 	char tmpa[IPSIZ], tmpb[IPSIZ], tmpc[TMPSIZ];
-	int tmp;
 
 	/*
 	 * Various metrics valid for non-bridge interfaces
@@ -320,10 +319,10 @@ void conf_ifmetrics(FILE *output, int ifs, struct if_data if_data,
 		fprintf(output, " nwid %s\n", tmpc);
 		if (get_nwinfo(ifname, tmpc, TMPSIZ, NWKEY) != NULL)
 			fprintf(output, " nwkey %s\n", tmpc);
-		if ((tmp = get_nwpowersave(ifs, ifname)) != NULL ) {
-			if (tmp != DEFAULT_POWERSAVE)
-				fprintf(output, " powersave %i\n", tmp);
-		}
+		if (get_nwinfo(ifname, tmpc, TMPSIZ, TXPOWER) != NULL)
+			fprintf(output, " txpower %s\n", tmpc);
+		if (get_nwinfo(ifname, tmpc, TMPSIZ, POWERSAVE) != NULL)
+			fprintf(output, " powersave %s\n", tmpc);
 	}
 }
 

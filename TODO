@@ -1,4 +1,4 @@
-$nsh: TODO,v 1.17 2007/01/19 00:22:52 chris Exp $
+$nsh: TODO,v 1.18 2007/01/19 09:45:56 chris Exp $
 
 nsh is a work in progress, future versions will be released which
 implement much of the following (of course, diffs are welcome):
@@ -25,18 +25,19 @@ To be implemented:
 
 * pfsync syncpeer
 * if description
-* Newer 802.11 gunk like txpower, bssid, whatever else
+* Rest of newer 802.11 gunk like rssi display, chan, flags
 * kernel pppoe
 * handle TDM timeslots
 * View other users logged in, clear their sessions, etc...
-* Interface wtth bgpd and ospfd
-* Configure IPsec VPNs with simple CLI commands (The easiest way to do this 
-  would be to use a conf-less isakmpd with certificates and ipsecadm flows)
-* IPComp
+* Interface wtth bgpd.conf, ospfd.conf, ripd.conf, associated ctl programs
+  maybe like we do with pf.conf and pfctl
+* Configure IPsec VPNs/IPComp with simple CLI commands (The easiest way to do
+  this would be through ipsecctl?? or direct?)
 * DHCP daemon control
 * telnet/ssh?
 * Persistent comments/remarks in the config file (to document routes, etc..)
-  or at least interface descriptions
+* Do we need to implement different get_lladdr for ieee80211 interfaces?
+  Test this
 
 Lower priority:
 

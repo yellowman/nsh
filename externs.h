@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.31 2007/01/17 08:54:59 chris Exp $ */
+/* $nsh: externs.h,v 1.32 2007/01/19 09:45:57 chris Exp $ */
 /*
  * nsh externs and more
  */
@@ -75,13 +75,17 @@ char *pprompt(void);
 /* ieee80211.c */
 #define NWID 0
 #define NWKEY 1
+#define POWERSAVE 2
+#define TXPOWER 3
+#define BSSID 4
 #define DEFAULT_POWERSAVE 100	/* 100 ms */
 const char *get_string(const char *, const char *, u_int8_t *, int *);
 void make_string(char *str, int, const u_int8_t *buf, int);
 int get_nwinfo(char *, char *, int, int);
 int get_nwpowersave(int, char *);
 int intnwkey(char *, int, int, char **);
-int inttxpower(char *ifname, int ifs, int argc, char **argv);
+int inttxpower(char *, int, int, char **);
+int intbssid(char *, int, int, char **);
 
 /* stats.c */
 void rt_stats(u_long);

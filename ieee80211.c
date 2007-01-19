@@ -1,4 +1,4 @@
-/* $nsh: ieee80211.c,v 1.10 2006/11/16 07:35:08 pata Exp $ */
+/* $nsh: ieee80211.c,v 1.11 2007/01/19 09:45:57 chris Exp $ */
 /* From: $OpenBSD: /usr/src/sbin/ifconfig/ifconfig.c,v 1.68 2002/06/19 18:53:53 millert Exp $ */
 /*
  * Copyright (c) 1983, 1993
@@ -254,24 +254,6 @@ set_nwkey:
 	return(0);
 }
 
-int
-get_nwpowersave(int ifs, char *ifname)
-{
-	struct ieee80211_power power;
-
-	memset(&power, 0, sizeof(power));
-	strlcpy(power.i_name, ifname, sizeof(power.i_name));
-
-	if (ioctl(ifs, SIOCG80211POWER, &power) == -1) {
-		printf("%% get_nwpowersave: SIOCG80211POWER: %s\n",
-		    strerror(errno));
-		return(NULL);
-	}
-	if (!power.i_enabled)
-		return(NULL);
-	return(power.i_maxsleep);
-}
-
 /*
  * mangled ieee80211_status()
  */
@@ -289,7 +271,9 @@ get_nwinfo(char *ifname, char *str, int str_len, int type)
 
 	memset(str, 0, str_len);
 
-	if (type == NWID) {
+	switch(type) {
+	case NWID:
+	{
 		struct ieee80211_nwid nwid;
 		struct ifreq ifr;
 
@@ -303,7 +287,66 @@ get_nwinfo(char *ifname, char *str, int str_len, int type)
 				len = IEEE80211_NWID_LEN;
 			make_string(str, str_len, nwid.i_nwid, len);
 		}
-	} else if (type == NWKEY) {
+	}
+	break;
+	case TXPOWER:
+	{
+		struct ieee80211_txpower txpower;
+		struct ifreq ifr;
+
+		memset(&ifr, 0, sizeof(ifr));
+		ifr.ifr_data = (caddr_t)&txpower;
+		(void) strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
+		if (ioctl(ifs, SIOCG80211TXPOWER, (caddr_t) &ifr) == 0) {
+			if (txpower.i_mode == IEEE80211_TXPOWER_MODE_FIXED)
+				snprintf(str, str_len, "%d", txpower.i_val);
+		} else {
+			printf("%% get_nwinfo: SIOCG80211TXPOWER: %s\n",
+			    strerror(errno));
+		}
+	}
+	break;
+	case POWERSAVE:
+	{
+		struct ieee80211_power power;
+
+		memset(&power, 0, sizeof(power));
+		strlcpy(power.i_name, ifname, sizeof(power.i_name));
+
+		if (ioctl(ifs, SIOCG80211POWER, &power) == 0) {
+			if (power.i_enabled &&
+			    power.i_maxsleep != DEFAULT_POWERSAVE)
+				snprintf(str, str_len, "%d", power.i_maxsleep);
+		} else {
+			printf("%% get_nwinfo: SIOCG80211POWER: %s\n",
+			    strerror(errno));
+		}
+	}
+	break;
+	case BSSID:
+	{
+		struct ieee80211_bssid bssid;
+		struct ether_addr ea;
+		u_int8_t zero_bssid[IEEE80211_ADDR_LEN];
+
+		memset(&zero_bssid, 0, sizeof(zero_bssid));
+		strlcpy(bssid.i_name, ifname, sizeof(bssid.i_name));
+
+		if (ioctl(ifs, SIOCG80211BSSID, &bssid) == 0) {
+			if (memcmp(bssid.i_bssid, zero_bssid,
+			    IEEE80211_ADDR_LEN) != 0) {
+				memcpy(&ea.ether_addr_octet, bssid.i_bssid,
+				    sizeof(ea.ether_addr_octet));
+				snprintf(str, str_len, "%s", ether_ntoa(&ea));
+			}
+		} else {
+			printf("%% get_nwinfo: SIOCG80211BSSID: %s\n",
+			    strerror(errno));
+		}
+	}
+	break;
+	case NWKEY:
+	{
 		struct ieee80211_nwkey nwkey;
 		u_int8_t keybuf[IEEE80211_WEP_NKID][16];
 
@@ -376,6 +419,8 @@ get_nwinfo(char *ifname, char *str, int str_len, int type)
 			}
 		}
 	}
+	break;
+	} /* switch {} */
 
 	close(ifs);
 	return(strlen(str));
@@ -400,7 +445,7 @@ inttxpower(char *ifname, int ifs, int argc, char **argv)
 
 	if ((set && argc != 1) || (!set && argc > 1)) {
 		printf("%% txpower <dBm>\n");
-		printf("%% no txpower (this will set it back to auto)\n");
+		printf("%% no txpower     (auto-select)\n");
 		return(0);
 	}
 
@@ -411,7 +456,8 @@ inttxpower(char *ifname, int ifs, int argc, char **argv)
 	} else {
 		dbm = strtonum(argv[0], SHRT_MIN, SHRT_MAX, &errmsg);
 		if (errmsg) {
-			printf("%% inttxpower: txpower %sdBm: %s\n", argv[0], errmsg);
+			printf("%% inttxpower: txpower %sdBm: %s\n", argv[0],
+			    errmsg);
 			return(0);
 		}
 		txpower.i_val = (int16_t)dbm;
@@ -419,7 +465,51 @@ inttxpower(char *ifname, int ifs, int argc, char **argv)
 	}
 
 	if (ioctl(ifs, SIOCS80211TXPOWER, (caddr_t)&txpower) == -1)
-		printf("%% inttxpower: SIOCS80211TXPOWER\n");
+		printf("%% inttxpower: SIOCS80211TXPOWER failed: %s\n",
+		    strerror(errno));
 
 	return(0);
+}
+
+int
+intbssid(char *ifname, int ifs, int argc, char **argv)
+{
+	struct ieee80211_bssid bssid;
+	struct ether_addr *ea;
+	short set;
+
+	if (NO_ARG(argv[0])) {
+		set = 0;
+		argv++;
+		argc--;
+	} else
+		set = 1;
+
+	argv++;
+	argc--;
+
+	if ((set && argc != 1) || (!set && argc > 1)) {
+		printf("%% bssid <xx:xx:xx:xx:xx:xx>\n");
+		printf("%% no bssid       (auto-select)\n");
+		return(0);
+	}
+
+	if (set) {
+		ea = ether_aton(argv[1]);
+		if (ea == NULL) {
+			printf("%% Invalid bssid\n");
+			return(0);
+		}
+		memcpy(&bssid.i_bssid, ea->ether_addr_octet,
+		    sizeof(bssid.i_bssid));
+	} else
+		memset(&bssid.i_bssid, 0, sizeof(bssid.i_bssid));
+
+	strlcpy(bssid.i_name, ifname, sizeof(bssid.i_name));
+	if (ioctl(ifs, SIOCS80211BSSID, &bssid) == -1) {
+		printf("%% inttxpower: SIOCS80211BSSID failed: %s\n",
+		    strerror(errno));
+	}
+
+	return (0);
 }
