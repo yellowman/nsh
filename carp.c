@@ -180,14 +180,16 @@ conf_carp(FILE *output, int s, char *ifname)
 	if (ioctl(s, SIOCGVH, (caddr_t) & ifr) == -1)
 		return (0);
 
+	if (creq.carpr_carpdev[0] != '\0')
+		fprintf(output, " carpdev %s\n", creq.carpr_carpdev);
+	if (creq.carpr_key[0] != '\0')
+		fprintf(output, " cpass %s\n", creq.carpr_key);
 	if (creq.carpr_vhid != -1)
 		fprintf(output, " vhid %i\n", creq.carpr_vhid);
 	if (creq.carpr_advbase != CARP_DFLTINTV)
 		fprintf(output, " advbase %i\n", creq.carpr_advbase);
 	if (creq.carpr_advskew != 0)
 		fprintf(output, " advskew %i\n", creq.carpr_advskew);
-	if (creq.carpr_key[0] != '\0')
-		fprintf(output, " cpass %s\n", creq.carpr_key);
 	return (0);
 }
 
