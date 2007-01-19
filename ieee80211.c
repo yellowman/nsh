@@ -1,4 +1,4 @@
-/* $nsh: ieee80211.c,v 1.11 2007/01/19 09:45:57 chris Exp $ */
+/* $nsh: ieee80211.c,v 1.12 2007/01/19 10:29:37 chris Exp $ */
 /* From: $OpenBSD: /usr/src/sbin/ifconfig/ifconfig.c,v 1.68 2002/06/19 18:53:53 millert Exp $ */
 /*
  * Copyright (c) 1983, 1993
@@ -317,6 +317,8 @@ get_nwinfo(char *ifname, char *str, int str_len, int type)
 			if (power.i_enabled &&
 			    power.i_maxsleep != DEFAULT_POWERSAVE)
 				snprintf(str, str_len, "%d", power.i_maxsleep);
+			else if (power.i_enabled)
+				memset(&str, '\0', str_len); /* "powersave " */
 		} else {
 			printf("%% get_nwinfo: SIOCG80211POWER: %s\n",
 			    strerror(errno));
