@@ -1,4 +1,4 @@
-/* $nsh: main.c,v 1.26 2007/01/17 09:57:18 chris Exp $ */
+/* $nsh: main.c,v 1.27 2007/09/14 16:54:53 chris Exp $ */
 /*
  * Copyright (c) 2002, 2003
  *      Chris Cappuccio.  All rights reserved.
@@ -58,11 +58,12 @@ char *cursor_pos = NULL;
 int
 main(int argc, char *argv[])
 {
+	int ch, iflag = 0;
+	char rc[PATH_MAX];
+
 	if(getuid() != 0) 
 		printf("%% Functionality may be limited without root privileges.\n");
 
-	int ch, iflag = 0;
-	char rc[PATH_MAX];
 	pid = getpid();
 
 	while ((ch = getopt(argc, argv, "i:v")) != -1)
@@ -109,6 +110,7 @@ main(int argc, char *argv[])
 		command(1);
 	}
 
+	/* NOTREACHED */
 	return 0;
 }
 
