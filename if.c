@@ -1,4 +1,4 @@
-/* $nsh: if.c,v 1.25 2007/01/19 09:45:57 chris Exp $ */
+/* $nsh: if.c,v 1.26 2007/12/15 22:39:23 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -269,9 +269,9 @@ show_int(char *ifname)
 		 * Display MTU, line rate, and ALTQ token rate info
 		 * (if available)
 		 */
-		printf("  MTU %li bytes", if_mtu);
+		printf("  MTU %u bytes", if_mtu);
 		if (if_baudrate)
-			printf(", Line Rate %li %s\n",
+			printf(", Line Rate %qu %s\n",
 			    MBPS(if_baudrate) ? MBPS(if_baudrate) :
 			    if_baudrate / 1000,
 			    MBPS(if_baudrate) ? "Mbps" : "Kbps");
@@ -311,19 +311,19 @@ show_int(char *ifname)
 	/*
 	 * Display remaining info from if_data structure
 	 */
-	printf("  %lu packets input, %lu bytes, %lu errors, %lu drops\n",
+	printf("  %qu packets input, %qu bytes, %qu errors, %qu drops\n",
 	    if_ipackets, if_ibytes, if_ierrors, if_iqdrops);
-	printf("  %lu packets output, %lu bytes, %lu errors, %lu unsupported\n",
+	printf("  %qu packets output, %qu bytes, %qu errors, %qu unsupported\n",
 	    if_opackets, if_obytes, if_oerrors, if_noproto);
 	if (if_ibytes && if_ipackets && (if_ibytes / if_ipackets) >= ETHERMIN) {
 		/* < ETHERMIN means byte counter probably rolled over */
-		printf("  %lu avg input size", if_ibytes / if_ipackets);
+		printf("  %qu avg input size", if_ibytes / if_ipackets);
 		pntd = 1;
 	} else
 		pntd = 0;
 	if (if_obytes && if_opackets && (if_obytes / if_opackets) >= ETHERMIN) {
 		/* < ETHERMIN means byte counter probably rolled over */
-		printf("%s%lu avg output size", pntd ? ", " : "  ",
+		printf("%s%qu avg output size", pntd ? ", " : "  ",
 		    if_obytes / if_opackets);
 		pntd = 1;
 	}
@@ -339,7 +339,7 @@ show_int(char *ifname)
 	case IFT_SLIP:
 	case IFT_PROPVIRTUAL:
 	case IFT_IEEE80211:
-		printf("  %lu collisions\n", if_collisions);
+		printf("  %qu collisions\n", if_collisions);
 		break;
 	default:
 		break;

@@ -1,4 +1,4 @@
-/* $nsh: routepr.c,v 1.10 2003/09/18 20:31:38 chris Exp $ */
+/* $nsh: routepr.c,v 1.11 2007/12/15 22:39:23 chris Exp $ */
 /* From: $OpenBSD: /usr/src/usr.bin/netstat/route.c,v 1.45 2002/02/16 21:27:50 millert Exp $ */
 
 /*
@@ -482,9 +482,9 @@ p_rtentry(rt)
 	p_sockaddr(sa, mask, rt->rt_flags, WID_DST(sa->sa_family));
 	p_sockaddr(kgetsa(rt->rt_gateway), 0, RTF_HOST, WID_GW(sa->sa_family));
 	p_flags(rt->rt_flags & interesting, "%-6.6s ");
-	printf("%6d %9ld ", rt->rt_refcnt, rt->rt_use);
+	printf("%6i %9qu ", rt->rt_refcnt, rt->rt_use);
 	if (rt->rt_rmx.rmx_mtu)
-		printf("%6ld ", rt->rt_rmx.rmx_mtu);
+		printf("%6u ", rt->rt_rmx.rmx_mtu);
 	else
 		printf("%6s ", "-");
 	putchar((rt->rt_rmx.rmx_locks & RTV_MTU) ? 'L' : ' ');
