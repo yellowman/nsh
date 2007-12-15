@@ -100,9 +100,9 @@ intcarp(char *ifname, int ifs, int argc, char **argv)
 	switch(type) {
 	case CARP_ADVSKEW:
 		if (set)
-			creq.carpr_advskew = (int)val;
+			creq.carpr_advskews[0] = (int)val;
 		else
-			creq.carpr_advskew = 0;
+			creq.carpr_advskews[0] = 0;
 		break;
 	case CARP_ADVBASE:
 		if (set)
@@ -112,9 +112,9 @@ intcarp(char *ifname, int ifs, int argc, char **argv)
 		break;
 	case CARP_VHID:
 		if(set)
-			creq.carpr_vhid = (int)val;
+			creq.carpr_vhids[0] = (int)val;
 		else
-			creq.carpr_vhid = -1;
+			creq.carpr_vhids[0] = -1;
 		break;
 	}
 
@@ -172,24 +172,36 @@ conf_carp(FILE *output, int s, char *ifname)
 {
 	struct ifreq ifr;
 	struct carpreq creq;
+	short i;
 
 	bzero((char *) &creq, sizeof(struct carpreq));
-	ifr.ifr_data = (caddr_t) & creq;
+	ifr.ifr_data = (caddr_t) &creq;
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 
 	if (ioctl(s, SIOCGVH, (caddr_t) & ifr) == -1)
+		return (0);
+
+	if (creq.carpr_vhids[0] == 0)
 		return (0);
 
 	if (creq.carpr_carpdev[0] != '\0')
 		fprintf(output, " carpdev %s\n", creq.carpr_carpdev);
 	if (creq.carpr_key[0] != '\0')
 		fprintf(output, " cpass %s\n", creq.carpr_key);
-	if (creq.carpr_vhid != -1)
-		fprintf(output, " vhid %i\n", creq.carpr_vhid);
 	if (creq.carpr_advbase != CARP_DFLTINTV)
 		fprintf(output, " advbase %i\n", creq.carpr_advbase);
-	if (creq.carpr_advskew != 0)
-		fprintf(output, " advskew %i\n", creq.carpr_advskew);
+	if (creq.carpr_vhids[1] == 0) {
+		fprintf(output, " vhid %i\n", creq.carpr_vhids[0]);
+		if (creq.carpr_advskews[0] != 0)
+			fprintf(output, " advskew %i\n",
+			    creq.carpr_advskews[0]);
+	} else {
+		for (i = 0; creq.carpr_vhids[i]; i++) {
+			fprintf(output, " carpnode %i %i\n",
+			    creq.carpr_vhids[i], creq.carpr_advskews[i]);
+		}
+	}
+			
 	return (0);
 }
 
@@ -208,7 +220,11 @@ carp_state(int s, char *ifname)
 	if (ioctl(s, SIOCGVH, (caddr_t) & ifr) == -1)
 		return (NULL);
 
-	if (creq.carpr_vhid > 0) {
+	/*
+	 * XXX carp_state and its callers need to be extended to handle
+	 * interfaces with multiple vhids
+	 */
+	if (creq.carpr_vhids[0] > 0) {
 		if (creq.carpr_state > CARP_MAXSTATE) {
 			errno = EINVAL;
 			return(NULL);
