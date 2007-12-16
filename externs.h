@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.32 2007/01/19 09:45:57 chris Exp $ */
+/* $nsh: externs.h,v 1.33 2007/12/16 10:42:14 chris Exp $ */
 /*
  * nsh externs and more
  */
@@ -228,6 +228,7 @@ int conf_pfsync(FILE *, int, char *);
 #define CARP_VHID 2
 int intcarp(char *, int, int, char **);
 int intcpass(char *, int, int, char **);
+int intcnode(char *, int, int, char **);
 int conf_carp(FILE *, int, char *);
 const char *carp_state(int, char *);
 int intcdev(char *, int, int, char **);

@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.50 2007/01/19 09:45:56 chris Exp $ */
+/* $nsh: commands.c,v 1.51 2007/12/16 10:42:14 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -516,6 +516,7 @@ static struct intlist Intlist[] = {
 	{ "advskew",	"CARP advertisement skew",		intcarp, 0 },
 	{ "cpass",	"CARP passphrase",			intcpass, 0 },
 	{ "carpdev",	"CARP device",				intcdev, 0 },
+	{ "carpnode",	"CARP additional vhid/advskew",		intcnode, 0 },
 	{ "vlan",	"802.1Q vlan tag and parent",		intvlan, 0 },
 	{ "debug",	"Driver dependent debugging",		intflags, 0 },
 	{ "shutdown",	"Shutdown interface",			intflags, 2 },

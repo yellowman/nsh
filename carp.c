@@ -168,6 +168,97 @@ intcpass(char *ifname, int ifs, int argc, char **argv)
 }
 
 int
+intcnode(char *ifname, int ifs, int argc, char **argv)
+{
+	struct ifreq ifr;
+	struct carpreq creq;
+	const char *errmsg = NULL;
+	int set, i, last;
+	u_int vhid, advskew;
+
+	if (NO_ARG(argv[0])) {
+		set = 0;
+		argc--;
+		argv++;
+	} else
+		set = 1;
+
+	argc--;
+	argv++;
+
+	if ((!set && argc != 1) || (set && argc > 3) || (set && argc < 1)) {
+		printf("%% carpnode <vhid> [advskew] [state]\n");
+		printf("%% no carpnode <vhid>\n");
+		return (0);
+	}
+	bzero((char *) &creq, sizeof(struct carpreq));
+	ifr.ifr_data = (caddr_t) & creq;
+	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
+
+	errno = 0;
+	vhid = strtonum(argv[0], 0, 255, &errmsg);
+	if (errmsg) {
+		printf("%% vhid value out of range: %s\n", errmsg);
+		return(0);
+	}
+	if (argv[1]) {
+		advskew = strtonum(argv[1], 0, 255, &errmsg);
+		if (errmsg) {
+			printf("%% advskew value out of range: %s\n", errmsg);
+			return(0);
+		}
+	} else {
+		advskew = 0;
+	}
+	
+	if (ioctl(ifs, SIOCGVH, (caddr_t) & ifr) == -1) {
+		printf("%% intcnode: SIOCGVH: %s\n", strerror(errno));
+		return (0);
+	}
+	
+	/* find last used vhid */
+	for (last = 0; creq.carpr_vhids[last]; last++) {
+	}
+	last--;
+
+	/* find next free vhid */
+	for (i = 0; creq.carpr_vhids[i]; i++) {
+		if (vhid == creq.carpr_vhids[i])
+			break;
+		if (set && ((i + 1) == CARP_MAXNODES)) {
+			printf("%% maximum carp nodes reached, unable to add "
+			    "more\n");
+			return(0);
+		}
+	}
+	if (!set && !creq.carpr_vhids[i]) {
+		printf("%% unable to delete vhid %u, does not exist on %s\n",
+		    vhid, ifname);
+		return(0);
+	}
+
+	if (set) {
+		creq.carpr_vhids[i] = vhid;
+		creq.carpr_advskews[i] = advskew;
+	} else {
+		if (last == i) {
+			creq.carpr_vhids[i] = 0;
+			creq.carpr_advskews[i] = 0;
+		} else {
+			/* Swap last vhid to erased one, to not create gap */
+			creq.carpr_vhids[i] = creq.carpr_vhids[last];
+			creq.carpr_advskews[i] = creq.carpr_advskews[last];
+			creq.carpr_vhids[last] = 0;
+			creq.carpr_advskews[last] = 0;
+		}
+	}
+
+	if (ioctl(ifs, SIOCSVH, (caddr_t) & ifr) == -1)
+		printf("%% intcnode: SIOCSVH: %s\n", strerror(errno));
+        return (0);
+}
+
+int
 conf_carp(FILE *output, int s, char *ifname)
 {
 	struct ifreq ifr;
