@@ -1,6 +1,6 @@
-/* $nsh: if.c,v 1.26 2007/12/15 22:39:23 chris Exp $ */
+/* $nsh: if.c,v 1.27 2007/12/17 06:54:33 chris Exp $ */
 /*
- * Copyright (c) 2002
+ * Copyright (c) 2002-2007
  *      Chris Cappuccio.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -1114,6 +1114,45 @@ intlladdr(char *ifname, int ifs, int argc, char **argv)
 			    strerror(errno));
 		return(1);
 	}
+
+	return(0);
+}
+
+int
+intdesc(char *ifname, int ifs, int argc, char **argv)
+{
+	int set, i;
+	char desc[IFDESCRSIZE];
+	struct ifreq ifr;
+
+	if (NO_ARG(argv[0])) {
+		set = 0;
+		argv++;
+		argc--;
+	} else
+		set = 1;
+
+	argv++;
+	argc--;
+
+	if (set && argc < 1) {
+		printf("%% description <text of description>\n");
+		printf("%% no description\n");
+		return(0);
+	}
+
+	for (i = 0; (set && i < argc); i++) {
+		snprintf(desc, sizeof(desc), "%s%s%s", i == 0 ? "" : desc,
+		    i != 0 ? " " : "", argv[i]);
+	}
+
+	if (set)
+		ifr.ifr_data = (caddr_t)&desc;
+	else
+		ifr.ifr_data = (caddr_t)"";
+	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
+	if (ioctl(ifs, SIOCSIFDESCR, &ifr) < 0)
+		printf("%% intdesc: SIOCSIFDESCR: %s\n", strerror(errno));
 
 	return(0);
 }

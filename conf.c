@@ -1,4 +1,4 @@
-/* $nsh: conf.c,v 1.30 2007/12/15 22:39:23 chris Exp $ */
+/* $nsh: conf.c,v 1.31 2007/12/17 06:54:33 chris Exp $ */
 /*
  * Copyright (c) 2002, 2005
  *      Chris Cappuccio.  All rights reserved.
@@ -69,14 +69,14 @@ static const struct {
 	char *name;
 	int mtu;
 } defmtus[] = {
-	/* Current as of 8/20/05 */
+	/* Current as of 12/16/07 */
 	{ "gre",	1476 },
 	{ "gif",	1280 },
-	{ "tun",	3000 },
+	{ "tun",	1500 },
 	{ "sl",		296 },
 	{ "enc",	1536 },
-	{ "pflog",	33224 },
-	{ "lo",		33224 },
+	{ "pflog",	33208 },
+	{ "lo",		33208 },
 };
 
 int
@@ -153,12 +153,13 @@ void conf_interfaces(FILE *output)
 	int ifs, flags, ippntd, br;
 #define LEASEPREFIX     "/var/db/dhclient.leases"
 #define	LLPREFIX	"/var/run/lladdr"
-	char leasefile[sizeof(LEASEPREFIX)+IFNAMSIZ+1];
+	char leasefile[sizeof(LEASEPREFIX)+1+IFNAMSIZ+1];
 	char *lladdr, llorig[IFNAMSIZ+1];
 	char llfn[sizeof(LLPREFIX)+IFNAMSIZ+1];
+	char ifdescr[IFDESCRSIZE];
 
 	struct if_nameindex *ifn_list, *ifnp;
-	struct ifreq ifr;
+	struct ifreq ifr, ifrdesc;
 	struct if_data if_data;
 	struct vlanreq vreq;
 
@@ -206,6 +207,18 @@ void conf_interfaces(FILE *output)
 			br = 0;
 		fprintf(output, "%s %s\n", br ? "bridge" : "interface",
 		    ifnp->if_name);
+
+		/*
+		 * description, if available
+		 * copied straight from ifconfig.c
+		 */
+		memset(&ifrdesc, 0, sizeof(ifrdesc));
+		strlcpy(ifrdesc.ifr_name, ifnp->if_name,
+		    sizeof(ifrdesc.ifr_name));
+		ifrdesc.ifr_data = (caddr_t)&ifdescr;
+		if (ioctl(ifs, SIOCGIFDESCR, &ifrdesc) == 0 &&
+		    strlen(ifrdesc.ifr_data))
+			fprintf(output, " description %s\n", ifrdesc.ifr_data);
 
 		/*
 		 * print lladdr if necessary

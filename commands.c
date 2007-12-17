@@ -1,6 +1,6 @@
-/* $nsh: commands.c,v 1.51 2007/12/16 10:42:14 chris Exp $ */
+/* $nsh: commands.c,v 1.52 2007/12/17 06:54:33 chris Exp $ */
 /*
- * Copyright (c) 2002
+ * Copyright (c) 2002-2007
  *      Chris Cappuccio.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -490,6 +490,7 @@ static struct intlist Intlist[] = {
 /* Interface mode commands */
 	{ "ip",		"IP address and other parameters",	intip,  0 },
 	{ "alias",	"Additional IP addresses and other parameters", intip, 0 },
+	{ "description", "Interface description",		intdesc, 0 },
 	{ "mtu",	"Set Maximum Transmission Unit",	intmtu, 0 },
 	{ "metric",	"Set routing metric",			intmetric, 0 },
 	{ "link",	"Set link level options",		intlink, 2 },
