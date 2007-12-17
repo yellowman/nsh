@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.52 2007/12/17 06:54:33 chris Exp $ */
+/* $nsh: commands.c,v 1.53 2007/12/17 08:46:16 chris Exp $ */
 /*
  * Copyright (c) 2002-2007
  *      Chris Cappuccio.  All rights reserved.
@@ -1706,7 +1706,7 @@ pr_s_conf(void)
 		return(0);
 	}
 	
-	f = fopen("NSHRC", "r");
+	f = fopen(NSHRC, "r");
 	if (f == NULL) {
 		if (errno == ENOENT)
 			printf ("%% No startup configuration found\n");
