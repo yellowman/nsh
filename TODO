@@ -1,4 +1,4 @@
-$nsh: TODO,v 1.20 2007/12/17 08:39:04 chris Exp $
+$nsh: TODO,v 1.21 2007/12/17 09:20:53 chris Exp $
 
 nsh is a work in progress, future versions will be released which
 implement much of the following (of course, diffs are welcome):
@@ -25,6 +25,7 @@ Cleanup:
 
 To be implemented:
 
+* fix arp set/show
 * handle multipath routes
 * pfsync syncpeer
 * snmpd access controls or snmpd.conf edit
