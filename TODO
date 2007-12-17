@@ -1,4 +1,4 @@
-$nsh: TODO,v 1.18 2007/01/19 09:45:56 chris Exp $
+$nsh: TODO,v 1.19 2007/12/17 06:15:13 chris Exp $
 
 nsh is a work in progress, future versions will be released which
 implement much of the following (of course, diffs are welcome):
@@ -6,7 +6,6 @@ implement much of the following (of course, diffs are welcome):
 Cleanup:
 
 * Formatting for the manual.  Something that looks slick in PDF and print.
-* Restructure, rewrite a few things, etc..
 * Check more errno values in various places for common mistakes and print out
   the error in "plain english" instead of kernel/library jargon
 * More security auditing for string handling, off-by-one errors, data
@@ -20,53 +19,52 @@ Cleanup:
   direct from CLI generally represent problems in nsh, or strange user
   alterations of the conf file)
 * Consistency in how errors are returned, handled between functions
+* Get rid of wi crap, move to new interfaces where necessary
+* Do we need to implement different get_lladdr for ieee80211 interfaces?
+  Test this
 
 To be implemented:
 
 * pfsync syncpeer
-* if description
+* snmpd access controls or snmpd.conf edit
+* bridge rtsp commands
 * Rest of newer 802.11 gunk like rssi display, chan, flags
 * kernel pppoe
 * handle TDM timeslots
 * View other users logged in, clear their sessions, etc...
-* Interface wtth bgpd.conf, ospfd.conf, ripd.conf, associated ctl programs
-  maybe like we do with pf.conf and pfctl
+* Interface with bgpd.conf, ospfd.conf, ripd.conf, relayd.conf and associated
+  ctl programs, maybe like we do with pf.conf and pfctl
 * Configure IPsec VPNs/IPComp with simple CLI commands (The easiest way to do
   this would be through ipsecctl?? or direct?)
 * DHCP daemon control
-* telnet/ssh?
+* exec ssh/telnet
 * Persistent comments/remarks in the config file (to document routes, etc..)
-* Do we need to implement different get_lladdr for ieee80211 interfaces?
-  Test this
-
-Lower priority:
-
-* IPv6?? (shouldn't be hard, considering that most of the functions
-  we stole from other source already support it)
-* IPX?? AppleTalk??
+* IPv6 (shouldn't be too hard, considering that most of the functions
+  we stole from other source already support it, but i won't look at this
+  until I use IPv6 myself, or someone else submits IPv6 patches)
 
 Would be nice:
 
 * Perhaps some way for the shell to upgrade itself, or the entire system/
   flash image when given a network source for new binaries?
-* Build a web interface that works through the rc file handler
+* Build a simple web interface that works through the rc file handler (web if
+  that calls nsh -i to execute commands)
 * Turn pfctl into a library and use it directly
 * Separate the user interface from the kernel interface so that nsh doesn't
-  need to be run as root, maybe this would allow us to run an nsh daemon
-  in the background that could persistently keep other information which the
-  kernel doesn't store itself. 
+  need to be run as root.  Maybe use an nsh daemon in the background that could
+  persistently keep other information not stored in the kernel itself.  The
+  daemon approach might be nice for a web app to access the back end of nsh.
+  Or, use the imsg framework.
 * Add more diagnostic messages for verbose output where useful
-* Can we hook into snmpd at all or just run it separately on the same box?
 * Support for paging through displays of text X lines at a time
 * Something comparable to "| inc" from cisco-land
 * Tab command/argument completion
 * Context-sensitive help
-* Import unimplemented wicontrol features
-* And what about sbecontrol?
 * Convenient/automatic mechanisms to centralize configurations for
   tracking/revision control
 * Get rid of routepr.c and use sysctl-based functions instead while still
   displaying all that tasty info
+* Do the same thing for the various IP statistics that are now sysctl-able
 * While there, split out arp/route show
 
 Known Bugs (or, things that I don't want to bother with right now, but
@@ -75,5 +73,5 @@ better not forget later...):
 * The kernel does not keep count of information displayed in 'show rtstat'
   properly (what else??)
 * ALTQTBRSET was removed from the kernel with the migration to pf.  But,
-  there is no equivalent.  Fix this.
+  there is no easy to use equivalent.  Fix this.
 * ...
