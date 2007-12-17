@@ -1,4 +1,4 @@
-/* $nsh: conf.c,v 1.31 2007/12/17 06:54:33 chris Exp $ */
+/* $nsh: conf.c,v 1.32 2007/12/17 08:58:01 chris Exp $ */
 /*
  * Copyright (c) 2002, 2005
  *      Chris Cappuccio.  All rights reserved.
@@ -89,11 +89,13 @@ conf(FILE *output)
 
 	gethostname (hostbuf, sizeof(hostbuf));
 	fprintf(output, "hostname %s\n", hostbuf);
-	if(read_pass(cpass, sizeof(cpass)))
+	if(read_pass(cpass, sizeof(cpass))) {
 		fprintf(output, "enable secret blowfish %s\n", cpass);
-	else
-		printf("%% Unable to read run-time crypt repository:"
-		    " %s\n", strerror(errno));
+	} else {
+		if (errno != ENOENT)
+			printf("%% Unable to read run-time crypt repository:"
+			    " %s\n", strerror(errno));
+	}
 
 	conf_interfaces(output);
 
