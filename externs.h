@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.35 2007/12/25 22:32:24 chris Exp $ */
+/* $nsh: externs.h,v 1.36 2007/12/25 22:46:14 chris Exp $ */
 /*
  * nsh externs and more
  */
@@ -102,7 +102,7 @@ void pfsync_stats(void);
 void ipcomp_stats(void);
 
 /* mbuf.c */
-void mbpr(u_long, u_long, u_long);
+void mbpr(void);
 
 /* kread.c */
 int kread(u_long, char *, int);

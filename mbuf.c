@@ -1,5 +1,4 @@
-/* $nsh: mbuf.c,v 1.7 2006/04/11 19:58:19 pata Exp $ */
-/* From: $OpenBSD: /usr/src/usr.bin/netstat/mbuf.c,v 1.11 2002/01/17 21:34:58 mickey Exp $ */
+/* From: $OpenBSD: mbuf.c,v 1.26 2007/12/19 01:47:00 deraadt Exp $	*/
 
 /*
  * Copyright (c) 1983, 1988, 1993
@@ -35,18 +34,23 @@
 #include <sys/socket.h>
 #include <sys/mbuf.h>
 #include <sys/pool.h>
+#include <sys/sysctl.h>
 
-#include <unistd.h>
+#include <errno.h>
+#include <kvm.h>
 #include <limits.h>
 #include <stdio.h>
+#include <string.h>
+#include <unistd.h>
 #include "externs.h"
 
 #define	YES	1
-
 typedef int bool;
 
-struct mbstat mbstat;
+struct	mbstat mbstat;
 struct pool mbpool, mclpool;
+
+extern kvm_t *kvmd;
 
 static struct mbtypes {
 	int	mt_type;
@@ -69,38 +73,86 @@ bool seen[256];			/* "have we seen this type yet?" */
  * Print mbuf statistics.
  */
 void
-mbpr(u_long mbaddr, u_long mbpooladdr, u_long mclpooladdr)
+mbpr(void)
 {
 	int totmem, totused, totmbufs, totpct;
-	int i;
+	int i, mib[4], npools, flag = 0;
+	struct pool pool;
 	struct mbtypes *mp;
+	size_t size;
 	int page_size = getpagesize();
 
 	if (nmbtypes != 256) {
 		printf("%% mbpr: unexpected change to mbstat; check source\n");
 		return;
 	}
-	if (mbaddr == 0) {
-		printf("%% mbpr: mbstat: symbol not in namelist\n");
+
+	mib[0] = CTL_KERN;
+	mib[1] = KERN_MBSTAT;
+	size = sizeof(mbstat);
+
+	if (sysctl(mib, 2, &mbstat, &size, NULL, 0) < 0) {
+		printf("%% mbpr: sysctl mbstat: %s\n", strerror(errno));
 		return;
 	}
-	if (kread(mbaddr, (char *)&mbstat, sizeof (mbstat)))
-		return;
-	if (kread(mbpooladdr, (char *)&mbpool, sizeof (mbpool)))
-		return;
 
-	if (kread(mclpooladdr, (char *)&mclpool, sizeof (mclpool)))
-		return;
+	mib[0] = CTL_KERN;
+	mib[1] = KERN_POOL;
+	mib[2] = KERN_POOL_NPOOLS;
+	size = sizeof(npools);
 
-	printf("%% mbufs:\n");
+	if (sysctl(mib, 3, &npools, &size, NULL, 0) < 0) {
+		printf("%% mbpr: sysctl npools: %s\n", strerror(errno));
+		return;
+	}
+
+	for (i = 1; npools; i++) {
+		char name[32];
+
+		mib[0] = CTL_KERN;
+		mib[1] = KERN_POOL;
+		mib[2] = KERN_POOL_POOL;
+		mib[3] = i;
+		size = sizeof(struct pool);
+		if (sysctl(mib, 4, &pool, &size, NULL, 0) < 0) {
+			if (errno == ENOENT)
+				continue;
+			printf("%% mbpr: sysctl pool size: %s\n",
+			    strerror(errno));
+			return;
+		}
+		npools--;
+		mib[2] = KERN_POOL_NAME;
+		size = sizeof(name);
+		if (sysctl(mib, 4, &name, &size, NULL, 0) < 0) {
+			printf("%% mbpr: sysctl pool name: %s\n",
+			    strerror(errno));
+			return;
+		}
+
+		if (!strncmp(name, "mbpl", strlen("mbpl"))) {
+			bcopy(&pool, &mbpool, sizeof(struct pool));
+			flag++;
+		} else {
+			if (!strncmp(name, "mclpl", strlen("mclpl"))) {
+				bcopy(&pool, &mclpool,
+				    sizeof(struct pool));
+				flag++;
+			}
+		}
+
+		if (flag == 2)
+			break;
+	}
+
 	totmbufs = 0;
 	for (mp = mbtypes; mp->mt_name; mp++)
 		totmbufs += mbstat.m_mtypes[mp->mt_type];
-	printf("\t%u mbuf%s in use:\n", totmbufs, plural(totmbufs));
+	printf("%u mbuf%s in use:\n", totmbufs, plural(totmbufs));
 	for (mp = mbtypes; mp->mt_name; mp++)
 		if (mbstat.m_mtypes[mp->mt_type]) {
 			seen[mp->mt_type] = YES;
-			printf("\t\t%u mbuf%s allocated to %s\n",
+			printf("\t%u mbuf%s allocated to %s\n",
 			    mbstat.m_mtypes[mp->mt_type],
 			    plural((int)mbstat.m_mtypes[mp->mt_type]),
 			    mp->mt_name);
@@ -108,22 +160,22 @@ mbpr(u_long mbaddr, u_long mbpooladdr, u_long mclpooladdr)
 	seen[MT_FREE] = YES;
 	for (i = 0; i < nmbtypes; i++)
 		if (!seen[i] && mbstat.m_mtypes[i]) {
-			printf("\t\t%u mbuf%s allocated to <mbuf type %d>\n",
+			printf("\t%u mbuf%s allocated to <mbuf type %d>\n",
 			    mbstat.m_mtypes[i],
 			    plural((int)mbstat.m_mtypes[i]), i);
 		}
-	printf("\t%lu/%lu/%lu mbuf clusters in use (current/peak/max)\n",
-	    (u_long)(mclpool.pr_nget - mclpool.pr_nput),
+	printf("%lu/%lu/%lu mbuf clusters in use (current/peak/max)\n",
+	    (u_long)(mclpool.pr_nout),
 	    (u_long)(mclpool.pr_hiwat * mclpool.pr_itemsperpage),
 	    (u_long)(mclpool.pr_maxpages * mclpool.pr_itemsperpage));
 	totmem = (mbpool.pr_npages * page_size) +
 	    (mclpool.pr_npages * page_size);
-	totused = (mbpool.pr_nget - mbpool.pr_nput) * mbpool.pr_size +
-	    (mclpool.pr_nget - mclpool.pr_nput) * mclpool.pr_size;
+	totused = mbpool.pr_nout * mbpool.pr_size +
+	    mclpool.pr_nout * mclpool.pr_size;
 	totpct = (totmem == 0)? 0 : ((totused * 100)/totmem);
-	printf("\t%u Kbytes allocated to network (%d%% in use)\n",
+	printf("%u Kbytes allocated to network (%d%% in use)\n",
 	    totmem / 1024, totpct);
-	printf("\t%lu requests for memory denied\n", mbstat.m_drops);
-	printf("\t%lu requests for memory delayed\n", mbstat.m_wait);
-	printf("\t%lu calls to protocol drain routines\n", mbstat.m_drain);
+	printf("%lu requests for memory denied\n", mbstat.m_drops);
+	printf("%lu requests for memory delayed\n", mbstat.m_wait);
+	printf("%lu calls to protocol drain routines\n", mbstat.m_drain);
 }

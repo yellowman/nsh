@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.54 2007/12/25 22:32:24 chris Exp $ */
+/* $nsh: commands.c,v 1.55 2007/12/25 22:46:14 chris Exp $ */
 /*
  * Copyright (c) 2002-2007
  *      Chris Cappuccio.  All rights reserved.
@@ -90,16 +90,8 @@ static char ifname[IFNAMSIZ];		/* interface name */
  * Kernel namelist for our use
  */
 struct nlist nl[] = {
-#define N_MBSTAT 0
-	{ "_mbstat" },		/* mbuf stats */
-#define N_RTSTAT 1
-	{ "_rtstat" },		/* routing stats */
-#define N_RTREE 2
+#define N_RTREE 0
 	{ "_rt_tables" },	/* routing tree */
-#define N_MCLPOOL 3
-	{ "_mclpool" },
-#define N_MBPOOL 4
-	{ "_mbpool" },
 	{ "" }
 };
 
@@ -1814,7 +1806,6 @@ pr_ipcomp_stats(void)
 int
 pr_mbuf_stats(void)
 {
-	mbpr(nl[N_MBSTAT].n_value, nl[N_MBPOOL].n_value,   
-	    nl[N_MCLPOOL].n_value);
+	mbpr();
 	return 0;
 }
