@@ -1,4 +1,4 @@
-/* $nsh: conf.c,v 1.32 2007/12/17 08:58:01 chris Exp $ */
+/* $nsh: conf.c,v 1.33 2007/12/25 06:37:12 chris Exp $ */
 /*
  * Copyright (c) 2002, 2005
  *      Chris Cappuccio.  All rights reserved.
@@ -330,13 +330,13 @@ void conf_ifmetrics(FILE *output, int ifs, struct if_data if_data,
 	if (if_metric)
 		fprintf(output, " metric %u\n", if_metric);
 
-	if (get_nwinfo(ifname, tmpc, TMPSIZ, NWID) != NULL) {
+	if (get_nwinfo(ifname, tmpc, TMPSIZ, NWID) != 0) {
 		fprintf(output, " nwid %s\n", tmpc);
-		if (get_nwinfo(ifname, tmpc, TMPSIZ, NWKEY) != NULL)
+		if (get_nwinfo(ifname, tmpc, TMPSIZ, NWKEY) != 0)
 			fprintf(output, " nwkey %s\n", tmpc);
-		if (get_nwinfo(ifname, tmpc, TMPSIZ, TXPOWER) != NULL)
+		if (get_nwinfo(ifname, tmpc, TMPSIZ, TXPOWER) != 0)
 			fprintf(output, " txpower %s\n", tmpc);
-		if (get_nwinfo(ifname, tmpc, TMPSIZ, POWERSAVE) != NULL)
+		if (get_nwinfo(ifname, tmpc, TMPSIZ, POWERSAVE) != 0)
 			fprintf(output, " powersave %s\n", tmpc);
 	}
 }
