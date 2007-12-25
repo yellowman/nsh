@@ -1,4 +1,4 @@
-/* $nsh: ieee80211.c,v 1.12 2007/01/19 10:29:37 chris Exp $ */
+/* $nsh: ieee80211.c,v 1.13 2007/12/25 06:42:55 chris Exp $ */
 /* From: $OpenBSD: /usr/src/sbin/ifconfig/ifconfig.c,v 1.68 2002/06/19 18:53:53 millert Exp $ */
 /*
  * Copyright (c) 1983, 1993
@@ -278,7 +278,7 @@ get_nwinfo(char *ifname, char *str, int str_len, int type)
 		struct ifreq ifr;
 
 		memset(&ifr, 0, sizeof(ifr));
-		ifr.ifr_data = (caddr_t) &nwid;
+		ifr.ifr_data = (caddr_t)&nwid;
 		(void) strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 		if (ioctl(ifs, SIOCG80211NWID, (caddr_t) & ifr) == 0) {
 			/* nwid.i_nwid is not NUL terminated. */
@@ -292,13 +292,14 @@ get_nwinfo(char *ifname, char *str, int str_len, int type)
 	case TXPOWER:
 	{
 		struct ieee80211_txpower txpower;
-		struct ifreq ifr;
 
-		memset(&ifr, 0, sizeof(ifr));
-		ifr.ifr_data = (caddr_t)&txpower;
-		(void) strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
-		if (ioctl(ifs, SIOCG80211TXPOWER, (caddr_t) &ifr) == 0) {
-			if (txpower.i_mode == IEEE80211_TXPOWER_MODE_FIXED)
+		memset(&txpower, 0, sizeof(txpower));
+		(void) strlcpy(txpower.i_name, ifname, sizeof(txpower.i_name));
+		if (ioctl(ifs, SIOCG80211TXPOWER, (caddr_t) &txpower) == 0) {
+			/* XXX FIXED is always set? For now, check for > 0, but
+			   really, find kernel bug and fix it */
+			if (txpower.i_mode == IEEE80211_TXPOWER_MODE_FIXED &&
+			    txpower.i_val > 0)
 				snprintf(str, str_len, "%d", txpower.i_val);
 		} else {
 			printf("%% get_nwinfo: SIOCG80211TXPOWER: %s\n",
@@ -454,6 +455,7 @@ inttxpower(char *ifname, int ifs, int argc, char **argv)
 	strlcpy(txpower.i_name, ifname, sizeof(txpower.i_name));
    
 	if (!set) {
+		txpower.i_val = 0;
 		txpower.i_mode = IEEE80211_TXPOWER_MODE_AUTO;
 	} else {
 		dbm = strtonum(argv[0], SHRT_MIN, SHRT_MAX, &errmsg);
