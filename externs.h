@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.34 2007/12/17 06:54:33 chris Exp $ */
+/* $nsh: externs.h,v 1.35 2007/12/25 22:32:24 chris Exp $ */
 /*
  * nsh externs and more
  */
@@ -88,16 +88,18 @@ int inttxpower(char *, int, int, char **);
 int intbssid(char *, int, int, char **);
 
 /* stats.c */
-void rt_stats(u_long);
-void tcp_stats(u_long);
-void udp_stats(u_long);
-void ip_stats(u_long);
-void icmp_stats(u_long);
-void igmp_stats(u_long);
-void ah_stats(u_long);
-void esp_stats(u_long);
-void ipip_stats(u_long);
-void ipcomp_stats(u_long);
+void rt_stats(void);
+void tcp_stats(void);
+void udp_stats(void);
+void ip_stats(void);
+void icmp_stats(void);
+void igmp_stats(void);
+void ah_stats(void);
+void esp_stats(void);
+void ipip_stats(void);
+void carp_stats(void);
+void pfsync_stats(void);
+void ipcomp_stats(void);
 
 /* mbuf.c */
 void mbpr(u_long, u_long, u_long);

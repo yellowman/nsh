@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.53 2007/12/17 08:46:16 chris Exp $ */
+/* $nsh: commands.c,v 1.54 2007/12/25 22:32:24 chris Exp $ */
 /*
  * Copyright (c) 2002-2007
  *      Chris Cappuccio.  All rights reserved.
@@ -96,25 +96,9 @@ struct nlist nl[] = {
 	{ "_rtstat" },		/* routing stats */
 #define N_RTREE 2
 	{ "_rt_tables" },	/* routing tree */
-#define N_IPSTAT 3
-	{ "_ipstat" },		/* ip stats */
-#define N_AHSTAT 4
-	{ "_ahstat" },		/* ah stats */
-#define N_ESPSTAT 5
-	{ "_espstat" },		/* esp stats */
-#define N_TCPSTAT 6
-	{ "_tcpstat" },		/* tcp stats */
-#define N_UDPSTAT 7
-	{ "_udpstat" },		/* udp stats */
-#define N_ICMPSTAT 8
-	{ "_icmpstat" },	/* icmp stats */
-#define N_IGMPSTAT 9
-	{ "_igmpstat" },	/* igmp stats */
-#define N_IPCOMPSTAT 10
-	{ "_ipcompstat" },	/* ipcomp stats */
-#define N_MCLPOOL 11
+#define N_MCLPOOL 3
 	{ "_mclpool" },
-#define N_MBPOOL 12
+#define N_MBPOOL 4
 	{ "_mbpool" },
 	{ "" }
 };
@@ -156,6 +140,8 @@ static int	pr_icmp_stats(void);
 static int	pr_igmp_stats(void);
 static int	pr_ipcomp_stats(void);
 static int	pr_mbuf_stats(void);
+static int	pr_carp_stats(void);
+static int	pr_pfsync_stats(void);
 static int	pr_conf(void);
 static int	pr_s_conf(void);
 static int	wr_conf(void);
@@ -218,6 +204,8 @@ static Menu showlist[] = {
 	{ "igmpstats",	"IGMP statistics",	0, 0, pr_igmp_stats },
 	{ "ipcompstats","IPCOMP statistics",	0, 0, pr_ipcomp_stats },
 	{ "rtstats",	"Routing statistics",	0, 0, pr_rt_stats },
+	{ "carpstats",	"CARP statistics",	0, 0, pr_carp_stats },
+	{ "pfsyncstats", "pfsync statistics",	0, 0, pr_pfsync_stats },
 	{ "mbufstats",	"Memory management statistics",	0, 0, pr_mbuf_stats },
 	{ "monitor",	"Monitor routing/arp table changes", 0, 0, monitor },
 	{ "ap",		"Wireless access points", 1, 1, wi_printaplist },
@@ -1741,7 +1729,21 @@ pr_routes(char *route)
 int
 pr_rt_stats(void)
 {
-	rt_stats(nl[N_RTSTAT].n_value);
+	rt_stats();
+	return 0;
+}
+
+int
+pr_carp_stats(void)
+{
+	carp_stats();
+	return 0;
+}
+
+int
+pr_pfsync_stats(void)
+{
+	pfsync_stats();
 	return 0;
 }
 
@@ -1756,56 +1758,56 @@ pr_pf_stats(void)
 int
 pr_ip_stats(void)
 {
-	ip_stats(nl[N_IPSTAT].n_value);
+	ip_stats();
 	return 0;
 }
 
 int
 pr_ah_stats(void)
 {
-	ah_stats(nl[N_AHSTAT].n_value);
+	ah_stats();
 	return 0;
 }
 
 int
 pr_esp_stats(void)
 {
-	esp_stats(nl[N_ESPSTAT].n_value);
+	esp_stats();
 	return 0;
 }
 
 int
 pr_tcp_stats(void)
 {
-	tcp_stats(nl[N_TCPSTAT].n_value);
+	tcp_stats();
 	return 0;
 }
 
 int
 pr_udp_stats(void)
 {
-	udp_stats(nl[N_UDPSTAT].n_value);
+	udp_stats();
 	return 0;
 }
 
 int
 pr_icmp_stats(void)
 {
-	icmp_stats(nl[N_ICMPSTAT].n_value);
+	icmp_stats();
 	return 0;
 }
 
 int
 pr_igmp_stats(void)
 {
-	igmp_stats(nl[N_IGMPSTAT].n_value);
+	igmp_stats();
 	return 0;
 }
 
 int
 pr_ipcomp_stats(void)
 {
-	ipcomp_stats(nl[N_IPCOMPSTAT].n_value);
+	ipcomp_stats();
 	return 0;
 }
 

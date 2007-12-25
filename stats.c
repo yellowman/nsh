@@ -1,5 +1,5 @@
-/* $nsh: stats.c,v 1.7 2004/03/03 08:45:27 chris Exp $ */
-/* From: $OpenBSD: /usr/src/usr.bin/netstat/inet.c,v 1.58 2002/02/19 21:11:23 miod Exp $ */
+/* $nsh: stats.c,v 1.8 2007/12/25 22:32:24 chris Exp $ */
+/* From: $OpenBSD: inet.c,v 1.104 2007/12/19 01:47:00 deraadt Exp $ */
 
 /*
  * Copyright (c) 1983, 1988, 1993
@@ -36,6 +36,8 @@
 #include <sys/socketvar.h>
 #include <sys/mbuf.h>
 #include <sys/protosw.h>
+#include <sys/sysctl.h>
+#include <errno.h>
 
 #include <net/route.h>
 #include <netinet/in.h>
@@ -62,6 +64,10 @@
 #include <netinet/ip_ipip.h>
 #include <netinet/ip_ipcomp.h>
 #include <netinet/ip_ether.h>
+#include <netinet/ip_carp.h>
+#include <net/if.h>
+#include <net/pfvar.h>
+#include <net/if_pfsync.h>
 
 #include <arpa/inet.h>
 #include <limits.h>
@@ -83,15 +89,20 @@ void	inet6print(struct in6_addr *, int, char *, int);
  * Dump TCP statistics structure.
  */
 void
-tcp_stats(off)
-	u_long off;
+tcp_stats()
 {
 	struct tcpstat tcpstat;
+	int mib[] = { CTL_NET, AF_INET, IPPROTO_TCP, TCPCTL_STATS };
+	size_t len = sizeof(tcpstat);
 
-	if (off == 0)
+	if (sysctl(mib, sizeof(mib) / sizeof(mib[0]),
+	    &tcpstat, &len, NULL, 0) == -1) {
+		if (errno != ENOPROTOOPT)
+			printf("%% tcp_stats: sysctl: %s\n",strerror(errno));
 		return;
+	}
+
 	printf ("%% tcp:\n");
-	kread(off, (char *)&tcpstat, sizeof (tcpstat));
 
 #define	p(f, m) if (tcpstat.f || sflag <= 1) \
     printf(m, tcpstat.f, plural(tcpstat.f))
@@ -121,13 +132,14 @@ tcp_stats(off)
 	p2(tcps_rcvackpack, tcps_rcvackbyte, "\t\t%u ack%s (for %qd byte%s)\n");
 	p(tcps_rcvdupack, "\t\t%u duplicate ack%s\n");
 	p(tcps_rcvacktoomuch, "\t\t%u ack%s for unsent data\n");
+	p(tcps_rcvacktooold, "\t\t%u ack%s for old data\n");
 	p2(tcps_rcvpack, tcps_rcvbyte,
 		"\t\t%u packet%s (%qu byte%s) received in-sequence\n");
 	p2(tcps_rcvduppack, tcps_rcvdupbyte,
 		"\t\t%u completely duplicate packet%s (%qd byte%s)\n");
 	p(tcps_pawsdrop, "\t\t%u old duplicate packet%s\n");
 	p2(tcps_rcvpartduppack, tcps_rcvpartdupbyte,
-		"\t\t%u packet%s with some dup. data (%qd byte%s duped)\n");
+	    "\t\t%u packet%s with some duplicate data (%qd byte%s duplicated)\n");
 	p2(tcps_rcvoopack, tcps_rcvoobyte,
 		"\t\t%u out-of-order packet%s (%qd byte%s)\n");
 	p2(tcps_rcvpackafterwin, tcps_rcvbyteafterwin,
@@ -139,17 +151,21 @@ tcp_stats(off)
 	p(tcps_rcvbadoff, "\t\t%u discarded for bad header offset field%s\n");
 	p1(tcps_rcvshort, "\t\t%u discarded because packet too short\n");
 	p1(tcps_rcvnosec, "\t\t%u discarded for missing IPsec protection\n");
+	p1(tcps_rcvmemdrop, "\t\t%u discarded due to memory shortage\n");
 	p(tcps_inhwcsum, "\t\t%u packet%s hardware-checksummed\n");
+	p(tcps_rcvbadsig, "\t\t%u bad/missing md5 checksum%s\n");
+	p(tcps_rcvgoodsig, "\t\t%qd good md5 checksum%s\n");
 	p(tcps_connattempt, "\t%u connection request%s\n");
 	p(tcps_accepts, "\t%u connection accept%s\n");
 	p(tcps_connects, "\t%u connection%s established (including accepts)\n");
 	p2(tcps_closed, tcps_drops,
 		"\t%u connection%s closed (including %u drop%s)\n");
+	p(tcps_conndrained, "\t%qd connection%s drained\n");
 	p(tcps_conndrops, "\t%u embryonic connection%s dropped\n");
 	p2(tcps_rttupdated, tcps_segstimed,
 		"\t%u segment%s updated rtt (of %u attempt%s)\n");
 	p(tcps_rexmttimeo, "\t%u retransmit timeout%s\n");
-	p(tcps_timeoutdrop, "\t\t%u connection%s dropped by rexmit timeout\n");
+	p(tcps_timeoutdrop, "\t\t%u connection%s dropped by retransmit timeout\n");
 	p(tcps_persisttimeo, "\t%u persist timeout%s\n");
 	p(tcps_keeptimeo, "\t%u keepalive timeout%s\n");
 	p(tcps_keepprobe, "\t\t%u keepalive probe%s sent\n");
@@ -157,7 +173,42 @@ tcp_stats(off)
 	p(tcps_predack, "\t%u correct ACK header prediction%s\n");
 	p(tcps_preddat, "\t%u correct data packet header prediction%s\n");
 	p3(tcps_pcbhashmiss, "\t%u PCB cache miss%s\n");
-	p(tcps_badsyn, "\t%u SYN packet%s received with same src/dst address/port\n");
+
+	p(tcps_ecn_accepts, "\t%u ECN connection%s accepted\n");
+	p(tcps_ecn_rcvece, "\t\t%u ECE packet%s received\n");
+	p(tcps_ecn_rcvcwr, "\t\t%u CWR packet%s received\n");
+	p(tcps_ecn_rcvce, "\t\t%u CE packet%s received\n");
+	p(tcps_ecn_sndect, "\t\t%u ECT packet%s sent\n");
+	p(tcps_ecn_sndece, "\t\t%u ECE packet%s sent\n");
+	p(tcps_ecn_sndcwr, "\t\t%u CWR packet%s sent\n");
+	p1(tcps_cwr_frecovery, "\t\t\tcwr by fastrecovery: %u\n");
+	p1(tcps_cwr_timeout, "\t\t\tcwr by timeout: %u\n");
+	p1(tcps_cwr_ecn, "\t\t\tcwr by ecn: %u\n");
+
+	p(tcps_badsyn, "\t%u bad connection attempt%s\n");
+	p1(tcps_sc_added, "\t%qd SYN cache entries added\n");
+	p(tcps_sc_collisions, "\t\t%qd hash collision%s\n");
+	p1(tcps_sc_completed, "\t\t%qd completed\n");
+	p1(tcps_sc_aborted, "\t\t%qd aborted (no space to build PCB)\n");
+	p1(tcps_sc_timed_out, "\t\t%qd timed out\n");
+	p1(tcps_sc_overflowed, "\t\t%qd dropped due to overflow\n");
+	p1(tcps_sc_bucketoverflow, "\t\t%qd dropped due to bucket overflow\n");
+	p1(tcps_sc_reset, "\t\t%qd dropped due to RST\n");
+	p1(tcps_sc_unreach, "\t\t%qd dropped due to ICMP unreachable\n");
+	p(tcps_sc_retransmitted, "\t%qd SYN,ACK%s retransmitted\n");
+	p(tcps_sc_dupesyn, "\t%qd duplicate SYN%s received for entries "
+	    "already in the cache\n");
+	p(tcps_sc_dropped, "\t%qd SYN%s dropped (no route or no space)\n");
+
+	p(tcps_sack_recovery_episode, "\t%qd SACK recovery episode%s\n");
+	p(tcps_sack_rexmits,
+	    "\t\t%qd segment rexmit%s in SACK recovery episodes\n");
+	p(tcps_sack_rexmit_bytes,
+	    "\t\t%qd byte rexmit%s in SACK recovery episodes\n");
+	p(tcps_sack_rcv_opts,
+	    "\t%qd SACK option%s received\n");
+	p(tcps_sack_snd_opts, "\t%qd SACK option%s sent\n");
+
 #undef p
 #undef p1
 #undef p2
@@ -169,15 +220,20 @@ tcp_stats(off)
  * Dump UDP statistics structure.
  */
 void
-udp_stats(off)
-	u_long off;
+udp_stats()
 {
 	struct udpstat udpstat;
 	u_long delivered;
+	int mib[] = { CTL_NET, AF_INET, IPPROTO_UDP, UDPCTL_STATS };
+	size_t len = sizeof(udpstat);
 
-	if (off == 0)
+	if (sysctl(mib, sizeof(mib) / sizeof(mib[0]),
+	    &udpstat, &len, NULL, 0) == -1) {
+		if (errno != ENOPROTOOPT)
+			printf("%% udp_stats: sysctl: %s\n",strerror(errno));
 		return;
-	kread(off, (char *)&udpstat, sizeof (udpstat));
+	}
+
 	printf("%% udp:\n");
 #define	p(f, m) if (udpstat.f || sflag <= 1) \
     printf(m, udpstat.f, plural(udpstat.f))
@@ -213,14 +269,19 @@ udp_stats(off)
  * Dump IP statistics structure.
  */
 void
-ip_stats(off)
-	u_long off;
+ip_stats()
 {
 	struct ipstat ipstat;
+	int mib[] = { CTL_NET, AF_INET, IPPROTO_IP, IPCTL_STATS };
+	size_t len = sizeof(ipstat);
 
-	if (off == 0)
+	if (sysctl(mib, sizeof(mib) / sizeof(mib[0]),
+	    &ipstat, &len, NULL, 0) == -1) {
+		if (errno != ENOPROTOOPT)
+			printf("%% ip_stats: sysctl: %s\n",strerror(errno));
 		return;
-	kread(off, (char *)&ipstat, sizeof (ipstat));
+	}
+
 	printf("%% ip:\n");
 
 #define	p(f, m) if (ipstat.f || sflag <= 1) \
@@ -237,7 +298,7 @@ ip_stats(off)
 	p1(ips_badoptions, "\t%lu with bad options\n");
 	p1(ips_badvers, "\t%lu with incorrect version number\n");
 	p(ips_fragments, "\t%lu fragment%s received\n");
-	p(ips_fragdropped, "\t%lu fragment%s dropped (dup or out of space)\n");
+	p(ips_fragdropped, "\t%lu fragment%s dropped (duplicates or out of space)\n");
 	p(ips_badfrags, "\t%lu malformed fragment%s dropped\n");
 	p(ips_fragtimeout, "\t%lu fragment%s dropped after timeout\n");
 	p(ips_reassembled, "\t%lu packet%s reassembled ok\n");
@@ -259,11 +320,12 @@ ip_stats(off)
 	p(ips_badaddr, "\t%lu datagram%s with bad address in header\n");
 	p(ips_inhwcsum, "\t%lu input datagram%s checksum-processed by hardware\n");
 	p(ips_outhwcsum, "\t%lu output datagram%s checksum-processed by hardware\n");
+	p(ips_notmember, "\t%lu multicast packet%s which we don't join\n");
 #undef p
 #undef p1
 }
 
-static	char *icmpnames[] = {
+static	char *icmpnames[ICMP_MAXTYPE + 1] = {
 	"echo reply",
 	"#1",
 	"#2",
@@ -283,21 +345,48 @@ static	char *icmpnames[] = {
 	"information request reply",
 	"address mask request",
 	"address mask reply",
+	"#19",
+	"#20",
+	"#21",
+	"#22",
+	"#23",
+	"#24",
+	"#25",
+	"#26",
+	"#27",
+	"#28",
+	"#29",
+	"traceroute",
+	"data conversion error",
+	"mobile host redirect",
+	"IPv6 where-are-you",
+	"IPv6 i-am-here",
+	"mobile registration request",
+	"mobile registration reply",
+	"#37",
+	"#38",
+	"SKIP",
+	"Photuris",
 };
 
 /*
  * Dump ICMP statistics.
  */
 void
-icmp_stats(off)
-	u_long off;
+icmp_stats()
 {
 	struct icmpstat icmpstat;
 	int i, first;
+	int mib[] = { CTL_NET, AF_INET, IPPROTO_ICMP, ICMPCTL_STATS };
+	size_t len = sizeof(icmpstat);
 
-	if (off == 0)
+	if (sysctl(mib, sizeof(mib) / sizeof(mib[0]),
+	    &icmpstat, &len, NULL, 0) == -1) {
+		if (errno != ENOPROTOOPT)
+			printf("%% icmp_stats: sysctl: %s\n",strerror(errno));
 		return;
-	kread(off, (char *)&icmpstat, sizeof (icmpstat));
+	}
+
 	printf("%% icmp:\n");
 
 #define	p(f, m) if (icmpstat.f || sflag <= 1) \
@@ -312,8 +401,11 @@ icmp_stats(off)
 				printf("\tOutput packet histogram:\n");
 				first = 0;
 			}
-			printf("\t\t%s: %lu\n", icmpnames[i],
-				icmpstat.icps_outhist[i]);
+			if (icmpnames[i])
+				printf("\t\t%s:", icmpnames[i]);
+			else
+				printf("\t\t#%d:", i);
+			printf(" %lu\n", icmpstat.icps_outhist[i]);
 		}
 	p(icps_badcode, "\t%lu message%s with bad code fields\n");
 	p(icps_tooshort, "\t%lu message%s < minimum length\n");
@@ -325,8 +417,11 @@ icmp_stats(off)
 				printf("\tInput packet histogram:\n");
 				first = 0;
 			}
-			printf("\t\t%s: %lu\n", icmpnames[i],
-				icmpstat.icps_inhist[i]);
+			if (icmpnames[i])
+				printf("\t\t%s:", icmpnames[i]);
+			else
+				printf("\t\t#%d:", i);
+			printf(" %lu\n", icmpstat.icps_inhist[i]);
 		}
 	p(icps_reflect, "\t%lu message response%s generated\n");
 #undef p
@@ -336,14 +431,19 @@ icmp_stats(off)
  * Dump IGMP statistics structure.
  */
 void
-igmp_stats(off)
-	u_long off;
+igmp_stats()
 {
 	struct igmpstat igmpstat;
+	int mib[] = { CTL_NET, AF_INET, IPPROTO_IGMP, IGMPCTL_STATS };
+	size_t len = sizeof(igmpstat);
 
-	if (off == 0)
+	if (sysctl(mib, sizeof(mib) / sizeof(mib[0]),
+	    &igmpstat, &len, NULL, 0) == -1) {
+		if (errno != ENOPROTOOPT)
+			printf("%% igmp_stats: sysctl: %s\n",strerror(errno));
 		return;
-	kread(off, (char *)&igmpstat, sizeof (igmpstat));
+	}
+
 	printf("%% igmp:\n");
 
 #define	p(f, m) if (igmpstat.f || sflag <= 1) \
@@ -367,14 +467,19 @@ igmp_stats(off)
  * Dump AH statistics structure.
  */
 void
-ah_stats(off)
-	u_long off;
+ah_stats()
 {
 	struct ahstat ahstat;
+	int mib[] = { CTL_NET, AF_INET, IPPROTO_AH, AHCTL_STATS };
+	size_t len = sizeof(ahstat);
 
-	if (off == 0)
-		return;
-	kread(off, (char *)&ahstat, sizeof (ahstat));
+	if (sysctl(mib, sizeof(mib) / sizeof(mib[0]),
+	    &ahstat, &len, NULL, 0) == -1) {
+		if (errno != ENOPROTOOPT)
+			printf("%% ah_stats: sysctl: %s\n",strerror(errno));
+                return;
+        }
+
 	printf("%% ah:\n");
 
 #define p(f, m) if (ahstat.f || sflag <= 1) \
@@ -409,14 +514,19 @@ ah_stats(off)
  * Dump ESP statistics structure.
  */
 void
-esp_stats(off)
-	u_long off;
+esp_stats()
 {
 	struct espstat espstat;
+	int mib[] = { CTL_NET, AF_INET, IPPROTO_ESP, ESPCTL_STATS };
+	size_t len = sizeof(espstat);
 
-	if (off == 0)
+	if (sysctl(mib, sizeof(mib) / sizeof(mib[0]),
+	    &espstat, &len, NULL, 0) == -1) {
+		if (errno != ENOPROTOOPT)
+			printf("%% esp_stats: sysctl: %s\n",strerror(errno));
 		return;
-	kread(off, (char *)&espstat, sizeof (espstat));
+	}
+
 	printf("%% esp:\n");
 
 #define p(f, m) if (espstat.f || sflag <= 1) \
@@ -439,6 +549,9 @@ esp_stats(off)
 	p(esps_invalid, "\t%u packet%s attempted to use an invalid tdb\n");
 	p(esps_toobig, "\t%u packet%s got larger than max IP packet size\n");
 	p(esps_crypto, "\t%u packet%s that failed crypto processing\n");
+	p(esps_udpencin, "\t%u input UDP encapsulated ESP packet%s\n");
+	p(esps_udpencout, "\t%u output UDP encapsulated ESP packet%s\n");
+	p(esps_udpinval, "\t%u UDP packet%s for non-encapsulating TDB received\n");
 	p(esps_ibytes, "\t%qu input byte%s\n");
 	p(esps_obytes, "\t%qu output byte%s\n");
 
@@ -446,17 +559,22 @@ esp_stats(off)
 }
 
 /*
- * Dump ESP statistics structure.
+ * Dump IP-in-IP statistics structure.
  */
 void
-ipip_stats(off)
-	u_long off;
+ipip_stats()
 {
 	struct ipipstat ipipstat;
+	int mib[] = { CTL_NET, AF_INET, IPPROTO_IPIP, IPIPCTL_STATS };
+	size_t len = sizeof(ipipstat);
 
-	if (off == 0)
+	if (sysctl(mib, sizeof(mib) / sizeof(mib[0]),
+	    &ipipstat, &len, NULL, 0) == -1) {
+		if (errno != ENOPROTOOPT)
+			printf("%% ipip_stats: sysctl: %s\n",strerror(errno));
 		return;
-	kread(off, (char *)&ipipstat, sizeof (ipipstat));
+	}
+	
 	printf("%% ipip:\n");
 
 #define p(f, m) if (ipipstat.f || sflag <= 1) \
@@ -476,17 +594,106 @@ ipip_stats(off)
 }
 
 /*
+ * Dump CARP statistics structure.
+ */
+void
+carp_stats()
+{
+	struct carpstats carpstat;
+	int mib[] = { CTL_NET, AF_INET, IPPROTO_CARP, CARPCTL_STATS };
+	size_t len = sizeof(carpstat);
+
+	if (sysctl(mib, sizeof(mib) / sizeof(mib[0]),
+	    &carpstat, &len, NULL, 0) == -1) {
+		if (errno != ENOPROTOOPT)
+			printf("%% carp_stats: sysctl: %s\n",strerror(errno));
+		return;
+	}
+
+	printf("%% carp:\n");
+#define p(f, m) if (carpstat.f || sflag <= 1) \
+	printf(m, carpstat.f, plural(carpstat.f))
+#define p2(f, m) if (carpstat.f || sflag <= 1) \
+	printf(m, carpstat.f)
+
+	p(carps_ipackets, "\t%llu packet%s received (IPv4)\n");
+	p(carps_ipackets6, "\t%llu packet%s received (IPv6)\n");
+	p(carps_badif, "\t\t%llu packet%s discarded for bad interface\n");
+	p(carps_badttl, "\t\t%llu packet%s discarded for wrong TTL\n");
+	p(carps_hdrops, "\t\t%llu packet%s shorter than header\n");
+	p(carps_badsum, "\t\t%llu discarded for bad checksum%s\n");
+	p(carps_badver, "\t\t%llu discarded packet%s with a bad version\n");
+	p2(carps_badlen, "\t\t%llu discarded because packet too short\n");
+	p2(carps_badauth, "\t\t%llu discarded for bad authentication\n");
+	p2(carps_badvhid, "\t\t%llu discarded for bad vhid\n");
+	p2(carps_badaddrs, "\t\t%llu discarded because of a bad address list\n");
+	p(carps_opackets, "\t%llu packet%s sent (IPv4)\n");
+	p(carps_opackets6, "\t%llu packet%s sent (IPv6)\n");
+	p2(carps_onomem, "\t\t%llu send failed due to mbuf memory error\n");
+	p(carps_preempt, "\t%llu transition%s to master\n");
+#undef p
+#undef p2
+}
+
+/*
+ * Dump pfsync statistics structure.
+ */
+void
+pfsync_stats()
+{
+	struct pfsyncstats pfsyncstat;
+	int mib[] = { CTL_NET, AF_INET, IPPROTO_PFSYNC, PFSYNCCTL_STATS };
+	size_t len = sizeof(pfsyncstat);
+
+	if (sysctl(mib, sizeof(mib) / sizeof(mib[0]),
+	    &pfsyncstat, &len, NULL, 0) == -1) {
+		if (errno != ENOPROTOOPT)
+			printf("%% pfsync_stats: sysctl: %s\n",strerror(errno));
+		return;
+	}
+
+	printf("%% pfsync:\n");
+#define p(f, m) if (pfsyncstat.f || sflag <= 1) \
+	printf(m, pfsyncstat.f, plural(pfsyncstat.f))
+#define p2(f, m) if (pfsyncstat.f || sflag <= 1) \
+	printf(m, pfsyncstat.f)
+	p(pfsyncs_ipackets, "\t%llu packet%s received (IPv4)\n");
+	p(pfsyncs_ipackets6, "\t%llu packet%s received (IPv6)\n");
+	p(pfsyncs_badif, "\t\t%llu packet%s discarded for bad interface\n");
+	p(pfsyncs_badttl, "\t\t%llu packet%s discarded for bad ttl\n");
+	p(pfsyncs_hdrops, "\t\t%llu packet%s shorter than header\n");
+	p(pfsyncs_badver, "\t\t%llu packet%s discarded for bad version\n");
+	p(pfsyncs_badauth, "\t\t%llu packet%s discarded for bad HMAC\n");
+	p(pfsyncs_badact,"\t\t%llu packet%s discarded for bad action\n");
+	p(pfsyncs_badlen, "\t\t%llu packet%s discarded for short packet\n");
+	p(pfsyncs_badval, "\t\t%llu state%s discarded for bad values\n");
+	p(pfsyncs_stale, "\t\t%llu stale state%s\n");
+	p(pfsyncs_badstate, "\t\t%llu failed state lookup/insert%s\n");
+	p(pfsyncs_opackets, "\t%llu packet%s sent (IPv4)\n");
+	p(pfsyncs_opackets6, "\t%llu packet%s sent (IPv6)\n");
+	p2(pfsyncs_onomem, "\t\t%llu send failed due to mbuf memory error\n");
+	p2(pfsyncs_oerrors, "\t\t%llu send error\n");
+#undef p
+#undef p2
+}
+
+/*
  * Dump IPCOMP statistics structure.
  */
 void
-ipcomp_stats(off)
-	u_long off;
+ipcomp_stats()
 {
 	struct ipcompstat ipcompstat;
+	int mib[] = { CTL_NET, AF_INET, IPPROTO_IPCOMP, IPCOMPCTL_STATS };
+	size_t len = sizeof(ipcompstat);
 
-	if (off == 0)
+	if (sysctl(mib, sizeof(mib) / sizeof(mib[0]),
+	    &ipcompstat, &len, NULL, 0) == -1) {
+		if (errno != ENOPROTOOPT)
+			printf("%% ipcomp_stats: sysctl: %s\n",strerror(errno));
 		return;
-	kread(off, (char *)&ipcompstat, sizeof (ipcompstat));
+	}
+
 	printf("%% ipcomp:\n");
 
 #define p(f, m) if (ipcompstat.f || sflag <= 1) \
@@ -516,14 +723,18 @@ ipcomp_stats(off)
  * Print routing statistics
  */
 void
-rt_stats(off)
-	u_long off;
+rt_stats()
 {
 	struct rtstat rtstat;
+ 	int mib[] = { CTL_NET, PF_ROUTE, 0, 0, NET_RT_STATS, 0 };
+ 	size_t size = sizeof (rtstat);
  
-	if (off == 0)
-                return;
-	kread(off, (char *)&rtstat, sizeof (rtstat));
+	if (sysctl(mib, sizeof(mib) / sizeof(mib[0]), &rtstat, &size,
+	    NULL, 0) < 0) {
+		printf("%% rt_stats: sysctl: %s\n", strerror(errno));
+		return;
+	}
+ 
 	printf("%% routing:\n");
 	printf("\t%u bad routing redirect%s\n",
 	    rtstat.rts_badredirect, plural(rtstat.rts_badredirect));   
