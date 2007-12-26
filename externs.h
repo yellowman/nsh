@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.38 2007/12/26 05:19:33 chris Exp $ */
+/* $nsh: externs.h,v 1.39 2007/12/26 06:00:14 chris Exp $ */
 /*
  * nsh externs, prototypes and macros
  */
@@ -73,6 +73,8 @@ extern char metricnames[];
 #define PING6		"/sbin/ping6"
 #define TRACERT		"/usr/sbin/traceroute"
 #define TRACERT6	"/usr/sbin/traceroute6"
+#define TELNET		"/usr/bin/telnet"
+#define SSH		"/usr/bin/ssh"
 #define SAVESCRIPT	"/usr/local/bin/save.sh"
 void command(int);
 int cmdrc(char rcname[FILENAME_MAX]);

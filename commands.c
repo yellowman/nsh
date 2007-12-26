@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.56 2007/12/26 05:19:33 chris Exp $ */
+/* $nsh: commands.c,v 1.57 2007/12/26 06:00:14 chris Exp $ */
 /*
  * Copyright (c) 2002-2007
  *      Chris Cappuccio.  All rights reserved.
@@ -147,6 +147,8 @@ static int	shell(int, char*[]);
 static int	cmdargs(char*, char*[]);
 static int	ping(int, char*[]);
 static int	traceroute(int, char*[]);
+static int	ssh(int, char*[]);
+static int	telnet(int, char*[]);
 static int	pr_rt_stats(void);
 static void	p_argv(int, char **);
 static int	notvalid(void);
@@ -820,6 +822,8 @@ static char
 	routehelp[] =	"Add a host or network route",
 	pinghelp[] = 	"Send ICMP echo request",
 	tracerthelp[] =	"Print the route to host",
+	sshhelp[] =	"SSH connection to remote host",
+	telnethelp[] =	"Telnet connection to remote host",
 	quithelp[] =	"Close current connection",
 	verbosehelp[] =	"Set verbose diagnostics",
 	editinghelp[] = "Set command line editing",
@@ -846,7 +850,9 @@ static Command cmdtab[] = {
 	{ "pf",		pfhelp,		pf,		1, 0, 0, 1, 1 },
 	{ "quit",	quithelp,	quit,		0, 0, 0, 0, 0 },
 	{ "ping",	pinghelp,	ping,		0, 0, 0, 0, 0 },
-	{ "traceroute",	tracerthelp,	traceroute,	0, 0, 0, 0, 0 },
+	{ "traceroute", tracerthelp,	traceroute,	0, 0, 0, 0, 0 },
+	{ "ssh",	sshhelp,	ssh,		0, 0, 0, 0, 0 },
+	{ "telnet",	telnethelp,	telnet,		0, 0, 0, 0, 0 },
 	{ "reload",	reloadhelp,	reload,		1, 0, 0, 0, 0 },
 	{ "halt",	halthelp,	halt,		1, 0, 0, 0, 0 },
 	{ "write-config", savehelp,	wr_conf,	1, 0, 0, 0, 0 },
@@ -1093,6 +1099,36 @@ ping(int argc, char *argv[])
 		return 1;
 	} else {
 		cmdargs(PING, argv);
+	}
+	return 0;
+}
+
+/*
+ * telnet command.
+ */
+int
+telnet(int argc, char *argv[])
+{
+	if (argc < 2) {
+		printf("%% Invalid arguments\n");
+		return 1;
+	} else {
+		cmdargs(TELNET, argv);
+	}
+	return 0;
+}
+
+/*
+ * ssh command.
+ */
+int
+ssh(int argc, char *argv[])
+{
+	if (argc < 2) {
+		printf("%% Invalid arguments\n");
+		return 1;
+	} else {
+		cmdargs(SSH, argv);
 	}
 	return 0;
 }
