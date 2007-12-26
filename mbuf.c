@@ -1,3 +1,4 @@
+/* $nsh $ */
 /* From: $OpenBSD: mbuf.c,v 1.26 2007/12/19 01:47:00 deraadt Exp $	*/
 
 /*
@@ -148,11 +149,11 @@ mbpr(void)
 	totmbufs = 0;
 	for (mp = mbtypes; mp->mt_name; mp++)
 		totmbufs += mbstat.m_mtypes[mp->mt_type];
-	printf("%u mbuf%s in use:\n", totmbufs, plural(totmbufs));
+	printf("\t%u mbuf%s in use:\n", totmbufs, plural(totmbufs));
 	for (mp = mbtypes; mp->mt_name; mp++)
 		if (mbstat.m_mtypes[mp->mt_type]) {
 			seen[mp->mt_type] = YES;
-			printf("\t%u mbuf%s allocated to %s\n",
+			printf("\t\t%u mbuf%s allocated to %s\n",
 			    mbstat.m_mtypes[mp->mt_type],
 			    plural((int)mbstat.m_mtypes[mp->mt_type]),
 			    mp->mt_name);
@@ -160,11 +161,11 @@ mbpr(void)
 	seen[MT_FREE] = YES;
 	for (i = 0; i < nmbtypes; i++)
 		if (!seen[i] && mbstat.m_mtypes[i]) {
-			printf("\t%u mbuf%s allocated to <mbuf type %d>\n",
+			printf("\t\t%u mbuf%s allocated to <mbuf type %d>\n",
 			    mbstat.m_mtypes[i],
 			    plural((int)mbstat.m_mtypes[i]), i);
 		}
-	printf("%lu/%lu/%lu mbuf clusters in use (current/peak/max)\n",
+	printf("\t%lu/%lu/%lu mbuf clusters in use (current/peak/max)\n",
 	    (u_long)(mclpool.pr_nout),
 	    (u_long)(mclpool.pr_hiwat * mclpool.pr_itemsperpage),
 	    (u_long)(mclpool.pr_maxpages * mclpool.pr_itemsperpage));
@@ -173,9 +174,9 @@ mbpr(void)
 	totused = mbpool.pr_nout * mbpool.pr_size +
 	    mclpool.pr_nout * mclpool.pr_size;
 	totpct = (totmem == 0)? 0 : ((totused * 100)/totmem);
-	printf("%u Kbytes allocated to network (%d%% in use)\n",
+	printf("\t%u Kbytes allocated to network (%d%% in use)\n",
 	    totmem / 1024, totpct);
-	printf("%lu requests for memory denied\n", mbstat.m_drops);
-	printf("%lu requests for memory delayed\n", mbstat.m_wait);
-	printf("%lu calls to protocol drain routines\n", mbstat.m_drain);
+	printf("\t%lu requests for memory denied\n", mbstat.m_drops);
+	printf("\t%lu requests for memory delayed\n", mbstat.m_wait);
+	printf("\t%lu calls to protocol drain routines\n", mbstat.m_drain);
 }
