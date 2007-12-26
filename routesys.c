@@ -1,4 +1,4 @@
-/* $nsh: routesys.c,v 1.18 2007/12/26 05:19:33 chris Exp $ */
+/* $nsh: routesys.c,v 1.19 2007/12/26 06:59:00 chris Exp $ */
 /* From: $OpenBSD: /usr/src/sbin/route/route.c,v 1.43 2001/07/07 18:26:20 deraadt Exp $ */
 
 /*
@@ -694,7 +694,7 @@ ip_route(ip_t *dest, ip_t *gate, u_short cmd)
 		rtm_addrs |= RTA_IFP;
 	}
 
-	flags = RTF_UP | RTF_STATIC;
+	flags = RTF_UP | RTF_STATIC | RTF_MPATH;
 
 	switch(dest->family) {
 	case AF_INET:
@@ -773,7 +773,7 @@ ip_route(ip_t *dest, ip_t *gate, u_short cmd)
 			printf("%% No such route to delete: %s\n",
 			    inet_ntoa(dest->addr.sin));
 		else if (cmd == RTM_ADD && errno == EEXIST)
-			printf("%% Subnet already in route table: %s\n",
+			printf("%% Route already exists: %s\n",
 			    inet_ntoa(dest->addr.sin));
 		else
 			printf("%% ip_route: rtmsg: %s\n", strerror(errno));
