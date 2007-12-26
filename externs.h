@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.36 2007/12/25 22:46:14 chris Exp $ */
+/* $nsh: externs.h,v 1.37 2007/12/26 03:55:49 chris Exp $ */
 /*
  * nsh externs and more
  */
@@ -32,7 +32,7 @@ int conf(FILE *);
 int default_mtu(char *);
 int conf_routes(FILE *, char *, int, int);
 
-/* routepr.c */
+/* show.c */
 char *netname(in_addr_t, in_addr_t);
 void routepr(u_long, int);
 
