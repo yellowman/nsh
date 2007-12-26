@@ -1,4 +1,4 @@
-/* $nsh: if.c,v 1.29 2007/12/26 05:19:33 chris Exp $ */
+/* $nsh: if.c,v 1.30 2007/12/26 07:03:03 chris Exp $ */
 /*
  * Copyright (c) 2002-2007
  *      Chris Cappuccio.  All rights reserved.
@@ -771,7 +771,7 @@ intvlan(char *ifname, int ifs, int argc, char **argv)
 	ifr.ifr_data = (caddr_t)&vreq;
 
 	if (ioctl(ifs, SIOCGETVLAN, (caddr_t)&ifr) == -1) {
-		if (errno == EINVAL)
+		if (errno == ENOTTY)
 			printf("%% This interface does not support vlan"
 			    " tagging\n");
 		else
