@@ -1,4 +1,4 @@
-/* $nsh: routepr.c,v 1.11 2007/12/15 22:39:23 chris Exp $ */
+/* $nsh: routepr.c,v 1.12 2007/12/26 03:26:49 chris Exp $ */
 /* From: $OpenBSD: /usr/src/usr.bin/netstat/route.c,v 1.45 2002/02/16 21:27:50 millert Exp $ */
 
 /*
@@ -117,13 +117,7 @@ struct	radix_mask rmask;
 
 char	*routename(in_addr_t);
 char	*netname(in_addr_t, in_addr_t);
-#ifdef IPX
-char	*ipx_print(struct sockaddr *);
-#endif
 void	routepr(u_long, int);
-#ifdef IPX
-void	upHex(char *);
-#endif
 
 static struct sockaddr *kgetsa(struct sockaddr *);
 static void p_tree(struct radix_node *);
@@ -348,12 +342,6 @@ p_sockaddr(sa, mask, flags, width)
 			cp = netname6(sa6, NULL);
 		break;
 	    }
-#endif
-
-#ifdef IPX
-	case AF_IPX:
-		cp = ipx_print(sa);
-		break;
 #endif
 
 	case AF_LINK:
@@ -688,76 +676,6 @@ routename6(sa6)
 }
 #endif /*INET6*/
 
-#ifdef IPX
-u_short ipx_nullh[] = {0,0,0};
-u_short ipx_bh[] = {0xffff,0xffff,0xffff};
-
-char *
-ipx_print(sa)
-	struct sockaddr *sa;
-{
-	struct sockaddr_ipx *sipx = (struct sockaddr_ipx*)sa;
-	struct ipx_addr work;
-	union { union ipx_net net_e; u_long long_e; } net;
-	in_port_t port;
-	static char mybuf[50], cport[10], chost[25];
-	char *host = "";
-	char *q;
-
-	work = sipx->sipx_addr;
-	port = ntohs(work.ipx_port);
-	work.ipx_port = 0;
-	net.net_e = work.ipx_net;
-	if (ipx_nullhost(work) && net.long_e == 0) {
-		if (port != 0) {
-			snprintf(mybuf, sizeof mybuf, "*.%xH", port);
-			upHex(mybuf);
-		} else
-			snprintf(mybuf, sizeof mybuf, "*.*");
-		return (mybuf);
-	}
-
-	if (bcmp(ipx_bh, work.ipx_host.c_host, 6) == 0) {
-		host = "any";
-	} else if (bcmp(ipx_nullh, work.ipx_host.c_host, 6) == 0) {
-		host = "*";
-	} else {
-		q = work.ipx_host.c_host;
-		snprintf(chost, sizeof chost, "%02x:%02x:%02x:%02x:%02x:%02x",
-		    q[0], q[1], q[2], q[3], q[4], q[5]);
-		host = chost;
-	}
-	if (port)
-		snprintf(cport, sizeof cport, ".%xH", htons(port));
-	else
-		*cport = 0;
-
-	snprintf(mybuf, sizeof mybuf, "%xH.%s%s", ntohl(net.long_e),
-	    host, cport);
-	upHex(mybuf);
-	return(mybuf);
-}
-
-char *
-ipx_phost(sa)
-	struct sockaddr *sa;
-{
-	struct sockaddr_ipx *sipx = (struct sockaddr_ipx *)sa;
-	struct sockaddr_ipx work;
-	static union ipx_net ipx_zeronet;
-	char *p;
-
-	work = *sipx;
-	work.sipx_addr.ipx_port = 0;
-	work.sipx_addr.ipx_net = ipx_zeronet;
-
-	p = ipx_print((struct sockaddr *)&work);
-	if (strncmp("0H.", p, 3) == 0)
-		p += 3;
-	return(p);
-}
-#endif
-
 static void
 encap_print(rt)
 	struct rtentry *rt;
@@ -869,18 +787,4 @@ encap_print(rt)
 		printf("/<unknown>\n");
 	}
 }
-
-#ifdef IPX
-void
-upHex(p0)
-	char *p0;
-{
-	char *p = p0;
-	for (; *p; p++) switch (*p) {
-
-	case 'a': case 'b': case 'c': case 'd': case 'e': case 'f':
-		*p += ('A' - 'a');
-	}
-}
-#endif
 
