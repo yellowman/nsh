@@ -1,4 +1,4 @@
-/* $nsh: show.c,v 1.2 2007/12/26 05:42:23 chris Exp $ */
+/* $nsh: show.c,v 1.3 2007/12/26 05:58:35 chris Exp $ */
 /* From: $OpenBSD: /usr/src/sbin/route/show.c,v 1.61 2007/09/05 20:30:21 claudio Exp $	*/
 
 /*
@@ -274,6 +274,7 @@ p_rtentry(struct rt_msghdr *rtm)
 	struct sockaddr	*sa = (struct sockaddr *)(rtm + 1);
 	struct sockaddr	*mask, *rti_info[RTAX_MAX];
 	char		 ifbuf[IF_NAMESIZE];
+	int interesting = RTF_UP | RTF_GATEWAY | RTF_HOST | RTF_DYNAMIC | RTF_LLINFO | RTF_STATIC | RTF_REJECT;
 
 	if (sa->sa_family == AF_KEY)
 		return;
@@ -297,7 +298,7 @@ p_rtentry(struct rt_msghdr *rtm)
 	p_sockaddr(sa, mask, rtm->rtm_flags, WID_DST(sa->sa_family));
 	p_sockaddr(rti_info[RTAX_GATEWAY], NULL, RTF_HOST,
 	    WID_GW(sa->sa_family));
-	p_flags(rtm->rtm_flags, "%-6.6s ");
+	p_flags(rtm->rtm_flags & interesting, "%-6.6s ");
 	printf("%6u %8llu ", rtm->rtm_rmx.rmx_refcnt,
 	    rtm->rtm_rmx.rmx_pksent);
 	if (rtm->rtm_rmx.rmx_mtu)
