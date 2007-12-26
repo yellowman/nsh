@@ -1,4 +1,4 @@
-/* $nsh $ */
+/* $nsh: mbuf.c,v 1.10 2007/12/26 03:30:31 chris Exp $ */
 /* From: $OpenBSD: mbuf.c,v 1.26 2007/12/19 01:47:00 deraadt Exp $	*/
 
 /*
