@@ -1,4 +1,4 @@
-$nsh: TODO,v 1.21 2007/12/17 09:20:53 chris Exp $
+$nsh: TODO,v 1.22 2007/12/26 05:20:57 chris Exp $
 
 nsh is a work in progress, future versions will be released which
 implement much of the following (of course, diffs are welcome):
@@ -64,10 +64,7 @@ Would be nice:
 * Context-sensitive help
 * Convenient/automatic mechanisms to centralize configurations for
   tracking/revision control
-* Get rid of routepr.c and use sysctl-based functions instead while still
-  displaying all that tasty info
-* Do the same thing for the various IP statistics that are now sysctl-able
-* While there, split out arp/route show
+* Split out arp/route show
 
 Known Bugs (or, things that I don't want to bother with right now, but
 better not forget later...):
