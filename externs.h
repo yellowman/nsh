@@ -1,6 +1,6 @@
-/* $nsh: externs.h,v 1.37 2007/12/26 03:55:49 chris Exp $ */
+/* $nsh: externs.h,v 1.38 2007/12/26 05:19:33 chris Exp $ */
 /*
- * nsh externs and more
+ * nsh externs, prototypes and macros
  */
 
 #define NO_ARG(x) (strcasecmp(x, "no") == 0) /* absolute "no" */
@@ -33,8 +33,18 @@ int default_mtu(char *);
 int conf_routes(FILE *, char *, int, int);
 
 /* show.c */
-char *netname(in_addr_t, in_addr_t);
-void routepr(u_long, int);
+void routepr(int);
+#ifdef _NETINET_IN_H_
+char *netname4(in_addr_t, struct sockaddr_in *);
+#endif
+#ifdef _NETINET6_IN6_H_
+char *netname6(struct sockaddr_in6 *, struct sockaddr_in6 *);
+#endif
+#ifdef _SYS_SOCKET_H_
+char *netname(struct sockaddr *, struct sockaddr *);
+char *routename(struct sockaddr *);
+char *any_ntoa(const struct sockaddr *);
+#endif
 
 /* alignment constraint for routing socket */
 #define ROUNDUP(a) \
@@ -67,7 +77,6 @@ extern char metricnames[];
 void command(int);
 int cmdrc(char rcname[FILENAME_MAX]);
 int cmdarg(char *, char *);
-int load_nlist(void);
 char *iprompt(void);
 char *cprompt(void);
 char *pprompt(void);
@@ -105,7 +114,6 @@ void ipcomp_stats(void);
 void mbpr(void);
 
 /* kread.c */
-int kread(u_long, char *, int);
 char *plural(int);
 char *plurales(int);
 

@@ -1,4 +1,4 @@
-/* $nsh: main.c,v 1.28 2007/12/17 06:57:02 chris Exp $ */
+/* $nsh: main.c,v 1.29 2007/12/26 05:19:33 chris Exp $ */
 /*
  * Copyright (c) 2002, 2003
  *      Chris Cappuccio.  All rights reserved.
@@ -86,11 +86,6 @@ main(int argc, char *argv[])
 
 	if (argc > 0)
 		usage();
-
-	/*
-	 * For future kvm access
-	 */
-	load_nlist();
 
 	if (iflag) {
 		/*

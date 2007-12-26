@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.55 2007/12/25 22:46:14 chris Exp $ */
+/* $nsh: commands.c,v 1.56 2007/12/26 05:19:33 chris Exp $ */
 /*
  * Copyright (c) 2002-2007
  *      Chris Cappuccio.  All rights reserved.
@@ -56,8 +56,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>
-#include <kvm.h>
-#include <nlist.h>
 #include <unistd.h>
 #include <string.h>
 #include <errno.h>
@@ -77,7 +75,6 @@
 #include "editing.h"
 
 char prompt[128];
-kvm_t *kvmd;
 
 static char line[256];
 static char saveline[256];
@@ -85,15 +82,6 @@ static int  margc;
 static char *margv[20];
 static char hbuf[MAXHOSTNAMELEN];	/* host name */
 static char ifname[IFNAMSIZ];		/* interface name */
-
-/*
- * Kernel namelist for our use
- */
-struct nlist nl[] = {
-#define N_RTREE 0
-	{ "_rt_tables" },	/* routing tree */
-	{ "" }
-};
 
 typedef struct {
 	char *name;		/* command name */
@@ -1360,31 +1348,6 @@ flush_pftables(void)
 }
 
 /*
- * initialize kvm access
- * load nl with kvm_nlist
- */
-int
-load_nlist(void)
-{
-	char *nlistf = NULL, *memf = NULL;
-	char buf[_POSIX2_LINE_MAX];
-
-	if ((kvmd = kvm_openfiles(nlistf, memf, NULL, O_RDONLY,
-	    buf)) == NULL) {
-		printf("%% kvm_openfiles: %s\n", buf);
-		return 1;
-	}
-	if(kvm_nlist(kvmd, nl) < 0 || nl[0].n_type == 0) {
-		if (nlistf)
-			printf("%% kvm_nlist: %s: no namelist\n", nlistf);
-		else
-			printf("%% kvm_nlist: no namelist\n");
-		return 1;
-	}
-	return 0;
-}
-
-/*
  * read a text file and execute commands
  * take into account that we may have mode handlers int cmdtab that 
  * execute indented commands from the rc file
@@ -1709,7 +1672,7 @@ pr_routes(char *route)
 {
 	if (route == 0)
 		/* show entire routing table */
-		routepr(nl[N_RTREE].n_value, AF_INET);
+		routepr(AF_INET);
 	else
 		/* show a specific route */
 		show_route(route);

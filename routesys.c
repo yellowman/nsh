@@ -1,4 +1,4 @@
-/* $nsh: routesys.c,v 1.17 2007/12/17 08:57:30 chris Exp $ */
+/* $nsh: routesys.c,v 1.18 2007/12/26 05:19:33 chris Exp $ */
 /* From: $OpenBSD: /usr/src/sbin/route/route.c,v 1.43 2001/07/07 18:26:20 deraadt Exp $ */
 
 /*
@@ -75,7 +75,6 @@ int	rtm_addrs;
 u_long  rtm_inits;
 
 char	*routename_sa(struct sockaddr *);
-char	*any_ntoa(const struct sockaddr *);
 char	*mylink_ntoa(const struct sockaddr_dl *);
 char	*touch;
 
@@ -230,25 +229,6 @@ flushroutes(int af, int af2)
 }
 
 static char hexlist[] = "0123456789abcdef";
-
-char *
-any_ntoa(sa)
-	const struct sockaddr *sa;
-{
-	static char obuf[240];
-	const char *in = sa->sa_data;
-	char *out = obuf;
-	int len = sa->sa_len;
-
-/*	*out++ = 'Q'; */ /* WTF ? */
-	do {
-		*out++ = hexlist[(*in >> 4) & 15];
-		*out++ = hexlist[(*in++)    & 15];
-		*out++ = '.';
-	} while (--len > 0 && (out + 3) < &obuf[sizeof obuf-1]);
-	out[-1] = '\0';
-	return (obuf);
-}
 
 /* print 00:00:00:00:00:00 style, not if:00.00.00.00.00.00 */
 char *

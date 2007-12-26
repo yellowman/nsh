@@ -1,4 +1,4 @@
-/* $nsh: if.c,v 1.28 2007/12/26 03:48:03 chris Exp $ */
+/* $nsh: if.c,v 1.29 2007/12/26 05:19:33 chris Exp $ */
 /*
  * Copyright (c) 2002-2007
  *      Chris Cappuccio.  All rights reserved.
@@ -226,7 +226,7 @@ show_int(char *ifname)
 			printf("  Internet address");
 
 		printf("%s %s", ippntd ? "," : "",
-		    (char *)netname(sin.sin_addr.s_addr, sin2.sin_addr.s_addr));
+		    netname4(sin.sin_addr.s_addr, &sin2));
 
 		ippntd = 1;
 

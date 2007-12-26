@@ -1,4 +1,4 @@
-/* $nsh: conf.c,v 1.33 2007/12/25 06:37:12 chris Exp $ */
+/* $nsh: conf.c,v 1.34 2007/12/26 05:19:33 chris Exp $ */
 /*
  * Copyright (c) 2002, 2005
  *      Chris Cappuccio.  All rights reserved.
@@ -444,8 +444,7 @@ int conf_ifaddrs(FILE *output, char *ifname, int flags)
 		}
 
 		fprintf(output, " %s %s", iptype,
-		    (char *)netname(sin.sin_addr.s_addr,
-		    sin2.sin_addr.s_addr));
+		    netname4(sin.sin_addr.s_addr, &sin2));
 
 		if (flags & IFF_POINTOPOINT) {
 			sin3.sin_addr =
@@ -571,8 +570,7 @@ conf_print_rtm(FILE *output, struct rt_msghdr *rtm, char *delim, int af)
 			maskin->sin_addr.s_addr = 0;
 		}
 		fprintf(output, "%s%s ", delim,
-		    (char *)netname(dstin->sin_addr.s_addr,
-		    maskin->sin_addr.s_addr));
+		    netname4(dstin->sin_addr.s_addr, maskin));
 		fprintf(output, "%s\n", routename_sa(gate));
 	} else
 #ifdef INET6

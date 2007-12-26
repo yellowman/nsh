@@ -1,4 +1,4 @@
-/* $nsh: stats.c,v 1.8 2007/12/25 22:32:24 chris Exp $ */
+/* $nsh: stats.c,v 1.9 2007/12/26 05:19:33 chris Exp $ */
 /* From: $OpenBSD: inet.c,v 1.104 2007/12/19 01:47:00 deraadt Exp $ */
 
 /*
@@ -748,3 +748,14 @@ rt_stats()
 	    rtstat.rts_wildcard, plural(rtstat.rts_wildcard));
 }
 
+char *
+plural(int n)
+{
+	return (n != 1 ? "s" : "");
+}
+
+char *
+plurales(int n)
+{
+	return (n != 1 ? "es" : "");
+}
