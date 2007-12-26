@@ -1,4 +1,4 @@
-/* $nsh: if.c,v 1.27 2007/12/17 06:54:33 chris Exp $ */
+/* $nsh: if.c,v 1.28 2007/12/26 03:48:03 chris Exp $ */
 /*
  * Copyright (c) 2002-2007
  *      Chris Cappuccio.  All rights reserved.
@@ -289,7 +289,7 @@ show_int(char *ifname)
 	}
 
 	if (get_nwinfo(ifname, tmp_str, sizeof(tmp_str), NWID) != NULL) {
-		printf("  802.11 network id %s", tmp_str);
+		printf("  SSID %s", tmp_str);
 		if(get_nwinfo(ifname, tmp_str, sizeof(tmp_str), NWKEY) != NULL)
 			printf(", key %s", tmp_str);
 		if ((tmp = get_nwinfo(ifname, tmp_str, sizeof(tmp_str),
@@ -317,18 +317,18 @@ show_int(char *ifname)
 	    if_opackets, if_obytes, if_oerrors, if_noproto);
 	if (if_ibytes && if_ipackets && (if_ibytes / if_ipackets) >= ETHERMIN) {
 		/* < ETHERMIN means byte counter probably rolled over */
-		printf("  %qu avg input size", if_ibytes / if_ipackets);
+		printf("  %qu input", if_ibytes / if_ipackets);
 		pntd = 1;
 	} else
 		pntd = 0;
 	if (if_obytes && if_opackets && (if_obytes / if_opackets) >= ETHERMIN) {
 		/* < ETHERMIN means byte counter probably rolled over */
-		printf("%s%qu avg output size", pntd ? ", " : "  ",
+		printf("%s%qu output", pntd ? ", " : "  ",
 		    if_obytes / if_opackets);
 		pntd = 1;
 	}
 	if (pntd)
-		printf("\n");
+		printf(" (average bytes/packet)\n");
 
 	switch(if_type) {
 	/*
