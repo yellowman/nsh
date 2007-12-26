@@ -1,4 +1,4 @@
-/* $nsh: version.c,v 1.9 2006/04/08 19:58:18 chris Exp $ */
+/* $nsh: version.c,v 1.10 2007/12/26 06:10:47 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -117,12 +117,11 @@ version(void)
 	if (!pntd)
 		printf("%d second%s", c, c == 1 ? "" : "s");
 	printf("\n");
-	printf("kernel: %s/%s version %s\n", un.sysname, un.machine,
+	printf("system: %s/%s version %s\n", un.sysname, un.machine,
 	    un.release);
 	printf("cpu: %s\n", cpubuf);
 	printf("memory: %luK\n", physmem / 1024);
-	printf("compiled on: %s", compiledon);
-	printf("running on: %s", kernver);
+	printf("kernel: %s", kernver);
 	return(0);
 }
 

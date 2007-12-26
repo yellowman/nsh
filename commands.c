@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.57 2007/12/26 06:00:14 chris Exp $ */
+/* $nsh: commands.c,v 1.58 2007/12/26 06:10:47 chris Exp $ */
 /*
  * Copyright (c) 2002-2007
  *      Chris Cappuccio.  All rights reserved.
@@ -1224,7 +1224,7 @@ cmdargs(char *cmd, char *arg[])
 			char *shellp = cmd;
 
 			execv(shellp, arg);
-			printf("%% execl failed: %s\n", strerror(errno));
+			printf("%% execv failed: %s\n", strerror(errno));
 			exit(0);
 		}
 		default:
