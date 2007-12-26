@@ -1,4 +1,4 @@
-/* $nsh: show.c,v 1.1 2007/12/26 05:19:33 chris Exp $ */
+/* $nsh: show.c,v 1.2 2007/12/26 05:42:23 chris Exp $ */
 /* From: $OpenBSD: /usr/src/sbin/route/show.c,v 1.61 2007/09/05 20:30:21 claudio Exp $	*/
 
 /*
@@ -667,14 +667,6 @@ netname4(in_addr_t in, struct sockaddr_in *maskp)
 	if (cp)
 		strlcpy(line, cp, sizeof(line));
 #define C(x)	((x) & 0xff)
-	else if (mbits < 9)
-		snprintf(line, sizeof(line), "%u/%d", C(in >> 24), mbits);
-	else if (mbits < 17)
-		snprintf(line, sizeof(line), "%u.%u/%d",
-		    C(in >> 24) , C(in >> 16), mbits);
-	else if (mbits < 25)
-		snprintf(line, sizeof(line), "%u.%u.%u/%d",
-		    C(in >> 24), C(in >> 16), C(in >> 8), mbits);
 	else
 		snprintf(line, sizeof(line), "%u.%u.%u.%u/%d", C(in >> 24),
 		    C(in >> 16), C(in >> 8), C(in), mbits);
