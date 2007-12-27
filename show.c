@@ -1,4 +1,4 @@
-/* $nsh: show.c,v 1.4 2007/12/27 01:57:56 chris Exp $ */
+/* $nsh: show.c,v 1.5 2007/12/27 02:26:37 chris Exp $ */
 /* From: $OpenBSD: /usr/src/sbin/route/show.c,v 1.61 2007/09/05 20:30:21 claudio Exp $	*/
 
 /*
@@ -221,6 +221,8 @@ p_rttables(int af, u_int tableid)
 			msg = (struct sadb_msg *)next;
 			if (msg->sadb_msg_len == 0)
 				break;
+			if (next == buf)
+				pr_rthdr(PF_KEY);
 			p_pfkentry(msg);
 		}
 		free(buf);
@@ -312,16 +314,10 @@ p_rtentry(struct rt_msghdr *rtm)
 void
 p_pfkentry(struct sadb_msg *msg)
 {
-	static int	 	 old = 0;
 	struct sadb_address	*saddr;
 	struct sadb_protocol	*sap, *saft;
 	struct sockaddr		*sa, *mask;
 	void			*headers[SADB_EXT_MAX + 1];
-
-	if (!old) {
-		pr_rthdr(PF_KEY);
-		old++;
-	}
 
 	bzero(headers, sizeof(headers));
 	index_pfk(msg, headers);
@@ -550,8 +546,12 @@ routename(struct sockaddr *sa)
 
 	switch (sa->sa_family) {
 	case AF_INET:
-		return
-		    (routename4(((struct sockaddr_in *)sa)->sin_addr.s_addr));
+		if (sa->sa_len == 0)
+			return("0.0.0.0");
+		else
+			return
+			    (routename4(((struct sockaddr_in *)sa)->
+			    sin_addr.s_addr));
 
 	case AF_INET6:
 	    {
@@ -631,6 +631,12 @@ netname4(in_addr_t in, struct sockaddr_in *maskp)
 	in_addr_t mask;
 	int mbits;
 
+	if (maskp->sin_len == 0) {
+		/*
+		 * annoying.  why can't the kernel just tell the truth?
+		 */
+		maskp->sin_addr.s_addr = 0;
+	}
 	in = ntohl(in);
 	mask = maskp ? ntohl(maskp->sin_addr.s_addr) : 0;
 	mbits = mask ? 33 - ffs(mask) : 0;

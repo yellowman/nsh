@@ -1,4 +1,4 @@
-/* $nsh: conf.c,v 1.35 2007/12/27 01:57:56 chris Exp $ */
+/* $nsh: conf.c,v 1.36 2007/12/27 02:26:37 chris Exp $ */
 /*
  * Copyright (c) 2002, 2005
  *      Chris Cappuccio.  All rights reserved.
@@ -559,16 +559,6 @@ conf_print_rtm(FILE *output, struct rt_msghdr *rtm, char *delim, int af)
 		/* print ipv4 routes */
 		struct sockaddr_in *dstin = (struct sockaddr_in *)dst;
 		struct sockaddr_in *maskin = (struct sockaddr_in *)mask;
-		if (mask->sa_len == 0) {
-			/*
-			 * Technique gleaned from routename_sa():
-			 * This is annoying.  Why can't the kernel return 0
-			 * for s_addr instead of just 0 for sa_len
-			 * and some bullshit value for s_addr???
-			 * Maybe we should be checking sa_len more often....
-			 */
-			maskin->sin_addr.s_addr = 0;
-		}
 		fprintf(output, "%s%s ", delim,
 		    netname4(dstin->sin_addr.s_addr, maskin));
 		fprintf(output, "%s\n", routename(gate));
