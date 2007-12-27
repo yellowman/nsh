@@ -1,8 +1,8 @@
-# $nsh: Makefile,v 1.20 2007/12/26 05:19:33 chris Exp $
+# $nsh: Makefile,v 1.21 2007/12/27 03:12:22 chris Exp $
 #
 PROG= nsh
 
-CFLAGS=-g -Wmissing-prototypes -Wformat -Wall -Wpointer-arith #-W -Wbad-function-cast -Wtraditional
+CFLAGS=-g -Wmissing-prototypes -Wformat -Wall -Wpointer-arith -Wbad-function-cast #-W
 
 SRCS=compile.c main.c genget.c commands.c stats.c mbuf.c routesys.c
 SRCS+=show.c if.c version.c route.c conf.c editing.c ieee80211.c

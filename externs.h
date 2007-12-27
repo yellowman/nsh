@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.40 2007/12/27 01:57:56 chris Exp $ */
+/* $nsh: externs.h,v 1.41 2007/12/27 03:12:22 chris Exp $ */
 /*
  * nsh externs, prototypes and macros
  */
@@ -29,7 +29,7 @@ extern HistEvent ev;		/* ev */
 
 /* conf.c */
 int conf(FILE *);
-int default_mtu(char *);
+u_int default_mtu(char *);
 int conf_routes(FILE *, char *, int, int);
 
 /* show.c */
@@ -53,7 +53,7 @@ char *any_ntoa(const struct sockaddr *);
 
 /* routesys.c */
 #define FLUSH 0
-struct rtdump *getrtdump(int);
+struct rtdump *getrtdump(void);
 void freertdump(struct rtdump *);
 int monitor(void);
 void flushroutes(int, int);
@@ -225,7 +225,6 @@ int wi_printlevels(char *);
 /* passwd.c */
 #define NSHPASSWD_TEMP "/var/run/nshpasswd"
 int read_pass(char *, size_t);
-int write_pass(char *, size_t);
 int gen_salt(char *, size_t);
 int enable(int, char **);
 

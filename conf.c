@@ -1,4 +1,4 @@
-/* $nsh: conf.c,v 1.36 2007/12/27 02:26:37 chris Exp $ */
+/* $nsh: conf.c,v 1.37 2007/12/27 03:12:22 chris Exp $ */
 /*
  * Copyright (c) 2002, 2005
  *      Chris Cappuccio.  All rights reserved.
@@ -473,10 +473,10 @@ int conf_ifaddrs(FILE *output, char *ifname, int flags)
 	return ippntd;
 }
 
-int
+u_int
 default_mtu(char *ifname)
 {
-	int i;
+	u_int i;
 
 	for (i = 0; i < sizeof(defmtus) / sizeof(defmtus[0]); i++)
 		if (strncasecmp(defmtus[i].name, ifname,
@@ -504,7 +504,7 @@ conf_routes(FILE *output, char *delim, int af, int flags)
 		return(-1);
 	}
 
-	rtdump = getrtdump(s);
+	rtdump = getrtdump();
 	if (rtdump == NULL) {
 		close(s);
 		return(-1);

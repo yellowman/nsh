@@ -1,4 +1,4 @@
-/* $nsh: if.c,v 1.30 2007/12/26 07:03:03 chris Exp $ */
+/* $nsh: if.c,v 1.31 2007/12/27 03:12:22 chris Exp $ */
 /*
  * Copyright (c) 2002-2007
  *      Chris Cappuccio.  All rights reserved.
@@ -435,7 +435,7 @@ get_hwdaddr(char *ifname)
 char *
 iftype(int int_type)
 {
-	int i;
+	u_int i;
 
 	for (i = 0; i < sizeof(iftypes) / sizeof(iftypes[0]); i++)
 		if (int_type == iftypes[i].type)

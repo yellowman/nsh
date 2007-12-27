@@ -1,4 +1,4 @@
-/* $nsh: routesys.c,v 1.21 2007/12/27 02:07:13 chris Exp $ */
+/* $nsh: routesys.c,v 1.22 2007/12/27 03:12:22 chris Exp $ */
 /* From: $OpenBSD: /usr/src/sbin/route/route.c,v 1.43 2001/07/07 18:26:20 deraadt Exp $ */
 
 /*
@@ -83,7 +83,7 @@ int	 rtmsg(int, int);
 #ifdef INET6
 static int prefixlen(char *);
 #endif
-void	 print_rtmsg(struct rt_msghdr *, int);
+void	 print_rtmsg(struct rt_msghdr *);
 void	 print_getmsg(struct rt_msghdr *, int);
 void	 pmsg_common(struct rt_msghdr *);
 void	 pmsg_addrs(char *, int);
@@ -93,7 +93,7 @@ int	 ip_route(ip_t *, ip_t *, u_short);
 /*
  * caller must freertdump() if rtdump not null
  */
-struct rtdump *getrtdump(int s)
+struct rtdump *getrtdump()
 {
 	size_t needed;
 	int mib[6];
@@ -168,7 +168,7 @@ flushroutes(int af, int af2)
 	}
 
 	shutdown(s, 0); /* Don't want to read back our messages */
-	rtdump = getrtdump(s);
+	rtdump = getrtdump();
 	if (rtdump == NULL) {
 		close(s);
 		return;
@@ -181,7 +181,7 @@ flushroutes(int af, int af2)
 			continue;
 		if (verbose) {
 			printf("\n%% Read message:\n");
-			print_rtmsg(rtm, rtm->rtm_msglen);
+			print_rtmsg(rtm);
 		}
 		sa = (struct sockaddr *)(rtm + 1);
 		sa2 = (struct sockaddr *)(ROUNDUP(sa->sa_len) + (char *)sa);
@@ -212,7 +212,7 @@ flushroutes(int af, int af2)
 		seqno++;
 		if (verbose) {
 			printf("\n%% Wrote message:\n");
-			print_rtmsg(rtm, rlen);
+			print_rtmsg(rtm);
 		} else {
 			printf("%% %-20.20s ", routename(sa));
 			printf("%-20.20s flushed\n", routename(sa2));
@@ -347,7 +347,7 @@ monitor()
 				n = read (s, msg, 2048);
 				now = time(NULL);
 				printf("%% Message of size %d on %s", n, ctime(&now));
-				print_rtmsg((struct rt_msghdr *)msg, n);
+				print_rtmsg((struct rt_msghdr *)msg);
 			}
 			if (FD_ISSET (0, &fds)) 
 				break; 
@@ -397,9 +397,8 @@ char addrnames[] =
 "\1DST\2GATEWAY\3NETMASK\4GENMASK\5IFP\6IFA\7AUTHOR\010BRD";
 
 void
-print_rtmsg(rtm, msglen)
+print_rtmsg(rtm)
 	struct rt_msghdr *rtm;
-	int msglen;
 {
 	struct if_msghdr *ifm;
 	struct ifa_msghdr *ifam;
@@ -745,7 +744,7 @@ rtmsg(cmd, flags)
 	NEXTADDR(RTA_IFP, so_ifp);
 	rtm.rtm_msglen = l = cp - (char *)&m_rtmsg;
 	if (verbose)
-		print_rtmsg(&rtm, l);
+		print_rtmsg(&rtm);
 	if ((rlen = write(s, (char *)&m_rtmsg, l)) < 0) {
 		/* on a write, the calling function will notify user of error */
 		close(s);

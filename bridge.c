@@ -1,4 +1,4 @@
-/* $nsh: bridge.c,v 1.11 2006/04/11 12:29:01 pata Exp $ */
+/* $nsh: bridge.c,v 1.12 2007/12/27 03:12:22 chris Exp $ */
 /* From: $OpenBSD: brconfig.c,v 1.27 2003/09/26 03:29:59 deraadt Exp $ */
 
 /*
@@ -759,7 +759,8 @@ bridge_list(int s, char *brdg, char *delim, char *br_str, int str_len, int type)
 {
 	struct ifbreq *reqp;
 	struct ifbifconf bifc;
-	int i, len = 8192, identified = 0;
+	u_int i, len = 8192;
+	int identified = 0;
 	char buf[256], *inbuf = NULL, *inb;
 
 	while (1) {
@@ -1128,7 +1129,7 @@ bridge_addrs(int s, char *brdg, char *hdr_delim, char *body_delim)
 	struct ifbaconf ifbac;
 	struct ifbareq *ifba;
 	char buf[sizeof(ifba->ifba_ifsname) + 1], *inbuf = NULL, *inb;
-	int i, len = 8192;
+	u_int i, len = 8192;
 
 	while (1) {
 		ifbac.ifbac_len = len;
@@ -1175,7 +1176,7 @@ bridge_confaddrs(int s, char *brdg, char *delim, FILE *output)
 	struct ifbaconf ifbac;
 	struct ifbareq *ifba;
 	char buf[sizeof(ifba->ifba_ifsname) + 1], *inbuf = NULL, *inb;
-	int i, len = 8192;
+	u_int i, len = 8192;
 
 	while (1) {
 		ifbac.ifbac_len = len;
@@ -1256,7 +1257,7 @@ bridge_rules(int s, char *brdg, char *ifname, char *delim, FILE *output)
 	char *inbuf = NULL, *inb;
 	struct ifbrlconf ifc;
 	struct ifbrlreq *ifrp, ifreq;
-	int len = 8192, i;
+	u_int i, len = 8192;
 
 	while (1) {
 		ifc.ifbrl_len = len;

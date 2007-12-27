@@ -1,4 +1,4 @@
-/* $nsh: passwd.c,v 1.5 2004/03/22 06:28:19 chris Exp $ */
+/* $nsh: passwd.c,v 1.6 2007/12/27 03:12:22 chris Exp $ */
 /*
  * Copyright (c) 2004
  *      Christian Gut.  All rights reserved.
@@ -35,7 +35,7 @@
 #include "externs.h"
 
 int read_pass(char *, size_t);
-int write_pass(char *, size_t);
+int write_pass(char *);
 int gen_salt(char *, size_t);
 
 char *bcrypt_gensalt(u_int8_t);
@@ -57,7 +57,7 @@ read_pass(char *pass, size_t size)
 
 /* write the crypted password to the passwd-temp file */
 int
-write_pass(char *cpass, size_t size)
+write_pass(char *cpass)
 {
 	FILE *pwdhandle;
 
@@ -157,7 +157,7 @@ enable(int argc, char **argv)
 		strlcpy(pass, argv[2], sizeof(pass));
 		gen_salt(salt, sizeof(salt));
 		cpass = strdup(crypt(pass, salt));
-		return (write_pass(cpass, sizeof(cpass)));
+		return (write_pass(cpass));
 
 	case 4:
 		/* 2nd == "secret" ? */
@@ -180,7 +180,7 @@ enable(int argc, char **argv)
 
 		/* set crypted pass */
 		strlcpy(pass, argv[3], sizeof(pass));
-		return (write_pass(pass, sizeof(pass)));
+		return (write_pass(pass));
 
 	default:
 		printf("%% Too many arguments\n");

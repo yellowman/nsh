@@ -1,4 +1,4 @@
-/* $nsh: show.c,v 1.5 2007/12/27 02:26:37 chris Exp $ */
+/* $nsh: show.c,v 1.6 2007/12/27 03:12:22 chris Exp $ */
 /* From: $OpenBSD: /usr/src/sbin/route/show.c,v 1.61 2007/09/05 20:30:21 claudio Exp $	*/
 
 /*
@@ -90,7 +90,7 @@ static const struct bits bits[] = {
 	{ RTF_PROTO3,	'3' },
 	{ RTF_CLONED,	'c' },
 	{ RTF_JUMBO,	'J' },
-	{ 0 }
+	{ 0, 0 }
 };
 
 void	pr_rthdr(int);
@@ -663,7 +663,7 @@ netname6(struct sockaddr_in6 *sa6, struct sockaddr_in6 *mask)
 	if (mask) {
 		lim = mask->sin6_len - offsetof(struct sockaddr_in6, sin6_addr);
 		lim = lim < (int)sizeof(struct in6_addr) ?
-		    lim : sizeof(struct in6_addr);
+		    lim : (int)sizeof(struct in6_addr);
 		for (p = (u_char *)&mask->sin6_addr, i = 0; i < lim; p++) {
 			if (final && *p) {
 				illegal++;
@@ -717,7 +717,7 @@ netname6(struct sockaddr_in6 *sa6, struct sockaddr_in6 *mask)
 			else
 				sin6.sin6_addr.s6_addr[i++] = 0x00;
 		}
-		while (i < sizeof(struct in6_addr))
+		while (i < (int)sizeof(struct in6_addr))
 			sin6.sin6_addr.s6_addr[i++] = 0x00;
 	} else
 		masklen = 128;

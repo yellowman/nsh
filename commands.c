@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.59 2007/12/27 01:57:56 chris Exp $ */
+/* $nsh: commands.c,v 1.60 2007/12/27 03:12:22 chris Exp $ */
 /*
  * Copyright (c) 2002-2007
  *      Chris Cappuccio.  All rights reserved.
@@ -243,7 +243,7 @@ static int
 show_help(void)
 {
 	Menu *s; /* pointer to current command */
-	int z = 0;
+	u_int z = 0;
 
 	printf("%% Commands may be abbreviated.\n");
 	printf("%% 'show' commands are:\n\n");
@@ -350,7 +350,7 @@ static int
 ip_help(void)
 {
 	Menu *i; /* pointer to current command */
-	int z = 0;
+	u_int z = 0;
 
 	printf("%% Commands may be abbreviated.\n");
 	printf("%% 'ip' commands are:\n\n");
@@ -430,7 +430,7 @@ static int
 flush_help(void)
 {
 	Menu *f;
-	int z = 0;
+	u_int z = 0;
 
 	printf("%% Commands may be abbreviated.\n");
 	printf("%% 'flush' commands are:\n\n");
@@ -533,7 +533,8 @@ static int
 interface(int argc, char **argv, char *modhvar)
 {
 	int z = 0;
-	int num, ifs, set;
+	u_int num;
+	int ifs, set;
 	char *tmp;
 	struct intlist *i;	/* pointer to current command */
 	struct ifreq ifr;
@@ -783,7 +784,7 @@ static int
 int_help(void)
 {
 	struct intlist *i; /* pointer to current command */
-	int z = 0;
+	u_int z = 0;
 
 	printf("%% Commands may be abbreviated.\n");
 	printf("%% Press enter at a prompt to leave %s configuration mode.\n",
@@ -941,7 +942,7 @@ void
 command(int top)
 {
 	Command  *c;
-	int num;
+	u_int num;
 
 	inithist();
 	initedit();
@@ -1034,7 +1035,7 @@ help(int argc, char **argv)
 	Command *c;
 
 	if (argc == 1) { 
-		int z = 0;
+		u_int z = 0;
 
 		printf("%% Commands may be abbreviated.\n");
 		printf("%% Commands are:\n\n");
@@ -1088,6 +1089,42 @@ hostname(int argc, char *argv[])
 		printf("%% %s\n", hbuf);
         }
 	return 0;
+}
+
+/*
+ * Shell command.
+ */
+int
+shell(argc, argv)
+	int argc;
+	char *argv[];
+{
+	switch(vfork()) {
+		case -1:
+			printf("%% fork failed: %s\n", strerror(errno));
+			break;
+
+		case 0:
+		{
+			/*
+			 * Fire up the shell in the child.
+			 */
+			char *shellp;
+			char *shellname = shellp = "/bin/sh";
+
+			if (argc > 1)
+				execl(shellp, shellname, "-c", &saveline[1],
+				    (char *)NULL);
+			else
+				execl(shellp, shellname, (char *)NULL);
+			printf("%% execl failed: %s\n", strerror(errno));
+			exit(0);
+		}
+		default:
+ 			(void)wait((int *)0);  /* Wait for shell to complete */
+			break;
+	}
+	return 1;
 }
 
 /*
@@ -1148,39 +1185,6 @@ traceroute(int argc, char *argv[])
 		cmdargs(TRACERT, argv);
 	}
 	return 0;
-}
-
-/*
- * Shell command.
- */
-int
-shell(int argc, char *argv[])
-{
- 	switch(vfork()) {
-		case -1:
-			printf("%% fork failed: %s\n", strerror(errno));
-			break;
-
-		case 0:
-		{
-			/*
-			 * Fire up the shell in the child.
-			 */
-			char *shellp;
-			char *shellname = shellp = "/bin/sh";
-
-			if (argc > 1)
-				execl(shellp, shellname, "-c", &saveline[1], (char *)NULL);
-			else
-				execl(shellp, shellname, (char *)NULL);
-			printf("%% execl failed: %s\n", strerror(errno));
-			exit(0);
-		}
-		default:
-			(void)wait((int *)0);  /* Wait for shell to complete */
-			break;
-	}
-	return 1;
 }
 
 /*
@@ -1398,7 +1402,7 @@ cmdrc(char rcname[FILENAME_MAX])
 	char	modhvar[128];	/* required variable in mode handler cmd */
 	int	modhcmd; 	/* do we execute under another mode? */
 	unsigned int lnum;	/* line number */
-	int	z = 0;		/* max length of cmdtab argument */
+	u_int	z = 0;		/* max length of cmdtab argument */
 
 	if ((rcfile = fopen(rcname, "r")) == 0) {
 		printf("%% Unable to open %s: %s\n", rcname, strerror(errno));
