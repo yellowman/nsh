@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.39 2007/12/26 06:00:14 chris Exp $ */
+/* $nsh: externs.h,v 1.40 2007/12/27 01:57:56 chris Exp $ */
 /*
  * nsh externs, prototypes and macros
  */
@@ -33,7 +33,7 @@ int default_mtu(char *);
 int conf_routes(FILE *, char *, int, int);
 
 /* show.c */
-void routepr(int);
+void p_rttables(int, u_int);
 #ifdef _NETINET_IN_H_
 char *netname4(in_addr_t, struct sockaddr_in *);
 #endif

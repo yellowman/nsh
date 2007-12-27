@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.58 2007/12/26 06:10:47 chris Exp $ */
+/* $nsh: commands.c,v 1.59 2007/12/27 01:57:56 chris Exp $ */
 /*
  * Copyright (c) 2002-2007
  *      Chris Cappuccio.  All rights reserved.
@@ -110,6 +110,7 @@ static int	disable(void);
 static int	doverbose(int, char**);
 static int	doediting(int, char**);
 static int	pr_routes(char *);
+static int	pr_sadb(void);
 static int	pr_pf_stats(void);
 static int	pr_ip_stats(void);
 static int	pr_ah_stats(void);
@@ -176,6 +177,7 @@ static Menu showlist[] = {
 	{ "hostname",	"Router hostname",	0, 0, hostname },
 	{ "interface",	"Interface config",	0, 1, show_int },
 	{ "route",	"IP route table or route lookup", 0, 1, pr_routes },
+	{ "sadb",	"Security Association Database", 0, 0, pr_sadb },
 	{ "pfstats",	"PF statistics",	0, 0, pr_pf_stats },
 	{ "ipstats",	"IP statistics",	0, 0, pr_ip_stats },
 	{ "ahstats",	"AH statistics",	0, 0, pr_ah_stats },
@@ -1707,8 +1709,8 @@ int
 pr_routes(char *route)
 {
 	if (route == 0)
-		/* show entire routing table */
-		routepr(AF_INET);
+		/* show primary routing table */
+		p_rttables(AF_INET, 0);
 	else
 		/* show a specific route */
 		show_route(route);
@@ -1716,6 +1718,13 @@ pr_routes(char *route)
 	return 0;
 }
 
+int
+pr_sadb(void)
+{
+	p_rttables(PF_KEY, 0);
+
+	return 0;
+}
 
 int
 pr_rt_stats(void)

@@ -1,4 +1,4 @@
-/* $nsh: conf.c,v 1.34 2007/12/26 05:19:33 chris Exp $ */
+/* $nsh: conf.c,v 1.35 2007/12/27 01:57:56 chris Exp $ */
 /*
  * Copyright (c) 2002, 2005
  *      Chris Cappuccio.  All rights reserved.
@@ -571,7 +571,7 @@ conf_print_rtm(FILE *output, struct rt_msghdr *rtm, char *delim, int af)
 		}
 		fprintf(output, "%s%s ", delim,
 		    netname4(dstin->sin_addr.s_addr, maskin));
-		fprintf(output, "%s\n", routename_sa(gate));
+		fprintf(output, "%s\n", routename(gate));
 	} else
 #ifdef INET6
 	{
@@ -589,6 +589,6 @@ conf_print_rtm(FILE *output, struct rt_msghdr *rtm, char *delim, int af)
 #endif
 	if (dst && gate && (af == AF_LINK))
 		/* print arp table */
-		fprintf(output, "%s%s %s\n", delim, routename_sa(dst),
-		    routename_sa(gate));
+		fprintf(output, "%s%s %s\n", delim, routename(dst),
+		    routename(gate));
 }
