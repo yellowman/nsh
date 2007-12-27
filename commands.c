@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.60 2007/12/27 03:12:22 chris Exp $ */
+/* $nsh: commands.c,v 1.61 2007/12/27 22:19:39 chris Exp $ */
 /*
  * Copyright (c) 2002-2007
  *      Chris Cappuccio.  All rights reserved.
@@ -129,6 +129,7 @@ static int	wr_conf(void);
 static int	show_help(void);
 static int	ip_help(void);
 static int	flush_help(void);
+static int	flush_line(char *);
 static int	flush_ip_routes(void);
 static int	flush_arp_cache(void);
 static int	flush_history(void);
@@ -194,6 +195,7 @@ static Menu showlist[] = {
 	{ "monitor",	"Monitor routing/arp table changes", 0, 0, monitor },
 	{ "ap",		"Wireless access points", 1, 1, wi_printaplist },
 	{ "version",	"Software information",	0, 0, version },
+	{ "users",	"System users",		0, 0, who },
 	{ "running-config",	"Operating configuration", 0, 0, pr_conf },
 	{ "startup-config", "Startup configuration", 0, 0, pr_s_conf },
 	{ "?",		"Options",		0, 0, show_help },
@@ -374,6 +376,7 @@ ip_help(void)
 static Menu flushlist[] = {
 	{ "routes",	"IP routes",		0, 0, flush_ip_routes },
 	{ "arp",	"ARP cache",		0, 0, flush_arp_cache },
+	{ "line",	"Active user",		1, 1, flush_line },
 	{ "bridge-dyn",	"Dynamically learned bridge addresses", 1, 1, flush_bridgedyn },
 	{ "bridge-all",	"Dynamic and static bridge addresses", 1, 1, flush_bridgeall },
 	{ "bridge-rule", "Layer 2 filter rules for a bridge member port", 2, 2, flush_bridgerule },
@@ -424,6 +427,14 @@ flushcmd(int argc, char **argv)
 		    (f->maxarg > 1) ? argv[3] : 0);
 
 	return(1);
+}
+
+static int
+flush_line(char *line)
+{
+	char *argv[] = { PKILL, "-9", "-t", line, '\0' };
+	cmdargs(PKILL, argv);
+	return (1);
 }
 
 static int
@@ -830,6 +841,7 @@ static char
 	quithelp[] =	"Close current connection",
 	verbosehelp[] =	"Set verbose diagnostics",
 	editinghelp[] = "Set command line editing",
+	whohelp[] =	"Display system users",
 	shellhelp[] =	"Invoke a subshell",
 	savehelp[] =	"Save the current configuration",
 	reloadhelp[] =	"Reboot the system",
@@ -861,6 +873,7 @@ static Command cmdtab[] = {
 	{ "write-config", savehelp,	wr_conf,	1, 0, 0, 0, 0 },
 	{ "verbose",	verbosehelp,	doverbose,	0, 0, 1, 0, 0 },
 	{ "editing",	editinghelp,	doediting,	0, 0, 1, 0, 0 },
+	{ "who",	whohelp,	who,		0, 0, 0, 0, 0 },
 	{ "!",		shellhelp,	shell,		1, 0, 0, 0, 0 },
 	{ "?",		helphelp,	help,		0, 0, 0, 0, 0 },
 	{ "help",	0,		help,		0, 0, 0, 0, 0 },

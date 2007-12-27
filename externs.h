@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.41 2007/12/27 03:12:22 chris Exp $ */
+/* $nsh: externs.h,v 1.42 2007/12/27 22:19:39 chris Exp $ */
 /*
  * nsh externs, prototypes and macros
  */
@@ -75,6 +75,7 @@ extern char metricnames[];
 #define TRACERT6	"/usr/sbin/traceroute6"
 #define TELNET		"/usr/bin/telnet"
 #define SSH		"/usr/bin/ssh"
+#define PKILL		"/usr/bin/pkill"
 #define SAVESCRIPT	"/usr/local/bin/save.sh"
 void command(int);
 int cmdrc(char rcname[FILENAME_MAX]);
@@ -250,3 +251,6 @@ int inttrunkport(char *, int, int, char **);
 int inttrunkproto(char *, int, int, char **);
 int conf_trunk(FILE *output, int ifs, char *ifname);
 void show_trunk(int ifs, char *ifname);
+
+/* who.c */
+int who(int, char **);
