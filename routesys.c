@@ -1,4 +1,4 @@
-/* $nsh: routesys.c,v 1.20 2007/12/27 01:57:56 chris Exp $ */
+/* $nsh: routesys.c,v 1.21 2007/12/27 02:07:13 chris Exp $ */
 /* From: $OpenBSD: /usr/src/sbin/route/route.c,v 1.43 2001/07/07 18:26:20 deraadt Exp $ */
 
 /*
@@ -446,7 +446,7 @@ print_getmsg(rtm, msglen)
 	char *cp;
 	int i;
 
-	(void) printf("%% route lookup for: %s\n", routename(&so_dst.sa));
+	(void) printf("%% route lookup for:\t%s\n", routename(&so_dst.sa));
 	if (rtm->rtm_msglen > msglen) {
 		printf("%% message length mismatch, in packet %d,"
 		    " returned %d\n", rtm->rtm_msglen, msglen);
@@ -502,19 +502,19 @@ print_getmsg(rtm, msglen)
 	 * we ignore most statistics and locks right now for simplicity
 	 */
 	if (rtm->rtm_rmx.rmx_mtu)
-		printf("\tmtu: %u\n", rtm->rtm_rmx.rmx_mtu);
+		printf("\tmtu:\t\t%u\n", rtm->rtm_rmx.rmx_mtu);
 	if (rtm->rtm_rmx.rmx_hopcount)
-		printf("\thopcount: %u\n", rtm->rtm_rmx.rmx_hopcount);
+		printf("\thopcount:\t%u\n", rtm->rtm_rmx.rmx_hopcount);
 	if (rtm->rtm_rmx.rmx_expire) {
 		rtm->rtm_rmx.rmx_expire -= time(0);
-		printf("\texpires: %u sec\n", rtm->rtm_rmx.rmx_expire);
+		printf("\texpires:\t%u sec\n", rtm->rtm_rmx.rmx_expire);
 	}
 
 #define RTA_IGN (RTA_DST|RTA_GATEWAY|RTA_NETMASK|RTA_IFP|RTA_IFA|RTA_BRD)
         if (verbose)
                 pmsg_common(rtm);
         else if (rtm->rtm_addrs &~ RTA_IGN) {
-		(void) printf("\tsockaddrs: ");
+		(void) printf("\tsockaddrs:\t");
 		bprintf(stdout, rtm->rtm_addrs, addrnames);
 		putchar('\n');
 	}

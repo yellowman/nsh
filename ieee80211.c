@@ -1,4 +1,4 @@
-/* $nsh: ieee80211.c,v 1.13 2007/12/25 06:42:55 chris Exp $ */
+/* $nsh: ieee80211.c,v 1.14 2007/12/27 02:07:13 chris Exp $ */
 /* From: $OpenBSD: /usr/src/sbin/ifconfig/ifconfig.c,v 1.68 2002/06/19 18:53:53 millert Exp $ */
 /*
  * Copyright (c) 1983, 1993
@@ -296,10 +296,10 @@ get_nwinfo(char *ifname, char *str, int str_len, int type)
 		memset(&txpower, 0, sizeof(txpower));
 		(void) strlcpy(txpower.i_name, ifname, sizeof(txpower.i_name));
 		if (ioctl(ifs, SIOCG80211TXPOWER, (caddr_t) &txpower) == 0) {
-			/* XXX FIXED is always set? For now, check for > 0, but
-			   really, find kernel bug and fix it */
+			/* XXX FIXED is always set? For now, check for == 100,
+			   txpower is totally broken in the kernel anyways */
 			if (txpower.i_mode == IEEE80211_TXPOWER_MODE_FIXED &&
-			    txpower.i_val > 0)
+			    txpower.i_val != 100)
 				snprintf(str, str_len, "%d", txpower.i_val);
 		} else {
 			printf("%% get_nwinfo: SIOCG80211TXPOWER: %s\n",
@@ -455,7 +455,7 @@ inttxpower(char *ifname, int ifs, int argc, char **argv)
 	strlcpy(txpower.i_name, ifname, sizeof(txpower.i_name));
    
 	if (!set) {
-		txpower.i_val = 0;
+		txpower.i_val = 100;
 		txpower.i_mode = IEEE80211_TXPOWER_MODE_AUTO;
 	} else {
 		dbm = strtonum(argv[0], SHRT_MIN, SHRT_MAX, &errmsg);
