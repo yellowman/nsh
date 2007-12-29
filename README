@@ -1,5 +1,5 @@
-nsh//network config shell//Chris Cappuccio <chris@dqc.org> version 20071216
-$nsh: README,v 1.23 2007/12/17 06:57:02 chris Exp $
+nsh//network config shell//Chris Cappuccio <chris@dqc.org> version 20071229
+$nsh: README,v 1.24 2007/12/29 23:12:44 chris Exp $
 
 A CLI intended for OpenBSD-based routers running little except for sshd,
 targeted towards flash-based systems.
