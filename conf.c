@@ -1,4 +1,4 @@
-/* $nsh: conf.c,v 1.37 2007/12/27 03:12:22 chris Exp $ */
+/* $nsh: conf.c,v 1.38 2007/12/29 23:11:22 chris Exp $ */
 /*
  * Copyright (c) 2002, 2005
  *      Chris Cappuccio.  All rights reserved.
@@ -268,11 +268,16 @@ void conf_interfaces(FILE *output)
 		if (br) {
 			conf_brcfg(output, ifs, ifn_list, ifnp->if_name);
 		} else {
+			char tmp[16];
+
 			conf_media_status(output, ifs, ifnp->if_name);
 			conf_ifmetrics(output, ifs, if_data, ifnp->if_name);
 			conf_pfsync(output, ifs, ifnp->if_name);
 			conf_carp(output, ifs, ifnp->if_name);
 			conf_trunk(output, ifs, ifnp->if_name);
+			if (timeslot_status(ifs, ifnp->if_name, tmp,
+			    sizeof(tmp)) == 1) 
+				fprintf(output, " timeslots %s\n", tmp);
 		}
 
 		/*

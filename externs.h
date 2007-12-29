@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.42 2007/12/27 22:19:39 chris Exp $ */
+/* $nsh: externs.h,v 1.43 2007/12/29 23:11:22 chris Exp $ */
 /*
  * nsh externs, prototypes and macros
  */
@@ -232,6 +232,7 @@ int enable(int, char **);
 /* pfsync.c */
 #define PFSYNC_MAXUPDATES 128
 int intsyncdev(char *, int, int, char **);
+int intsyncpeer(char *, int, int, char  **);
 int intmaxupd(char *, int, int, char **);
 int conf_pfsync(FILE *, int, char *);
 
@@ -254,3 +255,7 @@ void show_trunk(int ifs, char *ifname);
 
 /* who.c */
 int who(int, char **);
+
+/* timeslot.c */
+int inttimeslot(char *, int, int, char **);
+int timeslot_status(int, char *, char *, int);

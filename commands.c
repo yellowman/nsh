@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.61 2007/12/27 22:19:39 chris Exp $ */
+/* $nsh: commands.c,v 1.62 2007/12/29 23:11:22 chris Exp $ */
 /*
  * Copyright (c) 2002-2007
  *      Chris Cappuccio.  All rights reserved.
@@ -493,7 +493,8 @@ static struct intlist Intlist[] = {
 	{ "tentative",	"IPv6 tentative address bit",		inttentative, 0 },
 #endif
 	{ "tunnel",	"Source/destination for GIF tunnel",	inttunnel, 0 },
-	{ "syncdev",	"Control message interface",		intsyncdev, 0 },
+	{ "syncdev",	"PFsync control message interface",	intsyncdev, 0 },
+	{ "syncpeer",	"PFsync peer address",			intsyncpeer, 0},
 	{ "maxupd", 	"Collapsable max updates for a single state", intmaxupd, 0 },
 	{ "vhid",	"CARP virtual host ID",			intcarp, 0 },
 	{ "advbase",	"CARP advertisement interval",		intcarp, 0 },
@@ -502,6 +503,7 @@ static struct intlist Intlist[] = {
 	{ "carpdev",	"CARP device",				intcdev, 0 },
 	{ "carpnode",	"CARP additional vhid/advskew",		intcnode, 0 },
 	{ "vlan",	"802.1Q vlan tag and parent",		intvlan, 0 },
+	{ "timeslots",	"TDM timeslots",			inttimeslot, 0},
 	{ "debug",	"Driver dependent debugging",		intflags, 0 },
 	{ "shutdown",	"Shutdown interface",			intflags, 2 },
 /* Bridge mode commands */

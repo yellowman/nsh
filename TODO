@@ -1,42 +1,36 @@
-$nsh: TODO,v 1.25 2007/12/27 22:19:39 chris Exp $
+$nsh: TODO,v 1.26 2007/12/29 23:11:22 chris Exp $
 
-nsh is a work in progress, future versions will be released which
-implement much of the following (of course, diffs are welcome):
+nsh is a work in progress, diffs are welcome
 
 Cleanup:
 
 * Formatting for the manual.  Something that looks slick in PDF and print.
-* Check more errno values in various places for common mistakes and print out
-  the error in "plain english" instead of kernel/library jargon
 * More security auditing for string handling, off-by-one errors, data
   passed to kernel, data passed elsewhere...
-* Maybe user args should be set to lowercase at early so that we dont have to
-  use strcasecmp/strncasecmp everywhere?
-* User args should be sanity checked early on
-* Consistency in how we print errors for commands called from interface(),
-  give user-friendly messages, as these errors generally represent user
-  error (whereas an error in conf() or other things that are not called
-  direct from CLI generally represent problems in nsh, or strange user
-  alterations of the conf file)
-* Consistency in how errors are returned, handled between functions
-* Get rid of wi crap, move to new interfaces where necessary
-* Do we need to implement different get_lladdr for ieee80211 interfaces?
-  Test this
+* Sanity check _before_ args hit int*() routines, based on some framework
+  of possible values for each function (something that works along with
+  context sensitive help framework)
+* Consistency for return values between functions
+* Support new wireless information interfaces where necessary, also dump wi.c
+  once if_wi moves to new interfaces
+* Use getaddrinfo and netname/routename(show.c) instead of home-grown
+  parse functions to make IPv6 support easier
+* Use sockaddr everywhere instead of home-grown ip_t
 
 To be implemented:
 
-* fix arp set/show
-* pfsync syncpeer
-* snmpd access controls or snmpd.conf edit
-* bridge rtsp commands
-* Rest of newer 802.11 gunk like rssi display, chan, flags
-* kernel pppoe
-* handle TDM timeslots
-* Interface with bgpd.conf, ospfd.conf, ripd.conf, relayd.conf and associated
-  ctl programs, maybe like we do with pf.conf and pfctl
-* Configure IPsec VPNs/IPComp with simple CLI commands (The easiest way to do
-  this would be through ipsecctl?? or direct?)
+* arp set/show
+* handle snmpd access controls or full snmpd.conf editor mode
+* handle bridge rtsp commands
+* handle newer 802.11 gunk like rssi display, chan, flags
+* handle kernel pppoe
+* Interface with bgpd.conf, ospfd.conf, ripd.conf, relayd.conf, ipsec.conf
+  and associated ctl programs (possibly like the pf interface, or better)
 * DHCP daemon control
+* ISAKMP daemon control
+* RSA certificate generation/management method
+* SNMP daemon control
+* privsep (imsg based?)
 * Persistent comments/remarks in the config file (to document routes, etc..)
 * IPv6 (shouldn't be too hard, considering that most of the functions
   we stole from other source already support it, but i won't look at this
@@ -48,12 +42,6 @@ Would be nice:
   flash image when given a network source for new binaries?
 * Build a simple web interface that works through the rc file handler (web if
   that calls nsh -i to execute commands)
-* Turn pfctl into a library and use it directly
-* Separate the user interface from the kernel interface so that nsh doesn't
-  need to be run as root.  Maybe use an nsh daemon in the background that could
-  persistently keep other information not stored in the kernel itself.  The
-  daemon approach might be nice for a web app to access the back end of nsh.
-  Or, use the imsg framework.
 * Add more diagnostic messages for verbose output where useful
 * Support for paging through displays of text X lines at a time
 * Something comparable to "| inc" from cisco-land
@@ -61,7 +49,6 @@ Would be nice:
 * Context-sensitive help
 * Convenient/automatic mechanisms to centralize configurations for
   tracking/revision control
-* Split out arp/route show
 
 Known Bugs (or, things that I don't want to bother with right now, but
 better not forget later...):
@@ -70,4 +57,6 @@ better not forget later...):
   properly (what else??)
 * ALTQTBRSET was removed from the kernel with the migration to pf.  But,
   there is no easy to use equivalent.  Fix this.
+* The kernel/wireless drivers do not use txpower data in any way.  Also
+  TXPOWER_AUTO does absolutely nothing and is not even tracked in the kernel.
 * ...
