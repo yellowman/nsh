@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.63 2008/01/06 17:20:05 chris Exp $ */
+/* $nsh: commands.c,v 1.64 2008/01/06 18:10:01 chris Exp $ */
 /*
  * Copyright (c) 2002-2007
  *      Chris Cappuccio.  All rights reserved.
@@ -1765,6 +1765,7 @@ pr_s_conf(void)
 {
 	FILE   *f;
 	char   *input;
+	size_t	s;
 
 	if (priv != 1) {
 		printf ("%% Privilege required\n");
@@ -1780,7 +1781,12 @@ pr_s_conf(void)
 		return(0);
 	}
 	
-	while ((input =(char *)fparseln(f, NULL, NULL, NULL, 0)) != NULL) {
+	while ((input = fgetln(f, &s)) != NULL) {
+		/*
+		 * We replace newline, or whatever was at the end of
+	         * the line, with NUL termination
+		 */
+		input[s-1] = '\0';
 		printf("%s\n", input);
 	}
 	
