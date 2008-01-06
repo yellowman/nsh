@@ -1,4 +1,4 @@
-/* $nsh: conf.c,v 1.38 2007/12/29 23:11:22 chris Exp $ */
+/* $nsh: conf.c,v 1.39 2008/01/06 17:20:05 chris Exp $ */
 /*
  * Copyright (c) 2002, 2005
  *      Chris Cappuccio.  All rights reserved.
@@ -64,6 +64,9 @@ int conf_ifaddrs(FILE *, char *, int);
 void conf_brcfg(FILE *, int, struct if_nameindex *, char *);
 void conf_ifmetrics(FILE *, int, struct if_data, char *);
 void conf_pfrules(FILE *);
+void conf_intrtlabel(FILE *, int, char *);
+void conf_intgroup(FILE *, int, char *);
+void conf_groupattrib(FILE *);
 
 static const struct {
 	char *name;
@@ -101,6 +104,10 @@ conf(FILE *output)
 
 	fprintf(output, "!\n");
 
+	conf_groupattrib(output);
+
+	fprintf(output, "!\n");
+
 	/*
 	 * check out how sysctls are doing these days
 	 *
@@ -115,7 +122,7 @@ conf(FILE *output)
 	/*
 	 * print static arp and route entries in configuration file format
 	 */
-	conf_routes(output, "arp ", AF_INET, (RTF_LLINFO & RTF_STATIC));
+	conf_routes(output, "arp ", AF_LINK, RTF_STATIC);
 	conf_routes(output, "route ", AF_INET, RTF_STATIC);
 
 	fprintf(output, "!\n");
@@ -155,9 +162,9 @@ void conf_interfaces(FILE *output)
 	int ifs, flags, ippntd, br;
 #define LEASEPREFIX     "/var/db/dhclient.leases"
 #define	LLPREFIX	"/var/run/lladdr"
-	char leasefile[sizeof(LEASEPREFIX)+1+IFNAMSIZ+1];
-	char *lladdr, llorig[IFNAMSIZ+1];
-	char llfn[sizeof(LLPREFIX)+IFNAMSIZ+1];
+	char leasefile[sizeof(LEASEPREFIX)+1+IFNAMSIZ];
+	char *lladdr, llorig[IFNAMSIZ];
+	char llfn[sizeof(LLPREFIX)+IFNAMSIZ];
 	char ifdescr[IFDESCRSIZE];
 
 	struct if_nameindex *ifn_list, *ifnp;
@@ -224,10 +231,6 @@ void conf_interfaces(FILE *output)
 
 		/*
 		 * print lladdr if necessary
-		 * this is a heavy handed way of doing this, for something
-		 * that is more likely to not be set by default... and,
-		 * get_hwdaddr() is part of the dead weight...
-		 * soekris 486s run in spite of such measures to destroy them
 		 */
 		if ((lladdr = get_hwdaddr(ifnp->if_name)) != NULL) {
 			/* We assume lladdr only useful if we can get_hwdaddr */
@@ -246,14 +249,29 @@ void conf_interfaces(FILE *output)
 		 * print vlan tag, parent if available.  if a tag is set
 		 * but there is no parent, discard.
 		 */
-		memset(&vreq, 0, sizeof(struct vlanreq));
+		bzero(&vreq, sizeof(struct vlanreq));
 		ifr.ifr_data = (caddr_t)&vreq;  
 
 		if (ioctl(ifs, SIOCGETVLAN, (caddr_t)&ifr) != -1) {
-			if(vreq.vlr_tag && (vreq.vlr_parent[0] != '\0'))
-				fprintf(output, " vlan %d %s\n",
+			struct vlanreq preq;
+
+			bzero(&preq, sizeof(struct vlanreq));
+
+			ifr.ifr_data = (caddr_t)&preq;
+			ioctl(ifs, SIOCGETVLANPRIO, (caddr_t)&ifr);
+
+			if(vreq.vlr_tag && (vreq.vlr_parent[0] != '\0')) {
+				fprintf(output, " vlan %d parent %s",
 				    vreq.vlr_tag, vreq.vlr_parent);
+				if(preq.vlr_tag > 0)
+					fprintf(output, " priority %d",
+					    preq.vlr_tag);
+				fprintf(output, "\n");
+			}
 		}
+
+		conf_intrtlabel(output, ifs, ifnp->if_name);
+		conf_intgroup(output, ifs, ifnp->if_name);
 
 		snprintf(leasefile, sizeof(leasefile), "%s.%s",
 		    LEASEPREFIX, ifnp->if_name);
@@ -509,7 +527,7 @@ conf_routes(FILE *output, char *delim, int af, int flags)
 		return(-1);
 	}
 
-	rtdump = getrtdump();
+	rtdump = getrtdump(0, flags, 0);
 	if (rtdump == NULL) {
 		close(s);
 		return(-1);
@@ -533,6 +551,147 @@ conf_routes(FILE *output, char *delim, int af, int flags)
 }
 
 void
+conf_groupattrib(FILE *output)
+{
+	int len, ifs;
+	struct ifgroupreq	ifgr, ifgr_a;
+	struct ifg_req		*ifg;
+	struct if_nameindex *ifn_list, *ifnp;
+
+	if ((ifn_list = if_nameindex()) == NULL) {
+		printf("%% conf_groupattrib: if_nameindex failed\n");
+		return;
+	}
+
+	if ((ifs = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+		printf("%% conf_groupattrib socket: %s\n", strerror(errno));
+		if_freenameindex(ifn_list);
+		return;
+        }
+
+	/*
+	 * The only way to get attributes for each group is to loop through
+	 * all the groups on all the interfaces and ask for the attribs.
+	 * (The loop through all groups on an interface code is ripped
+	 * straight from ifconfig.c)
+	 * XXX need to keep track of what groups we printed so we don't
+	 * print them twice
+	 */
+
+	for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++) {
+		bzero(&ifgr, sizeof(ifgr));
+		strlcpy(ifgr.ifgr_name, ifnp->if_name, IFNAMSIZ);
+
+		if (ioctl(ifs, SIOCGIFGROUP, (caddr_t)&ifgr) == -1 &&
+		    errno != ENOTTY) {
+			printf("%% conf_groupattrib: SIOCGIFGROUP/1: %s\n",
+				    strerror(errno));
+			return;
+		}
+
+		len = ifgr.ifgr_len;
+		ifgr.ifgr_groups =
+		    (struct ifg_req *)calloc(len / sizeof(struct ifg_req),
+		    sizeof(struct ifg_req));
+		if (ifgr.ifgr_groups == NULL) {
+			printf("%% conf_groupattrib: calloc: %s\n",
+			    strerror(errno));
+			return;
+		}
+		if (ioctl(ifs, SIOCGIFGROUP, (caddr_t)&ifgr) == -1) {
+			printf("%% conf_groupattrib: SIOCGIFGROUP/2: %s\n",
+			    strerror(errno));
+			free(ifgr.ifgr_groups);
+		}
+		ifg = ifgr.ifgr_groups;
+		for (; ifg && len >= sizeof(struct ifg_req); ifg++) {
+			len -= sizeof(struct ifg_req);
+
+			bzero(&ifgr_a, sizeof(ifgr_a));
+			strlcpy(ifgr_a.ifgr_name, ifg->ifgrq_group, IFNAMSIZ);
+
+			if (ioctl(ifs, SIOCGIFGATTR, (caddr_t)&ifgr_a) == -1)
+				continue;
+			/* group attribs are only 'carpdemoted' for now */
+			if (ifgr_a.ifgr_attrib.ifg_carp_demoted != 0)
+				fprintf(output, "group %s carpdemote %d\n",
+				    ifg->ifgrq_group,
+				    ifgr_a.ifgr_attrib.ifg_carp_demoted);
+		}
+		free(ifgr.ifgr_groups);
+	}
+	if_freenameindex(ifn_list);
+}
+
+void
+conf_intgroup(FILE *output, int ifs, char *ifname)
+{
+	/* ripped straight from ifconfig.c */
+	int len, cnt;
+	struct ifgroupreq	ifgr;
+	struct ifg_req		*ifg;
+
+	bzero(&ifgr, sizeof(ifgr));
+	strlcpy(ifgr.ifgr_name, ifname, IFNAMSIZ);
+
+	if (ioctl(ifs, SIOCGIFGROUP, (caddr_t)&ifgr) == -1) {
+		if (errno != ENOTTY)
+			printf("%% conf_intgroup: SIOCGIFGROUP/1: %s\n",
+			    strerror(errno));
+		return;
+	}
+
+	len = ifgr.ifgr_len;
+	ifgr.ifgr_groups =
+	    (struct ifg_req *)calloc(len / sizeof(struct ifg_req),
+	    sizeof(struct ifg_req));
+	if (ifgr.ifgr_groups == NULL) {
+		printf("%% conf_intgroup: calloc: %s\n", strerror(errno));
+		return;
+	}
+	if (ioctl(ifs, SIOCGIFGROUP, (caddr_t)&ifgr) == -1) {
+		printf("%% conf_intgroup: SIOCGIFGROUP/2: %s\n",
+		    strerror(errno));
+		free(ifgr.ifgr_groups);
+		return;
+	}
+
+	ifg = ifgr.ifgr_groups;
+	for (cnt = 0; ifg && len >= sizeof(struct ifg_req); ifg++) {
+		len -= sizeof(struct ifg_req);
+		if (strcmp(ifg->ifgrq_group, "all")) {
+			if (cnt == 0)
+				fprintf(output, " group");
+			cnt++;
+			fprintf(output, " %s", ifg->ifgrq_group);
+		}
+	}
+	if (cnt)
+		fprintf(output, "\n");
+	free(ifgr.ifgr_groups);
+}
+
+void
+conf_intrtlabel(FILE *output, int ifs, char *ifname)
+{
+	struct ifreq ifr;
+	char ifrtlabelbuf[RTLABEL_LEN];
+
+	bzero(&ifr, sizeof(ifr));
+	strlcpy(ifr.ifr_name, ifname, IFNAMSIZ);
+	ifr.ifr_data = (caddr_t)&ifrtlabelbuf;
+
+	if (ioctl(ifs, SIOCGIFRTLABEL, (caddr_t)&ifr) == -1) {
+		if (errno != ENOENT)
+			printf("%% conf_intrtlabel: SIOCGIFRTLABEL: %s\n",
+			    strerror(errno));
+		return;
+	}
+
+	fprintf(output, " rtlabel %s\n", ifr.ifr_data);
+}
+
+void
 conf_print_rtm(FILE *output, struct rt_msghdr *rtm, char *delim, int af)
 {
 	int i;
@@ -546,7 +705,9 @@ conf_print_rtm(FILE *output, struct rt_msghdr *rtm, char *delim, int af)
 			sa = (struct sockaddr *)cp;
 			switch (i) {
 			case RTA_DST:
-				if (sa->sa_family == af)
+				/* allow arp to get printed with af==AF_LINK */
+				if ((sa->sa_family == af) ||
+				    (af == AF_LINK && sa->sa_family == AF_INET))
 					dst = sa;
 				break;
 			case RTA_GATEWAY:
@@ -560,30 +721,13 @@ conf_print_rtm(FILE *output, struct rt_msghdr *rtm, char *delim, int af)
 			}
 			ADVANCE(cp, sa);
 		}
-	if (dst && mask && gate && (af == AF_INET)) {
-		/* print ipv4 routes */
-		struct sockaddr_in *dstin = (struct sockaddr_in *)dst;
-		struct sockaddr_in *maskin = (struct sockaddr_in *)mask;
-		fprintf(output, "%s%s ", delim,
-		    netname4(dstin->sin_addr.s_addr, maskin));
+	if (dst && mask && gate && (af == AF_INET || af == AF_INET6)) {
+		/* print IP route */
+		fprintf(output, "%s%s ", delim, netname(dst, mask));
 		fprintf(output, "%s\n", routename(gate));
 	} else
-#ifdef INET6
-	{
-		/* print ipv6 routes */
-		struct sockaddr_in6 *dstin = (struct sockaddr_in6 *)dst;
-		struct sockaddr_in6 *maskin = (struct sockaddr_in6 *mask;
-		if (mask->sa_len == 0) {
-			/* same gripe as above */
-			maskin->sin6_addr.s_addr = 0;
-		}
-		fprintf(output, "%s%s ", delim,
-		    (char *)netname6(dst, maskin->sin6_addr);
-		fprintf(output, "%s\n", routename6(gate));
-	} else
-#endif
 	if (dst && gate && (af == AF_LINK))
-		/* print arp table */
+		/* print arp */
 		fprintf(output, "%s%s %s\n", delim, routename(dst),
 		    routename(gate));
 }

@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.62 2007/12/29 23:11:22 chris Exp $ */
+/* $nsh: commands.c,v 1.63 2008/01/06 17:20:05 chris Exp $ */
 /*
  * Copyright (c) 2002-2007
  *      Chris Cappuccio.  All rights reserved.
@@ -67,6 +67,7 @@
 #include <sys/wait.h>
 #include <sys/ioctl.h>
 #include <net/if.h>
+#include <net/route.h>
 #include <limits.h>
 #include <histedit.h>
 #include <util.h>
@@ -109,7 +110,9 @@ static int	quit(void);
 static int	disable(void);
 static int	doverbose(int, char**);
 static int	doediting(int, char**);
+static int	group(int, char**);
 static int	pr_routes(char *);
+static int	pr_arp(void);
 static int	pr_sadb(void);
 static int	pr_pf_stats(void);
 static int	pr_ip_stats(void);
@@ -179,6 +182,7 @@ static Menu showlist[] = {
 	{ "interface",	"Interface config",	0, 1, show_int },
 	{ "route",	"IP route table or route lookup", 0, 1, pr_routes },
 	{ "sadb",	"Security Association Database", 0, 0, pr_sadb },
+	{ "arp",	"ARP table",		0, 0, pr_arp },
 	{ "pfstats",	"PF statistics",	0, 0, pr_pf_stats },
 	{ "ipstats",	"IP statistics",	0, 0, pr_ip_stats },
 	{ "ahstats",	"AH statistics",	0, 0, pr_ah_stats },
@@ -474,6 +478,8 @@ static struct intlist Intlist[] = {
 	{ "ip",		"IP address and other parameters",	intip,  0 },
 	{ "alias",	"Additional IP addresses and other parameters", intip, 0 },
 	{ "description", "Interface description",		intdesc, 0 },
+	{ "group",	"Interface group",			intgroup, 0 },
+	{ "rtlabel",	"Interface route labels",		intrtlabel, 0 },
 	{ "mtu",	"Set Maximum Transmission Unit",	intmtu, 0 },
 	{ "metric",	"Set routing metric",			intmetric, 0 },
 	{ "link",	"Set link level options",		intlink, 2 },
@@ -667,9 +673,8 @@ interface(int argc, char **argv, char *modhvar)
 			if (line[0] == 0)
 				break;
 			makeargv(0);
-			if (margv[0] == 0) {
+			if (margv[0] == 0)
 				break;
-			}
 		} else {
 			/*
 			 * a command was supplied directly to interface()
@@ -828,6 +833,7 @@ int_help(void)
 static char
 	hostnamehelp[] = "Set system hostname",
 	interfacehelp[] = "Modify interface parameters",
+	grouphelp[] =	"Modify group attributes",
 	pfhelp[] =	"Packet filter rule handler",
 	bridgehelp[] =	"Modify bridge parameters",
 	showhelp[] =	"Show system information",
@@ -857,6 +863,7 @@ static char
 static Command cmdtab[] = {
 	{ "hostname",	hostnamehelp,	hostname,	1, 0, 0, 0, 0 },
 	{ "interface",	interfacehelp,	interface,	1, 0, 1, 1, 0 },
+	{ "group",	grouphelp,	group,		1, 0, 1, 0, 0 },
 	{ "bridge",	bridgehelp,	interface,	1, 0, 0, 1, 0 },
 	{ "show",	showhelp,	showcmd,	0, 0, 0, 0, 0 },
 	{ "ip",		iphelp,		ipcmd,		1, 0, 1, 0, 0 },
@@ -1199,6 +1206,64 @@ traceroute(int argc, char *argv[])
 	} else {
 		cmdargs(TRACERT, argv);
 	}
+	return 0;
+}
+
+
+/*
+ * Group attribute command.
+ */
+static int
+group(int argc, char **argv)
+{
+	int counter = 1, set, ifs;
+	const char *errstr;
+	struct ifgroupreq ifgr;
+
+	if (NO_ARG(argv[0])) {
+		argv++;
+		argc--;
+		set = 0;
+	} else
+		set = 1;
+
+	if ((argc < 3) || ((argc == 3 || argc == 4) &&
+	    !CMP_ARG(argv[2], "c"))) {
+		printf("%% group <group-name> carpdemote [demotion-counter]\n");
+		printf("%% no group <group-name> carpdemote [demotion-counter]\n");
+		return 1;
+	}
+
+	ifs = socket(AF_INET, SOCK_DGRAM, 0);
+	if (ifs < 0) {
+		printf("%% group: socket: %s\n", strerror(errno));
+
+		return 1;
+	}
+
+	bzero(&ifgr, sizeof(ifgr));
+	strlcpy(ifgr.ifgr_name, argv[1], sizeof(ifgr.ifgr_name));
+
+	if (set) {
+		if (argc == 4) {
+			counter = strtonum(argv[3], 0, 128, &errstr);
+			if (errstr) {
+				printf("%% invalid carp demotion: %s\n", errstr);
+				return 1;
+			}
+		} else
+			counter = 1;
+		ifgr.ifgr_attrib.ifg_carp_demoted = counter;
+	} else
+		ifgr.ifgr_attrib.ifg_carp_demoted = 0;
+
+	if (ioctl(ifs, SIOCSIFGATTR, (caddr_t)&ifgr) == -1) {
+		if (errno == ENOENT)
+			printf("%% group %s does not exist\n", ifgr.ifgr_name);
+		else
+			printf("%% group: SIOCSIFGATTR: %s\n", strerror(errno));
+	}
+
 	return 0;
 }
 
@@ -1599,7 +1664,7 @@ char *
 cprompt(void)
 {
 	gethostname(hbuf, sizeof(hbuf));
-	snprintf(prompt, sizeof(prompt), "%s%s/", hbuf, priv ? "(priv)" : "");
+	snprintf(prompt, sizeof(prompt), "%s%s/", hbuf, priv ? "(p)" : "");
 
 	return(prompt);
 }
@@ -1729,7 +1794,7 @@ pr_routes(char *route)
 {
 	if (route == 0)
 		/* show primary routing table */
-		p_rttables(AF_INET, 0);
+		p_rttables(AF_INET, 0, 0);
 	else
 		/* show a specific route */
 		show_route(route);
@@ -1738,9 +1803,16 @@ pr_routes(char *route)
 }
 
 int
+pr_arp(void)
+{
+	p_rttables(AF_INET, 0, RTF_LLINFO);
+	return 0;
+}
+
+int
 pr_sadb(void)
 {
-	p_rttables(PF_KEY, 0);
+	p_rttables(PF_KEY, 0, 0);
 
 	return 0;
 }

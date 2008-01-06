@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.43 2007/12/29 23:11:22 chris Exp $ */
+/* $nsh: externs.h,v 1.44 2008/01/06 17:20:05 chris Exp $ */
 /*
  * nsh externs, prototypes and macros
  */
@@ -33,7 +33,7 @@ u_int default_mtu(char *);
 int conf_routes(FILE *, char *, int, int);
 
 /* show.c */
-void p_rttables(int, u_int);
+void p_rttables(int, u_int, int);
 #ifdef _NETINET_IN_H_
 char *netname4(in_addr_t, struct sockaddr_in *);
 #endif
@@ -53,7 +53,7 @@ char *any_ntoa(const struct sockaddr *);
 
 /* routesys.c */
 #define FLUSH 0
-struct rtdump *getrtdump(void);
+struct rtdump *getrtdump(int, int, u_int);
 void freertdump(struct rtdump *);
 int monitor(void);
 void flushroutes(int, int);
@@ -166,6 +166,8 @@ int intnwid(char *, int, int, char **);
 int intpowersave(char *, int, int, char **);
 int intdesc(char *, int, int, char **);
 int intlladdr(char *, int, int, char **);
+int intgroup(char *, int, int, char **);
+int intrtlabel(char *, int, int, char **);
 char *get_hwdaddr(char *);
 
 /* version.c */

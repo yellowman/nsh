@@ -1,4 +1,4 @@
-/* $nsh: show.c,v 1.6 2007/12/27 03:12:22 chris Exp $ */
+/* $nsh: show.c,v 1.7 2008/01/06 17:20:05 chris Exp $ */
 /* From: $OpenBSD: /usr/src/sbin/route/show.c,v 1.61 2007/09/05 20:30:21 claudio Exp $	*/
 
 /*
@@ -95,7 +95,6 @@ static const struct bits bits[] = {
 
 void	pr_rthdr(int);
 void	pr_flags(int);
-void	p_rttables(int, u_int);
 
 void	p_rtentry(struct rt_msghdr *);
 void	p_pfkentry(struct sadb_msg *);
@@ -123,52 +122,27 @@ pr_flags(int af)
  * Print routing tables.
  */
 void
-p_rttables(int af, u_int tableid)
+p_rttables(int af, u_int tableid, int flags)
 {
 	struct rt_msghdr *rtm;
 	struct sadb_msg *msg;
-	char *buf = NULL, *next, *lim = NULL;
+	char *next, *buf = NULL, *lim = NULL;
 	size_t needed;
 	int mib[7];
 	struct sockaddr *sa;
+	struct rtdump *rtdump;
 
-	mib[0] = CTL_NET;
-	mib[1] = PF_ROUTE;
-	mib[2] = 0;
-	mib[3] = af;
-	mib[4] = NET_RT_DUMP;
-	mib[5] = 0;
-	mib[6] = tableid;
+	rtdump = getrtdump(0, flags, 0);
 
-	if (sysctl(mib, 7, NULL, &needed, NULL, 0) < 0) {
-		printf("%% p_rttables: route-sysctl-estimate: %s\n",
-		    strerror(errno));
-		return;
-	}
-	if (needed > 0) {
-		if ((buf = malloc(needed)) == 0) {
-			printf("%% p_rttables: route malloc: %s\n",
-			    strerror(errno));
-			return;
-		}
-		if (sysctl(mib, 7, buf, &needed, NULL, 0) < 0) {
-			free(buf);
-			printf("%% p_rttables: route sysctl: %s\n",
-			    strerror(errno));
-			return;
-		}
-		lim = buf + needed;
-	}
-
-	if (buf) {
-		for (next = buf; next < lim; next += rtm->rtm_msglen) {
+	if (rtdump) {
+		for (next = rtdump->buf; next < rtdump->lim; next += rtm->rtm_msglen) {
 			rtm = (struct rt_msghdr *)next;
 			if (rtm->rtm_version != RTM_VERSION)
 				continue;
 			sa = (struct sockaddr *)(rtm + 1);
 			if (af != AF_UNSPEC && sa->sa_family != af)
 				continue;
-			if (next == buf) {
+			if (next == rtdump->buf) {
 				/* start of the loop? print headers */
 				pr_flags(sa->sa_family);
 				pr_family(sa->sa_family);
@@ -176,13 +150,8 @@ p_rttables(int af, u_int tableid)
 			}
 			p_rtentry(rtm);
 		}
-		free(buf);
-		buf = NULL;
-	}
-
-	if (af != 0 && af != PF_KEY) {
-		if (!needed)
-			printf("%% Routing table empty\n");
+		freertdump(rtdump);
+	} else if (af != 0 && af != PF_KEY) {
 		return;
 	}
 
@@ -402,7 +371,7 @@ p_encap(struct sockaddr *sa, struct sockaddr *mask, int width)
 	if (width < 0)
 		printf("%s", cp);
 	else {
-			printf("%-*s %-5u ", width, cp, port);
+		printf("%-*s %-5u ", width, cp, port);
 	}
 }
 
@@ -792,10 +761,8 @@ link_print(struct sockaddr *sa)
 	u_char			*lla = (u_char *)sdl->sdl_data + sdl->sdl_nlen;
 
 	if (sdl->sdl_nlen == 0 && sdl->sdl_alen == 0 &&
-	    sdl->sdl_slen == 0) {
-		(void)snprintf(line, sizeof(line), "link#%d", sdl->sdl_index);
-		return (line);
-	}
+	    sdl->sdl_slen == 0)
+		return "";
 	switch (sdl->sdl_type) {
 	case IFT_ETHER:
 	case IFT_CARP:

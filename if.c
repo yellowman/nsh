@@ -1,4 +1,4 @@
-/* $nsh: if.c,v 1.31 2007/12/27 03:12:22 chris Exp $ */
+/* $nsh: if.c,v 1.32 2008/01/06 17:20:05 chris Exp $ */
 /*
  * Copyright (c) 2002-2007
  *      Chris Cappuccio.  All rights reserved.
@@ -40,6 +40,7 @@
 #include <net/if.h>
 #include <net/if_types.h>
 #include <net/if_dl.h>
+#include <net/route.h>
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
 #include <net/if_vlan_var.h>
@@ -113,7 +114,7 @@ show_int(char *ifname)
 	char *type, *lladdr;
 	const char *carp;
 
-	char tmp_str[4096], tmp_str2[1024];
+	char tmp_str[512], tmp_str2[512];
 
 	/*
 	 * Show all interfaces when no ifname specified.
@@ -746,7 +747,7 @@ intvlan(char *ifname, int ifs, int argc, char **argv)
 {
 	const char *errmsg = NULL;
 	struct ifreq ifr;
-	struct vlanreq vreq;
+	struct vlanreq vreq, preq;
 	int set;
 
 	if (NO_ARG(argv[0])) {
@@ -759,58 +760,185 @@ intvlan(char *ifname, int ifs, int argc, char **argv)
 	argc--;
 	argv++;
 
-	memset(&vreq, 0, sizeof(vreq));
-
-	if ((set && argc != 2) || (!set && argc > 2)) {
-		printf("%% vlan <tag> <parent interface>\n");
-		printf("%% no vlan [tag] [parent interface]\n");
-		return(0);
+	if ((set && (argc < 3 || argc > 5)) || (!set && argc > 5) ||
+	    argc == 4 ||
+	    (argc > 3 && !CMP_ARG(argv[1], "pa")) ||
+	    (argc > 5 && !CMP_ARG(argv[3], "pr"))) {
+		printf("%% vlan <tag> parent <parent interface> [priority <priority>]\n");
+		printf("%% no vlan [tag] [parent <parent interface>] [priority <priority>]\n");
+		return 0;
 	}
 
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
+
+	bzero(&vreq, sizeof(vreq));
+	bzero(&preq, sizeof(preq));
+
 	ifr.ifr_data = (caddr_t)&vreq;
 
 	if (ioctl(ifs, SIOCGETVLAN, (caddr_t)&ifr) == -1) {
-		if (errno == ENOTTY)
+		switch(errno) {
+		case ENOTTY:
 			printf("%% This interface does not support vlan"
 			    " tagging\n");
-		else
+			break;
+		default:
 			printf("%% intvlan: SIOCGETVLAN: %s\n",
 			    strerror(errno));
+		}
 		return(0);
 	}
 
 	if (set) {
-		if (!is_valid_ifname(argv[1]) || is_bridge(ifs, argv[1])) {
-			printf("%% Invalid vlan parent %s\n", argv[1]);
-			return(0);
+		if (!is_valid_ifname(argv[2]) || is_bridge(ifs, argv[2])) {
+			printf("%% Invalid vlan parent %s\n", argv[2]);
+			return 0;
 		}
-		strlcpy(vreq.vlr_parent, argv[1], sizeof(vreq.vlr_parent));
-		vreq.vlr_tag = strtonum(argv[0], 1, 4096, &errmsg);
+		strlcpy(vreq.vlr_parent, argv[2], sizeof(vreq.vlr_parent));
+		vreq.vlr_tag = strtonum(argv[0], 0, 4096, &errmsg);
 		if (errmsg) {
 			printf("%% Invalid vlan tag %s: %s", argv[0], errmsg);
-			return(0);
+			return 0;
 		}
 		if (vreq.vlr_tag != EVL_VLANOFTAG(vreq.vlr_tag)) {
 			printf("%% Invalid vlan tag %s\n", argv[0]);
-			return(0);
+			return 0;
+		}
+		if (argc == 5) {
+			preq.vlr_tag = strtonum(argv[4], 0, 7, &errmsg);
+			if (errmsg) {
+				printf("%% Invalid vlan priority %s: %s\n",
+				    argv[4], errmsg);
+				return 0;
+			}
 		}
 	} else {
-		memset(&vreq.vlr_parent, 0, sizeof(vreq.vlr_parent));
+		bzero(&vreq.vlr_parent, sizeof(vreq.vlr_parent));
 		vreq.vlr_tag = 0;
 	}
 
 	if (ioctl(ifs, SIOCSETVLAN, (caddr_t)&ifr) == -1) {
-		if (errno == EBUSY) {
+		switch(errno) {
+		case EBUSY:
 			printf("%% Please disconnect the current vlan parent"
 			    " before setting a new one\n");
-		} else {
+			return 0;
+			break;
+		default:
 			printf("%% intvlan: SIOCSETVLAN: %s\n",
 			    strerror(errno));
+			return 0;
 		}
 	}
 
-	return(0);
+	ifr.ifr_data = (caddr_t)&preq;
+	if (ioctl(ifs, SIOCSETVLANPRIO, (caddr_t)&ifr) == -1)
+		printf("%% intvlan: SIOCSETVLANPRIO: %s\n", strerror(errno));
+
+	return 0;
+}
+
+int
+intgroup(char *ifname, int ifs, int argc, char **argv)
+{
+	int set, i;
+	char *ioc;
+	struct ifgroupreq ifgr;
+	unsigned long ioctype;
+
+	if (NO_ARG(argv[0])) {
+		set = 0;
+		argc--;
+		argv++;
+	} else
+		set = 1;
+
+	argc--;
+	argv++;
+
+	if (argc < 1) {
+		printf("%% group <group-name> [group-name ...]\n");
+		printf("%% no group <group-name> [group-name ...]\n");
+		return 0;
+	}
+
+	for (i = 0; i < argc; i++) {
+		/* Validate supplied argument(s) before applying them */
+		if (isdigit(argv[i][strlen(argv[i]) - 1])) {
+			printf("%% Group names may not end with a digit\n");
+			return 0;
+		}
+		if (strlen(argv[i]) >= IFNAMSIZ) {
+			printf("%% Group name too long (%s)\n", argv[i]);
+			return 0;
+		}
+	}
+
+	if (set) {
+		ioctype=SIOCAIFGROUP;
+		ioc="SIOCAIFGROUP";
+	} else {
+		ioctype=SIOCDIFGROUP;
+		ioc="SIOCDIFGROUP";
+	}
+
+	for (i = 0; i < argc; i++) {
+		bzero(&ifgr, sizeof(ifgr));
+		strlcpy(ifgr.ifgr_name, ifname, IFNAMSIZ);
+		strlcpy(ifgr.ifgr_group, argv[i], IFNAMSIZ);
+
+		if (ioctl(ifs, ioctype, (caddr_t)&ifgr) == -1) {
+			switch(errno) {
+			case EEXIST:
+				printf("%% Group already applied to"
+				    " interface (%s)\n", argv[i]);
+				break;
+			default:
+				printf("%% intgroup: %s: %s\n", ioc,
+				    strerror(errno));
+				break;
+			}
+		}
+	}
+
+	return 0;
+}
+
+int
+intrtlabel(char *ifname, int ifs, int argc, char **argv)
+{
+	int set;
+	struct ifreq ifr;
+
+	if (NO_ARG(argv[0])) {
+		set = 0;
+		argc--;
+		argv++;
+	} else
+		set = 1;
+
+	argc--;
+	argv++;
+
+	bzero(&ifr, sizeof(ifr));
+
+	strlcpy(ifr.ifr_name, ifname, IFNAMSIZ);
+
+	if (set) {
+		if (strlen(argv[0]) >= RTLABEL_LEN) {
+			printf("%% label too long (max %d char)\n",
+			    RTLABEL_LEN - 1);
+			return 0;
+		}
+		ifr.ifr_data = (caddr_t)argv[0];
+	} else {
+		ifr.ifr_data = (caddr_t)(const char *)"";
+	}
+
+	if (ioctl(ifs, SIOCSIFRTLABEL, &ifr) == -1)
+		printf("%% intrtlabel: SIOCSIFRTLABEL: %s\n", strerror(errno));
+
+	return 0;
 }
 
 int
@@ -1070,9 +1198,11 @@ intlladdr(char *ifname, int ifs, int argc, char **argv)
 			    strerror(errno));
 			return(1);
 		} else {
-			if (errno == ENOENT) {
+			switch(errno) {
+			case ENOENT:
 				printf("%% No saved lladdr to revert back\n");
-			} else {
+				break;
+			default:
 				printf("%% Failed to read %s: %s\n", llfn,
 				    strerror(errno));
 			}
@@ -1107,11 +1237,14 @@ intlladdr(char *ifname, int ifs, int argc, char **argv)
 	ifr.ifr_addr.sa_family = AF_LINK;
 	bcopy(addr, ifr.ifr_addr.sa_data, ETHER_ADDR_LEN);
 	if(ioctl(ifs, SIOCSIFLLADDR, (caddr_t)&ifr) < 0) {
-		if (errno == EINVAL)
+		switch(errno) {
+		case EINVAL:
 			printf("%% Requested link level address denied\n");
-		else
+			break;
+		default:
 			printf("%% intlladdr: SIOCSIFLLADDR: %s\n",
 			    strerror(errno));
+		}
 		return(1);
 	}
 

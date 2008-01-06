@@ -1,4 +1,4 @@
-/* $nsh: routesys.c,v 1.22 2007/12/27 03:12:22 chris Exp $ */
+/* $nsh: routesys.c,v 1.23 2008/01/06 17:20:05 chris Exp $ */
 /* From: $OpenBSD: /usr/src/sbin/route/route.c,v 1.43 2001/07/07 18:26:20 deraadt Exp $ */
 
 /*
@@ -92,21 +92,25 @@ int	 ip_route(ip_t *, ip_t *, u_short);
 
 /*
  * caller must freertdump() if rtdump not null
+ *
+ * if af is set, flags are not, and vice versa (or both can be 0)
+ *
  */
-struct rtdump *getrtdump()
+struct rtdump *getrtdump(int af, int flags, u_int tableid)
 {
 	size_t needed;
-	int mib[6];
+	int mib[7];
 	struct rtdump *rtdump;
 
 	mib[0] = CTL_NET;
 	mib[1] = PF_ROUTE;
-	mib[2] = 0;	/* protocol */
+	mib[2] = af;	/* protocol */
 	mib[3] = 0;	/* wildcard address family */
-	mib[4] = NET_RT_DUMP;
-	mib[5] = 0;	/* no flags */
+	mib[4] = flags ? NET_RT_FLAGS : NET_RT_DUMP;
+	mib[5] = flags;
+	mib[6] = tableid;
 
-	if (sysctl(mib, 6, NULL, &needed, NULL, 0) < 0) {
+	if (sysctl(mib, 7, NULL, &needed, NULL, 0) < 0) {
 		printf("%% getrtdump: unable to get estimate: %s\n",
 		    strerror(errno));
 		return(NULL);
@@ -123,7 +127,7 @@ struct rtdump *getrtdump()
 			free(rtdump);
 			return(NULL);
 		}
-		if (sysctl(mib, 6, rtdump->buf, &needed, NULL, 0) < 0) {
+		if (sysctl(mib, 7, rtdump->buf, &needed, NULL, 0) < 0) {
 			printf("%% getrtdump: sysctl routing table: %s\n",
 			    strerror(errno));
 			freertdump(rtdump);
@@ -168,7 +172,7 @@ flushroutes(int af, int af2)
 	}
 
 	shutdown(s, 0); /* Don't want to read back our messages */
-	rtdump = getrtdump();
+	rtdump = getrtdump(af, 0, 0);
 	if (rtdump == NULL) {
 		close(s);
 		return;
