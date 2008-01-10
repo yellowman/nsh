@@ -55,8 +55,8 @@ inttrunkport(char *ifname, int ifs, int argc, char **argv)
 	argv++;
 
 	if ((!set && argc < 1) || (set && argc < 1)) {
-		printf("%% trunkport <ifname> ...\n");
-		printf("%% no trunkport <ifname> ...\n");
+		printf("%% trunkport <ifname> [ifname ...]\n");
+		printf("%% no trunkport <ifname> [ifname ...]\n");
 		return(0);   
 	}
 
@@ -68,14 +68,20 @@ inttrunkport(char *ifname, int ifs, int argc, char **argv)
 			strlcpy(rp.rp_portname, argv[i],
 			    sizeof(rp.rp_portname));
 			if (ioctl(ifs, SIOCSTRUNKPORT, &rp) < 0) {
-				if (errno == EBUSY) {
+				switch(errno) {
+				case ENOTTY:
+					printf("%% %s not trunk\n",ifname);
+					break;
+				case EBUSY:
 					printf("%% Failed (port %s already"
 					    " assigned to a trunk group)\n",
 					    argv[i]);
-				} else if (errno == ENETDOWN) {
+					break;
+				case ENETDOWN:
 					printf("%% Failed (port %s is "
 					    "shutdown)\n", argv[i]);
-				} else {
+					break;
+				default:
 					printf("%% inttrunkport:"
 					    " SIOCSTRUNKPORT: %s\n",
 				    strerror(errno));
@@ -85,10 +91,15 @@ inttrunkport(char *ifname, int ifs, int argc, char **argv)
 			strlcpy(rp.rp_portname, argv[i],
 			    sizeof(rp.rp_portname));
 			if (ioctl(ifs, SIOCSTRUNKDELPORT, &rp) < 0) {
-				if (errno == ENOENT) {
+				switch(errno) {
+				case ENOTTY:
+					printf("%% %s not trunk\n",ifname);
+					break;
+				case ENOENT:
 					printf("%% Port %s not part of %s\n",
 					    argv[i], ifname);
-				} else {
+					break;
+				default:
 					printf("%% inttrunkport:"
 					    " SIOCSTRUNKDELPORT: %s\n,",
 				    strerror(errno));
@@ -139,7 +150,13 @@ inttrunkproto(char *ifname, int ifs, int argc, char **argv)
 		ra.ra_proto = TRUNK_PROTO_NONE;
 
 	if (ioctl(ifs, SIOCSTRUNK, &ra) != 0) {
-		printf("%% inttrunkproto: SIOCSTRUNK: %s\n", strerror(errno));
+		switch(errno) {
+		case ENOTTY:
+			printf("%% %s not trunk\n", ifname);
+			break;
+		default:
+			printf("%% inttrunkproto: SIOCSTRUNK: %s\n", strerror(errno));
+		}
 		return 1;
 	}
 
