@@ -1,4 +1,4 @@
-/* $nsh: bridge.c,v 1.12 2007/12/27 03:12:22 chris Exp $ */
+/* $nsh: bridge.c,v 1.13 2008/01/13 02:27:38 chris Exp $ */
 /* From: $OpenBSD: brconfig.c,v 1.27 2003/09/26 03:29:59 deraadt Exp $ */
 
 /*
@@ -205,7 +205,7 @@ int
 brval(char *ifname, int ifs, int argc, char **argv)
 {
 	int set, type;
-	u_int32_t val;
+	u_int32_t val = 0;
 	char *name;
 	const char *errmsg = NULL;
 
@@ -683,7 +683,7 @@ long
 bridge_cfg(int s, char *brdg, int type)
 {
 	struct ifbrparam ifbp;
-	long val;
+	long val = 0;
 
 	strlcpy(ifbp.ifbrp_name, brdg, sizeof(ifbp.ifbrp_name));
 

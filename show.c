@@ -1,4 +1,4 @@
-/* $nsh: show.c,v 1.7 2008/01/06 17:20:05 chris Exp $ */
+/* $nsh: show.c,v 1.8 2008/01/13 02:27:38 chris Exp $ */
 /* From: $OpenBSD: /usr/src/sbin/route/show.c,v 1.61 2007/09/05 20:30:21 claudio Exp $	*/
 
 /*
@@ -151,9 +151,10 @@ p_rttables(int af, u_int tableid, int flags)
 			p_rtentry(rtm);
 		}
 		freertdump(rtdump);
-	} else if (af != 0 && af != PF_KEY) {
-		return;
 	}
+
+	if (af != 0 && af != PF_KEY)
+		return;
 
 	mib[0] = CTL_NET;
 	mib[1] = PF_KEY;
@@ -353,7 +354,7 @@ void
 p_encap(struct sockaddr *sa, struct sockaddr *mask, int width)
 {
 	char 		*cp;
-	unsigned short	 port;
+	unsigned short	 port = 0;
 
 	if (mask)
 		cp = netname(sa, mask);

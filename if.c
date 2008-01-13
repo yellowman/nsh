@@ -1,4 +1,4 @@
-/* $nsh: if.c,v 1.32 2008/01/06 17:20:05 chris Exp $ */
+/* $nsh: if.c,v 1.33 2008/01/13 02:27:38 chris Exp $ */
 /*
  * Copyright (c) 2002-2007
  *      Chris Cappuccio.  All rights reserved.
@@ -396,7 +396,7 @@ get_hwdaddr(char *ifname)
 	char *val = NULL;
 	struct ifaddrs *ifap, *ifa;
 	struct ether_addr *ea;
-	struct sockaddr_dl *sdl;
+	struct sockaddr_dl *sdl = NULL;
 
 	if (getifaddrs(&ifap) != 0) {
 		printf("%% get_hwdaddr: getifaddrs: %s\n", strerror(errno));
@@ -997,7 +997,7 @@ int
 intlink(char *ifname, int ifs, int argc, char **argv)
 {
 	const char *errmsg = NULL;
-	int set, i, flags, value;
+	int set, i, flags, value = 0;
 
 	if (NO_ARG(argv[0])) {
 		set = 0;

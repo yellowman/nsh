@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.44 2008/01/06 17:20:05 chris Exp $ */
+/* $nsh: externs.h,v 1.45 2008/01/13 02:27:38 chris Exp $ */
 /*
  * nsh externs, prototypes and macros
  */
@@ -52,12 +52,35 @@ char *any_ntoa(const struct sockaddr *);
 #define ADVANCE(x, n) (x += ROUNDUP((n)->sa_len))
 
 /* routesys.c */
+#ifdef _NET_ROUTE_H_
+struct m_rtmsg {
+        struct  rt_msghdr m_rtm;
+        char    m_space[512];
+};
+extern struct m_rtmsg m_rtmsg;
+#endif
+#ifdef _WANT_SO_
+union   sockunion {
+	struct	sockaddr sa;
+	struct	sockaddr_in sin;
+	struct	sockaddr_in6 sin6;
+	struct	sockaddr_dl sdl;
+	struct	sockaddr_inarp sinarp;
+};
+extern union sockunion so_dst, so_mask, so_gate, so_ifp;
+#endif
+extern int rtm_addrs;
+extern u_long rtm_inits;
 #define FLUSH 0
 struct rtdump *getrtdump(int, int, u_int);
 void freertdump(struct rtdump *);
 int monitor(void);
+int rtmsg(int, int, int, int);
 void flushroutes(int, int);
 void bprintf(FILE *, int, u_char *);
+#ifdef _NET_IF_DL_H_
+char *mylink_ntoa(const struct sockaddr_dl *);
+#endif
 extern char ifnetflags[];
 extern char routeflags[];
 extern char addrnames[];
@@ -261,3 +284,7 @@ int who(int, char **);
 /* timeslot.c */
 int inttimeslot(char *, int, int, char **);
 int timeslot_status(int, char *, char *, int);
+
+/* arp.c */
+int arpget(const char *);
+int arpset(int, char **);

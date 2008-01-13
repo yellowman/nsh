@@ -45,7 +45,7 @@ intcarp(char *ifname, int ifs, int argc, char **argv)
 	struct ifreq ifr;
 	struct carpreq creq;
 	int type, set;
-	u_int32_t val;
+	u_int32_t val = 0;
 
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -302,7 +302,7 @@ carp_state(int s, char *ifname)
 	struct ifreq ifr;
 	struct carpreq creq;
 	const char *carp_states[] = { CARP_STATES };
-	const char *state;
+	const char *state = NULL;
 
 	bzero((char *) &creq, sizeof(struct carpreq));
 	ifr.ifr_data = (caddr_t) & creq;

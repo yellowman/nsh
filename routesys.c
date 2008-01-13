@@ -1,4 +1,4 @@
-/* $nsh: routesys.c,v 1.23 2008/01/06 17:20:05 chris Exp $ */
+/* $nsh: routesys.c,v 1.24 2008/01/13 02:27:38 chris Exp $ */
 /* From: $OpenBSD: /usr/src/sbin/route/route.c,v 1.43 2001/07/07 18:26:20 deraadt Exp $ */
 
 /*
@@ -42,6 +42,7 @@
 #include <net/route.h>
 #include <net/if_dl.h>
 #include <netinet/in.h>
+#include <netinet/if_ether.h>
 #include <arpa/inet.h>
 #include <netdb.h>
 
@@ -54,6 +55,7 @@
 #include <string.h>
 #include <paths.h>
 #include "ip.h"
+#define _WANT_SO_
 #include "externs.h"
 
 short ns_nullh[] = {0,0,0};
@@ -61,25 +63,17 @@ short ns_bh[] = {-1,-1,-1};
 
 int 	sigflag = 0;
 
-union   sockunion {
-	struct  sockaddr sa;
-	struct  sockaddr_in sin;
-#ifdef INET6
-	struct  sockaddr_in6 sin6;
-#endif
-	struct  sockaddr_dl sdl;
-} so_dst, so_gate, so_mask, so_ifp; /* no thanks:, so_genmask, so_ifa; */
+/* declared in externs.h */
+union	sockunion so_dst, so_gate, so_mask, so_ifp;
+struct	m_rtmsg m_rtmsg;
 
-typedef union sockunion *sup;
 int	rtm_addrs;
 u_long  rtm_inits;
 
 char	*mylink_ntoa(const struct sockaddr_dl *);
-char	*touch;
 
 void	 flushroutes(int, int);
 int	 monitor(void);
-int	 rtmsg(int, int);
 #ifdef INET6
 static int prefixlen(char *);
 #endif
@@ -364,11 +358,6 @@ monitor()
 	return(0);
 }
 
-struct {
-	struct	rt_msghdr m_rtm;
-	char	m_space[512];
-} m_rtmsg;
-
 char *msgtypes[] = {
 	"",
 	"RTM_ADD: Add Route",
@@ -601,7 +590,7 @@ bprintf(fp, b, s)
 int
 ip_route(ip_t *dest, ip_t *gate, u_short cmd)
 {
-	int flags;
+	int l, flags;
 	int len = dest->bitlen;
 
 	rtm_addrs = 0;
@@ -682,7 +671,7 @@ ip_route(ip_t *dest, ip_t *gate, u_short cmd)
 		return(0);
 		break;
 	}
-	if (rtmsg(cmd, flags) < 0) {
+	if ((l = rtmsg(cmd, flags, 0, 0)) < 0) {
 		if (cmd == RTM_ADD && gate &&
 		    (errno == ESRCH || errno == ENETUNREACH))
 			printf("%% Gateway is unreachable: %s\n",
@@ -699,7 +688,9 @@ ip_route(ip_t *dest, ip_t *gate, u_short cmd)
 			    inet_ntoa(dest->addr.sin));
 		else
 			printf("%% ip_route: rtmsg: %s\n", strerror(errno));
-	}
+	} else if (cmd == RTM_GET)
+		/* ip_route is also used by 'show route' */
+		print_getmsg(&m_rtmsg.m_rtm, l);
 	return(0);
 }
 
@@ -709,46 +700,58 @@ ip_route(ip_t *dest, ip_t *gate, u_short cmd)
  * there is no error or we displayed the error message (get)
  */
 int
-rtmsg(cmd, flags)
-	int cmd, flags;
+rtmsg(cmd, flags, proxy, export)
+	int cmd, flags, proxy, export;
 {
 	static int seq;
+	struct rt_msghdr *rtm;
 	int rlen;
 	char *cp = m_rtmsg.m_space;
 	int l, s;
 
 	s = socket(PF_ROUTE, SOCK_RAW, 0);
+	rtm = &m_rtmsg.m_rtm;
+
 	if (s < 0) {
 		printf("%% Unable to open routing socket: %s\n",
 		    strerror(errno));
 		return(1);
 	}
 
-#define NEXTADDR(w, u)							\
-	if (rtm_addrs & (w)) {						\
-	    l = ROUNDUP(u.sa.sa_len); memcpy(cp, &(u), l); cp += l;	\
-	}
-
 	errno = 0;
 	memset(&m_rtmsg, 0, sizeof(m_rtmsg));
-#define rtm m_rtmsg.m_rtm
-	rtm.rtm_type = cmd;
-	rtm.rtm_flags = flags;
-	rtm.rtm_version = RTM_VERSION;
-	rtm.rtm_seq = ++seq;
-	rtm.rtm_addrs = rtm_addrs;
+	rtm->rtm_type = cmd;
+	if(flags)
+		rtm->rtm_flags = flags;
+	rtm->rtm_version = RTM_VERSION;
+	rtm->rtm_seq = ++seq;
+	rtm->rtm_addrs = rtm_addrs;
 #if 0 /* deal with this later when our cmdline handles metrics... */
-	rtm.rtm_rmx = rt_metrics;
+	rtm->rtm_rmx = rt_metrics;
 #endif
-	rtm.rtm_inits = rtm_inits;
+	if (proxy) {
+		if (export)
+			so_dst.sinarp.sin_other = SIN_PROXY;
+		else {
+			rtm->rtm_addrs |= RTA_NETMASK;
+			rtm->rtm_flags &= ~RTF_HOST;
+		}
+	}
+
+#define NEXTADDR(w, u)							\
+	if (rtm_addrs & (w)) {						\
+		l = ROUNDUP(u.sa.sa_len); memcpy(cp, &(u), l); cp += l;	\
+	}
 
 	NEXTADDR(RTA_DST, so_dst);
 	NEXTADDR(RTA_GATEWAY, so_gate);
 	NEXTADDR(RTA_NETMASK, so_mask);
 	NEXTADDR(RTA_IFP, so_ifp);
-	rtm.rtm_msglen = l = cp - (char *)&m_rtmsg;
+
+	rtm->rtm_msglen = l = cp - (char *)&m_rtmsg;
 	if (verbose)
-		print_rtmsg(&rtm);
+		print_rtmsg(rtm);
+
 	if ((rlen = write(s, (char *)&m_rtmsg, l)) < 0) {
 		/* on a write, the calling function will notify user of error */
 		close(s);
@@ -757,15 +760,13 @@ rtmsg(cmd, flags)
 	if (cmd == RTM_GET) {
 		do {
 			l = read(s, (char *)&m_rtmsg, sizeof(m_rtmsg));
-		} while (l > 0 && (rtm.rtm_seq != seq || rtm.rtm_pid != pid));
+		} while (l > 0 && (rtm->rtm_seq != seq || rtm->rtm_pid != pid));
 		if (l < 0)
 			/* on a get we notify the user */
 			printf("%% rtmsg: read from routing socket: %s\n",
 			    strerror(errno));
-		else
-			print_getmsg(&rtm, l);
 	}
-#undef rtm
+
 	close(s);
-	return (0);
+	return (l);
 }

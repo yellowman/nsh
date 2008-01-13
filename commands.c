@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.64 2008/01/06 18:10:01 chris Exp $ */
+/* $nsh: commands.c,v 1.65 2008/01/13 02:27:38 chris Exp $ */
 /*
  * Copyright (c) 2002-2007
  *      Chris Cappuccio.  All rights reserved.
@@ -112,7 +112,7 @@ static int	doverbose(int, char**);
 static int	doediting(int, char**);
 static int	group(int, char**);
 static int	pr_routes(char *);
-static int	pr_arp(void);
+static int	pr_arp(char *);
 static int	pr_sadb(void);
 static int	pr_pf_stats(void);
 static int	pr_ip_stats(void);
@@ -182,7 +182,7 @@ static Menu showlist[] = {
 	{ "interface",	"Interface config",	0, 1, show_int },
 	{ "route",	"IP route table or route lookup", 0, 1, pr_routes },
 	{ "sadb",	"Security Association Database", 0, 0, pr_sadb },
-	{ "arp",	"ARP table",		0, 0, pr_arp },
+	{ "arp",	"ARP table",		0, 1, pr_arp },
 	{ "pfstats",	"PF statistics",	0, 0, pr_pf_stats },
 	{ "ipstats",	"IP statistics",	0, 0, pr_ip_stats },
 	{ "ahstats",	"AH statistics",	0, 0, pr_ah_stats },
@@ -553,7 +553,7 @@ interface(int argc, char **argv, char *modhvar)
 {
 	int z = 0;
 	u_int num;
-	int ifs, set;
+	int ifs, set = 1;
 	char *tmp;
 	struct intlist *i;	/* pointer to current command */
 	struct ifreq ifr;
@@ -569,8 +569,7 @@ interface(int argc, char **argv, char *modhvar)
 			argv++;
 			argc--;
 			set = 0;
-		} else
-			set = 1;
+		}
 	
 		if (argc != 2) {
 			printf("%% [no] interface <interface name>\n");
@@ -834,6 +833,8 @@ static char
 	hostnamehelp[] = "Set system hostname",
 	interfacehelp[] = "Modify interface parameters",
 	grouphelp[] =	"Modify group attributes",
+	arphelp[] = 	"Static ARP set",
+	parphelp[] =	"Proxy ARP set",
 	pfhelp[] =	"Packet filter rule handler",
 	bridgehelp[] =	"Modify bridge parameters",
 	showhelp[] =	"Show system information",
@@ -864,6 +865,10 @@ static Command cmdtab[] = {
 	{ "hostname",	hostnamehelp,	hostname,	1, 0, 0, 0, 0 },
 	{ "interface",	interfacehelp,	interface,	1, 0, 1, 1, 0 },
 	{ "group",	grouphelp,	group,		1, 0, 1, 0, 0 },
+	{ "arp",	arphelp,	arpset,		1, 0, 1, 0, 0 },
+#ifdef notyet
+	{ "proxy-arp",	parphelp,	arpset,		1, 0, 1, 0, 0 },
+#endif
 	{ "bridge",	bridgehelp,	interface,	1, 0, 0, 1, 0 },
 	{ "show",	showhelp,	showcmd,	0, 0, 0, 0, 0 },
 	{ "ip",		iphelp,		ipcmd,		1, 0, 1, 0, 0 },
@@ -1809,9 +1814,14 @@ pr_routes(char *route)
 }
 
 int
-pr_arp(void)
+pr_arp(char *arp)
 {
-	p_rttables(AF_INET, 0, RTF_LLINFO);
+	if (arp == 0)
+		/* show arp table */
+		p_rttables(AF_INET, 0, RTF_LLINFO);
+	else
+		/* specific address */
+		arpget(arp);
 	return 0;
 }
 

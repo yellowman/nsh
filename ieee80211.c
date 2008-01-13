@@ -1,4 +1,4 @@
-/* $nsh: ieee80211.c,v 1.14 2007/12/27 02:07:13 chris Exp $ */
+/* $nsh: ieee80211.c,v 1.15 2008/01/13 02:27:38 chris Exp $ */
 /* From: $OpenBSD: /usr/src/sbin/ifconfig/ifconfig.c,v 1.68 2002/06/19 18:53:53 millert Exp $ */
 /*
  * Copyright (c) 1983, 1993
@@ -174,7 +174,7 @@ int
 intnwkey(char *ifname, int ifs, int argc, char **argv)
 {
 	int i, len, set;
-	char *cp = NULL, *val;
+	char *cp = NULL, *val = NULL;
 	struct ieee80211_nwkey nwkey;
 	u_int8_t keybuf[IEEE80211_WEP_NKID][16];
 
