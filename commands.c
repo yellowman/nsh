@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.65 2008/01/13 02:27:38 chris Exp $ */
+/* $nsh: commands.c,v 1.66 2008/01/14 09:05:23 chris Exp $ */
 /*
  * Copyright (c) 2002-2007
  *      Chris Cappuccio.  All rights reserved.
@@ -149,7 +149,6 @@ static void	makeargv(int);
 static int	hostname(int, char **);
 static int	help(int, char**);
 static int	shell(int, char*[]);
-static int	cmdargs(char*, char*[]);
 static int	ping(int, char*[]);
 static int	traceroute(int, char*[]);
 static int	ssh(int, char*[]);
@@ -159,7 +158,6 @@ static void	p_argv(int, char **);
 static int	notvalid(void);
 static int 	reload(void);
 static int 	halt(void);
-static int	pf(int, char **, char *);
 
 /*
  * Quit command
@@ -712,92 +710,6 @@ interface(int argc, char **argv, char *modhvar)
 }
 
 static int
-pf(int argc, char **argv, char *modhvar)
-{
-	int z = 0, action = 0;
-	char arg[256];
-	char *editor, *aarg;
-	FILE *rulefile;
-
-	if (!modhvar) {
-		(void) signal(SIGINT, SIG_IGN);
-		(void) signal(SIGQUIT, SIG_IGN);
-	}
-
-	if ((argc != 2 && !modhvar) || (argc == 2 && CMP_ARG(argv[1], "?"))) {
-		printf("%% pf edit\n");
-		printf("%% pf reload\n");
-		printf("%% pf enable\n");
-		printf("%% pf disable\n");
-		return(0);
-	}
-
-	aarg = argv[0];
-
-	if (modhvar && CMP_ARG(modhvar, "action"))
-		action = 1;
-
-	if (!modhvar) {
-		action = 1;
-		aarg = argv[1];
-	}
-
-	if (action) {
-		if(CMP_ARG(aarg, "ed")) {	/* edit */
-			if ((editor = getenv("EDITOR")) == NULL ||
-			    *editor == '\0')
-				editor = DEFAULT_EDITOR;
-			/* check for valid path from user supplied env var */
-			/* check for locking and return if already locked */
-			cmdarg(editor, PFCONF_TEMP);
-			/* undo locking when we are done editing */
-			snprintf(arg, sizeof(arg), "-nf%s", PFCONF_TEMP);
-			cmdarg(PFCTL, arg);
-			return(0);
-		}
-		if (CMP_ARG(aarg, "r")) {	/* reload */
-			snprintf(arg, sizeof(arg), "-f%s", PFCONF_TEMP);
-			cmdarg(PFCTL, arg);
-			return(0);
-		}
-		if (CMP_ARG(aarg, "en")) {	/* enable */
-			cmdarg(PFCTL, "-e");
-			return(0);
-		}
-		if (CMP_ARG(aarg, "d")) {	/* disable */
-			cmdarg(PFCTL, "-d");
-			return(0);
-		}
-		printf("%% invalid or ambiguous argument: %s\n", argv[1]);
-		return(0);
-	}
-
-	/*
-	 * nshrc routines
-	 *
-	 * keep in mind...this gets called for each single configuration
-	 * line, which is why we append...
-	 */
-	if (argc > 0 && CMP_ARG(modhvar, "rules")) {
-		rulefile = fopen(PFCONF_TEMP, "a");
-		if (rulefile == NULL) {
-			printf("%% Rule write failed: %s\n", strerror(errno));
-			return(1);
-		}
-		for (z = 0; z < argc; z++)
-			fprintf(rulefile, "%s%s", z ? " " : "", argv[z]);
-		fprintf(rulefile, "\n");
-		fclose(rulefile);
-		return(0);
-	}
-
-	if (modhvar)
-		printf ("%% Unknown rulefile modifier %s\n", modhvar);
-
-	return(0);
-}
-
-static int
 int_help(void)
 {
 	struct intlist *i; /* pointer to current command */
@@ -834,8 +746,16 @@ static char
 	interfacehelp[] = "Modify interface parameters",
 	grouphelp[] =	"Modify group attributes",
 	arphelp[] = 	"Static ARP set",
+#ifdef notyet
 	parphelp[] =	"Proxy ARP set",
-	pfhelp[] =	"Packet filter rule handler",
+#endif
+	pfhelp[] =	"Packet filter control",
+	ospfhelp[] =	"OSPF control",
+	bgphelp[] =	"BGP control",
+	riphelp[] =	"RIP control",
+	relayhelp[] =	"Relay control",
+	ipsechelp[] =	"IPsec control",
+	dvmrphelp[] = 	"DVMRP control",
 	bridgehelp[] =	"Modify bridge parameters",
 	showhelp[] =	"Show system information",
 	iphelp[] =	"Set IP networking parameters",
@@ -876,7 +796,13 @@ static Command cmdtab[] = {
 	{ "enable",	enablehelp,	enable,		0, 0, 0, 0, 0 },
 	{ "disable",	disablehelp,	disable,	1, 0, 0, 0, 0 },
 	{ "route",	routehelp,	route,		1, 0, 1, 0, 0 },
-	{ "pf",		pfhelp,		pf,		1, 0, 0, 1, 1 },
+	{ "pf",		pfhelp,		pfctl,		1, 0, 0, 1, 1 },
+	{ "ospf",	ospfhelp,	ospfctl,	1, 0, 0, 1, 1 },
+	{ "bgp",	bgphelp,	bgpctl,		1, 0, 0, 1, 1 },
+	{ "rip",	riphelp,	ripctl,		1, 0, 0, 1, 1 },
+	{ "relay",	relayhelp,	relayctl,	1, 0, 0, 1, 1 },
+	{ "ipsec",	ipsechelp,	ipsecctl,	1, 0, 0, 1, 1 },
+	{ "dvmrp",	dvmrphelp,	dvmrpctl,	1, 0, 0, 1, 1 },
 	{ "quit",	quithelp,	quit,		0, 0, 0, 0, 0 },
 	{ "ping",	pinghelp,	ping,		0, 0, 0, 0, 0 },
 	{ "traceroute", tracerthelp,	traceroute,	0, 0, 0, 0, 0 },

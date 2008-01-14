@@ -1,4 +1,4 @@
-$nsh: TODO,v 1.28 2008/01/13 02:27:38 chris Exp $
+$nsh: TODO,v 1.29 2008/01/14 09:05:23 chris Exp $
 
 nsh is a work in progress, diffs are welcome
 
@@ -10,12 +10,10 @@ Cleanup:
 * Sanity check _before_ args hit int*() routines, based on some framework
   of possible values for each function (something that works along with
   context sensitive help framework)
-* Consistency for return values between functions
+* Consistent return values between functions
 * Support new wireless information interfaces where necessary, also dump wi.c
   once if_wi moves to new interfaces
-* Use getaddrinfo and netname/routename(show.c) instead of home-grown
-  parse functions to make IPv6 support easier
-* Use sockaddr everywhere instead of home-grown ip_t
+* Use sockaddr everywhere, instead of home-grown ip_t
 
 To be implemented:
 
@@ -23,15 +21,15 @@ To be implemented:
 * handle bridge rtsp commands
 * handle newer 802.11 gunk like rssi display, chan, flags
 * handle kernel pppoe
-* Interface with bgpd.conf, ospfd.conf, ripd.conf, relayd.conf, ipsec.conf,
-  daemons (start/stop) associated ctl programs (possibly like the pfctl
-  interface, or better)
-* RSA certificate generation/management method (at least for isakmpd)
 * privsep (imsg based?)
+* RSA certificate generation/management method (isakmpd, possibly sshd)
 * Persistent comments/remarks in the config file (to document routes, etc..)
-* IPv6 (shouldn't be too hard, considering that most of the functions
-  we stole from other source already support it, but i won't look at this
-  until I use IPv6 myself, or someone else submits IPv6 patches)
+* IPv6 (mostly there already, but I won't finish it properly until I use IPv6
+  myself or someone else submits patches)
+* Support for paging through displays of text X lines at a time
+* Something comparable to "| inc" from cisco-land
+* Tab command/argument completion
+* Context-sensitive help
 
 Would be nice:
 
@@ -40,10 +38,6 @@ Would be nice:
 * Build a simple web interface that works through the rc file handler (web if
   that calls nsh -i to execute commands)
 * Add more diagnostic messages for verbose output where useful
-* Support for paging through displays of text X lines at a time
-* Something comparable to "| inc" from cisco-land
-* Tab command/argument completion
-* Context-sensitive help
 * Convenient/automatic mechanisms to centralize configurations for
   tracking/revision control
 

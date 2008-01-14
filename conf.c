@@ -1,6 +1,6 @@
-/* $nsh: conf.c,v 1.39 2008/01/06 17:20:05 chris Exp $ */
+/* $nsh: conf.c,v 1.40 2008/01/14 09:05:23 chris Exp $ */
 /*
- * Copyright (c) 2002, 2005
+ * Copyright (c) 2002-2008
  *      Chris Cappuccio.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -63,7 +63,7 @@ void conf_print_rtm(FILE *, struct rt_msghdr *, char *, int);
 int conf_ifaddrs(FILE *, char *, int);
 void conf_brcfg(FILE *, int, struct if_nameindex *, char *);
 void conf_ifmetrics(FILE *, int, struct if_data, char *);
-void conf_pfrules(FILE *);
+void conf_xrules(FILE *, char *, char *, int);
 void conf_intrtlabel(FILE *, int, char *);
 void conf_intgroup(FILE *, int, char *);
 void conf_groupattrib(FILE *);
@@ -127,33 +127,45 @@ conf(FILE *output)
 
 	fprintf(output, "!\n");
 
-	conf_pfrules(output);
+	conf_xrules(output, PFCONF_TEMP, "pf", RELOAD);
+
+	/* XXX should configure pfsync interfaces _after_ pf rules loaded */
+
+	conf_xrules(output, OSPFCONF_TEMP, "ospf", 0);
+	conf_xrules(output, BGPCONF_TEMP, "bgp", 0);
+	conf_xrules(output, RIPCONF_TEMP, "rip", 0);
+	conf_xrules(output, IPSECCONF_TEMP, "ipsec", RELOAD);
+	conf_xrules(output, DVMRPCONF_TEMP, "dvmrp", 0);
+	conf_xrules(output, RELAYCONF_TEMP, "relay", 0);
 
 	return(0);
 }
 
-void conf_pfrules(FILE *output)
+void conf_xrules(FILE *output, char *tmpfile, char *delim, int doreload)
 {
-	FILE *pfconf;
+	/* doreload is true when the reload command will load rule file */
+	FILE *conf;
 	char tmp_str[TMPSIZ];
 
 	/*
-	 * print pf rules
+	 * print rules
 	 */
-	if ((pfconf = fopen(PFCONF_TEMP, "r")) != NULL) {
-		fprintf(output, "pf rules\n");
+	if ((conf = fopen(tmpfile, "r")) != NULL) {
+		fprintf(output, "%s rules\n", delim);
 		for (;;) {
-			if(fgets(tmp_str, TMPSIZ, pfconf) == NULL)
+			if(fgets(tmp_str, TMPSIZ, conf) == NULL)
 				break;
 			if(tmp_str[0] == 0)
 				break;
 			fprintf(output, " %s", tmp_str);
 		}
-		fclose(pfconf);
+		fclose(conf);
 		fprintf(output, "!\n");
-		fprintf(output, "pf action\n enable\n reload\n");
-	} else if (verbose)
-		printf("%% PFCONF_TEMP: %s\n", strerror(errno));
+		fprintf(output, "%s action\n enable\n%s", delim,
+		    doreload ? " reload\n" : "");
+		fprintf(output, "!\n");
+	} else if (errno != ENOENT || verbose)
+		printf("%% conf_xrules: %s: %s\n", tmpfile, strerror(errno));
 }
 
 void conf_interfaces(FILE *output)

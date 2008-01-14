@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.45 2008/01/13 02:27:38 chris Exp $ */
+/* $nsh: externs.h,v 1.46 2008/01/14 09:05:23 chris Exp $ */
 /*
  * nsh externs, prototypes and macros
  */
@@ -86,12 +86,42 @@ extern char routeflags[];
 extern char addrnames[];
 extern char metricnames[];
 
+/* ctl.c */
+int pfctl(int, char **, char *);
+int ospfctl(int, char **, char *);
+int bgpctl(int, char **, char *);
+int ripctl(int, char **, char *);
+int relayctl(int, char **, char *);
+int ipsecctl(int, char **, char *);
+int dvmrpctl(int, char **, char *);
+/* tmp config locations */
+#define PFCONF_TEMP	"/var/run/pf.conf"
+#define OSPFCONF_TEMP	"/var/run/ospfd.conf"
+#define BGPCONF_TEMP	"/var/run/bgpd.conf"
+#define RIPCONF_TEMP	"/var/run/ripd.conf"
+#define IPSECCONF_TEMP	"/var/run/ipsec.conf"
+#define DVMRPCONF_TEMP	"/var/run/dvmrpd.conf"
+#define RELAYCONF_TEMP	"/var/run/relayd.conf"
+/* control programs */
+#define PFCTL		"/sbin/pfctl"
+#define OSPFCTL		"/usr/sbin/ospfctl"
+#define BGPCTL		"/usr/sbin/bgpctl"
+#define RIPCTL		"/usr/sbin/ripctl"
+#define IPSECCTL	"/sbin/ipsecctl"
+#define	DVMRPCTL	"/usr/sbin/dvmrpctl"
+#define RELAYCTL	"/usr/sbin/relayctl"
+/* service daemons */
+#define OSPFD		"/usr/sbin/ospfd"
+#define	BGPD		"/usr/sbin/bgpd"
+#define	RIPD		"/usr/sbin/ripd"
+#define	ISAKMPD		"/sbin/isakmpd"
+#define	DVMRPD		"/usr/sbin/dvmrpd"
+#define	RELAYD		"/usr/sbin/relayd"
+
 /* commands.c */
 #define DEFAULT_EDITOR	"/usr/bin/vi"
-#define PFCONF_TEMP	"/var/run/pf.conf"
 #define NSHRC_TEMP	"/var/run/nshrc"
 #define NSHRC		"/etc/nshrc"
-#define PFCTL		"/sbin/pfctl"
 #define PING		"/sbin/ping"
 #define PING6		"/sbin/ping6"
 #define TRACERT		"/usr/sbin/traceroute"
@@ -103,6 +133,7 @@ extern char metricnames[];
 void command(int);
 int cmdrc(char rcname[FILENAME_MAX]);
 int cmdarg(char *, char *);
+int cmdargs(char *, char **);
 char *iprompt(void);
 char *cprompt(void);
 char *pprompt(void);
@@ -265,6 +296,7 @@ int conf_pfsync(FILE *, int, char *);
 #define CARP_ADVSKEW 0
 #define CARP_ADVBASE 1
 #define CARP_VHID 2
+#define RELOAD 1
 int intcarp(char *, int, int, char **);
 int intcpass(char *, int, int, char **);
 int intcnode(char *, int, int, char **);
