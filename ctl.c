@@ -1,4 +1,4 @@
-/* $nsh: ctl.c,v 1.2 2008/01/14 09:57:31 chris Exp $ */
+/* $nsh: ctl.c,v 1.3 2008/01/15 06:10:12 chris Exp $ */
 /*
  * Copyright (c) 2008
  *      Chris Cappuccio.  All rights reserved.
@@ -35,6 +35,19 @@
 #include "externs.h"
 
 #define INVALID "Invalid or ambiguous argument"
+
+/* service daemons */
+#define OSPFD		"/usr/sbin/ospfd"
+#define BGPD		"/usr/sbin/bgpd"
+#define RIPD		"/usr/sbin/ripd"
+#define ISAKMPD		"/sbin/isakmpd"
+#define DVMRPD		"/usr/sbin/dvmrpd"
+#define RELAYD		"/usr/sbin/relayd"
+#define DHCPD		"/usr/sbin/dhcpd"
+#define SASYNCD		"/usr/sbin/sasyncd"
+
+#define DHCPDB		"/var/db/dhcpd.leases"
+
 #define	PFUSAGE	"%% pf edit\n%% pf reload\n%% pf enable\n%% pf disable\n"
 #define BGPUSAGE "%% bgp edit\n%% bgp reload\n%% bgp enable\n%% bgp disable\n"
 #define OSPFUSAGE "%% ospf edit\n%% ospf reload\n%% ospf enable\n%% ospf disable\n"
@@ -42,6 +55,8 @@
 #define DVMRPUSAGE "%% dvmrp edit\n%% dvmrp enable\n%% dvmrp disable\n"
 #define RELAYUSAGE "%% relay edit\n%% relay reload\n%% relay enable\n%% relay disable\n"
 #define IPSECUSAGE "%% ipsec edit\n%% ipsec reload\n%% ipsec enable\n%% ipsec disable\n"
+#define DHCPUSAGE "%% dhcp edit\n%% dhcp enable\n%% dhcp disable\n"
+#define SASYNCUSAGE "%% sasync edit\n%% sasync enable\n%% sasync disable\n"
 
 char *setup (char *, char *, int, char **, char *, char *);
 void call_editor(char *, char **, char *, char *);
@@ -240,7 +255,7 @@ ipsecctl(int argc, char **argv, char *modhvar)
 		return(0);
 	}
 	if (CMP_ARG(aarg, "en")) {	/* enable */
-		cmdarg(ISAKMPD, "-S");
+		cmdarg(ISAKMPD, "-Sa");
 		return(0);
 	}
 	if (CMP_ARG(aarg, "d")) {	/* disable */
@@ -276,6 +291,76 @@ dvmrpctl(int argc, char **argv, char *modhvar)
 	}
 	if (CMP_ARG(aarg, "d")) {	/* disable */
 		cmdarg(PKILL, "dvmrpd");
+		return(0);
+	}
+	printf("%% %s: %s\n", INVALID, argv[1]);
+
+	return(0);
+}
+
+int
+sasyncctl(int argc, char **argv, char *modhvar)
+{
+	char *aarg = argv[0];
+
+	aarg = setup(modhvar, aarg, argc, argv, SASYNCUSAGE, SASYNCCONF_TEMP);
+	if (aarg == NULL)
+		return(0);
+
+	if(CMP_ARG(aarg, "ed")) {       /* edit */
+		call_editor("sasync", NULL, SASYNCCONF_TEMP, NULL);
+		return(0);
+	}
+	/* no sasyncd reload command available! */
+	if (CMP_ARG(aarg, "en")) {      /* enable */
+		char *args[] = { SASYNCD, "-c", SASYNCCONF_TEMP, '\0' };
+
+		cmdargs(SASYNCD, args);
+		return(0);
+	}
+	if (CMP_ARG(aarg, "d")) {       /* disable */
+		cmdarg(PKILL, "sasyncd");
+		return(0);
+	}
+	printf("%% %s: %s\n", INVALID, argv[1]);
+
+	return(0);
+}
+
+int
+dhcpctl(int argc, char **argv, char *modhvar)
+{
+	char *aarg = argv[0];
+
+	aarg = setup(modhvar, aarg, argc, argv, DHCPUSAGE, DHCPCONF_TEMP);
+	if (aarg == NULL)
+		return(0);
+
+	if(CMP_ARG(aarg, "ed")) {       /* edit */
+		char *args[] = { DHCPD, "-nc", DHCPCONF_TEMP, '\0' };
+
+		call_editor("DHCP", args, DHCPCONF_TEMP, DHCPD);
+		return(0);
+	}
+	/* no dhcpd reload command available! */
+	if (CMP_ARG(aarg, "en")) {      /* enable */
+		int fd;
+		char *args[] = { DHCPD, "-c", DHCPCONF_TEMP, '\0' };
+
+		/* XXX not required by -current dhcpd? */
+		/* /var/db/dhcpd.leases must exist before dhcpd begins */
+		if ((fd = open(DHCPDB, O_RDWR | O_CREAT, 0644)) == -1) {
+			printf("%% Cannot enable DHCP (failed to establish"
+			    " DHCP lease database: %s)\n", strerror(errno));
+			return(0);
+		}		
+		close(fd);
+
+		cmdargs(DHCPD, args);
+		return(0);
+	}
+	if (CMP_ARG(aarg, "d")) {       /* disable */
+		cmdarg(PKILL, "dhcpd");
 		return(0);
 	}
 	printf("%% %s: %s\n", INVALID, argv[1]);
@@ -321,7 +406,8 @@ call_editor(char *name, char **args, char *tmpfile, char *cmd)
 		editor = DEFAULT_EDITOR;
 	if ((fd = acq_lock(tmpfile)) > 0) {
 		cmdarg(editor, tmpfile);
-		cmdargs(cmd, args);
+		if (cmd != NULL)
+			cmdargs(cmd, args);
 		rls_lock(fd);
 	} else
 		printf ("%% %s configuration is locked for editing\n", name);

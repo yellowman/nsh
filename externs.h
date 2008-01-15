@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.46 2008/01/14 09:05:23 chris Exp $ */
+/* $nsh: externs.h,v 1.47 2008/01/15 06:10:12 chris Exp $ */
 /*
  * nsh externs, prototypes and macros
  */
@@ -94,6 +94,8 @@ int ripctl(int, char **, char *);
 int relayctl(int, char **, char *);
 int ipsecctl(int, char **, char *);
 int dvmrpctl(int, char **, char *);
+int sasyncctl(int, char **, char *);
+int dhcpctl(int, char **, char *);
 /* tmp config locations */
 #define PFCONF_TEMP	"/var/run/pf.conf"
 #define OSPFCONF_TEMP	"/var/run/ospfd.conf"
@@ -102,21 +104,16 @@ int dvmrpctl(int, char **, char *);
 #define IPSECCONF_TEMP	"/var/run/ipsec.conf"
 #define DVMRPCONF_TEMP	"/var/run/dvmrpd.conf"
 #define RELAYCONF_TEMP	"/var/run/relayd.conf"
+#define	SASYNCCONF_TEMP	"/var/run/sasyncd.conf"
+#define DHCPCONF_TEMP	"/var/run/dhcpd.conf"
 /* control programs */
 #define PFCTL		"/sbin/pfctl"
 #define OSPFCTL		"/usr/sbin/ospfctl"
 #define BGPCTL		"/usr/sbin/bgpctl"
 #define RIPCTL		"/usr/sbin/ripctl"
 #define IPSECCTL	"/sbin/ipsecctl"
-#define	DVMRPCTL	"/usr/sbin/dvmrpctl"
+#define DVMRPCTL	"/usr/sbin/dvmrpctl"
 #define RELAYCTL	"/usr/sbin/relayctl"
-/* service daemons */
-#define OSPFD		"/usr/sbin/ospfd"
-#define	BGPD		"/usr/sbin/bgpd"
-#define	RIPD		"/usr/sbin/ripd"
-#define	ISAKMPD		"/sbin/isakmpd"
-#define	DVMRPD		"/usr/sbin/dvmrpd"
-#define	RELAYD		"/usr/sbin/relayd"
 
 /* commands.c */
 #define DEFAULT_EDITOR	"/usr/bin/vi"

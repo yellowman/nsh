@@ -1,4 +1,4 @@
-/* $nsh: conf.c,v 1.40 2008/01/14 09:05:23 chris Exp $ */
+/* $nsh: conf.c,v 1.41 2008/01/15 06:10:12 chris Exp $ */
 /*
  * Copyright (c) 2002-2008
  *      Chris Cappuccio.  All rights reserved.
@@ -137,6 +137,8 @@ conf(FILE *output)
 	conf_xrules(output, IPSECCONF_TEMP, "ipsec", RELOAD);
 	conf_xrules(output, DVMRPCONF_TEMP, "dvmrp", 0);
 	conf_xrules(output, RELAYCONF_TEMP, "relay", 0);
+	conf_xrules(output, SASYNCCONF_TEMP, "sasync", 0);
+	conf_xrules(output, DHCPCONF_TEMP, "dhcp", 0);
 
 	return(0);
 }

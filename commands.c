@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.66 2008/01/14 09:05:23 chris Exp $ */
+/* $nsh: commands.c,v 1.67 2008/01/15 06:10:12 chris Exp $ */
 /*
  * Copyright (c) 2002-2007
  *      Chris Cappuccio.  All rights reserved.
@@ -756,6 +756,8 @@ static char
 	relayhelp[] =	"Relay control",
 	ipsechelp[] =	"IPsec control",
 	dvmrphelp[] = 	"DVMRP control",
+	sasynchelp[] =	"SA synchronization control",
+	dhcphelp[] =	"DHCP server control",
 	bridgehelp[] =	"Modify bridge parameters",
 	showhelp[] =	"Show system information",
 	iphelp[] =	"Set IP networking parameters",
@@ -803,6 +805,8 @@ static Command cmdtab[] = {
 	{ "relay",	relayhelp,	relayctl,	1, 0, 0, 1, 1 },
 	{ "ipsec",	ipsechelp,	ipsecctl,	1, 0, 0, 1, 1 },
 	{ "dvmrp",	dvmrphelp,	dvmrpctl,	1, 0, 0, 1, 1 },
+	{ "sasync",	sasynchelp,	sasyncctl,	1, 0, 0, 1, 1 },
+	{ "dhcp",	dhcphelp,	dhcpctl,	1, 0, 0, 1, 1 },
 	{ "quit",	quithelp,	quit,		0, 0, 0, 0, 0 },
 	{ "ping",	pinghelp,	ping,		0, 0, 0, 0, 0 },
 	{ "traceroute", tracerthelp,	traceroute,	0, 0, 0, 0, 0 },
