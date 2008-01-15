@@ -1,4 +1,4 @@
-/* $nsh: ctl.c,v 1.3 2008/01/15 06:10:12 chris Exp $ */
+/* $nsh: ctl.c,v 1.4 2008/01/15 07:34:34 chris Exp $ */
 /*
  * Copyright (c) 2008
  *      Chris Cappuccio.  All rights reserved.
@@ -461,4 +461,13 @@ rls_lock(int fd)
 	flock(fd, LOCK_UN);
 	close(fd);
 	return;
+}
+
+void
+rmtemp(char *file)
+{
+	if (unlink(file) != 0)
+		if (errno != ENOENT)
+			printf("%% Unable to remove temporary file for "
+			    "reinitialization %s: %s\n", file, strerror(errno));
 }

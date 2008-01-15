@@ -1,4 +1,4 @@
-/* $nsh: conf.c,v 1.41 2008/01/15 06:10:12 chris Exp $ */
+/* $nsh: conf.c,v 1.42 2008/01/15 07:34:34 chris Exp $ */
 /*
  * Copyright (c) 2002-2008
  *      Chris Cappuccio.  All rights reserved.
@@ -174,7 +174,6 @@ void conf_interfaces(FILE *output)
 {
 	FILE *dhcpif, *llfile;
 	int ifs, flags, ippntd, br;
-#define LEASEPREFIX     "/var/db/dhclient.leases"
 #define	LLPREFIX	"/var/run/lladdr"
 	char leasefile[sizeof(LEASEPREFIX)+1+IFNAMSIZ];
 	char *lladdr, llorig[IFNAMSIZ];
@@ -567,7 +566,8 @@ conf_routes(FILE *output, char *delim, int af, int flags)
 void
 conf_groupattrib(FILE *output)
 {
-	int len, ifs;
+	int ifs;
+	u_int len;
 	struct ifgroupreq	ifgr, ifgr_a;
 	struct ifg_req		*ifg;
 	struct if_nameindex *ifn_list, *ifnp;
@@ -641,7 +641,8 @@ void
 conf_intgroup(FILE *output, int ifs, char *ifname)
 {
 	/* ripped straight from ifconfig.c */
-	int len, cnt;
+	int cnt;
+	u_int len;
 	struct ifgroupreq	ifgr;
 	struct ifg_req		*ifg;
 

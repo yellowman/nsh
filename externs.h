@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.47 2008/01/15 06:10:12 chris Exp $ */
+/* $nsh: externs.h,v 1.48 2008/01/15 07:34:34 chris Exp $ */
 /*
  * nsh externs, prototypes and macros
  */
@@ -28,6 +28,7 @@ extern HistEvent ev;		/* ev */
 #define	DEFAULT_MAXQUEUE	300	/* net.inet.ip.maxqueue */
 
 /* conf.c */
+#define LEASEPREFIX	"/var/db/dhclient.leases"
 int conf(FILE *);
 u_int default_mtu(char *);
 int conf_routes(FILE *, char *, int, int);
@@ -96,6 +97,7 @@ int ipsecctl(int, char **, char *);
 int dvmrpctl(int, char **, char *);
 int sasyncctl(int, char **, char *);
 int dhcpctl(int, char **, char *);
+void rmtemp(char *);
 /* tmp config locations */
 #define PFCONF_TEMP	"/var/run/pf.conf"
 #define OSPFCONF_TEMP	"/var/run/ospfd.conf"
@@ -193,7 +195,6 @@ int ip_route(ip_t *, ip_t *, u_short);
 
 /* if.c */
 #define DHCLIENT	"/sbin/dhclient"
-#define DHKILLSCRIPT	"/usr/local/bin/dhclient-kill.sh"
 #define IFDATA_MTU 1		/* request for if_data.ifi_mtu */
 #define IFDATA_BAUDRATE 2	/* request for if_data.ifi_baudrate */
 #define MBPS(bps) (bps / 1000 / 1000)

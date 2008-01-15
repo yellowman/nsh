@@ -1,4 +1,4 @@
-/* $nsh: main.c,v 1.30 2007/12/29 23:12:44 chris Exp $ */
+/* $nsh: main.c,v 1.31 2008/01/15 07:34:34 chris Exp $ */
 /*
  * Copyright (c) 2002, 2003
  *      Chris Cappuccio.  All rights reserved.
@@ -39,7 +39,6 @@
 #include "editing.h"
 
 void usage(void);
-void rmtemp(void);
 
 char *vers = "20071229";
 int bridge = 0;		/* bridge mode for interface() */
@@ -91,7 +90,16 @@ main(int argc, char *argv[])
 		/*
 		 * Run initialization and then exit.
 		 */
-		rmtemp();
+		rmtemp(PFCONF_TEMP);
+		rmtemp(OSPFCONF_TEMP);
+		rmtemp(BGPCONF_TEMP);
+		rmtemp(RIPCONF_TEMP);
+		rmtemp(IPSECCONF_TEMP);
+		rmtemp(DVMRPCONF_TEMP);
+		rmtemp(RELAYCONF_TEMP);
+		rmtemp(SASYNCCONF_TEMP);
+		rmtemp(DHCPCONF_TEMP);
+
 		priv = 1;	/*
 				 * Necessary today for 'enable secret' to
 				 * work in -i mode, as CLI code is reworked
@@ -110,18 +118,9 @@ main(int argc, char *argv[])
 }
 
 void
-rmtemp(void)
-{
-	if (unlink(PFCONF_TEMP) != 0)
-		if (errno != ENOENT)
-			printf("%% Unable to remove temporary PF rules for "
-			    "reinitialization %s\n", strerror(errno));
-}
-
-void
 usage(void)
 {
-	(void)fprintf(stderr, "usage: %s [-vi rcfile]\n", __progname);
+	(void)fprintf(stderr, "usage: %s [-v] [-i rcfile]\n", __progname);
 	(void)fprintf(stderr, "           -v indicates verbose operation\n");
 	(void)fprintf(stderr, "           -i rcfile loads configuration from rcfile\n");
 	exit(1);

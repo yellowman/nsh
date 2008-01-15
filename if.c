@@ -1,4 +1,4 @@
-/* $nsh: if.c,v 1.33 2008/01/13 02:27:38 chris Exp $ */
+/* $nsh: if.c,v 1.34 2008/01/15 07:34:34 chris Exp $ */
 /*
  * Copyright (c) 2002-2007
  *      Chris Cappuccio.  All rights reserved.
@@ -596,10 +596,17 @@ intip(char *ifname, int ifs, int argc, char **argv)
 	}
 
 	if (CMP_ARG(argv[0], "d")) {
+		char *args[] = { PKILL, "dhclient", ifname, '\0' };
+		char leasefile[sizeof(LEASEPREFIX)+1+IFNAMSIZ];
+
 		if (set)
 			cmdarg(DHCLIENT, ifname);
-		else
-			cmdarg(DHKILLSCRIPT, ifname);
+		else {
+			cmdargs(PKILL, args);
+			snprintf(leasefile, sizeof(leasefile), "%s.%s",
+			    LEASEPREFIX, ifname);
+			rmtemp(leasefile);
+		}
 		return(0);
 	}
 
