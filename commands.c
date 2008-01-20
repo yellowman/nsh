@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.68 2008/01/20 05:08:35 chris Exp $ */
+/* $nsh: commands.c,v 1.69 2008/01/20 06:08:49 chris Exp $ */
 /*
  * Copyright (c) 2002-2007
  *      Chris Cappuccio.  All rights reserved.
@@ -759,6 +759,7 @@ static char
 	dvmrphelp[] = 	"DVMRP control",
 	sasynchelp[] =	"SA synchronization control",
 	dhcphelp[] =	"DHCP server control",
+	snmphelp[] =	"SNMP server control",
 	bridgehelp[] =	"Modify bridge parameters",
 	showhelp[] =	"Show system information",
 	iphelp[] =	"Set IP networking parameters",
@@ -808,6 +809,7 @@ static Command cmdtab[] = {
 	{ "dvmrp",	dvmrphelp,	dvmrpctl,	1, 0, 0, 1, 1 },
 	{ "sasync",	sasynchelp,	sasyncctl,	1, 0, 0, 1, 1 },
 	{ "dhcp",	dhcphelp,	dhcpctl,	1, 0, 0, 1, 1 },
+	{ "snmp",	snmphelp,	snmpctl,	1, 0, 0, 1, 1 },
 	{ "quit",	quithelp,	quit,		0, 0, 0, 0, 0 },
 	{ "ping",	pinghelp,	ping,		0, 0, 0, 0, 0 },
 	{ "traceroute", tracerthelp,	traceroute,	0, 0, 0, 0, 0 },

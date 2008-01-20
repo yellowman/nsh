@@ -1,4 +1,4 @@
-/* $nsh: ctl.c,v 1.4 2008/01/15 07:34:34 chris Exp $ */
+/* $nsh: ctl.c,v 1.5 2008/01/20 06:08:49 chris Exp $ */
 /*
  * Copyright (c) 2008
  *      Chris Cappuccio.  All rights reserved.
@@ -45,6 +45,7 @@
 #define RELAYD		"/usr/sbin/relayd"
 #define DHCPD		"/usr/sbin/dhcpd"
 #define SASYNCD		"/usr/sbin/sasyncd"
+#define	SNMPD		"/usr/sbin/snmpd"
 
 #define DHCPDB		"/var/db/dhcpd.leases"
 
@@ -57,6 +58,7 @@
 #define IPSECUSAGE "%% ipsec edit\n%% ipsec reload\n%% ipsec enable\n%% ipsec disable\n"
 #define DHCPUSAGE "%% dhcp edit\n%% dhcp enable\n%% dhcp disable\n"
 #define SASYNCUSAGE "%% sasync edit\n%% sasync enable\n%% sasync disable\n"
+#define SNMPUSAGE "%% snmp edit\%% snmp enable\n%% snmp disable\n"
 
 char *setup (char *, char *, int, char **, char *, char *);
 void call_editor(char *, char **, char *, char *);
@@ -361,6 +363,37 @@ dhcpctl(int argc, char **argv, char *modhvar)
 	}
 	if (CMP_ARG(aarg, "d")) {       /* disable */
 		cmdarg(PKILL, "dhcpd");
+		return(0);
+	}
+	printf("%% %s: %s\n", INVALID, argv[1]);
+
+	return(0);
+}
+
+int
+snmpctl(int argc, char **argv, char *modhvar)
+{
+	char *aarg = argv[0];
+
+	aarg = setup(modhvar, aarg, argc, argv, SNMPUSAGE, SNMPCONF_TEMP);
+	if (aarg == NULL)
+		return(0);
+
+	if(CMP_ARG(aarg, "ed")) {	/* edit */
+		char *args[] = { SNMPD, "-nc", SNMPCONF_TEMP, '\0' };
+
+		call_editor("SNMP", args, SNMPCONF_TEMP, SNMPD);
+		return(0);
+	}
+	/* no snmpd reload command available! */
+	if (CMP_ARG(aarg, "en")) {	/* enable */
+		char *args[] = { SNMPD, "-c", SNMPCONF_TEMP, '\0' };
+
+		cmdargs(SNMPD, args);
+		return(0);
+	}
+        if (CMP_ARG(aarg, "d")) {	/* disable */
+		cmdarg(PKILL, "snmpd");
 		return(0);
 	}
 	printf("%% %s: %s\n", INVALID, argv[1]);
