@@ -1,4 +1,4 @@
-/* $nsh: ctl.c,v 1.5 2008/01/20 06:08:49 chris Exp $ */
+/* $nsh: ctl.c,v 1.6 2008/01/20 07:21:21 chris Exp $ */
 /*
  * Copyright (c) 2008
  *      Chris Cappuccio.  All rights reserved.
@@ -46,6 +46,7 @@
 #define DHCPD		"/usr/sbin/dhcpd"
 #define SASYNCD		"/usr/sbin/sasyncd"
 #define	SNMPD		"/usr/sbin/snmpd"
+#define NTPD		"/usr/sbin/ntpd"
 
 #define DHCPDB		"/var/db/dhcpd.leases"
 
@@ -59,6 +60,7 @@
 #define DHCPUSAGE "%% dhcp edit\n%% dhcp enable\n%% dhcp disable\n"
 #define SASYNCUSAGE "%% sasync edit\n%% sasync enable\n%% sasync disable\n"
 #define SNMPUSAGE "%% snmp edit\%% snmp enable\n%% snmp disable\n"
+#define NTPUSAGE "%% ntp edit\%% ntp enable\n%% ntp disable\n"
 
 char *setup (char *, char *, int, char **, char *, char *);
 void call_editor(char *, char **, char *, char *);
@@ -309,18 +311,18 @@ sasyncctl(int argc, char **argv, char *modhvar)
 	if (aarg == NULL)
 		return(0);
 
-	if(CMP_ARG(aarg, "ed")) {       /* edit */
+	if(CMP_ARG(aarg, "ed")) {	/* edit */
 		call_editor("sasync", NULL, SASYNCCONF_TEMP, NULL);
 		return(0);
 	}
 	/* no sasyncd reload command available! */
-	if (CMP_ARG(aarg, "en")) {      /* enable */
+	if (CMP_ARG(aarg, "en")) {	/* enable */
 		char *args[] = { SASYNCD, "-c", SASYNCCONF_TEMP, '\0' };
 
 		cmdargs(SASYNCD, args);
 		return(0);
 	}
-	if (CMP_ARG(aarg, "d")) {       /* disable */
+	if (CMP_ARG(aarg, "d")) {	/* disable */
 		cmdarg(PKILL, "sasyncd");
 		return(0);
 	}
@@ -338,14 +340,14 @@ dhcpctl(int argc, char **argv, char *modhvar)
 	if (aarg == NULL)
 		return(0);
 
-	if(CMP_ARG(aarg, "ed")) {       /* edit */
+	if(CMP_ARG(aarg, "ed")) {	/* edit */
 		char *args[] = { DHCPD, "-nc", DHCPCONF_TEMP, '\0' };
 
 		call_editor("DHCP", args, DHCPCONF_TEMP, DHCPD);
 		return(0);
 	}
 	/* no dhcpd reload command available! */
-	if (CMP_ARG(aarg, "en")) {      /* enable */
+	if (CMP_ARG(aarg, "en")) {	/* enable */
 		int fd;
 		char *args[] = { DHCPD, "-c", DHCPCONF_TEMP, '\0' };
 
@@ -361,7 +363,7 @@ dhcpctl(int argc, char **argv, char *modhvar)
 		cmdargs(DHCPD, args);
 		return(0);
 	}
-	if (CMP_ARG(aarg, "d")) {       /* disable */
+	if (CMP_ARG(aarg, "d")) {	/* disable */
 		cmdarg(PKILL, "dhcpd");
 		return(0);
 	}
@@ -380,14 +382,14 @@ snmpctl(int argc, char **argv, char *modhvar)
 		return(0);
 
 	if(CMP_ARG(aarg, "ed")) {	/* edit */
-		char *args[] = { SNMPD, "-nc", SNMPCONF_TEMP, '\0' };
+		char *args[] = { SNMPD, "-nf", SNMPCONF_TEMP, '\0' };
 
 		call_editor("SNMP", args, SNMPCONF_TEMP, SNMPD);
 		return(0);
 	}
 	/* no snmpd reload command available! */
 	if (CMP_ARG(aarg, "en")) {	/* enable */
-		char *args[] = { SNMPD, "-c", SNMPCONF_TEMP, '\0' };
+		char *args[] = { SNMPD, "-f", SNMPCONF_TEMP, '\0' };
 
 		cmdargs(SNMPD, args);
 		return(0);
@@ -398,6 +400,37 @@ snmpctl(int argc, char **argv, char *modhvar)
 	}
 	printf("%% %s: %s\n", INVALID, argv[1]);
 
+	return(0);
+}
+
+int
+ntpctl(int argc, char **argv, char *modhvar)
+{
+	char *aarg = argv[0];
+         
+	aarg = setup(modhvar, aarg, argc, argv, NTPUSAGE, NTPCONF_TEMP);
+	if (aarg == NULL)
+		return(0);
+         
+	if(CMP_ARG(aarg, "ed")) {	/* edit */
+		char *args[] = { NTPD, "-nf", NTPCONF_TEMP, '\0' };
+        
+		call_editor("NTP", args, NTPCONF_TEMP, NTPD);
+		return(0);
+	}
+	/* no ntpd reload command available! */
+	if (CMP_ARG(aarg, "en")) {	/* enable */
+		char *args[] = { NTPD, "-sf", NTPCONF_TEMP, '\0' };
+ 
+		cmdargs(NTPD, args);
+		return(0);
+	}
+	if (CMP_ARG(aarg, "d")) {	/* disable */
+		cmdarg(PKILL, "ntpd");
+		return(0);
+	}
+	printf("%% %s: %s\n", INVALID, argv[1]);
+         
 	return(0);
 }
 

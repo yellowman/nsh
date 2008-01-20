@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.69 2008/01/20 06:08:49 chris Exp $ */
+/* $nsh: commands.c,v 1.70 2008/01/20 07:21:21 chris Exp $ */
 /*
  * Copyright (c) 2002-2007
  *      Chris Cappuccio.  All rights reserved.
@@ -760,6 +760,7 @@ static char
 	sasynchelp[] =	"SA synchronization control",
 	dhcphelp[] =	"DHCP server control",
 	snmphelp[] =	"SNMP server control",
+	ntphelp[] =	"NTP synchronization control",
 	bridgehelp[] =	"Modify bridge parameters",
 	showhelp[] =	"Show system information",
 	iphelp[] =	"Set IP networking parameters",
@@ -810,6 +811,7 @@ static Command cmdtab[] = {
 	{ "sasync",	sasynchelp,	sasyncctl,	1, 0, 0, 1, 1 },
 	{ "dhcp",	dhcphelp,	dhcpctl,	1, 0, 0, 1, 1 },
 	{ "snmp",	snmphelp,	snmpctl,	1, 0, 0, 1, 1 },
+	{ "ntp",	ntphelp,	ntpctl,		1, 0, 0, 1, 1 },
 	{ "quit",	quithelp,	quit,		0, 0, 0, 0, 0 },
 	{ "ping",	pinghelp,	ping,		0, 0, 0, 0, 0 },
 	{ "traceroute", tracerthelp,	traceroute,	0, 0, 0, 0, 0 },

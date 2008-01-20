@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.50 2008/01/20 06:08:49 chris Exp $ */
+/* $nsh: externs.h,v 1.51 2008/01/20 07:21:21 chris Exp $ */
 /*
  * nsh externs, prototypes and macros
  */
@@ -98,6 +98,7 @@ int dvmrpctl(int, char **, char *);
 int sasyncctl(int, char **, char *);
 int dhcpctl(int, char **, char *);
 int snmpctl(int, char **, char *);
+int ntpctl(int, char **, char *);
 void rmtemp(char *);
 /* tmp config locations */
 #define PFCONF_TEMP	"/var/run/pf.conf"
@@ -110,6 +111,7 @@ void rmtemp(char *);
 #define	SASYNCCONF_TEMP	"/var/run/sasyncd.conf"
 #define DHCPCONF_TEMP	"/var/run/dhcpd.conf"
 #define SNMPCONF_TEMP	"/var/run/snmpd.conf"
+#define NTPCONF_TEMP	"/var/run/ntpd.conf"
 /* control programs */
 #define PFCTL		"/sbin/pfctl"
 #define OSPFCTL		"/usr/sbin/ospfctl"

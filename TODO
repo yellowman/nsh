@@ -1,4 +1,4 @@
-$nsh: TODO,v 1.29 2008/01/14 09:05:23 chris Exp $
+$nsh: TODO,v 1.30 2008/01/20 07:21:21 chris Exp $
 
 nsh is a work in progress, diffs are welcome
 
@@ -17,11 +17,11 @@ Cleanup:
 
 To be implemented:
 
-* handle snmpd access controls or full snmpd.conf editor mode
 * handle bridge rtsp commands
 * handle newer 802.11 gunk like rssi display, chan, flags
 * handle kernel pppoe
 * privsep (imsg based?)
+* copy configs from/to tftp/ftp/http/other parts of filesystem/etc
 * RSA certificate generation/management method (isakmpd, possibly sshd)
 * Persistent comments/remarks in the config file (to document routes, etc..)
 * IPv6 (mostly there already, but I won't finish it properly until I use IPv6
