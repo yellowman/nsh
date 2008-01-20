@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.67 2008/01/15 06:10:12 chris Exp $ */
+/* $nsh: commands.c,v 1.68 2008/01/20 05:08:35 chris Exp $ */
 /*
  * Copyright (c) 2002-2007
  *      Chris Cappuccio.  All rights reserved.
@@ -128,7 +128,8 @@ static int	pr_carp_stats(void);
 static int	pr_pfsync_stats(void);
 static int	pr_conf(void);
 static int	pr_s_conf(void);
-static int	wr_conf(void);
+static int	wr_startup(void);
+static int	wr_conf(char *);
 static int	show_help(void);
 static int	ip_help(void);
 static int	flush_help(void);
@@ -814,7 +815,7 @@ static Command cmdtab[] = {
 	{ "telnet",	telnethelp,	telnet,		0, 0, 0, 0, 0 },
 	{ "reload",	reloadhelp,	reload,		1, 0, 0, 0, 0 },
 	{ "halt",	halthelp,	halt,		1, 0, 0, 0, 0 },
-	{ "write-config", savehelp,	wr_conf,	1, 0, 0, 0, 0 },
+	{ "write-config", savehelp,	wr_startup,	1, 0, 0, 0, 0 },
 	{ "verbose",	verbosehelp,	doverbose,	0, 0, 1, 0, 0 },
 	{ "editing",	editinghelp,	doediting,	0, 0, 1, 0, 0 },
 	{ "who",	whohelp,	who,		0, 0, 0, 0, 0 },
@@ -1614,26 +1615,37 @@ iprompt(void)
 	return(prompt);
 }
 
+int
+wr_startup(void)
+{
+	if (wr_conf(NSHRC_TEMP))
+		printf("%% Saving configuration\n");
+	else
+		printf("%% Unable to save configuration: %s\n",
+		    strerror(errno));
+
+	cmdarg(SAVESCRIPT, NSHRC_TEMP);
+
+	return(1);
+}
+
 /*
  * Save configuration
  */
 int
-wr_conf(void)
+wr_conf(char *fname)
 {
 	FILE *rchandle;
-	rchandle = fopen(NSHRC_TEMP, "w");
-	if (rchandle != NULL) {
-		printf("%% Saving configuration\n");
+	int error = 1;
+
+	if ((rchandle = fopen(fname, "w")) == NULL) 
+		error = 0;
+	else {
 		conf(rchandle);
-	} else {
-		printf("%% Unable to save configuration: %s\n",
-		    strerror(errno));
+		fclose(rchandle);
 	}
-	fclose(rchandle);
 
-	cmdarg(SAVESCRIPT, NSHRC_TEMP);
-
-	return (1);
+	return (error);
 }
 
 /*
@@ -1682,12 +1694,17 @@ flush_arp_cache(void)
 int
 pr_conf(void)
 {
-	if (priv == 1)
-		conf(stdout);
-	else {
+	if (priv != 1) {
 		printf ("%% Privilege required\n");
 		return(0);
 	}
+
+	if (!wr_conf(NSHRC_TEMP)) {
+		printf("%% Couldn't generate configuration\n");
+		return(0);
+	}
+
+	more(NSHRC_TEMP);
 
 	return(1);
 }
@@ -1698,36 +1715,16 @@ pr_conf(void)
 int
 pr_s_conf(void)
 {
-	FILE   *f;
-	char   *input;
-	size_t	s;
+	int ret;
 
 	if (priv != 1) {
 		printf ("%% Privilege required\n");
 		return(0);
 	}
+
+	ret = more(NSHRC);
 	
-	f = fopen(NSHRC, "r");
-	if (f == NULL) {
-		if (errno == ENOENT)
-			printf ("%% No startup configuration found\n");
-		else
-			printf ("%% pr_s_conf: fopen: %s\n", strerror(errno));
-		return(0);
-	}
-	
-	while ((input = fgetln(f, &s)) != NULL) {
-		/*
-		 * We replace newline, or whatever was at the end of
-	         * the line, with NUL termination
-		 */
-		input[s-1] = '\0';
-		printf("%s\n", input);
-	}
-	
-	fclose(f);
-	
-	return(1);
+	return(ret);
 }
 
 int

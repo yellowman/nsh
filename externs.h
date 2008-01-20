@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.48 2008/01/15 07:34:34 chris Exp $ */
+/* $nsh: externs.h,v 1.49 2008/01/20 05:08:35 chris Exp $ */
 /*
  * nsh externs, prototypes and macros
  */
@@ -318,3 +318,8 @@ int timeslot_status(int, char *, char *, int);
 /* arp.c */
 int arpget(const char *);
 int arpset(int, char **);
+
+/* more.c */
+int more(char *);
+int nsh_cbreak(void);
+void nsh_nocbreak(void);
