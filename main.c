@@ -1,4 +1,4 @@
-/* $nsh: main.c,v 1.31 2008/01/15 07:34:34 chris Exp $ */
+/* $nsh: main.c,v 1.32 2008/01/20 07:30:32 chris Exp $ */
 /*
  * Copyright (c) 2002, 2003
  *      Chris Cappuccio.  All rights reserved.
@@ -99,6 +99,8 @@ main(int argc, char *argv[])
 		rmtemp(RELAYCONF_TEMP);
 		rmtemp(SASYNCCONF_TEMP);
 		rmtemp(DHCPCONF_TEMP);
+		rmtemp(SNMPCONF_TEMP);
+		rmtemp(NTPCONF_TEMP);
 
 		priv = 1;	/*
 				 * Necessary today for 'enable secret' to
