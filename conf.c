@@ -1,4 +1,4 @@
-/* $nsh: conf.c,v 1.43 2008/01/20 07:21:21 chris Exp $ */
+/* $nsh: conf.c,v 1.44 2008/01/24 07:40:53 chris Exp $ */
 /*
  * Copyright (c) 2002-2008
  *      Chris Cappuccio.  All rights reserved.
@@ -37,6 +37,7 @@
 #include <sys/param.h>
 #include <sys/sockio.h>
 #include <sys/ioctl.h>
+#include <sys/stat.h>
 #include <net/if.h>
 #include <net/if_types.h>
 #include <netinet/in.h>
@@ -149,7 +150,11 @@ void conf_xrules(FILE *output, char *tmpfile, char *delim, int doreload)
 {
 	/* doreload is true when the reload command will load rule file */
 	FILE *conf;
+	struct stat enst;
 	char tmp_str[TMPSIZ];
+	char fenabled[SIZE_CONF_TEMP + sizeof(".enabled") + 1];
+
+	snprintf(fenabled, sizeof(fenabled), "%s.enabled", tmpfile);
 
 	/*
 	 * print rules
@@ -165,9 +170,11 @@ void conf_xrules(FILE *output, char *tmpfile, char *delim, int doreload)
 		}
 		fclose(conf);
 		fprintf(output, "!\n");
-		fprintf(output, "%s action\n enable\n%s", delim,
-		    doreload ? " reload\n" : "");
-		fprintf(output, "!\n");
+		if (stat(fenabled, &enst) == 0 && S_ISREG(enst.st_mode)) {
+			fprintf(output, "%s action\n enable\n%s", delim,
+			    doreload ? " reload\n" : "");
+			fprintf(output, "!\n");
+		}
 	} else if (errno != ENOENT || verbose)
 		printf("%% conf_xrules: %s: %s\n", tmpfile, strerror(errno));
 }

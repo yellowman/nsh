@@ -1,4 +1,4 @@
-/* $nsh: ctl.c,v 1.6 2008/01/20 07:21:21 chris Exp $ */
+/* $nsh: ctl.c,v 1.7 2008/01/24 07:40:54 chris Exp $ */
 /*
  * Copyright (c) 2008
  *      Chris Cappuccio.  All rights reserved.
@@ -34,6 +34,8 @@
 #include <sys/signal.h>
 #include "externs.h"
 
+#define ENABLE 0
+#define DISABLE 1
 #define INVALID "Invalid or ambiguous argument"
 
 /* service daemons */
@@ -48,32 +50,31 @@
 #define	SNMPD		"/usr/sbin/snmpd"
 #define NTPD		"/usr/sbin/ntpd"
 
-#define DHCPDB		"/var/db/dhcpd.leases"
-
 #define	PFUSAGE	"%% pf edit\n%% pf reload\n%% pf enable\n%% pf disable\n"
 #define BGPUSAGE "%% bgp edit\n%% bgp reload\n%% bgp enable\n%% bgp disable\n"
 #define OSPFUSAGE "%% ospf edit\n%% ospf reload\n%% ospf enable\n%% ospf disable\n"
 #define RIPUSAGE "%% rip edit\n%% rip reload\n%% rip enable\n%% rip disable\n"
 #define DVMRPUSAGE "%% dvmrp edit\n%% dvmrp enable\n%% dvmrp disable\n"
-#define RELAYUSAGE "%% relay edit\n%% relay reload\n%% relay enable\n%% relay disable\n"
+#define RELAYUSAGE "%% relay edit\n%% relay reload\n%% relay enable\n%% relay disable\n%% relay host disable <host|id>\n%% relay host enable <host|id>\n%% relay redirect disable <host|id>\n%% relay redirect enable <host|id>\n%% relay table disable <name|id>\n%% relay table enable <name|id>\n%% relay poll\n%% relay monitor\n"
 #define IPSECUSAGE "%% ipsec edit\n%% ipsec reload\n%% ipsec enable\n%% ipsec disable\n"
 #define DHCPUSAGE "%% dhcp edit\n%% dhcp enable\n%% dhcp disable\n"
 #define SASYNCUSAGE "%% sasync edit\n%% sasync enable\n%% sasync disable\n"
 #define SNMPUSAGE "%% snmp edit\%% snmp enable\n%% snmp disable\n"
 #define NTPUSAGE "%% ntp edit\%% ntp enable\n%% ntp disable\n"
 
-char *setup (char *, char *, int, char **, char *, char *);
+char *setup (char *, char *, int, char **, char *, char *, int);
 void call_editor(char *, char **, char *, char *);
 int rule_writeline(char *, int, char **);
 int acq_lock(char *);
 void rls_lock(int);
+void flag_x(char *, int);
 
 int
 pfctl(int argc, char **argv, char *modhvar)
 {
 	char *aarg = argv[0];
 
-	aarg = setup(modhvar, aarg, argc, argv, PFUSAGE, PFCONF_TEMP);
+	aarg = setup(modhvar, aarg, argc, argv, PFUSAGE, PFCONF_TEMP, 2);
 	if (aarg == NULL)
 		return(0);
 
@@ -91,10 +92,12 @@ pfctl(int argc, char **argv, char *modhvar)
 	}
 	if (CMP_ARG(aarg, "en")) {	/* enable */
 		cmdarg(PFCTL, "-e");
+		flag_x(PFCONF_TEMP, ENABLE);
 		return(0);
 	}
 	if (CMP_ARG(aarg, "d")) {	/* disable */
 		cmdarg(PFCTL, "-d");
+		flag_x(PFCONF_TEMP, DISABLE);
 		return(0);
 	}
 	printf("%% %s: %s\n", INVALID, argv[1]);
@@ -107,7 +110,7 @@ ospfctl(int argc, char **argv, char *modhvar)
 {
 	char *aarg = argv[0];
 
-	aarg = setup(modhvar, aarg, argc, argv, OSPFUSAGE, OSPFCONF_TEMP);
+	aarg = setup(modhvar, aarg, argc, argv, OSPFUSAGE, OSPFCONF_TEMP, 2);
 	if (aarg == NULL)
 		return(0);
 
@@ -125,10 +128,12 @@ ospfctl(int argc, char **argv, char *modhvar)
 		char *args[] = { OSPFD, "-f", OSPFCONF_TEMP, '\0' };
 
 		cmdargs(OSPFD, args);
+		flag_x(OSPFCONF_TEMP, ENABLE);
 		return(0);
 	}
 	if (CMP_ARG(aarg, "d")) {	/* disable */
 		cmdarg(PKILL, "ospfd");
+		flag_x(OSPFCONF_TEMP, DISABLE);
 		return(0);
 	}
 	printf("%% %s: %s\n", INVALID, argv[1]);
@@ -141,7 +146,7 @@ bgpctl(int argc, char **argv, char *modhvar)
 {
 	char *aarg = argv[0];
 
-	aarg = setup(modhvar, aarg, argc, argv, BGPUSAGE, BGPCONF_TEMP);
+	aarg = setup(modhvar, aarg, argc, argv, BGPUSAGE, BGPCONF_TEMP, 2);
 	if (aarg == NULL)
 		return(0);
 
@@ -159,10 +164,12 @@ bgpctl(int argc, char **argv, char *modhvar)
 		char *args[] = { BGPD, "-f", BGPCONF_TEMP, '\0' };
 		
 		cmdargs(BGPD, args);
+		flag_x(BGPCONF_TEMP, ENABLE);
 		return(0);
 	}
 	if (CMP_ARG(aarg, "d")) {	/* disable */
 		cmdarg(PKILL, "bgpd");
+		flag_x(BGPCONF_TEMP, DISABLE);
 		return(0);
 	}
 	printf("%% %s: %s\n", INVALID, argv[1]);
@@ -175,7 +182,7 @@ ripctl(int argc, char **argv, char *modhvar)
 {
 	char *aarg = argv[0];
 
-	aarg = setup(modhvar, aarg, argc, argv, RIPUSAGE, RIPCONF_TEMP);
+	aarg = setup(modhvar, aarg, argc, argv, RIPUSAGE, RIPCONF_TEMP, 2);
 	if (aarg == NULL)
 		return(0);
 
@@ -193,10 +200,12 @@ ripctl(int argc, char **argv, char *modhvar)
 		char *args[] = { RIPD, "-f", RIPCONF_TEMP, '\0' };
 
 		cmdargs(RIPD, args);
+		flag_x(RIPCONF_TEMP, ENABLE);
 		return(0);
 	}
 	if (CMP_ARG(aarg, "d")) {	/* disable */
 		cmdarg(PKILL, "ripd");
+		flag_x(RIPCONF_TEMP, DISABLE);
 		return(0);
 	}
 	printf("%% %s: %s\n", INVALID, argv[1]);
@@ -209,11 +218,42 @@ relayctl(int argc, char **argv, char *modhvar)
 {
 	char *aarg = argv[0];
 
-	aarg = setup(modhvar, aarg, argc, argv, RELAYUSAGE, RELAYCONF_TEMP);
+	aarg = setup(modhvar, aarg, argc, argv, RELAYUSAGE, RELAYCONF_TEMP, 4);
 	if (aarg == NULL)
 		return(0);
 
-	if(CMP_ARG(aarg, "ed")) {	/* edit */
+	if (argc == 4) {
+		char *args[] = { RELAYCTL, NULL, NULL, argv[3], '\0' };
+		if (CMP_ARG(argv[1], "h"))
+			args[1] = "host";
+		if (CMP_ARG(argv[1], "t"))
+			args[1] = "table";
+		if (CMP_ARG(argv[1], "r"))
+			args[1] = "redirect";
+		if (CMP_ARG(argv[2], "d"))
+			args[2] = "disable";
+		if (CMP_ARG(argv[2], "e"))
+			args[2] = "enable";
+		if (args[1] != NULL && args[2] != NULL) {
+			cmdargs(RELAYCTL, args);
+			return(0);
+		}
+	}
+	if (argc != 2) {		/* could be 3 args.... */
+		printf(RELAYUSAGE);
+		return(0);
+	}
+	if (CMP_ARG(aarg, "m")) {	/* monitor */
+		char *args[] = { RELAYCTL, "monitor", '\0' };
+		cmdargs(RELAYCTL, args);
+		return(0);
+	}
+	if (CMP_ARG(aarg, "p")) {	/* poll */
+		char *args[] = { RELAYCTL, "poll", '\0' };
+		cmdargs(RELAYCTL, args);
+		return(0);
+	}
+	if (CMP_ARG(aarg, "ed")) {	/* edit */
 		char *args[] = { RELAYD, "-nf", RELAYCONF_TEMP, '\0' };
 
 		call_editor("Relay", args, RELAYCONF_TEMP, RELAYD);
@@ -227,10 +267,12 @@ relayctl(int argc, char **argv, char *modhvar)
 		char *args[] = { RELAYD, "-f", RELAYCONF_TEMP, '\0' };
 
 		cmdargs(RELAYD, args);
+		flag_x(RELAYCONF_TEMP, ENABLE);
 		return(0);
 	}
 	if (CMP_ARG(aarg, "d")) {	/* disable */
 		cmdarg(PKILL, "relayd");
+		flag_x(RELAYCONF_TEMP, DISABLE);
 		return(0);
 	}
 	printf("%% %s: %s\n", INVALID, argv[1]);
@@ -243,7 +285,7 @@ ipsecctl(int argc, char **argv, char *modhvar)
 {
 	char *aarg = argv[0];
 
-	aarg = setup(modhvar, aarg, argc, argv, IPSECUSAGE, IPSECCONF_TEMP);
+	aarg = setup(modhvar, aarg, argc, argv, IPSECUSAGE, IPSECCONF_TEMP, 2);
 	if (aarg == NULL)
 		return(0);
 
@@ -260,10 +302,12 @@ ipsecctl(int argc, char **argv, char *modhvar)
 	}
 	if (CMP_ARG(aarg, "en")) {	/* enable */
 		cmdarg(ISAKMPD, "-Sa");
+		flag_x(IPSECCONF_TEMP, ENABLE);
 		return(0);
 	}
 	if (CMP_ARG(aarg, "d")) {	/* disable */
 		cmdarg(PKILL, "isakmpd");
+		flag_x(IPSECCONF_TEMP, DISABLE);
 		return(0);
 	}
 	printf("%% %s: %s\n", INVALID, argv[1]);
@@ -276,7 +320,7 @@ dvmrpctl(int argc, char **argv, char *modhvar)
 {
 	char *aarg = argv[0];
 
-	aarg = setup(modhvar, aarg, argc, argv, DVMRPUSAGE, DVMRPCONF_TEMP);
+	aarg = setup(modhvar, aarg, argc, argv, DVMRPUSAGE, DVMRPCONF_TEMP, 2);
 	if (aarg == NULL)
 		return(0);
 
@@ -291,10 +335,12 @@ dvmrpctl(int argc, char **argv, char *modhvar)
 		char *args[] = { DVMRPD, "-f", DVMRPCONF_TEMP, '\0' };
 
 		cmdargs(DVMRPD, args);
+		flag_x(DVMRPCONF_TEMP, ENABLE);
 		return(0);
 	}
 	if (CMP_ARG(aarg, "d")) {	/* disable */
 		cmdarg(PKILL, "dvmrpd");
+		flag_x(DVMRPCONF_TEMP, DISABLE);
 		return(0);
 	}
 	printf("%% %s: %s\n", INVALID, argv[1]);
@@ -307,7 +353,7 @@ sasyncctl(int argc, char **argv, char *modhvar)
 {
 	char *aarg = argv[0];
 
-	aarg = setup(modhvar, aarg, argc, argv, SASYNCUSAGE, SASYNCCONF_TEMP);
+	aarg = setup(modhvar, aarg, argc, argv, SASYNCUSAGE, SASYNCCONF_TEMP, 2);
 	if (aarg == NULL)
 		return(0);
 
@@ -320,10 +366,12 @@ sasyncctl(int argc, char **argv, char *modhvar)
 		char *args[] = { SASYNCD, "-c", SASYNCCONF_TEMP, '\0' };
 
 		cmdargs(SASYNCD, args);
+		flag_x(SASYNCCONF_TEMP, ENABLE);
 		return(0);
 	}
 	if (CMP_ARG(aarg, "d")) {	/* disable */
 		cmdarg(PKILL, "sasyncd");
+		flag_x(SASYNCCONF_TEMP, DISABLE);
 		return(0);
 	}
 	printf("%% %s: %s\n", INVALID, argv[1]);
@@ -336,7 +384,7 @@ dhcpctl(int argc, char **argv, char *modhvar)
 {
 	char *aarg = argv[0];
 
-	aarg = setup(modhvar, aarg, argc, argv, DHCPUSAGE, DHCPCONF_TEMP);
+	aarg = setup(modhvar, aarg, argc, argv, DHCPUSAGE, DHCPCONF_TEMP, 2);
 	if (aarg == NULL)
 		return(0);
 
@@ -361,10 +409,12 @@ dhcpctl(int argc, char **argv, char *modhvar)
 		close(fd);
 
 		cmdargs(DHCPD, args);
+		flag_x(DHCPCONF_TEMP, ENABLE);
 		return(0);
 	}
 	if (CMP_ARG(aarg, "d")) {	/* disable */
 		cmdarg(PKILL, "dhcpd");
+		flag_x(DHCPCONF_TEMP, DISABLE);
 		return(0);
 	}
 	printf("%% %s: %s\n", INVALID, argv[1]);
@@ -377,7 +427,7 @@ snmpctl(int argc, char **argv, char *modhvar)
 {
 	char *aarg = argv[0];
 
-	aarg = setup(modhvar, aarg, argc, argv, SNMPUSAGE, SNMPCONF_TEMP);
+	aarg = setup(modhvar, aarg, argc, argv, SNMPUSAGE, SNMPCONF_TEMP, 2);
 	if (aarg == NULL)
 		return(0);
 
@@ -392,10 +442,12 @@ snmpctl(int argc, char **argv, char *modhvar)
 		char *args[] = { SNMPD, "-f", SNMPCONF_TEMP, '\0' };
 
 		cmdargs(SNMPD, args);
+		flag_x(SNMPCONF_TEMP, ENABLE);
 		return(0);
 	}
         if (CMP_ARG(aarg, "d")) {	/* disable */
 		cmdarg(PKILL, "snmpd");
+		flag_x(SNMPCONF_TEMP, DISABLE);
 		return(0);
 	}
 	printf("%% %s: %s\n", INVALID, argv[1]);
@@ -408,7 +460,7 @@ ntpctl(int argc, char **argv, char *modhvar)
 {
 	char *aarg = argv[0];
          
-	aarg = setup(modhvar, aarg, argc, argv, NTPUSAGE, NTPCONF_TEMP);
+	aarg = setup(modhvar, aarg, argc, argv, NTPUSAGE, NTPCONF_TEMP, 2);
 	if (aarg == NULL)
 		return(0);
          
@@ -423,10 +475,12 @@ ntpctl(int argc, char **argv, char *modhvar)
 		char *args[] = { NTPD, "-sf", NTPCONF_TEMP, '\0' };
  
 		cmdargs(NTPD, args);
+		flag_x(NTPCONF_TEMP, ENABLE);
 		return(0);
 	}
 	if (CMP_ARG(aarg, "d")) {	/* disable */
 		cmdarg(PKILL, "ntpd");
+		flag_x(NTPCONF_TEMP, DISABLE);
 		return(0);
 	}
 	printf("%% %s: %s\n", INVALID, argv[1]);
@@ -434,9 +488,30 @@ ntpctl(int argc, char **argv, char *modhvar)
 	return(0);
 }
 
+void
+flag_x(char *fname, int y)
+{
+	int fd;
+	char fenabled[SIZE_CONF_TEMP + sizeof(".enabled") + 1];
+
+	snprintf(fenabled, sizeof(fenabled), "%s.enabled", fname);
+
+	switch(y) {
+	case ENABLE:
+		if ((fd = open(fenabled, O_RDWR | O_CREAT, 0600)) == -1)
+			return;
+		close(fd);
+		break;
+	case DISABLE:
+		rmtemp(fenabled);
+		break;
+	}
+		
+}
+
 char *
 setup(char *modhvar, char *aarg, int argc, char **argv, char *usage,
-      char *tmpfile)
+      char *tmpfile, int maxarg)
 {
 	if (modhvar) {
 		if(CMP_ARG(modhvar, "action"))
@@ -449,7 +524,8 @@ setup(char *modhvar, char *aarg, int argc, char **argv, char *usage,
 			return (NULL);
 		}
 	} else {
-		if (argc != 2 || (argc == 2 && argv[1][0] == '?')) {
+		if (argc < 2 || argc > maxarg || (argc == 2 &&
+		    argv[1][0] == '?')) {
 			printf(usage);
 			return(NULL);
 		}
@@ -501,7 +577,7 @@ int
 acq_lock(char *fname)
 {
 	int fd;
-	char lockf[64];
+	char lockf[SIZE_CONF_TEMP + sizeof(".lock")];
 
 	/*
 	 * some text editors lock (vi), some don't (mg)
