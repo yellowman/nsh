@@ -1,4 +1,4 @@
-/* $nsh: sysctl.c,v 1.7 2006/04/08 20:10:17 chris Exp $ */
+/* $nsh: sysctl.c,v 1.8 2008/01/29 07:24:51 chris Exp $ */
 /*
  * Copyright (c) 2003
  *      Chris Cappuccio.  All rights reserved.
@@ -77,12 +77,48 @@ sysctl_inet(int mib2, int mib3, int val, int read)
 	return(old);
 }
 
+static struct ipsysctl {
+	char *name;
+	int mib2;
+	int mib3;
+	int32_t def_larg;
+} ipsysctls[] = {
+	{ "forwarding",	IPPROTO_IP,	IPCTL_FORWARDING,	0	},
+	{ "ipip",	IPPROTO_IPIP,	IPIPCTL_ALLOW,		0	},
+	{ "gre",	IPPROTO_GRE,	GRECTL_ALLOW,		0	},
+	{ "wccp",	IPPROTO_GRE,	GRECTL_WCCP,		0	},
+	{ "mobileip",	IPPROTO_MOBILE,	MOBILEIPCTL_ALLOW,	0	},
+	{ "etherip",	IPPROTO_ETHERIP,ETHERIPCTL_ALLOW,	0	},
+	{ "ipcomp",	IPPROTO_IPCOMP,	IPCOMPCTL_ENABLE,	0	},
+	{ "esp",	IPPROTO_ESP,	ESPCTL_ENABLE,		0	},
+	{ "ah",		IPPROTO_AH,	AHCTL_ENABLE,		0	},
+	{ "sourceroute",IPPROTO_IP,	IPCTL_SOURCEROUTE,	0	},
+	{ "encdebug",	IPPROTO_IP,	IPCTL_ENCDEBUG,		0	},
+	{ "maxqueue",	IPPROTO_IP,	IPCTL_IPPORT_MAXQUEUE,	DEFAULT_MAXQUEUE },
+	{ "send-redirects",IPPROTO_IP,	IPCTL_SENDREDIRECTS,	0	},
+	{ "directed-broadcast",IPPROTO_IP, IPCTL_DIRECTEDBCAST,	0	},
+#ifdef notyet
+	{ "default-mtu",IPPROTO_IP,	IPCTL_DEFMTU,		DEFAULT_MTU },
+#endif
+	{ "default-ttl",IPPROTO_IP,	IPCTL_DEFTTL,		DEFAULT_TTL },
+};
+
 int
 ipsysctl(int set, char *cmd, char *arg)
 {
-	int mib2, mib3;
 	int32_t larg;
 	const char *errmsg = NULL;
+	struct ipsysctl *x;
+
+	x = (struct ipsysctl *) genget(cmd, (char **)ipsysctls,
+	    sizeof(struct ipsysctl));
+	if (x == 0) {
+		printf("%% Invalid argument %s\n", cmd);
+		return 0;
+	} else if (Ambiguous(x)) {
+		printf("%% Ambiguous argument %s\n", cmd);
+		return 0;
+	}
 
 	if (arg) {
 		larg = strtonum(arg, 0, INT_MAX, &errmsg);
@@ -93,70 +129,9 @@ ipsysctl(int set, char *cmd, char *arg)
 	} else if (set)
 		larg = 1;
 	else
-		larg = 0;
+		larg = x->def_larg;
 
-	if (CMP_ARG(cmd, "f")) { /* forwarding */
-		mib2 = IPPROTO_IP;
-		mib3 = IPCTL_FORWARDING;
-	} else if (CMP_ARG(cmd, "ipi")) { /* ipip */
-		mib2 = IPPROTO_IPIP;
-		mib3 = IPIPCTL_ALLOW;
-	} else if (CMP_ARG(cmd, "g")) { /* gre */
-		mib2 = IPPROTO_GRE;
-		mib3 = GRECTL_ALLOW;
-	} else if (CMP_ARG(cmd, "w")) { /* wccp */
-		mib2 = IPPROTO_GRE;
-		mib3 = GRECTL_WCCP;
-	} else if (CMP_ARG(cmd, "mo")) { /* mobileip */
-		mib2 = IPPROTO_MOBILE;
-		mib3 = MOBILEIPCTL_ALLOW;
-	} else if (CMP_ARG(cmd, "et")) { /* etherip */
-		mib2 = IPPROTO_ETHERIP;
-		mib3 = ETHERIPCTL_ALLOW;
-	} else if (CMP_ARG(cmd, "ipc")) { /* ipcomp */
-		mib2 = IPPROTO_IPCOMP;
-		mib3 = IPCOMPCTL_ENABLE;
-	} else if (CMP_ARG(cmd, "es")) { /* esp */
-		mib2 = IPPROTO_ESP;
-		mib3 = ESPCTL_ENABLE;
-	} else if (CMP_ARG(cmd, "a")) { /* ah */
-		mib2 = IPPROTO_AH;
-		mib3 = AHCTL_ENABLE;
-	} else if (CMP_ARG(cmd, "so")) { /* sourceroute */
-		mib2 = IPPROTO_IP;
-		mib3 = IPCTL_SOURCEROUTE;
-	} else if (CMP_ARG(cmd, "en")) { /* encdebug */
-		mib2 = IPPROTO_IP;
-		mib3 = IPCTL_ENCDEBUG;
-	} else if (CMP_ARG(cmd, "ma")) { /* maxqueue */
-		mib2 = IPPROTO_IP;
-		mib3 = IPCTL_IPPORT_MAXQUEUE;
-		if (!set)
-			larg = DEFAULT_MAXQUEUE;
-	} else if (CMP_ARG(cmd, "se")) { /* send-redirects */
-		mib2 = IPPROTO_IP;
-		mib3 = IPCTL_SENDREDIRECTS;
-	} else if (CMP_ARG(cmd, "di")) { /* directed-broadcast */
-		mib2 = IPPROTO_IP;
-		mib3 = IPCTL_DIRECTEDBCAST;
-#ifdef notyet
-	} else if (CMP_ARG(cmd, "default-m")) { /* default-mtu */
-		mib2 = IPPROTO_IP;
-		mib3 = IPCTL_DEFMTU;
-		if (!set)
-			larg = DEFAULT_MTU;
-#endif
-	} else if (CMP_ARG(cmd, "de")) { /* default-ttl */
-		mib2 = IPPROTO_IP;
-		mib3 = IPCTL_DEFTTL;
-		if (!set)
-			larg = DEFAULT_TTL;
-	} else {
-		printf("%% Internal error\n");
-		return(0);
-	}
-
-	sysctl_inet(mib2, mib3, larg, 0);
+	sysctl_inet(x->mib2, x->mib3, larg, 0);
 
 	return(1);
 }
