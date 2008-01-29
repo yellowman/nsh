@@ -1,4 +1,4 @@
-/* $nsh: if.c,v 1.34 2008/01/15 07:34:34 chris Exp $ */
+/* $nsh: if.c,v 1.35 2008/01/29 06:17:35 chris Exp $ */
 /*
  * Copyright (c) 2002-2007
  *      Chris Cappuccio.  All rights reserved.
@@ -97,7 +97,7 @@ static const struct {
 };
 
 int
-show_int(char *ifname)
+show_int(int argc, char **argv)
 {
 	struct ifaddrs *ifap, *ifa;
 	struct if_nameindex *ifn_list, *ifnp;
@@ -111,21 +111,26 @@ show_int(char *ifname)
 	int ifs, br, flags, days, hours, mins, pntd;
 	int ippntd = 0;
 	time_t c;
-	char *type, *lladdr;
+	char *type, *lladdr, *ifname = NULL;
 	const char *carp;
 
 	char tmp_str[512], tmp_str2[512];
 
+	if (argc == 3)
+		ifname = argv[2];
+
 	/*
 	 * Show all interfaces when no ifname specified.
 	 */
-	if (ifname == 0) {
+	if (ifname == NULL) {
 		if ((ifn_list = if_nameindex()) == NULL) {
 			printf("%% show_int: if_nameindex failed\n");
 			return 1;
 		}
 		for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++) {
-			show_int(ifnp->if_name);
+			char *args[] = { NULL, NULL, ifnp->if_name };
+
+			show_int(3, args);
 		}
 		if_freenameindex(ifn_list);
 		return(0);

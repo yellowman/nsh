@@ -1,4 +1,4 @@
-/* $nsh: who.c,v 1.1 2007/12/27 22:19:39 chris Exp $ */
+/* $nsh: who.c,v 1.2 2008/01/29 06:17:35 chris Exp $ */
 /*
  * Copyright (c) 1989, 1993
  *      The Regents of the University of California.  All rights reserved.
@@ -53,7 +53,7 @@ who(int argc, char **argv)
 	struct utmp who;
 	int count = 0;
 
-	if (argc > 1) {
+	if (argc > 1 && !(argc == 2 && CMP_ARG(argv[1], "u"))) {
 		printf("%% Too many arguments\n");
 		return(0);
 	}

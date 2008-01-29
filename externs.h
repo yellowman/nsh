@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.51 2008/01/20 07:21:21 chris Exp $ */
+/* $nsh: externs.h,v 1.52 2008/01/29 06:17:35 chris Exp $ */
 /*
  * nsh externs, prototypes and macros
  */
@@ -75,7 +75,7 @@ extern u_long rtm_inits;
 #define FLUSH 0
 struct rtdump *getrtdump(int, int, u_int);
 void freertdump(struct rtdump *);
-int monitor(void);
+int monitor(int, char **);
 int rtmsg(int, int, int, int);
 void flushroutes(int, int);
 void bprintf(FILE *, int, u_char *);
@@ -88,6 +88,7 @@ extern char addrnames[];
 extern char metricnames[];
 
 /* ctl.c */
+#define SIZE_CONF_TEMP 64
 int pfctl(int, char **, char *);
 int ospfctl(int, char **, char *);
 int bgpctl(int, char **, char *);
@@ -101,6 +102,7 @@ int snmpctl(int, char **, char *);
 int ntpctl(int, char **, char *);
 void rmtemp(char *);
 /* tmp config locations */
+#define DHCPDB		"/var/db/dhcpd.leases"
 #define PFCONF_TEMP	"/var/run/pf.conf"
 #define OSPFCONF_TEMP	"/var/run/ospfd.conf"
 #define BGPCONF_TEMP	"/var/run/bgpd.conf"
@@ -207,7 +209,7 @@ int ip_route(ip_t *, ip_t *, u_short);
 #define ROUNDKBPS(bps) ((float)bps == ((bps / 1000) * 1000))
 #define ROUNDKBYTES(bytes) ((float)bytes == ((bytes / 1024) * 1024))
 int is_valid_ifname(char *);
-int show_int(char *);
+int show_int(int, char **);
 int get_ifdata(char *, int);
 int get_ifflags(char *, int);
 int set_ifflags(char *, int, int);
@@ -228,7 +230,7 @@ int intrtlabel(char *, int, int, char **);
 char *get_hwdaddr(char *);
 
 /* version.c */
-int version(void);
+int version(int, char **);
 
 /* compile.c */
 extern char compiled[], compiledby[], compiledon[], compilehost[];
@@ -275,7 +277,7 @@ int conf_media_status(FILE *, int, char *);
 #define WI_PORT_BSS	1
 #define WI_PORT_ADHOC	3
 #define WI_PORT_HOSTAP	6
-int wi_printaplist(char *);
+int wi_printaplist(int, char **);
 void wi_dumpstats(char *);
 void wi_dumpstations(char *);
 int is_wavelan(int, char *);

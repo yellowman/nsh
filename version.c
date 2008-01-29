@@ -1,4 +1,4 @@
-/* $nsh: version.c,v 1.10 2007/12/26 06:10:47 chris Exp $ */
+/* $nsh: version.c,v 1.11 2008/01/29 06:17:35 chris Exp $ */
 /*
  * Copyright (c) 2002
  *      Chris Cappuccio.  All rights reserved.
@@ -36,7 +36,7 @@
 #include "externs.h"
 
 int
-version(void)
+version(int argc, char **argv)
 {
 	char cpubuf[1024];
 	char kernver[1024];

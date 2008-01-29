@@ -1,4 +1,4 @@
-/* $nsh: ctl.c,v 1.7 2008/01/24 07:40:54 chris Exp $ */
+/* $nsh: ctl.c,v 1.8 2008/01/29 06:17:35 chris Exp $ */
 /*
  * Copyright (c) 2008
  *      Chris Cappuccio.  All rights reserved.
@@ -59,8 +59,8 @@
 #define IPSECUSAGE "%% ipsec edit\n%% ipsec reload\n%% ipsec enable\n%% ipsec disable\n"
 #define DHCPUSAGE "%% dhcp edit\n%% dhcp enable\n%% dhcp disable\n"
 #define SASYNCUSAGE "%% sasync edit\n%% sasync enable\n%% sasync disable\n"
-#define SNMPUSAGE "%% snmp edit\%% snmp enable\n%% snmp disable\n"
-#define NTPUSAGE "%% ntp edit\%% ntp enable\n%% ntp disable\n"
+#define SNMPUSAGE "%% snmp edit\n%% snmp enable\n%% snmp disable\n"
+#define NTPUSAGE "%% ntp edit\n%% ntp enable\n%% ntp disable\n"
 
 char *setup (char *, char *, int, char **, char *, char *, int);
 void call_editor(char *, char **, char *, char *);

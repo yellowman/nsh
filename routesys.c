@@ -1,4 +1,4 @@
-/* $nsh: routesys.c,v 1.24 2008/01/13 02:27:38 chris Exp $ */
+/* $nsh: routesys.c,v 1.25 2008/01/29 06:17:35 chris Exp $ */
 /* From: $OpenBSD: /usr/src/sbin/route/route.c,v 1.43 2001/07/07 18:26:20 deraadt Exp $ */
 
 /*
@@ -73,7 +73,6 @@ u_long  rtm_inits;
 char	*mylink_ntoa(const struct sockaddr_dl *);
 
 void	 flushroutes(int, int);
-int	 monitor(void);
 #ifdef INET6
 static int prefixlen(char *);
 #endif
@@ -297,7 +296,7 @@ _monitor_sig(int signo)
 }
 
 int
-monitor()
+monitor(int argc, char **argv)
 {
 	int s, m, n, saveverbose;
 	fd_set fds; 

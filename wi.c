@@ -66,7 +66,6 @@ int wi_getval(char *, struct wi_req *);
 int wi_setval(char *, struct wi_req *);
 int wi_porttype(char *);
 int wi_printlevels(char *);
-int wi_printaplist(char *);
 void wi_dumpstats(char *);
 void wi_dumpstations(char *);
 void wi_printwords(struct wi_req *);
@@ -129,8 +128,9 @@ wi_setval(char *iface, struct wi_req * wreq)
 }
 
 int
-wi_printaplist(char *iface)
+wi_printaplist(int argc, char **argv)
 {
+	char *iface;
 	int prism2, len, i = 0, j, s, flags, nap;
 	struct wi_req   wreq;
 	struct wi_scan_p2_hdr *wi_p2_h;
@@ -141,6 +141,11 @@ wi_printaplist(char *iface)
 		printf("wi_printaplist: socket: %s\n", strerror(errno));
 		return(-1);
 	}
+
+	if (argc == 3)
+		iface = argv[2];
+	else
+		return(-1);
 
 	if (!is_wavelan(s, iface)) {
 		if (!is_valid_ifname(iface))

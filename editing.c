@@ -1,4 +1,4 @@
-/* $nsh: editing.c,v 1.5 2008/01/20 05:08:35 chris Exp $ */
+/* $nsh: editing.c,v 1.6 2008/01/29 06:17:35 chris Exp $ */
 
 #include "editing.h"
 #include "externs.h"
@@ -50,9 +50,7 @@ initedit()
 		el_set(elc, EL_BIND, "\t", "complt", NULL);
 #endif
 		el_source(elc, NULL);	/* read ~/.editrc */
-#ifdef notyet
 		el_set(elc, EL_SIGNAL, 1);
-#endif
 	}
 	if (!eli && histi) {
 		eli = el_init(__progname, stdin, stdout, stderr); /* again */
@@ -60,13 +58,11 @@ initedit()
 		el_set(eli, EL_EDITOR, "emacs");
 		el_set(eli, EL_PROMPT, iprompt);
 #ifdef notyet
-		el_set(eli, EL_ADDFN, "exit", "Exit", exitcmd);
-		el_set(eli, EL_BIND, "\z", "exit", NULL);
+		el_set(eli, EL_ADDFN, "exit", "Exit", NULL);
+		el_set(eli, EL_BIND, "\026", "exit", NULL);
 #endif
 		el_source(eli, NULL);
-#ifdef notyet
 		el_set(eli, EL_SIGNAL, 1);
-#endif
 	}
 }
 

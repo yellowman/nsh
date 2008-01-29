@@ -1,6 +1,6 @@
-/* $nsh: commands.c,v 1.70 2008/01/20 07:21:21 chris Exp $ */
+/* $nsh: commands.c,v 1.71 2008/01/29 06:17:35 chris Exp $ */
 /*
- * Copyright (c) 2002-2007
+ * Copyright (c) 2002-2008
  *      Chris Cappuccio.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -111,39 +111,29 @@ static int	disable(void);
 static int	doverbose(int, char**);
 static int	doediting(int, char**);
 static int	group(int, char**);
-static int	pr_routes(char *);
-static int	pr_arp(char *);
-static int	pr_sadb(void);
-static int	pr_pf_stats(void);
-static int	pr_ip_stats(void);
-static int	pr_ah_stats(void);
-static int	pr_esp_stats(void);
-static int	pr_tcp_stats(void);
-static int	pr_udp_stats(void);
-static int	pr_icmp_stats(void);
-static int	pr_igmp_stats(void);
-static int	pr_ipcomp_stats(void);
-static int	pr_mbuf_stats(void);
-static int	pr_carp_stats(void);
-static int	pr_pfsync_stats(void);
-static int	pr_conf(void);
-static int	pr_s_conf(void);
+static int	pr_routes(int, char **);
+static int	pr_arp(int, char **);
+static int	pr_sadb(int, char **);
+static int	pr_stats(int, char **);
+static int	pr_bgp(int, char **);
+static int	pr_ospf(int, char **);
+static int	pr_rip(int, char **);
+static int	pr_dvmrp(int, char **);
+static int	pr_relay(int, char **);
+static int	pr_dhcp(int, char **);
+static int	pr_conf(int, char **);
+static int	pr_s_conf(int, char **);
+static int	show_hostname(int, char **);
 static int	wr_startup(void);
 static int	wr_conf(char *);
-static int	show_help(void);
+static int	show_help(int, char **);
 static int	ip_help(void);
+static int	flush_pf(char *);
 static int	flush_help(void);
 static int	flush_line(char *);
 static int	flush_ip_routes(void);
 static int	flush_arp_cache(void);
 static int	flush_history(void);
-static int	flush_pfall(void);
-static int	flush_pfnat(void);
-static int	flush_pfqueue(void);
-static int	flush_pfrules(void);
-static int	flush_pfstates(void);
-static int	flush_pfstats(void);
-static int	flush_pftables(void);
 static int	int_help(void);
 static int	el_burrito(EditLine *, int, char **);
 static void	makeargv(int);
@@ -154,7 +144,6 @@ static int	ping(int, char*[]);
 static int	traceroute(int, char*[]);
 static int	ssh(int, char*[]);
 static int	telnet(int, char*[]);
-static int	pr_rt_stats(void);
 static void	p_argv(int, char **);
 static int	notvalid(void);
 static int 	reload(void);
@@ -177,24 +166,18 @@ quit(void)
  */
 
 static Menu showlist[] = {
-	{ "hostname",	"Router hostname",	0, 0, hostname },
+	{ "hostname",	"Router hostname",	0, 0, show_hostname },
 	{ "interface",	"Interface config",	0, 1, show_int },
 	{ "route",	"IP route table or route lookup", 0, 1, pr_routes },
 	{ "sadb",	"Security Association Database", 0, 0, pr_sadb },
 	{ "arp",	"ARP table",		0, 1, pr_arp },
-	{ "pfstats",	"PF statistics",	0, 0, pr_pf_stats },
-	{ "ipstats",	"IP statistics",	0, 0, pr_ip_stats },
-	{ "ahstats",	"AH statistics",	0, 0, pr_ah_stats },
-	{ "espstats",	"ESP statistics",	0, 0, pr_esp_stats },
-	{ "tcpstats",	"TCP statistics",	0, 0, pr_tcp_stats },
-	{ "udpstats",	"UDP statistics",	0, 0, pr_udp_stats },
-	{ "icmpstats",	"ICMP statistics",	0, 0, pr_icmp_stats },
-	{ "igmpstats",	"IGMP statistics",	0, 0, pr_igmp_stats },
-	{ "ipcompstats","IPCOMP statistics",	0, 0, pr_ipcomp_stats },
-	{ "rtstats",	"Routing statistics",	0, 0, pr_rt_stats },
-	{ "carpstats",	"CARP statistics",	0, 0, pr_carp_stats },
-	{ "pfsyncstats", "pfsync statistics",	0, 0, pr_pfsync_stats },
-	{ "mbufstats",	"Memory management statistics",	0, 0, pr_mbuf_stats },
+	{ "stats",	"Kernel statistics",	0, 1, pr_stats },
+	{ "bgp",	"BGP information",	0, 4, pr_bgp },
+	{ "ospf",	"OSPF information",	0, 3, pr_ospf },
+	{ "rip",	"RIP information",	0, 3, pr_rip },
+	{ "dvmrp",	"DVMRP information",	0, 2, pr_dvmrp },
+	{ "relay",	"Relay server",		0, 1, pr_relay },
+	{ "dhcp",	"DHCP server",		0, 1, pr_dhcp },
 	{ "monitor",	"Monitor routing/arp table changes", 0, 0, monitor },
 	{ "ap",		"Wireless access points", 1, 1, wi_printaplist },
 	{ "version",	"Software information",	0, 0, version },
@@ -205,9 +188,6 @@ static Menu showlist[] = {
 	{ "help",	0,			0, 0, show_help },
 	{ 0, 0, 0, 0, 0 }
 };
-
-#define GETSHOW(name)	((Menu *) genget(name, (char **) showlist, \
-			    sizeof(Menu)))
 
 static int
 showcmd(int argc, char **argv)
@@ -223,7 +203,7 @@ showcmd(int argc, char **argv)
 	/*
 	 * Validate show argument
 	 */
-	s = GETSHOW(argv[1]);
+	s = (Menu *) genget(argv[1], (char **) showlist, sizeof(Menu));
 	if (s == 0) {
 		printf("%% Invalid argument %s\n", argv[1]);
 		return 0;
@@ -238,14 +218,13 @@ showcmd(int argc, char **argv)
 		return 0;
 	}
 	if (s->handler)	/* As if there was something else we do ? */
-		success = (*s->handler)((s->maxarg > 0) ? argv[2] : 0,
-		    (s->maxarg > 1) ? argv[3] : 0);
+		success = (*s->handler)(argc, argv);
 
 	return(success);
 }
 
 static int
-show_help(void)
+show_help(int argc, char **argv)
 {
 	Menu *s; /* pointer to current command */
 	u_int z = 0;
@@ -383,21 +362,12 @@ static Menu flushlist[] = {
 	{ "bridge-dyn",	"Dynamically learned bridge addresses", 1, 1, flush_bridgedyn },
 	{ "bridge-all",	"Dynamic and static bridge addresses", 1, 1, flush_bridgeall },
 	{ "bridge-rule", "Layer 2 filter rules for a bridge member port", 2, 2, flush_bridgerule },
-	{ "pf",		"pf NAT/filter/queue rules, states, tables", 1, 1, flush_pfall },
-	{ "pf-nat",	"pf NAT rules only", 	0, 0, flush_pfnat },
-	{ "pf-queue",	"pf queue rules only",	0, 0, flush_pfqueue },
-	{ "pf-rules",	"pf filter rules only",	0, 0, flush_pfrules },
-	{ "pf-states",	"pf NAT/filter states",	0, 0, flush_pfstates },
-	{ "pf-stats",	"pf statistics",	0, 0, flush_pfstats },
-	{ "pf-tables",	"pf tables",		0, 0, flush_pftables },
+	{ "pf",		"pf NAT/filter/queue rules, states, tables", 0, 1, flush_pf },
 	{ "history",	"Command history",	0, 0, flush_history },
 	{ "?",		"Options",		0, 0, flush_help },
 	{ "help",	0,			0, 0, flush_help },
 	{ 0, 0, 0, 0, 0 }
 };
-
-#define GETFLUSH(name) ((Menu *) genget(name, (char **) flushlist, \
-			   sizeof(Menu)))
 
 static int
 flushcmd(int argc, char **argv)
@@ -412,7 +382,7 @@ flushcmd(int argc, char **argv)
 	/*
 	 * Validate flush argument
 	 */
-	f = GETFLUSH(argv[1]);
+	f = (Menu *) genget(argv[1], (char **)flushlist, sizeof(Menu));
 	if (f == 0) {
 		printf("%% Invalid argument %s\n", argv[1]);
 		return 0;
@@ -536,9 +506,6 @@ static struct intlist Intlist[] = {
 	{ "help",	0,					int_help, 2 },
 	{ 0, 0, 0, 0 }
 };
-
-#define GETINT(name)	((struct intlist *) genget(name, (char **) Intlist, \
-			    sizeof(struct intlist)))
 
 /*
  * a big command input loop for interface mode
@@ -682,9 +649,11 @@ interface(int argc, char **argv, char *modhvar)
 			margc = argc;
 		}
 		if (NO_ARG(margv[0]))
-			i = GETINT(margv[1]);
+			i = (struct intlist *) genget(margv[1], (char **)
+			    Intlist, sizeof(struct intlist));
 		else
-			i = GETINT(margv[0]);
+			i = (struct intlist *) genget(margv[0], (char **)
+			    Intlist, sizeof(struct intlist));
 		if (Ambiguous(i)) {
 			printf("%% Ambiguous command\n");
 		} else if (i == 0) {
@@ -812,7 +781,6 @@ static Command cmdtab[] = {
 	{ "dhcp",	dhcphelp,	dhcpctl,	1, 0, 0, 1, 1 },
 	{ "snmp",	snmphelp,	snmpctl,	1, 0, 0, 1, 1 },
 	{ "ntp",	ntphelp,	ntpctl,		1, 0, 0, 1, 1 },
-	{ "quit",	quithelp,	quit,		0, 0, 0, 0, 0 },
 	{ "ping",	pinghelp,	ping,		0, 0, 0, 0, 0 },
 	{ "traceroute", tracerthelp,	traceroute,	0, 0, 0, 0, 0 },
 	{ "ssh",	sshhelp,	ssh,		0, 0, 0, 0, 0 },
@@ -825,6 +793,7 @@ static Command cmdtab[] = {
 	{ "who",	whohelp,	who,		0, 0, 0, 0, 0 },
 	{ "!",		shellhelp,	shell,		1, 0, 0, 0, 0 },
 	{ "?",		helphelp,	help,		0, 0, 0, 0, 0 },
+	{ "quit",	quithelp,	quit,		0, 0, 0, 0, 0 },
 	{ "help",	0,		help,		0, 0, 0, 0, 0 },
 	{ 0,		0,		0,		0, 0, 0, 0, 0 }
 };
@@ -912,7 +881,7 @@ command(int top)
 	if (!top) {
 		putchar('\n');
 	} else {
-		(void) signal(SIGINT, SIG_IGN);
+		(void) signal(SIGTSTP, SIG_IGN);
 		(void) signal(SIGQUIT, SIG_IGN);
 	}
 	for (;;) {
@@ -1045,11 +1014,17 @@ hostname(int argc, char *argv[])
 	if (argc == 1) {
 		if (sethostname(*argv, strlen(*argv)))
 			printf("%% sethostname: %s\n", strerror(errno));
-	} else {
-		if (gethostname(hbuf, sizeof(hbuf)))
-			printf("%% gethostname: %s\n", strerror(errno));
-		printf("%% %s\n", hbuf);
         }
+	return 0;
+}
+
+int show_hostname(int argc, char *argv[])
+{
+	if (gethostname(hbuf, sizeof(hbuf)))
+		printf("%% gethostname: %s\n", strerror(errno));
+	else
+		printf("%% %s\n", hbuf);
+
 	return 0;
 }
 
@@ -1344,69 +1319,56 @@ flush_history(void)
 /*
  * pf toilet flusher
  */
-
 int
-flush_pfall(void)
+flush_pf(char *arg)
 {
-	printf("%% Flushing all pf filter rules, NAT rules, queue rules,"
-	    "   address tables, states, and statistics\n");
-	cmdarg(PFCTL, "-Fall");
-
-	return(0);
-}
-
-int
-flush_pfnat(void)
-{
-	printf("%% Flushing pf NAT rules\n");
-	cmdarg(PFCTL, "-Fnat");
-
-	return(0);
-}
-
-int
-flush_pfqueue(void)
-{
-	printf("%% Flushing pf queue rules\n");
-	cmdarg(PFCTL, "-Fqueue");
-
-	return(0);
-}
-
-int
-flush_pfrules(void)
-{
-	printf("%% Flushing pf filter rules\n");
-	cmdarg(PFCTL, "-Frules");
-
-	return(0);
-}
-
-int
-flush_pfstates(void)
-{
-	printf("%% Flushing pf NAT/filter states\n");
-	cmdarg(PFCTL, "-Fstate");
-
-	return(0);
-}
-
-int
-flush_pfstats(void)
-{
-	printf("%% Flushing pf statistics\n");
-	cmdarg(PFCTL, "-Finfo");
-
-	return(0);
-}
-
-int
-flush_pftables(void)
-{
-	printf("%% Flushing pf address tables\n");
-	cmdarg(PFCTL, "-FTables");
-
-	return(0);
+	if (arg != NULL && arg[0] != '?') {
+		if (CMP_ARG(arg, "a")) {
+			printf("%% Flushing all pf filter rules, NAT rules, "
+			    "queue rules, address tables, states, and "
+			    "statistics\n");
+			cmdarg(PFCTL, "-Fall");
+			return(0);
+		}
+		if (CMP_ARG(arg, "n")) {
+			printf("%% Flushing pf NAT rules\n");
+			cmdarg(PFCTL, "-Fnat");
+			return(0);
+		}
+		if (CMP_ARG(arg, "q")) {
+			printf("%% Flushing pf queue rules\n");
+			cmdarg(PFCTL, "-Fqueue");
+			return(0);
+		}
+		if (CMP_ARG(arg, "f")) {
+			printf("%% Flushing pf filter rules\n");
+			cmdarg(PFCTL, "-Frules");
+			return(0);
+		}
+		if (CMP_ARG(arg, "state")) {
+			printf("%% Flushing pf NAT/filter states\n");
+			cmdarg(PFCTL, "-Fstate");
+			return(0);
+		}
+		if (CMP_ARG(arg, "stats")) {
+			printf("%% Flushing pf statistics\n");
+			cmdarg(PFCTL, "-Finfo");
+			return(0);
+		}
+		if (CMP_ARG(arg, "t")) {
+			printf("%% Flushing pf address tables\n");
+			cmdarg(PFCTL, "-FTables");
+			return(0);
+		}
+	}
+	printf("%% flush pf all\n");
+	printf("%% flush pf nat\n");
+	printf("%% flush pf queue\n");
+	printf("%% flush pf filter\n");
+	printf("%% flush pf states\n");
+	printf("%% flush pf stats\n");
+	printf("%% flush pf tables\n");
+	return(1);
 }
 
 /*
@@ -1696,7 +1658,7 @@ flush_arp_cache(void)
  * Show wrappers
  */
 int
-pr_conf(void)
+pr_conf(int argc, char **argv)
 {
 	if (priv != 1) {
 		printf ("%% Privilege required\n");
@@ -1717,7 +1679,7 @@ pr_conf(void)
  * Show startup config
  */
 int
-pr_s_conf(void)
+pr_s_conf(int argc, char **argv)
 {
 	int ret;
 
@@ -1732,32 +1694,40 @@ pr_s_conf(void)
 }
 
 int
-pr_routes(char *route)
+pr_routes(int argc, char **argv)
 {
-	if (route == 0)
+	switch(argc) {
+	case 2:
 		/* show primary routing table */
 		p_rttables(AF_INET, 0, 0);
-	else
+		break;
+	case 3:
 		/* show a specific route */
-		show_route(route);
+		show_route(argv[2]);
+		break;
+	}
 		
 	return 0;
 }
 
 int
-pr_arp(char *arp)
+pr_arp(int argc, char **argv)
 {
-	if (arp == 0)
+	switch(argc) {
+	case 2:
 		/* show arp table */
 		p_rttables(AF_INET, 0, RTF_LLINFO);
-	else
+		break;
+	case 3:
 		/* specific address */
-		arpget(arp);
+		arpget(argv[2]);
+		break;
+	}
 	return 0;
 }
 
 int
-pr_sadb(void)
+pr_sadb(int argc, char **argv)
 {
 	p_rttables(PF_KEY, 0, 0);
 
@@ -1765,93 +1735,300 @@ pr_sadb(void)
 }
 
 int
-pr_rt_stats(void)
+pr_stats(int argc, char **argv)
 {
-	rt_stats();
-	return 0;
+	if (argc == 3 && argv[2][0] != '?') {
+		if (CMP_ARG(argv[2], "pfsy")) {
+			pfsync_stats();
+			return(0);
+		}
+		if (CMP_ARG(argv[2], "pf")) {
+			printf("%% pf statistics:\n");
+			cmdarg(PFCTL, "-sinfo");  
+			return(0);
+		}
+		if (CMP_ARG(argv[2], "ip")) {
+			ip_stats();
+			return(0);
+		}
+		if (CMP_ARG(argv[2], "a")) {
+			ah_stats();
+			return(0);
+		}
+		if (CMP_ARG(argv[2], "e")) {
+			esp_stats();
+			return(0);
+		}
+		if (CMP_ARG(argv[2], "t")) {
+			tcp_stats();
+			return(0);
+		}
+		if (CMP_ARG(argv[2], "u")) {
+			udp_stats();
+			return(0);
+		}
+		if (CMP_ARG(argv[2], "ic")) {
+			icmp_stats();
+			return(0);
+		}
+		if (CMP_ARG(argv[2], "ig")) {
+			igmp_stats();
+			return(0);
+		}
+		if (CMP_ARG(argv[2], "ipc")) {
+			ipcomp_stats();
+			return(0);
+		}
+		if (CMP_ARG(argv[2], "r")) {
+			rt_stats();
+			return(0);
+		}
+		if (CMP_ARG(argv[2], "c")) {
+			carp_stats();
+			return(0);
+		}
+		if (CMP_ARG(argv[2], "m")) {
+			mbpr();
+			return(0);
+		}
+		printf("%% argument %s not recognized\n", argv[2]);
+		return(1);
+	}
+	printf("%% show stats pf\n");
+	printf("%% show stats ip\n");
+	printf("%% show stats ah\n");
+	printf("%% show stats esp\n");
+	printf("%% show stats tcp\n");
+	printf("%% show stats udp\n");
+	printf("%% show stats icmp\n");
+	printf("%% show stats igmp\n");
+	printf("%% show stats ipcomp\n");
+	printf("%% show stats route\n");
+	printf("%% show stats carp\n");
+	printf("%% show stats pfsync\n");
+	printf("%% show stats mbuf\n");
+	return(1);
 }
 
 int
-pr_carp_stats(void)
+pr_bgp(int argc, char **argv)
 {
-	carp_stats();
-	return 0;
+	if (argc == 3 && argv[2][0] != '?') {	/* network */
+		if (CMP_ARG(argv[2], "a")) {
+			char *args[] = { BGPCTL, "network", "show", '\0' };
+			cmdargs(BGPCTL, args);
+                        return(0);
+                }
+		if (CMP_ARG(argv[2], "i")) {	/* interfaces */
+			char *args[] = { BGPCTL, "show", "interfaces", '\0' };
+			cmdargs(BGPCTL, args);
+			return(0);
+		}
+		if (CMP_ARG(argv[2], "nex")) {	/* nexthop */
+			char *args[] = { BGPCTL, "show", "nexthop", '\0' };
+			cmdargs(BGPCTL, args);
+			return(0);
+		}
+		if (CMP_ARG(argv[2], "s")) {	/* summary */
+			char *args[] = { BGPCTL, "show", "summary", '\0' };
+			cmdargs(BGPCTL, args);
+			return(0);
+		}
+		printf("%% argument %s not recognized\n", argv[2]);
+		return(1);
+	}
+	if (argc > 3 && CMP_ARG(argv[2], "r")) { /* rib ......... */
+		if (argc == 4) {
+			char *args[] = { BGPCTL, "show", "rib", argv[3], '\0' };
+			cmdargs(BGPCTL, args);
+			return(0);
+		}
+		if (argc == 5) {
+			char *args[] = { BGPCTL, "show", "rib", argv[3], argv[4], '\0' };
+			cmdargs(BGPCTL, args);
+			return(0);
+		}
+		if (argc == 6) {
+			char *args[] = { BGPCTL, "show", "rib", argv[3], argv[4], argv[5], '\0' };
+			cmdargs(BGPCTL, args);
+			return(0);
+		}
+		printf("%% invalid number of arguments\n");
+		return(1);
+	}
+	if (argc == 4) {
+		if (CMP_ARG(argv[2], "f")) {    /* fib ... */
+			char *args[] = { BGPCTL, "show", "fib", argv[3], '\0' };
+			cmdargs(BGPCTL, args);
+			return(0);
+		}
+		if (CMP_ARG(argv[2], "s") && CMP_ARG(argv[3], "t")) { /* summary terse */
+			char *args[] = { BGPCTL, "show", "summary", "terse", '\0' };
+			cmdargs(BGPCTL, args);
+			return(0);
+		}
+		printf("%% argument %s not recognized\n", argv[2]);
+		return(1);
+	}
+	if (argc == 5) {
+		if (CMP_ARG(argv[2], "nei")) {  /* neighbor ... ... */
+			char *args[] = { BGPCTL, "show", "neighbor", argv[3], argv[4], '\0' };
+			cmdargs(BGPCTL, args);
+			return(0);
+		}
+	}
+	printf("%% show bgp nexthop\n");
+	printf("%% show bgp announced\n");
+	printf("%% show bgp fib <IP>\n");
+	printf("%% show bgp fib connected|static|bgp|nexthop\n");
+	printf("%% show bgp rib [detail|inet|inet6|in|out] <IP>[/len] [all]\n");
+	printf("%% show bgp rib [detail|inet|inet6|in|out] as|source-as|transit-as|peer-as <as>\n");
+	printf("%% show bgp rib [detail|inet|inet6|in|out] empty-as\n");
+	printf("%% show bgp rib [detail|inet|inet6|in|out] community <community>\n");
+	printf("%% show bgp rib summary|memory\n");
+	printf("%% show bgp summary [terse]\n");
+	printf("%% show bgp interfaces\n");
+	printf("%% show bgp neighbor <peer> [messages|terse|timers]\n");
+	return(1);
 }
 
 int
-pr_pfsync_stats(void)
+pr_ospf(int argc, char **argv)
 {
-	pfsync_stats();
-	return 0;
-}
-
-int 
-pr_pf_stats(void)
-{
-	printf("%% pf statistics:\n");
-	cmdarg(PFCTL, "-sinfo");
-	return 0;
-}
-
-int
-pr_ip_stats(void)
-{
-	ip_stats();
-	return 0;
+	if (argc == 3 && argv[2][0] != '?') {
+		if (CMP_ARG(argv[2], "s")) {
+			char *args[] = { BGPCTL, "network", "show", '\0' };
+			cmdargs(BGPCTL, args);
+		}
+		printf("%% argument %s not recognized\n", argv[2]);
+		return(1);
+	}
+	printf("%% show ospf nexthop\n");
+	return(1);
 }
 
 int
-pr_ah_stats(void)
+pr_rip(int argc, char **argv)
 {
-	ah_stats();
-	return 0;
+	if (argc == 3 && argv[2][0] != '?') {
+		printf("%% argument %s not recognized\n", argv[2]);
+		return(1);
+	}
+	printf("%% show rip nexthop\n");
+	return(1);
 }
 
 int
-pr_esp_stats(void)
+pr_dvmrp(int argc, char **argv)
 {
-	esp_stats();
-	return 0;
+	if (argc == 3 && argv[2][0] != '?') {
+		if (CMP_ARG(argv[2], "ig")) {
+			char *args[] = { DVMRPCTL, "show", "igmp", '\0' };
+			cmdargs(DVMRPCTL, args);
+			return(0);
+		}
+		if (CMP_ARG(argv[2], "in")) {
+			char *args[] = { DVMRPCTL, "show", "interfaces", '\0' };
+			cmdargs(DVMRPCTL, args);
+			return(0);
+		}
+		if (CMP_ARG(argv[2], "m")) {
+			char *args[] = { DVMRPCTL, "show", "mfc", NULL, '\0' };
+			if (verbose)
+				args[3] = "detail";
+			cmdargs(DVMRPCTL, args);
+			return(0);
+		}
+		if (CMP_ARG(argv[2], "n")) {
+			char *args[] = { DVMRPCTL, "show", "neighbor", NULL, '\0' };
+			if (verbose)
+				args[3] = "detail";
+			cmdargs(DVMRPCTL, args);
+			return(0);
+		}
+		if (CMP_ARG(argv[2], "r")) {
+			char *args[] = { DVMRPCTL, "show", "rib", NULL, '\0' };
+			if (verbose)
+				args[3] = "detail";
+			cmdargs(DVMRPCTL, args);
+			return(0);
+		}
+		if (CMP_ARG(argv[2], "s")) {
+			char *args[] = { DVMRPCTL, "show", "summary", '\0' };
+			cmdargs(DVMRPCTL, args);
+			return(0);
+		}
+		printf("%% argument %s not recognized\n", argv[2]);
+		return(1);
+	}
+	if (argc == 4) {
+		if (CMP_ARG(argv[2], "in") && argv[3] != NULL) {
+			char *args[] = { DVMRPCTL, "show", "interfaces",
+			    argv[3], '\0' };
+			cmdargs(DVMRPCTL, args);
+			return(0);
+		}
+	}
+	printf("%% show dvmrp interfaces [interface]\n");
+	printf("%% show dvmrp igmp\n");
+	printf("%% show dvmrp mfc\n");
+	printf("%% show dvmrp neighbor\n");
+	printf("%% show dvmrp rib\n");
+	printf("%% show dvmrp summary\n");
+	return(1);
 }
 
 int
-pr_tcp_stats(void)
+pr_relay(int argc, char **argv)
 {
-	tcp_stats();
-	return 0;
+	if (argc == 3 && argv[2][0] != '?') {
+		if (CMP_ARG(argv[2], "h")) {
+			char *args[] = { RELAYCTL, "show", "hosts", '\0' };
+			cmdargs(RELAYCTL, args);
+			return(0);
+		}
+		if (CMP_ARG(argv[2], "r")) {
+			char *args[] = { RELAYCTL, "show", "redirects", '\0' };
+			cmdargs(RELAYCTL, args);
+			return(0);
+		}
+		if (CMP_ARG(argv[2], "st")) {
+			char *args[] = { RELAYCTL, "show", "relays", '\0' };
+			cmdargs(RELAYCTL, args);
+			return(0);
+		}
+		if (CMP_ARG(argv[2], "se")) {
+			char *args[] = { RELAYCTL, "show", "sessions", '\0' };
+			cmdargs(RELAYCTL, args);
+			return(0);
+		}
+		if (CMP_ARG(argv[2], "su")) {
+			char *args[] = { RELAYCTL, "show", "summary", '\0' };
+			cmdargs(RELAYCTL, args);
+			return(0);
+		}
+		printf("%% argument %s not recognized\n", argv[2]);
+		return(1);
+	}
+	printf("%% show relay hosts\n");
+	printf("%% show relay redirects\n");
+	printf("%% show relay status\n");
+	printf("%% show relay sessions\n");
+	printf("%% show relay summary\n");
+	return(1);
 }
 
 int
-pr_udp_stats(void)
+pr_dhcp(int argc, char **argv)
 {
-	udp_stats();
-	return 0;
-}
-
-int
-pr_icmp_stats(void)
-{
-	icmp_stats();
-	return 0;
-}
-
-int
-pr_igmp_stats(void)
-{
-	igmp_stats();
-	return 0;
-}
-
-int
-pr_ipcomp_stats(void)
-{
-	ipcomp_stats();
-	return 0;
-}
-
-int
-pr_mbuf_stats(void)
-{
-	mbpr();
-	return 0;
+	if (argc == 3 && argv[2][0] != '?') {
+		if (CMP_ARG(argv[2], "l")) {
+			more(DHCPDB);
+			return(0);
+		}
+		printf("%% argument %s not recognized\n", argv[2]);
+		return(1);
+	}
+	printf("%% show dhcp leases\n");
+	return(1);
 }
