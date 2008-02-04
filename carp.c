@@ -201,7 +201,7 @@ intcnode(char *ifname, int ifs, int argc, char **argv)
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 
 	errno = 0;
-	vhid = strtonum(argv[0], 0, 255, &errmsg);
+	vhid = strtonum(argv[0], 1, 255, &errmsg);
 	if (errmsg) {
 		printf("%% vhid value out of range: %s\n", errmsg);
 		return(0);
