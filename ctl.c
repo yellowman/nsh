@@ -1,4 +1,4 @@
-/* $nsh: ctl.c,v 1.8 2008/01/29 06:17:35 chris Exp $ */
+/* $nsh: ctl.c,v 1.9 2008/02/04 02:49:46 chris Exp $ */
 /*
  * Copyright (c) 2008
  *      Chris Cappuccio.  All rights reserved.
@@ -50,57 +50,94 @@
 #define	SNMPD		"/usr/sbin/snmpd"
 #define NTPD		"/usr/sbin/ntpd"
 
-#define	PFUSAGE	"%% pf edit\n%% pf reload\n%% pf enable\n%% pf disable\n"
-#define BGPUSAGE "%% bgp edit\n%% bgp reload\n%% bgp enable\n%% bgp disable\n"
-#define OSPFUSAGE "%% ospf edit\n%% ospf reload\n%% ospf enable\n%% ospf disable\n"
-#define RIPUSAGE "%% rip edit\n%% rip reload\n%% rip enable\n%% rip disable\n"
-#define DVMRPUSAGE "%% dvmrp edit\n%% dvmrp enable\n%% dvmrp disable\n"
-#define RELAYUSAGE "%% relay edit\n%% relay reload\n%% relay enable\n%% relay disable\n%% relay host disable <host|id>\n%% relay host enable <host|id>\n%% relay redirect disable <host|id>\n%% relay redirect enable <host|id>\n%% relay table disable <name|id>\n%% relay table enable <name|id>\n%% relay poll\n%% relay monitor\n"
-#define IPSECUSAGE "%% ipsec edit\n%% ipsec reload\n%% ipsec enable\n%% ipsec disable\n"
-#define DHCPUSAGE "%% dhcp edit\n%% dhcp enable\n%% dhcp disable\n"
-#define SASYNCUSAGE "%% sasync edit\n%% sasync enable\n%% sasync disable\n"
-#define SNMPUSAGE "%% snmp edit\n%% snmp enable\n%% snmp disable\n"
-#define NTPUSAGE "%% ntp edit\n%% ntp enable\n%% ntp disable\n"
+struct ctl {
+	char *name;
+	char *help;
+	int handler_action;
+};
 
-char *setup (char *, char *, int, char **, char *, char *, int);
+char *setup (char *, char *, int, char **, struct ctl *, char *, int);   
 void call_editor(char *, char **, char *, char *);
 int rule_writeline(char *, int, char **);
 int acq_lock(char *);
 void rls_lock(int);
 void flag_x(char *, int);
 
+#define CTL_ENABLE 0
+#define CTL_DISABLE 1
+#define CTL_EDIT 2
+static struct ctl ctl_edds[] = {
+	{ "enable",	"enable service",	CTL_ENABLE },
+	{ "disable",	"disable service",	CTL_DISABLE },
+	{ "edit",	"edit configuration",	CTL_EDIT },
+	{ 0,		0,			0 }
+};
+
+#define CTL_RELOAD 3
+static struct ctl ctl_eddrs[] = {
+	{ "enable",	"enable service",	CTL_ENABLE },
+	{ "disable",	"disable service",	CTL_DISABLE },
+	{ "edit",	"edit configuration",	CTL_EDIT },
+	{ "reload",	"reload configuration",	CTL_RELOAD },
+	{ 0,		0,			0 }
+};
+
+#define CTL_HOST 4
+#define CTL_TABLE 5
+#define CTL_REDIRECT 6
+#define CTL_MONITOR 7
+#define CTL_POLL 8
+static struct ctl ctl_relay[] = {
+	{ "enable",	"enable service",	CTL_ENABLE },
+        { "disable",	"disable service",	CTL_DISABLE },
+        { "edit",	"edit configuration",	CTL_EDIT },
+        { "reload",	"reload configuration",	CTL_RELOAD },
+	{ "host",	"per-host control",	CTL_HOST },
+	{ "table",	"per-table control",	CTL_TABLE },
+	{ "redirect",	"per-redirect control",	CTL_REDIRECT },
+	{ "monitor",	"monitor mode",		CTL_MONITOR },
+	{ "poll",	"poll mode",		CTL_POLL },
+	{ 0,		0,			0 }
+};
+
 int
 pfctl(int argc, char **argv, char *modhvar)
 {
 	char *aarg = argv[0];
+	char *edit_args[] = { PFCTL, "-nf", PFCONF_TEMP, '\0' };
+	char *reload_args[] = { PFCTL, "-f", PFCONF_TEMP, '\0' };
+	struct ctl *x;
 
-	aarg = setup(modhvar, aarg, argc, argv, PFUSAGE, PFCONF_TEMP, 2);
+	aarg = setup(modhvar, aarg, argc, argv, ctl_eddrs, PFCONF_TEMP, 2);
 	if (aarg == NULL)
 		return(0);
 
-	if (CMP_ARG(aarg, "ed")) {	/* edit */
-		char *args[] = { PFCTL, "-nf", PFCONF_TEMP, '\0' };
-
-		call_editor("PF", args, PFCONF_TEMP, PFCTL);
-		return(0);
+	x = (struct ctl *) genget(aarg, (char **)ctl_eddrs,
+	    sizeof(struct ctl));
+	if (x == 0) {
+		printf("%% Invalid argument %s\n", aarg);
+		return 0;
+	} else if (Ambiguous(x)) {
+		printf("%% Ambiguous argument %s\n", aarg);
+		return 0;
 	}
-	if (CMP_ARG(aarg, "r")) {	/* reload */
-		char *args[] = { PFCTL, "-f", PFCONF_TEMP, '\0' };
 
-		cmdargs(PFCTL, args);
-		return(0);
-	}
-	if (CMP_ARG(aarg, "en")) {	/* enable */
+	switch (x->handler_action) {
+	case CTL_EDIT:
+		call_editor("PF", edit_args, PFCONF_TEMP, PFCTL);
+		break;
+	case CTL_RELOAD:
+		cmdargs(PFCTL, reload_args);
+		break;
+	case CTL_ENABLE:
 		cmdarg(PFCTL, "-e");
 		flag_x(PFCONF_TEMP, ENABLE);
-		return(0);
-	}
-	if (CMP_ARG(aarg, "d")) {	/* disable */
+		break;
+	case CTL_DISABLE:
 		cmdarg(PFCTL, "-d");
 		flag_x(PFCONF_TEMP, DISABLE);
-		return(0);
+		break;
 	}
-	printf("%% %s: %s\n", INVALID, argv[1]);
 
 	return(0);
 }
@@ -109,34 +146,40 @@ int
 ospfctl(int argc, char **argv, char *modhvar)
 {
 	char *aarg = argv[0];
+	char *edit_args[] = { OSPFD, "-nf", OSPFCONF_TEMP, '\0' };
+	char *enable_args[] = { OSPFD, "-f", OSPFCONF_TEMP, '\0' };
+	struct ctl *x;
 
-	aarg = setup(modhvar, aarg, argc, argv, OSPFUSAGE, OSPFCONF_TEMP, 2);
+	aarg = setup(modhvar, aarg, argc, argv, ctl_eddrs, OSPFCONF_TEMP, 2);
 	if (aarg == NULL)
 		return(0);
 
-	if (CMP_ARG(aarg, "ed")) {	/* edit */
-		char *args[] = { OSPFD, "-nf", OSPFCONF_TEMP, '\0' };
-
-		call_editor("OSPF", args, OSPFCONF_TEMP, OSPFD);
-		return(0);
+	x = (struct ctl *) genget(aarg, (char **)ctl_eddrs,
+	    sizeof(struct ctl));
+	if (x == 0) {
+		printf("%% Invalid argument %s\n", aarg);
+		return 0;
+	} else if (Ambiguous(x)) {
+		printf("%% Ambiguous argument %s\n", aarg);
+		return 0;
 	}
-	if (CMP_ARG(aarg, "r")) {	/* reload */
+
+	switch (x->handler_action) {
+	case CTL_EDIT:
+		call_editor("OSPF", edit_args, OSPFCONF_TEMP, OSPFD);
+		break;
+	case CTL_RELOAD:
 		cmdarg(OSPFCTL, "reload");
-		return(0);
-	}
-	if (CMP_ARG(aarg, "en")) {	/* enable */
-		char *args[] = { OSPFD, "-f", OSPFCONF_TEMP, '\0' };
-
-		cmdargs(OSPFD, args);
+		break;
+	case CTL_ENABLE:
+		cmdargs(OSPFD, enable_args);
 		flag_x(OSPFCONF_TEMP, ENABLE);
-		return(0);
-	}
-	if (CMP_ARG(aarg, "d")) {	/* disable */
+		break;
+	case CTL_DISABLE:
 		cmdarg(PKILL, "ospfd");
 		flag_x(OSPFCONF_TEMP, DISABLE);
-		return(0);
+		break;
 	}
-	printf("%% %s: %s\n", INVALID, argv[1]);
 
 	return(0);
 }
@@ -145,34 +188,40 @@ int
 bgpctl(int argc, char **argv, char *modhvar)
 {
 	char *aarg = argv[0];
+	char *edit_args[] = { BGPD, "-nf", BGPCONF_TEMP, '\0' };
+	char *enable_args[] = { BGPD, "-f", BGPCONF_TEMP, '\0' };
+	struct ctl *x;
 
-	aarg = setup(modhvar, aarg, argc, argv, BGPUSAGE, BGPCONF_TEMP, 2);
+	aarg = setup(modhvar, aarg, argc, argv, ctl_eddrs, BGPCONF_TEMP, 2);
 	if (aarg == NULL)
 		return(0);
 
-	if (CMP_ARG(aarg, "ed")) {	/* edit */
-		char *args[] = { BGPD, "-nf", BGPCONF_TEMP, '\0' };
+	x = (struct ctl *) genget(aarg, (char **)ctl_eddrs,
+	    sizeof(struct ctl));
+	if (x == 0) {
+		printf("%% Invalid argument %s\n", aarg);
+		return 0;
+	} else if (Ambiguous(x)) {
+		printf("%% Ambiguous argument %s\n", aarg);
+		return 0;
+	}
 
-		call_editor("BGP", args, BGPCONF_TEMP, BGPD);
-		return(0);
-	}
-	if (CMP_ARG(aarg, "r")) {	/* reload */
+	switch (x->handler_action) {
+	case CTL_EDIT:
+		call_editor("BGP", edit_args, BGPCONF_TEMP, BGPD);
+		break;
+	case CTL_RELOAD:
 		cmdarg(BGPCTL, "reload");
-		return(0);
-	}
-	if (CMP_ARG(aarg, "en")) {	/* enable */
-		char *args[] = { BGPD, "-f", BGPCONF_TEMP, '\0' };
-		
-		cmdargs(BGPD, args);
+		break;
+	case CTL_ENABLE:
+		cmdargs(BGPD, enable_args);
 		flag_x(BGPCONF_TEMP, ENABLE);
-		return(0);
-	}
-	if (CMP_ARG(aarg, "d")) {	/* disable */
+		break;
+	case CTL_DISABLE:
 		cmdarg(PKILL, "bgpd");
 		flag_x(BGPCONF_TEMP, DISABLE);
-		return(0);
+		break;
 	}
-	printf("%% %s: %s\n", INVALID, argv[1]);
 
 	return(0);
 }
@@ -181,34 +230,40 @@ int
 ripctl(int argc, char **argv, char *modhvar)
 {
 	char *aarg = argv[0];
+	char *edit_args[] = { RIPD, "-nf", RIPCONF_TEMP, '\0' };
+	char *enable_args[] = { RIPD, "-f", RIPCONF_TEMP, '\0' };
+	struct ctl *x;
 
-	aarg = setup(modhvar, aarg, argc, argv, RIPUSAGE, RIPCONF_TEMP, 2);
+	aarg = setup(modhvar, aarg, argc, argv, ctl_eddrs, RIPCONF_TEMP, 2);
 	if (aarg == NULL)
 		return(0);
 
-	if(CMP_ARG(aarg, "ed")) {	/* edit */
-		char *args[] = { RIPD, "-nf", RIPCONF_TEMP, '\0' };
-
-		call_editor("RIP", args, RIPCONF_TEMP, RIPD);
-		return(0);
+	x = (struct ctl *) genget(aarg, (char **)ctl_eddrs,
+	    sizeof(struct ctl));
+	if (x == 0) { 
+		printf("%% Invalid argument %s\n", aarg);
+		return 0;
+	} else if (Ambiguous(x)) {
+		printf("%% Ambiguous argument %s\n", aarg);
+		return 0;
 	}
-	if (CMP_ARG(aarg, "r")) {	/* reload */
+
+	switch (x->handler_action) {
+	case CTL_EDIT:
+		call_editor("RIP", edit_args, RIPCONF_TEMP, RIPD);
+		break;
+	case CTL_RELOAD:
 		cmdarg(RIPCTL, "reload");
-		return(0);
-	}
-	if (CMP_ARG(aarg, "en")) {	/* enable */
-		char *args[] = { RIPD, "-f", RIPCONF_TEMP, '\0' };
-
-		cmdargs(RIPD, args);
+		break;
+	case CTL_ENABLE:
+		cmdargs(RIPD, enable_args);
 		flag_x(RIPCONF_TEMP, ENABLE);
-		return(0);
-	}
-	if (CMP_ARG(aarg, "d")) {	/* disable */
+		break;
+	case CTL_DISABLE:
 		cmdarg(PKILL, "ripd");
 		flag_x(RIPCONF_TEMP, DISABLE);
-		return(0);
+		break;
 	}
-	printf("%% %s: %s\n", INVALID, argv[1]);
 
 	return(0);
 }
@@ -217,65 +272,68 @@ int
 relayctl(int argc, char **argv, char *modhvar)
 {
 	char *aarg = argv[0];
+	char *relayctl_args[] = { RELAYCTL, NULL, NULL, NULL, '\0' };
+	char *edit_args[] = { RELAYD, "-nf", RELAYCONF_TEMP, '\0' };
+	char *enable_args[] = { RELAYD, "-f", RELAYCONF_TEMP, '\0' };
+	struct ctl *x;
 
-	aarg = setup(modhvar, aarg, argc, argv, RELAYUSAGE, RELAYCONF_TEMP, 4);
+	aarg = setup(modhvar, aarg, argc, argv, ctl_relay, RELAYCONF_TEMP, 4);
 	if (aarg == NULL)
 		return(0);
 
-	if (argc == 4) {
-		char *args[] = { RELAYCTL, NULL, NULL, argv[3], '\0' };
-		if (CMP_ARG(argv[1], "h"))
-			args[1] = "host";
-		if (CMP_ARG(argv[1], "t"))
-			args[1] = "table";
-		if (CMP_ARG(argv[1], "r"))
-			args[1] = "redirect";
-		if (CMP_ARG(argv[2], "d"))
-			args[2] = "disable";
-		if (CMP_ARG(argv[2], "e"))
-			args[2] = "enable";
-		if (args[1] != NULL && args[2] != NULL) {
-			cmdargs(RELAYCTL, args);
-			return(0);
+	x = (struct ctl *) genget(aarg, (char **)ctl_relay,
+	    sizeof(struct ctl));
+	if (x == 0) { 
+		printf("%% Invalid argument %s\n", aarg);
+		return 0;
+	} else if (Ambiguous(x)) {
+		printf("%% Ambiguous argument %s\n", aarg);
+		return 0;
+	}
+
+	switch(x->handler_action) {
+	case CTL_HOST:
+	case CTL_TABLE:
+	case CTL_REDIRECT:
+		if (argc != 4) {
+			printf("%% relay %s enable|disable <name|id>\n",
+			    x->name);
+			return 0;
 		}
-	}
-	if (argc != 2) {		/* could be 3 args.... */
-		printf(RELAYUSAGE);
-		return(0);
-	}
-	if (CMP_ARG(aarg, "m")) {	/* monitor */
-		char *args[] = { RELAYCTL, "monitor", '\0' };
-		cmdargs(RELAYCTL, args);
-		return(0);
-	}
-	if (CMP_ARG(aarg, "p")) {	/* poll */
-		char *args[] = { RELAYCTL, "poll", '\0' };
-		cmdargs(RELAYCTL, args);
-		return(0);
-	}
-	if (CMP_ARG(aarg, "ed")) {	/* edit */
-		char *args[] = { RELAYD, "-nf", RELAYCONF_TEMP, '\0' };
-
-		call_editor("Relay", args, RELAYCONF_TEMP, RELAYD);
-		return(0);
-	}
-	if (CMP_ARG(aarg, "r")) {	/* reload */
+		relayctl_args[1] = x->name;
+		relayctl_args[3] = argv[3];
+		if (isprefix(argv[2], "disable"))
+			relayctl_args[2] = "disable";
+		if (isprefix(argv[2], "enable"))
+			relayctl_args[2] = "enable";
+		if (relayctl_args[1] != NULL && relayctl_args[2] != NULL) {
+			cmdargs(RELAYCTL, relayctl_args);
+			return(0);
+		} else
+			printf("%% relay %s enable|disable <name|id>\n",
+			    x->name);
+		break;
+	case CTL_MONITOR:
+		cmdarg(RELAYCTL, "monitor");
+		break;
+	case CTL_POLL:
+		cmdarg(RELAYCTL, "poll");
+		break;
+	case CTL_EDIT:
+		call_editor("Relay", edit_args, RELAYCONF_TEMP, RELAYD);
+		break;
+	case CTL_RELOAD:
 		cmdarg(RELAYCTL, "reload");
-		return(0);
-	}
-	if (CMP_ARG(aarg, "en")) {	/* enable */
-		char *args[] = { RELAYD, "-f", RELAYCONF_TEMP, '\0' };
-
-		cmdargs(RELAYD, args);
+		break;
+	case CTL_ENABLE:
+		cmdargs(RELAYD, enable_args);
 		flag_x(RELAYCONF_TEMP, ENABLE);
-		return(0);
-	}
-	if (CMP_ARG(aarg, "d")) {	/* disable */
+		break;
+	case CTL_DISABLE:
 		cmdarg(PKILL, "relayd");
 		flag_x(RELAYCONF_TEMP, DISABLE);
-		return(0);
+		break;
 	}
-	printf("%% %s: %s\n", INVALID, argv[1]);
 
 	return(0);
 }
@@ -284,33 +342,40 @@ int
 ipsecctl(int argc, char **argv, char *modhvar)
 {
 	char *aarg = argv[0];
+	char *edit_args[] = { IPSECCTL, "-nf", IPSECCONF_TEMP, '\0' };
+	char *reload_args[] = { IPSECCTL, "-f", IPSECCONF_TEMP, '\0' };
+	struct ctl *x;
 
-	aarg = setup(modhvar, aarg, argc, argv, IPSECUSAGE, IPSECCONF_TEMP, 2);
+	aarg = setup(modhvar, aarg, argc, argv, ctl_eddrs, IPSECCONF_TEMP, 2);
 	if (aarg == NULL)
 		return(0);
 
-	if (CMP_ARG(aarg, "ed")) {	/* edit */
-		char *args[] = { IPSECCTL, "-nf", IPSECCONF_TEMP, '\0' };
-		call_editor("IPsec", args, IPSECCONF_TEMP, IPSECCTL);
-		return(0);
+	x = (struct ctl *) genget(aarg, (char **)ctl_eddrs,
+	    sizeof(struct ctl));
+	if (x == 0) { 
+		printf("%% Invalid argument %s\n", aarg);
+		return 0;
+	} else if (Ambiguous(x)) {
+		printf("%% Ambiguous argument %s\n", aarg);
+		return 0;
 	}
-	if (CMP_ARG(aarg, "r")) {	/* reload */
-		char *args[] = { IPSECCTL, "-f", IPSECCONF_TEMP, '\0' };
 
-		cmdargs(IPSECCTL, args);
-		return(0);
-	}
-	if (CMP_ARG(aarg, "en")) {	/* enable */
+	switch (x->handler_action) {
+	case CTL_EDIT:
+		call_editor("IPsec", edit_args, IPSECCONF_TEMP, IPSECCTL);
+		break;
+	case CTL_RELOAD:
+		cmdargs(IPSECCTL, reload_args);
+		break;
+	case CTL_ENABLE:
 		cmdarg(ISAKMPD, "-Sa");
 		flag_x(IPSECCONF_TEMP, ENABLE);
-		return(0);
-	}
-	if (CMP_ARG(aarg, "d")) {	/* disable */
+		break;
+	case CTL_DISABLE:
 		cmdarg(PKILL, "isakmpd");
 		flag_x(IPSECCONF_TEMP, DISABLE);
-		return(0);
+		break;
 	}
-	printf("%% %s: %s\n", INVALID, argv[1]);
 
 	return(0);
 }
@@ -319,31 +384,37 @@ int
 dvmrpctl(int argc, char **argv, char *modhvar)
 {
 	char *aarg = argv[0];
+	char *edit_args[] = { DVMRPD, "-nf", DVMRPCONF_TEMP, '\0' };
+	char *enable_args[] = { DVMRPD, "-f", DVMRPCONF_TEMP, '\0' };
+	struct ctl *x;
 
-	aarg = setup(modhvar, aarg, argc, argv, DVMRPUSAGE, DVMRPCONF_TEMP, 2);
+	aarg = setup(modhvar, aarg, argc, argv, ctl_edds, DVMRPCONF_TEMP, 2);
 	if (aarg == NULL)
 		return(0);
 
-	if(CMP_ARG(aarg, "ed")) {	/* edit */
-		char *args[] = { DVMRPD, "-nf", DVMRPCONF_TEMP, '\0' };
-
-		call_editor("DVMRP", args, DVMRPCONF_TEMP, DVMRPD);
-		return(0);
+	x = (struct ctl *) genget(aarg, (char **)ctl_edds,
+	    sizeof(struct ctl));
+	if (x == 0) { 
+		printf("%% Invalid argument %s\n", aarg);
+		return 0;
+	} else if (Ambiguous(x)) {
+		printf("%% Ambiguous argument %s\n", aarg);
+		return 0;
 	}
-	/* no dvmrpctl reload command available! */
-	if (CMP_ARG(aarg, "en")) {	/* enable */
-		char *args[] = { DVMRPD, "-f", DVMRPCONF_TEMP, '\0' };
 
-		cmdargs(DVMRPD, args);
+	switch (x->handler_action) {
+	case CTL_EDIT:
+		call_editor("DVMRP", edit_args, DVMRPCONF_TEMP, DVMRPD);
+		break;
+	case CTL_ENABLE:
+		cmdargs(DVMRPD, enable_args);
 		flag_x(DVMRPCONF_TEMP, ENABLE);
-		return(0);
-	}
-	if (CMP_ARG(aarg, "d")) {	/* disable */
+		break;
+	case CTL_DISABLE:
 		cmdarg(PKILL, "dvmrpd");
 		flag_x(DVMRPCONF_TEMP, DISABLE);
-		return(0);
+		break;
 	}
-	printf("%% %s: %s\n", INVALID, argv[1]);
 
 	return(0);
 }
@@ -352,29 +423,36 @@ int
 sasyncctl(int argc, char **argv, char *modhvar)
 {
 	char *aarg = argv[0];
+	char *enable_args[] = { SASYNCD, "-c", SASYNCCONF_TEMP, '\0' };
+	struct ctl *x;
 
-	aarg = setup(modhvar, aarg, argc, argv, SASYNCUSAGE, SASYNCCONF_TEMP, 2);
+	aarg = setup(modhvar, aarg, argc, argv, ctl_edds, SASYNCCONF_TEMP, 2);
 	if (aarg == NULL)
 		return(0);
 
-	if(CMP_ARG(aarg, "ed")) {	/* edit */
-		call_editor("sasync", NULL, SASYNCCONF_TEMP, NULL);
-		return(0);
+	x = (struct ctl *) genget(aarg, (char **)ctl_edds,
+	    sizeof(struct ctl));
+	if (x == 0) { 
+		printf("%% Invalid argument %s\n", aarg);
+		return 0;
+	} else if (Ambiguous(x)) {
+		printf("%% Ambiguous argument %s\n", aarg);
+		return 0;
 	}
-	/* no sasyncd reload command available! */
-	if (CMP_ARG(aarg, "en")) {	/* enable */
-		char *args[] = { SASYNCD, "-c", SASYNCCONF_TEMP, '\0' };
 
-		cmdargs(SASYNCD, args);
+	switch (x->handler_action) {
+	case CTL_EDIT:
+		call_editor("sasync", NULL, SASYNCCONF_TEMP, NULL);
+		break;
+	case CTL_ENABLE:
+		cmdargs(SASYNCD, enable_args);
 		flag_x(SASYNCCONF_TEMP, ENABLE);
-		return(0);
-	}
-	if (CMP_ARG(aarg, "d")) {	/* disable */
+		break;
+	case CTL_DISABLE:
 		cmdarg(PKILL, "sasyncd");
 		flag_x(SASYNCCONF_TEMP, DISABLE);
-		return(0);
+		break;
 	}
-	printf("%% %s: %s\n", INVALID, argv[1]);
 
 	return(0);
 }
@@ -383,22 +461,30 @@ int
 dhcpctl(int argc, char **argv, char *modhvar)
 {
 	char *aarg = argv[0];
+	char *edit_args[] = { DHCPD, "-nc", DHCPCONF_TEMP, '\0' };
+	char *enable_args[] = { DHCPD, "-c", DHCPCONF_TEMP, '\0' };
+	struct ctl *x;
 
-	aarg = setup(modhvar, aarg, argc, argv, DHCPUSAGE, DHCPCONF_TEMP, 2);
+	aarg = setup(modhvar, aarg, argc, argv, ctl_edds, DHCPCONF_TEMP, 2);
 	if (aarg == NULL)
 		return(0);
 
-	if(CMP_ARG(aarg, "ed")) {	/* edit */
-		char *args[] = { DHCPD, "-nc", DHCPCONF_TEMP, '\0' };
-
-		call_editor("DHCP", args, DHCPCONF_TEMP, DHCPD);
-		return(0);
+	x = (struct ctl *) genget(aarg, (char **)ctl_edds,
+	    sizeof(struct ctl));
+	if (x == 0) { 
+		printf("%% Invalid argument %s\n", aarg);
+		return 0;
+	} else if (Ambiguous(x)) {
+		printf("%% Ambiguous argument %s\n", aarg);
+		return 0;
 	}
-	/* no dhcpd reload command available! */
-	if (CMP_ARG(aarg, "en")) {	/* enable */
-		int fd;
-		char *args[] = { DHCPD, "-c", DHCPCONF_TEMP, '\0' };
 
+	switch (x->handler_action) {
+	case CTL_EDIT:
+		call_editor("DHCP", edit_args, DHCPCONF_TEMP, DHCPD);
+		break;
+	case CTL_ENABLE:
+#if 0
 		/* XXX not required by -current dhcpd? */
 		/* /var/db/dhcpd.leases must exist before dhcpd begins */
 		if ((fd = open(DHCPDB, O_RDWR | O_CREAT, 0644)) == -1) {
@@ -407,17 +493,15 @@ dhcpctl(int argc, char **argv, char *modhvar)
 			return(0);
 		}		
 		close(fd);
-
-		cmdargs(DHCPD, args);
+#endif
+		cmdargs(DHCPD, enable_args);
 		flag_x(DHCPCONF_TEMP, ENABLE);
-		return(0);
-	}
-	if (CMP_ARG(aarg, "d")) {	/* disable */
+		break;
+	case CTL_DISABLE:
 		cmdarg(PKILL, "dhcpd");
 		flag_x(DHCPCONF_TEMP, DISABLE);
-		return(0);
+		break;
 	}
-	printf("%% %s: %s\n", INVALID, argv[1]);
 
 	return(0);
 }
@@ -426,31 +510,37 @@ int
 snmpctl(int argc, char **argv, char *modhvar)
 {
 	char *aarg = argv[0];
+	char *edit_args[] = { SNMPD, "-nf", SNMPCONF_TEMP, '\0' };
+	char *enable_args[] = { SNMPD, "-f", SNMPCONF_TEMP, '\0' };
+	struct ctl *x;
 
-	aarg = setup(modhvar, aarg, argc, argv, SNMPUSAGE, SNMPCONF_TEMP, 2);
+	aarg = setup(modhvar, aarg, argc, argv, ctl_edds, SNMPCONF_TEMP, 2);
 	if (aarg == NULL)
 		return(0);
 
-	if(CMP_ARG(aarg, "ed")) {	/* edit */
-		char *args[] = { SNMPD, "-nf", SNMPCONF_TEMP, '\0' };
-
-		call_editor("SNMP", args, SNMPCONF_TEMP, SNMPD);
-		return(0);
+	x = (struct ctl *) genget(aarg, (char **)ctl_edds,
+	    sizeof(struct ctl));
+	if (x == 0) { 
+		printf("%% Invalid argument %s\n", aarg);
+		return 0;
+	} else if (Ambiguous(x)) {
+		printf("%% Ambiguous argument %s\n", aarg);
+		return 0;
 	}
-	/* no snmpd reload command available! */
-	if (CMP_ARG(aarg, "en")) {	/* enable */
-		char *args[] = { SNMPD, "-f", SNMPCONF_TEMP, '\0' };
 
-		cmdargs(SNMPD, args);
+	switch (x->handler_action) {
+	case CTL_EDIT:
+		call_editor("SNMP", edit_args, SNMPCONF_TEMP, SNMPD);
+		break;
+	case CTL_ENABLE:
+		cmdargs(SNMPD, enable_args);
 		flag_x(SNMPCONF_TEMP, ENABLE);
-		return(0);
-	}
-        if (CMP_ARG(aarg, "d")) {	/* disable */
+		break;
+	case CTL_DISABLE:
 		cmdarg(PKILL, "snmpd");
 		flag_x(SNMPCONF_TEMP, DISABLE);
-		return(0);
+		break;
 	}
-	printf("%% %s: %s\n", INVALID, argv[1]);
 
 	return(0);
 }
@@ -459,31 +549,37 @@ int
 ntpctl(int argc, char **argv, char *modhvar)
 {
 	char *aarg = argv[0];
+	char *edit_args[] = { NTPD, "-nf", NTPCONF_TEMP, '\0' };
+	char *enable_args[] = { NTPD, "-sf", NTPCONF_TEMP, '\0' };
+	struct ctl *x;
          
-	aarg = setup(modhvar, aarg, argc, argv, NTPUSAGE, NTPCONF_TEMP, 2);
+	aarg = setup(modhvar, aarg, argc, argv, ctl_edds, NTPCONF_TEMP, 2);
 	if (aarg == NULL)
 		return(0);
-         
-	if(CMP_ARG(aarg, "ed")) {	/* edit */
-		char *args[] = { NTPD, "-nf", NTPCONF_TEMP, '\0' };
-        
-		call_editor("NTP", args, NTPCONF_TEMP, NTPD);
-		return(0);
+
+	x = (struct ctl *) genget(aarg, (char **)ctl_edds,
+	    sizeof(struct ctl));
+	if (x == 0) { 
+		printf("%% Invalid argument %s\n", aarg);
+		return 0;
+	} else if (Ambiguous(x)) {
+		printf("%% Ambiguous argument %s\n", aarg);
+		return 0;
 	}
-	/* no ntpd reload command available! */
-	if (CMP_ARG(aarg, "en")) {	/* enable */
-		char *args[] = { NTPD, "-sf", NTPCONF_TEMP, '\0' };
- 
-		cmdargs(NTPD, args);
+
+	switch (x->handler_action) {
+	case CTL_EDIT:
+		call_editor("NTP", edit_args, NTPCONF_TEMP, NTPD);
+		break;
+	case CTL_ENABLE:
+		cmdargs(NTPD, enable_args);
 		flag_x(NTPCONF_TEMP, ENABLE);
-		return(0);
-	}
-	if (CMP_ARG(aarg, "d")) {	/* disable */
+		break;
+	case CTL_DISABLE:
 		cmdarg(PKILL, "ntpd");
 		flag_x(NTPCONF_TEMP, DISABLE);
-		return(0);
+		break;
 	}
-	printf("%% %s: %s\n", INVALID, argv[1]);
          
 	return(0);
 }
@@ -510,13 +606,13 @@ flag_x(char *fname, int y)
 }
 
 char *
-setup(char *modhvar, char *aarg, int argc, char **argv, char *usage,
+setup(char *modhvar, char *aarg, int argc, char **argv, struct ctl *x,
       char *tmpfile, int maxarg)
 {
 	if (modhvar) {
-		if(CMP_ARG(modhvar, "action"))
+		if (isprefix(modhvar, "action"))
 			return (aarg);
-		else if(CMP_ARG(modhvar, "rules")) {
+		else if (isprefix(modhvar, "rules")) {
 			rule_writeline(tmpfile, argc, argv);
 			return (NULL);
 		} else {
@@ -526,8 +622,8 @@ setup(char *modhvar, char *aarg, int argc, char **argv, char *usage,
 	} else {
 		if (argc < 2 || argc > maxarg || (argc == 2 &&
 		    argv[1][0] == '?')) {
-			printf(usage);
-			return(NULL);
+			gen_help(x, argv[0], "", sizeof(struct ctl));
+			return (NULL);
 		}
 		(void) signal(SIGINT, SIG_IGN);
 		(void) signal(SIGQUIT, SIG_IGN);

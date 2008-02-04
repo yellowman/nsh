@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.71 2008/01/29 06:17:35 chris Exp $ */
+/* $nsh: commands.c,v 1.72 2008/02/04 02:49:46 chris Exp $ */
 /*
  * Copyright (c) 2002-2008
  *      Chris Cappuccio.  All rights reserved.
@@ -84,6 +84,9 @@ static char *margv[20];
 static char hbuf[MAXHOSTNAMELEN];	/* host name */
 static char ifname[IFNAMSIZ];		/* interface name */
 
+#define OPT	(void *)1
+#define REQ	(void *)2
+
 typedef struct {
 	char *name;		/* command name */
 	char *help;		/* help string (NULL for no help) */
@@ -104,6 +107,11 @@ typedef struct {
 	int (*handler)();	/* Routine to perform (for special ops) */
 } Menu;
 
+struct ghs {
+	char *name;
+	char *help;
+};
+
 static Command	*getcmd(char *);
 static Menu	*getip(char *);
 static int	quit(void);
@@ -115,11 +123,7 @@ static int	pr_routes(int, char **);
 static int	pr_arp(int, char **);
 static int	pr_sadb(int, char **);
 static int	pr_stats(int, char **);
-static int	pr_bgp(int, char **);
-static int	pr_ospf(int, char **);
-static int	pr_rip(int, char **);
-static int	pr_dvmrp(int, char **);
-static int	pr_relay(int, char **);
+static int	pr_prot1(int, char **);
 static int	pr_dhcp(int, char **);
 static int	pr_conf(int, char **);
 static int	pr_s_conf(int, char **);
@@ -148,6 +152,7 @@ static void	p_argv(int, char **);
 static int	notvalid(void);
 static int 	reload(void);
 static int 	halt(void);
+static void	pf_stats(void);
 
 /*
  * Quit command
@@ -172,11 +177,11 @@ static Menu showlist[] = {
 	{ "sadb",	"Security Association Database", 0, 0, pr_sadb },
 	{ "arp",	"ARP table",		0, 1, pr_arp },
 	{ "stats",	"Kernel statistics",	0, 1, pr_stats },
-	{ "bgp",	"BGP information",	0, 4, pr_bgp },
-	{ "ospf",	"OSPF information",	0, 3, pr_ospf },
-	{ "rip",	"RIP information",	0, 3, pr_rip },
-	{ "dvmrp",	"DVMRP information",	0, 2, pr_dvmrp },
-	{ "relay",	"Relay server",		0, 1, pr_relay },
+	{ "bgp",	"BGP information",	0, 4, pr_prot1 },
+	{ "ospf",	"OSPF information",	0, 3, pr_prot1 },
+	{ "rip",	"RIP information",	0, 3, pr_prot1 },
+	{ "dvmrp",	"DVMRP information",	0, 2, pr_prot1 },
+	{ "relay",	"Relay server",		0, 1, pr_prot1 },
 	{ "dhcp",	"DHCP server",		0, 1, pr_dhcp },
 	{ "monitor",	"Monitor routing/arp table changes", 0, 0, monitor },
 	{ "ap",		"Wireless access points", 1, 1, wi_printaplist },
@@ -509,10 +514,11 @@ static struct intlist Intlist[] = {
 
 /*
  * a big command input loop for interface mode
- * XXX yes, i will totally rewrite this crap, yes, it's horrible
  * if a function returns to interface() with a 1, interface() will break
  * the user back to command() mode.  interface() will always break from
  * mode handler calls.
+ * XXX needs to be factored down with other parts of this file into separate
+ * functions
  */
 static int
 interface(int argc, char **argv, char *modhvar)
@@ -591,12 +597,12 @@ interface(int argc, char **argv, char *modhvar)
 
 	if (is_bridge(ifs, ifname)) {
 		bridge = 1;
-		if (CMP_ARG(modhvar ? modhvar : argv[0], "i"))
+		if (isprefix(modhvar ? modhvar : argv[0], "interface"))
 			printf("%% Using bridge configuration mode"
 			    " for %s\n", ifname);
 	} else {
 		bridge = 0; 
-		if (CMP_ARG(modhvar ? modhvar : argv[0], "b"))
+		if (isprefix(modhvar ? modhvar : argv[0], "bridge"))
 			printf("%% Using interface configuration mode"
 			    " for %s\n", ifname);
 	}
@@ -1143,7 +1149,7 @@ group(int argc, char **argv)
 		set = 1;
 
 	if ((argc < 3) || ((argc == 3 || argc == 4) &&
-	    !CMP_ARG(argv[2], "c"))) {
+	    !isprefix(argv[2], "carpdemote"))) {
 		printf("%% group <group-name> carpdemote [demotion-counter]\n");
 		printf("%% no group <group-name> carpdemote [demotion-counter]\n");
 		return 1;
@@ -1316,58 +1322,71 @@ flush_history(void)
 	return(0);
 }
 
+static struct fpf {
+	char *name;
+	char *help;
+	char *cmd;
+	char *arg;
+} fpfs[] = {
+	{ "all",	"all PF elements",	PFCTL,	"-Fall" },
+	{ "nat",	"NAT rules",		PFCTL,	"-Fnat" },
+	{ "queue",	"queue rules",		PFCTL,	"-Fqueue" },
+	{ "filter",	"filter rules",		PFCTL,	"-Frules" },
+	{ "states",	"NAT/filter states",	PFCTL,	"-Fstate" },
+	{ "stats",	"PF statistics", 	PFCTL,	"-Finfo" },
+	{ "tables",	"PF address tables",	PFCTL,	"-FTables" },
+	{ 0, 0, 0, 0 }
+};
+
+void
+gen_help(char **x, char *cmdprefix, char *descrsuffix, int szstruct)
+{
+	/* only for structures starting with char *name; char *help; !! */
+	char **y = x;
+	struct ghs *ghs;
+	int z = 0;
+
+	printf("%% Arguments may be abbreviated\n\n");
+
+	while (*y != 0) {
+		if (strlen(*y) > z)
+			z = strlen(*y);
+		y = (char **)((char *)y + szstruct);
+	}
+
+	while (*x != 0) {
+		ghs = (struct ghs *)x;
+		if (ghs->help)
+			printf("  %s %-*s %s %s\n", cmdprefix, z, *x,
+			    ghs->help, descrsuffix);
+		x = (char **)((char *)x + szstruct);
+	}
+	return;
+}
+
 /*
  * pf toilet flusher
  */
 int
 flush_pf(char *arg)
 {
-	if (arg != NULL && arg[0] != '?') {
-		if (CMP_ARG(arg, "a")) {
-			printf("%% Flushing all pf filter rules, NAT rules, "
-			    "queue rules, address tables, states, and "
-			    "statistics\n");
-			cmdarg(PFCTL, "-Fall");
-			return(0);
-		}
-		if (CMP_ARG(arg, "n")) {
-			printf("%% Flushing pf NAT rules\n");
-			cmdarg(PFCTL, "-Fnat");
-			return(0);
-		}
-		if (CMP_ARG(arg, "q")) {
-			printf("%% Flushing pf queue rules\n");
-			cmdarg(PFCTL, "-Fqueue");
-			return(0);
-		}
-		if (CMP_ARG(arg, "f")) {
-			printf("%% Flushing pf filter rules\n");
-			cmdarg(PFCTL, "-Frules");
-			return(0);
-		}
-		if (CMP_ARG(arg, "state")) {
-			printf("%% Flushing pf NAT/filter states\n");
-			cmdarg(PFCTL, "-Fstate");
-			return(0);
-		}
-		if (CMP_ARG(arg, "stats")) {
-			printf("%% Flushing pf statistics\n");
-			cmdarg(PFCTL, "-Finfo");
-			return(0);
-		}
-		if (CMP_ARG(arg, "t")) {
-			printf("%% Flushing pf address tables\n");
-			cmdarg(PFCTL, "-FTables");
-			return(0);
-		}
+	struct fpf *x;
+	if (!arg || arg[0] == '?') {
+		gen_help((char **)fpfs, "flush pf", "flush",
+		    sizeof(struct fpf));
+		return 0;
 	}
-	printf("%% flush pf all\n");
-	printf("%% flush pf nat\n");
-	printf("%% flush pf queue\n");
-	printf("%% flush pf filter\n");
-	printf("%% flush pf states\n");
-	printf("%% flush pf stats\n");
-	printf("%% flush pf tables\n");
+	x = (struct fpf *) genget(arg, (char **)fpfs, sizeof(struct fpf));
+	if (x == 0) {
+		printf("%% Invalid argument %s\n", arg);
+		return 0;
+	} else if (Ambiguous(x)) {
+		printf("%% Ambiguous argument %s\n", arg);
+		return 0;
+	}
+
+	cmdarg(x->cmd, x->arg);
+
 	return(1);
 }
 
@@ -1734,295 +1753,221 @@ pr_sadb(int argc, char **argv)
 	return 0;
 }
 
+static struct stt {
+	char *name;
+	char *help;
+	void (*handler) ();
+} stts[] = {
+	{ "ip",		"Internet Protocol",		ip_stats },
+	{ "ah",		"Authentication Header",	ah_stats },
+	{ "esp",	"Encapsulated Security Payload",esp_stats },
+	{ "tcp",	"Transmission Control Protocol",tcp_stats },
+	{ "udp",	"Unreliable Datagram Protocol",	udp_stats },
+	{ "icmp",	"Internet Control Message Protocol",icmp_stats },
+	{ "igmp",	"Internet Group Managemnet Protocol",igmp_stats },
+	{ "ipcomp",	"IP Compression",		ipcomp_stats },
+	{ "route",	"Routing",			rt_stats },
+	{ "carp",	"Common Address Redundancy Protocol", carp_stats },
+	{ "mbuf",	"Packet memory buffer",		mbpr },
+	{ "pf",		"Packet Filter",		pf_stats },
+	{ 0,		0,				0 }
+};
+
 int
 pr_stats(int argc, char **argv)
 {
-	if (argc == 3 && argv[2][0] != '?') {
-		if (CMP_ARG(argv[2], "pfsy")) {
-			pfsync_stats();
-			return(0);
-		}
-		if (CMP_ARG(argv[2], "pf")) {
-			printf("%% pf statistics:\n");
-			cmdarg(PFCTL, "-sinfo");  
-			return(0);
-		}
-		if (CMP_ARG(argv[2], "ip")) {
-			ip_stats();
-			return(0);
-		}
-		if (CMP_ARG(argv[2], "a")) {
-			ah_stats();
-			return(0);
-		}
-		if (CMP_ARG(argv[2], "e")) {
-			esp_stats();
-			return(0);
-		}
-		if (CMP_ARG(argv[2], "t")) {
-			tcp_stats();
-			return(0);
-		}
-		if (CMP_ARG(argv[2], "u")) {
-			udp_stats();
-			return(0);
-		}
-		if (CMP_ARG(argv[2], "ic")) {
-			icmp_stats();
-			return(0);
-		}
-		if (CMP_ARG(argv[2], "ig")) {
-			igmp_stats();
-			return(0);
-		}
-		if (CMP_ARG(argv[2], "ipc")) {
-			ipcomp_stats();
-			return(0);
-		}
-		if (CMP_ARG(argv[2], "r")) {
-			rt_stats();
-			return(0);
-		}
-		if (CMP_ARG(argv[2], "c")) {
-			carp_stats();
-			return(0);
-		}
-		if (CMP_ARG(argv[2], "m")) {
-			mbpr();
-			return(0);
-		}
-		printf("%% argument %s not recognized\n", argv[2]);
-		return(1);
+	struct stt *x;
+
+	if (argc < 3 || argv[2][0] == '?') {
+		gen_help((char **)stts, "show stats", "statistics",
+		    sizeof(struct stt));
+		return 0;
 	}
-	printf("%% show stats pf\n");
-	printf("%% show stats ip\n");
-	printf("%% show stats ah\n");
-	printf("%% show stats esp\n");
-	printf("%% show stats tcp\n");
-	printf("%% show stats udp\n");
-	printf("%% show stats icmp\n");
-	printf("%% show stats igmp\n");
-	printf("%% show stats ipcomp\n");
-	printf("%% show stats route\n");
-	printf("%% show stats carp\n");
-	printf("%% show stats pfsync\n");
-	printf("%% show stats mbuf\n");
-	return(1);
+	x = (struct stt *) genget(argv[2], (char **)stts, sizeof(struct stt));
+	if (x == 0) {
+		printf("%% Invalid argument %s\n", argv[2]);
+		return 0;
+	} else if (Ambiguous(x)) {
+		printf("%% Ambiguous argument %s\n", argv[2]);
+		return 0;
+	}
+	if (x->handler) /* not likely to be false */
+		(*x->handler)();
+		
+	return(0);
 }
 
-int
-pr_bgp(int argc, char **argv)
+void
+pf_stats(void)
 {
-	if (argc == 3 && argv[2][0] != '?') {	/* network */
-		if (CMP_ARG(argv[2], "a")) {
-			char *args[] = { BGPCTL, "network", "show", '\0' };
-			cmdargs(BGPCTL, args);
-                        return(0);
-                }
-		if (CMP_ARG(argv[2], "i")) {	/* interfaces */
-			char *args[] = { BGPCTL, "show", "interfaces", '\0' };
-			cmdargs(BGPCTL, args);
-			return(0);
-		}
-		if (CMP_ARG(argv[2], "nex")) {	/* nexthop */
-			char *args[] = { BGPCTL, "show", "nexthop", '\0' };
-			cmdargs(BGPCTL, args);
-			return(0);
-		}
-		if (CMP_ARG(argv[2], "s")) {	/* summary */
-			char *args[] = { BGPCTL, "show", "summary", '\0' };
-			cmdargs(BGPCTL, args);
-			return(0);
-		}
-		printf("%% argument %s not recognized\n", argv[2]);
-		return(1);
-	}
-	if (argc > 3 && CMP_ARG(argv[2], "r")) { /* rib ......... */
-		if (argc == 4) {
-			char *args[] = { BGPCTL, "show", "rib", argv[3], '\0' };
-			cmdargs(BGPCTL, args);
-			return(0);
-		}
-		if (argc == 5) {
-			char *args[] = { BGPCTL, "show", "rib", argv[3], argv[4], '\0' };
-			cmdargs(BGPCTL, args);
-			return(0);
-		}
-		if (argc == 6) {
-			char *args[] = { BGPCTL, "show", "rib", argv[3], argv[4], argv[5], '\0' };
-			cmdargs(BGPCTL, args);
-			return(0);
-		}
-		printf("%% invalid number of arguments\n");
-		return(1);
-	}
-	if (argc == 4) {
-		if (CMP_ARG(argv[2], "f")) {    /* fib ... */
-			char *args[] = { BGPCTL, "show", "fib", argv[3], '\0' };
-			cmdargs(BGPCTL, args);
-			return(0);
-		}
-		if (CMP_ARG(argv[2], "s") && CMP_ARG(argv[3], "t")) { /* summary terse */
-			char *args[] = { BGPCTL, "show", "summary", "terse", '\0' };
-			cmdargs(BGPCTL, args);
-			return(0);
-		}
-		printf("%% argument %s not recognized\n", argv[2]);
-		return(1);
-	}
-	if (argc == 5) {
-		if (CMP_ARG(argv[2], "nei")) {  /* neighbor ... ... */
-			char *args[] = { BGPCTL, "show", "neighbor", argv[3], argv[4], '\0' };
-			cmdargs(BGPCTL, args);
-			return(0);
-		}
-	}
-	printf("%% show bgp nexthop\n");
-	printf("%% show bgp announced\n");
-	printf("%% show bgp fib <IP>\n");
-	printf("%% show bgp fib connected|static|bgp|nexthop\n");
-	printf("%% show bgp rib [detail|inet|inet6|in|out] <IP>[/len] [all]\n");
-	printf("%% show bgp rib [detail|inet|inet6|in|out] as|source-as|transit-as|peer-as <as>\n");
-	printf("%% show bgp rib [detail|inet|inet6|in|out] empty-as\n");
-	printf("%% show bgp rib [detail|inet|inet6|in|out] community <community>\n");
-	printf("%% show bgp rib summary|memory\n");
-	printf("%% show bgp summary [terse]\n");
-	printf("%% show bgp interfaces\n");
-	printf("%% show bgp neighbor <peer> [messages|terse|timers]\n");
-	return(1);
+	printf("%% pf statistics:\n");
+	cmdarg(PFCTL, "-sinfo");
+	return;
 }
 
-int
-pr_ospf(int argc, char **argv)
-{
-	if (argc == 3 && argv[2][0] != '?') {
-		if (CMP_ARG(argv[2], "s")) {
-			char *args[] = { BGPCTL, "network", "show", '\0' };
-			cmdargs(BGPCTL, args);
-		}
-		printf("%% argument %s not recognized\n", argv[2]);
-		return(1);
-	}
-	printf("%% show ospf nexthop\n");
-	return(1);
-}
+struct prot1 {
+	char *name;
+	char *help;
+	char *args[32];
+};
+
+static struct prot1 bgcs[] = {
+	{ "announced",  "All announced networks",
+	    { BGPCTL,  "network", "show", OPT, '\0' } },
+	{ "interfaces", "Interface states",
+	    { BGPCTL,  "show", "interfaces", OPT, '\0' } },
+	{ "nexthop",	"BGP nexthop routes",
+	    { BGPCTL,  "show", "nexthop", '\0' } },
+	{ "summary",	"Neighbor session states and counters",
+	    { BGPCTL,  "show", "summary", OPT, '\0' } },
+	{ "rib",	"Routing Information Base",
+	    { BGPCTL, "show",  "rib", OPT, OPT, OPT, '\0' } },
+	{ "neighbor",	"Detailed peer information",
+	    { BGPCTL, "show",  "neighbor", REQ, OPT, '\0' } },
+	{ 0, 0, { 0 } }
+};
+
+static struct prot1 oscs[] = {
+	{ "fib",	"Forward Information Base",
+	    { OSPFCTL, "show", "fib", OPT, OPT, '\0' } },
+	{ "database",	"Link State Database",
+	    { OSPFCTL, "show", "database", OPT, OPT, '\0' } },
+	{ "interfaces",	"Interface",
+	    { OSPFCTL, "show", "interfaces", OPT, '\0' } },
+	{ "neighbor",	"Neighbor",
+	    { OSPFCTL, "show", "neighbor", OPT, '\0' } },
+	{ "rib",	"Routing Information Base",
+	    { OSPFCTL, "show", "rib", OPT, '\0' } },
+	{ "summary",	"Summary",
+	    { OSPFCTL, "show", "summary", '\0' } },
+	{ 0, 0, { 0 } }
+};
+
+static struct prot1 rics[] = {
+	{ "fib",        "Forward Information Base",
+	    { RIPCTL, "show", "fib", OPT, '\0' } },
+	{ "interfaces", "Interfaces",
+	    { RIPCTL, "show", "interfaces", '\0' } },
+	{ "neighbor",   "Neighbor",
+	    { RIPCTL, "show", "neighbor", '\0' } },
+	{ "rib",        "Routing Information Base",
+	    { RIPCTL, "show", "rib", '\0' } },
+	{ 0, 0, { 0 } }
+};
+
+static struct prot1 dvcs[] = {
+	{ "igmp",       "Internet Group Message Protocol",
+	    { DVMRPCTL, "show", "igmp", '\0' } },
+	{ "interfaces", "Interfaces",
+	    { DVMRPCTL, "show", "interfaces", OPT, '\0' } },
+	{ "mfc",        "Multicast Forwarding Cache",
+	    { DVMRPCTL, "show", "mfc", OPT, '\0' } },
+	{ "neighbor",   "Neighbor",
+	    { DVMRPCTL, "show", "neighbor", OPT, '\0' } },
+	{ "rib",        "Routing Information Base",
+	    { DVMRPCTL, "show", "rib", OPT, '\0' } },
+	{ "summary",    "Summary",
+	    { DVMRPCTL, "show", "summary", '\0' } },
+        { 0, 0, { 0 } }
+};
+
+static struct prot1 rlcs[] = {
+	{ "hosts",      "hosts",
+	    { RELAYCTL, "show", "hosts", '\0' } },
+	{ "redirects",  "redirects",
+	    { RELAYCTL, "show", "redirects", '\0' } },
+	{ "status",     "status",
+	    { RELAYCTL, "show", "relays", '\0' } },
+	{ "sessions",   "sessions",
+	    { RELAYCTL, "show", "sessions", '\0' } },
+	{ "summary",    "summary",
+	    { RELAYCTL, "show", "summary", '\0' } },
+	{ 0, 0, { 0 } }
+};
+
+static struct prot {
+	char *name;
+	struct prot1 *table;
+} prots[] = {
+	{ "bgp",	bgcs },
+        { "ospf",	oscs },
+        { "rip",	rics },
+        { "dvmrp",	dvcs },
+        { "relay",	rlcs },
+        { 0, 0 }
+};
 
 int
-pr_rip(int argc, char **argv)
+pr_prot1(int argc, char **argv)
 {
-	if (argc == 3 && argv[2][0] != '?') {
-		printf("%% argument %s not recognized\n", argv[2]);
-		return(1);
-	}
-	printf("%% show rip nexthop\n");
-	return(1);
-}
+	struct prot1 *x;
+	struct prot *prot;
+	int i;
+#define NARGS 7
+	char *args[NARGS] = { NULL, NULL, NULL, NULL, NULL, NULL, '\0' };
+	char prefix[64];
 
-int
-pr_dvmrp(int argc, char **argv)
-{
-	if (argc == 3 && argv[2][0] != '?') {
-		if (CMP_ARG(argv[2], "ig")) {
-			char *args[] = { DVMRPCTL, "show", "igmp", '\0' };
-			cmdargs(DVMRPCTL, args);
-			return(0);
-		}
-		if (CMP_ARG(argv[2], "in")) {
-			char *args[] = { DVMRPCTL, "show", "interfaces", '\0' };
-			cmdargs(DVMRPCTL, args);
-			return(0);
-		}
-		if (CMP_ARG(argv[2], "m")) {
-			char *args[] = { DVMRPCTL, "show", "mfc", NULL, '\0' };
-			if (verbose)
-				args[3] = "detail";
-			cmdargs(DVMRPCTL, args);
-			return(0);
-		}
-		if (CMP_ARG(argv[2], "n")) {
-			char *args[] = { DVMRPCTL, "show", "neighbor", NULL, '\0' };
-			if (verbose)
-				args[3] = "detail";
-			cmdargs(DVMRPCTL, args);
-			return(0);
-		}
-		if (CMP_ARG(argv[2], "r")) {
-			char *args[] = { DVMRPCTL, "show", "rib", NULL, '\0' };
-			if (verbose)
-				args[3] = "detail";
-			cmdargs(DVMRPCTL, args);
-			return(0);
-		}
-		if (CMP_ARG(argv[2], "s")) {
-			char *args[] = { DVMRPCTL, "show", "summary", '\0' };
-			cmdargs(DVMRPCTL, args);
-			return(0);
-		}
-		printf("%% argument %s not recognized\n", argv[2]);
-		return(1);
+	/* loop protocol list to find table pointer */
+	prot = (struct prot *) genget(argv[1], (char **)prots,
+	    sizeof(struct prot));
+	if (prot == 0) {
+		printf("%% Internal error - Invalid argument %s\n", argv[1]);
+		return 0;
+	} else if (Ambiguous(prot)) {
+		printf("%% Internal error - Ambiguous argument %s\n", argv[1]);
+		return 0;
 	}
-	if (argc == 4) {
-		if (CMP_ARG(argv[2], "in") && argv[3] != NULL) {
-			char *args[] = { DVMRPCTL, "show", "interfaces",
-			    argv[3], '\0' };
-			cmdargs(DVMRPCTL, args);
-			return(0);
-		}
-	}
-	printf("%% show dvmrp interfaces [interface]\n");
-	printf("%% show dvmrp igmp\n");
-	printf("%% show dvmrp mfc\n");
-	printf("%% show dvmrp neighbor\n");
-	printf("%% show dvmrp rib\n");
-	printf("%% show dvmrp summary\n");
-	return(1);
-}
 
-int
-pr_relay(int argc, char **argv)
-{
-	if (argc == 3 && argv[2][0] != '?') {
-		if (CMP_ARG(argv[2], "h")) {
-			char *args[] = { RELAYCTL, "show", "hosts", '\0' };
-			cmdargs(RELAYCTL, args);
-			return(0);
-		}
-		if (CMP_ARG(argv[2], "r")) {
-			char *args[] = { RELAYCTL, "show", "redirects", '\0' };
-			cmdargs(RELAYCTL, args);
-			return(0);
-		}
-		if (CMP_ARG(argv[2], "st")) {
-			char *args[] = { RELAYCTL, "show", "relays", '\0' };
-			cmdargs(RELAYCTL, args);
-			return(0);
-		}
-		if (CMP_ARG(argv[2], "se")) {
-			char *args[] = { RELAYCTL, "show", "sessions", '\0' };
-			cmdargs(RELAYCTL, args);
-			return(0);
-		}
-		if (CMP_ARG(argv[2], "su")) {
-			char *args[] = { RELAYCTL, "show", "summary", '\0' };
-			cmdargs(RELAYCTL, args);
-			return(0);
-		}
-		printf("%% argument %s not recognized\n", argv[2]);
-		return(1);
+	snprintf(prefix, sizeof(prefix), "show %s", prot->name);
+
+	/* no clue? we can help */
+	if (argc < 3 || argv[2][0] == '?') {
+		gen_help((char **)prot->table, prefix, "information",
+		    sizeof(struct prot1));
+		return 0;
 	}
-	printf("%% show relay hosts\n");
-	printf("%% show relay redirects\n");
-	printf("%% show relay status\n");
-	printf("%% show relay sessions\n");
-	printf("%% show relay summary\n");
-	return(1);
+	x = (struct prot1 *) genget(argv[2], (char **)prot->table,
+	    sizeof(struct prot1));
+	if (x == 0) {
+		printf("%% Invalid argument %s\n", argv[2]);
+		return 0;
+	} else if (Ambiguous(x)) {
+		printf("%% Ambiguous argument %s\n", argv[2]);
+		return 0;
+	}
+
+	/* replace OPT/REQ arguments with stuff from command line */
+	for (i = 0; i < NARGS - 2; i++) {
+		if (x->args[i] == '\0') {
+			if (argc > i) {
+				printf("%% Argument not valid %s\n", argv[i]);
+				return 0;
+			}
+			args[i] = '\0';
+			break;
+		}
+		if (x->args[i] == OPT || x->args[i] == REQ) {
+			if (argc > i)
+				args[i] = argv[i];
+			else if (x->args[i] == REQ) {
+				printf("%% Missing required argument\n");
+				return 0;
+			} else
+				args[i] = NULL;
+		} else
+			args[i] = x->args[i];
+	}
+
+	cmdargs(args[0], args);
+
+	return 1;
 }
 
 int
 pr_dhcp(int argc, char **argv)
 {
 	if (argc == 3 && argv[2][0] != '?') {
-		if (CMP_ARG(argv[2], "l")) {
+		if (isprefix(argv[2], "leases")) {
 			more(DHCPDB);
 			return(0);
 		}

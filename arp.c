@@ -1,4 +1,4 @@
-/* $nsh: arp.c,v 1.1 2008/01/13 02:27:38 chris Exp $ */
+/* $nsh: arp.c,v 1.2 2008/02/04 02:49:46 chris Exp $ */
 /* From: $OpenBSD: /usr/src/usr.sbin/arp/arp.c,v 1.40 2007/08/24 13:12:16 claudio Exp $ */
 /*
  * Copyright (c) 1984, 1993
@@ -131,7 +131,7 @@ arpset(int argc, char *argv[])
 
 	so_gate.sdl.sdl_alen = ETHER_ADDR_LEN;
 	doing_proxy = flags = export_only = 0;
-	if (CMP_ARG(argv[0], "p")) { /* proxy-arp */
+	if (isprefix(argv[0], "proxy-arp")) {
 		flags |= RTF_ANNOUNCE;
 		doing_proxy = SIN_PROXY;
 	}

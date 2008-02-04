@@ -1,10 +1,10 @@
-/* $nsh: externs.h,v 1.52 2008/01/29 06:17:35 chris Exp $ */
+/* $nsh: externs.h,v 1.53 2008/02/04 02:49:46 chris Exp $ */
 /*
  * nsh externs, prototypes and macros
  */
 
 #define NO_ARG(x) (strcasecmp(x, "no") == 0) /* absolute "no" */
-#define CMP_ARG(x,y) (strncasecmp(x, y, strlen(y)) == 0) /* mabye arg y */
+#define MIN_ARG(x,y) (strncasecmp(x, y, strlen(y)) == 0) /* mabye arg y */
 
 struct rtdump {
 	char *buf;	/* start of routing table */
@@ -143,6 +143,7 @@ int cmdargs(char *, char **);
 char *iprompt(void);
 char *cprompt(void);
 char *pprompt(void);
+void gen_help(char **, char *, char *, int);
 
 /* ieee80211.c */
 #define NWID 0
@@ -301,7 +302,6 @@ int conf_pfsync(FILE *, int, char *);
 #define CARP_ADVSKEW 0
 #define CARP_ADVBASE 1
 #define CARP_VHID 2
-#define RELOAD 1
 int intcarp(char *, int, int, char **);
 int intcpass(char *, int, int, char **);
 int intcnode(char *, int, int, char **);

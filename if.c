@@ -1,4 +1,4 @@
-/* $nsh: if.c,v 1.35 2008/01/29 06:17:35 chris Exp $ */
+/* $nsh: if.c,v 1.36 2008/02/04 02:49:46 chris Exp $ */
 /*
  * Copyright (c) 2002-2007
  *      Chris Cappuccio.  All rights reserved.
@@ -564,10 +564,10 @@ intip(char *ifname, int ifs, int argc, char **argv)
 	 * We use this function for ip and alias setup since they are
 	 * the same thing.
 	 */
-	if (CMP_ARG(argv[0], "a")) {
+	if (isprefix(argv[0], "alias")) {
 		alias = 1;
 		cmdname = "alias";
-	} else if (CMP_ARG(argv[0], "i")) {
+	} else if (isprefix(argv[0], "ip")) {
 		alias = 0;
 		cmdname = "ip";
 	} else {
@@ -600,7 +600,7 @@ intip(char *ifname, int ifs, int argc, char **argv)
 		return(0);
 	}
 
-	if (CMP_ARG(argv[0], "d")) {
+	if (isprefix(argv[0], "dhcp")) {
 		char *args[] = { PKILL, "dhclient", ifname, '\0' };
 		char leasefile[sizeof(LEASEPREFIX)+1+IFNAMSIZ];
 
@@ -774,8 +774,8 @@ intvlan(char *ifname, int ifs, int argc, char **argv)
 
 	if ((set && (argc < 3 || argc > 5)) || (!set && argc > 5) ||
 	    argc == 4 ||
-	    (argc > 3 && !CMP_ARG(argv[1], "pa")) ||
-	    (argc > 5 && !CMP_ARG(argv[3], "pr"))) {
+	    (argc > 3 && !isprefix(argv[1], "parent")) ||
+	    (argc > 5 && !isprefix(argv[3], "priority"))) {
 		printf("%% vlan <tag> parent <parent interface> [priority <priority>]\n");
 		printf("%% no vlan [tag] [parent <parent interface>] [priority <priority>]\n");
 		return 0;
@@ -965,13 +965,13 @@ intflags(char *ifname, int ifs, int argc, char **argv)
 	} else
 		set = 1;
 
-	if (CMP_ARG(argv[0], "d")) {
+	if (isprefix(argv[0], "debug")) {
 		/* debug */
 		value = IFF_DEBUG;
-	} else if (CMP_ARG(argv[0], "s")) {
+	} else if (isprefix(argv[0], "shutdown")) {
 		/* shutdown */
 		value = -IFF_UP;
-	} else if (CMP_ARG(argv[0], "a")) {
+	} else if (isprefix(argv[0], "arp")) {
 		/* arp */
 		value = -IFF_NOARP;
 	} else {

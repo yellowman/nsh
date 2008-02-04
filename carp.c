@@ -37,15 +37,26 @@
 #include <net/if.h>
 #include "externs.h"
 
+static struct intc {
+	char *name;
+	char *descr;
+	int type;
+} intcs[] = {
+	{ "advskew",	"skew",		CARP_ADVSKEW },
+	{ "advbase",	"seconds",	CARP_ADVBASE },
+	{ "vhid",	"id",		CARP_VHID },
+	{ 0,		0,		0 }
+};
+
 int
 intcarp(char *ifname, int ifs, int argc, char **argv)
 {
-	char *name, *descr;
 	const char *errmsg = NULL;
 	struct ifreq ifr;
 	struct carpreq creq;
-	int type, set;
+	int set;
 	u_int32_t val = 0;
+	struct intc *x;
 
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -54,29 +65,23 @@ intcarp(char *ifname, int ifs, int argc, char **argv)
 	} else
 		set = 1;
 
-	if (CMP_ARG(argv[0], "advs")) {
-		type = CARP_ADVSKEW;
-		name = "advskew";
-		descr = "skew";
-	} else if (CMP_ARG(argv[0], "advb")) {
-		type = CARP_ADVBASE;
-		name = "advbase";
-		descr = "seconds";
-	} else if (CMP_ARG(argv[0], "v")) {
-		type = CARP_VHID;
-		name = "vhid";
-		descr = "id";
-	} else {
-		printf("%% Internal error\n");
-		return(1);
+	x = (struct intc *) genget(argv[0], (char **)intcs,
+	    sizeof(struct intc));
+
+	if (x == 0) {
+		printf("%% Internal error - Invalid argument %s\n", argv[0]);
+		return 0;
+	} else if (Ambiguous(x)) {
+		printf("%% Internal error - Ambiguous argument %s\n", argv[0]);
+		return 0;
 	}
 
 	argv++;
 	argc--;
 
 	if ((!set && argc > 1) || (set && argc != 1)) {
-		printf("%% %s <%s>\n", name, descr);
-		printf("%% no %s [%s]\n", name, descr);
+		printf("%% %s <%s>\n", x->name, x->descr);
+		printf("%% no %s [%s]\n", x->name, x->descr);
 		return (0);
 	}
 	bzero((char *) &creq, sizeof(struct carpreq));
@@ -92,12 +97,12 @@ intcarp(char *ifname, int ifs, int argc, char **argv)
 		errno = 0;
 		val = strtonum(argv[0], 0, INT_MAX, &errmsg);
 		if (errmsg) {
-			printf("%% %s value out of range: %s\n", name, errmsg);
+			printf("%% %s value out of range: %s\n", x->name, errmsg);
 			return(0);
 		}
 	}
 
-	switch(type) {
+	switch(x->type) {
 	case CARP_ADVSKEW:
 		if (set)
 			creq.carpr_advskews[0] = (int)val;

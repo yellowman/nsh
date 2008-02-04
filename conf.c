@@ -1,4 +1,4 @@
-/* $nsh: conf.c,v 1.44 2008/01/24 07:40:53 chris Exp $ */
+/* $nsh: conf.c,v 1.45 2008/02/04 02:49:46 chris Exp $ */
 /*
  * Copyright (c) 2002-2008
  *      Chris Cappuccio.  All rights reserved.
@@ -128,6 +128,7 @@ conf(FILE *output)
 
 	fprintf(output, "!\n");
 
+#define RELOAD 1
 	conf_xrules(output, PFCONF_TEMP, "pf", RELOAD);
 
 	/* XXX should configure pfsync interfaces _after_ pf rules loaded */
@@ -370,7 +371,7 @@ void conf_ifmetrics(FILE *output, int ifs, struct if_data if_data,
 	 * ignore interfaces named "pfsync" since their mtu
 	 * is dynamic and controlled by the kernel
 	 */
-	if (!CMP_ARG(ifname, "pfsync") && if_mtu != default_mtu(ifname))
+	if (!MIN_ARG(ifname, "pfsync") && if_mtu != default_mtu(ifname))
 		fprintf(output, " mtu %u\n", if_mtu);
 	if (if_metric)
 		fprintf(output, " metric %u\n", if_metric);

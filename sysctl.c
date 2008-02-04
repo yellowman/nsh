@@ -1,4 +1,4 @@
-/* $nsh: sysctl.c,v 1.8 2008/01/29 07:24:51 chris Exp $ */
+/* $nsh: sysctl.c,v 1.9 2008/02/04 02:49:46 chris Exp $ */
 /*
  * Copyright (c) 2003
  *      Chris Cappuccio.  All rights reserved.
@@ -101,6 +101,7 @@ static struct ipsysctl {
 	{ "default-mtu",IPPROTO_IP,	IPCTL_DEFMTU,		DEFAULT_MTU },
 #endif
 	{ "default-ttl",IPPROTO_IP,	IPCTL_DEFTTL,		DEFAULT_TTL },
+	{ 0,		0,		0,			0 }
 };
 
 int

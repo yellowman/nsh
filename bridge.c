@@ -1,4 +1,4 @@
-/* $nsh: bridge.c,v 1.13 2008/01/13 02:27:38 chris Exp $ */
+/* $nsh: bridge.c,v 1.14 2008/02/04 02:49:46 chris Exp $ */
 /* From: $OpenBSD: brconfig.c,v 1.27 2003/09/26 03:29:59 deraadt Exp $ */
 
 /*
@@ -81,21 +81,39 @@ char *stpstates[] = {
 	"blocking",
 };
 
-/*
- * rather than muck up jason's nice routines too much, i create nsh
- * interface() wrappers here
- */
 #define BRPORT_MEMBER 0
 #define BRPORT_SPAN 1
 #define BRPORT_BLOCKNONIP 2
 #define BRPORT_DISCOVER 3
 #define BRPORT_LEARN 4
 #define BRPORT_STP 5
+
+struct brc {
+	char *name;
+	int type;
+};
+
+struct brd {
+	char *name;
+	char *descr;
+	int type;
+};
+
+static struct brc brps[] = {
+	{ "member",	BRPORT_MEMBER },
+	{ "span",	BRPORT_SPAN },
+	{ "blocknonip",	BRPORT_BLOCKNONIP },
+	{ "discover",	BRPORT_DISCOVER },
+	{ "learning",	BRPORT_LEARN },
+	{ "stp",	BRPORT_STP },
+	{ 0,		0 }
+};
+
 int
 brport(char *ifname, int ifs, int argc, char **argv)
 {
-	int set, type, i;
-	char *name;
+	int set, i;
+	struct brc *x;
  
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -104,35 +122,21 @@ brport(char *ifname, int ifs, int argc, char **argv)
 	} else
 		set = 1;
 
-	if (CMP_ARG(argv[0], "m")) {
-		type = BRPORT_MEMBER;
-		name = "member";
-	} else if (CMP_ARG(argv[0], "sp")) {
-		type = BRPORT_SPAN;
-		name = "span";
-	} else if (CMP_ARG(argv[0], "b")) {
-		type = BRPORT_BLOCKNONIP;
-		name = "blocknonip";
-	} else if (CMP_ARG(argv[0], "d")) {
-		type = BRPORT_DISCOVER;
-		name = "discover";
-	} else if (CMP_ARG(argv[0], "l")) {
-		type = BRPORT_LEARN;
-		name = "learning";
-	} else if (CMP_ARG(argv[0], "st")) {
-		type = BRPORT_STP;
-		name = "stp";
-	} else {
-		printf("%% Internal error\n");
-		return(1);
+	x = (struct brc *) genget(argv[0], (char **)brps, sizeof(struct brc));
+	if (x == 0) {
+		printf("%% Internal error - Invalid argument %s\n", argv[0]);
+		return 0;
+	} else if (Ambiguous(x)) {
+		printf("%% Internal error - Ambiguous argument %s\n", argv[0]);
+		return 0;
 	}
 
 	argv++;
 	argc--;
 
 	if (argc == 0) {
-		printf("%% %s <if> [if]...\n", name);
-		printf("%% no %s <if> [if]...\n", name);
+		printf("%% %s <if> [if]...\n", x->name);
+		printf("%% no %s <if> [if]...\n", x->name);
 		return(0);
 	}
 
@@ -142,7 +146,7 @@ brport(char *ifname, int ifs, int argc, char **argv)
 			printf("%% Invalid interface name %s\n", argv[i]);
 			continue;
 		}
-		switch(type) {
+		switch(x->type) {
 		case BRPORT_MEMBER:
 			if (set) {
 				/* adding a member activates a bridge */
@@ -201,13 +205,24 @@ brport(char *ifname, int ifs, int argc, char **argv)
 #define BRVAL_FWDDELAY 3
 #define BRVAL_HELLOTIME 4
 #define BRVAL_PRIORITY 5
+
+static struct brc brvs[] = {
+	{ "maxaddr",	BRVAL_MAXADDR },
+	{ "timeout",	BRVAL_TIMEOUT },
+	{ "maxage",	BRVAL_MAXAGE },
+	{ "fwddelay",	BRVAL_FWDDELAY },
+	{ "hellotime",	BRVAL_HELLOTIME },
+	{ "priority",	BRVAL_PRIORITY },
+        { 0,            0 }
+};
+
 int
 brval(char *ifname, int ifs, int argc, char **argv)
 {
-	int set, type;
+	int set;
 	u_int32_t val = 0;
-	char *name;
 	const char *errmsg = NULL;
+	struct brc *x;
 
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -216,35 +231,21 @@ brval(char *ifname, int ifs, int argc, char **argv)
 	} else
 		set = 1;
 
-	if (CMP_ARG(argv[0], "maxad")) {
-		type = BRVAL_MAXADDR;
-		name = "maxaddr";
-        } else if (CMP_ARG(argv[0], "t")) {
-		type = BRVAL_TIMEOUT;
-		name = "timeout";
-	} else if (CMP_ARG(argv[0], "maxag")) {
-		type = BRVAL_MAXAGE;
-		name = "maxage";
-	} else if (CMP_ARG(argv[0], "f")) {
-		type = BRVAL_FWDDELAY;
-		name = "fwddelay";
-	} else if (CMP_ARG(argv[0], "h")) {
-		type = BRVAL_HELLOTIME;
-		name = "hellotime";
-	} else if (CMP_ARG(argv[0], "p")) {
-		type = BRVAL_PRIORITY;
-		name = "priority";
-	} else {
-		printf("%% Internal error\n");
-		return(1);
+	x = (struct brc *) genget(argv[0], (char **)brvs, sizeof(struct brc));
+	if (x == 0) {
+		printf("%% Internal error - Invalid argument %s\n", argv[0]);
+		return 0;
+	} else if (Ambiguous(x)) {
+		printf("%% Internal error - Ambiguous argument %s\n", argv[0]);
+		return 0;
 	}
 
 	argv++;
 	argc--;
 
 	if ((set && argc != 1) || (!set && argc > 1)) {
-		printf("%% %s <val>\n", name);
-		printf("%% no %s [val]\n", name);
+		printf("%% %s <val>\n", x->name);
+		printf("%% no %s [val]\n", x->name);
 		return(0);
 	}
 
@@ -252,13 +253,13 @@ brval(char *ifname, int ifs, int argc, char **argv)
 		errno = 0;
 		val = strtonum(argv[0], 0, ULONG_MAX, &errmsg);
 		if (errmsg) {
-			printf("%% invalid %s argument %s: %s\n", name,
+			printf("%% invalid %s argument %s: %s\n", x->name,
 			    argv[0], errmsg);
 			return(0);
 		}
 	}
 
-	switch(type) {
+	switch(x->type) {
 	case BRVAL_MAXADDR:
 		if (set)
 			bridge_maxaddr(ifs, ifname, val);
@@ -374,12 +375,18 @@ brstatic(char *ifname, int ifs, int argc, char **argv)
 
 #define BRPRI_IFPRIORITY 0
 #define BRPRI_IFCOST     1
+static struct brd brds[] = {
+	{ "ifpriority",		"priority",	BRPRI_IFPRIORITY },
+	{ "ifcost",		"cost",		BRPRI_IFCOST },
+	{ 0,			0,		0 }
+};
+
 int
 brpri(char *ifname, int ifs, int argc, char **argv)   
 {
-	int set, val, type;
-	char *name, *descr;
+	int set, val;
 	const char *errmsg = NULL;
+	struct brd *x;
          
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -388,17 +395,13 @@ brpri(char *ifname, int ifs, int argc, char **argv)
 	} else
 		set = 1;
 
-	if (CMP_ARG(argv[0], "ifp")) {
-		type = BRPRI_IFPRIORITY;
-		name = "ifpriority";
-		descr = "priority";
-	} else if (CMP_ARG(argv[0], "ifc")) {
-		type = BRPRI_IFCOST;
-		name = "ifcost";
-		descr = "cost";
-	} else {
-		printf("%% Internal error\n");
-		return(0);
+	x = (struct brd *) genget(argv[0], (char **)brds, sizeof(struct brd));
+	if (x == 0) {
+		printf("%% Internal error - Invalid argument %s\n", argv[0]);
+		return 0;
+	} else if (Ambiguous(x)) {
+		printf("%% Internal error - Ambiguous argument %s\n", argv[0]);
+		return 0;
 	}
 
 	argv++;
@@ -410,8 +413,8 @@ brpri(char *ifname, int ifs, int argc, char **argv)
 	 * set form of this command
 	 */
 	if ((set && argc != 2) || (!set && (argc < 1 || argc > 2))) {
-		printf("%% %s <member> <%s>\n", name, descr);
-		printf("%% no %s <member> [%s]\n", name, descr);
+		printf("%% %s <member> <%s>\n", x->name, x->descr);
+		printf("%% no %s <member> [%s]\n", x->name, x->descr);
 		return(0);
 	}
 
@@ -428,11 +431,11 @@ brpri(char *ifname, int ifs, int argc, char **argv)
 		return (0);
         }
 
-	switch(type) {
+	switch(x->type) {
 	case BRPRI_IFPRIORITY:
 		if (set) {
 			if (val > 0xff) {
-				printf("%% %s exceeds limit\n",name);
+				printf("%% %s exceeds limit\n", x->name);
 				return(0);
 			}
 			bridge_ifprio(ifs, ifname, argv[0], val);
@@ -443,7 +446,7 @@ brpri(char *ifname, int ifs, int argc, char **argv)
 	case BRPRI_IFCOST:
 		if (set) {
 			if (val > 65535) {
-				printf("%% %s exceeds limit\n",name);
+				printf("%% %s exceeds limit\n", x->name);
 				return(0);
 			}
 			bridge_ifcost(ifs, ifname, argv[0], val);

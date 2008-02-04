@@ -1,4 +1,4 @@
-$nsh: TODO,v 1.30 2008/01/20 07:21:21 chris Exp $
+$nsh: TODO,v 1.31 2008/02/04 02:49:46 chris Exp $
 
 nsh is a work in progress, diffs are welcome
 
@@ -10,7 +10,8 @@ Cleanup:
 * Sanity check _before_ args hit int*() routines, based on some framework
   of possible values for each function (something that works along with
   context sensitive help framework)
-* Consistent return values between functions
+* Push more argument validation up, outside of the actual function routines
+* Consistent return values between functions?
 * Support new wireless information interfaces where necessary, also dump wi.c
   once if_wi moves to new interfaces
 * Use sockaddr everywhere, instead of home-grown ip_t

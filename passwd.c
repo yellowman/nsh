@@ -1,4 +1,4 @@
-/* $nsh: passwd.c,v 1.6 2007/12/27 03:12:22 chris Exp $ */
+/* $nsh: passwd.c,v 1.7 2008/02/04 02:49:46 chris Exp $ */
 /*
  * Copyright (c) 2004
  *      Christian Gut.  All rights reserved.
@@ -128,7 +128,7 @@ enable(int argc, char **argv)
 		}
 
 	case 2:
-		if (CMP_ARG(argv[1], "?")) {
+		if (argv[1][0] == '?') {
 			/* print help */
 			printf("%% enable\t\t\t\tenable privileged mode\n");
 			printf("%% enable ?\t\t\t\tShow Options\n");
@@ -143,7 +143,7 @@ enable(int argc, char **argv)
 		}
 
 	case 3:
-		if (!(CMP_ARG(argv[1], "s"))) {
+		if (!isprefix(argv[1], "secret")) {
 			printf("%% Invalid argument: %s\n", argv[1]);
 			return 0;
 		}
@@ -160,14 +160,12 @@ enable(int argc, char **argv)
 		return (write_pass(cpass));
 
 	case 4:
-		/* 2nd == "secret" ? */
-		if (!(CMP_ARG(argv[1], "s"))) {
+		if (!isprefix(argv[1], "secret")) {
 			printf("%% Invalid argument: %s\n", argv[2]);
 			return 0;
 		}
 
-		/* third == correct cipher? (only blowfish atm) */
-		if (!(CMP_ARG(argv[2], "b"))) {
+		if (!isprefix(argv[2], "blowfish")) {
 			printf("%% Invalid cipher: %s\n", argv[3]);
 			return 0;
 		}

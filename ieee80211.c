@@ -1,4 +1,4 @@
-/* $nsh: ieee80211.c,v 1.15 2008/01/13 02:27:38 chris Exp $ */
+/* $nsh: ieee80211.c,v 1.16 2008/02/04 02:49:46 chris Exp $ */
 /* From: $OpenBSD: /usr/src/sbin/ifconfig/ifconfig.c,v 1.68 2002/06/19 18:53:53 millert Exp $ */
 /*
  * Copyright (c) 1983, 1993
@@ -391,7 +391,7 @@ get_nwinfo(char *ifname, char *str, int str_len, int type)
 					    ':')
 						nwkey_verbose = 1;
 					else if (nwkey.i_key[0].i_keylen >= 7 &&
-						    CMP_ARG(
+						    MIN_ARG(
 						    nwkey.i_key[0].i_keydat,
 						    "persist"))
 						nwkey_verbose = 1;

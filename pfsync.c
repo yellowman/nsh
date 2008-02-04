@@ -66,7 +66,7 @@ intsyncdev(char *ifname, int ifs, int argc, char **argv)
 		return (0);
 	}
 
-	if (!CMP_ARG(ifname, "pfsync")) {
+	if (!MIN_ARG(ifname, "pfsync")) {
 		printf("%% syncdev is only for pfsync devices\n");
 		return 0;
 	}
@@ -123,7 +123,7 @@ intsyncpeer(char *ifname, int ifs, int argc, char **argv)
 	argc--;
 	argv++;
 
-	if (!CMP_ARG(ifname, "pfsync")) {
+	if (!MIN_ARG(ifname, "pfsync")) {
 		printf("%% syncpeer is only for pfsync devices\n");
 		return 0;
 	}
