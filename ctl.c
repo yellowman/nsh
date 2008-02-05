@@ -1,4 +1,4 @@
-/* $nsh: ctl.c,v 1.9 2008/02/04 02:49:46 chris Exp $ */
+/* $nsh: ctl.c,v 1.10 2008/02/05 04:39:53 chris Exp $ */
 /*
  * Copyright (c) 2008
  *      Chris Cappuccio.  All rights reserved.
@@ -34,8 +34,10 @@
 #include <sys/signal.h>
 #include "externs.h"
 
-#define ENABLE 0
-#define DISABLE 1
+#define ENABLE	(void *)1 
+#define DISABLE	(void *)2
+#define OPT	(void *)1
+#define REQ	(void *)2
 #define INVALID "Invalid or ambiguous argument"
 
 /* service daemons */
@@ -53,587 +55,268 @@
 struct ctl {
 	char *name;
 	char *help;
-	int handler_action;
+	char *args[32];
+	void (*handler)(char *, char **, char *);
+	int *flag_x;
 };
 
 char *setup (char *, char *, int, char **, struct ctl *, char *, int);   
-void call_editor(char *, char **, char *, char *);
+void call_editor(char *, char **, char *);
 int rule_writeline(char *, int, char **);
 int acq_lock(char *);
 void rls_lock(int);
-void flag_x(char *, int);
+void flag_x(char *, int *);
 
-#define CTL_ENABLE 0
-#define CTL_DISABLE 1
-#define CTL_EDIT 2
-static struct ctl ctl_edds[] = {
-	{ "enable",	"enable service",	CTL_ENABLE },
-	{ "disable",	"disable service",	CTL_DISABLE },
-	{ "edit",	"edit configuration",	CTL_EDIT },
-	{ 0,		0,			0 }
+char *ctl_pf_test[] = { PFCTL, "-nf", PFCONF_TEMP, '\0' };
+static struct ctl ctl_pf[] = {
+	{ "enable",	"enable service",
+	    { PFCTL, "-e", '\0' }, NULL, ENABLE },
+	{ "disable",	"disable service",
+	    { PFCTL, "-d", '\0' }, NULL, DISABLE },
+	{ "edit",	"edit configuration",
+	    { "PF", (char *)ctl_pf_test, PFCONF_TEMP }, call_editor, NULL },
+	{ "reload",	"reload service",
+	    { PFCTL, "-f", PFCONF_TEMP, '\0' }, NULL, NULL },
+	{ 0, 0, { 0 }, 0, 0 }
 };
 
-#define CTL_RELOAD 3
-static struct ctl ctl_eddrs[] = {
-	{ "enable",	"enable service",	CTL_ENABLE },
-	{ "disable",	"disable service",	CTL_DISABLE },
-	{ "edit",	"edit configuration",	CTL_EDIT },
-	{ "reload",	"reload configuration",	CTL_RELOAD },
-	{ 0,		0,			0 }
+char *ctl_ospf_test[] = { OSPFD, "-nf", OSPFCONF_TEMP, '\0' };
+static struct ctl ctl_ospf[] = {
+	{ "enable",     "enable service",
+	    { OSPFD, "-f", OSPFCONF_TEMP, '\0' }, NULL, ENABLE },
+	{ "disable",    "disable service",
+	    { PKILL, "ospfd", '\0' }, NULL, DISABLE },
+	{ "edit",       "edit configuration",
+	    { "OSPF", (char *)ctl_ospf_test, OSPFCONF_TEMP },
+	    call_editor, NULL },
+	{ "reload",     "reload service",
+	    { OSPFCTL, "reload", '\0' }, NULL, NULL },
+	{ 0, 0, { 0 }, 0, 0 }
 };
 
-#define CTL_HOST 4
-#define CTL_TABLE 5
-#define CTL_REDIRECT 6
-#define CTL_MONITOR 7
-#define CTL_POLL 8
+char *ctl_bgp_test[] = { BGPD, "-nf", BGPCONF_TEMP, '\0' };
+static struct ctl ctl_bgp[] = {
+	{ "enable",     "enable service",
+	    { BGPD, "-f", BGPCONF_TEMP, '\0' }, NULL, ENABLE },
+	{ "disable",    "disable service",
+	    { PKILL, "bgpd", '\0' }, NULL, DISABLE },
+	{ "edit",       "edit configuration",
+	    { "BGP", (char *)ctl_bgp_test, BGPCONF_TEMP }, call_editor, NULL },
+	{ "reload",     "reload service",
+	    { BGPCTL, "reload", '\0' }, NULL, NULL },
+        { 0, 0, { 0 }, 0, 0 }
+};
+
+char *ctl_rip_test[] = { RIPD, "-nf", RIPCONF_TEMP, '\0' };
+static struct ctl ctl_rip[] = {
+	{ "enable",     "enable service",
+	    { RIPD, "-f", RIPCONF_TEMP, '\0' }, NULL, ENABLE },
+	{ "disable",    "disable service",
+	    { PKILL, "ripd", '\0' }, NULL, DISABLE },
+	{ "edit",       "edit configuration",
+	    { "RIP", (char *)ctl_rip_test, RIPCONF_TEMP }, call_editor, NULL },
+	{ "reload",     "reload service",
+	    { RIPCTL, "reload", '\0' }, NULL, NULL },
+	{ 0, 0, { 0 }, 0, 0 }
+};
+
+char *ctl_ipsec_test[] = { IPSECCTL, "-nf", IPSECCONF_TEMP, '\0' };
+static struct ctl ctl_ipsec[] = {
+	{ "enable",     "enable service",
+	    { ISAKMPD, "-Sa", '\0' }, NULL, ENABLE },
+	{ "disable",    "disable service",                   
+	    { PKILL, "isakmpd", '\0' }, NULL, DISABLE },
+	{ "edit",       "edit configuration",   
+	    { "IPsec", (char *)ctl_ipsec_test, IPSECCONF_TEMP },
+	    call_editor, NULL },
+	{ "reload",     "reload service",
+	    { IPSECCTL, "-f", IPSECCONF_TEMP, '\0' }, NULL, NULL },
+	{ 0, 0, { 0 }, 0, 0 }
+};
+
+char *ctl_dvmrp_test[] = { DVMRPD, "-nf", DVMRPCONF_TEMP, '\0' };
+static struct ctl ctl_dvmrp[] = {
+	{ "enable",     "enable service",
+	    { DVMRPD, "-f", DVMRPCONF_TEMP, '\0' }, NULL, ENABLE },
+	{ "disable",    "disable service",   
+	    { PKILL, "dvmrpd", '\0' }, NULL, DISABLE },
+	{ "edit",       "edit configuration",
+	    { "DVMRP", (char *)ctl_dvmrp_test,  DVMRPCONF_TEMP },
+	    call_editor, NULL },
+	{ 0, 0, { 0 }, 0, 0 }
+};
+
+static struct ctl ctl_sasync[] = {
+	{ "enable",     "enable service",
+	    { SASYNCD, "-c", SASYNCCONF_TEMP, '\0' }, NULL, ENABLE },
+	{ "disable",    "disable service",
+	    { PKILL, "sasyncd", '\0' }, NULL, DISABLE },
+	{ "edit",       "edit configuration",
+	    { "sasync", NULL, SASYNCCONF_TEMP }, call_editor, NULL },
+	{ 0, 0, { 0 }, 0, 0 }
+};
+
+char *ctl_dhcp_test[] = { DHCPD, "-nc", DHCPCONF_TEMP, '\0' };
+static struct ctl ctl_dhcp[] = {
+	{ "enable",     "enable service",
+	    { DHCPD, "-c", DHCPCONF_TEMP, '\0' }, NULL, ENABLE },
+	{ "disable",    "disable service",
+	    { PKILL, "dhcpd", '\0' }, NULL, DISABLE },
+	{ "edit",       "edit configuration",
+	    { "DHCP", (char *)ctl_dhcp_test, DHCPCONF_TEMP },
+	    call_editor, NULL },
+	{ 0, 0, { 0 }, 0, 0 }
+};
+
+char *ctl_snmp_test[] = { SNMPD, "-nf", SNMPCONF_TEMP, '\0' };
+static struct ctl ctl_snmp[] = {
+	{ "enable",     "enable service",
+	    { SNMPD, "-f", SNMPCONF_TEMP, '\0' }, NULL, ENABLE },
+	{ "disable",    "disable service",
+	    { PKILL, "snmpd", '\0' }, NULL, DISABLE },
+	{ "edit",       "edit configuration",
+	    { "SNMP", (char *)ctl_snmp_test, SNMPCONF_TEMP },
+	    call_editor, NULL },
+	{ 0, 0, { 0 }, 0, 0 }
+};
+
+char *ctl_ntp_test[] = { NTPD, "-nf", NTPCONF_TEMP, '\0' };
+static struct ctl ctl_ntp[] = {
+	{ "enable",     "enable service",
+	    { NTPD, "-sf", NTPCONF_TEMP, '\0' }, NULL, ENABLE },
+	{ "disable",    "disable service",
+	    { PKILL, "ntpd", '\0' }, NULL, DISABLE },
+	{ "edit",       "edit configuration",
+	    { "NTP", (char *)ctl_ntp_test, NTPCONF_TEMP },
+	    call_editor, NULL },
+	{ 0, 0, { 0 }, 0, 0 }
+};
+
+char *ctl_relay_test[] = { RELAYD, "-nf", RELAYCONF_TEMP, '\0' };
 static struct ctl ctl_relay[] = {
-	{ "enable",	"enable service",	CTL_ENABLE },
-        { "disable",	"disable service",	CTL_DISABLE },
-        { "edit",	"edit configuration",	CTL_EDIT },
-        { "reload",	"reload configuration",	CTL_RELOAD },
-	{ "host",	"per-host control",	CTL_HOST },
-	{ "table",	"per-table control",	CTL_TABLE },
-	{ "redirect",	"per-redirect control",	CTL_REDIRECT },
-	{ "monitor",	"monitor mode",		CTL_MONITOR },
-	{ "poll",	"poll mode",		CTL_POLL },
-	{ 0,		0,			0 }
+	{ "enable",	"enable service",
+	    { RELAYD, "-f", RELAYCONF_TEMP, '\0' }, NULL, ENABLE },
+        { "disable",	"disable service",
+	    { PKILL, "relayd", '\0' }, NULL, DISABLE },
+        { "edit",	"edit configuration",
+	    { "Relay", (char *)ctl_relay_test, RELAYCONF_TEMP },
+	    call_editor, NULL },
+        { "reload",	"reload configuration",
+	    { RELAYCTL, "reload", '\0' }, NULL, NULL },
+	{ "host",	"per-host control",
+	    { RELAYCTL, "host", OPT, OPT, '\0' }, NULL, NULL },
+	{ "table",	"per-table control",
+	    { RELAYCTL, "table", OPT, OPT, '\0' }, NULL, NULL },
+	{ "redirect",	"per-redirect control",
+	    { RELAYCTL, "redirect", OPT, OPT, '\0' }, NULL, NULL },
+	{ "monitor",	"monitor mode",
+	    { RELAYCTL, "monitor", '\0' }, NULL, NULL },
+	{ "poll",	"poll mode",
+	    { RELAYCTL, "poll", '\0' }, NULL, NULL},
+	{ 0, 0, { 0 }, 0, 0 }
 };
 
-int
-pfctl(int argc, char **argv, char *modhvar)
-{
-	char *aarg = argv[0];
-	char *edit_args[] = { PFCTL, "-nf", PFCONF_TEMP, '\0' };
-	char *reload_args[] = { PFCTL, "-f", PFCONF_TEMP, '\0' };
-	struct ctl *x;
-
-	aarg = setup(modhvar, aarg, argc, argv, ctl_eddrs, PFCONF_TEMP, 2);
-	if (aarg == NULL)
-		return(0);
-
-	x = (struct ctl *) genget(aarg, (char **)ctl_eddrs,
-	    sizeof(struct ctl));
-	if (x == 0) {
-		printf("%% Invalid argument %s\n", aarg);
-		return 0;
-	} else if (Ambiguous(x)) {
-		printf("%% Ambiguous argument %s\n", aarg);
-		return 0;
-	}
-
-	switch (x->handler_action) {
-	case CTL_EDIT:
-		call_editor("PF", edit_args, PFCONF_TEMP, PFCTL);
-		break;
-	case CTL_RELOAD:
-		cmdargs(PFCTL, reload_args);
-		break;
-	case CTL_ENABLE:
-		cmdarg(PFCTL, "-e");
-		flag_x(PFCONF_TEMP, ENABLE);
-		break;
-	case CTL_DISABLE:
-		cmdarg(PFCTL, "-d");
-		flag_x(PFCONF_TEMP, DISABLE);
-		break;
-	}
-
-	return(0);
-}
-
-int
-ospfctl(int argc, char **argv, char *modhvar)
-{
-	char *aarg = argv[0];
-	char *edit_args[] = { OSPFD, "-nf", OSPFCONF_TEMP, '\0' };
-	char *enable_args[] = { OSPFD, "-f", OSPFCONF_TEMP, '\0' };
-	struct ctl *x;
-
-	aarg = setup(modhvar, aarg, argc, argv, ctl_eddrs, OSPFCONF_TEMP, 2);
-	if (aarg == NULL)
-		return(0);
-
-	x = (struct ctl *) genget(aarg, (char **)ctl_eddrs,
-	    sizeof(struct ctl));
-	if (x == 0) {
-		printf("%% Invalid argument %s\n", aarg);
-		return 0;
-	} else if (Ambiguous(x)) {
-		printf("%% Ambiguous argument %s\n", aarg);
-		return 0;
-	}
-
-	switch (x->handler_action) {
-	case CTL_EDIT:
-		call_editor("OSPF", edit_args, OSPFCONF_TEMP, OSPFD);
-		break;
-	case CTL_RELOAD:
-		cmdarg(OSPFCTL, "reload");
-		break;
-	case CTL_ENABLE:
-		cmdargs(OSPFD, enable_args);
-		flag_x(OSPFCONF_TEMP, ENABLE);
-		break;
-	case CTL_DISABLE:
-		cmdarg(PKILL, "ospfd");
-		flag_x(OSPFCONF_TEMP, DISABLE);
-		break;
-	}
-
-	return(0);
-}
-
-int
-bgpctl(int argc, char **argv, char *modhvar)
-{
-	char *aarg = argv[0];
-	char *edit_args[] = { BGPD, "-nf", BGPCONF_TEMP, '\0' };
-	char *enable_args[] = { BGPD, "-f", BGPCONF_TEMP, '\0' };
-	struct ctl *x;
-
-	aarg = setup(modhvar, aarg, argc, argv, ctl_eddrs, BGPCONF_TEMP, 2);
-	if (aarg == NULL)
-		return(0);
-
-	x = (struct ctl *) genget(aarg, (char **)ctl_eddrs,
-	    sizeof(struct ctl));
-	if (x == 0) {
-		printf("%% Invalid argument %s\n", aarg);
-		return 0;
-	} else if (Ambiguous(x)) {
-		printf("%% Ambiguous argument %s\n", aarg);
-		return 0;
-	}
-
-	switch (x->handler_action) {
-	case CTL_EDIT:
-		call_editor("BGP", edit_args, BGPCONF_TEMP, BGPD);
-		break;
-	case CTL_RELOAD:
-		cmdarg(BGPCTL, "reload");
-		break;
-	case CTL_ENABLE:
-		cmdargs(BGPD, enable_args);
-		flag_x(BGPCONF_TEMP, ENABLE);
-		break;
-	case CTL_DISABLE:
-		cmdarg(PKILL, "bgpd");
-		flag_x(BGPCONF_TEMP, DISABLE);
-		break;
-	}
-
-	return(0);
-}
-
-int
-ripctl(int argc, char **argv, char *modhvar)
-{
-	char *aarg = argv[0];
-	char *edit_args[] = { RIPD, "-nf", RIPCONF_TEMP, '\0' };
-	char *enable_args[] = { RIPD, "-f", RIPCONF_TEMP, '\0' };
-	struct ctl *x;
-
-	aarg = setup(modhvar, aarg, argc, argv, ctl_eddrs, RIPCONF_TEMP, 2);
-	if (aarg == NULL)
-		return(0);
-
-	x = (struct ctl *) genget(aarg, (char **)ctl_eddrs,
-	    sizeof(struct ctl));
-	if (x == 0) { 
-		printf("%% Invalid argument %s\n", aarg);
-		return 0;
-	} else if (Ambiguous(x)) {
-		printf("%% Ambiguous argument %s\n", aarg);
-		return 0;
-	}
-
-	switch (x->handler_action) {
-	case CTL_EDIT:
-		call_editor("RIP", edit_args, RIPCONF_TEMP, RIPD);
-		break;
-	case CTL_RELOAD:
-		cmdarg(RIPCTL, "reload");
-		break;
-	case CTL_ENABLE:
-		cmdargs(RIPD, enable_args);
-		flag_x(RIPCONF_TEMP, ENABLE);
-		break;
-	case CTL_DISABLE:
-		cmdarg(PKILL, "ripd");
-		flag_x(RIPCONF_TEMP, DISABLE);
-		break;
-	}
-
-	return(0);
-}
-
-int
-relayctl(int argc, char **argv, char *modhvar)
-{
-	char *aarg = argv[0];
-	char *relayctl_args[] = { RELAYCTL, NULL, NULL, NULL, '\0' };
-	char *edit_args[] = { RELAYD, "-nf", RELAYCONF_TEMP, '\0' };
-	char *enable_args[] = { RELAYD, "-f", RELAYCONF_TEMP, '\0' };
-	struct ctl *x;
-
-	aarg = setup(modhvar, aarg, argc, argv, ctl_relay, RELAYCONF_TEMP, 4);
-	if (aarg == NULL)
-		return(0);
-
-	x = (struct ctl *) genget(aarg, (char **)ctl_relay,
-	    sizeof(struct ctl));
-	if (x == 0) { 
-		printf("%% Invalid argument %s\n", aarg);
-		return 0;
-	} else if (Ambiguous(x)) {
-		printf("%% Ambiguous argument %s\n", aarg);
-		return 0;
-	}
-
-	switch(x->handler_action) {
-	case CTL_HOST:
-	case CTL_TABLE:
-	case CTL_REDIRECT:
-		if (argc != 4) {
-			printf("%% relay %s enable|disable <name|id>\n",
-			    x->name);
-			return 0;
-		}
-		relayctl_args[1] = x->name;
-		relayctl_args[3] = argv[3];
-		if (isprefix(argv[2], "disable"))
-			relayctl_args[2] = "disable";
-		if (isprefix(argv[2], "enable"))
-			relayctl_args[2] = "enable";
-		if (relayctl_args[1] != NULL && relayctl_args[2] != NULL) {
-			cmdargs(RELAYCTL, relayctl_args);
-			return(0);
-		} else
-			printf("%% relay %s enable|disable <name|id>\n",
-			    x->name);
-		break;
-	case CTL_MONITOR:
-		cmdarg(RELAYCTL, "monitor");
-		break;
-	case CTL_POLL:
-		cmdarg(RELAYCTL, "poll");
-		break;
-	case CTL_EDIT:
-		call_editor("Relay", edit_args, RELAYCONF_TEMP, RELAYD);
-		break;
-	case CTL_RELOAD:
-		cmdarg(RELAYCTL, "reload");
-		break;
-	case CTL_ENABLE:
-		cmdargs(RELAYD, enable_args);
-		flag_x(RELAYCONF_TEMP, ENABLE);
-		break;
-	case CTL_DISABLE:
-		cmdarg(PKILL, "relayd");
-		flag_x(RELAYCONF_TEMP, DISABLE);
-		break;
-	}
-
-	return(0);
-}
-
-int
-ipsecctl(int argc, char **argv, char *modhvar)
-{
-	char *aarg = argv[0];
-	char *edit_args[] = { IPSECCTL, "-nf", IPSECCONF_TEMP, '\0' };
-	char *reload_args[] = { IPSECCTL, "-f", IPSECCONF_TEMP, '\0' };
-	struct ctl *x;
-
-	aarg = setup(modhvar, aarg, argc, argv, ctl_eddrs, IPSECCONF_TEMP, 2);
-	if (aarg == NULL)
-		return(0);
-
-	x = (struct ctl *) genget(aarg, (char **)ctl_eddrs,
-	    sizeof(struct ctl));
-	if (x == 0) { 
-		printf("%% Invalid argument %s\n", aarg);
-		return 0;
-	} else if (Ambiguous(x)) {
-		printf("%% Ambiguous argument %s\n", aarg);
-		return 0;
-	}
-
-	switch (x->handler_action) {
-	case CTL_EDIT:
-		call_editor("IPsec", edit_args, IPSECCONF_TEMP, IPSECCTL);
-		break;
-	case CTL_RELOAD:
-		cmdargs(IPSECCTL, reload_args);
-		break;
-	case CTL_ENABLE:
-		cmdarg(ISAKMPD, "-Sa");
-		flag_x(IPSECCONF_TEMP, ENABLE);
-		break;
-	case CTL_DISABLE:
-		cmdarg(PKILL, "isakmpd");
-		flag_x(IPSECCONF_TEMP, DISABLE);
-		break;
-	}
-
-	return(0);
-}
-
-int
-dvmrpctl(int argc, char **argv, char *modhvar)
-{
-	char *aarg = argv[0];
-	char *edit_args[] = { DVMRPD, "-nf", DVMRPCONF_TEMP, '\0' };
-	char *enable_args[] = { DVMRPD, "-f", DVMRPCONF_TEMP, '\0' };
-	struct ctl *x;
-
-	aarg = setup(modhvar, aarg, argc, argv, ctl_edds, DVMRPCONF_TEMP, 2);
-	if (aarg == NULL)
-		return(0);
-
-	x = (struct ctl *) genget(aarg, (char **)ctl_edds,
-	    sizeof(struct ctl));
-	if (x == 0) { 
-		printf("%% Invalid argument %s\n", aarg);
-		return 0;
-	} else if (Ambiguous(x)) {
-		printf("%% Ambiguous argument %s\n", aarg);
-		return 0;
-	}
-
-	switch (x->handler_action) {
-	case CTL_EDIT:
-		call_editor("DVMRP", edit_args, DVMRPCONF_TEMP, DVMRPD);
-		break;
-	case CTL_ENABLE:
-		cmdargs(DVMRPD, enable_args);
-		flag_x(DVMRPCONF_TEMP, ENABLE);
-		break;
-	case CTL_DISABLE:
-		cmdarg(PKILL, "dvmrpd");
-		flag_x(DVMRPCONF_TEMP, DISABLE);
-		break;
-	}
-
-	return(0);
-}
-
-int
-sasyncctl(int argc, char **argv, char *modhvar)
-{
-	char *aarg = argv[0];
-	char *enable_args[] = { SASYNCD, "-c", SASYNCCONF_TEMP, '\0' };
-	struct ctl *x;
-
-	aarg = setup(modhvar, aarg, argc, argv, ctl_edds, SASYNCCONF_TEMP, 2);
-	if (aarg == NULL)
-		return(0);
-
-	x = (struct ctl *) genget(aarg, (char **)ctl_edds,
-	    sizeof(struct ctl));
-	if (x == 0) { 
-		printf("%% Invalid argument %s\n", aarg);
-		return 0;
-	} else if (Ambiguous(x)) {
-		printf("%% Ambiguous argument %s\n", aarg);
-		return 0;
-	}
-
-	switch (x->handler_action) {
-	case CTL_EDIT:
-		call_editor("sasync", NULL, SASYNCCONF_TEMP, NULL);
-		break;
-	case CTL_ENABLE:
-		cmdargs(SASYNCD, enable_args);
-		flag_x(SASYNCCONF_TEMP, ENABLE);
-		break;
-	case CTL_DISABLE:
-		cmdarg(PKILL, "sasyncd");
-		flag_x(SASYNCCONF_TEMP, DISABLE);
-		break;
-	}
-
-	return(0);
-}
-
-int
-dhcpctl(int argc, char **argv, char *modhvar)
-{
-	char *aarg = argv[0];
-	char *edit_args[] = { DHCPD, "-nc", DHCPCONF_TEMP, '\0' };
-	char *enable_args[] = { DHCPD, "-c", DHCPCONF_TEMP, '\0' };
-	struct ctl *x;
-
-	aarg = setup(modhvar, aarg, argc, argv, ctl_edds, DHCPCONF_TEMP, 2);
-	if (aarg == NULL)
-		return(0);
-
-	x = (struct ctl *) genget(aarg, (char **)ctl_edds,
-	    sizeof(struct ctl));
-	if (x == 0) { 
-		printf("%% Invalid argument %s\n", aarg);
-		return 0;
-	} else if (Ambiguous(x)) {
-		printf("%% Ambiguous argument %s\n", aarg);
-		return 0;
-	}
-
-	switch (x->handler_action) {
-	case CTL_EDIT:
-		call_editor("DHCP", edit_args, DHCPCONF_TEMP, DHCPD);
-		break;
-	case CTL_ENABLE:
-#if 0
-		/* XXX not required by -current dhcpd? */
-		/* /var/db/dhcpd.leases must exist before dhcpd begins */
-		if ((fd = open(DHCPDB, O_RDWR | O_CREAT, 0644)) == -1) {
-			printf("%% Cannot enable DHCP (failed to establish"
-			    " DHCP lease database: %s)\n", strerror(errno));
-			return(0);
-		}		
-		close(fd);
-#endif
-		cmdargs(DHCPD, enable_args);
-		flag_x(DHCPCONF_TEMP, ENABLE);
-		break;
-	case CTL_DISABLE:
-		cmdarg(PKILL, "dhcpd");
-		flag_x(DHCPCONF_TEMP, DISABLE);
-		break;
-	}
-
-	return(0);
-}
-
-int
-snmpctl(int argc, char **argv, char *modhvar)
-{
-	char *aarg = argv[0];
-	char *edit_args[] = { SNMPD, "-nf", SNMPCONF_TEMP, '\0' };
-	char *enable_args[] = { SNMPD, "-f", SNMPCONF_TEMP, '\0' };
-	struct ctl *x;
-
-	aarg = setup(modhvar, aarg, argc, argv, ctl_edds, SNMPCONF_TEMP, 2);
-	if (aarg == NULL)
-		return(0);
-
-	x = (struct ctl *) genget(aarg, (char **)ctl_edds,
-	    sizeof(struct ctl));
-	if (x == 0) { 
-		printf("%% Invalid argument %s\n", aarg);
-		return 0;
-	} else if (Ambiguous(x)) {
-		printf("%% Ambiguous argument %s\n", aarg);
-		return 0;
-	}
-
-	switch (x->handler_action) {
-	case CTL_EDIT:
-		call_editor("SNMP", edit_args, SNMPCONF_TEMP, SNMPD);
-		break;
-	case CTL_ENABLE:
-		cmdargs(SNMPD, enable_args);
-		flag_x(SNMPCONF_TEMP, ENABLE);
-		break;
-	case CTL_DISABLE:
-		cmdarg(PKILL, "snmpd");
-		flag_x(SNMPCONF_TEMP, DISABLE);
-		break;
-	}
-
-	return(0);
-}
-
-int
-ntpctl(int argc, char **argv, char *modhvar)
-{
-	char *aarg = argv[0];
-	char *edit_args[] = { NTPD, "-nf", NTPCONF_TEMP, '\0' };
-	char *enable_args[] = { NTPD, "-sf", NTPCONF_TEMP, '\0' };
-	struct ctl *x;
-         
-	aarg = setup(modhvar, aarg, argc, argv, ctl_edds, NTPCONF_TEMP, 2);
-	if (aarg == NULL)
-		return(0);
-
-	x = (struct ctl *) genget(aarg, (char **)ctl_edds,
-	    sizeof(struct ctl));
-	if (x == 0) { 
-		printf("%% Invalid argument %s\n", aarg);
-		return 0;
-	} else if (Ambiguous(x)) {
-		printf("%% Ambiguous argument %s\n", aarg);
-		return 0;
-	}
-
-	switch (x->handler_action) {
-	case CTL_EDIT:
-		call_editor("NTP", edit_args, NTPCONF_TEMP, NTPD);
-		break;
-	case CTL_ENABLE:
-		cmdargs(NTPD, enable_args);
-		flag_x(NTPCONF_TEMP, ENABLE);
-		break;
-	case CTL_DISABLE:
-		cmdarg(PKILL, "ntpd");
-		flag_x(NTPCONF_TEMP, DISABLE);
-		break;
-	}
-         
-	return(0);
-}
+static struct daemons {
+	char *name;
+	struct ctl *table;
+	char *tmpfile;
+} ctl_daemons[] = {
+	{ "pf",		ctl_pf,		PFCONF_TEMP },
+	{ "ospf",	ctl_ospf,	OSPFCONF_TEMP },
+	{ "bgp",	ctl_bgp,	BGPCONF_TEMP },
+	{ "rip",	ctl_rip,	RIPCONF_TEMP },
+	{ "relay",	ctl_relay,	RELAYCONF_TEMP },
+	{ "ipsec",	ctl_ipsec, 	IPSECCONF_TEMP },
+	{ "dvmrp",	ctl_dvmrp,	DVMRPCONF_TEMP },
+	{ "sasync",	ctl_sasync,	SASYNCCONF_TEMP },
+	{ "dhcp",	ctl_dhcp,	DHCPCONF_TEMP },
+	{ "snmp",	ctl_snmp,	SNMPCONF_TEMP },
+	{ "ntp",	ctl_ntp,	NTPCONF_TEMP },
+	{ 0, 0, 0 }
+};
 
 void
-flag_x(char *fname, int y)
+flag_x(char *fname, int *y)
 {
 	int fd;
 	char fenabled[SIZE_CONF_TEMP + sizeof(".enabled") + 1];
 
 	snprintf(fenabled, sizeof(fenabled), "%s.enabled", fname);
 
-	switch(y) {
-	case ENABLE:
+	if (y == ENABLE) {
 		if ((fd = open(fenabled, O_RDWR | O_CREAT, 0600)) == -1)
 			return;
 		close(fd);
-		break;
-	case DISABLE:
+	} else if (y == DISABLE) {
 		rmtemp(fenabled);
-		break;
 	}
 		
 }
 
-char *
-setup(char *modhvar, char *aarg, int argc, char **argv, struct ctl *x,
-      char *tmpfile, int maxarg)
+int
+ctlhandler(int argc, char **argv, char *modhvar)
 {
-	if (modhvar) {
-		if (isprefix(modhvar, "action"))
-			return (aarg);
-		else if (isprefix(modhvar, "rules")) {
-			rule_writeline(tmpfile, argc, argv);
-			return (NULL);
-		} else {
-			printf("%% Unknown rulefile modifier %s\n", modhvar);
-			return (NULL);
-		}
-	} else {
-		if (argc < 2 || argc > maxarg || (argc == 2 &&
-		    argv[1][0] == '?')) {
-			gen_help(x, argv[0], "", sizeof(struct ctl));
-			return (NULL);
-		}
-		(void) signal(SIGINT, SIG_IGN);
-		(void) signal(SIGQUIT, SIG_IGN);
+	struct daemons *daemons;
+	struct ctl *x;
+#define NARGS 7
+	char *args[NARGS] = { NULL, NULL, NULL, NULL, NULL, NULL, '\0' };
+	char **fillargs;
 
-		return(argv[1]);
+	/* loop daemon list to find table pointer */
+	daemons = (struct daemons *) genget(hname, (char **)ctl_daemons,
+	    sizeof(struct daemons));
+	if (daemons == 0) {
+		printf("%% Internal error - Invalid argument %s\n", argv[1]);
+		return 0;
+	} else if (Ambiguous(daemons)) {
+		printf("%% Internal error - Ambiguous argument %s\n", argv[1]);
+		return 0;
 	}
+
+        if (modhvar) {
+                if (isprefix(modhvar, "action")) {
+                        /* float on down the river */
+                } else if (isprefix(modhvar, "rules")) {
+                        rule_writeline(daemons->tmpfile, argc, argv);
+                        return 0;
+                } else {
+                        printf("%% Unknown rulefile modifier %s\n", modhvar);
+                        return 0;
+                }
+        } else {
+		if (argc < 2 || argv[1][0] == '?') {
+			gen_help((char **)daemons->table, "", "control",
+			    sizeof(struct ctl));
+			return 0;
+		}
+	}
+	x = (struct ctl *) genget(argv[1], (char **)daemons->table,
+	    sizeof(struct ctl));
+	if (x == 0) {
+		printf("%% Invalid argument %s\n", argv[1]);
+		return 0;
+	} else if (Ambiguous(x)) {
+		printf("%% Ambiguous argument %s\n", argv[1]);
+		return 0;
+	}
+
+	fillargs = step_optreq(x->args, args, argc, argv, 1);
+	if (fillargs == NULL)
+		return 0;
+
+	if (x->handler)
+		(*x->handler)(fillargs[0], (char **)fillargs[1], fillargs[2]);
+	else
+		cmdargs(fillargs[0], fillargs);
+
+	if (x->flag_x != NULL)
+		flag_x(daemons->tmpfile, x->flag_x);
+
+	return 1;
 }
 
 void
-call_editor(char *name, char **args, char *tmpfile, char *cmd)
+call_editor(char *name, char **args, char *tmpfile)
 {
 	int fd;
 	char *editor;
@@ -644,8 +327,8 @@ call_editor(char *name, char **args, char *tmpfile, char *cmd)
 		editor = DEFAULT_EDITOR;
 	if ((fd = acq_lock(tmpfile)) > 0) {
 		cmdarg(editor, tmpfile);
-		if (cmd != NULL)
-			cmdargs(cmd, args);
+		if (args[0] != NULL)
+			cmdargs(args[0], args);
 		rls_lock(fd);
 	} else
 		printf ("%% %s configuration is locked for editing\n", name);

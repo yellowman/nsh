@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.53 2008/02/04 02:49:46 chris Exp $ */
+/* $nsh: externs.h,v 1.54 2008/02/05 04:39:53 chris Exp $ */
 /*
  * nsh externs, prototypes and macros
  */
@@ -18,6 +18,10 @@ extern int editing;		/* is command line editing mode on? */
 extern int bridge;		/* are we in bridge mode (or interface mode?) */
 extern int priv;		/* privileged mode or not? */
 extern pid_t pid;		/* process id of nsh */
+
+#define HSIZE	64
+extern char hname[HSIZE];	/* prefix name to mode handler */
+
 #ifdef _HISTEDIT_H_
 extern HistEvent ev;		/* ev */
 #endif
@@ -89,17 +93,7 @@ extern char metricnames[];
 
 /* ctl.c */
 #define SIZE_CONF_TEMP 64
-int pfctl(int, char **, char *);
-int ospfctl(int, char **, char *);
-int bgpctl(int, char **, char *);
-int ripctl(int, char **, char *);
-int relayctl(int, char **, char *);
-int ipsecctl(int, char **, char *);
-int dvmrpctl(int, char **, char *);
-int sasyncctl(int, char **, char *);
-int dhcpctl(int, char **, char *);
-int snmpctl(int, char **, char *);
-int ntpctl(int, char **, char *);
+int ctlhandler(int, char **, char *);
 void rmtemp(char *);
 /* tmp config locations */
 #define DHCPDB		"/var/db/dhcpd.leases"
@@ -137,6 +131,7 @@ void rmtemp(char *);
 #define PKILL		"/usr/bin/pkill"
 #define SAVESCRIPT	"/usr/local/bin/save.sh"
 void command(int);
+char **step_optreq(char **, char **, int, char **, int);
 int cmdrc(char rcname[FILENAME_MAX]);
 int cmdarg(char *, char *);
 int cmdargs(char *, char **);

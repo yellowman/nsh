@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.72 2008/02/04 02:49:46 chris Exp $ */
+/* $nsh: commands.c,v 1.73 2008/02/05 04:39:53 chris Exp $ */
 /*
  * Copyright (c) 2002-2008
  *      Chris Cappuccio.  All rights reserved.
@@ -81,6 +81,7 @@ static char line[256];
 static char saveline[256];
 static int  margc;
 static char *margv[20];
+char hname[HSIZE];
 static char hbuf[MAXHOSTNAMELEN];	/* host name */
 static char ifname[IFNAMSIZ];		/* interface name */
 
@@ -776,17 +777,17 @@ static Command cmdtab[] = {
 	{ "enable",	enablehelp,	enable,		0, 0, 0, 0, 0 },
 	{ "disable",	disablehelp,	disable,	1, 0, 0, 0, 0 },
 	{ "route",	routehelp,	route,		1, 0, 1, 0, 0 },
-	{ "pf",		pfhelp,		pfctl,		1, 0, 0, 1, 1 },
-	{ "ospf",	ospfhelp,	ospfctl,	1, 0, 0, 1, 1 },
-	{ "bgp",	bgphelp,	bgpctl,		1, 0, 0, 1, 1 },
-	{ "rip",	riphelp,	ripctl,		1, 0, 0, 1, 1 },
-	{ "relay",	relayhelp,	relayctl,	1, 0, 0, 1, 1 },
-	{ "ipsec",	ipsechelp,	ipsecctl,	1, 0, 0, 1, 1 },
-	{ "dvmrp",	dvmrphelp,	dvmrpctl,	1, 0, 0, 1, 1 },
-	{ "sasync",	sasynchelp,	sasyncctl,	1, 0, 0, 1, 1 },
-	{ "dhcp",	dhcphelp,	dhcpctl,	1, 0, 0, 1, 1 },
-	{ "snmp",	snmphelp,	snmpctl,	1, 0, 0, 1, 1 },
-	{ "ntp",	ntphelp,	ntpctl,		1, 0, 0, 1, 1 },
+	{ "pf",		pfhelp,		ctlhandler,	1, 0, 0, 1, 1 },
+	{ "ospf",	ospfhelp,	ctlhandler,	1, 0, 0, 1, 1 },
+	{ "bgp",	bgphelp,	ctlhandler,	1, 0, 0, 1, 1 },
+	{ "rip",	riphelp,	ctlhandler,	1, 0, 0, 1, 1 },
+	{ "relay",	relayhelp,	ctlhandler,	1, 0, 0, 1, 1 },
+	{ "ipsec",	ipsechelp,	ctlhandler,	1, 0, 0, 1, 1 },
+	{ "dvmrp",	dvmrphelp,	ctlhandler,	1, 0, 0, 1, 1 },
+	{ "sasync",	sasynchelp,	ctlhandler,	1, 0, 0, 1, 1 },
+	{ "dhcp",	dhcphelp,	ctlhandler,	1, 0, 0, 1, 1 },
+	{ "snmp",	snmphelp,	ctlhandler,	1, 0, 0, 1, 1 },
+	{ "ntp",	ntphelp,	ctlhandler,	1, 0, 0, 1, 1 },
 	{ "ping",	pinghelp,	ping,		0, 0, 0, 0, 0 },
 	{ "traceroute", tracerthelp,	traceroute,	0, 0, 0, 0, 0 },
 	{ "ssh",	sshhelp,	ssh,		0, 0, 0, 0, 0 },
@@ -957,6 +958,8 @@ command(int top)
 			printf("%% Command invalid while privileged\n");
 			continue;
 		}
+		if (c->modh)
+			strlcpy(hname, c->name, HSIZE);	
 		if ((*c->handler) (margc, margv, 0)) {
 			break;
 		}
@@ -1477,6 +1480,8 @@ cmdrc(char rcname[FILENAME_MAX])
 					 * one value stored, passed on
 					 */
 					if (margv[1]) {
+						strlcpy(hname, c->name,
+						    HSIZE);
 						strlcpy(modhvar, margv[1],
 						    sizeof(modhvar));
 					} else {
@@ -1815,7 +1820,7 @@ static struct prot1 bgcs[] = {
 	{ "announced",  "All announced networks",
 	    { BGPCTL,  "network", "show", OPT, '\0' } },
 	{ "interfaces", "Interface states",
-	    { BGPCTL,  "show", "interfaces", OPT, '\0' } },
+	    { BGPCTL,  "show", "interfaces", '\0' } },
 	{ "nexthop",	"BGP nexthop routes",
 	    { BGPCTL,  "show", "nexthop", '\0' } },
 	{ "summary",	"Neighbor session states and counters",
@@ -1902,9 +1907,9 @@ pr_prot1(int argc, char **argv)
 {
 	struct prot1 *x;
 	struct prot *prot;
-	int i;
 #define NARGS 7
 	char *args[NARGS] = { NULL, NULL, NULL, NULL, NULL, NULL, '\0' };
+	char **fillargs;
 	char prefix[64];
 
 	/* loop protocol list to find table pointer */
@@ -1936,31 +1941,44 @@ pr_prot1(int argc, char **argv)
 		return 0;
 	}
 
+	fillargs = step_optreq(x->args, args, argc, argv, 0);
+	if (fillargs == NULL)
+		return 0;
+
+	cmdargs(fillargs[0], fillargs);
+
+	return 1;
+}
+
+char **
+step_optreq(char **xargs, char **args, int argc, char **argv, int step)
+{
+	int i;
+
 	/* replace OPT/REQ arguments with stuff from command line */
 	for (i = 0; i < NARGS - 2; i++) {
-		if (x->args[i] == '\0') {
-			if (argc > i) {
-				printf("%% Argument not valid %s\n", argv[i]);
-				return 0;
+		if (xargs[i] == '\0') {
+			if (argc > i - step) {
+				printf("%% Superfluous argument %s\n",
+				    argv[i - step]);
+				return NULL;
 			}
 			args[i] = '\0';
 			break;
 		}
-		if (x->args[i] == OPT || x->args[i] == REQ) {
+		if (xargs[i] == OPT || xargs[i] == REQ) {
 			if (argc > i)
 				args[i] = argv[i];
-			else if (x->args[i] == REQ) {
+			else if (xargs[i] == REQ) {
 				printf("%% Missing required argument\n");
-				return 0;
+				return NULL;
 			} else
 				args[i] = NULL;
 		} else
-			args[i] = x->args[i];
+			args[i] = xargs[i];
 	}
 
-	cmdargs(args[0], args);
-
-	return 1;
+	return(args);
 }
 
 int
