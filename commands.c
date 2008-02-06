@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.73 2008/02/05 04:39:53 chris Exp $ */
+/* $nsh: commands.c,v 1.74 2008/02/06 16:51:44 chris Exp $ */
 /*
  * Copyright (c) 2002-2008
  *      Chris Cappuccio.  All rights reserved.
@@ -1818,75 +1818,75 @@ struct prot1 {
 
 static struct prot1 bgcs[] = {
 	{ "announced",  "All announced networks",
-	    { BGPCTL,  "network", "show", OPT, '\0' } },
+	    { BGPCTL,  "network", "show", OPT, NULL } },
 	{ "interfaces", "Interface states",
-	    { BGPCTL,  "show", "interfaces", '\0' } },
+	    { BGPCTL,  "show", "interfaces", NULL } },
 	{ "nexthop",	"BGP nexthop routes",
-	    { BGPCTL,  "show", "nexthop", '\0' } },
+	    { BGPCTL,  "show", "nexthop", NULL } },
 	{ "summary",	"Neighbor session states and counters",
-	    { BGPCTL,  "show", "summary", OPT, '\0' } },
+	    { BGPCTL,  "show", "summary", OPT, NULL } },
 	{ "rib",	"Routing Information Base",
-	    { BGPCTL, "show",  "rib", OPT, OPT, OPT, '\0' } },
+	    { BGPCTL, "show",  "rib", OPT, OPT, OPT, NULL } },
 	{ "neighbor",	"Detailed peer information",
-	    { BGPCTL, "show",  "neighbor", REQ, OPT, '\0' } },
+	    { BGPCTL, "show",  "neighbor", REQ, OPT, NULL } },
 	{ 0, 0, { 0 } }
 };
 
 static struct prot1 oscs[] = {
 	{ "fib",	"Forward Information Base",
-	    { OSPFCTL, "show", "fib", OPT, OPT, '\0' } },
+	    { OSPFCTL, "show", "fib", OPT, OPT, NULL } },
 	{ "database",	"Link State Database",
-	    { OSPFCTL, "show", "database", OPT, OPT, '\0' } },
+	    { OSPFCTL, "show", "database", OPT, OPT, NULL } },
 	{ "interfaces",	"Interface",
-	    { OSPFCTL, "show", "interfaces", OPT, '\0' } },
+	    { OSPFCTL, "show", "interfaces", OPT, NULL } },
 	{ "neighbor",	"Neighbor",
-	    { OSPFCTL, "show", "neighbor", OPT, '\0' } },
+	    { OSPFCTL, "show", "neighbor", OPT, NULL } },
 	{ "rib",	"Routing Information Base",
-	    { OSPFCTL, "show", "rib", OPT, '\0' } },
+	    { OSPFCTL, "show", "rib", OPT, NULL } },
 	{ "summary",	"Summary",
-	    { OSPFCTL, "show", "summary", '\0' } },
+	    { OSPFCTL, "show", "summary", NULL } },
 	{ 0, 0, { 0 } }
 };
 
 static struct prot1 rics[] = {
 	{ "fib",        "Forward Information Base",
-	    { RIPCTL, "show", "fib", OPT, '\0' } },
+	    { RIPCTL, "show", "fib", OPT, NULL } },
 	{ "interfaces", "Interfaces",
-	    { RIPCTL, "show", "interfaces", '\0' } },
+	    { RIPCTL, "show", "interfaces", NULL } },
 	{ "neighbor",   "Neighbor",
-	    { RIPCTL, "show", "neighbor", '\0' } },
+	    { RIPCTL, "show", "neighbor", NULL } },
 	{ "rib",        "Routing Information Base",
-	    { RIPCTL, "show", "rib", '\0' } },
+	    { RIPCTL, "show", "rib", NULL } },
 	{ 0, 0, { 0 } }
 };
 
 static struct prot1 dvcs[] = {
 	{ "igmp",       "Internet Group Message Protocol",
-	    { DVMRPCTL, "show", "igmp", '\0' } },
+	    { DVMRPCTL, "show", "igmp", NULL } },
 	{ "interfaces", "Interfaces",
-	    { DVMRPCTL, "show", "interfaces", OPT, '\0' } },
+	    { DVMRPCTL, "show", "interfaces", OPT, NULL } },
 	{ "mfc",        "Multicast Forwarding Cache",
-	    { DVMRPCTL, "show", "mfc", OPT, '\0' } },
+	    { DVMRPCTL, "show", "mfc", OPT, NULL } },
 	{ "neighbor",   "Neighbor",
-	    { DVMRPCTL, "show", "neighbor", OPT, '\0' } },
+	    { DVMRPCTL, "show", "neighbor", OPT, NULL } },
 	{ "rib",        "Routing Information Base",
-	    { DVMRPCTL, "show", "rib", OPT, '\0' } },
+	    { DVMRPCTL, "show", "rib", OPT, NULL } },
 	{ "summary",    "Summary",
-	    { DVMRPCTL, "show", "summary", '\0' } },
+	    { DVMRPCTL, "show", "summary", NULL } },
         { 0, 0, { 0 } }
 };
 
 static struct prot1 rlcs[] = {
 	{ "hosts",      "hosts",
-	    { RELAYCTL, "show", "hosts", '\0' } },
+	    { RELAYCTL, "show", "hosts", NULL } },
 	{ "redirects",  "redirects",
-	    { RELAYCTL, "show", "redirects", '\0' } },
+	    { RELAYCTL, "show", "redirects", NULL } },
 	{ "status",     "status",
-	    { RELAYCTL, "show", "relays", '\0' } },
+	    { RELAYCTL, "show", "relays", NULL } },
 	{ "sessions",   "sessions",
-	    { RELAYCTL, "show", "sessions", '\0' } },
+	    { RELAYCTL, "show", "sessions", NULL } },
 	{ "summary",    "summary",
-	    { RELAYCTL, "show", "summary", '\0' } },
+	    { RELAYCTL, "show", "summary", NULL } },
 	{ 0, 0, { 0 } }
 };
 
@@ -1941,7 +1941,7 @@ pr_prot1(int argc, char **argv)
 		return 0;
 	}
 
-	fillargs = step_optreq(x->args, args, argc, argv, 0);
+	fillargs = step_optreq(x->args, args, argc, argv, 3);
 	if (fillargs == NULL)
 		return 0;
 
@@ -1951,31 +1951,47 @@ pr_prot1(int argc, char **argv)
 }
 
 char **
-step_optreq(char **xargs, char **args, int argc, char **argv, int step)
+step_optreq(char **xargs, char **args, int argc, char **argv, int skip)
 {
 	int i;
+	int fill = 0;	/* total fillable arguments */
+	int flc = 0;	/* number of filled arguments */
 
-	/* replace OPT/REQ arguments with stuff from command line */
+	/* count fillable arguments */
+	for (i = 0; i < NARGS - 1; i++) {
+		if (xargs[i] == OPT || xargs[i] == REQ)
+			fill++;
+		if (xargs[i] == NULL)
+			break;
+	}
+
+	if (argc - skip > fill) {
+		printf("%% Superfluous argument: %s\n", argv[skip + fill]);
+		return NULL;
+	}
+
+	/* copy xargs to args, replace OPT/REQ args with argv past skip */
 	for (i = 0; i < NARGS - 2; i++) {
-		if (xargs[i] == '\0') {
-			if (argc > i - step) {
-				printf("%% Superfluous argument %s\n",
-				    argv[i - step]);
-				return NULL;
-			}
+		if (xargs[i] == NULL) {
 			args[i] = '\0';
 			break;
 		}
 		if (xargs[i] == OPT || xargs[i] == REQ) {
-			if (argc > i)
-				args[i] = argv[i];
-			else if (xargs[i] == REQ) {
+			/* copy from argv to args */
+			if (argc - skip - flc > 0) {
+				args[i] = argv[skip + flc];
+				flc++;
+			} else if (xargs[i] == REQ) {
 				printf("%% Missing required argument\n");
 				return NULL;
-			} else
-				args[i] = NULL;
-		} else
+			} else {
+				args[i] = '\0';
+				break;
+			}
+		} else {
+			/* copy from xargs to args */
 			args[i] = xargs[i];
+		}
 	}
 
 	return(args);

@@ -1,4 +1,4 @@
-/* $nsh: ctl.c,v 1.10 2008/02/05 04:39:53 chris Exp $ */
+/* $nsh: ctl.c,v 1.11 2008/02/06 16:51:44 chris Exp $ */
 /*
  * Copyright (c) 2008
  *      Chris Cappuccio.  All rights reserved.
@@ -70,100 +70,103 @@ void flag_x(char *, int *);
 char *ctl_pf_test[] = { PFCTL, "-nf", PFCONF_TEMP, '\0' };
 static struct ctl ctl_pf[] = {
 	{ "enable",	"enable service",
-	    { PFCTL, "-e", '\0' }, NULL, ENABLE },
+	    { PFCTL, "-e", NULL }, NULL, ENABLE },
 	{ "disable",	"disable service",
-	    { PFCTL, "-d", '\0' }, NULL, DISABLE },
+	    { PFCTL, "-d", NULL }, NULL, DISABLE },
 	{ "edit",	"edit configuration",
-	    { "PF", (char *)ctl_pf_test, PFCONF_TEMP }, call_editor, NULL },
+	    { "PF", (char *)ctl_pf_test, PFCONF_TEMP, NULL }, call_editor,
+	    NULL },
 	{ "reload",	"reload service",
-	    { PFCTL, "-f", PFCONF_TEMP, '\0' }, NULL, NULL },
+	    { PFCTL, "-f", PFCONF_TEMP, NULL }, NULL, NULL },
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
 char *ctl_ospf_test[] = { OSPFD, "-nf", OSPFCONF_TEMP, '\0' };
 static struct ctl ctl_ospf[] = {
 	{ "enable",     "enable service",
-	    { OSPFD, "-f", OSPFCONF_TEMP, '\0' }, NULL, ENABLE },
+	    { OSPFD, "-f", OSPFCONF_TEMP, NULL }, NULL, ENABLE },
 	{ "disable",    "disable service",
-	    { PKILL, "ospfd", '\0' }, NULL, DISABLE },
+	    { PKILL, "ospfd", NULL }, NULL, DISABLE },
 	{ "edit",       "edit configuration",
-	    { "OSPF", (char *)ctl_ospf_test, OSPFCONF_TEMP },
+	    { "OSPF", (char *)ctl_ospf_test, OSPFCONF_TEMP, NULL },
 	    call_editor, NULL },
 	{ "reload",     "reload service",
-	    { OSPFCTL, "reload", '\0' }, NULL, NULL },
+	    { OSPFCTL, "reload", NULL }, NULL, NULL },
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
-char *ctl_bgp_test[] = { BGPD, "-nf", BGPCONF_TEMP, '\0' };
+char *ctl_bgp_test[] = { BGPD, "-nf", BGPCONF_TEMP, NULL, '\0' };
 static struct ctl ctl_bgp[] = {
 	{ "enable",     "enable service",
-	    { BGPD, "-f", BGPCONF_TEMP, '\0' }, NULL, ENABLE },
+	    { BGPD, "-f", BGPCONF_TEMP, NULL }, NULL, ENABLE },
 	{ "disable",    "disable service",
-	    { PKILL, "bgpd", '\0' }, NULL, DISABLE },
+	    { PKILL, "bgpd", NULL }, NULL, DISABLE },
 	{ "edit",       "edit configuration",
-	    { "BGP", (char *)ctl_bgp_test, BGPCONF_TEMP }, call_editor, NULL },
+	    { "BGP", (char *)ctl_bgp_test, BGPCONF_TEMP, NULL }, call_editor,
+	    NULL },
 	{ "reload",     "reload service",
-	    { BGPCTL, "reload", '\0' }, NULL, NULL },
+	    { BGPCTL, "reload", NULL }, NULL, NULL },
         { 0, 0, { 0 }, 0, 0 }
 };
 
 char *ctl_rip_test[] = { RIPD, "-nf", RIPCONF_TEMP, '\0' };
 static struct ctl ctl_rip[] = {
 	{ "enable",     "enable service",
-	    { RIPD, "-f", RIPCONF_TEMP, '\0' }, NULL, ENABLE },
+	    { RIPD, "-f", RIPCONF_TEMP, NULL }, NULL, ENABLE },
 	{ "disable",    "disable service",
-	    { PKILL, "ripd", '\0' }, NULL, DISABLE },
+	    { PKILL, "ripd", NULL }, NULL, DISABLE },
 	{ "edit",       "edit configuration",
-	    { "RIP", (char *)ctl_rip_test, RIPCONF_TEMP }, call_editor, NULL },
+	    { "RIP", (char *)ctl_rip_test, RIPCONF_TEMP, NULL }, call_editor,
+	    NULL },
 	{ "reload",     "reload service",
-	    { RIPCTL, "reload", '\0' }, NULL, NULL },
+	    { RIPCTL, "reload", NULL }, NULL, NULL },
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
 char *ctl_ipsec_test[] = { IPSECCTL, "-nf", IPSECCONF_TEMP, '\0' };
 static struct ctl ctl_ipsec[] = {
 	{ "enable",     "enable service",
-	    { ISAKMPD, "-Sa", '\0' }, NULL, ENABLE },
+	    { ISAKMPD, "-Sa", NULL }, NULL, ENABLE },
 	{ "disable",    "disable service",                   
-	    { PKILL, "isakmpd", '\0' }, NULL, DISABLE },
+	    { PKILL, "isakmpd", NULL }, NULL, DISABLE },
 	{ "edit",       "edit configuration",   
-	    { "IPsec", (char *)ctl_ipsec_test, IPSECCONF_TEMP },
+	    { "IPsec", (char *)ctl_ipsec_test, IPSECCONF_TEMP, NULL },
 	    call_editor, NULL },
 	{ "reload",     "reload service",
-	    { IPSECCTL, "-f", IPSECCONF_TEMP, '\0' }, NULL, NULL },
+	    { IPSECCTL, "-f", IPSECCONF_TEMP, NULL }, NULL, NULL },
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
 char *ctl_dvmrp_test[] = { DVMRPD, "-nf", DVMRPCONF_TEMP, '\0' };
 static struct ctl ctl_dvmrp[] = {
 	{ "enable",     "enable service",
-	    { DVMRPD, "-f", DVMRPCONF_TEMP, '\0' }, NULL, ENABLE },
+	    { DVMRPD, "-f", DVMRPCONF_TEMP, NULL }, NULL, ENABLE },
 	{ "disable",    "disable service",   
-	    { PKILL, "dvmrpd", '\0' }, NULL, DISABLE },
+	    { PKILL, "dvmrpd", NULL }, NULL, DISABLE },
 	{ "edit",       "edit configuration",
-	    { "DVMRP", (char *)ctl_dvmrp_test,  DVMRPCONF_TEMP },
+	    { "DVMRP", (char *)ctl_dvmrp_test,  DVMRPCONF_TEMP, NULL },
 	    call_editor, NULL },
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
 static struct ctl ctl_sasync[] = {
 	{ "enable",     "enable service",
-	    { SASYNCD, "-c", SASYNCCONF_TEMP, '\0' }, NULL, ENABLE },
+	    { SASYNCD, "-c", SASYNCCONF_TEMP, NULL }, NULL, ENABLE },
 	{ "disable",    "disable service",
-	    { PKILL, "sasyncd", '\0' }, NULL, DISABLE },
+	    { PKILL, "sasyncd", NULL }, NULL, DISABLE },
 	{ "edit",       "edit configuration",
-	    { "sasync", NULL, SASYNCCONF_TEMP }, call_editor, NULL },
+	    { "sasync", NULL, SASYNCCONF_TEMP, NULL }, call_editor, NULL },
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
 char *ctl_dhcp_test[] = { DHCPD, "-nc", DHCPCONF_TEMP, '\0' };
 static struct ctl ctl_dhcp[] = {
 	{ "enable",     "enable service",
-	    { DHCPD, "-c", DHCPCONF_TEMP, '\0' }, NULL, ENABLE },
+	    { DHCPD, "-c", DHCPCONF_TEMP, NULL }, NULL, ENABLE },
 	{ "disable",    "disable service",
-	    { PKILL, "dhcpd", '\0' }, NULL, DISABLE },
+	    { PKILL, "dhcpd", NULL }, NULL, DISABLE },
 	{ "edit",       "edit configuration",
-	    { "DHCP", (char *)ctl_dhcp_test, DHCPCONF_TEMP },
+	    { "DHCP", (char *)ctl_dhcp_test, DHCPCONF_TEMP, NULL },
 	    call_editor, NULL },
 	{ 0, 0, { 0 }, 0, 0 }
 };
@@ -171,11 +174,11 @@ static struct ctl ctl_dhcp[] = {
 char *ctl_snmp_test[] = { SNMPD, "-nf", SNMPCONF_TEMP, '\0' };
 static struct ctl ctl_snmp[] = {
 	{ "enable",     "enable service",
-	    { SNMPD, "-f", SNMPCONF_TEMP, '\0' }, NULL, ENABLE },
+	    { SNMPD, "-f", SNMPCONF_TEMP, NULL }, NULL, ENABLE },
 	{ "disable",    "disable service",
-	    { PKILL, "snmpd", '\0' }, NULL, DISABLE },
+	    { PKILL, "snmpd", NULL }, NULL, DISABLE },
 	{ "edit",       "edit configuration",
-	    { "SNMP", (char *)ctl_snmp_test, SNMPCONF_TEMP },
+	    { "SNMP", (char *)ctl_snmp_test, SNMPCONF_TEMP, NULL },
 	    call_editor, NULL },
 	{ 0, 0, { 0 }, 0, 0 }
 };
@@ -183,11 +186,11 @@ static struct ctl ctl_snmp[] = {
 char *ctl_ntp_test[] = { NTPD, "-nf", NTPCONF_TEMP, '\0' };
 static struct ctl ctl_ntp[] = {
 	{ "enable",     "enable service",
-	    { NTPD, "-sf", NTPCONF_TEMP, '\0' }, NULL, ENABLE },
+	    { NTPD, "-sf", NTPCONF_TEMP, NULL }, NULL, ENABLE },
 	{ "disable",    "disable service",
-	    { PKILL, "ntpd", '\0' }, NULL, DISABLE },
+	    { PKILL, "ntpd", NULL }, NULL, DISABLE },
 	{ "edit",       "edit configuration",
-	    { "NTP", (char *)ctl_ntp_test, NTPCONF_TEMP },
+	    { "NTP", (char *)ctl_ntp_test, NTPCONF_TEMP, NULL },
 	    call_editor, NULL },
 	{ 0, 0, { 0 }, 0, 0 }
 };
@@ -195,24 +198,24 @@ static struct ctl ctl_ntp[] = {
 char *ctl_relay_test[] = { RELAYD, "-nf", RELAYCONF_TEMP, '\0' };
 static struct ctl ctl_relay[] = {
 	{ "enable",	"enable service",
-	    { RELAYD, "-f", RELAYCONF_TEMP, '\0' }, NULL, ENABLE },
+	    { RELAYD, "-f", RELAYCONF_TEMP, NULL }, NULL, ENABLE },
         { "disable",	"disable service",
-	    { PKILL, "relayd", '\0' }, NULL, DISABLE },
+	    { PKILL, "relayd", NULL }, NULL, DISABLE },
         { "edit",	"edit configuration",
-	    { "Relay", (char *)ctl_relay_test, RELAYCONF_TEMP },
+	    { "Relay", (char *)ctl_relay_test, RELAYCONF_TEMP, NULL },
 	    call_editor, NULL },
         { "reload",	"reload configuration",
-	    { RELAYCTL, "reload", '\0' }, NULL, NULL },
+	    { RELAYCTL, "reload", NULL }, NULL, NULL },
 	{ "host",	"per-host control",
-	    { RELAYCTL, "host", OPT, OPT, '\0' }, NULL, NULL },
+	    { RELAYCTL, "host", OPT, OPT, NULL }, NULL, NULL },
 	{ "table",	"per-table control",
-	    { RELAYCTL, "table", OPT, OPT, '\0' }, NULL, NULL },
+	    { RELAYCTL, "table", OPT, OPT, NULL }, NULL, NULL },
 	{ "redirect",	"per-redirect control",
-	    { RELAYCTL, "redirect", OPT, OPT, '\0' }, NULL, NULL },
+	    { RELAYCTL, "redirect", OPT, OPT, NULL }, NULL, NULL },
 	{ "monitor",	"monitor mode",
-	    { RELAYCTL, "monitor", '\0' }, NULL, NULL },
+	    { RELAYCTL, "monitor", NULL }, NULL, NULL },
 	{ "poll",	"poll mode",
-	    { RELAYCTL, "poll", '\0' }, NULL, NULL},
+	    { RELAYCTL, "poll", NULL }, NULL, NULL},
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
@@ -300,7 +303,7 @@ ctlhandler(int argc, char **argv, char *modhvar)
 		return 0;
 	}
 
-	fillargs = step_optreq(x->args, args, argc, argv, 1);
+	fillargs = step_optreq(x->args, args, argc, argv, 2);
 	if (fillargs == NULL)
 		return 0;
 
