@@ -1,28 +1,18 @@
-/* $nsh: ctl.c,v 1.11 2008/02/06 16:51:44 chris Exp $ */
+/* $nsh: ctl.c,v 1.12 2008/02/06 22:48:53 chris Exp $ */
 /*
- * Copyright (c) 2008
- *      Chris Cappuccio.  All rights reserved.
+ * Copyright (c) 2008 Chris Cappuccio <chris@nmedia.net>
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
+ * Permission to use, copy, modify, and distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
  *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
- * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
- * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
- * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
 #include <stdio.h>
@@ -56,7 +46,7 @@ struct ctl {
 	char *name;
 	char *help;
 	char *args[32];
-	void (*handler)(char *, char **, char *);
+	void (*handler)();
 	int *flag_x;
 };
 
@@ -92,6 +82,8 @@ static struct ctl ctl_ospf[] = {
 	    call_editor, NULL },
 	{ "reload",     "reload service",
 	    { OSPFCTL, "reload", NULL }, NULL, NULL },
+	{ "fib",        "fib couple/decouple",
+	    { OSPFCTL, "fib", REQ, NULL }, NULL, NULL },
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
@@ -106,6 +98,14 @@ static struct ctl ctl_bgp[] = {
 	    NULL },
 	{ "reload",     "reload service",
 	    { BGPCTL, "reload", NULL }, NULL, NULL },
+	{ "fib",	"fib couple/decouple",
+	    { BGPCTL, "fib", REQ, NULL }, NULL, NULL },
+	{ "irrfilter",	"generate bgpd filters",
+	    { BGPCTL, "irrfilter", REQ, OPT, NULL }, NULL, NULL },
+	{ "neighbor",	"neighbor up/down/clear/refresh",
+	    { BGPCTL, "neighbor", REQ, REQ, NULL }, NULL, NULL },
+	{ "network",	"network add/delete/flush/show",
+	    { BGPCTL, "network", REQ, OPT, NULL }, NULL, NULL },
         { 0, 0, { 0 }, 0, 0 }
 };
 
@@ -120,6 +120,8 @@ static struct ctl ctl_rip[] = {
 	    NULL },
 	{ "reload",     "reload service",
 	    { RIPCTL, "reload", NULL }, NULL, NULL },
+	{ "fib",        "fib couple/decouple",
+	    { RIPCTL, "fib", REQ, NULL }, NULL, NULL },
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
@@ -180,6 +182,8 @@ static struct ctl ctl_snmp[] = {
 	{ "edit",       "edit configuration",
 	    { "SNMP", (char *)ctl_snmp_test, SNMPCONF_TEMP, NULL },
 	    call_editor, NULL },
+	{ "trap",	"send traps",
+	    { SNMPCTL, "trap", "send", REQ, OPT, NULL }, NULL, NULL },
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
@@ -286,13 +290,14 @@ ctlhandler(int argc, char **argv, char *modhvar)
                         printf("%% Unknown rulefile modifier %s\n", modhvar);
                         return 0;
                 }
-        } else {
-		if (argc < 2 || argv[1][0] == '?') {
-			gen_help((char **)daemons->table, "", "control",
-			    sizeof(struct ctl));
-			return 0;
-		}
+        }
+
+	if (argc < 2 || argv[1][0] == '?') {
+		gen_help((char **)daemons->table, "", "",
+		    sizeof(struct ctl));
+		return 0;
 	}
+
 	x = (struct ctl *) genget(argv[1], (char **)daemons->table,
 	    sizeof(struct ctl));
 	if (x == 0) {
@@ -392,6 +397,6 @@ rmtemp(char *file)
 {
 	if (unlink(file) != 0)
 		if (errno != ENOENT)
-			printf("%% Unable to remove temporary file for "
-			    "reinitialization %s: %s\n", file, strerror(errno));
+			printf("%% Unable to remove temporary file %s: %s\n",
+			    file, strerror(errno));
 }
