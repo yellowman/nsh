@@ -1,4 +1,4 @@
-/* $nsh: more.c,v 1.3 2008/02/07 06:56:18 chris Exp $ */
+/* $nsh: more.c,v 1.4 2008/02/07 19:20:03 chris Exp $ */
 /*
  * Copyright (c) 2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -62,13 +62,16 @@ more(char *fname)
 	for (i = 0; (input = fgetln(f, &s)) != NULL; i++) {
 
 		if (!nopager && i == (winsize.ws_row - 1)) {
-			i = 0;
 			printf(PAGERPROMPT);
 			fflush(0);
 			c = getchar();
 			printf(BACKOVERPROMPT);
 			if (c == 'q')
-				break;
+				break;			/* stop */
+			if (c == '\r' || c == '\n')
+				i--;			/* skip one line */
+			else
+				i = 0;			/* skip one page */
 		}
 
 		/*
