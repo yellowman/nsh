@@ -1,4 +1,4 @@
-/* $nsh: ctl.c,v 1.12 2008/02/06 22:48:53 chris Exp $ */
+/* $nsh: ctl.c,v 1.13 2008/02/07 19:20:41 chris Exp $ */
 /*
  * Copyright (c) 2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -267,7 +267,7 @@ ctlhandler(int argc, char **argv, char *modhvar)
 	struct ctl *x;
 #define NARGS 7
 	char *args[NARGS] = { NULL, NULL, NULL, NULL, NULL, NULL, '\0' };
-	char **fillargs;
+	char **fillargs, *aarg = NULL;
 
 	/* loop daemon list to find table pointer */
 	daemons = (struct daemons *) genget(hname, (char **)ctl_daemons,
@@ -280,25 +280,27 @@ ctlhandler(int argc, char **argv, char *modhvar)
 		return 0;
 	}
 
-        if (modhvar) {
-                if (isprefix(modhvar, "action")) {
-                        /* float on down the river */
-                } else if (isprefix(modhvar, "rules")) {
-                        rule_writeline(daemons->tmpfile, argc, argv);
-                        return 0;
-                } else {
-                        printf("%% Unknown rulefile modifier %s\n", modhvar);
-                        return 0;
-                }
-        }
-
-	if (argc < 2 || argv[1][0] == '?') {
-		gen_help((char **)daemons->table, "", "",
-		    sizeof(struct ctl));
-		return 0;
+	if (modhvar) {
+		if (isprefix(modhvar, "rules")) {
+			rule_writeline(daemons->tmpfile, argc, argv);
+			return 0;
+		}
+		if (!isprefix(modhvar, "action")) {
+			printf("%% Unsupported rulefile modifier %s\n",
+			    modhvar);
+			return 0;
+		}
+		aarg = argv[0];
+	} else {
+		if (argc < 2 || argv[1][0] == '?') {
+			gen_help((char **)daemons->table, "", "",
+			    sizeof(struct ctl));
+			return 0;
+		}
+		aarg = argv[1];
 	}
 
-	x = (struct ctl *) genget(argv[1], (char **)daemons->table,
+	x = (struct ctl *) genget(aarg, (char **)daemons->table,
 	    sizeof(struct ctl));
 	if (x == 0) {
 		printf("%% Invalid argument %s\n", argv[1]);
