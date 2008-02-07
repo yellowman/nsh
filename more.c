@@ -1,4 +1,4 @@
-/* $nsh: more.c,v 1.2 2008/02/06 22:48:53 chris Exp $ */
+/* $nsh: more.c,v 1.3 2008/02/07 06:56:18 chris Exp $ */
 /*
  * Copyright (c) 2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -21,6 +21,8 @@
 #include <termios.h>
 #include <errno.h>
 #include <string.h>
+#include <sys/ttycom.h>
+#include <sys/ioctl.h>
 
 #include "externs.h"
 
@@ -31,6 +33,8 @@ int	nsh_cbreak(void);
 void	nsh_nocbreak(void);
 
 static struct termios	oldtty;
+
+struct winsize winsize;
 
 /*
  * Display file
@@ -57,8 +61,7 @@ more(char *fname)
 
 	for (i = 0; (input = fgetln(f, &s)) != NULL; i++) {
 
-		/* XXX use termcap to get number of lines in terminal */
-		if (i == 24 && !nopager) {
+		if (!nopager && i == (winsize.ws_row - 1)) {
 			i = 0;
 			printf(PAGERPROMPT);
 			fflush(0);
@@ -88,7 +91,7 @@ nsh_cbreak(void)
 {
 	struct termios	newtty;
 
-	if (tcgetattr(0, &oldtty) < 0)
+	if (tcgetattr(fileno(stdout), &oldtty) < 0)
 		return(-1);
 
 	(void)memcpy(&newtty, &oldtty, sizeof(newtty));
@@ -97,7 +100,7 @@ nsh_cbreak(void)
 	newtty.c_cc[VMIN] = 1;			/* one char at a time */
 	newtty.c_cc[VTIME] = 0;			/* no timeout */
 
-	if (tcsetattr(0, TCSAFLUSH, &newtty) < 0)
+	if (tcsetattr(fileno(stdout), TCSAFLUSH, &newtty) < 0)
 		return(-1);
 	return(0);
 }
@@ -106,4 +109,20 @@ void
 nsh_nocbreak(void)
 {
 	tcsetattr(0, TCSAFLUSH, &oldtty);
+}
+
+void
+setwinsize(int signo)
+{
+	int save_errno = errno;
+
+	if (ioctl(fileno(stdout), TIOCGWINSZ, &winsize) != -1) {
+		winsize.ws_col = winsize.ws_col ? winsize.ws_col : 80;
+		winsize.ws_row = winsize.ws_row ? winsize.ws_row : 24;
+	} else {
+		winsize.ws_col = 80;
+		winsize.ws_row = 24;
+	}
+
+	errno = save_errno;
 }

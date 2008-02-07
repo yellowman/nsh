@@ -1,4 +1,4 @@
-/* $nsh: main.c,v 1.33 2008/02/06 22:48:53 chris Exp $ */
+/* $nsh: main.c,v 1.34 2008/02/07 06:56:18 chris Exp $ */
 /*
  * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -24,6 +24,8 @@
 #include <fcntl.h>
 #include <sys/socket.h>
 #include <sys/syslimits.h>
+#include <sys/ttycom.h>
+#include <sys/signal.h>
 #include <histedit.h>
 #include "externs.h"
 #include "editing.h"
@@ -100,6 +102,9 @@ main(int argc, char *argv[])
 		cmdrc(rc);
 		exit(0);
 	}
+
+	(void)signal(SIGWINCH, setwinsize);
+	setwinsize(0);
 
 	for (;;) {
 		command(1);

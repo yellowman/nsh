@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.54 2008/02/05 04:39:53 chris Exp $ */
+/* $nsh: externs.h,v 1.55 2008/02/07 06:56:18 chris Exp $ */
 /*
  * nsh externs, prototypes and macros
  */
@@ -325,3 +325,7 @@ int arpset(int, char **);
 int more(char *);
 int nsh_cbreak(void);
 void nsh_nocbreak(void);
+void setwinsize(int);
+#ifdef _SYS_TTYCOM_H_
+extern struct winsize winsize;
+#endif
