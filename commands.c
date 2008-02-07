@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.75 2008/02/06 22:48:53 chris Exp $ */
+/* $nsh: commands.c,v 1.76 2008/02/07 22:48:47 chris Exp $ */
 /*
  * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -522,9 +522,7 @@ interface(int argc, char **argv, char *modhvar)
 	struct ifreq ifr;
 
 	if (!modhvar) {
-		/*
-		 * setup pieces which are valid ONLY for interactive routine
-		 */
+		/* setup pieces which are valid ONLY for interactive routine */
 		(void) signal(SIGINT, SIG_IGN);
 		(void) signal(SIGQUIT, SIG_IGN);
 
@@ -540,6 +538,11 @@ interface(int argc, char **argv, char *modhvar)
 		}
 		tmp = argv[1];
 	} else {
+		/* called from cmdrc(), processing config file rules only */
+		if (argc == 2 && strcmp(modhvar, argv[1]) == 0) {
+			 /* do-nothing */
+			return(0);
+		}
 		tmp = modhvar;
 	}
 
@@ -1504,28 +1507,14 @@ cmdrc(char rcname[FILENAME_MAX])
 			p_argv(margc, margv);
 			printf("\n");
 		}
-		if (!modhcmd) {
-			/*
-			 * normal processing, there is no sub-mode cmd to be
-			 * dealt with
-			 */
-			if (!c->nocmd && NO_ARG(margv[0])) {
-				printf("%% Invalid rc command (line %u) ",
-				    lnum);
-				p_argv(margc, margv);
-				printf("\n");
-				continue;
-			}
-			if (c->modh) {
-				/*
-				 * we took the first argument after the command
-				 * name, wait till the next line to actually do
-				 * something!
-				 */
-				continue;
-			}
+		if (!modhcmd && !c->nocmd && NO_ARG(margv[0])) {
+			printf("%% Invalid rc command (line %u) ",
+			    lnum);
+			p_argv(margc, margv);
+			printf("\n");
+			continue;
 		}
-		if (c->modh && modhcmd)
+		if (c->modh)
 			(*c->handler) (margc, margv, modhvar);
 		else
 			(*c->handler) (margc, margv, 0);

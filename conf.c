@@ -1,4 +1,4 @@
-/* $nsh: conf.c,v 1.46 2008/02/06 22:48:53 chris Exp $ */
+/* $nsh: conf.c,v 1.47 2008/02/07 22:48:47 chris Exp $ */
 /*
  * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -162,8 +162,9 @@ void conf_xrules(FILE *output, char *tmpfile, char *delim, int doreload)
 		fclose(conf);
 		fprintf(output, "!\n");
 		if (stat(fenabled, &enst) == 0 && S_ISREG(enst.st_mode)) {
-			fprintf(output, "%s action\n enable\n%s", delim,
-			    doreload ? " reload\n" : "");
+			fprintf(output, "%s enable\n", delim);
+			if (doreload)
+			    fprintf(output, "%s reload\n", delim);
 			fprintf(output, "!\n");
 		}
 	} else if (errno != ENOENT || verbose)
