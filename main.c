@@ -1,4 +1,4 @@
-/* $nsh: main.c,v 1.34 2008/02/07 06:56:18 chris Exp $ */
+/* $nsh: main.c,v 1.35 2008/02/08 07:02:51 chris Exp $ */
 /*
  * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -32,7 +32,7 @@
 
 void usage(void);
 
-char *vers = "20071229";
+char *vers = "20080207";
 int bridge = 0;		/* bridge mode for interface() */
 int verbose = 0;	/* verbose mode for lots of stuff*/
 int priv = 0;
