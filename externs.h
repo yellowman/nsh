@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.55 2008/02/07 06:56:18 chris Exp $ */
+/* $nsh: externs.h,v 1.56 2008/02/08 03:31:35 chris Exp $ */
 /*
  * nsh externs, prototypes and macros
  */
@@ -13,6 +13,7 @@ struct rtdump {
 
 extern char *__progname;	/* duh */
 extern char *vers;		/* the version of nsh */
+extern char saveline[256];	/* command line */
 extern int verbose;		/* is verbose mode on? */
 extern int editing;		/* is command line editing mode on? */
 extern int bridge;		/* are we in bridge mode (or interface mode?) */

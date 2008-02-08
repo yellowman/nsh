@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.76 2008/02/07 22:48:47 chris Exp $ */
+/* $nsh: commands.c,v 1.77 2008/02/08 03:31:35 chris Exp $ */
 /*
  * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -68,7 +68,7 @@
 char prompt[128];
 
 static char line[256];
-static char saveline[256];
+char saveline[256];
 static int  margc;
 static char *margv[20];
 char hname[HSIZE];
@@ -113,7 +113,7 @@ static int	group(int, char**);
 static int	pr_routes(int, char **);
 static int	pr_arp(int, char **);
 static int	pr_sadb(int, char **);
-static int	pr_stats(int, char **);
+static int	pr_kernel(int, char **);
 static int	pr_prot1(int, char **);
 static int	pr_dhcp(int, char **);
 static int	pr_conf(int, char **);
@@ -167,7 +167,7 @@ static Menu showlist[] = {
 	{ "route",	"IP route table or route lookup", 0, 1, pr_routes },
 	{ "sadb",	"Security Association Database", 0, 0, pr_sadb },
 	{ "arp",	"ARP table",		0, 1, pr_arp },
-	{ "stats",	"Kernel statistics",	0, 1, pr_stats },
+	{ "kernel",	"Kernel statistics",	0, 1, pr_kernel },
 	{ "bgp",	"BGP information",	0, 4, pr_prot1 },
 	{ "ospf",	"OSPF information",	0, 3, pr_prot1 },
 	{ "rip",	"RIP information",	0, 3, pr_prot1 },
@@ -1420,6 +1420,8 @@ cmdrc(char rcname[FILENAME_MAX])
 			continue;
 		if (line[0] == '!')
 			continue;
+		if (line[0] == ' ')
+			strlcpy(saveline, line, sizeof(line));
 		if (c && c->modh)
 			makeargv(c->noesc);
 		else
@@ -1748,7 +1750,7 @@ static struct stt {
 	{ "tcp",	"Transmission Control Protocol",tcp_stats },
 	{ "udp",	"Unreliable Datagram Protocol",	udp_stats },
 	{ "icmp",	"Internet Control Message Protocol",icmp_stats },
-	{ "igmp",	"Internet Group Managemnet Protocol",igmp_stats },
+	{ "igmp",	"Internet Group Management Protocol",igmp_stats },
 	{ "ipcomp",	"IP Compression",		ipcomp_stats },
 	{ "route",	"Routing",			rt_stats },
 	{ "carp",	"Common Address Redundancy Protocol", carp_stats },
@@ -1758,12 +1760,12 @@ static struct stt {
 };
 
 int
-pr_stats(int argc, char **argv)
+pr_kernel(int argc, char **argv)
 {
 	struct stt *x;
 
 	if (argc < 3 || argv[2][0] == '?') {
-		gen_help((char **)stts, "show stats", "statistics",
+		gen_help((char **)stts, "show kernel", "statistics",
 		    sizeof(struct stt));
 		return 0;
 	}

@@ -1,4 +1,4 @@
-/* $nsh: ctl.c,v 1.14 2008/02/07 22:48:47 chris Exp $ */
+/* $nsh: ctl.c,v 1.15 2008/02/08 03:31:35 chris Exp $ */
 /*
  * Copyright (c) 2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -50,9 +50,8 @@ struct ctl {
 	int *flag_x;
 };
 
-char *setup (char *, char *, int, char **, struct ctl *, char *, int);   
 void call_editor(char *, char **, char *);
-int rule_writeline(char *, int, char **);
+int rule_writeline(char *, char *);
 int acq_lock(char *);
 void rls_lock(int);
 void flag_x(char *, int *);
@@ -292,7 +291,7 @@ ctlhandler(int argc, char **argv, char *modhvar)
 		}
 		if (isprefix(modhvar, "rules")) {
 			/* write indented line to tmp config file */
-			rule_writeline(daemons->tmpfile, argc, argv);
+			rule_writeline(daemons->tmpfile, saveline);
 			return 0;
 		}
 	}
@@ -347,9 +346,8 @@ call_editor(char *name, char **args, char *tmpfile)
 }
 
 int
-rule_writeline(char *fname, int argc, char **argv)
+rule_writeline(char *fname, char *writeline)
 {
-	int z;
 	FILE *rulefile;
 
 	rulefile = fopen(fname, "a");
@@ -357,9 +355,9 @@ rule_writeline(char *fname, int argc, char **argv)
 		printf("%% Rule write failed: %s\n", strerror(errno));
 		return(1);
 	}
-	for (z = 0; z < argc; z++)
-		fprintf(rulefile, "%s%s", z ? " " : "", argv[z]);
-	fprintf(rulefile, "\n");
+	if (writeline[0] == ' ')
+		writeline++;
+	fprintf(rulefile, "%s", writeline);
 	fclose(rulefile);
 	return(0);
 }
