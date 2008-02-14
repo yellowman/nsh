@@ -1,4 +1,4 @@
-/* $nsh: ctl.c,v 1.15 2008/02/08 03:31:35 chris Exp $ */
+/* $nsh: ctl.c,v 1.16 2008/02/14 01:00:59 chris Exp $ */
 /*
  * Copyright (c) 2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -42,14 +42,6 @@
 #define	SNMPD		"/usr/sbin/snmpd"
 #define NTPD		"/usr/sbin/ntpd"
 
-struct ctl {
-	char *name;
-	char *help;
-	char *args[32];
-	void (*handler)();
-	int *flag_x;
-};
-
 void call_editor(char *, char **, char *);
 int rule_writeline(char *, char *);
 int acq_lock(char *);
@@ -57,7 +49,7 @@ void rls_lock(int);
 void flag_x(char *, int *);
 
 char *ctl_pf_test[] = { PFCTL, "-nf", PFCONF_TEMP, '\0' };
-static struct ctl ctl_pf[] = {
+struct ctl ctl_pf[] = {
 	{ "enable",	"enable service",
 	    { PFCTL, "-e", NULL }, NULL, ENABLE },
 	{ "disable",	"disable service",
@@ -71,7 +63,7 @@ static struct ctl ctl_pf[] = {
 };
 
 char *ctl_ospf_test[] = { OSPFD, "-nf", OSPFCONF_TEMP, '\0' };
-static struct ctl ctl_ospf[] = {
+struct ctl ctl_ospf[] = {
 	{ "enable",     "enable service",
 	    { OSPFD, "-f", OSPFCONF_TEMP, NULL }, NULL, ENABLE },
 	{ "disable",    "disable service",
@@ -87,7 +79,7 @@ static struct ctl ctl_ospf[] = {
 };
 
 char *ctl_bgp_test[] = { BGPD, "-nf", BGPCONF_TEMP, NULL, '\0' };
-static struct ctl ctl_bgp[] = {
+struct ctl ctl_bgp[] = {
 	{ "enable",     "enable service",
 	    { BGPD, "-f", BGPCONF_TEMP, NULL }, NULL, ENABLE },
 	{ "disable",    "disable service",
@@ -109,7 +101,7 @@ static struct ctl ctl_bgp[] = {
 };
 
 char *ctl_rip_test[] = { RIPD, "-nf", RIPCONF_TEMP, '\0' };
-static struct ctl ctl_rip[] = {
+struct ctl ctl_rip[] = {
 	{ "enable",     "enable service",
 	    { RIPD, "-f", RIPCONF_TEMP, NULL }, NULL, ENABLE },
 	{ "disable",    "disable service",
@@ -125,7 +117,7 @@ static struct ctl ctl_rip[] = {
 };
 
 char *ctl_ipsec_test[] = { IPSECCTL, "-nf", IPSECCONF_TEMP, '\0' };
-static struct ctl ctl_ipsec[] = {
+struct ctl ctl_ipsec[] = {
 	{ "enable",     "enable service",
 	    { ISAKMPD, "-Sa", NULL }, NULL, ENABLE },
 	{ "disable",    "disable service",                   
@@ -139,7 +131,7 @@ static struct ctl ctl_ipsec[] = {
 };
 
 char *ctl_dvmrp_test[] = { DVMRPD, "-nf", DVMRPCONF_TEMP, '\0' };
-static struct ctl ctl_dvmrp[] = {
+struct ctl ctl_dvmrp[] = {
 	{ "enable",     "enable service",
 	    { DVMRPD, "-f", DVMRPCONF_TEMP, NULL }, NULL, ENABLE },
 	{ "disable",    "disable service",   
@@ -150,7 +142,7 @@ static struct ctl ctl_dvmrp[] = {
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
-static struct ctl ctl_sasync[] = {
+struct ctl ctl_sasync[] = {
 	{ "enable",     "enable service",
 	    { SASYNCD, "-c", SASYNCCONF_TEMP, NULL }, NULL, ENABLE },
 	{ "disable",    "disable service",
@@ -161,7 +153,7 @@ static struct ctl ctl_sasync[] = {
 };
 
 char *ctl_dhcp_test[] = { DHCPD, "-nc", DHCPCONF_TEMP, '\0' };
-static struct ctl ctl_dhcp[] = {
+struct ctl ctl_dhcp[] = {
 	{ "enable",     "enable service",
 	    { DHCPD, "-c", DHCPCONF_TEMP, NULL }, NULL, ENABLE },
 	{ "disable",    "disable service",
@@ -173,7 +165,7 @@ static struct ctl ctl_dhcp[] = {
 };
 
 char *ctl_snmp_test[] = { SNMPD, "-nf", SNMPCONF_TEMP, '\0' };
-static struct ctl ctl_snmp[] = {
+struct ctl ctl_snmp[] = {
 	{ "enable",     "enable service",
 	    { SNMPD, "-f", SNMPCONF_TEMP, NULL }, NULL, ENABLE },
 	{ "disable",    "disable service",
@@ -187,7 +179,7 @@ static struct ctl ctl_snmp[] = {
 };
 
 char *ctl_ntp_test[] = { NTPD, "-nf", NTPCONF_TEMP, '\0' };
-static struct ctl ctl_ntp[] = {
+struct ctl ctl_ntp[] = {
 	{ "enable",     "enable service",
 	    { NTPD, "-sf", NTPCONF_TEMP, NULL }, NULL, ENABLE },
 	{ "disable",    "disable service",
@@ -199,7 +191,7 @@ static struct ctl ctl_ntp[] = {
 };
 
 char *ctl_relay_test[] = { RELAYD, "-nf", RELAYCONF_TEMP, '\0' };
-static struct ctl ctl_relay[] = {
+struct ctl ctl_relay[] = {
 	{ "enable",	"enable service",
 	    { RELAYD, "-f", RELAYCONF_TEMP, NULL }, NULL, ENABLE },
         { "disable",	"disable service",

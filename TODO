@@ -1,4 +1,4 @@
-$nsh: TODO,v 1.31 2008/02/04 02:49:46 chris Exp $
+$nsh: TODO,v 1.32 2008/02/14 01:00:59 chris Exp $
 
 nsh is a work in progress, diffs are welcome
 
@@ -29,7 +29,6 @@ To be implemented:
   myself or someone else submits patches)
 * Support for paging through displays of text X lines at a time
 * Something comparable to "| inc" from cisco-land
-* Tab command/argument completion
 * Context-sensitive help
 
 Would be nice:

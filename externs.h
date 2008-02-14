@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.56 2008/02/08 03:31:35 chris Exp $ */
+/* $nsh: externs.h,v 1.57 2008/02/14 01:00:59 chris Exp $ */
 /*
  * nsh externs, prototypes and macros
  */
@@ -14,6 +14,9 @@ struct rtdump {
 extern char *__progname;	/* duh */
 extern char *vers;		/* the version of nsh */
 extern char saveline[256];	/* command line */
+extern char line[256];		/* command line for makeargv() */
+extern int  margc;		/* makeargv() arg count */
+#define margv (marg_sl->sl_str) /* makeargv() command stringlist */
 extern int verbose;		/* is verbose mode on? */
 extern int editing;		/* is command line editing mode on? */
 extern int bridge;		/* are we in bridge mode (or interface mode?) */
@@ -118,6 +121,25 @@ void rmtemp(char *);
 #define DVMRPCTL	"/usr/sbin/dvmrpctl"
 #define RELAYCTL	"/usr/sbin/relayctl"
 #define SNMPCTL		"/usr/sbin/snmpctl"
+struct ctl {
+	char *name;
+	char *help;
+	char *args[32];
+	void (*handler)();
+	int *flag_x;
+};
+extern struct ctl ctl_pf[];
+extern struct ctl ctl_ospf[];
+extern struct ctl ctl_relay[];
+extern struct ctl ctl_bgp[];
+extern struct ctl ctl_rip[];
+extern struct ctl ctl_ipsec[];
+extern struct ctl ctl_dvmrp[];
+extern struct ctl ctl_sasync[];
+extern struct ctl ctl_dhcp[];
+extern struct ctl ctl_snmp[];
+extern struct ctl ctl_ntp[];
+
 
 /* commands.c */
 #define DEFAULT_EDITOR	"/usr/bin/vi"
@@ -131,7 +153,7 @@ void rmtemp(char *);
 #define SSH		"/usr/bin/ssh"
 #define PKILL		"/usr/bin/pkill"
 #define SAVESCRIPT	"/usr/local/bin/save.sh"
-void command(int);
+void command(void);
 char **step_optreq(char **, char **, int, char **, int);
 int cmdrc(char rcname[FILENAME_MAX]);
 int cmdarg(char *, char *);
@@ -140,6 +162,52 @@ char *iprompt(void);
 char *cprompt(void);
 char *pprompt(void);
 void gen_help(char **, char *, char *, int);
+
+typedef struct cmd {
+	char *name;		/* command name */
+	char *help;		/* help string (NULL for no help) */
+	char *complete;		/* context sensitive completion list */
+	char **table;		/* next table for context completion */
+	int stlen;		/* struct length (for rows in next table) */
+	int (*handler) ();	/* routine which executes command */
+	int needpriv;		/* Do we need privilege to execute? */   
+	int ignoreifpriv;	/* Ignore while privileged? */
+	int nocmd;		/* Can we specify 'no ...command...'? */
+	int modh;		/* Is it a mode handler for cmdrc()? */
+} Command;
+ 
+typedef struct menu {
+	char *name;		/* How user refers to it (case independent) */
+	char *help;		/* Help information (0 ==> no help) */
+	char *complete;		/* context sensitive completion list */
+	char **table;		/* next table for context completion */
+	int stlen;		/* struct length (for rows in next table) */
+	int minarg;		/* Minimum number of arguments */
+	int maxarg;		/* Maximum number of arguments */
+	int (*handler)();	/* Routine to perform (for special ops) */
+} Menu;
+
+struct intlist {
+	char *name;             /* How user refers to it (case independent) */
+	char *help;             /* Help information (0 ==> no help) */
+	char *complete;		/* context sensitive completion list */
+	char **table;		/* next table for context completion */
+	int stlen;		/* struct length (for rows in next table) */
+	int (*handler)();       /* Routine to perform (for special ops) */
+	int bridge;             /* 0 == Interface, 1 == Bridge, 2 == Both */
+};
+
+/* generic help /complt struct */
+struct ghs {
+	char *name;
+	char *help;
+	char *complete;
+	char **table;
+	int stlen;
+};
+
+extern Command cmdtab[];
+extern struct intlist Intlist[];
 
 /* ieee80211.c */
 #define NWID 0
@@ -226,17 +294,14 @@ int intgroup(char *, int, int, char **);
 int intrtlabel(char *, int, int, char **);
 char *get_hwdaddr(char *);
 
+/* main.c */
+void intr(void);
+
 /* version.c */
 int version(int, char **);
 
 /* compile.c */
 extern char compiled[], compiledby[], compiledon[], compilehost[];
-
-/* editing.c */
-void inithist(void);
-void endhist(void);
-void initedit(void);
-void endedit(void);
 
 /* bridge.c */
 long bridge_cfg(int, char *, int);
@@ -329,4 +394,25 @@ void nsh_nocbreak(void);
 void setwinsize(int);
 #ifdef _SYS_TTYCOM_H_
 extern struct winsize winsize;
+#endif
+
+/* complete.c */
+#ifdef _HISTEDIT_H_
+unsigned char complt_c(EditLine *, int);
+unsigned char complt_i(EditLine *, int);
+#endif
+#define CMPL(x) __STRING(x),
+#define CMPL0   "",
+void inithist(void);
+void endhist(void);
+void initedit(void);
+void endedit(void);
+
+/* util.c */
+void makeargv(void);
+extern char *cursor_pos;
+extern size_t cursor_argc;
+extern size_t cursor_argo;
+#ifdef _STRINGLIST_H
+extern StringList *marg_sl;
 #endif

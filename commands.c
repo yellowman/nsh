@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.77 2008/02/08 03:31:35 chris Exp $ */
+/* $nsh: commands.c,v 1.78 2008/02/14 01:00:59 chris Exp $ */
 /*
  * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -59,18 +59,17 @@
 #include <net/if.h>
 #include <net/route.h>
 #include <limits.h>
-#include <histedit.h>
 #include <util.h>
 #include <pwd.h>
-#include "externs.h"
 #include "editing.h"
+#include "stringlist.h"
+#include "externs.h"
 
 char prompt[128];
 
-static char line[256];
+char line[256];
 char saveline[256];
-static int  margc;
-static char *margv[20];
+int  margc;
 char hname[HSIZE];
 static char hbuf[MAXHOSTNAMELEN];	/* host name */
 static char ifname[IFNAMSIZ];		/* interface name */
@@ -78,32 +77,6 @@ static char ifname[IFNAMSIZ];		/* interface name */
 #define OPT	(void *)1
 #define REQ	(void *)2
 
-typedef struct {
-	char *name;		/* command name */
-	char *help;		/* help string (NULL for no help) */
-	int (*handler) ();	/* routine which executes command */
-	int needpriv;		/* Do we need privilege to execute? */
-	int ignoreifpriv;	/* Ignore while privileged? */
-	int nocmd;		/* Can we specify 'no ...command...'? */
-	int modh;		/* Is it a mode handler for cmdrc()? */
-	int noesc;		/* Does the shell interpret escape sequences
-				 * or pass them as arguments ? */
-} Command;
-
-typedef struct {
-	char *name;		/* How user refers to it (case independent) */
-	char *help;		/* Help information (0 ==> no help) */
-	int minarg;		/* Minimum number of arguments */
-	int maxarg;		/* Maximum number of arguments */
-	int (*handler)();	/* Routine to perform (for special ops) */
-} Menu;
-
-struct ghs {
-	char *name;
-	char *help;
-};
-
-static Command	*getcmd(char *);
 static Menu	*getip(char *);
 static int	quit(void);
 static int	disable(void);
@@ -131,7 +104,6 @@ static int	flush_arp_cache(void);
 static int	flush_history(void);
 static int	int_help(void);
 static int	el_burrito(EditLine *, int, char **);
-static void	makeargv(int);
 static int	hostname(int, char **);
 static int	help(int, char**);
 static int	shell(int, char*[]);
@@ -143,7 +115,10 @@ static void	p_argv(int, char **);
 static int	notvalid(void);
 static int 	reload(void);
 static int 	halt(void);
+static Command *getcmd(char *);
 static void	pf_stats(void);
+
+#include "commands.h"
 
 /*
  * Quit command
@@ -161,27 +136,27 @@ quit(void)
  * Data structures and routines for the "show" command.
  */
 
-static Menu showlist[] = {
-	{ "hostname",	"Router hostname",	0, 0, show_hostname },
-	{ "interface",	"Interface config",	0, 1, show_int },
-	{ "route",	"IP route table or route lookup", 0, 1, pr_routes },
-	{ "sadb",	"Security Association Database", 0, 0, pr_sadb },
-	{ "arp",	"ARP table",		0, 1, pr_arp },
-	{ "kernel",	"Kernel statistics",	0, 1, pr_kernel },
-	{ "bgp",	"BGP information",	0, 4, pr_prot1 },
-	{ "ospf",	"OSPF information",	0, 3, pr_prot1 },
-	{ "rip",	"RIP information",	0, 3, pr_prot1 },
-	{ "dvmrp",	"DVMRP information",	0, 2, pr_prot1 },
-	{ "relay",	"Relay server",		0, 1, pr_prot1 },
-	{ "dhcp",	"DHCP server",		0, 1, pr_dhcp },
-	{ "monitor",	"Monitor routing/arp table changes", 0, 0, monitor },
-	{ "ap",		"Wireless access points", 1, 1, wi_printaplist },
-	{ "version",	"Software information",	0, 0, version },
-	{ "users",	"System users",		0, 0, who },
-	{ "running-config",	"Operating configuration", 0, 0, pr_conf },
-	{ "startup-config", "Startup configuration", 0, 0, pr_s_conf },
-	{ "?",		"Options",		0, 0, show_help },
-	{ "help",	0,			0, 0, show_help },
+Menu showlist[] = {
+	{ "hostname",	"Router hostname",	CMPL0 0, 0, 0, 0, show_hostname },
+	{ "interface",	"Interface config",	CMPL(i) 0, 0, 0, 1, show_int },
+	{ "route",	"IP route table or route lookup", CMPL0 0, 0, 0, 1, pr_routes },
+	{ "sadb",	"Security Association Database", CMPL0 0, 0, 0, 0, pr_sadb },
+	{ "arp",	"ARP table",		CMPL0 0, 0, 0, 1, pr_arp },
+	{ "kernel",	"Kernel statistics",	CMPL(ta) (char **)stts, sizeof(struct stt), 0, 1, pr_kernel },
+	{ "bgp",	"BGP information",	CMPL(ta) (char **)bgcs, sizeof(struct prot1), 0, 4, pr_prot1 },
+	{ "ospf",	"OSPF information",	CMPL(ta) (char **)oscs, sizeof(struct prot1), 0, 3, pr_prot1 },
+	{ "rip",	"RIP information",	CMPL(ta) (char **)rics, sizeof(struct prot1), 0, 3, pr_prot1 },
+	{ "dvmrp",	"DVMRP information",	CMPL(ta) (char **)dvcs, sizeof(struct prot1), 0, 2, pr_prot1 },
+	{ "relay",	"Relay server",		CMPL(ta) (char **)rlcs, sizeof(struct prot1), 0, 1, pr_prot1 },
+	{ "dhcp",	"DHCP server",		CMPL(ta) (char **)dhcs, sizeof(struct prot1), 0, 1, pr_dhcp },
+	{ "monitor",	"Monitor routing/arp table changes", CMPL0 0, 0, 0, 0, monitor },
+	{ "ap",		"Wireless access points", CMPL(i) 0, 0, 1, 1, wi_printaplist },
+	{ "version",	"Software information",	CMPL0 0, 0, 0, 0, version },
+	{ "users",	"System users",		CMPL0 0, 0, 0, 0, who },
+	{ "running-config",	"Operating configuration", CMPL0 0, 0, 0, 0, pr_conf },
+	{ "startup-config", "Startup configuration", CMPL0 0, 0, 0, 0, pr_s_conf },
+	{ "?",		"Options",		CMPL0 0, 0, 0, 0, show_help },
+	{ "help",	0,			CMPL0 0, 0, 0, 0, show_help },
 	{ 0, 0, 0, 0, 0 }
 };
 
@@ -244,35 +219,35 @@ show_help(int argc, char **argv)
  * Data structures and routines for the "ip" command.
  */
 
-static Menu iptab[] = {
-	{ "forwarding",	"Enable IPv4 Forwarding",	0, 0,	ipsysctl },
-	{ "ipip",	"Allow IP-in-IP Encapsulation", 0, 0,	ipsysctl },
-	{ "gre",	"Allow Generic Route Encapsulation",	0, 0,	ipsysctl },
-	{ "wccp",	"Allow Web Cache Control Protocol",	0, 0,	ipsysctl },
-	{ "mobileip",	"Allow Mobile IP Encapsulation",	0, 0,	ipsysctl },
-	{ "etherip",	"Allow Ether-IP Encapsulation",	0, 0,	ipsysctl },
-	{ "ipcomp",	"Allow IP Compression",		0, 0,	ipsysctl },	
-	{ "esp",	"Allow Encapsulated Security Payload", 0, 0,	ipsysctl },
-	{ "ah",		"Allow Authentication Header",	0, 0,	ipsysctl },
-	{ "sourceroute", "Process Loose/Strict Source Route Options", 0, 0, ipsysctl },
-	{ "encdebug",	"Enable if_enc debugging",		0, 0,	ipsysctl },
-	{ "maxqueue",	"Set Max queued packets",		1, 1,	ipsysctl },
-	{ "send-redirects", "Send ICMP redirects",	0, 0,	ipsysctl },
-	{ "directed-broadcast", "Allow directed broadcasts", 0, 0, ipsysctl },
+Menu iptab[] = {
+	{ "forwarding",	"Enable IPv4 Forwarding",	CMPL0 0, 0, 0, 0, ipsysctl },
+	{ "ipip",	"Allow IP-in-IP Encapsulation", CMPL0 0, 0, 0, 0, ipsysctl },
+	{ "gre",	"Allow Generic Route Encapsulation", CMPL0 0, 0, 0, 0, ipsysctl },
+	{ "wccp",	"Allow Web Cache Control Protocol", CMPL0 0, 0, 0, 0, ipsysctl },
+	{ "mobileip",	"Allow Mobile IP Encapsulation", CMPL0 0, 0, 0, 0, ipsysctl },
+	{ "etherip",	"Allow Ether-IP Encapsulation",	CMPL0 0, 0, 0, 0, ipsysctl },
+	{ "ipcomp",	"Allow IP Compression",		CMPL0 0, 0, 0, 0, ipsysctl },	
+	{ "esp",	"Allow Encapsulated Security Payload", CMPL0 0, 0, 0, 0, ipsysctl },
+	{ "ah",		"Allow Authentication Header",	CMPL0 0, 0, 0, 0, ipsysctl },
+	{ "sourceroute", "Process Loose/Strict Source Route Options", CMPL0 0, 0, 0, 0, ipsysctl },
+	{ "encdebug",	"Enable if_enc debugging",	CMPL0 0, 0, 0, 0, ipsysctl },
+	{ "maxqueue",	"Set Max queued packets",	CMPL0 0, 0, 1, 1, ipsysctl },
+	{ "send-redirects", "Send ICMP redirects",	CMPL0 0, 0, 0, 0, ipsysctl },
+	{ "directed-broadcast", "Allow directed broadcasts", CMPL0 0, 0, 0, 0, ipsysctl },
 #ifdef notyet
-	{ "default-mtu", "Default interface MTU",	1, 1,	ipsysctl },
+	{ "default-mtu", "Default interface MTU",	CMPL0 0, 0, 1, 1, ipsysctl },
 #endif
-	{ "default-ttl", "Set Default IP packet TTL",	1, 1,	ipsysctl },
-	{ "classless",	0,			0, 0,	notvalid },
-	{ "?",		"Options",		0, 0,	ip_help },
-	{ "help",	0,			0, 0,	ip_help },
-	{ 0, 0, 0, 0, 0 }
+	{ "default-ttl", "Set Default IP packet TTL",	CMPL0 0, 0, 1, 1, ipsysctl },
+	{ "classless",	0,				CMPL0 0, 0, 0, 0, notvalid },
+	{ "?",		"Options",			CMPL0 0, 0, 0, 0, ip_help },
+	{ "help",	0,				CMPL0 0, 0, 0, 0, ip_help },
+	{ 0, 0, 0, 0, 0, 0, 0, 0 }
 };
 
 static Menu iptab2[] = {
-	{ "classless",	0,			0, 0,	notvalid },
-	{ "subnet-zero", 0,			0, 0,	notvalid },
-	{ 0, 0, 0, 0, 0 }
+	{ "classless",	0,				CMPL0 0, 0, 0, 0, notvalid },
+	{ "subnet-zero", 0,				CMPL0 0, 0, 0, 0, notvalid },
+	{ 0, 0, 0, 0, 0, 0, 0 }
 };
 
 Menu *
@@ -351,17 +326,17 @@ ip_help(void)
  * Data structures and routines for the "flush" command.
  */
 
-static Menu flushlist[] = {
-	{ "routes",	"IP routes",		0, 0, flush_ip_routes },
-	{ "arp",	"ARP cache",		0, 0, flush_arp_cache },
-	{ "line",	"Active user",		1, 1, flush_line },
-	{ "bridge-dyn",	"Dynamically learned bridge addresses", 1, 1, flush_bridgedyn },
-	{ "bridge-all",	"Dynamic and static bridge addresses", 1, 1, flush_bridgeall },
-	{ "bridge-rule", "Layer 2 filter rules for a bridge member port", 2, 2, flush_bridgerule },
-	{ "pf",		"pf NAT/filter/queue rules, states, tables", 0, 1, flush_pf },
-	{ "history",	"Command history",	0, 0, flush_history },
-	{ "?",		"Options",		0, 0, flush_help },
-	{ "help",	0,			0, 0, flush_help },
+Menu flushlist[] = {
+	{ "routes",	"IP routes", CMPL0 0, 0, 0, 0, flush_ip_routes },
+	{ "arp",	"ARP cache", CMPL0 0, 0, 0, 0, flush_arp_cache },
+	{ "line",	"Active user", CMPL0 0, 0, 1, 1, flush_line },
+	{ "bridge-dyn",	"Dynamically learned bridge addresses", CMPL0 0, 0, 1, 1, flush_bridgedyn },
+	{ "bridge-all",	"Dynamic and static bridge addresses", CMPL0 0, 0, 1, 1, flush_bridgeall },
+	{ "bridge-rule", "Layer 2 filter rules for a bridge member port", CMPL0 0, 0, 2, 2, flush_bridgerule },
+	{ "pf",		"pf NAT/filter/queue rules, states, tables", CMPL(t) (char**)fpfs, sizeof(struct fpf), 0, 1, flush_pf },
+	{ "history",	"Command history",	CMPL0 0, 0, 0, 0, flush_history },
+	{ "?",		"Options",		CMPL0 0, 0, 0, 0, flush_help },
+	{ "help",	0,			CMPL0 0, 0, 0, 0, flush_help },
 	{ 0, 0, 0, 0, 0 }
 };
 
@@ -431,76 +406,69 @@ flush_help(void)
  * Data structures and routines for the interface configuration mode
  */
 
-struct intlist {
-	char *name;		/* How user refers to it (case independent) */
-	char *help;		/* Help information (0 ==> no help) */
-	int (*handler)();	/* Routine to perform (for special ops) */
-	int bridge;		/* 0 == Interface, 1 == Bridge, 2 == Both */
-};
-
-static struct intlist Intlist[] = {
+struct intlist Intlist[] = {
 /* Interface mode commands */
-	{ "ip",		"IP address and other parameters",	intip,  0 },
-	{ "alias",	"Additional IP addresses and other parameters", intip, 0 },
-	{ "description", "Interface description",		intdesc, 0 },
-	{ "group",	"Interface group",			intgroup, 0 },
-	{ "rtlabel",	"Interface route labels",		intrtlabel, 0 },
-	{ "mtu",	"Set Maximum Transmission Unit",	intmtu, 0 },
-	{ "metric",	"Set routing metric",			intmetric, 0 },
-	{ "link",	"Set link level options",		intlink, 2 },
-	{ "arp",	"Set Address Resolution Protocol",	intflags, 0 },
-	{ "lladdr",	"Set Link Level (MAC) Address",		intlladdr, 0 },
-	{ "nwid",	"802.11 network ID",			intnwid, 0 },
-	{ "nwkey",	"802.11 network key",			intnwkey, 0 },
-	{ "powersave",	"802.11 powersaving mode",		intpowersave, 0 },
-	{ "txpower",	"802.11 transmit power",		inttxpower, 0 },
-	{ "bssid",	"802.11 bss id",			intbssid, 0 },
-	{ "media",	"Media type",				intmedia, 0 },
-	{ "mediaopt",	"Media options",			intmediaopt, 0 },
+	{ "ip",		"IP address and other parameters",	CMPL0 0, 0, intip,  0 },
+	{ "alias",	"Additional IP addresses and other parameters", CMPL0 0, 0, intip, 0 },
+	{ "description", "Interface description",		CMPL0 0, 0, intdesc, 0 },
+	{ "group",	"Interface group",			CMPL0 0, 0, intgroup, 0 },
+	{ "rtlabel",	"Interface route labels",		CMPL0 0, 0, intrtlabel, 0 },
+	{ "mtu",	"Set Maximum Transmission Unit",	CMPL0 0, 0, intmtu, 0 },
+	{ "metric",	"Set routing metric",			CMPL0 0, 0, intmetric, 0 },
+	{ "link",	"Set link level options",		CMPL0 0, 0, intlink, 2 },
+	{ "arp",	"Set Address Resolution Protocol",	CMPL0 0, 0, intflags, 0 },
+	{ "lladdr",	"Set Link Level (MAC) Address",		CMPL0 0, 0, intlladdr, 0 },
+	{ "nwid",	"802.11 network ID",			CMPL0 0, 0, intnwid, 0 },
+	{ "nwkey",	"802.11 network key",			CMPL0 0, 0, intnwkey, 0 },
+	{ "powersave",	"802.11 powersaving mode",		CMPL0 0, 0, intpowersave, 0 },
+	{ "txpower",	"802.11 transmit power",		CMPL0 0, 0, inttxpower, 0 },
+	{ "bssid",	"802.11 bss id",			CMPL0 0, 0, intbssid, 0 },
+	{ "media",	"Media type",				CMPL0 0, 0, intmedia, 0 },
+	{ "mediaopt",	"Media options",			CMPL0 0, 0, intmediaopt, 0 },
 #ifdef INET6
-	{ "vltime",	"IPv6 valid lifetime",			intvltime, 0 },
-	{ "pltime",	"IPv6 preferred lifetime",		intpltime, 0 },
-	{ "anycast",	"IPv6 anycast address bit",		intanycast, 0 },
-	{ "tentative",	"IPv6 tentative address bit",		inttentative, 0 },
+	{ "vltime",	"IPv6 valid lifetime",			CMPL0 0, 0, intvltime, 0 },
+	{ "pltime",	"IPv6 preferred lifetime",		CMPL0 0, 0, intpltime, 0 },
+	{ "anycast",	"IPv6 anycast address bit",		CMPL0 0, 0, intanycast, 0 },
+	{ "tentative",	"IPv6 tentative address bit",		CMPL0 0, 0, inttentative, 0 },
 #endif
-	{ "tunnel",	"Source/destination for GIF tunnel",	inttunnel, 0 },
-	{ "syncdev",	"PFsync control message interface",	intsyncdev, 0 },
-	{ "syncpeer",	"PFsync peer address",			intsyncpeer, 0},
-	{ "maxupd", 	"Collapsable max updates for a single state", intmaxupd, 0 },
-	{ "vhid",	"CARP virtual host ID",			intcarp, 0 },
-	{ "advbase",	"CARP advertisement interval",		intcarp, 0 },
-	{ "advskew",	"CARP advertisement skew",		intcarp, 0 },
-	{ "cpass",	"CARP passphrase",			intcpass, 0 },
-	{ "carpdev",	"CARP device",				intcdev, 0 },
-	{ "carpnode",	"CARP additional vhid/advskew",		intcnode, 0 },
-	{ "vlan",	"802.1Q vlan tag and parent",		intvlan, 0 },
-	{ "timeslots",	"TDM timeslots",			inttimeslot, 0},
-	{ "debug",	"Driver dependent debugging",		intflags, 0 },
-	{ "shutdown",	"Shutdown interface",			intflags, 2 },
+	{ "tunnel",	"Source/destination for GIF tunnel",	CMPL0 0, 0, inttunnel, 0 },
+	{ "syncdev",	"PFsync control message interface",	CMPL(i) 0, 0, intsyncdev, 0 },
+	{ "syncpeer",	"PFsync peer address",			CMPL0 0, 0, intsyncpeer, 0},
+	{ "maxupd", 	"Collapsable max updates for a single state", CMPL0 0, 0, intmaxupd, 0 },
+	{ "vhid",	"CARP virtual host ID",			CMPL0 0, 0, intcarp, 0 },
+	{ "advbase",	"CARP advertisement interval",		CMPL0 0, 0, intcarp, 0 },
+	{ "advskew",	"CARP advertisement skew",		CMPL0 0, 0, intcarp, 0 },
+	{ "cpass",	"CARP passphrase",			CMPL0 0, 0, intcpass, 0 },
+	{ "carpdev",	"CARP device",				CMPL0 0, 0, intcdev, 0 },
+	{ "carpnode",	"CARP additional vhid/advskew",		CMPL0 0, 0, intcnode, 0 },
+	{ "vlan",	"802.1Q vlan tag and parent",		CMPL0 0, 0, intvlan, 0 },
+	{ "timeslots",	"TDM timeslots",			CMPL0 0, 0, inttimeslot, 0},
+	{ "debug",	"Driver dependent debugging",		CMPL0 0, 0, intflags, 0 },
+	{ "shutdown",	"Shutdown interface",			CMPL0 0, 0, intflags, 2 },
 /* Bridge mode commands */
-	{ "member",	"Bridge member(s)",			brport, 1 },
-	{ "span",	"Bridge spanning port(s)",		brport, 1 },
-	{ "blocknonip",	"Block non-IP traffic forwarding on member(s)", brport, 1 },
-	{ "discover",	"Mark member(s) as discovery port(s)",	brport, 1 },
-	{ "learning",	"Mark member(s) as learning port(s)",	brport, 1 },
-	{ "stp",	"Enable 802.1D spanning tree protocol on member(s)", brport, 1 },
-	{ "maxaddr",	"Maximum address cache size",		brval, 1 },
-	{ "timeout",	"Address cache timeout",		brval, 1 },
-	{ "maxage",	"Time for 802.1D configuration to remain valid", brval, 1 },
-	{ "fwddelay",	"Time before bridge begins forwarding packets", brval, 1 },
-	{ "hellotime",	"Time between broadcasting 802.1D configuration packets", brval, 1 },
-	{ "priority",	"Spanning priority for all members on an 802.1D bridge", brval, 1 },
-	{ "rule",	"Bridge layer 2 filtering rules",	brrule, 1 },
-	{ "static",	"Static bridge address entry",		brstatic, 1 },
-	{ "ifpriority",	"Spanning priority of a member on an 802.1D bridge", brpri, 1 },
-	{ "ifcost",	"Spanning tree path cost of a member on 802.1D bridge", brpri, 1},
-	{ "trunkport",  "Add child interface(s) to trunk",	inttrunkport, 0 },
-	{ "trunkproto",	"Define trunkproto",		 	inttrunkproto, 0 },
+	{ "member",	"Bridge member(s)",			CMPL(i) 0, 0, brport, 1 },
+	{ "span",	"Bridge spanning port(s)",		CMPL(i) 0, 0, brport, 1 },
+	{ "blocknonip",	"Block non-IP traffic forwarding on member(s)",		CMPL0 0, 0, brport, 1 },
+	{ "discover",	"Mark member(s) as discovery port(s)",	CMPL0 0, 0, brport, 1 },
+	{ "learning",	"Mark member(s) as learning port(s)",	CMPL0 0, 0, brport, 1 },
+	{ "stp",	"Enable 802.1D spanning tree protocol on member(s)",	CMPL0 0, 0, brport, 1 },
+	{ "maxaddr",	"Maximum address cache size",		CMPL0 0, 0, brval, 1 },
+	{ "timeout",	"Address cache timeout",		CMPL0 0, 0, brval, 1 },
+	{ "maxage",	"Time for 802.1D configuration to remain valid",	CMPL0 0, 0, brval, 1 },
+	{ "fwddelay",	"Time before bridge begins forwarding packets",		CMPL0 0, 0, brval, 1 },
+	{ "hellotime",	"802.1D configuration packet broadcast interval",	CMPL0 0, 0, brval, 1 },
+	{ "priority",	"Spanning priority for all members on an 802.1D bridge",CMPL0 0, 0, brval, 1 },
+	{ "rule",	"Bridge layer 2 filtering rules",	CMPL0 0, 0, brrule, 1 },
+	{ "static",	"Static bridge address entry",		CMPL0 0, 0, brstatic, 1 },
+	{ "ifpriority",	"Spanning priority of a member on an 802.1D bridge",	CMPL0 0, 0, brpri, 1 },
+	{ "ifcost",	"Spanning tree path cost of a member on 802.1D bridge", CMPL0 0, 0, brpri, 1 },
+	{ "trunkport",  "Add child interface(s) to trunk",	CMPL0 0, 0, inttrunkport, 0 },
+	{ "trunkproto",	"Define trunkproto",		 	CMPL0 0, 0, inttrunkproto, 0 },
 
 /* Help commands */
-	{ "?",		"Options",				int_help, 2 },
-	{ "help",	0,					int_help, 2 },
-	{ 0, 0, 0, 0 }
+	{ "?",		"Options",				CMPL0 0, 0, int_help, 2 },
+	{ "help",	0,					CMPL0 0, 0, int_help, 2 },
+	{ 0, 0, 0, 0, 0, 0 }
 };
 
 /*
@@ -522,10 +490,6 @@ interface(int argc, char **argv, char *modhvar)
 	struct ifreq ifr;
 
 	if (!modhvar) {
-		/* setup pieces which are valid ONLY for interactive routine */
-		(void) signal(SIGINT, SIG_IGN);
-		(void) signal(SIGQUIT, SIG_IGN);
-
 		if (NO_ARG(argv[0])) {
 			argv++;
 			argc--;
@@ -637,7 +601,7 @@ interface(int argc, char **argv, char *modhvar)
 			}
 			if (line[0] == 0)
 				break;
-			makeargv(0);
+			makeargv();
 			if (margv[0] == 0)
 				break;
 		} else {
@@ -755,47 +719,48 @@ static char
  * Primary commands, will be included in help output
  */
 
-static Command cmdtab[] = {
-	{ "hostname",	hostnamehelp,	hostname,	1, 0, 0, 0, 0 },
-	{ "interface",	interfacehelp,	interface,	1, 0, 1, 1, 0 },
-	{ "group",	grouphelp,	group,		1, 0, 1, 0, 0 },
-	{ "arp",	arphelp,	arpset,		1, 0, 1, 0, 0 },
+#define ssctl sizeof(struct ctl)
+Command cmdtab[] = {
+	{ "hostname",	hostnamehelp,	CMPL0 0, 0, hostname, 	1, 0, 0, 0 },
+	{ "interface",	interfacehelp,	CMPL(i) 0, 0, interface, 1, 0, 1, 1 },
+	{ "group",	grouphelp,	CMPL0 0, 0, group,	1, 0, 1, 0 },
+	{ "arp",	arphelp,	CMPL0 0, 0, arpset,	1, 0, 1, 0 },
 #ifdef notyet
-	{ "proxy-arp",	parphelp,	arpset,		1, 0, 1, 0, 0 },
+	{ "proxy-arp",	parphelp,	CMPL0 0, 0, arpset,	1, 0, 1, 0 },
 #endif
-	{ "bridge",	bridgehelp,	interface,	1, 0, 0, 1, 0 },
-	{ "show",	showhelp,	showcmd,	0, 0, 0, 0, 0 },
-	{ "ip",		iphelp,		ipcmd,		1, 0, 1, 0, 0 },
-	{ "flush",	flushhelp,	flushcmd,	1, 0, 0, 0, 0 },
-	{ "enable",	enablehelp,	enable,		0, 0, 0, 0, 0 },
-	{ "disable",	disablehelp,	disable,	1, 0, 0, 0, 0 },
-	{ "route",	routehelp,	route,		1, 0, 1, 0, 0 },
-	{ "pf",		pfhelp,		ctlhandler,	1, 0, 0, 1, 1 },
-	{ "ospf",	ospfhelp,	ctlhandler,	1, 0, 0, 1, 1 },
-	{ "bgp",	bgphelp,	ctlhandler,	1, 0, 0, 1, 1 },
-	{ "rip",	riphelp,	ctlhandler,	1, 0, 0, 1, 1 },
-	{ "relay",	relayhelp,	ctlhandler,	1, 0, 0, 1, 1 },
-	{ "ipsec",	ipsechelp,	ctlhandler,	1, 0, 0, 1, 1 },
-	{ "dvmrp",	dvmrphelp,	ctlhandler,	1, 0, 0, 1, 1 },
-	{ "sasync",	sasynchelp,	ctlhandler,	1, 0, 0, 1, 1 },
-	{ "dhcp",	dhcphelp,	ctlhandler,	1, 0, 0, 1, 1 },
-	{ "snmp",	snmphelp,	ctlhandler,	1, 0, 0, 1, 1 },
-	{ "ntp",	ntphelp,	ctlhandler,	1, 0, 0, 1, 1 },
-	{ "ping",	pinghelp,	ping,		0, 0, 0, 0, 0 },
-	{ "traceroute", tracerthelp,	traceroute,	0, 0, 0, 0, 0 },
-	{ "ssh",	sshhelp,	ssh,		0, 0, 0, 0, 0 },
-	{ "telnet",	telnethelp,	telnet,		0, 0, 0, 0, 0 },
-	{ "reload",	reloadhelp,	reload,		1, 0, 0, 0, 0 },
-	{ "halt",	halthelp,	halt,		1, 0, 0, 0, 0 },
-	{ "write-config", savehelp,	wr_startup,	1, 0, 0, 0, 0 },
-	{ "verbose",	verbosehelp,	doverbose,	0, 0, 1, 0, 0 },
-	{ "editing",	editinghelp,	doediting,	0, 0, 1, 0, 0 },
-	{ "who",	whohelp,	who,		0, 0, 0, 0, 0 },
-	{ "!",		shellhelp,	shell,		1, 0, 0, 0, 0 },
-	{ "?",		helphelp,	help,		0, 0, 0, 0, 0 },
-	{ "quit",	quithelp,	quit,		0, 0, 0, 0, 0 },
-	{ "help",	0,		help,		0, 0, 0, 0, 0 },
-	{ 0,		0,		0,		0, 0, 0, 0, 0 }
+	{ "bridge",	bridgehelp,	CMPL(i) 0, 0, interface, 1, 0, 0, 1 },
+	{ "show",	showhelp,	CMPL(ta) (char **)showlist, sizeof(Menu), showcmd,	0, 0, 0, 0 },
+	{ "ip",		iphelp,		CMPL(ta) (char **)iptab, sizeof(Menu), ipcmd,		1, 0, 1, 0 },
+	{ "flush",	flushhelp,	CMPL(ta) (char **)flushlist, sizeof(Menu), flushcmd,	1, 0, 0, 0 },
+	{ "enable",	enablehelp,	CMPL0 0, 0, enable,	0, 0, 0, 0 },
+	{ "disable",	disablehelp,	CMPL0 0, 0, disable,	1, 0, 0, 0 },
+	{ "route",	routehelp,	CMPL0 0, 0, route,	1, 0, 1, 0 },
+	{ "pf",		pfhelp,		CMPL(t) (char **)ctl_pf, ssctl, ctlhandler,	1, 0, 0, 1 },
+	{ "ospf",	ospfhelp,	CMPL(t) (char **)ctl_ospf, ssctl, ctlhandler,	1, 0, 0, 1 },
+	{ "bgp",	bgphelp,	CMPL(t) (char **)ctl_bgp, ssctl, ctlhandler,	1, 0, 0, 1 },
+	{ "rip",	riphelp,	CMPL(t) (char **)ctl_rip, ssctl, ctlhandler,	1, 0, 0, 1 },
+	{ "relay",	relayhelp,	CMPL(t) (char **)ctl_relay, ssctl, ctlhandler,	1, 0, 0, 1 },
+	{ "ipsec",	ipsechelp,	CMPL(t) (char **)ctl_ipsec, ssctl, ctlhandler,	1, 0, 0, 1 },
+	{ "dvmrp",	dvmrphelp,	CMPL(t) (char **)ctl_dvmrp, ssctl, ctlhandler,	1, 0, 0, 1 },
+	{ "sasync",	sasynchelp,	CMPL(t) (char **)ctl_sasync, ssctl, ctlhandler,	1, 0, 0, 1 },
+	{ "dhcp",	dhcphelp,	CMPL(t) (char **)ctl_dhcp, ssctl, ctlhandler,	1, 0, 0, 1 },
+	{ "snmp",	snmphelp,	CMPL(t) (char **)ctl_snmp, ssctl, ctlhandler,	1, 0, 0, 1 },
+	{ "ntp",	ntphelp,	CMPL(t) (char **)ctl_ntp, ssctl, ctlhandler,	1, 0, 0, 1 },
+	{ "ping",	pinghelp,	CMPL0 0, 0, ping,	0, 0, 0, 0 },
+	{ "traceroute", tracerthelp,	CMPL0 0, 0, traceroute,	0, 0, 0, 0 },
+	{ "ssh",	sshhelp,	CMPL0 0, 0, ssh,	0, 0, 0, 0 },
+	{ "telnet",	telnethelp,	CMPL0 0, 0, telnet,	0, 0, 0, 0 },
+	{ "reload",	reloadhelp,	CMPL0 0, 0, reload,	1, 0, 0, 0 },
+	{ "halt",	halthelp,	CMPL0 0, 0, halt,	1, 0, 0, 0 },
+	{ "write-config", savehelp,	CMPL0 0, 0, wr_startup,	1, 0, 0, 0 },
+	{ "verbose",	verbosehelp,	CMPL0 0, 0, doverbose,	0, 0, 1, 0 },
+	{ "editing",	editinghelp,	CMPL0 0, 0, doediting,	0, 0, 1, 0 },
+	{ "who",	whohelp,	CMPL0 0, 0, who,	0, 0, 0, 0 },
+	{ "!",		shellhelp,	CMPL0 0, 0, shell,	1, 0, 0, 0 },
+	{ "?",		helphelp,	CMPL(C) 0, 0, help,	0, 0, 0, 0 },
+	{ "quit",	quithelp,	CMPL0 0, 0, quit,	0, 0, 0, 0 },
+	{ "help",	0,		CMPL(C) 0, 0, help,	0, 0, 0, 0 },
+	{ 0,		0,		CMPL0 0, 0, 0,		0, 0, 0, 0 }
 };
 
 /*
@@ -803,11 +768,11 @@ static Command cmdtab[] = {
  */
 
 static Command  cmdtab2[] = {
-	{ "config",	0,		notvalid,	0, 0, 0, 0, 0 },
-	{ 0,		0,		0,		0, 0, 0, 0, 0 }
+	{ "config",	0,		CMPL0 0, 0, notvalid,	0, 0, 0, 0 },
+	{ 0,		0,		CMPL0 0, 0, 0,		0, 0, 0, 0 }
 };
 
-static Command *
+Command *
 getcmd(char *name)
 {
 	Command *cm;
@@ -817,60 +782,8 @@ getcmd(char *name)
 	return (Command *) genget(name, (char **) cmdtab2, sizeof(Command));
 }
 
-static void
-makeargv(int x)
-{
-	char *cp, *cp2, c;
-	char **argp = margv;
-
-	margc = 0;
-	cp = line;
-	if (*cp == '!') {	/* Special case shell escape */
-		strlcpy(saveline, line, sizeof(saveline));
-						/* save for shell command */
-		*argp++ = "!";	/* No room in string to get this */
-		margc++;
-		cp++;
-	}
-	while ((c = *cp)) {
-		int inquote = 0;
-		while (isspace(c))
-			c = *++cp;
-		if (c == '\0')
-			break;
-		*argp++ = cp;
-		margc += 1;
-		for (cp2 = cp; c != '\0'; c = *++cp) {
-			if (inquote) {
-				if (c == inquote) {
-					inquote = 0;
-					continue;
-				}
-			} else {
-				if (!x && c == '\\') {
-					if ((c = *++cp) == '\0')
-						break;
-				} else if (!x && c == '"') {
-					inquote = '"';
-					continue;
-				} else if (!x && c == '\'') {
-					inquote = '\'';
-					continue;
-				} else if (isspace(c))
-					break;
-			}
-			*cp2++ = c;
-		}
-		*cp2 = '\0';
-		if (c == '\0')
-			break;
-		cp++;
-	}
-	*argp++ = 0;
-}
-
 void
-command(int top)
+command()
 {
 	Command  *c;
 	u_int num;
@@ -878,12 +791,6 @@ command(int top)
 	inithist();
 	initedit();
 
-	if (!top) {
-		putchar('\n');
-	} else {
-		(void) signal(SIGTSTP, SIG_IGN);
-		(void) signal(SIGQUIT, SIG_IGN);
-	}
 	for (;;) {
 		if (!editing) {
 			printf("%s", cprompt());
@@ -917,7 +824,7 @@ command(int top)
 
 		if (line[0] == 0)
 			break;
-		makeargv(0);
+		makeargv();
 		if (margv[0] == 0) {
 			break;
 		}
@@ -1003,7 +910,7 @@ help(int argc, char **argv)
  * Hostname command.
  */
 int
-hostname(int argc, char *argv[])
+hostname(int argc, char **argv)
 {
 	argv++;
 	argc--;
@@ -1016,16 +923,17 @@ hostname(int argc, char *argv[])
 	if (argc == 1) {
 		if (sethostname(*argv, strlen(*argv)))
 			printf("%% sethostname: %s\n", strerror(errno));
-        }
+        } else
+		show_hostname(0, NULL);
 	return 0;
 }
 
-int show_hostname(int argc, char *argv[])
+int show_hostname(int argc, char **argv)
 {
 	if (gethostname(hbuf, sizeof(hbuf)))
 		printf("%% gethostname: %s\n", strerror(errno));
 	else
-		printf("%% %s\n", hbuf);
+		printf("%s\n", hbuf);
 
 	return 0;
 }
@@ -1034,9 +942,7 @@ int show_hostname(int argc, char *argv[])
  * Shell command.
  */
 int
-shell(argc, argv)
-	int argc;
-	char *argv[];
+shell(int argc, char **argv)
 {
 	switch(vfork()) {
 		case -1:
@@ -1190,6 +1096,7 @@ group(int argc, char **argv)
 int
 cmdarg(char *cmd, char *arg)
 {
+	(void)signal(SIGINT, SIG_IGN);
 	switch(vfork()) {
 		case -1:
 			printf("%% fork failed: %s\n", strerror(errno));
@@ -1208,6 +1115,7 @@ cmdarg(char *cmd, char *arg)
 			(void)wait((int *)0);  /* Wait for cmd to complete */
 			break;
 	}
+	(void)signal(SIGINT, (sig_t)intr);
 	return 1;
 }
 
@@ -1217,6 +1125,7 @@ cmdarg(char *cmd, char *arg)
 int
 cmdargs(char *cmd, char *arg[])
 {
+	(void)signal(SIGINT, SIG_IGN);
 	switch(vfork()) {
 		case -1:
 			printf("%% fork failed: %s\n", strerror(errno));
@@ -1234,6 +1143,7 @@ cmdargs(char *cmd, char *arg[])
 			(void)wait((int *)0);  /* Wait for cmd to complete */
 			break;
 	}
+	(void)signal(SIGINT, (sig_t)intr);
 	return 1; 
 }
 
@@ -1317,22 +1227,6 @@ flush_history(void)
 
 	return(0);
 }
-
-static struct fpf {
-	char *name;
-	char *help;
-	char *cmd;
-	char *arg;
-} fpfs[] = {
-	{ "all",	"all PF elements",	PFCTL,	"-Fall" },
-	{ "nat",	"NAT rules",		PFCTL,	"-Fnat" },
-	{ "queue",	"queue rules",		PFCTL,	"-Fqueue" },
-	{ "filter",	"filter rules",		PFCTL,	"-Frules" },
-	{ "states",	"NAT/filter states",	PFCTL,	"-Fstate" },
-	{ "stats",	"PF statistics", 	PFCTL,	"-Finfo" },
-	{ "tables",	"PF address tables",	PFCTL,	"-FTables" },
-	{ 0, 0, 0, 0 }
-};
 
 void
 gen_help(char **x, char *cmdprefix, char *descrsuffix, int szstruct)
@@ -1422,10 +1316,7 @@ cmdrc(char rcname[FILENAME_MAX])
 			continue;
 		if (line[0] == ' ')
 			strlcpy(saveline, line, sizeof(line));
-		if (c && c->modh)
-			makeargv(c->noesc);
-		else
-			makeargv(0);
+		makeargv();
 		if (margv[0] == 0)
 			continue;
 		if (line[0] == ' ') {
@@ -1541,7 +1432,7 @@ p_argv(int argc, char **argv)
  * 0 is success
  */
 int
-el_burrito(EditLine *el, int margc, char **margv)
+el_burrito(EditLine *el, int argc, char **argv)
 {
 	char *colon;
 	int val;
@@ -1555,11 +1446,11 @@ el_burrito(EditLine *el, int margc, char **margv)
 	 * specific commands, which is really only useful in .editrc, so
 	 * it is invalid here.
 	 */
-	colon = strchr(margv[0], ':');
+	colon = strchr(argv[0], ':');
 	if (colon)
 		return(1);
 
-	val = el_parse(el, margc, (const char **)margv);
+	val = el_parse(el, argc, (const char **)argv);
 
 	if (val == 0)
 		return(0);
@@ -1739,26 +1630,6 @@ pr_sadb(int argc, char **argv)
 	return 0;
 }
 
-static struct stt {
-	char *name;
-	char *help;
-	void (*handler) ();
-} stts[] = {
-	{ "ip",		"Internet Protocol",		ip_stats },
-	{ "ah",		"Authentication Header",	ah_stats },
-	{ "esp",	"Encapsulated Security Payload",esp_stats },
-	{ "tcp",	"Transmission Control Protocol",tcp_stats },
-	{ "udp",	"Unreliable Datagram Protocol",	udp_stats },
-	{ "icmp",	"Internet Control Message Protocol",icmp_stats },
-	{ "igmp",	"Internet Group Management Protocol",igmp_stats },
-	{ "ipcomp",	"IP Compression",		ipcomp_stats },
-	{ "route",	"Routing",			rt_stats },
-	{ "carp",	"Common Address Redundancy Protocol", carp_stats },
-	{ "mbuf",	"Packet memory buffer",		mbpr },
-	{ "pf",		"Packet Filter",		pf_stats },
-	{ 0,		0,				0 }
-};
-
 int
 pr_kernel(int argc, char **argv)
 {
@@ -1790,98 +1661,6 @@ pf_stats(void)
 	cmdarg(PFCTL, "-sinfo");
 	return;
 }
-
-struct prot1 {
-	char *name;
-	char *help;
-	char *args[32];
-};
-
-static struct prot1 bgcs[] = {
-	{ "announced",  "All announced networks",
-	    { BGPCTL,  "network", "show", OPT, NULL } },
-	{ "interfaces", "Interface states",
-	    { BGPCTL,  "show", "interfaces", NULL } },
-	{ "nexthop",	"BGP nexthop routes",
-	    { BGPCTL,  "show", "nexthop", NULL } },
-	{ "summary",	"Neighbor session states and counters",
-	    { BGPCTL,  "show", "summary", OPT, NULL } },
-	{ "rib",	"Routing Information Base",
-	    { BGPCTL, "show",  "rib", OPT, OPT, OPT, NULL } },
-	{ "neighbor",	"Detailed peer information",
-	    { BGPCTL, "show",  "neighbor", REQ, OPT, NULL } },
-	{ 0, 0, { 0 } }
-};
-
-static struct prot1 oscs[] = {
-	{ "fib",	"Forward Information Base",
-	    { OSPFCTL, "show", "fib", OPT, OPT, NULL } },
-	{ "database",	"Link State Database",
-	    { OSPFCTL, "show", "database", OPT, OPT, NULL } },
-	{ "interfaces",	"Interface",
-	    { OSPFCTL, "show", "interfaces", OPT, NULL } },
-	{ "neighbor",	"Neighbor",
-	    { OSPFCTL, "show", "neighbor", OPT, NULL } },
-	{ "rib",	"Routing Information Base",
-	    { OSPFCTL, "show", "rib", OPT, NULL } },
-	{ "summary",	"Summary",
-	    { OSPFCTL, "show", "summary", NULL } },
-	{ 0, 0, { 0 } }
-};
-
-static struct prot1 rics[] = {
-	{ "fib",        "Forward Information Base",
-	    { RIPCTL, "show", "fib", OPT, NULL } },
-	{ "interfaces", "Interfaces",
-	    { RIPCTL, "show", "interfaces", NULL } },
-	{ "neighbor",   "Neighbor",
-	    { RIPCTL, "show", "neighbor", NULL } },
-	{ "rib",        "Routing Information Base",
-	    { RIPCTL, "show", "rib", NULL } },
-	{ 0, 0, { 0 } }
-};
-
-static struct prot1 dvcs[] = {
-	{ "igmp",       "Internet Group Message Protocol",
-	    { DVMRPCTL, "show", "igmp", NULL } },
-	{ "interfaces", "Interfaces",
-	    { DVMRPCTL, "show", "interfaces", OPT, NULL } },
-	{ "mfc",        "Multicast Forwarding Cache",
-	    { DVMRPCTL, "show", "mfc", OPT, NULL } },
-	{ "neighbor",   "Neighbor",
-	    { DVMRPCTL, "show", "neighbor", OPT, NULL } },
-	{ "rib",        "Routing Information Base",
-	    { DVMRPCTL, "show", "rib", OPT, NULL } },
-	{ "summary",    "Summary",
-	    { DVMRPCTL, "show", "summary", NULL } },
-        { 0, 0, { 0 } }
-};
-
-static struct prot1 rlcs[] = {
-	{ "hosts",      "hosts",
-	    { RELAYCTL, "show", "hosts", NULL } },
-	{ "redirects",  "redirects",
-	    { RELAYCTL, "show", "redirects", NULL } },
-	{ "status",     "status",
-	    { RELAYCTL, "show", "relays", NULL } },
-	{ "sessions",   "sessions",
-	    { RELAYCTL, "show", "sessions", NULL } },
-	{ "summary",    "summary",
-	    { RELAYCTL, "show", "summary", NULL } },
-	{ 0, 0, { 0 } }
-};
-
-static struct prot {
-	char *name;
-	struct prot1 *table;
-} prots[] = {
-	{ "bgp",	bgcs },
-        { "ospf",	oscs },
-        { "rip",	rics },
-        { "dvmrp",	dvcs },
-        { "relay",	rlcs },
-        { 0, 0 }
-};
 
 int
 pr_prot1(int argc, char **argv)

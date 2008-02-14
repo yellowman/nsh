@@ -1,4 +1,4 @@
-/* $nsh: main.c,v 1.35 2008/02/08 07:02:51 chris Exp $ */
+/* $nsh: main.c,v 1.36 2008/02/14 01:00:59 chris Exp $ */
 /*
  * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -22,19 +22,22 @@
 #include <string.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <setjmp.h>
 #include <sys/socket.h>
 #include <sys/syslimits.h>
 #include <sys/ttycom.h>
 #include <sys/signal.h>
-#include <histedit.h>
-#include "externs.h"
 #include "editing.h"
+#include "stringlist.h"
+#include "externs.h"
 
 void usage(void);
 
+jmp_buf toplevel;
+
 char *vers = "20080207";
 int bridge = 0;		/* bridge mode for interface() */
-int verbose = 0;	/* verbose mode for lots of stuff*/
+int verbose = 0;	/* verbose mode */
 int priv = 0;
 int editing;
 pid_t pid;
@@ -46,10 +49,14 @@ EditLine *elc = NULL;
 EditLine *eli = NULL;
 char *cursor_pos = NULL;
 
+StringList *marg_sl;	/* stringlist containing margv */
+
+void intr(void);
+
 int
 main(int argc, char *argv[])
 {
-	int ch, iflag = 0;
+	int top, ch, iflag = 0;
 	char rc[PATH_MAX];
 
 	if(getuid() != 0) 
@@ -78,6 +85,8 @@ main(int argc, char *argv[])
 	if (argc > 0)
 		usage();
 
+	marg_sl = sl_init();
+
 	if (iflag) {
 		/*
 		 * Run initialization and then exit.
@@ -103,11 +112,17 @@ main(int argc, char *argv[])
 		exit(0);
 	}
 
-	(void)signal(SIGWINCH, setwinsize);
-	setwinsize(0);
+	top = setjmp(toplevel) == 0;
+	if (top) {
+		(void)signal(SIGWINCH, setwinsize);
+		(void)signal(SIGINT, (sig_t)intr);
+		(void)setwinsize(0);
+	} else
+		putchar('\n');
 
 	for (;;) {
-		command(1);
+		command();
+		top = 1;
 	}
 
 	/* NOTREACHED */
@@ -121,4 +136,10 @@ usage(void)
 	(void)fprintf(stderr, "           -v indicates verbose operation\n");
 	(void)fprintf(stderr, "           -i rcfile loads configuration from rcfile\n");
 	exit(1);
+}
+
+void
+intr(void)
+{
+	longjmp(toplevel, 1);
 }
