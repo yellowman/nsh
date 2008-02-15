@@ -1,4 +1,4 @@
-/* $nsh: conf.c,v 1.47 2008/02/07 22:48:47 chris Exp $ */
+/* $nsh: conf.c,v 1.48 2008/02/15 07:25:19 chris Exp $ */
 /*
  * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -465,13 +465,12 @@ int conf_ifaddrs(FILE *output, char *ifname, int flags)
 		if (ifa->ifa_addr->sa_family != AF_INET)
 			continue;
                 
-		sin.sin_addr = ((struct sockaddr_in *)ifa->ifa_addr)->sin_addr;
+		memcpy(&sin, ifa->ifa_addr, sizeof(struct sockaddr_in));
 
 		if (sin.sin_addr.s_addr == 0)
 			continue;
  
-		sin2.sin_addr =
-		    ((struct sockaddr_in *)ifa->ifa_netmask)->sin_addr;
+		memcpy(&sin2, ifa->ifa_netmask, sizeof(struct sockaddr_in));
 
 		if (ippntd) {
 			iptype = "alias";
@@ -484,13 +483,12 @@ int conf_ifaddrs(FILE *output, char *ifname, int flags)
 		    netname4(sin.sin_addr.s_addr, &sin2));
 
 		if (flags & IFF_POINTOPOINT) {
-			sin3.sin_addr =
-			    ((struct sockaddr_in *)ifa->ifa_dstaddr)->sin_addr;
+			memcpy(&sin3, ifa->ifa_dstaddr,
+			    sizeof(struct sockaddr_in));
 			fprintf(output, " %s", inet_ntoa(sin3.sin_addr));
 		} else if (flags & IFF_BROADCAST) {
-			sin3.sin_addr =
-			    ((struct sockaddr_in *)ifa->ifa_broadaddr)->
-			    sin_addr;
+			memcpy(&sin3, ifa->ifa_broadaddr,
+			    sizeof(struct sockaddr_in));
 			/*
 			 * no reason to save the broadcast addr
 			 * if it is standard (this should always 
