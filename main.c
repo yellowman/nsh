@@ -1,4 +1,4 @@
-/* $nsh: main.c,v 1.36 2008/02/14 01:00:59 chris Exp $ */
+/* $nsh: main.c,v 1.37 2008/02/16 22:57:20 chris Exp $ */
 /*
  * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -49,8 +49,6 @@ EditLine *elc = NULL;
 EditLine *eli = NULL;
 char *cursor_pos = NULL;
 
-StringList *marg_sl;	/* stringlist containing margv */
-
 void intr(void);
 
 int
@@ -84,8 +82,6 @@ main(int argc, char *argv[])
 
 	if (argc > 0)
 		usage();
-
-	marg_sl = sl_init();
 
 	if (iflag) {
 		/*

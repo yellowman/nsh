@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.57 2008/02/14 01:00:59 chris Exp $ */
+/* $nsh: externs.h,v 1.58 2008/02/16 22:57:20 chris Exp $ */
 /*
  * nsh externs, prototypes and macros
  */
@@ -16,7 +16,7 @@ extern char *vers;		/* the version of nsh */
 extern char saveline[256];	/* command line */
 extern char line[256];		/* command line for makeargv() */
 extern int  margc;		/* makeargv() arg count */
-#define margv (marg_sl->sl_str) /* makeargv() command stringlist */
+extern char *margv[];		/* makeargv() args */
 extern int verbose;		/* is verbose mode on? */
 extern int editing;		/* is command line editing mode on? */
 extern int bridge;		/* are we in bridge mode (or interface mode?) */
@@ -162,6 +162,9 @@ char *iprompt(void);
 char *cprompt(void);
 char *pprompt(void);
 void gen_help(char **, char *, char *, int);
+void makeargv(void);
+extern size_t cursor_argc;
+extern size_t cursor_argo;
 
 typedef struct cmd {
 	char *name;		/* command name */
@@ -407,12 +410,3 @@ void inithist(void);
 void endhist(void);
 void initedit(void);
 void endedit(void);
-
-/* util.c */
-void makeargv(void);
-extern char *cursor_pos;
-extern size_t cursor_argc;
-extern size_t cursor_argo;
-#ifdef _STRINGLIST_H
-extern StringList *marg_sl;
-#endif

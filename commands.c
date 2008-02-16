@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.78 2008/02/14 01:00:59 chris Exp $ */
+/* $nsh: commands.c,v 1.79 2008/02/16 22:57:20 chris Exp $ */
 /*
  * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -73,6 +73,11 @@ int  margc;
 char hname[HSIZE];
 static char hbuf[MAXHOSTNAMELEN];	/* host name */
 static char ifname[IFNAMSIZ];		/* interface name */
+
+#define NARGS  sizeof(line)/2		/* max arguments in char line[] */
+char	*margv[NARGS];
+size_t	cursor_argc;	/* location of cursor in margv */
+size_t	cursor_argo;	/* offset of cursor in margv[cursor_argc] */
 
 #define OPT	(void *)1
 #define REQ	(void *)2
@@ -608,6 +613,8 @@ interface(int argc, char **argv, char *modhvar)
 			/*
 			 * a command was supplied directly to interface()
 			 */
+			if (argc - 1 > NARGS)
+				argc = NARGS;
 			for (z = 0; z < argc; z++)
 				margv[z] = argv[z];
 			margc = argc;
@@ -780,6 +787,69 @@ getcmd(char *name)
 	if ((cm = (Command *) genget(name, (char **) cmdtab, sizeof(Command))))
 		return cm;
 	return (Command *) genget(name, (char **) cmdtab2, sizeof(Command));
+}
+
+void 
+makeargv()
+{
+	char	*cp, *cp2, *base, c;
+	char	**argp = margv;
+
+	margc = 0;
+	cp = line;
+	if (*cp == '!') {	/* Special case shell escape */
+		/* save for shell command */
+		strlcpy(saveline, line, sizeof(saveline));
+
+		*argp++ = "!";	/* No room in string to get this */
+		margc++;
+		cp++;
+	}
+	while ((c = *cp)) {
+		int inquote = 0;
+		while (isspace(c))
+			c = *++cp;
+		if (c == '\0')
+			break;
+		*argp++ = cp;
+		cursor_argc = margc += 1;
+		base = cp;
+		for (cursor_argo = 0, cp2 = cp; c != '\0';
+		    cursor_argo = (cp + 1) - base, c = *++cp) {
+			if (inquote) {
+				if (c == inquote) {
+					inquote = 0;
+					continue;
+				}
+			} else {
+				if (c == '\\') {
+					if ((c = *++cp) == '\0')
+						break;
+				} else if (c == '"') {
+					inquote = '"';
+					continue;
+				} else if (c == '\'') {
+					inquote = '\'';
+					continue;
+				} else if (isspace(c)) {
+					cursor_argo = 0;
+					break;
+				}
+			}
+			*cp2++ = c;
+		}
+		*cp2 = '\0';
+		if (c == '\0') {
+			cursor_argc--;
+			break;
+		}
+		cp++;
+	}
+	*argp++ = 0;
+	if (cursor_pos == line) {
+		cursor_argc = 0;
+		cursor_argo = 0;
+	}
 }
 
 void

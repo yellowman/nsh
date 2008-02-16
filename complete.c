@@ -1,4 +1,4 @@
-/* $nsh: complete.c,v 1.1 2008/02/14 01:00:59 chris Exp $ */
+/* $nsh: complete.c,v 1.2 2008/02/16 22:57:20 chris Exp $ */
 /* From: $OpenBSD: /usr/src/usr.bin/ftp/complete.c,v 1.19 2006/06/23 20:35:25 steven Exp $ */
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -53,8 +53,6 @@
 
 #define ttyout stdout
 #define ttyin stdin
-
-StringList *marg_sl;	/* stringlist containing margv */
 
 unsigned char complete(EditLine *, int, char **, size_t, char *);
 static int	     comparstr(const void *, const void *);
