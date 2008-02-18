@@ -1,4 +1,4 @@
-/* $nsh: ctl.c,v 1.16 2008/02/14 01:00:59 chris Exp $ */
+/* $nsh: ctl.c,v 1.17 2008/02/18 15:46:00 chris Exp $ */
 /*
  * Copyright (c) 2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -24,12 +24,6 @@
 #include <sys/signal.h>
 #include "externs.h"
 
-#define ENABLE	(void *)1 
-#define DISABLE	(void *)2
-#define OPT	(void *)1
-#define REQ	(void *)2
-#define INVALID "Invalid or ambiguous argument"
-
 /* service daemons */
 #define OSPFD		"/usr/sbin/ospfd"
 #define BGPD		"/usr/sbin/bgpd"
@@ -41,8 +35,10 @@
 #define SASYNCD		"/usr/sbin/sasyncd"
 #define	SNMPD		"/usr/sbin/snmpd"
 #define NTPD		"/usr/sbin/ntpd"
+#define FTPPROXY	"/usr/sbin/ftp-proxy"
 
 void call_editor(char *, char **, char *);
+void ctl_symlink(char *, char **, char *);
 int rule_writeline(char *, char *);
 int acq_lock(char *);
 void rls_lock(int);
@@ -51,9 +47,9 @@ void flag_x(char *, int *);
 char *ctl_pf_test[] = { PFCTL, "-nf", PFCONF_TEMP, '\0' };
 struct ctl ctl_pf[] = {
 	{ "enable",	"enable service",
-	    { PFCTL, "-e", NULL }, NULL, ENABLE },
+	    { PFCTL, "-e", NULL }, NULL, X_ENABLE },
 	{ "disable",	"disable service",
-	    { PFCTL, "-d", NULL }, NULL, DISABLE },
+	    { PFCTL, "-d", NULL }, NULL, X_DISABLE },
 	{ "edit",	"edit configuration",
 	    { "PF", (char *)ctl_pf_test, PFCONF_TEMP, NULL }, call_editor,
 	    NULL },
@@ -65,9 +61,9 @@ struct ctl ctl_pf[] = {
 char *ctl_ospf_test[] = { OSPFD, "-nf", OSPFCONF_TEMP, '\0' };
 struct ctl ctl_ospf[] = {
 	{ "enable",     "enable service",
-	    { OSPFD, "-f", OSPFCONF_TEMP, NULL }, NULL, ENABLE },
+	    { OSPFD, "-f", OSPFCONF_TEMP, NULL }, NULL, X_ENABLE },
 	{ "disable",    "disable service",
-	    { PKILL, "ospfd", NULL }, NULL, DISABLE },
+	    { PKILL, "ospfd", NULL }, NULL, X_DISABLE },
 	{ "edit",       "edit configuration",
 	    { "OSPF", (char *)ctl_ospf_test, OSPFCONF_TEMP, NULL },
 	    call_editor, NULL },
@@ -81,9 +77,9 @@ struct ctl ctl_ospf[] = {
 char *ctl_bgp_test[] = { BGPD, "-nf", BGPCONF_TEMP, NULL, '\0' };
 struct ctl ctl_bgp[] = {
 	{ "enable",     "enable service",
-	    { BGPD, "-f", BGPCONF_TEMP, NULL }, NULL, ENABLE },
+	    { BGPD, "-f", BGPCONF_TEMP, NULL }, NULL, X_ENABLE },
 	{ "disable",    "disable service",
-	    { PKILL, "bgpd", NULL }, NULL, DISABLE },
+	    { PKILL, "bgpd", NULL }, NULL, X_DISABLE },
 	{ "edit",       "edit configuration",
 	    { "BGP", (char *)ctl_bgp_test, BGPCONF_TEMP, NULL }, call_editor,
 	    NULL },
@@ -103,9 +99,9 @@ struct ctl ctl_bgp[] = {
 char *ctl_rip_test[] = { RIPD, "-nf", RIPCONF_TEMP, '\0' };
 struct ctl ctl_rip[] = {
 	{ "enable",     "enable service",
-	    { RIPD, "-f", RIPCONF_TEMP, NULL }, NULL, ENABLE },
+	    { RIPD, "-f", RIPCONF_TEMP, NULL }, NULL, X_ENABLE },
 	{ "disable",    "disable service",
-	    { PKILL, "ripd", NULL }, NULL, DISABLE },
+	    { PKILL, "ripd", NULL }, NULL, X_DISABLE },
 	{ "edit",       "edit configuration",
 	    { "RIP", (char *)ctl_rip_test, RIPCONF_TEMP, NULL }, call_editor,
 	    NULL },
@@ -119,9 +115,9 @@ struct ctl ctl_rip[] = {
 char *ctl_ipsec_test[] = { IPSECCTL, "-nf", IPSECCONF_TEMP, '\0' };
 struct ctl ctl_ipsec[] = {
 	{ "enable",     "enable service",
-	    { ISAKMPD, "-Sa", NULL }, NULL, ENABLE },
+	    { ISAKMPD, "-Sa", NULL }, NULL, X_ENABLE },
 	{ "disable",    "disable service",                   
-	    { PKILL, "isakmpd", NULL }, NULL, DISABLE },
+	    { PKILL, "isakmpd", NULL }, NULL, X_DISABLE },
 	{ "edit",       "edit configuration",   
 	    { "IPsec", (char *)ctl_ipsec_test, IPSECCONF_TEMP, NULL },
 	    call_editor, NULL },
@@ -133,9 +129,9 @@ struct ctl ctl_ipsec[] = {
 char *ctl_dvmrp_test[] = { DVMRPD, "-nf", DVMRPCONF_TEMP, '\0' };
 struct ctl ctl_dvmrp[] = {
 	{ "enable",     "enable service",
-	    { DVMRPD, "-f", DVMRPCONF_TEMP, NULL }, NULL, ENABLE },
+	    { DVMRPD, "-f", DVMRPCONF_TEMP, NULL }, NULL, X_ENABLE },
 	{ "disable",    "disable service",   
-	    { PKILL, "dvmrpd", NULL }, NULL, DISABLE },
+	    { PKILL, "dvmrpd", NULL }, NULL, X_DISABLE },
 	{ "edit",       "edit configuration",
 	    { "DVMRP", (char *)ctl_dvmrp_test,  DVMRPCONF_TEMP, NULL },
 	    call_editor, NULL },
@@ -144,9 +140,9 @@ struct ctl ctl_dvmrp[] = {
 
 struct ctl ctl_sasync[] = {
 	{ "enable",     "enable service",
-	    { SASYNCD, "-c", SASYNCCONF_TEMP, NULL }, NULL, ENABLE },
+	    { SASYNCD, "-c", SASYNCCONF_TEMP, NULL }, NULL, X_ENABLE },
 	{ "disable",    "disable service",
-	    { PKILL, "sasyncd", NULL }, NULL, DISABLE },
+	    { PKILL, "sasyncd", NULL }, NULL, X_DISABLE },
 	{ "edit",       "edit configuration",
 	    { "sasync", NULL, SASYNCCONF_TEMP, NULL }, call_editor, NULL },
 	{ 0, 0, { 0 }, 0, 0 }
@@ -155,9 +151,9 @@ struct ctl ctl_sasync[] = {
 char *ctl_dhcp_test[] = { DHCPD, "-nc", DHCPCONF_TEMP, '\0' };
 struct ctl ctl_dhcp[] = {
 	{ "enable",     "enable service",
-	    { DHCPD, "-c", DHCPCONF_TEMP, NULL }, NULL, ENABLE },
+	    { DHCPD, "-c", DHCPCONF_TEMP, NULL }, NULL, X_ENABLE },
 	{ "disable",    "disable service",
-	    { PKILL, "dhcpd", NULL }, NULL, DISABLE },
+	    { PKILL, "dhcpd", NULL }, NULL, X_DISABLE },
 	{ "edit",       "edit configuration",
 	    { "DHCP", (char *)ctl_dhcp_test, DHCPCONF_TEMP, NULL },
 	    call_editor, NULL },
@@ -167,12 +163,12 @@ struct ctl ctl_dhcp[] = {
 char *ctl_snmp_test[] = { SNMPD, "-nf", SNMPCONF_TEMP, '\0' };
 struct ctl ctl_snmp[] = {
 	{ "enable",     "enable service",
-	    { SNMPD, "-f", SNMPCONF_TEMP, NULL }, NULL, ENABLE },
+	    { SNMPD, "-f", SNMPCONF_TEMP, NULL }, NULL, X_ENABLE },
 	{ "disable",    "disable service",
-	    { PKILL, "snmpd", NULL }, NULL, DISABLE },
+	    { PKILL, "snmpd", NULL }, NULL, X_DISABLE },
 	{ "edit",       "edit configuration",
-	    { "SNMP", (char *)ctl_snmp_test, SNMPCONF_TEMP, NULL },
-	    call_editor, NULL },
+	    { "SNMP", (char *)ctl_snmp_test, SNMPCONF_TEMP, NULL }, call_editor,
+	    NULL },
 	{ "trap",	"send traps",
 	    { SNMPCTL, "trap", "send", REQ, OPT, NULL }, NULL, NULL },
 	{ 0, 0, { 0 }, 0, 0 }
@@ -181,9 +177,9 @@ struct ctl ctl_snmp[] = {
 char *ctl_ntp_test[] = { NTPD, "-nf", NTPCONF_TEMP, '\0' };
 struct ctl ctl_ntp[] = {
 	{ "enable",     "enable service",
-	    { NTPD, "-sf", NTPCONF_TEMP, NULL }, NULL, ENABLE },
+	    { NTPD, "-sf", NTPCONF_TEMP, NULL }, NULL, X_ENABLE },
 	{ "disable",    "disable service",
-	    { PKILL, "ntpd", NULL }, NULL, DISABLE },
+	    { PKILL, "ntpd", NULL }, NULL, X_DISABLE },
 	{ "edit",       "edit configuration",
 	    { "NTP", (char *)ctl_ntp_test, NTPCONF_TEMP, NULL },
 	    call_editor, NULL },
@@ -193,9 +189,9 @@ struct ctl ctl_ntp[] = {
 char *ctl_relay_test[] = { RELAYD, "-nf", RELAYCONF_TEMP, '\0' };
 struct ctl ctl_relay[] = {
 	{ "enable",	"enable service",
-	    { RELAYD, "-f", RELAYCONF_TEMP, NULL }, NULL, ENABLE },
+	    { RELAYD, "-f", RELAYCONF_TEMP, NULL }, NULL, X_ENABLE },
         { "disable",	"disable service",
-	    { PKILL, "relayd", NULL }, NULL, DISABLE },
+	    { PKILL, "relayd", NULL }, NULL, X_DISABLE },
         { "edit",	"edit configuration",
 	    { "Relay", (char *)ctl_relay_test, RELAYCONF_TEMP, NULL },
 	    call_editor, NULL },
@@ -214,41 +210,80 @@ struct ctl ctl_relay[] = {
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
-static struct daemons {
-	char *name;
-	struct ctl *table;
-	char *tmpfile;
-} ctl_daemons[] = {
-	{ "pf",		ctl_pf,		PFCONF_TEMP },
-	{ "ospf",	ctl_ospf,	OSPFCONF_TEMP },
-	{ "bgp",	ctl_bgp,	BGPCONF_TEMP },
-	{ "rip",	ctl_rip,	RIPCONF_TEMP },
-	{ "relay",	ctl_relay,	RELAYCONF_TEMP },
-	{ "ipsec",	ctl_ipsec, 	IPSECCONF_TEMP },
-	{ "dvmrp",	ctl_dvmrp,	DVMRPCONF_TEMP },
-	{ "sasync",	ctl_sasync,	SASYNCCONF_TEMP },
-	{ "dhcp",	ctl_dhcp,	DHCPCONF_TEMP },
-	{ "snmp",	ctl_snmp,	SNMPCONF_TEMP },
-	{ "ntp",	ctl_ntp,	NTPCONF_TEMP },
-	{ 0, 0, 0 }
+struct ctl ctl_ftpproxy[] = {
+	{ "enable",	"enable service",
+	    { FTPPROXY, "-T", "ftp-proxy", NULL }, NULL, X_ENABLE },
+	{ "disable",	"disable service",
+	    { PKILL, "ftp-proxy", NULL }, NULL, X_DISABLE },
+	{ 0, 0, { 0 }, 0, 0 }
 };
 
+struct ctl ctl_dns[] = {
+	{ "local-control", "local control over DNS settings",
+	    { RESOLVCONF_SYM, NULL, RESOLVCONF_TEMP, NULL }, ctl_symlink,
+	    X_LOCAL },
+	{ "dhcp-control",   "DHCP client control over DNS settings",
+	    { RESOLVCONF_SYM, NULL, RESOLVCONF_DHCP, NULL }, ctl_symlink,
+	    X_OTHER },
+	{ "edit",	    "edit DNS settings",
+	    { "DNS", NULL, RESOLVCONF_TEMP, NULL }, call_editor, NULL },
+	{ 0, 0, { 0 }, 0, 0 }
+};
+
+struct daemons ctl_daemons[] = {
+	{ "pf",		ctl_pf,		PFCONF_TEMP,	1 },
+	{ "ospf",	ctl_ospf,	OSPFCONF_TEMP,	0 },
+	{ "bgp",	ctl_bgp,	BGPCONF_TEMP,	0 },
+	{ "rip",	ctl_rip,	RIPCONF_TEMP,	0 },
+	{ "relay",	ctl_relay,	RELAYCONF_TEMP,	0 },
+	{ "ipsec",	ctl_ipsec,	IPSECCONF_TEMP,	1 },
+	{ "dvmrp",	ctl_dvmrp,	DVMRPCONF_TEMP, 0 },
+	{ "sasync",	ctl_sasync,	SASYNCCONF_TEMP,0 },
+	{ "dhcp",	ctl_dhcp,	DHCPCONF_TEMP,	0 },
+	{ "snmp",	ctl_snmp,	SNMPCONF_TEMP,	0 },
+	{ "ntp",	ctl_ntp,	NTPCONF_TEMP,	0 },
+	{ "ftp-proxy",	ctl_ftpproxy,	FTPPROXY_TEMP,	0 },
+	{ "dns",	ctl_dns,	RESOLVCONF_TEMP,0 },
+	{ 0, 0, 0, 0 }
+};
+
+void
+ctl_symlink(char *temp, char **z, char *real)
+{
+	rmtemp(temp);
+	symlink(real,temp);
+}
+
+/* flag to other nsh sessions or nsh conf() that actions have been taken */
 void
 flag_x(char *fname, int *y)
 {
 	int fd;
 	char fenabled[SIZE_CONF_TEMP + sizeof(".enabled") + 1];
+	char fother[SIZE_CONF_TEMP + sizeof(".other") + 1];
+	char flocal[SIZE_CONF_TEMP + sizeof(".local") +1];
 
 	snprintf(fenabled, sizeof(fenabled), "%s.enabled", fname);
+	snprintf(fother, sizeof(fother), "%s.other", fname);
+	snprintf(flocal, sizeof(flocal), "%s.local", fname);
 
-	if (y == ENABLE) {
+	if (y == X_ENABLE) {
 		if ((fd = open(fenabled, O_RDWR | O_CREAT, 0600)) == -1)
 			return;
 		close(fd);
-	} else if (y == DISABLE) {
+	} else if (y == X_DISABLE) {
 		rmtemp(fenabled);
+	} else if (y == X_OTHER) {
+		rmtemp(flocal);
+		if ((fd = open(fother, O_RDWR | O_CREAT, 0600)) == -1)
+			return;
+		close(fd);
+	} else if (y == X_LOCAL) {
+		rmtemp(fother);
+		if ((fd = open(flocal, O_RDWR | O_CREAT, 0600)) == -1)
+			return;
+		close(fd);
 	}
-		
 }
 
 int
@@ -256,8 +291,7 @@ ctlhandler(int argc, char **argv, char *modhvar)
 {
 	struct daemons *daemons;
 	struct ctl *x;
-#define NARGS 7
-	char *args[NARGS] = { NULL, NULL, NULL, NULL, NULL, NULL, '\0' };
+	char *args[NOPTFILL] = { NULL, NULL, NULL, NULL, NULL, NULL, '\0' };
 	char **fillargs;
 
 	/* loop daemon list to find table pointer */
@@ -330,9 +364,10 @@ call_editor(char *name, char **args, char *tmpfile)
 		editor = DEFAULT_EDITOR;
 	if ((fd = acq_lock(tmpfile)) > 0) {
 		cmdarg(editor, tmpfile);
-		if (args[0] != NULL)
+		if (args != NULL)
 			cmdargs(args[0], args);
 		rls_lock(fd);
+		rmtemp(tmpfile);
 	} else
 		printf ("%% %s configuration is locked for editing\n", name);
 }

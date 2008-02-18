@@ -1,4 +1,4 @@
-/* $nsh: conf.c,v 1.48 2008/02/15 07:25:19 chris Exp $ */
+/* $nsh: conf.c,v 1.49 2008/02/18 15:46:00 chris Exp $ */
 /*
  * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -49,12 +49,12 @@
 #define TMPSIZ 1024	/* size of temp strings */
 
 char *routename_sa(struct sockaddr *);
-void conf_interfaces(FILE *);
+void conf_interfaces(FILE *, char *);
 void conf_print_rtm(FILE *, struct rt_msghdr *, char *, int);
 int conf_ifaddrs(FILE *, char *, int);
 void conf_brcfg(FILE *, int, struct if_nameindex *, char *);
 void conf_ifmetrics(FILE *, int, struct if_data, char *);
-void conf_xrules(FILE *, char *, char *, int);
+void conf_ctl(FILE *, char *);
 void conf_intrtlabel(FILE *, int, char *);
 void conf_intgroup(FILE *, int, char *);
 void conf_groupattrib(FILE *);
@@ -83,15 +83,17 @@ conf(FILE *output)
 
 	gethostname (hostbuf, sizeof(hostbuf));
 	fprintf(output, "hostname %s\n", hostbuf);
-	if(read_pass(cpass, sizeof(cpass))) {
+	if (read_pass(cpass, sizeof(cpass))) {
 		fprintf(output, "enable secret blowfish %s\n", cpass);
 	} else {
 		if (errno != ENOENT)
 			printf("%% Unable to read run-time crypt repository:"
 			    " %s\n", strerror(errno));
 	}
+	fprintf(output, "!\n");
+	conf_ctl(output, "dns");
 
-	conf_interfaces(output);
+	conf_interfaces(output, NULL);
 
 	fprintf(output, "!\n");
 
@@ -118,40 +120,47 @@ conf(FILE *output)
 
 	fprintf(output, "!\n");
 
-#define RELOAD 1
-	conf_xrules(output, PFCONF_TEMP, "pf", RELOAD);
+	conf_ctl(output, "pf");
 
-	/* XXX should configure pfsync interfaces _after_ pf rules loaded */
+	conf_interfaces(output, "pfsync");
 
-	conf_xrules(output, OSPFCONF_TEMP, "ospf", 0);
-	conf_xrules(output, BGPCONF_TEMP, "bgp", 0);
-	conf_xrules(output, RIPCONF_TEMP, "rip", 0);
-	conf_xrules(output, IPSECCONF_TEMP, "ipsec", RELOAD);
-	conf_xrules(output, DVMRPCONF_TEMP, "dvmrp", 0);
-	conf_xrules(output, RELAYCONF_TEMP, "relay", 0);
-	conf_xrules(output, SASYNCCONF_TEMP, "sasync", 0);
-	conf_xrules(output, DHCPCONF_TEMP, "dhcp", 0);
-	conf_xrules(output, SNMPCONF_TEMP, "snmp", 0);
-	conf_xrules(output, NTPCONF_TEMP, "ntp", 0);
+	conf_ctl(output, "ospf");
+	conf_ctl(output, "bgp");
+	conf_ctl(output, "rip");
+	conf_ctl(output, "ipsec");
+	conf_ctl(output, "dvmrp");
+	conf_ctl(output, "relay");
+	conf_ctl(output, "sasync");
+	conf_ctl(output, "dhcp");
+	conf_ctl(output, "snmp");
+	conf_ctl(output, "ntp");
 
 	return(0);
 }
 
-void conf_xrules(FILE *output, char *tmpfile, char *delim, int doreload)
+void conf_ctl(FILE *output, char *name)
 {
-	/* doreload is true when the reload command will load rule file */
 	FILE *conf;
 	struct stat enst;
+	struct daemons *x;
+	struct ctl *ctl;
 	char tmp_str[TMPSIZ];
-	char fenabled[SIZE_CONF_TEMP + sizeof(".enabled") + 1];
+	char fenabled[SIZE_CONF_TEMP + sizeof(".enabled") + 1],
+	    *fenablednm = NULL;
+	char flocal[SIZE_CONF_TEMP + sizeof(".local") + 1], *flocalnm = NULL;
+	char fother[SIZE_CONF_TEMP + sizeof(".other") + 1], *fothernm = NULL;
+	int pntdrules = 0;
 
-	snprintf(fenabled, sizeof(fenabled), "%s.enabled", tmpfile);
+	x = (struct daemons *)genget(name, (char **)ctl_daemons,
+	    sizeof(struct daemons));
+	if (x == 0 || Ambiguous(x)) {
+		printf("%% conf_xrules: %s: genget internal failure\n", name);
+		return;
+	}
 
-	/*
-	 * print rules
-	 */
-	if ((conf = fopen(tmpfile, "r")) != NULL) {
-		fprintf(output, "%s rules\n", delim);
+	/* print rules */
+	if ((conf = fopen(x->tmpfile, "r")) != NULL) {
+		fprintf(output, "%s rules\n", name);
 		for (;;) {
 			if(fgets(tmp_str, TMPSIZ, conf) == NULL)
 				break;
@@ -161,17 +170,43 @@ void conf_xrules(FILE *output, char *tmpfile, char *delim, int doreload)
 		}
 		fclose(conf);
 		fprintf(output, "!\n");
-		if (stat(fenabled, &enst) == 0 && S_ISREG(enst.st_mode)) {
-			fprintf(output, "%s enable\n", delim);
-			if (doreload)
-			    fprintf(output, "%s reload\n", delim);
-			fprintf(output, "!\n");
-		}
+		pntdrules = 1;
 	} else if (errno != ENOENT || verbose)
-		printf("%% conf_xrules: %s: %s\n", tmpfile, strerror(errno));
+		printf("%% conf_xrules: %s: %s\n", x->tmpfile, strerror(errno));
+
+	/* grab names from ctl struct for X_LOCAL, X_OTHER, X_ENABLE funcs */
+	for (ctl = x->table; ctl != NULL && ctl->name != NULL; ctl++) {
+		if (ctl->flag_x == X_LOCAL)
+			flocalnm = ctl->name;
+		if (ctl->flag_x == X_OTHER)
+			fothernm = ctl->name;
+		if (ctl->flag_x == X_ENABLE)
+			fenablednm = ctl->name;
+	}
+
+	snprintf(fenabled, sizeof(fenabled), "%s.enabled", x->tmpfile);
+	snprintf(flocal, sizeof(flocal), "%s.local", x->tmpfile);
+	snprintf(fother, sizeof(fother), "%s.other", x->tmpfile);
+
+	/*
+	 * if a function has the X_LOCAL, X_OTHER or X_ENABLE flags set,
+	 * save it in the config
+	 */
+	if (fenablednm && stat(fenabled, &enst) == 0 && S_ISREG(enst.st_mode))
+		fprintf(output, "%s %s\n", x->name, fenablednm);
+	if (flocalnm && stat(flocal, &enst) == 0 && S_ISREG(enst.st_mode))
+		fprintf(output, "%s %s\n", x->name, flocalnm);
+	if (fothernm && stat(fother, &enst) == 0 && S_ISREG(enst.st_mode))
+		fprintf(output, "%s %s\n", x->name, fothernm);
+
+	if (pntdrules) {
+		if (x->doreload)
+			fprintf(output, "%s reload\n", x->name);
+		fprintf(output, "!\n");
+	}
 }
 
-void conf_interfaces(FILE *output)
+void conf_interfaces(FILE *output, char *only)
 {
 	FILE *dhcpif, *llfile;
 	int ifs, flags, ippntd, br;
@@ -199,6 +234,15 @@ void conf_interfaces(FILE *output)
 
 	for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++) {
 		strlcpy(ifr.ifr_name, ifnp->if_name, sizeof(ifr.ifr_name));
+
+		if (only && !isprefix(only, ifnp->if_name))
+			/* only display interfaces which start with ... */
+			continue;
+		if (!only) {
+			/* interface prefixes to exclude on generic run */
+			if (isprefix("pfsync", ifnp->if_name))
+				continue;
+		}
 
 		if (ioctl(ifs, SIOCGIFFLAGS, (caddr_t)&ifr) < 0) {
 			printf("%% conf: SIOCGIFFLAGS: %s\n", strerror(errno));

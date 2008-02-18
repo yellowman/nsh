@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.79 2008/02/16 22:57:20 chris Exp $ */
+/* $nsh: commands.c,v 1.80 2008/02/18 15:46:00 chris Exp $ */
 /*
  * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -75,12 +75,9 @@ static char hbuf[MAXHOSTNAMELEN];	/* host name */
 static char ifname[IFNAMSIZ];		/* interface name */
 
 #define NARGS  sizeof(line)/2		/* max arguments in char line[] */
-char	*margv[NARGS];
-size_t	cursor_argc;	/* location of cursor in margv */
-size_t	cursor_argo;	/* offset of cursor in margv[cursor_argc] */
-
-#define OPT	(void *)1
-#define REQ	(void *)2
+char	*margv[NARGS];			/* argv storage */
+size_t	cursor_argc;			/* location of cursor in margv */
+size_t	cursor_argo;			/* offset of cursor margv[cursor_argc] */
 
 static Menu	*getip(char *);
 static int	quit(void);
@@ -701,6 +698,8 @@ static char
 	dhcphelp[] =	"DHCP server control",
 	snmphelp[] =	"SNMP server control",
 	ntphelp[] =	"NTP synchronization control",
+	ftpproxyhelp[] ="ftp-proxy server control",
+	dnshelp[]=	"DNS rule control",
 	bridgehelp[] =	"Modify bridge parameters",
 	showhelp[] =	"Show system information",
 	iphelp[] =	"Set IP networking parameters",
@@ -753,6 +752,8 @@ Command cmdtab[] = {
 	{ "dhcp",	dhcphelp,	CMPL(t) (char **)ctl_dhcp, ssctl, ctlhandler,	1, 0, 0, 1 },
 	{ "snmp",	snmphelp,	CMPL(t) (char **)ctl_snmp, ssctl, ctlhandler,	1, 0, 0, 1 },
 	{ "ntp",	ntphelp,	CMPL(t) (char **)ctl_ntp, ssctl, ctlhandler,	1, 0, 0, 1 },
+	{ "ftp-proxy",  ftpproxyhelp,	CMPL(t) (char **)ctl_ftpproxy, ssctl, ctlhandler,  1, 0, 0, 1 },
+	{ "dns",	dnshelp,	CMPL(t) (char **)ctl_dns, ssctl, ctlhandler,	1, 0, 0, 1 },
 	{ "ping",	pinghelp,	CMPL0 0, 0, ping,	0, 0, 0, 0 },
 	{ "traceroute", tracerthelp,	CMPL0 0, 0, traceroute,	0, 0, 0, 0 },
 	{ "ssh",	sshhelp,	CMPL0 0, 0, ssh,	0, 0, 0, 0 },
@@ -1014,6 +1015,7 @@ int show_hostname(int argc, char **argv)
 int
 shell(int argc, char **argv)
 {
+	(void)signal(SIGINT, SIG_IGN);
 	switch(vfork()) {
 		case -1:
 			printf("%% fork failed: %s\n", strerror(errno));
@@ -1039,6 +1041,7 @@ shell(int argc, char **argv)
  			(void)wait((int *)0);  /* Wait for shell to complete */
 			break;
 	}
+	(void)signal(SIGINT, (void *)intr);
 	return 1;
 }
 
@@ -1737,8 +1740,7 @@ pr_prot1(int argc, char **argv)
 {
 	struct prot1 *x;
 	struct prot *prot;
-#define NARGS 7
-	char *args[NARGS] = { NULL, NULL, NULL, NULL, NULL, NULL, '\0' };
+	char *args[NOPTFILL] = { NULL, NULL, NULL, NULL, NULL, NULL, '\0' };
 	char **fillargs;
 	char prefix[64];
 
@@ -1788,7 +1790,7 @@ step_optreq(char **xargs, char **args, int argc, char **argv, int skip)
 	int flc = 0;	/* number of filled arguments */
 
 	/* count fillable arguments */
-	for (i = 0; i < NARGS - 1; i++) {
+	for (i = 0; i < NOPTFILL - 1; i++) {
 		if (xargs[i] == OPT || xargs[i] == REQ)
 			fill++;
 		if (xargs[i] == NULL)
@@ -1801,10 +1803,17 @@ step_optreq(char **xargs, char **args, int argc, char **argv, int skip)
 	}
 
 	/* copy xargs to args, replace OPT/REQ args with argv past skip */
-	for (i = 0; i < NARGS - 2; i++) {
+	for (i = 0; i < NOPTFILL - 2; i++) {
 		if (xargs[i] == NULL) {
 			args[i] = '\0';
-			break;
+			if (i > 1)
+			/*
+			 * all **args passed must have at least two arguments
+			 * and a terminating NULL.  the point of this check
+			 * is to allow the first two arguments to be NULL but
+			 * still fill in fillargs[x] with corresponding NULL
+			 */
+				break;
 		}
 		if (xargs[i] == OPT || xargs[i] == REQ) {
 			/* copy from argv to args */

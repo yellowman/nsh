@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.58 2008/02/16 22:57:20 chris Exp $ */
+/* $nsh: externs.h,v 1.59 2008/02/18 15:46:00 chris Exp $ */
 /*
  * nsh externs, prototypes and macros
  */
@@ -96,6 +96,14 @@ extern char addrnames[];
 extern char metricnames[];
 
 /* ctl.c */
+/* flag_x flags */
+#define X_ENABLE  (void *)1
+#define X_DISABLE (void *)2
+#define X_LOCAL	  (void *)3
+#define X_OTHER   (void *)4
+/* argument list replacement */
+#define OPT     (void *)1
+#define REQ     (void *)2
 #define SIZE_CONF_TEMP 64
 int ctlhandler(int, char **, char *);
 void rmtemp(char *);
@@ -112,6 +120,10 @@ void rmtemp(char *);
 #define DHCPCONF_TEMP	"/var/run/dhcpd.conf"
 #define SNMPCONF_TEMP	"/var/run/snmpd.conf"
 #define NTPCONF_TEMP	"/var/run/ntpd.conf"
+#define FTPPROXY_TEMP	"/var/run/ftp-proxy"
+#define RESOLVCONF_TEMP "/var/run/resolv.conf"
+#define RESOLVCONF_SYM	"/var/run/resolv.conf.symlink"
+#define RESOLVCONF_DHCP	"/var/run/resolv.conf.dhcp"
 /* control programs */
 #define PFCTL		"/sbin/pfctl"
 #define OSPFCTL		"/usr/sbin/ospfctl"
@@ -128,6 +140,13 @@ struct ctl {
 	void (*handler)();
 	int *flag_x;
 };
+struct daemons {
+        char *name;
+        struct ctl *table;
+        char *tmpfile;
+	int doreload;
+};
+extern struct daemons ctl_daemons[];
 extern struct ctl ctl_pf[];
 extern struct ctl ctl_ospf[];
 extern struct ctl ctl_relay[];
@@ -139,9 +158,11 @@ extern struct ctl ctl_sasync[];
 extern struct ctl ctl_dhcp[];
 extern struct ctl ctl_snmp[];
 extern struct ctl ctl_ntp[];
-
+extern struct ctl ctl_ftpproxy[];
+extern struct ctl ctl_dns[];
 
 /* commands.c */
+#define NOPTFILL	7
 #define DEFAULT_EDITOR	"/usr/bin/vi"
 #define NSHRC_TEMP	"/var/run/nshrc"
 #define NSHRC		"/etc/nshrc"
