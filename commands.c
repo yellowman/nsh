@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.80 2008/02/18 15:46:00 chris Exp $ */
+/* $nsh: commands.c,v 1.81 2008/02/20 16:52:07 chris Exp $ */
 /*
  * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -1041,7 +1041,7 @@ shell(int argc, char **argv)
  			(void)wait((int *)0);  /* Wait for shell to complete */
 			break;
 	}
-	(void)signal(SIGINT, (void *)intr);
+	(void)signal(SIGINT, (sig_t)intr);
 	return 1;
 }
 

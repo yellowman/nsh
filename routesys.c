@@ -1,4 +1,4 @@
-/* $nsh: routesys.c,v 1.25 2008/01/29 06:17:35 chris Exp $ */
+/* $nsh: routesys.c,v 1.26 2008/02/20 16:52:07 chris Exp $ */
 /* From: $OpenBSD: /usr/src/sbin/route/route.c,v 1.43 2001/07/07 18:26:20 deraadt Exp $ */
 
 /*
@@ -353,6 +353,7 @@ monitor(int argc, char **argv)
 
 	sigflag = -1;
 	verbose = saveverbose;
+	(void)signal(SIGINT, (sig_t)intr);
 	close(s);
 	return(0);
 }
