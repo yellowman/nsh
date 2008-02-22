@@ -1,4 +1,4 @@
-/* $nsh: sysctl.c,v 1.10 2008/02/06 22:48:53 chris Exp $ */
+/* $nsh: sysctl.c,v 1.11 2008/02/22 01:08:41 chris Exp $ */
 /*
  * Copyright (c) 2003 Chris Cappuccio <chris@nmedia.net>
  *
@@ -72,26 +72,27 @@ static struct ipsysctl {
 	int mib2;
 	int mib3;
 	int32_t def_larg;
+	int enable;
 } ipsysctls[] = {
-	{ "forwarding",	IPPROTO_IP,	IPCTL_FORWARDING,	0	},
-	{ "ipip",	IPPROTO_IPIP,	IPIPCTL_ALLOW,		0	},
-	{ "gre",	IPPROTO_GRE,	GRECTL_ALLOW,		0	},
-	{ "wccp",	IPPROTO_GRE,	GRECTL_WCCP,		0	},
-	{ "mobileip",	IPPROTO_MOBILE,	MOBILEIPCTL_ALLOW,	0	},
-	{ "etherip",	IPPROTO_ETHERIP,ETHERIPCTL_ALLOW,	0	},
-	{ "ipcomp",	IPPROTO_IPCOMP,	IPCOMPCTL_ENABLE,	0	},
-	{ "esp",	IPPROTO_ESP,	ESPCTL_ENABLE,		0	},
-	{ "ah",		IPPROTO_AH,	AHCTL_ENABLE,		0	},
-	{ "sourceroute",IPPROTO_IP,	IPCTL_SOURCEROUTE,	0	},
-	{ "encdebug",	IPPROTO_IP,	IPCTL_ENCDEBUG,		0	},
-	{ "maxqueue",	IPPROTO_IP,	IPCTL_IPPORT_MAXQUEUE,	DEFAULT_MAXQUEUE },
-	{ "send-redirects",IPPROTO_IP,	IPCTL_SENDREDIRECTS,	0	},
-	{ "directed-broadcast",IPPROTO_IP, IPCTL_DIRECTEDBCAST,	0	},
+	{ "forwarding",	IPPROTO_IP,	IPCTL_FORWARDING,	0, 2	},
+	{ "ipip",	IPPROTO_IPIP,	IPIPCTL_ALLOW,		0, 1	},
+	{ "gre",	IPPROTO_GRE,	GRECTL_ALLOW,		0, 1	},
+	{ "wccp",	IPPROTO_GRE,	GRECTL_WCCP,		0, 1	},
+	{ "mobileip",	IPPROTO_MOBILE,	MOBILEIPCTL_ALLOW,	0, 1	},
+	{ "etherip",	IPPROTO_ETHERIP,ETHERIPCTL_ALLOW,	0, 1	},
+	{ "ipcomp",	IPPROTO_IPCOMP,	IPCOMPCTL_ENABLE,	0, 1	},
+	{ "esp",	IPPROTO_ESP,	ESPCTL_ENABLE,		0, 0	},
+	{ "ah",		IPPROTO_AH,	AHCTL_ENABLE,		0, 0	},
+	{ "sourceroute",IPPROTO_IP,	IPCTL_SOURCEROUTE,	0, 1	},
+	{ "encdebug",	IPPROTO_IP,	IPCTL_ENCDEBUG,		0, 1	},
+	{ "maxqueue",	IPPROTO_IP,	IPCTL_IPPORT_MAXQUEUE,	DEFAULT_MAXQUEUE, 1 },
+	{ "send-redirects",IPPROTO_IP,	IPCTL_SENDREDIRECTS,	0, 0	},
+	{ "directed-broadcast",IPPROTO_IP, IPCTL_DIRECTEDBCAST,	0, 1	},
 #ifdef notyet
-	{ "default-mtu",IPPROTO_IP,	IPCTL_DEFMTU,		DEFAULT_MTU },
+	{ "default-mtu",IPPROTO_IP,	IPCTL_DEFMTU,		DEFAULT_MTU, 1 },
 #endif
-	{ "default-ttl",IPPROTO_IP,	IPCTL_DEFTTL,		DEFAULT_TTL },
-	{ 0,		0,		0,			0 }
+	{ "default-ttl",IPPROTO_IP,	IPCTL_DEFTTL,		DEFAULT_TTL, 1 },
+	{ 0,		0,		0,			0, 0	}
 };
 
 int
@@ -111,15 +112,17 @@ ipsysctl(int set, char *cmd, char *arg)
 		return 0;
 	}
 
-	if (arg) {
-		larg = strtonum(arg, 0, INT_MAX, &errmsg);
-		if (errmsg) {
-			printf("%% Invalid argument %s: %s\n", arg, errmsg);
-			return(0);
-		}
-	} else if (set)
-		larg = 1;
-	else
+	if (set) {
+		if (arg) {
+			larg = strtonum(arg, 0, INT_MAX, &errmsg);
+			if (errmsg) {
+				printf("%% Invalid argument %s: %s\n", arg,
+				    errmsg);
+				return(0);
+			}
+		} else
+			larg = 1;
+	} else
 		larg = x->def_larg;
 
 	sysctl_inet(x->mib2, x->mib3, larg, 0);
@@ -130,48 +133,32 @@ ipsysctl(int set, char *cmd, char *arg)
 void
 conf_ipsysctl(FILE *output)
 {
-	int tmp;
+	int tmp = 0;
+	struct ipsysctl *x;
 
-	if ((tmp = sysctl_inet(IPPROTO_IP, IPCTL_FORWARDING, 0, 1)) == 1)
-		fprintf(output, "ip forwarding\n");
-	else if (tmp == 0)
-		fprintf(output, "no ip forwarding\n");
-	if (sysctl_inet(IPPROTO_IPIP, IPIPCTL_ALLOW, 0, 1) == 1)
-		fprintf(output, "ip ipip\n");
-	if (sysctl_inet(IPPROTO_GRE, GRECTL_ALLOW, 0, 1) == 1)
-		fprintf(output, "ip gre\n");
-	if (sysctl_inet(IPPROTO_GRE, GRECTL_WCCP, 0, 1) == 1)
-		fprintf(output, "ip wccp\n");
-	if (sysctl_inet(IPPROTO_MOBILE, MOBILEIPCTL_ALLOW, 0, 1) == 1)
-		fprintf(output, "ip mobileip\n");
-	if (sysctl_inet(IPPROTO_ETHERIP, ETHERIPCTL_ALLOW, 0, 1) == 1)
-		fprintf(output, "ip etherip\n");
-	if (sysctl_inet(IPPROTO_IPCOMP, IPCOMPCTL_ENABLE, 0, 1) == 1)
-		fprintf(output, "ip ipcomp\n");
-	if (sysctl_inet(IPPROTO_ESP, ESPCTL_ENABLE, 0, 1) == 0)
-		fprintf(output, "no ip esp\n");
-	if (sysctl_inet(IPPROTO_AH, AHCTL_ENABLE, 0, 1) == 0)
-		fprintf(output, "no ip ah\n");
-	if (sysctl_inet(IPPROTO_IP, IPCTL_SOURCEROUTE, 0, 1) == 1)
-		fprintf(output, "ip sourceroute\n");
-	/*
-	 * Your kernel must have option ENCDEBUG for this to do anything
-	 */
-	if (sysctl_inet(IPPROTO_IP, IPCTL_ENCDEBUG, 0, 1) == 1)
-		fprintf(output, "ip encdebug\n");
-	if ((tmp = sysctl_inet(IPPROTO_IP, IPCTL_IPPORT_MAXQUEUE, 0, 1)) !=
-	    DEFAULT_MAXQUEUE && tmp != -1)
-		fprintf(output, "ip maxqueue %i\n", tmp);
-	if (sysctl_inet(IPPROTO_IP, IPCTL_SENDREDIRECTS, 0, 1) == 0)
-		fprintf(output, "no ip send-redirects\n");
-	if (sysctl_inet(IPPROTO_IP, IPCTL_DIRECTEDBCAST, 0, 1) == 1)
-		fprintf(output, "ip directed-broadcast\n");
-#ifdef notyet
-	if ((tmp = sysctl_inet(IPPROTO_IP, IPCTL_DEFMTU, 0, 1)) !=
-	    DEFAULT_MTU && tmp != -1)
-		fprintf(output, "ip default-mtu %i\n", tmp);
-#endif
-	if ((tmp = sysctl_inet(IPPROTO_IP, IPCTL_DEFTTL, 0, 1)) !=
-	    DEFAULT_TTL && tmp != -1)
-		fprintf(output, "ip default-ttl %i\n", tmp);
+	for (x = &ipsysctls[0]; x->name != NULL; tmp = 0, x++) {
+		if (x->def_larg) {	/* this sysctl takes a value */
+			tmp = sysctl_inet(x->mib2, x->mib3, 0, 1);
+			if (tmp == x->def_larg || tmp == -1)
+				continue;
+			fprintf(output, "ip %s %i\n", x->name, tmp);
+			continue;
+		}
+		switch(x->enable) {	/* on/off */
+		case 0:	/* default is enabled */
+			if (sysctl_inet(x->mib2, x->mib3, 0, 1) == 0)
+				fprintf(output, "no ip %s\n", x->name);
+			break;
+		case 1: /* default is not enabled */
+			if (sysctl_inet(x->mib2, x->mib3, 0, 1) == 1)
+				fprintf(output, "ip %s\n", x->name);
+			break;
+		case 2: /* show either way */
+			if ((tmp = sysctl_inet(x->mib2, x->mib3, 0, 1)) == 1)
+				fprintf(output, "ip %s\n", x->name);
+			else if (tmp == 0)
+				fprintf(output, "no ip %s\n", x->name);
+			break;
+		}
+	}
 }
