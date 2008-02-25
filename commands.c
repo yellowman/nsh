@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.81 2008/02/20 16:52:07 chris Exp $ */
+/* $nsh: commands.c,v 1.82 2008/02/25 06:41:16 chris Exp $ */
 /*
  * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -169,7 +169,7 @@ showcmd(int argc, char **argv)
 	int success = 0;
 
 	if (argc < 2) {
-		printf("%% Use 'show ?' for help\n");
+		show_help(argc, argv);
 		return 0;
 	}
 
@@ -276,7 +276,7 @@ ipcmd(int argc, char **argv)
 		set = 1;
 
 	if (argc < 2) {
-		printf("%% Use 'ip ?' for help\n");
+		ip_help();
 		return 0;
 	}
 
@@ -348,7 +348,7 @@ flushcmd(int argc, char **argv)
 	Menu *f;
 
 	if (argc < 2) {
-		printf("%% Use 'flush ?' for help\n");
+		flush_help();
 		return 0;
 	}
 
