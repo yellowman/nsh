@@ -1,4 +1,4 @@
-/* $nsh: conf.c,v 1.49 2008/02/18 15:46:00 chris Exp $ */
+/* $nsh: conf.c,v 1.50 2008/02/25 00:27:01 chris Exp $ */
 /*
  * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -571,21 +571,12 @@ default_mtu(char *ifname)
 int
 conf_routes(FILE *output, char *delim, int af, int flags)
 {
-	int s;
 	char *next;
 	struct rt_msghdr *rtm;
 	struct rtdump *rtdump;
 
-	s = socket(PF_ROUTE, SOCK_RAW, 0);
-	if (s < 0) {
-		printf("%% Unable to open routing socket: %s\n",
-		    strerror(errno));
-		return(-1);
-	}
-
 	rtdump = getrtdump(0, flags, 0);
 	if (rtdump == NULL) {
-		close(s);
 		return(-1);
 	}
 
@@ -602,7 +593,6 @@ conf_routes(FILE *output, char *delim, int af, int flags)
 			    strerror(rtm->rtm_errno), rtm->rtm_errno);
 	}
 	freertdump(rtdump);
-	close(s);
 	return(1);
 }
 

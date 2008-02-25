@@ -1,4 +1,4 @@
-/* $nsh: arp.c,v 1.2 2008/02/04 02:49:46 chris Exp $ */
+/* $nsh: arp.c,v 1.3 2008/02/25 00:27:01 chris Exp $ */
 /* From: $OpenBSD: /usr/src/usr.sbin/arp/arp.c,v 1.40 2007/08/24 13:12:16 claudio Exp $ */
 /*
  * Copyright (c) 1984, 1993
@@ -293,6 +293,8 @@ search(in_addr_t addr, void (*action)(struct sockaddr_dl *sdl,
 	struct rtdump *rtdump;
 
 	rtdump = getrtdump(0, RTF_LLINFO, 0);
+	if (rtdump == NULL)
+		return;
 	for (next = rtdump->buf; next < rtdump->lim; next += rtm->rtm_msglen) {
 		rtm = (struct rt_msghdr *)next;
 		if (rtm->rtm_version != RTM_VERSION)
