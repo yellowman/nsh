@@ -1,4 +1,4 @@
-/* $nsh: routesys.c,v 1.26 2008/02/20 16:52:07 chris Exp $ */
+/* $nsh: routesys.c,v 1.27 2008/02/25 00:23:31 chris Exp $ */
 /* From: $OpenBSD: /usr/src/sbin/route/route.c,v 1.43 2001/07/07 18:26:20 deraadt Exp $ */
 
 /*
@@ -113,7 +113,7 @@ struct rtdump *getrtdump(int af, int flags, u_int tableid)
 		printf("%% getrtdump: rtdump malloc: %s\n", strerror(errno));
 		return(NULL);
 	}
-
+	rtdump->buf = NULL;
 	if (needed) {
 		if ((rtdump->buf = malloc(needed)) == NULL) {
 			printf("%% getrtdump: malloc: %s\n", strerror(errno));
@@ -129,7 +129,7 @@ struct rtdump *getrtdump(int af, int flags, u_int tableid)
 		rtdump->lim = rtdump->buf + needed;
 	}
 	if (rtdump->buf == NULL) {
-		printf ("%% No routing table\n");
+		printf ("%% Table empty\n");
 		free(rtdump);
 		return(NULL);
 	}
