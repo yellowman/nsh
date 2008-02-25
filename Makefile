@@ -1,4 +1,4 @@
-# $nsh: Makefile,v 1.31 2008/02/16 22:57:20 chris Exp $
+# $nsh: Makefile,v 1.32 2008/02/25 00:25:12 chris Exp $
 #
 PROG= nsh
 
@@ -14,6 +14,6 @@ LDADD=-ledit -ltermcap #-static
 NOMAN=1
 
 compile.c: compile.sh
-	sh compile.sh
+	sh ${.CURDIR}/compile.sh
 
 .include <bsd.prog.mk>
