@@ -1,4 +1,4 @@
-/* $nsh: ctl.c,v 1.17 2008/02/18 15:46:00 chris Exp $ */
+/* $nsh: ctl.c,v 1.18 2008/02/25 06:18:00 chris Exp $ */
 /*
  * Copyright (c) 2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -367,7 +367,6 @@ call_editor(char *name, char **args, char *tmpfile)
 		if (args != NULL)
 			cmdargs(args[0], args);
 		rls_lock(fd);
-		rmtemp(tmpfile);
 	} else
 		printf ("%% %s configuration is locked for editing\n", name);
 }
