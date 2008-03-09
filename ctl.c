@@ -1,4 +1,4 @@
-/* $nsh: ctl.c,v 1.18 2008/02/25 06:18:00 chris Exp $ */
+/* $nsh: ctl.c,v 1.19 2008/03/09 05:17:57 chris Exp $ */
 /*
  * Copyright (c) 2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -22,6 +22,8 @@
 #include <unistd.h>
 #include <errno.h>
 #include <sys/signal.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 #include "externs.h"
 
 /* service daemons */
@@ -385,6 +387,7 @@ rule_writeline(char *fname, char *writeline)
 		writeline++;
 	fprintf(rulefile, "%s", writeline);
 	fclose(rulefile);
+	chmod(fname, 0600);
 	return(0);
 }
 
