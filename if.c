@@ -1,4 +1,4 @@
-/* $nsh: if.c,v 1.38 2008/02/15 07:25:19 chris Exp $ */
+/* $nsh: if.c,v 1.39 2008/03/09 06:33:48 chris Exp $ */
 /*
  * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -889,8 +889,6 @@ intgroup(char *ifname, int ifs, int argc, char **argv)
 		if (ioctl(ifs, ioctype, (caddr_t)&ifgr) == -1) {
 			switch(errno) {
 			case EEXIST:
-				printf("%% Group already applied to"
-				    " interface (%s)\n", argv[i]);
 				break;
 			default:
 				printf("%% intgroup: %s: %s\n", ioc,
