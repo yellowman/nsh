@@ -1,4 +1,4 @@
-/* $nsh: if.c,v 1.39 2008/03/09 06:33:48 chris Exp $ */
+/* $nsh: if.c,v 1.40 2008/03/10 04:46:26 chris Exp $ */
 /*
  * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -91,7 +91,7 @@ show_int(int argc, char **argv)
 {
 	struct ifaddrs *ifap, *ifa;
 	struct if_nameindex *ifn_list, *ifnp;
-	struct ifreq ifr;
+	struct ifreq ifr, ifrdesc;
 	struct if_data if_data;
 	struct sockaddr_in sin, sin2, sin3;
 	struct timeval tv;
@@ -104,7 +104,7 @@ show_int(int argc, char **argv)
 	char *type, *lladdr, *ifname = NULL;
 	const char *carp;
 
-	char tmp_str[512], tmp_str2[512];
+	char tmp_str[512], tmp_str2[512], ifdescr[IFDESCRSIZE];
 
 	if (argc == 3)
 		ifname = argv[2];
@@ -151,7 +151,17 @@ show_int(int argc, char **argv)
 		return(1);
 	}
 
-	printf("%% %s\n", ifname);
+	printf("%% %s", ifname);
+
+	/* description */
+	memset(&ifrdesc, 0, sizeof(ifrdesc));
+	strlcpy(ifrdesc.ifr_name, ifname, sizeof(ifrdesc.ifr_name));
+	ifrdesc.ifr_data = (caddr_t)&ifdescr;
+	if (ioctl(ifs, SIOCGIFDESCR, &ifrdesc) == 0 && strlen(ifrdesc.ifr_data))
+		printf(" (%s)", ifrdesc.ifr_data);
+
+	putchar('\n');
+
 	printf("  %s is %s", br ? "Bridge" : "Interface",
 	    flags & IFF_UP ? "up" : "down");
 
