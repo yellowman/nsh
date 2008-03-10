@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.82 2008/02/25 06:41:16 chris Exp $ */
+/* $nsh: commands.c,v 1.83 2008/03/10 04:46:03 chris Exp $ */
 /*
  * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -699,7 +699,8 @@ static char
 	snmphelp[] =	"SNMP server control",
 	ntphelp[] =	"NTP synchronization control",
 	ftpproxyhelp[] ="ftp-proxy server control",
-	dnshelp[]=	"DNS rule control",
+	dnshelp[] =	"DNS rule control",
+	inethelp[] =	"Inet super-server control",
 	bridgehelp[] =	"Modify bridge parameters",
 	showhelp[] =	"Show system information",
 	iphelp[] =	"Set IP networking parameters",
@@ -754,6 +755,7 @@ Command cmdtab[] = {
 	{ "ntp",	ntphelp,	CMPL(t) (char **)ctl_ntp, ssctl, ctlhandler,	1, 0, 0, 1 },
 	{ "ftp-proxy",  ftpproxyhelp,	CMPL(t) (char **)ctl_ftpproxy, ssctl, ctlhandler,  1, 0, 0, 1 },
 	{ "dns",	dnshelp,	CMPL(t) (char **)ctl_dns, ssctl, ctlhandler,	1, 0, 0, 1 },
+	{ "inet",	inethelp,	CMPL(t) (char **)ctl_inet, ssctl, ctlhandler,	1, 0, 0, 1 },
 	{ "ping",	pinghelp,	CMPL0 0, 0, ping,	0, 0, 0, 0 },
 	{ "traceroute", tracerthelp,	CMPL0 0, 0, traceroute,	0, 0, 0, 0 },
 	{ "ssh",	sshhelp,	CMPL0 0, 0, ssh,	0, 0, 0, 0 },

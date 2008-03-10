@@ -1,4 +1,4 @@
-/* $nsh: ctl.c,v 1.19 2008/03/09 05:17:57 chris Exp $ */
+/* $nsh: ctl.c,v 1.20 2008/03/10 04:46:03 chris Exp $ */
 /*
  * Copyright (c) 2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -38,6 +38,7 @@
 #define	SNMPD		"/usr/sbin/snmpd"
 #define NTPD		"/usr/sbin/ntpd"
 #define FTPPROXY	"/usr/sbin/ftp-proxy"
+#define INETD		"/usr/sbin/inetd"
 
 void call_editor(char *, char **, char *);
 void ctl_symlink(char *, char **, char *);
@@ -232,6 +233,16 @@ struct ctl ctl_dns[] = {
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
+struct ctl ctl_inet[] = {
+	{ "enable",     "enable service",
+	    { INETD, INETCONF_TEMP, NULL }, NULL, X_ENABLE },
+	{ "disable",    "disable service",
+	    { PKILL, "inetd", NULL }, NULL, X_DISABLE },
+	{ "edit",       "edit configuration",
+	    { "inet", NULL, INETCONF_TEMP, NULL }, call_editor, NULL },
+	{ 0, 0, { 0 }, 0, 0 }
+};
+
 struct daemons ctl_daemons[] = {
 	{ "pf",		ctl_pf,		PFCONF_TEMP,	1 },
 	{ "ospf",	ctl_ospf,	OSPFCONF_TEMP,	0 },
@@ -246,6 +257,7 @@ struct daemons ctl_daemons[] = {
 	{ "ntp",	ctl_ntp,	NTPCONF_TEMP,	0 },
 	{ "ftp-proxy",	ctl_ftpproxy,	FTPPROXY_TEMP,	0 },
 	{ "dns",	ctl_dns,	RESOLVCONF_TEMP,0 },
+	{ "inet",	ctl_inet,	INETCONF_TEMP,	0 },
 	{ 0, 0, 0, 0 }
 };
 

@@ -1,4 +1,4 @@
-/* $nsh: conf.c,v 1.51 2008/02/25 06:30:54 chris Exp $ */
+/* $nsh: conf.c,v 1.52 2008/03/10 04:46:03 chris Exp $ */
 /*
  * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -95,8 +95,6 @@ conf(FILE *output)
 
 	conf_interfaces(output, NULL);
 
-	fprintf(output, "!\n");
-
 	conf_groupattrib(output);
 
 	fprintf(output, "!\n");
@@ -135,6 +133,7 @@ conf(FILE *output)
 	conf_ctl(output, "snmp");
 	conf_ctl(output, "ntp");
 	conf_ctl(output, "ftp-proxy");
+	conf_ctl(output, "inet");
 
 	return(0);
 }
@@ -270,7 +269,6 @@ void conf_interfaces(FILE *output, char *only)
 		/*
 		 * set interface/bridge mode
 		 */
-		fprintf(output, "!\n");
 		if (!(br = is_bridge(ifs, ifnp->if_name)))
 			br = 0;
 		fprintf(output, "%s %s\n", br ? "bridge" : "interface",
@@ -383,7 +381,7 @@ void conf_interfaces(FILE *output, char *only)
 			fprintf(output, " no shutdown\n");
 		else if (!(flags & IFF_UP))
 			fprintf(output, " shutdown\n");
-
+		fprintf(output, "!\n");
 	}
 	close(ifs);
 	if_freenameindex(ifn_list);
