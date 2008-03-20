@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.59 2008/02/18 15:46:00 chris Exp $ */
+/* $nsh: externs.h,v 1.60 2008/03/20 07:45:51 chris Exp $ */
 /*
  * nsh externs, prototypes and macros
  */
@@ -124,6 +124,7 @@ void rmtemp(char *);
 #define RESOLVCONF_TEMP "/var/run/resolv.conf"
 #define RESOLVCONF_SYM	"/var/run/resolv.conf.symlink"
 #define RESOLVCONF_DHCP	"/var/run/resolv.conf.dhcp"
+#define INETCONF_TEMP	"/var/run/inetd.conf"
 /* control programs */
 #define PFCTL		"/sbin/pfctl"
 #define OSPFCTL		"/usr/sbin/ospfctl"
@@ -144,6 +145,7 @@ struct daemons {
         char *name;
         struct ctl *table;
         char *tmpfile;
+	mode_t mode;
 	int doreload;
 };
 extern struct daemons ctl_daemons[];
@@ -160,6 +162,7 @@ extern struct ctl ctl_snmp[];
 extern struct ctl ctl_ntp[];
 extern struct ctl ctl_ftpproxy[];
 extern struct ctl ctl_dns[];
+extern struct ctl ctl_inet[];
 
 /* commands.c */
 #define NOPTFILL	7

@@ -1,4 +1,4 @@
-/* $nsh: ctl.c,v 1.20 2008/03/10 04:46:03 chris Exp $ */
+/* $nsh: ctl.c,v 1.21 2008/03/20 07:45:51 chris Exp $ */
 /*
  * Copyright (c) 2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -42,7 +42,7 @@
 
 void call_editor(char *, char **, char *);
 void ctl_symlink(char *, char **, char *);
-int rule_writeline(char *, char *);
+int rule_writeline(char *, mode_t, char *);
 int acq_lock(char *);
 void rls_lock(int);
 void flag_x(char *, int *);
@@ -244,20 +244,20 @@ struct ctl ctl_inet[] = {
 };
 
 struct daemons ctl_daemons[] = {
-	{ "pf",		ctl_pf,		PFCONF_TEMP,	1 },
-	{ "ospf",	ctl_ospf,	OSPFCONF_TEMP,	0 },
-	{ "bgp",	ctl_bgp,	BGPCONF_TEMP,	0 },
-	{ "rip",	ctl_rip,	RIPCONF_TEMP,	0 },
-	{ "relay",	ctl_relay,	RELAYCONF_TEMP,	0 },
-	{ "ipsec",	ctl_ipsec,	IPSECCONF_TEMP,	1 },
-	{ "dvmrp",	ctl_dvmrp,	DVMRPCONF_TEMP, 0 },
-	{ "sasync",	ctl_sasync,	SASYNCCONF_TEMP,0 },
-	{ "dhcp",	ctl_dhcp,	DHCPCONF_TEMP,	0 },
-	{ "snmp",	ctl_snmp,	SNMPCONF_TEMP,	0 },
-	{ "ntp",	ctl_ntp,	NTPCONF_TEMP,	0 },
-	{ "ftp-proxy",	ctl_ftpproxy,	FTPPROXY_TEMP,	0 },
-	{ "dns",	ctl_dns,	RESOLVCONF_TEMP,0 },
-	{ "inet",	ctl_inet,	INETCONF_TEMP,	0 },
+	{ "pf",		ctl_pf,		PFCONF_TEMP,	0600, 1 },
+	{ "ospf",	ctl_ospf,	OSPFCONF_TEMP,	0600, 0 },
+	{ "bgp",	ctl_bgp,	BGPCONF_TEMP,	0600, 0 },
+	{ "rip",	ctl_rip,	RIPCONF_TEMP,	0600, 0 },
+	{ "relay",	ctl_relay,	RELAYCONF_TEMP,	0600, 0 },
+	{ "ipsec",	ctl_ipsec,	IPSECCONF_TEMP,	0600, 1 },
+	{ "dvmrp",	ctl_dvmrp,	DVMRPCONF_TEMP, 0600, 0 },
+	{ "sasync",	ctl_sasync,	SASYNCCONF_TEMP,0600, 0 },
+	{ "dhcp",	ctl_dhcp,	DHCPCONF_TEMP,	0600, 0 },
+	{ "snmp",	ctl_snmp,	SNMPCONF_TEMP,	0600, 0 },
+	{ "ntp",	ctl_ntp,	NTPCONF_TEMP,	0600, 0 },
+	{ "ftp-proxy",	ctl_ftpproxy,	FTPPROXY_TEMP,	0600, 0 },
+	{ "dns",	ctl_dns,	RESOLVCONF_TEMP,0644, 0 },
+	{ "inet",	ctl_inet,	INETCONF_TEMP,	0600, 0 },
 	{ 0, 0, 0, 0 }
 };
 
@@ -331,7 +331,8 @@ ctlhandler(int argc, char **argv, char *modhvar)
 		}
 		if (isprefix(modhvar, "rules")) {
 			/* write indented line to tmp config file */
-			rule_writeline(daemons->tmpfile, saveline);
+			rule_writeline(daemons->tmpfile, daemons->mode,
+			    saveline);
 			return 0;
 		}
 	}
@@ -371,6 +372,15 @@ call_editor(char *name, char **args, char *tmpfile)
 {
 	int fd;
 	char *editor;
+	struct daemons *daemons;
+	mode_t mode = 0644;
+
+	for (daemons = ctl_daemons; daemons->name != 0; daemons++)
+		if (strncmp(daemons->tmpfile, tmpfile,
+		    strlen(daemons->tmpfile)) == 0) {
+			mode = daemons->mode;
+			break;
+		}
 
 	/* acq lock, call editor, test config with cmd and args, release lock */
 
@@ -378,6 +388,7 @@ call_editor(char *name, char **args, char *tmpfile)
 		editor = DEFAULT_EDITOR;
 	if ((fd = acq_lock(tmpfile)) > 0) {
 		cmdarg(editor, tmpfile);
+		chmod(tmpfile, mode);
 		if (args != NULL)
 			cmdargs(args[0], args);
 		rls_lock(fd);
@@ -386,7 +397,7 @@ call_editor(char *name, char **args, char *tmpfile)
 }
 
 int
-rule_writeline(char *fname, char *writeline)
+rule_writeline(char *fname, mode_t mode, char *writeline)
 {
 	FILE *rulefile;
 
@@ -399,7 +410,7 @@ rule_writeline(char *fname, char *writeline)
 		writeline++;
 	fprintf(rulefile, "%s", writeline);
 	fclose(rulefile);
-	chmod(fname, 0600);
+	chmod(fname, mode);
 	return(0);
 }
 
