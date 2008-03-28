@@ -1,4 +1,4 @@
-/* $nsh: conf.c,v 1.54 2008/03/28 16:58:56 chris Exp $ */
+/* $nsh: conf.c,v 1.55 2008/03/28 17:03:45 chris Exp $ */
 /*
  * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -172,7 +172,7 @@ void conf_ctl(FILE *output, char *name)
 		fclose(conf);
 		fprintf(output, "!\n");
 		pntdrules = 1;
-	} else if (errno != ENOENT || verbose)
+	} else if (errno != ENOENT || (errno != ENOENT && verbose))
 		printf("%% conf_xrules: %s: %s\n", x->tmpfile, strerror(errno));
 
 	/* grab names from ctl struct for X_LOCAL, X_OTHER, X_ENABLE funcs */
