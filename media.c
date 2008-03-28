@@ -1,4 +1,4 @@
-/* $nsh: media.c,v 1.11 2005/09/01 04:31:36 chris Exp $ */
+/* $nsh: media.c,v 1.12 2008/03/28 16:20:38 chris Exp $ */
 /*
  * From: $OpenBSD: /usr/src/sbin/ifconfig/ifconfig.c,v 1.64 2002/05/22
  * 08:21:02 deraadt Exp $
@@ -428,7 +428,7 @@ conf_media_status(FILE *output, int s, char *ifname)
 	strlcpy(ifmr.ifm_name, ifname, sizeof(ifmr.ifm_name));
 
 	if (ioctl(s, SIOCGIFMEDIA, (caddr_t)&ifmr) < 0) {
-		if (errno != EINVAL && errno != ENOTTY)
+		if (errno != ENOTTY)
 			printf("%% conf_media_status: 1/SIOCGIFMEDIA: %s\n",
 			    strerror(errno));
 		return(0);
@@ -471,7 +471,7 @@ media_status(int s, char *ifname, char *delim)
 	strlcpy(ifmr.ifm_name, ifname, sizeof(ifmr.ifm_name));
 
 	if (ioctl(s, SIOCGIFMEDIA, (caddr_t)&ifmr) < 0) {
-		if (errno != EINVAL && errno != ENOTTY)
+		if (errno != ENOTTY)
 			printf("%% media_status: SIOCGIFMEDIA: %s\n",
 			    strerror(errno));
 		return;
@@ -551,7 +551,7 @@ media_supported(int s, char *ifname, char *hdr_delim, char *body_delim)
 	strlcpy(ifmr.ifm_name, ifname, sizeof(ifmr.ifm_name));
 
 	if (ioctl(s, SIOCGIFMEDIA, (caddr_t)&ifmr) < 0) {
-		if (errno != EINVAL)
+		if (errno != ENOTTY)
 			printf("%% media_supported: 1/SIOCGIFMEDIA: %s\n",
 			    strerror(errno));
 		return;
