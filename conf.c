@@ -1,4 +1,4 @@
-/* $nsh: conf.c,v 1.52 2008/03/10 04:46:03 chris Exp $ */
+/* $nsh: conf.c,v 1.53 2008/03/28 16:48:39 chris Exp $ */
 /*
  * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -134,6 +134,7 @@ conf(FILE *output)
 	conf_ctl(output, "ntp");
 	conf_ctl(output, "ftp-proxy");
 	conf_ctl(output, "inet");
+	conf_ctl(output, "sshd");
 
 	return(0);
 }

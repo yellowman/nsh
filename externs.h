@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.60 2008/03/20 07:45:51 chris Exp $ */
+/* $nsh: externs.h,v 1.61 2008/03/28 16:48:39 chris Exp $ */
 /*
  * nsh externs, prototypes and macros
  */
@@ -96,6 +96,24 @@ extern char addrnames[];
 extern char metricnames[];
 
 /* ctl.c */
+/* tmp config locations */
+#define PFCONF_TEMP	"/var/run/pf.conf"
+#define OSPFCONF_TEMP	"/var/run/ospfd.conf"
+#define BGPCONF_TEMP	"/var/run/bgpd.conf"
+#define RIPCONF_TEMP	"/var/run/ripd.conf"
+#define IPSECCONF_TEMP	"/var/run/ipsec.conf"
+#define DVMRPCONF_TEMP	"/var/run/dvmrpd.conf"
+#define RELAYCONF_TEMP	"/var/run/relayd.conf"
+#define SASYNCCONF_TEMP	"/var/run/sasyncd.conf"
+#define DHCPCONF_TEMP	"/var/run/dhcpd.conf"
+#define SNMPCONF_TEMP	"/var/run/snmpd.conf"
+#define NTPCONF_TEMP	"/var/run/ntpd.conf"
+#define FTPPROXY_TEMP	"/var/run/ftp-proxy"
+#define RESOLVCONF_TEMP	"/var/run/resolv.conf"
+#define RESOLVCONF_SYM	"/var/run/resolv.conf.symlink"
+#define RESOLVCONF_DHCP	"/var/run/resolv.conf.dhcp"
+#define INETCONF_TEMP	"/var/run/inetd.conf"
+#define SSHDCONF_TEMP	"/var/run/sshd.conf"
 /* flag_x flags */
 #define X_ENABLE  (void *)1
 #define X_DISABLE (void *)2
@@ -107,24 +125,6 @@ extern char metricnames[];
 #define SIZE_CONF_TEMP 64
 int ctlhandler(int, char **, char *);
 void rmtemp(char *);
-/* tmp config locations */
-#define DHCPDB		"/var/db/dhcpd.leases"
-#define PFCONF_TEMP	"/var/run/pf.conf"
-#define OSPFCONF_TEMP	"/var/run/ospfd.conf"
-#define BGPCONF_TEMP	"/var/run/bgpd.conf"
-#define RIPCONF_TEMP	"/var/run/ripd.conf"
-#define IPSECCONF_TEMP	"/var/run/ipsec.conf"
-#define DVMRPCONF_TEMP	"/var/run/dvmrpd.conf"
-#define RELAYCONF_TEMP	"/var/run/relayd.conf"
-#define	SASYNCCONF_TEMP	"/var/run/sasyncd.conf"
-#define DHCPCONF_TEMP	"/var/run/dhcpd.conf"
-#define SNMPCONF_TEMP	"/var/run/snmpd.conf"
-#define NTPCONF_TEMP	"/var/run/ntpd.conf"
-#define FTPPROXY_TEMP	"/var/run/ftp-proxy"
-#define RESOLVCONF_TEMP "/var/run/resolv.conf"
-#define RESOLVCONF_SYM	"/var/run/resolv.conf.symlink"
-#define RESOLVCONF_DHCP	"/var/run/resolv.conf.dhcp"
-#define INETCONF_TEMP	"/var/run/inetd.conf"
 /* control programs */
 #define PFCTL		"/sbin/pfctl"
 #define OSPFCTL		"/usr/sbin/ospfctl"
@@ -143,6 +143,7 @@ struct ctl {
 };
 struct daemons {
         char *name;
+	char *propername;
         struct ctl *table;
         char *tmpfile;
 	mode_t mode;
@@ -159,6 +160,7 @@ extern struct ctl ctl_dvmrp[];
 extern struct ctl ctl_sasync[];
 extern struct ctl ctl_dhcp[];
 extern struct ctl ctl_snmp[];
+extern struct ctl ctl_sshd[];
 extern struct ctl ctl_ntp[];
 extern struct ctl ctl_ftpproxy[];
 extern struct ctl ctl_dns[];
@@ -177,6 +179,8 @@ extern struct ctl ctl_inet[];
 #define SSH		"/usr/bin/ssh"
 #define PKILL		"/usr/bin/pkill"
 #define SAVESCRIPT	"/usr/local/bin/save.sh"
+/* tmp config locations */
+#define DHCPDB          "/var/db/dhcpd.leases"
 void command(void);
 char **step_optreq(char **, char **, int, char **, int);
 int cmdrc(char rcname[FILENAME_MAX]);

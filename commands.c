@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.83 2008/03/10 04:46:03 chris Exp $ */
+/* $nsh: commands.c,v 1.84 2008/03/28 16:48:39 chris Exp $ */
 /*
  * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -697,6 +697,7 @@ static char
 	sasynchelp[] =	"SA synchronization control",
 	dhcphelp[] =	"DHCP server control",
 	snmphelp[] =	"SNMP server control",
+	sshdhelp[] =	"SSH server control",
 	ntphelp[] =	"NTP synchronization control",
 	ftpproxyhelp[] ="ftp-proxy server control",
 	dnshelp[] =	"DNS rule control",
@@ -752,6 +753,7 @@ Command cmdtab[] = {
 	{ "sasync",	sasynchelp,	CMPL(t) (char **)ctl_sasync, ssctl, ctlhandler,	1, 0, 0, 1 },
 	{ "dhcp",	dhcphelp,	CMPL(t) (char **)ctl_dhcp, ssctl, ctlhandler,	1, 0, 0, 1 },
 	{ "snmp",	snmphelp,	CMPL(t) (char **)ctl_snmp, ssctl, ctlhandler,	1, 0, 0, 1 },
+	{ "sshd",	sshdhelp,	CMPL(t) (char **)ctl_sshd, ssctl, ctlhandler,	1, 0, 0, 1 },
 	{ "ntp",	ntphelp,	CMPL(t) (char **)ctl_ntp, ssctl, ctlhandler,	1, 0, 0, 1 },
 	{ "ftp-proxy",  ftpproxyhelp,	CMPL(t) (char **)ctl_ftpproxy, ssctl, ctlhandler,  1, 0, 0, 1 },
 	{ "dns",	dnshelp,	CMPL(t) (char **)ctl_dns, ssctl, ctlhandler,	1, 0, 0, 1 },

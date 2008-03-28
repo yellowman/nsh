@@ -1,4 +1,4 @@
-/* $nsh: ctl.c,v 1.21 2008/03/20 07:45:51 chris Exp $ */
+/* $nsh: ctl.c,v 1.22 2008/03/28 16:48:39 chris Exp $ */
 /*
  * Copyright (c) 2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -39,6 +39,7 @@
 #define NTPD		"/usr/sbin/ntpd"
 #define FTPPROXY	"/usr/sbin/ftp-proxy"
 #define INETD		"/usr/sbin/inetd"
+#define SSHD		"/usr/sbin/sshd"
 
 void call_editor(char *, char **, char *);
 void ctl_symlink(char *, char **, char *);
@@ -54,8 +55,7 @@ struct ctl ctl_pf[] = {
 	{ "disable",	"disable service",
 	    { PFCTL, "-d", NULL }, NULL, X_DISABLE },
 	{ "edit",	"edit configuration",
-	    { "PF", (char *)ctl_pf_test, PFCONF_TEMP, NULL }, call_editor,
-	    NULL },
+	    { "pf", (char *)ctl_pf_test, NULL }, call_editor, NULL },
 	{ "reload",	"reload service",
 	    { PFCTL, "-f", PFCONF_TEMP, NULL }, NULL, NULL },
 	{ 0, 0, { 0 }, 0, 0 }
@@ -68,8 +68,7 @@ struct ctl ctl_ospf[] = {
 	{ "disable",    "disable service",
 	    { PKILL, "ospfd", NULL }, NULL, X_DISABLE },
 	{ "edit",       "edit configuration",
-	    { "OSPF", (char *)ctl_ospf_test, OSPFCONF_TEMP, NULL },
-	    call_editor, NULL },
+	    { "ospf", (char *)ctl_ospf_test, NULL }, call_editor, NULL },
 	{ "reload",     "reload service",
 	    { OSPFCTL, "reload", NULL }, NULL, NULL },
 	{ "fib",        "fib couple/decouple",
@@ -84,8 +83,7 @@ struct ctl ctl_bgp[] = {
 	{ "disable",    "disable service",
 	    { PKILL, "bgpd", NULL }, NULL, X_DISABLE },
 	{ "edit",       "edit configuration",
-	    { "BGP", (char *)ctl_bgp_test, BGPCONF_TEMP, NULL }, call_editor,
-	    NULL },
+	    { "bgp", (char *)ctl_bgp_test, NULL }, call_editor, NULL },
 	{ "reload",     "reload service",
 	    { BGPCTL, "reload", NULL }, NULL, NULL },
 	{ "fib",	"fib couple/decouple",
@@ -106,8 +104,7 @@ struct ctl ctl_rip[] = {
 	{ "disable",    "disable service",
 	    { PKILL, "ripd", NULL }, NULL, X_DISABLE },
 	{ "edit",       "edit configuration",
-	    { "RIP", (char *)ctl_rip_test, RIPCONF_TEMP, NULL }, call_editor,
-	    NULL },
+	    { "rip", (char *)ctl_rip_test, NULL }, call_editor, NULL },
 	{ "reload",     "reload service",
 	    { RIPCTL, "reload", NULL }, NULL, NULL },
 	{ "fib",        "fib couple/decouple",
@@ -122,8 +119,7 @@ struct ctl ctl_ipsec[] = {
 	{ "disable",    "disable service",                   
 	    { PKILL, "isakmpd", NULL }, NULL, X_DISABLE },
 	{ "edit",       "edit configuration",   
-	    { "IPsec", (char *)ctl_ipsec_test, IPSECCONF_TEMP, NULL },
-	    call_editor, NULL },
+	    { "ipsec", (char *)ctl_ipsec_test, NULL }, call_editor, NULL },
 	{ "reload",     "reload service",
 	    { IPSECCTL, "-f", IPSECCONF_TEMP, NULL }, NULL, NULL },
 	{ 0, 0, { 0 }, 0, 0 }
@@ -136,8 +132,7 @@ struct ctl ctl_dvmrp[] = {
 	{ "disable",    "disable service",   
 	    { PKILL, "dvmrpd", NULL }, NULL, X_DISABLE },
 	{ "edit",       "edit configuration",
-	    { "DVMRP", (char *)ctl_dvmrp_test,  DVMRPCONF_TEMP, NULL },
-	    call_editor, NULL },
+	    { "dvmrp", (char *)ctl_dvmrp_test,  NULL }, call_editor, NULL },
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
@@ -147,7 +142,7 @@ struct ctl ctl_sasync[] = {
 	{ "disable",    "disable service",
 	    { PKILL, "sasyncd", NULL }, NULL, X_DISABLE },
 	{ "edit",       "edit configuration",
-	    { "sasync", NULL, SASYNCCONF_TEMP, NULL }, call_editor, NULL },
+	    { "sasync", NULL, NULL }, call_editor, NULL },
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
@@ -158,8 +153,7 @@ struct ctl ctl_dhcp[] = {
 	{ "disable",    "disable service",
 	    { PKILL, "dhcpd", NULL }, NULL, X_DISABLE },
 	{ "edit",       "edit configuration",
-	    { "DHCP", (char *)ctl_dhcp_test, DHCPCONF_TEMP, NULL },
-	    call_editor, NULL },
+	    { "dhcp", (char *)ctl_dhcp_test, NULL }, call_editor, NULL },
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
@@ -170,10 +164,19 @@ struct ctl ctl_snmp[] = {
 	{ "disable",    "disable service",
 	    { PKILL, "snmpd", NULL }, NULL, X_DISABLE },
 	{ "edit",       "edit configuration",
-	    { "SNMP", (char *)ctl_snmp_test, SNMPCONF_TEMP, NULL }, call_editor,
-	    NULL },
+	    { "snmp", (char *)ctl_snmp_test, NULL }, call_editor, NULL },
 	{ "trap",	"send traps",
 	    { SNMPCTL, "trap", "send", REQ, OPT, NULL }, NULL, NULL },
+	{ 0, 0, { 0 }, 0, 0 }
+};
+
+struct ctl ctl_sshd[] = {
+	{ "enable",	"enable service",
+	    { SSHD, "-f", SSHDCONF_TEMP, NULL }, NULL, X_ENABLE },
+	{ "disable",	"disable service",
+	    { PKILL, "-f", SSHD, "-f", SSHDCONF_TEMP, NULL }, NULL, X_DISABLE },
+	{ "edit",	"edit configuration",
+	    { "sshd", NULL, NULL }, call_editor, NULL },
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
@@ -184,8 +187,7 @@ struct ctl ctl_ntp[] = {
 	{ "disable",    "disable service",
 	    { PKILL, "ntpd", NULL }, NULL, X_DISABLE },
 	{ "edit",       "edit configuration",
-	    { "NTP", (char *)ctl_ntp_test, NTPCONF_TEMP, NULL },
-	    call_editor, NULL },
+	    { "ntp", (char *)ctl_ntp_test, NULL }, call_editor, NULL },
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
@@ -196,8 +198,7 @@ struct ctl ctl_relay[] = {
         { "disable",	"disable service",
 	    { PKILL, "relayd", NULL }, NULL, X_DISABLE },
         { "edit",	"edit configuration",
-	    { "Relay", (char *)ctl_relay_test, RELAYCONF_TEMP, NULL },
-	    call_editor, NULL },
+	    { "relay", (char *)ctl_relay_test, NULL }, call_editor, NULL },
         { "reload",	"reload configuration",
 	    { RELAYCTL, "reload", NULL }, NULL, NULL },
 	{ "host",	"per-host control",
@@ -229,7 +230,7 @@ struct ctl ctl_dns[] = {
 	    { RESOLVCONF_SYM, NULL, RESOLVCONF_DHCP, NULL }, ctl_symlink,
 	    X_OTHER },
 	{ "edit",	    "edit DNS settings",
-	    { "DNS", NULL, RESOLVCONF_TEMP, NULL }, call_editor, NULL },
+	    { "dns", NULL, NULL }, call_editor, NULL },
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
@@ -239,26 +240,27 @@ struct ctl ctl_inet[] = {
 	{ "disable",    "disable service",
 	    { PKILL, "inetd", NULL }, NULL, X_DISABLE },
 	{ "edit",       "edit configuration",
-	    { "inet", NULL, INETCONF_TEMP, NULL }, call_editor, NULL },
+	    { "inet", NULL, NULL }, call_editor, NULL },
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
 struct daemons ctl_daemons[] = {
-	{ "pf",		ctl_pf,		PFCONF_TEMP,	0600, 1 },
-	{ "ospf",	ctl_ospf,	OSPFCONF_TEMP,	0600, 0 },
-	{ "bgp",	ctl_bgp,	BGPCONF_TEMP,	0600, 0 },
-	{ "rip",	ctl_rip,	RIPCONF_TEMP,	0600, 0 },
-	{ "relay",	ctl_relay,	RELAYCONF_TEMP,	0600, 0 },
-	{ "ipsec",	ctl_ipsec,	IPSECCONF_TEMP,	0600, 1 },
-	{ "dvmrp",	ctl_dvmrp,	DVMRPCONF_TEMP, 0600, 0 },
-	{ "sasync",	ctl_sasync,	SASYNCCONF_TEMP,0600, 0 },
-	{ "dhcp",	ctl_dhcp,	DHCPCONF_TEMP,	0600, 0 },
-	{ "snmp",	ctl_snmp,	SNMPCONF_TEMP,	0600, 0 },
-	{ "ntp",	ctl_ntp,	NTPCONF_TEMP,	0600, 0 },
-	{ "ftp-proxy",	ctl_ftpproxy,	FTPPROXY_TEMP,	0600, 0 },
-	{ "dns",	ctl_dns,	RESOLVCONF_TEMP,0644, 0 },
-	{ "inet",	ctl_inet,	INETCONF_TEMP,	0600, 0 },
-	{ 0, 0, 0, 0 }
+	{ "pf",		"PF",	ctl_pf,		PFCONF_TEMP,	0600, 1 },
+	{ "ospf",	"OSPF", ctl_ospf,	OSPFCONF_TEMP,	0600, 0 },
+	{ "bgp",	"BGP",	ctl_bgp,	BGPCONF_TEMP,	0600, 0 },
+	{ "rip",	"RIP",	ctl_rip,	RIPCONF_TEMP,	0600, 0 },
+	{ "relay",	"Relay", ctl_relay,	RELAYCONF_TEMP,	0600, 0 },
+	{ "ipsec",	"IPsec", ctl_ipsec,	IPSECCONF_TEMP,	0600, 1 },
+	{ "dvmrp",	"DVMRP", ctl_dvmrp,	DVMRPCONF_TEMP, 0600, 0 },
+	{ "sasync",	"SAsync", ctl_sasync,	SASYNCCONF_TEMP,0600, 0 },
+	{ "dhcp",	"DHCP",	ctl_dhcp,	DHCPCONF_TEMP,	0600, 0 },
+	{ "snmp",	"SNMP",	ctl_snmp,	SNMPCONF_TEMP,	0600, 0 },
+	{ "sshd",	"SSH",	ctl_sshd,	SSHDCONF_TEMP,	0600, 0 },
+	{ "ntp",	"NTP",	ctl_ntp,	NTPCONF_TEMP,	0600, 0 },
+	{ "ftp-proxy",  "FTP proxy", ctl_ftpproxy, FTPPROXY_TEMP, 0600, 0 },
+	{ "dns", 	"DNS", ctl_dns,		RESOLVCONF_TEMP,0644, 0 },
+	{ "inet",	"Inet", ctl_inet,	INETCONF_TEMP,	0600, 0 },
+	{ 0, 0, 0, 0, 0 }
 };
 
 void
@@ -337,8 +339,7 @@ ctlhandler(int argc, char **argv, char *modhvar)
 		}
 	}
 	if (argc < 2 || argv[1][0] == '?') {
-		gen_help((char **)daemons->table, "", "",
-		    sizeof(struct ctl));
+		gen_help((char **)daemons->table, "", "", sizeof(struct ctl));
 		return 0;
 	}
 
@@ -368,32 +369,36 @@ ctlhandler(int argc, char **argv, char *modhvar)
 }
 
 void
-call_editor(char *name, char **args, char *tmpfile)
+call_editor(char *name, char **args, char *z)
 {
-	int fd;
+	int fd, found = 0;
 	char *editor;
 	struct daemons *daemons;
-	mode_t mode = 0644;
 
 	for (daemons = ctl_daemons; daemons->name != 0; daemons++)
-		if (strncmp(daemons->tmpfile, tmpfile,
-		    strlen(daemons->tmpfile)) == 0) {
-			mode = daemons->mode;
+		if (strncmp(daemons->name, name, strlen(name)) == 0) {
+			found = 1;
 			break;
 		}
+
+	if (!found) {
+		printf("%% call_editor internal error\n");
+		return;
+	}
 
 	/* acq lock, call editor, test config with cmd and args, release lock */
 
 	if ((editor = getenv("EDITOR")) == NULL || *editor == '\0')
 		editor = DEFAULT_EDITOR;
-	if ((fd = acq_lock(tmpfile)) > 0) {
-		cmdarg(editor, tmpfile);
-		chmod(tmpfile, mode);
+	if ((fd = acq_lock(daemons->tmpfile)) > 0) {
+		cmdarg(editor, daemons->tmpfile);
+		chmod(daemons->tmpfile, daemons->mode);
 		if (args != NULL)
 			cmdargs(args[0], args);
 		rls_lock(fd);
 	} else
-		printf ("%% %s configuration is locked for editing\n", name);
+		printf ("%% %s configuration is locked for editing\n",
+		    daemons->propername);
 }
 
 int
