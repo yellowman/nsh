@@ -1,4 +1,4 @@
-/* $nsh: conf.c,v 1.53 2008/03/28 16:48:39 chris Exp $ */
+/* $nsh: conf.c,v 1.54 2008/03/28 16:58:56 chris Exp $ */
 /*
  * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -150,7 +150,7 @@ void conf_ctl(FILE *output, char *name)
 	    *fenablednm = NULL;
 	char flocal[SIZE_CONF_TEMP + sizeof(".local") + 1], *flocalnm = NULL;
 	char fother[SIZE_CONF_TEMP + sizeof(".other") + 1], *fothernm = NULL;
-	int pntdrules = 0;
+	int pntdrules = 0, pntdflag = 0;
 
 	x = (struct daemons *)genget(name, (char **)ctl_daemons,
 	    sizeof(struct daemons));
@@ -193,18 +193,25 @@ void conf_ctl(FILE *output, char *name)
 	 * if a function has the X_LOCAL, X_OTHER or X_ENABLE flags set,
 	 * save it in the config
 	 */
-	if (fenablednm && stat(fenabled, &enst) == 0 && S_ISREG(enst.st_mode))
+	if (fenablednm && stat(fenabled, &enst) == 0 && S_ISREG(enst.st_mode)) {
 		fprintf(output, "%s %s\n", x->name, fenablednm);
-	if (flocalnm && stat(flocal, &enst) == 0 && S_ISREG(enst.st_mode))
-		fprintf(output, "%s %s\n", x->name, flocalnm);
-	if (fothernm && stat(fother, &enst) == 0 && S_ISREG(enst.st_mode))
-		fprintf(output, "%s %s\n", x->name, fothernm);
-
-	if (pntdrules) {
-		if (x->doreload)
-			fprintf(output, "%s reload\n", x->name);
-		fprintf(output, "!\n");
+		pntdflag = 1;
 	}
+	if (flocalnm && stat(flocal, &enst) == 0 && S_ISREG(enst.st_mode)) {
+		fprintf(output, "%s %s\n", x->name, flocalnm);
+		pntdflag = 1;
+	}
+	if (fothernm && stat(fother, &enst) == 0 && S_ISREG(enst.st_mode)) {
+		fprintf(output, "%s %s\n", x->name, fothernm);
+		pntdflag = 1;
+	}
+
+	if (pntdrules && x->doreload) {
+		fprintf(output, "%s reload\n", x->name);
+		pntdflag = 1;
+	}
+	if (pntdflag)
+		fprintf(output, "!\n");
 }
 
 void conf_interfaces(FILE *output, char *only)
