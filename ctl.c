@@ -1,4 +1,4 @@
-/* $nsh: ctl.c,v 1.22 2008/03/28 16:48:39 chris Exp $ */
+/* $nsh: ctl.c,v 1.23 2008/04/11 03:49:35 chris Exp $ */
 /*
  * Copyright (c) 2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -91,7 +91,7 @@ struct ctl ctl_bgp[] = {
 	{ "irrfilter",	"generate bgpd filters",
 	    { BGPCTL, "irrfilter", REQ, OPT, NULL }, NULL, NULL },
 	{ "neighbor",	"neighbor up/down/clear/refresh",
-	    { BGPCTL, "neighbor", REQ, REQ, NULL }, NULL, NULL },
+	    { BGPCTL, "neighbor", OPT, OPT, NULL }, NULL, NULL },
 	{ "network",	"network add/delete/flush/show",
 	    { BGPCTL, "network", REQ, OPT, NULL }, NULL, NULL },
         { 0, 0, { 0 }, 0, 0 }
