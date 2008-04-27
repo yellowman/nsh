@@ -1,6 +1,6 @@
-nsh//network config shell//Chris Cappuccio <chris@nmedia.net> version 20080207
+nsh//network config shell//Chris Cappuccio <chris@nmedia.net> version 20080426
 
-$nsh: README,v 1.27 2008/03/20 07:45:51 chris Exp $
+$nsh: README,v 1.28 2008/04/27 00:40:38 chris Exp $
 
 NSH is a CLI intended for OpenBSD-based routers running little except for
 sshd, targeted towards flash-based systems.  It is freely licensed, in the BSD
