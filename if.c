@@ -1,4 +1,4 @@
-/* $nsh: if.c,v 1.40 2008/03/10 04:46:26 chris Exp $ */
+/* $nsh: if.c,v 1.41 2008/04/27 00:40:02 chris Exp $ */
 /*
  * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -595,6 +595,12 @@ intip(char *ifname, int ifs, int argc, char **argv)
 		printf("%% no %s <address>[/bits]\n", cmdname);
 		printf("%% no %s <address>[/netmask]\n", cmdname);
 		return(0);
+	}
+
+	/* ignore 'address' keyword, don't print error */
+	if (isprefix(argv[0], "address")) {
+		argc--;
+		argv++;
 	}
 
 	if (isprefix(argv[0], "dhcp")) {
