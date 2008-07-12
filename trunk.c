@@ -35,6 +35,7 @@
 #include <sys/ioctl.h>
 #include <netinet/in.h>
 #include <net/if.h>
+#include <netinet/if_ether.h>
 #include <net/if_trunk.h>
 #include "externs.h"
 
