@@ -1,4 +1,4 @@
-/* $nsh: conf.c,v 1.56 2009/03/01 01:29:05 chris Exp $ */
+/* $nsh: conf.c,v 1.57 2009/03/01 01:37:25 chris Exp $ */
 /*
  * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -28,6 +28,7 @@
 #include <sys/sockio.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
+#include <sys/limits.h>
 #include <net/if.h>
 #include <net/if_types.h>
 #include <netinet/in.h>
@@ -47,6 +48,7 @@
 			 * text representation
 			 */
 #define TMPSIZ 1024	/* size of temp strings */
+#define MTU_IGNORE ULONG_MAX	/* ignore this "default" mtu */
 
 char *routename_sa(struct sockaddr *);
 void conf_interfaces(FILE *, char *);
@@ -71,8 +73,8 @@ static const struct {
 	{ "tun",	1500 },
 	{ "sl",		296 },
 	{ "enc",	1536 },
-	{ "pflog",	33208 },
-	{ "lo",		33208 },
+	{ "pflog",	MTU_IGNORE },
+	{ "lo",		MTU_IGNORE },
 };
 
 int
@@ -449,7 +451,8 @@ void conf_ifmetrics(FILE *output, int ifs, struct if_data if_data,
 	 * ignore interfaces named "pfsync" since their mtu
 	 * is dynamic and controlled by the kernel
 	 */
-	if (!MIN_ARG(ifname, "pfsync") && if_mtu != default_mtu(ifname))
+	if (!MIN_ARG(ifname, "pfsync") && (if_mtu != default_mtu(ifname) &&
+	    default_mtu(ifname) != MTU_IGNORE))
 		fprintf(output, " mtu %u\n", if_mtu);
 	if (if_metric)
 		fprintf(output, " metric %u\n", if_metric);
