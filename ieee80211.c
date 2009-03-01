@@ -1,4 +1,4 @@
-/* $nsh: ieee80211.c,v 1.16 2008/02/04 02:49:46 chris Exp $ */
+/* $nsh: ieee80211.c,v 1.17 2009/03/01 01:29:56 chris Exp $ */
 /* From: $OpenBSD: /usr/src/sbin/ifconfig/ifconfig.c,v 1.68 2002/06/19 18:53:53 millert Exp $ */
 /*
  * Copyright (c) 1983, 1993
@@ -302,8 +302,10 @@ get_nwinfo(char *ifname, char *str, int str_len, int type)
 			    txpower.i_val != 100)
 				snprintf(str, str_len, "%d", txpower.i_val);
 		} else {
-			printf("%% get_nwinfo: SIOCG80211TXPOWER: %s\n",
-			    strerror(errno));
+			if (errno != EINVAL) {
+				printf("%% get_nwinfo: SIOCG80211TXPOWER: %s\n",
+				    strerror(errno));
+			}
 		}
 	}
 	break;
