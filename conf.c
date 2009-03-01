@@ -1,4 +1,4 @@
-/* $nsh: conf.c,v 1.55 2008/03/28 17:03:45 chris Exp $ */
+/* $nsh: conf.c,v 1.56 2009/03/01 01:29:05 chris Exp $ */
 /*
  * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -58,6 +58,8 @@ void conf_ctl(FILE *, char *);
 void conf_intrtlabel(FILE *, int, char *);
 void conf_intgroup(FILE *, int, char *);
 void conf_groupattrib(FILE *);
+int conf_isenabled(char *name);
+int isdefaultroute4(struct sockaddr *sa);
 
 static const struct {
 	char *name;
@@ -212,6 +214,40 @@ void conf_ctl(FILE *output, char *name)
 	}
 	if (pntdflag)
 		fprintf(output, "!\n");
+}
+
+int conf_isenabled(char *name)
+{
+	struct daemons *x;
+	struct ctl *ctl;
+	struct stat enst;
+
+	char fenabled[SIZE_CONF_TEMP + sizeof(".enabled") + 1],
+	    *fenablednm = NULL;
+
+	x = (struct daemons *)genget(name, (char **)ctl_daemons,
+	    sizeof(struct daemons));
+	if (x == 0 || Ambiguous(x)) {
+		printf("%% conf_xrules: %s: genget internal failure\n", name);
+		return (0);
+	}
+	for (ctl = x->table; ctl != NULL && ctl->name != NULL; ctl++) {
+		if (ctl->flag_x == X_ENABLE) {
+			fenablednm = ctl->name;
+			snprintf(fenabled, sizeof(fenabled), "%s.enabled", x->tmpfile);
+		}
+	}
+	if(fenablednm) {
+		if (stat(fenabled, &enst) == 0 && S_ISREG(enst.st_mode)) {
+			return (1);
+		} else {
+			return (0);
+		}
+	} else
+		printf("%% attempt to check enable state of \"%s\" which "
+		    "cannot be checked\n", name);
+
+	return (0);
 }
 
 void conf_interfaces(FILE *output, char *only)
@@ -746,6 +782,18 @@ conf_intrtlabel(FILE *output, int ifs, char *ifname)
 	fprintf(output, " rtlabel %s\n", ifr.ifr_data);
 }
 
+int
+isdefaultroute4(struct sockaddr *sa)
+{
+	switch (sa->sa_family) {
+	case AF_INET:
+		return
+		    (((struct sockaddr_in *)sa)->sin_addr.s_addr) == INADDR_ANY;
+	default:
+		return (0);
+	}
+}
+
 void
 conf_print_rtm(FILE *output, struct rt_msghdr *rtm, char *delim, int af)
 {
@@ -777,9 +825,14 @@ conf_print_rtm(FILE *output, struct rt_msghdr *rtm, char *delim, int af)
 			ADVANCE(cp, sa);
 		}
 	if (dst && mask && gate && (af == AF_INET || af == AF_INET6)) {
-		/* print IP route */
-		fprintf(output, "%s%s ", delim, netname(dst, mask));
-		fprintf(output, "%s\n", routename(gate));
+		/*
+		 * suppress printing IP route if it's the default
+		 * v4 route and dhcp (dhclient) is enabled
+		 */
+		if (!(isdefaultroute4(dst) && conf_isenabled("dhcp"))) {
+			fprintf(output, "%s%s ", delim, netname(dst, mask));
+			fprintf(output, "%s\n", routename(gate));
+		}
 	} else
 	if (dst && gate && (af == AF_LINK))
 		/* print arp */
