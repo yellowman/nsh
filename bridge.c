@@ -1,4 +1,4 @@
-/* $nsh: bridge.c,v 1.14 2008/02/04 02:49:46 chris Exp $ */
+/* $nsh: bridge.c,v 1.15 2009/03/01 01:29:31 chris Exp $ */
 /* From: $OpenBSD: brconfig.c,v 1.27 2003/09/26 03:29:59 deraadt Exp $ */
 
 /*
@@ -794,8 +794,9 @@ bridge_list(int s, char *brdg, char *delim, char *br_str, int str_len, int type)
 		reqp = bifc.ifbic_req + i;
 		switch (type) {
 		case CONF_IFPRIORITY:
-			if(reqp->ifbr_priority != DEFAULT_IFPRIORITY) {
-			/* rework flow at some pointXXX */
+			if((reqp->ifbr_ifsflags & IFBIF_STP) &&
+			    (reqp->ifbr_priority != DEFAULT_IFPRIORITY)) {
+			/* rework flow at some point XXX */
 				snprintf(buf, sizeof(buf),
 				    "%sifpriority %s %u\n", delim,
 				    reqp->ifbr_ifsname, reqp->ifbr_priority);
@@ -804,8 +805,9 @@ bridge_list(int s, char *brdg, char *delim, char *br_str, int str_len, int type)
 			}
 			break;
 		case CONF_IFCOST:
-			if(reqp->ifbr_path_cost != DEFAULT_IFCOST) {
-			/* rework flow at some pointXXX */
+			if((reqp->ifbr_ifsflags & IFBIF_STP) &&
+			(reqp->ifbr_path_cost != DEFAULT_IFCOST)) {
+			/* rework flow at some point XXX */
 				snprintf(buf, sizeof(buf),
 				    "%sifcost %s %u\n", delim,
 				    reqp->ifbr_ifsname, reqp->ifbr_path_cost);
