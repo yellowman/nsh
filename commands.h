@@ -1,6 +1,6 @@
-/* $nsh: commands.h,v 1.1 2008/02/14 01:00:59 chris Exp $ */
+/* $nsh: commands.h,v 1.2 2009/03/02 20:27:11 chris Exp $ */
 /*
- * Copyright (c) 2008 Chris Cappuccio <chris@nmedia.net>
+ * Copyright (c) 2008-2009 Chris Cappuccio <chris@nmedia.net>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -73,8 +73,10 @@ struct prot1 bgcs[] = {
 	    { BGPCTL,  "show", "summary", OPT, NULL } },
 	{ "rib",	"Routing Information Base",
 	    { BGPCTL, "show",  "rib", OPT, OPT, OPT, NULL } },
-	{ "neighbor",	"Detailed peer information",
+	{ "neighbor",	"Detailed peer",
 	    { BGPCTL, "show",  "neighbor", REQ, OPT, NULL } },
+	{ "ip",		"IP BGP",
+	    { BGPCTL, "show",  "ip", "bgp", OPT, OPT, OPT, NULL } },
 	{ 0, 0, { 0 } }
 };
 
