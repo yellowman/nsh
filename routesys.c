@@ -1,4 +1,4 @@
-/* $nsh: routesys.c,v 1.27 2008/02/25 00:23:31 chris Exp $ */
+/* $nsh: routesys.c,v 1.28 2009/03/02 23:01:14 chris Exp $ */
 /* From: $OpenBSD: /usr/src/sbin/route/route.c,v 1.43 2001/07/07 18:26:20 deraadt Exp $ */
 
 /*
@@ -180,7 +180,7 @@ flushroutes(int af, int af2)
 			printf("\n%% Read message:\n");
 			print_rtmsg(rtm);
 		}
-		sa = (struct sockaddr *)(rtm + 1);
+		sa = (struct sockaddr *)(rtm + rtm->rtm_hdrlen);
 		sa2 = (struct sockaddr *)(ROUNDUP(sa->sa_len) + (char *)sa);
 		if (sa->sa_family != af) {
 			if (verbose) {
@@ -409,14 +409,14 @@ print_rtmsg(rtm)
 		ifm = (struct if_msghdr *)rtm;
 		(void) printf("if# %d\n", ifm->ifm_index);
 		bprintf(stdout, ifm->ifm_flags, ifnetflags);
-		pmsg_addrs((char *)(ifm + 1), ifm->ifm_addrs);
+		pmsg_addrs((char *)ifm + ifm->ifm_hdrlen, ifm->ifm_addrs);
 		break;
 	case RTM_NEWADDR:
 	case RTM_DELADDR:
 		ifam = (struct ifa_msghdr *)rtm;
 		(void) printf("metric %d\n", ifam->ifam_metric);
 		bprintf(stdout, ifam->ifam_flags, routeflags);
-		pmsg_addrs((char *)(ifam + 1), ifam->ifam_addrs);
+		pmsg_addrs((char *)ifam + ifam->ifam_hdrlen, ifam->ifam_addrs);
 		break;
 	default:
 		(void) printf("pid: %d, seq %d, errno %d, flags:",
@@ -448,7 +448,7 @@ print_getmsg(rtm, msglen)
 		    strerror(rtm->rtm_errno), rtm->rtm_errno);
 		return;
 	}
-	cp = ((char *)(rtm + 1));
+	cp = ((char *)rtm + rtm->rtm_hdrlen);
 	if (rtm->rtm_addrs)
 		for (i = 1; i; i <<= 1)
 			if (i & rtm->rtm_addrs) {
@@ -522,7 +522,7 @@ pmsg_common(rtm)
 	(void) printf(" inits: ");
 	bprintf(stdout, rtm->rtm_inits, metricnames);
 	printf("\n");
-	pmsg_addrs(((char *)(rtm + 1)), rtm->rtm_addrs);
+	pmsg_addrs(((char *)rtm + rtm->rtm_hdrlen), rtm->rtm_addrs);
 }
 
 void
@@ -724,6 +724,7 @@ rtmsg(cmd, flags, proxy, export)
 	if(flags)
 		rtm->rtm_flags = flags;
 	rtm->rtm_version = RTM_VERSION;
+	rtm->rtm_hdrlen = sizeof(*rtm);
 	rtm->rtm_seq = ++seq;
 	rtm->rtm_addrs = rtm_addrs;
 #if 0 /* deal with this later when our cmdline handles metrics... */

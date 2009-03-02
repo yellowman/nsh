@@ -1,4 +1,4 @@
-/* $nsh: conf.c,v 1.58 2009/03/02 20:30:51 chris Exp $ */
+/* $nsh: conf.c,v 1.59 2009/03/02 23:01:13 chris Exp $ */
 /*
  * Copyright (c) 2002-2009 Chris Cappuccio <chris@nmedia.net>
  *
@@ -805,7 +805,7 @@ conf_print_rtm(FILE *output, struct rt_msghdr *rtm, char *delim, int af)
 	struct sockaddr *dst = NULL, *gate = NULL, *mask = NULL;
 	struct sockaddr *sa;
 
-	cp = ((char *)(rtm + 1));
+	cp = ((char *)rtm + rtm->rtm_hdrlen);
 	for (i = 1; i; i <<= 1)
 		if (i & rtm->rtm_addrs) {
 			sa = (struct sockaddr *)cp;

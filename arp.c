@@ -1,4 +1,4 @@
-/* $nsh: arp.c,v 1.3 2008/02/25 00:27:01 chris Exp $ */
+/* $nsh: arp.c,v 1.4 2009/03/02 23:01:13 chris Exp $ */
 /* From: $OpenBSD: /usr/src/usr.sbin/arp/arp.c,v 1.40 2007/08/24 13:12:16 claudio Exp $ */
 /*
  * Copyright (c) 1984, 1993
@@ -142,7 +142,7 @@ tryagain:
 	if (rtmsg(RTM_GET, flags, doing_proxy, export_only) < 0) {
 		printf("%% RTM_GET %s: %s\n", host, strerror(errno));
 	}
-	sin = (struct sockaddr_inarp *)(rtm + 1);
+	sin = (struct sockaddr_inarp *)((char *)rtm + rtm->rtm_hdrlen);
 	sdl = (struct sockaddr_dl *)(ROUNDUP(sin->sin_len) + (char *)sin);
 	if (sin->sin_addr.s_addr == so_dst.sinarp.sin_addr.s_addr) {
 		if (sdl->sdl_family == AF_LINK &&
@@ -244,7 +244,7 @@ tryagain:
 		printf("%% RTM_GET: %s not found\n", host);
 		return (1);
 	}
-	sin = (struct sockaddr_inarp *)(rtm + 1);
+	sin = (struct sockaddr_inarp *)((char *)rtm + rtm->rtm_hdrlen);
 	sdl = (struct sockaddr_dl *)(ROUNDUP(sin->sin_len) + (char *)sin);
 	if (sin->sin_addr.s_addr == so_dst.sin.sin_addr.s_addr)
 		if (sdl->sdl_family == AF_LINK &&
@@ -299,7 +299,7 @@ search(in_addr_t addr, void (*action)(struct sockaddr_dl *sdl,
 		rtm = (struct rt_msghdr *)next;
 		if (rtm->rtm_version != RTM_VERSION)
 			continue;
-		sin = (struct sockaddr_inarp *)(rtm + 1);
+		sin = (struct sockaddr_inarp *)(next + rtm->rtm_hdrlen);
 		sdl = (struct sockaddr_dl *)(sin + 1);
 		if (addr) {
 			if (addr != sin->sin_addr.s_addr)
