@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.84 2008/03/28 16:48:39 chris Exp $ */
+/* $nsh: commands.c,v 1.85 2009/03/02 20:29:37 chris Exp $ */
 /*
  * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -233,14 +233,13 @@ Menu iptab[] = {
 	{ "ah",		"Allow Authentication Header",	CMPL0 0, 0, 0, 0, ipsysctl },
 	{ "sourceroute", "Process Loose/Strict Source Route Options", CMPL0 0, 0, 0, 0, ipsysctl },
 	{ "encdebug",	"Enable if_enc debugging",	CMPL0 0, 0, 0, 0, ipsysctl },
-	{ "maxqueue",	"Set Max queued packets",	CMPL0 0, 0, 1, 1, ipsysctl },
 	{ "send-redirects", "Send ICMP redirects",	CMPL0 0, 0, 0, 0, ipsysctl },
+	{ "ifq-maxlen",	"IP IFQ maxlen",		CMPL0 0, 0, 0, 1, ipsysctl },
 	{ "directed-broadcast", "Allow directed broadcasts", CMPL0 0, 0, 0, 0, ipsysctl },
 #ifdef notyet
 	{ "default-mtu", "Default interface MTU",	CMPL0 0, 0, 1, 1, ipsysctl },
 #endif
 	{ "default-ttl", "Set Default IP packet TTL",	CMPL0 0, 0, 1, 1, ipsysctl },
-	{ "classless",	0,				CMPL0 0, 0, 0, 0, notvalid },
 	{ "?",		"Options",			CMPL0 0, 0, 0, 0, ip_help },
 	{ "help",	0,				CMPL0 0, 0, 0, 0, ip_help },
 	{ 0, 0, 0, 0, 0, 0, 0, 0 }
