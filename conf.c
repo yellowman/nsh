@@ -1,6 +1,6 @@
-/* $nsh: conf.c,v 1.57 2009/03/01 01:37:25 chris Exp $ */
+/* $nsh: conf.c,v 1.58 2009/03/02 20:30:51 chris Exp $ */
 /*
- * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
+ * Copyright (c) 2002-2009 Chris Cappuccio <chris@nmedia.net>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -65,7 +65,7 @@ int isdefaultroute4(struct sockaddr *sa);
 
 static const struct {
 	char *name;
-	int mtu;
+	u_long mtu;
 } defmtus[] = {
 	/* Current as of 12/16/07 */
 	{ "gre",	1476 },
@@ -159,7 +159,7 @@ void conf_ctl(FILE *output, char *name)
 	x = (struct daemons *)genget(name, (char **)ctl_daemons,
 	    sizeof(struct daemons));
 	if (x == 0 || Ambiguous(x)) {
-		printf("%% conf_xrules: %s: genget internal failure\n", name);
+		printf("%% conf_ctl: %s: genget internal failure\n", name);
 		return;
 	}
 
@@ -177,7 +177,7 @@ void conf_ctl(FILE *output, char *name)
 		fprintf(output, "!\n");
 		pntdrules = 1;
 	} else if (errno != ENOENT || (errno != ENOENT && verbose))
-		printf("%% conf_xrules: %s: %s\n", x->tmpfile, strerror(errno));
+		printf("%% conf_ctl: %s: %s\n", x->tmpfile, strerror(errno));
 
 	/* grab names from ctl struct for X_LOCAL, X_OTHER, X_ENABLE funcs */
 	for (ctl = x->table; ctl != NULL && ctl->name != NULL; ctl++) {
@@ -230,7 +230,7 @@ int conf_isenabled(char *name)
 	x = (struct daemons *)genget(name, (char **)ctl_daemons,
 	    sizeof(struct daemons));
 	if (x == 0 || Ambiguous(x)) {
-		printf("%% conf_xrules: %s: genget internal failure\n", name);
+		printf("%% conf_isenabled: %s: genget internal failure\n", name);
 		return (0);
 	}
 	for (ctl = x->table; ctl != NULL && ctl->name != NULL; ctl++) {

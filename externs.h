@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.61 2008/03/28 16:48:39 chris Exp $ */
+/* $nsh: externs.h,v 1.62 2009/03/02 20:30:51 chris Exp $ */
 /*
  * nsh externs, prototypes and macros
  */
@@ -33,7 +33,6 @@ extern HistEvent ev;		/* ev */
 /* defaults */
 #define	DEFAULT_MTU	1500		/* net.inet.ip.defmtu */
 #define	DEFAULT_TTL	64		/* net.inet.ip.defttl */
-#define	DEFAULT_MAXQUEUE	300	/* net.inet.ip.maxqueue */
 
 /* conf.c */
 #define LEASEPREFIX	"/var/db/dhclient.leases"
@@ -282,7 +281,7 @@ char **genget(char *, char **, int);
 int Ambiguous(void *);
 
 /* sysctl.c */
-int sysctl_inet(int, int, int, int);
+int sysctl_int(int[], int, int);
 int ipsysctl(int, char *, char *);
 void conf_ipsysctl(FILE *);
 
