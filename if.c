@@ -1,4 +1,4 @@
-/* $nsh: if.c,v 1.41 2008/04/27 00:40:02 chris Exp $ */
+/* $nsh: if.c,v 1.42 2009/03/02 20:54:45 chris Exp $ */
 /*
  * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -299,16 +299,6 @@ show_int(int argc, char **argv)
 		    POWERSAVE) != NULL))
 			printf(", powersaving (%s ms)\n", tmp_str);
 		printf("\n");
-		if (is_wavelan(ifs, ifname)) {
-			wi_dumpstats(ifname);
-			if (wi_porttype(ifname) == WI_PORT_HOSTAP)
-				wi_dumpstations(ifname);
-			else {
-				printf("  Q/S/N: ");
-				wi_printlevels(ifname);
-				printf("\n");
-			}
-		}
 	}
 
 	/*

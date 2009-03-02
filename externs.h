@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.62 2009/03/02 20:30:51 chris Exp $ */
+/* $nsh: externs.h,v 1.63 2009/03/02 20:54:45 chris Exp $ */
 /*
  * nsh externs, prototypes and macros
  */
@@ -364,17 +364,6 @@ int phys_status(int, char *, char *, char *, int, int);
 int intmedia(char *, int, int, char **);
 int intmediaopt(char *, int, int, char **);
 int conf_media_status(FILE *, int, char *);
-
-/* wi.c */
-#define WI_PORT_BSS	1
-#define WI_PORT_ADHOC	3
-#define WI_PORT_HOSTAP	6
-int wi_printaplist(int, char **);
-void wi_dumpstats(char *);
-void wi_dumpstations(char *);
-int is_wavelan(int, char *);
-int wi_porttype(char *);
-int wi_printlevels(char *);
 
 /* passwd.c */
 #define NSHPASSWD_TEMP "/var/run/nshpasswd"
