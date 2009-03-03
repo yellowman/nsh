@@ -1,4 +1,4 @@
-/* $nsh: conf.c,v 1.59 2009/03/02 23:01:13 chris Exp $ */
+/* $nsh: conf.c,v 1.60 2009/03/03 03:08:28 chris Exp $ */
 /*
  * Copyright (c) 2002-2009 Chris Cappuccio <chris@nmedia.net>
  *
@@ -60,7 +60,7 @@ void conf_ctl(FILE *, char *);
 void conf_intrtlabel(FILE *, int, char *);
 void conf_intgroup(FILE *, int, char *);
 void conf_groupattrib(FILE *);
-int conf_isenabled(char *name);
+int dhclient_isenabled(void);
 int isdefaultroute4(struct sockaddr *sa);
 
 static const struct {
@@ -218,38 +218,29 @@ void conf_ctl(FILE *output, char *name)
 		fprintf(output, "!\n");
 }
 
-int conf_isenabled(char *name)
+int dhclient_isenabled(void)
 {
-	struct daemons *x;
-	struct ctl *ctl;
+	int lease = 0;
 	struct stat enst;
+	struct if_nameindex *ifn_list, *ifnp;
 
-	char fenabled[SIZE_CONF_TEMP + sizeof(".enabled") + 1],
-	    *fenablednm = NULL;
+	char leasefile[sizeof(LEASEPREFIX)+IFNAMSIZ+1];
 
-	x = (struct daemons *)genget(name, (char **)ctl_daemons,
-	    sizeof(struct daemons));
-	if (x == 0 || Ambiguous(x)) {
-		printf("%% conf_isenabled: %s: genget internal failure\n", name);
-		return (0);
+	if ((ifn_list = if_nameindex()) == NULL) {
+		printf("%% dhclient_isenabled: if_nameindex failed\n");
+		return 0;
 	}
-	for (ctl = x->table; ctl != NULL && ctl->name != NULL; ctl++) {
-		if (ctl->flag_x == X_ENABLE) {
-			fenablednm = ctl->name;
-			snprintf(fenabled, sizeof(fenabled), "%s.enabled", x->tmpfile);
-		}
-	}
-	if(fenablednm) {
-		if (stat(fenabled, &enst) == 0 && S_ISREG(enst.st_mode)) {
-			return (1);
-		} else {
-			return (0);
-		}
-	} else
-		printf("%% attempt to check enable state of \"%s\" which "
-		    "cannot be checked\n", name);
 
-	return (0);
+	for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++) {
+		snprintf(leasefile, sizeof(leasefile), "%s.%s", LEASEPREFIX,
+		    ifnp->if_name);
+		if (stat(leasefile, &enst) == 0 && S_ISREG(enst.st_mode))
+			lease = 1;
+	}
+
+	if_freenameindex(ifn_list);
+
+	return (lease);
 }
 
 void conf_interfaces(FILE *output, char *only)
@@ -832,7 +823,7 @@ conf_print_rtm(FILE *output, struct rt_msghdr *rtm, char *delim, int af)
 		 * suppress printing IP route if it's the default
 		 * v4 route and dhcp (dhclient) is enabled
 		 */
-		if (!(isdefaultroute4(dst) && conf_isenabled("dhcp"))) {
+		if (!(isdefaultroute4(dst) && dhclient_isenabled())) {
 			fprintf(output, "%s%s ", delim, netname(dst, mask));
 			fprintf(output, "%s\n", routename(gate));
 		}
