@@ -1,4 +1,4 @@
-$nsh: TODO,v 1.32 2008/02/14 01:00:59 chris Exp $
+$nsh: TODO,v 1.33 2009/03/10 07:01:12 chris Exp $
 
 nsh is a work in progress, diffs are welcome
 
@@ -12,8 +12,7 @@ Cleanup:
   context sensitive help framework)
 * Push more argument validation up, outside of the actual function routines
 * Consistent return values between functions?
-* Support new wireless information interfaces where necessary, also dump wi.c
-  once if_wi moves to new interfaces
+* Support new wireless information interfaces where necessary
 * Use sockaddr everywhere, instead of home-grown ip_t
 
 To be implemented:

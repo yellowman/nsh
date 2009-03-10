@@ -1,4 +1,4 @@
-/* $nsh: version.c,v 1.12 2008/02/06 22:48:53 chris Exp $ */
+/* $nsh: version.c,v 1.13 2009/03/10 07:01:12 chris Exp $ */
 /*
  * Copyright (c) 2002 Chris Cappuccio <chris@nmedia.net>
  *
@@ -23,6 +23,9 @@
 #include <sys/param.h>
 #include <sys/sysctl.h>
 #include <sys/utsname.h>
+#include <sys/socket.h>
+#include <net/if.h>
+#include <netinet/in.h>
 #include "externs.h"
 
 int
@@ -35,7 +38,7 @@ version(int argc, char **argv)
 	size_t len;
 	time_t c;
 	u_long physmem;
-	int mib[2], pntd, weeks, days, hours, mins;
+	int mib[5], drops, pntd, weeks, days, hours, mins;
 
 	mib[0] = CTL_HW;
 	mib[1] = HW_PHYSMEM;
@@ -63,6 +66,16 @@ version(int argc, char **argv)
 	len = sizeof(kernver);
 	if (sysctl(mib, 2, &kernver, &len, NULL, 0) == -1) {
 		printf("%% KERN_VERSION: %s\n", strerror(errno));
+		return(1);
+	}
+	mib[0] = CTL_NET;
+	mib[1] = PF_INET;
+	mib[2] = IPPROTO_IP;
+	mib[3] = IPCTL_IFQUEUE;
+	mib[4] = IFQCTL_DROPS;
+	len = sizeof(drops);
+	if (sysctl(mib, 5, &drops, &len, NULL, 0) == -1) {
+		printf("%% IFQ_DROPS: %s\n", strerror(errno));
 		return(1);
 	}
 	if (uname(&un)) {
@@ -112,6 +125,7 @@ version(int argc, char **argv)
 	printf("cpu: %s\n", cpubuf);
 	printf("memory: %luK\n", physmem / 1024);
 	printf("kernel: %s", kernver);
+	printf("ifq drops: %i\n", drops);
 	return(0);
 }
 

@@ -1,4 +1,4 @@
-/* $nsh: sysctl.c,v 1.12 2009/03/02 20:29:37 chris Exp $ */
+/* $nsh: sysctl.c,v 1.13 2009/03/10 07:01:12 chris Exp $ */
 /*
  * Copyright (c) 2003-2009 Chris Cappuccio <chris@nmedia.net>
  *
@@ -31,6 +31,7 @@
 #include <netinet/ip_ipcomp.h>
 #include <netinet/ip_esp.h>
 #include <netinet/ip_ah.h>
+#include <netinet/ip_carp.h>
 #include "externs.h"
 
 #define	MIB_STOP	INT_MAX
@@ -74,6 +75,9 @@ static struct ipsysctl {
 	int32_t def_larg;	/* default value, or 0 for on/off sysctls */
 	int enable;		/* if on/off sysctl, 0 disable by default, 1 enable by default, 2 always show enable or disable */
 } ipsysctls[] = {
+	{ "carp",		{ CTL_NET, PF_INET, IPPROTO_CARP, CARPCTL_ALLOW, MIB_STOP, 0 },			0, 0    },
+	{ "carp-log",		{ CTL_NET, PF_INET, IPPROTO_CARP, CARPCTL_LOG, MIB_STOP, 0 },			2, 0	},
+	{ "carp-preempt",	{ CTL_NET, PF_INET, IPPROTO_CARP, CARPCTL_PREEMPT, MIB_STOP, 0 },		0, 1    },
 	{ "forwarding",		{ CTL_NET, PF_INET, IPPROTO_IP, IPCTL_FORWARDING, MIB_STOP, 0 },		0, 2	},
 	{ "ipip",		{ CTL_NET, PF_INET, IPPROTO_IPIP, IPIPCTL_ALLOW, MIB_STOP, 0 },			0, 1	},
 	{ "gre",		{ CTL_NET, PF_INET, IPPROTO_GRE, GRECTL_ALLOW, MIB_STOP, 0 },			0, 1	},
@@ -82,6 +86,8 @@ static struct ipsysctl {
 	{ "etherip",		{ CTL_NET, PF_INET, IPPROTO_ETHERIP,ETHERIPCTL_ALLOW, MIB_STOP, 0 },		0, 1	},
 	{ "ipcomp",		{ CTL_NET, PF_INET, IPPROTO_IPCOMP, IPCOMPCTL_ENABLE, MIB_STOP, 0 },		0, 1	},
 	{ "esp",		{ CTL_NET, PF_INET, IPPROTO_ESP, ESPCTL_ENABLE, MIB_STOP, 0 },			0, 0	},
+	{ "esp-udpencap",	{ CTL_NET, PF_INET, IPPROTO_ESP, ESPCTL_UDPENCAP_ENABLE, MIB_STOP, 0 },		0, 0	},
+	{ "esp-udpencap-port",	{ CTL_NET, PF_INET, IPPROTO_ESP, ESPCTL_UDPENCAP_PORT, MIB_STOP, 0 },		ESP_UDPENCAP_PORT, 0 },
 	{ "ah",			{ CTL_NET, PF_INET, IPPROTO_AH,	AHCTL_ENABLE, MIB_STOP, 0 },			0, 0	},
 	{ "sourceroute",	{ CTL_NET, PF_INET, IPPROTO_IP,	IPCTL_SOURCEROUTE, MIB_STOP, 0 },		0, 1	},
 	{ "encdebug",		{ CTL_NET, PF_INET, IPPROTO_IP,	IPCTL_ENCDEBUG, MIB_STOP, 0 },			0, 1	},

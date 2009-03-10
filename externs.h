@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.63 2009/03/02 20:54:45 chris Exp $ */
+/* $nsh: externs.h,v 1.64 2009/03/10 07:01:12 chris Exp $ */
 /*
  * nsh externs, prototypes and macros
  */
@@ -33,6 +33,7 @@ extern HistEvent ev;		/* ev */
 /* defaults */
 #define	DEFAULT_MTU	1500		/* net.inet.ip.defmtu */
 #define	DEFAULT_TTL	64		/* net.inet.ip.defttl */
+#define ESP_UDPENCAP_PORT 4500		/* net.inet.esp.udpencap_port */
 
 /* conf.c */
 #define LEASEPREFIX	"/var/db/dhclient.leases"

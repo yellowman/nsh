@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.86 2009/03/02 20:54:45 chris Exp $ */
+/* $nsh: commands.c,v 1.87 2009/03/10 07:01:12 chris Exp $ */
 /*
  * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -221,6 +221,9 @@ show_help(int argc, char **argv)
  */
 
 Menu iptab[] = {
+	{ "carp",	"Allow CARP",			CMPL0 0, 0, 0, 0, ipsysctl },
+	{ "carp-log",	"CARP Logging Priority",	CMPL0 0, 0, 0, 0, ipsysctl },
+	{ "carp-preempt", "CARP Virtual Host Preemption", CMPL0 0, 0, 0, 0, ipsysctl },
 	{ "forwarding",	"Enable IPv4 Forwarding",	CMPL0 0, 0, 0, 0, ipsysctl },
 	{ "ipip",	"Allow IP-in-IP Encapsulation", CMPL0 0, 0, 0, 0, ipsysctl },
 	{ "gre",	"Allow Generic Route Encapsulation", CMPL0 0, 0, 0, 0, ipsysctl },
@@ -229,6 +232,8 @@ Menu iptab[] = {
 	{ "etherip",	"Allow Ether-IP Encapsulation",	CMPL0 0, 0, 0, 0, ipsysctl },
 	{ "ipcomp",	"Allow IP Compression",		CMPL0 0, 0, 0, 0, ipsysctl },	
 	{ "esp",	"Allow Encapsulated Security Payload", CMPL0 0, 0, 0, 0, ipsysctl },
+	{ "esp-udpencap","Allow ESP encapsulation within UDP", CMPL0 0, 0, 0, 0, ipsysctl },
+	{ "esp-udpencap-port","UDP port number for encapsulation", CMPL0 0, 0, 0, 0, ipsysctl },  
 	{ "ah",		"Allow Authentication Header",	CMPL0 0, 0, 0, 0, ipsysctl },
 	{ "sourceroute", "Process Loose/Strict Source Route Options", CMPL0 0, 0, 0, 0, ipsysctl },
 	{ "encdebug",	"Enable if_enc debugging",	CMPL0 0, 0, 0, 0, ipsysctl },
