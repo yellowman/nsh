@@ -1,4 +1,4 @@
-/* $nsh: conf.c,v 1.61 2009/03/13 16:45:12 chris Exp $ */
+/* $nsh: conf.c,v 1.62 2009/03/13 23:20:22 chris Exp $ */
 /*
  * Copyright (c) 2002-2009 Chris Cappuccio <chris@nmedia.net>
  *
@@ -60,14 +60,14 @@ void conf_ctl(FILE *, char *);
 void conf_intrtlabel(FILE *, int, char *);
 void conf_intgroup(FILE *, int, char *);
 void conf_groupattrib(FILE *);
-int dhclient_isenabled(void);
+int dhclient_isenabled(char *);
 int isdefaultroute4(struct sockaddr *sa);
+int scantext(char *, char *);
 
 static const struct {
 	char *name;
 	u_long mtu;
 } defmtus[] = {
-	/* Current as of 12/16/07 */
 	{ "gre",	1476 },
 	{ "gif",	1280 },
 	{ "tun",	1500 },
@@ -218,12 +218,16 @@ void conf_ctl(FILE *output, char *name)
 		fprintf(output, "!\n");
 }
 
-int dhclient_isenabled(void)
+/*
+ * see if ("option routers %s;\n",dst) is preset in any possible dhclient
+ * lease file
+ */
+int dhclient_isenabled(char *dst)
 {
-	int lease = 0;
+	int gatewayfound = 0;
 	struct stat enst;
 	struct if_nameindex *ifn_list, *ifnp;
-
+	char ortext[128];
 	char leasefile[sizeof(LEASEPREFIX)+IFNAMSIZ+1];
 
 	if ((ifn_list = if_nameindex()) == NULL) {
@@ -231,16 +235,46 @@ int dhclient_isenabled(void)
 		return 0;
 	}
 
+	snprintf(ortext, sizeof(ortext), "  option routers %s;\n", dst);
+
 	for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++) {
 		snprintf(leasefile, sizeof(leasefile), "%s.%s", LEASEPREFIX,
 		    ifnp->if_name);
 		if (stat(leasefile, &enst) == 0 && S_ISREG(enst.st_mode))
-			lease = 1;
+			if(scantext(leasefile, ortext)) {
+				gatewayfound = 1;
+				break;
+			}
 	}
 
 	if_freenameindex(ifn_list);
 
-	return (lease);
+	return (gatewayfound);
+}
+
+/* find string in file */
+int scantext(char *fname, char *string)
+{
+	FILE *file;
+	char line[128];
+	int found = 0;
+
+	if ((file = fopen(fname, "r")) == 0) {
+		printf("%% Unable to open %s: %s\n", fname, strerror(errno));
+		return(0);
+	}
+
+	for (;;) {
+		if (fgets(line, sizeof(line), file) == NULL)
+			break;
+		if (strcmp(line, string) == 0) {
+			found = 1;
+			break;
+		}
+	}
+
+	fclose(file);
+	return(found);
 }
 
 void conf_interfaces(FILE *output, char *only)
@@ -336,6 +370,7 @@ void conf_interfaces(FILE *output, char *only)
 					fprintf(output, " lladdr %s\n",
 					    lladdr);
 				}
+				fclose(llfile);
 			}
 		}
 		 
@@ -823,7 +858,7 @@ conf_print_rtm(FILE *output, struct rt_msghdr *rtm, char *delim, int af)
 		 * suppress printing IP route if it's the default
 		 * v4 route and dhcp (dhclient) is enabled
 		 */
-		if (!(isdefaultroute4(dst) && dhclient_isenabled())) {
+		if (!(isdefaultroute4(dst) && dhclient_isenabled(routename(gate)))) {
 			fprintf(output, "%s%s ", delim, netname(dst, mask));
 			fprintf(output, "%s\n", routename(gate));
 		}
