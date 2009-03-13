@@ -1,4 +1,4 @@
-/* $nsh: conf.c,v 1.60 2009/03/03 03:08:28 chris Exp $ */
+/* $nsh: conf.c,v 1.61 2009/03/13 16:45:12 chris Exp $ */
 /*
  * Copyright (c) 2002-2009 Chris Cappuccio <chris@nmedia.net>
  *
@@ -589,7 +589,7 @@ int conf_ifaddrs(FILE *output, char *ifname, int flags)
 	return ippntd;
 }
 
-u_int
+u_long
 default_mtu(char *ifname)
 {
 	u_int i;

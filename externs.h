@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.64 2009/03/10 07:01:12 chris Exp $ */
+/* $nsh: externs.h,v 1.65 2009/03/13 16:45:12 chris Exp $ */
 /*
  * nsh externs, prototypes and macros
  */
@@ -38,7 +38,7 @@ extern HistEvent ev;		/* ev */
 /* conf.c */
 #define LEASEPREFIX	"/var/db/dhclient.leases"
 int conf(FILE *);
-u_int default_mtu(char *);
+u_long default_mtu(char *);
 int conf_routes(FILE *, char *, int, int);
 
 /* show.c */
