@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.88 2009/03/10 07:09:23 chris Exp $ */
+/* $nsh: commands.c,v 1.89 2009/03/25 16:09:04 chris Exp $ */
 /*
  * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -240,6 +240,7 @@ Menu iptab[] = {
 	{ "send-redirects", "Send ICMP redirects",	CMPL0 0, 0, 0, 0, ipsysctl },
 	{ "ifq-maxlen",	"IP IFQ maxlen",		CMPL0 0, 0, 0, 1, ipsysctl },
 	{ "directed-broadcast", "Allow directed broadcasts", CMPL0 0, 0, 0, 0, ipsysctl },
+	{ "multipath",	"Multipath routing",		CMPL0 0, 0, 0, 0, ipsysctl },
 #ifdef notyet
 	{ "default-mtu", "Default interface MTU",	CMPL0 0, 0, 1, 1, ipsysctl },
 #endif
@@ -449,6 +450,9 @@ struct intlist Intlist[] = {
 	{ "vlan",	"802.1Q vlan tag and parent",		CMPL0 0, 0, intvlan, 0 },
 	{ "timeslots",	"TDM timeslots",			CMPL0 0, 0, inttimeslot, 0},
 	{ "debug",	"Driver dependent debugging",		CMPL0 0, 0, intflags, 0 },
+/*
+	{ "dhcrelay",	"DHCP Relay Agent",			CMPL0 0, 0, intdhcrelay, 0 },
+*/
 	{ "shutdown",	"Shutdown interface",			CMPL0 0, 0, intflags, 2 },
 /* Bridge mode commands */
 	{ "member",	"Bridge member(s)",			CMPL(i) 0, 0, brport, 1 },

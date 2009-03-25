@@ -1,4 +1,4 @@
-/* $nsh: sysctl.c,v 1.13 2009/03/10 07:01:12 chris Exp $ */
+/* $nsh: sysctl.c,v 1.14 2009/03/25 16:09:04 chris Exp $ */
 /*
  * Copyright (c) 2003-2009 Chris Cappuccio <chris@nmedia.net>
  *
@@ -94,6 +94,7 @@ static struct ipsysctl {
 	{ "ifq-maxlen",		{ CTL_NET, PF_INET, IPPROTO_IP,	IPCTL_IFQUEUE, IFQCTL_MAXLEN, MIB_STOP },	IFQ_MAXLEN, 0 },
 	{ "send-redirects",	{ CTL_NET, PF_INET, IPPROTO_IP, IPCTL_SENDREDIRECTS, MIB_STOP, 0 },		0, 0	},
 	{ "directed-broadcast",	{ CTL_NET, PF_INET, IPPROTO_IP, IPCTL_DIRECTEDBCAST, MIB_STOP, 0 },		0, 1	},
+	{ "multipath",		{ CTL_NET, PF_INET, IPPROTO_IP, IPCTL_MULTIPATH, MIB_STOP, 0 },			0, 1	},
 #ifdef notyet
 	{ "default-mtu",	{ CTL_NET, PF_INET, IPPROTO_IP, IPCTL_DEFMTU, MIB_STOP, 0 },			DEFAULT_MTU, 0 },
 #endif
