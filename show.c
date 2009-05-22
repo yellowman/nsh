@@ -1,4 +1,4 @@
-/* $nsh: show.c,v 1.9 2009/03/02 23:01:14 chris Exp $ */
+/* $nsh: show.c,v 1.10 2009/05/22 23:43:33 chris Exp $ */
 /* From: $OpenBSD: /usr/src/sbin/route/show.c,v 1.61 2007/09/05 20:30:21 claudio Exp $	*/
 
 /*
@@ -139,7 +139,7 @@ p_rttables(int af, u_int tableid, int flags)
 			rtm = (struct rt_msghdr *)next;
 			if (rtm->rtm_version != RTM_VERSION)
 				continue;
-			sa = (struct sockaddr *)(rtm + rtm->rtm_hdrlen);
+			sa = (struct sockaddr *)(next + rtm->rtm_hdrlen);
 			if (af != AF_UNSPEC && sa->sa_family != af)
 				continue;
 			if (next == rtdump->buf) {
@@ -248,7 +248,7 @@ get_rtaddrs(int addrs, struct sockaddr *sa, struct sockaddr **rti_info)
 void
 p_rtentry(struct rt_msghdr *rtm)
 {
-	struct sockaddr	*sa = (struct sockaddr *)(rtm + rtm->rtm_hdrlen);
+	struct sockaddr	*sa = (struct sockaddr *)((char *)rtm + rtm->rtm_hdrlen);
 	struct sockaddr	*mask, *rti_info[RTAX_MAX];
 	char		 ifbuf[IF_NAMESIZE];
 	int interesting = RTF_UP | RTF_GATEWAY | RTF_HOST | RTF_DYNAMIC |
