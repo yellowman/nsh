@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.65 2009/03/13 16:45:12 chris Exp $ */
+/* $nsh: externs.h,v 1.66 2009/05/22 23:51:51 chris Exp $ */
 /*
  * nsh externs, prototypes and macros
  */
@@ -122,6 +122,7 @@ extern char metricnames[];
 /* argument list replacement */
 #define OPT     (void *)1
 #define REQ     (void *)2
+#define IFNAME  (void *)3
 #define SIZE_CONF_TEMP 64
 int ctlhandler(int, char **, char *);
 void rmtemp(char *);
@@ -293,11 +294,12 @@ int route(int, char**);
 void show_route(char *);
 #ifdef _IP_T_
 ip_t parse_ip(char *, int);
-int ip_route(ip_t *, ip_t *, u_short);
+int ip_route(ip_t *, ip_t *, u_short, int);
 #endif
 
 /* if.c */
 #define DHCLIENT	"/sbin/dhclient"
+#define DHCRELAY	"/usr/sbin/dhcrelay"
 #define IFDATA_MTU 1		/* request for if_data.ifi_mtu */
 #define IFDATA_BAUDRATE 2	/* request for if_data.ifi_baudrate */
 #define MBPS(bps) (bps / 1000 / 1000)
@@ -313,6 +315,7 @@ u_int32_t in4_netaddr(u_int32_t, u_int32_t);
 u_int32_t in4_brdaddr(u_int32_t, u_int32_t);
 int intip(char *, int, int, char **);
 int intmtu(char *, int, int, char **);
+int intdhcrelay(char *, int, int, char **);
 int intmetric(char *, int, int, char **);
 int intvlan(char *, int, int, char **);
 int intflags(char *, int, int, char **);

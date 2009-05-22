@@ -1,4 +1,4 @@
-/* $nsh: routesys.c,v 1.28 2009/03/02 23:01:14 chris Exp $ */
+/* $nsh: routesys.c,v 1.29 2009/05/22 23:51:51 chris Exp $ */
 /* From: $OpenBSD: /usr/src/sbin/route/route.c,v 1.43 2001/07/07 18:26:20 deraadt Exp $ */
 
 /*
@@ -81,7 +81,7 @@ void	 print_getmsg(struct rt_msghdr *, int);
 void	 pmsg_common(struct rt_msghdr *);
 void	 pmsg_addrs(char *, int);
 void	 bprintf(FILE *, int, u_char *);
-int	 ip_route(ip_t *, ip_t *, u_short);
+int	 ip_route(ip_t *, ip_t *, u_short, int);
 
 /*
  * caller must freertdump() if rtdump not null
@@ -97,8 +97,8 @@ struct rtdump *getrtdump(int af, int flags, u_int tableid)
 
 	mib[0] = CTL_NET;
 	mib[1] = PF_ROUTE;
-	mib[2] = af;	/* protocol */
-	mib[3] = 0;	/* wildcard address family */
+	mib[2] = 0;	/* protocol */
+	mib[3] = af;	/* wildcard address family */
 	mib[4] = flags ? NET_RT_FLAGS : NET_RT_DUMP;
 	mib[5] = flags;
 	mib[6] = tableid;
@@ -588,9 +588,9 @@ bprintf(fp, b, s)
  * that we know about then we try and give a sensible error message
  */
 int
-ip_route(ip_t *dest, ip_t *gate, u_short cmd)
+ip_route(ip_t *dest, ip_t *gate, u_short cmd, int flags)
 {
-	int l, flags;
+	int l;
 	int len = dest->bitlen;
 
 	rtm_addrs = 0;
@@ -604,8 +604,6 @@ ip_route(ip_t *dest, ip_t *gate, u_short cmd)
 		so_ifp.sa.sa_len = sizeof(struct sockaddr_dl);
 		rtm_addrs |= RTA_IFP;
 	}
-
-	flags = RTF_UP | RTF_STATIC | RTF_MPATH;
 
 	switch(dest->family) {
 	case AF_INET:

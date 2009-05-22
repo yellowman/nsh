@@ -1,4 +1,4 @@
-/* $nsh: route.c,v 1.11 2008/02/06 22:48:53 chris Exp $ */
+/* $nsh: route.c,v 1.12 2009/05/22 23:51:51 chris Exp $ */
 /*
  * Copyright (c) 2002 Chris Cappuccio <chris@nmedia.net>
  *
@@ -39,6 +39,7 @@ route(int argc, char **argv)
 	u_short cmd = 0;
 	u_int32_t net;
 	ip_t dest, gate;
+	int flags;
 
 	if (NO_ARG(argv[0])) {
 		cmd = RTM_DELETE; 
@@ -90,10 +91,12 @@ route(int argc, char **argv)
 		return(1);
 	}
 
+	flags = RTF_UP | RTF_STATIC | RTF_MPATH;
+
 	/*
 	 * Do the route...
 	 */
-	ip_route(&dest, &gate, cmd);
+	ip_route(&dest, &gate, cmd, flags);
 	return(0);
 }
 
@@ -107,7 +110,7 @@ void show_route(char *arg)
 	if (dest.family == 0)
 		return;
 
-	ip_route(&dest, NULL, RTM_GET);
+	ip_route(&dest, NULL, RTM_GET, RTF_UP);
 
 	/*
 	 * ip_route() calls rtmsg() which calls
