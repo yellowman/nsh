@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.89 2009/03/25 16:09:04 chris Exp $ */
+/* $nsh: commands.c,v 1.90 2009/05/26 22:08:06 chris Exp $ */
 /*
  * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -113,7 +113,7 @@ static int	ping(int, char*[]);
 static int	traceroute(int, char*[]);
 static int	ssh(int, char*[]);
 static int	telnet(int, char*[]);
-static void	p_argv(int, char **);
+       void	p_argv(int, char **);
 static int	notvalid(void);
 static int 	reload(void);
 static int 	halt(void);
@@ -450,9 +450,7 @@ struct intlist Intlist[] = {
 	{ "vlan",	"802.1Q vlan tag and parent",		CMPL0 0, 0, intvlan, 0 },
 	{ "timeslots",	"TDM timeslots",			CMPL0 0, 0, inttimeslot, 0},
 	{ "debug",	"Driver dependent debugging",		CMPL0 0, 0, intflags, 0 },
-/*
 	{ "dhcrelay",	"DHCP Relay Agent",			CMPL0 0, 0, intdhcrelay, 0 },
-*/
 	{ "shutdown",	"Shutdown interface",			CMPL0 0, 0, intflags, 2 },
 /* Bridge mode commands */
 	{ "member",	"Bridge member(s)",			CMPL(i) 0, 0, brport, 1 },

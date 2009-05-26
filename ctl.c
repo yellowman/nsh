@@ -1,4 +1,4 @@
-/* $nsh: ctl.c,v 1.24 2008/10/29 17:00:31 chris Exp $ */
+/* $nsh: ctl.c,v 1.25 2009/05/26 22:08:06 chris Exp $ */
 /*
  * Copyright (c) 2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -46,7 +46,6 @@ void ctl_symlink(char *, char **, char *);
 int rule_writeline(char *, mode_t, char *);
 int acq_lock(char *);
 void rls_lock(int);
-void flag_x(char *, int *);
 
 char *ctl_pf_test[] = { PFCTL, "-nf", PFCONF_TEMP, '\0' };
 struct ctl ctl_pf[] = {
@@ -270,35 +269,44 @@ ctl_symlink(char *temp, char **z, char *real)
 	symlink(real,temp);
 }
 
-/* flag to other nsh sessions or nsh conf() that actions have been taken */
+/* flag to other nsh sessions or nsh conf() that actions have been taken with parameter in text file*/
 void
-flag_x(char *fname, int *y)
+flag_x(char *fname, int *y, char *data)
 {
-	int fd;
+	FILE *file;
 	char fenabled[SIZE_CONF_TEMP + sizeof(".enabled") + 1];
 	char fother[SIZE_CONF_TEMP + sizeof(".other") + 1];
-	char flocal[SIZE_CONF_TEMP + sizeof(".local") +1];
+	char flocal[SIZE_CONF_TEMP + sizeof(".local") + 1];
 
 	snprintf(fenabled, sizeof(fenabled), "%s.enabled", fname);
 	snprintf(fother, sizeof(fother), "%s.other", fname);
 	snprintf(flocal, sizeof(flocal), "%s.local", fname);
 
 	if (y == X_ENABLE) {
-		if ((fd = open(fenabled, O_RDWR | O_CREAT, 0600)) == -1)
+		if ((file = fopen(fenabled, "w")) == NULL)
 			return;
-		close(fd);
+		chmod(fenabled, 0600);
+		if (data)
+			fprintf(file, "%s", data);
+		fclose(file);
 	} else if (y == X_DISABLE) {
 		rmtemp(fenabled);
 	} else if (y == X_OTHER) {
 		rmtemp(flocal);
-		if ((fd = open(fother, O_RDWR | O_CREAT, 0600)) == -1)
+		if ((file = fopen(fother, "w")) == NULL)
 			return;
-		close(fd);
+		chmod(fother, 0600);
+		if (data)
+			fprintf(file, "%s", data);
+		fclose(file);   
 	} else if (y == X_LOCAL) {
 		rmtemp(fother);
-		if ((fd = open(flocal, O_RDWR | O_CREAT, 0600)) == -1)
+		if ((file = fopen(flocal, "w")) == NULL)
 			return;
-		close(fd);
+		chmod(flocal, 0600);
+		if (data)
+			fprintf(file, "%s", data);
+		fclose(file);
 	}
 }
 
@@ -363,7 +371,7 @@ ctlhandler(int argc, char **argv, char *modhvar)
 		cmdargs(fillargs[0], fillargs);
 
 	if (x->flag_x != NULL)
-		flag_x(daemons->tmpfile, x->flag_x);
+		flag_x(daemons->tmpfile, x->flag_x, NULL);
 
 	return 1;
 }

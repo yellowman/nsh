@@ -1,4 +1,4 @@
-/* $nsh: conf.c,v 1.62 2009/03/13 23:20:22 chris Exp $ */
+/* $nsh: conf.c,v 1.63 2009/05/26 22:08:06 chris Exp $ */
 /*
  * Copyright (c) 2002-2009 Chris Cappuccio <chris@nmedia.net>
  *
@@ -415,7 +415,7 @@ void conf_interfaces(FILE *output, char *only)
 		if (br) {
 			conf_brcfg(output, ifs, ifn_list, ifnp->if_name);
 		} else {
-			char tmp[16];
+			char tmp[24];
 
 			conf_media_status(output, ifs, ifnp->if_name);
 			conf_ifmetrics(output, ifs, if_data, ifnp->if_name);
@@ -425,6 +425,9 @@ void conf_interfaces(FILE *output, char *only)
 			if (timeslot_status(ifs, ifnp->if_name, tmp,
 			    sizeof(tmp)) == 1) 
 				fprintf(output, " timeslots %s\n", tmp);
+			if (conf_dhcrelay(ifnp->if_name, tmp, sizeof(tmp))
+			    != NULL)
+				fprintf(output, " dhcrelay %s\n", tmp);
 		}
 
 		/*
@@ -457,6 +460,24 @@ void conf_interfaces(FILE *output, char *only)
 	}
 	close(ifs);
 	if_freenameindex(ifn_list);
+}
+
+char *conf_dhcrelay(char *ifname, char *server, int serverlen)
+{
+	FILE *file;
+	char fenabled[SIZE_CONF_TEMP + sizeof(".enabled")];
+
+	snprintf(fenabled, sizeof(fenabled), "/var/run/dhcrelay.%s.enabled", ifname);
+
+	if ((file = fopen(fenabled, "r")) == NULL)
+		return(NULL);
+
+	if (fgets(server, serverlen, file) == NULL)
+		return(NULL);
+
+	fclose(file);
+
+	return(server);
 }
 
 void conf_ifmetrics(FILE *output, int ifs, struct if_data if_data,

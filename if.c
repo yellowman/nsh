@@ -1,4 +1,4 @@
-/* $nsh: if.c,v 1.42 2009/03/02 20:54:45 chris Exp $ */
+/* $nsh: if.c,v 1.43 2009/05/26 22:08:06 chris Exp $ */
 /*
  * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -704,6 +704,66 @@ intmtu(char *ifname, int ifs, int argc, char **argv)
 	if (ioctl(ifs, SIOCSIFMTU, (caddr_t)&ifr) < 0)
 		printf("%% intmtu: SIOCSIFMTU: %s\n", strerror(errno));
 
+	return(0);
+}
+
+int
+intdhcrelay(char *ifname, int ifs, int argc, char **argv)
+{
+	char *cmd[] = { DHCRELAY, "-i", ifname, NULL, '\0' };
+ 	char fname[SIZE_CONF_TEMP];
+	int set;
+
+	if (NO_ARG(argv[0])) {
+		set = 0;
+		argc--;
+		argv++;
+	} else
+		set = 1;
+
+	argc--;
+	argv++;
+
+	if ((!set && argc > 1) || (set && argc != 1)) {
+		printf("%% dhcrelay <relayserver>\n");
+		printf("%% no dhcrelay [relayserver]\n");
+		return(0);
+	}
+
+	cmd[3] = argv[0];
+
+	snprintf(fname, sizeof(fname), "/var/run/dhcrelay.%s", ifname);
+	
+	if (set) {
+		flag_x(fname, X_ENABLE, argv[0]);
+		cmdargs(DHCRELAY, cmd);
+	} else {
+		char server[24], argue[SIZE_CONF_TEMP];
+		char *killcmd[] = { PKILL, "-xf", NULL, '\0' };
+
+		if (conf_dhcrelay(ifname, server, sizeof(server)) == NULL) {
+			if (errno == ENOENT)
+				printf("%% No relay configured for %s\n", ifname);
+			else
+				printf("%% int_dhcrelay: conf_dhcrelay failed: %s\n", strerror(errno));
+			return(0);
+		}
+
+		/* if dhcrelay not relaying to specified dhcp server, bail out */
+		if (argc && strcmp(server, argv[0]) != 0) {
+			printf("%% Server expected: %s (not %s)\n", server, argv[0]);
+			return(0);
+		}
+
+		/* delete .enabled file */
+		flag_x(fname, X_DISABLE, NULL);
+
+		/* setup argument list as one argument for pkill -xf */
+		snprintf(argue, sizeof(argue), "%s %s %s %s", cmd[0], cmd[1], cmd[2], server);
+		killcmd[2] = argue;
+
+		cmdargs(PKILL, killcmd);
+	}
 	return(0);
 }
 

@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.66 2009/05/22 23:51:51 chris Exp $ */
+/* $nsh: externs.h,v 1.67 2009/05/26 22:08:06 chris Exp $ */
 /*
  * nsh externs, prototypes and macros
  */
@@ -40,6 +40,7 @@ extern HistEvent ev;		/* ev */
 int conf(FILE *);
 u_long default_mtu(char *);
 int conf_routes(FILE *, char *, int, int);
+char *conf_dhcrelay(char *, char *, int);
 
 /* show.c */
 void p_rttables(int, u_int, int);
@@ -166,6 +167,7 @@ extern struct ctl ctl_ntp[];
 extern struct ctl ctl_ftpproxy[];
 extern struct ctl ctl_dns[];
 extern struct ctl ctl_inet[];
+void flag_x(char *, int *, char *);
 
 /* commands.c */
 #define NOPTFILL	7
