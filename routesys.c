@@ -1,4 +1,4 @@
-/* $nsh: routesys.c,v 1.29 2009/05/22 23:51:51 chris Exp $ */
+/* $nsh: routesys.c,v 1.30 2009/05/26 22:11:25 chris Exp $ */
 /* From: $OpenBSD: /usr/src/sbin/route/route.c,v 1.43 2001/07/07 18:26:20 deraadt Exp $ */
 
 /*
@@ -129,7 +129,6 @@ struct rtdump *getrtdump(int af, int flags, u_int tableid)
 		rtdump->lim = rtdump->buf + needed;
 	}
 	if (rtdump->buf == NULL) {
-		printf ("%% Table empty\n");
 		free(rtdump);
 		return(NULL);
 	}
