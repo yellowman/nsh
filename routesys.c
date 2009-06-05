@@ -1,4 +1,4 @@
-/* $nsh: routesys.c,v 1.30 2009/05/26 22:11:25 chris Exp $ */
+/* $nsh: routesys.c,v 1.31 2009/06/05 03:39:05 chris Exp $ */
 /* From: $OpenBSD: /usr/src/sbin/route/route.c,v 1.43 2001/07/07 18:26:20 deraadt Exp $ */
 
 /*
@@ -179,7 +179,7 @@ flushroutes(int af, int af2)
 			printf("\n%% Read message:\n");
 			print_rtmsg(rtm);
 		}
-		sa = (struct sockaddr *)(rtm + rtm->rtm_hdrlen);
+		sa = (struct sockaddr *)((char *)rtm + rtm->rtm_hdrlen);
 		sa2 = (struct sockaddr *)(ROUNDUP(sa->sa_len) + (char *)sa);
 		if (sa->sa_family != af) {
 			if (verbose) {
