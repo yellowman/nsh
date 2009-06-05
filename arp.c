@@ -1,4 +1,4 @@
-/* $nsh: arp.c,v 1.4 2009/03/02 23:01:13 chris Exp $ */
+/* $nsh: arp.c,v 1.5 2009/06/05 03:42:43 chris Exp $ */
 /* From: $OpenBSD: /usr/src/usr.sbin/arp/arp.c,v 1.40 2007/08/24 13:12:16 claudio Exp $ */
 /*
  * Copyright (c) 1984, 1993
@@ -57,7 +57,7 @@
 #include "externs.h"
 
 int delete(const char *, const char *);
-void search(in_addr_t addr, void (*action)(struct sockaddr_dl *sdl,
+int search(in_addr_t addr, void (*action)(struct sockaddr_dl *sdl,
 	struct sockaddr_inarp *sin, struct rt_msghdr *rtm));
 void print_entry(struct sockaddr_dl *sdl,
 	struct sockaddr_inarp *sin, struct rt_msghdr *rtm);
@@ -67,8 +67,6 @@ int arpset(int, char **);
 struct sockaddr_inarp	blank_sin = { sizeof(blank_sin), AF_INET };
 struct sockaddr_dl	blank_sdl = { sizeof(blank_sdl), AF_LINK };
 struct sockaddr_in	blank_mask = { 8, 0, 0, { 0xffffffff } };
-
-int			flags, found_entry;
 
 /*
  * Set an individual arp entry
@@ -81,7 +79,7 @@ arpset(int argc, char *argv[])
 	struct rt_msghdr *rtm;
 	char *eaddr, *host;
 	int doing_proxy, export_only;
-	int set = 1;
+	int flags = 0, set = 1;
 
 	sin = &so_dst.sinarp;
 	rtm = &(m_rtmsg.m_rtm);
@@ -194,6 +192,7 @@ int
 arpget(const char *host)
 {
 	struct sockaddr_inarp *sin;
+	int found_entry;
 
 	sin = &so_dst.sinarp;
 
@@ -205,8 +204,7 @@ arpget(const char *host)
 		return(1);
 	}
 	memcpy(&so_mask, &blank_mask, sizeof(struct sockaddr_in));
-	found_entry = 0;
-	search(sin->sin_addr.s_addr, print_entry);
+	found_entry = search(sin->sin_addr.s_addr, print_entry);
 	if (found_entry == 0) {
 		printf("%% %s -- no entry\n", inet_ntoa(sin->sin_addr));
 		return(1);
@@ -282,7 +280,7 @@ delete:
 /*
  * Search the entire arp table, and do some action on matching entries.
  */
-void
+int
 search(in_addr_t addr, void (*action)(struct sockaddr_dl *sdl,
     struct sockaddr_inarp *sin, struct rt_msghdr *rtm))
 {
@@ -291,10 +289,11 @@ search(in_addr_t addr, void (*action)(struct sockaddr_dl *sdl,
 	struct sockaddr_inarp *sin;
 	struct sockaddr_dl *sdl;
 	struct rtdump *rtdump;
+	int found_entry = 0;
 
 	rtdump = getrtdump(0, RTF_LLINFO, 0);
 	if (rtdump == NULL)
-		return;
+		return 0;
 	for (next = rtdump->buf; next < rtdump->lim; next += rtm->rtm_msglen) {
 		rtm = (struct rt_msghdr *)next;
 		if (rtm->rtm_version != RTM_VERSION)
@@ -309,6 +308,7 @@ search(in_addr_t addr, void (*action)(struct sockaddr_dl *sdl,
 		(*action)(sdl, sin, rtm);
 	}
 	freertdump(rtdump);
+	return(found_entry);
 }
 
 /*
