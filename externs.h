@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.67 2009/05/26 22:08:06 chris Exp $ */
+/* $nsh: externs.h,v 1.68 2009/10/09 21:49:58 chris Exp $ */
 /*
  * nsh externs, prototypes and macros
  */
@@ -325,6 +325,7 @@ int intlink(char *, int, int, char **);
 int intnwid(char *, int, int, char **);
 int intpowersave(char *, int, int, char **);
 int intdesc(char *, int, int, char **);
+int intpflow(char *, int, int, char **);
 int intlladdr(char *, int, int, char **);
 int intgroup(char *, int, int, char **);
 int intrtlabel(char *, int, int, char **);

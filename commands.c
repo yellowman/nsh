@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.90 2009/05/26 22:08:06 chris Exp $ */
+/* $nsh: commands.c,v 1.91 2009/10/09 21:49:58 chris Exp $ */
 /*
  * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -447,6 +447,7 @@ struct intlist Intlist[] = {
 	{ "cpass",	"CARP passphrase",			CMPL0 0, 0, intcpass, 0 },
 	{ "carpdev",	"CARP device",				CMPL0 0, 0, intcdev, 0 },
 	{ "carpnode",	"CARP additional vhid/advskew",		CMPL0 0, 0, intcnode, 0 },
+	{ "pflow",	"pflow data export",			CMPL0 0, 0, intpflow, 0 },
 	{ "vlan",	"802.1Q vlan tag and parent",		CMPL0 0, 0, intvlan, 0 },
 	{ "timeslots",	"TDM timeslots",			CMPL0 0, 0, inttimeslot, 0},
 	{ "debug",	"Driver dependent debugging",		CMPL0 0, 0, intflags, 0 },

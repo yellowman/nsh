@@ -1,4 +1,4 @@
-/* $nsh: conf.c,v 1.63 2009/05/26 22:08:06 chris Exp $ */
+/* $nsh: conf.c,v 1.64 2009/10/09 21:49:58 chris Exp $ */
 /*
  * Copyright (c) 2002-2009 Chris Cappuccio <chris@nmedia.net>
  *
@@ -37,6 +37,7 @@
 #include <net/route.h>
 #include <net/pfvar.h>
 #include <net/if_pfsync.h>
+#include <net/if_pflow.h>
 #include <ifaddrs.h>
 #include <arpa/inet.h>
 #include <limits.h>
@@ -56,6 +57,7 @@ void conf_print_rtm(FILE *, struct rt_msghdr *, char *, int);
 int conf_ifaddrs(FILE *, char *, int);
 void conf_brcfg(FILE *, int, struct if_nameindex *, char *);
 void conf_ifmetrics(FILE *, int, struct if_data, char *);
+void conf_pflow(FILE *, int, char *);
 void conf_ctl(FILE *, char *);
 void conf_intrtlabel(FILE *, int, char *);
 void conf_intgroup(FILE *, int, char *);
@@ -70,9 +72,9 @@ static const struct {
 } defmtus[] = {
 	{ "gre",	1476 },
 	{ "gif",	1280 },
-	{ "tun",	1500 },
 	{ "sl",		296 },
 	{ "enc",	1536 },
+	{ "pflow",	1492 },
 	{ "pflog",	MTU_IGNORE },
 	{ "lo",		MTU_IGNORE },
 };
@@ -422,6 +424,7 @@ void conf_interfaces(FILE *output, char *only)
 			conf_pfsync(output, ifs, ifnp->if_name);
 			conf_carp(output, ifs, ifnp->if_name);
 			conf_trunk(output, ifs, ifnp->if_name);
+			conf_pflow(output, ifs, ifnp->if_name);
 			if (timeslot_status(ifs, ifnp->if_name, tmp,
 			    sizeof(tmp)) == 1) 
 				fprintf(output, " timeslots %s\n", tmp);
@@ -478,6 +481,24 @@ char *conf_dhcrelay(char *ifname, char *server, int serverlen)
 	fclose(file);
 
 	return(server);
+}
+
+void conf_pflow(FILE *output, int ifs, char *ifname)
+{
+	struct pflowreq preq;
+	struct ifreq ifr;
+
+	bzero(&ifr, sizeof(ifr));
+	strlcpy(ifr.ifr_name, ifname, IFNAMSIZ);
+
+	bzero((char *)&preq, sizeof(struct pflowreq));
+	ifr.ifr_data = (caddr_t)&preq;
+
+	if (ioctl(ifs, SIOCGETPFLOW, (caddr_t)&ifr) == -1)
+		return;
+
+	fprintf(output, " pflow sender %s", inet_ntoa(preq.sender_ip));
+	fprintf(output, " receiver %s:%u\n", inet_ntoa(preq.receiver_ip), ntohs(preq.receiver_port));
 }
 
 void conf_ifmetrics(FILE *output, int ifs, struct if_data if_data,

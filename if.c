@@ -1,4 +1,4 @@
-/* $nsh: if.c,v 1.43 2009/05/26 22:08:06 chris Exp $ */
+/* $nsh: if.c,v 1.44 2009/10/09 21:49:58 chris Exp $ */
 /*
  * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -26,14 +26,15 @@
 #include <sys/param.h>
 #include <sys/sockio.h>
 #include <sys/ioctl.h>
-#include <ifaddrs.h>
 #include <net/if.h>
 #include <net/if_types.h>
 #include <net/if_dl.h>
 #include <net/route.h>
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
+#include <netdb.h>
 #include <net/if_vlan_var.h>
+#include <net/if_pflow.h>
 #include <net80211/ieee80211.h>
 #include <net80211/ieee80211_ioctl.h>
 #include <ifaddrs.h>
@@ -663,6 +664,109 @@ intip(char *ifname, int ifs, int argc, char **argv)
 		}
 		if (ioctl(ifs, SIOCAIFADDR, &addreq) < 0)
 			printf("%% intip: SIOCAIFADDR: %s\n", strerror(errno));
+	}
+
+	return(0);
+}
+
+/*
+ * addr/port parsing lifted from sbin/ifconfig/ifconfig.c
+ */
+int
+intpflow(char *ifname, int ifs, int argc, char **argv)
+{
+	struct ifreq ifr;
+	struct pflowreq preq;
+	struct addrinfo hints, *sender, *receiver;
+	int ecode, set;
+	char *ip, *port, buf[MAXHOSTNAMELEN+sizeof (":65535")];
+
+	if (NO_ARG(argv[0])) {
+		set = 0;
+		argc--;
+		argv++;
+	} else
+		set = 1;
+
+	argc--;
+	argv++;
+
+	if ((set && argc != 4) || (set && argc == 4 &&
+		(!isprefix(argv[0], "sender") || !isprefix(argv[2], "receiver")))) {
+		printf("%% pflow sender <x.x.x.x> receiver <x.x.x.x:port>\n");
+		printf("%% no pflow [sender x.x.x.x receiver x.x.x.x:port]\n");
+		return(0);
+	}
+
+	memset(&hints, 0, sizeof(hints));
+	hints.ai_family = AF_INET;
+	hints.ai_socktype = SOCK_DGRAM; /*dummy*/
+
+	if (set) {
+		if ((ecode = getaddrinfo(argv[1], NULL, &hints, &sender)) != 0) {
+			printf("%% Invalid sender %s: %s\n", argv[2],
+			    gai_strerror(ecode));
+			return(0);
+		}
+
+		if (sender->ai_addr->sa_family != AF_INET) {
+			printf("%% Only IPv4 addresses supported for the sender\n");
+			freeaddrinfo(sender);
+			return(0);
+		}
+
+	        if (strchr(argv[3], ':') == NULL) {
+			printf("%% Receiver has no port specified\n");
+			freeaddrinfo(sender);
+			return(0);
+		}
+
+		if (strlcpy(buf, argv[3], sizeof(buf)) >= sizeof(buf)) {
+			printf("%% Receiver value too large\n");
+			freeaddrinfo(sender);
+			return(0);
+		}
+
+		port = strchr(buf, ':');
+		*port++ = '\0';
+		ip = buf;
+ 
+		if ((ecode = getaddrinfo(ip, port, &hints, &receiver)) != 0) {
+			printf("%% Invalid receiver %s: %s\n", ip,
+			    gai_strerror(ecode));
+			freeaddrinfo(sender);
+			return(0);
+		}
+
+		if (receiver->ai_addr->sa_family != AF_INET) {
+			printf("%% Only IPv4 addresses supported for the receiver\n");
+			freeaddrinfo(sender);
+			freeaddrinfo(receiver);
+			return(0);
+		}
+	}
+
+	bzero(&ifr, sizeof(ifr));     
+	strlcpy(ifr.ifr_name, ifname, IFNAMSIZ);
+
+	bzero((char *)&preq, sizeof(struct pflowreq));
+	ifr.ifr_data = (caddr_t)&preq;
+
+	if (set) {
+		preq.sender_ip.s_addr = ((struct sockaddr_in *)
+		    sender->ai_addr)->sin_addr.s_addr;
+		preq.receiver_ip.s_addr = ((struct sockaddr_in *)
+		    receiver->ai_addr)->sin_addr.s_addr;
+		preq.receiver_port = (u_int16_t) ((struct sockaddr_in *)
+		    receiver->ai_addr)->sin_port;
+	}
+	preq.addrmask |= PFLOW_MASK_SRCIP | PFLOW_MASK_DSTIP | PFLOW_MASK_DSTPRT;
+	if (ioctl(ifs, SIOCSETPFLOW, (caddr_t)&ifr) == -1)
+		printf("%% Unable to set pflow parameters: %s\n", strerror(errno));
+
+	if (set) {
+		freeaddrinfo(sender);
+		freeaddrinfo(receiver);
 	}
 
 	return(0);
