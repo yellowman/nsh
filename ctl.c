@@ -1,4 +1,4 @@
-/* $nsh: ctl.c,v 1.25 2009/05/26 22:08:06 chris Exp $ */
+/* $nsh: ctl.c,v 1.26 2010/04/08 17:40:55 chris Exp $ */
 /*
  * Copyright (c) 2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -40,6 +40,9 @@
 #define FTPPROXY	"/usr/sbin/ftp-proxy"
 #define INETD		"/usr/sbin/inetd"
 #define SSHD		"/usr/sbin/sshd"
+#ifndef DHCPLEASES
+#define DHCPLEASES	"/var/db/dhcpd.leases"
+#endif
 
 void call_editor(char *, char **, char *);
 void ctl_symlink(char *, char **, char *);
@@ -148,7 +151,7 @@ struct ctl ctl_sasync[] = {
 char *ctl_dhcp_test[] = { DHCPD, "-nc", DHCPCONF_TEMP, '\0' };
 struct ctl ctl_dhcp[] = {
 	{ "enable",     "enable service",
-	    { DHCPD, "-c", DHCPCONF_TEMP, NULL }, NULL, X_ENABLE },
+	    { DHCPD, "-c", DHCPCONF_TEMP, "-l", DHCPLEASES, NULL }, NULL, X_ENABLE },
 	{ "disable",    "disable service",
 	    { PKILL, "dhcpd", NULL }, NULL, X_DISABLE },
 	{ "edit",       "edit configuration",
