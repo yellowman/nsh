@@ -1,4 +1,4 @@
-/* $nsh: conf.c,v 1.64 2009/10/09 21:49:58 chris Exp $ */
+/* $nsh: conf.c,v 1.65 2010/09/11 15:27:55 chris Exp $ */
 /*
  * Copyright (c) 2002-2009 Chris Cappuccio <chris@nmedia.net>
  *
@@ -520,7 +520,7 @@ void conf_ifmetrics(FILE *output, int ifs, struct if_data if_data,
 	 * is dynamic and controlled by the kernel
 	 */
 	if (!MIN_ARG(ifname, "pfsync") && (if_mtu != default_mtu(ifname) &&
-	    default_mtu(ifname) != MTU_IGNORE))
+	    default_mtu(ifname) != MTU_IGNORE) && if_mtu != 0)
 		fprintf(output, " mtu %u\n", if_mtu);
 	if (if_metric)
 		fprintf(output, " metric %u\n", if_metric);
