@@ -1,4 +1,4 @@
-/* $nsh: show.c,v 1.10 2009/05/22 23:43:33 chris Exp $ */
+/* $nsh: show.c,v 1.11 2010/09/11 15:26:55 chris Exp $ */
 /* From: $OpenBSD: /usr/src/sbin/route/show.c,v 1.61 2007/09/05 20:30:21 claudio Exp $	*/
 
 /*
@@ -495,7 +495,7 @@ p_flags(int f, char *format)
 	printf(format, name);
 }
 
-static char line[MAXHOSTNAMELEN];
+static char line_show[MAXHOSTNAMELEN];
 static char domain[MAXHOSTNAMELEN];
 
 char *
@@ -558,11 +558,11 @@ routename(struct sockaddr *sa)
 		}
 		/* FALLTHROUGH */
 	default:
-		(void)snprintf(line, sizeof(line), "(%d) %s",
+		(void)snprintf(line_show, sizeof(line_show), "(%d) %s",
 		    sa->sa_family, any_ntoa(sa));
 		break;
 	}
-	return (line);
+	return (line_show);
 }
 
 char *
@@ -571,9 +571,9 @@ routename4(in_addr_t in)
 	struct in_addr	 ina;
 
 	ina.s_addr = in;
-	strlcpy(line, inet_ntoa(ina), sizeof(line));
+	strlcpy(line_show, inet_ntoa(ina), sizeof(line_show));
 
-	return (line);
+	return (line_show);
 }
 
 char *
@@ -585,10 +585,10 @@ routename6(struct sockaddr_in6 *sin6)
 /*		niflags |= NI_NOFQDN;*/
 
 	if (getnameinfo((struct sockaddr *)sin6, sin6->sin6_len,
-	    line, sizeof(line), NULL, 0, niflags) != 0)
-		strncpy(line, "invalid", sizeof(line));
+	    line_show, sizeof(line_show), NULL, 0, niflags) != 0)
+		strncpy(line_show, "invalid", sizeof(line_show));
 
-	return (line);
+	return (line_show);
 }
 
 /*
@@ -611,10 +611,10 @@ netname4(in_addr_t in, struct sockaddr_in *maskp)
 	mask = maskp ? ntohl(maskp->sin_addr.s_addr) : 0;
 	mbits = mask ? 33 - ffs(mask) : 0;
 #define C(x)	((x) & 0xff)
-	snprintf(line, sizeof(line), "%u.%u.%u.%u/%d", C(in >> 24),
+	snprintf(line_show, sizeof(line_show), "%u.%u.%u.%u/%d", C(in >> 24),
 	    C(in >> 16), C(in >> 8), C(in), mbits);
 #undef C
-	return (line);
+	return (line_show);
 }
 
 char *
@@ -706,8 +706,8 @@ netname6(struct sockaddr_in6 *sa6, struct sockaddr_in6 *mask)
 	if (error)
 		snprintf(hbuf, sizeof(hbuf), "invalid");
 
-	snprintf(line, sizeof(line), "%s/%d", hbuf, masklen);
-	return (line);
+	snprintf(line_show, sizeof(line_show), "%s/%d", hbuf, masklen);
+	return (line_show);
 }
 
 /*
@@ -728,11 +728,11 @@ netname(struct sockaddr *sa, struct sockaddr *mask)
 	case AF_LINK:
 		return (link_print(sa));
 	default:
-		snprintf(line, sizeof(line), "af %d: %s",
+		snprintf(line_show, sizeof(line_show), "af %d: %s",
 		    sa->sa_family, any_ntoa(sa));
 		break;
 	}
-	return (line);
+	return (line_show);
 }
 
 static const char hexlist[] = "0123456789abcdef";
