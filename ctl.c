@@ -1,4 +1,4 @@
-/* $nsh: ctl.c,v 1.26 2010/04/08 17:40:55 chris Exp $ */
+/* $nsh: ctl.c,v 1.27 2012/05/10 01:14:20 chris Exp $ */
 /*
  * Copyright (c) 2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -218,7 +218,7 @@ struct ctl ctl_relay[] = {
 
 struct ctl ctl_ftpproxy[] = {
 	{ "enable",	"enable service",
-	    { FTPPROXY, "-T", "ftp-proxy", "-D", "2", NULL }, NULL, X_ENABLE },
+	    { FTPPROXY, "-D", "2", NULL }, NULL, X_ENABLE },
 	{ "disable",	"disable service",
 	    { PKILL, "ftp-proxy", NULL }, NULL, X_DISABLE },
 	{ 0, 0, { 0 }, 0, 0 }
