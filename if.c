@@ -1,4 +1,4 @@
-/* $nsh: if.c,v 1.44 2009/10/09 21:49:58 chris Exp $ */
+/* $nsh: if.c,v 1.45 2012/05/10 02:47:08 chris Exp $ */
 /*
  * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -916,7 +916,7 @@ intvlan(char *ifname, int ifs, int argc, char **argv)
 {
 	const char *errmsg = NULL;
 	struct ifreq ifr;
-	struct vlanreq vreq, preq;
+	struct vlanreq vreq;
 	int set;
 
 	if (NO_ARG(argv[0])) {
@@ -929,19 +929,16 @@ intvlan(char *ifname, int ifs, int argc, char **argv)
 	argc--;
 	argv++;
 
-	if ((set && (argc < 3 || argc > 5)) || (!set && argc > 5) ||
-	    argc == 4 ||
-	    (argc > 3 && !isprefix(argv[1], "parent")) ||
-	    (argc > 5 && !isprefix(argv[3], "priority"))) {
-		printf("%% vlan <tag> parent <parent interface> [priority <priority>]\n");
-		printf("%% no vlan [tag] [parent <parent interface>] [priority <priority>]\n");
+	if ((set && argc != 3) || (!set && argc > 3) ||
+	    (argc == 3 && !isprefix(argv[1], "parent"))) {
+		printf("%% vlan <tag> parent <parent interface>\n");
+		printf("%% no vlan [tag] [parent <parent interface>]\n");
 		return 0;
 	}
 
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 
 	bzero(&vreq, sizeof(vreq));
-	bzero(&preq, sizeof(preq));
 
 	ifr.ifr_data = (caddr_t)&vreq;
 
@@ -973,14 +970,6 @@ intvlan(char *ifname, int ifs, int argc, char **argv)
 			printf("%% Invalid vlan tag %s\n", argv[0]);
 			return 0;
 		}
-		if (argc == 5) {
-			preq.vlr_tag = strtonum(argv[4], 0, 7, &errmsg);
-			if (errmsg) {
-				printf("%% Invalid vlan priority %s: %s\n",
-				    argv[4], errmsg);
-				return 0;
-			}
-		}
 	} else {
 		bzero(&vreq.vlr_parent, sizeof(vreq.vlr_parent));
 		vreq.vlr_tag = 0;
@@ -999,10 +988,6 @@ intvlan(char *ifname, int ifs, int argc, char **argv)
 			return 0;
 		}
 	}
-
-	ifr.ifr_data = (caddr_t)&preq;
-	if (ioctl(ifs, SIOCSETVLANPRIO, (caddr_t)&ifr) == -1)
-		printf("%% intvlan: SIOCSETVLANPRIO: %s\n", strerror(errno));
 
 	return 0;
 }

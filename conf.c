@@ -1,4 +1,4 @@
-/* $nsh: conf.c,v 1.65 2010/09/11 15:27:55 chris Exp $ */
+/* $nsh: conf.c,v 1.66 2012/05/10 02:47:08 chris Exp $ */
 /*
  * Copyright (c) 2002-2009 Chris Cappuccio <chris@nmedia.net>
  *
@@ -384,19 +384,9 @@ void conf_interfaces(FILE *output, char *only)
 		ifr.ifr_data = (caddr_t)&vreq;  
 
 		if (ioctl(ifs, SIOCGETVLAN, (caddr_t)&ifr) != -1) {
-			struct vlanreq preq;
-
-			bzero(&preq, sizeof(struct vlanreq));
-
-			ifr.ifr_data = (caddr_t)&preq;
-			ioctl(ifs, SIOCGETVLANPRIO, (caddr_t)&ifr);
-
 			if(vreq.vlr_tag && (vreq.vlr_parent[0] != '\0')) {
 				fprintf(output, " vlan %d parent %s",
 				    vreq.vlr_tag, vreq.vlr_parent);
-				if(preq.vlr_tag > 0)
-					fprintf(output, " priority %d",
-					    preq.vlr_tag);
 				fprintf(output, "\n");
 			}
 		}
