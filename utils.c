@@ -1,4 +1,4 @@
-/* $nsh: utils.c,v 1.1 2012/05/10 03:36:46 chris Exp $ */
+/* $nsh: utils.c,v 1.2 2012/05/10 04:10:43 chris Exp $ */
 
 /*
  * Steal some useful routines from top
@@ -122,7 +122,7 @@ format_time(time_t seconds)
 #define NUM_STRINGS 8
 
 char *
-format_k(int amt)
+format_k(uint64_t amt)
 {
 	static char retarray[NUM_STRINGS][16];
 	static int  idx = 0;
@@ -139,6 +139,6 @@ format_k(int amt)
 			tag = 'G';
 		}
 	}
-	snprintf(ret, sizeof(retarray[0]), "%d%c", amt, tag);
+	snprintf(ret, sizeof(retarray[0]), "%llu%c", amt, tag);
 	return (ret);
 }

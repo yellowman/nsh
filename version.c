@@ -1,4 +1,4 @@
-/* $nsh: version.c,v 1.13 2009/03/10 07:01:12 chris Exp $ */
+/* $nsh: version.c,v 1.14 2012/05/10 04:10:43 chris Exp $ */
 /*
  * Copyright (c) 2002 Chris Cappuccio <chris@nmedia.net>
  *
@@ -37,11 +37,11 @@ version(int argc, char **argv)
 	struct utsname un;
 	size_t len;
 	time_t c;
-	u_long physmem;
+	uint64_t physmem;
 	int mib[5], drops, pntd, weeks, days, hours, mins;
 
 	mib[0] = CTL_HW;
-	mib[1] = HW_PHYSMEM;
+	mib[1] = HW_PHYSMEM64;
 	len = sizeof(physmem);
 	if (sysctl(mib, 2, &physmem, &len, NULL, 0) == -1) {
 		printf("%% HW_PHYSMEM: %s\n", strerror(errno));
@@ -123,7 +123,7 @@ version(int argc, char **argv)
 	printf("system: %s/%s version %s\n", un.sysname, un.machine,
 	    un.release);
 	printf("cpu: %s\n", cpubuf);
-	printf("memory: %luK\n", physmem / 1024);
+	printf("memory: %sB\n", format_k(physmem / 1024));
 	printf("kernel: %s", kernver);
 	printf("ifq drops: %i\n", drops);
 	return(0);
