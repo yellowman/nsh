@@ -1,4 +1,4 @@
-/* $nsh: show.c,v 1.11 2010/09/11 15:26:55 chris Exp $ */
+/* $nsh: show.c,v 1.12 2012/05/10 02:38:59 chris Exp $ */
 /* From: $OpenBSD: /usr/src/sbin/route/show.c,v 1.61 2007/09/05 20:30:21 claudio Exp $	*/
 
 /*
@@ -89,7 +89,6 @@ static const struct bits bits[] = {
 	{ RTF_PROTO2,	'2' },
 	{ RTF_PROTO3,	'3' },
 	{ RTF_CLONED,	'c' },
-	{ RTF_JUMBO,	'J' },
 	{ 0, 0 }
 };
 
