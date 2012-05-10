@@ -1,4 +1,4 @@
-/* $nsh: utils.c,v 1.2 2012/05/10 04:10:43 chris Exp $ */
+/* $nsh: utils.c,v 1.3 2012/05/10 04:24:31 chris Exp $ */
 
 /*
  * Steal some useful routines from top
@@ -132,10 +132,10 @@ format_k(uint64_t amt)
 	idx = (idx + 1) % NUM_STRINGS;
 
 	if (amt >= 10000) {
-		amt = (amt + 512) / 1024;
+		amt /= 1024;
 		tag = 'M';
 		if (amt >= 10000) {
-			amt = (amt + 512) / 1024;
+			amt /= 1024;
 			tag = 'G';
 		}
 	}
