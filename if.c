@@ -1,4 +1,4 @@
-/* $nsh: if.c,v 1.45 2012/05/10 02:47:08 chris Exp $ */
+/* $nsh: if.c,v 1.46 2012/05/10 03:20:45 chris Exp $ */
 /*
  * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -292,12 +292,12 @@ show_int(int argc, char **argv)
 				    "<none>" : vreq.vlr_parent);
 	}
 
-	if (get_nwinfo(ifname, tmp_str, sizeof(tmp_str), NWID) != NULL) {
+	if (get_nwinfo(ifname, tmp_str, sizeof(tmp_str), NWID) != 0) {
 		printf("  SSID %s", tmp_str);
-		if(get_nwinfo(ifname, tmp_str, sizeof(tmp_str), NWKEY) != NULL)
+		if(get_nwinfo(ifname, tmp_str, sizeof(tmp_str), NWKEY) != 0)
 			printf(", key %s", tmp_str);
 		if ((tmp = get_nwinfo(ifname, tmp_str, sizeof(tmp_str),
-		    POWERSAVE) != NULL))
+		    POWERSAVE)) != 0)
 			printf(", powersaving (%s ms)\n", tmp_str);
 		printf("\n");
 	}
