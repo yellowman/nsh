@@ -1,4 +1,4 @@
-/* $nsh: ieee80211.c,v 1.18 2009/03/02 20:50:50 chris Exp $ */
+/* $nsh: ieee80211.c,v 1.19 2012/05/10 03:22:18 chris Exp $ */
 /* From: $OpenBSD: /usr/src/sbin/ifconfig/ifconfig.c,v 1.68 2002/06/19 18:53:53 millert Exp $ */
 /*
  * Copyright (c) 1983, 1993
@@ -259,7 +259,7 @@ get_nwinfo(char *ifname, char *str, int str_len, int type)
 	ifs = socket(AF_INET, SOCK_DGRAM, 0);
 	if (ifs < 0) {
 		printf("%% get_nwinfo: socket: %s\n", strerror(errno));
-		return(NULL);
+		return 0;
         }
 
 	memset(str, 0, str_len);

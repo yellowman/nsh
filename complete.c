@@ -1,4 +1,4 @@
-/* $nsh: complete.c,v 1.3 2009/03/02 20:50:50 chris Exp $ */
+/* $nsh: complete.c,v 1.4 2012/05/10 03:22:18 chris Exp $ */
 /* From: $OpenBSD: /usr/src/usr.bin/ftp/complete.c,v 1.19 2006/06/23 20:35:25 steven Exp $ */
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -256,7 +256,7 @@ complete_ifname(char *word, int list, EditLine *el)
 	struct if_nameindex *ifn_list, *ifnp;
 
 	if ((ifn_list = if_nameindex()) == NULL)
-		return NULL;
+		return 0;
 
 	for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++) {
                 if (wordlen > strlen(ifnp->if_name))
