@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.68 2009/10/09 21:49:58 chris Exp $ */
+/* $nsh: externs.h,v 1.69 2012/05/10 03:36:46 chris Exp $ */
 /*
  * nsh externs, prototypes and macros
  */
@@ -433,3 +433,8 @@ void inithist(void);
 void endhist(void);
 void initedit(void);
 void endedit(void);
+
+/* utils.c */
+int string_index(char *, char **);
+char *format_time(time_t);
+char *format_k(int amt);
