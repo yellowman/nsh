@@ -1,4 +1,4 @@
-/* $nsh: conf.c,v 1.66 2012/05/10 02:47:08 chris Exp $ */
+/* $nsh: conf.c,v 1.67 2012/05/12 00:15:16 chris Exp $ */
 /*
  * Copyright (c) 2002-2009 Chris Cappuccio <chris@nmedia.net>
  *
@@ -36,6 +36,7 @@
 #include <net/if_vlan_var.h>
 #include <net/route.h>
 #include <net/pfvar.h>
+#include <netmpls/mpls.h>
 #include <net/if_pfsync.h>
 #include <net/if_pflow.h>
 #include <ifaddrs.h>
@@ -56,6 +57,7 @@ void conf_interfaces(FILE *, char *);
 void conf_print_rtm(FILE *, struct rt_msghdr *, char *, int);
 int conf_ifaddrs(FILE *, char *, int);
 void conf_brcfg(FILE *, int, struct if_nameindex *, char *);
+void conf_mpls(FILE *, int, char *);
 void conf_ifmetrics(FILE *, int, struct if_data, char *);
 void conf_pflow(FILE *, int, char *);
 void conf_ctl(FILE *, char *);
@@ -415,6 +417,7 @@ void conf_interfaces(FILE *output, char *only)
 			conf_carp(output, ifs, ifnp->if_name);
 			conf_trunk(output, ifs, ifnp->if_name);
 			conf_pflow(output, ifs, ifnp->if_name);
+			conf_mpls(output, ifs, ifnp->if_name);
 			if (timeslot_status(ifs, ifnp->if_name, tmp,
 			    sizeof(tmp)) == 1) 
 				fprintf(output, " timeslots %s\n", tmp);
@@ -489,6 +492,25 @@ void conf_pflow(FILE *output, int ifs, char *ifname)
 
 	fprintf(output, " pflow sender %s", inet_ntoa(preq.sender_ip));
 	fprintf(output, " receiver %s:%u\n", inet_ntoa(preq.receiver_ip), ntohs(preq.receiver_port));
+}
+
+void conf_mpls(FILE *output, int ifs, char *ifname)
+{
+	struct ifreq ifr;
+	struct shim_hdr shim;
+
+	bzero(&ifr, sizeof(ifr));
+	strlcpy(ifr.ifr_name, ifname, IFNAMSIZ);
+
+	if (ioctl(ifs, SIOCGIFXFLAGS, (caddr_t)&ifr) != -1)
+		if (ifr.ifr_flags & IFXF_MPLS)
+			fprintf(output, " mpls\n");
+
+	bzero(&shim, sizeof(shim));
+	ifr.ifr_data = (caddr_t)&shim;
+
+	if (ioctl(ifs, SIOCGETLABEL , (caddr_t)&ifr) != -1)
+		fprintf(output, " mpls label %d\n", shim.shim_label);
 }
 
 void conf_ifmetrics(FILE *output, int ifs, struct if_data if_data,
