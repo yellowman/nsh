@@ -1,4 +1,4 @@
-/* $nsh: if.c,v 1.46 2012/05/10 03:20:45 chris Exp $ */
+/* $nsh: if.c,v 1.47 2012/05/17 14:09:24 chris Exp $ */
 /*
  * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -60,15 +60,11 @@ static const struct {
 	{ "Ethernet Bridge",		IFT_BRIDGE },
 	/* IANA-assigned types */
 	{ "Token Ring",			IFT_ISO88025 },
-	{ "ISO over IP",		IFT_EON },
-	{ "XNS over IP",		IFT_NSIP },
-	{ "X.25 to IMP",		IFT_X25DDN },
 	{ "ATM Data Exchange Interface", IFT_ATMDXI },
 	{ "ATM Logical",		IFT_ATMLOGICAL },
 	{ "ATM Virtual",		IFT_ATMVIRTUAL },
 	{ "ATM",			IFT_ATM },
 	{ "Ethernet",			IFT_ETHER },
-	{ "ARCNET",			IFT_ARCNET },
 	{ "HDLC",			IFT_HDLC },
 	{ "IEEE 802.1Q",		IFT_L2VLAN },
 	{ "Virtual",			IFT_PROPVIRTUAL },
@@ -526,6 +522,38 @@ set_ifflags(char *ifname, int ifs, int flags)
 	}
 
         return(0);
+}
+
+int
+get_ifxflags(char *ifname, int ifs)
+{
+	int flags;
+	struct ifreq ifr;
+
+	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
+
+	if (ioctl(ifs, SIOCGIFXFLAGS, (caddr_t)&ifr) < 0) {
+		printf("%% get_ifxflags: SIOCGIFXFLAGS: %s\n", strerror(errno));
+		flags = 0;
+	} else
+		flags = ifr.ifr_flags;
+	return(flags);
+}
+
+int
+set_ifxflags(char *ifname, int ifs, int flags)
+{
+	struct ifreq ifr;
+
+	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
+
+	ifr.ifr_flags = flags;
+
+	if (ioctl(ifs, SIOCSIFXFLAGS, (caddr_t)&ifr) < 0) {
+		printf("%% get_ifxflags: SIOCSIFXFLAGS: %s\n", strerror(errno));
+	}
+
+	return(0);
 }
 
 int
@@ -1142,6 +1170,52 @@ intflags(char *ifname, int ifs, int argc, char **argv)
 		printf("%% intflags: value internal error\n");
 	}
 	set_ifflags(ifname, ifs, flags);
+	return(0);
+}
+
+int
+intxflags(char *ifname, int ifs, int argc, char **argv)
+{
+	int set, value, flags;
+
+	if (NO_ARG(argv[0])) {
+		set = 0;
+		argv++;
+		argc--;
+	} else
+		set = 1;
+
+	if (isprefix(argv[0], "autoconfprivacy")) {
+		value = IFXF_INET6_PRIVACY;
+	} else if (isprefix(argv[0], "mpls")) {
+		value = IFXF_MPLS;
+	} else if (isprefix(argv[0], "inet6")) {
+		value = -IFXF_NOINET6;
+	} else if (isprefix(argv[0], "wol")) {
+		value = IFXF_WOL;
+	} else {
+		printf("%% intxflags: Internal error\n");
+		return(0);
+	}
+
+	flags = get_ifxflags(ifname, ifs);
+	if (value < 0) {
+		if (set) {
+			value = -value;
+			flags &= ~value;
+		} else {
+			value = -value;
+			flags |= value;
+		}
+	} else if (value > 0) {
+		if (set)
+			flags |= value;
+		else
+			flags &= ~value;
+	} else {
+		printf("%% intxflags: value internal error\n");
+	}
+	set_ifxflags(ifname, ifs, flags);
 	return(0);
 }
 

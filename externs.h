@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.70 2012/05/10 04:10:43 chris Exp $ */
+/* $nsh: externs.h,v 1.71 2012/05/17 14:09:24 chris Exp $ */
 /*
  * nsh externs, prototypes and macros
  */
@@ -313,6 +313,8 @@ int show_int(int, char **);
 int get_ifdata(char *, int);
 int get_ifflags(char *, int);
 int set_ifflags(char *, int, int);
+int get_ifxflags(char *, int);
+int set_ifxflags(char *, int, int);
 u_int32_t in4_netaddr(u_int32_t, u_int32_t);
 u_int32_t in4_brdaddr(u_int32_t, u_int32_t);
 int intip(char *, int, int, char **);
@@ -321,6 +323,7 @@ int intdhcrelay(char *, int, int, char **);
 int intmetric(char *, int, int, char **);
 int intvlan(char *, int, int, char **);
 int intflags(char *, int, int, char **);
+int intxflags(char *, int, int, char **);
 int intlink(char *, int, int, char **);
 int intnwid(char *, int, int, char **);
 int intpowersave(char *, int, int, char **);
