@@ -1,4 +1,4 @@
-/* $nsh: show.c,v 1.13 2012/05/10 04:14:51 chris Exp $ */
+/* $nsh: show.c,v 1.14 2012/05/18 02:28:22 chris Exp $ */
 /* From: $OpenBSD: /usr/src/sbin/route/show.c,v 1.61 2007/09/05 20:30:21 claudio Exp $	*/
 
 /*
@@ -336,9 +336,6 @@ pr_family(int af)
 		break;
 	case PF_KEY:
 		afname = "Encap";
-		break;
-	case AF_APPLETALK:
-		afname = "AppleTalk";
 		break;
 	default:
 		afname = NULL;
