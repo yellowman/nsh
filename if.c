@@ -1,4 +1,4 @@
-/* $nsh: if.c,v 1.47 2012/05/17 14:09:24 chris Exp $ */
+/* $nsh: if.c,v 1.48 2012/05/18 14:02:28 chris Exp $ */
 /*
  * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -32,6 +32,7 @@
 #include <net/route.h>
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
+#include <netmpls/mpls.h>
 #include <netdb.h>
 #include <net/if_vlan_var.h>
 #include <net/if_pflow.h>
@@ -54,13 +55,13 @@ static const struct {
 	/* OpenBSD-specific types */
 	{ "Packet Filter Logging",	IFT_PFLOG },
 	{ "Packet Filter State Synchronization", IFT_PFSYNC },
-	{ "IPsec Loopback",		IFT_ENC },      
+	{ "pflow Accounting Data",	IFT_PFLOW },
+	{ "IPsec Encapsulation Interface",	IFT_ENC },      
 	{ "Generic Tunnel",		IFT_GIF },
 	{ "IPv6-IPv4 TCP relay",	IFT_FAITH },
 	{ "Ethernet Bridge",		IFT_BRIDGE },
+	{ "Common Address Redundancy Protocol",	IFT_CARP },
 	/* IANA-assigned types */
-	{ "Token Ring",			IFT_ISO88025 },
-	{ "ATM Data Exchange Interface", IFT_ATMDXI },
 	{ "ATM Logical",		IFT_ATMLOGICAL },
 	{ "ATM Virtual",		IFT_ATMVIRTUAL },
 	{ "ATM",			IFT_ATM },
@@ -69,10 +70,7 @@ static const struct {
 	{ "IEEE 802.1Q",		IFT_L2VLAN },
 	{ "Virtual",			IFT_PROPVIRTUAL },
 	{ "PPP",			IFT_PPP },
-	{ "SLIP",			IFT_SLIP },
 	{ "Loopback",			IFT_LOOP },
-	{ "ISDN S",			IFT_ISDNS },
-	{ "ISDN U",			IFT_ISDNU },
 	{ "ISDN BRI",			IFT_ISDNBASIC },
 	{ "ISDN PRI",			IFT_ISDNPRIMARY },
 	{ "V.35",			IFT_V35 },
@@ -112,7 +110,7 @@ show_int(int argc, char **argv)
 	if (ifname == NULL) {
 		if ((ifn_list = if_nameindex()) == NULL) {
 			printf("%% show_int: if_nameindex failed\n");
-			return 1;
+			return 0;
 		}
 		for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++) {
 			char *args[] = { NULL, NULL, ifnp->if_name };
@@ -265,11 +263,15 @@ show_int(int argc, char **argv)
 			    tmp_str, tmp_str2);
 		if ((carp = carp_state(ifs, ifname)) != NULL)
 			printf("  CARP state %s\n", carp);
+
+		printf(" ");
+		if (ioctl(ifs, SIOCGIFRDOMAIN, (caddr_t)&ifr) != -1)
+			printf(" Routing Domain %d,", ifr.ifr_rdomainid);
 		/*
 		 * Display MTU, line rate, and ALTQ token rate info
 		 * (if available)
 		 */
-		printf("  MTU %u bytes", if_mtu);
+		printf(" MTU %u bytes", if_mtu);
 		if (if_baudrate)
 			printf(", Line Rate %qu %s\n",
 			    MBPS(if_baudrate) ? MBPS(if_baudrate) :
@@ -840,6 +842,52 @@ intmtu(char *ifname, int ifs, int argc, char **argv)
 }
 
 int
+intlabel(char *ifname, int ifs, int argc, char **argv)
+{
+	struct ifreq ifr;
+	struct shim_hdr shim;
+	int set;
+	const char *errmsg = NULL;
+
+	if (NO_ARG(argv[0])) {
+		set = 0;
+		argc--;
+		argv++;
+	} else
+		set = 1;
+
+	argc--;
+	argv++;
+
+	if ((!set && argc > 1) || (set && argc != 1)) {
+		printf("%% label <mplslabel>\n");
+		printf("%% no label [mplslabel]\n");
+		return(0);
+	}
+
+	bzero(&shim, sizeof(shim));
+	ifr.ifr_data = (caddr_t)&shim;
+
+	if (set) {
+		shim.shim_label = strtonum(argv[0], 0, MPLS_LABEL_MAX, &errmsg);
+		if (errmsg) {
+			printf("%% Invalid MPLS Label %s: %s\n", argv[0], errmsg);
+			return(0);
+		}
+	} else
+		shim.shim_label = 0;
+
+	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
+	if (ioctl(ifs, SIOCSETLABEL, (caddr_t)&ifr) < 0) {
+		if (errno == ENOTTY)
+			printf("%% MPLS label not supported on this device (mpe only)\n");
+		else
+			printf("%% intlabel: SIOCSETLABEL: %s\n", strerror(errno));
+	}
+	return(0);
+}
+
+int
 intdhcrelay(char *ifname, int ifs, int argc, char **argv)
 {
 	char *cmd[] = { DHCRELAY, "-i", ifname, NULL, '\0' };
@@ -1392,9 +1440,9 @@ intlladdr(char *ifname, int ifs, int argc, char **argv)
 		set = 1;
 
 	if (set && argc < 2) {
-		printf ("%% lladdr <link level address>\n");
+		printf ("%% lladdr <link level address|random>\n");
 		printf ("%% no lladdr\n");
-		return(1);
+		return(0);
 	}
 
 	if ((lladdr = get_hwdaddr(ifname)) == NULL) {
@@ -1444,22 +1492,30 @@ intlladdr(char *ifname, int ifs, int argc, char **argv)
 
 	/* At this point, llorig will always represent the booted lladdr */
 
-	addr = ether_aton(set ? argv[1] : llorig); /* XXX Non-ethernet type ? */
-	if(addr == NULL) {		/* XXX Non-ethernet... */
-		if (set) {
-			printf("%% MAC addresses must be six hexadecimal "
-			    "fields, up to two digits each,\n");
-			printf("%% separated with colons (1:23:45:ab:cd:ef)\n");
-			return(1);
-		} else {
-			printf("%% %s corrupted, unable to retrieve original "
-			    "lladdr\n", llfn);
-			return(1);
-		}
-	} 
+	if (set && isprefix(argv[1], "random")) {
+		struct ether_addr eabuf;
+
+		arc4random_buf(&eabuf, sizeof eabuf);
+		eabuf.ether_addr_octet[0] &= 0xfc;
+		addr = &eabuf;
+	} else {
+		addr = ether_aton(set ? argv[1] : llorig);
+		if (addr == NULL) {
+			if (set) {
+				printf("%% MAC addresses must be six hexadecimal "
+				    "fields, up to two digits each,\n");
+				printf("%% separated with colons (1:23:45:ab:cd:ef)\n");
+				return(1);
+			} else {
+				printf("%% %s corrupted, unable to retrieve original "
+				    "lladdr\n", llfn);
+				return(1);
+			}
+		} 
+	}
 
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
-	ifr.ifr_addr.sa_len = ETHER_ADDR_LEN;	/* XXX */
+	ifr.ifr_addr.sa_len = ETHER_ADDR_LEN;
 	ifr.ifr_addr.sa_family = AF_LINK;
 	bcopy(addr, ifr.ifr_addr.sa_data, ETHER_ADDR_LEN);
 	if(ioctl(ifs, SIOCSIFLLADDR, (caddr_t)&ifr) < 0) {
@@ -1473,6 +1529,46 @@ intlladdr(char *ifname, int ifs, int argc, char **argv)
 		}
 		return(1);
 	}
+
+	return(0);
+}
+
+int
+intrdomain(char *ifname, int ifs, int argc, char **argv)
+{
+	int set, rdomain;
+	const char *errmsg = NULL;
+	struct ifreq ifr;
+
+	if (NO_ARG(argv[0])) {
+		set = 0;
+		argv++;
+		argc--;
+	} else
+		set = 1;
+
+	argv++;
+	argc--;
+
+	if (set && argc < 1) {
+		printf("%% rdomain <routing domain number>\n");
+		printf("%% no rdomain\n");
+		return(0);
+	}
+
+	rdomain = strtonum(argv[0], 0, RT_TABLEID_MAX, &errmsg);
+	if (errmsg) {
+		printf("%% Routing domain %s invalid (%s)\n", argv[0], errmsg);
+		return(0);
+	}
+
+	if (set)
+		ifr.ifr_rdomainid = rdomain;
+	else
+		ifr.ifr_rdomainid = 0;
+	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
+	if (ioctl(ifs, SIOCSIFRDOMAIN, &ifr) < 0)
+		printf("%% intrdomain: SIOCSIFRDOMAIN: %s\n", strerror(errno));
 
 	return(0);
 }

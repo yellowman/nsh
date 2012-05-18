@@ -1,4 +1,4 @@
-/* $nsh: conf.c,v 1.67 2012/05/12 00:15:16 chris Exp $ */
+/* $nsh: conf.c,v 1.68 2012/05/18 14:02:28 chris Exp $ */
 /*
  * Copyright (c) 2002-2009 Chris Cappuccio <chris@nmedia.net>
  *
@@ -58,6 +58,7 @@ void conf_print_rtm(FILE *, struct rt_msghdr *, char *, int);
 int conf_ifaddrs(FILE *, char *, int);
 void conf_brcfg(FILE *, int, struct if_nameindex *, char *);
 void conf_mpls(FILE *, int, char *);
+void conf_rdomain(FILE *, int, char *);
 void conf_ifmetrics(FILE *, int, struct if_data, char *);
 void conf_pflow(FILE *, int, char *);
 void conf_ctl(FILE *, char *);
@@ -393,6 +394,7 @@ void conf_interfaces(FILE *output, char *only)
 			}
 		}
 
+		conf_rdomain(output, ifs, ifnp->if_name);
 		conf_intrtlabel(output, ifs, ifnp->if_name);
 		conf_intgroup(output, ifs, ifnp->if_name);
 
@@ -433,7 +435,6 @@ void conf_interfaces(FILE *output, char *only)
 			fprintf(output, " debug\n");
 		if (flags & (IFF_LINK0|IFF_LINK1|IFF_LINK2)) {
 			fprintf(output, " link ");
-			if(flags & IFF_LINK0)
 				fprintf(output, "0 ");
 			if(flags & IFF_LINK1)
 				fprintf(output, "1 ");
@@ -502,6 +503,7 @@ void conf_mpls(FILE *output, int ifs, char *ifname)
 	bzero(&ifr, sizeof(ifr));
 	strlcpy(ifr.ifr_name, ifname, IFNAMSIZ);
 
+	/* set mpls mode for eth interfaces */
 	if (ioctl(ifs, SIOCGIFXFLAGS, (caddr_t)&ifr) != -1)
 		if (ifr.ifr_flags & IFXF_MPLS)
 			fprintf(output, " mpls\n");
@@ -509,9 +511,24 @@ void conf_mpls(FILE *output, int ifs, char *ifname)
 	bzero(&shim, sizeof(shim));
 	ifr.ifr_data = (caddr_t)&shim;
 
+	/* set label for mpe */
 	if (ioctl(ifs, SIOCGETLABEL , (caddr_t)&ifr) != -1)
-		fprintf(output, " mpls label %d\n", shim.shim_label);
+		if (shim.shim_label > 0)
+			fprintf(output, " label %d\n", shim.shim_label);
 }
+
+void conf_rdomain(FILE *output, int ifs, char *ifname)
+{
+	struct ifreq ifr;
+
+	bzero(&ifr, sizeof(ifr));
+	strlcpy(ifr.ifr_name, ifname, IFNAMSIZ);
+
+	if (ioctl(ifs, SIOCGIFRDOMAIN, (caddr_t)&ifr) != -1)
+		if (ifr.ifr_rdomainid != 0)
+			fprintf(output, " rdomain %d\n", ifr.ifr_rdomainid);
+}
+	
 
 void conf_ifmetrics(FILE *output, int ifs, struct if_data if_data,
     char *ifname)
