@@ -1,4 +1,4 @@
-/* $nsh: commands.h,v 1.2 2009/03/02 20:27:11 chris Exp $ */
+/* $nsh: commands.h,v 1.3 2012/05/18 14:04:15 chris Exp $ */
 /*
  * Copyright (c) 2008-2009 Chris Cappuccio <chris@nmedia.net>
  *
@@ -108,6 +108,24 @@ struct prot1 rics[] = {
 	{ 0, 0, { 0 } }
 };
 
+struct prot1 lics[] = {
+	{ "fib",        "Forward Information Base",
+	    { LDPCTL, "show", "fib", OPT, NULL } },
+	{ "interfaces", "Interfaces",
+	    { LDPCTL, "show", "interfaces", NULL } },
+	{ "neighbor",   "Neighbor",
+	    { LDPCTL, "show", "neighbor", NULL } },
+	{ "lib",        "Label Information Base",
+	    { LDPCTL, "show", "lib", NULL } },
+	{ 0, 0, { 0 } }
+};
+
+struct prot1 ikcs[] = {
+	{ "monitor",	"Monitor internal iked messages",
+	    { IKECTL, "monitor", NULL } },
+	{ 0, 0, { 0 } }
+};
+
 struct prot1 dvcs[] = {
 	{ "igmp",       "Internet Group Message Protocol",
 	    { DVMRPCTL, "show", "igmp", NULL } },
@@ -148,6 +166,8 @@ struct prot prots[] = {
 	{ "bgp",	bgcs },
 	{ "ospf",	oscs },
 	{ "rip",	rics },
+	{ "ike",	ikcs },
+	{ "ldp",	lics },
 	{ "dvmrp",	dvcs },
 	{ "relay",	rlcs },
 	{ 0,		0 }

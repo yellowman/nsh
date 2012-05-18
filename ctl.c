@@ -1,4 +1,4 @@
-/* $nsh: ctl.c,v 1.27 2012/05/10 01:14:20 chris Exp $ */
+/* $nsh: ctl.c,v 1.28 2012/05/18 14:04:15 chris Exp $ */
 /*
  * Copyright (c) 2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -31,6 +31,7 @@
 #define BGPD		"/usr/sbin/bgpd"
 #define RIPD		"/usr/sbin/ripd"
 #define ISAKMPD		"/sbin/isakmpd"
+#define IKED		"/sbin/iked"
 #define DVMRPD		"/usr/sbin/dvmrpd"
 #define RELAYD		"/usr/sbin/relayd"
 #define DHCPD		"/usr/sbin/dhcpd"
@@ -40,6 +41,7 @@
 #define FTPPROXY	"/usr/sbin/ftp-proxy"
 #define INETD		"/usr/sbin/inetd"
 #define SSHD		"/usr/sbin/sshd"
+#define LDPD		"/usr/sbin/ldpd"
 #ifndef DHCPLEASES
 #define DHCPLEASES	"/var/db/dhcpd.leases"
 #endif
@@ -107,10 +109,23 @@ struct ctl ctl_rip[] = {
 	    { PKILL, "ripd", NULL }, NULL, X_DISABLE },
 	{ "edit",       "edit configuration",
 	    { "rip", (char *)ctl_rip_test, NULL }, call_editor, NULL },
-	{ "reload",     "reload service",
+	{ "reload",	"reload service",
 	    { RIPCTL, "reload", NULL }, NULL, NULL },
 	{ "fib",        "fib couple/decouple",
 	    { RIPCTL, "fib", REQ, NULL }, NULL, NULL },
+	{ 0, 0, { 0 }, 0, 0 }
+};
+
+char *ctl_ldp_test[] = { LDPD, "-nf", LDPCONF_TEMP, '\0' };
+struct ctl ctl_ldp[] = {
+	{ "enable",	"enable service",
+	   { LDPD, "-f", LDPCONF_TEMP, NULL }, NULL, X_ENABLE },
+	{ "disable",	"disable service",
+	   { PKILL, "ldpd", NULL }, NULL, X_DISABLE },
+	{ "edit",	"edit configuration",
+	   { "ldp", (char *)ctl_ldp_test, NULL }, call_editor, NULL },
+	{ "fib",	"fib couple/decouple",
+	   { LDPCTL, "fib", REQ, NULL }, NULL, NULL },
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
@@ -124,6 +139,29 @@ struct ctl ctl_ipsec[] = {
 	    { "ipsec", (char *)ctl_ipsec_test, NULL }, call_editor, NULL },
 	{ "reload",     "reload service",
 	    { IPSECCTL, "-f", IPSECCONF_TEMP, NULL }, NULL, NULL },
+	{ 0, 0, { 0 }, 0, 0 }
+};
+
+char *ctl_ike_test[] = { IKED, "-nf", IKECONF_TEMP, '\0' };
+struct ctl ctl_ike[] = {
+	{ "enable",	"enable service",
+	    { IKED, "-f", IKECONF_TEMP, NULL }, NULL, X_ENABLE },
+	{ "disable",	"disable service",
+	    { PKILL, "iked", NULL }, NULL, X_DISABLE },
+	{ "active",	"force IKE active mode",
+	    { IKECTL, "active", NULL }, NULL, NULL },
+	{ "passive",	"force IKE passive mode",
+	    { IKECTL, "passive", NULL }, NULL, NULL },
+	{ "couple",	"load SAs and flows into kernel",
+	    { IKECTL, "couple", NULL }, NULL, NULL },
+	{ "decouple",	"unload SAs and flows from kernel",
+	    { IKECTL, "decouple", NULL }, NULL, NULL},
+	{ "edit",	"edit configuration",
+	    { "ike", (char *)ctl_ike_test, NULL }, call_editor, NULL},
+	{ "reload",	"reload service",
+	    { IKECTL, "reload", NULL }, NULL, NULL },
+	{ "reset",	"reset state, policies, SAs or user database",
+	    { IKECTL, "reset", REQ, NULL }, NULL, NULL },
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
@@ -251,8 +289,10 @@ struct daemons ctl_daemons[] = {
 	{ "ospf",	"OSPF", ctl_ospf,	OSPFCONF_TEMP,	0600, 0 },
 	{ "bgp",	"BGP",	ctl_bgp,	BGPCONF_TEMP,	0600, 0 },
 	{ "rip",	"RIP",	ctl_rip,	RIPCONF_TEMP,	0600, 0 },
+	{ "ldp",	"LDP",	ctl_ldp,	LDPCONF_TEMP,	0600, 0 },
 	{ "relay",	"Relay", ctl_relay,	RELAYCONF_TEMP,	0600, 0 },
-	{ "ipsec",	"IPsec", ctl_ipsec,	IPSECCONF_TEMP,	0600, 1 },
+	{ "ipsec",	"IPsec IKEv1", ctl_ipsec,	IPSECCONF_TEMP,	0600, 1 },
+	{ "ike",	"IPsec IKEv2", ctl_ike,		IKECONF_TEMP, 0600, 0 },
 	{ "dvmrp",	"DVMRP", ctl_dvmrp,	DVMRPCONF_TEMP, 0600, 0 },
 	{ "sasync",	"SAsync", ctl_sasync,	SASYNCCONF_TEMP,0600, 0 },
 	{ "dhcp",	"DHCP",	ctl_dhcp,	DHCPCONF_TEMP,	0600, 0 },

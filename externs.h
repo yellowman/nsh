@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.71 2012/05/17 14:09:24 chris Exp $ */
+/* $nsh: externs.h,v 1.72 2012/05/18 14:04:15 chris Exp $ */
 /*
  * nsh externs, prototypes and macros
  */
@@ -102,7 +102,9 @@ extern char metricnames[];
 #define OSPFCONF_TEMP	"/var/run/ospfd.conf"
 #define BGPCONF_TEMP	"/var/run/bgpd.conf"
 #define RIPCONF_TEMP	"/var/run/ripd.conf"
+#define LDPCONF_TEMP	"/var/run/ldpd.conf"
 #define IPSECCONF_TEMP	"/var/run/ipsec.conf"
+#define IKECONF_TEMP	"/var/run/iked.conf"
 #define DVMRPCONF_TEMP	"/var/run/dvmrpd.conf"
 #define RELAYCONF_TEMP	"/var/run/relayd.conf"
 #define SASYNCCONF_TEMP	"/var/run/sasyncd.conf"
@@ -132,7 +134,9 @@ void rmtemp(char *);
 #define OSPFCTL		"/usr/sbin/ospfctl"
 #define BGPCTL		"/usr/sbin/bgpctl"
 #define RIPCTL		"/usr/sbin/ripctl"
+#define LDPCTL		"/usr/sbin/ldpctl"
 #define IPSECCTL	"/sbin/ipsecctl"
+#define IKECTL		"/usr/sbin/ikectl"
 #define DVMRPCTL	"/usr/sbin/dvmrpctl"
 #define RELAYCTL	"/usr/sbin/relayctl"
 #define SNMPCTL		"/usr/sbin/snmpctl"
@@ -157,7 +161,9 @@ extern struct ctl ctl_ospf[];
 extern struct ctl ctl_relay[];
 extern struct ctl ctl_bgp[];
 extern struct ctl ctl_rip[];
+extern struct ctl ctl_ldp[];
 extern struct ctl ctl_ipsec[];
+extern struct ctl ctl_ike[];
 extern struct ctl ctl_dvmrp[];
 extern struct ctl ctl_sasync[];
 extern struct ctl ctl_dhcp[];
@@ -319,6 +325,8 @@ u_int32_t in4_netaddr(u_int32_t, u_int32_t);
 u_int32_t in4_brdaddr(u_int32_t, u_int32_t);
 int intip(char *, int, int, char **);
 int intmtu(char *, int, int, char **);
+int intlabel(char *, int, int, char **);
+int intrdomain(char *, int, int, char **);
 int intdhcrelay(char *, int, int, char **);
 int intmetric(char *, int, int, char **);
 int intvlan(char *, int, int, char **);
