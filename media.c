@@ -1,4 +1,4 @@
-/* $nsh: media.c,v 1.13 2009/03/02 20:50:50 chris Exp $ */
+/* $nsh: media.c,v 1.14 2012/05/19 23:54:26 chris Exp $ */
 /*
  * From: $OpenBSD: /usr/src/sbin/ifconfig/ifconfig.c,v 1.64 2002/05/22
  * 08:21:02 deraadt Exp $
@@ -380,8 +380,8 @@ conf_print_media_word(FILE *output, int ifmw)
 }
 
 int
-phys_status(int s, char *ifname, char *tmp_buf, char *tmp_buf2, int buf_len,
-int buf2_len)
+phys_status(int s, char *ifname, char *tmp_buf, char *tmp_buf2,
+int buf_len, int buf2_len, int *buf3)
 {
 #ifdef NI_WITHSCOPEID
 	const int       niflag = NI_NUMERICHOST | NI_WITHSCOPEID;
@@ -389,8 +389,9 @@ int buf2_len)
 	const int       niflag = NI_NUMERICHOST;
 #endif
 	struct if_laddrreq req;
+	struct ifreq ifr;
 
-	memset(&req, 0, sizeof(req));
+	bzero(&req, sizeof(req));
 	(void) strlcpy(req.iflr_name, ifname, sizeof(req.iflr_name));
 	if (ioctl(s, SIOCGLIFPHYADDR, (caddr_t) & req) < 0)
 		return(0);
@@ -407,6 +408,15 @@ int buf2_len)
 #endif
 	getnameinfo((struct sockaddr *) &req.dstaddr, req.dstaddr.ss_len,
 	    tmp_buf2, buf2_len, 0, 0, niflag);
+
+	bzero(&ifr, sizeof(ifr));
+	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
+	if (ioctl(s, SIOCGLIFPHYRTABLE, (caddr_t)&ifr) == 0 &&
+	    (ifr.ifr_rdomainid > 0)) {
+		bcopy(&ifr.ifr_rdomainid, buf3, sizeof(int));
+	} else {
+		buf3 = NULL;
+	}
 
 	return(strlen(tmp_buf)+strlen(tmp_buf2));
 }
