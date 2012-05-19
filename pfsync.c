@@ -1,4 +1,4 @@
-/* $nsh: pfsync.c,v 1.10 2008/02/06 22:48:53 chris Exp $ */
+/* $nsh: pfsync.c,v 1.11 2012/05/19 23:55:37 chris Exp $ */
 /*
  * Copyright (c) 2004 Chris Cappuccio <chris@nmedia.net>
  *
@@ -124,7 +124,19 @@ intsyncpeer(char *ifname, int ifs, int argc, char **argv)
 		return (0);
 	}
 
-	memset(&hints, 0, sizeof(hints));
+	bzero(&preq, sizeof(struct pfsyncreq));
+	ifr.ifr_data = (caddr_t) &preq;
+
+	if (ioctl(ifs, SIOCGETPFSYNC, (caddr_t)&ifr) == -1) {
+		if (errno == ENXIO)
+			printf("%% peer device (syncdev) not yet configured\n");
+		else
+			printf("%% intsyncpeer: SIOCGETPFSYNC: %s\n",
+			    strerror(errno));
+		return(0);
+	}
+
+	bzero(&hints, sizeof(hints));
 	hints.ai_family = AF_INET;
 	hints.ai_socktype = SOCK_DGRAM;
 
@@ -146,9 +158,6 @@ intsyncpeer(char *ifname, int ifs, int argc, char **argv)
 		preq.pfsyncr_syncpeer.s_addr = 0;
 
 	if (ioctl(ifs, SIOCSETPFSYNC, (caddr_t)&ifr) == -1) {
-		if (errno == ENXIO)
-			printf("%% peer device (syncdev) not yet configured\n");
-		else
 			printf("%% intsyncpeer: SIOCSETPFSYNC: %s\n",
 			    strerror(errno));
 	}
@@ -177,9 +186,10 @@ intmaxupd(char *ifname, int ifs, int argc, char **argv)
 	argc--;
 	argv++;
 
-	if ((!set && argc > 1) || (set && argc != 1)) {
-		printf("%% maxupd <max pfsync updates>\n");
-		printf("%% no maxupd [max pfsync updates]\n");
+	if ((!set && argc > 2) || (set && (argc < 1 || argc > 2)) ||
+	    (set && argc == 2 && !isprefix(argv[1], "defer"))) {
+		printf("%% maxupd <max pfsync updates> [defer]\n");
+		printf("%% no maxupd [max pfsync updates] [defer]\n");
 		return (0);
 	}
 	bzero((char *) &preq, sizeof(struct pfsyncreq));
@@ -199,6 +209,8 @@ intmaxupd(char *ifname, int ifs, int argc, char **argv)
 			return (0);
 		}
 		preq.pfsyncr_maxupdates = (int)val;
+		if (argc == 2)
+			preq.pfsyncr_defer = 1;
 	} else
 		preq.pfsyncr_maxupdates = PFSYNC_MAXUPDATES;
 
@@ -225,14 +237,18 @@ conf_pfsync(FILE *output, int s, char *ifname)
 	if (ioctl(s, SIOCGETPFSYNC, (caddr_t) & ifr) == -1)
 		return (0);
 
-	if (preq.pfsyncr_syncdev[0] != '\0') {
-		fprintf(output, " syncdev %s\n", preq.pfsyncr_syncdev);
-		if (preq.pfsyncr_syncpeer.s_addr != INADDR_PFSYNC_GROUP)
-			fprintf(output, " syncpeer %s", inet_ntoa(
-			    preq.pfsyncr_syncpeer));
-		if (preq.pfsyncr_maxupdates != PFSYNC_MAXUPDATES)
-			fprintf(output, " maxupd %i\n",
-			    preq.pfsyncr_maxupdates);
+	if (preq.pfsyncr_syncpeer.s_addr != INADDR_PFSYNC_GROUP)
+		fprintf(output, " syncpeer %s", inet_ntoa(
+		    preq.pfsyncr_syncpeer));
+	if (preq.pfsyncr_maxupdates != PFSYNC_MAXUPDATES || preq.pfsyncr_defer) {
+		fprintf(output, " maxupd %i",
+		    preq.pfsyncr_maxupdates);
+		if (preq.pfsyncr_defer)
+			fprintf(output, " defer");
+		fprintf(output, "\n");
 	}
+	/* syncdev must be last */
+	if (preq.pfsyncr_syncdev[0] != '\0')
+		fprintf(output, " syncdev %s\n", preq.pfsyncr_syncdev);
 	return (0);
 }
