@@ -1,4 +1,4 @@
-/* $nsh: ctl.c,v 1.28 2012/05/18 14:04:15 chris Exp $ */
+/* $nsh: ctl.c,v 1.29 2012/05/19 23:59:56 chris Exp $ */
 /*
  * Copyright (c) 2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -42,6 +42,8 @@
 #define INETD		"/usr/sbin/inetd"
 #define SSHD		"/usr/sbin/sshd"
 #define LDPD		"/usr/sbin/ldpd"
+#define SMTPD		"/usr/sbin/smtpd"
+#define LDAPD		"/usr/sbin/ldapd"
 #ifndef DHCPLEASES
 #define DHCPLEASES	"/var/db/dhcpd.leases"
 #endif
@@ -254,6 +256,27 @@ struct ctl ctl_relay[] = {
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
+char *ctl_smtp_test[] = { SMTPD, "-nf", SMTPCONF_TEMP, '\0' };
+struct ctl ctl_smtp[] = {
+	{ "enable",	"enable service",
+	    { SMTPD, "-f", SMTPCONF_TEMP, NULL }, NULL, X_ENABLE },
+	{ "disable",	"disable service",
+	    { PKILL, "smtpd", NULL }, NULL, X_DISABLE },
+	{ "edit",	"edit configuration",
+	    { "smtp", (char *)ctl_smtp_test, NULL }, call_editor, NULL },
+	{ "log",	"brief/verbose logging configuration",
+	    { SMTPCTL, "log", REQ, NULL }, NULL, NULL },
+	{ "pause",	"pause mda/mta/smtp listener",
+	    { SMTPCTL, "pause", REQ, NULL }, NULL, NULL },
+	{ "remove",	"remove message or envelope",
+	    { SMTPCTL, "remove", REQ, NULL }, NULL, NULL },
+	{ "resume",	"resume mda/mta/smtp listener",
+	    { SMTPCTL, "resume", REQ, NULL }, NULL, NULL },
+	{ "schedule-all", "schedule all envelopes for immediate delivery",
+	    { SMTPCTL, "schedule-all", NULL }, NULL, NULL },
+	{ 0, 0, { 0 }, 0, 0 }
+};
+
 struct ctl ctl_ftpproxy[] = {
 	{ "enable",	"enable service",
 	    { FTPPROXY, "-D", "2", NULL }, NULL, X_ENABLE },
@@ -284,6 +307,20 @@ struct ctl ctl_inet[] = {
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
+struct ctl ctl_ldap[] = {
+	{ "enable",	"enable service",
+	    { LDAPD, LDAPCONF_TEMP, NULL }, NULL, X_ENABLE },
+	{ "disable",	"disable service",
+	    { PKILL, "ldapd", NULL }, NULL, X_DISABLE },
+	{ "log", 	"brief/verbose logging",
+	    { LDAPCTL, "log", REQ, NULL }, NULL, NULL },
+	{ "compact",	"compact all databases",
+	    { LDAPCTL, "compact", NULL }, NULL, NULL },
+	{ "index",	"re-index all databases",
+	    { LDAPCTL, "index", NULL }, NULL, NULL },
+	{ 0, 0, { 0 }, 0, 0, }
+};
+
 struct daemons ctl_daemons[] = {
 	{ "pf",		"PF",	ctl_pf,		PFCONF_TEMP,	0600, 1 },
 	{ "ospf",	"OSPF", ctl_ospf,	OSPFCONF_TEMP,	0600, 0 },
@@ -302,6 +339,8 @@ struct daemons ctl_daemons[] = {
 	{ "ftp-proxy",  "FTP proxy", ctl_ftpproxy, FTPPROXY_TEMP, 0600, 0 },
 	{ "dns", 	"DNS", ctl_dns,		RESOLVCONF_TEMP,0644, 0 },
 	{ "inet",	"Inet", ctl_inet,	INETCONF_TEMP,	0600, 0 },
+	{ "smtp",	"SMTP", ctl_smtp,	SMTPCONF_TEMP,	0600, 0 },
+	{ "ldap",	"LDAP", ctl_ldap,	LDAPCONF_TEMP,	0600, 0 },
 	{ 0, 0, 0, 0, 0 }
 };
 

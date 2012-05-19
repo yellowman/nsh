@@ -1,6 +1,6 @@
 NSH // Network Shell User's Manual // Chris Cappuccio <chris@nmedia.net>
 
-$nsh: MANUAL,v 1.20 2008/02/04 02:49:46 chris Exp $
+$nsh: MANUAL,v 1.21 2012/05/19 23:59:56 chris Exp $
 
 Copyright (c) 2003, 2004 Chris Cappuccio
 
@@ -54,10 +54,13 @@ modeled around the concepts used in Cisco's popular interface.
 Section 2 > Installation
 ------------------------
 
+If you are using flashrd, please follow the NSH installation directions in the
+flashrd FAQ.
+
 NSH replaces /etc/netstart on a standard OpenBSD system.  To implement NSH on
 such a system, you first need to convert your standard configuration into one
 which is compatible with NSH's syntax.  You need to compile NSH in order
-to use it.  NSH currently requires OpenBSD 3.3 or a later version.  To compile
+to use it.  NSH currently requires OpenBSD 5.1 or a later version.  To compile
 NSH:
 
 $ tar xvf nsh.tar
@@ -339,7 +342,7 @@ nsh/show interface lo0
   Interface is up, protocol is up
   Interface type Loopback
   Internet address is 127.0.0.1/8
-  MTU 33224 bytes
+  Routing Domain 0, MTU 33224 bytes
   124 packets input, 22396 bytes, 0 errors, 0 drops
   124 packets output, 22396 bytes, 0 errors, 0 unsupported
   180 avg input size, 180 avg output size
@@ -462,7 +465,7 @@ R - reject
   This route is unreachable, and therefore marked unusable in the kernel
 D - dynamic
   This is a dynamic route which has is managed through routing software on
-  the local system (such as GateD or Zebra)
+  the local system (such as ripd, ospfd or bgpd)
 S - static
   This is a static route set by a user
 

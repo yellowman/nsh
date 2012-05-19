@@ -1,4 +1,4 @@
-/* $nsh: commands.h,v 1.3 2012/05/18 14:04:15 chris Exp $ */
+/* $nsh: commands.h,v 1.4 2012/05/19 23:59:56 chris Exp $ */
 /*
  * Copyright (c) 2008-2009 Chris Cappuccio <chris@nmedia.net>
  *
@@ -156,8 +156,24 @@ struct prot1 rlcs[] = {
 	{ 0, 0, { 0 } }
 };
 
+struct prot1 smcs[] = {
+	{ "queue",	"envelopes in queue",
+	    { SMTPCTL, "show", "queue", NULL } },
+	{ "runqueue",	"envelopes scheduled for delivery",
+	    { SMTPCTL, "show", "runqueue", NULL } },
+	{ "stats",	"runtime statistics",
+	    { SMTPCTL, "show", "stats", NULL } },
+	{ 0, 0, { 0 } }
+};
+
 struct prot1 dhcs[] = {
 	{ "leases",	"leases", { 0 } },
+	{ 0, 0, { 0 } }
+};
+
+struct prot1 ldcs[] = {
+	{ "stats",	"statistics counters",
+	    { LDAPCTL, "stats", NULL } },
 	{ 0, 0, { 0 } }
 };
 
@@ -170,5 +186,7 @@ struct prot prots[] = {
 	{ "ldp",	lics },
 	{ "dvmrp",	dvcs },
 	{ "relay",	rlcs },
+	{ "smtp",	smcs },
+	{ "ldap",	ldcs },
 	{ 0,		0 }
 };

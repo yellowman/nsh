@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.92 2012/05/18 14:04:15 chris Exp $ */
+/* $nsh: commands.c,v 1.93 2012/05/19 23:59:56 chris Exp $ */
 /*
  * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -153,6 +153,8 @@ Menu showlist[] = {
 	{ "dvmrp",	"DVMRP information",	CMPL(ta) (char **)dvcs, sizeof(struct prot1), 0, 2, pr_prot1 },
 	{ "relay",	"Relay server",		CMPL(ta) (char **)rlcs, sizeof(struct prot1), 0, 1, pr_prot1 },
 	{ "dhcp",	"DHCP server",		CMPL(ta) (char **)dhcs, sizeof(struct prot1), 0, 1, pr_dhcp },
+	{ "smtp",	"SMTP server",		CMPL(ta) (char **)smcs, sizeof(struct prot1), 0, 1, pr_prot1 },
+	{ "ldap",	"LDAP server",		CMPL(ta) (char **)ldcs, sizeof(struct prot1), 0, 1, pr_prot1 },
 	{ "monitor",	"Monitor routing/arp table changes", CMPL0 0, 0, 0, 0, monitor },
 	{ "version",	"Software information",	CMPL0 0, 0, 0, 0, version },
 	{ "users",	"System users",		CMPL0 0, 0, 0, 0, who },
@@ -713,6 +715,8 @@ static char
 	sasynchelp[] =	"SA synchronization control",
 	dhcphelp[] =	"DHCP server control",
 	snmphelp[] =	"SNMP server control",
+	smtphelp[] =	"SMTP server control",
+	ldaphelp[] =	"LDAP server control",
 	sshdhelp[] =	"SSH server control",
 	ntphelp[] =	"NTP synchronization control",
 	ftpproxyhelp[] ="ftp-proxy server control",
@@ -771,6 +775,8 @@ Command cmdtab[] = {
 	{ "sasync",	sasynchelp,	CMPL(t) (char **)ctl_sasync, ssctl, ctlhandler,	1, 0, 0, 1 },
 	{ "dhcp",	dhcphelp,	CMPL(t) (char **)ctl_dhcp, ssctl, ctlhandler,	1, 0, 0, 1 },
 	{ "snmp",	snmphelp,	CMPL(t) (char **)ctl_snmp, ssctl, ctlhandler,	1, 0, 0, 1 },
+	{ "ldap",	ldaphelp,	CMPL(t) (char **)ctl_ldap, ssctl, ctlhandler,	1, 0, 0, 1 },
+	{ "smtp",	smtphelp,	CMPL(t) (char **)ctl_smtp, ssctl, ctlhandler,	1, 0, 0, 1 },
 	{ "sshd",	sshdhelp,	CMPL(t) (char **)ctl_sshd, ssctl, ctlhandler,	1, 0, 0, 1 },
 	{ "ntp",	ntphelp,	CMPL(t) (char **)ctl_ntp, ssctl, ctlhandler,	1, 0, 0, 1 },
 	{ "ftp-proxy",  ftpproxyhelp,	CMPL(t) (char **)ctl_ftpproxy, ssctl, ctlhandler,  1, 0, 0, 1 },

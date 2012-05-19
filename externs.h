@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.72 2012/05/18 14:04:15 chris Exp $ */
+/* $nsh: externs.h,v 1.73 2012/05/19 23:59:56 chris Exp $ */
 /*
  * nsh externs, prototypes and macros
  */
@@ -117,6 +117,8 @@ extern char metricnames[];
 #define RESOLVCONF_DHCP	"/var/run/resolv.conf.dhcp"
 #define INETCONF_TEMP	"/var/run/inetd.conf"
 #define SSHDCONF_TEMP	"/var/run/sshd.conf"
+#define SMTPCONF_TEMP 	"/var/run/smtpd.conf"
+#define LDAPCONF_TEMP	"/var/run/ldapd.conf"
 /* flag_x flags */
 #define X_ENABLE  (void *)1
 #define X_DISABLE (void *)2
@@ -140,6 +142,8 @@ void rmtemp(char *);
 #define DVMRPCTL	"/usr/sbin/dvmrpctl"
 #define RELAYCTL	"/usr/sbin/relayctl"
 #define SNMPCTL		"/usr/sbin/snmpctl"
+#define SMTPCTL		"/usr/sbin/smtpctl"
+#define LDAPCTL		"/usr/sbin/ldapctl"
 struct ctl {
 	char *name;
 	char *help;
@@ -168,11 +172,13 @@ extern struct ctl ctl_dvmrp[];
 extern struct ctl ctl_sasync[];
 extern struct ctl ctl_dhcp[];
 extern struct ctl ctl_snmp[];
+extern struct ctl ctl_smtp[];
 extern struct ctl ctl_sshd[];
 extern struct ctl ctl_ntp[];
 extern struct ctl ctl_ftpproxy[];
 extern struct ctl ctl_dns[];
 extern struct ctl ctl_inet[];
+extern struct ctl ctl_ldap[];
 void flag_x(char *, int *, char *);
 
 /* commands.c */
@@ -371,14 +377,12 @@ int flush_bridgerule(char *, char*);
 
 /* tunnel.c */
 int inttunnel(char *, int, int, char **);
-int settunnel(int, char *, char *, char *);
-int deletetunnel(int, char *);
 
 /* media.c */
 #define DEFAULT_MEDIA_TYPE	"autoselect"
 void media_status(int, char *, char *);
 void media_supported(int, char *, char *, char *);
-int phys_status(int, char *, char *, char *, int, int);
+int phys_status(int, char *, char *, char *, int, int, int *);
 int intmedia(char *, int, int, char **);
 int intmediaopt(char *, int, int, char **);
 int conf_media_status(FILE *, int, char *);
