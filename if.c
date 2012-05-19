@@ -1,4 +1,4 @@
-/* $nsh: if.c,v 1.48 2012/05/18 14:02:28 chris Exp $ */
+/* $nsh: if.c,v 1.49 2012/05/19 23:57:53 chris Exp $ */
 /*
  * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -95,6 +95,7 @@ show_int(int argc, char **argv)
 	short tmp;
 	int ifs, br, flags, days, hours, mins, pntd;
 	int ippntd = 0;
+	int buf3;
 	time_t c;
 	char *type, *lladdr, *ifname = NULL;
 	const char *carp;
@@ -257,10 +258,14 @@ show_int(int argc, char **argv)
 	freeifaddrs(ifap);
 
 	if (!br) {
-		if (phys_status(ifs, ifname, tmp_str, tmp_str2, sizeof(tmp_str),
-		    sizeof(tmp_str2)) > 0)
-			printf("  Tunnel source %s destination %s\n",
+		if (phys_status(ifs, ifname, tmp_str, tmp_str2,
+		    sizeof(tmp_str), sizeof(tmp_str2), &buf3) > 0) {
+			printf("  Tunnel source %s destination %s",
 			    tmp_str, tmp_str2);
+			if (&buf3 != NULL)
+				printf(" rdomain %i", buf3);
+			printf("\n");
+		}
 		if ((carp = carp_state(ifs, ifname)) != NULL)
 			printf("  CARP state %s\n", carp);
 
@@ -710,6 +715,7 @@ intpflow(char *ifname, int ifs, int argc, char **argv)
 	struct addrinfo hints, *sender, *receiver;
 	int ecode, set;
 	char *ip, *port, buf[MAXHOSTNAMELEN+sizeof (":65535")];
+	const char *errmsg = NULL;
 
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -721,10 +727,11 @@ intpflow(char *ifname, int ifs, int argc, char **argv)
 	argc--;
 	argv++;
 
-	if ((set && argc != 4) || (set && argc == 4 &&
-		(!isprefix(argv[0], "sender") || !isprefix(argv[2], "receiver")))) {
-		printf("%% pflow sender <x.x.x.x> receiver <x.x.x.x:port>\n");
-		printf("%% no pflow [sender x.x.x.x receiver x.x.x.x:port]\n");
+	if ((set && argc < 4) || (set && argc == 5) || (set && argc >= 4 &&
+		(!isprefix(argv[0], "sender") || !isprefix(argv[2], "receiver") ||
+		(argc == 6 && !isprefix(argv[4], "version"))))) {
+		printf("%% pflow sender <x.x.x.x> receiver <x.x.x.x:port> [version 5|9|10]\n");
+		printf("%% no pflow [sender x.x.x.x receiver x.x.x.x:port version 5|9|10]\n");
 		return(0);
 	}
 
@@ -789,11 +796,21 @@ intpflow(char *ifname, int ifs, int argc, char **argv)
 		    receiver->ai_addr)->sin_addr.s_addr;
 		preq.receiver_port = (u_int16_t) ((struct sockaddr_in *)
 		    receiver->ai_addr)->sin_port;
+		if (argc == 6) {
+			preq.version = strtonum(argv[5], 5, PFLOW_PROTO_MAX, &errmsg);
+			preq.addrmask = PFLOW_MASK_VERSION;
+	                if (errmsg) {
+				printf("%% Invalid pflow version %s: %s\n", argv[0], errmsg);
+				goto done;
+			}
+                }
+
 	}
 	preq.addrmask |= PFLOW_MASK_SRCIP | PFLOW_MASK_DSTIP | PFLOW_MASK_DSTPRT;
 	if (ioctl(ifs, SIOCSETPFLOW, (caddr_t)&ifr) == -1)
 		printf("%% Unable to set pflow parameters: %s\n", strerror(errno));
 
+done:
 	if (set) {
 		freeaddrinfo(sender);
 		freeaddrinfo(receiver);

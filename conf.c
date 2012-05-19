@@ -1,4 +1,4 @@
-/* $nsh: conf.c,v 1.68 2012/05/18 14:02:28 chris Exp $ */
+/* $nsh: conf.c,v 1.69 2012/05/19 23:57:53 chris Exp $ */
 /*
  * Copyright (c) 2002-2009 Chris Cappuccio <chris@nmedia.net>
  *
@@ -492,7 +492,10 @@ void conf_pflow(FILE *output, int ifs, char *ifname)
 		return;
 
 	fprintf(output, " pflow sender %s", inet_ntoa(preq.sender_ip));
-	fprintf(output, " receiver %s:%u\n", inet_ntoa(preq.receiver_ip), ntohs(preq.receiver_port));
+	fprintf(output, " receiver %s:%u", inet_ntoa(preq.receiver_ip), ntohs(preq.receiver_port));
+	if (preq.version != 5)
+		fprintf(output, " version %i", preq.version);
+	fprintf(output, "\n");
 }
 
 void conf_mpls(FILE *output, int ifs, char *ifname)
@@ -534,13 +537,18 @@ void conf_ifmetrics(FILE *output, int ifs, struct if_data if_data,
     char *ifname)
 {
 	char tmpa[IPSIZ], tmpb[IPSIZ], tmpc[TMPSIZ];
+	int buf;
 
 	/*
 	 * Various metrics valid for non-bridge interfaces
 	 */
-	if (phys_status(ifs, ifname, tmpa, tmpb, IPSIZ, IPSIZ) > 0)
+	if (phys_status(ifs, ifname, tmpa, tmpb, IPSIZ, IPSIZ, &buf) > 0) {
 		/* future os may use this for more than tunnel? */
-		fprintf(output, " tunnel %s %s\n", tmpa, tmpb);
+		fprintf(output, " tunnel %s %s", tmpa, tmpb);
+		if (&buf != NULL && buf > 0)
+			fprintf(output, " rdomain %i", buf);
+		fprintf(output, "\n");
+	}
 
 	/*
 	 * print interface mtu, metric
