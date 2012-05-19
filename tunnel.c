@@ -1,4 +1,4 @@
-/* $nsh: tunnel.c,v 1.6 2006/04/11 19:55:54 pata Exp $ */
+/* $nsh: tunnel.c,v 1.7 2012/05/19 19:34:50 chris Exp $ */
 /* From: $OpenBSD: /usr/src/sbin/ifconfig/ifconfig.c,v 1.64 2002/05/22 08:21:02 deraadt Exp $ */
 
 #include <stdio.h>
@@ -51,21 +51,17 @@ inttunnel(char *ifname, int ifs, int argc, char **argv)
 int
 settunnel(int s, char *ifname, char *src, char *dst)
 {
-	struct addrinfo hints, *srcres, *dstres;
+	struct addrinfo *srcres, *dstres;
 	int ecode;
 	struct if_laddrreq req;
 
-	memset(&hints, 0, sizeof(hints));
-	hints.ai_family = AF_INET;
-	hints.ai_socktype = SOCK_DGRAM;	/* dummy */
-
-	if ((ecode = getaddrinfo(src, NULL, &hints, &srcres)) != 0) {
+	if ((ecode = getaddrinfo(src, NULL, NULL, &srcres)) != 0) {
 		printf("%% unable to parsing source address string: %s\n",
 		     gai_strerror(ecode));
 		return(0);
 	}
 
-	if ((ecode = getaddrinfo(dst, NULL, &hints, &dstres)) != 0) {
+	if ((ecode = getaddrinfo(dst, NULL, NULL, &dstres)) != 0) {
 		printf("%% unable to parsing destination address string: %s\n",
 		     gai_strerror(ecode));
 		return(0);
