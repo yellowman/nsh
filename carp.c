@@ -1,4 +1,4 @@
-/* $nsh $ */
+/* $nsh: carp.c,v 1.13 2012/05/20 03:14:29 chris Exp $ */
 /*
  * Copyright (c) 2004 Chris Cappuccio <chris@nmedia.net>
  *
@@ -20,11 +20,14 @@
 #include <string.h>
 #include <errno.h>
 #include <sys/limits.h>
+#include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
 #include <netinet/in.h>
+#include <arpa/inet.h>
 #include <netinet/ip_carp.h>
 #include <net/if.h>
+#include <netdb.h>
 #include "externs.h"
 
 static struct intc {
@@ -35,8 +38,12 @@ static struct intc {
 	{ "advskew",	"skew",		CARP_ADVSKEW },
 	{ "advbase",	"seconds",	CARP_ADVBASE },
 	{ "vhid",	"id",		CARP_VHID },
+	{ "carppeer",	"peer",		CARP_PEER },
+	{ "balancing",	"balancing mode", CARP_BALANCING },
 	{ 0,		0,		0 }
 };
+
+static const char *carp_bal_modes[] = { CARP_BAL_MODES };
 
 int
 intcarp(char *ifname, int ifs, int argc, char **argv)
@@ -44,8 +51,7 @@ intcarp(char *ifname, int ifs, int argc, char **argv)
 	const char *errmsg = NULL;
 	struct ifreq ifr;
 	struct carpreq creq;
-	int set;
-	u_int32_t val = 0;
+	int set, bal_mode = 0, val = 0;
 	struct intc *x;
 
 	if (NO_ARG(argv[0])) {
@@ -74,6 +80,7 @@ intcarp(char *ifname, int ifs, int argc, char **argv)
 		printf("%% no %s [%s]\n", x->name, x->descr);
 		return (0);
 	}
+	bzero(&ifr, sizeof(ifr));
 	bzero((char *) &creq, sizeof(struct carpreq));
 	ifr.ifr_data = (caddr_t) & creq;
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
@@ -83,13 +90,39 @@ intcarp(char *ifname, int ifs, int argc, char **argv)
 		return (0);
 	}
 
-	if (set) {
-		errno = 0;
-		val = strtonum(argv[0], 0, INT_MAX, &errmsg);
-		if (errmsg) {
-			printf("%% %s value out of range: %s\n", x->name, errmsg);
-			return(0);
+	switch(x->type) {
+	case CARP_ADVSKEW:
+	case CARP_ADVBASE:
+	case CARP_VHID:
+		if (set) {
+			errno = 0;
+			val = strtonum(argv[0], 0, 255, &errmsg);
+			if (errmsg) {
+				printf("%% %s value out of range: %s\n",  x->name, errmsg);
+				return(0);
+			}
 		}
+		break;
+	case CARP_BALANCING:
+		if (set) {
+			for (bal_mode = 0; bal_mode <= CARP_BAL_MAXID; bal_mode++)
+				if (isprefix(argv[0], (char *)carp_bal_modes[bal_mode]))
+					break;
+			if (bal_mode > CARP_BAL_MAXID) {
+				int i;
+
+				printf("%% %s <", x->name);
+				for (i = 0; i <= CARP_BAL_MAXID; i++)
+					printf("%s%s", i == 0 ? "" : "|",
+					    carp_bal_modes[i]);
+				printf(">\n");
+				printf("%% no %s\n", x->name);
+				return(0);
+			}
+		}
+		break;
+	default:
+		break;
 	}
 
 	switch(x->type) {
@@ -111,6 +144,37 @@ intcarp(char *ifname, int ifs, int argc, char **argv)
 		else
 			creq.carpr_vhids[0] = -1;
 		break;
+	case CARP_PEER:
+		if(set) {
+			struct addrinfo hints, *peerres;
+			int ecode;
+
+			bzero(&hints, sizeof(hints));
+			hints.ai_family = AF_INET;
+			hints.ai_socktype = SOCK_DGRAM;
+
+			if ((ecode = getaddrinfo(argv[0], NULL, &hints, &peerres)) != 0) {
+				printf("%% error in parsing address string: %s\n",
+				    gai_strerror(ecode));
+				return(0);
+			}
+
+			/* do we need this if hints.ai_family = AF_INET? */
+			if (peerres->ai_addr->sa_family != AF_INET) {
+				printf("%% only IPv4 addresses supported for the CARP peer\n");
+				return(0);
+			}
+
+			creq.carpr_peer.s_addr = ((struct sockaddr_in *)
+			    peerres->ai_addr)->sin_addr.s_addr;
+		} else
+			creq.carpr_peer.s_addr = htonl(INADDR_CARP_GROUP);
+		break;
+	case CARP_BALANCING:
+		if(set)
+			creq.carpr_balancing = bal_mode;
+		else
+			creq.carpr_balancing = 0;
 	}
 
 	if (ioctl(ifs, SIOCSVH, (caddr_t) & ifr) == -1) {
@@ -267,26 +331,30 @@ conf_carp(FILE *output, int s, char *ifname)
 	if (ioctl(s, SIOCGVH, (caddr_t) & ifr) == -1)
 		return (0);
 
-	if (creq.carpr_vhids[0] == 0)
-		return (0);
-
 	if (creq.carpr_carpdev[0] != '\0')
 		fprintf(output, " carpdev %s\n", creq.carpr_carpdev);
 	if (creq.carpr_key[0] != '\0')
 		fprintf(output, " cpass %s\n", creq.carpr_key);
 	if (creq.carpr_advbase != CARP_DFLTINTV)
 		fprintf(output, " advbase %i\n", creq.carpr_advbase);
-	if (creq.carpr_vhids[1] == 0) {
+	if (creq.carpr_vhids[0] != 0)
+	switch(creq.carpr_vhids[1]) {
+	case 0:
 		fprintf(output, " vhid %i\n", creq.carpr_vhids[0]);
 		if (creq.carpr_advskews[0] != 0)
 			fprintf(output, " advskew %i\n",
 			    creq.carpr_advskews[0]);
-	} else {
-		for (i = 0; creq.carpr_vhids[i]; i++) {
+		break;
+	default:
+		for (i = 0; creq.carpr_vhids[i]; i++)
 			fprintf(output, " carpnode %i %i\n",
 			    creq.carpr_vhids[i], creq.carpr_advskews[i]);
-		}
+		break;
 	}
+	if (creq.carpr_peer.s_addr != htonl(INADDR_CARP_GROUP))
+		fprintf(output, " carppeer %s\n", inet_ntoa(creq.carpr_peer));
+	if (creq.carpr_balancing != 0 && !(creq.carpr_balancing > CARP_BAL_MAXID))
+		fprintf(output, " balancing %s\n", carp_bal_modes[creq.carpr_balancing]);
 			
 	return (0);
 }

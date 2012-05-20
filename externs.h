@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.73 2012/05/19 23:59:56 chris Exp $ */
+/* $nsh: externs.h,v 1.74 2012/05/20 03:14:29 chris Exp $ */
 /*
  * nsh externs, prototypes and macros
  */
@@ -404,6 +404,8 @@ int conf_pfsync(FILE *, int, char *);
 #define CARP_ADVSKEW 0
 #define CARP_ADVBASE 1
 #define CARP_VHID 2
+#define CARP_PEER 3
+#define CARP_BALANCING 4
 int intcarp(char *, int, int, char **);
 int intcpass(char *, int, int, char **);
 int intcnode(char *, int, int, char **);

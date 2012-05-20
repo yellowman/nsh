@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.94 2012/05/20 00:59:32 chris Exp $ */
+/* $nsh: commands.c,v 1.95 2012/05/20 03:14:29 chris Exp $ */
 /*
  * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -443,7 +443,7 @@ struct intlist Intlist[] = {
 	{ "anycast",	"IPv6 anycast address bit",		CMPL0 0, 0, intanycast, 0 },
 	{ "tentative",	"IPv6 tentative address bit",		CMPL0 0, 0, inttentative, 0 },
 #endif
-	{ "tunnel",	"Source/destination for GIF tunnel",	CMPL0 0, 0, inttunnel, 0 },
+	{ "tunnel",	"Source/destination for GIF/GRE tunnel",CMPL0 0, 0, inttunnel, 0 },
 	{ "syncdev",	"PFsync control message interface",	CMPL(i) 0, 0, intsyncdev, 0 },
 	{ "syncpeer",	"PFsync peer address",			CMPL0 0, 0, intsyncpeer, 0},
 	{ "maxupd", 	"CARP max updates, defer first packet", CMPL0 0, 0, intmaxupd, 0 },
