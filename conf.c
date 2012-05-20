@@ -1,4 +1,4 @@
-/* $nsh: conf.c,v 1.69 2012/05/19 23:57:53 chris Exp $ */
+/* $nsh: conf.c,v 1.70 2012/05/20 01:03:13 chris Exp $ */
 /*
  * Copyright (c) 2002-2009 Chris Cappuccio <chris@nmedia.net>
  *
@@ -77,7 +77,7 @@ static const struct {
 	{ "gif",	1280 },
 	{ "sl",		296 },
 	{ "enc",	1536 },
-	{ "pflow",	1492 },
+	{ "pflow",	MTU_IGNORE },
 	{ "pflog",	MTU_IGNORE },
 	{ "lo",		MTU_IGNORE },
 };
