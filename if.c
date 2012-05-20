@@ -1,4 +1,4 @@
-/* $nsh: if.c,v 1.51 2012/05/20 04:37:02 chris Exp $ */
+/* $nsh: if.c,v 1.52 2012/05/20 15:32:51 chris Exp $ */
 /*
  * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -101,7 +101,6 @@ show_int(int argc, char **argv)
 	int buf3;
 	time_t c;
 	char *type, *lladdr, *ifname = NULL;
-	const char *carp;
 
 	char tmp_str[512], tmp_str2[512], ifdescr[IFDESCRSIZE];
 
@@ -270,8 +269,7 @@ show_int(int argc, char **argv)
 				printf(" destination rdomain %i", buf3);
 			printf("\n");
 		}
-		if ((carp = carp_state(ifs, ifname)) != NULL)
-			printf("  CARP state %s\n", carp);
+		carp_state(ifs, ifname);
 
 		printf(" ");
 		if (ioctl(ifs, SIOCGIFRDOMAIN, (caddr_t)&ifr) != -1)

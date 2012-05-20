@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.74 2012/05/20 03:14:29 chris Exp $ */
+/* $nsh: externs.h,v 1.75 2012/05/20 15:32:50 chris Exp $ */
 /*
  * nsh externs, prototypes and macros
  */
@@ -410,7 +410,7 @@ int intcarp(char *, int, int, char **);
 int intcpass(char *, int, int, char **);
 int intcnode(char *, int, int, char **);
 int conf_carp(FILE *, int, char *);
-const char *carp_state(int, char *);
+int carp_state(int, char *);
 int intcdev(char *, int, int, char **);
 
 /* trunk.c */

@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.96 2012/05/20 05:09:52 chris Exp $ */
+/* $nsh: commands.c,v 1.97 2012/05/20 15:32:50 chris Exp $ */
 /*
  * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -446,12 +446,12 @@ struct intlist Intlist[] = {
 	{ "tunnel",	"Source/destination for GIF/GRE tunnel",CMPL0 0, 0, inttunnel, 0 },
 	{ "syncdev",	"PFsync control message interface",	CMPL(i) 0, 0, intsyncdev, 0 },
 	{ "syncpeer",	"PFsync peer address",			CMPL0 0, 0, intsyncpeer, 0},
-	{ "maxupd", 	"CARP max updates, defer first packet", CMPL0 0, 0, intmaxupd, 0 },
+	{ "maxupd", 	"PFsync max updates, defer first packet", CMPL0 0, 0, intmaxupd, 0 },
 	{ "vhid",	"CARP virtual host ID",			CMPL0 0, 0, intcarp, 0 },
 	{ "advbase",	"CARP advertisement interval",		CMPL0 0, 0, intcarp, 0 },
 	{ "advskew",	"CARP advertisement skew",		CMPL0 0, 0, intcarp, 0 },
 	{ "cpass",	"CARP passphrase",			CMPL0 0, 0, intcpass, 0 },
-	{ "carpdev",	"CARP device",				CMPL0 0, 0, intcdev, 0 },
+	{ "carpdev",	"CARP device",				CMPL(i) 0, 0, intcdev, 0 },
 	{ "carpnode",	"CARP additional vhid/advskew",		CMPL0 0, 0, intcnode, 0 },
 	{ "carppeer",	"CARP peer",				CMPL0 0, 0, intcarp, 0 },
 	{ "balancing",	"CARP balancing mode",			CMPL0 0, 0, intcarp, 0 },

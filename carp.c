@@ -1,4 +1,4 @@
-/* $nsh: carp.c,v 1.13 2012/05/20 03:14:29 chris Exp $ */
+/* $nsh: carp.c,v 1.14 2012/05/20 15:32:50 chris Exp $ */
 /*
  * Copyright (c) 2004 Chris Cappuccio <chris@nmedia.net>
  *
@@ -359,34 +359,59 @@ conf_carp(FILE *output, int s, char *ifname)
 	return (0);
 }
 
-const char *
+int
 carp_state(int s, char *ifname)
 {
 	struct ifreq ifr;
 	struct carpreq creq;
 	const char *carp_states[] = { CARP_STATES };
 	const char *state = NULL;
+	int i, pntd = 0;
 
 	bzero((char *) &creq, sizeof(struct carpreq));
 	ifr.ifr_data = (caddr_t) & creq;
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 
 	if (ioctl(s, SIOCGVH, (caddr_t) & ifr) == -1)
-		return (NULL);
+		return (0);
 
-	/*
-	 * XXX carp_state and its callers need to be extended to handle
-	 * interfaces with multiple vhids
-	 */
-	if (creq.carpr_vhids[0] > 0) {
-		if (creq.carpr_state > CARP_MAXSTATE) {
-			errno = EINVAL;
-			return(NULL);
+	if (creq.carpr_balancing <= CARP_BAL_MAXID) {
+		printf("  CARP balancing mode %s", carp_bal_modes[creq.carpr_balancing]);
+		pntd = 1;
+	}
+
+	if (creq.carpr_peer.s_addr != htonl(INADDR_CARP_GROUP)) {
+		printf(" peer %s", inet_ntoa(creq.carpr_peer));
+		pntd = 1;
+	}
+	if (pntd)
+		printf("\n");
+
+	if (creq.carpr_vhids[0] == 0)
+		return(0);
+
+	for (i = 0; creq.carpr_vhids[i]; i++) {
+		if (creq.carpr_states[i] <= CARP_MAXSTATE)
+			state = carp_states[creq.carpr_states[i]];
+		if (creq.carpr_vhids[1] == 0) {
+			printf("  CARP state %s, device %s vhid %u advbase %d "
+		 	    "advskew %u\n", state,
+			    creq.carpr_carpdev[0] != '\0' ?
+			    creq.carpr_carpdev : "none", creq.carpr_vhids[0],
+			    creq.carpr_advbase, creq.carpr_advskews[0]);
 		} else {
-			state = carp_states[creq.carpr_state];
+			if (i == 0) {
+				printf("  CARP device %s advbase %d\n",
+				    creq.carpr_carpdev[0] != '\0' ?
+				    creq.carpr_carpdev : "none",
+				    creq.carpr_advbase);
+			}
+			printf("  CARP state %s vhid %u advskew %u\n", state,
+			    creq.carpr_vhids[i], creq.carpr_advskews[i]);
 		}
-	}	
-	return(state);
+	}
+			
+	return(0);
 }
 
 int
