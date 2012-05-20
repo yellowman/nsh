@@ -1,4 +1,4 @@
-/* $nsh: if.c,v 1.49 2012/05/19 23:57:53 chris Exp $ */
+/* $nsh: if.c,v 1.50 2012/05/20 00:56:41 chris Exp $ */
 /*
  * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -56,7 +56,7 @@ static const struct {
 	{ "Packet Filter Logging",	IFT_PFLOG },
 	{ "Packet Filter State Synchronization", IFT_PFSYNC },
 	{ "pflow Accounting Data",	IFT_PFLOW },
-	{ "IPsec Encapsulation Interface",	IFT_ENC },      
+	{ "IPsec Encapsulation",	IFT_ENC },      
 	{ "Generic Tunnel",		IFT_GIF },
 	{ "IPv6-IPv4 TCP relay",	IFT_FAITH },
 	{ "Ethernet Bridge",		IFT_BRIDGE },
@@ -69,6 +69,9 @@ static const struct {
 	{ "HDLC",			IFT_HDLC },
 	{ "IEEE 802.1Q",		IFT_L2VLAN },
 	{ "Virtual",			IFT_PROPVIRTUAL },
+	{ "MPLS Tunnel Virtual",	IFT_MPLSTUNNEL },
+	{ "MPLS Provider Edge",		IFT_MPLS },
+	{ "IEEE 802.3ad Link Aggregate", IFT_IEEE8023ADLAG },
 	{ "PPP",			IFT_PPP },
 	{ "Loopback",			IFT_LOOP },
 	{ "ISDN BRI",			IFT_ISDNBASIC },
@@ -438,6 +441,8 @@ iftype(int int_type)
 		if (int_type == iftypes[i].type)
 			return(iftypes[i].name);
 
+	if (verbose)
+		printf("%% iftype: int_type %x\n", int_type);
 	return("Unknown");
 }
 
