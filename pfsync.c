@@ -1,4 +1,4 @@
-/* $nsh: pfsync.c,v 1.11 2012/05/19 23:55:37 chris Exp $ */
+/* $nsh: pfsync.c,v 1.12 2012/05/20 03:16:04 chris Exp $ */
 /*
  * Copyright (c) 2004 Chris Cappuccio <chris@nmedia.net>
  *
@@ -238,7 +238,7 @@ conf_pfsync(FILE *output, int s, char *ifname)
 		return (0);
 
 	if (preq.pfsyncr_syncpeer.s_addr != INADDR_PFSYNC_GROUP)
-		fprintf(output, " syncpeer %s", inet_ntoa(
+		fprintf(output, " syncpeer %s\n", inet_ntoa(
 		    preq.pfsyncr_syncpeer));
 	if (preq.pfsyncr_maxupdates != PFSYNC_MAXUPDATES || preq.pfsyncr_defer) {
 		fprintf(output, " maxupd %i",
