@@ -1,4 +1,4 @@
-/* $nsh: if.c,v 1.50 2012/05/20 00:56:41 chris Exp $ */
+/* $nsh: if.c,v 1.51 2012/05/20 04:37:02 chris Exp $ */
 /*
  * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -194,6 +194,7 @@ show_int(int argc, char **argv)
 		printf(", hardware address %s", lladdr);
 	printf("\n");
 
+	show_trunk(ifs, ifname);
 	media_status(ifs, ifname, "  Media type ");
 
 	/*
@@ -266,7 +267,7 @@ show_int(int argc, char **argv)
 			printf("  Tunnel source %s destination %s",
 			    tmp_str, tmp_str2);
 			if (&buf3 != NULL)
-				printf(" rdomain %i", buf3);
+				printf(" destination rdomain %i", buf3);
 			printf("\n");
 		}
 		if ((carp = carp_state(ifs, ifname)) != NULL)

@@ -1,4 +1,4 @@
-/* $nsh $ */
+/* $nsh: trunk.c,v 1.5 2012/05/20 04:37:02 chris Exp $ */
 /* From: $OpenBSD: ifconfig.c,v 1.174 2006/08/29 17:22:00 henning Exp $  */
 /*
  * Copyright (c) 2006
@@ -38,6 +38,8 @@
 #include <netinet/if_ether.h>
 #include <net/if_trunk.h>
 #include "externs.h"
+
+struct trunk_protos tpr[] = TRUNK_PROTOS;
 
 int
 inttrunkport(char *ifname, int ifs, int argc, char **argv)
@@ -116,7 +118,6 @@ int
 inttrunkproto(char *ifname, int ifs, int argc, char **argv)
 {
 	int i, set;
-	struct trunk_protos tpr[] = TRUNK_PROTOS;
 	struct trunk_reqall ra;
 
 	if (NO_ARG(argv[0])) {
@@ -140,15 +141,20 @@ inttrunkproto(char *ifname, int ifs, int argc, char **argv)
 
 	if (set) {
 		for (i = 0; i < TRUNK_PROTO_MAX; ++i) {
-			if (!strncmp(argv[0], tpr[i].tpr_name, sizeof(tpr[i].tpr_name)))
+			if (isprefix(argv[0], (char *)tpr[i].tpr_name)) {
 				ra.ra_proto = tpr[i].tpr_proto;
+				break;
+			}
 		}
-		if (!ra.ra_proto) {
-			ra.ra_proto = TRUNK_PROTO_NONE;
-			printf("%% inttrunkproto: no valid protocol specified, falling back to none\n");
+		if (i == TRUNK_PROTO_MAX) {
+			printf("%% trunkproto <");
+			for (i = 0; i < TRUNK_PROTO_MAX; ++i)
+				printf("%s%s", i == 0 ? "" : "|", tpr[i].tpr_name);
+			printf(">\n");
+			return(0);
 		}
 	} else
-		ra.ra_proto = TRUNK_PROTO_NONE;
+		ra.ra_proto = TRUNK_PROTO_DEFAULT;
 
 	if (ioctl(ifs, SIOCSTRUNK, &ra) != 0) {
 		switch(errno) {
@@ -172,19 +178,30 @@ conf_trunk(FILE *output, int ifs, char *ifname)
         int i;
 
         bzero(&ra, sizeof(ra));
+	for (i = 0; i <= TRUNK_MAX_PORTS; i++)
+		bzero(&rpbuf[i], sizeof(struct trunk_reqport));
 
         strlcpy(ra.ra_ifname, ifname, sizeof(ra.ra_ifname));
         ra.ra_size = sizeof(rpbuf);
 	ra.ra_port = rpbuf;
 
         if (ioctl(ifs, SIOCGTRUNK, (caddr_t)&ra) == 0) {
-		fprintf(output," trunkproto %d\n", ra.ra_proto);
-                for (i = 0; i < ra.ra_ports; i++) {
-                        fprintf(output, " %s%s", i ? "" : "trunkport ",
-			    rpbuf[i].rp_portname);
-                }
-		if (i) {
-			printf("\n");
+		int pntd = 0;
+
+		for (i = 0; i < (sizeof(tpr) / sizeof(tpr[0])); i++)
+			if (ra.ra_proto == tpr[i].tpr_proto)
+				break;
+		if (tpr[i].tpr_proto != TRUNK_PROTO_DEFAULT)
+			fprintf(output," trunkproto %s\n", tpr[i].tpr_name);
+
+                for (i = 0; i <= ra.ra_ports; ++i)
+			if(rpbuf[i].rp_portname[0] != '\0') {
+				fprintf(output, " %s%s", pntd ? "" : "trunkport ",
+				    rpbuf[i].rp_portname);
+				pntd = 1;
+			}
+		if (pntd) {
+			fprintf(output, "\n");
 		}
         } else return (1);
 
@@ -194,40 +211,27 @@ conf_trunk(FILE *output, int ifs, char *ifname)
 void
 show_trunk(int ifs, char *ifname)
 {
-	struct trunk_protos tpr[] = TRUNK_PROTOS;
-	struct trunk_reqport rp, rpbuf[TRUNK_MAX_PORTS];
+	struct trunk_reqport rpbuf[TRUNK_MAX_PORTS];
 	struct trunk_reqall ra;
 	int i;
 
-	bzero(&rp, sizeof(rp));
 	bzero(&ra, sizeof(ra));
-
-	strlcpy(rp.rp_ifname, ifname, sizeof(rp.rp_ifname));
-	strlcpy(rp.rp_portname, ifname, sizeof(rp.rp_portname));
-
-	if (ioctl(ifs, SIOCGTRUNKPORT, (caddr_t)&rp) == 0) {
-		printf("  trunkdev: %s\n", rp.rp_ifname);
-		printf("  trunkflags: ");
-		bprintf(stdout, rp.rp_flags, TRUNK_PORT_BITS);
-
-		printf("\n");
-	}
 
 	strlcpy(ra.ra_ifname, ifname, sizeof(ra.ra_ifname));
 	ra.ra_size = sizeof(rpbuf);
 	ra.ra_port = rpbuf;
 
 	if (ioctl(ifs, SIOCGTRUNK, (caddr_t)&ra) == 0) {
-		for (i = 0; i < TRUNK_PROTO_MAX; i++) {
-			if (ra.ra_proto == tpr[i].tpr_proto) 
-				printf("  trunkproto: %s\n", tpr[i].tpr_name);
-		}
+		for (i = 0; i < TRUNK_PROTO_MAX; i++)
+			if (ra.ra_proto == tpr[i].tpr_proto) {
+				printf("  Trunkproto %s", tpr[i].tpr_name);
+				break;
+			}
 		for (i = 0; i < ra.ra_ports; i++) {
-			printf("  \ttrunkport %s ", rpbuf[i].rp_portname);
+			printf(" (%s ", rpbuf[i].rp_portname);
 			bprintf(stdout, rpbuf[i].rp_flags, TRUNK_PORT_BITS);
-
-			printf("\n");
-
+			printf(")");
 		}
+		printf("\n");
 	}
 }
