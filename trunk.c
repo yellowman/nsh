@@ -1,4 +1,4 @@
-/* $nsh: trunk.c,v 1.5 2012/05/20 04:37:02 chris Exp $ */
+/* $nsh: trunk.c,v 1.6 2012/05/20 05:22:44 chris Exp $ */
 /* From: $OpenBSD: ifconfig.c,v 1.174 2006/08/29 17:22:00 henning Exp $  */
 /*
  * Copyright (c) 2006
@@ -178,7 +178,7 @@ conf_trunk(FILE *output, int ifs, char *ifname)
         int i;
 
         bzero(&ra, sizeof(ra));
-	for (i = 0; i <= TRUNK_MAX_PORTS; i++)
+	for (i = 0; i < TRUNK_MAX_PORTS; i++)
 		bzero(&rpbuf[i], sizeof(struct trunk_reqport));
 
         strlcpy(ra.ra_ifname, ifname, sizeof(ra.ra_ifname));
@@ -194,7 +194,7 @@ conf_trunk(FILE *output, int ifs, char *ifname)
 		if (tpr[i].tpr_proto != TRUNK_PROTO_DEFAULT)
 			fprintf(output," trunkproto %s\n", tpr[i].tpr_name);
 
-                for (i = 0; i <= ra.ra_ports; ++i)
+                for (i = 0; i < ra.ra_ports; ++i)
 			if(rpbuf[i].rp_portname[0] != '\0') {
 				fprintf(output, " %s%s", pntd ? "" : "trunkport ",
 				    rpbuf[i].rp_portname);
@@ -211,27 +211,45 @@ conf_trunk(FILE *output, int ifs, char *ifname)
 void
 show_trunk(int ifs, char *ifname)
 {
-	struct trunk_reqport rpbuf[TRUNK_MAX_PORTS];
+	struct trunk_reqport rp, rpbuf[TRUNK_MAX_PORTS];
 	struct trunk_reqall ra;
 	int i;
 
 	bzero(&ra, sizeof(ra));
+	bzero(&rp, sizeof(rp));
+	strlcpy(rp.rp_ifname, ifname, sizeof(rp.rp_ifname));
+	strlcpy(rp.rp_portname, ifname, sizeof(rp.rp_portname));
+
+	if (ioctl(ifs, SIOCGTRUNKPORT, (caddr_t)&rp) == 0) {
+		printf("  Trunk parent %s ", rp.rp_ifname);
+		bprintf(stdout, rp.rp_flags, TRUNK_PORT_BITS);
+		printf("\n");
+	}
+
+	for (i = 0; i < TRUNK_MAX_PORTS; i++)
+		bzero(&rpbuf[i], sizeof(struct trunk_reqport));
 
 	strlcpy(ra.ra_ifname, ifname, sizeof(ra.ra_ifname));
 	ra.ra_size = sizeof(rpbuf);
 	ra.ra_port = rpbuf;
 
 	if (ioctl(ifs, SIOCGTRUNK, (caddr_t)&ra) == 0) {
+		int pntd = 0;
+
 		for (i = 0; i < TRUNK_PROTO_MAX; i++)
 			if (ra.ra_proto == tpr[i].tpr_proto) {
 				printf("  Trunkproto %s", tpr[i].tpr_name);
+				pntd = 1;
 				break;
 			}
-		for (i = 0; i < ra.ra_ports; i++) {
-			printf(" (%s ", rpbuf[i].rp_portname);
-			bprintf(stdout, rpbuf[i].rp_flags, TRUNK_PORT_BITS);
-			printf(")");
-		}
-		printf("\n");
+		for (i = 0; i < ra.ra_ports; i++)
+			if(rpbuf[i].rp_portname[0] != '\0') {
+				printf(" (%s ", rpbuf[i].rp_portname);
+				bprintf(stdout, rpbuf[i].rp_flags, TRUNK_PORT_BITS);
+				printf(")");
+				pntd = 1;
+			}
+		if (pntd)
+			printf("\n");
 	}
 }
