@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.97 2012/05/20 15:32:50 chris Exp $ */
+/* $nsh: commands.c,v 1.98 2012/05/20 20:11:01 chris Exp $ */
 /*
  * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -1695,17 +1695,19 @@ pr_s_conf(int argc, char **argv)
 int
 pr_routes(int argc, char **argv)
 {
+	int tableid = 0;
+
 	switch(argc) {
 	case 2:
 		/* show primary routing table */
-		p_rttables(AF_INET, 0, 0);
+		p_rttables(AF_INET, tableid, 0);
 		break;
 	case 3:
 		/* show a specific route */
-		show_route(argv[2]);
+		show_route(argv[2], tableid);
 		break;
 	}
-		
+
 	return 0;
 }
 

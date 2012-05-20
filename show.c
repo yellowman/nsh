@@ -1,4 +1,4 @@
-/* $nsh: show.c,v 1.14 2012/05/18 02:28:22 chris Exp $ */
+/* $nsh: show.c,v 1.15 2012/05/20 20:11:01 chris Exp $ */
 /* From: $OpenBSD: /usr/src/sbin/route/show.c,v 1.61 2007/09/05 20:30:21 claudio Exp $	*/
 
 /*
@@ -132,7 +132,7 @@ p_rttables(int af, u_int tableid, int flags)
 	struct sockaddr *sa;
 	struct rtdump *rtdump;
 
-	rtdump = getrtdump(0, flags, 0);
+	rtdump = getrtdump(0, flags, tableid);
 
 	if (rtdump) {
 		for (next = rtdump->buf; next < rtdump->lim; next += rtm->rtm_msglen) {

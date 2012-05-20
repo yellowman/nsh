@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.75 2012/05/20 15:32:50 chris Exp $ */
+/* $nsh: externs.h,v 1.76 2012/05/20 20:11:01 chris Exp $ */
 /*
  * nsh externs, prototypes and macros
  */
@@ -85,7 +85,7 @@ extern u_long rtm_inits;
 struct rtdump *getrtdump(int, int, u_int);
 void freertdump(struct rtdump *);
 int monitor(int, char **);
-int rtmsg(int, int, int, int);
+int rtmsg(int, int, int, int, int);
 void flushroutes(int, int);
 void bprintf(FILE *, int, u_char *);
 #ifdef _NET_IF_DL_H_
@@ -305,10 +305,10 @@ void conf_ipsysctl(FILE *);
 #define NO_NETMASK 0
 #define ASSUME_NETMASK 1
 int route(int, char**);
-void show_route(char *);
+void show_route(char *, int);
 #ifdef _IP_T_
 ip_t parse_ip(char *, int);
-int ip_route(ip_t *, ip_t *, u_short, int);
+int ip_route(ip_t *, ip_t *, u_short, int, int);
 #endif
 
 /* if.c */

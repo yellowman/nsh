@@ -1,4 +1,4 @@
-/* $nsh: arp.c,v 1.5 2009/06/05 03:42:43 chris Exp $ */
+/* $nsh: arp.c,v 1.6 2012/05/20 20:11:01 chris Exp $ */
 /* From: $OpenBSD: /usr/src/usr.sbin/arp/arp.c,v 1.40 2007/08/24 13:12:16 claudio Exp $ */
 /*
  * Copyright (c) 1984, 1993
@@ -79,7 +79,7 @@ arpset(int argc, char *argv[])
 	struct rt_msghdr *rtm;
 	char *eaddr, *host;
 	int doing_proxy, export_only;
-	int flags = 0, set = 1;
+	int flags = 0, set = 1, tableid = 0;
 
 	sin = &so_dst.sinarp;
 	rtm = &(m_rtmsg.m_rtm);
@@ -137,7 +137,7 @@ arpset(int argc, char *argv[])
 
 tryagain:
 	rtm_addrs = RTA_DST | RTA_GATEWAY;
-	if (rtmsg(RTM_GET, flags, doing_proxy, export_only) < 0) {
+	if (rtmsg(RTM_GET, flags, doing_proxy, export_only, tableid) < 0) {
 		printf("%% RTM_GET %s: %s\n", host, strerror(errno));
 	}
 	sin = (struct sockaddr_inarp *)((char *)rtm + rtm->rtm_hdrlen);
@@ -179,7 +179,7 @@ overwrite:
 	so_gate.sdl.sdl_type = sdl->sdl_type;
 	so_gate.sdl.sdl_index = sdl->sdl_index;
 	memcpy(&so_mask, &blank_mask, sizeof(so_mask));
-	if (rtmsg(RTM_ADD, flags, doing_proxy, export_only) < 0) {
+	if (rtmsg(RTM_ADD, flags, doing_proxy, export_only, tableid) < 0) {
 		printf("%% RTM_ADD %s: %s\n", host, strerror(errno));
 	}
 	return (errno);
@@ -221,7 +221,7 @@ delete(const char *host, const char *info)
 	struct sockaddr_inarp *sin;
 	struct rt_msghdr *rtm;
 	struct sockaddr_dl *sdl;
-	int export_only = 0;
+	int export_only = 0, tableid = 0;
 
 	sin = &so_dst.sinarp;
 	rtm = &(m_rtmsg.m_rtm);
@@ -238,7 +238,7 @@ delete(const char *host, const char *info)
 	}
 tryagain:
 	rtm_addrs = RTA_DST;
-	if (rtmsg(RTM_GET, 0, 0, 0) < 0) {
+	if (rtmsg(RTM_GET, 0, 0, 0, tableid) < 0) {
 		printf("%% RTM_GET: %s not found\n", host);
 		return (1);
 	}
@@ -270,7 +270,7 @@ delete:
 		printf("%% cannot locate %s\n", host);
 		return (1);
 	}
-	if (rtmsg(RTM_DELETE, 0, 0, export_only) < 0) {
+	if (rtmsg(RTM_DELETE, 0, 0, export_only, tableid) < 0) {
 		printf("%% delete failure: %s\n", strerror(errno));
 		return (1);
 	}

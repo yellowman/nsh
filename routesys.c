@@ -1,4 +1,4 @@
-/* $nsh: routesys.c,v 1.31 2009/06/05 03:39:05 chris Exp $ */
+/* $nsh: routesys.c,v 1.32 2012/05/20 20:11:01 chris Exp $ */
 /* From: $OpenBSD: /usr/src/sbin/route/route.c,v 1.43 2001/07/07 18:26:20 deraadt Exp $ */
 
 /*
@@ -81,7 +81,6 @@ void	 print_getmsg(struct rt_msghdr *, int);
 void	 pmsg_common(struct rt_msghdr *);
 void	 pmsg_addrs(char *, int);
 void	 bprintf(FILE *, int, u_char *);
-int	 ip_route(ip_t *, ip_t *, u_short, int);
 
 /*
  * caller must freertdump() if rtdump not null
@@ -587,7 +586,7 @@ bprintf(fp, b, s)
  * that we know about then we try and give a sensible error message
  */
 int
-ip_route(ip_t *dest, ip_t *gate, u_short cmd, int flags)
+ip_route(ip_t *dest, ip_t *gate, u_short cmd, int flags, int tableid)
 {
 	int l;
 	int len = dest->bitlen;
@@ -668,7 +667,7 @@ ip_route(ip_t *dest, ip_t *gate, u_short cmd, int flags)
 		return(0);
 		break;
 	}
-	if ((l = rtmsg(cmd, flags, 0, 0)) < 0) {
+	if ((l = rtmsg(cmd, flags, 0, 0, tableid)) < 0) {
 		if (cmd == RTM_ADD && gate &&
 		    (errno == ESRCH || errno == ENETUNREACH))
 			printf("%% Gateway is unreachable: %s\n",
@@ -697,8 +696,8 @@ ip_route(ip_t *dest, ip_t *gate, u_short cmd, int flags)
  * there is no error or we displayed the error message (get)
  */
 int
-rtmsg(cmd, flags, proxy, export)
-	int cmd, flags, proxy, export;
+rtmsg(cmd, flags, proxy, export, tableid)
+	int cmd, flags, proxy, export, tableid;
 {
 	static int seq;
 	struct rt_msghdr *rtm;
@@ -721,6 +720,7 @@ rtmsg(cmd, flags, proxy, export)
 	if(flags)
 		rtm->rtm_flags = flags;
 	rtm->rtm_version = RTM_VERSION;
+	rtm->rtm_tableid = tableid;
 	rtm->rtm_hdrlen = sizeof(*rtm);
 	rtm->rtm_seq = ++seq;
 	rtm->rtm_addrs = rtm_addrs;

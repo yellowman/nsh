@@ -1,4 +1,4 @@
-/* $nsh: route.c,v 1.12 2009/05/22 23:51:51 chris Exp $ */
+/* $nsh: route.c,v 1.13 2012/05/20 20:11:01 chris Exp $ */
 /*
  * Copyright (c) 2002 Chris Cappuccio <chris@nmedia.net>
  *
@@ -39,7 +39,7 @@ route(int argc, char **argv)
 	u_short cmd = 0;
 	u_int32_t net;
 	ip_t dest, gate;
-	int flags;
+	int flags, tableid = 0;
 
 	if (NO_ARG(argv[0])) {
 		cmd = RTM_DELETE; 
@@ -51,11 +51,11 @@ route(int argc, char **argv)
 	argc--;
 	argv++;
 
-	if (argc < 1 || argc > 2) {
-		printf("%% route <destination>[/bits] <gateway>\n");
-		printf("%% route <destination>[/netmask] <gateway>\n");
-		printf("%% no route <destination>[/bits] [gateway]\n");
-		printf("%% no route <destination>[/netmask] [gateway]\n");
+	if (argc < 1 || argc > 4 || (argc == 4 && !isprefix(argv[2], "table")) || argc == 3) {
+		printf("%% route <destination>[/bits] <gateway> [table <tableid>]\n");
+		printf("%% route <destination>[/netmask] <gateway> [table <tableid>]\n");
+		printf("%% no route <destination>[/bits] [gateway] [table <tableid>]\n");
+		printf("%% no route <destination>[/netmask] [gateway] [table <tableid>]\n");
 		return(1);
 	}
 
@@ -77,6 +77,8 @@ route(int argc, char **argv)
 		printf("%% No gateway specified\n");
 		return(1);
 	}
+	if (argc == 4)
+		tableid = atoi(argv[3]);
 
 	/*
 	 * Detect if a user is adding a route with a non-network address.
@@ -96,11 +98,11 @@ route(int argc, char **argv)
 	/*
 	 * Do the route...
 	 */
-	ip_route(&dest, &gate, cmd, flags);
+	ip_route(&dest, &gate, cmd, flags, tableid);
 	return(0);
 }
 
-void show_route(char *arg)
+void show_route(char *arg, int tableid)
 {
 	ip_t dest;
 
@@ -110,7 +112,7 @@ void show_route(char *arg)
 	if (dest.family == 0)
 		return;
 
-	ip_route(&dest, NULL, RTM_GET, RTF_UP);
+	ip_route(&dest, NULL, RTM_GET, RTF_UP, tableid);
 
 	/*
 	 * ip_route() calls rtmsg() which calls
