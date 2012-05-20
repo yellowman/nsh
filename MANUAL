@@ -1,6 +1,6 @@
 NSH // Network Shell User's Manual // Chris Cappuccio <chris@nmedia.net>
 
-$nsh: MANUAL,v 1.21 2012/05/19 23:59:56 chris Exp $
+$nsh: MANUAL,v 1.22 2012/05/20 05:09:52 chris Exp $
 
 Copyright (c) 2003, 2004 Chris Cappuccio
 
@@ -218,7 +218,7 @@ nsh(priv)/?
   route         Add a host or network route
   pf            Packet filter rule handler
   quit          Close current connection
-  reload        Reboot the system
+  reboot        Reboot the system
   shutdown      Shut the system down
   write-config  Save the current configuration
   verbose       Set verbose diagnostics
@@ -285,13 +285,13 @@ This will shut down the system.  Requires privileged access.
 nsh(priv)/halt
 % Shutdown initiated
 
-reload
+reboot
 ------
 
 This will reboot the system.  Requires privileged access.
 
-nsh(priv)/reload
-% Reload initiated
+nsh(priv)/reboot
+% Reboot initiated
 
 show
 ----

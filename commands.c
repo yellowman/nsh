@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.95 2012/05/20 03:14:29 chris Exp $ */
+/* $nsh: commands.c,v 1.96 2012/05/20 05:09:52 chris Exp $ */
 /*
  * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -115,7 +115,7 @@ static int	ssh(int, char*[]);
 static int	telnet(int, char*[]);
        void	p_argv(int, char **);
 static int	notvalid(void);
-static int 	reload(void);
+static int 	nreboot(void);
 static int 	halt(void);
 static Command *getcmd(char *);
 static void	pf_stats(void);
@@ -741,7 +741,7 @@ static char
 	whohelp[] =	"Display system users",
 	shellhelp[] =	"Invoke a subshell",
 	savehelp[] =	"Save the current configuration",
-	reloadhelp[] =	"Reboot the system",
+	nreboothelp[] =	"Reboot the system",
 	halthelp[] =	"Halt the system",
 	helphelp[] =	"Print help information";
 
@@ -788,7 +788,7 @@ Command cmdtab[] = {
 	{ "traceroute", tracerthelp,	CMPL0 0, 0, traceroute,	0, 0, 0, 0 },
 	{ "ssh",	sshhelp,	CMPL0 0, 0, ssh,	0, 0, 0, 0 },
 	{ "telnet",	telnethelp,	CMPL0 0, 0, telnet,	0, 0, 0, 0 },
-	{ "reload",	reloadhelp,	CMPL0 0, 0, reload,	1, 0, 0, 0 },
+	{ "reboot",	nreboothelp,	CMPL0 0, 0, nreboot,	1, 0, 0, 0 },
 	{ "halt",	halthelp,	CMPL0 0, 0, halt,	1, 0, 0, 0 },
 	{ "write-config", savehelp,	CMPL0 0, 0, wr_startup,	1, 0, 0, 0 },
 	{ "verbose",	verbosehelp,	CMPL0 0, 0, doverbose,	0, 0, 1, 0 },
@@ -1617,9 +1617,9 @@ wr_conf(char *fname)
  * Reboot
  */
 int
-reload(void)
+nreboot(void)
 {
-	printf ("%% Reload initiated\n");
+	printf ("%% Reboot initiated\n");
 	if (reboot (RB_AUTOBOOT) == -1)
 		printf("%% reboot: RB_AUTOBOOT: %s\n", strerror(errno));
 	return(1);
