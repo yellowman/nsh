@@ -1,4 +1,4 @@
-/* $nsh: routesys.c,v 1.32 2012/05/20 20:11:01 chris Exp $ */
+/* $nsh: routesys.c,v 1.33 2012/05/21 01:03:31 chris Exp $ */
 /* From: $OpenBSD: /usr/src/sbin/route/route.c,v 1.43 2001/07/07 18:26:20 deraadt Exp $ */
 
 /*
@@ -88,7 +88,7 @@ void	 bprintf(FILE *, int, u_char *);
  * if af is set, flags are not, and vice versa (or both can be 0)
  *
  */
-struct rtdump *getrtdump(int af, int flags, u_int tableid)
+struct rtdump *getrtdump(int af, int flags, int tableid)
 {
 	size_t needed;
 	int mib[7];
@@ -103,8 +103,9 @@ struct rtdump *getrtdump(int af, int flags, u_int tableid)
 	mib[6] = tableid;
 
 	if (sysctl(mib, 7, NULL, &needed, NULL, 0) < 0) {
-		printf("%% getrtdump: unable to get estimate: %s\n",
-		    strerror(errno));
+		if (errno != ENOENT)
+			printf("%% getrtdump: unable to get estimate: %s\n",
+			    strerror(errno));
 		return(NULL);
 	}
 
@@ -401,7 +402,8 @@ print_rtmsg(rtm)
 		    rtm->rtm_version);
 		return;
 	}
-	(void)printf("%% %s: len %d, ", msgtypes[rtm->rtm_type], rtm->rtm_msglen);
+	(void)printf("%% %s: len %d, table %d, ", msgtypes[rtm->rtm_type], rtm->rtm_msglen,
+	    rtm->rtm_tableid);
 	switch (rtm->rtm_type) {
 	case RTM_IFINFO:
 		ifm = (struct if_msghdr *)rtm;

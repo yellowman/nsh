@@ -1,4 +1,4 @@
-/* $nsh: conf.c,v 1.70 2012/05/20 01:03:13 chris Exp $ */
+/* $nsh: conf.c,v 1.71 2012/05/21 01:03:31 chris Exp $ */
 /*
  * Copyright (c) 2002-2009 Chris Cappuccio <chris@nmedia.net>
  *
@@ -725,25 +725,27 @@ conf_routes(FILE *output, char *delim, int af, int flags)
 	char *next;
 	struct rt_msghdr *rtm;
 	struct rtdump *rtdump;
+	int tableid;
 
-	rtdump = getrtdump(0, flags, 0);
-	if (rtdump == NULL) {
-		return(-1);
-	}
-
-	/* walk through routing table */
-	for (next = rtdump->buf; next < rtdump->lim; next += rtm->rtm_msglen) {
-		rtm = (struct rt_msghdr *)next;
-		if ((rtm->rtm_flags & flags) == 0)
+	for (tableid = 0; tableid <= RT_TABLEID_MAX; tableid++) {
+		rtdump = getrtdump(0, flags, tableid);
+		if (rtdump == NULL)
 			continue;
-		if (!rtm->rtm_errno) {
-			if (rtm->rtm_addrs)
-				conf_print_rtm(output, rtm, delim, af);
-		} else if (verbose)
-			printf("%% conf_routes: rtm: %s (errno %d)\n",
-			    strerror(rtm->rtm_errno), rtm->rtm_errno);
+
+		/* walk through routing table */
+		for (next = rtdump->buf; next < rtdump->lim; next += rtm->rtm_msglen) {
+			rtm = (struct rt_msghdr *)next;
+			if ((rtm->rtm_flags & flags) == 0)
+				continue;
+			if (!rtm->rtm_errno) {
+				if (rtm->rtm_addrs)
+					conf_print_rtm(output, rtm, delim, af);
+			} else if (verbose)
+				printf("%% conf_routes: rtm: %s (errno %d)\n",
+				    strerror(rtm->rtm_errno), rtm->rtm_errno);
+		}
+		freertdump(rtdump);
 	}
-	freertdump(rtdump);
 	return(1);
 }
 
@@ -907,9 +909,16 @@ conf_print_rtm(FILE *output, struct rt_msghdr *rtm, char *delim, int af)
 {
 	int i;
 	char *cp;
+	char tablename[16];
 	struct sockaddr *dst = NULL, *gate = NULL, *mask = NULL;
 	struct sockaddr *sa;
+	struct sockaddr_in sin;
 
+	sin.sin_addr.s_addr = htonl(INADDR_BROADCAST);
+
+	tablename[0] = '\0';
+	if (rtm->rtm_tableid > 0)
+		snprintf(tablename, sizeof(tablename), "table %i ", rtm->rtm_tableid);
 	cp = ((char *)rtm + rtm->rtm_hdrlen);
 	for (i = 1; i; i <<= 1)
 		if (i & rtm->rtm_addrs) {
@@ -932,18 +941,19 @@ conf_print_rtm(FILE *output, struct rt_msghdr *rtm, char *delim, int af)
 			}
 			ADVANCE(cp, sa);
 		}
-	if (dst && mask && gate && (af == AF_INET || af == AF_INET6)) {
+	if (dst && gate && (af == AF_INET)) {
 		/*
 		 * suppress printing IP route if it's the default
 		 * v4 route and dhcp (dhclient) is enabled
 		 */
 		if (!(isdefaultroute4(dst) && dhclient_isenabled(routename(gate)))) {
-			fprintf(output, "%s%s ", delim, netname(dst, mask));
+			fprintf(output, "%s%s%s ", delim, tablename, mask ?
+			    netname(dst, mask) : netname(dst, (struct sockaddr *)&sin));
 			fprintf(output, "%s\n", routename(gate));
 		}
 	} else
 	if (dst && gate && (af == AF_LINK))
 		/* print arp */
-		fprintf(output, "%s%s %s\n", delim, routename(dst),
+		fprintf(output, "%s%s%s %s\n", delim, tablename, routename(dst),
 		    routename(gate));
 }

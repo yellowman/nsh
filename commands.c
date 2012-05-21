@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.98 2012/05/20 20:11:01 chris Exp $ */
+/* $nsh: commands.c,v 1.99 2012/05/21 01:03:31 chris Exp $ */
 /*
  * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -141,7 +141,7 @@ quit(void)
 Menu showlist[] = {
 	{ "hostname",	"Router hostname",	CMPL0 0, 0, 0, 0, show_hostname },
 	{ "interface",	"Interface config",	CMPL(i) 0, 0, 0, 1, show_int },
-	{ "route",	"IP route table or route lookup", CMPL0 0, 0, 0, 1, pr_routes },
+	{ "route",	"IP route table or route lookup", CMPL0 0, 0, 0, 3, pr_routes },
 	{ "sadb",	"Security Association Database", CMPL0 0, 0, 0, 0, pr_sadb },
 	{ "arp",	"ARP table",		CMPL0 0, 0, 0, 1, pr_arp },
 	{ "kernel",	"Kernel statistics",	CMPL(ta) (char **)stts, sizeof(struct stt), 0, 1, pr_kernel },
@@ -1695,6 +1695,7 @@ pr_s_conf(int argc, char **argv)
 int
 pr_routes(int argc, char **argv)
 {
+	const char *errstr;
 	int tableid = 0;
 
 	switch(argc) {
@@ -1704,7 +1705,27 @@ pr_routes(int argc, char **argv)
 		break;
 	case 3:
 		/* show a specific route */
-		show_route(argv[2], tableid);
+		show_route(argv[2], 0);
+		break;
+	case 4:
+		if (isprefix(argv[2], "table")) {
+			tableid = strtonum(argv[3], 0, RT_TABLEID_MAX, &errstr);
+			if (errstr) {
+				printf("%% invalid table %s: %s\n", argv[3], errstr);
+				return(0);
+			}
+			p_rttables(AF_INET, tableid, 0);
+		}
+		break;
+	case 5:
+		if (isprefix(argv[3], "table")) {
+			tableid = strtonum(argv[4], 0, RT_TABLEID_MAX, &errstr);
+			if (errstr) {
+				printf("%% invalid table %s: %s\n", argv[4], errstr);
+				return(0);
+			}
+			show_route(argv[2], tableid);
+		}
 		break;
 	}
 

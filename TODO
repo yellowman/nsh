@@ -1,4 +1,4 @@
-$nsh: TODO,v 1.34 2012/05/18 14:09:56 chris Exp $
+$nsh: TODO,v 1.35 2012/05/21 01:03:31 chris Exp $
 
 nsh is a work in progress, diffs are welcome
 
@@ -17,6 +17,7 @@ Cleanup:
 
 To be implemented:
 
+* rdomain/rtable control in more places
 * handle newer bridge commands
 * handle newer 802.11 gunk like rssi display, chan, flags
 * handle kernel pppoe

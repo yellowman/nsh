@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.76 2012/05/20 20:11:01 chris Exp $ */
+/* $nsh: externs.h,v 1.77 2012/05/21 01:03:31 chris Exp $ */
 /*
  * nsh externs, prototypes and macros
  */
@@ -82,7 +82,7 @@ extern union sockunion so_dst, so_mask, so_gate, so_ifp;
 extern int rtm_addrs;
 extern u_long rtm_inits;
 #define FLUSH 0
-struct rtdump *getrtdump(int, int, u_int);
+struct rtdump *getrtdump(int, int, int);
 void freertdump(struct rtdump *);
 int monitor(int, char **);
 int rtmsg(int, int, int, int, int);

@@ -1,6 +1,6 @@
 NSH // Network Shell User's Manual // Chris Cappuccio <chris@nmedia.net>
 
-$nsh: MANUAL,v 1.22 2012/05/20 05:09:52 chris Exp $
+$nsh: MANUAL,v 1.23 2012/05/21 01:03:31 chris Exp $
 
 Copyright (c) 2003, 2004 Chris Cappuccio
 
@@ -701,7 +701,7 @@ nsh(priv)/ip ?
   ah                  Allow Authentication Header
   sourceroute         Process Loose/Strict Source Route Options
   encdebug            Enable if_enc debugging
-  maxqueue            Set Max queued packets
+  ifq-maxlen          IP IFQ maxlen
   send-redirects      Send ICMP redirects
   directed-broadcast  Allow directed broadcasts
   default-ttl         Set Default IP packet TTL
@@ -805,13 +805,15 @@ nsh(priv)/ip encdebug
 Print debugging messages for the if_enc interface to the kernel output.  
 Requires a kernel compiled with option ENCDEBUG.
 
-[no] ip maxqueue <argument>
----------------------------
+[no] ip ifq-maxlen <argument>
+-----------------------------
 
-nsh(priv)/ip maxqueue 1000
+nsh(priv)/ip ifq-maxlen 8192
 
 Maximum number of queued packets before they are dropped.  Increasing
-this option does not necessarily help with system performance.
+this option does not necessarily help with system performance.  The output
+of 'show version' displays the IFQ drop counter. If this counter increases,
+a larger ifq-maxlen may be necessary. 
 
 [no] ip send-redirects
 ----------------------
@@ -1038,14 +1040,15 @@ with an ethernet crossover cable).
 
 nsh(interface-pfsync0)/syncdev fxp0
 
-[no] maxupd <updates>
----------------------
+[no] maxupd <updates> [defer]
+-----------------------------
 
 This command is valid for pfsync interfaces only.  It configures the maximum
 number of updates which are collapsable into one for a single state.  The
-default value is 128.
+default value is 128. The defer flag defers the first packet of each connection
+from being delivered until the state is active on pfsync peer.
 
-nsh(interface-pfsync0)/maxupd 32
+nsh(interface-pfsync0)/maxupd 128 defer
 
 [no] vhid <id>
 --------------
@@ -1081,14 +1084,14 @@ the CARP passphrase.  There is no passphrase by default.
 
 nsh(interface-carp0)/cpass mekmitasdigoat
 
-[no] vlan <tag> <parent interface>
-----------------------------------
+[no] vlan <tag> parent <parent interface>
+-----------------------------------------
 
 You can set or remove vlan assignments with this command.  Note that vlan
 assignments are only valid on the vlan inteface.  See Appendix E for more
 details.
 
-nsh(interface-vlan0)/vlan 4 fxp3
+nsh(interface-vlan0)/vlan 4 parent fxp3
 
 This would set vlan0 to use vlan ID 4 on parent (trunk) interface fxp3.
 
@@ -1278,21 +1281,6 @@ The lack of link flag 0 enables MobileIP mode.
 
 nsh(interface-gre0)/no link 0
 
-lo
---
-lo is the loopback interface.  It is used for traffic that does not
-leave the system/router.  
-
-Setting the link 1 flag will cause a loopback interface to answer for
-all addresses identified as being in the super-net which is specified
-in the address and netmask.  
-
-To make the router answer for 208.44.76.0 through 208.44.76.7, you would
-do this:
-
-nsh(interface-lo1)/ip 208.44.76.0/29
-nsh(interface-lo1)/link 1
-
 enc (IPsec Loopback)
 ---
 enc (specifically, enc0) is the encapsulating interface.  It is a software
@@ -1341,7 +1329,7 @@ port using the 802.1Q protocol.  For instance, if you wanted to setup
 a virtual interface with the 192.168.44.1 IP address, with 802.1Q trunking
 on the fxp3 physical interface, and a vlan ID of 4, you would do this:
 
-nsh(interface-vlan0)/vlan 4 fxp3
+nsh(interface-vlan0)/vlan 4 parent fxp3
 nsh(interface-vlan0)/ip 192.168.44.1/24
 
 

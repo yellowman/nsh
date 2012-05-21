@@ -1,4 +1,4 @@
-/* $nsh: route.c,v 1.13 2012/05/20 20:11:01 chris Exp $ */
+/* $nsh: route.c,v 1.14 2012/05/21 01:03:31 chris Exp $ */
 /*
  * Copyright (c) 2002 Chris Cappuccio <chris@nmedia.net>
  *
@@ -51,12 +51,25 @@ route(int argc, char **argv)
 	argc--;
 	argv++;
 
-	if (argc < 1 || argc > 4 || (argc == 4 && !isprefix(argv[2], "table")) || argc == 3) {
-		printf("%% route <destination>[/bits] <gateway> [table <tableid>]\n");
-		printf("%% route <destination>[/netmask] <gateway> [table <tableid>]\n");
-		printf("%% no route <destination>[/bits] [gateway] [table <tableid>]\n");
-		printf("%% no route <destination>[/netmask] [gateway] [table <tableid>]\n");
+	if (argc < 1 || argc > 4 || (argc == 4 && !isprefix(argv[0], "table")) || argc == 3) {
+		printf("%% route [table <tableid>] <destination>[/bits] <gateway>\n");
+		printf("%% route [table <tableid>] <destination>[/netmask] <gateway>\n");
+		printf("%% no route [table <tableid>] <destination>[/bits] [gateway]\n");
+		printf("%% no route [table <tableid>] <destination>[/netmask] [gateway]\n");
 		return(1);
+	}
+
+	if (argc == 4) {
+		const char *errstr;
+
+		tableid = strtonum(argv[1], 0, RT_TABLEID_MAX, &errstr);
+		if (errstr) {
+			printf("%% table %s: %s\n", argv[3], errstr);
+			return(1);
+		}
+
+		argc-= 2;
+		argv+= 2;
 	}
 
 	memset(&gate, 0, sizeof(ip_t));
@@ -77,8 +90,6 @@ route(int argc, char **argv)
 		printf("%% No gateway specified\n");
 		return(1);
 	}
-	if (argc == 4)
-		tableid = atoi(argv[3]);
 
 	/*
 	 * Detect if a user is adding a route with a non-network address.
