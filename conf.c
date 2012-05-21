@@ -1,4 +1,4 @@
-/* $nsh: conf.c,v 1.71 2012/05/21 01:03:31 chris Exp $ */
+/* $nsh: conf.c,v 1.72 2012/05/21 14:46:11 chris Exp $ */
 /*
  * Copyright (c) 2002-2009 Chris Cappuccio <chris@nmedia.net>
  *
@@ -64,6 +64,7 @@ void conf_pflow(FILE *, int, char *);
 void conf_ctl(FILE *, char *);
 void conf_intrtlabel(FILE *, int, char *);
 void conf_intgroup(FILE *, int, char *);
+void conf_keepalive(FILE *, int, char *);
 void conf_groupattrib(FILE *);
 int dhclient_isenabled(char *);
 int isdefaultroute4(struct sockaddr *sa);
@@ -415,6 +416,7 @@ void conf_interfaces(FILE *output, char *only)
 
 			conf_media_status(output, ifs, ifnp->if_name);
 			conf_ifmetrics(output, ifs, if_data, ifnp->if_name);
+			conf_keepalive(output, ifs, ifnp->if_name);
 			conf_pfsync(output, ifs, ifnp->if_name);
 			conf_carp(output, ifs, ifnp->if_name);
 			conf_trunk(output, ifs, ifnp->if_name);
@@ -530,6 +532,20 @@ void conf_rdomain(FILE *output, int ifs, char *ifname)
 	if (ioctl(ifs, SIOCGIFRDOMAIN, (caddr_t)&ifr) != -1)
 		if (ifr.ifr_rdomainid != 0)
 			fprintf(output, " rdomain %d\n", ifr.ifr_rdomainid);
+}
+
+
+void conf_keepalive(FILE *output, int ifs, char *ifname)
+{
+	struct ifkalivereq ikar;
+
+	bzero(&ikar, sizeof(ikar));
+	strlcpy(ikar.ikar_name, ifname, IFNAMSIZ);
+
+	if (ioctl(ifs, SIOCGETKALIVE, &ikar) == 0 &&
+	    (ikar.ikar_timeo != 0 || ikar.ikar_cnt != 0))
+		fprintf(output, " keepalive %d %d\n",
+		    ikar.ikar_timeo, ikar.ikar_cnt);
 }
 	
 

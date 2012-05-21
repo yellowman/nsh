@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.77 2012/05/21 01:03:31 chris Exp $ */
+/* $nsh: externs.h,v 1.78 2012/05/21 14:46:11 chris Exp $ */
 /*
  * nsh externs, prototypes and macros
  */
@@ -331,6 +331,7 @@ u_int32_t in4_netaddr(u_int32_t, u_int32_t);
 u_int32_t in4_brdaddr(u_int32_t, u_int32_t);
 int intip(char *, int, int, char **);
 int intmtu(char *, int, int, char **);
+int intkeepalive(char *, int, int, char **);
 int intlabel(char *, int, int, char **);
 int intrdomain(char *, int, int, char **);
 int intdhcrelay(char *, int, int, char **);

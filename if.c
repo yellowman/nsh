@@ -1,4 +1,4 @@
-/* $nsh: if.c,v 1.52 2012/05/20 15:32:51 chris Exp $ */
+/* $nsh: if.c,v 1.53 2012/05/21 14:46:11 chris Exp $ */
 /*
  * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -858,6 +858,55 @@ intmtu(char *ifname, int ifs, int argc, char **argv)
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 	if (ioctl(ifs, SIOCSIFMTU, (caddr_t)&ifr) < 0)
 		printf("%% intmtu: SIOCSIFMTU: %s\n", strerror(errno));
+
+	return(0);
+}
+
+int
+intkeepalive(char *ifname, int ifs, int argc, char **argv)
+{
+	struct ifkalivereq ikar;
+	int set;
+	const char *errmsg = NULL;
+
+	if (NO_ARG(argv[0])) {
+		set = 0;
+		argc--;
+		argv++;
+	} else
+		set = 1;
+
+	argc--;
+	argv++;
+
+	if ((!set && argc > 2) || (set && argc != 2)) {
+		printf("%% keepalive <period> <count>\n");
+		printf("%% no keepalive [period] [count]\n");
+		return(0);
+	}
+
+	bzero(&ikar, sizeof(ikar));
+
+	if (set) {
+		ikar.ikar_timeo = strtonum(argv[0], 1, 3600, &errmsg);
+		if (errmsg) {
+			printf("%% Invalid period %s: %s\n", argv[0], errmsg);
+			return(0);
+		}
+		ikar.ikar_cnt = strtonum(argv[1], 2, 600, &errmsg);
+		if (errmsg) {
+			printf("%% Invalid count %s: %s\n", argv[1], errmsg);
+			return(0);
+		}
+	}
+
+	strlcpy(ikar.ikar_name, ifname, sizeof(ikar.ikar_name));
+	if (ioctl(ifs, SIOCSETKALIVE, (caddr_t)&ikar) < 0) {
+		if (errno == ENOTTY)
+			printf("%% Keepalive not available on this interface\n");
+		else
+			printf("%% intkeepalive: SIOCSETKALIVE: %s\n", strerror(errno));
+	}
 
 	return(0);
 }
