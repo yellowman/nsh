@@ -1,4 +1,4 @@
-/* $nsh: ctl.c,v 1.29 2012/05/19 23:59:56 chris Exp $ */
+/* $nsh: ctl.c,v 1.30 2012/05/23 05:45:35 chris Exp $ */
 /*
  * Copyright (c) 2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -44,6 +44,7 @@
 #define LDPD		"/usr/sbin/ldpd"
 #define SMTPD		"/usr/sbin/smtpd"
 #define LDAPD		"/usr/sbin/ldapd"
+#define IFSTATED	"/usr/sbin/ifstated"
 #ifndef DHCPLEASES
 #define DHCPLEASES	"/var/db/dhcpd.leases"
 #endif
@@ -175,6 +176,17 @@ struct ctl ctl_dvmrp[] = {
 	    { PKILL, "dvmrpd", NULL }, NULL, X_DISABLE },
 	{ "edit",       "edit configuration",
 	    { "dvmrp", (char *)ctl_dvmrp_test,  NULL }, call_editor, NULL },
+	{ 0, 0, { 0 }, 0, 0 }
+};
+
+char *ctl_ifstate_test[] = { IFSTATED, "-nf", IFSTATECONF_TEMP, '\0' };
+struct ctl ctl_ifstate[] = {
+	{ "enable",     "enable service",
+	    { IFSTATED, "-f", IFSTATECONF_TEMP, NULL }, NULL, X_ENABLE },
+	{ "disable",    "disable service",
+	    { PKILL, "ifstated", NULL }, NULL, X_DISABLE },
+	{ "edit",       "edit configuration",
+	    { "ifstate", (char *)ctl_ifstate_test,  NULL }, call_editor, NULL },
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
@@ -341,6 +353,7 @@ struct daemons ctl_daemons[] = {
 	{ "inet",	"Inet", ctl_inet,	INETCONF_TEMP,	0600, 0 },
 	{ "smtp",	"SMTP", ctl_smtp,	SMTPCONF_TEMP,	0600, 0 },
 	{ "ldap",	"LDAP", ctl_ldap,	LDAPCONF_TEMP,	0600, 0 },
+	{ "ifstate",	"Interface state", ctl_ifstate,	IFSTATECONF_TEMP, 0600, 0 },
 	{ 0, 0, 0, 0, 0 }
 };
 

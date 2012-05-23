@@ -1,4 +1,4 @@
-/* $nsh: conf.c,v 1.72 2012/05/21 14:46:11 chris Exp $ */
+/* $nsh: conf.c,v 1.73 2012/05/23 05:45:35 chris Exp $ */
 /*
  * Copyright (c) 2002-2009 Chris Cappuccio <chris@nmedia.net>
  *
@@ -67,6 +67,7 @@ void conf_intgroup(FILE *, int, char *);
 void conf_keepalive(FILE *, int, char *);
 void conf_groupattrib(FILE *);
 int dhclient_isenabled(char *);
+int islateif(char *);
 int isdefaultroute4(struct sockaddr *sa);
 int scantext(char *, char *);
 
@@ -81,6 +82,37 @@ static const struct {
 	{ "pflow",	MTU_IGNORE },
 	{ "pflog",	MTU_IGNORE },
 	{ "lo",		MTU_IGNORE },
+};
+
+/*
+ * these interfaces get started in a specific order
+ *
+ * pfsync gets delayed until pf rules are loaded
+ *
+ * /etc/netstart says:
+ *
+ * The trunk interfaces need to come up first in this list.
+ * The (s)vlan interfaces need to come up after trunk.
+ * Configure all the carp interfaces which we know about before default route.
+ *
+ * Configure PPPoE, GIF, GRE and TUN interfaces, delayed because they require
+ * routes to be set.  TUN might depend on PPPoE, and GIF or GRE may depend on
+ * either of them.
+ */
+
+static const struct {
+	char *name;
+} latestartifs[] = {
+	{ "trunk" },
+	{ "svlan" },
+	{ "vlan" },
+	{ "carp" },
+	{ "gif" },
+	{ "gre" },
+	{ "pfsync" },
+	{ "pppoe" },
+	{ "tun" },
+	{ "bridge" },
 };
 
 int
@@ -103,7 +135,17 @@ conf(FILE *output)
 	fprintf(output, "!\n");
 	conf_ctl(output, "dns");
 
+	/*
+	 * start all intefaces not listed in 'latestartifs'
+	 */
 	conf_interfaces(output, NULL);
+	/*
+	 * start these interfaces in specific order
+	 */
+	conf_interfaces(output, "trunk");
+	conf_interfaces(output, "svlan");
+	conf_interfaces(output, "vlan");
+	conf_interfaces(output, "carp");
 
 	conf_groupattrib(output);
 
@@ -127,21 +169,39 @@ conf(FILE *output)
 	conf_routes(output, "route ", AF_INET, RTF_STATIC);
 
 	fprintf(output, "!\n");
+	/*
+	 * these interfaces must start after routes are set
+	 */
+	conf_interfaces(output, "pppoe");
+	conf_interfaces(output, "tun");
+	conf_interfaces(output, "gif");
+	conf_interfaces(output, "gre");
+	conf_interfaces(output, "bridge");
 
+	fprintf(output, "!\n");
 	conf_ctl(output, "pf");
 
+	/*
+	 * this interface must start after pf is loaded
+	 */
 	conf_interfaces(output, "pfsync");
 
-	conf_ctl(output, "ospf");
-	conf_ctl(output, "bgp");
+	conf_ctl(output, "snmp");
+	conf_ctl(output, "ldp");
 	conf_ctl(output, "rip");
+	conf_ctl(output, "ospf");
+	/* conf_ctl(output, "ospf6"); */
+	conf_ctl(output, "bgp");
+	conf_ctl(output, "ifstate");
 	conf_ctl(output, "ipsec");
+	conf_ctl(output, "ike");
 	conf_ctl(output, "dvmrp");
 	conf_ctl(output, "relay");
 	conf_ctl(output, "sasync");
 	conf_ctl(output, "dhcp");
-	conf_ctl(output, "snmp");
 	conf_ctl(output, "ntp");
+	conf_ctl(output, "smtp");
+	conf_ctl(output, "ldap");
 	conf_ctl(output, "ftp-proxy");
 	conf_ctl(output, "inet");
 	conf_ctl(output, "sshd");
@@ -283,6 +343,17 @@ int scantext(char *fname, char *string)
 	return(found);
 }
 
+int islateif(char *ifname)
+{
+	int i;
+
+	for (i = 0; i < sizeof(latestartifs) / sizeof(latestartifs[0]); i++)
+		if (isprefix(latestartifs[i].name, ifname))  
+			return(1);
+
+	return(0);
+}
+
 void conf_interfaces(FILE *output, char *only)
 {
 	FILE *dhcpif, *llfile;
@@ -310,16 +381,14 @@ void conf_interfaces(FILE *output, char *only)
 	}
 
 	for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++) {
-		strlcpy(ifr.ifr_name, ifnp->if_name, sizeof(ifr.ifr_name));
-
 		if (only && !isprefix(only, ifnp->if_name))
 			/* only display interfaces which start with ... */
 			continue;
-		if (!only) {
+		if (!only && islateif(ifnp->if_name))
 			/* interface prefixes to exclude on generic run */
-			if (isprefix("pfsync", ifnp->if_name))
-				continue;
-		}
+			continue;
+
+		strlcpy(ifr.ifr_name, ifnp->if_name, sizeof(ifr.ifr_name));
 
 		if (ioctl(ifs, SIOCGIFFLAGS, (caddr_t)&ifr) < 0) {
 			printf("%% conf: SIOCGIFFLAGS: %s\n", strerror(errno));

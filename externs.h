@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.78 2012/05/21 14:46:11 chris Exp $ */
+/* $nsh: externs.h,v 1.79 2012/05/23 05:45:35 chris Exp $ */
 /*
  * nsh externs, prototypes and macros
  */
@@ -119,6 +119,7 @@ extern char metricnames[];
 #define SSHDCONF_TEMP	"/var/run/sshd.conf"
 #define SMTPCONF_TEMP 	"/var/run/smtpd.conf"
 #define LDAPCONF_TEMP	"/var/run/ldapd.conf"
+#define IFSTATECONF_TEMP "/var/run/ifstated.conf"
 /* flag_x flags */
 #define X_ENABLE  (void *)1
 #define X_DISABLE (void *)2
