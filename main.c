@@ -1,4 +1,4 @@
-/* $nsh: main.c,v 1.41 2012/05/21 14:47:47 chris Exp $ */
+/* $nsh: main.c,v 1.42 2012/05/23 21:44:32 chris Exp $ */
 /*
  * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -35,7 +35,7 @@ void usage(void);
 
 jmp_buf toplevel;
 
-char *vers = "20120521";
+char *vers = "20120523";
 int bridge = 0;		/* bridge mode for interface() */
 int verbose = 0;	/* verbose mode */
 int priv = 0;
