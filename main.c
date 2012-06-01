@@ -1,4 +1,4 @@
-/* $nsh: main.c,v 1.43 2012/06/01 17:30:25 chris Exp $ */
+/* $nsh: main.c,v 1.44 2012/06/01 18:03:09 chris Exp $ */
 /*
  * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -84,31 +84,17 @@ main(int argc, char *argv[])
 		usage();
 
 	if (iflag) {
+		/*
+		 * Interpret config file and exit
+		 */
 		char *argv_demote[] = { "group", "carp", "carpdemote", "128" };
 		char *argv_restore[] = { "no", "group", "carp", "carpdemote", "128" };
 
-		/*
-		 * Run initialization and then exit.
-		 */
-		rmtemp(PFCONF_TEMP);
-		rmtemp(OSPFCONF_TEMP);
-		rmtemp(BGPCONF_TEMP);
-		rmtemp(RIPCONF_TEMP);
-		rmtemp(LDPCONF_TEMP);
-		rmtemp(IPSECCONF_TEMP);
-		rmtemp(IKECONF_TEMP);
-		rmtemp(DVMRPCONF_TEMP);
-		rmtemp(RELAYCONF_TEMP);
-		rmtemp(SASYNCCONF_TEMP);
-		rmtemp(DHCPCONF_TEMP);
-		rmtemp(SNMPCONF_TEMP);
-		rmtemp(NTPCONF_TEMP);
-		rmtemp(RESOLVCONF_TEMP);
-		rmtemp(INETCONF_TEMP);
-		rmtemp(SSHDCONF_TEMP);
-		rmtemp(SMTPCONF_TEMP);
-		rmtemp(LDAPCONF_TEMP);
-		rmtemp(IFSTATECONF_TEMP);
+		struct daemons *daemons;
+
+		for (daemons = ctl_daemons; daemons->name != 0; daemons++)
+			if (daemons->tmpfile)
+				rmtemp(daemons->tmpfile);
 
 		priv = 1;
 
