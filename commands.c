@@ -1,4 +1,4 @@
-/* $nsh: commands.c,v 1.100 2012/05/21 14:46:11 chris Exp $ */
+/* $nsh: commands.c,v 1.101 2012/06/01 17:30:25 chris Exp $ */
 /*
  * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -84,7 +84,7 @@ static int	quit(void);
 static int	disable(void);
 static int	doverbose(int, char**);
 static int	doediting(int, char**);
-static int	group(int, char**);
+int		group(int, char**);
 static int	pr_routes(int, char **);
 static int	pr_arp(int, char **);
 static int	pr_sadb(int, char **);
@@ -1140,7 +1140,7 @@ traceroute(int argc, char *argv[])
 /*
  * Group attribute command.
  */
-static int
+int
 group(int argc, char **argv)
 {
 	int counter = 1, set, ifs;

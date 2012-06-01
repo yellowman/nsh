@@ -1,4 +1,4 @@
-/* $nsh: externs.h,v 1.79 2012/05/23 05:45:35 chris Exp $ */
+/* $nsh: externs.h,v 1.80 2012/06/01 17:30:25 chris Exp $ */
 /*
  * nsh externs, prototypes and macros
  */
@@ -205,6 +205,7 @@ int cmdargs(char *, char **);
 char *iprompt(void);
 char *cprompt(void);
 char *pprompt(void);
+int group (int, char **);
 void gen_help(char **, char *, char *, int);
 void makeargv(void);
 extern size_t cursor_argc;

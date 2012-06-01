@@ -1,4 +1,4 @@
-/* $nsh: main.c,v 1.42 2012/05/23 21:44:32 chris Exp $ */
+/* $nsh: main.c,v 1.43 2012/06/01 17:30:25 chris Exp $ */
 /*
  * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
  *
@@ -84,6 +84,9 @@ main(int argc, char *argv[])
 		usage();
 
 	if (iflag) {
+		char *argv_demote[] = { "group", "carp", "carpdemote", "128" };
+		char *argv_restore[] = { "no", "group", "carp", "carpdemote", "128" };
+
 		/*
 		 * Run initialization and then exit.
 		 */
@@ -91,20 +94,36 @@ main(int argc, char *argv[])
 		rmtemp(OSPFCONF_TEMP);
 		rmtemp(BGPCONF_TEMP);
 		rmtemp(RIPCONF_TEMP);
+		rmtemp(LDPCONF_TEMP);
 		rmtemp(IPSECCONF_TEMP);
+		rmtemp(IKECONF_TEMP);
 		rmtemp(DVMRPCONF_TEMP);
 		rmtemp(RELAYCONF_TEMP);
 		rmtemp(SASYNCCONF_TEMP);
 		rmtemp(DHCPCONF_TEMP);
 		rmtemp(SNMPCONF_TEMP);
 		rmtemp(NTPCONF_TEMP);
+		rmtemp(RESOLVCONF_TEMP);
+		rmtemp(INETCONF_TEMP);
+		rmtemp(SSHDCONF_TEMP);
+		rmtemp(SMTPCONF_TEMP);
+		rmtemp(LDAPCONF_TEMP);
+		rmtemp(IFSTATECONF_TEMP);
 
-		priv = 1;	/*
-				 * Necessary today for 'enable secret' to
-				 * work in -i mode, as CLI code is reworked
-				 * this will disappear
-				 */
+		priv = 1;
+
+		/*
+		 * Set carp group carpdemote to 128 during initialization
+		 */
+		group(sizeof(argv_demote) / sizeof(argv_demote[0]), argv_demote);
+
 		cmdrc(rc);
+
+		/*
+		 * Initialization over
+		 */
+		group(sizeof(argv_restore) / sizeof(argv_restore[0]), argv_restore);
+
 		exit(0);
 	}
 
