@@ -1,0 +1,251 @@
+#!/bin/ksh
+#
+# flashrd mkdist
+#
+# flip openbsd distribution into vnd and tars for mounting on flash boot
+#
+# Chris Cappuccio <chris@nmedia.net>
+#
+
+if [ -z "$vnddirs" ]; then
+ echo vnddirs not specified, aborting
+ exit 1
+fi
+if [ -z "$device" ]; then
+ device=svnd0
+fi
+
+if [ -z "$1" -a -z "$distloc" ]; then
+ echo "% mkdist <openbsd base>"
+ exit 1
+fi
+
+if [ -z "$distloc" ]; then
+ distloc=$1
+ shift
+fi
+
+if [ ! -d "$distloc" ]; then
+ echo % $distloc is not a directory
+ exit 1
+else
+ if [ ! -f "$distloc"/etc/services ]; then
+  echo % $distloc does not contain an unpacked etcXX.tgz file
+  exit 1
+ fi
+ if [ ! -f "$distloc"/bin/ksh ]; then
+  echo % $distloc does not contain an unpacked baseXX.tgz file
+  exit 1
+ fi
+ if [ ! -u "$distloc"/usr/bin/passwd ]; then
+  echo "% $distloc was not unpacked with tar p flag (to preserve permissions),"
+  echo "or it was not unpacked as root (to allow set ownership)"
+  exit 1
+ fi
+fi
+
+if [ ! -z "$vndsize" ]; then
+ # build vndsizeA array from $vndsize
+ x=0
+ for i in $vndsize; do
+  vndsizeA[$x]=$i
+  let x=x+1
+ done
+fi
+
+y=0
+for i in $vnddirs; do
+ if [ ! -d $distloc/$i ]; then
+  echo % Directory $distloc/$i not found 
+  exit 1
+ fi
+ let y=y+1
+done
+
+if [ $y -ne $x ]; then
+ echo "% \$vnddirs count ($y) different than \$vndsize count ($x), aborting"
+ exit 1
+fi
+
+if [ ! -z "tardirs" ]; then
+ for i in $tardirs; do
+  if [ ! -d $distloc/$i ]; then
+   echo % Directory $distloc/$i not found
+   exit 1
+  fi
+ done
+fi
+
+# determine working dir for shitz 
+if [ -z $tmpmnt ]; then
+ tmpdir="vnd-`date +%Y%m%d`"
+ if [ -d $tmpdir ]; then
+  echo % Directory $tmpdir already exists
+  ls -ld $tmpdir
+  exit 1
+ else
+  mkdir $tmpdir
+ fi
+else
+ tmpdir=$tmpmnt
+fi
+
+tmplabel=`mktemp /tmp/mkdistlabel.XXXXXXXXX`
+tmpmntdir=`mktemp -d /tmp/mkdist.XXXXXXXXX`
+
+###
+#
+# Determine sizes for partitions
+
+set -A part a d e f g h i j k l m n o p
+disktotal=0
+x=0
+
+for i in $vnddirs; do
+
+ echo -n Analyzing /$i
+
+ size[$x]=`du -s $distloc/$i | cut -f 1`
+
+ # Leave 1/5th (20%) of used space as free space for >=100MB directories
+ let free[$x]=size[$x]/5
+ let total[$x]=size[$x]+free[$x]
+ # and leave 140% of used space as free space for <100MB directories
+ if [ ${size[$x]} -le 204800 ]; then
+  let total[$x]=total[$x]+total[$x]
+ fi 
+ if [ ${vndsizeA[$x]} != "auto" ]; then
+  if [ ${total[$x]} -le ${vndsizeA[$x]} ]; then
+   let total[$x]=vndsizeA[$x]
+  else
+   # Auto-calculated size was more than suggested size.  Go with auto-calculation.
+   echo -n " (OVERRIDE $((vndsizeA[$x] / 2048))MB)"
+  fi
+ fi
+ # report results
+ echo " fs $((total[$x] / 2048))MB ($((size[$x] / 2048))MB files $(((total[$x] - size[$x]) / 2048))MB free)"
+ let disktotal=disktotal+total[$x]
+
+ let x=x+1
+
+done
+
+###
+#
+# This step isn't strictly necessary.  The kernel will just fill in the free space automatically during write if the disklabel purports a large image!
+
+echo -n "Creating openbsd.vnd $((disktotal / 2048))MB "
+if ! dd if=/dev/zero of=$tmpdir/openbsd.vnd bs=512 count=$disktotal >/dev/null 2>/dev/null; then
+ echo % dd if=/dev/zero of=$tmpdir/openbsd.vnd bs=512 count=$disktotal failure
+ exit 1
+fi
+echo
+ 
+if ! vnconfig $device $tmpdir/openbsd.vnd; then
+ echo % vnconfig $device $tmpdir/openbsd.vnd failure
+ exit 1
+fi
+
+###
+#
+# Read in fake label as basis for real one
+
+if ! disklabel $device > $tmplabel; then
+ echo % disklabel $device failure
+ vnconfig -u $device
+ exit 1
+fi
+
+###
+#
+# Build, write vnd disklabel
+
+x=0
+offset=0
+
+for i in $vnddirs; do
+
+ echo "${part[$x]}: ${total[$x]}  $offset   4.2BSD  1024    8192    16"  >> $tmplabel
+
+ let offset=offset+${total[$x]}
+ let x=x+1
+done
+
+if ! disklabel -R $device $tmplabel; then
+ echo % disklabel -R $device $tmplabel failure
+ vnconfig -u $device
+ exit 1
+fi
+
+###
+#
+# newfs, copy
+
+x=0
+
+for i in $vnddirs; do
+ echo -n Finalizing /$i
+
+ echo -n " newfs"
+ if ! newfs -m 0 -o space /dev/r"$device"${part[$x]} >/dev/null 2>/dev/null; then
+  echo newfs a -m 0 -o space /dev/r"$device"${part[$x]} failure
+  vnconfig -u $device
+  exit 1
+ fi
+
+ if ! mount /dev/"$device"${part[$x]} $tmpmntdir; then
+  echo mount /dev/"$device"${part[$x]} $tmpmntdir failure
+  vnconfig -u $device
+  exit 1
+ fi
+
+ echo -n " copy"
+ if ! tar cf - -C $distloc/$i . | tar xpf - -C $tmpmntdir; then
+  echo tar cf - -C $distloc/$i . | tar xpf - -C $tmpmntdir failure
+  umount $tmpmntdir
+  vnconfig -u $device
+  exit 1
+ fi
+
+ if ! umount $tmpmntdir; then
+  echo umount $tmpmntdir failure
+  vnconfig -u $device
+  exit 1
+ fi
+
+ echo
+ let x=x+1
+done
+
+if ! vnconfig -u $device; then
+ echo % vnconfig -u $device failure
+ exit 1
+fi
+
+###
+#
+# TAR loop
+
+if [ ! -z "$tardirs" ]; then
+ for i in $tardirs; do
+  echo -n Creating $i.tar
+
+  size=`du -s $distloc/$i | cut -f 1`
+  if [ "$size" -le 2048 ]; then
+   echo -n " $((size / 2))"KB files
+  else
+   echo -n " $((size / 2048))"MB files
+  fi
+
+  echo -n " copy"
+  if ! tar cf $tmpdir/$i.tar -C $distloc/$i . ; then
+   echo tar cf $tmpdir/$i.tar -C $distloc/$i .
+   exit 1
+  fi
+
+  echo
+ done 
+fi
+
+rm $tmplabel
+rmdir $tmpmntdir

@@ -1,0 +1,22 @@
+#!/bin/sh
+
+# DO NOT EDIT THIS SECTION UNLESS YOU INTEND TO MODIFY THE FILESYSTEM BEHAVIOR OF YOUR FLASHRD SYSTEM!!!
+
+tardirs="var"
+
+if [ ! -f /tmp/.tardirs ]; then
+ # /etc/rc runs rc.conf, then /etc/netstart runs it again, but only do this stuff once
+
+ for i in $tardirs; do
+  echo tardirs: extracting $i
+  tar xpf /flash/$i.tar -C /$i
+ done
+
+ chmod 1777 /tmp
+fi
+
+touch /tmp/.tardirs
+
+# Insert actual rc.conf.local directives HERE
+
+# END

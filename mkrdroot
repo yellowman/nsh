@@ -1,0 +1,241 @@
+#!/bin/ksh
+#
+# flashrd mkrdroot
+#
+# create the kernel ramdisk
+#
+# this environment (and custom rc) is for setting up vnds
+# so that we can mount the system and pass to real /etc/rc
+#
+# Chris Cappuccio <chris@nmedia.net>
+#
+
+# Files copied to /stand for stand-alone usage
+#
+
+if [ -z "$standcopy" ]; then
+ standcopy="bin/tar sbin/vnconfig sbin/umount"
+fi
+
+# Stuff that needs to be in place on the ramdisk
+#
+
+if [ -z "$bincopy" ]; then
+ bincopy="bin/sh"
+fi
+
+if [ -z "$sbincopy" ]; then
+ sbincopy="sbin/init sbin/mount sbin/mount_ffs sbin/fsck sbin/fsck_ffs"
+fi
+
+if [ -z "$etccopy" ]; then
+ etccopy="etc/login.conf etc/pwd.db"
+fi
+
+###
+#
+# blocks
+
+if [ -z "$blocks" ]; then
+ blocks=6080
+fi
+
+###
+#
+# rdrootfs, device, distloc
+
+if [ -z "$szezroot" ]; then
+ szezroot=szez.`uname -m`-`date +%Y%m%d`
+fi
+
+if [ -z "$device" ]; then
+ device=svnd0
+fi
+
+if [ -z "$distloc" -a -z "$1" ]; then
+ echo "% mkrdroot <openbsd base>"
+ exit 1
+fi
+
+if [ -z "$distloc" ]; then
+ distloc=$1
+fi
+
+if [ ! -f $distloc/dev/MAKEDEV ]; then
+ echo % $distloc/dev/MAKEDEV not found
+ exit 1
+fi
+
+echo Creating ramdisk rootfs
+
+###
+#
+# dd, vnconfig, disklabel, newfs
+
+if ! dd if=/dev/zero of=$szezroot bs=512 count=$blocks >/dev/null 2>&1; then
+ echo % dd if=/dev/zero of=$szezroot bs=512 count=$blocks failure
+ exit 1
+fi
+
+if ! vnconfig $device $szezroot; then
+ echo % vnconfig $device $szezroot failure
+ exit 1
+fi
+
+tmplabel=`mktemp /tmp/mkrdrootlabel.XXXXXXXXX`
+tmpmntdir=`mktemp -d /tmp/mkrdroot.XXXXXXXXX`
+
+if ! disklabel $device > $tmplabel 2>/dev/null; then
+ echo % disklabel $device > $tmplabel failure
+ vnconfig -u $device
+ exit 1
+fi
+
+totalsize=`awk -F: ' /^total sectors:/ {print $2} ' $tmplabel`
+cat >>$tmplabel <<-EOF
+	a: $totalsize   0   4.2BSD  1024    8192    16
+	EOF
+
+if ! disklabel -R $device $tmplabel >/dev/null 2>&1; then
+ echo % disklabel -R $device $tmplabel failure
+ vnconfig -u $device
+ exit 1
+fi
+
+if ! newfs -m 0 -o space -i 1024 /dev/r"$device"a >/dev/null 2>&1; then
+ echo % newfs -m 0 -o space -i 1024 /dev/r"$device"a failure
+ vnconfig -u $device
+ exit 1
+fi
+
+if ! mount /dev/"$device"a $tmpmntdir; then
+ echo % mount /dev/"$device"a $tmpmntdir failure
+ vnconfig -u $device
+ exit 1
+fi
+
+###
+#
+# Our ramdisk base
+
+if ! mkdir $tmpmntdir/bin $tmpmntdir/dev $tmpmntdir/etc $tmpmntdir/home $tmpmntdir/mnt $tmpmntdir/root $tmpmntdir/sbin $tmpmntdir/stand $tmpmntdir/sys $tmpmntdir/tmp $tmpmntdir/usr $tmpmntdir/var $tmpmntdir/flash; then
+ echo % mkdir $tmpmntdir/bin $tmpmntdir/dev $tmpmntdir/etc $tmpmntdir/home $tmpmntdir/mnt $tmpmntdir/root $tmpmntdir/sbin $tmpmntdir/stand $tmpmntdir/sys $tmpmntdir/tmp $tmpmntdir/usr $tmpmntdir/var $tmpmntdir/flash failure
+ umount $tmpmntdir
+ vnconfig -u $device
+ exit 1
+fi
+
+if ! cp $distloc/.cshrc $distloc/.profile $tmpmntdir; then
+ echo % cp $distloc/.cshrc $distloc/.profile $tmpmntdir failure
+ umount $tmpmntdir
+ vnconfig -u $device
+ exit 1
+fi
+
+if ! cp $distloc/dev/MAKEDEV $tmpmntdir/dev; then
+ echo % cp $distloc/dev/MAKEDEV $tmpmntdir/dev failure
+ umount $tmpmntdir
+ vnconfig -u $device
+ exit 1
+fi
+
+###
+#
+# Devices with an extra touch of bpf (normal distribution has bpf0-bpf9, so create starting at bpf10)
+
+wd=`pwd`
+cd $tmpmntdir/dev
+if ! ./MAKEDEV all; then
+ echo % ./MAKEDEV all failure
+ cd $wd
+ umount $tmpmntdir
+ vnconfig -u $device
+ exit 1
+fi
+
+i=10
+while [ $i -le 511 ]; do
+ if ! ./MAKEDEV bpf$i; then
+  echo % ./MAKEDEV bpf$i failure
+  cd $wd
+  umount $tmpmntdir
+  vnconfig -u $device
+  exit 1
+ fi
+ let i=i+1
+done
+cd $wd
+
+###
+#
+# Copy specific items to kernel ramdisk
+
+echo -n Copying items to ramdisk rootfs
+
+for i in $standcopy; do
+ echo -n " $i"
+ if ! cp $distloc/$i $tmpmntdir/stand; then
+  echo % cp $distloc/$i $tmpmntdir/stand failure
+  umount $tmpmntdir
+  vnconfig -u $device
+  exit 1
+ fi
+done
+for i in $bincopy; do
+ echo -n " $i"
+ if ! cp $distloc/$i $tmpmntdir/bin; then
+  echo % cp $distloc/$i $tmpmntdir/bin failure
+  umount $tmpmntdir
+  vnconfig -u $device
+  exit 1
+ fi
+done
+for i in $sbincopy; do
+ echo -n " $i"
+ if ! cp $distloc/$i $tmpmntdir/sbin; then
+  echo % cp $distloc/$i $tmpmntdir/sbin failure
+  umount $tmpmntdir
+  vnconfig -u $device
+  exit 1
+ fi
+done
+for i in $etccopy; do
+ echo -n " $i"
+ if ! cp $distloc/$i $tmpmntdir/etc; then
+  echo % cp $distloc/$i $tmpmntdir/etc failure
+  umount $tmpmntdir
+  vnconfig -u $device
+  exit 1
+ fi
+done
+
+echo
+
+###
+#
+# Copy custom rc to kernel ramdisk, cleanup
+
+if ! cp etc/rc $tmpmntdir/etc/rc; then
+ echo % cp etc/rc $tmpmntdir/etc/rc failure
+ umount $tmpmntdir
+ vnconfig -u $device
+ exit 1
+fi
+
+if ! cp stand/rc $tmpmntdir/stand/rc; then
+ echo % cp stand/rc $tmpmntdir/stand/rc failure
+ umount $tmpmntdir
+ vnconfig -u $device
+ exit 1
+fi
+
+if ! umount $tmpmntdir; then
+ echo % umount $tmpmntdir failure
+ vnconfig -u $device
+ exit 1
+fi
+
+if ! vnconfig -u $device; then
+ echo % vnconfig -u $device failure
+ exit 1
+fi

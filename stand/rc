@@ -1,0 +1,109 @@
+#!/bin/sh
+# bootstrap flashrd for running real images
+#
+# flashrd quirks:
+#
+# - real /etc/rc has umount -a, so mfs untars are done
+#    in /etc/rc.conf.local, not here
+# - even though everything is mounted by the real
+#    /etc/rc via /etc/fstab, /etc must be mounted before
+#    it is mounted by /etc/rc and parts of /sbin and /bin
+#    must be available as well.  thus we do fsck and mount
+#    here, not in /etc/rc, and /flash/old recovery here as well
+# - to work around /etc/rc trying to fsck everything, the rdrootfs
+#    actually has a /fastboot file (which /etc/rc deletes each time)
+#
+# these are the lengths we go through to have a truly "default" system
+#  (such as rc scripts, directories, and so forth) work with a read-only,
+#  vnd swappable system
+#
+# this bootstrap could do quite a bit more to check vnd images for validity
+#  and swap to /flash/old as necessary or convenient
+#
+vnddirs="bin etc sbin usr" # svnd0a, svnd0d, svnd0e, svnd0f
+set -A part a d e f g h i j k l m n o p
+vnd=svnd0
+disk=wd0a
+
+export PATH=/bin:/sbin:/stand
+
+mkvndmnt()
+{
+ x=0
+ fail=0
+
+ if ! vnconfig $vnd $1/openbsd.vnd; then
+  fail=1
+ fi
+
+ for i in $vnddirs; do
+  dev=$vnd${part[$x]}
+
+  if ! fsck -p /dev/$dev; then
+   if ! fsck -y /dev/$dev; then
+    fail=1
+   fi
+  fi
+
+  if ! mount -o noatime /dev/$dev /$i; then
+   fail=1
+  fi
+
+  let x=x+1
+ done
+}  
+
+unvndmnt()
+{
+ x=0
+
+ umount /$i
+ vnconfig -u $vnd
+}
+
+###
+#
+# test for loop
+
+if test "$bootstrap" == "1"; then
+ echo bootstrap: loop 
+ exit 1
+fi
+export bootstrap=1
+
+###
+#
+# mount base flash
+
+if ! fsck -p /dev/$disk; then
+ if ! fsck -y /dev/$disk; then
+  echo bootstrap: fsck $disk failed, attempting boot anyways
+ fi
+fi
+if ! mount -o noatime /dev/$disk /flash; then
+ echo bootstrap: fatal error mounting $disk to /flash
+ exit 1
+fi
+
+mkvndmnt /flash
+
+if test "$fail" == "1"; then
+ if test -f /flash/old/openbsd.vnd; then
+  echo bootstrap: fatal error with svnd, attempting to boot /flash/old
+  unvndmnt
+  mkvndmnt /flash/old
+  if test "$fail" == "1"; then
+   vnconfig -l
+   echo bootstrap: fatal error with svnd, attempting boot anyways
+  fi
+ else
+  vnconfig -l
+  echo bootstrap: fatal error with svnd, attempting boot anyways
+ fi
+fi
+
+###
+#
+# resume normal operations
+
+. /etc/rc

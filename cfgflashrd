@@ -1,0 +1,469 @@
+#!/bin/ksh
+#
+# flashrd image configurator
+#
+# Chris Cappuccio <chris@nmedia.net>
+
+vnddirs="bin etc sbin usr" # must match vnddirs= in stand/rc and fstab
+rootdevice=svnd2
+device=svnd3
+
+set -A part a d e f g h i j k l m n o p
+
+if [ `id -u` != 0 ]; then
+ echo Sorry, mount, vnconfig, and friends require root privileges
+ exit 1
+fi
+
+if [ "$1" == "-disk" ]; then
+ rootdevice="$2"
+ novnd=1
+ shift
+ shift
+fi
+
+if [ "$1" == "-image" ]; then
+ dest="$2"
+ shift
+ shift
+fi
+
+if [ "$1" == "-rdroot" ]; then
+ if [ ! -f "$2" ]; then
+  echo % rdroot $2 not found
+  exit 1
+ fi
+ rdfs=$2
+fi
+
+vncfgroot() {
+ if [ -z "$novnd" ]; then
+  if ! vnconfig $rootdevice $1; then
+   echo % vnconfig $rootdevice $1 failure
+   exit 1
+  fi
+ fi
+}
+
+vnuncfgroot() {
+ if [ -z "$novnd" ]; then
+  if ! vnconfig -u $rootdevice; then
+   echo % vnconfig -u $rootdevice failure
+   exit 1
+  fi
+ fi
+}
+
+###
+#
+# usage
+ 
+if [ -z "$dest" -a -z "$novnd" ]; then
+ cat <<-EOF
+	% cfgflashrd [-disk "dev" | -image "filename"] [-rdroot "filename"]
+	  "dev" as in wd2, sd3, etc...
+	  use -rdroot flag if you have built rdrootfs image and want to change disk parameters on it
+	EOF
+ exit 1
+fi
+
+if [ ! -z "$novnd" -a ! -f "$dest" ]; then
+ echo % image $dest not found
+ exit 1
+fi
+
+if [ ! -b /dev/"$rootdevice"a ]; then
+ echo % device /dev/"$rootdevice"a not found
+ exit 1
+fi
+
+###
+#
+# mount vnd or disk
+ 
+vncfgroot $dest
+   
+tmpmnt=`mktemp -d /tmp/cfgflashrd.XXXXXXXX` # vnd/disk mount point
+tmpmntvnd=`mktemp -d /tmp/cfgflashrd.XXXXXXXX` # openbsd.vnd partition mount point
+
+if ! fsck -p /dev/"$rootdevice"a; then
+ echo % fsck failure
+ vnuncfgroot
+ exit 1
+fi
+ 
+if ! mount /dev/"$rootdevice"a $tmpmnt; then
+ echo % mount /dev/"$rootdevice"a $tmpmnt failure
+ vnuncfgroot
+ exit 1
+fi  
+
+if [ ! -z "$rdfs" ]; then
+
+ ###
+ #
+ # if user wants to modify kernel ramdisk, ready elfrdsetroot, mount vnd, change stand/rc, elfrdsetroot actual kernels
+
+ if [ -z "$elfrdsetroot" ]; then
+  elfrdsetroot=/usr/src/distrib/common/elfrdsetroot.c
+ fi
+
+ if [ ! -f $elfrdsetroot ]; then
+  echo % $elfrdsetroot not found
+  exit 1
+ fi
+
+ ###
+ #
+ # compile ELFRDSETROOT
+
+ if ! cc -o ./elfrdsetroot $elfrdsetroot; then
+  echo % cc -o ./elfrdsetroot $elfrdsetroot failure
+  umount $tmpmnt
+  vnuncfgroot
+  exit 1
+ fi
+
+ if ! vnconfig $device $rdfs; then
+  echo % vnconfig $device $rdfs failure
+  umount $tmpmnt
+  vnuncfgroot
+  exit 1
+ fi
+
+ if ! fsck -p /dev/"$device"a; then
+  echo % fsck failure
+  vnconfig -u $device
+  umount $tmpmnt
+  vnuncfgroot
+  exit 1
+ fi
+
+ if ! mount /dev/"$device"a $tmpmntvnd; then
+  echo % mount /dev/"$device"a $tmpmntvnd failure
+  vnconfig -u $device
+  umount $tmpmnt
+  vnuncfgroot
+  exit 1
+ fi
+
+ cholo=`egrep ^disk= $tmpmntvnd/stand/rc`
+ if [ -z "$cholo" ]; then
+  echo % no disk= line found in $tmpmntvnd/stand/rc, aborting
+  umount $tmpmntvnd
+  vnconfig -u $device
+  umount $tmpmnt
+  vnuncfgroot
+  exit 1
+ fi
+
+ ch1=${cholo#disk=}
+ echo Current image device ${ch1%a}
+
+ getphys()
+ {
+  read phys?"New physical device name (as seen by destination system)? "
+  if [ ! -b /dev/"$phys"a ]; then
+   echo /dev/"$phys"a appear to be nonsense, try again
+   getphys
+  fi
+ }
+ getphys
+ 
+ temp=`mktemp /tmp/cfgflashrd.XXXXXXXX`
+ if ! sed -e "s/$cholo/disk="$phys"a/" < $tmpmntvnd/stand/rc > $temp; then
+  echo % sed -e \"s/$cholo/disk="$phys"a/\" < $tmpmntvnd/stand/rc > $temp failure
+  umount $tmpmntvnd
+  vnconfig -u $device
+  umount $tmpmnt 
+  vnuncfgroot
+  exit 1
+ fi
+
+ if ! mv $temp $tmpmntvnd/stand/rc; then
+  echo % mv $temp $tmpmntvnd/stand/rc failure
+  umount $tmpmntvnd
+  vnconfig -u $device
+  umount $tmpmnt
+  vnuncfgroot
+  exit 1
+ fi
+
+ if ! umount $tmpmntvnd; then
+  echo % umount $tmpmntvnd failure
+  vnconfig -u $device
+  umount $tmpmnt
+  vnuncfgroot
+  exit 1
+ fi
+
+ if ! vnconfig -u $device; then
+  echo % vnconfig -u $device failure
+  umount $tmpmnt
+  vnuncfgroot
+  exit 1
+ fi
+
+ echo Setting ramdisk root image
+ if [ -f $tmpmnt/bsd ]; then
+  if ! ./elfrdsetroot $tmpmnt/bsd $rdfs; then
+   echo % ./elfrdsetroot $tmpmnt/bsd $rdfs failure
+   umount $tmpmnt
+   vnuncfgroot
+   exit 1
+  fi
+  cfgbsd=1
+ fi
+
+ if [ -f $tmpmnt/bsd.mp ]; then
+  if ! ./elfrdsetroot $tmpmnt/bsd.mp $rdfs; then
+   echo % ./elfrdsetroot $tmpmnt/bsd.mp $rdfs failure
+   umount $tmpmnt
+   vnuncfgroot
+   exit 1
+  fi
+  cfgbsd=1
+ fi
+
+ if [ -z "$cfgbsd" ]; then
+  echo % neither bsd nor bsd.mp kernel found at flash image.  how odd?
+  umount $tmpmnt
+   vnuncfgroot
+   exit 1
+  fi
+
+ rm -f $temp
+fi
+
+###
+#
+# mount running filesystem for other types of changes
+
+if ! vnconfig $device $tmpmnt/openbsd.vnd; then
+ echo % vnconfig $device $tmpmnt/openbsd.vnd failure
+ umount $tmpmnt
+ vnuncfgroot
+ exit 1
+fi
+
+###
+#
+# map $vnddirs etc to a partition label, mount
+
+x=0
+for i in $vnddirs; do
+ if [ $i == etc ]; then
+  etcpart=${part[$x]}
+ fi
+ let x=x+1
+done
+
+if [ -z "$etcpart" ]; then
+ echo "% missing etc in \$vnddirs ($vnddirs) aborting"
+ vnconfig -u $device
+ umount $tmpmnt
+ vnuncfgroot
+ exit 1
+fi
+
+if ! fsck -p /dev/$device$etcpart; then
+ echo % fsck -p /dev/$device$etcpart failure
+ vnconfig -u $device
+ umount $tmpmnt
+ vnuncfgroot
+ exit 1
+fi
+
+if ! mount /dev/$device$etcpart $tmpmntvnd; then
+ echo % mount /dev/$device$etcpart $tmpmntvnd failure
+ vnconfig -u $device
+ umount $tmpmnt
+ vnuncfgroot
+ exit 1
+fi
+
+if [ ! -f $tmpmntvnd/.flashrd_version ]; then
+ echo % missing etc/.flashrd_version, not flashrd image or \$vnddirs out of sync? what funky?
+fi
+
+if [ ! -z "$rdfs" ]; then
+ # set root partition in fstab for /flash partition, based on rdroot answer
+ if [ -f $tmpmntvnd/fstab ]; then
+  deltoro=`awk ' /\/flash/ {print $1} ' $tmpmntvnd/fstab`
+  if [ ! -z "$deltoro" ]; then
+   curdisk=${deltoro#/dev/}
+   curdisk=${curdisk%a}
+   echo Old fstab /flash device $deltoro, new device /dev/"$phys"a
+   # here we assume the physical device for /flash isn't going to overlap with svnd0 or rd0
+   sed -e "s%$deltoro%/dev/"$phys"a%" < $tmpmntvnd/fstab > $temp
+   mv $temp $tmpmntvnd/fstab
+  else
+   echo % fstab has no /flash partition? continuing anyways, but unable to modify fstab root device
+  fi
+ else
+  echo % missing etc/fstab, not flashrd image or \$vnddirs out of sync? what funky?
+  echo % continuing anyways, but unable to modify fstab root device
+ fi
+fi
+
+###
+#
+# set hostname
+
+getname()
+{
+ read hostname?"Hostname: "
+ if [ -z "$hostname" ]; then
+  echo "Nothing entered? Try again."
+  getname
+ fi
+}
+
+if [ -z "$hostname" ]; then
+ echo
+ echo Please assign a system hostname...
+ getname
+fi
+
+echo $hostname > $tmpmntvnd/myname
+
+###
+#
+# set root password
+
+getpass()
+{
+ stty -echo
+ read pw1?"Password:"
+ echo
+ read pw2?"Verify:"
+ echo
+ stty echo
+
+ if [ "$pw1" == "$pw2" ]; then
+  password="$pw1"
+ fi
+ if [ -z "$password" ]; then
+  echo "Passwords don't match or password was empty.  Try again."
+  getpass
+ fi
+}
+
+if [ -z "$encpass" ]; then
+ if [ -z "$password" ]; then
+  echo
+  echo Please assign a root password...
+  getpass
+  echo
+ fi
+fi
+
+if [ -z "$encpass" ]; then
+ encpass=`echo $password | /usr/bin/encrypt -b 6`
+fi
+
+tmppass=`mktemp /tmp/cfgflashrd.XXXXXXXX`
+
+echo -n "root:$encpass" > $tmppass
+
+awk -F : '/^root/ \
+{ printf(":%s:%s:%s:%s:%s:%s:%s:%s\n", $3, $4, $5, $6, $7, $8, $9, $10) }' \
+< $tmpmntvnd/master.passwd >> $tmppass
+
+egrep -v "^root:" < $tmpmntvnd/master.passwd >> $tmppass
+
+mv $tmppass $tmpmntvnd/master.passwd
+
+if ! pwd_mkdb -p -d $tmpmntvnd $tmpmntvnd/master.passwd; then
+ echo % pwd_mkdb failure
+ umount $tmpmntvnd
+ vnconfig -u $device
+ umount $tmpmnt
+ vnuncfgroot
+ exit 1
+fi 
+
+###
+#
+# steal ntp servers from local ntpd.conf!
+
+if [ -f $tmpmntvnd/ntpd.conf ]; then
+ if [ -z "$ntpervers" ]; then
+  ntpservers=`awk ' /^server/ { print $2 } ' /etc/ntpd.conf | tr '\n' ' '`
+  read nntpservers?"NTP Servers: [$ntpservers] "
+  if [ ! -z "$nntpservers" ]; then
+   ntpservers="$nntpservers"
+  fi
+ fi
+
+ if [ ! -z "$ntpservers" ]; then
+  echo Configuring ntpd.conf for NTP servers $ntpservers
+   egrep -v ^server $tmpmntvnd/ntpd.conf > $tmppass
+   for i in $ntpservers; do
+     echo servers $i >> $tmppass
+   done
+   mv $tmppass $tmpmntvnd/ntpd.conf
+ fi
+fi
+
+###
+#
+# steal dns servers from local resolv.conf!
+
+if [ -z "$dnsservers" ]; then
+ dnsservers=`awk ' /^nameserver/ { print $2 } ' /etc/resolv.conf | tr '\n' ' '`
+ read ndnsservers?"DNS Servers: [$dnsservers] " 
+ if [ ! -z "$ndnsservers" ]; then
+  dnsservers="$ndnsservers"
+ fi
+fi
+
+if [ ! -z "$dnsservers" ]; then
+ echo Configuring resolv.conf for DNS servers $dnsservers
+ echo "lookup file bind" > $tmpmntvnd/resolv.conf
+ for i in $dnsservers; do
+  echo nameserver $i >> $tmpmntvnd/resolv.conf
+ done
+else
+ echo Failed to configure nameservers, you must manually configure /etc/resolv.conf
+fi
+
+###
+#
+# this is the end
+
+if ! umount $tmpmntvnd; then
+ echo % umount $tmpmntvnd failure
+ vnconfig -u $device
+ umount $tmpmnt
+ vnuncfgroot
+ exit 1
+fi
+
+###
+#
+# done with the main disk vnd
+
+if ! vnconfig -u $device; then
+ echo % vnconfig -u $device failure
+ umount $tmpmnt
+ vnuncfgroot
+ exit 1
+fi
+
+if ! umount $tmpmnt; then
+ echo % umount $tmpmnt failure
+ vnuncfgroot
+ exit 1
+fi
+
+###
+#
+# done with flash img vnd
+
+vnuncfgroot
+
+rmdir $tmpmnt $tmpmntvnd
+rm -f $tmppass
+
+echo Done

@@ -1,0 +1,163 @@
+#!/bin/ksh
+#
+# flashrd mkkern
+#
+# create luscious ramdisk version of GENERIC
+#
+# Chris Cappuccio <chris@nmedia.net>
+#
+
+if [ -z "$tmpmnt" ]; then
+ tmpmnt=`mktemp -d /tmp/mkkern.XXXXXXXX`
+fi
+
+###
+#
+# blocks
+
+if [ -z "$blocks" ]; then
+ blocks=6080
+fi
+
+###
+#
+# rdrootfs
+
+if [ -z "$szezroot" -a -z "$1" ]; then
+ echo "% mkkern <$blocks rdrootfs>"
+ exit 1
+fi
+
+if [ -z "$szezroot" ]; then
+ szezroot=$1
+fi
+
+if [ ! -f $szezroot ]; then
+ echo % $szezroot is not a file
+ exit 1
+fi
+
+###
+#
+# kernel source
+
+if [ -z "$kernsrc" ]; then
+ kernsrc=/usr/src/sys/arch/`uname -m`
+fi
+
+if [ ! -d $kernsrc ]; then
+ echo % $kernsrc not found
+ exit 1
+fi
+
+###
+#
+# elfrdsetroot
+
+if [ -z "$elfrdsetroot" ]; then
+ elfrdsetroot=/usr/src/distrib/common/elfrdsetroot.c
+fi
+
+if [ ! -f $elfrdsetroot ]; then
+ echo % $elfrdsetroot not found
+ exit 1
+fi
+
+###
+#
+# GENERIC config
+
+if [ ! -f $kernsrc/conf/GENERIC ]; then
+ echo % $kernsrc/conf/GENERIC config not found
+ exit 1
+fi
+
+###
+#
+# modify GENERIC
+
+egrep -v ^config < $kernsrc/conf/GENERIC >$kernsrc/conf/FLASHRD
+
+cat >> $kernsrc/conf/FLASHRD <<-EOF
+	option	RAMDISK_HOOKS
+	option	MINIROOTSIZE=$blocks
+	config	bsd	root on rd0a swap on rd0b and wd0b and sd0b
+	pseudo-device	rd 1
+	EOF
+
+sed -e 's/GENERIC/FLASHRD/' < $kernsrc/conf/GENERIC.MP > $kernsrc/conf/FLASHRD.MP
+
+###
+#
+# compile ELFRDSETROOT first (so we can bail out if it fails without waiting for GENERIC)
+
+if ! cc -o ./elfrdsetroot $elfrdsetroot; then
+ echo % cc -o ./elfrdsetroot $elfrdsetroot failure
+ exit 1
+fi
+
+###
+#
+# compile our version of GENERIC
+
+echo -n Configuring FLASHRD kernel
+wd=`pwd`
+cd $kernsrc/conf
+if ! config FLASHRD >/dev/null 2>&1; then
+ echo % config FLASHRD failure
+ exit 1
+fi
+if ! config FLASHRD.MP >/dev/null 2>&1; then
+ echo % config FLASHRD.MP failure
+ exit 1
+fi
+
+echo
+
+echo -n Compiling FLASHRD kernel
+cd $kernsrc/compile/FLASHRD
+if ! make depend >/dev/null 2>&1; then
+ echo % cd $kernsrc/compile/FLASHRD; make depend failure
+ exit 1
+fi
+if ! make >/dev/null 2>&1; then
+ echo % cd $kernsrc/compile/FLASHRD; make failure
+ exit 1
+fi
+
+if ! cp bsd $tmpmnt/bsd; then
+ echo % cp bsd $tmpmnt/bsd failure 
+ exit 1
+fi
+echo
+
+echo -n Compiling FLASHRD.MP kernel
+cd $kernsrc/compile/FLASHRD.MP
+if ! make depend >/dev/null 2>&1; then
+ echo % cd $kernsrc/compile/FLASHRD.MP; make depend failure
+ exit 1
+fi
+if ! make >/dev/null 2>&1; then
+ echo % cd $kernsrc/compile/FLASHRD.MP; make failure
+ exit 1
+fi
+
+if ! cp bsd $tmpmnt/bsd.mp; then
+ echo % cp bsd $tmpmnt/bsd.mp failure
+ exit 1
+fi
+echo
+
+###
+#
+# run elfrdsetroot
+
+cd $wd
+if ! ./elfrdsetroot $tmpmnt/bsd $szezroot; then
+ echo % ./elfrdsetroot $tmpmnt/bsd $szezroot failure
+ exit 1
+fi
+if ! ./elfrdsetroot $tmpmnt/bsd.mp $szezroot; then
+ echo % ./elfrdsetroot $tmpmnt/bsd.mp $szezroot failure
+ exit 1
+fi
