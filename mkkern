@@ -86,11 +86,26 @@ egrep -v ^config $kernsrc/conf/GENERIC | sed -e 's/GENERIC/FLASHRD/' > $kernsrc/
 cat >> $kernsrc/conf/FLASHRD <<-EOF
 	option	RAMDISK_HOOKS
 	option	MINIROOTSIZE=$blocks
+	option	NKPTP=8
 	config	bsd	root on rd0a swap on rd0b and wd0b and sd0b
 	pseudo-device	rd 1
 	EOF
 
 sed -e 's/GENERIC/FLASHRD/' $kernsrc/conf/GENERIC.MP > $kernsrc/conf/FLASHRD.MP
+
+if [ -f config.strip ]; then
+ while read line; do
+
+  line=${line%%#*}              # strip comments
+  test -z "$line" && continue
+
+  sed -e "s/^$line//" < $kernsrc/conf/FLASHRD > $kernsrc/conf/FLASHRD.tmp
+  mv $kernsrc/conf/FLASHRD.tmp $kernsrc/conf/FLASHRD
+ done < config.strip
+else
+ echo "[no config.strip found for kernel config alterations]"
+ echo "[ramdisk kernel may be too large to boot without disabling isadma for i386/amd64]"
+fi
 
 ###
 #

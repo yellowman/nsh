@@ -60,6 +60,10 @@ if [ -z "$novnd" ]; then
  totalsize=$((cylinders * trackscylinder * sectorstrack))
  sectorscylinder=$((totalsize / cylinders))
 else
+ # This probably isn't important as of OpenBSD 4.8 because disklabel
+ # now ignores geometry specified by -R command.  Flag for removal
+ # after further analysis. XXX
+ #
  # Disk specified, use default kernel geometry
  c 0 "fdisk -f $distloc/usr/mdec/mbr -yi $rootdevice >/dev/null 2>&1"
  c 0 disklabel $rootdevice > $tmplabel
@@ -77,6 +81,10 @@ echo "Using disk geometry $cylinders/$trackscylinder/$sectorstrack ($totalmbytes
 # Main partition comprises the total disk, minus first sector
 asize=$((totalsize - sectorstrack))
 
+# This probably isn't important as of OpenBSD 4.8 because disklabel
+# now ignores geometry specified by -R command.  Flag for removal
+# after further analysis. XXX
+#
 # Remove most disklabel info, write disk geometry, partitions
 egrep -v "^type:|^boundstart:|^boundend:|^total sectors:|^bytes/sector:|^sectors/track:|^sectors/cylinder:|^tracks/cylinder:|^cylinders:|^  .:|^#|^. partitions:|^.. partitions:|^$" < $tmplabel > ${tmplabel}.new
 cat >> ${tmplabel}.new <<-EOF

@@ -52,6 +52,30 @@ if [ "$1" == "-com0" ]; then
  shift
 fi
 
+if [ "$1" == "-sp" ]; then
+ bsdassp=1
+ shift
+fi
+
+if [ "$1" == "-mp" ]; then
+ bsdasmp=1
+ shift
+fi
+
+if [ "$1" == "-tz" ]; then
+ shift
+ if [ -z "$1" ]; then
+  echo "% tzfile not specified"
+  exit 1
+ fi
+ tzfile="$1"
+ shift
+ if [ ! -f /usr/share/zoneinfo/$tzfile -a ! -f $tzfile ]; then
+  echo "tzfile /usr/share/zoneinfo/$tzfile (and $tzfile) not found"
+  exit 1
+ fi
+fi
+
 vncfgroot() {
  [ -z "$novnd" ] && c 0 vnconfig $rootdevice $1
 }
@@ -88,10 +112,12 @@ vnuncfgroot() {
  
 if [ -z "$dest" -a -z "$novnd" ]; then
  cat <<-EOF
-	% cfgflashrd [-disk "dev" | -image "filename"] [-rdroot "filename"] [-com0 "speed"]
+	% cfgflashrd [-disk "dev" | -image "filename"] [-rdroot "filename"] [-com0 "speed"] [-mp] [-tz "tzfile"]
 	  "dev" as in wd2, sd3, etc...
 	  use -rdroot flag if you have built rdrootfs image and want to change disk parameters on it
 	  use -com0 flag if you want to direct console from vga to com0 at "speed" speed
+	  use -mp to set bsd.mp as primary kernel, if exists (shifting bsd to bsd.sp)
+	  use -tz to copy /usr/share/zoneinfo/"tzfile" to destination image /etc/localtime
 	EOF
  exit 1
 fi
@@ -177,7 +203,7 @@ if [ ! -z "$rdfs" ]; then
  echo Setting ramdisk root image
  elfrdarch=`file ./elfrdsetroot | awk -F, ' { print $2 } '`
 
- for i in bsd bsd.mp; do
+ for i in bsd bsd.mp bsd.sp; do
   if [ -f $tmpmnt/$i ]; then
    bsdarch=`file $tmpmnt/$i | awk -F, ' { print $2 } '`
    if [ "$bsdarch" != "$elfrdarch" ]; then
@@ -190,8 +216,26 @@ if [ ! -z "$rdfs" ]; then
  done
 
  if [ -z "$cfgbsd" ]; then
-  echo % neither bsd nor bsd.mp kernel found at flash image.  how odd?
+  echo % none of bsd bsd.mp bsd.sp kernel found at flash image.  how odd?
   2; 1; 0;
+ fi
+
+ if [ "$bsdassp" == "1" ]; then
+  if [ -f $tmpmnt/bsd.sp ]; then
+   mv $tmpmnt/bsd $tmpmnt/bsd.mp
+   mv $tmpmnt/bsd.sp $tmpmnt/bsd
+  else
+   echo "[bsd.sp not found, primary kernel may already be single processor]"
+  fi
+ fi
+
+ if [ "$bsdasmp" == "1" ]; then
+  if [ -f $tmpmnt/bsd.mp ]; then
+   mv $tmpmnt/bsd $tmpmnt/bsd.sp
+   mv $tmpmnt/bsd.mp $tmpmnt/bsd
+  else
+   echo "[bsd.mp not found, primary kernel may already by multi-processor]"
+  fi
  fi
 
  rm -f $temp
@@ -384,6 +428,20 @@ if [ ! -z "$dnsservers" ]; then
  done
 else
  echo Failed to configure nameservers, you must manually configure /etc/resolv.conf
+fi
+
+###
+#
+# tzfile
+
+if [ ! -z "$tzfile" ]; then
+ if [ -f /usr/share/zoneinfo/$tzfile ]; then
+  cp /usr/share/zoneinfo/$tzfile $tmpmntvnd/localtime
+ else
+  if [ -f $tzfile ]; then
+   cp $tzfile $tmpmntvnd/localtime
+  fi
+ fi
 fi
 
 ###
