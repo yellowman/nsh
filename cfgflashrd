@@ -118,7 +118,7 @@ if [ -z "$dest" -a -z "$novnd" ]; then
  	  or, use -image to configure a disk image
 	  use -rdroot flag if you have an rdrootfs image and want to change disk parameters on it
 	  use -com0 flag if you want to direct console from vga to com0 at "speed" speed
-	  use -mp to set bsd.mp as primary kernel, if exists (shifting bsd to bsd.sp)
+	  use -mp to set bsd.mp as primary kernel, if exists
 	  use -tz to copy /usr/share/zoneinfo/"tzfile" to destination image /etc/localtime
 	EOF
  exit 1
@@ -153,12 +153,12 @@ if [ ! -z "$rdfs" ]; then
  #
  # if user wants to modify kernel ramdisk, ready elfrdsetroot, mount vnd, change stand/rc, elfrdsetroot actual kernels
 
- if [ -z "$elfrdsetroot" ]; then
-  elfrdsetroot=./elfrdsetroot.c
+ if [ -z "$elfrdsetrootdir" ]; then
+  elfrdsetrootdir=./elfrdsetroot/
  fi
 
- if [ ! -f $elfrdsetroot ]; then
-  echo % $elfrdsetroot not found
+ if [ ! -d $elfrdsetrootdir ]; then
+  echo % $elfrdsetrootdir not found
   2; 1; 0;
  fi
 
@@ -166,7 +166,7 @@ if [ ! -z "$rdfs" ]; then
  #
  # compile ELFRDSETROOT
 
- c 2 cc -o ./elfrdsetroot $elfrdsetroot
+ c 2 cc -o $elfrdsetrootdir/elfrdsetroot $elfrdsetrootdir/elfrdsetroot.c $elfrdsetrootdir/elf32.c $elfrdsetrootdir/elf64.c
 
  c 2 vnconfig $device $rdfs
 
@@ -203,16 +203,10 @@ if [ ! -z "$rdfs" ]; then
  c 2 vnconfig -u $device
  
  echo Setting ramdisk root image
- elfrdarch=`file ./elfrdsetroot | awk -F, ' { print $2 } '`
 
  for i in bsd bsd.mp bsd.sp; do
   if [ -f $tmpmnt/$i ]; then
-   bsdarch=`file $tmpmnt/$i | awk -F, ' { print $2 } '`
-   if [ "$bsdarch" != "$elfrdarch" ]; then
-    echo "% elfrdsetroot architecture mismatch (kernel $bsdarch, but elfrdsetroot is $elfrdarch)"
-    2; 1; 0;
-   fi
-   c 2 ./elfrdsetroot $tmpmnt/$i $rdfs
+   c 2 $elfrdsetrootdir/elfrdsetroot $tmpmnt/$i $rdfs
    cfgbsd=1
   fi
  done

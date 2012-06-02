@@ -45,7 +45,11 @@ fi
 
 syntax()
 {
-  echo "syntax: growimg [-t target-disk] <cyls> <heads> <sectors> <source-image-filename>"
+  echo "growimg can operate in disk target mode by specifying the destination disk or it
+  echo "can create a new, resized image."
+  echo
+  echo "syntax: growimg <-t target-disk> <source-image-filename>"
+  echo "    or: growimg <cyls> <heads> <sectors> <source-image-filename>"
 }
 
 islezero()
@@ -63,24 +67,29 @@ islezero()
 }
 
 if [ "$1" == "-t" ]; then
+ # target device specified, use its geometry 
  device="$2"
  alt=/dev/"$2"c
  if [ ! -b $alt ]; then
-  echo "$device($alt) is an invalid disk device, not found or not block device"
+  echo "{$device}({$alt}) is an invalid disk device, not found or not block device"
   exit 1
  fi 
- shift
- shift
-fi
 
-if [ ! -f "$4" ]; then
- syntax
- exit 1
-fi
+ image=$3
+else
+ # geometry specified, write a new image file 
+ if [ ! -f "$4" ]; then
+  syntax
+  exit 1
+ fi
 
-islezero $1 cylinders
-islezero $2 heads
-islezero $3 sectors
+ islezero $1 cylinders
+ islezero $2 heads
+ islezero $3 sectors
+
+ image=$4
+fi
+ 
 
 biosboot=/usr/mdec/biosboot
 mbr=/usr/mdec/mbr
@@ -89,14 +98,30 @@ if [ -z "$device" ]; then
  device=vnd0
 fi
 device2=vnd1
-image=$4
 
-cylinders=$1
-trackscylinder=$2
-sectorstrack=$3
-bytessec=512
-totalsize=$((cylinders * trackscylinder * sectorstrack))
-sectorscylinder=$((totalsize / cylinders))
+if [ -z "$alt" ]; then
+ cylinders=$1
+ trackscylinder=$2
+ sectorstrack=$3
+ bytessec=512
+ totalsize=$((cylinders * trackscylinder * sectorstrack))
+ sectorscylinder=$((totalsize / cylinders))
+else
+ # Here we use disklabel as a way to grab these values. Later versions of OpenBSD
+ # always report the actual kernel-detected values and not the on-disk values
+
+ tmplabel=`mktemp /tmp/growimg.XXXXXXX`
+ disklabel $device > $tmplabel
+
+ totalsize=`awk -F: ' /^total sectors:/ {print $2} ' $tmplabel`
+ bytessec=`awk -F: ' /^bytes\/sector:/ {print $2} ' $tmplabel`
+ sectorstrack=`awk -F: ' /^sectors\/track:/ {print $2} ' $tmplabel`
+ sectorscylinder=`awk -F: ' /^sectors\/cylinder:/ {print $2} ' $tmplabel`
+ trackscylinder=`awk -F: ' /^tracks\/cylinder:/ {print $2} ' $tmplabel`
+ cylinders=`awk -F: ' /^cylinders:/ {print $2} ' $tmplabel`
+
+ rm $tmplabel
+fi
 
 # The source image must be 4GB or less, or this will break.
 imgbytes=`ls -l $image | awk ' { print $5 } '`
@@ -155,38 +180,39 @@ fi
 if [ -z "$alt" ]; then
  NewImg=`mktemp newimg.XXXX`
 fi
-NewLabel=`mktemp growimg.XXXXXXXX`
-OldDir=`mktemp -d olddir.XXXXX`
-NewDir=`mktemp -d newdir.XXXXX`
+NewLabel=`mktemp /tmp/growimg.XXXXXXXX`
+OldDir=`mktemp -d /tmp/olddir.XXXXX`
+NewDir=`mktemp -d /tmp/newdir.XXXXX`
 
 if ! mount -o rdonly /dev/"$device2"a $OldDir; then
  echo mount old image failed
  vnconfig -u $device2
- rm -f $NewImg $NewLabel $OldDir $NewDir
+ rm -rf $NewImg $NewLabel $OldDir $NewDir
  exit 1
 fi
 
 echo Reading current disklabel...
 disklabel $device2 |
-egrep -v "^total sectors:|^bytes/sector:|^sectors/track:|^sectors/cylinder:|^tracks/cylinder:|^cylinders:|^  .:|^#|^. partitions:|^.. partitions:|^$" > $NewLabel
+egrep -v "^boundstart:|^boundend:|^total sectors:|^bytes/sector:|^sectors/track:|^sectors/cylinder:|^tracks/cylinder:|^cylinders:|^  .:|^#|^. partitions:|^.. partitions:|^$" > $NewLabel
 
-apart=$((totalsize - sectorstrack))
+asize=$((totalsize - sectorstrack))
 
 # This probably isn't important as of OpenBSD 4.8 because disklabel
-# now ignores geometry specified by -R command.  Flag for removal
-# after further analysis. XXX
+# now ignores geometry specified by -R command.  Simply flashrd
+# as much as possible in this regard. XXX
 #
-cat <<-__New >>$NewLabel
-	total sectors: $totalsize
+cat >> $NewLabel <<-EOF
+	type: ESDI
 	bytes/sector: $bytessec
 	sectors/track: $sectorstrack
-	sectors/cylinder: $sectorscylinder
 	tracks/cylinder: $trackscylinder
+	sectors/cylinder: $sectorscylinder
 	cylinders: $cylinders
+	total sectors: $totalsize
 
-	a: $apart $sectorstrack 4.2BSD 1024 8192 16
+	a: $asize   $sectorstrack   4.2BSD  1024    8192    16
 	c: $totalsize 0 unused 0 0
-	__New
+	EOF
 
 if [ -z "$alt" ]; then
  echo
@@ -196,7 +222,7 @@ if [ -z "$alt" ]; then
  if ! vnconfig $device $NewImg; then
   echo % vnconfig failure
   vnconfig -u $device2
-  rm $NewImg $NewLabel $OldDir $NewDir
+  rm -f $NewImg $NewLabel $OldDir $NewDir
   exit 1
  fi
 fi
@@ -210,12 +236,18 @@ fdisk -c $cylinders -h $trackscylinder -s $sectorstrack -f $mbr \
 	__EOC
 
 echo
-echo Writing enlarged flashrd disklabel...
-disklabel -R $device $NewLabel
+echo Writing flashrd disklabel...
+if ! disklabel -R $device $NewLabel; then
+ echo disklabel failed
+ exit
+fi
 
 echo
 echo Creating new filesystem...
-newfs -S $bytessec -q /dev/r"$device"a
+if ! newfs -S $bytessec -q /dev/r"$device"a; then
+ echo newfs failed
+ exit
+fi
 
 if ! mount -o async /dev/"$device"a $NewDir; then
  echo mount new image failed
@@ -277,7 +309,7 @@ echo Grow completed.
 if [ -z "$alt" ]; then
  echo New "$new"image is located at $NewImg
 else
- echo "New image written to $device($alt)"
+ echo "New image written to {$device}({$alt})"
 fi
 echo
 

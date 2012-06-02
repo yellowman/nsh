@@ -6,7 +6,7 @@
 
 date=`date +%Y%m%d`
 arch=`uname -m`
-vers=20110421
+vers=20120521
 
 export device=vnd3	# least likely to conflict ?
 export rootdevice=vnd2	# used to mount flash vnd for writing of stuff inside

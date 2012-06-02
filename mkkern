@@ -46,10 +46,10 @@ fi
 #
 # elfrdsetroot
 
-[ -z "$elfrdsetroot" ] && elfrdsetroot=./elfrdsetroot.c
+[ -z "$elfrdsetrootdir" ] && elfrdsetrootdir="./elfrdsetroot/"
 
-if [ ! -f $elfrdsetroot ]; then
- echo % $elfrdsetroot not found
+if [ ! -d $elfrdsetrootdir ]; then
+ echo % elfrdsetrootdir $elfrdsetrootdir not found
  exit 1
 fi
 
@@ -111,7 +111,7 @@ fi
 #
 # compile ELFRDSETROOT first (so we can bail out if it fails without waiting for GENERIC)
 
-c 0 cc -o ./elfrdsetroot $elfrdsetroot
+c 0 cc -o $elfrdsetrootdir/elfrdsetroot $elfrdsetrootdir/elfrdsetroot.c $elfrdsetrootdir/elf32.c $elfrdsetrootdir/elf64.c
 
 ###
 #
@@ -160,5 +160,5 @@ rm $T
 # run elfrdsetroot
 
 cd $wd
-c 0 ./elfrdsetroot $tmpmnt/bsd $szezroot
-c 0 ./elfrdsetroot $tmpmnt/bsd.mp $szezroot
+c 0 $elfrdsetrootdir/elfrdsetroot $tmpmnt/bsd $szezroot
+c 0 $elfrdsetrootdir/elfrdsetroot $tmpmnt/bsd.mp $szezroot
