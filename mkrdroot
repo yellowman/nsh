@@ -150,6 +150,6 @@ c 2 cp etc/rc $tmpmntdir/etc/rc
 
 c 2 cp stand/rc $tmpmntdir/stand/rc
 
-c 1 umount $tmpmntdir
+umountwait 1 $tmpmntdir
 
 c 0 vnconfig -u $device

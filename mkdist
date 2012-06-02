@@ -148,10 +148,10 @@ done
 
 ###
 #
-# This step isn't strictly necessary.  The kernel will just fill in the free space automatically during write if the disklabel purports a large image!
+# Setup openbsd.vnd with a little bit of zeros
 
-echo -n "Creating openbsd.vnd $((disktotal / 2048))MB "
-c 0 "dd if=/dev/zero of=$tmpdir/openbsd.vnd bs=512 count=$disktotal >/dev/null 2>&1"
+echo -n "Size openbsd.vnd $((disktotal / 2048))MB "
+c 0 "dd if=/dev/zero of=$tmpdir/openbsd.vnd bs=512 count=512 >/dev/null 2>&1"
 echo
  
 c 0 vnconfig $device $tmpdir/openbsd.vnd
@@ -159,8 +159,33 @@ c 0 vnconfig $device $tmpdir/openbsd.vnd
 ###
 #
 # Read in fake label as basis for real one
+#
+# We build a label here instead of using the kernel's auto-generated
+# one so the user doesn't have to sit around and wait for dd of zeros!
+#
+# (The kernel would have generated a fake disklabel of the right size
+# if the dd step above was bs=512 count=$disktotal)
 
 c 1 "disklabel $device > $tmplabel"
+
+egrep -v "^boundstart:|^boundend:|^total sectors:|^bytes/sector:|^sectors/track:|^sectors/cylinder:|^tracks/cylinder:|^cylinders:|^  .:|^#|^. partitions:|^.. partitions:|^$" < $tmplabel > ${tmplabel}.new
+
+bytessec=512
+sectorstrack=100
+sectorscylinder=100
+trackscylinder=1
+cylinders=$((disktotal / sectorstrack))
+cat >> ${tmplabel}.new <<-EOF
+	bytes/sector: $bytessec
+	sectors/track: $sectorstrack
+	tracks/cylinder: $trackscylinder
+	sectors/cylinder: $sectorscylinder
+	cylinders: $cylinders
+	total sectors: $disktotal
+	
+	c: $disktotal 0 unused 0 0
+	EOF
+c 1 mv ${tmplabel}.new $tmplabel
 
 ###
 #
@@ -196,7 +221,7 @@ for i in $vnddirs; do
  echo -n " copy"
  c 2 tar cf - -C $distloc/$i . | tar xpf - -C $tmpmntdir
 
- c 1 umount $tmpmntdir
+ umountwait 1 $tmpmntdir
 
  echo
  let x=x+1

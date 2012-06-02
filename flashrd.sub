@@ -30,3 +30,21 @@ c() {
   }
  fi
 }
+
+###
+#
+# Wait up to 30 seconds for the kernel to catch up,
+# otherwise give up umount with fallback harness
+
+umountwait() {
+ y=1
+
+ while ! umount $2 2>/dev/null; do
+  echo -n "...$y"
+  sleep 1
+  let y=y+1
+  if [ "$y" -gt 30 ]; then
+   c $1 umount $2
+  fi
+ done
+}

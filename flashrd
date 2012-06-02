@@ -6,15 +6,13 @@
 
 date=`date +%Y%m%d`
 arch=`uname -m`
-vers=20090902
+vers=20090904
 
 export device=svnd3	# least likely to conflict ?
 export rootdevice=svnd2	# used to mount flash vnd for writing of stuff inside
 export blocks=6080	# blocks to reserve for kernel ramdisk
 export szezroot=szez.$arch-$date	# 6080 flash root
 export dest=flashimg.$arch-$date	# final product
-export count=950			# image block count
-export bsize=1m				# image block size
 
 export vnddirs="root bin etc sbin usr"	# must match vnddirs= in stand/rc and fstab
 export vndsize="102400 auto 102400 auto auto"	# min partition sizes (or auto) (in 512 byte sectors)
@@ -26,6 +24,19 @@ export mfsdirs="tmp"			# mfs-only dirs
 set -A mfssize 16384			# mfs sizes (in 512 byte sectors)
 
 set -A part a d e f g h i j k l m n o p
+
+# C/H/S for default "1GB" image, used by mkboot
+#
+# This is specified to get 63 sectors/track, therefore boot
+# blocks work properly on most "disks" without resizing image!
+#
+# Completely ignored if -disk is specified
+export cylinders=968
+export trackscylinder=32
+export sectorstrack=63
+#
+# Normally 512 (but, who knows, times they are a changin'!)
+export bytessec=512
 
 echo "flashrd $vers chris@nmedia.net"
 
@@ -89,13 +100,13 @@ fi
 # fall back
 
 4() {
- umount -f $tmpmntvnd
+ umount $tmpmntvnd
 }
 3() {
  vnconfig -u $device
 }
 2() {
- umount -f $tmpmnt
+ umount $tmpmnt
 }
 1() {
  vnuncfgroot
@@ -185,7 +196,7 @@ if [ ! -z "$mfsdirs" ]; then
  x=0
  for i in $mfsdirs; do
   echo
-  echo "swap	/$i	mfs	rw,nodev,nosuid,-s${mfssize[$x]}	0 0" >> $tmpfstab
+  echo "swap		/$i	mfs	rw,nodev,nosuid,-s${mfssize[$x]}	0 0" >> $tmpfstab
   let x=x+1
  done
 fi
@@ -235,7 +246,7 @@ c 4 mv $tmpfstab $tmpmntvnd/fstab
 
 c 4 "echo $vers > $tmpmntvnd/.flashrd_version"
 
-c 3 umount $tmpmntvnd
+umountwait 3 $tmpmntvnd
 
 ###
 #
@@ -245,7 +256,7 @@ c 3 mount /dev/$device$binpart $tmpmntvnd
 
 c 4 cp bin/ro bin/rw $tmpmntvnd/
 
-c 3 umount $tmpmntvnd
+umountwait 3 $tmpmntvnd
 
 ###
 #
@@ -253,7 +264,7 @@ c 3 umount $tmpmntvnd
 
 c 2 vnconfig -u $device
 
-c 1 umount $tmpmnt
+umountwait 1 $tmpmnt
 
 ###
 #

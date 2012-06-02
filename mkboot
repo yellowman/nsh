@@ -7,25 +7,19 @@
 date=`date +%Y%m%d`
 arch=`uname -m`
 
-if [ -z "$rootdevice" ]; then
- export rootdevice=svnd3
-fi
+[ -z "$rootdevice" ] && export rootdevice=svnd3
 
-if [ -z "$count" ]; then
- export count=1024
-fi
+[ -z "$cylinders" ] && cylinders=968 
 
-if [ -z "$bsize" ]; then
- export bsize=1m
-fi
+[ -z "$trackscylinder" ] && trackscylinder=32
 
-if [ -z "$dest" ]; then
- dest=flashimg.$arch-$date
-fi
+[ -z "$sectorstrack" ] && sectorstrack=63
 
-if [ -z "$tmpmnt" ]; then
- tmpmnt=`mktemp -d /tmp/mkboot.XXXXXXXX`
-fi
+[ -z "$bytessec" ] && bytessec=512
+
+[ -z "$dest" ] && dest=flashimg.$arch-$date
+
+[ -z "$tmpmnt" ] && tmpmnt=`mktemp -d /tmp/mkboot.XXXXXXXX`
 
 vncfgroot() {
  [ -z "$novnd" ] && c 0 vnconfig $rootdevice $1
@@ -58,33 +52,51 @@ vnuncfgroot() {
 tmplabel=`mktemp /tmp/mkbootlabel.XXXXXXXX`
 
 if [ -z "$novnd" ]; then
- echo -n "Creating base image ($bsize*$count)"
-
- c 0 "dd if=/dev/zero of=$dest bs=$bsize count=$count >/dev/null 2>&1"
- echo
+ # Create vnd image, must zero out the first few sectors or else disklabel freaks out...
+ c 0 "dd if=/dev/zero bs=$bytessec count=$bytessec of=$dest > /dev/null 2>&1"
+ vncfgroot $dest
+ c 1 "fdisk -c $cylinders -h $trackscylinder -s $sectorstrack -f $distloc/usr/mdec/mbr -yi $rootdevice >/dev/null 2>&1"
+ c 1 disklabel $rootdevice > $tmplabel
+ totalsize=$((cylinders * trackscylinder * sectorstrack))
+ sectorscylinder=$((totalsize / cylinders))
+else
+ # Disk specified, use default kernel geometry
+ c 0 "fdisk -f $distloc/usr/mdec/mbr -yi $rootdevice >/dev/null 2>&1"
+ c 0 disklabel $rootdevice > $tmplabel
+ totalsize=`awk -F: ' /^total sectors:/ {print $2} ' $tmplabel`
+ bytessec=`awk -F: ' /^bytes\/sector:/ {print $2} ' $tmplabel`
+ sectorstrack=`awk -F: ' /^sectors\/track:/ {print $2} ' $tmplabel`
+ sectorscylinder=`awk -F: ' /^sectors\/cylinder:/ {print $2} ' $tmplabel`
+ trackscylinder=`awk -F: ' /^tracks\/cylinder:/ {print $2} ' $tmplabel`
+ cylinders=`awk -F: ' /^cylinders:/ {print $2} ' $tmplabel`
 fi
 
-vncfgroot $dest
+totalmbytes=$((((totalsize / 1024) * bytessec) / 1024))
+echo "Using disk geometry $cylinders/$trackscylinder/$sectorstrack ($totalmbytes MB)"
 
-c 1 "fdisk -yi $rootdevice >/dev/null 2>&1"
-
-c 1 "disklabel $rootdevice | egrep -v ^type: > $tmplabel"
-
-totalsize=`awk -F: ' /^total sectors:/ {print $2} ' $tmplabel`
-sectorstrack=`awk -F: ' /^sectors\/track:/ {print $2} ' $tmplabel`
-
+# Main partition comprises the total disk, minus first sector
 asize=$((totalsize - sectorstrack))
 
-cat >>$tmplabel <<-EOF
+# Remove most disklabel info, write disk geometry, partitions
+egrep -v "^type:|^boundstart:|^boundend:|^total sectors:|^bytes/sector:|^sectors/track:|^sectors/cylinder:|^tracks/cylinder:|^cylinders:|^  .:|^#|^. partitions:|^.. partitions:|^$" < $tmplabel > ${tmplabel}.new
+cat >> ${tmplabel}.new <<-EOF
 	type: ESDI
-	
-	a: $asize   $sectorstrack   4.2BSD  1024    8192    16
-	EOF
+	bytes/sector: $bytessec
+	sectors/track: $sectorstrack
+	tracks/cylinder: $trackscylinder
+	sectors/cylinder: $sectorscylinder
+	cylinders: $cylinders
+	total sectors: $totalsize
 
-c 1 "disklabel -R $rootdevice $tmplabel >/dev/null 2>&1"
+	a: $asize   $sectorstrack   4.2BSD  1024    8192    16
+	c: $totalsize 0 unused 0 0
+	EOF
+c 1 mv ${tmplabel}.new $tmplabel
+
+c 1 disklabel -R $rootdevice $tmplabel
 
 echo -n Creating filesystem on /dev/r${rootdevice}a
-c 1 "newfs /dev/r${rootdevice}a >/dev/null 2>&1"
+c 1 "newfs -S $bytessec /dev/r${rootdevice}a >/dev/null 2>&1"
 echo
 
 c 1 mount /dev/${rootdevice}a $tmpmnt
@@ -97,6 +109,8 @@ c 2 "$distloc/usr/mdec/installboot $tmpmnt/boot $distloc/usr/mdec/biosboot $root
 
 c 2 mkdir $tmpmnt/new $tmpmnt/old
 
-c 1 umount $tmpmnt
+umountwait 1 $tmpmnt
 
 vnuncfgroot
+
+exit 0

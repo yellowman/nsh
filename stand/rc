@@ -57,7 +57,10 @@ unvndmnt()
 {
  x=0
 
- umount /$i
+ for i in $vndddirs; do
+  umount /$i
+ done
+
  vnconfig -u $vnd
 }
 

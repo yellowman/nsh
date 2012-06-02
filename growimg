@@ -188,7 +188,7 @@ cat <<-__New >>$NewLabel
 if [ -z "$alt" ]; then
  echo
  echo Creating new image...
- dd if=/dev/zero bs=$bytessec count=32 of=$NewImg >/dev/null
+ dd if=/dev/zero bs=$bytessec count=$bytessec of=$NewImg >/dev/null
 
  if ! vnconfig $device $NewImg; then
   echo % vnconfig failure
