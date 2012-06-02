@@ -40,7 +40,7 @@ vnuncfgroot() {
 # fall back
 
 2() {
- umount /dev/"$rootdevice"a
+ umount -f /dev/"$rootdevice"a
 }
 1() {
  vnuncfgroot

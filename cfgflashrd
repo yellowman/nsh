@@ -65,13 +65,13 @@ vnuncfgroot() {
 # fall back
 
 4() {
- umount $tmpmntvnd
+ umount -f $tmpmntvnd
 }
 3() {
  vnconfig -u $device
 }
 2() {
- umount $tmpmnt
+ umount -f $tmpmnt
 }
 1() {
  vnuncfgroot
@@ -126,12 +126,12 @@ if [ ! -z "$rdfs" ]; then
  # if user wants to modify kernel ramdisk, ready elfrdsetroot, mount vnd, change stand/rc, elfrdsetroot actual kernels
 
  if [ -z "$elfrdsetroot" ]; then
-  elfrdsetroot=/usr/src/distrib/common/elfrdsetroot.c
+  elfrdsetroot=./elfrdsetroot.c
  fi
 
  if [ ! -f $elfrdsetroot ]; then
   echo % $elfrdsetroot not found
-  exit 1
+  2; 1; 0;
  fi
 
  ###
@@ -149,11 +149,7 @@ if [ ! -z "$rdfs" ]; then
  cholo=`egrep ^disk= $tmpmntvnd/stand/rc`
  if [ -z "$cholo" ]; then
   echo % no disk= line found in $tmpmntvnd/stand/rc, aborting
-  4
-  3
-  2
-  1
-  0
+  4; 3; 2; 1; 0;
  fi
 
  ch1=${cholo#disk=}
@@ -178,17 +174,15 @@ if [ ! -z "$rdfs" ]; then
 
  c 2 vnconfig -u $device
  
- elfrdarch=`file ./elfrdsetroot | awk -F, ' { print $2 } '`
  echo Setting ramdisk root image
+ elfrdarch=`file ./elfrdsetroot | awk -F, ' { print $2 } '`
 
  for i in bsd bsd.mp; do
   if [ -f $tmpmnt/$i ]; then
    bsdarch=`file $tmpmnt/$i | awk -F, ' { print $2 } '`
    if [ "$bsdarch" != "$elfrdarch" ]; then
-    echo % architecture mismatch.  elfrdsetroot compiled for `uname -m` but image kernel is $bsdarch
-    2
-    1
-    0
+    echo "% elfrdsetroot architecture mismatch (kernel $bsdarch, but elfrdsetroot is $elfrdarch)"
+    2; 1; 0;
    fi
    c 2 ./elfrdsetroot $tmpmnt/$i $rdfs
    cfgbsd=1
@@ -197,9 +191,7 @@ if [ ! -z "$rdfs" ]; then
 
  if [ -z "$cfgbsd" ]; then
   echo % neither bsd nor bsd.mp kernel found at flash image.  how odd?
-  2
-  1
-  0
+  2; 1; 0;
  fi
 
  rm -f $temp
@@ -235,10 +227,7 @@ done
 
 if [ -z "$etcpart" ]; then
  echo "% missing etc in \$vnddirs ($vnddirs) aborting"
- 3
- 2
- 1
- 0
+ 3; 2; 1; 0;
 fi
 
 c 3 fsck -p /dev/$device$etcpart
@@ -273,11 +262,12 @@ if [ ! -z "$rdfs" ]; then
    sed -e "s%$deltoro%/dev/"$phys"a%" < $tmpmntvnd/fstab > $temp
    mv $temp $tmpmntvnd/fstab
   else
-   echo % fstab has no /flash partition? continuing anyways, but unable to modify fstab root device
+   echo % fstab has no /flash partition, not flashrd image? abort
+   4; 3; 2; 1; 0;
   fi
  else
-  echo % missing etc/fstab, not flashrd image or \$vnddirs out of sync? what funky?
-  echo % continuing anyways, but unable to modify fstab root device
+  echo % missing etc/fstab, not flashrd image or \$vnddirs out of sync with image? abort
+  4; 3; 2; 1; 0;
  fi
 fi
 

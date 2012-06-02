@@ -6,7 +6,7 @@
 
 date=`date +%Y%m%d`
 arch=`uname -m`
-vers=20090723
+vers=20090727
 
 export device=svnd3	# least likely to conflict ?
 export rootdevice=svnd2	# used to mount flash vnd for writing of stuff inside
@@ -89,13 +89,13 @@ fi
 # fall back
 
 4() {
- umount $tmpmntvnd
+ umount -f $tmpmntvnd
 }
 3() {
  vnconfig -u $device
 }
 2() {
- umount $tmpmnt
+ umount -f $tmpmnt
 }
 1() {
  vnuncfgroot
@@ -178,9 +178,7 @@ fi
 
 if [ $x -ne ${#tarsize[*]} ]; then
  echo "% \$tardirs count ($x) different than tarsize array count ${#tarsize[*]}, aborting"
- 2
- 1
- 0
+ 2; 1; 0;
 fi
 
 if [ ! -z "$mfsdirs" ]; then
@@ -194,9 +192,7 @@ fi
 
 if [ $x -ne ${#mfssize[*]} ]; then
  echo "% \$mfsdirs count ($x) different than mfssize array count ${#mfssize[*]}, aborting"
- 2
- 1
- 0
+ 2; 1; 0;
 fi
 
 ###
@@ -224,10 +220,7 @@ done
 
 if [ -z "$etcpart" -o -z "$binpart" ]; then
  echo "% missing etc and/or bin in \$vnddirs ($vnddirs) aborting"
- 3
- 2
- 1
- 0
+ 3; 2; 1; 0;
 fi
 
 ###

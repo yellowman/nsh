@@ -98,7 +98,7 @@ tmpmntdir=`mktemp -d /tmp/mkdist.XXXXXXXXX`
 # fall back
 
 2() {
- umount $tmpmntdir
+ umount -f $tmpmntdir
 }
 1() {
  vnconfig -u $device

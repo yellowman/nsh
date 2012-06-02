@@ -7,17 +7,13 @@
 # Chris Cappuccio <chris@nmedia.net>
 #
 
-if [ -z "$tmpmnt" ]; then
- tmpmnt=`mktemp -d /tmp/mkkern.XXXXXXXX`
-fi
+[ -z "$tmpmnt" ] && tmpmnt=`mktemp -d /tmp/mkkern.XXXXXXXX`
 
 ###
 #
 # blocks
 
-if [ -z "$blocks" ]; then
- blocks=6080
-fi
+[ -z "$blocks" ] && blocks=6080
 
 ###
 #
@@ -28,9 +24,7 @@ if [ -z "$szezroot" -a -z "$1" ]; then
  exit 1
 fi
 
-if [ -z "$szezroot" ]; then
- szezroot=$1
-fi
+[ -z "$szezroot" ] && szezroot=$1
 
 if [ ! -f $szezroot ]; then
  echo % $szezroot is not a file
@@ -41,9 +35,7 @@ fi
 #
 # kernel source
 
-if [ -z "$kernsrc" ]; then
- kernsrc=/usr/src/sys/arch/`uname -m`
-fi
+[ -z "$kernsrc" ] && kernsrc=/usr/src/sys/arch/`uname -m`
 
 if [ ! -d $kernsrc ]; then
  echo % $kernsrc not found
@@ -54,9 +46,7 @@ fi
 #
 # elfrdsetroot
 
-if [ -z "$elfrdsetroot" ]; then
- elfrdsetroot=/usr/src/distrib/common/elfrdsetroot.c
-fi
+[ -z "$elfrdsetroot" ] && elfrdsetroot=./elfrdsetroot.c
 
 if [ ! -f $elfrdsetroot ]; then
  echo % $elfrdsetroot not found
@@ -71,6 +61,14 @@ if [ ! -f $kernsrc/conf/GENERIC ]; then
  echo % $kernsrc/conf/GENERIC config not found
  exit 1
 fi
+
+###
+#
+# exit 1 harness
+
+0() {
+ exit 1
+}
 
 . ./flashrd.sub
 
