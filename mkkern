@@ -13,7 +13,7 @@
 #
 # blocks
 
-[ -z "$blocks" ] && blocks=6080
+[ -z "$blocks" ] && blocks=7480
 
 ###
 #
@@ -102,26 +102,43 @@ c 0 cc -o ./elfrdsetroot $elfrdsetroot
 #
 # compile our version of GENERIC
 
-echo -n Configuring FLASHRD kernel
+T=`mktemp /tmp/mkkern.XXXXXXX`
+TMP=`mktemp /tmp/mkkern.XXXXXXX`
+
+echo -n Configuring FLASHRD, FLASHRD.MP kernels
 wd=`pwd`
 cd $kernsrc/conf
-c 0 "config FLASHRD >/dev/null 2>&1"
-c 0 "config FLASHRD.MP >/dev/null 2>&1"
+c 0 "config FLASHRD >$T 2>&1"
+c 0 "config FLASHRD.MP >$TMP 2>&1"
 echo
 
 echo -n Compiling FLASHRD kernel
 cd $kernsrc/compile/FLASHRD
+echo -n " (make depend)"
 c 0 "make depend >/dev/null 2>&1"
+if grep "make clean" $T >/dev/null; then
+ echo -n " (make clean)"
+ c 0 "make clean >/dev/null 2>&1"
+fi
+echo -n " (make)"
 c 0 "make >/dev/null 2>&1"
 c 0 cp bsd $tmpmnt/bsd
 echo
 
 echo -n Compiling FLASHRD.MP kernel
 cd $kernsrc/compile/FLASHRD.MP
+echo -n " (make depend)"
 c 0 "make depend >/dev/null 2>&1"
+if grep "make clean" $TMP >/dev/null; then
+ echo -n " (make clean)"
+ c 0 "make clean >/dev/null 2>&1"
+fi
+echo -n " (make)"
 c 0 "make >/dev/null 2>&1"
 c 0 cp bsd $tmpmnt/bsd.mp
 echo
+
+rm $T
 
 ###
 #

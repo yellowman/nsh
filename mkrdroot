@@ -20,7 +20,7 @@
 
 [ -z "$bincopy" ] && bincopy="bin/sh"
 
-[ -z "$sbincopy" ] && sbincopy="sbin/init sbin/mount sbin/mount_ffs sbin/fsck sbin/fsck_ffs"
+[ -z "$sbincopy" ] && sbincopy="sbin/init sbin/mount sbin/mount_ffs sbin/fsck sbin/fsck_ffs sbin/reboot"
 
 [ -z "$etccopy" ] && etccopy="etc/login.conf etc/pwd.db"
 
@@ -28,7 +28,7 @@
 #
 # blocks
 
-[ -z "$blocks" ] && blocks=6080
+[ -z "$blocks" ] && blocks=7480
 
 ###
 #
@@ -96,7 +96,7 @@ c 1 mount /dev/${device}a $tmpmntdir
 #
 # Our ramdisk base
 
-c 2 mkdir $tmpmntdir/bin $tmpmntdir/dev $tmpmntdir/etc $tmpmntdir/home $tmpmntdir/mnt $tmpmntdir/root $tmpmntdir/sbin $tmpmntdir/stand $tmpmntdir/sys $tmpmntdir/tmp $tmpmntdir/usr $tmpmntdir/var $tmpmntdir/flash
+c 2 mkdir $tmpmntdir/bin $tmpmntdir/dev $tmpmntdir/etc $tmpmntdir/etc/firmware $tmpmntdir/home $tmpmntdir/mnt $tmpmntdir/root $tmpmntdir/sbin $tmpmntdir/stand $tmpmntdir/sys $tmpmntdir/tmp $tmpmntdir/usr $tmpmntdir/var $tmpmntdir/flash
 
 c 2 cp $distloc/.cshrc $distloc/.profile $tmpmntdir
 
@@ -139,6 +139,21 @@ for i in $etccopy; do
  echo -n " $i"
  c 2 cp $distloc/$i $tmpmntdir/etc
 done
+echo
+
+echo -n Copying pre-mount firmware to ramdisk rootfs
+if [ -f firmware.list ]; then
+ while read line; do
+
+  line=${line%%#*}		# strip comments
+  test -z "$line" && continue
+
+  echo -n " $line"
+  c 2 cp $distloc/etc/firmware/$line $tmpmntdir/etc/firmware
+ done < firmware.list
+else
+ echo -n " (no firmware.list found for ramdisk firmware copy)"
+fi
 
 echo
 

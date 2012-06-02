@@ -162,8 +162,7 @@ NewDir=`mktemp -d newdir.XXXXX`
 if ! mount -o rdonly /dev/"$device2"a $OldDir; then
  echo mount old image failed
  vnconfig -u $device2
- rm -f $NewImg $NewLabel
- rmdir $OldDir $NewDir
+ rm -f $NewImg $NewLabel $OldDir $NewDir
  exit 1
 fi
 
@@ -193,8 +192,7 @@ if [ -z "$alt" ]; then
  if ! vnconfig $device $NewImg; then
   echo % vnconfig failure
   vnconfig -u $device2
-  rm $NewImg $NewLabel
-  rmdir $OldDir $NewDir
+  rm $NewImg $NewLabel $OldDir $NewDir
   exit 1
  fi
 fi
@@ -222,8 +220,7 @@ if ! mount -o async /dev/"$device"a $NewDir; then
   vnconfig -u $device
  fi
  vnconfig -u $device2
- rmdir $OldDir $NewDir
- rm -f $NewImg
+ rm -f $NewImg $NewLabel $OldDir $NewDir
  exit 1
 fi
 
@@ -280,7 +277,7 @@ else
 fi
 echo
 
-rmdir $NewDir $OldDir
+rm -r $NewDir $OldDir
 rm $NewLabel
 
 exit 0
