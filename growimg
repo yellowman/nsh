@@ -45,7 +45,7 @@ fi
 
 syntax()
 {
-  echo "growimg can operate in disk target mode by specifying the destination disk or it
+  echo "growimg can operate in disk target mode by specifying the destination disk or it"
   echo "can create a new, resized image."
   echo
   echo "syntax: growimg <-t target-disk> <source-image-filename>"
@@ -71,7 +71,7 @@ if [ "$1" == "-t" ]; then
  device="$2"
  alt=/dev/"$2"c
  if [ ! -b $alt ]; then
-  echo "{$device}({$alt}) is an invalid disk device, not found or not block device"
+  echo "${device}(${alt}) is an invalid disk device, not found or not block device"
   exit 1
  fi 
 
@@ -309,7 +309,7 @@ echo Grow completed.
 if [ -z "$alt" ]; then
  echo New "$new"image is located at $NewImg
 else
- echo "New image written to {$device}({$alt})"
+ echo "New image written to ${device}(${alt})"
 fi
 echo
 
