@@ -34,6 +34,22 @@ if [ "$1" == "-rdroot" ]; then
   exit 1
  fi
  rdfs=$2
+ shift
+ shift
+fi
+
+if [ "$1" == "-com0" ]; then
+ if [ -z "$2" ]; then
+  echo "% no speed for com0??"
+  exit 1
+ fi
+ if [ "$2" -lt 1200 -o "$2" -gt 115200 ]; then
+  echo "% com0 speed $2 unlikely"
+  exit 1
+ fi
+ com0="$2"
+ shift
+ shift
 fi
 
 vncfgroot() {
@@ -60,9 +76,10 @@ vnuncfgroot() {
  
 if [ -z "$dest" -a -z "$novnd" ]; then
  cat <<-EOF
-	% cfgflashrd [-disk "dev" | -image "filename"] [-rdroot "filename"]
+	% cfgflashrd [-disk "dev" | -image "filename"] [-rdroot "filename"] [-com0 "speed"]
 	  "dev" as in wd2, sd3, etc...
 	  use -rdroot flag if you have built rdrootfs image and want to change disk parameters on it
+	  use -com0 flag if you want to direct console from vga to com0 at "speed" speed
 	EOF
  exit 1
 fi
@@ -204,36 +221,48 @@ if [ ! -z "$rdfs" ]; then
   exit 1
  fi
 
+ 
+ elfrdarch=`file ./elfrdsetroot | awk -F, ' { print $2 } '`
  echo Setting ramdisk root image
- if [ -f $tmpmnt/bsd ]; then
-  if ! ./elfrdsetroot $tmpmnt/bsd $rdfs; then
-   echo % ./elfrdsetroot $tmpmnt/bsd $rdfs failure
-   umount $tmpmnt
-   vnuncfgroot
-   exit 1
-  fi
-  cfgbsd=1
- fi
 
- if [ -f $tmpmnt/bsd.mp ]; then
-  if ! ./elfrdsetroot $tmpmnt/bsd.mp $rdfs; then
-   echo % ./elfrdsetroot $tmpmnt/bsd.mp $rdfs failure
-   umount $tmpmnt
-   vnuncfgroot
-   exit 1
+ for i in bsd bsd.mp; do
+  if [ -f $tmpmnt/$i ]; then
+   bsdarch=`file $tmpmnt/$i | awk -F, ' { print $2 } '`
+   if [ "$bsdarch" != "$elfrdarch" ]; then
+    echo % architecture mismatch.  elfrdsetroot compiled for `uname -m` but image kernel is $bsdarch
+    umount $tmpmnt
+    vnuncfgroot
+    exit 1
+   fi
+   if ! ./elfrdsetroot $tmpmnt/$i $rdfs; then
+    echo % ./elfrdsetroot $tmpmnt/$i $rdfs failure
+    umount $tmpmnt
+    vnuncfgroot
+    exit 1
+   fi
+   cfgbsd=1
   fi
-  cfgbsd=1
- fi
+ done
 
  if [ -z "$cfgbsd" ]; then
   echo % neither bsd nor bsd.mp kernel found at flash image.  how odd?
   umount $tmpmnt
-   vnuncfgroot
-   exit 1
-  fi
+  vnuncfgroot
+  exit 1
+ fi
 
  rm -f $temp
 fi
+
+if [ ! -z "$com0" ]; then
+ echo Installing boot.conf for com0 at $com0 baud
+ mkdir -p $tmpmnt/etc
+ cat <<-EOF >$tmpmnt/etc/boot.conf
+	stty com0 $com0
+	set tty com0
+	set timeout 5
+	EOF
+fi 
 
 ###
 #
@@ -284,6 +313,25 @@ fi
 
 if [ ! -f $tmpmntvnd/.flashrd_version ]; then
  echo % missing etc/.flashrd_version, not flashrd image or \$vnddirs out of sync? what funky?
+fi
+
+if [ ! -z "$com0" ]; then
+ tmpttys=`mktemp /tmp/cfgflashrd.XXXXXXXX`
+ echo Modifying /etc/ttys for tty00 at $com0 baud
+ # Turn off ttyC consoles, turn on com0
+ # partially gleaned from install.sub
+ sed	-e "/^tty00/s/std.[0-9]*/std.${com0}/"	\
+	-e "/^tty00/s/unknown/vt220	/"	\
+	-e "/^tty00/s/off.*/on secure/"		\
+	-e "/^ttyC/s/on.*secure/off/" $tmpmntvnd/ttys > $tmpttys
+ if ! mv $tmpttys $tmpmntvnd/ttys; then
+  echo % mv $tmpttys $tmpmntvnd/ttys failure
+  umount $tmpmntvnd
+  vnconfig -u $device
+  umount $tmpmnt
+  vnuncfgroot
+  exit 1
+ fi
 fi
 
 if [ ! -z "$rdfs" ]; then
@@ -359,7 +407,7 @@ if [ -z "$encpass" ]; then
 fi
 
 if [ -z "$encpass" ]; then
- encpass=`echo $password | /usr/bin/encrypt -b 6`
+ encpass=`echo $password | /usr/bin/encrypt -b 8`
 fi
 
 tmppass=`mktemp /tmp/cfgflashrd.XXXXXXXX`
