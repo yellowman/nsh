@@ -113,8 +113,10 @@ vnuncfgroot() {
 if [ -z "$dest" -a -z "$novnd" ]; then
  cat <<-EOF
 	% cfgflashrd [-disk "dev" | -image "filename"] [-rdroot "filename"] [-com0 "speed"] [-mp] [-tz "tzfile"]
+	  use -disk to configure an attached disk
 	  "dev" as in wd2, sd3, etc...
-	  use -rdroot flag if you have built rdrootfs image and want to change disk parameters on it
+ 	  or, use -image to configure a disk image
+	  use -rdroot flag if you have an rdrootfs image and want to change disk parameters on it
 	  use -com0 flag if you want to direct console from vga to com0 at "speed" speed
 	  use -mp to set bsd.mp as primary kernel, if exists (shifting bsd to bsd.sp)
 	  use -tz to copy /usr/share/zoneinfo/"tzfile" to destination image /etc/localtime
@@ -436,9 +438,11 @@ fi
 
 if [ ! -z "$tzfile" ]; then
  if [ -f /usr/share/zoneinfo/$tzfile ]; then
+  rm $tmpmntvnd/localtime
   cp /usr/share/zoneinfo/$tzfile $tmpmntvnd/localtime
  else
   if [ -f $tzfile ]; then
+   rm $tmpmntvnd/localtime
    cp $tzfile $tmpmntvnd/localtime
   fi
  fi

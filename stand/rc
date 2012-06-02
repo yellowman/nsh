@@ -32,6 +32,11 @@ mkvndmnt()
  x=0
  fail=0
 
+ if [ ! -f $1/openbsd.vnd ]; then
+  echo bootstrap: $1/openbsd.vnd not found!
+  fail=1
+ fi
+
  if ! vnconfig $vnd $1/openbsd.vnd; then
   fail=1
  fi

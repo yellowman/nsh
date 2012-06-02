@@ -4,18 +4,21 @@
 
 tardirs="var"
 
-if [ ! -f /tmp/.tardirs ]; then
- # /etc/rc runs rc.conf, then /etc/netstart runs it again, but only do this stuff once
+for i in $tardirs; do
+ # rc.conf runs early in /etc/rc, and again in /etc/netstart
+ # in OpenBSD 4.9, mfs dirs are not yet available on the first run
+ # therefore, check for mount first
+ if mount | egrep ^mfs".*"/$i >/dev/null ; then
+  if [ ! -f /$i/.tardirs.$i ]; then
+   echo tardirs: extracting $i
+   tar xpf /flash/$i.tar -C /$i
+   touch /$i/.tardirs.$i
+  fi
+ fi
+done
 
- for i in $tardirs; do
-  echo tardirs: extracting $i
-  tar xpf /flash/$i.tar -C /$i
- done
-
- chmod 1777 /tmp
-fi
-
-touch /tmp/.tardirs
+# XXX one day, track down the cause of this insanity
+chmod 1777 /tmp >/dev/null 2>&1
 
 # Insert actual rc.conf.local directives HERE
 

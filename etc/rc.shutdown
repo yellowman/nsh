@@ -15,6 +15,7 @@ if [ ! -z "$tardirs" ]; then
 
  for i in $tardirs; do
   echo tardirs: compacting $i
+  rm -f /$i/.tardirs.$i
   tar cf /flash/$i.tar -C /$i .
  done
 
