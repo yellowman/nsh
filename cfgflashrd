@@ -53,22 +53,34 @@ if [ "$1" == "-com0" ]; then
 fi
 
 vncfgroot() {
- if [ -z "$novnd" ]; then
-  if ! vnconfig $rootdevice $1; then
-   echo % vnconfig $rootdevice $1 failure
-   exit 1
-  fi
- fi
+ [ -z "$novnd" ] && c 0 vnconfig $rootdevice $1
 }
 
 vnuncfgroot() {
- if [ -z "$novnd" ]; then
-  if ! vnconfig -u $rootdevice; then
-   echo % vnconfig -u $rootdevice failure
-   exit 1
-  fi
- fi
+ [ -z "$novnd" ] && c 0 vnconfig -u $rootdevice
 }
+
+###
+#
+# fall back
+
+4() {
+ umount $tmpmntvnd
+}
+3() {
+ vnconfig -u $device
+}
+2() {
+ umount $tmpmnt
+}
+1() {
+ vnuncfgroot
+}
+0() {
+ exit 1
+}
+
+. ./flashrd.sub
 
 ###
 #
@@ -103,17 +115,9 @@ vncfgroot $dest
 tmpmnt=`mktemp -d /tmp/cfgflashrd.XXXXXXXX` # vnd/disk mount point
 tmpmntvnd=`mktemp -d /tmp/cfgflashrd.XXXXXXXX` # openbsd.vnd partition mount point
 
-if ! fsck -p /dev/"$rootdevice"a; then
- echo % fsck failure
- vnuncfgroot
- exit 1
-fi
+c 1 fsck -p /dev/${rootdevice}a
  
-if ! mount /dev/"$rootdevice"a $tmpmnt; then
- echo % mount /dev/"$rootdevice"a $tmpmnt failure
- vnuncfgroot
- exit 1
-fi  
+c 1 mount /dev/${rootdevice}a $tmpmnt
 
 if [ ! -z "$rdfs" ]; then
 
@@ -134,44 +138,22 @@ if [ ! -z "$rdfs" ]; then
  #
  # compile ELFRDSETROOT
 
- if ! cc -o ./elfrdsetroot $elfrdsetroot; then
-  echo % cc -o ./elfrdsetroot $elfrdsetroot failure
-  umount $tmpmnt
-  vnuncfgroot
-  exit 1
- fi
+ c 2 cc -o ./elfrdsetroot $elfrdsetroot
 
- if ! vnconfig $device $rdfs; then
-  echo % vnconfig $device $rdfs failure
-  umount $tmpmnt
-  vnuncfgroot
-  exit 1
- fi
+ c 2 vnconfig $device $rdfs
 
- if ! fsck -p /dev/"$device"a; then
-  echo % fsck failure
-  vnconfig -u $device
-  umount $tmpmnt
-  vnuncfgroot
-  exit 1
- fi
+ c 3 fsck -p /dev/${device}a
 
- if ! mount /dev/"$device"a $tmpmntvnd; then
-  echo % mount /dev/"$device"a $tmpmntvnd failure
-  vnconfig -u $device
-  umount $tmpmnt
-  vnuncfgroot
-  exit 1
- fi
+ c 3 mount /dev/${device}a $tmpmntvnd
 
  cholo=`egrep ^disk= $tmpmntvnd/stand/rc`
  if [ -z "$cholo" ]; then
   echo % no disk= line found in $tmpmntvnd/stand/rc, aborting
-  umount $tmpmntvnd
-  vnconfig -u $device
-  umount $tmpmnt
-  vnuncfgroot
-  exit 1
+  4
+  3
+  2
+  1
+  0
  fi
 
  ch1=${cholo#disk=}
@@ -188,39 +170,13 @@ if [ ! -z "$rdfs" ]; then
  getphys
  
  temp=`mktemp /tmp/cfgflashrd.XXXXXXXX`
- if ! sed -e "s/$cholo/disk="$phys"a/" < $tmpmntvnd/stand/rc > $temp; then
-  echo % sed -e \"s/$cholo/disk="$phys"a/\" < $tmpmntvnd/stand/rc > $temp failure
-  umount $tmpmntvnd
-  vnconfig -u $device
-  umount $tmpmnt 
-  vnuncfgroot
-  exit 1
- fi
+ c 4 "sed -e 's/$cholo/disk=${phys}a/' < $tmpmntvnd/stand/rc > $temp"
 
- if ! mv $temp $tmpmntvnd/stand/rc; then
-  echo % mv $temp $tmpmntvnd/stand/rc failure
-  umount $tmpmntvnd
-  vnconfig -u $device
-  umount $tmpmnt
-  vnuncfgroot
-  exit 1
- fi
+ c 4 mv $temp $tmpmntvnd/stand/rc
 
- if ! umount $tmpmntvnd; then
-  echo % umount $tmpmntvnd failure
-  vnconfig -u $device
-  umount $tmpmnt
-  vnuncfgroot
-  exit 1
- fi
+ c 3 umount $tmpmntvnd
 
- if ! vnconfig -u $device; then
-  echo % vnconfig -u $device failure
-  umount $tmpmnt
-  vnuncfgroot
-  exit 1
- fi
-
+ c 2 vnconfig -u $device
  
  elfrdarch=`file ./elfrdsetroot | awk -F, ' { print $2 } '`
  echo Setting ramdisk root image
@@ -230,25 +186,20 @@ if [ ! -z "$rdfs" ]; then
    bsdarch=`file $tmpmnt/$i | awk -F, ' { print $2 } '`
    if [ "$bsdarch" != "$elfrdarch" ]; then
     echo % architecture mismatch.  elfrdsetroot compiled for `uname -m` but image kernel is $bsdarch
-    umount $tmpmnt
-    vnuncfgroot
-    exit 1
+    2
+    1
+    0
    fi
-   if ! ./elfrdsetroot $tmpmnt/$i $rdfs; then
-    echo % ./elfrdsetroot $tmpmnt/$i $rdfs failure
-    umount $tmpmnt
-    vnuncfgroot
-    exit 1
-   fi
+   c 2 ./elfrdsetroot $tmpmnt/$i $rdfs
    cfgbsd=1
   fi
  done
 
  if [ -z "$cfgbsd" ]; then
   echo % neither bsd nor bsd.mp kernel found at flash image.  how odd?
-  umount $tmpmnt
-  vnuncfgroot
-  exit 1
+  2
+  1
+  0
  fi
 
  rm -f $temp
@@ -268,12 +219,7 @@ fi
 #
 # mount running filesystem for other types of changes
 
-if ! vnconfig $device $tmpmnt/openbsd.vnd; then
- echo % vnconfig $device $tmpmnt/openbsd.vnd failure
- umount $tmpmnt
- vnuncfgroot
- exit 1
-fi
+c 2 vnconfig $device $tmpmnt/openbsd.vnd
 
 ###
 #
@@ -289,27 +235,15 @@ done
 
 if [ -z "$etcpart" ]; then
  echo "% missing etc in \$vnddirs ($vnddirs) aborting"
- vnconfig -u $device
- umount $tmpmnt
- vnuncfgroot
- exit 1
+ 3
+ 2
+ 1
+ 0
 fi
 
-if ! fsck -p /dev/$device$etcpart; then
- echo % fsck -p /dev/$device$etcpart failure
- vnconfig -u $device
- umount $tmpmnt
- vnuncfgroot
- exit 1
-fi
+c 3 fsck -p /dev/$device$etcpart
 
-if ! mount /dev/$device$etcpart $tmpmntvnd; then
- echo % mount /dev/$device$etcpart $tmpmntvnd failure
- vnconfig -u $device
- umount $tmpmnt
- vnuncfgroot
- exit 1
-fi
+c 3 mount /dev/$device$etcpart $tmpmntvnd
 
 if [ ! -f $tmpmntvnd/.flashrd_version ]; then
  echo % missing etc/.flashrd_version, not flashrd image or \$vnddirs out of sync? what funky?
@@ -324,14 +258,7 @@ if [ ! -z "$com0" ]; then
 	-e "/^tty00/s/unknown/vt220	/"	\
 	-e "/^tty00/s/off.*/on secure/"		\
 	-e "/^ttyC/s/on.*secure/off/" $tmpmntvnd/ttys > $tmpttys
- if ! mv $tmpttys $tmpmntvnd/ttys; then
-  echo % mv $tmpttys $tmpmntvnd/ttys failure
-  umount $tmpmntvnd
-  vnconfig -u $device
-  umount $tmpmnt
-  vnuncfgroot
-  exit 1
- fi
+ c 4 mv $tmpttys $tmpmntvnd/ttys
 fi
 
 if [ ! -z "$rdfs" ]; then
@@ -418,18 +345,11 @@ awk -F : '/^root/ \
 { printf(":%s:%s:%s:%s:%s:%s:%s:%s\n", $3, $4, $5, $6, $7, $8, $9, $10) }' \
 < $tmpmntvnd/master.passwd >> $tmppass
 
-egrep -v "^root:" < $tmpmntvnd/master.passwd >> $tmppass
+c 4 "egrep -v '^root:' < $tmpmntvnd/master.passwd >> $tmppass"
 
-mv $tmppass $tmpmntvnd/master.passwd
+c 4 mv $tmppass $tmpmntvnd/master.passwd
 
-if ! pwd_mkdb -p -d $tmpmntvnd $tmpmntvnd/master.passwd; then
- echo % pwd_mkdb failure
- umount $tmpmntvnd
- vnconfig -u $device
- umount $tmpmnt
- vnuncfgroot
- exit 1
-fi 
+c 4 pwd_mkdb -p -d $tmpmntvnd $tmpmntvnd/master.passwd
 
 ###
 #
@@ -448,9 +368,9 @@ if [ -f $tmpmntvnd/ntpd.conf ]; then
   echo Configuring ntpd.conf for NTP servers $ntpservers
    egrep -v ^server $tmpmntvnd/ntpd.conf > $tmppass
    for i in $ntpservers; do
-     echo servers $i >> $tmppass
+     c 4 "echo servers $i >> $tmppass"
    done
-   mv $tmppass $tmpmntvnd/ntpd.conf
+   c 4 mv $tmppass $tmpmntvnd/ntpd.conf
  fi
 fi
 
@@ -468,9 +388,9 @@ fi
 
 if [ ! -z "$dnsservers" ]; then
  echo Configuring resolv.conf for DNS servers $dnsservers
- echo "lookup file bind" > $tmpmntvnd/resolv.conf
+ c 4 "echo lookup file bind > $tmpmntvnd/resolv.conf"
  for i in $dnsservers; do
-  echo nameserver $i >> $tmpmntvnd/resolv.conf
+  c 4 "echo nameserver $i >> $tmpmntvnd/resolv.conf"
  done
 else
  echo Failed to configure nameservers, you must manually configure /etc/resolv.conf
@@ -480,36 +400,21 @@ fi
 #
 # this is the end
 
-if ! umount $tmpmntvnd; then
- echo % umount $tmpmntvnd failure
- vnconfig -u $device
- umount $tmpmnt
- vnuncfgroot
- exit 1
-fi
+c 3 umount $tmpmntvnd
 
 ###
 #
 # done with the main disk vnd
 
-if ! vnconfig -u $device; then
- echo % vnconfig -u $device failure
- umount $tmpmnt
- vnuncfgroot
- exit 1
-fi
+c 2 vnconfig -u $device
 
-if ! umount $tmpmnt; then
- echo % umount $tmpmnt failure
- vnuncfgroot
- exit 1
-fi
+c 1 umount $tmpmnt
 
 ###
 #
 # done with flash img vnd
 
-vnuncfgroot
+c 0 vnuncfgroot
 
 rmdir $tmpmnt $tmpmntvnd
 rm -f $tmppass

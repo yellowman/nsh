@@ -72,6 +72,8 @@ if [ ! -f $kernsrc/conf/GENERIC ]; then
  exit 1
 fi
 
+. ./flashrd.sub
+
 ###
 #
 # modify GENERIC
@@ -91,10 +93,7 @@ sed -e 's/GENERIC/FLASHRD/' < $kernsrc/conf/GENERIC.MP > $kernsrc/conf/FLASHRD.M
 #
 # compile ELFRDSETROOT first (so we can bail out if it fails without waiting for GENERIC)
 
-if ! cc -o ./elfrdsetroot $elfrdsetroot; then
- echo % cc -o ./elfrdsetroot $elfrdsetroot failure
- exit 1
-fi
+c 0 cc -o ./elfrdsetroot $elfrdsetroot
 
 ###
 #
@@ -103,49 +102,22 @@ fi
 echo -n Configuring FLASHRD kernel
 wd=`pwd`
 cd $kernsrc/conf
-if ! config FLASHRD >/dev/null 2>&1; then
- echo % config FLASHRD failure
- exit 1
-fi
-if ! config FLASHRD.MP >/dev/null 2>&1; then
- echo % config FLASHRD.MP failure
- exit 1
-fi
-
+c 0 "config FLASHRD >/dev/null 2>&1"
+c 0 "config FLASHRD.MP >/dev/null 2>&1"
 echo
 
 echo -n Compiling FLASHRD kernel
 cd $kernsrc/compile/FLASHRD
-if ! make depend >/dev/null 2>&1; then
- echo % cd $kernsrc/compile/FLASHRD; make depend failure
- exit 1
-fi
-if ! make >/dev/null 2>&1; then
- echo % cd $kernsrc/compile/FLASHRD; make failure
- exit 1
-fi
-
-if ! cp bsd $tmpmnt/bsd; then
- echo % cp bsd $tmpmnt/bsd failure 
- exit 1
-fi
+c 0 "make depend >/dev/null 2>&1"
+c 0 "make >/dev/null 2>&1"
+c 0 cp bsd $tmpmnt/bsd
 echo
 
 echo -n Compiling FLASHRD.MP kernel
 cd $kernsrc/compile/FLASHRD.MP
-if ! make depend >/dev/null 2>&1; then
- echo % cd $kernsrc/compile/FLASHRD.MP; make depend failure
- exit 1
-fi
-if ! make >/dev/null 2>&1; then
- echo % cd $kernsrc/compile/FLASHRD.MP; make failure
- exit 1
-fi
-
-if ! cp bsd $tmpmnt/bsd.mp; then
- echo % cp bsd $tmpmnt/bsd.mp failure
- exit 1
-fi
+c 0 "make depend >/dev/null 2>&1"
+c 0 "make >/dev/null 2>&1"
+c 0 cp bsd $tmpmnt/bsd.mp
 echo
 
 ###
@@ -153,11 +125,5 @@ echo
 # run elfrdsetroot
 
 cd $wd
-if ! ./elfrdsetroot $tmpmnt/bsd $szezroot; then
- echo % ./elfrdsetroot $tmpmnt/bsd $szezroot failure
- exit 1
-fi
-if ! ./elfrdsetroot $tmpmnt/bsd.mp $szezroot; then
- echo % ./elfrdsetroot $tmpmnt/bsd.mp $szezroot failure
- exit 1
-fi
+c 0 ./elfrdsetroot $tmpmnt/bsd $szezroot
+c 0 ./elfrdsetroot $tmpmnt/bsd.mp $szezroot

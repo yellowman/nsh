@@ -13,53 +13,53 @@
 # Files copied to /stand for stand-alone usage
 #
 
-if [ -z "$standcopy" ]; then
- standcopy="bin/tar sbin/vnconfig sbin/umount"
-fi
+[ -z "$standcopy" ] && standcopy="bin/tar sbin/vnconfig sbin/umount"
 
 # Stuff that needs to be in place on the ramdisk
 #
 
-if [ -z "$bincopy" ]; then
- bincopy="bin/sh"
-fi
+[ -z "$bincopy" ] && bincopy="bin/sh"
 
-if [ -z "$sbincopy" ]; then
- sbincopy="sbin/init sbin/mount sbin/mount_ffs sbin/fsck sbin/fsck_ffs"
-fi
+[ -z "$sbincopy" ] && sbincopy="sbin/init sbin/mount sbin/mount_ffs sbin/fsck sbin/fsck_ffs"
 
-if [ -z "$etccopy" ]; then
- etccopy="etc/login.conf etc/pwd.db"
-fi
+[ -z "$etccopy" ] && etccopy="etc/login.conf etc/pwd.db"
 
 ###
 #
 # blocks
 
-if [ -z "$blocks" ]; then
- blocks=6080
-fi
+[ -z "$blocks" ] && blocks=6080
 
 ###
 #
 # rdrootfs, device, distloc
 
-if [ -z "$szezroot" ]; then
- szezroot=szez.`uname -m`-`date +%Y%m%d`
-fi
+[ -z "$szezroot" ] && szezroot=szez.`uname -m`-`date +%Y%m%d`
 
-if [ -z "$device" ]; then
- device=svnd0
-fi
+[ -z "$device" ] && device=svnd0
 
 if [ -z "$distloc" -a -z "$1" ]; then
  echo "% mkrdroot <openbsd base>"
  exit 1
 fi
 
-if [ -z "$distloc" ]; then
- distloc=$1
-fi
+[ -z "$distloc" ] && distloc=$1
+
+###
+#
+# fall back
+
+2() {
+ umount $tmpmntdir
+}
+1() {
+ vnconfig -u $device
+}
+0() {
+ exit 1
+}
+
+. ./flashrd.sub
 
 if [ ! -f $distloc/dev/MAKEDEV ]; then
  echo % $distloc/dev/MAKEDEV not found
@@ -72,72 +72,35 @@ echo Creating ramdisk rootfs
 #
 # dd, vnconfig, disklabel, newfs
 
-if ! dd if=/dev/zero of=$szezroot bs=512 count=$blocks >/dev/null 2>&1; then
- echo % dd if=/dev/zero of=$szezroot bs=512 count=$blocks failure
- exit 1
-fi
+c 0 "dd if=/dev/zero of=$szezroot bs=512 count=$blocks >/dev/null 2>&1"
 
-if ! vnconfig $device $szezroot; then
- echo % vnconfig $device $szezroot failure
- exit 1
-fi
+c 0 vnconfig $device $szezroot
 
 tmplabel=`mktemp /tmp/mkrdrootlabel.XXXXXXXXX`
 tmpmntdir=`mktemp -d /tmp/mkrdroot.XXXXXXXXX`
 
-if ! disklabel $device > $tmplabel 2>/dev/null; then
- echo % disklabel $device > $tmplabel failure
- vnconfig -u $device
- exit 1
-fi
+c 1 "disklabel $device > $tmplabel 2>/dev/null"
 
 totalsize=`awk -F: ' /^total sectors:/ {print $2} ' $tmplabel`
 cat >>$tmplabel <<-EOF
 	a: $totalsize   0   4.2BSD  1024    8192    16
 	EOF
 
-if ! disklabel -R $device $tmplabel >/dev/null 2>&1; then
- echo % disklabel -R $device $tmplabel failure
- vnconfig -u $device
- exit 1
-fi
+c 1 "disklabel -R $device $tmplabel >/dev/null 2>&1"
 
-if ! newfs -m 0 -o space -i 1024 /dev/r"$device"a >/dev/null 2>&1; then
- echo % newfs -m 0 -o space -i 1024 /dev/r"$device"a failure
- vnconfig -u $device
- exit 1
-fi
+c 1 "newfs -m 0 -o space -i 1024 /dev/r${device}a >/dev/null 2>&1"
 
-if ! mount /dev/"$device"a $tmpmntdir; then
- echo % mount /dev/"$device"a $tmpmntdir failure
- vnconfig -u $device
- exit 1
-fi
+c 1 mount /dev/${device}a $tmpmntdir
 
 ###
 #
 # Our ramdisk base
 
-if ! mkdir $tmpmntdir/bin $tmpmntdir/dev $tmpmntdir/etc $tmpmntdir/home $tmpmntdir/mnt $tmpmntdir/root $tmpmntdir/sbin $tmpmntdir/stand $tmpmntdir/sys $tmpmntdir/tmp $tmpmntdir/usr $tmpmntdir/var $tmpmntdir/flash; then
- echo % mkdir $tmpmntdir/bin $tmpmntdir/dev $tmpmntdir/etc $tmpmntdir/home $tmpmntdir/mnt $tmpmntdir/root $tmpmntdir/sbin $tmpmntdir/stand $tmpmntdir/sys $tmpmntdir/tmp $tmpmntdir/usr $tmpmntdir/var $tmpmntdir/flash failure
- umount $tmpmntdir
- vnconfig -u $device
- exit 1
-fi
+c 2 mkdir $tmpmntdir/bin $tmpmntdir/dev $tmpmntdir/etc $tmpmntdir/home $tmpmntdir/mnt $tmpmntdir/root $tmpmntdir/sbin $tmpmntdir/stand $tmpmntdir/sys $tmpmntdir/tmp $tmpmntdir/usr $tmpmntdir/var $tmpmntdir/flash
 
-if ! cp $distloc/.cshrc $distloc/.profile $tmpmntdir; then
- echo % cp $distloc/.cshrc $distloc/.profile $tmpmntdir failure
- umount $tmpmntdir
- vnconfig -u $device
- exit 1
-fi
+c 2 cp $distloc/.cshrc $distloc/.profile $tmpmntdir
 
-if ! cp $distloc/dev/MAKEDEV $tmpmntdir/dev; then
- echo % cp $distloc/dev/MAKEDEV $tmpmntdir/dev failure
- umount $tmpmntdir
- vnconfig -u $device
- exit 1
-fi
+c 2 cp $distloc/dev/MAKEDEV $tmpmntdir/dev
 
 ###
 #
@@ -145,23 +108,11 @@ fi
 
 wd=`pwd`
 cd $tmpmntdir/dev
-if ! ./MAKEDEV all; then
- echo % ./MAKEDEV all failure
- cd $wd
- umount $tmpmntdir
- vnconfig -u $device
- exit 1
-fi
+c 2 ./MAKEDEV all
 
 i=10
 while [ $i -le 511 ]; do
- if ! ./MAKEDEV bpf$i; then
-  echo % ./MAKEDEV bpf$i failure
-  cd $wd
-  umount $tmpmntdir
-  vnconfig -u $device
-  exit 1
- fi
+ c 2 ./MAKEDEV bpf$i
  let i=i+1
 done
 cd $wd
@@ -174,39 +125,19 @@ echo -n Copying items to ramdisk rootfs
 
 for i in $standcopy; do
  echo -n " $i"
- if ! cp $distloc/$i $tmpmntdir/stand; then
-  echo % cp $distloc/$i $tmpmntdir/stand failure
-  umount $tmpmntdir
-  vnconfig -u $device
-  exit 1
- fi
+ c 2 cp $distloc/$i $tmpmntdir/stand
 done
 for i in $bincopy; do
  echo -n " $i"
- if ! cp $distloc/$i $tmpmntdir/bin; then
-  echo % cp $distloc/$i $tmpmntdir/bin failure
-  umount $tmpmntdir
-  vnconfig -u $device
-  exit 1
- fi
+ c 2 cp $distloc/$i $tmpmntdir/bin
 done
 for i in $sbincopy; do
  echo -n " $i"
- if ! cp $distloc/$i $tmpmntdir/sbin; then
-  echo % cp $distloc/$i $tmpmntdir/sbin failure
-  umount $tmpmntdir
-  vnconfig -u $device
-  exit 1
- fi
+ c 2 cp $distloc/$i $tmpmntdir/sbin
 done
 for i in $etccopy; do
  echo -n " $i"
- if ! cp $distloc/$i $tmpmntdir/etc; then
-  echo % cp $distloc/$i $tmpmntdir/etc failure
-  umount $tmpmntdir
-  vnconfig -u $device
-  exit 1
- fi
+ c 2 cp $distloc/$i $tmpmntdir/etc
 done
 
 echo
@@ -215,27 +146,10 @@ echo
 #
 # Copy custom rc to kernel ramdisk, cleanup
 
-if ! cp etc/rc $tmpmntdir/etc/rc; then
- echo % cp etc/rc $tmpmntdir/etc/rc failure
- umount $tmpmntdir
- vnconfig -u $device
- exit 1
-fi
+c 2 cp etc/rc $tmpmntdir/etc/rc
 
-if ! cp stand/rc $tmpmntdir/stand/rc; then
- echo % cp stand/rc $tmpmntdir/stand/rc failure
- umount $tmpmntdir
- vnconfig -u $device
- exit 1
-fi
+c 2 cp stand/rc $tmpmntdir/stand/rc
 
-if ! umount $tmpmntdir; then
- echo % umount $tmpmntdir failure
- vnconfig -u $device
- exit 1
-fi
+c 1 umount $tmpmntdir
 
-if ! vnconfig -u $device; then
- echo % vnconfig -u $device failure
- exit 1
-fi
+c 0 vnconfig -u $device

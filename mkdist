@@ -95,6 +95,22 @@ tmpmntdir=`mktemp -d /tmp/mkdist.XXXXXXXXX`
 
 ###
 #
+# fall back
+
+2() {
+ umount $tmpmntdir
+}
+1() {
+ vnconfig -u $device
+}
+0() {
+ exit 1
+}
+
+. ./flashrd.sub
+
+###
+#
 # Determine sizes for partitions
 
 set -A part a d e f g h i j k l m n o p
@@ -135,26 +151,16 @@ done
 # This step isn't strictly necessary.  The kernel will just fill in the free space automatically during write if the disklabel purports a large image!
 
 echo -n "Creating openbsd.vnd $((disktotal / 2048))MB "
-if ! dd if=/dev/zero of=$tmpdir/openbsd.vnd bs=512 count=$disktotal >/dev/null 2>/dev/null; then
- echo % dd if=/dev/zero of=$tmpdir/openbsd.vnd bs=512 count=$disktotal failure
- exit 1
-fi
+c 0 "dd if=/dev/zero of=$tmpdir/openbsd.vnd bs=512 count=$disktotal >/dev/null 2>&1"
 echo
  
-if ! vnconfig $device $tmpdir/openbsd.vnd; then
- echo % vnconfig $device $tmpdir/openbsd.vnd failure
- exit 1
-fi
+c 0 vnconfig $device $tmpdir/openbsd.vnd
 
 ###
 #
 # Read in fake label as basis for real one
 
-if ! disklabel $device > $tmplabel; then
- echo % disklabel $device failure
- vnconfig -u $device
- exit 1
-fi
+c 1 "disklabel $device > $tmplabel"
 
 ###
 #
@@ -171,11 +177,7 @@ for i in $vnddirs; do
  let x=x+1
 done
 
-if ! disklabel -R $device $tmplabel; then
- echo % disklabel -R $device $tmplabel failure
- vnconfig -u $device
- exit 1
-fi
+c 1 disklabel -R $device $tmplabel
 
 ###
 #
@@ -187,40 +189,20 @@ for i in $vnddirs; do
  echo -n Finalizing /$i
 
  echo -n " newfs"
- if ! newfs -m 0 -o space /dev/r"$device"${part[$x]} >/dev/null 2>/dev/null; then
-  echo newfs a -m 0 -o space /dev/r"$device"${part[$x]} failure
-  vnconfig -u $device
-  exit 1
- fi
+ c 1 "newfs -m 0 -o space /dev/r${device}${part[$x]} >/dev/null 2>&1"
 
- if ! mount /dev/"$device"${part[$x]} $tmpmntdir; then
-  echo mount /dev/"$device"${part[$x]} $tmpmntdir failure
-  vnconfig -u $device
-  exit 1
- fi
+ c 1 mount /dev/${device}${part[$x]} $tmpmntdir
 
  echo -n " copy"
- if ! tar cf - -C $distloc/$i . | tar xpf - -C $tmpmntdir; then
-  echo tar cf - -C $distloc/$i . | tar xpf - -C $tmpmntdir failure
-  umount $tmpmntdir
-  vnconfig -u $device
-  exit 1
- fi
+ c 2 tar cf - -C $distloc/$i . | tar xpf - -C $tmpmntdir
 
- if ! umount $tmpmntdir; then
-  echo umount $tmpmntdir failure
-  vnconfig -u $device
-  exit 1
- fi
+ c 1 umount $tmpmntdir
 
  echo
  let x=x+1
 done
 
-if ! vnconfig -u $device; then
- echo % vnconfig -u $device failure
- exit 1
-fi
+c 0 vnconfig -u $device
 
 ###
 #
@@ -238,10 +220,7 @@ if [ ! -z "$tardirs" ]; then
   fi
 
   echo -n " copy"
-  if ! tar cf $tmpdir/$i.tar -C $distloc/$i . ; then
-   echo tar cf $tmpdir/$i.tar -C $distloc/$i .
-   exit 1
-  fi
+  c 0 tar cf $tmpdir/$i.tar -C $distloc/$i .
 
   echo
  done 

@@ -28,22 +28,28 @@ if [ -z "$tmpmnt" ]; then
 fi
 
 vncfgroot() {
- if [ -z "$novnd" ]; then
-  if ! vnconfig $rootdevice $1; then
-   echo % vnconfig $rootdevice $1 failure
-   exit 1
-  fi
- fi
+ [ -z "$novnd" ] && c 0 vnconfig $rootdevice $1
 }      
 
 vnuncfgroot() {
- if [ -z "$novnd" ]; then
-  if ! vnconfig -u $rootdevice; then
-   echo % vnconfig -u $rootdevice failure
-   exit 1
-  fi
- fi
+ [ -z "$novnd" ] && c 0 vnconfig -u $rootdevice
 }
+
+###
+#
+# fall back
+
+2() {
+ umount /dev/"$rootdevice"a
+}
+1() {
+ vnuncfgroot
+}
+0() {
+ exit 1
+}
+
+. ./flashrd.sub
 
 ###
 #
@@ -54,26 +60,15 @@ tmplabel=`mktemp /tmp/mkbootlabel.XXXXXXXX`
 if [ -z "$novnd" ]; then
  echo -n "Creating base image ($bsize*$count)"
 
- if ! dd if=/dev/zero of=$dest bs=$bsize count=$count >/dev/null 2>&1; then
-  echo % dd if=/dev/zero of=$dest bs=$bsize count=$count failure
-  exit 1
- fi
+ c 0 "dd if=/dev/zero of=$dest bs=$bsize count=$count >/dev/null 2>&1"
  echo
 fi
 
-vncfgroot $dest
+c 0 vncfgroot $dest
 
-if ! fdisk -yi $rootdevice >/dev/null 2>&1; then
- echo % fdisk -yi $rootdevice
- vnuncfgroot
- exit 1
-fi
+c 1 "fdisk -yi $rootdevice >/dev/null 2>&1"
 
-if ! disklabel $rootdevice | egrep -v ^type: > $tmplabel; then
- echo % disklabel $rootdevice > $tmplabel failure
- vnuncfgroot
- exit 1
-fi
+c 1 "disklabel $rootdevice | egrep -v ^type: > $tmplabel"
 
 totalsize=`awk -F: ' /^total sectors:/ {print $2} ' $tmplabel`
 sectorstrack=`awk -F: ' /^sectors\/track:/ {print $2} ' $tmplabel`
@@ -86,51 +81,22 @@ cat >>$tmplabel <<-EOF
 	a: $asize   $sectorstrack   4.2BSD  1024    8192    16
 	EOF
 
-if ! disklabel -R $rootdevice $tmplabel >/dev/null 2>&1; then
- echo % disklabel -R $rootdevice $tmplabel failure
- vnuncfgroot
- exit 1
-fi
+c 1 "disklabel -R $rootdevice $tmplabel >/dev/null 2>&1"
 
-echo -n Creating filesystem on /dev/r"$rootdevice"a
-if ! newfs /dev/r"$rootdevice"a >/dev/null 2>&1; then
- echo % newfs /dev/r"$rootdevice"a failure
- vnuncfgroot
- exit 1
-fi
+echo -n Creating filesystem on /dev/r${rootdevice}a
+c 1 "newfs /dev/r${rootdevice}a >/dev/null 2>&1"
 echo
 
-if ! mount /dev/"$rootdevice"a $tmpmnt; then
- echo % mount /dev/"$rootdevice"a $tmpmnt failure
- vnuncfgroot
- exit 1
-fi
+c 1 mount /dev/${rootdevice}a $tmpmnt
 
 echo Installing bootblocks
 
-if ! cp $distloc/usr/mdec/boot $tmpmnt/boot; then
- echo % cp $distloc/usr/mdec/boot $tmpmnt/boot
- umount /dev/"$rootdevice"a
- vnuncfgroot
- exit 1
-fi
+c 2 cp $distloc/usr/mdec/boot $tmpmnt/boot
 
-if ! $distloc/usr/mdec/installboot $tmpmnt/boot $distloc/usr/mdec/biosboot $rootdevice >/dev/null 2>&1; then
- echo % $distloc/usr/mdec/installboot $tmpmnt/boot $distloc/usr/mdec/biosboot $rootdevice failure
- umount /dev/"$rootdevice"a
- vnuncfgroot
- exit 1
-fi
+c 2 "$distloc/usr/mdec/installboot $tmpmnt/boot $distloc/usr/mdec/biosboot $rootdevice >/dev/null 2>&1"
 
-if ! mkdir $tmpmnt/new $tmpmnt/old; then
- echo % mkdir $tmpmnt/new $tmpmnt/old failure
- umount /dev/"$rootdevice"a
- vnuncfgroot
- exit 1
-fi
+c 2 mkdir $tmpmnt/new $tmpmnt/old
 
-if ! umount $tmpmnt; then
- echo % umount $tmpmnt failure
-fi
+c 1 umount $tmpmnt
 
 vnuncfgroot
