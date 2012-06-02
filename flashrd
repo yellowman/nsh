@@ -6,18 +6,18 @@
 
 date=`date +%Y%m%d`
 arch=`uname -m`
-vers=20090727
+vers=20090902
 
 export device=svnd3	# least likely to conflict ?
 export rootdevice=svnd2	# used to mount flash vnd for writing of stuff inside
 export blocks=6080	# blocks to reserve for kernel ramdisk
 export szezroot=szez.$arch-$date	# 6080 flash root
 export dest=flashimg.$arch-$date	# final product
-export count=1024			# image block count
+export count=950			# image block count
 export bsize=1m				# image block size
 
-export vnddirs="bin etc sbin usr"	# must match vnddirs= in stand/rc and fstab
-export vndsize="auto 102400 auto auto"	# min partition sizes (or auto) (in 512 byte sectors)
+export vnddirs="root bin etc sbin usr"	# must match vnddirs= in stand/rc and fstab
+export vndsize="102400 auto 102400 auto auto"	# min partition sizes (or auto) (in 512 byte sectors)
 
 export tardirs="var"			# must match tardirs= in stand/rc and rc.conf.local
 set -A tarsize 65536			# mfs sizes for tar dirs (in 512 byte sectors)
@@ -124,7 +124,7 @@ c 0 ./mkboot
 
 export tmpmnt=`mktemp -d /tmp/flashrd.XXXXXXXX`
 
-c 0 vncfgroot $dest
+vncfgroot $dest
 
 c 1 mount /dev/"$rootdevice"a $tmpmnt
 
@@ -229,7 +229,7 @@ fi
 
 c 3 mount /dev/$device$etcpart $tmpmntvnd
 
-c 4 cp etc/rc.local etc/rc.conf.local $tmpmntvnd/
+c 4 cp etc/rc.local etc/rc.conf.local etc/rc.shutdown $tmpmntvnd/
 
 c 4 mv $tmpfstab $tmpmntvnd/fstab
 
@@ -259,7 +259,7 @@ c 1 umount $tmpmnt
 #
 # done with flash img vnd
 
-c 0 vnuncfgroot
+vnuncfgroot
 
 rmdir $tmpmntvnd $tmpmnt
 

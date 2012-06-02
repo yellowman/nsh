@@ -20,7 +20,7 @@
 # this bootstrap could do quite a bit more to check vnd images for validity
 #  and swap to /flash/old as necessary or convenient
 #
-vnddirs="bin etc sbin usr" # svnd0a, svnd0d, svnd0e, svnd0f
+vnddirs="root bin etc sbin usr" # svnd0a, svnd0d, svnd0e, svnd0f, svnd0g
 set -A part a d e f g h i j k l m n o p
 vnd=svnd0
 disk=wd0a

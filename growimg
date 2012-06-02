@@ -159,7 +159,7 @@ NewLabel=`mktemp growimg.XXXXXXXX`
 OldDir=`mktemp -d olddir.XXXXX`
 NewDir=`mktemp -d newdir.XXXXX`
 
-if ! mount /dev/"$device2"a $OldDir; then
+if ! mount -o rdonly /dev/"$device2"a $OldDir; then
  echo mount old image failed
  vnconfig -u $device2
  rm -f $NewImg $NewLabel

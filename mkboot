@@ -64,7 +64,7 @@ if [ -z "$novnd" ]; then
  echo
 fi
 
-c 0 vncfgroot $dest
+vncfgroot $dest
 
 c 1 "fdisk -yi $rootdevice >/dev/null 2>&1"
 

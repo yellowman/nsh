@@ -74,9 +74,14 @@ fi
 
 ###
 #
-# modify GENERIC
+# remove option POOL_DEBUG from /usr/src/sys/conf/GENERIC (slower allocation!)
+# modify /usr/src/sys/arch/`uname -m`/conf/GENERIC
 
-egrep -v ^config < $kernsrc/conf/GENERIC >$kernsrc/conf/FLASHRD
+grep -v POOL_DEBUG /usr/src/sys/conf/GENERIC > /usr/src/sys/conf/FLASHRD
+# if you want POOL_DEBUG, do this instead:
+#cp /usr/src/sys/conf/GENERIC /usr/src/sys/conf/FLASHRD
+
+egrep -v ^config $kernsrc/conf/GENERIC | sed -e 's/GENERIC/FLASHRD/' > $kernsrc/conf/FLASHRD
 
 cat >> $kernsrc/conf/FLASHRD <<-EOF
 	option	RAMDISK_HOOKS
@@ -85,7 +90,7 @@ cat >> $kernsrc/conf/FLASHRD <<-EOF
 	pseudo-device	rd 1
 	EOF
 
-sed -e 's/GENERIC/FLASHRD/' < $kernsrc/conf/GENERIC.MP > $kernsrc/conf/FLASHRD.MP
+sed -e 's/GENERIC/FLASHRD/' $kernsrc/conf/GENERIC.MP > $kernsrc/conf/FLASHRD.MP
 
 ###
 #

@@ -4,7 +4,7 @@
 #
 # Chris Cappuccio <chris@nmedia.net>
 
-vnddirs="bin etc sbin usr" # must match vnddirs= in stand/rc and fstab
+vnddirs="root bin etc sbin usr" # must match vnddirs= in flashrd and stand/rc
 rootdevice=svnd2
 device=svnd3
 
@@ -96,7 +96,7 @@ if [ -z "$dest" -a -z "$novnd" ]; then
  exit 1
 fi
 
-if [ ! -z "$novnd" -a ! -f "$dest" ]; then
+if [ -z "$novnd" -a ! -f "$dest" ]; then
  echo % image $dest not found
  exit 1
 fi
@@ -404,7 +404,7 @@ c 1 umount $tmpmnt
 #
 # done with flash img vnd
 
-c 0 vnuncfgroot
+vnuncfgroot
 
 rmdir $tmpmnt $tmpmntvnd
 rm -f $tmppass
