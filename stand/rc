@@ -20,9 +20,9 @@
 # this bootstrap could do quite a bit more to check vnd images for validity
 #  and swap to /flash/old as necessary or convenient
 #
-vnddirs="root bin etc sbin usr" # svnd0a, svnd0d, svnd0e, svnd0f, svnd0g
+vnddirs="root bin etc sbin usr" # vnd0a, vnd0d, vnd0e, vnd0f, vnd0g
 set -A part a d e f g h i j k l m n o p
-vnd=svnd0
+vnd=vnd0
 disk=wd0a
 
 export PATH=/bin:/sbin:/stand
@@ -97,16 +97,16 @@ mkvndmnt /flash
 
 if test "$fail" == "1"; then
  if test -f /flash/old/openbsd.vnd; then
-  echo bootstrap: fatal error with svnd, attempting to boot /flash/old
+  echo bootstrap: fatal error with vnd, attempting to boot /flash/old
   unvndmnt
   mkvndmnt /flash/old
   if test "$fail" == "1"; then
    vnconfig -l
-   echo bootstrap: fatal error with svnd, attempting boot anyways
+   echo bootstrap: fatal error with vnd, attempting boot anyways
   fi
  else
   vnconfig -l
-  echo bootstrap: fatal error with svnd, attempting boot anyways
+  echo bootstrap: fatal error with vnd, attempting boot anyways
  fi
 fi
 

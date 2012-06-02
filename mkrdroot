@@ -36,7 +36,7 @@
 
 [ -z "$szezroot" ] && szezroot=szez.`uname -m`-`date +%Y%m%d`
 
-[ -z "$device" ] && device=svnd0
+[ -z "$device" ] && device=vnd0
 
 if [ -z "$distloc" -a -z "$1" ]; then
  echo "% mkrdroot <openbsd base>"

@@ -86,9 +86,9 @@ biosboot=/usr/mdec/biosboot
 mbr=/usr/mdec/mbr
 
 if [ -z "$device" ]; then
- device=svnd0
+ device=vnd0
 fi
-device2=svnd1
+device2=vnd1
 image=$4
 
 cylinders=$1

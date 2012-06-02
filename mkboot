@@ -7,7 +7,7 @@
 date=`date +%Y%m%d`
 arch=`uname -m`
 
-[ -z "$rootdevice" ] && export rootdevice=svnd3
+[ -z "$rootdevice" ] && export rootdevice=vnd3
 
 [ -z "$cylinders" ] && cylinders=968 
 

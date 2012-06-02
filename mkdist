@@ -12,7 +12,7 @@ if [ -z "$vnddirs" ]; then
  exit 1
 fi
 if [ -z "$device" ]; then
- device=svnd0
+ device=vnd0
 fi
 
 if [ -z "$1" -a -z "$distloc" ]; then
