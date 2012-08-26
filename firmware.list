@@ -14,6 +14,11 @@ atu-rfmd2958-ext
 atu-rfmd2958-int
 atu-rfmd2958smc-ext
 atu-rfmd2958smc-int
+bnx-b06
+bnx-b09
+bnx-rv2p
+bnx-xi-rv2p
+bnx-xi90-rv2p
 fxp-d101a
 fxp-d101b0
 fxp-d101ma
