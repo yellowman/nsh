@@ -1,15 +1,9 @@
-#	$OpenBSD: rc.local,v 1.39 2006/07/28 20:19:46 sturm Exp $
+#	$OpenBSD: rc.local,v 1.44 2011/04/22 06:08:14 ajacoutot Exp $
 
 # Site-specific startup actions, daemons, and other things which
 # can be done AFTER your system goes into securemode.  For actions
 # which should be done BEFORE your system has gone into securemode
 # please see /etc/rc.securelevel.
-
-echo -n 'starting local daemons:'
-
-# Add your local startup actions here.
-
-echo '.'
 
 # DO NOT EDIT THIS SECTION UNLESS YOU INTEND TO MODIFY THE FILESYSTEM BEHAVIOR OF YOUR FLASHRD SYSTEM!!!
 #
