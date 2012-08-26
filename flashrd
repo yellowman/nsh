@@ -6,22 +6,22 @@
 
 date=`date +%Y%m%d`
 arch=`uname -m`
-vers=20120523
+vers=20120826
 
 export device=vnd3	# least likely to conflict ?
 export rootdevice=vnd2	# used to mount flash vnd for writing of stuff inside
-export blocks=7480	# blocks to reserve for kernel ramdisk
-export szezroot=szez.$arch-$date	# 7480 flash root
+export blocks=8000	# blocks to reserve for kernel ramdisk
+export szezroot=szez.$arch-$date	# 8000 flash root
 export dest=flashimg.$arch-$date	# final product
 
 export vnddirs="root bin etc sbin usr"	# must match vnddirs= in stand/rc and fstab
 export vndsize="102400 auto 102400 auto auto"	# min partition sizes (or auto) (in 512 byte sectors)
 
 export tardirs="var"			# must match tardirs= in stand/rc and rc.conf.local
-set -A tarsize 65536			# mfs sizes for tar dirs (in 512 byte sectors)
+set -A tarsize 131072			# mfs sizes for tar dirs (in 512 byte sectors)
 
 export mfsdirs="tmp"			# mfs-only dirs
-set -A mfssize 16384			# mfs sizes (in 512 byte sectors)
+set -A mfssize 32768			# mfs sizes (in 512 byte sectors)
 
 set -A part a d e f g h i j k l m n o p
 
