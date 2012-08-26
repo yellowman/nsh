@@ -7,17 +7,37 @@
 
 powerdown=NO	# set to YES for powerdown
 
-# Uncomment tardirs if you want to compact dirs on shutdown
+# If you want tardirs changes to be preserved on each shutdown, use tardirs value:
 #
 #tardirs="var"
+#
+# If you want tardirs changes to be ignored on each shutdown, use blank value:
+#
+tardirs=""
+#
+# If you do not define tardirs here, the variable will be inhereted from rc.conf.local
 
 if [ ! -z "$tardirs" ]; then
 
  for i in $tardirs; do
   echo tardirs: compacting $i
   rm -f /$i/.tardirs.$i
-  tar cf /flash/$i.tar -C /$i .
+  tar cf /flash/$i.tar.part -C /$i .
  done
+
+ # Wait for slow flash. Like umountwait, this is a ridiculous work-around.
+ # The kernel should offer a better solution in the future.
+ #
+ echo -n tardirs: waiting for flash to settle...
+ sync
+ sleep 30
+
+ for i in $tardirs; do
+  mv /flash/$i.tar.part /flash/$i.tar
+ done
+
+ sync
+ echo ok
 
 fi
 
