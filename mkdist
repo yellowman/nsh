@@ -123,8 +123,8 @@ for i in $vnddirs; do
 
  size[$x]=`du -s $distloc/$i | cut -f 1`
 
- # Leave 1/5th (20%) of used space as free space for >=100MB directories
- let free[$x]=size[$x]/5
+ # Leave 1/2th (50%) of used space as free space for >=100MB directories
+ let free[$x]=size[$x]/2
  let total[$x]=size[$x]+free[$x]
  # and leave 140% of used space as free space for <100MB directories
  if [ ${size[$x]} -le 204800 ]; then
@@ -214,7 +214,7 @@ for i in $vnddirs; do
  echo -n Finalizing /$i
 
  echo -n " newfs"
- c 1 "newfs -m 0 -o space /dev/r${device}${part[$x]} >/dev/null 2>&1"
+ c 1 "newfs -m 1 -o space /dev/r${device}${part[$x]} >/dev/null 2>&1"
 
  c 1 mount /dev/${device}${part[$x]} $tmpmntdir
 
