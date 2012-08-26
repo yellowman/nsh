@@ -28,7 +28,7 @@
 #
 # blocks
 
-[ -z "$blocks" ] && blocks=7480
+[ -z "$blocks" ] && blocks=8000
 
 ###
 #
@@ -97,6 +97,9 @@ c 1 mount /dev/${device}a $tmpmntdir
 # Our ramdisk base
 
 c 2 mkdir $tmpmntdir/bin $tmpmntdir/dev $tmpmntdir/etc $tmpmntdir/etc/firmware $tmpmntdir/home $tmpmntdir/mnt $tmpmntdir/root $tmpmntdir/sbin $tmpmntdir/stand $tmpmntdir/sys $tmpmntdir/tmp $tmpmntdir/usr $tmpmntdir/var $tmpmntdir/flash
+
+# mount_mfs preserves permissions from parent mount
+c 2 chmod 1777 $tmpmntdir/tmp
 
 c 2 cp $distloc/.cshrc $distloc/.profile $tmpmntdir
 
