@@ -23,7 +23,7 @@
 vnddirs="root bin etc sbin usr" # vnd0a, vnd0d, vnd0e, vnd0f, vnd0g
 set -A part a d e f g h i j k l m n o p
 vnd=vnd0
-disk=wd0a
+disk=auto
 
 export PATH=/bin:/sbin:/stand
 
@@ -81,14 +81,51 @@ export bootstrap=1
 
 ###
 #
+# check for auto
+
+if test "$disk" == "auto"; then
+
+ let found=0
+ echo bootstrap: autodetecting root disk
+
+ for i in sd3a sd2a sd1a sd0a wd3a wd2a wd1a wd0a; do
+  # mount -o rdonly will succeed provided there is some
+  # semblance of an OpenBSD FFS at the specified location
+  if mount -o rdonly /dev/$i /flash 2>&1 >/dev/null; then
+   if test -f /flash/openbsd.vnd; then
+    disk=$i
+    let found=found+1
+    echo bootstrap: match $i
+   else
+    echo bootstrap: $i contains no flashrd openbsd.vnd, ignoring
+   fi
+   umount /flash
+  fi
+ done
+
+ if test "$found" -gt "1"; then
+  echo bootstrap: multiple possible matches found, using $disk
+ fi
+ if test "$found" -eq "0"; then
+  echo bootstrap: no disks found, giving up
+  exit 1
+ fi
+ if test "$found" -eq "1"; then
+  echo bootstrap: found $disk
+ fi
+fi
+
+###
+#
 # mount base flash
 
 if ! fsck -p /dev/$disk; then
  if ! fsck -y /dev/$disk; then
-  echo bootstrap: fsck $disk failed, attempting boot anyways
+  echo bootstrap: fsck $disk failed, attempting boot anyways with -o rdonly
+  rdonly=",rdonly"
  fi
 fi
-if ! mount -o noatime /dev/$disk /flash; then
+if ! mount -o noatime$rdonly /dev/$disk /flash; then
  echo bootstrap: fatal error mounting $disk to /flash
  exit 1
 fi
