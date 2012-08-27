@@ -22,7 +22,12 @@ if [ ! -z "$tardirs" ]; then
  for i in $tardirs; do
   echo tardirs: compacting $i
   rm -f /$i/.tardirs.$i
-  tar cf /flash/$i.tar.part -C /$i .
+  if ! tar cf /flash/$i.tar.part -C /$i . ; then
+   echo tardirs: compacting $i failed
+   rm /flash/$i.tar.part
+  else
+   mv /flash/$i.tar.part /flash/$i.tar
+  fi
  done
 
  # Wait for slow flash. Like umountwait, this is a ridiculous work-around.
@@ -30,13 +35,8 @@ if [ ! -z "$tardirs" ]; then
  #
  echo -n tardirs: waiting for flash to settle...
  sync
- sleep 30
-
- for i in $tardirs; do
-  mv /flash/$i.tar.part /flash/$i.tar
- done
-
  sync
+ sleep 30
  echo ok
 
 fi
