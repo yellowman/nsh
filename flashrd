@@ -159,7 +159,6 @@ tmpfstab=`mktemp /tmp/flashrdfstab.XXXXXXXX`
 
 cat <<-EOF >$tmpfstab
 	/dev/rd0a	/	ffs	rw	1 0
-	/dev/wd0a	/flash	ffs	rw,noatime,nodev,nosuid	1 0
 	EOF
 
 x=0

@@ -185,16 +185,22 @@ if [ ! -z "$rdfs" ]; then
 
  getphys()
  {
-  read phys?"New physical device name (as seen by destination system)? "
-  if [ ! -b /dev/"$phys"a ]; then
+  read phys?"New physical device name (as seen by destination system)[auto]? "
+  if [ -z "$phys" ]; then
+   phys=auto
+  fi
+  if [ ! -b /dev/"$phys"a -a "$phys" != "auto" ]; then
    echo /dev/"$phys"a appear to be nonsense, try again
    getphys
   fi
  }
  getphys
+ if [ "$phys" != "auto" ]; then
+  phys=${phys}a
+ fi
  
  temp=`mktemp /tmp/cfgflashrd.XXXXXXXX`
- c 4 "sed -e 's/$cholo/disk=${phys}a/' < $tmpmntvnd/stand/rc > $temp"
+ c 4 "sed -e 's/$cholo/disk=${phys}/' < $tmpmntvnd/stand/rc > $temp"
 
  c 4 mv $temp $tmpmntvnd/stand/rc
 
@@ -288,27 +294,6 @@ if [ ! -z "$com0" ]; then
 	-e "/^tty00/s/off.*/on secure/"		\
 	-e "/^ttyC/s/on.*secure/off/" $tmpmntvnd/ttys > $tmpttys
  c 4 mv $tmpttys $tmpmntvnd/ttys
-fi
-
-if [ ! -z "$rdfs" ]; then
- # set root partition in fstab for /flash partition, based on rdroot answer
- if [ -f $tmpmntvnd/fstab ]; then
-  deltoro=`awk ' /\/flash/ {print $1} ' $tmpmntvnd/fstab`
-  if [ ! -z "$deltoro" ]; then
-   curdisk=${deltoro#/dev/}
-   curdisk=${curdisk%a}
-   echo Old fstab /flash device $deltoro, new device /dev/"$phys"a
-   # here we assume the physical device for /flash isn't going to overlap with vnd0 or rd0
-   sed -e "s%$deltoro%/dev/"$phys"a%" < $tmpmntvnd/fstab > $temp
-   mv $temp $tmpmntvnd/fstab
-  else
-   echo % fstab has no /flash partition, not flashrd image? abort
-   4; 3; 2; 1; 0;
-  fi
- else
-  echo % missing etc/fstab, not flashrd image or \$vnddirs out of sync with image? abort
-  4; 3; 2; 1; 0;
- fi
 fi
 
 ###
