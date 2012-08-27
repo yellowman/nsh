@@ -33,8 +33,10 @@
 
 unset alt
 
-if [ `uname -s` != "OpenBSD" ]; then
- echo Sorry, cowboy.  This script only runs on OpenBSD.
+uname=`uname -s`
+
+if [ "$uname" != "OpenBSD" -a "$uname" != "Bitrig" ]; then
+ echo Sorry, cowboy.  This script only runs on OpenBSD and similar systems.
  exit 1
 fi
 
