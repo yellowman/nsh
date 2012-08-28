@@ -91,7 +91,7 @@ if test "$disk" == "auto"; then
  for i in sd3a sd2a sd1a sd0a wd3a wd2a wd1a wd0a; do
   # mount -o rdonly will succeed provided there is some
   # semblance of an OpenBSD FFS at the specified location
-  if mount -o rdonly /dev/$i /flash 2>&1 >/dev/null; then
+  if mount -o rdonly /dev/$i /flash >/dev/null 2>&1; then
    if test -f /flash/openbsd.vnd; then
     disk=$i
     let found=found+1
