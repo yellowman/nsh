@@ -20,18 +20,28 @@ tardirs=""
 if [ ! -z "$tardirs" ]; then
 
  for i in $tardirs; do
+
   echo tardirs: compacting $i
   rm -f /$i/.tardirs.$i
-  if ! tar cf /flash/$i.tar.part -C /$i . ; then
-   echo tardirs: compacting $i failed
-   rm /flash/$i.tar.part
+
+  # FIFO dance so we don't fail even if /tmp is full
+  temp=`mktemp -d /tmp/flashrd.XXXXXXXX`
+  fifo=$temp/fifo
+  mkfifo $fifo
+  # we rely on tar's return value and it can't handle sockets
+  (cd /; find $i ! -type s ! -type d > $fifo) &
+
+  if ! tar cf /flash/$i.tar.part -C / -I $fifo; then
+   echo tardirs: compacting $i failed, saved at /flash/$i.tar.part
   else
    mv /flash/$i.tar.part /flash/$i.tar
   fi
+
+  rm -r $temp
+
  done
 
- # Wait for slow flash. Like umountwait, this is a ridiculous work-around.
- # The kernel should offer a better solution in the future.
+ # Wait for slow flash. Likely unnecessary.
  #
  echo -n tardirs: waiting for flash to settle...
  sync
