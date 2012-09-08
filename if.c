@@ -1304,7 +1304,7 @@ intxflags(char *ifname, int ifs, int argc, char **argv)
 		set = 1;
 
 	if (isprefix(argv[0], "autoconfprivacy")) {
-		value = IFXF_INET6_PRIVACY;
+		value = -IFXF_INET6_NOPRIVACY;
 	} else if (isprefix(argv[0], "mpls")) {
 		value = IFXF_MPLS;
 	} else if (isprefix(argv[0], "inet6")) {
