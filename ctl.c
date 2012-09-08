@@ -39,6 +39,8 @@
 #define	SNMPD		"/usr/sbin/snmpd"
 #define NTPD		"/usr/sbin/ntpd"
 #define FTPPROXY	"/usr/sbin/ftp-proxy"
+#define TFTPPROXY	"/usr/sbin/tftp-proxy"
+#define TFTPD		"/usr/sbin/tftpd"
 #define INETD		"/usr/sbin/inetd"
 #define SSHD		"/usr/sbin/sshd"
 #define LDPD		"/usr/sbin/ldpd"
@@ -297,6 +299,22 @@ struct ctl ctl_ftpproxy[] = {
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
+struct ctl ctl_tftpproxy[] = {
+	{ "enable",     "enable service",
+	    { TFTPPROXY, "-v", "-l", "127.0.0.1", NULL }, NULL, X_ENABLE },
+	{ "disable",    "disable service",
+	    { PKILL, "tftp-proxy", NULL }, NULL, X_DISABLE },
+	{ 0, 0, { 0 }, 0, 0 }
+};
+
+struct ctl ctl_tftp[] = {
+	{ "enable", 	"enable service",
+	   { TFTPD, "-l", "127.0.0.1", NULL }, NULL, X_ENABLE },
+	{ "disable",	"disable service",
+	   { PKILL, "tftpd", NULL }, NULL, X_DISABLE },
+	{ 0, 0, { 0 }, 0, 0 }
+};
+
 struct ctl ctl_dns[] = {
 	{ "local-control", "local control over DNS settings",
 	    { RESOLVCONF_SYM, NULL, RESOLVCONF_TEMP, NULL }, ctl_symlink,
@@ -349,6 +367,8 @@ struct daemons ctl_daemons[] = {
 	{ "sshd",	"SSH",	ctl_sshd,	SSHDCONF_TEMP,	0600, 0 },
 	{ "ntp",	"NTP",	ctl_ntp,	NTPCONF_TEMP,	0600, 0 },
 	{ "ftp-proxy",  "FTP proxy", ctl_ftpproxy, FTPPROXY_TEMP, 0600, 0 },
+	{ "tftp-proxy",	"TFTP proxy", ctl_tftpproxy, TFTPPROXY_TEMP, 0600, 0 },
+	{ "tftpd",	"TFTP daemon", ctl_tftp,    TFTP_TEMP,	0600, 0 },
 	{ "dns", 	"DNS", ctl_dns,		RESOLVCONF_TEMP,0644, 0 },
 	{ "inet",	"Inet", ctl_inet,	INETCONF_TEMP,	0600, 0 },
 	{ "smtp",	"SMTP", ctl_smtp,	SMTPCONF_TEMP,	0600, 0 },

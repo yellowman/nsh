@@ -111,7 +111,10 @@ extern char metricnames[];
 #define DHCPCONF_TEMP	"/var/run/dhcpd.conf"
 #define SNMPCONF_TEMP	"/var/run/snmpd.conf"
 #define NTPCONF_TEMP	"/var/run/ntpd.conf"
+#define IFSTATE_TEMP	"/var/run/ifstated.conf"
 #define FTPPROXY_TEMP	"/var/run/ftp-proxy"
+#define TFTPPROXY_TEMP	"/var/run/tftp-proxy"
+#define TFTP_TEMP	"/var/run/tftpd"
 #define RESOLVCONF_TEMP	"/var/run/resolv.conf"
 #define RESOLVCONF_SYM	"/var/run/resolv.conf.symlink"
 #define RESOLVCONF_DHCP	"/var/run/resolv.conf.dhcp"
@@ -177,6 +180,8 @@ extern struct ctl ctl_smtp[];
 extern struct ctl ctl_sshd[];
 extern struct ctl ctl_ntp[];
 extern struct ctl ctl_ftpproxy[];
+extern struct ctl ctl_tftpproxy[];
+extern struct ctl ctl_tftp[];
 extern struct ctl ctl_dns[];
 extern struct ctl ctl_inet[];
 extern struct ctl ctl_ldap[];
