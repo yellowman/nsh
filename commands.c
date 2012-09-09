@@ -113,7 +113,9 @@ static int	hostname(int, char **);
 static int	help(int, char**);
 static int	shell(int, char*[]);
 static int	ping(int, char*[]);
+static int	ping6(int, char*[]);
 static int	traceroute(int, char*[]);
+static int	traceroute6(int, char*[]);
 static int	ssh(int, char*[]);
 static int	telnet(int, char*[]);
        void	p_argv(int, char **);
@@ -746,8 +748,10 @@ static char
 	enablehelp[] =	"Enable privileged mode",
 	disablehelp[] =	"Disable privileged mode",
 	routehelp[] =	"Add a host or network route",
-	pinghelp[] = 	"Send ICMP echo request",
-	tracerthelp[] =	"Print the route to host",
+	pinghelp[] = 	"Send IPv4 ICMP echo request",
+	ping6help[] =   "Send IPv6 ICMP echo request",
+	tracerthelp[] =	"Print the route to IPv4 host",
+	tracert6help[] ="Print the route to IPv6 host",
 	sshhelp[] =	"SSH connection to remote host",
 	telnethelp[] =	"Telnet connection to remote host",
 	quithelp[] =	"Close current connection",
@@ -803,7 +807,9 @@ Command cmdtab[] = {
 	{ "dns",	dnshelp,	CMPL(t) (char **)ctl_dns, ssctl, ctlhandler,	1, 0, 0, 1 },
 	{ "inet",	inethelp,	CMPL(t) (char **)ctl_inet, ssctl, ctlhandler,	1, 0, 0, 1 },
 	{ "ping",	pinghelp,	CMPL0 0, 0, ping,	0, 0, 0, 0 },
+	{ "ping6",	ping6help,	CMPL0 0, 0, ping6,	0, 0, 0, 0 },
 	{ "traceroute", tracerthelp,	CMPL0 0, 0, traceroute,	0, 0, 0, 0 },
+	{ "traceroute6", tracert6help,  CMPL0 0, 0, traceroute6, 0, 0, 0, 0 },
 	{ "ssh",	sshhelp,	CMPL0 0, 0, ssh,	0, 0, 0, 0 },
 	{ "telnet",	telnethelp,	CMPL0 0, 0, telnet,	0, 0, 0, 0 },
 	{ "reboot",	nreboothelp,	CMPL0 0, 0, nreboot,	1, 0, 0, 0 },
@@ -1125,6 +1131,18 @@ ping(int argc, char *argv[])
 	return 0;
 }
 
+int
+ping6(int argc, char *argv[])
+{
+	if (argc < 2) {
+		printf("%% Invalid arguments\n");
+		return 1;
+	} else {
+		cmdargs(PING6, argv);
+	}
+	return 0;
+}
+
 /*
  * telnet command.
  */
@@ -1170,6 +1188,17 @@ traceroute(int argc, char *argv[])
 	return 0;
 }
 
+int
+traceroute6(int argc, char *argv[])
+{
+	if (argc < 2) {
+		printf("%% Invalid arguments\n");
+		return 1;
+	} else {
+		cmdargs(TRACERT6, argv);
+	}
+	return 0;
+}
 
 /*
  * Group attribute command.
