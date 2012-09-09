@@ -49,6 +49,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <errno.h>
+#include <signal.h>
 #include <sys/fcntl.h>
 #include <sys/socket.h>
 #include <sys/param.h>
@@ -78,6 +79,8 @@ static char ifname[IFNAMSIZ];		/* interface name */
 char	*margv[NARGS];			/* argv storage */
 size_t	cursor_argc;			/* location of cursor in margv */
 size_t	cursor_argo;			/* offset of cursor margv[cursor_argc] */
+
+pid_t	child;
 
 static Menu	*getip(char *);
 static int	quit(void);
@@ -119,8 +122,16 @@ static int 	nreboot(void);
 static int 	halt(void);
 static Command *getcmd(char *);
 static void	pf_stats(void);
+static void	sigalarm(int);
 
 #include "commands.h"
+
+void sigalarm(int blahfart)
+{
+	if (child != -1) {
+		kill(child, SIGKILL);
+	}
+}
 
 /*
  * Quit command
@@ -1052,14 +1063,23 @@ int show_hostname(int argc, char **argv)
 int
 shell(int argc, char **argv)
 {
-	(void)signal(SIGINT, SIG_IGN);
-	switch(vfork()) {
+	sig_t sigint, sigquit, sigchld;
+
+	sigint = signal(SIGINT, SIG_IGN);
+	sigquit = signal(SIGQUIT, SIG_IGN);
+	sigchld = signal(SIGCHLD, SIG_DFL);
+
+	switch(child = fork()) {
 		case -1:
 			printf("%% fork failed: %s\n", strerror(errno));
 			break;
 
 		case 0:
-		{
+			{
+			signal(SIGQUIT, SIG_DFL);
+			signal(SIGINT, SIG_DFL);
+			signal(SIGCHLD, SIG_DFL);
+
 			/*
 			 * Fire up the shell in the child.
 			 */
@@ -1073,12 +1093,20 @@ shell(int argc, char **argv)
 				execl(shellp, shellname, (char *)NULL);
 			printf("%% execl failed: %s\n", strerror(errno));
 			exit(0);
-		}
+			}
+			break;
 		default:
- 			(void)wait((int *)0);  /* Wait for shell to complete */
+			signal(SIGALRM, sigalarm);
+ 			wait(0);  /* Wait for shell to complete */
 			break;
 	}
-	(void)signal(SIGINT, (sig_t)intr);
+
+	signal(SIGINT, sigint);
+	signal(SIGQUIT, sigquit);
+	signal(SIGCHLD, sigchld);
+	signal(SIGALRM, SIG_DFL);
+	child = -1;
+
 	return 1;
 }
 
@@ -1201,59 +1229,47 @@ group(int argc, char **argv)
 }
 
 /*
- * cmd, single arg
- */
-int
-cmdarg(char *cmd, char *arg)
-{
-	(void)signal(SIGINT, SIG_IGN);
-	switch(vfork()) {
-		case -1:
-			printf("%% fork failed: %s\n", strerror(errno));
-			break;
-
-		case 0:
-		{
-			char *shellp;
-			char *shellname = shellp = cmd;
-
-			execl(shellp, shellname, arg, (char *)NULL);
-			printf("%% execl failed: %s\n", strerror(errno));
-			exit(0);
-		}
-		default:
-			(void)wait((int *)0);  /* Wait for cmd to complete */
-			break;
-	}
-	(void)signal(SIGINT, (sig_t)intr);
-	return 1;
-}
-
-/*
  * cmd, multiple args
  */
 int
 cmdargs(char *cmd, char *arg[])
 {
-	(void)signal(SIGINT, SIG_IGN);
-	switch(vfork()) {
+	sig_t sigint, sigquit, sigchld;
+
+	sigint = signal(SIGINT, SIG_IGN);
+	sigquit = signal(SIGQUIT, SIG_IGN);
+	sigchld = signal(SIGCHLD, SIG_DFL);
+
+	switch(child = fork()) {
 		case -1:
 			printf("%% fork failed: %s\n", strerror(errno));
 			break;
 
 		case 0:
 		{
+			signal(SIGQUIT, SIG_DFL);
+			signal(SIGINT, SIG_DFL);
+			signal(SIGCHLD, SIG_DFL);
+
 			char *shellp = cmd;
 
 			execv(shellp, arg);
 			printf("%% execv failed: %s\n", strerror(errno));
 			exit(0);
 		}
+			break;
 		default:
-			(void)wait((int *)0);  /* Wait for cmd to complete */
+			signal(SIGALRM, sigalarm);
+			wait(0);  /* Wait for cmd to complete */
 			break;
 	}
-	(void)signal(SIGINT, (sig_t)intr);
+
+	signal(SIGINT, sigint);
+	signal(SIGQUIT, sigquit);
+	signal(SIGCHLD, sigchld);
+	signal(SIGALRM, SIG_DFL);
+	child = -1;
+
 	return 1; 
 }
 
@@ -1371,6 +1387,7 @@ int
 flush_pf(char *arg)
 {
 	struct fpf *x;
+
 	if (!arg || arg[0] == '?') {
 		gen_help((char **)fpfs, "flush pf", "flush",
 		    sizeof(struct fpf));
@@ -1385,7 +1402,10 @@ flush_pf(char *arg)
 		return 0;
 	}
 
-	cmdarg(x->cmd, x->arg);
+	{
+		char *argv[] = { x->cmd, x->arg, '\0' };
+		cmdargs(x->cmd, argv);
+	}
 
 	return(1);
 }
@@ -1590,13 +1610,15 @@ iprompt(void)
 int
 wr_startup(void)
 {
+	char *argv[] = { SAVESCRIPT, NSHRC_TEMP, '\0' };
+	
 	if (wr_conf(NSHRC_TEMP))
 		printf("%% Saving configuration\n");
 	else
 		printf("%% Unable to save configuration: %s\n",
 		    strerror(errno));
 
-	cmdarg(SAVESCRIPT, NSHRC_TEMP);
+	cmdargs(SAVESCRIPT, argv);
 
 	return(1);
 }
@@ -1790,8 +1812,11 @@ pr_kernel(int argc, char **argv)
 void
 pf_stats(void)
 {
+	char *argv[] = { PFCTL, "-sinfo", '\0' };
+
 	printf("%% pf statistics:\n");
-	cmdarg(PFCTL, "-sinfo");
+
+	cmdargs(PFCTL, argv);
 	return;
 }
 

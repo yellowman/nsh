@@ -635,10 +635,11 @@ intip(char *ifname, int ifs, int argc, char **argv)
 
 	if (isprefix(argv[0], "dhcp")) {
 		char *args[] = { PKILL, "dhclient", ifname, '\0' };
+		char *args_set[] = { DHCLIENT, ifname, '\0' };
 		char leasefile[sizeof(LEASEPREFIX)+1+IFNAMSIZ];
 
 		if (set)
-			cmdarg(DHCLIENT, ifname);
+			cmdargs(DHCLIENT, args_set);
 		else {
 			cmdargs(PKILL, args);
 			snprintf(leasefile, sizeof(leasefile), "%s.%s",
