@@ -226,7 +226,7 @@ show_int(int argc, char **argv)
 		case AF_INET:
 			sin = (struct sockaddr_in *)ifa->ifa_addr;
 			sinmask = (struct sockaddr_in *)ifa->ifa_netmask;
-			if (sin->sin_addr.s_addr == 0)
+			if (sin->sin_addr.s_addr == INADDR_ANY)
 				continue;
 			break;
 		case AF_INET6:

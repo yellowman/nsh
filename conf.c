@@ -871,7 +871,7 @@ int conf_ifaddrs(FILE *output, char *ifname, int flags, int af)
 			if (af != AF_INET && af != 0)
 				continue;
 			sin = (struct sockaddr_in *)ifa->ifa_addr;
-			if (sin->sin_addr.s_addr == 0)
+			if (sin->sin_addr.s_addr == INADDR_ANY)
 				continue;
 			sinmask = (struct sockaddr_in *)ifa->ifa_netmask;
 			if (flags & IFF_POINTOPOINT) {
