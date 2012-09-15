@@ -664,8 +664,14 @@ void conf_ifxflags(FILE *output, int ifs, char *ifname)
 			fprintf(output, " mpls\n");
 		if (ifr.ifr_flags & IFXF_NOINET6)
 			fprintf(output, " no inet6\n");
-		if (ifr.ifr_flags & IFXF_INET6_NOPRIVACY)
+#ifdef IFXF_INET6_PRIVACY
+		if (ifr.ifr_flags & IFXF_INET6_PRIVACY)
+			fprintf(output, " autoconfprivacy\n");
+#endif
+#ifdef IFXF_INET6_NOPRIVACY
+		if (ifr.ifr_flags & IFXF_INET6_PRIVACY)
 			fprintf(output, " no autoconfprivacy\n");
+#endif
 		if (ifr.ifr_flags & IFXF_WOL)
 			fprintf(output, " wol\n");
 	}
