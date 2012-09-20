@@ -112,6 +112,7 @@ extern char metricnames[];
 #define SNMPCONF_TEMP	"/var/run/snmpd.conf"
 #define NTPCONF_TEMP	"/var/run/ntpd.conf"
 #define IFSTATE_TEMP	"/var/run/ifstated.conf"
+#define NPPPCONF_TEMP	"/var/run/npppd.conf"
 #define FTPPROXY_TEMP	"/var/run/ftp-proxy"
 #define TFTPPROXY_TEMP	"/var/run/tftp-proxy"
 #define TFTP_TEMP	"/var/run/tftpd"
@@ -171,6 +172,7 @@ extern struct ctl ctl_bgp[];
 extern struct ctl ctl_rip[];
 extern struct ctl ctl_ldp[];
 extern struct ctl ctl_ipsec[];
+extern struct ctl ctl_nppp[];
 extern struct ctl ctl_ifstate[];
 extern struct ctl ctl_ike[];
 extern struct ctl ctl_dvmrp[];

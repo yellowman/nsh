@@ -47,6 +47,8 @@
 #define SMTPD		"/usr/sbin/smtpd"
 #define LDAPD		"/usr/sbin/ldapd"
 #define IFSTATED	"/usr/sbin/ifstated"
+#define NPPPD		"/usr/sbin/npppd"
+#define NPPPCTL		"/usr/sbin/npppctl"
 #ifndef DHCPLEASES
 #define DHCPLEASES	"/var/db/dhcpd.leases"
 #endif
@@ -199,6 +201,21 @@ struct ctl ctl_sasync[] = {
 	    { PKILL, "sasyncd", NULL }, NULL, X_DISABLE },
 	{ "edit",       "edit configuration",
 	    { "sasync", NULL, NULL }, call_editor, NULL },
+	{ 0, 0, { 0 }, 0, 0 }
+};
+
+char *ctl_nppp_test[] = { NPPPD, "-nf", NPPPCONF_TEMP, '\0' };
+struct ctl ctl_nppp[] = {
+	{ "enable",	"enable service",
+	    { NPPPD, "-f", NPPPCONF_TEMP, NULL }, NULL, X_ENABLE },
+	{ "disable",	"disable service",
+	    { PKILL, "npppd", NULL }, NULL, X_DISABLE },
+	{ "clear",	"disconnect PPP sessions",
+	    { NPPPCTL, "clear", REQ, OPT, OPT, NULL }, NULL, NULL },
+	{ "session", 	"show PPP sessions",
+	    { NPPPCTL, "session", REQ, OPT, OPT, NULL }, NULL, NULL },
+	{ "edit",	"edit configuration",
+	    { "nppp", (char *)ctl_nppp_test, NULL }, call_editor, NULL },
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
@@ -366,9 +383,11 @@ struct daemons ctl_daemons[] = {
 	{ "snmp",	"SNMP",	ctl_snmp,	SNMPCONF_TEMP,	0600, 0 },
 	{ "sshd",	"SSH",	ctl_sshd,	SSHDCONF_TEMP,	0600, 0 },
 	{ "ntp",	"NTP",	ctl_ntp,	NTPCONF_TEMP,	0600, 0 },
+	{ "ifstate",	"ifstate", ctl_ifstate,	IFSTATECONF_TEMP, 0600, 0 },
 	{ "ftp-proxy",  "FTP proxy", ctl_ftpproxy, FTPPROXY_TEMP, 0600, 0 },
 	{ "tftp-proxy",	"TFTP proxy", ctl_tftpproxy, TFTPPROXY_TEMP, 0600, 0 },
-	{ "tftpd",	"TFTP daemon", ctl_tftp,    TFTP_TEMP,	0600, 0 },
+	{ "tftp",	"TFTP", ctl_tftp,	TFTP_TEMP,	0600, 0 },
+	{ "nppp",	"PPP",	ctl_nppp,	NPPPCONF_TEMP,	0600, 0 },
 	{ "dns", 	"DNS", ctl_dns,		RESOLVCONF_TEMP,0644, 0 },
 	{ "inet",	"Inet", ctl_inet,	INETCONF_TEMP,	0600, 0 },
 	{ "smtp",	"SMTP", ctl_smtp,	SMTPCONF_TEMP,	0600, 0 },
