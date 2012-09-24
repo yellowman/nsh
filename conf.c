@@ -190,7 +190,7 @@ conf(FILE *output)
 	conf_ctl(output, "ldp");
 	conf_ctl(output, "rip");
 	conf_ctl(output, "ospf");
-	/* conf_ctl(output, "ospf6"); */
+	conf_ctl(output, "ospf6");
 	conf_ctl(output, "bgp");
 	conf_ctl(output, "ifstate");
 	conf_ctl(output, "ipsec");

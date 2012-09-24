@@ -96,6 +96,22 @@ struct prot1 oscs[] = {
 	{ 0, 0, { 0 } }
 };
 
+struct prot1 os6cs[] = {
+	{ "fib",        "Forward Information Base",
+	    { OSPF6CTL, "show", "fib", OPT, OPT, NULL } },
+	{ "database",   "Link State Database",
+	    { OSPF6CTL, "show", "database", OPT, OPT, NULL } },
+	{ "interfaces", "Interface",
+	    { OSPF6CTL, "show", "interfaces", OPT, NULL } },
+	{ "neighbor",   "Neighbor",
+	    { OSPF6CTL, "show", "neighbor", OPT, NULL } },
+	{ "rib",        "Routing Information Base",
+	    { OSPF6CTL, "show", "rib", OPT, NULL } },
+	{ "summary",    "Summary",
+	    { OSPF6CTL, "show", "summary", NULL } },
+	{ 0, 0, { 0 } }
+};
+
 struct prot1 rics[] = {
 	{ "fib",        "Forward Information Base",
 	    { RIPCTL, "show", "fib", OPT, NULL } },
@@ -181,6 +197,7 @@ struct prot1 ldcs[] = {
 struct prot prots[] = {
 	{ "bgp",	bgcs },
 	{ "ospf",	oscs },
+	{ "ospf6",	os6cs },
 	{ "rip",	rics },
 	{ "ike",	ikcs },
 	{ "ldp",	lics },

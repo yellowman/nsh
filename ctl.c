@@ -28,6 +28,7 @@
 
 /* service daemons */
 #define OSPFD		"/usr/sbin/ospfd"
+#define OSPF6D		"/usr/sbin/ospf6d"
 #define BGPD		"/usr/sbin/bgpd"
 #define RIPD		"/usr/sbin/ripd"
 #define ISAKMPD		"/sbin/isakmpd"
@@ -84,6 +85,25 @@ struct ctl ctl_ospf[] = {
 	    { OSPFCTL, "reload", NULL }, NULL, NULL },
 	{ "fib",        "fib couple/decouple",
 	    { OSPFCTL, "fib", REQ, NULL }, NULL, NULL },
+	{ "log",	"log brief/verbose",
+	    { OSPFCTL, "log", REQ, NULL }, NULL, NULL },
+	{ 0, 0, { 0 }, 0, 0 }
+};
+
+char *ctl_ospf6_test[] = { OSPF6D, "-nf", OSPF6CONF_TEMP, '\0' };
+struct ctl ctl_ospf6[] = {
+	{ "enable",     "enable service",
+	    { OSPF6D, "-f", OSPF6CONF_TEMP, NULL }, NULL, X_ENABLE },
+	{ "disable",    "disable service",
+	    { PKILL, "ospf6d", NULL }, NULL, X_DISABLE },
+	{ "edit",       "edit configuration",
+	    { "ospf6", (char *)ctl_ospf6_test, NULL }, call_editor, NULL },
+	{ "reload",     "reload service",
+	    { OSPF6CTL, "reload", NULL }, NULL, NULL },
+	{ "fib",        "fib couple/decouple",
+	    { OSPF6CTL, "fib", REQ, NULL }, NULL, NULL },
+	{ "log",	"log brief/verbose",
+	    { OSPF6CTL, "log", REQ, NULL }, NULL, NULL },
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
@@ -371,6 +391,7 @@ struct ctl ctl_ldap[] = {
 struct daemons ctl_daemons[] = {
 	{ "pf",		"PF",	ctl_pf,		PFCONF_TEMP,	0600, 1 },
 	{ "ospf",	"OSPF", ctl_ospf,	OSPFCONF_TEMP,	0600, 0 },
+	{ "ospf6",	"OSPF6", ctl_ospf6,	OSPF6CONF_TEMP, 0600, 0 },
 	{ "bgp",	"BGP",	ctl_bgp,	BGPCONF_TEMP,	0600, 0 },
 	{ "rip",	"RIP",	ctl_rip,	RIPCONF_TEMP,	0600, 0 },
 	{ "ldp",	"LDP",	ctl_ldp,	LDPCONF_TEMP,	0600, 0 },
