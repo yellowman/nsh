@@ -73,7 +73,6 @@ u_long  rtm_inits;
 char	*mylink_ntoa(const struct sockaddr_dl *);
 
 void	 flushroutes(int, int);
-static void sin6len(int);
 void	 print_rtmsg(struct rt_msghdr *);
 void	 print_getmsg(struct rt_msghdr *, int);
 void	 pmsg_common(struct rt_msghdr *);
@@ -256,24 +255,20 @@ mylink_ntoa(const struct sockaddr_dl *sdl)
 	return (obuf);
 }
 
-void
-sin6len(int len)
+int
+prefixlen(int len, struct sockaddr_in6 *sin6)
 {
 	int q, r;
 
-	rtm_addrs |= RTA_NETMASK;
-
 	q = len >> 3;
 	r = len & 7;
-	so_mask.sin6.sin6_family = AF_INET6;
-	so_mask.sin6.sin6_len = sizeof(struct sockaddr_in6);
-	memset((void *)&so_mask.sin6.sin6_addr, 0,
-		sizeof(so_mask.sin6.sin6_addr));
+	memset((void *)&sin6->sin6_addr, 0,
+		sizeof(sin6->sin6_addr));
 	if (q > 0)
-		memset((void *)&so_mask.sin6.sin6_addr, 0xff, q);
+		memset((void *)&sin6->sin6_addr, 0xff, q);
 	if (r > 0)
-		*((u_char *)&so_mask.sin6.sin6_addr + q) = (0xff00 >> r) & 0xff;
-	return;
+		*((u_char *)&sin6->sin6_addr + q) = (0xff00 >> r) & 0xff;
+	return len;
 }
 
 static void
@@ -648,7 +643,7 @@ ip_route(ip_t *dest, ip_t *gate, u_short cmd, int flags, int tableid)
 			so_mask.sin6.sin6_len = sizeof (struct sockaddr_in6);
 			so_mask.sin6.sin6_family = AF_INET6;
 			rtm_addrs |= RTA_NETMASK;
-			sin6len(len);
+			prefixlen(len, &so_mask.sin6);
 		}
 	  }
 		break;

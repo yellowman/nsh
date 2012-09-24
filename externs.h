@@ -80,6 +80,9 @@ union   sockunion {
 };
 extern union sockunion so_dst, so_mask, so_gate, so_ifp;
 #endif
+#ifdef _NETINET6_IN6_H_
+int prefixlen(int, struct sockaddr_in6 *);
+#endif
 extern int rtm_addrs;
 extern u_long rtm_inits;
 #define FLUSH 0

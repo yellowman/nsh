@@ -32,6 +32,8 @@
 #include <net/route.h>
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
+#include <netinet6/in6_var.h>
+#include <netinet6/nd6.h>
 #include <netmpls/mpls.h>
 #include <netdb.h>
 #include <net/if_vlan_var.h>
@@ -303,8 +305,7 @@ show_int(int argc, char **argv)
 		if (ioctl(ifs, SIOCGIFRDOMAIN, (caddr_t)&ifr) != -1)
 			printf(" Routing Domain %d,", ifr.ifr_rdomainid);
 		/*
-		 * Display MTU, line rate, and ALTQ token rate info
-		 * (if available)
+		 * Display MTU, line rate
 		 */
 		printf(" MTU %u bytes", if_mtu);
 		if (if_baudrate)
@@ -598,15 +599,24 @@ set_ifxflags(char *ifname, int ifs, int flags)
 int
 intip(char *ifname, int ifs, int argc, char **argv)
 {
-	int set, alias, flags, argcmax;
+	int s, set, flags, argcmax;
+	char *msg, *cmdname;
 	ip_t ip;
+	/* ipv4 structures */
 	struct in_addr destbcast;
 	struct ifaliasreq addreq, ridreq;
+	/* ipv6 structures */
+	struct in6_aliasreq add6req;
+	struct in6_ifreq rid6req;
 	struct sockaddr_in *sin;
-	char  *msg, *cmdname;
+	struct sockaddr_in6 *sin6, sin6dst;
 
+	/* clean out allocated structures */
 	memset(&addreq, 0, sizeof(addreq));
 	memset(&ridreq, 0, sizeof(ridreq));
+	memset(&add6req, 0, sizeof(add6req));
+	memset(&rid6req, 0, sizeof(rid6req));
+	memset(&sin6dst, 0, sizeof(sin6dst));
 	memset(&ip, 0, sizeof(ip));
 
 	if (NO_ARG(argv[0])) {
@@ -621,10 +631,8 @@ intip(char *ifname, int ifs, int argc, char **argv)
 	 * the same thing.
 	 */
 	if (isprefix(argv[0], "alias")) {
-		alias = 1;
 		cmdname = "alias";
 	} else if (isprefix(argv[0], "ip")) {
-		alias = 0;
 		cmdname = "ip";
 	} else {
 		printf("%% intip: Internal error\n");
@@ -684,57 +692,138 @@ intip(char *ifname, int ifs, int argc, char **argv)
 		/* bad IP specified */
 		return(0);
 
-	if (ip.bitlen == -1) {
+	if (set && ip.bitlen == -1) {
 		printf("%% Netmask not specified\n");
 		return(0);
 	}
 	
 	if (argc == 2)
-		if (!inet_aton(argv[1], &destbcast)) {
-			printf("%% Invalid %s address\n", msg);
-			return(0);
+		switch(ip.family) {
+		case AF_INET:
+			if (!inet_aton(argv[1], &destbcast)) {
+				printf("%% Invalid %s address\n", msg);
+				return(0);
+			}
+			break;
+		case AF_INET6:
+			if (!inet_pton(AF_INET6, argv[1], &sin6dst)) {
+				printf("%% Invalid %s address\n", msg);
+				return(0);
+			}
+			break;
+		default:
+			break;
 		}
+		
 	
-	strlcpy(addreq.ifra_name, ifname, sizeof(addreq.ifra_name));
-	strlcpy(ridreq.ifra_name, ifname, sizeof(ridreq.ifra_name));
-
 	if (!set) {
-		sin = (struct sockaddr_in *)&ridreq.ifra_addr;
-		sin->sin_len = sizeof(ridreq.ifra_addr);
-		sin->sin_family = AF_INET;
-		sin->sin_addr.s_addr = ip.addr.sin.s_addr;
-	}
+		switch (ip.family) {
+		case AF_INET:
+			/* set IP address for deletion */
+			sin = (struct sockaddr_in *)&ridreq.ifra_addr;
+			sin->sin_len = sizeof(struct sockaddr_in *);
+			sin->sin_family = AF_INET;
+			sin->sin_addr.s_addr = ip.addr.sin.s_addr;
+			/* set if name */
+			strlcpy(ridreq.ifra_name, ifname, sizeof(ridreq.ifra_name));
 
-	if (!alias || !set) {
-		/*
-		 * Here we remove the top IP on the interface before we
-		 * might add another one, or we delete the specified IP.
-		 */
-		if (ioctl(ifs, SIOCDIFADDR, &ridreq) < 0)
-			if (!set)
+			if (ioctl(ifs, SIOCDIFADDR, &ridreq) < 0)
 				printf("%% intip: SIOCDIFADDR: %s\n",
 				    strerror(errno));
+			return(0);
+			break;
+		case AF_INET6:
+			/* set IP address for deletion */
+			sin6 = (struct sockaddr_in6 *)&rid6req.ifr_addr;
+			sin6->sin6_len = sizeof(struct sockaddr_in6 *);
+			sin6->sin6_family = AF_INET6;
+			sin6->sin6_addr = ip.addr.sin6;
+			/* get inet6 socket */
+			s = socket(AF_INET6, SOCK_DGRAM, 0);
+			if (s < 0) {
+				printf("%% socket failed: %s\n", strerror(errno));
+				return(0);
+			}
+			/* set if name */
+			strlcpy(rid6req.ifr_name, ifname, sizeof(rid6req.ifr_name));
+
+			if (ioctl(s, SIOCDIFADDR_IN6, &rid6req) < 0)
+				printf("%% intip: SIOCDIFADDR_IN6: %s\n",
+				    strerror(errno));
+			close(s);
+			return(0);
+			break;
+		default:
+			printf("%% dismal failure\n");
+			return(0);
+			break;
+		}
 	}
 
-	if (set) {
+	switch(ip.family) {
+	case AF_INET:
+		/* set IP address */
 		sin = (struct sockaddr_in *)&addreq.ifra_addr;
 		sin->sin_family = AF_INET;
-		sin->sin_len = sizeof(addreq.ifra_addr);
+		sin->sin_len = sizeof(struct sockaddr_in);
 		sin->sin_addr.s_addr = ip.addr.sin.s_addr;
+		/* set netmask */
 		sin = (struct sockaddr_in *)&addreq.ifra_mask;
-		sin->sin_family = AF_INET;
-		sin->sin_len = sizeof(addreq.ifra_mask);
+		sin->sin_family = AF_INET; 
+		sin->sin_len = sizeof(struct sockaddr_in);
 		sin->sin_addr.s_addr = htonl(0xffffffff << (32 - ip.bitlen));
+		/* set destination/broadcast address */
 		if (argc == 2) {
 			sin = (struct sockaddr_in *)&addreq.ifra_dstaddr;
 			sin->sin_family = AF_INET;
-			sin->sin_len = sizeof(addreq.ifra_dstaddr);
+			sin->sin_len = sizeof(struct sockaddr_in);
 			sin->sin_addr.s_addr = destbcast.s_addr;
 		}
+		/* set interface name */
+		strlcpy(addreq.ifra_name, ifname, sizeof(addreq.ifra_name));
+		/* do it */
 		if (ioctl(ifs, SIOCAIFADDR, &addreq) < 0)
 			printf("%% intip: SIOCAIFADDR: %s\n", strerror(errno));
+		break;
+	case AF_INET6:
+		/* set IP address */
+		sin6 = (struct sockaddr_in6 *)&add6req.ifra_addr;
+		sin6->sin6_family = AF_INET6;
+		sin6->sin6_len = sizeof(struct sockaddr_in6);
+		sin6->sin6_addr = ip.addr.sin6;
+		/* fiddle with scope id? in6_fillscopeid(sin6); */
+		/* set prefixmask */
+		sin6 = (struct sockaddr_in6 *)&add6req.ifra_prefixmask;
+		sin6->sin6_family = AF_INET6;
+		sin6->sin6_len = sizeof(struct sockaddr_in6);
+		prefixlen(ip.bitlen, sin6);
+		/* set infinite lifetime */
+		add6req.ifra_lifetime.ia6t_pltime = ND6_INFINITE_LIFETIME;
+		add6req.ifra_lifetime.ia6t_vltime = ND6_INFINITE_LIFETIME;
+		/* set destination address */
+		if (argc == 2) {
+			sin6 = (struct sockaddr_in6 *)&add6req.ifra_dstaddr;
+			sin6->sin6_family = AF_INET6;
+			sin6->sin6_len = sizeof(struct sockaddr_in6);
+			sin6->sin6_addr = sin6dst.sin6_addr;
+		}
+		/* get inet6 socket */
+		s = socket(PF_INET6, SOCK_DGRAM, 0);
+		if (s < 0) {
+			printf("%% socket failed: %s\n", strerror(errno));
+			return(0);
+		}
+		/* set interface name */
+		strlcpy(add6req.ifra_name, ifname, sizeof(addreq.ifra_name));
+		/* do it */
+		if (ioctl(s, SIOCAIFADDR_IN6, &add6req) < 0)
+			printf("%% intip: SIOCAIFADDR_IN6: %s\n", strerror(errno));
+		close(s);
+		break;
+	default:
+		printf("%% dismal failure\n");
+		break;
 	}
-
 	return(0);
 }
 
