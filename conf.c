@@ -721,7 +721,6 @@ int conf_ifaddrs(FILE *output, char *ifname, int flags)
 	struct ifaddrs *ifa, *ifap;
 	struct sockaddr_in sin, sin2, sin3;
 	struct sockaddr_in6 sin6, sin62, sin63;
-	char *iptype;
 	int ippntd;
 
 	/*
@@ -769,16 +768,11 @@ int conf_ifaddrs(FILE *output, char *ifname, int flags)
 			continue;
 		}
                 
-		if (ippntd) {
-			iptype = "alias";
-		} else {
-			iptype = "ip";
-			ippntd = 1;
-		}
+		ippntd++;
 
 		switch (ifa->ifa_addr->sa_family) {
 		case AF_INET:
-			fprintf(output, " %s %s", iptype,
+			fprintf(output, " ip %s",
 			    netname4(sin.sin_addr.s_addr, &sin2));
 
 			if (flags & IFF_POINTOPOINT) {
@@ -802,7 +796,7 @@ int conf_ifaddrs(FILE *output, char *ifname, int flags)
 			}
 			break;
 		case AF_INET6:
-			fprintf(output, " %s %s", iptype,
+			fprintf(output, " ip %s",
 			    netname6(&sin6, &sin62));
 
 			if (flags & IFF_POINTOPOINT) {
