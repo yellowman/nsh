@@ -73,9 +73,7 @@ u_long  rtm_inits;
 char	*mylink_ntoa(const struct sockaddr_dl *);
 
 void	 flushroutes(int, int);
-#ifdef INET6
-static int prefixlen(char *);
-#endif
+static void sin6len(int);
 void	 print_rtmsg(struct rt_msghdr *);
 void	 print_getmsg(struct rt_msghdr *, int);
 void	 pmsg_common(struct rt_msghdr *);
@@ -258,18 +256,10 @@ mylink_ntoa(const struct sockaddr_dl *sdl)
 	return (obuf);
 }
 
-#ifdef INET6
-int
-prefixlen(s)
-	char *s;
+void
+sin6len(int len)
 {
-	const char *errmsg = NULL;
-
-	int len = strtonum(s, 0, 128, &errmsg), q, r;
-	if (errmsg) {
-		printf("%% prefixlen: bad value %s: %s\n", s, errmsg);
-		return(0);
-	}
+	int q, r;
 
 	rtm_addrs |= RTA_NETMASK;
 
@@ -283,9 +273,8 @@ prefixlen(s)
 		memset((void *)&so_mask.sin6.sin6_addr, 0xff, q);
 	if (r > 0)
 		*((u_char *)&so_mask.sin6.sin6_addr + q) = (0xff00 >> r) & 0xff;
-	return (len);
+	return;
 }
-#endif
 
 static void
 _monitor_sig(int signo)
@@ -615,7 +604,7 @@ ip_route(ip_t *dest, ip_t *gate, u_short cmd, int flags, int tableid)
 		so_dst.sin.sin_family = AF_INET;
 		rtm_addrs |= RTA_DST;
 
-		if (gate) {
+		if (gate && (gate->family == dest->family)) {
 			so_gate.sin.sin_addr.s_addr = gate->addr.sin.s_addr;
 			so_gate.sin.sin_len = sizeof (struct sockaddr_in);
 			so_gate.sin.sin_family = AF_INET;
@@ -626,7 +615,7 @@ ip_route(ip_t *dest, ip_t *gate, u_short cmd, int flags, int tableid)
 		if (len >= 0) {
 			so_mask.sin.sin_len = sizeof (struct sockaddr_in);
 			so_mask.sin.sin_family = AF_INET;
-			if(len == 0)
+			if (len == 0)
 				so_mask.sin.sin_addr.s_addr = 0;
 			else
 				so_mask.sin.sin_addr.s_addr =
@@ -636,34 +625,33 @@ ip_route(ip_t *dest, ip_t *gate, u_short cmd, int flags, int tableid)
 	  }
 		break;
 
-#ifdef INET6
 	case AF_INET6:
 	  {
 		if (len == 128)
 			flags |= RTF_HOST;
-		so_dst.sin6.sin6_addr = dest->addr.sin;
+		so_dst.sin6.sin6_addr = dest->addr.sin6;
 		so_dst.sin6.sin6_len = sizeof (struct sockaddr_in6);
 		so_dst.sin6.sin6_family = AF_INET6;
 		rtm_addrs |= RTA_DST;
-		if (gate && !prefix_is_unspecified (gate)) {
-			memcpy (&so_gate.sin6.sin6_addr, prefix_tochar (gate), 16);
-			so_gate.sin6.sin6_len = sizeof (struct sockaddr_in6);
-			so_gate.sin6.sin6_family = AF_INET6;
-			rtm_addrs |= RTA_GATEWAY;
-			flags |= RTF_GATEWAY;
-			/* KAME IPV6 still requires an index here */
-			if (IN6_IS_ADDR_LINKLOCAL (&so_gate.sin6.sin6_addr)) {
-				so_gate.sin6.sin6_addr.s6_addr[2] = index >> 8;;
-				so_gate.sin6.sin6_addr.s6_addr[3] = index;
+
+		if (gate && (gate->family == dest->family)) {
+			so_gate.sin6.sin6_addr = gate->addr.sin6;
+			if (!IN6_IS_ADDR_UNSPECIFIED(&so_gate.sin6.sin6_addr)) {
+				so_gate.sin6.sin6_len = sizeof (struct sockaddr_in6);
+				so_gate.sin6.sin6_family = AF_INET6;
+				rtm_addrs |= RTA_GATEWAY;
+				flags |= RTF_GATEWAY;
 			}
 		}
-		so_mask.sin6.sin6_len = sizeof (struct sockaddr_in6);
-		so_mask.sin6.sin6_family = AF_INET6;
-		so_mask.sin6.sin6_addr = htonl(0xffffffffffffffffffffffffffffffff << (128 - len));
-		rtm_addrs |= RTA_NETMASK;
+
+		if (len >= 0) {
+			so_mask.sin6.sin6_len = sizeof (struct sockaddr_in6);
+			so_mask.sin6.sin6_family = AF_INET6;
+			rtm_addrs |= RTA_NETMASK;
+			sin6len(len);
+		}
 	  }
 		break;
-#endif
 	default:
 		printf("%% ip_route: Internal error\n");
 		return(0);

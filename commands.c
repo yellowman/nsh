@@ -455,6 +455,7 @@ struct intlist Intlist[] = {
 	{ "pltime",	"IPv6 preferred lifetime",		CMPL0 0, 0, intpltime, 0 },
 	{ "anycast",	"IPv6 anycast address bit",		CMPL0 0, 0, intanycast, 0 },
 	{ "tentative",	"IPv6 tentative address bit",		CMPL0 0, 0, inttentative, 0 },
+	{ "eui64",	"IPv6 automatic interface index",	CMPL0 0, 0, inteui64, 0 },
 #endif
 	{ "tunnel",	"Source/destination for GIF/GRE tunnel",CMPL0 0, 0, inttunnel, 0 },
 	{ "keepalive",	"GRE tunnel keepalive",			CMPL0 0, 0, intkeepalive, 0 },

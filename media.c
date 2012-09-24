@@ -395,17 +395,13 @@ int buf_len, int buf2_len, int *buf3)
 	(void) strlcpy(req.iflr_name, ifname, sizeof(req.iflr_name));
 	if (ioctl(s, SIOCGLIFPHYADDR, (caddr_t) & req) < 0)
 		return(0);
-#ifdef INET6
 	if (req.addr.ss_family == AF_INET6)
 		in6_fillscopeid((struct sockaddr_in6 *)&req.addr);
-#endif
 	getnameinfo((struct sockaddr *)&req.addr, req.addr.ss_len,
 	    tmp_buf, buf_len, 0, 0, niflag);
 
-#ifdef INET6
 	if (req.addr.ss_family == AF_INET6)
 		in6_fillscopeid((struct sockaddr_in6 *) & req.dstaddr);
-#endif
 	getnameinfo((struct sockaddr *) &req.dstaddr, req.dstaddr.ss_len,
 	    tmp_buf2, buf2_len, 0, 0, niflag);
 

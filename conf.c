@@ -720,6 +720,7 @@ int conf_ifaddrs(FILE *output, char *ifname, int flags)
 {
 	struct ifaddrs *ifa, *ifap;
 	struct sockaddr_in sin, sin2, sin3;
+	struct sockaddr_in6 sin6, sin62, sin63;
 	char *iptype;
 	int ippntd;
 
@@ -749,16 +750,25 @@ int conf_ifaddrs(FILE *output, char *ifname, int flags)
 		if (strncmp(ifname, ifa->ifa_name, IFNAMSIZ))
 			continue;
 
-		if (ifa->ifa_addr->sa_family != AF_INET)
+		switch (ifa->ifa_addr->sa_family) {
+		case AF_INET:
+			memcpy(&sin, ifa->ifa_addr, sizeof(struct sockaddr_in));
+			memcpy(&sin2, ifa->ifa_netmask, sizeof(struct sockaddr_in));
+			if (sin.sin_addr.s_addr == 0)
+				continue;
+			break;
+		case AF_INET6:
+			memcpy(&sin6, ifa->ifa_addr, sizeof(struct sockaddr_in6));
+			memcpy(&sin62, ifa->ifa_netmask, sizeof(struct sockaddr_in6));
+			if (IN6_IS_ADDR_LINKLOCAL(&sin6.sin6_addr))
+				continue;
+			if (sin6.sin6_addr.s6_addr == 0)
+				continue;
+			break;
+		default:
 			continue;
+		}
                 
-		memcpy(&sin, ifa->ifa_addr, sizeof(struct sockaddr_in));
-
-		if (sin.sin_addr.s_addr == 0)
-			continue;
- 
-		memcpy(&sin2, ifa->ifa_netmask, sizeof(struct sockaddr_in));
-
 		if (ippntd) {
 			iptype = "alias";
 		} else {
@@ -766,27 +776,49 @@ int conf_ifaddrs(FILE *output, char *ifname, int flags)
 			ippntd = 1;
 		}
 
-		fprintf(output, " %s %s", iptype,
-		    netname4(sin.sin_addr.s_addr, &sin2));
+		switch (ifa->ifa_addr->sa_family) {
+		case AF_INET:
+			fprintf(output, " %s %s", iptype,
+			    netname4(sin.sin_addr.s_addr, &sin2));
 
-		if (flags & IFF_POINTOPOINT) {
-			memcpy(&sin3, ifa->ifa_dstaddr,
-			    sizeof(struct sockaddr_in));
-			fprintf(output, " %s", inet_ntoa(sin3.sin_addr));
-		} else if (flags & IFF_BROADCAST) {
-			memcpy(&sin3, ifa->ifa_broadaddr,
-			    sizeof(struct sockaddr_in));
+			if (flags & IFF_POINTOPOINT) {
+				memcpy(&sin3, ifa->ifa_dstaddr,
+				    sizeof(struct sockaddr_in));
+				fprintf(output, " %s", inet_ntoa(sin3.sin_addr));
+			} else if (flags & IFF_BROADCAST) {
+				memcpy(&sin3, ifa->ifa_broadaddr,
+				    sizeof(struct sockaddr_in));
+				/*
+				 * no reason to save the broadcast addr
+				 * if it is standard (this should always 
+				 * be true unless someone has messed up their
+				 * network or they are playing around...)
+				 */
+				if (ntohl(sin3.sin_addr.s_addr) !=
+				    in4_brdaddr(sin.sin_addr.s_addr,
+				    sin2.sin_addr.s_addr))
+					fprintf(output, " %s",
+					    inet_ntoa(sin3.sin_addr));
+			}
+			break;
+		case AF_INET6:
+			fprintf(output, " %s %s", iptype,
+			    netname6(&sin6, &sin62));
+
+			if (flags & IFF_POINTOPOINT) {
+				char inet6n[INET6_ADDRSTRLEN];
+				memcpy(&sin63, ifa->ifa_dstaddr,
+				    sizeof(struct sockaddr_in6));
+				fprintf(output, " %s", inet_ntop(AF_INET6, &sin63.sin6_addr,
+				    inet6n, sizeof(inet6n)));
+			}
 			/*
-			 * no reason to save the broadcast addr
-			 * if it is standard (this should always 
-			 * be true unless someone has messed up their
-			 * network or they are playing around...)
+			 * there may be some idiotic reason that you'd want the ability
+			 * to use a non-standard broadcast on your legacy ipv4 network. i'm
+			 * thinking, don't even bother to support it on ipv6. it's not even
+			 * worth the effort to type these sentences.
 			 */
-			if (ntohl(sin3.sin_addr.s_addr) !=
-			    in4_brdaddr(sin.sin_addr.s_addr,
-			    sin2.sin_addr.s_addr))
-				fprintf(output, " %s",
-				    inet_ntoa(sin3.sin_addr));
+			break;
 		}
 		fprintf(output, "\n");
 	}

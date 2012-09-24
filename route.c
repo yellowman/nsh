@@ -81,9 +81,21 @@ route(int argc, char **argv)
 		return(1);
 
 	if (argc > 1) {
-		if (!(inet_aton(argv[1], &gate.addr.sin) &&
-		    strchr(argv[1], '.'))) {
-			printf("%% %s is not an IP address\n", argv[1]);
+		switch (dest.family) {
+		case AF_INET:
+			if (!inet_pton(AF_INET, argv[1], &gate.addr.sin)) {
+				printf("%% %s is not an IP address\n", argv[1]);
+				return(1);
+			}
+			break;
+		case AF_INET6:
+			if (!inet_pton(AF_INET6, argv[1], &gate.addr.sin6)) {
+				printf("%% %s is not an IPv6 address\n", argv[1]);
+				return(1);
+			}
+			break;
+		default:
+			printf("%% route: all hope lost/1\n");
 			return(1);
 		}
 	} else if (cmd == RTM_ADD) {
@@ -94,13 +106,21 @@ route(int argc, char **argv)
 	/*
 	 * Detect if a user is adding a route with a non-network address.
 	 */
-	net = in4_netaddr(dest.addr.sin.s_addr,
-	    (u_int32_t)htonl(0xffffffff << (32 - dest.bitlen)));
-
-	if (ntohl(dest.addr.sin.s_addr) != net) {
-		tmp.s_addr = htonl(net);
-		printf("%% Inconsistent address and mask (%s/%i?)\n",
-		    inet_ntoa(tmp), dest.bitlen);
+	switch (dest.family) {
+	case AF_INET:
+		net = in4_netaddr(dest.addr.sin.s_addr,
+		    (u_int32_t)htonl(0xffffffff << (32 - dest.bitlen)));
+		if (ntohl(dest.addr.sin.s_addr) != net) {
+			tmp.s_addr = htonl(net);
+			printf("%% Inconsistent address and mask (%s/%i?)\n",
+			    inet_ntoa(tmp), dest.bitlen);
+			return(1);
+		}
+	case AF_INET6:
+		/* XXX invent check */
+		break;
+	default:
+		printf("%% route: all hope lost/2\n");
 		return(1);
 	}
 
@@ -162,25 +182,34 @@ ip_t parse_ip(char *arg, int type)
 	q = strchr(arg, '/');
 	if (q)
 		*q = '\0';
-	if (!(inet_aton(arg, &argip.addr.sin) && strchr(arg, '.'))) {
-		printf("%% %s is not an IP address\n", arg);
+	if (inet_pton(AF_INET, arg, &argip.addr.sin))
+		argip.family = AF_INET;
+	else if (inet_pton(AF_INET6, arg, &argip.addr.sin6))
+		argip.family = AF_INET6;
+	else {
+		printf("%% %s is not an IPv4 or IPv6 address\n", arg);
 		return(argip);
 	}
 	if (q) {
 		s = q + 1;
-		if (inet_aton(s, &mask) && strchr(s, '.')) {
-		    mask.s_addr = ntohl(mask.s_addr);
+		if (argip.family == AF_INET && inet_pton(AF_INET, s, &mask)) {
+			mask.s_addr = ntohl(mask.s_addr);
 			argip.bitlen = mask.s_addr ? 33 - ffs(mask.s_addr) : 0;
 		} else {
 			if(strspn(s, "0123456789") == strlen(s)) {
 				/* assume bits after slash */
 				argip.bitlen = strtoul(s, 0, 0);
-				if (argip.bitlen > 32) {
+				if ((argip.family == AF_INET6 &&
+				    argip.bitlen > 128) ||
+				    (argip.family == AF_INET &&
+				    argip.bitlen > 32)) {
 					printf("%% Invalid bit length\n");
+					argip.family = 0;
 					return(argip);
 				}
 			} else {
 				printf("%% Invalid mask specified\n");
+				argip.family = 0;
 				return(argip);
 			}
 		}
@@ -194,13 +223,13 @@ ip_t parse_ip(char *arg, int type)
 			argip.bitlen = -1;
 			break;
 		case ASSUME_NETMASK:
-			argip.bitlen = 32;
+			argip.bitlen = argip.family == AF_INET ? 32 : 128;
 			break;
 		default:
 			printf("%% parse_ip: Internal error\n");
+			argip.family = 0;
 			break;
 		}
 	}
-	argip.family = AF_INET;
 	return(argip);
 }

@@ -49,6 +49,7 @@ char *netname4(in_addr_t, struct sockaddr_in *);
 #endif
 #ifdef _NETINET6_IN6_H_
 char *netname6(struct sockaddr_in6 *, struct sockaddr_in6 *);
+void in6_fillscopeid(struct sockaddr_in6 *);
 #endif
 #ifdef _SYS_SOCKET_H_
 char *netname(struct sockaddr *, struct sockaddr *);
