@@ -75,7 +75,7 @@ route(int argc, char **argv)
 	memset(&gate, 0, sizeof(ip_t));
 	memset(&dest, 0, sizeof(ip_t));
 
-	dest = parse_ip(argv[0], ASSUME_NETMASK);
+	parse_ip(argv[0], ASSUME_NETMASK, &dest);
 	if (dest.family == 0)
 		/* bad arguments */
 		return(1);
@@ -139,7 +139,7 @@ void show_route(char *arg, int tableid)
 
 	memset(&dest, 0, sizeof(ip_t));
 
-	dest = parse_ip(arg, NO_NETMASK);
+	parse_ip(arg, NO_NETMASK, &dest);
 	if (dest.family == 0)
 		return;
 
@@ -167,13 +167,10 @@ void show_route(char *arg, int tableid)
  * If ip_route() sees that the destination ip_t.bitlen == -1, it does not
  * setup a netmask sockaddr in the routing message
  */
-ip_t parse_ip(char *arg, int type)
+void parse_ip(char *arg, int type, ip_t *argip)
 {
-	ip_t argip;
 	struct in_addr mask;
 	char *q, *s;
-
-	memset(&argip, 0, sizeof(ip_t));
 
 	/*
 	 * We parse this argument first so that we can give out error
@@ -182,35 +179,36 @@ ip_t parse_ip(char *arg, int type)
 	q = strchr(arg, '/');
 	if (q)
 		*q = '\0';
-	if (inet_pton(AF_INET, arg, &argip.addr.sin))
-		argip.family = AF_INET;
-	else if (inet_pton(AF_INET6, arg, &argip.addr.sin6))
-		argip.family = AF_INET6;
+	if (inet_pton(AF_INET, arg, &argip->addr.sin))
+		argip->family = AF_INET;
+	else if (inet_pton(AF_INET6, arg, &argip->addr.sin6))
+		argip->family = AF_INET6;
 	else {
 		printf("%% %s is not an IPv4 or IPv6 address\n", arg);
-		return(argip);
+		argip->family = 0;
+		return;
 	}
 	if (q) {
 		s = q + 1;
-		if (argip.family == AF_INET && inet_pton(AF_INET, s, &mask)) {
+		if (argip->family == AF_INET && inet_pton(AF_INET, s, &mask)) {
 			mask.s_addr = ntohl(mask.s_addr);
-			argip.bitlen = mask.s_addr ? 33 - ffs(mask.s_addr) : 0;
+			argip->bitlen = mask.s_addr ? 33 - ffs(mask.s_addr) : 0;
 		} else {
 			if(strspn(s, "0123456789") == strlen(s)) {
 				/* assume bits after slash */
-				argip.bitlen = strtoul(s, 0, 0);
-				if ((argip.family == AF_INET6 &&
-				    argip.bitlen > 128) ||
-				    (argip.family == AF_INET &&
-				    argip.bitlen > 32)) {
+				argip->bitlen = strtoul(s, 0, 0);
+				if ((argip->family == AF_INET6 &&
+				    argip->bitlen > 128) ||
+				    (argip->family == AF_INET &&
+				    argip->bitlen > 32)) {
 					printf("%% Invalid bit length\n");
-					argip.family = 0;
-					return(argip);
+					argip->family = 0;
+					return;
 				}
 			} else {
 				printf("%% Invalid mask specified\n");
-				argip.family = 0;
-				return(argip);
+				argip->family = 0;
+				return;
 			}
 		}
 	} else {
@@ -220,16 +218,16 @@ ip_t parse_ip(char *arg, int type)
 		 */
 		switch (type) {
 		case NO_NETMASK:
-			argip.bitlen = -1;
+			argip->bitlen = -1;
 			break;
 		case ASSUME_NETMASK:
-			argip.bitlen = argip.family == AF_INET ? 32 : 128;
+			argip->bitlen = argip->family == AF_INET ? 32 : 128;
 			break;
 		default:
 			printf("%% parse_ip: Internal error\n");
-			argip.family = 0;
+			argip->family = 0;
 			break;
 		}
 	}
-	return(argip);
+	return;
 }

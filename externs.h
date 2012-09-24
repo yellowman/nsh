@@ -317,7 +317,7 @@ void conf_ipsysctl(FILE *);
 int route(int, char**);
 void show_route(char *, int);
 #ifdef _IP_T_
-ip_t parse_ip(char *, int);
+void parse_ip(char *, int, ip_t *);
 int ip_route(ip_t *, ip_t *, u_short, int, int);
 #endif
 

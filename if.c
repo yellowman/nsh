@@ -607,6 +607,7 @@ intip(char *ifname, int ifs, int argc, char **argv)
 
 	memset(&addreq, 0, sizeof(addreq));
 	memset(&ridreq, 0, sizeof(ridreq));
+	memset(&ip, 0, sizeof(ip));
 
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -677,7 +678,7 @@ intip(char *ifname, int ifs, int argc, char **argv)
 		return(0);
 	}
 
-	ip = parse_ip(argv[0], NO_NETMASK);
+	parse_ip(argv[0], NO_NETMASK, &ip);
 
 	if (ip.family == 0)
 		/* bad IP specified */
