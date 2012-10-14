@@ -38,7 +38,7 @@ jmp_buf toplevel;
 char *vers = "20120523";
 int bridge = 0;		/* bridge mode for interface() */
 int verbose = 0;	/* verbose mode */
-int priv = 0;
+int priv = 0, rtable = 0;
 int editing;
 pid_t pid;
 

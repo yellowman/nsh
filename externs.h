@@ -22,6 +22,7 @@ extern int editing;		/* is command line editing mode on? */
 extern int bridge;		/* are we in bridge mode (or interface mode?) */
 extern int priv;		/* privileged mode or not? */
 extern pid_t pid;		/* process id of nsh */
+extern int rtable;		/* environment rtable */
 
 #define HSIZE	64
 extern char hname[HSIZE];	/* prefix name to mode handler */
