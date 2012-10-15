@@ -473,3 +473,14 @@ void endedit(void);
 int string_index(char *, char **);
 char *format_time(time_t);
 char *format_k(uint64_t amt);
+
+/* sqlite3.c */
+#define SQ3DBFILE "/var/run/nsh.db"
+int db_create_table_rtables(void);
+int db_create_table_daemons(void);
+int db_insert_daemons(char *, int, char *);
+int db_insert_rtables(int, char *);
+int db_delete_rtables_rtable(int);
+int db_delete_daemons_daemon(int);
+int db_select_rtables_daemons(StringList *, char *);
+int db_select_name_rtables(StringList *, int);
