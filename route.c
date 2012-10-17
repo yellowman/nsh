@@ -39,7 +39,7 @@ route(int argc, char **argv)
 	u_short cmd = 0;
 	u_int32_t net;
 	ip_t dest, gate;
-	int flags, tableid = 0;
+	int flags;
 
 	if (NO_ARG(argv[0])) {
 		cmd = RTM_DELETE; 
@@ -51,25 +51,12 @@ route(int argc, char **argv)
 	argc--;
 	argv++;
 
-	if (argc < 1 || argc > 4 || (argc == 4 && !isprefix(argv[0], "table")) || argc == 3) {
-		printf("%% route [table <tableid>] <destination>[/bits] <gateway>\n");
-		printf("%% route [table <tableid>] <destination>[/netmask] <gateway>\n");
-		printf("%% no route [table <tableid>] <destination>[/bits] [gateway]\n");
-		printf("%% no route [table <tableid>] <destination>[/netmask] [gateway]\n");
+	if (argc < 1 || argc > 2) {
+		printf("%% route <destination>[/bits] <gateway>\n");
+		printf("%% route <destination>[/netmask] <gateway>\n");
+		printf("%% no route <destination>[/bits] [gateway]\n");
+		printf("%% no route <destination>[/netmask] [gateway]\n");
 		return(1);
-	}
-
-	if (argc == 4) {
-		const char *errstr;
-
-		tableid = strtonum(argv[1], 0, RT_TABLEID_MAX, &errstr);
-		if (errstr) {
-			printf("%% table %s: %s\n", argv[3], errstr);
-			return(1);
-		}
-
-		argc-= 2;
-		argv+= 2;
 	}
 
 	memset(&gate, 0, sizeof(ip_t));
@@ -129,7 +116,7 @@ route(int argc, char **argv)
 	/*
 	 * Do the route...
 	 */
-	ip_route(&dest, &gate, cmd, flags, tableid);
+	ip_route(&dest, &gate, cmd, flags, cli_rtable);
 	return(0);
 }
 

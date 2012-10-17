@@ -38,7 +38,7 @@ jmp_buf toplevel;
 char *vers = "20120523";
 int bridge = 0;		/* bridge mode for interface() */
 int verbose = 0;	/* verbose mode */
-int priv = 0, rtable = 0;
+int priv = 0, cli_rtable = 0;
 int editing;
 pid_t pid;
 
@@ -77,6 +77,9 @@ main(int argc, char *argv[])
 
 	argc -= optind;
 	argv += optind;
+
+	db_create_table_rtables();
+	db_create_table_daemons();
 
 	printf("%% NSH v%s\n", vers);
 

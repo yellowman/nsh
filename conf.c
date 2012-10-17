@@ -42,6 +42,7 @@
 #include <ifaddrs.h>
 #include <arpa/inet.h>
 #include <limits.h>
+#include "stringlist.h"
 #include "externs.h"
 #include "bridge.h"
 
@@ -58,10 +59,12 @@ void conf_print_rtm(FILE *, struct rt_msghdr *, char *, int);
 int conf_ifaddrs(FILE *, char *, int);
 void conf_brcfg(FILE *, int, struct if_nameindex *, char *);
 void conf_ifxflags(FILE *, int, char *);
+void conf_rtables(FILE *);
+void conf_rtables_rtable(FILE *, int);
 void conf_rdomain(FILE *, int, char *);
 void conf_ifmetrics(FILE *, int, struct if_data, char *);
 void conf_pflow(FILE *, int, char *);
-void conf_ctl(FILE *, char *);
+void conf_ctl(FILE *, char *, char *);
 void conf_intrtlabel(FILE *, int, char *);
 void conf_intgroup(FILE *, int, char *);
 void conf_keepalive(FILE *, int, char *);
@@ -133,7 +136,7 @@ conf(FILE *output)
 			    " %s\n", strerror(errno));
 	}
 	fprintf(output, "!\n");
-	conf_ctl(output, "dns");
+	conf_ctl(output, "", "dns");
 
 	/*
 	 * start all intefaces not listed in 'latestartifs'
@@ -165,8 +168,9 @@ conf(FILE *output)
 	/*
 	 * print static arp and route entries in configuration file format
 	 */
-	conf_routes(output, "arp ", AF_LINK, RTF_STATIC);
-	conf_routes(output, "route ", AF_INET, RTF_STATIC);
+	conf_routes(output, "arp ", AF_LINK, RTF_STATIC, 0);
+	conf_routes(output, "route ", AF_INET, RTF_STATIC, 0);
+	conf_routes(output, "route ", AF_INET6, RTF_STATIC, 0);
 
 	fprintf(output, "!\n");
 	/*
@@ -179,37 +183,81 @@ conf(FILE *output)
 	conf_interfaces(output, "bridge");
 
 	fprintf(output, "!\n");
-	conf_ctl(output, "pf");
+	conf_ctl(output, "", "pf");
 
 	/*
 	 * this interface must start after pf is loaded
 	 */
 	conf_interfaces(output, "pfsync");
 
-	conf_ctl(output, "snmp");
-	conf_ctl(output, "ldp");
-	conf_ctl(output, "rip");
-	conf_ctl(output, "ospf");
-	conf_ctl(output, "ospf6");
-	conf_ctl(output, "bgp");
-	conf_ctl(output, "ifstate");
-	conf_ctl(output, "ipsec");
-	conf_ctl(output, "ike");
-	conf_ctl(output, "dvmrp");
-	conf_ctl(output, "relay");
-	conf_ctl(output, "sasync");
-	conf_ctl(output, "dhcp");
-	conf_ctl(output, "ntp");
-	conf_ctl(output, "smtp");
-	conf_ctl(output, "ldap");
-	conf_ctl(output, "ftp-proxy");
-	conf_ctl(output, "inet");
-	conf_ctl(output, "sshd");
+	conf_ctl(output, "", "snmp");
+	conf_ctl(output, "", "ldp");
+	conf_ctl(output, "", "rip");
+	conf_ctl(output, "", "ospf");
+	conf_ctl(output, "", "ospf6");
+	conf_ctl(output, "", "bgp");
+	conf_ctl(output, "", "ifstate");
+	conf_ctl(output, "", "ipsec");
+	conf_ctl(output, "", "ike");
+	conf_ctl(output, "", "dvmrp");
+	conf_ctl(output, "", "relay");
+	conf_ctl(output, "", "sasync");
+	conf_ctl(output, "", "dhcp");
+	conf_ctl(output, "", "ntp");
+	conf_ctl(output, "", "smtp");
+	conf_ctl(output, "", "ldap");
+	conf_ctl(output, "", "ftp-proxy");
+	conf_ctl(output, "", "inet");
+	conf_ctl(output, "", "sshd");
+
+	conf_rtables(output);
 
 	return(0);
 }
 
-void conf_ctl(FILE *output, char *name)
+void conf_rtables(FILE *output)
+{
+	int i, rtableid;
+	StringList *rtables;
+
+	rtables = sl_init();
+	db_select_rtable_rtables(rtables);
+	for (i = 0; i < rtables->sl_cur; i++) {
+		rtableid = atoi(rtables->sl_str[i]);
+		if (rtableid == 0)
+			continue;
+		conf_rtables_rtable(output, rtableid);
+	}
+
+	sl_free(rtables, 1);
+}
+
+void conf_rtables_rtable(FILE *output, int rtableid)
+{
+	int i;
+	StringList *rtable_name, *rtable_daemons;
+
+	rtable_name = sl_init();
+	rtable_daemons = sl_init();
+
+	db_select_name_rtable(rtable_name, rtableid);
+	fprintf(output, "rtable %d %s\n", rtableid, rtable_name->sl_str[0]);
+
+	db_select_daemon_rtable(rtable_daemons, rtableid);
+	for (i = 0; i < rtable_daemons->sl_cur; i++)
+		conf_ctl(output, " ", rtable_daemons->sl_str[i]);
+
+	conf_routes(output, " arp ", AF_LINK, RTF_STATIC, rtableid);
+	conf_routes(output, " route ", AF_INET, RTF_STATIC, rtableid);
+	conf_routes(output, " route ", AF_INET6, RTF_STATIC, rtableid);
+
+	fprintf(output, "!\n");
+
+	sl_free(rtable_daemons, 1);
+	sl_free(rtable_name, 1);
+}
+
+void conf_ctl(FILE *output, char *delim, char *name)
 {
 	FILE *conf;
 	struct stat enst;
@@ -231,16 +279,16 @@ void conf_ctl(FILE *output, char *name)
 
 	/* print rules */
 	if ((conf = fopen(x->tmpfile, "r")) != NULL) {
-		fprintf(output, "%s rules\n", name);
+		fprintf(output, "%s%s rules\n", delim, name);
 		for (;;) {
 			if(fgets(tmp_str, TMPSIZ, conf) == NULL)
 				break;
 			if(tmp_str[0] == 0)
 				break;
-			fprintf(output, " %s", tmp_str);
+			fprintf(output, "%s %s", delim, tmp_str);
 		}
 		fclose(conf);
-		fprintf(output, "!\n");
+		fprintf(output, "%s!\n", delim);
 		pntdrules = 1;
 	} else if (errno != ENOENT || (errno != ENOENT && verbose))
 		printf("%% conf_ctl: %s: %s\n", x->tmpfile, strerror(errno));
@@ -264,24 +312,24 @@ void conf_ctl(FILE *output, char *name)
 	 * save it in the config
 	 */
 	if (fenablednm && stat(fenabled, &enst) == 0 && S_ISREG(enst.st_mode)) {
-		fprintf(output, "%s %s\n", x->name, fenablednm);
+		fprintf(output, "%s%s %s\n", delim, x->name, fenablednm);
 		pntdflag = 1;
 	}
 	if (flocalnm && stat(flocal, &enst) == 0 && S_ISREG(enst.st_mode)) {
-		fprintf(output, "%s %s\n", x->name, flocalnm);
+		fprintf(output, "%s%s %s\n", delim, x->name, flocalnm);
 		pntdflag = 1;
 	}
 	if (fothernm && stat(fother, &enst) == 0 && S_ISREG(enst.st_mode)) {
-		fprintf(output, "%s %s\n", x->name, fothernm);
+		fprintf(output, "%s%s %s\n", delim, x->name, fothernm);
 		pntdflag = 1;
 	}
 
 	if (pntdrules && x->doreload) {
-		fprintf(output, "%s reload\n", x->name);
+		fprintf(output, "%s%s reload\n", delim, x->name);
 		pntdflag = 1;
 	}
 	if (pntdflag)
-		fprintf(output, "!\n");
+		fprintf(output, "%s!\n", delim);
 }
 
 /*
@@ -838,32 +886,33 @@ default_mtu(char *ifname)
  * Show IPv4/6 or ARP entries from the routing table
  */
 int
-conf_routes(FILE *output, char *delim, int af, int flags)
+conf_routes(FILE *output, char *delim, int af, int flags, int tableid)
 {
 	char *next;
 	struct rt_msghdr *rtm;
 	struct rtdump *rtdump;
-	int tableid;
 
-	for (tableid = 0; tableid <= RT_TABLEID_MAX; tableid++) {
-		rtdump = getrtdump(0, flags, tableid);
-		if (rtdump == NULL)
-			continue;
-
-		/* walk through routing table */
-		for (next = rtdump->buf; next < rtdump->lim; next += rtm->rtm_msglen) {
-			rtm = (struct rt_msghdr *)next;
-			if ((rtm->rtm_flags & flags) == 0)
-				continue;
-			if (!rtm->rtm_errno) {
-				if (rtm->rtm_addrs)
-					conf_print_rtm(output, rtm, delim, af);
-			} else if (verbose)
-				printf("%% conf_routes: rtm: %s (errno %d)\n",
-				    strerror(rtm->rtm_errno), rtm->rtm_errno);
-		}
-		freertdump(rtdump);
+	if (tableid < 0 || tableid > RT_TABLEID_MAX) {
+		printf("%% conf_routes: tableid %d out of range\n", tableid);
+		return(1);
 	}
+	rtdump = getrtdump(0, flags, tableid);
+	if (rtdump == NULL)
+		return(1);
+
+	/* walk through routing table */
+	for (next = rtdump->buf; next < rtdump->lim; next += rtm->rtm_msglen) {
+		rtm = (struct rt_msghdr *)next;
+		if ((rtm->rtm_flags & flags) == 0)
+			continue;
+		if (!rtm->rtm_errno) {
+			if (rtm->rtm_addrs)
+				conf_print_rtm(output, rtm, delim, af);
+		} else if (verbose)
+			printf("%% conf_routes: rtm: %s (errno %d)\n",
+			    strerror(rtm->rtm_errno), rtm->rtm_errno);
+	}
+	freertdump(rtdump);
 	return(1);
 }
 

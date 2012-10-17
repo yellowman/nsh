@@ -87,6 +87,7 @@ static int	quit(void);
 static int	disable(void);
 static int	doverbose(int, char**);
 static int	doediting(int, char**);
+int		rtable(int, char**);
 int		group(int, char**);
 static int	pr_routes(int, char **);
 static int	pr_arp(int, char **);
@@ -154,7 +155,7 @@ quit(void)
 Menu showlist[] = {
 	{ "hostname",	"Router hostname",	CMPL0 0, 0, 0, 0, show_hostname },
 	{ "interface",	"Interface config",	CMPL(i) 0, 0, 0, 1, show_int },
-	{ "route",	"IP route table or route lookup", CMPL0 0, 0, 0, 3, pr_routes },
+	{ "route",	"IP route table or route lookup", CMPL0 0, 0, 0, 1, pr_routes },
 	{ "sadb",	"Security Association Database", CMPL0 0, 0, 0, 0, pr_sadb },
 	{ "arp",	"ARP table",		CMPL0 0, 0, 0, 1, pr_arp },
 	{ "kernel",	"Kernel statistics",	CMPL(ta) (char **)stts, sizeof(struct stt), 0, 1, pr_kernel },
@@ -716,6 +717,7 @@ int_help(void)
 static char
 	hostnamehelp[] = "Set system hostname",
 	interfacehelp[] = "Modify interface parameters",
+	rtablehelp[] = 	"Routing table switch",
 	grouphelp[] =	"Modify group attributes",
 	arphelp[] = 	"Static ARP set",
 #ifdef notyet
@@ -776,6 +778,7 @@ static char
 Command cmdtab[] = {
 	{ "hostname",	hostnamehelp,	CMPL0 0, 0, hostname, 	1, 0, 0, 0 },
 	{ "interface",	interfacehelp,	CMPL(i) 0, 0, interface, 1, 0, 1, 1 },
+	{ "rtable",	rtablehelp,	CMPL0 0, 0, rtable,	1, 0, 1, 2 },
 	{ "group",	grouphelp,	CMPL0 0, 0, group,	1, 0, 1, 0 },
 	{ "arp",	arphelp,	CMPL0 0, 0, arpset,	1, 0, 1, 0 },
 #ifdef notyet
@@ -1075,6 +1078,7 @@ int show_hostname(int argc, char **argv)
 int
 shell(int argc, char **argv)
 {
+	int cur_rtable;
 	sig_t sigint, sigquit, sigchld;
 
 	sigint = signal(SIGINT, SIG_IGN);
@@ -1092,6 +1096,13 @@ shell(int argc, char **argv)
 			signal(SIGINT, SIG_DFL);
 			signal(SIGCHLD, SIG_DFL);
 
+			cur_rtable = getrtable();
+			if (cur_rtable != cli_rtable &&
+			    setrtable(cli_rtable) != 0)
+				printf("%% unable to set rtable %d"
+				    " prior to execution (was %d)\n",
+				    cli_rtable, cur_rtable);
+
 			/*
 			 * Fire up the shell in the child.
 			 */
@@ -1104,7 +1115,7 @@ shell(int argc, char **argv)
 			else
 				execl(shellp, shellname, (char *)NULL);
 			printf("%% execl failed: %s\n", strerror(errno));
-			exit(0);
+			_exit(0);
 			}
 			break;
 		default:
@@ -1206,6 +1217,80 @@ traceroute6(int argc, char *argv[])
 	return 0;
 }
 
+int
+rtable(int argc, char **argv)
+{
+	int table, set, i, j;
+	const char *errstr;
+	char rtname[64];
+	StringList *resp;
+
+	if (NO_ARG(argv[0])) {
+		argv++;
+		argc--;
+		set = 0;
+	} else
+		set = 1;
+
+	if ((set && argc < 2) || (!set && argc > 2) || (!set && argc < 2)) {
+		printf("%% rtable <table id> [name]\n");
+		printf("%% no rtable <table id>\n");
+		return 1;
+	}
+
+	table = strtonum(argv[1], 0, RT_TABLEID_MAX, &errstr);
+	if (errstr) {
+		printf("%% invalid table id: %s\n", errstr);
+		return 1;
+	}
+
+	/* Convert remaining argv [name] back to string */
+	argc -= 2;
+	argv += 2;
+	for (i = 0, j = 0; argc && i < (sizeof(rtname) - 1); i++) {
+		if (argv[0][j] == '\0') {
+			argc--;
+			argv++;
+			rtname[i] = ' ';
+			j = 0;
+			continue;
+		}
+		rtname[i] = argv[0][j];
+		j++;
+	}
+	rtname[i] = '\0';
+
+	/*
+	 * Only delete/insert to the database if the name is specified, or
+	 * when name is not specified and database has no prior entry
+	 */
+	if (i == 0) {
+		/* no name specified */
+		resp = sl_init();
+		if (db_select_rtables_rtable(resp, table) < 0)
+			printf("%% rtable select error\n");
+		if (resp->sl_cur > 0) {
+			/* table found, set cli_rtable and go home */
+			sl_free(resp, 1);
+			cli_rtable = table;
+			return 0;
+		}
+		sl_free(resp, 1);
+	}
+	if (db_delete_rtables_rtable(table) < 0)
+		printf("%% rtable db removal error\n");
+	if (set) {
+		if (db_insert_rtables(table, rtname) < 0) {
+			printf("%% rtable db insertion error\n");
+		}
+		cli_rtable = table;
+	} else {
+		cli_rtable = 0;
+	}
+
+	return 0;
+}
+
 /*
  * Group attribute command.
  */
@@ -1270,6 +1355,7 @@ int
 cmdargs(char *cmd, char *arg[])
 {
 	sig_t sigint, sigquit, sigchld;
+	int cur_rtable;
 
 	sigint = signal(SIGINT, SIG_IGN);
 	sigquit = signal(SIGQUIT, SIG_IGN);
@@ -1288,9 +1374,16 @@ cmdargs(char *cmd, char *arg[])
 
 			char *shellp = cmd;
 
+			cur_rtable = getrtable();
+			if (cur_rtable != cli_rtable &&
+			    setrtable(cli_rtable) != 0)
+				printf("%% unable to set rtable %d" 
+				    " prior to execution (was %d)\n",
+				    cli_rtable, cur_rtable);
+
 			execv(shellp, arg);
 			printf("%% execv failed: %s\n", strerror(errno));
-			exit(0);
+			_exit(0);
 		}
 			break;
 		default:
@@ -1453,10 +1546,9 @@ flush_pf(char *arg)
 int
 cmdrc(char rcname[FILENAME_MAX])
 {
-	Command	*c;
+	Command	*c = NULL, *savec = NULL;
 	FILE	*rcfile;
 	char	modhvar[128];	/* required variable in mode handler cmd */
-	int	modhcmd; 	/* do we execute under another mode? */
 	unsigned int lnum;	/* line number */
 	u_int	z = 0;		/* max length of cmdtab argument */
 
@@ -1468,7 +1560,7 @@ cmdrc(char rcname[FILENAME_MAX])
 	for (c = cmdtab; c->name; c++)
 		if (strlen(c->name) > z)
 			z = strlen(c->name);
-	c = 0;
+	c = NULL;
 
 	for (lnum = 1; ; lnum++) {
 		if (fgets(line, sizeof(line), rcfile) == NULL)
@@ -1484,34 +1576,24 @@ cmdrc(char rcname[FILENAME_MAX])
 		makeargv();
 		if (margv[0] == 0)
 			continue;
-		if (line[0] == ' ') {
+		if (line[0] == ' ' && savec && savec->modh < 1) {
+			printf("%% No mode handler specified before"
+			    " indented command? (line %u) ", lnum);
+			p_argv(margc, margv);
+			printf("\n");
+			continue;
+		}
+		if (line[0] != ' ' || (line[0] == ' ' && savec
+		    && savec->modh == 2)) {
 			/*
-			 * here, if a command starts with a space, it is
-			 * considered part of a mode handler
+			 * command was not indented, or indented for a mode 2
+			 * handler. process normally.
 			 */
-			if (c && c->modh) {
-				modhcmd = 1;
-			} else {
-				/*
-				 * a command was specified with indentation
-				 * but the last run of this loop was not a
-				 * mode handler!
-				 */
-				modhcmd = 0;
-				printf("%% No mode handler specified before"
-				    " indented command? (line %u) ", lnum);
-				p_argv(margc, margv);
-				printf("\n");
-				continue;
-			}
-		} else {
-			/*
-			 * command was not indented.  process normally.
-			 */
-			modhcmd = 0;
 			if (NO_ARG(margv[0])) {
 				c = getcmd(margv[1]);
-				if (c && c->modh) {
+				if (line[0] != ' ')
+					savec = c;
+				if (savec && savec->modh) {
 					/*
 					 * ..command is a mode handler
 					 * then it cannot be 'no cmd'
@@ -1525,7 +1607,9 @@ cmdrc(char rcname[FILENAME_MAX])
 				}
 			} else {
 				c = getcmd(margv[0]);
-				if(c && c->modh) {
+				if (line[0] != ' ')
+					savec = c;
+				if(savec && savec->modh) {
 					/*
 					 * any mode handler should have
 					 * one value stored, passed on
@@ -1560,19 +1644,20 @@ cmdrc(char rcname[FILENAME_MAX])
 		}
 		if (verbose) {
 			printf("%% %4s: %*s%10s (line %u) margv ",
-			    c->modh ? "mode" : "cmd", z, c->name,
-			    modhcmd ? "(sub-cmd)" : "", lnum);
+			    savec->modh ? "mode" : "cmd", z, c->name,
+			    c != savec ? "(sub-cmd)" : "", lnum);
 			p_argv(margc, margv);
 			printf("\n");
 		}
-		if (!modhcmd && !c->nocmd && NO_ARG(margv[0])) {
+		if (!(savec && savec->modh == 1) &&
+		    !c->nocmd && NO_ARG(margv[0])) {
 			printf("%% Invalid rc command (line %u) ",
 			    lnum);
 			p_argv(margc, margv);
 			printf("\n");
 			continue;
 		}
-		if (c->modh)
+		if (savec->modh == 1)
 			(*c->handler) (margc, margv, modhvar);
 		else
 			(*c->handler) (margc, margv, 0);
@@ -1626,8 +1711,18 @@ el_burrito(EditLine *el, int argc, char **argv)
 char *
 cprompt(void)
 {
+	int pr;
+	char tmp[4];
+
+	if (cli_rtable)
+		snprintf(tmp, sizeof(tmp), "%d", cli_rtable);
+
 	gethostname(hbuf, sizeof(hbuf));
-	snprintf(prompt, sizeof(prompt), "%s%s/", hbuf, priv ? "(p)" : "");
+	pr = priv | cli_rtable;
+	snprintf(prompt, sizeof(prompt), "%s%s%s%s%s%s%s/", hbuf, pr ? "(" : "",
+	    priv ? "p" : "", priv && cli_rtable ? "-" : "",
+	    cli_rtable ? "rtable " : "", cli_rtable ? tmp : "",
+	    pr ?")" : "");
 
 	return(prompt);
 }
@@ -1759,37 +1854,14 @@ pr_s_conf(int argc, char **argv)
 int
 pr_routes(int argc, char **argv)
 {
-	const char *errstr;
-	int tableid = 0;
-
 	switch(argc) {
 	case 2:
 		/* show primary routing table */
-		p_rttables(AF_INET, tableid, 0);
+		p_rttables(AF_INET, cli_rtable, 0);
 		break;
 	case 3:
 		/* show a specific route */
-		show_route(argv[2], 0);
-		break;
-	case 4:
-		if (isprefix(argv[2], "table")) {
-			tableid = strtonum(argv[3], 0, RT_TABLEID_MAX, &errstr);
-			if (errstr) {
-				printf("%% invalid table %s: %s\n", argv[3], errstr);
-				return(0);
-			}
-			p_rttables(AF_INET, tableid, 0);
-		}
-		break;
-	case 5:
-		if (isprefix(argv[3], "table")) {
-			tableid = strtonum(argv[4], 0, RT_TABLEID_MAX, &errstr);
-			if (errstr) {
-				printf("%% invalid table %s: %s\n", argv[4], errstr);
-				return(0);
-			}
-			show_route(argv[2], tableid);
-		}
+		show_route(argv[2], cli_rtable);
 		break;
 	}
 

@@ -39,56 +39,72 @@ db_create_table_daemons(void)
 }
 
 int
-db_insert_daemons(char *daemon, int rtable, char *configfile)
+db_insert_daemons(char *daemon, int rtableid, char *configfile)
 {
 	char		query[QSZ];
 
-	snprintf(query, QSZ, "INSERT INTO 'daemons' VALUES('%s', %d, '%s')", daemon, rtable, configfile);
+	snprintf(query, QSZ, "INSERT INTO 'daemons' VALUES('%s', %d, '%s')", daemon, rtableid, configfile);
 	return(sq3simple(query, NULL));
 }
 
 int
-db_insert_rtables(int rtable, char *name)
+db_insert_rtables(int rtableid, char *name)
 {
 	char		query[QSZ];
 
-	snprintf(query, QSZ, "INSERT INTO 'rtables' VALUES(%d, '%s')", rtable, name);
+	snprintf(query, QSZ, "INSERT INTO 'rtables' VALUES(%d, '%s')", rtableid, name);
 	return(sq3simple(query, NULL));
 }
 
 int
-db_delete_rtables_rtable(int rtable)
+db_delete_rtables_rtable(int rtableid)
 {
 	char		query[QSZ];
 
-	snprintf(query, QSZ, "DELETE FROM 'rtables' WHERE rtable='%d'", rtable);
+	snprintf(query, QSZ, "DELETE FROM 'rtables' WHERE rtable='%d'", rtableid);
 	return(sq3simple(query, NULL));
 }
 
 int
 db_delete_daemons_daemon(char *daemon)
 {
-	char		quer[QSZ];
+	char		query[QSZ];
 
 	snprintf(query, QSZ, "DELETE FROM 'daemons' WHERE daemon='%s'", daemon);
 	return(sq3simple(query, NULL));
 }
 
 int
-db_select_rtables_daemons(StringList *words, char *daemon)
+db_select_rtable_rtables(StringList *words)
 {
-	char		query[QSZ];
-
-	snprintf(query, QSZ, "SELECT rtable FROM daemons WHERE daemon='%s'", daemon);
+	char query[]="SELECT rtable FROM rtables";
 	return(sq3simple(query, words));
 }
 
 int
-db_select_name_rtables(StringList *words, int rtable)
+db_select_rtables_rtable(StringList *words, int rtableid)
 {
 	char		query[QSZ];
 
-	snprintf(query, QSZ, "SELECT name FROM rtables WHERE rtable='%d'", rtable);
+	snprintf(query, QSZ, "SELECT * FROM rtables WHERE rtable='%d'", rtableid);
+	return(sq3simple(query,words));
+}
+
+int
+db_select_daemon_rtable(StringList *words, int rtableid)
+{
+	char            query[QSZ];
+
+	snprintf(query, QSZ, "SELECT daemon FROM daemons WHERE rtable='%d'", rtableid);
+	return(sq3simple(query, words));
+}
+
+int
+db_select_name_rtable(StringList *words, int rtableid)
+{
+	char		query[QSZ];
+
+	snprintf(query, QSZ, "SELECT name FROM rtables WHERE rtable='%d'", rtableid);
 	return(sq3simple(query, words));
 }
 
@@ -126,8 +142,9 @@ sq3simple(char *sql, StringList *words)
 	sqlite3_finalize(stmt);
 	sqlite3_close(db);
 
-	if (new != NULL && rv != SQLITE_DONE) {
+	if (rv != SQLITE_DONE) {
 		printf("%% sq3simple: error: %s\n", sqlite3_errmsg(db));
+		return -1;
 	}
 	return tlen;
 }

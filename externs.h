@@ -22,7 +22,7 @@ extern int editing;		/* is command line editing mode on? */
 extern int bridge;		/* are we in bridge mode (or interface mode?) */
 extern int priv;		/* privileged mode or not? */
 extern pid_t pid;		/* process id of nsh */
-extern int rtable;		/* environment rtable */
+extern int cli_rtable;		/* environment rtable */
 
 #define HSIZE	64
 extern char hname[HSIZE];	/* prefix name to mode handler */
@@ -40,7 +40,7 @@ extern HistEvent ev;		/* ev */
 #define LEASEPREFIX	"/var/db/dhclient.leases"
 int conf(FILE *);
 u_long default_mtu(char *);
-int conf_routes(FILE *, char *, int, int);
+int conf_routes(FILE *, char *, int, int, int);
 char *conf_dhcrelay(char *, char *, int);
 
 /* show.c */
@@ -481,6 +481,11 @@ int db_create_table_daemons(void);
 int db_insert_daemons(char *, int, char *);
 int db_insert_rtables(int, char *);
 int db_delete_rtables_rtable(int);
-int db_delete_daemons_daemon(int);
+int db_delete_daemons_daemon(char *);
+#ifdef _STRINGLIST_H
+int db_select_rtable_rtables(StringList *);
+int db_select_rtables_rtable(StringList *, int);
 int db_select_rtables_daemons(StringList *, char *);
-int db_select_name_rtables(StringList *, int);
+int db_select_name_rtable(StringList *, int);
+int db_select_daemon_rtable(StringList *, int);
+#endif
