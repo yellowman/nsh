@@ -1657,7 +1657,7 @@ cmdrc(char rcname[FILENAME_MAX])
 			printf("\n");
 			continue;
 		}
-		if (savec->modh == 1)
+		if (c->modh == 1)
 			(*c->handler) (margc, margv, modhvar);
 		else
 			(*c->handler) (margc, margv, 0);
