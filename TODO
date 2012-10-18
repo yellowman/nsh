@@ -1,5 +1,3 @@
-$nsh: TODO,v 1.35 2012/05/21 01:03:31 chris Exp $
-
 nsh is a work in progress, diffs are welcome
 
 Cleanup:
@@ -13,21 +11,16 @@ Cleanup:
 * Push more argument validation up, outside of the actual function routines
 * Consistent return values between functions?
 * Support new wireless information interfaces where necessary
-* Use sockaddr everywhere, instead of home-grown ip_t
 
 To be implemented:
 
-* rdomain/rtable control in more places
 * handle newer bridge commands
 * handle newer 802.11 gunk like rssi display, chan, flags
 * handle kernel pppoe
 * privsep (imsg based?)
 * copy configs from/to tftp/ftp/http/other parts of filesystem/etc
-* support adding routes, ping, traceroute, ssh, telnet in alternate rdomains
 * RSA certificate generation/management method (isakmpd, iked, possibly sshd)
 * Persistent comments/remarks in the config file (to document routes, etc..)
-* IPv6 (mostly there already, but I won't finish it properly until I use IPv6
-  myself or someone else submits patches)
 * Support for paging through displays of text X lines at a time
 * Something comparable to "| inc" from cisco-land
 * Context-sensitive help
