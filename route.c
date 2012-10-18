@@ -74,12 +74,14 @@ route(int argc, char **argv)
 				printf("%% %s is not an IP address\n", argv[1]);
 				return(1);
 			}
+			gate.family = AF_INET;
 			break;
 		case AF_INET6:
 			if (!inet_pton(AF_INET6, argv[1], &gate.addr.sin6)) {
 				printf("%% %s is not an IPv6 address\n", argv[1]);
 				return(1);
 			}
+			gate.family = AF_INET6;
 			break;
 		default:
 			printf("%% route: all hope lost/1\n");
@@ -116,7 +118,10 @@ route(int argc, char **argv)
 	/*
 	 * Do the route...
 	 */
-	ip_route(&dest, &gate, cmd, flags, cli_rtable);
+	if (argc > 1)
+		ip_route(&dest, &gate, cmd, flags, cli_rtable);
+	else
+		ip_route(&dest, NULL, cmd, flags, cli_rtable);
 	return(0);
 }
 
