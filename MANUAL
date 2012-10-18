@@ -1,7 +1,5 @@
 NSH // Network Shell User's Manual // Chris Cappuccio <chris@nmedia.net>
 
-$nsh: MANUAL,v 1.23 2012/05/21 01:03:31 chris Exp $
-
 Copyright (c) 2003, 2004 Chris Cappuccio
 
 
@@ -1260,6 +1258,8 @@ MULTICAST
 Appendix C > Configuration examples
 -----------------------------------
 
+See http://www.nmedia.net/nsh/
+
 Appendix D > ALTQ notes
 -----------------------
 
@@ -1315,6 +1315,10 @@ gif
 This interface is used for RFC 1933 IPv[46] to IPv[46] tunnels.
 
 nsh(interface-gif0)/tunnel 1.2.3.4 5.5.5.5
+
+tunnels can be used between rdomains.
+
+nsh(interface-gif0)/tunnel 1.2.3.4 5.5.5.5 rdomain 5
 
 pflog
 -----

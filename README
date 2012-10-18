@@ -1,6 +1,4 @@
-nsh//network config shell//Chris Cappuccio <chris@nmedia.net> version 20090617
-
-$nsh: README,v 1.29 2009/06/17 22:24:32 chris Exp $
+nsh//network config shell//Chris Cappuccio <chris@nmedia.net> version 1.0
 
 NSH is a CLI intended for OpenBSD-based routers running little except for
 sshd, targeted towards flash-based systems.  It is freely licensed, in the BSD
@@ -13,14 +11,15 @@ manage this type of router (In fact, we eliminate the use of those
 commands and /etc configuration files entirely!).
 
 In conjunction with the OpenBSD kernel, sshd, (and perhaps one or more of
-dhcpd, isakmpd, bgpd, ripd, ospfd, relayd and snmpd) you have a fully
-functioning system.
+dhcpd, isakmpd, bgpd, ripd, ospfd, relayd, snmpd and other supported tools)
+you have a fully functioning system.
 
 >> Command line interface functions
- * Add/delete/show/flush/monitor IP routes
- * Manage and view BGP, OSPF, RIP, IPSEC, DHCP, DVMRP, SNMP, NTP configuration
+ * Add/delete/show/flush/monitor IPv4, IPv6 routes
+ * Manage and view BGP, OSPF, RIP, IPSEC, DHCP, DVMRP, SNMP, NTP and many others
+   configuration
  * Display detailed information regarding an interface
- * Configure interfaces for IP, MTU, VLAN, media, and other properties
+ * Configure interfaces for IPv4, IPv6, MTU, VLAN, media, and other properties
  * Show host (TCP, UDP) and router (IP, MBUF) statistics
  * Configure Packet Filter, NAT, and ALTQ system-wide
  * Configure bridges for members, rules
@@ -38,69 +37,14 @@ functioning system.
    built in to nsh itself.
 
 >> Contributors
- * Jose Nazario <jose@monkey.org> contributed command functions from the
-   OpenSoekris project for reboot, shutdown, writing the config out, 
-   and some fixes to the config generator. 
- * Christian Gut contributed password save functions.
- * Mats Mellstrand <mats@exmandato.se> contributed dhclient functionality
- * Manuel Pata <pata@alface.de> contributed various bits of cleanup,
-   and new commands for lladdr, carp, trunk and txpower
+ * Jose Nazario <jose@monkey.org>
+ * Christian Gut
+ * Mats Mellstrand <mats@exmandato.se>
+ * Manuel Pata <pata@alface.de>
+ * Stuart Henderson
 
 >> See TODO for details on implementation status and future ideas.
 
 >> Why a Cisco-like interface?
 It's easier to manage (one config for all features) and easier to train Cisco-
-centric and Juniper-centric users on.
-
->> On Features
-At the edge, it's obvious that people find OpenBSD to be very useful for a wide
-variety of network management and operation tasks.  OpenBSD is an excellent
-low-cost, high-quality alternative to closed, proprietary, expensive firewalls
-from various vendors.  OpenBSD's features such as IPsec-encapsulated ethernet
-bridging, IPsec itself, IPComp, highly extensible PF (integrating packet
-filter, queueing, and network address translation,) layer 3-7 application 
-redundancy and load-balancing with pf and relayd, 802.11 access point
-mode with with novel security options (such as authpf), and complete firewall
-(hot failover with CARP and PF state synchronization) all make OpenBSD a highly
-secure and attractive edge solution.
-
-At the core, enterprise level BGP, OSPF, RIP, DVMRP, SNMP, IPv6, tunneling,
-route labeling, 802.1Q vlan interfaces, and tight integration between these
-features and the packet filter make OpenBSD a natural choice.
-
->> On Appliances
-You can create a wide range of appliances with these tools.
-
-Modern embedded micro-PC systems like Soekris, and PC Engines present
-a quick and easy base for low end, lower packet-per-second edge jobs.
-They take compact flash, they use very little power, generate very little
-heat, and with no fans or other motors, have very long lives.
-
-Modern AMD64 class systems (Athlon 64, Pentium 4, Core 2) with OpenBSD
-easily rival Cisco 7200 series or Juniper J series in both areas of speed
-and functionality.  When combined with a flash based storage and high grade
-components, the reliability rivals them as well.
-
->> On Extensibility
-OpenBSD is fully programmable.  It offers a pcap userspace interface,
-and full kernel source code ready for your own modification.  OpenBSD
-is infinitely more extensible than a closed, commercial firewall or routing
-product.  There is also a vast library of third party software, much
-available right from the OpenBSD ports tree.  With it you may integrate
-applications providing intrusion detection, spam filtering, web filtering,
-instant message recording, email recording, and netflow data generation,
-just to name a few.
-
->> On Cryptography
-OpenBSD has long been the de-facto standard for tight operating system and
-network system integration with cryptographic security measures.  It is one
-of two reference standard IPsec implementations used by a consortium
-comprised of all the major router vendors (vpnc.org). New IPsec products
-from Cisco, Nortel, Juniper, Microsoft, Wind River, PGP, SSH Communications,
-F-Secure, and many others are tested against OpenBSD IPsec and KAME IPsec,
-(the consortium's reference standards.)
-
-Likewise, OpenBSD's OpenSSH comes on Cisco routers, HP switches, MacOS X,
-IBM's AIX, and Sun Solaris, not to mention just about every free OS out there!
-OpenBSD was the first free OS to include full source code for a cryptographic
-hardware accelerator driver and the first to fully implement it with IPsec.
+centric users on.
