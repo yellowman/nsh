@@ -1644,7 +1644,7 @@ cmdrc(char rcname[FILENAME_MAX])
 		}
 		if (verbose) {
 			printf("%% %4s: %*s%10s (line %u) margv ",
-			    savec->modh ? "mode" : "cmd", z, c->name,
+			    savec->modh ? "mode" : "cmd", z, savec->name,
 			    c != savec ? "(sub-cmd)" : "", lnum);
 			p_argv(margc, margv);
 			printf("\n");
