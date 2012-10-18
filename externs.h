@@ -170,6 +170,7 @@ struct daemons {
         char *tmpfile;
 	mode_t mode;
 	int doreload;
+	int rtablemax;
 };
 extern struct daemons ctl_daemons[];
 extern struct ctl ctl_pf[];

@@ -24,6 +24,7 @@
 #include <sys/signal.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/socket.h>
 #include "externs.h"
 
 /* service daemons */
@@ -389,32 +390,32 @@ struct ctl ctl_ldap[] = {
 };
 
 struct daemons ctl_daemons[] = {
-	{ "pf",		"PF",	ctl_pf,		PFCONF_TEMP,	0600, 1 },
-	{ "ospf",	"OSPF", ctl_ospf,	OSPFCONF_TEMP,	0600, 0 },
-	{ "ospf6",	"OSPF6", ctl_ospf6,	OSPF6CONF_TEMP, 0600, 0 },
-	{ "bgp",	"BGP",	ctl_bgp,	BGPCONF_TEMP,	0600, 0 },
-	{ "rip",	"RIP",	ctl_rip,	RIPCONF_TEMP,	0600, 0 },
-	{ "ldp",	"LDP",	ctl_ldp,	LDPCONF_TEMP,	0600, 0 },
-	{ "relay",	"Relay", ctl_relay,	RELAYCONF_TEMP,	0600, 0 },
-	{ "ipsec",	"IPsec IKEv1", ctl_ipsec,	IPSECCONF_TEMP,	0600, 1 },
-	{ "ike",	"IPsec IKEv2", ctl_ike,		IKECONF_TEMP, 0600, 0 },
-	{ "dvmrp",	"DVMRP", ctl_dvmrp,	DVMRPCONF_TEMP, 0600, 0 },
-	{ "sasync",	"SAsync", ctl_sasync,	SASYNCCONF_TEMP,0600, 0 },
-	{ "dhcp",	"DHCP",	ctl_dhcp,	DHCPCONF_TEMP,	0600, 0 },
-	{ "snmp",	"SNMP",	ctl_snmp,	SNMPCONF_TEMP,	0600, 0 },
-	{ "sshd",	"SSH",	ctl_sshd,	SSHDCONF_TEMP,	0600, 0 },
-	{ "ntp",	"NTP",	ctl_ntp,	NTPCONF_TEMP,	0600, 0 },
-	{ "ifstate",	"ifstate", ctl_ifstate,	IFSTATECONF_TEMP, 0600, 0 },
-	{ "ftp-proxy",  "FTP proxy", ctl_ftpproxy, FTPPROXY_TEMP, 0600, 0 },
-	{ "tftp-proxy",	"TFTP proxy", ctl_tftpproxy, TFTPPROXY_TEMP, 0600, 0 },
-	{ "tftp",	"TFTP", ctl_tftp,	TFTP_TEMP,	0600, 0 },
-	{ "nppp",	"PPP",	ctl_nppp,	NPPPCONF_TEMP,	0600, 0 },
-	{ "dns", 	"DNS", ctl_dns,		RESOLVCONF_TEMP,0644, 0 },
-	{ "inet",	"Inet", ctl_inet,	INETCONF_TEMP,	0600, 0 },
-	{ "smtp",	"SMTP", ctl_smtp,	SMTPCONF_TEMP,	0600, 0 },
-	{ "ldap",	"LDAP", ctl_ldap,	LDAPCONF_TEMP,	0600, 0 },
-	{ "ifstate",	"Interface state", ctl_ifstate,	IFSTATECONF_TEMP, 0600, 0 },
-	{ 0, 0, 0, 0, 0 }
+	{ "pf",		"PF",	ctl_pf,		PFCONF_TEMP,	0600, 1, 0 },
+	{ "ospf",	"OSPF", ctl_ospf,	OSPFCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
+	{ "ospf6",	"OSPF6", ctl_ospf6,	OSPF6CONF_TEMP, 0600, 0, RT_TABLEID_MAX },
+	{ "bgp",	"BGP",	ctl_bgp,	BGPCONF_TEMP,	0600, 0, 0 },
+	{ "rip",	"RIP",	ctl_rip,	RIPCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
+	{ "ldp",	"LDP",	ctl_ldp,	LDPCONF_TEMP,	0600, 0, 0 },
+	{ "relay",	"Relay", ctl_relay,	RELAYCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
+	{ "ipsec",	"IPsec IKEv1", ctl_ipsec,	IPSECCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
+	{ "ike",	"IPsec IKEv2", ctl_ike,		IKECONF_TEMP, 0600, 0, RT_TABLEID_MAX },
+	{ "dvmrp",	"DVMRP", ctl_dvmrp,	DVMRPCONF_TEMP, 0600, 0, RT_TABLEID_MAX },
+	{ "sasync",	"SAsync", ctl_sasync,	SASYNCCONF_TEMP,0600, 0, RT_TABLEID_MAX },
+	{ "dhcp",	"DHCP",	ctl_dhcp,	DHCPCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
+	{ "snmp",	"SNMP",	ctl_snmp,	SNMPCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
+	{ "sshd",	"SSH",	ctl_sshd,	SSHDCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
+	{ "ntp",	"NTP",	ctl_ntp,	NTPCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
+	{ "ifstate",	"ifstate", ctl_ifstate,	IFSTATECONF_TEMP, 0600, 0, RT_TABLEID_MAX },
+	{ "ftp-proxy",  "FTP proxy", ctl_ftpproxy, FTPPROXY_TEMP, 0600, 0, RT_TABLEID_MAX },
+	{ "tftp-proxy",	"TFTP proxy", ctl_tftpproxy, TFTPPROXY_TEMP, 0600, 0, RT_TABLEID_MAX },
+	{ "tftp",	"TFTP", ctl_tftp,	TFTP_TEMP,	0600, 0, RT_TABLEID_MAX },
+	{ "nppp",	"PPP",	ctl_nppp,	NPPPCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
+	{ "dns", 	"DNS", ctl_dns,		RESOLVCONF_TEMP,0644, 0, 0 },
+	{ "inet",	"Inet", ctl_inet,	INETCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
+	{ "smtp",	"SMTP", ctl_smtp,	SMTPCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
+	{ "ldap",	"LDAP", ctl_ldap,	LDAPCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
+	{ "ifstate",	"Interface state", ctl_ifstate,	IFSTATECONF_TEMP, 0600, 0, RT_TABLEID_MAX },
+	{ 0, 0, 0, 0, 0, 0 }
 };
 
 void
@@ -484,14 +485,13 @@ ctlhandler(int argc, char **argv, char *modhvar)
 		return 0;
 	}
 
+	if (cli_rtable > daemons->rtablemax)
+		printf("%% Command %s not available at rtable %d\n", daemons->name, cli_rtable);
+
 	if (modhvar) {
 		/* action specified or indented command specified */
 		if (argc == 2 && isprefix(argv[1], "rules")) {
 			/* skip 'X rules' line */
-			return(0);
-		}
-		if (argc == 2 && isprefix(argv[1], "action")) {
-			printf("%% Old configuration WILL NOT WORK! FIX IT!\n");
 			return(0);
 		}
 		if (isprefix(modhvar, "rules")) {
