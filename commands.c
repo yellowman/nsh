@@ -778,62 +778,62 @@ static char
 
 #define ssctl sizeof(struct ctl)
 Command cmdtab[] = {
-	{ "hostname",	hostnamehelp,	CMPL0 0, 0, hostname, 	1, 0, 0, 0 },
-	{ "interface",	interfacehelp,	CMPL(i) 0, 0, interface, 1, 0, 1, 1 },
-	{ "rtable",	rtablehelp,	CMPL0 0, 0, rtable,	1, 0, 1, 2 },
-	{ "group",	grouphelp,	CMPL0 0, 0, group,	1, 0, 1, 0 },
-	{ "arp",	arphelp,	CMPL0 0, 0, arpset,	1, 0, 1, 0 },
+	{ "hostname",	hostnamehelp,	CMPL0 0, 0, hostname, 	1, 0, 0 },
+	{ "interface",	interfacehelp,	CMPL(i) 0, 0, interface, 1, 1, 1 },
+	{ "rtable",	rtablehelp,	CMPL0 0, 0, rtable,	1, 1, 2 },
+	{ "group",	grouphelp,	CMPL0 0, 0, group,	1, 1, 0 },
+	{ "arp",	arphelp,	CMPL0 0, 0, arpset,	1, 1, 0 },
 #ifdef notyet
-	{ "proxy-arp",	parphelp,	CMPL0 0, 0, arpset,	1, 0, 1, 0 },
+	{ "proxy-arp",	parphelp,	CMPL0 0, 0, arpset,	1, 1, 0 },
 #endif
-	{ "bridge",	bridgehelp,	CMPL(i) 0, 0, interface, 1, 0, 0, 1 },
-	{ "show",	showhelp,	CMPL(ta) (char **)showlist, sizeof(Menu), showcmd,	0, 0, 0, 0 },
-	{ "ip",		iphelp,		CMPL(ta) (char **)iptab, sizeof(Menu), ipcmd,		1, 0, 1, 0 },
-	{ "flush",	flushhelp,	CMPL(ta) (char **)flushlist, sizeof(Menu), flushcmd,	1, 0, 0, 0 },
-	{ "enable",	enablehelp,	CMPL0 0, 0, enable,	0, 0, 0, 0 },
-	{ "disable",	disablehelp,	CMPL0 0, 0, disable,	1, 0, 0, 0 },
-	{ "route",	routehelp,	CMPL0 0, 0, route,	1, 0, 1, 0 },
-	{ "pf",		pfhelp,		CMPL(t) (char **)ctl_pf, ssctl, ctlhandler,	1, 0, 0, 1 },
-	{ "ospf",	ospfhelp,	CMPL(t) (char **)ctl_ospf, ssctl, ctlhandler,	1, 0, 0, 1 },
-	{ "ospf6",	ospf6help,	CMPL(t) (char **)ctl_ospf6, ssctl, ctlhandler,	1, 0, 0, 1 },
-	{ "bgp",	bgphelp,	CMPL(t) (char **)ctl_bgp, ssctl, ctlhandler,	1, 0, 0, 1 },
-	{ "rip",	riphelp,	CMPL(t) (char **)ctl_rip, ssctl, ctlhandler,	1, 0, 0, 1 },
-	{ "ldp",	ldphelp,	CMPL(t) (char **)ctl_ldp, ssctl, ctlhandler,	1, 0, 0, 1 },
-	{ "relay",	relayhelp,	CMPL(t) (char **)ctl_relay, ssctl, ctlhandler,	1, 0, 0, 1 },
-	{ "ipsec",	ipsechelp,	CMPL(t) (char **)ctl_ipsec, ssctl, ctlhandler,	1, 0, 0, 1 },
-	{ "ike",	ikehelp,	CMPL(t) (char **)ctl_ike, ssctl, ctlhandler, 	1, 0, 0, 1 },
-	{ "dvmrp",	dvmrphelp,	CMPL(t) (char **)ctl_dvmrp, ssctl, ctlhandler,	1, 0, 0, 1 },
-	{ "sasync",	sasynchelp,	CMPL(t) (char **)ctl_sasync, ssctl, ctlhandler,	1, 0, 0, 1 },
-	{ "dhcp",	dhcphelp,	CMPL(t) (char **)ctl_dhcp, ssctl, ctlhandler,	1, 0, 0, 1 },
-	{ "snmp",	snmphelp,	CMPL(t) (char **)ctl_snmp, ssctl, ctlhandler,	1, 0, 0, 1 },
-	{ "ldap",	ldaphelp,	CMPL(t) (char **)ctl_ldap, ssctl, ctlhandler,	1, 0, 0, 1 },
-	{ "smtp",	smtphelp,	CMPL(t) (char **)ctl_smtp, ssctl, ctlhandler,	1, 0, 0, 1 },
-	{ "sshd",	sshdhelp,	CMPL(t) (char **)ctl_sshd, ssctl, ctlhandler,	1, 0, 0, 1 },
-	{ "ntp",	ntphelp,	CMPL(t) (char **)ctl_ntp, ssctl, ctlhandler,	1, 0, 0, 1 },
-	{ "nppp",	nppphelp,	CMPL(t) (char **)ctl_nppp, ssctl, ctlhandler,	1, 0, 0, 1 },
-	{ "ifstate",	ifstatehelp,	CMPL(t) (char **)ctl_ifstate, ssctl, ctlhandler, 1, 0, 0, 1 },
-	{ "ftp-proxy",  ftpproxyhelp,	CMPL(t) (char **)ctl_ftpproxy, ssctl, ctlhandler,  1, 0, 0, 1 },
-	{ "tftp-proxy",	tftpproxyhelp,	CMPL(t) (char **)ctl_tftpproxy, ssctl, ctlhandler, 1, 0, 0, 1 },
-	{ "tftp",	tftphelp,	CMPL(t) (char **)ctl_tftp, ssctl, ctlhandler,	1, 0, 0, 1 },
-	{ "dns",	dnshelp,	CMPL(t) (char **)ctl_dns, ssctl, ctlhandler,	1, 0, 0, 1 },
-	{ "inet",	inethelp,	CMPL(t) (char **)ctl_inet, ssctl, ctlhandler,	1, 0, 0, 1 },
-	{ "ping",	pinghelp,	CMPL0 0, 0, ping,	0, 0, 0, 0 },
-	{ "ping6",	ping6help,	CMPL0 0, 0, ping6,	0, 0, 0, 0 },
-	{ "traceroute", tracerthelp,	CMPL0 0, 0, traceroute,	0, 0, 0, 0 },
-	{ "traceroute6", tracert6help,  CMPL0 0, 0, traceroute6, 0, 0, 0, 0 },
-	{ "ssh",	sshhelp,	CMPL0 0, 0, ssh,	0, 0, 0, 0 },
-	{ "telnet",	telnethelp,	CMPL0 0, 0, telnet,	0, 0, 0, 0 },
-	{ "reboot",	nreboothelp,	CMPL0 0, 0, nreboot,	1, 0, 0, 0 },
-	{ "halt",	halthelp,	CMPL0 0, 0, halt,	1, 0, 0, 0 },
-	{ "write-config", savehelp,	CMPL0 0, 0, wr_startup,	1, 0, 0, 0 },
-	{ "verbose",	verbosehelp,	CMPL0 0, 0, doverbose,	0, 0, 1, 0 },
-	{ "editing",	editinghelp,	CMPL0 0, 0, doediting,	0, 0, 1, 0 },
-	{ "who",	whohelp,	CMPL0 0, 0, who,	0, 0, 0, 0 },
-	{ "!",		shellhelp,	CMPL0 0, 0, shell,	1, 0, 0, 0 },
-	{ "?",		helphelp,	CMPL(C) 0, 0, help,	0, 0, 0, 0 },
-	{ "quit",	quithelp,	CMPL0 0, 0, quit,	0, 0, 0, 0 },
-	{ "help",	0,		CMPL(C) 0, 0, help,	0, 0, 0, 0 },
-	{ 0,		0,		CMPL0 0, 0, 0,		0, 0, 0, 0 }
+	{ "bridge",	bridgehelp,	CMPL(i) 0, 0, interface, 1, 0, 1 },
+	{ "show",	showhelp,	CMPL(ta) (char **)showlist, sizeof(Menu), showcmd,	0, 0, 0 },
+	{ "ip",		iphelp,		CMPL(ta) (char **)iptab, sizeof(Menu), ipcmd,		1, 1, 0 },
+	{ "flush",	flushhelp,	CMPL(ta) (char **)flushlist, sizeof(Menu), flushcmd,	1, 0, 0 },
+	{ "enable",	enablehelp,	CMPL0 0, 0, enable,	0, 0, 0 },
+	{ "disable",	disablehelp,	CMPL0 0, 0, disable,	1, 0, 0 },
+	{ "route",	routehelp,	CMPL0 0, 0, route,	1, 1, 0 },
+	{ "pf",		pfhelp,		CMPL(t) (char **)ctl_pf, ssctl, ctlhandler,	1, 0, 1 },
+	{ "ospf",	ospfhelp,	CMPL(t) (char **)ctl_ospf, ssctl, ctlhandler,	1, 0, 1 },
+	{ "ospf6",	ospf6help,	CMPL(t) (char **)ctl_ospf6, ssctl, ctlhandler,	1, 0, 1 },
+	{ "bgp",	bgphelp,	CMPL(t) (char **)ctl_bgp, ssctl, ctlhandler,	1, 0, 1 },
+	{ "rip",	riphelp,	CMPL(t) (char **)ctl_rip, ssctl, ctlhandler,	1, 0, 1 },
+	{ "ldp",	ldphelp,	CMPL(t) (char **)ctl_ldp, ssctl, ctlhandler,	1, 0, 1 },
+	{ "relay",	relayhelp,	CMPL(t) (char **)ctl_relay, ssctl, ctlhandler,	1, 0, 1 },
+	{ "ipsec",	ipsechelp,	CMPL(t) (char **)ctl_ipsec, ssctl, ctlhandler,	1, 0, 1 },
+	{ "ike",	ikehelp,	CMPL(t) (char **)ctl_ike, ssctl, ctlhandler, 	1, 0, 1 },
+	{ "dvmrp",	dvmrphelp,	CMPL(t) (char **)ctl_dvmrp, ssctl, ctlhandler,	1, 0, 1 },
+	{ "sasync",	sasynchelp,	CMPL(t) (char **)ctl_sasync, ssctl, ctlhandler,	1, 0, 1 },
+	{ "dhcp",	dhcphelp,	CMPL(t) (char **)ctl_dhcp, ssctl, ctlhandler,	1, 0, 1 },
+	{ "snmp",	snmphelp,	CMPL(t) (char **)ctl_snmp, ssctl, ctlhandler,	1, 0, 1 },
+	{ "ldap",	ldaphelp,	CMPL(t) (char **)ctl_ldap, ssctl, ctlhandler,	1, 0, 1 },
+	{ "smtp",	smtphelp,	CMPL(t) (char **)ctl_smtp, ssctl, ctlhandler,	1, 0, 1 },
+	{ "sshd",	sshdhelp,	CMPL(t) (char **)ctl_sshd, ssctl, ctlhandler,	1, 0, 1 },
+	{ "ntp",	ntphelp,	CMPL(t) (char **)ctl_ntp, ssctl, ctlhandler,	1, 0, 1 },
+	{ "nppp",	nppphelp,	CMPL(t) (char **)ctl_nppp, ssctl, ctlhandler,	1, 0, 1 },
+	{ "ifstate",	ifstatehelp,	CMPL(t) (char **)ctl_ifstate, ssctl, ctlhandler, 1, 0, 1 },
+	{ "ftp-proxy",  ftpproxyhelp,	CMPL(t) (char **)ctl_ftpproxy, ssctl, ctlhandler,  1, 0, 1 },
+	{ "tftp-proxy",	tftpproxyhelp,	CMPL(t) (char **)ctl_tftpproxy, ssctl, ctlhandler, 1, 0, 1 },
+	{ "tftp",	tftphelp,	CMPL(t) (char **)ctl_tftp, ssctl, ctlhandler,	1, 0, 1 },
+	{ "dns",	dnshelp,	CMPL(t) (char **)ctl_dns, ssctl, ctlhandler,	1, 0, 1 },
+	{ "inet",	inethelp,	CMPL(t) (char **)ctl_inet, ssctl, ctlhandler,	1, 0, 1 },
+	{ "ping",	pinghelp,	CMPL0 0, 0, ping,	0, 0, 0 },
+	{ "ping6",	ping6help,	CMPL0 0, 0, ping6,	0, 0, 0 },
+	{ "traceroute", tracerthelp,	CMPL0 0, 0, traceroute,	0, 0, 0 },
+	{ "traceroute6", tracert6help,  CMPL0 0, 0, traceroute6, 0, 0, 0 },
+	{ "ssh",	sshhelp,	CMPL0 0, 0, ssh,	0, 0, 0 },
+	{ "telnet",	telnethelp,	CMPL0 0, 0, telnet,	0, 0, 0 },
+	{ "reboot",	nreboothelp,	CMPL0 0, 0, nreboot,	1, 0, 0 },
+	{ "halt",	halthelp,	CMPL0 0, 0, halt,	1, 0, 0 },
+	{ "write-config", savehelp,	CMPL0 0, 0, wr_startup,	1, 0, 0 },
+	{ "verbose",	verbosehelp,	CMPL0 0, 0, doverbose,	0, 1, 0 },
+	{ "editing",	editinghelp,	CMPL0 0, 0, doediting,	0, 1, 0 },
+	{ "who",	whohelp,	CMPL0 0, 0, who,	0, 0, 0 },
+	{ "!",		shellhelp,	CMPL0 0, 0, shell,	1, 0, 0 },
+	{ "?",		helphelp,	CMPL(C) 0, 0, help,	0, 0, 0 },
+	{ "quit",	quithelp,	CMPL0 0, 0, quit,	0, 0, 0 },
+	{ "help",	0,		CMPL(C) 0, 0, help,	0, 0, 0 },
+	{ 0,		0,		CMPL0 0, 0, 0,		0, 0, 0 }
 };
 
 /*
@@ -841,8 +841,8 @@ Command cmdtab[] = {
  */
 
 static Command  cmdtab2[] = {
-	{ "config",	0,		CMPL0 0, 0, notvalid,	0, 0, 0, 0 },
-	{ 0,		0,		CMPL0 0, 0, 0,		0, 0, 0, 0 }
+	{ "config",	0,		CMPL0 0, 0, notvalid,	0, 0, 0 },
+	{ 0,		0,		CMPL0 0, 0, 0,		0, 0, 0 }
 };
 
 Command *
@@ -990,10 +990,6 @@ command()
 			printf("%% Privilege required\n");
 			continue;
 		}
-		if (c->ignoreifpriv == 1 && priv == 1) {
-			printf("%% Command invalid while privileged\n");
-			continue;
-		}
 		if (c->modh)
 			strlcpy(hname, c->name, HSIZE);	
 		if ((*c->handler) (margc, margv, 0)) {
@@ -1016,14 +1012,11 @@ help(int argc, char **argv)
 		printf("%% Commands may be abbreviated.\n");
 		printf("%% Commands are:\n\n");
 
+		for (c = cmdtab; c->name; c++)
+			if (c->needpriv == priv && strlen(c->name) > z)
+				z = strlen(c->name);
 		for (c = cmdtab; c->name; c++) {
-			if ((c->needpriv == priv) || (c->ignoreifpriv != priv))
-				if (strlen(c->name) > z)
-					z = strlen(c->name);
-		}
-		for (c = cmdtab; c->name; c++) {
-			if (c->help && ((c->needpriv == priv) ||
-			    (c->ignoreifpriv != priv)))
+			if (c->help && (c->needpriv == priv))
 				printf("  %-*s  %s\n", z, c->name, c->help);
 		}
 		return 0;

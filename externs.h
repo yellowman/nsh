@@ -235,7 +235,6 @@ typedef struct cmd {
 	int stlen;		/* struct length (for rows in next table) */
 	int (*handler) ();	/* routine which executes command */
 	int needpriv;		/* Do we need privilege to execute? */   
-	int ignoreifpriv;	/* Ignore while privileged? */
 	int nocmd;		/* Can we specify 'no ...command...'? */
 	int modh;		/* Is it a mode handler for cmdrc()? */
 } Command;
