@@ -1578,7 +1578,7 @@ cmdrc(char rcname[FILENAME_MAX])
 		makeargv();
 		if (margv[0] == 0)
 			continue;
-		if (line[0] == ' ' && savec && savec->modh < 1) {
+		if (line[0] == ' ' && (!savec || savec->modh < 1)) {
 			printf("%% No mode handler specified before"
 			    " indented command? (line %u) ", lnum);
 			p_argv(margc, margv);
