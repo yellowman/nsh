@@ -1213,9 +1213,30 @@ traceroute6(int argc, char *argv[])
 }
 
 int
+argvtostring(int argc, char **argv, char *string, int strlen)
+{
+	int i, j;
+
+	for (i = 0, j = 0; argc && i < (strlen - 1); i++) {
+		if (argv[0][j] == '\0') {
+			argc--;
+			argv++;
+			string[i] = ' ';
+			j = 0;
+			continue;
+		}
+		string[i] = argv[0][j];
+		j++;
+	}
+	string[i] = '\0';
+
+	return i;
+}
+
+int
 rtable(int argc, char **argv)
 {
-	int table, set, i, j;
+	int table, set, pos;
 	const char *errstr;
 	char rtname[64];
 	StringList *resp;
@@ -1239,27 +1260,17 @@ rtable(int argc, char **argv)
 		return 1;
 	}
 
-	/* Convert remaining argv [name] back to string */
 	argc -= 2;
 	argv += 2;
-	for (i = 0, j = 0; argc && i < (sizeof(rtname) - 1); i++) {
-		if (argv[0][j] == '\0') {
-			argc--;
-			argv++;
-			rtname[i] = ' ';
-			j = 0;
-			continue;
-		}
-		rtname[i] = argv[0][j];
-		j++;
-	}
-	rtname[i] = '\0';
+
+	/* Convert any remaining argv (name) back to string */
+	pos = argvtostring(argc, argv, rtname, sizeof(rtname));
 
 	/*
 	 * Only delete/insert to the database if the name is specified, or
 	 * when name is not specified and database has no prior entry
 	 */
-	if (i == 0) {
+	if (pos == 0) {
 		/* no name specified */
 		resp = sl_init();
 		if (db_select_rtables_rtable(resp, table) < 0)
@@ -1272,11 +1283,14 @@ rtable(int argc, char **argv)
 		}
 		sl_free(resp, 1);
 	}
-	if (db_delete_rtables_rtable(table) < 0)
+	if (db_delete_rtables_rtable(table) < 0) {
 		printf("%% rtable db removal error\n");
+		/* not a fatal error */
+	}
 	if (set) {
 		if (db_insert_rtables(table, rtname) < 0) {
 			printf("%% rtable db insertion error\n");
+			return 0;
 		}
 		cli_rtable = table;
 	} else {

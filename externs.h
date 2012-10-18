@@ -216,6 +216,7 @@ void flag_x(char *, int *, char *);
 #define DHCPDB          "/var/db/dhcpd.leases"
 void command(void);
 char **step_optreq(char **, char **, int, char **, int);
+int argvtostring(int, char **, char *, int);
 int cmdrc(char rcname[FILENAME_MAX]);
 int cmdargs(char *, char **);
 char *iprompt(void);

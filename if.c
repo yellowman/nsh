@@ -1765,7 +1765,7 @@ intrdomain(char *ifname, int ifs, int argc, char **argv)
 int
 intdesc(char *ifname, int ifs, int argc, char **argv)
 {
-	int set, i;
+	int set;
 	char desc[IFDESCRSIZE];
 	struct ifreq ifr;
 
@@ -1785,10 +1785,7 @@ intdesc(char *ifname, int ifs, int argc, char **argv)
 		return(0);
 	}
 
-	for (i = 0; (set && i < argc); i++) {
-		snprintf(desc, sizeof(desc), "%s%s%s", i == 0 ? "" : desc,
-		    i != 0 ? " " : "", argv[i]);
-	}
+	argvtostring(argc, argv, desc, sizeof(desc));
 
 	if (set)
 		ifr.ifr_data = (caddr_t)&desc;
