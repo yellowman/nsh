@@ -485,8 +485,10 @@ ctlhandler(int argc, char **argv, char *modhvar)
 		return 0;
 	}
 
-	if (cli_rtable > daemons->rtablemax)
-		printf("%% Command %s not available at rtable %d\n", daemons->name, cli_rtable);
+	if (cli_rtable > daemons->rtablemax) {
+		printf("%% Command %s not available via rtable %d\n", daemons->name, cli_rtable);
+		return 0;
+	}
 
 	if (modhvar) {
 		/* action specified or indented command specified */
