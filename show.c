@@ -132,7 +132,7 @@ p_rttables(int af, u_int tableid, int flags)
 	struct sockaddr *sa;
 	struct rtdump *rtdump;
 
-	rtdump = getrtdump(0, flags, tableid);
+	rtdump = getrtdump(af, flags, tableid);
 
 	if (rtdump) {
 		for (next = rtdump->buf; next < rtdump->lim; next += rtm->rtm_msglen) {

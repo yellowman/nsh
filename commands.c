@@ -90,6 +90,7 @@ static int	doediting(int, char**);
 int		rtable(int, char**);
 int		group(int, char**);
 static int	pr_routes(int, char **);
+static int	pr_routes6(int, char **);
 static int	pr_arp(int, char **);
 static int	pr_sadb(int, char **);
 static int	pr_kernel(int, char **);
@@ -155,7 +156,8 @@ quit(void)
 Menu showlist[] = {
 	{ "hostname",	"Router hostname",	CMPL0 0, 0, 0, 0, show_hostname },
 	{ "interface",	"Interface config",	CMPL(i) 0, 0, 0, 1, show_int },
-	{ "route",	"IP route table or route lookup", CMPL0 0, 0, 0, 1, pr_routes },
+	{ "route",	"IPv4 route table or route lookup", CMPL0 0, 0, 0, 1, pr_routes },
+	{ "route6",	"IPv6 route table or route lookup", CMPL0 0, 0, 0, 1, pr_routes6 },
 	{ "sadb",	"Security Association Database", CMPL0 0, 0, 0, 0, pr_sadb },
 	{ "arp",	"ARP table",		CMPL0 0, 0, 0, 1, pr_arp },
 	{ "kernel",	"Kernel statistics",	CMPL(ta) (char **)stts, sizeof(struct stt), 0, 1, pr_kernel },
@@ -1858,6 +1860,23 @@ pr_routes(int argc, char **argv)
 	case 2:
 		/* show primary routing table */
 		p_rttables(AF_INET, cli_rtable, 0);
+		break;
+	case 3:
+		/* show a specific route */
+		show_route(argv[2], cli_rtable);
+		break;
+	}
+
+	return 0;
+}
+
+int
+pr_routes6(int argc, char **argv)
+{
+	switch(argc) {
+	case 2:
+		/* show primary routing table */
+		p_rttables(AF_INET6, cli_rtable, 0);
 		break;
 	case 3:
 		/* show a specific route */
