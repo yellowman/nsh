@@ -1071,22 +1071,23 @@ int show_hostname(int argc, char **argv)
 int
 nsh_setrtable(int rtableid)
 {
-	int cur_rtable, rv = 0;
+	int cur_rtable;
+	errno = 0;
 
 	cur_rtable = getrtable();
-	if (cur_rtable != rtableid && (rv = setrtable(rtableid)) != 0)
-		switch(rv) {
+	if (cur_rtable != rtableid && setrtable(rtableid) < 0)
+		switch(errno) {
 		case EINVAL:
-			printf("%% rtable %d not created in kernel\n",
+			printf("%% rtable %d not initialized\n",
 			    cli_rtable);
 			break;
 		case EPERM:
 			printf("%% nsh not running as root?\n");
 			break;
 		default:
-			printf("%% setrtable failed: %d\n", rv);
+			printf("%% setrtable failed: %d\n", errno);
 		}
-	return(rv);
+	return(errno);
 }
 
 /*
