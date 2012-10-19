@@ -97,10 +97,8 @@ enable(int argc, char **argv)
 	switch (argc) {
 
 	case 1:
-		if (priv == 1) {
-			printf("%% Command invalid while privileged\n");
+		if (priv == 1)
 			return 0;
-		}
 
 		/* try to read pass */
 		if (!(read_pass(pass, sizeof(pass)))) {
