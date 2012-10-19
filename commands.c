@@ -1585,6 +1585,8 @@ cmdrc(char rcname[FILENAME_MAX])
 			continue;
 		if (line[0] == '!')
 			continue;
+		if (line[0] == ' ' && line[1] == "!")
+			continue;
 		if (line[0] == ' ')
 			strlcpy(saveline, line, sizeof(line));
 		makeargv();
