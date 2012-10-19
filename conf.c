@@ -250,20 +250,26 @@ void conf_rtables_rtable(FILE *output, int rtableid)
 		fprintf(output, "rtable %d %s\n", rtableid,
 		    rtable_name->sl_str[0]);
 
+	/*
+	 * Routes must be printed before we attempt to start daemons,
+	 * else rtables will not be created in the kernel (Unless an
+	 * rdomain is created by specifing one on an interface prior
+	 * to this point. An rdomain creates a new corresponding rtable)
+	 */
+	conf_routes(output, " arp ", AF_LINK, RTF_STATIC, rtableid);
+	conf_routes(output, " route ", AF_INET, RTF_STATIC, rtableid);
+	conf_routes(output, " route ", AF_INET6, RTF_STATIC, rtableid);
+
 	if (db_select_flag_x_ctl_rtable(rtable_daemons, "ctl", rtableid) < 0)
 		printf("%% database failure select ctl rtable\n");
 	else
 		for (i = 0; i < rtable_daemons->sl_cur; i++)
 			conf_ctl(output, " ", rtable_daemons->sl_str[i], rtableid);
 
-	conf_routes(output, " arp ", AF_LINK, RTF_STATIC, rtableid);
-	conf_routes(output, " route ", AF_INET, RTF_STATIC, rtableid);
-	conf_routes(output, " route ", AF_INET6, RTF_STATIC, rtableid);
-
-	fprintf(output, "!\n");
-
 	sl_free(rtable_daemons, 1);
 	sl_free(rtable_name, 1);
+
+	fprintf(output, "!\n");
 }
 
 void conf_ctl(FILE *output, char *delim, char *name, int rtableid)
@@ -1083,16 +1089,12 @@ conf_print_rtm(FILE *output, struct rt_msghdr *rtm, char *delim, int af)
 {
 	int i;
 	char *cp;
-	char tablename[16];
 	struct sockaddr *dst = NULL, *gate = NULL, *mask = NULL;
 	struct sockaddr *sa;
 	struct sockaddr_in sin;
 
 	sin.sin_addr.s_addr = htonl(INADDR_BROADCAST);
 
-	tablename[0] = '\0';
-	if (rtm->rtm_tableid > 0)
-		snprintf(tablename, sizeof(tablename), "table %i ", rtm->rtm_tableid);
 	cp = ((char *)rtm + rtm->rtm_hdrlen);
 	for (i = 1; i; i <<= 1)
 		if (i & rtm->rtm_addrs) {
@@ -1121,13 +1123,12 @@ conf_print_rtm(FILE *output, struct rt_msghdr *rtm, char *delim, int af)
 		 * v4 route and dhcp (dhclient) is enabled
 		 */
 		if (!(isdefaultroute4(dst) && dhclient_isenabled(routename(gate)))) {
-			fprintf(output, "%s%s%s ", delim, tablename, mask ?
+			fprintf(output, "%s%s ", delim, mask ?
 			    netname(dst, mask) : netname(dst, (struct sockaddr *)&sin));
 			fprintf(output, "%s\n", routename(gate));
 		}
 	} else
 	if (dst && gate && (af == AF_LINK))
 		/* print arp */
-		fprintf(output, "%s%s%s %s\n", delim, tablename, routename(dst),
-		    routename(gate));
+		fprintf(output, "%s%s %s\n", delim, routename(dst), routename(gate));
 }
