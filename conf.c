@@ -64,7 +64,7 @@ void conf_rtables_rtable(FILE *, int);
 void conf_rdomain(FILE *, int, char *);
 void conf_ifmetrics(FILE *, int, struct if_data, char *);
 void conf_pflow(FILE *, int, char *);
-void conf_ctl(FILE *, char *, char *);
+void conf_ctl(FILE *, char *, char *, int);
 void conf_intrtlabel(FILE *, int, char *);
 void conf_intgroup(FILE *, int, char *);
 void conf_keepalive(FILE *, int, char *);
@@ -136,7 +136,7 @@ conf(FILE *output)
 			    " %s\n", strerror(errno));
 	}
 	fprintf(output, "!\n");
-	conf_ctl(output, "", "dns");
+	conf_ctl(output, "", "dns", 0);
 
 	/*
 	 * start all intefaces not listed in 'latestartifs'
@@ -183,32 +183,32 @@ conf(FILE *output)
 	conf_interfaces(output, "bridge");
 
 	fprintf(output, "!\n");
-	conf_ctl(output, "", "pf");
+	conf_ctl(output, "", "pf", 0);
 
 	/*
 	 * this interface must start after pf is loaded
 	 */
 	conf_interfaces(output, "pfsync");
 
-	conf_ctl(output, "", "snmp");
-	conf_ctl(output, "", "ldp");
-	conf_ctl(output, "", "rip");
-	conf_ctl(output, "", "ospf");
-	conf_ctl(output, "", "ospf6");
-	conf_ctl(output, "", "bgp");
-	conf_ctl(output, "", "ifstate");
-	conf_ctl(output, "", "ipsec");
-	conf_ctl(output, "", "ike");
-	conf_ctl(output, "", "dvmrp");
-	conf_ctl(output, "", "relay");
-	conf_ctl(output, "", "sasync");
-	conf_ctl(output, "", "dhcp");
-	conf_ctl(output, "", "ntp");
-	conf_ctl(output, "", "smtp");
-	conf_ctl(output, "", "ldap");
-	conf_ctl(output, "", "ftp-proxy");
-	conf_ctl(output, "", "inet");
-	conf_ctl(output, "", "sshd");
+	conf_ctl(output, "", "snmp", 0);
+	conf_ctl(output, "", "ldp", 0);
+	conf_ctl(output, "", "rip", 0);
+	conf_ctl(output, "", "ospf", 0);
+	conf_ctl(output, "", "ospf6", 0);
+	conf_ctl(output, "", "bgp", 0);
+	conf_ctl(output, "", "ifstate", 0);
+	conf_ctl(output, "", "ipsec", 0);
+	conf_ctl(output, "", "ike", 0);
+	conf_ctl(output, "", "dvmrp", 0);
+	conf_ctl(output, "", "relay", 0);
+	conf_ctl(output, "", "sasync", 0);
+	conf_ctl(output, "", "dhcp", 0);
+	conf_ctl(output, "", "ntp", 0);
+	conf_ctl(output, "", "smtp", 0);
+	conf_ctl(output, "", "ldap", 0);
+	conf_ctl(output, "", "ftp-proxy", 0);
+	conf_ctl(output, "", "inet", 0);
+	conf_ctl(output, "", "sshd", 0);
 
 	conf_rtables(output);
 
@@ -221,7 +221,11 @@ void conf_rtables(FILE *output)
 	StringList *rtables;
 
 	rtables = sl_init();
-	db_select_rtable_rtables(rtables);
+	if (db_select_rtable_rtables(rtables) < 0) {
+		printf("%% database failure select rtables rtable\n");
+		sl_free(rtables, 1);
+		return;
+	}
 	for (i = 0; i < rtables->sl_cur; i++) {
 		rtableid = atoi(rtables->sl_str[i]);
 		if (rtableid == 0)
@@ -240,12 +244,17 @@ void conf_rtables_rtable(FILE *output, int rtableid)
 	rtable_name = sl_init();
 	rtable_daemons = sl_init();
 
-	db_select_name_rtable(rtable_name, rtableid);
-	fprintf(output, "rtable %d %s\n", rtableid, rtable_name->sl_str[0]);
+	if (db_select_name_rtable(rtable_name, rtableid) < 0)
+		printf("%% database failure select rtables name\n");
+	else
+		fprintf(output, "rtable %d %s\n", rtableid,
+		    rtable_name->sl_str[0]);
 
-	db_select_daemon_rtable(rtable_daemons, rtableid);
-	for (i = 0; i < rtable_daemons->sl_cur; i++)
-		conf_ctl(output, " ", rtable_daemons->sl_str[i]);
+	if (db_select_flag_x_ctl_rtable(rtable_daemons, "ctl", rtableid) < 0)
+		printf("%% database failure select ctl rtable\n");
+	else
+		for (i = 0; i < rtable_daemons->sl_cur; i++)
+			conf_ctl(output, " ", rtable_daemons->sl_str[i], rtableid);
 
 	conf_routes(output, " arp ", AF_LINK, RTF_STATIC, rtableid);
 	conf_routes(output, " route ", AF_INET, RTF_STATIC, rtableid);
@@ -257,18 +266,14 @@ void conf_rtables_rtable(FILE *output, int rtableid)
 	sl_free(rtable_name, 1);
 }
 
-void conf_ctl(FILE *output, char *delim, char *name)
+void conf_ctl(FILE *output, char *delim, char *name, int rtableid)
 {
 	FILE *conf;
-	struct stat enst;
 	struct daemons *x;
 	struct ctl *ctl;
 	char tmp_str[TMPSIZ];
-	char fenabled[SIZE_CONF_TEMP + sizeof(".enabled") + 1],
-	    *fenablednm = NULL;
-	char flocal[SIZE_CONF_TEMP + sizeof(".local") + 1], *flocalnm = NULL;
-	char fother[SIZE_CONF_TEMP + sizeof(".other") + 1], *fothernm = NULL;
-	int pntdrules = 0, pntdflag = 0;
+	char *fenablednm = NULL, *fothernm = NULL, *flocalnm = NULL;
+	int pntdrules = 0, pntdflag = 0, dbflag;
 
 	x = (struct daemons *)genget(name, (char **)ctl_daemons,
 	    sizeof(struct daemons));
@@ -293,7 +298,6 @@ void conf_ctl(FILE *output, char *delim, char *name)
 	} else if (errno != ENOENT || (errno != ENOENT && verbose))
 		printf("%% conf_ctl: %s: %s\n", x->tmpfile, strerror(errno));
 
-	/* grab names from ctl struct for X_LOCAL, X_OTHER, X_ENABLE funcs */
 	for (ctl = x->table; ctl != NULL && ctl->name != NULL; ctl++) {
 		if (ctl->flag_x == X_LOCAL)
 			flocalnm = ctl->name;
@@ -303,27 +307,32 @@ void conf_ctl(FILE *output, char *delim, char *name)
 			fenablednm = ctl->name;
 	}
 
-	snprintf(fenabled, sizeof(fenabled), "%s.enabled", x->tmpfile);
-	snprintf(flocal, sizeof(flocal), "%s.local", x->tmpfile);
-	snprintf(fother, sizeof(fother), "%s.other", x->tmpfile);
-
-	/*
-	 * if a function has the X_LOCAL, X_OTHER or X_ENABLE flags set,
-	 * save it in the config
-	 */
-	if (fenablednm && stat(fenabled, &enst) == 0 && S_ISREG(enst.st_mode)) {
-		fprintf(output, "%s%s %s\n", delim, x->name, fenablednm);
-		pntdflag = 1;
+	if ((dbflag = db_select_flag_x_dbflag_rtable("ctl", x->name, rtableid))
+	    < 0) {
+		printf("%% database ctl select failure (%s, %d)\n", x->name, rtableid);
+		return;
 	}
-	if (flocalnm && stat(flocal, &enst) == 0 && S_ISREG(enst.st_mode)) {
-		fprintf(output, "%s%s %s\n", delim, x->name, flocalnm);
+	switch(dbflag) {
+	case DB_X_ENABLE:
+		fprintf(output, "%s%s %s\n", delim, x->name, fenablednm ?
+		    fenablednm : "enable");
 		pntdflag = 1;
-	}
-	if (fothernm && stat(fother, &enst) == 0 && S_ISREG(enst.st_mode)) {
-		fprintf(output, "%s%s %s\n", delim, x->name, fothernm);
+		break;
+	case DB_X_LOCAL:
+		fprintf(output, "%s%s %s\n", delim, x->name, flocalnm ?
+		    flocalnm : "local");
 		pntdflag = 1;
+		break;
+	case DB_X_OTHER:
+		fprintf(output, "%s%s %s\n", delim, x->name, fothernm ?
+		    fothernm : "other");
+		pntdflag = 1;
+		break;
+	case 0:
+		break;
+	default:
+		printf("%% conf_ctl dbflag %d unknown\n", dbflag);
 	}
-
 	if (pntdrules && x->doreload) {
 		fprintf(output, "%s%s reload\n", delim, x->name);
 		pntdflag = 1;
@@ -543,7 +552,7 @@ void conf_interfaces(FILE *output, char *only)
 			    sizeof(tmp)) == 1) 
 				fprintf(output, " timeslots %s\n", tmp);
 			if (conf_dhcrelay(ifnp->if_name, tmp, sizeof(tmp))
-			    != NULL)
+			    > 0)
 				fprintf(output, " dhcrelay %s\n", tmp);
 		}
 
@@ -578,22 +587,20 @@ void conf_interfaces(FILE *output, char *only)
 	if_freenameindex(ifn_list);
 }
 
-char *conf_dhcrelay(char *ifname, char *server, int serverlen)
+int conf_dhcrelay(char *ifname, char *server, int serverlen)
 {
-	FILE *file;
-	char fenabled[SIZE_CONF_TEMP + sizeof(".enabled")];
+	StringList *data;
+	int alen;
 
-	snprintf(fenabled, sizeof(fenabled), "/var/run/dhcrelay.%s.enabled", ifname);
+	data = sl_init();
+	if ((alen = db_select_flag_x_data_ctl_rtable(data, "dhcrelay", ifname, 0))
+	    > 0) {
+		strlcpy(server, data->sl_str[0], serverlen);
+		alen = strlen(data->sl_str[0]);
+	}
+	sl_free(data, 1);
 
-	if ((file = fopen(fenabled, "r")) == NULL)
-		return(NULL);
-
-	if (fgets(server, serverlen, file) == NULL)
-		return(NULL);
-
-	fclose(file);
-
-	return(server);
+	return(alen);
 }
 
 void conf_pflow(FILE *output, int ifs, char *ifname)

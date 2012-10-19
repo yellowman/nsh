@@ -41,7 +41,7 @@ extern HistEvent ev;		/* ev */
 int conf(FILE *);
 u_long default_mtu(char *);
 int conf_routes(FILE *, char *, int, int, int);
-char *conf_dhcrelay(char *, char *, int);
+int conf_dhcrelay(char *, char *, int);
 
 /* show.c */
 void p_rttables(int, u_int, int);
@@ -197,7 +197,7 @@ extern struct ctl ctl_tftp[];
 extern struct ctl ctl_dns[];
 extern struct ctl ctl_inet[];
 extern struct ctl ctl_ldap[];
-void flag_x(char *, int *, char *);
+void flag_x(char *, char *, int *, char *);
 
 /* commands.c */
 #define NOPTFILL	7
@@ -477,16 +477,22 @@ char *format_k(uint64_t amt);
 
 /* sqlite3.c */
 #define SQ3DBFILE "/var/run/nsh.db"
+#define DB_X_ENABLE 1
+#define DB_X_DISABLE 2
+#define DB_X_OTHER 3
+#define DB_X_LOCAL 4
 int db_create_table_rtables(void);
-int db_create_table_daemons(void);
-int db_insert_daemons(char *, int, char *);
+int db_create_table_flag_x(char *);
+int db_insert_flag_x(char *, char *, int, int, char *);
 int db_insert_rtables(int, char *);
 int db_delete_rtables_rtable(int);
-int db_delete_daemons_daemon(char *);
+int db_delete_flag_x(char *, char *);
 #ifdef _STRINGLIST_H
 int db_select_rtable_rtables(StringList *);
 int db_select_rtables_rtable(StringList *, int);
-int db_select_rtables_daemons(StringList *, char *);
+int db_select_rtables_ctl(StringList *, char *);
 int db_select_name_rtable(StringList *, int);
-int db_select_daemon_rtable(StringList *, int);
+int db_select_flag_x_ctl_rtable(StringList *, char *, int);
+int db_select_flag_x_data_ctl_rtable(StringList *, char *, char *, int);
 #endif
+int db_select_flag_x_dbflag_rtable(char *, char *, int);

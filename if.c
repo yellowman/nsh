@@ -1080,8 +1080,7 @@ int
 intdhcrelay(char *ifname, int ifs, int argc, char **argv)
 {
 	char *cmd[] = { DHCRELAY, "-i", ifname, NULL, '\0' };
- 	char fname[SIZE_CONF_TEMP];
-	int set;
+	int set, alen;
 
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -1099,22 +1098,21 @@ intdhcrelay(char *ifname, int ifs, int argc, char **argv)
 		return(0);
 	}
 
+	/* XXX validate argv[0] IP address */
 	cmd[3] = argv[0];
 
-	snprintf(fname, sizeof(fname), "/var/run/dhcrelay.%s", ifname);
-	
 	if (set) {
-		flag_x(fname, X_ENABLE, argv[0]);
+		flag_x("dhcrelay", ifname, X_ENABLE, argv[0]);
 		cmdargs(DHCRELAY, cmd);
 	} else {
 		char server[24], argue[SIZE_CONF_TEMP];
 		char *killcmd[] = { PKILL, "-xf", NULL, '\0' };
 
-		if (conf_dhcrelay(ifname, server, sizeof(server)) == NULL) {
-			if (errno == ENOENT)
+		if ((alen = conf_dhcrelay(ifname, server, sizeof(server))) < 1) {
+			if (alen == 0)
 				printf("%% No relay configured for %s\n", ifname);
 			else
-				printf("%% int_dhcrelay: conf_dhcrelay failed: %s\n", strerror(errno));
+				printf("%% int_dhcrelay: conf_dhcrelay failed: %d\n", alen);
 			return(0);
 		}
 
@@ -1124,8 +1122,7 @@ intdhcrelay(char *ifname, int ifs, int argc, char **argv)
 			return(0);
 		}
 
-		/* delete .enabled file */
-		flag_x(fname, X_DISABLE, NULL);
+		flag_x("dhcrelay", ifname, X_DISABLE, NULL);
 
 		/* setup argument list as one argument for pkill -xf */
 		snprintf(argue, sizeof(argue), "%s %s %s %s", cmd[0], cmd[1], cmd[2], server);

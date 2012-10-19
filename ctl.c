@@ -425,44 +425,33 @@ ctl_symlink(char *temp, char **z, char *real)
 	symlink(real,temp);
 }
 
-/* flag to other nsh sessions or nsh conf() that actions have been taken with parameter in text file*/
+/* flag to other nsh sessions or nsh conf() that actions have been taken */
 void
-flag_x(char *fname, int *y, char *data)
+flag_x(char *name, char *daemon, int *y, char *data)
 {
-	FILE *file;
-	char fenabled[SIZE_CONF_TEMP + sizeof(".enabled") + 1];
-	char fother[SIZE_CONF_TEMP + sizeof(".other") + 1];
-	char flocal[SIZE_CONF_TEMP + sizeof(".local") + 1];
+	int dbflag;
 
-	snprintf(fenabled, sizeof(fenabled), "%s.enabled", fname);
-	snprintf(fother, sizeof(fother), "%s.other", fname);
-	snprintf(flocal, sizeof(flocal), "%s.local", fname);
-
+	/* y == pointer abuse, stop the madness! */
 	if (y == X_ENABLE) {
-		if ((file = fopen(fenabled, "w")) == NULL)
-			return;
-		chmod(fenabled, 0600);
-		if (data)
-			fprintf(file, "%s", data);
-		fclose(file);
-	} else if (y == X_DISABLE) {
-		rmtemp(fenabled);
-	} else if (y == X_OTHER) {
-		rmtemp(flocal);
-		if ((file = fopen(fother, "w")) == NULL)
-			return;
-		chmod(fother, 0600);
-		if (data)
-			fprintf(file, "%s", data);
-		fclose(file);   
-	} else if (y == X_LOCAL) {
-		rmtemp(fother);
-		if ((file = fopen(flocal, "w")) == NULL)
-			return;
-		chmod(flocal, 0600);
-		if (data)
-			fprintf(file, "%s", data);
-		fclose(file);
+		dbflag = DB_X_ENABLE;
+	}
+	if (y == X_DISABLE) {
+		if (db_delete_flag_x(name, daemon) < 0)
+			printf("%% database delete failure ctl ctl\n");
+		return;
+	}
+	if (y == X_OTHER) {
+		dbflag = DB_X_OTHER;
+	}
+	if (y == X_LOCAL) {
+		dbflag = DB_X_LOCAL;
+	}
+	if (db_delete_flag_x(name, daemon) < 0) {
+		printf("%% database delete failure ctl ctl\n");
+		return;
+	}
+	if (db_insert_flag_x(name, daemon, cli_rtable, dbflag, data) < 0) {
+		printf("%% database insert failure ctl ctl\n");
 	}
 }
 
@@ -528,7 +517,7 @@ ctlhandler(int argc, char **argv, char *modhvar)
 		cmdargs(fillargs[0], fillargs);
 
 	if (x->flag_x != NULL)
-		flag_x(daemons->tmpfile, x->flag_x, NULL);
+		flag_x("ctl", daemons->name, x->flag_x, NULL);
 
 	return 1;
 }
@@ -595,7 +584,7 @@ acq_lock(char *fname)
 	 * some text editors lock (vi), some don't (mg)
 	 *
 	 * here we lock a separate, do-nothing file so we don't interfere
-	 * with the editors that do...
+	 * with the editors that do... (lock multiple concurrent nsh users)
 	 */
 	snprintf(lockf, sizeof(lockf), "%s.lock", fname);
 	if ((fd = open(lockf, O_RDWR | O_CREAT, 0600)) == -1)

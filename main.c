@@ -78,8 +78,13 @@ main(int argc, char *argv[])
 	argc -= optind;
 	argv += optind;
 
-	db_create_table_rtables();
-	db_create_table_daemons();
+	/* create temporal tables (if they aren't already there) */
+	if (db_create_table_rtables() < 0)
+		printf("%% database rtables creation failed\n");
+	if (db_create_table_flag_x("ctl") < 0)
+		printf("%% database ctl creation failed\n");
+	if (db_create_table_flag_x("dhcrelay") < 0)
+		printf("%% database dhcrelay creation failed\n");
 
 	printf("%% NSH v%s\n", vers);
 
