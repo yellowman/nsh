@@ -89,6 +89,7 @@ static int	doverbose(int, char**);
 static int	doediting(int, char**);
 int		rtable(int, char**);
 int		group(int, char**);
+static int	nsh_setrtable(int);
 static int	pr_routes(int, char **);
 static int	pr_routes6(int, char **);
 static int	pr_arp(int, char **);
@@ -1067,13 +1068,33 @@ int show_hostname(int argc, char **argv)
 	return 0;
 }
 
+int
+nsh_setrtable(int rtableid)
+{
+	int cur_rtable, rv = 0;
+
+	cur_rtable = getrtable();
+	if (cur_rtable != rtableid && (rv = setrtable(rtableid)) != 0)
+		switch(rv) {
+		case EINVAL:
+			printf("%% rtable %d not created in kernel\n",
+			    cli_rtable);
+			break;
+		case EPERM:
+			printf("%% nsh not running as root?\n");
+			break;
+		default:
+			printf("%% setrtable failed: %d\n", rv);
+		}
+	return(rv);
+}
+
 /*
  * Shell command.
  */
 int
 shell(int argc, char **argv)
 {
-	int cur_rtable;
 	sig_t sigint, sigquit, sigchld;
 
 	sigint = signal(SIGINT, SIG_IGN);
@@ -1091,13 +1112,8 @@ shell(int argc, char **argv)
 			signal(SIGINT, SIG_DFL);
 			signal(SIGCHLD, SIG_DFL);
 
-			cur_rtable = getrtable();
-			if (cur_rtable != cli_rtable &&
-			    setrtable(cli_rtable) != 0)
-				printf("%% unable to set rtable %d"
-				    " prior to execution (was %d)\n",
-				    cli_rtable, cur_rtable);
-
+			if (nsh_setrtable(cli_rtable))
+				_exit(0);
 			/*
 			 * Fire up the shell in the child.
 			 */
@@ -1369,7 +1385,6 @@ int
 cmdargs(char *cmd, char *arg[])
 {
 	sig_t sigint, sigquit, sigchld;
-	int cur_rtable;
 
 	sigint = signal(SIGINT, SIG_IGN);
 	sigquit = signal(SIGQUIT, SIG_IGN);
@@ -1388,12 +1403,8 @@ cmdargs(char *cmd, char *arg[])
 
 			char *shellp = cmd;
 
-			cur_rtable = getrtable();
-			if (cur_rtable != cli_rtable &&
-			    setrtable(cli_rtable) != 0)
-				printf("%% unable to set rtable %d" 
-				    " prior to execution (was %d)\n",
-				    cli_rtable, cur_rtable);
+			if (nsh_setrtable(cli_rtable))
+				_exit(0);
 
 			execv(shellp, arg);
 			printf("%% execv failed: %s\n", strerror(errno));
@@ -1585,8 +1596,6 @@ cmdrc(char rcname[FILENAME_MAX])
 			continue;
 		if (line[0] == '!')
 			continue;
-		if (line[0] == ' ' && line[1] == "!")
-			continue;
 		if (line[0] == ' ')
 			strlcpy(saveline, line, sizeof(line));
 		makeargv();
@@ -1601,6 +1610,8 @@ cmdrc(char rcname[FILENAME_MAX])
 		}
 		if (line[0] != ' ' || (line[0] == ' ' && savec
 		    && savec->modh == 2)) {
+			if (line[1] == '!')
+				continue;
 			/*
 			 * command was not indented, or indented for a mode 2
 			 * handler. process normally.
