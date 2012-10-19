@@ -780,7 +780,7 @@ static char
 Command cmdtab[] = {
 	{ "hostname",	hostnamehelp,	CMPL0 0, 0, hostname, 	1, 0, 0 },
 	{ "interface",	interfacehelp,	CMPL(i) 0, 0, interface, 1, 1, 1 },
-	{ "rtable",	rtablehelp,	CMPL0 0, 0, rtable,	1, 1, 2 },
+	{ "rtable",	rtablehelp,	CMPL0 0, 0, rtable,	0, 1, 2 },
 	{ "group",	grouphelp,	CMPL0 0, 0, group,	1, 1, 0 },
 	{ "arp",	arphelp,	CMPL0 0, 0, arpset,	1, 1, 0 },
 #ifdef notyet
@@ -1245,8 +1245,13 @@ rtable(int argc, char **argv)
 		argv++;
 		argc--;
 		set = 0;
-	} else
+		if (!priv) {
+			printf("%% Privilege required\n");
+			return 1;
+		}
+	} else {
 		set = 1;
+	}
 
 	if ((set && argc < 2) || (!set && argc > 2) || (!set && argc < 2)) {
 		printf("%% rtable <table id> [name]\n");
