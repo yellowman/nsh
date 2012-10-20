@@ -84,7 +84,7 @@ route(int argc, char **argv)
 			gate.family = AF_INET6;
 			break;
 		default:
-			printf("%% route: all hope lost/1\n");
+			printf("%% unknown gateway address family %d\n", dest.family);
 			return(1);
 		}
 	} else if (cmd == RTM_ADD) {
@@ -109,7 +109,7 @@ route(int argc, char **argv)
 		/* XXX invent check */
 		break;
 	default:
-		printf("%% route: all hope lost/2\n");
+		printf("%% unknown destination address family %d\n", dest.family);
 		return(1);
 	}
 

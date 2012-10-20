@@ -754,7 +754,7 @@ intip(char *ifname, int ifs, int argc, char **argv)
 			return(0);
 			break;
 		default:
-			printf("%% dismal failure\n");
+			printf("%% unknown address family: %d\n", ip.family);
 			return(0);
 			break;
 		}
@@ -821,7 +821,7 @@ intip(char *ifname, int ifs, int argc, char **argv)
 		close(s);
 		break;
 	default:
-		printf("%% dismal failure\n");
+		printf("%% unknown address family: %d\n", ip.family);
 		break;
 	}
 	return(0);
