@@ -1253,7 +1253,7 @@ argvtostring(int argc, char **argv, char *string, int strlen)
 int
 rtable(int argc, char **argv)
 {
-	int table, set, pos;
+	int table, set, pos, found;
 	const char *errstr;
 	char rtname[64];
 	StringList *resp;
@@ -1262,6 +1262,7 @@ rtable(int argc, char **argv)
 		argv++;
 		argc--;
 		set = 0;
+		/* Disallow unprivileged users from removing an rtable */
 		if (!priv) {
 			printf("%% Privilege required\n");
 			return 1;
@@ -1288,31 +1289,40 @@ rtable(int argc, char **argv)
 	/* Convert any remaining argv (name) back to string */
 	pos = argvtostring(argc, argv, rtname, sizeof(rtname));
 
+	resp = sl_init();
+	if (db_select_rtables_rtable(resp, table) < 0)
+		printf("%% rtable select error\n");
+	found = resp->sl_cur;
+	sl_free(resp, 1);
+
 	/*
-	 * Only delete/insert to the database if the name is specified, or
-	 * when name is not specified and database has no prior entry
+	 * Disallow unprivileged users from adding a new
+	 * rtable to the database or specifying a name
+	 * (thus changing the database).
 	 */
-	if (pos == 0) {
-		/* no name specified */
-		resp = sl_init();
-		if (db_select_rtables_rtable(resp, table) < 0)
-			printf("%% rtable select error\n");
-		if (resp->sl_cur > 0) {
-			/* table found, set cli_rtable and go home */
-			sl_free(resp, 1);
-			cli_rtable = table;
-			return 0;
-		}
-		sl_free(resp, 1);
+	if ((!found || pos) && !priv) {
+		printf("%% Privilege required\n");
+		return 1;
+	}
+
+	if (set && (found && !pos)) {
+		/* Table found, skip database action */
+		cli_rtable = table;
+		return 0;
+	}
+	if (!set && !found) {
+		printf("%% rtable %d does not exist in database\n",
+		    table);
+		return 1;
 	}
 	if (db_delete_rtables_rtable(table) < 0) {
 		printf("%% rtable db removal error\n");
-		/* not a fatal error */
+		return 1;
 	}
 	if (set) {
 		if (db_insert_rtables(table, rtname) < 0) {
 			printf("%% rtable db insertion error\n");
-			return 0;
+			return 1;
 		}
 		cli_rtable = table;
 	} else {
