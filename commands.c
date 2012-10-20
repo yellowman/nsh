@@ -1236,8 +1236,7 @@ argvtostring(int argc, char **argv, char *string, int strlen)
 
 	for (i = 0, j = 0; argc && i < (strlen - 1); i++) {
 		if (argv[0][j] == '\0') {
-			argc--;
-			argv++;
+			argc--, argv++;
 			string[i] = ' ';
 			j = 0;
 			continue;
@@ -1245,7 +1244,7 @@ argvtostring(int argc, char **argv, char *string, int strlen)
 		string[i] = argv[0][j];
 		j++;
 	}
-	string[i] = '\0';
+	string[i - 1] = '\0';
 
 	return i;
 }
