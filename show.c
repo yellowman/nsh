@@ -646,7 +646,6 @@ netname6(struct sockaddr_in6 *sa6, struct sockaddr_in6 *mask)
 		for (p = (u_char *)&mask->sin6_addr, i = 0; i < lim; p++) {
 			if (final && *p) {
 				illegal++;
-				sin6.sin6_addr.s6_addr[i++] = 0x00;
 				continue;
 			}
 
@@ -691,23 +690,13 @@ netname6(struct sockaddr_in6 *sa6, struct sockaddr_in6 *mask)
 				break;
 			}
 
-			if (!illegal)
-				sin6.sin6_addr.s6_addr[i++] &= *p;
-			else
-				sin6.sin6_addr.s6_addr[i++] = 0x00;
+			i++;
 		}
-		while (i < (int)sizeof(struct in6_addr))
-			sin6.sin6_addr.s6_addr[i++] = 0x00;
 	} else
 		masklen = 128;
 
-#ifdef notyet
-	if (masklen == 0 && IN6_IS_ADDR_UNSPECIFIED(&sin6.sin6_addr))
-		return ("default");
-#endif
-
 	if (illegal)
-		warnx("illegal prefixlen");
+		printf("%% netname6: illegal prefixlen\n");
 
 	flag |= NI_NUMERICHOST;
 	error = getnameinfo((struct sockaddr *)&sin6, sin6.sin6_len,
