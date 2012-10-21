@@ -857,12 +857,12 @@ int conf_ifaddrs(FILE *output, char *ifname, int flags)
 				    sinmask.sin_addr.s_addr))
 					fprintf(output, " %s",
 					    inet_ntoa(sindest.sin_addr));
+			} else {
+				fprintf(output, " ip %s",
+				    netname4(sin.sin_addr.s_addr, &sinmask));
 			}
 			break;
 		case AF_INET6:
-			fprintf(output, " ip %s",
-			    netname6(&sin6, &sin6mask));
-
 			if (flags & IFF_POINTOPOINT) {
 				char inet6n[INET6_ADDRSTRLEN];
 				fprintf(output, " ip %s",
@@ -874,7 +874,7 @@ int conf_ifaddrs(FILE *output, char *ifname, int flags)
 				    sizeof(struct sockaddr_in6));
 				fprintf(output, " %s", inet_ntop(AF_INET6,
 				    &sin6dest.sin6_addr, inet6n, sizeof(inet6n)));
-			} else if (flags & IFF_BROADCAST) {
+			} else {
 				fprintf(output, " ip %s",
 				    netname6(&sin6, &sin6mask));
 			}

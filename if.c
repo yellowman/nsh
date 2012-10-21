@@ -689,7 +689,7 @@ intip(char *ifname, int ifs, int argc, char **argv)
 		/* bad IP specified */
 		return(0);
 
-	if (set && ip.bitlen == -1) {
+	if (set && flags & IFF_BROADCAST && ip.bitlen == -1) {
 		printf("%% Netmask not specified\n");
 		return(0);
 	}
@@ -724,6 +724,8 @@ intip(char *ifname, int ifs, int argc, char **argv)
 		sin = (struct sockaddr_in *)&ip4req.ifra_mask;
 		sin->sin_family = AF_INET; 
 		sin->sin_len = sizeof(struct sockaddr_in);
+		if (ip.bitlen == -1)
+			ip.bitlen = 0;
 		sin->sin_addr.s_addr = htonl(0xffffffff << (32 - ip.bitlen));
 		/* set destination/broadcast address */
 		if (argc == 2) {
@@ -750,6 +752,8 @@ intip(char *ifname, int ifs, int argc, char **argv)
 		sin6 = (struct sockaddr_in6 *)&ip6req.ifra_prefixmask;
 		sin6->sin6_family = AF_INET6;
 		sin6->sin6_len = sizeof(struct sockaddr_in6);
+		if (ip.bitlen == -1)
+			ip.bitlen = 0;
 		prefixlen(ip.bitlen, sin6);
 		/* set infinite lifetime */
 		ip6req.ifra_lifetime.ia6t_pltime = ND6_INFINITE_LIFETIME;
@@ -1057,7 +1061,7 @@ intdhcrelay(char *ifname, int ifs, int argc, char **argv)
 	cmd[3] = argv[0];
 
 	if (set) {
-		flag_x("dhcrelay", ifname, X_ENABLE, argv[0]);
+		flag_x("dhcrelay", ifname, DB_X_ENABLE, argv[0]);
 		cmdargs(DHCRELAY, cmd);
 	} else {
 		char server[24], argue[SIZE_CONF_TEMP];
@@ -1077,7 +1081,7 @@ intdhcrelay(char *ifname, int ifs, int argc, char **argv)
 			return(0);
 		}
 
-		flag_x("dhcrelay", ifname, X_DISABLE, NULL);
+		flag_x("dhcrelay", ifname, DB_X_DISABLE, NULL);
 
 		/* setup argument list as one argument for pkill -xf */
 		snprintf(argue, sizeof(argue), "%s %s %s %s", cmd[0], cmd[1], cmd[2], server);
