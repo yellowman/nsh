@@ -433,7 +433,7 @@ flag_x(char *name, char *daemon, int dbflag, char *data)
 		printf("%% database delete failure ctl ctl\n");
 		return;
 	}
-	if (dbflag == DB_X_DISABLE)
+	if (dbflag == DB_X_REMOVE)
 		return;
 	if (db_insert_flag_x(name, daemon, cli_rtable, dbflag, data) < 0) {
 		printf("%% database insert failure ctl ctl\n");

@@ -1081,7 +1081,7 @@ intdhcrelay(char *ifname, int ifs, int argc, char **argv)
 			return(0);
 		}
 
-		flag_x("dhcrelay", ifname, DB_X_DISABLE, NULL);
+		flag_x("dhcrelay", ifname, DB_X_REMOVE, NULL);
 
 		/* setup argument list as one argument for pkill -xf */
 		snprintf(argue, sizeof(argue), "%s %s %s %s", cmd[0], cmd[1], cmd[2], server);
