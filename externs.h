@@ -476,6 +476,7 @@ char *format_k(uint64_t amt);
 #define DB_X_DISABLE 2
 #define DB_X_LOCAL 3
 #define DB_X_OTHER 4
+#define DB_X_REMOVE 5
 int db_create_table_rtables(void);
 int db_create_table_flag_x(char *);
 int db_insert_flag_x(char *, char *, int, int, char *);
