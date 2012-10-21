@@ -130,11 +130,6 @@ extern char metricnames[];
 #define SMTPCONF_TEMP 	"/var/run/smtpd.conf"
 #define LDAPCONF_TEMP	"/var/run/ldapd.conf"
 #define IFSTATECONF_TEMP "/var/run/ifstated.conf"
-/* flag_x flags */
-#define X_ENABLE  (void *)1
-#define X_DISABLE (void *)2
-#define X_LOCAL	  (void *)3
-#define X_OTHER   (void *)4
 /* argument list replacement */
 #define OPT     (void *)1
 #define REQ     (void *)2
@@ -161,7 +156,7 @@ struct ctl {
 	char *help;
 	char *args[32];
 	void (*handler)();
-	int *flag_x;
+	int flag_x;
 };
 struct daemons {
         char *name;
@@ -197,7 +192,7 @@ extern struct ctl ctl_tftp[];
 extern struct ctl ctl_dns[];
 extern struct ctl ctl_inet[];
 extern struct ctl ctl_ldap[];
-void flag_x(char *, char *, int *, char *);
+void flag_x(char *, char *, int, char *);
 
 /* commands.c */
 #define NOPTFILL	7
@@ -479,8 +474,8 @@ char *format_k(uint64_t amt);
 #define SQ3DBFILE "/var/run/nsh.db"
 #define DB_X_ENABLE 1
 #define DB_X_DISABLE 2
-#define DB_X_OTHER 3
-#define DB_X_LOCAL 4
+#define DB_X_LOCAL 3
+#define DB_X_OTHER 4
 int db_create_table_rtables(void);
 int db_create_table_flag_x(char *);
 int db_insert_flag_x(char *, char *, int, int, char *);

@@ -64,328 +64,328 @@ void rls_lock(int);
 char *ctl_pf_test[] = { PFCTL, "-nf", PFCONF_TEMP, '\0' };
 struct ctl ctl_pf[] = {
 	{ "enable",	"enable service",
-	    { PFCTL, "-e", NULL }, NULL, X_ENABLE },
+	    { PFCTL, "-e", NULL }, NULL, DB_X_ENABLE },
 	{ "disable",	"disable service",
-	    { PFCTL, "-d", NULL }, NULL, X_DISABLE },
+	    { PFCTL, "-d", NULL }, NULL, DB_X_DISABLE },
 	{ "edit",	"edit configuration",
-	    { "pf", (char *)ctl_pf_test, NULL }, call_editor, NULL },
+	    { "pf", (char *)ctl_pf_test, NULL }, call_editor, 0 },
 	{ "reload",	"reload service",
-	    { PFCTL, "-f", PFCONF_TEMP, NULL }, NULL, NULL },
+	    { PFCTL, "-f", PFCONF_TEMP, NULL }, NULL, 0 },
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
 char *ctl_ospf_test[] = { OSPFD, "-nf", OSPFCONF_TEMP, '\0' };
 struct ctl ctl_ospf[] = {
 	{ "enable",     "enable service",
-	    { OSPFD, "-f", OSPFCONF_TEMP, NULL }, NULL, X_ENABLE },
+	    { OSPFD, "-f", OSPFCONF_TEMP, NULL }, NULL, DB_X_ENABLE },
 	{ "disable",    "disable service",
-	    { PKILL, "ospfd", NULL }, NULL, X_DISABLE },
+	    { PKILL, "ospfd", NULL }, NULL, DB_X_DISABLE },
 	{ "edit",       "edit configuration",
-	    { "ospf", (char *)ctl_ospf_test, NULL }, call_editor, NULL },
+	    { "ospf", (char *)ctl_ospf_test, NULL }, call_editor, 0 },
 	{ "reload",     "reload service",
-	    { OSPFCTL, "reload", NULL }, NULL, NULL },
+	    { OSPFCTL, "reload", NULL }, NULL, 0 },
 	{ "fib",        "fib couple/decouple",
-	    { OSPFCTL, "fib", REQ, NULL }, NULL, NULL },
+	    { OSPFCTL, "fib", REQ, NULL }, NULL, 0 },
 	{ "log",	"log brief/verbose",
-	    { OSPFCTL, "log", REQ, NULL }, NULL, NULL },
+	    { OSPFCTL, "log", REQ, NULL }, NULL, 0 },
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
 char *ctl_ospf6_test[] = { OSPF6D, "-nf", OSPF6CONF_TEMP, '\0' };
 struct ctl ctl_ospf6[] = {
 	{ "enable",     "enable service",
-	    { OSPF6D, "-f", OSPF6CONF_TEMP, NULL }, NULL, X_ENABLE },
+	    { OSPF6D, "-f", OSPF6CONF_TEMP, NULL }, NULL, DB_X_ENABLE },
 	{ "disable",    "disable service",
-	    { PKILL, "ospf6d", NULL }, NULL, X_DISABLE },
+	    { PKILL, "ospf6d", NULL }, NULL, DB_X_DISABLE },
 	{ "edit",       "edit configuration",
-	    { "ospf6", (char *)ctl_ospf6_test, NULL }, call_editor, NULL },
+	    { "ospf6", (char *)ctl_ospf6_test, NULL }, call_editor, 0 },
 	{ "reload",     "reload service",
-	    { OSPF6CTL, "reload", NULL }, NULL, NULL },
+	    { OSPF6CTL, "reload", NULL }, NULL, 0 },
 	{ "fib",        "fib couple/decouple",
-	    { OSPF6CTL, "fib", REQ, NULL }, NULL, NULL },
+	    { OSPF6CTL, "fib", REQ, NULL }, NULL, 0 },
 	{ "log",	"log brief/verbose",
-	    { OSPF6CTL, "log", REQ, NULL }, NULL, NULL },
+	    { OSPF6CTL, "log", REQ, NULL }, NULL, 0 },
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
 char *ctl_bgp_test[] = { BGPD, "-nf", BGPCONF_TEMP, NULL, '\0' };
 struct ctl ctl_bgp[] = {
 	{ "enable",     "enable service",
-	    { BGPD, "-f", BGPCONF_TEMP, NULL }, NULL, X_ENABLE },
+	    { BGPD, "-f", BGPCONF_TEMP, NULL }, NULL, DB_X_ENABLE },
 	{ "disable",    "disable service",
-	    { PKILL, "bgpd", NULL }, NULL, X_DISABLE },
+	    { PKILL, "bgpd", NULL }, NULL, DB_X_DISABLE },
 	{ "edit",       "edit configuration",
-	    { "bgp", (char *)ctl_bgp_test, NULL }, call_editor, NULL },
+	    { "bgp", (char *)ctl_bgp_test, NULL }, call_editor, 0 },
 	{ "reload",     "reload service",
-	    { BGPCTL, "reload", NULL }, NULL, NULL },
+	    { BGPCTL, "reload", NULL }, NULL, 0 },
 	{ "fib",	"fib couple/decouple",
-	    { BGPCTL, "fib", REQ, NULL }, NULL, NULL },
+	    { BGPCTL, "fib", REQ, NULL }, NULL, 0 },
 	{ "irrfilter",	"generate bgpd filters",
-	    { BGPCTL, "irrfilter", REQ, OPT, NULL }, NULL, NULL },
+	    { BGPCTL, "irrfilter", REQ, OPT, NULL }, NULL, 0 },
 	{ "neighbor",	"neighbor up/down/clear/refresh",
-	    { BGPCTL, "neighbor", OPT, OPT, NULL }, NULL, NULL },
+	    { BGPCTL, "neighbor", OPT, OPT, NULL }, NULL, 0 },
 	{ "network",	"network add/delete/flush/show",
-	    { BGPCTL, "network", REQ, OPT, NULL }, NULL, NULL },
+	    { BGPCTL, "network", REQ, OPT, NULL }, NULL, 0 },
         { 0, 0, { 0 }, 0, 0 }
 };
 
 char *ctl_rip_test[] = { RIPD, "-nf", RIPCONF_TEMP, '\0' };
 struct ctl ctl_rip[] = {
 	{ "enable",     "enable service",
-	    { RIPD, "-f", RIPCONF_TEMP, NULL }, NULL, X_ENABLE },
+	    { RIPD, "-f", RIPCONF_TEMP, NULL }, NULL, DB_X_ENABLE },
 	{ "disable",    "disable service",
-	    { PKILL, "ripd", NULL }, NULL, X_DISABLE },
+	    { PKILL, "ripd", NULL }, NULL, DB_X_DISABLE },
 	{ "edit",       "edit configuration",
-	    { "rip", (char *)ctl_rip_test, NULL }, call_editor, NULL },
+	    { "rip", (char *)ctl_rip_test, NULL }, call_editor, 0 },
 	{ "reload",	"reload service",
-	    { RIPCTL, "reload", NULL }, NULL, NULL },
+	    { RIPCTL, "reload", NULL }, NULL, 0 },
 	{ "fib",        "fib couple/decouple",
-	    { RIPCTL, "fib", REQ, NULL }, NULL, NULL },
+	    { RIPCTL, "fib", REQ, NULL }, NULL, 0 },
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
 char *ctl_ldp_test[] = { LDPD, "-nf", LDPCONF_TEMP, '\0' };
 struct ctl ctl_ldp[] = {
 	{ "enable",	"enable service",
-	   { LDPD, "-f", LDPCONF_TEMP, NULL }, NULL, X_ENABLE },
+	   { LDPD, "-f", LDPCONF_TEMP, NULL }, NULL, DB_X_ENABLE },
 	{ "disable",	"disable service",
-	   { PKILL, "ldpd", NULL }, NULL, X_DISABLE },
+	   { PKILL, "ldpd", NULL }, NULL, DB_X_DISABLE },
 	{ "edit",	"edit configuration",
-	   { "ldp", (char *)ctl_ldp_test, NULL }, call_editor, NULL },
+	   { "ldp", (char *)ctl_ldp_test, NULL }, call_editor, 0 },
 	{ "fib",	"fib couple/decouple",
-	   { LDPCTL, "fib", REQ, NULL }, NULL, NULL },
+	   { LDPCTL, "fib", REQ, NULL }, NULL, 0 },
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
 char *ctl_ipsec_test[] = { IPSECCTL, "-nf", IPSECCONF_TEMP, '\0' };
 struct ctl ctl_ipsec[] = {
 	{ "enable",     "enable service",
-	    { ISAKMPD, "-Sa", NULL }, NULL, X_ENABLE },
+	    { ISAKMPD, "-Sa", NULL }, NULL, DB_X_ENABLE },
 	{ "disable",    "disable service",                   
-	    { PKILL, "isakmpd", NULL }, NULL, X_DISABLE },
+	    { PKILL, "isakmpd", NULL }, NULL, DB_X_DISABLE },
 	{ "edit",       "edit configuration",   
-	    { "ipsec", (char *)ctl_ipsec_test, NULL }, call_editor, NULL },
+	    { "ipsec", (char *)ctl_ipsec_test, NULL }, call_editor, 0 },
 	{ "reload",     "reload service",
-	    { IPSECCTL, "-f", IPSECCONF_TEMP, NULL }, NULL, NULL },
+	    { IPSECCTL, "-f", IPSECCONF_TEMP, NULL }, NULL, 0 },
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
 char *ctl_ike_test[] = { IKED, "-nf", IKECONF_TEMP, '\0' };
 struct ctl ctl_ike[] = {
 	{ "enable",	"enable service",
-	    { IKED, "-f", IKECONF_TEMP, NULL }, NULL, X_ENABLE },
+	    { IKED, "-f", IKECONF_TEMP, NULL }, NULL, DB_X_ENABLE },
 	{ "disable",	"disable service",
-	    { PKILL, "iked", NULL }, NULL, X_DISABLE },
+	    { PKILL, "iked", NULL }, NULL, DB_X_DISABLE },
 	{ "active",	"force IKE active mode",
-	    { IKECTL, "active", NULL }, NULL, NULL },
+	    { IKECTL, "active", NULL }, NULL, 0 },
 	{ "passive",	"force IKE passive mode",
-	    { IKECTL, "passive", NULL }, NULL, NULL },
+	    { IKECTL, "passive", NULL }, NULL, 0 },
 	{ "couple",	"load SAs and flows into kernel",
-	    { IKECTL, "couple", NULL }, NULL, NULL },
+	    { IKECTL, "couple", NULL }, NULL, 0 },
 	{ "decouple",	"unload SAs and flows from kernel",
-	    { IKECTL, "decouple", NULL }, NULL, NULL},
+	    { IKECTL, "decouple", NULL }, NULL, 0 },
 	{ "edit",	"edit configuration",
-	    { "ike", (char *)ctl_ike_test, NULL }, call_editor, NULL},
+	    { "ike", (char *)ctl_ike_test, NULL }, call_editor, 0 },
 	{ "reload",	"reload service",
-	    { IKECTL, "reload", NULL }, NULL, NULL },
+	    { IKECTL, "reload", NULL }, NULL, 0 },
 	{ "reset",	"reset state, policies, SAs or user database",
-	    { IKECTL, "reset", REQ, NULL }, NULL, NULL },
+	    { IKECTL, "reset", REQ, NULL }, NULL, 0 },
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
 char *ctl_dvmrp_test[] = { DVMRPD, "-nf", DVMRPCONF_TEMP, '\0' };
 struct ctl ctl_dvmrp[] = {
 	{ "enable",     "enable service",
-	    { DVMRPD, "-f", DVMRPCONF_TEMP, NULL }, NULL, X_ENABLE },
+	    { DVMRPD, "-f", DVMRPCONF_TEMP, NULL }, NULL, DB_X_ENABLE },
 	{ "disable",    "disable service",   
-	    { PKILL, "dvmrpd", NULL }, NULL, X_DISABLE },
+	    { PKILL, "dvmrpd", NULL }, NULL, DB_X_DISABLE },
 	{ "edit",       "edit configuration",
-	    { "dvmrp", (char *)ctl_dvmrp_test,  NULL }, call_editor, NULL },
+	    { "dvmrp", (char *)ctl_dvmrp_test,  NULL }, call_editor, 0 },
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
 char *ctl_ifstate_test[] = { IFSTATED, "-nf", IFSTATECONF_TEMP, '\0' };
 struct ctl ctl_ifstate[] = {
 	{ "enable",     "enable service",
-	    { IFSTATED, "-f", IFSTATECONF_TEMP, NULL }, NULL, X_ENABLE },
+	    { IFSTATED, "-f", IFSTATECONF_TEMP, NULL }, NULL, DB_X_ENABLE },
 	{ "disable",    "disable service",
-	    { PKILL, "ifstated", NULL }, NULL, X_DISABLE },
+	    { PKILL, "ifstated", NULL }, NULL, DB_X_DISABLE },
 	{ "edit",       "edit configuration",
-	    { "ifstate", (char *)ctl_ifstate_test,  NULL }, call_editor, NULL },
+	    { "ifstate", (char *)ctl_ifstate_test,  NULL }, call_editor, 0 },
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
 struct ctl ctl_sasync[] = {
 	{ "enable",     "enable service",
-	    { SASYNCD, "-c", SASYNCCONF_TEMP, NULL }, NULL, X_ENABLE },
+	    { SASYNCD, "-c", SASYNCCONF_TEMP, NULL }, NULL, DB_X_ENABLE },
 	{ "disable",    "disable service",
-	    { PKILL, "sasyncd", NULL }, NULL, X_DISABLE },
+	    { PKILL, "sasyncd", NULL }, NULL, DB_X_DISABLE },
 	{ "edit",       "edit configuration",
-	    { "sasync", NULL, NULL }, call_editor, NULL },
+	    { "sasync", NULL, NULL }, call_editor, 0 },
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
 char *ctl_nppp_test[] = { NPPPD, "-nf", NPPPCONF_TEMP, '\0' };
 struct ctl ctl_nppp[] = {
 	{ "enable",	"enable service",
-	    { NPPPD, "-f", NPPPCONF_TEMP, NULL }, NULL, X_ENABLE },
+	    { NPPPD, "-f", NPPPCONF_TEMP, NULL }, NULL, DB_X_ENABLE },
 	{ "disable",	"disable service",
-	    { PKILL, "npppd", NULL }, NULL, X_DISABLE },
+	    { PKILL, "npppd", NULL }, NULL, DB_X_DISABLE },
 	{ "clear",	"disconnect PPP sessions",
-	    { NPPPCTL, "clear", REQ, OPT, OPT, NULL }, NULL, NULL },
+	    { NPPPCTL, "clear", REQ, OPT, OPT, NULL }, NULL, 0 },
 	{ "session", 	"show PPP sessions",
-	    { NPPPCTL, "session", REQ, OPT, OPT, NULL }, NULL, NULL },
+	    { NPPPCTL, "session", REQ, OPT, OPT, NULL }, NULL, 0 },
 	{ "edit",	"edit configuration",
-	    { "nppp", (char *)ctl_nppp_test, NULL }, call_editor, NULL },
+	    { "nppp", (char *)ctl_nppp_test, NULL }, call_editor, 0 },
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
 char *ctl_dhcp_test[] = { DHCPD, "-nc", DHCPCONF_TEMP, '\0' };
 struct ctl ctl_dhcp[] = {
 	{ "enable",     "enable service",
-	    { DHCPD, "-c", DHCPCONF_TEMP, "-l", DHCPLEASES, NULL }, NULL, X_ENABLE },
+	    { DHCPD, "-c", DHCPCONF_TEMP, "-l", DHCPLEASES, NULL }, NULL, DB_X_ENABLE },
 	{ "disable",    "disable service",
-	    { PKILL, "dhcpd", NULL }, NULL, X_DISABLE },
+	    { PKILL, "dhcpd", NULL }, NULL, DB_X_DISABLE },
 	{ "edit",       "edit configuration",
-	    { "dhcp", (char *)ctl_dhcp_test, NULL }, call_editor, NULL },
+	    { "dhcp", (char *)ctl_dhcp_test, NULL }, call_editor, 0 },
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
 char *ctl_snmp_test[] = { SNMPD, "-nf", SNMPCONF_TEMP, '\0' };
 struct ctl ctl_snmp[] = {
 	{ "enable",     "enable service",
-	    { SNMPD, "-f", SNMPCONF_TEMP, NULL }, NULL, X_ENABLE },
+	    { SNMPD, "-f", SNMPCONF_TEMP, NULL }, NULL, DB_X_ENABLE },
 	{ "disable",    "disable service",
-	    { PKILL, "snmpd", NULL }, NULL, X_DISABLE },
+	    { PKILL, "snmpd", NULL }, NULL, DB_X_DISABLE },
 	{ "edit",       "edit configuration",
-	    { "snmp", (char *)ctl_snmp_test, NULL }, call_editor, NULL },
+	    { "snmp", (char *)ctl_snmp_test, NULL }, call_editor, 0 },
 	{ "trap",	"send traps",
-	    { SNMPCTL, "trap", "send", REQ, OPT, NULL }, NULL, NULL },
+	    { SNMPCTL, "trap", "send", REQ, OPT, NULL }, NULL, 0 },
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
 struct ctl ctl_sshd[] = {
 	{ "enable",	"enable service",
-	    { SSHD, "-f", SSHDCONF_TEMP, NULL }, NULL, X_ENABLE },
+	    { SSHD, "-f", SSHDCONF_TEMP, NULL }, NULL, DB_X_ENABLE },
 	{ "disable",	"disable service",
-	    { PKILL, "-f", SSHD, "-f", SSHDCONF_TEMP, NULL }, NULL, X_DISABLE },
+	    { PKILL, "-f", SSHD, "-f", SSHDCONF_TEMP, NULL }, NULL, DB_X_DISABLE },
 	{ "edit",	"edit configuration",
-	    { "sshd", NULL, NULL }, call_editor, NULL },
+	    { "sshd", NULL, NULL }, call_editor, 0 },
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
 char *ctl_ntp_test[] = { NTPD, "-nf", NTPCONF_TEMP, '\0' };
 struct ctl ctl_ntp[] = {
 	{ "enable",     "enable service",
-	    { NTPD, "-sf", NTPCONF_TEMP, NULL }, NULL, X_ENABLE },
+	    { NTPD, "-sf", NTPCONF_TEMP, NULL }, NULL, DB_X_ENABLE },
 	{ "disable",    "disable service",
-	    { PKILL, "ntpd", NULL }, NULL, X_DISABLE },
+	    { PKILL, "ntpd", NULL }, NULL, DB_X_DISABLE },
 	{ "edit",       "edit configuration",
-	    { "ntp", (char *)ctl_ntp_test, NULL }, call_editor, NULL },
+	    { "ntp", (char *)ctl_ntp_test, NULL }, call_editor, 0 },
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
 char *ctl_relay_test[] = { RELAYD, "-nf", RELAYCONF_TEMP, '\0' };
 struct ctl ctl_relay[] = {
 	{ "enable",	"enable service",
-	    { RELAYD, "-f", RELAYCONF_TEMP, NULL }, NULL, X_ENABLE },
+	    { RELAYD, "-f", RELAYCONF_TEMP, NULL }, NULL, DB_X_ENABLE },
         { "disable",	"disable service",
-	    { PKILL, "relayd", NULL }, NULL, X_DISABLE },
+	    { PKILL, "relayd", NULL }, NULL, DB_X_DISABLE },
         { "edit",	"edit configuration",
-	    { "relay", (char *)ctl_relay_test, NULL }, call_editor, NULL },
+	    { "relay", (char *)ctl_relay_test, NULL }, call_editor, 0 },
         { "reload",	"reload configuration",
-	    { RELAYCTL, "reload", NULL }, NULL, NULL },
+	    { RELAYCTL, "reload", NULL }, NULL, 0 },
 	{ "host",	"per-host control",
-	    { RELAYCTL, "host", OPT, OPT, NULL }, NULL, NULL },
+	    { RELAYCTL, "host", OPT, OPT, NULL }, NULL, 0 },
 	{ "table",	"per-table control",
-	    { RELAYCTL, "table", OPT, OPT, NULL }, NULL, NULL },
+	    { RELAYCTL, "table", OPT, OPT, NULL }, NULL, 0 },
 	{ "redirect",	"per-redirect control",
-	    { RELAYCTL, "redirect", OPT, OPT, NULL }, NULL, NULL },
+	    { RELAYCTL, "redirect", OPT, OPT, NULL }, NULL, 0 },
 	{ "monitor",	"monitor mode",
-	    { RELAYCTL, "monitor", NULL }, NULL, NULL },
+	    { RELAYCTL, "monitor", NULL }, NULL, 0 },
 	{ "poll",	"poll mode",
-	    { RELAYCTL, "poll", NULL }, NULL, NULL},
+	    { RELAYCTL, "poll", NULL }, NULL, 0 },
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
 char *ctl_smtp_test[] = { SMTPD, "-nf", SMTPCONF_TEMP, '\0' };
 struct ctl ctl_smtp[] = {
 	{ "enable",	"enable service",
-	    { SMTPD, "-f", SMTPCONF_TEMP, NULL }, NULL, X_ENABLE },
+	    { SMTPD, "-f", SMTPCONF_TEMP, NULL }, NULL, DB_X_ENABLE },
 	{ "disable",	"disable service",
-	    { PKILL, "smtpd", NULL }, NULL, X_DISABLE },
+	    { PKILL, "smtpd", NULL }, NULL, DB_X_DISABLE },
 	{ "edit",	"edit configuration",
-	    { "smtp", (char *)ctl_smtp_test, NULL }, call_editor, NULL },
+	    { "smtp", (char *)ctl_smtp_test, NULL }, call_editor, 0 },
 	{ "log",	"brief/verbose logging configuration",
-	    { SMTPCTL, "log", REQ, NULL }, NULL, NULL },
+	    { SMTPCTL, "log", REQ, NULL }, NULL, 0 },
 	{ "pause",	"pause mda/mta/smtp listener",
-	    { SMTPCTL, "pause", REQ, NULL }, NULL, NULL },
+	    { SMTPCTL, "pause", REQ, NULL }, NULL, 0 },
 	{ "remove",	"remove message or envelope",
-	    { SMTPCTL, "remove", REQ, NULL }, NULL, NULL },
+	    { SMTPCTL, "remove", REQ, NULL }, NULL, 0 },
 	{ "resume",	"resume mda/mta/smtp listener",
-	    { SMTPCTL, "resume", REQ, NULL }, NULL, NULL },
+	    { SMTPCTL, "resume", REQ, NULL }, NULL, 0 },
 	{ "schedule-all", "schedule all envelopes for immediate delivery",
-	    { SMTPCTL, "schedule-all", NULL }, NULL, NULL },
+	    { SMTPCTL, "schedule-all", NULL }, NULL, 0 },
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
 struct ctl ctl_ftpproxy[] = {
 	{ "enable",	"enable service",
-	    { FTPPROXY, "-D", "2", NULL }, NULL, X_ENABLE },
+	    { FTPPROXY, "-D", "2", NULL }, NULL, DB_X_ENABLE },
 	{ "disable",	"disable service",
-	    { PKILL, "ftp-proxy", NULL }, NULL, X_DISABLE },
+	    { PKILL, "ftp-proxy", NULL }, NULL, DB_X_DISABLE },
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
 struct ctl ctl_tftpproxy[] = {
 	{ "enable",     "enable service",
-	    { TFTPPROXY, "-v", "-l", "127.0.0.1", NULL }, NULL, X_ENABLE },
+	    { TFTPPROXY, "-v", "-l", "127.0.0.1", NULL }, NULL, DB_X_ENABLE },
 	{ "disable",    "disable service",
-	    { PKILL, "tftp-proxy", NULL }, NULL, X_DISABLE },
+	    { PKILL, "tftp-proxy", NULL }, NULL, DB_X_DISABLE },
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
 struct ctl ctl_tftp[] = {
 	{ "enable", 	"enable service",
-	   { TFTPD, "-l", "127.0.0.1", NULL }, NULL, X_ENABLE },
+	   { TFTPD, "-l", "127.0.0.1", NULL }, NULL, DB_X_ENABLE },
 	{ "disable",	"disable service",
-	   { PKILL, "tftpd", NULL }, NULL, X_DISABLE },
+	   { PKILL, "tftpd", NULL }, NULL, DB_X_DISABLE },
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
 struct ctl ctl_dns[] = {
 	{ "local-control", "local control over DNS settings",
 	    { RESOLVCONF_SYM, NULL, RESOLVCONF_TEMP, NULL }, ctl_symlink,
-	    X_LOCAL },
+	    DB_X_LOCAL },
 	{ "dhcp-control",   "DHCP client control over DNS settings",
 	    { RESOLVCONF_SYM, NULL, RESOLVCONF_DHCP, NULL }, ctl_symlink,
-	    X_OTHER },
+	    DB_X_OTHER },
 	{ "edit",	    "edit DNS settings",
-	    { "dns", NULL, NULL }, call_editor, NULL },
+	    { "dns", NULL, NULL }, call_editor, 0 },
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
 struct ctl ctl_inet[] = {
 	{ "enable",     "enable service",
-	    { INETD, INETCONF_TEMP, NULL }, NULL, X_ENABLE },
+	    { INETD, INETCONF_TEMP, NULL }, NULL, DB_X_ENABLE },
 	{ "disable",    "disable service",
-	    { PKILL, "inetd", NULL }, NULL, X_DISABLE },
+	    { PKILL, "inetd", NULL }, NULL, DB_X_DISABLE },
 	{ "edit",       "edit configuration",
-	    { "inet", NULL, NULL }, call_editor, NULL },
+	    { "inet", NULL, NULL }, call_editor, 0 },
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
 struct ctl ctl_ldap[] = {
 	{ "enable",	"enable service",
-	    { LDAPD, LDAPCONF_TEMP, NULL }, NULL, X_ENABLE },
+	    { LDAPD, LDAPCONF_TEMP, NULL }, NULL, DB_X_ENABLE },
 	{ "disable",	"disable service",
-	    { PKILL, "ldapd", NULL }, NULL, X_DISABLE },
+	    { PKILL, "ldapd", NULL }, NULL, DB_X_DISABLE },
 	{ "log", 	"brief/verbose logging",
-	    { LDAPCTL, "log", REQ, NULL }, NULL, NULL },
+	    { LDAPCTL, "log", REQ, NULL }, NULL, 0 },
 	{ "compact",	"compact all databases",
-	    { LDAPCTL, "compact", NULL }, NULL, NULL },
+	    { LDAPCTL, "compact", NULL }, NULL, 0 },
 	{ "index",	"re-index all databases",
-	    { LDAPCTL, "index", NULL }, NULL, NULL },
+	    { LDAPCTL, "index", NULL }, NULL, 0 },
 	{ 0, 0, { 0 }, 0, 0, }
 };
 
@@ -427,29 +427,14 @@ ctl_symlink(char *temp, char **z, char *real)
 
 /* flag to other nsh sessions or nsh conf() that actions have been taken */
 void
-flag_x(char *name, char *daemon, int *y, char *data)
+flag_x(char *name, char *daemon, int dbflag, char *data)
 {
-	int dbflag;
-
-	/* y == pointer abuse, stop the madness! */
-	if (y == X_ENABLE) {
-		dbflag = DB_X_ENABLE;
-	}
-	if (y == X_DISABLE) {
-		if (db_delete_flag_x(name, daemon) < 0)
-			printf("%% database delete failure ctl ctl\n");
-		return;
-	}
-	if (y == X_OTHER) {
-		dbflag = DB_X_OTHER;
-	}
-	if (y == X_LOCAL) {
-		dbflag = DB_X_LOCAL;
-	}
 	if (db_delete_flag_x(name, daemon) < 0) {
 		printf("%% database delete failure ctl ctl\n");
 		return;
 	}
+	if (dbflag == DB_X_DISABLE)
+		return;
 	if (db_insert_flag_x(name, daemon, cli_rtable, dbflag, data) < 0) {
 		printf("%% database insert failure ctl ctl\n");
 	}
@@ -516,7 +501,7 @@ ctlhandler(int argc, char **argv, char *modhvar)
 	else
 		cmdargs(fillargs[0], fillargs);
 
-	if (x->flag_x != NULL)
+	if (x->flag_x != 0)
 		flag_x("ctl", daemons->name, x->flag_x, NULL);
 
 	return 1;
