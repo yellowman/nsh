@@ -42,12 +42,12 @@ db_create_table_flag_x(char *name)
 }
 
 int
-db_insert_flag_x(char *name, char *daemon, int rtableid, int flag, char *data)
+db_insert_flag_x(char *name, char *ctl, int rtableid, int flag, char *data)
 {
 	char		query[QSZ];
 
 	snprintf(query, QSZ, "INSERT INTO '%s' VALUES('%s', %d, %d, '%s')",
-	    name, daemon, rtableid, flag, data);
+	    name, ctl, rtableid, flag, data);
 	return(sq3simple(query, NULL));
 }
 
@@ -70,12 +70,30 @@ db_delete_rtables_rtable(int rtableid)
 }
 
 int
-db_delete_flag_x(char *name, char *daemon)
+db_delete_flag_x_ctl(char *name, char *ctl)
 {
 	char		query[QSZ];
 
-	snprintf(query, QSZ, "DELETE FROM '%s' WHERE ctl='%s' AND rtable=%d", name, daemon, cli_rtable);
+	snprintf(query, QSZ, "DELETE FROM '%s' WHERE ctl='%s' AND rtable=%d", name, ctl, cli_rtable);
 	return(sq3simple(query, NULL));
+}
+
+int
+db_delete_flag_x_ctl_data(char *name, char *ctl, char *data)
+{
+	char		query[QSZ];
+
+	snprintf(query, QSZ, "DELETE FROM '%s' WHERE ctl='%s' AND data='%s'", name, ctl, data);
+	return(sq3simple(query, NULL));
+}
+
+int
+db_select_flag_x_ctl_data(StringList *words, char *name, char *ctl, char *data)
+{
+	char		query[QSZ];
+
+	snprintf(query, QSZ, "SELECT data FROM '%s' WHERE ctl='%s' AND data='%s'", name, ctl, data);
+	return(sq3simple(query, words));
 }
 
 int
@@ -114,14 +132,14 @@ db_select_flag_x_data_ctl_rtable(StringList *words, char *name, char *ctl, int r
 }
 
 int
-db_select_flag_x_dbflag_rtable(char *name, char *daemon, int rtableid)
+db_select_flag_x_dbflag_rtable(char *name, char *ctl, int rtableid)
 {
 	StringList	*words;
 	char		query[QSZ];
 	int		rv;
 
 	snprintf(query, QSZ, "SELECT flag FROM %s WHERE ctl='%s' AND rtable=%d",
-	    name, daemon, rtableid);
+	    name, ctl, rtableid);
 	words = sl_init();
 	if((rv = sq3simple(query, words)) > 0)
 		rv = atoi(words->sl_str[0]);

@@ -46,15 +46,17 @@ int conf_dhcrelay(char *, char *, int);
 /* show.c */
 void p_rttables(int, u_int, int);
 #ifdef _NETINET_IN_H_
+char *routename4(in_addr_t);
 char *netname4(in_addr_t, struct sockaddr_in *);
 #endif
 #ifdef _NETINET6_IN6_H_
+char *routename6(struct sockaddr_in6 *);
 char *netname6(struct sockaddr_in6 *, struct sockaddr_in6 *);
 void in6_fillscopeid(struct sockaddr_in6 *);
 #endif
 #ifdef _SYS_SOCKET_H_
-char *netname(struct sockaddr *, struct sockaddr *);
 char *routename(struct sockaddr *);
+char *netname(struct sockaddr *, struct sockaddr *);
 char *any_ntoa(const struct sockaddr *);
 #endif
 
@@ -482,8 +484,10 @@ int db_create_table_flag_x(char *);
 int db_insert_flag_x(char *, char *, int, int, char *);
 int db_insert_rtables(int, char *);
 int db_delete_rtables_rtable(int);
-int db_delete_flag_x(char *, char *);
+int db_delete_flag_x_ctl(char *, char *);
+int db_delete_flag_x_ctl_data(char *, char *, char *);
 #ifdef _STRINGLIST_H
+int db_select_flag_x_ctl_data(StringList *, char *, char *, char *);
 int db_select_rtable_rtables(StringList *);
 int db_select_rtables_rtable(StringList *, int);
 int db_select_rtables_ctl(StringList *, char *);

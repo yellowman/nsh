@@ -104,8 +104,6 @@ void	p_protocol(struct sadb_protocol *, struct sockaddr *, struct
 	    sadb_protocol *, int);
 void	p_sockaddr(struct sockaddr *, struct sockaddr *, int, int);
 void	p_flags(int, char *);
-char	*routename4(in_addr_t);
-char	*routename6(struct sockaddr_in6 *);
 void	index_pfk(struct sadb_msg *, void **);
 
 /*
@@ -445,20 +443,8 @@ p_sockaddr(struct sockaddr *sa, struct sockaddr *mask, int flags, int width)
 	case AF_INET6:
 	    {
 		struct sockaddr_in6 *sa6 = (struct sockaddr_in6 *)sa;
-		struct in6_addr *in6 = &sa6->sin6_addr;
 
-		/*
-		 * XXX: This is a special workaround for KAME kernels.
-		 * sin6_scope_id field of SA should be set in the future.
-		 */
-		if (IN6_IS_ADDR_LINKLOCAL(in6) ||
-		    IN6_IS_ADDR_MC_LINKLOCAL(in6) ||
-		    IN6_IS_ADDR_MC_INTFACELOCAL(in6)) {
-			/* XXX: override is ok? */
-			sa6->sin6_scope_id = (u_int32_t)ntohs(*(u_short *)
-			    &in6->s6_addr[2]);
-			*(u_short *)&in6->s6_addr[2] = 0;
-		}
+		in6_fillscopeid(sa6);
 		if (flags & RTF_HOST)
 			cp = routename((struct sockaddr *)sa6);
 		else
@@ -500,6 +486,7 @@ routename(struct sockaddr *sa)
 {
 	char *cp = NULL;
 	static int first = 1;
+	struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)sa;
 
 	if (first) {
 		first = 0;
@@ -521,25 +508,9 @@ routename(struct sockaddr *sa)
 			    sin_addr.s_addr));
 
 	case AF_INET6:
-	    {
-		struct sockaddr_in6 sin6;
-
-		memset(&sin6, 0, sizeof(sin6));
-		memcpy(&sin6, sa, sa->sa_len);
-		sin6.sin6_len = sizeof(struct sockaddr_in6);
-		sin6.sin6_family = AF_INET6;
-		if (sa->sa_len == sizeof(struct sockaddr_in6) &&
-		    (IN6_IS_ADDR_LINKLOCAL(&sin6.sin6_addr) ||
-		     IN6_IS_ADDR_MC_LINKLOCAL(&sin6.sin6_addr) ||
-		     IN6_IS_ADDR_MC_INTFACELOCAL(&sin6.sin6_addr)) &&
-		    sin6.sin6_scope_id == 0) {
-			sin6.sin6_scope_id =
-			    ntohs(*(u_int16_t *)&sin6.sin6_addr.s6_addr[2]);
-			sin6.sin6_addr.s6_addr[2] = 0;
-			sin6.sin6_addr.s6_addr[3] = 0;
-		}
-		return (routename6(&sin6));
-	    }
+		if (sa->sa_len == sizeof(struct sockaddr_in6))
+			in6_fillscopeid(sin6);
+		return (routename6(sin6));
 
 	case AF_LINK:
 		return (link_print(sa));
@@ -565,13 +536,14 @@ routename(struct sockaddr *sa)
 void
 in6_fillscopeid(struct sockaddr_in6 *sin6)
 {
-#ifdef __KAME__
-	if (IN6_IS_ADDR_LINKLOCAL(&sin6->sin6_addr)) {
+	if ((IN6_IS_ADDR_LINKLOCAL(&sin6->sin6_addr) ||
+	    IN6_IS_ADDR_MC_LINKLOCAL(&sin6->sin6_addr) ||
+	    IN6_IS_ADDR_MC_INTFACELOCAL(&sin6->sin6_addr)) &&
+	    sin6->sin6_scope_id == 0) {
 		sin6->sin6_scope_id =
 		    ntohs(*(u_int16_t *)&sin6->sin6_addr.s6_addr[2]);
 		sin6->sin6_addr.s6_addr[2] = sin6->sin6_addr.s6_addr[3] = 0;
 	}
-#endif /* __KAME__ */
 }
 
 char *
@@ -588,13 +560,8 @@ routename4(in_addr_t in)
 char *
 routename6(struct sockaddr_in6 *sin6)
 {
-	int	 niflags = 0;
-
-	niflags |= NI_NUMERICHOST;
-/*		niflags |= NI_NOFQDN;*/
-
 	if (getnameinfo((struct sockaddr *)sin6, sin6->sin6_len,
-	    line_show, sizeof(line_show), NULL, 0, niflags) != 0)
+	    line_show, sizeof(line_show), NULL, 0, NI_NUMERICHOST) != 0)
 		strncpy(line_show, "invalid", sizeof(line_show));
 
 	return (line_show);
@@ -632,12 +599,11 @@ netname6(struct sockaddr_in6 *sa6, struct sockaddr_in6 *mask)
 	struct sockaddr_in6 sin6;
 	u_char *p;
 	int masklen, final = 0, illegal = 0;
-	int i, lim, flag, error;
+	int i, lim, error;
 	char hbuf[NI_MAXHOST];
 
 	sin6 = *sa6;
 
-	flag = 0;
 	masklen = 0;
 	if (mask) {
 		lim = mask->sin6_len - offsetof(struct sockaddr_in6, sin6_addr);
@@ -695,12 +661,12 @@ netname6(struct sockaddr_in6 *sa6, struct sockaddr_in6 *mask)
 	} else
 		masklen = 128;
 
+	/* This will warn us if the kernel supplies an insane mask */
 	if (illegal)
 		printf("%% netname6: illegal prefixlen\n");
 
-	flag |= NI_NUMERICHOST;
 	error = getnameinfo((struct sockaddr *)&sin6, sin6.sin6_len,
-	    hbuf, sizeof(hbuf), NULL, 0, flag);
+	    hbuf, sizeof(hbuf), NULL, 0, NI_NUMERICHOST);
 	if (error)
 		snprintf(hbuf, sizeof(hbuf), "invalid");
 

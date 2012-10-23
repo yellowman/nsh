@@ -49,6 +49,10 @@
 
 char *iftype(int int_type);
 char *get_hwdaddr(char *ifname);
+void pack_ifaliasreq(struct ifaliasreq *, ip_t *, struct in_addr *, char *);
+void pack_in6aliasreq(struct in6_aliasreq *, ip_t *, struct sockaddr_in6 *,
+    char *);
+void ipv6ll_db_store(struct sockaddr_in6 *, struct sockaddr_in6 *, int, char *);
 
 static const struct {
 	char *name;
@@ -93,8 +97,8 @@ show_int(int argc, char **argv)
 	struct if_nameindex *ifn_list, *ifnp;
 	struct ifreq ifr, ifrdesc;
 	struct if_data if_data;
-	struct sockaddr_in sin, sinmask, sindest;
-	struct sockaddr_in6 sin6, sin6mask, sin6dest;
+	struct sockaddr_in *sin, *sinmask, *sindest;
+	struct sockaddr_in6 *sin6, *sin6mask, *sin6dest;
 	struct timeval tv;
 	struct vlanreq vreq;
 
@@ -221,16 +225,17 @@ show_int(int argc, char **argv)
 
 		switch (ifa->ifa_addr->sa_family) {
 		case AF_INET:
-			memcpy(&sin, ifa->ifa_addr, sizeof(struct sockaddr_in));
-			memcpy(&sinmask, ifa->ifa_netmask, sizeof(struct sockaddr_in));
-			if (sin.sin_addr.s_addr == 0)
+			sin = (struct sockaddr_in *)ifa->ifa_addr;
+			sinmask = (struct sockaddr_in *)ifa->ifa_netmask;
+			if (sin->sin_addr.s_addr == 0)
 				continue;
 			break;
 		case AF_INET6:
-			memcpy(&sin6, ifa->ifa_addr, sizeof(struct sockaddr_in6));
-			memcpy(&sin6mask, ifa->ifa_netmask, sizeof(struct sockaddr_in6));
-			if (sin6.sin6_addr.s6_addr == 0)
+			sin6 = (struct sockaddr_in6 *)ifa->ifa_addr;
+			sin6mask = (struct sockaddr_in6 *)ifa->ifa_netmask;
+			if (sin6->sin6_addr.s6_addr == 0)
 				continue;
+			in6_fillscopeid(sin6);
 			break;
 		default:
 			continue;
@@ -239,43 +244,36 @@ show_int(int argc, char **argv)
 		if (!ippntd)
 			printf("  Internet address");
 
-		if (ifa->ifa_addr->sa_family == AF_INET6)
-			in6_fillscopeid(&sin6);
-
 		printf("%s %s", ippntd ? "," : "", ifa->ifa_addr->sa_family == AF_INET ?
-		    netname4(sin.sin_addr.s_addr, &sinmask) : netname6(&sin6, &sin6mask));
+		    netname4(sin->sin_addr.s_addr, sinmask) : netname6(sin6, sin6mask));
 
 		ippntd = 1;
 
 		switch (ifa->ifa_addr->sa_family) {
 		case AF_INET:
 			if (flags & IFF_POINTOPOINT) {
-				memcpy(&sindest, ifa->ifa_dstaddr,
-				    sizeof(struct sockaddr_in));
-				printf(" (Destination %s)", inet_ntoa(sindest.sin_addr));
+				sindest = (struct sockaddr_in *)ifa->ifa_dstaddr;
+				printf(" (Destination %s)", routename4(sindest));
 			} else if (flags & IFF_BROADCAST) {
-				memcpy(&sindest, ifa->ifa_broadaddr,
-				    sizeof(struct sockaddr_in));
+				sindest = (struct sockaddr_in *)ifa->ifa_broadaddr;
 				/*
 				 * no reason to show the broadcast addr
 				 * if it is standard (this should always
 				 * be true unless someone has messed up their
 				 * network or they are playing around...)
 				 */
-				if (ntohl(sindest.sin_addr.s_addr) !=
-				    in4_brdaddr(sin.sin_addr.s_addr,
-				    sinmask.sin_addr.s_addr))
+				if (ntohl(sindest->sin_addr.s_addr) !=
+				    in4_brdaddr(sin->sin_addr.s_addr,
+				    sinmask->sin_addr.s_addr))
 					printf(" (Broadcast %s)",
-					    inet_ntoa(sindest.sin_addr));
+					    inet_ntoa(sindest->sin_addr));
 			}
 			break;
 		case AF_INET6:
 			if (flags & IFF_POINTOPOINT) {
-				char inet6n[INET6_ADDRSTRLEN];
-				memcpy(&sin6dest, ifa->ifa_dstaddr,
-				    sizeof(struct sockaddr_in6));
-				printf(" (Destination %s)", inet_ntop(AF_INET6,
-				    &sin6dest.sin6_addr, inet6n, sizeof(inet6n)));
+				sin6dest = (struct sockaddr_in6 *)ifa->ifa_dstaddr;
+				in6_fillscopeid(sin6dest);
+				printf(" (Destination %s)", routename6(sin6dest));
 			}
 			break;
 		default:
@@ -607,13 +605,9 @@ intip(char *ifname, int ifs, int argc, char **argv)
 	struct ifaliasreq ip4req;
 	/* ipv6 structures */
 	struct in6_aliasreq ip6req;
-	struct sockaddr_in *sin;
-	struct sockaddr_in6 *sin6, sin6dst;
+	struct sockaddr_in6 sin6dest;
 
-	/* clean out allocated structures */
-	memset(&ip4req, 0, sizeof(ip4req));
-	memset(&ip6req, 0, sizeof(ip6req));
-	memset(&sin6dst, 0, sizeof(sin6dst));
+	memset(&sin6dest, 0, sizeof(sin6dest));
 	memset(&ip, 0, sizeof(ip));
 
 	if (NO_ARG(argv[0])) {
@@ -694,89 +688,47 @@ intip(char *ifname, int ifs, int argc, char **argv)
 		return(0);
 	}
 	
-	if (argc == 2)
-		switch(ip.family) {
-		case AF_INET:
-			if (!inet_aton(argv[1], &destbcast)) {
-				printf("%% Invalid %s address\n", msg);
-				return(0);
-			}
-			break;
-		case AF_INET6:
-			if (!inet_pton(AF_INET6, argv[1], &sin6dst)) {
-				printf("%% Invalid %s address\n", msg);
-				return(0);
-			}
-			break;
-		default:
-			break;
-		}
-		
-	
+	if (ip.bitlen == -1)
+		ip.bitlen = 0;
 	switch(ip.family) {
 	case AF_INET:
-		/* set IP address */
-		sin = (struct sockaddr_in *)&ip4req.ifra_addr;
-		sin->sin_family = AF_INET;
-		sin->sin_len = sizeof(struct sockaddr_in);
-		sin->sin_addr.s_addr = ip.addr.sin.s_addr;
-		/* set netmask */
-		sin = (struct sockaddr_in *)&ip4req.ifra_mask;
-		sin->sin_family = AF_INET; 
-		sin->sin_len = sizeof(struct sockaddr_in);
-		if (ip.bitlen == -1)
-			ip.bitlen = 0;
-		sin->sin_addr.s_addr = htonl(0xffffffff << (32 - ip.bitlen));
-		/* set destination/broadcast address */
-		if (argc == 2) {
-			sin = (struct sockaddr_in *)&ip4req.ifra_dstaddr;
-			sin->sin_family = AF_INET;
-			sin->sin_len = sizeof(struct sockaddr_in);
-			sin->sin_addr.s_addr = destbcast.s_addr;
+		if (argc == 2 && !inet_aton(argv[1], &destbcast)) {
+			printf("%% Invalid %s address\n", msg);
+			return(0);
 		}
-		/* set interface name */
-		strlcpy(ip4req.ifra_name, ifname, sizeof(ip4req.ifra_name));
+		pack_ifaliasreq(&ip4req, &ip, &destbcast, ifname);
 		/* do it */
 		if (ioctl(ifs, set ? SIOCAIFADDR : SIOCDIFADDR, &ip4req) < 0)
 			printf("%% intip: SIOC%sIFADDR: %s\n", set ? "A" : "D",
 			    strerror(errno));
 		break;
 	case AF_INET6:
-		/* set IP address */
-		sin6 = (struct sockaddr_in6 *)&ip6req.ifra_addr;
-		sin6->sin6_family = AF_INET6;
-		sin6->sin6_len = sizeof(struct sockaddr_in6);
-		sin6->sin6_addr = ip.addr.sin6;
-		/* fiddle with scope id? in6_fillscopeid(sin6); */
-		/* set prefixmask */
-		sin6 = (struct sockaddr_in6 *)&ip6req.ifra_prefixmask;
-		sin6->sin6_family = AF_INET6;
-		sin6->sin6_len = sizeof(struct sockaddr_in6);
-		if (ip.bitlen == -1)
-			ip.bitlen = 0;
-		prefixlen(ip.bitlen, sin6);
-		/* set infinite lifetime */
-		ip6req.ifra_lifetime.ia6t_pltime = ND6_INFINITE_LIFETIME;
-		ip6req.ifra_lifetime.ia6t_vltime = ND6_INFINITE_LIFETIME;
-		/* set destination address */
-		if (argc == 2) {
-			sin6 = (struct sockaddr_in6 *)&ip6req.ifra_dstaddr;
-			sin6->sin6_family = AF_INET6;
-			sin6->sin6_len = sizeof(struct sockaddr_in6);
-			sin6->sin6_addr = sin6dst.sin6_addr;
+		if (argc == 2 && !inet_pton(AF_INET6, argv[1], &sin6dest)) {
+			printf("%% Invalid %s address\n", msg);
+			return(0);
 		}
+		pack_in6aliasreq(&ip6req, &ip, &sin6dest, ifname);
 		/* get inet6 socket */
 		s = socket(PF_INET6, SOCK_DGRAM, 0);
 		if (s < 0) {
 			printf("%% socket failed: %s\n", strerror(errno));
 			return(0);
 		}
-		/* set interface name */
-		strlcpy(ip6req.ifra_name, ifname, sizeof(ip6req.ifra_name));
 		/* do it */
-		if (ioctl(s, set ? SIOCAIFADDR_IN6 : SIOCDIFADDR_IN6, &ip6req) < 0)
-			printf("%% intip: SIOC%sIFADDR_IN6: %s\n", set ? "A" : "D",
-			    strerror(errno));
+		if (ioctl(s, set ? SIOCAIFADDR_IN6 : SIOCDIFADDR_IN6, &ip6req)
+		    < 0) {
+			if (!set && errno == EADDRNOTAVAIL)
+				printf("%% IP address not found on %s\n",
+				    ifname);
+			else
+				printf("%% intip: SIOC%sIFADDR_IN6: %s\n",
+				    set ? "A" : "D", strerror(errno));
+		} else {
+			ipv6ll_db_store(
+			    (struct sockaddr_in6 *)&ip6req.ifra_addr,
+			    (struct sockaddr_in6 *)&ip6req.ifra_prefixmask,
+			    set ? DB_X_ENABLE : DB_X_REMOVE, ifname);
+		}
 		close(s);
 		break;
 	default:
@@ -784,6 +736,88 @@ intip(char *ifname, int ifs, int argc, char **argv)
 		break;
 	}
 	return(0);
+}
+
+void
+pack_ifaliasreq(struct ifaliasreq *ip4req, ip_t *ip,
+    struct in_addr *destbcast, char *ifname)
+{
+	struct sockaddr_in *sin;
+
+	memset(ip4req, 0, sizeof(ip4req));
+
+	/* set IP address */
+	sin = (struct sockaddr_in *)&ip4req->ifra_addr;
+	sin->sin_family = AF_INET;
+	sin->sin_len = sizeof(struct sockaddr_in);
+	sin->sin_addr.s_addr = ip->addr.sin.s_addr;
+	/* set netmask */
+	sin = (struct sockaddr_in *)&ip4req->ifra_mask;
+	sin->sin_family = AF_INET;
+	sin->sin_len = sizeof(struct sockaddr_in);
+	sin->sin_addr.s_addr = htonl(0xffffffff << (32 - ip->bitlen));
+	/* set destination/broadcast address */
+	if (destbcast->s_addr != 0) {
+		sin = (struct sockaddr_in *)&ip4req->ifra_dstaddr;
+		sin->sin_family = AF_INET;
+		sin->sin_len = sizeof(struct sockaddr_in);
+		sin->sin_addr.s_addr = destbcast->s_addr;
+	}
+	/* set interface name */
+	strlcpy(ip4req->ifra_name, ifname, sizeof(ip4req->ifra_name));
+}
+
+void
+pack_in6aliasreq(struct in6_aliasreq *ip6req, ip_t *ip,
+    struct sockaddr_in6 *sin6dest, char *ifname)
+{
+	struct sockaddr_in6 *sin6;
+
+	memset(ip6req, 0, sizeof(ip6req));
+
+	/* set IP address */
+	sin6 = (struct sockaddr_in6 *)&ip6req->ifra_addr;
+	sin6->sin6_family = AF_INET6;
+	sin6->sin6_len = sizeof(struct sockaddr_in6);
+	sin6->sin6_addr = ip->addr.sin6;
+	/* set prefixmask */
+	sin6 = (struct sockaddr_in6 *)&ip6req->ifra_prefixmask;
+	sin6->sin6_family = AF_INET6;
+	sin6->sin6_len = sizeof(struct sockaddr_in6);
+	prefixlen(ip->bitlen, sin6);
+	/* set infinite lifetime */
+	ip6req->ifra_lifetime.ia6t_pltime = ND6_INFINITE_LIFETIME;
+	ip6req->ifra_lifetime.ia6t_vltime = ND6_INFINITE_LIFETIME;
+	/* set destination address */
+	if (sin6dest->sin6_family != 0) {
+		sin6 = (struct sockaddr_in6 *)&ip6req->ifra_dstaddr;
+		sin6->sin6_family = AF_INET6;
+		sin6->sin6_len = sizeof(struct sockaddr_in6);
+		sin6->sin6_addr = sin6dest->sin6_addr;
+	}
+	/* set interface name */
+	strlcpy(ip6req->ifra_name, ifname, sizeof(ip6req->ifra_name));
+}
+
+void
+ipv6ll_db_store(struct sockaddr_in6 *sin6, struct sockaddr_in6 *sin6mask,
+    int dbflag, char *ifname)
+{
+	/*
+	 * If linklocal, store a version that will match conf output
+	 * with no scope id, ifname in separate database field
+	 */
+	if (IN6_IS_ADDR_LINKLOCAL(&sin6->sin6_addr) ||
+	    IN6_IS_ADDR_MC_LINKLOCAL(&sin6->sin6_addr) ||
+	    IN6_IS_ADDR_MC_INTFACELOCAL(&sin6->sin6_addr)) {
+		sin6->sin6_addr.s6_addr[2] = sin6->sin6_addr.s6_addr[3] = 0;
+		sin6->sin6_scope_id = 0;
+		db_delete_flag_x_ctl_data("ipv6linklocal", ifname,
+		    netname6(sin6, sin6mask));
+		if (dbflag != DB_X_REMOVE)
+			db_insert_flag_x("ipv6linklocal", ifname, 0,
+			    dbflag, netname6(sin6, sin6mask));
+	}
 }
 
 /*

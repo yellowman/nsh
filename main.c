@@ -85,6 +85,8 @@ main(int argc, char *argv[])
 		printf("%% database ctl creation failed\n");
 	if (db_create_table_flag_x("dhcrelay") < 0)
 		printf("%% database dhcrelay creation failed\n");
+	if (db_create_table_flag_x("ipv6linklocal") < 0)
+		printf("%% database ipv6linklocal creation failed\n");
 
 	printf("%% NSH v%s\n", vers);
 

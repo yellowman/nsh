@@ -53,7 +53,6 @@
 #define TMPSIZ 1024	/* size of temp strings */
 #define MTU_IGNORE ULONG_MAX	/* ignore this "default" mtu */
 
-char *routename_sa(struct sockaddr *);
 void conf_interfaces(FILE *, char *);
 void conf_print_rtm(FILE *, struct rt_msghdr *, char *, int);
 int conf_ifaddrs(FILE *, char *, int);
@@ -71,8 +70,10 @@ void conf_keepalive(FILE *, int, char *);
 void conf_groupattrib(FILE *);
 int dhclient_isenabled(char *);
 int islateif(char *);
-int isdefaultroute4(struct sockaddr *sa);
+int isdefaultroute(struct sockaddr *sa);
 int scantext(char *, char *);
+int ipv6ll_db_compare(struct sockaddr_in6 *, struct sockaddr_in6 *,
+    char *);
 
 static const struct {
 	char *name;
@@ -777,18 +778,51 @@ void conf_brcfg(FILE *output, int ifs, struct if_nameindex *ifn_list,
 		    output);
 }
 
+int
+ipv6ll_db_compare(struct sockaddr_in6 *sin6, struct sockaddr_in6 *sin6mask,
+    char *ifname)
+{
+	int count, scope;
+	StringList *data;
+	struct in6_addr store;
+
+	if (IN6_IS_ADDR_LINKLOCAL(&sin6->sin6_addr) ||
+	    IN6_IS_ADDR_MC_LINKLOCAL(&sin6->sin6_addr) ||
+	    IN6_IS_ADDR_MC_INTFACELOCAL(&sin6->sin6_addr)) {
+		/*
+		 * Save any scope or embedded scope.
+		 * The kernel does not set sin6_scope_id.
+		 * But if it ever does, we're already prepared.
+		 */
+		store.s6_addr[0] = sin6->sin6_addr.s6_addr[2];
+		store.s6_addr[1] = sin6->sin6_addr.s6_addr[3];
+		sin6->sin6_addr.s6_addr[2] = sin6->sin6_addr.s6_addr[3] = 0;
+		scope = sin6->sin6_scope_id;
+		sin6->sin6_scope_id = 0;
+		
+		data = sl_init();
+		db_select_flag_x_ctl_data(data, "ipv6linklocal", ifname,
+		    netname6(sin6, sin6mask));
+		count = data->sl_cur;
+		sl_free(data, 1);
+
+		/* restore any scope or embedded scope */
+		sin6->sin6_addr.s6_addr[2] = store.s6_addr[0];
+		sin6->sin6_addr.s6_addr[3] = store.s6_addr[1];
+		sin6->sin6_scope_id = scope;
+		return(count);
+	}
+	return 0;
+}
+
+
 int conf_ifaddrs(FILE *output, char *ifname, int flags)
 {
 	struct ifaddrs *ifa, *ifap;
-	struct sockaddr_in sin, sinmask, sindest;
-	struct sockaddr_in6 sin6, sin6mask, sin6dest;
-	int ippntd;
+	struct sockaddr_in *sin, *sinmask, *sindest;
+	struct sockaddr_in6 *sin6, *sin6mask, *sin6dest;
+	int ippntd = 0;
 
-	/*
-	 * Print interface IP address, and broadcast or
-	 * destination if available.  But, don't print broadcast
-	 * if it is what we would expect given the ip and netmask!
-	 */
 	if (getifaddrs(&ifap) != 0) {
 		printf("%% conf: getifaddrs failed: %s\n",
 		strerror(errno));
@@ -796,15 +830,9 @@ int conf_ifaddrs(FILE *output, char *ifname, int flags)
 	}
 
 	/*
-	 * This short controls whether or not we print 'ip ....'
-	 * or 'alias ....'
-	 */
-	ippntd = 0;
-
-	/*
 	 * Cycle through getifaddrs for interfaces with our
-	 * desired name that sport AF_INET, print the IP and
-	 * related information.
+	 * desired name that sport AF_INET | AF_INET6. Print
+	 * the IP and related information.
 	 */
 	for (ifa = ifap; ifa; ifa = ifa->ifa_next) {
 		if (strncmp(ifname, ifa->ifa_name, IFNAMSIZ))
@@ -812,73 +840,62 @@ int conf_ifaddrs(FILE *output, char *ifname, int flags)
 
 		switch (ifa->ifa_addr->sa_family) {
 		case AF_INET:
-			memcpy(&sin, ifa->ifa_addr, sizeof(struct sockaddr_in));
-			memcpy(&sinmask, ifa->ifa_netmask, sizeof(struct sockaddr_in));
-			if (sin.sin_addr.s_addr == 0)
+			sin = (struct sockaddr_in *)ifa->ifa_addr;
+			if (sin->sin_addr.s_addr == 0)
 				continue;
-			break;
-		case AF_INET6:
-			memcpy(&sin6, ifa->ifa_addr, sizeof(struct sockaddr_in6));
-			memcpy(&sin6mask, ifa->ifa_netmask, sizeof(struct sockaddr_in6));
-			if (IN6_IS_ADDR_LINKLOCAL(&sin6.sin6_addr))
-				continue;
-			if (sin6.sin6_addr.s6_addr == 0)
-				continue;
-			break;
-		default:
-			continue;
-		}
-                
-		ippntd++;
-
-		switch (ifa->ifa_addr->sa_family) {
-		case AF_INET:
+			sinmask = (struct sockaddr_in *)ifa->ifa_netmask;
 			if (flags & IFF_POINTOPOINT) {
+				sindest = (struct sockaddr_in *)ifa->ifa_dstaddr;
 				fprintf(output, " ip %s",
-				    sinmask.sin_addr.s_addr == 0 ?
-				    inet_ntoa(sinmask.sin_addr) :
-				    netname4(sin.sin_addr.s_addr, &sinmask));
-				memcpy(&sindest, ifa->ifa_dstaddr,
-				    sizeof(struct sockaddr_in));
-				fprintf(output, " %s", inet_ntoa(sindest.sin_addr));
+				    sinmask->sin_addr.s_addr == 0 ?
+				    routename4(sinmask->sin_addr.s_addr) :
+				    netname4(sin->sin_addr.s_addr, sinmask));
+				fprintf(output, " %s", inet_ntoa(sindest->sin_addr));
 			} else if (flags & IFF_BROADCAST) {
+				sindest = (struct sockaddr_in *)ifa->ifa_broadaddr;
 				fprintf(output, " ip %s",
-				    netname4(sin.sin_addr.s_addr, &sinmask));
-				memcpy(&sindest, ifa->ifa_broadaddr,
-				    sizeof(struct sockaddr_in));
+				    netname4(sin->sin_addr.s_addr, sinmask));
 				/*
 				 * no reason to save the broadcast addr
 				 * if it is standard (this should always 
 				 * be true unless someone has messed up their
 				 * network or they are playing around...)
 				 */
-				if (ntohl(sindest.sin_addr.s_addr) !=
-				    in4_brdaddr(sin.sin_addr.s_addr,
-				    sinmask.sin_addr.s_addr))
+				if (ntohl(sindest->sin_addr.s_addr) !=
+				    in4_brdaddr(sin->sin_addr.s_addr,
+				    sinmask->sin_addr.s_addr))
 					fprintf(output, " %s",
-					    inet_ntoa(sindest.sin_addr));
+					    inet_ntoa(sindest->sin_addr));
 			} else {
 				fprintf(output, " ip %s",
-				    netname4(sin.sin_addr.s_addr, &sinmask));
+				    netname4(sin->sin_addr.s_addr, sinmask));
 			}
+			ippntd = 1;
 			break;
 		case AF_INET6:
+			sin6 = (struct sockaddr_in6 *)ifa->ifa_addr;
+			sin6mask = (struct sockaddr_in6 *)ifa->ifa_netmask;
+			if (sin6->sin6_addr.s6_addr == 0)
+				continue;
+			if (!ipv6ll_db_compare(sin6, sin6mask, ifname))
+				continue;
+			in6_fillscopeid(sin6);
 			if (flags & IFF_POINTOPOINT) {
-				char inet6n[INET6_ADDRSTRLEN];
+				sin6dest = (struct sockaddr_in6 *)ifa->ifa_dstaddr;
 				fprintf(output, " ip %s",
-				    sin6mask.sin6_addr.s6_addr[0] == 0 ?
-				    inet_ntop(AF_INET6, &sin6.sin6_addr,
-				    inet6n, sizeof(inet6n)) :
-				    netname6(&sin6, &sin6mask));
-				memcpy(&sin6dest, ifa->ifa_dstaddr,
-				    sizeof(struct sockaddr_in6));
-				fprintf(output, " %s", inet_ntop(AF_INET6,
-				    &sin6dest.sin6_addr, inet6n, sizeof(inet6n)));
+				    sin6mask->sin6_addr.s6_addr[0] == 0 ?
+				    routename6(sin6) :
+				    netname6(sin6, sin6mask));
+				in6_fillscopeid(sin6dest);
+				fprintf(output, " %s", routename6(sin6dest));
 			} else {
 				fprintf(output, " ip %s",
-				    netname6(&sin6, &sin6mask));
+				    netname6(sin6, sin6mask));
 			}
+			ippntd = 1;
 			break;
+		default:
+			continue;
 		}
 		fprintf(output, "\n");
 	}
@@ -1078,12 +1095,16 @@ conf_intrtlabel(FILE *output, int ifs, char *ifname)
 }
 
 int
-isdefaultroute4(struct sockaddr *sa)
+isdefaultroute(struct sockaddr *sa)
 {
+	struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)sa;
+
 	switch (sa->sa_family) {
 	case AF_INET:
 		return
 		    (((struct sockaddr_in *)sa)->sin_addr.s_addr) == INADDR_ANY;
+	case AF_INET6:
+		return (IN6_IS_ADDR_UNSPECIFIED(&sin6->sin6_addr));
 	default:
 		return (0);
 	}
@@ -1122,14 +1143,14 @@ conf_print_rtm(FILE *output, struct rt_msghdr *rtm, char *delim, int af)
 			}
 			ADVANCE(cp, sa);
 		}
-	if (dst && gate && (af == AF_INET)) {
+	if (dst && gate && (af == AF_INET || af == AF_INET6)) {
 		/*
-		 * suppress printing IP route if it's the default
-		 * v4 route and dhcp (dhclient) is enabled
+		 * Suppress printing IP route if it's the default
+		 * route and dhcp (dhclient) is enabled. XXX This logic is
+		 * really for IPv4, not IPv6.
 		 */
-		if (!(isdefaultroute4(dst) && dhclient_isenabled(routename(gate)))) {
-			fprintf(output, "%s%s ", delim, mask ?
-			    netname(dst, mask) : netname(dst, (struct sockaddr *)&sin));
+		if (!(isdefaultroute(dst) && dhclient_isenabled(routename(gate)))) {
+			fprintf(output, "%s%s ", delim, netname(dst, mask));
 			fprintf(output, "%s\n", routename(gate));
 		}
 	} else
