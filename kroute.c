@@ -591,7 +591,6 @@ ip_route(ip_t *dest, ip_t *gate, u_short cmd, int flags, int tableid)
 
 	switch(dest->family) {
 	case AF_INET:
-	  {
 		if (len == 32)
 			flags |= RTF_HOST;
 		so_dst.sin.sin_addr.s_addr = dest->addr.sin.s_addr;
@@ -617,11 +616,9 @@ ip_route(ip_t *dest, ip_t *gate, u_short cmd, int flags, int tableid)
 				    htonl(0xffffffff << (32 - len));
 			rtm_addrs |= RTA_NETMASK;
 		}
-	  }
 		break;
 
 	case AF_INET6:
-	  {
 		if (len == 128)
 			flags |= RTF_HOST;
 		so_dst.sin6.sin6_addr = dest->addr.sin6;
@@ -645,7 +642,6 @@ ip_route(ip_t *dest, ip_t *gate, u_short cmd, int flags, int tableid)
 			rtm_addrs |= RTA_NETMASK;
 			prefixlen(len, &so_mask.sin6);
 		}
-	  }
 		break;
 	default:
 		printf("%% ip_route: Internal error\n");

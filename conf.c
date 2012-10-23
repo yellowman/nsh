@@ -70,7 +70,7 @@ void conf_keepalive(FILE *, int, char *);
 void conf_groupattrib(FILE *);
 int dhclient_isenabled(char *);
 int islateif(char *);
-int isdefaultroute(struct sockaddr *sa);
+int isdefaultroute(struct sockaddr *, struct sockaddr *);
 int scantext(char *, char *);
 int ipv6ll_db_compare(struct sockaddr_in6 *, struct sockaddr_in6 *,
     char *);
@@ -1095,19 +1095,25 @@ conf_intrtlabel(FILE *output, int ifs, char *ifname)
 }
 
 int
-isdefaultroute(struct sockaddr *sa)
+isdefaultroute(struct sockaddr *sa, struct sockaddr *samask)
 {
 	struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)sa;
+	struct sockaddr_in6 *sin6mask = (struct sockaddr_in6 *)samask;
 
 	switch (sa->sa_family) {
 	case AF_INET:
-		return
-		    (((struct sockaddr_in *)sa)->sin_addr.s_addr) == INADDR_ANY;
+		if ((((struct sockaddr_in *)samask)->sin_addr.s_addr) == INADDR_ANY);
+			return
+			    (((struct sockaddr_in *)sa)->sin_addr.s_addr) == INADDR_ANY;
+		break;
 	case AF_INET6:
-		return (IN6_IS_ADDR_UNSPECIFIED(&sin6->sin6_addr));
+		if (IN6_IS_ADDR_UNSPECIFIED(&sin6mask->sin6_addr))
+			return (IN6_IS_ADDR_UNSPECIFIED(&sin6->sin6_addr));
+		break;
 	default:
-		return (0);
+		break;
 	}
+	return 0;
 }
 
 void
@@ -1143,13 +1149,13 @@ conf_print_rtm(FILE *output, struct rt_msghdr *rtm, char *delim, int af)
 			}
 			ADVANCE(cp, sa);
 		}
-	if (dst && gate && (af == AF_INET || af == AF_INET6)) {
+	if (dst && gate && mask && (af == AF_INET || af == AF_INET6)) {
 		/*
 		 * Suppress printing IP route if it's the default
-		 * route and dhcp (dhclient) is enabled. XXX This logic is
-		 * really for IPv4, not IPv6.
+		 * route and dhcp (dhclient) is enabled.
 		 */
-		if (!(isdefaultroute(dst) && dhclient_isenabled(routename(gate)))) {
+		if (!(isdefaultroute(dst, mask)
+		    && dhclient_isenabled(routename(gate)))) {
 			fprintf(output, "%s%s ", delim, netname(dst, mask));
 			fprintf(output, "%s\n", routename(gate));
 		}
