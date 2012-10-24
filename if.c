@@ -97,8 +97,8 @@ show_int(int argc, char **argv)
 	struct if_nameindex *ifn_list, *ifnp;
 	struct ifreq ifr, ifrdesc;
 	struct if_data if_data;
-	struct sockaddr_in *sin, *sinmask, *sindest;
-	struct sockaddr_in6 *sin6, *sin6mask, *sin6dest;
+	struct sockaddr_in *sin = NULL, *sinmask = NULL, *sindest;
+	struct sockaddr_in6 *sin6 = NULL, *sin6mask = NULL, *sin6dest;
 	struct timeval tv;
 	struct vlanreq vreq;
 
@@ -253,7 +253,7 @@ show_int(int argc, char **argv)
 		case AF_INET:
 			if (flags & IFF_POINTOPOINT) {
 				sindest = (struct sockaddr_in *)ifa->ifa_dstaddr;
-				printf(" (Destination %s)", routename4(sindest));
+				printf(" (Destination %s)", routename4(sindest->sin_addr.s_addr));
 			} else if (flags & IFF_BROADCAST) {
 				sindest = (struct sockaddr_in *)ifa->ifa_broadaddr;
 				/*

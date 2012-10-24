@@ -58,9 +58,6 @@
 #define _WANT_SO_
 #include "externs.h"
 
-short ns_nullh[] = {0,0,0};
-short ns_bh[] = {-1,-1,-1};
-
 int 	sigflag = 0;
 
 /* declared in externs.h */
