@@ -1606,6 +1606,12 @@ cmdrc(char rcname[FILENAME_MAX])
 			continue;
 		if (line[0] == '!')
 			continue;
+		/*
+		 * Don't ignore indented comments with pound sign, otherwise
+		 * comments won't be saved into daemon/ctl config files.
+		 */
+		if (line[0] == ' ' && line[1] == '!')
+			continue;
 		if (line[0] == ' ')
 			strlcpy(saveline, line, sizeof(line));
 		makeargv();
@@ -1620,8 +1626,6 @@ cmdrc(char rcname[FILENAME_MAX])
 		}
 		if (line[0] != ' ' || (line[0] == ' ' && savec
 		    && savec->modh == 2)) {
-			if (line[1] == '!')
-				continue;
 			/*
 			 * command was not indented, or indented for a mode 2
 			 * handler. process normally.
@@ -1630,13 +1634,8 @@ cmdrc(char rcname[FILENAME_MAX])
 				c = getcmd(margv[1]);
 				if (line[0] != ' ')
 					savec = c;
-				if (savec && savec->modh) {
-					/*
-					 * ..command is a mode handler
-					 * then it cannot be 'no cmd'
-					 */
-					printf("%% Argument 'no' is invalid"
-					    " for a mode handler (line %u) ",
+				if (savec && (savec->nocmd == 0)) {
+					printf("%% Invalid rc command (line %u) ",
 					    lnum);
 					p_argv(margc, margv);
 					printf("\n");
@@ -1685,14 +1684,6 @@ cmdrc(char rcname[FILENAME_MAX])
 			    c != savec ? "(sub-cmd)" : "", lnum);
 			p_argv(margc, margv);
 			printf("\n");
-		}
-		if (!(savec && savec->modh == 1) &&
-		    !c->nocmd && NO_ARG(margv[0])) {
-			printf("%% Invalid rc command (line %u) ",
-			    lnum);
-			p_argv(margc, margv);
-			printf("\n");
-			continue;
 		}
 		if (c->modh == 1)
 			(*c->handler) (margc, margv, modhvar);
