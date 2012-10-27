@@ -53,6 +53,7 @@ char *netname4(in_addr_t, struct sockaddr_in *);
 char *routename6(struct sockaddr_in6 *);
 char *netname6(struct sockaddr_in6 *, struct sockaddr_in6 *);
 void in6_fillscopeid(struct sockaddr_in6 *);
+void in6_clearscopeid(struct sockaddr_in6 *);
 #endif
 #ifdef _SYS_SOCKET_H_
 char *routename(struct sockaddr *);
@@ -322,8 +323,11 @@ void conf_ipsysctl(FILE *);
 int route(int, char**);
 void show_route(char *, int);
 #ifdef _IP_T_
-void parse_ip(char *, int, ip_t *);
+void parse_ip_pfx(char *, int, ip_t *);
 int ip_route(ip_t *, ip_t *, u_short, int, int);
+#endif
+#ifdef _NETINET6_IN6_H_
+int parse_ipv6(char *, struct in6_addr *);
 #endif
 
 /* if.c */

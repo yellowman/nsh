@@ -442,13 +442,11 @@ p_sockaddr(struct sockaddr *sa, struct sockaddr *mask, int flags, int width)
 	switch (sa->sa_family) {
 	case AF_INET6:
 	    {
-		struct sockaddr_in6 *sa6 = (struct sockaddr_in6 *)sa;
-
-		in6_fillscopeid(sa6);
+		in6_fillscopeid((struct sockaddr_in6 *)sa);
 		if (flags & RTF_HOST)
-			cp = routename((struct sockaddr *)sa6);
+			cp = routename(sa);
 		else
-			cp = netname((struct sockaddr *)sa6, mask);
+			cp = netname(sa, mask);
 		break;
 	    }
 	default:
@@ -546,6 +544,20 @@ in6_fillscopeid(struct sockaddr_in6 *sin6)
 	}
 }
 
+void
+in6_clearscopeid(struct sockaddr_in6 *sin6)
+{
+	if ((IN6_IS_ADDR_LINKLOCAL(&sin6->sin6_addr) ||
+	    IN6_IS_ADDR_MC_LINKLOCAL(&sin6->sin6_addr) ||
+	    IN6_IS_ADDR_MC_INTFACELOCAL(&sin6->sin6_addr)) &&
+	    *(u_int16_t *)&sin6->sin6_addr.s6_addr[2] == 0 &&
+	    sin6->sin6_scope_id) {
+		*(u_int16_t *)&sin6->sin6_addr.s6_addr[2] =
+		    htons(sin6->sin6_scope_id & 0xffff);
+		sin6->sin6_scope_id = 0;
+	}
+}
+
 char *
 routename4(in_addr_t in)
 {
@@ -562,7 +574,7 @@ routename6(struct sockaddr_in6 *sin6)
 {
 	if (getnameinfo((struct sockaddr *)sin6, sin6->sin6_len,
 	    line_show, sizeof(line_show), NULL, 0, NI_NUMERICHOST) != 0)
-		strncpy(line_show, "invalid", sizeof(line_show));
+		strncpy(line_show, "", sizeof(line_show));
 
 	return (line_show);
 }
@@ -668,7 +680,7 @@ netname6(struct sockaddr_in6 *sa6, struct sockaddr_in6 *mask)
 	error = getnameinfo((struct sockaddr *)&sin6, sin6.sin6_len,
 	    hbuf, sizeof(hbuf), NULL, 0, NI_NUMERICHOST);
 	if (error)
-		snprintf(hbuf, sizeof(hbuf), "invalid");
+		hbuf[0] = '\0';
 
 	snprintf(line_show, sizeof(line_show), "%s/%d", hbuf, masklen);
 	return (line_show);

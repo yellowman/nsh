@@ -573,6 +573,7 @@ ip_route(ip_t *dest, ip_t *gate, u_short cmd, int flags, int tableid)
 {
 	int l;
 	int len = dest->bitlen;
+	static char line_kroute[MAXHOSTNAMELEN];
 
 	rtm_addrs = 0;
 	memset(&so_dst, 0, sizeof (so_dst));
@@ -590,13 +591,13 @@ ip_route(ip_t *dest, ip_t *gate, u_short cmd, int flags, int tableid)
 	case AF_INET:
 		if (len == 32)
 			flags |= RTF_HOST;
-		so_dst.sin.sin_addr.s_addr = dest->addr.sin.s_addr;
+		so_dst.sin.sin_addr.s_addr = dest->addr.in.s_addr;
 		so_dst.sin.sin_len = sizeof (struct sockaddr_in);
 		so_dst.sin.sin_family = AF_INET;
 		rtm_addrs |= RTA_DST;
 
 		if (gate && (gate->family == dest->family)) {
-			so_gate.sin.sin_addr.s_addr = gate->addr.sin.s_addr;
+			so_gate.sin.sin_addr.s_addr = gate->addr.in.s_addr;
 			so_gate.sin.sin_len = sizeof (struct sockaddr_in);
 			so_gate.sin.sin_family = AF_INET;
 			rtm_addrs |= RTA_GATEWAY;
@@ -618,13 +619,13 @@ ip_route(ip_t *dest, ip_t *gate, u_short cmd, int flags, int tableid)
 	case AF_INET6:
 		if (len == 128)
 			flags |= RTF_HOST;
-		so_dst.sin6.sin6_addr = dest->addr.sin6;
+		so_dst.sin6.sin6_addr = dest->addr.in6;
 		so_dst.sin6.sin6_len = sizeof (struct sockaddr_in6);
 		so_dst.sin6.sin6_family = AF_INET6;
 		rtm_addrs |= RTA_DST;
 
 		if (gate && (gate->family == dest->family)) {
-			so_gate.sin6.sin6_addr = gate->addr.sin6;
+			so_gate.sin6.sin6_addr = gate->addr.in6;
 			if (!IN6_IS_ADDR_UNSPECIFIED(&so_gate.sin6.sin6_addr)) {
 				so_gate.sin6.sin6_len = sizeof (struct sockaddr_in6);
 				so_gate.sin6.sin6_family = AF_INET6;
@@ -649,17 +650,21 @@ ip_route(ip_t *dest, ip_t *gate, u_short cmd, int flags, int tableid)
 		if (cmd == RTM_ADD && gate &&
 		    (errno == ESRCH || errno == ENETUNREACH))
 			printf("%% Gateway is unreachable: %s\n",
-			    inet_ntoa(gate->addr.sin)); /* XXX IPv6 */
+			    inet_ntop(gate->family, &gate->addr,
+			    line_kroute, sizeof(line_kroute)));
 		else if (cmd == RTM_GET &&
 		    (errno == ESRCH || errno == ENETUNREACH))
 			printf("%% Unable to find route: %s\n",
-			    inet_ntoa(dest->addr.sin));
+			    inet_ntop(dest->family, &dest->addr,
+			    line_kroute, sizeof(line_kroute)));
 		else if (cmd == RTM_DELETE && errno == ESRCH)
 			printf("%% No such route to delete: %s\n",
-			    inet_ntoa(dest->addr.sin));
+			    inet_ntop(dest->family, &dest->addr,
+			    line_kroute, sizeof(line_kroute)));
 		else if (cmd == RTM_ADD && errno == EEXIST)
 			printf("%% Route already exists: %s\n",
-			    inet_ntoa(dest->addr.sin));
+			    inet_ntop(dest->family, &dest->addr,
+			    line_kroute, sizeof(line_kroute)));
 		else
 			printf("%% ip_route: rtmsg: %s\n", strerror(errno));
 	} else if (cmd == RTM_GET)

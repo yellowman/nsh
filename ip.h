@@ -11,8 +11,8 @@ typedef struct _ip_t {
 	int bitlen;		/* bits */
 	int ref_count;          /* reference count */
 	union {
-		struct in_addr sin;
-		struct in6_addr sin6;
+		struct in_addr in;
+		struct in6_addr in6;
 	} addr;
 } ip_t;
 

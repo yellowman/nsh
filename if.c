@@ -50,8 +50,7 @@
 char *iftype(int int_type);
 char *get_hwdaddr(char *ifname);
 void pack_ifaliasreq(struct ifaliasreq *, ip_t *, struct in_addr *, char *);
-void pack_in6aliasreq(struct in6_aliasreq *, ip_t *, struct sockaddr_in6 *,
-    char *);
+void pack_in6aliasreq(struct in6_aliasreq *, ip_t *, struct in6_addr *, char *);
 void ipv6ll_db_store(struct sockaddr_in6 *, struct sockaddr_in6 *, int, char *);
 
 static const struct {
@@ -233,7 +232,7 @@ show_int(int argc, char **argv)
 		case AF_INET6:
 			sin6 = (struct sockaddr_in6 *)ifa->ifa_addr;
 			sin6mask = (struct sockaddr_in6 *)ifa->ifa_netmask;
-			if (sin6->sin6_addr.s6_addr == 0)
+			if (IN6_IS_ADDR_UNSPECIFIED(&sin6->sin6_addr))
 				continue;
 			in6_fillscopeid(sin6);
 			break;
@@ -601,14 +600,11 @@ intip(char *ifname, int ifs, int argc, char **argv)
 	char *msg, *cmdname;
 	ip_t ip;
 	/* ipv4 structures */
-	struct in_addr destbcast;
+	struct in_addr in4dest;
 	struct ifaliasreq ip4req;
 	/* ipv6 structures */
+	struct in6_addr in6dest;
 	struct in6_aliasreq ip6req;
-	struct sockaddr_in6 sin6dest;
-
-	memset(&sin6dest, 0, sizeof(sin6dest));
-	memset(&ip, 0, sizeof(ip));
 
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -677,37 +673,55 @@ intip(char *ifname, int ifs, int argc, char **argv)
 		return(0);
 	}
 
-	parse_ip(argv[0], NO_NETMASK, &ip);
+	memset(&ip, 0, sizeof(ip));
+	parse_ip_pfx(argv[0], NO_NETMASK, &ip);
 
 	if (ip.family == 0)
 		/* bad IP specified */
 		return(0);
 
-	if (set && flags & IFF_BROADCAST && ip.bitlen == -1) {
+	if (set && !(flags & IFF_POINTOPOINT) && ip.bitlen == -1) {
 		printf("%% Netmask not specified\n");
 		return(0);
 	}
 	
-	if (ip.bitlen == -1)
-		ip.bitlen = 0;
+	if (ip.bitlen == -1) {
+		/*
+		 * No netmask specified, set the field at 0.
+		 * The kernel mostly ignores netmask for PTP interfaces,
+		 * but won't allow anything less than a /128 for an IPv6
+		 * PTP interface.
+		 */
+		if (!(flags & IFF_POINTOPOINT))
+			ip.bitlen = 0;
+		else if (ip.family == AF_INET)
+			ip.bitlen = 32;
+		else if (ip.family == AF_INET6)
+			ip.bitlen = 128;
+	}
+	
 	switch(ip.family) {
 	case AF_INET:
-		if (argc == 2 && !inet_aton(argv[1], &destbcast)) {
+		memset(&in4dest, 0, sizeof(in4dest));
+		if (argc == 2 && !inet_pton(AF_INET, argv[1], &in4dest)) {
 			printf("%% Invalid %s address\n", msg);
 			return(0);
 		}
-		pack_ifaliasreq(&ip4req, &ip, &destbcast, ifname);
+		memset(&ip4req, 0, sizeof(ip4req));
+		pack_ifaliasreq(&ip4req, &ip, &in4dest, ifname);
 		/* do it */
 		if (ioctl(ifs, set ? SIOCAIFADDR : SIOCDIFADDR, &ip4req) < 0)
 			printf("%% intip: SIOC%sIFADDR: %s\n", set ? "A" : "D",
 			    strerror(errno));
 		break;
 	case AF_INET6:
-		if (argc == 2 && !inet_pton(AF_INET6, argv[1], &sin6dest)) {
-			printf("%% Invalid %s address\n", msg);
+		memset(&in6dest, 0, sizeof(in6dest));
+		if (argc == 2 && parse_ipv6(argv[1], &in6dest) != 0) {
+			printf("%% Invalid destination address %s\n", argv[1]);
 			return(0);
 		}
-		pack_in6aliasreq(&ip6req, &ip, &sin6dest, ifname);
+		memset(&ip6req, 0, sizeof(ip6req));
+		pack_in6aliasreq(&ip6req, &ip, &in6dest, ifname);
 		/* get inet6 socket */
 		s = socket(PF_INET6, SOCK_DGRAM, 0);
 		if (s < 0) {
@@ -740,28 +754,26 @@ intip(char *ifname, int ifs, int argc, char **argv)
 
 void
 pack_ifaliasreq(struct ifaliasreq *ip4req, ip_t *ip,
-    struct in_addr *destbcast, char *ifname)
+    struct in_addr *in4dest, char *ifname)
 {
 	struct sockaddr_in *sin;
-
-	memset(ip4req, 0, sizeof(ip4req));
 
 	/* set IP address */
 	sin = (struct sockaddr_in *)&ip4req->ifra_addr;
 	sin->sin_family = AF_INET;
 	sin->sin_len = sizeof(struct sockaddr_in);
-	sin->sin_addr.s_addr = ip->addr.sin.s_addr;
+	sin->sin_addr.s_addr = ip->addr.in.s_addr;
 	/* set netmask */
 	sin = (struct sockaddr_in *)&ip4req->ifra_mask;
 	sin->sin_family = AF_INET;
 	sin->sin_len = sizeof(struct sockaddr_in);
 	sin->sin_addr.s_addr = htonl(0xffffffff << (32 - ip->bitlen));
 	/* set destination/broadcast address */
-	if (destbcast->s_addr != 0) {
+	if (in4dest->s_addr != 0) {
 		sin = (struct sockaddr_in *)&ip4req->ifra_dstaddr;
 		sin->sin_family = AF_INET;
 		sin->sin_len = sizeof(struct sockaddr_in);
-		sin->sin_addr.s_addr = destbcast->s_addr;
+		sin->sin_addr.s_addr = in4dest->s_addr;
 	}
 	/* set interface name */
 	strlcpy(ip4req->ifra_name, ifname, sizeof(ip4req->ifra_name));
@@ -769,17 +781,15 @@ pack_ifaliasreq(struct ifaliasreq *ip4req, ip_t *ip,
 
 void
 pack_in6aliasreq(struct in6_aliasreq *ip6req, ip_t *ip,
-    struct sockaddr_in6 *sin6dest, char *ifname)
+    struct in6_addr *in6dest, char *ifname)
 {
 	struct sockaddr_in6 *sin6;
-
-	memset(ip6req, 0, sizeof(ip6req));
 
 	/* set IP address */
 	sin6 = (struct sockaddr_in6 *)&ip6req->ifra_addr;
 	sin6->sin6_family = AF_INET6;
 	sin6->sin6_len = sizeof(struct sockaddr_in6);
-	sin6->sin6_addr = ip->addr.sin6;
+	sin6->sin6_addr = ip->addr.in6;
 	/* set prefixmask */
 	sin6 = (struct sockaddr_in6 *)&ip6req->ifra_prefixmask;
 	sin6->sin6_family = AF_INET6;
@@ -789,11 +799,11 @@ pack_in6aliasreq(struct in6_aliasreq *ip6req, ip_t *ip,
 	ip6req->ifra_lifetime.ia6t_pltime = ND6_INFINITE_LIFETIME;
 	ip6req->ifra_lifetime.ia6t_vltime = ND6_INFINITE_LIFETIME;
 	/* set destination address */
-	if (sin6dest->sin6_family != 0) {
+	if (!IN6_IS_ADDR_UNSPECIFIED(in6dest)) {
 		sin6 = (struct sockaddr_in6 *)&ip6req->ifra_dstaddr;
 		sin6->sin6_family = AF_INET6;
 		sin6->sin6_len = sizeof(struct sockaddr_in6);
-		sin6->sin6_addr = sin6dest->sin6_addr;
+		sin6->sin6_addr = *in6dest;
 	}
 	/* set interface name */
 	strlcpy(ip6req->ifra_name, ifname, sizeof(ip6req->ifra_name));
@@ -1074,6 +1084,7 @@ intdhcrelay(char *ifname, int ifs, int argc, char **argv)
 {
 	char *cmd[] = { DHCRELAY, "-i", ifname, NULL, '\0' };
 	int set, alen;
+	struct in_addr notused;
 
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -1091,8 +1102,12 @@ intdhcrelay(char *ifname, int ifs, int argc, char **argv)
 		return(0);
 	}
 
-	/* XXX validate argv[0] IP address */
-	cmd[3] = argv[0];
+	if (inet_pton(AF_INET, argv[0], &notused)) {
+		cmd[3] = argv[0];
+	} else {
+		printf("%% Not a valid IPv4 address: %s\n", argv[0]);
+		return 0;
+	}
 
 	if (set) {
 		flag_x("dhcrelay", ifname, DB_X_ENABLE, argv[0]);

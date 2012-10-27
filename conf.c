@@ -812,7 +812,7 @@ ipv6ll_db_compare(struct sockaddr_in6 *sin6, struct sockaddr_in6 *sin6mask,
 		sin6->sin6_scope_id = scope;
 		return(count);
 	}
-	return 0;
+	return 1;
 }
 
 
@@ -847,9 +847,7 @@ int conf_ifaddrs(FILE *output, char *ifname, int flags)
 			if (flags & IFF_POINTOPOINT) {
 				sindest = (struct sockaddr_in *)ifa->ifa_dstaddr;
 				fprintf(output, " ip %s",
-				    sinmask->sin_addr.s_addr == 0 ?
-				    routename4(sinmask->sin_addr.s_addr) :
-				    netname4(sin->sin_addr.s_addr, sinmask));
+				    routename4(sin->sin_addr.s_addr));
 				fprintf(output, " %s", inet_ntoa(sindest->sin_addr));
 			} else if (flags & IFF_BROADCAST) {
 				sindest = (struct sockaddr_in *)ifa->ifa_broadaddr;
@@ -875,17 +873,14 @@ int conf_ifaddrs(FILE *output, char *ifname, int flags)
 		case AF_INET6:
 			sin6 = (struct sockaddr_in6 *)ifa->ifa_addr;
 			sin6mask = (struct sockaddr_in6 *)ifa->ifa_netmask;
-			if (sin6->sin6_addr.s6_addr == 0)
+			if (IN6_IS_ADDR_UNSPECIFIED(&sin6->sin6_addr))
 				continue;
 			if (!ipv6ll_db_compare(sin6, sin6mask, ifname))
 				continue;
 			in6_fillscopeid(sin6);
 			if (flags & IFF_POINTOPOINT) {
+				fprintf(output, " ip %s", routename6(sin6));
 				sin6dest = (struct sockaddr_in6 *)ifa->ifa_dstaddr;
-				fprintf(output, " ip %s",
-				    sin6mask->sin6_addr.s6_addr[0] == 0 ?
-				    routename6(sin6) :
-				    netname6(sin6, sin6mask));
 				in6_fillscopeid(sin6dest);
 				fprintf(output, " %s", routename6(sin6dest));
 			} else {
@@ -1120,7 +1115,7 @@ void
 conf_print_rtm(FILE *output, struct rt_msghdr *rtm, char *delim, int af)
 {
 	int i;
-	char *cp;
+	char *cp, flags[64];
 	struct sockaddr *dst = NULL, *gate = NULL, *mask = NULL;
 	struct sockaddr *sa;
 	struct sockaddr_in sin;
@@ -1135,8 +1130,14 @@ conf_print_rtm(FILE *output, struct rt_msghdr *rtm, char *delim, int af)
 			case RTA_DST:
 				/* allow arp to get printed with af==AF_LINK */
 				if ((sa->sa_family == af) ||
-				    (af == AF_LINK && sa->sa_family == AF_INET))
+				    (af == AF_LINK && sa->sa_family == AF_INET)) {
+					if (rtm->rtm_flags & RTF_REJECT)
+						snprintf(flags, sizeof(flags),
+						    " reject");
+					else
+						flags[0] = '\0';
 					dst = sa;
+				}
 				break;
 			case RTA_GATEWAY:
 				if (sa->sa_family == af)
@@ -1157,10 +1158,11 @@ conf_print_rtm(FILE *output, struct rt_msghdr *rtm, char *delim, int af)
 		if (!(isdefaultroute(dst, mask)
 		    && dhclient_isenabled(routename(gate)))) {
 			fprintf(output, "%s%s ", delim, netname(dst, mask));
-			fprintf(output, "%s\n", routename(gate));
+			fprintf(output, "%s%s\n", routename(gate), flags);
 		}
-	} else
-	if (dst && gate && (af == AF_LINK))
+	} else if (dst && gate && (af == AF_LINK)) {
 		/* print arp */
-		fprintf(output, "%s%s %s\n", delim, routename(dst), routename(gate));
+		fprintf(output, "%s%s ", delim, routename(dst));
+		fprintf(output, "%s%s\n", routename(gate), flags);
+	}
 }
