@@ -1244,7 +1244,9 @@ argvtostring(int argc, char **argv, char *string, int strlen)
 		string[i] = argv[0][j];
 		j++;
 	}
-	string[i == 0 ? 0 : i - 1] = '\0';
+	if (i > 0)
+		i--;
+	string[i] = '\0';
 
 	return i;
 }
