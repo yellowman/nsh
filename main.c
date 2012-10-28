@@ -99,12 +99,16 @@ main(int argc, char *argv[])
 		 */
 		char *argv_demote[] = { "group", "carp", "carpdemote", "128" };
 		char *argv_restore[] = { "no", "group", "carp", "carpdemote", "128" };
+		char tmpfile[64];
 
 		struct daemons *daemons;
 
 		for (daemons = ctl_daemons; daemons->name != 0; daemons++)
-			if (daemons->tmpfile)
-				rmtemp(daemons->tmpfile);
+			if (daemons->tmpfile) {
+				snprintf(tmpfile, sizeof(tmpfile), "%s.0",
+				    daemons->tmpfile);
+				rmtemp(tmpfile);
+			}
 
 		priv = 1;
 
