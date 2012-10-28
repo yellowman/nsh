@@ -1014,10 +1014,12 @@ help(int argc, char **argv)
 		printf("%% Commands are:\n\n");
 
 		for (c = cmdtab; c->name; c++)
-			if (c->needpriv == priv && strlen(c->name) > z)
+			if (((c->needpriv && priv) || !c->needpriv)
+			    && strlen(c->name) > z)
 				z = strlen(c->name);
 		for (c = cmdtab; c->name; c++) {
-			if (c->help && (c->needpriv == priv))
+			if (c->help && ((c->needpriv && priv) ||
+			    !c->needpriv))
 				printf("  %-*s  %s\n", z, c->name, c->help);
 		}
 		return 0;

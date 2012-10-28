@@ -278,7 +278,7 @@ void conf_ctl(FILE *output, char *delim, char *name, int rtableid)
 	FILE *conf;
 	struct daemons *x;
 	struct ctl *ctl;
-	char tmp_str[TMPSIZ];
+	char tmp_str[TMPSIZ], tmpfile[64];
 	char *fenablednm = NULL, *fothernm = NULL, *flocalnm = NULL;
 	int pntdrules = 0, pntdflag = 0, dbflag;
 
@@ -290,7 +290,8 @@ void conf_ctl(FILE *output, char *delim, char *name, int rtableid)
 	}
 
 	/* print rules */
-	if ((conf = fopen(x->tmpfile, "r")) != NULL) {
+	snprintf(tmpfile, sizeof(tmpfile), "%s.%d", x->tmpfile, rtableid);
+	if ((conf = fopen(tmpfile, "r")) != NULL) {
 		fprintf(output, "%s%s rules\n", delim, name);
 		for (;;) {
 			if(fgets(tmp_str, TMPSIZ, conf) == NULL)
@@ -303,7 +304,7 @@ void conf_ctl(FILE *output, char *delim, char *name, int rtableid)
 		fprintf(output, "%s!\n", delim);
 		pntdrules = 1;
 	} else if (errno != ENOENT || (errno != ENOENT && verbose))
-		printf("%% conf_ctl: %s: %s\n", x->tmpfile, strerror(errno));
+		printf("%% conf_ctl: %s: %s\n", tmpfile, strerror(errno));
 
 	for (ctl = x->table; ctl != NULL && ctl->name != NULL; ctl++) {
 		if (ctl->flag_x == DB_X_LOCAL)
@@ -335,6 +336,7 @@ void conf_ctl(FILE *output, char *delim, char *name, int rtableid)
 		    fothernm : "other");
 		pntdflag = 1;
 		break;
+	case DB_X_DISABLE:
 	case 0:
 		break;
 	default:

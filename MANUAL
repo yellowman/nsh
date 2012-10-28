@@ -187,12 +187,21 @@ nsh/?
 % Commands may be abbreviated.
 % Commands are:
 
-  show     Show system information
-  enable   Enable privileged mode
-  quit     Close current connection
-  verbose  Set verbose diagnostics
-  editing  Set command line editing
-  ?        Print help information
+  rtable       Routing table switch
+  show         Show system information
+  enable       Enable privileged mode
+  ping         Send IPv4 ICMP echo request
+  ping6        Send IPv6 ICMP echo request
+  traceroute   Print the route to IPv4 host
+  traceroute6  Print the route to IPv6 host
+  ssh          SSH connection to remote host
+  telnet       Telnet connection to remote host
+  verbose      Set verbose diagnostics
+  editing      Set command line editing
+  who          Display system users
+  ?            Print help information
+  quit         Close current connection
+
 
 enable
 ------
@@ -209,26 +218,64 @@ nsh(priv)/?
 
   hostname      Set system hostname
   interface     Modify interface parameters
+  rtable        Routing table switch
+  group         Modify group attributes
+  arp           Static ARP set
   bridge        Modify bridge parameters
   show          Show system information
+  ip            Set IP networking parameters
   flush         Flush system tables
+  enable        Enable privileged mode
   disable       Disable privileged mode
   route         Add a host or network route
-  pf            Packet filter rule handler
-  quit          Close current connection
+  pf            Packet filter control
+  ospf          OSPF control
+  ospf6         OSPF6 control
+  bgp           BGP control
+  rip           RIP control
+  ldp           LDP control
+  relay         Relay control
+  ipsec         IPsec IKEv1 control
+  ike           IPsec IKEv2 control
+  dvmrp         DVMRP control
+  sasync        SA synchronization control
+  dhcp          DHCP server control
+  snmp          SNMP server control
+  ldap          LDAP server control
+  smtp          SMTP server control
+  sshd          SSH server control
+  ntp           NTP synchronization control
+  nppp          PPP server control
+  ifstate       ifstate server control
+  ftp-proxy     ftp-proxy server control
+  tftp-proxy    tftp-proxy server control
+  tftp          TFTP server control
+  dns           DNS rule control
+  inet          Inet super-server control
+  ping          Send IPv4 ICMP echo request
+  ping6         Send IPv6 ICMP echo request
+  traceroute    Print the route to IPv4 host
+  traceroute6   Print the route to IPv6 host
+  ssh           SSH connection to remote host
+  telnet        Telnet connection to remote host
   reboot        Reboot the system
-  shutdown      Shut the system down
+  halt          Halt the system
   write-config  Save the current configuration
   verbose       Set verbose diagnostics
   editing       Set command line editing
+  who           Display system users
   !             Invoke a subshell
   ?             Print help information
+  quit          Close current connection
 
+
+enable secret
+-------------
 
 To set the password you must be in privileged mode. Set it either with
 "enable secret <yourpassword>" or 
 "enable secret <cipher> <crypted password>".
-NSH at the moment only supports blowfish as cipher.
+NSH only supports blowfish as cipher.
 
 Examples:
 
@@ -239,6 +286,31 @@ or with an already crypted password:
 nsh(priv)/enable secret blowfish $2a$06$eQYswZjAHop5UFC8yle85uEqi/MCBhnWBi8IRU60LmkVvgZmtBiOm
 
 You can generate a blowfish-crypted password using encrypt -b6.
+
+rtable
+------
+
+The rtable commands allows you to execute services and diagnostic commands 
+(ping, traceroute) under alternate routing tables. Routing tables in
+OpenBSD number from 0 to 255. They have a 1:1 relationship with routing
+domains, except that routing domain 0 can contain multiple routing 
+tables.
+
+A routing table must be initialized by having static routes added, or
+by having an interface join its corresponding routing domain. An
+uninitialized routing table cannot be used to execute any services
+or diagnostic commands.
+
+nsh(p)/rtable 1 Management network
+nsh(p-rtable 1)/route 0.0.0.0/0 100.64.0.1
+nsh(p-rtable 1)/sshd edit
+nsh(p-rtable 1)/sshd enable
+
+The rtable command also supports unprivileged mode usage
+
+nsh/rtable 1
+nsh(rtable 1)/ping 100.64.0.1
+
 
 hostname <hostname>
 -------------------

@@ -137,6 +137,7 @@ extern char metricnames[];
 #define OPT     (void *)1
 #define REQ     (void *)2
 #define IFNAME  (void *)3
+#define REQTEMP (void *)4
 #define SIZE_CONF_TEMP 64
 int ctlhandler(int, char **, char *);
 void rmtemp(char *);
