@@ -658,13 +658,15 @@ intip(char *ifname, int ifs, int argc, char **argv)
 	}
 
 	if (isprefix(argv[0], "dhcp")) {
-		char *args[] = { PKILL, "dhclient", ifname, '\0' };
+		char table[16];
+		char *args[] = { PKILL, table, "dhclient", ifname, '\0' };
 		char *args_set[] = { DHCLIENT, ifname, '\0' };
 		char leasefile[sizeof(LEASEPREFIX)+1+IFNAMSIZ];
 
 		if (set)
 			cmdargs(DHCLIENT, args_set);
 		else {
+			snprintf(table, sizeof(table), "-T%d", cli_rtable);
 			cmdargs(PKILL, args);
 			snprintf(leasefile, sizeof(leasefile), "%s.%s",
 			    LEASEPREFIX, ifname);
@@ -1113,8 +1115,8 @@ intdhcrelay(char *ifname, int ifs, int argc, char **argv)
 		flag_x("dhcrelay", ifname, DB_X_ENABLE, argv[0]);
 		cmdargs(DHCRELAY, cmd);
 	} else {
-		char server[24], argue[SIZE_CONF_TEMP];
-		char *killcmd[] = { PKILL, "-xf", NULL, '\0' };
+		char table[16], server[24], argue[SIZE_CONF_TEMP];
+		char *killcmd[] = { PKILL, table, "-xf", NULL, '\0' };
 
 		if ((alen = conf_dhcrelay(ifname, server, sizeof(server))) < 1) {
 			if (alen == 0)
@@ -1132,9 +1134,11 @@ intdhcrelay(char *ifname, int ifs, int argc, char **argv)
 
 		flag_x("dhcrelay", ifname, DB_X_REMOVE, NULL);
 
+		snprintf(table, sizeof(table), "-T%d", cli_rtable);
+
 		/* setup argument list as one argument for pkill -xf */
 		snprintf(argue, sizeof(argue), "%s %s %s %s", cmd[0], cmd[1], cmd[2], server);
-		killcmd[2] = argue;
+		killcmd[3] = argue;
 
 		cmdargs(PKILL, killcmd);
 	}
