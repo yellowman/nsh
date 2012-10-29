@@ -493,6 +493,7 @@ int db_delete_flag_x_ctl(char *, char *);
 int db_delete_flag_x_ctl_data(char *, char *, char *);
 #ifdef _STRINGLIST_H
 int db_select_flag_x_ctl_data(StringList *, char *, char *, char *);
+int db_select_flag_x_ctl(StringList *, char *, char *);
 int db_select_rtable_rtables(StringList *);
 int db_select_rtables_rtable(StringList *, int);
 int db_select_rtables_ctl(StringList *, char *);

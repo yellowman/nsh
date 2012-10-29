@@ -44,8 +44,9 @@
 #include <arpa/inet.h>
 #include <limits.h>
 #include "ip.h"
-#include "externs.h"
 #include "bridge.h"
+#include "stringlist.h"
+#include "externs.h"
 
 char *iftype(int int_type);
 char *get_hwdaddr(char *ifname);
@@ -1622,12 +1623,10 @@ intpowersave(char *ifname, int ifs, int argc, char **argv)
 int
 intlladdr(char *ifname, int ifs, int argc, char **argv)
 {
-	char *lladdr, llorig[IFNAMSIZ+1];
+	StringList *hwdaddr;
+	char *lladdr, llorig[sizeof("00:00:00:00:00:00") + 1];
 	struct ether_addr *addr;
 	struct ifreq ifr;
-	FILE *llfile;
-#define LLPREFIX "/var/run/lladdr"
-	char llfn[sizeof(LLPREFIX)+IFNAMSIZ+1];
 	int set;
 
 	if (NO_ARG(argv[0])) {
@@ -1648,45 +1647,33 @@ intlladdr(char *ifname, int ifs, int argc, char **argv)
 		return(1);
 	}
 
-	/*
-	 * the expectation here is that, on first run of the lladdr command,
-	 * after system boot, /var/run/lladdr.%s will not exist and so we
-	 * will ALWAYS create it with the interface's current lladdr.
-	 * this file is used if 'no lladdr' is ever specified, that way
-	 * we know exactly what address to revert back to.  also, conf_lladdr
-	 * always knows about the default address this way.  finally, because
-	 * the output to /var/run/lladdr.%s is generated from get_hwdaddr,
-	 * and the comparisons will be with new data generated from get_hwdaddr
-	 * it will always have the same case and format for easy comparison.
-	 */
-	snprintf(llfn, sizeof(llfn), "%s.%s", LLPREFIX, ifname);
-	if ((llfile = fopen(llfn, "r")) == NULL) {
-		/* llfn not around? create it */
-		if (set && ((llfile = fopen(llfn, "w")) != NULL)) {
-			fprintf(llfile, "%s", lladdr);
-			fclose(llfile);
-		} else if (set) {
-			printf("%% Failed to open %s for writing: %s\n", llfn,
-			    strerror(errno));
-			return(1);
-		} else {
-			switch(errno) {
-			case ENOENT:
-				printf("%% No saved lladdr to revert back\n");
-				break;
-			default:
-				printf("%% Failed to read %s: %s\n", llfn,
-				    strerror(errno));
-			}
-			return(1);
+	hwdaddr = sl_init();
+	if (db_select_flag_x_ctl(hwdaddr, "lladdr", ifname) < 0) {
+		printf("%% database failure select flag x ctl\n");
+		return(1);
+	}
+	if (hwdaddr->sl_cur > 0) {
+		strlcpy(llorig, hwdaddr->sl_str[0], sizeof(llorig));
+		if (!set && db_delete_flag_x_ctl("lladdr", ifname) < 0) {
+				printf("%% database delete failure\n");
+				sl_free(hwdaddr, 1);
+				return(1);
 		}
 	} else {
-		fgets(llorig, sizeof(llorig), llfile);
-		fclose(llfile);
-		if (!set && unlink(llfn) != 0)
-			printf("%% Failed to remove %s: %s\n", llfn,
-			    strerror(errno));
+		strlcpy(llorig, lladdr, sizeof(llorig));
+		if (set && db_insert_flag_x("lladdr", ifname, 0, DB_X_ENABLE,
+		    llorig) < 0) {
+			printf("%% database delete failure\n");
+			sl_free(hwdaddr, 1);
+			return(1);
+		}
+		if (!set) {
+			printf("%% No stored lladdr to reinstate\n");
+			sl_free(hwdaddr, 1);
+			return(1);
+		}
 	}
+	sl_free(hwdaddr, 1);
 
 	/* At this point, llorig will always represent the booted lladdr */
 
@@ -1705,8 +1692,8 @@ intlladdr(char *ifname, int ifs, int argc, char **argv)
 				printf("%% separated with colons (1:23:45:ab:cd:ef)\n");
 				return(1);
 			} else {
-				printf("%% %s corrupted, unable to retrieve original "
-				    "lladdr\n", llfn);
+				printf("%% database corrupted, unable to retrieve original "
+				    "lladdr\n");
 				return(1);
 			}
 		} 

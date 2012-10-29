@@ -87,6 +87,8 @@ main(int argc, char *argv[])
 		printf("%% database dhcrelay creation failed\n");
 	if (db_create_table_flag_x("ipv6linklocal") < 0)
 		printf("%% database ipv6linklocal creation failed\n");
+	if (db_create_table_flag_x("lladdr") < 0)
+		printf("%% database lladdr creation failed\n");
 
 	printf("%% NSH v%s\n", vers);
 

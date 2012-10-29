@@ -97,6 +97,15 @@ db_select_flag_x_ctl_data(StringList *words, char *name, char *ctl, char *data)
 }
 
 int
+db_select_flag_x_ctl(StringList *words, char *name, char *ctl)
+{
+	char		query [QSZ];
+
+	snprintf(query, QSZ, "SELECT data FROM '%s' WHERE ctl='%s'", name, ctl);
+	return(sq3simple(query, words));
+}
+
+int
 db_select_rtable_rtables(StringList *words)
 {
 	char query[]="SELECT rtable FROM rtables";

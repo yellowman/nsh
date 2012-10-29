@@ -422,12 +422,10 @@ int islateif(char *ifname)
 
 void conf_interfaces(FILE *output, char *only)
 {
-	FILE *dhcpif, *llfile;
+	FILE *dhcpif;
 	int ifs, flags, ippntd, br;
-#define	LLPREFIX	"/var/run/lladdr"
 	char leasefile[sizeof(LEASEPREFIX)+1+IFNAMSIZ];
-	char *lladdr, llorig[IFNAMSIZ];
-	char llfn[sizeof(LLPREFIX)+IFNAMSIZ];
+	char *lladdr;
 	char ifdescr[IFDESCRSIZE];
 
 	struct if_nameindex *ifn_list, *ifnp;
@@ -503,16 +501,17 @@ void conf_interfaces(FILE *output, char *only)
 		 */
 		if ((lladdr = get_hwdaddr(ifnp->if_name)) != NULL) {
 			/* We assume lladdr only useful if we can get_hwdaddr */
-			snprintf(llfn, sizeof(llfn), "%s.%s", LLPREFIX,
-			    ifnp->if_name);
-			if ((llfile = fopen(llfn, "r"))) {
-				fgets(llorig, sizeof(llorig), llfile);
-				if (strcmp(llorig, lladdr) != 0) {
-					fprintf(output, " lladdr %s\n",
-					    lladdr);
-				}
-				fclose(llfile);
+			StringList *hwdaddr;
+			hwdaddr = sl_init();
+
+			if (db_select_flag_x_ctl(hwdaddr, "lladdr",
+			    ifnp->if_name) < 0) {
+				printf("%% lladdr database select failed\n");
 			}
+			if (hwdaddr->sl_cur > 0 && (strcmp(hwdaddr->sl_str[0],
+			    lladdr) != 0))
+				fprintf(output, " lladdr %s\n", lladdr);
+			sl_free(hwdaddr, 1);
 		}
 		 
 		/*
