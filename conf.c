@@ -220,7 +220,6 @@ void conf_rtables(FILE *output)
 {
 	int i, rtableid;
 	StringList *rtables;
-	const char *errmsg = NULL;
 
 	rtables = sl_init();
 	if (db_select_rtable_rtables(rtables) < 0) {
@@ -229,6 +228,8 @@ void conf_rtables(FILE *output)
 		return;
 	}
 	for (i = 0; i < rtables->sl_cur; i++) {
+		const char *errmsg = NULL;
+
 		rtableid = strtonum(rtables->sl_str[i], 0, RT_TABLEID_MAX, &errmsg);
 		if (rtableid == 0)
 			continue;
