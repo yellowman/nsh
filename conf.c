@@ -220,6 +220,7 @@ void conf_rtables(FILE *output)
 {
 	int i, rtableid;
 	StringList *rtables;
+	const char *errmsg = NULL;
 
 	rtables = sl_init();
 	if (db_select_rtable_rtables(rtables) < 0) {
@@ -228,9 +229,14 @@ void conf_rtables(FILE *output)
 		return;
 	}
 	for (i = 0; i < rtables->sl_cur; i++) {
-		rtableid = atoi(rtables->sl_str[i]);
+		rtableid = strtonum(rtables->sl_str[i], 0, RT_TABLEID_MAX, &errmsg);
 		if (rtableid == 0)
 			continue;
+		if (errmsg) {
+			printf("%% Invalid route table (%d) %s: %s\n",  i,
+			    rtables->sl_str[i], errmsg);
+			continue;
+		}
 		conf_rtables_rtable(output, rtableid);
 	}
 

@@ -16,6 +16,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <sys/socket.h>
 #include <sqlite3.h>
 #include "stringlist.h"
 #include "externs.h"
@@ -146,12 +147,20 @@ db_select_flag_x_dbflag_rtable(char *name, char *ctl, int rtableid)
 	StringList	*words;
 	char		query[QSZ];
 	int		rv;
+	const char	*errmsg = NULL;
 
 	snprintf(query, QSZ, "SELECT flag FROM %s WHERE ctl='%s' AND rtable=%d",
 	    name, ctl, rtableid);
 	words = sl_init();
-	if((rv = sq3simple(query, words)) > 0)
-		rv = atoi(words->sl_str[0]);
+	if((rv = sq3simple(query, words)) > 0) {
+		rv = strtonum(words->sl_str[0], 0, RT_TABLEID_MAX, &errmsg);
+		if (errmsg) {
+			printf("%% db_select_flag_x_dbflag_rtable %s: %s\n", 
+                            words->sl_str[0], errmsg);
+			rv = -1;
+                }
+	}
+
 	sl_free(words, 1);
 
 	return rv;
