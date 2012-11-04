@@ -31,7 +31,7 @@ if [ ! -z "$tardirs" ]; then
   # we rely on tar's return value...(and it can't handle sockets)
   (cd /$i; find . ! -type s ! -type d -or -type d -empty > $fifo) &
 
-  if ! tar cf /flash/$i.tar.part -C / -I $fifo; then
+  if ! tar cf /flash/$i.tar.part -C /$i -I $fifo; then
    echo tardirs: compacting $i failed, saved at /flash/$i.tar.part
   else
    mv /flash/$i.tar.part /flash/$i.tar
