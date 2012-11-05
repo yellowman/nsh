@@ -10,17 +10,19 @@
 # Chris Cappuccio <chris@nmedia.net>
 #
 
-# Files copied to /stand for stand-alone usage
+# Crunchgen links
 #
 
-[ -z "$standcopy" ] && standcopy="bin/tar sbin/vnconfig sbin/umount"
+[ -z "$progs" ] && progs="ksh pax ls fsck fsck_ffs reboot init mount mount_ffs mount_vnd umount cp mv"
 
-# Stuff that needs to be in place on the ramdisk
+[ -z "$standlink" ] && standlink="tar pax mount_vnd vnconfig umount"
+
+[ -z "$binlink" ] && binlink="sh ksh ls cp mv"
+
+[ -z "$sbinlink" ] && sbinlink="init mount mount_ffs fsck fsck_ffs reboot"
+
+# Files to copy
 #
-
-[ -z "$bincopy" ] && bincopy="bin/sh"
-
-[ -z "$sbincopy" ] && sbincopy="sbin/init sbin/mount sbin/mount_ffs sbin/fsck sbin/fsck_ffs sbin/reboot"
 
 [ -z "$etccopy" ] && etccopy="etc/login.conf etc/pwd.db"
 
@@ -28,13 +30,13 @@
 #
 # blocks
 
-[ -z "$blocks" ] && blocks=8000
+[ -z "$blocks" ] && blocks=4600
 
 ###
 #
 # rdrootfs, device, distloc
 
-[ -z "$szezroot" ] && szezroot=szez.`uname -m`-`date +%Y%m%d`
+[ -z "$rdroot" ] && rdroot=rd.`uname -m`-`date +%Y%m%d`
 
 [ -z "$device" ] && device=vnd0
 
@@ -66,15 +68,26 @@ if [ ! -f $distloc/dev/MAKEDEV ]; then
  exit 1
 fi
 
+if [ ! -f /usr/src/bin/Makefile ]; then
+ echo OpenBSD source tree not found at /usr/src/bin
+ echo Giving up...
+ exit 1
+fi
+if [ ! -f /usr/src/sbin/Makefile ]; then
+ echo OpenBSD source tree not found at /usr/src/sbin
+ echo Giving up...
+ exit 1
+fi
+
 echo Creating ramdisk rootfs
 
 ###
 #
 # dd, vnconfig, disklabel, newfs
 
-c 0 "dd if=/dev/zero of=$szezroot bs=512 count=$blocks >/dev/null 2>&1"
+c 0 "dd if=/dev/zero of=$rdroot bs=512 count=$blocks >/dev/null 2>&1"
 
-c 0 vnconfig $device $szezroot
+c 0 vnconfig $device $rdroot
 
 tmplabel=`mktemp /tmp/mkrdrootlabel.XXXXXXXXX`
 tmpmntdir=`mktemp -d /tmp/mkrdroot.XXXXXXXXX`
@@ -122,22 +135,51 @@ cd $wd
 
 ###
 #
+# Oppa Crunchgen Style
+
+echo -n "Crunchgen ($progs)"
+cgdir=`mktemp -d /tmp/mkrdrootcg.XXXXXXXXX`
+cat  <<-_EOF >>$cgdir/kcopy.conf
+srcdirs /usr/src/bin /usr/src/sbin
+
+progs $progs
+ln ksh -sh       # init invokes the shell with "-sh" in argv[0]
+ln ksh sh
+ln pax tar
+ln mount_vnd vnconfig
+
+libs -lutil
+	_EOF
+
+c 2 cd $cgdir
+c 2 "crunchgen -Em Makefile $cgdir/kcopy.conf >/dev/null 2>&1"
+c 2 "make objs >/dev/null 2>&1"
+c 2 "make >/dev/null 2>&1"
+c 2 cd $wd
+echo
+
+###
+#
 # Copy specific items to kernel ramdisk
 
-echo -n Copying items to ramdisk rootfs
+echo -n Linking kcopy
 
-for i in $standcopy; do
- echo -n " $i"
- c 2 cp $distloc/$i $tmpmntdir/stand
+c 2 cp $cgdir/kcopy $tmpmntdir/stand/kcopy
+c 2 rm -r $cgdir
+for i in $standlink; do
+ echo -n " stand/$i"
+ c 2 ln $tmpmntdir/stand/kcopy $tmpmntdir/stand/$i
 done
-for i in $bincopy; do
- echo -n " $i"
- c 2 cp $distloc/$i $tmpmntdir/bin
+for i in $binlink; do
+ echo -n " bin/$i"
+ c 2 ln $tmpmntdir/stand/kcopy $tmpmntdir/bin/$i
 done
-for i in $sbincopy; do
- echo -n " $i"
- c 2 cp $distloc/$i $tmpmntdir/sbin
+for i in $sbinlink; do
+ echo -n " sbin/$i"
+ c 2 ln $tmpmntdir/stand/kcopy $tmpmntdir/sbin/$i
 done
+echo
+echo -n Copying 
 for i in $etccopy; do
  echo -n " $i"
  c 2 cp $distloc/$i $tmpmntdir/etc

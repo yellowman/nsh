@@ -42,7 +42,7 @@ ie.*at isa.*
 lc.*at isa.*
 ex.*at isa.*
 sm.*at isa.*
-pss.at isa.*
+pss.*at isa.*
 sp.*at pss.*
 eso.*at pci.*
 sb.*at isa.*

@@ -13,21 +13,21 @@
 #
 # blocks
 
-[ -z "$blocks" ] && blocks=8000
+[ -z "$blocks" ] && blocks=4600
 
 ###
 #
 # rdrootfs
 
-if [ -z "$szezroot" -a -z "$1" ]; then
+if [ -z "$rdroot" -a -z "$1" ]; then
  echo "% mkkern <$blocks rdrootfs>"
  exit 1
 fi
 
-[ -z "$szezroot" ] && szezroot=$1
+[ -z "$rdroot" ] && rdroot=$1
 
-if [ ! -f $szezroot ]; then
- echo % $szezroot is not a file
+if [ ! -f $rdroot ]; then
+ echo % $rdroot is not a file
  exit 1
 fi
 
@@ -165,5 +165,5 @@ rm $T
 # run elfrdsetroot
 
 cd $wd
-c 0 $elfrdsetrootdir/elfrdsetroot $tmpmnt/bsd $szezroot
-c 0 $elfrdsetrootdir/elfrdsetroot $tmpmnt/bsd.mp $szezroot
+c 0 $elfrdsetrootdir/elfrdsetroot $tmpmnt/bsd $rdroot
+c 0 $elfrdsetrootdir/elfrdsetroot $tmpmnt/bsd.mp $rdroot
