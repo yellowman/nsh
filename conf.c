@@ -250,13 +250,17 @@ void conf_rtables_rtable(FILE *output, int rtableid)
 	StringList *rtable_name, *rtable_daemons;
 
 	rtable_name = sl_init();
-	rtable_daemons = sl_init();
 
-	if (db_select_name_rtable(rtable_name, rtableid) < 0)
+	if (db_select_name_rtable(rtable_name, rtableid) < 0) {
 		printf("%% database failure select rtables name\n");
-	else
+		sl_free(rtable_name, 1);
+		return;
+	} else {
 		fprintf(output, "rtable %d %s\n", rtableid,
 		    rtable_name->sl_str[0]);
+	}
+
+	sl_free(rtable_name, 1);
 
 	/*
 	 * Routes must be printed before we attempt to start daemons,
@@ -268,14 +272,18 @@ void conf_rtables_rtable(FILE *output, int rtableid)
 	conf_routes(output, " route ", AF_INET, RTF_STATIC, rtableid);
 	conf_routes(output, " route ", AF_INET6, RTF_STATIC, rtableid);
 
-	if (db_select_flag_x_ctl_rtable(rtable_daemons, "ctl", rtableid) < 0)
+	rtable_daemons = sl_init();
+
+	if (db_select_flag_x_ctl_rtable(rtable_daemons, "ctl", rtableid) < 0) {
 		printf("%% database failure select ctl rtable\n");
-	else
+		sl_free(rtable_daemons, 1);
+		return;
+	} else {
 		for (i = 0; i < rtable_daemons->sl_cur; i++)
 			conf_ctl(output, " ", rtable_daemons->sl_str[i], rtableid);
+	}
 
 	sl_free(rtable_daemons, 1);
-	sl_free(rtable_name, 1);
 
 	fprintf(output, "!\n");
 }
@@ -670,14 +678,23 @@ void conf_ifxflags(FILE *output, int ifs, char *ifname)
 
 void conf_rdomain(FILE *output, int ifs, char *ifname)
 {
+	char rdomainid;
+
+	rdomainid = get_rdomain(ifs, ifname);
+	if (rdomainid > 0)
+		fprintf(output, " rdomain %d\n", rdomainid);
+}
+	
+int get_rdomain(int ifs, char *ifname)
+{
 	struct ifreq ifr;
 
 	bzero(&ifr, sizeof(ifr));
 	strlcpy(ifr.ifr_name, ifname, IFNAMSIZ);
 
 	if (ioctl(ifs, SIOCGIFRDOMAIN, (caddr_t)&ifr) != -1)
-		if (ifr.ifr_rdomainid != 0)
-			fprintf(output, " rdomain %d\n", ifr.ifr_rdomainid);
+		return ifr.ifr_rdomainid;
+	return -1;
 }
 
 

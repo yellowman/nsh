@@ -342,6 +342,7 @@ int parse_ipv6(char *, struct in6_addr *);
 #define ROUNDKBYTES(bytes) ((float)bytes == ((bytes / 1024) * 1024))
 int is_valid_ifname(char *);
 int show_int(int, char **);
+int get_rdomain(int, char *);
 int get_ifdata(char *, int);
 int get_ifflags(char *, int);
 int set_ifflags(char *, int, int);
