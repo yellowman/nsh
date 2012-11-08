@@ -642,7 +642,7 @@ ip_route(ip_t *dest, ip_t *gate, u_short cmd, int flags, int tableid)
 		}
 		break;
 	default:
-		printf("%% ip_route: Internal error\n");
+		printf("%% ip_route: can't handle af %d\n", dest->family);
 		return(0);
 		break;
 	}

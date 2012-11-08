@@ -1654,6 +1654,7 @@ intlladdr(char *ifname, int ifs, int argc, char **argv)
 	hwdaddr = sl_init();
 	if (db_select_flag_x_ctl(hwdaddr, "lladdr", ifname) < 0) {
 		printf("%% database failure select flag x ctl\n");
+		sl_free(hwdaddr, 1);
 		return(1);
 	}
 	if (hwdaddr->sl_cur > 0) {
