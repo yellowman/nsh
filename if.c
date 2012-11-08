@@ -760,23 +760,27 @@ pack_ifaliasreq(struct ifaliasreq *ip4req, ip_t *ip,
     struct in_addr *in4dest, char *ifname)
 {
 	struct sockaddr_in *sin;
+	in_addr_t mask;
 
 	/* set IP address */
 	sin = (struct sockaddr_in *)&ip4req->ifra_addr;
 	sin->sin_family = AF_INET;
 	sin->sin_len = sizeof(struct sockaddr_in);
-	sin->sin_addr.s_addr = ip->addr.in.s_addr;
+	memcpy(&sin->sin_addr.s_addr, &ip->addr.in.s_addr,
+	    sizeof(in_addr_t));
 	/* set netmask */
 	sin = (struct sockaddr_in *)&ip4req->ifra_mask;
 	sin->sin_family = AF_INET;
 	sin->sin_len = sizeof(struct sockaddr_in);
-	sin->sin_addr.s_addr = htonl(0xffffffff << (32 - ip->bitlen));
+	mask = htonl(0xffffffff << (32 - ip->bitlen));
+	memcpy(&sin->sin_addr.s_addr, &mask, sizeof(in_addr_t));
 	/* set destination/broadcast address */
 	if (in4dest->s_addr != 0) {
 		sin = (struct sockaddr_in *)&ip4req->ifra_dstaddr;
 		sin->sin_family = AF_INET;
 		sin->sin_len = sizeof(struct sockaddr_in);
-		sin->sin_addr.s_addr = in4dest->s_addr;
+		memcpy(&sin->sin_addr.s_addr, &in4dest->s_addr,
+		    sizeof(in_addr_t));
 	}
 	/* set interface name */
 	strlcpy(ip4req->ifra_name, ifname, sizeof(ip4req->ifra_name));
@@ -792,7 +796,7 @@ pack_in6aliasreq(struct in6_aliasreq *ip6req, ip_t *ip,
 	sin6 = (struct sockaddr_in6 *)&ip6req->ifra_addr;
 	sin6->sin6_family = AF_INET6;
 	sin6->sin6_len = sizeof(struct sockaddr_in6);
-	sin6->sin6_addr = ip->addr.in6;
+	memcpy(&sin6->sin6_addr, &ip->addr.in6, sizeof(struct in6_addr));
 	/* set prefixmask */
 	sin6 = (struct sockaddr_in6 *)&ip6req->ifra_prefixmask;
 	sin6->sin6_family = AF_INET6;
@@ -806,7 +810,7 @@ pack_in6aliasreq(struct in6_aliasreq *ip6req, ip_t *ip,
 		sin6 = (struct sockaddr_in6 *)&ip6req->ifra_dstaddr;
 		sin6->sin6_family = AF_INET6;
 		sin6->sin6_len = sizeof(struct sockaddr_in6);
-		sin6->sin6_addr = *in6dest;
+		memcpy(&sin6->sin6_addr, in6dest, sizeof(struct in6_addr));
 	}
 	/* set interface name */
 	strlcpy(ip6req->ifra_name, ifname, sizeof(ip6req->ifra_name));
