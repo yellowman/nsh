@@ -55,7 +55,7 @@
 
 void conf_interfaces(FILE *, char *);
 void conf_print_rtm(FILE *, struct rt_msghdr *, char *, int);
-int conf_ifaddrs(FILE *, char *, int);
+int conf_ifaddrs(FILE *, char *, int, int);
 void conf_brcfg(FILE *, int, struct if_nameindex *, char *);
 void conf_ifxflags(FILE *, int, char *);
 void conf_rtables(FILE *);
@@ -553,9 +553,10 @@ void conf_interfaces(FILE *output, char *only)
 		if ((dhcpif = fopen(leasefile, "r"))) {
 			fprintf(output, " ip dhcp\n");
 			fclose(dhcpif);
+			conf_ifaddrs(output, ifnp->if_name, flags, AF_INET6);
 			ippntd = 1;
 		} else {
-			ippntd = conf_ifaddrs(output, ifnp->if_name, flags);
+			ippntd = conf_ifaddrs(output, ifnp->if_name, flags, 0);
 		}
 
 		if (br) {
@@ -586,6 +587,7 @@ void conf_interfaces(FILE *output, char *only)
 			fprintf(output, " debug\n");
 		if (flags & (IFF_LINK0|IFF_LINK1|IFF_LINK2)) {
 			fprintf(output, " link ");
+			if(flags & IFF_LINK0)
 				fprintf(output, "0 ");
 			if(flags & IFF_LINK1)
 				fprintf(output, "1 ");
@@ -841,7 +843,7 @@ ipv6ll_db_compare(struct sockaddr_in6 *sin6, struct sockaddr_in6 *sin6mask,
 }
 
 
-int conf_ifaddrs(FILE *output, char *ifname, int flags)
+int conf_ifaddrs(FILE *output, char *ifname, int flags, int af)
 {
 	struct ifaddrs *ifa, *ifap;
 	struct sockaddr_in *sin, *sinmask, *sindest;
@@ -865,6 +867,8 @@ int conf_ifaddrs(FILE *output, char *ifname, int flags)
 
 		switch (ifa->ifa_addr->sa_family) {
 		case AF_INET:
+			if (af != AF_INET && af != 0)
+				continue;
 			sin = (struct sockaddr_in *)ifa->ifa_addr;
 			if (sin->sin_addr.s_addr == 0)
 				continue;
@@ -896,6 +900,8 @@ int conf_ifaddrs(FILE *output, char *ifname, int flags)
 			ippntd = 1;
 			break;
 		case AF_INET6:
+			if (af != AF_INET6 && af != 0)
+				continue;
 			sin6 = (struct sockaddr_in6 *)ifa->ifa_addr;
 			sin6mask = (struct sockaddr_in6 *)ifa->ifa_netmask;
 			if (IN6_IS_ADDR_UNSPECIFIED(&sin6->sin6_addr))
@@ -1177,10 +1183,10 @@ conf_print_rtm(FILE *output, struct rt_msghdr *rtm, char *delim, int af)
 		}
 	if (dst && gate && mask && (af == AF_INET || af == AF_INET6)) {
 		/*
-		 * Suppress printing IP route if it's the default
+		 * Suppress printing IPv4 route if it's the default
 		 * route and dhcp (dhclient) is enabled.
 		 */
-		if (!(isdefaultroute(dst, mask)
+		if (!(af == AF_INET && isdefaultroute(dst, mask)
 		    && dhclient_isenabled(routename(gate)))) {
 			fprintf(output, "%s%s ", delim, netname(dst, mask));
 			fprintf(output, "%s%s\n", routename(gate), flags);
@@ -1188,6 +1194,6 @@ conf_print_rtm(FILE *output, struct rt_msghdr *rtm, char *delim, int af)
 	} else if (dst && gate && (af == AF_LINK)) {
 		/* print arp */
 		fprintf(output, "%s%s ", delim, routename(dst));
-		fprintf(output, "%s%s\n", routename(gate), flags);
+		fprintf(output, "%s\n", routename(gate));
 	}
 }
