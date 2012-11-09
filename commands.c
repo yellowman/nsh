@@ -82,7 +82,6 @@ size_t	cursor_argo;			/* offset of cursor margv[cursor_argc] */
 
 pid_t	child;
 
-static Menu	*getip(char *);
 static int	quit(void);
 static int	disable(void);
 static int	doverbose(int, char**);
@@ -103,7 +102,7 @@ static int	show_hostname(int, char **);
 static int	wr_startup(void);
 static int	wr_conf(char *);
 static int	show_help(int, char **);
-static int	ip_help(void);
+static int	genhelp(int, char **, char **, int);
 static int	flush_pf(char *);
 static int	flush_help(void);
 static int	flush_line(char *);
@@ -247,6 +246,7 @@ Menu iptab[] = {
 	{ "carp-log",	"CARP Logging Priority",	CMPL0 0, 0, 0, 1, ipsysctl },
 	{ "carp-preempt", "CARP Virtual Host Preemption", CMPL0 0, 0, 0, 0, ipsysctl },
 	{ "forwarding",	"Enable IPv4 Forwarding",	CMPL0 0, 0, 0, 0, ipsysctl },
+	{ "mforwarding", "Enable IPv4 Multicast Forwarding", CMPL0 0, 0, 0, 0, ipsysctl },
 	{ "ipip",	"Allow IP-in-IP Encapsulation", CMPL0 0, 0, 0, 0, ipsysctl },
 	{ "gre",	"Allow Generic Route Encapsulation", CMPL0 0, 0, 0, 0, ipsysctl },
 	{ "wccp",	"Allow Web Cache Control Protocol", CMPL0 0, 0, 0, 0, ipsysctl },
@@ -267,32 +267,23 @@ Menu iptab[] = {
 	{ "default-mtu", "Default interface MTU",	CMPL0 0, 0, 1, 1, ipsysctl },
 #endif
 	{ "default-ttl", "Set Default IP packet TTL",	CMPL0 0, 0, 1, 1, ipsysctl },
-	{ "?",		"Options",			CMPL0 0, 0, 0, 0, ip_help },
-	{ "help",	0,				CMPL0 0, 0, 0, 0, ip_help },
+	{ "?",		"Options",			CMPL0 0, 0, 0, 0, genhelp },
 	{ 0, 0, 0, 0, 0, 0, 0, 0 }
 };
 
-static Menu iptab2[] = {
-	{ "classless",	0,				CMPL0 0, 0, 0, 0, notvalid },
-	{ "subnet-zero", 0,				CMPL0 0, 0, 0, 0, notvalid },
-	{ 0, 0, 0, 0, 0, 0, 0 }
+Menu ip6tab[] = {
+	{ "forwarding",	"Enable IPv6 Forwarding",	CMPL0 0, 0, 0, 0, ipsysctl },
+	{ "mforwarding", "Enable IPv6 Multicast Forwarding", CMPL0 0, 0, 0, 0, ipsysctl },
+	{ "multipath",	"Multipath routing",		CMPL0 0, 0, 0, 0, ipsysctl },
+	{ "?",		"Help",				CMPL0 0, 0, 0, 0, genhelp },
+	{ 0, 0, 0, 0, 0, 0, 0, 0 }
 };
-
-Menu *
-getip(char *name)
-{
-	Menu *i;
-
-        if ((i = (Menu *) genget(name, (char **) iptab, sizeof(Menu))))
-                return i;
-        return (Menu *) genget(name, (char **) iptab2, sizeof(Menu));
-}
 
 static int
 ipcmd(int argc, char **argv)
 {
 	Menu *i;     /* pointer to current command */
-	int set, success = 0;
+	int set, success = 0, type;
 
 	if (NO_ARG(argv[0])) {
 		argv++;
@@ -301,15 +292,23 @@ ipcmd(int argc, char **argv)
 	} else
 		set = 1;
 
+	if (strcasecmp(argv[0], "ip6") == 0) {
+		type = PF_INET6;
+		i = ip6tab;
+	} else {
+		type = PF_INET;
+		i = iptab;
+	}
+
 	if (argc < 2) {
-		ip_help();
+		genhelp(0, NULL, NULL, type);
 		return 0;
 	}
 
 	/*
 	 * Validate ip argument
 	 */
-        i = getip(argv[1]);
+        i = (Menu *)genget(argv[1], (char **)i, sizeof(Menu));
 	if (i == 0) {
 		printf("%% Invalid argument %s\n", argv[1]);
 		return 0;
@@ -318,34 +317,48 @@ ipcmd(int argc, char **argv)
 		return 0;
 	}
 	if (((i->minarg + 2) > argc) || ((i->maxarg + 2) < argc)) {
-		printf("%% Wrong argument%s to 'ip %s' command.\n",
-		    argc <= 2 ? "" : "s", i->name);
+		printf("%% Wrong argument%s to '%s %s' command.\n",
+		    argv[0], argc <= 2 ? "" : "s", i->name);
 		return 0;
 	}
 
 	if (i->handler)
 		success = (*i->handler)(set, argv[1],
-		    (i->maxarg > 0) ? argv[2] : 0);
+		    (i->maxarg > 0) ? argv[2] : 0, type);
 	return(success);
 }
 
 static int
-ip_help(void)
+genhelp(int unused1, char **unused2, char **unused3, int type)
 {
-	Menu *i; /* pointer to current command */
+	Menu *i, *j; /* pointer to current command */
+	char *prefix;
 	u_int z = 0;
 
+	switch(type) {
+	case PF_INET:
+		i = j = iptab;
+		prefix = "ip";
+		break;
+	case PF_INET6:
+		i = j = ip6tab;
+		prefix = "ip6";
+		break;
+	default:
+		return 0;
+		break;
+	}
 	printf("%% Commands may be abbreviated.\n");
-	printf("%% 'ip' commands are:\n\n");
+	printf("%% '%s' commands are:\n\n", prefix);
 
-	for (i = iptab; i->name; i++) {
+	for (; i && i->name; i++) {
 		if (strlen(i->name) > z)
 			z = strlen(i->name);
 	}
 
-	for (i = iptab; i->name; i++) {
-		if (i->help)
-			printf("  %-*s  %s\n", z, i->name, i->help);
+	for (; j && j->name; j++) {
+		if (j->help)
+			printf("  %-*s  %s\n", z, j->name, j->help);
 	}
 	return 0;
 }
@@ -753,6 +766,7 @@ static char
 	bridgehelp[] =	"Modify bridge parameters",
 	showhelp[] =	"Show system information",
 	iphelp[] =	"Set IP networking parameters",
+	ip6help[] =	"Set IPv6 networking parameters",
 	flushhelp[] =	"Flush system tables",
 	enablehelp[] =	"Enable privileged mode",
 	disablehelp[] =	"Disable privileged mode",
@@ -790,6 +804,7 @@ Command cmdtab[] = {
 	{ "bridge",	bridgehelp,	CMPL(i) 0, 0, interface, 1, 0, 1 },
 	{ "show",	showhelp,	CMPL(ta) (char **)showlist, sizeof(Menu), showcmd,	0, 0, 0 },
 	{ "ip",		iphelp,		CMPL(ta) (char **)iptab, sizeof(Menu), ipcmd,		1, 1, 0 },
+	{ "ip6",	ip6help,	CMPL(ta) (char **)ip6tab, sizeof(Menu), ipcmd,		1, 1, 0 },
 	{ "flush",	flushhelp,	CMPL(ta) (char **)flushlist, sizeof(Menu), flushcmd,	1, 0, 0 },
 	{ "enable",	enablehelp,	CMPL0 0, 0, enable,	0, 0, 0 },
 	{ "disable",	disablehelp,	CMPL0 0, 0, disable,	1, 0, 0 },

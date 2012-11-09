@@ -69,47 +69,69 @@ sysctl_int(int mib[], int val, int read)
 	return(old);
 }
 
-static struct ipsysctl {
+struct ipsysctl {
 	char *name;
 	int mib[6];
 	int32_t def_larg;	/* default value, or 0 for on/off sysctls */
 	int enable;		/* if on/off sysctl, 0 disable by default, 1 enable by default, 2 always show enable or disable */
-} ipsysctls[] = {
-	{ "carp",		{ CTL_NET, PF_INET, IPPROTO_CARP, CARPCTL_ALLOW, MIB_STOP, 0 },			0, 0    },
-	{ "carp-log",		{ CTL_NET, PF_INET, IPPROTO_CARP, CARPCTL_LOG, MIB_STOP, 0 },			2, 0	},
-	{ "carp-preempt",	{ CTL_NET, PF_INET, IPPROTO_CARP, CARPCTL_PREEMPT, MIB_STOP, 0 },		0, 1    },
-	{ "forwarding",		{ CTL_NET, PF_INET, IPPROTO_IP, IPCTL_FORWARDING, MIB_STOP, 0 },		0, 2	},
-	{ "ipip",		{ CTL_NET, PF_INET, IPPROTO_IPIP, IPIPCTL_ALLOW, MIB_STOP, 0 },			0, 1	},
-	{ "gre",		{ CTL_NET, PF_INET, IPPROTO_GRE, GRECTL_ALLOW, MIB_STOP, 0 },			0, 1	},
-	{ "wccp",		{ CTL_NET, PF_INET, IPPROTO_GRE, GRECTL_WCCP, MIB_STOP, 0 },			0, 1	},
-	{ "mobileip",		{ CTL_NET, PF_INET, IPPROTO_MOBILE, MOBILEIPCTL_ALLOW, MIB_STOP, 0 },		0, 1	},
-	{ "etherip",		{ CTL_NET, PF_INET, IPPROTO_ETHERIP,ETHERIPCTL_ALLOW, MIB_STOP, 0 },		0, 1	},
-	{ "ipcomp",		{ CTL_NET, PF_INET, IPPROTO_IPCOMP, IPCOMPCTL_ENABLE, MIB_STOP, 0 },		0, 1	},
-	{ "esp",		{ CTL_NET, PF_INET, IPPROTO_ESP, ESPCTL_ENABLE, MIB_STOP, 0 },			0, 0	},
-	{ "esp-udpencap",	{ CTL_NET, PF_INET, IPPROTO_ESP, ESPCTL_UDPENCAP_ENABLE, MIB_STOP, 0 },		0, 0	},
-	{ "esp-udpencap-port",	{ CTL_NET, PF_INET, IPPROTO_ESP, ESPCTL_UDPENCAP_PORT, MIB_STOP, 0 },		ESP_UDPENCAP_PORT, 0 },
-	{ "ah",			{ CTL_NET, PF_INET, IPPROTO_AH,	AHCTL_ENABLE, MIB_STOP, 0 },			0, 0	},
-	{ "sourceroute",	{ CTL_NET, PF_INET, IPPROTO_IP,	IPCTL_SOURCEROUTE, MIB_STOP, 0 },		0, 1	},
-	{ "encdebug",		{ CTL_NET, PF_INET, IPPROTO_IP,	IPCTL_ENCDEBUG, MIB_STOP, 0 },			0, 1	},
-	{ "ifq-maxlen",		{ CTL_NET, PF_INET, IPPROTO_IP,	IPCTL_IFQUEUE, IFQCTL_MAXLEN, MIB_STOP },	IFQ_MAXLEN, 0 },
-	{ "send-redirects",	{ CTL_NET, PF_INET, IPPROTO_IP, IPCTL_SENDREDIRECTS, MIB_STOP, 0 },		0, 0	},
-	{ "directed-broadcast",	{ CTL_NET, PF_INET, IPPROTO_IP, IPCTL_DIRECTEDBCAST, MIB_STOP, 0 },		0, 1	},
-	{ "multipath",		{ CTL_NET, PF_INET, IPPROTO_IP, IPCTL_MULTIPATH, MIB_STOP, 0 },			0, 1	},
+};
+
+static struct ipsysctl ipsysctls[] = {
+{ "carp",		{ CTL_NET, PF_INET, IPPROTO_CARP, CARPCTL_ALLOW, MIB_STOP, 0 },		0, 0    },
+{ "carp-log",		{ CTL_NET, PF_INET, IPPROTO_CARP, CARPCTL_LOG, MIB_STOP, 0 },		2, 0	},
+{ "carp-preempt",	{ CTL_NET, PF_INET, IPPROTO_CARP, CARPCTL_PREEMPT, MIB_STOP, 0 },	0, 1    },
+{ "forwarding",		{ CTL_NET, PF_INET, IPPROTO_IP, IPCTL_FORWARDING, MIB_STOP, 0 },	0, 2	},
+{ "mforwarding",	{ CTL_NET, PF_INET, IPPROTO_IP, IPCTL_MFORWARDING, MIB_STOP, 0 },	0, 1,   },
+{ "ipip",		{ CTL_NET, PF_INET, IPPROTO_IPIP, IPIPCTL_ALLOW, MIB_STOP, 0 },		0, 1	},
+{ "gre",		{ CTL_NET, PF_INET, IPPROTO_GRE, GRECTL_ALLOW, MIB_STOP, 0 },		0, 1	},
+{ "wccp",		{ CTL_NET, PF_INET, IPPROTO_GRE, GRECTL_WCCP, MIB_STOP, 0 },		0, 1	},
+{ "mobileip",		{ CTL_NET, PF_INET, IPPROTO_MOBILE, MOBILEIPCTL_ALLOW, MIB_STOP, 0 },	0, 1	},
+{ "etherip",		{ CTL_NET, PF_INET, IPPROTO_ETHERIP,ETHERIPCTL_ALLOW, MIB_STOP, 0 },	0, 1	},
+{ "ipcomp",		{ CTL_NET, PF_INET, IPPROTO_IPCOMP, IPCOMPCTL_ENABLE, MIB_STOP, 0 },	0, 1	},
+{ "esp",		{ CTL_NET, PF_INET, IPPROTO_ESP, ESPCTL_ENABLE, MIB_STOP, 0 },		0, 0	},
+{ "esp-udpencap",	{ CTL_NET, PF_INET, IPPROTO_ESP, ESPCTL_UDPENCAP_ENABLE, MIB_STOP, 0 },	0, 0	},
+{ "esp-udpencap-port",	{ CTL_NET, PF_INET, IPPROTO_ESP, ESPCTL_UDPENCAP_PORT, MIB_STOP, 0 },	ESP_UDPENCAP_PORT, 0 },
+{ "ah",			{ CTL_NET, PF_INET, IPPROTO_AH,	AHCTL_ENABLE, MIB_STOP, 0 },		0, 0	},
+{ "sourceroute",	{ CTL_NET, PF_INET, IPPROTO_IP,	IPCTL_SOURCEROUTE, MIB_STOP, 0 },	0, 1	},
+{ "encdebug",		{ CTL_NET, PF_INET, IPPROTO_IP,	IPCTL_ENCDEBUG, MIB_STOP, 0 },		0, 1	},
+{ "ifq-maxlen",		{ CTL_NET, PF_INET, IPPROTO_IP,	IPCTL_IFQUEUE, IFQCTL_MAXLEN, MIB_STOP }, IFQ_MAXLEN, 0 },
+{ "send-redirects",	{ CTL_NET, PF_INET, IPPROTO_IP, IPCTL_SENDREDIRECTS, MIB_STOP, 0 },	0, 0	},
+{ "directed-broadcast",	{ CTL_NET, PF_INET, IPPROTO_IP, IPCTL_DIRECTEDBCAST, MIB_STOP, 0 },	0, 1	},
+{ "multipath",		{ CTL_NET, PF_INET, IPPROTO_IP, IPCTL_MULTIPATH, MIB_STOP, 0 },		0, 1	},
 #ifdef notyet
-	{ "default-mtu",	{ CTL_NET, PF_INET, IPPROTO_IP, IPCTL_DEFMTU, MIB_STOP, 0 },			DEFAULT_MTU, 0 },
+{ "default-mtu",	{ CTL_NET, PF_INET, IPPROTO_IP, IPCTL_DEFMTU, MIB_STOP, 0 },		DEFAULT_MTU, 0 },
 #endif
-	{ "default-ttl",	{ CTL_NET, PF_INET, IPPROTO_IP, IPCTL_DEFTTL, MIB_STOP, 0 },			DEFAULT_TTL, 0 },
-	{ 0, { 0, 0, 0, 0, 0, 0 }, 0, 0	}
+{ "default-ttl",	{ CTL_NET, PF_INET, IPPROTO_IP, IPCTL_DEFTTL, MIB_STOP, 0 },		DEFAULT_TTL, 0 },
+{ 0, { 0, 0, 0, 0, 0, 0 }, 0, 0	}
+};
+
+static struct ipsysctl ip6sysctls[] = {
+{ "forwarding",		{ CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_FORWARDING, MIB_STOP, 0 },	0, 0    },
+{ "multipath",		{ CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_MULTIPATH, MIB_STOP, 0 },	0, 1	},
+{ "mforwarding",	{ CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_MFORWARDING, MIB_STOP, 0 },	0, 1	},
+{ 0, { 0, 0, 0, 0, 0, 0 }, 0, 0 }
 };
 
 int
-ipsysctl(int set, char *cmd, char *arg)
+ipsysctl(int set, char *cmd, char *arg, int type)
 {
 	int32_t larg;
 	const char *errmsg = NULL;
 	struct ipsysctl *x;
 
-	x = (struct ipsysctl *) genget(cmd, (char **)ipsysctls,
+	switch(type) {
+	case PF_INET6:
+		x = ip6sysctls;
+		break;
+	case PF_INET:
+		x = ipsysctls;
+		break;
+	default:
+		return 0;
+		break;
+	}
+
+	x = (struct ipsysctl *) genget(cmd, (char **)x,
 	    sizeof(struct ipsysctl));
 	if (x == 0) {
 		printf("%% Invalid argument %s\n", cmd);
@@ -138,33 +160,47 @@ ipsysctl(int set, char *cmd, char *arg)
 }
 
 void
-conf_ipsysctl(FILE *output)
+conf_sysctl(FILE *output, int type)
 {
 	int tmp = 0;
-	struct ipsysctl *x;
+	char *prefix;
+	struct ipsysctl *x = NULL;
 
-	for (x = &ipsysctls[0]; x->name != NULL; tmp = 0, x++) {
+	switch(type) {
+	case PF_INET6:
+		x = ip6sysctls;
+		prefix = "ip6";
+		break;
+	case PF_INET:
+		x = ipsysctls;
+		prefix = "ip";
+		break;
+	default:
+		break;
+	}
+
+	for (; x != NULL && x->name != NULL; tmp = 0, x++) {
 		if (x->def_larg) {	/* this sysctl takes a value */
 			tmp = sysctl_int(x->mib, 0, 1);
 			if (tmp == x->def_larg || tmp == -1)
 				continue;
-			fprintf(output, "ip %s %i\n", x->name, tmp);
+			fprintf(output, "%s %s %i\n", prefix, x->name, tmp);
 			continue;
 		}
 		switch(x->enable) {	/* on/off */
 		case 0:	/* default is enabled */
 			if (sysctl_int(x->mib, 0, 1) == 0)
-				fprintf(output, "no ip %s\n", x->name);
+				fprintf(output, "no %s %s\n", prefix, x->name);
 			break;
 		case 1: /* default is not enabled */
 			if (sysctl_int(x->mib, 0, 1) == 1)
-				fprintf(output, "ip %s\n", x->name);
+				fprintf(output, "%s %s\n", prefix, x->name);
 			break;
 		case 2: /* show either way */
 			if ((tmp = sysctl_int(x->mib, 0, 1)) == 1)
-				fprintf(output, "ip %s\n", x->name);
+				fprintf(output, "%s %s\n", prefix, x->name);
 			else if (tmp == 0)
-				fprintf(output, "no ip %s\n", x->name);
+				fprintf(output, "no %s %s\n", prefix, x->name);
 			break;
 		}
 	}

@@ -315,8 +315,8 @@ int Ambiguous(void *);
 
 /* sysctl.c */
 int sysctl_int(int[], int, int);
-int ipsysctl(int, char *, char *);
-void conf_ipsysctl(FILE *);
+int ipsysctl(int, char *, char *, int);
+void conf_sysctl(FILE *, int);
 
 /* route.c */
 #define NO_NETMASK 0

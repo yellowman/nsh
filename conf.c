@@ -162,7 +162,8 @@ conf(FILE *output)
 	 * (such as interface flags), must display if the kernel's default
 	 * setting is not currently set.
 	 */
-	conf_ipsysctl(output);
+	conf_sysctl(output, PF_INET);
+	conf_sysctl(output, PF_INET6);
 
 	fprintf(output, "!\n");
 
