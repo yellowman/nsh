@@ -1,4 +1,3 @@
-/* $nsh: pfsync.c,v 1.12 2012/05/20 03:16:04 chris Exp $ */
 /*
  * Copyright (c) 2004 Chris Cappuccio <chris@nmedia.net>
  *

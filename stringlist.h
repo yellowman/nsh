@@ -1,4 +1,3 @@
-/* $nsh: stringlist.h,v 1.1 2008/02/14 01:00:59 chris Exp $ */
 /* From: $OpenBSD: /usr/src/usr.bin/ftp/stringlist.h,v 1.2 2002/02/16 21:27:46 millert Exp $	*/
 
 /*

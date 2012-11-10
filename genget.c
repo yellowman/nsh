@@ -1,5 +1,4 @@
-/* $nsh: genget.c,v 1.5 2006/04/11 19:53:29 pata Exp $ */
-/*     $OpenBSD: genget.c,v 1.5 2001/05/25 10:23:06 hin Exp $  */
+/* From: $OpenBSD: genget.c,v 1.5 2001/05/25 10:23:06 hin Exp $  */
 
 /*-
  * Copyright (c) 1991, 1993

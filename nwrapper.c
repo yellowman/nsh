@@ -1,5 +1,3 @@
-/* $nsh: nwrapper.c,v 1.2 2003/03/28 00:03:42 chris Exp $ */
-
 /*
  * This program acts as a login shell for users who are meant to login
  * to nsh and nothing else.

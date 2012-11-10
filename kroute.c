@@ -1,4 +1,3 @@
-/* $nsh: routesys.c,v 1.33 2012/05/21 01:03:31 chris Exp $ */
 /* From: $OpenBSD: /usr/src/sbin/route/route.c,v 1.43 2001/07/07 18:26:20 deraadt Exp $ */
 
 /*

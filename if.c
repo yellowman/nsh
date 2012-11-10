@@ -1,4 +1,3 @@
-/* $nsh: if.c,v 1.53 2012/05/21 14:46:11 chris Exp $ */
 /*
  * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
  *

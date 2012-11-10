@@ -1,4 +1,3 @@
-/* $nsh: sysctl.c,v 1.14 2009/03/25 16:09:04 chris Exp $ */
 /*
  * Copyright (c) 2003-2009 Chris Cappuccio <chris@nmedia.net>
  *

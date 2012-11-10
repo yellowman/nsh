@@ -1,4 +1,3 @@
-/* $nsh: more.c,v 1.4 2008/02/07 19:20:03 chris Exp $ */
 /*
  * Copyright (c) 2008 Chris Cappuccio <chris@nmedia.net>
  *

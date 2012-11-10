@@ -1,4 +1,3 @@
-/* $nsh: ieee80211.c,v 1.19 2012/05/10 03:22:18 chris Exp $ */
 /* From: $OpenBSD: /usr/src/sbin/ifconfig/ifconfig.c,v 1.68 2002/06/19 18:53:53 millert Exp $ */
 /*
  * Copyright (c) 1983, 1993

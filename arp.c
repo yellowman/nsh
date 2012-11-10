@@ -1,4 +1,3 @@
-/* $nsh: arp.c,v 1.6 2012/05/20 20:11:01 chris Exp $ */
 /* From: $OpenBSD: /usr/src/usr.sbin/arp/arp.c,v 1.40 2007/08/24 13:12:16 claudio Exp $ */
 /*
  * Copyright (c) 1984, 1993

@@ -1,4 +1,3 @@
-/* $nsh: main.c,v 1.44 2012/06/01 18:03:09 chris Exp $ */
 /*
  * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
  *

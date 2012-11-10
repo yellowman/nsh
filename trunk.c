@@ -1,4 +1,3 @@
-/* $nsh: trunk.c,v 1.6 2012/05/20 05:22:44 chris Exp $ */
 /* From: $OpenBSD: ifconfig.c,v 1.174 2006/08/29 17:22:00 henning Exp $  */
 /*
  * Copyright (c) 2006

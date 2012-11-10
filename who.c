@@ -1,4 +1,3 @@
-/* $nsh: who.c,v 1.3 2008/02/04 02:49:46 chris Exp $ */
 /*
  * Copyright (c) 1989, 1993
  *      The Regents of the University of California.  All rights reserved.

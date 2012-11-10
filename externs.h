@@ -1,4 +1,3 @@
-/* $nsh: externs.h,v 1.80 2012/06/01 17:30:25 chris Exp $ */
 /*
  * nsh externs, prototypes and macros
  */

@@ -1,5 +1,3 @@
-/* $nsh: bridge.h,v 1.4 2005/06/12 07:47:58 chris Exp $ */
-
 /* request types for bridge_cfg() */
 
 #define PRIORITY	0

@@ -1,4 +1,3 @@
-/* $nsh: timeslot.c,v 1.1 2007/12/29 23:11:22 chris Exp $ */
 /* From: $OpenBSD: ifconfig.c,v 1.192 2007/11/27 16:21:02 chl Exp $	*/
 
 /*

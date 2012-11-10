@@ -1,4 +1,3 @@
-/* $nsh: stats.c,v 1.10 2008/01/06 18:18:16 chris Exp $ */
 /* From: $OpenBSD: inet.c,v 1.104 2007/12/19 01:47:00 deraadt Exp $ */
 
 /*

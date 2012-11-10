@@ -1,4 +1,3 @@
-# $nsh: Makefile,v 1.35 2012/05/10 03:36:46 chris Exp $
 #
 PROG= nsh
 

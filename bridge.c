@@ -1,4 +1,3 @@
-/* $nsh: bridge.c,v 1.15 2009/03/01 01:29:31 chris Exp $ */
 /* From: $OpenBSD: brconfig.c,v 1.27 2003/09/26 03:29:59 deraadt Exp $ */
 
 /*

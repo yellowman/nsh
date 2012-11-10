@@ -1,4 +1,3 @@
-/* $nsh: complete.c,v 1.4 2012/05/10 03:22:18 chris Exp $ */
 /* From: $OpenBSD: /usr/src/usr.bin/ftp/complete.c,v 1.19 2006/06/23 20:35:25 steven Exp $ */
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.

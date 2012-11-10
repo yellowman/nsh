@@ -1,4 +1,3 @@
-/* $nsh: route.c,v 1.14 2012/05/21 01:03:31 chris Exp $ */
 /*
  * Copyright (c) 2002 Chris Cappuccio <chris@nmedia.net>
  *

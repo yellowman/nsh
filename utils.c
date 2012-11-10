@@ -1,5 +1,3 @@
-/* $nsh: utils.c,v 1.3 2012/05/10 04:24:31 chris Exp $ */
-
 /*
  * Steal some useful routines from top
  *

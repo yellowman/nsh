@@ -1,4 +1,3 @@
-/* $nsh: ctl.c,v 1.30 2012/05/23 05:45:35 chris Exp $ */
 /*
  * Copyright (c) 2008 Chris Cappuccio <chris@nmedia.net>
  *

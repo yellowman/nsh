@@ -1,4 +1,3 @@
-/* $nsh: commands.h,v 1.4 2012/05/19 23:59:56 chris Exp $ */
 /*
  * Copyright (c) 2008-2009 Chris Cappuccio <chris@nmedia.net>
  *

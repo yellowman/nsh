@@ -1,4 +1,3 @@
-/* $nsh: carp.c,v 1.14 2012/05/20 15:32:50 chris Exp $ */
 /*
  * Copyright (c) 2004 Chris Cappuccio <chris@nmedia.net>
  *

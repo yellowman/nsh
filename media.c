@@ -1,4 +1,3 @@
-/* $nsh: media.c,v 1.14 2012/05/19 23:54:26 chris Exp $ */
 /*
  * From: $OpenBSD: /usr/src/sbin/ifconfig/ifconfig.c,v 1.64 2002/05/22
  * 08:21:02 deraadt Exp $
