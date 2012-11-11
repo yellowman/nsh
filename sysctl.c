@@ -23,6 +23,7 @@
 #include <sys/sysctl.h>
 #include <sys/socket.h>
 #include <net/if.h>
+#include <net/pipex.h>
 #include <netinet/in.h>
 #include <netinet/ip_ether.h>
 #include <netinet/ip_ipip.h>
@@ -32,6 +33,7 @@
 #include <netinet/ip_ah.h>
 #include <netinet/ip_carp.h>
 #include <netmpls/mpls.h>
+#include <ddb/db_var.h>
 #include "externs.h"
 #include "sysctl.h"
 
@@ -76,6 +78,8 @@ struct sysctltab sysctls[] = {
 	{ "ip",		PF_INET,	iptab,		ipsysctls },
 	{ "ip6",	PF_INET6,	ip6tab,		ip6sysctls },
 	{ "mpls",	PF_MPLS,	mplstab,	mplssysctls },
+	{ "ddb",	PF_DECnet,	ddbtab,		ddbsysctls },
+	{ "pipex",	PF_PIPEX,	pipextab,	pipexsysctls },
 	{ 0,		0,		0,		0 }
 };
 
@@ -109,9 +113,13 @@ struct ipsysctl ipsysctls[] = {
 };
 
 struct ipsysctl ip6sysctls[] = {
-{ "forwarding",		{ CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_FORWARDING, MIB_STOP, 0 },	0, 0    },
+{ "forwarding",		{ CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_FORWARDING, MIB_STOP, 0 },	0, 1    },
 { "multipath",		{ CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_MULTIPATH, MIB_STOP, 0 },	0, 1	},
 { "mforwarding",	{ CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_MFORWARDING, MIB_STOP, 0 },	0, 1	},
+{ "v6only",		{ CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_V6ONLY, MIB_STOP, 0 },	0, 0	},
+{ "maxifprefixes",	{ CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_MAXIFPREFIXES, MIB_STOP, 0 }, DEFAULT_MAXIFPREFIXES, 0	},
+{ "maxifdefrouters",	{ CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_MAXIFDEFROUTERS, MIB_STOP, 0 }, DEFAULT_MAXIFDEFROUTERS, 0 },
+{ "maxdynroutes", 	{ CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_MAXDYNROUTES, MIB_STOP, 0 },	DEFAULT_MAXDYNROUTES, 0 },
 { 0, { 0, 0, 0, 0, 0, 0 }, 0, 0 }
 };
 
@@ -120,6 +128,18 @@ struct ipsysctl mplssysctls[] = {
 { "ifq-maxlen",		{ CTL_NET, PF_MPLS, MPLSCTL_IFQUEUE, IFQCTL_MAXLEN, MIB_STOP, 0 },	IFQ_MAXLEN, 0	},
 { "mapttl-ip",		{ CTL_NET, PF_MPLS, MPLSCTL_MAPTTL_IP, MIB_STOP, 0 },			0, 0	},
 { "mapttl-ip6",		{ CTL_NET, PF_MPLS, MPLSCTL_MAPTTL_IP6, MIB_STOP, 0 },			0, 1	},
+{ 0, { 0, 0, 0, 0, 0, 0 }, 0, 0 }
+};
+
+struct ipsysctl ddbsysctls[] = {
+{ "panic",		{ CTL_DDB, DBCTL_PANIC, MIB_STOP, 0 },					0, 0	},
+{ "console",		{ CTL_DDB, DBCTL_CONSOLE, MIB_STOP, 0 },				0, 1	},
+{ "log",		{ CTL_DDB, DBCTL_LOG, MIB_STOP, 0 },					0, 0	},
+{ 0, { 0, 0, 0, 0, 0, 0 }, 0, 0 }
+};
+
+struct ipsysctl pipexsysctls[] = {
+{ "enable",		{ CTL_NET, PF_PIPEX, PIPEXCTL_ENABLE, MIB_STOP, 0 },			0, 1	},
 { 0, { 0, 0, 0, 0, 0, 0 }, 0, 0 }
 };
 

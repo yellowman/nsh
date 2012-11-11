@@ -275,6 +275,10 @@ Menu ip6tab[] = {
 	{ "forwarding",	"Enable IPv6 Forwarding",	CMPL0 0, 0, 0, 0, ipsysctl },
 	{ "mforwarding", "Enable IPv6 Multicast Forwarding", CMPL0 0, 0, 0, 0, ipsysctl },
 	{ "multipath",	"Multipath routing",		CMPL0 0, 0, 0, 0, ipsysctl },
+	{ "v6only",	"IPv6 only",			CMPL0 0, 0, 0, 0, ipsysctl },
+	{ "maxifprefixes", "Max if IPv6 Prefixes",	CMPL0 0, 0, 0, 0, ipsysctl },
+	{ "maxifdefrouters", "Max if IPv6 Def Routers",	CMPL0 0, 0, 0, 0, ipsysctl },
+	{ "maxdynroutes", "Max IPv6 Dyn Routes",	CMPL0 0, 0, 0, 0, ipsysctl },
 	{ "?",		"Help",				CMPL0 0, 0, 0, 0, genhelp },
 	{ 0, 0, 0, 0, 0, 0, 0, 0 }
 };
@@ -284,6 +288,21 @@ Menu mplstab[] = {
 	{ "ifq-maxlen", "MPLS IFQ maxlen",		CMPL0 0, 0, 0, 1, ipsysctl },
 	{ "mapttl-ip",	"MPLS mapttl IPv4",		CMPL0 0, 0, 0, 1, ipsysctl },
 	{ "mapttl-ip6",	"MPLS mapttl IPv6",		CMPL0 0, 0, 0, 1, ipsysctl },
+	{ "?",		"Help",				CMPL0 0, 0, 0, 0, genhelp },
+	{ 0, 0, 0, 0, 0, 0, 0, 0 }
+};
+
+Menu ddbtab[] = {
+	{ "panic",	"DDB panic",			CMPL0 0, 0, 0, 1, ipsysctl },
+	{ "console",	"DDB console",			CMPL0 0, 0, 0, 1, ipsysctl },
+	{ "log",	"DDB log",			CMPL0 0, 0, 0, 1, ipsysctl },
+	{ "?",		"Help",				CMPL0 0, 0, 0, 0, genhelp },
+	{ 0, 0, 0, 0, 0, 0, 0, 0 }
+};
+
+Menu pipextab[] = {
+	{ "enable",	"PIPEX enable",			CMPL0 0, 0, 0, 1, ipsysctl },
+	{ "?",		"Help",				CMPL0 0, 0, 0, 0, genhelp },
 	{ 0, 0, 0, 0, 0, 0, 0, 0 }
 };
 
@@ -782,6 +801,8 @@ static char
 	iphelp[] =	"Set IP networking parameters",
 	ip6help[] =	"Set IPv6 networking parameters",
 	mplshelp[] =	"Set MPLS network parameters",
+	ddbhelp[] =	"Set DDB parameters",
+	pipexhelp[] =	"Set PIPEX parameters",
 	flushhelp[] =	"Flush system tables",
 	enablehelp[] =	"Enable privileged mode",
 	disablehelp[] =	"Disable privileged mode",
@@ -821,6 +842,8 @@ Command cmdtab[] = {
 	{ "ip",		iphelp,		CMPL(ta) (char **)iptab, sizeof(Menu), ipcmd,		1, 1, 0 },
 	{ "ip6",	ip6help,	CMPL(ta) (char **)ip6tab, sizeof(Menu), ipcmd,		1, 1, 0 },
 	{ "mpls",	mplshelp,	CMPL(ta) (char **)mplstab, sizeof(Menu), ipcmd,		1, 1, 0 },
+	{ "ddb",	ddbhelp,	CMPL(ta) (char **)ddbtab, sizeof(Menu), ipcmd,		1, 1, 0 },
+	{ "pipex",	pipexhelp,	CMPL(ta) (char **)pipextab, sizeof(Menu), ipcmd,	1, 1, 0 },
 	{ "flush",	flushhelp,	CMPL(ta) (char **)flushlist, sizeof(Menu), flushcmd,	1, 0, 0 },
 	{ "enable",	enablehelp,	CMPL0 0, 0, enable,	0, 0, 0 },
 	{ "disable",	disablehelp,	CMPL0 0, 0, disable,	1, 0, 0 },
