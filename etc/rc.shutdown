@@ -25,7 +25,7 @@ if [ ! -z "$tardirs" ]; then
   rm -f /$i/.tardirs.$i
 
   # Get rid of sockets before shutdown (they will skew tar's return value)
-  find /var -type s -exec rm {} \;
+  find /$i -type s -exec rm {} \;
 
   if ! tar cf /flash/$i.tar.part -C /$i .; then
    echo tardirs: compacting $i failed, saved at /flash/$i.tar.part
