@@ -74,13 +74,6 @@ if [ ! -z "tardirs" ]; then
    exit 1
   fi
  done
- # https://github.com/yellowman/flashrd/issues/3
- # XXX altering $distloc is against the rules
- if [ "$i" == "var" ]; then
-  if [ -d "$distloc"/var/empty/dev ]; then
-   touch "$distloc"/var/empty/dev/.flashrd
-  fi
- fi
 fi
 
 # determine working dir for shitz 
@@ -255,13 +248,6 @@ if [ ! -z "$tardirs" ]; then
   c 0 tar cf $tmpdir/$i.tar -C $distloc/$i .
 
   echo
-  # https://github.com/yellowman/flashrd/issues/3
-  # XXX altering $distloc is against the rules
-  if [ "$i" == "var" ]; then
-   if [ -f "$distloc"/var/empty/dev/.flashrd ]; then
-    rm -f "$distloc"/var/empty/dev/.flashrd
-   fi
-  fi
  done 
 fi
 
