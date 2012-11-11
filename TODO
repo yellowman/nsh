@@ -2,22 +2,17 @@ nsh is a work in progress, diffs are welcome
 
 Cleanup:
 
-* Formatting for the manual.  Something that looks slick in PDF and print.
-* More security auditing for string handling, off-by-one errors, data
-  passed to kernel, data passed elsewhere...
-* Sanity check _before_ args hit int*() routines, based on some framework
-  of possible values for each function (something that works along with
-  context sensitive help framework)
-* Push more argument validation up, outside of the actual function routines
-* Consistent return values between functions?
+* Document all new commands in the manual
+* Some formatting for the manual.  Simple markdown format?
+* Bug hunt
 * Support new wireless information interfaces where necessary
+* handle newer bridge commands
+* handle newer 802.11 gunk like rssi display, chan, flags
 
 To be implemented:
 
-* handle newer bridge commands
-* handle newer 802.11 gunk like rssi display, chan, flags
-* handle kernel pppoe
-* privsep (imsg based?)
+* handle kernel sppp/pppoe client
+* privsep? multiple daemons? web front end using privsep?
 * copy configs from/to tftp/ftp/http/other parts of filesystem/etc
 * RSA certificate generation/management method (isakmpd, iked, possibly sshd)
 * Persistent comments/remarks in the config file (to document routes, etc..)
@@ -27,10 +22,12 @@ To be implemented:
 
 Would be nice:
 
+* Generate example configs for BGP+MPLS, IPv6+BGP, IPv6+Link local GIF,
+  vether+bridge, and many other interesting feature combinations/scenarios.
 * Perhaps some way for the shell to upgrade itself, or the entire system/
   flash image when given a network source for new binaries?
-* Build a simple web interface that works through the rc file handler (web if
-  that calls nsh -i to execute commands)
+* Build a simple web interface that works through the rc file handler or
+  via imsg
 * Add more diagnostic messages for verbose output where useful
 * Convenient/automatic mechanisms to centralize configurations for
   tracking/revision control
@@ -40,8 +37,7 @@ better not forget later...):
 
 * The kernel does not keep count of information displayed in 'show rtstat'
   properly (what else??)
-* ALTQTBRSET was removed from the kernel with the migration to pf.  But,
-  there is no easy to use equivalent.  Fix this.
+  (Very old, possibly no longer valid)
 * The kernel/wireless drivers do not use txpower data in any way.  Also
   TXPOWER_AUTO does absolutely nothing and is not even tracked in the kernel.
-* ...
+  (Very old, possibly no longer valid)
