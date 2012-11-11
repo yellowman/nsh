@@ -44,6 +44,7 @@
 #include "stringlist.h"
 #include "externs.h"
 #include "bridge.h"
+#include "sysctl.h"
 
 #define IPSIZ  256	/*
 			 * max theoretical size of ipv4 or ipv6
@@ -161,8 +162,7 @@ conf(FILE *output)
 	 * (such as interface flags), must display if the kernel's default
 	 * setting is not currently set.
 	 */
-	conf_sysctl(output, PF_INET);
-	conf_sysctl(output, PF_INET6);
+	conf_sysctls(output);
 
 	fprintf(output, "!\n");
 
@@ -191,6 +191,7 @@ conf(FILE *output)
 	 */
 	conf_interfaces(output, "pfsync");
 
+	conf_ctl(output, "", "rtadv", 0);
 	conf_ctl(output, "", "snmp", 0);
 	conf_ctl(output, "", "ldp", 0);
 	conf_ctl(output, "", "rip", 0);

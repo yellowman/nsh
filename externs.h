@@ -33,6 +33,7 @@ extern HistEvent ev;		/* ev */
 /* defaults */
 #define	DEFAULT_MTU	1500		/* net.inet.ip.defmtu */
 #define	DEFAULT_TTL	64		/* net.inet.ip.defttl */
+#define DEFAULT_MTTL	255		/* net.mpls.ttl */
 #define ESP_UDPENCAP_PORT 4500		/* net.inet.esp.udpencap_port */
 
 /* conf.c */
@@ -114,6 +115,7 @@ extern char metricnames[];
 #define IPSECCONF_TEMP	"/var/run/ipsec.conf"
 #define IKECONF_TEMP	"/var/run/iked.conf"
 #define DVMRPCONF_TEMP	"/var/run/dvmrpd.conf"
+#define RTADVCONF_TEMP	"/var/run/rtadvd.conf"
 #define RELAYCONF_TEMP	"/var/run/relayd.conf"
 #define SASYNCCONF_TEMP	"/var/run/sasyncd.conf"
 #define DHCPCONF_TEMP	"/var/run/dhcpd.conf"
@@ -183,6 +185,7 @@ extern struct ctl ctl_nppp[];
 extern struct ctl ctl_ifstate[];
 extern struct ctl ctl_ike[];
 extern struct ctl ctl_dvmrp[];
+extern struct ctl ctl_rtadv[];
 extern struct ctl ctl_sasync[];
 extern struct ctl ctl_dhcp[];
 extern struct ctl ctl_snmp[];
@@ -315,7 +318,7 @@ int Ambiguous(void *);
 /* sysctl.c */
 int sysctl_int(int[], int, int);
 int ipsysctl(int, char *, char *, int);
-void conf_sysctl(FILE *, int);
+void conf_sysctls(FILE *);
 
 /* route.c */
 #define NO_NETMASK 0

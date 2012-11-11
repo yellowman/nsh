@@ -34,6 +34,7 @@
 #define ISAKMPD		"/sbin/isakmpd"
 #define IKED		"/sbin/iked"
 #define DVMRPD		"/usr/sbin/dvmrpd"
+#define RTADVD		"/usr/sbin/rtadvd"
 #define RELAYD		"/usr/sbin/relayd"
 #define DHCPD		"/usr/sbin/dhcpd"
 #define SASYNCD		"/usr/sbin/sasyncd"
@@ -202,6 +203,16 @@ struct ctl ctl_dvmrp[] = {
 	    { PKILL, table, "dvmrpd", NULL }, NULL, DB_X_DISABLE },
 	{ "edit",       "edit configuration",
 	    { "dvmrp", (char *)ctl_dvmrp_test,  NULL }, call_editor, 0 },
+	{ 0, 0, { 0 }, 0, 0 }
+};
+
+struct ctl ctl_rtadv[] = {
+	{ "enable",	"enable service",
+	    { RTADVD, "-c", REQTEMP, REQ, OPT, OPT, OPT, NULL }, NULL, DB_X_ENABLE },
+	{ "disable",	"disable service",
+	    { PKILL, table, "rtadvd", NULL }, NULL, DB_X_DISABLE },
+	{ "edit",	"edit configuration",
+	    { "rtadv", NULL, NULL}, call_editor, 0 },
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
@@ -400,6 +411,7 @@ struct daemons ctl_daemons[] = {
 	{ "relay",	"Relay", ctl_relay,	RELAYCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
 	{ "ipsec",	"IPsec IKEv1", ctl_ipsec,	IPSECCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
 	{ "ike",	"IPsec IKEv2", ctl_ike,		IKECONF_TEMP, 0600, 0, RT_TABLEID_MAX },
+	{ "rtadv",	"rtadvd", ctl_rtadv,	RTADVCONF_TEMP, 0600, 0, RT_TABLEID_MAX },
 	{ "dvmrp",	"DVMRP", ctl_dvmrp,	DVMRPCONF_TEMP, 0600, 0, RT_TABLEID_MAX },
 	{ "sasync",	"SAsync", ctl_sasync,	SASYNCCONF_TEMP,0600, 0, RT_TABLEID_MAX },
 	{ "dhcp",	"DHCP",	ctl_dhcp,	DHCPCONF_TEMP,	0600, 0, RT_TABLEID_MAX },

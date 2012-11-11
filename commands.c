@@ -64,6 +64,7 @@
 #include "editing.h"
 #include "stringlist.h"
 #include "externs.h"
+#include "sysctl.h"
 
 char prompt[128];
 
@@ -278,11 +279,20 @@ Menu ip6tab[] = {
 	{ 0, 0, 0, 0, 0, 0, 0, 0 }
 };
 
+Menu mplstab[] = {
+	{ "ttl",	"MPLS ttl",			CMPL0 0, 0, 0, 1, ipsysctl },
+	{ "ifq-maxlen", "MPLS IFQ maxlen",		CMPL0 0, 0, 0, 1, ipsysctl },
+	{ "mapttl-ip",	"MPLS mapttl IPv4",		CMPL0 0, 0, 0, 1, ipsysctl },
+	{ "mapttl-ip6",	"MPLS mapttl IPv6",		CMPL0 0, 0, 0, 1, ipsysctl },
+	{ 0, 0, 0, 0, 0, 0, 0, 0 }
+};
+
 static int
 ipcmd(int argc, char **argv)
 {
 	Menu *i;     /* pointer to current command */
-	int set, success = 0, type;
+	struct sysctltab *stab;
+	int set, success = 0;
 
 	if (NO_ARG(argv[0])) {
 		argv++;
@@ -291,23 +301,28 @@ ipcmd(int argc, char **argv)
 	} else
 		set = 1;
 
-	if (strcasecmp(argv[0], "ip6") == 0) {
-		type = PF_INET6;
-		i = ip6tab;
-	} else {
-		type = PF_INET;
-		i = iptab;
-	}
+	/*
+	 * Find ourself in the great divide
+	 */
+	stab = (struct sysctltab *)genget(argv[0], (char **)sysctls,
+	    sizeof(struct sysctltab));
+        if (stab == 0) {
+                printf("%% Invalid argument %s\n", argv[0]);
+                return 0;
+        } else if (Ambiguous(stab)) {
+                printf("%% Ambiguous argument %s\n", argv[0]);
+                return 0;
+        }
 
 	if (argc < 2) {
-		genhelp(0, NULL, NULL, type);
+		genhelp(0, NULL, NULL, stab->pf);
 		return 0;
 	}
 
 	/*
 	 * Validate ip argument
 	 */
-        i = (Menu *)genget(argv[1], (char **)i, sizeof(Menu));
+        i = (Menu *)genget(argv[1], (char **)stab->table, sizeof(Menu));
 	if (i == 0) {
 		printf("%% Invalid argument %s\n", argv[1]);
 		return 0;
@@ -323,30 +338,29 @@ ipcmd(int argc, char **argv)
 
 	if (i->handler)
 		success = (*i->handler)(set, argv[1],
-		    (i->maxarg > 0) ? argv[2] : 0, type);
+		    (i->maxarg > 0) ? argv[2] : 0, stab->pf);
 	return(success);
 }
 
 static int
 genhelp(int unused1, char **unused2, char **unused3, int type)
 {
-	Menu *i, *j; /* pointer to current command */
-	char *prefix;
+	Menu *i = NULL, *j = NULL; /* pointer to current command */
+	char *prefix = NULL;
 	u_int z = 0;
-
-	switch(type) {
-	case PF_INET:
-		i = j = iptab;
-		prefix = "ip";
-		break;
-	case PF_INET6:
-		i = j = ip6tab;
-		prefix = "ip6";
-		break;
-	default:
+	struct sysctltab *stab;
+	
+	for (stab = sysctls; stab->name != NULL; stab++)
+		if (stab->pf == type) {
+			prefix = stab->name;
+			i = j = stab->table;
+			break;
+		}
+	if (stab->pf != type) {
+		printf("%% table lookup failed (%d)\n", type);
 		return 0;
-		break;
 	}
+
 	printf("%% Commands may be abbreviated.\n");
 	printf("%% '%s' commands are:\n\n", prefix);
 
@@ -748,6 +762,7 @@ static char
 	ipsechelp[] =	"IPsec IKEv1 control",
 	ikehelp[] =	"IPsec IKEv2 control",
 	dvmrphelp[] = 	"DVMRP control",
+	rtadvhelp[] =	"Router advertisement control",
 	sasynchelp[] =	"SA synchronization control",
 	dhcphelp[] =	"DHCP server control",
 	snmphelp[] =	"SNMP server control",
@@ -766,6 +781,7 @@ static char
 	showhelp[] =	"Show system information",
 	iphelp[] =	"Set IP networking parameters",
 	ip6help[] =	"Set IPv6 networking parameters",
+	mplshelp[] =	"Set MPLS network parameters",
 	flushhelp[] =	"Flush system tables",
 	enablehelp[] =	"Enable privileged mode",
 	disablehelp[] =	"Disable privileged mode",
@@ -804,6 +820,7 @@ Command cmdtab[] = {
 	{ "show",	showhelp,	CMPL(ta) (char **)showlist, sizeof(Menu), showcmd,	0, 0, 0 },
 	{ "ip",		iphelp,		CMPL(ta) (char **)iptab, sizeof(Menu), ipcmd,		1, 1, 0 },
 	{ "ip6",	ip6help,	CMPL(ta) (char **)ip6tab, sizeof(Menu), ipcmd,		1, 1, 0 },
+	{ "mpls",	mplshelp,	CMPL(ta) (char **)mplstab, sizeof(Menu), ipcmd,		1, 1, 0 },
 	{ "flush",	flushhelp,	CMPL(ta) (char **)flushlist, sizeof(Menu), flushcmd,	1, 0, 0 },
 	{ "enable",	enablehelp,	CMPL0 0, 0, enable,	0, 0, 0 },
 	{ "disable",	disablehelp,	CMPL0 0, 0, disable,	1, 0, 0 },
@@ -818,6 +835,7 @@ Command cmdtab[] = {
 	{ "ipsec",	ipsechelp,	CMPL(t) (char **)ctl_ipsec, ssctl, ctlhandler,	1, 0, 1 },
 	{ "ike",	ikehelp,	CMPL(t) (char **)ctl_ike, ssctl, ctlhandler, 	1, 0, 1 },
 	{ "dvmrp",	dvmrphelp,	CMPL(t) (char **)ctl_dvmrp, ssctl, ctlhandler,	1, 0, 1 },
+	{ "rtadv",	rtadvhelp,	CMPL(t) (char **)ctl_rtadv, ssctl, ctlhandler,	1, 0, 1 },
 	{ "sasync",	sasynchelp,	CMPL(t) (char **)ctl_sasync, ssctl, ctlhandler,	1, 0, 1 },
 	{ "dhcp",	dhcphelp,	CMPL(t) (char **)ctl_dhcp, ssctl, ctlhandler,	1, 0, 1 },
 	{ "snmp",	snmphelp,	CMPL(t) (char **)ctl_snmp, ssctl, ctlhandler,	1, 0, 1 },

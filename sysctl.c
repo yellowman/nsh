@@ -31,9 +31,13 @@
 #include <netinet/ip_esp.h>
 #include <netinet/ip_ah.h>
 #include <netinet/ip_carp.h>
+#include <netmpls/mpls.h>
 #include "externs.h"
+#include "sysctl.h"
 
 #define	MIB_STOP	INT_MAX
+
+void conf_sysctl(FILE *, char *, struct ipsysctl *);
 
 /*
  * sysctl_int: get or set an int value
@@ -68,14 +72,14 @@ sysctl_int(int mib[], int val, int read)
 	return(old);
 }
 
-struct ipsysctl {
-	char *name;
-	int mib[6];
-	int32_t def_larg;	/* default value, or 0 for on/off sysctls */
-	int enable;		/* if on/off sysctl, 0 disable by default, 1 enable by default, 2 always show enable or disable */
+struct sysctltab sysctls[] = {
+	{ "ip",		PF_INET,	iptab,		ipsysctls },
+	{ "ip6",	PF_INET6,	ip6tab,		ip6sysctls },
+	{ "mpls",	PF_MPLS,	mplstab,	mplssysctls },
+	{ 0,		0,		0,		0 }
 };
 
-static struct ipsysctl ipsysctls[] = {
+struct ipsysctl ipsysctls[] = {
 { "carp",		{ CTL_NET, PF_INET, IPPROTO_CARP, CARPCTL_ALLOW, MIB_STOP, 0 },		0, 0    },
 { "carp-log",		{ CTL_NET, PF_INET, IPPROTO_CARP, CARPCTL_LOG, MIB_STOP, 0 },		2, 0	},
 { "carp-preempt",	{ CTL_NET, PF_INET, IPPROTO_CARP, CARPCTL_PREEMPT, MIB_STOP, 0 },	0, 1    },
@@ -104,10 +108,18 @@ static struct ipsysctl ipsysctls[] = {
 { 0, { 0, 0, 0, 0, 0, 0 }, 0, 0	}
 };
 
-static struct ipsysctl ip6sysctls[] = {
+struct ipsysctl ip6sysctls[] = {
 { "forwarding",		{ CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_FORWARDING, MIB_STOP, 0 },	0, 0    },
 { "multipath",		{ CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_MULTIPATH, MIB_STOP, 0 },	0, 1	},
 { "mforwarding",	{ CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_MFORWARDING, MIB_STOP, 0 },	0, 1	},
+{ 0, { 0, 0, 0, 0, 0, 0 }, 0, 0 }
+};
+
+struct ipsysctl mplssysctls[] = {
+{ "ttl",		{ CTL_NET, PF_MPLS, MPLSCTL_DEFTTL, MIB_STOP, 0 },			DEFAULT_MTTL, 0	},
+{ "ifq-maxlen",		{ CTL_NET, PF_MPLS, MPLSCTL_IFQUEUE, IFQCTL_MAXLEN, MIB_STOP, 0 },	IFQ_MAXLEN, 0	},
+{ "mapttl-ip",		{ CTL_NET, PF_MPLS, MPLSCTL_MAPTTL_IP, MIB_STOP, 0 },			0, 0	},
+{ "mapttl-ip6",		{ CTL_NET, PF_MPLS, MPLSCTL_MAPTTL_IP6, MIB_STOP, 0 },			0, 1	},
 { 0, { 0, 0, 0, 0, 0, 0 }, 0, 0 }
 };
 
@@ -117,20 +129,17 @@ ipsysctl(int set, char *cmd, char *arg, int type)
 	int32_t larg;
 	const char *errmsg = NULL;
 	struct ipsysctl *x;
+	struct sysctltab *stab;
 
-	switch(type) {
-	case PF_INET6:
-		x = ip6sysctls;
-		break;
-	case PF_INET:
-		x = ipsysctls;
-		break;
-	default:
+	for (stab = sysctls; stab-> name != NULL; stab++)
+		if(stab->pf == type)
+			break;
+	if (stab->pf != type) {
+		printf("%% table lookup failed (%d)\n", type);
 		return 0;
-		break;
 	}
 
-	x = (struct ipsysctl *) genget(cmd, (char **)x,
+	x = (struct ipsysctl *) genget(cmd, (char **)stab->sysctl,
 	    sizeof(struct ipsysctl));
 	if (x == 0) {
 		printf("%% Invalid argument %s\n", cmd);
@@ -159,24 +168,18 @@ ipsysctl(int set, char *cmd, char *arg, int type)
 }
 
 void
-conf_sysctl(FILE *output, int type)
+conf_sysctls(FILE *output)
+{
+	struct sysctltab *stab;
+
+	for (stab = sysctls; stab->name != 0; stab++)
+		conf_sysctl(output, stab->name, stab->sysctl);
+}
+
+void
+conf_sysctl(FILE *output, char *prefix, struct ipsysctl *x)
 {
 	int tmp = 0;
-	char *prefix;
-	struct ipsysctl *x = NULL;
-
-	switch(type) {
-	case PF_INET6:
-		x = ip6sysctls;
-		prefix = "ip6";
-		break;
-	case PF_INET:
-		x = ipsysctls;
-		prefix = "ip";
-		break;
-	default:
-		break;
-	}
 
 	for (; x != NULL && x->name != NULL; tmp = 0, x++) {
 		if (x->def_larg) {	/* this sysctl takes a value */
