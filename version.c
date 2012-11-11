@@ -25,6 +25,7 @@
 #include <sys/socket.h>
 #include <net/if.h>
 #include <netinet/in.h>
+#include <netmpls/mpls.h>
 #include "externs.h"
 
 int
@@ -37,7 +38,7 @@ version(int argc, char **argv)
 	size_t len;
 	time_t c;
 	uint64_t physmem;
-	int mib[5], drops, pntd, weeks, days, hours, mins;
+	int mib[5], ipdrops, mplsdrops, pntd, weeks, days, hours, mins;
 
 	mib[0] = CTL_HW;
 	mib[1] = HW_PHYSMEM64;
@@ -72,9 +73,18 @@ version(int argc, char **argv)
 	mib[2] = IPPROTO_IP;
 	mib[3] = IPCTL_IFQUEUE;
 	mib[4] = IFQCTL_DROPS;
-	len = sizeof(drops);
-	if (sysctl(mib, 5, &drops, &len, NULL, 0) == -1) {
+	len = sizeof(ipdrops);
+	if (sysctl(mib, 5, &ipdrops, &len, NULL, 0) == -1) {
 		printf("%% IFQ_DROPS: %s\n", strerror(errno));
+		return(1);
+	}
+	mib[0] = CTL_NET;
+	mib[1] = PF_MPLS;
+	mib[2] = MPLSCTL_IFQUEUE;
+	mib[3] = IFQCTL_DROPS;
+	len = sizeof(mplsdrops);
+	if (sysctl(mib, 4, &mplsdrops, &len, NULL, 0) == -1) {
+		printf("%% MPLS_IFQCTL_DROPS: %s\n", strerror(errno));
 		return(1);
 	}
 	if (uname(&un)) {
@@ -124,7 +134,7 @@ version(int argc, char **argv)
 	printf("cpu: %s\n", cpubuf);
 	printf("memory: %sB\n", format_k(physmem / 1024));
 	printf("kernel: %s", kernver);
-	printf("ifq drops: %i\n", drops);
+	printf("IFQ drops: ip %d mpls %d\n", ipdrops, mplsdrops);
 	return(0);
 }
 
