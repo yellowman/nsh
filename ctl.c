@@ -276,13 +276,14 @@ struct ctl ctl_snmp[] = {
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
+char *ctl_sshd_test[] = { SSHD, "-tf", REQTEMP, '\0' };
 struct ctl ctl_sshd[] = {
 	{ "enable",	"enable service",
 	    { SSHD, "-f", REQTEMP, NULL }, NULL, DB_X_ENABLE },
 	{ "disable",	"disable service",
 	    { PKILL, table, "-f", SSHD, "-f", REQTEMP, NULL }, NULL, DB_X_DISABLE },
 	{ "edit",	"edit configuration",
-	    { "sshd", NULL, NULL }, call_editor, 0 },
+	    { "sshd", (char *)ctl_sshd_test, NULL }, call_editor, 0 },
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
@@ -387,11 +388,14 @@ struct ctl ctl_inet[] = {
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
+char *ctl_ldap_test[] = { LDAPD, "-nf", REQTEMP, '\0' };
 struct ctl ctl_ldap[] = {
 	{ "enable",	"enable service",
 	    { LDAPD, REQTEMP, NULL }, NULL, DB_X_ENABLE },
 	{ "disable",	"disable service",
 	    { PKILL, table, "ldapd", NULL }, NULL, DB_X_DISABLE },
+	{ "edit",       "edit configuration",
+	    { "ldap", (char *)ctl_ldap_test, NULL }, call_editor, 0 },
 	{ "log", 	"brief/verbose logging",
 	    { LDAPCTL, "log", REQ, NULL }, NULL, 0 },
 	{ "compact",	"compact all databases",
