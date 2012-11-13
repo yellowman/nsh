@@ -1669,7 +1669,7 @@ cmdrc(char rcname[FILENAME_MAX])
 		 * Don't ignore indented comments with pound sign, otherwise
 		 * comments won't be saved into daemon/ctl config files.
 		 */
-		if (line[0] == ' ' && line[1] == '!')
+		if (line[0] == ' ' && line[1] == '!' && savec && savec->modh == 2)
 			continue;
 		if (line[0] == ' ')
 			strlcpy(saveline, line, sizeof(line));
