@@ -36,7 +36,6 @@ fi
 
 while :
 do
- echo 1: $1
  case $1 in
   -\?)		usage; exit 0;;
   -d|-disk)	t2 "$2"; disk="$2"; shift 2;;
