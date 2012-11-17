@@ -305,6 +305,6 @@ umountwait 1 $tmpmnt
 
 vnuncfgroot $rootdevice
 
-rm -rf $TMPDIR
+rm -r $TMPDIR
 
 echo Done
