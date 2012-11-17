@@ -19,8 +19,6 @@ arch=`uname -m`
 
 [ -z "$dest" ] && dest=flashimg.$arch-$date
 
-[ -z "$tmpmnt" ] && tmpmnt=`mktemp -t -d mkboot.XXXXXXXX`
-
 vncfgroot() {
  [[ $vnd == true ]] && c 0 vnconfig $rootdevice $1
 }
@@ -45,11 +43,13 @@ vnuncfgroot() {
 
 . ./flashrd.sub
 
+[ -z "$tmpmnt" ] && tmpmnt=$(c 0 mktemp -t -d mkboot.XXXX)
+
 ###
 #
 # Create boot image
 
-tmplabel=`mktemp -t mkbootlabel.XXXXXXXX`
+tmplabel=$(c 0 mktemp -t mkbootlabel.XXXX)
 
 if [[ $vnd == true ]]; then
 

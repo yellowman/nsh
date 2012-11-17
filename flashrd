@@ -10,7 +10,7 @@ vers=1.1
 
 typeset -x device rootdevice blocks rdroot dest vnddirs vndsize
 typeset -x tardirs mfsdirs cylinders trackscylinder sectorstrack
-typeset -x bytessec vnd distloc tmpmnt
+typeset -x bytessec vnd distloc tmpmnt TMPDIR
 
 device=vnd3				# least likely to conflict ?
 rootdevice=vnd2				# used to mount flash vnd for writing of stuff inside
@@ -142,7 +142,12 @@ fi
  exit 1
 }
 
-. ./flashrd.sub
+###
+#
+# (Re-)Base TMPDIR to a subdiretory of either the current
+# TMPDIR value, or to /tmp
+
+TMPDIR=$(c 0 mktemp -t -d flashrd.XXXXXX)
 
 ###
 #
@@ -160,7 +165,8 @@ c 0 ./mkboot
 
 # $dest should now have a boot image
 
-tmpmnt=`mktemp -t -d flashrd.XXXXXXXX`
+tmpmnt=$TMPDIR/tmpmnt
+c 0 mkdir $tmpmnt
 
 vncfgroot $rootdevice $dest
 
@@ -182,7 +188,7 @@ c 2 ./mkdist
 #
 # Build fstab
 
-tmpfstab=`mktemp -t flashrdfstab.XXXXXXXX`
+tmpfstab=$TMPDIR/fstab
 
 cat <<-EOF >$tmpfstab
 	/dev/rd0a	/	ffs	rw	1 0
@@ -236,7 +242,8 @@ fi
 #
 # Copy in fstab, etc/rc.conf.local, bin/ro bin/rw to vnd
 
-tmpmntvnd=`mktemp -t -d flashrd.XXXXXXXX` # openbsd.vnd image mount point
+tmpmntvnd=$TMPDIR/tmpmntvnd		# openbsd.vnd image mount point
+c 2 mkdir $tmpmntvnd
 
 c 2 vnconfig $device $tmpmnt/openbsd.vnd
 
@@ -298,6 +305,6 @@ umountwait 1 $tmpmnt
 
 vnuncfgroot $rootdevice
 
-rmdir $tmpmntvnd $tmpmnt
+rm -rf $TMPDIR
 
 echo Done

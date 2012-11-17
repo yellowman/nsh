@@ -2,12 +2,10 @@
 #
 # flashrd mkkern
 #
-# create luscious ramdisk version of GENERIC
+# create luscious ramdisk version of (GENERIC - config.strip)
 #
 # Chris Cappuccio <chris@nmedia.net>
 #
-
-[ -z "$tmpmnt" ] && tmpmnt=`mktemp -t -d mkkern.XXXXXXXX`
 
 ###
 #
@@ -72,6 +70,8 @@ fi
 
 . ./flashrd.sub
 
+[ -z "$tmpmnt" ] && tmpmnt=$(c 0 mktemp -t -d mkkern.XXXXXXXX)
+
 ###
 #
 # remove option POOL_DEBUG from /usr/src/sys/conf/GENERIC (slower allocation!)
@@ -122,8 +122,8 @@ c 0 cc -o $elfrdsetrootdir/elfrdsetroot $elfrdsetrootdir/elfrdsetroot.c $elfrdse
 #
 # compile our version of GENERIC
 
-T=`mktemp -t mkkern.XXXXXXX`
-TMP=`mktemp -t mkkern.XXXXXXX`
+T=$(c 0 mktemp -t mkkern.XXXX)
+TMP=$(c 0 mktemp -t mkkern.XXXX)
 
 echo -n Configuring FLASHRD, FLASHRD.MP kernels
 wd=`pwd`
@@ -157,8 +157,6 @@ echo -n " (make)"
 c 0 "make -j4>/dev/null 2>&1"
 c 0 cp bsd $tmpmnt/bsd.mp
 echo
-
-rm $T
 
 ###
 #

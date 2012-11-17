@@ -76,23 +76,6 @@ if [ ! -z "tardirs" ]; then
  done
 fi
 
-# determine working dir for shitz
-if [ -z $tmpmnt ]; then
- tmpdir="vnd-`date +%Y%m%d`"
- if [ -d $tmpdir ]; then
-  echo % Directory $tmpdir already exists
-  ls -ld $tmpdir
-  exit 1
- else
-  mkdir $tmpdir
- fi
-else
- tmpdir=$tmpmnt
-fi
-
-tmplabel=`mktemp -t mkdistlabel.XXXXXXXXX`
-tmpmntdir=`mktemp -t -d mkdist.XXXXXXXXX`
-
 ###
 #
 # fall back
@@ -108,6 +91,10 @@ tmpmntdir=`mktemp -t -d mkdist.XXXXXXXXX`
 }
 
 . ./flashrd.sub
+
+tmplabel=$(c 0 mktemp -t mkdistlabel.XXXX)
+tmpmntdir=$(c 0 mktemp -t -d mkdist.XXXX)
+[ -z "$tmpmnt" ] && tmpmnt=$(c 0 mktemp -t -d vnd.XXXX)
 
 ###
 #
@@ -151,10 +138,10 @@ done
 # Setup openbsd.vnd with a little bit of zeros
 
 echo -n "Size openbsd.vnd $((disktotal / 2048))MB "
-c 0 "dd if=/dev/zero of=$tmpdir/openbsd.vnd bs=512 count=512 >/dev/null 2>&1"
+c 0 "dd if=/dev/zero of=$tmpmnt/openbsd.vnd bs=512 count=512 >/dev/null 2>&1"
 echo
 
-c 0 vnconfig $device $tmpdir/openbsd.vnd
+c 0 vnconfig $device $tmpmnt/openbsd.vnd
 
 ###
 #
@@ -245,11 +232,8 @@ if [ ! -z "$tardirs" ]; then
   fi
 
   echo -n " copy"
-  c 0 tar cf $tmpdir/$i.tar -C $distloc/$i .
+  c 0 tar cf $tmpmnt/$i.tar -C $distloc/$i .
 
   echo
  done
 fi
-
-rm $tmplabel
-rmdir $tmpmntdir

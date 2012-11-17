@@ -142,8 +142,8 @@ vnuncfgroot() {
 
 vncfgroot $image
 
-tmpmnt=`mktemp -t -d cfgflashrd.XXXXXXXX` # vnd/disk mount point
-tmpmntvnd=`mktemp -t -d cfgflashrd.XXXXXXXX` # openbsd.vnd partition mount point
+tmpmnt=$(c 1 mktemp -t -d cfgflashrd.XXXX) # vnd/disk mount point
+tmpmntvnd=$(c 1 mktemp -t -d cfgflashrd.XXXX) # openbsd.vnd partition mount point
 
 c 1 fsck -p ${rootdevice}
 
@@ -204,7 +204,7 @@ if [ ! -z "$rdfs" ]; then
   phys=${phys}a
  fi
 
- temp=`mktemp -t cfgflashrd.XXXXXXXX`
+ temp=$(c 4 mktemp -t cfgflashrd.XXXX)
  c 4 "sed -e 's/$cholo/disk=${phys}/' < $tmpmntvnd/stand/rc > $temp"
 
  c 4 mv $temp $tmpmntvnd/stand/rc
@@ -290,7 +290,7 @@ if [ ! -f $tmpmntvnd/.flashrd_version ]; then
 fi
 
 if [ ! -z "$com0" ]; then
- tmpttys=`mktemp -t cfgflashrd.XXXXXXXX`
+ tmpttys=$(c 4 mktemp -t cfgflashrd.XXXX)
  echo Modifying /etc/ttys for tty00 at $com0 baud
  # Turn off ttyC consoles, turn on com0
  # partially gleaned from install.sub
@@ -357,7 +357,7 @@ if [ -z "$encpass" ]; then
  encpass=`echo $password | /usr/bin/encrypt -b 8`
 fi
 
-tmppass=`mktemp -t cfgflashrd.XXXXXXXX`
+tmppass=$(c 4 mktemp -t cfgflashrd.XXXX)
 
 echo -n "root:$encpass" > $tmppass
 
