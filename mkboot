@@ -7,9 +7,9 @@
 date=`date +%Y%m%d`
 arch=`uname -m`
 
-[ -z "$rootdevice" ] && export rootdevice=vnd3
+[ -z "$rootdevice" ] && rootdevice=vnd3
 
-[ -z "$cylinders" ] && cylinders=968 
+[ -z "$cylinders" ] && cylinders=968
 
 [ -z "$trackscylinder" ] && trackscylinder=32
 
@@ -19,14 +19,14 @@ arch=`uname -m`
 
 [ -z "$dest" ] && dest=flashimg.$arch-$date
 
-[ -z "$tmpmnt" ] && tmpmnt=`mktemp -d /tmp/mkboot.XXXXXXXX`
+[ -z "$tmpmnt" ] && tmpmnt=`mktemp -t -d mkboot.XXXXXXXX`
 
 vncfgroot() {
- [ -z "$novnd" ] && c 0 vnconfig $rootdevice $1
-}      
+ [[ $vnd == true ]] && c 0 vnconfig $rootdevice $1
+}
 
 vnuncfgroot() {
- [ -z "$novnd" ] && c 0 vnconfig -u $rootdevice
+ [[ $vnd == true ]] && c 0 vnconfig -u $rootdevice
 }
 
 ###
@@ -49,9 +49,9 @@ vnuncfgroot() {
 #
 # Create boot image
 
-tmplabel=`mktemp /tmp/mkbootlabel.XXXXXXXX`
+tmplabel=`mktemp -t mkbootlabel.XXXXXXXX`
 
-if [ -z "$novnd" ]; then
+if [[ $vnd == true ]]; then
 
  # Create vnd image, must zero out the first few sectors or else disklabel freaks out...
  c 0 "dd if=/dev/zero bs=$bytessec count=$bytessec of=$dest > /dev/null 2>&1"

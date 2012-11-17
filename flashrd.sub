@@ -48,3 +48,14 @@ umountwait() {
   fi
  done
 }
+
+###
+#
+# Test Argument
+
+t2() {
+ if [ -z "$1" ]; then
+  usage
+  exit 1
+ fi
+}

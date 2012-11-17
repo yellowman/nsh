@@ -7,7 +7,7 @@
 # Chris Cappuccio <chris@nmedia.net>
 #
 
-[ -z "$tmpmnt" ] && tmpmnt=`mktemp -d /tmp/mkkern.XXXXXXXX`
+[ -z "$tmpmnt" ] && tmpmnt=`mktemp -t -d mkkern.XXXXXXXX`
 
 ###
 #
@@ -122,8 +122,8 @@ c 0 cc -o $elfrdsetrootdir/elfrdsetroot $elfrdsetrootdir/elfrdsetroot.c $elfrdse
 #
 # compile our version of GENERIC
 
-T=`mktemp /tmp/mkkern.XXXXXXX`
-TMP=`mktemp /tmp/mkkern.XXXXXXX`
+T=`mktemp -t mkkern.XXXXXXX`
+TMP=`mktemp -t mkkern.XXXXXXX`
 
 echo -n Configuring FLASHRD, FLASHRD.MP kernels
 wd=`pwd`

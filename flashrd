@@ -1,4 +1,4 @@
-#!/bin/ksh 
+#!/bin/ksh
 #
 # flashrd initializer with default vnd image destination (or disk destination on demand)
 #
@@ -8,20 +8,24 @@ date=`date +%Y%m%d`
 arch=`uname -m`
 vers=1.1
 
-export device=vnd3	# least likely to conflict ?
-export rootdevice=vnd2	# used to mount flash vnd for writing of stuff inside
-export blocks=4600	# blocks to reserve for kernel ramdisk
-export rdroot=rd.$arch-$date		# 4600 flash root
-export dest=flashimg.$arch-$date	# final product
+typeset -x device rootdevice blocks rdroot dest vnddirs vndsize
+typeset -x tardirs mfsdirs cylinders trackscylinder sectorstrack
+typeset -x bytessec vnd distloc tmpmnt
 
-export vnddirs="root bin etc sbin usr"	# must match vnddirs= in stand/rc and fstab
-export vndsize="102400 auto 102400 auto auto"	# min partition sizes (or auto) (in 512 byte sectors)
+device=vnd3				# least likely to conflict ?
+rootdevice=vnd2				# used to mount flash vnd for writing of stuff inside
+blocks=4600				# blocks to reserve for kernel ramdisk
+rdroot=rd.$arch-$date			# ramdisk root fs image
+dest=flashimg.$arch-$date		# final product
 
-export tardirs="var"			# must match tardirs= in stand/rc and rc.conf.local
-set -A tarsize 131072			# mfs sizes for tar dirs (in 512 byte sectors)
+vnddirs="root bin etc sbin usr"		# must match vnddirs= in stand/rc and fstab
+vndsize="102400 auto 102400 auto auto"	# min partition sizes (or auto) (in 512 byte sectors)
 
-export mfsdirs="tmp"			# mfs-only dirs
-set -A mfssize 32768			# mfs sizes (in 512 byte sectors)
+tardirs="var"				# must match tardirs= in stand/rc and rc.conf.local
+set -A tarsize	131072			# mfs sizes for tar dirs (in 512 byte sectors)
+
+mfsdirs="tmp"				# mfs-only dirs
+set -A mfssize	32768			# mfs sizes (in 512 byte sectors)
 
 set -A part a d e f g h i j k l m n o p
 
@@ -31,51 +35,69 @@ set -A part a d e f g h i j k l m n o p
 # blocks work properly on most "disks" without resizing image!
 #
 # Completely ignored if -disk is specified
-export cylinders=968
-export trackscylinder=32
-export sectorstrack=63
+cylinders=968
+trackscylinder=32
+sectorstrack=63
 #
 # Normally 512 (but, who knows, times they are a changin'!)
-export bytessec=512
+bytessec=512
 
-echo "flashrd $vers chris@nmedia.net"
+# Set to true when the device is an image file false when a device is used.
+vnd=true
 
-if [ "$1" == "-disk" ]; then
- shift
- export rootdevice="$1"
- export novnd=1
- shift
-fi
+
+. ./flashrd.sub
 
 vncfgroot() {
- [ -z "$novnd" ] && c 0 vnconfig $rootdevice $1
+ [[ $vnd == true ]] && c 0 vnconfig $1 $2
 }
 
 vnuncfgroot() {
- [ -z "$novnd" ] && c 0 vnconfig -u $rootdevice
+ [[ $vnd == true ]] && c 0 vnconfig -u $1
 }
- 
+
+usage() {
+ cat <<EOF
+Usage: flashrd [options] <openbsd base>
+
+flashrd will create flash image file in absence of a disk name.
+
+Write direct to disk:
+    -d "dev"	Simple disk name (such as wd3 or sd2)
+
+Write to disk image:
+    -c n	Number of cylinder (default: $cylinders)
+    -h n	Number of heads (tracks/cylinder) (default: $trackscylinder)
+    -s n	Number of sectors/track (default $sectorstrack)
+
+EOF
+}
+
+while :
+do
+ case $1 in
+  -\?) usage; exit 0;;
+  -d | -disk) t2 "$2"; rootdevice="$2"; vnd=false; shift 2;;
+  -c) t2 "$2"; cylinders="$2"; shift 2;;
+  -h) t2 "$2"; trackscylinder="$2"; shift 2;;
+  -s) t2 "$2"; sectorstrack="$2"; shift 2;;
+
+  --) shift; break;;
+  -*) usage; exit 1;;
+  *) break;;
+ esac
+done
+
+if [ $# -ne 1 ]
+then
+ usage
+ exit 1
+else
+ distloc=$1
+fi
+
+echo "flashrd $vers chris@nmedia.net"
 echo
-
-if [ `id -u` != 0 ]; then
- echo Sorry, mount, vnconfig, and friends require root privileges
- exit 1
-fi
-
-if [ -z "$1" -a -z "$distloc" ]; then
- cat <<-EOF
-	% flashrd [-disk "dev"] <openbsd base>
-	  system will create flash image file in absence of -disk name
-	  "dev" can be wd3, sd2, etc...
-	EOF
- exit 1
-fi
-
-if [ -z "$distloc" ]; then
- export distloc=$1
- shift
-fi
-
 if [ ! -d "$distloc" ]; then
  echo % $distloc is not a directory
  exit 1
@@ -95,6 +117,11 @@ else
  fi
 fi
 
+if [ `id -u` != 0 ]; then
+ echo Sorry, mount, vnconfig, and friends require root privileges
+ exit 1
+fi
+
 ###
 #
 # fall back
@@ -109,7 +136,7 @@ fi
  umount $tmpmnt
 }
 1() {
- vnuncfgroot
+ vnuncfgroot $rootdevice
 }
 0() {
  exit 1
@@ -133,9 +160,9 @@ c 0 ./mkboot
 
 # $dest should now have a boot image
 
-export tmpmnt=`mktemp -d /tmp/flashrd.XXXXXXXX`
+tmpmnt=`mktemp -t -d flashrd.XXXXXXXX`
 
-vncfgroot $dest
+vncfgroot $rootdevice $dest
 
 c 1 mount /dev/"$rootdevice"a $tmpmnt
 
@@ -147,7 +174,7 @@ c 2 ./mkkern
 
 ###
 #
-# generate vnd, tar files 
+# generate vnd, tar files
 
 c 2 ./mkdist
 
@@ -155,7 +182,7 @@ c 2 ./mkdist
 #
 # Build fstab
 
-tmpfstab=`mktemp /tmp/flashrdfstab.XXXXXXXX`
+tmpfstab=`mktemp -t flashrdfstab.XXXXXXXX`
 
 cat <<-EOF >$tmpfstab
 	/dev/rd0a	/	ffs	rw	1 0
@@ -209,7 +236,7 @@ fi
 #
 # Copy in fstab, etc/rc.conf.local, bin/ro bin/rw to vnd
 
-tmpmntvnd=`mktemp -d /tmp/flashrd.XXXXXXXX` # openbsd.vnd image mount point
+tmpmntvnd=`mktemp -t -d flashrd.XXXXXXXX` # openbsd.vnd image mount point
 
 c 2 vnconfig $device $tmpmnt/openbsd.vnd
 
@@ -269,7 +296,7 @@ umountwait 1 $tmpmnt
 #
 # done with flash img vnd
 
-vnuncfgroot
+vnuncfgroot $rootdevice
 
 rmdir $tmpmntvnd $tmpmnt
 

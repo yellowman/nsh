@@ -56,7 +56,7 @@ fi
 y=0
 for i in $vnddirs; do
  if [ ! -d $distloc/$i ]; then
-  echo % Directory $distloc/$i not found 
+  echo % Directory $distloc/$i not found
   exit 1
  fi
  let y=y+1
@@ -76,7 +76,7 @@ if [ ! -z "tardirs" ]; then
  done
 fi
 
-# determine working dir for shitz 
+# determine working dir for shitz
 if [ -z $tmpmnt ]; then
  tmpdir="vnd-`date +%Y%m%d`"
  if [ -d $tmpdir ]; then
@@ -90,8 +90,8 @@ else
  tmpdir=$tmpmnt
 fi
 
-tmplabel=`mktemp /tmp/mkdistlabel.XXXXXXXXX`
-tmpmntdir=`mktemp -d /tmp/mkdist.XXXXXXXXX`
+tmplabel=`mktemp -t mkdistlabel.XXXXXXXXX`
+tmpmntdir=`mktemp -t -d mkdist.XXXXXXXXX`
 
 ###
 #
@@ -129,7 +129,7 @@ for i in $vnddirs; do
  # and leave 140% of used space as free space for <100MB directories
  if [ ${size[$x]} -le 204800 ]; then
   let total[$x]=total[$x]+total[$x]
- fi 
+ fi
  if [ ${vndsizeA[$x]} != "auto" ]; then
   if [ ${total[$x]} -le ${vndsizeA[$x]} ]; then
    let total[$x]=vndsizeA[$x]
@@ -153,7 +153,7 @@ done
 echo -n "Size openbsd.vnd $((disktotal / 2048))MB "
 c 0 "dd if=/dev/zero of=$tmpdir/openbsd.vnd bs=512 count=512 >/dev/null 2>&1"
 echo
- 
+
 c 0 vnconfig $device $tmpdir/openbsd.vnd
 
 ###
@@ -182,7 +182,7 @@ cat >> ${tmplabel}.new <<-EOF
 	sectors/cylinder: $sectorscylinder
 	cylinders: $cylinders
 	total sectors: $disktotal
-	
+
 	c: $disktotal 0 unused 0 0
 	EOF
 c 1 mv ${tmplabel}.new $tmplabel
@@ -248,7 +248,7 @@ if [ ! -z "$tardirs" ]; then
   c 0 tar cf $tmpdir/$i.tar -C $distloc/$i .
 
   echo
- done 
+ done
 fi
 
 rm $tmplabel

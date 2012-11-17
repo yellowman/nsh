@@ -5,83 +5,114 @@
 # Chris Cappuccio <chris@nmedia.net>
 
 vnddirs="root bin etc sbin usr" # must match vnddirs= in flashrd and stand/rc
-rootdevice=vnd2
 device=vnd3
+rootvnd=vnd2
 
 set -A part a d e f g h i j k l m n o p
+
+
+usage() {
+ cat <<EOF
+Usage: cfgflashrd [-d "dev" | -i "filename"]  [options]
+
+Use one of:
+    -d "dev"		Configure an attached disk
+    -i "filename"	Configure an image
+Options:
+    -c "speed"		set com0 as console at speed "speed"
+    -r "filename"	rdrootfs image (needed only to change ramdisk)
+    -m 			set bsd.mp as primary kernel
+    -s 			set bsd.sp as primary kernel
+    -t tzfile"		set timezone using a timezone file fromfrom
+			/usr/share/zoneinfo
+
+EOF
+}
+
+if [[ "$#" -lt 1 ]]; then
+ usage
+ exit 1
+fi
+
+while :
+do
+ echo 1: $1
+ case $1 in
+  -\?)		usage; exit 0;;
+  -d|-disk)	t2 "$2"; disk="$2"; shift 2;;
+  -i|-image)	t2 "$2"; image="$2"; shift 2;;
+  -r|-rdroot)	t2 "$2"; rdfs="$2"; shift 2;;
+  -c|-com0)	t2 "$2"; com0="$2"; shift 2;;
+  -m|-mp)	t2 "$2"; kernel="bsdmp"; shift;;
+  -s|-sp)	t2 "$2"; kernel="bsdsp"; shift;;
+  -t|-tz)	t2 "$2"; tzfile="$2"; shift 2;;
+
+  --)		shift; break;;
+  -*)		usage; exit 1;;
+  *)		break;;
+ esac
+done
+
+# checking arguments
+
+if [[ -n $disk && -n $image ]]; then
+ echo "Choose either -d or -i, not both"
+ exit 1
+fi
+
+if [[ -z $disk && -z $image ]]; then
+ echo "Must choose either -d or -i"
+ exit 1
+fi
+
+if [[ -n $disk ]]; then
+ if [[ ! -b /dev/${disk}a ]]; then
+  echo "Device /dev/${disk}a not found"
+  exit 1
+ fi
+ vnd=false
+ rootdevice=/dev/${disk}a
+fi
+
+if [[ -n $image ]]; then
+ if [[ ! -f $image ]]; then
+  echo "$flashrd image not found"
+  exit 1
+ fi
+ vnd=true
+ rootdevice=/dev/${rootvnd}a
+fi
+
+if [[ -n $rdfs && ! -f $rdfs ]]; then
+ echo "Sorry rdroot $rdfs not found"
+ exit 1
+fi
+
+if [[ -n $com0 && ( $com0 -lt 1200 || $com0 -gt 115200 ) ]]; then
+ echo "Sorry the com0 speed $com0 is unlikely"
+ exit 1
+fi
+
+if [[ -n $tzfile ]]; then
+ if [[ ! -f $tzfile ]]; then
+  tzfile=/usr/share/zoneinfo/$tzfile
+ elif [[ ! -f $tzfile ]]; then
+  echo "Timezone file not found"
+  exit 1
+ fi
+fi
 
 if [ `id -u` != 0 ]; then
  echo Sorry, mount, vnconfig, and friends require root privileges
  exit 1
 fi
 
-if [ "$1" == "-disk" ]; then
- rootdevice="$2"
- novnd=1
- shift
- shift
-fi
-
-if [ "$1" == "-image" ]; then
- dest="$2"
- shift
- shift
-fi
-
-if [ "$1" == "-rdroot" ]; then
- if [ ! -f "$2" ]; then
-  echo % rdroot $2 not found
-  exit 1
- fi
- rdfs=$2
- shift
- shift
-fi
-
-if [ "$1" == "-com0" ]; then
- if [ -z "$2" ]; then
-  echo "% no speed for com0??"
-  exit 1
- fi
- if [ "$2" -lt 1200 -o "$2" -gt 115200 ]; then
-  echo "% com0 speed $2 unlikely"
-  exit 1
- fi
- com0="$2"
- shift
- shift
-fi
-
-if [ "$1" == "-sp" ]; then
- bsdassp=1
- shift
-fi
-
-if [ "$1" == "-mp" ]; then
- bsdasmp=1
- shift
-fi
-
-if [ "$1" == "-tz" ]; then
- shift
- if [ -z "$1" ]; then
-  echo "% tzfile not specified"
-  exit 1
- fi
- tzfile="$1"
- shift
- if [ ! -f /usr/share/zoneinfo/$tzfile -a ! -f $tzfile ]; then
-  echo "tzfile /usr/share/zoneinfo/$tzfile (and $tzfile) not found"
-  exit 1
- fi
-fi
-
 vncfgroot() {
- [ -z "$novnd" ] && c 0 vnconfig $rootdevice $1
+ [[ $vnd == true ]] && c 0 vnconfig ${rootvnd} $1
 }
 
 vnuncfgroot() {
- [ -z "$novnd" ] && c 0 vnconfig -u $rootdevice
+ [[ $vnd == true ]] && c 0 vnconfig -u ${rootvnd}
 }
 
 ###
@@ -108,44 +139,16 @@ vnuncfgroot() {
 
 ###
 #
-# usage
- 
-if [ -z "$dest" -a -z "$novnd" ]; then
- cat <<-EOF
-	% cfgflashrd [-disk "dev" | -image "filename"] [-rdroot "filename"] [-com0 "speed"] [-mp] [-tz "tzfile"]
-	  use -disk to configure an attached disk
-	  "dev" as in wd2, sd3, etc...
- 	  or, use -image to configure a disk image
-	  use -rdroot flag if you have an rdrootfs image and want to change disk parameters on it
-	  use -com0 flag if you want to direct console from vga to com0 at "speed" speed
-	  use -mp to set bsd.mp as primary kernel, if exists
-	  use -tz to copy /usr/share/zoneinfo/"tzfile" to destination image /etc/localtime
-	EOF
- exit 1
-fi
-
-if [ -z "$novnd" -a ! -f "$dest" ]; then
- echo % image $dest not found
- exit 1
-fi
-
-if [ ! -b /dev/"$rootdevice"a ]; then
- echo % device /dev/"$rootdevice"a not found
- exit 1
-fi
-
-###
-#
 # mount vnd or disk
- 
-vncfgroot $dest
-   
-tmpmnt=`mktemp -d /tmp/cfgflashrd.XXXXXXXX` # vnd/disk mount point
-tmpmntvnd=`mktemp -d /tmp/cfgflashrd.XXXXXXXX` # openbsd.vnd partition mount point
 
-c 1 fsck -p /dev/${rootdevice}a
- 
-c 1 mount /dev/${rootdevice}a $tmpmnt
+vncfgroot $image
+
+tmpmnt=`mktemp -t -d cfgflashrd.XXXXXXXX` # vnd/disk mount point
+tmpmntvnd=`mktemp -t -d cfgflashrd.XXXXXXXX` # openbsd.vnd partition mount point
+
+c 1 fsck -p ${rootdevice}
+
+c 1 mount ${rootdevice} $tmpmnt
 
 if [ ! -z "$rdfs" ]; then
 
@@ -181,25 +184,28 @@ if [ ! -z "$rdfs" ]; then
  fi
 
  ch1=${cholo#disk=}
- echo Current image device ${ch1%a}
+ if [ ${ch1} != "auto" ]; then
+  ch1=${ch1%a}
+ fi
+ echo Current image device ${ch1}
 
  getphys()
  {
-  read phys?"New physical device name (as seen by destination system)[auto]? "
-  if [ -z "$phys" ]; then
-   phys=auto
+  read phys?"New physical device name (as seen by destination system)[${ch1}]? "
+  if [ -z ${phys} ]; then
+   phys=$ch1
   fi
-  if [ ! -b /dev/"$phys"a -a "$phys" != "auto" ]; then
-   echo /dev/"$phys"a appear to be nonsense, try again
+  if [ ! -b /dev/${phys}a -a ${phys} != "auto" ]; then
+   echo /dev/${phys}a appear to be nonsense, try again
    getphys
   fi
  }
  getphys
- if [ "$phys" != "auto" ]; then
+ if [ ${phys} != "auto" ]; then
   phys=${phys}a
  fi
- 
- temp=`mktemp /tmp/cfgflashrd.XXXXXXXX`
+
+ temp=`mktemp -t cfgflashrd.XXXXXXXX`
  c 4 "sed -e 's/$cholo/disk=${phys}/' < $tmpmntvnd/stand/rc > $temp"
 
  c 4 mv $temp $tmpmntvnd/stand/rc
@@ -207,7 +213,7 @@ if [ ! -z "$rdfs" ]; then
  c 3 umount $tmpmntvnd
 
  c 2 vnconfig -u $device
- 
+
  echo Setting ramdisk root image
 
  for i in bsd bsd.mp bsd.sp; do
@@ -222,7 +228,7 @@ if [ ! -z "$rdfs" ]; then
   2; 1; 0;
  fi
 
- if [ "$bsdassp" == "1" ]; then
+ if [ "$kernel" == "bsdsp" ]; then
   if [ -f $tmpmnt/bsd.sp ]; then
    mv $tmpmnt/bsd $tmpmnt/bsd.mp
    mv $tmpmnt/bsd.sp $tmpmnt/bsd
@@ -231,7 +237,7 @@ if [ ! -z "$rdfs" ]; then
   fi
  fi
 
- if [ "$bsdasmp" == "1" ]; then
+ if [ "$kernel" == "bsdmp" ]; then
   if [ -f $tmpmnt/bsd.mp ]; then
    mv $tmpmnt/bsd $tmpmnt/bsd.sp
    mv $tmpmnt/bsd.mp $tmpmnt/bsd
@@ -251,7 +257,7 @@ if [ ! -z "$com0" ]; then
 	set tty com0
 	set timeout 5
 	EOF
-fi 
+fi
 
 ###
 #
@@ -285,7 +291,7 @@ if [ ! -f $tmpmntvnd/.flashrd_version ]; then
 fi
 
 if [ ! -z "$com0" ]; then
- tmpttys=`mktemp /tmp/cfgflashrd.XXXXXXXX`
+ tmpttys=`mktemp -t cfgflashrd.XXXXXXXX`
  echo Modifying /etc/ttys for tty00 at $com0 baud
  # Turn off ttyC consoles, turn on com0
  # partially gleaned from install.sub
@@ -352,7 +358,7 @@ if [ -z "$encpass" ]; then
  encpass=`echo $password | /usr/bin/encrypt -b 8`
 fi
 
-tmppass=`mktemp /tmp/cfgflashrd.XXXXXXXX`
+tmppass=`mktemp -t cfgflashrd.XXXXXXXX`
 
 echo -n "root:$encpass" > $tmppass
 
@@ -395,7 +401,7 @@ fi
 
 if [ -z "$dnsservers" ]; then
  dnsservers=`awk ' /^nameserver/ { print $2 } ' /etc/resolv.conf | tr '\n' ' '`
- read ndnsservers?"DNS Servers: [$dnsservers] " 
+ read ndnsservers?"DNS Servers: [$dnsservers] "
  if [ ! -z "$ndnsservers" ]; then
   dnsservers="$ndnsservers"
  fi
@@ -415,16 +421,9 @@ fi
 #
 # tzfile
 
-if [ ! -z "$tzfile" ]; then
- if [ -f /usr/share/zoneinfo/$tzfile ]; then
-  rm $tmpmntvnd/localtime
-  cp /usr/share/zoneinfo/$tzfile $tmpmntvnd/localtime
- else
-  if [ -f $tzfile ]; then
-   rm $tmpmntvnd/localtime
-   cp $tzfile $tmpmntvnd/localtime
-  fi
- fi
+if [ ! -z "$tzfile" -a -f "$tzfile" ]; then
+ c 4 rm $tmpmntvnd/localtime
+ c 4 cp $tzfile $tmpmntvnd/localtime
 fi
 
 ###

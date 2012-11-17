@@ -9,7 +9,7 @@
 # -t target-disk causes this script to write directly to a disk instead of
 # a new VND image.  This may be useful if you want to write a small image
 # to a large flash without overwriting the unused space (which can be rather
-# slow).  This is as fast as running flashrd, without requiring 
+# slow).  This is as fast as running flashrd, without requiring
 # the source files from flashrd.
 #
 # Growimg.sh might be useful if you have a stable, tested image that you want
@@ -69,17 +69,17 @@ islezero()
 }
 
 if [ "$1" == "-t" ]; then
- # target device specified, use its geometry 
+ # target device specified, use its geometry
  device="$2"
  alt=/dev/"$2"c
  if [ ! -b $alt ]; then
   echo "${device}(${alt}) is an invalid disk device, not found or not block device"
   exit 1
- fi 
+ fi
 
  image=$3
 else
- # geometry specified, write a new image file 
+ # geometry specified, write a new image file
  if [ ! -f "$4" ]; then
   syntax
   exit 1
@@ -91,7 +91,7 @@ else
 
  image=$4
 fi
- 
+
 
 biosboot=/usr/mdec/biosboot
 mbr=/usr/mdec/mbr
@@ -112,7 +112,7 @@ else
  # Here we use disklabel as a way to grab these values. Later versions of OpenBSD
  # always report the actual kernel-detected values and not the on-disk values
 
- tmplabel=`mktemp /tmp/growimg.XXXXXXX`
+ tmplabel=`mktemp -t growimg.XXXXXXX`
  disklabel $device > $tmplabel
 
  totalsize=`awk -F: ' /^total sectors:/ {print $2} ' $tmplabel`
@@ -149,7 +149,7 @@ if [ "$bytessec" -le 1024 ]; then
  echo Requested size: $((totalsize / 1024 / (1024 / bytessec)))MB
  echo Size increase: $((addon / 1024 / (1024 / bytessec)))MB
 fi
-echo 
+echo
 
 if [ -z "$alt" ]; then
  freespace=`df . | tail -1 | awk ' { print $4 } '`
@@ -160,7 +160,7 @@ if [ -z "$alt" ]; then
   factor=$((bytessec / 512))
   freespace=$((freespace / factor))
  fi
- 
+
  # The new image will not take more disk space than the old one, in fact
  # it will take less.  But it will appear to use more when dd reads it.
  # vnd will create holes in the file for the blank space so we don't have
@@ -182,9 +182,9 @@ fi
 if [ -z "$alt" ]; then
  NewImg=`mktemp newimg.XXXX`
 fi
-NewLabel=`mktemp /tmp/growimg.XXXXXXXX`
-OldDir=`mktemp -d /tmp/olddir.XXXXX`
-NewDir=`mktemp -d /tmp/newdir.XXXXX`
+NewLabel=`mktemp -t growimg.XXXXXXXX`
+OldDir=`mktemp -t -d olddir.XXXXX`
+NewDir=`mktemp -t -d newdir.XXXXX`
 
 if ! mount -o rdonly /dev/"$device2"a $OldDir; then
  echo mount old image failed
@@ -278,7 +278,7 @@ if [ "$FreeBlocks" -le "$UsedBlocks" ]; then
    vnconfig -u $device
   fi
   vnconfig -u $device2
-  rm -f $NewImg $NewLabel 
+  rm -f $NewImg $NewLabel
   rmdir $OldDir $NewDir
   exit 1
 fi
