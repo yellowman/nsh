@@ -102,7 +102,7 @@ static int	show_hostname(int, char **);
 static int	wr_startup(void);
 static int	wr_conf(char *);
 static int	show_help(int, char **);
-static int	genhelp(int, char **, char **, int);
+static int	sysctlhelp(int, char **, char **, int);
 static int	flush_pf(char *);
 static int	flush_help(void);
 static int	flush_line(char *);
@@ -267,7 +267,7 @@ Menu iptab[] = {
 	{ "default-mtu", "Default interface MTU",	CMPL0 0, 0, 1, 1, ipsysctl },
 #endif
 	{ "default-ttl", "Set Default IP packet TTL",	CMPL0 0, 0, 1, 1, ipsysctl },
-	{ "?",		"Options",			CMPL0 0, 0, 0, 0, genhelp },
+	{ "?",		"Options",			CMPL0 0, 0, 0, 0, sysctlhelp },
 	{ 0, 0, 0, 0, 0, 0, 0, 0 }
 };
 
@@ -279,7 +279,7 @@ Menu ip6tab[] = {
 	{ "maxifprefixes", "Max if IPv6 Prefixes",	CMPL0 0, 0, 0, 0, ipsysctl },
 	{ "maxifdefrouters", "Max if IPv6 Def Routers",	CMPL0 0, 0, 0, 0, ipsysctl },
 	{ "maxdynroutes", "Max IPv6 Dyn Routes",	CMPL0 0, 0, 0, 0, ipsysctl },
-	{ "?",		"Help",				CMPL0 0, 0, 0, 0, genhelp },
+	{ "?",		"Help",				CMPL0 0, 0, 0, 0, sysctlhelp },
 	{ 0, 0, 0, 0, 0, 0, 0, 0 }
 };
 
@@ -288,7 +288,7 @@ Menu mplstab[] = {
 	{ "ifq-maxlen", "MPLS IFQ maxlen",		CMPL0 0, 0, 0, 1, ipsysctl },
 	{ "mapttl-ip",	"MPLS mapttl IPv4",		CMPL0 0, 0, 0, 1, ipsysctl },
 	{ "mapttl-ip6",	"MPLS mapttl IPv6",		CMPL0 0, 0, 0, 1, ipsysctl },
-	{ "?",		"Help",				CMPL0 0, 0, 0, 0, genhelp },
+	{ "?",		"Help",				CMPL0 0, 0, 0, 0, sysctlhelp },
 	{ 0, 0, 0, 0, 0, 0, 0, 0 }
 };
 
@@ -296,13 +296,13 @@ Menu ddbtab[] = {
 	{ "panic",	"DDB panic",			CMPL0 0, 0, 0, 1, ipsysctl },
 	{ "console",	"DDB console",			CMPL0 0, 0, 0, 1, ipsysctl },
 	{ "log",	"DDB log",			CMPL0 0, 0, 0, 1, ipsysctl },
-	{ "?",		"Help",				CMPL0 0, 0, 0, 0, genhelp },
+	{ "?",		"Help",				CMPL0 0, 0, 0, 0, sysctlhelp },
 	{ 0, 0, 0, 0, 0, 0, 0, 0 }
 };
 
 Menu pipextab[] = {
 	{ "enable",	"PIPEX enable",			CMPL0 0, 0, 0, 1, ipsysctl },
-	{ "?",		"Help",				CMPL0 0, 0, 0, 0, genhelp },
+	{ "?",		"Help",				CMPL0 0, 0, 0, 0, sysctlhelp },
 	{ 0, 0, 0, 0, 0, 0, 0, 0 }
 };
 
@@ -334,7 +334,7 @@ ipcmd(int argc, char **argv)
         }
 
 	if (argc < 2) {
-		genhelp(0, NULL, NULL, stab->pf);
+		sysctlhelp(0, NULL, NULL, stab->pf);
 		return 0;
 	}
 
@@ -362,7 +362,7 @@ ipcmd(int argc, char **argv)
 }
 
 static int
-genhelp(int unused1, char **unused2, char **unused3, int type)
+sysctlhelp(int unused1, char **unused2, char **unused3, int type)
 {
 	Menu *i = NULL, *j = NULL; /* pointer to current command */
 	char *prefix = NULL;
