@@ -4,6 +4,8 @@
 #
 # Chris Cappuccio <chris@nmedia.net>
 
+typeset -x TMPDIR
+
 vnddirs="root bin etc sbin usr" # must match vnddirs= in flashrd and stand/rc
 device=vnd3
 rootvnd=vnd2
@@ -19,11 +21,12 @@ Use one of:
     -d "dev"		Configure an attached disk
     -i "filename"	Configure an image
 Options:
+    -r "filename"       rdrootfs image (needed only to change ramdisk)
+    -e "dir"		directory where elfrdsetroot.c is located (only with -r)
     -c "speed"		set com0 as console at speed "speed"
-    -r "filename"	rdrootfs image (needed only to change ramdisk)
     -m 			set bsd.mp as primary kernel
     -s 			set bsd.sp as primary kernel
-    -t tzfile"		set timezone using a timezone file fromfrom
+    -t "tzfile"		set timezone using a timezone file fromfrom
 			/usr/share/zoneinfo
 
 EOF
@@ -45,6 +48,7 @@ do
   -m|-mp)	t2 "$2"; kernel="bsdmp"; shift;;
   -s|-sp)	t2 "$2"; kernel="bsdsp"; shift;;
   -t|-tz)	t2 "$2"; tzfile="$2"; shift 2;;
+  -e)		t2 "$2"; elfrdsetrootdir="$2"; shift 2;;
 
   --)		shift; break;;
   -*)		usage; exit 1;;
@@ -53,6 +57,11 @@ do
 done
 
 # checking arguments
+
+if [[ -n $elfrdsetrootdir && -z $rdfs ]]; then
+ echo "Option -e only valid in conjunction with -r"
+ exit 1
+fi
 
 if [[ -n $disk && -n $image ]]; then
  echo "Choose either -d or -i, not both"
@@ -106,6 +115,14 @@ if [ `id -u` != 0 ]; then
  exit 1
 fi
 
+if [ -z "$elfrdsetrootdir" ]; then
+ elfrdsetrootdir=./elfrdsetroot/
+fi
+
+if [ ! -d $elfrdsetrootdir ]; then
+ echo % elfrdsetroodir $elfrdsetrootdir not found
+fi
+
 vncfgroot() {
  [[ $vnd == true ]] && c 0 vnconfig ${rootvnd} $1
 }
@@ -131,6 +148,7 @@ vnuncfgroot() {
  vnuncfgroot
 }
 0() {
+ echo TMPDIR: $TMPDIR
  exit 1
 }
 
@@ -138,12 +156,21 @@ vnuncfgroot() {
 
 ###
 #
+# (Re-)Base TMPDIR to a subdiretory of either the current
+# TMPDIR value, or to /tmp
+
+TMPDIR=$(c 0 mktemp -t -d cfgflashrd.XXXX)
+
+tmpmnt=$TMPDIR/tmpmnt		# vnd/disk mount point
+c 1 mkdir $tmpmnt
+tmpmntvnd=$TMPDIR/tmpmntvnd	# openbsd.vnd partition mount point
+c 1 mkdir $tmpmntvnd
+
+###
+#
 # mount vnd or disk
 
 vncfgroot $image
-
-tmpmnt=$(c 1 mktemp -t -d cfgflashrd.XXXX) # vnd/disk mount point
-tmpmntvnd=$(c 1 mktemp -t -d cfgflashrd.XXXX) # openbsd.vnd partition mount point
 
 c 1 fsck -p ${rootdevice}
 
@@ -153,22 +180,9 @@ if [ ! -z "$rdfs" ]; then
 
  ###
  #
- # if user wants to modify kernel ramdisk, ready elfrdsetroot, mount vnd, change stand/rc, elfrdsetroot actual kernels
-
- if [ -z "$elfrdsetrootdir" ]; then
-  elfrdsetrootdir=./elfrdsetroot/
- fi
-
- if [ ! -d $elfrdsetrootdir ]; then
-  echo % $elfrdsetrootdir not found
-  2; 1; 0;
- fi
-
- ###
- #
  # compile ELFRDSETROOT
 
- c 2 cc -o $elfrdsetrootdir/elfrdsetroot $elfrdsetrootdir/elfrdsetroot.c $elfrdsetrootdir/elf32.c $elfrdsetrootdir/elf64.c
+ c 2 cc -o $TMPDIR/elfrdsetroot $elfrdsetrootdir/elfrdsetroot.c $elfrdsetrootdir/elf32.c $elfrdsetrootdir/elf64.c
 
  c 2 vnconfig $device $rdfs
 
@@ -217,7 +231,7 @@ if [ ! -z "$rdfs" ]; then
 
  for i in bsd bsd.mp bsd.sp; do
   if [ -f $tmpmnt/$i ]; then
-   c 2 $elfrdsetrootdir/elfrdsetroot $tmpmnt/$i $rdfs
+   c 2 $TMPDIR/elfrdsetroot $tmpmnt/$i $rdfs
    cfgbsd=1
   fi
  done
@@ -290,7 +304,7 @@ if [ ! -f $tmpmntvnd/.flashrd_version ]; then
 fi
 
 if [ ! -z "$com0" ]; then
- tmpttys=$(c 4 mktemp -t cfgflashrd.XXXX)
+ tmpttys=$TMPDIR/tmpttys
  echo Modifying /etc/ttys for tty00 at $com0 baud
  # Turn off ttyC consoles, turn on com0
  # partially gleaned from install.sub
@@ -357,7 +371,7 @@ if [ -z "$encpass" ]; then
  encpass=`echo $password | /usr/bin/encrypt -b 8`
 fi
 
-tmppass=$(c 4 mktemp -t cfgflashrd.XXXX)
+tmppass=$TMPDIR/tmppass
 
 echo -n "root:$encpass" > $tmppass
 
@@ -445,7 +459,6 @@ c 1 umount $tmpmnt
 
 vnuncfgroot
 
-rmdir $tmpmnt $tmpmntvnd
-rm -f $tmppass
+rm -r $TMPDIR
 
 echo Done
