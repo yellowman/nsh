@@ -177,12 +177,11 @@ c 1 fsck -p ${rootdevice}
 c 1 mount ${rootdevice} $tmpmnt
 
 if [ ! -z "$rdfs" ]; then
-
  ###
  #
  # compile ELFRDSETROOT
 
- c 2 cc -o $TMPDIR/elfrdsetroot $elfrdsetrootdir/elfrdsetroot.c $elfrdsetrootdir/elf32.c $elfrdsetrootdir/elf64.c
+ c 2 cc -o $elfrdsetrootdir/elfrdsetroot $elfrdsetrootdir/elfrdsetroot.c $elfrdsetrootdir/elf32.c $elfrdsetrootdir/elf64.c
 
  c 2 vnconfig $device $rdfs
 
@@ -231,10 +230,11 @@ if [ ! -z "$rdfs" ]; then
 
  for i in bsd bsd.mp bsd.sp; do
   if [ -f $tmpmnt/$i ]; then
-   c 2 $TMPDIR/elfrdsetroot $tmpmnt/$i $rdfs
+   c 2 $elfrdsetrootdir/elfrdsetroot $tmpmnt/$i $rdfs
    cfgbsd=1
   fi
  done
+ c 2 rm $elfrdsetrootdir/elfrdsetroot
 
  if [ -z "$cfgbsd" ]; then
   echo % none of bsd bsd.mp bsd.sp kernel found at flash image.  how odd?

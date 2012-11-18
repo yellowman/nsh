@@ -70,7 +70,7 @@ fi
 
 . ./flashrd.sub
 
-[ -z "$tmpmnt" ] && tmpmnt=$(c 0 mktemp -t -d mkkern.XXXXXXXX)
+[ -z "$tmpmnt" ] && tmpmnt=$(c 0 mktemp -t -d mkkern.tmpmnt.XXXX)
 
 ###
 #
@@ -122,8 +122,8 @@ c 0 cc -o $elfrdsetrootdir/elfrdsetroot $elfrdsetrootdir/elfrdsetroot.c $elfrdse
 #
 # compile our version of GENERIC
 
-T=$(c 0 mktemp -t mkkern.XXXX)
-TMP=$(c 0 mktemp -t mkkern.XXXX)
+T=$(c 0 mktemp -t mkkern.FLASHRD.XXXX)
+TMP=$(c 0 mktemp -t mkkern.FLASRD.MP.XXXX)
 
 echo -n Configuring FLASHRD, FLASHRD.MP kernels
 wd=`pwd`
@@ -165,3 +165,4 @@ echo
 cd $wd
 c 0 $elfrdsetrootdir/elfrdsetroot $tmpmnt/bsd $rdroot
 c 0 $elfrdsetrootdir/elfrdsetroot $tmpmnt/bsd.mp $rdroot
+c 0 rm $elfrdsetrootdir/elfrdsetroot

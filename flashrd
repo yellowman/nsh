@@ -10,7 +10,7 @@ vers=1.1
 
 typeset -x device rootdevice blocks rdroot dest vnddirs vndsize
 typeset -x tardirs mfsdirs cylinders trackscylinder sectorstrack
-typeset -x bytessec vnd distloc tmpmnt TMPDIR
+typeset -x bytessec vnd distloc tmpmnt TMPDIR elfrdsetrootdir
 
 device=vnd3				# least likely to conflict ?
 rootdevice=vnd2				# used to mount flash vnd for writing of stuff inside
@@ -70,6 +70,9 @@ Write to disk image:
     -h n	Number of heads (tracks/cylinder) (default: $trackscylinder)
     -s n	Number of sectors/track (default $sectorstrack)
 
+Other options:
+    -e "dir"    directory where elfrdsetroot.c is located
+
 EOF
 }
 
@@ -81,6 +84,7 @@ do
   -c) t2 "$2"; cylinders="$2"; shift 2;;
   -h) t2 "$2"; trackscylinder="$2"; shift 2;;
   -s) t2 "$2"; sectorstrack="$2"; shift 2;;
+  -e) t2 "$2"; elfrdsetrootdir="$2"; shift 2;;
 
   --) shift; break;;
   -*) usage; exit 1;;
@@ -115,6 +119,10 @@ else
   echo "or it was not unpacked as root (to allow set ownership)"
   exit 1
  fi
+fi
+
+if [ -n "$elfrdsetrootdir" && ! -d $elfrdsetrootdir ]; then
+ echo % elfrdsetrootdir $elfrdsetrootdir not found
 fi
 
 if [ `id -u` != 0 ]; then
