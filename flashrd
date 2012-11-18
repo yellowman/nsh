@@ -139,6 +139,7 @@ fi
  vnuncfgroot $rootdevice
 }
 0() {
+ echo TMPDIR: $TMPDIR
  exit 1
 }
 
