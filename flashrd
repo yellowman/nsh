@@ -121,7 +121,7 @@ else
  fi
 fi
 
-if [ -n "$elfrdsetrootdir" && ! -d $elfrdsetrootdir ]; then
+if [[ -n $elfrdsetrootdir && ! -d $elfrdsetrootdir ]]; then
  echo % elfrdsetrootdir $elfrdsetrootdir not found
 fi
 

@@ -37,6 +37,8 @@ if [[ "$#" -lt 1 ]]; then
  exit 1
 fi
 
+. ./flashrd.sub
+
 while :
 do
  case $1 in
@@ -151,8 +153,6 @@ vnuncfgroot() {
  echo TMPDIR: $TMPDIR
  exit 1
 }
-
-. ./flashrd.sub
 
 ###
 #
