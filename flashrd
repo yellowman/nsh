@@ -316,4 +316,6 @@ vnuncfgroot $rootdevice
 
 rm -r $TMPDIR
 
-echo Done
+echo -n Done
+[[ $vnd == true ]] && echo -n "(image $dest)"
+echo
