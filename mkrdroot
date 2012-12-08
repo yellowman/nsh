@@ -192,7 +192,6 @@ if [ -f firmware.list ]; then
   line=${line%%#*}		# strip comments
   test -z "$line" && continue
 
-  echo -n " $line"
   c 2 cp $distloc/etc/firmware/$line $tmpmntdir/etc/firmware
  done < firmware.list
 else
