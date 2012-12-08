@@ -12,16 +12,10 @@
 # slow).  This is as fast as running flashrd, without requiring
 # the source files from flashrd.
 #
-# Growimg.sh might be useful if you have a stable, tested image that you want
-# to copy to a different media without having the source files originally used
-# to create the image.  It's also useful if you are feeling too lazy to run
-# flashdist.
-#
 # This script tries to keep everything scaled to sectors, so we are less
 # likely to hit the 32 bit (2^32) boundary on shell variable values (amd64
 # users have no such problem.)  The sanity checks fail completely on i386
-# if the source image is larger than 4GB (not very likely for flashdist
-# users)
+# if the source image is larger than 4GB.
 #
 # The previous version of this script used growfs.  Unfortunately the
 # superblock locations change radically going from, say, 32 sec/trk to 63 s/t.
