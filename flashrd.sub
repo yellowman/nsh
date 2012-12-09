@@ -11,6 +11,9 @@ c() {
 
  if ! eval $*; then
   echo % $* failure
+  if echo "$*" | grep last.output >/dev/null 2>&1; then
+   echo % See $TMPDIR/last.output for further diagnostics
+  fi
   case $lvl {
   4)
    4; 3; 2; 1; 0;

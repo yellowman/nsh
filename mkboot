@@ -54,9 +54,9 @@ tmplabel=$(c 0 mktemp -t mkbootlabel.XXXX)
 if [[ $vnd == true ]]; then
 
  # Create vnd image, must zero out the first few sectors or else disklabel freaks out...
- c 0 "dd if=/dev/zero bs=$bytessec count=$bytessec of=$dest > /dev/null 2>&1"
+ c 0 "dd if=/dev/zero bs=$bytessec count=$bytessec of=$dest > $TMPDIR/last.output 2>&1"
  vncfgroot $dest
- c 1 "fdisk -c $cylinders -h $trackscylinder -s $sectorstrack -f $distloc/usr/mdec/mbr -yi $rootdevice >/dev/null 2>&1"
+ c 1 "fdisk -c $cylinders -h $trackscylinder -s $sectorstrack -f $distloc/usr/mdec/mbr -yi $rootdevice > $TMPDIR/last.output 2>&1"
  c 1 disklabel $rootdevice > $tmplabel
  totalsize=$((cylinders * trackscylinder * sectorstrack))
  sectorscylinder=$((totalsize / cylinders))
@@ -64,7 +64,7 @@ if [[ $vnd == true ]]; then
 else
 
  # Disk specified, use default kernel geometry
- c 0 "fdisk -f $distloc/usr/mdec/mbr -yi $rootdevice >/dev/null 2>&1"
+ c 0 "fdisk -f $distloc/usr/mdec/mbr -yi $rootdevice > $TMPDIR/last.output 2>&1"
  c 0 disklabel $rootdevice > $tmplabel
  totalsize=`awk -F: ' /^total sectors:/ {print $2} ' $tmplabel`
  bytessec=`awk -F: ' /^bytes\/sector:/ {print $2} ' $tmplabel`
@@ -100,7 +100,7 @@ c 1 mv ${tmplabel}.new $tmplabel
 c 1 disklabel -R $rootdevice $tmplabel
 
 echo -n Creating filesystem on /dev/r${rootdevice}a
-c 1 "newfs -S $bytessec /dev/r${rootdevice}a >/dev/null 2>&1"
+c 1 "newfs -S $bytessec /dev/r${rootdevice}a > $TMPDIR/last.output 2>&1"
 echo
 
 c 1 mount /dev/${rootdevice}a $tmpmnt
@@ -109,7 +109,7 @@ echo Installing bootblocks
 
 c 2 cp $distloc/usr/mdec/boot $tmpmnt/boot
 
-c 2 "$distloc/usr/mdec/installboot $tmpmnt/boot $distloc/usr/mdec/biosboot $rootdevice >/dev/null 2>&1"
+c 2 "$distloc/usr/mdec/installboot $tmpmnt/boot $distloc/usr/mdec/biosboot $rootdevice > $TMPDIR/last.output 2>&1"
 
 c 2 mkdir $tmpmnt/new $tmpmnt/old
 

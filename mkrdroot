@@ -85,23 +85,23 @@ echo Creating ramdisk rootfs
 #
 # dd, vnconfig, disklabel, newfs
 
-c 0 "dd if=/dev/zero of=$rdroot bs=512 count=$blocks >/dev/null 2>&1"
+c 0 "dd if=/dev/zero of=$rdroot bs=512 count=$blocks > $TMPDIR/last.output 2>&1"
 
 c 0 vnconfig $device $rdroot
 
 tmplabel=$(c 0 mktemp -t mkrdrootlabel.XXXX)
 tmpmntdir=$(c 0 mktemp -t -d mkrdroot.XXXX)
 
-c 1 "disklabel $device > $tmplabel 2>/dev/null"
+c 1 "disklabel $device > $tmplabel 2> $TMPDIR/last.output"
 
 totalsize=`awk -F: ' /^total sectors:/ {print $2} ' $tmplabel`
 cat >>$tmplabel <<-EOF
 	a: $totalsize   0   4.2BSD  1024    8192    16
 	EOF
 
-c 1 "disklabel -R $device $tmplabel >/dev/null 2>&1"
+c 1 "disklabel -R $device $tmplabel > $TMPDIR/last.output 2>&1"
 
-c 1 "newfs -m 0 -o space -i 1024 /dev/r${device}a >/dev/null 2>&1"
+c 1 "newfs -m 0 -o space -i 1024 /dev/r${device}a > $TMPDIR/last.output 2>&1"
 
 c 1 mount /dev/${device}a $tmpmntdir
 
@@ -152,9 +152,9 @@ libs -lutil
 	_EOF
 
 c 2 cd $cgdir
-c 2 "crunchgen -Em Makefile $cgdir/kcopy.conf >/dev/null 2>&1"
-c 2 "make objs >/dev/null 2>&1"
-c 2 "make >/dev/null 2>&1"
+c 2 "crunchgen -Em Makefile $cgdir/kcopy.conf > $TMPDIR/last.output 2>&1"
+c 2 "make objs > $TMPDIR/last.output 2>&1"
+c 2 "make > $TMPDIR/last.output 2>&1"
 c 2 cd $wd
 echo
 
