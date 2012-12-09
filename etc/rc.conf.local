@@ -19,7 +19,7 @@ for i in $tardirs; do
  fi
 done
 
-if [ ! -f /etc/.flashrd_onetime ]; then
+if [ ! -f /etc/.flashrd_onetime -a -f /flash/onetime.tgz ]; then
   tar xpzf /flash/onetime.tgz -C /
   echo $version > /etc/.flashrd_onetime
   echo flashrd: onetime extracted
