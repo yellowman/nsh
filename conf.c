@@ -151,7 +151,9 @@ conf(FILE *output)
 	conf_interfaces(output, "vlan");
 	conf_interfaces(output, "carp");
 
+#ifdef notyet
 	conf_groupattrib(output);
+#endif
 
 	fprintf(output, "!\n");
 
