@@ -18,16 +18,19 @@ usage() {
 Usage: cfgflashrd [-d "dev" | -i "filename"]  [options]
 
 Use one of:
-    -d "dev"		Configure an attached disk
-    -i "filename"	Configure an image
+    -d | -disk "dev"        Configure an attached disk
+    -i | -image "filename"  Configure an image
 Options:
-    -r "filename"       rdrootfs image (needed only to change ramdisk)
-    -e "dir"		directory where elfrdsetroot.c is located (only with -r)
-    -c "speed"		set com0 as console at speed "speed"
-    -m 			set bsd.mp as primary kernel
-    -s 			set bsd.sp as primary kernel
-    -t "tzfile"		set timezone using a timezone file fromfrom
-			/usr/share/zoneinfo
+    -r | -rdroot "filename" rdrootfs image (needed only to change ramdisk)
+    -e "dir"                directory where elfrdsetroot.c is located (only with -r)
+    -c | -com0 "speed"      set com0 as console at speed "speed"
+    -m | -mp                set bsd.mp as primary kernel
+    -s | -sp                set bsd.sp as primary kernel
+    -dns "dns server"       list of DNS servers, separated by spaces
+    -ntp "ntp servers"      list of NTP servers, separated by spaces
+    -hostname "target hostname"     fully qualified name of target host, 
+    -t | -tz "tzfile"       set timezone using a timezone file from
+                            /usr/share/zoneinfo
 
 EOF
 }
@@ -43,14 +46,17 @@ while :
 do
  case $1 in
   -\?)		usage; exit 0;;
-  -d|-disk)	t2 "$2"; disk="$2"; shift 2;;
+  -d|-disk)	    t2 "$2"; disk="$2"; shift 2;;
   -i|-image)	t2 "$2"; image="$2"; shift 2;;
   -r|-rdroot)	t2 "$2"; rdfs="$2"; shift 2;;
-  -c|-com0)	t2 "$2"; com0="$2"; shift 2;;
-  -m|-mp)	t2 "$2"; kernel="bsdmp"; shift;;
-  -s|-sp)	t2 "$2"; kernel="bsdsp"; shift;;
-  -t|-tz)	t2 "$2"; tzfile="$2"; shift 2;;
-  -e)		t2 "$2"; elfrdsetrootdir="$2"; shift 2;;
+  -c|-com0)	    t2 "$2"; com0="$2"; shift 2;;
+  -m|-mp)	    t2 "$2"; kernel="bsdmp"; shift;;
+  -s|-sp)	    t2 "$2"; kernel="bsdsp"; shift;;
+  -t|-tz)	    t2 "$2"; tzfile="$2"; shift 2;;
+  -dns)         t2 "$2"; dnsservers="$2"; shift 2;;
+  -ntp)         t2 "$2"; ntpservers="$2"; shift 2;;
+  -hostname)    t2 "$2"; hostname="$2"; shift 2;;
+  -e)		    t2 "$2"; elfrdsetrootdir="$2"; shift 2;;
 
   --)		shift; break;;
   -*)		usage; exit 1;;
@@ -390,7 +396,7 @@ c 4 pwd_mkdb -p -d $tmpmntvnd $tmpmntvnd/master.passwd
 # steal ntp servers from local ntpd.conf!
 
 if [ -f $tmpmntvnd/ntpd.conf ]; then
- if [ -z "$ntpervers" ]; then
+ if [ -z "$ntpservers" ]; then
   ntpservers=`awk ' /^server/ { print $2 } ' /etc/ntpd.conf | tr '\n' ' '`
   read nntpservers?"NTP Servers: [$ntpservers] "
   if [ ! -z "$nntpservers" ]; then
