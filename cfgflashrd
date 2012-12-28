@@ -48,9 +48,9 @@ do
   -i|-image)	t2 "$2"; image="$2"; shift 2;;
   -r|-rdroot)	t2 "$2"; rdfs="$2"; shift 2;;
   -c|-com0)	t2 "$2"; com0="$2"; shift 2;;
-  -m|-mp)	t2 "$2"; kernel="bsdmp"; shift;;
+  -m|-mp)	kernel="bsdmp"; shift;;
   -o|-onetime)  t2 "$2"; onetime="$2"; shift 2;;
-  -s|-sp)	t2 "$2"; kernel="bsdsp"; shift;;
+  -s|-sp)	kernel="bsdsp"; shift;;
   -t|-tz)	t2 "$2"; tzfile="$2"; shift 2;;
   -e)		t2 "$2"; elfrdsetrootdir="$2"; shift 2;;
 
