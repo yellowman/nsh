@@ -217,14 +217,14 @@ for i in $vnddirs; do
   ;;
  }
  echo  "/dev/vnd0${part[$x]}	/$i	ffs	rw,$opts	1 0" >> $tmpfstab
- let x=x+1
+ ((x++))
 done
 
 x=0
 if [ ! -z "$tardirs" ]; then
  for i in $tardirs; do
   echo "swap	/$i	mfs	rw,nodev,nosuid,-s${tarsize[$x]}	0 0" >> $tmpfstab
-  let x=x+1
+  ((x++))
  done
 fi
 
@@ -238,7 +238,7 @@ if [ ! -z "$mfsdirs" ]; then
  for i in $mfsdirs; do
   echo
   echo "swap		/$i	mfs	rw,nodev,nosuid,-s${mfssize[$x]}	0 0" >> $tmpfstab
-  let x=x+1
+  ((x++))
  done
 fi
 
@@ -268,7 +268,7 @@ for i in $vnddirs; do
  if [ $i == bin ]; then
   binpart=${part[$x]}
  fi
- let x=x+1
+ ((x++))
 done
 
 if [ -z "$etcpart" -o -z "$binpart" ]; then
@@ -282,7 +282,7 @@ fi
 
 c 3 mount /dev/$device$etcpart $tmpmntvnd
 
-c 4 cp etc/rc.local etc/rc.conf.local etc/rc.shutdown $tmpmntvnd/
+c 4 cp etc/rc.local etc/rc.conf.local etc/rc.onetime etc/rc.shutdown $tmpmntvnd/
 
 c 4 mv $tmpfstab $tmpmntvnd/fstab
 
@@ -317,5 +317,5 @@ vnuncfgroot $rootdevice
 rm -r $TMPDIR
 
 echo -n Done
-[[ $vnd == true ]] && echo -n "(image $dest)"
+[[ $vnd == true ]] && echo -n " (image $dest)"
 echo

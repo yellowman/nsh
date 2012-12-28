@@ -25,6 +25,7 @@ Options:
     -e "dir"		directory where elfrdsetroot.c is located (only with -r)
     -c "speed"		set com0 as console at speed "speed"
     -m 			set bsd.mp as primary kernel
+    -o "onetime.tgz"    install onetime.tgz file on the flash
     -s 			set bsd.sp as primary kernel
     -t "tzfile"		set timezone using a timezone file fromfrom
 			/usr/share/zoneinfo
@@ -48,6 +49,7 @@ do
   -r|-rdroot)	t2 "$2"; rdfs="$2"; shift 2;;
   -c|-com0)	t2 "$2"; com0="$2"; shift 2;;
   -m|-mp)	t2 "$2"; kernel="bsdmp"; shift;;
+  -o|-onetime)  t2 "$2"; onetime="$2"; shift 2;;
   -s|-sp)	t2 "$2"; kernel="bsdsp"; shift;;
   -t|-tz)	t2 "$2"; tzfile="$2"; shift 2;;
   -e)		t2 "$2"; elfrdsetrootdir="$2"; shift 2;;
@@ -86,7 +88,7 @@ fi
 
 if [[ -n $image ]]; then
  if [[ ! -f $image ]]; then
-  echo "$flashrd image not found"
+  echo "Sorry flashimg $image not found"
   exit 1
  fi
  vnd=true
@@ -274,6 +276,14 @@ fi
 
 ###
 #
+# install the onetime.tgz file
+if [ ! -z "$onetime" -a -f "$onetime" ]; then
+ echo Installing "$onetime" file
+ cp "$onetime" $tmpmnt/onetime.tgz
+fi
+
+###
+#
 # mount running filesystem for other types of changes
 
 c 2 vnconfig $device $tmpmnt/openbsd.vnd
@@ -287,7 +297,7 @@ for i in $vnddirs; do
  if [ $i == etc ]; then
   etcpart=${part[$x]}
  fi
- let x=x+1
+ (( x++ ))
 done
 
 if [ -z "$etcpart" ]; then
@@ -372,18 +382,16 @@ if [ -z "$encpass" ]; then
 fi
 
 tmppass=$TMPDIR/tmppass
+awk -v encpass=$encpass -F : '{
+  if (/^root/){
+    printf("%s:%s:%s:%s:%s:%s:%s:%s:%s:%s\n",
+         $1, encpass, $3, $4, $5, $6, $7, $8, $9, $10)
+  } else {print}}' $tmpmntvnd/master.passwd >> $tmppass
 
-echo -n "root:$encpass" > $tmppass
-
-awk -F : '/^root/ \
-{ printf(":%s:%s:%s:%s:%s:%s:%s:%s\n", $3, $4, $5, $6, $7, $8, $9, $10) }' \
-< $tmpmntvnd/master.passwd >> $tmppass
-
-c 4 "egrep -v '^root:' < $tmpmntvnd/master.passwd >> $tmppass"
-
-c 4 mv $tmppass $tmpmntvnd/master.passwd
-
-c 4 pwd_mkdb -p -d $tmpmntvnd $tmpmntvnd/master.passwd
+if [[ $? -eq 0 ]]; then
+    c 4 mv $tmppass $tmpmntvnd/master.passwd
+    c 4 pwd_mkdb -p -d $tmpmntvnd $tmpmntvnd/master.passwd
+fi
 
 ###
 #
@@ -391,7 +399,7 @@ c 4 pwd_mkdb -p -d $tmpmntvnd $tmpmntvnd/master.passwd
 
 if [ -f $tmpmntvnd/ntpd.conf ]; then
  if [ -z "$ntpervers" ]; then
-  ntpservers=`awk ' /^server/ { print $2 } ' /etc/ntpd.conf | tr '\n' ' '`
+  ntpservers=`awk 'BEGIN {ORS=" "} /^server/{print $2}' /etc/ntpd.conf`
   read nntpservers?"NTP Servers: [$ntpservers] "
   if [ ! -z "$nntpservers" ]; then
    ntpservers="$nntpservers"
@@ -413,7 +421,7 @@ fi
 # steal dns servers from local resolv.conf!
 
 if [ -z "$dnsservers" ]; then
- dnsservers=`awk ' /^nameserver/ { print $2 } ' /etc/resolv.conf | tr '\n' ' '`
+ dnsservers=`awk 'BEGIN {ORS=" "} /^nameserver/{print $2}' /etc/resolv.conf`
  read ndnsservers?"DNS Servers: [$dnsservers] "
  if [ ! -z "$ndnsservers" ]; then
   dnsservers="$ndnsservers"

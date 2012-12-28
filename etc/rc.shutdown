@@ -33,8 +33,6 @@ if [ ! -z "$tardirs" ]; then
    mv /flash/$i.tar.part /flash/$i.tar
   fi
 
-  rm -r $temp
-
  done
 
  # Wait for slow flash. Likely unnecessary.
