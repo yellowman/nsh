@@ -123,7 +123,7 @@ c 0 cc -o $elfrdsetrootdir/elfrdsetroot $elfrdsetrootdir/elfrdsetroot.c $elfrdse
 # compile our version of GENERIC
 
 T=$(c 0 mktemp -t mkkern.FLASHRD.XXXX)
-TMP=$(c 0 mktemp -t mkkern.FLASRD.MP.XXXX)
+TMP=$(c 0 mktemp -t mkkern.FLASHRD.MP.XXXX)
 
 echo -n Configuring FLASHRD, FLASHRD.MP kernels
 wd=`pwd`

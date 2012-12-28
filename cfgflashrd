@@ -25,10 +25,13 @@ Options:
     -e "dir"		directory where elfrdsetroot.c is located (only with -r)
     -c "speed"		set com0 as console at speed "speed"
     -m 			set bsd.mp as primary kernel
-    -o "onetime.tgz"    install onetime.tgz file on the flash
+    -o "onetime.tgz"    install specified file on the flash as onetime.tgz
     -s 			set bsd.sp as primary kernel
     -t "tzfile"		set timezone using a timezone file fromfrom
 			/usr/share/zoneinfo
+    -dns "dns server"   list of DNS servers (separated by spaces)
+    -ntp "ntp servers"  list of NTP servers (separated by spaces)
+    -hostname "name"	hostname of target host
 
 EOF
 }
@@ -49,9 +52,12 @@ do
   -r|-rdroot)	t2 "$2"; rdfs="$2"; shift 2;;
   -c|-com0)	t2 "$2"; com0="$2"; shift 2;;
   -m|-mp)	kernel="bsdmp"; shift;;
-  -o|-onetime)  t2 "$2"; onetime="$2"; shift 2;;
+  -o|-onetime)	t2 "$2"; onetime="$2"; shift 2;;
   -s|-sp)	kernel="bsdsp"; shift;;
   -t|-tz)	t2 "$2"; tzfile="$2"; shift 2;;
+  -dns)		t2 "$2"; dnsservers="$2"; shift 2;;
+  -ntp)		t2 "$2"; ntpservers="$2"; shift 2;;
+  -hostname)	t2 "$2"; hostname="$2"; shift 2;;
   -e)		t2 "$2"; elfrdsetrootdir="$2"; shift 2;;
 
   --)		shift; break;;
@@ -398,7 +404,7 @@ fi
 # steal ntp servers from local ntpd.conf!
 
 if [ -f $tmpmntvnd/ntpd.conf ]; then
- if [ -z "$ntpervers" ]; then
+ if [ -z "$ntpservers" ]; then
   ntpservers=`awk 'BEGIN {ORS=" "} /^server/{print $2}' /etc/ntpd.conf`
   read nntpservers?"NTP Servers: [$ntpservers] "
   if [ ! -z "$nntpservers" ]; then
