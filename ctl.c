@@ -59,6 +59,7 @@ void call_editor(char *, char **, char *);
 void ctl_symlink(char *, char **, char *);
 int rule_writeline(char *, mode_t, char *);
 void fill_tmpfile(char **, char *, int, char *, int);
+void unfill_tmpfile(char **, char *);
 int acq_lock(char *);
 void rls_lock(int);
 static char table[16];
@@ -520,10 +521,12 @@ ctlhandler(int argc, char **argv, char *modhvar)
 		fill_tmpfile((char **)fillargs[1], daemons->tmpfile, cli_rtable,
 		    buf, sizeof(buf));
 		(*x->handler)(fillargs[0], (char **)fillargs[1], fillargs[2]);
+		unfill_tmpfile((char **)fillargs[1], buf);
 	} else {
 		fill_tmpfile(fillargs, daemons->tmpfile, cli_rtable, buf,
 		    sizeof(buf));
 		cmdargs(fillargs[0], fillargs);
+		unfill_tmpfile(fillargs, buf);
 	}
 
 	if (x->flag_x != 0)
@@ -540,12 +543,30 @@ fill_tmpfile(char **fillargs, char *tmpfile, int rtableid, char *buf, int len)
 	if (fillargs == NULL)
 		return;
 
-	for (i = 0; i < NOPTFILL - 1 ; i++) {
+	for (i = 0; i < NOPTFILL - 1; i++) {
 		if(fillargs[i] == '\0' || fillargs[i] == NULL)
 			break;
 		if(fillargs[i] == REQTEMP) {
 			snprintf(buf, len, "%s.%d", tmpfile, cli_rtable);
 			fillargs[i] = buf;
+			break;
+		}
+	}
+}
+
+void
+unfill_tmpfile(char **fillargs, char *buf)
+{
+	int i;
+
+	if (fillargs == NULL)
+		return;
+
+	for (i = 0; i < NOPTFILL - 1; i++) {
+		if(fillargs[i] == '\0' || fillargs[i] == NULL)
+			break;
+		if(fillargs[i] == buf) {
+			fillargs[i] = REQTEMP;
 			break;
 		}
 	}
@@ -572,7 +593,6 @@ call_editor(char *name, char **args, char *z)
 	snprintf(tmpfile, sizeof(tmpfile), "%s.%d", daemons->tmpfile, cli_rtable);
 
 	/* acq lock, call editor, test config with cmd and args, release lock */
-
 	if ((editor = getenv("EDITOR")) == NULL || *editor == '\0')
 		editor = DEFAULT_EDITOR;
 	if ((fd = acq_lock(tmpfile)) > 0) {
@@ -581,8 +601,10 @@ call_editor(char *name, char **args, char *z)
 		chmod(tmpfile, daemons->mode);
 		fill_tmpfile(args, daemons->tmpfile, cli_rtable, tmpfile,
 		    sizeof(tmpfile));
-		if (args != NULL)
+		if (args != NULL) {
 			cmdargs(args[0], args);
+		}
+		unfill_tmpfile(args, tmpfile);
 		rls_lock(fd);
 	} else
 		printf ("%% %s configuration is locked for editing\n",
