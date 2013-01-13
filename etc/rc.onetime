@@ -3,7 +3,7 @@
 
 if [ ! -f /etc/.flashrd_onetime -a -f /flash/onetime.tgz ]; then
  tar xpzf /flash/onetime.tgz -C /
- echo $version > /etc/.flashrd_onetime
+ touch /etc/.flashrd_onetime
  echo flashrd: onetime extracted
  echo rebooting
  sync; sync
