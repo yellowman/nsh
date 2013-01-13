@@ -24,6 +24,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/socket.h>
+#include <sys/syslimits.h>
 #include "externs.h"
 
 /* service daemons */
@@ -58,7 +59,7 @@
 void call_editor(char *, char **, char *);
 void ctl_symlink(char *, char **, char *);
 int rule_writeline(char *, mode_t, char *);
-int fill_tmpfile(char **, char *, int, char *, int, char **);
+int fill_tmpfile(char **, char *, char **);
 int acq_lock(char *);
 void rls_lock(int);
 static char table[16];
@@ -462,7 +463,7 @@ ctlhandler(int argc, char **argv, char *modhvar)
 {
 	struct daemons *daemons;
 	struct ctl *x;
-	char buf[64];
+	char tmpfile[PATH_MAX];
 	char *step_args[NOPTFILL] = { NULL, NULL, NULL, NULL, NULL, NULL, '\0' };
 	char *tmp_args[NOPTFILL] = { NULL, NULL, NULL, NULL, NULL, NULL, '\0' };
 	char **fillargs;
@@ -517,13 +518,15 @@ ctlhandler(int argc, char **argv, char *modhvar)
 		return 0;
 
 	snprintf(table, sizeof(table), "-T%d", cli_rtable);
+	if (daemons->tmpfile)
+		snprintf(tmpfile, sizeof(tmpfile), "%s.%d", daemons->tmpfile,
+		    cli_rtable);
 
-	if (x->handler && fill_tmpfile((char **)fillargs[1], daemons->tmpfile,
-	    cli_rtable, buf, sizeof(buf), tmp_args)) {
+	if (x->handler && fill_tmpfile((char **)fillargs[1], tmpfile,
+	    tmp_args)) {
 		(*x->handler)(fillargs[0], tmp_args, fillargs[2]);
 		cmplt = 1;
-	} else if (!x->handler && fill_tmpfile(fillargs, daemons->tmpfile,
-	    cli_rtable, buf, sizeof(buf), tmp_args)) {
+	} else if (!x->handler && fill_tmpfile(fillargs, tmpfile, tmp_args)) {
 		cmdargs(tmp_args[0], tmp_args);
 		cmplt = 1;
 	}
@@ -538,21 +541,19 @@ ctlhandler(int argc, char **argv, char *modhvar)
 }
 
 int
-fill_tmpfile(char **fillargs, char *tmpfile, int rtableid, char *buf, int len,
-    char **tmp_args)
+fill_tmpfile(char **fillargs, char *tmpfile, char **tmp_args)
 {
 	int i;
 
-	if (fillargs == NULL)
+	if (fillargs == NULL || tmpfile == NULL)
 		return 0;
 
-	snprintf(buf, len, "%s.%d", tmpfile, cli_rtable);
 	for (i = 0; i < NOPTFILL - 1; i++) {
 		if(fillargs[i] == '\0' || fillargs[i] == NULL) {
 			break;
 		}
 		if(fillargs[i] == REQTEMP) {
-			tmp_args[i] = buf;
+			tmp_args[i] = tmpfile;
 		} else {
 			tmp_args[i] = fillargs[i];
 		}
