@@ -58,8 +58,7 @@
 void call_editor(char *, char **, char *);
 void ctl_symlink(char *, char **, char *);
 int rule_writeline(char *, mode_t, char *);
-void fill_tmpfile(char **, char *, int, char *, int);
-void unfill_tmpfile(char **, char *);
+int fill_tmpfile(char **, char *, int, char *, int, char **);
 int acq_lock(char *);
 void rls_lock(int);
 static char table[16];
@@ -464,8 +463,10 @@ ctlhandler(int argc, char **argv, char *modhvar)
 	struct daemons *daemons;
 	struct ctl *x;
 	char buf[64];
-	char *args[NOPTFILL] = { NULL, NULL, NULL, NULL, NULL, NULL, '\0' };
+	char *step_args[NOPTFILL] = { NULL, NULL, NULL, NULL, NULL, NULL, '\0' };
+	char *tmp_args[NOPTFILL] = { NULL, NULL, NULL, NULL, NULL, NULL, '\0' };
 	char **fillargs;
+	int cmplt = 0;
 
 	/* loop daemon list to find table pointer */
 	daemons = (struct daemons *) genget(hname, (char **)ctl_daemons,
@@ -511,65 +512,52 @@ ctlhandler(int argc, char **argv, char *modhvar)
 		return 0;
 	}
 
-	fillargs = step_optreq(x->args, args, argc, argv, 2);
+	fillargs = step_optreq(x->args, step_args, argc, argv, 2);
 	if (fillargs == NULL)
 		return 0;
 
 	snprintf(table, sizeof(table), "-T%d", cli_rtable);
 
-	if (x->handler) {
-		fill_tmpfile((char **)fillargs[1], daemons->tmpfile, cli_rtable,
-		    buf, sizeof(buf));
-		(*x->handler)(fillargs[0], (char **)fillargs[1], fillargs[2]);
-		unfill_tmpfile((char **)fillargs[1], buf);
-	} else {
-		fill_tmpfile(fillargs, daemons->tmpfile, cli_rtable, buf,
-		    sizeof(buf));
-		cmdargs(fillargs[0], fillargs);
-		unfill_tmpfile(fillargs, buf);
+	if (x->handler && fill_tmpfile((char **)fillargs[1], daemons->tmpfile,
+	    cli_rtable, buf, sizeof(buf), tmp_args)) {
+		(*x->handler)(fillargs[0], tmp_args, fillargs[2]);
+		cmplt = 1;
+	} else if (!x->handler && fill_tmpfile(fillargs, daemons->tmpfile,
+	    cli_rtable, buf, sizeof(buf), tmp_args)) {
+		cmdargs(tmp_args[0], tmp_args);
+		cmplt = 1;
 	}
 
-	if (x->flag_x != 0)
+	if (cmplt == 0) {
+		printf("%% fill_tmpfile failure!\n");
+	} else if (x->flag_x != 0) {
 		flag_x("ctl", daemons->name, x->flag_x, NULL);
+	}
 
 	return 1;
 }
 
-void
-fill_tmpfile(char **fillargs, char *tmpfile, int rtableid, char *buf, int len)
+int
+fill_tmpfile(char **fillargs, char *tmpfile, int rtableid, char *buf, int len,
+    char **tmp_args)
 {
 	int i;
 
 	if (fillargs == NULL)
-		return;
+		return 0;
 
+	snprintf(buf, len, "%s.%d", tmpfile, cli_rtable);
 	for (i = 0; i < NOPTFILL - 1; i++) {
-		if(fillargs[i] == '\0' || fillargs[i] == NULL)
+		if(fillargs[i] == '\0' || fillargs[i] == NULL) {
 			break;
+		}
 		if(fillargs[i] == REQTEMP) {
-			snprintf(buf, len, "%s.%d", tmpfile, cli_rtable);
-			fillargs[i] = buf;
-			break;
+			tmp_args[i] = buf;
+		} else {
+			tmp_args[i] = fillargs[i];
 		}
 	}
-}
-
-void
-unfill_tmpfile(char **fillargs, char *buf)
-{
-	int i;
-
-	if (fillargs == NULL)
-		return;
-
-	for (i = 0; i < NOPTFILL - 1; i++) {
-		if(fillargs[i] == '\0' || fillargs[i] == NULL)
-			break;
-		if(fillargs[i] == buf) {
-			fillargs[i] = REQTEMP;
-			break;
-		}
-	}
+	return 1;
 }
 
 void
@@ -599,12 +587,7 @@ call_editor(char *name, char **args, char *z)
 		char *argv[] = { editor, tmpfile, '\0' };
 		cmdargs(editor, argv);
 		chmod(tmpfile, daemons->mode);
-		fill_tmpfile(args, daemons->tmpfile, cli_rtable, tmpfile,
-		    sizeof(tmpfile));
-		if (args != NULL) {
-			cmdargs(args[0], args);
-		}
-		unfill_tmpfile(args, tmpfile);
+		cmdargs(args[0], args);
 		rls_lock(fd);
 	} else
 		printf ("%% %s configuration is locked for editing\n",
