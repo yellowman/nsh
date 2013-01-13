@@ -56,14 +56,51 @@
 #define DHCPLEASES	"/var/db/dhcpd.leases"
 #endif
 
+/* table variable (for pkill usage) */
+static char table[16];
+
+/* service routines */
 void call_editor(char *, char **, char *);
 void ctl_symlink(char *, char **, char *);
 int rule_writeline(char *, mode_t, char *);
 int fill_tmpfile(char **, char *, char **);
 int acq_lock(char *);
 void rls_lock(int);
-static char table[16];
 
+/* master daemon list */
+struct daemons ctl_daemons[] = {
+{ "pf",		"PF",	ctl_pf,		PFCONF_TEMP,	0600, 1, 0 },
+{ "ospf",	"OSPF",	ctl_ospf,	OSPFCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
+{ "ospf6",	"OSPF6",ctl_ospf6,	OSPF6CONF_TEMP,	0600, 0, RT_TABLEID_MAX },
+{ "bgp",	"BGP",	ctl_bgp,	BGPCONF_TEMP,	0600, 0, 0 },
+{ "rip",	"RIP",	ctl_rip,	RIPCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
+{ "ldp",	"LDP",	ctl_ldp,	LDPCONF_TEMP,	0600, 0, 0 },
+{ "relay",	"Relay",ctl_relay,	RELAYCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
+{ "ipsec",	"IPsec IKEv1",ctl_ipsec,IPSECCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
+{ "ike",	"IPsec IKEv2",ctl_ike,	IKECONF_TEMP,	0600, 0, RT_TABLEID_MAX },
+{ "rtadv",	"rtadvd",ctl_rtadv,	RTADVCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
+{ "dvmrp",	"DVMRP",ctl_dvmrp,	DVMRPCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
+{ "sasync",	"SAsync",ctl_sasync,	SASYNCCONF_TEMP,0600, 0, RT_TABLEID_MAX },
+{ "dhcp",	"DHCP",	ctl_dhcp,	DHCPCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
+{ "snmp",	"SNMP",	ctl_snmp,	SNMPCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
+{ "sshd",	"SSH",	ctl_sshd,	SSHDCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
+{ "ntp",	"NTP",	ctl_ntp,	NTPCONF_TEMP,	0600, 0, 0 },
+{ "ifstate",	"ifstate",ctl_ifstate,	IFSTATECONF_TEMP,0600, 0, RT_TABLEID_MAX },
+{ "ftp-proxy",	"FTP proxy",ctl_ftpproxy,FTPPROXY_TEMP,	0600, 0, RT_TABLEID_MAX },
+{ "tftp-proxy",	"TFTP proxy",ctl_tftpproxy,TFTPPROXY_TEMP,0600, 0, RT_TABLEID_MAX },
+{ "tftp",	"TFTP",	ctl_tftp,	TFTP_TEMP,	0600, 0, RT_TABLEID_MAX },
+{ "nppp",	"PPP",	ctl_nppp,	NPPPCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
+{ "dns",	"DNS",	ctl_dns,	RESOLVCONF_TEMP,0644, 0, 0 },
+{ "inet",	"Inet",	ctl_inet,	INETCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
+{ "smtp",	"SMTP",	ctl_smtp,	SMTPCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
+{ "ldap",	"LDAP",	ctl_ldap,	LDAPCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
+{ "ifstate",	"If state",ctl_ifstate,	IFSTATECONF_TEMP,0600, 0, RT_TABLEID_MAX },
+{ 0, 0, 0, 0, 0, 0 }
+};
+
+/* per-daemon commands, and their C or executable functions */ 
+
+/* PF, pfctl */
 char *ctl_pf_test[] = { PFCTL, "-nf", REQTEMP, '\0' };
 struct ctl ctl_pf[] = {
 	{ "enable",	"enable service",
@@ -77,6 +114,7 @@ struct ctl ctl_pf[] = {
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
+/* ospfd, ospfctl */
 char *ctl_ospf_test[] = { OSPFD, "-nf", REQTEMP, '\0' };
 struct ctl ctl_ospf[] = {
 	{ "enable",     "enable service",
@@ -94,6 +132,7 @@ struct ctl ctl_ospf[] = {
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
+/* ospf6d, ospf6ctl */
 char *ctl_ospf6_test[] = { OSPF6D, "-nf", REQTEMP, '\0' };
 struct ctl ctl_ospf6[] = {
 	{ "enable",     "enable service",
@@ -111,6 +150,7 @@ struct ctl ctl_ospf6[] = {
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
+/* bgpd, bgpctl */
 char *ctl_bgp_test[] = { BGPD, "-nf", REQTEMP, NULL, '\0' };
 struct ctl ctl_bgp[] = {
 	{ "enable",     "enable service",
@@ -132,6 +172,7 @@ struct ctl ctl_bgp[] = {
         { 0, 0, { 0 }, 0, 0 }
 };
 
+/* ripd, ripctl */
 char *ctl_rip_test[] = { RIPD, "-nf", REQTEMP, '\0' };
 struct ctl ctl_rip[] = {
 	{ "enable",     "enable service",
@@ -147,6 +188,7 @@ struct ctl ctl_rip[] = {
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
+/* ldpd, ldpctl */
 char *ctl_ldp_test[] = { LDPD, "-nf", REQTEMP, '\0' };
 struct ctl ctl_ldp[] = {
 	{ "enable",	"enable service",
@@ -160,6 +202,7 @@ struct ctl ctl_ldp[] = {
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
+/* isakmpd, ipsecctl */
 char *ctl_ipsec_test[] = { IPSECCTL, "-nf", REQTEMP, '\0' };
 struct ctl ctl_ipsec[] = {
 	{ "enable",     "enable service",
@@ -173,6 +216,7 @@ struct ctl ctl_ipsec[] = {
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
+/* iked, ikectl */
 char *ctl_ike_test[] = { IKED, "-nf", REQTEMP, '\0' };
 struct ctl ctl_ike[] = {
 	{ "enable",	"enable service",
@@ -196,6 +240,7 @@ struct ctl ctl_ike[] = {
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
+/* dvmrpd */
 char *ctl_dvmrp_test[] = { DVMRPD, "-nf", REQTEMP, '\0' };
 struct ctl ctl_dvmrp[] = {
 	{ "enable",     "enable service",
@@ -207,6 +252,7 @@ struct ctl ctl_dvmrp[] = {
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
+/* rtadvd */
 struct ctl ctl_rtadv[] = {
 	{ "enable",	"enable service",
 	    { RTADVD, "-c", REQTEMP, REQ, OPT, OPT, OPT, NULL }, NULL, DB_X_ENABLE },
@@ -217,6 +263,7 @@ struct ctl ctl_rtadv[] = {
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
+/* ifstated */
 char *ctl_ifstate_test[] = { IFSTATED, "-nf", REQTEMP, '\0' };
 struct ctl ctl_ifstate[] = {
 	{ "enable",     "enable service",
@@ -228,6 +275,7 @@ struct ctl ctl_ifstate[] = {
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
+/* sasyncd */
 struct ctl ctl_sasync[] = {
 	{ "enable",     "enable service",
 	    { SASYNCD, "-c", REQTEMP, NULL }, NULL, DB_X_ENABLE },
@@ -238,6 +286,7 @@ struct ctl ctl_sasync[] = {
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
+/* npppd, npppctl */
 char *ctl_nppp_test[] = { NPPPD, "-nf", REQTEMP, '\0' };
 struct ctl ctl_nppp[] = {
 	{ "enable",	"enable service",
@@ -253,6 +302,7 @@ struct ctl ctl_nppp[] = {
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
+/* dhcpd */
 char *ctl_dhcp_test[] = { DHCPD, "-nc", REQTEMP, '\0' };
 struct ctl ctl_dhcp[] = {
 	{ "enable",     "enable service",
@@ -264,6 +314,7 @@ struct ctl ctl_dhcp[] = {
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
+/* snmpd, snmpctl */
 char *ctl_snmp_test[] = { SNMPD, "-nf", REQTEMP, '\0' };
 struct ctl ctl_snmp[] = {
 	{ "enable",     "enable service",
@@ -277,6 +328,7 @@ struct ctl ctl_snmp[] = {
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
+/* sshd */
 char *ctl_sshd_test[] = { SSHD, "-tf", REQTEMP, '\0' };
 struct ctl ctl_sshd[] = {
 	{ "enable",	"enable service",
@@ -288,6 +340,7 @@ struct ctl ctl_sshd[] = {
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
+/* ntpd */
 char *ctl_ntp_test[] = { NTPD, "-nf", REQTEMP, '\0' };
 struct ctl ctl_ntp[] = {
 	{ "enable",     "enable service",
@@ -299,6 +352,7 @@ struct ctl ctl_ntp[] = {
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
+/* relayd, relayctl */
 char *ctl_relay_test[] = { RELAYD, "-nf", REQTEMP, '\0' };
 struct ctl ctl_relay[] = {
 	{ "enable",	"enable service",
@@ -322,6 +376,7 @@ struct ctl ctl_relay[] = {
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
+/* snmpd, snmpctl */
 char *ctl_smtp_test[] = { SMTPD, "-nf", REQTEMP, '\0' };
 struct ctl ctl_smtp[] = {
 	{ "enable",	"enable service",
@@ -343,6 +398,7 @@ struct ctl ctl_smtp[] = {
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
+/* ftpproxy */
 struct ctl ctl_ftpproxy[] = {
 	{ "enable",	"enable service",
 	    { FTPPROXY, "-D", "2", NULL }, NULL, DB_X_ENABLE },
@@ -351,6 +407,7 @@ struct ctl ctl_ftpproxy[] = {
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
+/* tftpproxy */
 struct ctl ctl_tftpproxy[] = {
 	{ "enable",     "enable service",
 	    { TFTPPROXY, "-v", "-l", "127.0.0.1", NULL }, NULL, DB_X_ENABLE },
@@ -359,6 +416,7 @@ struct ctl ctl_tftpproxy[] = {
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
+/* tftpd */
 struct ctl ctl_tftp[] = {
 	{ "enable", 	"enable service",
 	   { TFTPD, "-l", "127.0.0.1", NULL }, NULL, DB_X_ENABLE },
@@ -367,6 +425,7 @@ struct ctl ctl_tftp[] = {
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
+/* resolv.conf */
 struct ctl ctl_dns[] = {
 	{ "local-control", "local control over DNS settings",
 	    { RESOLVCONF_SYM, NULL, RESOLVCONF_TEMP, NULL }, ctl_symlink,
@@ -379,6 +438,7 @@ struct ctl ctl_dns[] = {
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
+/* inetd */
 struct ctl ctl_inet[] = {
 	{ "enable",     "enable service",
 	    { INETD, REQTEMP, NULL }, NULL, DB_X_ENABLE },
@@ -389,6 +449,7 @@ struct ctl ctl_inet[] = {
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
+/* ldapd, ldapctl */
 char *ctl_ldap_test[] = { LDAPD, "-nf", REQTEMP, '\0' };
 struct ctl ctl_ldap[] = {
 	{ "enable",	"enable service",
@@ -406,41 +467,11 @@ struct ctl ctl_ldap[] = {
 	{ 0, 0, { 0 }, 0, 0, }
 };
 
-struct daemons ctl_daemons[] = {
-	{ "pf",		"PF",	ctl_pf,		PFCONF_TEMP,	0600, 1, 0 },
-	{ "ospf",	"OSPF", ctl_ospf,	OSPFCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
-	{ "ospf6",	"OSPF6", ctl_ospf6,	OSPF6CONF_TEMP, 0600, 0, RT_TABLEID_MAX },
-	{ "bgp",	"BGP",	ctl_bgp,	BGPCONF_TEMP,	0600, 0, 0 },
-	{ "rip",	"RIP",	ctl_rip,	RIPCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
-	{ "ldp",	"LDP",	ctl_ldp,	LDPCONF_TEMP,	0600, 0, 0 },
-	{ "relay",	"Relay", ctl_relay,	RELAYCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
-	{ "ipsec",	"IPsec IKEv1", ctl_ipsec,	IPSECCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
-	{ "ike",	"IPsec IKEv2", ctl_ike,		IKECONF_TEMP, 0600, 0, RT_TABLEID_MAX },
-	{ "rtadv",	"rtadvd", ctl_rtadv,	RTADVCONF_TEMP, 0600, 0, RT_TABLEID_MAX },
-	{ "dvmrp",	"DVMRP", ctl_dvmrp,	DVMRPCONF_TEMP, 0600, 0, RT_TABLEID_MAX },
-	{ "sasync",	"SAsync", ctl_sasync,	SASYNCCONF_TEMP,0600, 0, RT_TABLEID_MAX },
-	{ "dhcp",	"DHCP",	ctl_dhcp,	DHCPCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
-	{ "snmp",	"SNMP",	ctl_snmp,	SNMPCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
-	{ "sshd",	"SSH",	ctl_sshd,	SSHDCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
-	{ "ntp",	"NTP",	ctl_ntp,	NTPCONF_TEMP,	0600, 0, 0 },
-	{ "ifstate",	"ifstate", ctl_ifstate,	IFSTATECONF_TEMP, 0600, 0, RT_TABLEID_MAX },
-	{ "ftp-proxy",  "FTP proxy", ctl_ftpproxy, FTPPROXY_TEMP, 0600, 0, RT_TABLEID_MAX },
-	{ "tftp-proxy",	"TFTP proxy", ctl_tftpproxy, TFTPPROXY_TEMP, 0600, 0, RT_TABLEID_MAX },
-	{ "tftp",	"TFTP", ctl_tftp,	TFTP_TEMP,	0600, 0, RT_TABLEID_MAX },
-	{ "nppp",	"PPP",	ctl_nppp,	NPPPCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
-	{ "dns", 	"DNS", ctl_dns,		RESOLVCONF_TEMP,0644, 0, 0 },
-	{ "inet",	"Inet", ctl_inet,	INETCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
-	{ "smtp",	"SMTP", ctl_smtp,	SMTPCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
-	{ "ldap",	"LDAP", ctl_ldap,	LDAPCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
-	{ "ifstate",	"Interface state", ctl_ifstate,	IFSTATECONF_TEMP, 0600, 0, RT_TABLEID_MAX },
-	{ 0, 0, 0, 0, 0, 0 }
-};
-
 void
 ctl_symlink(char *temp, char **z, char *real)
 {
 	rmtemp(temp);
-	symlink(real,temp);
+	symlink(real, temp);
 }
 
 /* flag to other nsh sessions or nsh conf() that actions have been taken */
@@ -458,6 +489,7 @@ flag_x(char *name, char *daemon, int dbflag, char *data)
 	}
 }
 
+/* the main entry point into ctl.c from CLI */
 int
 ctlhandler(int argc, char **argv, char *modhvar)
 {
@@ -481,7 +513,8 @@ ctlhandler(int argc, char **argv, char *modhvar)
 	}
 
 	if (cli_rtable > daemons->rtablemax) {
-		printf("%% Command %s not available via rtable %d\n", daemons->name, cli_rtable);
+		printf("%% Command %s not available via rtable %d\n",
+		    daemons->name, cli_rtable);
 		return 0;
 	}
 
@@ -579,7 +612,8 @@ call_editor(char *name, char **args, char *z)
 		return;
 	}
 
-	snprintf(tmpfile, sizeof(tmpfile), "%s.%d", daemons->tmpfile, cli_rtable);
+	snprintf(tmpfile, sizeof(tmpfile), "%s.%d", daemons->tmpfile,
+	    cli_rtable);
 
 	/* acq lock, call editor, test config with cmd and args, release lock */
 	if ((editor = getenv("EDITOR")) == NULL || *editor == '\0')
