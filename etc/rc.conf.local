@@ -1,36 +1,7 @@
-#!/bin/sh
+# Run flashrd boot routines
+/etc/rc.flashrd
 
-# DO NOT EDIT THIS SECTION UNLESS YOU INTEND TO MODIFY THE FILESYSTEM BEHAVIOR OF YOUR FLASHRD SYSTEM!!!
-#
-# MAKE LOCAL EDITS IN THE LAST SECTION OF THIS FILE
-
-tardirs="var"
-
-for i in $tardirs; do
- # rc.conf runs early in /etc/rc, and again in /etc/netstart
- # as of OpenBSD 4.9, mfs dirs are not yet available on the first run
- # therefore, check for mount first
- if mount | egrep ^mfs".*"/$i >/dev/null ; then
-  if [ ! -f /$i/.tardirs.$i ]; then
-   echo tardirs: extracting $i
-   tar xpf /flash/$i.tar -C /$i
-   touch /$i/.tardirs.$i
-  fi
- fi
-done
-
-/etc/rc.onetime
-
-# Untar on-boot files every time
-if [ ! -f /tmp/.flashrd_onboot -a -f /flash/onboot.tgz ]; then
- tar xpzf /flash/onboot.tgz -C /
- echo $version > /tmp/.flashrd_onboot
- echo flashrd: onboot extracted
-fi
-
-# Insert actual rc.conf.local directives HERE
+# Define rc.conf.local variables
 
 # pkg_scripts=""
 # syslogd_flags="${syslogd_flags} -a /var/unbound/dev/log"
-
-# END
