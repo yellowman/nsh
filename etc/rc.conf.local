@@ -1,3 +1,4 @@
+#!/bin/sh
 # Run flashrd boot routines
 /etc/rc.flashrd
 
