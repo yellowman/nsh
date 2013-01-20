@@ -49,7 +49,7 @@ if [ ! -z "$vndsize" ]; then
  x=0
  for i in $vndsize; do
   vndsizeA[$x]=$i
-  let x=x+1
+  ((x++))
  done
 fi
 
@@ -59,7 +59,7 @@ for i in $vnddirs; do
   echo % Directory $distloc/$i not found
   exit 1
  fi
- let y=y+1
+ ((y++))
 done
 
 if [ $y -ne $x ]; then
@@ -108,28 +108,29 @@ for i in $vnddirs; do
 
  echo -n Analyzing /$i
 
- size[$x]=`du -s $distloc/$i | cut -f 1`
+ set -- $(du -s $distloc/$i)
+ size=$1
 
  # Leave 1/2th (50%) of used space as free space for >=100MB directories
- let free[$x]=size[$x]/2
- let total[$x]=size[$x]+free[$x]
+ free=$((size/2))
+ total[$x]=$((size+free))
+
  # and leave 140% of used space as free space for <100MB directories
- if [ ${size[$x]} -le 204800 ]; then
-  let total[$x]=total[$x]+total[$x]
+ if [ ${size} -le 204800 ]; then
+  ((total[$x]*=2))
  fi
  if [ ${vndsizeA[$x]} != "auto" ]; then
   if [ ${total[$x]} -le ${vndsizeA[$x]} ]; then
-   let total[$x]=vndsizeA[$x]
+   total[$x]=$((vndsizeA[$x]))
   else
    # Auto-calculated size was more than suggested size.  Go with auto-calculation.
    echo -n " (OVERRIDE $((vndsizeA[$x] / 2048))MB)"
   fi
  fi
  # report results
- echo " fs $((total[$x] / 2048))MB ($((size[$x] / 2048))MB files $(((total[$x] - size[$x]) / 2048))MB free)"
- let disktotal=disktotal+total[$x]
-
- let x=x+1
+ echo " fs $((total[$x] / 2048))MB ($((size / 2048))MB files $(((total[$x] - size) / 2048))MB free)"
+ disktotal=$((disktotal+total[$x]))
+ ((x++))
 
 done
 
@@ -185,8 +186,8 @@ for i in $vnddirs; do
 
  echo "${part[$x]}: ${total[$x]}  $offset   4.2BSD  1024    8192    16"  >> $tmplabel
 
- let offset=offset+${total[$x]}
- let x=x+1
+ offset=$((offset+${total[$x]}))
+ ((x++))
 done
 
 c 1 disklabel -R $device $tmplabel
@@ -211,7 +212,7 @@ for i in $vnddirs; do
  umountwait 1 $tmpmntdir
 
  echo
- let x=x+1
+ ((x++))
 done
 
 c 0 vnconfig -u $device
@@ -224,7 +225,8 @@ if [ ! -z "$tardirs" ]; then
  for i in $tardirs; do
   echo -n Creating $i.tar
 
-  size=`du -s $distloc/$i | cut -f 1`
+  set -- `du -s $distloc/$i`
+  size=$1
   if [ "$size" -le 2048 ]; then
    echo -n " $((size / 2))"KB files
   else
@@ -236,4 +238,13 @@ if [ ! -z "$tardirs" ]; then
 
   echo
  done
+fi
+
+###
+#
+# Install onetime.tgz file
+
+if [ -f onetime.tgz ]; then
+ echo 'Installing onetime.tgz'
+ c 0 cp onetime.tgz $tmpmnt
 fi

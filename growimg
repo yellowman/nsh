@@ -86,6 +86,10 @@ else
  image=$4
 fi
 
+if [ ! -f $image ]; then
+  echo "Error: ${image} not found"
+  exit 1
+fi
 
 biosboot=/usr/mdec/biosboot
 mbr=/usr/mdec/mbr
