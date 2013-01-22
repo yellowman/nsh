@@ -624,7 +624,8 @@ call_editor(char *name, char **args, char *z)
 		char *argv[] = { editor, tmpfile, '\0' };
 		cmdargs(editor, argv);
 		chmod(tmpfile, daemons->mode);
-		cmdargs(args[0], args);
+		if (args != NULL)
+			cmdargs(args[0], args);
 		rls_lock(fd);
 	} else
 		printf ("%% %s configuration is locked for editing\n",
