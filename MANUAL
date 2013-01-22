@@ -95,7 +95,10 @@ When you use the 'write-config' command, NSH will learn your configurations
 from the running kernel.  It will enter everything that is currently configured
 into the nsh startup file.
 
-# mv /etc/pf.conf /var/run/pf.conf
+# mv /etc/pf.conf /var/run/pf.conf.0
+# mv /etc/ssh/sshd_config /var/run/sshd.conf.0
+# mv /etc/inetd.conf /var/run/inetd.conf.0
+# nsh
 # nsh
 % NSH v1.0
 nsh/enable
