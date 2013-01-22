@@ -1,6 +1,6 @@
-NSH // Network Shell User's Manual // Chris Cappuccio <chris@nmedia.net>
+NSH // Network Shell User Manual // Chris Cappuccio <chris@nmedia.net>
 
-Copyright (c) 2003, 2004 Chris Cappuccio
+Copyright (c) 2003-2013 Chris Cappuccio
 
 
 Contents
@@ -37,7 +37,7 @@ Section 1 > Overview
 
 Network Shell is a command line interface designed to facilitate network
 configuration on the OpenBSD operating system.  The command line notation
-is simple and terse.  This manual explains NSH's functions to you.
+is simple and terse.
 
 NSH is a shell to the OpenBSD kernel's networking functions.  The kernel
 handles routing of packets, firewalling, network address translation,
@@ -47,7 +47,6 @@ functions to aid you in setting up a network.  The goal of this software
 is to make the command syntax uniform, and bring all configuration together
 with a single configuration file.  The command line interface is loosely
 modeled around the concepts used in Cisco's popular interface.  
-
 
 Section 2 > Installation
 ------------------------
@@ -61,7 +60,7 @@ which is compatible with NSH's syntax.  You need to compile NSH in order
 to use it.  NSH currently requires OpenBSD 5.1 or a later version.  To compile
 NSH:
 
-$ tar xvf nsh.tar
+$ tar xvzf nsh.tar.gz
 ...
 $ cd nsh
 $ make
@@ -89,10 +88,6 @@ If /etc and /var/run are read-write, you need to use the save-rw.sh script:
 
 # cp save-rw.sh /usr/local/bin/save.sh
 
-Copy the dhclient stop script to /usr/local/bin:
-
-# cp dhclient-kill.sh /usr/local/bin
-
 To create nsh's initial configuration, run nsh on your router/firewall
 which is already configured, and save the running configuration to disk,
 as detailed below.  Nsh will merge your PF/NAT/ALTQ rules into /etc/nshrc.
@@ -102,55 +97,36 @@ into the nsh startup file.
 
 # mv /etc/pf.conf /var/run/pf.conf
 # nsh
-% NSH v20030208
-machine/enable
+% NSH v1.0
+nsh/enable
 Password:
-machine(priv)/write-config
+nsh(p)/write-config
 % Configuration saved
-machine(priv)/ 
+nsh(p)/ 
 
 At this point, you should inspect and edit /etc/nshrc by hand to ensure that
 it does exactly what you want.  Since it reads the entire configuration out of
 the kernel, you may find things that you did not intend to save permanently.
 
-There is a small section in the /etc/rc startup script which reads:
+You may wish to use nsh to control sshd, pf, inetd, and other daemons that
+OpenBSD normally executes out of /etc/rc and /etc/netstart. To disable the
+automatic start of these daemons and services, tell OpenBSD not to load
+them.
 
-# set hostname, turn on network
-echo 'starting network'
-. /etc/netstart
+echo sshd_flags=NO >>/etc/rc.conf.local
+echo pf=NO >>/etc/rc.conf.local
+echo inetd=NO >>/etc/rc.conf.local
 
-if [ "X${pf}" != X"NO" ]; then
-        if [ -f ${pf_rules} ]; then
-                pfctl -f ${pf_rules}
-        fi
-fi
+Remove any networking config from /etc/ that conflicts with nsh, such
+as /etc/hostname.*, /etc/mygate.
 
-Go ahead and remove (or just comment out) these lines from the startup script.
-None of the netstart or pfctl section from /etc/rc are used when nsh is 
-installed!
-
-Move the cursor so it is positioned just after the "clean up left-over files"
-section or about 28 lines past the former network startup section.   Position
-the cursor after the following lines in the startup script:
-
-(cd /var/run && { test -r dhclient.pid && dhclient_pid=`cat dhclient.pid`; rm -r
-f -- *; install -c -m 664 -g utmp /dev/null utmp; test -n "$dhclient_pid" && ech
-o "$dhclient_pid" > dhclient.pid; })
-(cd /var/authpf && rm -rf -- *)
-
-After these lines, add the following commands:
+Add nsh's start command to the end of /etc/rc.conf.local:
 
 nsh -i /etc/nshrc | tee /var/run/nsh.out
 
 You may even want verbose output to see how nsh parses its' rc file:
 
 nsh -vi /etc/nshrc | tee /var/run/nsh.out
-
-On a router created with flashdist, you can simply copy NSH into /bin/nsh
-and save nshrc to /etc/nshrc.  The default startup script (/etc/rc) with
-flashdist will automatically use NSH if it is present.  You may need to edit 
-it to specify "nsh -i /etc/nshrc" instead of simply "nsh -i nshrc" which 
-was the default with some versions of flashdist.
 
 You are done.  When NSH starts from /etc/rc, it will automatically load up
 the network configuration into the kernel.  At this point, you are free to
@@ -212,7 +188,7 @@ increases when you enter privileged mode.
 
 nsh/enable
 Password:
-nsh(priv)/?
+nsh(p)/?
 % Commands may be abbreviated.
 % Commands are:
 
@@ -279,11 +255,11 @@ NSH only supports blowfish as cipher.
 
 Examples:
 
-nsh(priv)/enable secret foo
+nsh(p)/enable secret foo
 
 or with an already crypted password:
 
-nsh(priv)/enable secret blowfish $2a$06$eQYswZjAHop5UFC8yle85uEqi/MCBhnWBi8IRU60LmkVvgZmtBiOm
+nsh(p)/enable secret blowfish $2a$06$eQYswZjAHop5UFC8yle85uEqi/MCBhnWBi8IRU60LmkVvgZmtBiOm
 
 You can generate a blowfish-crypted password using encrypt -b6.
 
@@ -296,17 +272,34 @@ OpenBSD number from 0 to 255. They have a 1:1 relationship with routing
 domains, except that routing domain 0 can contain multiple routing 
 tables.
 
-A routing table must be initialized by having static routes added, or
-by having an interface join its corresponding routing domain. An
-uninitialized routing table cannot be used to execute any services
+An uninitialized routing table cannot be used to execute any services
 or diagnostic commands.
+
+To add a routing table for unique use in its own routing domain, the most
+common use, add a routing domain through the interface configuration first.
+
+nsh(p)/interface fxp0
+nsh(interface-fxp0)/rdomain 2
+nsh(interface-fxp0)/ip 100.64.0.2/30
+
+Now you can add routes to rtable 2.
+
+nsh(p-rtable 2)/route 0.0.0.0/0 100.64.0.1
+
+If you wish to add a routing table to rdomain 0, you must initialize it
+without a corresponding rdomain being created, by creating a static
+route.
 
 nsh(p)/rtable 1 Management network
 nsh(p-rtable 1)/route 0.0.0.0/0 100.64.0.1
 nsh(p-rtable 1)/sshd edit
 nsh(p-rtable 1)/sshd enable
 
-The rtable command also supports unprivileged mode usage
+If you initialize a routing table in this manner, you will later be unable
+to joint it to a new rdomain.
+
+The rtable command also supports unprivileged mode usage to execute
+diagnostic commands.
 
 nsh/rtable 1
 nsh(rtable 1)/ping 100.64.0.1
@@ -317,8 +310,8 @@ hostname <hostname>
 
 Set system hostname.  Requires privileged mode.
 
-nsh(priv)/hostname firewall.xyz.com
-firewall.xyz.com(priv)/
+nsh(p)/hostname firewall.xyz.com
+firewall.xyz.com(p)/
 
 verbose
 -------
@@ -343,16 +336,16 @@ This will save the running configuration to the permanent configuration
 space.  Upon the next startup of the system, the saved configuration will
 be used.
 
-nsh(priv)/write-config
+nsh(p)/write-config
 % Configuration saved
-nsh(priv)/
+nsh(p)/
 
 halt
 ----
 
 This will shut down the system.  Requires privileged access.
 
-nsh(priv)/halt
+nsh(p)/halt
 % Shutdown initiated
 
 reboot
@@ -360,7 +353,7 @@ reboot
 
 This will reboot the system.  Requires privileged access.
 
-nsh(priv)/reboot
+nsh(p)/reboot
 % Reboot initiated
 
 show
@@ -617,17 +610,16 @@ on a kernel that is of a similar version to the version of the kernel/header
 files that NSH was compiled under.  This ensures that NSH will talk to
 the kernel properly.
 
-nsh/sho version
-% NSH v20020619
-Compiled 23-Jan-03 00:45 by chris
-uptime: 3 days, 6 hours, 3 minutes
-kernel: OpenBSD/i386 version 3.2
-cpu: AMD Athlon Model 4 (Thunderbird) ("AuthenticAMD" 686-class)
-memory: 130604K
-compiled on: OpenBSD 3.2-current (ZION) #3: Thu Nov 28 05:52:39 PST 2002
-    chris@ind0.nmedia.net:/usr/src/sys/arch/i386/compile/ZION
-running on: OpenBSD 3.2-current (ZION) #3: Thu Nov 28 05:52:39 PST 2002
-    chris@ind0.nmedia.net:/usr/src/sys/arch/i386/compile/ZION
+nsh/show version
+% NSH v1.0
+Compiled 03-Jan-13 22:08 by chris@nsh
+uptime: 1 week, 1 day, 1 hour, 39 minutes
+system: OpenBSD/i386 version 5.2
+cpu: Geode(TM) Integrated Processor by AMD PCS ("AuthenticAMD" 586-class)
+memory: 255MB
+kernel: OpenBSD 5.2-current (FLASHRD) #8: Thu Jan  3 21:01:39 PST 2013
+    root@mina.nmedia.net:/usr/src/sys/arch/i386/compile/FLASHRD
+IFQ drops: ip 0 mpls 0
 
 show running-config
 -------------------
@@ -702,21 +694,21 @@ You can add static routes with this command.  It takes CIDR netmasks
 (number of bits) or classic IP netmasks to describe routes.  This 
 command only runs in privileged mode.
 
-nsh(priv)/route 192.168.0.0/16 1.2.3.4
+nsh(p)/route 192.168.0.0/16 1.2.3.4
 
 is equivalent to:
 
-nsh(priv)/route 192.168.0.0/255.255.0.0 1.2.3.4
+nsh(p)/route 192.168.0.0/255.255.0.0 1.2.3.4
 
 This command takes the 'no ' prefix to remove a route.  The gateway
 is not necessary when using the 'no route' notation.
 
-nsh(priv)/no route 192.168.0.0/16
+nsh(p)/no route 192.168.0.0/16
 
 If you do not specify a mask, it will assume you are routing a host
 address
 
-nsh(priv)/route 10.6.6.4 1.2.3.4
+nsh(p)/route 10.6.6.4 1.2.3.4
 
 quit
 ----
@@ -744,9 +736,9 @@ Invoke a shell command (requires privileged mode.)
 
 Your system may have this feature disabled to enhance security.
 
-nsh(priv)/!ls
+nsh(p)/!ls
 helloworld.c
-nsh(priv)/!
+nsh(p)/!
 $ 
 
 ip
@@ -756,7 +748,7 @@ Enable, allow, or set system parameters or features (requires privileged mode.)
 
 All commands in this category allow the 'no' modifier to disable the option.
 
-nsh(priv)/ip ?
+nsh(p)/ip ?
 % Commands may be abbreviated.
 % 'ip' commands are:
 
@@ -780,13 +772,13 @@ nsh(priv)/ip ?
 [no] interface <ifname>
 -----------------------
 
-nsh(priv)/interface vlan0
+nsh(p)/interface vlan0
 
 If vlan0 does not exist, this will create the interface.  If it was possible
 to create the interface, or if the named interface already exists, you
 will noe be in the interface command mode, documented below in Section 4.
 
-nsh(priv)/no interface vlan0
+nsh(p)/no interface vlan0
 
 Alternately, if vlan0 does exist, you can remove the interface with
 the 'no interface' syntax.  This only works for interface types which
@@ -795,7 +787,7 @@ support creation and removal.
 [no] ip forwarding
 ------------------
 
-nsh(priv)/ip forwarding
+nsh(p)/ip forwarding
 
 Enable IP packet forwarding.  This must be set in order to use routing,
 NAT, IPsec or packet filter features.
@@ -803,21 +795,21 @@ NAT, IPsec or packet filter features.
 [no] ip ipip
 ------------
 
-nsh(priv)/ip ipip
+nsh(p)/ip ipip
 
 Allow IP-in-IP encapsulation.  
 
 [no] ip gre
 -----------
 
-nsh(priv)/ip gre
+nsh(p)/ip gre
 
 Allow Generic Route Encapsulation.  Must be used to enable gre interfaces.
 
 [no] ip wccp
 ------------
 
-nsh(priv)/ip wccp
+nsh(p)/ip wccp
 
 Allow GRE-based Web Cache Control Protocol packets to manage caching device.
 Must be used to enable WCCP on gre interfaces.
@@ -825,7 +817,7 @@ Must be used to enable WCCP on gre interfaces.
 [no] ip mobileip
 ----------------
 
-nsh(priv)/ip mobileip
+nsh(p)/ip mobileip
 
 Allow GRE-based MobileIP encapsulation.  Must be used to enable MobileIP
 operation on gre interfaces.
@@ -833,21 +825,21 @@ operation on gre interfaces.
 [no] ip etherip
 ---------------
 
-nsh(priv)/ip etherip
+nsh(p)/ip etherip
 
 Allow Ether-IP encapsulation
 
 [no] ip ipcomp
 --------------
 
-nsh(priv)/ip ipcomp
+nsh(p)/ip ipcomp
 
 Allow IPComp compression to be used.
 
 [no] ip esp
 -----------
 
-nsh(priv)/ip esp
+nsh(p)/ip esp
 
 Allow IPsec Encapsulated Security Payload to be used.  Note this is a system
 default.
@@ -855,14 +847,14 @@ default.
 [no] ip ah
 ----------
 
-nsh(priv)/ip ah
+nsh(p)/ip ah
 
 Allow IPsec Authentication Header to be used. Note this is a sysdem default.
 
 [no] ip sourceroute
 -------------------
 
-nsh(priv)/ip sourceroute
+nsh(p)/ip sourceroute
 
 Process loose or strict source routing options on IP packet headers.  Do
 not enable this option on systems connected to the public internet.
@@ -870,7 +862,7 @@ not enable this option on systems connected to the public internet.
 [no] ip encdebug
 ----------------
 
-nsh(priv)/ip encdebug
+nsh(p)/ip encdebug
 
 Print debugging messages for the if_enc interface to the kernel output.  
 Requires a kernel compiled with option ENCDEBUG.
@@ -878,7 +870,7 @@ Requires a kernel compiled with option ENCDEBUG.
 [no] ip ifq-maxlen <argument>
 -----------------------------
 
-nsh(priv)/ip ifq-maxlen 8192
+nsh(p)/ip ifq-maxlen 8192
 
 Maximum number of queued packets before they are dropped.  Increasing
 this option does not necessarily help with system performance.  The output
@@ -888,7 +880,7 @@ a larger ifq-maxlen may be necessary.
 [no] ip send-redirects
 ----------------------
 
-nsh(priv)/ip send-redirects
+nsh(p)/ip send-redirects
 
 Controls whether or not the system sends ICMP redirects to local hosts.  This
 option is enabled by default.
@@ -901,7 +893,7 @@ the direct path on the network to send further packets.
 [no] ip default-ttl <ttl>
 -------------------------
 
-nsh(priv)/ip default-ttl 128
+nsh(p)/ip default-ttl 128
 
 Sets the default ttl used on IP packets originating from this system.  
 
@@ -914,7 +906,7 @@ of the TTL is to avoid routing loops in the network.
 ?
 -
 
-nsh(priv)/ip ?
+nsh(p)/ip ?
 
 Help menu
 
@@ -986,13 +978,7 @@ for insterfaces on which you do not intend to use DHCP.
 [no] alias <address>/<bitmaskORnetmask>
 ---------------------------------------
 
-Add (or remove) an IP address to the interface
-
-nsh(interface-fxp0)/alias 192.168.125.1/24
-
-or
-
-nsh(interface-fxp0)/alias 192.168.125.1/255.255.255.0
+This command is deprecated. Use the 'ip' command instead.
 
 [no] mtu <value>
 ----------------
