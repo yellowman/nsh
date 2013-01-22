@@ -499,7 +499,6 @@ ctlhandler(int argc, char **argv, char *modhvar)
 	char *step_args[NOPTFILL] = { NULL, NULL, NULL, NULL, NULL, NULL, '\0' };
 	char *tmp_args[NOPTFILL] = { NULL, NULL, NULL, NULL, NULL, NULL, '\0' };
 	char **fillargs;
-	int cmplt = 0;
 
 	/* loop daemon list to find table pointer */
 	daemons = (struct daemons *) genget(hname, (char **)ctl_daemons,
@@ -555,18 +554,21 @@ ctlhandler(int argc, char **argv, char *modhvar)
 		snprintf(tmpfile, sizeof(tmpfile), "%s.%d", daemons->tmpfile,
 		    cli_rtable);
 
-	if (x->handler && fill_tmpfile((char **)fillargs[1], tmpfile,
-	    tmp_args)) {
-		(*x->handler)(fillargs[0], tmp_args, fillargs[2]);
-		cmplt = 1;
-	} else if (!x->handler && fill_tmpfile(fillargs, tmpfile, tmp_args)) {
-		cmdargs(tmp_args[0], tmp_args);
-		cmplt = 1;
+	if (x->handler) {
+		/* pointer to handler routine */
+		if (fill_tmpfile((char **)fillargs[1], tmpfile, tmp_args))
+			(*x->handler)(fillargs[0], tmp_args, fillargs[2]);
+		else
+			(*x->handler)(fillargs[0], (char **)fillargs[1], fillargs[2]);
+	} else {
+		/* command to execute via execv syscall */
+		if (fill_tmpfile(fillargs, tmpfile, tmp_args))
+			cmdargs(tmp_args[0], tmp_args);
+		else
+			cmdargs(fillargs[0], fillargs);
 	}
 
-	if (cmplt == 0) {
-		printf("%% fill_tmpfile failure!\n");
-	} else if (x->flag_x != 0) {
+	if (x->flag_x != 0) {
 		flag_x("ctl", daemons->name, x->flag_x, NULL);
 	}
 
