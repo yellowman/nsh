@@ -118,9 +118,12 @@ echo pf=NO >>/etc/rc.conf.local
 echo inetd=NO >>/etc/rc.conf.local
 
 Remove any networking config from /etc/ that conflicts with nsh, such
-as /etc/hostname.*, /etc/mygate.
+as /etc/hostname.*, /etc/mygate, and daemons from /etc/rc.conf.local that
+you wish to control via NSH. (If you start network daemons from
+/etc/rc.conf.local, rather than using NSH, you will not be able to control
+their configuration file through NSH.)
 
-Add nsh's start command to the end of /etc/rc.conf.local:
+Add nsh's start command to the top of /etc/rc.local:
 
 nsh -i /etc/nshrc | tee /var/run/nsh.out
 
@@ -128,7 +131,7 @@ You may even want verbose output to see how nsh parses its' rc file:
 
 nsh -vi /etc/nshrc | tee /var/run/nsh.out
 
-You are done.  When NSH starts from /etc/rc, it will automatically load up
+You are done.  When NSH starts from /etc/rc.local, it will automatically load up
 the network configuration into the kernel.  At this point, you are free to
 view and manipulate the configuration from nsh.
 
