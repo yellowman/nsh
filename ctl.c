@@ -206,7 +206,7 @@ struct ctl ctl_ldp[] = {
 char *ctl_ipsec_test[] = { IPSECCTL, "-nf", REQTEMP, '\0' };
 struct ctl ctl_ipsec[] = {
 	{ "enable",     "enable service",
-	    { ISAKMPD, "-Sa", NULL }, NULL, DB_X_ENABLE },
+	    { ISAKMPD, "-KSa", NULL }, NULL, DB_X_ENABLE },
 	{ "disable",    "disable service",                   
 	    { PKILL, table, "isakmpd", NULL }, NULL, DB_X_DISABLE },
 	{ "edit",       "edit configuration",   
