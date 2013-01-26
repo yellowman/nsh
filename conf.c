@@ -550,6 +550,7 @@ void conf_interfaces(FILE *output, char *only)
 		conf_rdomain(output, ifs, ifnp->if_name);
 		conf_intrtlabel(output, ifs, ifnp->if_name);
 		conf_intgroup(output, ifs, ifnp->if_name);
+		conf_carp(output, ifs, ifnp->if_name);
 
 		snprintf(leasefile, sizeof(leasefile), "%s.%s",
 		    LEASEPREFIX, ifnp->if_name);
@@ -571,7 +572,6 @@ void conf_interfaces(FILE *output, char *only)
 			conf_ifmetrics(output, ifs, if_data, ifnp->if_name);
 			conf_keepalive(output, ifs, ifnp->if_name);
 			conf_pfsync(output, ifs, ifnp->if_name);
-			conf_carp(output, ifs, ifnp->if_name);
 			conf_trunk(output, ifs, ifnp->if_name);
 			conf_pflow(output, ifs, ifnp->if_name);
 			conf_ifxflags(output, ifs, ifnp->if_name);
