@@ -127,41 +127,45 @@ intsyncpeer(char *ifname, int ifs, int argc, char **argv)
 	ifr.ifr_data = (caddr_t) &preq;
 
 	if (ioctl(ifs, SIOCGETPFSYNC, (caddr_t)&ifr) == -1) {
+		/* ENXIO means ifp == 0, yawn */
 		if (errno == ENXIO)
-			printf("%% peer device (syncdev) not yet configured\n");
+			printf("%% You must (re)set syncdev first\n");
 		else
 			printf("%% intsyncpeer: SIOCGETPFSYNC: %s\n",
 			    strerror(errno));
 		return(0);
 	}
 
-	bzero(&hints, sizeof(hints));
-	hints.ai_family = AF_INET;
-	hints.ai_socktype = SOCK_DGRAM;
+	if (set) {
+		bzero(&hints, sizeof(hints));
+		hints.ai_family = AF_INET;
+		hints.ai_socktype = SOCK_DGRAM;
 
-	if ((ecode = getaddrinfo(argv[0], NULL, &hints, &peerres)) != 0) {
-		printf("%% error in parsing address string: %s\n",
-		    gai_strerror(ecode));
-		return 0;
-	}
+		if ((ecode = getaddrinfo(argv[0], NULL, &hints, &peerres)) != 0)
+		{
+			printf("%% error in parsing address string: %s\n",
+			    gai_strerror(ecode));
+			return 0;
+		}
 
-	if (peerres->ai_addr->sa_family != AF_INET) {
-		printf("%% only IPv4 addresses supported for syncpeer\n");
-		freeaddrinfo(peerres);
-		return 0;
-	}
-	if (set)
+		if (peerres->ai_addr->sa_family != AF_INET) {
+			printf("%% only IPv4 allowed for syncpeer\n");
+			freeaddrinfo(peerres);
+			return 0;
+		}
 		preq.pfsyncr_syncpeer.s_addr = ((struct sockaddr_in *)
 		    peerres->ai_addr)->sin_addr.s_addr;
-	else
+	} else {
 		preq.pfsyncr_syncpeer.s_addr = 0;
+	}
 
 	if (ioctl(ifs, SIOCSETPFSYNC, (caddr_t)&ifr) == -1) {
 			printf("%% intsyncpeer: SIOCSETPFSYNC: %s\n",
 			    strerror(errno));
 	}
 
-	freeaddrinfo(peerres);
+	if (set)
+		freeaddrinfo(peerres);
 
 	return 0;
 }
