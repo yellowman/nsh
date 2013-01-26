@@ -240,7 +240,7 @@ conf_pfsync(FILE *output, int s, char *ifname)
 	if (preq.pfsyncr_syncdev[0] != '\0')
 		fprintf(output, " syncdev %s\n", preq.pfsyncr_syncdev);
 	/* syncpeer */
-	if (preq.pfsyncr_syncpeer.s_addr != INADDR_PFSYNC_GROUP)
+	if (preq.pfsyncr_syncpeer.s_addr != htonl(INADDR_PFSYNC_GROUP))
 		fprintf(output, " syncpeer %s\n", inet_ntoa(
 		    preq.pfsyncr_syncpeer));
 	if (preq.pfsyncr_maxupdates != PFSYNC_MAXUPDATES || preq.pfsyncr_defer) {
