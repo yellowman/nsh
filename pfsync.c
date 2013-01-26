@@ -236,6 +236,10 @@ conf_pfsync(FILE *output, int s, char *ifname)
 	if (ioctl(s, SIOCGETPFSYNC, (caddr_t) & ifr) == -1)
 		return (0);
 
+	/* syncdev must be first */
+	if (preq.pfsyncr_syncdev[0] != '\0')
+		fprintf(output, " syncdev %s\n", preq.pfsyncr_syncdev);
+	/* syncpeer */
 	if (preq.pfsyncr_syncpeer.s_addr != INADDR_PFSYNC_GROUP)
 		fprintf(output, " syncpeer %s\n", inet_ntoa(
 		    preq.pfsyncr_syncpeer));
@@ -246,8 +250,5 @@ conf_pfsync(FILE *output, int s, char *ifname)
 			fprintf(output, " defer");
 		fprintf(output, "\n");
 	}
-	/* syncdev must be last */
-	if (preq.pfsyncr_syncdev[0] != '\0')
-		fprintf(output, " syncdev %s\n", preq.pfsyncr_syncdev);
 	return (0);
 }
