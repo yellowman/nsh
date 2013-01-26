@@ -517,6 +517,11 @@ ctlhandler(int argc, char **argv, char *modhvar)
 		return 0;
 	}
 
+	snprintf(table, sizeof(table), "-T%d", cli_rtable);
+	if (daemons->tmpfile)
+		snprintf(tmpfile, sizeof(tmpfile), "%s.%d", daemons->tmpfile,
+		    cli_rtable);
+
 	if (modhvar) {
 		/* action specified or indented command specified */
 		if (argc == 2 && isprefix(argv[1], "rules")) {
@@ -524,9 +529,12 @@ ctlhandler(int argc, char **argv, char *modhvar)
 			return(0);
 		}
 		if (isprefix(modhvar, "rules")) {
+			if (!daemons->tmpfile) {
+				printf("%% writeline without tmpfile\n");
+				return 0;
+			}
 			/* write indented line to tmp config file */
-			rule_writeline(daemons->tmpfile, daemons->mode,
-			    saveline);
+			rule_writeline(tmpfile, daemons->mode, saveline);
 			return 0;
 		}
 	}
@@ -548,11 +556,6 @@ ctlhandler(int argc, char **argv, char *modhvar)
 	fillargs = step_optreq(x->args, step_args, argc, argv, 2);
 	if (fillargs == NULL)
 		return 0;
-
-	snprintf(table, sizeof(table), "-T%d", cli_rtable);
-	if (daemons->tmpfile)
-		snprintf(tmpfile, sizeof(tmpfile), "%s.%d", daemons->tmpfile,
-		    cli_rtable);
 
 	if (x->handler) {
 		/* pointer to handler routine */
