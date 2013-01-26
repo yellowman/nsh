@@ -68,8 +68,8 @@
 
 char prompt[128];
 
-char line[256];
-char saveline[256];
+char line[1024];
+char saveline[1024];
 int  margc;
 char hname[HSIZE];
 static char hbuf[MAXHOSTNAMELEN];	/* host name */

@@ -12,8 +12,8 @@ struct rtdump {
 
 extern char *__progname;	/* duh */
 extern char *vers;		/* the version of nsh */
-extern char saveline[256];	/* command line */
-extern char line[256];		/* command line for makeargv() */
+extern char saveline[1024];	/* command line */
+extern char line[1024];		/* command line for makeargv() */
 extern int  margc;		/* makeargv() arg count */
 extern char *margv[];		/* makeargv() args */
 extern int verbose;		/* is verbose mode on? */
