@@ -162,7 +162,11 @@ struct ctl {
 	char *args[32];
 	void (*handler)();
 	int flag_x;
+	int type;
 };
+#define	T_HANDLER	1
+#define T_HANDLER_FILL1	2
+#define	T_EXEC		3
 struct daemons {
         char *name;
 	char *propername;
