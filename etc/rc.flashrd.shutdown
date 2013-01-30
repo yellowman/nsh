@@ -4,9 +4,9 @@
 #
 . /etc/rc.flashrd.sub
 
-if [ ! -z "$tardirs" ]; then
+if [ ! -z "$savetardirs" ]; then
 
- for i in $tardirs; do
+ for i in $savetardirs; do
 
   echo tardirs: compacting $i
   rm -f /$i/.tardirs.$i
