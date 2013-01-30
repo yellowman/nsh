@@ -1,0 +1,33 @@
+#!/bin/sh
+
+# Inherit tardirs value
+#
+. /etc/rc.flashrd.sub
+
+if [ ! -z "$tardirs" ]; then
+
+ for i in $tardirs; do
+
+  echo tardirs: compacting $i
+  rm -f /$i/.tardirs.$i
+
+  # Get rid of sockets before shutdown (they will skew tar's return value)
+  find /$i -type s -exec rm {} \;
+
+  if ! tar cf /flash/$i.tar.part -C /$i .; then
+   echo tardirs: compacting $i failed, saved at /flash/$i.tar.part
+  else
+   mv /flash/$i.tar.part /flash/$i.tar
+  fi
+
+ done
+
+ # Wait for slow flash. Likely unnecessary.
+ #
+ echo -n tardirs: waiting for flash to settle...
+ sync
+ sync
+ sleep 30
+ echo ok
+
+fi

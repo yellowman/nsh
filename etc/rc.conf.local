@@ -1,8 +1,9 @@
-#!/bin/sh
 # Run flashrd boot routines
-/etc/rc.flashrd
+/etc/rc.flashrd.conf
 
 # Define rc.conf.local variables
 
+# example:
+#
 # pkg_scripts=""
 # syslogd_flags="${syslogd_flags} -a /var/unbound/dev/log"

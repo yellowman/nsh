@@ -6,7 +6,9 @@
 
 typeset -x TMPDIR
 
-vnddirs="root bin etc sbin usr" # must match vnddirs= in flashrd and stand/rc
+# include vnddirs
+. ./etc/rc.flashrd.sub
+
 device=vnd3
 rootvnd=vnd2
 

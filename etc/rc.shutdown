@@ -1,4 +1,4 @@
-#	$OpenBSD: rc.shutdown,v 1.7 2006/06/22 00:41:59 deraadt Exp $
+#	$OpenBSD: rc.shutdown,v 1.12 2011/04/22 06:08:14 ajacoutot Exp $
 #
 # If it exists, this script is run at system-shutdown by reboot(8),
 # halt(8).  If the architecture supports keyboard requested halting,
@@ -7,45 +7,6 @@
 
 powerdown=NO	# set to YES for powerdown
 
-# If you want tardirs changes to be preserved on each shutdown, use tardirs value:
-#
-#tardirs="var"
-#
-# If you want tardirs changes to be ignored on each shutdown, use blank value:
-#
-tardirs=""
-#
-# If you do not define tardirs here, the variable will be inhereted from rc.conf.local
+# Add your local shutdown actions here.
 
-if [ ! -z "$tardirs" ]; then
-
- for i in $tardirs; do
-
-  echo tardirs: compacting $i
-  rm -f /$i/.tardirs.$i
-
-  # Get rid of sockets before shutdown (they will skew tar's return value)
-  find /$i -type s -exec rm {} \;
-
-  if ! tar cf /flash/$i.tar.part -C /$i .; then
-   echo tardirs: compacting $i failed, saved at /flash/$i.tar.part
-  else
-   mv /flash/$i.tar.part /flash/$i.tar
-  fi
-
- done
-
- # Wait for slow flash. Likely unnecessary.
- #
- echo -n tardirs: waiting for flash to settle...
- sync
- sync
- sleep 30
- echo ok
-
-fi
-
-#
-# Your shell code goes here
-#
-
+/etc/rc.flashrd.shutdown

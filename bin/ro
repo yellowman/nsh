@@ -1,9 +1,6 @@
 #!/bin/sh
 
-# To exclude certain vnd partitions from being set to read-write or read-only during 'rw' and 'ro' commands, simply remove those partitions from the vnddirs= setting in /bin/rw and /bin/ro
-
-vnddirs="root bin etc sbin usr"
-dev=vnd0
+. /etc/rc.flashrd.sub
 
 for i in $vnddirs; do
  sync
