@@ -5,19 +5,25 @@
 #
 # To exclude certain vnd partitions from being set to
 # read-write or read-only during 'rw' and 'ro' commands,
-# simply remove those partitions from the vnddirs setting:
+# simply remove those partitions from the vnddirs setting below:
 #
 # All sizes are represented in 512-byte blocks
 #
 # Used in image creation only:
 #
-vnddirs="root bin etc sbin usr"         # must match vnddirs= in RAMDISK stand/rc
-vndsize="102400 auto auto auto auto"    # min partition sizes (or auto)
-#
 mfsdirs="tmp"                           # mfs-only dirs
 set -A mfssize  32768                   # dir sizes
 #
+# mfs runtime parameters can be changed by editing image's /etc/fstab
+#
 # Used in image creation and runtime:
+#
+vnddirs="root bin etc sbin usr"
+vndsize="102400 auto auto auto auto"    # min partition sizes (or auto)
+#
+# During image creation ONLY (flashrd process), vnddirs MUST match vnddirs
+# setting in RAMDISK stand/rc file. (If you change it here and run flashrd,
+# you MUST change stand/rc as well.)
 #
 tardirs="var"
 set -A tarsize  131072                  # mfs sizes for tar dirs
