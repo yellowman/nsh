@@ -142,7 +142,7 @@ fi
  vnuncfgroot $rootdevice
 }
 0() {
- echo TMPDIR: $TMPDIR
+ echo % TMPDIR: $TMPDIR
  exit 1
 }
 
@@ -277,7 +277,7 @@ fi
 
 c 3 mount /dev/$device$etcpart $tmpmntvnd
 
-c 4 cp etc/rc.local etc/rc.conf.local etc/rc.flashrd etc/rc.shutdown $tmpmntvnd/
+c 4 cp etc/rc.local etc/rc.conf.local etc/rc.shutdown etc/rc.flashrd.conf etc/rc.flashrd.local etc/rc.flashrd.shutdown etc/rc.flashrd.sub $tmpmntvnd/
 
 c 4 mv $tmpfstab $tmpmntvnd/fstab
 

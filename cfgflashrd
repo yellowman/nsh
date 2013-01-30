@@ -160,7 +160,7 @@ vnuncfgroot() {
  vnuncfgroot
 }
 0() {
- echo TMPDIR: $TMPDIR
+ echo % TMPDIR: $TMPDIR
  exit 1
 }
 
