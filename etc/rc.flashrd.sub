@@ -3,10 +3,6 @@
 # This file gets used for variables defined both during flashrd image
 # creation process, and during runtime.
 #
-# To exclude certain vnd partitions from being set to
-# read-write or read-only during 'rw' and 'ro' commands,
-# simply remove those partitions from the vnddirs setting below:
-#
 # All sizes are represented in 512-byte blocks
 #
 # Used in image creation only:
@@ -14,21 +10,24 @@
 mfsdirs="tmp"                           # mfs-only dirs
 set -A mfssize  32768                   # dir sizes
 #
-# mfs runtime parameters can be changed by editing image's /etc/fstab
+# (mfs runtime parameters can be changed by editing image's /etc/fstab)
 #
 # Used in image creation and runtime:
 #
 vnddirs="root bin etc sbin usr"
 vndsize="102400 auto auto auto auto"    # min partition sizes (or auto)
 #
-# During image creation ONLY (flashrd process), vnddirs MUST match vnddirs
-# setting in RAMDISK stand/rc file. (If you change it here and run flashrd,
-# you MUST change stand/rc as well.)
+# During image creation ONLY (flashrd process), vnddirs MUST match
+# vnddirs setting in RAMDISK stand/rc file. (If you change it here
+# and run flashrd, you MUST change stand/rc as well.)
+#
+# During image runtime ONLY, to exclude certain vnd partitions from
+# being set to read-write or read-only during 'rw' and 'ro' commands,
+# simply remove those partitions from vnddirs. (They will retain any
+# rw/ro setting as defined by fstab.)
 #
 tardirs="var"
 set -A tarsize  131072                  # mfs sizes for tar dirs
 #
 # If you want to save all "tardirs" contents on shutdown:
-#  savetardirs="$tardirs"
-# else:
-savetardirs=""
+# savetardirs="$tardirs"
