@@ -88,7 +88,6 @@ gen_salt(char *salt, size_t saltlen)
 int
 enable(int argc, char **argv)
 {
-
 	char *p, *cpass;
 	char salt[_PASSWORD_LEN];
 	char pass[_PASSWORD_LEN + 1];
@@ -153,8 +152,11 @@ enable(int argc, char **argv)
 		/* crypt plaintext and save as pass */
 		strlcpy(pass, argv[2], sizeof(pass));
 		gen_salt(salt, sizeof(salt));
-		cpass = strdup(crypt(pass, salt));
-		return (write_pass(cpass));
+		if ((cpass = crypt(pass, salt)) == NULL) {
+			printf("%% crypt failed\n");
+			return 0;
+		}
+		return(write_pass(cpass));
 
 	case 4:
 		if (!isprefix(argv[1], "secret")) {
