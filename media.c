@@ -297,6 +297,7 @@ get_media_options(type, val)
 		if (option == -1) {
 			printf("%% get_media_options: unknown %s media option: %s\n",
 			     get_media_type_string(type), str);
+			free(optlist);
 			return(-1);
 		}
 		rval |= IFM_OPTIONS(option);
