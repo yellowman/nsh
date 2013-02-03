@@ -7,8 +7,7 @@ style.
 The idea is to allow simple, quick management of a router *without*
 requiring the user to be familiar with ifconfig, route, netstat, pfctl,
 and the various configuration files in /etc which are otherwise required to
-manage this type of router (In fact, we eliminate the use of those
-commands and /etc configuration files entirely!).
+manage this type of router.
 
 In conjunction with the OpenBSD kernel, sshd, (and perhaps one or more of
 dhcpd, isakmpd, bgpd, ripd, ospfd, relayd, snmpd and other supported tools)
@@ -20,7 +19,7 @@ you have a fully functioning system.
    configuration
  * Display detailed information regarding an interface
  * Configure interfaces for IPv4, IPv6, MTU, VLAN, media, and other properties
- * Show host (TCP, UDP) and router (IP, MBUF) statistics
+ * Show host (TCP, UDP) and router (IP, MBUF, IFQ drops) statistics
  * Configure Packet Filter, NAT, and ALTQ system-wide
  * Configure bridges for members, rules
  * Save all current network configuration to a single, easy to read text file
@@ -35,13 +34,6 @@ you have a fully functioning system.
  * Via save-ro.sh, writes permanent config to read-only flash space
  * Nsh allows privileged users to escape to bourne shell for functions not
    built in to nsh itself.
-
->> Contributors
- * Jose Nazario <jose@monkey.org>
- * Christian Gut
- * Mats Mellstrand <mats@exmandato.se>
- * Manuel Pata <pata@alface.de>
- * Stuart Henderson
 
 >> See TODO for details on implementation status and future ideas.
 
