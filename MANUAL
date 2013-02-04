@@ -931,33 +931,56 @@ Help menu
 Section 4 > Interface mode commands
 -----------------------------------
 
-nsh(interface-fxp0)/?
+nsh(interface-vr0)/?
 % Commands may be abbreviated.
 % Press enter at a prompt to leave interface configuration mode.
 % Interface configuration commands are:
 
-  ip         IP address and other parameters
-  alias      Additional IP addresses and other parameters
-  mtu        Set Maximum Transmission Unit
-  metric     Set routing metric
-  link       Set link level options
-  arp        Set Address Resolution Protocol
-  nwid       802.11 network ID
-  nwkey      802.11 network key
-  powersave  802.11 powersaving mode
-  media      Media type
-  mediaopt   Media options
-  tunnel     Source/destination for GIF tunnel
-  syncdev    Control message interface
-  maxupd     Collapsable max updates for a single state
-  vhid       CARP virtual host ID
-  advbase    CARP advertisement interval
-  advskew    CARP advertisement skew
-  cpass      CARP passphrase
-  vlan       802.1Q vlan tag and parent
-  debug      Driver dependent debugging
-  shutdown   Shutdown interface
-  ?          Options
+  ip               IP address and other parameters
+  alias            Additional IP addresses and other parameters
+  description      Interface description
+  group            Interface group
+  rdomain          Interface routing domain
+  rtlabel          Interface route labels
+  mtu              Set Maximum Transmission Unit
+  metric           Set routing metric
+  link             Set link level options
+  arp              Set Address Resolution Protocol
+  label            Set MPLS Label
+  lladdr           Set Link Level (MAC) Address
+  nwid             802.11 network ID
+  nwkey            802.11 network key
+  powersave        802.11 powersaving mode
+  txpower          802.11 transmit power
+  bssid            802.11 bss id
+  media            Media type
+  mediaopt         Media options
+  tunnel           Source/destination for GIF/GRE tunnel
+  keepalive        GRE tunnel keepalive
+  syncdev          PFsync control message interface
+  syncpeer         PFsync peer address
+  maxupd           PFsync max updates, defer first packet
+  vhid             CARP virtual host ID
+  advbase          CARP advertisement interval
+  advskew          CARP advertisement skew
+  carppass         CARP passphrase
+  carpdev          CARP device
+  carpnode         CARP additional vhid/advskew
+  carppeer         CARP peer
+  balancing        CARP balancing mode
+  pflow            pflow data export
+  vlan             802.1Q vlan tag and parent
+  timeslots        TDM timeslots
+  debug            Driver dependent debugging
+  dhcrelay         DHCP Relay Agent
+  shutdown         Shutdown interface
+  wol              Wake On LAN
+  mpls             MPLS
+  inet6            IPv6
+  autoconfprivacy  IPv6 Autoconfigurable address
+  trunkport        Add child interface(s) to trunk
+  trunkproto       Define trunkproto
+  ?                Options
 
 [no] ip <address>/<bitmaskORnetmask>
 [no] ip dhcp

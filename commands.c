@@ -515,7 +515,7 @@ struct intlist Intlist[] = {
 	{ "vhid",	"CARP virtual host ID",			CMPL0 0, 0, intcarp, 0 },
 	{ "advbase",	"CARP advertisement interval",		CMPL0 0, 0, intcarp, 0 },
 	{ "advskew",	"CARP advertisement skew",		CMPL0 0, 0, intcarp, 0 },
-	{ "cpass",	"CARP passphrase",			CMPL0 0, 0, intcpass, 0 },
+	{ "carppass",	"CARP passphrase",			CMPL0 0, 0, intcpass, 0 },
 	{ "carpdev",	"CARP device",				CMPL(i) 0, 0, intcdev, 0 },
 	{ "carpnode",	"CARP additional vhid/advskew",		CMPL0 0, 0, intcnode, 0 },
 	{ "carppeer",	"CARP peer",				CMPL0 0, 0, intcarp, 0 },

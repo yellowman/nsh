@@ -333,7 +333,7 @@ conf_carp(FILE *output, int s, char *ifname)
 	if (creq.carpr_carpdev[0] != '\0')
 		fprintf(output, " carpdev %s\n", creq.carpr_carpdev);
 	if (creq.carpr_key[0] != '\0')
-		fprintf(output, " cpass %s\n", creq.carpr_key);
+		fprintf(output, " carppass %s\n", creq.carpr_key);
 	if (creq.carpr_advbase != CARP_DFLTINTV)
 		fprintf(output, " advbase %i\n", creq.carpr_advbase);
 	if (creq.carpr_vhids[0] != 0)
