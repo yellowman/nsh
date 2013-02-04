@@ -1,4 +1,4 @@
-NSH // Network Shell User Manual // Chris Cappuccio <chris@nmedia.net>
+NSH // Network Shell Manual // Chris Cappuccio <chris@nmedia.net>
 
 Copyright (c) 2003-2013 Chris Cappuccio
 
@@ -36,8 +36,12 @@ Section 1 > Overview
 --------------------
 
 Network Shell is a command line interface designed to facilitate network
-configuration on the OpenBSD operating system.  The command line notation
-is simple and terse.
+configuration on the OpenBSD operating system. The command line notation
+is simple and terse. The command line interface is loosely modeled around
+the concepts used in Cisco's popular interface. Typically, only values
+changed from default get saved in the configuration, giving system/network
+administrators a quick view of the unique configuration on the given,
+local system.
 
 NSH is a shell to the OpenBSD kernel's networking functions.  The kernel
 handles routing of packets, firewalling, network address translation,
@@ -45,8 +49,14 @@ rate limiting, bandwidth queueing, LAN bridging, IP tunneling, and
 encryption (IP security).  NSH provides simple wrappers around these
 functions to aid you in setting up a network.  The goal of this software
 is to make the command syntax uniform, and bring all configuration together
-with a single configuration file.  The command line interface is loosely
-modeled around the concepts used in Cisco's popular interface.  
+with a single configuration file.
+
+Some programs, such as ipsecctl, pfctl (and anything else handled from
+ctl.c) simply have their native configuration files encapsulated within
+the NSH configuration framework. No effort is made by NSH to obfuscate
+their configuration in any way, the default configuration syntax
+provided by these programs is already preferrable. NSH simply gives the
+administrator a way to keep all configuration in one place.
 
 Section 2 > Installation
 ------------------------
@@ -57,8 +67,9 @@ flashrd FAQ.
 NSH replaces /etc/netstart on a standard OpenBSD system.  To implement NSH on
 such a system, you first need to convert your standard configuration into one
 which is compatible with NSH's syntax.  You need to compile NSH in order
-to use it.  NSH currently requires OpenBSD 5.1 or a later version.  To compile
-NSH:
+to use it.  NSH currently requires OpenBSD 5.1 or a later version. It may be
+partially or fully compatible with Bitrig, but is currently untested there.
+To compile NSH:
 
 $ tar xvzf nsh.tar.gz
 ...
@@ -1210,7 +1221,7 @@ of a certain group to run NSH through sudo, like this:
 
 2. Compile nwrapper (in the nsh distribution):
 
-cc -o nwrapper nwrapper.c
+cc -static -o nwrapper nwrapper.c
 
 3. Move nwrapper to a permanent location:
 
