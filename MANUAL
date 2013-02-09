@@ -704,12 +704,13 @@ disable
 Leave privileged mode, use this if you want to stay logged in but to not
 trust your terminal area
 
-route <destination>[/<bitmaskORnetmask>] <gateway>
+route <destination>[/<bitlen | netmask>] <gateway>
 --------------------------------------------------
 
-You can add static routes with this command.  It takes CIDR netmasks
-(number of bits) or classic IP netmasks to describe routes.  This 
-command only runs in privileged mode.
+You can add static routes with this command.  IPv4 addresses can be configured
+with CIDR bitlength, or classic IP netmasks to describe routes.  The IPv6
+address may only be configured with a bitlength. This command only runs
+in privileged mode.
 
 nsh(p)/route 192.168.0.0/16 1.2.3.4
 
@@ -726,6 +727,15 @@ If you do not specify a mask, it will assume you are routing a host
 address
 
 nsh(p)/route 10.6.6.4 1.2.3.4
+
+Routing flags may be defined after a route.
+
+nsh(p)/route 127.0.0.0/8 127.0.0.1 reject
+
+or
+
+nsh(p)/route ::/96 ::1 reject
+
 
 quit
 ----
@@ -982,11 +992,17 @@ nsh(interface-vr0)/?
   trunkproto       Define trunkproto
   ?                Options
 
-[no] ip <address>/<bitmaskORnetmask>
+[no] ip <address>/<bitlen | netmask>
 [no] ip dhcp
 ------------------------------------
 
-Set (or remove) the IP address on an interface 
+Set (or remove) the IPv4 or IPv6 address on an interface. IPv4 addresses
+can be configured with CIDR bitlength, or classic netmask. The IPv6
+address may only be configured with a bitlength.
+
+nsh(interface-lo0)/ip ::1/128
+
+or
 
 nsh(interface-fxp0)/ip 192.168.100.1/24
 

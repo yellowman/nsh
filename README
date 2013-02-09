@@ -1,42 +1,25 @@
 nsh//network config shell//Chris Cappuccio <chris@nmedia.net> version 1.0
 
-NSH is a CLI intended for OpenBSD-based routers running little except for
-sshd, targeted towards flash-based systems.  It is freely licensed, in the BSD
-style.
+NSH is a CLI intended for OpenBSD-based network appliances. It replaces
+ifconfig and route with its own simple command language, and encapsulates
+configuration for other daemons into one place, effectively replacing
+/etc/netstart and parts of /etc/rc for appliance-style usage.
 
-The idea is to allow simple, quick management of a router *without*
-requiring the user to be familiar with ifconfig, route, netstat, pfctl,
-and the various configuration files in /etc which are otherwise required to
-manage this type of router.
+NSH is freely licensed, in the BSD style.
 
-In conjunction with the OpenBSD kernel, sshd, (and perhaps one or more of
-dhcpd, isakmpd, bgpd, ripd, ospfd, relayd, snmpd and other supported tools)
+Daemons and services encapsulated by nsh:
+
+pf, ospfd, ospf6d, bgpd, ripd, ldpd, relayd, ipsecctl, iked, rtadvd,
+dvmrpd, sasyncd, dhcpd, snmpd, sshd, ntpd, ifstated, tftp-proxy, ftp-proxy,
+tftpd, npppd, resolv.conf, inetd, smtpd, ldapd, ifstated
+
+In conjunction with the OpenBSD kernel and the daemons you wish to control,
 you have a fully functioning system.
 
->> Command line interface functions
- * Add/delete/show/flush/monitor IPv4, IPv6 routes
- * Manage and view BGP, OSPF, RIP, IPSEC, DHCP, DVMRP, SNMP, NTP and many others
-   configuration
- * Display detailed information regarding an interface
- * Configure interfaces for IPv4, IPv6, MTU, VLAN, media, and other properties
- * Show host (TCP, UDP) and router (IP, MBUF, IFQ drops) statistics
- * Configure Packet Filter, NAT, and ALTQ system-wide
- * Configure bridges for members, rules
- * Save all current network configuration to a single, easy to read text file
+See MANUAL for installation instructons and command set.
 
->> Features
- * Comes with a manual
- * This shell replaces most of /etc/rc, /etc/netstart on an embedded system.
-   Simply started as nsh -i, it will read the previously saved configuration
-   and execute it on the system.
- * Via nwrapper, nsh can optionally start as a user's login shell from ssh,
-   or console.
- * Via save-ro.sh, writes permanent config to read-only flash space
- * Nsh allows privileged users to escape to bourne shell for functions not
-   built in to nsh itself.
+See TODO for details on implementation status and future ideas.
 
->> See TODO for details on implementation status and future ideas.
-
->> Why a Cisco-like interface?
-It's easier to manage (one config for all features) and easier to train Cisco-
-centric users on.
+See http://github.com/yellowman/nsh/ for current source code and
+see http://www.nmedia.net/flashrd/ for example configurations and mailing
+list.
