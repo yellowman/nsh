@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
+ * Copyright (c) 2002-2013 Chris Cappuccio <chris@nmedia.net>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -53,7 +53,7 @@ void intr(void);
 int
 main(int argc, char *argv[])
 {
-	int top, ch, iflag = 0;
+	int top, ch, iflag = 0, cflag = 0;
 	char rc[PATH_MAX];
 
 	if(getuid() != 0) 
@@ -61,8 +61,11 @@ main(int argc, char *argv[])
 
 	pid = getpid();
 
-	while ((ch = getopt(argc, argv, "i:v")) != -1)
+	while ((ch = getopt(argc, argv, "c:i:v")) != -1)
 		switch (ch) {
+		case 'c':
+			cflag = 1;
+			strlcpy(rc, optarg, PATH_MAX);
 		case 'i':
 			iflag = 1;
 			strlcpy(rc, optarg, PATH_MAX);
@@ -77,6 +80,15 @@ main(int argc, char *argv[])
 	argc -= optind;
 	argv += optind;
 
+	if (cflag && iflag)
+		usage();
+	if (argc > 0)
+		usage();
+	if (iflag)
+		rmtemp(SQ3DBFILE);
+
+	printf("%% NSH v%s\n", vers);
+
 	/* create temporal tables (if they aren't already there) */
 	if (db_create_table_rtables() < 0)
 		printf("%% database rtables creation failed\n");
@@ -89,41 +101,35 @@ main(int argc, char *argv[])
 	if (db_create_table_flag_x("lladdr") < 0)
 		printf("%% database lladdr creation failed\n");
 
-	printf("%% NSH v%s\n", vers);
-
-	if (argc > 0)
-		usage();
-
 	if (iflag) {
 		/*
 		 * Interpret config file and exit
 		 */
 		char *argv_demote[] = { "group", "carp", "carpdemote", "128" };
 		char *argv_restore[] = { "no", "group", "carp", "carpdemote", "128" };
-		char tmpfile[64];
-
-		struct daemons *daemons;
-
-		for (daemons = ctl_daemons; daemons->name != 0; daemons++)
-			if (daemons->tmpfile) {
-				snprintf(tmpfile, sizeof(tmpfile), "%s.0",
-				    daemons->tmpfile);
-				rmtemp(tmpfile);
-			}
-
 		priv = 1;
 
 		/*
 		 * Set carp group carpdemote to 128 during initialization
 		 */
-		group(sizeof(argv_demote) / sizeof(argv_demote[0]), argv_demote);
+		group(nitems(argv_demote), argv_demote);
 
 		cmdrc(rc);
 
 		/*
 		 * Initialization over
 		 */
-		group(sizeof(argv_restore) / sizeof(argv_restore[0]), argv_restore);
+		group(nitems(argv_restore), argv_restore);
+
+		exit(0);
+	}
+	if (cflag) {
+		/*
+		 * Interpret command file and exit
+		 */
+		priv = 1;
+
+		cmdrc(rc);
 
 		exit(0);
 	}
@@ -148,9 +154,11 @@ main(int argc, char *argv[])
 void
 usage(void)
 {
-	(void)fprintf(stderr, "usage: %s [-v] [-i rcfile]\n", __progname);
-	(void)fprintf(stderr, "           -v indicates verbose operation\n");
-	(void)fprintf(stderr, "           -i rcfile loads configuration from rcfile\n");
+	fprintf(stderr, "usage: %s [-v] [-i rcfile | -c rcfile]\n", __progname);
+	fprintf(stderr, "           -v indicates verbose operation\n");
+	fprintf(stderr, "           -i rcfile loads initial system" \
+		    "  configuration from rcfile\n");
+	fprintf(stderr, "	    -c rcfile loads commands from rcfile\n");
 	exit(1);
 }
 

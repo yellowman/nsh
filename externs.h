@@ -2,8 +2,10 @@
  * nsh externs, prototypes and macros
  */
 
-#define NO_ARG(x) (strcasecmp(x, "no") == 0) /* absolute "no" */
-#define MIN_ARG(x,y) (strncasecmp(x, y, strlen(y)) == 0) /* mabye arg y */
+#define NO_ARG(x)	(strcasecmp(x, "no") == 0) /* absolute "no" */
+#define MIN_ARG(x,y)	(strncasecmp(x, y, strlen(y)) == 0) /* mabye arg y */
+
+#define nitems(_a)	(sizeof((_a)) / sizeof((_a)[0])) /* sys/param.h */
 
 struct rtdump {
 	char *buf;	/* start of routing table */
