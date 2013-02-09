@@ -57,7 +57,7 @@ main(int argc, char *argv[])
 	char rc[PATH_MAX];
 
 	if(getuid() != 0) 
-		printf("%% Functionality may be limited without root privileges.\n");
+		printf("%% Functionality limited without root privilege.\n");
 
 	pid = getpid();
 
@@ -66,6 +66,7 @@ main(int argc, char *argv[])
 		case 'c':
 			cflag = 1;
 			strlcpy(rc, optarg, PATH_MAX);
+			break;
 		case 'i':
 			iflag = 1;
 			strlcpy(rc, optarg, PATH_MAX);
@@ -157,8 +158,8 @@ usage(void)
 	fprintf(stderr, "usage: %s [-v] [-i rcfile | -c rcfile]\n", __progname);
 	fprintf(stderr, "           -v indicates verbose operation\n");
 	fprintf(stderr, "           -i rcfile loads initial system" \
-		    "  configuration from rcfile\n");
-	fprintf(stderr, "	    -c rcfile loads commands from rcfile\n");
+		    " configuration from rcfile\n");
+	fprintf(stderr, "           -c rcfile loads commands from rcfile\n");
 	exit(1);
 }
 
