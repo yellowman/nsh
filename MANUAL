@@ -353,6 +353,32 @@ disable verbose mode.
 nsh/no verbose
 % Diagnostic mode disabled
 
+ftp-proxy
+---------
+
+This activates the ftp proxy. NSH starts ftp-proxy on 127.0.0.1 by default.
+Redirect rules in pf must be used to direct outside traffic from any
+rdomain to the local tftp daemon.
+
+tftp-proxy
+----------
+
+This activates the tftp proxy. NSH starts tftp-proxy on 127.0.0.1, port 6969
+by default. Redirect rules in pf must be used to direct outside traffic from
+any rdomain to the local tftp proxy.
+
+pass in quick on $int_if inet proto udp from $lan to port tftp \
+    divert-to 127.0.0.1 port 6969
+pass out quick on $ext_if inet proto udp from $lan to port tftp \
+    group proxy divert-reply
+
+tftpd
+-----
+
+This activates the tftp daemon. NSH starts tftpd on 127.0.0.1, port 69
+by default. Redirect rules in pf must be used to direct outside traffic from
+any rdomain to the local tftp daemon.
+
 write-config
 ------------
 
