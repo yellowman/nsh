@@ -14,3 +14,5 @@ rw
 cp $1 /etc/nshrc
 sync
 ro
+#
+# for flashrd, use save-rw.sh and copy to /flash/nshrc
