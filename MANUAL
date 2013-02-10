@@ -315,7 +315,7 @@ without a corresponding rdomain being created. Do not set the rdomain in
 any interface, and instead simply create a static route.
 
 nsh(p)/rtable 1 Management network
-nsh(p-rtable 1)/route 0.0.0.0/0 100.64.0.1
+nsh(p-rtable 1)/route 0.0.0.0/0 127.0.0.1
 nsh(p-rtable 1)/sshd edit
 nsh(p-rtable 1)/sshd enable
 
@@ -432,13 +432,13 @@ about all interfaces and bridges available on a system.  Using
 
 nsh/show interface lo0
 % lo0
-  Interface is up, protocol is up
+  Interface is up (last change 37d 11:02:55), protocol is up
   Interface type Loopback
-  Internet address is 127.0.0.1/8
-  Routing Domain 0, MTU 33224 bytes
-  124 packets input, 22396 bytes, 0 errors, 0 drops
-  124 packets output, 22396 bytes, 0 errors, 0 unsupported
-  180 avg input size, 180 avg output size
+  Internet address ::1/128, fe80::1%lo0/64, 127.0.0.1/8
+  Routing Domain 0, MTU 33196 bytes
+  3182 packets input, 1486429 bytes, 0 errors, 0 drops
+  3182 packets output, 1486429 bytes, 0 errors, 0 unsupported
+  467 input, 467 output (average bytes/packet)
 
 "Interface is up" means that the interface is turned on in software. 
 "Protocol is up" means that the interface is configured and ready to run.
@@ -447,8 +447,10 @@ the system.  Some interfaces are not intended to pass traffic for network
 users, and instead handle internal functions on the system.  See
 Appendix A for more information on common interface types.
 
-"Internet address" shows the IP address configured for the interface,
-if any.  MTU describes the Maximum Transmission Unit, the largest size of
+"Internet address" shows the IPv4 and IPv6 addresses configured for the
+interface, if any. IPv6 addresses with a % sign are "link-local" and
+not valid outside of the context of the interface name specified.
+MTU describes the Maximum Transmission Unit, the largest size of
 a packet which the kernel will transmit on this interface.  
 
 The statistics show the number of packets, bytes, errors, and dropped
@@ -467,13 +469,13 @@ flags for an interface.  See Appendix B for an explanation of these flags.
 
 nsh/show int lo0
 % lo0
-  Interface is up, protocol is up
+  Interface is up (last change 37d 11:04:41), protocol is up
   Interface type Loopback
-  Internet address is 127.0.0.1/8
-  MTU 33224 bytes
-  124 packets input, 22396 bytes, 0 errors, 0 drops
-  124 packets output, 22396 bytes, 0 errors, 0 unsupported
-  180 avg input size, 180 avg output size
+  Internet address ::1/128, fe80::1%lo0/64, 127.0.0.1/8
+  Routing Domain 0, MTU 33196 bytes
+  3182 packets input, 1486429 bytes, 0 errors, 0 drops
+  3182 packets output, 1486429 bytes, 0 errors, 0 unsupported
+  467 input, 467 output (average bytes/packet)
   Flags:
     <UP,LOOPBACK,RUNNING,MULTICAST>
 
@@ -915,7 +917,7 @@ nsh(p)/ip ifq-maxlen 8192
 Maximum number of queued packets before they are dropped.  Increasing
 this option does not necessarily help with system performance.  The output
 of 'show version' displays the IFQ drop counter. If this counter increases,
-a larger ifq-maxlen may be necessary. 
+a larger ifq-maxlen value should be set.
 
 [no] ip send-redirects
 ----------------------
@@ -1056,7 +1058,15 @@ Set the interface Maximum Transmission Unit.  This is the maximum packet
 size that the operating system will transmit.  Using 'no mtu' will set
 the interface MTU back to the default value for that interface type.
 
-nsh(interface-fxp0)/mtu 4000
+nsh(interface-vr0)/mtu 1600
+
+The output of 'show interface' displays a 'hardmtu' value which is the
+maximum mtu value supported by the hardware and driver currently
+installed. The mtu command will fail if the specified mtu exceeds
+the hardmtu value.
+
+A larger MTU is particularly useful for features which stack tags,
+such as PPPoE, MPLS tagging and QinQ (svlan) tagging.
 
 [no] metric <value>
 -------------------
@@ -1112,19 +1122,22 @@ an interface by setting verbose mode and looking at the interface.
 
 nsh/v
 % Diagnostic mode enabled
-nsh/sho int fxp0
-% fxp0
-  Interface is up, protocol is up
-  Interface type Ethernet (Broadcast), hardware address 00:90:27:4c:f4:80
+nsh/sho int vr0
+% vr0
+  Interface is up (last change 37d 12:16:02), protocol is up
+  Interface type Ethernet (Broadcast), hardware address 00:0d:b9:29:6b:50
   Media type autoselect (100baseTX full-duplex), status active
-  Internet address is 192.168.1.1/32
-  MTU 1500 bytes, Line Rate 100 Mbps
-  98305076 packets input, 3151445270 bytes, 1 errors, 0 drops
-  93539074 packets output, 1678432034 bytes, 0 errors, 0 unsupported
+  Internet address 100.64.0.1/24, fe80::20d:b9ff:fe29:6b50%vr0/64
+  Routing Domain 0, MTU 1500 bytes (hardmtu 1740), Line Rate 100 Mbps
+  187081496 packets input, 232860544316 bytes, 19 errors, 0 drops
+  102231197 packets output, 21564487790 bytes, 0 errors, 3267264 unsupported
+  1244 input, 210 output (average bytes/packet)
   0 collisions
   Flags:
     <UP,BROADCAST,RUNNING,SIMPLEX,MULTICAST>
-  Supported media types on fxp0:
+  Hardware features:
+    <CSUM_IPv4,CSUM_TCPv4,CSUM_UDPv4,VLAN_MTU,VLAN_HWTAGGING,WOL>
+  Supported media types on vr0:
     media none
     media 10baseT
     media 10baseT, mediaopt full-duplex
@@ -1134,15 +1147,15 @@ nsh/sho int fxp0
 
 To force the interface to use a particular media type,
 
-nsh(interface-fxp0)/media 10baseT
+nsh(interface-vr0)/media 10baseT
 
 [no] mediaopt <option>
 ----------------------
 
 You can set or remove media options with this command.
 
-nsh(interface-fxp0)/mediaopt full-duplex
-nsh(interface-fxp0)/no mediaopt full-duplex
+nsh(interface-vr0)/mediaopt full-duplex
+nsh(interface-vr0)/no mediaopt full-duplex
 
 [no] tunnel <src ip> <dest ip>
 ------------------------------
@@ -1163,7 +1176,7 @@ Therefore, the only secure way to use it is through a network plug connecting
 directly between two pfsync capable devices (such as a conenction made
 with an ethernet crossover cable).
 
-nsh(interface-pfsync0)/syncdev fxp0
+nsh(interface-pfsync0)/syncdev vr0
 
 [no] maxupd <updates> [defer]
 -----------------------------
@@ -1366,9 +1379,9 @@ OACTIVE
   may be able to reset an interface that is in this state by using and then
   reversing the 'shutdown' command from the interface menu.  For example,
 
-nsh/interface fxp0
-nsh(interface-fxp0)/shutdown
-nsh(interface-fxp0)/no shutdown
+nsh/interface vr0
+nsh(interface-vr0)/shutdown
+nsh(interface-vr0)/no shutdown
 
 SIMPLEX
   Can't hear own transmissions
@@ -1462,6 +1475,12 @@ on the fxp3 physical interface, and a vlan ID of 4, you would do this:
 
 nsh(interface-vlan0)/vlan 4 parent fxp3
 nsh(interface-vlan0)/ip 192.168.44.1/24
+
+svlan
+-----
+
+This interface type allows virtual LANs to be setup over an Ethernet
+port using 802.1AD provider bridge.
 
 
 ----

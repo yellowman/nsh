@@ -52,6 +52,7 @@ char *get_hwdaddr(char *ifname);
 void pack_ifaliasreq(struct ifaliasreq *, ip_t *, struct in_addr *, char *);
 void pack_in6aliasreq(struct in6_aliasreq *, ip_t *, struct in6_addr *, char *);
 void ipv6ll_db_store(struct sockaddr_in6 *, struct sockaddr_in6 *, int, char *);
+void printifhwfeatures(int, char *);
 
 static const struct {
 	char *name;
@@ -380,6 +381,7 @@ show_int(int argc, char **argv)
 			bprintf(stdout, flags, ifnetflags);
 			printf("\n");
 		}
+		printifhwfeatures(ifs, ifname);
 		if (br) {
 			if ((tmp = bridge_list(ifs, ifname, "    ", tmp_str,
 			    sizeof(tmp_str), SHOW_STPSTATE))) {
@@ -394,6 +396,33 @@ show_int(int argc, char **argv)
 
 	close(ifs);
 	return(0);
+}
+
+/* lifted right from ifconfig.c */
+#define HWFEATURESBITS							\
+	"\024\1CSUM_IPv4\2CSUM_TCPv4\3CSUM_UDPv4"			\
+	"\5VLAN_MTU\6VLAN_HWTAGGING\10CSUM_TCPv6"			\
+	"\11CSUM_UDPv6\20WOL"
+
+/* lifted right from ifconfig.c */
+void
+printifhwfeatures(int ifs, char *ifname)
+{
+	struct ifreq	ifr;
+	struct if_data	ifrdat;
+
+	bzero(&ifrdat, sizeof(ifrdat));
+	ifr.ifr_data = (caddr_t)&ifrdat;
+	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
+
+	if (ioctl(ifs, SIOCGIFDATA, (caddr_t)&ifr) == -1) {
+		printf("%% printifhwfeatures: SIOCGIFDATA: %s\n",
+		    strerror(errno));
+		return;
+	}
+	printf("  Hardware features:\n    ");
+	bprintf(stdout, (u_int)ifrdat.ifi_capabilities, HWFEATURESBITS);
+	putchar('\n');
 }
 
 u_int32_t
