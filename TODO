@@ -5,32 +5,37 @@ Cleanup:
 * Document all new commands in the manual
 * Some formatting for the manual.  Simple markdown format?
 * Bug hunt
-* Support new wireless information interfaces where necessary
+
+To be implemented: 
+
 * handle newer bridge commands
 * handle newer 802.11 gunk like rssi display, chan, flags
-
-To be implemented:
-
+* ndp controls
 * handle kernel sppp/pppoe client
 * privsep? multiple daemons? web front end using privsep?
+* Build a simple web interface that works through the rc file handler or
+  via imsg
 * copy configs from/to tftp/ftp/http/other parts of filesystem/etc
-* RSA certificate generation/management method (isakmpd, iked, possibly sshd)
+* RSA certificate generation/management method (isakmpd, iked, sshd)
 * Persistent comments/remarks in the config file (to document routes, etc..)
-* Support for paging through displays of text X lines at a time
-* Something comparable to "| inc" from cisco-land
+  (this was already done for rtable descriptions, and the database could be
+  used the same way for routes)
+* Better support for paging through displays of text X lines at a time
+* Something comparable to pipe-grep for matching output
 * Context-sensitive help
+* Generate example configs for BGP+MPLS, IPv6+BGP, IPv6+Link local GIF,
+  vether+bridge, and many other interesting feature combinations/scenarios.
 
 Would be nice:
 
-* Generate example configs for BGP+MPLS, IPv6+BGP, IPv6+Link local GIF,
-  vether+bridge, and many other interesting feature combinations/scenarios.
 * Perhaps some way for the shell to upgrade itself, or the entire system/
   flash image when given a network source for new binaries?
-* Build a simple web interface that works through the rc file handler or
-  via imsg
+  (requires our environment be known, this may be doable with flashrd,
+  doable in a different way with a typical install, etc)
 * Add more diagnostic messages for verbose output where useful
 * Convenient/automatic mechanisms to centralize configurations for
   tracking/revision control
+  (can already be done by adding cvs/git/... calls to save.sh)
 
 Known Bugs (or, things that I don't want to bother with right now, but
 better not forget later...):

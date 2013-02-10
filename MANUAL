@@ -62,7 +62,7 @@ Section 2 > Installation
 ------------------------
 
 If you are using flashrd, please follow the NSH installation directions in the
-flashrd FAQ.
+flashrd FAQ for additional details.
 
 NSH replaces /etc/netstart on a standard OpenBSD system.  To implement NSH on
 such a system, you first need to convert your standard configuration into one
@@ -106,17 +106,21 @@ When you use the 'write-config' command, NSH will learn your configurations
 from the running kernel.  It will enter everything that is currently configured
 into the nsh startup file.
 
-# mv /etc/pf.conf /var/run/pf.conf.0
-# mv /etc/ssh/sshd_config /var/run/sshd.conf.0
-# mv /etc/inetd.conf /var/run/inetd.conf.0
-# nsh
+# cp /etc/pf.conf /var/run/pf.conf.0
+# cp /etc/dhcpd.conf /var/run/dhcpd.conf.0
+# cp /etc/ssh/sshd_config /var/run/sshd.conf.0
+# mv /etc/resolv.conf /var/run/resolv.conf.0
+# ln -s /var/run/resolv.conf.symlink /etc/resolv.conf.0
 # nsh
 % NSH v1.0
 nsh/enable
-Password:
-nsh(p)/write-config
+nsh(p)/pf enable
+nsh(p)/dhcp enable
+nsh(p)/ssh enable
+nsh(p)/dns local-control
+nsh/write
 % Configuration saved
-nsh(p)/ 
+nsh/quit
 
 At this point, you should inspect and edit /etc/nshrc by hand to ensure that
 it does exactly what you want.  Since it reads the entire configuration out of
@@ -283,11 +287,12 @@ You can generate a blowfish-crypted password using encrypt -b6.
 rtable
 ------
 
-The rtable commands allows you to execute services and diagnostic commands 
-(ping, traceroute) under alternate routing tables. Routing tables in
-OpenBSD number from 0 to 255. They have a 1:1 relationship with routing
-domains, except that routing domain 0 can contain multiple routing 
-tables.
+The rtable command allows you to execute services, diagnostic commands 
+(ping, traceroute) and set routes under alternate routing tables. Routing
+tables in OpenBSD number from 0 to 255. They have a 1:1 relationship with
+routing domains, except that routing domain 0 can contain multiple routing 
+tables. In addition, routing tables initialized prior to their corresponding
+routing domain will be inititalized with a routing domain of 0.
 
 An uninitialized routing table cannot be used to execute any services
 or diagnostic commands.
@@ -299,13 +304,15 @@ nsh(p)/interface fxp0
 nsh(interface-fxp0)/rdomain 2
 nsh(interface-fxp0)/ip 100.64.0.2/30
 
-Now you can add routes to rtable 2.
+Now you may add routes to rtable 2 and have them tied to the fxp0
+interface.
 
+nsh(p)/rtable 2 Production network
 nsh(p-rtable 2)/route 0.0.0.0/0 100.64.0.1
 
 If you wish to add a routing table to rdomain 0, you must initialize it
-without a corresponding rdomain being created, by creating a static
-route.
+without a corresponding rdomain being created. Do not set the rdomain in
+any interface, and instead simply create a static route.
 
 nsh(p)/rtable 1 Management network
 nsh(p-rtable 1)/route 0.0.0.0/0 100.64.0.1
@@ -384,19 +391,25 @@ nsh/show ?
 
   hostname        Router hostname
   interface       Interface config
-  route           IP route table or route lookup
-  ipstats         IP statistics
-  ahstats         AH statistics
-  espstats        ESP statistics
-  tcpstats        TCP statistics
-  udpstats        UDP statistics
-  icmpstats       ICMP statistics
-  igmpstats       IGMP statistics
-  ipcompstats     IPCOMP statistics
-  rtstats         Routing statistics
-  mbufstats       Memory management statistics
+  route           IPv4 route table or route lookup
+  route6          IPv6 route table or route lookup
+  sadb            Security Association Database
+  arp             ARP table
+  kernel          Kernel statistics
+  bgp             BGP information
+  ospf            OSPF information
+  ospf6           OSPF6 information
+  rip             RIP information
+  ldp             LDP information
+  ike             IKE information
+  dvmrp           DVMRP information
+  relay           Relay server
+  dhcp            DHCP server
+  smtp            SMTP server
+  ldap            LDAP server
   monitor         Monitor routing/arp table changes
   version         Software information
+  users           System users
   running-config  Operating configuration
   startup-config  Startup configuration
   ?               Options
@@ -481,8 +494,8 @@ nsh/show int bridge0
 With an IEEE 802.11 wireless interface, verbose mode will show
 the network ID, network key, and powersaving mode (if enabled).
 
-nsh/show int wi0
-% wi0
+nsh/show int athn0
+% athn0
   BLah blah
   IEEE 802.11
     network id blah
@@ -704,12 +717,12 @@ disable
 Leave privileged mode, use this if you want to stay logged in but to not
 trust your terminal area
 
-route <destination>[/<bitlen | netmask>] <gateway>
---------------------------------------------------
+route <destination>[/<prefixlen | netmask>] <gateway>
+-----------------------------------------------------
 
 You can add static routes with this command.  IPv4 addresses can be configured
-with CIDR bitlength, or classic IP netmasks to describe routes.  The IPv6
-address may only be configured with a bitlength. This command only runs
+with CIDR prefix length, or classic IP netmasks to describe routes.  The IPv6
+address may only be configured with a prefix length. This command only runs
 in privileged mode.
 
 nsh(p)/route 192.168.0.0/16 1.2.3.4
@@ -745,16 +758,16 @@ Leave NSH
 verbose
 -------
 
-Set verbose mode on.  (It defaults to off)
+[no] verbose
 
-This command takes the 'no ' prefix to turn off verbose mode.
+Set verbose mode on.  (It defaults to off)
 
 editing
 -------
 
-Set command line editing on.  (If defaults to on)
+[no] editing
 
-This command takes the 'no ' prefix to turn off editing mode.
+Set command line editing on.  (If defaults to on)
 
 !
 -
@@ -992,9 +1005,9 @@ nsh(interface-vr0)/?
   trunkproto       Define trunkproto
   ?                Options
 
-[no] ip <address>/<bitlen | netmask>
+[no] ip <address>/<prefixlen | netmask>
 [no] ip dhcp
-------------------------------------
+---------------------------------------
 
 Set (or remove) the IPv4 or IPv6 address on an interface. IPv4 addresses
 can be configured with CIDR bitlength, or classic netmask. The IPv6
@@ -1031,8 +1044,8 @@ configurations (write) and in displayed NSH configurations
 kept persistently, look at the running configuration and execute 'no ip dhcp'
 for insterfaces on which you do not intend to use DHCP.
 
-[no] alias <address>/<bitmaskORnetmask>
----------------------------------------
+[no] alias <address>/<prefixlen | netmask>
+------------------------------------------
 
 This command is deprecated. Use the 'ip' command instead.
 
