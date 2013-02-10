@@ -305,6 +305,10 @@ show_int(int argc, char **argv)
 		 * Display MTU, line rate
 		 */
 		printf(" MTU %u bytes", if_mtu);
+		if (ioctl(ifs, SIOCGIFHARDMTU, (caddr_t)&ifr) != -1) {
+			if (ifr.ifr_hardmtu)
+				printf(" (hardmtu %u)", ifr.ifr_hardmtu);
+		}
 		if (if_baudrate)
 			printf(", Line Rate %qu %s\n",
 			    MBPS(if_baudrate) ? MBPS(if_baudrate) :
