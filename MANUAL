@@ -116,7 +116,7 @@ into the nsh startup file.
 nsh/enable
 nsh(p)/pf enable
 nsh(p)/dhcp enable
-nsh(p)/ssh enable
+nsh(p)/sshd enable
 nsh(p)/dns local-control
 nsh/write
 % Configuration saved
