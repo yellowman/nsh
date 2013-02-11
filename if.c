@@ -1206,7 +1206,7 @@ intmetric(char *ifname, int ifs, int argc, char **argv)
 	}
 
 	if (set)
-		ifr.ifr_metric = strtonum(argv[0], 0, ULONG_MAX, &errmsg);
+		ifr.ifr_metric = strtonum(argv[0], 0, INT_MAX, &errmsg);
 	else
 		ifr.ifr_metric = 0;
 

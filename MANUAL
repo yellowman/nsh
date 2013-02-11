@@ -110,7 +110,7 @@ into the nsh startup file.
 # cp /etc/dhcpd.conf /var/run/dhcpd.conf.0
 # cp /etc/ssh/sshd_config /var/run/sshd.conf.0
 # mv /etc/resolv.conf /var/run/resolv.conf.0
-# ln -s /var/run/resolv.conf.symlink /etc/resolv.conf.0
+# ln -s /var/run/resolv.conf.symlink /etc/resolv.conf
 # nsh
 % NSH v1.0
 nsh/enable
