@@ -568,10 +568,13 @@ struct intlist Bridgelist[] = {
 };
 
 /*
- * a big command input loop for interface/bridge mode
+ * command handler for interface and bridge modes
+ *
+ * acts as a loop for human keyboard user, and as a one time command
+ * lookup for rcfile -c or -i usage
+ *
  * if a function returns to interface() with a 1, interface() will break
- * the user back to command() mode.  interface() will always break from
- * mode handler calls.
+ * the user back to command() mode.
  */
 static int
 interface(int argc, char **argv, char *modhvar)
@@ -647,7 +650,7 @@ interface(int argc, char **argv, char *modhvar)
 	}
 
 	if (is_bridge(ifs, ifname)) {
-		/* whichlist is used by command completion code too */
+		/* whichlist also used by help, command completion code */
 		whichlist = Bridgelist;
 		bridge = 1;
 	} else {
@@ -760,16 +763,12 @@ int_help(void)
 	printf("%% %s configuration commands are:\n\n",
 	    bridge ? "Bridge" : "Interface");
 
-	for (i = Intlist; i->name; i++) {
-		if ((bridge && !i->bridge) || (!bridge && (i->bridge == 1)))
-			continue;
+	for (i = whichlist; i->name; i++) {
 		if (strlen(i->name) > z)
 			z = strlen(i->name);
 	}
 
-	for (i = Intlist; i->name; i++) {
-		if ((bridge && !i->bridge) || (!bridge && (i->bridge == 1)))
-			continue;
+	for (i = whichlist; i->name; i++) {
 		if (i->help)
 			printf("  %-*s  %s\n", z, i->name, i->help);
 	}
