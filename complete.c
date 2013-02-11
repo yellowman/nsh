@@ -232,7 +232,7 @@ complete_local(char *word, int list, EditLine *el)
 unsigned char
 complt_i(EditLine *el, int ch)
 {
-	return(complete(el, ch, (char **)Intlist, sizeof(struct intlist),
+	return(complete(el, ch, (char **)whichlist, sizeof(struct intlist),
 	    NULL));
 }
 

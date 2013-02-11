@@ -279,6 +279,8 @@ struct ghs {
 
 extern Command cmdtab[];
 extern struct intlist Intlist[];
+extern struct intlist Bridgelist[];
+extern struct intlist *whichlist;
 
 /* ieee80211.c */
 #define NWID 0
