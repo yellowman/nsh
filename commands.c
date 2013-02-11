@@ -526,10 +526,10 @@ struct intlist Intlist[] = {
 	{ "debug",	"Driver dependent debugging",		CMPL0 0, 0, intflags, 0 },
 	{ "dhcrelay",	"DHCP Relay Agent",			CMPL0 0, 0, intdhcrelay, 0 },
 	{ "shutdown",	"Shutdown interface",			CMPL0 0, 0, intflags, 2 },
-	{ "wol",	"Wake On LAN",				CMPL0 0, 0, intxflags, 2 },
-	{ "mpls",	"MPLS",					CMPL0 0, 0, intxflags, 2 },
-	{ "inet6",	"IPv6",					CMPL0 0, 0, intxflags, 2 },
-	{ "autoconfprivacy", "IPv6 Autoconfigurable address",	CMPL0 0, 0, intxflags, 2 },
+	{ "wol",	"Wake On LAN",				CMPL0 0, 0, intxflags, 0 },
+	{ "mpls",	"MPLS",					CMPL0 0, 0, intxflags, 0 },
+	{ "inet6",	"IPv6",					CMPL0 0, 0, intxflags, 0 },
+	{ "autoconfprivacy", "IPv6 Autoconfigurable address",	CMPL0 0, 0, intxflags, 0 },
 /* Bridge mode commands */
 	{ "member",	"Bridge member(s)",			CMPL(i) 0, 0, brport, 1 },
 	{ "span",	"Bridge spanning port(s)",		CMPL(i) 0, 0, brport, 1 },
@@ -627,7 +627,7 @@ interface(int argc, char **argv, char *modhvar)
 		}
 	}
 
-	if (set == 0 && !modhvar) {
+	if (set == 0) {
 		if (ioctl(ifs, SIOCIFDESTROY, &ifr) == -1) {
 			printf("%% unable to remove interface %s: %s\n",
 			    ifname, strerror(errno));
@@ -638,17 +638,10 @@ interface(int argc, char **argv, char *modhvar)
 		return(0);
 	}
 
-	if (is_bridge(ifs, ifname)) {
+	if (is_bridge(ifs, ifname))
 		bridge = 1;
-		if (isprefix(modhvar ? modhvar : argv[0], "interface"))
-			printf("%% Using bridge configuration mode"
-			    " for %s\n", ifname);
-	} else {
+	else
 		bridge = 0; 
-		if (isprefix(modhvar ? modhvar : argv[0], "bridge"))
-			printf("%% Using interface configuration mode"
-			    " for %s\n", ifname);
-	}
 
 	for (;;) {
 		if (!modhvar) {
