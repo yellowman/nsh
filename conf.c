@@ -728,6 +728,7 @@ void conf_ifmetrics(FILE *output, int ifs, struct if_data if_data,
 {
 	char tmpa[IPSIZ], tmpb[IPSIZ], tmpc[TMPSIZ];
 	int buf;
+	struct ifreq ifrpriority;
 
 	/*
 	 * Various metrics valid for non-bridge interfaces
@@ -749,8 +750,14 @@ void conf_ifmetrics(FILE *output, int ifs, struct if_data if_data,
 	if (!MIN_ARG(ifname, "pfsync") && (if_mtu != default_mtu(ifname) &&
 	    default_mtu(ifname) != MTU_IGNORE) && if_mtu != 0)
 		fprintf(output, " mtu %u\n", if_mtu);
+
 	if (if_metric)
 		fprintf(output, " metric %u\n", if_metric);
+	strlcpy(ifrpriority.ifr_name, ifname, IFNAMSIZ);
+	if (ioctl(ifs, SIOCGIFPRIORITY, (caddr_t)&ifrpriority) == 0)
+		if(ifrpriority.ifr_metric)
+			fprintf(output, " priority %u\n",
+			    ifrpriority.ifr_metric);
 
 	if (get_nwinfo(ifname, tmpc, TMPSIZ, NWID) != 0) {
 		fprintf(output, " nwid %s\n", tmpc);

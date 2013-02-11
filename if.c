@@ -1186,7 +1186,8 @@ int
 intmetric(char *ifname, int ifs, int argc, char **argv)
 {
 	struct ifreq ifr;
-	int set;
+	int set, max, theioctl;
+	char *type;
 	const char *errmsg = NULL;
 
 	if (NO_ARG(argv[0])) {
@@ -1196,28 +1197,41 @@ intmetric(char *ifname, int ifs, int argc, char **argv)
 	} else
 		set = 1;
 
+	if (isprefix(argv[0], "metric")) {
+		type = "metric";
+		max = INT_MAX;
+		theioctl = SIOCSIFMETRIC;
+	} else if (isprefix(argv[0], "priority")) {
+		type = "priority";
+		max = 15;
+		theioctl = SIOCSIFPRIORITY;
+	} else {
+		printf("%% intmetric internal failure\n");
+		return(0);
+	}
+
 	argc--;
 	argv++;
 
 	if ((!set && argc > 1) || (set && argc != 1)) {
-		printf("%% metric <metric>\n");
-		printf("%% no metric [metric]\n");
+		printf("%% %s <%s>\n", type, type);
+		printf("%% no %s [%s]\n", type, type);
 		return(0);
 	}
 
 	if (set)
-		ifr.ifr_metric = strtonum(argv[0], 0, INT_MAX, &errmsg);
+		ifr.ifr_metric = strtonum(argv[0], 0, max, &errmsg);
 	else
 		ifr.ifr_metric = 0;
 
 	if (errmsg) {
-		printf("%% Invalid metric %s: %s\n", argv[0], errmsg);
+		printf("%% Invalid %s %s: %s\n", type, argv[0], errmsg);
 		return(0);
 	}
 
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
-	if (ioctl(ifs, SIOCSIFMETRIC, (caddr_t)&ifr) < 0)
-		printf("%% intmetric: SIOCSIFMETRIC: %s\n", strerror(errno));
+	if (ioctl(ifs, theioctl, (caddr_t)&ifr) < 0)
+		printf("%% intmetric: SIOCSIF%s: %s\n", type, strerror(errno));
 
 	return(0);
 }
