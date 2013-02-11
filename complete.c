@@ -95,8 +95,8 @@ complete_ambiguous(char *word, int list, StringList *words, EditLine *el)
 
 	if (!list) {
 		matchlen = 0;
-		lastmatch = words->sl_str[0];
-		matchlen = strlen(lastmatch);
+		if (lastmatch = words->sl_str[0])
+			matchlen = strlen(lastmatch);
 		for (i = 1 ; i < words->sl_cur ; i++) {
 			for (j = wordlen ; j < strlen(words->sl_str[i]); j++)
 				if (lastmatch[j] != words->sl_str[i][j])
