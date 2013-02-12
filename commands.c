@@ -680,11 +680,12 @@ interface(int argc, char **argv, char *modhvar)
 		} else if (i == 0) {
 			printf("%% Invalid command\n");
 		} else {
-			if ((bridge && !i->bridge) ||
-			    (!bridge && (i->bridge == 1))) {
-				printf("%% Invalid command\n");
-			} else
-				((*i->handler) (ifname, ifs, argc, argv));
+			int save_cli_rtable = cli_rtable;
+			cli_rtable = 0;
+
+			((*i->handler) (ifname, ifs, argc, argv));
+
+			cli_rtable = save_cli_rtable;
 		}
 
 		return(0);
@@ -744,9 +745,14 @@ interface(int argc, char **argv, char *modhvar)
 			if (val)
 				printf("%% Invalid command\n");
 		} else {
+			int save_cli_rtable = cli_rtable;
+			cli_rtable = 0;
+
 			if ((*i->handler) (ifname, ifs, margc, margv)) {
+				cli_rtable = save_cli_rtable;
 				break;
 			}
+			cli_rtable = save_cli_table;
 		}
 	}
 
@@ -1490,7 +1496,7 @@ cmdargs(char *cmd, char *arg[])
 
 			char *shellp = cmd;
 
-			if (nsh_setrtable(cli_rtable))
+			if (cli_rtable != 0 && nsh_setrtable(cli_rtable))
 				_exit(0);
 
 			execv(shellp, arg);
