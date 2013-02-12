@@ -691,15 +691,13 @@ intip(char *ifname, int ifs, int argc, char **argv)
 	}
 
 	if (isprefix(argv[0], "dhcp")) {
-		char table[16];
-		char *args[] = { PKILL, table, "dhclient", ifname, '\0' };
+		char *args[] = { PKILL, "dhclient", ifname, '\0' };
 		char *args_set[] = { DHCLIENT, ifname, '\0' };
 		char leasefile[sizeof(LEASEPREFIX)+1+IFNAMSIZ];
 
 		if (set)
 			cmdargs(DHCLIENT, args_set);
 		else {
-			snprintf(table, sizeof(table), "-T%d", cli_rtable);
 			cmdargs(PKILL, args);
 			snprintf(leasefile, sizeof(leasefile), "%s.%s",
 			    LEASEPREFIX, ifname);
@@ -1152,8 +1150,8 @@ intdhcrelay(char *ifname, int ifs, int argc, char **argv)
 		flag_x("dhcrelay", ifname, DB_X_ENABLE, argv[0]);
 		cmdargs(DHCRELAY, cmd);
 	} else {
-		char table[16], server[24], argue[SIZE_CONF_TEMP];
-		char *killcmd[] = { PKILL, table, "-xf", NULL, '\0' };
+		char server[24], argue[SIZE_CONF_TEMP];
+		char *killcmd[] = { PKILL, "-xf", NULL, '\0' };
 
 		if ((alen = conf_dhcrelay(ifname, server, sizeof(server))) < 1) {
 			if (alen == 0)
@@ -1170,8 +1168,6 @@ intdhcrelay(char *ifname, int ifs, int argc, char **argv)
 		}
 
 		flag_x("dhcrelay", ifname, DB_X_REMOVE, NULL);
-
-		snprintf(table, sizeof(table), "-T%d", cli_rtable);
 
 		/* setup argument list as one argument for pkill -xf */
 		snprintf(argue, sizeof(argue), "%s %s %s %s", cmd[0], cmd[1], cmd[2], server);
@@ -1780,7 +1776,6 @@ intrtd(char *ifname, int ifs, int argc, char **argv)
 	StringList *dbreturn;
 	char *cmdpath, *cmdname;
 	int set;
-	char *argv_cmd[] = { cmdpath, cmdname, ifname, '\0' };
 
 	if (NO_ARG(argv[0])) {
 		argv++;
@@ -1791,8 +1786,10 @@ intrtd(char *ifname, int ifs, int argc, char **argv)
 
 	if (isprefix(argv[0], "rtsol")) {
 		cmdname = "rtsol";
+		cmdpath = RTSOL;
 	} else if (isprefix(argv[0], "rtadvd")) {
 		cmdname = "rtadvd";
+		cmdpath = RTADVD;
 	} else {
 		printf("%% intrtd: Internal error\n");
 		return 0;
@@ -1812,10 +1809,14 @@ intrtd(char *ifname, int ifs, int argc, char **argv)
 	}
 	if (dbreturn->sl_cur > 0) {
 		/* already found in db for ifname */
-		if (!set && db_delete_flag_x_ctl(cmdname, ifname) < 0) {
-			printf("%% database delete failure\n");
-			sl_free(dbreturn, 1);
-			return(1);
+		if (!set) {
+			char *args[] = { PKILL, cmdname, ifname, '\0' };
+
+			if (db_delete_flag_x_ctl(cmdname, ifname) < 0)
+				printf("%% database delete failure\n");
+			cmdargs(PKILL, args);
+		} else {
+			printf("%% %s already running\n", cmdname);
 		}
 	} else {
 		/* not found in db for ifname */
@@ -1826,8 +1827,11 @@ intrtd(char *ifname, int ifs, int argc, char **argv)
 				sl_free(dbreturn, 1);
 				return(1);
 			}
-		} else {
+			char *args[] = { cmdpath, cmdname, ifname, '\0' };
 
+			cmdargs(cmdpath, args);
+		} else {
+			printf("%% %s not running\n", cmdname);
 		}
 	}
 	sl_free(dbreturn, 1);

@@ -752,7 +752,7 @@ interface(int argc, char **argv, char *modhvar)
 				cli_rtable = save_cli_rtable;
 				break;
 			}
-			cli_rtable = save_cli_table;
+			cli_rtable = save_cli_rtable;
 		}
 	}
 
