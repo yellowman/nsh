@@ -57,7 +57,7 @@
 void conf_db_single(FILE *, char *, char *, char *);
 void conf_interfaces(FILE *, char *);
 void conf_print_rtm(FILE *, struct rt_msghdr *, char *, int);
-int conf_ifaddrs(FILE *, int, char *, int, int);
+int conf_ifaddrs(FILE *, char *, int, int);
 void conf_brcfg(FILE *, int, struct if_nameindex *, char *);
 void conf_ifxflags(FILE *, int, char *);
 void conf_rtables(FILE *);
@@ -565,12 +565,10 @@ void conf_interfaces(FILE *output, char *only)
 		if ((dhcpif = fopen(leasefile, "r"))) {
 			fprintf(output, " ip dhcp\n");
 			fclose(dhcpif);
-			conf_ifaddrs(output, ifs, ifnp->if_name, flags,
-			    AF_INET6);
+			conf_ifaddrs(output, ifnp->if_name, flags, AF_INET6);
 			ippntd = 1;
 		} else {
-			ippntd = conf_ifaddrs(output, ifs, ifnp->if_name, flags,
-			    0);
+			ippntd = conf_ifaddrs(output, ifnp->if_name, flags, 0);
 		}
 
 		if (br) {
@@ -869,7 +867,7 @@ ipv6ll_db_compare(struct sockaddr_in6 *sin6, struct sockaddr_in6 *sin6mask,
 }
 
 
-int conf_ifaddrs(FILE *output, int ifs, char *ifname, int flags, int af)
+int conf_ifaddrs(FILE *output, char *ifname, int flags, int af)
 {
 	struct ifaddrs *ifa, *ifap;
 	struct sockaddr_in *sin, *sinmask, *sindest;
