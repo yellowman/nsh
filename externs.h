@@ -117,6 +117,7 @@ extern char metricnames[];
 #define IPSECCONF_TEMP	"/var/run/ipsec.conf"
 #define IKECONF_TEMP	"/var/run/iked.conf"
 #define DVMRPCONF_TEMP	"/var/run/dvmrpd.conf"
+#define RTADVCONF_TEMP	"/var/run/rtadvd.conf"
 #define RELAYCONF_TEMP	"/var/run/relayd.conf"
 #define SASYNCCONF_TEMP	"/var/run/sasyncd.conf"
 #define DHCPCONF_TEMP	"/var/run/dhcpd.conf"
@@ -190,6 +191,7 @@ extern struct ctl ctl_nppp[];
 extern struct ctl ctl_ifstate[];
 extern struct ctl ctl_ike[];
 extern struct ctl ctl_dvmrp[];
+extern struct ctl ctl_rtadv[];
 extern struct ctl ctl_sasync[];
 extern struct ctl ctl_dhcp[];
 extern struct ctl ctl_snmp[];

@@ -1812,13 +1812,19 @@ intrtd(char *ifname, int ifs, int argc, char **argv)
 	if (dbreturn->sl_cur > 0) {
 		/* already found in db for ifname */
 		if (!set) {
-			char *args[] = { PKILL, cmdpath, ifname, '\0' };
-
 			if (db_delete_flag_x_ctl(cmdname, ifname) < 0)
 				printf("%% database delete failure\n");
-			cmdargs(PKILL, args);
 		} else {
 			printf("%% %s already running\n", cmdname);
+		}
+		if (!set && strcmp(cmdname, "rtsol") == 0) {
+			char *args[] = { PKILL, cmdpath, ifname, '\0' };
+
+			cmdargs(PKILL, args);
+		} else if (!set && strcmp(cmdname, "rtadvd") == 0) {
+			char *args[] = { PKILL, cmdpath, "-c", "/var/run/rtadvd.0", ifname, '\0' };
+
+			cmdargs(PKILL, args);
 		}
 	} else {
 		/* not found in db for ifname */
@@ -1829,11 +1835,17 @@ intrtd(char *ifname, int ifs, int argc, char **argv)
 				sl_free(dbreturn, 1);
 				return(1);
 			}
+		} else {
+			printf("%% %s not running\n", cmdname);
+		}
+		if (set && strcmp(cmdname, "rtsol") == 0) {
 			char *args[] = { cmdpath, ifname, '\0' };
 
 			cmdargs(cmdpath, args);
-		} else {
-			printf("%% %s not running\n", cmdname);
+		} else if (set && strcmp(cmdname, "rtadvd") == 0) {
+			char *args[] = { cmdpath, "-c", "/var/run/rtadvd.0", ifname, '\0' };
+
+			cmdargs(cmdpath, args);
 		}
 	}
 	sl_free(dbreturn, 1);
