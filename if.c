@@ -1810,7 +1810,7 @@ intrtd(char *ifname, int ifs, int argc, char **argv)
 	if (dbreturn->sl_cur > 0) {
 		/* already found in db for ifname */
 		if (!set) {
-			char *args[] = { PKILL, cmdname, ifname, '\0' };
+			char *args[] = { PKILL, cmdpath, ifname, '\0' };
 
 			if (db_delete_flag_x_ctl(cmdname, ifname) < 0)
 				printf("%% database delete failure\n");
@@ -1827,7 +1827,7 @@ intrtd(char *ifname, int ifs, int argc, char **argv)
 				sl_free(dbreturn, 1);
 				return(1);
 			}
-			char *args[] = { cmdpath, cmdname, ifname, '\0' };
+			char *args[] = { cmdpath, ifname, '\0' };
 
 			cmdargs(cmdpath, args);
 		} else {
