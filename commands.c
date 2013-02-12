@@ -280,6 +280,7 @@ Menu ip6tab[] = {
 	{ "maxifprefixes", "Max if IPv6 Prefixes",	CMPL0 0, 0, 0, 0, ipsysctl },
 	{ "maxifdefrouters", "Max if IPv6 Def Routers",	CMPL0 0, 0, 0, 0, ipsysctl },
 	{ "maxdynroutes", "Max IPv6 Dyn Routes",	CMPL0 0, 0, 0, 0, ipsysctl },
+	{ "accept-rtadv", "Accept Router Advertisements", CMPL0 0, 0, 0, 0, ipsysctl },
 	{ "?",		"Help",				CMPL0 0, 0, 0, 0, sysctlhelp },
 	{ 0, 0, 0, 0, 0, 0, 0, 0 }
 };
