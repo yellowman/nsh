@@ -1775,6 +1775,66 @@ intlladdr(char *ifname, int ifs, int argc, char **argv)
 }
 
 int
+intrtd(char *ifname, int ifs, int argc, char **argv)
+{
+	StringList *dbreturn;
+	char *cmdpath, *cmdname;
+	int set;
+	char *argv_cmd[] = { cmdpath, cmdname, ifname, '\0' };
+
+	if (NO_ARG(argv[0])) {
+		argv++;
+		argc--;
+		set = 0;
+	} else
+		set = 1;
+
+	if (isprefix(argv[0], "rtsol")) {
+		cmdname = "rtsol";
+	} else if (isprefix(argv[0], "rtadvd")) {
+		cmdname = "rtadvd";
+	} else {
+		printf("%% intrtd: Internal error\n");
+		return 0;
+	}
+
+	if (argc > 1) {
+		printf ("%% %s\n", cmdname);
+		printf ("%% no %s\n", cmdname);
+		return(0);
+	}
+
+	dbreturn = sl_init();
+	if (db_select_flag_x_ctl(dbreturn, cmdname, ifname) < 0) {
+		printf("%% database failure select flag x ctl\n");
+		sl_free(dbreturn, 1);
+		return(1);
+	}
+	if (dbreturn->sl_cur > 0) {
+		/* already found in db for ifname */
+		if (!set && db_delete_flag_x_ctl(cmdname, ifname) < 0) {
+			printf("%% database delete failure\n");
+			sl_free(dbreturn, 1);
+			return(1);
+		}
+	} else {
+		/* not found in db for ifname */
+		if (set) {
+			if(db_insert_flag_x(cmdname, ifname, 0, DB_X_ENABLE,
+			    NULL) < 0) {
+				printf("%% database insert failure\n");
+				sl_free(dbreturn, 1);
+				return(1);
+			}
+		} else {
+
+		}
+	}
+	sl_free(dbreturn, 1);
+	return(0);
+}
+
+int
 intrdomain(char *ifname, int ifs, int argc, char **argv)
 {
 	int set, rdomain;

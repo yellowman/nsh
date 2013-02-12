@@ -32,6 +32,7 @@
 #include <net/if_types.h>
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
+#include <netinet6/in6_var.h>
 #include <net/if_vlan_var.h>
 #include <net/route.h>
 #include <net/pfvar.h>
@@ -53,9 +54,10 @@
 #define TMPSIZ 1024	/* size of temp strings */
 #define MTU_IGNORE ULONG_MAX	/* ignore this "default" mtu */
 
+void conf_db_single(FILE *, char *, char *, char *);
 void conf_interfaces(FILE *, char *);
 void conf_print_rtm(FILE *, struct rt_msghdr *, char *, int);
-int conf_ifaddrs(FILE *, char *, int, int);
+int conf_ifaddrs(FILE *, int, char *, int, int);
 void conf_brcfg(FILE *, int, struct if_nameindex *, char *);
 void conf_ifxflags(FILE *, int, char *);
 void conf_rtables(FILE *);
@@ -193,7 +195,6 @@ conf(FILE *output)
 	 */
 	conf_interfaces(output, "pfsync");
 
-	conf_ctl(output, "", "rtadv", 0);
 	conf_ctl(output, "", "snmp", 0);
 	conf_ctl(output, "", "ldp", 0);
 	conf_ctl(output, "", "rip", 0);
@@ -438,6 +439,24 @@ int islateif(char *ifname)
 	return(0);
 }
 
+void
+conf_db_single(FILE *output, char *dbname, char *lookup, char *ifname)
+{
+	StringList *dbreturn;
+	dbreturn = sl_init();
+
+	if (db_select_flag_x_ctl(dbreturn, dbname, ifname) < 0) {
+		printf("%% conf_db_single %s database select failed\n", dbname);
+	}
+	if (dbreturn->sl_cur > 0) {
+		if (lookup == NULL)
+			fprintf(output, " %s\n", dbname);
+		else if (strcmp(dbreturn->sl_str[0], lookup) != 0)
+			fprintf(output, " %s %s\n", dbname, dbreturn->sl_str[0]);
+	}
+	sl_free(dbreturn, 1);
+}
+
 void conf_interfaces(FILE *output, char *only)
 {
 	FILE *dhcpif;
@@ -514,24 +533,13 @@ void conf_interfaces(FILE *output, char *only)
 		    strlen(ifrdesc.ifr_data))
 			fprintf(output, " description %s\n", ifrdesc.ifr_data);
 
-		/*
-		 * print lladdr if necessary
-		 */
 		if ((lladdr = get_hwdaddr(ifnp->if_name)) != NULL) {
 			/* We assume lladdr only useful if we can get_hwdaddr */
-			StringList *hwdaddr;
-			hwdaddr = sl_init();
-
-			if (db_select_flag_x_ctl(hwdaddr, "lladdr",
-			    ifnp->if_name) < 0) {
-				printf("%% lladdr database select failed\n");
-			}
-			if (hwdaddr->sl_cur > 0 && (strcmp(hwdaddr->sl_str[0],
-			    lladdr) != 0))
-				fprintf(output, " lladdr %s\n", lladdr);
-			sl_free(hwdaddr, 1);
+			conf_db_single(output, "lladdr", lladdr, ifnp->if_name);
 		}
-		 
+		conf_db_single(output, "rtsol", NULL, ifnp->if_name);
+		conf_db_single(output, "rtadvd", NULL, ifnp->if_name);
+
 		/*
 		 * print vlan tag, parent if available.  if a tag is set
 		 * but there is no parent, discard.
@@ -557,10 +565,12 @@ void conf_interfaces(FILE *output, char *only)
 		if ((dhcpif = fopen(leasefile, "r"))) {
 			fprintf(output, " ip dhcp\n");
 			fclose(dhcpif);
-			conf_ifaddrs(output, ifnp->if_name, flags, AF_INET6);
+			conf_ifaddrs(output, ifs, ifnp->if_name, flags,
+			    AF_INET6);
 			ippntd = 1;
 		} else {
-			ippntd = conf_ifaddrs(output, ifnp->if_name, flags, 0);
+			ippntd = conf_ifaddrs(output, ifs, ifnp->if_name, flags,
+			    0);
 		}
 
 		if (br) {
@@ -859,11 +869,12 @@ ipv6ll_db_compare(struct sockaddr_in6 *sin6, struct sockaddr_in6 *sin6mask,
 }
 
 
-int conf_ifaddrs(FILE *output, char *ifname, int flags, int af)
+int conf_ifaddrs(FILE *output, int ifs, char *ifname, int flags, int af)
 {
 	struct ifaddrs *ifa, *ifap;
 	struct sockaddr_in *sin, *sinmask, *sindest;
 	struct sockaddr_in6 *sin6, *sin6mask, *sin6dest;
+	struct in6_ifreq ifr6;
 	int ippntd = 0;
 
 	if (getifaddrs(&ifap) != 0) {
@@ -874,14 +885,15 @@ int conf_ifaddrs(FILE *output, char *ifname, int flags, int af)
 
 	/*
 	 * Cycle through getifaddrs for interfaces with our
-	 * desired name that sport AF_INET | AF_INET6. Print
-	 * the IP and related information.
+	 * desired name that sport af or (AF_INET | AF_INET6).
+	 * Print the IP and related information.
 	 */
 	for (ifa = ifap; ifa; ifa = ifa->ifa_next) {
 		if (strncmp(ifname, ifa->ifa_name, IFNAMSIZ))
 			continue;
 
 		switch (ifa->ifa_addr->sa_family) {
+		int s;
 		case AF_INET:
 			if (af != AF_INET && af != 0)
 				continue;
@@ -920,11 +932,32 @@ int conf_ifaddrs(FILE *output, char *ifname, int flags, int af)
 				continue;
 			sin6 = (struct sockaddr_in6 *)ifa->ifa_addr;
 			sin6mask = (struct sockaddr_in6 *)ifa->ifa_netmask;
+
 			if (IN6_IS_ADDR_UNSPECIFIED(&sin6->sin6_addr))
 				continue;
 			if (!ipv6ll_db_compare(sin6, sin6mask, ifname))
 				continue;
 			in6_fillscopeid(sin6);
+
+			/* get address flags */
+			memset(&ifr6, 0, sizeof(ifr6));
+			strlcpy(ifr6.ifr_name, ifname, sizeof(ifr6.ifr_name));
+			memcpy(&ifr6.ifr_addr, &sin6, sizeof(ifr6.ifr_addr));
+			s = socket(PF_INET6, SOCK_DGRAM, 0);
+			if (s < 0)
+				printf("%% conf_ifaddrs: socket: %s\n",
+				    strerror(errno));
+			if (ioctl(s, SIOCGIFAFLAG_IN6, (caddr_t)&ifr6) < 0) {
+				if (errno != EADDRNOTAVAIL)
+					printf("%% conf_ifaddrs: " \
+					    "SIOCGIFAFLAG_IN6: %s\n",
+					    strerror(errno));
+			} else {
+				/* skip autoconf addresses */
+				if (ifr6.ifr_ifru.ifru_flags6 & IN6_IFF_AUTOCONF)
+					continue;
+			}
+
 			if (flags & IFF_POINTOPOINT) {
 				fprintf(output, " ip %s", routename6(sin6));
 				sin6dest = (struct sockaddr_in6 *)ifa->ifa_dstaddr;
