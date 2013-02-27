@@ -187,7 +187,7 @@ conf_trunk(FILE *output, int ifs, char *ifname)
         if (ioctl(ifs, SIOCGTRUNK, (caddr_t)&ra) == 0) {
 		int pntd = 0;
 
-		for (i = 0; i < (sizeof(tpr) / sizeof(tpr[0])); i++)
+		for (i = 0; i < nitems(tpr); i++)
 			if (ra.ra_proto == tpr[i].tpr_proto)
 				break;
 		if (tpr[i].tpr_proto != TRUNK_PROTO_DEFAULT)

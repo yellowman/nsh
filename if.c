@@ -497,7 +497,7 @@ iftype(int int_type)
 {
 	u_int i;
 
-	for (i = 0; i < sizeof(iftypes) / sizeof(iftypes[0]); i++)
+	for (i = 0; i < nitems(iftypes); i++)
 		if (int_type == iftypes[i].type)
 			return(iftypes[i].name);
 

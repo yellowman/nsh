@@ -433,7 +433,7 @@ int islateif(char *ifname)
 {
 	int i;
 
-	for (i = 0; i < sizeof(latestartifs) / sizeof(latestartifs[0]); i++)
+	for (i = 0; i < nitems(latestartifs); i++)
 		if (isprefix(latestartifs[i].name, ifname))  
 			return(1);
 
@@ -983,7 +983,7 @@ default_mtu(char *ifname)
 {
 	u_int i;
 
-	for (i = 0; i < sizeof(defmtus) / sizeof(defmtus[0]); i++)
+	for (i = 0; i < nitems(defmtus); i++)
 		if (strncasecmp(defmtus[i].name, ifname,
 		    strlen(defmtus[i].name)) == 0)
 			return(defmtus[i].mtu);

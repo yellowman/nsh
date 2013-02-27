@@ -100,8 +100,7 @@ tcp_stats()
 	int mib[] = { CTL_NET, AF_INET, IPPROTO_TCP, TCPCTL_STATS };
 	size_t len = sizeof(tcpstat);
 
-	if (sysctl(mib, sizeof(mib) / sizeof(mib[0]),
-	    &tcpstat, &len, NULL, 0) == -1) {
+	if (sysctl(mib, nitems(mib), &tcpstat, &len, NULL, 0) == -1) {
 		if (errno != ENOPROTOOPT)
 			printf("%% tcp_stats: sysctl: %s\n",strerror(errno));
 		return;
@@ -232,8 +231,7 @@ udp_stats()
 	int mib[] = { CTL_NET, AF_INET, IPPROTO_UDP, UDPCTL_STATS };
 	size_t len = sizeof(udpstat);
 
-	if (sysctl(mib, sizeof(mib) / sizeof(mib[0]),
-	    &udpstat, &len, NULL, 0) == -1) {
+	if (sysctl(mib, nitems(mib), &udpstat, &len, NULL, 0) == -1) {
 		if (errno != ENOPROTOOPT)
 			printf("%% udp_stats: sysctl: %s\n",strerror(errno));
 		return;
@@ -280,8 +278,7 @@ ip_stats()
 	int mib[] = { CTL_NET, AF_INET, IPPROTO_IP, IPCTL_STATS };
 	size_t len = sizeof(ipstat);
 
-	if (sysctl(mib, sizeof(mib) / sizeof(mib[0]),
-	    &ipstat, &len, NULL, 0) == -1) {
+	if (sysctl(mib, nitems(mib), &ipstat, &len, NULL, 0) == -1) {
 		if (errno != ENOPROTOOPT)
 			printf("%% ip_stats: sysctl: %s\n",strerror(errno));
 		return;
@@ -385,8 +382,7 @@ icmp_stats()
 	int mib[] = { CTL_NET, AF_INET, IPPROTO_ICMP, ICMPCTL_STATS };
 	size_t len = sizeof(icmpstat);
 
-	if (sysctl(mib, sizeof(mib) / sizeof(mib[0]),
-	    &icmpstat, &len, NULL, 0) == -1) {
+	if (sysctl(mib, nitems(mib), &icmpstat, &len, NULL, 0) == -1) {
 		if (errno != ENOPROTOOPT)
 			printf("%% icmp_stats: sysctl: %s\n",strerror(errno));
 		return;
@@ -442,8 +438,7 @@ igmp_stats()
 	int mib[] = { CTL_NET, AF_INET, IPPROTO_IGMP, IGMPCTL_STATS };
 	size_t len = sizeof(igmpstat);
 
-	if (sysctl(mib, sizeof(mib) / sizeof(mib[0]),
-	    &igmpstat, &len, NULL, 0) == -1) {
+	if (sysctl(mib, nitems(mib), &igmpstat, &len, NULL, 0) == -1) {
 		if (errno != ENOPROTOOPT)
 			printf("%% igmp_stats: sysctl: %s\n",strerror(errno));
 		return;
@@ -478,8 +473,7 @@ ah_stats()
 	int mib[] = { CTL_NET, AF_INET, IPPROTO_AH, AHCTL_STATS };
 	size_t len = sizeof(ahstat);
 
-	if (sysctl(mib, sizeof(mib) / sizeof(mib[0]),
-	    &ahstat, &len, NULL, 0) == -1) {
+	if (sysctl(mib, nitems(mib), &ahstat, &len, NULL, 0) == -1) {
 		if (errno != ENOPROTOOPT)
 			printf("%% ah_stats: sysctl: %s\n",strerror(errno));
                 return;
@@ -525,8 +519,7 @@ esp_stats()
 	int mib[] = { CTL_NET, AF_INET, IPPROTO_ESP, ESPCTL_STATS };
 	size_t len = sizeof(espstat);
 
-	if (sysctl(mib, sizeof(mib) / sizeof(mib[0]),
-	    &espstat, &len, NULL, 0) == -1) {
+	if (sysctl(mib, nitems(mib), &espstat, &len, NULL, 0) == -1) {
 		if (errno != ENOPROTOOPT)
 			printf("%% esp_stats: sysctl: %s\n",strerror(errno));
 		return;
@@ -573,8 +566,7 @@ ipip_stats()
 	int mib[] = { CTL_NET, AF_INET, IPPROTO_IPIP, IPIPCTL_STATS };
 	size_t len = sizeof(ipipstat);
 
-	if (sysctl(mib, sizeof(mib) / sizeof(mib[0]),
-	    &ipipstat, &len, NULL, 0) == -1) {
+	if (sysctl(mib, nitems(mib), &ipipstat, &len, NULL, 0) == -1) {
 		if (errno != ENOPROTOOPT)
 			printf("%% ipip_stats: sysctl: %s\n",strerror(errno));
 		return;
@@ -608,8 +600,7 @@ carp_stats()
 	int mib[] = { CTL_NET, AF_INET, IPPROTO_CARP, CARPCTL_STATS };
 	size_t len = sizeof(carpstat);
 
-	if (sysctl(mib, sizeof(mib) / sizeof(mib[0]),
-	    &carpstat, &len, NULL, 0) == -1) {
+	if (sysctl(mib, nitems(mib), &carpstat, &len, NULL, 0) == -1) {
 		if (errno != ENOPROTOOPT)
 			printf("%% carp_stats: sysctl: %s\n",strerror(errno));
 		return;
@@ -650,8 +641,7 @@ pfsync_stats()
 	int mib[] = { CTL_NET, AF_INET, IPPROTO_PFSYNC, PFSYNCCTL_STATS };
 	size_t len = sizeof(pfsyncstat);
 
-	if (sysctl(mib, sizeof(mib) / sizeof(mib[0]),
-	    &pfsyncstat, &len, NULL, 0) == -1) {
+	if (sysctl(mib, nitems(mib), &pfsyncstat, &len, NULL, 0) == -1) {
 		if (errno != ENOPROTOOPT)
 			printf("%% pfsync_stats: sysctl: %s\n",strerror(errno));
 		return;
@@ -692,8 +682,7 @@ ipcomp_stats()
 	int mib[] = { CTL_NET, AF_INET, IPPROTO_IPCOMP, IPCOMPCTL_STATS };
 	size_t len = sizeof(ipcompstat);
 
-	if (sysctl(mib, sizeof(mib) / sizeof(mib[0]),
-	    &ipcompstat, &len, NULL, 0) == -1) {
+	if (sysctl(mib, nitems(mib), &ipcompstat, &len, NULL, 0) == -1) {
 		if (errno != ENOPROTOOPT)
 			printf("%% ipcomp_stats: sysctl: %s\n",strerror(errno));
 		return;
@@ -734,8 +723,7 @@ rt_stats()
  	int mib[] = { CTL_NET, PF_ROUTE, 0, 0, NET_RT_STATS, 0 };
  	size_t size = sizeof (rtstat);
  
-	if (sysctl(mib, sizeof(mib) / sizeof(mib[0]), &rtstat, &size,
-	    NULL, 0) < 0) {
+	if (sysctl(mib, nitems(mib), &rtstat, &size, NULL, 0) < 0) {
 		printf("%% rt_stats: sysctl: %s\n", strerror(errno));
 		return;
 	}
