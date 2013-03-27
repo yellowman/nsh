@@ -111,8 +111,6 @@ into the nsh startup file.
 # cp /etc/ssh/sshd_config /var/run/sshd.conf.0
 # mv /etc/resolv.conf /var/run/resolv.conf.0
 # ln -s /var/run/resolv.conf.symlink /etc/resolv.conf
-# mv /etc/motd /var/run/motd.0
-# ln -s /var/run/motd.0	/etc/motd
 # nsh
 % NSH v1.0
 nsh/enable
@@ -123,6 +121,29 @@ nsh(p)/dns local-control
 nsh/write
 % Configuration saved
 nsh/quit
+
+To get the MOTD feature to work, you will need to:
+# mv /etc/motd /var/run/motd.0
+# ln -s /var/run/motd.0 /etc/motd
+
+and edit /etc/rc to comment out:
+
+# patch /etc/motd
+## if [ ! -f /etc/motd ]; then
+##      install -c -o root -g wheel -m 664 /dev/null /etc/motd
+## fi
+## if T=`mktemp /tmp/_motd.XXXXXXXXXX`; then
+##      sysctl -n kern.version | sed 1q > $T
+##      echo "" >> $T
+##      sed '1,/^$/d' < /etc/motd >> $T
+##      cmp -s $T /etc/motd || cp $T /etc/motd
+##      rm -f $T
+## fi
+
+and for login banner, make sure your /var/run/sshd.conf.0 is configured with:
+
+Banner /var/run/sshd_banner 
+
 
 At this point, you should inspect and edit /etc/nshrc by hand to ensure that
 it does exactly what you want.  Since it reads the entire configuration out of
