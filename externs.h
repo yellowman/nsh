@@ -131,6 +131,7 @@ extern char metricnames[];
 #define RESOLVCONF_TEMP	"/var/run/resolv.conf"
 #define RESOLVCONF_SYM	"/var/run/resolv.conf.symlink"
 #define RESOLVCONF_DHCP	"/var/run/resolv.conf.dhcp"
+#define MOTDCONF_TEMP	"/var/run/motd"
 #define INETCONF_TEMP	"/var/run/inetd.conf"
 #define SSHDCONF_TEMP	"/var/run/sshd.conf"
 #define SMTPCONF_TEMP 	"/var/run/smtpd.conf"
@@ -202,6 +203,7 @@ extern struct ctl ctl_ftpproxy[];
 extern struct ctl ctl_tftpproxy[];
 extern struct ctl ctl_tftp[];
 extern struct ctl ctl_dns[];
+extern struct ctl ctl_motd[];
 extern struct ctl ctl_inet[];
 extern struct ctl ctl_ldap[];
 void flag_x(char *, char *, int, char *);

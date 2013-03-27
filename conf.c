@@ -1,4 +1,6 @@
 /*
+ * Copyright (c) 2013 Muhammad Nuzaihan Bin Kamal Luddin <muhammad@taqisystems.com>
+ *
  * Copyright (c) 2002-2009 Chris Cappuccio <chris@nmedia.net>
  *
  * Permission to use, copy, modify, and distribute this software for any
@@ -140,6 +142,7 @@ conf(FILE *output)
 	}
 	fprintf(output, "!\n");
 	conf_ctl(output, "", "dns", 0);
+	conf_ctl(output, "", "motd", 0);
 	conf_ctl(output, "", "rtadv", 0);
 
 	/*

@@ -111,6 +111,8 @@ into the nsh startup file.
 # cp /etc/ssh/sshd_config /var/run/sshd.conf.0
 # mv /etc/resolv.conf /var/run/resolv.conf.0
 # ln -s /var/run/resolv.conf.symlink /etc/resolv.conf
+# mv /etc/motd /var/run/motd.0
+# ln -s /var/run/motd.0	/etc/motd
 # nsh
 % NSH v1.0
 nsh/enable
