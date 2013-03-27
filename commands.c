@@ -1,4 +1,5 @@
 /*
+ * Copyright (c) 2013 Muhammad Nuzaihan Bin Kamal Luddin <muhammad@taqisystems.com>
  * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
  *
  * Permission to use, copy, modify, and distribute this software for any
@@ -822,6 +823,7 @@ static char
 	tftpproxyhelp[] ="tftp-proxy server control",
 	tftphelp[] =	"TFTP server control",
 	dnshelp[] =	"DNS rule control",
+        motdhelp[] =  "Message-of-the-Day",
 	inethelp[] =	"Inet super-server control",
 	bridgehelp[] =	"Modify bridge parameters",
 	showhelp[] =	"Show system information",
@@ -899,6 +901,7 @@ Command cmdtab[] = {
 	{ "tftp-proxy",	tftpproxyhelp,	CMPL(t) (char **)ctl_tftpproxy, ssctl, ctlhandler, 1, 0, 1 },
 	{ "tftp",	tftphelp,	CMPL(t) (char **)ctl_tftp, ssctl, ctlhandler,	1, 0, 1 },
 	{ "dns",	dnshelp,	CMPL(t) (char **)ctl_dns, ssctl, ctlhandler,	1, 0, 1 },
+	{ "motd",	motdhelp,	CMPL(t) (char **)ctl_motd, ssctl, ctlhandler,	1, 0, 1 },	
 	{ "inet",	inethelp,	CMPL(t) (char **)ctl_inet, ssctl, ctlhandler,	1, 0, 1 },
 	{ "ping",	pinghelp,	CMPL0 0, 0, ping,	0, 0, 0 },
 	{ "ping6",	ping6help,	CMPL0 0, 0, ping6,	0, 0, 0 },
