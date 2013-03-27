@@ -143,7 +143,6 @@ conf(FILE *output)
 	fprintf(output, "!\n");
 	conf_ctl(output, "", "dns", 0);
 	conf_ctl(output, "", "motd", 0);
-	conf_ctl(output, "", "banner", 0);
 	conf_ctl(output, "", "rtadv", 0);
 
 	/*
