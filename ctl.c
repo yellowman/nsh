@@ -92,6 +92,7 @@ struct daemons ctl_daemons[] = {
 { "nppp",	"PPP",	ctl_nppp,	NPPPCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
 { "dns",	"DNS",	ctl_dns,	RESOLVCONF_TEMP,0644, 0, 0 },
 { "motd",       "MOTD", ctl_motd,       MOTDCONF_TEMP,0644, 0, 0 },
+{ "banner"	"BANNER", ctl_banner,	BANNERCONF_TEMP,0644, 0, 0},
 { "inet",	"Inet",	ctl_inet,	INETCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
 { "smtp",	"SMTP",	ctl_smtp,	SMTPCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
 { "ldap",	"LDAP",	ctl_ldap,	LDAPCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
@@ -457,9 +458,16 @@ struct ctl ctl_dns[] = {
 
 /* motd */
 struct ctl ctl_motd[] = {
-        { "edit",           "edit Login Banner",
+        { "edit",           "edit Message-of-the-Day",
             { "motd", NULL, NULL }, call_editor, 0, T_HANDLER },
         { 0, 0, { 0 }, 0, 0, 0 }
+};
+
+/* login banner */
+struct ctl ctl_banner[] = {
+	{ "edit",	    "edit Login banner",
+	    { "banner", NULL, NULL } call_editor, 0, T_HANDLER },
+	{ 0, 0, { 0 }, 0, 0, 0 }
 };
 
 /* inetd */
