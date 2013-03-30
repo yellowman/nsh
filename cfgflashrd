@@ -169,7 +169,7 @@ vnuncfgroot() {
 # (Re-)Base TMPDIR to a subdiretory of either the current
 # TMPDIR value, or to /tmp
 
-TMPDIR=$(c 0 mktemp -t -d cfgflashrd.XXXX)
+TMPDIR=$(c 0 mktemp -t -d cfgflashrd.XXXXXX)
 
 tmpmnt=$TMPDIR/tmpmnt		# vnd/disk mount point
 c 1 mkdir $tmpmnt
@@ -227,7 +227,7 @@ if [ ! -z "$rdfs" ]; then
   phys=${phys}a
  fi
 
- temp=$(c 4 mktemp -t cfgflashrd.XXXX)
+ temp=$(c 4 mktemp -t cfgflashrd.XXXXXX)
  c 4 "sed -e 's/$cholo/disk=${phys}/' < $tmpmntvnd/stand/rc > $temp"
 
  c 4 mv $temp $tmpmntvnd/stand/rc

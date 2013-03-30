@@ -43,13 +43,13 @@ vnuncfgroot() {
 
 . ./flashrd.sub
 
-[ -z "$tmpmnt" ] && tmpmnt=$(c 0 mktemp -t -d mkboot.XXXX)
+[ -z "$tmpmnt" ] && tmpmnt=$(c 0 mktemp -t -d mkboot.XXXXXX)
 
 ###
 #
 # Create boot image
 
-tmplabel=$(c 0 mktemp -t mkbootlabel.XXXX)
+tmplabel=$(c 0 mktemp -t mkbootlabel.XXXXXX)
 
 if [[ $vnd == true ]]; then
 

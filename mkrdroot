@@ -89,8 +89,8 @@ c 0 "dd if=/dev/zero of=$rdroot bs=512 count=$blocks > $TMPDIR/last.output 2>&1"
 
 c 0 vnconfig $device $rdroot
 
-tmplabel=$(c 0 mktemp -t mkrdrootlabel.XXXX)
-tmpmntdir=$(c 0 mktemp -t -d mkrdroot.XXXX)
+tmplabel=$(c 0 mktemp -t mkrdrootlabel.XXXXXX)
+tmpmntdir=$(c 0 mktemp -t -d mkrdroot.XXXXXX)
 
 c 1 "disklabel $device > $tmplabel 2> $TMPDIR/last.output"
 
@@ -138,7 +138,7 @@ cd $wd
 # Oppa Crunchgen Style
 
 echo -n "Crunchgen ($progs)"
-cgdir=$(c 2 mktemp -t -d mkrdrootcg.XXXX)
+cgdir=$(c 2 mktemp -t -d mkrdrootcg.XXXXXX)
 cat  <<-_EOF >>$cgdir/kcopy.conf
 srcdirs /usr/src/bin /usr/src/sbin
 

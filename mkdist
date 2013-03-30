@@ -92,9 +92,9 @@ fi
 
 . ./flashrd.sub
 
-tmplabel=$(c 0 mktemp -t mkdistlabel.XXXX)
-tmpmntdir=$(c 0 mktemp -t -d mkdist.XXXX)
-[ -z "$tmpmnt" ] && tmpmnt=$(c 0 mktemp -t -d vnd.XXXX)
+tmplabel=$(c 0 mktemp -t mkdistlabel.XXXXXX)
+tmpmntdir=$(c 0 mktemp -t -d mkdist.XXXXXX)
+[ -z "$tmpmnt" ] && tmpmnt=$(c 0 mktemp -t -d vnd.XXXXXX)
 
 ###
 #
