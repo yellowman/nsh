@@ -590,6 +590,8 @@ void conf_interfaces(FILE *output, char *only)
 			if (conf_dhcrelay(ifnp->if_name, tmp, sizeof(tmp))
 			    > 0)
 				fprintf(output, " dhcrelay %s\n", tmp);
+			conf_sppp(output, ifs, ifnp->if_name);
+			conf_pppoe(output, ifs, ifnp->if_name);
 		}
 
 		/*

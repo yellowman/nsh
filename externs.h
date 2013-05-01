@@ -38,6 +38,24 @@ extern HistEvent ev;		/* ev */
 #define DEFAULT_MTTL	255		/* net.mpls.ttl */
 #define ESP_UDPENCAP_PORT 4500		/* net.inet.esp.udpencap_port */
 
+/* nopt.c */
+#define no_arg		1
+#define req_arg		2
+struct nopts {
+	char *name;
+	int type;
+	int arg;
+};
+extern int noptind;
+extern char *nopterr;
+int nopt(int, char **, struct nopts *);
+
+/* ppp.c */
+int intsppp(char *, int, int, char **);
+int intpppoe(char *, int, int, char **);
+void conf_pppoe(FILE *, int, char *);
+void conf_sppp(FILE *, int, char *);
+
 /* conf.c */
 #define LEASEPREFIX	"/var/db/dhclient.leases"
 int conf(FILE *);
@@ -70,11 +88,11 @@ char *any_ntoa(const struct sockaddr *);
 
 /* routesys.c */
 #ifdef _NET_ROUTE_H_
-struct m_rtmsg {
-        struct  rt_msghdr m_rtm;
-        char    m_space[512];
-};
 extern struct m_rtmsg m_rtmsg;
+struct m_rtmsg {
+	struct	rt_msghdr m_rtm;
+	char	m_space[512];
+};
 #endif
 #ifdef _WANT_SO_
 union   sockunion {

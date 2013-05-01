@@ -503,6 +503,9 @@ struct intlist Intlist[] = {
 	{ "bssid",	"802.11 bss id",			CMPL0 0, 0, intbssid },
 	{ "media",	"Media type",				CMPL0 0, 0, intmedia },
 	{ "mediaopt",	"Media options",			CMPL0 0, 0, intmediaopt },
+	{ "auth",	"PPP authentication",			CMPL0 0, 0, intsppp },
+	{ "peer",	"PPP peer authentication",		CMPL0 0, 0, intsppp },
+	{ "pppoe",	"PPPoE settings",			CMPL0 0, 0, intpppoe },
 #ifdef INET6
 	{ "vltime",	"IPv6 valid lifetime",			CMPL0 0, 0, intvltime },
 	{ "pltime",	"IPv6 preferred lifetime",		CMPL0 0, 0, intpltime },
