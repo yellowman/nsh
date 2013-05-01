@@ -179,10 +179,8 @@ intsppp(char *ifname, int ifs, int argc, char **argv)
 			printf("%% intsppp: nopt table error\n");
 			return(0);
 		}
-	argc -= noptind;
-	argv += noptind;
 
-	if (argc != 0) {
+	if (argc - noptind != 0) {
 		/* leftover salmon */
 		printf("%% %s", nopterr);
 		if (argv[noptind])
@@ -298,7 +296,7 @@ intpppoe(char *ifname, int ifs, int argc, char **argv)
 	argc -= noptind;
 	argv += noptind;
 
-	if (argc != 0) {
+	if (argc - noptind != 0) {
 		/* leftover salmon */
 		printf("%% %s", nopterr);
 		if (argv[noptind])
@@ -367,7 +365,8 @@ conf_sppp_mh(FILE *output, struct sauthreq *spa, char *pfx)
 {
 	int i;
 
-	if (!(spa->proto | spa->name[0] | spa->secret[0] | spa->flags))
+	if (!(spa->proto | spa->name[0] | spa->secret[0] | (spa->flags &
+	    AUTHFLAG_NOCALLOUT) | (spa->flags & AUTHFLAG_NORECHALLENGE)))
 		return;
 	fprintf(output, " %s", pfx);
 	if (spa->proto)
