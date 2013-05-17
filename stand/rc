@@ -1,4 +1,6 @@
 #!/bin/sh
+# RAMDISK bootstrap
+#
 # bootstrap flashrd for running real images
 #
 # flashrd quirks:

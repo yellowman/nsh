@@ -6,7 +6,7 @@
 
 date=`date +%Y%m%d`
 arch=`uname -m`
-vers=1.2
+vers=1.3
 
 typeset -x device rootdevice blocks rdroot dest vnddirs vndsize
 typeset -x tardirs mfsdirs cylinders trackscylinder sectorstrack
@@ -18,14 +18,9 @@ blocks=4600				# blocks to reserve for kernel ramdisk
 rdroot=rd.$arch-$date			# ramdisk root fs image
 dest=flashimg.$arch-$date		# final product
 
-vnddirs="root bin etc sbin usr"		# must match vnddirs= in stand/rc and fstab
-vndsize="102400 auto auto auto auto"	# min partition sizes (or auto) (in 512 byte sectors)
-
-tardirs="var"				# must match tardirs= in stand/rc and rc.conf.local
-set -A tarsize	131072			# mfs sizes for tar dirs (in 512 byte sectors)
-
-mfsdirs="tmp"				# mfs-only dirs
-set -A mfssize	32768			# mfs sizes (in 512 byte sectors)
+# See ./etc/rc.flashrd.sub to define tardirs, vnddirs, mfsdirs
+#
+. ./etc/rc.flashrd.sub
 
 set -A part a d e f g h i j k l m n o p
 
@@ -147,7 +142,7 @@ fi
  vnuncfgroot $rootdevice
 }
 0() {
- echo TMPDIR: $TMPDIR
+ echo % TMPDIR: $TMPDIR
  exit 1
 }
 
@@ -282,7 +277,7 @@ fi
 
 c 3 mount /dev/$device$etcpart $tmpmntvnd
 
-c 4 cp etc/rc.local etc/rc.conf.local etc/rc.flashrd etc/rc.shutdown $tmpmntvnd/
+c 4 cp etc/rc.local etc/rc.conf.local etc/rc.shutdown etc/rc.flashrd.conf etc/rc.flashrd.local etc/rc.flashrd.shutdown etc/rc.flashrd.sub $tmpmntvnd/
 
 c 4 mv $tmpfstab $tmpmntvnd/fstab
 

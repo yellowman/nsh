@@ -1,0 +1,6 @@
+#!/bin/sh
+#
+# Uses definitions from /etc/rc.flashrd.sub. Set dedicated read-only dirs in there, if you wish.
+
+echo 'flashrd: moving mounts to read-only mode'
+/bin/ro

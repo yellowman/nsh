@@ -110,7 +110,7 @@ else
  # Here we use disklabel as a way to grab these values. Later versions of OpenBSD
  # always report the actual kernel-detected values and not the on-disk values
 
- tmplabel=`mktemp -t growimg.XXXXXXX`
+ tmplabel=`mktemp -t growimg.XXXXXX`
  disklabel $device > $tmplabel
 
  totalsize=`awk -F: ' /^total sectors:/ {print $2} ' $tmplabel`
@@ -178,11 +178,11 @@ if ! vnconfig $device2 $image; then
 fi
 
 if [ -z "$alt" ]; then
- NewImg=`mktemp newimg.XXXX`
+ NewImg=`mktemp newimg.XXXXXX`
 fi
-NewLabel=`mktemp -t growimg.XXXXXXXX`
-OldDir=`mktemp -t -d olddir.XXXXX`
-NewDir=`mktemp -t -d newdir.XXXXX`
+NewLabel=`mktemp -t growimg.XXXXXX`
+OldDir=`mktemp -t -d olddir.XXXXXX`
+NewDir=`mktemp -t -d newdir.XXXXXX`
 
 if ! mount -o rdonly /dev/"$device2"a $OldDir; then
  echo mount old image failed

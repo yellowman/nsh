@@ -5,9 +5,5 @@
 # which should be done BEFORE your system has gone into securemode
 # please see /etc/rc.securelevel.
 
-# DO NOT EDIT THIS SECTION UNLESS YOU INTEND TO MODIFY THE FILESYSTEM BEHAVIOR OF YOUR FLASHRD SYSTEM!!!
-#
-# To exclude certain vnd partitions from being set to read-write or read-only during 'rw' and 'ro' commands, simply remove those partitions from the vnddirs= setting in /bin/rw and /bin/ro
-
-echo 'flashrd: moving mounts to read-only mode'
-/bin/ro
+# Run flashrd final boot routine
+/etc/rc.flashrd.local
