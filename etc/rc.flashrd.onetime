@@ -105,13 +105,13 @@ appendToFiles()
 	if [ -d /tmp/APPEND ]; then
 		appendOnDir /tmp/APPEND /
 		/bin/rm -rf /tmp/APPEND
-		echo: flashrd onetime files appended
+		echo flashrd: onetime files appended
 	fi
 	
 	if [ -d /tmp/"${MY_HOSTNAME}"/APPEND ]; then
 		appendOnDir /tmp/"${MY_HOSTNAME}"/APPEND /
 		/bin/rm -rf /tmp/"${MY_HOSTNAME}"/APPEND
-		echo: flashrd "${MY_HOSTNAME}".onetime files appended
+		echo flashrd: "${MY_HOSTNAME}".onetime files appended
 	fi
 
 }
@@ -131,7 +131,7 @@ runScripts()
   
   # check for a overall script in /flash
   if [ -e /flash/flashrd.site ]; then
-   . /flashrd.site
+   . /flash/flashrd.site
    echo flashrd: ran /flash/flashrd.site
   fi
   
