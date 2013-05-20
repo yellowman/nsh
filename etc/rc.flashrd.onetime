@@ -1,0 +1,179 @@
+#!/bin/sh
+
+# This script will be run only the first time a system is booted
+# The guard for this is in /etc/rc.flashrd.conf, we don't need to worry about it here
+
+# BE SURE THAT THE onetime.tgz and ${MY_HOSTNAME}.onetime.append.tgz FILES ARE ALL HAVE 
+# PERMISSIONS 600, AS THEY MAY CONTAIN SENSITIVE INFORMATION. 
+
+# The onetime.tgz and ${MY_HOSTNAME}.onetime.tgz files should have a structure like: 
+#
+# /
+#	etc/
+#		...
+#	flash/
+#		host1.example.com.onetime.tgz
+#		host2.example.com.onetime.tgz
+#		host3.example.com.onetime.tgz
+#		host4.example.com.onetime.tgz
+#		...
+#		
+#	tmp/
+#		APPEND/
+#			etc/
+#			var/
+#	usr/
+#		...
+#
+# Each host-specific .tgz should have a similar structure
+# 
+# /
+#	etc/
+#		...
+#	flash/
+#		...
+#		
+#	tmp/
+#		host1.example.com.onetime.tgz
+#			APPEND/
+#				etc/
+#				var/
+#		host2.example.com.onetime.tgz
+#			APPEND/
+#				etc/
+#				var/
+#		host3.example.com.onetime.tgz
+#			...
+#	usr/
+#		...
+#
+# This way a whole set of files for a bunch of systems can be packaged up as a single
+# onetime.tgz and placed into a single flashing file via the cfgflashrd script's -o option. 
+# The correct host-specific files and scripts will be run via the setting of the host name
+# in /etc/myname
+#
+# The structure can be set up and maintained by using the build_onetime script. 
+#
+
+# extract tar'd up files
+# general and host specific
+
+extractFiles() 
+{
+
+	if [ -f /flash/onetime.tgz ]; then
+		tar xpzf /flash/onetime.tgz -C /
+		echo flashrd: onetime extracted
+	fi
+	
+	if [ -f /flash/"${MY_HOSTNAME}".onetime.tgz ]; then
+		/bin/tar zxpf /flash/"${MY_HOSTNAME}".onetime.tgz -C /
+		echo flashrd: "${MY_HOSTNAME}".onetime extracted
+	fi
+	
+}
+
+# Appends text to files
+# $1 contains the source directory
+# $2 contains the target directory
+appendOnDir()
+{
+	if [[ ! -d "${1}" ]]; then
+		return
+	fi
+	ORIG_PATH=`pwd`
+	cd "${1}"
+	echo "In directory: " `/bin/pwd`
+	FILE_LIST=`/usr/bin/find . -type f`
+	
+	for ONE_FILE in ${FILE_LIST}; do
+	
+		/bin/cat "${ONE_FILE}" >> "${2}/${ONE_FILE}"
+		
+	done
+	
+	cd "${ORIG_PATH}"
+}
+
+# walk the append tree
+# anything that is in /tmp/APPEND will be appended
+# then anything in /tmp/${MY_HOSTNAME}/APPEND will be appended
+
+appendToFiles()
+{
+
+	if [ -d /tmp/APPEND ]; then
+		appendOnDir /tmp/APPEND /
+		/bin/rm -rf /tmp/APPEND
+		echo: flashrd onetime files appended
+	fi
+	
+	if [ -d /tmp/"${MY_HOSTNAME}"/APPEND ]; then
+		appendOnDir /tmp/"${MY_HOSTNAME}"/APPEND /
+		/bin/rm -rf /tmp/"${MY_HOSTNAME}"/APPEND
+		echo: flashrd "${MY_HOSTNAME}".onetime files appended
+	fi
+
+}
+
+
+# Run scripts
+
+runScripts() 
+{
+
+  # LEGACY
+  # check for a overall script at the root level of the vnd
+  if [ -e /flashrd.site ]; then
+   . /flashrd.site
+   echo flashrd: ran /flashrd.site
+  fi
+  
+  # check for a overall script in /flash
+  if [ -e /flash/flashrd.site ]; then
+   . /flashrd.site
+   echo flashrd: ran /flash/flashrd.site
+  fi
+  
+  # next, check for a machine-specific script at in the /flash dir
+  if [ -e /flash/"${MY_HOSTNAME}".flashrd.site ]; then
+   . /flash/"${MY_HOSTNAME}".flashrd.site
+   echo flashrd: ran /flash/"${MY_HOSTNAME}".flashrd.site
+  fi
+
+}
+
+
+if [ ! -f /etc/.flashrd_onetime ]; then
+
+	# reset system hostname from flash disk
+	if [ -f /flash/myname ]; then
+		/bin/cp /flash/myname /etc/myname
+	fi
+	MY_HOSTNAME=`/bin/cat /etc/myname`
+
+	extractFiles
+	appendToFiles
+	runScripts
+	
+	# clean up host-specific .tgz files in /flash
+	/bin/rm /flash/*.onetime.tgz
+ 
+	touch /etc/.flashrd_onetime
+
+	echo rebooting
+	sync; sync
+	reboot
+
+fi
+
+
+# run pwd_mkdb so that if there were additions to the users list then 
+# they will take hold
+# /usr/sbin/pwd_mkdb /etc/master.passwd
+
+# install packages in specified directory
+# TODO
+
+ 
+ 

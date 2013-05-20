@@ -1,0 +1,94 @@
+#!/bin/sh
+
+# The onetime.tgz and ${MY_HOSTNAME}.onetime.tgz files should have a structure like: 
+#
+# /
+#	etc/
+#		...
+#	flash/
+#		host1.example.com.onetime.tgz
+#		host2.example.com.onetime.tgz
+#		host3.example.com.onetime.tgz
+#		host4.example.com.onetime.tgz
+#		...
+#		
+#	tmp/
+#		APPEND/
+#			etc/
+#			var/
+#	usr/
+#		...
+#
+# Each host-specific .tgz should have a similar structure
+# 
+# /
+#	etc/
+#		...
+#	flash/
+#		...
+#		
+#	tmp/
+#		host1.example.com.onetime.tgz
+#			APPEND/
+#				etc/
+#				var/
+#		host2.example.com.onetime.tgz
+#			APPEND/
+#				etc/
+#				var/
+#		host3.example.com.onetime.tgz
+#			...
+#	usr/
+#		...
+#
+
+# build host-specific .tgz files
+# $1 = path to directory full of host-specific files
+# $2 = path to destination dir
+buildHostSpecificFiles() 
+{
+
+	echo $1
+	ls $1
+	for oneHost in `/bin/ls "${1}"`; do
+	
+		echo $oneHost
+		/bin/ls -A "${1}/${oneHost}"
+		/bin/tar zcf "${2}/${oneHost}".onetime.tgz -C "${1}/${oneHost}" `/bin/ls -A "${1}/${oneHost}"`
+		/bin/chmod 400 "${2}/${oneHost}".onetime.tgz
+		/sbin/chown root:wheel "${2}/${oneHost}".onetime.tgz
+	
+	done
+
+}
+
+
+# check for root
+if [ `/usr/bin/id -u` != 0 ]; then
+	echo "build_onetime: must run as root"
+	exit 1
+fi
+
+# location where the final file will be built
+if [ -z "${1}" ]; then
+	BASEDIR=`pwd`
+else
+	# user input
+	BASEDIR="${1}"
+fi
+
+COMMON_BASEDIR="${BASEDIR}/CommonFiles"
+HOST_BASEDIR="${BASEDIR}/HostSpecificFiles"
+HOST_TARGET_DIR="${COMMON_BASEDIR}/flash"
+
+if [ ! -d "${HOST_TARGET_DIR}" ]; then
+	/bin/mkdir "${HOST_TARGET_DIR}"
+fi
+
+buildHostSpecificFiles "${HOST_BASEDIR}" "${HOST_TARGET_DIR}"
+
+/bin/tar zcf "${BASEDIR}"/onetime.tgz -C "${COMMON_BASEDIR}" `/bin/ls -A "${COMMON_BASEDIR}"`
+/bin/chmod 400 "${BASEDIR}"/onetime.tgz
+/sbin/chown root:wheel "${BASEDIR}"/onetime.tgz
+
+
