@@ -277,7 +277,7 @@ fi
 
 c 3 mount /dev/$device$etcpart $tmpmntvnd
 
-c 4 cp etc/rc.local etc/rc.conf.local etc/rc.shutdown etc/rc.flashrd.conf etc/rc.flashrd.local etc/rc.flashrd.shutdown etc/rc.flashrd.sub $tmpmntvnd/
+c 4 cp etc/rc.local etc/rc.conf.local etc/rc.shutdown etc/rc.flashrd.conf etc/rc.flashrd.onetime etc/rc.flashrd.local etc/rc.flashrd.shutdown etc/rc.flashrd.sub $tmpmntvnd/
 
 c 4 mv $tmpfstab $tmpmntvnd/fstab
 

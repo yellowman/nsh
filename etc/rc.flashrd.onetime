@@ -126,7 +126,7 @@ runScripts()
   # check for a overall script at the root level of the vnd
   if [ -e /flashrd.site ]; then
    . /flashrd.site
-   echo flashrd: ran /flashrd.site
+   echo flashrd: DEPRECATED ran /flashrd.site
   fi
   
   # check for a overall script in /flash
