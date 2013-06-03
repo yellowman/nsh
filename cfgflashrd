@@ -20,8 +20,8 @@ usage() {
 Usage: cfgflashrd [-d "dev" | -i "filename"]  [options]
 
 Use one of:
-    -d "dev"		Configure an attached disk
-    -i "filename"	Configure an image
+    -d | -disk "dev"        Configure an attached disk
+    -i | -image "filename"  Configure an image
 Options:
     -r "filename"       rdrootfs image (needed only to change ramdisk)
     -e "dir"		directory where elfrdsetroot.c is located (only with -r)
@@ -49,7 +49,7 @@ while :
 do
  case $1 in
   -\?)		usage; exit 0;;
-  -d|-disk)	t2 "$2"; disk="$2"; shift 2;;
+  -d|-disk)	    t2 "$2"; disk="$2"; shift 2;;
   -i|-image)	t2 "$2"; image="$2"; shift 2;;
   -r|-rdroot)	t2 "$2"; rdfs="$2"; shift 2;;
   -c|-com0)	t2 "$2"; com0="$2"; shift 2;;
