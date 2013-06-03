@@ -434,7 +434,7 @@ struct ctl ctl_tftpproxy[] = {
 /* tftpd */
 struct ctl ctl_tftp[] = {
 	{ "enable", 	"enable service",
-	   { TFTPD, "-l", "127.0.0.1", NULL }, NULL, DB_X_ENABLE, T_EXEC },
+	   { TFTPD, "-l", "127.0.0.1", "/tftpboot", NULL }, NULL, DB_X_ENABLE, T_EXEC },
 	{ "disable",	"disable service",
 	   { PKILL, table, "tftpd", NULL }, NULL, DB_X_DISABLE, T_EXEC },
 	{ 0, 0, { 0 }, 0, 0, 0 }
