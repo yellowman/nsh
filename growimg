@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# chris@nmedia.net
+# Chris Cappuccio <chris@nmedia.net>
 #
 # This is an example of how to create a new image, transfer the contents
 # of an old image to it, and keep the user from screwing it up too bad, by
@@ -17,17 +17,42 @@
 # users have no such problem.)  The sanity checks fail completely on i386
 # if the source image is larger than 4GB.
 #
-# The previous version of this script used growfs.  Unfortunately the
-# superblock locations change radically going from, say, 32 sec/trk to 63 s/t.
-# The change is too much for growfs or fsck to grok.  Our new approach is to
-# create a new image, copy the data over with tar, and recreate the boot
-# blocks.  A side benefit of this approach is that we can also shrink images
-# now.
-#
-
-unset alt
 
 uname=`uname -s`
+
+[ -z "$rootdevice" ] && rootdevice=vnd3
+
+vncfgroot() {
+ c 0 vnconfig $rootdevice $1
+}
+
+vnuncfgroot() {
+ c 0 vnconfig -u $rootdevice
+}
+
+###
+#
+# fall back
+
+4() {
+ umount -f /dev/"$device"a
+}
+3() {
+ [ -z "$alt" ] && vnconfig -u $device
+}
+2() {
+ umount -f /dev/"$rootdevice"a
+}
+1() {
+ vnuncfgroot
+}
+0() {
+ rmdir $OldDir $NewDir
+ rm -f $NewImg $NewLabel
+ exit 1
+}
+
+. ./flashrd.sub
 
 if [ "$uname" != "OpenBSD" -a "$uname" != "Bitrig" ]; then
  echo Sorry, cowboy.  This script only runs on OpenBSD and similar systems.
@@ -97,7 +122,6 @@ mbr=/usr/mdec/mbr
 if [ -z "$device" ]; then
  device=vnd0
 fi
-device2=vnd1
 
 if [ -z "$alt" ]; then
  cylinders=$1
@@ -110,8 +134,8 @@ else
  # Here we use disklabel as a way to grab these values. Later versions of OpenBSD
  # always report the actual kernel-detected values and not the on-disk values
 
- tmplabel=`mktemp -t growimg.XXXXXX`
- disklabel $device > $tmplabel
+ tmplabel=`c 0 mktemp -t growimg.XXXXXX`
+ c 0 disklabel $device > $tmplabel
 
  totalsize=`awk -F: ' /^total sectors:/ {print $2} ' $tmplabel`
  bytessec=`awk -F: ' /^bytes\/sector:/ {print $2} ' $tmplabel`
@@ -120,7 +144,7 @@ else
  trackscylinder=`awk -F: ' /^tracks\/cylinder:/ {print $2} ' $tmplabel`
  cylinders=`awk -F: ' /^cylinders:/ {print $2} ' $tmplabel`
 
- rm $tmplabel
+ c 0 rm $tmplabel
 fi
 
 # The source image must be 4GB or less, or this will break.
@@ -172,27 +196,19 @@ if [ -z "$alt" ]; then
  fi
 fi
 
-if ! vnconfig $device2 $image; then
- echo % vnconfig failure
- exit 1
-fi
+vncfgroot $image
 
 if [ -z "$alt" ]; then
- NewImg=`mktemp newimg.XXXXXX`
+ [ -z "$NewImg" ] && NewImg=$(c 0 mktemp -t growimg.XXXXXX)
 fi
-NewLabel=`mktemp -t growimg.XXXXXX`
-OldDir=`mktemp -t -d olddir.XXXXXX`
-NewDir=`mktemp -t -d newdir.XXXXXX`
+[ -z "$NewLabel" ] && NewLabel=$(c 0 mktemp -t growimg.XXXXXX)
+[ -z "$OldDir" ] && OldDir=$(c 0 mktemp -t -d growimg.XXXXXX)
+[ -z "$NewDir" ] && NewDir=$(c 0 mktemp -t -d growimg.XXXXXX)
 
-if ! mount -o rdonly /dev/"$device2"a $OldDir; then
- echo mount old image failed
- vnconfig -u $device2
- rm -rf $NewImg $NewLabel $OldDir $NewDir
- exit 1
-fi
+c 1 mount -o rdonly /dev/"$rootdevice"a $OldDir
 
 echo Reading current disklabel...
-disklabel $device2 |
+c 2 disklabel $rootdevice |
 egrep -v "^boundstart:|^boundend:|^total sectors:|^bytes/sector:|^sectors/track:|^sectors/cylinder:|^tracks/cylinder:|^cylinders:|^  .:|^#|^. partitions:|^.. partitions:|^$" > $NewLabel
 
 asize=$((totalsize - sectorstrack))
@@ -201,7 +217,7 @@ asize=$((totalsize - sectorstrack))
 # now ignores geometry specified by -R command.  Simply flashrd
 # as much as possible in this regard. XXX
 #
-cat >> $NewLabel <<-EOF
+c 2 cat >> $NewLabel <<-EOF
 	type: ESDI
 	bytes/sector: $bytessec
 	sectors/track: $sectorstrack
@@ -217,17 +233,12 @@ cat >> $NewLabel <<-EOF
 if [ -z "$alt" ]; then
  echo
  echo Creating new image...
- dd if=/dev/zero bs=$bytessec count=$bytessec of=$NewImg >/dev/null
+ c 2 dd if=/dev/zero bs=$bytessec count=$bytessec of=$NewImg >/dev/null
 
- if ! vnconfig $device $NewImg; then
-  echo % vnconfig failure
-  vnconfig -u $device2
-  rm -f $NewImg $NewLabel $OldDir $NewDir
-  exit 1
- fi
+ c 2 vnconfig $device $NewImg
 fi
 
-fdisk -c $cylinders -h $trackscylinder -s $sectorstrack -f $mbr \
+c 3 fdisk -c $cylinders -h $trackscylinder -s $sectorstrack -f $mbr \
   -e $device <<-__EOC >/dev/null
 	reinit
 	update
@@ -237,31 +248,16 @@ fdisk -c $cylinders -h $trackscylinder -s $sectorstrack -f $mbr \
 
 echo
 echo Writing flashrd disklabel...
-if ! disklabel -R $device $NewLabel; then
- echo disklabel failed
- exit
-fi
+c 3 disklabel -R $device $NewLabel
 
 echo
 echo Creating new filesystem...
-if ! newfs -S $bytessec -q /dev/r"$device"a; then
- echo newfs failed
- exit
-fi
+c 3 newfs -S $bytessec -q /dev/r"$device"a
 
-if ! mount -o async /dev/"$device"a $NewDir; then
- echo mount new image failed
- umount $OldDir
- if [ -z "$alt" ]; then
-  vnconfig -u $device
- fi
- vnconfig -u $device2
- rm -f $NewImg $NewLabel $OldDir $NewDir
- exit 1
-fi
+c 3 mount -o async /dev/"$device"a $NewDir
 
-UsedBlocks=`df $OldDir | tail -1 | awk ' { print $3 } '`
-FreeBlocks=`df $NewDir | tail -1 | awk ' { print $4 } '`
+UsedBlocks=`c 3 df $OldDir | tail -1 | awk ' { print $3 } '`
+FreeBlocks=`c 3 df $NewDir | tail -1 | awk ' { print $4 } '`
 
 if [ "$FreeBlocks" -le "$UsedBlocks" ]; then
   cat <<-__UsedBlocks
@@ -270,36 +266,28 @@ if [ "$FreeBlocks" -le "$UsedBlocks" ]; then
 	$((FreeBlocks / 1024 / (1024 / bytessec)))MB available for hip-hop
 	verbal potential.  Sorry, you must specify a larger destination size.
 	__UsedBlocks
-  umount $OldDir
-  umount $NewDir
-  if [ -z "$alt" ]; then
-   vnconfig -u $device
-  fi
-  vnconfig -u $device2
-  rm -f $NewImg $NewLabel
-  rmdir $OldDir $NewDir
-  exit 1
+ 4; 3; 2; 1; 0;
 fi
 
 echo
 echo Copying installation...
-tar cf - -C $OldDir . | tar xpf - -C $NewDir
+c 4 tar cf - -C $OldDir . | tar xpf - -C $NewDir
 
 echo
 echo Installing boot blocks...
-/usr/mdec/installboot $NewDir/boot $biosboot $device
+c 4 /usr/mdec/installboot $NewDir/boot $biosboot $device
 
 echo
 echo Checking filesystem...
-fsck -f /dev/"$device"a
+c 4 fsck -f /dev/"$device"a
 
-umount /dev/"$device"a
-umount /dev/"$device2"a
+umountwait 4 /dev/"$device"a
+umountwait 3 /dev/"$rootdevice"a
 
 if [ -z "$alt" ]; then
- vnconfig -u $device
+ c 1 vnconfig -u $device
 fi
-vnconfig -u $device2
+c 0 vnuncfgroot
 
 if [ "$bytessec" -le 1024 ]; then
  new="$((totalsize / 1024 / (1024 / bytessec)))MB "
@@ -313,7 +301,7 @@ else
 fi
 echo
 
-rm -r $NewDir $OldDir
+rmdir $NewDir $OldDir
 rm $NewLabel
 
 exit 0
