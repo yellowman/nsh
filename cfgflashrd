@@ -31,6 +31,7 @@ Options:
     -s 			set bsd.sp as primary kernel
     -t "tzfile"		set timezone using a timezone file fromfrom
 			/usr/share/zoneinfo
+    -k "keyboard"	configure alternative keyboard encoding
     -dns "dns server"   list of DNS servers (separated by spaces)
     -ntp "ntp servers"  list of NTP servers (separated by spaces)
     -hostname "name"	hostname of target host
@@ -61,6 +62,7 @@ do
   -ntp)		t2 "$2"; ntpservers="$2"; shift 2;;
   -hostname)	t2 "$2"; hostname="$2"; shift 2;;
   -e)		t2 "$2"; elfrdsetrootdir="$2"; shift 2;;
+  -k)		t2 "$2"; keyboardencoding="$2"; shift 2;;
 
   --)		shift; break;;
   -*)		usage; exit 1;;
@@ -141,6 +143,23 @@ vncfgroot() {
 
 vnuncfgroot() {
  [[ $vnd == true ]] && c 0 vnconfig -u ${rootvnd}
+}
+
+###
+#
+# Check if provided keyboard encoding seems viable based on what exists on the
+# current machine
+
+testkeyboardencoding() {
+ if [ ! -z $keyboardencoding ]; then
+    found=`/sbin/kbd -l | grep $keyboardencoding | wc -l`
+    if [ $found -eq 0 ]; then
+        echo WARNING: The keyboard encoding \"$keyboardencoding\" does not exist on your machine.
+        echo You'll need to set it manually on the targetted machine via the wsconsctl command if
+        echo this is a new encoding.
+        return 1
+    fi
+ fi
 }
 
 ###
@@ -453,6 +472,22 @@ fi
 if [ ! -z "$tzfile" -a -f "$tzfile" ]; then
  c 4 rm $tmpmntvnd/localtime
  c 4 cp $tzfile $tmpmntvnd/localtime
+fi
+
+###
+#
+# set keyboard encoding (optional)
+
+if [ -z "$keyboardencoding" ]; then
+  read keyboardencoding?"Keyboard encoding: [default] "
+fi
+
+if [ ! -z "$keyboardencoding" ]; then
+ testkeyboardencoding
+ if [ $? == 0 ]; then
+  sed -e "s:.*keyboard.encoding.*:keyboard.encoding=$keyboardencoding            # use different keyboard encoding:" < $tmpmntvnd/wsconsctl.conf >> $TMPDIR/tmpwsconsctl
+  c 4 mv $TMPDIR/tmpwsconsctl $tmpmntvnd/wsconsctl.conf
+ fi
 fi
 
 ###
