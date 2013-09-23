@@ -109,7 +109,7 @@ echo Installing bootblocks
 
 c 2 cp $distloc/usr/mdec/boot $tmpmnt/boot
 
-c 2 "$distloc/usr/mdec/installboot $tmpmnt/boot $distloc/usr/mdec/biosboot $rootdevice > $TMPDIR/last.output 2>&1"
+c 2 "/usr/mdec/installboot $tmpmnt/boot $distloc/usr/mdec/biosboot $rootdevice > $TMPDIR/last.output 2>&1"
 
 c 2 mkdir $tmpmnt/new $tmpmnt/old
 
