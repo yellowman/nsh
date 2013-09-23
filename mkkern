@@ -86,9 +86,11 @@ egrep -v ^config $kernsrc/conf/GENERIC | sed -e 's/GENERIC/FLASHRD/' > $kernsrc/
 if [ `uname -m` == "i386" ]; then
 	echo "option	NKPTP=16" >> $kernsrc/conf/FLASHRD
 fi
-if [ `uname -m` == "amd64" ]; then
-	echo "option	NKL2_KIMG_ENTRIES=16" >> $kernsrc/conf/FLASHRD
-fi
+# OpenBSD 5.4 defines this to 16 automatically. So give up for now, since 
+# the 'option' ability still requires a custom patch.
+#if [ `uname -m` == "amd64" ]; then
+#	echo "option	NKL2_KIMG_ENTRIES=16" >> $kernsrc/conf/FLASHRD
+#fi
 cat >> $kernsrc/conf/FLASHRD <<-EOF
 	option	RAMDISK_HOOKS
 	option	MINIROOTSIZE=$blocks
