@@ -154,9 +154,9 @@ testkeyboardencoding() {
  if [ ! -z $keyboardencoding ]; then
     found=`/sbin/kbd -l | grep $keyboardencoding | wc -l`
     if [ $found -eq 0 ]; then
-        echo WARNING: The keyboard encoding \"$keyboardencoding\" does not exist on your machine.
-        echo You'll need to set it manually on the targetted machine via the wsconsctl command if
-        echo this is a new encoding.
+        echo "WARNING: The keyboard encoding \"$keyboardencoding\" does not exist on your machine."
+        echo "You'll need to set it manually on the targetted machine via the wsconsctl command if"
+        echo "this is a new encoding."
         return 1
     fi
  fi
