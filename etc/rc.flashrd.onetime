@@ -3,10 +3,11 @@
 # This script will be run only the first time a system is booted
 # The guard for this is in /etc/rc.flashrd.conf, we don't need to worry about it here
 
-# BE SURE THAT THE onetime.tgz and ${MY_HOSTNAME}.onetime.append.tgz FILES ARE ALL HAVE 
-# PERMISSIONS 600, AS THEY MAY CONTAIN SENSITIVE INFORMATION. 
+# PERMISSIONS:
+# onetime.tgz AND ${hostname}.onetime.append.tgz files should have 0600
+# permissions as they contain sensitive information.
 
-# The onetime.tgz and ${MY_HOSTNAME}.onetime.tgz files should have a structure like: 
+# The onetime.tgz and ${hostname}.onetime.tgz files should have a structure like: 
 #
 # /
 #	etc/
@@ -29,8 +30,6 @@
 # 
 # /
 #	etc/
-#		...
-#	flash/
 #		...
 #		
 #	tmp/
@@ -66,9 +65,9 @@ extractFiles()
 		echo flashrd: onetime extracted
 	fi
 	
-	if [ -f /flash/"${MY_HOSTNAME}".onetime.tgz ]; then
-		/bin/tar zxpf /flash/"${MY_HOSTNAME}".onetime.tgz -C /
-		echo flashrd: "${MY_HOSTNAME}".onetime extracted
+	if [ -f /flash/"${hostname}".onetime.tgz ]; then
+		/bin/tar zxpf /flash/"${hostname}".onetime.tgz -C /
+		echo flashrd: "${hostname}".onetime extracted
 	fi
 	
 }
@@ -97,7 +96,7 @@ appendOnDir()
 
 # walk the append tree
 # anything that is in /tmp/APPEND will be appended
-# then anything in /tmp/${MY_HOSTNAME}/APPEND will be appended
+# then anything in /tmp/${hostname}/APPEND will be appended
 
 appendToFiles()
 {
@@ -108,10 +107,10 @@ appendToFiles()
 		echo flashrd: onetime files appended
 	fi
 	
-	if [ -d /tmp/"${MY_HOSTNAME}"/APPEND ]; then
-		appendOnDir /tmp/"${MY_HOSTNAME}"/APPEND /
-		/bin/rm -rf /tmp/"${MY_HOSTNAME}"/APPEND
-		echo flashrd: "${MY_HOSTNAME}".onetime files appended
+	if [ -d /tmp/"${hostname}"/APPEND ]; then
+		appendOnDir /tmp/"${hostname}"/APPEND /
+		/bin/rm -rf /tmp/"${hostname}"/APPEND
+		echo flashrd: "${hostname}".onetime files appended
 	fi
 
 }
@@ -122,8 +121,9 @@ appendToFiles()
 runScripts() 
 {
 
-  # LEGACY
-  # check for a overall script at the root level of the vnd
+  # "DEPRECATED" since the root is really the ramdisk!
+  # If flashrd.site got extracted here somehow, let's still use it.
+  #
   if [ -e /flashrd.site ]; then
    . /flashrd.site
    echo flashrd: DEPRECATED ran /flashrd.site
@@ -136,9 +136,9 @@ runScripts()
   fi
   
   # next, check for a machine-specific script at in the /flash dir
-  if [ -e /flash/"${MY_HOSTNAME}".flashrd.site ]; then
-   . /flash/"${MY_HOSTNAME}".flashrd.site
-   echo flashrd: ran /flash/"${MY_HOSTNAME}".flashrd.site
+  if [ -e /flash/"${hostname}".flashrd.site ]; then
+   . /flash/"${hostname}".flashrd.site
+   echo flashrd: ran /flash/"${hostname}".flashrd.site
   fi
 
 }
@@ -147,10 +147,10 @@ runScripts()
 if [ ! -f /etc/.flashrd_onetime ]; then
 
 	# reset system hostname from flash disk
-	if [ -f /flash/myname ]; then
-		/bin/cp /flash/myname /etc/myname
+	if [ -f /flash/etc/myname ]; then
+		/bin/cp /flash/etc/myname /etc/myname
 	fi
-	MY_HOSTNAME=`/bin/cat /etc/myname`
+	hostname=`/bin/cat /etc/myname`
 
 	extractFiles
 	appendToFiles
@@ -161,19 +161,14 @@ if [ ! -f /etc/.flashrd_onetime ]; then
  
 	touch /etc/.flashrd_onetime
 
+	# sync /etc/master.passwd to pwd databases
+	/usr/sbin/pwd_mkdb /etc/master.passwd
+
 	echo rebooting
 	sync; sync
 	reboot
 
 fi
 
-
-# run pwd_mkdb so that if there were additions to the users list then 
-# they will take hold
-# /usr/sbin/pwd_mkdb /etc/master.passwd
-
 # install packages in specified directory
 # TODO
-
- 
- 
