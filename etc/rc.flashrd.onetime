@@ -157,7 +157,7 @@ if [ ! -f /etc/.flashrd_onetime ]; then
 	runScripts
 	
 	# clean up host-specific .tgz files in /flash
-	/bin/rm /flash/*.onetime.tgz
+	/bin/rm -f /flash/*.onetime.tgz
  
 	touch /etc/.flashrd_onetime
 
