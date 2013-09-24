@@ -114,8 +114,8 @@ output(struct utmp *up)
 		(void)printf("00:00 ");
 	else if (idle < (24 * 60 * 60))
 		(void)printf("%02d:%02d ", 
-			     (idle / (60 * 60)),
-			     (idle % (60 * 60)) / 60);
+			     ((int)idle / (60 * 60)),
+			     ((int)idle % (60 * 60)) / 60);
 	else
 		(void)printf(" old  ");
 	

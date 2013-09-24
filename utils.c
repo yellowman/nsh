@@ -88,8 +88,8 @@ format_time(time_t seconds)
 	} else {
 		/* standard method produces MMM:SS */
 		/* we avoid printf as must as possible to make this quick */
-		snprintf(result, sizeof(result), "%3d:%02d", seconds / 60,
-		    seconds % 60);
+		snprintf(result, sizeof(result), "%3d:%02d", (int)seconds / 60,
+		    (int)seconds % 60);
 	}
 	return (result);
 }

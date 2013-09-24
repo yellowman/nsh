@@ -127,7 +127,7 @@ version(int argc, char **argv)
 		pntd = 1;
 	}
 	if (!pntd)
-		printf("%d second%s", c, c == 1 ? "" : "s");
+		printf("%d second%s", (int)c, c == 1 ? "" : "s");
 	printf("\n");
 	printf("system: %s/%s version %s\n", un.sysname, un.machine,
 	    un.release);
