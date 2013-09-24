@@ -198,8 +198,13 @@ intsppp(char *ifname, int ifs, int argc, char **argv)
 	}
 
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
+#ifdef SIOCSIFGENERIC
 	if (ioctl(ifs, SIOCSIFGENERIC, &ifr) == -1)
 		printf("%% intspppproto: SIOCSIFGENERIC: SPPPIOSxAUTH: %s\n",
+#else
+	if (ioctl(ifs, SIOCSSPPPPARAMS, &ifr) == -1)
+		printf("%% intspppproto: SIOCSSPPPPARAMS: SPPPIOSxAUTH: %s\n",
+#endif
 		    strerror(errno));
 	return 0;
 }
@@ -350,11 +355,19 @@ conf_sppp(FILE *output, int ifs, char *ifname)
 	ifr.ifr_data = (caddr_t)&spa;
 
 	spa.cmd = SPPPIOGHAUTH;
+#ifdef SIOCGIFGENERIC
 	if (ioctl(ifs, SIOCGIFGENERIC, &ifr) == 0)
+#else
+	if (ioctl(ifs, SIOCGSPPPPARAMS, &ifr) == 0)
+#endif
 		conf_sppp_mh(output, &spa, "peer");
 
 	spa.cmd = SPPPIOGMAUTH;
+#ifdef SIOCGIFGENERIC
 	if (ioctl(ifs, SIOCGIFGENERIC, &ifr) == 0)
+#else
+	if (ioctl(ifs, SIOCGSPPPPARAMS, &ifr) == 0)
+#endif
 		conf_sppp_mh(output, &spa, "auth");
 }
 
