@@ -362,6 +362,8 @@ conf_sppp(FILE *output, int ifs, char *ifname)
 #endif
 		conf_sppp_mh(output, &spa, "peer");
 
+	memset(&spa, 0, sizeof(spa));
+
 	spa.cmd = SPPPIOGMAUTH;
 #ifdef SIOCGIFGENERIC
 	if (ioctl(ifs, SIOCGIFGENERIC, &ifr) == 0)
