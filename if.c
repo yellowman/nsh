@@ -182,7 +182,7 @@ show_int(int argc, char **argv)
 		printf(" (last change ");
 		if (days)
 			printf("%id ", days);
-		printf("%02i:%02i:%02i)", hours, mins, c);
+		printf("%02i:%02i:%02i)", hours, mins, (int)c);
 	}
 
 	printf(", protocol is %s", flags & IFF_RUNNING ? "up" : "down");
