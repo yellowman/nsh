@@ -1713,8 +1713,8 @@ cmdrc(char rcname[FILENAME_MAX])
 			printf("\n");
 			continue;
 		}
-		if (line[0] != ' ' || (line[0] == ' ' && savec
-		    && savec->modh == 2)) {
+		if (line[0] != ' ' || (line[0] == ' ' && line[1] != ' '
+		    && savec && savec->modh == 2)) {
 			/*
 			 * command was not indented, or indented for a mode 2
 			 * handler. process normally.
@@ -1741,7 +1741,7 @@ cmdrc(char rcname[FILENAME_MAX])
 					 */
 					if (margv[1]) {
 						strlcpy(hname, c->name,
-						    HSIZE);
+							    HSIZE);
 						strlcpy(modhvar, margv[1],
 						    sizeof(modhvar));
 					} else {
