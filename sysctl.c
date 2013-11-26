@@ -39,6 +39,8 @@
 
 #define	MIB_STOP	INT_MAX
 
+#define IFQ_MAXLEN	256
+
 void conf_sysctl(FILE *, char *, struct ipsysctl *);
 
 /*
