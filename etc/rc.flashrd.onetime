@@ -147,8 +147,8 @@ runScripts()
 if [ ! -f /etc/.flashrd_onetime ]; then
 
 	# reset system hostname from flash disk
-	if [ -f /flash/etc/myname ]; then
-		/bin/cp /flash/etc/myname /etc/myname
+	if [ -f /flash/myname ]; then
+		/bin/cp /flash/myname /etc/myname
 	fi
 	hostname=`/bin/cat /etc/myname`
 
