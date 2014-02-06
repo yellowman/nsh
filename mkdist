@@ -180,7 +180,7 @@ c 1 mv ${tmplabel}.new $tmplabel
 # Build, write vnd disklabel
 
 x=0
-offset=0
+offset=64
 
 for i in $vnddirs; do
 
