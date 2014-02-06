@@ -153,6 +153,7 @@ libs -lutil
 
 c 2 cd $cgdir
 c 2 "crunchgen -Em Makefile $cgdir/kcopy.conf > $TMPDIR/last.output 2>&1"
+c 2 "make clean > $TMPDIR/last.output 2>&1"
 c 2 "make objs > $TMPDIR/last.output 2>&1"
 c 2 "make > $TMPDIR/last.output 2>&1"
 c 2 cd $wd
