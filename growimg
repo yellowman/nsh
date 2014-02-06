@@ -116,9 +116,6 @@ if [ ! -f $image ]; then
   exit 1
 fi
 
-biosboot=/usr/mdec/biosboot
-mbr=/usr/mdec/mbr
-
 if [ -z "$device" ]; then
  device=vnd0
 fi
@@ -238,7 +235,7 @@ if [ -z "$alt" ]; then
  c 2 vnconfig $device $NewImg
 fi
 
-c 3 fdisk -c $cylinders -h $trackscylinder -s $sectorstrack -f $mbr \
+c 3 fdisk -c $cylinders -h $trackscylinder -s $sectorstrack -f /usr/mdec/mbr \
   -e $device <<-__EOC >/dev/null
 	reinit
 	update
@@ -275,7 +272,7 @@ c 4 tar cf - -C $OldDir . | tar xpf - -C $NewDir
 
 echo
 echo Installing boot blocks...
-c 4 /usr/mdec/installboot $NewDir/boot $biosboot $device
+c 4 installboot -r $NewDir $device
 
 echo
 echo Checking filesystem...
