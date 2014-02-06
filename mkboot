@@ -7,6 +7,8 @@
 date=`date +%Y%m%d`
 arch=`uname -m`
 
+[ -z "$distloc" ] && distloc=/
+
 [ -z "$rootdevice" ] && rootdevice=vnd3
 
 [ -z "$cylinders" ] && cylinders=968
@@ -107,7 +109,7 @@ c 1 mount /dev/${rootdevice}a $tmpmnt
 
 echo Installing bootblocks
 
-c 2 "installboot -r $tmpmnt $rootdevice > $TMPDIR/last.output 2>&1"
+c 2 "installboot -r $tmpmnt $rootdevice $distloc/usr/mdec/biosboot $distloc/usr/mdec/boot > $TMPDIR/last.output 2>&1"
 
 c 2 mkdir $tmpmnt/new $tmpmnt/old
 

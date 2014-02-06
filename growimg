@@ -22,6 +22,8 @@ uname=`uname -s`
 
 [ -z "$rootdevice" ] && rootdevice=vnd3
 
+[ -z "$distloc" ] && distloc=/
+
 vncfgroot() {
  c 0 vnconfig $rootdevice $1
 }
@@ -272,7 +274,7 @@ c 4 tar cf - -C $OldDir . | tar xpf - -C $NewDir
 
 echo
 echo Installing boot blocks...
-c 4 installboot -r $NewDir $device
+c 4 installboot -r $NewDir $device $distloc/usr/mdec/biosboot $distloc/usr/mdec/boot
 
 echo
 echo Checking filesystem...
