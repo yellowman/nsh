@@ -120,11 +120,11 @@ for i in $vnddirs; do
   ((total[$x]*=2))
  fi
  if [ ${vndsizeA[$x]} != "auto" ]; then
-  if [ ${total[$x]} -le ${vndsizeA[$x]} ]; then
-   total[$x]=$((vndsizeA[$x]))
+  if [ ${total[$x]} -le $((vndsizeA[$x] * 2048)) ]; then
+   total[$x]=$((vndsizeA[$x] * 2048))
   else
    # Auto-calculated size was more than suggested size.  Go with auto-calculation.
-   echo -n " (OVERRIDE $((vndsizeA[$x] / 2048))MB)"
+   echo -n " (OVERRIDE $vndsizeA[$x]MB)"
   fi
  fi
  # report results

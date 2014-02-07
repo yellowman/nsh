@@ -15,7 +15,7 @@ set -A tmpfssize 16M                    # dir sizes
 # Used in image creation and runtime:
 #
 vnddirs="root bin etc sbin usr"
-vndsize="102400 auto auto auto auto"    # min partition sizes (or auto)
+vndsize="50 auto auto auto auto"    # min partition sizes in MBytes (or auto)
 #
 # During image creation ONLY (flashrd process), vnddirs MUST match
 # vnddirs setting in RAMDISK stand/rc file. (If you change it here
