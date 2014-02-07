@@ -81,7 +81,8 @@ totalmbytes=$((((totalsize / 1024) * bytessec) / 1024))
 echo "Using disk geometry $cylinders/$trackscylinder/$sectorstrack ($totalmbytes MB)"
 
 # Main partition comprises the total disk, minus first sector
-asize=$((totalsize - sectorstrack))
+offset=64
+asize=$((totalsize - offset))
 
 # Remove most disklabel info, write disk geometry, partitions
 egrep -v "^type:|^boundstart:|^boundend:|^total sectors:|^bytes/sector:|^sectors/track:|^sectors/cylinder:|^tracks/cylinder:|^cylinders:|^  .:|^#|^. partitions:|^.. partitions:|^$" < $tmplabel > ${tmplabel}.new
@@ -94,7 +95,7 @@ cat >> ${tmplabel}.new <<-EOF
 	cylinders: $cylinders
 	total sectors: $totalsize
 
-	a: $asize   $sectorstrack   4.2BSD  1024    8192    16
+	a: $asize   $offset   4.2BSD  1024    8192    16
 	c: $totalsize 0 unused 0 0
 	EOF
 c 1 mv ${tmplabel}.new $tmplabel

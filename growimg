@@ -210,7 +210,8 @@ echo Reading current disklabel...
 c 2 disklabel $rootdevice |
 egrep -v "^boundstart:|^boundend:|^total sectors:|^bytes/sector:|^sectors/track:|^sectors/cylinder:|^tracks/cylinder:|^cylinders:|^  .:|^#|^. partitions:|^.. partitions:|^$" > $NewLabel
 
-asize=$((totalsize - sectorstrack))
+offset=64
+asize=$((totalsize - offset))
 
 # This probably isn't important as of OpenBSD 4.8 because disklabel
 # now ignores geometry specified by -R command.  Simply flashrd
@@ -225,7 +226,7 @@ c 2 cat >> $NewLabel <<-EOF
 	cylinders: $cylinders
 	total sectors: $totalsize
 
-	a: $asize   $sectorstrack   4.2BSD  1024    8192    16
+	a: $asize  $offset	4.2BSD  1024    8192    16
 	c: $totalsize 0 unused 0 0
 	EOF
 
