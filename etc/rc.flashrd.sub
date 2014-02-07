@@ -7,15 +7,15 @@
 #
 # Used in image creation only:
 #
-tmpfsdirs="tmp"                         # tmpfs-only dirs
-set -A tmpfssize 16M                    # dir sizes
+tmpfsdirs="tmp"				# tmpfs-only dirs
+set -A tmpfssize 16M			# dir sizes
 #
 # (tmpfs runtime parameters can be changed by editing image's /etc/fstab)
 #
 # Used in image creation and runtime:
 #
 vnddirs="root bin etc sbin usr"
-vndsize="50 auto auto auto auto"    # min partition sizes in MBytes (or auto)
+vndsize="50 auto auto auto auto"	# min partition sizes in MBytes (or auto)
 #
 # During image creation ONLY (flashrd process), vnddirs MUST match
 # vnddirs setting in RAMDISK stand/rc file. (If you change it here
@@ -27,7 +27,7 @@ vndsize="50 auto auto auto auto"    # min partition sizes in MBytes (or auto)
 # rw/ro setting as defined by fstab.)
 #
 tardirs="var"
-set -A tarsize 64M                      # tmpfs sizes for tar dirs
+set -A tarsize 64M			# tmpfs sizes for tar dirs
 #
 # If you want to save all "tardirs" contents on shutdown:
 # savetardirs="$tardirs"

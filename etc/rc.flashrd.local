@@ -4,3 +4,8 @@
 
 echo 'flashrd: moving mounts to read-only mode'
 /bin/ro
+echo 'flashrd: regen initial random seed'
+if [ ! -d /flash/etc ]; then
+ mkdir /flash/etc
+fi
+dd if=/dev/random of=/flash/etc/random.seed bs=512 count=1

@@ -112,7 +112,11 @@ echo Installing bootblocks
 
 c 2 "installboot -r $tmpmnt $rootdevice $distloc/usr/mdec/biosboot $distloc/usr/mdec/boot > $TMPDIR/last.output 2>&1"
 
-c 2 mkdir $tmpmnt/new $tmpmnt/old
+c 2 mkdir $tmpmnt/new $tmpmnt/old $tmpmnt/etc
+
+echo Initial random seed
+
+c 2 "dd if=/dev/random of=$tmpmnt/etc/random.seed bs=512 count=1 > $TMPDIR/last.output 2>&1"
 
 umountwait 1 $tmpmnt
 
