@@ -7,10 +7,10 @@
 #
 # Used in image creation only:
 #
-mfsdirs="tmp"                           # mfs-only dirs
-set -A mfssize  32768                   # dir sizes
+tmpfsdirs="tmp"                         # tmpfs-only dirs
+set -A tmpfssize 16M                    # dir sizes
 #
-# (mfs runtime parameters can be changed by editing image's /etc/fstab)
+# (tmpfs runtime parameters can be changed by editing image's /etc/fstab)
 #
 # Used in image creation and runtime:
 #
@@ -27,7 +27,7 @@ vndsize="102400 auto auto auto auto"    # min partition sizes (or auto)
 # rw/ro setting as defined by fstab.)
 #
 tardirs="var"
-set -A tarsize  131072                  # mfs sizes for tar dirs
+set -A tarsize 64M                      # tmpfs sizes for tar dirs
 #
 # If you want to save all "tardirs" contents on shutdown:
 # savetardirs="$tardirs"
