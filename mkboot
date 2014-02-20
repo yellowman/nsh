@@ -116,9 +116,8 @@ c 2 mkdir $tmpmnt/new $tmpmnt/old $tmpmnt/etc
 
 echo Generate initial random seed
 
-c 2 "touch $tmpmnt/etc/random.seed"
-c 2 "chmod 600 $tmpmnt/etc/random.seed"
 c 2 "dd if=/dev/random of=$tmpmnt/etc/random.seed bs=512 count=1 > $TMPDIR/last.output 2>&1"
+c 2 "chmod 600 $tmpmnt/etc/random.seed"
 
 umountwait 1 $tmpmnt
 
