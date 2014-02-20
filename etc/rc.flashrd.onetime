@@ -54,6 +54,8 @@
 # The structure can be set up and maintained by using the build_onetime script. 
 #
 
+onetime_reboot=0
+
 # extract tar'd up files
 # general and host specific
 
@@ -63,11 +65,13 @@ extractFiles()
 	if [ -f /flash/onetime.tgz ]; then
 		tar xpzf /flash/onetime.tgz -C /
 		echo flashrd: onetime extracted
+		onetime_reboot=1
 	fi
 	
 	if [ -f /flash/"${hostname}".onetime.tgz ]; then
 		/bin/tar zxpf /flash/"${hostname}".onetime.tgz -C /
 		echo flashrd: "${hostname}".onetime extracted
+		onetime_reboot=1
 	fi
 	
 }
@@ -127,18 +131,21 @@ runScripts()
   if [ -e /flashrd.site ]; then
    . /flashrd.site
    echo flashrd: DEPRECATED ran /flashrd.site
+   onetime_reboot=1
   fi
   
   # check for a overall script in /flash
   if [ -e /flash/flashrd.site ]; then
    . /flash/flashrd.site
    echo flashrd: ran /flash/flashrd.site
+   onetime_reboot=1
   fi
   
   # next, check for a machine-specific script at in the /flash dir
   if [ -e /flash/"${hostname}".flashrd.site ]; then
    . /flash/"${hostname}".flashrd.site
    echo flashrd: ran /flash/"${hostname}".flashrd.site
+   onetime_reboot=1
   fi
 
 }
@@ -153,21 +160,24 @@ if [ ! -f /etc/.flashrd_onetime ]; then
 	hostname=`/bin/cat /etc/myname`
 
 	extractFiles
-	appendToFiles
+	if [ "$onetime_reboot" == "1" ]; then
+		appendToFiles
+	fi
 	runScripts
 	
-	# clean up host-specific .tgz files in /flash
-	/bin/rm -f /flash/*.onetime.tgz
- 
 	touch /etc/.flashrd_onetime
 
 	# sync /etc/master.passwd to pwd databases
 	/usr/sbin/pwd_mkdb /etc/master.passwd
 
-	echo rebooting
-	sync; sync
-	reboot
+	if [ "$onetime_reboot" == "1" ]; then
+		# clean up host-specific .tgz files in /flash
+		/bin/rm -f /flash/*.onetime.tgz
 
+		echo rebooting
+		sync; sync
+		reboot
+	fi
 fi
 
 # install packages in specified directory
