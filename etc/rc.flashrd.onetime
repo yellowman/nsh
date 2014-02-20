@@ -1,7 +1,6 @@
 #!/bin/sh
 
 # This script will be run only the first time a system is booted
-# The guard for this is in /etc/rc.flashrd.conf, we don't need to worry about it here
 
 # PERMISSIONS:
 # onetime.tgz AND ${hostname}.onetime.append.tgz files should have 0600
@@ -61,19 +60,17 @@ onetime_reboot=0
 
 extractFiles() 
 {
-
-	if [ -f /flash/onetime.tgz ]; then
-		tar xpzf /flash/onetime.tgz -C /
-		echo flashrd: onetime extracted
-		onetime_reboot=1
-	fi
+  if [ -f /flash/onetime.tgz ]; then
+   tar xpzf /flash/onetime.tgz -C /
+   echo flashrd: onetime extracted
+   onetime_reboot=1
+  fi
 	
-	if [ -f /flash/"${hostname}".onetime.tgz ]; then
-		/bin/tar zxpf /flash/"${hostname}".onetime.tgz -C /
-		echo flashrd: "${hostname}".onetime extracted
-		onetime_reboot=1
-	fi
-	
+  if [ -f /flash/"${hostname}".onetime.tgz ]; then
+   /bin/tar zxpf /flash/"${hostname}".onetime.tgz -C /
+   echo flashrd: "${hostname}".onetime extracted
+   onetime_reboot=1
+  fi
 }
 
 # Appends text to files
@@ -81,21 +78,21 @@ extractFiles()
 # $2 contains the target directory
 appendOnDir()
 {
-	if [[ ! -d "${1}" ]]; then
-		return
-	fi
-	ORIG_PATH=`pwd`
-	cd "${1}"
-	echo "In directory: " `/bin/pwd`
-	FILE_LIST=`/usr/bin/find . -type f`
-	
-	for ONE_FILE in ${FILE_LIST}; do
-	
-		/bin/cat "${ONE_FILE}" >> "${2}/${ONE_FILE}"
-		
-	done
-	
-	cd "${ORIG_PATH}"
+ if [[ ! -d "${1}" ]]; then
+  return
+ fi
+ ORIG_PATH=`pwd`
+ cd "${1}"
+ echo "In directory: " `/bin/pwd`
+ FILE_LIST=`/usr/bin/find . -type f`
+
+ for ONE_FILE in ${FILE_LIST}; do
+
+  /bin/cat "${ONE_FILE}" >> "${2}/${ONE_FILE}"
+
+ done
+
+ cd "${ORIG_PATH}"
 }
 
 # walk the append tree
@@ -104,19 +101,17 @@ appendOnDir()
 
 appendToFiles()
 {
+ if [ -d /tmp/APPEND ]; then
+  appendOnDir /tmp/APPEND /
+  /bin/rm -rf /tmp/APPEND
+  echo flashrd: onetime files appended
+ fi
 
-	if [ -d /tmp/APPEND ]; then
-		appendOnDir /tmp/APPEND /
-		/bin/rm -rf /tmp/APPEND
-		echo flashrd: onetime files appended
-	fi
-	
-	if [ -d /tmp/"${hostname}"/APPEND ]; then
-		appendOnDir /tmp/"${hostname}"/APPEND /
-		/bin/rm -rf /tmp/"${hostname}"/APPEND
-		echo flashrd: "${hostname}".onetime files appended
-	fi
-
+ if [ -d /tmp/"${hostname}"/APPEND ]; then
+  appendOnDir /tmp/"${hostname}"/APPEND /
+  /bin/rm -rf /tmp/"${hostname}"/APPEND
+  echo flashrd: "${hostname}".onetime files appended
+ fi
 }
 
 
@@ -124,60 +119,57 @@ appendToFiles()
 
 runScripts() 
 {
+ # "DEPRECATED" since the root is really the ramdisk!
+ # If flashrd.site got extracted here somehow, let's still use it.
+ #
+ if [ -e /flashrd.site ]; then
+  . /flashrd.site
+  echo flashrd: DEPRECATED ran /flashrd.site
+  onetime_reboot=1
+ fi
 
-  # "DEPRECATED" since the root is really the ramdisk!
-  # If flashrd.site got extracted here somehow, let's still use it.
-  #
-  if [ -e /flashrd.site ]; then
-   . /flashrd.site
-   echo flashrd: DEPRECATED ran /flashrd.site
-   onetime_reboot=1
-  fi
-  
-  # check for a overall script in /flash
-  if [ -e /flash/flashrd.site ]; then
-   . /flash/flashrd.site
-   echo flashrd: ran /flash/flashrd.site
-   onetime_reboot=1
-  fi
-  
-  # next, check for a machine-specific script at in the /flash dir
-  if [ -e /flash/"${hostname}".flashrd.site ]; then
-   . /flash/"${hostname}".flashrd.site
-   echo flashrd: ran /flash/"${hostname}".flashrd.site
-   onetime_reboot=1
-  fi
+ # check for a overall script in /flash
+ if [ -e /flash/flashrd.site ]; then
+  . /flash/flashrd.site
+  echo flashrd: ran /flash/flashrd.site
+  onetime_reboot=1
+ fi
 
+ # next, check for a machine-specific script at in the /flash dir
+ if [ -e /flash/"${hostname}".flashrd.site ]; then
+  . /flash/"${hostname}".flashrd.site
+  echo flashrd: ran /flash/"${hostname}".flashrd.site
+  onetime_reboot=1
+ fi
 }
 
 
 if [ ! -f /etc/.flashrd_onetime ]; then
+ # reset system hostname from flash disk
+ if [ -f /flash/etc/myname ]; then
+  /bin/cp /flash/etc/myname /etc/myname
+ fi
+ hostname=`/bin/cat /etc/myname`
 
-	# reset system hostname from flash disk
-	if [ -f /flash/etc/myname ]; then
-		/bin/cp /flash/etc/myname /etc/myname
-	fi
-	hostname=`/bin/cat /etc/myname`
+ extractFiles
+ if [ "$onetime_reboot" == "1" ]; then
+  appendToFiles
+ fi
+ runScripts
 
-	extractFiles
-	if [ "$onetime_reboot" == "1" ]; then
-		appendToFiles
-	fi
-	runScripts
-	
-	touch /etc/.flashrd_onetime
+ touch /etc/.flashrd_onetime
 
-	# sync /etc/master.passwd to pwd databases
-	/usr/sbin/pwd_mkdb /etc/master.passwd
+ # sync /etc/master.passwd to pwd databases
+ /usr/sbin/pwd_mkdb /etc/master.passwd
 
-	if [ "$onetime_reboot" == "1" ]; then
-		# clean up host-specific .tgz files in /flash
-		/bin/rm -f /flash/*.onetime.tgz
+ if [ "$onetime_reboot" == "1" ]; then
+  # clean up host-specific .tgz files in /flash
+  /bin/rm -f /flash/*.onetime.tgz
 
-		echo rebooting
-		sync; sync
-		reboot
-	fi
+  echo rebooting
+  sync; sync
+  reboot
+ fi
 fi
 
 # install packages in specified directory
