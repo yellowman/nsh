@@ -67,7 +67,7 @@ extractFiles()
   fi
 	
   if [ -f /flash/"${hostname}".onetime.tgz ]; then
-   /bin/tar zxpf /flash/"${hostname}".onetime.tgz -C /
+   tar zxpf /flash/"${hostname}".onetime.tgz -C /
    echo flashrd: "${hostname}".onetime extracted
    onetime_reboot=1
   fi
@@ -88,7 +88,7 @@ appendOnDir()
 
  for ONE_FILE in ${FILE_LIST}; do
 
-  /bin/cat "${ONE_FILE}" >> "${2}/${ONE_FILE}"
+  cat "${ONE_FILE}" >> "${2}/${ONE_FILE}"
 
  done
 
@@ -103,13 +103,13 @@ appendToFiles()
 {
  if [ -d /tmp/APPEND ]; then
   appendOnDir /tmp/APPEND /
-  /bin/rm -rf /tmp/APPEND
+  rm -rf /tmp/APPEND
   echo flashrd: onetime files appended
  fi
 
  if [ -d /tmp/"${hostname}"/APPEND ]; then
   appendOnDir /tmp/"${hostname}"/APPEND /
-  /bin/rm -rf /tmp/"${hostname}"/APPEND
+  rm -rf /tmp/"${hostname}"/APPEND
   echo flashrd: "${hostname}".onetime files appended
  fi
 }
@@ -147,9 +147,9 @@ runScripts()
 if [ ! -f /etc/.flashrd_onetime ]; then
  # reset system hostname from flash disk
  if [ -f /flash/etc/myname ]; then
-  /bin/cp /flash/etc/myname /etc/myname
+  cp /flash/etc/myname /etc/myname
  fi
- hostname=`/bin/cat /etc/myname`
+ hostname=`cat /etc/myname`
 
  extractFiles
  if [ "$onetime_reboot" == "1" ]; then
@@ -164,7 +164,7 @@ if [ ! -f /etc/.flashrd_onetime ]; then
 
  if [ "$onetime_reboot" == "1" ]; then
   # clean up host-specific .tgz files in /flash
-  /bin/rm -f /flash/*.onetime.tgz
+  rm -f /flash/*.onetime.tgz
 
   echo rebooting
   sync; sync
