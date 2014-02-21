@@ -278,6 +278,12 @@ echo Installing boot blocks...
 c 4 installboot -r $NewDir $device $distloc/usr/mdec/biosboot $distloc/usr/mdec/boot
 
 echo
+echo Generate initial random seed...
+c 4 "mkdir -p $NewDir/etc"
+c 4 "dd if=/dev/random of=$NewDir/etc/random.seed bs=512 count=1 > /dev/null 2>&1"
+c 4 "chmod 600 $NewDir/etc/random.seed"
+
+echo
 echo Checking filesystem...
 c 4 fsck -f /dev/"$device"a
 
