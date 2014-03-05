@@ -104,10 +104,6 @@ else
   syntax
   exit 1
  fi
- if [ ! -f "$3" ]; then
-  syntax
-  exit 1
- fi
 
  islezero $2 sectors
  totalsize=$2
@@ -118,6 +114,10 @@ else
   image=$5
  else
   image=$3
+ fi
+ if [ ! -f "$image" ]; then
+  syntax
+  exit 1
  fi
 fi
 
