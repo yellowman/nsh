@@ -68,11 +68,11 @@ fi
 
 syntax()
 {
-  echo "growimg can operate in disk target mode by specifying the destination disk or it"
-  echo "can create a new, resized image."
+  echo "disk target mode:"
+  echo "  growimg <-t target-disk> <source-image-filename>"
   echo
-  echo "syntax: growimg <-t target-disk> <source-image-filename>"
-  echo "    or: growimg <cyls> <heads> <sectors> <source-image-filename>"
+  echo "image target mode:"
+  echo "  growimg <-l sectors> <source-image-filename>"
 }
 
 islezero()
@@ -100,17 +100,25 @@ if [ "$1" == "-t" ]; then
 
  image=$3
 else
- # geometry specified, write a new image file
- if [ ! -f "$4" ]; then
+ if [ "$1" != "-l" ]; then
+  syntax
+  exit 1
+ fi
+ if [ ! -f "$3" ]; then
   syntax
   exit 1
  fi
 
- islezero $1 cylinders
- islezero $2 heads
- islezero $3 sectors
+ islezero $2 sectors
+ totalsize=$2
 
- image=$4
+ if [ "$3" == "-b" ]; then
+  islezero $4 bytessec
+  bytessec=$4
+  image=$5
+ else
+  image=$3
+ fi
 fi
 
 if [ ! -f $image ]; then
@@ -122,16 +130,18 @@ if [ -z "$device" ]; then
  device=vnd0
 fi
 
-if [ -z "$alt" ]; then
- cylinders=$1
- trackscylinder=$2
- sectorstrack=$3
+if [ -z "$bytessec" ]; then
  bytessec=512
- totalsize=$((cylinders * trackscylinder * sectorstrack))
+fi
+
+if [ -z "$alt" ]; then
+ cylinders=$((totalsize / 64))
+ trackscylinder=1
+ sectorstrack=64
  sectorscylinder=$((totalsize / cylinders))
 else
- # Here we use disklabel as a way to grab these values. Later versions of OpenBSD
- # always report the actual kernel-detected values and not the on-disk values
+ # Here we use disklabel as a way to grab these values. OpenBSD 4.8+
+ # always reports actual detected values (not what was stored on disk)
 
  tmplabel=`c 0 mktemp -t growimg.XXXXXX`
  c 0 disklabel $device > $tmplabel
@@ -164,7 +174,7 @@ fi
 addon=$((totalsize - imgsize))
 
 echo Image: $image
-echo Image size: $((imgbytes / 1024 / 1024))MB
+echo Image size: $(((imgbytes / 1024) / 1024))MB
 if [ "$bytessec" -le 1024 ]; then
  # The division is done like this to keep any 32 int from overflowing in ksh
  echo Requested size: $((totalsize / 1024 / (1024 / bytessec)))MB
@@ -206,10 +216,6 @@ fi
 
 c 1 mount -o rdonly /dev/"$rootdevice"a $OldDir
 
-echo Reading current disklabel...
-c 2 disklabel $rootdevice |
-egrep -v "^boundstart:|^boundend:|^total sectors:|^bytes/sector:|^sectors/track:|^sectors/cylinder:|^tracks/cylinder:|^cylinders:|^  .:|^#|^. partitions:|^.. partitions:|^$" > $NewLabel
-
 offset=64
 asize=$((totalsize - offset))
 
@@ -217,7 +223,7 @@ asize=$((totalsize - offset))
 # now ignores geometry specified by -R command.  Simply flashrd
 # as much as possible in this regard. XXX
 #
-c 2 cat >> $NewLabel <<-EOF
+c 2 cat > $NewLabel <<-EOF
 	type: ESDI
 	bytes/sector: $bytessec
 	sectors/track: $sectorstrack
@@ -226,25 +232,19 @@ c 2 cat >> $NewLabel <<-EOF
 	cylinders: $cylinders
 	total sectors: $totalsize
 
-	a: $asize  $offset	4.2BSD  1024    8192    16
+	a: $asize  $offset	4.2BSD  1024    8192    1
 	c: $totalsize 0 unused 0 0
 	EOF
 
 if [ -z "$alt" ]; then
- echo
  echo Creating new image...
  c 2 dd if=/dev/zero bs=$bytessec count=$bytessec of=$NewImg >/dev/null
 
  c 2 vnconfig $device $NewImg
+ c 3 fdisk -l $totalsize -f /usr/mdec/mbr -yi $device
+else
+ c 3 fdisk -f /usr/mdec/mbr -yi $device
 fi
-
-c 3 fdisk -c $cylinders -h $trackscylinder -s $sectorstrack -f /usr/mdec/mbr \
-  -e $device <<-__EOC >/dev/null
-	reinit
-	update
-	write
-	quit
-	__EOC
 
 echo
 echo Writing flashrd disklabel...

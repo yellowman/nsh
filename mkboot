@@ -11,11 +11,7 @@ arch=`uname -m`
 
 [ -z "$rootdevice" ] && rootdevice=vnd3
 
-[ -z "$cylinders" ] && cylinders=968
-
-[ -z "$trackscylinder" ] && trackscylinder=32
-
-[ -z "$sectorstrack" ] && sectorstrack=63
+[ -z "$totalsize" ] && totalsize=1951488
 
 [ -z "$bytessec" ] && bytessec=512
 
@@ -58,9 +54,11 @@ if [[ $vnd == true ]]; then
  # Create vnd image, must zero out the first few sectors or else disklabel freaks out...
  c 0 "dd if=/dev/zero bs=$bytessec count=$bytessec of=$dest > $TMPDIR/last.output 2>&1"
  vncfgroot $dest
- c 1 "fdisk -c $cylinders -h $trackscylinder -s $sectorstrack -f $distloc/usr/mdec/mbr -yi $rootdevice > $TMPDIR/last.output 2>&1"
+ cylinders=$((totalsize / 64))
+ trackscylinder=1
+ sectorstrack=64
+ c 1 "fdisk -l $totalsize -f $distloc/usr/mdec/mbr -yi $rootdevice > $TMPDIR/last.output 2>&1"
  c 1 disklabel $rootdevice > $tmplabel
- totalsize=$((cylinders * trackscylinder * sectorstrack))
  sectorscylinder=$((totalsize / cylinders))
 
 else
@@ -74,19 +72,21 @@ else
  sectorscylinder=`awk -F: ' /^sectors\/cylinder:/ {print $2} ' $tmplabel`
  trackscylinder=`awk -F: ' /^tracks\/cylinder:/ {print $2} ' $tmplabel`
  cylinders=`awk -F: ' /^cylinders:/ {print $2} ' $tmplabel`
-
 fi
 
 totalmbytes=$((((totalsize / 1024) * bytessec) / 1024))
-echo "Using disk geometry $cylinders/$trackscylinder/$sectorstrack ($totalmbytes MB)"
+echo -n "Disk size ${totalmbytes}MB ($totalsize sectors"
+if [ "$bytessec" == "512" ]; then
+ echo ")"
+else
+ echo ", $bytessec bytes/sector)"
+fi
 
 # Main partition comprises the total disk, minus first sector
 offset=64
 asize=$((totalsize - offset))
 
-# Remove most disklabel info, write disk geometry, partitions
-egrep -v "^type:|^boundstart:|^boundend:|^total sectors:|^bytes/sector:|^sectors/track:|^sectors/cylinder:|^tracks/cylinder:|^cylinders:|^  .:|^#|^. partitions:|^.. partitions:|^$" < $tmplabel > ${tmplabel}.new
-cat >> ${tmplabel}.new <<-EOF
+cat > $tmplabel <<-EOF
 	type: ESDI
 	bytes/sector: $bytessec
 	sectors/track: $sectorstrack
@@ -95,10 +95,9 @@ cat >> ${tmplabel}.new <<-EOF
 	cylinders: $cylinders
 	total sectors: $totalsize
 
-	a: $asize   $offset   4.2BSD  1024    8192    16
+	a: $asize   $offset   4.2BSD  1024    8192    1
 	c: $totalsize 0 unused 0 0
 	EOF
-c 1 mv ${tmplabel}.new $tmplabel
 
 c 1 disklabel -R $rootdevice $tmplabel
 

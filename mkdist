@@ -185,7 +185,7 @@ offset=64
 
 for i in $vnddirs; do
 
- echo "${part[$x]}: ${total[$x]}  $offset   4.2BSD  1024    8192    16"  >> $tmplabel
+ echo "${part[$x]}: ${total[$x]}  $offset   4.2BSD  1024    8192    1"  >> $tmplabel
 
  offset=$((offset+${total[$x]}))
  ((x++))

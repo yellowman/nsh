@@ -96,7 +96,7 @@ c 1 "disklabel $device > $tmplabel 2> $TMPDIR/last.output"
 
 totalsize=`awk -F: ' /^total sectors:/ {print $2} ' $tmplabel`
 cat >>$tmplabel <<-EOF
-	a: $totalsize   0   4.2BSD  1024    8192    16
+	a: $totalsize   0   4.2BSD  1024    8192    1
 	EOF
 
 c 1 "disklabel -R $device $tmplabel > $TMPDIR/last.output 2>&1"
