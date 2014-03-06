@@ -176,11 +176,20 @@ addon=$((totalsize - imgsize))
 echo Image: $image
 echo Image size: $(((imgbytes / 1024) / 1024))MB
 if [ "$bytessec" -le 1024 ]; then
- # The division is done like this to keep any 32 int from overflowing in ksh
  echo Requested size: $((totalsize / 1024 / (1024 / bytessec)))MB
  echo Size increase: $((addon / 1024 / (1024 / bytessec)))MB
 fi
 echo
+
+if [ $bytessec -gt 512 ]; then
+ factor=$((bytessec / 512))
+ if [ $((factor * 512)) != $bytessec ]; then
+  echo Block size $bytessec not divisible by 512. Are you sure?
+  exit
+ fi
+else
+ unset factor
+fi
 
 if [ -z "$alt" ]; then
  freespace=`df . | tail -1 | awk ' { print $4 } '`
@@ -188,7 +197,6 @@ if [ -z "$alt" ]; then
  if [ $bytessec -gt 512 ]; then
   # df reports in 512 byte sectors, so scale freespace for comparison
   # to media with different bytes/sec
-  factor=$((bytessec / 512))
   freespace=$((freespace / factor))
  fi
 
@@ -238,9 +246,10 @@ c 2 cat > $NewLabel <<-EOF
 
 if [ -z "$alt" ]; then
  echo Creating new image...
- c 2 dd if=/dev/zero bs=$bytessec count=$bytessec of=$NewImg >/dev/null
+ c 2 dd if=/dev/zero bs=512 count=512 of=$NewImg >/dev/null
 
  c 2 vnconfig $device $NewImg
+ 
  c 3 fdisk -l $totalsize -f /usr/mdec/mbr -yi $device
 else
  c 3 fdisk -f /usr/mdec/mbr -yi $device
