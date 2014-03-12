@@ -4,9 +4,8 @@
 
 echo 'flashrd: moving mounts to read-only mode'
 /bin/ro
-if [ ! -f /flash/etc/random.seed ]; then
+if [ ! -d /flash/etc ]; then
  mkdir -p /flash/etc
- touch /flash/etc/random.seed
- chmod 600 /flash/etc/random.seed
 fi
 dd if=/dev/random of=/flash/etc/random.seed bs=512 count=1 >/dev/null 2>&1
+chmod 600 /flash/etc/random.seed
