@@ -144,26 +144,13 @@ echo
 
 c 0 vnconfig $device $tmpmnt/openbsd.vnd
 
-###
-#
-# Read in fake label as basis for real one
-#
-# We build a label here instead of using the kernel's auto-generated
-# one so the user doesn't have to sit around and wait for dd of zeros!
-#
-# (The kernel would have generated a fake disklabel of the right size
-# if the dd step above was bs=512 count=$disktotal)
-
-c 1 "disklabel $device > $tmplabel"
-
-egrep -v "^boundstart:|^boundend:|^total sectors:|^bytes/sector:|^sectors/track:|^sectors/cylinder:|^tracks/cylinder:|^cylinders:|^  .:|^#|^. partitions:|^.. partitions:|^$" < $tmplabel > ${tmplabel}.new
-
 bytessec=512
 sectorstrack=100
-sectorscylinder=100
 trackscylinder=1
 cylinders=$((disktotal / sectorstrack))
-cat >> ${tmplabel}.new <<-EOF
+sectorscylinder=$((disktotal / cylinders))
+
+cat >> ${tmplabel} <<-EOF
 	bytes/sector: $bytessec
 	sectors/track: $sectorstrack
 	tracks/cylinder: $trackscylinder
@@ -173,7 +160,6 @@ cat >> ${tmplabel}.new <<-EOF
 
 	c: $disktotal 0 unused 0 0
 	EOF
-c 1 mv ${tmplabel}.new $tmplabel
 
 ###
 #
@@ -185,7 +171,7 @@ offset=64
 
 for i in $vnddirs; do
 
- echo "${part[$x]}: ${total[$x]}  $offset   4.2BSD  1024    8192    1"  >> $tmplabel
+ echo "${part[$x]}: ${total[$x]}  $offset   4.2BSD  $((bytessec * 2))   $((bytessec * 16))    1"  >> $tmplabel
 
  offset=$((offset+${total[$x]}))
  ((x++))

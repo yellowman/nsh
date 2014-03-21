@@ -95,7 +95,7 @@ cat > $tmplabel <<-EOF
 	cylinders: $cylinders
 	total sectors: $totalsize
 
-	a: $asize   $offset   4.2BSD  1024    8192    1
+	a: $asize   $offset   4.2BSD  $((bytessec * 2))  $((bytessec * 16))  1
 	c: $totalsize 0 unused 0 0
 	EOF
 
