@@ -175,13 +175,13 @@ for i in $vnddirs; do
 
  e="${part[$x]}"
 
- echo "	:p${e}#${total[$x]}:o${e}#${offset}:f${e}#$((bytessec * 2)):b${e}#$((bytessec * 16)):t${e}=4.2BSD:ty=${tabname}:\\" >> $tmplabel
+ echo "	:p${e}#${total[$x]}:o${e}#${offset}:f${e}#$((bytessec * 2)):b${e}#$((bytessec * 16)):t${e}=4.2BSD:\\" >> $tmplabel
 
  offset=$((offset+${total[$x]}))
  ((x++))
 done
 
-echo "	:pc#${disktotal}:oc#0:ty=${tabname}:" >> $tmplabel
+echo "	:pc#${disktotal}:oc#0:" >> $tmplabel
 
 # DISKTAB MODIFIED
 c 0 mv /etc/disktab /etc/disktab.${tabname}

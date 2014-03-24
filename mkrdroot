@@ -106,7 +106,7 @@ tmpmntdir=$(c 0 mktemp -t -d mkrdroot.XXXXXX)
 echo "vnd-${tabname}:\\" > $tmplabel
 echo "	:dt=SCSI:ty=${tabname}:se#512:nt#1:ns#64:nc#$((blocks / 64)):su#${blocks}:\\" >> $tmplabel
 echo "	:pa#${blocks}:oa#0:fa#1024:ba#8192:ta=4.2BSD:\\" >> $tmplabel
-echo "	:pc#${blocks}:oc#0:tc=unused:" >> $tmplabel
+echo "	:pc#${blocks}:oc#0:" >> $tmplabel
 
 # DISKTAB MODIFIED
 c 0 mv /etc/disktab /etc/disktab.${tabname}
