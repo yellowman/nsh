@@ -49,6 +49,18 @@ fi
 
 ###
 #
+# disktab dance
+
+if [[ ! -w /etc ]]; then
+ echo "Can't do it, depends on disktab being replaceable!"
+ exit 1
+fi
+
+random=`dd if=/dev/urandom bs=512 count=1 2>/dev/null | sha512`
+tabname=`printf "%.8s" $random`
+
+###
+#
 # fall back
 
 2() {
@@ -58,6 +70,7 @@ fi
  vnconfig -u $device
 }
 0() {
+ [[ -f /etc/disktab.${tabname} ]] && mv /etc/disktab.${tabname} /etc/disktab
  exit 1
 }
 
@@ -87,19 +100,24 @@ echo Creating ramdisk rootfs
 
 c 0 "dd if=/dev/zero of=$rdroot bs=512 count=$blocks > $TMPDIR/last.output 2>&1"
 
-c 0 vnconfig $device $rdroot
-
 tmplabel=$(c 0 mktemp -t mkrdrootlabel.XXXXXX)
 tmpmntdir=$(c 0 mktemp -t -d mkrdroot.XXXXXX)
 
-c 1 "disklabel $device > $tmplabel 2> $TMPDIR/last.output"
+echo "vnd-${tabname}:\\" > $tmplabel
+echo "	:dt=SCSI:ty=${tabname}:se#512:nt#1:ns#64:nc#$((blocks / 64)):su#${blocks}:\\" >> $tmplabel
+echo "	:pa#${blocks}:oa#0:fa#1024:ba#8192:ta=4.2BSD:\\" >> $tmplabel
+echo "	:pc#${blocks}:oc#0:tc=unused:" >> $tmplabel
 
-totalsize=`awk -F: ' /^total sectors:/ {print $2} ' $tmplabel`
-cat >>$tmplabel <<-EOF
-	a: $totalsize   0   4.2BSD  1024    8192    1
-	EOF
+# DISKTAB MODIFIED
+c 0 mv /etc/disktab /etc/disktab.${tabname}
+c 0 cp $tmplabel /etc/disktab
 
-c 1 "disklabel -R $device $tmplabel > $TMPDIR/last.output 2>&1"
+c 0 vnconfig -t vnd-${tabname} $device $rdroot
+
+c 1 "disklabel -w $device vnd-${tabname} > $TMPDIR/last.output 2>&1"
+
+# DISKTAB ORIGINAL
+c 1 mv /etc/disktab.${tabname} /etc/disktab
 
 c 1 "newfs -m 0 -o space -i 1024 /dev/r${device}a > $TMPDIR/last.output 2>&1"
 

@@ -17,8 +17,20 @@ arch=`uname -m`
 
 [ -z "$dest" ] && dest=flashimg.$arch-$date
 
+###
+#
+# disktab dance
+
+if [[ ! -w /etc ]]; then
+ echo "Can't do it, depends on disktab being replaceable!"
+ exit 1
+fi
+
+random=`dd if=/dev/urandom bs=512 count=1 2>/dev/null | sha512`
+tabname=`printf "%.8s" $random`
+
 vncfgroot() {
- [[ $vnd == true ]] && c 0 vnconfig $rootdevice $1
+ [[ $vnd == true ]] && c 0 vnconfig -t vnd-${tabname} $rootdevice $1
 }
 
 vnuncfgroot() {
@@ -36,6 +48,7 @@ vnuncfgroot() {
  vnuncfgroot
 }
 0() {
+ [[ -f /etc/disktab.${tabname} ]] && mv /etc/disktab.${tabname} /etc/disktab
  exit 1
 }
 
@@ -52,14 +65,10 @@ tmplabel=$(c 0 mktemp -t mkbootlabel.XXXXXX)
 if [[ $vnd == true ]]; then
 
  # Create vnd image, must zero out the first few sectors or else disklabel freaks out...
- c 0 "dd if=/dev/zero bs=$bytessec count=$bytessec of=$dest > $TMPDIR/last.output 2>&1"
- vncfgroot $dest
+ c 0 "dd if=/dev/zero bs=512 count=512 of=$dest > $TMPDIR/last.output 2>&1"
  cylinders=$((totalsize / 64))
  trackscylinder=1
  sectorstrack=64
- c 1 "fdisk -l $totalsize -f $distloc/usr/mdec/mbr -yi $rootdevice > $TMPDIR/last.output 2>&1"
- c 1 disklabel $rootdevice > $tmplabel
- sectorscylinder=$((totalsize / cylinders))
 
 else
 
@@ -69,9 +78,9 @@ else
  totalsize=`awk -F: ' /^total sectors:/ {print $2} ' $tmplabel`
  bytessec=`awk -F: ' /^bytes\/sector:/ {print $2} ' $tmplabel`
  sectorstrack=`awk -F: ' /^sectors\/track:/ {print $2} ' $tmplabel`
- sectorscylinder=`awk -F: ' /^sectors\/cylinder:/ {print $2} ' $tmplabel`
  trackscylinder=`awk -F: ' /^tracks\/cylinder:/ {print $2} ' $tmplabel`
  cylinders=`awk -F: ' /^cylinders:/ {print $2} ' $tmplabel`
+
 fi
 
 totalmbytes=$((((totalsize / 1024) * bytessec) / 1024))
@@ -82,24 +91,28 @@ else
  echo ", $bytessec bytes/sector)"
 fi
 
-# Main partition comprises the total disk, minus first sector
+# Main partition comprises the total disk after offset
 offset=64
 asize=$((totalsize - offset))
 
-cat > $tmplabel <<-EOF
-	type: ESDI
-	bytes/sector: $bytessec
-	sectors/track: $sectorstrack
-	tracks/cylinder: $trackscylinder
-	sectors/cylinder: $sectorscylinder
-	cylinders: $cylinders
-	total sectors: $totalsize
+echo "vnd-${tabname}:\\" > $tmplabel
+echo "	:dt=SCSI:ty=${tabname}:se#${bytessec}:nt#${trackscylinder}:ns#${sectorstrack}:nc#${cylinders}:su#${totalsize}:\\" >> $tmplabel
+echo "	:pa#${asize}:oa#${offset}:fa#$((bytessec * 2)):ba#$((bytessec * 16)):ta=4.2BSD:\\" >> $tmplabel
+echo "	:pc#${totalsize}:oc#0:" >> $tmplabel
 
-	a: $asize   $offset   4.2BSD  $((bytessec * 2))  $((bytessec * 16))  1
-	c: $totalsize 0 unused 0 0
-	EOF
+# DISKTAB MODIFIED
+c 1 mv /etc/disktab /etc/disktab.${tabname}
+c 1 cp $tmplabel /etc/disktab
 
-c 1 disklabel -R $rootdevice $tmplabel
+if [[ $vnd == true ]]; then
+ vncfgroot $dest
+ c 1 "fdisk -l $totalsize -f $distloc/usr/mdec/mbr -yi $rootdevice > $TMPDIR/last.output 2>&1"
+fi
+
+c 1 "disklabel -w $rootdevice vnd-${tabname} > $TMPDIR/last.output 2>&1"
+
+# DISKTAB ORIGINAL
+c 1 mv /etc/disktab.${tabname} /etc/disktab
 
 echo -n Creating filesystem on /dev/r${rootdevice}a
 c 1 "newfs -S $bytessec /dev/r${rootdevice}a > $TMPDIR/last.output 2>&1"

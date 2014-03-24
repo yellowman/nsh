@@ -24,6 +24,18 @@ uname=`uname -s`
 
 [ -z "$distloc" ] && distloc=/
 
+###
+#
+# disktab dance
+
+if [[ ! -w /etc ]]; then
+ echo "Can't do it, depends on disktab being replaceable!"
+ exit 1
+fi
+
+random=`dd if=/dev/urandom bs=512 count=1 2>/dev/null | sha512`
+tabname=`printf "%.8s" $random`
+
 vncfgroot() {
  c 0 vnconfig $rootdevice $1
 }
@@ -51,6 +63,7 @@ vnuncfgroot() {
 0() {
  rmdir $OldDir $NewDir
  rm -f $NewImg $NewLabel
+ [[ -f /etc/disktab.${tabname} ]] && mv /etc/disktab.${tabname} /etc/disktab
  exit 1
 }
 
@@ -138,7 +151,6 @@ if [ -z "$alt" ]; then
  cylinders=$((totalsize / 64))
  trackscylinder=1
  sectorstrack=64
- sectorscylinder=$((totalsize / cylinders))
 else
  # Here we use disklabel as a way to grab these values. OpenBSD 4.8+
  # always reports actual detected values (not what was stored on disk)
@@ -149,7 +161,6 @@ else
  totalsize=`awk -F: ' /^total sectors:/ {print $2} ' $tmplabel`
  bytessec=`awk -F: ' /^bytes\/sector:/ {print $2} ' $tmplabel`
  sectorstrack=`awk -F: ' /^sectors\/track:/ {print $2} ' $tmplabel`
- sectorscylinder=`awk -F: ' /^sectors\/cylinder:/ {print $2} ' $tmplabel`
  trackscylinder=`awk -F: ' /^tracks\/cylinder:/ {print $2} ' $tmplabel`
  cylinders=`awk -F: ' /^cylinders:/ {print $2} ' $tmplabel`
 
@@ -218,7 +229,7 @@ vncfgroot $image
 if [ -z "$alt" ]; then
  [ -z "$NewImg" ] && NewImg=$(c 0 mktemp -t growimg.XXXXXX)
 fi
-[ -z "$NewLabel" ] && NewLabel=$(c 0 mktemp -t growimg.XXXXXX)
+[ -z "$NewLabel" ] && NewLabel=$(c 0 mktemp -t growimg.disklabel.XXXXXX)
 [ -z "$OldDir" ] && OldDir=$(c 0 mktemp -t -d growimg.XXXXXX)
 [ -z "$NewDir" ] && NewDir=$(c 0 mktemp -t -d growimg.XXXXXX)
 
@@ -227,28 +238,20 @@ c 1 mount -o rdonly /dev/"$rootdevice"a $OldDir
 offset=64
 asize=$((totalsize - offset))
 
-# This probably isn't important as of OpenBSD 4.8 because disklabel
-# now ignores geometry specified by -R command.  Simply flashrd
-# as much as possible in this regard. XXX
-#
-c 2 cat > $NewLabel <<-EOF
-	type: ESDI
-	bytes/sector: $bytessec
-	sectors/track: $sectorstrack
-	tracks/cylinder: $trackscylinder
-	sectors/cylinder: $sectorscylinder
-	cylinders: $cylinders
-	total sectors: $totalsize
+echo "vnd-${tabname}:\\" > $NewLabel
+echo "	:dt=SCSI:ty=${tabname}:se#${bytessec}:nt#${trackscylinder}:ns#${sectorstrack}:nc#${cylinders}:su#${totalsize}:\\" >> $NewLabel
+echo "	:pa#${asize}:oa#${offset}:fa#$((bytessec * 2)):ba#$((bytessec * 16)):ta=4.2BSD:\\" >> $NewLabel
+echo "	:pc#${totalsize}:oc#0:" >> $NewLabel
 
-	a: $asize  $offset	4.2BSD  $((bytessec * 2))  $((bytessec * 16))  1
-	c: $totalsize 0 unused 0 0
-	EOF
+# DISKTAB MODIFIED
+c 2 mv /etc/disktab /etc/disktab.${tabname}
+c 2 cp $NewLabel /etc/disktab
 
 if [ -z "$alt" ]; then
  echo Creating new image...
  c 2 dd if=/dev/zero bs=512 count=512 of=$NewImg >/dev/null
 
- c 2 vnconfig $device $NewImg
+ c 2 vnconfig -t vnd-${tabname} $device $NewImg
  
  c 3 fdisk -l $totalsize -f /usr/mdec/mbr -yi $device
 else
@@ -257,7 +260,10 @@ fi
 
 echo
 echo Writing flashrd disklabel...
-c 3 disklabel -R $device $NewLabel
+c 3 disklabel -w $device vnd-${tabname}
+
+# DISKTAB ORIGINAL
+c 3 mv /etc/disktab.${tabname} /etc/disktab
 
 echo
 echo Creating new filesystem...

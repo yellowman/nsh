@@ -78,6 +78,18 @@ fi
 
 ###
 #
+# disktab dance
+
+if [[ ! -w /etc ]]; then
+ echo "Can't do it, depends on disktab being replaceable!"
+ exit 1
+fi
+
+random=`dd if=/dev/urandom bs=512 count=1 2>/dev/null | sha512`
+tabname=`printf "%.8s" $random`
+
+###
+#
 # fall back
 
 2() {
@@ -87,6 +99,7 @@ fi
  vnconfig -u $device
 }
 0() {
+ [[ -f /etc/disktab.${tabname} ]] && mv /etc/disktab.${tabname} /etc/disktab
  exit 1
 }
 
@@ -142,28 +155,17 @@ echo -n "Size openbsd.vnd $((disktotal / 2048))MB "
 c 0 "dd if=/dev/zero of=$tmpmnt/openbsd.vnd bs=512 count=512 > $TMPDIR/last.output 2>&1"
 echo
 
-c 0 vnconfig $device $tmpmnt/openbsd.vnd
-
 bytessec=512
-sectorstrack=100
+sectorstrack=64
 trackscylinder=1
 cylinders=$((disktotal / sectorstrack))
-sectorscylinder=$((disktotal / cylinders))
-
-cat >> ${tmplabel} <<-EOF
-	bytes/sector: $bytessec
-	sectors/track: $sectorstrack
-	tracks/cylinder: $trackscylinder
-	sectors/cylinder: $sectorscylinder
-	cylinders: $cylinders
-	total sectors: $disktotal
-
-	c: $disktotal 0 unused 0 0
-	EOF
 
 ###
 #
-# Build, write vnd disklabel
+# Generate openbsd.vnd disktab
+
+echo "vnd-${tabname}:\\" > $tmplabel
+echo "	:dt=SCSI:ty=${tabname}:se#${bytessec}:nt#${trackscylinder}:ns#${sectorstrack}:nc#${cylinders}:su#${disktotal}:\\" >> $tmplabel
 
 x=0
 offset=64
@@ -171,13 +173,28 @@ offset=64
 
 for i in $vnddirs; do
 
- echo "${part[$x]}: ${total[$x]}  $offset   4.2BSD  $((bytessec * 2))   $((bytessec * 16))    1"  >> $tmplabel
+ e="${part[$x]}"
+
+ echo "	:p${e}#${total[$x]}:o${e}#${offset}:f${e}#$((bytessec * 2)):b${e}#$((bytessec * 16)):t${e}=4.2BSD:ty=${tabname}:\\" >> $tmplabel
 
  offset=$((offset+${total[$x]}))
  ((x++))
 done
 
-c 1 disklabel -R $device $tmplabel
+echo "	:pc#${disktotal}:oc#0:ty=${tabname}:" >> $tmplabel
+
+# DISKTAB MODIFIED
+c 0 mv /etc/disktab /etc/disktab.${tabname}
+
+c 0 cp $tmplabel /etc/disktab
+c 0 cp $tmplabel $TMPDIR/vnd.disktab
+
+c 0 vnconfig -t vnd-${tabname} $device $tmpmnt/openbsd.vnd
+
+c 1 "disklabel -w $device vnd-${tabname} > $TMPDIR/last.output 2>&1"
+
+# DISKTAB ORIGINAL
+c 1 mv /etc/disktab.${tabname} /etc/disktab
 
 ###
 #
