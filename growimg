@@ -160,11 +160,11 @@ else
  tmplabel=`c 0 mktemp -t growimg.XXXXXX`
  c 0 disklabel $device > $tmplabel
 
- totalsize=`awk -F: ' /^total sectors:/ {print $2} ' $tmplabel`
- bytessec=`awk -F: ' /^bytes\/sector:/ {print $2} ' $tmplabel`
- sectorstrack=`awk -F: ' /^sectors\/track:/ {print $2} ' $tmplabel`
- trackscylinder=`awk -F: ' /^tracks\/cylinder:/ {print $2} ' $tmplabel`
- cylinders=`awk -F: ' /^cylinders:/ {print $2} ' $tmplabel`
+ totalsize=`awk -F": " ' /^total sectors:/ {print $2} ' $tmplabel`
+ bytessec=`awk -F": " ' /^bytes\/sector:/ {print $2} ' $tmplabel`
+ sectorstrack=`awk -F": " ' /^sectors\/track:/ {print $2} ' $tmplabel`
+ trackscylinder=`awk -F": " ' /^tracks\/cylinder:/ {print $2} ' $tmplabel`
+ cylinders=`awk -F": " ' /^cylinders:/ {print $2} ' $tmplabel`
 
  c 0 rm $tmplabel
 fi
