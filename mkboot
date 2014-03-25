@@ -83,8 +83,7 @@ else
 
 fi
 
-totalmbytes=$((((totalsize / 1024) * bytessec) / 1024))
-echo -n "Disk size ${totalmbytes}MB ($totalsize sectors"
+echo -n "Disk size `sectors2mbytes $totalsize`MB ($totalsize sectors"
 if [ "$bytessec" == "512" ]; then
  echo ")"
 else

@@ -12,11 +12,6 @@
 # slow).  This is as fast as running flashrd, without requiring
 # the source files from flashrd.
 #
-# This script tries to keep everything scaled to sectors, so we are less
-# likely to hit the 32 bit (2^32) boundary on shell variable values (amd64
-# users have no such problem.)  The sanity checks fail completely on i386
-# if the source image is larger than 4GB.
-#
 
 uname=`uname -s`
 
@@ -42,6 +37,10 @@ vncfgroot() {
 
 vnuncfgroot() {
  c 0 vnconfig -u $rootdevice
+}
+
+sourcesectors2mbytes() {
+ echo $(((($1 / 1024) * sourcebytessec) / 1024))
 }
 
 ###
@@ -144,8 +143,11 @@ if [ -z "$device" ]; then
 fi
 
 if [ -z "$bytessec" ]; then
+ # destination bytes/sector
  bytessec=512
 fi
+
+sourcebytessec=512
 
 if [ -z "$alt" ]; then
  cylinders=$((totalsize / 64))
@@ -169,27 +171,23 @@ fi
 
 # The source image must be 4GB or less, or this will break.
 imgbytes=`ls -l $image | awk ' { print $5 } '`
-imgsize=$((imgbytes / bytessec))
+imgsize=$((imgbytes / sourcebytessec))
 
-if [ $((imgsize * bytessec)) != "$imgbytes" ]; then
+if [ $((imgsize * sourcebytessec)) != "$imgbytes" ]; then
  cat <<-__FluxCapacitor
-	size of image $image is not divisible by $bytessec bytes/sector
-	without a remainder.  this image may not be compatible with
-	the media that you are installing to, or, more likely, it may
-	not be a disk image at all.  either way, run flashrd to create a
-	new image.
+	Size of image $image is not divisible by $sourcebytessec bytes/sector
+	without a remainder. Is this a disk image?
 	__FluxCapacitor
  exit 1
 fi
 
-addon=$((totalsize - imgsize))
+dstimgmb=`sectors2mbytes $totalsize`
+srcimgmb=`sourcesectors2mbytes $imgsize`
 
 echo Image: $image
 echo Image size: $(((imgbytes / 1024) / 1024))MB
-if [ "$bytessec" -le 1024 ]; then
- echo Requested size: $((totalsize / 1024 / (1024 / bytessec)))MB
- echo Size increase: $((addon / 1024 / (1024 / bytessec)))MB
-fi
+echo Requested size: ${dstimgmb}MB
+echo Size increase: $((dstimgmb - srcimgmb))MB
 echo
 
 if [ $bytessec -gt 512 ]; then
@@ -212,9 +210,7 @@ if [ -z "$alt" ]; then
  fi
 
  # The new image will not take more disk space than the old one, in fact
- # it will take less.  But it will appear to use more when dd reads it.
- # vnd will create holes in the file for the blank space so we don't have
- # to waste a bunch of disk space for megabytes of zeros!
+ # it may take less (sparse file).
  if [ "$imgsize" -gt "$freespace" ]; then
   echo imgsize: $imgsize sectors
   echo freespace: $freespace sectors
@@ -271,22 +267,20 @@ c 3 newfs -S $bytessec -q /dev/r"$device"a
 
 c 3 mount -o async /dev/"$device"a $NewDir
 
-UsedBlocks=`c 3 df $OldDir | tail -1 | awk ' { print $3 } '`
-FreeBlocks=`c 3 df $NewDir | tail -1 | awk ' { print $4 } '`
+used=`c 4 df $OldDir | tail -1 | awk ' { print $3 } '`
+usedmb=`sourcesectors2mbytes $used`
 
-if [ "$FreeBlocks" -le "$UsedBlocks" ]; then
-  cat <<-__UsedBlocks
+free=`c 4 df $NewDir | tail -1 | awk ' { print $4 } '`
+freemb=`sourcesectors2mbytes $free`
 
-	Binaries use $((UsedBlocks / 1024 / (1024 / bytessec)))MB but only
-	$((FreeBlocks / 1024 / (1024 / bytessec)))MB available for hip-hop
-	verbal potential.  Sorry, you must specify a larger destination size.
-	__UsedBlocks
+if [ "$freemb" -le "$usedmb" ]; then
+ echo "Image files use ${usedmb}MB, but only ${freemb}MB available. Game over."
  4; 3; 2; 1; 0;
 fi
 
 echo
 echo Copying installation...
-c 4 tar cf - -C $OldDir . | tar xpf - -C $NewDir
+c 4 tar cf - -C $OldDir . | c 4 tar xpf - -C $NewDir
 
 echo
 echo Installing boot blocks...
@@ -310,13 +304,15 @@ if [ -z "$alt" ]; then
 fi
 c 0 vnuncfgroot
 
-if [ "$bytessec" -le 1024 ]; then
- new="$((totalsize / 1024 / (1024 / bytessec)))MB "
-fi
 echo
 echo Grow completed.
 if [ -z "$alt" ]; then
- echo New "$new"image is located at $NewImg
+ echo New `sectors2mbytes $totalsize`MB image is located at $NewImg
+ if [ $bytessec -gt 512 ]; then
+  echo
+  echo disktab for mounting:
+  cat $NewLabel
+ fi
 else
  echo "New image written to ${device}(${alt})"
 fi

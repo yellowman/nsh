@@ -45,7 +45,6 @@ vnuncfgroot() {
 }
 
 usage() {
- totalmbytes=$((((totalsize / 1024) * bytessec) / 1024))
  cat <<EOF
 Usage: flashrd [options] <openbsd base>
 
@@ -55,7 +54,7 @@ Write direct to disk:
     -d "dev"	Simple disk name (such as wd3 or sd2)
 
 Write to disk image:
-    -l n	Number of total sectors (default $totalsize or $totalmbytes MB)
+    -l n	Number of total sectors (default $totalsize or `sectors2mbytes $totalsize`MB)
 
 Other options:
     -e "dir"    directory where elfrdsetroot.c is located
