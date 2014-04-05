@@ -274,6 +274,7 @@ free=`c 4 df $NewDir | tail -1 | awk ' { print $4 } '`
 freemb=`sourcesectors2mbytes $free`
 
 if [ "$freemb" -le "$usedmb" ]; then
+ echo
  echo "Image files use ${usedmb}MB, but only ${freemb}MB available. Game over."
  4; 3; 2; 1; 0;
 fi
