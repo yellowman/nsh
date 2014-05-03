@@ -479,7 +479,7 @@ print_getmsg(rtm, msglen)
 		printf("\thopcount:\t%u\n", rtm->rtm_rmx.rmx_hopcount);
 	if (rtm->rtm_rmx.rmx_expire) {
 		rtm->rtm_rmx.rmx_expire -= time(0);
-		printf("\texpires:\t%u sec\n", rtm->rtm_rmx.rmx_expire);
+		printf("\texpires:\t%lld sec\n", rtm->rtm_rmx.rmx_expire);
 	}
 
 #define RTA_IGN (RTA_DST|RTA_GATEWAY|RTA_NETMASK|RTA_IFP|RTA_IFA|RTA_BRD)
