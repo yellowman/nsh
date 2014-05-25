@@ -5,7 +5,7 @@
 #
 # flashrd quirks:
 #
-# - real /etc/rc has umount -a, so mfs untars are done
+# - real /etc/rc has umount -a, so tmpfs untars are done
 #    in /etc/rc.conf.local, not here
 # - even though everything is mounted by the real
 #    /etc/rc via /etc/fstab, /etc must be mounted before

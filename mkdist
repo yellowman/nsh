@@ -78,6 +78,18 @@ fi
 
 ###
 #
+# disktab dance
+
+if [[ ! -w /etc ]]; then
+ echo "Can't do it, depends on disktab being replaceable!"
+ exit 1
+fi
+
+random=`dd if=/dev/urandom bs=512 count=1 2>/dev/null | sha512`
+tabname=`printf "%.8s" $random`
+
+###
+#
 # fall back
 
 2() {
@@ -87,6 +99,7 @@ fi
  vnconfig -u $device
 }
 0() {
+ [[ -f /etc/disktab.${tabname} ]] && mv /etc/disktab.${tabname} /etc/disktab
  exit 1
 }
 
@@ -104,6 +117,11 @@ set -A part a d e f g h i j k l m n o p
 disktotal=0
 x=0
 
+bytessec=512
+
+# In the future, we may create an image with larger blocks.
+factor=$((bytessec / 512))
+
 for i in $vnddirs; do
 
  echo -n Analyzing /$i
@@ -111,24 +129,27 @@ for i in $vnddirs; do
  set -- $(du -s $distloc/$i)
  size=$1
 
+ # du outputs 512 byte blocks
+ [[ $factor -gt 1 ]] && ((size /= factor))
+
  # Leave 1/2th (50%) of used space as free space for >=100MB directories
  free=$((size/2))
  total[$x]=$((size+free))
-
- # and leave 140% of used space as free space for <100MB directories
- if [ ${size} -le 204800 ]; then
+ # and double time for <100MB directories
+ if [ ${size} -le `mbytes2sectors 100` ]; then
   ((total[$x]*=2))
  fi
+
  if [ ${vndsizeA[$x]} != "auto" ]; then
-  if [ ${total[$x]} -le ${vndsizeA[$x]} ]; then
-   total[$x]=$((vndsizeA[$x]))
+  if [ ${total[$x]} -le `mbytes2sectors ${vndsizeA[$x]}` ]; then
+   total[$x]=`mbytes2sectors ${vndsizeA[$x]}`
   else
    # Auto-calculated size was more than suggested size.  Go with auto-calculation.
-   echo -n " (OVERRIDE $((vndsizeA[$x] / 2048))MB)"
+   echo -n " (OVERRIDE ${vndsizeA[$x]}MB)"
   fi
  fi
  # report results
- echo " fs $((total[$x] / 2048))MB ($((size / 2048))MB files $(((total[$x] - size) / 2048))MB free)"
+ echo " fs `sectors2mbytes ${total[$x]}`MB (`sectors2mbytes $size`MB files `sectors2mbytes $((total[$x] - size))`MB free)"
  disktotal=$((disktotal+total[$x]))
  ((x++))
 
@@ -138,59 +159,49 @@ done
 #
 # Setup openbsd.vnd with a little bit of zeros
 
-echo -n "Size openbsd.vnd $((disktotal / 2048))MB "
+echo -n "Size openbsd.vnd `sectors2mbytes $disktotal`MB "
 c 0 "dd if=/dev/zero of=$tmpmnt/openbsd.vnd bs=512 count=512 > $TMPDIR/last.output 2>&1"
 echo
 
-c 0 vnconfig $device $tmpmnt/openbsd.vnd
-
-###
-#
-# Read in fake label as basis for real one
-#
-# We build a label here instead of using the kernel's auto-generated
-# one so the user doesn't have to sit around and wait for dd of zeros!
-#
-# (The kernel would have generated a fake disklabel of the right size
-# if the dd step above was bs=512 count=$disktotal)
-
-c 1 "disklabel $device > $tmplabel"
-
-egrep -v "^boundstart:|^boundend:|^total sectors:|^bytes/sector:|^sectors/track:|^sectors/cylinder:|^tracks/cylinder:|^cylinders:|^  .:|^#|^. partitions:|^.. partitions:|^$" < $tmplabel > ${tmplabel}.new
-
-bytessec=512
-sectorstrack=100
-sectorscylinder=100
+sectorstrack=64
 trackscylinder=1
 cylinders=$((disktotal / sectorstrack))
-cat >> ${tmplabel}.new <<-EOF
-	bytes/sector: $bytessec
-	sectors/track: $sectorstrack
-	tracks/cylinder: $trackscylinder
-	sectors/cylinder: $sectorscylinder
-	cylinders: $cylinders
-	total sectors: $disktotal
-
-	c: $disktotal 0 unused 0 0
-	EOF
-c 1 mv ${tmplabel}.new $tmplabel
 
 ###
 #
-# Build, write vnd disklabel
+# Generate openbsd.vnd disktab
+
+echo "vnd-${tabname}:\\" > $tmplabel
+echo "	:dt=SCSI:ty=${tabname}:se#${bytessec}:nt#${trackscylinder}:ns#${sectorstrack}:nc#${cylinders}:su#${disktotal}:\\" >> $tmplabel
 
 x=0
-offset=0
+offset=64
+((total[0] -= offset))
 
 for i in $vnddirs; do
 
- echo "${part[$x]}: ${total[$x]}  $offset   4.2BSD  1024    8192    16"  >> $tmplabel
+ e="${part[$x]}"
+
+ echo "	:p${e}#${total[$x]}:o${e}#${offset}:f${e}#$((bytessec * 2)):b${e}#$((bytessec * 16)):t${e}=4.2BSD:\\" >> $tmplabel
 
  offset=$((offset+${total[$x]}))
  ((x++))
 done
 
-c 1 disklabel -R $device $tmplabel
+echo "	:pc#${disktotal}:oc#0:" >> $tmplabel
+
+# DISKTAB MODIFIED
+c 0 mv /etc/disktab /etc/disktab.${tabname}
+
+c 0 cp $tmplabel /etc/disktab
+c 0 cp $tmplabel $TMPDIR/vnd.disktab
+
+c 0 vnconfig -t vnd-${tabname} $device $tmpmnt/openbsd.vnd
+
+c 1 "disklabel -w $device vnd-${tabname} > $TMPDIR/last.output 2>&1"
+
+# DISKTAB ORIGINAL
+c 1 mv /etc/disktab.${tabname} /etc/disktab
 
 ###
 #
@@ -227,10 +238,10 @@ if [ ! -z "$tardirs" ]; then
 
   set -- `du -s $distloc/$i`
   size=$1
-  if [ "$size" -le 2048 ]; then
-   echo -n " $((size / 2))"KB files
+  if [ `sectors2mbytes $size` -ge 1 ]; then
+   echo -n " `sectors2mbytes $size`"MB files
   else
-   echo -n " $((size / 2048))"MB files
+   echo -n " $((size)) sectors of files ($bytessec bytes/sector)"
   fi
 
   echo -n " copy"

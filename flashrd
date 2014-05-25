@@ -6,33 +6,26 @@
 
 date=`date +%Y%m%d`
 arch=`uname -m`
-vers=1.4
+vers=1.6
 
 typeset -x device rootdevice blocks rdroot dest vnddirs vndsize
-typeset -x tardirs mfsdirs cylinders trackscylinder sectorstrack
+typeset -x tardirs tmpfsdirs totalsize
 typeset -x bytessec vnd distloc tmpmnt TMPDIR elfrdsetrootdir
 
 device=vnd3				# least likely to conflict ?
-rootdevice=vnd2				# used to mount flash vnd for writing of stuff inside
+rootdevice=vnd2				# used to mount flash vnd
 blocks=4600				# blocks to reserve for kernel ramdisk
 rdroot=rd.$arch-$date			# ramdisk root fs image
 dest=flashimg.$arch-$date		# final product
 
-# See ./etc/rc.flashrd.sub to define tardirs, vnddirs, mfsdirs
+# See ./etc/rc.flashrd.sub to define tardirs, vnddirs, tmpfsdirs
 #
 . ./etc/rc.flashrd.sub
 
 set -A part a d e f g h i j k l m n o p
 
-# C/H/S for default "1GB" image, used by mkboot
-#
-# This is specified to get 63 sectors/track, therefore boot
-# blocks work properly on most "disks" without resizing image!
-#
 # Completely ignored if -disk is specified
-cylinders=968
-trackscylinder=32
-sectorstrack=63
+totalsize=1951488
 #
 # Normally 512 (but, who knows, times they are a changin'!)
 bytessec=512
@@ -61,9 +54,7 @@ Write direct to disk:
     -d "dev"	Simple disk name (such as wd3 or sd2)
 
 Write to disk image:
-    -c n	Number of cylinder (default: $cylinders)
-    -h n	Number of heads (tracks/cylinder) (default: $trackscylinder)
-    -s n	Number of sectors/track (default $sectorstrack)
+    -l n	Number of total sectors (default $totalsize or `sectors2mbytes $totalsize`MB)
 
 Other options:
     -e "dir"    directory where elfrdsetroot.c is located
@@ -76,9 +67,8 @@ do
  case $1 in
   -\?) usage; exit 0;;
   -d | -disk) t2 "$2"; rootdevice="$2"; vnd=false; shift 2;;
-  -c) t2 "$2"; cylinders="$2"; shift 2;;
-  -h) t2 "$2"; trackscylinder="$2"; shift 2;;
-  -s) t2 "$2"; sectorstrack="$2"; shift 2;;
+  -l) t2 "$2"; totalsize="$2"; shift 2;;
+  -b) t2 "$2"; bytessec="$2"; shift 2;;
   -e) t2 "$2"; elfrdsetrootdir="$2"; shift 2;;
 
   --) shift; break;;
@@ -218,7 +208,7 @@ done
 x=0
 if [ ! -z "$tardirs" ]; then
  for i in $tardirs; do
-  echo "swap	/$i	mfs	rw,nodev,nosuid,-s${tarsize[$x]}	0 0" >> $tmpfstab
+  echo "swap	/$i	tmpfs	rw,nodev,nosuid,-s${tarsize[$x]}	0 0" >> $tmpfstab
   ((x++))
  done
 fi
@@ -229,16 +219,16 @@ if [ $x -ne ${#tarsize[*]} ]; then
 fi
 
 x=0
-if [ ! -z "$mfsdirs" ]; then
- for i in $mfsdirs; do
+if [ ! -z "$tmpfsdirs" ]; then
+ for i in $tmpfsdirs; do
   echo
-  echo "swap		/$i	mfs	rw,nodev,nosuid,-s${mfssize[$x]}	0 0" >> $tmpfstab
+  echo "swap		/$i	tmpfs	rw,nodev,nosuid,-s${tmpfssize[$x]}	0 0" >> $tmpfstab
   ((x++))
  done
 fi
 
-if [ $x -ne ${#mfssize[*]} ]; then
- echo "% \$mfsdirs count ($x) different than mfssize array count ${#mfssize[*]}, aborting"
+if [ $x -ne ${#tmpfssize[*]} ]; then
+ echo "% \$tmpfsdirs count ($x) different than tmpfssize array count ${#tmpfssize[*]}, aborting"
  2; 1; 0;
 fi
 

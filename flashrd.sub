@@ -62,3 +62,19 @@ t2() {
   exit 1
  fi
 }
+
+###
+#
+# Sectors to MBytes
+
+sectors2mbytes() {
+ echo $(((($1 / 1024) * bytessec) / 1024))
+}
+
+###
+#
+# MBytes to sectors
+
+mbytes2sectors() {
+ echo $(((($1 * 1024) / bytessec) * 1024))
+}
