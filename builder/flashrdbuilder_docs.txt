@@ -1,0 +1,175 @@
+FLASHRD BUILDER
+
+A system for mass deploying and updating Flashrd-based OpenBSD systems. 
+
+
+BACKGROUND
+
+Much of my experience is in working with mass deployment of systems, so I tend to kick around these sorts of things even for a few hosts. In my case, I have three OpenBSD routers that I maintain using flashrd and nsh. While I could easily handle that number manually, I tend to think of how to automate the process quite naturally. Part of it is due to that fact that OpenBSD is so reliable that I rarely need to touch it. As a result, a lot of procedures stale out from my memory in the six months between releases. It's a lot easier if I automate the deployment process and don't have to remember quite so much. I'm also influenced by having used Sonicwall's GMS, which allows an admin to mass configure and administer hundreds of firewalls on a rule-driven basis. While I don't think I need to go that far, deploying and updating a couple of dozen OpenBSD-based routers is not uncommon, and doing that many one by one is a real PITA. 
+
+
+GOALS
+
+1) A single build should be produced for all systems involved. 
+2) Setting the hostname should be the only customization at deployment time. 
+3) There should be provisions for config settings that are common across all systems and for config settings that are specific to each individual system. 
+4) Some config files will require that additional lines be appended to an existing config file. The most common case is /etc/master.passwd, to pre-configure users on the system. 
+5) Cryptographic keys (such as ssh host keys and ssl keys and certificates) should be preserved. 
+6) The mechanism should take advantage of the existing onetime mechanism. 
+7) There should be a script that can be run on an existing system that grabs all of the config pieces for a system and bundles them up. 
+
+
+HOW IT WORKS
+
+On your development system, create a file tree that looks like the following: 
+
+onetimeBase/
+	CommonFiles/ -- For all systems
+		etc/
+		flash/
+			PACKAGES
+		tmp/
+			APPEND/ -- files under here will be appended to existing files
+				etc/
+		usr/
+			local/
+				bin/
+	HostSpecificFiles/
+		host1.example.com/
+			etc/
+				ssh/
+				ssl/
+				isakmpd/
+			flash/
+				PACKAGES
+			tmp/
+				host1.example.com/
+					APPEND/
+						etc/
+			usr/
+		host2.example.com/
+			etc/
+				ssh/
+				ssl/
+				isakmpd/
+			flash/
+				PACKAGES
+			tmp/
+				host2.example.com/
+					APPEND/
+						etc/
+			usr/
+		...
+
+Guard this file tree very carefully, as it will contain cryptographic keys and password hashes for *all* of your flashrd systems. Keeping it on an encrypted file system would not be a bad ideas. 
+
+
+CAPTURING EXISTING HOST CONFIGURATIONS
+
+To generate the file tree, run the script save_info on each of the individual systems that you are going to pull into the mass deployment system. 
+
+The saved files will be placed into a file structure that is compatible with the development system file tree, then tar'ed and gzipped. The entire process will be done under the /flash directory by default. This should be safe, since on an existing flashrd system that will put the saved files directly on the flash media, and on a non-flashrd system the /flash directory almost certainly does not exist. If you need to save the files somewhere else, change the SAVEDIR variable in the save_info script so that it points to your desired save location. 
+
+The files/directories that are captured by the script are: 
+
+	/etc/isakmpd/
+	/etc/iked/
+	/etc/ssh/
+	/etc/sudoers
+	/etc/adduser.conf
+	/etc/adduser.message
+	/etc/hostname.*
+	/etc/mygate
+	/etc/pf.conf
+	/etc/sysctl.conf
+
+In addition, the last lines of the following files are captured by the script: 
+
+	/etc/master.passwd (all lines below the nobody user)
+	/etc/group (all lines below the nobody group)
+	/etc/rc.local (entire file)
+	/etc/rc.conf.local (entire file)
+
+These will be placed under the /tmp/hostname.example.com/APPEND subdirectory for that host. If you have additional files that you need to capture from multiple systems you can edit the script. 
+
+rc.local and rc.conf.local are treated as append files because flashrd has commands in them such as expanding tardirs. If the scripts were simply replaced, then there would be multiple failures at boot. 
+
+Copy each of the resulting .tgz files from the existing hosts to your development system and un-tar them into the HostSpecificFiles directory, filling in the file tree. 
+
+sudo tar zxpf hostname.example.com -C /path/to/oneTimeBase/HostSpecificFiles
+
+Now comes the manual part of the process. You need to separate out the files that are common across the whole set of mass-deployed machines, and move them into the CommonFiles subtree. This isn't strictly necessary, but in the long run it will help with maintainability. Some files are almost certainly host-specific, e.g., the isakmpd, iked, and ssh directories. Others are more likely to be general. Some may have elements of both. For instance, there may be a set of users that is common to all machines (and thus will be appended to passwd and master.passwd from the CommonFiles), but there may also be users that are host-specific. As long as there are no username/uid conflicts, everything should be OK. For instance, in my configuration I have both common and host-specific appends to rc.conf.local and rc.local. 
+
+Once you have created the file tree on your development system, you don't need to run save_info again. You only need to update the information in the file tree with any changes. If you are using nsh to manage the system, you probably won't need to make any changes if you preserve nshrc in /flash. 
+
+PACKAGES
+
+Any packages found in /flash/PACKAGES will be installed as part of the onetime setup. Just put the package into the directory in the file tree and it will be installed. Packages will be installed in alphabetical order, so you may want to re-name packages so that packages that depend on other packages are installed later in the process. 
+
+PREPARING THE FLASHRD CONFIGURATION
+
+Make sure that all of the files are in the file tree and have the correct ownership and permissions. Be sure that append files are in the correct location under the tmp/APPEND subdirectory, and packages are the correct version and alphabetical order in the tmp/PACKAGES subdirectory. Navigate to the enclosing directory of the oneTimeBase directory and run the script build_onetime. 
+
+INSTALLING TO A NEW DISK
+
+This is for a brand new disk that will be swapped into an existing host. 
+
+1. Run flashrd and cfgflashrd as a standard setup. 
+2. Copy the onetime.tgz file onto the root level of the flash disk. 
+3. Create a text file /etc/myname on the flash drive that contains the fully qualified hostname for that system, to match the directory name in the tree above. 
+4. Swap out the disks, powerup, and in a few minutes you're ready to go. 
+
+UPGRADING IN PLACE
+
+This is to upgrade a host in place. 
+
+1. Run flashrd and cfgflashrd, then extract and copy the bsd, openbsd.vnd, and var.tar files from the flashimg-XXX file as in the FAQ. 
+2. Copy onetime.tgz file to /flash on the current system. 
+3. Make sure that there is a text file called /flash/etc/myname that contains the fully qualified hostname for that system in /flash, to match the directory name in the tree above. 
+4. Reboot the system, and in a few minutes you're ready to go. 
+
+HOW IT WORKS
+
+The build_onetime script sets up so that it is easy to expand targets into place. The script first copies all of the CommonFiles elements into a destroot directory. Then it goes through and creates host-specific .tar.gz files from the subdirectories within the HostSpecificFiles directory. The host-specific .tar.gz files are placed into the /flash subdirectory under the destroot. Then the entire destroot is .tar.gz'd up to form the onetime.tgz file. 
+
+At first boot, the work is done by the rc.flashrd.onetime script. The onetime.tgz file is expanded into place at the root of the file system, neatly dropping into place all of the files common to all hosts. The host-specific files are dropped into the /flash subdirectory. Then any host-specific files are expanded into place from the correct .tar.gz file. 
+
+Any files in the /tmp/APPEND directory will be appended to the corresponding files in the various subdirectories. After that, any files in the /tmp/hostname.example.com/APPEND directory will be similarly appended to the corresponding files. 
+
+Once that is all done, the onetime.tgz and host-specific .tar.gz files are deleted, since they contain the private keys for *all* of the hosts. 
+
+
+CONTACT ME
+
+Paul Suh
+paul.suh@ps-enable.com
+http://ps-enable.com/
+
+Feedback and bug reports welcome! 
+
+
+FLASHRD BOOT PROCESS
+
+Just as a reference. 
+
+1. RAMdisk/kernel/crunchgen-based root boots
+2. /etc/rc from kernel RAMdisk runs, calls /stand/rc
+3. /stand/rc runs, mounts vnd disks, /flash media
+3. System default /etc/rc runs from vnd disks, executes (in following order)
+	rc.conf
+		rc.conf.local
+			rc.flashrd.conf (skips because mounts are not ready)
+				rc.flashrd.sub (skips because mounts are not ready)
+				rc.flashrd.onetime (skips because mounts are not ready)
+	wsconsctl.conf
+	sysctl.conf
+	netstart
+		rc.conf
+			rc.conf.local
+				rc.flashrd.conf
+					rc.flashrd.sub
+					rc.flashrd.onetime 
+	rc.firstime
+	rc.d/
+	rc.local
+		rc.flashrd.local

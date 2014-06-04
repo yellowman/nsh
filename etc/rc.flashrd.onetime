@@ -162,9 +162,17 @@ if [ ! -f /etc/.flashrd_onetime ]; then
  # sync /etc/master.passwd to pwd databases
  /usr/sbin/pwd_mkdb /etc/master.passwd
 
+ # install packages in specified directory
+ packages_to_install=`/bin/ls /flash/PACKAGES/*.tgz`
+ for one_package in $packages_to_install; do
+  /usr/sbin/pkg_add ${one_package}
+ done
+
  if [ "$onetime_reboot" == "1" ]; then
-  # clean up host-specific .tgz files in /flash
-  rm -f /flash/*.onetime.tgz
+  # clean up onetime.tgz and host-specific .tgz files in /flash
+  # IMPORTANT, since these contain configs for ALL hosts
+  /bin/rm -f /flash/*.onetime.tgz
+  /bin/rm -f /flash/onetime.tgz
 
   echo rebooting
   sync; sync
@@ -172,5 +180,3 @@ if [ ! -f /etc/.flashrd_onetime ]; then
  fi
 fi
 
-# install packages in specified directory
-# TODO
