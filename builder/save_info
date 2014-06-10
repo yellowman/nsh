@@ -20,8 +20,8 @@
 #
 #
 
-ITEMS_TO_SAVE="/etc/isakmpd /etc/iked /etc/ssh /etc/shells /etc/sudoers /etc/adduser.conf \
-	/etc/adduser.message /etc/myname /etc/mygate /etc/pf.conf /etc/sysctl.conf"
+ITEMS_TO_SAVE="/etc/isakmpd /etc/iked /etc/ssh /etc/shells /etc/ssl /etc/sudoers \
+	/etc/adduser.conf /etc/adduser.message /etc/myname /etc/mygate /etc/pf.conf /etc/sysctl.conf"
 
 # List of files and corresponding markers 
 # all lines in the /etc/master.passwd file after the nobody user are saved
