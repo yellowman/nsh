@@ -82,7 +82,7 @@ Guard this file tree very carefully, as it will contain cryptographic keys and
 password hashes for *all* of your flashrd systems. Keeping it on an encrypted
 file system would not be a bad ideas. For your convenience, an empty file tree
 with the necessary directories is included in the flashrd builder directory as 
-oneTimeBase.tar.
+onetimeBase.tgz.
 
 
 CAPTURING EXISTING HOST CONFIGURATIONS
@@ -176,8 +176,8 @@ Any packages found in /flash/PACKAGES will be installed as part of the onetime
 setup. Just put the package into the directory in the file tree and it will be
 installed. Packages  will be installed in alphabetical order, so you may want to
 re-name packages so that packages that depend on other packages are installed
-later in the process. You may want to include packages in the onetime.tgz file
-or you may want to place them on the flash media separately. 
+later in the process. You can include packages in the onetime.tgz file or you 
+can place them on the flash media separately. 
 
 PREPARING THE FLASHRD CONFIGURATION
 
@@ -186,7 +186,7 @@ ownership and permissions. Be sure that append files are in the correct location
 under the tmp/APPEND subdirectory, and packages are the correct version and
 alphabetical order in the tmp/PACKAGES subdirectory.
 
-1. Tun the script build_onetime, giving the path to the oneTimeBase directory as
+1. Run the script build_onetime, giving the path to the oneTimeBase directory as
 the argument. 
 2. Run flashrd to create a flashimg-XXX file. 
 3. Run cfgflashrd against the image file, using a generic hostname rather than a
@@ -224,14 +224,14 @@ attempt made to upgrade existing packages.
 HOW IT WORKS
 
 The build_onetime script sets up the files from the file tree so that it is easy
-to expand targets into place. The script first copies all of the CommonFiles
-elements into a destroot directory. Then it goes through and creates
+to expand targets into place. The script first goes through and creates
 host-specific .tar.gz files from the subdirectories within the HostSpecificFiles
 directory. The host-specific .tar.gz files are placed into the /flash
-subdirectory under the destroot. Then the entire destroot is .tar.gz'd up to
-form the onetime.tgz file.
+subdirectory under the CommonFiles directory. Then the entire contents of
+CommonFiles is .tar.gz'd up to form the onetime.tgz file. Lastly, the
+host-specific .tgz files are clean up out of the /flash subdirectory. 
 
-At first boot, the work is done by the rc.flashrd.onetime script. The
+On first boot, the work is done by the rc.flashrd.onetime script. The
 onetime.tgz file is expanded into place at the root of the file system, neatly
 dropping into place all of the files common to all hosts. The tar'd and gzipped
 host-specific files are dropped into the /flash subdirectory. Then any
@@ -257,11 +257,24 @@ FLASHRD BOOT PROCESS
 
 Just as a reference.
 
-1. RAMdisk/kernel/crunchgen-based root boots 2. /etc/rc from kernel RAMdisk
-runs, calls /stand/rc 3. /stand/rc runs, mounts vnd disks, /flash media 3.
-System default /etc/rc runs from vnd disks, executes (in following order)
-rc.conf rc.conf.local rc.flashrd.conf (skips because mounts are not ready)
-rc.flashrd.sub (skips because mounts are not ready) rc.flashrd.onetime (skips
-because mounts are not ready) wsconsctl.conf sysctl.conf netstart rc.conf
-rc.conf.local rc.flashrd.conf rc.flashrd.sub rc.flashrd.onetime rc.firstime
-rc.d/ rc.local rc.flashrd.local
+1. RAMdisk/kernel/crunchgen-based root boots 
+2. /etc/rc from kernel RAMdisk runs, calls /stand/rc 
+3. /stand/rc runs, mounts vnd disks, /flash media 
+4. System default /etc/rc runs from vnd disks, executes (in following order)
+	rc.conf
+		rc.conf.local
+			rc.flashrd.conf (skips because mounts are not ready)
+			rc.flashrd.sub (skips because mounts are not ready)
+			rc.flashrd.onetime (skips because mounts are not ready)
+	wsconsctl.conf
+	sysctl.conf
+	netstart
+		rc.conf
+			rc.conf.local
+				rc.flashrd.conf
+				rc.flashrd.sub
+				rc.flashrd.onetime
+	rc.firstime
+	rc.d/
+	rc.local
+		rc.flashrd.local
