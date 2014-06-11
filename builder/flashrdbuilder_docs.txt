@@ -1,6 +1,7 @@
 FLASHRD BUILDER
 
-A system for mass deploying and updating Flashrd-based OpenBSD systems.
+A system for mass deploying and updating Flashrd-based OpenBSD hosts,
+contributed by Paul Suh, building on the work by Chris Cappuccio.
 
 
 BACKGROUND
@@ -35,10 +36,18 @@ should be preserved.
 7) There should be a script that can be run on an existing system that grabs all
 of the config pieces for a system and bundles them up.
 
+The logic behind appending content to some files rather than just keeping the
+old file is that newer versions of the operating system often add new users,
+groups, or other functionality. If you just copy over the old /etc/master.passwd
+file, some daemon users may not exist on the system. 
 
-HOW IT WORKS
 
-On your development system, create a file tree that looks like the following:
+SETUP
+
+You will need a separate OpenBSD staging system to maintain the configuration
+file tree. This should not be a hardship since you need to have this sort of
+system available to build flashrd in the first place. On the staging system,
+create a file tree that looks like the following:
 
 oneTimeBase/
 	CommonFiles/ -- For all systems 
@@ -91,13 +100,12 @@ To generate the file tree, run the script save_info on each of the individual
 systems that you are going to pull into the mass deployment system.
 
 The saved files will be placed into a file structure that is compatible with the
-development system file tree, then tar'ed and gzipped. The entire process will
-be done under the /flash directory by default. This should be safe, since on an
+staging system file tree, then tar'ed and gzipped. The entire process will be
+done under the /flash directory by default. This should be safe, since on an
 existing flashrd system that will put the saved files directly on the flash
 media, and on a non-flashrd system the /flash directory almost certainly does
 not exist. If you need to save the files somewhere else, change the SAVEDIR
-variable in the save_info script so that it points to your desired save
-location.
+variable in the save_info script so that it points to your desired save location.
 
 The files/directories that are captured by the script are:
 
@@ -129,8 +137,8 @@ script are just the ones that are most commonly modified or contain unique
 system private keys. If you have additional files that you need to capture from
 multiple systems you can edit the script to capture them. 
 
-One technique you can use to locate potential targets is to use /usr/bin/find to
-locate changed files. 
+One technique that can help you locate potential targets is to use /usr/bin/find
+to locate files that have changed since the first boot. 
 
 	sudo find /etc -newer /etc/ssh/ssh_host_ed25519_key -ls
 
@@ -138,10 +146,10 @@ This will list all files that have been modified since the
 /etc/ssh/ssh_host_ed25519_key host key file was generated. Since this file is
 automatically generated the first time a system is booted up (unless you saved
 the ssh host key files from a previous incarnation of the host), it serves as a
-pretty good marker to locate config files that may have been modified since the
-system was first booted up. Some of the files may not be significant; for
-instance, some of the /etc/firmware files may have been updated if you have
-update the system since the initial installation. 
+pretty good marker to locate config files that may have been modified. Some of
+the files may not be significant; for instance, some of the /etc/firmware files
+may have been updated if you have updated the system since the initial
+installation. 
 
 rc.local and rc.conf.local are treated as append files because flashrd has
 commands in them that perform essential tasks such as expanding tardirs. If the
@@ -209,14 +217,14 @@ UPGRADING IN PLACE
 This is to upgrade a host in place.
 
 4. Extract and copy the bsd, openbsd.vnd, and var.tar files from the
-flashimg-XXX file by following the instructions in the FAQ. 
+flashimg-XXX file by following the instructions in the flashrd FAQ. 
 5. Copy the three files over to the flashrd system and move them into place, 
 following the instructions for upgrading an existing system given in the FAQ. 
 6. Copy the onetime.tgz file to /flash on the current system. 
 7. Make sure that there is a text file called /flash/etc/myname that contains the 
 fully qualified hostname for that system, to match the directory name in the tree 
 above. 
-8. Copy any desired NEW packages into the /flash/PACKAGES directory. Since this 
+8. Copy any desired packages into the /flash/PACKAGES directory. Since this
 should happen only once, and only to an absolutely brand new system, there is no
 attempt made to upgrade existing packages. 
 9. Reboot the system, and in a few minutes you're ready to go.
@@ -229,7 +237,7 @@ host-specific .tar.gz files from the subdirectories within the HostSpecificFiles
 directory. The host-specific .tar.gz files are placed into the /flash
 subdirectory under the CommonFiles directory. Then the entire contents of
 CommonFiles is .tar.gz'd up to form the onetime.tgz file. Lastly, the
-host-specific .tgz files are clean up out of the /flash subdirectory. 
+host-specific .tgz files are cleaned up out of the /flash subdirectory. 
 
 On first boot, the work is done by the rc.flashrd.onetime script. The
 onetime.tgz file is expanded into place at the root of the file system, neatly
@@ -248,7 +256,14 @@ deleted, since they contain the private keys for *all* of the hosts.
 
 CONTACT ME
 
-Paul Suh paul.suh@ps-enable.com http://ps-enable.com/
+Paul Suh
+paul.suh@ps-enable.com
+http://ps-enable.com/
+
+Many thanks to Chris Cappuccio for creating the flashrd system, which has made
+my life much easier, since updating hosts remotely is now much less of a
+problem. Any errors are my own -- Chris is definitely a better developer than I
+am. 
 
 Feedback and bug reports welcome!
 
