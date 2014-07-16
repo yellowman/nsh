@@ -297,7 +297,6 @@ if [ ! -z "$com0" ]; then
  cat <<-EOF >$tmpmnt/etc/boot.conf
 	stty com0 $com0
 	set tty com0
-	set timeout 5
 	EOF
 fi
 
