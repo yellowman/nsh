@@ -5,8 +5,7 @@
 # it is also run by init(8) when such an event happens.
 #
 
-powerdown=NO	# set to YES for powerdown
+/etc/rc.flashrd.shutdown
 
 # Add your local shutdown actions here.
 
-/etc/rc.flashrd.shutdown
