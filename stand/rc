@@ -64,7 +64,7 @@ unvndmnt()
 {
  x=0
 
- for i in $vndddirs; do
+ for i in $vnddirs; do
   umount /$i
  done
 
