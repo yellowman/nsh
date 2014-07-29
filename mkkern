@@ -143,7 +143,7 @@ if grep "make clean" $T >/dev/null; then
  c 0 "make clean > $TMPDIR/last.output 2>&1"
 fi
 echo -n " (make)"
-c 0 "make -j4> $TMPDIR/last.output 2>&1"
+c 0 "make -j$(($(sysctl -n hw.ncpu) + 1))> $TMPDIR/last.output 2>&1"
 c 0 cp bsd $tmpmnt/bsd
 echo
 
@@ -156,7 +156,7 @@ if grep "make clean" $TMP >/dev/null; then
  c 0 "make clean > $TMPDIR/last.output 2>&1"
 fi
 echo -n " (make)"
-c 0 "make -j4> $TMPDIR/last.output 2>&1"
+c 0 "make -j$(($(sysctl -n hw.ncpu) + 1))> $TMPDIR/last.output 2>&1"
 c 0 cp bsd $tmpmnt/bsd.mp
 echo
 
