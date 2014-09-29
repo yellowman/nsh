@@ -12,8 +12,6 @@ typeset -x device rootdevice blocks rdroot dest vnddirs vndsize
 typeset -x tardirs tmpfsdirs totalsize
 typeset -x bytessec vnd distloc tmpmnt TMPDIR elfrdsetrootdir
 
-device=vnd3				# least likely to conflict ?
-rootdevice=vnd2				# used to mount flash vnd
 blocks=4600				# blocks to reserve for kernel ramdisk
 rdroot=rd.$arch-$date			# ramdisk root fs image
 dest=flashimg.$arch-$date		# final product
@@ -35,6 +33,10 @@ vnd=true
 
 
 . ./flashrd.sub
+
+getavailvnd 2
+device=${vndevices[0]}
+rootdevice=${vndevices[1]}		# used to mount flash vnd
 
 vncfgroot() {
  [[ $vnd == true ]] && c 0 vnconfig $1 $2

@@ -9,8 +9,6 @@ arch=`uname -m`
 
 [ -z "$distloc" ] && distloc=/
 
-[ -z "$rootdevice" ] && rootdevice=vnd3
-
 [ -z "$totalsize" ] && totalsize=1951488
 
 [ -z "$bytessec" ] && bytessec=512
@@ -53,6 +51,8 @@ vnuncfgroot() {
 }
 
 . ./flashrd.sub
+
+[ -z "$rootdevice" ] && getavailvnd 1 && rootdevice=${vndevices[0]}
 
 [ -z "$tmpmnt" ] && tmpmnt=$(c 0 mktemp -t -d mkboot.XXXXXX)
 

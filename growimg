@@ -15,8 +15,6 @@
 
 uname=`uname -s`
 
-[ -z "$rootdevice" ] && rootdevice=vnd3
-
 [ -z "$distloc" ] && distloc=/
 
 ###
@@ -139,7 +137,11 @@ if [ ! -f $image ]; then
 fi
 
 if [ -z "$device" ]; then
- device=vnd0
+ getavailvnd 2
+ rootdevice=${vndevices[0]}
+ device=${vndevices[1]}
+else
+ [ -z "$rootdevice" ] && getavailvnd 1 && rootdevice=${vndevices[0]}
 fi
 
 if [ -z "$bytessec" ]; then

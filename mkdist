@@ -11,9 +11,6 @@ if [ -z "$vnddirs" ]; then
  echo vnddirs not specified, aborting
  exit 1
 fi
-if [ -z "$device" ]; then
- device=vnd0
-fi
 
 if [ -z "$1" -a -z "$distloc" ]; then
  echo "% mkdist <openbsd base>"
@@ -104,6 +101,8 @@ tabname=`printf "%.8s" $random`
 }
 
 . ./flashrd.sub
+
+[ -z "$device" ] && getavailvnd 1 && device=${vndevices[0]}
 
 tmplabel=$(c 0 mktemp -t mkdistlabel.XXXXXX)
 tmpmntdir=$(c 0 mktemp -t -d mkdist.XXXXXX)

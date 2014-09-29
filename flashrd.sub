@@ -78,3 +78,16 @@ sectors2mbytes() {
 mbytes2sectors() {
  echo $(((($1 * 1024) / bytessec) * 1024))
 }
+
+###
+#
+# Find a free vnd
+
+getavailvnd() {
+ set -A vndevices `vnconfig -l | grep -i 'not in use' | sed 's/\(vnd[[:digit:]]\).*/\1/'`
+
+ if [ ${#vndevices[@]} -lt "$1" ]; then
+   echo "Not enough vnd device(s) available (${#vndevices[@]} < $1)"
+   exit 1
+ fi
+}

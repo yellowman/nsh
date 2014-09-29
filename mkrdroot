@@ -38,8 +38,6 @@
 
 [ -z "$rdroot" ] && rdroot=rd.`uname -m`-`date +%Y%m%d`
 
-[ -z "$device" ] && device=vnd0
-
 if [ -z "$distloc" -a -z "$1" ]; then
  echo "% mkrdroot <openbsd base>"
  exit 1
@@ -75,6 +73,8 @@ tabname=`printf "%.8s" $random`
 }
 
 . ./flashrd.sub
+
+[ -z "$device" ] && getavailvnd 1 && device=${vndevices[0]}
 
 if [ ! -f $distloc/dev/MAKEDEV ]; then
  echo % $distloc/dev/MAKEDEV not found
