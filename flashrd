@@ -288,9 +288,9 @@ TMPF=`c 4 mktemp /tmp/sed.XXXXXX`
 c 4 "echo /ifconfig -g carp carpdemote/a\\\\" > $TMPF
 c 4 "echo /etc/rc.flashrd.conf" >> $TMPF
 c 4 sed -f $TMPF $tmpmntvnd/rc >$tmpmntvnd/rc.new
-c 4 mv tmpmntvnd/rc.new tmpmntvnd/rc
+c 4 mv $tmpmntvnd/rc.new $tmpmntvnd/rc
 
-c 4 rm $TMPF $tmpmntvnd/rc.new
+c 4 rm $TMPF
 
 umountwait 3 $tmpmntvnd
 
