@@ -6,7 +6,7 @@
 
 date=`date +%Y%m%d`
 arch=`uname -m`
-vers=1.6
+vers=1.7
 
 typeset -x device rootdevice blocks rdroot dest vnddirs vndsize
 typeset -x tardirs tmpfsdirs totalsize
@@ -285,7 +285,7 @@ c 4 "echo /swapctl -A -t blk/a\\\\" > $TMPF
 c 4 "echo /etc/rc.flashrd.conf" >> $TMPF
 c 4 "sed -f $TMPF $tmpmntvnd/rc >$tmpmntvnd/rc.new"
 
-c 4 "echo /random_seed/a\\\\" > $TMPF
+c 4 "echo /ifconfig -g carp carpdemote/a\\\\" > $TMPF
 c 4 "echo /etc/rc.flashrd.conf" >> $TMPF
 c 4 "sed -f $TMPF $tmpmntvnd/rc.new >$tmpmntvnd/rc"
 
