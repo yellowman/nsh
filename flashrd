@@ -281,13 +281,14 @@ c 4 "echo $vers > $tmpmntvnd/.flashrd_version"
 
 TMPF=`c 4 mktemp /tmp/sed.XXXXXX`
 
-c 4 "echo /swapctl -A -t blk/a\\\\" > $TMPF
-c 4 "echo /etc/rc.flashrd.conf" >> $TMPF
-c 4 "sed -f $TMPF $tmpmntvnd/rc >$tmpmntvnd/rc.new"
-
+# sed cmd:
+# /ifconfig -a carp carpdemote/a\
+# /etc/rc.flashrd.conf
+#
 c 4 "echo /ifconfig -g carp carpdemote/a\\\\" > $TMPF
 c 4 "echo /etc/rc.flashrd.conf" >> $TMPF
-c 4 "sed -f $TMPF $tmpmntvnd/rc.new >$tmpmntvnd/rc"
+c 4 sed -f $TMPF $tmpmntvnd/rc >$tmpmntvnd/rc.new
+c 4 mv tmpmntvnd/rc.new tmpmntvnd/rc
 
 c 4 rm $TMPF $tmpmntvnd/rc.new
 
