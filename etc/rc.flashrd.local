@@ -9,3 +9,5 @@ if [ ! -d /flash/etc ]; then
 fi
 dd if=/dev/random of=/flash/etc/random.seed bs=512 count=1 >/dev/null 2>&1
 chmod 600 /flash/etc/random.seed
+dd if=/dev/random of=/flash/etc/host.random bs=512 count=1 >/dev/null 2>&1
+chmod 600 /flash/etc/host.random
