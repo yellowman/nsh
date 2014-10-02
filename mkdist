@@ -75,6 +75,15 @@ fi
 
 ###
 #
+# Relocate resolv.conf from /etc to /var/db for default read-only /etc
+
+if [ -f ${distloc}/etc/resolv.conf ]; then
+  mv ${distloc}/etc/resolv.conf ${distloc}/var/db
+fi
+ln -s /var/db/resolv.conf ${distloc}/etc
+
+###
+#
 # disktab dance
 
 if [[ ! -w /etc ]]; then
