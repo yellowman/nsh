@@ -31,7 +31,6 @@ bytessec=512
 # Set to true when the device is an image file false when a device is used.
 vnd=true
 
-
 . ./flashrd.sub
 
 getavailvnd 2

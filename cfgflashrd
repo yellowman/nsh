@@ -9,12 +9,8 @@ typeset -x TMPDIR
 # include vnddirs
 . ./etc/rc.flashrd.sub
 
-getavailvnd 2
-device=${vndevices[0]}
-rootvnd=${vndevices[1]}
 
 set -A part a d e f g h i j k l m n o p
-
 
 usage() {
  cat <<EOF
@@ -46,6 +42,10 @@ if [[ "$#" -lt 1 ]]; then
 fi
 
 . ./flashrd.sub
+
+getavailvnd 2
+device=${vndevices[0]}
+rootvnd=${vndevices[1]}
 
 while :
 do
