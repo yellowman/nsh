@@ -51,7 +51,7 @@ while :
 do
  case $1 in
   -\?)		usage; exit 0;;
-  -d|-disk)	    t2 "$2"; disk="$2"; shift 2;;
+  -d|-disk)	t2 "$2"; disk="$2"; shift 2;;
   -i|-image)	t2 "$2"; image="$2"; shift 2;;
   -r|-rdroot)	t2 "$2"; rdfs="$2"; shift 2;;
   -c|-com0)	t2 "$2"; com0="$2"; shift 2;;
@@ -338,6 +338,8 @@ c 3 mount /dev/$device$etcpart $tmpmntvnd
 
 if [ ! -f $tmpmntvnd/.flashrd_version ]; then
  echo % missing etc/.flashrd_version, not flashrd image or \$vnddirs out of sync? what funky?
+else
+ echo % image flashrd_version $(cat $tmpmntvnd/.flashrd_version)
 fi
 
 if [ ! -z "$com0" ]; then
@@ -457,10 +459,20 @@ fi
 
 if [ ! -z "$dnsservers" ]; then
  echo Configuring resolv.conf for DNS servers $dnsservers
- c 4 "echo lookup file bind > $tmpmntvnd/resolv.conf"
+ resolv=$TMPDIR/resolv.conf
+ c 4 "echo lookup file bind > ${resolv}"
  for i in $dnsservers; do
-  c 4 "echo nameserver $i >> $tmpmntvnd/resolv.conf"
+  c 4 "echo nameserver $i >> ${resolv}"
  done
+ if [ -f $tmpmnt/var.tar ]; then
+  c 4 mkdir $TMPDIR/var-copy
+  c 4 tar xpf $tmpmnt/var.tar -C $TMPDIR/var-copy
+  c 4 mkdir -p $TMPDIR/var-copy/db
+  c 4 mv ${resolv} $TMPDIR/var-copy/db/resolv.conf
+  c 4 tar cf $tmpmnt/var.tar -C $TMPDIR/var-copy .
+ else
+  c 4 mv ${resolv} ${tmpmntvnd}/resolv.conf
+ fi
 else
  echo Failed to configure nameservers, you must manually configure /etc/resolv.conf
 fi

@@ -208,6 +208,8 @@ c 1 mv /etc/disktab.${tabname} /etc/disktab
 
 x=0
 
+resolv=$TMPDIR/resolv.conf
+
 for i in $vnddirs; do
  echo -n Finalizing /$i
 
@@ -218,6 +220,16 @@ for i in $vnddirs; do
 
  echo -n " copy"
  c 2 tar cf - -C $distloc/$i . | tar xpf - -C $tmpmntdir
+
+ if [ $i == etc ]; then
+  for zz in $tardirs; do
+   if [ $zz == var ]; then
+    echo -n " (resolv.conf)"
+    [ -f ${tmpmntdir}/resolv.conf ] && c 2 mv ${tmpmntdir}/resolv.conf ${resolv}
+    c 2 ln -s /var/db/resolv.conf ${tmpmntdir}
+   fi
+  done
+ fi
 
  umountwait 1 $tmpmntdir
 
@@ -244,9 +256,17 @@ if [ ! -z "$tardirs" ]; then
   fi
 
   echo -n " copy"
-  c 0 tar cf $tmpmnt/$i.tar -C $distloc/$i .
-
+  if [ $i == var -a -f $resolv ]; then
+   echo -n " (resolv.conf)"
+   c 0 cp -Rp $distloc/$i $TMPDIR/var-copy
+   c 0 mkdir -p $TMPDIR/var-copy/db
+   c 0 cp -p ${resolv} $TMPDIR/var-copy/db/resolv.conf
+   c 0 tar cf $tmpmnt/$i.tar -C $TMPDIR/var-copy .
+  else
+   c 0 tar cf $tmpmnt/$i.tar -C $distloc/$i .
+  fi
   echo
+
  done
 fi
 
