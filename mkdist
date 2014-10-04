@@ -125,7 +125,7 @@ for i in $vnddirs; do
 
  echo -n Analyzing /$i
 
- set -- $(du -s $distloc/$i)
+ set -- $(c 0 du -s $distloc/$i)
  size=$1
 
  # du outputs 512 byte blocks
@@ -219,7 +219,7 @@ for i in $vnddirs; do
  c 1 mount /dev/${device}${part[$x]} $tmpmntdir
 
  echo -n " copy"
- c 2 tar cf - -C $distloc/$i . | tar xpf - -C $tmpmntdir
+ c 2 tar cf - -C $distloc/$i . | c 2 tar xpf - -C $tmpmntdir
 
  if [ $i == etc ]; then
   for zz in $tardirs; do
@@ -247,12 +247,12 @@ if [ ! -z "$tardirs" ]; then
  for i in $tardirs; do
   echo -n Creating $i.tar
 
-  set -- `du -s $distloc/$i`
+  set -- $(c 0 du -s $distloc/$i)
   size=$1
   if [ `sectors2mbytes $size` -ge 1 ]; then
    echo -n " `sectors2mbytes $size`"MB files
   else
-   echo -n " $((size)) sectors of files ($bytessec bytes/sector)"
+   echo -n " $((size)) sectors ($bytessec bytes/sector)"
   fi
 
   echo -n " copy"
