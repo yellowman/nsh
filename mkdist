@@ -26,9 +26,15 @@ if [ ! -d "$distloc" ]; then
  echo % $distloc is not a directory
  exit 1
 else
- if [ ! -f "$distloc"/etc/services ]; then
-  echo % $distloc does not contain an unpacked etcXX.tgz file
-  exit 1
+ if [ ! -f $distloc/.profile ]; then
+  if [ -f $distloc/usr/share/sysmerge/etc.tgz ]; then
+   echo % $distloc/usr/share/sysmerge/etc.tgz must be unpacked under $distloc"
+   echo % "(such as: tar xzpf $distloc/usr/share/sysmerge/etc.tgz -C $distloc)"
+   exit 1
+  else
+   echo % $distloc does not contain an unpacked etcXX.tgz file
+   exit 1
+  fi
  fi
  if [ ! -f "$distloc"/bin/ksh ]; then
   echo % $distloc does not contain an unpacked baseXX.tgz file

@@ -80,6 +80,16 @@ if [ ! -f $distloc/dev/MAKEDEV ]; then
  echo % $distloc/dev/MAKEDEV not found
  exit 1
 fi
+if [ ! -f $distloc/.profile ]; then
+ if [ -f $distloc/usr/share/sysmerge/etc.tgz ]; then
+  echo % $distloc/usr/share/sysmerge/etc.tgz must be unpacked under $distloc"
+  echo % "(such as: tar xzpf $distloc/usr/share/sysmerge/etc.tgz -C $distloc)"
+  exit 1
+ else
+  echo % $distloc does not contain an unpacked etcXX.tgz file
+  exit 1
+ fi
+fi
 
 if [ ! -f /usr/src/bin/Makefile ]; then
  echo OpenBSD source tree not found at /usr/src/bin
