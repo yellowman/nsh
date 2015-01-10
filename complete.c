@@ -264,9 +264,8 @@ complete_ifname(char *word, int list, EditLine *el)
                         sl_add(words, ifnp->if_name);
         }
 
-	if_freenameindex(ifn_list);
-
         rv = complete_ambiguous(word, list, words, el);
+	if_freenameindex(ifn_list);
         sl_free(words, 0);
         return (rv);
 }
