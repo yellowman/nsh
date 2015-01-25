@@ -533,7 +533,7 @@ struct intlist Intlist[] = {
 	{ "dhcrelay",	"DHCP Relay Agent",			CMPL0 0, 0, intdhcrelay },
 	{ "wol",	"Wake On LAN",				CMPL0 0, 0, intxflags },
 	{ "mpls",	"MPLS",					CMPL0 0, 0, intxflags },
-	{ "inet6",	"IPv6",					CMPL0 0, 0, intxflags },
+	{ "inet6",	"IPv6",					CMPL0 0, 0, intaf },
 	{ "rtsol",	"IPv6 router solicitation request",	CMPL0 0, 0, intrtd },
 	{ "rtadvd",	"IPv6 router advertisement service",	CMPL0 0, 0, intrtd },
 	{ "autoconfprivacy", "IPv6 Autoconfigurable address",	CMPL0 0, 0, intxflags },

@@ -634,6 +634,56 @@ set_ifxflags(char *ifname, int ifs, int flags)
 	return(0);
 }
 
+/* addaf, removeaf heavily derived from sbin/ifconfig/ifconfig.c */
+int
+addaf(char *ifname, int af, int ifs)
+{
+#ifdef IFXF_NOINET6	/* Pre 5.7 */
+	if (af == AF_INET6) {
+		set_ifxflags(ifname, ifs, -IFXF_NOINET6);
+	} else {
+		printf("%% addaf not implemented for AF %d\n", af);
+		return(1);
+	}
+#else			/* 5.7 */
+	struct if_afreq	ifar;
+
+	strlcpy(ifar.ifar_name, ifname, sizeof(ifar.ifar_name));
+	ifar.ifar_af = af;
+	if (ioctl(ifs, SIOCIFAFATTACH, (caddr_t)&ifar) < 0) {
+		printf("%% addaf: SIOCIFAFATTACH: %s\n",
+		    strerror(errno));
+		return(1);
+	}
+#endif
+	return(0);
+}
+
+int
+removeaf(char *ifname, int af, int ifs)
+{
+#ifdef IFXF_NOINET6	/* Pre 5.7 */
+	if (af == AF_INET6) {
+		set_ifxflags(ifname, ifs, IFXF_NOINET6);
+		set_ifxflags(ifname, ifs, -IFXF_AUTOCONF6);
+	} else {
+		printf("%% removeaf not implemented for AF %d\n", af);
+		return(1);
+	}
+#else			/* 5.7 */
+	struct if_afreq	ifar;
+
+	strlcpy(ifar.ifar_name, ifname, sizeof(ifar.ifar_name));
+	ifar.ifar_af = af;
+	if (ioctl(ifs, SIOCIFAFDETACH, (caddr_t)&ifar) < 0) {
+		printf("%% removeaf: SIOCIFAFDETACH: %s\n",
+		    strerror(errno));
+		return(1);
+	}
+#endif
+	return(0);
+}
+
 int
 intip(char *ifname, int ifs, int argc, char **argv)
 {
@@ -769,6 +819,8 @@ intip(char *ifname, int ifs, int argc, char **argv)
 			printf("%% socket failed: %s\n", strerror(errno));
 			return(0);
 		}
+		/* turn on inet6 */
+		addaf(ifname, AF_INET6, ifs);
 		/* do it */
 		if (ioctl(s, set ? SIOCAIFADDR_IN6 : SIOCDIFADDR_IN6, &ip6req)
 		    < 0) {
@@ -1475,6 +1527,29 @@ intflags(char *ifname, int ifs, int argc, char **argv)
 }
 
 int
+intaf(char *ifname, int ifs, int argc, char **argv)
+{
+	int set;
+
+	if (NO_ARG(argv[0])) {
+		set = 0;
+		argv++;
+		argc--;
+	} else
+		set = 1;
+
+	if (isprefix(argv[0], "inet6")) {
+		if (set)
+			addaf(ifname, AF_INET6, ifs);
+		else
+			removeaf(ifname, AF_INET6, ifs);
+	} else {
+		printf("%% intaf: prefix internal error\n");
+	}
+	return(0);
+}
+
+int
 intxflags(char *ifname, int ifs, int argc, char **argv)
 {
 	int set, value, flags;
@@ -1495,8 +1570,6 @@ intxflags(char *ifname, int ifs, int argc, char **argv)
 #endif
 	} else if (isprefix(argv[0], "mpls")) {
 		value = IFXF_MPLS;
-	} else if (isprefix(argv[0], "inet6")) {
-		value = -IFXF_NOINET6;
 	} else if (isprefix(argv[0], "wol")) {
 		value = IFXF_WOL;
 	} else {

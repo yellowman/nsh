@@ -391,6 +391,7 @@ int intrtd(char *, int, int, char **);
 int intvlan(char *, int, int, char **);
 int intflags(char *, int, int, char **);
 int intxflags(char *, int, int, char **);
+int intaf(char *, int, int, char **);
 int intlink(char *, int, int, char **);
 int intnwid(char *, int, int, char **);
 int intpowersave(char *, int, int, char **);
@@ -399,6 +400,8 @@ int intpflow(char *, int, int, char **);
 int intlladdr(char *, int, int, char **);
 int intgroup(char *, int, int, char **);
 int intrtlabel(char *, int, int, char **);
+int addaf(char *, int, int);
+int removeaf(char *, int, int);
 char *get_hwdaddr(char *);
 
 /* main.c */

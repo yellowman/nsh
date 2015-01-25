@@ -675,8 +675,10 @@ void conf_ifxflags(FILE *output, int ifs, char *ifname)
  		/* set mpls mode for eth interfaces */
 		if (ifr.ifr_flags & IFXF_MPLS)
 			fprintf(output, " mpls\n");
+#ifdef IFXF_NOINET6		/* Pre 5.7 */
 		if (ifr.ifr_flags & IFXF_NOINET6)
 			fprintf(output, " no inet6\n");
+#endif
 #ifdef IFXF_INET6_PRIVACY
 		if (ifr.ifr_flags & IFXF_INET6_PRIVACY)
 			fprintf(output, " autoconfprivacy\n");
