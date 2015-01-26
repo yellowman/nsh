@@ -105,7 +105,7 @@ show_int(int argc, char **argv)
 	short tmp;
 	int ifs, br, flags, days, hours, mins, pntd;
 	int ippntd = 0;
-	int buf3;
+	int physrt, physttl;
 	time_t c;
 	char *type, *lladdr, *ifname = NULL;
 
@@ -290,11 +290,13 @@ show_int(int argc, char **argv)
 
 	if (!br) {
 		if (phys_status(ifs, ifname, tmp_str, tmp_str2,
-		    sizeof(tmp_str), sizeof(tmp_str2), &buf3) > 0) {
+		    sizeof(tmp_str), sizeof(tmp_str2)) > 0) {
 			printf("  Tunnel source %s destination %s",
 			    tmp_str, tmp_str2);
-			if (&buf3 != NULL)
-				printf(" destination rdomain %i", buf3);
+			if (((physrt = conf_physrtable(ifs, ifname)) != 0))
+				printf(" destination rdomain %i", physrt);
+			if (((physttl = conf_physttl(ifs, ifname)) != 0))
+				printf(" ttl %i", physttl);
 			printf("\n");
 		}
 		carp_state(ifs, ifname);

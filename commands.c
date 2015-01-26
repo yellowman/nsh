@@ -513,7 +513,8 @@ struct intlist Intlist[] = {
 	{ "tentative",	"IPv6 tentative address bit",		CMPL0 0, 0, inttentative },
 	{ "eui64",	"IPv6 automatic interface index",	CMPL0 0, 0, inteui64 },
 #endif
-	{ "tunnel",	"Source/destination for GIF/GRE tunnel",CMPL0 0, 0, inttunnel },
+	{ "tunnel",	"VXLAN/GIF/GRE Tunnel parameters",	CMPL0 0, 0, inttunnel },
+	{ "vnetid",	"VXLAN VNETID",				CMPL0 0, 0, intvnetid },
 	{ "keepalive",	"GRE tunnel keepalive",			CMPL0 0, 0, intkeepalive },
 	{ "syncdev",	"PFsync control message interface",	CMPL(i) 0, 0, intsyncdev },
 	{ "syncpeer",	"PFsync peer address",			CMPL0 0, 0, intsyncpeer },

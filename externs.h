@@ -351,6 +351,7 @@ void conf_sysctls(FILE *);
 #define ASSUME_NETMASK 1
 int route(int, char**);
 void show_route(char *, int);
+int is_ip_addr(char *);
 #ifdef _IP_T_
 void parse_ip_pfx(char *, int, ip_t *);
 int ip_route(ip_t *, ip_t *, u_short, int, int);
@@ -433,12 +434,16 @@ int flush_bridgerule(char *, char*);
 
 /* tunnel.c */
 int inttunnel(char *, int, int, char **);
+int intvnetid(char *, int, int, char **);
+int conf_physrtable(int, char *);
+int conf_physttl(int, char *);
+int conf_vnetid(int, char *);
 
 /* media.c */
 #define DEFAULT_MEDIA_TYPE	"autoselect"
 void media_status(int, char *, char *);
 void media_supported(int, char *, char *, char *);
-int phys_status(int, char *, char *, char *, int, int, int *);
+int phys_status(int, char *, char *, char *, int, int);
 int intmedia(char *, int, int, char **);
 int intmediaopt(char *, int, int, char **);
 int conf_media_status(FILE *, int, char *);

@@ -739,20 +739,30 @@ void conf_keepalive(FILE *output, int ifs, char *ifname)
 void conf_ifmetrics(FILE *output, int ifs, struct if_data if_data,
     char *ifname)
 {
+	int vnetid;
+	int dstport;
 	char tmpa[IPSIZ], tmpb[IPSIZ], tmpc[TMPSIZ];
-	int buf;
 	struct ifreq ifrpriority;
 
 	/*
-	 * Various metrics valid for non-bridge interfaces
+	 * Various metrics for non-bridge interfaces
 	 */
-	if (phys_status(ifs, ifname, tmpa, tmpb, IPSIZ, IPSIZ, &buf) > 0) {
-		/* future os may use this for more than tunnel? */
+	if ((dstport=
+	    phys_status(ifs, ifname, tmpa, tmpb, IPSIZ, IPSIZ)) >= 0) {
+		int physrt, physttl;
+
 		fprintf(output, " tunnel %s %s", tmpa, tmpb);
-		if (&buf != NULL && buf > 0)
-			fprintf(output, " rdomain %i", buf);
+		if (dstport > 0)
+			fprintf(output, ":%i", dstport);
+		if (((physrt = conf_physrtable(ifs, ifname)) != 0))
+			fprintf(output, " rdomain %i", physrt);
+		if (((physttl = conf_physttl(ifs, ifname)) != 0))
+			fprintf(output, " ttl %i", physttl);
 		fprintf(output, "\n");
 	}
+
+	if (((vnetid = conf_vnetid(ifs, ifname)) != 0))
+			fprintf(output, " vnetid %i\n", vnetid);
 
 	/*
 	 * print interface mtu, metric

@@ -381,7 +381,7 @@ conf_print_media_word(FILE *output, int ifmw)
 
 int
 phys_status(int s, char *ifname, char *tmp_buf, char *tmp_buf2,
-int buf_len, int buf2_len, int *buf3)
+int buf_len, int buf2_len)
 {
 #ifdef NI_WITHSCOPEID
 	const int       niflag = NI_NUMERICHOST | NI_WITHSCOPEID;
@@ -389,30 +389,32 @@ int buf_len, int buf2_len, int *buf3)
 	const int       niflag = NI_NUMERICHOST;
 #endif
 	struct if_laddrreq req;
-	struct ifreq ifr;
+	int dstport = 0;
 
 	bzero(&req, sizeof(req));
 	(void) strlcpy(req.iflr_name, ifname, sizeof(req.iflr_name));
-	if (ioctl(s, SIOCGLIFPHYADDR, (caddr_t) & req) < 0)
-		return(0);
+	if (ioctl(s, SIOCGLIFPHYADDR, (caddr_t) &req) < 0)
+		return(-1);
 	if (req.addr.ss_family == AF_INET6)
 		in6_fillscopeid((struct sockaddr_in6 *)&req.addr);
-	getnameinfo((struct sockaddr *)&req.addr, req.addr.ss_len,
-	    tmp_buf, buf_len, 0, 0, niflag);
+	if (getnameinfo((struct sockaddr *)&req.addr, req.addr.ss_len,
+	    tmp_buf, buf_len, 0, 0, niflag) != 0) {
+		printf("%% phys_status: 0/getnameinfo failure\n");
+		return (-1);
+	}
 
-	if (req.addr.ss_family == AF_INET6)
+	if (req.dstaddr.ss_family == AF_INET) {
+		dstport = ((struct sockaddr_in *)&req.dstaddr)->sin_port;
+	} else if (req.dstaddr.ss_family == AF_INET6) {
 		in6_fillscopeid((struct sockaddr_in6 *) & req.dstaddr);
-	getnameinfo((struct sockaddr *) &req.dstaddr, req.dstaddr.ss_len,
-	    tmp_buf2, buf2_len, 0, 0, niflag);
-
-	bzero(&ifr, sizeof(ifr));
-	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
-	if (ioctl(s, SIOCGLIFPHYRTABLE, (caddr_t)&ifr) < 0)
-		buf3 = NULL;
-	else
-		bcopy(&ifr.ifr_rdomainid, buf3, sizeof(int));
-
-	return(strlen(tmp_buf)+strlen(tmp_buf2));
+		dstport = ((struct sockaddr_in6 *)&req.dstaddr)->sin6_port;
+	}
+	if (getnameinfo((struct sockaddr *)&req.dstaddr, req.dstaddr.ss_len,
+	    tmp_buf2, buf2_len, 0, 0, niflag) != 0) {
+		printf("%% phys_status: 1/getnameinfo failure\n");
+		return(-1);
+	}
+	return(ntohs(dstport));
 }
 
 int

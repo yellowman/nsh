@@ -133,6 +133,17 @@ route(int argc, char **argv)
 	return(0);
 }
 
+int is_ip_addr(char *arg)
+{
+	ip_t argip;
+
+	if (inet_pton(AF_INET, arg, &argip.addr.in))
+		return(1);
+	if (parse_ipv6(arg, &argip.addr.in6) == 0)
+		return(1);
+	return(0);
+}
+
 void show_route(char *arg, int tableid)
 {
 	ip_t dest;
