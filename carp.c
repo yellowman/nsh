@@ -92,12 +92,21 @@ intcarp(char *ifname, int ifs, int argc, char **argv)
 	switch(x->type) {
 	case CARP_ADVSKEW:
 	case CARP_ADVBASE:
+		if (set) {
+			errno = 0;
+			val = strtonum(argv[0], 0, 254, &errmsg);
+			if (errmsg) {
+				printf("%% %s value out of range: %s\n", x->name, errmsg);
+				return(0);
+			}
+		}
+		break;
 	case CARP_VHID:
 		if (set) {
 			errno = 0;
 			val = strtonum(argv[0], 0, 255, &errmsg);
 			if (errmsg) {
-				printf("%% %s value out of range: %s\n",  x->name, errmsg);
+				printf("%% %s value out of range: %s\n", x->name, errmsg);
 				return(0);
 			}
 		}
