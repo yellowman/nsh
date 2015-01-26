@@ -407,12 +407,10 @@ int buf_len, int buf2_len, int *buf3)
 
 	bzero(&ifr, sizeof(ifr));
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
-	if (ioctl(s, SIOCGLIFPHYRTABLE, (caddr_t)&ifr) == 0 &&
-	    (ifr.ifr_rdomainid > 0)) {
-		bcopy(&ifr.ifr_rdomainid, buf3, sizeof(int));
-	} else {
+	if (ioctl(s, SIOCGLIFPHYRTABLE, (caddr_t)&ifr) < 0)
 		buf3 = NULL;
-	}
+	else
+		bcopy(&ifr.ifr_rdomainid, buf3, sizeof(int));
 
 	return(strlen(tmp_buf)+strlen(tmp_buf2));
 }
