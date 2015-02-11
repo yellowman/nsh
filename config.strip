@@ -1,7 +1,7 @@
 #
 # Lines in this file are matched and removed using sed from the architecture-
 # dependent GENERIC kernel config.  This list is valid for i386 and amd64
-# as of OpenBSD 4.8.  It has not been tested on earlier kernels.
+# as of OpenBSD 5.7.
 #
 # The purpose of this list is to remove isadma and devices which depend
 # on isadma.  You may find other reasons to strip features or devices
@@ -14,6 +14,9 @@ aha.*at isa.*
 scsibus.*at aha.*
 uha.*at isa.*
 uha.*at eisa.*
+ahc[*].*at pci.*
+ahd.*at pci.*
+tew.*at pci.*
 ahc.*at eisa.*
 ahb.*at eisa.*
 cac.*at eisa.*
@@ -51,8 +54,10 @@ wss.*at isa.*
 pas.*at isa.*
 gus.*at isa.*
 ym.*at isa.*
+mpu.*at isa.*
 midi.*at sb.*
 midi.*at ym.*
+midi.*at mpu.*
 audio.*at sb.*
 audio.*at gus.*
 audio.*at pas.*
@@ -66,3 +71,33 @@ tcic.*at isa.*
 pcic.*at pci.*
 pcmcia.*at pcic.*
 pcmcia.*at tcic.*
+radeondrm.*at pci.*
+inteldrm.*at vga.*
+drm.*at inteldrm.*
+radeondrm.*at vga.*
+drm.*at radeondrm.*
+wsdisplay.*at radeondrm.*
+acpiasus.*at acpi.*
+acpisony.*at acpi.*
+acpitoshiba.*at acpi.*
+acpithinkpad.*at acpi.*
+acpivideo.*at acpi.*
+acpivout.*at acpivideo.*
+acpipwrres.*at acpi.*
+aibs.*at acpi.*
+uguru.*at isa.*
+aps.*at isa.*
+option.*X86EMU.*
+bktr.*at pci.*
+radio.*at bktr.*
+qle.*at pci.*
+envy.*at pci.*
+midi.*at envy.*
+audio.*at envy.*
+isp.*at pci.*
+zyd.*at uhub.*
+upgt.*at uhub.*
+acx.*at pci.*
+acx.*at cardbus.*
+an[*].*at pci.*
+cnw.*at pcmcia.*
