@@ -82,7 +82,7 @@ if [ ! -f $distloc/dev/MAKEDEV ]; then
 fi
 if [ ! -f $distloc/.profile ]; then
  if [ -f $distloc/usr/share/sysmerge/etc.tgz ]; then
-  echo % $distloc/usr/share/sysmerge/etc.tgz must be unpacked under $distloc"
+  echo % "$distloc/usr/share/sysmerge/etc.tgz must be unpacked under $distloc"
   echo % "(such as: tar xzpf $distloc/usr/share/sysmerge/etc.tgz -C $distloc)"
   exit 1
  else
