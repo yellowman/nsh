@@ -134,6 +134,9 @@ c 0 "config FLASHRD >$T 2>&1"
 c 0 "config FLASHRD.MP >$TMP 2>&1"
 echo
 
+unset ALTCC
+[ -n "$CC" ] && ALTCC="CC=$CC "
+
 echo -n Compiling FLASHRD kernel
 cd $kernsrc/compile/FLASHRD
 echo -n " (make depend)"
@@ -143,7 +146,7 @@ if grep "make clean" $T >/dev/null; then
  c 0 "make clean > $TMPDIR/last.output 2>&1"
 fi
 echo -n " (make)"
-c 0 "make -j$(($(sysctl -n hw.ncpu) + 1))> $TMPDIR/last.output 2>&1"
+c 0 "make ${ALTCC}-j$(($(sysctl -n hw.ncpu) + 1))> $TMPDIR/last.output 2>&1"
 c 0 cp bsd $tmpmnt/bsd
 echo
 
@@ -156,7 +159,7 @@ if grep "make clean" $TMP >/dev/null; then
  c 0 "make clean > $TMPDIR/last.output 2>&1"
 fi
 echo -n " (make)"
-c 0 "make -j$(($(sysctl -n hw.ncpu) + 1))> $TMPDIR/last.output 2>&1"
+c 0 "make ${ALTCC}-j$(($(sysctl -n hw.ncpu) + 1))> $TMPDIR/last.output 2>&1"
 c 0 cp bsd $tmpmnt/bsd.mp
 echo
 
