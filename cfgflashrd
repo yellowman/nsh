@@ -43,6 +43,8 @@ fi
 
 . ./flashrd.sub
 
+[ `id -u` != 0 ] && echo root required && exit 1
+
 getavailvnd 2
 device=${vndevices[0]}
 rootvnd=${vndevices[1]}
@@ -123,11 +125,6 @@ if [[ -n $tzfile ]]; then
   echo "Timezone file not found"
   exit 1
  fi
-fi
-
-if [ `id -u` != 0 ]; then
- echo Sorry, mount, vnconfig, and friends require root privileges
- exit 1
 fi
 
 if [ -z "$elfrdsetrootdir" ]; then

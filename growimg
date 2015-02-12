@@ -71,10 +71,7 @@ if [ "$uname" != "OpenBSD" -a "$uname" != "Bitrig" ]; then
  exit 1
 fi
 
-if [ `id -u` != 0 ]; then
- echo Sorry, mount, vnconfig, and friends require root privileges
- exit 1
-fi
+[ `id -u` != 0 ] && echo root required && exit 1
 
 syntax()
 {

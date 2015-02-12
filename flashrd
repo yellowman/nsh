@@ -31,6 +31,8 @@ bytessec=512
 # Set to true when the device is an image file false when a device is used.
 vnd=true
 
+[ `id -u` != 0 ] && echo root required && exit 1
+
 . ./flashrd.sub
 
 getavailvnd 2
@@ -109,11 +111,6 @@ fi
 
 if [[ -n $elfrdsetrootdir && ! -d $elfrdsetrootdir ]]; then
  echo % elfrdsetrootdir $elfrdsetrootdir not found
-fi
-
-if [ `id -u` != 0 ]; then
- echo Sorry, mount, vnconfig, and friends require root privileges
- exit 1
 fi
 
 ###
