@@ -292,9 +292,9 @@ c 4 installboot -r $NewDir $device $distloc/usr/mdec/biosboot $distloc/usr/mdec/
 echo
 echo Generate initial random seeds...
 c 4 "mkdir -p $NewDir/etc"
-c 4 "dd if=/dev/random of=$NewDir/etc/random.seed bs=512 count=1 > /dev/null 2>&1"
+c 4 "dd if=/dev/random of=$NewDir/etc/random.seed bs=512 count=1 status=none"
 c 4 chmod 600 $NewDir/etc/random.seed
-c 4 "dd if=/dev/random of=$NewDir/etc/host.random bs=512 count=1 > /dev/null 2>&1"
+c 4 "dd if=/dev/random of=$NewDir/etc/host.random bs=65536 count=1 status=none"
 c 4 chmod 600 $NewDir/etc/host.random
 
 echo
