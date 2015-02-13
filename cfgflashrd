@@ -494,7 +494,7 @@ fi
 if [ ! -z "$keyboardencoding" ]; then
  testkeyboardencoding
  if [ $? == 0 ]; then
-  sed -e "s:.*keyboard.encoding.*:keyboard.encoding=$keyboardencoding            # use different keyboard encoding:" < $tmpmntvnd/wsconsctl.conf >> $TMPDIR/tmpwsconsctl
+  sed -e "s:.*keyboard.encoding.*:keyboard.encoding=$keyboardencoding            # use different keyboard encoding:" < $tmpmntvnd/examples/wsconsctl.conf >> $TMPDIR/tmpwsconsctl
   c 4 mv $TMPDIR/tmpwsconsctl $tmpmntvnd/wsconsctl.conf
  fi
 fi
