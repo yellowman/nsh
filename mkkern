@@ -111,6 +111,7 @@ if [ -f config.strip ]; then
  done < config.strip
 else
  echo "[no config.strip found for kernel config alterations]"
+ # XXX isn't the isadma space relocated to 1MB now (at least on i386)???
  echo "[ramdisk kernel may be too large to boot without disabling isadma for i386/amd64]"
 fi
 
