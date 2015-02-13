@@ -228,13 +228,37 @@ for i in $vnddirs; do
  c 2 tar cf - -C $distloc/$i . | c 2 tar xpf - -C $tmpmntdir
 
  if [ $i == etc ]; then
+
+  # US/Pacific by default for flashrd!
+  ln -fs /usr/share/zoneinfo/US/Pacific ${tmpmntdir}/localtime
+  # random.seed rests at /flash/etc/random.seed
+  ln -fs /flash/etc/random.seed ${tmpmntdir}/random.seed
+
+  if [ ! -f ${tmpmntdir}/myname ]; then
+   # No name? Let's call it 'flashrd' for now...
+   c 2 echo flashrd > ${tmpmntdir}/myname
+
+   if [ -f ${tmpmntdir}/hosts ]; then
+    # Add 'flashrd' to the hosts file
+    c 2 sed -e 's/localhost/localhost flashrd/' < ${tmpmntdir}/hosts > ${tmpmntdir}/hosts.new
+    c 2 mv ${tmpmntdir}/hosts.new ${tmpmntdir}/hosts
+   else
+    # Create a basic hosts file
+    c 2 echo "127.0.0.1	localhost flashrd" > ${tmpmntdir}/hosts
+    c 2 echo "::1	localhost flashrd" >> ${tmpmntdir}/hosts
+   fi
+
+  fi
+
   for zz in $tardirs; do
    if [ $zz == var ]; then
+    # If /var is temporal, we want to move resolv.conf to it and static link
     echo -n " (resolv.conf)"
     [ -f ${tmpmntdir}/resolv.conf ] && c 2 mv ${tmpmntdir}/resolv.conf ${resolv}
     c 2 ln -s /var/db/resolv.conf ${tmpmntdir}
    fi
   done
+
  fi
 
  umountwait 1 $tmpmntdir
