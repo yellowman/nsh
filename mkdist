@@ -286,12 +286,16 @@ if [ ! -z "$tardirs" ]; then
   fi
 
   echo -n " copy"
-  if [ $i == var -a -f $resolv ]; then
-   echo -n " (resolv.conf)"
-   c 0 cp -Rp $distloc/$i $TMPDIR/var-copy
-   c 0 mkdir -p $TMPDIR/var-copy/db
-   c 0 cp -p ${resolv} $TMPDIR/var-copy/db/resolv.conf
-   c 0 tar cf $tmpmnt/$i.tar -C $TMPDIR/var-copy .
+  if [ $i == var ]; then
+  c 0 cp -Rp $distloc/$i $TMPDIR/var-copy
+  c 0 mkdir -p $TMPDIR/var-copy/db
+   if [ -f $resolv ]; then
+    echo -n " (resolv.conf)"
+    c 0 cp -p ${resolv} $TMPDIR/var-copy/db/resolv.conf
+   fi
+  echo -n " (host.random)"
+  c 0 ln -s /flash/etc/host.random $TMPDIR/var-copy/db/host.random
+  c 0 tar cf $tmpmnt/$i.tar -C $TMPDIR/var-copy .
   else
    c 0 tar cf $tmpmnt/$i.tar -C $distloc/$i .
   fi
