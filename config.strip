@@ -16,7 +16,7 @@ uha.*at isa.*
 uha.*at eisa.*
 ahc[*].*at pci.*
 ahd.*at pci.*
-tew.*at pci.*
+twe.*at pci.*
 ahc.*at eisa.*
 ahb.*at eisa.*
 cac.*at eisa.*
