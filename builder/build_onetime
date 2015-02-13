@@ -88,7 +88,7 @@ HOST_BASEDIR="${BASEDIR}/HostSpecificFiles"
 HOST_TARGET_DIR="${COMMON_BASEDIR}/flash"
 
 if [ ! -d "${HOST_TARGET_DIR}" ]; then
-	/bin/mkdir "${HOST_TARGET_DIR}"
+	/bin/mkdir -p "${HOST_TARGET_DIR}"
 fi
 
 buildHostSpecificFiles "${HOST_BASEDIR}" "${HOST_TARGET_DIR}"
@@ -97,5 +97,8 @@ echo build_onetime: building main file
 /bin/tar zcf "${BASEDIR}"/onetime.tgz -C "${COMMON_BASEDIR}" `/bin/ls -A "${COMMON_BASEDIR}"`
 /bin/chmod 400 "${BASEDIR}"/onetime.tgz
 /sbin/chown root:wheel "${BASEDIR}"/onetime.tgz
+
+# clean up host-specific files
+/bin/rm "${HOST_TARGET_DIR}"/*.onetime.tgz
 
 

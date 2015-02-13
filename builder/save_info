@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/ksh
 
 # capture keys & settings from a flashrd system
 
@@ -8,34 +8,146 @@
 
 # /etc/rc.local
 # /etc/rc.conf.local
-# /etc/adduser.conf - from common
-# /etc/shells - from common
-# /etc/sudoers - from common
+# /etc/adduser.conf
+# /etc/shells
+# /etc/sudoers
 
-# /usr/local
+# /etc/hostname.* handled separately
 
-hostname=`/bin/hostname`
-cd /
+# 
+#
+#	CONFIGURATION ITEMS IN THIS SECTION
+#
+#
 
-/bin/tar zcf "/flash/${hostname}.tgz" \
-	etc/isakmpd etc/iked etc/ssh \
-	etc/rc.local etc/rc.conf.local \
-	usr/local
+ITEMS_TO_SAVE="/etc/isakmpd /etc/iked /etc/ssh /etc/shells /etc/ssl /etc/sudoers \
+	/etc/adduser.conf /etc/adduser.message /etc/myname /etc/mygate /etc/pf.conf /etc/sysctl.conf"
 
-skipList="boot bsd bsd.mp etc new old openbsd.vnd var.tar ${hostname}.tgz ${hostname}_flash.tgz"
-FLASH_SAVE_DIRS=" "
-for oneDir in `/bin/ls /flash`; do
+# List of files and corresponding markers 
+# all lines in the /etc/master.passwd file after the nobody user are saved
+# all lines in the /etc/group file after the nobody group are saved
+set -A APPEND_ITEMS_TO_SAVE "/etc/master.passwd" "/etc/group" "/etc/rc.local" "/etc/rc.conf.local"
+set -A APPEND_ITEMS_TO_SAVE_MARKERS "nobody" "nobody" "ENTIRE_FILE" "ENTIRE_FILE"
+
+SAVEDIR="/flash"
+SAVE_ADDITIONAL_FLASH_ITEMS="YES"	# set to "NO" to not save all the other misc stuff in /flash
+									# NO is generally for upgrade in place, otherwise is for new media
+
+# 
+#
+#	END CONFIGURATION ITEMS
+#
+#
+
+# $1 = name of file to save
+# $2 = marker in the last line of the file just before the one to save
+# $3 = path to destination directory
+#
+# E.g. - to save all lines in /etc/master.passwd below the 'nobody' user to the file /tmp/APPEND/master.passwd
+#
+#	saveEndOfFile /etc/master.passwd nobody /tmp/APPEND
+
+saveEndOfFile() {
+
+	local FILE_TO_SAVE_END_OF="${1}"
+	local LAST_LINE_FROM_DISTRO="${2}"
+	local DESTINATION_DIR="${3}"
 	
-	echo "$skipList" | /usr/bin/grep $oneDir > /dev/null
-	if [[ $? -ne 0 ]]; then
-		echo $oneDir
-		FLASH_SAVE_DIRS="${FLASH_SAVE_DIRS} ${oneDir}"
+	local LAST_LINE_NUM=`/usr/bin/grep -n "${LAST_LINE_FROM_DISTRO}" "${FILE_TO_SAVE_END_OF}" | /usr/bin/awk '{ FS = ":" }{ print $1 }'`
+	local TOTAL_LINES_IN_FILE=`/usr/bin/wc -l ${FILE_TO_SAVE_END_OF} | /usr/bin/awk '{ print $1 }'`
+	
+	local ENCLOSING_DIR=`/usr/bin/dirname "${FILE_TO_SAVE_END_OF}"`
+	/bin/mkdir -p "${DESTINATION_DIR}${ENCLOSING_DIR}"
+	local -i LINES_TO_SAVE=${TOTAL_LINES_IN_FILE}-${LAST_LINE_NUM}
+	
+	/usr/bin/tail -${LINES_TO_SAVE} "${FILE_TO_SAVE_END_OF}" > "${DESTINATION_DIR}/${FILE_TO_SAVE_END_OF}"
+	
+	local PERMISSION_MODE=`/usr/bin/stat -r "${FILE_TO_SAVE_END_OF}" | /usr/bin/awk '{ print $3 }' | /usr/bin/cut -c 5-7`
+	/bin/chmod "${PERMISSION_MODE}" "${DESTINATION_DIR}/${FILE_TO_SAVE_END_OF}"
+	
+	local OWNER_GROUP=`/usr/bin/stat "${FILE_TO_SAVE_END_OF}" | /usr/bin/awk '{ printf "%s:%s",$5,$6 }'`
+	/usr/sbin/chown "${OWNER_GROUP}" "${DESTINATION_DIR}/${FILE_TO_SAVE_END_OF}"
+}
+
+
+saveAdditionalFlashItems() {
+
+	# skip standard files and directories that come with every flashrd setup and any archive files
+	skipList="boot bsd bsd.mp etc new old openbsd.vnd var.tar ${HOSTNAME} ${HOSTNAME}.tgz ${HOSTNAME}_flash.tgz"
+	FLASH_SAVE_DIRS=" "
+	for oneDir in `/bin/ls /flash`; do
+	
+		echo "$skipList" | /usr/bin/grep $oneDir > /dev/null
+		if [[ $? -ne 0 ]]; then
+			FLASH_SAVE_DIRS="${FLASH_SAVE_DIRS} ${oneDir}"
+		fi
+	
+	done
+
+	cd /flash
+	# $FLASH_SAVE_DIRS deliberately not quoted! 
+	/bin/tar zcf "/flash/${HOSTNAME}_flash.tgz" ${FLASH_SAVE_DIRS}
+	/bin/chmod 400 "/flash/${HOSTNAME}_flash.tgz"
+	
+}
+#
+#	Real work starts here
+#
+
+HOSTNAME=`/bin/hostname`
+cd /
+REAL_SAVEDIR="${SAVEDIR}/${HOSTNAME}"
+REAL_APPEND_SAVEDIR="${SAVEDIR}/${HOSTNAME}/tmp/${HOSTNAME}/APPEND"
+
+/bin/mkdir -p "${REAL_SAVEDIR}"
+/bin/mkdir -p "${REAL_APPEND_SAVEDIR}"
+
+# create temp dirs
+#/bin/mkdir -p "/${REAL_SAVEDIR}/etc"
+#/bin/mkdir -p "/${REAL_SAVEDIR}/var"
+#/bin/mkdir -p "/${REAL_SAVEDIR}/usr/local/bin"
+#/bin/mkdir -p "/${REAL_SAVEDIR}/usr/local/sbin"
+
+#/bin/mkdir -p "/${REAL_SAVEDIR}/tmp/${HOSTNAME}/APPEND/etc"
+#/bin/mkdir -p "/${REAL_SAVEDIR}/tmp/${HOSTNAME}/APPEND/var"
+
+# save entire items
+for ONE_ITEM in ${ITEMS_TO_SAVE}; do
+
+	ENCLOSING_DIR=`/usr/bin/dirname "${ONE_ITEM}"`
+	/bin/mkdir -p "${REAL_SAVEDIR}${ENCLOSING_DIR}"
+	/bin/cp -Rp "${ONE_ITEM}" "${REAL_SAVEDIR}${ONE_ITEM}"
+
+done
+
+# save hostname files
+/bin/cp -p /etc/hostname* "${REAL_SAVEDIR}/etc"
+
+# save append items
+i=0
+while [ i -lt ${#APPEND_ITEMS_TO_SAVE[@]} ]; do
+
+	if [ "${APPEND_ITEMS_TO_SAVE_MARKERS[i]}" = "ENTIRE_FILE" ]; then
+		/bin/cp "${APPEND_ITEMS_TO_SAVE[i]}" "${REAL_APPEND_SAVEDIR}/${APPEND_ITEMS_TO_SAVE[i]}"
+	else
+		saveEndOfFile "${APPEND_ITEMS_TO_SAVE[i]}" "${APPEND_ITEMS_TO_SAVE_MARKERS[i]}" "${REAL_APPEND_SAVEDIR}"
 	fi
+	((i++))
 	
 done
 
-cd /flash
-# $FLASH_SAVE_DIRS deliberately not quoted! 
-/bin/tar zcf "/flash/${hostname}_flash.tgz" ${FLASH_SAVE_DIRS}
+# tar up the save file
 
+cd "${SAVEDIR}"
+/bin/tar zcf "${SAVEDIR}/${HOSTNAME}.tgz" "${HOSTNAME}"/*
+/bin/chmod 400 "${SAVEDIR}/${HOSTNAME}.tgz"
 
+# tar up anything else in /flash if desired
+if [ ${SAVE_ADDITIONAL_FLASH_ITEMS} != "NO" ]; then
+
+	saveAdditionalFlashItems
+
+fi
+
+# clean up
+/bin/rm -rf "${REAL_SAVEDIR}"
