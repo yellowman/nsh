@@ -334,43 +334,18 @@ arpsearch(FILE *output, char *delim, in_addr_t addr, void (*action)
     (FILE *output, char *delim, struct sockaddr_dl *sdl,
     struct sockaddr_inarp *sin, struct rt_msghdr *rtm))
 {
-	int found_entry, mib[7];
-	size_t needed;
-	char *lim, *buf = NULL, *next;
+	char *next;
 	struct rt_msghdr *rtm;
 	struct sockaddr_inarp *sin;
 	struct sockaddr_dl *sdl;
+	struct rtdump *rtdump;
+	int found_entry = 0;
 
-	mib[0] = CTL_NET;
-	mib[1] = PF_ROUTE;
-	mib[2] = 0;
-	mib[3] = AF_INET;
-	mib[4] = NET_RT_FLAGS;
-	mib[5] = RTF_LLINFO;
-	mib[6] = cli_rtable;
-	while (1) {
-		if (sysctl(mib, 7, NULL, &needed, NULL, 0) == -1) {
-			printf("%% arpsearch: route-sysctl-estimate: %s\n",
-			    strerror(errno));
-			return 0;
-		}
-		if (needed == 0)
-			return 0;
-		if ((buf = realloc(buf, needed)) == NULL) {
-			printf("%% arpsearch: realloc: %s\n", strerror(errno));
-			return 0;
-		}
-		if (sysctl(mib, 7, buf, &needed, NULL, 0) == -1) {
-			if (errno == ENOMEM)
-				continue;
-			printf("%% arpsearch: routing-table: %s\n",
-			    strerror(errno));
-			return 0;
-		}
-		lim = buf + needed;
-		break;
-	}
-	for (next = buf; next < lim; next += rtm->rtm_msglen) {
+	rtdump = getrtdump(AF_INET, RTF_LLINFO, 0);
+	if (rtdump == NULL)
+		return 0;
+	for (next = rtdump->buf; next < rtdump->lim; next += rtm->rtm_msglen)
+	{
 		rtm = (struct rt_msghdr *)next;
 		if (rtm->rtm_version != RTM_VERSION)
 			continue;
@@ -385,7 +360,7 @@ arpsearch(FILE *output, char *delim, in_addr_t addr, void (*action)
 		}
 		(*action)(output, delim, sdl, sin, rtm);
 	}
-	free(buf);
+	freertdump(rtdump);
 	return(found_entry);
 }
 
