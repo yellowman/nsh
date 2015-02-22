@@ -112,7 +112,7 @@ void
 pr_flags(int af)
 {
 	printf("Flags: U - up, G - gateway, H - host, L - link layer, R - reject (unreachable),\n");
-	printf("       D - dynamic, S - static, T - MPLS\n");
+	printf("       D - dynamic, S - static, T - MPLS, c - CLONED, l - LOCAL\n");
 }
 
 /*
@@ -130,25 +130,27 @@ p_rttables(int af, u_int tableid, int flags)
 	struct rtdump *rtdump;
 
 	rtdump = getrtdump(af, flags, tableid);
-
-	if (rtdump) {
-		for (next = rtdump->buf; next < rtdump->lim; next += rtm->rtm_msglen) {
-			rtm = (struct rt_msghdr *)next;
-			if (rtm->rtm_version != RTM_VERSION)
-				continue;
-			sa = (struct sockaddr *)(next + rtm->rtm_hdrlen);
-			if (af != AF_UNSPEC && sa->sa_family != af)
-				continue;
-			if (next == rtdump->buf) {
-				/* start of the loop? print headers */
-				pr_flags(sa->sa_family);
-				pr_family(sa->sa_family);
-				pr_rthdr(sa->sa_family);
-			}
-			p_rtentry(rtm);
-		}
-		freertdump(rtdump);
+	if (rtdump == NULL) {
+		printf("%% p_rttables: getrtdump failure\n");
+		return;
 	}
+
+	for (next = rtdump->buf; next < rtdump->lim; next += rtm->rtm_msglen) {
+		rtm = (struct rt_msghdr *)next;
+		if (rtm->rtm_version != RTM_VERSION)
+			continue;
+		sa = (struct sockaddr *)(next + rtm->rtm_hdrlen);
+		if (af != AF_UNSPEC && sa->sa_family != af)
+			continue;
+		if (next == rtdump->buf) {
+			/* start of the loop? print headers */
+			pr_flags(sa->sa_family);
+		pr_family(sa->sa_family);
+			pr_rthdr(sa->sa_family);
+		}
+		p_rtentry(rtm);
+	}
+	freertdump(rtdump);
 
 	if (af != 0 && af != PF_KEY)
 		return;
@@ -249,7 +251,8 @@ p_rtentry(struct rt_msghdr *rtm)
 	struct sockaddr	*mask, *rti_info[RTAX_MAX];
 	char		 ifbuf[IF_NAMESIZE];
 	int interesting = RTF_UP | RTF_GATEWAY | RTF_HOST | RTF_DYNAMIC |
-	    RTF_LLINFO | RTF_STATIC | RTF_REJECT | RTF_MPLS;
+	    RTF_LLINFO | RTF_STATIC | RTF_REJECT | RTF_MPLS | RTF_CLONED |
+	    RTF_LOCAL;
 
 	if (sa->sa_family == AF_KEY)
 		return;
