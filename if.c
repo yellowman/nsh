@@ -1244,7 +1244,8 @@ int
 intmetric(char *ifname, int ifs, int argc, char **argv)
 {
 	struct ifreq ifr;
-	int set, max, theioctl;
+	int set, max;
+	unsigned long theioctl;
 	char *type;
 	const char *errmsg = NULL;
 
@@ -1277,10 +1278,18 @@ intmetric(char *ifname, int ifs, int argc, char **argv)
 		return(0);
 	}
 
-	if (set)
-		ifr.ifr_metric = strtonum(argv[0], 0, max, &errmsg);
-	else
+	if (set) {
+		int num;
+
+		num = strtonum(argv[0], 0, max, &errmsg);
+		if (errmsg) {
+			printf("%% Invalid %s %s: %s\n", type, argv[0], errmsg);
+			return(0);
+		}
+		ifr.ifr_metric = num;
+	} else {
 		ifr.ifr_metric = 0;
+	}
 
 	if (errmsg) {
 		printf("%% Invalid %s %s: %s\n", type, argv[0], errmsg);
