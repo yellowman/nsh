@@ -598,7 +598,7 @@ set_ifflags(char *ifname, int ifs, int flags)
 	ifr.ifr_flags = flags;
 
 	if (ioctl(ifs, SIOCSIFFLAGS, (caddr_t)&ifr) < 0) {
-		printf("%% get_ifflags: SIOCSIFFLAGS: %s\n", strerror(errno));
+		printf("%% set_ifflags: SIOCSIFFLAGS: %s\n", strerror(errno));
 	}
 
         return(0);
@@ -792,7 +792,7 @@ intip(char *ifname, int ifs, int argc, char **argv)
 		else if (ip.family == AF_INET6)
 			ip.bitlen = 128;
 	}
-	
+
 	switch(ip.family) {
 	case AF_INET:
 		memset(&in4dest, 0, sizeof(in4dest));
@@ -1877,6 +1877,7 @@ intrtd(char *ifname, int ifs, int argc, char **argv)
 		set = 1;
 
 	if (isprefix(argv[0], "rtsol")) {
+		/* XXX this has been replaced with IFXF_AUTOCONF6 */
 		cmdname = "rtsol";
 		cmdpath = RTSOL;
 	} else if (isprefix(argv[0], "rtadvd")) {
