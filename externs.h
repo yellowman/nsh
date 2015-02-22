@@ -489,6 +489,9 @@ int timeslot_status(int, char *, char *, int);
 /* arp.c */
 int arpget(const char *);
 int arpset(int, char **);
+void arpdump(void);
+void conf_arp(FILE *, char *);
+char *sec2str(time_t);
 
 /* more.c */
 int more(char *);

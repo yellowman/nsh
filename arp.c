@@ -32,10 +32,6 @@
  * SUCH DAMAGE.
  */
 
-/*
- * arp - display, set, delete arp table entries
- */
-
 #include <sys/file.h>
 #include <sys/socket.h>
 #include <sys/sysctl.h>
@@ -61,30 +57,26 @@
 #include <ifaddrs.h>
 #include "externs.h"
 
-void arpdump(void);
 int arpdelete(const char *, const char *);
-int arpsearch(in_addr_t addr, void (*action)(struct sockaddr_dl *sdl,
-	struct sockaddr_inarp *sin, struct rt_msghdr *rtm));
-void print_entry(struct sockaddr_dl *sdl,
+int arpsearch(FILE *, char *, in_addr_t addr, void (*action)(FILE *, char *,
+	struct sockaddr_dl *sdl, struct sockaddr_inarp *sin,
+	struct rt_msghdr *rtm));
+void print_entry(FILE *, char *, struct sockaddr_dl *sdl,
 	struct sockaddr_inarp *sin, struct rt_msghdr *rtm);
 void nuke_entry(struct sockaddr_dl *sdl,
 	struct sockaddr_inarp *sin, struct rt_msghdr *rtm);
+void conf_arp_entry(FILE *, char *, struct sockaddr_dl *,
+	struct sockaddr_inarp *, struct rt_msghdr *);
 static char *ether_str(struct sockaddr_dl *);
 int getinetaddr(const char *, struct in_addr *);
 void getsocket(void);
 int rtmsg_arp(int, int, int, int);
-static char *sec2str(time_t);
 
 static int nflag;	/* no reverse dns lookups */
 static int s = -1;
 
 extern int h_errno;
 
-/* ROUNDUP() is nasty, but it is identical to what's in the kernel. */
-#define ROUNDUP(a)					\
-	((a) > 0 ? (1 + (((a) - 1) | (sizeof(long) - 1))) : sizeof(long))
-
-/* which function we're supposed to do */
 #define F_GET		1
 #define F_SET		2
 #define F_FILESET	3
@@ -195,7 +187,6 @@ arpset(int argc, char *argv[])
 	}
 
 tryagain:
-	printf("rtmsg_arp\n");
 	if (rtmsg_arp(RTM_GET, flags, doing_proxy, export_only) < 0) {
 		printf("%% %s\n", host);
 		return (1);
@@ -263,7 +254,7 @@ arpget(const char *host)
 	    W_ADDR, W_ADDR, "Host", W_LL, W_LL, "Ethernet Address",
 	    W_IF, W_IF, "Netif", "Expire", "Flags");
 
-	found_entry = arpsearch(sin->sin_addr.s_addr, print_entry);
+	found_entry = arpsearch(NULL, "", sin->sin_addr.s_addr, print_entry);
 	if (found_entry == 0) {
 		printf("%% %-*.*s no entry\n", W_ADDR, W_ADDR,
 		    inet_ntoa(sin->sin_addr));
@@ -339,7 +330,8 @@ delete:
  * Search the entire arp table, and do some action on matching entries.
  */
 int
-arpsearch(in_addr_t addr, void (*action)(struct sockaddr_dl *sdl,
+arpsearch(FILE *output, char *delim, in_addr_t addr, void (*action)
+    (FILE *output, char *delim, struct sockaddr_dl *sdl,
     struct sockaddr_inarp *sin, struct rt_msghdr *rtm))
 {
 	int found_entry, mib[7];
@@ -391,7 +383,7 @@ arpsearch(in_addr_t addr, void (*action)(struct sockaddr_dl *sdl,
 				continue;
 			found_entry = 1;
 		}
-		(*action)(sdl, sin, rtm);
+		(*action)(output, delim, sdl, sin, rtm);
 	}
 	free(buf);
 	return(found_entry);
@@ -407,20 +399,49 @@ arpdump(void)
 	    W_ADDR, W_ADDR, "Host", W_LL, W_LL, "Ethernet Address",
 	    W_IF, W_IF, "Netif", "Expire", "Flags");
 
-	arpsearch(0, print_entry);
+	arpsearch(NULL, "", 0, print_entry);
+}
+
+void
+conf_arp(FILE *output, char *delim)
+{
+	arpsearch(output, delim, 0, conf_arp_entry);
+}
+
+void
+conf_arp_entry(FILE *output, char *delim, struct sockaddr_dl *sdl,
+    struct sockaddr_inarp *sin, struct rt_msghdr *rtm)
+{
+	char *host;
+
+        if (output == NULL) {
+		printf("%% conf_arp_entry: unprepared\n");
+		return;
+	}
+
+	host = inet_ntoa(sin->sin_addr);
+
+	if (!(rtm->rtm_flags & (RTF_PERMANENT_ARP|RTF_LOCAL|RTF_BROADCAST)) &&
+	    (rtm->rtm_rmx.rmx_expire == 0))
+		fprintf(output, "%s%s %s\n", delim, host, ether_str(sdl));
 }
 
 /*
  * Display an arp entry
  */
 void
-print_entry(struct sockaddr_dl *sdl, struct sockaddr_inarp *sin,
-    struct rt_msghdr *rtm)
+print_entry(FILE *output, char *delim, struct sockaddr_dl *sdl,
+    struct sockaddr_inarp *sin, struct rt_msghdr *rtm)
 {
 	char ifix_buf[IFNAMSIZ], *ifname, *host;
 	struct hostent *hp = NULL;
 	int addrwidth, llwidth, ifwidth ;
 	struct timeval now;
+
+	if (output != NULL) {
+		printf("%% print_entry: unprepared\n");
+		return;
+	}
 
 	gettimeofday(&now, 0);
 
@@ -445,7 +466,7 @@ print_entry(struct sockaddr_dl *sdl, struct sockaddr_inarp *sin,
 	if (W_ADDR + W_LL + W_IF - addrwidth - llwidth > ifwidth)
 		ifwidth = W_ADDR + W_LL + W_IF - addrwidth - llwidth;
 
-	printf("%-*.*s %-*.*s %*.*s", addrwidth, addrwidth, host,
+	printf("%s%-*.*s %-*.*s %*.*s", delim, addrwidth, addrwidth, host,
 	    llwidth, llwidth, ether_str(sdl), ifwidth, ifwidth, ifname);
 
 	if (rtm->rtm_flags & (RTF_PERMANENT_ARP|RTF_LOCAL|RTF_BROADCAST))
@@ -585,7 +606,7 @@ getinetaddr(const char *host, struct in_addr *inap)
 	return (0);
 }
 
-static char *
+char *
 sec2str(time_t total)
 {
 	static char result[256];

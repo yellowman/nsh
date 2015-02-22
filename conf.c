@@ -174,7 +174,7 @@ conf(FILE *output)
 	/*
 	 * print static arp and route entries in configuration file format
 	 */
-	conf_routes(output, "arp ", AF_LINK, RTF_STATIC, 0);
+	conf_arp(output, "arp ");
 	conf_routes(output, "route ", AF_INET, RTF_STATIC, 0);
 	conf_routes(output, "route ", AF_INET6, RTF_STATIC, 0);
 
@@ -273,7 +273,7 @@ void conf_rtables_rtable(FILE *output, int rtableid)
 	 * rdomain is created by specifing one on an interface prior
 	 * to this point. An rdomain creates a new corresponding rtable)
 	 */
-	conf_routes(output, " arp ", AF_LINK, RTF_STATIC, rtableid);
+	conf_arp(output, " arp ");
 	conf_routes(output, " route ", AF_INET, RTF_STATIC, rtableid);
 	conf_routes(output, " route ", AF_INET6, RTF_STATIC, rtableid);
 
@@ -1015,19 +1015,25 @@ conf_routes(FILE *output, char *delim, int af, int flags, int tableid)
 	char *next;
 	struct rt_msghdr *rtm;
 	struct rtdump *rtdump;
+	struct sockaddr *sa;
 
 	if (tableid < 0 || tableid > RT_TABLEID_MAX) {
 		printf("%% conf_routes: tableid %d out of range\n", tableid);
 		return(1);
 	}
 	rtdump = getrtdump(0, flags, tableid);
-	if (rtdump == NULL)
+	if (rtdump == NULL) {
+		printf("%% conf_routes: getrtdump failure\n");
 		return(1);
+	}
 
 	/* walk through routing table */
 	for (next = rtdump->buf; next < rtdump->lim; next += rtm->rtm_msglen) {
 		rtm = (struct rt_msghdr *)next;
-		if ((rtm->rtm_flags & flags) == 0)
+		if (rtm->rtm_version != RTM_VERSION)
+			continue;
+		sa = (struct sockaddr *)(next + rtm->rtm_hdrlen);
+		if (af != AF_UNSPEC && sa->sa_family != af)
 			continue;
 		if (!rtm->rtm_errno) {
 			if (rtm->rtm_addrs)
@@ -1220,11 +1226,11 @@ conf_print_rtm(FILE *output, struct rt_msghdr *rtm, char *delim, int af)
 	for (i = 1; i; i <<= 1)
 		if (i & rtm->rtm_addrs) {
 			sa = (struct sockaddr *)cp;
+
 			switch (i) {
 			case RTA_DST:
 				/* allow arp to get printed with af==AF_LINK */
-				if ((sa->sa_family == af) ||
-				    (af == AF_LINK && sa->sa_family == AF_INET)) {
+				if (sa->sa_family == af) {
 					if (rtm->rtm_flags & RTF_REJECT)
 						snprintf(flags, sizeof(flags),
 						    " reject");
