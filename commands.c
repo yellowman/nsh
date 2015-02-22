@@ -2009,7 +2009,7 @@ pr_arp(int argc, char **argv)
 	switch(argc) {
 	case 2:
 		/* show arp table */
-		p_rttables(AF_INET, 0, RTF_LLINFO);
+		arpdump();
 		break;
 	case 3:
 		/* specific address */
