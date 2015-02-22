@@ -61,7 +61,7 @@ int 	sigflag = 0;
 
 /* declared in externs.h */
 union	sockunion so_dst, so_gate, so_mask, so_ifp;
-struct	m_rtmsg m_rtmsg;
+struct	m_rtmsg;
 
 int	rtm_addrs;
 u_long  rtm_inits;
