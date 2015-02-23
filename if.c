@@ -630,7 +630,7 @@ set_ifxflags(char *ifname, int ifs, int flags)
 	ifr.ifr_flags = flags;
 
 	if (ioctl(ifs, SIOCSIFXFLAGS, (caddr_t)&ifr) < 0) {
-		printf("%% get_ifxflags: SIOCSIFXFLAGS: %s\n", strerror(errno));
+		printf("%% set_ifxflags: SIOCSIFXFLAGS: %s\n", strerror(errno));
 	}
 
 	return(0);
@@ -1548,6 +1548,11 @@ intaf(char *ifname, int ifs, int argc, char **argv)
 		argc--;
 	} else
 		set = 1;
+
+	if (argc > 1) {
+		printf("%% Invalid argument\n");
+		return(1);
+	}
 
 	if (isprefix(argv[0], "inet6")) {
 		if (set)
