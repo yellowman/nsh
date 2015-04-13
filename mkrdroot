@@ -168,12 +168,7 @@ cd $wd
 echo -n "Crunchgen ($progs)"
 cgdir=$(c 2 mktemp -t -d mkrdrootcg.XXXXXX)
 
-# Due to static PIE, ramdisk binaries need to be cleaned and rebuilt NOPIE
-c 2 cp -p /usr/src/bin/Makefile.inc /usr/src/bin/Makefile.inc.orig
-c 2 echo 'NOPIE=' >> /usr/src/bin/Makefile.inc
-c 2 cp -p /usr/src/sbin/Makefile.inc /usr/src/sbin/Makefile.inc.orig
-c 2 echo 'NOPIE=' >> /usr/src/sbin/Makefile.inc
-# These aren't cleaned by crunchgen's Makefile, do them manually
+# Ramdisk binaries aren't cleaned by crunchgen's Makefile, do them manually for NOPIE build
 for progname in ${progs}; do
  if [ -d /usr/src/bin/${progname} ]; then
   c 2 cd /usr/src/bin/${progname}
@@ -198,11 +193,12 @@ libs -lutil
 
 c 2 cd $cgdir
 c 2 "crunchgen -Em Makefile $cgdir/kcopy.conf > $TMPDIR/last.output 2>&1"
+# Ramdisk binaries need to be built NOPIE
+sed -e "/^.*cd .* && exec $(MAKE)/s/exec/exec env NOPIE=/" Makefile > Makefile.tmp
+c 2 mv Makefile.tmp Makefile
 c 2 "make clean > $TMPDIR/last.output 2>&1"
 c 2 "make objs > $TMPDIR/last.output 2>&1"
 c 2 "make > $TMPDIR/last.output 2>&1"
-c 2 mv /usr/src/bin/Makefile.inc.orig /usr/src/bin/Makefile.inc
-c 2 mv /usr/src/sbin/Makefile.inc.orig /usr/src/sbin/Makefile.inc
 # Don't leave non-PIE .o hanging around
 for progname in ${progs}; do
  if [ -d /usr/src/bin/${progname} ]; then
