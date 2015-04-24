@@ -91,7 +91,7 @@ else
 fi
 
 # Main partition comprises the total disk after offset
-offset=64
+offset=$((4*1024*1024/${bytessec}))
 asize=$((totalsize - offset))
 
 echo "vnd-${tabname}:\\" > $tmplabel
