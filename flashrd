@@ -9,7 +9,7 @@ arch=`uname -m`
 vers=1.9
 
 typeset -x device rootdevice blocks rdroot dest vnddirs vndsize
-typeset -x tardirs tmpfsdirs totalsize
+typeset -x tardirs tmpfsdirs totalsize vers
 typeset -x bytessec vnd distloc tmpmnt TMPDIR elfrdsetrootdir
 
 blocks=4600				# blocks to reserve for kernel ramdisk
