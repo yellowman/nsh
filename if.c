@@ -16,7 +16,6 @@
 
 #include <stdio.h>
 #include <ctype.h>
-#include <tzfile.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
@@ -173,12 +172,11 @@ show_int(int argc, char **argv)
 	if (if_data.ifi_lastchange.tv_sec) {
 		gettimeofday(&tv, (struct timezone *)0);
 		c = difftime(tv.tv_sec, if_data.ifi_lastchange.tv_sec);
-		days = c / SECSPERDAY;
-		c %= SECSPERDAY;
-		hours = c / SECSPERHOUR;
-		c %= SECSPERHOUR;
-		mins = c / SECSPERMIN;
-		c %= SECSPERMIN;
+		days = c / (24 * 60 * 60);
+		c %= (24 * 60 * 60);
+		hours = c / (60 * 60);
+		c %= (60 * 60);
+		mins = c / 60;
 		printf(" (last change ");
 		if (days)
 			printf("%id ", days);

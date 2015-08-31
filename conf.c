@@ -16,7 +16,6 @@
 
 #include <stdio.h>
 #include <ctype.h>
-#include <tzfile.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
