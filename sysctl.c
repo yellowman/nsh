@@ -128,7 +128,6 @@ struct ipsysctl ip6sysctls[] = {
 
 struct ipsysctl mplssysctls[] = {
 { "ttl",		{ CTL_NET, PF_MPLS, MPLSCTL_DEFTTL, MIB_STOP, 0 },			DEFAULT_MTTL, 0	},
-{ "ifq-maxlen",		{ CTL_NET, PF_MPLS, MPLSCTL_IFQUEUE, IFQCTL_MAXLEN, MIB_STOP, 0 },	IFQ_MAXLEN, 0	},
 { "mapttl-ip",		{ CTL_NET, PF_MPLS, MPLSCTL_MAPTTL_IP, MIB_STOP, 0 },			0, 0	},
 { "mapttl-ip6",		{ CTL_NET, PF_MPLS, MPLSCTL_MAPTTL_IP6, MIB_STOP, 0 },			0, 1	},
 { 0, { 0, 0, 0, 0, 0, 0 }, 0, 0 }
