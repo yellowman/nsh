@@ -287,7 +287,6 @@ Menu ip6tab[] = {
 
 Menu mplstab[] = {
 	{ "ttl",	"MPLS ttl",			CMPL0 0, 0, 0, 1, ipsysctl },
-	{ "ifq-maxlen", "MPLS IFQ maxlen",		CMPL0 0, 0, 0, 1, ipsysctl },
 	{ "mapttl-ip",	"MPLS mapttl IPv4",		CMPL0 0, 0, 0, 1, ipsysctl },
 	{ "mapttl-ip6",	"MPLS mapttl IPv6",		CMPL0 0, 0, 0, 1, ipsysctl },
 	{ "?",		"Help",				CMPL0 0, 0, 0, 0, sysctlhelp },
