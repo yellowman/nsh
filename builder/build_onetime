@@ -1,0 +1,104 @@
+#!/bin/sh
+
+# The files root folder should have a structure like: 
+# 
+# onetimeBase/
+#	CommonFiles/
+#		etc/
+#			...
+#		flash/
+#			...
+#		tmp/
+#			APPEND/
+#				etc/
+#				var/
+#		usr/
+#			...
+# 	HostSpecificFiles/
+#		host1.example.com/
+#			etc/
+#				...
+#			flash/
+#				...
+#			tmp/
+#				APPEND/
+#					etc/
+#						...
+#					var/
+#						...
+#		host2.example.com/
+#			etc/
+#				...
+#			flash/
+#				...
+#			tmp/
+#				APPEND/
+#					etc/
+#						...
+#					var/
+#						...
+#
+# Each host-specific directory will be rolled up into a .tgz inside the 
+# CommonFiles/flash/ folder. 
+#
+# Files in the APPEND trees will be appended to existing files. 
+#
+
+# build host-specific .tgz files
+# $1 = path to directory full of host-specific files
+# $2 = path to destination dir
+buildHostSpecificFiles() 
+{
+
+	echo build_onetime: host-specific files
+	
+	# clean out existing files
+	/bin/rm "${2}"/*.onetime.tgz
+	
+	for oneHost in `/bin/ls "${1}"`; do
+	
+		echo build_onetime: "${oneHost}"
+		
+		/bin/tar zcf "${2}/${oneHost}".onetime.tgz -C "${1}/${oneHost}" `/bin/ls -A "${1}/${oneHost}"`
+		/bin/chmod 400 "${2}/${oneHost}".onetime.tgz
+		/sbin/chown root:wheel "${2}/${oneHost}".onetime.tgz
+	
+	done
+
+}
+
+
+# check for root
+if [ `/usr/bin/id -u` != 0 ]; then
+	echo "build_onetime: must run as root"
+	exit 1
+fi
+
+# location where the final file will be built
+if [ -z "${1}" ]; then
+	echo "usage: build_onetime <files root folder>"
+	exit 0
+else
+	# user input
+	BASEDIR="${1}"
+fi
+
+COMMON_BASEDIR="${BASEDIR}/CommonFiles"
+HOST_BASEDIR="${BASEDIR}/HostSpecificFiles"
+HOST_TARGET_DIR="${COMMON_BASEDIR}/flash"
+
+if [ ! -d "${HOST_TARGET_DIR}" ]; then
+	/bin/mkdir -p "${HOST_TARGET_DIR}"
+fi
+
+buildHostSpecificFiles "${HOST_BASEDIR}" "${HOST_TARGET_DIR}"
+
+echo build_onetime: building main file
+/bin/tar zcf "${BASEDIR}"/onetime.tgz -C "${COMMON_BASEDIR}" `/bin/ls -A "${COMMON_BASEDIR}"`
+/bin/chmod 400 "${BASEDIR}"/onetime.tgz
+/sbin/chown root:wheel "${BASEDIR}"/onetime.tgz
+
+# clean up host-specific files
+/bin/rm "${HOST_TARGET_DIR}"/*.onetime.tgz
+
+

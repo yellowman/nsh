@@ -1,0 +1,93 @@
+###
+#
+# fallback harness
+
+c() {
+ [ -z "$1" ] && exit 1
+ lvl="$1"
+ shift
+
+ [ -z "$*" ] && exit 1
+
+ if ! eval $*; then
+  echo % $* failure
+  if echo "$*" | grep last.output >/dev/null 2>&1; then
+   echo % See $TMPDIR/last.output for further diagnostics
+  fi
+  case $lvl {
+  4)
+   4; 3; 2; 1; 0;
+   ;;
+  3)
+   3; 2; 1; 0;
+   ;;
+  2)
+   2; 1; 0;
+   ;;
+  1)
+   1; 0;
+   ;;
+  0)
+   0;
+   ;;
+  }
+ fi
+}
+
+###
+#
+# Wait up to 30 seconds for the kernel to catch up,
+# otherwise give up umount with fallback harness
+
+umountwait() {
+ y=1
+
+ while ! umount $2 2>/dev/null; do
+  echo -n "...$y"
+  sleep 1
+  let y=y+1
+  if [ "$y" -gt 30 ]; then
+   c $1 umount $2
+  fi
+ done
+}
+
+###
+#
+# Test Argument
+
+t2() {
+ if [ -z "$1" ]; then
+  usage
+  exit 1
+ fi
+}
+
+###
+#
+# Sectors to MBytes
+
+sectors2mbytes() {
+ echo $(((($1 / 1024) * bytessec) / 1024))
+}
+
+###
+#
+# MBytes to sectors
+
+mbytes2sectors() {
+ echo $(((($1 * 1024) / bytessec) * 1024))
+}
+
+###
+#
+# Find a free vnd
+
+getavailvnd() {
+ set -A vndevices `vnconfig -l | grep -i 'not in use' | sed 's/\(vnd[[:digit:]]\).*/\1/'`
+
+ if [ ${#vndevices[@]} -lt "$1" ]; then
+   echo "Not enough vnd device(s) available (${#vndevices[@]} < $1)"
+   exit 1
+ fi
+}

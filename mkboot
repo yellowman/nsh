@@ -1,0 +1,139 @@
+#!/bin/ksh
+#
+# mkboot
+#
+# Chris Cappuccio <chris@nmedia.net>
+
+date=`date +%Y%m%d`
+arch=`uname -m`
+
+[ -z "$distloc" ] && distloc=/
+
+[ -z "$totalsize" ] && totalsize=1951488
+
+[ -z "$bytessec" ] && bytessec=512
+
+[ -z "$dest" ] && dest=flashimg.$arch-$date
+
+###
+#
+# disktab dance
+
+if [[ ! -w /etc ]]; then
+ echo "Can't do it, depends on disktab being replaceable!"
+ exit 1
+fi
+
+random=`dd if=/dev/urandom bs=512 count=1 2>/dev/null | sha512`
+tabname=`printf "%.8s" $random`
+
+vncfgroot() {
+ [[ $vnd == true ]] && c 0 vnconfig -t vnd-${tabname} $rootdevice $1
+}
+
+vnuncfgroot() {
+ [[ $vnd == true ]] && c 0 vnconfig -u $rootdevice
+}
+
+###
+#
+# fall back
+
+2() {
+ umount -f /dev/"$rootdevice"a
+}
+1() {
+ vnuncfgroot
+}
+0() {
+ [[ -f /etc/disktab.${tabname} ]] && mv /etc/disktab.${tabname} /etc/disktab
+ exit 1
+}
+
+. ./flashrd.sub
+
+[ -z "$rootdevice" ] && getavailvnd 1 && rootdevice=${vndevices[0]}
+
+[ -z "$tmpmnt" ] && tmpmnt=$(c 0 mktemp -t -d mkboot.XXXXXX)
+
+###
+#
+# Create boot image
+
+tmplabel=$(c 0 mktemp -t mkbootlabel.XXXXXX)
+
+if [[ $vnd == true ]]; then
+
+ # Create vnd image, must zero out the first few sectors or else disklabel freaks out...
+ c 0 "dd if=/dev/zero bs=512 count=512 of=$dest > $TMPDIR/last.output 2>&1"
+ cylinders=$((totalsize / 64))
+ trackscylinder=1
+ sectorstrack=64
+
+else
+
+ # Disk specified, use default kernel geometry
+ c 0 "fdisk -f $distloc/usr/mdec/mbr -yi $rootdevice > $TMPDIR/last.output 2>&1"
+ c 0 disklabel $rootdevice > $tmplabel
+ totalsize=`awk -F": " ' /^total sectors:/ {print $2} ' $tmplabel`
+ bytessec=`awk -F": " ' /^bytes\/sector:/ {print $2} ' $tmplabel`
+ sectorstrack=`awk -F": " ' /^sectors\/track:/ {print $2} ' $tmplabel`
+ trackscylinder=`awk -F": " ' /^tracks\/cylinder:/ {print $2} ' $tmplabel`
+ cylinders=`awk -F": " ' /^cylinders:/ {print $2} ' $tmplabel`
+
+fi
+
+echo -n "Disk size `sectors2mbytes $totalsize`MB ($totalsize sectors"
+if [ "$bytessec" == "512" ]; then
+ echo ")"
+else
+ echo ", $bytessec bytes/sector)"
+fi
+
+# Main partition comprises the total disk after offset
+offset=$((4*1024*1024/${bytessec}))
+asize=$((totalsize - offset))
+
+echo "vnd-${tabname}:\\" > $tmplabel
+echo "	:dt=SCSI:ty=${tabname}:se#${bytessec}:nt#${trackscylinder}:ns#${sectorstrack}:nc#${cylinders}:su#${totalsize}:\\" >> $tmplabel
+echo "	:pa#${asize}:oa#${offset}:fa#$((bytessec * 2)):ba#$((bytessec * 16)):ta=4.2BSD:\\" >> $tmplabel
+echo "	:pc#${totalsize}:oc#0:" >> $tmplabel
+
+# DISKTAB MODIFIED
+c 1 mv /etc/disktab /etc/disktab.${tabname}
+c 1 cp $tmplabel /etc/disktab
+
+if [[ $vnd == true ]]; then
+ vncfgroot $dest
+ c 1 "fdisk -l $totalsize -f $distloc/usr/mdec/mbr -yi $rootdevice > $TMPDIR/last.output 2>&1"
+fi
+
+c 1 "disklabel -w $rootdevice vnd-${tabname} > $TMPDIR/last.output 2>&1"
+
+# DISKTAB ORIGINAL
+c 1 mv /etc/disktab.${tabname} /etc/disktab
+
+echo -n Creating filesystem on /dev/r${rootdevice}a
+c 1 "newfs -S $bytessec /dev/r${rootdevice}a > $TMPDIR/last.output 2>&1"
+echo
+
+c 1 mount /dev/${rootdevice}a $tmpmnt
+
+echo Installing bootblocks
+
+c 2 "installboot -r $tmpmnt $rootdevice $distloc/usr/mdec/biosboot $distloc/usr/mdec/boot > $TMPDIR/last.output 2>&1"
+
+c 2 mkdir $tmpmnt/new $tmpmnt/old $tmpmnt/etc
+
+echo Generate initial random seeds
+
+c 2 "dd if=/dev/random of=$tmpmnt/etc/random.seed bs=512 count=1 status=none"
+c 2 chmod 600 $tmpmnt/etc/random.seed
+c 2 "dd if=/dev/random of=$tmpmnt/etc/host.random bs=65536 count=1 status=none"
+c 2 chmod 600 $tmpmnt/etc/host.random
+
+umountwait 1 $tmpmnt
+
+vnuncfgroot
+
+exit 0

@@ -1,0 +1,174 @@
+#!/bin/ksh
+#
+# flashrd mkkern
+#
+# create luscious ramdisk version of (GENERIC - config.strip)
+#
+# Chris Cappuccio <chris@nmedia.net>
+#
+
+###
+#
+# blocks
+
+[ -z "$blocks" ] && blocks=4600
+
+###
+#
+# rdrootfs
+
+if [ -z "$rdroot" -a -z "$1" ]; then
+ echo "% mkkern <$blocks rdrootfs>"
+ exit 1
+fi
+
+[ -z "$rdroot" ] && rdroot=$1
+
+if [ ! -f $rdroot ]; then
+ echo % $rdroot is not a file
+ exit 1
+fi
+
+###
+#
+# kernel source
+
+[ -z "$kernsrc" ] && kernsrc=/usr/src/sys/arch/`uname -m`
+
+if [ ! -d $kernsrc ]; then
+ echo % $kernsrc not found
+ exit 1
+fi
+
+###
+#
+# elfrdsetroot
+
+[ -z "$elfrdsetrootdir" ] && elfrdsetrootdir="./elfrdsetroot/"
+
+if [ ! -d $elfrdsetrootdir ]; then
+ echo % elfrdsetrootdir $elfrdsetrootdir not found
+ exit 1
+fi
+
+###
+#
+# GENERIC config
+
+if [ ! -f $kernsrc/conf/GENERIC ]; then
+ echo % $kernsrc/conf/GENERIC config not found
+ exit 1
+fi
+
+###
+#
+# exit 1 harness
+
+0() {
+ exit 1
+}
+
+. ./flashrd.sub
+
+[ -z "$tmpmnt" ] && tmpmnt=$(c 0 mktemp -t -d mkkern.tmpmnt.XXXXXX)
+
+###
+#
+# remove option POOL_DEBUG from /usr/src/sys/conf/GENERIC (slower allocation!)
+# modify /usr/src/sys/arch/`uname -m`/conf/GENERIC
+
+grep -v POOL_DEBUG /usr/src/sys/conf/GENERIC > /usr/src/sys/conf/FLASHRD
+# if you want POOL_DEBUG, do this instead:
+#cp /usr/src/sys/conf/GENERIC /usr/src/sys/conf/FLASHRD
+
+egrep -v ^config $kernsrc/conf/GENERIC | sed -e 's/GENERIC/FLASHRD/' > $kernsrc/conf/FLASHRD
+
+if [ `uname -m` == "i386" ]; then
+	echo "option	NKPTP=16" >> $kernsrc/conf/FLASHRD
+fi
+# OpenBSD 5.4 defines this to 16 automatically. So give up for now, since 
+# the 'option' ability still requires a custom patch.
+#if [ `uname -m` == "amd64" ]; then
+#	echo "option	NKL2_KIMG_ENTRIES=16" >> $kernsrc/conf/FLASHRD
+#fi
+cat >> $kernsrc/conf/FLASHRD <<-EOF
+	option	RAMDISK_HOOKS
+	option	MINIROOTSIZE=$blocks
+	config	bsd	root on rd0a swap on rd0b and wd0b and sd0b
+	pseudo-device	rd 1
+	EOF
+
+sed -e 's/GENERIC/FLASHRD/' $kernsrc/conf/GENERIC.MP > $kernsrc/conf/FLASHRD.MP
+
+if [ -f config.strip ]; then
+ while read line; do
+
+  line=${line%%#*}              # strip comments
+  test -z "$line" && continue
+
+  sed -e "s/^$line//" < $kernsrc/conf/FLASHRD > $kernsrc/conf/FLASHRD.tmp
+  mv $kernsrc/conf/FLASHRD.tmp $kernsrc/conf/FLASHRD
+ done < config.strip
+else
+ echo "[no config.strip found for kernel config alterations]"
+ # XXX isn't the isadma space relocated to 1MB now (at least on i386)???
+ echo "[ramdisk kernel may be too large to boot without disabling isadma for i386/amd64]"
+fi
+
+###
+#
+# compile ELFRDSETROOT first (so we can bail out if it fails without waiting for GENERIC)
+
+c 0 cc -o $elfrdsetrootdir/elfrdsetroot $elfrdsetrootdir/elfrdsetroot.c $elfrdsetrootdir/elf32.c $elfrdsetrootdir/elf64.c
+
+###
+#
+# compile our version of GENERIC
+
+T=$(c 0 mktemp -t mkkern.FLASHRD.XXXXXX)
+TMP=$(c 0 mktemp -t mkkern.FLASHRD.MP.XXXXXX)
+
+echo -n Configuring FLASHRD, FLASHRD.MP kernels
+wd=`pwd`
+cd $kernsrc/conf
+c 0 "config FLASHRD >$T 2>&1"
+c 0 "config FLASHRD.MP >$TMP 2>&1"
+echo
+
+unset ALTCC
+[ -n "$CC" ] && ALTCC="CC=$CC "
+
+echo -n Compiling FLASHRD kernel
+cd $kernsrc/compile/FLASHRD
+echo -n " (make depend)"
+c 0 "make depend > $TMPDIR/last.output 2>&1"
+if grep "make clean" $T >/dev/null; then
+ echo -n " (make clean)"
+ c 0 "make clean > $TMPDIR/last.output 2>&1"
+fi
+echo -n " (make)"
+c 0 "make ${ALTCC}-j$(($(sysctl -n hw.ncpu) + 1))> $TMPDIR/last.output 2>&1"
+c 0 cp bsd $tmpmnt/bsd
+echo
+
+echo -n Compiling FLASHRD.MP kernel
+cd $kernsrc/compile/FLASHRD.MP
+echo -n " (make depend)"
+c 0 "make depend > $TMPDIR/last.output 2>&1"
+if grep "make clean" $TMP >/dev/null; then
+ echo -n " (make clean)"
+ c 0 "make clean > $TMPDIR/last.output 2>&1"
+fi
+echo -n " (make)"
+c 0 "make ${ALTCC}-j$(($(sysctl -n hw.ncpu) + 1))> $TMPDIR/last.output 2>&1"
+c 0 cp bsd $tmpmnt/bsd.mp
+echo
+
+###
+#
+# run elfrdsetroot
+
+cd $wd
+c 0 $elfrdsetrootdir/elfrdsetroot $tmpmnt/bsd $rdroot
+c 0 $elfrdsetrootdir/elfrdsetroot $tmpmnt/bsd.mp $rdroot
+c 0 rm $elfrdsetrootdir/elfrdsetroot

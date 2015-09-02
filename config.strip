@@ -1,0 +1,104 @@
+#
+# Lines in this file are matched and removed using sed from the architecture-
+# dependent GENERIC kernel config.  This list is valid for i386 and amd64
+# as of OpenBSD 5.7.
+#
+# The purpose of this list is to remove isadma and devices which depend
+# on isadma.  You may find other reasons to strip features or devices
+# from your GENERIC kernel config (and thus add those patterns here.)
+#
+isadma.*at isa.*
+bha.*at isa.*
+scsibus.*at bha.*
+aha.*at isa.*
+scsibus.*at aha.*
+uha.*at isa.*
+uha.*at eisa.*
+ahc[*].*at pci.*
+ahd.*at pci.*
+twe.*at pci.*
+ahc.*at eisa.*
+ahb.*at eisa.*
+cac.*at eisa.*
+ep.*at eisa.*
+fea.*at eisa.*
+ne.*at pcmcia.*
+ep.*at pcmcia.*
+sm.*at pcmcia.*
+xe.*at pcmcia.*
+an.*at pcmcia.*
+an.*at isapnp.*
+ray.*at pcmcia.*
+malo.*at pcmcia.*
+scsibus.*at uha.*
+wds.*at isa.*
+scsibus.*at wds.*
+fdc.*at isa.*
+fd.*at fdc.*
+le.*at isa.*
+we.*at isa.*
+ec.*at isa.*
+ep.*at isa.*
+ef.*at isa.*
+ec.*at isa.*
+ie.*at isa.*
+lc.*at isa.*
+ex.*at isa.*
+sm.*at isa.*
+pss.*at isa.*
+sp.*at pss.*
+eso.*at pci.*
+sb.*at isa.*
+ess.*at isa.*
+wss.*at isa.*
+pas.*at isa.*
+gus.*at isa.*
+ym.*at isa.*
+mpu.*at isa.*
+midi.*at sb.*
+midi.*at ym.*
+midi.*at mpu.*
+audio.*at sb.*
+audio.*at gus.*
+audio.*at pas.*
+audio.*at sp.*
+audio.*at ess.*
+audio.*at wss.*
+audio.*at ym.*
+audio.*at eso.*
+pcic.*at isa.*
+tcic.*at isa.*
+pcic.*at pci.*
+pcmcia.*at pcic.*
+pcmcia.*at tcic.*
+radeondrm.*at pci.*
+inteldrm.*at vga.*
+drm.*at inteldrm.*
+radeondrm.*at vga.*
+drm.*at radeondrm.*
+wsdisplay.*at radeondrm.*
+acpiasus.*at acpi.*
+acpisony.*at acpi.*
+acpitoshiba.*at acpi.*
+acpithinkpad.*at acpi.*
+acpivideo.*at acpi.*
+acpivout.*at acpivideo.*
+acpipwrres.*at acpi.*
+aibs.*at acpi.*
+uguru.*at isa.*
+aps.*at isa.*
+option.*X86EMU.*
+bktr.*at pci.*
+radio.*at bktr.*
+qle.*at pci.*
+qlw.*at pci.*
+qla.*at pci.*
+gdt.*at pci.*
+ami.*at pci.*
+adw.*at pci.*
+siop.*at pci.*
+pcscp.*at pci.*
+bwi.*at pci.*
+bwi.*at cardbus.*
+udl.*at uhub.*
+wsdisplay.*at udl.*

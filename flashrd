@@ -1,0 +1,324 @@
+#!/bin/ksh
+#
+# flashrd initializer with default vnd image destination (or disk destination on demand)
+#
+# Chris Cappuccio <chris@nmedia.net>
+
+date=`date +%Y%m%d`
+arch=`uname -m`
+vers=1.9
+
+typeset -x device rootdevice blocks rdroot dest vnddirs vndsize
+typeset -x tardirs tmpfsdirs totalsize vers
+typeset -x bytessec vnd distloc tmpmnt TMPDIR elfrdsetrootdir
+
+blocks=4600				# blocks to reserve for kernel ramdisk
+rdroot=rd.$arch-$date			# ramdisk root fs image
+dest=flashimg.$arch-$date		# final product
+
+# See ./etc/rc.flashrd.sub to define tardirs, vnddirs, tmpfsdirs
+#
+. ./etc/rc.flashrd.sub
+
+set -A part a d e f g h i j k l m n o p
+
+# Completely ignored if -disk is specified
+totalsize=1951488
+#
+# Normally 512 (but, who knows, times they are a changin'!)
+bytessec=512
+
+# Set to true when the device is an image file false when a device is used.
+vnd=true
+
+[ `id -u` != 0 ] && echo root required && exit 1
+
+. ./flashrd.sub
+
+getavailvnd 2
+device=${vndevices[0]}
+rootdevice=${vndevices[1]}		# used to mount flash vnd
+
+vncfgroot() {
+ [[ $vnd == true ]] && c 0 vnconfig $1 $2
+}
+
+vnuncfgroot() {
+ [[ $vnd == true ]] && c 0 vnconfig -u $1
+}
+
+usage() {
+ cat <<EOF
+Usage: flashrd [options] <openbsd base>
+
+flashrd will create flash image file in absence of a disk name.
+
+Write direct to disk:
+    -d "dev"	Simple disk name (such as wd3 or sd2)
+
+Write to disk image:
+    -l n	Number of total sectors (default $totalsize or `sectors2mbytes $totalsize`MB)
+
+Other options:
+    -e "dir"    directory where elfrdsetroot.c is located
+
+EOF
+}
+
+while :
+do
+ case $1 in
+  -\?) usage; exit 0;;
+  -d | -disk) t2 "$2"; rootdevice="$2"; vnd=false; shift 2;;
+  -l) t2 "$2"; totalsize="$2"; shift 2;;
+  -b) t2 "$2"; bytessec="$2"; shift 2;;
+  -e) t2 "$2"; elfrdsetrootdir="$2"; shift 2;;
+
+  --) shift; break;;
+  -*) usage; exit 1;;
+  *) break;;
+ esac
+done
+
+if [ $# -ne 1 ]
+then
+ usage
+ exit 1
+else
+ distloc=$1
+fi
+
+echo "flashrd $vers chris@nmedia.net"
+echo
+if [ ! -d "$distloc" ]; then
+ echo % $distloc is not a directory
+ exit 1
+else
+ if [ ! -f "$distloc"/etc/services ]; then
+  echo % $distloc does not contain an unpacked etcXX.tgz file
+  exit 1
+ fi
+ if [ ! -f "$distloc"/bin/ksh ]; then
+  echo % $distloc does not contain an unpacked baseXX.tgz file
+  exit 1
+ fi
+ if [ ! -u "$distloc"/usr/bin/passwd ]; then
+  echo "% $distloc was not unpacked with tar p flag (to preserve permissions),"
+  echo "or it was not unpacked as root (to allow set ownership)"
+  exit 1
+ fi
+fi
+
+if [[ -n $elfrdsetrootdir && ! -d $elfrdsetrootdir ]]; then
+ echo % elfrdsetrootdir $elfrdsetrootdir not found
+fi
+
+###
+#
+# fall back
+
+4() {
+ umount $tmpmntvnd
+}
+3() {
+ vnconfig -u $device
+}
+2() {
+ umount $tmpmnt
+}
+1() {
+ vnuncfgroot $rootdevice
+}
+0() {
+ echo % TMPDIR: $TMPDIR
+ exit 1
+}
+
+###
+#
+# (Re-)Base TMPDIR to a subdiretory of either the current
+# TMPDIR value, or to /tmp
+
+TMPDIR=$(c 0 mktemp -t -d flashrd.XXXXXX)
+
+###
+#
+# generate kernel ramdisk
+
+c 0 ./mkrdroot
+
+# $rdroot should now have a ramdisk image
+
+###
+#
+# generate boot image
+
+c 0 ./mkboot
+
+# $dest should now have a boot image
+
+tmpmnt=$TMPDIR/tmpmnt
+c 0 mkdir $tmpmnt
+
+vncfgroot $rootdevice $dest
+
+c 1 mount /dev/"$rootdevice"a $tmpmnt
+
+###
+#
+# generate kernel
+
+c 2 ./mkkern
+
+###
+#
+# generate vnd, tar files
+
+c 2 ./mkdist
+
+###
+#
+# Build fstab
+
+tmpfstab=$TMPDIR/fstab
+
+cat <<-EOF >$tmpfstab
+	/dev/rd0a	/	ffs	rw	1 0
+	EOF
+
+x=0
+for i in $vnddirs; do
+ case $i {
+ sbin)
+  opts=noatime,nodev
+  ;;
+ usr)
+  opts=noatime,nodev
+  ;;
+ *)
+  opts=noatime,nodev,nosuid
+  ;;
+ }
+ echo  "/dev/vnd0${part[$x]}	/$i	ffs	rw,$opts	1 0" >> $tmpfstab
+ ((x++))
+done
+
+x=0
+if [ ! -z "$tardirs" ]; then
+ for i in $tardirs; do
+  echo "swap	/$i	tmpfs	rw,nodev,nosuid,-s${tarsize[$x]}	0 0" >> $tmpfstab
+  ((x++))
+ done
+fi
+
+if [ $x -ne ${#tarsize[*]} ]; then
+ echo "% \$tardirs count ($x) different than tarsize array count ${#tarsize[*]}, aborting"
+ 2; 1; 0;
+fi
+
+x=0
+if [ ! -z "$tmpfsdirs" ]; then
+ for i in $tmpfsdirs; do
+  echo
+  echo "swap		/$i	tmpfs	rw,nodev,nosuid,-s${tmpfssize[$x]}	0 0" >> $tmpfstab
+  ((x++))
+ done
+fi
+
+if [ $x -ne ${#tmpfssize[*]} ]; then
+ echo "% \$tmpfsdirs count ($x) different than tmpfssize array count ${#tmpfssize[*]}, aborting"
+ 2; 1; 0;
+fi
+
+###
+#
+# Copy in flashrd items to vnd
+
+tmpmntvnd=$TMPDIR/tmpmntvnd		# openbsd.vnd image mount point
+c 2 mkdir $tmpmntvnd
+
+c 2 vnconfig $device $tmpmnt/openbsd.vnd
+
+###
+#
+# map $vnddirs etc to a partition label
+
+x=0
+for i in $vnddirs; do
+ if [ $i == etc ]; then
+  etcpart=${part[$x]}
+ fi
+ if [ $i == bin ]; then
+  binpart=${part[$x]}
+ fi
+ ((x++))
+done
+
+if [ -z "$etcpart" -o -z "$binpart" ]; then
+ echo "% missing etc and/or bin in \$vnddirs ($vnddirs) aborting"
+ 3; 2; 1; 0;
+fi
+
+###
+#
+# mount, copy, umount etc files
+
+c 3 mount /dev/$device$etcpart $tmpmntvnd
+
+echo '# Run flashrd final boot routine' >> ${tmpmntvnd}/rc.local
+c 4 echo '/etc/rc.flashrd.local' >> ${tmpmntvnd}/rc.local
+c 4 echo '/etc/rc.flashrd.shutdown' >> ${tmpmntvnd}/rc.shutdown
+c 4 cp etc/rc.flashrd.conf etc/rc.flashrd.onetime etc/rc.flashrd.local etc/rc.flashrd.shutdown etc/rc.flashrd.sub $tmpmntvnd/
+
+c 4 mv $tmpfstab $tmpmntvnd/fstab
+
+c 4 "echo $vers > $tmpmntvnd/.flashrd_version"
+
+###
+#
+# stash calls to rc.flashrd.conf in /etc/rc
+
+TMPF=`c 4 mktemp /tmp/sed.XXXXXX`
+
+# sed cmd:
+# /ifconfig -a carp carpdemote/a\
+# /etc/rc.flashrd.conf
+#
+c 4 "echo /ifconfig -g carp carpdemote/a\\\\" > $TMPF
+c 4 "echo /etc/rc.flashrd.conf" >> $TMPF
+c 4 sed -f $TMPF $tmpmntvnd/rc >$tmpmntvnd/rc.new
+c 4 mv $tmpmntvnd/rc.new $tmpmntvnd/rc
+
+c 4 rm $TMPF
+
+umountwait 3 $tmpmntvnd
+
+###
+#
+# mount, copy, umount bin files
+
+c 3 mount /dev/$device$binpart $tmpmntvnd
+
+c 4 cp bin/ro bin/rw $tmpmntvnd/
+
+umountwait 3 $tmpmntvnd
+
+###
+#
+# done with the main disk vnd
+
+c 2 vnconfig -u $device
+
+umountwait 1 $tmpmnt
+
+###
+#
+# done with flash img vnd
+
+vnuncfgroot $rootdevice
+
+rm -r $TMPDIR
+
+echo -n Done
+[[ $vnd == true ]] && echo -n " (image $dest)"
+echo

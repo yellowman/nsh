@@ -1,0 +1,267 @@
+#!/bin/ksh
+#
+# flashrd mkrdroot
+#
+# create the kernel ramdisk
+#
+# this environment (and custom rc) is for setting up vnds
+# so that we can mount the system and pass to real /etc/rc
+#
+# Chris Cappuccio <chris@nmedia.net>
+#
+
+# Crunchgen links
+#
+
+[ -z "$progs" ] && progs="ksh pax ls fsck fsck_ffs reboot init mount mount_ffs mount_vnd umount cp mv"
+
+[ -z "$standlink" ] && standlink="tar pax mount_vnd vnconfig umount"
+
+[ -z "$binlink" ] && binlink="sh ksh ls cp mv"
+
+[ -z "$sbinlink" ] && sbinlink="init mount mount_ffs fsck fsck_ffs reboot"
+
+# Files to copy
+#
+
+[ -z "$etccopy" ] && etccopy="etc/login.conf etc/pwd.db"
+
+###
+#
+# blocks
+
+[ -z "$blocks" ] && blocks=4600
+
+###
+#
+# rdrootfs, device, distloc
+
+[ -z "$rdroot" ] && rdroot=rd.`uname -m`-`date +%Y%m%d`
+
+if [ -z "$distloc" -a -z "$1" ]; then
+ echo "% mkrdroot <openbsd base>"
+ exit 1
+fi
+
+[ -z "$distloc" ] && distloc=$1
+
+###
+#
+# disktab dance
+
+if [[ ! -w /etc ]]; then
+ echo "Can't do it, depends on disktab being replaceable!"
+ exit 1
+fi
+
+random=`dd if=/dev/urandom bs=512 count=1 2>/dev/null | sha512`
+tabname=`printf "%.8s" $random`
+
+###
+#
+# fall back
+
+2() {
+ umount -f $tmpmntdir
+}
+1() {
+ vnconfig -u $device
+}
+0() {
+ [[ -f /etc/disktab.${tabname} ]] && mv /etc/disktab.${tabname} /etc/disktab
+ exit 1
+}
+
+. ./flashrd.sub
+
+[ -z "$device" ] && getavailvnd 1 && device=${vndevices[0]}
+
+if [ ! -f $distloc/dev/MAKEDEV ]; then
+ echo % $distloc/dev/MAKEDEV not found
+ exit 1
+fi
+if [ ! -f $distloc/.profile ]; then
+ if [ -f $distloc/usr/share/sysmerge/etc.tgz ]; then
+  echo % "$distloc/usr/share/sysmerge/etc.tgz must be unpacked under $distloc"
+  echo % "(such as: tar xzpf $distloc/usr/share/sysmerge/etc.tgz -C $distloc)"
+  exit 1
+ else
+  echo % $distloc does not contain an unpacked etcXX.tgz file
+  exit 1
+ fi
+fi
+
+if [ ! -f /usr/src/bin/Makefile ]; then
+ echo OpenBSD source tree not found at /usr/src/bin
+ echo Giving up...
+ exit 1
+fi
+if [ ! -f /usr/src/sbin/Makefile ]; then
+ echo OpenBSD source tree not found at /usr/src/sbin
+ echo Giving up...
+ exit 1
+fi
+
+echo Creating ramdisk rootfs
+
+###
+#
+# dd, vnconfig, disklabel, newfs
+
+c 0 "dd if=/dev/zero of=$rdroot bs=512 count=$blocks > $TMPDIR/last.output 2>&1"
+
+tmplabel=$(c 0 mktemp -t mkrdrootlabel.XXXXXX)
+tmpmntdir=$(c 0 mktemp -t -d mkrdroot.XXXXXX)
+
+echo "vnd-${tabname}:\\" > $tmplabel
+echo "	:dt=SCSI:ty=${tabname}:se#512:nt#1:ns#64:nc#$((blocks / 64)):su#${blocks}:\\" >> $tmplabel
+echo "	:pa#${blocks}:oa#0:fa#1024:ba#8192:ta=4.2BSD:\\" >> $tmplabel
+echo "	:pc#${blocks}:oc#0:" >> $tmplabel
+
+# DISKTAB MODIFIED
+c 0 mv /etc/disktab /etc/disktab.${tabname}
+c 0 cp $tmplabel /etc/disktab
+
+c 0 vnconfig -t vnd-${tabname} $device $rdroot
+
+c 1 "disklabel -w $device vnd-${tabname} > $TMPDIR/last.output 2>&1"
+
+# DISKTAB ORIGINAL
+c 1 mv /etc/disktab.${tabname} /etc/disktab
+
+c 1 "newfs -m 0 -o space -i 1024 /dev/r${device}a > $TMPDIR/last.output 2>&1"
+
+c 1 mount /dev/${device}a $tmpmntdir
+
+###
+#
+# Our ramdisk base
+
+c 2 mkdir $tmpmntdir/bin $tmpmntdir/dev $tmpmntdir/etc $tmpmntdir/etc/firmware $tmpmntdir/home $tmpmntdir/mnt $tmpmntdir/root $tmpmntdir/sbin $tmpmntdir/stand $tmpmntdir/sys $tmpmntdir/tmp $tmpmntdir/usr $tmpmntdir/var $tmpmntdir/flash
+
+# mount_tmpfs preserves permissions from parent mount
+c 2 chmod 1777 $tmpmntdir/tmp
+
+c 2 cp $distloc/.cshrc $distloc/.profile $tmpmntdir
+
+c 2 cp $distloc/dev/MAKEDEV $tmpmntdir/dev
+
+###
+#
+# Devices with an extra touch of bpf (normal distribution has bpf0-bpf9, so create starting at bpf10)
+
+wd=`pwd`
+cd $tmpmntdir/dev
+c 2 ./MAKEDEV all
+
+i=10
+while [ $i -le 511 ]; do
+ c 2 ./MAKEDEV bpf$i
+ let i=i+1
+done
+cd $wd
+
+###
+#
+# Oppa Crunchgen Style
+
+echo -n "Crunchgen ($progs)"
+cgdir=$(c 2 mktemp -t -d mkrdrootcg.XXXXXX)
+
+# Ramdisk binaries aren't cleaned by crunchgen's Makefile, do them manually for NOPIE build
+for progname in ${progs}; do
+ if [ -d /usr/src/bin/${progname} ]; then
+  c 2 cd /usr/src/bin/${progname}
+  c 2 make clean > /dev/null
+ else
+  c 2 cd /usr/src/sbin/${progname}
+  c 2 make clean > /dev/null
+ fi
+done
+
+cat  <<-_EOF >>$cgdir/kcopy.conf
+srcdirs /usr/src/bin /usr/src/sbin
+
+progs $progs
+ln ksh -sh       # init invokes the shell with "-sh" in argv[0]
+ln ksh sh
+ln pax tar
+ln mount_vnd vnconfig
+
+libs -lutil
+	_EOF
+
+c 2 cd $cgdir
+c 2 "crunchgen -Em Makefile $cgdir/kcopy.conf > $TMPDIR/last.output 2>&1"
+# Ramdisk binaries need to be built NOPIE
+sed -e "/^.*cd .* && exec .* Makefile/s/exec/exec env NOPIE=/" Makefile > Makefile.tmp
+c 2 mv Makefile.tmp Makefile
+c 2 "make clean > $TMPDIR/last.output 2>&1"
+c 2 "make objs > $TMPDIR/last.output 2>&1"
+c 2 "make > $TMPDIR/last.output 2>&1"
+# Don't leave non-PIE .o hanging around
+for progname in ${progs}; do
+ if [ -d /usr/src/bin/${progname} ]; then
+  c 2 cd /usr/src/bin/${progname}
+  c 2 make clean > /dev/null
+ else
+  c 2 cd /usr/src/sbin/${progname}
+  c 2 make clean > /dev/null
+ fi
+done
+c 2 cd $wd
+echo
+
+###
+#
+# Copy specific items to kernel ramdisk
+
+echo -n Linking kcopy
+
+c 2 cp $cgdir/kcopy $tmpmntdir/stand/kcopy
+for i in $standlink; do
+ echo -n " stand/$i"
+ c 2 ln $tmpmntdir/stand/kcopy $tmpmntdir/stand/$i
+done
+for i in $binlink; do
+ echo -n " bin/$i"
+ c 2 ln $tmpmntdir/stand/kcopy $tmpmntdir/bin/$i
+done
+for i in $sbinlink; do
+ echo -n " sbin/$i"
+ c 2 ln $tmpmntdir/stand/kcopy $tmpmntdir/sbin/$i
+done
+echo
+echo -n Copying
+for i in $etccopy; do
+ echo -n " $i"
+ c 2 cp $distloc/$i $tmpmntdir/etc
+done
+echo
+
+echo -n Copying pre-mount firmware to ramdisk rootfs
+if [ -f firmware.list ]; then
+ while read line; do
+
+  line=${line%%#*}		# strip comments
+  test -z "$line" && continue
+
+  c 2 cp $distloc/etc/firmware/$line $tmpmntdir/etc/firmware
+ done < firmware.list
+else
+ echo -n " (no firmware.list found for ramdisk firmware copy)"
+fi
+
+echo
+
+###
+#
+# Copy custom rc to kernel ramdisk, cleanup
+
+c 2 cp etc/rc $tmpmntdir/etc/rc
+
+c 2 cp stand/rc $tmpmntdir/stand/rc
+
+umountwait 1 $tmpmntdir
+
+c 0 vnconfig -u $device
