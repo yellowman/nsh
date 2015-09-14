@@ -1012,6 +1012,8 @@ intpflow(char *ifname, int ifs, int argc, char **argv)
 	bzero((char *)&preq, sizeof(struct pflowreq));
 	ifr.ifr_data = (caddr_t)&preq;
 
+	preq.addrmask = PFLOW_MASK_SRCIP | PFLOW_MASK_DSTIP |
+	    PFLOW_MASK_DSTPRT;
 	if (set) {
 		preq.sender_ip.s_addr = ((struct sockaddr_in *)
 		    sender->ai_addr)->sin_addr.s_addr;
@@ -1021,15 +1023,17 @@ intpflow(char *ifname, int ifs, int argc, char **argv)
 		    receiver->ai_addr)->sin_port;
 		if (argc == 6) {
 			preq.version = strtonum(argv[5], 5, PFLOW_PROTO_MAX, &errmsg);
-			preq.addrmask = PFLOW_MASK_VERSION;
+			preq.addrmask |= PFLOW_MASK_VERSION;
 	                if (errmsg) {
 				printf("%% Invalid pflow version %s: %s\n", argv[0], errmsg);
 				goto done;
 			}
                 }
 
+	} else {
+		preq.addrmask |= PFLOW_MASK_VERSION;
 	}
-	preq.addrmask |= PFLOW_MASK_SRCIP | PFLOW_MASK_DSTIP | PFLOW_MASK_DSTPRT;
+
 	if (ioctl(ifs, SIOCSETPFLOW, (caddr_t)&ifr) == -1)
 		printf("%% Unable to set pflow parameters: %s\n", strerror(errno));
 
