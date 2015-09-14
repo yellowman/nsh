@@ -1,6 +1,0 @@
-#!/bin/sh
-#
-# /stand/rc will re-mount /etc, which would obliterate
-# the running script, so run it from /stand/rc instead
-
-. /stand/rc
