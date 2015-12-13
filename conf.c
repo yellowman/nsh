@@ -663,15 +663,12 @@ void conf_pflow(FILE *output, int ifs, char *ifname)
 	char version[INET6_ADDRSTRLEN];
 
 	if (pflow_status(PFLOW_SENDER, ifs, ifname, sender)) {
-		printf("SENDER\n");
 		return;
 	}
 	if (pflow_status(PFLOW_RECEIVER, ifs, ifname, receiver)) {
-		printf("RECEIVER\n");
 		return;
 	}
 	if (pflow_status(PFLOW_VERSION, ifs, ifname, version)) {
-		printf("VERSION\n");
 		return;
 	}
 	fprintf(output, " pflow sender %s receiver %s version %s\n",
