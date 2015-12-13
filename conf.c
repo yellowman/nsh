@@ -658,15 +658,24 @@ int conf_dhcrelay(char *ifname, char *server, int serverlen)
 
 void conf_pflow(FILE *output, int ifs, char *ifname)
 {
-	char result[INET6_ADDRSTRLEN];
+	char sender[INET6_ADDRSTRLEN];
+	char receiver[INET6_ADDRSTRLEN];
+	char version[INET6_ADDRSTRLEN];
 
-	pflow_status(PFLOW_SENDER, ifs, result);
-	fprintf(output, " pflow sender %s", result);
-	pflow_status(PFLOW_RECEIVER, ifs, result);
-	fprintf(output, " receiver %s", result);
-	pflow_status(PFLOW_VERSION, ifs, result);
-	fprintf(output, " version %s", result);
-	fprintf(output, "\n");
+	if (pflow_status(PFLOW_SENDER, ifs, ifname, sender)) {
+		printf("SENDER\n");
+		return;
+	}
+	if (pflow_status(PFLOW_RECEIVER, ifs, ifname, receiver)) {
+		printf("RECEIVER\n");
+		return;
+	}
+	if (pflow_status(PFLOW_VERSION, ifs, ifname, version)) {
+		printf("VERSION\n");
+		return;
+	}
+	fprintf(output, " pflow sender %s receiver %s version %s\n",
+	    sender, receiver, version);
 }
 
 void conf_ifxflags(FILE *output, int ifs, char *ifname)

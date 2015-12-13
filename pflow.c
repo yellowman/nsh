@@ -110,7 +110,7 @@ pflow_addr(const char *val, struct sockaddr_storage *ss)
 }
 
 int
-pflow_status(int type, int ifs, char *result)
+pflow_status(int type, int ifs, char *ifname, char *result)
 {
 	struct ifreq ifr;
 	struct pflowreq preq;
@@ -122,6 +122,7 @@ pflow_status(int type, int ifs, char *result)
 	bzero(&ifr, sizeof(struct ifreq));
 	bzero(&preq, sizeof(struct pflowreq));
 	ifr.ifr_data = (caddr_t) & preq;
+	strlcpy(ifr.ifr_name, ifname, IFNAMSIZ);
 
 	if (ioctl(ifs, SIOCGETPFLOW, (caddr_t) & ifr) == -1)
 		return(1);
@@ -143,23 +144,23 @@ pflow_status(int type, int ifs, char *result)
 			sin = (struct sockaddr_in *) & preq.flowsrc;
 			if (sin->sin_addr.s_addr == INADDR_ANY)
 				return(1);
-			if (sin->sin_port == 0)
-				return(1);
 			strlcpy(result, buf, INET6_ADDRSTRLEN);
-			snprintf(buf, INET6_ADDRSTRLEN, ":%u",
-			    ntohs(sin->sin_port));
-			strlcat(result, buf, INET6_ADDRSTRLEN);
+			if (sin->sin_port != 0) {
+				snprintf(buf, INET6_ADDRSTRLEN, ":%u",
+				    ntohs(sin->sin_port));
+				strlcat(result, buf, INET6_ADDRSTRLEN);
+			}
 			break;
 		case AF_INET6:
 			sin6 = (struct sockaddr_in6 *) & preq.flowsrc;
 			if (IN6_IS_ADDR_UNSPECIFIED(&sin6->sin6_addr))
 				return(1);
-			if (sin6->sin6_port == 0)
-				return(1);
 			strlcpy(result, buf, INET6_ADDRSTRLEN);
-			snprintf(buf, INET6_ADDRSTRLEN, ":%u",
-			    ntohs(sin6->sin6_port));
-			strlcat(result, buf, INET6_ADDRSTRLEN);
+			if (sin6->sin6_port != 0) {
+				snprintf(buf, INET6_ADDRSTRLEN, ":%u",
+				    ntohs(sin6->sin6_port));
+				strlcat(result, buf, INET6_ADDRSTRLEN);
+			}
 			break;
 		default:
 			return(1);
@@ -184,22 +185,22 @@ pflow_status(int type, int ifs, char *result)
 			if (sin->sin_addr.s_addr == INADDR_ANY)
 				return(1);
 			snprintf(result, INET6_ADDRSTRLEN, "%s", buf);
-			if (sin->sin_port == 0)
-				return(1);
-			snprintf(buf, INET6_ADDRSTRLEN, ":%u",
-			    ntohs(sin->sin_port));
-			strlcat(result, buf, INET6_ADDRSTRLEN);
+			if (sin->sin_port != 0) {
+				snprintf(buf, INET6_ADDRSTRLEN, ":%u",
+				    ntohs(sin->sin_port));
+				strlcat(result, buf, INET6_ADDRSTRLEN);
+			}
 			break;
 		case AF_INET6:
 			sin6 = (struct sockaddr_in6 *) & preq.flowdst;
 			if (IN6_IS_ADDR_UNSPECIFIED(&sin6->sin6_addr))
 				return(1);
 			snprintf(result, INET6_ADDRSTRLEN, "%s", buf);
-			if (sin6->sin6_port == 0)
-				return(1);
-			snprintf(buf, sizeof(buf), ":%u",
-			    ntohs(sin6->sin6_port));
-			strlcat(result, buf, INET6_ADDRSTRLEN);
+			if (sin6->sin6_port != 0) {
+				snprintf(buf, sizeof(buf), ":%u",
+				    ntohs(sin6->sin6_port));
+				strlcat(result, buf, INET6_ADDRSTRLEN);
+			}
 			break;
 		default:
 			return(1);

@@ -552,4 +552,4 @@ int db_select_flag_x_dbflag_rtable(char *, char *, int);
 #ifdef _SYS_SOCKET_H_
 int pflow_addr(const char *, struct sockaddr_storage *);
 #endif
-int pflow_status(int, int, char *);
+int pflow_status(int, int, char *, char *);
