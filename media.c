@@ -348,7 +348,7 @@ conf_print_media_word(FILE *output, int ifmw)
 
 	fprintf(output, " media %s", get_media_subtype_string(ifmw));
 	if (IFM_INST(ifmw) != 0)
-		printf(" %d", IFM_INST(ifmw));
+		printf(" %llu", IFM_INST(ifmw));
 	fprintf(output, "\n");
 
 	/* Find options. */
@@ -426,7 +426,7 @@ conf_media_status(FILE *output, int s, char *ifname)
 	if (ifmr.ifm_count == 0)
 		return(0);
 
-	media_list = (int *)malloc(ifmr.ifm_count * sizeof(int));
+	media_list = (u_int64_t *)malloc(ifmr.ifm_count * sizeof(int));
 	if (media_list == NULL) {
 		printf("%% conf_media_status: malloc: %s\n", strerror(errno));
 		return(0);
@@ -472,7 +472,7 @@ media_status(int s, char *ifname, char *delim)
 		return;
 	}
 
-	media_list = (int *)malloc(ifmr.ifm_count * sizeof(int));
+	media_list = (u_int64_t *)malloc(ifmr.ifm_count * sizeof(int));
 	if (media_list == NULL) {
 		printf("%% media_status: malloc: %s\n", strerror(errno));
 		return;
@@ -533,7 +533,8 @@ media_status(int s, char *ifname, char *delim)
 void
 media_supported(int s, char *ifname, char *hdr_delim, char *body_delim)
 {
-	int *media_list, i, type, printed_type;
+	u_int64_t *media_list;
+	int i, type, printed_type;
 	struct ifmediareq ifmr;
 
 	memset(&ifmr, 0, sizeof(ifmr));
@@ -546,7 +547,7 @@ media_supported(int s, char *ifname, char *hdr_delim, char *body_delim)
 		return;
 	}
 
-	media_list = (int *)malloc(ifmr.ifm_count * sizeof(int));
+	media_list = (u_int64_t *)malloc(ifmr.ifm_count * sizeof(int));
 	if (media_list == NULL) {
 		printf("%% media_status: malloc: %s\n", strerror(errno));
 		return;
