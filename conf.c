@@ -57,6 +57,9 @@ void conf_db_single(FILE *, char *, char *, char *);
 void conf_interfaces(FILE *, char *);
 void conf_print_rtm(FILE *, struct rt_msghdr *, char *, int);
 int conf_ifaddrs(FILE *, char *, int, int);
+int conf_ifaddr_dhcp(FILE *, char *, int);
+void conf_ifflags(FILE *, int, int);
+void conf_vlan(FILE *, int, char *);
 void conf_brcfg(FILE *, int, struct if_nameindex *, char *);
 void conf_ifxflags(FILE *, int, char *);
 void conf_rtables(FILE *);
@@ -459,16 +462,13 @@ conf_db_single(FILE *output, char *dbname, char *lookup, char *ifname)
 
 void conf_interfaces(FILE *output, char *only)
 {
-	FILE *dhcpif;
 	int ifs, flags, ippntd, br;
-	char leasefile[sizeof(LEASEPREFIX)+1+IFNAMSIZ];
 	char *lladdr;
 	char ifdescr[IFDESCRSIZE];
 
 	struct if_nameindex *ifn_list, *ifnp;
 	struct ifreq ifr, ifrdesc;
 	struct if_data if_data;
-	struct vlanreq vreq;
 
 	if ((ifn_list = if_nameindex()) == NULL) {
 		printf("%% conf_interfaces: if_nameindex failed\n");
@@ -503,19 +503,9 @@ void conf_interfaces(FILE *output, char *only)
 			continue;
 		}
 
-		/*
-		 * Keep in mind that the order in which things are displayed
-		 * here is important.  For instance, we want to setup the
-		 * vlan tag before setting the IP address since the vlan
-		 * must know what parent to inherit the parent interface
-		 * flags from before it is brought up.  Another example of
-		 * this would be that we need to setup the members on a
-		 * bridge before we setup flags on them.
-		 */
+		/* The output order is important! */
 
-		/*
-		 * set interface/bridge mode
-		 */
+		/* set interface/bridge mode */
 		if (!(br = is_bridge(ifs, ifnp->if_name)))
 			br = 0;
 		fprintf(output, "%s %s\n", br ? "bridge" : "interface",
@@ -533,43 +523,18 @@ void conf_interfaces(FILE *output, char *only)
 		    strlen(ifrdesc.ifr_data))
 			fprintf(output, " description %s\n", ifrdesc.ifr_data);
 
-		if ((lladdr = get_hwdaddr(ifnp->if_name)) != NULL) {
-			/* We assume lladdr only useful if we can get_hwdaddr */
+		if ((lladdr = get_hwdaddr(ifnp->if_name)) != NULL)
 			conf_db_single(output, "lladdr", lladdr, ifnp->if_name);
-		}
 		conf_db_single(output, "rtsol", NULL, ifnp->if_name);
 		conf_db_single(output, "rtadvd", NULL, ifnp->if_name);
 
-		/*
-		 * print vlan tag, parent if available.  if a tag is set
-		 * but there is no parent, discard.
-		 */
-		bzero(&vreq, sizeof(struct vlanreq));
-		ifr.ifr_data = (caddr_t)&vreq;  
-
-		if (ioctl(ifs, SIOCGETVLAN, (caddr_t)&ifr) != -1) {
-			if(vreq.vlr_tag && (vreq.vlr_parent[0] != '\0')) {
-				fprintf(output, " vlan %d parent %s",
-				    vreq.vlr_tag, vreq.vlr_parent);
-				fprintf(output, "\n");
-			}
-		}
-
+		conf_vlan(output, ifs, ifnp->if_name);
 		conf_rdomain(output, ifs, ifnp->if_name);
 		conf_intrtlabel(output, ifs, ifnp->if_name);
 		conf_intgroup(output, ifs, ifnp->if_name);
 		conf_carp(output, ifs, ifnp->if_name);
 
-		snprintf(leasefile, sizeof(leasefile), "%s.%s",
-		    LEASEPREFIX, ifnp->if_name);
-		if ((dhcpif = fopen(leasefile, "r"))) {
-			fprintf(output, " ip dhcp\n");
-			fclose(dhcpif);
-			conf_ifaddrs(output, ifnp->if_name, flags, AF_INET6);
-			ippntd = 1;
-		} else {
-			ippntd = conf_ifaddrs(output, ifnp->if_name, flags, 0);
-		}
+		ippntd = conf_ifaddr_dhcp(output, ifnp->if_name, flags);
 
 		if (br) {
 			conf_brcfg(output, ifs, ifn_list, ifnp->if_name);
@@ -592,37 +557,87 @@ void conf_interfaces(FILE *output, char *only)
 			conf_sppp(output, ifs, ifnp->if_name);
 			conf_pppoe(output, ifs, ifnp->if_name);
 		}
-
-		/*
-		 * print various flags
-		 */
-		if (flags & IFF_DEBUG)
-			fprintf(output, " debug\n");
-		if (flags & (IFF_LINK0|IFF_LINK1|IFF_LINK2)) {
-			fprintf(output, " link ");
-			if(flags & IFF_LINK0)
-				fprintf(output, "0 ");
-			if(flags & IFF_LINK1)
-				fprintf(output, "1 ");
-			if(flags & IFF_LINK2)
-				fprintf(output, "2");
-			fprintf(output, "\n");
-		}
-		if (flags & IFF_NOARP)
-			fprintf(output, " no arp\n");
-		/*
-		 * ip X/Y turns the interface up (just like 'no shutdown')
-		 * ...but if we never had an ip address set and the interface
-		 * is up, we need to save this state explicitly.
-		 */
-		if (!ippntd && (flags & IFF_UP))
-			fprintf(output, " no shutdown\n");
-		else if (!(flags & IFF_UP))
-			fprintf(output, " shutdown\n");
-		fprintf(output, "!\n");
+		conf_ifflags(output, flags, ippntd);
 	}
 	close(ifs);
 	if_freenameindex(ifn_list);
+}
+
+int conf_ifaddr_dhcp(FILE *output, char *ifname, int flags)
+{
+	FILE *dhcpif;
+	int ippntd; 
+	char leasefile[sizeof(LEASEPREFIX)+1+IFNAMSIZ];
+
+	/* find dhclient controlled interfaces */
+	snprintf(leasefile, sizeof(leasefile), "%s.%s",
+	    LEASEPREFIX, ifname);
+	if ((dhcpif = fopen(leasefile, "r"))) {
+		/* don't print ipv4 addresses */
+		fprintf(output, " ip dhcp\n");
+		fclose(dhcpif);
+		/* print all non-autoconf ipv6 addresses */
+		conf_ifaddrs(output, ifname, flags, AF_INET6);
+		ippntd = 1;
+	} else {
+		/* print all non-autoconf addresses */
+		ippntd = conf_ifaddrs(output, ifname, flags, 0);
+	}
+
+	return ippntd;
+}
+
+void conf_vlan(FILE *output, int ifs, char *ifname)
+{
+	struct ifreq ifr;
+	struct vlanreq vreq;
+
+	/*
+	 * print vlan tag, parent if available.  if a tag is set
+	 * but there is no parent, discard.
+	 */
+	bzero(&ifr, sizeof(struct ifreq));
+	ifr.ifr_data = (caddr_t)&vreq;
+	strlcpy(ifr.ifr_name, ifname, IFNAMSIZ);
+
+	bzero(&vreq, sizeof(struct vlanreq));
+
+	if (ioctl(ifs, SIOCGETVLAN, (caddr_t)&ifr) != -1) {
+		if(vreq.vlr_tag && (vreq.vlr_parent[0] != '\0')) {
+			fprintf(output, " vlan %d parent %s",
+			    vreq.vlr_tag, vreq.vlr_parent);
+				fprintf(output, "\n");
+		}
+	}
+}
+
+
+void conf_ifflags(FILE *output, int flags, int ippntd)
+{
+	if (flags & IFF_DEBUG)
+		fprintf(output, " debug\n");
+	if (flags & (IFF_LINK0|IFF_LINK1|IFF_LINK2)) {
+		fprintf(output, " link ");
+		if(flags & IFF_LINK0)
+			fprintf(output, "0 ");
+		if(flags & IFF_LINK1)
+			fprintf(output, "1 ");
+		if(flags & IFF_LINK2)
+			fprintf(output, "2");
+		fprintf(output, "\n");
+	}
+	if (flags & IFF_NOARP)
+		fprintf(output, " no arp\n");
+	/*
+	 * ip X/Y turns the interface up (just like 'no shutdown')
+	 * ...but if we never had an ip address set and the interface
+	 * is up, we need to save this state explicitly.
+	 */
+	if (!ippntd && (flags & IFF_UP))
+		fprintf(output, " no shutdown\n");
+	else if (!(flags & IFF_UP))
+		fprintf(output, " shutdown\n");
+	fprintf(output, "!\n");
 }
 
 int conf_dhcrelay(char *ifname, char *server, int serverlen)
@@ -643,22 +658,14 @@ int conf_dhcrelay(char *ifname, char *server, int serverlen)
 
 void conf_pflow(FILE *output, int ifs, char *ifname)
 {
-	struct pflowreq preq;
-	struct ifreq ifr;
+	char result[INET6_ADDRSTRLEN];
 
-	bzero(&ifr, sizeof(ifr));
-	strlcpy(ifr.ifr_name, ifname, IFNAMSIZ);
-
-	bzero((char *)&preq, sizeof(struct pflowreq));
-	ifr.ifr_data = (caddr_t)&preq;
-
-	if (ioctl(ifs, SIOCGETPFLOW, (caddr_t)&ifr) == -1)
-		return;
-
-	fprintf(output, " pflow sender %s", inet_ntoa(preq.sender_ip));
-	fprintf(output, " receiver %s:%u", inet_ntoa(preq.receiver_ip), ntohs(preq.receiver_port));
-	if (preq.version != 5)
-		fprintf(output, " version %i", preq.version);
+	pflow_status(PFLOW_SENDER, ifs, result);
+	fprintf(output, " pflow sender %s", result);
+	pflow_status(PFLOW_RECEIVER, ifs, result);
+	fprintf(output, " receiver %s", result);
+	pflow_status(PFLOW_VERSION, ifs, result);
+	fprintf(output, " version %s", result);
 	fprintf(output, "\n");
 }
 
@@ -701,7 +708,7 @@ void conf_ifxflags(FILE *output, int ifs, char *ifname)
 
 void conf_rdomain(FILE *output, int ifs, char *ifname)
 {
-	char rdomainid;
+	int rdomainid;
 
 	rdomainid = get_rdomain(ifs, ifname);
 	if (rdomainid > 0)
