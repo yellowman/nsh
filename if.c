@@ -969,12 +969,6 @@ intpflow(char *ifname, int ifs, int argc, char **argv)
 			return(0);
 		}
 
-		if (sender->ai_addr->sa_family != AF_INET) {
-			printf("%% Only IPv4 addresses supported for the sender\n");
-			freeaddrinfo(sender);
-			return(0);
-		}
-
 	        if (strchr(argv[3], ':') == NULL) {
 			printf("%% Receiver has no port specified\n");
 			freeaddrinfo(sender);
@@ -997,13 +991,6 @@ intpflow(char *ifname, int ifs, int argc, char **argv)
 			freeaddrinfo(sender);
 			return(0);
 		}
-
-		if (receiver->ai_addr->sa_family != AF_INET) {
-			printf("%% Only IPv4 addresses supported for the receiver\n");
-			freeaddrinfo(sender);
-			freeaddrinfo(receiver);
-			return(0);
-		}
 	}
 
 	bzero(&ifr, sizeof(ifr));     
@@ -1012,15 +999,10 @@ intpflow(char *ifname, int ifs, int argc, char **argv)
 	bzero((char *)&preq, sizeof(struct pflowreq));
 	ifr.ifr_data = (caddr_t)&preq;
 
-	preq.addrmask = PFLOW_MASK_SRCIP | PFLOW_MASK_DSTIP |
-	    PFLOW_MASK_DSTPRT;
+	preq.addrmask = PFLOW_MASK_SRCIP | PFLOW_MASK_DSTIP;
 	if (set) {
-		preq.sender_ip.s_addr = ((struct sockaddr_in *)
-		    sender->ai_addr)->sin_addr.s_addr;
-		preq.receiver_ip.s_addr = ((struct sockaddr_in *)
-		    receiver->ai_addr)->sin_addr.s_addr;
-		preq.receiver_port = (u_int16_t) ((struct sockaddr_in *)
-		    receiver->ai_addr)->sin_port;
+		pflow_addr(argv[1], &preq.flowsrc);
+		pflow_addr(argv[3], &preq.flowdst);
 		if (argc == 6) {
 			preq.version = strtonum(argv[5], 5, PFLOW_PROTO_MAX, &errmsg);
 			preq.addrmask |= PFLOW_MASK_VERSION;
@@ -1029,7 +1011,6 @@ intpflow(char *ifname, int ifs, int argc, char **argv)
 				goto done;
 			}
                 }
-
 	} else {
 		preq.addrmask |= PFLOW_MASK_VERSION;
 	}
