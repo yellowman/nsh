@@ -100,7 +100,7 @@ getsocket(void)
 	}
 }
 
-struct sockaddr_in	so_mask = { 8, 0, 0, { 0xffffffff } };
+struct sockaddr_in	so_1mask = { 8, 0, 0, { 0xffffffff } };
 struct sockaddr_inarp	blank_sin = { sizeof(blank_sin), AF_INET }, sin_m;
 struct sockaddr_dl	blank_sdl = { sizeof(blank_sdl), AF_LINK }, sdl_m;
 time_t			expire_time;
@@ -542,7 +542,7 @@ rtmsg_arp(cmd, flags, doing_proxy, export_only)
 
 	NEXTADDR(RTA_DST, sin_m);
 	NEXTADDR(RTA_GATEWAY, sdl_m);
-	NEXTADDR(RTA_NETMASK, so_mask);
+	NEXTADDR(RTA_NETMASK, so_1mask);
 
 	rtm->rtm_msglen = cp - (char *)&m_rtmsg;
 doit:

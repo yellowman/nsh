@@ -935,9 +935,7 @@ intpflow(char *ifname, int ifs, int argc, char **argv)
 {
 	struct ifreq ifr;
 	struct pflowreq preq;
-	struct addrinfo hints, *sender, *receiver;
-	int ecode, set;
-	char *ip, *port, buf[MAXHOSTNAMELEN+sizeof (":65535")];
+	int set;
 	const char *errmsg = NULL;
 
 	if (NO_ARG(argv[0])) {
@@ -950,58 +948,19 @@ intpflow(char *ifname, int ifs, int argc, char **argv)
 	argc--;
 	argv++;
 
-	if ((set && argc < 4) || (set && argc == 5) || (set && argc >= 4 &&
-		(!isprefix(argv[0], "sender") || !isprefix(argv[2], "receiver") ||
-		(argc == 6 && !isprefix(argv[4], "version"))))) {
+	/* XXX fucking makes my eyes bleed. learn how to use yacc ? */
+	if ((set && argc < 4) || (set && argc == 5) || (set &&
+	    (argc == 4 || argc == 6) && (!isprefix(argv[0], "sender") ||
+	    !isprefix(argv[2], "receiver") ||
+	    (argc == 6 && !isprefix(argv[4], "version"))))) {
 		printf("%% pflow sender <x.x.x.x> receiver <x.x.x.x:port> [version 5|9|10]\n");
 		printf("%% no pflow [sender x.x.x.x receiver x.x.x.x:port version 5|9|10]\n");
 		return(0);
 	}
 
-	memset(&hints, 0, sizeof(hints));
-	hints.ai_family = AF_INET;
-	hints.ai_socktype = SOCK_DGRAM; /*dummy*/
-
 	if (set) {
-		if ((ecode = getaddrinfo(argv[1], NULL, &hints, &sender)) != 0) {
-			printf("%% Invalid sender %s: %s\n", argv[2],
-			    gai_strerror(ecode));
-			return(0);
-		}
-
-		if (sender->ai_addr->sa_family != AF_INET) {
-			printf("%% Only IPv4 addresses supported for the sender\n");
-			freeaddrinfo(sender);
-			return(0);
-		}
-
 	        if (strchr(argv[3], ':') == NULL) {
 			printf("%% Receiver has no port specified\n");
-			freeaddrinfo(sender);
-			return(0);
-		}
-
-		if (strlcpy(buf, argv[3], sizeof(buf)) >= sizeof(buf)) {
-			printf("%% Receiver value too large\n");
-			freeaddrinfo(sender);
-			return(0);
-		}
-
-		port = strchr(buf, ':');
-		*port++ = '\0';
-		ip = buf;
- 
-		if ((ecode = getaddrinfo(ip, port, &hints, &receiver)) != 0) {
-			printf("%% Invalid receiver %s: %s\n", ip,
-			    gai_strerror(ecode));
-			freeaddrinfo(sender);
-			return(0);
-		}
-
-		if (receiver->ai_addr->sa_family != AF_INET) {
-			printf("%% Only IPv4 addresses supported for the receiver\n");
-			freeaddrinfo(sender);
-			freeaddrinfo(receiver);
 			return(0);
 		}
 	}
@@ -1009,39 +968,25 @@ intpflow(char *ifname, int ifs, int argc, char **argv)
 	bzero(&ifr, sizeof(ifr));     
 	strlcpy(ifr.ifr_name, ifname, IFNAMSIZ);
 
-	bzero((char *)&preq, sizeof(struct pflowreq));
+	bzero(&preq, sizeof(struct pflowreq));
 	ifr.ifr_data = (caddr_t)&preq;
 
-	preq.addrmask = PFLOW_MASK_SRCIP | PFLOW_MASK_DSTIP |
-	    PFLOW_MASK_DSTPRT;
+	preq.addrmask = PFLOW_MASK_SRCIP | PFLOW_MASK_DSTIP;
 	if (set) {
-		preq.sender_ip.s_addr = ((struct sockaddr_in *)
-		    sender->ai_addr)->sin_addr.s_addr;
-		preq.receiver_ip.s_addr = ((struct sockaddr_in *)
-		    receiver->ai_addr)->sin_addr.s_addr;
-		preq.receiver_port = (u_int16_t) ((struct sockaddr_in *)
-		    receiver->ai_addr)->sin_port;
+		pflow_addr(argv[1], &preq.flowsrc);
+		pflow_addr(argv[3], &preq.flowdst);
 		if (argc == 6) {
 			preq.version = strtonum(argv[5], 5, PFLOW_PROTO_MAX, &errmsg);
 			preq.addrmask |= PFLOW_MASK_VERSION;
 	                if (errmsg) {
 				printf("%% Invalid pflow version %s: %s\n", argv[0], errmsg);
-				goto done;
+				return(0);
 			}
                 }
-
-	} else {
-		preq.addrmask |= PFLOW_MASK_VERSION;
 	}
 
 	if (ioctl(ifs, SIOCSETPFLOW, (caddr_t)&ifr) == -1)
 		printf("%% Unable to set pflow parameters: %s\n", strerror(errno));
-
-done:
-	if (set) {
-		freeaddrinfo(sender);
-		freeaddrinfo(receiver);
-	}
 
 	return(0);
 }

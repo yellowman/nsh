@@ -81,7 +81,6 @@ static const struct bits bits[] = {
 	{ RTF_DONE,	'd' }, /* Completed -- for routing messages only */
 	{ RTF_MASK,	'm' }, /* Mask Present -- for routing messages only */
 	{ RTF_CLONING,	'C' },
-	{ RTF_XRESOLVE,	'X' },
 	{ RTF_LLINFO,	'L' },
 	{ RTF_STATIC,	'S' },
 	{ RTF_PROTO1,	'1' },

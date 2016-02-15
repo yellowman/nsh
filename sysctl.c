@@ -68,8 +68,14 @@ sysctl_int(int mib[], int val, int read)
 			break;
 
 	if (sysctl(mib, i, &old, &len, valp, sizeof(int)) == -1) {
-		if (read && errno != ENOPROTOOPT)
+		if (read && errno != ENOPROTOOPT) {
 			printf("%% sysctl_int: sysctl: %s\n", strerror(errno));
+			for (i = 0; i < 6; i++) {
+				printf("%% mib[%i] == %i\n",i,mib[i]);
+		                if (mib[i] == MIB_STOP)
+					break;
+			}
+		}
 		return(-1);
 	}
 
@@ -122,7 +128,6 @@ struct ipsysctl ip6sysctls[] = {
 { "maxifprefixes",	{ CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_MAXIFPREFIXES, MIB_STOP, 0 }, DEFAULT_MAXIFPREFIXES, 0	},
 { "maxifdefrouters",	{ CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_MAXIFDEFROUTERS, MIB_STOP, 0 }, DEFAULT_MAXIFDEFROUTERS, 0 },
 { "maxdynroutes", 	{ CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_MAXDYNROUTES, MIB_STOP, 0 },	DEFAULT_MAXDYNROUTES, 0 },
-{ "accept-rtadv",	{ CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_ACCEPT_RTADV, MIB_STOP, 0 }, 0, 1	},
 { 0, { 0, 0, 0, 0, 0, 0 }, 0, 0 }
 };
 

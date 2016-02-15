@@ -544,3 +544,12 @@ int db_select_flag_x_ctl_rtable(StringList *, char *, int);
 int db_select_flag_x_data_ctl_rtable(StringList *, char *, char *, int);
 #endif
 int db_select_flag_x_dbflag_rtable(char *, char *, int);
+
+/* pflow.c */
+#define PFLOW_SENDER 0
+#define PFLOW_RECEIVER 1
+#define PFLOW_VERSION 2
+#ifdef _SYS_SOCKET_H_
+int pflow_addr(const char *, struct sockaddr_storage *);
+#endif
+int pflow_status(int, int, char *, char *);
