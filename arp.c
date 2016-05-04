@@ -115,7 +115,7 @@ arpset(int argc, char *argv[])
 	struct sockaddr_dl *sdl;
 	struct rt_msghdr *rtm;
 	char *eaddr = argv[1], *host = argv[0];
-	struct ether_addr *ea;
+	struct ether_addr *ea = NULL;
 	int flags = 0, set = 1, doing_proxy, export_only;
 
 	sin = &sin_m;
