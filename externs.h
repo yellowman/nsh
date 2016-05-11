@@ -237,7 +237,17 @@ void flag_x(char *, char *, int, char *);
 #define PKILL		"/usr/bin/pkill"
 #define SAVESCRIPT	"/usr/local/bin/save.sh"
 /* tmp config locations */
+/*
+DHCPDB must allow being defined externally, because DHCPLEASES already allows that
+and things break when it points elsewhere
+
+  make CFLAGS="-DDHCPLEASES=\\\"/flash/dhcpd.leases\\\" \
+               -DDHCPDB=\\\"/flash/dhcpd.leases\\\""
+
+*/
+#ifndef DHCPDB
 #define DHCPDB          "/var/db/dhcpd.leases"
+#endif
 void command(void);
 char **step_optreq(char **, char **, int, char **, int);
 int argvtostring(int, char **, char *, int);
