@@ -2166,7 +2166,7 @@ pr_dhcp(int argc, char **argv)
 {
 	if (argc == 3 && argv[2][0] != '?') {
 		if (isprefix(argv[2], "leases")) {
-			more(DHCPDB);
+			more(DHCPLEASES);
 			return(0);
 		}
 		printf("%% argument %s not recognized\n", argv[2]);

@@ -236,8 +236,9 @@ void flag_x(char *, char *, int, char *);
 #define SSH		"/usr/bin/ssh"
 #define PKILL		"/usr/bin/pkill"
 #define SAVESCRIPT	"/usr/local/bin/save.sh"
-/* tmp config locations */
-#define DHCPDB          "/var/db/dhcpd.leases"
+#ifndef DHCPLEASES
+#define DHCPLEASES	"/var/db/dhcpd.leases"
+#endif
 void command(void);
 char **step_optreq(char **, char **, int, char **, int);
 int argvtostring(int, char **, char *, int);
