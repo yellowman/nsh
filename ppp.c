@@ -29,12 +29,15 @@
 #include <net/ppp_defs.h>
 #include <net/if_sppp.h>
 #include <net/if_pppoe.h>
+#include "stringlist.h"
 #include "externs.h"
+
+#define TYPESZ 16
 
 void authusage(void);
 void peerusage(void);
 void pppoeusage(void);
-void conf_sppp_mh(FILE *, struct sauthreq *, char *);
+void conf_sppp_mh(FILE *, struct sauthreq *, char *, char *);
 
 /* options for 'proto' */
 static struct {
@@ -66,7 +69,7 @@ intsppp(char *ifname, int ifs, int argc, char **argv)
 {
 	struct sauthreq spa;
 	struct ifreq ifr;
-        int set, ch, i;
+	int set, ch, i, cmd = 0;
 
 	/* command options for 'auth' */
 	static struct nopts authopts[] = {
@@ -135,7 +138,9 @@ intsppp(char *ifname, int ifs, int argc, char **argv)
 	noptind = 0;
 	while ((ch = nopt(argc, argv, isc->nopts)) != -1)
 		switch (ch) {
+#define	__proto 1<<0
 		case 'p':	/* proto */
+			cmd |= __proto;
 			for (i = 0; i < nitems(spppproto); i++) {
 				if (isprefix(argv[noptind - 1],
 				    spppproto[i].name))
@@ -147,7 +152,9 @@ intsppp(char *ifname, int ifs, int argc, char **argv)
 				return(0);
 			}
 			break;
+#define	__name	1<<1
 		case 'n':	/* name */
+			cmd |= __name;
 			if (strlcpy(spa.name, argv[noptind - 1],
 			    sizeof(spa.name)) >= sizeof(spa.name)) {
 				printf("%% Name too long (> %lu): %s\n",
@@ -155,7 +162,9 @@ intsppp(char *ifname, int ifs, int argc, char **argv)
 				return(0);
 			}
 			break;
+#define	__key	1<<2
 		case 'k':	/* key */
+			cmd |= __key;
 			if (strlcpy(spa.secret, argv[noptind - 1],
 			    sizeof(spa.secret)) >= sizeof(spa.secret)) {
 				printf("%% Key too long (> %lu): %s\n",
@@ -163,7 +172,9 @@ intsppp(char *ifname, int ifs, int argc, char **argv)
 				return(0);
 			}
 			break;
+#define	__flag	1<<3
 		case 'f':	/* flag */
+			cmd |= __flag;
 			if (isprefix(argv[noptind - 1], "callin")) {
 				spa.flags = AUTHFLAG_NOCALLOUT;
 			} else if (isprefix(argv[noptind - 1],
@@ -190,6 +201,9 @@ intsppp(char *ifname, int ifs, int argc, char **argv)
 		return(0);
 	}
 
+	if (argc < 1)
+		cmd = __proto | __name | __key | __flag;
+
 	if (!set) {
 		spa.proto = 0;
 		spa.flags = 0;
@@ -199,13 +213,26 @@ intsppp(char *ifname, int ifs, int argc, char **argv)
 
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 #ifdef SIOCSIFGENERIC
-	if (ioctl(ifs, SIOCSIFGENERIC, &ifr) == -1)
+	if (ioctl(ifs, SIOCSIFGENERIC, &ifr) == -1) {
 		printf("%% intspppproto: SIOCSIFGENERIC: SPPPIOSxAUTH: %s\n",
 #else
-	if (ioctl(ifs, SIOCSSPPPPARAMS, &ifr) == -1)
+	if (ioctl(ifs, SIOCSSPPPPARAMS, &ifr) == -1) {
 		printf("%% intspppproto: SIOCSSPPPPARAMS: SPPPIOSxAUTH: %s\n",
 #endif
 		    strerror(errno));
+		return 0;
+	}
+	if (cmd & __key) {
+		char type[TYPESZ];
+
+		snprintf(type, TYPESZ, "%skey", isc->name);
+		db_delete_flag_x_ctl(type, ifname);
+		if (set) {
+			db_insert_flag_x(type, ifname, 0, DB_X_ENABLE,
+			    spa.secret);
+		}
+	}
+
 	return 0;
 }
 
@@ -360,7 +387,7 @@ conf_sppp(FILE *output, int ifs, char *ifname)
 #else
 	if (ioctl(ifs, SIOCGSPPPPARAMS, &ifr) == 0)
 #endif
-		conf_sppp_mh(output, &spa, "peer");
+		conf_sppp_mh(output, &spa, ifname, "peer");
 
 	memset(&spa, 0, sizeof(spa));
 
@@ -370,13 +397,15 @@ conf_sppp(FILE *output, int ifs, char *ifname)
 #else
 	if (ioctl(ifs, SIOCGSPPPPARAMS, &ifr) == 0)
 #endif
-		conf_sppp_mh(output, &spa, "auth");
+		conf_sppp_mh(output, &spa, ifname, "auth");
 }
 
 void
-conf_sppp_mh(FILE *output, struct sauthreq *spa, char *pfx)
+conf_sppp_mh(FILE *output, struct sauthreq *spa, char *ifname, char *pfx)
 {
 	int i;
+	char type[TYPESZ];
+	StringList *req;
 
 	if (!(spa->proto | spa->name[0] | spa->secret[0] | (spa->flags &
 	    AUTHFLAG_NOCALLOUT) | (spa->flags & AUTHFLAG_NORECHALLENGE)))
@@ -388,8 +417,15 @@ conf_sppp_mh(FILE *output, struct sauthreq *spa, char *pfx)
 				fprintf(output, " proto %s", spppproto[i].name);
 	if (spa->name[0])
 		fprintf(output, " name %s", spa->name);
-	if (spa->secret[0])
-		fprintf(output, " key %s", spa->secret);
+
+	snprintf(type, TYPESZ, "%skey", pfx);
+	req = sl_init();
+	if (db_select_flag_x_ctl(req, type, ifname) >= 0) {
+		if (req->sl_cur > 0)
+			fprintf(output, " key %s", req->sl_str[0]);
+	}
+	sl_free(req, 1);
+
 	if (spa->flags & AUTHFLAG_NOCALLOUT)
 		fprintf(output, " flag callin");
 	if (spa->flags & AUTHFLAG_NORECHALLENGE)
