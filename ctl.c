@@ -94,10 +94,18 @@ struct daemons ctl_daemons[] = {
 { "smtp",	"SMTP",	ctl_smtp,	SMTPCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
 { "ldap",	"LDAP",	ctl_ldap,	LDAPCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
 { "ifstate",	"If state",ctl_ifstate,	IFSTATECONF_TEMP,0600, 0, RT_TABLEID_MAX },
+{ "motd",        "MOTD",  ctl_motd,        MOTD_TEMP,0644, 0, 0 },
 { 0, 0, 0, 0, 0, 0 }
 };
 
 /* per-daemon commands, and their C or executable functions */ 
+
+/* MOTD */
+struct ctl ctl_motd[] = {
+        { "edit",           "edit message-of-the-day",
+            { "motd", NULL, NULL }, call_editor, 0, T_HANDLER },
+        { 0, 0, { 0 }, 0, 0, 0 }
+};
 
 /* PF, pfctl */
 char *ctl_pf_test[] = { PFCTL, "-nf", REQTEMP, '\0' };
