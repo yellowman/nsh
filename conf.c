@@ -143,6 +143,7 @@ conf(FILE *output)
 	fprintf(output, "!\n");
 	conf_ctl(output, "", "dns", 0);
 	conf_ctl(output, "", "rtadv", 0);
+        conf_ctl(output, "", "motd", 0);
 
 	/*
 	 * start all intefaces not listed in 'latestartifs'

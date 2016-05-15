@@ -153,6 +153,8 @@ extern char metricnames[];
 #define SMTPCONF_TEMP 	"/var/run/smtpd.conf"
 #define LDAPCONF_TEMP	"/var/run/ldapd.conf"
 #define IFSTATECONF_TEMP "/var/run/ifstated.conf"
+#define MOTD_TEMP "/var/run/motd"
+
 /* argument list replacement */
 #define OPT     (void *)1
 #define REQ     (void *)2
@@ -221,6 +223,7 @@ extern struct ctl ctl_tftp[];
 extern struct ctl ctl_dns[];
 extern struct ctl ctl_inet[];
 extern struct ctl ctl_ldap[];
+extern struct ctl ctl_motd[];
 void flag_x(char *, char *, int, char *);
 
 /* commands.c */
