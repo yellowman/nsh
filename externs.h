@@ -153,7 +153,7 @@ extern char metricnames[];
 #define SMTPCONF_TEMP 	"/var/run/smtpd.conf"
 #define LDAPCONF_TEMP	"/var/run/ldapd.conf"
 #define IFSTATECONF_TEMP "/var/run/ifstated.conf"
-#define MOTD_TEMP "/etc/motd"
+#define MOTD_TEMP "/var/run/motd"
 
 /* argument list replacement */
 #define OPT     (void *)1
