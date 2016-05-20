@@ -135,6 +135,14 @@ struct prot1 lics[] = {
 	{ 0, 0, { 0 } }
 };
 
+struct prot1 iscs[] = {
+	{ "flows",	"Display IPsec flows",
+	    { IPSECCTL, "-sf", NULL } },
+	{ "sadb",	"Display SADB",
+	    { IPSECCTL, "-ss", NULL } },
+	{ 0, 0, { 0 } }
+};
+
 struct prot1 ikcs[] = {
 	{ "monitor",	"Monitor internal iked messages",
 	    { IKECTL, "monitor", NULL } },
@@ -199,6 +207,7 @@ struct prot prots[] = {
 	{ "ospf6",	os6cs },
 	{ "rip",	rics },
 	{ "ike",	ikcs },
+	{ "ipsec",	iscs },
 	{ "ldp",	lics },
 	{ "dvmrp",	dvcs },
 	{ "relay",	rlcs },

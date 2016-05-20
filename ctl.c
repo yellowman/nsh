@@ -75,7 +75,7 @@ struct daemons ctl_daemons[] = {
 { "rip",	"RIP",	ctl_rip,	RIPCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
 { "ldp",	"LDP",	ctl_ldp,	LDPCONF_TEMP,	0600, 0, 0 },
 { "relay",	"Relay",ctl_relay,	RELAYCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
-{ "ipsec",	"IPsec IKEv1",ctl_ipsec,IPSECCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
+{ "ipsec",	"IPsec IKEv1",ctl_ipsec,IPSECCONF_TEMP,	0600, 1, RT_TABLEID_MAX },
 { "ike",	"IPsec IKEv2",ctl_ike,	IKECONF_TEMP,	0600, 0, RT_TABLEID_MAX },
 { "rtadv",	"rtadvd",ctl_rtadv,	RTADVCONF_TEMP,	0600, 0, 0 },
 { "dvmrp",	"DVMRP",ctl_dvmrp,	DVMRPCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
@@ -219,7 +219,7 @@ struct ctl ctl_ldp[] = {
 char *ctl_ipsec_test[] = { IPSECCTL, "-nf", REQTEMP, '\0' };
 struct ctl ctl_ipsec[] = {
 	{ "enable",     "enable service",
-	    { ISAKMPD, "-KSa", NULL }, NULL, DB_X_ENABLE, T_EXEC },
+	    { ISAKMPD, "-Kv", NULL }, NULL, DB_X_ENABLE, T_EXEC },
 	{ "disable",    "disable service",
 	    { PKILL, table, "isakmpd", NULL }, NULL, DB_X_DISABLE, T_EXEC },
 	{ "edit",       "edit configuration",   
