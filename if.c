@@ -1472,7 +1472,7 @@ intparent(char *ifname, int ifs, int argc, char **argv)
 	argc--;
 	argv++;
 
-	if ((set && argc != 2) || (!set && argc > 2))
+	if ((set && argc != 2) || (!set && argc > 2)) {
                 printf("%% parent <parent interface>\n");
                 printf("%% no parent [parent interface]\n");
                 return 0;
