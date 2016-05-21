@@ -3,15 +3,15 @@ nsh is a work in progress, diffs are welcome
 Cleanup:
 
 * Document all new commands in the manual
-* Some formatting for the manual.  Simple markdown format?
+* Some formatting for the manual.  Markdown format? mandoc?
 * Bug hunt
+* More code refactoring and re-use
 
 To be implemented: 
 
 * handle newer bridge commands
 * handle newer 802.11 gunk like rssi display, chan, flags
 * ndp controls
-* handle kernel sppp/pppoe client
 * privsep? multiple daemons? web front end using privsep?
 * Build a simple web interface that works through the rc file handler or
   via imsg
@@ -22,9 +22,10 @@ To be implemented:
   used the same way for routes)
 * Better support for paging through displays of text X lines at a time
 * Something comparable to pipe-grep for matching output
-* Context-sensitive help
+* More context-sensitive help, the framework is extensible
 * Generate example configs for BGP+MPLS, IPv6+BGP, IPv6+Link local GIF,
-  vether+bridge, and many other interesting feature combinations/scenarios.
+  vether+bridge, ipsec/ike, and many other interesting feature
+  combinations/scenarios.
 
 Would be nice:
 
@@ -42,7 +43,4 @@ better not forget later...):
 
 * The kernel does not keep count of information displayed in 'show rtstat'
   properly (what else??)
-  (Very old, possibly no longer valid)
-* The kernel/wireless drivers do not use txpower data in any way.  Also
-  TXPOWER_AUTO does absolutely nothing and is not even tracked in the kernel.
   (Very old, possibly no longer valid)
