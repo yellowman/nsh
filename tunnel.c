@@ -253,7 +253,7 @@ setvnetid(int ifs, char *ifname, char *vnetida)
 	/* vxlan 2^24 is the upper limit user of vnetid as of OpenBSD 6.0 */
 	vnetid = strtonum(vnetida, 0, 0xffffff, &errmsg);
 	if (errmsg) {
-		printf("%% vnetid %d out of range for %s: %s\n", vnetid,
+		printf("%% vnetid %s out of range for %s: %s\n", vnetida,
 		    ifname, errmsg);
 		return;
 	}
