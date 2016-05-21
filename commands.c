@@ -513,7 +513,10 @@ struct intlist Intlist[] = {
 	{ "eui64",	"IPv6 automatic interface index",	CMPL0 0, 0, inteui64 },
 #endif
 	{ "tunnel",	"VXLAN/GIF/GRE Tunnel parameters",	CMPL0 0, 0, inttunnel },
-	{ "vnetid",	"VXLAN VNETID",				CMPL0 0, 0, intvnetid },
+	{ "vnetid",	"Virtual interface network identifier",	CMPL0 0, 0, intvnetid },
+#ifdef SIOCSIFPARENT	/* 6.0+ */
+	{ "parent",	"Parent interface",			CMPL(i) 0, 0, intparent },
+#endif
 	{ "keepalive",	"GRE tunnel keepalive",			CMPL0 0, 0, intkeepalive },
 	{ "syncdev",	"PFsync control message interface",	CMPL(i) 0, 0, intsyncdev },
 	{ "syncpeer",	"PFsync peer address",			CMPL0 0, 0, intsyncpeer },
@@ -527,7 +530,7 @@ struct intlist Intlist[] = {
 	{ "carppeer",	"CARP peer",				CMPL0 0, 0, intcarp },
 	{ "balancing",	"CARP balancing mode",			CMPL0 0, 0, intcarp },
 	{ "pflow",	"pflow data export",			CMPL0 0, 0, intpflow },
-	{ "vlan",	"802.1Q vlan tag and parent",		CMPL0 0, 0, intvlan },
+	{ "vlan",	"802.1Q vlan tag and parent",		CMPL0 0, 0, intvlan },	/* XXX bkcompat */
 	{ "timeslots",	"TDM timeslots",			CMPL0 0, 0, inttimeslot },
 	{ "debug",	"Driver dependent debugging",		CMPL0 0, 0, intflags },
 	{ "dhcrelay",	"DHCP Relay Agent",			CMPL0 0, 0, intdhcrelay },
