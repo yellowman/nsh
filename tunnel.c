@@ -43,7 +43,7 @@ intvnetid(char *ifname, int ifs, int argc, char **argv)
 	argc--;
 	argv++;
 
-	if (set && argc !=1) {
+	if ((set && argc != 2) || (!set && argc > 2)) {
 		printf("%% vnetid <vnetid>\n");
 		printf("%% no vnetid [vnetid]\n");
                 return(0);
@@ -286,7 +286,7 @@ deletetunnel(int s, char *ifname)
 	return(1);
 }
 
-int conf_physrtable(int s, char *ifname)
+int get_physrtable(int s, char *ifname)
 {
 	struct ifreq ifr;
 
@@ -298,7 +298,7 @@ int conf_physrtable(int s, char *ifname)
 		return ifr.ifr_rdomainid;
 }
 
-int conf_physttl(int s, char *ifname)
+int get_physttl(int s, char *ifname)
 {
 	struct ifreq ifr;
 
