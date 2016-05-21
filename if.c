@@ -1314,7 +1314,7 @@ intvlan(char *ifname, int ifs, int argc, char **argv)
 		}
 #ifndef SIOCSIFPARENT	/* 5.9- */
 		strlcpy(vreq.vlr_parent, argv[2], sizeof(vreq.vlr_parent));
-		vreq.vlr_tag = strtonum(argv[0], 0, 4096, &errmsg);
+		vreq.vlr_tag = strtonum(argv[0], 0, 4095, &errmsg);
 		if (errmsg) {
 			printf("%% Invalid vlan tag %s: %s", argv[0], errmsg);
 			return 0;
@@ -1471,6 +1471,12 @@ intparent(char *ifname, int ifs, int argc, char **argv)
 
 	argc--;
 	argv++;
+
+	if ((set && argc != 2) || (!set && argc > 2))
+                printf("%% parent <parent interface>\n");
+                printf("%% no parent [parent interface]\n");
+                return 0;
+        }
 
 	bzero(&ifp, sizeof(ifp));
 
