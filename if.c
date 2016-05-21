@@ -52,6 +52,7 @@ void pack_ifaliasreq(struct ifaliasreq *, ip_t *, struct in_addr *, char *);
 void pack_in6aliasreq(struct in6_aliasreq *, ip_t *, struct in6_addr *, char *);
 void ipv6ll_db_store(struct sockaddr_in6 *, struct sockaddr_in6 *, int, char *);
 void printifhwfeatures(int, char *);
+void show_vnet_parent(int, char *);
 
 static const struct {
 	char *name;
@@ -99,7 +100,6 @@ show_int(int argc, char **argv)
 	struct sockaddr_in *sin = NULL, *sinmask = NULL, *sindest;
 	struct sockaddr_in6 *sin6 = NULL, *sin6mask = NULL, *sin6dest;
 	struct timeval tv;
-	struct vlanreq vreq;
 
 	short tmp;
 	int ifs, br, flags, days, hours, mins, pntd;
@@ -320,15 +320,8 @@ show_int(int argc, char **argv)
 			    MBPS(if_data.ifi_baudrate) ? "Mbps" : "Kbps");
 		else
 			printf("\n");
- 
-		memset(&vreq, 0, sizeof(struct vlanreq));
-		ifr.ifr_data = (caddr_t)&vreq;
 
-		if (ioctl(ifs, SIOCGETVLAN, (caddr_t)&ifr) != -1)
-			if(vreq.vlr_tag || (vreq.vlr_parent[0] != '\0'))
-				printf("  802.1Q vlan tag %d, parent %s\n",
-				    vreq.vlr_tag, vreq.vlr_parent[0] == '\0' ?
-				    "<none>" : vreq.vlr_parent);
+		show_vnet_parent(ifs, ifname);
 	}
 
 	if (get_nwinfo(ifname, tmp_str, sizeof(tmp_str), NWID) != 0) {
@@ -404,6 +397,33 @@ show_int(int argc, char **argv)
 
 	close(ifs);
 	return(0);
+}
+
+void
+show_vnet_parent(int ifs, char *ifname)
+{
+#ifdef SIOCGIFPARENT	/* 6.0+ */
+	struct if_parent ifp;
+#endif
+	struct ifreq ifr;
+	int pntd = 0;
+
+	bzero(&ifr, sizeof(ifr));
+	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
+
+	if (ioctl(ifs, SIOCGVNETID, (caddr_t)&ifr) != -1) {
+		printf(" vnetid %d", ifr.ifr_vnetid);
+		pntd = 1;
+	}
+#ifdef SIOCGIFPARENT	/* 6.0+ */
+	if (ioctl(ifs, SIOCGIFPARENT, (caddr_t)&ifp) != -1) {
+		printf(" parent %s", ifp.ifp_parent);
+		pntd = 1;
+	}
+#endif
+
+	if (pntd)
+		printf("\n");
 }
 
 /* lifted right from ifconfig.c */
@@ -1335,9 +1355,7 @@ int
 intgroup(char *ifname, int ifs, int argc, char **argv)
 {
 	int set, i;
-	char *ioc;
 	struct ifgroupreq ifgr;
-	unsigned long ioctype;
 
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -1367,26 +1385,19 @@ intgroup(char *ifname, int ifs, int argc, char **argv)
 		}
 	}
 
-	if (set) {
-		ioctype=SIOCAIFGROUP;
-		ioc="SIOCAIFGROUP";
-	} else {
-		ioctype=SIOCDIFGROUP;
-		ioc="SIOCDIFGROUP";
-	}
-
 	for (i = 0; i < argc; i++) {
 		bzero(&ifgr, sizeof(ifgr));
 		strlcpy(ifgr.ifgr_name, ifname, IFNAMSIZ);
 		strlcpy(ifgr.ifgr_group, argv[i], IFNAMSIZ);
 
-		if (ioctl(ifs, ioctype, (caddr_t)&ifgr) == -1) {
+		if (ioctl(ifs, set ? SIOCAIFGROUP : SIOCDIFGROUP,
+		    (caddr_t)&ifgr) == -1) {
 			switch(errno) {
 			case EEXIST:
 				break;
 			default:
-				printf("%% intgroup: %s: %s\n", ioc,
-				    strerror(errno));
+				printf("%% intgroup: SIOC%sIFGROUP: %s\n",
+				    set ? "S" : "D", strerror(errno));
 				break;
 			}
 		}
@@ -1431,6 +1442,42 @@ intrtlabel(char *ifname, int ifs, int argc, char **argv)
 
 	return 0;
 }
+
+#ifdef SIOCSIFPARENT
+int
+intparent(char *ifname, int ifs, int argc, char **argv)
+{
+	int set;
+	struct if_parent ifp;
+	struct ifreq ifr;
+
+	if (NO_ARG(argv[0])) {
+		set = 0;
+		argc--;
+		argv++;
+	} else
+		set = 1;
+
+	argc--;
+	argv++;
+
+	bzero(&ifr, sizeof(ifr));
+
+	strlcpy(ifr.ifr_name, ifname, IFNAMSIZ);
+
+	if (set && strlcpy(ifp.ifp_parent, argv[0], sizeof(ifp.ifp_parent)) >=
+	    sizeof(ifp.ifp_parent)) {
+		printf("%% parent name too long\n");
+		return 0;
+	}
+
+	if (ioctl(ifs, set ? SIOCSIFPARENT : SIOCDIFPARENT, &ifr) == -1)
+		printf("%% intparent: SIOC%sIFPARENT: %s\n", set ? "S" : "D",
+		    strerror(errno));
+
+	return 0;
+}
+#endif
 
 int
 intflags(char *ifname, int ifs, int argc, char **argv)

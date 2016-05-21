@@ -404,6 +404,7 @@ int intpflow(char *, int, int, char **);
 int intlladdr(char *, int, int, char **);
 int intgroup(char *, int, int, char **);
 int intrtlabel(char *, int, int, char **);
+int intparent(char *, int, int, char **);
 int addaf(char *, int, int);
 int removeaf(char *, int, int);
 char *get_hwdaddr(char *);
