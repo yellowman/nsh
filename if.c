@@ -291,9 +291,9 @@ show_int(int argc, char **argv)
 		    sizeof(tmp_str), sizeof(tmp_str2)) > 0) {
 			printf("  Tunnel source %s destination %s",
 			    tmp_str, tmp_str2);
-			if (((physrt = conf_physrtable(ifs, ifname)) != 0))
+			if (((physrt = get_physrtable(ifs, ifname)) != 0))
 				printf(" destination rdomain %i", physrt);
-			if (((physttl = conf_physttl(ifs, ifname)) != 0))
+			if (((physttl = get_physttl(ifs, ifname)) != 0))
 				printf(" ttl %i", physttl);
 			printf("\n");
 		}

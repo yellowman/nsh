@@ -798,9 +798,9 @@ void conf_ifmetrics(FILE *output, int ifs, struct if_data if_data,
 		fprintf(output, " tunnel %s %s", tmpa, tmpb);
 		if (dstport > 0)
 			fprintf(output, ":%i", dstport);
-		if (((physrt = conf_physrtable(ifs, ifname)) != 0))
+		if (((physrt = get_physrtable(ifs, ifname)) != 0))
 			fprintf(output, " rdomain %i", physrt);
-		if (((physttl = conf_physttl(ifs, ifname)) != 0))
+		if (((physttl = get_physttl(ifs, ifname)) != 0))
 			fprintf(output, " ttl %i", physttl);
 		fprintf(output, "\n");
 	}
