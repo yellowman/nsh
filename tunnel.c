@@ -45,7 +45,7 @@ intvnetid(char *ifname, int ifs, int argc, char **argv)
 
 	if (set && argc !=1) {
 		printf("%% vnetid <vnetid>\n");
-		printf("%% no tunnel [vnetid]\n");
+		printf("%% no vnetid [vnetid]\n");
                 return(0);
         }
 	if (set)
@@ -250,16 +250,24 @@ setvnetid(int ifs, char *ifname, char *vnetida)
 	if (vnetida == NULL)
 		return;
 
-	/* vxlan(4) says it's a 24-bit number */
+	/* vxlan 2^24 is the upper limit user of vnetid as of OpenBSD 6.0 */
 	vnetid = strtonum(vnetida, 0, 0xffffff, &errmsg);
 	if (errmsg) {
-		printf("%% setvnetid %s: %s\n", vnetida, errmsg);
+		printf("%% vnetid %d out of range for %s: %s\n", vnetid,
+		    ifname, errmsg);
 		return;
 	}
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 	ifr.ifr_vnetid = vnetid;
-	if (ioctl(ifs, SIOCSVNETID, (caddr_t)&ifr) < 0)
-		printf("%% setvnetid SIOCSVNETID: %s\n", strerror(errno));
+	if (ioctl(ifs, SIOCSVNETID, (caddr_t)&ifr) < 0) {
+		if (errno == EINVAL) {
+			printf("%% vnetid %d out of range for %s\n",
+			    vnetid, ifname);
+		} else {
+			printf("%% setvnetid SIOCSVNETID: %s\n",
+			    strerror(errno));
+		}
+	}
 }
 
 int
