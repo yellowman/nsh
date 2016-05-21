@@ -300,28 +300,26 @@ show_int(int argc, char **argv)
 		carp_state(ifs, ifname);
 
 		printf(" ");
+		show_vnet_parent(ifs, ifname);
 		if (ioctl(ifs, SIOCGIFRDOMAIN, (caddr_t)&ifr) != -1)
-			printf(" Routing Domain %d,", ifr.ifr_rdomainid);
+			printf(" rdomain %d,", ifr.ifr_rdomainid);
+
 		/*
 		 * Display MTU, line rate
 		 */
 		printf(" MTU %u bytes", if_data.ifi_mtu);
-#ifdef SIOCGIFHARDMTU
 		if (ioctl(ifs, SIOCGIFHARDMTU, (caddr_t)&ifr) != -1) {
 			if (ifr.ifr_hardmtu)
 				printf(" (hardmtu %u)", ifr.ifr_hardmtu);
 		}
-#endif
 		if (if_data.ifi_baudrate)
-			printf(", Line Rate %qu %s\n",
+			printf(", Line Rate %qu %s",
 			    MBPS(if_data.ifi_baudrate) ?
 			    MBPS(if_data.ifi_baudrate) :
 			    if_data.ifi_baudrate / 1000,
 			    MBPS(if_data.ifi_baudrate) ? "Mbps" : "Kbps");
-		else
-			printf("\n");
 
-		show_vnet_parent(ifs, ifname);
+		printf("\n");
 	}
 
 	if (get_nwinfo(ifname, tmp_str, sizeof(tmp_str), NWID) != 0) {
@@ -406,24 +404,16 @@ show_vnet_parent(int ifs, char *ifname)
 	struct if_parent ifp;
 #endif
 	struct ifreq ifr;
-	int pntd = 0;
 
 	bzero(&ifr, sizeof(ifr));
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 
-	if (ioctl(ifs, SIOCGVNETID, (caddr_t)&ifr) != -1) {
-		printf(" vnetid %d", ifr.ifr_vnetid);
-		pntd = 1;
-	}
+	if (ioctl(ifs, SIOCGVNETID, (caddr_t)&ifr) != -1)
+		printf(" vnetid %d,", ifr.ifr_vnetid);
 #ifdef SIOCGIFPARENT	/* 6.0+ */
-	if (ioctl(ifs, SIOCGIFPARENT, (caddr_t)&ifp) != -1) {
-		printf(" parent %s", ifp.ifp_parent);
-		pntd = 1;
-	}
+	if (ioctl(ifs, SIOCGIFPARENT, (caddr_t)&ifp) != -1)
+		printf(" parent %s,", ifp.ifp_parent);
 #endif
-
-	if (pntd)
-		printf("\n");
 }
 
 /* lifted right from ifconfig.c */
@@ -1273,9 +1263,11 @@ intmetric(char *ifname, int ifs, int argc, char **argv)
 int
 intvlan(char *ifname, int ifs, int argc, char **argv)
 {
+#ifndef SIOCSIFPARENT /* 5.9- */
 	const char *errmsg = NULL;
 	struct ifreq ifr;
 	struct vlanreq vreq;
+#endif
 	int set;
 
 	if (NO_ARG(argv[0])) {
@@ -1295,6 +1287,7 @@ intvlan(char *ifname, int ifs, int argc, char **argv)
 		return 0;
 	}
 
+#ifndef SIOCSIFPARENT /* 5.9- */
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 
 	bzero(&vreq, sizeof(vreq));
@@ -1313,12 +1306,13 @@ intvlan(char *ifname, int ifs, int argc, char **argv)
 		}
 		return(0);
 	}
-
+#endif
 	if (set) {
 		if (!is_valid_ifname(argv[2]) || is_bridge(ifs, argv[2])) {
 			printf("%% Invalid vlan parent %s\n", argv[2]);
 			return 0;
 		}
+#ifndef SIOCSIFPARENT	/* 5.9- */
 		strlcpy(vreq.vlr_parent, argv[2], sizeof(vreq.vlr_parent));
 		vreq.vlr_tag = strtonum(argv[0], 0, 4096, &errmsg);
 		if (errmsg) {
@@ -1332,8 +1326,25 @@ intvlan(char *ifname, int ifs, int argc, char **argv)
 	} else {
 		bzero(&vreq.vlr_parent, sizeof(vreq.vlr_parent));
 		vreq.vlr_tag = 0;
+#endif
 	}
 
+#ifdef SIOCSIFPARENT	/* 6.0+ */
+	if (set) {
+		char *vnet_argv[] = { "vnetid", argv[0], '\0' };
+		char *par_argv[] = { "parent", argv[2], '\0' };
+
+		intparent(ifname, ifs, 2, par_argv);
+		intvnetid(ifname, ifs, 2, vnet_argv);
+	} else {
+		char *vnet_argv[] = { "no", "vnetid" };
+		char *par_argv[] = { "no", "parent" };
+
+		intparent(ifname, ifs, 2, par_argv);
+		intvnetid(ifname, ifs, 2, vnet_argv);
+	}
+
+#else
 	if (ioctl(ifs, SIOCSETVLAN, (caddr_t)&ifr) == -1) {
 		switch(errno) {
 		case EBUSY:
@@ -1347,6 +1358,7 @@ intvlan(char *ifname, int ifs, int argc, char **argv)
 			return 0;
 		}
 	}
+#endif
 
 	return 0;
 }
@@ -1449,7 +1461,6 @@ intparent(char *ifname, int ifs, int argc, char **argv)
 {
 	int set;
 	struct if_parent ifp;
-	struct ifreq ifr;
 
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -1461,9 +1472,9 @@ intparent(char *ifname, int ifs, int argc, char **argv)
 	argc--;
 	argv++;
 
-	bzero(&ifr, sizeof(ifr));
+	bzero(&ifp, sizeof(ifp));
 
-	strlcpy(ifr.ifr_name, ifname, IFNAMSIZ);
+	strlcpy(ifp.ifp_name, ifname, IFNAMSIZ);
 
 	if (set && strlcpy(ifp.ifp_parent, argv[0], sizeof(ifp.ifp_parent)) >=
 	    sizeof(ifp.ifp_parent)) {
@@ -1471,7 +1482,7 @@ intparent(char *ifname, int ifs, int argc, char **argv)
 		return 0;
 	}
 
-	if (ioctl(ifs, set ? SIOCSIFPARENT : SIOCDIFPARENT, &ifr) == -1)
+	if (ioctl(ifs, set ? SIOCSIFPARENT : SIOCDIFPARENT, &ifp) == -1)
 		printf("%% intparent: SIOC%sIFPARENT: %s\n", set ? "S" : "D",
 		    strerror(errno));
 
