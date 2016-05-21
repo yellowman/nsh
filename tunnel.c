@@ -310,7 +310,7 @@ int conf_physttl(int s, char *ifname)
 		return ifr.ifr_ttl;
 }
 
-int conf_vnetid(int s, char *ifname)
+int get_vnetid(int s, char *ifname)
 {
 	struct ifreq ifr;
 

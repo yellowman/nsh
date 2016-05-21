@@ -59,7 +59,8 @@ void conf_print_rtm(FILE *, struct rt_msghdr *, char *, int);
 int conf_ifaddrs(FILE *, char *, int, int);
 int conf_ifaddr_dhcp(FILE *, char *, int);
 void conf_ifflags(FILE *, int, int);
-void conf_vlan(FILE *, int, char *);
+void conf_vnetid(FILE *, int, char *);
+void conf_parent(FILE *, int, char *);
 void conf_brcfg(FILE *, int, struct if_nameindex *, char *);
 void conf_ifxflags(FILE *, int, char *);
 void conf_rtables(FILE *);
@@ -529,7 +530,8 @@ void conf_interfaces(FILE *output, char *only)
 		conf_db_single(output, "rtsol", NULL, ifnp->if_name);
 		conf_db_single(output, "rtadvd", NULL, ifnp->if_name);
 
-		conf_vlan(output, ifs, ifnp->if_name);
+		conf_vnetid(output, ifs, ifnp->if_name);
+		conf_parent(output, ifs, ifnp->if_name);
 		conf_rdomain(output, ifs, ifnp->if_name);
 		conf_intrtlabel(output, ifs, ifnp->if_name);
 		conf_intgroup(output, ifs, ifnp->if_name);
@@ -588,7 +590,36 @@ int conf_ifaddr_dhcp(FILE *output, char *ifname, int flags)
 	return ippntd;
 }
 
-void conf_vlan(FILE *output, int ifs, char *ifname)
+void conf_vnetid(FILE *output, int ifs, char *ifname)
+{
+	int vnetid;
+
+	if (((vnetid = get_vnetid(ifs, ifname)) != 0))
+		fprintf(output, " vnetid %i\n", vnetid);
+}
+
+#ifdef SIOCSIFPARENT	/* 6.0+ */
+
+void conf_parent(FILE *output, int ifs, char *ifname)
+{
+	struct if_parent ifp;
+
+	memset(&ifp, 0, sizeof(ifp));
+	strlcpy(ifp.ifp_name, ifname, IFNAMSIZ);
+
+	if (ioctl(ifs, SIOCGIFPARENT, (caddr_t)&ifp) == -1) {
+		if (errno != EADDRNOTAVAIL && errno != ENOTTY)
+			printf("%% SIOCGIFPARENT %s: %s\n", ifname,
+			    strerror(errno));
+		return;
+	}
+
+	fprintf(output, " parent %s\n", ifp.ifp_parent);
+}
+
+#else
+
+void conf_parent(FILE *output, int ifs, char *ifname)
 {
 	struct ifreq ifr;
 	struct vlanreq vreq;
@@ -612,6 +643,7 @@ void conf_vlan(FILE *output, int ifs, char *ifname)
 	}
 }
 
+#endif
 
 void conf_ifflags(FILE *output, int flags, int ippntd)
 {
@@ -752,7 +784,6 @@ void conf_keepalive(FILE *output, int ifs, char *ifname)
 void conf_ifmetrics(FILE *output, int ifs, struct if_data if_data,
     char *ifname)
 {
-	int vnetid;
 	int dstport;
 	char tmpa[IPSIZ], tmpb[IPSIZ], tmpc[TMPSIZ];
 	struct ifreq ifrpriority;
@@ -773,9 +804,6 @@ void conf_ifmetrics(FILE *output, int ifs, struct if_data if_data,
 			fprintf(output, " ttl %i", physttl);
 		fprintf(output, "\n");
 	}
-
-	if (((vnetid = conf_vnetid(ifs, ifname)) != 0))
-			fprintf(output, " vnetid %i\n", vnetid);
 
 	/*
 	 * print interface mtu, metric
