@@ -648,14 +648,6 @@ set_ifxflags(char *ifname, int ifs, int flags)
 int
 addaf(char *ifname, int af, int ifs)
 {
-#ifdef IFXF_NOINET6	/* Pre 5.7 */
-	if (af == AF_INET6) {
-		set_ifxflags(ifname, ifs, -IFXF_NOINET6);
-	} else {
-		printf("%% addaf not implemented for AF %d\n", af);
-		return(1);
-	}
-#else			/* 5.7 */
 	struct if_afreq	ifar;
 
 	strlcpy(ifar.ifar_name, ifname, sizeof(ifar.ifar_name));
@@ -665,22 +657,12 @@ addaf(char *ifname, int af, int ifs)
 		    strerror(errno));
 		return(1);
 	}
-#endif
 	return(0);
 }
 
 int
 removeaf(char *ifname, int af, int ifs)
 {
-#ifdef IFXF_NOINET6	/* Pre 5.7 */
-	if (af == AF_INET6) {
-		set_ifxflags(ifname, ifs, IFXF_NOINET6);
-		set_ifxflags(ifname, ifs, -IFXF_AUTOCONF6);
-	} else {
-		printf("%% removeaf not implemented for AF %d\n", af);
-		return(1);
-	}
-#else			/* 5.7 */
 	struct if_afreq	ifar;
 
 	strlcpy(ifar.ifar_name, ifname, sizeof(ifar.ifar_name));
@@ -690,7 +672,6 @@ removeaf(char *ifname, int af, int ifs)
 		    strerror(errno));
 		return(1);
 	}
-#endif
 	return(0);
 }
 
@@ -1589,12 +1570,7 @@ intxflags(char *ifname, int ifs, int argc, char **argv)
 		set = 1;
 
 	if (isprefix(argv[0], "autoconfprivacy")) {
-#ifdef IFXF_INET6_PRIVACY
-		value = IFXF_INET6_PRIVACY;
-#endif
-#ifdef IFXF_INET6_NOPRIVACY
 		value = -IFXF_INET6_NOPRIVACY;
-#endif
 	} else if (isprefix(argv[0], "mpls")) {
 		value = IFXF_MPLS;
 	} else if (isprefix(argv[0], "wol")) {
