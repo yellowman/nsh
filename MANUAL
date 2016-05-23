@@ -779,6 +779,23 @@ or
 
 nsh(p)/route ::/96 ::1 reject
 
+Flags:
+------
+blackhole	RTF_BLACKHOLE	discard packets for this route
+cloning		RTF_CLONING	generate a new route on use
+iface		!RTF_GATEWAY	destination is directly reachable
+llinfo		RTF_LLINFO	translates proto addr(l3) to link addr(l2)
+nompath		!RTF_MPATH	do not allow multiple gateways for this route
+nostatic	!RTF_STATIC	do not save this in the static routing table
+proto1		RTF_PROTO1	protocol specific flag #1
+proto2		RTF_PROTO2	protocol specific flag #2
+reject		RTF_REJECT	reject packets with ICMP unreachable
+
+Inits:
+------
+mtu <n>		RTV_MTU		Maximum transmission unit (MTU) size (this route only)
+expire <n>	RTV_EXPIRE	Lifetime for a route (seconds)
+
 
 quit
 ----

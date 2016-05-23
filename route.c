@@ -79,7 +79,6 @@ route(int argc, char **argv)
 	argv++;
 
 	if (argc < 1) {
-		printf("%% argc < 1\n");
 		routeusage();
 		return(1);
 	}
