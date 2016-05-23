@@ -59,7 +59,7 @@ void conf_interfaces(FILE *, char *);
 void conf_print_rtm(FILE *, struct rt_msghdr *, char *, int);
 int conf_ifaddrs(FILE *, char *, int, int);
 int conf_ifaddr_dhcp(FILE *, char *, int);
-void conf_ifflags(FILE *, int, int);
+void conf_ifflags(FILE *, int, char *, int);
 void conf_vnetid(FILE *, int, char *);
 void conf_parent(FILE *, int, char *);
 void conf_brcfg(FILE *, int, struct if_nameindex *, char *);
@@ -562,7 +562,7 @@ void conf_interfaces(FILE *output, char *only)
 			conf_sppp(output, ifs, ifnp->if_name);
 			conf_pppoe(output, ifs, ifnp->if_name);
 		}
-		conf_ifflags(output, flags, ippntd);
+		conf_ifflags(output, flags, ifnp->if_name, ippntd);
 	}
 	close(ifs);
 	if_freenameindex(ifn_list);
@@ -647,7 +647,7 @@ void conf_parent(FILE *output, int ifs, char *ifname)
 
 #endif
 
-void conf_ifflags(FILE *output, int flags, int ippntd)
+void conf_ifflags(FILE *output, int flags, char *ifname, int ippntd)
 {
 	if (flags & IFF_DEBUG)
 		fprintf(output, " debug\n");
@@ -663,16 +663,21 @@ void conf_ifflags(FILE *output, int flags, int ippntd)
 	}
 	if (flags & IFF_NOARP)
 		fprintf(output, " no arp\n");
-	/*
-	 * ip X/Y turns the interface up (just like 'no shutdown')
-	 * ...but if we never had an ip address set and the interface
-	 * is up, we need to save this state explicitly.
-	 */
-	if (!ippntd && (flags & IFF_UP))
+
+	if (isprefix("pppoe", ifname)) {		/* XXX */
 		fprintf(output, " no shutdown\n");
-	else if (!(flags & IFF_UP))
-		fprintf(output, " shutdown\n");
-	fprintf(output, "!\n");
+	} else {
+		/*
+		 * ip X/Y turns the interface up (just like 'no shutdown')
+		 * ...but if we never had an ip address set and the interface
+		 * is up, we need to save this state explicitly.
+		 */
+		if (!ippntd && (flags & IFF_UP))
+			fprintf(output, " no shutdown\n");
+		else if (!(flags & IFF_UP))
+			fprintf(output, " shutdown\n");
+		fprintf(output, "!\n");
+	}
 }
 
 int conf_dhcrelay(char *ifname, char *server, int serverlen)
