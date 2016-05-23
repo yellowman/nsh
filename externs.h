@@ -357,7 +357,7 @@ void show_route(char *, int);
 int is_ip_addr(char *);
 #ifdef _IP_T_
 void parse_ip_pfx(char *, int, ip_t *);
-int ip_route(ip_t *, ip_t *, u_short, int, int);
+int ip_route(ip_t *, ip_t *, u_short, int, int, struct rt_metrics, int inits);
 #endif
 #ifdef _NETINET6_IN6_H_
 int parse_ipv6(char *, struct in6_addr *);

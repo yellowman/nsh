@@ -58,13 +58,14 @@
 #include "externs.h"
 
 int 	sigflag = 0;
+static struct	rt_metrics	rt_metrics;
 
 /* declared in externs.h */
 union	sockunion so_dst, so_gate, so_mask, so_ifp;
 struct	m_rtmsg;
 
 int	rtm_addrs;
-u_long  rtm_inits;
+u_long	rtm_inits;
 
 char	*mylink_ntoa(const struct sockaddr_dl *);
 
@@ -568,13 +569,14 @@ bprintf(fp, b, s)
  * that we know about then we try and give a sensible error message
  */
 int
-ip_route(ip_t *dest, ip_t *gate, u_short cmd, int flags, int tableid)
+ip_route(ip_t *dest, ip_t *gate, u_short cmd, int flags, int tableid,
+    struct rt_metrics rt_metrics, int inits)
 {
 	int l;
 	int len = dest->bitlen;
 	static char line_kroute[MAXHOSTNAMELEN];
 
-	rtm_addrs = 0;
+	rtm_addrs = 0, rtm_inits = inits;
 	memset(&so_dst, 0, sizeof (so_dst));
 	memset(&so_gate, 0, sizeof (so_gate));
 	memset(&so_mask, 0, sizeof (so_mask));
@@ -600,7 +602,6 @@ ip_route(ip_t *dest, ip_t *gate, u_short cmd, int flags, int tableid)
 			so_gate.sin.sin_len = sizeof (struct sockaddr_in);
 			so_gate.sin.sin_family = AF_INET;
 			rtm_addrs |= RTA_GATEWAY;
-			flags |= RTF_GATEWAY;
 		}
 
 		if (len >= 0) {
@@ -629,7 +630,6 @@ ip_route(ip_t *dest, ip_t *gate, u_short cmd, int flags, int tableid)
 				so_gate.sin6.sin6_len = sizeof (struct sockaddr_in6);
 				so_gate.sin6.sin6_family = AF_INET6;
 				rtm_addrs |= RTA_GATEWAY;
-				flags |= RTF_GATEWAY;
 			}
 		}
 
@@ -706,9 +706,9 @@ rtmsg(cmd, flags, proxy, export, tableid)
 	rtm->rtm_hdrlen = sizeof(*rtm);
 	rtm->rtm_seq = ++seq;
 	rtm->rtm_addrs = rtm_addrs;
-#if 0 /* deal with this later when our cmdline handles metrics... */
 	rtm->rtm_rmx = rt_metrics;
-#endif
+	rtm->rtm_inits = rtm_inits;
+
 	if (proxy) {
 		if (export)
 			so_dst.sinarp.sin_other = SIN_PROXY;

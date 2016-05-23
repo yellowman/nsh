@@ -51,6 +51,7 @@
 			 * text representation
 			 */
 #define TMPSIZ 1024	/* size of temp strings */
+#define ROUTEMTU 32768	/* common route MTU */
 #define MTU_IGNORE ULONG_MAX	/* ignore this "default" mtu */
 
 void conf_db_single(FILE *, char *, char *, char *);
@@ -73,6 +74,7 @@ void conf_intrtlabel(FILE *, int, char *);
 void conf_intgroup(FILE *, int, char *);
 void conf_keepalive(FILE *, int, char *);
 void conf_groupattrib(FILE *);
+void conf_rtflags(char *, int, struct rt_msghdr *rtm);
 int dhclient_isenabled(char *);
 int islateif(char *);
 int isdefaultroute(struct sockaddr *, struct sockaddr *);
@@ -1252,11 +1254,53 @@ isdefaultroute(struct sockaddr *sa, struct sockaddr *samask)
 	return 0;
 }
 
+static const struct {
+	char *name;
+	long flag;
+} rtflags[] = {
+	{ "blackhole",	RTF_BLACKHOLE },
+	{ "cloning",	RTF_CLONING },
+	{ "iface",	-RTF_GATEWAY },
+	{ "llinfo",	RTF_LLINFO },
+	{ "nompath",	-RTF_MPATH },
+	{ "nostatic",	-RTF_STATIC },
+	{ "proto1",	RTF_PROTO1 },
+	{ "proto2",	RTF_PROTO2 },
+	{ "reject",	RTF_REJECT }
+};
+
+void
+conf_rtflags(char *txt, int flags, struct rt_msghdr *rtm)
+{
+	int i, value;
+
+	for (i = 0; i < nitems(rtflags); i++)
+		if (rtflags[i].flag < 0) {
+			value = -value;
+			if (!flags & rtflags[i].flag) {
+				snprintf(txt, TMPSIZ, "%s %s", txt,
+				    rtflags[i].name);
+			}
+		} else {
+			if (flags & rtflags[i].flag) {
+				snprintf(txt, TMPSIZ, "%s %s", txt,
+				    rtflags[i].name);
+			}
+		}
+
+	if (rtm->rtm_rmx.rmx_mtu && rtm->rtm_rmx.rmx_mtu != ROUTEMTU)
+		snprintf(txt, TMPSIZ, "%s mtu %d", txt,
+		    rtm->rtm_rmx.rmx_mtu);
+	if (rtm->rtm_rmx.rmx_expire)
+		snprintf(txt, TMPSIZ, "%s expire %lld", txt,
+		    rtm->rtm_rmx.rmx_expire);
+}
+
 void
 conf_print_rtm(FILE *output, struct rt_msghdr *rtm, char *delim, int af)
 {
 	int i;
-	char *cp, flags[64];
+	char *cp, flags[TMPSIZ];
 	struct sockaddr *dst = NULL, *gate = NULL, *mask = NULL;
 	struct sockaddr *sa;
 	struct sockaddr_in sin;
@@ -1270,13 +1314,10 @@ conf_print_rtm(FILE *output, struct rt_msghdr *rtm, char *delim, int af)
 
 			switch (i) {
 			case RTA_DST:
-				/* allow arp to get printed with af==AF_LINK */
+				/* allow arp to print when af==AF_LINK */
 				if (sa->sa_family == af) {
-					if (rtm->rtm_flags & RTF_REJECT)
-						snprintf(flags, sizeof(flags),
-						    " reject");
-					else
-						flags[0] = '\0';
+					conf_rtflags(flags, rtm->rtm_flags,
+					    rtm);
 					dst = sa;
 				}
 				break;
@@ -1306,4 +1347,5 @@ conf_print_rtm(FILE *output, struct rt_msghdr *rtm, char *delim, int af)
 		fprintf(output, "%s%s ", delim, routename(dst));
 		fprintf(output, "%s\n", routename(gate));
 	}
+	memset(flags, 0, TMPSIZ);
 }

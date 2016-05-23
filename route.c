@@ -32,14 +32,41 @@
 
 #define ASSUME_NETMASK 1
 
+void routeusage(void);
+
+void
+routeusage(void)
+{
+	printf("%% route <destination>[/bits] <gateway> [flags]\n");
+	printf("%% route <destination>[/netmask] <gateway> [flags]\n");
+	printf("%% no route <destination>[/bits] [gateway] [flags]\n");
+	printf("%% no route <destination>[/netmask] [gateway] [flags]\n");
+}
+
 int
 route(int argc, char **argv)
 {
-	struct in_addr tmp;
 	u_short cmd = 0;
 	u_int32_t net;
 	ip_t dest, gate;
-	int flags = 0;
+	struct in_addr tmp;
+	struct rt_metrics rt_metrics;
+	int ch, inits = 0, flags = RTF_STATIC | RTF_MPATH;
+
+	static struct nopts routeflags[] = {
+		{ "blackhole",	no_arg,		'b' },
+		{ "cloning",	no_arg,		'c' },
+		{ "expire",	req_arg,	'e' },
+		{ "iface",	no_arg,		'i' },
+		{ "llinfo",	no_arg,		'l' },
+		{ "nompath",	no_arg,		'u' },
+		{ "mtu",	req_arg,	'm' },
+		{ "nostatic",	no_arg,		'n' },
+		{ "proto1",	no_arg,		'1' },
+		{ "proto2",	no_arg,		'2' },
+		{ "reject",	no_arg,		'r' },
+		{ NULL,		0,		0   }
+	};
 
 	if (NO_ARG(argv[0])) {
 		cmd = RTM_DELETE; 
@@ -51,14 +78,13 @@ route(int argc, char **argv)
 	argc--;
 	argv++;
 
-	if (argc < 1 || argc > 3) {
-		printf("%% route <destination>[/bits] <gateway> [flags]\n");
-		printf("%% route <destination>[/netmask] <gateway> [flags]\n");
-		printf("%% no route <destination>[/bits] [gateway] [flags]\n");
-		printf("%% no route <destination>[/netmask] [gateway] [flags]\n");
+	if (argc < 1) {
+		printf("%% argc < 1\n");
+		routeusage();
 		return(1);
 	}
 
+	memset(&rt_metrics, 0, sizeof(rt_metrics));
 	memset(&gate, 0, sizeof(ip_t));
 	memset(&dest, 0, sizeof(ip_t));
 
@@ -67,18 +93,23 @@ route(int argc, char **argv)
 		/* bad arguments */
 		return(1);
 
-	if (argc > 1) {
+	argc--;
+	argv++;
+
+	if (argc >= 1) {
 		switch (dest.family) {
 		case AF_INET:
-			if (!inet_pton(AF_INET, argv[1], &gate.addr.in)) {
-				printf("%% %s is not an IPv4 address\n", argv[1]);
+			if (!inet_pton(AF_INET, argv[0], &gate.addr.in)) {
+				printf("%% %s is not an IPv4 address\n",
+				    argv[0]);
 				return(1);
 			}
 			gate.family = AF_INET;
 			break;
 		case AF_INET6:
-			if (parse_ipv6(argv[1], &gate.addr.in6) != 0) {
-				printf("%% %s is not an IPv6 address\n", argv[1]);
+			if (parse_ipv6(argv[0], &gate.addr.in6) != 0) {
+				printf("%% %s is not an IPv6 address\n",
+				    argv[0]);
 				return(1);
 			}
 			gate.family = AF_INET6;
@@ -87,19 +118,89 @@ route(int argc, char **argv)
 			printf("%% unknown gateway address family %d\n", dest.family);
 			return(1);
 		}
-		if (argc == 3) {
-			if (isprefix(argv[2], "reject")) {
-				flags = RTF_REJECT;
-			} else {
-				printf("%% unsupported flag\n");
-				return(1);
-			}
-		}
+
+		flags |= RTF_GATEWAY;
+		argc--;
+		argv++;
 	} else if (cmd == RTM_ADD) {
 		printf("%% No gateway specified\n");
 		return(1);
 	}
 
+	if (argc >= 1) {
+		long long relative_expire;
+
+		/* parse flags */
+		noptind = 0;
+		while ((ch = nopt(argc, argv, routeflags)) != -1) {
+			switch (ch) {
+			const char *errmsg = NULL;
+
+			case 'b':	/* blackhole */
+				flags |= RTF_BLACKHOLE;
+				break;
+			case 'c':	/* cloning */
+				flags |= RTF_CLONING;
+				break;
+			case 'e':	/* expire */
+				relative_expire = strtonum(
+				    argv[noptind - 1], 0, INT_MAX, &errmsg);
+				if (errmsg) {
+					printf("%% Invalid expire %s: %s\n",
+					    argv[noptind - 1], errmsg);
+					return(0);
+				}
+				rt_metrics.rmx_expire = relative_expire ?
+				    relative_expire + time(NULL) : 0;
+				inits |= RTV_EXPIRE;
+				break;
+			case 'i':	/* iface */
+				flags &= ~RTF_GATEWAY;
+				break;
+			case 'l':	/* llinfo */
+				flags |= RTF_LLINFO;
+				break;
+			case 'u':	/* nompath */
+				flags &= ~RTF_MPATH;
+				break;
+			case 'm':	/* mtu */
+				rt_metrics.rmx_mtu = strtonum(
+				    argv[noptind - 1], 64, 65536, &errmsg);
+				if (errmsg) {
+					printf("%% Invalid route mtu %s: %s\n",
+					    argv[noptind - 1], errmsg);
+					return(0);
+				}
+				inits |= RTV_MTU;
+				break;
+			case 'n':	/* nostatic */
+				flags &= ~RTF_STATIC;
+				break;
+			case '1':	/* proto1 */
+				flags |= RTF_PROTO1;
+				break;
+			case '2':	/* proto2 */
+				flags |= RTF_PROTO2;
+				break;
+			case 'r':	/* reject */
+				flags |= RTF_REJECT;
+				break;
+			default:
+				printf("%% route: nopt table error\n");
+				return(0);
+			}
+		}
+	}
+
+	if (argc - noptind != 0) {
+		/* leftover salmon */
+		printf("%% %s", nopterr);
+		if (argv[noptind])
+			printf(": %s", argv[noptind]);
+		printf("\n");
+		routeusage();
+		return(0);
+	}
 	/*
 	 * Detect if a user is adding a route with a non-network address.
 	 */
@@ -121,15 +222,15 @@ route(int argc, char **argv)
 		return(1);
 	}
 
-	flags |= RTF_UP | RTF_STATIC | RTF_MPATH;
+	flags |= RTF_UP;
 
 	/*
 	 * Do the route...
 	 */
-	if (argc > 1)
-		ip_route(&dest, &gate, cmd, flags, cli_rtable);
+	if (flags & RTF_GATEWAY)
+		ip_route(&dest, &gate, cmd, flags, cli_rtable, rt_metrics, inits);
 	else
-		ip_route(&dest, NULL, cmd, flags, cli_rtable);
+		ip_route(&dest, NULL, cmd, flags, cli_rtable, rt_metrics, inits);
 	return(0);
 }
 
@@ -147,14 +248,16 @@ int is_ip_addr(char *arg)
 void show_route(char *arg, int tableid)
 {
 	ip_t dest;
+	struct rt_metrics rt_metrics;
 
 	memset(&dest, 0, sizeof(ip_t));
+	memset(&rt_metrics, 0, sizeof(rt_metrics));
 
 	parse_ip_pfx(arg, NO_NETMASK, &dest);
 	if (dest.family == 0)
 		return;
 
-	ip_route(&dest, NULL, RTM_GET, RTF_UP, tableid);
+	ip_route(&dest, NULL, RTM_GET, RTF_UP, tableid, rt_metrics, 0);
 
 	/*
 	 * ip_route() calls rtmsg() which calls
