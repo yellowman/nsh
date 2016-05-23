@@ -676,8 +676,8 @@ void conf_ifflags(FILE *output, int flags, char *ifname, int ippntd)
 			fprintf(output, " no shutdown\n");
 		else if (!(flags & IFF_UP))
 			fprintf(output, " shutdown\n");
-		fprintf(output, "!\n");
 	}
+	fprintf(output, "!\n");
 }
 
 int conf_dhcrelay(char *ifname, char *server, int serverlen)
