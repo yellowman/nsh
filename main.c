@@ -101,8 +101,6 @@ main(int argc, char *argv[])
 		printf("%% database ipv6linklocal creation failed\n");
 	if (db_create_table_flag_x("lladdr") < 0)
 		printf("%% database lladdr creation failed\n");
-	if (db_create_table_flag_x("rtsol") < 0)
-		printf("%% database rtsol creation failed\n");
 	if (db_create_table_flag_x("rtadvd") < 0)
 		printf("%% database rtadvd creation failed\n");
 	if (db_create_table_flag_x("authkey") < 0)

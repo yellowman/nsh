@@ -529,7 +529,6 @@ void conf_interfaces(FILE *output, char *only)
 
 		if ((lladdr = get_hwdaddr(ifnp->if_name)) != NULL)
 			conf_db_single(output, "lladdr", lladdr, ifnp->if_name);
-		conf_db_single(output, "rtsol", NULL, ifnp->if_name);
 		conf_db_single(output, "rtadvd", NULL, ifnp->if_name);
 
 		conf_vnetid(output, ifs, ifnp->if_name);
@@ -727,6 +726,8 @@ void conf_ifxflags(FILE *output, int ifs, char *ifname)
  		/* set mpls mode for eth interfaces */
 		if (ifr.ifr_flags & IFXF_MPLS)
 			fprintf(output, " mpls\n");
+		if (ifr.ifr_flags & IFXF_AUTOCONF6)
+			fprintf(output, " autoconf6\n");
 		if (ifr.ifr_flags & IFXF_INET6_NOPRIVACY)
 			fprintf(output, " no autoconfprivacy\n");
 		if (ifr.ifr_flags & IFXF_WOL)

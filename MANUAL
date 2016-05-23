@@ -1047,7 +1047,8 @@ nsh(interface-vr0)/?
   wol              Wake On LAN
   mpls             MPLS
   inet6            IPv6
-  autoconfprivacy  IPv6 Autoconfigurable address
+  autoconf6        IPv6 Autoconfigurable address
+  autoconfprivacy  Privacy addresses for IPv6 autoconf
   trunkport        Add child interface(s) to trunk
   trunkproto       Define trunkproto
   ?                Options

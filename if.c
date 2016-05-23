@@ -1571,6 +1571,8 @@ intxflags(char *ifname, int ifs, int argc, char **argv)
 
 	if (isprefix(argv[0], "autoconfprivacy")) {
 		value = -IFXF_INET6_NOPRIVACY;
+	} else if (isprefix(argv[0], "autoconf6")) {
+		value = IFXF_AUTOCONF6;
 	} else if (isprefix(argv[0], "mpls")) {
 		value = IFXF_MPLS;
 	} else if (isprefix(argv[0], "wol")) {
@@ -1868,11 +1870,7 @@ intrtd(char *ifname, int ifs, int argc, char **argv)
 	} else
 		set = 1;
 
-	if (isprefix(argv[0], "rtsol")) {
-		/* XXX this has been replaced with IFXF_AUTOCONF6 */
-		cmdname = "rtsol";
-		cmdpath = RTSOL;
-	} else if (isprefix(argv[0], "rtadvd")) {
+	if (isprefix(argv[0], "rtadvd")) {
 		cmdname = "rtadvd";
 		cmdpath = RTADVD;
 	} else {
@@ -1900,11 +1898,7 @@ intrtd(char *ifname, int ifs, int argc, char **argv)
 		} else {
 			printf("%% %s already running\n", cmdname);
 		}
-		if (!set && strcmp(cmdname, "rtsol") == 0) {
-			char *args[] = { PKILL, cmdpath, ifname, '\0' };
-
-			cmdargs(PKILL, args);
-		} else if (!set && strcmp(cmdname, "rtadvd") == 0) {
+		if (!set && strcmp(cmdname, "rtadvd") == 0) {
 			char *args[] = { PKILL, cmdpath, "-c", "/var/run/rtadvd.0", ifname, '\0' };
 
 			cmdargs(PKILL, args);
@@ -1921,11 +1915,7 @@ intrtd(char *ifname, int ifs, int argc, char **argv)
 		} else {
 			printf("%% %s not running\n", cmdname);
 		}
-		if (set && strcmp(cmdname, "rtsol") == 0) {
-			char *args[] = { cmdpath, ifname, '\0' };
-
-			cmdargs(cmdpath, args);
-		} else if (set && strcmp(cmdname, "rtadvd") == 0) {
+		if (set && strcmp(cmdname, "rtadvd") == 0) {
 			char *args[] = { cmdpath, "-c", "/var/run/rtadvd.0", ifname, '\0' };
 
 			cmdargs(cmdpath, args);
