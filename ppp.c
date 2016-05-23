@@ -213,8 +213,9 @@ intsppp(char *ifname, int ifs, int argc, char **argv)
 
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 	if (ioctl(ifs, SIOCSSPPPPARAMS, &ifr) == -1) {
-		printf("%% intspppproto: SIOCSSPPPPARAMS: SPPPIOSxAUTH: %s\n",
-		    strerror(errno));
+		printf("%% intspppproto: SIOCSSPPPPARAMS: "
+		    "SPPPIOS%sAUTH: %s\n", strerror(errno),
+		    isc->cmd == SPPPIOSMAUTH ? "M" : "H");
 		return 0;
 	}
 	if (cmd & __key) {
