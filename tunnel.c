@@ -43,7 +43,7 @@ intvnetid(char *ifname, int ifs, int argc, char **argv)
 	argc--;
 	argv++;
 
-	if ((set && argc != 2) || (!set && argc > 2)) {
+	if ((set && argc != 1) || (!set && argc > 1)) {
 		printf("%% vnetid <vnetid>\n");
 		printf("%% no vnetid [vnetid]\n");
                 return(0);
