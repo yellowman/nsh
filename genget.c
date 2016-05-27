@@ -29,8 +29,6 @@
  * SUCH DAMAGE.
  */
 
-/* $KTH: genget.c,v 1.6 1997/05/04 09:01:34 assar Exp $ */
-
 #include <ctype.h>
 #include <stdio.h>
 #include "externs.h"
