@@ -262,7 +262,9 @@ show_int(int argc, char **argv)
 				 */
 				if (ntohl(sindest->sin_addr.s_addr) !=
 				    in4_brdaddr(sin->sin_addr.s_addr,
-				    sinmask->sin_addr.s_addr))
+				    sinmask->sin_addr.s_addr) &&
+				    ntohl(sindest->sin_addr.s_addr) !=
+				    INADDR_ANY)
 					printf(" (Broadcast %s)",
 					    inet_ntoa(sindest->sin_addr));
 			}

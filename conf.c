@@ -971,7 +971,9 @@ int conf_ifaddrs(FILE *output, char *ifname, int flags, int af)
 				 */
 				if (ntohl(sindest->sin_addr.s_addr) !=
 				    in4_brdaddr(sin->sin_addr.s_addr,
-				    sinmask->sin_addr.s_addr))
+				    sinmask->sin_addr.s_addr) &&
+				    ntohl(sindest->sin_addr.s_addr) !=
+				    INADDR_ANY)
 					fprintf(output, " %s",
 					    inet_ntoa(sindest->sin_addr));
 			} else {
