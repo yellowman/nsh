@@ -128,10 +128,14 @@ struct prot1 lics[] = {
 	    { LDPCTL, "show", "fib", OPT, NULL } },
 	{ "interfaces", "Interfaces",
 	    { LDPCTL, "show", "interfaces", NULL } },
-	{ "neighbor",   "Neighbor",
+	{ "neighbor",   "Neighbors",
 	    { LDPCTL, "show", "neighbor", NULL } },
 	{ "lib",        "Label Information Base",
 	    { LDPCTL, "show", "lib", NULL } },
+	{ "discovery",	"Adjacencies",
+	    { LDPCTL, "show", "discovery", NULL } },
+	{ "l2vpn",	"Pseudowire",
+	    { LDPCTL, "show", "l2vpn", OPT, NULL } },
 	{ 0, 0, { 0 } }
 };
 

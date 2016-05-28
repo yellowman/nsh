@@ -210,6 +210,8 @@ struct ctl ctl_ldp[] = {
 	{ "edit",	"edit configuration",
 	   { "ldp", (char *)ctl_ldp_test, NULL }, call_editor, 0,
 	    T_HANDLER_FILL1 },
+	{ "reload",	"reload service",
+	    { LDPCTL, "reload", NULL }, NULL, 0, T_EXEC },
 	{ "fib",	"fib couple/decouple",
 	   { LDPCTL, "fib", REQ, NULL }, NULL, 0, T_EXEC },
 	{ 0, 0, { 0 }, 0, 0, 0 }
