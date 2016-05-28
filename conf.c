@@ -1277,22 +1277,25 @@ conf_rtflags(char *txt, int flags, struct rt_msghdr *rtm)
 		if (rtflags[i].flag < 0) {
 			value = -value;
 			if (!flags & rtflags[i].flag) {
-				snprintf(txt, TMPSIZ, "%s %s", txt,
-				    rtflags[i].name);
+				strlcat(txt, " ", TMPSIZ);
+				strlcat(txt, rtflags[i].name, TMPSIZ);
 			}
-		} else {
-			if (flags & rtflags[i].flag) {
-				snprintf(txt, TMPSIZ, "%s %s", txt,
-				    rtflags[i].name);
-			}
+		} else if (flags & rtflags[i].flag) {
+				strlcat(txt, " ", TMPSIZ);
+				strlcat(txt, rtflags[i].name, TMPSIZ);
 		}
 
-	if (rtm->rtm_rmx.rmx_mtu && rtm->rtm_rmx.rmx_mtu != ROUTEMTU)
-		snprintf(txt, TMPSIZ, "%s mtu %d", txt,
-		    rtm->rtm_rmx.rmx_mtu);
-	if (rtm->rtm_rmx.rmx_expire)
-		snprintf(txt, TMPSIZ, "%s expire %lld", txt,
+	if (rtm->rtm_rmx.rmx_mtu && rtm->rtm_rmx.rmx_mtu != ROUTEMTU) {
+		char sn1[16];
+		snprintf(sn1, sizeof(sn1), " mtu %d", rtm->rtm_rmx.rmx_mtu);
+		strlcat(txt, sn1, TMPSIZ);
+	}
+	if (rtm->rtm_rmx.rmx_expire) {
+		char sn1[16];
+		snprintf(sn1, sizeof(sn1), " expire %lld",
 		    rtm->rtm_rmx.rmx_expire);
+		strlcat(txt, sn1, TMPSIZ);
+	}
 }
 
 void
