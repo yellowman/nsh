@@ -958,16 +958,17 @@ int conf_ifaddrs(FILE *output, char *ifname, int flags, int af)
 				sindest = (struct sockaddr_in *)ifa->ifa_dstaddr;
 				fprintf(output, " ip %s",
 				    routename4(sin->sin_addr.s_addr));
-				fprintf(output, " %s", inet_ntoa(sindest->sin_addr));
+				if (ntohl(sindest->sin_addr.s_addr) !=
+				    INADDR_ANY)
+					fprintf(output, " %s",
+					    inet_ntoa(sindest->sin_addr));
 			} else if (flags & IFF_BROADCAST) {
 				sindest = (struct sockaddr_in *)ifa->ifa_broadaddr;
 				fprintf(output, " ip %s",
 				    netname4(sin->sin_addr.s_addr, sinmask));
 				/*
-				 * no reason to save the broadcast addr
-				 * if it is standard (this should always 
-				 * be true unless someone has messed up their
-				 * network or they are playing around...)
+				 * don't save a broadcast address that would be
+				 * automatically calculated by the kernel anyways
 				 */
 				if (ntohl(sindest->sin_addr.s_addr) !=
 				    in4_brdaddr(sin->sin_addr.s_addr,
