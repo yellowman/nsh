@@ -1287,7 +1287,6 @@ bridge_rules(int s, char *brdg, char *ifname, char *delim, FILE *output)
 			break;
 		len *= 2;
 	}
-	ifrp = ifc.ifbrl_req;
 	for (i = 0; i < ifc.ifbrl_len; i += sizeof(ifreq)) {
 		ifrp = (struct ifbrlreq *)((caddr_t)ifc.ifbrl_req + i);
 		bridge_showrule(ifrp, delim, output);
