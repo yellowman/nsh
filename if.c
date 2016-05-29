@@ -161,7 +161,8 @@ show_int(int argc, char **argv)
 	memset(&ifrdesc, 0, sizeof(ifrdesc));
 	strlcpy(ifrdesc.ifr_name, ifname, sizeof(ifrdesc.ifr_name));
 	ifrdesc.ifr_data = (caddr_t)&ifdescr;
-	if (ioctl(ifs, SIOCGIFDESCR, &ifrdesc) == 0 && strlen(ifrdesc.ifr_data))
+	if (ioctl(ifs, SIOCGIFDESCR, &ifrdesc) == 0 &&
+	    strlen(ifrdesc.ifr_data))
 		printf(" (%s)", ifrdesc.ifr_data);
 
 	putchar('\n');
@@ -239,21 +240,25 @@ show_int(int argc, char **argv)
 			continue;
 		}
 		
-		if (!ippntd)
+		if (!ippntd) 
 			printf("  Internet address");
 
-		printf("%s %s", ippntd ? "," : "", ifa->ifa_addr->sa_family == AF_INET ?
-		    netname4(sin->sin_addr.s_addr, sinmask) : netname6(sin6, sin6mask));
+		printf("%s %s", ippntd ? "," : "", ifa->ifa_addr->sa_family
+		    == AF_INET ? netname4(sin->sin_addr.s_addr, sinmask) :
+		    netname6(sin6, sin6mask));
 
 		ippntd = 1;
 
 		switch (ifa->ifa_addr->sa_family) {
 		case AF_INET:
 			if (flags & IFF_POINTOPOINT) {
-				sindest = (struct sockaddr_in *)ifa->ifa_dstaddr;
-				printf(" (Destination %s)", routename4(sindest->sin_addr.s_addr));
+				sindest = (struct sockaddr_in *)
+				    ifa->ifa_dstaddr;
+				printf(" (Destination %s)",
+				    routename4(sindest->sin_addr.s_addr));
 			} else if (flags & IFF_BROADCAST) {
-				sindest = (struct sockaddr_in *)ifa->ifa_broadaddr;
+				sindest = (struct sockaddr_in *)
+				    ifa->ifa_broadaddr;
 				/*
 				 * no reason to show the broadcast addr
 				 * if it is standard (this should always
@@ -271,9 +276,11 @@ show_int(int argc, char **argv)
 			break;
 		case AF_INET6:
 			if (flags & IFF_POINTOPOINT) {
-				sin6dest = (struct sockaddr_in6 *)ifa->ifa_dstaddr;
+				sin6dest = (struct sockaddr_in6 *)
+				    ifa->ifa_dstaddr;
 				in6_fillscopeid(sin6dest);
-				printf(" (Destination %s)", routename6(sin6dest));
+				printf(" (Destination %s)",
+				    routename6(sin6dest));
 			}
 			break;
 		default:
@@ -622,7 +629,8 @@ get_ifxflags(char *ifname, int ifs)
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 
 	if (ioctl(ifs, SIOCGIFXFLAGS, (caddr_t)&ifr) < 0) {
-		printf("%% get_ifxflags: SIOCGIFXFLAGS: %s\n", strerror(errno));
+		printf("%% get_ifxflags: SIOCGIFXFLAGS: %s\n",
+		    strerror(errno));
 		flags = 0;
 	} else
 		flags = ifr.ifr_flags;
@@ -639,7 +647,8 @@ set_ifxflags(char *ifname, int ifs, int flags)
 	ifr.ifr_flags = flags;
 
 	if (ioctl(ifs, SIOCSIFXFLAGS, (caddr_t)&ifr) < 0) {
-		printf("%% set_ifxflags: SIOCSIFXFLAGS: %s\n", strerror(errno));
+		printf("%% set_ifxflags: SIOCSIFXFLAGS: %s\n",
+		    strerror(errno));
 	}
 
 	return(0);
@@ -945,8 +954,10 @@ intpflow(char *ifname, int ifs, int argc, char **argv)
 	    (argc == 4 || argc == 6) && (!isprefix(argv[0], "sender") ||
 	    !isprefix(argv[2], "receiver") ||
 	    (argc == 6 && !isprefix(argv[4], "version"))))) {
-		printf("%% pflow sender <x.x.x.x> receiver <x.x.x.x:port> [version 5|9|10]\n");
-		printf("%% no pflow [sender x.x.x.x receiver x.x.x.x:port version 5|9|10]\n");
+		printf("%% pflow sender <x.x.x.x> receiver <x.x.x.x:port> "
+		    "[version 5|9|10]\n"
+		    "%% no pflow [sender x.x.x.x receiver x.x.x.x:port "
+		    "version 5|9|10]\n");
 		return(0);
 	}
 
@@ -968,17 +979,20 @@ intpflow(char *ifname, int ifs, int argc, char **argv)
 		pflow_addr(argv[1], &preq.flowsrc);
 		pflow_addr(argv[3], &preq.flowdst);
 		if (argc == 6) {
-			preq.version = strtonum(argv[5], 5, PFLOW_PROTO_MAX, &errmsg);
+			preq.version = strtonum(argv[5], 5, PFLOW_PROTO_MAX,
+			    &errmsg);
 			preq.addrmask |= PFLOW_MASK_VERSION;
 	                if (errmsg) {
-				printf("%% Invalid pflow version %s: %s\n", argv[0], errmsg);
+				printf("%% Invalid pflow version %s: %s\n",
+				    argv[0], errmsg);
 				return(0);
 			}
                 }
 	}
 
 	if (ioctl(ifs, SIOCSETPFLOW, (caddr_t)&ifr) == -1)
-		printf("%% Unable to set pflow parameters: %s\n", strerror(errno));
+		printf("%% Unable to set pflow parameters: %s\n",
+		    strerror(errno));
 
 	return(0);
 }
@@ -1063,9 +1077,10 @@ intkeepalive(char *ifname, int ifs, int argc, char **argv)
 	strlcpy(ikar.ikar_name, ifname, sizeof(ikar.ikar_name));
 	if (ioctl(ifs, SIOCSETKALIVE, (caddr_t)&ikar) < 0) {
 		if (errno == ENOTTY)
-			printf("%% Keepalive not available on this interface\n");
+			printf("%% Keepalive not available on %s\n", ifname);
 		else
-			printf("%% intkeepalive: SIOCSETKALIVE: %s\n", strerror(errno));
+			printf("%% intkeepalive: SIOCSETKALIVE: %s\n",
+			    strerror(errno));
 	}
 
 	return(0);
@@ -1099,9 +1114,11 @@ intlabel(char *ifname, int ifs, int argc, char **argv)
 	ifr.ifr_data = (caddr_t)&shim;
 
 	if (set) {
-		shim.shim_label = strtonum(argv[0], 0, MPLS_LABEL_MAX, &errmsg);
+		shim.shim_label = strtonum(argv[0], 0, MPLS_LABEL_MAX,
+		    &errmsg);
 		if (errmsg) {
-			printf("%% Invalid MPLS Label %s: %s\n", argv[0], errmsg);
+			printf("%% Invalid MPLS Label %s: %s\n", argv[0],
+			    errmsg);
 			return(0);
 		}
 	} else
@@ -1110,9 +1127,10 @@ intlabel(char *ifname, int ifs, int argc, char **argv)
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 	if (ioctl(ifs, SIOCSETLABEL, (caddr_t)&ifr) < 0) {
 		if (errno == ENOTTY)
-			printf("%% MPLS label not supported on this device (mpe only)\n");
+			printf("%% MPLS label not supported on %s\n", ifname);
 		else
-			printf("%% intlabel: SIOCSETLABEL: %s\n", strerror(errno));
+			printf("%% intlabel: SIOCSETLABEL: %s\n",
+			    strerror(errno));
 	}
 	return(0);
 }
@@ -1154,24 +1172,29 @@ intdhcrelay(char *ifname, int ifs, int argc, char **argv)
 		char server[24], argue[SIZE_CONF_TEMP];
 		char *killcmd[] = { PKILL, "-xf", NULL, '\0' };
 
-		if ((alen = conf_dhcrelay(ifname, server, sizeof(server))) < 1) {
+		if ((alen = conf_dhcrelay(ifname, server, sizeof(server))) < 1)
+		{
 			if (alen == 0)
-				printf("%% No relay configured for %s\n", ifname);
+				printf("%% No relay configured for %s\n",
+				    ifname);
 			else
-				printf("%% int_dhcrelay: conf_dhcrelay failed: %d\n", alen);
+				printf("%% int_dhcrelay: conf_dhcrelay failed:"
+				    " %d\n", alen);
 			return(0);
 		}
 
-		/* if dhcrelay not relaying to specified dhcp server, bail out */
+		/* bail if dhcrelay not relaying to specified dhcp server */
 		if (argc && strcmp(server, argv[0]) != 0) {
-			printf("%% Server expected: %s (not %s)\n", server, argv[0]);
+			printf("%% Server expected: %s (not %s)\n", server,
+			    argv[0]);
 			return(0);
 		}
 
 		flag_x("dhcrelay", ifname, DB_X_REMOVE, NULL);
 
 		/* setup argument list as one argument for pkill -xf */
-		snprintf(argue, sizeof(argue), "%s %s %s %s", cmd[0], cmd[1], cmd[2], server);
+		snprintf(argue, sizeof(argue), "%s %s %s %s", cmd[0], cmd[1],
+		    cmd[2], server);
 		killcmd[3] = argue;
 
 		cmdargs(PKILL, killcmd);
@@ -1222,7 +1245,8 @@ intmetric(char *ifname, int ifs, int argc, char **argv)
 
 		num = strtonum(argv[0], 0, max, &errmsg);
 		if (errmsg) {
-			printf("%% Invalid %s %s: %s\n", type, argv[0], errmsg);
+			printf("%% Invalid %s %s: %s\n", type, argv[0],
+			    errmsg);
 			return(0);
 		}
 		ifr.ifr_metric = num;
@@ -1237,7 +1261,8 @@ intmetric(char *ifname, int ifs, int argc, char **argv)
 
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 	if (ioctl(ifs, theioctl, (caddr_t)&ifr) < 0)
-		printf("%% intmetric: SIOCSIF%s: %s\n", type, strerror(errno));
+		printf("%% intmetric: SIOCSIF%s: %s\n", type,
+		    strerror(errno));
 
 	return(0);
 }
@@ -1742,7 +1767,8 @@ intpowersave(char *ifname, int ifs, int argc, char **argv)
 	if (argc == 1)
 		power.i_maxsleep = strtonum(argv[0], 0, 1000, &errmsg);
 		if (errmsg) {
-			printf("%% Power save invalid %s: %s", argv[0], errmsg);
+			printf("%% Power save invalid %s: %s", argv[0],
+			    errmsg);
 			return(0);
 		}
 	else
@@ -1826,13 +1852,14 @@ intlladdr(char *ifname, int ifs, int argc, char **argv)
 		addr = ether_aton(set ? argv[1] : llorig);
 		if (addr == NULL) {
 			if (set) {
-				printf("%% MAC addresses must be six hexadecimal "
-				    "fields, up to two digits each,\n");
-				printf("%% separated with colons (1:23:45:ab:cd:ef)\n");
+				printf("%% MAC addresses are six hexadecimal "
+				    "fields, up to two digits each,\n"
+				    " %% separated with colons"
+				    " (1:23:45:ab:cd:ef)\n");
 				return(1);
 			} else {
-				printf("%% database corrupted, unable to retrieve original "
-				    "lladdr\n");
+				printf("%% database corrupted, unable to "
+				    " retrieve original lladdr\n");
 				return(1);
 			}
 		} 
@@ -1900,7 +1927,8 @@ intrtd(char *ifname, int ifs, int argc, char **argv)
 			printf("%% %s already running\n", cmdname);
 		}
 		if (!set && strcmp(cmdname, "rtadvd") == 0) {
-			char *args[] = { PKILL, cmdpath, "-c", "/var/run/rtadvd.0", ifname, '\0' };
+			char *args[] = { PKILL, cmdpath, "-c",
+			    "/var/run/rtadvd.0", ifname, '\0' };
 
 			cmdargs(PKILL, args);
 		}
@@ -1917,7 +1945,8 @@ intrtd(char *ifname, int ifs, int argc, char **argv)
 			printf("%% %s not running\n", cmdname);
 		}
 		if (set && strcmp(cmdname, "rtadvd") == 0) {
-			char *args[] = { cmdpath, "-c", "/var/run/rtadvd.0", ifname, '\0' };
+			char *args[] = { cmdpath, "-c", "/var/run/rtadvd.0",
+			    ifname, '\0' };
 
 			cmdargs(cmdpath, args);
 		}
