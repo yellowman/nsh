@@ -207,7 +207,7 @@ conf_sysctl(FILE *output, char *prefix, struct ipsysctl *x)
 {
 	int tmp = 0;
 
-	for (; x != NULL && x->name != NULL; tmp = 0, x++) {
+	for (; x != NULL && x->name != NULL; x++) {
 		if (x->def_larg) {	/* this sysctl takes a value */
 			tmp = sysctl_int(x->mib, 0, 1);
 			if (tmp == x->def_larg || tmp == -1)
