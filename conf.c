@@ -1271,11 +1271,10 @@ static const struct {
 void
 conf_rtflags(char *txt, int flags, struct rt_msghdr *rtm)
 {
-	int i, value;
+	int i;
 
 	for (i = 0; i < nitems(rtflags); i++)
 		if (rtflags[i].flag < 0) {
-			value = -value;
 			if (!flags & rtflags[i].flag) {
 				strlcat(txt, " ", TMPSIZ);
 				strlcat(txt, rtflags[i].name, TMPSIZ);
