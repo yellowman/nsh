@@ -396,7 +396,10 @@ list_vertical(StringList *sl)
 				putc('\n', ttyout);
 				break;
 			}
-			w = strlen(p);
+			if (p)
+				w = strlen(p);
+			else
+				w = 0;
 			while (w < width) {
 				w = (w + 8) &~ 7;
 				(void)putc('\t', ttyout);
