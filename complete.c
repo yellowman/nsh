@@ -320,7 +320,7 @@ complete(EditLine *el, int ch, char **table, size_t stlen, char *arg)
 
 	/* check for 'continuation' completes (which are uppercase) */
 	if ((cursor_argc > celems) && (celems > 0)
-	    && isupper(c->complete[celems-1]))
+	    && isupper((unsigned char)c->complete[celems-1]))
 		cursor_argc = celems;
 
 	if (cursor_argc > celems)
