@@ -426,9 +426,9 @@ conf_media_status(FILE *output, int s, char *ifname)
 	if (ifmr.ifm_count == 0)
 		return(0);
 
-	media_list = (u_int64_t *)malloc(ifmr.ifm_count * sizeof(int));
+	media_list = calloc(ifmr.ifm_count, sizeof(*media_list));
 	if (media_list == NULL) {
-		printf("%% conf_media_status: malloc: %s\n", strerror(errno));
+		printf("%% conf_media_status: calloc: %s\n", strerror(errno));
 		return(0);
 	}
 	ifmr.ifm_ulist = media_list;
@@ -472,9 +472,9 @@ media_status(int s, char *ifname, char *delim)
 		return;
 	}
 
-	media_list = (u_int64_t *)malloc(ifmr.ifm_count * sizeof(int));
+	media_list = calloc(ifmr.ifm_count, sizeof(*media_list));
 	if (media_list == NULL) {
-		printf("%% media_status: malloc: %s\n", strerror(errno));
+		printf("%% media_status: calloc: %s\n", strerror(errno));
 		return;
 	}
 	ifmr.ifm_ulist = media_list;
@@ -547,9 +547,9 @@ media_supported(int s, char *ifname, char *hdr_delim, char *body_delim)
 		return;
 	}
 
-	media_list = (u_int64_t *)malloc(ifmr.ifm_count * sizeof(int));
+	media_list = calloc(ifmr.ifm_count, sizeof(*media_list));
 	if (media_list == NULL) {
-		printf("%% media_status: malloc: %s\n", strerror(errno));
+		printf("%% media_status: calloc: %s\n", strerror(errno));
 		return;
 	}
 	ifmr.ifm_ulist = media_list;
