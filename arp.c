@@ -114,7 +114,7 @@ arpset(int argc, char *argv[])
 	struct sockaddr_inarp *sin;
 	struct sockaddr_dl *sdl;
 	struct rt_msghdr *rtm;
-	char *eaddr = argv[1], *host = argv[0];
+	char *eaddr, *host;
 	struct ether_addr *ea = NULL;
 	int flags = 0, set = 1, doing_proxy, export_only;
 
@@ -611,7 +611,6 @@ sec2str(time_t total)
 		p += n;
 	}
 	if (!first || mins) {
-		first = 0;
 		n = snprintf(p, ep - p, "%dm", mins);
 		if (n < 0 || n >= ep - p)
 			return "?";

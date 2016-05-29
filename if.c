@@ -283,7 +283,6 @@ show_int(int argc, char **argv)
 	}
 
 	if (ippntd) {
-		ippntd = 0;
 		printf("\n");
 	}
 	freeifaddrs(ifap);
