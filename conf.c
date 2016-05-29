@@ -1125,7 +1125,7 @@ conf_groupattrib(FILE *output)
 		    errno != ENOTTY) {
 			printf("%% conf_groupattrib: SIOCGIFGROUP/1: %s\n",
 				    strerror(errno));
-			return;
+			goto fail;
 		}
 
 		len = ifgr.ifgr_len;
@@ -1135,12 +1135,13 @@ conf_groupattrib(FILE *output)
 		if (ifgr.ifgr_groups == NULL) {
 			printf("%% conf_groupattrib: calloc: %s\n",
 			    strerror(errno));
-			return;
+			goto fail;
 		}
 		if (ioctl(ifs, SIOCGIFGROUP, (caddr_t)&ifgr) == -1) {
 			printf("%% conf_groupattrib: SIOCGIFGROUP/2: %s\n",
 			    strerror(errno));
 			free(ifgr.ifgr_groups);
+			goto fail;
 		}
 		ifg = ifgr.ifgr_groups;
 		for (; ifg && len >= sizeof(struct ifg_req); ifg++) {
@@ -1159,6 +1160,7 @@ conf_groupattrib(FILE *output)
 		}
 		free(ifgr.ifgr_groups);
 	}
+fail:
 	if_freenameindex(ifn_list);
 }
 
