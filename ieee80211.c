@@ -385,7 +385,7 @@ get_nwinfo(char *ifname, char *str, int str_len, int type)
 					    ':')
 						nwkey_verbose = 1;
 					else if (nwkey.i_key[0].i_keylen >= 7 &&
-						    MIN_ARG(
+						    isprefix(
 						    nwkey.i_key[0].i_keydat,
 						    "persist"))
 						nwkey_verbose = 1;
