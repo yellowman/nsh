@@ -312,6 +312,8 @@ struct ctl ctl_nppp[] = {
 	    { NPPPCTL, "clear", REQ, OPT, OPT, NULL }, NULL, 0, T_EXEC },
 	{ "session", 	"show PPP sessions",
 	    { NPPPCTL, "session", REQ, OPT, OPT, NULL }, NULL, 0, T_EXEC },
+	{ "monitor",	"monitor PPP sessions",
+	    { NPPPCTL, "monitor", REQ, OPT, OPT, NULL }, NULL, 0, T_EXEC },
 	{ "edit",	"edit configuration",
 	    { "nppp", (char *)ctl_nppp_test, NULL }, call_editor, 0,
 	    T_HANDLER_FILL1 },
