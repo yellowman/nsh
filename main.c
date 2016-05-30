@@ -38,7 +38,7 @@ char *vers = "1.0";
 int bridge = 0;		/* bridge mode for interface() */
 int verbose = 0;	/* verbose mode */
 int priv = 0, cli_rtable = 0;
-int editing;
+int editing = 1;
 pid_t pid;
 
 History *histi = NULL;

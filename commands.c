@@ -1015,8 +1015,10 @@ command()
 	Command  *c;
 	u_int num;
 
-	inithist();
-	initedit();
+	if (editing) {
+		inithist();
+		initedit();
+	}
 
 	for (;;) {
 		if (!editing) {

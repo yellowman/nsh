@@ -454,9 +454,10 @@ initedit()
 {
 	editing = 1;
 
-	if (!elc && histc) {
+	if (!elc) {
 		elc = el_init(__progname, stdin, stdout, stderr);
-		el_set(elc, EL_HIST, history, histc); /* use history */
+		if (histc)
+			el_set(elc, EL_HIST, history, histc); /* use history */
 		el_set(elc, EL_EDITOR, "emacs"); /* default type */
 		el_set(elc, EL_PROMPT, cprompt); /* set the prompt
 						  * function */
@@ -466,9 +467,10 @@ initedit()
 		el_source(elc, NULL);	/* read ~/.editrc */
 		el_set(elc, EL_SIGNAL, 1);
 	}
-	if (!eli && histi) {
+	if (!eli) {
 		eli = el_init(__progname, stdin, stdout, stderr);
-		el_set(eli, EL_HIST, history, histi);
+		if (histi)
+			el_set(eli, EL_HIST, history, histi);
 		el_set(eli, EL_EDITOR, "emacs");
 		el_set(eli, EL_PROMPT, iprompt);
 		el_set(eli, EL_ADDFN, "complt_i", "Command completion",
