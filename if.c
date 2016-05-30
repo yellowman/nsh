@@ -178,6 +178,7 @@ show_int(int argc, char **argv)
 		hours = c / (60 * 60);
 		c %= (60 * 60);
 		mins = c / 60;
+		c %= 60;
 		printf(" (last change ");
 		if (days)
 			printf("%id ", days);
