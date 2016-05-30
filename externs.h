@@ -507,10 +507,6 @@ extern struct winsize winsize;
 #endif
 
 /* complete.c */
-#ifdef _HISTEDIT_H_
-unsigned char complt_c(EditLine *, int);
-unsigned char complt_i(EditLine *, int);
-#endif
 #define CMPL(x) __STRING(x),
 #define CMPL0   "",
 void inithist(void);

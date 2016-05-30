@@ -47,6 +47,7 @@
 #define ttyin stdin
 
 unsigned char complete(EditLine *, int, char **, size_t, char *);
+
 static int	     comparstr(const void *, const void *);
 static unsigned char complete_ambiguous(char *, int, StringList *, EditLine *);
 static unsigned char complete_command(char *, int, EditLine *, char **, int);
@@ -56,6 +57,10 @@ static unsigned char complete_ifname(char *, int, EditLine *);
 static unsigned char complete_args(struct ghs *, char *, int, EditLine *,
 				   char **, int, int);
 static void list_vertical(StringList *);
+
+unsigned char complt_c(EditLine *, int);
+unsigned char complt_i(EditLine *, int);
+unsigned char exit_i(EditLine *, int);
 
 static int
 comparstr(const void *a, const void *b)
@@ -227,6 +232,13 @@ complete_local(char *word, int list, EditLine *el)
 	rv = complete_ambiguous(file, list, words, el);
 	sl_free(words, 1);
 	return (rv);
+}
+
+unsigned char
+exit_i(EditLine *el, int ch)
+{
+	printf("\n");
+	return CC_EOF;
 }
 
 unsigned char
@@ -448,22 +460,22 @@ initedit()
 		el_set(elc, EL_EDITOR, "emacs"); /* default type */
 		el_set(elc, EL_PROMPT, cprompt); /* set the prompt
 						  * function */
-		el_set(elc, EL_ADDFN, "complt", "Command completion", complt_c);
-		el_set(elc, EL_BIND, "\t", "complt", NULL);
+		el_set(elc, EL_ADDFN, "complt_c", "Command completion",
+		    complt_c);
+		el_set(elc, EL_BIND, "\t", "complt_c", NULL);
 		el_source(elc, NULL);	/* read ~/.editrc */
 		el_set(elc, EL_SIGNAL, 1);
 	}
 	if (!eli && histi) {
-		eli = el_init(__progname, stdin, stdout, stderr); /* again */
+		eli = el_init(__progname, stdin, stdout, stderr);
 		el_set(eli, EL_HIST, history, histi);
 		el_set(eli, EL_EDITOR, "emacs");
 		el_set(eli, EL_PROMPT, iprompt);
-		el_set(eli, EL_ADDFN, "complt", "Command completion", complt_i);
-		el_set(eli, EL_BIND, "\t", "complt", NULL);
-#ifdef notyet
-		el_set(eli, EL_ADDFN, "exit", "Exit", NULL);
-		el_set(eli, EL_BIND, "\026", "exit", NULL);
-#endif
+		el_set(eli, EL_ADDFN, "complt_i", "Command completion",
+		    complt_i);
+		el_set(eli, EL_BIND, "\t", "complt_i", NULL);
+		el_set(eli, EL_ADDFN, "exit_i", "Exit", exit_i);
+		el_set(eli, EL_BIND, "^X", "exit_i", NULL);
 		el_source(eli, NULL);
 		el_set(eli, EL_SIGNAL, 1);
 	}

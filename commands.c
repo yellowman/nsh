@@ -724,7 +724,7 @@ interface(int argc, char **argv, char *modhvar)
 					break;
 			}
 			if (num >= sizeof(line)) {
-			printf("%% Input exceeds permitted length\n");
+				printf("%% Input exceeds permitted length\n");
 				break;
 			}
 			memcpy(line, buf, (size_t)num);
