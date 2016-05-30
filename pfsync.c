@@ -55,7 +55,7 @@ intsyncdev(char *ifname, int ifs, int argc, char **argv)
 		return (0);
 	}
 
-	if (!MIN_ARG(ifname, "pfsync")) {
+	if (!isprefix("pfsync", ifname)) {
 		printf("%% syncdev is only for pfsync devices\n");
 		return 0;
 	}
@@ -112,7 +112,7 @@ intsyncpeer(char *ifname, int ifs, int argc, char **argv)
 	argc--;
 	argv++;
 
-	if (!MIN_ARG(ifname, "pfsync")) {
+	if (!isprefix("pfsync", ifname)) {
 		printf("%% syncpeer is only for pfsync devices\n");
 		return 0;
 	}
@@ -125,12 +125,9 @@ intsyncpeer(char *ifname, int ifs, int argc, char **argv)
 
 	bzero(&preq, sizeof(struct pfsyncreq));
 	ifr.ifr_data = (caddr_t) &preq;
+	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 
 	if (ioctl(ifs, SIOCGETPFSYNC, (caddr_t)&ifr) == -1) {
-		/* ENXIO means ifp == 0, yawn */
-		if (errno == ENXIO)
-			printf("%% You must (re)set syncdev first\n");
-		else
 			printf("%% intsyncpeer: SIOCGETPFSYNC: %s\n",
 			    strerror(errno));
 		return(0);

@@ -92,6 +92,7 @@ static const struct {
 	{ "enc",	1536 },
 	{ "pflow",	MTU_IGNORE },
 	{ "pflog",	MTU_IGNORE },
+	{ "pfsync",	MTU_IGNORE },
 	{ "lo",		MTU_IGNORE },
 };
 
@@ -805,13 +806,9 @@ void conf_ifmetrics(FILE *output, int ifs, struct if_data if_data,
 
 	/*
 	 * print interface mtu, metric
-	 *
-	 * ignore interfaces named "pfsync" since their mtu
-	 * is dynamic and controlled by the kernel
 	 */
-	if (!MIN_ARG(ifname, "pfsync") &&
-	    (if_data.ifi_mtu != default_mtu(ifname) &&
-	    default_mtu(ifname) != MTU_IGNORE) && if_data.ifi_mtu != 0)
+	if (if_data.ifi_mtu != default_mtu(ifname) &&
+	   default_mtu(ifname) != MTU_IGNORE && if_data.ifi_mtu != 0)
 		fprintf(output, " mtu %u\n", if_data.ifi_mtu);
 	if (if_data.ifi_metric)
 		fprintf(output, " metric %u\n", if_data.ifi_metric);
