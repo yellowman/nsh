@@ -262,7 +262,7 @@ Menu iptab[] = {
 	{ "sourceroute", "Process Loose/Strict Source Route Options", CMPL0 0, 0, 0, 0, ipsysctl },
 	{ "encdebug",	"Enable if_enc debugging",	CMPL0 0, 0, 0, 0, ipsysctl },
 	{ "send-redirects", "Send ICMP redirects",	CMPL0 0, 0, 0, 0, ipsysctl },
-	{ "ifq-maxlen",	"IP IFQ maxlen",		CMPL0 0, 0, 0, 1, ipsysctl },
+	{ "ifq-maxlen",	"IPv4 ifqueue max length",	CMPL0 0, 0, 0, 1, ipsysctl },
 	{ "directed-broadcast", "Allow directed broadcasts", CMPL0 0, 0, 0, 0, ipsysctl },
 	{ "multipath",	"Multipath routing",		CMPL0 0, 0, 0, 0, ipsysctl },
 #ifdef notyet
@@ -281,6 +281,7 @@ Menu ip6tab[] = {
 	{ "maxifprefixes", "Max if IPv6 Prefixes",	CMPL0 0, 0, 0, 0, ipsysctl },
 	{ "maxifdefrouters", "Max if IPv6 Def Routers",	CMPL0 0, 0, 0, 0, ipsysctl },
 	{ "maxdynroutes", "Max IPv6 Dyn Routes",	CMPL0 0, 0, 0, 0, ipsysctl },
+	{ "ifq-maxlen",	"IPv6 ifqueue max length",	CMPL0 0, 0, 0, 1, ipsysctl },
 	{ "?",		"Help",				CMPL0 0, 0, 0, 0, sysctlhelp },
 	{ 0, 0, 0, 0, 0, 0, 0, 0 }
 };
@@ -294,15 +295,17 @@ Menu mplstab[] = {
 };
 
 Menu ddbtab[] = {
-	{ "panic",	"DDB panic",			CMPL0 0, 0, 0, 1, ipsysctl },
-	{ "console",	"DDB console",			CMPL0 0, 0, 0, 1, ipsysctl },
-	{ "log",	"DDB log",			CMPL0 0, 0, 0, 1, ipsysctl },
+	{ "panic",	"DDB panic",			CMPL0 0, 0, 0, 0, ipsysctl },
+	{ "console",	"DDB console",			CMPL0 0, 0, 0, 0, ipsysctl },
+	{ "log",	"DDB log",			CMPL0 0, 0, 0, 0, ipsysctl },
 	{ "?",		"Help",				CMPL0 0, 0, 0, 0, sysctlhelp },
 	{ 0, 0, 0, 0, 0, 0, 0, 0 }
 };
 
 Menu pipextab[] = {
-	{ "enable",	"PIPEX enable",			CMPL0 0, 0, 0, 1, ipsysctl },
+	{ "enable",	"PIPEX enable",			CMPL0 0, 0, 0, 0, ipsysctl },
+	{ "inq-maxlen",	"Input queue max length",	CMPL0 0, 0, 0, 1, ipsysctl },
+	{ "outq-maxlength", "Output queue max length",	CMPL0 0, 0, 0, 1, ipsysctl },
 	{ "?",		"Help",				CMPL0 0, 0, 0, 0, sysctlhelp },
 	{ 0, 0, 0, 0, 0, 0, 0, 0 }
 };
@@ -352,7 +355,7 @@ ipcmd(int argc, char **argv)
 	}
 	if (((i->minarg + 2) > argc) || ((i->maxarg + 2) < argc)) {
 		printf("%% Wrong argument%s to '%s %s' command.\n",
-		    argv[0], argc <= 2 ? "" : "s", i->name);
+		    argc <= 2 ? "" : "s", argv[0], i->name);
 		return 0;
 	}
 

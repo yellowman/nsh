@@ -127,6 +127,7 @@ struct ipsysctl ip6sysctls[] = {
 { "maxifprefixes",	{ CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_MAXIFPREFIXES, MIB_STOP, 0 }, DEFAULT_MAXIFPREFIXES, 0	},
 { "maxifdefrouters",	{ CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_MAXIFDEFROUTERS, MIB_STOP, 0 }, DEFAULT_MAXIFDEFROUTERS, 0 },
 { "maxdynroutes", 	{ CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_MAXDYNROUTES, MIB_STOP, 0 },	DEFAULT_MAXDYNROUTES, 0 },
+{ "ifq-maxlen",		{ CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_IFQUEUE, IFQCTL_MAXLEN, MIB_STOP }, IFQ_MAXLEN, 0 },
 { 0, { 0, 0, 0, 0, 0, 0 }, 0, 0 }
 };
 
@@ -146,6 +147,10 @@ struct ipsysctl ddbsysctls[] = {
 
 struct ipsysctl pipexsysctls[] = {
 { "enable",		{ CTL_NET, PF_PIPEX, PIPEXCTL_ENABLE, MIB_STOP, 0 },			0, 1	},
+{ "inq-maxlen",		{ CTL_NET, PF_PIPEX, PIPEXCTL_INQ, MIB_STOP, 0 },
+		IFQ_MAXLEN, 0 },
+{ "outq-maxlen",	{ CTL_NET, PF_PIPEX, PIPEXCTL_OUTQ, MIB_STOP, 0 },
+		IFQ_MAXLEN, 0 },
 { 0, { 0, 0, 0, 0, 0, 0 }, 0, 0 }
 };
 
