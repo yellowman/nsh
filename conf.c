@@ -62,6 +62,7 @@ int conf_ifaddr_dhcp(FILE *, char *, int);
 void conf_ifflags(FILE *, int, char *, int);
 void conf_vnetid(FILE *, int, char *);
 void conf_parent(FILE *, int, char *);
+void conf_patch(FILE *, int, char *);
 void conf_brcfg(FILE *, int, struct if_nameindex *, char *);
 void conf_ifxflags(FILE *, int, char *);
 void conf_rtables(FILE *);
@@ -534,6 +535,7 @@ void conf_interfaces(FILE *output, char *only)
 
 		conf_vnetid(output, ifs, ifnp->if_name);
 		conf_parent(output, ifs, ifnp->if_name);
+		conf_patch(output, ifs, ifnp->if_name);
 		conf_rdomain(output, ifs, ifnp->if_name);
 		conf_intrtlabel(output, ifs, ifnp->if_name);
 		conf_intgroup(output, ifs, ifnp->if_name);
@@ -600,8 +602,21 @@ void conf_vnetid(FILE *output, int ifs, char *ifname)
 		fprintf(output, " vnetid %i\n", vnetid);
 }
 
-#ifdef SIOCSIFPARENT	/* 6.0+ */
+void conf_patch(FILE *output, int ifs, char *ifname)
+{
+	struct ifreq ifr;
 
+	memset(&ifr, 0, sizeof(ifr));
+	strlcpy(ifr.ifr_name, ifname, IFNAMSIZ);
+
+#ifdef SIOCGIFPAIR	/* 6.0+ */
+	if (ioctl(ifs, SIOCGIFPAIR, &ifr) == 0 && ifr.ifr_index != 0 &&
+	    if_indextoname(ifr.ifr_index, ifname) != NULL)
+		fprintf(output, " patch %s\n", ifname);
+#endif
+}
+
+#ifdef SIOCGIFPARENT	/* 6.0+ */
 void conf_parent(FILE *output, int ifs, char *ifname)
 {
 	struct if_parent ifp;

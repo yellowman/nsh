@@ -993,6 +993,49 @@ intpflow(char *ifname, int ifs, int argc, char **argv)
 }
 
 int
+intpatch(char *ifname, int ifs, int argc, char **argv)
+{
+	int set;
+	struct ifreq ifr;
+
+	if (NO_ARG(argv[0])) {
+		set = 0;
+		argc--;
+		argv++;
+	} else
+		set = 1;
+
+	argc--;
+	argv++;
+
+	if ((set && argc != 1) || (!set && argc > 1)) {
+		printf("%% patch <pair interface>\n");
+		printf("%% no patch [pair interface]\n");
+		return 0;
+	}
+
+	bzero(&ifr, sizeof(ifr));
+
+	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
+	if (set) {
+		if ((ifr.ifr_index = if_nametoindex(argv[0])) == 0) {
+			printf("%% invalid interface %s\n", argv[0]);
+			return 0;
+		}
+	} else {
+		ifr.ifr_index = 0;
+	}
+#ifdef SIOCSIFPAIR /* 6.0+ */
+	if (ioctl(ifs, SIOCSIFPAIR, &ifr) == -1)
+		printf("%% intpatch: SIOCSIFPAIR: %s\n", strerror(errno));
+#else
+	printf("%% Unsupported OpenBSD version\n");
+#endif
+
+	return 0;
+}
+
+int
 intmtu(char *ifname, int ifs, int argc, char **argv)
 {
 	struct ifreq ifr;

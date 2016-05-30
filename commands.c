@@ -520,6 +520,9 @@ struct intlist Intlist[] = {
 #ifdef SIOCSIFPARENT	/* 6.0+ */
 	{ "parent",	"Parent interface",			CMPL(i) 0, 0, intparent },
 #endif
+#ifdef SIOCSIFPAIR	/* 6.0+ */
+	{ "patch",	"Pair interface",			CMPL(i) 0, 0, intpatch },
+#endif
 	{ "keepalive",	"GRE tunnel keepalive",			CMPL0 0, 0, intkeepalive },
 	{ "syncdev",	"PFsync control message interface",	CMPL(i) 0, 0, intsyncdev },
 	{ "syncpeer",	"PFsync peer address",			CMPL0 0, 0, intsyncpeer },
