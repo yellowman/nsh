@@ -147,9 +147,9 @@ struct ipsysctl ddbsysctls[] = {
 
 struct ipsysctl pipexsysctls[] = {
 { "enable",		{ CTL_NET, PF_PIPEX, PIPEXCTL_ENABLE, MIB_STOP, 0 },			0, 1	},
-{ "inq-maxlen",		{ CTL_NET, PF_PIPEX, PIPEXCTL_INQ, MIB_STOP, 0 },
+{ "inq-maxlen",		{ CTL_NET, PF_PIPEX, PIPEXCTL_INQ, IFQCTL_MAXLEN, MIB_STOP, 0 },
 		IFQ_MAXLEN, 0 },
-{ "outq-maxlen",	{ CTL_NET, PF_PIPEX, PIPEXCTL_OUTQ, MIB_STOP, 0 },
+{ "outq-maxlen",	{ CTL_NET, PF_PIPEX, PIPEXCTL_OUTQ, IFQCTL_MAXLEN, MIB_STOP, 0 },
 		IFQ_MAXLEN, 0 },
 { 0, { 0, 0, 0, 0, 0, 0 }, 0, 0 }
 };
