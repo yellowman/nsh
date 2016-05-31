@@ -70,6 +70,7 @@ void conf_rtables_rtable(FILE *, int);
 void conf_rdomain(FILE *, int, char *);
 void conf_ifmetrics(FILE *, int, struct if_data, char *);
 void conf_pflow(FILE *, int, char *);
+void conf_mpw(FILE *, int, char *);
 void conf_ctl(FILE *, char *, char *, int);
 void conf_intrtlabel(FILE *, int, char *);
 void conf_intgroup(FILE *, int, char *);
@@ -554,6 +555,7 @@ void conf_interfaces(FILE *output, char *only)
 			conf_pfsync(output, ifs, ifnp->if_name);
 			conf_trunk(output, ifs, ifnp->if_name);
 			conf_pflow(output, ifs, ifnp->if_name);
+			conf_mpw(output, ifs, ifnp->if_name);
 			conf_ifxflags(output, ifs, ifnp->if_name);
 			if (timeslot_status(ifs, ifnp->if_name, tmp,
 			    sizeof(tmp)) == 1) 
@@ -756,7 +758,7 @@ void conf_ifxflags(FILE *output, int ifs, char *ifname)
 	/* set label for mpe */
 	if (ioctl(ifs, SIOCGETLABEL , (caddr_t)&ifr) != -1)
 		if (shim.shim_label > 0)
-			fprintf(output, " label %d\n", shim.shim_label);
+			fprintf(output, " mpelabel %d\n", shim.shim_label);
 }
 
 void conf_rdomain(FILE *output, int ifs, char *ifname)
@@ -780,7 +782,6 @@ int get_rdomain(int ifs, char *ifname)
 	return -1;
 }
 
-
 void conf_keepalive(FILE *output, int ifs, char *ifname)
 {
 	struct ifkalivereq ikar;
@@ -793,7 +794,46 @@ void conf_keepalive(FILE *output, int ifs, char *ifname)
 		fprintf(output, " keepalive %d %d\n",
 		    ikar.ikar_timeo, ikar.ikar_cnt);
 }
-	
+
+void conf_mpw(FILE *output, int ifs, char *ifname)
+{
+	struct sockaddr_in *sin;
+	struct ifmpwreq imr;
+	struct ifreq ifr;
+
+	bzero(&imr, sizeof(imr));
+	bzero(&ifr, sizeof(ifr));
+
+	strlcpy(ifr.ifr_name, ifname, IFNAMSIZ);
+	ifr.ifr_data = (caddr_t) &imr;
+	if (ioctl(ifs, SIOCGETMPWCFG, (caddr_t) &ifr) == -1)
+		return;
+
+	switch (imr.imr_type) {
+	case IMR_TYPE_NONE:
+		break;
+	case IMR_TYPE_ETHERNET:
+		fprintf(output, " encap ethernet\n");
+		break;
+	case IMR_TYPE_ETHERNET_TAGGED:
+		fprintf(output, " encap ethernet-tagged\n");
+		break;
+	default:
+		printf("%% conf_mpw: imr.imr_type %d unknown\n", imr.imr_type);
+		break;
+	}
+
+	if (imr.imr_flags & IMR_FLAG_CONTROLWORD)
+		fprintf(output, " controlword\n");
+
+	if (imr.imr_lshim.shim_label != 0 || imr.imr_rshim.shim_label != 0)
+		fprintf(output, " mpwlabel %u %u\n", imr.imr_lshim.shim_label,
+		    imr.imr_rshim.shim_label);
+
+	sin = (struct sockaddr_in *) &imr.imr_nexthop;
+	if (!(sin->sin_addr.s_addr == 0))
+		fprintf(output, " neighbor %s\n", inet_ntoa(sin->sin_addr));
+}
 
 void conf_ifmetrics(FILE *output, int ifs, struct if_data if_data,
     char *ifname)
