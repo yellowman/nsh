@@ -55,6 +55,7 @@ void printifhwfeatures(int, char *);
 void show_vnet_parent(int, char *);
 
 static struct ifmpwreq imrsave;
+static char imrif[IFNAMSIZ];
 
 static const struct {
 	char *name;
@@ -85,6 +86,14 @@ static const struct {
 	{ "IEEE 802.11",		IFT_IEEE80211 },
 	{ "Unspecified",		IFT_OTHER },
 };
+
+void imr_init(char *ifname)
+{
+	if (strcmp(ifname, imrif) == 0)
+			return;
+	strlcpy (imrif, ifname, IFNAMSIZ);
+	memset (&imrsave, 0, sizeof(imrsave));
+}
 
 int
 show_int(int argc, char **argv)
@@ -1317,8 +1326,8 @@ intmpw(char *ifname, int ifs, int argc, char **argv)
 	    imrsave.imr_rshim.shim_label == 0) {
 		if (imr.imr_lshim.shim_label == 0 ||
 		    imr.imr_rshim.shim_label == 0) {
-			printf("%% mpw local / remote label not specified\n");
-			/*return 0;*/
+			/*printf("%% mpw local / remote label not specified\n");*/
+			return 0;
 		}
 		imrsave.imr_lshim.shim_label = imr.imr_lshim.shim_label;
 		imrsave.imr_rshim.shim_label = imr.imr_rshim.shim_label;
@@ -1328,8 +1337,8 @@ intmpw(char *ifname, int ifs, int argc, char **argv)
 	sinn = (struct sockaddr_in *) &imr.imr_nexthop;
 	if (sin->sin_addr.s_addr == 0) {
 		if (sinn->sin_addr.s_addr == 0) {
-			printf("%% mpw neighbor address not specified\n");
-			/*return 0;*/
+			/*printf("%% mpw neighbor address not specified\n");*/
+			return 0;
 		}
 
 		sin->sin_family = sinn->sin_family;

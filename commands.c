@@ -678,6 +678,8 @@ interface(int argc, char **argv, char *modhvar)
 		bridge = 0; 
 	}
 
+	imr_init(ifname);
+
 	if (modhvar) {
 		/* direct rcfile -i or -c initialization */
 		char *argp;
