@@ -20,6 +20,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <errno.h>
+#include <stdint.h>
 #include <sys/socket.h>
 #include <sys/param.h>
 #include <sys/sockio.h>
@@ -1294,7 +1295,7 @@ intmpw(char *ifname, int ifs, int argc, char **argv)
 	break;
 	case MPWENCAP:
 		if (!set) {
-			imrsave.imr_type = 0;
+			imrsave.imr_type = UINT32_MAX;
 			break;
 		}
 		if (isprefix(argv[0], "ethernet")) {
@@ -1314,11 +1315,11 @@ intmpw(char *ifname, int ifs, int argc, char **argv)
 		return 0;
 	}
 
-	if (imrsave.imr_type == 0) {
-		if (imr.imr_type == 0)
-			imrsave.imr_type = IMR_TYPE_ETHERNET;
+	if (imrsave.imr_type == 0)
 		imrsave.imr_type = imr.imr_type;
-	}
+	if (imrsave.imr_type == UINT32_MAX)
+		imrsave.imr_type = 0;
+
 	if (x->type != MPWCONTROLWORD)
 		imrsave.imr_flags |= imr.imr_flags;
 
@@ -1326,7 +1327,7 @@ intmpw(char *ifname, int ifs, int argc, char **argv)
 	    imrsave.imr_rshim.shim_label == 0) {
 		if (imr.imr_lshim.shim_label == 0 ||
 		    imr.imr_rshim.shim_label == 0) {
-			/*printf("%% mpw local / remote label not specified\n");*/
+			/* mpw local / remote label not specified */
 			return 0;
 		}
 		imrsave.imr_lshim.shim_label = imr.imr_lshim.shim_label;
@@ -1337,7 +1338,7 @@ intmpw(char *ifname, int ifs, int argc, char **argv)
 	sinn = (struct sockaddr_in *) &imr.imr_nexthop;
 	if (sin->sin_addr.s_addr == 0) {
 		if (sinn->sin_addr.s_addr == 0) {
-			/*printf("%% mpw neighbor address not specified\n");*/
+			/* mpw neighbor address not specified */
 			return 0;
 		}
 
