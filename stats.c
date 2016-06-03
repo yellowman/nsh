@@ -783,6 +783,8 @@ mbpr(void)
 	int page_size = getpagesize();
 	int nmbtypes = sizeof(mbstat.m_mtypes) / sizeof(short);
 
+	memset(&seen, 0, sizeof(seen));
+
 	if (nmbtypes != 256) {
 		printf("%% mbpr: unexpected change to mbstat; check source\n");
 		return;
