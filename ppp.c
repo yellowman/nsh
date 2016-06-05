@@ -395,7 +395,7 @@ conf_sppp_mh(FILE *output, struct sauthreq *spa, char *ifname, char *pfx)
 	char type[TYPESZ];
 	StringList *req;
 
-	if (!(spa->proto | spa->name[0] | spa->secret[0] | (spa->flags &
+	if (!(spa->proto | spa->name[0] | (spa->flags &
 	    AUTHFLAG_NOCALLOUT) | (spa->flags & AUTHFLAG_NORECHALLENGE)))
 		return;
 	fprintf(output, " %s", pfx);

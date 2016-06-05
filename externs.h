@@ -127,6 +127,7 @@ extern char metricnames[];
 #define PFCONF_TEMP	"/var/run/pf.conf"
 #define OSPFCONF_TEMP	"/var/run/ospfd.conf"
 #define OSPF6CONF_TEMP	"/var/run/ospf6d.conf"
+#define EIGRPCONF_TEMP	"/var/run/eigrpd.conf"
 #define BGPCONF_TEMP	"/var/run/bgpd.conf"
 #define RIPCONF_TEMP	"/var/run/ripd.conf"
 #define LDPCONF_TEMP	"/var/run/ldpd.conf"
@@ -166,6 +167,7 @@ void rmtemp(char *);
 #define PFCTL		"/sbin/pfctl"
 #define OSPFCTL		"/usr/sbin/ospfctl"
 #define OSPF6CTL	"/usr/sbin/ospf6ctl"
+#define EIGRPCTL	"/usr/sbin/eigrpctl"
 #define BGPCTL		"/usr/sbin/bgpctl"
 #define RIPCTL		"/usr/sbin/ripctl"
 #define LDPCTL		"/usr/sbin/ldpctl"
@@ -200,6 +202,7 @@ extern struct daemons ctl_daemons[];
 extern struct ctl ctl_pf[];
 extern struct ctl ctl_ospf[];
 extern struct ctl ctl_ospf6[];
+extern struct ctl ctl_eigrp[];
 extern struct ctl ctl_relay[];
 extern struct ctl ctl_bgp[];
 extern struct ctl ctl_rip[];
