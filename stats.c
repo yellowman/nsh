@@ -86,10 +86,8 @@ typedef int bool;
 struct  mbstat mbstat;
 struct kinfo_pool mbpool, mclpool;
 
-#ifdef INET6
 char	*inet6name(struct in6_addr *);
 void	inet6print(struct in6_addr *, int, char *, int);
-#endif
 
 /*
  * Dump TCP statistics structure.
