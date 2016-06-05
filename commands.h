@@ -111,6 +111,18 @@ struct prot1 os6cs[] = {
 	{ 0, 0, { 0 } }
 };
 
+struct prot1 eics[] = {
+	{ "interfaces",	"Interface",
+	    { EIGRPCTL, "show", "interfaces", OPT, OPT, NULL } },
+	{ "neighbor",	"Neighbor",
+	    { EIGRPCTL, "show", "neighbor", OPT, OPT, NULL } },
+	{ "topology",	"Topology",
+	    { EIGRPCTL, "show", "topology", OPT, OPT, NULL } },
+	{ "traffic",	"Traffic",
+	    { EIGRPCTL, "show", "traffic", OPT, OPT, NULL } },
+	{ 0, 0, { 0 } }
+};
+
 struct prot1 rics[] = {
 	{ "fib",        "Forward Information Base",
 	    { RIPCTL, "show", "fib", OPT, NULL } },

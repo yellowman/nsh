@@ -30,6 +30,7 @@
 /* service daemons */
 #define OSPFD		"/usr/sbin/ospfd"
 #define OSPF6D		"/usr/sbin/ospf6d"
+#define EIGRPD		"/usr/sbin/eigrpd"
 #define BGPD		"/usr/sbin/bgpd"
 #define RIPD		"/usr/sbin/ripd"
 #define ISAKMPD		"/sbin/isakmpd"
@@ -71,6 +72,7 @@ struct daemons ctl_daemons[] = {
 { "pf",		"PF",	ctl_pf,		PFCONF_TEMP,	0600, 1, 0 },
 { "ospf",	"OSPF",	ctl_ospf,	OSPFCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
 { "ospf6",	"OSPF6",ctl_ospf6,	OSPF6CONF_TEMP,	0600, 0, RT_TABLEID_MAX },
+{ "eigrp",	"EIGRP",ctl_eigrp,	EIGRPCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
 { "bgp",	"BGP",	ctl_bgp,	BGPCONF_TEMP,	0600, 0, 0 },
 { "rip",	"RIP",	ctl_rip,	RIPCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
 { "ldp",	"LDP",	ctl_ldp,	LDPCONF_TEMP,	0600, 0, 0 },
@@ -157,6 +159,25 @@ struct ctl ctl_ospf6[] = {
 	    { OSPF6CTL, "fib", REQ, NULL }, NULL, 0, T_EXEC },
 	{ "log",	"log brief/verbose",
 	    { OSPF6CTL, "log", REQ, NULL }, NULL, 0, T_EXEC },
+	{ 0, 0, { 0 }, 0, 0, 0 }
+};
+
+/* eigrpd, eigrpctl */
+char *ctl_eigrp_test[] = { EIGRPD, "-nf", REQTEMP, '\0' };
+struct ctl ctl_eigrp[] = {
+	{ "enable",	"enable service",
+	    { EIGRPD, "-f", REQTEMP, NULL }, NULL, DB_X_ENABLE, T_EXEC },
+	{ "disable",	"disable service",
+	    { PKILL, table, "eigrpd", NULL }, NULL, DB_X_DISABLE, T_EXEC },
+	{ "edit",	"edit configuration",
+	    { "eigrp", (char *)ctl_eigrp_test, NULL }, call_editor, 0,
+	    T_HANDLER_FILL1 },
+	{ "reload",	"reload service",
+	    { EIGRPCTL, "reload", NULL }, NULL, 0, T_EXEC },
+	{ "fib",	"fib couple/decouple",
+	    { EIGRPCTL, "fib", REQ, NULL }, NULL, 0, T_EXEC },
+	{ "log",	"log brief/verbose",
+	    { EIGRPCTL, "lob", REQ, NULL }, NULL, 0, T_EXEC },
 	{ 0, 0, { 0 }, 0, 0, 0 }
 };
 
