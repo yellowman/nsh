@@ -143,7 +143,6 @@ main(int argc, char *argv[])
 
 	top = setjmp(toplevel) == 0;
 	if (top) {
-		(void)signal(SIGTSTP, SIG_IGN);
 		(void)signal(SIGWINCH, setwinsize);
 		(void)signal(SIGINT, (sig_t)intr);
 		(void)setwinsize(0);
