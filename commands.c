@@ -509,11 +509,13 @@ struct intlist Intlist[] = {
 	{ "auth",	"PPP authentication",			CMPL0 0, 0, intsppp },
 	{ "peer",	"PPP peer authentication",		CMPL0 0, 0, intsppp },
 	{ "pppoe",	"PPPoE settings",			CMPL0 0, 0, intpppoe },
+#ifdef notyet
 	{ "vltime",	"IPv6 valid lifetime",			CMPL0 0, 0, intvltime },
 	{ "pltime",	"IPv6 preferred lifetime",		CMPL0 0, 0, intpltime },
 	{ "anycast",	"IPv6 anycast address bit",		CMPL0 0, 0, intanycast },
 	{ "tentative",	"IPv6 tentative address bit",		CMPL0 0, 0, inttentative },
 	{ "eui64",	"IPv6 automatic interface index",	CMPL0 0, 0, inteui64 },
+#endif
 	{ "tunnel",	"VXLAN/GIF/GRE Tunnel parameters",	CMPL0 0, 0, inttunnel },
 	{ "vnetid",	"Virtual interface network identifier",	CMPL0 0, 0, intvnetid },
 #ifdef SIOCSIFPARENT	/* 6.0+ */
