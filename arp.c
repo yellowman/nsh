@@ -36,6 +36,7 @@
 #include <sys/socket.h>
 #include <sys/sysctl.h>
 #include <sys/ioctl.h>
+#include <sys/time.h>
 #include <net/bpf.h>
 #include <net/if.h>
 #include <net/if_dl.h>
