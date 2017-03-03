@@ -36,6 +36,7 @@
 #include <net/route.h>
 #include <net/pfvar.h>
 #include <netmpls/mpls.h>
+#include <netinet/ip_ipsp.h>
 #include <net/if_pfsync.h>
 #include <net/if_pflow.h>
 #include <ifaddrs.h>

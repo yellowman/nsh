@@ -27,6 +27,7 @@
 #include <arpa/inet.h>
 #include <net/if.h>
 #include <net/pfvar.h>
+#include <netinet/ip_ipsp.h>
 #include <net/if_pfsync.h>
 #include "externs.h"
 
