@@ -424,7 +424,7 @@ show_vnet_parent(int ifs, char *ifname)
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 
 	if (ioctl(ifs, SIOCGVNETID, (caddr_t)&ifr) != -1)
-		printf(" vnetid %d,", ifr.ifr_vnetid);
+		printf(" vnetid %llu,", ifr.ifr_vnetid);
 #ifdef SIOCGIFPARENT	/* 6.0+ */
 	if (ioctl(ifs, SIOCGIFPARENT, (caddr_t)&ifp) != -1)
 		printf(" parent %s,", ifp.ifp_parent);
