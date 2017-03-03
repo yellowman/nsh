@@ -67,6 +67,7 @@
 #include <sys/limits.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
+#include <sys/param.h>
 #include <net/if.h>
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
