@@ -126,8 +126,8 @@ static const struct {
 	{ "gre" },
 	{ "pfsync" },
 	{ "pppoe" },
-	{ "tun" },
 	{ "bridge" },
+	{ "pflow" },
 };
 
 int
@@ -193,7 +193,6 @@ conf(FILE *output)
 	 * these interfaces must start after routes are set
 	 */
 	conf_interfaces(output, "pppoe");
-	conf_interfaces(output, "tun");
 	conf_interfaces(output, "gif");
 	conf_interfaces(output, "gre");
 	conf_interfaces(output, "bridge");
@@ -205,6 +204,7 @@ conf(FILE *output)
 	 * this interface must start after pf is loaded
 	 */
 	conf_interfaces(output, "pfsync");
+	conf_interfaces(output, "pflow");
 
 	conf_ctl(output, "", "snmp", 0);
 	conf_ctl(output, "", "ldp", 0);
