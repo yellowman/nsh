@@ -113,6 +113,10 @@ struct ipsysctl ipsysctls[] = {
 { "send-redirects",	{ CTL_NET, PF_INET, IPPROTO_IP, IPCTL_SENDREDIRECTS, MIB_STOP, 0 },	0, 0	},
 { "directed-broadcast",	{ CTL_NET, PF_INET, IPPROTO_IP, IPCTL_DIRECTEDBCAST, MIB_STOP, 0 },	0, 1	},
 { "multipath",		{ CTL_NET, PF_INET, IPPROTO_IP, IPCTL_MULTIPATH, MIB_STOP, 0 },		0, 1	},
+#ifdef IPCTL_ARPTIMEOUT		/* 6.0+ */
+{ "arptimeout",		{ CTL_NET, PF_INET, IPPROTO_IP, IPCTL_ARPTIMEOUT, MIB_STOP, 0 },        262144, 0 },
+{ "arpdown",		{ CTL_NET, PF_INET, IPPROTO_IP, IPCTL_ARPDOWN, MIB_STOP, 0 },           262144, 0 },
+#endif
 #ifdef notyet
 { "default-mtu",	{ CTL_NET, PF_INET, IPPROTO_IP, IPCTL_DEFMTU, MIB_STOP, 0 },		DEFAULT_MTU, 0 },
 #endif
