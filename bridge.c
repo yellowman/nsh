@@ -824,7 +824,7 @@ bridge_list(int s, char *brdg, char *delim, char *br_str, int str_len, int type)
 			}
 			break;
 		case MEMBER:
-			if (reqp->ifbr_ifsname) {
+			if (reqp->ifbr_ifsname[0] != '\0') {
 				snprintf(buf, sizeof(buf), "%s ",
 				    reqp->ifbr_ifsname);
 				strlcat(br_str, buf, str_len);
