@@ -203,7 +203,7 @@ sq3simple(char *sql, StringList *words)
 			printf("%% sq3simple: malloc failed\n");
 			break;
 		}
-		tlen =+ len;
+		tlen += len;
 		strlcpy(new, result, len);
 		sl_add(words, new);
 	}
