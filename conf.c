@@ -1294,13 +1294,11 @@ isdefaultroute(struct sockaddr *sa, struct sockaddr *samask)
 
 	switch (sa->sa_family) {
 	case AF_INET:
-		if ((((struct sockaddr_in *)samask)->sin_addr.s_addr) == INADDR_ANY);
-			return
-			    (((struct sockaddr_in *)sa)->sin_addr.s_addr) == INADDR_ANY;
+		return
+		    (((struct sockaddr_in *)sa)->sin_addr.s_addr) == INADDR_ANY;
 		break;
 	case AF_INET6:
-		if (IN6_IS_ADDR_UNSPECIFIED(&sin6mask->sin6_addr))
-			return (IN6_IS_ADDR_UNSPECIFIED(&sin6->sin6_addr));
+		return (IN6_IS_ADDR_UNSPECIFIED(&sin6->sin6_addr));
 		break;
 	default:
 		break;
