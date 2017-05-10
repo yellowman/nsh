@@ -1294,10 +1294,12 @@ isdefaultroute(struct sockaddr *sa, struct sockaddr *samask)
 
 	switch (sa->sa_family) {
 	case AF_INET:
+		/* XXX check for zero mask */
 		return
 		    (((struct sockaddr_in *)sa)->sin_addr.s_addr) == INADDR_ANY;
 		break;
 	case AF_INET6:
+		/* XXX check for zero mask */
 		return (IN6_IS_ADDR_UNSPECIFIED(&sin6->sin6_addr));
 		break;
 	default:
@@ -1328,11 +1330,11 @@ conf_rtflags(char *txt, int flags, struct rt_msghdr *rtm)
 
 	for (i = 0; i < nitems(rtflags); i++)
 		if (rtflags[i].flag < 0) {
-			if (!flags & rtflags[i].flag) {
+			if (!(flags & -rtflags[i].flag)) {
 				strlcat(txt, " ", TMPSIZ);
 				strlcat(txt, rtflags[i].name, TMPSIZ);
 			}
-		} else if (flags & rtflags[i].flag) {
+		} else if ((flags & rtflags[i].flag)) {
 				strlcat(txt, " ", TMPSIZ);
 				strlcat(txt, rtflags[i].name, TMPSIZ);
 		}
@@ -1401,5 +1403,5 @@ conf_print_rtm(FILE *output, struct rt_msghdr *rtm, char *delim, int af)
 		fprintf(output, "%s%s ", delim, routename(dst));
 		fprintf(output, "%s\n", routename(gate));
 	}
-	memset(flags, 0, TMPSIZ);
+	explicit_bzero(flags, TMPSIZ);
 }
