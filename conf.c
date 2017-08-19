@@ -558,9 +558,6 @@ void conf_interfaces(FILE *output, char *only)
 			conf_pflow(output, ifs, ifnp->if_name);
 			conf_mpw(output, ifs, ifnp->if_name);
 			conf_ifxflags(output, ifs, ifnp->if_name);
-			if (timeslot_status(ifs, ifnp->if_name, tmp,
-			    sizeof(tmp)) == 1) 
-				fprintf(output, " timeslots %s\n", tmp);
 			if (conf_dhcrelay(ifnp->if_name, tmp, sizeof(tmp))
 			    > 0)
 				fprintf(output, " dhcrelay %s\n", tmp);

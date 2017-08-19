@@ -491,10 +491,6 @@ void show_trunk(int ifs, char *ifname);
 /* who.c */
 int who(int, char **);
 
-/* timeslot.c */
-int inttimeslot(char *, int, int, char **);
-int timeslot_status(int, char *, char *, int);
-
 /* arp.c */
 int arpget(const char *);
 int arpset(int, char **);
