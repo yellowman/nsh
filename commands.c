@@ -253,7 +253,6 @@ Menu iptab[] = {
 	{ "ipip",	"Allow IP-in-IP Encapsulation", CMPL0 0, 0, 0, 0, ipsysctl },
 	{ "gre",	"Allow Generic Route Encapsulation", CMPL0 0, 0, 0, 0, ipsysctl },
 	{ "wccp",	"Allow Web Cache Control Protocol", CMPL0 0, 0, 0, 0, ipsysctl },
-	{ "mobileip",	"Allow Mobile IP Encapsulation", CMPL0 0, 0, 0, 0, ipsysctl },
 	{ "etherip",	"Allow Ether-IP Encapsulation",	CMPL0 0, 0, 0, 0, ipsysctl },
 	{ "ipcomp",	"Allow IP Compression",		CMPL0 0, 0, 0, 0, ipsysctl },	
 	{ "esp",	"Allow Encapsulated Security Payload", CMPL0 0, 0, 0, 0, ipsysctl },
@@ -305,8 +304,6 @@ Menu ddbtab[] = {
 
 Menu pipextab[] = {
 	{ "enable",	"PIPEX enable",			CMPL0 0, 0, 0, 0, ipsysctl },
-	{ "inq-maxlen",	"Input queue max length",	CMPL0 0, 0, 0, 1, ipsysctl },
-	{ "outq-maxlength", "Output queue max length",	CMPL0 0, 0, 0, 1, ipsysctl },
 	{ "?",		"Help",				CMPL0 0, 0, 0, 0, sysctlhelp },
 	{ 0, 0, 0, 0, 0, 0, 0, 0 }
 };
