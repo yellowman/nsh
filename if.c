@@ -757,8 +757,8 @@ intip(char *ifname, int ifs, int argc, char **argv)
 	}
 
 	if (isprefix(argv[0], "dhcp")) {
-		char *args[] = { PKILL, "dhclient", ifname, '\0' };
-		char *args_set[] = { DHCLIENT, ifname, '\0' };
+		char *args[] = { PKILL, "dhclient", ifname, NULL };
+		char *args_set[] = { DHCLIENT, ifname, NULL };
 		char leasefile[sizeof(LEASEPREFIX)+1+IFNAMSIZ];
 
 		if (set)
@@ -1356,7 +1356,7 @@ intmpw(char *ifname, int ifs, int argc, char **argv)
 int
 intdhcrelay(char *ifname, int ifs, int argc, char **argv)
 {
-	char *cmd[] = { DHCRELAY, "-i", ifname, NULL, '\0' };
+	char *cmd[] = { DHCRELAY, "-i", ifname, NULL, NULL };
 	int set, alen;
 	struct in_addr notused;
 
@@ -1388,7 +1388,7 @@ intdhcrelay(char *ifname, int ifs, int argc, char **argv)
 		cmdargs(DHCRELAY, cmd);
 	} else {
 		char server[24], argue[SIZE_CONF_TEMP];
-		char *killcmd[] = { PKILL, "-xf", NULL, '\0' };
+		char *killcmd[] = { PKILL, "-xf", NULL };
 
 		if ((alen = conf_dhcrelay(ifname, server, sizeof(server))) < 1)
 		{
@@ -1556,8 +1556,8 @@ intvlan(char *ifname, int ifs, int argc, char **argv)
 
 #ifdef SIOCSIFPARENT	/* 6.0+ */
 	if (set) {
-		char *vnet_argv[] = { "vnetid", argv[0], '\0' };
-		char *par_argv[] = { "parent", argv[2], '\0' };
+		char *vnet_argv[] = { "vnetid", argv[0], NULL };
+		char *par_argv[] = { "parent", argv[2], NULL };
 
 		intparent(ifname, ifs, 2, par_argv);
 		intvnetid(ifname, ifs, 2, vnet_argv);
@@ -2146,7 +2146,7 @@ intrtd(char *ifname, int ifs, int argc, char **argv)
 		}
 		if (!set && strcmp(cmdname, "rtadvd") == 0) {
 			char *args[] = { PKILL, cmdpath, "-c",
-			    "/var/run/rtadvd.0", ifname, '\0' };
+			    "/var/run/rtadvd.0", ifname, NULL };
 
 			cmdargs(PKILL, args);
 		}
@@ -2164,7 +2164,7 @@ intrtd(char *ifname, int ifs, int argc, char **argv)
 		}
 		if (set && strcmp(cmdname, "rtadvd") == 0) {
 			char *args[] = { cmdpath, "-c", "/var/run/rtadvd.0",
-			    ifname, '\0' };
+			    ifname, NULL };
 
 			cmdargs(cmdpath, args);
 		}
