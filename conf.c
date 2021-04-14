@@ -1287,7 +1287,6 @@ int
 isdefaultroute(struct sockaddr *sa, struct sockaddr *samask)
 {
 	struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)sa;
-	struct sockaddr_in6 *sin6mask = (struct sockaddr_in6 *)samask;
 
 	switch (sa->sa_family) {
 	case AF_INET:
