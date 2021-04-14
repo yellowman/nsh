@@ -451,7 +451,7 @@ flushcmd(int argc, char **argv)
 static int
 flush_line(char *line)
 {
-	char *argv[] = { PKILL, "-9", "-t", line, '\0' };
+	char *argv[] = { PKILL, "-9", "-t", line, NULL };
 	cmdargs(PKILL, argv);
 	return (1);
 }
@@ -1673,7 +1673,7 @@ flush_pf(char *arg)
 	}
 
 	{
-		char *argv[] = { x->cmd, x->arg, '\0' };
+		char *argv[] = { x->cmd, x->arg, NULL };
 		cmdargs(x->cmd, argv);
 	}
 
@@ -1720,7 +1720,7 @@ cmdrc(char rcname[FILENAME_MAX])
 		if (line[0] == ' ' && line[1] == '!' && savec && savec->modh == 2)
 			continue;
 		if (line[0] == ' ')
-			strlcpy(saveline, line, sizeof(line));
+			strlcpy(saveline, line, sizeof(saveline));
 		makeargv();
 		if (margv[0] == 0)
 			continue;
@@ -1876,7 +1876,7 @@ iprompt(void)
 int
 wr_startup(void)
 {
-	char *argv[] = { SAVESCRIPT, NSHRC_TEMP, '\0' };
+	char *argv[] = { SAVESCRIPT, NSHRC_TEMP, NULL };
 	
 	if (wr_conf(NSHRC_TEMP))
 		printf("%% Saving configuration\n");
@@ -2072,7 +2072,7 @@ pr_kernel(int argc, char **argv)
 void
 pf_stats(void)
 {
-	char *argv[] = { PFCTL, "-sinfo", '\0' };
+	char *argv[] = { PFCTL, "-sinfo", NULL };
 
 	printf("%% pf statistics:\n");
 
@@ -2085,7 +2085,7 @@ pr_prot1(int argc, char **argv)
 {
 	struct prot1 *x;
 	struct prot *prot;
-	char *args[NOPTFILL] = { NULL, NULL, NULL, NULL, NULL, NULL, '\0' };
+	char *args[NOPTFILL] = { NULL, NULL, NULL, NULL, NULL, NULL, NULL };
 	char **fillargs;
 	char prefix[64];
 
@@ -2150,7 +2150,7 @@ step_optreq(char **xargs, char **args, int argc, char **argv, int skip)
 	/* copy xargs to args, replace OPT/REQ args with argv past skip */
 	for (i = 0; i < NOPTFILL - 2; i++) {
 		if (xargs[i] == NULL) {
-			args[i] = '\0';
+			args[i] = NULL;
 			if (i > 1)
 			/*
 			 * all **args passed must have at least two arguments
@@ -2169,7 +2169,7 @@ step_optreq(char **xargs, char **args, int argc, char **argv, int skip)
 				printf("%% Missing required argument\n");
 				return NULL;
 			} else {
-				args[i] = '\0';
+				args[i] = NULL;
 				break;
 			}
 		} else {
