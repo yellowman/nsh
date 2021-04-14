@@ -1982,7 +1982,7 @@ intpowersave(char *ifname, int ifs, int argc, char **argv)
 		return(0);
 	}
 
-	if (argc == 1) (
+	if (argc == 1) {
 		power.i_maxsleep = strtonum(argv[0], 0, 1000, &errmsg);
 		if (errmsg) {
 			printf("%% Power save invalid %s: %s", argv[0],
