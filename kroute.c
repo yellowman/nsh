@@ -62,7 +62,7 @@ static struct	rt_metrics	rt_metrics;
 
 /* declared in externs.h */
 union	sockunion so_dst, so_gate, so_mask, so_ifp;
-struct	m_rtmsg;
+struct	rtmsg m_rtmsg;
 
 int	rtm_addrs;
 u_long	rtm_inits;

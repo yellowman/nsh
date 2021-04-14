@@ -87,10 +87,11 @@ char *any_ntoa(const struct sockaddr *);
 
 /* routesys.c */
 #ifdef _NET_ROUTE_H_
-struct {
+struct rtmsg {
 	struct	rt_msghdr m_rtm;
 	char	m_space[512];
-} m_rtmsg;
+};
+struct rtmsg m_rtmsg;
 #endif
 #ifdef _WANT_SO_
 union   sockunion {
