@@ -744,8 +744,14 @@ void conf_ifxflags(FILE *output, int ifs, char *ifname)
 			fprintf(output, " mpls\n");
 		if (ifr.ifr_flags & IFXF_AUTOCONF6)
 			fprintf(output, " autoconf6\n");
+#ifdef IFXF_INET6_NOPRIVACY	/* pre-6.9 */
 		if (ifr.ifr_flags & IFXF_INET6_NOPRIVACY)
 			fprintf(output, " no autoconfprivacy\n");
+#endif
+#ifdef IFXF_AUTOCONF6TEMP	/* 6.9+ */
+		if (ifr.ifr_flags & IFXF_AUTOCONF6TEMP)
+			fprintf(output, " temporary\n");
+#endif
 		if (ifr.ifr_flags & IFXF_WOL)
 			fprintf(output, " wol\n");
 	}

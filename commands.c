@@ -546,7 +546,13 @@ struct intlist Intlist[] = {
 	{ "inet6",	"IPv6",					CMPL0 0, 0, intaf },
 	{ "rtadvd",	"IPv6 router advertisement service",	CMPL0 0, 0, intrtd },
 	{ "autoconf6",  "IPv6 Autoconfigurable address",	CMPL0 0, 0, intxflags },
+#ifdef IFXF_INET6_NOPRIVACY	/* pre-6.9 */
 	{ "autoconfprivacy", "Privacy addresses for IPv6 autoconf", CMPL0 0, 0, intxflags },
+#endif
+#ifdef IFXF_AUTOCONF6TEMP	/* 6.9+ */
+	{ "autoconfprivacy", "Privacy addresses for IPv6 autoconf", CMPL0 0, 0, intxflags }, /* XXX bkcompat */
+	{ "temporary",	"Temporary addresses for IPv6 autoconf", CMPL0 0, 0, intxflags },
+#endif
         { "trunkport",  "Add child interface(s) to trunk",      CMPL0 0, 0, inttrunkport },
         { "trunkproto", "Define trunkproto",                    CMPL0 0, 0, inttrunkproto },
 	{ "shutdown",   "Shutdown interface",			CMPL0 0, 0, intflags },

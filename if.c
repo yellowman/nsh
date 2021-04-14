@@ -1814,7 +1814,14 @@ intxflags(char *ifname, int ifs, int argc, char **argv)
 		set = 1;
 
 	if (isprefix(argv[0], "autoconfprivacy")) {
+#ifdef IFXF_INET6_NOPRIVACY	/* pre-6.9 */
 		value = -IFXF_INET6_NOPRIVACY;
+#endif
+#ifdef IFXF_AUTOCONF6TEMP	/* 6.9+ */
+		value = IFXF_AUTOCONF6TEMP;
+	} else if (isprefix(argv[0], "temporary")) {
+		value = IFXF_AUTOCONF6TEMP;
+#endif
 	} else if (isprefix(argv[0], "autoconf6")) {
 		value = IFXF_AUTOCONF6;
 	} else if (isprefix(argv[0], "mpls")) {
