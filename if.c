@@ -1388,7 +1388,7 @@ intdhcrelay(char *ifname, int ifs, int argc, char **argv)
 		cmdargs(DHCRELAY, cmd);
 	} else {
 		char server[24], argue[SIZE_CONF_TEMP];
-		char *killcmd[] = { PKILL, "-xf", NULL };
+		char *killcmd[] = { PKILL, "-xf", NULL, NULL, NULL };
 
 		if ((alen = conf_dhcrelay(ifname, server, sizeof(server))) < 1)
 		{
