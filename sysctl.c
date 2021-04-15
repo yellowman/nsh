@@ -108,7 +108,6 @@ struct ipsysctl ipsysctls[] = {
 { "ah",			{ CTL_NET, PF_INET, IPPROTO_AH,	AHCTL_ENABLE, MIB_STOP, 0 },		0, 0	},
 { "sourceroute",	{ CTL_NET, PF_INET, IPPROTO_IP,	IPCTL_SOURCEROUTE, MIB_STOP, 0 },	0, 1	},
 { "encdebug",		{ CTL_NET, PF_INET, IPPROTO_IP,	IPCTL_ENCDEBUG, MIB_STOP, 0 },		0, 1	},
-{ "ifq-maxlen",		{ CTL_NET, PF_INET, IPPROTO_IP,	IPCTL_IFQUEUE, IFQCTL_MAXLEN, MIB_STOP }, IFQ_MAXLEN, 0 },
 { "send-redirects",	{ CTL_NET, PF_INET, IPPROTO_IP, IPCTL_SENDREDIRECTS, MIB_STOP, 0 },	0, 0	},
 { "directed-broadcast",	{ CTL_NET, PF_INET, IPPROTO_IP, IPCTL_DIRECTEDBCAST, MIB_STOP, 0 },	0, 1	},
 { "multipath",		{ CTL_NET, PF_INET, IPPROTO_IP, IPCTL_MULTIPATH, MIB_STOP, 0 },		0, 1	},
