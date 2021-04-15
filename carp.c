@@ -224,10 +224,12 @@ intcpass(char *ifname, int ifs, int argc, char **argv)
 		printf("%% intpass: SIOCGVH: %s\n", strerror(errno));
 		return (0);
 	}
-	if (set)
+	if (set) {
+		bzero(creq.carpr_key, CARP_KEY_LEN);
 		strlcpy(creq.carpr_key, argv[0], CARP_KEY_LEN);
-	else
+	} else {
 		bzero((char *)&creq.carpr_key, sizeof(creq.carpr_key));
+	}
 
 	if (ioctl(ifs, SIOCSVH, (caddr_t) & ifr) == -1)
 		printf("%% intcpass: SIOCSVH: %s\n", strerror(errno));
