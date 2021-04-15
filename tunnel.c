@@ -20,6 +20,7 @@ int settunnel(int, char *, char *, char *, char *);
 void settunnelrdomain(int, char *, char *);
 void settunnelttl(int, char *, char *);
 void setvnetid(int, char *, char *);
+void delvnetid(int, char *);
 int deletetunnel(int, char *);
 
 static struct nopts tunnelopts[] = {
@@ -51,7 +52,7 @@ intvnetid(char *ifname, int ifs, int argc, char **argv)
 	if (set)
 		setvnetid(ifs, ifname, argv[0]);
 	else
-		setvnetid(ifs, ifname, "0");
+		delvnetid(ifs, ifname);
 	return (0);
 }
 
@@ -268,6 +269,16 @@ setvnetid(int ifs, char *ifname, char *vnetida)
 			    strerror(errno));
 		}
 	}
+}
+
+void
+delvnetid(int ifs, char *ifname)
+{
+	struct ifreq ifr;
+
+	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
+	if (ioctl(ifs, SIOCDVNETID, &ifr) < 0)
+		printf("%% delvnetid SIOCDVNETID: %s\n", strerror(errno));
 }
 
 int
