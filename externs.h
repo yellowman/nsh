@@ -91,7 +91,7 @@ struct rtmsg {
 	struct	rt_msghdr m_rtm;
 	char	m_space[512];
 };
-struct rtmsg m_rtmsg;
+extern struct rtmsg m_rtmsg;
 #endif
 #ifdef _WANT_SO_
 union   sockunion {
