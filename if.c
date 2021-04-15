@@ -226,6 +226,8 @@ show_int(int argc, char **argv)
 	 * related information.
 	 */
 	for (ifa = ifap; ifa; ifa = ifa->ifa_next) {
+		if (ifa->ifa_addr == NULL)
+			continue;
 		if (strncmp(ifname, ifa->ifa_name, IFNAMSIZ))
 			continue;
 

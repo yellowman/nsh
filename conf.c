@@ -1002,6 +1002,8 @@ int conf_ifaddrs(FILE *output, char *ifname, int flags, int af)
 	 * Print the IP and related information.
 	 */
 	for (ifa = ifap; ifa; ifa = ifa->ifa_next) {
+		if (ifa->ifa_addr == NULL)
+			continue;
 		if (strncmp(ifname, ifa->ifa_name, IFNAMSIZ))
 			continue;
 
