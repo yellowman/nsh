@@ -10,7 +10,7 @@ Cleanup:
 To be implemented: 
 
 * handle newer bridge commands
-* handle newer 802.11 gunk like rssi display, chan, flags
+* handle newer 802.11 gunk like rssi display, chan, flags, nodes
 * ndp controls
 * privsep? multiple daemons? web front end using privsep?
 * Build a simple web interface that works through the rc file handler or
@@ -29,10 +29,6 @@ To be implemented:
 
 Would be nice:
 
-* Perhaps some way for the shell to upgrade itself, or the entire system/
-  flash image when given a network source for new binaries?
-  (requires our environment be known, this may be doable with flashrd,
-  doable in a different way with a typical install, etc)
 * Add more diagnostic messages for verbose output where useful
 * Convenient/automatic mechanisms to centralize configurations for
   tracking/revision control
