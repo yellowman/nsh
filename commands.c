@@ -533,7 +533,6 @@ struct intlist Intlist[] = {
 	{ "advbase",	"CARP advertisement interval",		CMPL0 0, 0, intcarp },
 	{ "advskew",	"CARP advertisement skew",		CMPL0 0, 0, intcarp },
 	{ "carppass",	"CARP passphrase",			CMPL0 0, 0, intcpass },
-	{ "carpdev",	"CARP device",				CMPL(i) 0, 0, intcdev },
 	{ "carpnode",	"CARP additional vhid/advskew",		CMPL0 0, 0, intcnode },
 	{ "carppeer",	"CARP peer",				CMPL0 0, 0, intcarp },
 	{ "balancing",	"CARP balancing mode",			CMPL0 0, 0, intcarp },
