@@ -127,7 +127,6 @@ struct ipsysctl ip6sysctls[] = {
 { "multipath",		{ CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_MULTIPATH, MIB_STOP, 0 },	0, 1	},
 { "mforwarding",	{ CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_MFORWARDING, MIB_STOP, 0 },	0, 1	},
 { "maxdynroutes", 	{ CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_MAXDYNROUTES, MIB_STOP, 0 },	DEFAULT_MAXDYNROUTES, 0 },
-{ "ifq-maxlen",		{ CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_IFQUEUE, IFQCTL_MAXLEN, MIB_STOP }, IFQ_MAXLEN, 0 },
 { 0, { 0, 0, 0, 0, 0, 0 }, 0, 0 }
 };
 
