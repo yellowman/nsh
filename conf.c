@@ -752,6 +752,10 @@ void conf_ifxflags(FILE *output, int ifs, char *ifname)
 		if (ifr.ifr_flags & IFXF_AUTOCONF6TEMP)
 			fprintf(output, " temporary\n");
 #endif
+#ifdef IFXF_MONITOR		/* 6.9+ */
+		if (ifr.ifr_flags & IFXF_MONITOR)
+			fprintf(output, " monitor\n");
+#endif
 		if (ifr.ifr_flags & IFXF_WOL)
 			fprintf(output, " wol\n");
 	}

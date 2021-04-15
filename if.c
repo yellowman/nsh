@@ -1822,6 +1822,10 @@ intxflags(char *ifname, int ifs, int argc, char **argv)
 	} else if (isprefix(argv[0], "temporary")) {
 		value = IFXF_AUTOCONF6TEMP;
 #endif
+#ifdef IFXF_MONITOR		/* 6.9+ */
+	} else if (isprefix(argv[0], "monitor")) {
+		value = IFXF_MONITOR;
+#endif
 	} else if (isprefix(argv[0], "autoconf6")) {
 		value = IFXF_AUTOCONF6;
 	} else if (isprefix(argv[0], "mpls")) {

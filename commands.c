@@ -553,6 +553,9 @@ struct intlist Intlist[] = {
 	{ "autoconfprivacy", "Privacy addresses for IPv6 autoconf", CMPL0 0, 0, intxflags }, /* XXX bkcompat */
 	{ "temporary",	"Temporary addresses for IPv6 autoconf", CMPL0 0, 0, intxflags },
 #endif
+#ifdef IFXF_MONITOR		/* 6.9+ */
+	{ "monitor",	"Monitor mode for incoming traffic",	CMPL0 0, 0, intxflags },
+#endif
         { "trunkport",  "Add child interface(s) to trunk",      CMPL0 0, 0, inttrunkport },
         { "trunkproto", "Define trunkproto",                    CMPL0 0, 0, inttrunkproto },
 	{ "shutdown",   "Shutdown interface",			CMPL0 0, 0, intflags },
