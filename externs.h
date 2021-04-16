@@ -376,6 +376,7 @@ int parse_ipv6(char *, struct in6_addr *);
 #define ROUNDMBPS(bps) ((float)bps == ((bps / 1000 / 1000) * 1000 * 1000))
 #define ROUNDKBPS(bps) ((float)bps == ((bps / 1000) * 1000))
 #define ROUNDKBYTES(bytes) ((float)bytes == ((bytes / 1024) * 1024))
+#define DEFAULT_LLPRIORITY 3
 void imr_init(char *);
 int is_valid_ifname(char *);
 int show_int(int, char **);

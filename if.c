@@ -1501,7 +1501,7 @@ intllprio(char *ifname, int ifs, int argc, char **argv)
 	} else
 		set = 1;
 
-	if ((!set && argc > 1) || (set && argc != 1)) {
+	if ((!set && argc > 2) || (set && argc != 2)) {
 		printf("%% llpriority <priority>\n");
 		printf("%% no llpriority [priority]\n");
 		return(0);
@@ -1510,7 +1510,7 @@ intllprio(char *ifname, int ifs, int argc, char **argv)
 	if (set) {
 		int num;
 
-		num = strtonum(argv[0], 0, 15, &errmsg);
+		num = strtonum(argv[1], 0, 15, &errmsg);
 		if (errmsg) {
 			printf("%% Invalid llpriority %s: %s\n", argv[0],
 			    errmsg);
@@ -1518,7 +1518,7 @@ intllprio(char *ifname, int ifs, int argc, char **argv)
 		}
 		ifr.ifr_llprio = num;
 	} else {
-		ifr.ifr_llprio = 0;
+		ifr.ifr_llprio = DEFAULT_LLPRIORITY;
 	}
 
 	if (errmsg) {

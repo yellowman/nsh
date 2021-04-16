@@ -490,7 +490,7 @@ struct intlist Intlist[] = {
 	{ "rdomain",	"Interface routing domain",		CMPL0 0, 0, intrdomain },
 	{ "rtlabel",	"Interface route labels",		CMPL0 0, 0, intrtlabel },
 	{ "priority",	"Data packet priority",			CMPL0 0, 0, intmetric },
-	{ "llpriority",	"Link Level packet priority",		CMPL0 0, 0, intmetric },
+	{ "llpriority",	"Link Level packet priority",		CMPL0 0, 0, intllprio },
 	{ "mtu",	"Set Maximum Transmission Unit",	CMPL0 0, 0, intmtu },
 	{ "metric",	"Set routing metric",			CMPL0 0, 0, intmetric },
 	{ "link",	"Set link level options",		CMPL0 0, 0, intlink },

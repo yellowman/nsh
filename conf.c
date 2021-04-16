@@ -882,7 +882,7 @@ void conf_ifmetrics(FILE *output, int ifs, struct if_data if_data,
 			fprintf(output, " priority %u\n",
 			    ifrpriority.ifr_metric);
 	if (ioctl(ifs, SIOCGIFLLPRIO, (caddr_t)&ifrpriority) == 0)
-		if(ifrpriority.ifr_llprio)
+		if(ifrpriority.ifr_llprio != DEFAULT_LLPRIORITY)
 			fprintf(output, " llpriority %u\n",
 			    ifrpriority.ifr_llprio);
 
