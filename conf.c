@@ -881,6 +881,10 @@ void conf_ifmetrics(FILE *output, int ifs, struct if_data if_data,
 		if(ifrpriority.ifr_metric)
 			fprintf(output, " priority %u\n",
 			    ifrpriority.ifr_metric);
+	if (ioctl(ifs, SIOCGIFLLPRIO, (caddr_t)&ifrpriority) == 0)
+		if(ifrpriority.ifr_llprio)
+			fprintf(output, " llpriority %u\n",
+			    ifrpriority.ifr_llprio);
 
 	if (get_nwinfo(ifname, tmpc, TMPSIZ, NWID) != 0) {
 		fprintf(output, " nwid %s\n", tmpc);

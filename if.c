@@ -1488,6 +1488,52 @@ intmetric(char *ifname, int ifs, int argc, char **argv)
 }
 
 int
+intllprio(char *ifname, int ifs, int argc, char **argv)
+{
+	struct ifreq ifr;
+	int set;
+	const char *errmsg = NULL;
+
+	if (NO_ARG(argv[0])) {
+		set = 0;
+		argc--;
+		argv++;
+	} else
+		set = 1;
+
+	if ((!set && argc > 1) || (set && argc != 1)) {
+		printf("%% llpriority <priority>\n");
+		printf("%% no llpriority [priority]\n");
+		return(0);
+	}
+
+	if (set) {
+		int num;
+
+		num = strtonum(argv[0], 0, 15, &errmsg);
+		if (errmsg) {
+			printf("%% Invalid llpriority %s: %s\n", argv[0],
+			    errmsg);
+			return(0);
+		}
+		ifr.ifr_llprio = num;
+	} else {
+		ifr.ifr_llprio = 0;
+	}
+
+	if (errmsg) {
+		printf("%% Invalid llpriority %s: %s\n", argv[0], errmsg);
+		return(0);
+	}
+
+	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
+	if (ioctl(ifs, SIOCSIFLLPRIO, (caddr_t)&ifr) < 0)
+		printf("%% intllprio: SIOCSIFLLPRIO: %s\n", strerror(errno));
+
+	return(0);
+}
+
+int
 intvlan(char *ifname, int ifs, int argc, char **argv)
 {
 #ifndef SIOCSIFPARENT /* 5.9- */
