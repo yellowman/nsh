@@ -70,6 +70,8 @@ static const struct {
 	{ "Generic Tunnel",		IFT_GIF },
 	{ "Common Address Redundancy Protocol",	IFT_CARP },
 	{ "Bluetooth",			IFT_BLUETOOTH },
+	{ "Mobile Broadband Interface",	IFT_MBIM },
+	{ "Wireguard",			IFT_WIREGUARD },
 	/* IANA-assigned types */
 	{ "Ethernet",			IFT_ETHER },
 	{ "USB",			IFT_USB },
