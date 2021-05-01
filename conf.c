@@ -599,10 +599,13 @@ int conf_ifaddr_dhcp(FILE *output, char *ifname, int flags)
 
 void conf_vnetid(FILE *output, int ifs, char *ifname)
 {
-	int vnetid;
+	int64_t vnetid;
 
 	if (((vnetid = get_vnetid(ifs, ifname)) != 0))
-		fprintf(output, " vnetid %i\n", vnetid);
+		if (vnetid < 0)
+			fprintf(output, " vnetid any\n", vnetid);
+		else
+			fprintf(output, " vnetid %lld\n", vnetid);
 }
 
 void conf_patch(FILE *output, int ifs, char *ifname)

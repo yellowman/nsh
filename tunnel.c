@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <stdint.h>
 #include <sys/param.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
@@ -245,24 +246,27 @@ void
 setvnetid(int ifs, char *ifname, char *vnetida)
 {
 	const char *errmsg = NULL;
-	int vnetid;
+	int64_t vnetid;
 	struct ifreq ifr;
 
 	if (vnetida == NULL)
 		return;
 
-	/* vxlan 2^24 is the upper limit user of vnetid as of OpenBSD 6.0 */
-	vnetid = strtonum(vnetida, 0, 0xffffff, &errmsg);
-	if (errmsg) {
-		printf("%% vnetid %s out of range for %s: %s\n", vnetida,
-		    ifname, errmsg);
-		return;
+	if (isprefix("any", vnetida)) {
+		vnetid = -1;
+	} else {
+		vnetid = strtonum(vnetida, 0, INT64_MAX, &errmsg);
+		if (errmsg) {
+			printf("%% vnetid %s out of range: %s\n", vnetida,
+			    errmsg);
+			return;
+		}
 	}
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 	ifr.ifr_vnetid = vnetid;
 	if (ioctl(ifs, SIOCSVNETID, (caddr_t)&ifr) < 0) {
 		if (errno == EINVAL) {
-			printf("%% vnetid %d out of range for %s\n",
+			printf("%% vnetid %lld out of range for %s\n",
 			    vnetid, ifname);
 		} else {
 			printf("%% setvnetid SIOCSVNETID: %s\n",
@@ -321,7 +325,7 @@ int get_physttl(int s, char *ifname)
 		return ifr.ifr_ttl;
 }
 
-int get_vnetid(int s, char *ifname)
+int64_t get_vnetid(int s, char *ifname)
 {
 	struct ifreq ifr;
 

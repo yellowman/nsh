@@ -448,7 +448,7 @@ int inttunnel(char *, int, int, char **);
 int intvnetid(char *, int, int, char **);
 int get_physrtable(int, char *);
 int get_physttl(int, char *);
-int get_vnetid(int, char *);
+int64_t get_vnetid(int, char *);
 
 /* media.c */
 #define DEFAULT_MEDIA_TYPE	"autoselect"
