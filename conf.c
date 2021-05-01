@@ -612,14 +612,11 @@ void conf_patch(FILE *output, int ifs, char *ifname)
 	memset(&ifr, 0, sizeof(ifr));
 	strlcpy(ifr.ifr_name, ifname, IFNAMSIZ);
 
-#ifdef SIOCGIFPAIR	/* 6.0+ */
 	if (ioctl(ifs, SIOCGIFPAIR, &ifr) == 0 && ifr.ifr_index != 0 &&
 	    if_indextoname(ifr.ifr_index, ifname) != NULL)
 		fprintf(output, " patch %s\n", ifname);
-#endif
 }
 
-#ifdef SIOCGIFPARENT	/* 6.0+ */
 void conf_parent(FILE *output, int ifs, char *ifname)
 {
 	struct if_parent ifp;
@@ -636,34 +633,6 @@ void conf_parent(FILE *output, int ifs, char *ifname)
 
 	fprintf(output, " parent %s\n", ifp.ifp_parent);
 }
-
-#else
-
-void conf_parent(FILE *output, int ifs, char *ifname)
-{
-	struct ifreq ifr;
-	struct vlanreq vreq;
-
-	/*
-	 * print vlan tag, parent if available.  if a tag is set
-	 * but there is no parent, discard.
-	 */
-	bzero(&ifr, sizeof(struct ifreq));
-	ifr.ifr_data = (caddr_t)&vreq;
-	strlcpy(ifr.ifr_name, ifname, IFNAMSIZ);
-
-	bzero(&vreq, sizeof(struct vlanreq));
-
-	if (ioctl(ifs, SIOCGETVLAN, (caddr_t)&ifr) != -1) {
-		if(vreq.vlr_tag && (vreq.vlr_parent[0] != '\0')) {
-			fprintf(output, " vlan %d parent %s",
-			    vreq.vlr_tag, vreq.vlr_parent);
-				fprintf(output, "\n");
-		}
-	}
-}
-
-#endif
 
 void conf_ifflags(FILE *output, int flags, char *ifname, int ippntd, u_char ift)
 {

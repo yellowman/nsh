@@ -420,9 +420,7 @@ show_int(int argc, char **argv)
 void
 show_vnet_parent(int ifs, char *ifname)
 {
-#ifdef SIOCGIFPARENT	/* 6.0+ */
 	struct if_parent ifp;
-#endif
 	struct ifreq ifr;
 
 	bzero(&ifr, sizeof(ifr));
@@ -430,10 +428,8 @@ show_vnet_parent(int ifs, char *ifname)
 
 	if (ioctl(ifs, SIOCGVNETID, (caddr_t)&ifr) != -1)
 		printf(" vnetid %llu,", ifr.ifr_vnetid);
-#ifdef SIOCGIFPARENT	/* 6.0+ */
 	if (ioctl(ifs, SIOCGIFPARENT, (caddr_t)&ifp) != -1)
 		printf(" parent %s,", ifp.ifp_parent);
-#endif
 }
 
 /* lifted right from ifconfig.c */
@@ -1044,12 +1040,8 @@ intpatch(char *ifname, int ifs, int argc, char **argv)
 	} else {
 		ifr.ifr_index = 0;
 	}
-#ifdef SIOCSIFPAIR /* 6.0+ */
 	if (ioctl(ifs, SIOCSIFPAIR, &ifr) == -1)
 		printf("%% intpatch: SIOCSIFPAIR: %s\n", strerror(errno));
-#else
-	printf("%% Unsupported OpenBSD version\n");
-#endif
 
 	return 0;
 }
@@ -1607,7 +1599,6 @@ intvlan(char *ifname, int ifs, int argc, char **argv)
 #endif
 	}
 
-#ifdef SIOCSIFPARENT	/* 6.0+ */
 	if (set) {
 		char *vnet_argv[] = { "vnetid", argv[0], NULL };
 		char *par_argv[] = { "parent", argv[2], NULL };
@@ -1621,22 +1612,6 @@ intvlan(char *ifname, int ifs, int argc, char **argv)
 		intparent(ifname, ifs, 2, par_argv);
 		intvnetid(ifname, ifs, 2, vnet_argv);
 	}
-
-#else
-	if (ioctl(ifs, SIOCSETVLAN, (caddr_t)&ifr) == -1) {
-		switch(errno) {
-		case EBUSY:
-			printf("%% Please disconnect the current vlan parent"
-			    " before setting a new one\n");
-			return 0;
-			break;
-		default:
-			printf("%% intvlan: SIOCSETVLAN: %s\n",
-			    strerror(errno));
-			return 0;
-		}
-	}
-#endif
 
 	return 0;
 }
@@ -1733,7 +1708,6 @@ intrtlabel(char *ifname, int ifs, int argc, char **argv)
 	return 0;
 }
 
-#ifdef SIOCSIFPARENT
 int
 intparent(char *ifname, int ifs, int argc, char **argv)
 {
@@ -1772,7 +1746,6 @@ intparent(char *ifname, int ifs, int argc, char **argv)
 
 	return 0;
 }
-#endif
 
 int
 intflags(char *ifname, int ifs, int argc, char **argv)

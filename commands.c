@@ -516,12 +516,8 @@ struct intlist Intlist[] = {
 #endif
 	{ "tunnel",	"VXLAN/GIF/GRE Tunnel parameters",	CMPL0 0, 0, inttunnel },
 	{ "vnetid",	"Virtual interface network identifier",	CMPL0 0, 0, intvnetid },
-#ifdef SIOCSIFPARENT	/* 6.0+ */
 	{ "parent",	"Parent interface",			CMPL(i) 0, 0, intparent },
-#endif
-#ifdef SIOCSIFPAIR	/* 6.0+ */
 	{ "patch",	"Pair interface",			CMPL(i) 0, 0, intpatch },
-#endif
 	{ "keepalive",	"GRE tunnel keepalive",			CMPL0 0, 0, intkeepalive },
 	{ "mpwlabel",	"MPLS pseudowire local-remote labels",	CMPL0 0, 0, intmpw },
 	{ "neighbor",	"MPLS pseudowire neighbor IP",		CMPL0 0, 0, intmpw },
