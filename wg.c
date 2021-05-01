@@ -512,7 +512,8 @@ void
 wgpeerusage(void)
 {
 	printf("%% wgpeer <public key>\n");
-	printf("%% wgpeer <public key> endpoint <endpoint ip:[port]> ...\n");
+	printf("%% wgpeer <public key> endpoint <endpoint ip:port> ...\n");
+	printf("%% wgpeer <public key> endpoint <[endpoint ipv6]:port> ...\n");
 	printf("%% wgpeer <public key> aip <allowed ip/prefix> ...\n");
 	printf("%% wgpeer <public key> psk <pre-shared key> ...\n");
 	printf("%% wgpeer <public key> pka <interval> ...\n");
