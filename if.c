@@ -961,7 +961,7 @@ intpflow(char *ifname, int ifs, int argc, char **argv)
 	argc--;
 	argv++;
 
-	/* XXX fucking makes my eyes bleed. learn how to use yacc ? */
+	/* convert to nopt() */
 	if ((set && argc < 4) || (set && argc == 5) || (set &&
 	    (argc == 4 || argc == 6) && (!isprefix(argv[0], "sender") ||
 	    !isprefix(argv[2], "receiver") ||
@@ -988,8 +988,10 @@ intpflow(char *ifname, int ifs, int argc, char **argv)
 
 	preq.addrmask = PFLOW_MASK_SRCIP | PFLOW_MASK_DSTIP;
 	if (set) {
-		pflow_addr(argv[1], &preq.flowsrc);
-		pflow_addr(argv[3], &preq.flowdst);
+		if (pflow_addr(argv[1], &preq.flowsrc) < 0)
+			return(0);
+		if (pflow_addr(argv[3], &preq.flowdst) < 0)
+			return(0);
 		if (argc == 6) {
 			preq.version = strtonum(argv[5], 5, PFLOW_PROTO_MAX,
 			    &errmsg);
