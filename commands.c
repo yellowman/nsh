@@ -556,6 +556,10 @@ struct intlist Intlist[] = {
 #ifdef IFXF_MONITOR		/* 6.9+ */
 	{ "monitor",	"Monitor mode for incoming traffic",	CMPL0 0, 0, intxflags },
 #endif
+	{ "wgpeer",	"Wireguard peer config",		CMPL0 0, 0, intwgpeer },
+	{ "wgport",	"Wireguard UDP port",			CMPL0 0, 0, intwg },
+	{ "wgkey",	"Wireguard private key",		CMPL0 0, 0, intwg },
+	{ "wgrtable",	"Wireguard routing table",		CMPL0 0, 0, intwg },
         { "trunkport",  "Add child interface(s) to trunk",      CMPL0 0, 0, inttrunkport },
         { "trunkproto", "Define trunkproto",                    CMPL0 0, 0, inttrunkproto },
 	{ "shutdown",   "Shutdown interface",			CMPL0 0, 0, intflags },

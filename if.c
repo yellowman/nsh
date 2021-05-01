@@ -208,6 +208,7 @@ show_int(int argc, char **argv)
 		printf(", hardware address %s", lladdr);
 	printf("\n");
 
+	show_wg(ifs, ifname);
 	show_trunk(ifs, ifname);
 	media_status(ifs, ifname, "  Media type ");
 

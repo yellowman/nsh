@@ -63,7 +63,7 @@ pflow_addr(const char *val, struct sockaddr_storage *ss)
 
 	if (strlcpy(buf, val, sizeof(buf)) >= sizeof(buf)) {
 		printf("%% pflow_addr: bad value: (%s)\n", val);
-		return(1);
+		return(-1);
 	}
 	port = NULL;
 	cp = buf;
@@ -98,11 +98,12 @@ pflow_addr(const char *val, struct sockaddr_storage *ss)
 	bzero(&hints, sizeof(hints));
 	hints.ai_family = AF_UNSPEC;
 	hints.ai_socktype = SOCK_DGRAM;	/* dummy */
+	hints.ai_flags = AI_NUMERICHOST;
 
 	if ((error = getaddrinfo(ip, port, &hints, &res0)) != 0) {
-		printf("%% pflow_addr: error in parsing address string: %s\n",
+		printf("%% pflow_addr: error in address string: %s\n",
 		       gai_strerror(error));
-		return(1);
+		return(-1);
 	}
 	memcpy(ss, res0->ai_addr, res0->ai_addr->sa_len);
 	freeaddrinfo(res0);

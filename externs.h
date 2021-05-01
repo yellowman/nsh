@@ -556,3 +556,9 @@ int db_select_flag_x_dbflag_rtable(char *, char *, int);
 int pflow_addr(const char *, struct sockaddr_storage *);
 #endif
 int pflow_status(int, int, char *, char *);
+
+/* wg.c */
+int intwg(char *, int, int, char **);
+int intwgpeer(char *, int, int, char **);
+void conf_wg(FILE *, int, char *);
+void show_wg(int, char *);

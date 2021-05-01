@@ -60,7 +60,7 @@ void conf_interfaces(FILE *, char *);
 void conf_print_rtm(FILE *, struct rt_msghdr *, char *, int);
 int conf_ifaddrs(FILE *, char *, int, int);
 int conf_ifaddr_dhcp(FILE *, char *, int);
-void conf_ifflags(FILE *, int, char *, int);
+void conf_ifflags(FILE *, int, char *, int, u_char);
 void conf_vnetid(FILE *, int, char *);
 void conf_parent(FILE *, int, char *);
 void conf_patch(FILE *, int, char *);
@@ -90,6 +90,7 @@ static const struct {
 	u_long mtu;
 } defmtus[] = {
 	{ "gre",	1476 },
+	{ "wg",		1420 },
 	{ "gif",	1280 },
 	{ "sl",		296 },
 	{ "enc",	1536 },
@@ -563,8 +564,10 @@ void conf_interfaces(FILE *output, char *only)
 				fprintf(output, " dhcrelay %s\n", tmp);
 			conf_sppp(output, ifs, ifnp->if_name);
 			conf_pppoe(output, ifs, ifnp->if_name);
+			conf_wg(output, ifs, ifnp->if_name);
 		}
-		conf_ifflags(output, flags, ifnp->if_name, ippntd);
+		conf_ifflags(output, flags, ifnp->if_name, ippntd,
+		    if_data.ifi_type);
 	}
 	close(ifs);
 	if_freenameindex(ifn_list);
@@ -662,7 +665,7 @@ void conf_parent(FILE *output, int ifs, char *ifname)
 
 #endif
 
-void conf_ifflags(FILE *output, int flags, char *ifname, int ippntd)
+void conf_ifflags(FILE *output, int flags, char *ifname, int ippntd, u_char ift)
 {
 	if (flags & IFF_DEBUG)
 		fprintf(output, " debug\n");
@@ -676,7 +679,7 @@ void conf_ifflags(FILE *output, int flags, char *ifname, int ippntd)
 			fprintf(output, "2");
 		fprintf(output, "\n");
 	}
-	if (flags & IFF_NOARP)
+	if (flags & IFF_NOARP && ift != IFT_WIREGUARD)
 		fprintf(output, " no arp\n");
 
 	if (isprefix("pppoe", ifname)) {		/* XXX */
