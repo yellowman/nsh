@@ -35,6 +35,7 @@
 #include <sys/ioctl.h>
 #include <net/if.h>
 #include <net/if_dl.h>
+#include <net/if_types.h>
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
 #include <net/if_bridge.h>
@@ -1224,33 +1225,34 @@ is_bridge(int s, char *brdg)
 {
 	struct ifreq ifr;
 	struct ifbaconf ifbac;
-	struct ifbifconf ifbic;
+	struct if_data if_data;
 
 	strlcpy(ifr.ifr_name, brdg, sizeof(ifr.ifr_name));
 
-	if (ioctl(s, SIOCGIFFLAGS, (caddr_t)&ifr) < 0)
-		return (0);
-
-	ifbac.ifbac_len = 0;
-	strlcpy(ifbac.ifbac_name, brdg, sizeof(ifbac.ifbac_name));
-	if (ioctl(s, SIOCBRDGRTS, (caddr_t)&ifbac) < 0) {
-		if (errno == ENETDOWN)
-			return(1);
-	} else {
+	ifr.ifr_data = (caddr_t)&if_data;
+	if (ioctl(s, SIOCGIFDATA, (caddr_t)&ifr) < 0) {
+		/* bail out */
+		return(0);
+	}
+	if (if_data.ifi_type == IFT_BRIDGE) {
+		/* surely a bridge! */
 		return(1);
 	}
 
-
-	ifbic.ifbic_len = 0;
-	strlcpy(ifbic.ifbic_name, brdg, sizeof(ifbic.ifbic_name));
-	if (ioctl(s, SIOCBRDGIFS, (caddr_t)&ifbic) < 0) {
-		if (errno == ENETDOWN)
+	/* ok, maybe still a bridge, let's ask for SIOCBRDGRTS */
+	ifbac.ifbac_len = 0;
+	strlcpy(ifbac.ifbac_name, brdg, sizeof(ifbac.ifbac_name));
+	if (ioctl(s, SIOCBRDGRTS, (caddr_t)&ifbac) < 0) {
+		if (errno == ENETDOWN) {
+			/* oh, a bridge who happens to be unconfigured */
 			return(1);
-	} else {
-		return (1);
+		}
+		/* bridge ioctl failure, so, not a bridge */
+		return(0);
 	}
 
-	return (0);
+	/* apparently we had SIOCBRDGRTS success */
+	return(1);
 }
 
 int
