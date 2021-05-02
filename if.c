@@ -199,10 +199,12 @@ show_int(int argc, char **argv)
 	type = iftype(if_data.ifi_type);
 
 	printf("  Interface type %s", type);
-	if (flags & IFF_BROADCAST)
-		printf(" (Broadcast)");
-	else if (flags & IFF_POINTOPOINT)
-		printf(" (PointToPoint)");
+	if (if_data.ifi_type != IFT_WIREGUARD) {
+		if (flags & IFF_BROADCAST)
+			printf(" (Broadcast)");
+		else if (flags & IFF_POINTOPOINT)
+			printf(" (PointToPoint)");
+	}
 
 	if ((lladdr = get_hwdaddr(ifname)) != NULL)
 		printf(", hardware address %s", lladdr);
