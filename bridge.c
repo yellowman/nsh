@@ -1224,6 +1224,7 @@ is_bridge(int s, char *brdg)
 {
 	struct ifreq ifr;
 	struct ifbaconf ifbac;
+	struct ifbifconf ifbic;
 
 	strlcpy(ifr.ifr_name, brdg, sizeof(ifr.ifr_name));
 
@@ -1234,10 +1235,22 @@ is_bridge(int s, char *brdg)
 	strlcpy(ifbac.ifbac_name, brdg, sizeof(ifbac.ifbac_name));
 	if (ioctl(s, SIOCBRDGRTS, (caddr_t)&ifbac) < 0) {
 		if (errno == ENETDOWN)
-			return (1);
-		return (0);
+			return(1);
+	} else {
+		return(1);
 	}
-	return (1);
+
+
+	ifbic.ifbic_len = 0;
+	strlcpy(ifbic.ifbic_name, brdg, sizeof(ifbic.ifbic_name));
+	if (ioctl(s, SIOCBRDGIFS, (caddr_t)&ifbic) < 0) {
+		if (errno == ENETDOWN)
+			return(1);
+	} else {
+		return (1);
+	}
+
+	return (0);
 }
 
 int
