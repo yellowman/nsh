@@ -514,7 +514,7 @@ struct intlist Intlist[] = {
 	{ "tentative",	"IPv6 tentative address bit",		CMPL0 0, 0, inttentative },
 	{ "eui64",	"IPv6 automatic interface index",	CMPL0 0, 0, inteui64 },
 #endif
-	{ "tunnel",	"VXLAN/GIF/GRE Tunnel parameters",	CMPL0 0, 0, inttunnel },
+	{ "tunnel",	"Tunnel parameters",			CMPL0 0, 0, inttunnel },
 	{ "vnetid",	"Virtual interface network identifier",	CMPL0 0, 0, intvnetid },
 	{ "parent",	"Parent interface",			CMPL(i) 0, 0, intparent },
 	{ "patch",	"Pair interface",			CMPL(i) 0, 0, intpatch },
@@ -586,6 +586,7 @@ struct intlist Bridgelist[] = {
 	{ "link",	"Link level options",			CMPL0 0, 0, intlink },
 	{ "vnetid",	"Virtual interface network identifier",	CMPL0 0, 0, intvnetid },
 	{ "parent",	"Parent interface",			CMPL(i) 0, 0, intparent },
+	{ "tunnel",	"Tunnel parameters",			CMPL0 0, 0, inttunnel },
 	{ "shutdown",	"Shutdown bridge",			CMPL0 0, 0, intflags },
 
 /* Help commands */

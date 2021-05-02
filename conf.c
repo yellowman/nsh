@@ -69,6 +69,7 @@ void conf_ifxflags(FILE *, int, char *);
 void conf_rtables(FILE *);
 void conf_rtables_rtable(FILE *, int);
 void conf_rdomain(FILE *, int, char *);
+void conf_tunnel(FILE *, int, struct if_data, char *);
 void conf_ifmetrics(FILE *, int, struct if_data, char *);
 void conf_pflow(FILE *, int, char *);
 void conf_mpw(FILE *, int, char *);
@@ -543,7 +544,7 @@ void conf_interfaces(FILE *output, char *only)
 		conf_intrtlabel(output, ifs, ifnp->if_name);
 		conf_intgroup(output, ifs, ifnp->if_name);
 		conf_carp(output, ifs, ifnp->if_name);
-		conf_ifmetrics(output,  ifs, if_data, ifnp->if_name);
+		conf_tunnel(output,  ifs, if_data, ifnp->if_name);
 
 		ippntd = conf_ifaddr_dhcp(output, ifnp->if_name, flags);
 
@@ -552,6 +553,7 @@ void conf_interfaces(FILE *output, char *only)
 		} else {
 			char tmp[24];
 
+			conf_ifmetrics(output,  ifs, if_data, ifnp->if_name);
 			conf_media_status(output, ifs, ifnp->if_name);
 			conf_keepalive(output, ifs, ifnp->if_name);
 			conf_pfsync(output, ifs, ifnp->if_name);
@@ -819,17 +821,11 @@ void conf_mpw(FILE *output, int ifs, char *ifname)
 		fprintf(output, " neighbor %s\n", inet_ntoa(sin->sin_addr));
 }
 
-void conf_ifmetrics(FILE *output, int ifs, struct if_data if_data,
-    char *ifname)
+void conf_tunnel(FILE *output, int ifs, struct if_data if_data, char *ifname)
 {
 	int dstport;
-	char tmpa[IPSIZ], tmpb[IPSIZ], tmpc[TMPSIZ];
-	struct ifreq ifrpriority;
+	char tmpa[IPSIZ], tmpb[IPSIZ];
 
-	/*
-	 * Various metrics for interfaces that are now sometimes also
-	 * bridges
-	 */
 	if ((dstport=
 	    phys_status(ifs, ifname, tmpa, tmpb, IPSIZ, IPSIZ)) >= 0) {
 		int physrt, physttl;
@@ -843,6 +839,13 @@ void conf_ifmetrics(FILE *output, int ifs, struct if_data if_data,
 			fprintf(output, " ttl %i", physttl);
 		fprintf(output, "\n");
 	}
+}
+
+void conf_ifmetrics(FILE *output, int ifs, struct if_data if_data,
+    char *ifname)
+{
+	char tmp[IPSIZ];
+	struct ifreq ifrpriority;
 
 	/*
 	 * print interface mtu, metric
@@ -863,14 +866,14 @@ void conf_ifmetrics(FILE *output, int ifs, struct if_data if_data,
 			fprintf(output, " llpriority %u\n",
 			    ifrpriority.ifr_llprio);
 
-	if (get_nwinfo(ifname, tmpc, TMPSIZ, NWID) != 0) {
-		fprintf(output, " nwid %s\n", tmpc);
-		if (get_nwinfo(ifname, tmpc, TMPSIZ, NWKEY) != 0)
-			fprintf(output, " nwkey %s\n", tmpc);
-		if (get_nwinfo(ifname, tmpc, TMPSIZ, TXPOWER) != 0)
-			fprintf(output, " txpower %s\n", tmpc);
-		if (get_nwinfo(ifname, tmpc, TMPSIZ, POWERSAVE) != 0)
-			fprintf(output, " powersave %s\n", tmpc);
+	if (get_nwinfo(ifname, tmp, TMPSIZ, NWID) != 0) {
+		fprintf(output, " nwid %s\n", tmp);
+		if (get_nwinfo(ifname, tmp, TMPSIZ, NWKEY) != 0)
+			fprintf(output, " nwkey %s\n", tmp);
+		if (get_nwinfo(ifname, tmp, TMPSIZ, TXPOWER) != 0)
+			fprintf(output, " txpower %s\n", tmp);
+		if (get_nwinfo(ifname, tmp, TMPSIZ, POWERSAVE) != 0)
+			fprintf(output, " powersave %s\n", tmp);
 	}
 }
 
