@@ -583,8 +583,10 @@ struct intlist Bridgelist[] = {
 	{ "static",	"Static bridge address entry",		CMPL0 0, 0, brstatic },
 	{ "ifpriority",	"Spanning priority of a member on an 802.1D bridge",	CMPL0 0, 0, brpri },
 	{ "ifcost",	"Spanning tree path cost of a member on 802.1D bridge", CMPL0 0, 0, brpri },
-        { "link",	"Link level options",			CMPL0 0, 0, intlink },
-        { "shutdown",	"Shutdown bridge",			CMPL0 0, 0, intflags },
+	{ "link",	"Link level options",			CMPL0 0, 0, intlink },
+	{ "vnetid",	"Virtual interface network identifier",	CMPL0 0, 0, intvnetid },
+	{ "parent",	"Parent interface",			CMPL(i) 0, 0, intparent },
+	{ "shutdown",	"Shutdown bridge",			CMPL0 0, 0, intflags },
 
 /* Help commands */
 	{ "?",		"Options",				CMPL0 0, 0, int_help },

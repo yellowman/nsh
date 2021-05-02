@@ -543,6 +543,7 @@ void conf_interfaces(FILE *output, char *only)
 		conf_intrtlabel(output, ifs, ifnp->if_name);
 		conf_intgroup(output, ifs, ifnp->if_name);
 		conf_carp(output, ifs, ifnp->if_name);
+		conf_ifmetrics(output,  ifs, if_data, ifnp->if_name);
 
 		ippntd = conf_ifaddr_dhcp(output, ifnp->if_name, flags);
 
@@ -552,7 +553,6 @@ void conf_interfaces(FILE *output, char *only)
 			char tmp[24];
 
 			conf_media_status(output, ifs, ifnp->if_name);
-			conf_ifmetrics(output, ifs, if_data, ifnp->if_name);
 			conf_keepalive(output, ifs, ifnp->if_name);
 			conf_pfsync(output, ifs, ifnp->if_name);
 			conf_trunk(output, ifs, ifnp->if_name);
@@ -601,11 +601,12 @@ void conf_vnetid(FILE *output, int ifs, char *ifname)
 {
 	int64_t vnetid;
 
-	if (((vnetid = get_vnetid(ifs, ifname)) != 0))
+	if (((vnetid = get_vnetid(ifs, ifname)) != 0)) {
 		if (vnetid < 0)
 			fprintf(output, " vnetid any\n");
 		else
 			fprintf(output, " vnetid %lld\n", vnetid);
+	}
 }
 
 void conf_patch(FILE *output, int ifs, char *ifname)
@@ -826,7 +827,8 @@ void conf_ifmetrics(FILE *output, int ifs, struct if_data if_data,
 	struct ifreq ifrpriority;
 
 	/*
-	 * Various metrics for non-bridge interfaces
+	 * Various metrics for interfaces that are now sometimes also
+	 * bridges
 	 */
 	if ((dstport=
 	    phys_status(ifs, ifname, tmpa, tmpb, IPSIZ, IPSIZ)) >= 0) {
