@@ -268,7 +268,7 @@ Menu iptab[] = {
 #ifdef notyet
 	{ "default-mtu", "Default interface MTU",	CMPL0 0, 0, 1, 1, ipsysctl },
 #endif
-	{ "default-ttl", "Set Default IP packet TTL",	CMPL0 0, 0, 1, 1, ipsysctl },
+	{ "default-ttl", "Default IP packet TTL",	CMPL0 0, 0, 1, 1, ipsysctl },
 	{ "?",		"Options",			CMPL0 0, 0, 0, 0, sysctlhelp },
 	{ 0, 0, 0, 0, 0, 0, 0, 0 }
 };
@@ -491,12 +491,12 @@ struct intlist Intlist[] = {
 	{ "rtlabel",	"Interface route labels",		CMPL0 0, 0, intrtlabel },
 	{ "priority",	"Data packet priority",			CMPL0 0, 0, intmetric },
 	{ "llpriority",	"Link Level packet priority",		CMPL0 0, 0, intllprio },
-	{ "mtu",	"Set Maximum Transmission Unit",	CMPL0 0, 0, intmtu },
-	{ "metric",	"Set routing metric",			CMPL0 0, 0, intmetric },
-	{ "link",	"Set link level options",		CMPL0 0, 0, intlink },
-	{ "arp",	"Set Address Resolution Protocol",	CMPL0 0, 0, intflags },
-	{ "mpelabel",	"Set MPLS MPE Label",			CMPL0 0, 0, intmpelabel },
-	{ "lladdr",	"Set Link Level (MAC) Address",		CMPL0 0, 0, intlladdr },
+	{ "mtu",	"Maximum Transmission Unit",		CMPL0 0, 0, intmtu },
+	{ "metric",	"Routing metric",			CMPL0 0, 0, intmetric },
+	{ "link",	"Link level options",			CMPL0 0, 0, intlink },
+	{ "arp",	"Address Resolution Protocol",		CMPL0 0, 0, intflags },
+	{ "mpelabel",	"MPLS MPE Label",			CMPL0 0, 0, intmpelabel },
+	{ "lladdr",	"Link Level (MAC) Address",		CMPL0 0, 0, intlladdr },
 	{ "nwid",	"802.11 network ID",			CMPL0 0, 0, intnwid },
 	{ "nwkey",	"802.11 network key",			CMPL0 0, 0, intnwkey },
 	{ "powersave",	"802.11 powersaving mode",		CMPL0 0, 0, intpowersave },
@@ -584,7 +584,7 @@ struct intlist Bridgelist[] = {
 	{ "static",	"Static bridge address entry",		CMPL0 0, 0, brstatic },
 	{ "ifpriority",	"Spanning priority of a member on an 802.1D bridge",	CMPL0 0, 0, brpri },
 	{ "ifcost",	"Spanning tree path cost of a member on 802.1D bridge", CMPL0 0, 0, brpri },
-        { "link",	"Set link level options",		CMPL0 0, 0, intlink },
+        { "link",	"Link level options",			CMPL0 0, 0, intlink },
         { "shutdown",	"Shutdown bridge",			CMPL0 0, 0, intflags },
 
 /* Help commands */
