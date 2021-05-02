@@ -603,7 +603,7 @@ void conf_vnetid(FILE *output, int ifs, char *ifname)
 
 	if (((vnetid = get_vnetid(ifs, ifname)) != 0))
 		if (vnetid < 0)
-			fprintf(output, " vnetid any\n", vnetid);
+			fprintf(output, " vnetid any\n");
 		else
 			fprintf(output, " vnetid %lld\n", vnetid);
 }

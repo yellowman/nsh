@@ -534,7 +534,6 @@ struct intlist Intlist[] = {
 	{ "carppeer",	"CARP peer",				CMPL0 0, 0, intcarp },
 	{ "balancing",	"CARP balancing mode",			CMPL0 0, 0, intcarp },
 	{ "pflow",	"pflow data export",			CMPL0 0, 0, intpflow },
-	{ "vlan",	"802.1Q vlan tag and parent",		CMPL0 0, 0, intvlan },	/* XXX bkcompat */
 	{ "debug",	"Driver dependent debugging",		CMPL0 0, 0, intflags },
 	{ "dhcrelay",	"DHCP Relay Agent",			CMPL0 0, 0, intdhcrelay },
 	{ "wol",	"Wake On LAN",				CMPL0 0, 0, intxflags },

@@ -397,7 +397,6 @@ int intdhcrelay(char *, int, int, char **);
 int intmetric(char *, int, int, char **);
 int intllprio(char *, int, int, char **);
 int intrtd(char *, int, int, char **);
-int intvlan(char *, int, int, char **);
 int intflags(char *, int, int, char **);
 int intxflags(char *, int, int, char **);
 int intaf(char *, int, int, char **);
