@@ -69,7 +69,7 @@ void conf_ifxflags(FILE *, int, char *);
 void conf_rtables(FILE *);
 void conf_rtables_rtable(FILE *, int);
 void conf_rdomain(FILE *, int, char *);
-void conf_tunnel(FILE *, int, struct if_data, char *);
+void conf_tunnel(FILE *, int, char *);
 void conf_ifmetrics(FILE *, int, struct if_data, char *);
 void conf_pflow(FILE *, int, char *);
 void conf_mpw(FILE *, int, char *);
@@ -544,7 +544,7 @@ void conf_interfaces(FILE *output, char *only)
 		conf_intrtlabel(output, ifs, ifnp->if_name);
 		conf_intgroup(output, ifs, ifnp->if_name);
 		conf_carp(output, ifs, ifnp->if_name);
-		conf_tunnel(output,  ifs, if_data, ifnp->if_name);
+		conf_tunnel(output,  ifs, ifnp->if_name);
 
 		ippntd = conf_ifaddr_dhcp(output, ifnp->if_name, flags);
 
@@ -821,7 +821,7 @@ void conf_mpw(FILE *output, int ifs, char *ifname)
 		fprintf(output, " neighbor %s\n", inet_ntoa(sin->sin_addr));
 }
 
-void conf_tunnel(FILE *output, int ifs, struct if_data if_data, char *ifname)
+void conf_tunnel(FILE *output, int ifs, char *ifname)
 {
 	int dstport;
 	char tmpa[IPSIZ], tmpb[IPSIZ];
@@ -844,7 +844,7 @@ void conf_tunnel(FILE *output, int ifs, struct if_data if_data, char *ifname)
 void conf_ifmetrics(FILE *output, int ifs, struct if_data if_data,
     char *ifname)
 {
-	char tmp[IPSIZ];
+	char tmp[TMPSIZ];
 	struct ifreq ifrpriority;
 
 	/*
