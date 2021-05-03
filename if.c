@@ -1137,89 +1137,48 @@ intkeepalive(char *ifname, int ifs, int argc, char **argv)
 	return(0);
 }
 
-int
-intmpelabel(char *ifname, int ifs, int argc, char **argv)
-{
-	struct ifreq ifr;
-	struct shim_hdr shim;
-	int set;
-	const char *errmsg = NULL;
+#define MPLSLABEL 1
+#define PWE3CW 2
+#define PWE3FAT 3
+#define PWE3NEIGHBOR 4
 
-	if (NO_ARG(argv[0])) {
-		set = 0;
-		argc--;
-		argv++;
-	} else
-		set = 1;
-
-	argc--;
-	argv++;
-
-	if ((!set && argc > 1) || (set && argc != 1)) {
-		printf("%% label <mplslabel>\n");
-		printf("%% no label [mplslabel]\n");
-		return(0);
-	}
-
-	bzero(&shim, sizeof(shim));
-	ifr.ifr_data = (caddr_t)&shim;
-
-	if (set) {
-		shim.shim_label = strtonum(argv[0], 0, MPLS_LABEL_MAX,
-		    &errmsg);
-		if (errmsg) {
-			printf("%% Invalid MPLS Label %s: %s\n", argv[0],
-			    errmsg);
-			return(0);
-		}
-	} else
-		shim.shim_label = 0;
-
-	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
-	if (ioctl(ifs, SIOCSETLABEL, (caddr_t)&ifr) < 0) {
-		if (errno == ENOTTY)
-			printf("%% MPLS label not supported on %s\n", ifname);
-		else
-			printf("%% intlabel: SIOCSETLABEL: %s\n",
-			    strerror(errno));
-	}
-	return(0);
-}
-
-#define MPWLABEL 1
-#define MPWNEIGHBOR 2
-#define MPWCONTROLWORD 3
-#define MPWENCAP 4
-
-static struct mpwc {
+static struct pwec {
 	char *name;
 	char *descr;
 	char *descr2;
 	int type;
 	int args;
-} mpwcs[] = {
-	{ "mpwlabel",	"local label",	"remote label",	MPWLABEL,	2 },
-	{ "neighbor",	"neighbor IP",	"",		MPWNEIGHBOR,	1 },
-	{ "controlword", "controlword",	"",		MPWCONTROLWORD,	0 },
-	{ "encap",	"encap-type",	"",		MPWENCAP,	1 },
+} pwecs[] = {
+	{ "mplslabel",	"local mpls label", 	"",	MPLSLABEL,	1 },
+	{ "pwecw",	"",		"",		PWE3CW,		0 },
+	{ "pwefat",	"",		"",		PWE3FAT,	0 },
+	{ "pweneighbor","label",	"neighbor IP",	PWE3NEIGHBOR,	2 },
 	{ 0,		0,		0,		0,		0 }
 };
 
 /* from ifconfig.c */
 int
-intmpw(char *ifname, int ifs, int argc, char **argv)
+intpwe3(char *ifname, int ifs, int argc, char **argv)
 {
-	int set;
-	struct sockaddr_in *sin, *sinn;
-	struct ifmpwreq imr;
+	int set, error;
+	unsigned long cmd;
 	struct ifreq ifr;
-	struct mpwc *x;
+	struct shim_hdr shim;
+	struct pwec *x;
 	const char *errstr;
 
-	bzero(&imr, sizeof(imr));
+	struct if_laddrreq req;
+	struct addrinfo hints, *res;
+	struct sockaddr_mpls *smpls = (struct sockaddr_mpls *)&req.dstaddr;
+
+	caddr_t arg;
+
 	bzero(&ifr, sizeof(ifr));
+	bzero(&req, sizeof(req));
+	bzero(&hints, sizeof(hints));
 
 	strlcpy(ifr.ifr_name, ifname, IFNAMSIZ);
+	strlcpy(req.iflr_name, ifname, IFNAMSIZ);
 
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -1228,7 +1187,7 @@ intmpw(char *ifname, int ifs, int argc, char **argv)
 	} else
 		set = 1;
 
-	x=(struct mpwc *) genget(argv[0], (char **)mpwcs, sizeof(struct mpwc));
+	x=(struct pwec *) genget(argv[0], (char **)pwecs, sizeof(struct pwec));
 	if (x == 0) {
 		printf("%% Internal error - Invalid argument %s\n", argv[0]);
 		return 0;
@@ -1257,101 +1216,88 @@ intmpw(char *ifname, int ifs, int argc, char **argv)
 	}
 
 	switch(x->type) {
-	case MPWLABEL:
-		if (!set) {
-			imrsave.imr_lshim.shim_label = 0;
-			imrsave.imr_rshim.shim_label = 0;
-			break;
-		}
-		imrsave.imr_lshim.shim_label = strtonum(argv[0],
-		    (MPLS_LABEL_RESERVED_MAX + 1), MPLS_LABEL_MAX, &errstr);
-		if (errstr != NULL) {
-			printf("%% invalid local label: %s\n", errstr);
-			return 0;
-		}
+	case MPLSLABEL:
+		if (set) {
+			bzero(&shim, sizeof(shim));
+			ifr.ifr_data = (caddr_t)&shim;
 
-		imrsave.imr_rshim.shim_label = strtonum(argv[1],
-		    (MPLS_LABEL_RESERVED_MAX + 1), MPLS_LABEL_MAX, &errstr);
-		if (errstr != NULL) {
-			printf("%% invalid remote label: %s\n", errstr);
-			return 0;
-		}
-	break;
-	case MPWNEIGHBOR:
-		sin = (struct sockaddr_in *) &imrsave.imr_nexthop;
-		if (set && inet_aton(argv[0], &sin->sin_addr) == 0) {
-			printf("%% invalid neighbor addresses\n");
-			return 0;
-		}
-		if (!set) {
-			sin->sin_addr.s_addr = 0;
-		}
-		sin->sin_family = AF_INET;
-	break;
-	case MPWCONTROLWORD:
-		if (set)
-			imrsave.imr_flags |= IMR_FLAG_CONTROLWORD;
-		else
-			imrsave.imr_flags &= ~IMR_FLAG_CONTROLWORD;
-	break;
-	case MPWENCAP:
-		if (!set) {
-			imrsave.imr_type = UINT32_MAX;
-			break;
-		}
-		if (isprefix(argv[0], "ethernet")) {
-			imrsave.imr_type = IMR_TYPE_ETHERNET;
-		} else if (isprefix(argv[0], "ethernet-tagged")) {
-			imrsave.imr_type = IMR_TYPE_ETHERNET_TAGGED;
+			shim.shim_label = strtonum(argv[0], 0, MPLS_LABEL_MAX,
+			    &errstr);
+			if (errstr) {
+				printf("%% Invalid MPLS Label %s: %s\n",
+				    argv[0], errstr);
+				return(0);
+			}
+			cmd = SIOCSETLABEL;
 		} else {
-			printf("%% invalid mpw encapsulation type\n");
-			return 0;
+			cmd = SIOCDELLABEL;
 		}
-		break;
-	}
-
-	ifr.ifr_data = (caddr_t) &imr;
-	if (ioctl(ifs, SIOCGETMPWCFG, (caddr_t) &ifr) == -1) {
-		printf("%% SIOCGETMPWCFG: %s\n", strerror(errno));
-		return 0;
-	}
-
-	if (imrsave.imr_type == 0)
-		imrsave.imr_type = imr.imr_type;
-	if (imrsave.imr_type == UINT32_MAX)
-		imrsave.imr_type = 0;
-
-	if (x->type != MPWCONTROLWORD)
-		imrsave.imr_flags |= imr.imr_flags;
-
-	if (imrsave.imr_lshim.shim_label == 0 ||
-	    imrsave.imr_rshim.shim_label == 0) {
-		if (imr.imr_lshim.shim_label == 0 ||
-		    imr.imr_rshim.shim_label == 0) {
-			/* mpw local / remote label not specified */
-			return 0;
+		arg = (caddr_t)&ifr;
+	break;
+	case PWE3CW:
+		if (set) {
+			cmd = SIOCSPWE3CTRLWORD;
+			ifr.ifr_pwe3 = 1;
+		} else {
+			cmd = SIOCSPWE3CTRLWORD;
+			ifr.ifr_pwe3 = 0;
 		}
-		imrsave.imr_lshim.shim_label = imr.imr_lshim.shim_label;
-		imrsave.imr_rshim.shim_label = imr.imr_rshim.shim_label;
-	}
-
-	sin = (struct sockaddr_in *) &imrsave.imr_nexthop;
-	sinn = (struct sockaddr_in *) &imr.imr_nexthop;
-	if (sin->sin_addr.s_addr == 0) {
-		if (sinn->sin_addr.s_addr == 0) {
-			/* mpw neighbor address not specified */
-			return 0;
+		arg = (caddr_t)&ifr;
+	break;
+	case PWE3FAT:
+		if (set) {
+			cmd = SIOCSPWE3FAT;
+			ifr.ifr_pwe3 = 1;
+		} else {
+			cmd = SIOCSPWE3FAT;
+			ifr.ifr_pwe3 = 0;
 		}
-
-		sin->sin_family = sinn->sin_family;
-		sin->sin_addr.s_addr = sinn->sin_addr.s_addr;
+		arg = (caddr_t)&ifr;
+	break;
+	case PWE3NEIGHBOR:
+		if (set) {
+			hints.ai_family = AF_UNSPEC;
+			hints.ai_socktype = SOCK_DGRAM;
+			error = getaddrinfo(argv[1], NULL, &hints, &res);
+			if (error != 0) {
+				printf("%% intpwe3: neighbor %s: %s\n",
+				    argv[1], gai_strerror(error));
+				return (0);
+			}
+			smpls->smpls_len = sizeof(*smpls);
+			smpls->smpls_family = AF_MPLS;
+			smpls->smpls_label = strtonum(argv[0],
+			    (MPLS_LABEL_RESERVED_MAX + 1), MPLS_LABEL_MAX,
+			    &errstr);
+			if (errstr != NULL) {
+				printf("%% intpwe3: invalid label %s\n",
+					errstr);
+				return (0);
+			}
+			if (res->ai_addrlen > sizeof(req.addr)) {
+				printf("%% intpwe3: invalid address %s\n",
+				argv[0]);
+				return (0);
+			}
+			memcpy(&req.addr, res->ai_addr, res->ai_addrlen);
+			freeaddrinfo(res);
+			cmd = SIOCSPWE3NEIGHBOR;
+		} else {
+			cmd = SIOCDPWE3NEIGHBOR;
+		}
+		arg = (caddr_t)&req;
+	break;
 	}
 
-	ifr.ifr_data = (caddr_t) &imrsave;
-	if (ioctl(ifs, SIOCSETMPWCFG, (caddr_t) &ifr) == -1)
-		printf("%% intmpw: SIOCSETMPWCFG: %s\n", strerror(errno));
+	if (ioctl(ifs, cmd, arg) < 0) {
+		if (errno == ENOTTY)
+			printf("%% MPLS not supported on %s\n", ifname);
+		else
+			printf("%% intpwe3: ioctl: %s\n",
+			    strerror(errno));
+	}
 
-	return 0;
+	return (0);
 }
 
 int

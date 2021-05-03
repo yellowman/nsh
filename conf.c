@@ -39,6 +39,7 @@
 #include <netinet/ip_ipsp.h>
 #include <net/if_pfsync.h>
 #include <net/if_pflow.h>
+#include <netdb.h>
 #include <ifaddrs.h>
 #include <arpa/inet.h>
 #include <limits.h>
@@ -72,7 +73,7 @@ void conf_rdomain(FILE *, int, char *);
 void conf_tunnel(FILE *, int, char *);
 void conf_ifmetrics(FILE *, int, struct if_data, char *);
 void conf_pflow(FILE *, int, char *);
-void conf_mpw(FILE *, int, char *);
+void conf_pwe3(FILE *, int, char *);
 void conf_ctl(FILE *, char *, char *, int);
 void conf_intrtlabel(FILE *, int, char *);
 void conf_intgroup(FILE *, int, char *);
@@ -559,7 +560,7 @@ void conf_interfaces(FILE *output, char *only)
 			conf_pfsync(output, ifs, ifnp->if_name);
 			conf_trunk(output, ifs, ifnp->if_name);
 			conf_pflow(output, ifs, ifnp->if_name);
-			conf_mpw(output, ifs, ifnp->if_name);
+			conf_pwe3(output, ifs, ifnp->if_name);
 			conf_ifxflags(output, ifs, ifnp->if_name);
 			if (conf_dhcrelay(ifnp->if_name, tmp, sizeof(tmp))
 			    > 0)
@@ -711,7 +712,6 @@ void conf_pflow(FILE *output, int ifs, char *ifname)
 void conf_ifxflags(FILE *output, int ifs, char *ifname)
 {
 	struct ifreq ifr;
-	struct shim_hdr shim;
 
 	bzero(&ifr, sizeof(ifr));
 	strlcpy(ifr.ifr_name, ifname, IFNAMSIZ);
@@ -737,14 +737,6 @@ void conf_ifxflags(FILE *output, int ifs, char *ifname)
 		if (ifr.ifr_flags & IFXF_WOL)
 			fprintf(output, " wol\n");
 	}
-
-	bzero(&shim, sizeof(shim));
-	ifr.ifr_data = (caddr_t)&shim;
-
-	/* set label for mpe */
-	if (ioctl(ifs, SIOCGETLABEL , (caddr_t)&ifr) != -1)
-		if (shim.shim_label > 0)
-			fprintf(output, " mpelabel %d\n", shim.shim_label);
 }
 
 void conf_rdomain(FILE *output, int ifs, char *ifname)
@@ -781,44 +773,54 @@ void conf_keepalive(FILE *output, int ifs, char *ifname)
 		    ikar.ikar_timeo, ikar.ikar_cnt);
 }
 
-void conf_mpw(FILE *output, int ifs, char *ifname)
+void conf_pwe3(FILE *output, int ifs, char *ifname)
 {
-	struct sockaddr_in *sin;
-	struct ifmpwreq imr;
+	int error;
+	struct shim_hdr shim;
 	struct ifreq ifr;
 
-	bzero(&imr, sizeof(imr));
+	struct if_laddrreq req;
+	char hbuf[NI_MAXHOST];
+	struct sockaddr_mpls *smpls;
+
 	bzero(&ifr, sizeof(ifr));
+	bzero(&shim, sizeof(shim));
+	bzero(&req, sizeof(req));
 
-	strlcpy(ifr.ifr_name, ifname, IFNAMSIZ);
-	ifr.ifr_data = (caddr_t) &imr;
-	if (ioctl(ifs, SIOCGETMPWCFG, (caddr_t) &ifr) == -1)
-		return;
+	ifr.ifr_data = (caddr_t)&shim;
+	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
+	strlcpy(req.iflr_name, ifname, sizeof(req.iflr_name));
 
-	switch (imr.imr_type) {
-	case IMR_TYPE_NONE:
-		break;
-	case IMR_TYPE_ETHERNET:
-		fprintf(output, " encap ethernet\n");
-		break;
-	case IMR_TYPE_ETHERNET_TAGGED:
-		fprintf(output, " encap ethernet-tagged\n");
-		break;
-	default:
-		printf("%% conf_mpw: imr.imr_type %d unknown\n", imr.imr_type);
-		break;
+	if (ioctl(ifs, SIOCGETLABEL, (caddr_t) &ifr) >= 0) {
+		fprintf(output, " mplslabel %u\n", shim.shim_label);
 	}
 
-	if (imr.imr_flags & IMR_FLAG_CONTROLWORD)
-		fprintf(output, " controlword\n");
+	if (ioctl(ifs, SIOCGPWE3NEIGHBOR, (caddr_t)&req) >= 0) {
+		if (req.dstaddr.ss_family == AF_MPLS) {
+			smpls = (struct sockaddr_mpls *)&req.dstaddr;
+			error = getnameinfo((struct sockaddr *)&req.addr,
+			    sizeof(req.addr), hbuf, sizeof(hbuf), NULL, 0,
+			    NI_NUMERICHOST);
+			if (error != 0) {
+				printf("%% conf_pwe3: getnameinfo: %s\n",
+				    gai_strerror(error));
+			} else {
+				fprintf(output, " pweneighbor %u %s\n",
+				   smpls->smpls_label, hbuf);
+			}
+		}
+				
+	}
 
-	if (imr.imr_lshim.shim_label != 0 || imr.imr_rshim.shim_label != 0)
-		fprintf(output, " mpwlabel %u %u\n", imr.imr_lshim.shim_label,
-		    imr.imr_rshim.shim_label);
+	if (ioctl(ifs,  SIOCGPWE3FAT, (caddr_t)&ifr) >= 0) {
+		if (ifr.ifr_pwe3)
+			fprintf(output, " pwefat\n");
+	}
 
-	sin = (struct sockaddr_in *) &imr.imr_nexthop;
-	if (!(sin->sin_addr.s_addr == 0))
-		fprintf(output, " neighbor %s\n", inet_ntoa(sin->sin_addr));
+	if (ioctl(ifs,  SIOCGPWE3CTRLWORD, (caddr_t)&ifr) >= 0) {
+		if (ifr.ifr_pwe3)
+			fprintf(output, " pwecw\n");
+	}
 }
 
 void conf_tunnel(FILE *output, int ifs, char *ifname)
