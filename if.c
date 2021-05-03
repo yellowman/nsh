@@ -1141,6 +1141,7 @@ intkeepalive(char *ifname, int ifs, int argc, char **argv)
 #define PWE3CW 2
 #define PWE3FAT 3
 #define PWE3NEIGHBOR 4
+#define TUNNELDOMAIN 5
 
 static struct pwec {
 	char *name;
@@ -1153,6 +1154,7 @@ static struct pwec {
 	{ "pwecw",	"",		"",		PWE3CW,		0 },
 	{ "pwefat",	"",		"",		PWE3FAT,	0 },
 	{ "pweneighbor","label",	"neighbor IP",	PWE3NEIGHBOR,	2 },
+	{ "tunneldomain","rdomain",	"",		TUNNELDOMAIN,	1 },
 	{ 0,		0,		0,		0,		0 }
 };
 
@@ -1287,6 +1289,20 @@ intpwe3(char *ifname, int ifs, int argc, char **argv)
 		}
 		arg = (caddr_t)&req;
 	break;
+	case TUNNELDOMAIN:
+		if (set) {
+			ifr.ifr_rdomainid =
+			    strtonum(argv[0], 0, RT_TABLEID_MAX, &errstr);
+			if (errstr) {
+				printf("%% intpwe3: rdomain %s: %s\n", argv[0],
+				    errstr);
+				return(0);
+			}
+		} else {
+			ifr.ifr_rdomainid = 0;
+		}
+		cmd = SIOCSLIFPHYRTABLE;
+		arg = (caddr_t)&ifr;
 	}
 
 	if (ioctl(ifs, cmd, arg) < 0) {

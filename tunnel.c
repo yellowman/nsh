@@ -20,13 +20,18 @@
 int settunnel(int, char *, char *, char *, char *);
 void settunnelrdomain(int, char *, char *);
 void settunnelttl(int, char *, char *);
+void settunneldf(int, char *, int);
+void settunnelecn(int, char *, int);
 void setvnetid(int, char *, char *);
 void delvnetid(int, char *);
 int deletetunnel(int, char *);
+void tunnelusage(void);
 
 static struct nopts tunnelopts[] = {
 	{ "rdomain",	req_arg,	'r' },
 	{ "ttl",	req_arg,	't' },
+	{ "df",		no_arg,		'd' },
+	{ "ecn",	no_arg,		'e' },
 	{ NULL,		0,		0   },
 };
 
@@ -57,10 +62,17 @@ intvnetid(char *ifname, int ifs, int argc, char **argv)
 	return (0);
 }
 
+void
+tunnelusage(void)
+{
+	printf("%% tunnel <src ip> <dest ip> [ttl <ttl>] [df] [ecn]\n");
+	printf("%% no tunnel [src ip] [dest ip] [ttl <ttl>] [df] [ecn]\n");
+}
+
 int
 inttunnel(char *ifname, int ifs, int argc, char **argv)
 {
-	int set, ch;
+	int set, ch, df = 0, ecn = 0;
 	char *src = NULL, *dst = NULL, *rdomain = NULL, *ttl = NULL;
 	char *dstip = NULL, *dstport = NULL;
 	char buf[MAXHOSTNAMELEN+sizeof (":65535")];
@@ -75,9 +87,8 @@ inttunnel(char *ifname, int ifs, int argc, char **argv)
 	argc--;
 	argv++;
 
-	if (set && argc !=2 && argc != 4 && argc != 6) {
-		printf("%% tunnel <src ip> <dest ip> [rdomain <domain>] [ttl <ttl>]\n");
-		printf("%% no tunnel [src ip] [dest ip] [rdomain <domain>] [ttl <ttl>]\n");
+	if (set && argc < 2) {
+		tunnelusage();
 		return(0);
 	}
 
@@ -121,7 +132,23 @@ inttunnel(char *ifname, int ifs, int argc, char **argv)
 		case 't':
 			ttl = argv[noptind - 1];
 			break;
+		case 'd':
+			df = 1;
+			break;
+		case 'e':
+			ecn = 1;
+			break;
 		}
+
+	if (argc - noptind != 0) {
+		/* leftover salmon */
+		printf("%% %s", nopterr);
+		if (argv[noptind])
+			printf(": %s", argv[noptind]);
+		printf("\n");
+		tunnelusage();
+		return(0);
+	}
 
 	if (set) {
 		settunnel(ifs, ifname, src, dstip, dstport);
@@ -129,10 +156,15 @@ inttunnel(char *ifname, int ifs, int argc, char **argv)
 			settunnelrdomain(ifs, ifname, rdomain);
 		if (ttl)
 			settunnelttl(ifs, ifname, ttl);
+		if (df)
+			settunneldf(ifs, ifname, 1);
+		if (ecn)
+			settunnelecn(ifs, ifname, 1);
 	} else {
 		deletetunnel(ifs, ifname);
-		settunnelrdomain(ifs, ifname, "0");
 		settunnelttl(ifs, ifname, "0");
+		settunneldf(ifs, ifname, 0);
+		settunnelecn(ifs, ifname, 0);
 	}
 	return(0);
 }
@@ -243,6 +275,28 @@ settunnelttl(int ifs, char *ifname, char *ttla)
 }
 
 void
+settunneldf(int ifs, char *ifname, int df)
+{
+	struct ifreq ifr;
+
+	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
+	ifr.ifr_df = df;
+	if (ioctl(ifs, SIOCSLIFPHYDF, (caddr_t)&ifr) == -1)
+		printf("%% settunneldf: SIOCSLIFPHYDF: %s\n", strerror(errno));
+}
+
+void
+settunnelecn(int ifs, char *ifname, int ecn)
+{
+	struct ifreq ifr;
+
+	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
+	ifr.ifr_metric = ecn;
+	if (ioctl(ifs, SIOCSLIFPHYECN, (caddr_t)&ifr) == -1)
+		printf("%% settunnelecn: SIOCSLIFPHYECN: %s\n", strerror(errno));
+}
+
+void
 setvnetid(int ifs, char *ifname, char *vnetida)
 {
 	const char *errmsg = NULL;
@@ -323,6 +377,30 @@ int get_physttl(int s, char *ifname)
 		return 0;
 	else
 		return ifr.ifr_ttl;
+}
+
+int get_physdf(int s, char *ifname)
+{
+	struct ifreq ifr;
+
+	bzero(&ifr, sizeof(ifr));
+	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
+	if (ioctl(s, SIOCGLIFPHYDF, (caddr_t)&ifr) < 0)
+		return 0;
+	else
+		return ifr.ifr_df;
+}
+
+int get_physecn(int s, char *ifname)
+{
+	struct ifreq ifr;
+
+	bzero(&ifr, sizeof(ifr));
+	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
+	if (ioctl(s, SIOCGLIFPHYECN, (caddr_t)&ifr) < 0)
+		return 0;
+	 else
+		return ifr.ifr_metric;
 }
 
 int64_t get_vnetid(int s, char *ifname)

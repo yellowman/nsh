@@ -825,22 +825,27 @@ void conf_pwe3(FILE *output, int ifs, char *ifname)
 
 void conf_tunnel(FILE *output, int ifs, char *ifname)
 {
-	int dstport;
+	int dstport, physrtable, physdf, physecn;
 	char tmpa[IPSIZ], tmpb[IPSIZ];
 
 	if ((dstport=
 	    phys_status(ifs, ifname, tmpa, tmpb, IPSIZ, IPSIZ)) >= 0) {
-		int physrt, physttl;
+		int physttl;
 
 		fprintf(output, " tunnel %s %s", tmpa, tmpb);
 		if (dstport > 0)
 			fprintf(output, ":%i", dstport);
-		if (((physrt = get_physrtable(ifs, ifname)) != 0))
-			fprintf(output, " rdomain %i", physrt);
-		if (((physttl = get_physttl(ifs, ifname)) != 0))
+		if ((physttl = get_physttl(ifs, ifname)) > 0)
 			fprintf(output, " ttl %i", physttl);
+		if ((physecn = get_physecn(ifs, ifname)) > 0)
+			fprintf(output, " ecn");
+		if ((physdf = get_physdf(ifs, ifname)) > 0)
+			fprintf(output, " df");	
 		fprintf(output, "\n");
 	}
+	/* non-tunnel interfaces can have a tunneldomain */
+	if ((physrtable = get_physrtable(ifs, ifname)) != 0)
+		fprintf(output, " tunneldomain %i\n", physrtable);
 }
 
 void conf_ifmetrics(FILE *output, int ifs, struct if_data if_data,

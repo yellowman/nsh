@@ -514,6 +514,7 @@ struct intlist Intlist[] = {
 	{ "eui64",	"IPv6 automatic interface index",	CMPL0 0, 0, inteui64 },
 #endif
 	{ "tunnel",	"Tunnel parameters",			CMPL0 0, 0, inttunnel },
+	{ "tunneldomain", "Tunnel routing domain for transit",	CMPL0 0, 0, intpwe3 },
 	{ "vnetid",	"Virtual interface network identifier",	CMPL0 0, 0, intvnetid },
 	{ "parent",	"Parent interface",			CMPL(i) 0, 0, intparent },
 	{ "patch",	"Pair interface",			CMPL(i) 0, 0, intpatch },
