@@ -40,8 +40,15 @@ nopt(int argc, char **argv, struct nopts *tokens)
 		nopterr = "Ambiguous argument";
 		return(-1);
 	}
+	if (op->type == req_2arg) {
+		if ((argc - noptind) < 3) {
+			nopterr = "Missing required argument";
+			return(-1);
+		}
+		noptind += 3;
+	}
 	if (op->type == req_arg) {
-		if ((argc - noptind - 1) == 0) {
+		if ((argc - noptind) < 2) {
 			nopterr = "Missing required argument";
 			return(-1);
 		}

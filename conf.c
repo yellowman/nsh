@@ -775,7 +775,7 @@ void conf_keepalive(FILE *output, int ifs, char *ifname)
 
 void conf_pwe3(FILE *output, int ifs, char *ifname)
 {
-	int error;
+	int error, nei = 0, fat = 0, cw = 0;
 	struct shim_hdr shim;
 	struct ifreq ifr;
 
@@ -805,8 +805,7 @@ void conf_pwe3(FILE *output, int ifs, char *ifname)
 				printf("%% conf_pwe3: getnameinfo: %s\n",
 				    gai_strerror(error));
 			} else {
-				fprintf(output, " pweneighbor %u %s\n",
-				   smpls->smpls_label, hbuf);
+				nei = 1;
 			}
 		}
 				
@@ -814,13 +813,25 @@ void conf_pwe3(FILE *output, int ifs, char *ifname)
 
 	if (ioctl(ifs,  SIOCGPWE3FAT, (caddr_t)&ifr) >= 0) {
 		if (ifr.ifr_pwe3)
-			fprintf(output, " pwefat\n");
+			fat = 1;
 	}
 
 	if (ioctl(ifs,  SIOCGPWE3CTRLWORD, (caddr_t)&ifr) >= 0) {
 		if (ifr.ifr_pwe3)
-			fprintf(output, " pwecw\n");
+			cw = 1;
 	}
+
+	if (nei || cw || fat)
+		fprintf(output, " pwe");
+	if (nei)
+		fprintf(output, " neighbor %u %s", smpls->smpls_label, hbuf);
+	if (cw)
+		fprintf(output, " cw");
+	if (fat)
+		fprintf(output, " fat");
+	if (nei || cw || fat)
+		fprintf(output, "\n");
+
 }
 
 void conf_tunnel(FILE *output, int ifs, char *ifname)

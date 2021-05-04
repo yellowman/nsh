@@ -42,6 +42,7 @@ extern HistEvent ev;		/* ev */
 /* nopt.c */
 #define no_arg		1
 #define req_arg		2
+#define req_2arg	3
 struct nopts {
 	char *name;
 	int type;
@@ -411,6 +412,7 @@ int intgroup(char *, int, int, char **);
 int intrtlabel(char *, int, int, char **);
 int intparent(char *, int, int, char **);
 int intpatch(char *, int, int, char **);
+int intmpls(char *, int, int, char **);
 int intpwe3(char *, int, int, char **);
 int addaf(char *, int, int);
 int removeaf(char *, int, int);
