@@ -1361,6 +1361,7 @@ conf_print_rtm(FILE *output, struct rt_msghdr *rtm, char *delim, int af)
 	struct sockaddr_in sin;
 
 	sin.sin_addr.s_addr = htonl(INADDR_BROADCAST);
+	bzero(&flags, TMPSIZ);
 
 	cp = ((char *)rtm + rtm->rtm_hdrlen);
 	for (i = 1; i; i <<= 1)
