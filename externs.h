@@ -32,6 +32,8 @@ extern HistEvent ev;		/* ev */
 #endif
 
 /* defaults */
+#define DEFAULT_ARPTIMEOUT	1200	/* net.inet.ip.arptimeout */
+#define DEFAULT_ARPDOWN	20		/* net.inet.ip.arpdown */
 #define	DEFAULT_MTU	1500		/* net.inet.ip.defmtu */
 #define	DEFAULT_TTL	64		/* net.inet.ip.defttl */
 #define DEFAULT_MTTL	255		/* net.mpls.ttl */

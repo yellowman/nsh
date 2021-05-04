@@ -840,6 +840,8 @@ nsh(p)/ip ?
 % Commands may be abbreviated.
 % 'ip' commands are:
 
+  arpdown             Seconds before resending unanswered ARP requests
+  arptimeout          Seconds for ARP entries to remain in cache
   forwarding          Enable IPv4 Forwarding
   ipip                Allow IP-in-IP Encapsulation
   gre                 Allow Generic Route Encapsulation
@@ -870,6 +872,32 @@ nsh(p)/no interface vlan0
 Alternately, if vlan0 does exist, you can remove the interface with
 the 'no interface' syntax.  This only works for interface types which
 support creation and removal.
+
+[no] ip arpdown <seconds>
+--------------------------
+
+nsh(p)/ip arpdown 20
+
+Timeout (seconds) the system waits before resending an unanswered ARP request.
+
+If the ARP system fails to resolve a MAC address, it will wait for this timer
+before trying again. Lower settings will increase the broadcast traffic on the
+underlying network while higher settings will increase the time it takes to
+resolve a host on a lossy network.
+
+[no] ip arptimeout <seconds>
+-----------------------------
+
+nsh(p)/ip arptimeout 300
+
+Timeout (seconds) for ARP entries to remain in cache on this system.
+
+When the system stops receiving ARP packets from the host, they will be removed
+from the ARP cache, forcing broadcast and ARP resolution. Lower settings will
+increase the broadcast traffic on the underlying network while higher settings
+will increase the time it takes to resolve a host. This setting should be
+the same or lower on a router than the bridge MAC table timeout on an
+intermediate bridge.
 
 [no] ip forwarding
 ------------------

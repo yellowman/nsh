@@ -245,6 +245,8 @@ show_help(int argc, char **argv)
  */
 
 Menu iptab[] = {
+	{ "arptimeout",	"Seconds for ARP entries to remain in cache",	CMPL0 0, 0, 1, 1, ipsysctl },
+	{ "arpdown",	"Seconds before resending unanswered ARP requests", CMPL0 0, 0, 1, 1, ipsysctl },
 	{ "carp",	"Allow CARP",			CMPL0 0, 0, 0, 0, ipsysctl },
 	{ "carp-log",	"CARP Logging Priority",	CMPL0 0, 0, 0, 1, ipsysctl },
 	{ "carp-preempt", "CARP Virtual Host Preemption", CMPL0 0, 0, 0, 0, ipsysctl },
