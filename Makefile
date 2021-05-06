@@ -4,7 +4,7 @@ PROG= nsh
 # For use with flashrd:
 #CFLAGS=-O -DDHCPLEASES=\"/flash/dhcpd.leases\" -Wmissing-prototypes -Wformat -Wall -Wpointer-arith -Wbad-function-cast #-W
 CFLAGS?=-O
-CFLAGS+=-Wmissing-prototypes -Wformat -Wall -Wpointer-arith -Wbad-function-cast -I/usr/local/include #-W
+CFLAGS+=-Wmissing-prototypes -Wformat -Wall -Wbad-function-cast -I/usr/local/include #-W -Wpointer-arith
 
 SRCS=arp.c compile.c main.c genget.c commands.c stats.c kroute.c
 SRCS+=ctl.c show.c if.c version.c route.c conf.c complete.c ieee80211.c
