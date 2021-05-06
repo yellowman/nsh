@@ -423,3 +423,45 @@ carp_state(int s, char *ifname)
 			
 	return(0);
 }
+
+int
+intcdev(char *ifname, int ifs, int argc, char **argv)
+{
+	struct ifreq ifr;
+	struct carpreq creq;
+	int set;
+
+	if (NO_ARG(argv[0])) {
+		set = 0;
+		argc--;
+		argv++;
+	} else
+		set = 1;
+
+	argc--;
+	argv++;
+
+	if ((!set && argc > 1) || (set && argc != 1)) {
+		printf("%% carpdev <carpdev>\n");
+		printf("%% no carpdev\n");
+		return (0);
+	}
+
+	bzero((char *) &creq, sizeof(struct carpreq));
+	ifr.ifr_data = (caddr_t) & creq;
+	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
+
+	if (ioctl(ifs, SIOCGVH, (caddr_t) & ifr) == -1) {
+		printf("%% intcdev: SIOCGVH: %s\n", strerror(errno));
+		return (0);
+	}
+	if (set)
+		strlcpy(creq.carpr_carpdev, argv[0], sizeof(creq.carpr_carpdev));
+	else
+		bzero((char *)&creq.carpr_carpdev, sizeof(creq.carpr_carpdev));
+
+	if (ioctl(ifs, SIOCSVH, (caddr_t) & ifr) == -1)
+		printf("%% intcdev: SIOCSVH: %s\n", strerror(errno));
+
+	return (0);
+}
