@@ -1140,16 +1140,19 @@ intkeepalive(char *ifname, int ifs, int argc, char **argv)
 
 #define MPLSLABEL 1
 #define TUNNELDOMAIN 2
+#define TXPRIO 3
+#define RXPRIO 4
 
 static struct mplsc {
 	char *name;
 	char *descr;
-	char *descr2;
 	int type;
 } mplscs[] = {
-	{ "mplslabel",	"local mpls label", 	"",	MPLSLABEL	 },
-	{ "tunneldomain","rdomain",	"",		TUNNELDOMAIN	 },
-	{ 0,		0,		0,		0		 }
+	{ "mplslabel",	"local mpls label", 	MPLSLABEL	},
+	{ "tunneldomain","rdomain",		TUNNELDOMAIN	},
+	{ "txprio",	"priority or packet|payload", 	TXPRIO	},
+	{ "rxprio",	"priority or packet|payload|outer", RXPRIO },
+	{ 0,		0,			0		}
 };
 
 /* from ifconfig.c */
@@ -1209,7 +1212,7 @@ intmpls(char *ifname, int ifs, int argc, char **argv)
 		} else {
 			cmd = SIOCDELLABEL;
 		}
-	break;
+		break;
 	case TUNNELDOMAIN:
 		if (set) {
 			ifr.ifr_rdomainid =
@@ -1223,6 +1226,53 @@ intmpls(char *ifname, int ifs, int argc, char **argv)
 			ifr.ifr_rdomainid = 0;
 		}
 		cmd = SIOCSLIFPHYRTABLE;
+		break;
+	case TXPRIO:
+		if (set) {
+			if (isprefix(argv[0], "packet"))
+				ifr.ifr_hdrprio = IF_HDRPRIO_PACKET;
+			else if (isprefix(argv[0], "payload"))
+				ifr.ifr_hdrprio = IF_HDRPRIO_PAYLOAD;
+			else {
+				ifr.ifr_hdrprio = strtonum(argv[0],
+				    IF_HDRPRIO_MIN, IF_HDRPRIO_MAX, &errstr);
+				if (errstr) {
+					printf("%% intmpls: txprio %s: %s\n",
+					    argv[0], errstr);
+					return(0);
+				}
+			}
+		} else {
+			ifr.ifr_hdrprio = 0;
+		}
+		cmd = SIOCSTXHPRIO;
+		break;
+	case RXPRIO:
+		if (set) {
+			if (isprefix(argv[0], "packet"))
+				ifr.ifr_hdrprio = IF_HDRPRIO_PACKET;
+			else if (isprefix(argv[0], "payload"))
+				ifr.ifr_hdrprio = IF_HDRPRIO_PAYLOAD;
+			else if (isprefix(argv[0], "outer"))
+				ifr.ifr_hdrprio = IF_HDRPRIO_OUTER;
+			else {
+				ifr.ifr_hdrprio = strtonum(argv[0],
+				    IF_HDRPRIO_MIN, IF_HDRPRIO_MAX, &errstr);
+				if (errstr) {
+					printf("%% intmpls: txprio %s: %s\n",
+					    argv[0], errstr);
+					return(0);
+				}
+			}
+		} else {
+			ifr.ifr_hdrprio = 0;
+		}
+		cmd = SIOCSRXHPRIO;
+		break;
+	default:
+		printf("%% intmpls: Internal error\n");
+		return(0);
+		break;
 	}
 
 	if (ioctl(ifs, cmd, (caddr_t)&ifr) < 0) {

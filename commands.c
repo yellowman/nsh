@@ -517,6 +517,8 @@ struct intlist Intlist[] = {
 #endif
 	{ "tunnel",	"Tunnel parameters",			CMPL0 0, 0, inttunnel },
 	{ "tunneldomain", "Tunnel routing domain for transit",	CMPL0 0, 0, intmpls },
+	{ "txprio",	"Priority in tunnel protocol headers",	CMPL0 0, 0, intmpls },
+	{ "rxprio",	"Source used for packet priority",	CMPL0 0, 0, intmpls },
 	{ "vnetid",	"Virtual interface network identifier",	CMPL0 0, 0, intvnetid },
 	{ "parent",	"Parent interface",			CMPL(i) 0, 0, intparent },
 	{ "patch",	"Pair interface",			CMPL(i) 0, 0, intpatch },

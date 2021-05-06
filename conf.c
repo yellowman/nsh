@@ -863,7 +863,7 @@ void conf_ifmetrics(FILE *output, int ifs, struct if_data if_data,
     char *ifname)
 {
 	char tmp[TMPSIZ];
-	struct ifreq ifrpriority;
+	struct ifreq ifr;
 
 	/*
 	 * print interface mtu, metric
@@ -874,15 +874,44 @@ void conf_ifmetrics(FILE *output, int ifs, struct if_data if_data,
 	if (if_data.ifi_metric)
 		fprintf(output, " metric %u\n", if_data.ifi_metric);
 
-	strlcpy(ifrpriority.ifr_name, ifname, IFNAMSIZ);
-	if (ioctl(ifs, SIOCGIFPRIORITY, (caddr_t)&ifrpriority) == 0)
-		if(ifrpriority.ifr_metric)
-			fprintf(output, " priority %u\n",
-			    ifrpriority.ifr_metric);
-	if (ioctl(ifs, SIOCGIFLLPRIO, (caddr_t)&ifrpriority) == 0)
-		if(ifrpriority.ifr_llprio != DEFAULT_LLPRIORITY)
-			fprintf(output, " llpriority %u\n",
-			    ifrpriority.ifr_llprio);
+	strlcpy(ifr.ifr_name, ifname, IFNAMSIZ);
+	if (ioctl(ifs, SIOCGIFPRIORITY, (caddr_t)&ifr) == 0 &&
+	    ifr.ifr_metric)
+		fprintf(output, " priority %u\n", ifr.ifr_metric);
+	if (ioctl(ifs, SIOCGIFLLPRIO, (caddr_t)&ifr) == 0 &&
+	    ifr.ifr_llprio != DEFAULT_LLPRIORITY)
+		fprintf(output, " llpriority %u\n", ifr.ifr_llprio);
+	if (ioctl(ifs, SIOCGTXHPRIO, (caddr_t)&ifr) == 0 &&
+	    ifr.ifr_hdrprio != DEFAULT_TXPRIO) {
+		switch(ifr.ifr_hdrprio) {
+			case IF_HDRPRIO_PACKET:
+				fprintf(output, " txprio packet\n");
+				break;
+			case IF_HDRPRIO_PAYLOAD:
+				fprintf(output, " txprio payload\n");
+				break;
+			default:
+				fprintf(output, " txprio %u\n",
+				    ifr.ifr_hdrprio);
+		}
+	}
+	if (ioctl(ifs, SIOCGRXHPRIO, (caddr_t)&ifr) == 0 &&
+	    ifr.ifr_hdrprio != DEFAULT_RXPRIO) {
+		switch(ifr.ifr_hdrprio) {
+			case IF_HDRPRIO_PACKET:
+				fprintf(output, " rxprio packet\n");
+				break;
+			case IF_HDRPRIO_PAYLOAD:
+				fprintf(output, " rxprio payload\n");
+				break;
+			case IF_HDRPRIO_OUTER:
+				fprintf(output, " rxprio outer\n");
+				break;
+			default:
+				fprintf(output, " rxprio %u\n",
+				    ifr.ifr_hdrprio);
+		}
+	}
 
 	if (get_nwinfo(ifname, tmp, TMPSIZ, NWID) != 0) {
 		fprintf(output, " nwid %s\n", tmp);
