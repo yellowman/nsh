@@ -586,9 +586,11 @@ struct intlist Bridgelist[] = {
 	{ "ifpriority",	"Spanning priority of a member on an 802.1D bridge",	CMPL0 0, 0, brpri },
 	{ "ifcost",	"Spanning tree path cost of a member on 802.1D bridge", CMPL0 0, 0, brpri },
 	{ "link",	"Link level options",			CMPL0 0, 0, intlink },
+	{ "txprio",     "Priority in tunnel protocol headers",	CMPL0 0, 0, intmpls },
+	{ "rxprio",     "Source used for packet priority",	CMPL0 0, 0, intmpls },
 	{ "vnetid",	"Virtual interface network identifier",	CMPL0 0, 0, intvnetid },
 	{ "parent",	"Parent interface",			CMPL(i) 0, 0, intparent },
-	{ "tunnel",	"Tunnel parameters",			CMPL0 0, 0, inttunnel },
+	{ "tunneldomain", "Tunnel parameters",			CMPL0 0, 0, intmpls },
 	{ "shutdown",	"Shutdown bridge",			CMPL0 0, 0, intflags },
 
 /* Help commands */

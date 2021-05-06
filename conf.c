@@ -546,6 +546,7 @@ void conf_interfaces(FILE *output, char *only)
 		conf_intgroup(output, ifs, ifnp->if_name);
 		conf_carp(output, ifs, ifnp->if_name);
 		conf_tunnel(output,  ifs, ifnp->if_name);
+		conf_ifmetrics(output,  ifs, if_data, ifnp->if_name);
 
 		ippntd = conf_ifaddr_dhcp(output, ifnp->if_name, flags);
 
@@ -554,7 +555,6 @@ void conf_interfaces(FILE *output, char *only)
 		} else {
 			char tmp[24];
 
-			conf_ifmetrics(output,  ifs, if_data, ifnp->if_name);
 			conf_media_status(output, ifs, ifnp->if_name);
 			conf_keepalive(output, ifs, ifnp->if_name);
 			conf_pfsync(output, ifs, ifnp->if_name);
