@@ -416,6 +416,7 @@ int intparent(char *, int, int, char **);
 int intpatch(char *, int, int, char **);
 int intmpls(char *, int, int, char **);
 int intpwe3(char *, int, int, char **);
+int intvnetflowid(char *, int, int, char **);
 int addaf(char *, int, int);
 int removeaf(char *, int, int);
 char *get_hwdaddr(char *);

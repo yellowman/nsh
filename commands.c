@@ -520,6 +520,7 @@ struct intlist Intlist[] = {
 	{ "txprio",	"Priority in tunnel protocol headers",	CMPL0 0, 0, intmpls },
 	{ "rxprio",	"Source used for packet priority",	CMPL0 0, 0, intmpls },
 	{ "vnetid",	"Virtual interface network identifier",	CMPL0 0, 0, intvnetid },
+	{ "vnetflowid",	"Use part of vnetid as flowid",		CMPL0 0, 0, intvnetflowid },
 	{ "parent",	"Parent interface",			CMPL(i) 0, 0, intparent },
 	{ "patch",	"Pair interface",			CMPL(i) 0, 0, intpatch },
 	{ "keepalive",	"GRE tunnel keepalive",			CMPL0 0, 0, intkeepalive },

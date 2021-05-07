@@ -2270,3 +2270,36 @@ intdesc(char *ifname, int ifs, int argc, char **argv)
 
 	return(0);
 }
+
+int
+intvnetflowid(char *ifname, int ifs, int argc, char **argv)
+{
+	int set;
+	struct ifreq ifr;
+
+	if (NO_ARG(argv[0])) {
+		set = 0;
+		argv++;
+		argc--;
+	} else
+		set = 1;
+
+ 	argv++;
+	argc--;
+
+	if (set && argc != 0) {
+		printf("%% vnetflowid\n");
+		printf("%% no vnetlowid\n");
+		return(0);
+	}
+
+	if (set)
+		ifr.ifr_vnetid = 1;
+	else
+		ifr.ifr_vnetid = 0;
+	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
+	if (ioctl(ifs, SIOCSVNETFLOWID, &ifr) < 0)
+		printf("%% intvnetflowid: SIOCSVNETFLOWID: %s\n", strerror(errno));
+
+	return(0);
+}

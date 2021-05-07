@@ -63,6 +63,7 @@ int conf_ifaddrs(FILE *, char *, int, int);
 int conf_ifaddr_dhcp(FILE *, char *, int);
 void conf_ifflags(FILE *, int, char *, int, u_char);
 void conf_vnetid(FILE *, int, char *);
+void conf_vnetflowid(FILE *, int, char *);
 void conf_parent(FILE *, int, char *);
 void conf_patch(FILE *, int, char *);
 void conf_brcfg(FILE *, int, struct if_nameindex *, char *);
@@ -539,6 +540,7 @@ void conf_interfaces(FILE *output, char *only)
 		conf_db_single(output, "rtadvd", NULL, ifnp->if_name);
 
 		conf_vnetid(output, ifs, ifnp->if_name);
+		conf_vnetflowid(output, ifs, ifnp->if_name);
 		conf_parent(output, ifs, ifnp->if_name);
 		conf_patch(output, ifs, ifnp->if_name);
 		conf_rdomain(output, ifs, ifnp->if_name);
@@ -610,6 +612,20 @@ void conf_vnetid(FILE *output, int ifs, char *ifname)
 		else
 			fprintf(output, " vnetid %lld\n", vnetid);
 	}
+}
+
+void conf_vnetflowid(FILE *output, int ifs, char *ifname)
+{
+	struct ifreq ifr;
+
+	bzero(&ifr, sizeof(ifr));
+	strlcpy(ifr.ifr_name, ifname, IFNAMSIZ);
+
+	if (ioctl(ifs, SIOCGVNETFLOWID, &ifr) == -1)
+		return;
+
+	if (ifr.ifr_vnetid)
+		fprintf(output, " vnetflowid\n");
 }
 
 void conf_patch(FILE *output, int ifs, char *ifname)
