@@ -465,3 +465,24 @@ intcdev(char *ifname, int ifs, int argc, char **argv)
 
 	return (0);
 }
+
+void
+carplock(int lock)
+{
+	int ifs;
+	struct ifgroupreq ifgr;
+
+	bzero(&ifgr, sizeof(ifgr));
+	strlcpy(ifgr.ifgr_name, "carp", sizeof(ifgr.ifgr_name));
+
+	ifs = socket(AF_INET, SOCK_DGRAM, 0);
+	if (ifs == -1) {
+		printf("%% carplock: socket: %s\n", strerror(errno));
+		return;
+	}
+
+	ifgr.ifgr_attrib.ifg_carp_demoted = lock;
+
+	if (ioctl(ifs, SIOCSIFGATTR, (caddr_t)&ifgr) == -1)
+		printf("%% carplock: SIOCSIFGATTR: %s\n", strerror(errno));
+}

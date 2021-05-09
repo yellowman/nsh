@@ -112,21 +112,19 @@ main(int argc, char *argv[])
 		/*
 		 * Interpret config file and exit
 		 */
-		char *argv_demote[] = { "group", "carp", "carpdemote", "128" };
-		char *argv_restore[] = { "no", "group", "carp", "carpdemote", "128" };
 		priv = 1;
 
 		/*
 		 * Set carp group carpdemote to 128 during initialization
 		 */
-		group(nitems(argv_demote), argv_demote);
+		carplock(128);
 
 		cmdrc(rc);
 
 		/*
 		 * Initialization over
 		 */
-		group(nitems(argv_restore), argv_restore);
+		carplock(-128);
 
 		exit(0);
 	}

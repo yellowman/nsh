@@ -491,6 +491,7 @@ int intcnode(char *, int, int, char **);
 int conf_carp(FILE *, int, char *);
 int carp_state(int, char *);
 int intcdev(char *, int, int, char **);
+void carplock(int);
 
 /* trunk.c */
 int inttrunkport(char *, int, int, char **);
