@@ -898,7 +898,7 @@ Command cmdtab[] = {
 #ifdef notyet
 	{ "proxy-arp",	parphelp,	CMPL0 0, 0, arpset,	1, 1, 0 },
 #endif
-	{ "bridge",	bridgehelp,	CMPL(i) 0, 0, interface, 1, 0, 1 },
+	{ "bridge",	bridgehelp,	CMPL(i) 0, 0, interface, 1, 1, 1 },
 	{ "show",	showhelp,	CMPL(ta) (char **)showlist, sizeof(Menu), showcmd,	0, 0, 0 },
 	{ "ip",		iphelp,		CMPL(ta) (char **)iptab, sizeof(Menu), ipcmd,		1, 1, 0 },
 	{ "ip6",	ip6help,	CMPL(ta) (char **)ip6tab, sizeof(Menu), ipcmd,		1, 1, 0 },
