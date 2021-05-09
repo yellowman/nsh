@@ -79,7 +79,6 @@ void conf_ctl(FILE *, char *, char *, int);
 void conf_intrtlabel(FILE *, int, char *);
 void conf_intgroup(FILE *, int, char *);
 void conf_keepalive(FILE *, int, char *);
-void conf_groupattrib(FILE *);
 void conf_rtflags(char *, int, struct rt_msghdr *rtm);
 int dhclient_isenabled(char *);
 int islateif(char *);
@@ -167,10 +166,6 @@ conf(FILE *output)
 	conf_interfaces(output, "svlan");
 	conf_interfaces(output, "vlan");
 	conf_interfaces(output, "carp");
-
-#ifdef notyet
-	conf_groupattrib(output);
-#endif
 
 	fprintf(output, "!\n");
 
@@ -1195,82 +1190,6 @@ conf_routes(FILE *output, char *delim, int af, int flags, int tableid)
 	}
 	freertdump(rtdump);
 	return(1);
-}
-
-void
-conf_groupattrib(FILE *output)
-{
-	int ifs;
-	u_int len;
-	struct ifgroupreq	ifgr, ifgr_a;
-	struct ifg_req		*ifg;
-	struct if_nameindex *ifn_list, *ifnp;
-
-	if ((ifn_list = if_nameindex()) == NULL) {
-		printf("%% conf_groupattrib: if_nameindex failed\n");
-		return;
-	}
-
-	if ((ifs = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-		printf("%% conf_groupattrib socket: %s\n", strerror(errno));
-		if_freenameindex(ifn_list);
-		return;
-        }
-
-	/*
-	 * The only way to get attributes for each group is to loop through
-	 * all the groups on all the interfaces and ask for the attribs.
-	 * (The loop through all groups on an interface code is ripped
-	 * straight from ifconfig.c)
-	 * XXX need to keep track of what groups we printed so we don't
-	 * print them twice
-	 */
-
-	for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++) {
-		bzero(&ifgr, sizeof(ifgr));
-		strlcpy(ifgr.ifgr_name, ifnp->if_name, IFNAMSIZ);
-
-		if (ioctl(ifs, SIOCGIFGROUP, (caddr_t)&ifgr) == -1 &&
-		    errno != ENOTTY) {
-			printf("%% conf_groupattrib: SIOCGIFGROUP/1: %s\n",
-				    strerror(errno));
-			goto fail;
-		}
-
-		len = ifgr.ifgr_len;
-		ifgr.ifgr_groups =
-		    (struct ifg_req *)calloc(len / sizeof(struct ifg_req),
-		    sizeof(struct ifg_req));
-		if (ifgr.ifgr_groups == NULL) {
-			printf("%% conf_groupattrib: calloc: %s\n",
-			    strerror(errno));
-			goto fail;
-		}
-		if (ioctl(ifs, SIOCGIFGROUP, (caddr_t)&ifgr) == -1) {
-			printf("%% conf_groupattrib: SIOCGIFGROUP/2: %s\n",
-			    strerror(errno));
-			free(ifgr.ifgr_groups);
-			goto fail;
-		}
-		ifg = ifgr.ifgr_groups;
-		for (; ifg && len >= sizeof(struct ifg_req); ifg++) {
-			len -= sizeof(struct ifg_req);
-
-			bzero(&ifgr_a, sizeof(ifgr_a));
-			strlcpy(ifgr_a.ifgr_name, ifg->ifgrq_group, IFNAMSIZ);
-
-			if (ioctl(ifs, SIOCGIFGATTR, (caddr_t)&ifgr_a) == -1)
-				continue;
-			/* group attribs are only 'carpdemoted' for now */
-			if (ifgr_a.ifgr_attrib.ifg_carp_demoted != 0)
-				fprintf(output, "group %s carpdemote %d\n",
-				    ifg->ifgrq_group,
-				    ifgr_a.ifgr_attrib.ifg_carp_demoted);
-		}
-		free(ifgr.ifgr_groups);
-	}
-fail:
-	if_freenameindex(ifn_list);
 }
 
 void
