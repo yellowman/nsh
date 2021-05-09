@@ -27,6 +27,7 @@
 #include <netinet/ip_carp.h>
 #include <net/if.h>
 #include <netdb.h>
+#include <unistd.h>
 #include "externs.h"
 
 static struct intc {
@@ -485,4 +486,5 @@ carplock(int lock)
 
 	if (ioctl(ifs, SIOCSIFGATTR, (caddr_t)&ifgr) == -1)
 		printf("%% carplock: SIOCSIFGATTR: %s\n", strerror(errno));
+	close(ifs);
 }
