@@ -852,7 +852,6 @@ nsh(p)/ip ?
   ah                  Allow Authentication Header
   sourceroute         Process Loose/Strict Source Route Options
   encdebug            Enable if_enc debugging
-  ifq-maxlen          IP IFQ maxlen
   send-redirects      Send ICMP redirects
   directed-broadcast  Allow directed broadcasts
   default-ttl         Set Default IP packet TTL
@@ -973,16 +972,6 @@ nsh(p)/ip encdebug
 
 Print debugging messages for the if_enc interface to the kernel output.  
 Requires a kernel compiled with option ENCDEBUG.
-
-[no] ip ifq-maxlen <argument>
------------------------------
-
-nsh(p)/ip ifq-maxlen 8192
-
-Maximum number of queued packets before they are dropped.  Increasing
-this option does not necessarily help with system performance.  The output
-of 'show version' displays the IFQ drop counter. If this counter increases,
-a larger ifq-maxlen value should be set.
 
 [no] ip send-redirects
 ----------------------
