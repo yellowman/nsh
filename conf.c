@@ -585,13 +585,12 @@ void conf_lladdr(FILE *output, char *ifname)
 
 	if (db_select_flag_x_ctl(hwdaddr, "lladdr", ifname) < 0) {
 		printf("%% lladdr database select failed\n");
-		return;
 	}
 	if (hwdaddr->sl_cur > 0 && (strcmp(hwdaddr->sl_str[0],
-	    lladdr) != 0)) {
+	    lladdr) != 0))
 		fprintf(output, " lladdr %s\n", lladdr);
-		sl_free(hwdaddr, 1);
-	}
+
+	sl_free(hwdaddr, 1);
 }
 
 int conf_ifaddr_dhcp(FILE *output, char *ifname, int flags)
