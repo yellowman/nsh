@@ -1676,6 +1676,11 @@ intrtlabel(char *ifname, int ifs, int argc, char **argv)
 	strlcpy(ifr.ifr_name, ifname, IFNAMSIZ);
 
 	if (set) {
+		if (argc < 1) {
+			printf("%% rtlabel <route-label>\n");
+			printf("%% no rtlabel [route-label]\n");
+			return 0;
+		}
 		if (strlen(argv[0]) >= RTLABEL_LEN) {
 			printf("%% label too long (max %d char)\n",
 			    RTLABEL_LEN - 1);
