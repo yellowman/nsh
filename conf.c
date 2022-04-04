@@ -61,6 +61,7 @@ void conf_interfaces(FILE *, char *);
 void conf_print_rtm(FILE *, struct rt_msghdr *, char *, int);
 int conf_ifaddrs(FILE *, char *, int, int);
 int conf_ifaddr_dhcp(FILE *, char *, int);
+void conf_lladdr(FILE *, char *);
 void conf_ifflags(FILE *, int, char *, int, u_char);
 void conf_vnetid(FILE *, int, char *);
 void conf_vnetflowid(FILE *, int, char *);
@@ -470,7 +471,6 @@ conf_db_single(FILE *output, char *dbname, char *lookup, char *ifname)
 void conf_interfaces(FILE *output, char *only)
 {
 	int ifs, flags, ippntd, br;
-	char *lladdr;
 	char ifdescr[IFDESCRSIZE];
 
 	struct if_nameindex *ifn_list, *ifnp;
@@ -530,8 +530,7 @@ void conf_interfaces(FILE *output, char *only)
 		    strlen(ifrdesc.ifr_data))
 			fprintf(output, " description %s\n", ifrdesc.ifr_data);
 
-		if ((lladdr = get_hwdaddr(ifnp->if_name)) != NULL)
-			conf_db_single(output, "lladdr", lladdr, ifnp->if_name);
+		conf_lladdr(output, ifnp->if_name);
 		conf_db_single(output, "rtadvd", NULL, ifnp->if_name);
 
 		conf_vnetid(output, ifs, ifnp->if_name);
@@ -571,6 +570,28 @@ void conf_interfaces(FILE *output, char *only)
 	}
 	close(ifs);
 	if_freenameindex(ifn_list);
+}
+
+void conf_lladdr(FILE *output, char *ifname)
+{
+	StringList *hwdaddr;
+	char *lladdr;
+
+	/* We assume lladdr only useful if interface can get_hwdaddr */
+	if ((lladdr = get_hwdaddr(ifname)) == NULL)
+		return;
+
+	hwdaddr = sl_init();
+
+	if (db_select_flag_x_ctl(hwdaddr, "lladdr", ifname) < 0) {
+		printf("%% lladdr database select failed\n");
+		return;
+	}
+	if (hwdaddr->sl_cur > 0 && (strcmp(hwdaddr->sl_str[0],
+	    lladdr) != 0)) {
+		fprintf(output, " lladdr %s\n", lladdr);
+		sl_free(hwdaddr, 1);
+	}
 }
 
 int conf_ifaddr_dhcp(FILE *output, char *ifname, int flags)
