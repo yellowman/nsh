@@ -494,7 +494,7 @@ intbssid(char *ifname, int ifs, int argc, char **argv)
 	}
 
 	if (set) {
-		ea = ether_aton(argv[1]);
+		ea = ether_aton(argv[0]);
 		if (ea == NULL) {
 			printf("%% Invalid bssid\n");
 			return(0);
