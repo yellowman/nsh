@@ -1445,11 +1445,13 @@ intdhcrelay(char *ifname, int ifs, int argc, char **argv)
 		return(0);
 	}
 
-	if (inet_pton(AF_INET, argv[0], &notused)) {
-		cmd[3] = argv[0];
-	} else {
-		printf("%% Not a valid IPv4 address: %s\n", argv[0]);
-		return 0;
+	if (argc) {
+		if (inet_pton(AF_INET, argv[0], &notused)) {
+			cmd[3] = argv[0];
+		} else {
+			printf("%% Not a valid IPv4 address: %s\n", argv[0]);
+			return 0;
+		}
 	}
 
 	if (set) {
@@ -1457,7 +1459,7 @@ intdhcrelay(char *ifname, int ifs, int argc, char **argv)
 		cmdargs(DHCRELAY, cmd);
 	} else {
 		char server[24], argue[SIZE_CONF_TEMP];
-		char *killcmd[] = { PKILL, "-xf", NULL, NULL, NULL };
+		char *killcmd[] = { PKILL, "-xf", NULL, NULL };
 
 		if ((alen = conf_dhcrelay(ifname, server, sizeof(server))) < 1)
 		{
@@ -1482,7 +1484,7 @@ intdhcrelay(char *ifname, int ifs, int argc, char **argv)
 		/* setup argument list as one argument for pkill -xf */
 		snprintf(argue, sizeof(argue), "%s %s %s %s", cmd[0], cmd[1],
 		    cmd[2], server);
-		killcmd[3] = argue;
+		killcmd[2] = argue;
 
 		cmdargs(PKILL, killcmd);
 	}
