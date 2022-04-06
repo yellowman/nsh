@@ -564,11 +564,11 @@ intwgpeer(char *ifname, int ifs, int argc, char **argv)
 
 	/* handle peer public key first */
 	if (argc >= 1) {
-		if (!set && argc == 1)
-			wg_peer->p_flags |= WG_PEER_REMOVE;
-
 		if (setwgpeer(argv[0]) < 0)
 			goto wgerr;
+
+		if (!set && argc == 1)
+			wg_peer->p_flags |= WG_PEER_REMOVE;
 
 		/* hide public key from nopt */
 		argc--;
