@@ -138,8 +138,10 @@ struct ctl ctl_ospf[] = {
 	    { OSPFCTL, "reload", NULL }, NULL, 0, T_EXEC },
 	{ "fib",        "fib couple/decouple",
 	    { OSPFCTL, "fib", REQ, NULL }, NULL, 0, T_EXEC },
-	{ "log",	"log brief/verbose",
-	    { OSPFCTL, "log", REQ, NULL }, NULL, 0, T_EXEC },
+	{ "log",        "log brief/verbose",
+            { OSPFCTL, "log", REQ, NULL }, NULL, 0, T_EXEC },
+	{ "show",	"show database/fib/interfaces/neighbor/rib/summary",
+	    { OSPFCTL, "show", REQ, NULL }, NULL, 0, T_EXEC },
 	{ 0, 0, { 0 }, 0, 0, 0 }
 };
 
@@ -178,6 +180,8 @@ struct ctl ctl_eigrp[] = {
 	    { EIGRPCTL, "fib", REQ, NULL }, NULL, 0, T_EXEC },
 	{ "log",	"log brief/verbose",
 	    { EIGRPCTL, "lob", REQ, NULL }, NULL, 0, T_EXEC },
+	{ "show",       "show fib/interfaces/neighbor/topology/traffic",
+            { EIGRPCTL, "show", REQ, NULL }, NULL, 0, T_EXEC },
 	{ 0, 0, { 0 }, 0, 0, 0 }
 };
 
@@ -218,6 +222,8 @@ struct ctl ctl_rip[] = {
 	    { RIPCTL, "reload", NULL }, NULL, 0, T_EXEC },
 	{ "fib",        "fib couple/decouple",
 	    { RIPCTL, "fib", REQ, NULL }, NULL, 0, T_EXEC },
+	{ "show",       "show fib/interfaces/neighbor/rib",
+            { RIPCTL, "show", REQ, NULL }, NULL, 0, T_EXEC },
 	{ 0, 0, { 0 }, 0, 0, 0 }
 };
 
@@ -235,6 +241,10 @@ struct ctl ctl_ldp[] = {
 	    { LDPCTL, "reload", NULL }, NULL, 0, T_EXEC },
 	{ "fib",	"fib couple/decouple",
 	   { LDPCTL, "fib", REQ, NULL }, NULL, 0, T_EXEC },
+	{ "clear",       "clear neighbors",
+            { LDPCTL, "show", REQ, NULL }, NULL, 0, T_EXEC },
+	{ "show",       "show fib/interfaces/discovery/neighbor/lib",
+            { LDPCTL, "show", REQ, NULL }, NULL, 0, T_EXEC },
 	{ 0, 0, { 0 }, 0, 0, 0 }
 };
 
@@ -250,6 +260,8 @@ struct ctl ctl_ipsec[] = {
 	    T_HANDLER_FILL1 },
 	{ "reload",     "reload service",
 	    { IPSECCTL, "-f", REQTEMP, NULL }, NULL, 0, T_EXEC },
+	{ "show",       "show flow/sa/all",
+            { IPSECCTL, "-s", REQTEMP, NULL }, NULL, 0, T_EXEC },
 	{ 0, 0, { 0 }, 0, 0, 0 }
 };
 
@@ -275,6 +287,8 @@ struct ctl ctl_ike[] = {
 	    { IKECTL, "reload", NULL }, NULL, 0, T_EXEC },
 	{ "reset",	"reset state, policies, SAs or user database",
 	    { IKECTL, "reset", REQ, NULL }, NULL, 0, T_EXEC },
+	{ "show",       "show sa",
+            { IKECTL, "show", REQ, NULL }, NULL, 0, T_EXEC },
 	{ 0, 0, { 0 }, 0, 0, 0 }
 };
 
@@ -288,6 +302,10 @@ struct ctl ctl_dvmrp[] = {
 	{ "edit",       "edit configuration",
 	    { "dvmrp", (char *)ctl_dvmrp_test,  NULL }, call_editor, 0,
 	    T_HANDLER_FILL1 },
+	{ "log",       "log brief/verbose",
+            { DVMRPCTL, "log", REQ, NULL }, NULL, 0, T_EXEC },
+	{ "show",       "show igmp/interfaces/mfc/neighbor/rib/summary",
+            { DVMRPCTL, "show", REQ, NULL }, NULL, 0, T_EXEC },
 	{ 0, 0, { 0 }, 0, 0, 0 }
 };
 
@@ -419,6 +437,8 @@ struct ctl ctl_relay[] = {
 	    { RELAYCTL, "monitor", NULL }, NULL, 0, T_EXEC },
 	{ "poll",	"poll mode",
 	    { RELAYCTL, "poll", NULL }, NULL, 0, T_EXEC },
+	{ "show",       "show hosts/redirects/relays/routers/sessions/summary",
+            { RELAYCTL, "show",  NULL }, NULL, 0, T_EXEC },
 	{ 0, 0, { 0 }, 0, 0, 0 }
 };
 
