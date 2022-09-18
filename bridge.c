@@ -30,6 +30,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <sys/param.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
@@ -251,7 +252,7 @@ brval(char *ifname, int ifs, int argc, char **argv)
 
 	if (set) {
 		errno = 0;
-		val = strtonum(argv[0], 0, ULONG_MAX, &errmsg);
+		val = strtonum(argv[0], 0, UINT32_MAX, &errmsg);
 		if (errmsg) {
 			printf("%% invalid %s argument %s: %s\n", x->name,
 			    argv[0], errmsg);
