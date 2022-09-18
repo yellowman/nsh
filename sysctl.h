@@ -43,7 +43,5 @@ extern Menu mplstab[];
 extern Menu ddbtab[];
 extern Menu pipextab[];
 
-#define DEFAULT_MAXIFPREFIXES	16	/* net.inet6.ip6.maxifprefixes */
-#define DEFAULT_MAXIFDEFROUTERS	16	/* net.inet6.ip6.maxifdefrouters */
 #define DEFAULT_MAXDYNROUTES	4096	/* net.inet6.ip6.maxdynroutes */
 #define DEFAULT_NEIGHBORGCTHRESH 2048   /* net.inet6.ip6.neighborgcthresh */
