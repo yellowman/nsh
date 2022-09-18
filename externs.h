@@ -38,6 +38,14 @@ extern HistEvent ev;		/* ev */
 #define	DEFAULT_TTL	64		/* net.inet.ip.defttl */
 #define DEFAULT_MTTL	255		/* net.mpls.ttl */
 #define ESP_UDPENCAP_PORT 4500		/* net.inet.esp.udpencap_port */
+#define DEFAULT_MAXQUEUE 300            /* net.inet.ip.maxqueue */
+#define DEFAULT_MTUDISCTIMEOUT 600      /* net.inet.ip.mtudisctimeout */
+#define DEFAULT_IPSEC_TIMEOUT 86400     /* net.inet.ip.ipsec-timeout */
+#define DEFAULT_IPSEC_SOFT_TIMEOUT 80000 /* net.inet.ip.ipsec-soft-timeout */
+#define DEFAULT_IPSEC_EXPIRE_ACQUIRE 30 /* net.inet.ip.ipsec-expire-acquire */
+#define DEFAULT_IPSEC_FIRSTUSE 7200     /* net.inet.ip.ipsec-firstuse */
+#define DEFAULT_IPSEC_SOFT_FIRSTUSE 3600 /* net.inet.ip.ipsec-soft-firstuse */
+#define DEFAULT_IPSEC_INVALID_LIFE 60   /* net.inet.ip.ipsec-invalid-life */
 
 /* nopt.c */
 #define no_arg		1
