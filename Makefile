@@ -14,7 +14,7 @@ SRCS+=nopt.c pflow.c wg.c
 CLEANFILES+=compile.c
 LDADD=-ledit -ltermcap -lsqlite3 -L/usr/local/lib #-static
 
-NOMAN=1
+MAN=nsh.8
 
 compile.c: compile.sh
 	sh ${.CURDIR}/compile.sh
