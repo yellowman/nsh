@@ -143,6 +143,19 @@ struct ipsysctl ip6sysctls[] = {
 { "multipath",		{ CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_MULTIPATH, MIB_STOP, 0 },	0, 1	},
 { "mforwarding",	{ CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_MFORWARDING, MIB_STOP, 0 },	0, 1	},
 { "maxdynroutes", 	{ CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_MAXDYNROUTES, MIB_STOP, 0 },	DEFAULT_MAXDYNROUTES, 0 },
+{ "redirect",           { CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_SENDREDIRECTS, MIB_STOP, 0 }, 0, 1   },
+{ "hoplimit",               { CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_DEFHLIM, MIB_STOP, 0}, 0, 1  },
+{ "defmcasthlim",       { CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_DEFMCASTHLIM, MIB_STOP, 0}, 0, 1  },
+{ "maxfragpackets",     { CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_MAXFRAGPACKETS, MIB_STOP, 0}, 1, 0   },
+{ "maxfrags",     { CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_MAXFRAGS, MIB_STOP, 0}, 1, 0   },
+{ "mtudisctimeout",               { CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_MTUDISCTIMEOUT, MIB_STOP, 0}, 0, 1  },
+{ "multicast_mtudisc",               { CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_MCAST_PMTU, MIB_STOP, 0}, 0, 1  },
+{ "log_interval",               { CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_LOG_INTERVAL, MIB_STOP, 0}, 0, 1  },
+{ "auto_flowlabel",     { CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_AUTO_FLOWLABEL, MIB_STOP, 0}, 0, 1   },
+{ "neighborgcthresh",       { CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_NEIGHBORGCTHRESH, MIB_STOP, 0 }, DEFAULT_NEIGHBORGCTHRESH , 0 },
+{ "hdrnestlimit",       { CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_HDRNESTLIMIT, MIB_STOP, 0 }, 0, 1  },
+{ "dad_count",     { CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_DAD_COUNT, MIB_STOP, 0}, 0, 1  },
+{ "dad_pending",     { CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_DAD_PENDING, MIB_STOP, 0}, 0, 1  },
 { 0, { 0, 0, 0, 0, 0, 0 }, 0, 0 }
 };
 

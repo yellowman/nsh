@@ -1,0 +1,5 @@
+#!/usr/local/bin/nsh -
+enable
+sshd enable
+write memory
+quit 
