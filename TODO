@@ -3,7 +3,6 @@ nsh is a work in progress, diffs are welcome
 Cleanup:
 
 * Document all new commands in the manual
-* Some formatting for the manual.  Markdown format? mandoc?
 * Bug hunt
 * More code refactoring and re-use
 
@@ -13,10 +12,10 @@ To be implemented:
 * handle newer bridge commands
 * handle newer 802.11 gunk like rssi display, chan, flags, nodes
 * ndp controls
-* privsep? multiple daemons? web front end using privsep?
+* privsep? multiple daemons?
 * Build a simple web interface that works through the rc file handler or
-  via imsg
-* copy configs from/to tftp/ftp/http/other parts of filesystem/etc
+  via imsg/some other privsep
+* copy configs from/to tftp/sftp/https/other parts of filesystem/etc
 * RSA certificate generation/management method (isakmpd, iked, sshd)
 * Persistent comments/remarks in the config file (to document routes, etc..)
   (this was already done for rtable descriptions, and the database could be
@@ -25,7 +24,7 @@ To be implemented:
 * Something comparable to pipe-grep for matching output
 * More context-sensitive help, the framework is extensible
 * Generate example configs for BGP+MPLS, IPv6+BGP, IPv6+Link local GIF,
-  vether+bridge, ipsec/ike, and many other interesting feature
+  vport+veb, ipsec/ike, wg, and many other interesting feature
   combinations/scenarios.
 
 Would be nice:
@@ -33,7 +32,7 @@ Would be nice:
 * Add more diagnostic messages for verbose output where useful
 * Convenient/automatic mechanisms to centralize configurations for
   tracking/revision control
-  (can already be done by adding cvs/git/... calls to save.sh)
+  (can already be done by adding cvs/got commit calls to save.sh)
 
 Known Bugs (or, things that I don't want to bother with right now, but
 better not forget later...):
