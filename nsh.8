@@ -277,7 +277,7 @@ nsh/help
   ipsec         IPsec IKEv1 control
   ike           IPsec IKEv2 control
   dvmrp         DVMRP control
-  rtadv         Router advertisement control
+  rad           Router advertisement control
   sasync        SA synchronization control
   dhcp          DHCP server control
   snmp          SNMP server control
@@ -2197,7 +2197,7 @@ nsh(p)/ip ?
  | vnetflowid | parent | patch | keepalive | mplslabel | pwe\
  | syncdev | syncpeer | maxupd | vhid | advbase | advskew | carppass\
  | carpdev | carpnode | carppeer | balancing | pflow |  debug\
- | dhcrelay | wol |  mpls | inet6 | rtadvd | autoconf6\
+ | dhcrelay | wol |  mpls | inet6 | autoconf6\
  | autoconfprivacy | temporary | monitor |  wgpeer | wgport\
  | wgkey |  wgrtable | trunkport | trunkproto | shutdown |\ ?
 interface mode commands, are commands that can be applied to a specific
@@ -2259,7 +2259,6 @@ nsh(interface-em0)/?
   wol              Wake On LAN
   mpls             MPLS
   inet6            IPv6
-  rtadvd           IPv6 router advertisement service
   autoconf6        IPv6 Autoconfigurable address
   autoconfprivacy  Privacy addresses for IPv6 autoconf
   temporary        Temporary addresses for IPv6 autoconf
@@ -3138,18 +3137,7 @@ E.g. to enable ipv6 link local address on em0
 .Bd -literal -offset indent
 nsh(p)/interface em0
 
-nsh(interface-em0)/inet6
-.Ed
-.Pp
-.Op no
-.Ic rtadvd
-enables or disables the ipv6 router advertisement daemon on an interface.
-.Pp
-E.g. to enable v6 router advertisements on the interface em0
-.Bd -literal -offset indent
-nsh(p)/interface em0
-
-nsh(interface-em0)/rtadvd
+nsh(interface-em0)/rad
 .Ed
 .Pp
 .Op no

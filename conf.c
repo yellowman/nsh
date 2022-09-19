@@ -206,6 +206,7 @@ conf(FILE *output)
 	conf_interfaces(output, "pfsync");
 	conf_interfaces(output, "pflow");
 
+	conf_ctl(output, "", "rad", 0);
 	conf_ctl(output, "", "snmp", 0);
 	conf_ctl(output, "", "ldp", 0);
 	conf_ctl(output, "", "rip", 0);
@@ -531,7 +532,6 @@ void conf_interfaces(FILE *output, char *only)
 			fprintf(output, " description %s\n", ifrdesc.ifr_data);
 
 		conf_lladdr(output, ifnp->if_name);
-		conf_db_single(output, "rtadvd", NULL, ifnp->if_name);
 
 		conf_vnetid(output, ifs, ifnp->if_name);
 		conf_vnetflowid(output, ifs, ifnp->if_name);

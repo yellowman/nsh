@@ -79,7 +79,7 @@ struct daemons ctl_daemons[] = {
 { "relay",	"Relay",ctl_relay,	RELAYCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
 { "ipsec",	"IPsec IKEv1",ctl_ipsec,IPSECCONF_TEMP,	0600, 1, RT_TABLEID_MAX },
 { "ike",	"IPsec IKEv2",ctl_ike,	IKECONF_TEMP,	0600, 0, RT_TABLEID_MAX },
-{ "rtadv",	"rtadvd",ctl_rtadv,	RTADVCONF_TEMP,	0600, 0, 0 },
+{ "rad",	"rad",	ctl_rad,	RADCONF_TEMP,	0600, 0, 0 },
 { "dvmrp",	"DVMRP",ctl_dvmrp,	DVMRPCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
 { "sasync",	"SAsync",ctl_sasync,	SASYNCCONF_TEMP,0600, 0, RT_TABLEID_MAX },
 { "dhcp",	"DHCP",	ctl_dhcp,	DHCPCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
@@ -309,10 +309,16 @@ struct ctl ctl_dvmrp[] = {
 	{ 0, 0, { 0 }, 0, 0, 0 }
 };
 
-/* rtadvd */
-struct ctl ctl_rtadv[] = {
+/* rad */
+char *ctl_rad_test[] = { RAD, "-nf", REQTEMP, NULL };
+struct ctl ctl_rad[] = {
+	{ "enable",	"enable service",
+	    { RAD, "-f", REQTEMP, NULL }, NULL, DB_X_ENABLE, T_EXEC },
+	{ "disable",	"disable service",
+	    { PKILL, table, "rad", NULL }, NULL, DB_X_DISABLE, T_EXEC },
 	{ "edit",  "edit configuration",
-	    { "rtadv", NULL, NULL}, call_editor, 0, T_HANDLER_FILL1 },
+	    { "rad", (char *)ctl_rad_test, NULL}, call_editor, 0,
+	    T_HANDLER_FILL1 },
 	{ 0, 0, { 0 }, 0, 0, 0 }
 };
 
