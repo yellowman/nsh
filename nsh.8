@@ -39,17 +39,18 @@
 .Nm
 is a command interpreter intended for both interactive and shell script use.
 .Nm
-is an alterntive to:
+is an alternative to:
 .Xr ifconfig 8 ,
 .Xr sysctl 8 ,
 .Xr route 8 ,
 and encapsulates configuration for other daemons into one place.
 .Nm
 provides an alternative to:
-.Xr netstart 8 and parts of
+.Xr netstart 8
+and parts of
 .Xr rc 8 .
 .Nm
-with its own command language similar to the configuration language used by
+has its own command language similar to the configuration language used by
 many network appliance vendors.
 .Pp
 .Nm
@@ -62,11 +63,12 @@ section for a complete list.
 .Pp
 .Nm
 is a shell to configure
-.Ox kernel's networking functions such as routing
+.Ox
+kernel's networking functions such as routing
 of packets, firewalling, network address translation, rate limiting,
 bandwidth queueing, LAN bridging, IP tunneling, and encryption.
 .Nm
-provides simple wrappers around these functions to aid in setting up a network.
+provides simple wrappers around these functions to aid setting up a network.
 The goals of this software are:
 .Bl -dash
 .It
@@ -76,17 +78,21 @@ Bring all configuration together in a single configuration file
 .It
 Provide a wrapper for any
 .Ox
-ctl utility such as osfpctl, ipsecctl and bgpctl
+ctl utility such as
+.Xr ospfctl 8 ,
+.Xr ipsecctl 8 ,
+and
+.Xr bgpctl 8 .
 .El
 .Pp
 .Nm
-encapsultates those configuration files, so that their native configuration
+encapsulates those configuration files, so that their native configuration
 files are encapsulated within the
 .Nm
 configuration framework.
 .Nm
 does not in any way obfuscate the configuration syntax that is utilised or
-provided by these ctl.c bsaed programs.
+provided by these ctl.c based programs.
 .Nm
 allows the administrator to view and edit all configuration in one place.
 .Ss COMMAND LINE ARGUMENTS
@@ -105,9 +111,9 @@ execute the command(s) in the
 .Ar config-script-file .
 This is typically used to implement scripted changes to configuration.
 .It Fl i Ar rcfile
-load the inital system configuration from the command(s) in the
+load the initial system configuration from the command(s) in the
 .Ar rcfile .
-This is typically used to clear the configuration load a full
+This is typically used to clear the configuration and load a full
 .Nm
 configuration script from rcfile .
 .El
@@ -125,22 +131,22 @@ arrow keys.
 .Pp
 It is possible to repeat the commands from the command history.
 .Pp
-Any command can be abbreviated as long as the abbreviation is not ambigious.
-E.g. 'show running-config' can be abbreviated to 'sho run'.
+Any command can be abbreviated as long as the abbreviation is not ambiguous.
+e.g. 'show running-config' can be abbreviated to 'sho run'.
 .Pp
-If the user enters a command that is ambigious
+If the user enters a command that is ambiguous
 .Nm
-warns the user with 'Ambigious argument' message.
- E.g. ambigious command entry
+warns the user with 'Ambiguous argument' message,
+e.g. ambiguous command entry.
 .Bd -literal -offset indent
 nsh/show i
-% Ambigious argument i
+% Ambiguous argument i
 .Ed
 .Ss Commandline completion
 .Nm
 has double <Tab> command line completion for user convenience if the command
-is not ambigious double <Tab> completes the command.
-If what is typed is ambigious double tab presents the administrator
+is not ambiguous double <Tab> completes the command.
+If what is typed is ambiguous double tab presents the administrator
 with the available command line options that match what has been typed thus
 far.
 .Bl -dash
@@ -166,8 +172,8 @@ Any affirmative commands that do not contain
 keyword can be reversed
 with the
 .Ic no
-keyword infront of the affirmative version of the command.
-E.g. reverse allowing IP packet forwarding.
+keyword in front of the affirmative version of the command.
+e.g. reverse allowing IP packet forwarding.
 .Bd -literal -offset indent
 nsh(p)/ip forwarding
 nsh(p)/no ip forwarding
@@ -193,17 +199,17 @@ shell starts as an unprivileged prompt which displays as the text of the FQDN
 (fully qualfied domain name) of the machine followed by a forward slash.
 .Bl -dash
 .It
-E.g. standard prompt of the device firewall.machine.com
+e.g. standard prompt of the device firewall.machine.com
 .Bd -literal -offset indent
 firewall.machinename.com/
 .Ed
 .El
 The privileged shell is accessed using the enable command.
 The privileged shell has the FQDN of the machine followed by (p) to indicate
-privleged and followed by a /
+privileged and followed by a /
 .Bl -dash
 .It
-E.g. privileged shell prompt of the device firewall.machine.com
+e.g. privileged shell prompt of the device firewall.machine.com
 .Bd -literal -offset indent
 firewall.machinename.com(p)/
 .Ed
@@ -214,12 +220,12 @@ For the purposes of this manual, any examples the machine is called
 .
 .Bl -dash
 .It
-E.g. standard prompt apearing in examples in this manual
+e.g. standard prompt appearing in examples in this manual
 .Bd -literal -offset indent
 nsh/
 .Ed
 .It
-E.g. privileged prompt apearing in examples in this manual
+e.g. privileged prompt appearing in examples in this manual
 .Bd -literal -offset indent
 nsh(p)/
 .Ed
@@ -319,7 +325,7 @@ of the system.
 hostname with an argument will set hostname to the argument's value.
 .Bl -dash
 .It
-E.g. set hostname to the myfirewallname.com .
+e.g. set hostname to the myfirewallname.com .
 .Bd -literal -offset indent
 nsh(p)/hostname myfirewallname.com
 myfirewallname.com(p)/
@@ -329,7 +335,7 @@ myfirewallname.com(p)/
 .Ic enable
 Start a privileged shell to allow the user run privleged configuration
 commands.
-I.e. enable privileged command shell mode.
+i.e. enable privileged command shell mode.
 If an enable secret or password is set, the user shall be prompted to enter
 the password to access the privileged shell.
 .Pp
@@ -340,14 +346,14 @@ Set or the password that an administrator would enter to access the privileged
 shell.
 .Bl -dash
 .It
-E.g. Set a password manually to yourpassword
+e.g. Set a password manually to yourpassword
 .Bd -literal -offset indent
 nsh(p)/enable secret yourpassword
 .Ed
 .It
-E.g. Set a password using a previously set encrypted password
+e.g. Set a password using a previously set encrypted password
 .Bd -literal -offset indent
-nsh(p)/enable secret blowfish $2bkKSJFDd$....NqIUaTCZ0=
+nsh(p)/enable secret blowfish $2b$10$kKSJFDd....NqIUaTCZ0=
 .Ed
 .El
 .Pp
@@ -370,14 +376,14 @@ rtable when used with a specified table-id can execute services, diagnostic
 commands (ping, traceroute) and set routes under alternate routing tables.
 The default
 .Ox
-kernel can accomdate 256 rtables.
+kernel can accommodate 256 rtables.
 They have a 1:1 relationship with routing domains, except that routing domain 0
 can contain multiple routing tables.
 In addition, routing tables initialized prior to their corresponding
 routing domain, shall be inititalized with a routing domain of 0.
 .Bl -dash
 .It
-E.g. Create a new routing table rdomain 3 create a loopback for rdomain 3.
+e.g. Create a new routing table rdomain 3 create a loopback for rdomain 3.
 .Bd -literal -offset indent
 nsh(p)/interface lo3
 nsh(interface-lo3)/rt
@@ -392,7 +398,7 @@ nsh(interface-em0)/rdomain 3
 nsh(interface-em0)/ip 10.255.0.10/24
 .Ed
 .It
-Once the rdomain has been intialised (by creating a loopback inside the rdomain
+Once the rdomain has been initialized (by creating a loopback inside the rdomain)
 the administrator can add routes to the rtable
 .Bd -literal -offset indent
 nsh(p)/rtable 3 customer label network3
@@ -400,7 +406,7 @@ nsh(p-rtable 3)/route 0.0.0.0/0 10.255.0.1
 .Ed
 .It
 One can configure any service or daemon inside that routing domain e.g.
- to setup ssh in rdomain 3
+to setup ssh in rdomain 3
 .Bd -literal -offset indent
 nsh(p-rtable 3)/sshd edit
 nsh(p-rtable 3)/sshd enable
@@ -440,7 +446,7 @@ TBC
 .Op Ar IPv4-Address
 .Op Ar MAC-Address
 .Pp
-Set or remove a static IP address and mac address binding for Address
+Set or remove a static IP address and MAC address binding for Address
 Resolution Protocol.
 TBC
 .Pp
@@ -450,17 +456,21 @@ TBC
 .Op Ar bridge-name
 .Pp
 Modify bridge configuraiton on the named bridge.
-see also
+See also
 .Ox
-manual pages for bridge and ifconfig (accessible via the following nsh
-commands.
+manual pages for
+.Xr bridge 4
+and
+.Xr ifconfig 8
+(accessible via the following nsh
+commands):
 .Bd -literal -offset indent
 !man bridge
 !man ifconfig
 .Ed
 .Bl -dash
 .It
-E.g. configure bridge settings on bridge1. and display bridge configuration
+e.g. configure bridge settings on bridge1. and display bridge configuration
 help.
 .El
 .Bd -literal -offset indent
@@ -502,11 +512,11 @@ nsh(bridge-bridge1)/?
 .Ic ip6
 .Op Cm \ ? | forwarding | mforwarding | multipath | maxifprefixes | maxifdefrouters | maxdynroutes
 .Pp
-Configure IPv6 networking parameters.
-Such as forwarding, multicast forwarding, multipath routing, etc.
+Configure IPv6 networking parameters,
+such as forwarding, multicast forwarding, multipath routing, etc.
 .Bl -dash
 .It
-E.g. list available IPv6 configuration options
+e.g. list available IPv6 configuration options
 .Bd -literal -offset indent
 nsh(p)/ip6
 % Commands may be abbreviated.
@@ -554,7 +564,7 @@ nsh(p)/ip6 multipath
 Set or disable the limit on maximum number of IPv6 routes created as a result
 of incomming ICMPv6 redirects.
 The max-route-value can be set to any value 0-20480 or -1.
-A value of 0 prevents any routes being created as a result of incomming ICMPv6
+A value of 0 prevents any routes being created as a result of incoming ICMPv6
 redirects.
 Set to -1 to disable the limit.
 The default value for maxdynroutes is 4096.
@@ -594,7 +604,7 @@ nsh(p)/mpls ttl 64
 .Ic mpls mapttl-ip
 .Op Ar 0-1
 .Pp
-Set or unset weather or not the kernel decrements the TTL of the IP packet
+Set or unset whether the kernel decrements the TTL of the IP packet
 header that is encapsulated in mpls packet, when the packet is mpls label
 switched (forwarded via MPLS).
 This is useful when diagnosing failures in the forwarding path of an
@@ -610,7 +620,7 @@ nsh(p)/mpls mapttl-ip 1
 .Ic mpls mapttl-ip6
 .Op Ar 0-1
 .Pp
-Set or unset weather or not the kernel decrements the TTL of the IPv6
+Set or unset whether or not the kernel decrements the TTL of the IPv6
 packet header that is encapsulated in mpls packet, when the packet is mpls
 label switched (forwarded via MPLS).
 This feature is useful when diagnosing failures in the forwarding path of an
@@ -643,9 +653,9 @@ nsh(p)/ddb ?
 .Op no
 .Ic ddb panic
 .Pp
-Enable or disable droping the system to the kernel debugger in the event of a
+Enable or disable dropping the system to the kernel debugger in the event of a
 system panic.
-By default, droping to the ddb debugger in a system panic is enabled.
+By default, dropping to the ddb debugger in a system panic is enabled.
 .Bd -literal -offset indent
 nsh(p)/ddb panic
 .Ed
@@ -653,14 +663,14 @@ nsh(p)/ddb panic
 .Op no
 .Ic ddb console
 .Pp
-Enable acess to the kernel debugger from the console using an architecture
-dependent magic key sequence on the console or a debugger button.
+Enable access to the kernel debugger from the console using an
+architecture-dependent magic key sequence on the console or a debugger button.
 When running
 .Ox
 with a
 .Xr securelevel 7
 greater than 0, this feature cannot be enabled.
-By default accssing the ddb debugger from the console disabled.
+By default accessing the ddb debugger from the console is disabled.
 .Bd -literal -offset indent
 nsh(p)/ddb console
 .Ed
@@ -681,12 +691,15 @@ nsh(p)/ddb log
 .Ic pipex
 .Op Cm  \ ? | enable
 .Pp
-Enable or disable pipex processing on
+Enable or disable
+.Xr pipex 4
+processing on
 .Xr pppac 4
 and
 .Xr pppx 4
 interfaces.
-pipex handles PPP frames and forwards IP packets in-kernel.
+.Xr pipex 4
+handles PPP frames and forwards IP packets in-kernel.
 It accelerates the performance of packet forwarding, because it reduces
 copying of packets between kernel and userland.
 By default pipex is disabled.
@@ -714,9 +727,10 @@ Open the default system editor and edit the firewall configuration.
 The edited ruleset is automatically validated on saving and exiting the editor.
 Note! firewall configuration changes DO NOT take effect until the "pf reload"
 command is entered.
-The editor used by nsh can be customised to your prefered editor using the
+The editor used by nsh can be customised to your preferred editor using the
 EDITOR and VISUAL enviornment variables.
-For pf.conf packet filter configuration syntax refer to pf.conf man page.
+For packet filter configuration syntax, refer to
+.Xr pf.conf 5 .
 .Bd -literal -offset indent
 nsh(p)/!man pf.conf
 nsh(p)/pf edit
@@ -731,28 +745,30 @@ nsh(p)/pf reload
 .Tg ospf
 .Ic ospf
 .Op Cm \ ? | enable | disable | edit | reload | fib | log
-Enable, disable or configure (Open Shortest Path First) ospf daemon.
+Enable, disable or configure
+.Xr ospfd 8 ,
+the OSPF (Open Shortest Path First) daemon.
 .Bd -literal -offset indent
 nsh(p)/ospf enable
 .Ed
 .Pp
 .Ic ospf edit
-Edit the configuration of the (Open Shortest Path First) ospf daemon.
-The edited ruleset is automatically be validated on saving and exiting the
+Edit the configuration of the OSPF daemon.
+The edited ruleset is automatically validated on saving and exiting the
 editor.
 Note ospfd configuration changes DO NOT take effect until the "ospf reload"
 command is entered.
 The editor used by nsh can be customised to your prefered editor using the
 EDITOR and VISUAL enviornment variables.
-For ospf daemon ospfd.conf configuration syntax refer to ospfd.conf man page.
+For OSPF configuration syntax, refer to
+.Xr ospfd.conf 5 .
 .Bd -literal -offset indent
 nsh(p)/!man ospfd.conf
 nsh(p)/ospf edit
 .Ed
 .Pp
 .Ic ospf reload
-Reread the ospf configuration and apply to (Open Shortest Path First) ospf
-daemon.
+Reread and apply the OSPF configuration.
 .Bd -literal -offset indent
 nsh(p)/ospf reload
 .Ed
@@ -760,8 +776,10 @@ nsh(p)/ospf reload
 .Ic ospf fib
 .Op Ar \ ? | couple | decouple | reload
 .Pp
-Configure wheather or not (Open Shortest Pat;5Bh First) ospf daemon updates
-the forwarding information base (the active kernel routing tables).
+Configure whether or not
+.Xr ospfd 8
+updates the forwarding information base (the active kernel routing tables).
+.\" XXX needs rewording, this is an active control not a config thing. for config see "fib-update yes/no" in ospfd.conf
 The decouple feature is useful for monitoring OSPF networks without affecting
 the routing table of the system.
 OSPF decouple should only be done where there is only one link between the
@@ -775,8 +793,9 @@ nsh(p)/ospf fib decouple
 .Ic ospf log
 .Op Ar \ ? | verbose | brief
 .Pp
-Configure the detail of (Open Shortest Path First) ospf daemon logging
-messages.
+Configure the detail level of
+.Xr ospfd 8
+logging messages.
 Set ospf log verbose to enable detailed debug log output from ospfd.
 set ospf log brief to disable detalled debug log output from ospfd.
 .Bd -literal -offset indent
@@ -815,25 +834,21 @@ manual page.
 .Op Cm  \ ? | enable | disable | edit
 .Op Cm options
 .Pp
-Enable or disable or configure the
-.Xr bgpd 8
-Border Gateway Protocol daemon.
-The configuration of
+Enable or disable or configure
+.Xr bgpd 8 ,
+the Border Gateway Protocol daemon.
+Configuration of the
 .Ic bgp
 daemon can be edited with
 .Cm edit
-command, the configuration syntax of
-.Ic bgp
-daemon is documented in
-.Xr bgpd.conf 5
-manual page.
+command, the syntax is documented in
+.Xr bgpd.conf 5 .
 Thre are a number of
 .Cm options
 that can be used to control the operation of
-.Xr bgpd 8
-daemon, these options are documented in the
-.Xr bgpctl 8
-manual page.
+.Xr bgpd 8 ,
+documented in
+.Xr bgpctl 8 .
 .Pp
 .Tg ripd
 .Tg rip
@@ -848,18 +863,14 @@ The configuration of
 .Ic rip
 daemon can be edited with
 .Cm edit
-command, the configuration syntax of
-.Ic rip
-daemon is documented in
-.Xr ripd.conf 5
-manual page.
+command, the configuration syntax is documented in
+.Xr ripd.conf 5 .
 Thre are a number of
 .Cm options
 that can be used to control the operation of
 .Xr ripd 8
-daemon, these options are documented in the
-.Xr ripctl 8
-manual page
+daemon, these options are documented in
+.Xr ripctl 8 .
 .Pp
 .Tg ldpd
 .Tg ldp
@@ -877,15 +888,13 @@ daemon can be edited with
 command, the configuration syntax of
 .Ic ldp
 daemon is documented in
-.Xr ldpd.conf 5
-manual page.
+.Xr ldpd.conf 5 .
 Thre are a number of
 .Cm options
 that can be used to control the operation of
 .Xr ldpd 8
-daemon, these options are documented in the
-.Xr ldpctl 8
-manual page.
+daemon, these options are documented in
+.Xr ldpctl 8 .
 .Pp
 .Tg relayd
 .Tg relay
@@ -894,24 +903,20 @@ manual page.
 .Op Cm options
 .Pp
 Enable or disable or configure the
-.Xr relayd 8
-Relay (load balancer and tls termination daemon.
+.Xr relayd 8 ,
+a load balancer and TLS termination daemon.
 The configuration of
 .Ic relay
 daemon can be edited with
 .Cm edit
-command, the configuration syntax of
-.Ic relay
-daemon is documented in
-.Xr relayd.conf 5
-manual page.
-Thre are a number of
+command, the syntax is documented in
+.Xr relayd.conf 5 .
+There are a number of
 .Cm options
 that can be used to control the operation of
 .Xr relayd 8
-daemon, these options are documented in the
-.Xr relayctl 8
-manual page.
+daemon, these options are documented in
+.Xr relayctl 8 .
 .Pp
 .Tg isakmpd
 .Tg ipsec
@@ -930,8 +935,7 @@ command, the configuration syntax of
 daemon is documented in
 .Xr isakmpd.conf 5
 and
-.Xr ipsec.conf 5
-manual pages.
+.Xr ipsec.conf 5 .
 .Pp
 .Tg iked
 .Tg ike
@@ -949,8 +953,7 @@ daemon can be edited with
 command, the configuration syntax of
 .Ic ike
 daemon is documented in
-.Xr iked.conf 5
-manual page.
+.Xr iked.conf 5 .
 .Ar options
 to control the
 .Xr iked 8
@@ -958,9 +961,8 @@ daemon in a similar manner to
 .Xr ikectl 8
 i.e to force ike daemon to run in active mode or passive mode, or reload the
 the daemon configuration.
-These features are documented in the
-.Xr ikectl 8
-manual page.
+These features are documented in
+.Xr ikectl 8 .
 .Pp
 .Tg dvmrpd
 .Tg dvmrp
@@ -991,11 +993,8 @@ The configuration of
 .Ic rad
 daemon can be edited with
 .Cm edit
-command, the configuration syntax of
-.Ic rad
-daemon is documented in
-.Xr rad.conf 5
-manual page.
+command, the syntax is documented in
+.Xr rad.conf 5 .
 .Pp
 .Tg sasyncd
 .Tg sasync
@@ -1012,8 +1011,7 @@ daemon can be edited with
 command, the configuration syntax of
 .Ic sasync
 daemon is documented in
-.Xr sasyncd.conf 5
-manual page.
+.Xr sasyncd.conf 5 .
 .Pp
 .Tg dhcpd
 .Tg dhcp
@@ -1030,8 +1028,7 @@ daemon can be edited with
 command, the configuration syntax of
 .Ic dhcp
 daemon is documented in
-.Xr dhcpd.conf 5
-manual page.
+.Xr dhcpd.conf 5 .
 .Pp
 .Tg snmpd
 .Tg snmp
@@ -1049,8 +1046,7 @@ daemon can be edited with
 command, the configuration syntax of
 .Ic snmp
 daemon is documented in
-.Xr snmpd.conf 5
-manual page.
+.Xr snmpd.conf 5 .
 .Pp
 .Tg ldapd
 .Tg ldap
@@ -1068,17 +1064,15 @@ daemon can be edited with
 command, the configuration syntax of
 .Ic ldap
 daemon is documented in
-.Xr ldapd.conf 5
-manual page.
+.Xr ldapd.conf 5 .
 .Ar options
 to control the
 .Xr ldapd 8
 daemon in a similar manner to
 .Xr ldapctl 8
-i.e to set log verbose vs brief or to compact / reindex the LDAP database
-are documented in the
-.Xr ldapctl 8
-manual page.
+e.g. to set log verbose vs brief or to compact / reindex the LDAP database
+are documented in
+.Xr ldapctl 8 .
 .Pp
 .Tg smtpd
 .Tg smtp
@@ -1100,14 +1094,13 @@ daemon is documented in
 manual page.
 .Pp
 .Ar options
-to control the
+to control
 .Xr smtpd 8
-daemon in a similar manner to
+in a similar manner to
 .Xr smtpctl 8
 i.e pausing / resuming mta (mail transfer agents) / mda (mail delivery
-agents) are documented in the
-.Xr smtpctl 8
-manual page.
+agents) are documented in
+.Xr smtpctl 8 .
 .Pp
 .Tg sshd
 .Ic sshd
@@ -1120,11 +1113,8 @@ The configuration of
 .Ic sshd
 daemon can be edited with
 .Cm edit
-command, the configuration syntax of
-.Ic sshd
-daemon is documented in
-.Xr sshd_config 5
-manual page.
+command, the syntax is documented in
+.Xr sshd_config 5 .
 .Pp
 .Tg ntpd
 .Tg ntp
@@ -1138,11 +1128,8 @@ The configuration of
 .Ic ntp
 daemon can be edited with
 .Cm edit
-command, the configuration syntax of
-.Ic ntp
-daemon is documented in
-.Xr ntpd.conf 5
-manual page.
+command, the syntax is documented in
+.Xr ntpd.conf 5 .
 .Pp
 .Tg npppd
 .Tg nppp
@@ -1169,11 +1156,8 @@ The configuration of
 .Ic nppp
 daemon can be edited with
 .Cm edit
-command, the configuration syntax of
-.Ic nppp
-daemon is documented in
-.Xr npppd.conf 5
-manual page.
+command, the syntax is documented in
+.Xr npppd.conf 5 .
 .Pp
 .Tg ifstated
 .Tg ifstate
@@ -1187,11 +1171,8 @@ The configuration of
 .Ic ifstate
 daemon can be edited with
 .Cm edit
-command, the configuration syntax of
-.Ic ifstate
-daemon is documented in
-.Xr ifstated.conf 5
-manual page.
+command, the syntax is documented in
+.Xr ifstated.conf 5 .
 .Pp
 .Tg ftp-proxy
 .Ic ftp-proxy
@@ -1205,7 +1186,7 @@ Redirect rules in pf must be used to direct outside traffic from any rdomain
 to the local tftp daemon.
 .Bl -dash
 .It
-E.g. enable ftp-proxy
+e.g. enable ftp-proxy
 .Bd -literal -offset indent
 nsh(p)/ftp-proxy enable
 .Ed
@@ -1224,7 +1205,7 @@ Redirect rules in pf must be used to direct outside traffic from any rdomain
 to the local tftp proxy.
 .Bl -dash
 .It
-E.g. enable tftp-proxy and redirects needed to use it.
+e.g. enable tftp-proxy and redirects needed to use it.
 .Bd -literal -offset indent
 nsh(p)/tftp-proxy enable
 .Ed
@@ -1259,12 +1240,9 @@ is for manual statically configured DNS client setup.
 is to allow dhcp client to update DNS client settings from recieved DNS
 servers in a DHCP offer.
 .Cm edit
-command, is used to statically configure DNS options, the configuration syntax
-of
-.Ic dns
+command, is used to statically configure DNS options, the syntax
 is documented in
-.Xr resolv.conf 5
-manual page.
+.Xr resolv.conf 5 .
 .Pp
 .Tg inetd
 .Tg inet
@@ -1276,9 +1254,8 @@ Enable or disable or configure the
 inet superserver daemon.
 The configuration of inet daemon can be edited with
 .Cm edit
-command, the configuration syntax of inet daemon is documented in
-.Xr inetd.conf 8
-manual page.
+command, the syntax is documented in
+.Xr inetd.conf 8 .
 .Pp
 .Tg ping
 .Ic ping
@@ -1291,8 +1268,7 @@ specified by name or IPv4 address.
 The
 .Ar options
 are documented in the
-.Xr ping 8
-manual page.
+.Xr ping 8 .
 .Pp
 .Tg ping6
 .Ic ping6
@@ -1318,9 +1294,8 @@ Trace and print the route packets take to an IPv4 network
 specified by name or IP address.
 The
 .Ar options
-are documented in the
-.Xr traceroute 8
-manual page.
+are documented in
+.Xr traceroute 8 .
 .Pp
 .Tg traceroute6
 .Ic traceroute6
@@ -1332,9 +1307,8 @@ Trace and print the route packets take to an IPv6 network
 specified by name or IP address.
 The
 .Ar options
-are documented in the
-.Xr traceroute6 8
-manual page.
+are documented in
+.Xr traceroute6 8 .
 .Pp
 .Tg ssh
 .Ic ssh
@@ -1352,9 +1326,8 @@ The
 is the TCP port on the remote host which you wish to connect.
 The
 .Ar options
-are documented in the
-.Xr ssh 1
-manual page.
+are documented in
+.Xr ssh 1 .
 .Pp
 .Tg telnet
 .Ic telnet
@@ -1373,9 +1346,8 @@ If the port is not specified the IANA assigned port 23 for telnet will be
 used.
 The
 .Ar options
-are documented in the
-.Xr telnet 1
-manual page.
+are documented in
+.Xr telnet 1 .
 .Pp
 .Tg reboot
 .Ic reboot
@@ -1402,7 +1374,7 @@ User must save configuration manually BEFORE using halt.
 Requires privileged mode.
 .Bl -dash
 .It
-E.g. shutdown the system
+e.g. shutdown the system
 .Bd -literal -offset indent
 nsh(p)/halt
 % Shutdown initiated
@@ -1415,7 +1387,7 @@ Save the running configuration to the permanent configuration space.
 On the next startup of the system, this saved configuration is used.
 .Bl -dash
 .It
-E.g. save the configuration on the system
+e.g. save the configuration on the system
 .Bd -literal -offset indent
 nsh(p)/write-config
 % Configuration saved
@@ -1494,7 +1466,7 @@ nsh(p)/show
 Display the system's currently assigned hostname.
 .Bl -dash
 .It
-E.g display the name of the device
+e.g. display the name of the device
 .Bd -literal -offset indent
 nsh(p)/show hostname
 % devicename.com
@@ -1514,7 +1486,7 @@ show interface
 Display information about a specific interface.
 .Bl -dash
 .It
-E.g. display information about the loopback interface.
+e.g. display information about the loopback interface.
 .Bd -literal -offset indent
 nsh/show interface lo0
 % lo0
@@ -1546,7 +1518,7 @@ the kernel can transmit on this interface.
 .It
 The statistics show the number of packets, bytes, errors, and dropped packets
 in both incoming and outgoing directions.
-The average input/output sizes describes the median size of packets going in
+The average input/output sizes describe the median size of packets going in
 and out the interface.
 Note that the total bytes in and/or out may not be accurate.
 .Ox
@@ -1630,7 +1602,7 @@ nsh/show int sis0
 .Pp
 Display a dump of the kernel routing table, including ARP entries.
 .Pp
-E.g. display contents of the routing table.
+e.g. display contents of the routing table.
 .Bd -literal -offset indent
 nsh/show route
 Flags: U - up, G - gateway, H - host, L - link layer, R - reject (unreachable),
@@ -1784,7 +1756,7 @@ The IPv6 address may only be configured with a prefix length.
 This command only runs in privileged mode.
 .Bl -dash
 .It
-E.g. setup routes on the system
+e.g. setup routes on the system
 .Bd -literal -offset indent
 nsh(p)/route 192.168.0.0/16 1.2.3.4
 .Ed
@@ -1992,7 +1964,9 @@ nsh(p)/ip arpdown 20
 .Op no
 .Ic ip carp
 .Pp
-Enable or disable carp functionality in the system kernel.
+Enable or disable
+.Xr carp 4
+functionality in the system kernel.
 Carp is a BSD licensed technology for router redundancy utilising a virtual ip
 that floats between 2 or more routers on a LAN segment, it is similar to VRRP
 or HSRP.
@@ -2043,7 +2017,9 @@ nsh(p)/ip ipip
 .Ic ip gre
 .Pp
 Enable or disable Generic Route Encapsulation in the system kernel.
-Must be used to enable gre interfaces.
+Must be used to enable
+.Xr gre 4
+interfaces.
 .Bd -literal -offset indent
 nsh(p)/ip gre
 .Ed
@@ -2053,7 +2029,9 @@ nsh(p)/ip gre
 .Pp
 Enable or disable GRE-based Web Cache Control Protocol packets to manage
 caching device.
-Must be used to enable WCCP on gre interfaces.
+Must be used to enable WCCP on
+.Xr gre 4
+interfaces.
 .Bd -literal -offset indent
 nsh(p)/ip wccp
 .Ed
@@ -2126,7 +2104,9 @@ nsh(p)/ip sourceroute
 .Op no
 .Ic ip encdebug
 .Pp
-Enable or disable printinting debug messages for the if_enc interface to the
+Enable or disable printing debug messages for the
+.Xr enc 4
+interface to the
 kernel output.
 Note! Requires a kernel compiled with ENCDEBUG option.
 .Bd -literal -offset indent
