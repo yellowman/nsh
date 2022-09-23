@@ -510,7 +510,7 @@ nsh(bridge-bridge1)/?
 .Tg ip6
 .Op no
 .Ic ip6
-.Op Cm \ ? | forwarding | mforwarding | multipath | maxifprefixes | maxifdefrouters | maxdynroutes
+.Op Cm \&? | forwarding | mforwarding | multipath | maxifprefixes | maxifdefrouters | maxdynroutes
 .Pp
 Configure IPv6 networking parameters,
 such as forwarding, multicast forwarding, multipath routing, etc.
@@ -574,7 +574,7 @@ nsh(p)/ip6 maxdynroutes 8192
 .Tg mpls
 .Op no
 .Ic mpls
-.Op Cm \ ? | ttl | mapttl-ip | mapttl-ip6
+.Op Cm \&? | ttl | mapttl-ip | mapttl-ip6
 Configure MPLS (Multi Protocol Label Switching) network parameters in the
 kernel.
 .Bd -literal -offset indent
@@ -635,7 +635,7 @@ nsh(p)/mpls mapttl-ip6 1
 .Tg ddb
 .Op no
 .Ic ddb
-.Op Cm \ ? | panic | console | log
+.Op Cm \&? | panic | console | log
 .Pp
 Configure or remove kernel debug (DDB) options.
 .Bd -literal -offset indent
@@ -689,7 +689,7 @@ nsh(p)/ddb log
 .Tg pipex
 .Op no
 .Ic pipex
-.Op Cm  \ ? | enable
+.Op Cm  \&? | enable
 .Pp
 Enable or disable
 .Xr pipex 4
@@ -708,7 +708,7 @@ nsh(p)/pipex enable
 .Ed
 .Tg pf
 .Ic pf
-.Op Cm \ ? | enable | disable | edit | reload
+.Op Cm \&? | enable | disable | edit | reload
 .Pp
 Control the configuration and operation of the pf (Packet Filter) firewall.
 .Bd -literal -offset indent
@@ -744,7 +744,7 @@ nsh(p)/pf reload
 .Ed
 .Tg ospf
 .Ic ospf
-.Op Cm \ ? | enable | disable | edit | reload | fib | log
+.Op Cm \&? | enable | disable | edit | reload | fib | log
 Enable, disable or configure
 .Xr ospfd 8 ,
 the OSPF (Open Shortest Path First) daemon.
@@ -774,7 +774,7 @@ nsh(p)/ospf reload
 .Ed
 .Pp
 .Ic ospf fib
-.Op Ar \ ? | couple | decouple | reload
+.Op Ar \&? | couple | decouple | reload
 .Pp
 Configure whether or not
 .Xr ospfd 8
@@ -791,7 +791,7 @@ nsh(p)/ospf fib decouple
 .Ed
 .Pp
 .Ic ospf log
-.Op Ar \ ? | verbose | brief
+.Op Ar \&? | verbose | brief
 .Pp
 Configure the detail level of
 .Xr ospfd 8
@@ -805,7 +805,7 @@ nsh(p)/ospf log verbose
 .Tg eigrpd
 .Tg eigrp
 .Ic eigrp
-.Op Cm  \ ? | enable | disable | edit
+.Op Cm  \&? | enable | disable | edit
 .Op Cm options
 .Pp
 Enable or disable or configure the
@@ -831,7 +831,7 @@ manual page.
 .Tg bgpd
 .Tg bgp
 .Ic bgp
-.Op Cm  \ ? | enable | disable | edit
+.Op Cm  \&? | enable | disable | edit
 .Op Cm options
 .Pp
 Enable or disable or configure
@@ -853,7 +853,7 @@ documented in
 .Tg ripd
 .Tg rip
 .Ic rip
-.Op Cm  \ ? | enable | disable | edit
+.Op Cm  \&? | enable | disable | edit
 .Op Cm options
 .Pp
 Enable or disable or configure the
@@ -875,7 +875,7 @@ daemon, these options are documented in
 .Tg ldpd
 .Tg ldp
 .Ic ldp
-.Op Cm  \ ? | enable | disable | edit
+.Op Cm  \&? | enable | disable | edit
 .Op Cm options
 .Pp
 Enable or disable or configure the
@@ -899,7 +899,7 @@ daemon, these options are documented in
 .Tg relayd
 .Tg relay
 .Ic relay
-.Op Cm  \ ? | enable | disable | edit
+.Op Cm  \&? | enable | disable | edit
 .Op Cm options
 .Pp
 Enable or disable or configure the
@@ -921,7 +921,7 @@ daemon, these options are documented in
 .Tg isakmpd
 .Tg ipsec
 .Ic ipsec
-.Op Cm  \ ? | enable | disable | edit | reload
+.Op Cm  \&? | enable | disable | edit | reload
 .Pp
 Enable or disable or configure the
 .Xr isakmpd 8
@@ -940,7 +940,7 @@ and
 .Tg iked
 .Tg ike
 .Ic ike
-.Op Cm  \ ? | enable | disable | edit
+.Op Cm  \&? | enable | disable | edit
 .Op Ar options
 .Pp
 Enable or disable or configure the
@@ -967,7 +967,7 @@ These features are documented in
 .Tg dvmrpd
 .Tg dvmrp
 .Ic dvmrp
-.Op Cm  \ ? | enable | disable | edit
+.Op Cm  \&? | enable | disable | edit
 .Pp
 Enable or disable or configure the
 .Xr dvmrpd 8
@@ -984,7 +984,7 @@ manual page.
 .Pp
 .Tg rad
 .Ic rad
-.Op Cm  \ ? | enable | disable | edit
+.Op Cm  \&? | enable | disable | edit
 .Pp
 Enable or disable or configure the
 .Xr rad 8
@@ -999,7 +999,7 @@ command, the syntax is documented in
 .Tg sasyncd
 .Tg sasync
 .Ic sasync
-.Op Cm  \ ? | enable | disable | edit
+.Op Cm  \&? | enable | disable | edit
 .Pp
 Enable or disable or configure the
 .Xr sasyncd 8
@@ -1016,7 +1016,7 @@ daemon is documented in
 .Tg dhcpd
 .Tg dhcp
 .Ic dhcp
-.Op Cm  \ ? | enable | disable | edit
+.Op Cm  \&? | enable | disable | edit
 .Pp
 Enable or disable or configure the
 .Xr dhcpd 8
@@ -1033,7 +1033,7 @@ daemon is documented in
 .Tg snmpd
 .Tg snmp
 .Ic snmp
-.Op Cm  \ ? | enable | disable | edit | trap
+.Op Cm  \&? | enable | disable | edit | trap
 .Op Ar options
 .Pp
 Enable or disable or configure the
@@ -1051,7 +1051,7 @@ daemon is documented in
 .Tg ldapd
 .Tg ldap
 .Ic ldap
-.Op Cm  \ ? | enable | disable | edit
+.Op Cm  \&? | enable | disable | edit
 .Op Ar options
 .Pp
 Enable or disable or configure the
@@ -1077,7 +1077,7 @@ are documented in
 .Tg smtpd
 .Tg smtp
 .Ic smtp
-.Op Cm  \ ? | enable | disable | edit
+.Op Cm  \&? | enable | disable | edit
 .Op options
 .Pp
 Enable or disable or configure the
@@ -1104,7 +1104,7 @@ agents) are documented in
 .Pp
 .Tg sshd
 .Ic sshd
-.Op Cm \ ? | enable | disable | edit
+.Op Cm \&? | enable | disable | edit
 .Pp
 Enable or disable or configure the
 .Xr sshd 8
@@ -1134,11 +1134,11 @@ command, the syntax is documented in
 .Tg npppd
 .Tg nppp
 .Ic nppp
-.Op Cm \ ? | enable | disable | session | monitor | edit
-.Op Cm clear Ar \ ? | all | ppp-id | address | interface | protocol | realm | \
+.Op Cm \&? | enable | disable | session | monitor | edit
+.Op Cm clear Ar \&? | all | ppp-id | address | interface | protocol | realm | \
 username
-.Op Cm session Ar \ ? |all | brief | packets
-.Op Cm monitor Ar \ ? | all | ppp-id | address | interface | protocol | realm | \
+.Op Cm session Ar \&? |all | brief | packets
+.Op Cm monitor Ar \&? | all | ppp-id | address | interface | protocol | realm | \
 username
 .Pp
 Enable or disable or configure the
@@ -1419,7 +1419,7 @@ nsh/no verbose
 .Ic show
 .Op hostname | interface | route | route6 | sadb | arp | kernel | bgp | ospf\
  | ospf6 |eigrp | rip | ldp | ike | ipsec | dvmrp | relay | dhcp | smtp\
- | ldap | monitor | version | users | running-config | startup-config |\ ? | help
+ | ldap | monitor | version | users | running-config | startup-config |\&? | help
 .Pp
 The main diagnostic and informational command is 'show'.
 show without arguments  displays the available diagnostic show sub commands.
@@ -1696,7 +1696,7 @@ firewall rules, and other information compiled by
 TBC
 .Tg flush
 .Ic flush
-.Op routes | arp | line | bridge-dyn | bridge-all | bridge-rule | pf | history |\ ? | help
+.Op routes | arp | line | bridge-dyn | bridge-all | bridge-rule | pf | history |\&? | help
 .Pp
 Clear various system tables.
 .Pp
@@ -1882,7 +1882,7 @@ OpenBSDshell#
  mforwarding | mtu-path-disc | mtu-disc-timeout | ipip |  gre | wccp | etherip\
  | ipcomp | esp | esp-udpencap | esp-udpencap-port | ah | sourceroute | encdebug\
  | send-redirects | ifq-maxlen |  directed-broadcast | multipath | default-ttl\
- |\ ?
+ |\&?
 .Pp
 Modify system kernel ip processing parameters or features.
 (requires privileged mode).
@@ -2161,7 +2161,7 @@ The main purpose of the TTL is to avoid routing loops in the network.
 nsh(p)/ip default-ttl 128
 .Ed
 .Pp
-.Ic ip \ ?
+.Ic ip \&?
 .Pp
 Displays the help menu and available ip command options.
 .Bd -literal -offset indent
@@ -2179,7 +2179,7 @@ nsh(p)/ip ?
  | carpdev | carpnode | carppeer | balancing | pflow |  debug\
  | dhcrelay | wol |  mpls | inet6 | autoconf6\
  | autoconfprivacy | temporary | monitor |  wgpeer | wgport\
- | wgkey |  wgrtable | trunkport | trunkproto | shutdown |\ ?
+ | wgkey |  wgrtable | trunkport | trunkproto | shutdown |\&?
 interface mode commands, are commands that can be applied to a specific
 named interface.
 .Bd -literal -offset indent
