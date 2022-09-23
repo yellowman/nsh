@@ -66,7 +66,7 @@ is a shell to configure
 .Ox
 kernel's networking functions such as routing
 of packets, firewalling, network address translation, rate limiting,
-bandwidth queueing, LAN bridging, IP tunneling, and encryption.
+bandwidth queueing, LAN bridging, IP tunnelling, and encryption.
 .Nm
 provides simple wrappers around these functions to aid setting up a network.
 The goals of this software are:
@@ -123,7 +123,7 @@ When run without any command line arguments,
 presents an unprivileged shell to the user.
 All
 .Nm
-interactive commandline modes allow basic command line editing features from
+interactive command line modes allow basic command line editing features from
 .Xr editline 7
 library.
 The command history of the current session is available through the up / down
@@ -142,7 +142,7 @@ e.g. ambiguous command entry.
 nsh/show i
 % Ambiguous argument i
 .Ed
-.Ss Commandline completion
+.Ss Command line completion
 .Nm
 has double <Tab> command line completion for user convenience if the command
 is not ambiguous double <Tab> completes the command.
@@ -151,7 +151,7 @@ with the available command line options that match what has been typed thus
 far.
 .Bl -dash
 .It
-E.g. commandline completion display
+E.g. command line completion display
 .Bd -literal -offset indent
 nsh(p)/i
 ifstate         inet            ip              ipsec
@@ -196,7 +196,7 @@ nsh(p)/pf disable
 .Ss Standard Prompt vs Privileged Prompt
 .Nm
 shell starts as an unprivileged prompt which displays as the text of the FQDN
-(fully qualfied domain name) of the machine followed by a forward slash.
+(fully qualified domain name) of the machine followed by a forward slash.
 .Bl -dash
 .It
 e.g. standard prompt of the device firewall.machine.com
@@ -238,7 +238,7 @@ nsh(p)/
 Display available commands and options that can used in the current
 .Nm
 mode.
-The help or ? can be follwed by a
+The help or ? can be followed by a
 .Nm
 command,
 .Nm
@@ -380,7 +380,7 @@ kernel can accommodate 256 rtables.
 They have a 1:1 relationship with routing domains, except that routing domain 0
 can contain multiple routing tables.
 In addition, routing tables initialized prior to their corresponding
-routing domain, shall be inititalized with a routing domain of 0.
+routing domain, shall be initialised with a routing domain of 0.
 .Bl -dash
 .It
 e.g. Create a new routing table rdomain 3 create a loopback for rdomain 3.
@@ -398,8 +398,8 @@ nsh(interface-em0)/rdomain 3
 nsh(interface-em0)/ip 10.255.0.10/24
 .Ed
 .It
-Once the rdomain has been initialized (by creating a loopback inside the rdomain)
-the administrator can add routes to the rtable
+Once the rdomain has been initialized (by creating a loopback inside the
+ rdomain) the administrator can add routes to the rtable.
 .Bd -literal -offset indent
 nsh(p)/rtable 3 customer label network3
 nsh(p-rtable 3)/route 0.0.0.0/0 10.255.0.1
@@ -510,7 +510,7 @@ nsh(bridge-bridge1)/?
 .Tg ip6
 .Op no
 .Ic ip6
-.Op Cm \ ? | forwarding | mforwarding | multipath | maxifprefixes | maxifdefrouters | maxdynroutes
+.Op Cm \&? | forwarding | mforwarding | multipath | maxifprefixes | maxifdefrouters | maxdynroutes
 .Pp
 Configure IPv6 networking parameters,
 such as forwarding, multicast forwarding, multipath routing, etc.
@@ -574,7 +574,7 @@ nsh(p)/ip6 maxdynroutes 8192
 .Tg mpls
 .Op no
 .Ic mpls
-.Op Cm \ ? | ttl | mapttl-ip | mapttl-ip6
+.Op Cm \&? | ttl | mapttl-ip | mapttl-ip6
 Configure MPLS (Multi Protocol Label Switching) network parameters in the
 kernel.
 .Bd -literal -offset indent
@@ -635,7 +635,7 @@ nsh(p)/mpls mapttl-ip6 1
 .Tg ddb
 .Op no
 .Ic ddb
-.Op Cm \ ? | panic | console | log
+.Op Cm \&? | panic | console | log
 .Pp
 Configure or remove kernel debug (DDB) options.
 .Bd -literal -offset indent
@@ -689,7 +689,7 @@ nsh(p)/ddb log
 .Tg pipex
 .Op no
 .Ic pipex
-.Op Cm  \ ? | enable
+.Op Cm  \&? | enable
 .Pp
 Enable or disable
 .Xr pipex 4
@@ -708,7 +708,7 @@ nsh(p)/pipex enable
 .Ed
 .Tg pf
 .Ic pf
-.Op Cm \ ? | enable | disable | edit | reload
+.Op Cm \&? | enable | disable | edit | reload
 .Pp
 Control the configuration and operation of the pf (Packet Filter) firewall.
 .Bd -literal -offset indent
@@ -728,7 +728,7 @@ The edited ruleset is automatically validated on saving and exiting the editor.
 Note! firewall configuration changes DO NOT take effect until the "pf reload"
 command is entered.
 The editor used by nsh can be customised to your preferred editor using the
-EDITOR and VISUAL enviornment variables.
+EDITOR and VISUAL environment variables.
 For packet filter configuration syntax, refer to
 .Xr pf.conf 5 .
 .Bd -literal -offset indent
@@ -744,7 +744,7 @@ nsh(p)/pf reload
 .Ed
 .Tg ospf
 .Ic ospf
-.Op Cm \ ? | enable | disable | edit | reload | fib | log
+.Op Cm \&? | enable | disable | edit | reload | fib | log
 Enable, disable or configure
 .Xr ospfd 8 ,
 the OSPF (Open Shortest Path First) daemon.
@@ -758,8 +758,8 @@ The edited ruleset is automatically validated on saving and exiting the
 editor.
 Note ospfd configuration changes DO NOT take effect until the "ospf reload"
 command is entered.
-The editor used by nsh can be customised to your prefered editor using the
-EDITOR and VISUAL enviornment variables.
+The editor used by nsh can be customised to your preferred editor using the
+EDITOR and VISUAL environment variables.
 For OSPF configuration syntax, refer to
 .Xr ospfd.conf 5 .
 .Bd -literal -offset indent
@@ -774,7 +774,7 @@ nsh(p)/ospf reload
 .Ed
 .Pp
 .Ic ospf fib
-.Op Ar \ ? | couple | decouple | reload
+.Op Cm \&? | couple | decouple | reload
 .Pp
 Configure whether or not
 .Xr ospfd 8
@@ -784,20 +784,20 @@ The decouple feature is useful for monitoring OSPF networks without affecting
 the routing table of the system.
 OSPF decouple should only be done where there is only one link between the
 system and the rest of the OSPF network.
-The ospf fib reload command refetches and relearns the routes in the FIB and
+The ospf fib reload command re fetches and relearns the routes in the FIB and
 passes them to the ospfd daemon for processing.
 .Bd -literal -offset indent
 nsh(p)/ospf fib decouple
 .Ed
 .Pp
 .Ic ospf log
-.Op Ar \ ? | verbose | brief
+.Op Cm \&? | verbose | brief
 .Pp
 Configure the detail level of
 .Xr ospfd 8
 logging messages.
 Set ospf log verbose to enable detailed debug log output from ospfd.
-set ospf log brief to disable detalled debug log output from ospfd.
+set ospf log brief to disable detailed debug log output from ospfd.
 .Bd -literal -offset indent
 nsh(p)/ospf log verbose
 .Ed
@@ -805,7 +805,7 @@ nsh(p)/ospf log verbose
 .Tg eigrpd
 .Tg eigrp
 .Ic eigrp
-.Op Cm  \ ? | enable | disable | edit
+.Op Cm  \&? | enable | disable | edit
 .Op Cm options
 .Pp
 Enable or disable or configure the
@@ -831,7 +831,7 @@ manual page.
 .Tg bgpd
 .Tg bgp
 .Ic bgp
-.Op Cm  \ ? | enable | disable | edit
+.Op Cm  \&? | enable | disable | edit
 .Op Cm options
 .Pp
 Enable or disable or configure
@@ -853,7 +853,7 @@ documented in
 .Tg ripd
 .Tg rip
 .Ic rip
-.Op Cm  \ ? | enable | disable | edit
+.Op Cm  \&? | enable | disable | edit
 .Op Cm options
 .Pp
 Enable or disable or configure the
@@ -875,7 +875,7 @@ daemon, these options are documented in
 .Tg ldpd
 .Tg ldp
 .Ic ldp
-.Op Cm  \ ? | enable | disable | edit
+.Op Cm  \&? | enable | disable | edit
 .Op Cm options
 .Pp
 Enable or disable or configure the
@@ -899,7 +899,7 @@ daemon, these options are documented in
 .Tg relayd
 .Tg relay
 .Ic relay
-.Op Cm  \ ? | enable | disable | edit
+.Op Cm  \&? | enable | disable | edit
 .Op Cm options
 .Pp
 Enable or disable or configure the
@@ -921,7 +921,7 @@ daemon, these options are documented in
 .Tg isakmpd
 .Tg ipsec
 .Ic ipsec
-.Op Cm  \ ? | enable | disable | edit | reload
+.Op Cm  \&? | enable | disable | edit | reload
 .Pp
 Enable or disable or configure the
 .Xr isakmpd 8
@@ -940,7 +940,7 @@ and
 .Tg iked
 .Tg ike
 .Ic ike
-.Op Cm  \ ? | enable | disable | edit
+.Op Cm  \&? | enable | disable | edit
 .Op Ar options
 .Pp
 Enable or disable or configure the
@@ -967,7 +967,7 @@ These features are documented in
 .Tg dvmrpd
 .Tg dvmrp
 .Ic dvmrp
-.Op Cm  \ ? | enable | disable | edit
+.Op Cm  \&? | enable | disable | edit
 .Pp
 Enable or disable or configure the
 .Xr dvmrpd 8
@@ -976,7 +976,7 @@ The configuration of
 .Ic dvmrp
 daemon can be edited with
 .Cm edit
-commmand, the configuration syntax of
+command, the configuration syntax of
 .Ic dvmrp
 daemon is documented in
 .Xr dvmrpd.conf 5
@@ -984,7 +984,7 @@ manual page.
 .Pp
 .Tg rad
 .Ic rad
-.Op Cm  \ ? | enable | disable | edit
+.Op Cm  \&? | enable | disable | edit
 .Pp
 Enable or disable or configure the
 .Xr rad 8
@@ -999,11 +999,11 @@ command, the syntax is documented in
 .Tg sasyncd
 .Tg sasync
 .Ic sasync
-.Op Cm  \ ? | enable | disable | edit
+.Op Cm  \&? | enable | disable | edit
 .Pp
 Enable or disable or configure the
 .Xr sasyncd 8
-IPSec Security Associaton synchronisation daemon for failover gateways.
+IPSec Security Association synchronisation daemon for failover gateways.
 The configuration of
 .Ic sasync
 daemon can be edited with
@@ -1016,7 +1016,7 @@ daemon is documented in
 .Tg dhcpd
 .Tg dhcp
 .Ic dhcp
-.Op Cm  \ ? | enable | disable | edit
+.Op Cm  \&? | enable | disable | edit
 .Pp
 Enable or disable or configure the
 .Xr dhcpd 8
@@ -1033,7 +1033,7 @@ daemon is documented in
 .Tg snmpd
 .Tg snmp
 .Ic snmp
-.Op Cm  \ ? | enable | disable | edit | trap
+.Op Cm  \&? | enable | disable | edit | trap
 .Op Ar options
 .Pp
 Enable or disable or configure the
@@ -1051,7 +1051,7 @@ daemon is documented in
 .Tg ldapd
 .Tg ldap
 .Ic ldap
-.Op Cm  \ ? | enable | disable | edit
+.Op Cm  \&? | enable | disable | edit
 .Op Ar options
 .Pp
 Enable or disable or configure the
@@ -1070,14 +1070,14 @@ to control the
 .Xr ldapd 8
 daemon in a similar manner to
 .Xr ldapctl 8
-e.g. to set log verbose vs brief or to compact / reindex the LDAP database
+e.g. to set log verbose vs brief or to compact / re-index the LDAP database
 are documented in
 .Xr ldapctl 8 .
 .Pp
 .Tg smtpd
 .Tg smtp
 .Ic smtp
-.Op Cm  \ ? | enable | disable | edit
+.Op Cm  \&? | enable | disable | edit
 .Op options
 .Pp
 Enable or disable or configure the
@@ -1104,7 +1104,7 @@ agents) are documented in
 .Pp
 .Tg sshd
 .Ic sshd
-.Op Cm \ ? | enable | disable | edit
+.Op Cm \&? | enable | disable | edit
 .Pp
 Enable or disable or configure the
 .Xr sshd 8
@@ -1134,11 +1134,11 @@ command, the syntax is documented in
 .Tg npppd
 .Tg nppp
 .Ic nppp
-.Op Cm \ ? | enable | disable | session | monitor | edit
-.Op Cm clear Ar \ ? | all | ppp-id | address | interface | protocol | realm | \
+.Op Cm \&? | enable | disable | session | monitor | edit
+.Op Cm clear Ar \&? | all | ppp-id | address | interface | protocol | realm | \
 username
-.Op Cm session Ar \ ? |all | brief | packets
-.Op Cm monitor Ar \ ? | all | ppp-id | address | interface | protocol | realm | \
+.Op Cm session Ar \&? |all | brief | packets
+.Op Cm monitor Ar \&? | all | ppp-id | address | interface | protocol | realm | \
 username
 .Pp
 Enable or disable or configure the
@@ -1419,7 +1419,7 @@ nsh/no verbose
 .Ic show
 .Op hostname | interface | route | route6 | sadb | arp | kernel | bgp | ospf\
  | ospf6 |eigrp | rip | ldp | ike | ipsec | dvmrp | relay | dhcp | smtp\
- | ldap | monitor | version | users | running-config | startup-config |\ ? | help
+ | ldap | monitor | version | users | running-config | startup-config |\&? | help
 .Pp
 The main diagnostic and informational command is 'show'.
 show without arguments  displays the available diagnostic show sub commands.
@@ -1478,7 +1478,7 @@ nsh(p)/show hostname
 .Pp
 Display essential information about the system network interfaces including
 any network bridges / switches.
-show interface without any arguments diplays information about all
+show interface without any arguments displays information about all
 interfaces available on the system.
 .Pp
 show interface
@@ -1552,7 +1552,7 @@ nsh(p)/show interface lo0
 
 .Ed
 .It
-With a bridge, verbose mode diplays spanning tree member states and bridge
+With a bridge, verbose mode displays spanning tree member states and bridge
 members.
 .Bd -literal -offset indent
 nsh/show int bridge0
@@ -1569,7 +1569,7 @@ nsh/show int bridge0
 .Ed
 .It
 With an IEEE 802.11 wireless interface, verbose mode displays the network ID,
-network key, and powersaving mode (if enabled).
+network key, and power-saving mode (if enabled).
 .Bd -literal -offset indent
 nsh/show int athn0
 % athn0
@@ -1696,7 +1696,7 @@ firewall rules, and other information compiled by
 TBC
 .Tg flush
 .Ic flush
-.Op routes | arp | line | bridge-dyn | bridge-all | bridge-rule | pf | history |\ ? | help
+.Op routes | arp | line | bridge-dyn | bridge-all | bridge-rule | pf | history |\&? | help
 .Pp
 Clear various system tables.
 .Pp
@@ -1860,7 +1860,7 @@ nsh(p)/no editing
 .Pp
 Invoke a shell or run an entered shell-command with arguments if required.
 (requires privileged mode).
-The active users login shell is the shell that is involked by this feature.
+The active users login shell is the shell that is invoked by this feature.
 This feature disabled to enhance security.
 .Pp
 E.g. list files in /root
@@ -1882,7 +1882,7 @@ OpenBSDshell#
  mforwarding | mtu-path-disc | mtu-disc-timeout | ipip |  gre | wccp | etherip\
  | ipcomp | esp | esp-udpencap | esp-udpencap-port | ah | sourceroute | encdebug\
  | send-redirects | ifq-maxlen |  directed-broadcast | multipath | default-ttl\
- |\ ?
+ |\&?
 .Pp
 Modify system kernel ip processing parameters or features.
 (requires privileged mode).
@@ -2161,7 +2161,7 @@ The main purpose of the TTL is to avoid routing loops in the network.
 nsh(p)/ip default-ttl 128
 .Ed
 .Pp
-.Ic ip \ ?
+.Ic ip \&?
 .Pp
 Displays the help menu and available ip command options.
 .Bd -literal -offset indent
@@ -2179,7 +2179,7 @@ nsh(p)/ip ?
  | carpdev | carpnode | carppeer | balancing | pflow |  debug\
  | dhcrelay | wol |  mpls | inet6 | autoconf6\
  | autoconfprivacy | temporary | monitor |  wgpeer | wgport\
- | wgkey |  wgrtable | trunkport | trunkproto | shutdown |\ ?
+ | wgkey |  wgrtable | trunkport | trunkproto | shutdown |\&?
 interface mode commands, are commands that can be applied to a specific
 named interface.
 .Bd -literal -offset indent
@@ -2351,7 +2351,7 @@ Note that this command clears all existing ip configuration on the interface.
 .Op Ar rtable-id
 .Pp
 TODO Set or remove the rtable id on an interface.
-TODO better exlplanation needed!
+TODO better explanation needed!
 .Pp
 .Op no
 .Ic priority
@@ -2630,7 +2630,7 @@ Set or remove configured transmit priority of the headers of a tunnel interface.
 Valid options are standard traffic priority values (0-7) or set the headers
 according to encapsulated packet or payload priority.
 .Pp
-E.g. to set the priority of headsrs of the tunnel gre1 to match that of the
+E.g. to set the priority of headers of the tunnel gre1 to match that of the
 payload.
 .Bd -literal -offset indent
 nsh(interface-gre1)/txprio payload
@@ -2639,7 +2639,7 @@ nsh(interface-gre1)/txprio payload
 .Op no
 .Cm rxprio Op Ar 0-7 | packet | payload
 .Pp
-Set or remove configured recieve priority of the headers of a tunnel
+Set or remove configured receive priority of the headers of a tunnel
 interfaces are standard traffic priority values (0-7) or set the headers
 according to encapsulated packet / payload priority).
 .Pp
@@ -2654,8 +2654,8 @@ nsh(interface-gre1)/rxprio 7
 .Pp
 Set or remove the 24 bit virtual network identifier tag.
 Virtual network identifier tags are typically used in large multi tenant VXLAN
-multiple routing domain enviornments.
-If vnetid involked inside a vlan interface the acceptable range is the
+multiple routing domain environments.
+If vnetid invoked inside a vlan interface the acceptable range is the
 standard 12-bit vlan id 1-4094 of the IEEE 802.1Q VLAN tag.
 .Pp
 E.g. set gre1 vnetid to 8192.
@@ -2667,7 +2667,7 @@ nsh(interface-gre1)/vnetid 8192
 .Cm vnetflowid
 .Pp
 Allow or disallow the interface to use a portion of the virtual network
-identifiier space as a flow identifier.
+identifier space as a flow identifier.
 This allowOBs loadbalancing of the encapsulated traffic over multiple links.
 .Pp
 E.g. enable vnetflowid load balancing for gre1.
@@ -2690,7 +2690,7 @@ nsh(interface-vlan1024)/parent em0
 .Ic patch
 .Ar pair-interface-name
 .Pp
-Set or remove patch (layer1+ conection) between current interface and another
+Set or remove patch (layer1+ connection) between current interface and another
 pair(4) interface.
 A patch is a CPU efficient way of forwarding packets between two
 .Xr pair 4
@@ -2703,7 +2703,7 @@ Patch can only connect two
 .Xr pair 4
 interfaces, no other interface types are supported.
 .Pp
-E.g. To connect pair1 and pair2 intefaces with a virtual patch cable.
+E.g. To connect pair1 and pair2 interfaces with a virtual patch cable.
 .Bd -literal -offset indent -compact
 nsh(p)/interface pair1
 
@@ -2795,7 +2795,7 @@ Note that the pfsync protocol currently includes no authentication method.
 It is advisable to layer authentication, signing and (possibly encrypted
 tunnels for the underlay interfaces.
 For simplicity on co-located pfsynced firewalls a secure way to use pfsync,
-is through a a direct (layer1 (i.e. no switches)) cableonnecting directly
+is through a a direct (layer1 (i.e. no switches)) cable connecting directly
 between two pfsync capable devices (i.e. a conenction made with an ethernet
 patch cable).
 This command is valid only for
@@ -2811,7 +2811,7 @@ nsh(interface-pfsync0)/syncdev em1
 .Ic syncpeer
 .Op Ar ipv4-peer-pfsync-address
 .Pp
-Set or remove a manually enetered ip address of the pfsync interface of a
+Set or remove a manually entered ip address of the pfsync interface of a
 peer pf sync firewall.
 By default, state change messages are sent out on the synchronisation
 interface using IP multicast packets to the 224.0.0.240 group address.
@@ -2832,7 +2832,7 @@ nsh(interface-pfsync0)/syncpeer 192.0.0.10
 .Ar 0-255
 .Op defer
 .Pp
-Configures or removes the maximum number of updates which are collapsable into
+Configures or removes the maximum number of updates which are collapsible into
 one for a single state.
 The default value is 128.
 The transmission a pfsync update packet shall be delayed by a maximum of 1
@@ -2926,7 +2926,7 @@ nsh(interface-carp0)/carppass 19CharPassphrase!!!
 .Op Ar interface-name
 .Pp
 Set or remove the interface on which the selected carp interface's carp
-advertisments are sent and received.
+advertisements are sent and received.
 The carpdev is the "real interface" over which the carp virtual IP is
 accessible.
 carpdev is valid for
@@ -3001,11 +3001,11 @@ ip-stealth		carp wont send packets with its own virtual MAC
 			virtual MAC address, therefore the switch would
 			 unicast flood traffic to all switch ports
  			(unless there is some swithc acls to prevent flooding
-			unneccessarily.
+			unnecessarily.
 .It
 ip-unicast		Used in conjunction with a HUB or a switch that
 			can replicate packets (monitoring or mirror) or
-			other non-standard switch forwarding mechanisim.
+			other non-standard switch forwarding mechanism.
 .El
 Note: IP balancing is being used on a firewall, it is recommended to
 configure the carpnodes in a symmetrical manner.
@@ -3099,7 +3099,7 @@ nsh(interface-em0)/wol
 .Ic mpls
 .Pp
 Set or remove the MPLS flag on the selected interface,if mpls is set on the
-interface, the interface can send and recieve mpls traffic.
+interface, the interface can send and receive mpls traffic.
 .Pp
 E.g enable mpls on em0
 .Bd -literal -offset indent
@@ -3123,8 +3123,8 @@ nsh(interface-em0)/rad
 .Op no
 .Ic autoconf6
 .Pp
-Enable or disable IPv6 auto configuation of Ipv6 address on the inteface.
-If autoconf6 is used alone (without tempoarary or autoconfprivacy being set
+Enable or disable IPv6 auto configuration of Ipv6 address on the inteface.
+If autoconf6 is used alone (without temporary or autoconfprivacy being set
 on the interface then the autoconfigured address assigned is repeatable based
 on the MAC address of the interface (EUI64).
 .Pp
@@ -3207,8 +3207,8 @@ The psk and preshared-key is optional but recommended as it supplements the
 public key cryptography with symmetric key cryptography.
 .Pp
 .Ic aip Ar allowed-ip/prefix
-Set the peer's allowed IPv4 or IPv6 addresses or prefixes for tunneled traffic.
-The option be reppeated to set multiple allowed ip/ranges.
+Set the peer's allowed IPv4 or IPv6 addresses or prefixes for tunnelled traffic.
+The option be repeated to set multiple allowed ip/ranges.
 No addresses are allowed by default.
 .Bl -dash
 .It
@@ -3247,7 +3247,7 @@ nsh(interface-wg0)/wgkey QComa+ca+mWih+Vl/5G/p+UwhYy17hw5vdwysZpIAn0=
 .Op no
 .Ic wgport Ar 0-65535
 .Pp
-Set or remove the configuraiton for the local UDP port to be used by the
+Set or remove the configuration for the local UDP port to be used by the
 current wireguard interface when exchanging traffic with its wireguard peers.
 The interface binds to INADDR_ANY and IN6ADDR_ANY_INIT.
 If
@@ -3273,7 +3273,7 @@ between 0 and 255 on a default
 kernel.
 The routing domain of the rtable does not need be in the same routing domain
 to which the interface is attached.
-wgrtable configures which rdomain the interface's tunneled traffic appears.
+wgrtable configures which rdomain the interface's tunnelled traffic appears.
 .Pp
 E.g. set wireguard interface wg0  routing table to routing domain 5.
 .Bd -literal -offset indent
@@ -3356,7 +3356,7 @@ These interface names start with 'enc'.
 .Pp
 Generic Tunnel: This interface is used to configure a network tunnel to
 another host or router.
-It follows the RFC1933 tunneling standard.
+It follows the RFC1933 tunnelling standard.
 These interface names start with 'gif'.
 .Pp
 Ethernet Bridge: This interface is used to configure layer 2 bridging
