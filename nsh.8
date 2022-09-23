@@ -399,7 +399,7 @@ nsh(interface-em0)/ip 10.255.0.10/24
 .Ed
 .It
 Once the rdomain has been initialized (by creating a loopback inside the
- rdomain)
+ rdomain) the administrator can add routes to the rtable.
 .Bd -literal -offset indent
 nsh(p)/rtable 3 customer label network3
 nsh(p-rtable 3)/route 0.0.0.0/0 10.255.0.1
