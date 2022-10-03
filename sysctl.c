@@ -166,7 +166,7 @@ struct ipsysctl ip6sysctls[] = {
 { "auto_flowlabel",     { CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_AUTO_FLOWLABEL, MIB_STOP, 0}, 0, 1   },
 { "neighborgcthresh",       { CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_NEIGHBORGCTHRESH, MIB_STOP, 0 }, DEFAULT_NEIGHBORGCTHRESH , 0 },
 { "hdrnestlimit",       { CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_HDRNESTLIMIT, MIB_STOP, 0 }, 0, 1  },
-{ "dad_count",     { CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_DAD_COUNT, MIB_STOP, 0}, 0, 1  },
+{ "dad_count",     { CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_DAD_COUNT, MIB_STOP, 0}, 0, 0  },
 { "dad_pending",     { CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_DAD_PENDING, MIB_STOP, 0}, 0, 1  },
 { 0, { 0, 0, 0, 0, 0, 0 }, 0, 0 }
 };
