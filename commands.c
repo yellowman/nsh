@@ -311,7 +311,7 @@ Menu ip6tab[] = {
 	{ "multicast_mtudisc", "Enables ICMPv6 too big messages when machine is an IPv6 multicast router", CMPL0 0, 0, 0, 0, ipsysctl },
 	{ "multipath",  "Multipath routing",            CMPL0 0, 0, 0, 0, ipsysctl },
 	{ "neighborgcthresh", "Maximum number of entries in neighbor cache", CMPL0 0, 0, 0, 0, ipsysctl },
-	{ "redirect", "Enables sending ICMPv6 redirects by the system", CMPL0 0, 0, 0, 0, ipsysctl },
+	{ "send-redirect", "Enables sending ICMPv6 redirects by the system", CMPL0 0, 0, 0, 0, ipsysctl },
 	{ "?",          "Help",                         CMPL0 0, 0, 0, 0, sysctlhelp },
 { 0, 0, 0, 0, 0, 0, 0, 0 }
 
