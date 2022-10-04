@@ -1049,7 +1049,6 @@ nsh(interface-vr0)/?
   balancing        CARP balancing mode
   pflow            pflow data export
   vlan             802.1Q vlan tag and parent
-  timeslots        TDM timeslots
   debug            Driver dependent debugging
   dhcrelay         DHCP Relay Agent
   shutdown         Shutdown interface
