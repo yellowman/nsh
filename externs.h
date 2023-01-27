@@ -55,6 +55,7 @@ void conf_sppp(FILE *, int, char *);
 
 /* conf.c */
 #define LEASEPREFIX	"/var/db/dhclient.leases"
+#define DHCPLEASECTL	"/usr/sbin/dhcpleasectl"
 int conf(FILE *);
 u_long default_mtu(char *);
 int conf_routes(FILE *, char *, int, int, int);
@@ -247,6 +248,7 @@ void command(void);
 char **step_optreq(char **, char **, int, char **, int);
 int argvtostring(int, char **, char *, int);
 int cmdrc(char rcname[FILENAME_MAX]);
+int cmdargs_output(char *, char **, int, int);
 int cmdargs(char *, char **);
 char *iprompt(void);
 char *cprompt(void);
