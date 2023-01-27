@@ -1,6 +1,10 @@
 #
 PROG= nsh
 
+DESTDIR?=/usr/local
+BINDIR?=/bin
+MANDIR?=/man/man
+
 # For use with flashrd:
 #CFLAGS=-O -DDHCPLEASES=\"/flash/dhcpd.leases\" -Wmissing-prototypes -Wformat -Wall -Wpointer-arith -Wbad-function-cast #-W
 CFLAGS?=-O
