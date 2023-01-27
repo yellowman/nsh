@@ -368,6 +368,7 @@ int parse_ipv6(char *, struct in6_addr *);
 #define DHCLIENT	"/sbin/dhclient"
 #define DHCRELAY	"/usr/sbin/dhcrelay"
 #define RAD		"/usr/sbin/rad"
+#define DHCPLEASED_SOCK	"/dev/dhcpleased.sock"
 #define IFDATA_MTU 1		/* request for if_data.ifi_mtu */
 #define IFDATA_BAUDRATE 2	/* request for if_data.ifi_baudrate */
 #define MBPS(bps) (bps / 1000 / 1000)
@@ -413,6 +414,7 @@ int intpwe3(char *, int, int, char **);
 int intvnetflowid(char *, int, int, char **);
 int addaf(char *, int, int);
 int removeaf(char *, int, int);
+int dhcpleased_is_running(void);
 char *get_hwdaddr(char *);
 
 /* main.c */
