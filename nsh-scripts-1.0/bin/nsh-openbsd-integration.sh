@@ -14,7 +14,7 @@ else
 	echo "If you have an unusual config, it is not recommended to run"
 	read input?"Do you want to continue? (Yes/No) [${dflt}] "
 
-	[[ "${input}" = '' ]] && inputdflt}
+	if [ -z "${input}" ]; then input="${dflt}"; fi
 	if [ "${input}" = 'Yes' ] || [ "${input}" = 'yes' ];
 	then
 		test -f /var/nsh/backup/pre-nsh-config && echo pre-nsh-config exists already && exit
