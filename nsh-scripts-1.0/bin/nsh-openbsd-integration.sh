@@ -39,7 +39,7 @@ else
 			chown root /var/run/pf.conf.0
 			chgrp wheel /var/run/pf.conf.0
 			chmod 660 /var/run/pf.conf.0
-			else
+		else
 			echo etc-pf does not exist, not importing!
 		fi
 
