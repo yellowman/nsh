@@ -25,6 +25,7 @@
 #include <sys/param.h>
 #include <sys/sockio.h>
 #include <sys/ioctl.h>
+#include <sys/un.h>
 #include <net/if.h>
 #include <net/if_types.h>
 #include <net/if_dl.h>
@@ -697,6 +698,37 @@ removeaf(char *ifname, int af, int ifs)
 }
 
 int
+dhcpleased_is_running(void)
+{
+	/*
+	 * Should this path be configurable? Usually, there is
+	 * only one instance of this daemon per system...
+	 */
+	char *dhcpleased_sockname = DHCPLEASED_SOCK;
+	int sock, error;
+	struct sockaddr_un sun;
+
+	sock = socket(AF_UNIX, SOCK_STREAM, 0);
+	if (sock == -1) {
+		printf("socket: %s\n", strerror(errno));
+		return 0;
+	}
+
+	memset(&sun, 0, sizeof(sun));
+	sun.sun_family = AF_UNIX;
+	if (strlcpy(sun.sun_path, dhcpleased_sockname, sizeof(sun.sun_path)) >=
+	    sizeof(sun.sun_path)) {
+		printf("socket path too long: %s\n", dhcpleased_sockname);
+		return 0;
+	}
+
+	error = connect(sock, (struct sockaddr *)&sun, sizeof(sun));
+	close(sock);
+
+	return error ? 0 : 1;
+}
+
+int
 intip(char *ifname, int ifs, int argc, char **argv)
 {
 	int s, set, flags, argcmax;
@@ -761,19 +793,44 @@ intip(char *ifname, int ifs, int argc, char **argv)
 	}
 
 	if (isprefix(argv[0], "dhcp")) {
-		char *args[] = { PKILL, "dhclient", ifname, NULL };
-		char *args_set[] = { DHCLIENT, ifname, NULL };
-		char leasefile[sizeof(LEASEPREFIX)+1+IFNAMSIZ];
+		if (dhcpleased_is_running()) {
+			/*
+			 * dhclient(8) has gone away as of OpenBSD 7.2+.
+			 * dhcpleased(8) should always be running and will
+			 * only take action once the autoconf4 flag is set.
+			 */
+			char *args[3] = { "no", "autoconf4", NULL };
+			char *args_set[2] = { "autoconf4", NULL };
+			char **argv_dhcp;
+			int argc_dhcp;
+			if (set) {
+				argv_dhcp = args_set;
+				argc_dhcp = nitems(args_set) - 1;
+			} else {
+				argv_dhcp = args;
+				argc_dhcp = nitems(args) - 1;
+			}
+			return intxflags(ifname, ifs, argc_dhcp, argv_dhcp);
+		} else {
+			/*
+			 * On OpenBSD 7.2, dhclient(8) is just a stub and will
+			 * likewise set the autoconf4 flag for dhcpleased(8).
+			 * On earlier releases, dhclient(8) will get a lease.
+			 */
+			char *args[] = { PKILL, "dhclient", ifname, NULL };
+			char *args_set[] = { DHCLIENT, ifname, NULL };
+			char leasefile[sizeof(LEASEPREFIX)+1+IFNAMSIZ];
 
-		if (set)
-			cmdargs(DHCLIENT, args_set);
-		else {
-			cmdargs(PKILL, args);
-			snprintf(leasefile, sizeof(leasefile), "%s.%s",
-			    LEASEPREFIX, ifname);
-			rmtemp(leasefile);
+			if (set)
+				cmdargs(DHCLIENT, args_set);
+			else {
+				cmdargs(PKILL, args);
+				snprintf(leasefile, sizeof(leasefile), "%s.%s",
+				    LEASEPREFIX, ifname);
+				rmtemp(leasefile);
+			}
+			return (0);
 		}
-		return(0);
 	}
 
 	memset(&ip, 0, sizeof(ip));
@@ -1842,6 +1899,10 @@ intxflags(char *ifname, int ifs, int argc, char **argv)
 #ifdef IFXF_MONITOR		/* 6.9+ */
 	} else if (isprefix(argv[0], "monitor")) {
 		value = IFXF_MONITOR;
+#endif
+#ifdef IFXF_AUTOCONF4		/* 6.6+ */
+	} else if (isprefix(argv[0], "autoconf4")) {
+		value = IFXF_AUTOCONF4;
 #endif
 	} else if (isprefix(argv[0], "autoconf6")) {
 		value = IFXF_AUTOCONF6;

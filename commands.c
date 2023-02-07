@@ -518,6 +518,9 @@ struct intlist Intlist[] = {
 /* Interface mode commands */
 	{ "ip",		"IP address and other parameters",	CMPL0 0, 0, intip },
 	{ "alias",	"Additional IP addresses and other parameters", CMPL0 0, 0, intip },
+#ifdef IFXF_AUTOCONF4		/* 6.6+ */
+	{ "autoconf4",  "IPv4 Autoconfigurable address",	CMPL0 0, 0, intxflags },
+#endif
 	{ "description", "Interface description",		CMPL0 0, 0, intdesc },
 	{ "group",	"Interface group",			CMPL0 0, 0, intgroup },
 	{ "rdomain",	"Interface routing domain",		CMPL0 0, 0, intrdomain },
