@@ -61,7 +61,7 @@ void conf_db_single(FILE *, char *, char *, char *);
 void conf_interfaces(FILE *, char *);
 void conf_print_rtm(FILE *, struct rt_msghdr *, char *, int);
 int conf_ifaddrs(FILE *, char *, int, int);
-int conf_ifaddr_dhcp(FILE *, char *, int);
+int conf_ifaddr_dhcp(FILE *, char *, int, int);
 void conf_lladdr(FILE *, char *);
 void conf_ifflags(FILE *, int, char *, int, u_char);
 void conf_vnetid(FILE *, int, char *);
@@ -83,6 +83,7 @@ void conf_intgroup(FILE *, int, char *);
 void conf_keepalive(FILE *, int, char *);
 void conf_rtflags(char *, int, struct rt_msghdr *rtm);
 int dhcpleased_has_defaultroute(char *);
+int dhcpleased_controls_interface(char *, int);
 int dhclient_isenabled(char *);
 int islateif(char *);
 int isdefaultroute(struct sockaddr *, struct sockaddr *);
@@ -439,6 +440,23 @@ dhcpleased_has_defaultroute(char *dst)
 	return (gatewayfound);
 }
 
+/* Check whether IPv4 addresses on an interface are managed by dhcpleased. */
+int
+dhcpleased_controls_interface(char *ifname, int ifs)
+{
+#ifdef IFXF_AUTOCONF4		/* 6.6+ */
+	int ifxflags;
+
+	if (!dhcpleased_is_running())
+		return 0;
+
+	ifxflags = get_ifxflags(ifname, ifs);
+	return ((ifxflags & IFXF_AUTOCONF4) != 0);
+#else
+	return 0;
+#endif
+}
+
 /*
  * see if ("option routers %s;\n",dst) is preset in any possible dhclient
  * lease file
@@ -602,7 +620,7 @@ void conf_interfaces(FILE *output, char *only)
 		conf_tunnel(output,  ifs, ifnp->if_name);
 		conf_ifmetrics(output,  ifs, if_data, ifnp->if_name);
 
-		ippntd = conf_ifaddr_dhcp(output, ifnp->if_name, flags);
+		ippntd = conf_ifaddr_dhcp(output, ifnp->if_name, ifs, flags);
 
 		if (br) {
 			conf_brcfg(output, ifs, ifn_list, ifnp->if_name);
@@ -651,19 +669,20 @@ void conf_lladdr(FILE *output, char *ifname)
 	sl_free(hwdaddr, 1);
 }
 
-int conf_ifaddr_dhcp(FILE *output, char *ifname, int flags)
+int conf_ifaddr_dhcp(FILE *output, char *ifname, int ifs, int flags)
 {
-	FILE *dhcpif;
+	FILE *dhcpif = NULL;
 	int ippntd; 
 	char leasefile[sizeof(LEASEPREFIX)+1+IFNAMSIZ];
 
-	/* find dhclient controlled interfaces */
+	/* find dhcpleased/dhclient controlled interfaces */
 	snprintf(leasefile, sizeof(leasefile), "%s.%s",
 	    LEASEPREFIX, ifname);
-	if ((dhcpif = fopen(leasefile, "r"))) {
-		/* don't print ipv4 addresses */
+	if (dhcpleased_controls_interface(ifname, ifs) ||
+	    (dhcpif = fopen(leasefile, "r")) != NULL) {
 		fprintf(output, " ip dhcp\n");
-		fclose(dhcpif);
+		if (dhcpif)
+			fclose(dhcpif);
 		/* print all non-autoconf ipv6 addresses */
 		conf_ifaddrs(output, ifname, flags, AF_INET6);
 		ippntd = 1;
