@@ -14,7 +14,7 @@ else
 	echo "If you have an unusual config, it is not recommended to run"
 	read input?"Do you want to continue? (Yes/No) [${dflt}] "
 
-	[[ "${input}" = '' ]] && inputdflt}
+	if [ -z "${input}" ]; then input="${dflt}"; fi
 	if [ "${input}" = 'Yes' ] || [ "${input}" = 'yes' ];
 	then
 		test -f /var/nsh/backup/pre-nsh-config && echo pre-nsh-config exists already && exit
@@ -39,7 +39,7 @@ else
 			chown root /var/run/pf.conf.0
 			chgrp wheel /var/run/pf.conf.0
 			chmod 660 /var/run/pf.conf.0
-			else
+		else
 			echo etc-pf does not exist, not importing!
 		fi
 
@@ -272,6 +272,7 @@ else
 		#can we import rc.conf.local to nsh config
 		mv /etc/rc.conf.local /var/nsh/backup/pre-nsh-config/
 		cp nsh /etc/rc.d/
+		chmod +x /etc/rd.d/nsh
 		rcctl disable pf ntpd
 		#Disable these network management daemons until we know how to integrate them ?
 		rcctl disable resolvd dhcpleased slaacd
