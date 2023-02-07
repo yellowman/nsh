@@ -1551,16 +1551,25 @@ group(int argc, char **argv)
 int
 cmdargs(char *cmd, char *arg[])
 {
+	return cmdargs_output(cmd, arg, -1, -1);
+}
+
+/*
+ * cmd, multiple args, capture stdout and stderr output
+ */
+int
+cmdargs_output(char *cmd, char *arg[], int stdoutfd, int stderrfd)
+{
 	sig_t sigint, sigquit, sigchld;
 
 	sigint = signal(SIGINT, SIG_IGN);
 	sigquit = signal(SIGQUIT, SIG_IGN);
 	sigchld = signal(SIGCHLD, SIG_DFL);
 
-	switch(child = fork()) {
+	switch (child = fork()) {
 		case -1:
 			printf("%% fork failed: %s\n", strerror(errno));
-			break;
+			return 0;
 
 		case 0:
 		{
@@ -1572,6 +1581,23 @@ cmdargs(char *cmd, char *arg[])
 
 			if (cli_rtable != 0 && nsh_setrtable(cli_rtable))
 				_exit(0);
+
+			if (stdoutfd != -1) {
+				if (stdoutfd != STDOUT_FILENO &&
+				    dup2(stdoutfd, STDOUT_FILENO) == -1) {
+					printf("%% dup2: %s\n",
+					    strerror(errno));
+					_exit(0);
+				}
+			}
+			if (stderrfd != -1) {
+				if (stderrfd != STDERR_FILENO &&
+				    dup2(stderrfd, STDERR_FILENO) == -1) {
+					printf("%% dup2 failed: %s\n",
+					    strerror(errno));
+					_exit(0);
+				}
+			}
 
 			execv(shellp, arg);
 			printf("%% execv failed: %s\n", strerror(errno));
