@@ -60,6 +60,7 @@ int conf(FILE *);
 u_long default_mtu(char *);
 int conf_routes(FILE *, char *, int, int, int);
 int conf_dhcrelay(char *, char *, int);
+int dhcpleased_controls_interface(char *, int);
 
 /* show.c */
 void p_rttables(int, u_int, int);
@@ -123,6 +124,8 @@ extern char addrnames[];
 extern char metricnames[];
 
 /* ctl.c */
+#define RESOLVD		"/sbin/resolvd"
+#define RESOLV_CONF	"/etc/resolv.conf"
 /* tmp config locations */
 #define PFCONF_TEMP	"/var/run/pf.conf"
 #define OSPFCONF_TEMP	"/var/run/ospfd.conf"
@@ -417,6 +420,7 @@ int intvnetflowid(char *, int, int, char **);
 int addaf(char *, int, int);
 int removeaf(char *, int, int);
 int dhcpleased_is_running(void);
+void dhcpleased_refresh_leases(void);
 char *get_hwdaddr(char *);
 
 /* main.c */

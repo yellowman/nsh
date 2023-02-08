@@ -728,6 +728,36 @@ dhcpleased_is_running(void)
 	return error ? 0 : 1;
 }
 
+void
+dhcpleased_refresh_leases(void)
+{
+#ifdef IFXF_AUTOCONF4		/* 6.6+ */
+	struct if_nameindex *ifn_list, *ifnp;
+	int ifs;
+
+	if ((ifn_list = if_nameindex()) == NULL) {
+		printf("%% if_nameindex: %s\n", strerror(errno));
+		return;
+	}
+
+	if ((ifs = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+		printf("%% socket: %s\n", strerror(errno));
+		return;
+	}
+
+	for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++) {
+		char *args[] = { DHCPLEASECTL, ifnp->if_name, NULL };
+		int ifxflags = get_ifxflags(ifnp->if_name, ifs);
+
+		if (ifxflags & IFXF_AUTOCONF4)
+			cmdargs(DHCPLEASECTL, args);
+	}
+
+	if_freenameindex(ifn_list);
+	close(ifs);
+#endif
+}
+
 int
 intip(char *ifname, int ifs, int argc, char **argv)
 {

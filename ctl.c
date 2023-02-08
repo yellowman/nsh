@@ -61,7 +61,8 @@ static char table[16];
 
 /* service routines */
 void call_editor(char *, char **, char *);
-void ctl_symlink(char *, char *, char *);
+void ctl_dhcp_local(char *, char *, char *);
+void ctl_dhcp_client(char *, char *, char *);
 int rule_writeline(char *, mode_t, char *);
 int fill_tmpfile(char **, char *, char **);
 int acq_lock(char *);
@@ -499,13 +500,13 @@ struct ctl ctl_tftp[] = {
 	{ 0, 0, { 0 }, 0, 0, 0 }
 };
 
-/* resolv.conf */
+/* resolv.conf/resolvd */
 struct ctl ctl_dns[] = {
 	{ "local-control", "local control over DNS settings",
-	    { RESOLVCONF_SYM, REQTEMP, NULL }, ctl_symlink,
+	    { RESOLVCONF_SYM, REQTEMP, NULL }, ctl_dhcp_local,
 	    DB_X_LOCAL, T_HANDLER },
 	{ "dhcp-control",   "DHCP client control over DNS settings",
-	    { RESOLVCONF_SYM, RESOLVCONF_DHCP, NULL }, ctl_symlink,
+	    { RESOLVCONF_SYM, RESOLVCONF_DHCP, NULL }, ctl_dhcp_client,
 	    DB_X_OTHER, T_HANDLER },
 	{ "edit",	    "edit DNS settings",
 	    { "dns", NULL, NULL }, call_editor, 0, T_HANDLER },
@@ -543,10 +544,75 @@ struct ctl ctl_ldap[] = {
 };
 
 void
-ctl_symlink(char *temp, char *real, char *z)
+ctl_dhcp_local(char *temp, char *real, char *z)
 {
+	char *args[] = { PKILL, "resolvd", NULL };
+
+	if (dhcpleased_is_running()) {
+		/*
+		 * dhcpleased depends on resolvd to modify /etc/resolv.conf.
+		 * Stop resolvd to prevent further dynamic modifications.
+		 */
+		cmdargs(PKILL, args);
+		sleep(1);
+
+		/*
+		 * Local DNS management requires /etc/resolv.conf to be a
+		 * symlink to the resolv.conf.symlink file managed by nsh.
+		 */
+		if (unlink(RESOLV_CONF) == -1 && errno != ENOENT) {
+			printf("%% unlink %s: %s\n", RESOLV_CONF,
+			    strerror(errno));
+		}
+		if (symlink(RESOLVCONF_SYM, RESOLV_CONF) == -1) {
+			printf("%% symlink %s %s: %s\n", RESOLVCONF_SYM,
+			    RESOLV_CONF, strerror(errno));
+		}
+	}
+
 	rmtemp(temp);
-	symlink(real, temp);
+	if (symlink(real, temp) == -1)
+		printf("%% symlink %s %s: %s\n", real, temp, strerror(errno));
+}
+
+void
+ctl_dhcp_client(char *temp, char *real, char *z)
+{
+	char *args_stop[] = { PKILL, "resolvd", NULL };
+	char *args_start[] = { RESOLVD, NULL };
+
+	if (!dhcpleased_is_running()) {
+		/* assume dhclient is being used */
+		rmtemp(temp);
+		symlink(real, temp);
+		return;
+	}
+
+	/*
+	 * dhcpleased requires resolvd to modify /etc/resolv.conf.
+	 * As of OpenBSD 7.0, resolvd and dhcpleased are both running
+	 * by default. The /etc/resolv.conf file will not be a symlink,
+	 * but a regular file populated with nameservers proposed by
+	 * various daemons and drivers, including dhcpleased(8),
+	 * slaacd(8), sppp(4), and umb(4).
+	 */
+
+	/* Stop resolvd in case it is already running. */
+	cmdargs(PKILL, args_stop);
+	sleep(1);
+
+	/* resolvd will re-create /etc/resolv.conf on startup. */
+	if (unlink(RESOLV_CONF) == -1 && errno != ENOENT)
+		printf("%% unlink %s: %s", RESOLV_CONF, strerror(errno));
+
+	cmdargs(RESOLVD, args_start);
+
+	/*
+	 * Refresh DHCP leases on relevant interfaces.
+	 * This should trigger new nameserver proposals to
+	 * populate /etc/resolv.conf with.
+	 */
+	dhcpleased_refresh_leases();
 }
 
 /* flag to other nsh sessions or nsh conf() that actions have been taken */

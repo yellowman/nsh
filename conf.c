@@ -83,7 +83,6 @@ void conf_intgroup(FILE *, int, char *);
 void conf_keepalive(FILE *, int, char *);
 void conf_rtflags(char *, int, struct rt_msghdr *rtm);
 int dhcpleased_has_defaultroute(char *);
-int dhcpleased_controls_interface(char *, int);
 int dhclient_isenabled(char *);
 int islateif(char *);
 int isdefaultroute(struct sockaddr *, struct sockaddr *);
