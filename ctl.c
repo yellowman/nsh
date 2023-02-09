@@ -512,12 +512,6 @@ struct ctl ctl_resolv[] = {
 
 /* resolv.conf */
 struct ctl ctl_dns[] = {
-	{ "local-control", "local control over DNS settings",
-	    { RESOLVCONF_SYM, REQTEMP, NULL }, ctl_symlink,
-	    DB_X_LOCAL, T_HANDLER },
-	{ "dhcp-control",   "DHCP client control over DNS settings",
-	    { RESOLVCONF_SYM, RESOLVCONF_DHCP, NULL }, ctl_symlink,
-	    DB_X_OTHER, T_HANDLER },
 	{ "edit",	    "edit DNS settings",
 	    { "dns", NULL, NULL }, call_editor, 0, T_HANDLER },
 	{ 0, 0, { 0 }, 0, 0, 0 }
