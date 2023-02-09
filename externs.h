@@ -226,6 +226,7 @@ extern struct ctl ctl_dns[];
 extern struct ctl ctl_inet[];
 extern struct ctl ctl_ldap[];
 extern struct ctl ctl_motd[];
+extern struct ctl ctl_resolv[];
 void flag_x(char *, char *, int, char *);
 
 /* commands.c */
@@ -531,11 +532,13 @@ char *format_k(uint64_t amt);
 
 /* sqlite3.c */
 #define SQ3DBFILE "/var/run/nsh.db"
-#define DB_X_ENABLE 1
-#define DB_X_DISABLE 2
-#define DB_X_LOCAL 3
-#define DB_X_OTHER 4
-#define DB_X_REMOVE 5
+#define DB_X_ENABLE 1		/* enable command */
+#define DB_X_DISABLE 2		/* disable command */
+#define DB_X_LOCAL 3		/* local control command */
+#define DB_X_OTHER 4		/* other command */
+#define DB_X_REMOVE 5		/* remove command */
+#define DB_X_ENABLE_DEFAULT 6	/* enable command, always prints enable until disabled */
+#define DB_X_DISABLE_ALWAYS 7	/* disable command, always prints if disabled */
 int db_create_table_rtables(void);
 int db_create_table_flag_x(char *);
 int db_insert_flag_x(char *, char *, int, int, char *);

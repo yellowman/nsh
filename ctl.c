@@ -52,6 +52,7 @@
 #define IFSTATED	"/usr/sbin/ifstated"
 #define NPPPD		"/usr/sbin/npppd"
 #define NPPPCTL		"/usr/sbin/npppctl"
+#define RESOLVD		"/sbin/resolvd"
 #ifndef DHCPLEASES
 #define DHCPLEASES	"/var/db/dhcpd.leases"
 #endif
@@ -91,6 +92,7 @@ struct daemons ctl_daemons[] = {
 { "tftp-proxy",	"TFTP proxy",ctl_tftpproxy,TFTPPROXY_TEMP,0600, 0, RT_TABLEID_MAX },
 { "tftp",	"TFTP",	ctl_tftp,	TFTP_TEMP,	0600, 0, RT_TABLEID_MAX },
 { "nppp",	"PPP",	ctl_nppp,	NPPPCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
+{ "resolv",	"resolvd",ctl_resolv,	NULL,		0, 0, 0 },
 { "dns",	"DNS",	ctl_dns,	RESOLVCONF_TEMP,0644, 0, 0 },
 { "inet",	"Inet",	ctl_inet,	INETCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
 { "smtp",	"SMTP",	ctl_smtp,	SMTPCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
@@ -496,6 +498,15 @@ struct ctl ctl_tftp[] = {
 	   { TFTPD, "-l", "127.0.0.1", "/tftpboot", NULL }, NULL, DB_X_ENABLE, T_EXEC },
 	{ "disable",	"disable service",
 	   { PKILL, table, "tftpd", NULL }, NULL, DB_X_DISABLE, T_EXEC },
+	{ 0, 0, { 0 }, 0, 0, 0 }
+};
+
+/* resolvd */
+struct ctl ctl_resolv[] = {
+	{ "enable",	"enable service",
+	   { RESOLVD, NULL }, NULL, DB_X_ENABLE_DEFAULT, T_EXEC },
+	{ "disable",    "disable service",
+	   { PKILL, "resolvd", NULL }, NULL, DB_X_DISABLE_ALWAYS, T_EXEC },
 	{ 0, 0, { 0 }, 0, 0, 0 }
 };
 

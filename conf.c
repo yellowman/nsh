@@ -210,6 +210,7 @@ conf(FILE *output)
 	conf_interfaces(output, "pflow");
 
 	conf_ctl(output, "", "snmp", 0);
+	conf_ctl(output, "", "resolv", 0);
 	conf_ctl(output, "", "ldp", 0);
 	conf_ctl(output, "", "rip", 0);
 	conf_ctl(output, "", "ospf", 0);
@@ -312,8 +313,8 @@ void conf_ctl(FILE *output, char *delim, char *name, int rtableid)
 	struct daemons *x;
 	struct ctl *ctl;
 	char tmp_str[TMPSIZ], tmpfile[64];
-	char *fenablednm = NULL, *fothernm = NULL, *flocalnm = NULL;
-	int pntdrules = 0, pntdflag = 0, dbflag;
+	char *fenablenm = NULL, *fothernm = NULL, *flocalnm = NULL;
+	int defenable = 0, pntdrules = 0, pntdflag = 0, dbflag;
 
 	x = (struct daemons *)genget(name, (char **)ctl_daemons,
 	    sizeof(struct daemons));
@@ -322,7 +323,7 @@ void conf_ctl(FILE *output, char *delim, char *name, int rtableid)
 		return;
 	}
 
-	/* print rules */
+	/* print rules if they exist */
 	snprintf(tmpfile, sizeof(tmpfile), "%s.%d", x->tmpfile, rtableid);
 	if ((conf = fopen(tmpfile, "r")) != NULL) {
 		fprintf(output, "%s%s rules\n", delim, name);
@@ -336,18 +337,36 @@ void conf_ctl(FILE *output, char *delim, char *name, int rtableid)
 		fclose(conf);
 		fprintf(output, "%s!\n", delim);
 		pntdrules = 1;
-	} else if (errno != ENOENT || (errno != ENOENT && verbose))
+	} else if (errno != ENOENT || (errno == ENOENT && verbose))
 		printf("%% conf_ctl: %s: %s\n", tmpfile, strerror(errno));
 
+	/* fill in argument names from table */
 	for (ctl = x->table; ctl != NULL && ctl->name != NULL; ctl++) {
-		if (ctl->flag_x == DB_X_LOCAL)
+		switch(ctl->flag_x) {
+		case DB_X_ENABLE_DEFAULT:
+			defenable = 1;
+			/* FALLTHROUGH */
+		case DB_X_ENABLE:
+			fenablenm = ctl->name;
+			break;
+		case DB_X_LOCAL:
 			flocalnm = ctl->name;
-		if (ctl->flag_x == DB_X_OTHER)
+			break;
+		case DB_X_OTHER:
 			fothernm = ctl->name;
-		if (ctl->flag_x == DB_X_ENABLE)
-			fenablednm = ctl->name;
+			break;
+		case DB_X_DISABLE:
+		case DB_X_REMOVE:
+		case DB_X_DISABLE_ALWAYS:
+		case 0:
+			break;
+		default:
+			printf("%% conf_ctl: flag_x %d unknown\n", ctl->flag_x);
+			return;
+		}
 	}
 
+	/* print rules as currently enabled in running time database */
 	if ((dbflag = db_select_flag_x_dbflag_rtable("ctl", x->name, rtableid))
 	    < 0) {
 		printf("%% database ctl select failure (%s, %d)\n", x->name, rtableid);
@@ -355,8 +374,8 @@ void conf_ctl(FILE *output, char *delim, char *name, int rtableid)
 	}
 	switch(dbflag) {
 	case DB_X_ENABLE:
-		fprintf(output, "%s%s %s\n", delim, x->name, fenablednm ?
-		    fenablednm : "enable");
+		fprintf(output, "%s%s %s\n", delim, x->name, fenablenm ?
+		    fenablenm : "enable");
 		pntdflag = 1;
 		break;
 	case DB_X_LOCAL:
@@ -369,11 +388,24 @@ void conf_ctl(FILE *output, char *delim, char *name, int rtableid)
 		    fothernm : "other");
 		pntdflag = 1;
 		break;
+	case DB_X_DISABLE_ALWAYS:
+		fprintf(output, "%s%s disable\n", delim, x->name);
+		pntdflag = 1;
+		/* FALLTHROUGH */
 	case DB_X_DISABLE:
+		defenable = 0;
+		break;
+	case DB_X_REMOVE:
+	case DB_X_ENABLE_DEFAULT:
 	case 0:
 		break;
 	default:
-		printf("%% conf_ctl dbflag %d unknown\n", dbflag);
+		printf("%% conf_ctl: dbflag %d unknown\n", dbflag);
+	}
+	if (defenable) {
+		fprintf(output, "%s%s %s\n", delim, x->name, fenablenm ?
+		    fenablenm : "enable");
+		pntdflag = 1;
 	}
 	if (pntdrules && x->doreload) {
 		fprintf(output, "%s%s reload\n", delim, x->name);

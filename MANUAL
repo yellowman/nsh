@@ -133,7 +133,7 @@ OpenBSD normally executes out of /etc/rc and /etc/netstart. To disable the
 automatic start of these daemons and services, tell OpenBSD not to load
 them.
 
-rcctl disable sshd pf ntpd
+rcctl disable sshd pf ntpd resolvd
 
 Remove any networking config from /etc/ that conflicts with nsh, such
 as /etc/hostname.*, /etc/mygate, and daemons from /etc/rc.conf.local that
