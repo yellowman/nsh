@@ -56,6 +56,7 @@ void conf_sppp(FILE *, int, char *);
 /* conf.c */
 #define LEASEPREFIX	"/var/db/dhclient.leases"
 #define DHCPLEASECTL	"/usr/sbin/dhcpleasectl"
+#define SLAACCTL	"/usr/sbin/slaacctl"
 int conf(FILE *);
 u_long default_mtu(char *);
 int conf_routes(FILE *, char *, int, int, int);
@@ -371,6 +372,7 @@ int parse_ipv6(char *, struct in6_addr *);
 #define DHCRELAY	"/usr/sbin/dhcrelay"
 #define RAD		"/usr/sbin/rad"
 #define DHCPLEASED_SOCK	"/dev/dhcpleased.sock"
+#define SLAACD_SOCK	"/dev/slaacd.sock"
 #define IFDATA_MTU 1		/* request for if_data.ifi_mtu */
 #define IFDATA_BAUDRATE 2	/* request for if_data.ifi_baudrate */
 #define MBPS(bps) (bps / 1000 / 1000)
@@ -383,6 +385,7 @@ int parse_ipv6(char *, struct in6_addr *);
 void imr_init(char *);
 int is_valid_ifname(char *);
 int show_int(int, char **);
+int show_autoconf(int, char **);
 int get_rdomain(int, char *);
 int get_ifdata(char *, int);
 int get_ifflags(char *, int);
@@ -416,7 +419,9 @@ int intpwe3(char *, int, int, char **);
 int intvnetflowid(char *, int, int, char **);
 int addaf(char *, int, int);
 int removeaf(char *, int, int);
+int check_daemon_control_socket(const char *);
 int dhcpleased_is_running(void);
+int slaacd_is_running(void);
 char *get_hwdaddr(char *);
 
 /* main.c */

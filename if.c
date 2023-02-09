@@ -16,6 +16,7 @@
 
 #include <stdio.h>
 #include <ctype.h>
+#include <fcntl.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
@@ -421,6 +422,84 @@ show_int(int argc, char **argv)
 	return(0);
 }
 
+int
+show_autoconf(int argc, char **argv)
+{
+	struct if_nameindex *ifn_list, *ifnp;
+	char *ifname = NULL;
+	char outpath[PATH_MAX];
+	int ifs = -1, fd = -1, nullfd = -1, ifxflags;
+	int have_output = 0;
+
+	if (argc == 3) {
+		ifname = argv[2];
+		if (!is_valid_ifname(ifname)) {
+			printf("%% interface %s not found\n", ifname);
+			return (1);
+		}
+	}
+
+	nullfd = open("/dev/null", O_WRONLY | O_NOFOLLOW | O_CLOEXEC);
+	if (nullfd == -1) {
+		printf("%% open /dev/null: %s\n", strerror(errno));
+		return (1);
+	}
+
+	if ((ifs = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+		printf("%% socket: %s\n", strerror(errno));
+		close(nullfd);
+		return (1);
+	}
+
+	if ((ifn_list = if_nameindex()) == NULL) {
+		printf("%% if_nameindex: %s\n", strerror(errno));
+		close(nullfd);
+		close(ifs);
+		return (1);
+	}
+
+	strlcpy(outpath, "/tmp/nsh-XXXXXX", sizeof(outpath));
+	fd = mkstemp(outpath);
+	if (fd == -1) {
+		printf("%% mkstemp: %s\n", strerror(errno));
+		close(nullfd);
+		close(ifs);
+		if_freenameindex(ifn_list);
+		return (1);
+	}
+
+	for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++) {
+		if (ifname && strcmp(ifname, ifnp->if_name) != 0)
+			continue;
+
+		ifxflags = get_ifxflags(ifnp->if_name, ifs);
+#ifdef IFXF_AUTOCONF4		/* 6.6+ */
+		if ((ifxflags & IFXF_AUTOCONF4) && dhcpleased_is_running()) {
+			char *args[] = { DHCPLEASECTL, "-l",
+			    ifnp->if_name, NULL };
+			cmdargs_output(DHCPLEASECTL, args, fd, nullfd);
+			have_output = 1;
+		}
+#endif
+		if ((ifxflags & IFXF_AUTOCONF6) && slaacd_is_running()) {
+			char *args[] = { SLAACCTL, "show", "interface",
+			    ifnp->if_name, NULL };
+			cmdargs_output(SLAACCTL, args, fd, nullfd);
+			have_output = 1;
+		}
+	}
+
+	if (have_output)
+		more(outpath);
+
+	unlink(outpath);
+	if_freenameindex(ifn_list);
+	close(nullfd);
+	close(fd);
+	close(ifs);
+	return (0);
+}
+
 void
 show_vnet_parent(int ifs, char *ifname)
 {
@@ -698,13 +777,8 @@ removeaf(char *ifname, int af, int ifs)
 }
 
 int
-dhcpleased_is_running(void)
+check_daemon_control_socket(const char *sockname)
 {
-	/*
-	 * Should this path be configurable? Usually, there is
-	 * only one instance of this daemon per system...
-	 */
-	char *dhcpleased_sockname = DHCPLEASED_SOCK;
 	int sock, error;
 	struct sockaddr_un sun;
 
@@ -716,9 +790,9 @@ dhcpleased_is_running(void)
 
 	memset(&sun, 0, sizeof(sun));
 	sun.sun_family = AF_UNIX;
-	if (strlcpy(sun.sun_path, dhcpleased_sockname, sizeof(sun.sun_path)) >=
+	if (strlcpy(sun.sun_path, sockname, sizeof(sun.sun_path)) >=
 	    sizeof(sun.sun_path)) {
-		printf("socket path too long: %s\n", dhcpleased_sockname);
+		printf("socket path too long: %s\n", sockname);
 		return 0;
 	}
 
@@ -726,6 +800,18 @@ dhcpleased_is_running(void)
 	close(sock);
 
 	return error ? 0 : 1;
+}
+
+int
+dhcpleased_is_running(void)
+{
+	return check_daemon_control_socket(DHCPLEASED_SOCK);
+}
+
+int
+slaacd_is_running(void)
+{
+	return check_daemon_control_socket(SLAACD_SOCK);
 }
 
 int
