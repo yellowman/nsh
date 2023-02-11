@@ -149,9 +149,6 @@ struct ipsysctl ipsysctls[] = {
 { "portlast",		{ CTL_NET, PF_INET, IPPROTO_IP, IPCTL_IPPORT_LASTAUTO, MIB_STOP, 0 },   DEFAULT_PORTLAST, 0 },
 { "porthifirst",	{ CTL_NET, PF_INET, IPPROTO_IP, IPCTL_IPPORT_HIFIRSTAUTO, MIB_STOP, 0 }, DEFAULT_PORTHIFIRST, 0 },
 { "porthilast",		{ CTL_NET, PF_INET, IPPROTO_IP, IPCTL_IPPORT_HILASTAUTO, MIB_STOP, 0 },	DEFAULT_PORTHILAST, 0 },
-#ifdef notyet
-{ "default-mtu",	{ CTL_NET, PF_INET, IPPROTO_IP, IPCTL_DEFMTU, MIB_STOP, 0 },		DEFAULT_MTU, 0 },
-#endif
 { "default-ttl",	{ CTL_NET, PF_INET, IPPROTO_IP, IPCTL_DEFTTL, MIB_STOP, 0 },		DEFAULT_TTL, 0 },
 { 0, { 0, 0, 0, 0, 0, 0 }, 0, 0	}
 };
