@@ -232,6 +232,9 @@ conf(FILE *output)
 
 	conf_rtables(output);
 
+	fprintf(output, "!\n");
+	conf_nameserver(output);
+
 	return(0);
 }
 

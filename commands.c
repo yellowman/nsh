@@ -864,6 +864,7 @@ static char
 #ifdef notyet
 	parphelp[] =	"Proxy ARP set",
 #endif
+	nameserverhelp[] ="set or remove static DNS nameservers",
 	pfhelp[] =	"Packet filter control",
 	ospfhelp[] =	"OSPF control",
 	ospf6help[] = 	"OSPF6 control",
@@ -933,6 +934,7 @@ Command cmdtab[] = {
 #ifdef notyet
 	{ "proxy-arp",	parphelp,	CMPL0 0, 0, arpset,	1, 1, 0 },
 #endif
+	{ "nameserver",	nameserverhelp,	CMPL0 0, 0, nameserverset,1, 1, 0 },
 	{ "bridge",	bridgehelp,	CMPL(i) 0, 0, interface, 1, 1, 1 },
 	{ "show",	showhelp,	CMPL(ta) (char **)showlist, sizeof(Menu), showcmd,	0, 0, 0 },
 	{ "ip",		iphelp,		CMPL(ta) (char **)iptab, sizeof(Menu), ipcmd,		1, 1, 0 },

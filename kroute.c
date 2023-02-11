@@ -750,3 +750,139 @@ rtmsg(cmd, flags, proxy, export, tableid)
 	close(s);
 	return (l);
 }
+
+int
+rtnameserver(int argc, char *argv[], int tableid)
+{
+	struct rt_msghdr         rtm;
+	struct sockaddr_rtdns    rtdns;
+	struct iovec             iov[3];
+	struct addrinfo	 hints, *res;
+	struct in_addr           ns4[5];
+	struct in6_addr          ns6[5];
+	size_t			 ns4_count = 0, ns6_count = 0;
+	long			 pad = 0;
+	unsigned int		 if_index;
+	int			 error = 0, iovcnt = 0, padlen, i, s;
+	char			*if_name, buf[INET6_ADDRSTRLEN];
+
+	if (argc <= 0) {
+		printf("%% rtnameserver: no interface name provided\n");
+		return (1);
+	}
+
+	if_name = *argv;
+	argc--;
+	argv++;
+
+	if ((if_index = if_nametoindex(if_name)) == 0) {
+		printf("%% rtnameserver: unknown interface: %s", if_name);
+		return (1);
+	}
+
+	memset(&hints, 0, sizeof(hints));
+	hints.ai_family = AF_UNSPEC;
+	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_flags = AI_NUMERICHOST | AI_NUMERICSERV;
+
+#ifndef nitems
+#define nitems(_a)      (sizeof((_a)) / sizeof((_a)[0]))
+#endif
+
+	for (; argc > 0 && ns4_count + ns6_count < 5; argc--, argv++) {
+		error = getaddrinfo(*argv, NULL, &hints, &res);
+		if (error) {
+			printf("%% rtnameserver: %s", gai_strerror(error));
+			continue;
+		}
+		if (res == NULL) {
+			printf("%% rtnameserver: %s: unknown", *argv);
+			continue;
+		}
+
+		switch (res->ai_addr->sa_family) {
+		case AF_INET:
+			memcpy(&ns4[ns4_count++],
+			    &((struct sockaddr_in *)res->ai_addr)->sin_addr,
+			    sizeof(struct in_addr));
+			break;
+		case AF_INET6:
+			memcpy(&ns6[ns6_count++],
+			    &((struct sockaddr_in6 *)res->ai_addr)->sin6_addr,
+			    sizeof(struct in6_addr));
+			break;
+		default:
+			break;
+		}
+		freeaddrinfo(res);
+	}
+
+	if (verbose) {
+		for (i = 0; i < ns4_count; i++)
+			printf("v4: %s", inet_ntop(AF_INET, &ns4[i], buf,
+			    sizeof(buf)));
+		for (i = 0; i < ns6_count; i++)
+			printf("v6: %s", inet_ntop(AF_INET6, &ns6[i], buf,
+			    sizeof(buf)));
+	}
+
+	memset(&rtm, 0, sizeof(rtm));
+
+	rtm.rtm_version = RTM_VERSION;
+	rtm.rtm_type = RTM_PROPOSAL;
+	rtm.rtm_msglen = sizeof(rtm);
+	rtm.rtm_tableid = tableid;
+	rtm.rtm_index = if_index;
+	rtm.rtm_seq = 1;
+	rtm.rtm_priority = RTP_PROPOSAL_STATIC;
+	rtm.rtm_addrs = RTA_DNS;
+	rtm.rtm_flags = RTF_UP;
+
+	iov[iovcnt].iov_base = &rtm;
+	iov[iovcnt++].iov_len = sizeof(rtm);
+
+	iov[iovcnt].iov_base = &rtdns;
+	iov[iovcnt++].iov_len = sizeof(rtdns);
+	rtm.rtm_msglen += sizeof(rtdns);
+
+	padlen = ROUNDUP(sizeof(rtdns)) - sizeof(rtdns);
+	if (padlen > 0) {
+		iov[iovcnt].iov_base = &pad;
+		iov[iovcnt++].iov_len = padlen;
+		rtm.rtm_msglen += padlen;
+	}
+
+	memset(&rtdns, 0, sizeof(rtdns));
+	rtdns.sr_family = AF_INET;
+	rtdns.sr_len = 2 + ns4_count * sizeof(struct in_addr);
+	memcpy(rtdns.sr_dns, ns4, rtdns.sr_len - 2);
+
+	s = socket(AF_ROUTE, SOCK_RAW, AF_UNSPEC);
+	if (s == -1) {
+		printf("%% rtnameserver: socket: %s\n", strerror(errno));
+		close(s);
+		return (1);
+	}
+
+	if (writev(s, iov, iovcnt) == -1) {
+		printf("%% rtnameserver: failed to send routing message: %s",
+		    strerror(errno));
+		error = 1;
+	}
+
+	rtm.rtm_seq++;
+
+	memset(&rtdns, 0, sizeof(rtdns));
+	rtdns.sr_family = AF_INET6;
+	rtdns.sr_len = 2 + ns6_count * sizeof(struct in6_addr);
+	memcpy(rtdns.sr_dns, ns6, rtdns.sr_len - 2);
+
+	if (writev(s, iov, iovcnt) == -1) {
+		printf("%% rtnameserver: failed to send routing message: %s",
+		    strerror(errno));
+		error = 1;
+	}
+
+	close(s);
+	return (error);
+}

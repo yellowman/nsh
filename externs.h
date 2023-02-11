@@ -364,6 +364,7 @@ int is_ip_addr(char *);
 void parse_ip_pfx(char *, int, ip_t *);
 int ip_route(ip_t *, ip_t *, u_short, int, int, struct rt_metrics, int inits);
 #endif
+int rtnameserver(int, char *[], int);
 #ifdef _NETINET6_IN6_H_
 int parse_ipv6(char *, struct in6_addr *);
 #endif
@@ -513,6 +514,10 @@ void arpdump(void);
 void conf_arp(FILE *, char *);
 char *sec2str(time_t);
 
+/* nameserver.c */
+int nameserverset(int, char **);
+void conf_nameserver(FILE *);
+
 /* more.c */
 int more(char *);
 int nsh_cbreak(void);
@@ -546,11 +551,14 @@ char *format_k(uint64_t amt);
 #define DB_X_DISABLE_ALWAYS 7	/* disable command, always prints if disabled */
 int db_create_table_rtables(void);
 int db_create_table_flag_x(char *);
+int db_create_table_nameservers(void);
 int db_insert_flag_x(char *, char *, int, int, char *);
 int db_insert_rtables(int, char *);
+int db_insert_nameserver(char *);
 int db_delete_rtables_rtable(int);
 int db_delete_flag_x_ctl(char *, char *);
 int db_delete_flag_x_ctl_data(char *, char *, char *);
+int db_delete_nameservers(void);
 #ifdef _STRINGLIST_H
 int db_select_flag_x_ctl_data(StringList *, char *, char *, char *);
 int db_select_flag_x_ctl(StringList *, char *, char *);
@@ -560,6 +568,7 @@ int db_select_rtables_ctl(StringList *, char *);
 int db_select_name_rtable(StringList *, int);
 int db_select_flag_x_ctl_rtable(StringList *, char *, int);
 int db_select_flag_x_data_ctl_rtable(StringList *, char *, char *, int);
+int db_select_nameservers(StringList *);
 #endif
 int db_select_flag_x_dbflag_rtable(char *, char *, int);
 

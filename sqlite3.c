@@ -34,6 +34,13 @@ db_create_table_rtables(void)
 }
 
 int
+db_create_table_nameservers(void)
+{
+	char query[]="CREATE TABLE IF NOT EXISTS nameservers (nameserver TEXT)";
+	return(sq3simple(query, NULL));
+}
+
+int
 db_create_table_flag_x(char *name)
 {
 	char		query[QSZ];
@@ -72,6 +79,16 @@ db_delete_rtables_rtable(int rtableid)
 }
 
 int
+db_insert_nameserver(char *nameserver)
+{
+	char		query[QSZ];
+
+	snprintf(query, QSZ, "INSERT OR REPLACE INTO 'nameservers' VALUES('%s')",
+	    nameserver);
+	return(sq3simple(query, NULL));
+}
+
+int
 db_delete_flag_x_ctl(char *name, char *ctl)
 {
 	char		query[QSZ];
@@ -86,6 +103,15 @@ db_delete_flag_x_ctl_data(char *name, char *ctl, char *data)
 	char		query[QSZ];
 
 	snprintf(query, QSZ, "DELETE FROM '%s' WHERE ctl='%s' AND data='%s'", name, ctl, data);
+	return(sq3simple(query, NULL));
+}
+
+int
+db_delete_nameservers(void)
+{
+	char		query[QSZ];
+
+	snprintf(query, QSZ, "DELETE FROM 'nameservers'");
 	return(sq3simple(query, NULL));
 }
 
@@ -165,6 +191,13 @@ db_select_flag_x_dbflag_rtable(char *name, char *ctl, int rtableid)
 	sl_free(words, 1);
 
 	return rv;
+}
+
+int
+db_select_nameservers(StringList *words)
+{
+	char query[]="SELECT nameserver FROM nameservers";
+	return(sq3simple(query, words));
 }
 
 int
