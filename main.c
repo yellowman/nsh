@@ -105,6 +105,8 @@ main(int argc, char *argv[])
 		printf("%% database authkey creation failed\n");
 	if (db_create_table_flag_x("peerkey") < 0)
 		printf("%% database peerkey creation failed\n");
+	if (db_create_table_nameservers() < 0)
+		printf("%% database nameservers creation failed\n");
 
 	if (iflag) {
 		/*
