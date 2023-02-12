@@ -93,7 +93,6 @@ struct daemons ctl_daemons[] = {
 { "tftp",	"TFTP",	ctl_tftp,	TFTP_TEMP,	0600, 0, RT_TABLEID_MAX },
 { "nppp",	"PPP",	ctl_nppp,	NPPPCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
 { "resolv",	"resolvd",ctl_resolv,	NULL,		0, 0, 0 },
-{ "dns",	"DNS",	ctl_dns,	RESOLVCONF_TEMP,0644, 0, 0 },
 { "inet",	"Inet",	ctl_inet,	INETCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
 { "smtp",	"SMTP",	ctl_smtp,	SMTPCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
 { "ldap",	"LDAP",	ctl_ldap,	LDAPCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
@@ -507,13 +506,6 @@ struct ctl ctl_resolv[] = {
 	   { RESOLVD, NULL }, NULL, DB_X_ENABLE_DEFAULT, T_EXEC },
 	{ "disable",    "disable service",
 	   { PKILL, "resolvd", NULL }, NULL, DB_X_DISABLE_ALWAYS, T_EXEC },
-	{ 0, 0, { 0 }, 0, 0, 0 }
-};
-
-/* resolv.conf */
-struct ctl ctl_dns[] = {
-	{ "edit",	    "edit DNS settings",
-	    { "dns", NULL, NULL }, call_editor, 0, T_HANDLER },
 	{ 0, 0, { 0 }, 0, 0, 0 }
 };
 
