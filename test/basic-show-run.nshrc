@@ -1,0 +1,75 @@
+enable
+show run
+show startup
+show hostname
+show interface
+show route
+show route6
+show sadb
+show arp
+show kernel ip
+show kernel ah
+show kernel esp
+show kernel tcp
+show kernel udp
+show kernel icmp
+show kernel igmp
+show kernel ipcomp
+show kernel route
+show kernel carp
+show kernel mbuf
+show kernel pf
+show bgp announced
+show bgp interfaces
+show bgp nexthop
+show bgp summary
+show bgp rib
+show bgp neighbor
+show bgp ip
+show ospf fib
+show ospf database
+show ospf interfaces
+show ospf neighbor
+show ospf rib
+show ospf summary
+show ospf6 fib
+show ospf6 database
+show ospf6 interfaces
+show ospf6 neighbor
+show ospf6 rib
+show ospf6 summary
+show eigrp
+show rip fib
+show rip interfaces
+show rip neighbor
+show rip rib
+show ldp fib
+show ldp interfaces
+show ldp neighbor
+show ldp lib
+show ldp discovery
+show ldp l2vpn bindings
+show ldp l2vpn pseudowires
+show ike monitor
+show ipsec flows
+show ipsec sadb
+show dvmrp igmp
+show dvmrp interfaces
+show dvmrp mfc
+show dvmrp neighbor
+show dvmrp rib
+show dvmrp summary
+show relay hosts
+show relay redirects
+show relay status
+show relay sessions
+show relay summary
+show dhcp leases
+show smtp queue
+show smtp runqueue
+show smtp stats
+show ldap stats
+show montior
+show version
+show users
+show ?
