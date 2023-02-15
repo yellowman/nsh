@@ -296,7 +296,8 @@ nsh/help
   ftp-proxy     ftp-proxy server control
   tftp-proxy    tftp-proxy server control
   tftp          TFTP server control
-  dns           DNS rule control
+  resolv        Resolver configuration control
+  nameserver    set or remove static DNS nameservers
   motd          Message of-the-day
   inet          Inet super-server control
   ping          Send IPv4 ICMP echo request
@@ -1229,20 +1230,51 @@ Enable or disable the tftp daemon.
 .Nm
 starts tftpd on 127.0.0.1, port 69 by default.
 .Pp
-.Tg dns
-.Ic dns
-.Op Cm local-control | dhcp-control | edit
+.Tg resolv
+.Ic resolv
+.Op Cm enable | disable
 .Pp
-Configure Domain Name Service client on the system.
-.Ar local-control
-is for manual statically configured DNS client setup.
-.Ar dhcp-control
-is to allow dhcp client to update DNS client settings from recieved DNS
-servers in a DHCP offer.
-.Cm edit
-command, is used to statically configure DNS options, the syntax
-is documented in
-.Xr resolv.conf 5 .
+Enable or disable
+.Xr resolvd 8 .
+.Xr resolvd 8
+is enabled by default and is required to learn DNS information over
+DHCP and IPv6 RA.
+If
+.Xr resolvd 8
+is disabled then the
+.Xr resolv.conf 5
+file must be maintained manually.
+.Pp
+.Tg nameserver
+.Bl -tag -width nameserver
+.It Xo
+.Cm nameserver
+.Ar IP-address1
+.Op Ar IP-address2 ...  IP-address5
+.Xr
+.It Cm no nameserver
+.El
+.Pp
+Configure static DNS name resolution servers used by the system.
+Up to 5 IPv4 and/or IPv6
+.Ar IP-address
+arguments can be specified, which will then be added to
+.Xr resolv.conf 5
+via
+.Xr resolvd 8 .
+.Pp
+The
+.Cm no nameserver
+command removes any previously configured static DNS servers.
+.Pp
+The
+.Cm nameserver
+command requires
+.Xr resolvd 8
+to be enabled.
+DNS servers learned via DHCP or IPv6 RA are not affected by the
+.Cm nameserver
+command.
 .Pp
 .Tg inetd
 .Tg inet
