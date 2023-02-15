@@ -33,7 +33,7 @@ int resolvd_is_disabled(void);
 int
 nameserver_usage(void)
 {
-	printf("%% nameserver address ... (up to 5 addresses)\n");
+	printf("%% nameserver IP-address1 [IP-address2 ... IP-address5]\n");
 	printf("%% no nameserver\n");
 	return (0);
 }
