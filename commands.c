@@ -110,6 +110,8 @@ static int	flush_line(char *);
 static int	flush_ip_routes(void);
 static int	flush_arp_cache(void);
 static int	flush_history(void);
+static int	is_bad_input(const char *, size_t);
+static int	read_command_line(EditLine *, History *);
 static int	int_help(void);
 static int	el_burrito(EditLine *, int, char **);
 static int	hostname(int, char **);
@@ -635,6 +637,65 @@ struct intlist Bridgelist[] = {
 	{ 0, 0, 0, 0, 0, 0 }
 };
 
+static int
+is_bad_input(const char *buf, size_t num)
+{
+	int i;
+
+	if (num >= sizeof(line)) {
+		printf("%% Input exceeds permitted length\n");
+		return 1;
+	}
+
+	for (i = 0; i < num; i++) {
+		if (!isprint((unsigned char)buf[i])) {
+			printf("%% Input contains bad character\n");
+			return 1;
+		}
+	}
+
+	return 0;
+}
+
+/*
+ * Try to read a non-empty command into the global line buffer.
+ * Return -1 upon error from el_gets().
+ * If successful, enter the command into editing history and
+ * return the amount of characters read.
+ * The Enter key by itself has no effect.
+ * Return 0 if any of EOF, "exit", and ".." is read.
+ * Do not add "exit" or ".." to editing history.
+ */
+static int
+read_command_line(EditLine *el, History *hist)
+{
+	const char *buf;
+	int num;
+
+	do {
+		num = 0;
+		if ((buf = el_gets(el, &num)) == NULL) {
+			if (num == -1)
+				return -1;
+			/* EOF, e.g. ^X or ^D via exit_i() in complete.c */
+			return 0;
+		}
+		while (num > 0 && isspace((unsigned char)buf[num - 1]))
+			num--;
+		if (is_bad_input(buf, num))
+			continue;
+	} while (num == 0); /* Enter key */
+
+	if ((num == 4 && strncmp(buf, "exit", num) == 0) ||
+	    (num == 2 && strncmp(buf, "..", num) == 0))
+		return 0;
+	
+	memcpy(line, buf, (size_t)num);
+	line[num] = '\0';
+	history(hist, &ev, H_ENTER, buf);
+	return num;
+}
+
 /*
  * command handler for interface and bridge modes
  *
@@ -647,7 +708,6 @@ struct intlist Bridgelist[] = {
 static int
 interface(int argc, char **argv, char *modhvar)
 {
-	u_int num;
 	int ifs, set = 1;
 	char *tmp;
 	struct intlist *i;	/* pointer to current command */
@@ -773,26 +833,23 @@ interface(int argc, char **argv, char *modhvar)
 				}
 				break;
 			}
+			if (line[0] == '\0')
+				break;
 		} else {
-			const char *buf;
-			cursor_pos = NULL;
+			int num;
 
-			if ((buf = el_gets(eli, &num)) == NULL || num == 0)
+			cursor_pos = NULL;
+			num = read_command_line(eli, histi);
+			if (num == 0)
 				break;
-			if (buf[--num]  == '\n') {
-				if (num == 0)
-					break;
+			if (num == -1) {
+				printf("%% Input error: %s\n",
+				    strerror(errno));
+				close(ifs);
+				return(1);
 			}
-			if (num >= sizeof(line)) {
-				printf("%% Input exceeds permitted length\n");
-				break;
-			}
-			memcpy(line, buf, (size_t)num);
-			line[num] = '\0';
-			history(histi, &ev, H_ENTER, buf);
 		}
-		if (line[0] == 0)
-			break;
+
 		makeargv();
 		if (margv[0] == 0)
 			break;
