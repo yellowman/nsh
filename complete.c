@@ -478,6 +478,7 @@ initedit()
 		el_set(eli, EL_BIND, "\t", "complt_i", NULL);
 		el_set(eli, EL_ADDFN, "exit_i", "Exit", exit_i);
 		el_set(eli, EL_BIND, "^X", "exit_i", NULL);
+		el_set(eli, EL_BIND, "^D", "exit_i", NULL);
 		el_source(eli, NULL);
 		el_set(eli, EL_SIGNAL, 1);
 	}
