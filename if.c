@@ -1769,7 +1769,7 @@ intgroup(char *ifname, int ifs, int argc, char **argv)
 
 	for (i = 0; i < argc; i++) {
 		/* Validate supplied argument(s) before applying them */
-		if (isdigit(argv[i][strlen(argv[i]) - 1])) {
+		if (isdigit((unsigned char)argv[i][strlen(argv[i]) - 1])) {
 			printf("%% Group names may not end with a digit\n");
 			return 0;
 		}
