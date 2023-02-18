@@ -307,7 +307,7 @@ complete(EditLine *el, int ch, char **table, size_t stlen, char *arg)
 	lastc_argo = cursor_argo;
 	makeargv();			/* build argc/argv of current line */
 
-	if (cursor_argo >= sizeof(word))
+	if (margc == 0 || cursor_argo >= sizeof(word))
 		return (CC_ERROR);
 
 	dolist = 0;
