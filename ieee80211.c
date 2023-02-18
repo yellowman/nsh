@@ -84,7 +84,7 @@ get_string(const char *val, const char *sep, u_int8_t *buf, int *lenp)
 
 	len = *lenp;
 	p = buf;
-	hexstr = (val[0] == '0' && tolower((u_char) val[1]) == 'x');
+	hexstr = (val[0] == '0' && tolower((unsigned char)val[1]) == 'x');
 	if (hexstr)
 		val += 2;
 	for (;;) {
@@ -95,8 +95,8 @@ get_string(const char *val, const char *sep, u_int8_t *buf, int *lenp)
 			break;
 		}
 		if (hexstr) {
-			if (!isxdigit((u_char) val[0]) ||
-			    !isxdigit((u_char) val[1])) {
+			if (!isxdigit((unsigned char)val[0]) ||
+			    !isxdigit((unsigned char)val[1])) {
 				printf("%% get_string: bad hexadecimal digits\n");
 				return NULL;
 			}
@@ -109,9 +109,9 @@ get_string(const char *val, const char *sep, u_int8_t *buf, int *lenp)
 			return NULL;
 		}
 		if (hexstr) {
-#define tohex(x)        (isdigit(x) ? (x) - '0' : tolower(x) - 'a' + 10)
-			*p++ = (tohex((u_char) val[0]) << 4) |
-				tohex((u_char) val[1]);
+#define tohex(x)        (isdigit((unsigned char)(x)) ? (x) - '0' : \
+			    tolower((unsigned char)(x)) - 'a' + 10)
+			*p++ = (tohex(val[0]) << 4) | tohex(val[1]);
 #undef tohex
 			val += 2;
 		} else {
@@ -139,12 +139,14 @@ make_string(char *str, int str_len, const u_int8_t *buf, int buf_len)
 	str_len--;
 	i = 0;
 	hasspc = 0;
-	if (buf_len < 2 || buf[0] != '0' || tolower(buf[1]) != 'x') {
+	if (buf_len < 2 || buf[0] != '0' ||
+	    tolower((unsigned char)buf[1]) != 'x') {
 		for (; i < buf_len; i++) {
 			/* Only print 7-bit ASCII keys */
-			if (buf[i] & 0x80 || !isprint(buf[i]))
+			if (buf[i] & 0x80 ||
+			    !isprint((unsigned char)buf[i]))
 				break;
-			if (isspace(buf[i]))
+			if (isspace((unsigned char)buf[i]))
 				hasspc++;
 		}
 	}
@@ -210,7 +212,7 @@ intnwkey(char *ifname, int ifs, int argc, char **argv)
 		goto set_nwkey;
 	} else {
 set_nwkey:
-		if (isdigit(val[0]) && val[1] == ':') {
+		if (isdigit((unsigned char)val[0]) && val[1] == ':') {
 			/* specifying a full set of four keys */
 			nwkey.i_defkid = val[0] - '0';
 			val += 2;
@@ -380,15 +382,14 @@ get_nwinfo(char *ifname, char *str, int str_len, int type)
 				}
 				/* check extra ambiguity with keywords */
 				if (!nwkey_verbose) {
-					if (nwkey.i_key[0].i_keylen >= 2 &&
-					    isdigit(nwkey.i_key[0].i_keydat[0])
-					    && nwkey.i_key[0].i_keydat[1] ==
-					    ':')
+					uint8_t *kdat = nwkey.i_key[0].i_keydat;
+					size_t klen = nwkey.i_key[0].i_keylen;
+					if (klen >= 2 &&
+					    isdigit((unsigned char)kdat[0]) &&
+					    kdat[1] == ':')
 						nwkey_verbose = 1;
-					else if (nwkey.i_key[0].i_keylen >= 7 &&
-						    isprefix(
-						    nwkey.i_key[0].i_keydat,
-						    "persist"))
+					else if (klen >= 7 &&
+					    isprefix(kdat, "persist"))
 						nwkey_verbose = 1;
 				}
 				if (nwkey_verbose) {

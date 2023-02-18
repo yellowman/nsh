@@ -1085,7 +1085,7 @@ makeargv()
 	}
 	while ((c = *cp)) {
 		int inquote = 0;
-		while (isspace(c))
+		while (isspace((unsigned char)c))
 			c = *++cp;
 		if (c == '\0')
 			break;
@@ -1109,7 +1109,7 @@ makeargv()
 				} else if (c == '\'') {
 					inquote = '\'';
 					continue;
-				} else if (isspace(c)) {
+				} else if (isspace((unsigned char)c)) {
 					cursor_argo = 0;
 					break;
 				}
