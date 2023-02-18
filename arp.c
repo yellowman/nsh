@@ -70,7 +70,7 @@ void conf_arp_entry(FILE *, char *, struct sockaddr_dl *,
 	struct sockaddr_inarp *, struct rt_msghdr *);
 static char *ether_str(struct sockaddr_dl *);
 int getinetaddr(const char *, struct in_addr *);
-void getsocket(void);
+int getsocket(void);
 int rtmsg_arp(int, int, int, int);
 
 static int nflag;	/* no reverse dns lookups */
@@ -83,22 +83,24 @@ extern int h_errno;
 #define F_FILESET	3
 #define F_DELETE	4
 
-void
+int
 getsocket(void)
 {
 	socklen_t len = sizeof(cli_rtable);
 
 	if (s >= 0)
-		return;
+		return s;
 	s = socket(PF_ROUTE, SOCK_RAW, 0);
 	if (s < 0) {
 		printf("%% getsocket: socket: %s\n", strerror(errno));
-		return;
+		return s;
 	}
 	if (setsockopt(s, PF_ROUTE, ROUTE_TABLEFILTER, &cli_rtable, len) < 0) {
 		printf("%% getsocket: setsockopt: %s\n", strerror(errno));
-		return;
+		return -1;
 	}
+
+	return s;
 }
 
 struct sockaddr_in	so_1mask = { 8, 0, 0, { 0xffffffff } };
@@ -145,7 +147,8 @@ arpset(int argc, char *argv[])
 		host = argv[1];
 		eaddr = NULL;
 	}
-	getsocket();
+	if (getsocket() < 0)
+		return (1);
 	sdl_m = blank_sdl;		/* struct copy */
 	sin_m = blank_sin;		/* struct copy */
 	if (getinetaddr(host, &sin->sin_addr) == -1)
@@ -280,7 +283,8 @@ arpdelete(const char *host, const char *info)
 
 	if (info && isprefix((char *)info, "proxy"))
 		export_only = 1;
-	getsocket();
+	if (getsocket() < 0)
+		return (1);
 	sin_m = blank_sin;		/* struct copy */
 	if (getinetaddr(host, &sin->sin_addr) == -1)
 		return (1);
