@@ -505,9 +505,9 @@ void show_trunk(int ifs, char *ifname);
 int who(int, char **);
 
 /* arp.c */
-int arpget(const char *);
+int arpget(const char *, int);
 int arpset(int, char **);
-void arpdump(void);
+void arpdump(int);
 void conf_arp(FILE *, char *);
 char *sec2str(time_t);
 

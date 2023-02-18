@@ -1505,6 +1505,21 @@ nsh(p)/show hostname
 .Ed
 .El
 .Pp
+.Ic show arp
+.Op Fl n
+.Op Ar address
+.Pp
+Display the ARP table.
+.Pp
+If an
+.Ar address
+is specified display an ARP table entry which matches this address.
+Otherwise display all ARP table entries.
+.Pp
+The
+.Fl n
+option disables reverse-DNS lookup of displayed IP addresses.
+.Pp
 .Ic show interface
 .Op Ar interface-name
 .Pp

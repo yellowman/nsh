@@ -163,7 +163,7 @@ Menu showlist[] = {
 	{ "route",	"IPv4 route table or route lookup", CMPL0 0, 0, 0, 1, pr_routes },
 	{ "route6",	"IPv6 route table or route lookup", CMPL0 0, 0, 0, 1, pr_routes6 },
 	{ "sadb",	"Security Association Database", CMPL0 0, 0, 0, 0, pr_sadb },
-	{ "arp",	"ARP table",		CMPL0 0, 0, 0, 1, pr_arp },
+	{ "arp",	"ARP table",		CMPL0 0, 0, 0, 2, pr_arp },
 	{ "kernel",	"Kernel statistics",	CMPL(ta) (char **)stts, sizeof(struct stt), 0, 1, pr_kernel },
 	{ "bgp",	"BGP information",	CMPL(ta) (char **)bgcs, sizeof(struct prot1), 0, 4, pr_prot1 },
 	{ "ospf",	"OSPF information",	CMPL(ta) (char **)oscs, sizeof(struct prot1), 0, 3, pr_prot1 },
@@ -2160,14 +2160,43 @@ pr_routes6(int argc, char **argv)
 int
 pr_arp(int argc, char **argv)
 {
-	switch(argc) {
+	int nflag = 0;
+	char *address = NULL;
+
+	/* Detect show arp -n [address] */
+	if (argc >= 2) {
+		int ch;
+
+		optind = 2;
+		optreset = 1;
+		opterr = 1;
+		while ((ch = getopt(argc, argv, "n")) != -1) {
+			switch (ch) {
+			case 'n':
+				nflag = 1;
+				break;
+			default:
+				/* getopt prints "unknown option" error */
+				return 1;
+			}
+		}
+	}
+
+	if (nflag) {
+		if (argc >= 3)
+			address = argv[3];
+		argc--;
+	} else if (argc == 3) 
+		address = argv[2];
+
+	switch (argc) {
 	case 2:
 		/* show arp table */
-		arpdump();
+		arpdump(nflag);
 		break;
 	case 3:
 		/* specific address */
-		arpget(argv[2]);
+		arpget(address, nflag);
 		break;
 	}
 	return 0;

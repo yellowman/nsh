@@ -73,7 +73,7 @@ int getinetaddr(const char *, struct in_addr *);
 void getsocket(void);
 int rtmsg_arp(int, int, int, int);
 
-static int nflag;	/* no reverse dns lookups */
+static int no_reverse_dns;
 static int s = -1;
 
 extern int h_errno;
@@ -239,10 +239,12 @@ overwrite:
  * Display an individual arp entry
  */
 int
-arpget(const char *host)
+arpget(const char *host, int nflag)
 {
 	struct sockaddr_inarp *sin;
 	int found_entry;
+
+	no_reverse_dns = nflag;
 
 	sin = &sin_m;
 	sin_m = blank_sin;		/* struct copy */
@@ -369,8 +371,10 @@ arpsearch(FILE *output, char *delim, in_addr_t addr, void (*action)
  * Dump the entire ARP table
  */
 void
-arpdump(void)
+arpdump(int nflag)
 {
+	no_reverse_dns = nflag;
+
 	printf("%-*.*s %-*.*s %*.*s %-10.10s %5s\n",
 	    W_ADDR, W_ADDR, "Host", W_LL, W_LL, "Ethernet Address",
 	    W_IF, W_IF, "Netif", "Expire", "Flags");
@@ -421,7 +425,7 @@ print_entry(FILE *output, char *delim, struct sockaddr_dl *sdl,
 
 	gettimeofday(&now, 0);
 
-	if (nflag == 0)
+	if (!no_reverse_dns)
 		hp = gethostbyaddr((caddr_t)&(sin->sin_addr),
 		    sizeof(sin->sin_addr), AF_INET);
 	if (hp)
