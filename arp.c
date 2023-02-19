@@ -73,7 +73,6 @@ int getinetaddr(const char *, struct in_addr *);
 int getsocket(void);
 int rtmsg_arp(int, int, int, int);
 
-static int nflag;	/* no reverse dns lookups */
 static int s = -1;
 
 extern int h_errno;
@@ -414,7 +413,6 @@ print_entry(FILE *output, char *delim, struct sockaddr_dl *sdl,
     struct sockaddr_inarp *sin, struct rt_msghdr *rtm)
 {
 	char ifix_buf[IFNAMSIZ], *ifname, *host;
-	struct hostent *hp = NULL;
 	int addrwidth, llwidth, ifwidth ;
 	struct timeval now;
 
@@ -425,13 +423,7 @@ print_entry(FILE *output, char *delim, struct sockaddr_dl *sdl,
 
 	gettimeofday(&now, 0);
 
-	if (nflag == 0)
-		hp = gethostbyaddr((caddr_t)&(sin->sin_addr),
-		    sizeof(sin->sin_addr), AF_INET);
-	if (hp)
-		host = hp->h_name;
-	else
-		host = inet_ntoa(sin->sin_addr);
+	host = inet_ntoa(sin->sin_addr);
 
 	addrwidth = strlen(host);
 	if (addrwidth < W_ADDR)
