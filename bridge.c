@@ -769,6 +769,7 @@ bridge_list(int s, char *brdg, char *delim, char *br_str, int str_len, int type)
 	u_int i, len = 8192;
 	int identified = 0;
 	char buf[256], *inbuf = NULL, *inb;
+	uint32_t v;
 
 	while (1) {
 		strlcpy(bifc.ifbic_name, brdg, sizeof(bifc.ifbic_name));
@@ -877,6 +878,22 @@ bridge_list(int s, char *brdg, char *delim, char *br_str, int str_len, int type)
 				strlcat(br_str, buf, str_len);
 				identified++;
 			}
+			break;
+		case PROTECTED:
+			if (reqp->ifbr_protected == 0)
+				break;
+			v = ffs(reqp->ifbr_protected);
+			snprintf(buf, sizeof(buf), "%sprotect %s %u", delim,
+			    reqp->ifbr_ifsname, v);
+			strlcat(br_str, buf, str_len);
+			while (++v < 32) {
+				if ((1 << (v - 1)) & reqp->ifbr_protected) {
+					snprintf(buf, sizeof(buf), ",%u", v);
+					strlcat(br_str, buf, str_len);
+				}
+			}
+			strlcat(br_str, "\n", str_len);
+			identified++;
 			break;
 		}
 	}
