@@ -535,7 +535,7 @@ ether_str(struct sockaddr_dl *sdl)
 
 /* -1 error */
 int
-rtmsg_arp(cmd, flags, doing_proxy, export_only)
+rtmsg_arp(int cmd, int flags, int doing_proxy, int export_only)
 {
 	static int seq;
 	struct rt_msghdr *rtm;
