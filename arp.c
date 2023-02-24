@@ -447,9 +447,15 @@ conf_arp_entry(FILE *output, char *delim, struct sockaddr_dl *sdl,
 
 	host = inet_ntoa(sin->sin_addr);
 
-	if (!(rtm->rtm_flags & (RTF_PERMANENT_ARP|RTF_LOCAL|RTF_BROADCAST)) &&
-	    (rtm->rtm_rmx.rmx_expire == 0))
-		fprintf(output, "%s%s %s\n", delim, host, ether_str(sdl));
+	if ((rtm->rtm_flags & RTF_LOCAL) || rtm->rtm_rmx.rmx_expire != 0)
+		return;
+
+	fprintf(output, "%s%s %s", delim, host, ether_str(sdl));
+	if (rtm->rtm_flags & RTF_PERMANENT_ARP)
+		fputs(" permanent", output);
+	if (rtm->rtm_flags & RTF_ANNOUNCE)
+		fputs(" pub", output);
+	fputs("\n", output);
 }
 
 /*
