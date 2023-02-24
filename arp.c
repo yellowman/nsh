@@ -118,7 +118,7 @@ arpset(int argc, char *argv[])
 	struct rt_msghdr *rtm;
 	char *eaddr, *host;
 	struct ether_addr *ea = NULL;
-	int flags = 0, set = 1, doing_proxy, export_only;
+	int flags = 0, set = 1, doing_proxy, export_only, i;
 
 	sin = &sin_m;
 	rtm = &(m_rtmsg.m_rtm);
@@ -129,8 +129,9 @@ arpset(int argc, char *argv[])
 		argv++;
 	}
 
-	if ((set && argc != 3) || (!set && (argc < 2 || argc > 3))) {
-		printf("%% %s <inet addr> <ether addr>\n", argv[0]);
+	if ((set && (argc < 3 || argc > 6)) || (!set && argc != 3)) {
+		printf("%% %s <inet addr> <ether addr> [temp | permanent] "
+		    "[pub]\n", argv[0]);
 		printf("%% no %s <inet addr> [ether addr]\n", argv[0]);
 		return(1);
 	}
@@ -139,7 +140,7 @@ arpset(int argc, char *argv[])
 		return(arpdelete(argv[1], NULL));
 	}
 
-	if (argc == 3) {
+	if (argc >= 3) {
 		host = argv[1];
 		eaddr = argv[2];
 	} else {
@@ -164,8 +165,8 @@ arpset(int argc, char *argv[])
 	sdl_m.sdl_alen = 6;
 	expire_time = 0;
 	doing_proxy = flags = export_only = 0;
-	while (argc-- > 0) {
-		if (isprefix(argv[0], "temp")) {
+	for (i = 3; i < argc; i++) {
+		if (isprefix(argv[i], "temp")) {
 			struct timeval now;
 
 			gettimeofday(&now, 0);
@@ -175,18 +176,20 @@ arpset(int argc, char *argv[])
 				printf("%% temp or permanent, not both\n");
 				return (0);
 			}
-		} else if (isprefix(argv[0], "pub")) {
+		} else if (isprefix(argv[i], "pub")) {
 			flags |= RTF_ANNOUNCE;
 			doing_proxy = SIN_PROXY;
-		} else if (isprefix(argv[0], "permanent")) {
+		} else if (isprefix(argv[i], "permanent")) {
 			flags |= RTF_PERMANENT_ARP;
 			if (expire_time != 0) {
 				/* temp or permanent, not both */
 				printf("%% temp or permanent, not both\n");
 				return (0);
 			}
+		} else {
+			printf("%% invalid parameter: %s\n", argv[i]);
+			return (0);
 		}
-		argv++;
 	}
 
 tryagain:
