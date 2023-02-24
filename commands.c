@@ -534,6 +534,7 @@ struct intlist Intlist[] = {
 	{ "metric",	"Routing metric",			CMPL0 0, 0, intmetric },
 	{ "link",	"Link level options",			CMPL0 0, 0, intlink },
 	{ "arp",	"Address Resolution Protocol",		CMPL0 0, 0, intflags },
+	{ "staticarp",	"Always use static ARP to find other hosts",CMPL0 0, 0, intflags },
 	{ "lladdr",	"Link Level (MAC) Address",		CMPL0 0, 0, intlladdr },
 	{ "nwid",	"802.11 network ID",			CMPL0 0, 0, intnwid },
 	{ "nwkey",	"802.11 network key",			CMPL0 0, 0, intnwkey },

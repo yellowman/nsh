@@ -2232,6 +2232,7 @@ nsh(interface-em0)/?
   metric           Routing metric
   link             Link level options
   arp              Address Resolution Protocol
+  staticarp        Always use static ARP to find other hosts
   lladdr           Link Level (MAC) Address
   nwid             802.11 network ID
   nwkey            802.11 network key
@@ -2474,6 +2475,34 @@ Enable or disable Address Resolution Protocol ARP on the interface.
 nsh(interface-fxp0)/arp
 nsh(interface-fxp0)/no arp
 .Ed
+.Pp
+.Op no
+.Ic staticarp
+.Pp
+Always use static ARP entries to find other hosts reachable via the interface.
+(Disabled by default.)
+.Bd -literal -offset indent
+nsh(interface-fxp0)/staticarp
+nsh(interface-fxp0)/no staticarp
+.Ed
+.Pp
+Only hosts with entries in the static ARP table will be reachable via
+the interface.
+Static ARP entries can be configured using the
+.Cm arp
+command in the global context (not the
+.Cm arp
+command in the interface context).
+.Pp
+When
+.Cm staticarp
+is enabled no ARP requests will be sent out on the interface, while
+responses to incoming ARP requests for the interface's own addresses
+will still be sent.
+If ARP was previously disabled on the interface with the
+.Cm no arp
+command then ARP will be automatically re-enabled to allow outgoing
+ARP responses.
 .Pp
 .Op no
 .Ic lladdr

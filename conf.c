@@ -798,8 +798,14 @@ void conf_ifflags(FILE *output, int flags, char *ifname, int ippntd, u_char ift)
 			fprintf(output, "2");
 		fprintf(output, "\n");
 	}
-	if (flags & IFF_NOARP && ift != IFT_WIREGUARD)
-		fprintf(output, " no arp\n");
+
+	/* wg(4) sets IFF_NOARP by default and this should not be changed. */
+	if (ift != IFT_WIREGUARD) {
+		if (flags & IFF_NOARP)
+			fprintf(output, " no arp\n");
+		if (flags & IFF_STATICARP)
+			fprintf(output, " staticarp\n");
+	}
 
 	if (isprefix("pppoe", ifname)) {		/* XXX */
 		fprintf(output, " no shutdown\n");
