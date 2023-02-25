@@ -891,7 +891,7 @@ int_help(void)
 	u_int z = 0;
 
 	printf("%% Commands may be abbreviated.\n");
-	printf("%% Press enter at a prompt to leave %s configuration mode.\n",
+	printf("%% Type 'exit' at a prompt to leave %s configuration mode.\n",
 	    bridge ? "bridge" : "interface");
 	printf("%% %s configuration commands are:\n\n",
 	    bridge ? "Bridge" : "Interface");
