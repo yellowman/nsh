@@ -644,6 +644,8 @@ get_ifdata(char *ifname, int type)
 			value = if_data.ifi_mtu;
 		else if (type == IFDATA_BAUDRATE)
 			value = if_data.ifi_baudrate;
+		else if (type == IFDATA_IFTYPE)
+			value = if_data.ifi_type;
 	}
 	close(ifs);
 	return (value);
@@ -1884,7 +1886,7 @@ intparent(char *ifname, int ifs, int argc, char **argv)
 int
 intflags(char *ifname, int ifs, int argc, char **argv)
 {
-	int set, value, flags;
+	int set, value, flags, iftype;
 
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -1902,12 +1904,37 @@ intflags(char *ifname, int ifs, int argc, char **argv)
 	} else if (isprefix(argv[0], "arp")) {
 		/* arp */
 		value = -IFF_NOARP;
+	} else if (isprefix(argv[0], "staticarp")) {
+		/* staticarp */
+		value = IFF_STATICARP;
 	} else {
 		printf("%% intflags: Internal error\n");
 		return(0);
 	}
 
+	/*
+	 * wg(4) sets IFF_NOARP by default and this should not be changed.
+	 * The kernel doesn't prevent this flag from being cleared (as of 7.2).
+	 */
+	iftype = get_ifdata(ifname, IFDATA_IFTYPE);
+	if (iftype == IFT_WIREGUARD &&
+	    (value == -IFF_NOARP || value == IFF_STATICARP)) {
+		printf("%% wireguard interfaces do not support ARP\n");
+		return (0);
+	}
+
 	flags = get_ifflags(ifname, ifs);
+	/*
+	 * If static ARP is requested while ARP is disabled entirely then
+	 * re-enable ARP to send responses to requests for our own address.
+	 * A configuration with both STATICARP and NOARP set amounts to NOARP.
+	 */
+	if (value == IFF_STATICARP && (flags & IFF_NOARP))
+		flags &= ~IFF_NOARP;
+	/* Likewise, disable STATICARP if ARP is being disabled entirely. */
+	if (value == -IFF_NOARP && (flags & IFF_STATICARP))
+		flags &= ~IFF_STATICARP;
+
 	if (value < 0) {
 		/*
 		 * Idea from ifconfig.  If value is negative then
