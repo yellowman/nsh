@@ -1110,6 +1110,8 @@ void conf_brcfg(FILE *output, int ifs, struct if_nameindex *ifn_list,
 		fprintf(output, "%s", tmp_str);
 	if (bridge_list(ifs, ifname, " ", tmp_str, TMPSIZ, CONF_IFCOST))
 		fprintf(output, "%s", tmp_str);
+	if (bridge_list(ifs, ifname, " ", tmp_str, TMPSIZ, PROTECTED))
+		fprintf(output, "%s", tmp_str);
 	bridge_confaddrs(ifs, ifname, " static ", output);
 
 	for (br_ifnp = ifn_list; br_ifnp->if_name != NULL; br_ifnp++)

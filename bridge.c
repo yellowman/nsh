@@ -73,6 +73,9 @@ int 	bridge_flushrule(int, char *, char *);
 void 	bridge_badrule(int, char **, int, short);
 void 	bridge_showrule(struct ifbrlreq *, char *, FILE *);
 int 	bridge_confaddrs(int, char *, char *, FILE *);
+int	bridge_protect(const char *, int, const char *, const char *);
+int	bridge_unprotect(const char *, int, const char *);
+void	brprotect_usage(void);
 
 char *stpstates[] = {
 	"disabled",
@@ -766,6 +769,7 @@ bridge_list(int s, char *brdg, char *delim, char *br_str, int str_len, int type)
 	u_int i, len = 8192;
 	int identified = 0;
 	char buf[256], *inbuf = NULL, *inb;
+	uint32_t v;
 
 	while (1) {
 		strlcpy(bifc.ifbic_name, brdg, sizeof(bifc.ifbic_name));
@@ -874,6 +878,22 @@ bridge_list(int s, char *brdg, char *delim, char *br_str, int str_len, int type)
 				strlcat(br_str, buf, str_len);
 				identified++;
 			}
+			break;
+		case PROTECTED:
+			if (reqp->ifbr_protected == 0)
+				break;
+			v = ffs(reqp->ifbr_protected);
+			snprintf(buf, sizeof(buf), "%sprotect %s %u", delim,
+			    reqp->ifbr_ifsname, v);
+			strlcat(br_str, buf, str_len);
+			while (++v < 32) {
+				if ((1 << (v - 1)) & reqp->ifbr_protected) {
+					snprintf(buf, sizeof(buf), ",%u", v);
+					strlcat(br_str, buf, str_len);
+				}
+			}
+			strlcat(br_str, "\n", str_len);
+			identified++;
 			break;
 		}
 	}
@@ -1482,4 +1502,101 @@ bridge_badrule(int argc, char **argv, int ln, short sec)
 		printf("%s ", argv[i]);
 	}
 	printf(" (sec %i)\n", sec);
+}
+
+int
+bridge_protect(const char *ifname, int sock, const char *ifsname,
+    const char *val)
+{
+	struct ifbreq breq;
+	unsigned long v;
+	char *optlist, *str;
+	const char *errstr;
+
+	strlcpy(breq.ifbr_name, ifname, sizeof(breq.ifbr_name));
+	strlcpy(breq.ifbr_ifsname, ifsname, sizeof(breq.ifbr_ifsname));
+	breq.ifbr_protected = 0;
+
+	/* We muck with the string, so copy it. */
+	optlist = strdup(val);
+	if (optlist == NULL)
+		err(1, "strdup");
+
+	str = strtok(optlist, ",");
+	while (str != NULL) {
+		v = strtonum(str, 1, 31, &errstr);
+		if (errstr) {
+			printf("%% protected domain %s is %s\n", str, errstr);
+			free(optlist);
+			return 0;
+		}
+		breq.ifbr_protected |= (1 << (v - 1));
+		str = strtok(NULL, ",");
+	}
+
+	if (ioctl(sock, SIOCBRDGSIFPROT, (caddr_t)&breq) == -1) {
+		printf("%% protect %s %s: %s\n", ifname, val, strerror(errno));
+		free(optlist);
+		return 1;
+	}
+
+	free(optlist);
+	return 0;
+}
+
+int
+bridge_unprotect(const char *ifname, int sock, const char *ifsname)
+{
+	struct ifbreq breq;
+
+	strlcpy(breq.ifbr_name, ifname, sizeof(breq.ifbr_name));
+	strlcpy(breq.ifbr_ifsname, ifsname, sizeof(breq.ifbr_ifsname));
+
+	breq.ifbr_protected = 0;
+
+	if (ioctl(sock, SIOCBRDGSIFPROT, (caddr_t)&breq) == -1) {
+		printf("%% no protect %s: %s\n", ifname, strerror(errno));
+		return 1;
+	}
+
+	return 0;
+}
+
+void
+brprotect_usage(void)
+{
+	printf("%% protect <if> <domain-ids>\n");
+	printf("%% no protect <if>\n");
+}
+
+int
+brprotect(char *ifname, int ifs, int argc, char **argv)
+{
+	int set;
+
+	if (NO_ARG(argv[0])) {
+		set = 0;
+		argv++;
+		argc--;
+		if (argc != 2) {
+			brprotect_usage();
+			return 0;
+		}
+	} else {
+		set = 1;
+		if (argc != 3) {
+			brprotect_usage();
+			return 0;
+		}
+	}
+
+	if (!is_valid_ifname(argv[1]) || is_bridge(ifs, argv[1])) {
+		printf("%% Invalid interface name %s\n", argv[1]);
+		return 0;
+	}
+
+	if (set)
+		return bridge_protect(ifname, ifs, argv[1], argv[2]);
+	else
+		return bridge_unprotect(ifname, ifs, argv[1]);
 }

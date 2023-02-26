@@ -629,6 +629,7 @@ struct intlist Bridgelist[] = {
 	{ "vnetid",	"Virtual interface network identifier",	CMPL0 0, 0, intvnetid },
 	{ "parent",	"Parent interface",			CMPL(i) 0, 0, intparent },
 	{ "tunneldomain", "Tunnel parameters",			CMPL0 0, 0, intmpls },
+	{ "protect",	"Configure protected bridge domains",	CMPL0 0, 0, brprotect },
 	{ "shutdown",	"Shutdown bridge",			CMPL0 0, 0, intflags },
 
 /* Help commands */
