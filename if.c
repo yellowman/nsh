@@ -39,6 +39,7 @@
 #include <netdb.h>
 #include <net/if_vlan_var.h>
 #include <net/if_pflow.h>
+#include <net/if_media.h>
 #include <net80211/ieee80211.h>
 #include <net80211/ieee80211_ioctl.h>
 #include <ifaddrs.h>
@@ -50,6 +51,8 @@
 #include "externs.h"
 
 char *iftype(int int_type);
+const char *get_linkstate(int, int);
+void show_int_status(char *, int);
 char *get_hwdaddr(char *ifname);
 void pack_ifaliasreq(struct ifaliasreq *, ip_t *, struct in_addr *, char *);
 void pack_in6aliasreq(struct in6_aliasreq *, ip_t *, struct in6_addr *, char *);
@@ -101,6 +104,116 @@ void imr_init(char *ifname)
 	memset (&imrsave, 0, sizeof(imrsave));
 }
 
+const char *
+get_linkstate(int mt, int link_state)
+{
+	const struct if_status_description if_status_descriptions[] =
+		LINK_STATE_DESCRIPTIONS;
+	const struct if_status_description *p;
+	static char buf[8];
+
+	for (p = if_status_descriptions; p->ifs_string != NULL; p++) {
+		if (LINK_STATE_DESC_MATCH(p, mt, link_state))
+			return (p->ifs_string);
+	}
+	snprintf(buf, sizeof(buf), "[#%d]", link_state);
+	return buf;
+}
+
+void
+show_int_status(char *ifname, int ifs)
+{
+	struct ifreq ifr;
+	struct ifmediareq ifmr;
+	int flags;
+	struct if_data if_data;
+	struct sockaddr_dl *sdl = NULL;
+	const char *link_state_desc = NULL;
+	struct ifaddrs *ifap, *ifa;
+	uint64_t *media_list = NULL, seen_options = 0;
+	const char *ifm_type = NULL, *ifm_subtype = NULL;
+	char ifm_options_current[128];
+	char ifm_options_active[128];
+
+	ifm_options_current[0] = '\0';
+	ifm_options_active[0] = '\0';
+
+	memset(&ifr, 0, sizeof(ifr));
+	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
+
+	flags = get_ifflags(ifname, ifs);
+	ifr.ifr_data = (caddr_t)&if_data;
+	if (ioctl(ifs, SIOCGIFDATA, (caddr_t)&ifr) < 0) {
+		printf("%% show_int_status: SIOCGIFDATA: %s\n",
+		    strerror(errno));
+		return;
+	}
+
+	memset(&ifmr, 0, sizeof(ifmr));
+	strlcpy(ifmr.ifm_name, ifname, sizeof(ifmr.ifm_name));
+
+	if (getifaddrs(&ifap) != 0) {
+		printf("%% show_int_status: getifaddrs: %s\n",
+		    strerror(errno));
+		return;
+	}
+	for (ifa = ifap; ifa; ifa = ifa->ifa_next) {
+		if (ifa->ifa_addr->sa_family == AF_LINK &&
+		    (strcmp(ifname, ifa->ifa_name) == 0)) {
+			sdl = (struct sockaddr_dl *)ifa->ifa_addr;
+			link_state_desc = get_linkstate(sdl->sdl_type,
+			    if_data.ifi_link_state);
+			break;
+		}
+	}
+
+	if (ioctl(ifs, SIOCGIFMEDIA, (caddr_t)&ifmr) != -1 &&
+	    ifmr.ifm_count > 0) {
+		media_list = calloc(ifmr.ifm_count, sizeof(*media_list));
+		if (media_list == NULL) {
+			printf("%% show_int_status: calloc: %s\n",
+			    strerror(errno));
+			return;
+		}
+		ifmr.ifm_ulist = media_list;
+		if (ioctl(ifs, SIOCGIFMEDIA, (caddr_t)&ifmr) == -1) {
+			printf("%% show_int_status: SIOCGIFMEDIA: %s\n",
+			    strerror(errno));
+			return;
+		}
+		if (link_state_desc == NULL)
+			link_state_desc = get_ifm_linkstate_str(&ifmr);
+	}
+
+	/* Avoid displaying "unknown" for any non-physical interface. */
+	if (link_state_desc == NULL || strcmp(link_state_desc, "unknown") == 0)
+		link_state_desc = "-";
+
+	get_ifm_options_str(ifm_options_current, sizeof(ifm_options_current),
+	    ifmr.ifm_current, &seen_options);
+	if (IFM_OPTIONS(ifmr.ifm_current) != IFM_OPTIONS(ifmr.ifm_active)) {
+		get_ifm_options_str(ifm_options_active,
+		    sizeof(ifm_options_active), ifmr.ifm_active, &seen_options);
+	}
+
+	ifm_type = get_ifm_type_str(ifmr.ifm_active);
+	/* Avoid displaying "autoselect" for any non-physical interface. */
+	if (IFM_SUBTYPE(ifmr.ifm_active) != IFM_AUTO)
+		ifm_subtype = get_ifm_subtype_str(ifmr.ifm_active);
+
+	printf("  %-7s %-7s %-15s %s%s%s%s%s%s%s\n", ifname,
+	    (flags & IFF_UP) ? "up" : "down", link_state_desc,
+	    ifm_type ? ifm_type : "",
+	    ifm_type ? " " : "",
+	    ifm_subtype ? ifm_subtype : "",
+	    ifm_subtype ? " " : "",
+	    ifm_options_current,
+	    ifm_options_current[0] != '\0' ? " " : "",
+	    ifm_options_active[0] != '\0' ? ifm_options_active : "");
+
+	free(media_list);
+}
+
 int
 show_int(int argc, char **argv)
 {
@@ -124,12 +237,18 @@ show_int(int argc, char **argv)
 	if (argc == 3)
 		ifname = argv[2];
 
+	if ((ifs = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+		printf("%% show_int: %s\n", strerror(errno));
+		return(1);
+	}
+
 	/*
 	 * Show all interfaces when no ifname specified.
 	 */
 	if (ifname == NULL) {
 		if ((ifn_list = if_nameindex()) == NULL) {
 			printf("%% show_int: if_nameindex failed\n");
+			close(ifs);
 			return 0;
 		}
 		for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++) {
@@ -138,14 +257,23 @@ show_int(int argc, char **argv)
 			show_int(3, args);
 		}
 		if_freenameindex(ifn_list);
+		close(ifs);
+		return(0);
+	} else if (isprefix(ifname, "status")) {
+		if ((ifn_list = if_nameindex()) == NULL) {
+			printf("%% show_int: if_nameindex failed\n");
+			close(ifs);
+			return 0;
+		}
+		puts("% Name    Status  Link            Media");
+		for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++)
+			show_int_status(ifnp->if_name, ifs);
+		if_freenameindex(ifn_list);
+		close(ifs);
 		return(0);
 	} else if (!is_valid_ifname(ifname)) {
 		printf("%% interface %s not found\n", ifname);
-		return(1);
-	}
-
-	if ((ifs = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-		printf("%% show_int: %s\n", strerror(errno));
+		close(ifs);
 		return(1);
 	}
 

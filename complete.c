@@ -260,11 +260,11 @@ complete_ifname(char *word, int list, EditLine *el)
 	StringList *words;
 	size_t wordlen;
 	unsigned char rv;   
+	const char *status_cmd = "status";
+	struct if_nameindex *ifn_list, *ifnp;
 
 	words = sl_init();
 	wordlen = strlen(word);
-
-	struct if_nameindex *ifn_list, *ifnp;
 
 	if ((ifn_list = if_nameindex()) == NULL)
 		return 0;
@@ -275,6 +275,14 @@ complete_ifname(char *word, int list, EditLine *el)
                 if (strncmp(word, ifnp->if_name, wordlen) == 0)
                         sl_add(words, ifnp->if_name);
         }
+
+	if (wordlen <= strlen(status_cmd) &&
+	    strncmp(word, status_cmd, wordlen) == 0) {
+		char *s = strdup(status_cmd);
+		if (s == NULL)
+			err(1, "strdup");
+		sl_add(words, s);
+	}
 
         rv = complete_ambiguous(word, list, words, el);
 	if_freenameindex(ifn_list);
