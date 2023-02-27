@@ -989,9 +989,6 @@ Command cmdtab[] = {
 	{ "rtable",	rtablehelp,	CMPL0 0, 0, rtable,	0, 1, 2 },
 	{ "group",	grouphelp,	CMPL0 0, 0, group,	1, 1, 0 },
 	{ "arp",	arphelp,	CMPL0 0, 0, arpset,	1, 1, 0 },
-#ifdef notyet
-	{ "proxy-arp",	parphelp,	CMPL0 0, 0, arpset,	1, 1, 0 },
-#endif
 	{ "nameserver",	nameserverhelp,	CMPL0 0, 0, nameserverset,1, 1, 0 },
 	{ "bridge",	bridgehelp,	CMPL(i) 0, 0, interface, 1, 1, 1 },
 	{ "show",	showhelp,	CMPL(ta) (char **)showlist, sizeof(Menu), showcmd,	0, 0, 0 },
