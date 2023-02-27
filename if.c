@@ -999,6 +999,17 @@ intip(char *ifname, int ifs, int argc, char **argv)
 		printf("%% unknown address family: %d\n", ip.family);
 		break;
 	}
+
+	/*
+	 * Some interfaces, such as vport(4), will not come UP
+	 * automatically when the first IP address is added.
+	 */
+	if (set) {
+		flags = get_ifflags(ifname, ifs);
+		if ((flags & IFF_UP) == 0)
+			set_ifflags(ifname, ifs, flags | IFF_UP);
+	}
+
 	return(0);
 }
 
