@@ -469,6 +469,11 @@ int phys_status(int, char *, char *, char *, int, int);
 int intmedia(char *, int, int, char **);
 int intmediaopt(char *, int, int, char **);
 int conf_media_status(FILE *, int, char *);
+struct ifmediareq;
+const char *get_ifm_linkstate_str(struct ifmediareq *);
+const char *get_ifm_options_str(char *, size_t, uint64_t, uint64_t *);
+const char *get_ifm_type_str(uint64_t);
+const char *get_ifm_subtype_str(uint64_t);
 
 /* passwd.c */
 #define NSHPASSWD_TEMP "/var/run/nshpasswd"
