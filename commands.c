@@ -93,6 +93,7 @@ static int	nsh_setrtable(int);
 static int	pr_routes(int, char **);
 static int	pr_routes6(int, char **);
 static int	pr_arp(int, char **);
+static int	pr_ndp(int, char **);
 static int	pr_sadb(int, char **);
 static int	pr_kernel(int, char **);
 static int	pr_prot1(int, char **);
@@ -109,6 +110,7 @@ static int	flush_help(void);
 static int	flush_line(char *);
 static int	flush_ip_routes(void);
 static int	flush_arp_cache(void);
+static int	flush_ndp_cache(void);
 static int	flush_history(void);
 static int	is_bad_input(const char *, size_t);
 static int	read_command_line(EditLine *, History *);
@@ -164,6 +166,7 @@ Menu showlist[] = {
 	{ "route6",	"IPv6 route table or route lookup", CMPL0 0, 0, 0, 1, pr_routes6 },
 	{ "sadb",	"Security Association Database", CMPL0 0, 0, 0, 0, pr_sadb },
 	{ "arp",	"ARP table",		CMPL0 0, 0, 0, 1, pr_arp },
+	{ "ndp",	"NDP table",		CMPL0 0, 0, 0, 1, pr_ndp },
 	{ "kernel",	"Kernel statistics",	CMPL(ta) (char **)stts, sizeof(struct stt), 0, 1, pr_kernel },
 	{ "bgp",	"BGP information",	CMPL(ta) (char **)bgcs, sizeof(struct prot1), 0, 4, pr_prot1 },
 	{ "ospf",	"OSPF information",	CMPL(ta) (char **)oscs, sizeof(struct prot1), 0, 3, pr_prot1 },
@@ -440,6 +443,7 @@ sysctlhelp(int unused1, char **unused2, char **unused3, int type)
 Menu flushlist[] = {
 	{ "routes",	"IP routes", CMPL0 0, 0, 0, 0, flush_ip_routes },
 	{ "arp",	"ARP cache", CMPL0 0, 0, 0, 0, flush_arp_cache },
+	{ "ndp",	"NDP cache", CMPL0 0, 0, 0, 0, flush_ndp_cache },
 	{ "line",	"Active user", CMPL0 0, 0, 1, 1, flush_line },
 	{ "bridge-dyn",	"Dynamically learned bridge addresses", CMPL0 0, 0, 1, 1, flush_bridgedyn },
 	{ "bridge-all",	"Dynamic and static bridge addresses", CMPL0 0, 0, 1, 1, flush_bridgeall },
@@ -923,6 +927,7 @@ static char
 #ifdef notyet
 	parphelp[] =	"Proxy ARP set",
 #endif
+	ndphelp[] = 	"Static NDP set",
 	nameserverhelp[] ="set or remove static DNS nameservers",
 	pfhelp[] =	"Packet filter control",
 	ospfhelp[] =	"OSPF control",
@@ -989,6 +994,7 @@ Command cmdtab[] = {
 	{ "rtable",	rtablehelp,	CMPL0 0, 0, rtable,	0, 1, 2 },
 	{ "group",	grouphelp,	CMPL0 0, 0, group,	1, 1, 0 },
 	{ "arp",	arphelp,	CMPL0 0, 0, arpset,	1, 1, 0 },
+	{ "ndp",	ndphelp,	CMPL0 0, 0, ndpset,	1, 1, 0 },
 	{ "nameserver",	nameserverhelp,	CMPL0 0, 0, nameserverset,1, 1, 0 },
 	{ "bridge",	bridgehelp,	CMPL(i) 0, 0, interface, 1, 1, 1 },
 	{ "show",	showhelp,	CMPL(ta) (char **)showlist, sizeof(Menu), showcmd,	0, 0, 0 },
@@ -2083,6 +2089,13 @@ flush_arp_cache(void)
 	return(0);
 }
 
+int
+flush_ndp_cache(void)
+{
+	ndpdump(NULL, 1);
+	return(0);
+}
+
 /*
  * Show wrappers
  */
@@ -2167,6 +2180,22 @@ pr_arp(int argc, char **argv)
 	case 3:
 		/* specific address */
 		arpget(argv[2]);
+		break;
+	}
+	return 0;
+}
+
+int
+pr_ndp(int argc, char **argv)
+{
+	switch(argc) {
+	case 2:
+		/* show ndp table */
+		ndpdump(NULL, 0);
+		break;
+	case 3:
+		/* specific address */
+		ndpget(argv[2]);
 		break;
 	}
 	return 0;

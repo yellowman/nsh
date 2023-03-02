@@ -74,9 +74,8 @@ void nuke_entry(struct sockaddr_dl *sdl,
 	struct sockaddr_inarp *sin, struct rt_msghdr *rtm);
 void conf_arp_entry(FILE *, char *, struct sockaddr_dl *,
 	struct sockaddr_inarp *, struct rt_msghdr *);
-static char *ether_str(struct sockaddr_dl *);
 int getinetaddr(const char *, struct in_addr *);
-int getsocket(void);
+static int getsocket(void);
 int rtmsg_arp(int, int, int, int);
 
 static int s = -1;
@@ -88,7 +87,7 @@ extern int h_errno;
 #define F_FILESET	3
 #define F_DELETE	4
 
-int
+static int
 getsocket(void)
 {
 	socklen_t len = sizeof(cli_rtable);
@@ -108,11 +107,11 @@ getsocket(void)
 	return s;
 }
 
-struct sockaddr_in	so_1mask = { 8, 0, 0, { 0xffffffff } };
-struct sockaddr_inarp	blank_sin = { sizeof(blank_sin), AF_INET }, sin_m;
-struct sockaddr_dl	blank_sdl = { sizeof(blank_sdl), AF_LINK }, sdl_m;
-struct sockaddr_dl	ifp_m = { sizeof(ifp_m), AF_LINK };
-time_t			expire_time;
+static struct sockaddr_in	so_1mask = { 8, 0, 0, { 0xffffffff } };
+static struct sockaddr_inarp	blank_sin = { sizeof(blank_sin), AF_INET }, sin_m;
+static struct sockaddr_dl	blank_sdl = { sizeof(blank_sdl), AF_LINK }, sdl_m;
+static struct sockaddr_dl	ifp_m = { sizeof(ifp_m), AF_LINK };
+static time_t			expire_time;
 
 int
 rtget(struct sockaddr_inarp **sinp, struct sockaddr_dl **sdlp,
@@ -523,7 +522,7 @@ nuke_entry(struct sockaddr_dl *sdl, struct sockaddr_inarp *sin,
 	arpdelete(ip, NULL);
 }
 
-static char *
+char *
 ether_str(struct sockaddr_dl *sdl)
 {
 	static char hbuf[NI_MAXHOST];

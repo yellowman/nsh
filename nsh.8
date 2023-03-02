@@ -261,6 +261,7 @@ nsh/help
   rtable        Routing table switch
   group         Modify group attributes
   arp           Static ARP set
+  ndp           Static NDP set
   bridge        Modify bridge parameters
   show          Show system information
   ip            Set IP networking parameters
@@ -450,6 +451,26 @@ TBC
 Set or remove a static IP address and MAC address binding for Address
 Resolution Protocol.
 TBC
+.Pp
+.Tg ndp
+.Op no
+.Ic ndp
+.Op Ar IPv6-Address
+.Op Ar MAC-Address
+.Op Cm temp
+.Op Cm proxy
+.Pp
+Set or remove a static IPv6 address and MAC address binding for the
+IPv6 Neighbour Discovery Protocol (NDP).
+The entry will be permanent unless the word
+.Cm temp
+is given in the command.
+If the word
+.Cm proxy
+is given, this system will act as an ND Proxy server,
+responding to requests for
+.Ar IPv6-Address
+even though the MAC address is not its own.
 .Pp
 .Tg bridge
 .Op no
@@ -1450,7 +1471,7 @@ nsh/no verbose
 .El
 .Tg show
 .Ic show
-.Op hostname | interface | route | route6 | sadb | arp | kernel | bgp | ospf\
+.Op hostname | interface | route | route6 | sadb | arp | ndp | kernel | bgp | ospf\
  | ospf6 |eigrp | rip | ldp | ike | ipsec | dvmrp | relay | dhcp | smtp\
  | ldap | monitor | version | users | running-config | startup-config |\&? | help
 .Pp
@@ -1470,6 +1491,7 @@ nsh(p)/show
   route6          IPv6 route table or route lookup
   sadb            Security Association Database
   arp             ARP table
+  ndp             NDP table
   kernel          Kernel statistics
   bgp             BGP information
   ospf            OSPF information
@@ -1729,7 +1751,7 @@ firewall rules, and other information compiled by
 TBC
 .Tg flush
 .Ic flush
-.Op routes | arp | line | bridge-dyn | bridge-all | bridge-rule | pf | history |\&? | help
+.Op routes | arp | ndp | line | bridge-dyn | bridge-all | bridge-rule | pf | history |\&? | help
 .Pp
 Clear various system tables.
 .Pp
@@ -1740,6 +1762,10 @@ Clear the system routing table.
 .Ic flush arp
 .Pp
 Clear the system arp cache and static arp table.
+.Pp
+.Ic flush ndp
+.Pp
+Clear the system NDP cache and static NDP table.
 .Pp
 .Ic flush bridge-dyn
 .Ar bridge-name
