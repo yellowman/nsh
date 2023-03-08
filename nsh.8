@@ -1471,7 +1471,7 @@ nsh/no verbose
 .El
 .Tg show
 .Ic show
-.Op hostname | interface | route | route6 | sadb | arp | ndp | kernel | bgp | ospf\
+.Op hostname | interface | route | route6 | sadb | arp | ndp | vlan | kernel | bgp | ospf\
  | ospf6 |eigrp | rip | ldp | ike | ipsec | dvmrp | relay | dhcp | smtp\
  | ldap | monitor | version | users | running-config | startup-config |\&? | help
 .Pp
@@ -1492,6 +1492,7 @@ nsh(p)/show
   sadb            Security Association Database
   arp             ARP table
   ndp             NDP table
+  vlan            802.1Q/802.1ad VLANs
   kernel          Kernel statistics
   bgp             BGP information
   ospf            OSPF information

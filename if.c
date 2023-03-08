@@ -60,6 +60,7 @@ void ipv6ll_db_store(struct sockaddr_in6 *, struct sockaddr_in6 *, int, char *);
 void printifhwfeatures(int, char *);
 void show_vnet_parent(int, char *);
 void pwe3usage(void);
+int show_vlan(int);
 
 static struct ifmpwreq imrsave;
 static char imrif[IFNAMSIZ];
@@ -2551,4 +2552,137 @@ intvnetflowid(char *ifname, int ifs, int argc, char **argv)
 		printf("%% intvnetflowid: SIOCSVNETFLOWID: %s\n", strerror(errno));
 
 	return(0);
+}
+
+int
+show_vlan(int wanted_vnetid)
+{
+	struct if_nameindex *ifn_list, *ifnp;
+	struct ifreq ifr;
+	struct if_parent ifp;
+	int ifs, vnetid, flags, bridx;
+	const char *parent, *description, *bridgename;
+	char ifdescr[IFDESCRSIZE];
+	char vnetid_str[5];
+	int found_vnetid = 0, header_shown = 0;
+	char ifix_buf[IFNAMSIZ];
+
+	if ((ifs = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+		printf("%% show_vlan: %s\n", strerror(errno));
+		return 0;
+	}
+
+	if ((ifn_list = if_nameindex()) == NULL) {
+		printf("%% show_vlan: if_nameindex failed\n");
+		close(ifs);
+		return 0;
+	}
+
+	for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++) {
+		if (!isprefix("vlan", ifnp->if_name) &&
+		    !isprefix("svlan", ifnp->if_name))
+			continue;
+
+		memset(&ifr, 0, sizeof(ifr));
+		if (strlcpy(ifr.ifr_name, ifnp->if_name,
+		    sizeof(ifr.ifr_name)) >= sizeof(ifr.ifr_name)) {
+			printf("%% %s: interface name is too long\n",
+			   ifnp->if_name);
+			continue;
+		}
+
+		vnetid = -1;
+		if (ioctl(ifs, SIOCGVNETID, &ifr) == -1) {
+			if (errno != EADDRNOTAVAIL) {
+				printf("%% %s: SIOCGVNETID: %s\n",
+				   ifnp->if_name, strerror(errno));
+				continue;
+			}
+		} else if (ifr.ifr_vnetid >= 0)
+			vnetid = ifr.ifr_vnetid;
+
+		if (wanted_vnetid != -1) {
+			if (vnetid != wanted_vnetid)
+				continue;
+			found_vnetid = 1;
+		}
+
+		if (!header_shown) {
+			puts("% Interface  Tag   Status  Type     "
+			    "Parent  Bridge   Description");
+			header_shown = 1;
+		}
+
+		memset(&ifp, 0, sizeof(ifp));
+		if (strlcpy(ifp.ifp_name, ifnp->if_name,
+		    sizeof(ifp.ifp_name)) >= sizeof(ifp.ifp_name)) {
+			printf("%% %s: interface name is too long\n",
+			   ifnp->if_name);
+			continue;
+		}
+		parent = "-";
+		if (ioctl(ifs, SIOCGIFPARENT, &ifp) == -1) {
+			if (errno != EADDRNOTAVAIL) {
+				printf("%% %s: SIOCGIFPARENT: %s\n",
+				   ifnp->if_name, strerror(errno));
+				continue;
+			}
+		} else
+			parent = ifp.ifp_parent;
+
+		flags = get_ifflags(ifnp->if_name, ifs);
+
+		memset(ifdescr, 0, sizeof(ifdescr));
+		ifr.ifr_data = (caddr_t)&ifdescr;
+		if (ioctl(ifs, SIOCGIFDESCR, &ifr) == 0)
+			description = ifr.ifr_data;
+		else
+			description = "";
+
+		if (vnetid == -1)
+			strlcpy(vnetid_str, "-", sizeof(vnetid_str));
+		else
+			snprintf(vnetid_str, sizeof(vnetid_str), "%d", vnetid);
+
+		bridx = bridge_member_search(ifs, ifnp->if_name);
+		if (bridx)
+			bridgename = if_indextoname(bridx, ifix_buf);
+		else
+			bridgename = "-";
+
+		printf("  %-10s %-5s %-7s %-8s %-7s %-8s %s\n", ifnp->if_name,
+		    vnetid_str, (flags & IFF_UP) ? "up" : "down",
+		    isprefix("vlan", ifnp->if_name) ? "802.1Q" : "802.1ad",
+		    parent, bridgename, description);
+	}
+
+	if (wanted_vnetid != -1 && !found_vnetid)
+		printf("%% no VLAN with tag %d configured\n", wanted_vnetid);
+
+	if_freenameindex(ifn_list);
+	close(ifs);
+	return 0;
+}
+
+int
+show_vlans(int argc, char **argv)
+{
+	long long vnetid = -1;
+	const char *errstr;
+
+	switch (argc) {
+	case 2:
+		show_vlan(-1);
+		break;
+	case 3:
+		vnetid = strtonum(argv[2], EVL_VLID_NULL,
+		    EVL_VLID_MAX, &errstr);
+		if (errstr) {
+			printf("%% VLAN tag %s is %s\n", argv[2], errstr);
+			break;
+		}
+		show_vlan(vnetid);
+		break;
+	}
+	return 0;
 }

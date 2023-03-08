@@ -167,6 +167,7 @@ Menu showlist[] = {
 	{ "sadb",	"Security Association Database", CMPL0 0, 0, 0, 0, pr_sadb },
 	{ "arp",	"ARP table",		CMPL0 0, 0, 0, 1, pr_arp },
 	{ "ndp",	"NDP table",		CMPL0 0, 0, 0, 1, pr_ndp },
+	{ "vlan",	"802.1Q/802.1ad VLANs",	CMPL0 0, 0, 0, 1, show_vlans },
 	{ "kernel",	"Kernel statistics",	CMPL(ta) (char **)stts, sizeof(struct stt), 0, 1, pr_kernel },
 	{ "bgp",	"BGP information",	CMPL(ta) (char **)bgcs, sizeof(struct prot1), 0, 4, pr_prot1 },
 	{ "ospf",	"OSPF information",	CMPL(ta) (char **)oscs, sizeof(struct prot1), 0, 3, pr_prot1 },
