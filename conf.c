@@ -441,15 +441,14 @@ dhcpleased_has_defaultroute(char *dst)
 	nullfd = open("/dev/null", O_WRONLY | O_NOFOLLOW | O_CLOEXEC);
 	if (nullfd == -1) {
 		printf("%% open /dev/null: %s\n", strerror(errno));
-		return 0;
+		goto err0;
 	}
 
 	strlcpy(outpath, "/tmp/nsh-XXXXXX", sizeof(outpath));
 	fd = mkstemp(outpath);
 	if (fd == -1) {
 		printf("%% mkstemp: %s\n", strerror(errno));
-		close(nullfd);
-		return 0;
+		goto err1;
 	}
 
 	for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++) {
@@ -468,10 +467,12 @@ dhcpleased_has_defaultroute(char *dst)
 		}
 	}
 
-	if_freenameindex(ifn_list);
 	unlink(outpath);
 	close(fd);
+err1:
 	close(nullfd);
+err0:
+	if_freenameindex(ifn_list);
 	return (gatewayfound);
 }
 
