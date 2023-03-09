@@ -705,8 +705,10 @@ call_editor(char *name, char **args, char *z)
 	    cli_rtable);
 
 	/* acq lock, call editor, test config with cmd and args, release lock */
-	if ((editor = getenv("EDITOR")) == NULL)
-		editor = DEFAULT_EDITOR;
+	if ((editor = getenv("VISUAL")) == NULL) {
+		if ((editor = getenv("EDITOR")) == NULL)
+			editor = DEFAULT_EDITOR;
+	}
 	if ((fd = acq_lock(tmpfile)) > 0) {
 		char *argv[] = { editor, tmpfile, NULL };
 		cmdargs(editor, argv);
