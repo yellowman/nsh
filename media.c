@@ -228,8 +228,55 @@ init_current_media(int s, char *ifname)
 	return(media_current);
 }
 
-const char     *
-get_media_type_string(uint64_t mword)
+const char *
+get_ifm_linkstate_str(struct ifmediareq *ifmr)
+{
+	const uint64_t ifm_status_valid_list[] = IFM_STATUS_VALID_LIST;
+	const struct ifmedia_status_description *ifms;
+	int bitno;
+
+	if ((ifmr->ifm_status & IFM_AVALID) == 0)
+		return NULL;
+
+	for (bitno = 0; ifm_status_valid_list[bitno] != 0; bitno++) {
+		for (ifms = ifm_status_descriptions;
+		    ifms->ifms_valid != 0; ifms++) {
+			if (ifms->ifms_type != IFM_TYPE(ifmr->ifm_current) ||
+			    ifms->ifms_valid != ifm_status_valid_list[bitno])
+				continue;
+			return IFM_STATUS_DESC(ifms, ifmr->ifm_status);
+		}
+	}
+
+	return NULL;
+}
+
+const char *
+get_ifm_options_str(char *buf, size_t size, uint64_t ifmw,
+    uint64_t *seen_options)
+{
+	const struct ifmedia_description *desc;
+
+	buf[0] = '\0';
+
+	/* Find options. */
+	for (desc = ifm_option_descriptions; desc->ifmt_string != NULL;
+	     desc++) {
+		if (IFM_TYPE_MATCH(desc->ifmt_word, ifmw) &&
+		  (IFM_OPTIONS(ifmw) & IFM_OPTIONS(desc->ifmt_word)) != 0 &&
+		    (*seen_options & IFM_OPTIONS(desc->ifmt_word)) == 0) {
+			if (buf[0] != '\0')
+				strlcat(buf, " ", size);
+			strlcat(buf, desc->ifmt_string, size);
+			*seen_options |= IFM_OPTIONS(desc->ifmt_word);
+		}
+	}
+
+	return buf;
+}
+
+const char *
+get_ifm_type_str(uint64_t mword)
 {
 	const struct ifmedia_description *desc;
 
@@ -238,11 +285,12 @@ get_media_type_string(uint64_t mword)
 		if (IFM_TYPE(mword) == desc->ifmt_word)
 			return (desc->ifmt_string);
 	}
-	return ("<unknown type>");
+
+	return NULL;
 }
 
 const char     *
-get_media_subtype_string(uint64_t mword)
+get_ifm_subtype_str(uint64_t mword)
 {
 	const struct ifmedia_description *desc;
 
@@ -252,6 +300,31 @@ get_media_subtype_string(uint64_t mword)
 		    IFM_SUBTYPE(desc->ifmt_word) == IFM_SUBTYPE(mword))
 			return (desc->ifmt_string);
 	}
+
+	return NULL;
+}
+
+const char     *
+get_media_type_string(uint64_t mword)
+{
+	const char *s;
+
+	s = get_ifm_type_str(mword);
+	if (s != NULL)
+		return (s);
+
+	return ("<unknown type>");
+}
+
+const char     *
+get_media_subtype_string(uint64_t mword)
+{
+	const char *s;
+
+	s = get_ifm_subtype_str(mword);
+	if (s != NULL)
+		return (s);
+
 	return ("<unknown subtype>");
 }
 

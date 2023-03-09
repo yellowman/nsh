@@ -1012,7 +1012,7 @@ Section 4 > Interface mode commands
 
 nsh(interface-vr0)/?
 % Commands may be abbreviated.
-% Press enter at a prompt to leave interface configuration mode.
+% Type 'exit' at a prompt to leave interface configuration mode.
 % Interface configuration commands are:
 
   ip               IP address and other parameters

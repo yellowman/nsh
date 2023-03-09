@@ -374,6 +374,7 @@ int parse_ipv6(char *, struct in6_addr *);
 #define SLAACD_SOCK	"/dev/slaacd.sock"
 #define IFDATA_MTU 1		/* request for if_data.ifi_mtu */
 #define IFDATA_BAUDRATE 2	/* request for if_data.ifi_baudrate */
+#define IFDATA_IFTYPE 3		/* request for if_data.ifi_type */
 #define MBPS(bps) (bps / 1000 / 1000)
 #define ROUNDMBPS(bps) ((float)bps == ((bps / 1000 / 1000) * 1000 * 1000))
 #define ROUNDKBPS(bps) ((float)bps == ((bps / 1000) * 1000))
@@ -384,6 +385,7 @@ int parse_ipv6(char *, struct in6_addr *);
 void imr_init(char *);
 int is_valid_ifname(char *);
 int show_int(int, char **);
+int show_vlans(int, char **);
 int show_autoconf(int, char **);
 int get_rdomain(int, char *);
 int get_ifdata(char *, int);
@@ -437,6 +439,7 @@ long bridge_cfg(int, char *, int);
 int bridge_confaddrs(int, char *, char *, FILE *);
 int bridge_rules(int, char *, char *, char *, FILE *);
 int bridge_list(int, char *, char *, char *, int, int);
+int bridge_member_search(int, char *);
 int bridge_addrs(int, char *, char *, char *);
 int set_ifflag(int, char *, short);
 int clr_ifflag(int, char *, short);
@@ -449,6 +452,7 @@ int brpri(char *, int, int, char **);
 int flush_bridgedyn(char *);
 int flush_bridgeall(char *);
 int flush_bridgerule(char *, char*);
+int brprotect(char *, int, int, char **);
 
 /* tunnel.c */
 int inttunnel(char *, int, int, char **);
@@ -467,6 +471,11 @@ int phys_status(int, char *, char *, char *, int, int);
 int intmedia(char *, int, int, char **);
 int intmediaopt(char *, int, int, char **);
 int conf_media_status(FILE *, int, char *);
+struct ifmediareq;
+const char *get_ifm_linkstate_str(struct ifmediareq *);
+const char *get_ifm_options_str(char *, size_t, uint64_t, uint64_t *);
+const char *get_ifm_type_str(uint64_t);
+const char *get_ifm_subtype_str(uint64_t);
 
 /* passwd.c */
 #define NSHPASSWD_TEMP "/var/run/nshpasswd"
@@ -510,6 +519,15 @@ int arpset(int, char **);
 void arpdump(void);
 void conf_arp(FILE *, char *);
 char *sec2str(time_t);
+struct sockaddr_dl;
+char *ether_str(struct sockaddr_dl *);
+
+/* ndp.c */
+int ndpset(int, char **);
+void ndpget(const char *);
+int ndpdelete(const char *);
+struct sockaddr_in6;
+void ndpdump(struct sockaddr_in6 *, int);
 
 /* nameserver.c */
 int nameserverset(int, char **);

@@ -799,8 +799,14 @@ void conf_ifflags(FILE *output, int flags, char *ifname, int ippntd, u_char ift)
 			fprintf(output, "2");
 		fprintf(output, "\n");
 	}
-	if (flags & IFF_NOARP && ift != IFT_WIREGUARD)
-		fprintf(output, " no arp\n");
+
+	/* wg(4) sets IFF_NOARP by default and this should not be changed. */
+	if (ift != IFT_WIREGUARD) {
+		if (flags & IFF_NOARP)
+			fprintf(output, " no arp\n");
+		if (flags & IFF_STATICARP)
+			fprintf(output, " staticarp\n");
+	}
 
 	if (isprefix("pppoe", ifname)) {		/* XXX */
 		fprintf(output, " no shutdown\n");
@@ -1110,6 +1116,8 @@ void conf_brcfg(FILE *output, int ifs, struct if_nameindex *ifn_list,
 	if (bridge_list(ifs, ifname, " ", tmp_str, TMPSIZ, CONF_IFPRIORITY))
 		fprintf(output, "%s", tmp_str);
 	if (bridge_list(ifs, ifname, " ", tmp_str, TMPSIZ, CONF_IFCOST))
+		fprintf(output, "%s", tmp_str);
+	if (bridge_list(ifs, ifname, " ", tmp_str, TMPSIZ, PROTECTED))
 		fprintf(output, "%s", tmp_str);
 	bridge_confaddrs(ifs, ifname, " static ", output);
 

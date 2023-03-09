@@ -261,6 +261,7 @@ nsh/help
   rtable        Routing table switch
   group         Modify group attributes
   arp           Static ARP set
+  ndp           Static NDP set
   bridge        Modify bridge parameters
   show          Show system information
   ip            Set IP networking parameters
@@ -451,12 +452,32 @@ Set or remove a static IP address and MAC address binding for Address
 Resolution Protocol.
 TBC
 .Pp
+.Tg ndp
+.Op no
+.Ic ndp
+.Op Ar IPv6-Address
+.Op Ar MAC-Address
+.Op Cm temp
+.Op Cm proxy
+.Pp
+Set or remove a static IPv6 address and MAC address binding for the
+IPv6 Neighbour Discovery Protocol (NDP).
+The entry will be permanent unless the word
+.Cm temp
+is given in the command.
+If the word
+.Cm proxy
+is given, this system will act as an ND Proxy server,
+responding to requests for
+.Ar IPv6-Address
+even though the MAC address is not its own.
+.Pp
 .Tg bridge
 .Op no
 .Ic bridge
 .Op Ar bridge-name
 .Pp
-Modify bridge configuraiton on the named bridge.
+Modify bridge configuration on the named bridge.
 See also
 .Ox
 manual pages for
@@ -478,7 +499,7 @@ help.
 nsh(p)/bridge bridge1
 nsh(bridge-bridge1)/?
 % Commands may be abbreviated.
-% Press enter at a prompt to leave bridge configuration mode.
+% Type 'exit' at a prompt to leave bridge configuration mode.
 % Bridge configuration commands are:
 
   description   Bridge description
@@ -504,6 +525,7 @@ nsh(bridge-bridge1)/?
   vnetid        Virtual interface network identifier
   parent        Parent interface
   tunneldomain  Tunnel parameters
+  protect       Configure protected bridge domains
   shutdown      Shutdown bridge
   ?             Options
 
@@ -1449,7 +1471,7 @@ nsh/no verbose
 .El
 .Tg show
 .Ic show
-.Op hostname | interface | route | route6 | sadb | arp | kernel | bgp | ospf\
+.Op hostname | interface | route | route6 | sadb | arp | ndp | vlan | kernel | bgp | ospf\
  | ospf6 |eigrp | rip | ldp | ike | ipsec | dvmrp | relay | dhcp | smtp\
  | ldap | monitor | version | users | running-config | startup-config |\&? | help
 .Pp
@@ -1469,6 +1491,8 @@ nsh(p)/show
   route6          IPv6 route table or route lookup
   sadb            Security Association Database
   arp             ARP table
+  ndp             NDP table
+  vlan            802.1Q/802.1ad VLANs
   kernel          Kernel statistics
   bgp             BGP information
   ospf            OSPF information
@@ -1728,7 +1752,7 @@ firewall rules, and other information compiled by
 TBC
 .Tg flush
 .Ic flush
-.Op routes | arp | line | bridge-dyn | bridge-all | bridge-rule | pf | history |\&? | help
+.Op routes | arp | ndp | line | bridge-dyn | bridge-all | bridge-rule | pf | history |\&? | help
 .Pp
 Clear various system tables.
 .Pp
@@ -1739,6 +1763,10 @@ Clear the system routing table.
 .Ic flush arp
 .Pp
 Clear the system arp cache and static arp table.
+.Pp
+.Ic flush ndp
+.Pp
+Clear the system NDP cache and static NDP table.
 .Pp
 .Ic flush bridge-dyn
 .Ar bridge-name
@@ -2217,7 +2245,7 @@ named interface.
 .Bd -literal -offset indent
 nsh(interface-em0)/?
 % Commands may be abbreviated.
-% Press enter at a prompt to leave interface configuration mode.
+% Type 'exit' at a prompt to leave interface configuration mode.
 % Interface configuration commands are:
 
   ip               IP address and other parameters
@@ -2232,6 +2260,7 @@ nsh(interface-em0)/?
   metric           Routing metric
   link             Link level options
   arp              Address Resolution Protocol
+  staticarp        Always use static ARP to find other hosts
   lladdr           Link Level (MAC) Address
   nwid             802.11 network ID
   nwkey            802.11 network key
@@ -2474,6 +2503,34 @@ Enable or disable Address Resolution Protocol ARP on the interface.
 nsh(interface-fxp0)/arp
 nsh(interface-fxp0)/no arp
 .Ed
+.Pp
+.Op no
+.Ic staticarp
+.Pp
+Always use static ARP entries to find other hosts reachable via the interface.
+(Disabled by default.)
+.Bd -literal -offset indent
+nsh(interface-fxp0)/staticarp
+nsh(interface-fxp0)/no staticarp
+.Ed
+.Pp
+Only hosts with entries in the static ARP table will be reachable via
+the interface.
+Static ARP entries can be configured using the
+.Cm arp
+command in the global context (not the
+.Cm arp
+command in the interface context).
+.Pp
+When
+.Cm staticarp
+is enabled no ARP requests will be sent out on the interface, while
+responses to incoming ARP requests for the interface's own addresses
+will still be sent.
+If ARP was previously disabled on the interface with the
+.Cm no arp
+command then ARP will be automatically re-enabled to allow outgoing
+ARP responses.
 .Pp
 .Op no
 .Ic lladdr

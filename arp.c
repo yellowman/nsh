@@ -58,6 +58,12 @@
 #include <ifaddrs.h>
 #include "externs.h"
 
+/* ROUNDUP() is nasty, but it is identical to what's in the kernel. */
+#define ROUNDUP(a) \
+	((a) > 0 ? (1 + (((a) - 1) | (sizeof(long) - 1))) : sizeof(long))
+#define ADVANCE(x, n) (x += ROUNDUP((n)->sa_len))
+
+int rtget(struct sockaddr_inarp **, struct sockaddr_dl **, int, int, int);
 int arpdelete(const char *, const char *);
 int arpsearch(FILE *, char *, in_addr_t addr, void (*action)(FILE *, char *,
 	struct sockaddr_dl *sdl, struct sockaddr_inarp *sin,
@@ -68,9 +74,8 @@ void nuke_entry(struct sockaddr_dl *sdl,
 	struct sockaddr_inarp *sin, struct rt_msghdr *rtm);
 void conf_arp_entry(FILE *, char *, struct sockaddr_dl *,
 	struct sockaddr_inarp *, struct rt_msghdr *);
-static char *ether_str(struct sockaddr_dl *);
 int getinetaddr(const char *, struct in_addr *);
-int getsocket(void);
+static int getsocket(void);
 int rtmsg_arp(int, int, int, int);
 
 static int s = -1;
@@ -82,7 +87,7 @@ extern int h_errno;
 #define F_FILESET	3
 #define F_DELETE	4
 
-int
+static int
 getsocket(void)
 {
 	socklen_t len = sizeof(cli_rtable);
@@ -102,10 +107,54 @@ getsocket(void)
 	return s;
 }
 
-struct sockaddr_in	so_1mask = { 8, 0, 0, { 0xffffffff } };
-struct sockaddr_inarp	blank_sin = { sizeof(blank_sin), AF_INET }, sin_m;
-struct sockaddr_dl	blank_sdl = { sizeof(blank_sdl), AF_LINK }, sdl_m;
-time_t			expire_time;
+static struct sockaddr_in	so_1mask = { 8, 0, 0, { 0xffffffff } };
+static struct sockaddr_inarp	blank_sin = { sizeof(blank_sin), AF_INET }, sin_m;
+static struct sockaddr_dl	blank_sdl = { sizeof(blank_sdl), AF_LINK }, sdl_m;
+static struct sockaddr_dl	ifp_m = { sizeof(ifp_m), AF_LINK };
+static time_t			expire_time;
+
+int
+rtget(struct sockaddr_inarp **sinp, struct sockaddr_dl **sdlp,
+    int flags, int doing_proxy, int export_only)
+{
+	struct rt_msghdr *rtm = &(m_rtmsg.m_rtm);
+	struct sockaddr_inarp *sin = NULL;
+	struct sockaddr_dl *sdl = NULL;
+	struct sockaddr *sa;
+	char *cp;
+	unsigned int i;
+
+	if (rtmsg_arp(RTM_GET, flags, doing_proxy, export_only) < 0)
+		return (1);
+
+	if (rtm->rtm_addrs) {
+		cp = ((char *)rtm + rtm->rtm_hdrlen);
+		for (i = 1; i; i <<= 1) {
+			if (i & rtm->rtm_addrs) {
+				sa = (struct sockaddr *)cp;
+				switch (i) {
+				case RTA_DST:
+					sin = (struct sockaddr_inarp *)sa;
+					break;
+				case RTA_IFP:
+					sdl = (struct sockaddr_dl *)sa;
+					break;
+				default:
+					break;
+				}
+				ADVANCE(cp, sa);
+			}
+		}
+	}
+
+	if (sin == NULL || sdl == NULL)
+		return (1);
+
+	*sinp = sin;
+	*sdlp = sdl;
+
+	return (0);
+}
 
 /*
  * Set an individual arp entry
@@ -118,7 +167,7 @@ arpset(int argc, char *argv[])
 	struct rt_msghdr *rtm;
 	char *eaddr, *host;
 	struct ether_addr *ea = NULL;
-	int flags = 0, set = 1, doing_proxy, export_only;
+	int flags = 0, set = 1, doing_proxy, export_only, i;
 
 	sin = &sin_m;
 	rtm = &(m_rtmsg.m_rtm);
@@ -129,8 +178,9 @@ arpset(int argc, char *argv[])
 		argv++;
 	}
 
-	if ((set && argc != 3) || (!set && (argc < 2 || argc > 3))) {
-		printf("%% %s <inet addr> <ether addr>\n", argv[0]);
+	if ((set && (argc < 3 || argc > 6)) || (!set && argc != 3)) {
+		printf("%% %s <inet addr> <ether addr> [temp | permanent] "
+		    "[pub]\n", argv[0]);
 		printf("%% no %s <inet addr> [ether addr]\n", argv[0]);
 		return(1);
 	}
@@ -139,7 +189,7 @@ arpset(int argc, char *argv[])
 		return(arpdelete(argv[1], NULL));
 	}
 
-	if (argc == 3) {
+	if (argc >= 3) {
 		host = argv[1];
 		eaddr = argv[2];
 	} else {
@@ -164,8 +214,8 @@ arpset(int argc, char *argv[])
 	sdl_m.sdl_alen = 6;
 	expire_time = 0;
 	doing_proxy = flags = export_only = 0;
-	while (argc-- > 0) {
-		if (isprefix(argv[0], "temp")) {
+	for (i = 3; i < argc; i++) {
+		if (isprefix(argv[i], "temp")) {
 			struct timeval now;
 
 			gettimeofday(&now, 0);
@@ -175,27 +225,27 @@ arpset(int argc, char *argv[])
 				printf("%% temp or permanent, not both\n");
 				return (0);
 			}
-		} else if (isprefix(argv[0], "pub")) {
+		} else if (isprefix(argv[i], "pub")) {
 			flags |= RTF_ANNOUNCE;
 			doing_proxy = SIN_PROXY;
-		} else if (isprefix(argv[0], "permanent")) {
+		} else if (isprefix(argv[i], "permanent")) {
 			flags |= RTF_PERMANENT_ARP;
 			if (expire_time != 0) {
 				/* temp or permanent, not both */
 				printf("%% temp or permanent, not both\n");
 				return (0);
 			}
+		} else {
+			printf("%% invalid parameter: %s\n", argv[i]);
+			return (0);
 		}
-		argv++;
 	}
 
 tryagain:
-	if (rtmsg_arp(RTM_GET, flags, doing_proxy, export_only) < 0) {
+	if (rtget(&sin, &sdl, flags, doing_proxy, export_only) < 0) {
 		printf("%% %s\n", host);
 		return (1);
 	}
-	sin = (struct sockaddr_inarp *)((char *)rtm + rtm->rtm_hdrlen);
-	sdl = (struct sockaddr_dl *)(ROUNDUP(sin->sin_len) + (char *)sin);
 	if (sin->sin_addr.s_addr == sin_m.sin_addr.s_addr) {
 		if (sdl->sdl_family == AF_LINK &&
 		    (rtm->rtm_flags & RTF_LLINFO) &&
@@ -288,15 +338,13 @@ arpdelete(const char *host, const char *info)
 	if (getinetaddr(host, &sin->sin_addr) == -1)
 		return (1);
 tryagain:
-	if (rtmsg_arp(RTM_GET, 0, doing_proxy, export_only) < 0) {
+	if (rtget(&sin, &sdl, 0, doing_proxy, export_only) < 0) {
 		printf("%% %s\n", host);
 		return (1);
 	}
-	sin = (struct sockaddr_inarp *)((char *)rtm + rtm->rtm_hdrlen);
-	sdl = (struct sockaddr_dl *)(ROUNDUP(sin->sin_len) + (char *)sin);
 	if (sin->sin_addr.s_addr == sin_m.sin_addr.s_addr) {
 		if (sdl->sdl_family == AF_LINK && rtm->rtm_flags & RTF_LLINFO) {
-			if (rtm->rtm_flags & (RTF_LOCAL|RTF_BROADCAST))
+			if (rtm->rtm_flags & RTF_LOCAL)
 				return (0);
 		    	if (!(rtm->rtm_flags & RTF_GATEWAY))
 				switch (sdl->sdl_type) {
@@ -353,8 +401,6 @@ arpsearch(FILE *output, char *delim, in_addr_t addr, void (*action)
 		rtm = (struct rt_msghdr *)next;
 		if (rtm->rtm_version != RTM_VERSION)
 			continue;
-		if (rtm->rtm_flags & RTF_BROADCAST)
-			continue;
 		sin = (struct sockaddr_inarp *)(next + rtm->rtm_hdrlen);
 		sdl = (struct sockaddr_dl *)(sin + 1);
 		if (addr) {
@@ -400,9 +446,15 @@ conf_arp_entry(FILE *output, char *delim, struct sockaddr_dl *sdl,
 
 	host = inet_ntoa(sin->sin_addr);
 
-	if (!(rtm->rtm_flags & (RTF_PERMANENT_ARP|RTF_LOCAL|RTF_BROADCAST)) &&
-	    (rtm->rtm_rmx.rmx_expire == 0))
-		fprintf(output, "%s%s %s\n", delim, host, ether_str(sdl));
+	if ((rtm->rtm_flags & RTF_LOCAL) || rtm->rtm_rmx.rmx_expire != 0)
+		return;
+
+	fprintf(output, "%s%s %s", delim, host, ether_str(sdl));
+	if (rtm->rtm_flags & RTF_PERMANENT_ARP)
+		fputs(" permanent", output);
+	if (rtm->rtm_flags & RTF_ANNOUNCE)
+		fputs(" pub", output);
+	fputs("\n", output);
 }
 
 /*
@@ -441,7 +493,7 @@ print_entry(FILE *output, char *delim, struct sockaddr_dl *sdl,
 	printf("%s%-*.*s %-*.*s %*.*s", delim, addrwidth, addrwidth, host,
 	    llwidth, llwidth, ether_str(sdl), ifwidth, ifwidth, ifname);
 
-	if (rtm->rtm_flags & (RTF_PERMANENT_ARP|RTF_LOCAL|RTF_BROADCAST))
+	if (rtm->rtm_flags & (RTF_PERMANENT_ARP|RTF_LOCAL))
 		printf(" %-10.10s", "permanent");
 	else if (rtm->rtm_rmx.rmx_expire == 0)
 		printf(" %-10.10s", "static");
@@ -470,7 +522,7 @@ nuke_entry(struct sockaddr_dl *sdl, struct sockaddr_inarp *sin,
 	arpdelete(ip, NULL);
 }
 
-static char *
+char *
 ether_str(struct sockaddr_dl *sdl)
 {
 	static char hbuf[NI_MAXHOST];
@@ -488,7 +540,7 @@ ether_str(struct sockaddr_dl *sdl)
 
 /* -1 error */
 int
-rtmsg_arp(cmd, flags, doing_proxy, export_only)
+rtmsg_arp(int cmd, int flags, int doing_proxy, int export_only)
 {
 	static int seq;
 	struct rt_msghdr *rtm;
@@ -528,18 +580,19 @@ rtmsg_arp(cmd, flags, doing_proxy, export_only)
 		}
 		/* FALLTHROUGH */
 	case RTM_GET:
-		rtm->rtm_addrs |= RTA_DST;
+		rtm->rtm_addrs |= (RTA_DST | RTA_IFP);
 	}
 
 #define NEXTADDR(w, s)					\
 	if (rtm->rtm_addrs & (w)) {			\
 		memcpy(cp, &s, sizeof(s));		\
-		cp += ROUNDUP(sizeof(s));		\
+		ADVANCE(cp, (struct sockaddr *)&(s));	\
 	}
 
 	NEXTADDR(RTA_DST, sin_m);
 	NEXTADDR(RTA_GATEWAY, sdl_m);
 	NEXTADDR(RTA_NETMASK, so_1mask);
+	NEXTADDR(RTA_IFP, ifp_m);
 
 	rtm->rtm_msglen = cp - (char *)&m_rtmsg;
 doit:

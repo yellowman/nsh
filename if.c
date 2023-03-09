@@ -39,6 +39,7 @@
 #include <netdb.h>
 #include <net/if_vlan_var.h>
 #include <net/if_pflow.h>
+#include <net/if_media.h>
 #include <net80211/ieee80211.h>
 #include <net80211/ieee80211_ioctl.h>
 #include <ifaddrs.h>
@@ -50,6 +51,8 @@
 #include "externs.h"
 
 char *iftype(int int_type);
+const char *get_linkstate(int, int);
+void show_int_status(char *, int);
 char *get_hwdaddr(char *ifname);
 void pack_ifaliasreq(struct ifaliasreq *, ip_t *, struct in_addr *, char *);
 void pack_in6aliasreq(struct in6_aliasreq *, ip_t *, struct in6_addr *, char *);
@@ -57,6 +60,7 @@ void ipv6ll_db_store(struct sockaddr_in6 *, struct sockaddr_in6 *, int, char *);
 void printifhwfeatures(int, char *);
 void show_vnet_parent(int, char *);
 void pwe3usage(void);
+int show_vlan(int);
 
 static struct ifmpwreq imrsave;
 static char imrif[IFNAMSIZ];
@@ -101,6 +105,116 @@ void imr_init(char *ifname)
 	memset (&imrsave, 0, sizeof(imrsave));
 }
 
+const char *
+get_linkstate(int mt, int link_state)
+{
+	const struct if_status_description if_status_descriptions[] =
+		LINK_STATE_DESCRIPTIONS;
+	const struct if_status_description *p;
+	static char buf[8];
+
+	for (p = if_status_descriptions; p->ifs_string != NULL; p++) {
+		if (LINK_STATE_DESC_MATCH(p, mt, link_state))
+			return (p->ifs_string);
+	}
+	snprintf(buf, sizeof(buf), "[#%d]", link_state);
+	return buf;
+}
+
+void
+show_int_status(char *ifname, int ifs)
+{
+	struct ifreq ifr;
+	struct ifmediareq ifmr;
+	int flags;
+	struct if_data if_data;
+	struct sockaddr_dl *sdl = NULL;
+	const char *link_state_desc = NULL;
+	struct ifaddrs *ifap, *ifa;
+	uint64_t *media_list = NULL, seen_options = 0;
+	const char *ifm_type = NULL, *ifm_subtype = NULL;
+	char ifm_options_current[128];
+	char ifm_options_active[128];
+
+	ifm_options_current[0] = '\0';
+	ifm_options_active[0] = '\0';
+
+	memset(&ifr, 0, sizeof(ifr));
+	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
+
+	flags = get_ifflags(ifname, ifs);
+	ifr.ifr_data = (caddr_t)&if_data;
+	if (ioctl(ifs, SIOCGIFDATA, (caddr_t)&ifr) < 0) {
+		printf("%% show_int_status: SIOCGIFDATA: %s\n",
+		    strerror(errno));
+		return;
+	}
+
+	memset(&ifmr, 0, sizeof(ifmr));
+	strlcpy(ifmr.ifm_name, ifname, sizeof(ifmr.ifm_name));
+
+	if (getifaddrs(&ifap) != 0) {
+		printf("%% show_int_status: getifaddrs: %s\n",
+		    strerror(errno));
+		return;
+	}
+	for (ifa = ifap; ifa; ifa = ifa->ifa_next) {
+		if (ifa->ifa_addr->sa_family == AF_LINK &&
+		    (strcmp(ifname, ifa->ifa_name) == 0)) {
+			sdl = (struct sockaddr_dl *)ifa->ifa_addr;
+			link_state_desc = get_linkstate(sdl->sdl_type,
+			    if_data.ifi_link_state);
+			break;
+		}
+	}
+
+	if (ioctl(ifs, SIOCGIFMEDIA, (caddr_t)&ifmr) != -1 &&
+	    ifmr.ifm_count > 0) {
+		media_list = calloc(ifmr.ifm_count, sizeof(*media_list));
+		if (media_list == NULL) {
+			printf("%% show_int_status: calloc: %s\n",
+			    strerror(errno));
+			return;
+		}
+		ifmr.ifm_ulist = media_list;
+		if (ioctl(ifs, SIOCGIFMEDIA, (caddr_t)&ifmr) == -1) {
+			printf("%% show_int_status: SIOCGIFMEDIA: %s\n",
+			    strerror(errno));
+			return;
+		}
+		if (link_state_desc == NULL)
+			link_state_desc = get_ifm_linkstate_str(&ifmr);
+	}
+
+	/* Avoid displaying "unknown" for any non-physical interface. */
+	if (link_state_desc == NULL || strcmp(link_state_desc, "unknown") == 0)
+		link_state_desc = "-";
+
+	get_ifm_options_str(ifm_options_current, sizeof(ifm_options_current),
+	    ifmr.ifm_current, &seen_options);
+	if (IFM_OPTIONS(ifmr.ifm_current) != IFM_OPTIONS(ifmr.ifm_active)) {
+		get_ifm_options_str(ifm_options_active,
+		    sizeof(ifm_options_active), ifmr.ifm_active, &seen_options);
+	}
+
+	ifm_type = get_ifm_type_str(ifmr.ifm_active);
+	/* Avoid displaying "autoselect" for any non-physical interface. */
+	if (IFM_SUBTYPE(ifmr.ifm_active) != IFM_AUTO)
+		ifm_subtype = get_ifm_subtype_str(ifmr.ifm_active);
+
+	printf("  %-7s %-7s %-15s %s%s%s%s%s%s%s\n", ifname,
+	    (flags & IFF_UP) ? "up" : "down", link_state_desc,
+	    ifm_type ? ifm_type : "",
+	    ifm_type ? " " : "",
+	    ifm_subtype ? ifm_subtype : "",
+	    ifm_subtype ? " " : "",
+	    ifm_options_current,
+	    ifm_options_current[0] != '\0' ? " " : "",
+	    ifm_options_active[0] != '\0' ? ifm_options_active : "");
+
+	free(media_list);
+}
+
 int
 show_int(int argc, char **argv)
 {
@@ -124,12 +238,18 @@ show_int(int argc, char **argv)
 	if (argc == 3)
 		ifname = argv[2];
 
+	if ((ifs = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+		printf("%% show_int: %s\n", strerror(errno));
+		return(1);
+	}
+
 	/*
 	 * Show all interfaces when no ifname specified.
 	 */
 	if (ifname == NULL) {
 		if ((ifn_list = if_nameindex()) == NULL) {
 			printf("%% show_int: if_nameindex failed\n");
+			close(ifs);
 			return 0;
 		}
 		for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++) {
@@ -138,14 +258,23 @@ show_int(int argc, char **argv)
 			show_int(3, args);
 		}
 		if_freenameindex(ifn_list);
+		close(ifs);
+		return(0);
+	} else if (isprefix(ifname, "status")) {
+		if ((ifn_list = if_nameindex()) == NULL) {
+			printf("%% show_int: if_nameindex failed\n");
+			close(ifs);
+			return 0;
+		}
+		puts("% Name    Status  Link            Media");
+		for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++)
+			show_int_status(ifnp->if_name, ifs);
+		if_freenameindex(ifn_list);
+		close(ifs);
 		return(0);
 	} else if (!is_valid_ifname(ifname)) {
 		printf("%% interface %s not found\n", ifname);
-		return(1);
-	}
-
-	if ((ifs = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-		printf("%% show_int: %s\n", strerror(errno));
+		close(ifs);
 		return(1);
 	}
 
@@ -508,9 +637,10 @@ show_vnet_parent(int ifs, char *ifname)
 
 	bzero(&ifr, sizeof(ifr));
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
-
 	if (ioctl(ifs, SIOCGVNETID, (caddr_t)&ifr) != -1)
 		printf(" vnetid %llu,", ifr.ifr_vnetid);
+	bzero(&ifp, sizeof(ifp));
+	strlcpy(ifp.ifp_name, ifname, sizeof(ifp.ifp_name));
 	if (ioctl(ifs, SIOCGIFPARENT, (caddr_t)&ifp) != -1)
 		printf(" parent %s,", ifp.ifp_parent);
 }
@@ -644,6 +774,8 @@ get_ifdata(char *ifname, int type)
 			value = if_data.ifi_mtu;
 		else if (type == IFDATA_BAUDRATE)
 			value = if_data.ifi_baudrate;
+		else if (type == IFDATA_IFTYPE)
+			value = if_data.ifi_type;
 	}
 	close(ifs);
 	return (value);
@@ -997,6 +1129,17 @@ intip(char *ifname, int ifs, int argc, char **argv)
 		printf("%% unknown address family: %d\n", ip.family);
 		break;
 	}
+
+	/*
+	 * Some interfaces, such as vport(4), will not come UP
+	 * automatically when the first IP address is added.
+	 */
+	if (set) {
+		flags = get_ifflags(ifname, ifs);
+		if ((flags & IFF_UP) == 0)
+			set_ifflags(ifname, ifs, flags | IFF_UP);
+	}
+
 	return(0);
 }
 
@@ -1884,7 +2027,7 @@ intparent(char *ifname, int ifs, int argc, char **argv)
 int
 intflags(char *ifname, int ifs, int argc, char **argv)
 {
-	int set, value, flags;
+	int set, value, flags, iftype;
 
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -1902,12 +2045,37 @@ intflags(char *ifname, int ifs, int argc, char **argv)
 	} else if (isprefix(argv[0], "arp")) {
 		/* arp */
 		value = -IFF_NOARP;
+	} else if (isprefix(argv[0], "staticarp")) {
+		/* staticarp */
+		value = IFF_STATICARP;
 	} else {
 		printf("%% intflags: Internal error\n");
 		return(0);
 	}
 
+	/*
+	 * wg(4) sets IFF_NOARP by default and this should not be changed.
+	 * The kernel doesn't prevent this flag from being cleared (as of 7.2).
+	 */
+	iftype = get_ifdata(ifname, IFDATA_IFTYPE);
+	if (iftype == IFT_WIREGUARD &&
+	    (value == -IFF_NOARP || value == IFF_STATICARP)) {
+		printf("%% wireguard interfaces do not support ARP\n");
+		return (0);
+	}
+
 	flags = get_ifflags(ifname, ifs);
+	/*
+	 * If static ARP is requested while ARP is disabled entirely then
+	 * re-enable ARP to send responses to requests for our own address.
+	 * A configuration with both STATICARP and NOARP set amounts to NOARP.
+	 */
+	if (value == IFF_STATICARP && (flags & IFF_NOARP))
+		flags &= ~IFF_NOARP;
+	/* Likewise, disable STATICARP if ARP is being disabled entirely. */
+	if (value == -IFF_NOARP && (flags & IFF_STATICARP))
+		flags &= ~IFF_STATICARP;
+
 	if (value < 0) {
 		/*
 		 * Idea from ifconfig.  If value is negative then
@@ -2385,4 +2553,137 @@ intvnetflowid(char *ifname, int ifs, int argc, char **argv)
 		printf("%% intvnetflowid: SIOCSVNETFLOWID: %s\n", strerror(errno));
 
 	return(0);
+}
+
+int
+show_vlan(int wanted_vnetid)
+{
+	struct if_nameindex *ifn_list, *ifnp;
+	struct ifreq ifr;
+	struct if_parent ifp;
+	int ifs, vnetid, flags, bridx;
+	const char *parent, *description, *bridgename;
+	char ifdescr[IFDESCRSIZE];
+	char vnetid_str[5];
+	int found_vnetid = 0, header_shown = 0;
+	char ifix_buf[IFNAMSIZ];
+
+	if ((ifs = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+		printf("%% show_vlan: %s\n", strerror(errno));
+		return 0;
+	}
+
+	if ((ifn_list = if_nameindex()) == NULL) {
+		printf("%% show_vlan: if_nameindex failed\n");
+		close(ifs);
+		return 0;
+	}
+
+	for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++) {
+		if (!isprefix("vlan", ifnp->if_name) &&
+		    !isprefix("svlan", ifnp->if_name))
+			continue;
+
+		memset(&ifr, 0, sizeof(ifr));
+		if (strlcpy(ifr.ifr_name, ifnp->if_name,
+		    sizeof(ifr.ifr_name)) >= sizeof(ifr.ifr_name)) {
+			printf("%% %s: interface name is too long\n",
+			   ifnp->if_name);
+			continue;
+		}
+
+		vnetid = -1;
+		if (ioctl(ifs, SIOCGVNETID, &ifr) == -1) {
+			if (errno != EADDRNOTAVAIL) {
+				printf("%% %s: SIOCGVNETID: %s\n",
+				   ifnp->if_name, strerror(errno));
+				continue;
+			}
+		} else if (ifr.ifr_vnetid >= 0)
+			vnetid = ifr.ifr_vnetid;
+
+		if (wanted_vnetid != -1) {
+			if (vnetid != wanted_vnetid)
+				continue;
+			found_vnetid = 1;
+		}
+
+		if (!header_shown) {
+			puts("% Interface  Tag   Status  Type     "
+			    "Parent  Bridge   Description");
+			header_shown = 1;
+		}
+
+		memset(&ifp, 0, sizeof(ifp));
+		if (strlcpy(ifp.ifp_name, ifnp->if_name,
+		    sizeof(ifp.ifp_name)) >= sizeof(ifp.ifp_name)) {
+			printf("%% %s: interface name is too long\n",
+			   ifnp->if_name);
+			continue;
+		}
+		parent = "-";
+		if (ioctl(ifs, SIOCGIFPARENT, &ifp) == -1) {
+			if (errno != EADDRNOTAVAIL) {
+				printf("%% %s: SIOCGIFPARENT: %s\n",
+				   ifnp->if_name, strerror(errno));
+				continue;
+			}
+		} else
+			parent = ifp.ifp_parent;
+
+		flags = get_ifflags(ifnp->if_name, ifs);
+
+		memset(ifdescr, 0, sizeof(ifdescr));
+		ifr.ifr_data = (caddr_t)&ifdescr;
+		if (ioctl(ifs, SIOCGIFDESCR, &ifr) == 0)
+			description = ifr.ifr_data;
+		else
+			description = "";
+
+		if (vnetid == -1)
+			strlcpy(vnetid_str, "-", sizeof(vnetid_str));
+		else
+			snprintf(vnetid_str, sizeof(vnetid_str), "%d", vnetid);
+
+		bridx = bridge_member_search(ifs, ifnp->if_name);
+		if (bridx)
+			bridgename = if_indextoname(bridx, ifix_buf);
+		else
+			bridgename = "-";
+
+		printf("  %-10s %-5s %-7s %-8s %-7s %-8s %s\n", ifnp->if_name,
+		    vnetid_str, (flags & IFF_UP) ? "up" : "down",
+		    isprefix("vlan", ifnp->if_name) ? "802.1Q" : "802.1ad",
+		    parent, bridgename, description);
+	}
+
+	if (wanted_vnetid != -1 && !found_vnetid)
+		printf("%% no VLAN with tag %d configured\n", wanted_vnetid);
+
+	if_freenameindex(ifn_list);
+	close(ifs);
+	return 0;
+}
+
+int
+show_vlans(int argc, char **argv)
+{
+	long long vnetid = -1;
+	const char *errstr;
+
+	switch (argc) {
+	case 2:
+		show_vlan(-1);
+		break;
+	case 3:
+		vnetid = strtonum(argv[2], EVL_VLID_NULL,
+		    EVL_VLID_MAX, &errstr);
+		if (errstr) {
+			printf("%% VLAN tag %s is %s\n", argv[2], errstr);
+			break;
+		}
+		show_vlan(vnetid);
+		break;
+	}
+	return 0;
 }

@@ -27,6 +27,7 @@
 #define SHOW_STPSTATE	101
 #define MEMBER		102
 #define CONF_IFCOST	103
+#define PROTECTED	104
 
 /* blah */
 
