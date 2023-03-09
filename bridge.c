@@ -901,6 +901,49 @@ bridge_list(int s, char *brdg, char *delim, char *br_str, int str_len, int type)
 	return (identified);
 }
 
+/*
+ * Find a bridge, if any, which the given interface is a member of.
+ * Return the interface index of the bridge, or 0 if not found.
+ * A given interface can only be a member of one bridge at a time.
+ */
+int
+bridge_member_search(int ifs, char *ifname)
+{
+	struct if_nameindex *ifn_list, *ifnp;
+	int idx = 0;
+	char buf[1024];
+	char *p, *s;
+	
+	if (!is_valid_ifname(ifname) || is_bridge(ifs, ifname)) {
+		printf("%% bridge_member_search: bad interface %s\n", ifname);
+		return 0;
+	}
+
+	if ((ifn_list = if_nameindex()) == NULL) {
+		printf("%% bridge_member_search: if_nameindex failed\n");
+		return 0;
+	}
+
+	/* Search all bridges. */
+	for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++) {
+		if (!is_bridge(ifs, ifnp->if_name))
+			continue;
+		if (bridge_list(ifs, ifnp->if_name, NULL, buf, sizeof(buf),
+		    MEMBER) == 0)
+			continue;
+		p = buf;
+		while ((s = strsep(&p, " ")) != NULL) {
+			if (strcmp(s, ifname) == 0) {
+				idx = ifnp->if_index;
+				goto found;
+			}
+		}
+	}
+found:
+	if_freenameindex(ifn_list);
+	return idx;
+}
+
 int
 bridge_add(int s, char *brdg, char *ifn)
 {
