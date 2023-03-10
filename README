@@ -9,7 +9,7 @@ Daemons and services encapsulated by nsh:
 
 pf, ospfd, ospf6d, bgpd, ripd, ldpd, relayd, ipsecctl, iked, rad,
 dvmrpd, sasyncd, dhcpd, snmpd, sshd, ntpd, ifstated, tftp-proxy, ftp-proxy,
-tftpd, npppd, resolv.conf, inetd, smtpd, ldapd, ifstated
+tftpd, npppd, resolv.conf via resolvd, slaacd, dhcpleased, inetd, smtpd, ldapd
 
 NSH is freely licensed, in the BSD style.
 
