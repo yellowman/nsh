@@ -1,4 +1,4 @@
-.\"     $OpenBSD: nsh.1,v 1.0 2023/03/10 16:46:00 smytht Exp $
+.\"     $OpenBSD: nsh.1,v 1.1 2023/03/11 13:22:00 UTC chrisc Exp $
 .\"
 .\" Copyright (c) 2002-2023 Chris Cappuccio.  All rights reserved.
 .\"
@@ -24,7 +24,7 @@
 .\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd $Mdocdate: March 10 2023 $
+.Dd $Mdocdate: March 11 2023 $
 .Dt NSH 8
 .Os
 .Sh NAME
@@ -3680,6 +3680,7 @@ privileged shell profile
 .Xr resolv.conf 5 ,
 .Xr bgpd 8 ,
 .Xr dhcpd 8 ,
+.Xr dhcpleased 8 ,
 .Xr dvmrpd 8 ,
 .Xr eigrpd 8 ,
 .Xr ftpd 8 ,
@@ -3696,9 +3697,11 @@ privileged shell profile
 .Xr ospfd 8 ,
 .Xr pfctl 8 ,
 .Xr relayd 8 ,
+.Xr resolvd 8 ,
 .Xr ripd 8 ,
 .Xr rad 8 ,
 .Xr sasyncd 8 ,
+.Xr slaacd 8 ,
 .Xr smtpd 8 ,
 .Xr snmpd 8 ,
 .Xr sshd 8 ,
@@ -3731,6 +3734,7 @@ privileged shell profile
 This shell was originally designed and written by
 .An Chris Cappuccio Aq Mt chris@nmedia.net ,
 and is now co-maintained by
-.An Stefan Sperling Aq Mt stsp@ and 
+.An Stefan Sperling 
+and 
 .An Tom Smyth Aq Mt tom.smyth@wirelessconnect.eu .
 .Sh BUGS
