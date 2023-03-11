@@ -1,4 +1,4 @@
-nsh//network config shell//Chris Cappuccio <chris@nmedia.net> version 1.0
+nsh//network config shell//Chris Cappuccio <chris@nmedia.net> version 1.1
 
 NSH is a CLI intended for OpenBSD-based network appliances. It replaces
 ifconfig, sysctl and route with its own simple command language, and
@@ -7,19 +7,24 @@ replacing /etc/netstart and parts of /etc/rc for appliance-style usage.
 
 Daemons and services encapsulated by nsh:
 
-pf, ospfd, ospf6d, bgpd, ripd, ldpd, relayd, ipsecctl, iked, rad,
-dvmrpd, sasyncd, dhcpd, snmpd, sshd, ntpd, ifstated, tftp-proxy, ftp-proxy,
-tftpd, npppd, resolv.conf via resolvd, slaacd, dhcpleased, inetd, smtpd, ldapd
+bgpd, dhcpd, dhcpleased, dvmrpd, eigrpd, ftp-proxy, ifstated, inetd, 
+iked, ipsecctl, ldapd, ldpd, npppd, ntpd, ospfd, ospf6d, pf, rad, relayd, 
+resolvd, ripd, sasyncd, slaacd, smtpd, snmpd, sshd, tftpd, tftp-proxy.
 
 NSH is freely licensed, in the BSD style.
 
 In conjunction with the OpenBSD kernel and the daemons you wish to control,
 you have a fully functioning system.
 
-See MANUAL for installation instructons and command set.
+See https://github.com/yellowman/nsh/wiki/NSH-Manual-page or 
+nsh.8 manual for installation instructons and command set.
 
-See TODO for details on implementation status and future ideas.
+See the Todo list on https://github.com/users/yellowman/projects/1 for 
+details on implementation status and future ideas.
 
-See http://github.com/yellowman/nsh/ for current source code repository and
-see http://www.nmedia.net/nsh/ for example configurations and mailing
+See http://github.com/yellowman/nsh/ for current source code repository.
+See http://www.nmedia.net/nsh/ for example configurations and mailing
 list.
+
+See https://www.youtube.com/watch?v=WMKxIHaWaG0 for an EurobsdCon 2022 
+Presentation on NSH for network administrators. 
