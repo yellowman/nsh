@@ -34,7 +34,7 @@ void usage(void);
 
 jmp_buf toplevel;
 
-char *vers = "1.0";
+char *vers = "1.1";
 int bridge = 0;		/* bridge mode for interface() */
 int verbose = 0;	/* verbose mode */
 int priv = 0, cli_rtable = 0;
