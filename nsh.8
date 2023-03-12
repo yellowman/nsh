@@ -1,4 +1,4 @@
-.\"     $OpenBSD: nsh.1,v 1.1 2023/03/11 13:22:00 UTC chrisc Exp $
+.\"     $OpenBSD: nsh.8,v 1.1 2023/03/12 23:22:00 UTC chrisc Exp $
 .\"
 .\" Copyright (c) 2002-2023 Chris Cappuccio.  All rights reserved.
 .\"
@@ -24,7 +24,7 @@
 .\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd $Mdocdate: March 11 2023 $
+.Dd $Mdocdate: March 12 2023 $
 .Dt NSH 8
 .Os
 .Sh NAME
@@ -1270,6 +1270,7 @@ is disabled then the
 file must be maintained manually.
 .Pp
 .Tg nameserver
+.Tg resolv.conf
 .Op no
 .Ic nameserver
 .Ar IP-address1
@@ -1493,6 +1494,7 @@ nsh(p)/show
   arp             ARP table
   ndp             NDP table
   vlan            802.1Q/802.1ad VLANs
+  bridge          Ethernet bridges
   kernel          Kernel statistics
   bgp             BGP information
   ospf            OSPF information
@@ -1529,6 +1531,7 @@ nsh(p)/show hostname
 .Ed
 .El
 .Pp
+.Tg interface
 .Ic show interface
 .Op Ar interface-name
 .Pp
@@ -1654,6 +1657,7 @@ nsh/show int sis0
 .Ed
 .El
 .Pp
+.Tg autoconf
 .Ic show autoconf
 .Pp
 Display the interfaces on the system that are dynamically configured and the
@@ -1672,6 +1676,7 @@ em0 [Bound]
 	dhcp server 10.0.2.2
 .Ed
 .Pp
+.Tg route
 .Ic show route
 .Pp
 Display a dump of the kernel's IPv4 routing table, including ARP entries.
@@ -1723,6 +1728,7 @@ S - static
   This is a static route set by a user
 .El
 .Pp
+.Tg route6
 .Ic show route6
 .Pp
 Display a dump of the kernel's IPv6 routing table, including neighbour entries.
@@ -1752,10 +1758,13 @@ ff02::%lo0/32       fe80::1%lo0    U           0      1  32768   lo0
 nsh(p)/
 .Ed
 .Pp
+.Tg sadb
+.Tg ipsec
 .Ic show sadb
 .Pp
 Display the IPSEC security association database of the system.
 .Pp
+.Tg arp
 .Ic show arp
 .Pp
 Display Address Resolution Protocol table of the system, listing
@@ -1772,6 +1781,7 @@ Host           Ethernet Address   Netif Expire     Flags
 nsh(p)/
 .Ed
 .Pp
+.Tg ndp
 .Ic show ndp
 .Pp
 Display Neighbour Discovery Protocol NDP table.
@@ -1782,13 +1792,14 @@ Locally configured IPv6 addresses appear as permanent ndp entries.
 .Pp
 e.g. display contents of the ndp table.
 .Bd -literal -offset indent
-nsh(p)/nsh(p)/show ndp
+nsh(p)/show ndp
 Neighbor                       Linklayer Address   Netif Expire    S Flags
 fe80::a00:27ff:febd:cb77%em0   08:00:27:bd:cb:77     em0 permanent R l
 fe80::cafe:babe:beef:face%em0  52:54:00:12:35:02     em0 17m03s
 nsh(p)/
 .Ed
 .Pp
+.Tg vlan
 .Ic show vlan
 .Op vlan-id
 .Pp
@@ -1813,6 +1824,59 @@ nsh(p)/show vlan 200
 nsh(p)/
 .Ed
 .Pp
+.Tg bridge
+.Tg veb
+.Tg tpmr
+.Ic show bridge
+.Op bridge-interface | veb-interace | tpmr-interface
+.Pp
+Without specifying an argument, it displays all layer2 forwarding
+devices configured on the system, and all members of each layer2
+forwarding device, and any description of the layer2 forwarding
+device.
+Layer 2 forwarding devices supported by this command include
+.Xr bridge 4
+standard bridge,
+.Xr veb 4
+virtual ethernet bridge
+and the
+.Xr tpmr 4
+two port mac relay device.
+.Pp
+e.g. Display all layer2 forwarding devices and their member ports
+.Bd -literal -offset indent
+nsh(p)/show bridge
+% Bridge    Status  Member Interfaces
+  bridge1   down
+            Description: -
+  bridge100 up      vlan100
+            Description: Tom-Smyths-Bridge
+  veb200    up      vlan200
+            Description: Chris-Cappuccios-Bridge
+  tpmr102   up      vether1102 vether2102
+            Description: dlg-bridge
+nsh(p)/
+.Ed
+e.g. Display the information the tpmr102 layer2 forwarding device
+.Bd -literal -offset indent
+nsh(p)/show bridge tpmr102
+% Bridge    Status  Member Interfaces
+  tpmr102   up      vether1102 vether2102
+            Description: 2PortMacRelay-bridge-102
+.Ed
+.Pp
+.Tg kernel
+.Tg ip
+.Tg ah
+.Tg esp
+.Tg tcp
+.Tg icmp
+.Tg igmp
+.Tg ipcomp
+.Tg route
+.Tg carp
+.Tg mbuf
+.Tg pf
 .Ic show kernel
 .Op Ar ip | ah | esp | tcp | icmp | igmp | ipcomp | route | carp | mbuf | pf
 .Pp
@@ -1872,6 +1936,195 @@ Counters
   no-route                               0            0.0/s
 nsh(p)/
 .Ed
+.Pp
+.Tg ip
+.Tg route
+.Tg bgp
+.Ic show bgp
+.Op Ar announced | interfaces | nexthop | summary | rib | neighbor | ip
+.Pp
+Display status for
+.Xr bgpd 8
+Border Gateway Protocol BGPv4 dynamic routing on this system.
+e.g. show bgp
+.Bd -literal -offset indent
+nsh(p)/show bgp
+% Arguments may be abbreviated
+
+  show bgp announced  All announced networks information
+  show bgp interfaces Interface states information
+  show bgp nexthop    BGP nexthop routes information
+  show bgp summary    Neighbor session states and counters information
+  show bgp rib        Routing Information Base information
+  show bgp neighbor   Detailed peer information
+  show bgp ip         IP BGP information
+nsh(p)/
+.Ed
+.Pp
+.Tg ip
+.Tg ospf
+.Tg route
+.Ic show ospf
+.Op Ar fib | database | interfaces | neighbor | rib | summary
+.Pp
+Display the state of
+.Xr ospfd 8
+Open Shortest Path First OSPF dynamic links state routing
+protocol for IPv4 on this system.
+.Bd -literal -offset indent
+nsh(p)/show ospf
+% Arguments may be abbreviated
+
+  show ospf fib        Forward Information Base information
+  show ospf database   Link State Database information
+  show ospf interfaces Interface information
+  show ospf neighbor   Neighbor information
+  show ospf rib        Routing Information Base information
+  show ospf summary    Summary information
+nsh(p)/
+.Ed
+.Pp
+.Tg ospf6
+.Tg ospfv3
+.Tg route6
+.Ic show ospf6
+.Op Ar fib | database | interfaces | neighbor | rib | summary
+.Pp
+Display the state of
+.Xr ospf6d 8
+Open Shortest Path First OSPFv3 daemon for dynamic links state
+routing protocol for IPv6 on this system.
+.Bd -literal -offset indent
+nsh(p)/show ospf6
+% Arguments may be abbreviated
+
+  show ospf6 fib        Forward Information Base information
+  show ospf6 database   Link State Database information
+  show ospf6 interfaces Interface information
+  show ospf6 neighbor   Neighbor information
+  show ospf6 rib        Routing Information Base information
+  show ospf6 summary    Summary information
+nsh(p)/
+.Ed
+.Pp
+.Tg rip
+.Ic show rip
+.Op Ar fib | interfaces | neighbor | rib
+.Pp
+Display the status of
+.Xr ripd 8
+Routing Information Protocol RIP daemon for dynamic
+distance vector routing protocol on this system.
+.Bd -literal -offset indent
+nsh(p)/show rip
+% Arguments may be abbreviated
+
+  show rip fib        Forward Information Base information
+  show rip interfaces Interfaces information
+  show rip neighbor   Neighbor information
+  show rip rib        Routing Information Base information
+nsh(p)/
+.Ed
+.Pp
+.Tg mpls
+.Tg ldp
+.Tg label
+.Tg l2vpn
+.Ic show ldp
+.Op Ar fib | interfaces | neighbor | lib | discovery | l2vpn
+.Pp
+Display information on the status of
+.Xr ldpd 8
+Label Distribution protocol LDP routing daemon for MPLS Multi
+Protocol label Switching on this system.
+.Bd -literal -offset indent
+nsh(p)/show ldp
+% Arguments may be abbreviated
+
+  show ldp fib        Forward Information Base information
+  show ldp interfaces Interfaces information
+  show ldp neighbor   Neighbors information
+  show ldp lib        Label Information Base information
+  show ldp discovery  Adjacencies information
+  show ldp l2vpn      Pseudowire information
+nsh(p)/
+.Ed
+.Pp
+.Tg ipsec
+.Tg ike
+.Tg ikev2
+.Tg flow
+.Tg sa
+.Tg sadb
+.Ic show ike
+.Op Ar monitor
+.Pp
+Display Information on the Internet Key Exchange IKEv2 daemon on
+this system.
+.Pp
+.Ic show ipsec
+.Op Ar flows | sadb
+.Pp
+Display IPSECurity information related to either IPSEC flows or the
+Security Association Database on the system.
+.Pp
+.Tg dvmrp
+.Tg multicast
+.Tg igmp
+.Ic show dvmrp
+.Op Ar igmp | interfaces | mfc | neighbor | rib | summary
+.Pp
+Display status information from
+.Xr dvmrpd 8
+the Distance Vector Multicast Routing Protocol (DVMRP) daemon.
+.Bd -literal -offset indent
+nsh(p)/show dvmrp
+% Arguments may be abbreviated
+
+  show dvmrp igmp       Internet Group Message Protocol information
+  show dvmrp interfaces Interfaces information
+  show dvmrp mfc        Multicast Forwarding Cache information
+  show dvmrp neighbor   Neighbor information
+  show dvmrp rib        Routing Information Base information
+  show dvmrp summary    Summary information
+nsh(p)/
+.Ed
+.Tg relay
+.Tg relayd
+.Ic relay
+.Op Ar hosts | redirects | status | sessions | summary
+.Pp
+Display status information from
+.Xr relayd 8
+daemon for loadbalancing, TLS termination and content switching.
+.Bd -literal -offset indent
+nsh(p)/show relay
+% Arguments may be abbreviated
+
+  show relay hosts     hosts information
+  show relay redirects redirects information
+  show relay status    status information
+  show relay sessions  sessions information
+  show relay summary   summary information
+nsh(p)/
+.Ed
+.Pp
+.Tg dhcp
+.Tg ip
+.Tg lease
+.Ic show dhcp
+.Op Ar leases
+Display leases recored in the lease database as handed out by
+.Xr dhcpd 8
+Dynamic Host Configuration Protocol (DHCP) daemon.
+.Pp
+.Tg ldap
+.Tg auth
+.Ic show ldap
+.Op Ar stats
+Display statistics from
+.Xr ldapd 8
+Lightweight Directory Access Protocol (LDAP) daemon.
 .Pp
 .Ic show monitor
 .Pp
