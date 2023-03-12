@@ -1,6 +1,23 @@
 NSH // Network Shell Manual // Chris Cappuccio <chris@nmedia.net>
 
-Copyright (c) 2003-2013 Chris Cappuccio
+Copyright (c) 2003-2023 Chris Cappuccio
+
+NOTICE: this page is now deprecated and is provided for historic information on 
+the NSH project
+
+The most authoritive source of information on nsh is currently in the manual nsh.8, which is installed with nsh on any OpenBSD system that had nsh installed since late 2022.
+
+To view the manual, simply type on (your shell via terminal or console  or ssh ) 
+
+man nsh 
+
+or from within nsh type 
+
+!man nsh
+
+these commands should display the nsh manual as relates to version of nsh installed on your system.
+
+[The nsh manual can be viewed here](https://github.com/yellowman/nsh/wiki/NSH-Manual-page)
 
 
 Contents
