@@ -1,12 +1,18 @@
 enable
+show
 show run
 show startup
 show hostname
 show interface
+show autoconf
 show route
 show route6
 show sadb
 show arp
+show ndp
+show vlan
+show bridge
+show kernel 
 show kernel ip
 show kernel ah
 show kernel esp
@@ -19,6 +25,7 @@ show kernel route
 show kernel carp
 show kernel mbuf
 show kernel pf
+show bgp
 show bgp announced
 show bgp interfaces
 show bgp nexthop
@@ -26,6 +33,7 @@ show bgp summary
 show bgp rib
 show bgp neighbor
 show bgp ip
+show ospf
 show ospf fib
 show ospf database
 show ospf interfaces
@@ -39,6 +47,7 @@ show ospf6 neighbor
 show ospf6 rib
 show ospf6 summary
 show eigrp
+show rip
 show rip fib
 show rip interfaces
 show rip neighbor
@@ -50,26 +59,34 @@ show ldp lib
 show ldp discovery
 show ldp l2vpn bindings
 show ldp l2vpn pseudowires
+show ike
 show ike monitor
+show ipsec
 show ipsec flows
 show ipsec sadb
+show dvmrp
 show dvmrp igmp
 show dvmrp interfaces
 show dvmrp mfc
 show dvmrp neighbor
 show dvmrp rib
 show dvmrp summary
+show relay
 show relay hosts
 show relay redirects
 show relay status
 show relay sessions
 show relay summary
+show dhcp
 show dhcp leases
+show smtp
 show smtp queue
 show smtp runqueue
 show smtp stats
+show ldap
 show ldap stats
 show montior
 show version
 show users
+show help
 show ?
