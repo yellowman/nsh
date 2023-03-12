@@ -453,6 +453,7 @@ int flush_bridgedyn(char *);
 int flush_bridgeall(char *);
 int flush_bridgerule(char *, char*);
 int brprotect(char *, int, int, char **);
+int show_bridges(int, char **);
 
 /* tunnel.c */
 int inttunnel(char *, int, int, char **);

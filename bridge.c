@@ -76,6 +76,7 @@ int 	bridge_confaddrs(int, char *, char *, FILE *);
 int	bridge_protect(const char *, int, const char *, const char *);
 int	bridge_unprotect(const char *, int, const char *);
 void	brprotect_usage(void);
+int	show_bridge(char *);
 
 char *stpstates[] = {
 	"disabled",
@@ -1642,4 +1643,116 @@ brprotect(char *ifname, int ifs, int argc, char **argv)
 		return bridge_protect(ifname, ifs, argv[1], argv[2]);
 	else
 		return bridge_unprotect(ifname, ifs, argv[1]);
+}
+
+int
+show_bridge(char *ifname)
+{
+	struct if_nameindex *ifn_list, *ifnp;
+	int ifs, flags, totlen, len, found_bridge = 0, header_shown = 0;
+	char buf[1024], *p, *member;
+	struct ifreq ifr;
+	char ifdescr[IFDESCRSIZE], *description;
+
+	if ((ifs = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+		printf("%% show_bridge: socket: %s\n", strerror(errno));
+		return 0;
+	}
+
+	if (ifname) {
+		if (!is_valid_ifname(ifname) || !is_bridge(ifs, ifname)) {
+			printf("%% interface %s is not a bridge\n", ifname);
+			close(ifs);
+			return 0;
+		}
+	}
+
+	if ((ifn_list = if_nameindex()) == NULL) {
+		printf("%% show_vlan: if_nameindex failed\n");
+		close(ifs);
+		return 0;
+	}
+
+	for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++) {
+		if (ifname) {
+			if (strcmp(ifname, ifnp->if_name) != 0)
+				continue;
+			found_bridge = 1;
+		} else if (!is_bridge(ifs, ifnp->if_name))
+			continue;
+
+		if (!header_shown) {
+			puts("% Bridge    Status  Member Interfaces");
+			header_shown = 1;
+		}
+		if (bridge_list(ifs, ifnp->if_name, NULL, buf, sizeof(buf),
+		    MEMBER) == 0)
+			buf[0] = '\0';
+
+		flags = get_ifflags(ifnp->if_name, ifs);
+
+		len = printf("  %-9s %-7s", ifnp->if_name,
+		    (flags & IFF_UP) ? "up" : "down");
+		if (len < 0) {
+			printf("\n%% show_bridge: printf failed: %s\n",
+			    strerror(errno));
+			goto out;
+		}
+		totlen = len;
+
+		p = buf;
+		while ((member = strsep(&p, " ")) != NULL) {
+			if (totlen + strlen(member) >= 80) {
+				printf("\n                   ");
+				len = 19;
+				totlen = len;
+			}
+
+			len = printf(" %s", member);
+			if (len < 0) {
+				printf("\n%% show_bridge: printf failed: %s\n",
+				    strerror(errno));
+				goto out;
+			}
+			totlen += len;
+		}
+		printf("\n");
+
+		memset(&ifr, 0, sizeof(ifr));
+		if (strlcpy(ifr.ifr_name, ifnp->if_name,
+		    sizeof(ifr.ifr_name)) >= sizeof(ifr.ifr_name)) {
+			printf("%% %s: interface name is too long\n",
+			   ifnp->if_name);
+			continue;
+		}
+
+		ifr.ifr_data = (caddr_t)&ifdescr;
+		if (ioctl(ifs, SIOCGIFDESCR, &ifr) == 0 &&
+		    ifr.ifr_data[0] != '\0')
+			description = ifr.ifr_data;
+		else
+			description = "-";
+		printf("            Description: %s\n", description);
+
+		if (found_bridge)
+			break;
+	}
+out:
+	if_freenameindex(ifn_list);
+	close(ifs);
+	return 0;
+}
+
+int
+show_bridges(int argc, char **argv)
+{
+	switch (argc) {
+	case 2:
+		show_bridge(NULL);
+		break;
+	case 3:
+		show_bridge(argv[2]);
+		break;
+	}
+	return 0;
 }
