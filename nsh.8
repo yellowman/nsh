@@ -253,15 +253,17 @@ nsh(p)/? rtable
 .It
 E.g. display help for all available commands.
 .Bd -literal -offset indent
-nsh/help
+nsh(p)/help
 % Commands may be abbreviated.
 % Commands are:
+
   hostname      Set system hostname
   interface     Modify interface parameters
   rtable        Routing table switch
   group         Modify group attributes
   arp           Static ARP set
   ndp           Static NDP set
+  nameserver    set or remove static DNS nameservers
   bridge        Modify bridge parameters
   show          Show system information
   ip            Set IP networking parameters
@@ -298,7 +300,6 @@ nsh/help
   tftp-proxy    tftp-proxy server control
   tftp          TFTP server control
   resolv        Resolver configuration control
-  nameserver    set or remove static DNS nameservers
   motd          Message of-the-day
   inet          Inet super-server control
   ping          Send IPv4 ICMP echo request
@@ -316,6 +317,7 @@ nsh/help
   !             Invoke a subshell
   ?             Print help information
   quit          Close current connection
+nsh(p)/
 .Ed
 .El
 .Tg hostname
@@ -1268,17 +1270,13 @@ is disabled then the
 file must be maintained manually.
 .Pp
 .Tg nameserver
-.Bl -tag -width nameserver
-.It Xo
-.Cm nameserver
+.Op no
+.Ic nameserver
 .Ar IP-address1
 .Op Ar IP-address2 ...  IP-address5
-.Xr
-.It Cm no nameserver
-.El
 .Pp
 Configure static DNS name resolution servers used by the system.
-Up to 5 IPv4 and/or IPv6
+Up to 5 IPv4 and/or IPv6.
 .Ar IP-address
 arguments can be specified, which will then be added to
 .Xr resolv.conf 5
@@ -1471,9 +1469,10 @@ nsh/no verbose
 .El
 .Tg show
 .Ic show
-.Op hostname | interface | route | route6 | sadb | arp | ndp | vlan | kernel | bgp | ospf\
- | ospf6 |eigrp | rip | ldp | ike | ipsec | dvmrp | relay | dhcp | smtp\
- | ldap | monitor | version | users | running-config | startup-config |\&? | help
+.Op hostname | interface | autoconf | route | route6 | sadb | arp | ndp | vlan\
+ | kernel | bgp | ospf | ospf6 | eigrp | rip | ldp | ike | ipsec | dvmrp\
+ | relay | dhcp | smtp | ldap | monitor | version | users | running-config\
+ | startup-config |\&? | help
 .Pp
 The main diagnostic and informational command is 'show'.
 show without arguments  displays the available diagnostic show sub commands.
@@ -1487,6 +1486,7 @@ nsh(p)/show
 
   hostname        Router hostname
   interface       Interface config
+  autoconf        IPv4/IPv6 autoconf state
   route           IPv4 route table or route lookup
   route6          IPv6 route table or route lookup
   sadb            Security Association Database
@@ -1513,7 +1513,7 @@ nsh(p)/show
   running-config  Operating configuration
   startup-config  Startup configuration
   ?               Options
-
+nsh(p)/
 .Ed
 .El
 .Pp
@@ -1654,11 +1654,29 @@ nsh/show int sis0
 .Ed
 .El
 .Pp
+.Ic show autoconf
+.Pp
+Display the interfaces on the system that are dynamically configured and the
+current state and configured settings such as IP addresses, routes
+nameservers and the server that the system recieved the autoconf settings from
+.
+.Pp
+e.g. list current autoconfiguration state of the system.
+.Bd -literal -offset indent
+nsh(p)/show autoconf
+em0 [Bound]
+	inet 10.0.2.15 netmask 255.255.255.0
+	default gateway 10.0.2.2
+	nameservers 10.0.0.1 192.168.0.1
+	lease 17 hours
+	dhcp server 10.0.2.2
+.Ed
+.Pp
 .Ic show route
 .Pp
-Display a dump of the kernel routing table, including ARP entries.
+Display a dump of the kernel's IPv4 routing table, including ARP entries.
 .Pp
-e.g. display contents of the routing table.
+e.g. display contents of the IPv4 routing table.
 .Bd -literal -offset indent
 nsh/show route
 Flags: U - up, G - gateway, H - host, L - link layer, R - reject (unreachable),
@@ -1666,16 +1684,16 @@ Flags: U - up, G - gateway, H - host, L - link layer, R - reject (unreachable),
 
 % IPv4 routing table:
 
-Destination        Gateway            Flags     Refs  Packets    Mtu  Interface
-0.0.0.0/0          172.20.1.1         UGS         3     57502      -   sis0
-127.0.0.0/8        127.0.0.1          UGRS        0         0  33224   lo0
-127.0.0.1          127.0.0.1          UH          2        12  33224   lo0
-172.20.1.0/24      link#1             U           0         0      -   sis0
-172.20.1.1         8:0:20:71:22:e7    UHL         1         0      -   sis0
-172.20.1.2         127.0.0.1          UGHS        0         0  33224   lo0
-172.20.1.23        link#1             UHL         1      1764      -   sis0
-172.20.1.255       link#1             UHL         2      1555      -   sis0
-224.0.0.0/4        127.0.0.1          URS         0         0  33224   lo0
+Destination     Gateway           Flags  Refs  Packets    Mtu  Interface
+0.0.0.0/0       172.20.1.1        UGS      3     57502      -   sis0
+127.0.0.0/8     127.0.0.1         UGRS     0         0  33224   lo0
+127.0.0.1       127.0.0.1         UH       2        12  33224   lo0
+172.20.1.0/24   link#1            U        0         0      -   sis0
+172.20.1.1      8:0:20:71:22:e7   UHL      1         0      -   sis0
+172.20.1.2      127.0.0.1         UGHS     0         0  33224   lo0
+172.20.1.23     link#1            UHL      1      1764      -   sis0
+172.20.1.255    link#1            UHL      2      1555      -   sis0
+224.0.0.0/4     127.0.0.1         URS      0         0  33224   lo0
 .Ed
 .Bl -dash
 .It
@@ -1705,17 +1723,167 @@ S - static
   This is a static route set by a user
 .El
 .Pp
+.Ic show route6
+.Pp
+Display a dump of the kernel's IPv6 routing table, including neighbour entries.
+.Pp
+e.g. display contents of the IPv6 routing table.
+.Bd -literal -offset indent
+nsh(p)/show route6
+Flags: U - up, G - gateway, H - host, L - link layer, R - reject (unreachable),
+       D - dynamic, S - static, T - MPLS, c - CLONED, l - LOCAL
+
+% IPv6:
+Destination         Gateway        Flags    Refs    Use    Mtu  Interface
+::/96               ::1            UGRS        0      0  32768   lo0
+::1                 ::1            UH         10     20  32768   lo0
+::ffff:0.0.0.0/96   ::1            UGRS        0      0  32768   lo0
+2002::/24           ::1            UGRS        0      0  32768   lo0
+2002:7f00::/24      ::1            UGRS        0      0  32768   lo0
+2002:e000::/20      ::1            UGRS        0      0  32768   lo0
+2002:ff00::/24      ::1            UGRS        0      0  32768   lo0
+fe80::/10           ::1            UGRS        0      0  32768   lo0
+fec0::/10           ::1            UGRS        0      0  32768   lo0
+fe80::1%lo0         fe80::1%lo0    UH          0      0  32768   lo0
+ff01::/16           ::1            UGRS        0      0  32768   lo0
+ff01::%lo0/32       fe80::1%lo0    U           0      1  32768   lo0
+ff02::/16           ::1            UGRS        0      0  32768   lo0
+ff02::%lo0/32       fe80::1%lo0    U           0      1  32768   lo0
+nsh(p)/
+.Ed
+.Pp
+.Ic show sadb
+.Pp
+Display the IPSEC security association database of the system.
+.Pp
+.Ic show arp
+.Pp
+Display Address Resolution Protocol table of the system, listing
+IPv4 to layer2 mac-address entries, the interfaces they were learned on and the
+expiry of each interfaces.
+Locally configured IPv4 addresses appear as permanent arp entries.
+.Pp
+e.g. display contents of the arp table.
+.Bd -literal -offset indent
+nsh(p)/show arp
+Host           Ethernet Address   Netif Expire     Flags
+10.0.2.2       52:54:00:12:35:02    em0 2m14s
+10.0.2.15      08:00:27:bd:cb:77    em0 permanent  l
+nsh(p)/
+.Ed
+.Pp
+.Ic show ndp
+.Pp
+Display Neighbour Discovery Protocol NDP table.
+Neighbour Discovery Protocol database of the system, listing
+IPv6 to layer2 mac-address entries, the interfaces they were learned on and the
+expiry of each interfaces.
+Locally configured IPv6 addresses appear as permanent ndp entries.
+.Pp
+e.g. display contents of the ndp table.
+.Bd -literal -offset indent
+nsh(p)/nsh(p)/show ndp
+Neighbor                       Linklayer Address   Netif Expire    S Flags
+fe80::a00:27ff:febd:cb77%em0   08:00:27:bd:cb:77     em0 permanent R l
+fe80::cafe:babe:beef:face%em0  52:54:00:12:35:02     em0 17m03s
+nsh(p)/
+.Ed
+.Pp
+.Ic show vlan
+.Op vlan-id
+.Pp
+Display all virtual local area network interfaces configured on the system.
+Lists the vlans parent interfaces, any layer2 forwarding device the interface
+is a member of and the vlan interface description.
+expiry of each interfaces.
+.Pp
+e.g. display all vlan interfaces on the system
+.Bd -literal -offset indent
+nsh(p)/show vlan
+% Interface  Tag   Status  Type     Parent    Bridge     Description
+  vlan100    100   up      802.1Q   em0       bridge100  Stefans-LAN
+  vlan200    200   up      802.1Q   vether200 veb200     Chris-C-LAN
+nsh(p)/
+.Ed
+e.g. display information on all vlans with vnetid/tag of 200.
+.Bd -literal -offset indent
+nsh(p)/show vlan 200
+% Interface  Tag   Status  Type     Parent    Bridge   Description
+  vlan200    200   up      802.1Q   vether200 veb200   Chris-C-LAN
+nsh(p)/
+.Ed
+.Pp
+.Ic show kernel
+.Op Ar ip | ah | esp | tcp | icmp | igmp | ipcomp | route | carp | mbuf | pf
+.Pp
+Display kernel statistics available for query.
+Display kernel statistics as selected by the argument.
+Executing show kernel without an argument lists all available statistics
+.Pp
+e.g. show available kernel statistics.
+.Bd -literal -offset indent
+nsh(p)/show kernel
+% Arguments may be abbreviated
+
+  show kernel ip     Internet Protocol statistics
+  show kernel ah     Authentication Header statistics
+  show kernel esp    Encapsulated Security Payload statistics
+  show kernel tcp    Transmission Control Protocol statistics
+  show kernel udp    Unreliable Datagram Protocol statistics
+  show kernel icmp   Internet Control Message Protocol statistics
+  show kernel igmp   Internet Group Management Protocol statistics
+  show kernel ipcomp IP Compression statistics
+  show kernel route  Routing statistics
+  show kernel carp   Common Address Redundancy Protocol statistics
+  show kernel mbuf   Packet memory buffer statistics
+  show kernel pf     Packet Filter statistics
+nsh(p)/
+.Ed
+.Pp
+e.g. show packet filter kernel statistics
+.Bd -literal -offset indent
+nsh(p)/show kernel pf
+% pf statistics:
+Status: Enabled for 0 days 23:58:32              Debug: err
+
+State Table                          Total             Rate
+  current entries                        7
+  half-open tcp                          0
+  searches                          284973            3.3/s
+  inserts                              836            0.0/s
+  removals                             829            0.0/s
+Counters
+  match                                841            0.0/s
+  bad-offset                             0            0.0/s
+  fragment                               0            0.0/s
+  short                                  0            0.0/s
+  normalize                              0            0.0/s
+  memory                                 0            0.0/s
+  bad-timestamp                          0            0.0/s
+  congestion                             0            0.0/s
+  ip-option                              1            0.0/s
+  proto-cksum                            0            0.0/s
+  state-mismatch                         0            0.0/s
+  state-insert                           0            0.0/s
+  state-limit                            0            0.0/s
+  src-limit                              0            0.0/s
+  synproxy                               0            0.0/s
+  translate                              0            0.0/s
+  no-route                               0            0.0/s
+nsh(p)/
+.Ed
+.Pp
 .Ic show monitor
 .Pp
-start an interactive console monitor mode for the system's routing socket.
+Start an interactive console monitor mode for the system's routing socket.
 The monitor displays raw descriptions of the data passing into the kernel's
 routing socket and dumps of the kernel's routing messages to the machine.
 Press enter or control-C to exit this mode.
 .Pp
 .Ic show version
 .Pp
-This displays basic information about the host and about NSH, such as
-the version of NSH installed, the system's  uptime and kernel version.
+Display basic version information about the host and about NSH, including,
+ the system's  uptime and kernel version.
 It also shows both the kernel that NSH was compiled under, and the
 current kernel that NSH is running under.
 .Nm
@@ -3734,7 +3902,7 @@ privileged shell profile
 This shell was originally designed and written by
 .An Chris Cappuccio Aq Mt chris@nmedia.net ,
 and is now co-maintained by
-.An Stefan Sperling 
-and 
+.An Stefan Sperling Aq Mt stsp@openbsd.org
+and
 .An Tom Smyth Aq Mt tom.smyth@wirelessconnect.eu .
 .Sh BUGS
