@@ -19,6 +19,7 @@ extern int  margc;		/* makeargv() arg count */
 extern char *margv[];		/* makeargv() args */
 extern int verbose;		/* is verbose mode on? */
 extern int editing;		/* is command line editing mode on? */
+extern int config_mode;		/* are we in comfig mode? */
 extern int bridge;		/* are we in bridge mode (or interface mode?) */
 extern int priv;		/* privileged mode or not? */
 extern pid_t pid;		/* process id of nsh */
@@ -266,6 +267,7 @@ typedef struct cmd {
 	int stlen;		/* struct length (for rows in next table) */
 	int (*handler) ();	/* routine which executes command */
 	int needpriv;		/* Do we need privilege to execute? */   
+	int needconfig;		/* Do we need config mode to execute? */
 	int nocmd;		/* Can we specify 'no ...command...'? */
 	int modh;		/* Is it a mode handler for cmdrc()? */
 } Command;

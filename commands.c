@@ -87,6 +87,7 @@ static int	quit(void);
 static int	disable(void);
 static int	doverbose(int, char**);
 static int	doediting(int, char**);
+static int	doconfig(int, char**);
 int		rtable(int, char**);
 int		group(int, char**);
 static int	nsh_setrtable(int);
@@ -126,7 +127,6 @@ static int	traceroute6(int, char*[]);
 static int	ssh(int, char*[]);
 static int	telnet(int, char*[]);
        void	p_argv(int, char **);
-static int	notvalid(void);
 static int 	nreboot(void);
 static int 	halt(void);
 static Command *getcmd(char *);
@@ -321,10 +321,7 @@ Menu ip6tab[] = {
 	{ "neighborgcthresh", "Maximum number of entries in neighbor cache", CMPL0 0, 0, 0, 0, ipsysctl },
 	{ "send-redirect", "Enables sending ICMPv6 redirects by the system", CMPL0 0, 0, 0, 0, ipsysctl },
 	{ "?",          "Help",                         CMPL0 0, 0, 0, 0, sysctlhelp },
-{ 0, 0, 0, 0, 0, 0, 0, 0 }
-
-
-
+	{ 0, 0, 0, 0, 0, 0, 0, 0 }
 };
 
 Menu mplstab[] = {
@@ -978,6 +975,7 @@ static char
 	quithelp[] =	"Close current connection",
 	verbosehelp[] =	"Set verbose diagnostics",
 	editinghelp[] = "Set command line editing",
+	confighelp[] =	"Set configuration mode",
 	whohelp[] =	"Display system users",
 	shellhelp[] =	"Invoke a subshell",
 	savehelp[] =	"Save the current configuration",
@@ -991,68 +989,69 @@ static char
 
 #define ssctl sizeof(struct ctl)
 Command cmdtab[] = {
-	{ "hostname",	hostnamehelp,	CMPL0 0, 0, hostname, 	1, 0, 0 },
-	{ "interface",	interfacehelp,	CMPL(i) 0, 0, interface, 1, 1, 1 },
-	{ "rtable",	rtablehelp,	CMPL0 0, 0, rtable,	0, 1, 2 },
-	{ "group",	grouphelp,	CMPL0 0, 0, group,	1, 1, 0 },
-	{ "arp",	arphelp,	CMPL0 0, 0, arpset,	1, 1, 0 },
-	{ "ndp",	ndphelp,	CMPL0 0, 0, ndpset,	1, 1, 0 },
-	{ "nameserver",	nameserverhelp,	CMPL0 0, 0, nameserverset,1, 1, 0 },
-	{ "bridge",	bridgehelp,	CMPL(i) 0, 0, interface, 1, 1, 1 },
-	{ "show",	showhelp,	CMPL(ta) (char **)showlist, sizeof(Menu), showcmd,	0, 0, 0 },
-	{ "ip",		iphelp,		CMPL(ta) (char **)iptab, sizeof(Menu), ipcmd,		1, 1, 0 },
-	{ "ip6",	ip6help,	CMPL(ta) (char **)ip6tab, sizeof(Menu), ipcmd,		1, 1, 0 },
-	{ "mpls",	mplshelp,	CMPL(ta) (char **)mplstab, sizeof(Menu), ipcmd,		1, 1, 0 },
-	{ "ddb",	ddbhelp,	CMPL(ta) (char **)ddbtab, sizeof(Menu), ipcmd,		1, 1, 0 },
-	{ "pipex",	pipexhelp,	CMPL(ta) (char **)pipextab, sizeof(Menu), ipcmd,	1, 1, 0 },
-	{ "flush",	flushhelp,	CMPL(ta) (char **)flushlist, sizeof(Menu), flushcmd,	1, 0, 0 },
-	{ "enable",	enablehelp,	CMPL0 0, 0, enable,	0, 0, 0 },
-	{ "disable",	disablehelp,	CMPL0 0, 0, disable,	1, 0, 0 },
-	{ "route",	routehelp,	CMPL0 0, 0, route,	1, 1, 0 },
-	{ "pf",		pfhelp,		CMPL(t) (char **)ctl_pf, ssctl, ctlhandler,	1, 0, 1 },
-	{ "ospf",	ospfhelp,	CMPL(t) (char **)ctl_ospf, ssctl, ctlhandler,	1, 0, 1 },
-	{ "ospf6",	ospf6help,	CMPL(t) (char **)ctl_ospf6, ssctl, ctlhandler,	1, 0, 1 },
-	{ "eigrp",	eigrphelp,	CMPL(t) (char **)ctl_eigrp, ssctl, ctlhandler,	1, 0, 1 },
-	{ "bgp",	bgphelp,	CMPL(t) (char **)ctl_bgp, ssctl, ctlhandler,	1, 0, 1 },
-	{ "rip",	riphelp,	CMPL(t) (char **)ctl_rip, ssctl, ctlhandler,	1, 0, 1 },
-	{ "ldp",	ldphelp,	CMPL(t) (char **)ctl_ldp, ssctl, ctlhandler,	1, 0, 1 },
-	{ "relay",	relayhelp,	CMPL(t) (char **)ctl_relay, ssctl, ctlhandler,	1, 0, 1 },
-	{ "ipsec",	ipsechelp,	CMPL(t) (char **)ctl_ipsec, ssctl, ctlhandler,	1, 0, 1 },
-	{ "ike",	ikehelp,	CMPL(t) (char **)ctl_ike, ssctl, ctlhandler, 	1, 0, 1 },
-	{ "dvmrp",	dvmrphelp,	CMPL(t) (char **)ctl_dvmrp, ssctl, ctlhandler,	1, 0, 1 },
-	{ "rad",	radhelp,	CMPL(t) (char **)ctl_rad, ssctl, ctlhandler,	1, 0, 1 },
-	{ "sasync",	sasynchelp,	CMPL(t) (char **)ctl_sasync, ssctl, ctlhandler,	1, 0, 1 },
-	{ "dhcp",	dhcphelp,	CMPL(t) (char **)ctl_dhcp, ssctl, ctlhandler,	1, 0, 1 },
-	{ "snmp",	snmphelp,	CMPL(t) (char **)ctl_snmp, ssctl, ctlhandler,	1, 0, 1 },
-	{ "ldap",	ldaphelp,	CMPL(t) (char **)ctl_ldap, ssctl, ctlhandler,	1, 0, 1 },
-	{ "smtp",	smtphelp,	CMPL(t) (char **)ctl_smtp, ssctl, ctlhandler,	1, 0, 1 },
-	{ "sshd",	sshdhelp,	CMPL(t) (char **)ctl_sshd, ssctl, ctlhandler,	1, 0, 1 },
-	{ "ntp",	ntphelp,	CMPL(t) (char **)ctl_ntp, ssctl, ctlhandler,	1, 0, 1 },
-	{ "nppp",	nppphelp,	CMPL(t) (char **)ctl_nppp, ssctl, ctlhandler,	1, 0, 1 },
-	{ "ifstate",	ifstatehelp,	CMPL(t) (char **)ctl_ifstate, ssctl, ctlhandler, 1, 0, 1 },
-	{ "ftp-proxy",  ftpproxyhelp,	CMPL(t) (char **)ctl_ftpproxy, ssctl, ctlhandler,  1, 0, 1 },
-	{ "tftp-proxy",	tftpproxyhelp,	CMPL(t) (char **)ctl_tftpproxy, ssctl, ctlhandler, 1, 0, 1 },
-	{ "tftp",	tftphelp,	CMPL(t) (char **)ctl_tftp, ssctl, ctlhandler,	1, 0, 1 },
-	{ "resolv",	resolvhelp,	CMPL(t) (char **)ctl_resolv, ssctl, ctlhandler, 1, 0, 1 },
-        { "motd",       motdhelp,       CMPL(t) (char **)ctl_motd, ssctl, ctlhandler,    1, 0, 1 },
-	{ "inet",	inethelp,	CMPL(t) (char **)ctl_inet, ssctl, ctlhandler,	1, 0, 1 },
-	{ "ping",	pinghelp,	CMPL0 0, 0, ping,	0, 0, 0 },
-	{ "ping6",	ping6help,	CMPL0 0, 0, ping6,	0, 0, 0 },
-	{ "traceroute", tracerthelp,	CMPL0 0, 0, traceroute,	0, 0, 0 },
-	{ "traceroute6", tracert6help,  CMPL0 0, 0, traceroute6, 0, 0, 0 },
-	{ "ssh",	sshhelp,	CMPL0 0, 0, ssh,	0, 0, 0 },
-	{ "telnet",	telnethelp,	CMPL0 0, 0, telnet,	0, 0, 0 },
-	{ "reboot",	nreboothelp,	CMPL0 0, 0, nreboot,	1, 0, 0 },
-	{ "halt",	halthelp,	CMPL0 0, 0, halt,	1, 0, 0 },
-	{ "write-config", savehelp,	CMPL0 0, 0, wr_startup,	1, 0, 0 },
-	{ "verbose",	verbosehelp,	CMPL0 0, 0, doverbose,	0, 1, 0 },
-	{ "editing",	editinghelp,	CMPL0 0, 0, doediting,	0, 1, 0 },
-	{ "who",	whohelp,	CMPL0 0, 0, who,	0, 0, 0 },
-	{ "!",		shellhelp,	CMPL0 0, 0, shell,	1, 0, 0 },
-	{ "?",		helphelp,	CMPL(C) 0, 0, help,	0, 0, 0 },
-	{ "quit",	quithelp,	CMPL0 0, 0, quit,	0, 0, 0 },
-	{ "help",	0,		CMPL(C) 0, 0, help,	0, 0, 0 },
-	{ 0,		0,		CMPL0 0, 0, 0,		0, 0, 0 }
+	{ "hostname",	hostnamehelp,	CMPL0 0, 0, hostname,		1, 1, 0, 0 },
+	{ "interface",	interfacehelp,	CMPL(i) 0, 0, interface,	1, 1, 1, 1 },
+	{ "rtable",	rtablehelp,	CMPL0 0, 0, rtable,		0, 0, 1, 2 },
+	{ "group",	grouphelp,	CMPL0 0, 0, group,		1, 1, 1, 0 },
+	{ "arp",	arphelp,	CMPL0 0, 0, arpset,		1, 1, 1, 0 },
+	{ "ndp",	ndphelp,	CMPL0 0, 0, ndpset,		1, 1, 1, 0 },
+	{ "nameserver",	nameserverhelp,	CMPL0 0, 0, nameserverset,	1, 1, 1, 0 },
+	{ "bridge",	bridgehelp,	CMPL(i) 0, 0, interface,	1, 1, 1, 1 },
+	{ "show",	showhelp,	CMPL(ta) (char **)showlist, sizeof(Menu), showcmd,	0, 0, 0, 0 },
+	{ "ip",		iphelp,		CMPL(ta) (char **)iptab, sizeof(Menu), ipcmd,		1, 1, 1, 0 },
+	{ "ip6",	ip6help,	CMPL(ta) (char **)ip6tab, sizeof(Menu), ipcmd,		1, 1, 1, 0 },
+	{ "mpls",	mplshelp,	CMPL(ta) (char **)mplstab, sizeof(Menu), ipcmd,		1, 1, 1, 0 },
+	{ "ddb",	ddbhelp,	CMPL(ta) (char **)ddbtab, sizeof(Menu), ipcmd,		1, 1, 1, 0 },
+	{ "pipex",	pipexhelp,	CMPL(ta) (char **)pipextab, sizeof(Menu), ipcmd,	1, 1, 1, 0 },
+	{ "flush",	flushhelp,	CMPL(ta) (char **)flushlist, sizeof(Menu), flushcmd,	1, 0, 0, 0 },
+	{ "enable",	enablehelp,	CMPL0 0, 0, enable,		0, 0, 0, 0 },
+	{ "disable",	disablehelp,	CMPL0 0, 0, disable,		1, 0, 0, 0 },
+	{ "route",	routehelp,	CMPL0 0, 0, route,		1, 1, 1, 0 },
+	{ "pf",		pfhelp,		CMPL(t) (char **)ctl_pf, ssctl, ctlhandler,	1, 1, 0, 1 },
+	{ "ospf",	ospfhelp,	CMPL(t) (char **)ctl_ospf, ssctl, ctlhandler,	1, 1, 0, 1 },
+	{ "ospf6",	ospf6help,	CMPL(t) (char **)ctl_ospf6, ssctl, ctlhandler,	1, 1, 0, 1 },
+	{ "eigrp",	eigrphelp,	CMPL(t) (char **)ctl_eigrp, ssctl, ctlhandler,	1, 1, 0, 1 },
+	{ "bgp",	bgphelp,	CMPL(t) (char **)ctl_bgp, ssctl, ctlhandler,	1, 1, 0, 1 },
+	{ "rip",	riphelp,	CMPL(t) (char **)ctl_rip, ssctl, ctlhandler,	1, 1, 0, 1 },
+	{ "ldp",	ldphelp,	CMPL(t) (char **)ctl_ldp, ssctl, ctlhandler,	1, 1, 0, 1 },
+	{ "relay",	relayhelp,	CMPL(t) (char **)ctl_relay, ssctl, ctlhandler,	1, 1, 0, 1 },
+	{ "ipsec",	ipsechelp,	CMPL(t) (char **)ctl_ipsec, ssctl, ctlhandler,	1, 1, 0, 1 },
+	{ "ike",	ikehelp,	CMPL(t) (char **)ctl_ike, ssctl, ctlhandler, 	1, 1, 0, 1 },
+	{ "dvmrp",	dvmrphelp,	CMPL(t) (char **)ctl_dvmrp, ssctl, ctlhandler,	1, 1, 0, 1 },
+	{ "rad",	radhelp,	CMPL(t) (char **)ctl_rad, ssctl, ctlhandler,	1, 1, 0, 1 },
+	{ "sasync",	sasynchelp,	CMPL(t) (char **)ctl_sasync, ssctl, ctlhandler,	1, 1, 0, 1 },
+	{ "dhcp",	dhcphelp,	CMPL(t) (char **)ctl_dhcp, ssctl, ctlhandler,	1, 1, 0, 1 },
+	{ "snmp",	snmphelp,	CMPL(t) (char **)ctl_snmp, ssctl, ctlhandler,	1, 1, 0, 1 },
+	{ "ldap",	ldaphelp,	CMPL(t) (char **)ctl_ldap, ssctl, ctlhandler,	1, 1, 0, 1 },
+	{ "smtp",	smtphelp,	CMPL(t) (char **)ctl_smtp, ssctl, ctlhandler,	1, 1, 0, 1 },
+	{ "sshd",	sshdhelp,	CMPL(t) (char **)ctl_sshd, ssctl, ctlhandler,	1, 1, 0, 1 },
+	{ "ntp",	ntphelp,	CMPL(t) (char **)ctl_ntp, ssctl, ctlhandler,	1, 1, 0, 1 },
+	{ "nppp",	nppphelp,	CMPL(t) (char **)ctl_nppp, ssctl, ctlhandler,	1, 1, 0, 1 },
+	{ "ifstate",	ifstatehelp,	CMPL(t) (char **)ctl_ifstate, ssctl, ctlhandler, 1, 1, 0, 1 },
+	{ "ftp-proxy",  ftpproxyhelp,	CMPL(t) (char **)ctl_ftpproxy, ssctl, ctlhandler,  1, 1, 0, 1 },
+	{ "tftp-proxy",	tftpproxyhelp,	CMPL(t) (char **)ctl_tftpproxy, ssctl, ctlhandler, 1, 1, 0, 1 },
+	{ "tftp",	tftphelp,	CMPL(t) (char **)ctl_tftp, ssctl, ctlhandler,	1, 1, 0, 1 },
+	{ "resolv",	resolvhelp,	CMPL(t) (char **)ctl_resolv, ssctl, ctlhandler, 1, 1, 0, 1 },
+	{ "motd",       motdhelp,       CMPL(t) (char **)ctl_motd, ssctl, ctlhandler,    1, 1, 0, 1 },
+	{ "inet",	inethelp,	CMPL(t) (char **)ctl_inet, ssctl, ctlhandler,	1, 1, 0, 1 },
+	{ "ping",	pinghelp,	CMPL0 0, 0, ping,		0, 0, 0, 0 },
+	{ "ping6",	ping6help,	CMPL0 0, 0, ping6,		0, 0, 0, 0 },
+	{ "traceroute", tracerthelp,	CMPL0 0, 0, traceroute,		0, 0, 0, 0 },
+	{ "traceroute6", tracert6help,  CMPL0 0, 0, traceroute6,	 0, 0, 0, 0 },
+	{ "ssh",	sshhelp,	CMPL0 0, 0, ssh,		0, 0, 0, 0 },
+	{ "telnet",	telnethelp,	CMPL0 0, 0, telnet,		0, 0, 0, 0 },
+	{ "reboot",	nreboothelp,	CMPL0 0, 0, nreboot,		1, 0, 0, 0 },
+	{ "halt",	halthelp,	CMPL0 0, 0, halt,		1, 0, 0, 0 },
+	{ "write-config", savehelp,	CMPL0 0, 0, wr_startup,		1, 0, 0, 0 },
+	{ "verbose",	verbosehelp,	CMPL0 0, 0, doverbose,		0, 0, 1, 0 },
+	{ "editing",	editinghelp,	CMPL0 0, 0, doediting,		0, 0, 1, 0 },
+	{ "configure",	confighelp,	CMPL0 0, 0, doconfig,		0, 0, 1, 0 },
+	{ "who",	whohelp,	CMPL0 0, 0, who,		0, 0, 0, 0 },
+	{ "!",		shellhelp,	CMPL0 0, 0, shell,		1, 0, 0, 0 },
+	{ "?",		helphelp,	CMPL(C) 0, 0, help,		0, 0, 0, 0 },
+	{ "quit",	quithelp,	CMPL0 0, 0, quit,		0, 0, 0, 0 },
+	{ "help",	0,		CMPL(C) 0, 0, help,		0, 0, 0, 0 },
+	{ 0,		0,		CMPL0 0, 0, 0,			0, 0, 0, 0 }
 };
 
 /*
@@ -1060,8 +1059,7 @@ Command cmdtab[] = {
  */
 
 static Command  cmdtab2[] = {
-	{ "config",	0,		CMPL0 0, 0, notvalid,	0, 0, 0 },
-	{ 0,		0,		CMPL0 0, 0, 0,		0, 0, 0 }
+	{ 0,		0,		CMPL0 0, 0, 0,		0, 0, 0, 0 }
 };
 
 Command *
@@ -1211,6 +1209,10 @@ command()
 			printf("%% Privilege required\n");
 			continue;
 		}
+		if (c->needconfig != 0 && config_mode != 1) {
+			printf("%% Command requires configure mode\n");
+			continue;
+		}
 		if (c->modh)
 			strlcpy(hname, c->name, HSIZE);	
 		if ((*c->handler) (margc, margv, 0)) {
@@ -1238,8 +1240,9 @@ help(int argc, char **argv)
 			    && strlen(c->name) > z)
 				z = strlen(c->name);
 		for (c = cmdtab; c->name; c++) {
-			if (c->help && ((c->needpriv && priv) ||
-			    !c->needpriv))
+			if (c->help &&
+			    ((c->needpriv && priv) || !c->needpriv) &&
+			    ((c->needconfig && config_mode) || !c->needconfig))
 				printf("  %-*s  %s\n", z, c->name, c->help);
 		}
 		return 0;
@@ -1696,15 +1699,6 @@ disable(void)
 	return 0;
 }
 
-int
-notvalid(void)
-{
-	printf("%% The command you entered is not necessary with this"
-	    " software.\n");
-
-	return(0);
-}
-
 /*
  * verbose diagnostics
  */
@@ -1743,6 +1737,25 @@ doediting(int argc, char **argv)
 
 	printf("%% Command line editing %s\n",
 	    editing ? "enabled" : "disabled");
+
+	return 0;
+}
+
+int
+doconfig(int argc, char **argv)
+{
+	if (argc > 1) {
+		if (NO_ARG(argv[0])) {
+			config_mode = 0;
+		} else if (isprefix(argv[1], "terminal")) {
+			config_mode = 1;
+		} else {
+			printf ("%% Invalid argument\n");
+			return 1;
+		}
+	} else {
+		config_mode = 1;
+	}
 
 	return 0;
 }
@@ -1997,9 +2010,13 @@ cprompt(void)
 		snprintf(tmp, sizeof(tmp), "%d", cli_rtable);
 
 	gethostname(hbuf, sizeof(hbuf));
-	pr = priv | cli_rtable;
-	snprintf(prompt, sizeof(prompt), "%s%s%s%s%s%s%s/", hbuf, pr ? "(" : "",
-	    priv ? "p" : "", priv && cli_rtable ? "-" : "",
+	pr = priv | cli_rtable | config_mode;
+	snprintf(prompt, sizeof(prompt), "%s%s%s%s%s%s%s%s%s/", hbuf,
+	    pr ? "(" : "",
+	    config_mode ? "config" : "",
+	    config_mode && priv ? "-" : "",
+	    priv ? "p" : "",
+	    (( priv && cli_rtable) || (config_mode && cli_rtable)) ? "-" : "",
 	    cli_rtable ? "rtable " : "", cli_rtable ? tmp : "",
 	    pr ?")" : "");
 
