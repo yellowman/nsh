@@ -7,7 +7,7 @@ replacing /etc/netstart and parts of /etc/rc for appliance-style usage.
 
 Daemons and services encapsulated by nsh:
 
-bgpd, dhcpd, dhcpleased, dvmrpd, eigrpd, ftp-proxy, ifstated, inetd, 
+bgpd, dhcpd, dhcpleased, dhcrelay, dvmrpd, eigrpd, ftp-proxy, ifstated, inetd, 
 iked, ipsecctl, ldapd, ldpd, npppd, ntpd, ospfd, ospf6d, pf, rad, relayd, 
 resolvd, ripd, sasyncd, slaacd, smtpd, snmpd, sshd, tftpd, tftp-proxy.
 
