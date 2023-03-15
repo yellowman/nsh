@@ -2,5 +2,4 @@
 enable
 pf enable
 sshd enable
-dns local-control
 write-config
