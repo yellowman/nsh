@@ -507,7 +507,7 @@ commands):
 .Ed
 .Bl -dash
 .It
-e.g. configure bridge settings on bridge1. and display bridge configuration
+e.g. configure bridge settings on bridge1, and display bridge configuration
 help.
 .El
 E.g show available bridge configuration commands.
@@ -545,7 +545,18 @@ nsh(bridge-bridge1)/?
   shutdown      Shutdown bridge
   ?             Options
 .Ed
-.eg. configure a standard
+.Tg port
+.Tg switchport
+.Tg bridgeport
+.Op no
+.Ic member
+.Op Ar interface-name
+.Pp
+Add a named interface as a member port to the layer 2 bridge device.
+Using the no suffix removes the named interface from the layer 2
+bridge device.
+.Pp
+E.g. configure a standard
 .Xr bridge 4
 device called bridge101 and add vlan 101 and vether101 as member ports.
 .Bd -literal -offset indent
@@ -563,7 +574,7 @@ nsh(bridge-veb101)/member vether101
 nsh(bridge-veb101)/member vlan101
 nsh(bridge-veb101)/exit
 .Ed
-.eg. configure a virtual ethernet bridge
+E.g. configure a virtual ethernet bridge
 .Xr veb 4
 device called veb101 and add vlan 101 and vether101 as member ports.
 .Bd -literal -offset indent
@@ -584,6 +595,30 @@ If an unsupported command is issued to a tpmr interface the system will
 display the following when rejecting the configuration command
 .Bd -literal -offset indent
 % Inappropriate ioctl for device
+.Ed
+.Tg protected
+.Tg isolation
+.Op no
+.Ic protected
+.Op Ar interface-name
+.Pp
+This command requires that the named interface is already a member
+of the layer 2 bridge device.
+Add the named interface to a protected domain.
+Any member ports in the same bridge in the same protected domain are
+isolated from each other.
+No layer 2 communication is possible between memers ports in the same
+port protection group.
+Protected domains allow for selective port isolation and or private
+vlan functionality.
+.Pp
+E.g. enable port isolation between vether101 and vlan101 which are
+member ports of the bridge veb101.
+.Bd -literal -offset indent
+nsh(p)/bridge veb101
+nsh(bridge-veb101)/protect vether101 20
+nsh(bridge-veb101)/protect vlan101 20
+nsh(bridge-veb101)/exit
 .Ed
 .Tg ip6
 .Op no
