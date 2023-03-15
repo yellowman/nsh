@@ -478,15 +478,25 @@ responding to requests for
 even though the MAC address is not its own.
 .Pp
 .Tg bridge
+.Tg tpmr
+.Tg veb
+.Tg switch
+.Tg layer2
 .Op no
 .Ic bridge
 .Op Ar bridge-name
 .Pp
-Modify bridge configuration on the named bridge.
+Modify bridge configuration on the named bridge or layer 2
+forwarding interfaces such as,
+.Xr bridge 4 ,
+.Xr veb 4 ,
+.Xr tpmr 4 .
 See also
 .Ox
 manual pages for
-.Xr bridge 4
+.Xr bridge 4 ,
+.Xr veb 4 ,
+.Xr tpmr 4
 and
 .Xr ifconfig 8
 (accessible via the following nsh
@@ -500,6 +510,7 @@ commands):
 e.g. configure bridge settings on bridge1. and display bridge configuration
 help.
 .El
+E.g show available bridge configuration commands.
 .Bd -literal -offset indent
 nsh(p)/bridge bridge1
 nsh(bridge-bridge1)/?
@@ -533,7 +544,46 @@ nsh(bridge-bridge1)/?
   protect       Configure protected bridge domains
   shutdown      Shutdown bridge
   ?             Options
-
+.Ed
+.eg. configure a standard
+.Xr bridge 4
+device called bridge101 and add vlan 101 and vether101 as member ports.
+.Bd -literal -offset indent
+nsh(p)/bridge bridge101
+nsh(bridge-bridge101)/member vether101
+nsh(bridge-bridge101)/member vlan101
+nsh(bridge-bridge101)/exit
+.Ed
+E.g. configure a virtual ethernet bridge
+.Xr veb 4
+device called veb101 and add vlan 101 and vether101 as member ports.
+.Bd -literal -offset indent
+nsh(p)/bridge veb101
+nsh(bridge-veb101)/member vether101
+nsh(bridge-veb101)/member vlan101
+nsh(bridge-veb101)/exit
+.Ed
+.eg. configure a virtual ethernet bridge
+.Xr veb 4
+device called veb101 and add vlan 101 and vether101 as member ports.
+.Bd -literal -offset indent
+nsh(p)/bridge tpmr101
+nsh(bridge-tpmr101)/member vether101
+nsh(bridge-tpmr101)/member vlan101
+nsh(bridge-tpmr101)/exit
+.Ed
+Note
+.Xr tpmr 4
+is a layer 2 mac relay and it does not have layer2 to physical
+interface mac learning capabilities it is simply a relay, its
+purpose is to minimise processing when forwarding packets
+transparently between two and only two interfaces on a machine.
+Consequentially not all bridge configuration commands will be accepted by
+the system.
+If an unsupported command is issued to a tpmr interface the system will
+display the following when rejecting the configuration command
+.Bd -literal -offset indent
+% Inappropriate ioctl for device
 .Ed
 .Tg ip6
 .Op no
@@ -614,7 +664,6 @@ nsh(p)/mpls ?
   mapttl-ip   MPLS mapttl IPv4
   mapttl-ip6  MPLS mapttl IPv6
   ?           Help
-
 .Ed
 .Pp
 .Op no
@@ -734,6 +783,8 @@ By default pipex is disabled.
 .Bd -literal -offset indent
 nsh(p)/pipex enable
 .Ed
+.Tg packetfilter
+.Tg firewall
 .Tg pf
 .Ic pf
 .Op Cm \&? | enable | disable | edit | reload
@@ -807,7 +858,11 @@ nsh(p)/ospf reload
 Configure whether or not
 .Xr ospfd 8
 updates the forwarding information base (the active kernel routing tables).
-.\" XXX needs rewording, this is an active control not a config thing. for config see "fib-update yes/no" in ospfd.conf
+this is an active control not a persistent configuration setting.
+.\" TODO rewording attempted
+See "fib-update" in
+.Xr ospfd.conf 5
+for more information.
 The decouple feature is useful for monitoring OSPF networks without affecting
 the routing table of the system.
 OSPF decouple should only be done where there is only one link between the
@@ -857,6 +912,8 @@ daemon, these options are documented in the
 manual page.
 .Pp
 .Tg bgpd
+.Tg bgp
+.Tg bgpctl
 .Tg bgp
 .Ic bgp
 .Op Cm  \&? | enable | disable | edit
