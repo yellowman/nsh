@@ -1,4 +1,4 @@
-.\"     $OpenBSD: nsh.8,v 1.1 2023/03/12 23:22:00 UTC chrisc Exp $
+.\"     $OpenBSD: nsh.8,v 1.1 2023/03/15 23:22:00 UTC chrisc Exp $
 .\"
 .\" Copyright (c) 2002-2023 Chris Cappuccio.  All rights reserved.
 .\"
@@ -24,7 +24,7 @@
 .\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd $Mdocdate: March 12 2023 $
+.Dd $Mdocdate: March 15 2023 $
 .Dt NSH 8
 .Os
 .Sh NAME
@@ -371,6 +371,7 @@ diagnostics in an unprivileged
 shell.
 .Pp
 .Tg rtable
+.Tg rdomain
 .Op no
 .Ic rtable
 .Op Ar table-id
@@ -384,7 +385,9 @@ kernel can accommodate 256 rtables.
 They have a 1:1 relationship with routing domains, except that routing domain 0
 can contain multiple routing tables.
 In addition, routing tables initialized prior to their corresponding
-routing domain, shall be initialised with a routing domain of 0.
+routing domain
+.Xr rdomain 4
+, shall be initialised with a routing domain of 0.
 .Bl -dash
 .It
 e.g. Create a new routing table rdomain 3 create a loopback for rdomain 3.
@@ -1534,11 +1537,17 @@ nsh(p)/show hostname
 .Tg interface
 .Ic show interface
 .Op Ar interface-name
+.Op Cm status
 .Pp
 Display essential information about the system network interfaces including
 any network bridges / switches.
 show interface without any arguments displays information about all
 interfaces available on the system.
+The
+.Cm status
+keyword shows a useful summary (including the Name, Admin Status, Link
+state, and Media type) of each hardware and other
+configured network interfaces on the system.
 .Pp
 show interface
 .Ar interface-name
@@ -1656,6 +1665,25 @@ nsh/show int sis0
 
 .Ed
 .El
+e.g. briefly list the status of all interfaces on the system.
+.Bd -literal -offset indent
+nsh(p)/show interface status
+% Name    Status  Link            Media
+  lo0     up      -
+  em0     up      active          Ethernet 1000baseT full-duplex
+  enc0    down    active
+  pflog0  up      -
+  tpmr1   up      active
+  vether1 up      active          Ethernet
+  vether2 up      active          Ethernet
+  vether10 up      active          Ethernet
+  vether11 up      active          Ethernet
+  bridge101 up      -
+  vether20 up      active          Ethernet
+  vether21 up      active          Ethernet
+  veb201  up      -
+nsh(p)/
+.Ed
 .Pp
 .Tg autoconf
 .Ic show autoconf
@@ -2821,19 +2849,30 @@ An interface can be a member of multiple groups.
 nsh(interface-em0)/group WAN
 .Ed
 .Pp
+.Tg rdomain
 .Op no
 .Ic rdomain
 .Ar routing-domain-number
 .Pp
-Sets the routing domain of an interface.
+Set the
+.Xr rdomain 4
+or routing domain of an interface.
 Note that this command clears all existing ip configuration on the interface.
+Therefore, you should run this command before any configuring any other
+setting on the interface.
 .Pp
 .Op no
 .Ic rtlabel
 .Op Ar rtable-id
 .Pp
-TODO Set or remove the rtable id on an interface.
-TODO better explanation needed!
+Set or remove the
+.Xr rtable 4
+id on an interface.
+Each
+.Xr rdomain 4
+can contain multiple
+.Xr rtable 4
+this feature allows for policy routing within each rdomain.
 .Pp
 .Op no
 .Ic priority
@@ -2854,7 +2893,11 @@ by adding 8 (RTP_STATIC) to the interface priority.
 .Ic llpriority
 .Ar 0-7
 Sets or remove the priority for link layer communications on the interface
-to a value between 0-7 (arp (4), bpf(4), pppoe(4).
+to a value between 0-7
+.Xr arp 8
+.Xr ndp 8
+.Xr bpf 4
+.Xr pppoe 4
 .Bd -literal -offset indent
 nsh(interface-em0)/llpriority 7
 .Ed
@@ -2879,7 +2922,18 @@ value of the interface.
 .Pp
 A larger MTU is particularly useful for underlay interfaces which
 encapsulated tunneled traffic traverses or for features which stack tags,
-such as PPPoE, MPLS tagging and QinQ (svlan) tagging.
+such as
+.Xr pppoe 4 ,
+.Xr vxlan 4 ,
+.Xr etherip 4 ,
+.Xr eoip 4 ,
+.Xr gre 4 ,
+.Xr vlan 4 ,
+QinQ, svlan or tagging or QinQ (svlan) tagging and MPLS devices such as
+.Xr mpe 4 ,
+.Xr mpip 4 ,
+and
+.Xr mpw 4 .
 .Pp
 nsh(interface-vr0)/mtu 1600
 .Pp
@@ -2915,10 +2969,13 @@ nsh(interface-gre0)/no link 0
 .Ed
 Each different interface type uses link flags for different purposes.
 .Pp
+.Tg arp
 .Op no
 .Ic arp
 .Pp
-Enable or disable Address Resolution Protocol ARP on the interface.
+Enable or disable
+.Xr arp 8
+Address Resolution Protocol ARP on the interface.
 (Enabled by default.)
 .Bd -literal -offset indent
 nsh(interface-fxp0)/arp
@@ -2953,6 +3010,8 @@ If ARP was previously disabled on the interface with the
 command then ARP will be automatically re-enabled to allow outgoing
 ARP responses.
 .Pp
+.Tg macaddress
+.Tg lladdr
 .Op no
 .Ic lladdr
 .Ar mac-address | random
@@ -3159,18 +3218,29 @@ of payload:
 nsh(interface-gre1)/rxprio 7
 .Ed
 .Pp
+.Tg vxlan
+.Tg vlan
+.Tg vnetid
+.Tg vni
 .Op no
 .Cm vnetid Op 0-16777215 | 1-4094
 .Pp
-Set or remove the 24 bit virtual network identifier tag.
-Virtual network identifier tags are typically used in large multi tenant VXLAN
-multiple routing domain environments.
-If vnetid invoked inside a vlan interface the acceptable range is the
-standard 12-bit vlan id 1-4094 of the IEEE 802.1Q VLAN tag.
+On a
+.Xr vxlan 4
+interface, set or remove the 24 bit virtual network identifier VNI tag.
+Virtual network identifier tags are typically used in large multi
+tenant VXLAN multiple routing domain environments and have an
+acceptable range of 0-16777215.
 .Pp
-E.g. set gre1 vnetid to 8192.
+On a
+.Xr vlan 4
+interface, set or remove the VLAN ID in IEEE 802.1Q vlan tag
+If vnetid invoked inside a vlan interface the acceptable range is the
+standard 12-bit vlan id 1-4094.
+.Pp
+E.g. set vxlan100 vnetid to 8192.
 .Bd -literal -offset indent
-nsh(interface-gre1)/vnetid 8192
+nsh(interface-vxlan100)/vnetid 8192
 .Ed
 .Pp
 .Op no
@@ -3178,7 +3248,7 @@ nsh(interface-gre1)/vnetid 8192
 .Pp
 Allow or disallow the interface to use a portion of the virtual network
 identifier space as a flow identifier.
-This allowOBs loadbalancing of the encapsulated traffic over multiple links.
+This allows loadbalancing of the encapsulated traffic over multiple links.
 .Pp
 E.g. enable vnetflowid load balancing for gre1.
 .Bd -literal -offset indent
@@ -3189,26 +3259,32 @@ nsh(interface-gre1)/vnetflowid
 .Ic parent
 .Ar parent-interface
 .Pp
-Set or remove the parent interface for a vlan interface
+Set or remove the parent interface for a
+.Xr vlan 4
+interface.
 .Pp
 E.g. set the parent interface of vlan1024 to em0.
 .Bd -literal -offset indent
 nsh(interface-vlan1024)/parent em0
 .Ed
 .Pp
+.Tg pair
+.Tg patch
 .Op no
 .Ic patch
 .Ar pair-interface-name
 .Pp
 Set or remove patch (layer1+ connection) between current interface and another
-pair(4) interface.
+.Xr pair 4
+interface.
 A patch is a CPU efficient way of forwarding packets between two
 .Xr pair 4
 interfaces, the forwarding mechanisim is layer1 like a cable what is sent
 by one
 .Xr pair 4
-interface is recived by the other pair(4) interface and vice
-versa.
+interface is recived by the other
+.Xr pair 4
+interface and vice versa.
 Patch can only connect two
 .Xr pair 4
 interfaces, no other interface types are supported.
@@ -3238,6 +3314,9 @@ count of 3.
 nsh(interface-gre1)/keepalive 1 3
 .Ed
 .Pp
+.Tg mpls
+.Tg vpls
+.Tg label
 .Op no
 .Ic mplslabel
 .Op Ar 16-1024575
@@ -3272,7 +3351,11 @@ neighbour-ip should be set to the ip address of the PWE3 neighbor.
 .Pp
 Enable or disable the use of PWE3 Control Word.
 The control word is used to facilitate fragmentation across mpls packets.
-This option supported on the mpip(4) and mpw(4) interfaces.
+This option supported on the
+.Xr mpip 4
+and
+.Xr mpw 4
+interfaces.
 .Pp
 E.g. enable control word on an mpls pseudo wire interface mpw1.
 .Bd -literal -offset indent
@@ -3295,6 +3378,9 @@ E.g. Enable flow-aware transport flow label on mpls ip interface mpip1
 interface-mpip1)/pw fat
 .Ed
 .Pp
+.Tg pfsync
+.Tg sync
+.Tg syncdev
 .Op no
 .Ic syncdev
 .Ar syncdev-name
@@ -3364,6 +3450,9 @@ fowarding of new connection packets until peers pfstate is synchronised use:
 nsh(interface-pfsync0)/maxupd 32 defer
 .Ed
 .Pp
+.Tg carp
+.Tg hsrp
+.Tg vrrp
 .Op no
 .Ic vhid
 .Op Ar 1-255
@@ -3537,7 +3626,9 @@ nsh(interface-carp0)/balancing ip
 .Op Cm sender Ar sender-ip Cm receiver Ar receiver-ip:port
 .Op Cm version Ar 5 | 9 | 10
 .Pp
-Set or remove pflow export to a pflow interface.
+Set or remove pflow export to a
+.Xr pflow 4
+interface.
 plfow without arguments displays command help.
 To set a up a pflow export the sender-ip and receiver-ip:port must be specified.
 The specified pflow sender-ip address must exist on an interface on the
@@ -3557,7 +3648,9 @@ the pflow interface and packets sent out to the flow receiver.
 I.e. if a packet with 30 flows on pflow, then the same 30 flows were sent out
 to the receiver.
 .Pp
-pflow command is valid only on a pflow(4) interface.
+pflow command is valid only on a
+.Xr pflow 4
+interface.
 .Pp
 E.g. to setup a pflow export from 10.1.1.1 to an IPFIX flow collector
 listening on another server on 10.1.1.2 port 4739.
@@ -3578,12 +3671,18 @@ E.g to set debugging on a carp0 interface.
 nsh(interface-carp0)/debug
 .Ed
 .Pp
+.Tg relay
+.Tg dhcp
+.Tg dhcprelay
+.Tg dhcrelay
 .Op no
-.Ic dhclrelay
+.Ic dhcrelay
 .Op Ar dhcp-server-ip
 .Pp
-Set or remove dhcp relay service on the selected interface.
-The dhcrelay service listens on the selected interface for broadcast
+Set or remove dhcp relay agent on the selected interface.
+The
+.Xr dhcrelay 8
+service listens on the selected interface for broadcast
 dhcp requests and then wrap the recieved broadcast request in a unicast ip
 packet and send it to a DHCP server specified by dhcp-server-ip.
 .Pp
@@ -3592,6 +3691,8 @@ E.g. set up dhcprelay on em0 and send requests to DHCP server 10.1.1.2
 nsh(interface-em0)/dhcrelay 10.1.1.2
 .Ed
 .Pp
+.Tg wake
+.Tg wol
 .Op no
 .Ic wol
 .Pp
@@ -3605,6 +3706,9 @@ nsh(p)/interface em0
 nsh(interface-em0)/wol
 .Ed
 .Pp
+.Tg mpls
+.Tg vpls
+.Tg label
 .Op no
 .Ic mpls
 .Pp
@@ -3681,6 +3785,10 @@ nsh(interface-em0)/autoconf6
 nsh(interface-em0)/autoconfprivacy
 .Ed
 .Pp
+.Tg sensor
+.Tg monitor
+.Tg sniff
+.Tg span
 .Op no
 .Ic monitor
 .Pp
@@ -3696,6 +3804,8 @@ nsh(p)/interface em0
 nsh(interface-em0)/monitor
 .Ed
 .Pp
+.Tg wireguard
+.Tg wg
 .Op no
 .Cm wgpeer Op Ar public-key
 .Op Cm endpoint Ar endpoint-ip:port | Cm aip Ar allowed-ip/prefix | Cm psk Ar pre-shared-key | Cm pka Ar interval-sec
@@ -3741,13 +3851,17 @@ psk oJo0kNhoF3TElGUXDg4b0H6IJvOiVCAc/tuaJa1nmVU=
 .Ed
 .Ic wgkey
 .Op Ar privatekey
-Set the private key of the current wireguard interface.
+Set the private key of the current
+.Xr wg 4
+wireguard interface.
 When
 .Ic wgkey
 is run without an argument a new wireguard key is generated for the interface.
 The privatekey is 32 bytes and base64-encoded.
 .Pp
-E.g. set the private key of wireguard interface wg0 to a specific key.
+E.g. set the private key of
+.Xr wg 4
+wireguard interface wg0 to a specific key.
 .Bd -literal -offset indent
 nsh(p)/interface wg0
 
@@ -3781,9 +3895,11 @@ The routing table choice is made using rtable-id which would be a value
 between 0 and 255 on a default
 .Ox
 kernel.
-The routing domain of the rtable does not need be in the same routing domain
+The routing domain of the wgrtable does not need be in the same routing domain
 to which the interface is attached.
-wgrtable configures which rdomain the interface's tunnelled traffic appears.
+wgrtable configures which
+.Xr rdomain 4
+the interface's tunnelled traffic appears.
 .Pp
 E.g. set wireguard interface wg0  routing table to routing domain 5.
 .Bd -literal -offset indent
