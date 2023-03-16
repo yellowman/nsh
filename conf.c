@@ -155,7 +155,6 @@ conf(FILE *output)
 			    " %s\n", strerror(errno));
 	}
 	fprintf(output, "!\n");
-	conf_ctl(output, "", "dns", 0);
 	conf_ctl(output, "", "rad", 0);
         conf_ctl(output, "", "motd", 0);
 
