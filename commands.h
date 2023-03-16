@@ -221,6 +221,7 @@ struct prot prots[] = {
 	{ "bgp",	bgcs },
 	{ "ospf",	oscs },
 	{ "ospf6",	os6cs },
+	{ "eigrp",	eics },
 	{ "rip",	rics },
 	{ "ike",	ikcs },
 	{ "ipsec",	iscs },
