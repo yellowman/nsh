@@ -1,5 +1,13 @@
 nsh is a work in progress, diffs are welcome
 
+This page is a higlevel overview of the to-dos on this project
+we have created a detailed to-do list in the following project
+page where we have grouped the to-dos according to the type of 
+task envisaged. 
+
+https://github.com/users/yellowman/projects/1
+
+Feedback and comments welcome...
 Cleanup:
 
 * Document all new commands in the manual
