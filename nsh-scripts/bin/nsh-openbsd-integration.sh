@@ -272,10 +272,8 @@ else
 		#can we import rc.conf.local to nsh config
 		mv /etc/rc.conf.local /var/nsh/backup/pre-nsh-config/
 		cp nsh /etc/rc.d/
-		chmod +x /etc/rd.d/nsh
+		chmod 555 /etc/rd.d/nsh
 		rcctl disable pf ntpd
-		#Disable these network management daemons until we know how to integrate them ?
-		rcctl disable resolvd dhcpleased slaacd
 		#enable nsh 
 		rcctl enable nsh
 		echo reboot device for nsh configuration to take effect
