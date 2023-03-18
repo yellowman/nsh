@@ -273,12 +273,15 @@ else
 		mv /etc/rc.conf.local /var/nsh/backup/pre-nsh-config/
 		cp nsh /etc/rc.d/
 		chmod 555 /etc/rd.d/nsh
-		rcctl disable pf ntpd
 		#enable nsh 
 		rcctl enable nsh
+		#disable services now managed by nsh 
+		rcctl disable pf
+		rcctl disable ntpd
+		rcctl disable smtpd
+		rcctl disable sshd
 		echo reboot device for nsh configuration to take effect
 		/usr/local/bin/nsh -c ./enable-sshd.nshrc
-	 
 	else
 		exit
 	fi
