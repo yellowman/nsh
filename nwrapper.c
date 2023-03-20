@@ -13,6 +13,7 @@
 #include <stdio.h>
 #include <unistd.h>
 
+int
 main()
 {
  execl("/usr/bin/sudo","/usr/bin/sudo","/bin/nsh", (char *)NULL);
