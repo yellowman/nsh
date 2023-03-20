@@ -17,4 +17,6 @@ int
 main()
 {
  execl("/usr/bin/sudo","/usr/bin/sudo","/bin/nsh", (char *)NULL);
+ return 0;
+ 
 }
