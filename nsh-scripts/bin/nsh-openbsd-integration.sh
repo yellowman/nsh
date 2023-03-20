@@ -272,7 +272,7 @@ else
 		#can we import rc.conf.local to nsh config
 		mv /etc/rc.conf.local /var/nsh/backup/pre-nsh-config/
 		cp nsh /etc/rc.d/
-		chmod 555 /etc/rd.d/nsh
+		chmod 555 /etc/rc.d/nsh
 		#enable nsh 
 		rcctl enable nsh
 		#disable services now managed by nsh 
