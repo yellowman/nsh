@@ -4,10 +4,15 @@
  */
 
 /*
- * for 'stacy' to login to this shell and launch nsh, this
- * is what you would put in /etc/sudoers:
+ * E.g. to allow the user 'stacy' to login to this shell and launch 
+ * nsh interactive mode only put the following line in /etc/doas.conf:
+ * 
+ * permit nopass stacy as root cmd /usr/local/bin/nsh args
  *
- * stacy		ALL=NOPASSWD:/bin/nsh
+ * to allow a restricted user e.g. a backup user 'backupuser' 
+ * run nsh in non interactive mode and run a specific nshrc script
+ * put the following line in /etc/doas.conf 
+ * permit nopass backupuser as root cmd /usr/local/bin/nsh args -c /home/backupuser/showrun.nshrc  
  */
 
 #include <stdio.h>
@@ -16,7 +21,7 @@
 int
 main()
 {
- execl("/usr/bin/sudo","/usr/bin/sudo","/bin/nsh", (char *)NULL);
+ execl("/usr/bin/doas","/usr/bin/doas","/usr/local/bin/nsh", (char *)NULL);
  return 0;
  
 }

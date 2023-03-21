@@ -4022,44 +4022,88 @@ see the following man pages for information
 .Pp
 !man pfctl
 !man pf.conf
-.Sh Section 7 > Adding system users to
+.Sh Section 7 Adding system users to
 .Nm
-.
+on
+.Ox
 .Pp
 .Ox
-has facilities for a user to be able to login directly to nsh without
-having access to a typical bourne or C shell.
+has facilities for a user to be able to login directly to
+.Nm
+without having access to a typical bourne or C shell.
+Using doas (a tool similar to sudo in other POSIX systems)
+one can setup doas to allow the user to launch nsh as root.
+there are 3 options for doing this.
 .Pp
-Configure the user so they can run /bin/nsh from sudo.
-You must do this in /etc/sudoers, like this:
-.Bd -literal -offset indent
-nshuser		ALL=NOPASSWD:/bin/nsh
-.Ed
-(replace 'nshuser' with the actual user name)
+Option1 - least restrictive interactive and non-interactive
+.Nm
 .Pp
-Another way to configure sudoers is to allow all users that are members
-of a certain group to run NSH through sudo, like this:
-.Bd -literal -offset indent
-%nshgroup	ALL=NOPASSWD:/bin/nsh
+To allow a user to run nsh interactively or non interactively
+as root when logged in or logging in.
+Configuring /etc/doas.conf with the line starting with 'permit'
+to allow the full path to the nsh binary without any other
+restrictions.
+e.g. Configure the user 'stacy' so they can run
+.Bd -literal
+/usr/local/bin/nsh as root
+or
+/usr/local/bin/nsh -c /some/path/to/scriptedconfig.nshrc
 .Ed
-(replace 'nshgroup' with the actual group name)
+.Bd -literal -offset indent
+permit nopass stacy as root cmd /usr/local/bin/nsh
+.Ed
+.Pp
+Option2 - allow interactive
+.Nm
+use only.
+.Pp
+Configuring /etc/doas.conf with the line starting with 'permit'
+to allow the full path to the nsh binary and specify empty args
+to enforce nsh be run without any arguments.
+.Bd -literal -offset indent
+permit nopass stacy as root cmd /usr/local/bin/nsh args
+.Ed
+.Pp
+Option3 - allow non-interactive
+.Nm
+use only.
+.Pp
+To allow a restricted user run a specifc configuration script only.
+Configuring /etc/doas.conf with the line starting with 'permit'
+to allow the full path to the nsh binary and specify args
+to enforce nsh be run only with those specific arguments.
+E.g.to allow a backupuser pull the running config only.
+.Bd -literal -offset indent
+permit nopass backupuser as root cmd /usr/local/bin/nsh args -c /home/backupuser/showrunconfig.nshrc
+.Ed
+.Pp
+The /home/backup/showrunconfig.nshrc would look like this
+.Bd -literal -offset indent
+enable
+show run
+quit
+.Ed
+.Pp
+A more standards RBAC based approach would be to create a group
+on the system for users with the role of manging the system via nsh.
+Then simply allow all users that are members of a group to run
+.Nm
+using /etc/doas.conf and referring to the groupname rather than just
+a single username.
 .Pp
 Compile nwrapper (in the nsh distribution):
 .Bd -literal -offset indent
-cc -static -o nwrapper nwrapper.c
+cc -o nwrapper nwrapper.c
 .Ed
 Move nwrapper to a permanent location:
 .Bd -literal -offset indent
-mv nwrapper /bin/nwrapper
+mv nwrapper /usr/local/bin/nwrapper
 .Ed
 Change the user's shell to nwrapper:
 .Bd -literal -offset indent
-usermod -s /bin/nwrapper nshuser
+usermod -s /usr/local/bin/nwrapper nshuser
 .Ed
 (replace 'nshuser' with the actual user name)
-.Pp
-Do NOT add nwrapper (or nsh) to /etc/shells.
-They should not be entered here.
 .Sh Common interface types
 Packet Filter Logging: This interface is used to pass traffic logged by
 the firewall to software which can record it.
