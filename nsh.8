@@ -4104,6 +4104,14 @@ Change the user's shell to nwrapper:
 usermod -s /usr/local/bin/nwrapper nshuser
 .Ed
 (replace 'nshuser' with the actual user name)
+.Pp
+*NB Security Warning!!!
+.Pp
+The doas configs here are not completely iron clad!
+the user can use doas running as root to carry out other
+shell scripts launched by nsh either interactively or in a
+nshrc config file.
+This obvious privilege escalation path can be restricted.
 .Sh Common interface types
 Packet Filter Logging: This interface is used to pass traffic logged by
 the firewall to software which can record it.
