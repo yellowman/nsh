@@ -201,15 +201,9 @@ else
 		resolv='/etc/resolv.conf'
 		if [ -f $resolv ]; then
 			cp /etc/resolv.conf /var/nsh/backup/pre-nsh-config/
-			rcctl stop resolvd
-			mv /etc/resolv.conf /var/run/resolv.conf.0
-			chown root /var/run/resolv.conf.0
-			chgrp wheel /var/run/resolv.conf.0
-			chmod 660 /var/run/resolv.conf.0
-			ln -s /var/run/resolv.conf.0 /etc/resolv.conf
-			rcctl start resolvd
+			
 		else
-			echo etc-resolv does not exist, not importing!
+			echo etc-resolv does not exist, not backing up!
 		fi
 
 		motd='/etc/motd'
