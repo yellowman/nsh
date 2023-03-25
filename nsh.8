@@ -4107,11 +4107,40 @@ usermod -s /usr/local/bin/nwrapper nshuser
 .Pp
 *NB Security Warning!!!
 .Pp
-The doas configs here are not completely iron clad!
-the user can use doas running as root to carry out other
-shell scripts launched by nsh either interactively or in a
-nshrc config file.
-This obvious privilege escalation path can be restricted.
+The doas configurations outlined here are not
+security measures.
+They allow an administrator to grant a non root
+user the ability to run
+.Nm with all the privileges of the
+.Ox
+root user.
+The design of
+.Ox
+requires root privileges to change many aspects of
+the systems network stack. 
+The nwrwapper binary is a binary that hardcodes the
+doas request to launch
+.Nm
+on
+.Ox
+as root.
+.Nm
+currently does not have security countermeasure
+features against malicious users.
+It is therefore essential that the administrator only
+grants
+.Nm
+user access with the same security considerations
+of granting a user root access to the system.
+I.e. the user can use
+.Nm running as root (facilitated by doas and nwrapper)
+to carry out other shell scripts either interactively or in a
+nshrc configuration file.
+It gives a user the ability to configure basic system
+parameters and to run editors and other commands as root.
+Therefore access to
+.Nm
+must be restricted to trusted users only.
 .Sh Common interface types
 Packet Filter Logging: This interface is used to pass traffic logged by
 the firewall to software which can record it.
