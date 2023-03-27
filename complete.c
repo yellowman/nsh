@@ -310,15 +310,21 @@ complete(EditLine *el, int ch, char **table, size_t stlen, char *arg)
 		return (CC_ERROR);
 	(void)memcpy(line, lf->buffer, len);
 	line[len] = '\0';
+	if (strlen(word) > len) /* user has erased part of previous line */
+		word[len] = '\0';
 	cursor_pos = line + (lf->cursor - lf->buffer);
 	lastc_argc = cursor_argc;	/* remember last cursor pos */
 	lastc_argo = cursor_argo;
 	makeargv();			/* build argc/argv of current line */
 
-	if (margc == 0 || cursor_argo >= sizeof(word))
+	if (cursor_argo >= sizeof(word))
 		return (CC_ERROR);
 
-	dolist = 0;
+	if (margc == 0) {
+		dolist = 1;
+		return (complete_command(word, dolist, el, table, stlen));
+	} else
+		dolist = 0;
 
 	/* if cursor and word is same, list alternatives */
 	if (lastc_argc == cursor_argc && lastc_argo == cursor_argo
