@@ -119,6 +119,7 @@ static int	int_help(void);
 static int	el_burrito(EditLine *, int, char **);
 static int	hostname(int, char **);
 static int	help(int, char**);
+static int	nocmd(int, char **);
 static int	shell(int, char*[]);
 static int	ping(int, char*[]);
 static int	ping6(int, char*[]);
@@ -1047,12 +1048,15 @@ Command cmdtab[] = {
 	{ "editing",	editinghelp,	CMPL0 0, 0, doediting,		0, 0, 1, 0 },
 	{ "configure",	confighelp,	CMPL0 0, 0, doconfig,		0, 0, 1, 0 },
 	{ "who",	whohelp,	CMPL0 0, 0, who,		0, 0, 0, 0 },
+	{ "no",		0,		CMPL(C) 0, 0, nocmd,		0, 0, 0, 0 },
 	{ "!",		shellhelp,	CMPL0 0, 0, shell,		1, 0, 0, 0 },
 	{ "?",		helphelp,	CMPL(C) 0, 0, help,		0, 0, 0, 0 },
 	{ "quit",	quithelp,	CMPL0 0, 0, quit,		0, 0, 0, 0 },
 	{ "help",	0,		CMPL(C) 0, 0, help,		0, 0, 0, 0 },
 	{ 0,		0,		CMPL0 0, 0, 0,			0, 0, 0, 0 }
 };
+
+size_t cmdtab_nitems = nitems(cmdtab);
 
 /*
  * These commands escape ambiguous check and help listings
@@ -1313,6 +1317,40 @@ nsh_setrtable(int rtableid)
 			printf("%% setrtable failed: %d\n", errno);
 		}
 	return(errno);
+}
+
+/*
+ * "no" command
+ * This is a pseudo command table entry used for TAB-completion purposes.
+ */
+static int
+nocmd(int argc, char **argv)
+{
+	Command  *cmd = NULL, *c;
+
+	if (!NO_ARG(argv[0])) {
+		printf("%% nocmd: invalid command %s\n", argv[0]);
+		return 0;
+	}
+
+	if (argc < 2) {
+		printf("%% nocmd: command name not provided\n");
+		return 0;
+	}
+
+	for (c = cmdtab; c->name; c++) {
+		if (c->nocmd && strcmp(c->name, argv[1]) == 0) {
+			cmd = c;
+			break;
+		}
+	}
+
+	if (cmd == NULL) {
+		printf("%% nocmd: command %s not found\n", argv[1]);
+		return 0;
+	}
+
+	return (*c->handler)(argc, argv, 0);
 }
 
 /*

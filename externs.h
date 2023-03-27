@@ -303,6 +303,7 @@ struct ghs {
 };
 
 extern Command cmdtab[];
+extern size_t cmdtab_nitems;
 extern struct intlist Intlist[];
 extern struct intlist Bridgelist[];
 extern struct intlist *whichlist;

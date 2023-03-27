@@ -54,6 +54,8 @@ static unsigned char complete_command(char *, int, EditLine *, char **, int);
 static unsigned char complete_subcommand(char *, int, EditLine *, char **, int);
 static unsigned char complete_local(char *, int, EditLine *);
 static unsigned char complete_ifname(char *, int, EditLine *);
+static unsigned char complete_nocmd(struct ghs *, char *, int, EditLine *,
+				   char **, int, int);
 static unsigned char complete_args(struct ghs *, char *, int, EditLine *,
 				   char **, int, int);
 static void list_vertical(StringList *);
@@ -352,8 +354,86 @@ complete(EditLine *el, int ch, char **table, size_t stlen, char *arg)
 	if (cursor_argc > celems)
 		return (CC_ERROR);
 
+	if (NO_ARG(margv[0]))
+		return(complete_nocmd(c, word, dolist, el, table, stlen,
+		    cursor_argc - 1));
+
 	return(complete_args(c, word, dolist, el, table, stlen,
 	    cursor_argc - 1));
+}
+
+unsigned char
+complete_nocmd(struct ghs *nocmd, char *word, int dolist, EditLine *el,
+    char **table, int stlen, int level)
+{
+	static Command *nocmdtab;
+	static size_t nocmdtab_nitems;
+	Command *c, *nc;
+	int i, j;
+
+	/* One-shot initialization since this is a static variable. */
+	if (nocmdtab == NULL) {
+		for (i = 0; i < cmdtab_nitems; i++) {
+			c = &cmdtab[i];
+			if (c->nocmd || c->name == NULL /* sentinel */)
+				nocmdtab_nitems++;
+		}
+		nocmdtab = calloc(nocmdtab_nitems, sizeof(*nocmdtab));
+		if (nocmdtab == NULL)
+			return (CC_ERROR);
+		/*
+		 * Copy commands which may be prefixed with "no".
+		 * Memory allocated for the nocmdtab array will be
+		 * freed when the nsh program exits.
+		 */
+		j = 0;
+		for (i = 0; i < cmdtab_nitems; i++) {
+			c = &cmdtab[i];
+			if (!c->nocmd)
+				continue;
+			if (j >= nocmdtab_nitems)
+				break;
+			nc = &nocmdtab[j++];
+			memcpy(nc, c, sizeof(*nc));
+		}
+
+		/* sentinel */
+		memset(&nocmdtab[cmdtab_nitems - 1], 0, sizeof(*nocmdtab));
+	}
+
+	if (margc == 1) {
+		/* Complete "no " using the list of known no-commands. */
+		return (complete_command(word, dolist, el, (char **)nocmdtab,
+		    sizeof(Command)));
+	}
+
+	/* Determine whether the no-command's name has been completed. */
+	nc = NULL;
+	for (i = 0; i < nocmdtab_nitems - 1; i++) {
+		c = &nocmdtab[i];
+		if (strcmp(c->name, margv[1]) == 0) {
+			nc = c;
+			break;
+		}
+	}
+	if (nc) {
+		/* Complete "no <command name> [more arguments]" */
+		return (complete_args((struct ghs *)nc, word, dolist, el,
+		    nc->table, nc->stlen, cursor_argc - 1));
+	}
+
+	/* Check for a partially completed valid command name. */
+	for (i = 0; i < nocmdtab_nitems - 1; i++) {
+		c = &nocmdtab[i];
+		if (isprefix(margv[1], c->name) == 0)
+			continue;
+
+		/* Complete "no <partial command name>" */
+		return (complete_command(word, dolist, el, (char **)nocmdtab,
+		    sizeof(Command)));
+	}
+
+	return (CC_ERROR); /* invalid command in margv[1] */
 }
 
 unsigned char
