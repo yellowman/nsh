@@ -29,6 +29,7 @@
 #include <sys/stat.h>
 #include <sys/limits.h>
 #include <net/if.h>
+#include <net/if_dl.h>
 #include <net/if_types.h>
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
@@ -707,7 +708,7 @@ void conf_lladdr(FILE *output, char *ifname)
 int conf_ifaddr_dhcp(FILE *output, char *ifname, int ifs, int flags)
 {
 	FILE *dhcpif = NULL;
-	int ippntd; 
+	int ippntd;
 	char leasefile[sizeof(LEASEPREFIX)+1+IFNAMSIZ];
 
 	/* find dhcpleased/dhclient controlled interfaces */
@@ -721,6 +722,17 @@ int conf_ifaddr_dhcp(FILE *output, char *ifname, int ifs, int flags)
 		/* print all non-autoconf ipv6 addresses */
 		conf_ifaddrs(output, ifname, flags, AF_INET6);
 		ippntd = 1;
+	} else if (is_pppoe(ifname, ifs)) {
+		int ipaddrmode = pppoe_get_ipaddrmode(ifname);
+		if (ipaddrmode == NSH_PPPOE_IPADDR_IPCP) {
+			fprintf(output, " autoconf4\n");
+			ippntd = 1;
+		} else if (ipaddrmode == NSH_PPPOE_IPADDR_STATIC) {
+			fprintf(output, " no autoconf4\n");
+			/* print all non-autoconf addresses */
+			ippntd = conf_ifaddrs(output, ifname, flags, 0);
+		} else
+			ippntd = 0;
 	} else {
 		/* print all non-autoconf addresses */
 		ippntd = conf_ifaddrs(output, ifname, flags, 0);
@@ -1470,10 +1482,13 @@ void
 conf_print_rtm(FILE *output, struct rt_msghdr *rtm, char *delim, int af)
 {
 	int i;
-	char *cp, flags[TMPSIZ];
+	char *cp, flags[TMPSIZ], ifname[IFNAMSIZ];
 	struct sockaddr *dst = NULL, *gate = NULL, *mask = NULL;
 	struct sockaddr *sa;
 	struct sockaddr_in sin;
+	struct sockaddr_dl *ifp = NULL;
+
+	memset(ifname, 0, sizeof(ifname));
 
 	sin.sin_addr.s_addr = htonl(INADDR_BROADCAST);
 	bzero(&flags, TMPSIZ);
@@ -1500,15 +1515,32 @@ conf_print_rtm(FILE *output, struct rt_msghdr *rtm, char *delim, int af)
 				/* netmasks will not have a valid sa_family */
 				mask = sa;
 				break;
+			case RTA_IFP:
+				if (sa->sa_family == AF_LINK &&
+				   ((struct sockaddr_dl *)sa)->sdl_nlen) {
+					ifp = (struct sockaddr_dl *)sa;
+					if (ifp->sdl_nlen < sizeof(ifname)) {
+						memcpy(ifname, ifp->sdl_data,
+						    ifp->sdl_nlen);
+					}
+				}
+				break;
 			}
 			ADVANCE(cp, sa);
 		}
 	if (dst && gate && mask && (af == AF_INET || af == AF_INET6)) {
+		/* Special case for dynamic default route via pppoe(4) */
+		if (af == AF_INET && isdefaultroute(dst, mask) &&
+		    isprefix("pppoe", ifname)) {
+			pppoe_conf_default_route(output, ifname,
+			    delim, netname(dst, mask),
+			    routename(gate), flags);
+		}
 		/*
 		 * Suppress printing IPv4 route if it's the default
 		 * route and dhcp (dhcpleased or dhclient) is enabled.
 		 */
-		if (!(af == AF_INET && isdefaultroute(dst, mask)
+		else if (!(af == AF_INET && isdefaultroute(dst, mask)
 		    && (dhcpleased_has_defaultroute(routename(gate)) ||
 		    dhclient_isenabled(routename(gate))))) {
 			fprintf(output, "%s%s ", delim, netname(dst, mask));

@@ -26,9 +26,11 @@
 #include <net/route.h>
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
+#include <arpa/inet.h>
 #include <net/ppp_defs.h>
 #include <net/if_sppp.h>
 #include <net/if_pppoe.h>
+#include "ip.h"
 #include "stringlist.h"
 #include "externs.h"
 
@@ -37,6 +39,7 @@
 void authusage(void);
 void peerusage(void);
 void pppoeusage(void);
+int pppoe_get_ifunit(char *);
 void conf_sppp_mh(FILE *, struct sauthreq *, char *, char *);
 
 /* options for 'proto' */
@@ -239,6 +242,74 @@ pppoeusage(void)
 	printf("%% no pppoe\n");
 }
 
+void
+pppoe_ipcp(char *ifname, int ifs, int set)
+{
+	int unit, flags, up;
+	struct ifaliasreq ip4req;
+	ip_t in4dest, in4gate;
+	char dest_str[16];
+	struct sockaddr_in *sin;
+	struct rt_metrics rt_metrics;
+
+	memset(&ip4req, 0, sizeof(ip4req));
+	memset(&in4dest, 0, sizeof(in4dest));
+	memset(&in4gate, 0, sizeof(in4gate));
+	memset(&rt_metrics, 0, sizeof(rt_metrics));
+
+	in4dest.family = AF_INET;
+	in4gate.family = AF_INET;
+
+	unit = pppoe_get_ifunit(ifname);
+	if (unit == -1)
+		return;
+
+	flags = get_ifflags(ifname, ifs);
+	up = (flags & IFF_UP) ? 1 : 0;
+	if (up) {
+		flags &= ~IFF_UP;
+		set_ifflags(ifname, ifs, flags);
+	}
+	
+	/*
+	 * Wildcard IPv4 addresses: 0.0.0.0/32 -> 0.0.0.$(unit + 1)
+	 */
+
+	/* IP address 0.0.0.0 */
+	sin = (struct sockaddr_in *)&ip4req.ifra_addr;
+	sin->sin_family = AF_INET;
+	sin->sin_len = sizeof(struct sockaddr_in);
+	memset(&sin->sin_addr.s_addr, 0, sizeof(in_addr_t));
+
+	/* Netmask 255.255.255.255 */
+	sin = (struct sockaddr_in *)&ip4req.ifra_mask;
+	sin->sin_family = AF_INET;
+	sin->sin_len = sizeof(struct sockaddr_in);
+	memset(&sin->sin_addr.s_addr, 0xff, sizeof(in_addr_t));
+
+	/* Destination address 0.0.0.$(unit + 1) */
+	snprintf(dest_str, sizeof(dest_str), "0.0.0.%d", unit + 1);
+	inet_pton(AF_INET, dest_str, &in4gate.addr.in);
+	sin = (struct sockaddr_in *)&ip4req.ifra_dstaddr;
+	sin->sin_family = AF_INET;
+	sin->sin_len = sizeof(struct sockaddr_in);
+	memcpy(&sin->sin_addr.s_addr, &in4gate.addr.in.s_addr,
+	    sizeof(in_addr_t));
+
+	strlcpy(ip4req.ifra_name, ifname, sizeof(ip4req.ifra_name));
+	if (ioctl(ifs, set ? SIOCAIFADDR : SIOCDIFADDR, &ip4req) < 0) {
+		printf("%% pppoe_ipcp: SIOC%dIFADDR: %s\n",
+		    set ? 'A' : 'D', strerror(errno));
+	}
+
+	/* Wildcard IPv4 default route: 0.0.0.$(unit + 1) */
+	ip_route(&in4dest, &in4gate, set ? RTM_ADD : RTM_DELETE,
+	    RTF_STATIC | RTF_MPATH | RTF_GATEWAY | RTF_UP,
+	    cli_rtable, rt_metrics, 0);
+
+	if (set || up)
+		set_ifflags(ifname, ifs, flags | IFF_UP);
+}
 
 /* pppoe dev, pppoe svc, pppoe ac */
 int
@@ -342,6 +413,92 @@ intpppoe(char *ifname, int ifs, int argc, char **argv)
 		printf("%% intpppoe: PPPOESETPARMS: %s\n", strerror(errno));
 
 	return (0);
+}
+
+int
+is_pppoe(char *ifname, int ifs)
+{
+	struct pppoediscparms parms;
+
+	strlcpy(parms.ifname, ifname, sizeof(parms.ifname));
+	if (ioctl(ifs, PPPOEGETPARMS, &parms))
+		return 0;
+
+	return 1;
+}
+
+int
+pppoe_get_ipaddrmode(char *ifname)
+{
+	StringList *ipaddrmode;
+	int ret = 0;
+
+	ipaddrmode = sl_init();
+
+	if (db_select_flag_x_ctl(ipaddrmode, "pppoeipaddrmode", ifname) < 0) {
+		printf("%% database failure select flag x ctl\n");
+		sl_free(ipaddrmode, 1);
+		return 0;
+	}
+
+	if (ipaddrmode->sl_cur == 0) { /* ipaddrmode not yet initalized */
+		db_insert_flag_x("pppoeipaddrmode", ifname, 0, 0, "ipcp");
+		ret = NSH_PPPOE_IPADDR_IPCP;
+	} else {
+		if (strcmp(ipaddrmode->sl_str[0], "ipcp") == 0)
+			ret = NSH_PPPOE_IPADDR_IPCP;
+		else if (strcmp(ipaddrmode->sl_str[0], "static") == 0)
+			ret = NSH_PPPOE_IPADDR_STATIC;
+		else
+			printf("%% invalid pppoe ipaddrmode %s \n",
+			    ipaddrmode->sl_str[0]);
+	}
+
+	sl_free(ipaddrmode, 1);
+	return ret;
+}
+
+int
+pppoe_get_ifunit(char *ifname)
+{
+	long long unit;
+	char *unitstr;
+	const char *errstr;
+
+	if (strncmp(ifname, "pppoe", 5) != 0)
+		return -1;
+
+	unitstr = ifname + 5;
+	unit = strtonum(unitstr, 0, 254, &errstr);
+	if (errstr) {
+		printf("%% %s: interface unit is %s\n", ifname, errstr);
+		return -1;
+	}
+
+	return (int)unit;
+}
+
+void
+pppoe_conf_default_route(FILE *output, char *ifname, char *delim,
+    char *netname, char *routename, char *flags)
+{
+	int ipaddrmode, unit;
+
+	ipaddrmode = pppoe_get_ipaddrmode(ifname);
+	if (ipaddrmode == NSH_PPPOE_IPADDR_STATIC) {
+		fprintf(output, "%s%s ", delim, netname);
+		fprintf(output, "%s%s\n", routename, flags);
+		return;
+	}
+
+	if (ipaddrmode != NSH_PPPOE_IPADDR_IPCP)
+		return;
+
+	unit = pppoe_get_ifunit(ifname);
+	if (unit == -1)
+		return;
+
+	fprintf(output, "%s0.0.0.0/0 0.0.0.%d%s\n", delim, unit + 1, flags);
 }
 
 void
