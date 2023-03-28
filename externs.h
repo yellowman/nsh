@@ -50,7 +50,13 @@ int nopt(int, char **, struct nopts *);
 
 /* ppp.c */
 int intsppp(char *, int, int, char **);
+void pppoe_ipcp(char *, int, int);
 int intpppoe(char *, int, int, char **);
+int is_pppoe(char *, int);
+#define NSH_PPPOE_IPADDR_IPCP 1
+#define NSH_PPPOE_IPADDR_STATIC 2
+int pppoe_get_ipaddrmode(char *);
+void pppoe_conf_default_route(FILE *, char *, char *, char *, char *, char *);
 void conf_pppoe(FILE *, int, char *);
 void conf_sppp(FILE *, int, char *);
 
@@ -398,6 +404,7 @@ int set_ifxflags(char *, int, int);
 u_int32_t in4_netaddr(u_int32_t, u_int32_t);
 u_int32_t in4_brdaddr(u_int32_t, u_int32_t);
 int intip(char *, int, int, char **);
+int intipcp(char *, int, int, char **);
 int intmtu(char *, int, int, char **);
 int intkeepalive(char *, int, int, char **);
 int intrdomain(char *, int, int, char **);

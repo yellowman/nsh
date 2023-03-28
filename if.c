@@ -58,6 +58,7 @@ void pack_ifaliasreq(struct ifaliasreq *, ip_t *, struct in_addr *, char *);
 void pack_in6aliasreq(struct in6_aliasreq *, ip_t *, struct in6_addr *, char *);
 void ipv6ll_db_store(struct sockaddr_in6 *, struct sockaddr_in6 *, int, char *);
 void printifhwfeatures(int, char *);
+int run_ipcp(char *, int, int);
 void show_vnet_parent(int, char *);
 void pwe3usage(void);
 int show_vlan(int);
@@ -1143,6 +1144,52 @@ intip(char *ifname, int ifs, int argc, char **argv)
 	return(0);
 }
 
+int
+intipcp(char *ifname, int ifs, int argc, char **argv)
+{
+	int set;
+
+	/* Only pppoe(4) interfaces make use of sppp(4). */
+	if (!is_pppoe(ifname, ifs)) {
+		printf("%% %s: not a PPPoE interface\n", ifname);
+		return 0;
+	}
+
+	if (NO_ARG(argv[0])) {
+		set = 0;
+		argv++;
+		argc--;
+	} else
+		set = 1;
+	
+	if (set)
+		db_insert_flag_x("pppoeipaddrmode", ifname, 0, 0, "ipcp");
+	else
+		db_insert_flag_x("pppoeipaddrmode", ifname, 0, 0, "static");
+
+	pppoe_ipcp(ifname, ifs, set);
+
+	return 0;
+}
+
+int
+run_ipcp(char *ifname, int ifs, int set)
+{
+	char *args[3] = { "no", "ipcp", NULL };
+	char *args_set[2] = { "ipcp", NULL };
+	char **argv_ipcp;
+	int argc_ipcp;
+	if (set) {
+		argv_ipcp = args_set;
+		argc_ipcp = nitems(args_set) - 1;
+	} else {
+		argv_ipcp = args;
+		argc_ipcp = nitems(args) - 1;
+	}
+
+	return intipcp(ifname, ifs, argc_ipcp, argv_ipcp);
+}
+
 void
 pack_ifaliasreq(struct ifaliasreq *ip4req, ip_t *ip,
     struct in_addr *in4dest, char *ifname)
@@ -2156,6 +2203,10 @@ intxflags(char *ifname, int ifs, int argc, char **argv)
 #endif
 #ifdef IFXF_AUTOCONF4		/* 6.6+ */
 	} else if (isprefix(argv[0], "autoconf4")) {
+		/* Have "autoconf4" on pppoe(4) do the right thing. */
+		if (is_pppoe(ifname, ifs))
+			return run_ipcp(ifname, ifs, set);
+
 		value = IFXF_AUTOCONF4;
 #endif
 	} else if (isprefix(argv[0], "autoconf6")) {

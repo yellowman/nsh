@@ -107,6 +107,8 @@ main(int argc, char *argv[])
 		printf("%% database peerkey creation failed\n");
 	if (db_create_table_nameservers() < 0)
 		printf("%% database nameservers creation failed\n");
+	if (db_create_table_flag_x("pppoeipaddrmode") < 0)
+		printf("%% database pppoeipaddrmode creation failed\n");
 
 	if (iflag) {
 		/*
