@@ -522,10 +522,11 @@ flush_help(void)
 
 struct intlist Intlist[] = {
 /* Interface mode commands */
-	{ "ip",		"IP address and other parameters",	CMPL0 0, 0, intip },
-	{ "alias",	"Additional IP addresses and other parameters", CMPL0 0, 0, intip },
+	{ "address",	"Static IPv4/IPv6 address",		CMPL0 0, 0, intip },
+	{ "ip",		NULL, /* backwards compatibilty */	CMPL0 0, 0, intip },
+	{ "alias",	"Additional static IPv4/IPv6 addresses",CMPL0 0, 0, intip },
 #ifdef IFXF_AUTOCONF4		/* 6.6+ */
-	{ "autoconf4",  "IPv4 Autoconfigurable address",	CMPL0 0, 0, intxflags },
+	{ "autoconf4",  "IPv4 Autoconfigurable address (DHCP)",	CMPL0 0, 0, intxflags },
 #endif
 	{ "description", "Interface description",		CMPL0 0, 0, intdesc },
 	{ "group",	"Interface group",			CMPL0 0, 0, intgroup },

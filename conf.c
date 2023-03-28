@@ -716,7 +716,7 @@ int conf_ifaddr_dhcp(FILE *output, char *ifname, int ifs, int flags)
 	    LEASEPREFIX, ifname);
 	if (dhcpleased_controls_interface(ifname, ifs) ||
 	    (dhcpif = fopen(leasefile, "r")) != NULL) {
-		fprintf(output, " ip dhcp\n");
+		fprintf(output, " autoconf4\n");
 		if (dhcpif)
 			fclose(dhcpif);
 		/* print all non-autoconf ipv6 addresses */
@@ -823,7 +823,7 @@ void conf_ifflags(FILE *output, int flags, char *ifname, int ippntd, u_char ift)
 		fprintf(output, " no shutdown\n");
 	} else {
 		/*
-		 * ip X/Y turns the interface up (just like 'no shutdown')
+		 * address X/Y turns the interface up (just like 'no shutdown')
 		 * ...but if we never had an ip address set and the interface
 		 * is up, we need to save this state explicitly.
 		 */
@@ -1212,7 +1212,7 @@ int conf_ifaddrs(FILE *output, char *ifname, int flags, int af)
 			sinmask = (struct sockaddr_in *)ifa->ifa_netmask;
 			if (flags & IFF_POINTOPOINT) {
 				sindest = (struct sockaddr_in *)ifa->ifa_dstaddr;
-				fprintf(output, " ip %s",
+				fprintf(output, " address %s",
 				    routename4(sin->sin_addr.s_addr));
 				if (ntohl(sindest->sin_addr.s_addr) !=
 				    INADDR_ANY)
@@ -1220,7 +1220,7 @@ int conf_ifaddrs(FILE *output, char *ifname, int flags, int af)
 					    inet_ntoa(sindest->sin_addr));
 			} else if (flags & IFF_BROADCAST) {
 				sindest = (struct sockaddr_in *)ifa->ifa_broadaddr;
-				fprintf(output, " ip %s",
+				fprintf(output, " address %s",
 				    netname4(sin->sin_addr.s_addr, sinmask));
 				/*
 				 * don't save a broadcast address that would be
@@ -1234,7 +1234,7 @@ int conf_ifaddrs(FILE *output, char *ifname, int flags, int af)
 					fprintf(output, " %s",
 					    inet_ntoa(sindest->sin_addr));
 			} else {
-				fprintf(output, " ip %s",
+				fprintf(output, " address %s",
 				    netname4(sin->sin_addr.s_addr, sinmask));
 			}
 			ippntd = 1;
@@ -1271,12 +1271,12 @@ int conf_ifaddrs(FILE *output, char *ifname, int flags, int af)
 			}
 
 			if (flags & IFF_POINTOPOINT) {
-				fprintf(output, " ip %s", routename6(sin6));
+				fprintf(output, " address %s", routename6(sin6));
 				sin6dest = (struct sockaddr_in6 *)ifa->ifa_dstaddr;
 				in6_fillscopeid(sin6dest);
 				fprintf(output, " %s", routename6(sin6dest));
 			} else {
-				fprintf(output, " ip %s",
+				fprintf(output, " address %s",
 				    netname6(sin6, sin6mask));
 			}
 			ippntd = 1;

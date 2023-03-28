@@ -968,10 +968,12 @@ intip(char *ifname, int ifs, int argc, char **argv)
 		set = 1;
 
 	/*
-	 * We use this function for ip and alias setup since they are
+	 * We use this function for address and alias setup since they are
 	 * the same thing.
 	 */
-	if (isprefix(argv[0], "alias")) {
+	if (isprefix(argv[0], "address")) {
+		cmdname = "address";
+	} else if (isprefix(argv[0], "alias")) {
 		cmdname = "alias";
 	} else if (isprefix(argv[0], "ip")) {
 		cmdname = "ip";
@@ -1006,12 +1008,13 @@ intip(char *ifname, int ifs, int argc, char **argv)
 	}
 
 	/* ignore 'address' keyword, don't print error */
-	if (isprefix(argv[0], "address")) {
+	if (strcmp(cmdname, "ip") == 0 && isprefix(argv[0], "address")) {
 		argc--;
 		argv++;
 	}
 
-	if (isprefix(argv[0], "dhcp")) {
+	/* Support deprecated "ip dhcp" command for reading old configs. */
+	if (strcmp(cmdname, "ip") == 0 && isprefix(argv[0], "dhcp")) {
 		if (dhcpleased_is_running()) {
 			/*
 			 * dhclient(8) has gone away as of OpenBSD 7.2+.

@@ -393,16 +393,15 @@ routing domain
 e.g. Create a new routing table rdomain 3 create a loopback for rdomain 3.
 .Bd -literal -offset indent
 nsh(p)/interface lo3
-nsh(interface-lo3)/rt
 nsh(interface-lo3)/rdomain 3
-nsh(interface-lo3)/ip 127.0.0.1/8
+nsh(interface-lo3)/address 127.0.0.1/8
 .Ed
 .It
 configure a physical interface
 .Bd -literal -offset indent
 nsh(p)/interface em0
 nsh(interface-em0)/rdomain 3
-nsh(interface-em0)/ip 10.255.0.10/24
+nsh(interface-em0)/address 10.255.0.10/24
 .Ed
 .It
 Once the rdomain has been initialized (by creating a loopback inside the
@@ -2768,12 +2767,13 @@ Displays the help menu and available ip command options.
 .Bd -literal -offset indent
 nsh(p)/ip ?
 .Ed
+.Pp
 .Tg interface
 .Op no
 .Ic interface
-.Op  ip | alias | description | group | rdomain | rtlabel | priority\
- | llpriority | mtu | metric | link | arp | lladdr | nwid | nwkey\
- | powersave | txpower | bssid | media | mediaopt | auth | peer\
+.Op  address | alias | autoconf4 | description | group | rdomain | \
+ | rtlabel | priority| llpriority | mtu | metric | link | arp | lladdr | nwid \
+ | nwkey | powersave | txpower | bssid | media | mediaopt | auth | peer\
  | pppoe | tunnel | tunneldomain | txprio | rxprio | vnetid\
  | vnetflowid | parent | patch | keepalive | mplslabel | pwe\
  | syncdev | syncpeer | maxupd | vhid | advbase | advskew | carppass\
@@ -2789,8 +2789,9 @@ nsh(interface-em0)/?
 % Type 'exit' at a prompt to leave interface configuration mode.
 % Interface configuration commands are:
 
-  ip               IP address and other parameters
-  alias            Additional IP addresses and other parameters
+  address          Static IPv4/IPv6 address
+  alias            Additional static IPv4/IPv6 addresses
+  autoconf4        IPv4 Autoconfigurable address (DHCP)
   description      Interface description
   group            Interface group
   rdomain          Interface routing domain
@@ -2856,39 +2857,36 @@ nsh(interface-em0)/?
 .Ed
 .Pp
 .Op no
-.Ic ip
-.Op dhcp
-.Ar | address/prefix-length | address/netmask
+.Ic address
+.Ar address/prefix-length | address/netmask
 .Pp
-Adds or removes the main IP address and other related parameters on the
-interface.
+Adds or removes static IP addresses on the interface.
 IPv4 addresses can be configured with CIDR bitlength, or classic netmask.
 The IPv6 address may only be configured with a bitlength.
 .Bd -literal -offset indent
-nsh(interface-lo0)/ip ::1/128
+nsh(interface-lo0)/address ::1/128
 .Ed
 or
 .Bd -literal -offset indent
-nsh(interface-fxp0)/ip 192.168.100.1/24
+nsh(interface-fxp0)/address 192.168.100.1/24
 .Ed
 or
 .Bd -literal -offset indent
-nsh(interface-fxp0)/ip 192.168.100.1/255.255.255.0
+nsh(interface-fxp0)/address 192.168.100.1/255.255.255.0
 .Ed
 .Pp
 .Op no
 .Ic alias
 .Ar address/prefix-length | address/netmask
 .Pp
-Deprecated, adds or removes additional IP address and other related
-parameters on the interface.
-IPv4 addresses can be configured with CIDR bitlength, or classic netmask.
-The IP address may only be configured with a bitlength.
+Deprecated and equivalent to the
+.Cm address
+command.
 .Pp
 .Op no
-.Ic ip dhcp
+.Ic autoconf4
 .Pp
-Enables or disables dhclient on a given (broadcast and layer2 capable)
+Enables or disables DHCP on a given (broadcast and layer2 capable)
 interface.
 .Pp
 DHCP client notes:
@@ -2897,25 +2895,6 @@ There is currently no way to control default gateway if DHCP client is used
 on multiple interfaces.
 The first DHCP client interface to succeed in obtaining a lease sets the
 default gateway.
-.Pp
-If /var/db is kept across reboots, (such as in a configuration where
-.Nm
-is used on a hard disk) /var/db/dhclient.leasees.$if files may exist where
-not desired.
-The presence of /var/db/dhclient.leases.$if (where $if is the interface name)
-triggers DHCP mode to be turned on in saved
-.Nm
-configurations (write) and in displayed
-.Nm
-configurations (show running-config).
-If you are using
-.Nm
-on a system where /var is kept persistently, look at the running
-configuration and execute 'no ip dhcp' for insterfaces on which you do not
-intend to use DHCP.
-.Bd -literal -offset indent
-nsh(interface-fxp0)/ip dhcp
-.Ed
 .Pp
 .Op no
 .Ic description
@@ -4335,7 +4314,7 @@ nsh(interface-vlan0)/vnetid 4
 
 nsh(interface-vlan0)/parent fxp3
 
-nsh(interface-vlan0)/ip 192.168.44.1/24
+nsh(interface-vlan0)/address 192.168.44.1/24
 .Ed
 .Ss Svlan
 This interface type allows virtual LANs to be setup over an Ethernet
