@@ -92,8 +92,9 @@ complete_ambiguous(char *word, int list, StringList *words, EditLine *el)
 	if (words->sl_cur == 0)
 		return (CC_ERROR);	/* no choices available */
 
-	if (words->sl_cur == 1) {	/* only once choice available */
+	if (words->sl_cur == 1) {	/* only one choice available */
 		(void)strlcpy(insertstr, words->sl_str[0], sizeof insertstr);
+		(void)strlcat(insertstr, " ", sizeof insertstr);
 		if (el_insertstr(el, insertstr + wordlen) == -1)
 			return (CC_ERROR);
 		else
