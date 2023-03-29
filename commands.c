@@ -88,6 +88,7 @@ static int	disable(void);
 static int	doverbose(int, char**);
 static int	doediting(int, char**);
 static int	doconfig(int, char**);
+static int	exitconfig(int, char**);
 int		rtable(int, char**);
 int		group(int, char**);
 static int	nsh_setrtable(int);
@@ -983,6 +984,7 @@ static char
 	sshhelp[] =	"SSH connection to remote host",
 	telnethelp[] =	"Telnet connection to remote host",
 	quithelp[] =	"Close current connection",
+	exithelp[] =	"Leave configuration mode and return to privileged mode",
 	verbosehelp[] =	"Set verbose diagnostics",
 	editinghelp[] = "Set command line editing",
 	confighelp[] =	"Set configuration mode",
@@ -1060,6 +1062,7 @@ Command cmdtab[] = {
 	{ "no",		0,		CMPL(C) 0, 0, nocmd,		0, 0, 0, 0 },
 	{ "!",		shellhelp,	CMPL0 0, 0, shell,		1, 0, 0, 0 },
 	{ "?",		helphelp,	CMPL(C) 0, 0, help,		0, 0, 0, 0 },
+	{ "exit",	exithelp,	CMPL0 0, 0, exitconfig,		1, 0, 0, 0 },
 	{ "quit",	quithelp,	CMPL0 0, 0, quit,		0, 0, 0, 0 },
 	{ "help",	0,		CMPL(C) 0, 0, help,		0, 0, 0, 0 },
 	{ 0,		0,		CMPL0 0, 0, 0,			0, 0, 0, 0 }
@@ -1793,7 +1796,7 @@ doconfig(int argc, char **argv)
 {
 	if (argc > 1) {
 		if (NO_ARG(argv[0])) {
-			config_mode = 0;
+			return exitconfig(argc, argv);
 		} else if (isprefix(argv[1], "terminal")) {
 			config_mode = 1;
 		} else {
@@ -1804,6 +1807,18 @@ doconfig(int argc, char **argv)
 		config_mode = 1;
 	}
 
+	return 0;
+}
+
+int
+exitconfig(int argc, char **argv)
+{
+	if (!config_mode) {
+		printf ("%% Configuration mode is already disabled\n");
+		return 1;
+	}
+
+	config_mode = 0;
 	return 0;
 }
 
