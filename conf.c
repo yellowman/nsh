@@ -1320,10 +1320,8 @@ conf_routes(FILE *output, char *delim, int af, int flags, int tableid)
 		return(1);
 	}
 	rtdump = getrtdump(0, flags, tableid);
-	if (rtdump == NULL) {
-		printf("%% conf_routes: getrtdump failure\n");
+	if (rtdump == NULL)
 		return(1);
-	}
 
 	/* walk through routing table */
 	for (next = rtdump->buf; next < rtdump->lim; next += rtm->rtm_msglen) {
