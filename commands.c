@@ -116,7 +116,7 @@ static int	flush_history(void);
 static int	is_bad_input(const char *, size_t);
 static int	read_command_line(EditLine *, History *);
 static int	int_help(void);
-static int	int_noop(void);
+static int	int_exit(void);
 static int	el_burrito(EditLine *, int, char **);
 static int	hostname(int, char **);
 static int	help(int, char**);
@@ -608,7 +608,7 @@ struct intlist Intlist[] = {
         { "?",		"Options",				CMPL0 0, 0, int_help },
         { "help",	0,					CMPL0 0, 0, int_help },
 	{ "exit",	"Leave interface config mode and return to global config mode ",
-								CMPL0 0, 0, int_noop },
+								CMPL0 0, 0, int_exit },
 
 	{ 0, 0, 0, 0, 0 }
 };
@@ -673,8 +673,8 @@ is_bad_input(const char *buf, size_t num)
  * If successful, enter the command into editing history and
  * return the amount of characters read.
  * The Enter key by itself has no effect.
- * Return 0 if any of EOF, "exit", and ".." is read.
- * Do not add "exit" or ".." to editing history.
+ * Return 0 if EOF or ".." is read.
+ * Do not add ".." to editing history.
  */
 static int
 read_command_line(EditLine *el, History *hist)
@@ -696,8 +696,7 @@ read_command_line(EditLine *el, History *hist)
 			continue;
 	} while (num == 0); /* Enter key */
 
-	if ((num == 4 && strncmp(buf, "exit", num) == 0) ||
-	    (num == 2 && strncmp(buf, "..", num) == 0))
+	if (num == 2 && strncmp(buf, "..", num) == 0)
 		return 0;
 	
 	memcpy(line, buf, (size_t)num);
@@ -918,11 +917,10 @@ int_help(void)
 	return 0;
 }
 
-/* No-op handler for pseudo commands such as "exit". */
 static int
-int_noop(void)
+int_exit(void)
 {
-	return 0;
+	return 1; /* leave interface config mode */
 }
 
 /*
