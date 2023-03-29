@@ -128,10 +128,8 @@ p_rttables(int af, u_int tableid, int flags)
 	struct rtdump *rtdump;
 
 	rtdump = getrtdump(af, flags, tableid);
-	if (rtdump == NULL) {
-		printf("%% p_rttables: getrtdump failure\n");
+	if (rtdump == NULL)
 		return;
-	}
 
 	for (next = rtdump->buf; next < rtdump->lim; next += rtm->rtm_msglen) {
 		rtm = (struct rt_msghdr *)next;
