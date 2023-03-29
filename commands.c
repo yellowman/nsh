@@ -116,6 +116,7 @@ static int	flush_history(void);
 static int	is_bad_input(const char *, size_t);
 static int	read_command_line(EditLine *, History *);
 static int	int_help(void);
+static int	int_noop(void);
 static int	el_burrito(EditLine *, int, char **);
 static int	hostname(int, char **);
 static int	help(int, char**);
@@ -606,6 +607,8 @@ struct intlist Intlist[] = {
 	{ "shutdown",   "Shutdown interface",			CMPL0 0, 0, intflags },
         { "?",		"Options",				CMPL0 0, 0, int_help },
         { "help",	0,					CMPL0 0, 0, int_help },
+	{ "exit",	"Leave interface config mode and return to global config mode ",
+								CMPL0 0, 0, int_noop },
 
 	{ 0, 0, 0, 0, 0 }
 };
@@ -912,6 +915,13 @@ int_help(void)
 		if (i->help)
 			printf("  %-*s  %s\n", z, i->name, i->help);
 	}
+	return 0;
+}
+
+/* No-op handler for pseudo commands such as "exit". */
+static int
+int_noop(void)
+{
 	return 0;
 }
 
