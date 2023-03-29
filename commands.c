@@ -526,7 +526,7 @@ struct intlist Intlist[] = {
 /* Interface mode commands */
 	{ "address",	"Static IPv4/IPv6 address",		CMPL0 0, 0, intip },
 	{ "ip",		NULL, /* backwards compatibilty */	CMPL0 0, 0, intip },
-	{ "alias",	"Additional static IPv4/IPv6 addresses",CMPL0 0, 0, intip },
+	{ "alias",	NULL, /* backwards compatibilty */	CMPL0 0, 0, intip },
 #ifdef IFXF_AUTOCONF4		/* 6.6+ */
 	{ "autoconf4",  "IPv4 Autoconfigurable address (DHCP)",	CMPL0 0, 0, intxflags },
 #endif
