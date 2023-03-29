@@ -1057,7 +1057,7 @@ Command cmdtab[] = {
 	{ "write-config", savehelp,	CMPL0 0, 0, wr_startup,		1, 0, 0, 0 },
 	{ "verbose",	verbosehelp,	CMPL0 0, 0, doverbose,		0, 0, 1, 0 },
 	{ "editing",	editinghelp,	CMPL0 0, 0, doediting,		0, 0, 1, 0 },
-	{ "configure",	confighelp,	CMPL0 0, 0, doconfig,		0, 0, 1, 0 },
+	{ "configure",	confighelp,	CMPL0 0, 0, doconfig,		1, 0, 1, 0 },
 	{ "who",	whohelp,	CMPL0 0, 0, who,		0, 0, 0, 0 },
 	{ "no",		0,		CMPL(C) 0, 0, nocmd,		0, 0, 0, 0 },
 	{ "!",		shellhelp,	CMPL0 0, 0, shell,		1, 0, 0, 0 },
