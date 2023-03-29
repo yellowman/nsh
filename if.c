@@ -58,6 +58,7 @@ void pack_ifaliasreq(struct ifaliasreq *, ip_t *, struct in_addr *, char *);
 void pack_in6aliasreq(struct in6_aliasreq *, ip_t *, struct in6_addr *, char *);
 void ipv6ll_db_store(struct sockaddr_in6 *, struct sockaddr_in6 *, int, char *);
 void printifhwfeatures(int, char *);
+void intipusage(const char *, const char *);
 int run_ipcp(char *, int, int);
 void show_vnet_parent(int, char *);
 void pwe3usage(void);
@@ -947,10 +948,29 @@ slaacd_is_running(void)
 	return check_daemon_control_socket(SLAACD_SOCK);
 }
 
+void
+intipusage(const char *cmdname, const char *msg)
+{
+	printf("%% %s <address>/<bits> %s%s%s\n", cmdname,
+	    msg ? "[" : "", msg ? msg : "", msg ? "]" : "");
+	printf("%% %s <address>/<netmask> %s%s%s\n", cmdname,
+	    msg ? "[" : "", msg ? msg : "", msg ? "]" : "");
+	if (strcmp(cmdname, "inet") == 0 ||
+	    strcmp(cmdname, "inet6") == 0) {
+		printf("%% no %s [<address>[/prefix-len]]\n", cmdname);
+		printf("%% no %s [<address>[/netmask]]\n", cmdname);
+	} else {
+		printf("%% no %s <address>[/prefix-len]\n", cmdname);
+		printf("%% no %s <address>[/netmask]\n", cmdname);
+	}
+}
+
 int
 intip(char *ifname, int ifs, int argc, char **argv)
 {
 	int s, set, flags, argcmax;
+	int argc0 = argc;
+	char **argv0 = argv;
 	char *msg, *cmdname;
 	ip_t ip;
 	/* ipv4 structures */
@@ -977,6 +997,10 @@ intip(char *ifname, int ifs, int argc, char **argv)
 		cmdname = "alias";
 	} else if (isprefix(argv[0], "ip")) {
 		cmdname = "ip";
+	} else if (isprefix(argv[0], "inet")) {
+		cmdname = "inet";
+	} else if (isprefix(argv[0], "inet6")) {
+		cmdname = "inet6";
 	} else {
 		printf("%% intip: Internal error\n");
 		return 0;
@@ -997,13 +1021,30 @@ intip(char *ifname, int ifs, int argc, char **argv)
 		msg = NULL;
 	}
 
-	if (argc < 1 || argc > argcmax) {
-		printf("%% %s <address>/<bits> %s%s%s\n", cmdname,
-		    msg ? "[" : "", msg ? msg : "", msg ? "]" : "");
-		printf("%% %s <address>/<netmask> %s%s%s\n", cmdname,
-		    msg ? "[" : "", msg ? msg : "", msg ? "]" : "");
-		printf("%% no %s <address>[/bits]\n", cmdname);
-		printf("%% no %s <address>[/netmask]\n", cmdname);
+	if (argc == 0) {
+		/*
+		 * The inet and inet6 commands allow for removing all
+		 * addresses in the corresponding address family.
+		 */
+		if (!set &&
+		    (strcmp(cmdname, "inet") == 0 ||
+		    strcmp(cmdname, "inet6") == 0)) {
+			intaf(ifname, ifs, argc0, argv0);
+			return(0);
+		}
+
+		/*
+		 * The inet6 command allows for enabling IPv6 link-local.
+		 */
+		if (set && strcmp(cmdname, "inet6") == 0) {
+			intaf(ifname, ifs, argc0, argv0);
+			return(0);
+		}
+		
+		intipusage(cmdname, msg);
+		return(0);
+	} else if (argc < 1 || argc > argcmax) {
+		intipusage(cmdname, msg);
 		return(0);
 	}
 
@@ -1061,6 +1102,12 @@ intip(char *ifname, int ifs, int argc, char **argv)
 	if (ip.family == 0)
 		/* bad IP specified */
 		return(0);
+
+	/* The inet6 command is IPv6-only. */
+	if (strcmp(cmdname, "inet6") == 0 && ip.family != AF_INET6) {
+		printf("%% %s is not a valid IPv6 address\n", argv[0]);
+		return(0);
+	}
 
 	if (set && !(flags & IFF_POINTOPOINT) && ip.bitlen == -1) {
 		printf("%% Netmask not specified\n");
@@ -2168,13 +2215,19 @@ intaf(char *ifname, int ifs, int argc, char **argv)
 		return(1);
 	}
 
-	if (isprefix(argv[0], "inet6")) {
+	/* Do not use isprefix() here because it would always be ambiguous. */
+	if (strcmp(argv[0], "inet6") == 0) {
 		if (set)
 			addaf(ifname, AF_INET6, ifs);
 		else
 			removeaf(ifname, AF_INET6, ifs);
+	} else if (strcmp(argv[0], "inet") == 0) {
+		if (set)
+			addaf(ifname, AF_INET, ifs);
+		else
+			removeaf(ifname, AF_INET, ifs);
 	} else {
-		printf("%% intaf: prefix internal error\n");
+		printf("%% intaf: unknown address family %s\n", argv[0]);
 	}
 	return(0);
 }
