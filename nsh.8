@@ -394,14 +394,14 @@ e.g. Create a new routing table rdomain 3 create a loopback for rdomain 3.
 .Bd -literal -offset indent
 nsh(p)/interface lo3
 nsh(interface-lo3)/rdomain 3
-nsh(interface-lo3)/address 127.0.0.1/8
+nsh(interface-lo3)/inet 127.0.0.1/8
 .Ed
 .It
 configure a physical interface
 .Bd -literal -offset indent
 nsh(p)/interface em0
 nsh(interface-em0)/rdomain 3
-nsh(interface-em0)/address 10.255.0.10/24
+nsh(interface-em0)/inet 10.255.0.10/24
 .Ed
 .It
 Once the rdomain has been initialized (by creating a loopback inside the
@@ -2771,7 +2771,7 @@ nsh(p)/ip ?
 .Tg interface
 .Op no
 .Ic interface
-.Op  address | alias | autoconf4 | description | group | rdomain | \
+.Op  inet | alias | autoconf4 | description | group | rdomain | \
  | rtlabel | priority| llpriority | mtu | metric | link | arp | lladdr | nwid \
  | nwkey | powersave | txpower | bssid | media | mediaopt | auth | peer\
  | pppoe | tunnel | tunneldomain | txprio | rxprio | vnetid\
@@ -2789,7 +2789,7 @@ nsh(interface-em0)/?
 % Type 'exit' at a prompt to leave interface configuration mode.
 % Interface configuration commands are:
 
-  address          Static IPv4/IPv6 address
+  inet             IPv4/IPv6 addresses
   alias            Additional static IPv4/IPv6 addresses
   autoconf4        IPv4 Autoconfigurable address (DHCP)
   description      Interface description
@@ -2841,7 +2841,7 @@ nsh(interface-em0)/?
   dhcrelay         DHCP Relay Agent
   wol              Wake On LAN
   mpls             MPLS
-  inet6            IPv6
+  inet6            IPv6 addresses
   autoconf6        IPv6 Autoconfigurable address
   autoconfprivacy  Privacy addresses for IPv6 autoconf
   temporary        Temporary addresses for IPv6 autoconf
@@ -2857,23 +2857,30 @@ nsh(interface-em0)/?
 .Ed
 .Pp
 .Op no
-.Ic address
-.Ar address/prefix-length | address/netmask
+.Ic inet
+.Op Ar address/prefix-length | address/netmask
 .Pp
-Adds or removes static IP addresses on the interface.
-IPv4 addresses can be configured with CIDR bitlength, or classic netmask.
-The IPv6 address may only be configured with a bitlength.
+Adds or removes the specified IPv4 or IPv6 address on the interface.
+An IPv4 address can be configured with CIDR bitlength, or classic netmask.
 .Bd -literal -offset indent
-nsh(interface-lo0)/address ::1/128
+nsh(interface-fxp0)/inet 192.168.100.1/24
 .Ed
 or
 .Bd -literal -offset indent
-nsh(interface-fxp0)/address 192.168.100.1/24
+nsh(interface-fxp0)/inet 192.168.100.1/255.255.255.0
 .Ed
-or
+An IPv6 address may be configured with a network prefix length.
 .Bd -literal -offset indent
-nsh(interface-fxp0)/address 192.168.100.1/255.255.255.0
+nsh(interface-lo0)/inet ::1/128
 .Ed
+.Pp
+.Pp
+The command
+.Cm no inet
+without futher arguments removes all IPv4 addresses from the interface.
+The
+.Cm no inet6
+command (see below) may be used to remove all IPv6 addresses.
 .Pp
 .Op no
 .Ic alias
@@ -3795,14 +3802,28 @@ nsh(interface-em0)/mpls
 .Pp
 .Op no
 .Ic inet6
+.Op Ar address/prefix-length
 .Pp
-Enables or disables ipv6 (inet6) link local address on the selected interface.
+Adds or removes the specified IPv6 address on the interface.
+The IPv6 address may be configured with a network prefix length.
+.Bd -literal -offset indent
+nsh(interface-lo0)/inet6 ::1/128
+.Ed
+.Pp
+The command
+.Cm no inet6
+without futher arguments removes all IPv6 addresses from the interface,
+including link-local addresses.
+.Pp
+The command
+.Cm inet6
+without further arguments enables link-local addresses on the interface.
 .Pp
 E.g. to enable ipv6 link local address on em0
 .Bd -literal -offset indent
 nsh(p)/interface em0
 
-nsh(interface-em0)/rad
+nsh(interface-em0)/inet6
 .Ed
 .Pp
 .Op no
