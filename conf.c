@@ -101,7 +101,6 @@ static const struct {
 	{ "gre",	1476 },
 	{ "wg",		1420 },
 	{ "gif",	1280 },
-	{ "sl",		296 },
 	{ "enc",	1536 },
 	{ "pflow",	MTU_IGNORE },
 	{ "pflog",	MTU_IGNORE },
