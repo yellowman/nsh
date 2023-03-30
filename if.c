@@ -87,6 +87,7 @@ static const struct {
 	{ "Transparent bridge",		IFT_BRIDGE },
 	{ "HDLC",			IFT_HDLC },
 	{ "IEEE 802.1Q",		IFT_L2VLAN },
+	{ "Layer 3 Virtual LAN",	IFT_L3IPVLAN },
 	{ "Virtual",			IFT_PROPVIRTUAL },
 	{ "MPLS Tunnel Virtual",	IFT_MPLSTUNNEL },
 	{ "MPLS Provider Edge",		IFT_MPLS },
