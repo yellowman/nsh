@@ -32,6 +32,7 @@
 #include <net/if_dl.h>
 #include <net/if_types.h>
 #include <netinet/in.h>
+#include <netinet/ip.h>
 #include <netinet/if_ether.h>
 #include <netinet6/in6_var.h>
 #include <net/if_vlan_var.h>
@@ -88,6 +89,7 @@ int dhcpleased_controls_interface(char *, int);
 int dhclient_isenabled(char *);
 int default_txprio(char *);
 int default_rxprio(char *);
+int default_llpriority(char *);
 int islateif(char *);
 int isdefaultroute(struct sockaddr *, struct sockaddr *);
 int scantext(char *, char *);
@@ -127,6 +129,15 @@ static const struct {
 	{ "svlan",	IF_HDRPRIO_OUTER,	IF_HDRPRIO_PACKET },
 	{ "gif",	IF_HDRPRIO_PAYLOAD,	IF_HDRPRIO_PAYLOAD },
 	{ "eoip",	IF_HDRPRIO_PACKET,	0 },
+};
+
+static const struct {
+	char *name;
+	int llpriority;
+} defllpriority[] = {
+	{ "gre",	IFQ_TOS2PRIO(IPTOS_PREC_INTERNETCONTROL) },
+	{ "aggr",	IFQ_MAXPRIO },
+	{ "tpmr",	IFQ_MAXPRIO },
 };
 
 /*
@@ -1062,7 +1073,7 @@ void conf_ifmetrics(FILE *output, int ifs, struct if_data if_data,
 	    ifr.ifr_metric)
 		fprintf(output, " priority %u\n", ifr.ifr_metric);
 	if (ioctl(ifs, SIOCGIFLLPRIO, (caddr_t)&ifr) == 0 &&
-	    ifr.ifr_llprio != DEFAULT_LLPRIORITY)
+	    ifr.ifr_llprio != default_llpriority(ifr.ifr_name))
 		fprintf(output, " llpriority %u\n", ifr.ifr_llprio);
 	if (ioctl(ifs, SIOCGTXHPRIO, (caddr_t)&ifr) == 0 &&
 	    ifr.ifr_hdrprio != default_txprio(ifr.ifr_name)) {
@@ -1347,6 +1358,18 @@ default_rxprio(char *ifname)
 			return(defprios[i].rxprio);
 
 	return 0;	/* default rxprio */
+}
+
+int
+default_llpriority(char *ifname)
+{
+	u_int i;
+
+	for (i = 0; i < nitems(defllpriority); i++)
+		if (isprefix(defllpriority[i].name, ifname))
+			return(defllpriority[i].llpriority);
+
+	return IFQ_DEFPRIO;	/* default llpriority */
 }
 
 /*
