@@ -698,8 +698,9 @@ bridge_cfg(int s, char *brdg, int type)
 	switch (type) {
 	case PRIORITY:
 		if (ioctl(s, SIOCBRDGGPRI, (caddr_t)&ifbp)) {
-			printf("%% unable to get priority: SIOCBRDGGPRI: %s\n",
-			    strerror(errno));
+			if (errno != ENOTTY)
+				printf("%% bridge_cfg: SIOCBRDGGPRI: %s\n",
+				    strerror(errno));
 			return (-1);
 		}
 		val = ifbp.ifbrp_prio;
@@ -707,7 +708,8 @@ bridge_cfg(int s, char *brdg, int type)
 
 	case HELLOTIME:
 		if (ioctl(s, SIOCBRDGGHT, (caddr_t)&ifbp)) {
-			printf("%% unable to get hellotime: SIOCBRDGGHT: %s\n",
+			if (errno != ENOTTY)
+				printf("%% bridge_cfg: SIOCBRDGGHT: %s\n",
 			    strerror(errno));
 			return (-1);
 		}
@@ -716,8 +718,9 @@ bridge_cfg(int s, char *brdg, int type)
 
 	case FWDDELAY:
 		if (ioctl(s, SIOCBRDGGFD, (caddr_t)&ifbp)) {
-			printf("%% unable to get fwddelay: SIOCBRDGGFD: %s\n",
-			    strerror(errno));
+			if (errno != ENOTTY)
+				printf("%% bridge_cfg: SIOCBRDGGFD: %s\n",
+				    strerror(errno));
 			return (-1);
 		}
 		val = ifbp.ifbrp_fwddelay;
@@ -725,8 +728,9 @@ bridge_cfg(int s, char *brdg, int type)
 
 	case MAXAGE:
 		if (ioctl(s, SIOCBRDGGMA, (caddr_t)&ifbp)) {
-			printf("%% unable to get maxage: SIOCBRDGGMA: %s\n",
-			    strerror(errno));
+			if (errno != ENOTTY)
+				printf("%% bridge_cfg: SIOCBRDGGMA: %s\n",
+				    strerror(errno));
 			return (-1);
 		}
 		val = ifbp.ifbrp_maxage;
@@ -734,8 +738,9 @@ bridge_cfg(int s, char *brdg, int type)
 
 	case MAXADDR:
 		if (ioctl(s, SIOCBRDGGCACHE, (caddr_t)&ifbp) < 0) {
-			printf("%% unable to get maxaddr: SIOCBRDGGCACHE: %s\n",
-			    strerror(errno));
+			if (errno != ENOTTY)
+				printf("%% bridge_cfg: SIOCBRDGGCACHE: %s\n",
+				    strerror(errno));
 			return (-1);
 		}
 		val = ifbp.ifbrp_csize;
@@ -743,8 +748,9 @@ bridge_cfg(int s, char *brdg, int type)
 
 	case TIMEOUT:
 		if (ioctl(s, SIOCBRDGGTO, (caddr_t)&ifbp) < 0) {
-			printf("%% unable to get timeout: SIOCBRDGGTO: %s\n",
-			    strerror(errno));
+			if (errno != ENOTTY)
+				printf("%% bridge_cfg: SIOCBRDGGTO: %s\n",
+				    strerror(errno));
 			return (-1);
 		}
 		val = ifbp.ifbrp_ctime;
@@ -783,8 +789,9 @@ bridge_list(int s, char *brdg, char *delim, char *br_str, int str_len, int type)
 		}
 		bifc.ifbic_buf = inbuf = inb;
 		if (ioctl(s, SIOCBRDGIFS, &bifc) < 0) {
-			printf("%% unable to get interfaces: SIOCBRDGIFS: %s\n",
-			    strerror(errno));
+			if (errno != ENOTTY)
+				printf("%% bridge_list: SIOCBRDGIFS: %s\n",
+				    strerror(errno));
 			free(inbuf);
 			return(0);
 		}
@@ -1260,7 +1267,8 @@ bridge_confaddrs(int s, char *brdg, char *delim, FILE *output)
 		ifbac.ifbac_buf = inbuf = inb;
 		strlcpy(ifbac.ifbac_name, brdg, sizeof(ifbac.ifbac_name));
 		if (ioctl(s, SIOCBRDGRTS, &ifbac) < 0) {
-			if (errno != ENETDOWN)
+			if ((errno != ENETDOWN) &&
+			    (errno != ENOTTY))
 				printf("%% bridge_confaddrs: SIOCBRDGRTS: %s\n",
 				    strerror(errno));
 			free(inbuf);
@@ -1357,7 +1365,8 @@ bridge_rules(int s, char *brdg, char *ifname, char *delim, FILE *output)
 		strlcpy(ifc.ifbrl_ifsname, ifname, sizeof(ifc.ifbrl_ifsname));
 		errno = 0;
 		if (ioctl(s, SIOCBRDGGRL, &ifc) < 0) {
-			if (errno != ESRCH) /* invalid interface name spec'd */
+			if ((errno != ESRCH) && /* invalid interface name */
+			    (errno != ENOTTY))	/* not a bridge */
 				printf("%% bridge_rules: SIOCBRDGGRL: %s\n",
 				    strerror(errno));
 			free(inbuf);
