@@ -156,8 +156,7 @@ conf(FILE *output)
 			    " %s\n", strerror(errno));
 	}
 	fprintf(output, "!\n");
-	conf_ctl(output, "", "rad", 0);
-        conf_ctl(output, "", "motd", 0);
+	conf_ctl(output, "", "motd", 0);
 
 	/*
 	 * start all intefaces not listed in 'latestartifs'
@@ -219,6 +218,7 @@ conf(FILE *output)
 	conf_ctl(output, "", "ifstate", 0);
 	conf_ctl(output, "", "ipsec", 0);
 	conf_ctl(output, "", "ike", 0);
+	conf_ctl(output, "", "rad", 0);
 	conf_ctl(output, "", "dvmrp", 0);
 	conf_ctl(output, "", "relay", 0);
 	conf_ctl(output, "", "sasync", 0);
