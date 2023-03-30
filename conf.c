@@ -1320,8 +1320,7 @@ default_mtu(char *ifname)
 	u_int i;
 
 	for (i = 0; i < nitems(defmtus); i++)
-		if (strncasecmp(defmtus[i].name, ifname,
-		    strlen(defmtus[i].name)) == 0)
+		if (isprefix(defmtus[i].name, ifname))  
 			return(defmtus[i].mtu);
 
 	return(DEFAULT_MTU); /* default mtu */
@@ -1333,8 +1332,7 @@ default_txprio(char *ifname)
 	u_int i;
 
 	for (i = 0; i < nitems(defprios); i++)
-		if (strncasecmp(defprios[i].name, ifname,
-		    strlen(defprios[i].name)) == 0)
+		if (isprefix(defprios[i].name, ifname))
 			return(defprios[i].txprio);
 
 	return 0;	/* default txprio */
@@ -1346,8 +1344,7 @@ default_rxprio(char *ifname)
 	u_int i;
 
 	for (i = 0; i < nitems(defprios); i++)
-		if (strncasecmp(defprios[i].name, ifname,
-		    strlen(defprios[i].name)) == 0)
+		if (isprefix(defprios[i].name, ifname))
 			return(defprios[i].rxprio);
 
 	return 0;	/* default rxprio */
