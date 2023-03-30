@@ -86,6 +86,8 @@ void conf_rtflags(char *, int, struct rt_msghdr *rtm);
 int dhcpleased_has_defaultroute(char *);
 int dhcpleased_controls_interface(char *, int);
 int dhclient_isenabled(char *);
+int default_txprio(char *);
+int default_rxprio(char *);
 int islateif(char *);
 int isdefaultroute(struct sockaddr *, struct sockaddr *);
 int scantext(char *, char *);
@@ -105,6 +107,27 @@ static const struct {
 	{ "pflog",	MTU_IGNORE },
 	{ "pfsync",	MTU_IGNORE },
 	{ "lo",		MTU_IGNORE },
+};
+
+static const struct {
+	char *name;
+	int rxprio;
+	int txprio;
+} defprios[] = {
+	{ "bpe",	IF_HDRPRIO_OUTER,	IF_HDRPRIO_PACKET },
+	{ "nvgre",	IF_HDRPRIO_PACKET,	0 },
+	{ "etherip",	IF_HDRPRIO_PACKET,	0 },
+	{ "gre",	IF_HDRPRIO_PACKET,	IF_HDRPRIO_PAYLOAD },
+	{ "mgre",	IF_HDRPRIO_PACKET,	IF_HDRPRIO_PAYLOAD },
+	{ "egre",	IF_HDRPRIO_PACKET,	0 },
+	{ "mpe",	IF_HDRPRIO_PACKET,	0 },
+	{ "mpip",	IF_HDRPRIO_PACKET,	0 },
+	{ "mpw",	IF_HDRPRIO_PACKET,	0 },
+	{ "vxlan",	IF_HDRPRIO_OUTER,	0 },
+	{ "vlan",	IF_HDRPRIO_OUTER,	IF_HDRPRIO_PACKET },
+	{ "svlan",	IF_HDRPRIO_OUTER,	IF_HDRPRIO_PACKET },
+	{ "gif",	IF_HDRPRIO_PAYLOAD,	IF_HDRPRIO_PAYLOAD },
+	{ "eoip",	IF_HDRPRIO_PACKET,	0 },
 };
 
 /*
@@ -1043,7 +1066,7 @@ void conf_ifmetrics(FILE *output, int ifs, struct if_data if_data,
 	    ifr.ifr_llprio != DEFAULT_LLPRIORITY)
 		fprintf(output, " llpriority %u\n", ifr.ifr_llprio);
 	if (ioctl(ifs, SIOCGTXHPRIO, (caddr_t)&ifr) == 0 &&
-	    ifr.ifr_hdrprio != DEFAULT_TXPRIO) {
+	    ifr.ifr_hdrprio != default_txprio(ifr.ifr_name)) {
 		switch(ifr.ifr_hdrprio) {
 			case IF_HDRPRIO_PACKET:
 				fprintf(output, " txprio packet\n");
@@ -1057,7 +1080,7 @@ void conf_ifmetrics(FILE *output, int ifs, struct if_data if_data,
 		}
 	}
 	if (ioctl(ifs, SIOCGRXHPRIO, (caddr_t)&ifr) == 0 &&
-	    ifr.ifr_hdrprio != DEFAULT_RXPRIO) {
+	    ifr.ifr_hdrprio != default_rxprio(ifr.ifr_name)) {
 		switch(ifr.ifr_hdrprio) {
 			case IF_HDRPRIO_PACKET:
 				fprintf(output, " rxprio packet\n");
@@ -1302,6 +1325,32 @@ default_mtu(char *ifname)
 			return(defmtus[i].mtu);
 
 	return(DEFAULT_MTU); /* default mtu */
+}
+
+int
+default_txprio(char *ifname)
+{
+	u_int i;
+
+	for (i = 0; i < nitems(defprios); i++)
+		if (strncasecmp(defprios[i].name, ifname,
+		    strlen(defprios[i].name)) == 0)
+			return(defprios[i].txprio);
+
+	return 0;	/* default txprio */
+}
+
+int
+default_rxprio(char *ifname)
+{
+	u_int i;
+
+	for (i = 0; i < nitems(defprios); i++)
+		if (strncasecmp(defprios[i].name, ifname,
+		    strlen(defprios[i].name)) == 0)
+			return(defprios[i].rxprio);
+
+	return 0;	/* default rxprio */
 }
 
 /*
