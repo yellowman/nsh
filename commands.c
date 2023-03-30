@@ -525,9 +525,9 @@ flush_help(void)
 
 struct intlist Intlist[] = {
 /* Interface mode commands */
-	{ "inet",	"IPv4/IPv6 addresses",			CMPL0 0, 0, intip },
-	{ "ip",		NULL, /* backwards compatibilty */	CMPL0 0, 0, intip },
-	{ "alias",	NULL, /* backwards compatibilty */	CMPL0 0, 0, intip },
+	{ "inet",	"IPv4/IPv6 addresses",			CMPL(h) intiphelp, sizeof(char *), intip },
+	{ "ip",		"Alias for \"inet\" command",		CMPL(h) intiphelp, sizeof(char *), intip },
+	{ "alias",	NULL, /* backwards compatibilty */	CMPL(h) intiphelp, sizeof(char *), intip },
 #ifdef IFXF_AUTOCONF4		/* 6.6+ */
 	{ "autoconf4",  "IPv4 Autoconfigurable address (DHCP)",	CMPL0 0, 0, intxflags },
 #endif
@@ -587,7 +587,7 @@ struct intlist Intlist[] = {
 	{ "dhcrelay",	"DHCP Relay Agent",			CMPL0 0, 0, intdhcrelay },
 	{ "wol",	"Wake On LAN",				CMPL0 0, 0, intxflags },
 	{ "mpls",	"MPLS",					CMPL0 0, 0, intxflags },
-	{ "inet6",	"IPv6 addresses",			CMPL0 0, 0, intip },
+	{ "inet6",	"IPv6 addresses",			CMPL(h) intip6help, sizeof(char *), intip },
 	{ "autoconf6",  "IPv6 Autoconfigurable address",	CMPL0 0, 0, intxflags },
 #ifdef IFXF_INET6_NOPRIVACY	/* pre-6.9 */
 	{ "autoconfprivacy", "Privacy addresses for IPv6 autoconf", CMPL0 0, 0, intxflags },

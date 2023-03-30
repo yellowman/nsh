@@ -2771,7 +2771,7 @@ nsh(p)/ip ?
 .Tg interface
 .Op no
 .Ic interface
-.Op  inet | alias | autoconf4 | description | group | rdomain | \
+.Op  inet | ip | autoconf4 | description | group | rdomain | \
  | rtlabel | priority| llpriority | mtu | metric | link | arp | lladdr | nwid \
  | nwkey | powersave | txpower | bssid | media | mediaopt | auth | peer\
  | pppoe | tunnel | tunneldomain | txprio | rxprio | vnetid\
@@ -2790,7 +2790,7 @@ nsh(interface-em0)/?
 % Interface configuration commands are:
 
   inet             IPv4/IPv6 addresses
-  alias            Additional static IPv4/IPv6 addresses
+  ip               Alias for the "inet" command
   autoconf4        IPv4 Autoconfigurable address (DHCP)
   description      Interface description
   group            Interface group
@@ -2869,11 +2869,11 @@ or
 .Bd -literal -offset indent
 nsh(interface-fxp0)/inet 192.168.100.1/255.255.255.0
 .Ed
+.Pp
 An IPv6 address may be configured with a network prefix length.
 .Bd -literal -offset indent
 nsh(interface-lo0)/inet ::1/128
 .Ed
-.Pp
 .Pp
 The command
 .Cm no inet
@@ -2883,11 +2883,41 @@ The
 command (see below) may be used to remove all IPv6 addresses.
 .Pp
 .Op no
-.Ic alias
-.Ar address/prefix-length | address/netmask
+.Ic inet
+.Cm autoconf
 .Pp
-Deprecated and equivalent to the
-.Cm address
+Equivalent to the
+.Cm autoconf4
+command.
+.Pp
+.Op no
+.Ic inet
+.Cm dhcp
+.Pp
+Equivalent to the
+.Cm autoconf4
+command.
+.Pp
+.Op no
+.Ic ip
+.Pp
+Equivalent to the
+.Cm inet
+command, for convenience.
+All parameters accepted by
+.Cm inet
+are also accepted by
+.Cm ip ,
+including
+.Cm autoconf
+and
+.Cm dhcp .
+.Pp
+.Op no
+.Ic alias
+.Pp
+Deprecated and also equivalent to the
+.Cm inet
 command.
 .Pp
 .Op no
@@ -3825,6 +3855,14 @@ nsh(p)/interface em0
 
 nsh(interface-em0)/inet6
 .Ed
+.Pp
+.Op no
+.Ic inet6
+.Cm autoconf
+.Pp
+Equivalent to the
+.Cm autoconf6
+command.
 .Pp
 .Op no
 .Ic autoconf6

@@ -402,6 +402,8 @@ int get_ifxflags(char *, int);
 int set_ifxflags(char *, int, int);
 u_int32_t in4_netaddr(u_int32_t, u_int32_t);
 u_int32_t in4_brdaddr(u_int32_t, u_int32_t);
+extern char *intiphelp[];
+extern char *intip6help[];
 int intip(char *, int, int, char **);
 int intipcp(char *, int, int, char **);
 int intmtu(char *, int, int, char **);
