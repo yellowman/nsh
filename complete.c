@@ -56,6 +56,7 @@ static unsigned char complete_local(char *, int, EditLine *);
 static unsigned char complete_ifname(char *, int, EditLine *);
 static unsigned char complete_nocmd(struct ghs *, char *, int, EditLine *,
 				   char **, int, int);
+static unsigned char complete_noint(char *, int, EditLine *, char **, int, int);
 static unsigned char complete_args(struct ghs *, char *, int, EditLine *,
 				   char **, int, int);
 static void list_vertical(StringList *);
@@ -387,6 +388,12 @@ complete(EditLine *el, int ch, char **table, size_t stlen, char *arg)
 
 	if (arg == NULL)
 		arg = margv[0];
+
+	if (NO_ARG(margv[0]) && table == (char **)whichlist) {
+		return(complete_noint(word, dolist, el, table, stlen,
+		    cursor_argc - 1));
+	}
+
 	c = (struct ghs *) genget(arg, table, stlen);
 	if (c == (struct ghs *)-1 || c == 0 || Ambiguous(c))
 		return (CC_ERROR);
@@ -400,7 +407,7 @@ complete(EditLine *el, int ch, char **table, size_t stlen, char *arg)
 	if (cursor_argc > celems)
 		return (CC_ERROR);
 
-	if (NO_ARG(margv[0]))
+	if (NO_ARG(margv[0])) /* Completing "no " in command context. */
 		return(complete_nocmd(c, word, dolist, el, table, stlen,
 		    cursor_argc - 1));
 
@@ -477,6 +484,103 @@ complete_nocmd(struct ghs *nocmd, char *word, int dolist, EditLine *el,
 		/* Complete "no <partial command name>" */
 		return (complete_command(word, dolist, el, (char **)nocmdtab,
 		    sizeof(Command)));
+	}
+
+	return (CC_ERROR); /* invalid command in margv[1] */
+}
+
+unsigned char
+complete_noint(char *word, int dolist, EditLine *el,
+    char **whichlist, int stlen, int level)
+{
+	static struct intlist *nointtab, *nobridgetab;
+	static size_t notab_nitems;
+	struct intlist *table = (struct intlist *)whichlist;
+	struct intlist *notab, *c, *nc;
+	size_t table_nitems;
+	int i, j;
+
+	if (stlen != sizeof(*table))
+		return (CC_ERROR);
+
+	/* One-shot initialization since these are static variables. */
+	if ((bridge && nobridgetab == NULL) || (!bridge && nointtab == NULL)) {
+		if (bridge)
+			table_nitems = Bridgelist_nitems;
+		else
+			table_nitems = Intlist_nitems;
+		for (i = 0; i < table_nitems; i++) {
+			c = &table[i];
+			if (c->nocmd || c->name == NULL /* sentinel */)
+				notab_nitems++;
+		}
+		notab = calloc(notab_nitems, sizeof(*notab));
+		if (notab == NULL)
+			return (CC_ERROR);
+		/*
+		 * Copy commands which may be prefixed with "no".
+		 * Memory allocated for the notab array will be
+		 * freed when the nsh program exits.
+		 */
+		j = 0;
+		for (i = 0; i < table_nitems; i++) {
+			c = &table[i];
+			if (!c->nocmd)
+				continue;
+			if (j >= notab_nitems)
+				break;
+			nc = &notab[j++];
+			memcpy(nc, c, sizeof(*nc));
+		}
+
+		/* sentinel */
+		memset(&notab[notab_nitems - 1], 0, sizeof(*notab));
+
+		if (bridge)
+			nobridgetab = notab;
+		else
+			nointtab = notab;
+	} else {
+		if (bridge)
+			notab = nobridgetab;
+		else
+			notab = nointtab;
+	}
+
+	if (margc == 1) {
+		/* Complete "no " using the list of known no-commands. */
+		return (complete_command(word, dolist, el, (char **)notab,
+			stlen));
+	}
+
+	if (cursor_argc >= 2) {
+		/* The no-command's name has been completed. */
+		nc = NULL;
+		for (i = 0; i < notab_nitems - 1; i++) {
+			c = &notab[i];
+			if (strcmp(margv[1], c->name) == 0) {
+				nc = c;
+				break;
+			}
+		}
+		if (nc == NULL) /* should not happen */
+			return (CC_ERROR);
+
+		/* Complete "no <command name> [more arguments]" */
+		return (complete_args((struct ghs *)nc,
+		    margv[cursor_argc] ? margv[cursor_argc] : "",
+		    dolist, el, nc->table, nc->stlen, 0));
+	}
+
+	/* Check for a partially completed valid command name. */
+	for (i = 0; i < notab_nitems - 1; i++) {
+		c = &notab[i];
+		if (isprefix(margv[1], c->name) == 0)
+			continue;
+
+		/* Complete "no <partial command name>" */
+		return (complete_command(word, dolist, el, (char **)notab,
+		    stlen));
 	}
 
 	return (CC_ERROR); /* invalid command in margv[1] */
