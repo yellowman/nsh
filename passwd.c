@@ -144,7 +144,11 @@ enable(int argc, char **argv)
 			return 0;
 		}
 
-		if (priv != 1) {
+		if (config_mode != 1) {
+			printf("%% Configuration mode required\n");
+			return 0;
+		}
+		if (priv != 1) { /* redundant, but kept here just in case */
 			printf("%% Privilege required\n");
 			return 0;
 		}
@@ -169,8 +173,11 @@ enable(int argc, char **argv)
 			return 0;
 		}
 
-		/* privileged? */
-		if (priv != 1) {
+		if (config_mode != 1) {
+			printf("%% Configuration mode required\n");
+			return 0;
+		}
+		if (priv != 1) { /* redundant, but kept here just in case */
 			printf("%% Privilege required\n");
 			return 0;
 		}
