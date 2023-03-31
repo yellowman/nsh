@@ -1746,6 +1746,7 @@ int
 disable(void)
 {
 	priv = 0;
+	config_mode = 0;
 	return 0;
 }
 
