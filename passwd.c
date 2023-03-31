@@ -109,8 +109,8 @@ enable(int argc, char **argv)
 				return 1;
 			} else {
 				/* cant read password file */
-				printf("%% Unable to read password: %s\n",
-				       strerror(errno));
+				printf("%% Unable to read %s: %s\n",
+				       NSHPASSWD_TEMP, strerror(errno));
 				return 0;
 			}
 		}
@@ -182,7 +182,7 @@ enable(int argc, char **argv)
 		}
 
 		if (!isprefix(argv[2], "blowfish")) {
-			printf("%% Invalid cipher: %s\n", argv[3]);
+			printf("%% Invalid cipher: %s\n", argv[2]);
 			return 0;
 		}
 
