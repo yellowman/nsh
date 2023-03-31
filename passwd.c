@@ -25,6 +25,7 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
@@ -35,6 +36,7 @@
 
 int read_pass(char *, size_t);
 int write_pass(char *);
+int validate_cpass(char *, char *);
 int gen_salt(char *, size_t);
 
 char *bcrypt_gensalt(u_int8_t);
@@ -75,6 +77,67 @@ write_pass(char *cpass)
 	fclose(pwdhandle);
 
 	return (1);
+}
+
+/* sanity checks for crypted password input */
+int
+validate_cpass(char *cipher, char *cpass)
+{
+	const char *errstr;
+	char *rounds, *pw;
+
+	if (!isprefix(cipher, "blowfish")) {
+		printf("%% Invalid cipher: %s\n", cipher);
+		return 0;
+	}
+
+	if (strlen(cpass) > _PASSWORD_LEN) {
+		printf("%% Encrypted password is too long\n");
+		return 0;
+	}
+
+	/* version number: 2b for blowfish */
+	if (cpass[0] != '$' || cpass[1] != '2' || cpass[2] != 'b') {
+		printf("%% Invalid crypted password version number\n");
+		return 0;
+	}
+
+	/* Parse the number of rounds. */
+	if (cpass[3] != '$') {
+		printf("%% Number of blowfish rounds missing from crypted password\n");
+		return 0;
+	}
+	rounds = &cpass[4];
+	while (*rounds == '0') /* skip leading zeroes */
+		rounds++;
+
+	pw = strchr(rounds, '$');
+	if (pw == NULL) {
+		printf("%% Encrypted password string is missing\n");
+		return 0;
+	}
+
+	/* Copy rounds into NUL-terminated buffer for strtonum() */
+	rounds = strndup(rounds, pw - rounds);
+	if (rounds == NULL) {
+		printf("%% validate_cpass: strndup: %s\n", strerror(errno));
+		return 0;
+		
+	}
+	strtonum(rounds, 4, 31, &errstr);
+	free(rounds);
+	if (errstr) {
+		printf("%% Number of blowfish rounds is %s\n", errstr);
+		return 0;
+	}
+
+	pw++; /* skip over '$' separator */
+	if (pw[0] == '\0') {
+		printf("%% Encrypted password string is empty\n");
+		return 0;
+	}
+
+	return 1;
 }
 
 int
@@ -194,6 +257,9 @@ enable(int argc, char **argv)
 			printf("%% Privilege required\n");
 			return 0;
 		}
+
+		if (!validate_cpass(argv[2], argv[3]))
+			return 0;
 
 		/* set crypted pass */
 		strlcpy(pass, argv[3], sizeof(pass));
