@@ -296,7 +296,7 @@ struct intlist {
 	char **table;		/* next table for context completion */
 	int stlen;		/* struct length (for rows in next table) */
 	int (*handler)();       /* Routine to perform (for special ops) */
-	int bridge;             /* 0 == Interface, 1 == Bridge, 2 == Both */
+	int nocmd;		/* Can we specify 'no ...command...'? */
 };
 
 /* generic help /complt struct */
@@ -313,6 +313,8 @@ extern size_t cmdtab_nitems;
 extern struct intlist Intlist[];
 extern struct intlist Bridgelist[];
 extern struct intlist *whichlist;
+extern size_t Intlist_nitems;
+extern size_t Bridgelist_nitems;
 
 /* ieee80211.c */
 #define NWID 0
