@@ -149,6 +149,16 @@ enable(int argc, char **argv)
 			return 0;
 		}
 
+		if (strlen(argv[2]) < 8) {
+			printf("%% Password too short; at least 8 characters required\n");
+			return 0;
+		}
+		if (strlen(argv[2]) > _PASSWORD_LEN) {
+			printf("%% Password too long; at most %d characters allowed\n",
+			    _PASSWORD_LEN);
+			return 0;
+		}
+			
 		/* crypt plaintext and save as pass */
 		strlcpy(pass, argv[2], sizeof(pass));
 		gen_salt(salt, sizeof(salt));
