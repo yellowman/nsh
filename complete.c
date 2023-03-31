@@ -237,6 +237,51 @@ complete_local(char *word, int list, EditLine *el)
 	return (rv);
 }
 
+static unsigned char
+complete_showhelp(char *word, EditLine *el, char **table, int stlen,
+    char *cmdname)
+{
+	char insertstr[MAXPATHLEN];
+	char **c;
+	struct ghs *ghs;
+	StringList *helplist;
+	int i;
+	size_t wordlen;
+
+	helplist = sl_init();
+	wordlen = strlen(word);
+	for (c = table; *c != NULL; c = (char **)((char *)c + stlen)) {
+		ghs = (struct ghs *)c;
+		if (wordlen > strlen(ghs->name))
+			continue;
+		if (word[0] == '<')
+			continue;
+		if (strncmp(word, ghs->name, wordlen) == 0)
+			sl_add(helplist, ghs->name);
+	}
+
+	/*
+	 * If we match a non-arbitrary parameter (which are not enclosed
+	 * in pointy brackets, "<...>") then we can complete this parameter.
+	 */
+	if (helplist->sl_cur == 1 && helplist->sl_str[0][0] != '<') {
+		(void)strlcpy(insertstr, helplist->sl_str[0], sizeof insertstr);
+		(void)strlcat(insertstr, " ", sizeof insertstr);
+		if (el_insertstr(el, insertstr + wordlen) == -1)
+			return (CC_ERROR);
+		else
+			return (CC_REFRESH);
+	}
+
+	if (helplist->sl_cur > 0)
+		putc('\n', ttyout);
+	for (i = 0 ; i < helplist->sl_cur ; i++)
+		fprintf(ttyout, " %s %s\n", cmdname, helplist->sl_str[i]);
+
+        sl_free(helplist, 0);
+	return (CC_REDISPLAY);
+}
+
 unsigned char
 exit_i(EditLine *el, int ch)
 {
@@ -464,6 +509,10 @@ complete_args(struct ghs *c, char *word, int dolist, EditLine *el, char **table,
 		if (c->table == NULL)
 			return(CC_ERROR);
 		return (complete_subcommand(word, dolist, el, c->table, c->stlen));
+	case 'h':
+		if (c->table == NULL)
+			return(CC_ERROR);
+		return (complete_showhelp(word, el, c->table, c->stlen, c->name));
 	case 'n':			/* no complete */
 		return (CC_ERROR);
 	}

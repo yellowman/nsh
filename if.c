@@ -949,6 +949,21 @@ slaacd_is_running(void)
 	return check_daemon_control_socket(SLAACD_SOCK);
 }
 
+char *intiphelp[] = {
+	"<address>/<prefixlen>",
+	"<address>/<netmask>",
+	"autoconf",
+	"dhcp",
+	NULL
+};
+
+char *intip6help[] = {
+	"<address>/<prefixlen>",
+	"autoconf",
+	NULL
+};
+
+
 void
 intipusage(const char *cmdname, const char *msg)
 {
@@ -956,14 +971,8 @@ intipusage(const char *cmdname, const char *msg)
 	    msg ? "[" : "", msg ? msg : "", msg ? "]" : "");
 	printf("%% %s <address>/<netmask> %s%s%s\n", cmdname,
 	    msg ? "[" : "", msg ? msg : "", msg ? "]" : "");
-	if (strcmp(cmdname, "inet") == 0 ||
-	    strcmp(cmdname, "inet6") == 0) {
-		printf("%% no %s [<address>[/prefix-len]]\n", cmdname);
-		printf("%% no %s [<address>[/netmask]]\n", cmdname);
-	} else {
-		printf("%% no %s <address>[/prefix-len]\n", cmdname);
-		printf("%% no %s <address>[/netmask]\n", cmdname);
-	}
+	printf("%% no %s [<address>[/prefix-len]]\n", cmdname);
+	printf("%% no %s [<address>[/netmask]]\n", cmdname);
 }
 
 int
@@ -1050,13 +1059,19 @@ intip(char *ifname, int ifs, int argc, char **argv)
 	}
 
 	/* ignore 'address' keyword, don't print error */
-	if (strcmp(cmdname, "ip") == 0 && isprefix(argv[0], "address")) {
+	if (strcmp(cmdname, "ip") == 0 &&
+	    (isprefix(argv[0], "address") && !isprefix(argv[0], "autoconf"))) {
 		argc--;
 		argv++;
 	}
 
-	/* Support deprecated "ip dhcp" command for reading old configs. */
-	if (strcmp(cmdname, "ip") == 0 && isprefix(argv[0], "dhcp")) {
+	/*
+	 * Enable IPv4 DHCP with any of the following commands:
+	 *   inet dhcp, ip dhcp, inet autoconf, ip autoconf
+	 * Disable IPv4 DHCP if "no" is given for any of these commands.
+	 */
+	if (strcmp(cmdname, "inet6") != 0 &&
+	    (isprefix(argv[0], "dhcp") || isprefix(argv[0], "autoconf"))) {
 		if (dhcpleased_is_running()) {
 			/*
 			 * dhclient(8) has gone away as of OpenBSD 7.2+.
@@ -1095,6 +1110,22 @@ intip(char *ifname, int ifs, int argc, char **argv)
 			}
 			return (0);
 		}
+	}
+
+	/* Enable IPv6 SLAAC with "inet6 autoconf" and disable it with "no". */
+	if (strcmp(cmdname, "inet6") == 0 && isprefix(argv[0], "autoconf")) {
+		char *args[3] = { "no", "autoconf6", NULL };
+		char *args_set[2] = { "autoconf6", NULL };
+		char **argv_xflags;
+		int argc_xflags;
+		if (set) {
+			argv_xflags = args_set;
+			argc_xflags = nitems(args_set) - 1;
+		} else {
+			argv_xflags = args;
+			argc_xflags = nitems(args) - 1;
+		}
+		return intxflags(ifname, ifs, argc_xflags, argv_xflags);
 	}
 
 	memset(&ip, 0, sizeof(ip));
