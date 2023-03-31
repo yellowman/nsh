@@ -995,6 +995,18 @@ static char
 	halthelp[] =	"Halt the system",
 	helphelp[] =	"Print help information";
 
+char *secrettab[] = {
+	"<password>",
+	"<cipher> <hash>",
+	NULL
+};
+
+Menu enabletab[] = {
+	{ "<cr>",	"Enable privileged mode", CMPL0 0, 0, 0, 0, enable },
+	{ "secret",	"Set privileged mode secret", CMPL(h) secrettab, sizeof(char *), 0, 0, enable },
+	{ 0, 0, 0, 0, 0 }
+};
+
 /*
  * Primary commands, will be included in help output
  */
@@ -1016,7 +1028,7 @@ Command cmdtab[] = {
 	{ "ddb",	ddbhelp,	CMPL(ta) (char **)ddbtab, sizeof(Menu), ipcmd,		1, 1, 1, 0 },
 	{ "pipex",	pipexhelp,	CMPL(ta) (char **)pipextab, sizeof(Menu), ipcmd,	1, 1, 1, 0 },
 	{ "flush",	flushhelp,	CMPL(ta) (char **)flushlist, sizeof(Menu), flushcmd,	1, 0, 0, 0 },
-	{ "enable",	enablehelp,	CMPL0 0, 0, enable,		0, 0, 0, 0 },
+	{ "enable",	enablehelp,	CMPL(ta) (char **)enabletab, sizeof(Menu), enable,	0, 0, 0, 0 },
 	{ "disable",	disablehelp,	CMPL0 0, 0, disable,		1, 0, 0, 0 },
 	{ "route",	routehelp,	CMPL0 0, 0, route,		1, 1, 1, 0 },
 	{ "pf",		pfhelp,		CMPL(t) (char **)ctl_pf, ssctl, ctlhandler,	1, 1, 0, 1 },
