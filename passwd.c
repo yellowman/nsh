@@ -36,6 +36,7 @@
 int read_pass(char *, size_t);
 int write_pass(char *);
 int gen_salt(char *, size_t);
+void secretusage(void);
 
 char *bcrypt_gensalt(u_int8_t);
 
@@ -82,6 +83,15 @@ gen_salt(char *salt, size_t saltlen)
 	return 1;
 }
 
+void
+secretusage(void)
+{
+	printf("%% enable secret <password>\t\tSet password"
+	       "(plaintext)\n");
+	printf("%% enable secret <cipher> <hash>\t\tSet"
+	       " password(ciphertext)\n");
+}
+
 /*
  * enable privileged mode
  */
@@ -126,14 +136,15 @@ enable(int argc, char **argv)
 	case 2:
 		if (argv[1][0] == '?') {
 			/* print help */
-			printf("%% enable\t\t\t\tenable privileged mode\n");
-			printf("%% enable ?\t\t\t\tShow Options\n");
-			printf("%% enable secret <password>\t\tSet password"
-			       "(plaintext)\n");
-			printf("%% enable secret <cipher> <hash>\t\tSet"
-			       " password(ciphertext)\n");
-				return 1;
+			printf("%% enable\t\t\t\tEnable privileged mode\n");
+			printf("%% enable ?\t\t\t\tPrint help information\n");
+			secretusage();
+			return 1;
 		} else {
+			if (isprefix(argv[1], "secret")) {
+				secretusage();
+				return 1;
+			}
 			printf("%% Invalid argument: %s\n", argv[1]);
 			return 0;
 		}
