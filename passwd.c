@@ -48,7 +48,10 @@ read_pass(char *pass, size_t size)
 	pwdhandle = fopen(NSHPASSWD_TEMP, "r");
 	if (pwdhandle == NULL)
 		return (0);
-	fgets(pass, size, pwdhandle);
+	if (fgets(pass, size, pwdhandle) == NULL && ferror(pwdhandle)) {
+		fclose(pwdhandle);
+		return (0);
+	}
 	fclose(pwdhandle);
 
 	return (1);
