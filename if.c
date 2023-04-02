@@ -1346,8 +1346,7 @@ ipv6ll_db_store(struct sockaddr_in6 *sin6, struct sockaddr_in6 *sin6mask,
 	    IN6_IS_ADDR_MC_INTFACELOCAL(&sin6->sin6_addr)) {
 		sin6->sin6_addr.s6_addr[2] = sin6->sin6_addr.s6_addr[3] = 0;
 		sin6->sin6_scope_id = 0;
-		db_delete_flag_x_ctl_data("ipv6linklocal", ifname,
-		    netname6(sin6, sin6mask));
+		db_delete_flag_x_ctl("ipv6linklocal", ifname);
 		if (dbflag != DB_X_REMOVE)
 			db_insert_flag_x("ipv6linklocal", ifname, 0,
 			    dbflag, netname6(sin6, sin6mask));
