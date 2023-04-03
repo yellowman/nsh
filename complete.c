@@ -30,7 +30,6 @@
 
 #include <ctype.h>
 #include <err.h>
-#include <errno.h>
 #include <dirent.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -40,7 +39,6 @@
 #include <net/if.h>
 #include <sys/param.h>
 #include <sys/tty.h>
-#include <unistd.h>
 #include "editing.h"
 #include "stringlist.h"
 #include "externs.h"
@@ -56,7 +54,6 @@ static unsigned char complete_command(char *, int, EditLine *, char **, int);
 static unsigned char complete_subcommand(char *, int, EditLine *, char **, int);
 static unsigned char complete_local(char *, int, EditLine *);
 static unsigned char complete_ifname(char *, int, EditLine *);
-static unsigned char complete_ifbridge(char *, int, EditLine *);
 static unsigned char complete_nocmd(struct ghs *, char *, int, EditLine *,
 				   char **, int, int);
 static unsigned char complete_noint(char *, int, EditLine *, char **, int, int);
@@ -345,42 +342,6 @@ complete_ifname(char *word, int list, EditLine *el)
         return (rv);
 }
 
-unsigned char
-complete_ifbridge(char *word, int list, EditLine *el)
-{
-	StringList *words;
-	size_t wordlen;
-	unsigned char rv;   
-	struct if_nameindex *ifn_list, *ifnp;
-	int ifs;
-
-	words = sl_init();
-	wordlen = strlen(word);
-
-	if ((ifn_list = if_nameindex()) == NULL)
-		return 0;
-
-	if ((ifs = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-		printf("%% complete_ifbridge: %s\n", strerror(errno));
-		return(1);
-	}
-
-	for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++) {
-		if (wordlen > strlen(ifnp->if_name))
-			continue;
-		if (!is_bridge(ifs, ifnp->if_name))
-			continue;
-		if (strncmp(word, ifnp->if_name, wordlen) == 0)
-			sl_add(words, ifnp->if_name);
-	}
-
-	rv = complete_ambiguous(word, list, words, el);
-	if_freenameindex(ifn_list);
-	sl_free(words, 0);
-	close(ifs);
-	return (rv);
-}
-
 /*
  * Generic complete routine
  */
@@ -645,9 +606,6 @@ complete_args(struct ghs *c, char *word, int dolist, EditLine *el, char **table,
 	case 'i':
 	case 'I':
 		return (complete_ifname(word, dolist, el));
-	case 'b':
-	case 'B':
-		return (complete_ifbridge(word, dolist, el));
 	case 't':	/* points to a table */
 	case 'T':
 		if (c->table == NULL)
