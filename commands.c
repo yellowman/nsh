@@ -220,6 +220,95 @@ Menu showlist[] = {
 	{ 0, 0, 0, 0, 0 }
 };
 
+/*
+ * Data structures and routines for the main CLI
+ */
+
+static char
+	hostnamehelp[] = "Set system hostname",
+	interfacehelp[] = "Modify interface parameters",
+	rtablehelp[] = 	"Routing table switch",
+	grouphelp[] =	"Modify group attributes",
+	arphelp[] = 	"Static ARP set",
+#ifdef notyet
+	parphelp[] =	"Proxy ARP set",
+#endif
+	ndphelp[] = 	"Static NDP set",
+	nameserverhelp[] ="set or remove static DNS nameservers",
+	pfhelp[] =	"Packet filter control",
+	ospfhelp[] =	"OSPF control",
+	ospf6help[] = 	"OSPF6 control",
+	eigrphelp[] =	"EIGRP control",
+	bgphelp[] =	"BGP control",
+	riphelp[] =	"RIP control",
+	ldphelp[] =	"LDP control",
+	relayhelp[] =	"Relay control",
+	ipsechelp[] =	"IPsec IKEv1 control",
+	ikehelp[] =	"IPsec IKEv2 control",
+	radhelp[] =	"Router advertisement control",
+	dvmrphelp[] = 	"DVMRP control",
+	sasynchelp[] =	"SA synchronization control",
+	dhcphelp[] =	"DHCP server control",
+	snmphelp[] =	"SNMP server control",
+	smtphelp[] =	"SMTP server control",
+	ldaphelp[] =	"LDAP server control",
+	sshdhelp[] =	"SSH server control",
+	ntphelp[] =	"NTP synchronization control",
+	nppphelp[] =	"PPP server control",
+	ifstatehelp[] =	"ifstate server control",
+	ftpproxyhelp[] ="ftp-proxy server control",
+	tftpproxyhelp[] ="tftp-proxy server control",
+	tftphelp[] =	"TFTP server control",
+	resolvhelp[] =	"Resolver configuration control",
+        motdhelp[] =    "Message of-the-day",
+	inethelp[] =	"Inet super-server control",
+	bridgehelp[] =	"Modify bridge parameters",
+	showhelp[] =	"Show system information",
+	iphelp[] =	"Set IP networking parameters",
+	ip6help[] =	"Set IPv6 networking parameters",
+	mplshelp[] =	"Set MPLS network parameters",
+	ddbhelp[] =	"Set DDB parameters",
+	pipexhelp[] =	"Set PIPEX parameters",
+	flushhelp[] =	"Flush system tables",
+	enablehelp[] =	"Enable privileged mode",
+	disablehelp[] =	"Disable privileged mode",
+	routehelp[] =	"Add a host or network route",
+	pinghelp[] = 	"Send IPv4 ICMP echo request",
+	ping6help[] =   "Send IPv6 ICMP echo request",
+	tracerthelp[] =	"Print the route to IPv4 host",
+	tracert6help[] ="Print the route to IPv6 host",
+	sshhelp[] =	"SSH connection to remote host",
+	telnethelp[] =	"Telnet connection to remote host",
+	quithelp[] =	"Close current connection",
+	exithelp[] =	"Leave configuration mode and return to privileged mode",
+	verbosehelp[] =	"Set verbose diagnostics",
+	editinghelp[] = "Set command line editing",
+	confighelp[] =	"Set configuration mode",
+	whohelp[] =	"Display system users",
+	shellhelp[] =	"Invoke a subshell",
+	savehelp[] =	"Save the current configuration",
+	nreboothelp[] =	"Reboot the system",
+	halthelp[] =	"Halt the system",
+	helphelp[] =	"Print help information";
+
+char *secrettab[] = {
+	"<password>",
+	"<cipher> <hash>",
+	NULL
+};
+
+Menu enabletab[] = {
+	{ "<cr>",	"Enable privileged mode", CMPL0 0, 0, 0, 0, enable },
+	{ "secret",	"Set privileged mode secret", CMPL(h) secrettab, sizeof(char *), 0, 0, enable },
+	{ 0, 0, 0, 0, 0 }
+};
+
+char *rtabletab[] = {
+	"<cr>",
+	"<table id> [name]",
+	NULL
+};
+
 static int
 showcmd(int argc, char **argv)
 {
@@ -958,94 +1047,6 @@ int_exit(void)
 	return 1; /* leave interface config mode */
 }
 
-/*
- * Data structures and routines for the main CLI
- */
-
-static char
-	hostnamehelp[] = "Set system hostname",
-	interfacehelp[] = "Modify interface parameters",
-	rtablehelp[] = 	"Routing table switch",
-	grouphelp[] =	"Modify group attributes",
-	arphelp[] = 	"Static ARP set",
-#ifdef notyet
-	parphelp[] =	"Proxy ARP set",
-#endif
-	ndphelp[] = 	"Static NDP set",
-	nameserverhelp[] ="set or remove static DNS nameservers",
-	pfhelp[] =	"Packet filter control",
-	ospfhelp[] =	"OSPF control",
-	ospf6help[] = 	"OSPF6 control",
-	eigrphelp[] =	"EIGRP control",
-	bgphelp[] =	"BGP control",
-	riphelp[] =	"RIP control",
-	ldphelp[] =	"LDP control",
-	relayhelp[] =	"Relay control",
-	ipsechelp[] =	"IPsec IKEv1 control",
-	ikehelp[] =	"IPsec IKEv2 control",
-	radhelp[] =	"Router advertisement control",
-	dvmrphelp[] = 	"DVMRP control",
-	sasynchelp[] =	"SA synchronization control",
-	dhcphelp[] =	"DHCP server control",
-	snmphelp[] =	"SNMP server control",
-	smtphelp[] =	"SMTP server control",
-	ldaphelp[] =	"LDAP server control",
-	sshdhelp[] =	"SSH server control",
-	ntphelp[] =	"NTP synchronization control",
-	nppphelp[] =	"PPP server control",
-	ifstatehelp[] =	"ifstate server control",
-	ftpproxyhelp[] ="ftp-proxy server control",
-	tftpproxyhelp[] ="tftp-proxy server control",
-	tftphelp[] =	"TFTP server control",
-	resolvhelp[] =	"Resolver configuration control",
-        motdhelp[] =    "Message of-the-day",
-	inethelp[] =	"Inet super-server control",
-	bridgehelp[] =	"Modify bridge parameters",
-	showhelp[] =	"Show system information",
-	iphelp[] =	"Set IP networking parameters",
-	ip6help[] =	"Set IPv6 networking parameters",
-	mplshelp[] =	"Set MPLS network parameters",
-	ddbhelp[] =	"Set DDB parameters",
-	pipexhelp[] =	"Set PIPEX parameters",
-	flushhelp[] =	"Flush system tables",
-	enablehelp[] =	"Enable privileged mode",
-	disablehelp[] =	"Disable privileged mode",
-	routehelp[] =	"Add a host or network route",
-	pinghelp[] = 	"Send IPv4 ICMP echo request",
-	ping6help[] =   "Send IPv6 ICMP echo request",
-	tracerthelp[] =	"Print the route to IPv4 host",
-	tracert6help[] ="Print the route to IPv6 host",
-	sshhelp[] =	"SSH connection to remote host",
-	telnethelp[] =	"Telnet connection to remote host",
-	quithelp[] =	"Close current connection",
-	exithelp[] =	"Leave configuration mode and return to privileged mode",
-	verbosehelp[] =	"Set verbose diagnostics",
-	editinghelp[] = "Set command line editing",
-	confighelp[] =	"Set configuration mode",
-	whohelp[] =	"Display system users",
-	shellhelp[] =	"Invoke a subshell",
-	savehelp[] =	"Save the current configuration",
-	nreboothelp[] =	"Reboot the system",
-	halthelp[] =	"Halt the system",
-	helphelp[] =	"Print help information";
-
-char *secrettab[] = {
-	"<password>",
-	"<cipher> <hash>",
-	NULL
-};
-
-Menu enabletab[] = {
-	{ "<cr>",	"Enable privileged mode", CMPL0 0, 0, 0, 0, enable },
-	{ "secret",	"Set privileged mode secret", CMPL(h) secrettab, sizeof(char *), 0, 0, enable },
-	{ 0, 0, 0, 0, 0 }
-};
-
-char *rtabletab[] = {
-	"<cr>",
-	"<table id> [name]",
-	NULL
-};
 
 /*
  * Primary commands, will be included in help output
