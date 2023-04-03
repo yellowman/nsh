@@ -325,7 +325,10 @@ complete_ifname(char *word, int list, EditLine *el)
                         sl_add(words, ifnp->if_name);
         }
 
-	if (wordlen <= strlen(status_cmd) &&
+	/* Handle the pseudo command "show interface status". */
+	if (margc >= 2 && isprefix(margv[0], "show") &&
+	    isprefix(margv[1], "interface") &&
+	    wordlen <= strlen(status_cmd) &&
 	    strncmp(word, status_cmd, wordlen) == 0) {
 		char *s = strdup(status_cmd);
 		if (s == NULL)
