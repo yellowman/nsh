@@ -1011,6 +1011,12 @@ Menu enabletab[] = {
 	{ 0, 0, 0, 0, 0 }
 };
 
+char *rtabletab[] = {
+	"<cr>",
+	"<table id> [name]",
+	NULL
+};
+
 /*
  * Primary commands, will be included in help output
  */
@@ -1019,7 +1025,7 @@ Menu enabletab[] = {
 Command cmdtab[] = {
 	{ "hostname",	hostnamehelp,	CMPL0 0, 0, hostname,		1, 1, 0, 0 },
 	{ "interface",	interfacehelp,	CMPL(i) 0, 0, interface,	1, 1, 1, 1 },
-	{ "rtable",	rtablehelp,	CMPL0 0, 0, rtable,		0, 0, 1, 2 },
+	{ "rtable",	rtablehelp,	CMPL(h) rtabletab, sizeof(char *), rtable,		0, 0, 1, 2 },
 	{ "group",	grouphelp,	CMPL0 0, 0, group,		1, 1, 1, 0 },
 	{ "arp",	arphelp,	CMPL0 0, 0, arpset,		1, 1, 1, 0 },
 	{ "ndp",	ndphelp,	CMPL0 0, 0, ndpset,		1, 1, 1, 0 },
@@ -1563,7 +1569,7 @@ rtable(int argc, char **argv)
 		set = 1;
 	}
 
-	if ((set && argc < 2) || (!set && argc > 2) || (!set && argc < 2)) {
+	if (argc < 2) {
 		printf("%% rtable <table id> [name]\n");
 		printf("%% no rtable <table id>\n");
 		return 1;
