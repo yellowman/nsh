@@ -163,7 +163,7 @@ quit(void)
 
 Menu showlist[] = {
 	{ "hostname",	"Router hostname",	CMPL0 0, 0, 0, 0, show_hostname },
-	{ "interface",	"Interface config",	CMPL(i) 0, 0, 0, 1, show_int },
+	{ "interface",	"Interface config",	CMPL(i) 0, 0, 0, 2, show_int },
 	{ "autoconf",	"IPv4/IPv6 autoconf state", CMPL(i) 0, 0, 0, 1, show_autoconf },
 	{ "route",	"IPv4 route table or route lookup", CMPL0 0, 0, 0, 1, pr_routes },
 	{ "route6",	"IPv6 route table or route lookup", CMPL0 0, 0, 0, 1, pr_routes6 },
@@ -724,6 +724,7 @@ interface(int argc, char **argv, char *modhvar)
 {
 	int ifs, set = 1;
 	char *tmp;
+	char *ifunit = NULL;
 	struct intlist *i;	/* pointer to current command */
 	struct ifreq ifr;
 
@@ -733,8 +734,13 @@ interface(int argc, char **argv, char *modhvar)
 			argc--;
 			set = 0;
 		}
-	
-		if (argc != 2) {
+		if (argc == 3) {
+			/*
+			 * Allow "interface-name interface-number" as some
+			 * network switches do: interface em 0
+			 */
+			ifunit = argv[2];
+		} else if (argc != 2) {
 			printf("%% [no] interface <interface name>\n");
 			return(0);
 		}
@@ -755,6 +761,17 @@ interface(int argc, char **argv, char *modhvar)
 
 	ifname[IFNAMSIZ-1] = '\0';
 	strlcpy(ifname, tmp, IFNAMSIZ);
+	if (ifunit) {
+		const char *errstr;
+		strtonum(ifunit, 0, INT_MAX, &errstr);
+		if (errstr) {
+			printf("%% interface unit %s is %s\n", ifunit, errstr);
+			return(1);
+		}
+		strlcat(ifname, ifunit, sizeof(ifname));
+		printf("%% Pro Tip: it is interface %s rather than \"%s %s\"\n",
+		    ifname, tmp, ifunit);
+	}
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 
 	ifs = socket(AF_INET, SOCK_DGRAM, 0);

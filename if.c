@@ -234,12 +234,30 @@ show_int(int argc, char **argv)
 	int ippntd = 0;
 	int physrt, physttl;
 	time_t c;
-	char *type, *lladdr, *ifname = NULL;
+	char *type, *lladdr;
+	char ifname[IFNAMSIZ];
 
 	char tmp_str[512], tmp_str2[512], ifdescr[IFDESCRSIZE];
 
-	if (argc == 3)
-		ifname = argv[2];
+	memset(ifname, 0, sizeof(ifname));
+
+	if (argc == 4) {
+		/*
+		 * Allow "interface-name interface-number" as some
+		 * network switches do: interface em 0
+		 */
+		const char *errstr;
+		strlcpy(ifname, argv[2], sizeof(ifname));
+		strtonum(argv[3], 0, INT_MAX, &errstr);
+		if (errstr) {
+			printf("%% interface unit %s is %s\n", argv[3], errstr);
+			return(1);
+		}
+		strlcat(ifname, argv[3], sizeof(ifname));
+		printf("%% Pro Tip: it is interface %s rather than \"%s %s\"\n",
+		    ifname, argv[2], argv[3]);
+	} if (argc == 3)
+		strlcpy(ifname, argv[2], sizeof(ifname));
 
 	if ((ifs = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
 		printf("%% show_int: %s\n", strerror(errno));
@@ -249,7 +267,7 @@ show_int(int argc, char **argv)
 	/*
 	 * Show all interfaces when no ifname specified.
 	 */
-	if (ifname == NULL) {
+	if (ifname[0] == '\0') {
 		if ((ifn_list = if_nameindex()) == NULL) {
 			printf("%% show_int: if_nameindex failed\n");
 			close(ifs);
