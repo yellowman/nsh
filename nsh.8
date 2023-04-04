@@ -214,6 +214,7 @@ nsh(p)/pf disable
 .Tg disable
 .Tg unprivileged
 .Tg shell
+.Ic disable
 .Nm
 shell starts as an unprivileged prompt which displays as the text of the FQDN
 (fully qualified domain name) of the machine followed by a forward slash.
@@ -229,6 +230,7 @@ firewall.machinename.com/
 .Tg enable
 .Tg privileged
 .Tg shell
+.Ic enable
 The privileged shell is accessed using the enable command.
 It allows the administrator to view the running
 and other diagnostic information such as the
@@ -250,7 +252,7 @@ firewall.machinename.com(p)/
 .El
 .Tg configure
 .Tg config
-.Cm configure
+.Ic configure
 This command allows the administrator to make changes to the system
 configuration.
 This additional command is a safeguard against accidental configuration
