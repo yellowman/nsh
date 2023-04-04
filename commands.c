@@ -671,6 +671,8 @@ struct intlist Bridgelist[] = {
 /* Help commands */
 	{ "?",		"Options",				CMPL0 0, 0, int_help, 0 },
 	{ "help",	0,					CMPL0 0, 0, int_help, 0 },
+	{ "exit",	"Leave bridge config mode and return to global config mode ",
+								CMPL0 0, 0, int_exit },
 	{ 0, 0, 0, 0, 0, 0 }
 };
 
