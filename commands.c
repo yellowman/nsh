@@ -1041,6 +1041,16 @@ char *rtabletab[] = {
 	NULL
 };
 
+char *demotecountertab[] = {
+	"[demotion-counter]",
+	NULL
+};
+
+Menu grouptab[] = {
+	{ "carpdemote",	"Set carp demote counter", CMPL(h) demotecountertab, sizeof(char *), 0, 0, group },
+	{ 0, 0, 0, 0, 0 }
+};
+
 /*
  * Primary commands, will be included in help output
  */
@@ -1050,7 +1060,7 @@ Command cmdtab[] = {
 	{ "hostname",	hostnamehelp,	CMPL0 0, 0, hostname,		1, 1, 0, 0 },
 	{ "interface",	interfacehelp,	CMPL(i) 0, 0, interface,	1, 1, 1, 1 },
 	{ "rtable",	rtablehelp,	CMPL(h) rtabletab, sizeof(char *), rtable,		0, 0, 1, 2 },
-	{ "group",	grouphelp,	CMPL0 0, 0, group,		1, 1, 1, 0 },
+	{ "group",	grouphelp,	CMPL(gth) (char **)grouptab, sizeof(Menu), group, 1, 1, 1, 0 },
 	{ "arp",	arphelp,	CMPL0 0, 0, arpset,		1, 1, 1, 0 },
 	{ "ndp",	ndphelp,	CMPL0 0, 0, ndpset,		1, 1, 1, 0 },
 	{ "nameserver",	nameserverhelp,	CMPL0 0, 0, nameserverset,	1, 1, 1, 0 },

@@ -36,6 +36,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/ioctl.h>
 #include <ifaddrs.h>
 #include <net/if.h>
 #include <sys/param.h>
@@ -56,6 +57,7 @@ static unsigned char complete_command(char *, int, EditLine *, char **, int);
 static unsigned char complete_subcommand(char *, int, EditLine *, char **, int);
 static unsigned char complete_local(char *, int, EditLine *);
 static unsigned char complete_ifname(char *, int, EditLine *);
+static unsigned char complete_ifgroup(char *, int, EditLine *);
 static unsigned char complete_ifbridge(char *, int, EditLine *);
 static unsigned char complete_nocmd(struct ghs *, char *, int, EditLine *,
 				   char **, int, int);
@@ -258,17 +260,18 @@ complete_showhelp(char *word, EditLine *el, char **table, int stlen,
 		ghs = (struct ghs *)c;
 		if (wordlen > strlen(ghs->name))
 			continue;
-		if (word[0] == '<')
+		if (word[0] == '<' || word[0] == '[')
 			continue;
 		if (strncmp(word, ghs->name, wordlen) == 0)
 			sl_add(helplist, ghs->name);
 	}
 
 	/*
-	 * If we match a non-arbitrary parameter (which are not enclosed
-	 * in pointy brackets, "<...>") then we can complete this parameter.
+	 * If we match a non-arbitrary parameter (which are not enclosed in
+	 * brackets, "<...>" or "[...]") then we can complete this parameter.
 	 */
-	if (helplist->sl_cur == 1 && helplist->sl_str[0][0] != '<') {
+	if (helplist->sl_cur == 1 && helplist->sl_str[0][0] != '<' &&
+	    helplist->sl_str[0][0] != '[') {
 		(void)strlcpy(insertstr, helplist->sl_str[0], sizeof insertstr);
 		(void)strlcat(insertstr, " ", sizeof insertstr);
 		if (el_insertstr(el, insertstr + wordlen) == -1)
@@ -346,6 +349,64 @@ complete_ifname(char *word, int list, EditLine *el)
 }
 
 unsigned char
+complete_ifgroup(char *word, int list, EditLine *el)
+{
+	StringList *words;
+	size_t wordlen;
+	unsigned char rv;   
+	struct ifgroupreq ifgr;
+	struct ifg_req *ifg;
+	int ifs;
+	u_int len, ngroups, i;
+
+	words = sl_init();
+	wordlen = strlen(word);
+
+	bzero(&ifgr, sizeof(ifgr));
+
+	if ((ifs = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+		printf("%% complete_ifgroup: %s\n", strerror(errno));
+		return(1);
+	}
+
+	if (ioctl(ifs, SIOCGIFGLIST, (caddr_t)&ifgr) == -1) {
+		printf("%% SIOCGIFGLIST: %s\n", strerror(errno));
+		close(ifs);
+		return(1);
+	}
+
+	len = ifgr.ifgr_len;
+	ifgr.ifgr_groups = calloc(1, len);
+	if (ifgr.ifgr_groups == NULL) {
+		printf("%% calloc: %s\n", strerror(errno));
+		close(ifs);
+		return(1);
+	}
+
+	if (ioctl(ifs, SIOCGIFGLIST, (caddr_t)&ifgr) == -1) {
+		printf("%% SIOCGIFGLIST: %s\n", strerror(errno));
+		free(ifgr.ifgr_groups);
+		close(ifs);
+		return(1);
+	}
+
+	ngroups = len / sizeof(ifgr.ifgr_groups[0]);
+	for (i = 0; i < ngroups; i++) {
+		ifg = &ifgr.ifgr_groups[i];
+		if (wordlen > strlen(ifg->ifgrq_group))
+			continue;
+		if (strncmp(word, ifg->ifgrq_group, wordlen) == 0)
+			sl_add(words, ifg->ifgrq_group);
+	}
+
+	rv = complete_ambiguous(word, list, words, el);
+	sl_free(words, 0);
+	free(ifgr.ifgr_groups);
+	close(ifs);
+	return (rv);
+}
+
+unsigned char
 complete_ifbridge(char *word, int list, EditLine *el)
 {
 	StringList *words;
@@ -391,7 +452,7 @@ complete(EditLine *el, int ch, char **table, size_t stlen, char *arg)
 	static int lastc_argc, lastc_argo;
 	struct ghs *c;
 	const LineInfo *lf;
-	int celems, dolist;
+	int celems, dolist, level, i;
 	size_t len;
 
 	(void)ch;	/* not used */
@@ -453,8 +514,20 @@ complete(EditLine *el, int ch, char **table, size_t stlen, char *arg)
 		return(complete_nocmd(c, word, dolist, el, table, stlen,
 		    cursor_argc - 1));
 
-	return(complete_args(c, word, dolist, el, table, stlen,
-	    cursor_argc - 1));
+	level = cursor_argc - 1;
+	i = 1;
+	/*
+	 * Switch to a nested command table if needed.
+	 * XXX CMPL(h) is using elements of size < sizeof(struct ghs)
+	 */
+	while (c->table && i < cursor_argc - 1 && c->stlen >= sizeof(*c)) {
+		c = (struct ghs *)c->table;
+		table = c->table;
+		stlen = c->stlen;
+		level = 0; /* table has been switched */
+		i++;
+	}
+	return(complete_args(c, word, dolist, el, table, stlen, level));
 }
 
 unsigned char
@@ -645,6 +718,9 @@ complete_args(struct ghs *c, char *word, int dolist, EditLine *el, char **table,
 	case 'i':
 	case 'I':
 		return (complete_ifname(word, dolist, el));
+	case 'g':
+	case 'G':
+		return (complete_ifgroup(word, dolist, el));
 	case 'b':
 	case 'B':
 		return (complete_ifbridge(word, dolist, el));
