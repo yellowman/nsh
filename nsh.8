@@ -1,4 +1,4 @@
-.\"     $OpenBSD: nsh.8,v 1.1 2023/03/15 23:22:00 UTC chrisc Exp $
+.\"     $OpenBSD: nsh.8,v 1.1 2023/04/04 23:22:00 UTC chrisc Exp $
 .\"
 .\" Copyright (c) 2002-2023 Chris Cappuccio.  All rights reserved.
 .\"
@@ -24,7 +24,7 @@
 .\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd $Mdocdate: March 15 2023 $
+.Dd $Mdocdate: April 04 2023 $
 .Dt NSH 8
 .Os
 .Sh NAME
@@ -132,12 +132,12 @@ arrow keys.
 It is possible to repeat the commands from the command history.
 .Pp
 Any command can be abbreviated as long as the abbreviation is not ambiguous.
-e.g. 'show running-config' can be abbreviated to 'sho run'.
+E.g. 'show running-config' can be abbreviated to 'sho run'.
 .Pp
 If the user enters a command that is ambiguous
 .Nm
 warns the user with 'Ambiguous argument' message,
-e.g. ambiguous command entry.
+E.g. ambiguous command entry.
 .Bd -literal -offset indent
 nsh/show i
 % Ambiguous argument i
@@ -146,18 +146,35 @@ nsh/show i
 .Nm
 has double <Tab> command line completion for user convenience if the command
 is not ambiguous double <Tab> completes the command.
+.Pp
+E.g show all available valid commands  with double tab key sequence <tab><tab>
+.Bd -literal -offset indent
+nsh(config-p)/
+!		exit		ipsec		ping	smtp
+?		flush		ldap		ping6	snmp
+arp		ftp-proxy	ldp		pipex	ssh
+bgp		group		motd		quit	sshd
+bridge		halt		mpls		rad	telnet
+configure	help		nameserver	reboot	tftp
+ddb		hostname	ndp		relay	tftp-proxy
+dhcp		ifstate		no		resolv	traceroute
+disable		ike		nppp		rip	traceroute6
+dvmrp		inet		ntp		route	verbose
+editing		interface	ospf		rtable	who
+eigrp		ip		ospf6		sasync	write-config
+enable		ip6		pf		show
+nsh(config-p)/
+.Ed
 If what is typed is ambiguous double tab presents the administrator
 with the available command line options that match what has been typed thus
 far.
-.Bl -dash
-.It
-E.g. command line completion display
+.Pp
+E.g. command line completion display for all commands begining with i
 .Bd -literal -offset indent
 nsh(p)/i
 ifstate         inet            ip              ipsec
 ike             interface       ip6
 .Ed
-.El
 .Ss Command History
 Use the up arrow on most keyboards to review the previous commands entered in
 the current session.
@@ -193,10 +210,15 @@ nsh(p)/pf disable
 %pf disabled
 .Ed
 .El
-.Ss Standard Prompt vs Privileged Prompt
+.Ss Standard Prompt vs Privileged Prompt vs Configuration mode Prompt
+.Tg disable
+.Tg unprivileged
+.Tg shell
 .Nm
 shell starts as an unprivileged prompt which displays as the text of the FQDN
 (fully qualified domain name) of the machine followed by a forward slash.
+This unprivileged prompt will allow only the very basic diagnostic command
+and does not allow viewing sensitive configuration information.
 .Bl -dash
 .It
 e.g. standard prompt of the device firewall.machine.com
@@ -204,28 +226,64 @@ e.g. standard prompt of the device firewall.machine.com
 firewall.machinename.com/
 .Ed
 .El
+.Tg enable
+.Tg privileged
+.Tg shell
 The privileged shell is accessed using the enable command.
-The privileged shell has the FQDN of the machine followed by (p) to indicate
-privileged and followed by a /
+It allows the administrator to view the running
+and other diagnostic information such as the
+.Cm show
+command.
+If external commands are enabled, external commands can be involked by
+the user in privileged mode.
+The privileged mode alone will not allow changes to the system using
+.Nm
+shell.
+The privileged shell is indicated by the FQDN of the machine followed
+by (p) and followed by a /
 .Bl -dash
 .It
-e.g. privileged shell prompt of the device firewall.machine.com
+E.g. privileged shell prompt of the device firewall.machine.com
 .Bd -literal -offset indent
 firewall.machinename.com(p)/
 .Ed
 .El
+.Tg configure
+.Tg config
+.Cm configure
+This command allows the administrator to make changes to the system
+configuration.
+This additional command is a safeguard against accidental configuration
+of a system.
+I.e. a user can run privileged diagnostic commands, however without
+configuration mode being enabled,
+.Nm
+will not permit any modifications to the system configuration through
+.Nm
+shell
+.Pp
+E.g. user elevating privileges from privilege disabled, to enabled privilege
+mode and finally configuration mode on a system called hostname.nsh.org
+.Bd -literal -offset indent
+% NSH v1.1
+hostname.nsh.org/
+hostname.nsh.org/enable
+hostname.nsh.org(p)/
+hostname.nsh.org(p)/configure
+hostname.nsh.org(config-p)/
+.Ed
 .Pp
 For the purposes of this manual, any examples the machine is called
 .Nm
 .
 .Bl -dash
 .It
-e.g. standard prompt appearing in examples in this manual
+E.g. standard prompt appearing in examples in this manual
 .Bd -literal -offset indent
 nsh/
 .Ed
 .It
-e.g. privileged prompt appearing in examples in this manual
+E.g. privileged prompt appearing in examples in this manual
 .Bd -literal -offset indent
 nsh(p)/
 .Ed
@@ -4155,10 +4213,8 @@ with all the privileges of the
 root user.
 The design of
 .Ox
-requires root privileges to change many aspects of
-the systems network stack. 
-The nwrwapper binary is a binary that hardcodes the
-doas request to launch
+requires root privileges to change many aspects of the systems network stack.
+The nwrwapper binary is a binary that hardcodes the doas request to launch
 .Nm
 on
 .Ox
