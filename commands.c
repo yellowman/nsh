@@ -769,7 +769,7 @@ interface(int argc, char **argv, char *modhvar)
 			return(1);
 		}
 		strlcat(ifname, ifunit, sizeof(ifname));
-		printf("%% Pro Tip: it is interface %s rather than \"%s %s\"\n",
+		printf("%% Interface name is %s not \"%s %s\"\n",
 		    ifname, tmp, ifunit);
 	}
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
