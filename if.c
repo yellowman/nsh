@@ -254,7 +254,7 @@ show_int(int argc, char **argv)
 			return(1);
 		}
 		strlcat(ifname, argv[3], sizeof(ifname));
-		printf("%% Pro Tip: it is interface %s rather than \"%s %s\"\n",
+		printf("%% Interface name is %s not \"%s %s\"\n",
 		    ifname, argv[2], argv[3]);
 	} if (argc == 3)
 		strlcpy(ifname, argv[2], sizeof(ifname));
