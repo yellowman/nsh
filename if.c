@@ -949,18 +949,18 @@ slaacd_is_running(void)
 	return check_daemon_control_socket(SLAACD_SOCK);
 }
 
-char *intiphelp[] = {
-	"<address>/<prefixlen>",
-	"<address>/<netmask>",
-	"autoconf",
-	"dhcp",
-	NULL
+struct ghs intiphelp[] = {
+	{ "<address>/<prefixlen>", "IP address parameter", CMPL0 NULL, 0 },
+	{ "<address>/<netmask>", "IP address parameter", CMPL0 NULL, 0 },
+	{ "autoconf", "Use automatic configuration", CMPL0 NULL, 0 },
+	{ "dhcp", "Use DHCP", CMPL0 NULL, 0 },
+	{ NULL, NULL, NULL, NULL, 0 }
 };
 
-char *intip6help[] = {
-	"<address>/<prefixlen>",
-	"autoconf",
-	NULL
+struct ghs intip6help[] = {
+	{ "<address>/<prefixlen>", "IPv6 address parameter", CMPL0 NULL, 0 },
+	{ "autoconf", "Use stateless address autoconfiguration (SLAAC)", CMPL0 NULL, 0 },
+	{ NULL, NULL, NULL, NULL, 0 }
 };
 
 

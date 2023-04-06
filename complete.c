@@ -518,9 +518,8 @@ complete(EditLine *el, int ch, char **table, size_t stlen, char *arg)
 	i = 1;
 	/*
 	 * Switch to a nested command table if needed.
-	 * XXX CMPL(h) is using elements of size < sizeof(struct ghs)
 	 */
-	while (c->table && i < cursor_argc - 1 && c->stlen >= sizeof(*c)) {
+	while (c->table && i < cursor_argc - 1) {
 		c = (struct ghs *)c->table;
 		table = c->table;
 		stlen = c->stlen;

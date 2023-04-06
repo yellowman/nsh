@@ -157,28 +157,28 @@ quit(void)
 	return 0;
 }
 
-char *showroutetab[] = {
-	"<cr>",
-	"<address[/prefix-length]>",
-	NULL
+struct ghs showroutetab[] = {
+	{ "<cr>", "Type Enter to run command", CMPL0 NULL, 0 },
+	{ "<address[/prefix-length]>", "IP address parameter" , CMPL0 NULL, 0 },
+	{ NULL, NULL, NULL, NULL, 0 }
 };
 
-char *showarptab[] = {
-	"<cr>",
-	"<IPv4-address>",
-	NULL
+struct ghs showarptab[] = {
+	{ "<cr>", "Type Enter to run command", CMPL0 NULL, 0 },
+	{ "<IPv4-address>", "IPv4 address parameter", CMPL0 NULL, 0 },
+	{ NULL, NULL, NULL, NULL, 0 }
 };
 
-char *showndptab[] = {
-	"<cr>",
-	"<IPv6-address>",
-	NULL
+struct ghs showndptab[] = {
+	{ "<cr>", "Type Enter to run command", CMPL0 NULL, 0 },
+	{ "<IPv6-address>", "IPv6 address parameter", CMPL0 NULL, 0 },
+	{ NULL, NULL, NULL, NULL, 0 }
 };
 
-char *showvlantab[] = {
-	"<cr>",
-	"<VLAN Tag>",
-	NULL
+struct ghs showvlantab[] = {
+	{ "<cr>", "Type Enter to run command", CMPL0 NULL, 0 },
+	{ "<VLAN Tag>", "VLAN tag parameter", CMPL0 NULL, 0 },
+	{ NULL, NULL, NULL, NULL, 0 }
 };
 
 /*
@@ -189,12 +189,12 @@ Menu showlist[] = {
 	{ "hostname",	"Router hostname",	CMPL0 0, 0, 0, 0, show_hostname },
 	{ "interface",	"Interface config",	CMPL(i) 0, 0, 0, 1, show_int },
 	{ "autoconf",	"IPv4/IPv6 autoconf state", CMPL(i) 0, 0, 0, 1, show_autoconf },
-	{ "route",	"IPv4 route table or route lookup", CMPL(h) showroutetab, sizeof(char *), 0, 1, pr_routes },
-	{ "route6",	"IPv6 route table or route lookup", CMPL(h) showroutetab, sizeof(char *), 0, 1, pr_routes6 },
+	{ "route",	"IPv4 route table or route lookup", CMPL(h) (char **)showroutetab, sizeof(struct ghs), 0, 1, pr_routes },
+	{ "route6",	"IPv6 route table or route lookup", CMPL(h) (char **)showroutetab, sizeof(struct ghs), 0, 1, pr_routes6 },
 	{ "sadb",	"Security Association Database", CMPL0 0, 0, 0, 0, pr_sadb },
-	{ "arp",	"ARP table",		CMPL(h) showarptab, sizeof(char *), 0, 1, pr_arp },
-	{ "ndp",	"NDP table",		CMPL(h) showndptab, sizeof(char *), 0, 1, pr_ndp },
-	{ "vlan",	"802.1Q/802.1ad VLANs",	CMPL(h) showvlantab, sizeof(char *), 0, 1, show_vlans },
+	{ "arp",	"ARP table",		CMPL(h) (char **)showarptab, sizeof(struct ghs), 0, 1, pr_arp },
+	{ "ndp",	"NDP table",		CMPL(h) (char **)showndptab, sizeof(struct ghs), 0, 1, pr_ndp },
+	{ "vlan",	"802.1Q/802.1ad VLANs",	CMPL(h) (char **)showvlantab, sizeof(struct ghs), 0, 1, show_vlans },
 	{ "bridge",	"Ethernet bridges",	CMPL(b) 0, 0, 0, 1, show_bridges },
 	{ "kernel",	"Kernel statistics",	CMPL(ta) (char **)stts, sizeof(struct stt), 0, 1, pr_kernel },
 	{ "bgp",	"BGP information",	CMPL(ta) (char **)bgcs, sizeof(struct prot1), 0, 4, pr_prot1 },
@@ -549,9 +549,9 @@ flush_help(void)
 
 struct intlist Intlist[] = {
 /* Interface mode commands */
-	{ "inet",	"IPv4/IPv6 addresses",			CMPL(h) intiphelp, sizeof(char *), intip, 1},
-	{ "ip",		"Alias for \"inet\" command",		CMPL(h) intiphelp, sizeof(char *), intip, 1 },
-	{ "alias",	NULL, /* backwards compatibilty */	CMPL(h) intiphelp, sizeof(char *), intip, 1 },
+	{ "inet",	"IPv4/IPv6 addresses",			CMPL(h) (char **)intiphelp, sizeof(struct ghs), intip, 1},
+	{ "ip",		"Alias for \"inet\" command",		CMPL(h) (char **)intiphelp, sizeof(struct ghs), intip, 1 },
+	{ "alias",	NULL, /* backwards compatibilty */	CMPL(h) (char **)intiphelp, sizeof(struct ghs), intip, 1 },
 #ifdef IFXF_AUTOCONF4		/* 6.6+ */
 	{ "autoconf4",  "IPv4 Autoconfigurable address (DHCP)",	CMPL0 0, 0, intxflags, 1 },
 #endif
@@ -611,7 +611,7 @@ struct intlist Intlist[] = {
 	{ "dhcrelay",	"DHCP Relay Agent",			CMPL0 0, 0, intdhcrelay, 1 },
 	{ "wol",	"Wake On LAN",				CMPL0 0, 0, intxflags, 1 },
 	{ "mpls",	"MPLS",					CMPL0 0, 0, intxflags, 1 },
-	{ "inet6",	"IPv6 addresses",			CMPL(h) intip6help, sizeof(char *), intip, 1 },
+	{ "inet6",	"IPv6 addresses",			CMPL(h) (char **)intip6help, sizeof(struct ghs), intip, 1 },
 	{ "autoconf6",  "IPv6 Autoconfigurable address",	CMPL0 0, 0, intxflags, 1 },
 #ifdef IFXF_INET6_NOPRIVACY	/* pre-6.9 */
 	{ "autoconfprivacy", "Privacy addresses for IPv6 autoconf", CMPL0 0, 0, intxflags, 1 },
@@ -1025,31 +1025,31 @@ static char
 	halthelp[] =	"Halt the system",
 	helphelp[] =	"Print help information";
 
-char *secrettab[] = {
-	"<password>",
-	"<cipher> <hash>",
-	NULL
+struct ghs secrettab[] = {
+	{ "<password>", "Password parameter", CMPL0 NULL, 0 },
+	{ "<cipher> <hash>", "Encrypted password parameter", CMPL0 NULL, 0 },
+	{ NULL, NULL, NULL, NULL, 0 }
 };
 
 Menu enabletab[] = {
 	{ "<cr>",	"Enable privileged mode", CMPL0 0, 0, 0, 0, enable },
-	{ "secret",	"Set privileged mode secret", CMPL(h) secrettab, sizeof(char *), 0, 0, enable },
+	{ "secret",	"Set privileged mode secret", CMPL(h) (char **)secrettab, sizeof(struct ghs), 0, 0, enable },
 	{ 0, 0, 0, 0, 0 }
 };
 
-char *rtabletab[] = {
-	"<cr>",
-	"<table id> [name]",
-	NULL
+struct ghs rtabletab[] = {
+	{ "<cr>", "Type Enter to run command", CMPL0 NULL, 0 },
+	{ "<table id> [name]", "Routing table ID parameter", CMPL0 NULL, 0 },
+	{ NULL, NULL, NULL, NULL, 0 }
 };
 
-char *demotecountertab[] = {
-	"[demotion-counter]",
-	NULL
+struct ghs demotecountertab[] = {
+	{ "[demotion-counter]", "CARP demotion counter parameter", CMPL0 NULL, 0 },
+	{ NULL, NULL, NULL, NULL, 0 }
 };
 
 Menu grouptab[] = {
-	{ "carpdemote",	"Set carp demote counter", CMPL(h) demotecountertab, sizeof(char *), 0, 0, group },
+	{ "carpdemote",	"Set carp demote counter", CMPL(h) (char **)demotecountertab, sizeof(struct ghs), 0, 0, group },
 	{ 0, 0, 0, 0, 0 }
 };
 
@@ -1061,7 +1061,7 @@ Menu grouptab[] = {
 Command cmdtab[] = {
 	{ "hostname",	hostnamehelp,	CMPL0 0, 0, hostname,		1, 1, 0, 0 },
 	{ "interface",	interfacehelp,	CMPL(i) 0, 0, interface,	1, 1, 1, 1 },
-	{ "rtable",	rtablehelp,	CMPL(h) rtabletab, sizeof(char *), rtable,		0, 0, 1, 2 },
+	{ "rtable",	rtablehelp,	CMPL(h) (char **)rtabletab, sizeof(struct ghs), rtable, 0, 0, 1, 2 },
 	{ "group",	grouphelp,	CMPL(gth) (char **)grouptab, sizeof(Menu), group, 1, 1, 1, 0 },
 	{ "arp",	arphelp,	CMPL0 0, 0, arpset,		1, 1, 1, 0 },
 	{ "ndp",	ndphelp,	CMPL0 0, 0, ndpset,		1, 1, 1, 0 },
