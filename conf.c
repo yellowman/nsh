@@ -159,16 +159,26 @@ static const struct {
 static const struct {
 	char *name;
 } latestartifs[] = {
+	{ "aggr" },
 	{ "trunk" },
 	{ "svlan" },
 	{ "vlan" },
 	{ "carp" },
-	{ "gif" },
-	{ "gre" },
 	{ "pfsync" },
-	{ "pppoe" },
-	{ "bridge" },
+	{ "tun" },
+	{ "tap" },
+	{ "gif" },
+	{ "etherip" },
+	{ "gre" },
+	{ "egre" },
+	{ "nvgre" },
+	{ "eoip" },
+	{ "vxlan" },
 	{ "pflow" },
+	{ "wg" },
+	{ "bridge" },
+	{ "veb" },
+	{ "tpmr" }
 };
 
 int
@@ -198,6 +208,7 @@ conf(FILE *output)
 	/*
 	 * start these interfaces in specific order
 	 */
+	conf_interfaces(output, "aggr");
 	conf_interfaces(output, "trunk");
 	conf_interfaces(output, "svlan");
 	conf_interfaces(output, "vlan");
@@ -227,10 +238,19 @@ conf(FILE *output)
 	/*
 	 * these interfaces must start after routes are set
 	 */
-	conf_interfaces(output, "pppoe");
+	conf_interfaces(output, "tun");
+	conf_interfaces(output, "tap");
 	conf_interfaces(output, "gif");
+	conf_interfaces(output, "etherip");
 	conf_interfaces(output, "gre");
+	conf_interfaces(output, "egre");
+	conf_interfaces(output, "nvgre");
+	conf_interfaces(output, "eoip");
+	conf_interfaces(output, "vxlan");
+	conf_interfaces(output, "wg");
 	conf_interfaces(output, "bridge");
+	conf_interfaces(output, "veb");
+	conf_interfaces(output, "tpmr");
 
 	fprintf(output, "!\n");
 	conf_ctl(output, "", "pf", 0);
