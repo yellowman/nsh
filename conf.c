@@ -164,6 +164,7 @@ static const struct {
 	{ "svlan" },
 	{ "vlan" },
 	{ "carp" },
+	{ "pppoe" },
 	{ "pfsync" },
 	{ "tun" },
 	{ "tap" },
@@ -213,6 +214,7 @@ conf(FILE *output)
 	conf_interfaces(output, "svlan");
 	conf_interfaces(output, "vlan");
 	conf_interfaces(output, "carp");
+	conf_interfaces(output, "pppoe");
 
 	fprintf(output, "!\n");
 
