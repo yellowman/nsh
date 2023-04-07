@@ -1364,7 +1364,7 @@ ipv6ll_db_store(struct sockaddr_in6 *sin6, struct sockaddr_in6 *sin6mask,
 	    IN6_IS_ADDR_MC_INTFACELOCAL(&sin6->sin6_addr)) {
 		sin6->sin6_addr.s6_addr[2] = sin6->sin6_addr.s6_addr[3] = 0;
 		sin6->sin6_scope_id = 0;
-		db_delete_flag_x_ctl("ipv6linklocal", ifname);
+		db_delete_flag_x_ctl("ipv6linklocal", ifname, 0);
 		if (dbflag != DB_X_REMOVE)
 			db_insert_flag_x("ipv6linklocal", ifname, 0,
 			    dbflag, netname6(sin6, sin6mask));
@@ -2537,7 +2537,7 @@ intlladdr(char *ifname, int ifs, int argc, char **argv)
 	}
 	if (hwdaddr->sl_cur > 0) {
 		strlcpy(llorig, hwdaddr->sl_str[0], sizeof(llorig));
-		if (!set && db_delete_flag_x_ctl("lladdr", ifname) < 0) {
+		if (!set && db_delete_flag_x_ctl("lladdr", ifname, 0) < 0) {
 				printf("%% database delete failure\n");
 				sl_free(hwdaddr, 1);
 				return(1);

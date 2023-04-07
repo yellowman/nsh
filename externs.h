@@ -584,7 +584,7 @@ int db_insert_flag_x(char *, char *, int, int, char *);
 int db_insert_rtables(int, char *);
 int db_insert_nameserver(char *);
 int db_delete_rtables_rtable(int);
-int db_delete_flag_x_ctl(char *, char *);
+int db_delete_flag_x_ctl(char *, char *, int);
 int db_delete_flag_x_ctl_data(char *, char *, char *);
 int db_delete_nameservers(void);
 #ifdef _STRINGLIST_H

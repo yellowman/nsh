@@ -89,11 +89,11 @@ db_insert_nameserver(char *nameserver)
 }
 
 int
-db_delete_flag_x_ctl(char *name, char *ctl)
+db_delete_flag_x_ctl(char *name, char *ctl, int rtable)
 {
 	char		query[QSZ];
 
-	snprintf(query, QSZ, "DELETE FROM '%s' WHERE ctl='%s' AND rtable=%d", name, ctl, cli_rtable);
+	snprintf(query, QSZ, "DELETE FROM '%s' WHERE ctl='%s' AND rtable=%d", name, ctl, rtable);
 	return(sq3simple(query, NULL));
 }
 

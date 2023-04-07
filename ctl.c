@@ -550,7 +550,7 @@ ctl_symlink(char *temp, char *real, char *z)
 void
 flag_x(char *name, char *daemon, int dbflag, char *data)
 {
-	if (db_delete_flag_x_ctl(name, daemon) < 0) {
+	if (db_delete_flag_x_ctl(name, daemon, cli_rtable) < 0) {
 		printf("%% database delete failure ctl ctl\n");
 		return;
 	}

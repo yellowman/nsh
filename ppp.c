@@ -225,9 +225,9 @@ intsppp(char *ifname, int ifs, int argc, char **argv)
 		char type[TYPESZ];
 
 		snprintf(type, TYPESZ, "%skey", isc->name);
-		db_delete_flag_x_ctl(type, ifname);
+		db_delete_flag_x_ctl(type, ifname, cli_rtable);
 		if (set) {
-			db_insert_flag_x(type, ifname, 0, DB_X_ENABLE,
+			db_insert_flag_x(type, ifname, cli_rtable, DB_X_ENABLE,
 			    spa.secret);
 		}
 	}
