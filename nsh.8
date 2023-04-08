@@ -171,7 +171,7 @@ far.
 .Pp
 E.g. command line completion display for all commands begining with i
 .Bd -literal -offset indent
-nsh(p)/i
+nsh(config-p)/i
 ifstate         inet            ip              ipsec
 ike             interface       ip6
 .Ed
@@ -192,8 +192,8 @@ with the
 keyword in front of the affirmative version of the command.
 e.g. reverse allowing IP packet forwarding.
 .Bd -literal -offset indent
-nsh(p)/ip forwarding
-nsh(p)/no ip forwarding
+nsh(config-p)/ip forwarding
+nsh(config-p)/no ip forwarding
 .Ed
 .It
 Any affirmative commands that contain
@@ -204,9 +204,9 @@ with
 keyword.
 E.g reverse enabling packet filter firewall command.
 .Bd -literal -offset indent
-nsh(p)/pf enable
+nsh(config-p)/pf enable
 %pf enabled
-nsh(p)/pf disable
+nsh(config-p)/pf disable
 %pf disabled
 .Ed
 .El
@@ -307,7 +307,7 @@ displays the purpose of the specified command.
 .It
 E.g. display help on the rtable command
 .Bd -literal -offset indent
-nsh(p)/? rtable
+nsh(config-p)/? rtable
 % rtable: Routing table switch
 .Ed
 .It
@@ -391,7 +391,7 @@ hostname with an argument will set hostname to the argument's value.
 .It
 e.g. set hostname to the myfirewallname.com .
 .Bd -literal -offset indent
-nsh(p)/hostname myfirewallname.com
+nsh(config-p)/hostname myfirewallname.com
 myfirewallname.com(p)/
 .Ed
 .El
@@ -412,12 +412,12 @@ shell.
 .It
 e.g. Set a password manually to yourpassword
 .Bd -literal -offset indent
-nsh(p)/enable secret yourpassword
+nsh(config-p)/enable secret yourpassword
 .Ed
 .It
 e.g. Set a password using a previously set encrypted password
 .Bd -literal -offset indent
-nsh(p)/enable secret blowfish $2b$10$kKSJFDd....NqIUaTCZ0=
+nsh(config-p)/enable secret blowfish $2b$10$kKSJFDd....NqIUaTCZ0=
 .Ed
 .El
 .Pp
@@ -452,14 +452,14 @@ routing domain
 .It
 e.g. Create a new routing table rdomain 3 create a loopback for rdomain 3.
 .Bd -literal -offset indent
-nsh(p)/interface lo3
+nsh(config-p)/interface lo3
 nsh(interface-lo3)/rdomain 3
 nsh(interface-lo3)/inet 127.0.0.1/8
 .Ed
 .It
 configure a physical interface
 .Bd -literal -offset indent
-nsh(p)/interface em0
+nsh(config-p)/interface em0
 nsh(interface-em0)/rdomain 3
 nsh(interface-em0)/inet 10.255.0.10/24
 .Ed
@@ -467,7 +467,7 @@ nsh(interface-em0)/inet 10.255.0.10/24
 Once the rdomain has been initialized (by creating a loopback inside the
  rdomain) the administrator can add routes to the rtable.
 .Bd -literal -offset indent
-nsh(p)/rtable 3 customer label network3
+nsh(config-p)/rtable 3 customer label network3
 nsh(p-rtable 3)/route 0.0.0.0/0 10.255.0.1
 .Ed
 .It
@@ -572,7 +572,7 @@ help.
 .El
 E.g show available bridge configuration commands.
 .Bd -literal -offset indent
-nsh(p)/bridge bridge1
+nsh(config-p)/bridge bridge1
 nsh(bridge-bridge1)/?
 % Commands may be abbreviated.
 % Type 'exit' at a prompt to leave bridge configuration mode.
@@ -620,7 +620,7 @@ E.g. configure a standard
 .Xr bridge 4
 device called bridge101 and add vlan 101 and vether101 as member ports.
 .Bd -literal -offset indent
-nsh(p)/bridge bridge101
+nsh(config-p)/bridge bridge101
 nsh(bridge-bridge101)/member vether101
 nsh(bridge-bridge101)/member vlan101
 nsh(bridge-bridge101)/exit
@@ -629,7 +629,7 @@ E.g. configure a virtual ethernet bridge
 .Xr veb 4
 device called veb101 and add vlan 101 and vether101 as member ports.
 .Bd -literal -offset indent
-nsh(p)/bridge veb101
+nsh(config-p)/bridge veb101
 nsh(bridge-veb101)/member vether101
 nsh(bridge-veb101)/member vlan101
 nsh(bridge-veb101)/exit
@@ -638,7 +638,7 @@ E.g. configure a virtual ethernet bridge
 .Xr veb 4
 device called veb101 and add vlan 101 and vether101 as member ports.
 .Bd -literal -offset indent
-nsh(p)/bridge tpmr101
+nsh(config-p)/bridge tpmr101
 nsh(bridge-tpmr101)/member vether101
 nsh(bridge-tpmr101)/member vlan101
 nsh(bridge-tpmr101)/exit
@@ -675,7 +675,7 @@ vlan functionality.
 E.g. enable port isolation between vether101 and vlan101 which are
 member ports of the bridge veb101.
 .Bd -literal -offset indent
-nsh(p)/bridge veb101
+nsh(config-p)/bridge veb101
 nsh(bridge-veb101)/protect vether101 20
 nsh(bridge-veb101)/protect vlan101 20
 nsh(bridge-veb101)/exit
@@ -691,7 +691,7 @@ such as forwarding, multicast forwarding, multipath routing, etc.
 .It
 e.g. list available IPv6 configuration options
 .Bd -literal -offset indent
-nsh(p)/ip6
+nsh(config-p)/ip6
 % Commands may be abbreviated.
 % 'ip6' commands are:
   forwarding       Enable IPv6 Forwarding
@@ -708,7 +708,7 @@ nsh(p)/ip6
 Enable or disable forwarding (routing /NAT) of IPv6 packets through the
 kernel.
 .Bd -literal -offset indent
-nsh(p)/ip6 forwarding
+nsh(config-p)/ip6 forwarding
 .Ed
 .Pp
 .Op no
@@ -717,7 +717,7 @@ nsh(p)/ip6 forwarding
 Enable or disable forwarding of IPv6 multicast packets through the
 kernel.
 .Bd -literal -offset indent
-nsh(p)/ip6 mforwarding
+nsh(config-p)/ip6 mforwarding
 .Ed
 .Pp
 .Op no
@@ -727,7 +727,7 @@ Enable or disable multipath routing for IPv6 addresses.
 If multipath is disabled, only the first selected route is used for a
 given destination regardless of how many routes exist in the routing table.
 .Bd -literal -offset indent
-nsh(p)/ip6 multipath
+nsh(config-p)/ip6 multipath
 .Ed
 .Pp
 .Op no
@@ -742,7 +742,7 @@ redirects.
 Set to -1 to disable the limit.
 The default value for maxdynroutes is 4096.
 .Bd -literal -offset indent
-nsh(p)/ip6 maxdynroutes 8192
+nsh(config-p)/ip6 maxdynroutes 8192
 .Ed
 .Tg mpls
 .Op no
@@ -751,7 +751,7 @@ nsh(p)/ip6 maxdynroutes 8192
 Configure MPLS (Multi Protocol Label Switching) network parameters in the
 kernel.
 .Bd -literal -offset indent
-nsh(p)/mpls ?
+nsh(config-p)/mpls ?
 % Commands may be abbreviated.
 % 'mpls' commands are:
 
@@ -769,7 +769,7 @@ Configure the default MPLS (Multi Protocol Label Switching) TTL (time to live)
 in the kernel for MPLS shim headers of generated (not forwarded) MPLS packets.
 The default value is 255.
 .Bd -literal -offset indent
-nsh(p)/mpls ttl 64
+nsh(config-p)/mpls ttl 64
 .Ed
 .Pp
 .Op no
@@ -785,7 +785,7 @@ If set to 0, the encapsulated payload IP header TTL is not modified while
 passing through MPLS and the MPLS label stack.
 The default value is 1.
 .Bd -literal -offset indent
-nsh(p)/mpls mapttl-ip 1
+nsh(config-p)/mpls mapttl-ip 1
 .Ed
 .Pp
 .Op no
@@ -801,7 +801,7 @@ If set to 0, the encapsulated payload IPv6 header TTL field is not modified
 while passing through MPLS and the MPLS label stack.
 The default value is 0.
 .Bd -literal -offset indent
-nsh(p)/mpls mapttl-ip6 1
+nsh(config-p)/mpls mapttl-ip6 1
 .Ed
 .Pp
 .Tg ddb
@@ -811,7 +811,7 @@ nsh(p)/mpls mapttl-ip6 1
 .Pp
 Configure or remove kernel debug (DDB) options.
 .Bd -literal -offset indent
-nsh(p)/ddb ?
+nsh(config-p)/ddb ?
 % Commands may be abbreviated.
 % 'ddb' commands are:
 
@@ -829,7 +829,7 @@ Enable or disable dropping the system to the kernel debugger in the event of a
 system panic.
 By default, dropping to the ddb debugger in a system panic is enabled.
 .Bd -literal -offset indent
-nsh(p)/ddb panic
+nsh(config-p)/ddb panic
 .Ed
 .Pp
 .Op no
@@ -844,7 +844,7 @@ with a
 greater than 0, this feature cannot be enabled.
 By default accessing the ddb debugger from the console is disabled.
 .Bd -literal -offset indent
-nsh(p)/ddb console
+nsh(config-p)/ddb console
 .Ed
 .Pp
 .Op no
@@ -855,7 +855,7 @@ message buffer.
 By default ddb debugger output logging to the kernel message buffer is
 enabled.
 .Bd -literal -offset indent
-nsh(p)/ddb log
+nsh(config-p)/ddb log
 .Ed
 .Pp
 .Tg pipex
@@ -876,7 +876,7 @@ It accelerates the performance of packet forwarding, because it reduces
 copying of packets between kernel and userland.
 By default pipex is disabled.
 .Bd -literal -offset indent
-nsh(p)/pipex enable
+nsh(config-p)/pipex enable
 .Ed
 .Tg packetfilter
 .Tg firewall
@@ -886,7 +886,7 @@ nsh(p)/pipex enable
 .Pp
 Control the configuration and operation of the pf (Packet Filter) firewall.
 .Bd -literal -offset indent
-nsh(p)/pf ?
+nsh(config-p)/pf ?
 % Arguments may be abbreviated
 
    enable  enable service
@@ -928,7 +928,7 @@ For packet filter configuration syntax, refer to
 .Xr pf.conf 5 .
 .Bd -literal -offset indent
 nsh(p)/!man pf.conf
-nsh(p)/pf edit
+nsh(config-p)/pf edit
 .Ed
 .Pp
 .Ic pf reload
@@ -954,7 +954,7 @@ will issue warning listing the line numbers where the syntax is incorrect.
 E.g. Example syntax warning issued by pf reload warning that there is an error
 in lines 15 and 17 of the user entered pf configuration.
 .Bd -literal -offset indent
-nsh(p)/pf reload
+nsh(config-p)/pf reload
 /var/run/pf.conf.0:15: syntax error
 /var/run/pf.conf.0:17: syntax error
 pfctl: Syntax error in config file: pf rules not loaded
@@ -966,7 +966,7 @@ Enable, disable or configure
 .Xr ospfd 8 ,
 the OSPF (Open Shortest Path First) daemon.
 .Bd -literal -offset indent
-nsh(p)/ospf enable
+nsh(config-p)/ospf enable
 .Ed
 .Pp
 .Ic ospf edit
@@ -983,13 +983,13 @@ For OSPF configuration syntax, refer to
 .Xr ospfd.conf 5 .
 .Bd -literal -offset indent
 nsh(p)/!man ospfd.conf
-nsh(p)/ospf edit
+nsh(config-p)/ospf edit
 .Ed
 .Pp
 .Ic ospf reload
 Reread and apply the OSPF configuration.
 .Bd -literal -offset indent
-nsh(p)/ospf reload
+nsh(config-p)/ospf reload
 .Ed
 .Pp
 .Ic ospf fib
@@ -1010,7 +1010,7 @@ system and the rest of the OSPF network.
 The ospf fib reload command re fetches and relearns the routes in the FIB and
 passes them to the ospfd daemon for processing.
 .Bd -literal -offset indent
-nsh(p)/ospf fib decouple
+nsh(config-p)/ospf fib decouple
 .Ed
 .Pp
 .Ic ospf log
@@ -1022,7 +1022,7 @@ logging messages.
 Set ospf log verbose to enable detailed debug log output from ospfd.
 set ospf log brief to disable detailed debug log output from ospfd.
 .Bd -literal -offset indent
-nsh(p)/ospf log verbose
+nsh(config-p)/ospf log verbose
 .Ed
 .Pp
 .Tg eigrpd
@@ -1413,7 +1413,7 @@ to the local tftp daemon.
 .It
 e.g. enable ftp-proxy
 .Bd -literal -offset indent
-nsh(p)/ftp-proxy enable
+nsh(config-p)/ftp-proxy enable
 .Ed
 .El
 .Pp
@@ -1432,12 +1432,12 @@ to the local tftp proxy.
 .It
 e.g. enable tftp-proxy and redirects needed to use it.
 .Bd -literal -offset indent
-nsh(p)/tftp-proxy enable
+nsh(config-p)/tftp-proxy enable
 .Ed
 .It
 Add firewall rule in pf to divert tftp requests to tftp proxy
 .Bd -literal -offset indent
-nsh(p)/pf edit
+nsh(config-p)/pf edit
 
 pass in quick on $int_if inet proto udp from $lan to port tftp
 divert-to 127.0.0.1 port 6969
@@ -1614,7 +1614,7 @@ Requires privileged access.
 .It
 E.g. restart the system
 .Bd -literal -offset indent
-nsh(p)/reboot
+nsh(config-p)/reboot
 % Reboot initiated
 .Ed
 .El
@@ -2474,36 +2474,36 @@ This command only runs in privileged mode.
 .It
 e.g. setup routes on the system
 .Bd -literal -offset indent
-nsh(p)/route 192.168.0.0/16 1.2.3.4
+nsh(config-p)/route 192.168.0.0/16 1.2.3.4
 .Ed
 .It
 is equivalent to:
 .Bd -literal -offset indent
-nsh(p)/route 192.168.0.0/255.255.0.0 1.2.3.4
+nsh(config-p)/route 192.168.0.0/255.255.0.0 1.2.3.4
 .Ed
 .It
 Use the
 .Ic no
 keyword to remove the specific route (if present) in the routing table.
 .Bd -literal -offset indent
-nsh(p)/no route 192.168.0.0/16 1.2.3.4
+nsh(config-p)/no route 192.168.0.0/16 1.2.3.4
 .Ed
 .It
 If you do not specify a mask,
 .Nm
 assumes you are routing a host address (/32 in ipv4).
 .Bd -literal -offset indent
-nsh(p)/route 10.6.6.4 1.2.3.4
+nsh(config-p)/route 10.6.6.4 1.2.3.4
 .Ed
 .It
 Routing flags may be defined after a route.
 .Bd -literal -offset indent
-nsh(p)/route 127.0.0.0/8 127.0.0.1 reject
+nsh(config-p)/route 127.0.0.0/8 127.0.0.1 reject
 .Ed
 .It
 or
 .Bd -literal -offset indent
-nsh(p)/route ::/96 ::1 reject
+nsh(config-p)/route ::/96 ::1 reject
 .Ed
 .El
 .Ss Route Flags
@@ -2605,7 +2605,7 @@ Modify system kernel ip processing parameters or features.
 .Pp
 All commands in this category allow the 'no' modifier to disable the option.
 .Bd -literal -offset indent
-nsh(p)/ip ?
+nsh(config-p)/ip ?
 % Commands may be abbreviated.
 % 'ip' commands are:
 
@@ -2656,7 +2656,7 @@ values increase the time it takes to resolve a host.
 This setting should be the same or lower on a router than the bridge MAC table
 timeout on an intermediate bridge.
 .Bd -literal -offset indent
-nsh(p)/ip arptimeout 300
+nsh(config-p)/ip arptimeout 300
 .Ed
 .Pp
 .Op no
@@ -2674,7 +2674,7 @@ Lower settings increases the broadcast traffic on the underlying network
 while higher settings increases the time it takes to resolve a host
 (after the host boots up) and on a network that is experiencing packet loss.
 .Bd -literal -offset indent
-nsh(p)/ip arpdown 20
+nsh(config-p)/ip arpdown 20
 .Ed
 .Pp
 .Op no
@@ -2687,7 +2687,7 @@ Carp is a BSD licensed technology for router redundancy utilising a virtual ip
 that floats between 2 or more routers on a LAN segment, it is similar to VRRP
 or HSRP.
 .Bd -literal -offset indent
-nsh(p)/ip carp
+nsh(config-p)/ip carp
 .Ed
 .Pp
 .Op no
@@ -2700,7 +2700,7 @@ carp-log may be set to a value between 0 and 7 corresponding with standard
 syslog(3) priorities.
 The default value is 2, which limits logging to changes in CARP state.
 .Bd -literal -offset indent
-nsh(p)/ip carp-log 7
+nsh(config-p)/ip carp-log 7
 .Ed
 .Pp
 .Op no
@@ -2709,7 +2709,7 @@ nsh(p)/ip carp-log 7
 Enable or disable the device taking master role from an existing master carp
 router
 .Bd -literal -offset indent
-nsh(p)/ip carp-preempt
+nsh(config-p)/ip carp-preempt
 .Ed
 .Pp
 .Op no
@@ -2718,7 +2718,7 @@ nsh(p)/ip carp-preempt
 Enable or disable IP packet forwarding in the system kernel.
 This must be set in order to use routing, NAT, IPsec or packet filter features.
 .Bd -literal -offset indent
-nsh(p)/ip forwarding
+nsh(config-p)/ip forwarding
 .Ed
 .Pp
 .Op no
@@ -2726,7 +2726,7 @@ nsh(p)/ip forwarding
 .Pp
 Enable or disable IP-in-IP encapsulation in the system kernel.
 .Bd -literal -offset indent
-nsh(p)/ip ipip
+nsh(config-p)/ip ipip
 .Ed
 .Pp
 .Op no
@@ -2737,7 +2737,7 @@ Must be used to enable
 .Xr gre 4
 interfaces.
 .Bd -literal -offset indent
-nsh(p)/ip gre
+nsh(config-p)/ip gre
 .Ed
 .Pp
 .Op no
@@ -2749,7 +2749,7 @@ Must be used to enable WCCP on
 .Xr gre 4
 interfaces.
 .Bd -literal -offset indent
-nsh(p)/ip wccp
+nsh(config-p)/ip wccp
 .Ed
 .Pp
 .Op no
@@ -2757,7 +2757,7 @@ nsh(p)/ip wccp
 .Pp
 Enable or disable GRE-based Ether-IP encapsulation in the system kernel.
 .Bd -literal -offset indent
-nsh(p)/ip etherip
+nsh(config-p)/ip etherip
 .Ed
 .Pp
 .Op no
@@ -2765,7 +2765,7 @@ nsh(p)/ip etherip
 .Pp
 Enable or disable IPComp internet protocol compression in the system kernel.
 .Bd -literal -offset indent
-nsh(p)/ip ipcomp
+nsh(config-p)/ip ipcomp
 .Ed
 .Pp
 .Op no
@@ -2775,7 +2775,7 @@ Enable or disable IPsec Encapsulated Security Payload procesing in the system
 kernel.
 (Enabled by default.)
 .Bd -literal -offset indent
-nsh(p)/ip esp
+nsh(config-p)/ip esp
 .Ed
 .Pp
 .Op no
@@ -2784,7 +2784,7 @@ Enable or Disable processing of UDP encapsulated ESP packets in the system
 kernel.
 (Enabled by default.)
 .Bd -literal -offset indent
-nsh(p)/ip esp-udpencap
+nsh(config-p)/ip esp-udpencap
 .Ed
 .Pp
 .Op no
@@ -2795,7 +2795,7 @@ UDP encapsulated ESP packets.
 (The default port is 4500) udp encapsulated esp packets are useful for
 traversing NAT routers.
 .Bd -literal -offset indent
-nsh(p)/ip esp-udpencap-port 4600
+nsh(config-p)/ip esp-udpencap-port 4600
 .Ed
 .Pp
 .Op no
@@ -2804,7 +2804,7 @@ nsh(p)/ip esp-udpencap-port 4600
 Enable or disable IPsec Authentication Header processing in the system kernel.
 (Enabled by default.)
 .Bd -literal -offset indent
-nsh(p)/ip ah
+nsh(config-p)/ip ah
 .Ed
 .Pp
 .Op no
@@ -2814,7 +2814,7 @@ Enable or disable processing loose or strict source routing options on IP
 packet headers.
 Do not enable this option on systems connected to the public internet.
 .Bd -literal -offset indent
-nsh(p)/ip sourceroute
+nsh(config-p)/ip sourceroute
 .Ed
 .Pp
 .Op no
@@ -2826,7 +2826,7 @@ interface to the
 kernel output.
 Note! Requires a kernel compiled with ENCDEBUG option.
 .Bd -literal -offset indent
-nsh(p)/ip encdebug
+nsh(config-p)/ip encdebug
 .Ed
 .Pp
 .Op no
@@ -2841,7 +2841,7 @@ sends an ICMP redirect to the originating host.
 This redirect tells the host the direct path on the network to send further
 packets.
 .Bd -literal -offset indent
-nsh(p)/ip send-redirects
+nsh(config-p)/ip send-redirects
 .Ed
 .Pp
 .Op no
@@ -2857,7 +2857,7 @@ This setting is useful for limiting certain types of DoS attacks.
 Enable or disable ip multicast forwarding in the system kernel.
 (Disabled by default.)
 .Bd -literal -offset indent
-nsh(p)/ip mforwarding
+nsh(config-p)/ip mforwarding
 .Ed
 .Pp
 .Op no
@@ -2874,14 +2874,14 @@ packet to pass through up to 64 routers (also called hops) before reaching
 its destination.
 The main purpose of the TTL is to avoid routing loops in the network.
 .Bd -literal -offset indent
-nsh(p)/ip default-ttl 128
+nsh(config-p)/ip default-ttl 128
 .Ed
 .Pp
 .Ic ip \&?
 .Pp
 Displays the help menu and available ip command options.
 .Bd -literal -offset indent
-nsh(p)/ip ?
+nsh(config-p)/ip ?
 .Ed
 .Pp
 .Tg interface
@@ -3515,7 +3515,7 @@ interfaces, no other interface types are supported.
 .Pp
 E.g. To connect pair1 and pair2 interfaces with a virtual patch cable.
 .Bd -literal -offset indent -compact
-nsh(p)/interface pair1
+nsh(config-p)/interface pair1
 
 nsh(interface-pair1)/patch pair2
 .Ed
@@ -3879,7 +3879,7 @@ interface.
 E.g. to setup a pflow export from 10.1.1.1 to an IPFIX flow collector
 listening on another server on 10.1.1.2 port 4739.
 .Bd -literal -offset indent
-nsh(p)/interface pflow0
+nsh(config-p)/interface pflow0
 
 nsh(interface-pflow0)/pflow sender 10.1.1.1 receiver 10.1.1.2:4379 version 10
 .Ed
@@ -3925,7 +3925,7 @@ The interface and device bios or firmware must support WOL functionality.
 .Pp
 E.g. to enable wake on lan on interface em0.
 .Bd -literal -offset indent
-nsh(p)/interface em0
+nsh(config-p)/interface em0
 
 nsh(interface-em0)/wol
 .Ed
@@ -3941,7 +3941,7 @@ interface, the interface can send and receive mpls traffic.
 .Pp
 E.g enable mpls on em0
 .Bd -literal -offset indent
-nsh(p)/interface em0
+nsh(config-p)/interface em0
 
 nsh(interface-em0)/mpls
 .Ed
@@ -3967,7 +3967,7 @@ without further arguments enables link-local addresses on the interface.
 .Pp
 E.g. to enable ipv6 link local address on em0
 .Bd -literal -offset indent
-nsh(p)/interface em0
+nsh(config-p)/interface em0
 
 nsh(interface-em0)/inet6
 .Ed
@@ -3990,7 +3990,7 @@ on the MAC address of the interface (EUI64).
 .Pp
 E.g. enable ipv6 autoconf address on the interface em0.
 .Bd -literal -offset indent
-nsh(p)/interface em0
+nsh(config-p)/interface em0
 
 nsh(interface-em0)/autoconf6
 .Ed
@@ -4006,7 +4006,7 @@ device (users) activity.
 .Pp
 E.g. enable ipv6 autoconf with a temporary address on the interface em0.
 .Bd -literal -offset indent
-nsh(p)/interface em0
+nsh(config-p)/interface em0
 
 nsh(interface-em0)/autoconf6
 
@@ -4024,7 +4024,7 @@ guaranteed by random IP addressing of a device.
 E.g. enable ipv6 autoconf with "privacy" random temp address on the
 interface em0.
 .Bd -literal -offset indent
-nsh(p)/interface em0
+nsh(config-p)/interface em0
 
 nsh(interface-em0)/autoconf6
 
@@ -4045,7 +4045,7 @@ Useful for intrusion detection sniffing and other diagnostics.
 E.g. to enable ipv6 autoconf with "privacy" random temp address on the
 interface em0
 .Bd -literal -offset indent
-nsh(p)/interface em0
+nsh(config-p)/interface em0
 
 nsh(interface-em0)/monitor
 .Ed
@@ -4089,7 +4089,7 @@ with a keep alive packet interval of 25 seconds
 .El
 .El
 .Bd -literal -offset indent
-nsh(p)/interface wg0
+nsh(config-p)/interface wg0
 
 nsh(interface-wg0)/wgpeer EJqeFntM71Dfvn/LDu88gLOWw8aeOHoxrshOEHFd6lQ=
 aip 10.1.2.3/32 endpoint 10.1.2.3:5252
@@ -4109,7 +4109,7 @@ E.g. set the private key of
 .Xr wg 4
 wireguard interface wg0 to a specific key.
 .Bd -literal -offset indent
-nsh(p)/interface wg0
+nsh(config-p)/interface wg0
 
 nsh(interface-wg0)/wgkey QComa+ca+mWih+Vl/5G/p+UwhYy17hw5vdwysZpIAn0=
 .Ed
@@ -4126,7 +4126,7 @@ is entered without an argument wireguard selects its own port automatically.
 .Pp
 E.g. set wireguard interface wg0 to listen on 18443 UDP.
 .Bd -literal -offset indent
-nsh(p)/interface wg0
+nsh(config-p)/interface wg0
 
 nsh(interface-wg0)/wgport 18443
 .Ed
@@ -4149,7 +4149,7 @@ the interface's tunnelled traffic appears.
 .Pp
 E.g. set wireguard interface wg0  routing table to routing domain 5.
 .Bd -literal -offset indent
-nsh(p)/interface wg0
+nsh(config-p)/interface wg0
 
 nsh(interface-wg0)/wgrtable 5
 .Ed
