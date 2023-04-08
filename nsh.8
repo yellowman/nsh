@@ -1,4 +1,4 @@
-.\"     $OpenBSD: nsh.8,v 1.1 2023/04/04 23:22:00 UTC chrisc Exp $
+.\"     $OpenBSD: nsh.8,v 1.1 2023/04/08 13:22:00 UTC chrisc Exp $
 .\"
 .\" Copyright (c) 2002-2023 Chris Cappuccio.  All rights reserved.
 .\"
@@ -24,7 +24,7 @@
 .\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd $Mdocdate: April 04 2023 $
+.Dd $Mdocdate: April 08 2023 $
 .Dt NSH 8
 .Os
 .Sh NAME
@@ -558,7 +558,8 @@ manual pages for
 .Xr tpmr 4
 and
 .Xr ifconfig 8
-(accessible via the following nsh
+(accessible via the following
+.Nm
 commands):
 .Bd -literal -offset indent
 !man bridge
@@ -896,12 +897,33 @@ nsh(p)/pf ?
 .Pp
 .Ic pf edit
 .Pp
-Open the default system editor and edit the firewall configuration.
-The edited ruleset is automatically validated on saving and exiting the editor.
-Note! firewall configuration changes DO NOT take effect until the "pf reload"
-command is entered.
-The editor used by nsh can be customised to your preferred editor using the
-EDITOR and VISUAL environment variables.
+Open the default editor for the user and allow the user modify the firewall
+configuration.
+The edited ruleset is automatically validated by
+.Nm
+with
+.Xr pfctl 8
+on exiting the editor.
+If the user entered pf configuraition is incorrect on exiting the editor
+.Nm
+will display a syntax error warning with each line number that fails the
+syntax checker.
+.Pp
+E.g. warning displayed by
+.Cm pf edit
+when the incorrect syntax is used.
+.Bd -literal -offset indent
+nsh(config-p)/pf edit
+/var/run/pf.conf.0:15: syntax error
+/var/run/pf.conf.0:17: syntax error
+.Ed
+Note! firewall configuration changes DO NOT take effect until the
+.Cm pf reload
+command is excecuted.
+The editor used by
+.Nm
+can be customised to your preferred editor using the
+EDITOR or VISUAL environment variables.
 For packet filter configuration syntax, refer to
 .Xr pf.conf 5 .
 .Bd -literal -offset indent
@@ -910,10 +932,32 @@ nsh(p)/pf edit
 .Ed
 .Pp
 .Ic pf reload
-Once the pf ruleset has been edited and validated the modified pf
-configuration can be applied with this command.
+The
+.Cm pf reload
+command validates the syntax of the user entered pf configuration.
+If the
+.Cm pf edit
+config passes,
+.Nm
+commits the new configuration atomically.
+In other words
+.Cm pf reload
+checks firewall configuration using
+.Ox
+.Xr pfctl 8
+and if the pf configuration passes
+.Nm
+commits the configuration so that it is active in the kernel.
+If the user entered pf configuration is not correct.
+.Nm
+will issue warning listing the line numbers where the syntax is incorrect.
+E.g. Example syntax warning issued by pf reload warning that there is an error
+in lines 15 and 17 of the user entered pf configuration.
 .Bd -literal -offset indent
 nsh(p)/pf reload
+/var/run/pf.conf.0:15: syntax error
+/var/run/pf.conf.0:17: syntax error
+pfctl: Syntax error in config file: pf rules not loaded
 .Ed
 .Tg ospf
 .Ic ospf
@@ -931,8 +975,10 @@ The edited ruleset is automatically validated on saving and exiting the
 editor.
 Note ospfd configuration changes DO NOT take effect until the "ospf reload"
 command is entered.
-The editor used by nsh can be customised to your preferred editor using the
-EDITOR and VISUAL environment variables.
+The editor used by
+.Nm
+can be customised to your preferred editor using the
+EDITOR or VISUAL environment variables.
 For OSPF configuration syntax, refer to
 .Xr ospfd.conf 5 .
 .Bd -literal -offset indent
@@ -1605,7 +1651,9 @@ nsh(p)/write-config
 .Op no
 .Ic verbose
 .Pp
-Verbose mode sets nsh to display extra information on entered commands.
+Verbose mode sets
+.Nm
+to display extra information on entered commands.
 It is useful during a diagnostic and troubleshooting session.
 .Bl -dash
 .It
@@ -2316,17 +2364,22 @@ Press enter or control-C to exit this mode.
 .Pp
 Display basic version information about the host and about NSH, including,
  the system's  uptime and kernel version.
-It also shows both the kernel that NSH was compiled under, and the
-current kernel that NSH is running under.
+It also shows both the kernel that
+.Nm was compiled under, and the
+current kernel that
+.Nm
+is running under.
 .Nm
 should always be running on a kernel that is of a similar version to the
-version of the kernel/header files that NSH was compiled under.
+version of the kernel/header files that
+.Nm
+was compiled under.
 This ensures that
 .Nm
 can interact with the kernel properly (and vice versa).
 .Bd -literal -offset indent
 nsh/show version
-% NSH v1.0
+% NSH v1.1
 Compiled 03-Apr-22 06:03 by _pbuild@amd64-1.ports.openbsd.org
 uptime: 1 day, 2 hours, 17 minutes
 system: OpenBSD/amd64 version 7.1
@@ -2340,7 +2393,9 @@ kernel: OpenBSD 7.1 (GENERIC.MP) #459: Mon Apr  4 18:16:13 MDT 2022
 .Pp
 Display the current running configuration on the system, including
 interface and bridge configurations, routes, the system hostname, firewall
-rules, and other information compiled by nsh.
+rules, and other information compiled by
+.Nm
+.
 .Pp
 .Ic show startup-config
 .Pp
@@ -2748,7 +2803,7 @@ nsh(p)/ip esp-udpencap-port 4600
 Enable or disable IPsec Authentication Header processing in the system kernel.
 (Enabled by default.)
 .Bd -literal -offset indent
-nsh (p)/ip ah
+nsh(p)/ip ah
 .Ed
 .Pp
 .Op no
@@ -4130,16 +4185,22 @@ has facilities for a user to be able to login directly to
 .Nm
 without having access to a typical bourne or C shell.
 Using doas (a tool similar to sudo in other POSIX systems)
-one can setup doas to allow the user to launch nsh as root.
+one can setup doas to allow the user to launch
+.Nm
+as root.
 there are 3 options for doing this.
 .Pp
 Option1 - least restrictive interactive and non-interactive
 .Nm
 .Pp
-To allow a user to run nsh interactively or non interactively
+To allow a user to run
+.Nm
+interactively or non interactively
 as root when logged in or logging in.
 Configuring /etc/doas.conf with the line starting with 'permit'
-to allow the full path to the nsh binary without any other
+to allow the full path to the
+.Nm
+binary without any other
 restrictions.
 e.g. Configure the user 'stacy' so they can run
 .Bd -literal
@@ -4168,7 +4229,9 @@ use only.
 .Pp
 To allow a restricted user run a specifc configuration script only.
 Configuring /etc/doas.conf with the line starting with 'permit'
-to allow the full path to the nsh binary and specify args
+to allow the full path to the
+.Nm
+binary and specify args
 to enforce nsh be run only with those specific arguments.
 E.g.to allow a backupuser pull the running config only.
 .Bd -literal -offset indent
@@ -4189,7 +4252,9 @@ Then simply allow all users that are members of a group to run
 using /etc/doas.conf and referring to the groupname rather than just
 a single username.
 .Pp
-Compile nwrapper (in the nsh distribution):
+Compile nwrapper (in the
+.Nm
+distribution):
 .Bd -literal -offset indent
 cc -o nwrapper nwrapper.c
 .Ed
