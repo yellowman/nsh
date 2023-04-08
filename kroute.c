@@ -77,10 +77,7 @@ void	 pmsg_addrs(char *, int);
 void	 bprintf(FILE *, int, u_char *);
 
 /*
- * caller must freertdump() if rtdump not null
- *
- * if af is set, flags are not, and vice versa (or both can be 0)
- *
+ * caller must freertdump() if rtdump not NULL
  */
 struct rtdump *getrtdump(int af, int flags, int tableid)
 {
@@ -96,31 +93,36 @@ struct rtdump *getrtdump(int af, int flags, int tableid)
 	mib[5] = flags;
 	mib[6] = tableid;
 
-	if (sysctl(mib, 7, NULL, &needed, NULL, 0) < 0) {
-		if (errno != ENOENT)
-			printf("%% getrtdump: unable to get estimate: %s\n",
-			    strerror(errno));
-		return(NULL);
-	}
-
 	if ((rtdump = malloc(sizeof(struct rtdump))) == NULL) {
 		printf("%% getrtdump: rtdump malloc: %s\n", strerror(errno));
 		return(NULL);
 	}
 	rtdump->buf = NULL;
-	if (needed) {
-		if ((rtdump->buf = malloc(needed)) == NULL) {
-			printf("%% getrtdump: malloc: %s\n", strerror(errno));
+
+	while (1) {
+		if (sysctl(mib, 7, NULL, &needed, NULL, 0) < 0) {
+			if (errno != ENOENT)
+				printf("%% getrtdump: unable to get estimate: %s\n",
+				    strerror(errno));
+			return(NULL);
+		}
+		if (needed == 0)
+			break;
+		if ((rtdump->buf = realloc(rtdump->buf, needed)) == NULL) {
+			printf("%% getrtdump: realloc: %s\n", strerror(errno));
 			free(rtdump);
 			return(NULL);
 		}
 		if (sysctl(mib, 7, rtdump->buf, &needed, NULL, 0) < 0) {
+			if (errno == ENOMEM)
+				continue;
 			printf("%% getrtdump: sysctl routing table: %s\n",
 			    strerror(errno));
 			freertdump(rtdump);
 			return(NULL);
 		}
 		rtdump->lim = rtdump->buf + needed;
+		break;
 	}
 	if (rtdump->buf == NULL) {
 		free(rtdump);
