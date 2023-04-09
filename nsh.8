@@ -24,7 +24,7 @@
 .\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd $Mdocdate: April 08 2023 $
+.Dd $Mdocdate: April 09 2023 $
 .Dt NSH 8
 .Os
 .Sh NAME
@@ -1673,7 +1673,7 @@ nsh/no verbose
 .Tg show
 .Ic show
 .Op hostname | interface | autoconf | route | route6 | sadb | arp | ndp | vlan\
- | kernel | bgp | ospf | ospf6 | eigrp | rip | ldp | ike | ipsec | dvmrp\
+ | kernel | bgp | ospf | ospf6 | pf | eigrp | rip | ldp | ike | ipsec | dvmrp\
  | relay | dhcp | smtp | ldap | monitor | version | users | running-config\
  | startup-config |\&? | help
 .Pp
@@ -1701,6 +1701,7 @@ nsh(p)/show
   bgp             BGP information
   ospf            OSPF information
   ospf6           OSPF6 information
+  pf              Packet Filter firewall information
   eigrp           EIGRP information
   rip             RIP information
   ldp             LDP information
@@ -2231,6 +2232,56 @@ nsh(p)/show ospf6
   show ospf6 neighbor   Neighbor information
   show ospf6 rib        Routing Information Base information
   show ospf6 summary    Summary information
+nsh(p)/
+.Ed
+.Pp
+.Tg pf
+.Ic show pf
+.Op Ar all | anchors | info | labels | memory | queues | rules | sources |
+ states | tables | timeouts | osfingerprint | interfaces
+.Pp
+Display the status of
+.Xr pf 4
+.Ox
+Packet Filter firewall.
+.Nm uses
+.Xr pfctl 8
+with the -s (show) command with modifier arguments to display various aspects
+the current pf status on the system.
+.Bd -literal -offset indent
+nsh(p)/show pf
+% Arguments may be abbreviated
+
+  show pf all           all pf info except fingerprints and interfaces information
+  show pf anchors       currently loaded anchors in main pf ruleset information
+  show pf info          pf filter statistics, counters and tracking information
+  show pf labels        per rule stats (bytes, packets and states) information
+  show pf memory        current pf pool memory hard limit information
+  show pf queues        currently loaded pf queue definition information
+  show pf rules         active pf firewall rule information
+  show pf sources       contents of the pf source tracking table information
+  show pf states        contents of the pf state table information
+  show pf tables        pf table information
+  show pf timeouts      current pf global timeout information
+  show pf osfingerprint pf Operating System fingerprint information
+  show pf interfaces    pf usable interfaces/ interface group information
+nsh(p)/
+.Ed
+.Tg eigrp
+.Ic show eigrp
+.Op Ar interfaces | neighbor | topology | traffic
+.Pp
+Display the status of
+.Xr eigrpd 8
+Enhanced Interior Gateway Routing Protocol (EIGRP) daemon.
+.Bd -literal -offset indent
+nsh(p)/show eigrp
+% Arguments may be abbreviated
+
+  show eigrp interfaces Interface information
+  show eigrp neighbor   Neighbor information
+  show eigrp topology   Topology information
+  show eigrp traffic    Traffic information
 nsh(p)/
 .Ed
 .Pp
