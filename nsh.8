@@ -1,4 +1,4 @@
-.\"     $OpenBSD: nsh.8,v 1.1 2023/04/08 13:22:00 UTC chrisc Exp $
+#.\"     $OpenBSD: nsh.8,v 1.1 2023/04/08 13:22:00 UTC chrisc Exp $
 .\"
 .\" Copyright (c) 2002-2023 Chris Cappuccio.  All rights reserved.
 .\"
@@ -878,36 +878,39 @@ By default pipex is disabled.
 .Bd -literal -offset indent
 nsh(config-p)/pipex enable
 .Ed
+.Pp
 .Tg packetfilter
 .Tg firewall
 .Tg pf
 .Ic pf
-.Op Cm \&? | enable | disable | edit | reload
+.Op Cm \&? | enable | disable | edit | check-config | reload
 .Pp
 Control the configuration and operation of the pf (Packet Filter) firewall.
 .Bd -literal -offset indent
 nsh(config-p)/pf ?
 % Arguments may be abbreviated
 
-   enable  enable service
-   disable disable service
-   edit    edit configuration
-   reload  reload service
+   enable       enable pf firewall
+   disable      disable pf firewall
+   edit         edit, test and stage firewall rules
+   check-config test and display staged firewall rules
+   reload       test and apply staged firewall rules
+nsh(config-p)/
 .Ed
 .Pp
 .Ic pf edit
 .Pp
-Open the default editor for the user and allow the user modify the firewall
-configuration.
+Open the default editor for the user and allow the user modify and stage
+the firewall configuration.
 The edited ruleset is automatically validated by
 .Nm
 with
 .Xr pfctl 8
 on exiting the editor.
-If the user entered pf configuraition is incorrect on exiting the editor
+If the user entered pf configuration is incorrect on exiting the editor,
 .Nm
 will display a syntax error warning with each line number that fails the
-syntax checker.
+syntax check.
 .Pp
 E.g. warning displayed by
 .Cm pf edit
@@ -931,10 +934,27 @@ nsh(p)/!man pf.conf
 nsh(config-p)/pf edit
 .Ed
 .Pp
+.Ic pf check-config
+.Pp
+The
+.Cm pf check-config
+command uses
+.Ox
+.Xr pfctl 8
+to validate the syntax of the staged pf configuration.
+If the staged pf configuration passes the syntax checker, the rules
+will be displayed in order with their rule number.
+If the staged pf configuration fails the syntax checker, the line
+numbers with the syntax errors will be listed.
+.Pp
 .Ic pf reload
+.Pp
 The
 .Cm pf reload
-command validates the syntax of the user entered pf configuration.
+command uses
+.Ox
+.Xr pfctl 8
+to validate the syntax of the staged pf configuration.
 If the
 .Cm pf edit
 config passes,
@@ -959,6 +979,7 @@ nsh(config-p)/pf reload
 /var/run/pf.conf.0:17: syntax error
 pfctl: Syntax error in config file: pf rules not loaded
 .Ed
+.Pp
 .Tg ospf
 .Ic ospf
 .Op Cm \&? | enable | disable | edit | reload | fib | log
