@@ -113,14 +113,16 @@ struct ctl ctl_motd[] = {
 /* PF, pfctl */
 char *ctl_pf_test[] = { PFCTL, "-nf", REQTEMP, NULL };
 struct ctl ctl_pf[] = {
-	{ "enable",	"enable service",
+	{ "enable",	"enable pf firewall",
 	    { PFCTL, "-e", NULL }, NULL, DB_X_ENABLE, T_EXEC },
-	{ "disable",	"disable service",
+	{ "disable",	"disable pf firewall",
 	    { PFCTL, "-d", NULL }, NULL, DB_X_DISABLE, T_EXEC },
-	{ "edit",	"edit configuration",
+	{ "edit",	"edit, test and stage firewall rules",
 	    { "pf", (char *)ctl_pf_test, NULL }, call_editor, 0,
 	    T_HANDLER_FILL1 },
-	{ "reload",	"reload service",
+	{ "check-config",     "test and display staged firewall rules",
+            { PFCTL, "-nvvf", REQTEMP, NULL }, NULL, 0, T_EXEC },
+	{ "reload",	"test and apply staged firewall rules",
 	    { PFCTL, "-f", REQTEMP, NULL }, NULL, 0, T_EXEC },
 	{ 0, 0, { 0 }, 0, 0, 0 }
 };
