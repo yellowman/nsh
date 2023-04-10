@@ -245,7 +245,7 @@ complete_local(char *word, int list, EditLine *el)
 
 static unsigned char
 complete_showhelp(char *word, EditLine *el, char **table, int stlen,
-    char *cmdname)
+    char *cmdname, int vertical)
 {
 	char insertstr[MAXPATHLEN];
 	char **c;
@@ -282,8 +282,12 @@ complete_showhelp(char *word, EditLine *el, char **table, int stlen,
 
 	if (helplist->sl_cur > 0)
 		putc('\n', ttyout);
-	for (i = 0 ; i < helplist->sl_cur ; i++)
-		fprintf(ttyout, " %s %s\n", cmdname, helplist->sl_str[i]);
+	if (vertical)
+		list_vertical(helplist);
+	else {
+		for (i = 0 ; i < helplist->sl_cur ; i++)
+			fprintf(ttyout, " %s %s\n", cmdname, helplist->sl_str[i]);
+	}
 
         sl_free(helplist, 0);
 	return (CC_REDISPLAY);
@@ -704,6 +708,8 @@ unsigned char
 complete_args(struct ghs *c, char *word, int dolist, EditLine *el, char **table,
     int stlen, int level)
 {
+	int help_vertical = 0;
+
 #ifdef CMPLDEBUG
 	printf("[%s]",&c->complete[level]);
 #endif
@@ -733,10 +739,14 @@ complete_args(struct ghs *c, char *word, int dolist, EditLine *el, char **table,
 		if (c->table == NULL)
 			return(CC_ERROR);
 		return (complete_subcommand(word, dolist, el, c->table, c->stlen));
+	case 'H':
+		help_vertical = 1;
+		/* fallthrough */
 	case 'h':
 		if (c->table == NULL)
 			return(CC_ERROR);
-		return (complete_showhelp(word, el, c->table, c->stlen, c->name));
+		return (complete_showhelp(word, el, c->table, c->stlen, c->name,
+		    help_vertical));
 	case 'n':			/* no complete */
 		return (CC_ERROR);
 	}
