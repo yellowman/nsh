@@ -2018,11 +2018,11 @@ cmdargs_output(char *cmd, char *arg[], int stdoutfd, int stderrfd)
 
 		case 0:
 		{
+			char *shellp = cmd;
+
 			signal(SIGQUIT, SIG_DFL);
 			signal(SIGINT, SIG_DFL);
 			signal(SIGCHLD, SIG_DFL);
-
-			char *shellp = cmd;
 
 			if (cli_rtable != 0 && nsh_setrtable(cli_rtable))
 				_exit(0);
