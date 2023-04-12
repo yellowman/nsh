@@ -1992,6 +1992,10 @@ group(int argc, char **argv)
 
 /*
  * cmd, multiple args
+ *
+ * If no error occurs then return the program's exit code (>= 0).
+ * Return -1 on error to run the program or if the program was
+ * terminated in an abnormal way, such as being killed by a signal.
  */
 int
 cmdargs(char *cmd, char *arg[])
@@ -2001,11 +2005,16 @@ cmdargs(char *cmd, char *arg[])
 
 /*
  * cmd, multiple args, capture stdout and stderr output
+ *
+ * If no error occurs then return the program's exit code (>= 0).
+ * Return -1 on error to run the program or if the program was
+ * terminated in an abnormal way, such as being killed by a signal.
  */
 int
 cmdargs_output(char *cmd, char *arg[], int stdoutfd, int stderrfd)
 {
 	sig_t sigint, sigquit, sigchld;
+	int status = -1;
 
 	sigint = signal(SIGINT, SIG_IGN);
 	sigquit = signal(SIGQUIT, SIG_IGN);
@@ -2014,7 +2023,7 @@ cmdargs_output(char *cmd, char *arg[], int stdoutfd, int stderrfd)
 	switch (child = fork()) {
 		case -1:
 			printf("%% fork failed: %s\n", strerror(errno));
-			return 0;
+			return -1;
 
 		case 0:
 		{
@@ -2046,12 +2055,14 @@ cmdargs_output(char *cmd, char *arg[], int stdoutfd, int stderrfd)
 
 			execv(shellp, arg);
 			printf("%% execv failed: %s\n", strerror(errno));
-			_exit(0);
+			_exit(127); /* same as what ksh(1) would do here */
 		}
 			break;
 		default:
 			signal(SIGALRM, sigalarm);
-			wait(0);  /* Wait for cmd to complete */
+			wait(&status);  /* Wait for cmd to complete */
+			if (WIFEXITED(status)) /* normal exit? */
+				status = WEXITSTATUS(status); /* exit code */
 			break;
 	}
 
@@ -2061,7 +2072,7 @@ cmdargs_output(char *cmd, char *arg[], int stdoutfd, int stderrfd)
 	signal(SIGALRM, SIG_DFL);
 	child = -1;
 
-	return 1; 
+	return status;
 }
 
 /*
