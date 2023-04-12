@@ -62,6 +62,37 @@
 #define SMTPCTL         "/usr/sbin/smtpctl"
 #define LDAPCTL         "/usr/sbin/ldapctl"
 
+/* argument list replacement */
+#define OPT     (void *)1
+#define REQ     (void *)2
+#define IFNAME  (void *)3
+#define REQTEMP (void *)4                                                       
+#define SIZE_CONF_TEMP 64
+int ctlhandler(int, char **, char *);
+void rmtemp(char *);
+struct ctl {
+        char *name;
+        char *help;
+        char *args[32];
+        void (*handler)();
+        int flag_x;
+        int type;
+};
+
+#define T_HANDLER       1
+#define T_HANDLER_FILL1 2
+#define T_EXEC          3
+struct daemons {
+        char *name;
+        char *propername;
+        struct ctl *table;
+        char *tmpfile;
+        mode_t mode;
+        int doreload;
+        int rtablemax;
+};
+
+
 /* tmp config locations */
 #define PFCONF_TEMP     "/var/run/pf.conf"
 #define OSPFCONF_TEMP   "/var/run/ospfd.conf"
@@ -91,25 +122,6 @@
 #define IFSTATECONF_TEMP "/var/run/ifstated.conf"
 #define MOTD_TEMP "/var/run/motd"
 
-
-/* if.c related */
-#define DHCLIENT        "/sbin/dhclient"
-#define DHCRELAY        "/usr/sbin/dhcrelay"
-#define RAD             "/usr/sbin/rad"
-#define DHCPLEASED_SOCK "/dev/dhcpleased.sock"
-#define SLAACD_SOCK     "/dev/slaacd.sock"
-#define IFDATA_MTU 1            /* request for if_data.ifi_mtu */
-#define IFDATA_BAUDRATE 2       /* request for if_data.ifi_baudrate */
-#define IFDATA_IFTYPE 3         /* request for if_data.ifi_type */
-#define MBPS(bps) (bps / 1000 / 1000)
-#define ROUNDMBPS(bps) ((float)bps == ((bps / 1000 / 1000) * 1000 * 1000))
-#define ROUNDKBPS(bps) ((float)bps == ((bps / 1000) * 1000))
-#define ROUNDKBYTES(bytes) ((float)bytes == ((bytes / 1024) * 1024))
-#define DEFAULT_LLPRIORITY 3
-
-
-
-
 /* ctl tests*/
 static char *ctl_bgp_test[] = { BGPD, "-nf", REQTEMP, NULL, NULL };
 static char *ctl_dhcp_test[] = { DHCPD, "-nc", REQTEMP, NULL };
@@ -137,3 +149,34 @@ static char *ctl_sshd_test[] = { SSHD, "-tf", REQTEMP, NULL };
 /* sasyncd test ? */
 /* tftpd test ? */
 /* tftpproxy test ? */
+
+extern struct daemons ctl_daemons[];
+extern struct ctl ctl_pf[];
+extern struct ctl ctl_ospf[];
+extern struct ctl ctl_ospf6[];
+extern struct ctl ctl_eigrp[];
+extern struct ctl ctl_relay[];
+extern struct ctl ctl_bgp[];
+extern struct ctl ctl_rip[];
+extern struct ctl ctl_ldp[];
+extern struct ctl ctl_ipsec[];
+extern struct ctl ctl_nppp[];
+extern struct ctl ctl_ifstate[];
+extern struct ctl ctl_ike[];
+extern struct ctl ctl_dvmrp[];
+extern struct ctl ctl_rad[];
+extern struct ctl ctl_sasync[];
+extern struct ctl ctl_dhcp[];
+extern struct ctl ctl_snmp[];
+extern struct ctl ctl_smtp[];
+extern struct ctl ctl_sshd[];
+extern struct ctl ctl_ntp[];
+extern struct ctl ctl_ftpproxy[];
+extern struct ctl ctl_tftpproxy[];
+extern struct ctl ctl_tftp[];
+extern struct ctl ctl_dns[];
+extern struct ctl ctl_inet[];
+extern struct ctl ctl_ldap[];
+extern struct ctl ctl_motd[];
+extern struct ctl ctl_resolv[];
+void flag_x(char *, char *, int, char *);
