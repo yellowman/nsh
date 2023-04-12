@@ -26,7 +26,7 @@
 #include <sys/socket.h>
 #include <sys/syslimits.h>
 #include "externs.h"
-
+#include "ctl.h"
 
 /* table variable (for pkill usage) */
 static char table[16];

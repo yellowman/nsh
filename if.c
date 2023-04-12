@@ -49,6 +49,8 @@
 #include "bridge.h"
 #include "stringlist.h"
 #include "externs.h"
+#include "ctl.h"
+
 
 char *iftype(int int_type);
 const char *get_linkstate(int, int);

@@ -65,6 +65,7 @@
 #include "stringlist.h"
 #include "externs.h"
 #include "sysctl.h"
+#include "ctl.h"
 
 char prompt[128];
 
