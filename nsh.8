@@ -2063,14 +2063,18 @@ nsh(p)/
 .Pp
 .Tg vlan
 .Ic show vlan
-.Op vlan-id
+.Op vlan-id 
+.Op <rangestart-vlan-id> <range-end-vlan-id>
 .Pp
 Display all virtual local area network interfaces configured on the system.
 Lists the vlans parent interfaces, any layer2 forwarding device the interface
 is a member of and the vlan interface description.
-expiry of each interfaces.
+List of vlans displayed can be restricted to an individual vlan if its vlan-id
+is supplied as an optional argument.
+The vlans displayed can be restricted to a range of vlans if the start and end
+vlan-id are supplied as 2 optional consequitiv arguments in ascending order.
 .Pp
-e.g. display all vlan interfaces on the system
+E.g. display all vlan interfaces on the system
 .Bd -literal -offset indent
 nsh(p)/show vlan
 % Interface  Tag   Status  Type     Parent    Bridge     Description
@@ -2084,6 +2088,15 @@ nsh(p)/show vlan 200
 % Interface  Tag   Status  Type     Parent    Bridge   Description
   vlan200    200   up      802.1Q   vether200 veb200   Chris-C-LAN
 nsh(p)/
+.Ed
+.Pp
+E.g. show vlan interfaces with vlan-ids the range 100 to 4093 
+.Bd. -literal -offset indent
+nsh(p)/show vlan 100 4093
+% Interface  Tag   Status  Type     Parent  Bridge   Description
+  vlan100    100   up      802.1Q   em1     -        
+  vlan4093   4093  up      802.1Q   em1     -        
+  vlan200    200   up      802.1Q   em1     -        
 .Ed
 .Pp
 .Tg bridge
