@@ -14,6 +14,8 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#include <sys/tree.h>
+
 #include <stdio.h>
 #include <ctype.h>
 #include <fcntl.h>
@@ -654,6 +656,192 @@ show_autoconf(int argc, char **argv)
 	close(nullfd);
 	close(fd);
 	close(ifs);
+	return (0);
+}
+
+struct ip_tree_entry {
+	RB_ENTRY(ip_tree_entry) entry;
+	u_short family;		/* AF_INET | AF_INET6 */
+	const char *ifname;
+	int flags;		/* custom IPv4 address flags */
+#define NSH_IP_FLAG_DHCP	0x01
+#define NSH_IP_FLAG_IPCP	0x02
+#define NSH_IP_FLAG_STATIC	0x04
+	int flags6;		/* IN6_IFF_ flags */
+	union {
+		struct in_addr in;
+		struct in6_addr in6;
+	} addr;
+};
+
+static inline int
+ip_tree_cmp(const struct ip_tree_entry *e1, const struct ip_tree_entry *e2)
+{
+	if (e1->family < e2->family)
+		return -1;
+	if (e1->family > e2->family)
+		return 1;
+
+	if (e1->family == AF_INET)
+		return memcmp(&e1->addr.in, &e2->addr.in,
+		    sizeof(struct in_addr));
+
+	return memcmp(&e1->addr.in6, &e2->addr.in6, sizeof(struct in6_addr));
+}
+
+RB_HEAD(ip_tree, ip_tree_entry);
+RB_PROTOTYPE(ip_tree, ip_tree_entry, entry, ip_tree_cmp);
+RB_GENERATE(ip_tree, ip_tree_entry, entry, ip_tree_cmp);
+
+int
+show_ip(int argc, char **argv)
+{
+	struct ifaddrs *ifap, *ifa;
+	struct sockaddr_in *sin = NULL, *sinmask = NULL;
+	struct sockaddr_in6 *sin6 = NULL;
+	struct in6_ifreq ifr6;
+	int af = -1, s = -1;
+	char buf[INET6_ADDRSTRLEN];
+	char maskbuf[INET_ADDRSTRLEN];
+	char flagsbuf[64];
+	struct ip_tree tree;
+	struct ip_tree_entry *e = NULL;
+	int max_addr_strlen = 0;
+	size_t addr_strlen;
+
+	RB_INIT(&tree);
+
+	s = socket(PF_INET6, SOCK_DGRAM, 0);
+	if (s < 0) {
+		printf("%% show_ip: socket: %s\n", strerror(errno));
+		return (0);
+	}
+
+	if (getifaddrs(&ifap) != 0) {
+		printf("%% show_ip: getifaddrs: %s\n", strerror(errno));
+		close(s);
+		return (0);
+	}
+
+	if (strcmp(argv[1], "inet") == 0)
+		af = AF_INET;
+	else if (strcmp(argv[1], "inet6") == 0)
+		af = AF_INET6;
+
+	/* Collect IPs */
+	for (ifa = ifap; ifa; ifa = ifa->ifa_next) {
+		if (ifa->ifa_addr->sa_family != AF_INET &&
+		    ifa->ifa_addr->sa_family != AF_INET6)
+			continue;
+		if (af != -1 && ifa->ifa_addr->sa_family != af)
+			continue;
+
+		e = calloc(1, sizeof(*e));
+		if (e == NULL) {
+			printf("%% show_ip: calloc: %s\n", strerror(errno));
+			goto done;
+		}
+
+		e->family = ifa->ifa_addr->sa_family;
+		e->ifname = ifa->ifa_name;
+
+		if (ifa->ifa_addr->sa_family == AF_INET) {
+			sin = (struct sockaddr_in *)ifa->ifa_addr;
+			sinmask = (struct sockaddr_in *)ifa->ifa_netmask;
+			memcpy(&e->addr.in, &sin->sin_addr, sizeof(e->addr.in));
+			if (inet_ntop(e->family, &e->addr.in,
+			    buf, sizeof(buf)) == NULL) {
+				printf("%% inet_ntop: %s\n", strerror(errno));
+				goto done;
+			}
+			if (inet_ntop(e->family, &sinmask->sin_addr,
+			    maskbuf, sizeof(maskbuf)) == NULL) {
+				printf("%% inet_ntop: %s\n", strerror(errno));
+				goto done;
+			}
+			if (dhcpleased_has_address(ifa->ifa_name, buf, maskbuf))
+				e->flags |= NSH_IP_FLAG_DHCP;
+			else if (is_pppoe(ifa->ifa_name, s) &&
+			    pppoe_get_ipaddrmode(ifa->ifa_name) ==
+			    NSH_PPPOE_IPADDR_IPCP)
+				e->flags |= NSH_IP_FLAG_IPCP;
+			else
+				e->flags |= NSH_IP_FLAG_STATIC;
+		} else {
+			sin6 = (struct sockaddr_in6 *)ifa->ifa_addr;
+			memcpy(&e->addr.in6, &sin6->sin6_addr,
+			    sizeof(e->addr.in6));
+			if (inet_ntop(e->family, &e->addr.in6,
+			    buf, sizeof(buf)) == NULL) {
+				printf("%% inet_ntop: %s\n", strerror(errno));
+				goto done;
+			}
+			memset(&ifr6, 0, sizeof(ifr6));
+			strlcpy(ifr6.ifr_name, e->ifname, sizeof(ifr6.ifr_name));
+			memcpy(&ifr6.ifr_addr, sin6, sizeof(ifr6.ifr_addr));
+			if (ioctl(s, SIOCGIFAFLAG_IN6, (caddr_t)&ifr6) == 0)
+				e->flags6 = ifr6.ifr_ifru.ifru_flags6;
+		}
+
+		RB_INSERT(ip_tree, &tree, e);
+		e = NULL;
+
+		addr_strlen = strlen(buf);
+		if (max_addr_strlen < addr_strlen)
+			max_addr_strlen = addr_strlen;
+	}
+
+	/* Show IPs */
+	printf("%-*s  Interface  Type\n", max_addr_strlen, "Address");
+	RB_FOREACH(e, ip_tree, &tree) {
+		void *addr;
+		flagsbuf[0] = '\0';
+		if (e->family == AF_INET) {
+			addr = &e->addr.in;
+			if (e->flags & NSH_IP_FLAG_DHCP)
+				strlcat(flagsbuf, " dhcp", sizeof(flagsbuf));
+			if (e->flags & NSH_IP_FLAG_IPCP) {
+				strlcat(flagsbuf, " autoconf",
+				    sizeof(flagsbuf));
+			}
+			if (e->flags & NSH_IP_FLAG_STATIC)
+				strlcat(flagsbuf, " static", sizeof(flagsbuf));
+		} else {
+			addr = &e->addr.in6;
+			if (e->flags6 & IN6_IFF_AUTOCONF) {
+				strlcat(flagsbuf, " autoconf",
+				    sizeof(flagsbuf));
+			}
+			if (e->flags6 & IN6_IFF_TEMPORARY) {
+				strlcat(flagsbuf, " temporary",
+				    sizeof(flagsbuf));
+			}
+			if (IN6_IS_ADDR_LINKLOCAL(&e->addr.in6)) {
+				strlcat(flagsbuf, " link-local",
+				    sizeof(flagsbuf));
+			} else if ((e->flags6 & (IN6_IFF_AUTOCONF |
+			    IN6_IFF_TEMPORARY)) == 0) {
+				strlcat(flagsbuf, " static",
+				    sizeof(flagsbuf));
+			}
+		}
+
+		if (inet_ntop(e->family, addr, buf, sizeof(buf)) == NULL) {
+			printf("%% inet_ntop: %s\n", strerror(errno));
+			continue;
+		}
+
+		printf("%-*s  %-9s %s\n", max_addr_strlen, buf,
+		    e->ifname, flagsbuf);
+	}
+done:
+	free(e);
+	while ((e = RB_MIN(ip_tree, &tree))) {
+		RB_REMOVE(ip_tree, &tree, e);
+		free(e);
+	}
+	freeifaddrs(ifap);
+	close(s);
 	return (0);
 }
 
