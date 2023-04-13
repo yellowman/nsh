@@ -152,6 +152,11 @@ show_int_status(char *ifname, int ifs)
 		    strerror(errno));
 		return;
 	}
+	if (ioctl(ifs, SIOCGIFRDOMAIN, (caddr_t)&ifr) == -1) {
+		printf("%% show_int_status: SIOCGIFRDOMAIN: %s\n",
+		    strerror(errno));
+		return;
+	}
 
 	memset(&ifmr, 0, sizeof(ifmr));
 	strlcpy(ifmr.ifm_name, ifname, sizeof(ifmr.ifm_name));
@@ -205,8 +210,10 @@ show_int_status(char *ifname, int ifs)
 	if (IFM_SUBTYPE(ifmr.ifm_active) != IFM_AUTO)
 		ifm_subtype = get_ifm_subtype_str(ifmr.ifm_active);
 
-	printf("  %-7s %-7s %-15s %s%s%s%s%s%s%s\n", ifname,
+
+	printf("  %-7s %-7s %-15s %10u  %s%s%s%s%s%s%s\n", ifname,
 	    (flags & IFF_UP) ? "up" : "down", link_state_desc,
+	    ifr.ifr_rdomainid,
 	    ifm_type ? ifm_type : "",
 	    ifm_type ? " " : "",
 	    ifm_subtype ? ifm_subtype : "",
@@ -287,7 +294,7 @@ show_int(int argc, char **argv)
 			close(ifs);
 			return 0;
 		}
-		puts("% Name    Status  Link            Media");
+		puts("% Name    Status  Link        Routing-Domain  Media");
 		for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++)
 			show_int_status(ifnp->if_name, ifs);
 		if_freenameindex(ifn_list);
