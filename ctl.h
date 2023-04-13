@@ -141,14 +141,14 @@ static char *ctl_ospf_test[] = { OSPFD, "-nf", REQTEMP, NULL };
 static char *ctl_ospf6_test[] = { OSPF6D, "-nf", REQTEMP, NULL };
 static char *ctl_rad_test[] = { RAD, "-nf", REQTEMP, NULL };
 static char *ctl_relay_test[] = { RELAYD, "-nf", REQTEMP, NULL };
-/* resolvd test ? */
+/* resolvd test how can this be done ? */
 static char *ctl_rip_test[] = { RIPD, "-nf", REQTEMP, NULL };
+static char *ctl_sasync_test[] = { SASYNCD, "-nc", REQTEMP, NULL };
 static char *ctl_smtp_test[] = { SMTPD, "-nf", REQTEMP, NULL };
 static char *ctl_snmp_test[] = { SNMPD, "-nf", REQTEMP, NULL };
 static char *ctl_sshd_test[] = { SSHD, "-tf", REQTEMP, NULL };
-/* sasyncd test ? */
-/* tftpd test ? */
-/* tftpproxy test ? */
+/* tftpd test how this can be done ? */
+/* tftpproxy  how this can be done ? */
 
 extern struct daemons ctl_daemons[];
 extern struct ctl ctl_pf[];
