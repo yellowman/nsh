@@ -29,7 +29,6 @@
 #include <arpa/inet.h>
 #include "ip.h"
 #include "externs.h"
-#include "ctl.h"
 
 #define ASSUME_NETMASK 1
 
