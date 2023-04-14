@@ -795,9 +795,14 @@ interface(int argc, char **argv, char *modhvar)
 	strlcpy(ifname, tmp, IFNAMSIZ);
 	if (ifunit) {
 		const char *errstr;
+		size_t len = strlen(ifname);
 		strtonum(ifunit, 0, INT_MAX, &errstr);
 		if (errstr) {
 			printf("%% interface unit %s is %s\n", ifunit, errstr);
+			return(1);
+		}
+		if (len > 0 && isdigit((unsigned char)(ifname[len - 1]))) {
+			printf("%% interface unit %s is redundant\n", ifunit);
 			return(1);
 		}
 		strlcat(ifname, ifunit, sizeof(ifname));
