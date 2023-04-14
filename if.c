@@ -51,7 +51,6 @@
 #include "externs.h"
 #include "ctl.h"
 
-
 char *iftype(int int_type);
 const char *get_linkstate(int, int);
 void show_int_status(char *, int);
