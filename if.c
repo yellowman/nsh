@@ -256,10 +256,15 @@ show_int(int argc, char **argv)
 		 * network switches do: interface em 0
 		 */
 		const char *errstr;
+		size_t len2 = strlen(argv[2]);
 		strlcpy(ifname, argv[2], sizeof(ifname));
 		strtonum(argv[3], 0, INT_MAX, &errstr);
 		if (errstr) {
 			printf("%% interface unit %s is %s\n", argv[3], errstr);
+			return(1);
+		}
+		if (len2 > 0 && isdigit((unsigned char)(argv[2][len2 - 1]))) {
+			printf("%% interface unit %s is redundant\n", argv[3]);
 			return(1);
 		}
 		strlcat(ifname, argv[3], sizeof(ifname));
