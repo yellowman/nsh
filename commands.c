@@ -117,6 +117,7 @@ static int	flush_history(void);
 static int	is_bad_input(const char *, size_t);
 static int	read_command_line(EditLine *, History *);
 static int	int_show(char *, int, int, char **);
+static int	int_manual(char *, int, int, char **);
 static int	int_help(void);
 static int	int_exit(void);
 static int	el_burrito(EditLine *, int, char **);
@@ -555,6 +556,8 @@ flush_help(void)
  */
 
 static char showhelp[];
+static char manhelp[];
+struct ghs mantab[];
 
 struct intlist Intlist[] = {
 /* Interface mode commands */
@@ -641,6 +644,7 @@ struct intlist Intlist[] = {
 	{ "shutdown",   "Shutdown interface",			CMPL0 0, 0, intflags, 1 },
 	{ "show",	showhelp,				CMPL(ta) (char **)showlist, sizeof(Menu), int_show, 0 },
         { "?",		"Options",				CMPL0 0, 0, int_help, 0 },
+	{ "manual",	manhelp,				CMPL(H) (char **)mantab, sizeof(struct ghs), int_manual, 0 },
         { "help",	0,					CMPL0 0, 0, int_help, 0 },
 	{ "exit",	"Leave interface config mode and return to global config mode ",
 								CMPL0 0, 0, int_exit, 0 },
@@ -681,6 +685,7 @@ struct intlist Bridgelist[] = {
 
 /* Help commands */
 	{ "?",		"Options",				CMPL0 0, 0, int_help, 0 },
+	{ "manual",	manhelp,				CMPL(H) (char **)mantab, sizeof(struct ghs), int_manual, 0 },
 	{ "help",	0,					CMPL0 0, 0, int_help, 0 },
 	{ "exit",	"Leave bridge config mode and return to global config mode ",
 								CMPL0 0, 0, int_exit },
@@ -961,6 +966,13 @@ static int
 int_show(char *ifname, int ifs, int argc, char **argv)
 {
 	showcmd(argc, argv);
+	return 0; /* do not leave interface context */
+}
+
+static int
+int_manual(char *ifname, int ifs, int argc, char **argv)
+{
+	manual(argc, argv);
 	return 0; /* do not leave interface context */
 }
 
