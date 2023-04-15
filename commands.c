@@ -123,6 +123,8 @@ static int	int_traceroute6(char *, int, int, char **);
 static int	int_ssh(char *, int, int, char **);
 static int	int_telnet(char *, int, int, char **);
 static int	int_show(char *, int, int, char **);
+static int	int_doverbose(char *, int, int, char **);
+static int	int_doediting(char *, int, int, char **);
 static int	int_manual(char *, int, int, char **);
 static int	int_help(void);
 static int	int_exit(void);
@@ -568,6 +570,8 @@ static char tracert6help[];
 static char sshhelp[];
 static char telnethelp[];
 static char showhelp[];
+static char verbosehelp[];
+static char editinghelp[];
 static char manhelp[];
 struct ghs mantab[];
 
@@ -661,6 +665,8 @@ struct intlist Intlist[] = {
 	{ "trunkproto",	"Define trunkproto",			CMPL0 0, 0, inttrunkproto, 1 },
 	{ "shutdown",   "Shutdown interface",			CMPL0 0, 0, intflags, 1 },
 	{ "show",	showhelp,				CMPL(ta) (char **)showlist, sizeof(Menu), int_show, 0 },
+	{ "verbose",	verbosehelp,				CMPL0 0, 0, int_doverbose, 1 },
+	{ "editing",	editinghelp,				CMPL0 0, 0, int_doediting, 1 },
         { "?",		"Options",				CMPL0 0, 0, int_help, 0 },
 	{ "manual",	manhelp,				CMPL(H) (char **)mantab, sizeof(struct ghs), int_manual, 0 },
         { "help",	0,					CMPL0 0, 0, int_help, 0 },
@@ -706,6 +712,8 @@ struct intlist Bridgelist[] = {
 	{ "protect",	"Configure protected bridge domains",	CMPL0 0, 0, brprotect, 1 },
 	{ "shutdown",	"Shutdown bridge",			CMPL0 0, 0, intflags, 1 },
 	{ "show",	showhelp,				CMPL(ta) (char **)showlist, sizeof(Menu), int_show, 0 },
+	{ "verbose",	verbosehelp,				CMPL0 0, 0, int_doverbose, 1 },
+	{ "editing",	editinghelp,				CMPL0 0, 0, int_doediting, 1 },
 
 /* Help commands */
 	{ "?",		"Options",				CMPL0 0, 0, int_help, 0 },
@@ -1032,6 +1040,20 @@ static int
 int_show(char *ifname, int ifs, int argc, char **argv)
 {
 	showcmd(argc, argv);
+	return 0; /* do not leave interface context */
+}
+
+static int
+int_doverbose(char *ifname, int ifs, int argc, char **argv)
+{
+	doverbose(argc, argv);
+	return 0; /* do not leave interface context */
+}
+
+static int
+int_doediting(char *ifname, int ifs, int argc, char **argv)
+{
+	doediting(argc, argv);
 	return 0; /* do not leave interface context */
 }
 
