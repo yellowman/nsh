@@ -127,6 +127,7 @@ static int	int_who(char *, int, int, char **);
 static int	int_doverbose(char *, int, int, char **);
 static int	int_doediting(char *, int, int, char **);
 static int	int_manual(char *, int, int, char **);
+static int	int_shell(char *, int, int, char **);
 static int	int_help(void);
 static int	int_exit(void);
 static int	el_burrito(EditLine *, int, char **);
@@ -574,6 +575,7 @@ static char showhelp[];
 static char whohelp[];
 static char verbosehelp[];
 static char editinghelp[];
+static char shellhelp[];
 static char manhelp[];
 struct ghs mantab[];
 
@@ -670,6 +672,7 @@ struct intlist Intlist[] = {
 	{ "who",	whohelp,				CMPL0 0, 0, int_who, 0 },
 	{ "verbose",	verbosehelp,				CMPL0 0, 0, int_doverbose, 1 },
 	{ "editing",	editinghelp,				CMPL0 0, 0, int_doediting, 1 },
+	{ "!",		shellhelp,				CMPL0 0, 0, int_shell, 0 },
         { "?",		"Options",				CMPL0 0, 0, int_help, 0 },
 	{ "manual",	manhelp,				CMPL(H) (char **)mantab, sizeof(struct ghs), int_manual, 0 },
         { "help",	0,					CMPL0 0, 0, int_help, 0 },
@@ -718,6 +721,7 @@ struct intlist Bridgelist[] = {
 	{ "who",	whohelp,				CMPL0 0, 0, int_who, 0 },
 	{ "verbose",	verbosehelp,				CMPL0 0, 0, int_doverbose, 1 },
 	{ "editing",	editinghelp,				CMPL0 0, 0, int_doediting, 1 },
+	{ "!",		shellhelp,				CMPL0 0, 0, int_shell, 0 },
 
 /* Help commands */
 	{ "?",		"Options",				CMPL0 0, 0, int_help, 0 },
@@ -1072,6 +1076,13 @@ static int
 int_manual(char *ifname, int ifs, int argc, char **argv)
 {
 	manual(argc, argv);
+	return 0; /* do not leave interface context */
+}
+
+static int
+int_shell(char *ifname, int ifs, int argc, char **argv)
+{
+	shell(argc, argv);
 	return 0; /* do not leave interface context */
 }
 
