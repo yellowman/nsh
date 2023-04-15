@@ -123,6 +123,7 @@ static int	int_traceroute6(char *, int, int, char **);
 static int	int_ssh(char *, int, int, char **);
 static int	int_telnet(char *, int, int, char **);
 static int	int_show(char *, int, int, char **);
+static int	int_who(char *, int, int, char **);
 static int	int_doverbose(char *, int, int, char **);
 static int	int_doediting(char *, int, int, char **);
 static int	int_manual(char *, int, int, char **);
@@ -570,6 +571,7 @@ static char tracert6help[];
 static char sshhelp[];
 static char telnethelp[];
 static char showhelp[];
+static char whohelp[];
 static char verbosehelp[];
 static char editinghelp[];
 static char manhelp[];
@@ -665,6 +667,7 @@ struct intlist Intlist[] = {
 	{ "trunkproto",	"Define trunkproto",			CMPL0 0, 0, inttrunkproto, 1 },
 	{ "shutdown",   "Shutdown interface",			CMPL0 0, 0, intflags, 1 },
 	{ "show",	showhelp,				CMPL(ta) (char **)showlist, sizeof(Menu), int_show, 0 },
+	{ "who",	whohelp,				CMPL0 0, 0, int_who, 0 },
 	{ "verbose",	verbosehelp,				CMPL0 0, 0, int_doverbose, 1 },
 	{ "editing",	editinghelp,				CMPL0 0, 0, int_doediting, 1 },
         { "?",		"Options",				CMPL0 0, 0, int_help, 0 },
@@ -712,6 +715,7 @@ struct intlist Bridgelist[] = {
 	{ "protect",	"Configure protected bridge domains",	CMPL0 0, 0, brprotect, 1 },
 	{ "shutdown",	"Shutdown bridge",			CMPL0 0, 0, intflags, 1 },
 	{ "show",	showhelp,				CMPL(ta) (char **)showlist, sizeof(Menu), int_show, 0 },
+	{ "who",	whohelp,				CMPL0 0, 0, int_who, 0 },
 	{ "verbose",	verbosehelp,				CMPL0 0, 0, int_doverbose, 1 },
 	{ "editing",	editinghelp,				CMPL0 0, 0, int_doediting, 1 },
 
@@ -1040,6 +1044,13 @@ static int
 int_show(char *ifname, int ifs, int argc, char **argv)
 {
 	showcmd(argc, argv);
+	return 0; /* do not leave interface context */
+}
+
+static int
+int_who(char *ifname, int ifs, int argc, char **argv)
+{
+	who(argc, argv);
 	return 0; /* do not leave interface context */
 }
 
