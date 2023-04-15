@@ -120,6 +120,8 @@ static int	int_ping(char *, int, int, char **);
 static int	int_ping6(char *, int, int, char **);
 static int	int_traceroute(char *, int, int, char **);
 static int	int_traceroute6(char *, int, int, char **);
+static int	int_ssh(char *, int, int, char **);
+static int	int_telnet(char *, int, int, char **);
 static int	int_show(char *, int, int, char **);
 static int	int_manual(char *, int, int, char **);
 static int	int_help(void);
@@ -563,6 +565,8 @@ static char pinghelp[];
 static char ping6help[];
 static char tracerthelp[];
 static char tracert6help[];
+static char sshhelp[];
+static char telnethelp[];
 static char showhelp[];
 static char manhelp[];
 struct ghs mantab[];
@@ -616,6 +620,8 @@ struct intlist Intlist[] = {
 	{ "ping6",	ping6help,				CMPL0 0, 0, int_ping6, 0 },
 	{ "traceroute", tracerthelp,				CMPL0 0, 0, int_traceroute, 0 },
 	{ "traceroute6", tracert6help,				CMPL0 0, 0, int_traceroute6, 0 },
+	{ "ssh",	sshhelp,				CMPL0 0, 0, int_ssh, 0 },
+	{ "telnet",	telnethelp,				CMPL0 0, 0, int_telnet,	0 },
 	{ "keepalive",	"GRE tunnel keepalive",			CMPL0 0, 0, intkeepalive, 1},
 	{ "mplslabel",	"MPLS local label",			CMPL0 0, 0, intmpls, 1 },
 	{ "pwe",	"MPLS PWE3",				CMPL0 0, 0, intpwe3, 1 },
@@ -685,6 +691,8 @@ struct intlist Bridgelist[] = {
 	{ "ping6",	ping6help,				CMPL0 0, 0, int_ping6, 0 },
 	{ "traceroute", tracerthelp,				CMPL0 0, 0, int_traceroute, 0 },
 	{ "traceroute6", tracert6help,				CMPL0 0, 0, int_traceroute6, 0 },
+	{ "ssh",	sshhelp,				CMPL0 0, 0, int_ssh, 0 },
+	{ "telnet",	telnethelp,				CMPL0 0, 0, int_telnet,	0 },
 	{ "rule",	"Bridge layer 2 filtering rules",	CMPL0 0, 0, brrule, 0 },
 	{ "static",	"Static bridge address entry",		CMPL0 0, 0, brstatic, 1 },
 	{ "ifpriority",	"Spanning priority of a member on an 802.1D bridge",	CMPL0 0, 0, brpri, 1 },
@@ -1003,6 +1011,20 @@ static int
 int_traceroute6(char *ifname, int ifs, int argc, char **argv)
 {
 	traceroute6(argc, argv);
+	return 0; /* do not leave interface context */
+}
+
+static int
+int_ssh(char *ifname, int ifs, int argc, char **argv)
+{
+	ssh(argc, argv);
+	return 0; /* do not leave interface context */
+}
+
+static int
+int_telnet(char *ifname, int ifs, int argc, char **argv)
+{
+	telnet(argc, argv);
 	return 0; /* do not leave interface context */
 }
 
