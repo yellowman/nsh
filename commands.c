@@ -116,6 +116,7 @@ static int	flush_ndp_cache(void);
 static int	flush_history(void);
 static int	is_bad_input(const char *, size_t);
 static int	read_command_line(EditLine *, History *);
+static int	int_show(char *, int, int, char **);
 static int	int_help(void);
 static int	int_exit(void);
 static int	el_burrito(EditLine *, int, char **);
@@ -553,6 +554,8 @@ flush_help(void)
  * Data structures and routines for the interface configuration mode
  */
 
+static char showhelp[];
+
 struct intlist Intlist[] = {
 /* Interface mode commands */
 	{ "inet",	"IPv4/IPv6 addresses",			CMPL(h) (char **)intiphelp, sizeof(struct ghs), intip, 1},
@@ -636,6 +639,7 @@ struct intlist Intlist[] = {
 	{ "trunkport",	"Add child interface(s) to trunk",	CMPL0 0, 0, inttrunkport, 1 },
 	{ "trunkproto",	"Define trunkproto",			CMPL0 0, 0, inttrunkproto, 1 },
 	{ "shutdown",   "Shutdown interface",			CMPL0 0, 0, intflags, 1 },
+	{ "show",	showhelp,				CMPL(ta) (char **)showlist, sizeof(Menu), int_show, 0 },
         { "?",		"Options",				CMPL0 0, 0, int_help, 0 },
         { "help",	0,					CMPL0 0, 0, int_help, 0 },
 	{ "exit",	"Leave interface config mode and return to global config mode ",
@@ -673,6 +677,7 @@ struct intlist Bridgelist[] = {
 	{ "tunneldomain", "Tunnel parameters",			CMPL0 0, 0, intmpls, 1 },
 	{ "protect",	"Configure protected bridge domains",	CMPL0 0, 0, brprotect, 1 },
 	{ "shutdown",	"Shutdown bridge",			CMPL0 0, 0, intflags, 1 },
+	{ "show",	showhelp,				CMPL(ta) (char **)showlist, sizeof(Menu), int_show, 0 },
 
 /* Help commands */
 	{ "?",		"Options",				CMPL0 0, 0, int_help, 0 },
@@ -950,6 +955,13 @@ interface(int argc, char **argv, char *modhvar)
 
 	close(ifs);
 	return(0);
+}
+
+static int
+int_show(char *ifname, int ifs, int argc, char **argv)
+{
+	showcmd(argc, argv);
+	return 0; /* do not leave interface context */
 }
 
 static int
