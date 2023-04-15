@@ -116,6 +116,8 @@ static int	flush_ndp_cache(void);
 static int	flush_history(void);
 static int	is_bad_input(const char *, size_t);
 static int	read_command_line(EditLine *, History *);
+static int	int_ping(char *, int, int, char **);
+static int	int_ping6(char *, int, int, char **);
 static int	int_show(char *, int, int, char **);
 static int	int_manual(char *, int, int, char **);
 static int	int_help(void);
@@ -555,6 +557,8 @@ flush_help(void)
  * Data structures and routines for the interface configuration mode
  */
 
+static char pinghelp[];
+static char ping6help[];
 static char showhelp[];
 static char manhelp[];
 struct ghs mantab[];
@@ -604,6 +608,8 @@ struct intlist Intlist[] = {
 	{ "vnetflowid",	"Use part of vnetid as flowid",		CMPL0 0, 0, intvnetflowid, 1 },
 	{ "parent",	"Parent interface",			CMPL(i) 0, 0, intparent, 1 },
 	{ "patch",	"Pair interface",			CMPL(i) 0, 0, intpatch, 1 },
+	{ "ping",	pinghelp,				CMPL0 0, 0, int_ping, 0 },
+	{ "ping6",	ping6help,				CMPL0 0, 0, int_ping6, 0 },
 	{ "keepalive",	"GRE tunnel keepalive",			CMPL0 0, 0, intkeepalive, 1},
 	{ "mplslabel",	"MPLS local label",			CMPL0 0, 0, intmpls, 1 },
 	{ "pwe",	"MPLS PWE3",				CMPL0 0, 0, intpwe3, 1 },
@@ -669,6 +675,8 @@ struct intlist Bridgelist[] = {
 	{ "fwddelay",	"Time before bridge begins forwarding packets",		CMPL0 0, 0, brval, 1 },
 	{ "hellotime",	"802.1D configuration packet broadcast interval",	CMPL0 0, 0, brval, 1 },
 	{ "priority",	"Spanning priority for all members on an 802.1D bridge",CMPL0 0, 0, brval, 1},
+	{ "ping",	pinghelp,				CMPL0 0, 0, int_ping, 0 },
+	{ "ping6",	ping6help,				CMPL0 0, 0, int_ping6, 0 },
 	{ "rule",	"Bridge layer 2 filtering rules",	CMPL0 0, 0, brrule, 0 },
 	{ "static",	"Static bridge address entry",		CMPL0 0, 0, brstatic, 1 },
 	{ "ifpriority",	"Spanning priority of a member on an 802.1D bridge",	CMPL0 0, 0, brpri, 1 },
@@ -960,6 +968,20 @@ interface(int argc, char **argv, char *modhvar)
 
 	close(ifs);
 	return(0);
+}
+
+static int
+int_ping(char *ifname, int ifs, int argc, char **argv)
+{
+	ping(argc, argv);
+	return 0; /* do not leave interface context */
+}
+
+static int
+int_ping6(char *ifname, int ifs, int argc, char **argv)
+{
+	ping6(argc, argv);
+	return 0; /* do not leave interface context */
 }
 
 static int
