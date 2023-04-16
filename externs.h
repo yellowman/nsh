@@ -68,6 +68,7 @@ int conf(FILE *);
 u_long default_mtu(char *);
 int conf_routes(FILE *, char *, int, int, int);
 int conf_dhcrelay(char *, char *, int);
+int dhcpleased_has_address(char *, const char *, const char *);
 
 /* show.c */
 void p_rttables(int, u_int, int);
@@ -293,6 +294,7 @@ void imr_init(char *);
 int is_valid_ifname(char *);
 int show_int(int, char **);
 int show_vlans(int, char **);
+int show_ip(int, char **);
 int show_autoconf(int, char **);
 int get_rdomain(int, char *);
 int get_ifdata(char *, int);

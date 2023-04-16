@@ -123,32 +123,33 @@ struct daemons {
 #define MOTD_TEMP "/var/run/motd"
 
 /* ctl tests*/
-static char *ctl_bgp_test[] = { BGPD, "-nf", REQTEMP, NULL, NULL };
-static char *ctl_dhcp_test[] = { DHCPD, "-nc", REQTEMP, NULL };
-static char *ctl_dvmrp_test[] = { DVMRPD, "-nf", REQTEMP, NULL };
-static char *ctl_eigrp_test[] = { EIGRPD, "-nf", REQTEMP, NULL };
+extern char *ctl_bgp_test[];
+extern char *ctl_dhcp_test[];
+extern char *ctl_dvmrp_test[];
+extern char *ctl_eigrp_test[];
 /* ftpproxy test ? */
-static char *ctl_ifstate_test[] = { IFSTATED, "-nf", REQTEMP, NULL };
-static char *ctl_ike_test[] = { IKED, "-nf", REQTEMP, NULL };
+extern char *ctl_ifstate_test[];
+extern char *ctl_ike_test[];
 /* inetd test ? */ 
-static char *ctl_ipsec_test[] = { IPSECCTL, "-nf", REQTEMP, NULL };
-static char *ctl_ldap_test[] = { LDAPD, "-nf", REQTEMP, NULL };
-static char *ctl_ldp_test[] = { LDPD, "-nf", REQTEMP, NULL };
-static char *ctl_nppp_test[] = { NPPPD, "-nf", REQTEMP, NULL };
-static char *ctl_ntp_test[] = { NTPD, "-nf", REQTEMP, NULL };
-static char *ctl_pf_test[] = { PFCTL, "-nf", REQTEMP, NULL };
-static char *ctl_ospf_test[] = { OSPFD, "-nf", REQTEMP, NULL };
-static char *ctl_ospf6_test[] = { OSPF6D, "-nf", REQTEMP, NULL };
-static char *ctl_rad_test[] = { RAD, "-nf", REQTEMP, NULL };
-static char *ctl_relay_test[] = { RELAYD, "-nf", REQTEMP, NULL };
-/* resolvd test how can this be done ? */
-static char *ctl_rip_test[] = { RIPD, "-nf", REQTEMP, NULL };
-static char *ctl_sasync_test[] = { SASYNCD, "-nc", REQTEMP, NULL };
-static char *ctl_smtp_test[] = { SMTPD, "-nf", REQTEMP, NULL };
-static char *ctl_snmp_test[] = { SNMPD, "-nf", REQTEMP, NULL };
-static char *ctl_sshd_test[] = { SSHD, "-tf", REQTEMP, NULL };
-/* tftpd test how this can be done ? */
-/* tftpproxy  how this can be done ? */
+
+extern char *ctl_ipsec_test[];
+extern char *ctl_ldap_test[];
+extern char *ctl_ldp_test[];
+extern char *ctl_nppp_test[];
+extern char *ctl_ntp_test[];
+extern char *ctl_pf_test[];
+extern char *ctl_ospf_test[];
+extern char *ctl_ospf6_test[];
+extern char *ctl_rad_test[];
+extern char *ctl_relay_test[];
+/* resolvd test ? */
+extern char *ctl_rip_test[];
+extern char *ctl_smtp_test[];
+extern char *ctl_snmp_test[];
+extern char *ctl_sshd_test[];
+/* sasyncd test ? */
+/* tftpd test ? */
+/* tftpproxy test ? */
 
 extern struct daemons ctl_daemons[];
 extern struct ctl ctl_pf[];

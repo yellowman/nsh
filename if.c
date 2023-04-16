@@ -14,6 +14,8 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#include <sys/tree.h>
+
 #include <stdio.h>
 #include <ctype.h>
 #include <fcntl.h>
@@ -51,7 +53,6 @@
 #include "externs.h"
 #include "ctl.h"
 
-
 char *iftype(int int_type);
 const char *get_linkstate(int, int);
 void show_int_status(char *, int);
@@ -64,7 +65,7 @@ void intipusage(const char *, const char *);
 int run_ipcp(char *, int, int);
 void show_vnet_parent(int, char *);
 void pwe3usage(void);
-int show_vlan(int);
+int show_vlan(int, int);
 
 static struct ifmpwreq imrsave;
 static char imrif[IFNAMSIZ];
@@ -154,6 +155,11 @@ show_int_status(char *ifname, int ifs)
 		    strerror(errno));
 		return;
 	}
+	if (ioctl(ifs, SIOCGIFRDOMAIN, (caddr_t)&ifr) == -1) {
+		printf("%% show_int_status: SIOCGIFRDOMAIN: %s\n",
+		    strerror(errno));
+		return;
+	}
 
 	memset(&ifmr, 0, sizeof(ifmr));
 	strlcpy(ifmr.ifm_name, ifname, sizeof(ifmr.ifm_name));
@@ -207,8 +213,10 @@ show_int_status(char *ifname, int ifs)
 	if (IFM_SUBTYPE(ifmr.ifm_active) != IFM_AUTO)
 		ifm_subtype = get_ifm_subtype_str(ifmr.ifm_active);
 
-	printf("  %-7s %-7s %-15s %s%s%s%s%s%s%s\n", ifname,
+
+	printf("  %-7s %-7s %-15s %10u  %s%s%s%s%s%s%s\n", ifname,
 	    (flags & IFF_UP) ? "up" : "down", link_state_desc,
+	    ifr.ifr_rdomainid,
 	    ifm_type ? ifm_type : "",
 	    ifm_type ? " " : "",
 	    ifm_subtype ? ifm_subtype : "",
@@ -249,10 +257,15 @@ show_int(int argc, char **argv)
 		 * network switches do: interface em 0
 		 */
 		const char *errstr;
+		size_t len2 = strlen(argv[2]);
 		strlcpy(ifname, argv[2], sizeof(ifname));
 		strtonum(argv[3], 0, INT_MAX, &errstr);
 		if (errstr) {
 			printf("%% interface unit %s is %s\n", argv[3], errstr);
+			return(1);
+		}
+		if (len2 > 0 && isdigit((unsigned char)(argv[2][len2 - 1]))) {
+			printf("%% interface unit %s is redundant\n", argv[3]);
 			return(1);
 		}
 		strlcat(ifname, argv[3], sizeof(ifname));
@@ -289,7 +302,7 @@ show_int(int argc, char **argv)
 			close(ifs);
 			return 0;
 		}
-		puts("% Name    Status  Link            Media");
+		puts("% Name    Status  Link        Routing-Domain  Media");
 		for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++)
 			show_int_status(ifnp->if_name, ifs);
 		if_freenameindex(ifn_list);
@@ -649,6 +662,212 @@ show_autoconf(int argc, char **argv)
 	close(nullfd);
 	close(fd);
 	close(ifs);
+	return (0);
+}
+
+struct ip_tree_entry {
+	RB_ENTRY(ip_tree_entry) entry;
+	u_short family;		/* AF_INET | AF_INET6 */
+	const char *ifname;
+	int rdomain;
+	int flags;		/* custom IPv4 address flags */
+#define NSH_IP_FLAG_DHCP	0x01
+#define NSH_IP_FLAG_IPCP	0x02
+#define NSH_IP_FLAG_STATIC	0x04
+	int flags6;		/* IN6_IFF_ flags */
+	union {
+		struct in_addr in;
+		struct in6_addr in6;
+	} addr;
+};
+
+static inline int
+ip_tree_cmp(const struct ip_tree_entry *e1, const struct ip_tree_entry *e2)
+{
+	int cmp;
+
+	if (e1->family < e2->family)
+		return -1;
+	if (e1->family > e2->family)
+		return 1;
+
+	if (e1->family == AF_INET) {
+		cmp = memcmp(&e1->addr.in, &e2->addr.in,
+		    sizeof(struct in_addr));
+	} else {
+		cmp = memcmp(&e1->addr.in6, &e2->addr.in6,
+		    sizeof(struct in6_addr));
+	}
+
+	if (cmp == 0) {
+		if (e1->rdomain < e2->rdomain)
+			return -1;
+		if (e1->rdomain > e2->rdomain)
+			return 1;
+	}
+
+	return cmp;
+}
+
+RB_HEAD(ip_tree, ip_tree_entry);
+RB_PROTOTYPE(ip_tree, ip_tree_entry, entry, ip_tree_cmp);
+RB_GENERATE(ip_tree, ip_tree_entry, entry, ip_tree_cmp);
+
+int
+show_ip(int argc, char **argv)
+{
+	struct ifaddrs *ifap, *ifa;
+	struct sockaddr_in *sin = NULL, *sinmask = NULL;
+	struct sockaddr_in6 *sin6 = NULL;
+	struct in6_ifreq ifr6;
+	int af = -1, s = -1;
+	char buf[INET6_ADDRSTRLEN];
+	char maskbuf[INET_ADDRSTRLEN];
+	char flagsbuf[64];
+	struct ip_tree tree;
+	struct ip_tree_entry *e = NULL;
+	int max_addr_strlen = 0;
+	size_t addr_strlen;
+	struct ifreq ifr;
+
+	RB_INIT(&tree);
+
+	s = socket(PF_INET6, SOCK_DGRAM, 0);
+	if (s < 0) {
+		printf("%% show_ip: socket: %s\n", strerror(errno));
+		return (0);
+	}
+
+	if (getifaddrs(&ifap) != 0) {
+		printf("%% show_ip: getifaddrs: %s\n", strerror(errno));
+		close(s);
+		return (0);
+	}
+
+	if (strcmp(argv[1], "inet") == 0)
+		af = AF_INET;
+	else if (strcmp(argv[1], "inet6") == 0)
+		af = AF_INET6;
+
+	/* Collect IPs */
+	for (ifa = ifap; ifa; ifa = ifa->ifa_next) {
+		if (ifa->ifa_addr->sa_family != AF_INET &&
+		    ifa->ifa_addr->sa_family != AF_INET6)
+			continue;
+		if (af != -1 && ifa->ifa_addr->sa_family != af)
+			continue;
+
+		e = calloc(1, sizeof(*e));
+		if (e == NULL) {
+			printf("%% show_ip: calloc: %s\n", strerror(errno));
+			goto done;
+		}
+
+		e->family = ifa->ifa_addr->sa_family;
+		e->ifname = ifa->ifa_name;
+		memset(&ifr, 0, sizeof(ifr));
+		strlcpy(ifr.ifr_name, ifa->ifa_name, sizeof(ifr.ifr_name));
+		if (ioctl(s, SIOCGIFRDOMAIN, (caddr_t)&ifr) != -1)
+			e->rdomain = ifr.ifr_rdomainid;;
+
+		if (ifa->ifa_addr->sa_family == AF_INET) {
+			sin = (struct sockaddr_in *)ifa->ifa_addr;
+			sinmask = (struct sockaddr_in *)ifa->ifa_netmask;
+			memcpy(&e->addr.in, &sin->sin_addr, sizeof(e->addr.in));
+			if (inet_ntop(e->family, &e->addr.in,
+			    buf, sizeof(buf)) == NULL) {
+				printf("%% inet_ntop: %s\n", strerror(errno));
+				goto done;
+			}
+			if (inet_ntop(e->family, &sinmask->sin_addr,
+			    maskbuf, sizeof(maskbuf)) == NULL) {
+				printf("%% inet_ntop: %s\n", strerror(errno));
+				goto done;
+			}
+			if (dhcpleased_has_address(ifa->ifa_name, buf, maskbuf))
+				e->flags |= NSH_IP_FLAG_DHCP;
+			else if (is_pppoe(ifa->ifa_name, s) &&
+			    pppoe_get_ipaddrmode(ifa->ifa_name) ==
+			    NSH_PPPOE_IPADDR_IPCP)
+				e->flags |= NSH_IP_FLAG_IPCP;
+			else
+				e->flags |= NSH_IP_FLAG_STATIC;
+		} else {
+			sin6 = (struct sockaddr_in6 *)ifa->ifa_addr;
+			memcpy(&e->addr.in6, &sin6->sin6_addr,
+			    sizeof(e->addr.in6));
+			if (inet_ntop(e->family, &e->addr.in6,
+			    buf, sizeof(buf)) == NULL) {
+				printf("%% inet_ntop: %s\n", strerror(errno));
+				goto done;
+			}
+			memset(&ifr6, 0, sizeof(ifr6));
+			strlcpy(ifr6.ifr_name, e->ifname, sizeof(ifr6.ifr_name));
+			memcpy(&ifr6.ifr_addr, sin6, sizeof(ifr6.ifr_addr));
+			if (ioctl(s, SIOCGIFAFLAG_IN6, (caddr_t)&ifr6) == 0)
+				e->flags6 = ifr6.ifr_ifru.ifru_flags6;
+		}
+
+		RB_INSERT(ip_tree, &tree, e);
+		e = NULL;
+
+		addr_strlen = strlen(buf);
+		if (max_addr_strlen < addr_strlen)
+			max_addr_strlen = addr_strlen;
+	}
+
+	/* Show IPs */
+	printf("%-*s  Interface  RDomain  Type\n",
+	    max_addr_strlen, "Address");
+	RB_FOREACH(e, ip_tree, &tree) {
+		void *addr;
+		flagsbuf[0] = '\0';
+		if (e->family == AF_INET) {
+			addr = &e->addr.in;
+			if (e->flags & NSH_IP_FLAG_DHCP)
+				strlcat(flagsbuf, " dhcp", sizeof(flagsbuf));
+			if (e->flags & NSH_IP_FLAG_IPCP) {
+				strlcat(flagsbuf, " autoconf",
+				    sizeof(flagsbuf));
+			}
+			if (e->flags & NSH_IP_FLAG_STATIC)
+				strlcat(flagsbuf, " static", sizeof(flagsbuf));
+		} else {
+			addr = &e->addr.in6;
+			if (e->flags6 & IN6_IFF_AUTOCONF) {
+				strlcat(flagsbuf, " autoconf",
+				    sizeof(flagsbuf));
+			}
+			if (e->flags6 & IN6_IFF_TEMPORARY) {
+				strlcat(flagsbuf, " temporary",
+				    sizeof(flagsbuf));
+			}
+			if (IN6_IS_ADDR_LINKLOCAL(&e->addr.in6)) {
+				strlcat(flagsbuf, " link-local",
+				    sizeof(flagsbuf));
+			} else if ((e->flags6 & (IN6_IFF_AUTOCONF |
+			    IN6_IFF_TEMPORARY)) == 0) {
+				strlcat(flagsbuf, " static",
+				    sizeof(flagsbuf));
+			}
+		}
+
+		if (inet_ntop(e->family, addr, buf, sizeof(buf)) == NULL) {
+			printf("%% inet_ntop: %s\n", strerror(errno));
+			continue;
+		}
+
+		printf("%-*s  %-9s %8d %s\n", max_addr_strlen, buf,
+		    e->ifname, e->rdomain, flagsbuf);
+	}
+done:
+	free(e);
+	while ((e = RB_MIN(ip_tree, &tree))) {
+		RB_REMOVE(ip_tree, &tree, e);
+		free(e);
+	}
+	freeifaddrs(ifap);
+	close(s);
 	return (0);
 }
 
@@ -2714,12 +2933,12 @@ intvnetflowid(char *ifname, int ifs, int argc, char **argv)
 }
 
 int
-show_vlan(int wanted_vnetid)
+show_vlan(int start_vnetid, int end_vnetid)
 {
 	struct if_nameindex *ifn_list, *ifnp;
 	struct ifreq ifr;
 	struct if_parent ifp;
-	int ifs, vnetid, flags, bridx;
+	int ifs, vnetid, flags, bridx, rdomain;
 	const char *parent, *description, *bridgename;
 	char ifdescr[IFDESCRSIZE];
 	char vnetid_str[5];
@@ -2760,15 +2979,20 @@ show_vlan(int wanted_vnetid)
 		} else if (ifr.ifr_vnetid >= 0)
 			vnetid = ifr.ifr_vnetid;
 
-		if (wanted_vnetid != -1) {
-			if (vnetid != wanted_vnetid)
+		if (start_vnetid != -1) {
+			if (end_vnetid != -1) {
+				if (vnetid < start_vnetid)
+					continue;
+			} else if (vnetid != start_vnetid)
 				continue;
-			found_vnetid = 1;
 		}
+		if (end_vnetid != -1 && vnetid > end_vnetid)
+			continue;
+		found_vnetid = 1;
 
 		if (!header_shown) {
-			puts("% Interface  Tag   Status  Type     "
-			    "Parent  Bridge   Description");
+			puts("% Interface  Tag   Status  Type    "
+			    "RDomain  Parent  Bridge   Description");
 			header_shown = 1;
 		}
 
@@ -2788,6 +3012,11 @@ show_vlan(int wanted_vnetid)
 			}
 		} else
 			parent = ifp.ifp_parent;
+
+		if (ioctl(ifs, SIOCGIFRDOMAIN, (caddr_t)&ifr) != -1)
+			rdomain = ifr.ifr_rdomainid;
+		else
+			rdomain = 0;
 
 		flags = get_ifflags(ifnp->if_name, ifs);
 
@@ -2809,14 +3038,20 @@ show_vlan(int wanted_vnetid)
 		else
 			bridgename = "-";
 
-		printf("  %-10s %-5s %-7s %-8s %-7s %-8s %s\n", ifnp->if_name,
-		    vnetid_str, (flags & IFF_UP) ? "up" : "down",
+		printf("  %-10s %-5s %-7s %-8s %6d  %-7s %-8s %s\n",
+		   ifnp->if_name, vnetid_str, (flags & IFF_UP) ? "up" : "down",
 		    isprefix("vlan", ifnp->if_name) ? "802.1Q" : "802.1ad",
-		    parent, bridgename, description);
+		    rdomain, parent, bridgename, description);
 	}
 
-	if (wanted_vnetid != -1 && !found_vnetid)
-		printf("%% no VLAN with tag %d configured\n", wanted_vnetid);
+	if (!found_vnetid) {
+		if (end_vnetid == -1)
+			printf("%% no VLAN with tag %d configured\n",
+			    start_vnetid);
+		else
+			printf("%% no VLANs with tag between %d and %d "
+			    "configured\n", start_vnetid, end_vnetid);
+	}
 
 	if_freenameindex(ifn_list);
 	close(ifs);
@@ -2826,21 +3061,41 @@ show_vlan(int wanted_vnetid)
 int
 show_vlans(int argc, char **argv)
 {
-	long long vnetid = -1;
+	long long start_vnetid = -1, end_vnetid = -1;
 	const char *errstr;
 
 	switch (argc) {
 	case 2:
-		show_vlan(-1);
+		show_vlan(-1, -1);
 		break;
 	case 3:
-		vnetid = strtonum(argv[2], EVL_VLID_NULL,
+		start_vnetid = strtonum(argv[2], EVL_VLID_NULL,
 		    EVL_VLID_MAX, &errstr);
 		if (errstr) {
 			printf("%% VLAN tag %s is %s\n", argv[2], errstr);
 			break;
 		}
-		show_vlan(vnetid);
+		show_vlan(start_vnetid, -1);
+		break;
+	case 4:
+		start_vnetid = strtonum(argv[2], EVL_VLID_NULL,
+		    EVL_VLID_MAX, &errstr);
+		if (errstr) {
+			printf("%% VLAN tag %s is %s\n", argv[2], errstr);
+			break;
+		}
+		end_vnetid = strtonum(argv[3], EVL_VLID_NULL,
+		    EVL_VLID_MAX, &errstr);
+		if (errstr) {
+			printf("%% VLAN tag %s is %s\n", argv[3], errstr);
+			break;
+		}
+		if (start_vnetid >= end_vnetid) {
+			printf("%% VLAN Start Tag must be smaller "
+			    "than VLAN End Tag\n");
+			break;
+		}
+		show_vlan(start_vnetid, end_vnetid);
 		break;
 	}
 	return 0;

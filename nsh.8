@@ -585,8 +585,8 @@ help.
 .El
 E.g show available bridge configuration commands.
 .Bd -literal -offset indent
-nsh(config-p)/bridge bridge1
-nsh(bridge-bridge1)/?
+nsh(config-p)/bridge bridge100
+nsh(bridge-bridge100)/?
 % Commands may be abbreviated.
 % Type 'exit' at a prompt to leave bridge configuration mode.
 % Bridge configuration commands are:
@@ -604,6 +604,12 @@ nsh(bridge-bridge1)/?
   fwddelay      Time before bridge begins forwarding packets
   hellotime     802.1D configuration packet broadcast interval
   priority      Spanning priority for all members on an 802.1D bridge
+  ping          Send IPv4 ICMP echo request
+  ping6         Send IPv6 ICMP echo request
+  traceroute    Print the route to IPv4 host
+  traceroute6   Print the route to IPv6 host
+  ssh           SSH connection to remote host
+  telnet        Telnet connection to remote host
   rule          Bridge layer 2 filtering rules
   static        Static bridge address entry
   ifpriority    Spanning priority of a member on an 802.1D bridge
@@ -616,7 +622,15 @@ nsh(bridge-bridge1)/?
   tunneldomain  Tunnel parameters
   protect       Configure protected bridge domains
   shutdown      Shutdown bridge
+  show          Show system information
+  who           Display system users
+  verbose       Set verbose diagnostics
+  editing       Set command line editing
+  !             Invoke a subshell
   ?             Options
+  manual        Display the NSH manual
+  exit          Leave bridge config mode and return to global config mode
+nsh(bridge-bridge100)/
 .Ed
 .Tg port
 .Tg switchport
@@ -1715,10 +1729,10 @@ nsh/no verbose
 .El
 .Tg show
 .Ic show
-.Op hostname | interface | autoconf | route | route6 | sadb | arp | ndp | vlan\
- | kernel | bgp | ospf | ospf6 | pf | eigrp | rip | ldp | ike | ipsec | dvmrp\
- | relay | dhcp | smtp | ldap | monitor | version | users | running-config\
- | startup-config |\&? | help
+.Op hostname | interface | autoconf | ip | inet | inet6 | route | route6\
+ | sadb | arp | ndp | vlan | kernel | bgp | ospf | ospf6 | pf | eigrp | rip\
+ | ldp | ike | ipsec | dvmrp | relay | dhcp | smtp | ldap | monitor\
+ | version | users | running-config | startup-config |\&? | help
 .Pp
 The main diagnostic and informational command is 'show'.
 show without arguments  displays the available diagnostic show sub commands.
@@ -1733,6 +1747,9 @@ nsh(p)/show
   hostname        Router hostname
   interface       Interface config
   autoconf        IPv4/IPv6 autoconf state
+  ip              IP address information
+  inet            IPv4 address information
+  inet6           IPv6 address information
   route           IPv4 route table or route lookup
   route6          IPv6 route table or route lookup
   sadb            Security Association Database
@@ -1933,8 +1950,7 @@ nsh(p)/
 .Pp
 Display the interfaces on the system that are dynamically configured and the
 current state and configured settings such as IP addresses, routes
-nameservers and the server that the system recieved the autoconf settings from
-.
+nameservers and the server that the system recieved the autoconf settings from.
 .Pp
 e.g. list current autoconfiguration state of the system.
 .Bd -literal -offset indent
@@ -1945,6 +1961,56 @@ em0 [Bound]
 	nameservers 10.0.0.1 192.168.0.1
 	lease 17 hours
 	dhcp server 10.0.2.2
+.Ed
+.Pp
+.Tg ip
+.Tg inet
+.Tg inet6
+.Cm show
+.Op ip | inet | inet6
+.Pp
+Display the IP addresses on all interfaces, their respective rdomains and
+where the ip address was configured from on the system including:
+.Bl -dash
+.It
+static
+.It
+dhcp
+.It
+ppp
+.It
+link-local
+.El
+.Pp
+E.g show all ipv4 and IPv6 adddresses on the system
+.Bd -literal -offset indent
+nsh(p)/show ip
+Address      Interface  RDomain  Type
+10.0.2.15    em0              0  dhcp
+10.10.10.10  em1            200  static
+127.0.0.1    lo0              0  static
+127.0.0.1    lo0            200  static
+::1          lo0              0  static
+::1          lo200          200  static
+fe80:4::1    lo0              0  link-local
+nsh(p)/
+.Ed
+E.g. show only IPv4 addresses on the system.
+.Bd -literal -offset indent
+nsh(config-p)/show inet
+Address      Interface  RDomain  Type
+10.0.2.15    em0              0  dhcp
+10.10.10.10  em1            200  static
+127.0.0.1    lo0              0  static
+127.0.0.1    lo200          200  static
+.Ed
+E.g. show only IPv6 addresses on the system.
+.Bd -literal -offset indent
+sh(config-p)/show inet6
+Address    Interface  RDomain  Type
+::1        lo0              0  static
+::1        lo200          200  static
+fe80:4::1  lo0              0  link-local
 .Ed
 .Pp
 .Tg route
@@ -2073,26 +2139,52 @@ nsh(p)/
 .Tg vlan
 .Ic show vlan
 .Op vlan-id
+.Op <rangestart-vlan-id> <range-end-vlan-id>
 .Pp
 Display all virtual local area network interfaces configured on the system.
-Lists the vlans parent interfaces, any layer2 forwarding device the interface
-is a member of and the vlan interface description.
-expiry of each interfaces.
+It Lists the following:
+.Bl -dash
+.It
+the vlan interface name
+.It
+the vlan's parent interfaces
+.It
+the status of the interface
+.It
+the rdomain of the interface
+.It
+any layer2 forwarding device the vlan interface is a member of
+.It
+the vlan interface description.
+.El
+List of vlans displayed can be restricted to an individual vlan if its vlan-id
+is supplied as an optional argument.
+The vlans displayed can be restricted to a range of vlans if the start and end
+vlan-id are supplied as 2 optional consequitive arguments in ascending order.
 .Pp
-e.g. display all vlan interfaces on the system
+E.g. display all vlan interfaces on the system
 .Bd -literal -offset indent
 nsh(p)/show vlan
-% Interface  Tag   Status  Type     Parent    Bridge     Description
-  vlan100    100   up      802.1Q   em0       bridge100  Stefans-LAN
-  vlan200    200   up      802.1Q   vether200 veb200     Chris-C-LAN
+% Interface  Tag   Status  Type    RDomain  Parent  Bridge   Description
+  vlan4093   4093  up      802.1Q      200  em1     -        Chris-VLAN
+  vlan100    100   up      802.1Q        0  em1     -        Stefan-VLAN
+  vlan200    200   up      802.1Q      200  em1     tpmr100  Tom-VLAN
 nsh(p)/
 .Ed
 e.g. display information on all vlans with vnetid/tag of 200.
 .Bd -literal -offset indent
 nsh(p)/show vlan 200
-% Interface  Tag   Status  Type     Parent    Bridge   Description
-  vlan200    200   up      802.1Q   vether200 veb200   Chris-C-LAN
+% Interface  Tag   Status  Type     RDomain   Parent    Bridge   Description
+  vlan200    200   up      802.1Q       200   em1       tpmr100  Tom-VLAN
 nsh(p)/
+.Ed
+.Pp
+E.g. show vlan interfaces with vlan-ids the range 100 to 4093
+.Bd -literal -offset indent
+nsh(p)/show vlan 100 4093
+% Interface  Tag   Status  Type    RDomain  Parent  Bridge   Description
+  vlan4093   4093  up      802.1Q      200  em1     -        Chris-VLAN
+  vlan200    200   up      802.1Q      200  em1     tpmr100  Tom-VLAN
 .Ed
 .Pp
 .Tg bridge
@@ -2982,7 +3074,7 @@ nsh(config-p)/ip ?
 .Op no
 .Ic interface
 .Op  inet | ip | autoconf4 | description | group | rdomain | \
- | rtlabel | priority| llpriority | mtu | metric | link | arp | lladdr | nwid \
+ | rtlabel | priority| llpriority | mtu | metric | link | arp | lladdr | nwid\
  | nwkey | powersave | txpower | bssid | media | mediaopt | auth | peer\
  | pppoe | tunnel | tunneldomain | txprio | rxprio | vnetid\
  | vnetflowid | parent | patch | keepalive | mplslabel | pwe\
@@ -2990,7 +3082,8 @@ nsh(config-p)/ip ?
  | carpdev | carpnode | carppeer | balancing | pflow |  debug\
  | dhcrelay | wol |  mpls | inet6 | autoconf6\
  | autoconfprivacy | temporary | monitor |  wgpeer | wgport\
- | wgkey |  wgrtable | trunkport | trunkproto | shutdown |\&?
+ | wgkey |  wgrtable | trunkport | trunkproto | shutdown | show | |\&?\
+ | manual | exit
 interface mode commands, are commands that can be applied to a specific
 named interface.
 .Bd -literal -offset indent
@@ -3032,6 +3125,12 @@ nsh(interface-em0)/?
   vnetflowid       Use part of vnetid as flowid
   parent           Parent interface
   patch            Pair interface
+  ping             Send IPv4 ICMP echo request
+  ping6            Send IPv6 ICMP echo request
+  traceroute       Print the route to IPv4 host
+  traceroute6      Print the route to IPv6 host
+  ssh              SSH connection to remote host
+  telnet           Telnet connection to remote host
   keepalive        GRE tunnel keepalive
   mplslabel        MPLS local label
   pwe              MPLS PWE3
@@ -3063,6 +3162,14 @@ nsh(interface-em0)/?
   trunkport        Add child interface(s) to trunk
   trunkproto       Define trunkproto
   shutdown         Shutdown interface
+  show             Show system information
+  who              Display system users
+  verbose          Set verbose diagnostics
+  editing          Set command line editing
+  !                Invoke a subshell
+  ?                Options
+  manual           Display the NSH manual
+  exit             Leave interface config mode and return to global config mode
   ?                Options
 .Ed
 .Pp
@@ -4621,6 +4728,7 @@ TODO
 .Sh ENVIRONMENT
 .Bl -tag -width NSH_MANUAL_PAGE
 .It Ev NSH_MANUAL_PAGE
+.El
 The manual page displayed by the built-in
 .Cm manual
 command.
@@ -4629,6 +4737,7 @@ This must be an absolute path to the
 file that should be displayed.
 Defaults to
 .Pa /usr/local/man/man8/nsh.8
+.Pp
 .Sh FILES
 .Bl -tag -width /etc/suid_profile -compact
 .It Pa /etc/nshrc

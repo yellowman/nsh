@@ -117,6 +117,18 @@ static int	flush_ndp_cache(void);
 static int	flush_history(void);
 static int	is_bad_input(const char *, size_t);
 static int	read_command_line(EditLine *, History *);
+static int	int_ping(char *, int, int, char **);
+static int	int_ping6(char *, int, int, char **);
+static int	int_traceroute(char *, int, int, char **);
+static int	int_traceroute6(char *, int, int, char **);
+static int	int_ssh(char *, int, int, char **);
+static int	int_telnet(char *, int, int, char **);
+static int	int_show(char *, int, int, char **);
+static int	int_who(char *, int, int, char **);
+static int	int_doverbose(char *, int, int, char **);
+static int	int_doediting(char *, int, int, char **);
+static int	int_manual(char *, int, int, char **);
+static int	int_shell(char *, int, int, char **);
 static int	int_help(void);
 static int	int_exit(void);
 static int	el_burrito(EditLine *, int, char **);
@@ -180,6 +192,7 @@ struct ghs showndptab[] = {
 struct ghs showvlantab[] = {
 	{ "<cr>", "Type Enter to run command", CMPL0 NULL, 0 },
 	{ "<VLAN Tag>", "VLAN tag parameter", CMPL0 NULL, 0 },
+	{ "<VLAN Start Tag> <VLAN End Tag>", "VLAN tag range parameters", CMPL0 NULL, 0 },
 	{ NULL, NULL, NULL, NULL, 0 }
 };
 
@@ -191,12 +204,15 @@ Menu showlist[] = {
 	{ "hostname",	"Router hostname",	CMPL0 0, 0, 0, 0, show_hostname },
 	{ "interface",	"Interface config",	CMPL(i) 0, 0, 0, 2, show_int },
 	{ "autoconf",	"IPv4/IPv6 autoconf state", CMPL(i) 0, 0, 0, 1, show_autoconf },
+	{ "ip",		"IP address information", CMPL0 0, 0, 0, 0, show_ip },
+	{ "inet",	"IPv4 address information", CMPL0 0, 0, 0, 0, show_ip },
+	{ "inet6",	"IPv6 address information", CMPL0 0, 0, 0, 0, show_ip },
 	{ "route",	"IPv4 route table or route lookup", CMPL(h) (char **)showroutetab, sizeof(struct ghs), 0, 1, pr_routes },
 	{ "route6",	"IPv6 route table or route lookup", CMPL(h) (char **)showroutetab, sizeof(struct ghs), 0, 1, pr_routes6 },
 	{ "sadb",	"Security Association Database", CMPL0 0, 0, 0, 0, pr_sadb },
 	{ "arp",	"ARP table",		CMPL(h) (char **)showarptab, sizeof(struct ghs), 0, 1, pr_arp },
 	{ "ndp",	"NDP table",		CMPL(h) (char **)showndptab, sizeof(struct ghs), 0, 1, pr_ndp },
-	{ "vlan",	"802.1Q/802.1ad VLANs",	CMPL(h) (char **)showvlantab, sizeof(struct ghs), 0, 1, show_vlans },
+	{ "vlan",	"802.1Q/802.1ad VLANs",	CMPL(h) (char **)showvlantab, sizeof(struct ghs), 0, 2, show_vlans },
 	{ "bridge",	"Ethernet bridges",	CMPL(b) 0, 0, 0, 1, show_bridges },
 	{ "kernel",	"Kernel statistics",	CMPL(ta) (char **)stts, sizeof(struct stt), 0, 1, pr_kernel },
 	{ "bgp",	"BGP information",	CMPL(ta) (char **)bgcs, sizeof(struct prot1), 0, 4, pr_prot1 },
@@ -550,6 +566,20 @@ flush_help(void)
  * Data structures and routines for the interface configuration mode
  */
 
+static char pinghelp[];
+static char ping6help[];
+static char tracerthelp[];
+static char tracert6help[];
+static char sshhelp[];
+static char telnethelp[];
+static char showhelp[];
+static char whohelp[];
+static char verbosehelp[];
+static char editinghelp[];
+static char shellhelp[];
+static char manhelp[];
+struct ghs mantab[];
+
 struct intlist Intlist[] = {
 /* Interface mode commands */
 	{ "inet",	"IPv4/IPv6 addresses",			CMPL(h) (char **)intiphelp, sizeof(struct ghs), intip, 1},
@@ -595,6 +625,12 @@ struct intlist Intlist[] = {
 	{ "vnetflowid",	"Use part of vnetid as flowid",		CMPL0 0, 0, intvnetflowid, 1 },
 	{ "parent",	"Parent interface",			CMPL(i) 0, 0, intparent, 1 },
 	{ "patch",	"Pair interface",			CMPL(i) 0, 0, intpatch, 1 },
+	{ "ping",	pinghelp,				CMPL0 0, 0, int_ping, 0 },
+	{ "ping6",	ping6help,				CMPL0 0, 0, int_ping6, 0 },
+	{ "traceroute", tracerthelp,				CMPL0 0, 0, int_traceroute, 0 },
+	{ "traceroute6", tracert6help,				CMPL0 0, 0, int_traceroute6, 0 },
+	{ "ssh",	sshhelp,				CMPL0 0, 0, int_ssh, 0 },
+	{ "telnet",	telnethelp,				CMPL0 0, 0, int_telnet,	0 },
 	{ "keepalive",	"GRE tunnel keepalive",			CMPL0 0, 0, intkeepalive, 1},
 	{ "mplslabel",	"MPLS local label",			CMPL0 0, 0, intmpls, 1 },
 	{ "pwe",	"MPLS PWE3",				CMPL0 0, 0, intpwe3, 1 },
@@ -633,7 +669,13 @@ struct intlist Intlist[] = {
 	{ "trunkport",	"Add child interface(s) to trunk",	CMPL0 0, 0, inttrunkport, 1 },
 	{ "trunkproto",	"Define trunkproto",			CMPL0 0, 0, inttrunkproto, 1 },
 	{ "shutdown",   "Shutdown interface",			CMPL0 0, 0, intflags, 1 },
+	{ "show",	showhelp,				CMPL(ta) (char **)showlist, sizeof(Menu), int_show, 0 },
+	{ "who",	whohelp,				CMPL0 0, 0, int_who, 0 },
+	{ "verbose",	verbosehelp,				CMPL0 0, 0, int_doverbose, 1 },
+	{ "editing",	editinghelp,				CMPL0 0, 0, int_doediting, 1 },
+	{ "!",		shellhelp,				CMPL0 0, 0, int_shell, 0 },
         { "?",		"Options",				CMPL0 0, 0, int_help, 0 },
+	{ "manual",	manhelp,				CMPL(H) (char **)mantab, sizeof(struct ghs), int_manual, 0 },
         { "help",	0,					CMPL0 0, 0, int_help, 0 },
 	{ "exit",	"Leave interface config mode and return to global config mode ",
 								CMPL0 0, 0, int_exit, 0 },
@@ -658,6 +700,12 @@ struct intlist Bridgelist[] = {
 	{ "fwddelay",	"Time before bridge begins forwarding packets",		CMPL0 0, 0, brval, 1 },
 	{ "hellotime",	"802.1D configuration packet broadcast interval",	CMPL0 0, 0, brval, 1 },
 	{ "priority",	"Spanning priority for all members on an 802.1D bridge",CMPL0 0, 0, brval, 1},
+	{ "ping",	pinghelp,				CMPL0 0, 0, int_ping, 0 },
+	{ "ping6",	ping6help,				CMPL0 0, 0, int_ping6, 0 },
+	{ "traceroute", tracerthelp,				CMPL0 0, 0, int_traceroute, 0 },
+	{ "traceroute6", tracert6help,				CMPL0 0, 0, int_traceroute6, 0 },
+	{ "ssh",	sshhelp,				CMPL0 0, 0, int_ssh, 0 },
+	{ "telnet",	telnethelp,				CMPL0 0, 0, int_telnet,	0 },
 	{ "rule",	"Bridge layer 2 filtering rules",	CMPL0 0, 0, brrule, 0 },
 	{ "static",	"Static bridge address entry",		CMPL0 0, 0, brstatic, 1 },
 	{ "ifpriority",	"Spanning priority of a member on an 802.1D bridge",	CMPL0 0, 0, brpri, 1 },
@@ -670,9 +718,15 @@ struct intlist Bridgelist[] = {
 	{ "tunneldomain", "Tunnel parameters",			CMPL0 0, 0, intmpls, 1 },
 	{ "protect",	"Configure protected bridge domains",	CMPL0 0, 0, brprotect, 1 },
 	{ "shutdown",	"Shutdown bridge",			CMPL0 0, 0, intflags, 1 },
+	{ "show",	showhelp,				CMPL(ta) (char **)showlist, sizeof(Menu), int_show, 0 },
+	{ "who",	whohelp,				CMPL0 0, 0, int_who, 0 },
+	{ "verbose",	verbosehelp,				CMPL0 0, 0, int_doverbose, 1 },
+	{ "editing",	editinghelp,				CMPL0 0, 0, int_doediting, 1 },
+	{ "!",		shellhelp,				CMPL0 0, 0, int_shell, 0 },
 
 /* Help commands */
 	{ "?",		"Options",				CMPL0 0, 0, int_help, 0 },
+	{ "manual",	manhelp,				CMPL(H) (char **)mantab, sizeof(struct ghs), int_manual, 0 },
 	{ "help",	0,					CMPL0 0, 0, int_help, 0 },
 	{ "exit",	"Leave bridge config mode and return to global config mode ",
 								CMPL0 0, 0, int_exit },
@@ -792,9 +846,14 @@ interface(int argc, char **argv, char *modhvar)
 	strlcpy(ifname, tmp, IFNAMSIZ);
 	if (ifunit) {
 		const char *errstr;
+		size_t len = strlen(ifname);
 		strtonum(ifunit, 0, INT_MAX, &errstr);
 		if (errstr) {
 			printf("%% interface unit %s is %s\n", ifunit, errstr);
+			return(1);
+		}
+		if (len > 0 && isdigit((unsigned char)(ifname[len - 1]))) {
+			printf("%% interface unit %s is redundant\n", ifunit);
 			return(1);
 		}
 		strlcat(ifname, ifunit, sizeof(ifname));
@@ -942,6 +1001,90 @@ interface(int argc, char **argv, char *modhvar)
 
 	close(ifs);
 	return(0);
+}
+
+static int
+int_ping(char *ifname, int ifs, int argc, char **argv)
+{
+	ping(argc, argv);
+	return 0; /* do not leave interface context */
+}
+
+static int
+int_ping6(char *ifname, int ifs, int argc, char **argv)
+{
+	ping6(argc, argv);
+	return 0; /* do not leave interface context */
+}
+
+static int
+int_traceroute(char *ifname, int ifs, int argc, char **argv)
+{
+	traceroute(argc, argv);
+	return 0; /* do not leave interface context */
+}
+
+static int
+int_traceroute6(char *ifname, int ifs, int argc, char **argv)
+{
+	traceroute6(argc, argv);
+	return 0; /* do not leave interface context */
+}
+
+static int
+int_ssh(char *ifname, int ifs, int argc, char **argv)
+{
+	ssh(argc, argv);
+	return 0; /* do not leave interface context */
+}
+
+static int
+int_telnet(char *ifname, int ifs, int argc, char **argv)
+{
+	telnet(argc, argv);
+	return 0; /* do not leave interface context */
+}
+
+static int
+int_show(char *ifname, int ifs, int argc, char **argv)
+{
+	showcmd(argc, argv);
+	return 0; /* do not leave interface context */
+}
+
+static int
+int_who(char *ifname, int ifs, int argc, char **argv)
+{
+	who(argc, argv);
+	return 0; /* do not leave interface context */
+}
+
+static int
+int_doverbose(char *ifname, int ifs, int argc, char **argv)
+{
+	doverbose(argc, argv);
+	return 0; /* do not leave interface context */
+}
+
+static int
+int_doediting(char *ifname, int ifs, int argc, char **argv)
+{
+	doediting(argc, argv);
+	return 0; /* do not leave interface context */
+}
+
+static int
+int_manual(char *ifname, int ifs, int argc, char **argv)
+{
+	manual(argc, argv);
+	return 0; /* do not leave interface context */
+}
+
+static int
+int_shell(char *ifname, int ifs, int argc, char **argv)
+{
+	shell(argc, argv);
+	return 0; /* do not leave interface context */
 }
 
 static int
@@ -1993,6 +2136,10 @@ group(int argc, char **argv)
 
 /*
  * cmd, multiple args
+ *
+ * If no error occurs then return the program's exit code (>= 0).
+ * Return -1 on error to run the program or if the program was
+ * terminated in an abnormal way, such as being killed by a signal.
  */
 int
 cmdargs(char *cmd, char *arg[])
@@ -2002,11 +2149,16 @@ cmdargs(char *cmd, char *arg[])
 
 /*
  * cmd, multiple args, capture stdout and stderr output
+ *
+ * If no error occurs then return the program's exit code (>= 0).
+ * Return -1 on error to run the program or if the program was
+ * terminated in an abnormal way, such as being killed by a signal.
  */
 int
 cmdargs_output(char *cmd, char *arg[], int stdoutfd, int stderrfd)
 {
 	sig_t sigint, sigquit, sigchld;
+	int status = -1;
 
 	sigint = signal(SIGINT, SIG_IGN);
 	sigquit = signal(SIGQUIT, SIG_IGN);
@@ -2015,15 +2167,15 @@ cmdargs_output(char *cmd, char *arg[], int stdoutfd, int stderrfd)
 	switch (child = fork()) {
 		case -1:
 			printf("%% fork failed: %s\n", strerror(errno));
-			return 0;
+			return -1;
 
 		case 0:
 		{
+			char *shellp = cmd;
+
 			signal(SIGQUIT, SIG_DFL);
 			signal(SIGINT, SIG_DFL);
 			signal(SIGCHLD, SIG_DFL);
-
-			char *shellp = cmd;
 
 			if (cli_rtable != 0 && nsh_setrtable(cli_rtable))
 				_exit(0);
@@ -2047,12 +2199,14 @@ cmdargs_output(char *cmd, char *arg[], int stdoutfd, int stderrfd)
 
 			execv(shellp, arg);
 			printf("%% execv failed: %s\n", strerror(errno));
-			_exit(0);
+			_exit(127); /* same as what ksh(1) would do here */
 		}
 			break;
 		default:
 			signal(SIGALRM, sigalarm);
-			wait(0);  /* Wait for cmd to complete */
+			wait(&status);  /* Wait for cmd to complete */
+			if (WIFEXITED(status)) /* normal exit? */
+				status = WEXITSTATUS(status); /* exit code */
 			break;
 	}
 
@@ -2062,7 +2216,7 @@ cmdargs_output(char *cmd, char *arg[], int stdoutfd, int stderrfd)
 	signal(SIGALRM, SIG_DFL);
 	child = -1;
 
-	return 1; 
+	return status;
 }
 
 /*

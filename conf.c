@@ -85,7 +85,7 @@ void conf_intrtlabel(FILE *, int, char *);
 void conf_intgroup(FILE *, int, char *);
 void conf_keepalive(FILE *, int, char *);
 void conf_rtflags(char *, int, struct rt_msghdr *rtm);
-int dhcpleased_has_defaultroute(char *);
+int dhcpleased_has_defaultroute(struct sockaddr_rtlabel *);
 int dhcpleased_controls_interface(char *, int);
 int dhclient_isenabled(char *);
 int default_txprio(char *);
@@ -474,62 +474,10 @@ void conf_ctl(FILE *output, char *delim, char *name, int rtableid)
 		fprintf(output, "%s!\n", delim);
 }
 
-/* Check if 'dhcpleasectl -l $if' shows a default route pointing at 'dst'. */
 int
-dhcpleased_has_defaultroute(char *dst)
+dhcpleased_has_defaultroute(struct sockaddr_rtlabel *sr)
 {
-	int gatewayfound = 0;
-	struct if_nameindex *ifn_list, *ifnp;
-	char ortext[128];
-	char outpath[PATH_MAX];
-	int fd = -1, nullfd = -1;
-
-	if (!dhcpleased_is_running())
-		return 0;
-
-	if ((ifn_list = if_nameindex()) == NULL) {
-		printf("%% if_nameindex: %s\n", strerror(errno));
-		return 0;
-	}
-
-	snprintf(ortext, sizeof(ortext), "\tdefault gateway %s\n", dst);
-
-	nullfd = open("/dev/null", O_WRONLY | O_NOFOLLOW | O_CLOEXEC);
-	if (nullfd == -1) {
-		printf("%% open /dev/null: %s\n", strerror(errno));
-		goto err0;
-	}
-
-	strlcpy(outpath, "/tmp/nsh-XXXXXX", sizeof(outpath));
-	fd = mkstemp(outpath);
-	if (fd == -1) {
-		printf("%% mkstemp: %s\n", strerror(errno));
-		goto err1;
-	}
-
-	for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++) {
-		char *argv[] = { DHCPLEASECTL, "-l", ifnp->if_name, NULL };
-
-		if (ftruncate(fd, 0) == -1) {
-			printf("%% ftruncate: %s\n", strerror(errno));
-			break;
-		}
-		lseek(fd, SEEK_SET, 0);
-
-		if (cmdargs_output(DHCPLEASECTL, argv, fd, nullfd) &&
-		    scantext(outpath, ortext)) {
-			gatewayfound = 1;
-			break;
-		}
-	}
-
-	unlink(outpath);
-	close(fd);
-err1:
-	close(nullfd);
-err0:
-	if_freenameindex(ifn_list);
-	return (gatewayfound);
+	return (sr != NULL && strcmp(sr->sr_label, "dhcpleased") == 0);
 }
 
 /* Check whether IPv4 addresses on an interface are managed by dhcpleased. */
@@ -547,6 +495,50 @@ dhcpleased_controls_interface(char *ifname, int ifs)
 #else
 	return 0;
 #endif
+}
+
+/*
+ * Check whether a specific IPv4 addresses on an interface is
+ * managed by dhcpleased.
+ */
+int
+dhcpleased_has_address(char *ifname, const char *address,
+    const char *netmask)
+{
+	char *argv[] = { DHCPLEASECTL, "-l", ifname, NULL };
+	int address_found = 0;
+	char ortext[128];
+	char outpath[PATH_MAX];
+	int fd = -1, nullfd = -1;
+
+	if (!dhcpleased_is_running())
+		return 0;
+
+	snprintf(ortext, sizeof(ortext), "\tinet %s netmask %s\n",
+	    address, netmask);
+
+	nullfd = open("/dev/null", O_WRONLY | O_NOFOLLOW | O_CLOEXEC);
+	if (nullfd == -1) {
+		printf("%% open /dev/null: %s\n", strerror(errno));
+		return 0;
+	}
+
+	strlcpy(outpath, "/tmp/nsh-XXXXXX", sizeof(outpath));
+	fd = mkstemp(outpath);
+	if (fd == -1) {
+		printf("%% mkstemp: %s\n", strerror(errno));
+		close(nullfd);
+		return 0;
+	}
+
+	if (cmdargs_output(DHCPLEASECTL, argv, fd, nullfd) == 0 &&
+	    scantext(outpath, ortext))
+		address_found = 1;
+
+	unlink(outpath);
+	close(fd);
+	close(nullfd);
+	return (address_found);
 }
 
 /*
@@ -1573,6 +1565,7 @@ conf_print_rtm(FILE *output, struct rt_msghdr *rtm, char *delim, int af)
 	int i;
 	char *cp, flags[TMPSIZ], ifname[IFNAMSIZ];
 	struct sockaddr *dst = NULL, *gate = NULL, *mask = NULL;
+	struct sockaddr_rtlabel *sa_rl = NULL;
 	struct sockaddr *sa;
 	struct sockaddr_in sin;
 	struct sockaddr_dl *ifp = NULL;
@@ -1614,6 +1607,9 @@ conf_print_rtm(FILE *output, struct rt_msghdr *rtm, char *delim, int af)
 					}
 				}
 				break;
+			case RTA_LABEL:
+				sa_rl = (struct sockaddr_rtlabel *)sa;
+				break;
 			}
 			ADVANCE(cp, sa);
 		}
@@ -1630,7 +1626,7 @@ conf_print_rtm(FILE *output, struct rt_msghdr *rtm, char *delim, int af)
 		 * route and dhcp (dhcpleased or dhclient) is enabled.
 		 */
 		else if (!(af == AF_INET && isdefaultroute(dst, mask)
-		    && (dhcpleased_has_defaultroute(routename(gate)) ||
+		    && (dhcpleased_has_defaultroute(sa_rl) ||
 		    dhclient_isenabled(routename(gate))))) {
 			fprintf(output, "%s%s ", delim, netname(dst, mask));
 			fprintf(output, "%s%s\n", routename(gate), flags);
