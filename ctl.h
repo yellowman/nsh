@@ -131,7 +131,6 @@ extern char *ctl_eigrp_test[];
 extern char *ctl_ifstate_test[];
 extern char *ctl_ike_test[];
 /* inetd test ? */ 
-
 extern char *ctl_ipsec_test[];
 extern char *ctl_ldap_test[];
 extern char *ctl_ldp_test[];
