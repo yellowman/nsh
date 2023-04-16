@@ -80,7 +80,6 @@ main(int argc, char *argv[])
 		}
 
 	argc -= optind;
-	
 
 	if (cflag && iflag)
 		usage();
