@@ -516,7 +516,7 @@ show_int(int argc, char **argv)
 		printf("  SSID %s", tmp_str);
 		if(get_nwinfo(ifname, tmp_str, sizeof(tmp_str), NWKEY) != 0)
 			printf(", key %s", tmp_str);
-		if ((tmp = get_nwinfo(ifname, tmp_str, sizeof(tmp_str),
+		if ((get_nwinfo(ifname, tmp_str, sizeof(tmp_str),
 		    POWERSAVE)) != 0)
 			printf(", powersaving (%s ms)\n", tmp_str);
 		printf("\n");
