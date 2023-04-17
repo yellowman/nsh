@@ -311,12 +311,14 @@ struct ctl ctl_ifstate[] = {
 
 /* sasyncd */
 struct ctl ctl_sasync[] = {
-	{ "enable",     "enable service",
+	{ "enable",       "enable sasyncd service",
 	    { SASYNCD, "-c", REQTEMP, NULL }, NULL, DB_X_ENABLE, T_EXEC },
-	{ "disable",    "disable service",
+	{ "disable",      "disable sasyncd service",
 	    { PKILL, table, "sasyncd", NULL }, NULL, DB_X_DISABLE, T_EXEC },
-	{ "edit",       "edit configuration",
-	    { "sasync", NULL, NULL }, call_editor, 0, T_HANDLER_FILL1 },
+	{ "edit",         "edit,test and stage sasyncd config",
+	    { "sasync", (char *)ctl_sasync_test, NULL }, call_editor, 0, T_HANDLER_FILL1 },
+	{ "check-config", "test staged sasyncd config",
+            { SASYNCD, "-nvvc", REQTEMP, NULL }, NULL, DB_X_ENABLE, T_EXEC },
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
