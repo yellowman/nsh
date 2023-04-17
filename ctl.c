@@ -319,7 +319,7 @@ struct ctl ctl_sasync[] = {
 	{ "edit",         "edit,test and stage sasyncd config",
 	    { "sasync", (char *)ctl_sasync_test, NULL }, call_editor, 0, T_HANDLER_FILL1 },
 	{ "check-config", "test staged sasyncd config",
-            { SASYNCD, "-nvvc", REQTEMP, NULL }, NULL, DB_X_ENABLE, T_EXEC },
+            { SASYNCD, "-nvvc", REQTEMP, NULL }, NULL, 0, T_EXEC },
 	{ 0, 0, { 0 }, 0, 0 }
 };
 
