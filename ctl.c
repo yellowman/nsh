@@ -336,7 +336,7 @@ struct ctl ctl_nppp[] = {
 	    { NPPPCTL, "session", REQ, OPT, OPT, NULL }, NULL, 0, T_EXEC },
 	{ "monitor",	"monitor PPP sessions",
 	    { NPPPCTL, "monitor", REQ, OPT, OPT, NULL }, NULL, 0, T_EXEC },
-	{ "edit",	"edit ,test and stage nppd config",
+	{ "edit",	"edit ,test and stage npppd config",
 	    { "nppp", (char *)ctl_nppp_test, NULL }, call_editor, 0,
 	    T_HANDLER_FILL1 },
 	{ 0, 0, { 0 }, 0, 0, 0 }
