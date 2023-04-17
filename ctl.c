@@ -101,20 +101,20 @@ struct ctl ctl_pf[] = {
 /* ospfd, ospfctl */
 char *ctl_ospf_test[] = { OSPFD, "-nf", REQTEMP, NULL };
 struct ctl ctl_ospf[] = {
-	{ "enable",     "enable service",
+	{ "enable",     "enable ospfd service",
 	    { OSPFD, "-f", REQTEMP, NULL }, NULL, DB_X_ENABLE, T_EXEC },
-	{ "disable",    "disable service",
+	{ "disable",    "disable ospfd service",
 	    { PKILL, table, "ospfd", NULL }, NULL, DB_X_DISABLE, T_EXEC },
-	{ "edit",       "edit configuration",
+	{ "edit",       "edit, test and stage ospfd configuration",
 	    { "ospf", (char *)ctl_ospf_test, NULL }, call_editor, 0,
 	    T_HANDLER_FILL1 },
-	{ "reload",     "reload service",
+	{ "reload",     "test and appy staged ospfd config",
 	    { OSPFCTL, "reload", NULL }, NULL, 0, T_EXEC },
 	{ "fib",        "fib couple/decouple",
 	    { OSPFCTL, "fib", REQ, NULL }, NULL, 0, T_EXEC },
-	{ "log",        "log brief/verbose",
+	{ "log",        "config ospfd logging brief/verbose",
             { OSPFCTL, "log", REQ, NULL }, NULL, 0, T_EXEC },
-	{ "show",	"show database/fib/interfaces/neighbor/rib/summary",
+	{ "show",	"show ospfd db/fib/interfaces/neighbor/rib/summary",
 	    { OSPFCTL, "show", REQ, NULL }, NULL, 0, T_EXEC },
 	{ 0, 0, { 0 }, 0, 0, 0 }
 };
@@ -122,14 +122,14 @@ struct ctl ctl_ospf[] = {
 /* ospf6d, ospf6ctl */
 char *ctl_ospf6_test[] = { OSPF6D, "-nf", REQTEMP, NULL };
 struct ctl ctl_ospf6[] = {
-	{ "enable",     "enable service",
+	{ "enable",     "enable ospf6d service",
 	    { OSPF6D, "-f", REQTEMP, NULL }, NULL, DB_X_ENABLE, T_EXEC },
-	{ "disable",    "disable service",
+	{ "disable",    "disable ospf6d service",
 	    { PKILL, table, "ospf6d", NULL }, NULL, DB_X_DISABLE, T_EXEC },
-	{ "edit",       "edit configuration",
+	{ "edit",       "edit, test and stage ospf6d config",
 	    { "ospf6", (char *)ctl_ospf6_test, NULL }, call_editor, 0,
 	    T_HANDLER_FILL1 },
-	{ "reload",     "reload service",
+	{ "reload",     "test and apply staged ospf6d config",
 	    { OSPF6CTL, "reload", NULL }, NULL, 0, T_EXEC },
 	{ "fib",        "fib couple/decouple",
 	    { OSPF6CTL, "fib", REQ, NULL }, NULL, 0, T_EXEC },
@@ -141,18 +141,18 @@ struct ctl ctl_ospf6[] = {
 /* eigrpd, eigrpctl */
 char *ctl_eigrp_test[] = { EIGRPD, "-nf", REQTEMP, NULL };
 struct ctl ctl_eigrp[] = {
-	{ "enable",	"enable service",
+	{ "enable",	"enable eigrpd service",
 	    { EIGRPD, "-f", REQTEMP, NULL }, NULL, DB_X_ENABLE, T_EXEC },
-	{ "disable",	"disable service",
+	{ "disable",	"disable eigrpd service",
 	    { PKILL, table, "eigrpd", NULL }, NULL, DB_X_DISABLE, T_EXEC },
-	{ "edit",	"edit configuration",
+	{ "edit",	"edit, test and stage eigrpd config",
 	    { "eigrp", (char *)ctl_eigrp_test, NULL }, call_editor, 0,
 	    T_HANDLER_FILL1 },
-	{ "reload",	"reload service",
+	{ "reload",	"test and apply stagged eigrpd config",
 	    { EIGRPCTL, "reload", NULL }, NULL, 0, T_EXEC },
 	{ "fib",	"fib couple/decouple",
 	    { EIGRPCTL, "fib", REQ, NULL }, NULL, 0, T_EXEC },
-	{ "log",	"log brief/verbose",
+	{ "log",	"set eigrpd loggging, brief/verbose",
 	    { EIGRPCTL, "lob", REQ, NULL }, NULL, 0, T_EXEC },
 	{ "show",       "show fib/interfaces/neighbor/topology/traffic",
             { EIGRPCTL, "show", REQ, NULL }, NULL, 0, T_EXEC },
@@ -162,14 +162,14 @@ struct ctl ctl_eigrp[] = {
 /* bgpd, bgpctl */
 char *ctl_bgp_test[] = { BGPD, "-nf", REQTEMP, NULL, NULL };
 struct ctl ctl_bgp[] = {
-	{ "enable",     "enable service",
+	{ "enable",     "enable OpenBGPD service",
 	    { BGPD, "-f", REQTEMP, NULL }, NULL, DB_X_ENABLE, T_EXEC },
-	{ "disable",    "disable service",
+	{ "disable",    "disable OpenBGPD service",
 	    { PKILL, "bgpd", NULL }, NULL, DB_X_DISABLE, T_EXEC },
-	{ "edit",       "edit configuration",
+	{ "edit",       "edit, test and stage OpenBGPD config",
 	    { "bgp", (char *)ctl_bgp_test, NULL }, call_editor, 0,
 	    T_HANDLER_FILL1 },
-	{ "reload",     "reload service",
+	{ "reload",     "test and apply staged OpenBGPD config",
 	    { BGPCTL, "reload", NULL }, NULL, 0, T_EXEC },
 	{ "fib",	"fib couple/decouple",
 	    { BGPCTL, "fib", REQ, NULL }, NULL, 0, T_EXEC },
@@ -185,14 +185,14 @@ struct ctl ctl_bgp[] = {
 /* ripd, ripctl */
 char *ctl_rip_test[] = { RIPD, "-nf", REQTEMP, NULL };
 struct ctl ctl_rip[] = {
-	{ "enable",     "enable service",
+	{ "enable",     "enable ripd service",
 	    { RIPD, "-f", REQTEMP, NULL }, NULL, DB_X_ENABLE, T_EXEC },
-	{ "disable",    "disable service",
+	{ "disable",    "disable ripd service",
 	    { PKILL, table, "ripd", NULL }, NULL, DB_X_DISABLE, T_EXEC },
-	{ "edit",       "edit configuration",
+	{ "edit",       "edit, test and stage configuration",
 	    { "rip", (char *)ctl_rip_test, NULL }, call_editor, 0,
 	    T_HANDLER_FILL1 },
-	{ "reload",	"reload service",
+	{ "reload",	"test and apply staged ripd config",
 	    { RIPCTL, "reload", NULL }, NULL, 0, T_EXEC },
 	{ "fib",        "fib couple/decouple",
 	    { RIPCTL, "fib", REQ, NULL }, NULL, 0, T_EXEC },
@@ -204,20 +204,20 @@ struct ctl ctl_rip[] = {
 /* ldpd, ldpctl */
 char *ctl_ldp_test[] = { LDPD, "-nf", REQTEMP, NULL };
 struct ctl ctl_ldp[] = {
-	{ "enable",	"enable service",
+	{ "enable",	"enable ldpd service",
 	   { LDPD, "-f", REQTEMP, NULL }, NULL, DB_X_ENABLE, T_EXEC },
-	{ "disable",	"disable service",
+	{ "disable",	"disable ldpd service",
 	   { PKILL, "ldpd", NULL }, NULL, DB_X_DISABLE, T_EXEC },
-	{ "edit",	"edit configuration",
+	{ "edit",	"edit,test and stage ldpd config",
 	   { "ldp", (char *)ctl_ldp_test, NULL }, call_editor, 0,
 	    T_HANDLER_FILL1 },
-	{ "reload",	"reload service",
+	{ "reload",	"test and apply staged ldpd config",
 	    { LDPCTL, "reload", NULL }, NULL, 0, T_EXEC },
 	{ "fib",	"fib couple/decouple",
 	   { LDPCTL, "fib", REQ, NULL }, NULL, 0, T_EXEC },
-	{ "clear",       "clear neighbors",
+	{ "clear",       "clear ldpd neighbors",
             { LDPCTL, "show", REQ, NULL }, NULL, 0, T_EXEC },
-	{ "show",       "show fib/interfaces/discovery/neighbor/lib",
+	{ "show",       "show ldpd fib/interfaces/discovery/neighbor/lib",
             { LDPCTL, "show", REQ, NULL }, NULL, 0, T_EXEC },
 	{ 0, 0, { 0 }, 0, 0, 0 }
 };
@@ -225,16 +225,16 @@ struct ctl ctl_ldp[] = {
 /* isakmpd, ipsecctl */
 char *ctl_ipsec_test[] = { IPSECCTL, "-nf", REQTEMP, NULL };
 struct ctl ctl_ipsec[] = {
-	{ "enable",     "enable service",
+	{ "enable",     "enable isakmpd service",
 	    { ISAKMPD, "-Kv", NULL }, NULL, DB_X_ENABLE, T_EXEC },
-	{ "disable",    "disable service",
+	{ "disable",    "disable isakmpd service",
 	    { PKILL, table, "isakmpd", NULL }, NULL, DB_X_DISABLE, T_EXEC },
-	{ "edit",       "edit configuration",   
+	{ "edit",       "edit, test and stage isakmpd config",   
 	    { "ipsec", (char *)ctl_ipsec_test, NULL }, call_editor, 0,
 	    T_HANDLER_FILL1 },
-	{ "reload",     "reload service",
+	{ "reload",     "test and apply staged isakmpd config",
 	    { IPSECCTL, "-f", REQTEMP, NULL }, NULL, 0, T_EXEC },
-	{ "show",       "show flow/sa/all",
+	{ "show",       "show isakmpd flow/sa/all",
             { IPSECCTL, "-s", REQTEMP, NULL }, NULL, 0, T_EXEC },
 	{ 0, 0, { 0 }, 0, 0, 0 }
 };
@@ -242,9 +242,9 @@ struct ctl ctl_ipsec[] = {
 /* iked, ikectl */
 char *ctl_ike_test[] = { IKED, "-nf", REQTEMP, NULL };
 struct ctl ctl_ike[] = {
-	{ "enable",	"enable service",
+	{ "enable",	"enable iked service",
 	    { IKED, "-f", REQTEMP, NULL }, NULL, DB_X_ENABLE, T_EXEC },
-	{ "disable",	"disable service",
+	{ "disable",	"disable iked service",
 	    { PKILL, table, "iked", NULL }, NULL, DB_X_DISABLE, T_EXEC },
 	{ "active",	"force IKE active mode",
 	    { IKECTL, "active", NULL }, NULL, 0, T_EXEC },
@@ -254,12 +254,12 @@ struct ctl ctl_ike[] = {
 	    { IKECTL, "couple", NULL }, NULL, 0, T_EXEC },
 	{ "decouple",	"unload SAs and flows from kernel",
 	    { IKECTL, "decouple", NULL }, NULL, 0, T_EXEC },
-	{ "edit",	"edit configuration",
+	{ "edit",	"edit, test and stage iked config",
 	    { "ike", (char *)ctl_ike_test, NULL }, call_editor, 0,
 	    T_HANDLER_FILL1 },
-	{ "reload",	"reload service",
+	{ "reload",	"test and apply iked config",
 	    { IKECTL, "reload", NULL }, NULL, 0, T_EXEC },
-	{ "reset",	"reset state, policies, SAs or user database",
+	{ "reset",	"reset iked state, policies, SAs or user database",
 	    { IKECTL, "reset", REQ, NULL }, NULL, 0, T_EXEC },
 	{ "show",       "show sa",
             { IKECTL, "show", REQ, NULL }, NULL, 0, T_EXEC },
@@ -269,14 +269,14 @@ struct ctl ctl_ike[] = {
 /* dvmrpd */
 char *ctl_dvmrp_test[] = { DVMRPD, "-nf", REQTEMP, NULL };
 struct ctl ctl_dvmrp[] = {
-	{ "enable",     "enable service",
+	{ "enable",     "enable dvmrpd service",
 	    { DVMRPD, "-f", REQTEMP, NULL }, NULL, DB_X_ENABLE, T_EXEC },
-	{ "disable",    "disable service",   
+	{ "disable",    "disable dvmrpd service",   
 	    { PKILL, table, "dvmrpd", NULL }, NULL, DB_X_DISABLE, T_EXEC },
-	{ "edit",       "edit configuration",
+	{ "edit",       "edit,test and stage dvmrpd config",
 	    { "dvmrp", (char *)ctl_dvmrp_test,  NULL }, call_editor, 0,
 	    T_HANDLER_FILL1 },
-	{ "log",       "log brief/verbose",
+	{ "log",       "set dvmprd logging brief/verbose",
             { DVMRPCTL, "log", REQ, NULL }, NULL, 0, T_EXEC },
 	{ "show",       "show igmp/interfaces/mfc/neighbor/rib/summary",
             { DVMRPCTL, "show", REQ, NULL }, NULL, 0, T_EXEC },
@@ -286,11 +286,11 @@ struct ctl ctl_dvmrp[] = {
 /* rad */
 char *ctl_rad_test[] = { RAD, "-nf", REQTEMP, NULL };
 struct ctl ctl_rad[] = {
-	{ "enable",	"enable service",
+	{ "enable",	"enable rad service",
 	    { RAD, "-f", REQTEMP, NULL }, NULL, DB_X_ENABLE, T_EXEC },
-	{ "disable",	"disable service",
+	{ "disable",	"disable disable service",
 	    { PKILL, "rad", NULL }, NULL, DB_X_DISABLE, T_EXEC },
-	{ "edit",  "edit configuration",
+	{ "edit",  "edit,test and stage rad config",
 	    { "rad", (char *)ctl_rad_test, NULL}, call_editor, 0,
 	    T_HANDLER_FILL1 },
 	{ 0, 0, { 0 }, 0, 0, 0 }
@@ -299,11 +299,11 @@ struct ctl ctl_rad[] = {
 /* ifstated */
 char *ctl_ifstate_test[] = { IFSTATED, "-nf", REQTEMP, NULL };
 struct ctl ctl_ifstate[] = {
-	{ "enable",     "enable service",
+	{ "enable",     "enable ifstated service",
 	    { IFSTATED, "-f", REQTEMP, NULL }, NULL, DB_X_ENABLE, T_EXEC },
-	{ "disable",    "disable service",
+	{ "disable",    "disable ifstated service",
 	    { PKILL, table, "ifstated", NULL }, NULL, DB_X_DISABLE, T_EXEC },
-	{ "edit",       "edit configuration",
+	{ "edit",       "edit, test and stage ifstated config",
 	    { "ifstate", (char *)ctl_ifstate_test,  NULL }, call_editor, 0,
 	    T_HANDLER_FILL1 },
 	{ 0, 0, { 0 }, 0, 0, 0 }
@@ -326,9 +326,9 @@ struct ctl ctl_sasync[] = {
 /* npppd, npppctl */
 char *ctl_nppp_test[] = { NPPPD, "-nf", REQTEMP, NULL };
 struct ctl ctl_nppp[] = {
-	{ "enable",	"enable service",
+	{ "enable",	"enable npppd service",
 	    { NPPPD, "-f", REQTEMP, NULL }, NULL, DB_X_ENABLE, T_EXEC },
-	{ "disable",	"disable service",
+	{ "disable",	"disable npppd service",
 	    { PKILL, table, "npppd", NULL }, NULL, DB_X_DISABLE, T_EXEC },
 	{ "clear",	"disconnect PPP sessions",
 	    { NPPPCTL, "clear", REQ, OPT, OPT, NULL }, NULL, 0, T_EXEC },
@@ -336,7 +336,7 @@ struct ctl ctl_nppp[] = {
 	    { NPPPCTL, "session", REQ, OPT, OPT, NULL }, NULL, 0, T_EXEC },
 	{ "monitor",	"monitor PPP sessions",
 	    { NPPPCTL, "monitor", REQ, OPT, OPT, NULL }, NULL, 0, T_EXEC },
-	{ "edit",	"edit configuration",
+	{ "edit",	"edit ,test and stage configuration",
 	    { "nppp", (char *)ctl_nppp_test, NULL }, call_editor, 0,
 	    T_HANDLER_FILL1 },
 	{ 0, 0, { 0 }, 0, 0, 0 }
@@ -345,12 +345,12 @@ struct ctl ctl_nppp[] = {
 /* dhcpd */
 char *ctl_dhcp_test[] = { DHCPD, "-nc", REQTEMP, NULL };
 struct ctl ctl_dhcp[] = {
-	{ "enable",     "enable service",
+	{ "enable",     "enable dhcpd service",
 	    { DHCPD, "-c", REQTEMP, "-l", DHCPLEASES, NULL }, NULL, DB_X_ENABLE,
 	    T_EXEC },
-	{ "disable",    "disable service",
+	{ "disable",    "disable dhcpd service",
 	    { PKILL, table, "dhcpd", NULL }, NULL, DB_X_DISABLE, T_EXEC },
-	{ "edit",       "edit configuration",
+	{ "edit",       "edit,test and stage dhcpd config",
 	    { "dhcp", (char *)ctl_dhcp_test, NULL }, call_editor, 0,
 	    T_HANDLER_FILL1 },
 	{ 0, 0, { 0 }, 0, 0, 0 }
@@ -359,11 +359,11 @@ struct ctl ctl_dhcp[] = {
 /* snmpd, snmpctl */
 char *ctl_snmp_test[] = { SNMPD, "-nf", REQTEMP, NULL };
 struct ctl ctl_snmp[] = {
-	{ "enable",     "enable service",
+	{ "enable",     "enable OpenSNMPD service",
 	    { SNMPD, "-f", REQTEMP, NULL }, NULL, DB_X_ENABLE, T_EXEC },
-	{ "disable",    "disable service",
+	{ "disable",    "disable OpenSNMPD service",
 	    { PKILL, table, "snmpd", NULL }, NULL, DB_X_DISABLE, T_EXEC },
-	{ "edit",       "edit configuration",
+	{ "edit",       "edit,test and stage OpenSNMPD config",
 	    { "snmp", (char *)ctl_snmp_test, NULL }, call_editor, 0,
 	    T_HANDLER_FILL1 },
 	{ "trap",	"send traps",
@@ -374,12 +374,12 @@ struct ctl ctl_snmp[] = {
 /* sshd */
 char *ctl_sshd_test[] = { SSHD, "-tf", REQTEMP, NULL };
 struct ctl ctl_sshd[] = {
-	{ "enable",	"enable service",
+	{ "enable",	"enable OpenSSHD service",
 	    { SSHD, "-f", REQTEMP, NULL }, NULL, DB_X_ENABLE, T_EXEC },
-	{ "disable",	"disable service",
+	{ "disable",	"disable OpenSSHD service",
 	    { PKILL, table, "-f", SSHD, "-f", REQTEMP, NULL }, NULL,
 	    DB_X_DISABLE, T_EXEC },
-	{ "edit",	"edit configuration",
+	{ "edit",	"edit,test and stage OpenSSHD config",
 	    { "sshd", (char *)ctl_sshd_test, NULL }, call_editor, 0,
 	    T_HANDLER_FILL1 },
 	{ 0, 0, { 0 }, 0, 0, 0 }
@@ -388,11 +388,11 @@ struct ctl ctl_sshd[] = {
 /* ntpd */
 char *ctl_ntp_test[] = { NTPD, "-nf", REQTEMP, NULL };
 struct ctl ctl_ntp[] = {
-	{ "enable",     "enable service",
+	{ "enable",     "enable OpenNTPD service",
 	    { NTPD, "-sf", REQTEMP, NULL }, NULL, DB_X_ENABLE, T_EXEC },
-	{ "disable",    "disable service",
+	{ "disable",    "disable OpenNTPD service",
 	    { PKILL, "ntpd", NULL }, NULL, DB_X_DISABLE, T_EXEC },
-	{ "edit",       "edit configuration",
+	{ "edit",       "edit, test and stage OpenNTPD config",
 	    { "ntp", (char *)ctl_ntp_test, NULL }, call_editor, 0,
 	    T_HANDLER_FILL1 },
 	{ 0, 0, { 0 }, 0, 0, 0 }
@@ -401,14 +401,14 @@ struct ctl ctl_ntp[] = {
 /* relayd, relayctl */
 char *ctl_relay_test[] = { RELAYD, "-nf", REQTEMP, NULL };
 struct ctl ctl_relay[] = {
-	{ "enable",	"enable service",
+	{ "enable",	"enable relayd service",
 	    { RELAYD, "-f", REQTEMP, NULL }, NULL, DB_X_ENABLE, T_EXEC },
-        { "disable",	"disable service",
+        { "disable",	"disable relayd service",
 	    { PKILL, table, "relayd", NULL }, NULL, DB_X_DISABLE, T_EXEC },
-        { "edit",	"edit configuration",
+        { "edit",	"edit, test and stage relayd config",
 	    { "relay", (char *)ctl_relay_test, NULL }, call_editor, 0,
 	    T_HANDLER_FILL1 },
-        { "reload",	"reload configuration",
+        { "reload",	"test and apply staged relayd config",
 	    { RELAYCTL, "reload", NULL }, NULL, 0, T_EXEC },
 	{ "host",	"per-host control",
 	    { RELAYCTL, "host", OPT, OPT, NULL }, NULL, 0, T_EXEC },
@@ -425,17 +425,17 @@ struct ctl ctl_relay[] = {
 	{ 0, 0, { 0 }, 0, 0, 0 }
 };
 
-/* snmpd, snmpctl */
+/* smtpd, smptpdctl */
 char *ctl_smtp_test[] = { SMTPD, "-nf", REQTEMP, NULL };
 struct ctl ctl_smtp[] = {
-	{ "enable",	"enable service",
+	{ "enable",	"enable OpenSMTPD service",
 	    { SMTPD, "-f", REQTEMP, NULL }, NULL, DB_X_ENABLE, T_EXEC },
-	{ "disable",	"disable service",
+	{ "disable",	"disable OpenSMTPD service",
 	    { PKILL, table, "smtpd", NULL }, NULL, DB_X_DISABLE, T_EXEC },
-	{ "edit",	"edit configuration",
+	{ "edit",	"edit,test and stage OpenSMTPD configuration",
 	    { "smtp", (char *)ctl_smtp_test, NULL }, call_editor, 0,
 	    T_HANDLER_FILL1 },
-	{ "log",	"brief/verbose logging configuration",
+	{ "log",	"set OpenSMTPD logging brief/verbose config",
 	    { SMTPCTL, "log", REQ, NULL }, NULL, 0, T_EXEC },
 	{ "pause",	"pause mda/mta/smtp listener",
 	    { SMTPCTL, "pause", REQ, NULL }, NULL, 0, T_EXEC },
@@ -450,48 +450,48 @@ struct ctl ctl_smtp[] = {
 
 /* ftpproxy */
 struct ctl ctl_ftpproxy[] = {
-	{ "enable",	"enable service",
+	{ "enable",	"enable ftp proxy service",
 	    { FTPPROXY, "-D", "2", NULL }, NULL, DB_X_ENABLE, T_EXEC },
-	{ "disable",	"disable service",
+	{ "disable",	"disable ftp proxy service",
 	    { PKILL, table, "ftp-proxy", NULL }, NULL, DB_X_DISABLE, T_EXEC },
 	{ 0, 0, { 0 }, 0, 0, 0 }
 };
 
 /* tftpproxy */
 struct ctl ctl_tftpproxy[] = {
-	{ "enable",     "enable service",
+	{ "enable",     "enable tftp proxy service",
 	    { TFTPPROXY, "-v", "-l", "127.0.0.1", NULL }, NULL, DB_X_ENABLE,
 	    T_EXEC },
-	{ "disable",    "disable service",
+	{ "disable",    "disable tftp proxy service",
 	    { PKILL, table, "tftp-proxy", NULL }, NULL, DB_X_DISABLE, T_EXEC },
 	{ 0, 0, { 0 }, 0, 0, 0 }
 };
 
 /* tftpd */
 struct ctl ctl_tftp[] = {
-	{ "enable", 	"enable service",
+	{ "enable", 	"enable tftpd service",
 	   { TFTPD, "-l", "127.0.0.1", "/tftpboot", NULL }, NULL, DB_X_ENABLE, T_EXEC },
-	{ "disable",	"disable service",
+	{ "disable",	"disable tftpd service",
 	   { PKILL, table, "tftpd", NULL }, NULL, DB_X_DISABLE, T_EXEC },
 	{ 0, 0, { 0 }, 0, 0, 0 }
 };
 
 /* resolvd */
 struct ctl ctl_resolv[] = {
-	{ "enable",	"enable service",
+	{ "enable",	"enable resolvd service",
 	   { RESOLVD, NULL }, NULL, DB_X_ENABLE_DEFAULT, T_EXEC },
-	{ "disable",    "disable service",
+	{ "disable",    "disable resolvd service",
 	   { PKILL, "resolvd", NULL }, NULL, DB_X_DISABLE_ALWAYS, T_EXEC },
 	{ 0, 0, { 0 }, 0, 0, 0 }
 };
 
 /* inetd */
 struct ctl ctl_inet[] = {
-	{ "enable",     "enable service",
+	{ "enable",     "enable inetd service",
 	    { INETD, REQTEMP, NULL }, NULL, DB_X_ENABLE, T_EXEC },
-	{ "disable",    "disable service",
+	{ "disable",    "disable inetd service",
 	    { PKILL, table, "inetd", NULL }, NULL, DB_X_DISABLE, T_EXEC },
-	{ "edit",       "edit configuration",
+	{ "edit",       "edit inetd superserver config",
 	    { "inet", NULL, NULL }, call_editor, 0, T_HANDLER_FILL1 },
 	{ 0, 0, { 0 }, 0, 0, 0 }
 };
@@ -499,18 +499,18 @@ struct ctl ctl_inet[] = {
 /* ldapd, ldapctl */
 char *ctl_ldap_test[] = { LDAPD, "-nf", REQTEMP, NULL };
 struct ctl ctl_ldap[] = {
-	{ "enable",	"enable service",
+	{ "enable",	"enable LDAPd service",
 	    { LDAPD, REQTEMP, NULL }, NULL, DB_X_ENABLE, T_EXEC },
-	{ "disable",	"disable service",
+	{ "disable",	"disable LDAPd service",
 	    { PKILL, table, "ldapd", NULL }, NULL, DB_X_DISABLE, T_EXEC },
-	{ "edit",       "edit configuration",
+	{ "edit",       "edit, test and stage LDAPd config",
 	    { "ldap", (char *)ctl_ldap_test, NULL }, call_editor, 0,
 	    T_HANDLER_FILL1 },
-	{ "log", 	"brief/verbose logging",
+	{ "log", 	"set LDAPd logging brief/verbose",
 	    { LDAPCTL, "log", REQ, NULL }, NULL, 0, T_EXEC },
-	{ "compact",	"compact all databases",
+	{ "compact",	"compact all LDAPd databases",
 	    { LDAPCTL, "compact", NULL }, NULL, 0, T_EXEC },
-	{ "index",	"re-index all databases",
+	{ "index",	"re-index all LDAPd databases",
 	    { LDAPCTL, "index", NULL }, NULL, 0, T_EXEC },
 	{ 0, 0, { 0 }, 0, 0, 0 }
 };
