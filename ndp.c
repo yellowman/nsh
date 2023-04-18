@@ -126,6 +126,14 @@ static struct in6_nbrinfo *getnbrinfo(struct in6_addr *, int, int);
 int ndp_ether_aton(const char *, u_char *);
 int rtmsg_ndp(int);
 int rtget_ndp(struct sockaddr_in6 **, struct sockaddr_dl **);
+int ndpsearch(FILE *, char *, struct in6_addr *, void (*action)());
+/*
+    (FILE *, char *, struct sockaddr_dl *,
+    struct sockaddr_in6 *, struct rt_msghdr *))
+*/
+void conf_ndp(FILE *output, char *delim);
+void conf_ndp_entry(FILE *, char *, struct sockaddr_dl *,
+    struct sockaddr_in6 *, struct rt_msghdr *);
 
 static int
 getsocket(void)
@@ -736,4 +744,67 @@ rtget_ndp(struct sockaddr_in6 **sinp, struct sockaddr_dl **sdlp)
 	*sdlp = sdl;
 
 	return (0);
+}
+
+int
+ndpsearch(FILE *output, char *delim, struct in6_addr *addr, void (*action)())
+{
+	char *next;
+	struct rt_msghdr *rtm;
+	struct sockaddr_in6 *sin6;
+	struct sockaddr_dl *sdl;
+	struct rtdump *rtdump;
+	int found_entry = 0;
+
+	rtdump = getrtdump(AF_INET6, RTF_LLINFO, 0);
+	if (rtdump == NULL)
+	    return 0;
+	for (next = rtdump->buf; next < rtdump->lim; next += rtm->rtm_msglen)
+	{
+		rtm = (struct rt_msghdr *)next;
+ 		if (rtm->rtm_version != RTM_VERSION)
+			continue;
+	        if (rtm->rtm_addrs & RTA_DST) {
+			sin6 = (struct sockaddr_in6 *)(rtm + rtm->rtm_hdrlen);
+		}
+		if (rtm->rtm_addrs & RTA_DST) {
+			sdl = (struct sockaddr_dl *)(rtm + rtm->rtm_hdrlen);
+		}
+                if (addr) {
+			if (!IN6_ARE_ADDR_EQUAL(&sin6->sin6_addr, addr))
+                                continue;
+                        found_entry = 1;
+                }
+                (*action)(output, delim, sdl, sin6, rtm);
+        }
+        freertdump(rtdump);
+        return(found_entry);
+}
+
+void
+conf_ndp(FILE *output, char *delim)
+{
+	ndpsearch(output, delim, 0, conf_ndp_entry);
+}
+
+void
+conf_ndp_entry(FILE *output, char *delim, struct sockaddr_dl *sdl,
+    struct sockaddr_in6 *sin6, struct rt_msghdr *rtm)
+{
+	char *host;
+
+	if (output == NULL) {
+		printf("%% conf_ndp_entry: unprepared\n");
+		return;
+	}
+
+	if ((rtm->rtm_flags & RTF_LOCAL) || rtm->rtm_rmx.rmx_expire != 0)
+		return;
+
+	host = routename6(sin6);
+
+	fprintf(output, "%s%s %s", delim, host, ether_str(sdl));
+	if (rtm->rtm_flags & RTF_ANNOUNCE)
+		fputs(" proxy", output);
+	fputs("\n", output);
 }
