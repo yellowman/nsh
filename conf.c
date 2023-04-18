@@ -1143,22 +1143,22 @@ void conf_brcfg(FILE *output, int ifs, struct if_nameindex *ifn_list,
 
 	if ((l_tmp = bridge_cfg(ifs, ifname, PRIORITY))
 	    != -1 && l_tmp != DEFAULT_PRIORITY)
-		fprintf(output, " priority %lu\n", l_tmp);
+		fprintf(output, " priority %ld\n", l_tmp);
 	if ((l_tmp = bridge_cfg(ifs, ifname, HELLOTIME))
 	    != -1 && l_tmp != DEFAULT_HELLOTIME)
-		fprintf(output, " hellotime %lu\n", l_tmp);
+		fprintf(output, " hellotime %ld\n", l_tmp);
 	if ((l_tmp = bridge_cfg(ifs, ifname, FWDDELAY))
 	    != -1 && l_tmp != DEFAULT_FWDDELAY)
-		fprintf(output, " fwddelay %lu\n", l_tmp);
+		fprintf(output, " fwddelay %ld\n", l_tmp);
 	if ((l_tmp = bridge_cfg(ifs, ifname, MAXAGE))
 	    != -1 && l_tmp != DEFAULT_MAXAGE)
-		fprintf(output, " maxage %lu\n", l_tmp);
+		fprintf(output, " maxage %ld\n", l_tmp);
 	if ((l_tmp = bridge_cfg(ifs, ifname, MAXADDR))
 	    != -1 && l_tmp != DEFAULT_MAXADDR)
-		fprintf(output, " maxaddr %lu\n", l_tmp);
+		fprintf(output, " maxaddr %ld\n", l_tmp);
 	if ((l_tmp = bridge_cfg(ifs, ifname, TIMEOUT))
 	    != -1 && l_tmp != DEFAULT_TIMEOUT)
-		fprintf(output, " timeout %lu\n", l_tmp);
+		fprintf(output, " timeout %ld\n", l_tmp);
 
 	if (bridge_list(ifs, ifname, NULL, tmp_str, TMPSIZ, MEMBER))
 		fprintf(output, " member %s\n", tmp_str);
