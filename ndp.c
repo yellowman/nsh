@@ -131,7 +131,6 @@ int ndpsearch(FILE *, char *, struct in6_addr *, void (*action)());
     (FILE *, char *, struct sockaddr_dl *,
     struct sockaddr_in6 *, struct rt_msghdr *))
 */
-void conf_ndp(FILE *output, char *delim);
 void conf_ndp_entry(FILE *, char *, struct sockaddr_dl *,
     struct sockaddr_in6 *, struct rt_msghdr *);
 
@@ -749,7 +748,7 @@ rtget_ndp(struct sockaddr_in6 **sinp, struct sockaddr_dl **sdlp)
 int
 ndpsearch(FILE *output, char *delim, struct in6_addr *addr, void (*action)())
 {
-	char *next;
+	char *next, *p;
 	struct rt_msghdr *rtm;
 	struct sockaddr_in6 *sin6;
 	struct sockaddr_dl *sdl;
@@ -764,12 +763,13 @@ ndpsearch(FILE *output, char *delim, struct in6_addr *addr, void (*action)())
 		rtm = (struct rt_msghdr *)next;
  		if (rtm->rtm_version != RTM_VERSION)
 			continue;
-	        if (rtm->rtm_addrs & RTA_DST) {
-			sin6 = (struct sockaddr_in6 *)(rtm + rtm->rtm_hdrlen);
-		}
-		if (rtm->rtm_addrs & RTA_DST) {
-			sdl = (struct sockaddr_dl *)(rtm + rtm->rtm_hdrlen);
-		}
+		if ((rtm->rtm_addrs & (RTA_DST | RTA_GATEWAY)) == 0)
+			continue;
+		p = (char *)rtm;
+		p += rtm->rtm_hdrlen;
+		sin6 = (struct sockaddr_in6 *)(p);
+		p += ROUNDUP(((struct sockaddr *)p)->sa_len);
+		sdl = (struct sockaddr_dl *)(p);
                 if (addr) {
 			if (!IN6_ARE_ADDR_EQUAL(&sin6->sin6_addr, addr))
                                 continue;
