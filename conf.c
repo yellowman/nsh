@@ -61,7 +61,6 @@
 #define MTU_IGNORE ULONG_MAX	/* ignore this "default" mtu */
 
 void conf_db_single(FILE *, char *, char *, char *);
-void conf_interfaces(FILE *, char *);
 void conf_print_rtm(FILE *, struct rt_msghdr *, char *, int);
 int conf_ifaddrs(FILE *, char *, int, int);
 int conf_ifaddr_dhcp(FILE *, char *, int, int);
@@ -206,16 +205,16 @@ conf(FILE *output)
 	/*
 	 * start all intefaces not listed in 'latestartifs'
 	 */
-	conf_interfaces(output, NULL);
+	conf_interfaces(output, NULL, 0);
 	/*
 	 * start these interfaces in specific order
 	 */
-	conf_interfaces(output, "aggr");
-	conf_interfaces(output, "trunk");
-	conf_interfaces(output, "svlan");
-	conf_interfaces(output, "vlan");
-	conf_interfaces(output, "carp");
-	conf_interfaces(output, "pppoe");
+	conf_interfaces(output, "aggr", 0);
+	conf_interfaces(output, "trunk", 0);
+	conf_interfaces(output, "svlan", 0);
+	conf_interfaces(output, "vlan", 0);
+	conf_interfaces(output, "carp", 0);
+	conf_interfaces(output, "pppoe", 0);
 
 	fprintf(output, "!\n");
 
@@ -241,19 +240,19 @@ conf(FILE *output)
 	/*
 	 * these interfaces must start after routes are set
 	 */
-	conf_interfaces(output, "tun");
-	conf_interfaces(output, "tap");
-	conf_interfaces(output, "gif");
-	conf_interfaces(output, "etherip");
-	conf_interfaces(output, "gre");
-	conf_interfaces(output, "egre");
-	conf_interfaces(output, "nvgre");
-	conf_interfaces(output, "eoip");
-	conf_interfaces(output, "vxlan");
-	conf_interfaces(output, "wg");
-	conf_interfaces(output, "bridge");
-	conf_interfaces(output, "veb");
-	conf_interfaces(output, "tpmr");
+	conf_interfaces(output, "tun", 0);
+	conf_interfaces(output, "tap", 0);
+	conf_interfaces(output, "gif", 0);
+	conf_interfaces(output, "etherip", 0);
+	conf_interfaces(output, "gre", 0);
+	conf_interfaces(output, "egre", 0);
+	conf_interfaces(output, "nvgre", 0);
+	conf_interfaces(output, "eoip", 0);
+	conf_interfaces(output, "vxlan", 0);
+	conf_interfaces(output, "wg", 0);
+	conf_interfaces(output, "bridge", 0);
+	conf_interfaces(output, "veb", 0);
+	conf_interfaces(output, "tpmr", 0);
 
 	fprintf(output, "!\n");
 	conf_ctl(output, "", "pf", 0);
@@ -261,8 +260,8 @@ conf(FILE *output)
 	/*
 	 * this interface must start after pf is loaded
 	 */
-	conf_interfaces(output, "pfsync");
-	conf_interfaces(output, "pflow");
+	conf_interfaces(output, "pfsync", 0);
+	conf_interfaces(output, "pflow", 0);
 
 	conf_ctl(output, "", "snmp", 0);
 	conf_ctl(output, "", "resolv", 0);
@@ -629,7 +628,7 @@ conf_db_single(FILE *output, char *dbname, char *lookup, char *ifname)
 	sl_free(dbreturn, 1);
 }
 
-void conf_interfaces(FILE *output, char *only)
+void conf_interfaces(FILE *output, char *only, int exact_match)
 {
 	int ifs, flags, ippntd, br;
 	char ifdescr[IFDESCRSIZE];
@@ -650,9 +649,14 @@ void conf_interfaces(FILE *output, char *only)
 	}
 
 	for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++) {
-		if (only && !isprefix(only, ifnp->if_name))
-			/* only display interfaces which start with ... */
-			continue;
+		if (only) {
+			/* only interfaces which match, or start with ... */
+			if (exact_match) {
+				if (strcmp(only, ifnp->if_name) != 0)
+					continue;
+			} else if (!isprefix(only, ifnp->if_name))
+				continue;
+		}
 		if (!only && islateif(ifnp->if_name))
 			/* interface prefixes to exclude on generic run */
 			continue;
