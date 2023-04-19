@@ -2055,10 +2055,19 @@ rtable(int argc, char **argv)
 		cli_rtable = table;
 		return 0;
 	}
-	if (!set && !found) {
-		printf("%% rtable %d does not exist in database\n",
-		    table);
-		return 1;
+	if (!set) {
+		if (!found) {
+			printf("%% rtable %d does not exist in database\n",
+			    table);
+			return 1;
+		} else if (table == 0) {
+			printf("%% cannot remove rtable %d\n", table);
+			return 1;
+		}
+	} else if (table == 0)  {
+		/* Do not add the kernel's default rtable 0 to the database. */
+		cli_rtable = 0;
+		return 0;
 	}
 	if (db_delete_rtables_rtable(table) < 0) {
 		printf("%% rtable db removal error\n");
