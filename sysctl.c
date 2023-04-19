@@ -86,7 +86,9 @@ sysctl_int(int mib[], int val, int read)
 			break;
 
 	if (sysctl(mib, i, &old, &len, valp, sizeof(int)) == -1) {
-		if (read && errno != ENOPROTOOPT) {
+		if (!read) {
+			printf("%% sysctl_int: sysctl: %s\n", strerror(errno));
+		} else if (errno != ENOPROTOOPT) {
 			printf("%% sysctl_int: sysctl: %s\n", strerror(errno));
 			for (i = 0; i < 6; i++) {
 		                if (mib[i] == MIB_STOP)
