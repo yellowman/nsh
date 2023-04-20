@@ -300,50 +300,283 @@ show_help(int argc, char **argv)
  * Data structures and routines for the "ip" command.
  */
 
-Menu iptab[] = {
-	{ "arptimeout",	"Seconds for ARP entries to remain in cache",	CMPL0 0, 0, 1, 1, ipsysctl },
-	{ "arpdown",	"Seconds before resending unanswered ARP requests", CMPL0 0, 0, 1, 1, ipsysctl },
-	{ "carp",	"Allow CARP",			CMPL0 0, 0, 0, 0, ipsysctl },
-	{ "carp-log",	"CARP Logging Priority",	CMPL0 0, 0, 0, 1, ipsysctl },
-	{ "carp-preempt", "CARP Virtual Host Preemption", CMPL0 0, 0, 0, 0, ipsysctl },
-	{ "forwarding",	"Enable IPv4 Forwarding",	CMPL0 0, 0, 0, 0, ipsysctl },
-	{ "mforwarding", "Enable IPv4 Multicast Forwarding", CMPL0 0, 0, 0, 0, ipsysctl },
-	{ "ipip",	"Allow IP-in-IP Encapsulation", CMPL0 0, 0, 0, 0, ipsysctl },
-	{ "gre",	"Allow Generic Route Encapsulation", CMPL0 0, 0, 0, 0, ipsysctl },
-	{ "wccp",	"Allow Web Cache Control Protocol", CMPL0 0, 0, 0, 0, ipsysctl },
-	{ "etherip",	"Allow Ether-IP Encapsulation",	CMPL0 0, 0, 0, 0, ipsysctl },
-	{ "ipcomp",	"Allow IP Compression",		CMPL0 0, 0, 0, 0, ipsysctl },	
-	{ "esp",	"Allow Encapsulated Security Payload", CMPL0 0, 0, 0, 0, ipsysctl },
-	{ "esp-udpencap","Allow ESP encapsulation within UDP", CMPL0 0, 0, 0, 0, ipsysctl },
-	{ "esp-udpencap-port","UDP port number for encapsulation", CMPL0 0, 0, 0, 1, ipsysctl },  
-	{ "ah",		"Allow Authentication Header",	CMPL0 0, 0, 0, 0, ipsysctl },
-	{ "sourceroute", "Process Loose/Strict Source Route Options", CMPL0 0, 0, 0, 0, ipsysctl },
-	{ "encdebug",	"Enable if_enc debugging",	CMPL0 0, 0, 0, 0, ipsysctl },
-	{ "send-redirects", "Send ICMP redirects",	CMPL0 0, 0, 0, 0, ipsysctl },
-	{ "directed-broadcast", "Allow directed broadcasts", CMPL0 0, 0, 0, 0, ipsysctl },
-	{ "multipath",	"Multipath routing",		CMPL0 0, 0, 0, 0, ipsysctl },
-	{ "maxqueue", "Maximum unassembled IP fragments in the fragment queue",      CMPL0 0, 0, 1, 1, ipsysctl  },
-        { "mtudisc", "Enable Path MTU Discovery",       CMPL0 0, 0, 0, 0, ipsysctl },
-        { "mtudisctimeout", "Timeout in seconds for routes added by Path MTU discovery engine", CMPL0 0, 0, 1, 1, ipsysctl },
-        { "ipsec-timeout", "Seconds after a SA is established before it will expire", CMPL0 0, 0, 1, 1, ipsysctl },
-        { "ipsec-soft-timeout", "Seconds after a SA is established before being renegotiated", CMPL0 0, 0, 1, 1, ipsysctl },
-        { "ipsec-allocs", "Maximum IPSEC flows that can use a SA before it expires", CMPL0 0, 0, 1, 1, ipsysctl },
-        { "ipsec-soft-allocs", "Maximum IPSEC flows a SA uses before renegotiation", CMPL0 0, 0, 1, 1, ipsysctl },
-        { "ipsec-bytes", "Maximum bytes processed by a security association before it expires", CMPL0 0, 0, 1, 1, ipsysctl },
-        { "ipsec-soft-bytes", "Maximum bytes a SA processes before renegotiation", CMPL0 0, 0, 1, 1, ipsysctl },
-        { "ipsec-expire-acquire", "Seconds the kernel allows to dynamically acquire SAs before a request", CMPL0 0, 0, 1, 1, ipsysctl },
-        { "ipsec-firstuse", "Seconds after security association is first used before it expires", CMPL0 0, 0, 1, 1, ipsysctl },
-        { "ipsec-soft-firstuse", "Seconds after a SA is first used before it is sent for renegotiation", CMPL0 0, 0, 1, 1, ipsysctl },
-        { "ipsec-invalid-life", "Lifetime of Embryonic SAs in seconds", CMPL0 0, 0, 1, 1, ipsysctl },
-        { "ipsec-pfs", "Enables Perfect Forward Secrecy when establishing SAs", CMPL0 0, 0, 1, 1, ipsysctl },
-        { "portfirst", "Minimum registered port number for TCP/UDP port allocation", CMPL0 0, 0, 1, 1, ipsysctl },
-        { "porthifirst", "Minimum dynamic/private port number for TCP/UDP port allocation", CMPL0 0, 0, 1, 1, ipsysctl },
-        { "porthilast", "Maximum dynamic/private port number for TCP/UDP port allocation", CMPL0 0, 0, 1, 1, ipsysctl },
-        { "portlast", "Maximum regisrered port number for TCP/UDP port allocation", CMPL0 0, 0, 1, 1, ipsysctl },
+struct ghs arptimeouttab[] = {
+	{ "<seconds>", "Seconds for ARP entries to remain in cache", CMPL0 NULL, 0 },
+	{ NULL, NULL, NULL, NULL, 0 }
+};
+
+struct ghs arpdowntab[] = {
+	{ "<seconds>", "Seconds before resending unanswered ARP requests", CMPL0 NULL, 0 },
+	{ NULL, NULL, NULL, NULL, 0 }
+};
+
+struct ghs carptab[] = {
+	{ "^no ip carp <cr>", "Disallow CARP", CMPL0 NULL, 0 },
+	{ "^ip carp <cr>", "Allow CARP", CMPL0 NULL, 0 },
+	{ NULL, NULL, NULL, NULL, 0 }
+};
+
+struct ghs carploggingtab[] = {
+	{ "0", "CARP logging priority 0", CMPL0 NULL, 0 },
+	{ "1", "CARP logging priority 1", CMPL0 NULL, 0 },
+	{ "2", "CARP logging priority 2", CMPL0 NULL, 0 },
+	{ "3", "CARP logging priority 3", CMPL0 NULL, 0 },
+	{ "4", "CARP logging priority 4", CMPL0 NULL, 0 },
+	{ "5", "CARP logging priority 5", CMPL0 NULL, 0 },
+	{ "6", "CARP logging priority 6", CMPL0 NULL, 0 },
+	{ "7", "CARP logging priority 7", CMPL0 NULL, 0 },
+	{ NULL, NULL, NULL, NULL, 0 }
+};
+
+struct ghs carppreempttab[] = {
+	{ "^no ip carp-preempt <cr>", "Disallow virtual CARP hosts to preempt each other", CMPL0 NULL, 0 },
+	{ "^ip carp-preempt <cr>", "Allow virtual CARP hosts to preempt each other", CMPL0 NULL, 0 },
+	{ NULL, NULL, NULL, NULL, 0 }
+};
+
+struct ghs forwardingtab[] = {
+	{ "^no ip forwarding <cr>", "Disable IPv4 Forwarding", CMPL0 NULL, 0 },
+	{ "^ip forwarding <cr>", "Enable IPv4 Forwarding", CMPL0 NULL, 0 },
+	{ NULL, NULL, NULL, NULL, 0 }
+};
+
+struct ghs mforwardingtab[] = {
+	{ "^no ip mforwarding <cr>", "Disable IPv4 Multicast Forwarding", CMPL0 NULL, 0 },
+	{ "^ip mforwarding <cr>", "Enable IPv4 Multicast Forwarding", CMPL0 NULL, 0 },
+	{ NULL, NULL, NULL, NULL, 0 }
+};
+
+struct ghs ipiptab[] = {
+	{ "^no ip ipip <cr>", "Disallow IP-in-IP Encapsulation", CMPL0 NULL, 0 },
+	{ "^ip ipip <cr>", "Allow IP-in-IP Encapsulation", CMPL0 NULL, 0 },
+	{ NULL, NULL, NULL, NULL, 0 }
+};
+
+struct ghs gretab[] = {
+	{ "^no ip gre <cr>", "Disallow Generic Routing Encapsulation", CMPL0 NULL, 0 },
+	{ "^ip gre <cr>", "Allow Generic Routing Encapsulation", CMPL0 NULL, 0 },
+	{ NULL, NULL, NULL, NULL, 0 }
+};
+
+struct ghs wccptab[] = {
+	{ "^no ip wccp <cr>", "Disallow Web Cache Control Protocol", CMPL0 NULL, 0 },
+	{ "^ip wccp <cr>", "Allow Web Cache Control Protocol", CMPL0 NULL, 0 },
+	{ NULL, NULL, NULL, NULL, 0 }
+};
+
+struct ghs etheriptab[] = {
+	{ "^no ip etherip <cr>", "Disallow Ether-IP Encapsulation", CMPL0 NULL, 0 },
+	{ "^ip etherip <cr>", "Allow Ether-IP Encapsulation", CMPL0 NULL, 0 },
+	{ NULL, NULL, NULL, NULL, 0 }
+};
+
+struct ghs ipcomptab[] = {
+	{ "^no ip ipcomp <cr>", "Disallow IP Compression", CMPL0 NULL, 0 },
+	{ "^ip ipcomp <cr>", "Allow IP Compression", CMPL0 NULL, 0 },
+	{ NULL, NULL, NULL, NULL, 0 }
+};
+
+struct ghs esptab[] = {
+	{ "^no ip esp <cr>", "Disallow Encapsulated Security Payload", CMPL0 NULL, 0 },
+	{ "^ip esp <cr>", "Allow Encapsulated Security Payload", CMPL0 NULL, 0 },
+	{ NULL, NULL, NULL, NULL, 0 }
+};
+
+struct ghs espudpencaptab[] = {
+	{ "^no ip esp-udpencap <cr>", "Disallow ESP encapsulation within UDP", CMPL0 NULL, 0 },
+	{ "^ip esp-udpencap <cr>", "Allow ESP encapsulation within UDP", CMPL0 NULL, 0 },
+	{ NULL, NULL, NULL, NULL, 0 }
+};
+
+struct ghs espudpencapporttab[] = {
+	{ "<number>", "UDP port number for encapsulation", CMPL0 NULL, 0 },
+	{ NULL, NULL, NULL, NULL, 0 }
+};
+
+struct ghs ahtab[] = {
+	{ "^no ip ah <cr>", "Disallow Authentication Header", CMPL0 NULL, 0 },
+	{ "^ip ah <cr>", "Allow Authentication Header", CMPL0 NULL, 0 },
+	{ NULL, NULL, NULL, NULL, 0 }
+};
+
+struct ghs sourceroutetab[] = {
+	{ "^no ip sourceroute <cr>", "Disallow Forwarding of Source-Routed Packets", CMPL0 NULL, 0 },
+	{ "^ip sourceroute <cr>", "Allow Forwarding of Source-Routed Packets", CMPL0 NULL, 0 },
+	{ NULL, NULL, NULL, NULL, 0 }
+};
+
+struct ghs encdebugtab[] = {
+	{ "^no ip encdebug <cr>", "Disable enc(4) interface debugging", CMPL0 NULL, 0 },
+	{ "^ip encdebug <cr>", "Enable enc(4) interface debugging", CMPL0 NULL, 0 },
+	{ NULL, NULL, NULL, NULL, 0 }
+};
+
+struct ghs sendredirectstab[] = {
+	{ "^no ip send-redirects <cr>", "Do not send ICMP redirects", CMPL0 NULL, 0 },
+	{ "^ip send-redirects <cr>", "Send ICMP redirects", CMPL0 NULL, 0 },
+	{ NULL, NULL, NULL, NULL, 0 }
+};
+
+struct ghs directedbroadcaststab[] = {
+	{ "^no ip directed-broadcast <cr>", "Disallow directed broadcasts", CMPL0 NULL, 0 },
+	{ "^ip directed-broadcast <cr>", "Allow directed broadcasts", CMPL0 NULL, 0 },
+	{ NULL, NULL, NULL, NULL, 0 }
+};
+
+struct ghs multipathtab[] = {
+	{ "^no ip multipath <cr>", "Disable Multipath Routing", CMPL0 NULL, 0 },
+	{ "^ip multipath <cr>", "Enable Multipath Routing", CMPL0 NULL, 0 },
+	{ NULL, NULL, NULL, NULL, 0 }
+};
+
+struct ghs maxqueuetab[] = {
+	{ "<number>", "Maximum unassembled IP fragments in the fragment queue", CMPL0 NULL, 0 },
+	{ NULL, NULL, NULL, NULL, 0 }
+};
+
+struct ghs mtudisctab[] = {
+	{ "^no ip mtudisc <cr>", "Disable Path MTU Discovery", CMPL0 NULL, 0 },
+	{ "^ip mtudisc <cr>", "Enable Path MTU Discovery", CMPL0 NULL, 0 },
+	{ NULL, NULL, NULL, NULL, 0 }
+};
+
+struct ghs mtudisctimeouttab[] = {
+	{ "<seconds>", "Timeout in seconds for routes added by Path MTU discovery engine", CMPL0 NULL, 0 },
+	{ NULL, NULL, NULL, NULL, 0 }
+};
+
+struct ghs ipsectimeouttab[] = {
+	{ "<seconds>", "Seconds after a SA is established before it will expire", CMPL0 NULL, 0 },
+	{ NULL, NULL, NULL, NULL, 0 }
+};
+
+struct ghs ipsecsofttimeouttab[] = {
+	{ "<seconds>", "Seconds after a SA is established before being renegotiated", CMPL0 NULL, 0 },
+	{ NULL, NULL, NULL, NULL, 0 }
+};
+
+struct ghs ipsecallocstab[] = {
+	{ "<number>", "Maximum IPSEC flows that can use a SA before it expires", CMPL0 NULL, 0 },
+	{ NULL, NULL, NULL, NULL, 0 }
+};
+
+struct ghs ipsecsoftallocstab[] = {
+	{ "<number>", "Maximum IPSEC flows that can use a SA before being renegotiated", CMPL0 NULL, 0 },
+	{ NULL, NULL, NULL, NULL, 0 }
+};
+
+struct ghs ipsecbytestab[] = {
+	{ "<number>", "Maximum bytes processed by a security association before it expires", CMPL0 NULL, 0 },
+	{ NULL, NULL, NULL, NULL, 0 }
+};
+
+struct ghs ipsecsoftbytestab[] = {
+	{ "<number>", "Maximum bytes processed by a security association before being renegotiated", CMPL0 NULL, 0 },
+	{ NULL, NULL, NULL, NULL, 0 }
+};
+
+struct ghs ipsecexpireacquiretab[] = {
+	{ "<seconds>", "Seconds the kernel allows to dynamically acquire SAs before a request", CMPL0 NULL, 0 },
+	{ NULL, NULL, NULL, NULL, 0 }
+};
+
+struct ghs ipsecfirstusetab[] = {
+	{ "<seconds>", "Seconds after security association is first used before it expires", CMPL0 NULL, 0 },
+	{ NULL, NULL, NULL, NULL, 0 }
+};
+
+struct ghs ipsecsoftfirstusetab[] = {
+	{ "<seconds>", "Seconds after a SA is first used before it is sent for renegotiation", CMPL0 NULL, 0 },
+	{ NULL, NULL, NULL, NULL, 0 }
+};
+
+struct ghs ipsecinvalidlifetab[] = {
+	{ "<seconds>", "Lifetime of Embryonic SAs in seconds", CMPL0 NULL, 0 },
+	{ NULL, NULL, NULL, NULL, 0 }
+};
+
+struct ghs ipsecpfstab[] = {
+	{ "^no ip ipsec-pfs <cr>", "Disable Perfect Forward Secrecy", CMPL0 NULL, 0 },
+	{ "^ip ipsec-pfs <cr>", "Enable Perfect Forward Secrecy", CMPL0 NULL, 0 },
+	{ NULL, NULL, NULL, NULL, 0 }
+};
+
+struct ghs portfirsttab[] = {
+	{ "<number>", "Minimum registered port number for TCP/UDP port allocation", CMPL0 NULL, 0 },
+	{ NULL, NULL, NULL, NULL, 0 }
+};
+
+struct ghs porthifirsttab[] = {
+	{ "<number>", "Minimum dynamic/private port number for TCP/UDP port allocation", CMPL0 NULL, 0 },
+	{ NULL, NULL, NULL, NULL, 0 }
+};
+
+struct ghs porthilasttab[] = {
+	{ "<number>", "Maximum dynamic/private port number for TCP/UDP port allocation", CMPL0 NULL, 0 },
+	{ NULL, NULL, NULL, NULL, 0 }
+};
+
+struct ghs portlasttab[] = {
+	{ "<number>", "Maximum registered port number for TCP/UDP port allocation", CMPL0 NULL, 0 },
+	{ NULL, NULL, NULL, NULL, 0 }
+};
+
 #ifdef notyet
-	{ "default-mtu", "Default interface MTU",	CMPL0 0, 0, 1, 1, ipsysctl },
+struct ghs defaultmtutab[] = {
+	{ "<number>", "Default interface MTU", CMPL0 NULL, 0 },
+	{ NULL, NULL, NULL, NULL, 0 }
+};
 #endif
-	{ "default-ttl", "Default IP packet TTL",	CMPL0 0, 0, 1, 1, ipsysctl },
+
+struct ghs defaultttltab[] = {
+	{ "<number>", "Default IP packet TTL", CMPL0 NULL, 0 },
+	{ NULL, NULL, NULL, NULL, 0 }
+};
+
+Menu iptab[] = {
+	{ "arptimeout",	"Seconds for ARP entries to remain in cache",	CMPL(h) (char **)arptimeouttab, sizeof(struct ghs), 1, 1, ipsysctl },
+	{ "arpdown",	"Seconds before resending unanswered ARP requests", CMPL(h) (char **)arpdowntab, sizeof(struct ghs), 1, 1, ipsysctl },
+	{ "carp",	"Allow CARP",			CMPL(h) (char **)carptab, sizeof(struct ghs), 0, 0, ipsysctl },
+	{ "carp-log",	"CARP Logging Priority",	CMPL(h) (char **)carploggingtab, sizeof(struct ghs), 0, 1, ipsysctl },
+	{ "carp-preempt", "CARP Virtual Host Preemption", CMPL(h) (char **)carppreempttab, sizeof(struct ghs), 0, 0, ipsysctl },
+	{ "forwarding",	"Enable IPv4 Forwarding",	CMPL(h) (char **)forwardingtab, sizeof(struct ghs), 0, 0, ipsysctl },
+	{ "mforwarding", "Enable IPv4 Multicast Forwarding", CMPL(h) (char **)mforwardingtab, sizeof(struct ghs), 0, 0, ipsysctl },
+	{ "ipip",	"Allow IP-in-IP Encapsulation", CMPL(h) (char **)ipiptab, sizeof(struct ghs), 0, 0, ipsysctl },
+	{ "gre",	"Allow Generic Route Encapsulation", CMPL(h) (char **)gretab, sizeof(struct ghs), 0, 0, ipsysctl },
+	{ "wccp",	"Allow Web Cache Control Protocol", CMPL(h) (char **)wccptab, sizeof(struct ghs), 0, 0, ipsysctl },
+	{ "etherip",	"Allow Ether-IP Encapsulation",	CMPL(h) (char **)etheriptab, sizeof(struct ghs), 0, 0, ipsysctl },
+	{ "ipcomp",	"Allow IP Compression",		CMPL(h) (char **)ipcomptab, sizeof(struct ghs), 0, 0, ipsysctl },
+	{ "esp",	"Allow Encapsulated Security Payload", CMPL(h) (char **)esptab, sizeof(struct ghs), 0, 0, ipsysctl },
+	{ "esp-udpencap","Allow ESP encapsulation within UDP", CMPL(h) (char **)espudpencaptab, sizeof(struct ghs), 0, 0, ipsysctl },
+	{ "esp-udpencap-port","UDP port number for encapsulation", CMPL(h) (char **)espudpencapporttab, sizeof(struct ghs), 0, 1, ipsysctl },
+	{ "ah",		"Allow Authentication Header",	CMPL(h) (char**)ahtab, sizeof(struct ghs), 0, 0, ipsysctl },
+	{ "sourceroute", "Process Loose/Strict Source Route Options", CMPL(h) (char**)sourceroutetab, sizeof(struct ghs), 0, 1, ipsysctl },
+	{ "encdebug",	"Enable if_enc debugging",	CMPL(h) (char **)encdebugtab, sizeof(struct ghs), 0, 0, ipsysctl },
+	{ "send-redirects", "Send ICMP redirects",	CMPL(h) (char **)sendredirectstab, sizeof(struct ghs), 0, 0, ipsysctl },
+	{ "directed-broadcast", "Allow directed broadcasts", CMPL(h) (char **)directedbroadcaststab, sizeof(struct ghs), 0, 0, ipsysctl },
+	{ "multipath",	"Multipath routing",		CMPL(h) (char **)multipathtab, sizeof(struct ghs), 0, 0, ipsysctl },
+	{ "maxqueue", "Maximum unassembled IP fragments in the fragment queue", CMPL(h) (char **)maxqueuetab, sizeof(struct ghs), 1, 1, ipsysctl  },
+	{ "mtudisc", "Enable Path MTU Discovery",       CMPL(h) (char **)mtudisctab, sizeof(struct ghs), 0, 0, ipsysctl },
+	{ "mtudisctimeout", "Timeout in seconds for routes added by Path MTU discovery engine", CMPL(h) (char **)mtudisctimeouttab, sizeof(struct ghs), 1, 1, ipsysctl },
+	{ "ipsec-timeout", "Seconds after a SA is established before it will expire", CMPL(h) (char **)ipsectimeouttab, sizeof(struct ghs), 1, 1, ipsysctl },
+	{ "ipsec-soft-timeout", "Seconds after a SA is established before being renegotiated", CMPL(h) (char **)ipsecsofttimeouttab, sizeof(struct ghs), 1, 1, ipsysctl },
+	{ "ipsec-allocs", "Maximum IPSEC flows that can use a SA before it expires", CMPL(h) (char **)ipsecallocstab, sizeof(struct ghs), 1, 1, ipsysctl },
+	{ "ipsec-soft-allocs", "Maximum IPSEC flows a SA uses before renegotiation", CMPL(h) (char **)ipsecsoftallocstab, sizeof(struct ghs), 1, 1, ipsysctl },
+	{ "ipsec-bytes", "Maximum bytes processed by a security association before it expires", CMPL(h) (char **)ipsecbytestab, sizeof(struct ghs), 1, 1, ipsysctl },
+	{ "ipsec-soft-bytes", "Maximum bytes a SA processes before renegotiation", CMPL(h) (char **)ipsecsoftbytestab, sizeof(struct ghs), 1, 1, ipsysctl },
+	{ "ipsec-expire-acquire", "Seconds the kernel allows to dynamically acquire SAs before a request", CMPL(h) (char **)ipsecexpireacquiretab, sizeof(struct ghs), 1, 1, ipsysctl },
+	{ "ipsec-firstuse", "Seconds after security association is first used before it expires", CMPL(h) (char **)ipsecfirstusetab, sizeof(struct ghs), 1, 1, ipsysctl },
+	{ "ipsec-soft-firstuse", "Seconds after a SA is first used before it is sent for renegotiation", CMPL(h) (char **)ipsecsoftfirstusetab, sizeof(struct ghs), 1, 1, ipsysctl },
+	{ "ipsec-invalid-life", "Lifetime of Embryonic SAs in seconds", CMPL(h) (char **)ipsecinvalidlifetab, sizeof(struct ghs), 1, 1, ipsysctl },
+	{ "ipsec-pfs", "Enables Perfect Forward Secrecy when establishing SAs", CMPL(h) (char **)ipsecpfstab, sizeof(struct ghs), 1, 1, ipsysctl },
+	{ "portfirst", "Minimum registered port number for TCP/UDP port allocation", CMPL(h) (char **)portfirsttab, sizeof(struct ghs), 1, 1, ipsysctl },
+	{ "porthifirst", "Minimum dynamic/private port number for TCP/UDP port allocation", CMPL(h) (char **)porthifirsttab, sizeof(struct ghs), 1, 1, ipsysctl },
+	{ "porthilast", "Maximum dynamic/private port number for TCP/UDP port allocation", CMPL(h) (char **)porthilasttab, sizeof(struct ghs), 1, 1, ipsysctl },
+	{ "portlast", "Maximum registered port number for TCP/UDP port allocation", CMPL(h) (char **)portlasttab, sizeof(struct ghs), 1, 1, ipsysctl },
+#ifdef notyet
+	{ "default-mtu", "Default interface MTU",	CMPL(h) (char **)defaultmtutab, sizeof(struct ghs), 1, 1, ipsysctl },
+#endif
+	{ "default-ttl", "Default IP packet TTL",	CMPL(h) (char **)defaultttltab, sizeof(struct ghs), 1, 1, ipsysctl },
 	{ "?",		"Options",			CMPL0 0, 0, 0, 0, sysctlhelp },
 	{ 0, 0, 0, 0, 0, 0, 0, 0 }
 };
