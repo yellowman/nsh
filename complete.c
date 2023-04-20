@@ -59,6 +59,7 @@ static unsigned char complete_local(char *, int, EditLine *);
 static unsigned char complete_ifname(char *, int, EditLine *);
 static unsigned char complete_ifgroup(char *, int, EditLine *);
 static unsigned char complete_ifbridge(char *, int, EditLine *);
+static unsigned char complete_rtable(char *, int, EditLine *);
 static unsigned char complete_nocmd(struct ghs *, char *, int, EditLine *,
 				   char **, int, int);
 static unsigned char complete_noint(char *, int, EditLine *, char **, int, int);
@@ -446,6 +447,49 @@ complete_ifbridge(char *word, int list, EditLine *el)
 	return (rv);
 }
 
+unsigned char
+complete_rtable(char *word, int list, EditLine *el)
+{
+	StringList *words, *rtables;
+	size_t wordlen = strlen(word);
+	int i, rv = CC_ERROR;
+	char *s = NULL;
+
+	words = sl_init();
+	rtables = sl_init();
+
+	if (db_select_rtable_rtables(rtables) < 0) {
+		printf("%% database failure select rtables rtable\n");
+		goto done;
+	}
+
+	/*
+	 * Routing table 0 always exists even if not created by nsh
+	 * and is never present in the database.
+	 */
+	s = strdup("0");
+	if (s == NULL) {
+		printf("%% strdup: %s", strerror(errno));
+		goto done;
+	}
+	sl_add(words, s);
+
+	for (i = 0; i < rtables->sl_cur; i++) {
+		char *rtable = rtables->sl_str[i];
+		if (wordlen > strlen(rtable))
+			continue;
+		if (strncmp(word, rtable, wordlen) == 0)
+			sl_add(words, rtable);
+	}
+
+	rv = complete_ambiguous(word, list, words, el);
+done:
+	sl_free(rtables, 1);
+	sl_free(words, 0);
+	free(s);
+	return (rv);
+}
+
 /*
  * Generic complete routine
  */
@@ -504,6 +548,10 @@ complete(EditLine *el, int ch, char **table, size_t stlen, char *arg)
 	c = (struct ghs *) genget(arg, table, stlen);
 	if (c == (struct ghs *)-1 || c == 0 || Ambiguous(c))
 		return (CC_ERROR);
+
+	if (strcmp(c->name, "no") == 0) /* Completing "no " command. */
+		return(complete_nocmd(c, word, dolist, el, table, stlen, -1));
+
 	celems = strlen(c->complete);
 
 	/* check for 'continuation' completes (which are uppercase) */
@@ -513,10 +561,6 @@ complete(EditLine *el, int ch, char **table, size_t stlen, char *arg)
 
 	if (cursor_argc > celems)
 		return (CC_ERROR);
-
-	if (NO_ARG(margv[0])) /* Completing "no " in command context. */
-		return(complete_nocmd(c, word, dolist, el, table, stlen,
-		    cursor_argc - 1));
 
 	level = cursor_argc - 1;
 	i = 1;
@@ -588,9 +632,21 @@ complete_nocmd(struct ghs *nocmd, char *word, int dolist, EditLine *el,
 		}
 	}
 	if (nc) {
+		struct ghs *ghs = (struct ghs *)nc;
+
+		level = cursor_argc - 2; /* "no" + command name */
+		i = 1;
+		/*
+		 * Switch to a nested command table if needed.
+		 */
+		while (ghs->table && i < cursor_argc - 2) {
+			ghs = (struct ghs *)ghs->table;
+			level = 0; /* table has been switched */
+			i++;
+		}
 		/* Complete "no <command name> [more arguments]" */
-		return (complete_args((struct ghs *)nc, word, dolist, el,
-		    nc->table, nc->stlen, cursor_argc - 1));
+		return (complete_args(ghs, word, dolist, el,
+		    ghs->table, ghs->stlen, level));
 	}
 
 	/* Check for a partially completed valid command name. */
@@ -729,6 +785,9 @@ complete_args(struct ghs *c, char *word, int dolist, EditLine *el, char **table,
 	case 'b':
 	case 'B':
 		return (complete_ifbridge(word, dolist, el));
+	case 'r':
+	case 'R':
+		return (complete_rtable(word, dolist, el));
 	case 't':	/* points to a table */
 	case 'T':
 		if (c->table == NULL)

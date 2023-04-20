@@ -1220,8 +1220,8 @@ Menu enabletab[] = {
 };
 
 struct ghs rtabletab[] = {
-	{ "<cr>", "Type Enter to run command", CMPL0 NULL, 0 },
-	{ "<table id> [name]", "Routing table ID parameter", CMPL0 NULL, 0 },
+	{ "<table id>", "Switch to the given rtable", CMPL0 NULL, 0 },
+	{ "<table id> [name]", "Create the given rtable", CMPL0 NULL, 0 },
 	{ NULL, NULL, NULL, NULL, 0 }
 };
 
@@ -1391,7 +1391,7 @@ struct ghs mantab[] = {
 Command cmdtab[] = {
 	{ "hostname",	hostnamehelp,	CMPL0 0, 0, hostname,		1, 1, 0, 0 },
 	{ "interface",	interfacehelp,	CMPL(i) 0, 0, interface,	1, 1, 1, 1 },
-	{ "rtable",	rtablehelp,	CMPL(h) (char **)rtabletab, sizeof(struct ghs), rtable, 0, 0, 1, 2 },
+	{ "rtable",	rtablehelp,	CMPL(rh) (char **)rtabletab, sizeof(struct ghs), rtable,	0, 0, 1, 2 },
 	{ "group",	grouphelp,	CMPL(gth) (char **)grouptab, sizeof(Menu), group, 1, 1, 1, 0 },
 	{ "arp",	arphelp,	CMPL0 0, 0, arpset,		1, 1, 1, 0 },
 	{ "ndp",	ndphelp,	CMPL0 0, 0, ndpset,		1, 1, 1, 0 },
@@ -1447,7 +1447,7 @@ Command cmdtab[] = {
 	{ "editing",	editinghelp,	CMPL0 0, 0, doediting,		0, 0, 1, 0 },
 	{ "configure",	confighelp,	CMPL0 0, 0, doconfig,		1, 0, 1, 0 },
 	{ "who",	whohelp,	CMPL0 0, 0, who,		0, 0, 0, 0 },
-	{ "no",		0,		CMPL(C) 0, 0, nocmd,		0, 0, 0, 0 },
+	{ "no",		0,		CMPL(c) 0, 0, nocmd,		0, 0, 0, 0 },
 	{ "!",		shellhelp,	CMPL0 0, 0, shell,		1, 0, 0, 0 },
 	{ "?",		helphelp,	CMPL(C) 0, 0, help,		0, 0, 0, 0 },
 	{ "manual",	manhelp,	CMPL(H) (char **)mantab, sizeof(struct ghs), manual,0, 0, 0, 0 },
@@ -2073,10 +2073,19 @@ rtable(int argc, char **argv)
 		cli_rtable = table;
 		return 0;
 	}
-	if (!set && !found) {
-		printf("%% rtable %d does not exist in database\n",
-		    table);
-		return 1;
+	if (!set) {
+		if (!found) {
+			printf("%% rtable %d does not exist in database\n",
+			    table);
+			return 1;
+		} else if (table == 0) {
+			printf("%% cannot remove rtable %d\n", table);
+			return 1;
+		}
+	} else if (table == 0)  {
+		/* Do not add the kernel's default rtable 0 to the database. */
+		cli_rtable = 0;
+		return 0;
 	}
 	if (db_delete_rtables_rtable(table) < 0) {
 		printf("%% rtable db removal error\n");
