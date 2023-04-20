@@ -251,10 +251,13 @@ complete_showhelp(char *word, EditLine *el, char **table, int stlen,
 	char insertstr[MAXPATHLEN];
 	char **c;
 	struct ghs *ghs;
+	StringList *cmdlist;
 	StringList *helplist;
 	int i;
 	size_t wordlen;
+	int cmdlen, max_cmdmlen = 0;
 
+	cmdlist = sl_init();
 	helplist = sl_init();
 	wordlen = strlen(word);
 	for (c = table; *c != NULL; c = (char **)((char *)c + stlen)) {
@@ -263,17 +266,22 @@ complete_showhelp(char *word, EditLine *el, char **table, int stlen,
 			continue;
 		if (word[0] == '<' || word[0] == '[')
 			continue;
-		if (strncmp(word, ghs->name, wordlen) == 0)
-			sl_add(helplist, ghs->name);
+		if (strncmp(word, ghs->name, wordlen) == 0) {
+			sl_add(cmdlist, ghs->name);
+			sl_add(helplist, ghs->help);
+			cmdlen = strlen(ghs->name);
+			if (cmdlen > max_cmdmlen)
+				max_cmdmlen = cmdlen;
+		}
 	}
 
 	/*
 	 * If we match a non-arbitrary parameter (which are not enclosed in
 	 * brackets, "<...>" or "[...]") then we can complete this parameter.
 	 */
-	if (helplist->sl_cur == 1 && helplist->sl_str[0][0] != '<' &&
-	    helplist->sl_str[0][0] != '[') {
-		(void)strlcpy(insertstr, helplist->sl_str[0], sizeof insertstr);
+	if (cmdlist->sl_cur == 1 && cmdlist->sl_str[0][0] != '<' &&
+	    cmdlist->sl_str[0][0] != '[' && cmdlist->sl_str[0][0] != '^') {
+		(void)strlcpy(insertstr, cmdlist->sl_str[0], sizeof insertstr);
 		(void)strlcat(insertstr, " ", sizeof insertstr);
 		if (el_insertstr(el, insertstr + wordlen) == -1)
 			return (CC_ERROR);
@@ -281,15 +289,37 @@ complete_showhelp(char *word, EditLine *el, char **table, int stlen,
 			return (CC_REFRESH);
 	}
 
-	if (helplist->sl_cur > 0)
+	if (cmdlist->sl_cur > 0)
 		putc('\n', ttyout);
 	if (vertical)
-		list_vertical(helplist);
+		list_vertical(cmdlist);
 	else {
-		for (i = 0 ; i < helplist->sl_cur ; i++)
-			fprintf(ttyout, " %s %s\n", cmdname, helplist->sl_str[i]);
+		for (i = 0 ; i < cmdlist->sl_cur ; i++) {
+			if (i < helplist->sl_cur &&
+			    helplist->sl_str[i][0] != '\0') {
+				/*
+				 * Command help strings beginning with '^'
+				 * are supposed to be printed literally.
+				 */
+				if (cmdlist->sl_str[i][0] == '^') {
+					fprintf(ttyout, " %-*s  # %s\n",
+					    max_cmdmlen,
+					    &cmdlist->sl_str[i][1],
+					    helplist->sl_str[i]);
+				} else {
+					fprintf(ttyout, " %s %-*s  # %s\n",
+					    cmdname, max_cmdmlen,
+					    cmdlist->sl_str[i],
+					    helplist->sl_str[i]);
+				}
+			} else {
+				fprintf(ttyout, " %s %s\n", cmdname,
+				    cmdlist->sl_str[i]);
+			}
+		}
 	}
 
+        sl_free(cmdlist, 0);
         sl_free(helplist, 0);
 	return (CC_REDISPLAY);
 }
