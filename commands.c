@@ -125,6 +125,7 @@ static int	int_traceroute(char *, int, int, char **);
 static int	int_traceroute6(char *, int, int, char **);
 static int	int_ssh(char *, int, int, char **);
 static int	int_telnet(char *, int, int, char **);
+static int	int_do(char *, int, int, char **);
 static int	int_show(char *, int, int, char **);
 static int	int_who(char *, int, int, char **);
 static int	int_doverbose(char *, int, int, char **);
@@ -138,6 +139,7 @@ static int	hostname(int, char **);
 static int	help(int, char**);
 static int	manual(int, char**);
 static int	nocmd(int, char **);
+static int	docmd(int, char **);
 static int	shell(int, char*[]);
 static int	ping(int, char*[]);
 static int	ping6(int, char*[]);
@@ -811,6 +813,7 @@ static char sshhelp[];
 static char telnethelp[];
 static char showhelp[];
 static char whohelp[];
+static char dohelp[];
 static char verbosehelp[];
 static char editinghelp[];
 static char shellhelp[];
@@ -868,6 +871,7 @@ struct intlist Intlist[] = {
 	{ "traceroute6", tracert6help,				CMPL0 0, 0, int_traceroute6, 0 },
 	{ "ssh",	sshhelp,				CMPL0 0, 0, int_ssh, 0 },
 	{ "telnet",	telnethelp,				CMPL0 0, 0, int_telnet,	0 },
+	{ "do",		dohelp,					CMPL(c) 0, 0, int_do, 0 },
 	{ "keepalive",	"GRE tunnel keepalive",			CMPL0 0, 0, intkeepalive, 1},
 	{ "mplslabel",	"MPLS local label",			CMPL0 0, 0, intmpls, 1 },
 	{ "pwe",	"MPLS PWE3",				CMPL0 0, 0, intpwe3, 1 },
@@ -943,6 +947,7 @@ struct intlist Bridgelist[] = {
 	{ "traceroute6", tracert6help,				CMPL0 0, 0, int_traceroute6, 0 },
 	{ "ssh",	sshhelp,				CMPL0 0, 0, int_ssh, 0 },
 	{ "telnet",	telnethelp,				CMPL0 0, 0, int_telnet,	0 },
+	{ "do",		dohelp,					CMPL(c) 0, 0, int_do, 0 },
 	{ "rule",	"Bridge layer 2 filtering rules",	CMPL0 0, 0, brrule, 0 },
 	{ "static",	"Static bridge address entry",		CMPL0 0, 0, brstatic, 1 },
 	{ "ifpriority",	"Spanning priority of a member on an 802.1D bridge",	CMPL0 0, 0, brpri, 1 },
@@ -1299,6 +1304,13 @@ int_telnet(char *ifname, int ifs, int argc, char **argv)
 }
 
 static int
+int_do(char *ifname, int ifs, int argc, char **argv)
+{
+	docmd(argc, argv);
+	return 0; /* do not leave interface context */
+}
+
+static int
 int_show(char *ifname, int ifs, int argc, char **argv)
 {
 	showcmd(argc, argv);
@@ -1435,6 +1447,7 @@ static char
 	editinghelp[] = "Set command line editing",
 	confighelp[] =	"Set configuration mode",
 	whohelp[] =	"Display system users",
+	dohelp[] =	"Run the specified command",
 	shellhelp[] =	"Invoke a subshell",
 	savehelp[] =	"Save the current configuration",
 	nreboothelp[] =	"Reboot the system",
@@ -1683,6 +1696,7 @@ Command cmdtab[] = {
 	{ "configure",	confighelp,	CMPL0 0, 0, doconfig,		1, 0, 1, 0 },
 	{ "who",	whohelp,	CMPL0 0, 0, who,		0, 0, 0, 0 },
 	{ "no",		0,		CMPL(c) 0, 0, nocmd,		0, 0, 0, 0 },
+	{ "do",		dohelp,		CMPL(c) 0, 0, docmd,		0, 0, 0, 0 },
 	{ "!",		shellhelp,	CMPL0 0, 0, shell,		1, 0, 0, 0 },
 	{ "?",		helphelp,	CMPL(C) 0, 0, help,		0, 0, 0, 0 },
 	{ "manual",	manhelp,	CMPL(H) (char **)mantab, sizeof(struct ghs), manual,0, 0, 0, 0 },
@@ -2085,6 +2099,40 @@ nocmd(int argc, char **argv)
 	}
 
 	return (*c->handler)(argc, argv, 0);
+}
+
+/*
+ * "do" command
+ * This is a pseudo command which exists for people used to routers and
+ * switches which offer a "do" command for context switching.
+ */
+static int
+docmd(int argc, char **argv)
+{
+	Command *c;
+
+	if (argc < 2) {
+		printf("%% command name not provided\n");
+		return 0;
+	}
+
+	argv++;
+	argc--;
+
+	if (NO_ARG(argv[0])) {
+		printf("%% 'no' commands are not supported with 'do'\n");
+		return 0;
+	}
+
+	c = getcmd(argv[0]);
+	if (Ambiguous(c))
+		printf("%% Ambiguous command %s\n", argv[0]);
+	else if (c == NULL)
+		printf("%% Invalid command %s\n", argv[0]);
+	else
+		return (*c->handler)(argc, argv, 0);
+
+	return 0;
 }
 
 /*

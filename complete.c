@@ -62,6 +62,8 @@ static unsigned char complete_ifbridge(char *, int, EditLine *);
 static unsigned char complete_rtable(char *, int, EditLine *);
 static unsigned char complete_nocmd(struct ghs *, char *, int, EditLine *,
 				   char **, int, int);
+static unsigned char complete_docmd(struct ghs *, char *, int, EditLine *,
+				   char **, int, int);
 static unsigned char complete_noint(char *, int, EditLine *, char **, int, int);
 static unsigned char complete_args(struct ghs *, char *, int, EditLine *,
 				   char **, int, int);
@@ -579,6 +581,9 @@ complete(EditLine *el, int ch, char **table, size_t stlen, char *arg)
 	if (c == (struct ghs *)-1 || c == 0 || Ambiguous(c))
 		return (CC_ERROR);
 
+	if (strcmp(c->name, "do") == 0) /* Completing "do " command. */
+		return(complete_docmd(c, word, dolist, el, (char **)cmdtab, stlen, -1));
+
 	if (strcmp(c->name, "no") == 0) /* Completing "no " command. */
 		return(complete_nocmd(c, word, dolist, el, table, stlen, -1));
 
@@ -687,6 +692,60 @@ complete_nocmd(struct ghs *nocmd, char *word, int dolist, EditLine *el,
 
 		/* Complete "no <partial command name>" */
 		return (complete_command(word, dolist, el, (char **)nocmdtab,
+		    sizeof(Command)));
+	}
+
+	return (CC_ERROR); /* invalid command in margv[1] */
+}
+
+unsigned char
+complete_docmd(struct ghs *docmd, char *word, int dolist, EditLine *el,
+    char **table, int stlen, int level)
+{
+	Command *c, *dc;
+	int i;
+
+	if (margc == 1) {
+		/* Complete "do " using the list of known commands. */
+		return (complete_command(word, dolist, el, (char **)cmdtab,
+		    sizeof(Command)));
+	}
+
+	/* Determine whether the no-command's name has been completed. */
+	dc = NULL;
+	for (i = 0; i < cmdtab_nitems - 1; i++) {
+		c = &cmdtab[i];
+		if (strcmp(c->name, margv[1]) == 0) {
+			dc = c;
+			break;
+		}
+	}
+	if (dc) {
+		struct ghs *ghs = (struct ghs *)dc;
+
+		level = cursor_argc - 2; /* "do" + command name */
+		i = 1;
+		/*
+		 * Switch to a nested command table if needed.
+		 */
+		while (ghs->table && cursor_argc >= 2 && i < cursor_argc - 2) {
+			ghs = (struct ghs *)ghs->table;
+			level = 0; /* table has been switched */
+			i++;
+		}
+		/* Complete "no <command name> [more arguments]" */
+		return (complete_args(ghs, word, dolist, el,
+		    ghs->table, ghs->stlen, level));
+	}
+
+	/* Check for a partially completed valid command name. */
+	for (i = 0; i < cmdtab_nitems - 1; i++) {
+		c = &cmdtab[i];
+		if (isprefix(margv[1], c->name) == 0)
+			continue;
+
+		/* Complete "do <partial command name>" */
+		return (complete_command(word, dolist, el, (char **)cmdtab,
 		    sizeof(Command)));
 	}
 
