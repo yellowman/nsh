@@ -104,6 +104,7 @@ static int	pr_dhcp(int, char **);
 static int	pr_conf(int, char **);
 static int	pr_s_conf(int, char **);
 static int	pr_a_conf(int, char **);
+static int	pr_conf_diff(int, char **);
 static int	show_hostname(int, char **);
 static int	wr_startup(void);
 static int	wr_conf(char *);
@@ -236,6 +237,7 @@ Menu showlist[] = {
 	{ "running-config",	"Operating configuration", CMPL0 0, 0, 0, 0, pr_conf },
 	{ "startup-config", "Startup configuration", CMPL0 0, 0, 0, 0, pr_s_conf },
 	{ "active-config", "Configuration of active context", CMPL0 0, 0, 0, 0, pr_a_conf },
+	{ "diff-config", "Show differences between startup and running config", CMPL0 0, 0, 0, 0, pr_conf_diff },
 	{ "?",		"Options",		CMPL0 0, 0, 0, 0, show_help },
 	{ "help",	0,			CMPL0 0, 0, 0, 0, show_help },
 	{ 0, 0, 0, 0, 0 }
@@ -2976,6 +2978,74 @@ pr_a_conf(int argc, char **argv)
 
 	conf_interfaces(stdout, ifname, 1);
 	return(0);
+}
+
+/*
+ * Show differences between startup and running config.
+ */
+int
+pr_conf_diff(int argc, char **argv)
+{
+	int conf_fd = -1, diff_fd = -1;
+	char confpath[PATH_MAX];
+	char diffpath[PATH_MAX];
+	char *diff_argv[9] = {
+	    DIFF, "-u", "-L", NULL, "-L", NULL, NULL, NULL, NULL
+	};
+
+	if (priv != 1) {
+		printf("%% Privilege required\n");
+		return 0;
+	}
+
+	if (getuid() != 0) {
+		printf("%% Root privileges required\n");
+		return 0;
+	}
+
+	if (strlcpy(confpath, "/tmp/nshrc.XXXXXXXX", sizeof(confpath)) >=
+	    sizeof(confpath))
+		return 0;
+	if (strlcpy(diffpath, "/tmp/nshrc.diff.XXXXXXXX", sizeof(diffpath)) >=
+	    sizeof(diffpath))
+		return 0;
+
+	conf_fd = mkstemp(confpath);
+	if (conf_fd == -1) {
+		printf("%% mkstemp %s: %s\n", confpath, strerror(errno));
+		return 0;
+	}
+
+	diff_fd = mkstemp(diffpath);
+	if (diff_fd == -1) {
+		printf("%% mkstemp %s: %s\n", diffpath, strerror(errno));
+		goto done;
+	}
+
+	if (!wr_conf(confpath)) {
+		printf("%% Couldn't generate configuration\n");
+		goto done;
+	}
+
+	diff_argv[3] = "startup-config";
+	diff_argv[5] = "running-config";
+	diff_argv[6] = NSHRC;
+	diff_argv[7] = confpath;
+
+	if (cmdargs_output(DIFF, diff_argv, diff_fd, -1) > 1)
+		printf("%% %s command failed\n", DIFF);
+
+	more(diffpath);
+done:
+	if (diff_fd != -1) {
+		unlink(diffpath);
+		close(diff_fd);
+	}
+	if (conf_fd != -1) {
+		unlink(confpath);
+		close(conf_fd);
+	}
+	return 0;
 }
 
 int

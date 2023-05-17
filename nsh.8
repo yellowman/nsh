@@ -2581,17 +2581,21 @@ kernel: OpenBSD 7.1 (GENERIC.MP) #459: Mon Apr  4 18:16:13 MDT 2022
 Display the current running configuration on the system, including
 interface and bridge configurations, routes, the system hostname, firewall
 rules, and other information compiled by
-.Nm
-.
+.Nm .
 .Pp
 .Ic show startup-config
 .Pp
 Display the startup configuration on the system, read from nshrc,
 including interface and bridge configuration, routes, the system hostname,
 firewall rules, and other information compiled by
-.Nm
-.
-TBC
+.Nm .
+.Pp
+.Ic show diff-config
+.Pp
+Display differences between the startup configuration and the running
+configuration.
+This command requires root user privileges.
+.Pp
 .Tg flush
 .Ic flush
 .Op routes | arp | ndp | line | bridge-dyn | bridge-all | bridge-rule | pf | history |\&? | help

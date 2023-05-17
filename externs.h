@@ -146,6 +146,7 @@ extern char metricnames[];
 #define TELNET		"/usr/bin/telnet"
 #define SSH		"/usr/bin/ssh"
 #define PKILL		"/usr/bin/pkill"
+#define DIFF		"/usr/bin/diff"
 #define SAVESCRIPT	"/usr/local/bin/save.sh"
 #ifndef DHCPLEASES
 #define DHCPLEASES	"/var/db/dhcpd.leases"
