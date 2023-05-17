@@ -1448,7 +1448,7 @@ static char
 	editinghelp[] = "Set command line editing",
 	confighelp[] =	"Set configuration mode",
 	whohelp[] =	"Display system users",
-	dohelp[] =	"Run the specified command",
+	dohelp[] =	"Superfluous, do is ignored and its arguments executed",
 	shellhelp[] =	"Invoke a subshell",
 	savehelp[] =	"Save the current configuration",
 	nreboothelp[] =	"Reboot the system",
