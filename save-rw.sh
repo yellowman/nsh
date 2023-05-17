@@ -10,6 +10,6 @@ if [ ! -f "$1" ]; then
   exit
 fi
 
-cp $1 /etc/nshrc
-#cp /var/run/pf.conf /etc/pf.conf
+cp -p $1 /etc/nshrc
+#cp -p /var/run/pf.conf /etc/pf.conf
 sync

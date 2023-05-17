@@ -11,7 +11,7 @@ if [ ! -f "$1" ]; then
 fi
 
 rw
-cp $1 /etc/nshrc
+cp -p $1 /etc/nshrc
 sync
 ro
 #

@@ -50,6 +50,7 @@
 #include <errno.h>
 #include <signal.h>
 #include <sys/fcntl.h>
+#include <sys/stat.h>
 #include <sys/socket.h>
 #include <sys/param.h>
 #include <sys/reboot.h>
@@ -2861,16 +2862,17 @@ int
 wr_conf(char *fname)
 {
 	FILE *rchandle;
-	int error = 1;
+	int success = 1;
 
-	if ((rchandle = fopen(fname, "w")) == NULL) 
-		error = 0;
+	if ((rchandle = fopen(fname, "w")) == NULL)
+		success = 0;
 	else {
+		fchmod(fileno(rchandle), 0640);
 		conf(rchandle);
 		fclose(rchandle);
 	}
 
-	return (error);
+	return (success);
 }
 
 /*
