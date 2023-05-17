@@ -2861,16 +2861,16 @@ int
 wr_conf(char *fname)
 {
 	FILE *rchandle;
-	int error = 1;
+	int success = 1;
 
-	if ((rchandle = fopen(fname, "w")) == NULL) 
-		error = 0;
+	if ((rchandle = fopen(fname, "w")) == NULL)
+		success = 0;
 	else {
 		conf(rchandle);
 		fclose(rchandle);
 	}
 
-	return (error);
+	return (success);
 }
 
 /*
