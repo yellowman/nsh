@@ -529,7 +529,6 @@ unsigned char
 complete(EditLine *el, int ch, char **table, size_t stlen, char *arg)
 {
 	static char word[256];
-	static int lastc_argc, lastc_argo;
 	struct ghs *c;
 	const LineInfo *lf;
 	int celems, dolist, level, i;
@@ -545,8 +544,6 @@ complete(EditLine *el, int ch, char **table, size_t stlen, char *arg)
 	if (strlen(word) > len) /* user has erased part of previous line */
 		word[len] = '\0';
 	cursor_pos = line + (lf->cursor - lf->buffer);
-	lastc_argc = cursor_argc;	/* remember last cursor pos */
-	lastc_argo = cursor_argo;
 	makeargv();			/* build argc/argv of current line */
 
 	if (cursor_argo >= sizeof(word))
@@ -559,8 +556,7 @@ complete(EditLine *el, int ch, char **table, size_t stlen, char *arg)
 		dolist = 0;
 
 	/* if cursor and word is same, list alternatives */
-	if (lastc_argc == cursor_argc && lastc_argo == cursor_argo
-	    && strncmp(word, margv[cursor_argc], cursor_argo) == 0)
+	if (strncmp(word, margv[cursor_argc], cursor_argo) == 0)
 		dolist = 1;
 	else if (cursor_argo)
 		memcpy(word, margv[cursor_argc], cursor_argo);
