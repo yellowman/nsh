@@ -28,7 +28,6 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <ctype.h>
 #include <err.h>
 #include <errno.h>
 #include <dirent.h>
@@ -588,11 +587,6 @@ complete(EditLine *el, int ch, char **table, size_t stlen, char *arg)
 		return(complete_nocmd(c, word, dolist, el, table, stlen, -1));
 
 	celems = strlen(c->complete);
-
-	/* check for 'continuation' completes (which are uppercase) */
-	if ((cursor_argc > celems) && (celems > 0)
-	    && isupper((unsigned char)c->complete[celems-1]))
-		cursor_argc = celems;
 
 	if (cursor_argc > celems)
 		return (CC_ERROR);
