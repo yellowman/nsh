@@ -162,7 +162,7 @@ parse_host(const char *host, struct sockaddr_in6 *sin6)
 
 	gai_error = getaddrinfo(host, NULL, &hints, &res);
 	if (gai_error) {
-		warnx("%% %s: %s", host, gai_strerror(gai_error));
+		printf("%% %s: %s\n", host, gai_strerror(gai_error));
 		return 1;
 	}
 	*sin6 = *(struct sockaddr_in6 *)res->ai_addr;
@@ -262,7 +262,7 @@ ndpset(int argc, char *argv[])
 		/*
 		 * IPv4 arp command retries with sin_other = SIN_PROXY here.
 		 */
-		warnx("%% ndpset: cannot configure a new entry");
+		printf("%% ndpset: cannot configure a new entry\n");
 		return 1;
 	}
 
@@ -525,7 +525,6 @@ again:;
 			isrouter = nbi->isrouter;
 			prbs = nbi->asked;
 		} else {
-			warnx("%% failed to get neighbor information");
 			printf("  ");
 		}
 
@@ -539,6 +538,10 @@ again:;
 
 		printf("\n");
 	}
+
+	if (!nbi)
+		printf("\n%% %s: failed to get neighbor information\n",
+		    routename6(sin));
 
 	if (repeat) {
 		printf("\n");
@@ -566,7 +569,8 @@ getnbrinfo(struct in6_addr *addr, int ifindex, int warning)
 	nbi.addr = *addr;
 	if (ioctl(s, SIOCGNBRINFO_IN6, (caddr_t)&nbi) == -1) {
 		if (warning)
-			warn("%% ioctl(SIOCGNBRINFO_IN6)");
+			printf("%% getnbrinfo: ioctl(SIOCGNBRINFO_IN6): %s\n",
+			    strerror(errno));
 		close(s);
 		return(NULL);
 	}
@@ -583,7 +587,7 @@ ndp_ether_aton(const char *a, u_char *n)
 	i = sscanf(a, "%x:%x:%x:%x:%x:%x", &o[0], &o[1], &o[2],
 	    &o[3], &o[4], &o[5]);
 	if (i != 6) {
-		warnx("%% invalid Ethernet address '%s'", a);
+		printf("%% ndp_ether_aton: invalid Ethernet address '%s'\n", a);
 		return (1);
 	}
 	for (i = 0; i < 6; i++)
@@ -674,7 +678,7 @@ doit:
 	} while (l > 0 && (rtm->rtm_version != RTM_VERSION ||
 	    rtm->rtm_seq != seq || rtm->rtm_pid != pid));
 	if (l == -1) {
-		warn("%% read from routing socket");
+		printf("%% rtmsg_ndp: read from routing socket\n");
 		return(-1);
 	}
 	return (0);
