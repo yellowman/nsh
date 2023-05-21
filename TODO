@@ -18,10 +18,8 @@ Cleanup:
 
 To be implemented: 
 
-* umb
 * handle newer bridge commands
 * handle newer 802.11 gunk like rssi display, chan, flags, nodes
-* ndp controls
 * privsep? multiple daemons?
 * Build a simple web interface that works through the rc file handler or
   via imsg/some other privsep
