@@ -65,6 +65,7 @@ void conf_sppp(FILE *, int, char *);
 #define DHCPLEASECTL	"/usr/sbin/dhcpleasectl"
 #define SLAACCTL	"/usr/sbin/slaacctl"
 int conf(FILE *);
+void conf_interfaces(FILE *, char *, int);
 u_long default_mtu(char *);
 int conf_routes(FILE *, char *, int, int, int);
 int conf_dhcrelay(char *, char *, int);

@@ -103,6 +103,7 @@ static int	pr_prot1(int, char **);
 static int	pr_dhcp(int, char **);
 static int	pr_conf(int, char **);
 static int	pr_s_conf(int, char **);
+static int	pr_a_conf(int, char **);
 static int	show_hostname(int, char **);
 static int	wr_startup(void);
 static int	wr_conf(char *);
@@ -234,6 +235,7 @@ Menu showlist[] = {
 	{ "users",	"System users",		CMPL0 0, 0, 0, 0, who },
 	{ "running-config",	"Operating configuration", CMPL0 0, 0, 0, 0, pr_conf },
 	{ "startup-config", "Startup configuration", CMPL0 0, 0, 0, 0, pr_s_conf },
+	{ "active-config", "Configuration of active context", CMPL0 0, 0, 0, 0, pr_a_conf },
 	{ "?",		"Options",		CMPL0 0, 0, 0, 0, show_help },
 	{ "help",	0,			CMPL0 0, 0, 0, 0, show_help },
 	{ 0, 0, 0, 0, 0 }
@@ -801,6 +803,12 @@ read_command_line(EditLine *el, History *hist)
  *
  * if a function returns to interface() with a 1, interface() will break
  * the user back to command() mode.
+ *
+ * While this function is active the global ifname buffer contains the
+ * name of the interface being configured.
+ * Ensure that the ifname buffer gets cleared on exit. This allows nested
+ * commands to tell whether a interface/bridge context is active, and which
+ * interface/bridge is being configured.
  */
 static int
 interface(int argc, char **argv, char *modhvar)
@@ -842,7 +850,6 @@ interface(int argc, char **argv, char *modhvar)
 		return(0);
 	}
 
-	ifname[IFNAMSIZ-1] = '\0';
 	strlcpy(ifname, tmp, IFNAMSIZ);
 	if (ifunit) {
 		const char *errstr;
@@ -850,10 +857,12 @@ interface(int argc, char **argv, char *modhvar)
 		strtonum(ifunit, 0, INT_MAX, &errstr);
 		if (errstr) {
 			printf("%% interface unit %s is %s\n", ifunit, errstr);
+			ifname[0] = '\0';
 			return(1);
 		}
 		if (len > 0 && isdigit((unsigned char)(ifname[len - 1]))) {
 			printf("%% interface unit %s is redundant\n", ifunit);
+			ifname[0] = '\0';
 			return(1);
 		}
 		strlcat(ifname, ifunit, sizeof(ifname));
@@ -865,6 +874,7 @@ interface(int argc, char **argv, char *modhvar)
 	ifs = socket(AF_INET, SOCK_DGRAM, 0);
 	if (ifs < 0) {
 		printf("%% socket failed: %s\n", strerror(errno));
+		ifname[0] = '\0';
 		return(1);
 	}
 
@@ -880,6 +890,7 @@ interface(int argc, char **argv, char *modhvar)
 			else
 				printf("%% unable to create interface %s: %s\n",
 				    ifname, strerror(errno));
+			ifname[0] = '\0';
 			close(ifs);
 			return(0);
 		}
@@ -892,6 +903,7 @@ interface(int argc, char **argv, char *modhvar)
 		} else {
 			/* remove interface routes? */
 		}
+		ifname[0] = '\0';
 		close(ifs);
 		return(0);
 	}
@@ -913,8 +925,10 @@ interface(int argc, char **argv, char *modhvar)
 
 		if (argc - 1 > NARGS)
 			argc = NARGS;
-		if (argv[0] == 0)
+		if (argv[0] == 0) {
+			ifname[0] = '\0';
 			return(0);
+		}
 		if (NO_ARG(argv[0]))
 			argp = argv[1];
 		else
@@ -934,6 +948,7 @@ interface(int argc, char **argv, char *modhvar)
 			cli_rtable = save_cli_rtable;
 		}
 
+		ifname[0] = '\0';
 		return(0);
 	}
 
@@ -947,6 +962,7 @@ interface(int argc, char **argv, char *modhvar)
 			if (fgets(line, sizeof(line), stdin) == NULL) {
 				if (feof(stdin) || ferror(stdin)) {
 					printf("\n");
+					ifname[0] = '\0';
 					close(ifs);
 					return(0);
 				}
@@ -964,6 +980,7 @@ interface(int argc, char **argv, char *modhvar)
 			if (num == -1) {
 				printf("%% Input error: %s\n",
 				    strerror(errno));
+				ifname[0] = '\0';
 				close(ifs);
 				return(1);
 			}
@@ -999,6 +1016,7 @@ interface(int argc, char **argv, char *modhvar)
 		}
 	}
 
+	ifname[0] = '\0';
 	close(ifs);
 	return(0);
 }
@@ -2695,6 +2713,27 @@ pr_s_conf(int argc, char **argv)
 	ret = more(NSHRC);
 	
 	return(ret);
+}
+
+/*
+ * Show running-config for the active context.
+ * Currently only supports the interface/bridge context.
+ */
+int
+pr_a_conf(int argc, char **argv)
+{
+	if (priv != 1) {
+		printf ("%% Privilege required\n");
+		return(0);
+	}
+
+	if (ifname[0] == '\0') {
+		printf ("%% Interface or Bridge context required\n");
+		return(0);
+	}
+
+	conf_interfaces(stdout, ifname, 1);
+	return(0);
 }
 
 int
