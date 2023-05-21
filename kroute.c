@@ -417,6 +417,7 @@ print_getmsg(rtm, msglen)
 {
 	struct sockaddr *dst = NULL, *gate = NULL, *mask = NULL;
 	struct sockaddr_dl *ifp = NULL;
+	struct sockaddr_rtlabel *sa_rl = NULL;
 	struct sockaddr *sa;
 	char *cp;
 	int i;
@@ -451,6 +452,9 @@ print_getmsg(rtm, msglen)
 					   ((struct sockaddr_dl *)sa)->sdl_nlen)
 					    ifp = (struct sockaddr_dl *)sa;
 					break;
+				case RTA_LABEL:
+					sa_rl = (struct sockaddr_rtlabel *)sa;
+					break;
 				}
 				ADVANCE(cp, sa);
 			}
@@ -470,6 +474,8 @@ print_getmsg(rtm, msglen)
 		bprintf(stdout, rtm->rtm_flags, routeflags);
 		printf("\n");
 	}
+	if (sa_rl != NULL)
+		printf("\tlabel:\t\t%s\n", sa_rl->sr_label);
 
 #define lock(f) ((rtm->rtm_rmx.rmx_locks & __CONCAT(RTV_,f)) ? 'L' : ' ')
 
