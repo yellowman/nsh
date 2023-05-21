@@ -48,7 +48,7 @@
 #define ttyout stdout
 #define ttyin stdin
 
-unsigned char complete(EditLine *, int, char **, size_t, char *);
+unsigned char complete(EditLine *, char **, size_t);
 
 static int	     comparstr(const void *, const void *);
 static unsigned char complete_ambiguous(char *, int, StringList *, EditLine *);
@@ -335,14 +335,13 @@ exit_i(EditLine *el, int ch)
 unsigned char
 complt_i(EditLine *el, int ch)
 {
-	return(complete(el, ch, (char **)whichlist, sizeof(struct intlist),
-	    NULL));
+	return(complete(el, (char **)whichlist, sizeof(struct intlist)));
 }
 
 unsigned char
 complt_c(EditLine *el, int ch)
 {
-	return(complete(el, ch, (char **)cmdtab, sizeof(struct cmd), NULL));
+	return(complete(el, (char **)cmdtab, sizeof(struct cmd)));
 }
 
 unsigned char
@@ -525,7 +524,7 @@ done:
  * Generic complete routine
  */
 unsigned char
-complete(EditLine *el, int ch, char **table, size_t stlen, char *arg)
+complete(EditLine *el, char **table, size_t stlen)
 {
 	static char word[256];
 	struct ghs *c;
@@ -533,7 +532,6 @@ complete(EditLine *el, int ch, char **table, size_t stlen, char *arg)
 	int celems, dolist, level, i;
 	size_t len;
 
-	(void)ch;	/* not used */
 	lf = el_line(el);
 	len = lf->lastchar - lf->buffer;
 	if (len >= sizeof(line))
@@ -564,15 +562,12 @@ complete(EditLine *el, int ch, char **table, size_t stlen, char *arg)
 	if (cursor_argc == 0)
 		return (complete_command(word, dolist, el, table, stlen));
 
-	if (arg == NULL)
-		arg = margv[0];
-
 	if (NO_ARG(margv[0]) && table == (char **)whichlist) {
 		return(complete_noint(word, dolist, el, table, stlen,
 		    cursor_argc - 1));
 	}
 
-	c = (struct ghs *) genget(arg, table, stlen);
+	c = (struct ghs *) genget(margv[0], table, stlen);
 	if (c == (struct ghs *)-1 || c == 0 || Ambiguous(c))
 		return (CC_ERROR);
 
