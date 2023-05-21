@@ -109,6 +109,8 @@ main(int argc, char *argv[])
 		printf("%% database nameservers creation failed\n");
 	if (db_create_table_flag_x("pppoeipaddrmode") < 0)
 		printf("%% database pppoeipaddrmode creation failed\n");
+	if (db_create_table_flag_x("pin") < 0)
+		printf("%% database pin creation failed\n");
 
 	if (iflag) {
 		/*

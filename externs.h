@@ -517,3 +517,8 @@ int intwg(char *, int, int, char **);
 int intwgpeer(char *, int, int, char **);
 void conf_wg(FILE *, int, char *);
 void show_wg(int, char *);
+
+/* umb.c */
+int intumb(char *, int, int, char **);
+void conf_umb(FILE *, int, char *);
+void show_umb(int, char *);

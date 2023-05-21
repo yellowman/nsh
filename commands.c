@@ -823,7 +823,7 @@ struct ghs mantab[];
 
 struct intlist Intlist[] = {
 /* Interface mode commands */
-	{ "inet",	"IPv4/IPv6 addresses",			CMPL(h) (char **)intiphelp, sizeof(struct ghs), intip, 1},
+	{ "inet",	"IPv4/IPv6 addresses",			CMPL(h) (char **)intiphelp, sizeof(struct ghs), intip, 1 },
 	{ "ip",		"Alias for \"inet\" command",		CMPL(h) (char **)intiphelp, sizeof(struct ghs), intip, 1 },
 	{ "alias",	NULL, /* backwards compatibilty */	CMPL(h) (char **)intiphelp, sizeof(struct ghs), intip, 1 },
 #ifdef IFXF_AUTOCONF4		/* 6.6+ */
@@ -910,6 +910,12 @@ struct intlist Intlist[] = {
 	{ "wgrtable",	"Wireguard routing table",		CMPL0 0, 0, intwg, 1 },
 	{ "trunkport",	"Add child interface(s) to trunk",	CMPL0 0, 0, inttrunkport, 1 },
 	{ "trunkproto",	"Define trunkproto",			CMPL0 0, 0, inttrunkproto, 1 },
+	{ "apn",	"Access Point Name",			CMPL0 0, 0, intumb, 1 },
+	{ "setpin",	"Set SIM card PIN",			CMPL0 0, 0, intumb, 1 },
+	{ "setpuk",	"Set new SIM card PIN using PUK for validation", CMPL0 0, 0, intumb, 0 },
+	{ "chgpin",	"Permanently change SIM PIN",		CMPL0 0, 0, intumb, 0 },
+	{ "class",	"Preferred cell classes",		CMPL0 0, 0, intumb, 1 },
+	{ "roaming",	"Enable data roaming",			CMPL0 0, 0, intumb, 1 },
 	{ "shutdown",   "Shutdown interface",			CMPL0 0, 0, intflags, 1 },
 	{ "show",	showhelp,				CMPL(ta) (char **)showlist, sizeof(Menu), int_show, 0 },
 	{ "who",	whohelp,				CMPL0 0, 0, int_who, 0 },

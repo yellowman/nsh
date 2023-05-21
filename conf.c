@@ -730,6 +730,7 @@ void conf_interfaces(FILE *output, char *only, int exact_match)
 			conf_sppp(output, ifs, ifnp->if_name);
 			conf_pppoe(output, ifs, ifnp->if_name);
 			conf_wg(output, ifs, ifnp->if_name);
+			conf_umb(output, ifs, ifnp->if_name);
 		}
 		conf_ifflags(output, flags, ifnp->if_name, ippntd,
 		    if_data.ifi_type);

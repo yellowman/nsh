@@ -379,6 +379,7 @@ show_int(int argc, char **argv)
 	printf("\n");
 
 	show_wg(ifs, ifname);
+	show_umb(ifs, ifname);
 	show_trunk(ifs, ifname);
 	media_status(ifs, ifname, "  Media type ");
 
