@@ -2932,7 +2932,7 @@ show_vlan(int start_vnetid, int end_vnetid)
 	struct if_nameindex *ifn_list, *ifnp;
 	struct ifreq ifr;
 	struct if_parent ifp;
-	int ifs, vnetid, flags, bridx;
+	int ifs, vnetid, flags, bridx, rdomain;
 	const char *parent, *description, *bridgename;
 	char ifdescr[IFDESCRSIZE];
 	char vnetid_str[5];
@@ -2985,8 +2985,8 @@ show_vlan(int start_vnetid, int end_vnetid)
 		found_vnetid = 1;
 
 		if (!header_shown) {
-			puts("% Interface  Tag   Status  Type     "
-			    "Parent  Bridge   Description");
+			puts("% Interface  Tag   Status  Type    "
+			    "RDomain  Parent  Bridge   Description");
 			header_shown = 1;
 		}
 
@@ -3006,6 +3006,11 @@ show_vlan(int start_vnetid, int end_vnetid)
 			}
 		} else
 			parent = ifp.ifp_parent;
+
+		if (ioctl(ifs, SIOCGIFRDOMAIN, (caddr_t)&ifr) != -1)
+			rdomain = ifr.ifr_rdomainid;
+		else
+			rdomain = 0;
 
 		flags = get_ifflags(ifnp->if_name, ifs);
 
@@ -3027,10 +3032,10 @@ show_vlan(int start_vnetid, int end_vnetid)
 		else
 			bridgename = "-";
 
-		printf("  %-10s %-5s %-7s %-8s %-7s %-8s %s\n", ifnp->if_name,
-		    vnetid_str, (flags & IFF_UP) ? "up" : "down",
+		printf("  %-10s %-5s %-7s %-8s %6d  %-7s %-8s %s\n",
+		   ifnp->if_name, vnetid_str, (flags & IFF_UP) ? "up" : "down",
 		    isprefix("vlan", ifnp->if_name) ? "802.1Q" : "802.1ad",
-		    parent, bridgename, description);
+		    rdomain, parent, bridgename, description);
 	}
 
 	if (!found_vnetid) {
