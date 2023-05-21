@@ -663,6 +663,7 @@ struct ip_tree_entry {
 	RB_ENTRY(ip_tree_entry) entry;
 	u_short family;		/* AF_INET | AF_INET6 */
 	const char *ifname;
+	int rdomain;
 	int flags;		/* custom IPv4 address flags */
 #define NSH_IP_FLAG_DHCP	0x01
 #define NSH_IP_FLAG_IPCP	0x02
@@ -677,16 +678,29 @@ struct ip_tree_entry {
 static inline int
 ip_tree_cmp(const struct ip_tree_entry *e1, const struct ip_tree_entry *e2)
 {
+	int cmp;
+
 	if (e1->family < e2->family)
 		return -1;
 	if (e1->family > e2->family)
 		return 1;
 
-	if (e1->family == AF_INET)
-		return memcmp(&e1->addr.in, &e2->addr.in,
+	if (e1->family == AF_INET) {
+		cmp = memcmp(&e1->addr.in, &e2->addr.in,
 		    sizeof(struct in_addr));
+	} else {
+		cmp = memcmp(&e1->addr.in6, &e2->addr.in6,
+		    sizeof(struct in6_addr));
+	}
 
-	return memcmp(&e1->addr.in6, &e2->addr.in6, sizeof(struct in6_addr));
+	if (cmp == 0) {
+		if (e1->rdomain < e2->rdomain)
+			return -1;
+		if (e1->rdomain > e2->rdomain)
+			return 1;
+	}
+
+	return cmp;
 }
 
 RB_HEAD(ip_tree, ip_tree_entry);
@@ -708,6 +722,7 @@ show_ip(int argc, char **argv)
 	struct ip_tree_entry *e = NULL;
 	int max_addr_strlen = 0;
 	size_t addr_strlen;
+	struct ifreq ifr;
 
 	RB_INIT(&tree);
 
@@ -744,6 +759,10 @@ show_ip(int argc, char **argv)
 
 		e->family = ifa->ifa_addr->sa_family;
 		e->ifname = ifa->ifa_name;
+		memset(&ifr, 0, sizeof(ifr));
+		strlcpy(ifr.ifr_name, ifa->ifa_name, sizeof(ifr.ifr_name));
+		if (ioctl(s, SIOCGIFRDOMAIN, (caddr_t)&ifr) != -1)
+			e->rdomain = ifr.ifr_rdomainid;;
 
 		if (ifa->ifa_addr->sa_family == AF_INET) {
 			sin = (struct sockaddr_in *)ifa->ifa_addr;
@@ -792,7 +811,8 @@ show_ip(int argc, char **argv)
 	}
 
 	/* Show IPs */
-	printf("%-*s  Interface  Type\n", max_addr_strlen, "Address");
+	printf("%-*s  Interface  RDomain  Type\n",
+	    max_addr_strlen, "Address");
 	RB_FOREACH(e, ip_tree, &tree) {
 		void *addr;
 		flagsbuf[0] = '\0';
@@ -831,8 +851,8 @@ show_ip(int argc, char **argv)
 			continue;
 		}
 
-		printf("%-*s  %-9s %s\n", max_addr_strlen, buf,
-		    e->ifname, flagsbuf);
+		printf("%-*s  %-9s %8d %s\n", max_addr_strlen, buf,
+		    e->ifname, e->rdomain, flagsbuf);
 	}
 done:
 	free(e);
