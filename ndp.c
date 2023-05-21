@@ -126,6 +126,8 @@ static struct in6_nbrinfo *getnbrinfo(struct in6_addr *, int, int);
 int ndp_ether_aton(const char *, u_char *);
 int rtmsg_ndp(int);
 int rtget_ndp(struct sockaddr_in6 **, struct sockaddr_dl **);
+void conf_ndp(FILE *output, char *delim);
+void conf_ndp_entry(FILE *, char *, struct  rt_msghdr *);
 
 static int
 getsocket(void)
@@ -665,14 +667,17 @@ doit:
 		if (errno != ESRCH || cmd != RTM_DELETE) {
 			printf("%% rtmsg_ndp: writing to routing socket: %s\n",
 			    strerror(errno));
+			return(-1);
 		}
 	}
 	do {
 		l = read(rtsock, (char *)&m_rtmsg, sizeof(m_rtmsg));
 	} while (l > 0 && (rtm->rtm_version != RTM_VERSION ||
 	    rtm->rtm_seq != seq || rtm->rtm_pid != pid));
-	if (l == -1)
+	if (l == -1) {
 		warn("%% read from routing socket");
+		return(-1);
+	}
 	return (0);
 }
 
@@ -736,4 +741,45 @@ rtget_ndp(struct sockaddr_in6 **sinp, struct sockaddr_dl **sdlp)
 	*sdlp = sdl;
 
 	return (0);
+}
+
+void
+conf_ndp(FILE *output, char *delim)
+{
+	char *next;
+	struct rt_msghdr *rtm;
+	struct rtdump *rtdump;
+
+	if ((rtdump = getrtdump(AF_INET6, RTF_LLINFO, 0)) == NULL)
+	    return;
+
+	for (next = rtdump->buf; next < rtdump->lim; next += rtm->rtm_msglen)
+	{
+		rtm = (struct rt_msghdr *)next;
+		if (rtm->rtm_version != RTM_VERSION)
+			continue;
+		if (!(rtm->rtm_flags & RTF_HOST))
+			continue;
+		conf_ndp_entry(output, delim, rtm);
+        }
+	freertdump(rtdump);
+	return;
+}
+
+void
+conf_ndp_entry(FILE *output, char *delim, struct rt_msghdr *rtm)
+{
+	struct sockaddr_in6 *sin6;
+	struct sockaddr_dl *sdl;
+	
+	sin6 = (struct sockaddr_in6 *)((char *)rtm + rtm->rtm_hdrlen);
+	in6_fillscopeid(sin6);
+	sdl = (struct sockaddr_dl *)((char *)sin6 + ROUNDUP(sin6->sin6_len));
+	if (sdl->sdl_family != AF_LINK)
+		return;
+
+	fprintf(output, "%s%s %s", delim, routename6(sin6), ether_str(sdl));
+	if (rtm->rtm_flags & RTF_ANNOUNCE)
+		fputs(" proxy", output);
+	fputs("\n", output);
 }

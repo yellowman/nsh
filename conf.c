@@ -233,6 +233,7 @@ conf(FILE *output)
 	 * print static arp and route entries in configuration file format
 	 */
 	conf_arp(output, "arp ");
+	conf_ndp(output, "ndp ");
 	conf_routes(output, "route ", AF_INET, RTF_STATIC, 0);
 	conf_routes(output, "route ", AF_INET6, RTF_STATIC, 0);
 
@@ -346,6 +347,7 @@ void conf_rtables_rtable(FILE *output, int rtableid)
 	 * to this point. An rdomain creates a new corresponding rtable)
 	 */
 	conf_arp(output, " arp ");
+	conf_ndp(output, " ndp ");
 	conf_routes(output, " route ", AF_INET, RTF_STATIC, rtableid);
 	conf_routes(output, " route ", AF_INET6, RTF_STATIC, rtableid);
 

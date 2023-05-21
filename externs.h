@@ -541,6 +541,7 @@ void ndpget(const char *);
 int ndpdelete(const char *);
 struct sockaddr_in6;
 void ndpdump(struct sockaddr_in6 *, int);
+void conf_ndp(FILE *output, char *delim);
 
 /* nameserver.c */
 int nameserverset(int, char **);
