@@ -310,6 +310,7 @@ struct ctl ctl_ifstate[] = {
 };
 
 /* sasyncd */
+char *ctl_sasync_test[] = { SASYNCD, "-nvvc", REQTEMP, NULL };
 struct ctl ctl_sasync[] = {
 	{ "enable",       "enable sasyncd service",
 	    { SASYNCD, "-c", REQTEMP, NULL }, NULL, DB_X_ENABLE, T_EXEC },

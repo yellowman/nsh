@@ -127,10 +127,10 @@ extern char *ctl_bgp_test[];
 extern char *ctl_dhcp_test[];
 extern char *ctl_dvmrp_test[];
 extern char *ctl_eigrp_test[];
-/* ftpproxy test ? */
+/* ftpproxy test no config test yet */
 extern char *ctl_ifstate_test[];
 extern char *ctl_ike_test[];
-/* inetd test ? */ 
+/* inetd test  no config test yet */ 
 extern char *ctl_ipsec_test[];
 extern char *ctl_ldap_test[];
 extern char *ctl_ldp_test[];
@@ -141,14 +141,14 @@ extern char *ctl_ospf_test[];
 extern char *ctl_ospf6_test[];
 extern char *ctl_rad_test[];
 extern char *ctl_relay_test[];
-/* resolvd test ? */
+/* resolvd test no config test yet */
 extern char *ctl_rip_test[];
+extern char *ctl_sasync_test[];
 extern char *ctl_smtp_test[];
 extern char *ctl_snmp_test[];
 extern char *ctl_sshd_test[];
-/* sasyncd test ? */
-/* tftpd test ? */
-/* tftpproxy test ? */
+/* tftpd test no config test yet */
+/* tftpproxy test no config test yet */
 
 extern struct daemons ctl_daemons[];
 extern struct ctl ctl_pf[];
