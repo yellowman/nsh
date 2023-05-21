@@ -1706,7 +1706,7 @@ nsh/no verbose
 .El
 .Tg show
 .Ic show
-.Op hostname | interface | autoconf | ip | inet | inet6 | route | route6\ 
+.Op hostname | interface | autoconf | ip | inet | inet6 | route | route6\
  | sadb | arp | ndp | vlan | kernel | bgp | ospf | ospf6 | pf | eigrp | rip\
  | ldp | ike | ipsec | dvmrp | relay | dhcp | smtp | ldap | monitor\
  | version | users | running-config | startup-config |\&? | help
@@ -1943,44 +1943,51 @@ em0 [Bound]
 .Tg ip
 .Tg inet
 .Tg inet6
-.Cm show 
+.Cm show
 .Op ip | inet | inet6
 .Pp
-Display the IP addresses on all interfaces on the system and where the ip
-address was configured from.
+Display the IP addresses on all interfaces, their respective rdomains and
+where the ip address was configured from on the system including:
 .Bl -dash
-.It static
-.It dhcp
-.It ppp
-.It link-local
+.It
+static
+.It
+dhcp
+.It
+ppp
+.It
+link-local
 .El
 .Pp
 E.g show all ipv4 and IPv6 adddresses on the system
 .Bd -literal -offset indent
 nsh(p)/show ip
-Address     Interface  Type
-10.0.2.15   em0        dhcp
-10.10.10.2  vlan4093   static
-127.0.0.1   lo0        static
-::1         lo0        static
-fe80:4::1   lo0        link-local
+Address      Interface  RDomain  Type
+10.0.2.15    em0              0  dhcp
+10.10.10.10  em1            200  static
+127.0.0.1    lo0              0  static
+127.0.0.1    lo0            200  static
+::1          lo0              0  static
+::1          lo200          200  static
+fe80:4::1    lo0              0  link-local
+nsh(p)/
 .Ed
-.Pp
-E.g. show only IPv4 addresses on the system. 
+E.g. show only IPv4 addresses on the system.
 .Bd -literal -offset indent
-nsh(p)/show inet
-Address     Interface  Type
-10.0.2.15   em0        dhcp
-10.10.10.2  vlan4093   static
-127.0.0.1   lo0        static
+nsh(config-p)/show inet
+Address      Interface  RDomain  Type
+10.0.2.15    em0              0  dhcp
+10.10.10.10  em1            200  static
+127.0.0.1    lo0              0  static
+127.0.0.1    lo200          200  static
 .Ed
-.Pp
 E.g. show only IPv6 addresses on the system.
 .Bd -literal -offset indent
-nsh(p)/show inet6
-Address    Interface  Type
-::1        lo0        static
-fe80:4::1  lo0        link-local
+sh(config-p)/show inet6
+Address    Interface  RDomain  Type
+::1        lo0              0  static
+::1        lo200          200  static
+fe80:4::1  lo0              0  link-local
 .Ed
 .Pp
 .Tg route
@@ -2108,7 +2115,7 @@ nsh(p)/
 .Pp
 .Tg vlan
 .Ic show vlan
-.Op vlan-id 
+.Op vlan-id
 .Op <rangestart-vlan-id> <range-end-vlan-id>
 .Pp
 Display all virtual local area network interfaces configured on the system.
@@ -2135,13 +2142,13 @@ nsh(p)/show vlan 200
 nsh(p)/
 .Ed
 .Pp
-E.g. show vlan interfaces with vlan-ids the range 100 to 4093 
-.Bd. -literal -offset indent
+E.g. show vlan interfaces with vlan-ids the range 100 to 4093
+.Bd -literal -offset indent
 nsh(p)/show vlan 100 4093
 % Interface  Tag   Status  Type     Parent  Bridge   Description
-  vlan100    100   up      802.1Q   em1     -        
-  vlan4093   4093  up      802.1Q   em1     -        
-  vlan200    200   up      802.1Q   em1     -        
+  vlan100    100   up      802.1Q   em1     -
+  vlan4093   4093  up      802.1Q   em1     -
+  vlan200    200   up      802.1Q   em1     -
 .Ed
 .Pp
 .Tg bridge
@@ -4670,6 +4677,7 @@ TODO
 .Sh ENVIRONMENT
 .Bl -tag -width NSH_MANUAL_PAGE
 .It Ev NSH_MANUAL_PAGE
+.El
 The manual page displayed by the built-in
 .Cm manual
 command.
@@ -4678,6 +4686,7 @@ This must be an absolute path to the
 file that should be displayed.
 Defaults to
 .Pa /usr/local/man/man8/nsh.8
+.Pp
 .Sh FILES
 .Bl -tag -width /etc/suid_profile -compact
 .It Pa /etc/nshrc
