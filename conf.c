@@ -1047,7 +1047,7 @@ void conf_pwe3(FILE *output, int ifs, char *ifname)
 
 void conf_tunnel(FILE *output, int ifs, char *ifname)
 {
-	int dstport, physrtable, physdf, physecn;
+	int dstport, physrtable;
 	char tmpa[IPSIZ], tmpb[IPSIZ];
 
 	if ((dstport=
@@ -1059,9 +1059,9 @@ void conf_tunnel(FILE *output, int ifs, char *ifname)
 			fprintf(output, ":%i", dstport);
 		if ((physttl = get_physttl(ifs, ifname)) > 0)
 			fprintf(output, " ttl %i", physttl);
-		if ((physecn = get_physecn(ifs, ifname)) > 0)
+		if ((get_physecn(ifs, ifname)) > 0)
 			fprintf(output, " ecn");
-		if ((physdf = get_physdf(ifs, ifname)) > 0)
+		if ((get_physdf(ifs, ifname)) > 0)
 			fprintf(output, " df");	
 		fprintf(output, "\n");
 	}

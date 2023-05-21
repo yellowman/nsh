@@ -691,7 +691,6 @@ rtmsg(cmd, flags, proxy, export, tableid)
 {
 	static int seq;
 	struct rt_msghdr *rtm;
-	int rlen;
 	char *cp = m_rtmsg.m_space;
 	int l, s;
 
@@ -740,7 +739,7 @@ rtmsg(cmd, flags, proxy, export, tableid)
 	if (verbose)
 		print_rtmsg(rtm);
 
-	if ((rlen = write(s, (char *)&m_rtmsg, l)) < 0) {
+	if ((write(s, (char *)&m_rtmsg, l)) < 0) {
 		/* on a write, the calling function will notify user of error */
 		close(s);
 		return (-1);

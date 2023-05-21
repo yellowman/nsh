@@ -595,7 +595,6 @@ int
 rtmsg_ndp(int cmd)
 {
 	static int seq;
-	int rlen;
 	struct rt_msghdr *rtm = &m_rtmsg.m_rtm;
 	char *cp = m_rtmsg.m_space;
 	int l;
@@ -663,7 +662,7 @@ doit:
 	l = rtm->rtm_msglen;
 	rtm->rtm_seq = ++seq;
 	rtm->rtm_type = cmd;
-	if ((rlen = write(rtsock, (char *)&m_rtmsg, l)) == -1) {
+	if ((write(rtsock, (char *)&m_rtmsg, l)) == -1) {
 		if (errno != ESRCH || cmd != RTM_DELETE) {
 			printf("%% rtmsg_ndp: writing to routing socket: %s\n",
 			    strerror(errno));
