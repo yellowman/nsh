@@ -160,7 +160,7 @@ intsppp(char *ifname, int ifs, int argc, char **argv)
 			cmd |= __name;
 			if (strlcpy(spa.name, argv[noptind - 1],
 			    sizeof(spa.name)) >= sizeof(spa.name)) {
-				printf("%% Name too long (> %lu): %s\n",
+				printf("%% Name too long (> %zu): %s\n",
 				    sizeof(spa.name), argv[noptind - 1]);
 				return(0);
 			}
@@ -170,7 +170,7 @@ intsppp(char *ifname, int ifs, int argc, char **argv)
 			cmd |= __key;
 			if (strlcpy(spa.secret, argv[noptind - 1],
 			    sizeof(spa.secret)) >= sizeof(spa.secret)) {
-				printf("%% Key too long (> %lu): %s\n",
+				printf("%% Key too long (> %zu): %s\n",
 				    sizeof(spa.secret), argv[noptind - 1]);
 				return(0);
 			}
@@ -361,7 +361,7 @@ intpppoe(char *ifname, int ifs, int argc, char **argv)
 			    sizeof(parms.ac_name)) >=
 			    sizeof(parms.ac_name)) {
 				printf("%% access concentrator name too"
-				    " long (> %lu): %s\n",
+				    " long (> %zu): %s\n",
 				    sizeof(parms.ac_name),
 				    argv[noptind - 1]);
 				return(0);
@@ -371,7 +371,7 @@ intpppoe(char *ifname, int ifs, int argc, char **argv)
 			if (strlcpy(parms.eth_ifname, argv[noptind - 1],
 			    sizeof(parms.eth_ifname)) >=
 			    sizeof(parms.eth_ifname)) {
-				printf("%% dev name too long (> %lu): %s\n",
+				printf("%% dev name too long (> %zu): %s\n",
 				    sizeof(parms.eth_ifname),
 				    argv[noptind - 1]);
 				return(0);
@@ -382,7 +382,7 @@ intpppoe(char *ifname, int ifs, int argc, char **argv)
 			    argv[noptind - 1],
 			    sizeof(parms.service_name)) >=
 			    sizeof(parms.service_name)) {
-				printf("%% service name too long (> %lu): %s\n",
+				printf("%% service name too long (> %zu): %s\n",
 				    sizeof(parms.service_name),
 				    argv[noptind - 1]);
 				return(0);

@@ -848,7 +848,7 @@ mbpr(void)
 	totmbufs = 0;
 	for (mp = mbtypes; mp->mt_name; mp++)
 		totmbufs += mbstat.m_mtypes[mp->mt_type];
-	printf("\t%u mbuf%s in use:\n", totmbufs, plural(totmbufs));
+	printf("\t%d mbuf%s in use:\n", totmbufs, plural(totmbufs));
 	for (mp = mbtypes; mp->mt_name; mp++)
 		if (mbstat.m_mtypes[mp->mt_type]) {
 			seen[mp->mt_type] = YES;
@@ -873,7 +873,7 @@ mbpr(void)
 	totused = mbpool.pr_nout * mbpool.pr_size +
 	    mclpool.pr_nout * mclpool.pr_size;
 	totpct = (totmem == 0)? 0 : ((totused * 100)/totmem);
-	printf("\t%u Kbytes allocated to network (%d%% in use)\n",
+	printf("\t%d Kbytes allocated to network (%d%% in use)\n",
 	    totmem / 1024, totpct);
 	printf("\t%lu requests for memory denied\n", mbstat.m_drops);
 	printf("\t%lu requests for memory delayed\n", mbstat.m_wait);
