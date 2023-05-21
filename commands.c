@@ -1699,11 +1699,11 @@ Command cmdtab[] = {
 	{ "no",		0,		CMPL(c) 0, 0, nocmd,		0, 0, 0, 0 },
 	{ "do",		dohelp,		CMPL(c) 0, 0, docmd,		0, 0, 0, 0 },
 	{ "!",		shellhelp,	CMPL0 0, 0, shell,		1, 0, 0, 0 },
-	{ "?",		helphelp,	CMPL(C) 0, 0, help,		0, 0, 0, 0 },
+	{ "?",		helphelp,	CMPL(c) 0, 0, help,		0, 0, 0, 0 },
 	{ "manual",	manhelp,	CMPL(H) (char **)mantab, sizeof(struct ghs), manual,0, 0, 0, 0 },
 	{ "exit",	exithelp,	CMPL0 0, 0, exitconfig,		1, 0, 0, 0 },
 	{ "quit",	quithelp,	CMPL0 0, 0, quit,		0, 0, 0, 0 },
-	{ "help",	0,		CMPL(C) 0, 0, help,		0, 0, 0, 0 },
+	{ "help",	0,		CMPL(c) 0, 0, help,		0, 0, 0, 0 },
 	{ 0,		0,		CMPL0 0, 0, 0,			0, 0, 0, 0 }
 };
 
