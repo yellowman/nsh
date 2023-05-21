@@ -62,7 +62,7 @@ void intipusage(const char *, const char *);
 int run_ipcp(char *, int, int);
 void show_vnet_parent(int, char *);
 void pwe3usage(void);
-int show_vlan(int);
+int show_vlan(int, int);
 
 static struct ifmpwreq imrsave;
 static char imrif[IFNAMSIZ];
@@ -2719,7 +2719,7 @@ intvnetflowid(char *ifname, int ifs, int argc, char **argv)
 }
 
 int
-show_vlan(int wanted_vnetid)
+show_vlan(int start_vnetid, int end_vnetid)
 {
 	struct if_nameindex *ifn_list, *ifnp;
 	struct ifreq ifr;
@@ -2765,11 +2765,16 @@ show_vlan(int wanted_vnetid)
 		} else if (ifr.ifr_vnetid >= 0)
 			vnetid = ifr.ifr_vnetid;
 
-		if (wanted_vnetid != -1) {
-			if (vnetid != wanted_vnetid)
+		if (start_vnetid != -1) {
+			if (end_vnetid != -1) {
+				if (vnetid < start_vnetid)
+					continue;
+			} else if (vnetid != start_vnetid)
 				continue;
-			found_vnetid = 1;
 		}
+		if (end_vnetid != -1 && vnetid > end_vnetid)
+			continue;
+		found_vnetid = 1;
 
 		if (!header_shown) {
 			puts("% Interface  Tag   Status  Type     "
@@ -2820,8 +2825,14 @@ show_vlan(int wanted_vnetid)
 		    parent, bridgename, description);
 	}
 
-	if (wanted_vnetid != -1 && !found_vnetid)
-		printf("%% no VLAN with tag %d configured\n", wanted_vnetid);
+	if (!found_vnetid) {
+		if (end_vnetid == -1)
+			printf("%% no VLAN with tag %d configured\n",
+			    start_vnetid);
+		else
+			printf("%% no VLANs with tag between %d and %d "
+			    "configured\n", start_vnetid, end_vnetid);
+	}
 
 	if_freenameindex(ifn_list);
 	close(ifs);
@@ -2831,21 +2842,41 @@ show_vlan(int wanted_vnetid)
 int
 show_vlans(int argc, char **argv)
 {
-	long long vnetid = -1;
+	long long start_vnetid = -1, end_vnetid = -1;
 	const char *errstr;
 
 	switch (argc) {
 	case 2:
-		show_vlan(-1);
+		show_vlan(-1, -1);
 		break;
 	case 3:
-		vnetid = strtonum(argv[2], EVL_VLID_NULL,
+		start_vnetid = strtonum(argv[2], EVL_VLID_NULL,
 		    EVL_VLID_MAX, &errstr);
 		if (errstr) {
 			printf("%% VLAN tag %s is %s\n", argv[2], errstr);
 			break;
 		}
-		show_vlan(vnetid);
+		show_vlan(start_vnetid, -1);
+		break;
+	case 4:
+		start_vnetid = strtonum(argv[2], EVL_VLID_NULL,
+		    EVL_VLID_MAX, &errstr);
+		if (errstr) {
+			printf("%% VLAN tag %s is %s\n", argv[2], errstr);
+			break;
+		}
+		end_vnetid = strtonum(argv[3], EVL_VLID_NULL,
+		    EVL_VLID_MAX, &errstr);
+		if (errstr) {
+			printf("%% VLAN tag %s is %s\n", argv[3], errstr);
+			break;
+		}
+		if (start_vnetid >= end_vnetid) {
+			printf("%% VLAN Start Tag must be smaller "
+			    "than VLAN End Tag\n");
+			break;
+		}
+		show_vlan(start_vnetid, end_vnetid);
 		break;
 	}
 	return 0;
