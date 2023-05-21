@@ -111,6 +111,35 @@ struct prot1 os6cs[] = {
 	{ 0, 0, { 0 } }
 };
 
+struct prot1 pfcs[] = {
+	{ "all",           "all pf info except fingerprints and interfaces", 
+            { PFCTL, "-sall", NULL, NULL, NULL, NULL } },
+	{ "anchors",       "currently loaded anchors in main pf ruleset", 
+            { PFCTL, "-sAnchors", NULL, NULL, NULL } },	
+        { "info ",         "pf filter statistics, counters and tracking",
+            { PFCTL, "-sinfo", "-v", NULL, NULL, NULL } },
+        { "labels",        "per rule stats (bytes, packets and states)",        
+            { PFCTL, "-slabels", NULL, NULL, NULL, NULL } },
+        { "memory",        "current pf pool memory hard limit",
+            { PFCTL, "-smemory", NULL, NULL, NULL, NULL } },
+	{ "queues",        "currently loaded pf queue definition", 
+            { PFCTL, "-squeue", "-v", NULL, NULL, NULL } },
+	{ "rules",         "active pf firewall rule",
+            { PFCTL, "-srules", NULL, NULL, NULL, NULL } },
+	{ "sources",       "contents of the pf source tracking table", 
+            { PFCTL, "-sSources", NULL, NULL, NULL, NULL } },
+	{ "states",        "contents of the pf state table",
+            { PFCTL, "-sstates", NULL, NULL, NULL, NULL } },
+        { "tables",        "pf table",
+            { PFCTL, "-sTables", NULL, NULL, NULL, NULL } },
+	{ "timeouts",      "current pf global timeout", 
+            { PFCTL, "-stimeouts", NULL, NULL, NULL, NULL } },
+	{ "osfingerprint", "pf Operating System fingerprint", 
+            { PFCTL, "-sosfp", NULL, NULL, NULL, NULL } },
+	{ "interfaces",    "pf usable interfaces/ interface group", 
+            { PFCTL, "-sInterfaces", NULL, NULL, NULL, NULL } },
+	{ 0, 0, { 0 } }                                                         
+};
 struct prot1 eics[] = {
 	{ "interfaces",	"Interface",
 	    { EIGRPCTL, "show", "interfaces", OPT, OPT, NULL } },
@@ -221,6 +250,7 @@ struct prot prots[] = {
 	{ "bgp",	bgcs },
 	{ "ospf",	oscs },
 	{ "ospf6",	os6cs },
+	{ "pf",		pfcs },
 	{ "eigrp",	eics },
 	{ "rip",	rics },
 	{ "ike",	ikcs },
