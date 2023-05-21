@@ -49,6 +49,7 @@
 #include "stringlist.h"
 #include "externs.h"
 #include "bridge.h"
+#include "ctl.h"
 #include "sysctl.h"
 
 #define IPSIZ  256	/*

@@ -26,36 +26,7 @@
 #include <sys/socket.h>
 #include <sys/syslimits.h>
 #include "externs.h"
-
-/* service daemons */
-#define OSPFD		"/usr/sbin/ospfd"
-#define OSPF6D		"/usr/sbin/ospf6d"
-#define EIGRPD		"/usr/sbin/eigrpd"
-#define BGPD		"/usr/sbin/bgpd"
-#define RIPD		"/usr/sbin/ripd"
-#define ISAKMPD		"/sbin/isakmpd"
-#define IKED		"/sbin/iked"
-#define DVMRPD		"/usr/sbin/dvmrpd"
-#define RELAYD		"/usr/sbin/relayd"
-#define DHCPD		"/usr/sbin/dhcpd"
-#define SASYNCD		"/usr/sbin/sasyncd"
-#define	SNMPD		"/usr/sbin/snmpd"
-#define NTPD		"/usr/sbin/ntpd"
-#define FTPPROXY	"/usr/sbin/ftp-proxy"
-#define TFTPPROXY	"/usr/sbin/tftp-proxy"
-#define TFTPD		"/usr/sbin/tftpd"
-#define INETD		"/usr/sbin/inetd"
-#define SSHD		"/usr/sbin/sshd"
-#define LDPD		"/usr/sbin/ldpd"
-#define SMTPD		"/usr/sbin/smtpd"
-#define LDAPD		"/usr/sbin/ldapd"
-#define IFSTATED	"/usr/sbin/ifstated"
-#define NPPPD		"/usr/sbin/npppd"
-#define NPPPCTL		"/usr/sbin/npppctl"
-#define RESOLVD		"/sbin/resolvd"
-#ifndef DHCPLEASES
-#define DHCPLEASES	"/var/db/dhcpd.leases"
-#endif
+#include "ctl.h"
 
 /* table variable (for pkill usage) */
 static char table[16];

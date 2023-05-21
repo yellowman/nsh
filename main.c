@@ -29,6 +29,7 @@
 #include "editing.h"
 #include "stringlist.h"
 #include "externs.h"
+#include "ctl.h"
 
 void usage(void);
 
