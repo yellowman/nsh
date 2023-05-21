@@ -499,6 +499,50 @@ dhcpleased_controls_interface(char *ifname, int ifs)
 }
 
 /*
+ * Check whether a specific IPv4 addresses on an interface is
+ * managed by dhcpleased.
+ */
+int
+dhcpleased_has_address(char *ifname, const char *address,
+    const char *netmask)
+{
+	char *argv[] = { DHCPLEASECTL, "-l", ifname, NULL };
+	int address_found = 0;
+	char ortext[128];
+	char outpath[PATH_MAX];
+	int fd = -1, nullfd = -1;
+
+	if (!dhcpleased_is_running())
+		return 0;
+
+	snprintf(ortext, sizeof(ortext), "\tinet %s netmask %s\n",
+	    address, netmask);
+
+	nullfd = open("/dev/null", O_WRONLY | O_NOFOLLOW | O_CLOEXEC);
+	if (nullfd == -1) {
+		printf("%% open /dev/null: %s\n", strerror(errno));
+		return 0;
+	}
+
+	strlcpy(outpath, "/tmp/nsh-XXXXXX", sizeof(outpath));
+	fd = mkstemp(outpath);
+	if (fd == -1) {
+		printf("%% mkstemp: %s\n", strerror(errno));
+		close(nullfd);
+		return 0;
+	}
+
+	if (cmdargs_output(DHCPLEASECTL, argv, fd, nullfd) == 0 &&
+	    scantext(outpath, ortext))
+		address_found = 1;
+
+	unlink(outpath);
+	close(fd);
+	close(nullfd);
+	return (address_found);
+}
+
+/*
  * see if ("option routers %s;\n",dst) is preset in any possible dhclient
  * lease file
  */
