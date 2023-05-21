@@ -121,6 +121,7 @@ static int	int_exit(void);
 static int	el_burrito(EditLine *, int, char **);
 static int	hostname(int, char **);
 static int	help(int, char**);
+static int	manual(int, char**);
 static int	nocmd(int, char **);
 static int	shell(int, char*[]);
 static int	ping(int, char*[]);
@@ -1041,7 +1042,8 @@ static char
 	savehelp[] =	"Save the current configuration",
 	nreboothelp[] =	"Reboot the system",
 	halthelp[] =	"Halt the system",
-	helphelp[] =	"Print help information";
+	helphelp[] =	"Print help information",
+	manhelp[] =	"Display the NSH manual";
 
 struct ghs secrettab[] = {
 	{ "<password>", "Password parameter", CMPL0 NULL, 0 },
@@ -1069,6 +1071,154 @@ struct ghs demotecountertab[] = {
 Menu grouptab[] = {
 	{ "carpdemote",	"Set carp demote counter", CMPL(h) (char **)demotecountertab, sizeof(struct ghs), 0, 0, group },
 	{ 0, 0, 0, 0, 0 }
+};
+
+/* Keep in sync with grep '^\.Tg' nsh.8 | sort | uniq */
+struct ghs mantab[] = {
+	{ "ah", "Search for tag ah", CMPL0 NULL, 0 },
+	{ "arp", "Search for tag arp", CMPL0 NULL, 0 },
+	{ "auth", "Search for tag auth", CMPL0 NULL, 0 },
+	{ "autoconf", "Search for tag autoconf", CMPL0 NULL, 0 },
+	{ "bgp", "Search for tag bgp", CMPL0 NULL, 0 },
+	{ "bgpctl", "Search for tag bgpctl", CMPL0 NULL, 0 },
+	{ "bgpd", "Search for tag bgpd", CMPL0 NULL, 0 },
+	{ "bridge", "Search for tag bridge", CMPL0 NULL, 0 },
+	{ "bridgeport", "Search for tag bridgeport", CMPL0 NULL, 0 },
+	{ "carp", "Search for tag carp", CMPL0 NULL, 0 },
+	{ "config", "Search for tag config", CMPL0 NULL, 0 },
+	{ "configure", "Search for tag configure", CMPL0 NULL, 0 },
+	{ "csh", "Search for tag csh", CMPL0 NULL, 0 },
+	{ "ddb", "Search for tag ddb", CMPL0 NULL, 0 },
+	{ "dhcp", "Search for tag dhcp", CMPL0 NULL, 0 },
+	{ "dhcpd", "Search for tag dhcpd", CMPL0 NULL, 0 },
+	{ "dhcprelay", "Search for tag dhcprelay", CMPL0 NULL, 0 },
+	{ "dhcrelay", "Search for tag dhcrelay", CMPL0 NULL, 0 },
+	{ "disable", "Search for tag disable", CMPL0 NULL, 0 },
+	{ "dvmrp", "Search for tag dvmrp", CMPL0 NULL, 0 },
+	{ "dvmrpd", "Search for tag dvmrpd", CMPL0 NULL, 0 },
+	{ "editing", "Search for tag editing", CMPL0 NULL, 0 },
+	{ "eigrp", "Search for tag eigrp", CMPL0 NULL, 0 },
+	{ "eigrpd", "Search for tag eigrpd", CMPL0 NULL, 0 },
+	{ "enable", "Search for tag enable", CMPL0 NULL, 0 },
+	{ "esp", "Search for tag esp", CMPL0 NULL, 0 },
+	{ "firewall", "Search for tag firewall", CMPL0 NULL, 0 },
+	{ "flow", "Search for tag flow", CMPL0 NULL, 0 },
+	{ "flush", "Search for tag flush", CMPL0 NULL, 0 },
+	{ "ftp-proxy", "Search for tag ftp-proxy", CMPL0 NULL, 0 },
+	{ "group", "Search for tag group", CMPL0 NULL, 0 },
+	{ "halt", "Search for tag halt", CMPL0 NULL, 0 },
+	{ "help", "Search for tag help", CMPL0 NULL, 0 },
+	{ "hostname", "Search for tag hostname", CMPL0 NULL, 0 },
+	{ "hsrp", "Search for tag hsrp", CMPL0 NULL, 0 },
+	{ "icmp", "Search for tag icmp", CMPL0 NULL, 0 },
+	{ "ifstate", "Search for tag ifstate", CMPL0 NULL, 0 },
+	{ "ifstated", "Search for tag ifstated", CMPL0 NULL, 0 },
+	{ "igmp", "Search for tag igmp", CMPL0 NULL, 0 },
+	{ "ike", "Search for tag ike", CMPL0 NULL, 0 },
+	{ "iked", "Search for tag iked", CMPL0 NULL, 0 },
+	{ "ikev2", "Search for tag ikev2", CMPL0 NULL, 0 },
+	{ "inet", "Search for tag inet", CMPL0 NULL, 0 },
+	{ "inetd", "Search for tag inetd", CMPL0 NULL, 0 },
+	{ "interface", "Search for tag interface", CMPL0 NULL, 0 },
+	{ "ip", "Search for tag ip", CMPL0 NULL, 0 },
+	{ "ip6", "Search for tag ip6", CMPL0 NULL, 0 },
+	{ "ipcomp", "Search for tag ipcomp", CMPL0 NULL, 0 },
+	{ "ipsec", "Search for tag ipsec", CMPL0 NULL, 0 },
+	{ "isakmpd", "Search for tag isakmpd", CMPL0 NULL, 0 },
+	{ "isolation", "Search for tag isolation", CMPL0 NULL, 0 },
+	{ "kernel", "Search for tag kernel", CMPL0 NULL, 0 },
+	{ "ksh", "Search for tag ksh", CMPL0 NULL, 0 },
+	{ "l2vpn", "Search for tag l2vpn", CMPL0 NULL, 0 },
+	{ "label", "Search for tag label", CMPL0 NULL, 0 },
+	{ "layer2", "Search for tag layer2", CMPL0 NULL, 0 },
+	{ "ldap", "Search for tag ldap", CMPL0 NULL, 0 },
+	{ "ldapd", "Search for tag ldapd", CMPL0 NULL, 0 },
+	{ "ldp", "Search for tag ldp", CMPL0 NULL, 0 },
+	{ "ldpd", "Search for tag ldpd", CMPL0 NULL, 0 },
+	{ "lease", "Search for tag lease", CMPL0 NULL, 0 },
+	{ "lladdr", "Search for tag lladdr", CMPL0 NULL, 0 },
+	{ "macaddress", "Search for tag macaddress", CMPL0 NULL, 0 },
+	{ "manual", "Search for tag manual", CMPL0 NULL, 0 },
+	{ "mbuf", "Search for tag mbuf", CMPL0 NULL, 0 },
+	{ "monitor", "Search for tag monitor", CMPL0 NULL, 0 },
+	{ "mpls", "Search for tag mpls", CMPL0 NULL, 0 },
+	{ "multicast", "Search for tag multicast", CMPL0 NULL, 0 },
+	{ "nameserver", "Search for tag nameserver", CMPL0 NULL, 0 },
+	{ "ndp", "Search for tag ndp", CMPL0 NULL, 0 },
+	{ "nppp", "Search for tag nppp", CMPL0 NULL, 0 },
+	{ "npppd", "Search for tag npppd", CMPL0 NULL, 0 },
+	{ "ntp", "Search for tag ntp", CMPL0 NULL, 0 },
+	{ "ntpd", "Search for tag ntpd", CMPL0 NULL, 0 },
+	{ "ospf", "Search for tag ospf", CMPL0 NULL, 0 },
+	{ "ospf6", "Search for tag ospf6", CMPL0 NULL, 0 },
+	{ "ospfv3", "Search for tag ospfv3", CMPL0 NULL, 0 },
+	{ "packetfilter", "Search for tag packetfilter", CMPL0 NULL, 0 },
+	{ "pair", "Search for tag pair", CMPL0 NULL, 0 },
+	{ "patch", "Search for tag patch", CMPL0 NULL, 0 },
+	{ "pf", "Search for tag pf", CMPL0 NULL, 0 },
+	{ "pfsync", "Search for tag pfsync", CMPL0 NULL, 0 },
+	{ "ping", "Search for tag ping", CMPL0 NULL, 0 },
+	{ "ping6", "Search for tag ping6", CMPL0 NULL, 0 },
+	{ "pipex", "Search for tag pipex", CMPL0 NULL, 0 },
+	{ "port", "Search for tag port", CMPL0 NULL, 0 },
+	{ "privileged", "Search for tag privileged", CMPL0 NULL, 0 },
+	{ "protected", "Search for tag protected", CMPL0 NULL, 0 },
+	{ "quit", "Search for tag quit", CMPL0 NULL, 0 },
+	{ "rad", "Search for tag rad", CMPL0 NULL, 0 },
+	{ "rdomain", "Search for tag rdomain", CMPL0 NULL, 0 },
+	{ "reboot", "Search for tag reboot", CMPL0 NULL, 0 },
+	{ "relay", "Search for tag relay", CMPL0 NULL, 0 },
+	{ "relayd", "Search for tag relayd", CMPL0 NULL, 0 },
+	{ "resolv", "Search for tag resolv", CMPL0 NULL, 0 },
+	{ "resolv.conf", "Search for tag resolv.conf", CMPL0 NULL, 0 },
+	{ "rip", "Search for tag rip", CMPL0 NULL, 0 },
+	{ "ripd", "Search for tag ripd", CMPL0 NULL, 0 },
+	{ "route", "Search for tag route", CMPL0 NULL, 0 },
+	{ "route6", "Search for tag route6", CMPL0 NULL, 0 },
+	{ "rtable", "Search for tag rtable", CMPL0 NULL, 0 },
+	{ "sa", "Search for tag sa", CMPL0 NULL, 0 },
+	{ "sadb", "Search for tag sadb", CMPL0 NULL, 0 },
+	{ "sasync", "Search for tag sasync", CMPL0 NULL, 0 },
+	{ "sasyncd", "Search for tag sasyncd", CMPL0 NULL, 0 },
+	{ "sensor", "Search for tag sensor", CMPL0 NULL, 0 },
+	{ "sh", "Search for tag sh", CMPL0 NULL, 0 },
+	{ "shell", "Search for tag shell", CMPL0 NULL, 0 },
+	{ "show", "Search for tag show", CMPL0 NULL, 0 },
+	{ "smtp", "Search for tag smtp", CMPL0 NULL, 0 },
+	{ "smtpd", "Search for tag smtpd", CMPL0 NULL, 0 },
+	{ "sniff", "Search for tag sniff", CMPL0 NULL, 0 },
+	{ "snmp", "Search for tag snmp", CMPL0 NULL, 0 },
+	{ "snmpd", "Search for tag snmpd", CMPL0 NULL, 0 },
+	{ "span", "Search for tag span", CMPL0 NULL, 0 },
+	{ "ssh", "Search for tag ssh", CMPL0 NULL, 0 },
+	{ "sshd", "Search for tag sshd", CMPL0 NULL, 0 },
+	{ "switch", "Search for tag switch", CMPL0 NULL, 0 },
+	{ "switchport", "Search for tag switchport", CMPL0 NULL, 0 },
+	{ "sync", "Search for tag sync", CMPL0 NULL, 0 },
+	{ "syncdev", "Search for tag syncdev", CMPL0 NULL, 0 },
+	{ "tcp", "Search for tag tcp", CMPL0 NULL, 0 },
+	{ "telnet", "Search for tag telnet", CMPL0 NULL, 0 },
+	{ "tftp", "Search for tag tftp", CMPL0 NULL, 0 },
+	{ "tftp-proxy", "Search for tag tftp-proxy", CMPL0 NULL, 0 },
+	{ "tpmr", "Search for tag tpmr", CMPL0 NULL, 0 },
+	{ "traceroute", "Search for tag traceroute", CMPL0 NULL, 0 },
+	{ "traceroute6", "Search for tag traceroute6", CMPL0 NULL, 0 },
+	{ "unprivileged", "Search for tag unprivileged", CMPL0 NULL, 0 },
+	{ "veb", "Search for tag veb", CMPL0 NULL, 0 },
+	{ "verbose", "Search for tag verbose", CMPL0 NULL, 0 },
+	{ "vlan", "Search for tag vlan", CMPL0 NULL, 0 },
+	{ "vnetid", "Search for tag vnetid", CMPL0 NULL, 0 },
+	{ "vni", "Search for tag vni", CMPL0 NULL, 0 },
+	{ "vpls", "Search for tag vpls", CMPL0 NULL, 0 },
+	{ "vrrp", "Search for tag vrrp", CMPL0 NULL, 0 },
+	{ "vxlan", "Search for tag vxlan", CMPL0 NULL, 0 },
+	{ "wake", "Search for tag wake", CMPL0 NULL, 0 },
+	{ "wg", "Search for tag wg", CMPL0 NULL, 0 },
+	{ "wireguard", "Search for tag wireguard", CMPL0 NULL, 0 },
+	{ "wol", "Search for tag wol", CMPL0 NULL, 0 },
+	{ "write-config", "Search for tag write-config", CMPL0 NULL, 0 },
+	{ "<cr>", "Read entire manual", CMPL0 NULL, 0 },
+	{ NULL, NULL, NULL, NULL, 0 }
 };
 
 /*
@@ -1138,6 +1288,7 @@ Command cmdtab[] = {
 	{ "no",		0,		CMPL(C) 0, 0, nocmd,		0, 0, 0, 0 },
 	{ "!",		shellhelp,	CMPL0 0, 0, shell,		1, 0, 0, 0 },
 	{ "?",		helphelp,	CMPL(C) 0, 0, help,		0, 0, 0, 0 },
+	{ "manual",	manhelp,	CMPL(H) (char **)mantab, sizeof(struct ghs), manual,0, 0, 0, 0 },
 	{ "exit",	exithelp,	CMPL0 0, 0, exitconfig,		1, 0, 0, 0 },
 	{ "quit",	quithelp,	CMPL0 0, 0, quit,		0, 0, 0, 0 },
 	{ "help",	0,		CMPL(C) 0, 0, help,		0, 0, 0, 0 },
@@ -1351,6 +1502,104 @@ help(int argc, char **argv)
 			printf("%% %s: %s\n", arg, c->help);
 	}
 	return 0;
+}
+
+/*
+ * Manual command.
+ */
+
+static void
+manual_usage(void)
+{
+	printf("%% manual [search tag]\n");
+}
+
+static int
+manual(int argc, char **argv)
+{
+	sig_t sigint, sigquit, sigchld;
+	char term[32], *termenv = NULL;
+	char tag[64], *tagarg = NULL;
+	const char *lessenv, *nsh8;
+
+	if (argc != 1 && argc != 2) {
+		manual_usage();
+		return 1;
+	}
+
+	if (argc == 2) {
+		if (strcmp(argv[1], "?") == 0) {
+			manual_usage();
+			return 1;
+		}
+		snprintf(tag, sizeof(tag), "tag=%s", argv[1]);
+		tagarg = tag;
+		lessenv = "LESS=-P [j/k]-scroll down/up "
+		    "[t]-jump to next tag "
+		    "[T]-jump to previous tag "
+		    "[q]-quit";
+	} else {
+		lessenv = "LESS=-P [j/k]-scroll down/up "
+		    "[q]-quit";
+	}
+
+	termenv = getenv("TERM");
+	if (termenv) {
+		snprintf(term, sizeof(term), "TERM=%s", getenv("TERM"));
+		termenv = term;
+	}
+
+	nsh8 = getenv("NSH_MANUAL_PAGE");
+	if (nsh8 == NULL)
+		nsh8 = "/usr/local/man/man8/nsh.8";
+
+	sigint = signal(SIGINT, SIG_IGN);
+	sigquit = signal(SIGQUIT, SIG_IGN);
+	sigchld = signal(SIGCHLD, SIG_DFL);
+
+	switch (child = fork()) {
+		case -1:
+			printf("%% fork failed: %s\n", strerror(errno));
+			break;
+
+		case 0:
+			signal(SIGQUIT, SIG_DFL);
+			signal(SIGINT, SIG_DFL);
+			signal(SIGCHLD, SIG_DFL);
+
+			/*
+			 * Fire up man(1) in the child.
+			 */
+			const char *env[] = {
+				"PAGER=less",
+				lessenv,
+				termenv,
+				NULL
+			};
+
+			if (tagarg == NULL) {
+				execle("/usr/bin/man", "man", "-l",
+				    nsh8, NULL, env);
+			} else {
+				execle("/usr/bin/man", "man", "-l",
+				    "-O", tagarg, nsh8, NULL, env);
+			}
+			printf("%% execl failed: %s\n", strerror(errno));
+			_exit(0);
+			break;
+		default:
+			signal(SIGALRM, sigalarm);
+ 			wait(0);  /* Wait for man(1) to complete */
+			break;
+	}
+
+	signal(SIGINT, sigint);
+	signal(SIGQUIT, sigquit);
+	signal(SIGCHLD, sigchld);
+	signal(SIGALRM, SIG_DFL);
+	child = -1;
+
+	return 1;
 }
 
 /*

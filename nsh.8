@@ -380,6 +380,19 @@ nsh(p)/help
 nsh(p)/
 .Ed
 .El
+.Pp
+.Tg manual
+.Ic manual
+.Op Ar search tag
+.Pp
+Display the
+.Nm
+manual page.
+If a
+.Ar search tag
+is specified then jump to the first section matching this tag if one
+or more matching tags exist.
+.Pp
 .Tg hostname
 .Ic hostname
 .Op Ar hostname
@@ -4596,6 +4609,17 @@ Hence if
 is set, it overrides
 .Ev EDITOR .
 TODO
+.Sh ENVIRONMENT
+.Bl -tag -width NSH_MANUAL_PAGE
+.It Ev NSH_MANUAL_PAGE
+The manual page displayed by the built-in
+.Cm manual
+command.
+This must be an absolute path to the
+.Xr mdoc 7
+file that should be displayed.
+Defaults to
+.Pa /usr/local/man/man8/nsh.8
 .Sh FILES
 .Bl -tag -width /etc/suid_profile -compact
 .It Pa /etc/nshrc
