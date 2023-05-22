@@ -638,7 +638,7 @@ conf_umb_pin(FILE *output, char *ifname)
 		printf("%% pin database select failed\n");
 	}
 	if (pin->sl_cur > 0)
-		fprintf(output, " pin %s\n", pin->sl_str[0]);
+		fprintf(output, " setpin %s\n", pin->sl_str[0]);
 
 	sl_free(pin, 1);
 }
