@@ -119,7 +119,7 @@ brport(char *ifname, int ifs, int argc, char **argv)
 {
 	int set, i;
 	struct brc *x;
- 
+
 	if (NO_ARG(argv[0])) {
 		set = 0;
 		argv++;
@@ -344,7 +344,7 @@ brrule(char *ifname, int ifs, int argc, char **argv)
 	return(0);
 }
 
-int 
+int
 brstatic(char *ifname, int ifs, int argc, char **argv)
 {
 	int set;
@@ -387,12 +387,12 @@ static struct brd brds[] = {
 };
 
 int
-brpri(char *ifname, int ifs, int argc, char **argv)   
+brpri(char *ifname, int ifs, int argc, char **argv)
 {
 	int set, val;
 	const char *errmsg = NULL;
 	struct brd *x;
-         
+
 	if (NO_ARG(argv[0])) {
 		set = 0;
 		argv++;
@@ -414,7 +414,7 @@ brpri(char *ifname, int ifs, int argc, char **argv)
 
 	/*
 	 * the ifpriority value is ignored for 'no ifpriority' but
-	 * we allow it anyways to retain compatibility with the 
+	 * we allow it anyways to retain compatibility with the
 	 * set form of this command
 	 */
 	if ((set && argc != 2) || (!set && (argc < 1 || argc > 2))) {
@@ -446,7 +446,7 @@ brpri(char *ifname, int ifs, int argc, char **argv)
 			bridge_ifprio(ifs, ifname, argv[0], val);
 		} else {
 			bridge_ifprio(ifs, ifname, argv[0], DEFAULT_IFPRIORITY);
-		}	
+		}
 	break;
 	case BRPRI_IFCOST:
 		if (set) {
@@ -460,7 +460,7 @@ brpri(char *ifname, int ifs, int argc, char **argv)
 		}
 	break;
 	}
-	
+
 
 	return(0);
 }
@@ -921,7 +921,7 @@ bridge_member_search(int ifs, char *ifname)
 	int idx = 0;
 	char buf[1024];
 	char *p, *s;
-	
+
 	if (!is_valid_ifname(ifname) || is_bridge(ifs, ifname)) {
 		printf("%% bridge_member_search: bad interface %s\n", ifname);
 		return 0;
@@ -1048,7 +1048,7 @@ bridge_maxage(int s, char *brdg, u_int32_t val)
 		return (EX_IOERR);
 	}
 	return (0);
-	
+
 }
 
 int
@@ -1079,7 +1079,7 @@ bridge_fwddelay(int s, char *brdg, u_int32_t val)
 		return (EX_IOERR);
 	}
 	return (0);
-	
+
 }
 
 int
@@ -1095,7 +1095,7 @@ bridge_hellotime(int s, char *brdg, u_int32_t val)
 		return (EX_IOERR);
 	}
 	return (0);
-	
+
 }
 
 int
