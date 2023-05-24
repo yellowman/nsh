@@ -1,5 +1,5 @@
 /* From: $OpenBSD: ifconfig.c,v 1.430 2020/11/06 21:24:47 kn Exp $	*/
- 
+
 #include <stdio.h>
 #include <ctype.h>
 #include <stdlib.h>
@@ -11,7 +11,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
-#include <errno.h> 
+#include <errno.h>
 #include <stddef.h>
 #include <resolv.h>
 
@@ -406,7 +406,7 @@ conf_wg(FILE *output, int ifs, char *ifname)
 }
 
 #define WGPEER 1
-#define WGPORT 2 
+#define WGPORT 2
 #define WGKEY 3
 #define WGRTABLE 4
 
@@ -477,7 +477,7 @@ intwg(char *ifname, int ifs, int argc, char **argv)
 			} else {
 				uint8_t key[WG_KEY_LEN];
 				char keyb64[WG_BASE64_KEY_LEN+1];
-	
+
 				printf("%% Using randomly generated private key for %s\n", ifname);
 
 				arc4random_buf(key, WG_KEY_LEN);
@@ -559,7 +559,7 @@ intwgpeer(char *ifname, int ifs, int argc, char **argv)
 		} else {
 			if (unsetwgpeerall() < 0)
 				goto wgerr;
-		}	
+		}
 	}
 
 	/* handle peer public key first */
