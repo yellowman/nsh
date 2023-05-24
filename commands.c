@@ -250,7 +250,7 @@ static int
 showcmd(int argc, char **argv)
 {
 	Menu *s;	/* pointer to current command */
-	int success = 0;
+	int error = 0;
 
 	if (argc < 2) {
 		show_help(argc, argv);
@@ -275,9 +275,9 @@ showcmd(int argc, char **argv)
 		return 0;
 	}
 	if (s->handler)	/* As if there was something else we do ? */
-		success = (*s->handler)(argc, argv);
+		error = (*s->handler)(argc, argv);
 
-	return(success);
+	return(error);
 }
 
 static int
