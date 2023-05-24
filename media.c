@@ -622,7 +622,7 @@ media_supported(int s, char *ifname, char *hdr_delim, char *body_delim)
 
 	media_list = calloc(ifmr.ifm_count, sizeof(*media_list));
 	if (media_list == NULL) {
-		printf("%% media_status: calloc: %s\n", strerror(errno));
+		printf("%% media_supported: calloc: %s\n", strerror(errno));
 		return;
 	}
 	ifmr.ifm_ulist = media_list;
