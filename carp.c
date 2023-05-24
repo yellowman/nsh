@@ -280,12 +280,12 @@ intcnode(char *ifname, int ifs, int argc, char **argv)
 	} else {
 		advskew = 0;
 	}
-	
+
 	if (ioctl(ifs, SIOCGVH, (caddr_t) & ifr) == -1) {
 		printf("%% intcnode: SIOCGVH: %s\n", strerror(errno));
 		return (0);
 	}
-	
+
 	/* find last used vhid */
 	for (last = 0; creq.carpr_vhids[last]; last++) {
 	}
@@ -366,7 +366,7 @@ conf_carp(FILE *output, int s, char *ifname)
 		fprintf(output, " carppeer %s\n", inet_ntoa(creq.carpr_peer));
 	if (creq.carpr_balancing != 0 && !(creq.carpr_balancing > CARP_BAL_MAXID))
 		fprintf(output, " balancing %s\n", carp_bal_modes[creq.carpr_balancing]);
-			
+
 	return (0);
 }
 
@@ -421,7 +421,7 @@ carp_state(int s, char *ifname)
 			    creq.carpr_vhids[i], creq.carpr_advskews[i]);
 		}
 	}
-			
+
 	return(0);
 }
 
