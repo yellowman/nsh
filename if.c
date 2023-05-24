@@ -55,15 +55,15 @@
 
 char *iftype(int int_type);
 const char *get_linkstate(int, int);
-void show_int_status(char *, int);
+void show_int_status(char *, int, FILE *);
 char *get_hwdaddr(char *ifname);
 void pack_ifaliasreq(struct ifaliasreq *, ip_t *, struct in_addr *, char *);
 void pack_in6aliasreq(struct in6_aliasreq *, ip_t *, struct in6_addr *, char *);
 void ipv6ll_db_store(struct sockaddr_in6 *, struct sockaddr_in6 *, int, char *);
-void printifhwfeatures(int, char *);
+void printifhwfeatures(int, char *, FILE *);
 void intipusage(const char *, const char *);
 int run_ipcp(char *, int, int);
-void show_vnet_parent(int, char *);
+void show_vnet_parent(int, char *, FILE *);
 void pwe3usage(void);
 int show_vlan(int, int);
 
@@ -128,7 +128,7 @@ get_linkstate(int mt, int link_state)
 }
 
 void
-show_int_status(char *ifname, int ifs)
+show_int_status(char *ifname, int ifs, FILE *outfile)
 {
 	struct ifreq ifr;
 	struct ifmediareq ifmr;
@@ -214,7 +214,7 @@ show_int_status(char *ifname, int ifs)
 		ifm_subtype = get_ifm_subtype_str(ifmr.ifm_active);
 
 
-	printf("  %-7s %-7s %-15s %10u  %s%s%s%s%s%s%s\n", ifname,
+	fprintf(outfile, "  %-7s %-7s %-15s %10u  %s%s%s%s%s%s%s\n", ifname,
 	    (flags & IFF_UP) ? "up" : "down", link_state_desc,
 	    ifr.ifr_rdomainid,
 	    ifm_type ? ifm_type : "",
@@ -229,7 +229,7 @@ show_int_status(char *ifname, int ifs)
 }
 
 int
-show_int(int argc, char **argv)
+show_int(int argc, char **argv, FILE *outfile)
 {
 	struct ifaddrs *ifap, *ifa;
 	struct if_nameindex *ifn_list, *ifnp;
@@ -291,7 +291,7 @@ show_int(int argc, char **argv)
 		for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++) {
 			char *args[] = { NULL, NULL, ifnp->if_name };
 
-			show_int(3, args);
+			show_int(3, args, outfile);
 		}
 		if_freenameindex(ifn_list);
 		close(ifs);
@@ -302,9 +302,10 @@ show_int(int argc, char **argv)
 			close(ifs);
 			return 0;
 		}
-		puts("% Name    Status  Link        Routing-Domain  Media");
+		fputs("% Name    Status  Link        Routing-Domain  Media",
+		    outfile);
 		for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++)
-			show_int_status(ifnp->if_name, ifs);
+			show_int_status(ifnp->if_name, ifs, outfile);
 		if_freenameindex(ifn_list);
 		close(ifs);
 		return(0);
@@ -331,7 +332,7 @@ show_int(int argc, char **argv)
 		return(1);
 	}
 
-	printf("%% %s", ifname);
+	fprintf(outfile, "%% %s", ifname);
 
 	/* description */
 	memset(&ifrdesc, 0, sizeof(ifrdesc));
@@ -339,11 +340,11 @@ show_int(int argc, char **argv)
 	ifrdesc.ifr_data = (caddr_t)&ifdescr;
 	if (ioctl(ifs, SIOCGIFDESCR, &ifrdesc) == 0 &&
 	    strlen(ifrdesc.ifr_data))
-		printf(" (%s)", ifrdesc.ifr_data);
+		fprintf(outfile, " (%s)", ifrdesc.ifr_data);
 
-	putchar('\n');
+	fputc('\n', outfile);
 
-	printf("  %s is %s", br ? "Bridge" : "Interface",
+	fprintf(outfile, "  %s is %s", br ? "Bridge" : "Interface",
 	    flags & IFF_UP ? "up" : "down");
 
 	if (if_data.ifi_lastchange.tv_sec) {
@@ -355,33 +356,34 @@ show_int(int argc, char **argv)
 		c %= (60 * 60);
 		mins = c / 60;
 		c %= 60;
-		printf(" (last change ");
+		fprintf(outfile, " (last change ");
 		if (days)
-			printf("%id ", days);
-		printf("%02i:%02i:%02i)", hours, mins, (int)c);
+			fprintf(outfile, "%id ", days);
+		fprintf(outfile, "%02i:%02i:%02i)", hours, mins, (int)c);
 	}
 
-	printf(", protocol is %s", flags & IFF_RUNNING ? "up" : "down");
-	printf("\n");
+	fprintf(outfile, ", protocol is %s\n",
+	    flags & IFF_RUNNING ? "up" : "down");
 
 	type = iftype(if_data.ifi_type);
 
-	printf("  Interface type %s", type);
+	fprintf(outfile, "  Interface type %s", type);
 	if (if_data.ifi_type != IFT_WIREGUARD) {
 		if (flags & IFF_BROADCAST)
-			printf(" (Broadcast)");
+			fprintf(outfile, " (Broadcast)");
 		else if (flags & IFF_POINTOPOINT)
-			printf(" (PointToPoint)");
+			fprintf(outfile, " (PointToPoint)");
 	}
 
 	if ((lladdr = get_hwdaddr(ifname)) != NULL)
-		printf(", hardware address %s", lladdr);
-	printf("\n");
+		fprintf(outfile, ", hardware address %s", lladdr);
+	fputc('\n', outfile);
 
-	show_wg(ifs, ifname);
-	show_umb(ifs, ifname);
-	show_trunk(ifs, ifname);
-	media_status(ifs, ifname, "  Media type ");
+	show_wg(ifs, ifname, outfile);
+	show_umb(ifs, ifname, outfile);
+	show_trunk(ifs, ifname, outfile);
+	if (media_status(ifs, ifname, "  Media type ", outfile))
+		return(1);
 
 	/*
 	 * Print interface IP address, and broadcast or
@@ -424,10 +426,11 @@ show_int(int argc, char **argv)
 		}
 
 		if (!ippntd)
-			printf("  Internet address");
+			fprintf(outfile, "  Internet address");
 
-		printf("%s %s", ippntd ? "," : "", ifa->ifa_addr->sa_family
-		    == AF_INET ? netname4(sin->sin_addr.s_addr, sinmask) :
+		fprintf(outfile, "%s %s", ippntd ? "," : "",
+		    ifa->ifa_addr->sa_family == AF_INET ?
+		    netname4(sin->sin_addr.s_addr, sinmask) :
 		    netname6(sin6, sin6mask));
 
 		ippntd = 1;
@@ -437,7 +440,7 @@ show_int(int argc, char **argv)
 			if (flags & IFF_POINTOPOINT) {
 				sindest = (struct sockaddr_in *)
 				    ifa->ifa_dstaddr;
-				printf(" (Destination %s)",
+				fprintf(outfile, " (Destination %s)",
 				    routename4(sindest->sin_addr.s_addr));
 			} else if (flags & IFF_BROADCAST) {
 				sindest = (struct sockaddr_in *)
@@ -453,7 +456,7 @@ show_int(int argc, char **argv)
 				    sinmask->sin_addr.s_addr) &&
 				    ntohl(sindest->sin_addr.s_addr) !=
 				    INADDR_ANY)
-					printf(" (Broadcast %s)",
+					fprintf(outfile, " (Broadcast %s)",
 					    inet_ntoa(sindest->sin_addr));
 			}
 			break;
@@ -462,80 +465,83 @@ show_int(int argc, char **argv)
 				sin6dest = (struct sockaddr_in6 *)
 				    ifa->ifa_dstaddr;
 				in6_fillscopeid(sin6dest);
-				printf(" (Destination %s)",
+				fprintf(outfile, " (Destination %s)",
 				    routename6(sin6dest));
 			}
 			break;
 		default:
-			printf(" unknown");
+			fprintf(outfile, " unknown");
 			break;
 		}
 	}
 
 	if (ippntd) {
-		printf("\n");
+		fputc('\n', outfile);
 	}
 	freeifaddrs(ifap);
 
 	if (!br) {
 		if (phys_status(ifs, ifname, tmp_str, tmp_str2,
 		    sizeof(tmp_str), sizeof(tmp_str2)) > 0) {
-			printf("  Tunnel source %s destination %s",
+			fprintf(outfile, "  Tunnel source %s destination %s",
 			    tmp_str, tmp_str2);
 			if (((physrt = get_physrtable(ifs, ifname)) != 0))
-				printf(" destination rdomain %i", physrt);
+				fprintf(outfile, " destination rdomain %i",
+				    physrt);
 			if (((physttl = get_physttl(ifs, ifname)) != 0))
-				printf(" ttl %i", physttl);
-			printf("\n");
+				fprintf(outfile, " ttl %i", physttl);
+			fputc('\n', outfile);
 		}
-		carp_state(ifs, ifname);
+		carp_state(ifs, ifname, outfile);
 
-		printf(" ");
-		show_vnet_parent(ifs, ifname);
+		fputc(' ', outfile);
+		show_vnet_parent(ifs, ifname, outfile);
 		if (ioctl(ifs, SIOCGIFRDOMAIN, (caddr_t)&ifr) != -1)
-			printf(" rdomain %d,", ifr.ifr_rdomainid);
+			fprintf(outfile, " rdomain %d,", ifr.ifr_rdomainid);
 
 		/*
 		 * Display MTU, line rate
 		 */
-		printf(" MTU %u bytes", if_data.ifi_mtu);
+		fprintf(outfile, " MTU %u bytes", if_data.ifi_mtu);
 		if (ioctl(ifs, SIOCGIFHARDMTU, (caddr_t)&ifr) != -1) {
 			if (ifr.ifr_hardmtu)
-				printf(" (hardmtu %u)", ifr.ifr_hardmtu);
+				fprintf(outfile, " (hardmtu %u)",
+				    ifr.ifr_hardmtu);
 		}
 		if (if_data.ifi_baudrate)
-			printf(", Line Rate %qu %s",
+			fprintf(outfile, ", Line Rate %qu %s",
 			    MBPS(if_data.ifi_baudrate) ?
 			    MBPS(if_data.ifi_baudrate) :
 			    if_data.ifi_baudrate / 1000,
 			    MBPS(if_data.ifi_baudrate) ? "Mbps" : "Kbps");
 
-		printf("\n");
+		fputc('\n', outfile);
 	}
 
 	if (get_nwinfo(ifname, tmp_str, sizeof(tmp_str), NWID) != 0) {
-		printf("  SSID %s", tmp_str);
+		fprintf(outfile, "  SSID %s", tmp_str);
 		if(get_nwinfo(ifname, tmp_str, sizeof(tmp_str), NWKEY) != 0)
-			printf(", key %s", tmp_str);
+			fprintf(outfile, ", key %s", tmp_str);
 		if ((get_nwinfo(ifname, tmp_str, sizeof(tmp_str),
 		    POWERSAVE)) != 0)
-			printf(", powersaving (%s ms)\n", tmp_str);
-		printf("\n");
+			fprintf(outfile, ", powersaving (%s ms)\n", tmp_str);
+		fputc('\n', outfile);
 	}
 
 	/*
 	 * Display remaining info from if_data structure
 	 */
-	printf("  %qu packets input, %qu bytes, %qu errors, %qu drops\n",
+	fprintf(outfile, "  %qu packets input, %qu bytes, %qu errors, %qu drops\n",
 	    if_data.ifi_ipackets, if_data.ifi_ibytes, if_data.ifi_ierrors,
 	    if_data.ifi_iqdrops);
-	printf("  %qu packets output, %qu bytes, %qu errors, %qu unsupported\n",
+	fprintf(outfile, "  %qu packets output, %qu bytes, %qu errors, "
+	    "%qu unsupported\n",
 	    if_data.ifi_opackets, if_data.ifi_obytes, if_data.ifi_oerrors,
 	    if_data.ifi_noproto);
 	if (if_data.ifi_ibytes && if_data.ifi_ipackets &&
 	    (if_data.ifi_ibytes / if_data.ifi_ipackets) >= ETHERMIN) {
 		/* < ETHERMIN means byte counter probably rolled over */
-		printf("  %qu input", if_data.ifi_ibytes /
+		fprintf(outfile, "  %qu input", if_data.ifi_ibytes /
 		    if_data.ifi_ipackets);
 		pntd = 1;
 	} else
@@ -543,12 +549,12 @@ show_int(int argc, char **argv)
 	if (if_data.ifi_obytes && if_data.ifi_opackets &&
 	    (if_data.ifi_obytes / if_data.ifi_opackets) >= ETHERMIN) {
 		/* < ETHERMIN means byte counter probably rolled over */
-		printf("%s%qu output", pntd ? ", " : "  ",
+		fprintf(outfile, "%s%qu output", pntd ? ", " : "  ",
 		    if_data.ifi_obytes / if_data.ifi_opackets);
 		pntd = 1;
 	}
 	if (pntd)
-		printf(" (average bytes/packet)\n");
+		fprintf(outfile, " (average bytes/packet)\n");
 
 	switch(if_data.ifi_type) {
 	/*
@@ -559,7 +565,7 @@ show_int(int argc, char **argv)
 	case IFT_SLIP:
 	case IFT_PROPVIRTUAL:
 	case IFT_IEEE80211:
-		printf("  %qu collisions\n", if_data.ifi_collisions);
+		fprintf(outfile, "  %qu collisions\n", if_data.ifi_collisions);
 		break;
 	default:
 		break;
@@ -567,21 +573,21 @@ show_int(int argc, char **argv)
 
 	if(verbose) {
 		if (flags) {
-			printf("  Flags:\n    ");
-			bprintf(stdout, flags, ifnetflags);
-			printf("\n");
+			fprintf(outfile, "  Flags:\n    ");
+			bprintf(outfile, flags, ifnetflags);
+			fputc('\n', outfile);
 		}
-		printifhwfeatures(ifs, ifname);
+		printifhwfeatures(ifs, ifname, outfile);
 		if (br) {
 			if ((tmp = bridge_list(ifs, ifname, "    ", tmp_str,
 			    sizeof(tmp_str), SHOW_STPSTATE))) {
-				printf("  STP member state%s:\n", tmp > 1 ?
-				    "s" : "");
-				printf("%s", tmp_str);
+				fprintf(outfile, "  STP member state%s:\n",
+				    tmp > 1 ?  "s" : "");
+				fprintf(outfile, "%s", tmp_str);
 			}
-			bridge_addrs(ifs, ifname, "  ", "    ");
+			bridge_addrs(ifs, ifname, "  ", "    ", outfile);
 		}
-		media_supported(ifs, ifname, "  ", "    ");
+		media_supported(ifs, ifname, "  ", "    ", outfile);
 	}
 
 	close(ifs);
@@ -873,7 +879,7 @@ done:
 }
 
 void
-show_vnet_parent(int ifs, char *ifname)
+show_vnet_parent(int ifs, char *ifname, FILE *outfile)
 {
 	struct if_parent ifp;
 	struct ifreq ifr;
@@ -881,11 +887,11 @@ show_vnet_parent(int ifs, char *ifname)
 	bzero(&ifr, sizeof(ifr));
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 	if (ioctl(ifs, SIOCGVNETID, (caddr_t)&ifr) != -1)
-		printf(" vnetid %llu,", ifr.ifr_vnetid);
+		fprintf(outfile, " vnetid %llu,", ifr.ifr_vnetid);
 	bzero(&ifp, sizeof(ifp));
 	strlcpy(ifp.ifp_name, ifname, sizeof(ifp.ifp_name));
 	if (ioctl(ifs, SIOCGIFPARENT, (caddr_t)&ifp) != -1)
-		printf(" parent %s,", ifp.ifp_parent);
+		fprintf(outfile, " parent %s,", ifp.ifp_parent);
 }
 
 /* lifted right from ifconfig.c */
@@ -896,7 +902,7 @@ show_vnet_parent(int ifs, char *ifname)
 
 /* lifted right from ifconfig.c */
 void
-printifhwfeatures(int ifs, char *ifname)
+printifhwfeatures(int ifs, char *ifname, FILE *outfile)
 {
 	struct ifreq	ifr;
 	struct if_data	ifrdat;
@@ -906,13 +912,13 @@ printifhwfeatures(int ifs, char *ifname)
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 
 	if (ioctl(ifs, SIOCGIFDATA, (caddr_t)&ifr) == -1) {
-		printf("%% printifhwfeatures: SIOCGIFDATA: %s\n",
+		fprintf(outfile, "%% printifhwfeatures: SIOCGIFDATA: %s\n",
 		    strerror(errno));
 		return;
 	}
-	printf("  Hardware features:\n    ");
-	bprintf(stdout, (u_int)ifrdat.ifi_capabilities, HWFEATURESBITS);
-	putchar('\n');
+	fprintf(outfile, "  Hardware features:\n    ");
+	bprintf(outfile, (u_int)ifrdat.ifi_capabilities, HWFEATURESBITS);
+	fputc('\n', outfile);
 }
 
 u_int32_t

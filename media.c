@@ -54,7 +54,7 @@ const char *get_media_subtype_string(uint64_t);
 uint64_t get_media_subtype(uint64_t, const char *);
 uint64_t get_media_options(uint64_t, const char *);
 uint64_t lookup_media_word(const struct ifmedia_description *, uint64_t, const char *);
-void print_media_word(uint64_t, int, int);
+void print_media_word(uint64_t, int, int, FILE *);
 void conf_print_media_word(FILE *, int);
 
 const int ifm_status_valid_list[] =
@@ -91,7 +91,7 @@ intmedia(char *ifname, int ifs, int argc, char **argv)
 	if ((set && (argc < 1 || argc > 2)) || (!set && argc > 2)) {
 		printf("%% media <type> [instance]\n");
 		printf("%% no media [type] [instance]\n");
-		media_supported(ifs, ifname, "% ", "%   ");
+		media_supported(ifs, ifname, "% ", "%   ", stdout);
 		return(0);
 	}
 
@@ -386,17 +386,17 @@ lookup_media_word(const struct ifmedia_description *desc, uint64_t type, const c
 }
 
 void
-print_media_word(uint64_t ifmw, int print_type, int as_syntax)
+print_media_word(uint64_t ifmw, int print_type, int as_syntax, FILE *outfile)
 {
 	const struct ifmedia_description *desc;
 	uint64_t	seen_option = 0;
 
 	if (print_type)
-		printf("%s ", get_media_type_string(ifmw));
-	printf("%s%s", as_syntax ? "media " : "",
+		fprintf(outfile, "%s ", get_media_type_string(ifmw));
+	fprintf(outfile, "%s%s", as_syntax ? "media " : "",
 	       get_media_subtype_string(ifmw));
 	if (IFM_INST(ifmw) != 0)
-		printf(" %lld", IFM_INST(ifmw));
+		fprintf(outfile, " %lld", IFM_INST(ifmw));
 
 	/* Find options. */
 	for (desc = ifm_option_descriptions; desc->ifmt_string != NULL;
@@ -405,8 +405,9 @@ print_media_word(uint64_t ifmw, int print_type, int as_syntax)
 		  (IFM_OPTIONS(ifmw) & IFM_OPTIONS(desc->ifmt_word)) != 0 &&
 		    (seen_option & IFM_OPTIONS(desc->ifmt_word)) == 0) {
 			if (seen_option == 0)
-				printf("%s", as_syntax ? ", mediaopt " : " ");
-			printf("%s%s", seen_option ? "," : "",
+				fprintf(outfile, "%s",
+				    as_syntax ? ", mediaopt " : " ");
+			fprintf(outfile, "%s%s", seen_option ? "," : "",
 			       desc->ifmt_string);
 			seen_option |= IFM_OPTIONS(desc->ifmt_word);
 		}
@@ -523,8 +524,8 @@ conf_media_status(FILE *output, int s, char *ifname)
 	return(rval);
 }
 
-void
-media_status(int s, char *ifname, char *delim)
+int
+media_status(int s, char *ifname, char *delim, FILE *outfile)
 {
 	uint64_t *media_list;
 	struct ifmediareq ifmr;
@@ -533,44 +534,46 @@ media_status(int s, char *ifname, char *delim)
 	strlcpy(ifmr.ifm_name, ifname, sizeof(ifmr.ifm_name));
 
 	if (ioctl(s, SIOCGIFMEDIA, (caddr_t)&ifmr) < 0) {
-		if (errno != ENOTTY)
+		if (errno != ENOTTY) {
 			printf("%% media_status: SIOCGIFMEDIA: %s\n",
 			    strerror(errno));
-		return;
+			return 1;
+		}
+		return 0;
 	}
 
 	if (ifmr.ifm_count == 0) {
 		if (verbose)
 			printf("%% %s: No media types?\n", ifname);
-		return;
+		return 0;
 	}
 
 	media_list = calloc(ifmr.ifm_count, sizeof(*media_list));
 	if (media_list == NULL) {
 		printf("%% media_status: calloc: %s\n", strerror(errno));
-		return;
+		return 1;
 	}
 	ifmr.ifm_ulist = media_list;
 
 	if (ioctl(s, SIOCGIFMEDIA, (caddr_t)&ifmr) < 0) {
 		printf("%% media_status: SIOCGIFMEDIA: %s\n", strerror(errno));
 		free(media_list);
-		return;
+		return 1;
 	}
 
-	printf("%s", delim);
-	print_media_word(ifmr.ifm_current, 0, 0);
+	fprintf(outfile, "%s", delim);
+	print_media_word(ifmr.ifm_current, 0, 0, outfile);
 	if (ifmr.ifm_active != ifmr.ifm_current) {
-		printf(" (");
-		print_media_word(ifmr.ifm_active, 0, 0);
-		putchar(')');
+		fprintf(outfile, " (");
+		print_media_word(ifmr.ifm_active, 0, 0, outfile);
+		fputc(')', outfile);
 	}
 
 	if (ifmr.ifm_status & IFM_AVALID) {
 		const struct ifmedia_status_description *ifms;
 		int bitno, found = 0;
 
-		printf(", status ");
+		fprintf(outfile, ", status ");
 		for (bitno = 0; ifm_status_valid_list[bitno] != 0; bitno++) {
 
 			for (ifms = ifm_status_descriptions;
@@ -582,7 +585,7 @@ media_status(int s, char *ifname, char *delim)
 				      ifm_status_valid_list[bitno])
 					continue;
 
-				printf("%s%s", found ? ", " : "",
+				fprintf(outfile, "%s%s", found ? ", " : "",
 				    IFM_STATUS_DESC(ifms, ifmr.ifm_status));
 				found = 1;
 
@@ -595,16 +598,17 @@ media_status(int s, char *ifname, char *delim)
 			}
 		}
 		if (found == 0)
-			printf("unknown");
+			fprintf(outfile, "unknown");
 	}
-	putchar('\n');
+	fputc('\n', outfile);
 
 	free(media_list);
-	return;
+	return 0;
 }
 
 void
-media_supported(int s, char *ifname, char *hdr_delim, char *body_delim)
+media_supported(int s, char *ifname, char *hdr_delim, char *body_delim,
+    FILE *outfile)
 {
 	u_int64_t *media_list;
 	int i, type, printed_type;
@@ -637,13 +641,14 @@ media_supported(int s, char *ifname, char *hdr_delim, char *body_delim)
 		for (i = 0, printed_type = 0; i < ifmr.ifm_count; i++) {
 			if (IFM_TYPE(media_list[i]) == type) {
 				if (printed_type == 0) {
-				    printf("%sSupported media types on %s:\n",
+				    fprintf(outfile,
+				        "%sSupported media types on %s:\n",
 				        hdr_delim, ifname);
 				    printed_type = 1;
 				}
-				printf("%s", body_delim);
-				print_media_word(media_list[i], 0, 1);
-				printf("\n");
+				fprintf(outfile, "%s", body_delim);
+				print_media_word(media_list[i], 0, 1, outfile);
+				fputc('\n', outfile);
 			}
 		}
 	}

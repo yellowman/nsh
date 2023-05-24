@@ -24,7 +24,7 @@
 #include "stringlist.h"
 #include "externs.h"
 
-void	umb_printclasses(char *, int);
+void	umb_printclasses(char *, int, FILE *);
 int	umb_parse_classes(const char *);
 void	umb_setpin(int, char *, const char *);
 void	umb_chgpin(int, char *, const char *, const char *);
@@ -64,7 +64,7 @@ umb_descr2val(const struct umb_valdescr *vdp, char *str)
 }
 
 void
-show_umb(int ifs, char *ifname)
+show_umb(int ifs, char *ifname, FILE *outfile)
 {
 	struct umb_info mi;
 	struct ifreq ifr;
@@ -91,94 +91,97 @@ show_umb(int ifs, char *ifname)
 
 	if (mi.nwerror) {
 		/* 3GPP 24.008 Cause Code */
-		printf("  error: ");
+		fprintf(outfile, "  error: ");
 		switch (mi.nwerror) {
 		case 2:
-			printf("SIM not activated");
+			fprintf(outfile, "SIM not activated");
 			break;
 		case 4:
-			printf("Roaming not supported");
+			fprintf(outfile, "Roaming not supported");
 			break;
 		case 6:
-			printf("SIM reported stolen");
+			fprintf(outfile, "SIM reported stolen");
 			break;
 		case 7:
-			printf("No GPRS subscription");
+			fprintf(outfile, "No GPRS subscription");
 			break;
 		case 8:
-			printf("GPRS and non-GPRS services not allowed");
+			fprintf(outfile, "GPRS and non-GPRS services "
+			    "not allowed");
 			break;
 		case 11:
-			printf("Subscription expired");
+			fprintf(outfile, "Subscription expired");
 			break;
 		case 12:
-			printf("Subscription does not cover current location");
+			fprintf(outfile, "Subscription does not cover "
+			    "current location");
 			break;
 		case 13:
-			printf("No roaming in this location");
+			fprintf(outfile, "No roaming in this location");
 			break;
 		case 14:
-			printf("GPRS not supported");
+			fprintf(outfile, "GPRS not supported");
 			break;
 		case 15:
-			printf("No subscription for the service");
+			fprintf(outfile, "No subscription for the service");
 			break;
 		case 17:
-			printf("Registration failed");
+			fprintf(outfile, "Registration failed");
 			break;
 		case 22:
-			printf("Network congestion");
+			fprintf(outfile, "Network congestion");
 			break;
 		default:
-			printf("Error code %d", mi.nwerror);
+			fprintf(outfile, "Error code %d", mi.nwerror);
 			break;
 		}
-		printf("\n");
+		putc('\n', outfile);
 	}
 
-	printf("  roaming %s registration %s",
+	fprintf(outfile, "  roaming %s registration %s",
 	    mi.enable_roaming ? "enabled" : "disabled",
 	    umb_val2descr(umb_regstate, mi.regstate));
 	utf16_to_char(mi.roamingtxt, UMB_ROAMINGTEXT_MAXLEN,
 	    roamingtxt, sizeof (roamingtxt));
 	if (roamingtxt[0])
-		printf(" [%s]", roamingtxt);
-	printf("\n");
+		fprintf(outfile, " [%s]", roamingtxt);
+	fputc('\n', outfile);
 
-	umb_printclasses("available classes", mi.supportedclasses);
-	printf("  state %s cell-class %s",
+	umb_printclasses("available classes", mi.supportedclasses, outfile);
+	fprintf(outfile, "  state %s cell-class %s",
 	    umb_val2descr(umb_istate, mi.state),
 	    umb_val2descr(umb_dataclass, mi.highestclass));
 	if (mi.rssi != UMB_VALUE_UNKNOWN && mi.rssi != 0)
-		printf(" rssi %ddBm", mi.rssi);
+		fprintf(outfile, " rssi %ddBm", mi.rssi);
 	if (mi.uplink_speed != 0 || mi.downlink_speed != 0) {
 		char s[2][FMT_SCALED_STRSIZE];
 		if (fmt_scaled(mi.uplink_speed, s[0]) != 0)
 			snprintf(s[0], sizeof (s[0]), "%llu", mi.uplink_speed);
 		if (fmt_scaled(mi.downlink_speed, s[1]) != 0)
 			snprintf(s[1], sizeof (s[1]), "%llu", mi.downlink_speed);
-		printf(" speed %sbps up %sbps down", s[0], s[1]);
+		fprintf(outfile, " speed %sbps up %sbps down", s[0], s[1]);
 	}
-	printf("\n");
+	fputc('\n', outfile);
 
-	printf("  SIM %s PIN ", umb_val2descr(umb_simstate, mi.sim_state));
+	fprintf(outfile, "  SIM %s PIN ",
+	    umb_val2descr(umb_simstate, mi.sim_state));
 	switch (mi.pin_state) {
 	case UMB_PIN_REQUIRED:
-		printf("required");
+		fprintf(outfile, "required");
 		break;
 	case UMB_PIN_UNLOCKED:
-		printf("valid");
+		fprintf(outfile, "valid");
 		break;
 	case UMB_PUK_REQUIRED:
-		printf("locked (PUK required)");
+		fprintf(outfile, "locked (PUK required)");
 		break;
 	default:
-		printf("unknown state (%d)", mi.pin_state);
+		fprintf(outfile, "unknown state (%d)", mi.pin_state);
 		break;
 	}
 	if (mi.pin_attempts_left != UMB_VALUE_UNKNOWN)
-		printf(" (%d attempts left)", mi.pin_attempts_left);
-	printf("\n");
+		fprintf(outfile, " (%d attempts left)", mi.pin_attempts_left);
+	fputc('\n', outfile);
 
 	utf16_to_char(mi.sid, UMB_SUBSCRIBERID_MAXLEN, sid, sizeof (sid));
 	utf16_to_char(mi.iccid, UMB_ICCID_MAXLEN, iccid, sizeof (iccid));
@@ -187,12 +190,13 @@ show_umb(int ifs, char *ifname)
 	utf16_to_char(mi.providerid, UMB_PROVIDERID_MAXLEN,
 	    providerid, sizeof (providerid));
 	if (sid[0] || iccid[0]) {
-		printf("  ");
+		fprintf(outfile, "  ");
 		n = 0;
 		if (sid[0])
-			printf("%ssubscriber-id %s", n++ ? " " : "", sid);
+			fprintf(outfile, "%ssubscriber-id %s",
+			    n++ ? " " : "", sid);
 		if (iccid[0])
-			printf("%sICC-id %s", n++ ? " " : "", iccid);
+			fprintf(outfile, "%sICC-id %s", n++ ? " " : "", iccid);
 		printf("\n");
 	}
 
@@ -200,57 +204,60 @@ show_umb(int ifs, char *ifname)
 	utf16_to_char(mi.devid, UMB_DEVID_MAXLEN, devid, sizeof (devid));
 	utf16_to_char(mi.fwinfo, UMB_FWINFO_MAXLEN, fwinfo, sizeof (fwinfo));
 	if (hwinfo[0] || devid[0] || fwinfo[0]) {
-		printf("  ");
+		fprintf(outfile, "  ");
 		n = 0;
 		if (hwinfo[0])
-			printf("%sdevice %s", n++ ? " " : "", hwinfo);
+			fprintf(outfile, "%sdevice %s", n++ ? " " : "", hwinfo);
 		if (devid[0]) {
-			printf("%s", n++ ? " " : "");
+			fprintf(outfile, "%s", n++ ? " " : "");
 			switch (mi.cellclass) {
 			case MBIM_CELLCLASS_GSM:
-				printf("IMEI");
+				fprintf(outfile, "IMEI");
 				break;
 			case MBIM_CELLCLASS_CDMA:
 				n = strlen(devid);
 				if (n == 8 || n == 11) {
-					printf("ESN");
+					fprintf(outfile, "ESN");
 					break;
 				} else if (n == 14 || n == 18) {
-					printf("MEID");
+					fprintf(outfile, "MEID");
 					break;
 				}
 				/*FALLTHROUGH*/
 			default:
-				printf("ID");
+				fprintf(outfile, "ID");
 				break;
 			}
-			printf(" %s", devid);
+			fprintf(outfile, " %s", devid);
 		}
 		if (fwinfo[0])
-			printf("%sfirmware %s", n++ ? " " : "", fwinfo);
-		printf("\n");
+			fprintf(outfile, "%sfirmware %s", n++ ? " " : "",
+			    fwinfo);
+		fputc('\n', outfile);
 	}
 
 	utf16_to_char(mi.pn, UMB_PHONENR_MAXLEN, pn, sizeof (pn));
 	utf16_to_char(mi.apn, UMB_APN_MAXLEN, apn, sizeof (apn));
 	if (pn[0] || apn[0] || provider[0] || providerid[0]) {
-		printf("  ");
+		fprintf(outfile, "  ");
 		n = 0;
 		if (pn[0])
-			printf("%sphone# %s", n++ ? " " : "", pn);
+			fprintf(outfile, "%sphone# %s", n++ ? " " : "", pn);
 		if (apn[0])
-			printf("%sAPN %s", n++ ? " " : "", apn);
+			fprintf(outfile, "%sAPN %s", n++ ? " " : "", apn);
 		if (provider[0])
-			printf("%sprovider %s", n++ ? " " : "", provider);
+			fprintf(outfile, "%sprovider %s", n++ ? " " : "",
+			    provider);
 		if (providerid[0])
-			printf("%sprovider-id %s", n ? " " : "", providerid);
-		printf("\n");
+			fprintf(outfile, "%sprovider-id %s", n ? " " : "",
+			    providerid);
+		fputc('\n', outfile);
 	}
 
 	for (i = 0, n = 0; i < UMB_MAX_DNSSRV; i++) {
 		if (mi.ipv4dns[i].s_addr == INADDR_ANY)
 			break;
-		printf("%s %s", n++ ? "" : "  dns",
+		fprintf(outfile, "%s %s", n++ ? "" : "  dns",
 		    inet_ntop(AF_INET, &mi.ipv4dns[i], astr, sizeof(astr)));
 	}
 
@@ -258,30 +265,30 @@ show_umb(int ifs, char *ifname)
 		if (memcmp(&mi.ipv6dns[i], &in6addr_any,
 		    sizeof (mi.ipv6dns[i])) == 0)
 			break;
-		printf("%s %s", n++ ? "" : "  dns",
+		fprintf(outfile, "%s %s", n++ ? "" : "  dns",
 		    inet_ntop(AF_INET6, &mi.ipv6dns[i], astr, sizeof(astr)));
 	}
 
 	if (n)
-		printf("\n");
+		fputc('\n', outfile);
 }
 
 void
-umb_printclasses(char *tag, int c)
+umb_printclasses(char *tag, int c, FILE *outfile)
 {
 	int	 i;
 	char	*sep = "";
 
-	printf("  %s: ", tag);
+	fprintf(outfile, "  %s: ", tag);
 	i = 0;
 	while (umb_dataclass[i].descr) {
 		if (umb_dataclass[i].val & c) {
-			printf("%s%s", sep, umb_dataclass[i].descr);
+			fprintf(outfile, "%s%s", sep, umb_dataclass[i].descr);
 			sep = ",";
 		}
 		i++;
 	}
-	printf("\n");
+	fputc('\n', outfile);
 }
 
 int

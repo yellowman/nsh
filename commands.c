@@ -250,7 +250,9 @@ static int
 showcmd(int argc, char **argv)
 {
 	Menu *s;	/* pointer to current command */
-	int error = 0;
+	int error = 0, outfd = -1;
+	char outpath[PATH_MAX];
+	struct stat sb;
 
 	if (argc < 2) {
 		show_help(argc, argv);
@@ -274,9 +276,67 @@ showcmd(int argc, char **argv)
 		    s->minarg, s->maxarg);
 		return 0;
 	}
-	if (s->handler)	/* As if there was something else we do ? */
-		error = (*s->handler)(argc, argv);
 
+	if (strlcpy(outpath, "/tmp/nsh.show.XXXXXXXX", sizeof(outpath)) >=
+	    sizeof(outpath))
+		return 0;
+
+	outfd = mkstemp(outpath);
+	if (outfd == -1) {
+		printf("%% mkstemp %s: %s\n", outpath, strerror(errno));
+		return 0;
+	}
+
+	if (fstat(outfd, &sb) == -1) {
+		printf("%% fstat %s: %s\n", outpath, strerror(errno));
+		goto done;
+	}
+
+	if (s->handler)	{
+		FILE *f;
+		int fd;
+
+		fd = dup(outfd);
+		if (fd == -1) {
+			printf("%% dup %s\n", strerror(errno));
+			goto done;
+		}
+
+		f = fdopen(fd, "w+");
+		if (f == NULL) {
+			printf("%% dup %s\n", strerror(errno));
+			close(fd);
+			goto done;
+		}
+		error = (*s->handler)(argc, argv, f);
+		if (fflush(f) == EOF)
+			printf("%% fflush %s: %s\n", outpath, strerror(errno));
+		fclose(f); /* fd is closed via f */
+	}
+
+	/*
+	 * Until all show commands have been converted to write to the output
+	 * file we need to check here whether the file has been modified before
+	 * piping it to the pager.
+	 */
+	if (error == 0) {
+		struct stat sb2;
+
+		lseek(outfd, 0, SEEK_SET);
+		if (fstat(outfd, &sb2) == -1) {
+			printf("%% fstat %s: %s\n", outpath, strerror(errno));
+			goto done;
+		}
+		if (sb.st_size != sb2.st_size ||
+		    sb.st_mtim.tv_sec != sb2.st_mtim.tv_sec ||
+		    sb.st_mtim.tv_nsec != sb2.st_mtim.tv_nsec)
+			more(outpath);
+	}
+done:
+	if (close(outfd) == EOF)
+		printf("%% close %s: %s\n", outpath, strerror(errno));
+	if (unlink(outpath) == -1)
+		printf("%% unlink %s: %s\n", outpath, strerror(errno));
 	return(error);
 }
 

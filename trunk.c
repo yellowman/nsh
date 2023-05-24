@@ -195,7 +195,8 @@ conf_trunk(FILE *output, int ifs, char *ifname)
 
                 for (i = 0; i < ra.ra_ports; ++i)
 			if(rpbuf[i].rp_portname[0] != '\0') {
-				fprintf(output, " %s%s", pntd ? "" : "trunkport ",
+				fprintf(output, " %s%s",
+				    pntd ? "" : "trunkport ",
 				    rpbuf[i].rp_portname);
 				pntd = 1;
 			}
@@ -208,7 +209,7 @@ conf_trunk(FILE *output, int ifs, char *ifname)
 }
 
 void
-show_trunk(int ifs, char *ifname)
+show_trunk(int ifs, char *ifname, FILE *outfile)
 {
 	struct trunk_reqport rp, rpbuf[TRUNK_MAX_PORTS];
 	struct trunk_reqall ra;
@@ -220,9 +221,9 @@ show_trunk(int ifs, char *ifname)
 	strlcpy(rp.rp_portname, ifname, sizeof(rp.rp_portname));
 
 	if (ioctl(ifs, SIOCGTRUNKPORT, (caddr_t)&rp) == 0) {
-		printf("  Trunk parent %s ", rp.rp_ifname);
-		bprintf(stdout, rp.rp_flags, TRUNK_PORT_BITS);
-		printf("\n");
+		fprintf(outfile, "  Trunk parent %s ", rp.rp_ifname);
+		bprintf(outfile, rp.rp_flags, TRUNK_PORT_BITS);
+		fputc('\n', outfile);
 	}
 
 	for (i = 0; i < TRUNK_MAX_PORTS; i++)
@@ -237,18 +238,20 @@ show_trunk(int ifs, char *ifname)
 
 		for (i = 0; i < TRUNK_PROTO_MAX; i++)
 			if (ra.ra_proto == tpr[i].tpr_proto) {
-				printf("  Trunkproto %s", tpr[i].tpr_name);
+				fprintf(outfile, "  Trunkproto %s",
+				    tpr[i].tpr_name);
 				pntd = 1;
 				break;
 			}
 		for (i = 0; i < ra.ra_ports; i++)
 			if(rpbuf[i].rp_portname[0] != '\0') {
-				printf(" (%s ", rpbuf[i].rp_portname);
-				bprintf(stdout, rpbuf[i].rp_flags, TRUNK_PORT_BITS);
-				printf(")");
+				fprintf(outfile, " (%s ", rpbuf[i].rp_portname);
+				bprintf(outfile, rpbuf[i].rp_flags,
+				    TRUNK_PORT_BITS);
+				putc(')', outfile);
 				pntd = 1;
 			}
 		if (pntd)
-			printf("\n");
+			fputc('\n', outfile);
 	}
 }
