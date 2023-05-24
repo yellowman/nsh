@@ -2,6 +2,15 @@
  * nsh externs, prototypes and macros
  */
 
+#ifndef NSH_VERSION
+#error "NSH_VERSION is undefined"
+#endif
+
+#define NSH_STRINGIFY_VERSION(x) #x
+#define NSH_STRINGVAL_VERSION(x) NSH_STRINGIFY_VERSION(x)
+
+#define NSH_VERSION_STR NSH_STRINGVAL_VERSION(NSH_VERSION)
+
 #define NO_ARG(x)	(strcasecmp(x, "no") == 0) /* absolute "no" */
 
 #define nitems(_a)	(sizeof((_a)) / sizeof((_a)[0])) /* sys/param.h */
