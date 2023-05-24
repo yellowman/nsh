@@ -47,7 +47,7 @@
 #include <netdb.h>
 #include "externs.h"
 
-int init_current_media(int, char *); 
+int init_current_media(int, char *);
 void process_media_commands(int, char *, int);
 const char *get_media_type_string(uint64_t);
 const char *get_media_subtype_string(uint64_t);
@@ -588,7 +588,7 @@ media_status(int s, char *ifname, char *delim)
 
 				/*
 				 * For each valid indicator bit, there's only
-				 * one entry for each media type, so 
+				 * one entry for each media type, so
 				 * terminate the inner loop now.
 				 */
 				break;
@@ -628,7 +628,7 @@ media_supported(int s, char *ifname, char *hdr_delim, char *body_delim)
 	ifmr.ifm_ulist = media_list;
 
 	if (ioctl(s, SIOCGIFMEDIA, (caddr_t)&ifmr) < 0) {
-		printf("%% media_supported: 2/SIOCGIFMEDIA: %s\n", 
+		printf("%% media_supported: 2/SIOCGIFMEDIA: %s\n",
 		    strerror(errno));
 		return;
 	}
