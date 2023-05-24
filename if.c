@@ -78,7 +78,7 @@ static const struct {
 	{ "Packet Filter Logging",	IFT_PFLOG },
 	{ "Packet Filter State Synchronization", IFT_PFSYNC },
 	{ "pflow Accounting Data",	IFT_PFLOW },
-	{ "IPsec Encapsulation",	IFT_ENC },      
+	{ "IPsec Encapsulation",	IFT_ENC },
 	{ "Generic Tunnel",		IFT_GIF },
 	{ "Common Address Redundancy Protocol",	IFT_CARP },
 	{ "Bluetooth",			IFT_BLUETOOTH },
@@ -393,7 +393,7 @@ show_int(int argc, char **argv)
 		    strerror(errno));
 		return(1);
 	}
- 
+
 	/*
 	 * Cycle through getifaddrs for interfaces with our
 	 * desired name that sport AF_INET, print the IP and
@@ -422,8 +422,8 @@ show_int(int argc, char **argv)
 		default:
 			continue;
 		}
-		
-		if (!ippntd) 
+
+		if (!ippntd)
 			printf("  Internet address");
 
 		printf("%s %s", ippntd ? "," : "", ifa->ifa_addr->sa_family
@@ -994,7 +994,7 @@ iftype(int int_type)
 	return("Unknown");
 }
 
-int 
+int
 get_ifdata(char *ifname, int type)
 {
 	int ifs, value = 0;
@@ -1290,7 +1290,7 @@ intip(char *ifname, int ifs, int argc, char **argv)
 			intaf(ifname, ifs, argc0, argv0);
 			return(0);
 		}
-		
+
 		intipusage(cmdname, msg);
 		return(0);
 	} else if (argc < 1 || argc > argcmax) {
@@ -1385,7 +1385,7 @@ intip(char *ifname, int ifs, int argc, char **argv)
 		printf("%% Netmask not specified\n");
 		return(0);
 	}
-	
+
 	if (ip.bitlen == -1) {
 		/*
 		 * No netmask specified, set the field at 0.
@@ -1483,7 +1483,7 @@ intipcp(char *ifname, int ifs, int argc, char **argv)
 		argc--;
 	} else
 		set = 1;
-	
+
 	if (set)
 		db_insert_flag_x("pppoeipaddrmode", ifname, 0, 0, "ipcp");
 	else
@@ -1633,7 +1633,7 @@ intpflow(char *ifname, int ifs, int argc, char **argv)
 		}
 	}
 
-	bzero(&ifr, sizeof(ifr));     
+	bzero(&ifr, sizeof(ifr));
 	strlcpy(ifr.ifr_name, ifname, IFNAMSIZ);
 
 	bzero(&preq, sizeof(struct pflowreq));
@@ -2597,7 +2597,7 @@ intlink(char *ifname, int ifs, int argc, char **argv)
 		 * just 'no link' was specified.  so we remove all flags
 		 */
 		flags &= ~IFF_LINK0 & ~IFF_LINK1 & ~IFF_LINK2;
-	} else 
+	} else
 	for (i = 0; i < argc; i++) {
 		int a;
 
@@ -2802,7 +2802,7 @@ intlladdr(char *ifname, int ifs, int argc, char **argv)
 				    " retrieve original lladdr\n");
 				return(1);
 			}
-		} 
+		}
 	}
 
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
