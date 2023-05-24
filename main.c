@@ -57,7 +57,7 @@ main(int argc, char *argv[])
 	int top, ch, iflag = 0, cflag = 0;
 	char rc[PATH_MAX];
 
-	if(getuid() != 0) 
+	if(getuid() != 0)
 		printf("%% Functionality limited without root privilege.\n");
 
 	pid = getpid();

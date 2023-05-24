@@ -173,12 +173,12 @@ typedef struct cmd {
 	char **table;		/* next table for context completion */
 	int stlen;		/* struct length (for rows in next table) */
 	int (*handler) ();	/* routine which executes command */
-	int needpriv;		/* Do we need privilege to execute? */   
+	int needpriv;		/* Do we need privilege to execute? */
 	int needconfig;		/* Do we need config mode to execute? */
 	int nocmd;		/* Can we specify 'no ...command...'? */
 	int modh;		/* Is it a mode handler for cmdrc()? */
 } Command;
- 
+
 typedef struct menu {
 	char *name;		/* How user refers to it (case independent) */
 	char *help;		/* Help information (0 ==> no help) */
