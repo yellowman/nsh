@@ -59,14 +59,14 @@ inttrunkport(char *ifname, int ifs, int argc, char **argv)
 	if ((!set && argc < 1) || (set && argc < 1)) {
 		printf("%% trunkport <ifname> [ifname ...]\n");
 		printf("%% no trunkport <ifname> [ifname ...]\n");
-		return(0);   
+		return(0);
 	}
 
 	bzero(&rp, sizeof(rp));
 	strlcpy(rp.rp_ifname, ifname, sizeof(rp.rp_ifname));
 
 	for (i = 0; i < argc; i++) {
-		if (set) {  
+		if (set) {
 			strlcpy(rp.rp_portname, argv[i],
 			    sizeof(rp.rp_portname));
 			if (ioctl(ifs, SIOCSTRUNKPORT, &rp) < 0) {
