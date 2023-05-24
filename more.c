@@ -20,8 +20,10 @@
 #include <termios.h>
 #include <errno.h>
 #include <string.h>
+#include <stdlib.h>
 #include <sys/ttycom.h>
 #include <sys/ioctl.h>
+#include <wchar.h>
 
 #include "externs.h"
 
@@ -43,8 +45,9 @@ more(char *fname)
 {
 	FILE   *f;
 	char   *input, c;
-	size_t	s;
+	size_t	s, wlen;
 	int	i, nopager = 0;
+	wchar_t *ws = NULL;
 
 	if ((f = fopen(fname, "r")) == NULL) {
 		if (errno == ENOENT)
@@ -59,8 +62,22 @@ more(char *fname)
 		nopager = 1;
 
 	for (i = 0; (input = fgetln(f, &s)) != NULL; i++) {
+		int extra_rows = 0;
 
-		if (!nopager && i == (winsize.ws_row - 1)) {
+		input[s - 1] = '\0';
+
+		/* Account for lines overflowing the terminal's width. */
+		if (mbs2ws(&ws, &wlen, input) == 0) {
+			int width = wcswidth(ws, wcslen(ws));
+			if (width == -1) { /* unprintable wide character */
+				free(ws);
+				ws = NULL;
+			} else
+				extra_rows = width / winsize.ws_col;
+		} else
+			ws = NULL;
+
+		if (!nopager && i + extra_rows >= (winsize.ws_row - 1)) {
 			printf(PAGERPROMPT);
 			fflush(0);
 			c = getchar();
@@ -77,14 +94,20 @@ more(char *fname)
 		 * We replace newline (or whatever was at the end of
 	         * the line) with NUL termination
 		 */
-		input[s-1] = '\0';
-		printf("%s\n", input);
+		if (ws) {
+			printf("%ls\n", ws);
+			free(ws);
+			ws = NULL;
+		} else
+			printf("%s\n", input);
+		i += extra_rows;
 	}
 
 	if (!nopager)
 		nsh_nocbreak();
 
 	fclose(f);
+	free(ws);
 	return(1);
 }
 

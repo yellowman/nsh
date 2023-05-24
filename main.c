@@ -22,6 +22,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <setjmp.h>
+#include <locale.h>
 #include <sys/socket.h>
 #include <sys/syslimits.h>
 #include <sys/ttycom.h>
@@ -56,6 +57,8 @@ main(int argc, char *argv[])
 {
 	int top, ch, iflag = 0, cflag = 0;
 	char rc[PATH_MAX];
+
+	setlocale(LC_CTYPE, "");
 
 	if(getuid() != 0)
 		printf("%% Functionality limited without root privilege.\n");

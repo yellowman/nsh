@@ -522,3 +522,9 @@ void show_wg(int, char *);
 int intumb(char *, int, int, char **);
 void conf_umb(FILE *, int, char *);
 void show_umb(int, char *);
+
+/* utf8.c */
+#ifdef _WCHAR_H_
+int mbs2ws(wchar_t **, size_t *, const char *);
+#endif
+int mbsavis(char**, int *, const char *);
