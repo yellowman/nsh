@@ -694,7 +694,7 @@ sysctlhelp(int unused1, char **unused2, char **unused3, int type)
 	char *prefix = NULL;
 	u_int z = 0;
 	struct sysctltab *stab;
-	
+
 	for (stab = sysctls; stab->name != NULL; stab++)
 		if (stab->pf == type) {
 			prefix = stab->name;
@@ -1035,7 +1035,7 @@ read_command_line(EditLine *el, History *hist)
 
 	if (num == 2 && strncmp(buf, "..", num) == 0)
 		return 0;
-	
+
 	memcpy(line, buf, (size_t)num);
 	line[num] = '\0';
 	history(hist, &ev, H_ENTER, buf);
@@ -1161,7 +1161,7 @@ interface(int argc, char **argv, char *modhvar)
 		bridge = 1;
 	} else {
 		whichlist = Intlist;
-		bridge = 0; 
+		bridge = 0;
 	}
 
 	imr_init(ifname);
@@ -1733,7 +1733,7 @@ getcmd(char *name)
 	return (Command *) genget(name, (char **) cmdtab2, sizeof(Command));
 }
 
-void 
+void
 makeargv()
 {
 	char	*cp, *cp2, *base, c;
@@ -1855,7 +1855,7 @@ command()
 		if (c == 0) {
 			int val = 1;
 
-			if (editing)                                
+			if (editing)
 				val = el_burrito(elc, margc, margv);
 			if (val)
 				printf("%% Invalid command\n");
@@ -1875,7 +1875,7 @@ command()
 			continue;
 		}
 		if (c->modh)
-			strlcpy(hname, c->name, HSIZE);	
+			strlcpy(hname, c->name, HSIZE);
 		if ((*c->handler) (margc, margv, 0)) {
 			break;
 		}
@@ -1890,7 +1890,7 @@ help(int argc, char **argv)
 {
 	Command *c;
 
-	if (argc == 1) { 
+	if (argc == 1) {
 		u_int z = 0;
 
 		printf("%% Commands may be abbreviated.\n");
@@ -2563,7 +2563,7 @@ doverbose(int argc, char **argv)
 	} else {
 		verbose = 1;
 	}
-	
+
 	printf("%% Diagnostic mode %s\n", verbose ? "enabled" : "disabled");
 
 	return 0;
@@ -2698,7 +2698,7 @@ flush_pf(char *arg)
 
 /*
  * read a text file and execute commands
- * take into account that we may have mode handlers int cmdtab that 
+ * take into account that we may have mode handlers int cmdtab that
  * execute indented commands from the rc file
  */
 int
@@ -2897,7 +2897,7 @@ int
 wr_startup(void)
 {
 	char *argv[] = { SAVESCRIPT, NSHRC_TEMP, NULL };
-	
+
 	if (wr_conf(NSHRC_TEMP))
 		printf("%% Saving configuration\n");
 	else
@@ -2940,7 +2940,7 @@ nreboot(void)
 		printf("%% reboot: RB_AUTOBOOT: %s\n", strerror(errno));
 	return(0);
 }
-               
+
 int
 halt(void)
 {
@@ -3011,7 +3011,7 @@ pr_s_conf(int argc, char **argv)
 	}
 
 	ret = more(NSHRC);
-	
+
 	return(ret);
 }
 
@@ -3198,7 +3198,7 @@ pr_kernel(int argc, char **argv)
 	}
 	if (x->handler) /* not likely to be false */
 		(*x->handler)();
-		
+
 	return(0);
 }
 
