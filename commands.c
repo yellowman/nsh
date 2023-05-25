@@ -3044,8 +3044,11 @@ conf_has_unsaved_changes(void)
 	}
 
 	nshrc_fd = open(NSHRC, O_RDONLY);
-	if (nshrc_fd == -1) {
-		printf("%% open %s: %s\n", NSHRC, strerror(errno));
+	if (nshrc_fd == -1){
+		if (errno == ENOENT)
+			ret = 1;
+		else
+			printf("%% open %s: %s\n", NSHRC, strerror(errno));
 		goto done;
 	}
 
