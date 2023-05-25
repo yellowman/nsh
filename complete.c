@@ -845,30 +845,22 @@ complete_args(struct ghs *c, char *word, int dolist, EditLine *el, char **table,
 #endif
 	switch (c->complete[level]) {
 	case 'l':	/* local complete */
-	case 'L':
 		return (complete_local(word, dolist, el));
 	case 'c':	/* command complete */
-	case 'C':
 		return (complete_command(word, dolist, el, table, stlen));
 	case 'i':
-	case 'I':
 		return (complete_ifname(word, dolist, el));
 	case 'g':
-	case 'G':
 		return (complete_ifgroup(word, dolist, el));
 	case 'b':
-	case 'B':
 		return (complete_ifbridge(word, dolist, el));
 	case 'r':
-	case 'R':
 		return (complete_rtable(word, dolist, el));
 	case 't':	/* points to a table */
-	case 'T':
 		if (c->table == NULL)
 			return(CC_ERROR);
 		return (complete_command(word, dolist, el, c->table, c->stlen));
 	case 'a':
-	case 'A':
 		if (c->table == NULL)
 			return(CC_ERROR);
 		return (complete_subcommand(word, dolist, el, c->table, c->stlen));
