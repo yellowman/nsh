@@ -17,7 +17,7 @@ show inet
 show inet6
 show vlan
 show bridge
-show kernel 
+show kernel
 show kernel ip
 show kernel ah
 show kernel esp
