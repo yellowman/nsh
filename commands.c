@@ -3044,8 +3044,11 @@ conf_has_unsaved_changes(void)
 	}
 
 	nshrc_fd = open(NSHRC, O_RDONLY);
-	if (nshrc_fd == -1) {
-		printf("%% open %s: %s\n", NSHRC, strerror(errno));
+	if (nshrc_fd == -1){
+		if (errno == ENOENT)
+			ret = 1;
+		else
+			printf("%% open %s: %s\n", NSHRC, strerror(errno));
 		goto done;
 	}
 
@@ -3295,7 +3298,14 @@ pr_conf_diff(int argc, char **argv)
 
 	diff_argv[3] = "startup-config";
 	diff_argv[5] = "running-config";
-	diff_argv[6] = NSHRC;
+	if (access(NSHRC, R_OK) == -1) {
+		if (errno != ENOENT) {
+			printf("%% access %s: %s\n", NSHRC, strerror(errno));
+			goto done;
+		}
+		diff_argv[6] = "/dev/null";
+	} else
+		diff_argv[6] = NSHRC;
 	diff_argv[7] = confpath;
 
 	if (cmdargs_output(DIFF, diff_argv, diff_fd, -1) > 1)
