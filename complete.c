@@ -124,7 +124,7 @@ complete_ambiguous(char *word, int list, StringList *words, EditLine *el)
 			(void)strlcpy(insertstr, lastmatch, matchlen+1);
 			if (el_insertstr(el, insertstr + wordlen) == -1)
 				return (CC_ERROR);
-			else	
+			else
 					/*
 					 * XXX: really want CC_REFRESH_BEEP
 					 */
@@ -349,7 +349,7 @@ complete_ifname(char *word, int list, EditLine *el)
 {
 	StringList *words;
 	size_t wordlen;
-	unsigned char rv;   
+	unsigned char rv;
 	const char *status_cmd = "status";
 	struct if_nameindex *ifn_list, *ifnp;
 
@@ -388,7 +388,7 @@ complete_ifgroup(char *word, int list, EditLine *el)
 {
 	StringList *words;
 	size_t wordlen;
-	unsigned char rv;   
+	unsigned char rv;
 	struct ifgroupreq ifgr;
 	struct ifg_req *ifg;
 	int ifs;
@@ -446,7 +446,7 @@ complete_ifbridge(char *word, int list, EditLine *el)
 {
 	StringList *words;
 	size_t wordlen;
-	unsigned char rv;   
+	unsigned char rv;
 	struct if_nameindex *ifn_list, *ifnp;
 	int ifs;
 
