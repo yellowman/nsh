@@ -47,6 +47,7 @@ History *histc = NULL;
 HistEvent ev;
 EditLine *elc = NULL;
 EditLine *eli = NULL;
+EditLine *elp = NULL;
 char *cursor_pos = NULL;
 
 void intr(void);
