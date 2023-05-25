@@ -985,6 +985,17 @@ initedit()
 		el_source(eli, NULL);
 		el_set(eli, EL_SIGNAL, 1);
 	}
+	if (!elp) {
+		elp = el_init(__progname, stdin, stdout, stderr);
+		el_set(elp, EL_EDITOR, "emacs"); /* default type */
+		el_set(elp, EL_PROMPT, pprompt); /* set the prompt
+						  * function */
+		el_set(eli, EL_ADDFN, "exit_i", "Exit", exit_i);
+		el_set(eli, EL_BIND, "^X", "exit_i", NULL);
+		el_set(eli, EL_BIND, "^D", "exit_i", NULL);
+		el_source(elp, NULL);	/* read ~/.editrc */
+		el_set(elp, EL_SIGNAL, 1);
+	}
 }
 
 void
