@@ -78,16 +78,23 @@ more(char *fname)
 			ws = NULL;
 
 		if (!nopager && i + extra_rows >= (winsize.ws_row - 1)) {
-			printf(PAGERPROMPT);
-			fflush(0);
-			c = getchar();
-			printf(BACKOVERPROMPT);
-			if (c == 'q')
-				break;			/* stop */
-			if (c == '\r' || c == '\n')
-				i--;			/* skip one line */
-			else
-				i = 0;			/* skip one page */
+			for (;;) {
+				printf(PAGERPROMPT);
+				fflush(0);
+				c = getchar();
+				printf(BACKOVERPROMPT);
+				if (c == 'q')
+					goto quit;
+				if (c == '\r' || c == '\n' || c == 'j' ||
+				    c == CTRL('n')) {
+					i--; /* skip one line */
+					break;
+				}
+				if (c == ' ' || c == 'f' || c == CTRL('f')) {
+					i = 0; /* skip one page */
+					break;
+				}
+			}
 		}
 
 		/*
@@ -102,7 +109,7 @@ more(char *fname)
 			printf("%s\n", input);
 		i += extra_rows;
 	}
-
+quit:
 	if (!nopager)
 		nsh_nocbreak();
 
