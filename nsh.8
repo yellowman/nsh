@@ -370,6 +370,7 @@ nsh(p)/help
   telnet        Telnet connection to remote host
   reboot        Reboot the system
   halt          Halt the system
+  powerdown     Power the system down
   write-config  Save the current configuration
   verbose       Set verbose diagnostics
   editing       Set command line editing
@@ -1677,7 +1678,9 @@ nsh(config-p)/reboot
 .Pp
 .Tg halt
 .Ic halt
-shut down the system.
+Shut down the system.
+The system will halt and then wait for a key to be pressed on the
+console before rebooting.
 Requires
 .Nm
 to be in privileged mode and requires root user privileges.
@@ -1686,6 +1689,22 @@ to be in privileged mode and requires root user privileges.
 e.g. shutdown the system
 .Bd -literal -offset indent
 nsh(p)/halt
+% Shutdown initiated
+.Ed
+.El
+.Pp
+.Tg powerdown
+.Ic powerdown
+Shut down the system and then turn off power.
+Restarting the system will require access to the power-on button.
+Requires
+.Nm
+to be in privileged mode and requires root user privileges.
+.Bl -dash
+.It
+e.g. power the system down
+.Bd -literal -offset indent
+nsh(p)/powerdown
 % Shutdown initiated
 .Ed
 .El

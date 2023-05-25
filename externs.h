@@ -156,6 +156,8 @@ extern char metricnames[];
 #define SSH		"/usr/bin/ssh"
 #define PKILL		"/usr/bin/pkill"
 #define DIFF		"/usr/bin/diff"
+#define REBOOT		"/sbin/reboot"
+#define HALT		"/sbin/halt"
 #define SAVESCRIPT	"/usr/local/bin/save.sh"
 #ifndef DHCPLEASES
 #define DHCPLEASES	"/var/db/dhcpd.leases"

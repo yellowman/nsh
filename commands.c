@@ -152,6 +152,7 @@ static int	telnet(int, char*[]);
        void	p_argv(int, char **);
 static int 	nreboot(void);
 static int 	halt(void);
+static int 	powerdown(void);
 static Command *getcmd(char *);
 static void	pf_stats(void);
 static void	sigalarm(int);
@@ -1520,6 +1521,7 @@ static char
 	savehelp[] =	"Save the current configuration",
 	nreboothelp[] =	"Reboot the system",
 	halthelp[] =	"Halt the system",
+	powerdownhelp[] ="Power the system down",
 	helphelp[] =	"Print help information",
 	manhelp[] =	"Display the NSH manual";
 
@@ -1758,6 +1760,7 @@ Command cmdtab[] = {
 	{ "telnet",	telnethelp,	CMPL0 0, 0, telnet,		0, 0, 0, 0 },
 	{ "reboot",	nreboothelp,	CMPL0 0, 0, nreboot,		1, 0, 0, 0 },
 	{ "halt",	halthelp,	CMPL0 0, 0, halt,		1, 0, 0, 0 },
+	{ "powerdown",	powerdownhelp,	CMPL0 0, 0, powerdown,		1, 0, 0, 0 },
 	{ "write-config", savehelp,	CMPL0 0, 0, wr_startup,		1, 0, 0, 0 },
 	{ "verbose",	verbosehelp,	CMPL0 0, 0, doverbose,		0, 0, 1, 0 },
 	{ "editing",	editinghelp,	CMPL0 0, 0, doediting,		0, 0, 1, 0 },
@@ -3092,6 +3095,7 @@ do_reboot(int how)
 {
 	const char *buf;
 	int ret = 0, num, have_changes;
+	char *argv[3] = { REBOOT, NULL, NULL };
 
 	have_changes = conf_has_unsaved_changes();
 	if (have_changes == -1)
@@ -3110,7 +3114,13 @@ do_reboot(int how)
 		setprompt("Proceed with reboot? [yes/no] ");
 		break;
 	case RB_HALT:
+		argv[0] = HALT;
 		setprompt("Proceed with shutdown? [yes/no] ");
+		break;
+	case RB_POWERDOWN:
+		argv[0] = HALT;
+		argv[1] = "-p";
+		setprompt("Proceed with powerdown? [yes/no] ");
 		break;
 	default:
 		printf("%% Invalid reboot parameter 0x%x\n", how);
@@ -3141,8 +3151,8 @@ do_reboot(int how)
 	else
 		printf("%% Shutdown initiated\n");
 
-	if (reboot(how) == -1)
-		printf("%% reboot: %s\n", strerror(errno));
+	if (cmdargs(argv[0], argv) != 0)
+		printf("%% %s command failed\n", argv[0]);
 done:
 	restoreprompt();
 	return ret;
@@ -3163,6 +3173,11 @@ halt(void)
 	return do_reboot(RB_HALT);
 }
 
+int
+powerdown(void)
+{
+	return do_reboot(RB_POWERDOWN);
+}
 /*
  * Flush wrappers
  */
