@@ -69,6 +69,7 @@
 #include "ctl.h"
 
 char prompt[128];
+char saved_prompt[sizeof(prompt)];
 
 char line[1024];
 char saveline[1024];
@@ -250,7 +251,9 @@ static int
 showcmd(int argc, char **argv)
 {
 	Menu *s;	/* pointer to current command */
-	int error = 0;
+	int error = 0, outfd = -1;
+	char outpath[PATH_MAX];
+	struct stat sb;
 
 	if (argc < 2) {
 		show_help(argc, argv);
@@ -274,9 +277,67 @@ showcmd(int argc, char **argv)
 		    s->minarg, s->maxarg);
 		return 0;
 	}
-	if (s->handler)	/* As if there was something else we do ? */
-		error = (*s->handler)(argc, argv);
 
+	if (strlcpy(outpath, "/tmp/nsh.show.XXXXXXXX", sizeof(outpath)) >=
+	    sizeof(outpath))
+		return 0;
+
+	outfd = mkstemp(outpath);
+	if (outfd == -1) {
+		printf("%% mkstemp %s: %s\n", outpath, strerror(errno));
+		return 0;
+	}
+
+	if (fstat(outfd, &sb) == -1) {
+		printf("%% fstat %s: %s\n", outpath, strerror(errno));
+		goto done;
+	}
+
+	if (s->handler)	{
+		FILE *f;
+		int fd;
+
+		fd = dup(outfd);
+		if (fd == -1) {
+			printf("%% dup %s\n", strerror(errno));
+			goto done;
+		}
+
+		f = fdopen(fd, "w+");
+		if (f == NULL) {
+			printf("%% dup %s\n", strerror(errno));
+			close(fd);
+			goto done;
+		}
+		error = (*s->handler)(argc, argv, f);
+		if (fflush(f) == EOF)
+			printf("%% fflush %s: %s\n", outpath, strerror(errno));
+		fclose(f); /* fd is closed via f */
+	}
+
+	/*
+	 * Until all show commands have been converted to write to the output
+	 * file we need to check here whether the file has been modified before
+	 * piping it to the pager.
+	 */
+	if (error == 0) {
+		struct stat sb2;
+
+		lseek(outfd, 0, SEEK_SET);
+		if (fstat(outfd, &sb2) == -1) {
+			printf("%% fstat %s: %s\n", outpath, strerror(errno));
+			goto done;
+		}
+		if (sb.st_size != sb2.st_size ||
+		    sb.st_mtim.tv_sec != sb2.st_mtim.tv_sec ||
+		    sb.st_mtim.tv_nsec != sb2.st_mtim.tv_nsec)
+			more(outpath);
+	}
+done:
+	if (close(outfd) == EOF)
+		printf("%% close %s: %s\n", outpath, strerror(errno));
+	if (unlink(outpath) == -1)
+		printf("%% unlink %s: %s\n", outpath, strerror(errno));
 	return(error);
 }
 
@@ -2893,6 +2954,25 @@ iprompt(void)
 	return(prompt);
 }
 
+char *
+pprompt(void)
+{
+	return(prompt);
+}
+
+static void
+setprompt(const char *s)
+{
+	strlcpy(saved_prompt, prompt, sizeof(saved_prompt));
+	strlcpy(prompt, s, sizeof(prompt));
+}
+
+static void
+restoreprompt(void)
+{
+	strlcpy(prompt, saved_prompt, sizeof(prompt));
+}
+
 int
 wr_startup(void)
 {
@@ -2929,25 +3009,155 @@ wr_conf(char *fname)
 	return (success);
 }
 
+static int
+conf_has_unsaved_changes(void)
+{
+	int conf_fd = -1, nshrc_fd = -1;
+	char confpath[PATH_MAX];
+	char buf1[8192];
+	char buf2[8192];
+	int ret = -1;
+
+	if (priv != 1) {
+		printf("%% Privilege required\n");
+		return -1;
+	}
+
+	if (getuid() != 0) {
+		printf("%% Root privileges required\n");
+		return -1;
+	}
+
+	if (strlcpy(confpath, "/tmp/nshrc.XXXXXXXX", sizeof(confpath)) >=
+	    sizeof(confpath))
+		return -1;
+
+	conf_fd = mkstemp(confpath);
+	if (conf_fd == -1) {
+		printf("%% mkstemp %s: %s\n", confpath, strerror(errno));
+		return -1;
+	}
+
+	if (!wr_conf(confpath)) {
+		printf("%% Couldn't generate configuration\n");
+		goto done;
+	}
+
+	nshrc_fd = open(NSHRC, O_RDONLY);
+	if (nshrc_fd == -1) {
+		printf("%% open %s: %s\n", NSHRC, strerror(errno));
+		goto done;
+	}
+
+	lseek(conf_fd, 0, SEEK_SET);
+
+	for (;;) {
+		ssize_t r1, r2;
+
+		r1 = read(nshrc_fd, buf1, sizeof(buf1));
+		if (r1 == -1) {
+			printf("%% read %s: %s\n", NSHRC, strerror(errno));
+			goto done;
+		}
+
+		r2 = read(conf_fd, buf2, sizeof(buf2));
+		if (r2 == -1) {
+			printf("%% read %s: %s\n", confpath, strerror(errno));
+			goto done;
+		}
+
+		if (r1 == 0 && r2 == 0) {
+			ret = 0;
+			break;
+		} else if (r1 != r2 || memcmp(buf1, buf2, r1) != 0) {
+			ret = 1;
+			break;
+		}
+	}
+done:
+	if (conf_fd != -1) {
+		unlink(confpath);
+		close(conf_fd);
+	}
+	if (nshrc_fd != -1)
+		close(nshrc_fd);
+	return ret;
+}
+
+static int
+do_reboot(int how)
+{
+	const char *buf;
+	int ret = 0, num, have_changes;
+
+	have_changes = conf_has_unsaved_changes();
+	if (have_changes == -1)
+		return -1;
+	else if (have_changes) {
+		printf("%% WARNING: The running configuration contains "
+		    "unsaved changes!\n"
+		    "%% The 'show diff-config' command will display unsaved "
+		    "changes.\n"
+		    "%% The 'write-config' command will save changes to %s.\n",
+		    NSHRC);
+	}
+
+	switch (how) {
+	case RB_AUTOBOOT:
+		setprompt("Proceed with reboot? [yes/no] ");
+		break;
+	case RB_HALT:
+		setprompt("Proceed with shutdown? [yes/no] ");
+		break;
+	default:
+		printf("%% Invalid reboot parameter 0x%x\n", how);
+		return 0;
+	}
+
+	for (;;) {
+		if ((buf = el_gets(elp, &num)) == NULL) {
+			if (num == -1) {
+				ret = -1;
+				goto done;
+			}
+			/* EOF, e.g. ^X or ^D via exit_i() in complete.c */
+			goto done;
+		}
+
+		if (strcasecmp(buf, "yes\n") == 0)
+			break;
+
+		if (strcasecmp(buf, "no\n") == 0)
+			goto done;
+
+		printf("%% Please type \"yes\" or \"no\"\n");
+	}
+
+	if (how == RB_AUTOBOOT)
+		printf("%% Reboot initiated\n");
+	else
+		printf("%% Shutdown initiated\n");
+
+	if (reboot(how) == -1)
+		printf("%% reboot: %s\n", strerror(errno));
+done:
+	restoreprompt();
+	return ret;
+}
+
 /*
  * Reboot
  */
 int
 nreboot(void)
 {
-	printf ("%% Reboot initiated\n");
-	if (reboot (RB_AUTOBOOT) == -1)
-		printf("%% reboot: RB_AUTOBOOT: %s\n", strerror(errno));
-	return(0);
+	return do_reboot(RB_AUTOBOOT);
 }
 
 int
 halt(void)
 {
-	printf ("%% Shutdown initiated\n");
-	if (reboot (RB_HALT) == -1)
-		printf("%% reboot: RB_HALT: %s\n", strerror(errno));
-	return(0);
+	return do_reboot(RB_HALT);
 }
 
 /*

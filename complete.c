@@ -124,7 +124,7 @@ complete_ambiguous(char *word, int list, StringList *words, EditLine *el)
 			(void)strlcpy(insertstr, lastmatch, matchlen+1);
 			if (el_insertstr(el, insertstr + wordlen) == -1)
 				return (CC_ERROR);
-			else	
+			else
 					/*
 					 * XXX: really want CC_REFRESH_BEEP
 					 */
@@ -349,7 +349,7 @@ complete_ifname(char *word, int list, EditLine *el)
 {
 	StringList *words;
 	size_t wordlen;
-	unsigned char rv;   
+	unsigned char rv;
 	const char *status_cmd = "status";
 	struct if_nameindex *ifn_list, *ifnp;
 
@@ -388,7 +388,7 @@ complete_ifgroup(char *word, int list, EditLine *el)
 {
 	StringList *words;
 	size_t wordlen;
-	unsigned char rv;   
+	unsigned char rv;
 	struct ifgroupreq ifgr;
 	struct ifg_req *ifg;
 	int ifs;
@@ -446,7 +446,7 @@ complete_ifbridge(char *word, int list, EditLine *el)
 {
 	StringList *words;
 	size_t wordlen;
-	unsigned char rv;   
+	unsigned char rv;
 	struct if_nameindex *ifn_list, *ifnp;
 	int ifs;
 
@@ -845,30 +845,22 @@ complete_args(struct ghs *c, char *word, int dolist, EditLine *el, char **table,
 #endif
 	switch (c->complete[level]) {
 	case 'l':	/* local complete */
-	case 'L':
 		return (complete_local(word, dolist, el));
 	case 'c':	/* command complete */
-	case 'C':
 		return (complete_command(word, dolist, el, table, stlen));
 	case 'i':
-	case 'I':
 		return (complete_ifname(word, dolist, el));
 	case 'g':
-	case 'G':
 		return (complete_ifgroup(word, dolist, el));
 	case 'b':
-	case 'B':
 		return (complete_ifbridge(word, dolist, el));
 	case 'r':
-	case 'R':
 		return (complete_rtable(word, dolist, el));
 	case 't':	/* points to a table */
-	case 'T':
 		if (c->table == NULL)
 			return(CC_ERROR);
 		return (complete_command(word, dolist, el, c->table, c->stlen));
 	case 'a':
-	case 'A':
 		if (c->table == NULL)
 			return(CC_ERROR);
 		return (complete_subcommand(word, dolist, el, c->table, c->stlen));
@@ -992,6 +984,17 @@ initedit()
 		el_set(eli, EL_BIND, "^D", "exit_i", NULL);
 		el_source(eli, NULL);
 		el_set(eli, EL_SIGNAL, 1);
+	}
+	if (!elp) {
+		elp = el_init(__progname, stdin, stdout, stderr);
+		el_set(elp, EL_EDITOR, "emacs"); /* default type */
+		el_set(elp, EL_PROMPT, pprompt); /* set the prompt
+						  * function */
+		el_set(eli, EL_ADDFN, "exit_i", "Exit", exit_i);
+		el_set(eli, EL_BIND, "^X", "exit_i", NULL);
+		el_set(eli, EL_BIND, "^D", "exit_i", NULL);
+		el_source(elp, NULL);	/* read ~/.editrc */
+		el_set(elp, EL_SIGNAL, 1);
 	}
 }
 

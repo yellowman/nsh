@@ -296,7 +296,7 @@ getwg(int ifs)
 }
 
 void
-show_wg(int ifs, char *ifname)
+show_wg(int ifs, char *ifname, FILE *outfile)
 {
 	int			 i;
 	struct timespec		 now;
@@ -313,21 +313,21 @@ show_wg(int ifs, char *ifname)
 	if (wg_interface->i_flags & WG_INTERFACE_HAS_PUBLIC) {
 		b64_ntop(wg_interface->i_public, WG_KEY_LEN,
 		    key, sizeof(key));
-		printf("  Wireguard publickey %s\n", key);
+		fprintf(outfile, "  Wireguard publickey %s\n", key);
 	}
 
 	wg_peer = &wg_interface->i_peers[0];
 	for (i = 0; i < wg_interface->i_peers_count; i++) {
 		b64_ntop(wg_peer->p_public, WG_KEY_LEN,
 		    key, sizeof(key));
-		printf("  Wireguard peer %s", key);
+		fprintf(outfile, "  Wireguard peer %s", key);
 
 		if (wg_peer->p_last_handshake.tv_sec != 0) {
 			timespec_get(&now, TIME_UTC);
-			printf(" last handshake: %lld seconds ago\n",
+			fprintf(outfile, " last handshake: %lld seconds ago\n",
 			    now.tv_sec - wg_peer->p_last_handshake.tv_sec);
 		}
-		printf("\n");
+		putc('\n', outfile);
 	}
 	free(wgdata.wgd_interface);
 }

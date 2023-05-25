@@ -1287,7 +1287,7 @@ daemon is documented in
 .Xr sasyncd.conf 5 .
 .Pp
 .Bd -literal -offset indent
-nsh(config-p)/sasync 
+nsh(config-p)/sasync
 % Arguments may be abbreviated
 
    enable  enable sasyncd service
@@ -1663,10 +1663,9 @@ are documented in
 .Ic reboot
 .Pp
 Restart the system.
-Warning no confirmation prompt is issued, configuration changes are
-NOT automatically saved!
-User must save configuration manually BEFORE using reboot.
-Requires privileged access.
+Requires
+.Nm
+to be in privileged mode and requires root user privileges.
 .Bl -dash
 .It
 E.g. restart the system
@@ -1675,13 +1674,13 @@ nsh(config-p)/reboot
 % Reboot initiated
 .Ed
 .El
+.Pp
 .Tg halt
 .Ic halt
 shut down the system.
-Warning no confirmation prompt is issued, configuration changes are
-NOT automatically saved!
-User must save configuration manually BEFORE using halt.
-Requires privileged mode.
+Requires
+.Nm
+to be in privileged mode and requires root user privileges.
 .Bl -dash
 .It
 e.g. shutdown the system
@@ -1690,6 +1689,7 @@ nsh(p)/halt
 % Shutdown initiated
 .Ed
 .El
+.Pp
 .Tg write-config
 .Ic write-config
 .Pp

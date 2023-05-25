@@ -1,18 +1,23 @@
 enable
 show
-show run
-show startup
+show running-config
+show startup-config
+show diff-config
 show hostname
 show interface
+show interface status
 show autoconf
 show route
 show route6
 show sadb
 show arp
 show ndp
+show ip
+show inet
+show inet6
 show vlan
 show bridge
-show kernel 
+show kernel
 show kernel ip
 show kernel ah
 show kernel esp
@@ -25,6 +30,8 @@ show kernel route
 show kernel carp
 show kernel mbuf
 show kernel pf
+show route
+show route6
 show bgp
 show bgp announced
 show bgp interfaces
@@ -46,6 +53,19 @@ show ospf6 interfaces
 show ospf6 neighbor
 show ospf6 rib
 show ospf6 summary
+show pf all
+show pf anchors
+show pf info
+show pf labels
+show pf memory
+show pf queues
+show pf rules
+show pf sources
+show pf states
+show pf tables
+show pf timeouts
+show pf osfingerprint
+show pf interfaces
 show eigrp
 show rip
 show rip fib
@@ -85,8 +105,8 @@ show smtp runqueue
 show smtp stats
 show ldap
 show ldap stats
-show montior
 show version
 show users
 show help
 show ?
+show monitor
