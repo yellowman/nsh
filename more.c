@@ -64,6 +64,10 @@ more(char *fname)
 	for (i = 0; (input = fgetln(f, &s)) != NULL; i++) {
 		int extra_rows = 0;
 
+		/*
+		 * We replace newline (or whatever was at the end of
+	         * the line) with NUL termination
+		 */
 		input[s - 1] = '\0';
 
 		/* Account for lines overflowing the terminal's width. */
@@ -90,10 +94,6 @@ more(char *fname)
 				i = 0;			/* skip one page */
 		}
 
-		/*
-		 * We replace newline (or whatever was at the end of
-	         * the line) with NUL termination
-		 */
 		if (ws) {
 			printf("%ls\n", ws);
 			free(ws);
