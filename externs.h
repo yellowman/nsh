@@ -303,7 +303,7 @@ int parse_ipv6(char *, struct in6_addr *);
 #define DEFAULT_LLPRIORITY 3
 void imr_init(char *);
 int is_valid_ifname(char *);
-int show_int(int, char **);
+int show_int(int, char **, FILE *);
 int show_vlans(int, char **);
 int show_ip(int, char **);
 int show_autoconf(int, char **);
@@ -363,7 +363,7 @@ int bridge_confaddrs(int, char *, char *, FILE *);
 int bridge_rules(int, char *, char *, char *, FILE *);
 int bridge_list(int, char *, char *, char *, int, int);
 int bridge_member_search(int, char *);
-int bridge_addrs(int, char *, char *, char *);
+int bridge_addrs(int, char *, char *, char *, FILE *);
 int set_ifflag(int, char *, short);
 int clr_ifflag(int, char *, short);
 int is_bridge(int, char *);
@@ -389,8 +389,8 @@ int64_t get_vnetid(int, char *);
 
 /* media.c */
 #define DEFAULT_MEDIA_TYPE	"autoselect"
-void media_status(int, char *, char *);
-void media_supported(int, char *, char *, char *);
+int media_status(int, char *, char *, FILE *);
+void media_supported(int, char *, char *, char *, FILE *);
 int phys_status(int, char *, char *, char *, int, int);
 int intmedia(char *, int, int, char **);
 int intmediaopt(char *, int, int, char **);
@@ -424,7 +424,7 @@ int intcarp(char *, int, int, char **);
 int intcpass(char *, int, int, char **);
 int intcnode(char *, int, int, char **);
 int conf_carp(FILE *, int, char *);
-int carp_state(int, char *);
+int carp_state(int, char *, FILE *);
 int intcdev(char *, int, int, char **);
 void carplock(int);
 
@@ -432,7 +432,7 @@ void carplock(int);
 int inttrunkport(char *, int, int, char **);
 int inttrunkproto(char *, int, int, char **);
 int conf_trunk(FILE *output, int ifs, char *ifname);
-void show_trunk(int ifs, char *ifname);
+void show_trunk(int ifs, char *ifname, FILE *);
 
 /* who.c */
 int who(int, char **);
@@ -525,9 +525,9 @@ int pflow_status(int, int, char *, char *);
 int intwg(char *, int, int, char **);
 int intwgpeer(char *, int, int, char **);
 void conf_wg(FILE *, int, char *);
-void show_wg(int, char *);
+void show_wg(int, char *, FILE *);
 
 /* umb.c */
 int intumb(char *, int, int, char **);
 void conf_umb(FILE *, int, char *);
-void show_umb(int, char *);
+void show_umb(int, char *, FILE *);

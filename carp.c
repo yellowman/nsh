@@ -371,7 +371,7 @@ conf_carp(FILE *output, int s, char *ifname)
 }
 
 int
-carp_state(int s, char *ifname)
+carp_state(int s, char *ifname, FILE *outfile)
 {
 	struct ifreq ifr;
 	struct carpreq creq;
@@ -387,16 +387,17 @@ carp_state(int s, char *ifname)
 		return (0);
 
 	if (creq.carpr_balancing <= CARP_BAL_MAXID) {
-		printf("  CARP balancing mode %s", carp_bal_modes[creq.carpr_balancing]);
+		fprintf(outfile, "  CARP balancing mode %s",
+		    carp_bal_modes[creq.carpr_balancing]);
 		pntd = 1;
 	}
 
 	if (creq.carpr_peer.s_addr != htonl(INADDR_CARP_GROUP)) {
-		printf(" peer %s", inet_ntoa(creq.carpr_peer));
+		fprintf(outfile, " peer %s", inet_ntoa(creq.carpr_peer));
 		pntd = 1;
 	}
 	if (pntd)
-		printf("\n");
+		fputc('\n', outfile);
 
 	if (creq.carpr_vhids[0] == 0)
 		return(0);
@@ -405,20 +406,21 @@ carp_state(int s, char *ifname)
 		if (creq.carpr_states[i] <= CARP_MAXSTATE)
 			state = carp_states[creq.carpr_states[i]];
 		if (creq.carpr_vhids[1] == 0) {
-			printf("  CARP state %s, device %s vhid %u advbase %d "
-		 	    "advskew %u\n", state,
+			fprintf(outfile, "  CARP state %s, "
+			    "device %s vhid %u advbase %d advskew %u\n", state,
 			    creq.carpr_carpdev[0] != '\0' ?
 			    creq.carpr_carpdev : "none", creq.carpr_vhids[0],
 			    creq.carpr_advbase, creq.carpr_advskews[0]);
 		} else {
 			if (i == 0) {
-				printf("  CARP device %s advbase %d\n",
+				fprintf(outfile,
+				    "  CARP device %s advbase %d\n",
 				    creq.carpr_carpdev[0] != '\0' ?
 				    creq.carpr_carpdev : "none",
 				    creq.carpr_advbase);
 			}
-			printf("  CARP state %s vhid %u advskew %u\n", state,
-			    creq.carpr_vhids[i], creq.carpr_advskews[i]);
+			fprintf(outfile, "  CARP state %s vhid %u advskew %u\n",
+			    state, creq.carpr_vhids[i], creq.carpr_advskews[i]);
 		}
 	}
 

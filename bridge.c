@@ -1201,7 +1201,8 @@ bridge_addaddr(int s, char *brdg, char *ifname, char *addr)
 }
 
 int
-bridge_addrs(int s, char *brdg, char *hdr_delim, char *body_delim)
+bridge_addrs(int s, char *brdg, char *hdr_delim, char *body_delim,
+    FILE *outfile)
 {
 	struct ifbaconf ifbac;
 	struct ifbareq *ifba;
@@ -1231,17 +1232,18 @@ bridge_addrs(int s, char *brdg, char *hdr_delim, char *body_delim)
 		len *= 2;
 	}
 	if (ifbac.ifbac_len / sizeof(*ifba)) {
-		printf("%sLearned addresses:\n", hdr_delim);
-		printf("%saddress           member age\n", body_delim);
+		fprintf(outfile, "%sLearned addresses:\n", hdr_delim);
+		fprintf(outfile, "%saddress           member age\n",
+		    body_delim);
 	}
 
 	for (i = 0; i < ifbac.ifbac_len / sizeof(*ifba); i++) {
 		ifba = ifbac.ifbac_req + i;
 		strlcpy(buf, ifba->ifba_ifsname, sizeof(buf));
-		printf("%s%s %-6s %u ", body_delim, ether_ntoa(&ifba->ifba_dst),
-		    buf, ifba->ifba_age);
-		bprintf(stdout, ifba->ifba_flags, IFBAFBITS);
-		printf("\n");
+		fprintf(outfile, "%s%s %-6s %u ", body_delim,
+		    ether_ntoa(&ifba->ifba_dst), buf, ifba->ifba_age);
+		bprintf(outfile, ifba->ifba_flags, IFBAFBITS);
+		fputc('\n', outfile);
 	}
 	free(inbuf);
 	return (0);
