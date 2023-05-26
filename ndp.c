@@ -613,7 +613,8 @@ rtmsg_ndp(int cmd)
 
 	switch (cmd) {
 	default:
-		errx(1, "internal wrong cmd");
+		printf("%% rtmsg_ndp: internal wrong cmd\n");
+		return(-1);
 	case RTM_ADD:
 		rtm->rtm_addrs |= RTA_GATEWAY;
 		if (expire_time) {
