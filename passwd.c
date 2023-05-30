@@ -161,8 +161,8 @@ secretusage(void)
 /*
  * enable privileged mode
  */
-int
-enable(int argc, char **argv)
+static int
+enable_passwd(int argc, char **argv)
 {
 	char *p, *cpass;
 	char salt[_PASSWORD_LEN];
@@ -171,14 +171,10 @@ enable(int argc, char **argv)
 	switch (argc) {
 
 	case 1:
-		if (priv == 1)
-			return 0;
-
 		/* try to read pass */
 		if (!(read_pass(pass, sizeof(pass)))) {
 			if (errno == ENOENT) {
 				/* no password file, so enable */
-				priv = 1;
 				return 1;
 			} else {
 				/* cant read password file */
@@ -187,15 +183,14 @@ enable(int argc, char **argv)
 				return 0;
 			}
 		}
-		p = getpass("Password:");
+		p = getpass("Privileged Mode Secret:");
 		if (p == NULL || *p == '\0')
 			return 0;
 
 		if (strcmp(crypt(p, pass), pass) == 0) {
-			priv = 1;
 			return 1;
 		} else {
-			printf("%% Password incorrect\n");
+			printf("%% Secret incorrect\n");
 			return 0;
 		}
 
@@ -205,11 +200,11 @@ enable(int argc, char **argv)
 			printf("%% enable\t\t\t\tEnable privileged mode\n");
 			printf("%% enable ?\t\t\t\tPrint help information\n");
 			secretusage();
-			return 1;
+			return 0;
 		} else {
 			if (isprefix(argv[1], "secret")) {
 				secretusage();
-				return 1;
+				return 0;
 			}
 			printf("%% Invalid argument: %s\n", argv[1]);
 			return 0;
@@ -231,11 +226,11 @@ enable(int argc, char **argv)
 		}
 
 		if (strlen(argv[2]) < 8) {
-			printf("%% Password too short; at least 8 characters required\n");
+			printf("%% Secret too short; at least 8 characters required\n");
 			return 0;
 		}
 		if (strlen(argv[2]) > _PASSWORD_LEN) {
-			printf("%% Password too long; at most %d characters allowed\n",
+			printf("%% Secret too long; at most %d characters allowed\n",
 			    _PASSWORD_LEN);
 			return 0;
 		}
@@ -247,7 +242,8 @@ enable(int argc, char **argv)
 			printf("%% crypt failed\n");
 			return 0;
 		}
-		return(write_pass(cpass));
+		write_pass(cpass);
+		return 0;
 
 	case 4:
 		if (!isprefix(argv[1], "secret")) {
@@ -274,11 +270,73 @@ enable(int argc, char **argv)
 
 		/* set crypted pass */
 		strlcpy(pass, argv[3], sizeof(pass));
-		return (write_pass(pass));
+		write_pass(pass);
+		return 0;
 
 	default:
 		printf("%% Too many arguments\n");
 		return 0;
 	}
 
+	return 0;
+}
+
+int
+enable(int argc, char **argv)
+{
+	char *doas_argv[] = {
+		DOAS, NSH_REXEC_PATH_STR, "-e", NULL
+	};
+	char *su_argv[] = {
+		SU, "root", "-c", NSH_REXEC_PATH_STR " -e", NULL
+		
+	};
+	int exit_code;
+
+	if (argc != 1)
+		return enable_passwd(argc, argv);
+
+	if (priv == 1 || !enable_passwd(argc, argv))
+		return 0;
+	
+	if (getuid() == 0) {
+		priv = 1;
+		return 0;
+	}
+
+	/*
+	 * Start an nsh child process in privileged mode.
+	 * The 'priv' flag will remain at zero in our own process.
+	 */
+	printf("%% Obtaining root privileges via %s\n", DOAS);
+	exit_code = cmdargs(doas_argv[0], doas_argv);
+	if (exit_code == 0)
+		return 0;
+	else if (exit_code == NSH_REXEC_EXIT_CODE_QUIT) {
+		/* The child exited due to a 'quit' command. */
+		quit();
+	}
+
+	/*
+	 * XXX We cannot differentiate a doas exit code of 1 from an
+	 * nsh exit code of 1. Under normal circumstances nsh will exit
+	 * with code zero. Just assume that doas failed to run the
+	 * command if we get here and retry with su.
+	 */
+
+	printf("%% Obtaining root privileges via %s\n", SU);
+	exit_code = cmdargs(su_argv[0], su_argv);
+
+	if (exit_code == -1 || exit_code == 127) {
+		printf("%% Entering privileged mode failed: "
+		    "Could not re-execute nsh\n");
+	} else if (exit_code == NSH_REXEC_EXIT_CODE_QUIT) {
+		/* The child exited due to a 'quit' command. */
+		quit();
+	} else if (exit_code) {
+		printf("%% Privileged mode child process exited "
+		    "with error code %d\n", exit_code);
+	}
+
+	return 0;
 }

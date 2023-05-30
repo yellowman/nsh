@@ -6,10 +6,13 @@
 #error "NSH_VERSION is undefined"
 #endif
 
-#define NSH_STRINGIFY_VERSION(x) #x
-#define NSH_STRINGVAL_VERSION(x) NSH_STRINGIFY_VERSION(x)
+#define NSH_STRINGIFY(x) #x
+#define NSH_STRINGVAL(x) NSH_STRINGIFY(x)
 
-#define NSH_VERSION_STR NSH_STRINGVAL_VERSION(NSH_VERSION)
+#define NSH_VERSION_STR NSH_STRINGVAL(NSH_VERSION)
+
+#define NSH_REXEC_PATH_STR		NSH_STRINGVAL(NSH_REXEC_PATH)
+#define NSH_REXEC_EXIT_CODE_QUIT	42
 
 #define NO_ARG(x)	(strcasecmp(x, "no") == 0) /* absolute "no" */
 
@@ -31,6 +34,7 @@ extern int editing;		/* is command line editing mode on? */
 extern int config_mode;		/* are we in comfig mode? */
 extern int bridge;		/* are we in bridge mode (or interface mode?) */
 extern int priv;		/* privileged mode or not? */
+extern int privexec;		/* process was started in privileged mode? */
 extern pid_t pid;		/* process id of nsh */
 extern int cli_rtable;		/* environment rtable */
 
@@ -158,10 +162,13 @@ extern char metricnames[];
 #define DIFF		"/usr/bin/diff"
 #define REBOOT		"/sbin/reboot"
 #define HALT		"/sbin/halt"
+#define SU		"/usr/bin/su"
+#define DOAS		"/usr/bin/doas"
 #define SAVESCRIPT	"/usr/local/bin/save.sh"
 #ifndef DHCPLEASES
 #define DHCPLEASES	"/var/db/dhcpd.leases"
 #endif
+int quit(void);
 void command(void);
 char **step_optreq(char **, char **, int, char **, int);
 int argvtostring(int, char **, char *, int);
