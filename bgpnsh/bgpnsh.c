@@ -1,4 +1,5 @@
 /*
+ * Copyright (c) 2002-2008 Chris Cappuccio <chris@nmedia.net>
  * Copyright (c) 2023 Stefan Sperling <stsp@openbsd.org>
  *
  * Permission to use, copy, modify, and distribute this software for any
