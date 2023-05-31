@@ -1,0 +1,64 @@
+
+.\" Copyright (c) 2023 Stefan Sperling
+.\"
+.\" Permission to use, copy, modify, and distribute this software for any
+.\" purpose with or without fee is hereby granted, provided that the above
+.\" copyright notice and this permission notice appear in all copies.
+.\"
+.\" THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+.\" WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+.\" MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+.\" ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+.\" WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+.\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+.\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+.\"
+.Dd $Mdocdate$
+.Dt BGPNSH 1
+.Os
+.Sh NAME
+.Nm bgpnsh
+.Nd BGP Looking Glass Network Shell
+.Sh SYNOPSIS
+.Nm
+.Sh DESCRIPTION
+.Nm
+is a command interpreter intended for interactive use as a BGP
+Looking Glass shell for routers running
+.Xr bgpd 8 .
+.Pp
+.Nm
+is an alternative to
+.Xr bgplgsh 1
+with a user interface that matches the user interface of
+.Xr nsh 8 .
+.Pp
+All functionality of
+.Nm
+is also available in
+.Xr nsh 8 .
+Unlike
+.Xr nsh 8 ,
+.Nm
+restricts users to commands which obtain BGP routing information for
+diagnostic purposes.
+.Pp
+.Nm
+will usually be configured as the login shell for dedicated user accounts
+which are used to obtain BGP routing information from the system.
+See
+.Xr shells 5
+for more information.
+.Sh ENVIRONMENT
+.Bl -tag -width BGPNSH_SOCKET
+.It Ev BGPNSH_SOCKET
+Sets an alternative path to the restricted control socket of
+.Xr bgpd 8 .
+The default path is
+.Pa /var/www/run/bgpd.rsock .
+.Sh SEE ALSO
+.Xr bgplgsh 1 ,
+.Xr shells 5 ,
+.Xr bgpd 8 ,
+.Xr bgplg 8 ,
+.Xr nsh 8

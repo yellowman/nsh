@@ -26,6 +26,7 @@ struct rtdump {
 extern char *__progname;	/* duh */
 extern char *vers;		/* the version of nsh */
 extern char saveline[1024];	/* command line */
+#define NARGS  (sizeof(line)/2)	/* max arguments in char line[] */
 extern char line[1024];		/* command line for makeargv() */
 extern int  margc;		/* makeargv() arg count */
 extern char *margv[];		/* makeargv() args */
@@ -147,7 +148,13 @@ extern char metricnames[];
 
 /* ctl.c declarations moved to ctl.h */
 
+/* cmdargs.c */
+int cmdargs_output(char *, char **, int, int);
+int cmdargs(char *, char **);
+int nsh_setrtable(int);
+
 /* commands.c */
+extern pid_t child;
 #define NOPTFILL	7
 #define DEFAULT_EDITOR	"/usr/bin/vi"
 #define NSHRC_TEMP	"/var/run/nshrc"
@@ -169,15 +176,20 @@ extern char metricnames[];
 #define DHCPLEASES	"/var/db/dhcpd.leases"
 #endif
 int quit(void);
+void sigalarm(int);
 void command(void);
-char **step_optreq(char **, char **, int, char **, int);
 int argvtostring(int, char **, char *, int);
 int cmdrc(char rcname[FILENAME_MAX]);
-int cmdargs_output(char *, char **, int, int);
-int cmdargs(char *, char **);
+
+/* prompt.c */
 char *iprompt(void);
 char *cprompt(void);
 char *pprompt(void);
+void setprompt(const char *);
+void restoreprompt(void);
+extern char prompt[128];
+extern char saved_prompt[sizeof(prompt)];
+
 int group (int, char **);
 void gen_help(char **, char *, char *, int);
 void makeargv(void);
@@ -546,3 +558,7 @@ void show_umb(int, char *, FILE *);
 int mbs2ws(wchar_t **, size_t *, const char *);
 #endif
 int mbsavis(char**, int *, const char *);
+
+/* ctlargs.c */
+int pr_prot1(int, char **);
+char **step_optreq(char **, char **, int, char **, int);

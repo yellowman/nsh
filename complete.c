@@ -1012,3 +1012,34 @@ endedit()
 		eli = NULL;
 	}
 }
+
+/*
+ * for the purpose of interface handler routines, 1 here is failure and
+ * 0 is success
+ */
+int
+el_burrito(EditLine *el, int argc, char **argv)
+{
+	char *colon;
+	int val;
+
+	if (!editing)	/* Nothing to parse, fail */
+		return(1);
+
+	/*
+	 * el_parse will always return a non-error status if someone specifies
+	 * argv[0] with a colon.  The idea of the colon is to allow host-
+	 * specific commands, which is really only useful in .editrc, so
+	 * it is invalid here.
+	 */
+	colon = strchr(argv[0], ':');
+	if (colon)
+		return(1);
+
+	val = el_parse(el, argc, (const char **)argv);
+
+	if (val == 0)
+		return(0);
+	else
+		return(1);
+}

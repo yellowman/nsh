@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2009 Chris Cappuccio <chris@nmedia.net>
+ * Copyright (c) 2023 Stefan Sperling <stsp@openbsd.org>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -14,28 +14,21 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-struct prot1 {
-	char *name;
-	char *help;
-	char *args[32];
-};
+/* These functions are stubbed out in bgpnsh but required for linking. */
 
-struct prot {
-	char *name;
-	struct prot1 *table;
-};
+#include "../stringlist.h"
 
-#define BGPD_SOCKET_PATH "/var/run/bgpd.sock"
-extern char bgpd_socket_path[PATH_MAX];
-void init_bgpd_socket_path(int);
-extern struct prot prots[];
-int show_help(int, char **);
-Command *getcmd(char *);
-extern Menu showlist[];
-void makeargv(void);
-extern pid_t child;
-extern int	nsh_setrtable(int);
-extern void	sigalarm(int);
-extern char hbuf[MAXHOSTNAMELEN];
-extern char ifname[IFNAMSIZ];
-int	help(int, char**);
+int is_bridge(int, char *);
+int db_select_rtable_rtables(StringList *);
+
+int
+is_bridge(int s, char *brdg)
+{
+	return 0;
+}
+
+int
+db_select_rtable_rtables(StringList *words)
+{
+	return -1;
+}

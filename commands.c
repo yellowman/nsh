@@ -68,21 +68,10 @@
 #include "sysctl.h"
 #include "ctl.h"
 
-char prompt[128];
-char saved_prompt[sizeof(prompt)];
-
-char line[1024];
-char saveline[1024];
-int  margc;
 char hname[HSIZE];
-static char hbuf[MAXHOSTNAMELEN];	/* host name */
-static char ifname[IFNAMSIZ];		/* interface name */
+char hbuf[MAXHOSTNAMELEN];	/* host name */
+char ifname[IFNAMSIZ];		/* interface name */
 struct intlist *whichlist;
-
-#define NARGS  sizeof(line)/2		/* max arguments in char line[] */
-char	*margv[NARGS];			/* argv storage */
-size_t	cursor_argc;			/* location of cursor in margv */
-size_t	cursor_argo;			/* offset of cursor margv[cursor_argc] */
 
 pid_t	child;
 
@@ -93,14 +82,12 @@ static int	doconfig(int, char**);
 static int	exitconfig(int, char**);
 int		rtable(int, char**);
 int		group(int, char**);
-static int	nsh_setrtable(int);
 static int	pr_routes(int, char **);
 static int	pr_routes6(int, char **);
 static int	pr_arp(int, char **);
 static int	pr_ndp(int, char **);
 static int	pr_sadb(int, char **);
 static int	pr_kernel(int, char **);
-static int	pr_prot1(int, char **);
 static int	pr_dhcp(int, char **);
 static int	pr_conf(int, char **);
 static int	pr_s_conf(int, char **);
@@ -109,7 +96,6 @@ static int	pr_conf_diff(int, char **);
 static int	show_hostname(int, char **);
 static int	wr_startup(void);
 static int	wr_conf(char *);
-static int	show_help(int, char **);
 static int	sysctlhelp(int, char **, char **, int);
 static int	flush_pf(char *);
 static int	flush_help(void);
@@ -135,9 +121,7 @@ static int	int_manual(char *, int, int, char **);
 static int	int_shell(char *, int, int, char **);
 static int	int_help(void);
 static int	int_exit(void);
-static int	el_burrito(EditLine *, int, char **);
 static int	hostname(int, char **);
-static int	help(int, char**);
 static int	manual(int, char**);
 static int	nocmd(int, char **);
 static int	docmd(int, char **);
@@ -152,9 +136,7 @@ static int	telnet(int, char*[]);
 static int 	nreboot(void);
 static int 	halt(void);
 static int 	powerdown(void);
-static Command *getcmd(char *);
 static void	pf_stats(void);
-static void	sigalarm(int);
 
 #include "commands.h"
 
@@ -164,6 +146,230 @@ void sigalarm(int blahfart)
 		kill(child, SIGKILL);
 	}
 }
+
+static struct fpf {
+	char *name;
+	char *help;
+	char *cmd;
+	char *arg;
+} fpfs[] = {
+	{ "all",	"all PF elements",	PFCTL,	"-Fall" },
+	{ "nat",	"NAT rules",		PFCTL,	"-Fnat" },
+	{ "queue",	"queue rules",		PFCTL,	"-Fqueue" },
+	{ "filter",	"filter rules",		PFCTL,	"-Frules" },
+	{ "states",	"NAT/filter states",	PFCTL,	"-Fstate" },
+	{ "stats",	"PF statistics",	PFCTL,	"-Finfo" },
+	{ "tables",	"PF address tables",	PFCTL,	"-FTables" },
+	{ 0, 0, 0, 0 }
+};
+
+static struct stt {
+	char *name;
+	char *help;
+	void (*handler) ();
+} stts[] = {
+	{ "ip",		"Internet Protocol",			ip_stats },
+	{ "ah",		"Authentication Header",		ah_stats },
+	{ "esp",	"Encapsulated Security Payload",	esp_stats },
+	{ "tcp",	"Transmission Control Protocol",	tcp_stats },
+	{ "udp",	"Unreliable Datagram Protocol",		udp_stats },
+	{ "icmp",	"Internet Control Message Protocol",	icmp_stats },
+	{ "igmp",	"Internet Group Management Protocol",	igmp_stats },
+	{ "ipcomp",	"IP Compression",			ipcomp_stats },
+	{ "route",	"Routing",				rt_stats },
+	{ "carp",	"Common Address Redundancy Protocol",	carp_stats },
+	{ "mbuf",	"Packet memory buffer",			mbpr },
+	{ "pf",		"Packet Filter",			pf_stats },
+	{ 0,		0,					0 }
+};
+
+
+struct prot1 oscs[] = {
+	{ "fib",	"Forward Information Base",
+	    { OSPFCTL, "show", "fib", OPT, OPT, NULL } },
+	{ "database",	"Link State Database",
+	    { OSPFCTL, "show", "database", OPT, OPT, NULL } },
+	{ "interfaces",	"Interface",
+	    { OSPFCTL, "show", "interfaces", OPT, NULL } },
+	{ "neighbor",	"Neighbor",
+	    { OSPFCTL, "show", "neighbor", OPT, NULL } },
+	{ "rib",	"Routing Information Base",
+	    { OSPFCTL, "show", "rib", OPT, NULL } },
+	{ "summary",	"Summary",
+	    { OSPFCTL, "show", "summary", NULL } },
+	{ 0, 0, { 0 } }
+};
+
+struct prot1 os6cs[] = {
+	{ "fib",        "Forward Information Base",
+	    { OSPF6CTL, "show", "fib", OPT, OPT, NULL } },
+	{ "database",   "Link State Database",
+	    { OSPF6CTL, "show", "database", OPT, OPT, NULL } },
+	{ "interfaces", "Interface",
+	    { OSPF6CTL, "show", "interfaces", OPT, NULL } },
+	{ "neighbor",   "Neighbor",
+	    { OSPF6CTL, "show", "neighbor", OPT, NULL } },
+	{ "rib",        "Routing Information Base",
+	    { OSPF6CTL, "show", "rib", OPT, NULL } },
+	{ "summary",    "Summary",
+	    { OSPF6CTL, "show", "summary", NULL } },
+	{ 0, 0, { 0 } }
+};
+
+struct prot1 pfcs[] = {
+	{ "all",           "all pf info except fingerprints and interfaces", 
+            { PFCTL, "-sall", NULL, NULL, NULL, NULL } },
+	{ "anchors",       "currently loaded anchors in main pf ruleset", 
+            { PFCTL, "-sAnchors", NULL, NULL, NULL } },	
+        { "info ",         "pf filter statistics, counters and tracking",
+            { PFCTL, "-sinfo", "-v", NULL, NULL, NULL } },
+        { "labels",        "per rule stats (bytes, packets and states)",        
+            { PFCTL, "-slabels", NULL, NULL, NULL, NULL } },
+        { "memory",        "current pf pool memory hard limit",
+            { PFCTL, "-smemory", NULL, NULL, NULL, NULL } },
+	{ "queues",        "currently loaded pf queue definition", 
+            { PFCTL, "-squeue", "-v", NULL, NULL, NULL } },
+	{ "rules",         "active pf firewall rule",
+            { PFCTL, "-srules", NULL, NULL, NULL, NULL } },
+	{ "sources",       "contents of the pf source tracking table", 
+            { PFCTL, "-sSources", NULL, NULL, NULL, NULL } },
+	{ "states",        "contents of the pf state table",
+            { PFCTL, "-sstates", NULL, NULL, NULL, NULL } },
+        { "tables",        "pf table",
+            { PFCTL, "-sTables", NULL, NULL, NULL, NULL } },
+	{ "timeouts",      "current pf global timeout", 
+            { PFCTL, "-stimeouts", NULL, NULL, NULL, NULL } },
+	{ "osfingerprint", "pf Operating System fingerprint", 
+            { PFCTL, "-sosfp", NULL, NULL, NULL, NULL } },
+	{ "interfaces",    "pf usable interfaces/ interface group", 
+            { PFCTL, "-sInterfaces", NULL, NULL, NULL, NULL } },
+	{ 0, 0, { 0 } }                                                         
+};
+struct prot1 eics[] = {
+	{ "interfaces",	"Interface",
+	    { EIGRPCTL, "show", "interfaces", OPT, OPT, NULL } },
+	{ "neighbor",	"Neighbor",
+	    { EIGRPCTL, "show", "neighbor", OPT, OPT, NULL } },
+	{ "topology",	"Topology",
+	    { EIGRPCTL, "show", "topology", OPT, OPT, NULL } },
+	{ "traffic",	"Traffic",
+	    { EIGRPCTL, "show", "traffic", OPT, OPT, NULL } },
+	{ 0, 0, { 0 } }
+};
+
+struct prot1 rics[] = {
+	{ "fib",        "Forward Information Base",
+	    { RIPCTL, "show", "fib", OPT, NULL } },
+	{ "interfaces", "Interfaces",
+	    { RIPCTL, "show", "interfaces", NULL } },
+	{ "neighbor",   "Neighbor",
+	    { RIPCTL, "show", "neighbor", NULL } },
+	{ "rib",        "Routing Information Base",
+	    { RIPCTL, "show", "rib", NULL } },
+	{ 0, 0, { 0 } }
+};
+
+struct prot1 lics[] = {
+	{ "fib",        "Forward Information Base",
+	    { LDPCTL, "show", "fib", OPT, NULL } },
+	{ "interfaces", "Interfaces",
+	    { LDPCTL, "show", "interfaces", NULL } },
+	{ "neighbor",   "Neighbors",
+	    { LDPCTL, "show", "neighbor", NULL } },
+	{ "lib",        "Label Information Base",
+	    { LDPCTL, "show", "lib", NULL } },
+	{ "discovery",	"Adjacencies",
+	    { LDPCTL, "show", "discovery", NULL } },
+	{ "l2vpn",	"Pseudowire",
+	    { LDPCTL, "show", "l2vpn", OPT, NULL } },
+	{ 0, 0, { 0 } }
+};
+
+struct prot1 iscs[] = {
+	{ "flows",	"Display IPsec flows",
+	    { IPSECCTL, "-sf", NULL } },
+	{ "sadb",	"Display SADB",
+	    { IPSECCTL, "-ss", NULL } },
+	{ 0, 0, { 0 } }
+};
+
+struct prot1 ikcs[] = {
+	{ "monitor",	"Monitor internal iked messages",
+	    { IKECTL, "monitor", NULL } },
+	{ 0, 0, { 0 } }
+};
+
+struct prot1 dvcs[] = {
+	{ "igmp",       "Internet Group Message Protocol",
+	    { DVMRPCTL, "show", "igmp", NULL } },
+	{ "interfaces", "Interfaces",
+	    { DVMRPCTL, "show", "interfaces", OPT, NULL } },
+	{ "mfc",        "Multicast Forwarding Cache",
+	    { DVMRPCTL, "show", "mfc", OPT, NULL } },
+	{ "neighbor",   "Neighbor",
+	    { DVMRPCTL, "show", "neighbor", OPT, NULL } },
+	{ "rib",        "Routing Information Base",
+	    { DVMRPCTL, "show", "rib", OPT, NULL } },
+	{ "summary",    "Summary",
+	    { DVMRPCTL, "show", "summary", NULL } },
+        { 0, 0, { 0 } }
+};
+
+struct prot1 rlcs[] = {
+	{ "hosts",      "hosts",
+	    { RELAYCTL, "show", "hosts", NULL } },
+	{ "redirects",  "redirects",
+	    { RELAYCTL, "show", "redirects", NULL } },
+	{ "status",     "status",
+	    { RELAYCTL, "show", "relays", NULL } },
+	{ "sessions",   "sessions",
+	    { RELAYCTL, "show", "sessions", NULL } },
+	{ "summary",    "summary",
+	    { RELAYCTL, "show", "summary", NULL } },
+	{ 0, 0, { 0 } }
+};
+
+struct prot1 smcs[] = {
+	{ "queue",	"envelopes in queue",
+	    { SMTPCTL, "show", "queue", NULL } },
+	{ "runqueue",	"envelopes scheduled for delivery",
+	    { SMTPCTL, "show", "runqueue", NULL } },
+	{ "stats",	"runtime statistics",
+	    { SMTPCTL, "show", "stats", NULL } },
+	{ 0, 0, { 0 } }
+};
+
+struct prot1 dhcs[] = {
+	{ "leases",	"leases", { 0 } },
+	{ 0, 0, { 0 } }
+};
+
+struct prot1 ldcs[] = {
+	{ "stats",	"statistics counters",
+	    { LDAPCTL, "stats", NULL } },
+	{ 0, 0, { 0 } }
+};
+
+extern struct prot1 bgcs[];
+
+/* show yyy zzz */
+struct prot prots[] = {
+	{ "bgp",	bgcs },
+	{ "ospf",	oscs },
+	{ "ospf6",	os6cs },
+	{ "pf",		pfcs },
+	{ "eigrp",	eics },
+	{ "rip",	rics },
+	{ "ike",	ikcs },
+	{ "ipsec",	iscs },
+	{ "ldp",	lics },
+	{ "dvmrp",	dvcs },
+	{ "relay",	rlcs },
+	{ "smtp",	smcs },
+	{ "ldap",	ldcs },
+	{ 0,		0 }
+};
+
 
 /*
  * Quit command
@@ -343,27 +549,6 @@ done:
 	if (unlink(outpath) == -1)
 		printf("%% unlink %s: %s\n", outpath, strerror(errno));
 	return(error);
-}
-
-static int
-show_help(int argc, char **argv)
-{
-	Menu *s; /* pointer to current command */
-	u_int z = 0;
-
-	printf("%% Commands may be abbreviated.\n");
-	printf("%% 'show' commands are:\n\n");
-
-	for (s = showlist; s->name; s++) {
-		if (strlen(s->name) > z)
-			z = strlen(s->name);
-	}
-
-	for (s = showlist; s->name; s++) {
-		if (s->help)
-			printf("  %-*s  %s\n", z, s->name, s->help);
-	}
-	return 0;
 }
 
 /*
@@ -1801,73 +1986,12 @@ getcmd(char *name)
 }
 
 void
-makeargv()
-{
-	char	*cp, *cp2, *base, c;
-	char	**argp = margv;
-
-	margc = 0;
-	cp = line;
-	if (*cp == '!') {	/* Special case shell escape */
-		/* save for shell command */
-		strlcpy(saveline, line, sizeof(saveline));
-
-		*argp++ = "!";	/* No room in string to get this */
-		margc++;
-		cp++;
-	}
-	while ((c = *cp)) {
-		int inquote = 0;
-		while (isspace((unsigned char)c))
-			c = *++cp;
-		if (c == '\0')
-			break;
-		*argp++ = cp;
-		cursor_argc = margc += 1;
-		base = cp;
-		for (cursor_argo = 0, cp2 = cp; c != '\0';
-		    cursor_argo = (cp + 1) - base, c = *++cp) {
-			if (inquote) {
-				if (c == inquote) {
-					inquote = 0;
-					continue;
-				}
-			} else {
-				if (c == '\\') {
-					if ((c = *++cp) == '\0')
-						break;
-				} else if (c == '"') {
-					inquote = '"';
-					continue;
-				} else if (c == '\'') {
-					inquote = '\'';
-					continue;
-				} else if (isspace((unsigned char)c)) {
-					cursor_argo = 0;
-					break;
-				}
-			}
-			*cp2++ = c;
-		}
-		*cp2 = '\0';
-		if (c == '\0') {
-			cursor_argc--;
-			break;
-		}
-		cp++;
-	}
-	*argp++ = 0;
-	if (cursor_pos == line) {
-		cursor_argc = 0;
-		cursor_argo = 0;
-	}
-}
-
-void
 command()
 {
 	Command  *c;
 	u_int num;
+
+	init_bgpd_socket_path(getrtable());
 
 	if (editing) {
 		inithist();
@@ -1947,46 +2071,6 @@ command()
 			break;
 		}
 	}
-}
-
-/*
- * Help command.
- */
-static int
-help(int argc, char **argv)
-{
-	Command *c;
-
-	if (argc == 1) {
-		u_int z = 0;
-
-		printf("%% Commands may be abbreviated.\n");
-		printf("%% Commands are:\n\n");
-
-		for (c = cmdtab; c->name; c++)
-			if (((c->needpriv && priv) || !c->needpriv)
-			    && strlen(c->name) > z)
-				z = strlen(c->name);
-		for (c = cmdtab; c->name; c++) {
-			if (c->help &&
-			    ((c->needpriv && priv) || !c->needpriv) &&
-			    ((c->needconfig && config_mode) || !c->needconfig))
-				printf("  %-*s  %s\n", z, c->name, c->help);
-		}
-		return 0;
-	}
-	while (--argc > 0) {
-		char *arg;
-		arg = *++argv;
-		c = getcmd(arg);
-		if (Ambiguous(c))
-			printf("%% Ambiguous help command %s\n", arg);
-		else if (c == (Command *)0)
-			printf("%% Invalid help command %s\n", arg);
-		else
-			printf("%% %s: %s\n", arg, c->help);
-	}
-	return 0;
 }
 
 /*
@@ -2117,28 +2201,6 @@ int show_hostname(int argc, char **argv)
 		printf("%s\n", hbuf);
 
 	return 0;
-}
-
-int
-nsh_setrtable(int rtableid)
-{
-	int cur_rtable;
-	errno = 0;
-
-	cur_rtable = getrtable();
-	if (cur_rtable != rtableid && setrtable(rtableid) < 0)
-		switch(errno) {
-		case EINVAL:
-			printf("%% rtable %d not initialized\n",
-			    cli_rtable);
-			break;
-		case EPERM:
-			printf("%% nsh not running as root?\n");
-			break;
-		default:
-			printf("%% setrtable failed: %d\n", errno);
-		}
-	return(errno);
 }
 
 /*
@@ -2519,91 +2581,6 @@ group(int argc, char **argv)
 }
 
 /*
- * cmd, multiple args
- *
- * If no error occurs then return the program's exit code (>= 0).
- * Return -1 on error to run the program or if the program was
- * terminated in an abnormal way, such as being killed by a signal.
- */
-int
-cmdargs(char *cmd, char *arg[])
-{
-	return cmdargs_output(cmd, arg, -1, -1);
-}
-
-/*
- * cmd, multiple args, capture stdout and stderr output
- *
- * If no error occurs then return the program's exit code (>= 0).
- * Return -1 on error to run the program or if the program was
- * terminated in an abnormal way, such as being killed by a signal.
- */
-int
-cmdargs_output(char *cmd, char *arg[], int stdoutfd, int stderrfd)
-{
-	sig_t sigint, sigquit, sigchld;
-	int status = -1;
-
-	sigint = signal(SIGINT, SIG_IGN);
-	sigquit = signal(SIGQUIT, SIG_IGN);
-	sigchld = signal(SIGCHLD, SIG_DFL);
-
-	switch (child = fork()) {
-		case -1:
-			printf("%% fork failed: %s\n", strerror(errno));
-			return -1;
-
-		case 0:
-		{
-			char *shellp = cmd;
-
-			signal(SIGQUIT, SIG_DFL);
-			signal(SIGINT, SIG_DFL);
-			signal(SIGCHLD, SIG_DFL);
-
-			if (cli_rtable != 0 && nsh_setrtable(cli_rtable))
-				_exit(0);
-
-			if (stdoutfd != -1) {
-				if (stdoutfd != STDOUT_FILENO &&
-				    dup2(stdoutfd, STDOUT_FILENO) == -1) {
-					printf("%% dup2: %s\n",
-					    strerror(errno));
-					_exit(0);
-				}
-			}
-			if (stderrfd != -1) {
-				if (stderrfd != STDERR_FILENO &&
-				    dup2(stderrfd, STDERR_FILENO) == -1) {
-					printf("%% dup2 failed: %s\n",
-					    strerror(errno));
-					_exit(0);
-				}
-			}
-
-			execv(shellp, arg);
-			printf("%% execv failed: %s\n", strerror(errno));
-			_exit(127); /* same as what ksh(1) would do here */
-		}
-			break;
-		default:
-			signal(SIGALRM, sigalarm);
-			wait(&status);  /* Wait for cmd to complete */
-			if (WIFEXITED(status)) /* normal exit? */
-				status = WEXITSTATUS(status); /* exit code */
-			break;
-	}
-
-	signal(SIGINT, sigint);
-	signal(SIGQUIT, sigquit);
-	signal(SIGCHLD, sigchld);
-	signal(SIGALRM, SIG_DFL);
-	child = -1;
-
-	return status;
-}
-
-/*
  * disable privileged mode
  */
 int
@@ -2711,32 +2688,6 @@ flush_history(void)
 	return(0);
 }
 
-void
-gen_help(char **x, char *cmdprefix, char *descrsuffix, int szstruct)
-{
-	/* only for structures starting with char *name; char *help; !! */
-	char **y = x;
-	struct ghs *ghs;
-	int z = 0;
-
-	printf("%% Arguments may be abbreviated\n\n");
-
-	while (*y != 0) {
-		if (strlen(*y) > z)
-			z = strlen(*y);
-		y = (char **)((char *)y + szstruct);
-	}
-
-	while (*x != 0) {
-		ghs = (struct ghs *)x;
-		if (ghs->help)
-			printf("  %s %-*s %s %s\n", cmdprefix, z, *x,
-			    ghs->help, descrsuffix);
-		x = (char **)((char *)x + szstruct);
-	}
-	return;
-}
-
 /*
  * pf toilet flusher
  */
@@ -2780,6 +2731,8 @@ cmdrc(char rcname[FILENAME_MAX])
 	char	modhvar[128];	/* required variable in mode handler cmd */
 	unsigned int lnum;	/* line number */
 	u_int	z = 0;		/* max length of cmdtab argument */
+
+	init_bgpd_socket_path(getrtable());
 
 	if ((rcfile = fopen(rcname, "r")) == 0) {
 		printf("%% Unable to open %s: %s\n", rcname, strerror(errno));
@@ -2898,89 +2851,6 @@ p_argv(int argc, char **argv)
 		printf("%s%s", z ? " " : "[", argv[z]);
 	printf("]");
 	return;
-}
-
-/*
- * for the purpose of interface handler routines, 1 here is failure and
- * 0 is success
- */
-int
-el_burrito(EditLine *el, int argc, char **argv)
-{
-	char *colon;
-	int val;
-
-	if (!editing)	/* Nothing to parse, fail */
-		return(1);
-
-	/*
-	 * el_parse will always return a non-error status if someone specifies
-	 * argv[0] with a colon.  The idea of the colon is to allow host-
-	 * specific commands, which is really only useful in .editrc, so
-	 * it is invalid here.
-	 */
-	colon = strchr(argv[0], ':');
-	if (colon)
-		return(1);
-
-	val = el_parse(el, argc, (const char **)argv);
-
-	if (val == 0)
-		return(0);
-	else
-		return(1);
-}
-
-char *
-cprompt(void)
-{
-	int pr;
-	char tmp[4];
-
-	if (cli_rtable)
-		snprintf(tmp, sizeof(tmp), "%d", cli_rtable);
-
-	gethostname(hbuf, sizeof(hbuf));
-	pr = priv | cli_rtable | config_mode;
-	snprintf(prompt, sizeof(prompt), "%s%s%s%s%s%s%s%s%s/", hbuf,
-	    pr ? "(" : "",
-	    config_mode ? "config" : "",
-	    config_mode && priv ? "-" : "",
-	    priv ? "p" : "",
-	    (( priv && cli_rtable) || (config_mode && cli_rtable)) ? "-" : "",
-	    cli_rtable ? "rtable " : "", cli_rtable ? tmp : "",
-	    pr ?")" : "");
-
-	return(prompt);
-}
-
-char *
-iprompt(void)
-{
-	gethostname(hbuf, sizeof(hbuf));
-	snprintf(prompt, sizeof(prompt), "%s(%s-%s)/", hbuf,
-	    bridge ? "bridge" : "interface", ifname);
-
-	return(prompt);
-}
-
-char *
-pprompt(void)
-{
-	return(prompt);
-}
-
-static void
-setprompt(const char *s)
-{
-	strlcpy(saved_prompt, prompt, sizeof(saved_prompt));
-	strlcpy(prompt, s, sizeof(prompt));
-}
-
-static void
-restoreprompt(void)
-{
-	strlcpy(prompt, saved_prompt, sizeof(prompt));
 }
 
 int
@@ -3453,107 +3323,6 @@ pf_stats(void)
 
 	cmdargs(PFCTL, argv);
 	return;
-}
-
-int
-pr_prot1(int argc, char **argv)
-{
-	struct prot1 *x;
-	struct prot *prot;
-	char *args[NOPTFILL] = { NULL, NULL, NULL, NULL, NULL, NULL, NULL };
-	char **fillargs;
-	char prefix[64];
-
-	/* loop protocol list to find table pointer */
-	prot = (struct prot *) genget(argv[1], (char **)prots,
-	    sizeof(struct prot));
-	if (prot == 0) {
-		printf("%% Internal error - Invalid argument %s\n", argv[1]);
-		return 0;
-	} else if (Ambiguous(prot)) {
-		printf("%% Internal error - Ambiguous argument %s\n", argv[1]);
-		return 0;
-	}
-
-	snprintf(prefix, sizeof(prefix), "show %s", prot->name);
-
-	/* no clue? we can help */
-	if (argc < 3 || argv[2][0] == '?') {
-		gen_help((char **)prot->table, prefix, "information",
-		    sizeof(struct prot1));
-		return 0;
-	}
-	x = (struct prot1 *) genget(argv[2], (char **)prot->table,
-	    sizeof(struct prot1));
-	if (x == 0) {
-		printf("%% Invalid argument %s\n", argv[2]);
-		return 0;
-	} else if (Ambiguous(x)) {
-		printf("%% Ambiguous argument %s\n", argv[2]);
-		return 0;
-	}
-
-	fillargs = step_optreq(x->args, args, argc, argv, 3);
-	if (fillargs == NULL)
-		return 0;
-
-	cmdargs(fillargs[0], fillargs);
-
-	return 1;
-}
-
-char **
-step_optreq(char **xargs, char **args, int argc, char **argv, int skip)
-{
-	int i;
-	int fill = 0;	/* total fillable arguments */
-	int flc = 0;	/* number of filled arguments */
-
-	/* count fillable arguments */
-	for (i = 0; i < NOPTFILL - 1; i++) {
-		if (xargs[i] == OPT || xargs[i] == REQ)
-			fill++;
-		if (xargs[i] == NULL)
-			break;
-	}
-
-	if (argc - skip > fill) {
-		printf("%% Superfluous argument: %s\n", argv[skip + fill]);
-		return NULL;
-	}
-
-	/* copy xargs to args, replace OPT/REQ args with argv past skip */
-	for (i = 0; i < NOPTFILL - 2; i++) {
-		if (xargs[i] == NULL) {
-			args[i] = NULL;
-			if (i > 1)
-			/*
-			 * all **args passed must have at least two arguments
-			 * and a terminating NULL.  the point of this check
-			 * is to allow the first two arguments to be NULL but
-			 * still fill in fillargs[x] with corresponding NULL
-			 */
-				break;
-		}
-		if (xargs[i] == OPT || xargs[i] == REQ) {
-			/* copy from argv to args */
-			if (argc - skip - flc > 0) {
-				args[i] = argv[skip + flc];
-				flc++;
-			} else if (xargs[i] == REQ) {
-				printf("%% Missing required argument\n");
-				return NULL;
-			} else {
-				args[i] = NULL;
-				break;
-			}
-		} else {
-			/* copy from xargs to args */
-			args[i] = xargs[i];
-		}
-	}
-
-	return(args);
 }
 
 int
