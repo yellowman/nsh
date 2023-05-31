@@ -181,8 +181,6 @@ struct ctl ctl_bgp[] = {
 	    { BGPCTL, "reload", NULL }, NULL, 0, T_EXEC },
 	{ "fib",	     "fib couple/decouple",
 	    { BGPCTL, "fib", REQ, NULL }, NULL, 0, T_EXEC },
-	{ "irrfilter",	     "generate BGPd filters",
-	    { BGPCTL, "irrfilter", REQ, OPT, NULL }, NULL, 0, T_EXEC },
 	{ "neighbor",	     "neighbor up/down/clear/refresh",
 	    { BGPCTL, "neighbor", OPT, OPT, NULL }, NULL, 0, T_EXEC },
 	{ "network",	     "network add/delete/flush/show",
