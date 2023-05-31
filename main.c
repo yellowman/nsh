@@ -39,7 +39,7 @@ jmp_buf toplevel;
 char *vers = NSH_VERSION_STR;
 int bridge = 0;		/* bridge mode for interface() */
 int verbose = 0;	/* verbose mode */
-int priv = 0, cli_rtable = 0;
+int priv = 0, privexec = 0, cli_rtable = 0;
 int editing = 1, config_mode = 0;;
 pid_t pid;
 
@@ -61,16 +61,21 @@ main(int argc, char *argv[])
 
 	setlocale(LC_CTYPE, "");
 
-	if(getuid() != 0)
-		printf("%% Functionality limited without root privilege.\n");
-
 	pid = getpid();
 
-	while ((ch = getopt(argc, argv, "c:i:v")) != -1)
+	while ((ch = getopt(argc, argv, "c:ei:v")) != -1)
 		switch (ch) {
 		case 'c':
 			cflag = 1;
 			strlcpy(rc, optarg, PATH_MAX);
+			break;
+		case 'e':
+			if (getuid() != 0) {
+				fprintf(stderr, "%s: Use of -e option requires "
+				    "root privileges.\n", getprogname());
+				exit(1);
+			}
+			privexec = 1;
 			break;
 		case 'i':
 			iflag = 1;
@@ -83,6 +88,12 @@ main(int argc, char *argv[])
 			usage();
 		}
 
+
+	if (getuid() != 0) {
+		printf("%% Functionality is limited without root privileges.\n"
+		    "%% The 'enable' command will switch to the root user.\n");
+	}
+
 	argc -= optind;
 	argv += optind;
 	if (cflag && iflag)
@@ -92,7 +103,8 @@ main(int argc, char *argv[])
 	if (iflag)
 		rmtemp(SQ3DBFILE);
 
-	printf("%% NSH v%s\n", vers);
+	if (!privexec)
+		printf("%% NSH v%s\n", vers);
 
 	/* create temporal tables (if they aren't already there) */
 	if (db_create_table_rtables() < 0)
@@ -145,6 +157,13 @@ main(int argc, char *argv[])
 		cmdrc(rc);
 
 		exit(0);
+	}
+	if (privexec) {
+		/*
+		 * We start out in privileged mode.
+		 * We are already running as root as per -e option handling.
+		 */
+		priv = 1;
 	}
 
 	top = setjmp(toplevel) == 0;

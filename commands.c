@@ -86,7 +86,6 @@ size_t	cursor_argo;			/* offset of cursor margv[cursor_argc] */
 
 pid_t	child;
 
-static int	quit(void);
 static int	disable(void);
 static int	doverbose(int, char**);
 static int	doediting(int, char**);
@@ -173,8 +172,12 @@ void sigalarm(int blahfart)
 int
 quit(void)
 {
-	printf("%% Session terminated.\n");
-	exit(0);
+	if (privexec) {
+		exit(NSH_REXEC_EXIT_CODE_QUIT);
+	} else {
+		printf("%% Session terminated.\n");
+		exit(0);
+	}
 	return 0;
 }
 
@@ -2606,6 +2609,10 @@ cmdargs_output(char *cmd, char *arg[], int stdoutfd, int stderrfd)
 int
 disable(void)
 {
+	if (privexec) {
+		exit(0);
+		return 0;
+	}
 	priv = 0;
 	config_mode = 0;
 	return 0;
