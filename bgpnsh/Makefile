@@ -24,7 +24,7 @@ SRCS=bgpnsh.c compile.c bgpcommands.c complete.c genget.c more.c \
 CLEANFILES+=compile.c
 LDADD=-lutil -ledit -ltermcap
 
-MAN=bgpnsh.8
+MAN=bgpnsh.1
 
 compile.c: compile.sh
 	sh ${.CURDIR}/../compile.sh
