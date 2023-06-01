@@ -162,6 +162,17 @@ main(int argc, char *argv[])
 		/*
 		 * We start out in privileged mode.
 		 * We are already running as root as per -e option handling.
+		 * The privexec flag also affects the behaviour of commands
+		 * such as 'disable' and 'quit'. 'disable' will pass control
+		 * back to the parent process which runs in non-privileged
+		 * mode. "quit' does the same with a special exit code to let
+		 * the parent know that it should exit immediately.
+		 */
+		priv = 1;
+	} else if (getuid() == 0) {
+		/*
+		 * Root users always start out in privileged mode.
+		 * They can use 'disable' if they want to exit priv mode.
 		 */
 		priv = 1;
 	}
