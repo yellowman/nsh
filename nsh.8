@@ -418,13 +418,22 @@ nsh(config-p)/hostname myfirewallname.com
 myfirewallname.com(p)/
 .Ed
 .El
+.Pp
 .Tg enable
 .Ic enable
-Start a privileged shell to allow the user run privleged configuration
-commands.
-i.e. enable privileged command shell mode.
-If an enable secret or password is set, the user shall be prompted to enter
-the password to access the privileged shell.
+.Pp
+Start a privileged shell to allow the user to run privileged commands.
+If an enable secret is set, the user shall be prompted to enter
+the secret to access the privileged shell.
+If neccessary,
+.Nm
+then attempts to obtain root privileges.
+Depending on configuration, this step may require the user's password or
+the root password to be entered.
+Root privileges will be obtained via
+.Xr doas 1 ,
+with a fallback to
+.Xr su 1 .
 .Pp
 .Op no
 .Ic enable Ar secret
