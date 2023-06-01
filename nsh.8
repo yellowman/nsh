@@ -32,7 +32,7 @@
 .Nd network configuration shell
 .Sh SYNOPSIS
 .Nm nsh
-.Op Fl v
+.Op Fl ev
 .Op Fl i Ar rcfile
 .Op Fl c Ar config-script-file
 .Sh DESCRIPTION
@@ -103,19 +103,27 @@ is run without arguments it loads an interactive shell.
 The options are as follows:
 .Bl -tag -width Ds
 .It Fl v
-.Nm
-produce verbose output
+Produce verbose output
 .It Fl c Ar config-script-file
-.Nm
-execute the command(s) in the
+Execute the command(s) in the
 .Ar config-script-file .
 This is typically used to implement scripted changes to configuration.
 .It Fl i Ar rcfile
-load the initial system configuration from the command(s) in the
+Load the initial system configuration from the command(s) in the
 .Ar rcfile .
 This is typically used to clear the configuration and load a full
 .Nm
 configuration script from rcfile .
+.It Fl e
+Start
+.Nm
+in a privileged mode session.
+This option is not intended to be used directly.
+It is used internally by
+.Nm
+while restarting itself with root privileges when a non-root user runs the
+.Cm enable
+command.
 .El
 .Ss INTERACTIVE FEATURES
 When run without any command line arguments,
@@ -4400,104 +4408,114 @@ see the following man pages for information
 .Pp
 !man pfctl
 !man pf.conf
-.Sh Section 7 Adding system users to
+.Sh Section 7 Allowing users to run NSH
+Users can either start
 .Nm
-on
-.Ox
+from another shell or be logged into an
+.Nm
+session directly if the user account's login shell is set to
+.Nm
+as follows:
+.Bd -literal -offset indent
+usermod -s /usr/local/bin/nsh nshuser
+.Ed
 .Pp
-.Ox
-has facilities for a user to be able to login directly to
+(replace 'nshuser' with the actual user name)
+.Pp
+If a user has knowlege of the root password they can use the nsh
+.Cm enable
+command to enter
 .Nm
-without having access to a typical bourne or C shell.
-Using doas (a tool similar to sudo in other POSIX systems)
-one can setup doas to allow the user to launch
+privileged mode with root privileges.
+.Pp
+If the user should not know the root password then
+.Xr doas 1
+can be used to allow the user to either use the nsh
+.Cm enable
+command to obtain root privileges within nsh, or to launch
 .Nm
 as root.
-there are 3 options for doing this.
-.Pp
-Option1 - least restrictive interactive and non-interactive
-.Nm
 .Pp
 To allow a user to run
 .Nm
-interactively or non interactively
-as root when logged in or logging in.
-Configuring /etc/doas.conf with the line starting with 'permit'
-to allow the full path to the
+as root and with arbitrary arguments, configure
+.Pa /etc/doas.conf
+with a line starting with 'permit' to allow the full path to the
 .Nm
-binary without any other
-restrictions.
-e.g. Configure the user 'stacy' so they can run
-.Bd -literal
-/usr/local/bin/nsh as root
-or
-/usr/local/bin/nsh -c /some/path/to/scriptedconfig.nshrc
+binary without any other restrictions.
+For example, the following allows user 'stacy' to run
+.Nm
+as root via
+.Xr doas 1
+with arbitrary arguments:
 .Ed
 .Bd -literal -offset indent
-permit nopass stacy as root cmd /usr/local/bin/nsh
+permit keepenv stacy as root cmd /usr/local/bin/nsh
 .Ed
 .Pp
-Option2 - allow interactive
+The user stacy can now start
 .Nm
-use only.
+as follows:
 .Pp
-Configuring /etc/doas.conf with the line starting with 'permit'
-to allow the full path to the nsh binary and specify empty args
-to enforce nsh be run without any arguments.
 .Bd -literal -offset indent
-permit nopass stacy as root cmd /usr/local/bin/nsh args
+doas /usr/local/bin/nsh
 .Ed
 .Pp
-Option3 - allow non-interactive
+If nsh arguments in
+.Pa /etc/doas.conf
+are restricted to the
+.Fl e
+option then users can use the
+.Cm enable
+command from within nsh to enter privileged mode.
 .Nm
-use only.
-.Pp
-To allow a restricted user run a specifc configuration script only.
-Configuring /etc/doas.conf with the line starting with 'permit'
-to allow the full path to the
-.Nm
-binary and specify args
-to enforce nsh be run only with those specific arguments.
-E.g.to allow a backupuser pull the running config only.
+will try to run
+.Xr doas 1
+automatically to obtain root privileges when privileged mode is entered,
+and with a line such as the following in
+.Pa /etc/doas.conf
+this will succeed:
 .Bd -literal -offset indent
-permit nopass backupuser as root cmd /usr/local/bin/nsh args -c /home/backupuser/showrunconfig.nshrc
+permit keepenv stacy as root cmd /usr/local/bin/nsh args -e
 .Ed
 .Pp
-The /home/backup/showrunconfig.nshrc would look like this
+To allow a restricted user to run a specifc
+.Nm
+script only, configure /etc/doas.conf to require specific arguments to nsh
+that involve the
+.Fl c
+option.
+The following example allows a backupuser to display the running-config:
+.Bd -literal -offset indent
+permit nopass backupuser as root cmd /usr/local/bin/nsh args -c /etc/showrunconfig.nshrc
+.Ed
+.Pp
+Where the file
+.Pa /etc/showrunconfig.nshrc
+would not be writable by the backupuser account and would look like this:
 .Bd -literal -offset indent
 enable
-show run
+show running-config
 quit
 .Ed
 .Pp
 A more standards RBAC based approach would be to create a group
-on the system for users with the role of manging the system via nsh.
-Then simply allow all users that are members of a group to run
+.Dq nshusers
+on the system for users with the role of managing the system via nsh.
+Then allow users that are members of a group to run
 .Nm
-using /etc/doas.conf and referring to the groupname rather than just
-a single username.
+using /etc/doas.conf by referring to the groupname rather than just
+a single username (the colon before the group name is required by
+.Xr doas.conf 5
+syntax and signifies a group name argument):
 .Pp
-Compile nwrapper (in the
-.Nm
-distribution):
 .Bd -literal -offset indent
-cc -o nwrapper nwrapper.c
+permit keepenv :nshusers as root cmd /usr/local/bin/nsh args -e
 .Ed
-Move nwrapper to a permanent location:
-.Bd -literal -offset indent
-mv nwrapper /usr/local/bin/nwrapper
-.Ed
-Change the user's shell to nwrapper:
-.Bd -literal -offset indent
-usermod -s /usr/local/bin/nwrapper nshuser
-.Ed
-(replace 'nshuser' with the actual user name)
 .Pp
 *NB Security Warning!!!
 .Pp
-The doas configurations outlined here are not
-security measures.
-They allow an administrator to grant a non root
+The doas configurations outlined here grant a non-root
 user the ability to run
 .Nm
 with all the privileges of the
@@ -4505,30 +4523,15 @@ with all the privileges of the
 root user.
 The design of
 .Ox
-requires root privileges to change many aspects of the systems network stack.
-The nwrwapper binary is a binary that hardcodes the doas request to launch
+requires root privileges to administor the network stack.
+A user can abuse
 .Nm
-on
-.Ox
-as root.
+running as root to run arbitrary commands with the
+.Cm !
+shell escape syntax.
+Therefore, access to running
 .Nm
-currently does not have security countermeasure
-features against malicious users.
-It is therefore essential that the administrator only
-grants
-.Nm
-user access with the same security considerations
-of granting a user root access to the system.
-I.e. the user can use
-.Nm
-running as root (facilitated by doas and nwrapper)
-to carry out other shell scripts either interactively or
-in a nshrc configuration file.
-It gives a user the ability to configure basic system
-parameters and to run editors and other commands as root.
-Therefore access to
-.Nm
-must be restricted to trusted users only.
+with root privleges must be restricted to trusted users only.
 .Sh Common interface types
 Packet Filter Logging: This interface is used to pass traffic logged by
 the firewall to software which can record it.
