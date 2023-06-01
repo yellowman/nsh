@@ -222,11 +222,11 @@ nsh(config-p)/pf disable
 .Tg disable
 .Tg unprivileged
 .Tg shell
-.Ic disable
-.Nm
-shell starts as an unprivileged prompt which displays as the text of the FQDN
-(fully qualified domain name) of the machine followed by a forward slash.
-This unprivileged prompt will allow only the very basic diagnostic command
+.Ic Standard Prompt
+The shell starts out with an unprivileged prompt which displays as the text
+of the FQDN (fully qualified domain name) of the machine followed by a
+forward slash.
+This unprivileged prompt will allow only basic diagnostic commands
 and does not allow viewing sensitive configuration information.
 .Bl -dash
 .It
@@ -235,20 +235,20 @@ e.g. standard prompt of the device firewall.machine.com
 firewall.machinename.com/
 .Ed
 .El
+.Pp
 .Tg enable
 .Tg privileged
 .Tg shell
-.Ic enable
-The privileged shell is accessed using the enable command.
-It allows the administrator to view the running
-and other diagnostic information such as the
-.Cm show
+.Ic Privileged Prompt
+The privileged shell is accessed using the
+.Cm enable
 command.
-If external commands are enabled, external commands can be involked by
+It allows the administrator to run privileged diagnostic commands.
+If external commands are enabled, external commands can be invoked by
 the user in privileged mode.
-The privileged mode alone will not allow changes to the system using
+The privileged mode alone will not allow changes to the system via
 .Nm
-shell.
+commands.
 The privileged shell is indicated by the FQDN of the machine followed
 by (p) and followed by a /
 .Bl -dash
@@ -258,19 +258,20 @@ E.g. privileged shell prompt of the device firewall.machine.com
 firewall.machinename.com(p)/
 .Ed
 .El
+.Pp
 .Tg configure
 .Tg config
-.Ic configure
-This command allows the administrator to make changes to the system
+.Ic Configuration Mode Prompt
+The
+.Cm configure
+command allows the administrator to make changes to the system
 configuration.
 This additional command is a safeguard against accidental configuration
 of a system.
 I.e. a user can run privileged diagnostic commands, however without
 configuration mode being enabled,
 .Nm
-will not permit any modifications to the system configuration through
-.Nm
-shell
+will not permit any modifications to the system configuration.
 .Pp
 E.g. user elevating privileges from privilege disabled, to enabled privilege
 mode and finally configuration mode on a system called hostname.nsh.org
