@@ -1708,6 +1708,15 @@ This command can be used to overwrite the system crontab in case it has
 become out of sync with the copy managed by
 .Nm .
 .Pp
+.Tg scheduler
+.Ic scheduler Op Cm edit | install
+.Pp
+The
+.Cm scheduler
+command is an alias for the
+.Cm crontab
+command described above.
+.Pp
 .Tg reboot
 .Ic reboot
 .Pp
@@ -2652,6 +2661,12 @@ managed by
 See the
 .Xr crontab 5
 manual page for information about scheduling rules syntax.
+.Pp
+.Ic show scheduler
+.Pp
+Alias for the
+.Cm show crontab
+command described above.
 .Pp
 .Ic show running-config
 .Pp

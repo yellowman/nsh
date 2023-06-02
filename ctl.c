@@ -73,6 +73,7 @@ struct daemons ctl_daemons[] = {
 { "ifstate",	"If state",ctl_ifstate,	IFSTATECONF_TEMP,0600, 0, RT_TABLEID_MAX },
 { "motd",        "MOTD",  ctl_motd,        MOTD_TEMP,0644, 0, 0 },
 { "crontab",	"crontab",  ctl_crontab, CRONTAB_TEMP, 0600, 0, 0 },
+{ "scheduler",	"scheduler",  ctl_crontab, CRONTAB_TEMP, 0600, 0, 0 },
 { 0, 0, 0, 0, 0, 0 }
 };
 
