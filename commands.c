@@ -82,6 +82,7 @@ static int	doconfig(int, char**);
 static int	exitconfig(int, char**);
 int		rtable(int, char**);
 int		group(int, char**);
+static int	pr_crontab(int, char **, FILE *);
 static int	pr_routes(int, char **);
 static int	pr_routes6(int, char **);
 static int	pr_arp(int, char **);
@@ -448,6 +449,7 @@ Menu showlist[] = {
 	{ "monitor",	"Monitor routing/arp table changes", CMPL0 0, 0, 0, 0, monitor },
 	{ "version",	"Software information",	CMPL0 0, 0, 0, 0, version },
 	{ "users",	"System users",		CMPL0 0, 0, 0, 0, who },
+	{ "crontab",	"Scheduled background jobs",	CMPL0 0, 0, 0, 0, pr_crontab },
 	{ "running-config",	"Operating configuration", CMPL0 0, 0, 0, 0, pr_conf },
 	{ "startup-config", "Startup configuration", CMPL0 0, 0, 0, 0, pr_s_conf },
 	{ "active-config", "Configuration of active context", CMPL0 0, 0, 0, 0, pr_a_conf },
@@ -1062,6 +1064,7 @@ static char tracerthelp[];
 static char tracert6help[];
 static char sshhelp[];
 static char telnethelp[];
+static char crontabhelp[];
 static char showhelp[];
 static char whohelp[];
 static char dohelp[];
@@ -1698,6 +1701,7 @@ static char
 	tracert6help[] ="Print the route to IPv6 host",
 	sshhelp[] =	"SSH connection to remote host",
 	telnethelp[] =	"Telnet connection to remote host",
+	crontabhelp[] =	"Configure scheduled background jobs",
 	quithelp[] =	"Close current connection",
 	exithelp[] =	"Leave configuration mode and return to privileged mode",
 	verbosehelp[] =	"Set verbose diagnostics",
@@ -1755,6 +1759,7 @@ struct ghs mantab[] = {
 	{ "carp", "Search for tag carp", CMPL0 NULL, 0 },
 	{ "config", "Search for tag config", CMPL0 NULL, 0 },
 	{ "configure", "Search for tag configure", CMPL0 NULL, 0 },
+	{ "crontab", "Search for tag crontab", CMPL0 NULL, 0 },
 	{ "csh", "Search for tag csh", CMPL0 NULL, 0 },
 	{ "ddb", "Search for tag ddb", CMPL0 NULL, 0 },
 	{ "dhcp", "Search for tag dhcp", CMPL0 NULL, 0 },
@@ -1939,6 +1944,7 @@ Command cmdtab[] = {
 	{ "tftp",	tftphelp,	CMPL(t) (char **)ctl_tftp, ssctl, ctlhandler,	1, 1, 0, 1 },
 	{ "resolv",	resolvhelp,	CMPL(t) (char **)ctl_resolv, ssctl, ctlhandler, 1, 1, 0, 1 },
 	{ "motd",       motdhelp,       CMPL(t) (char **)ctl_motd, ssctl, ctlhandler,    1, 1, 0, 1 },
+	{ "crontab",    crontabhelp,    CMPL(t) (char **)ctl_crontab, ssctl, ctlhandler,    1, 1, 0, 1 },
 	{ "inet",	inethelp,	CMPL(t) (char **)ctl_inet, ssctl, ctlhandler,	1, 1, 0, 1 },
 	{ "ping",	pinghelp,	CMPL0 0, 0, ping,		0, 0, 0, 0 },
 	{ "ping6",	ping6help,	CMPL0 0, 0, ping6,		0, 0, 0, 0 },
@@ -3213,6 +3219,26 @@ done:
 		unlink(confpath);
 		close(conf_fd);
 	}
+	return 0;
+}
+
+static int
+pr_crontab(int argc, char **argv, FILE *outfile)
+{
+	char *crontab_argv[] = { CRONTAB, "-l", "-u", "root", NULL };
+
+	if (priv != 1) {
+		printf("%% Privilege required\n");
+		return 0 ;
+	}
+
+	fprintf(outfile, "%% To view crontab syntax documentation in NSH, "
+	    "run: !man 5 crontab\n\n");
+	fflush(outfile);
+
+	if (cmdargs_output(CRONTAB, crontab_argv, fileno(outfile), -1) != 0)
+		printf("%% crontab command failed\n");
+
 	return 0;
 }
 

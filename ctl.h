@@ -121,6 +121,7 @@ struct daemons {
 #define LDAPCONF_TEMP   "/var/run/ldapd.conf"
 #define IFSTATECONF_TEMP "/var/run/ifstated.conf"
 #define MOTD_TEMP "/var/run/motd"
+#define CRONTAB_TEMP     "/var/run/crontab"
 
 /* ctl tests*/
 extern char *ctl_bgp_test[];
@@ -178,5 +179,6 @@ extern struct ctl ctl_dns[];
 extern struct ctl ctl_inet[];
 extern struct ctl ctl_ldap[];
 extern struct ctl ctl_motd[];
+extern struct ctl ctl_crontab[];
 extern struct ctl ctl_resolv[];
 void flag_x(char *, char *, int, char *);

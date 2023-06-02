@@ -167,6 +167,7 @@ extern pid_t child;
 #define SSH		"/usr/bin/ssh"
 #define PKILL		"/usr/bin/pkill"
 #define DIFF		"/usr/bin/diff"
+#define CRONTAB		"/usr/bin/crontab"
 #define REBOOT		"/sbin/reboot"
 #define HALT		"/sbin/halt"
 #define SU		"/usr/bin/su"

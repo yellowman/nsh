@@ -32,7 +32,10 @@
 static char table[16];
 
 /* service routines */
+void edit_crontab(char *, char **, char *);
+void install_crontab(char *, char **, char *);
 void call_editor(char *, char **, char *);
+int edit_file(char *, mode_t, char *, char **);
 void ctl_symlink(char *, char *, char *);
 int rule_writeline(char *, mode_t, char *);
 int fill_tmpfile(char **, char *, char **);
@@ -69,10 +72,21 @@ struct daemons ctl_daemons[] = {
 { "ldap",	"LDAP",	ctl_ldap,	LDAPCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
 { "ifstate",	"If state",ctl_ifstate,	IFSTATECONF_TEMP,0600, 0, RT_TABLEID_MAX },
 { "motd",        "MOTD",  ctl_motd,        MOTD_TEMP,0644, 0, 0 },
+{ "crontab",	"crontab",  ctl_crontab, CRONTAB_TEMP, 0600, 0, 0 },
 { 0, 0, 0, 0, 0, 0 }
 };
 
 /* per-daemon commands, and their C or executable functions */ 
+
+/* CRONTAB */
+struct ctl ctl_crontab[] = {
+        { "edit",           "edit scheduled background jobs",
+            { "crontab", NULL, NULL }, edit_crontab, 0, T_HANDLER },
+        { "install",           "install scheduled background job config",
+            { "crontab", NULL, NULL }, install_crontab, 0, T_HANDLER },
+        { 0, 0, { 0 }, 0, 0, 0 }
+};
+
 
 /* MOTD */
 struct ctl ctl_motd[] = {
@@ -697,10 +711,91 @@ fill_tmpfile(char **fillargs, char *tmpfile, char **tmp_args)
 }
 
 void
+edit_crontab(char *name, char **args, char *z)
+{
+	char *crontab_argv[] = { CRONTAB, "-u", "root", "-l", NULL };
+	char tmpfile[PATH_MAX];
+	int found = 0;
+	struct daemons *daemons;
+	int fd = -1;
+
+	for (daemons = ctl_daemons; daemons->name != 0; daemons++)
+		if (strncmp(daemons->name, name, strlen(name)) == 0) {
+			found = 1;
+			break;
+		}
+
+	if (!found) {
+		printf("%% edit_crontab internal error\n");
+		return;
+	}
+
+	snprintf(tmpfile, sizeof(tmpfile), "%s.%d", daemons->tmpfile,
+	    cli_rtable);
+
+	fd = open(tmpfile, O_RDWR | O_EXCL);
+	if (fd == -1) {
+		if (errno != ENOENT) {
+			printf("%% open %s: %s\n", tmpfile, strerror(errno));
+			return;
+		}
+		fd = open(tmpfile, O_RDWR | O_CREAT | O_EXCL, daemons->mode);
+		if (fd == -1) {
+			printf("%% open %s: %s\n", tmpfile, strerror(errno));
+			return;
+		}
+
+		/* Populate temporary file with current crontab. */
+		if (cmdargs_output(CRONTAB, crontab_argv, fd, -1) != 0) {
+			printf("%% crontab -l command failed\n");
+			goto done;
+		}
+	}
+
+	if (edit_file(tmpfile, daemons->mode, daemons->propername, args) == 0) {
+		crontab_argv[3] = tmpfile;
+		if (cmdargs(CRONTAB, crontab_argv) != 0)
+			printf("%% failed to install crontab\n");
+	}
+done:
+	close(fd);
+}
+
+void
+install_crontab(char *name, char **args, char *z)
+{
+	char *crontab_argv[] = { CRONTAB, "-u", "root", NULL, NULL };
+	char tmpfile[PATH_MAX];
+	int fd, found = 0;
+	struct daemons *daemons;
+
+	for (daemons = ctl_daemons; daemons->name != 0; daemons++)
+		if (strncmp(daemons->name, name, strlen(name)) == 0) {
+			found = 1;
+			break;
+		}
+
+	if (!found) {
+		printf("%% install_crontab internal error\n");
+		return;
+	}
+
+	snprintf(tmpfile, sizeof(tmpfile), "%s.%d", daemons->tmpfile,
+	    cli_rtable);
+
+	if ((fd = acq_lock(tmpfile)) > 0) {
+		crontab_argv[3] = tmpfile;
+		if (cmdargs(CRONTAB, crontab_argv) != 0)
+			printf("%% failed to install crontab\n");
+		rls_lock(fd);
+	}
+}
+
+void
 call_editor(char *name, char **args, char *z)
 {
-	int fd, found = 0;
-	char *editor, tmpfile[64];
+	int found = 0;
+	char tmpfile[64];
 	struct daemons *daemons;
 
 	for (daemons = ctl_daemons; daemons->name != 0; daemons++)
@@ -717,6 +812,16 @@ call_editor(char *name, char **args, char *z)
 	snprintf(tmpfile, sizeof(tmpfile), "%s.%d", daemons->tmpfile,
 	    cli_rtable);
 
+	edit_file(tmpfile, daemons->mode, daemons->propername, args);
+}
+
+int
+edit_file(char *tmpfile, mode_t mode, char *propername, char **args)
+{
+	char *editor;
+	int fd;
+	int ret = 0;
+
 	/* acq lock, call editor, test config with cmd and args, release lock */
 	if ((editor = getenv("VISUAL")) == NULL) {
 		if ((editor = getenv("EDITOR")) == NULL)
@@ -724,14 +829,22 @@ call_editor(char *name, char **args, char *z)
 	}
 	if ((fd = acq_lock(tmpfile)) > 0) {
 		char *argv[] = { editor, tmpfile, NULL };
-		cmdargs(editor, argv);
-		chmod(tmpfile, daemons->mode);
-		if (args != NULL)
-			cmdargs(args[0], args);
+		ret = cmdargs(editor, argv);
+		if (ret == 0 && chmod(tmpfile, mode) == -1) {
+			printf("%% chmod %o %s: %s\n",
+			    mode, tmpfile, strerror(errno));
+			ret = 1;
+		}
+		if (ret == 0 && args != NULL)
+			ret = cmdargs(args[0], args);
 		rls_lock(fd);
-	} else
+	} else {
 		printf ("%% %s configuration is locked for editing\n",
-		    daemons->propername);
+		    propername);
+		return 1;
+	}
+
+	return ret;
 }
 
 int
