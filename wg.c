@@ -19,6 +19,7 @@
 
 int	setwgpeer(const char *);
 int	setwgpeerep(const char *);
+int	setwgpeerdesc(const char *);
 int	setwgpeeraip(const char *);
 int	setwgpeerpsk(const char *);
 int	setwgpeerpka(const char *);
@@ -125,6 +126,21 @@ setwgpeer(const char *peerkey_b64)
 	wg_peer->p_flags |= WG_PEER_HAS_PUBLIC;
 	WG_LOAD_KEY(wg_peer->p_public, peerkey_b64, "setwgpeer");
 	wg_interface->i_peers_count++;
+	return(0);
+}
+
+ 
+int
+setwgpeerdesc(const char *descr)
+{
+#ifdef WG_PEER_SET_DESCRIPTION /* OpenBSD 7.4+ */
+	if (wg_peer == NULL) {
+		printf("%% setwgpeerdesc: wgpeer not set\n");
+		return(-1);
+	}
+	wg_peer->p_flags |= WG_PEER_SET_DESCRIPTION;
+	strlcpy(wg_peer->p_description, descr, IFDESCRSIZE);
+#endif
 	return(0);
 }
 
@@ -321,6 +337,11 @@ show_wg(int ifs, char *ifname, FILE *outfile)
 		b64_ntop(wg_peer->p_public, WG_KEY_LEN,
 		    key, sizeof(key));
 		fprintf(outfile, "  Wireguard peer %s", key);
+#ifdef WG_PEER_SET_DESCRIPTION	/* OpenBSD 7.4+ */
+		if (strlen(wg_peer->p_description)) {
+			printf(" (%s)\n", wg_peer->p_description);
+		}
+#endif
 
 		if (wg_peer->p_last_handshake.tv_sec != 0) {
 			timespec_get(&now, TIME_UTC);
@@ -364,8 +385,17 @@ conf_wg(FILE *output, int ifs, char *ifname)
 		if (!(wg_peer->p_flags & WG_PEER_HAS_PSK) &&
 		    !(wg_peer->p_flags & WG_PEER_HAS_PKA) &&
 		    !(wg_peer->p_flags & WG_PEER_HAS_ENDPOINT) &&
+#ifdef WG_PEER_SET_DESCRIPTION	/* OpenBSD 7.4+ */
+		    !(strlen(wg_peer->p_description)) &&
+#endif
 		    (wg_peer->p_aips_count == 0))
 			fprintf(output, " wgpeer %s\n", key);
+
+#ifdef WG_PEER_SET_DESCRIPTION
+		if (strlen(wg_peer->p_description)) {
+			fprintf(output, " wgpeer %s description %s\n", key, wg_peer->p_description);
+		}
+#endif
 
 		if (wg_peer->p_flags & WG_PEER_HAS_PSK) {
 			b64_ntop(wg_peer->p_psk, WG_KEY_LEN, psk,
@@ -512,6 +542,9 @@ void
 wgpeerusage(void)
 {
 	printf("%% wgpeer <public key>\n");
+#ifdef WG_PEER_SET_DESCRIPTION
+	printf("%% wgpeer <public key> description <description> ...\n");
+#endif
 	printf("%% wgpeer <public key> endpoint <endpoint ip:port> ...\n");
 	printf("%% wgpeer <public key> endpoint <[endpoint ipv6]:port> ...\n");
 	printf("%% wgpeer <public key> aip <allowed ip/prefix> ...\n");
@@ -532,6 +565,9 @@ intwgpeer(char *ifname, int ifs, int argc, char **argv)
 		{ "aip",	req_arg,	'a' },
 		{ "psk",	req_arg,	'p' },
 		{ "pka",	req_arg,	'k' },
+#ifdef WG_PEER_SET_DESCRIPTION
+		{ "description", req_arg,	'd' },
+#endif
 		{ NULL,		0,		0 }
 	};
 
@@ -612,6 +648,16 @@ intwgpeer(char *ifname, int ifs, int argc, char **argv)
 			if (setwgpeerpka(argv[noptind - 1]) < 0)
 				goto wgerr;
 			break;
+#ifdef WG_PEER_SET_DESCRIPTION
+		case 'd':	/* description */
+			if (!set) {
+				wgpeerusage();
+				goto wgerr;
+			}
+			if (setwgpeerdesc(argv[noptind - 1]) < 0)
+				goto wgerr;
+			break;
+#endif
 		default:
 			printf("%% intwgpeer: nopt table error\n");
 			return(0);
