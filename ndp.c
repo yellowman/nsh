@@ -111,7 +111,6 @@
 
 static int tflag;
 static int rtsock = -1;
-static int repeat = 0;
 
 char host_buf[NI_MAXHOST];		/* getnameinfo() */
 char ifix_buf[IFNAMSIZ];		/* if_indextoname() */
@@ -371,7 +370,6 @@ ndpdump(struct sockaddr_in6 *addr, int cflag)
 		    W_ADDR, W_ADDR, "Neighbor", W_LL, W_LL, "Linklayer Address",
 		    W_IF, W_IF, "Netif", "Expire", "S", "Flags");
 
-again:;
 	lim = NULL;
 	mib[0] = CTL_NET;
 	mib[1] = PF_ROUTE;
@@ -542,13 +540,6 @@ again:;
 	if (!nbi)
 		printf("\n%% %s: failed to get neighbor information\n",
 		    routename6(sin));
-
-	if (repeat) {
-		printf("\n");
-		fflush(stdout);
-		sleep(repeat);
-		goto again;
-	}
 
 	free(buf);
 }
