@@ -1681,6 +1681,42 @@ The
 are documented in
 .Xr telnet 1 .
 .Pp
+.Tg crontab
+.Ic crontab Op Cm edit | install
+.Pp
+Edit the configuration of scheduled background jobs which are
+managed by
+.Xr cron 8 .
+Only the crontab file of the root user can be edited.
+See the
+.Xr crontab 5
+man page for information about configuration file syntax.
+.Pp
+.Nm
+stores a private copy of the root user's crontab in
+.Pa /var/run/crontab.0 .
+The
+.Cm crontab edit
+command edits this file and then installs it to the system by running the
+.Xr crontab 1
+command.
+.Pp
+The
+.Cm crontab install
+command skips editing but otherwise has the same effect.
+This command can be used to overwrite the system crontab in case it has
+become out of sync with the copy managed by
+.Nm .
+.Pp
+.Tg scheduler
+.Ic scheduler Op Cm edit | install
+.Pp
+The
+.Cm scheduler
+command is an alias for the
+.Cm crontab
+command described above.
+.Pp
 .Tg reboot
 .Ic reboot
 .Pp
@@ -1772,7 +1808,7 @@ nsh/no verbose
 .Op hostname | interface | autoconf | ip | inet | inet6 | route | route6\
  | sadb | arp | ndp | vlan | kernel | bgp | ospf | ospf6 | pf | eigrp | rip\
  | ldp | ike | ipsec | dvmrp | relay | dhcp | smtp | ldap | monitor\
- | version | users | running-config | startup-config |\&? | help
+ | version | users | crontab | running-config | startup-config |\&? | help
 .Pp
 The main diagnostic and informational command is 'show'.
 show without arguments  displays the available diagnostic show sub commands.
@@ -1815,6 +1851,7 @@ nsh(p)/show
   monitor         Monitor routing/arp table changes
   version         Software information
   users           System users
+  crontab         Scheduled background jobs
   running-config  Operating configuration
   startup-config  Startup configuration
   ?               Options
@@ -2615,6 +2652,21 @@ memory: 8175MB
 kernel: OpenBSD 7.1 (GENERIC.MP) #459: Mon Apr  4 18:16:13 MDT 2022
     deraadt@amd64.openbsd.org:/usr/src/sys/arch/amd64/compile/GENERIC.MP
 .Ed
+.Pp
+.Ic show crontab
+.Pp
+Display the scheduled background jobs of the root user which are
+managed by
+.Xr cron 8 .
+See the
+.Xr crontab 5
+manual page for information about scheduling rules syntax.
+.Pp
+.Ic show scheduler
+.Pp
+Alias for the
+.Cm show crontab
+command described above.
 .Pp
 .Ic show running-config
 .Pp

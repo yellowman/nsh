@@ -187,6 +187,7 @@ conf(FILE *output)
 {
 	char cpass[_PASSWORD_LEN+1];
 	char hostbuf[MAXHOSTNAMELEN];
+	off_t offset;
 
 	fprintf(output, "!\n");
 
@@ -285,6 +286,11 @@ conf(FILE *output)
 	conf_ctl(output, "", "ftp-proxy", 0);
 	conf_ctl(output, "", "inet", 0);
 	conf_ctl(output, "", "sshd", 0);
+
+	offset = ftello(output);
+	conf_ctl(output, "", "crontab", 0);
+	if (offset != ftello(output)) /* we have custom crontab rules */
+		fprintf(output, "crontab install\n");
 
 	conf_rtables(output);
 
