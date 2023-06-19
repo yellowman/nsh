@@ -2688,6 +2688,41 @@ Display differences between the startup configuration and the running
 configuration.
 This command requires root user privileges.
 .Pp
+.Ic show environment Op Ar NAME
+.Pp
+Display environment variables. 
+If the
+.Ar NAME
+of a variable is specified then display the value of this variable.
+Otherwise, display all existing environment variable names and values.
+.Pp
+.Tg setenv
+.Ic setenv Ar NAME=VALUE
+.Pp
+Set the environment variable
+.Ar NAME
+to the specified
+.Ar VALUE.
+If a
+.Ar NAME
+or
+.Ar VALUE
+contains whitespace then it must be quoted in double-quotes.
+For example:
+.Bd -literal -offset indent
+nsh/setenv EDITOR=/usr/local/bin/emacs
+nsh/setenv MY_VARIABLE="this value contains whitespace"
+nsh/setenv "MY OTHER VARIABLE"=my-name-contains-whitespace
+.Ed
+.Pp
+.Tg unsetenv
+.Pp
+.Ic unsetenv Ar NAME
+.Pp
+Delete the variable
+.Ar NAME
+from the environment.
+.Pp
 .Tg flush
 .Ic flush
 .Op routes | arp | ndp | line | bridge-dyn | bridge-all | bridge-rule | pf | history |\&? | help

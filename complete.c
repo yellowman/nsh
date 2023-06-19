@@ -51,7 +51,8 @@
 unsigned char complete(EditLine *, char **, size_t);
 
 static int	     comparstr(const void *, const void *);
-static unsigned char complete_ambiguous(char *, int, StringList *, EditLine *);
+static unsigned char complete_ambiguous(char *, int, StringList *, EditLine *,
+				char *);
 static unsigned char complete_command(char *, int, EditLine *, char **, int);
 static unsigned char complete_subcommand(char *, int, EditLine *, char **, int);
 static unsigned char complete_local(char *, int, EditLine *);
@@ -59,6 +60,7 @@ static unsigned char complete_ifname(char *, int, EditLine *);
 static unsigned char complete_ifgroup(char *, int, EditLine *);
 static unsigned char complete_ifbridge(char *, int, EditLine *);
 static unsigned char complete_rtable(char *, int, EditLine *);
+static unsigned char complete_environment(char *, int, EditLine *, int);
 static unsigned char complete_nocmd(struct ghs *, char *, int, EditLine *,
 				   char **, int, int);
 static unsigned char complete_docmd(struct ghs *, char *, int, EditLine *,
@@ -87,9 +89,11 @@ comparstr(const void *a, const void *b)
  *	word	word which started the match
  *	list	list by default
  *	words	stringlist containing possible matches
+ *	sep	separator to insert after completed word; usually " "
  */
 static unsigned char
-complete_ambiguous(char *word, int list, StringList *words, EditLine *el)
+complete_ambiguous(char *word, int list, StringList *words, EditLine *el,
+    char *sep)
 {
 	char insertstr[MAXPATHLEN];
 	char *lastmatch;
@@ -102,7 +106,7 @@ complete_ambiguous(char *word, int list, StringList *words, EditLine *el)
 
 	if (words->sl_cur == 1) {	/* only one choice available */
 		(void)strlcpy(insertstr, words->sl_str[0], sizeof insertstr);
-		(void)strlcat(insertstr, " ", sizeof insertstr);
+		(void)strlcat(insertstr, sep, sizeof insertstr);
 		if (el_insertstr(el, insertstr + wordlen) == -1)
 			return (CC_ERROR);
 		else
@@ -164,7 +168,7 @@ complete_command(char *word, int list, EditLine *el, char **table, int stlen)
 			sl_add(words, ghs->name);
 	}
 
-	rv = complete_ambiguous(word, list, words, el);
+	rv = complete_ambiguous(word, list, words, el, " ");
 	sl_free(words, 0);
 	return (rv);
 }
@@ -240,7 +244,7 @@ complete_local(char *word, int list, EditLine *el)
 	}
 	closedir(dd);
 
-	rv = complete_ambiguous(file, list, words, el);
+	rv = complete_ambiguous(file, list, words, el, " ");
 	sl_free(words, 1);
 	return (rv);
 }
@@ -377,7 +381,7 @@ complete_ifname(char *word, int list, EditLine *el)
 		sl_add(words, s);
 	}
 
-        rv = complete_ambiguous(word, list, words, el);
+        rv = complete_ambiguous(word, list, words, el, " ");
 	if_freenameindex(ifn_list);
         sl_free(words, 0);
         return (rv);
@@ -434,7 +438,7 @@ complete_ifgroup(char *word, int list, EditLine *el)
 			sl_add(words, ifg->ifgrq_group);
 	}
 
-	rv = complete_ambiguous(word, list, words, el);
+	rv = complete_ambiguous(word, list, words, el, " ");
 	sl_free(words, 0);
 	free(ifgr.ifgr_groups);
 	close(ifs);
@@ -470,7 +474,7 @@ complete_ifbridge(char *word, int list, EditLine *el)
 			sl_add(words, ifnp->if_name);
 	}
 
-	rv = complete_ambiguous(word, list, words, el);
+	rv = complete_ambiguous(word, list, words, el, " ");
 	if_freenameindex(ifn_list);
 	sl_free(words, 0);
 	close(ifs);
@@ -512,12 +516,57 @@ complete_rtable(char *word, int list, EditLine *el)
 			sl_add(words, rtable);
 	}
 
-	rv = complete_ambiguous(word, list, words, el);
+	rv = complete_ambiguous(word, list, words, el, " ");
 done:
 	sl_free(rtables, 1);
 	sl_free(words, 0);
 	free(s);
 	return (rv);
+}
+
+static unsigned char
+complete_environment(char *word, int dolist, EditLine *el, int set)
+{
+	StringList *words;
+	extern char **environ;
+	char **ep, *eq, *name;
+	size_t wordlen = strlen(word);
+	int rv = CC_ERROR;
+
+	words = sl_init();
+
+	for (ep = environ; *ep; ep++) {
+		eq = strchr(*ep, '=');
+		if (eq == NULL)
+			continue;
+		name = strndup(*ep, eq - *ep);
+		if (name == NULL) {
+			sl_free(words, 1);
+			return CC_ERROR;
+		}
+		if (strncmp(word, name, wordlen) == 0)
+			sl_add(words, name);
+		else
+			free(name);
+	}
+
+	/*
+	 * When a new environment variable is created then hitting the
+	 * TAB key makes '=' appear.
+	 */
+	if (set && words->sl_cur == 0 && wordlen > 0 &&
+	    word[wordlen - 1] != '=' && strchr(word, '=') == NULL) {
+		name = strdup(word);
+		if (name == NULL) {
+			sl_free(words, 1);
+			return CC_ERROR;
+		}
+		sl_add(words, name);
+	}
+
+	rv = complete_ambiguous(word, dolist, words, el, set ? "=" : " ");
+	sl_free(words, 1);
+	return rv;
 }
 
 /*
@@ -872,6 +921,10 @@ complete_args(struct ghs *c, char *word, int dolist, EditLine *el, char **table,
 			return(CC_ERROR);
 		return (complete_showhelp(word, el, c->table, c->stlen, c->name,
 		    help_vertical));
+	case 'E':
+		return complete_environment(word, dolist, el, 1);
+	case 'e':
+		return complete_environment(word, dolist, el, 0);
 	case 'n':			/* no complete */
 		return (CC_ERROR);
 	}
