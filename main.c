@@ -40,7 +40,7 @@ char *vers = NSH_VERSION_STR;
 int bridge = 0;		/* bridge mode for interface() */
 int verbose = 0;	/* verbose mode */
 int priv = 0, privexec = 0, cli_rtable = 0;
-int editing = 1, config_mode = 0;;
+int editing = 0, interactive_mode = 0, config_mode = 0;;
 pid_t pid;
 
 History *histi = NULL;
@@ -89,11 +89,6 @@ main(int argc, char *argv[])
 		}
 
 
-	if (getuid() != 0) {
-		printf("%% Functionality is limited without root privileges.\n"
-		    "%% The 'enable' command will switch to the root user.\n");
-	}
-
 	argc -= optind;
 	argv += optind;
 	if (cflag && iflag)
@@ -103,8 +98,19 @@ main(int argc, char *argv[])
 	if (iflag)
 		rmtemp(SQ3DBFILE);
 
-	if (!privexec)
-		printf("%% NSH v%s\n", vers);
+	interactive_mode = isatty(STDIN_FILENO);
+	if (interactive_mode) {
+		editing = 1;
+
+		if (getuid() != 0) {
+			printf("%% Functionality is limited without "
+			    "root privileges.\n%% The 'enable' command "
+			    "will switch to the root user.\n");
+		}
+
+		if (!privexec)
+			printf("%% NSH v%s\n", vers);
+	}
 
 	/* create temporal tables (if they aren't already there) */
 	if (db_create_table_rtables() < 0)
@@ -139,7 +145,7 @@ main(int argc, char *argv[])
 		 */
 		carplock(128);
 
-		cmdrc(rc);
+		cmdrc(rc, 0);
 
 		/*
 		 * Initialization over
@@ -154,7 +160,7 @@ main(int argc, char *argv[])
 		 */
 		priv = 1;
 
-		cmdrc(rc);
+		cmdrc(rc, 0);
 
 		exit(0);
 	}

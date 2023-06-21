@@ -32,6 +32,7 @@ extern int  margc;		/* makeargv() arg count */
 extern char *margv[];		/* makeargv() args */
 extern int verbose;		/* is verbose mode on? */
 extern int editing;		/* is command line editing mode on? */
+extern int interactive_mode;	/* are we in interactive mode? */
 extern int config_mode;		/* are we in comfig mode? */
 extern int bridge;		/* are we in bridge mode (or interface mode?) */
 extern int priv;		/* privileged mode or not? */
@@ -149,6 +150,7 @@ extern char metricnames[];
 /* ctl.c declarations moved to ctl.h */
 
 /* cmdargs.c */
+int cmdargs_output_setenv(char *, char **, int, int, char **);
 int cmdargs_output(char *, char **, int, int);
 int cmdargs(char *, char **);
 int nsh_setrtable(int);
@@ -167,6 +169,7 @@ extern pid_t child;
 #define SSH		"/usr/bin/ssh"
 #define PKILL		"/usr/bin/pkill"
 #define DIFF		"/usr/bin/diff"
+#define AT		"/usr/bin/at"
 #define CRONTAB		"/usr/bin/crontab"
 #define REBOOT		"/sbin/reboot"
 #define HALT		"/sbin/halt"
@@ -180,7 +183,7 @@ int quit(void);
 void sigalarm(int);
 void command(void);
 int argvtostring(int, char **, char *, int);
-int cmdrc(char rcname[FILENAME_MAX]);
+int cmdrc(char rcname[FILENAME_MAX], int);
 
 /* prompt.c */
 char *iprompt(void);
@@ -563,3 +566,8 @@ int mbsavis(char**, int *, const char *);
 /* ctlargs.c */
 int pr_prot1(int, char **);
 char **step_optreq(char **, char **, int, char **, int);
+
+/* findprog.c */
+#define PROG_WHICH	1
+#define PROG_WHEREIS	2
+int findprog(char *, char *, int, int);

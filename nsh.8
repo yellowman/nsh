@@ -99,6 +99,16 @@ allows the administrator to view and edit all configuration in one place.
 When
 .Nm
 is run without arguments it loads an interactive shell.
+If standard input is not connected to a terminal
+.Nm
+enters non-interactive mode.
+Multiple commands may be passed on standard input and must be seperated by
+newlines:
+.Bd -literal -offset indent
+# printf "hostname\\nshow ip\\nwho" | nsh
+.Ed
+.Pp
+Some commands which may not work as expected in non-interactive mode.
 .Pp
 The options are as follows:
 .Bl -tag -width Ds
@@ -108,12 +118,18 @@ Produce verbose output
 Execute the command(s) in the
 .Ar config-script-file .
 This is typically used to implement scripted changes to configuration.
+This option is incompatible with the
+.Fl i
+option and commands passed on the command line.
 .It Fl i Ar rcfile
 Load the initial system configuration from the command(s) in the
 .Ar rcfile .
 This is typically used to clear the configuration and load a full
 .Nm
 configuration script from rcfile .
+This option is incompatible with the
+.Fl c
+option and commands passed on the command line.
 .It Fl e
 Start
 .Nm
@@ -1716,6 +1732,113 @@ The
 command is an alias for the
 .Cm crontab
 command described above.
+.Pp
+.Tg runat
+.Ic runat Ar time-of-day Ar date Ar command Oo Ar \; command \; ... Oc
+.Pp
+Run a sequence of commands as a background job at some time in the future.
+If multiple commands are given they must be separated by semicolons.
+Commands in the list may be any of the commands supported by
+.Nm .
+In privileged mode the
+.Cm !
+command can be used to run arbitrary Unix commands.
+.Pp
+Command output will be sent via email to the invoking user on the local system.
+The
+.Xr mail 1
+command can be used to read local mail.
+Output will be mailed to other systems if
+.Xr smtpd 8
+and
+.Xr aliases 5
+are configured appropriately.
+.Pp
+.Cm runat
+is based on
+.Xr at 1
+and hence allows some moderately complex
+.Ar time-of-day
+and
+.Ar date
+specifications.
+It accepts times of the form
+.Ar HHMM
+or
+.Ar HH:MM
+to run a job at a specific time of day.
+It is also possible to specify
+.Cm midnight ,
+.Cm noon ,
+or
+.Cm teatime
+(4pm),
+or have a time-of-day suffixed with
+.Cm AM
+or
+.Cm PM
+for running in the morning or the evening.
+To say what day the job will be run,
+give a date in the form
+.Ar \%month-name day
+with an optional
+.Ar year ,
+or giving a date of the form
+.Ar dd.mm.ccyy ,
+.Ar dd.mm.yy ,
+.Ar mm/dd/ccyy ,
+.Ar mm/dd/yy ,
+.Ar mmddccyy ,
+or
+.Ar mmddyy .
+.Pp
+The year may be given as two or four digits.
+If the year is given as two digits, it is taken to occur as soon as
+possible in the future, which may be in the next century \(em
+unless the year is last year, in which case it is considered to be
+a typing error.
+.Pp
+The specification of a
+.Ar date
+must follow the specification of
+the time of day.
+A time like
+.Oo Cm now Oc Cm + Ar count time-units
+may be given,
+where the time-units can be
+.Cm minutes ,
+.Cm hours ,
+.Cm days ,
+.Cm weeks ,
+.Cm months ,
+or
+.Cm years
+(the singular forms are also accepted).
+To run the job today or tomorrow,
+set the
+.Ar date
+parameter to
+.Cm today
+or
+.Cm tomorrow .
+The
+.Cm next
+keyword may be used as an alias for
+.Cm + 1 .
+.Pp
+If the
+.Ar time-of-day
+or
+.Ar date
+arguments contain whitespace they must be enclosed in double-quotes.
+For example, to run a job at 4pm three days from now, use
+.Dq 4pm + 3 days .
+To run a job at 10:00am on July 31, use
+.Dq 10am Jul 31 .
+To run a job at 1am tomorrow, use
+.Dq 1am tomorrow .
+To run a job at midnight in one week's time, use
+.Dq midnight next week .
 .Pp
 .Tg reboot
 .Ic reboot
@@ -4842,6 +4965,7 @@ privileged shell profile
 .El
 .Sh SEE ALSO
 .Bd -ragged -offset indent
+.Xr at 1 ,
 .Xr ed 1 ,
 .Xr mg 1 ,
 .Xr stty 1 ,

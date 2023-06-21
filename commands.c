@@ -127,6 +127,7 @@ static int	manual(int, char**);
 static int	nocmd(int, char **);
 static int	docmd(int, char **);
 static int	shell(int, char*[]);
+static int	runatcmd(int, char*[]);
 static int	ping(int, char*[]);
 static int	ping6(int, char*[]);
 static int	traceroute(int, char*[]);
@@ -382,7 +383,8 @@ quit(void)
 	if (privexec) {
 		exit(NSH_REXEC_EXIT_CODE_QUIT);
 	} else {
-		printf("%% Session terminated.\n");
+		if (interactive_mode)
+			printf("%% Session terminated.\n");
 		exit(0);
 	}
 	return 0;
@@ -1453,16 +1455,18 @@ interface(int argc, char **argv, char *modhvar)
 		return(0);
 	}
 
-	/* human at the keyboard */
+	/* human at the keyboard or commands on stdin */
 	for (;;) {
 		char *margp;
 
 		if (!editing) {
 			/* command line editing disabled */
-			printf("%s", iprompt());
+			if (interactive_mode)
+				printf("%s", iprompt());
 			if (fgets(line, sizeof(line), stdin) == NULL) {
 				if (feof(stdin) || ferror(stdin)) {
-					printf("\n");
+					if (interactive_mode)
+						printf("\n");
 					ifname[0] = '\0';
 					close(ifs);
 					return(0);
@@ -1703,6 +1707,7 @@ static char
 	sshhelp[] =	"SSH connection to remote host",
 	telnethelp[] =	"Telnet connection to remote host",
 	crontabhelp[] =	"Configure scheduled background jobs",
+	runathelp[] =	"Run a command at some time in the future",
 	quithelp[] =	"Close current connection",
 	exithelp[] =	"Leave configuration mode and return to privileged mode",
 	verbosehelp[] =	"Set verbose diagnostics",
@@ -1746,6 +1751,55 @@ Menu grouptab[] = {
 	{ 0, 0, 0, 0, 0 }
 };
 
+struct ghs runatdatetab[] = {
+	{ "<DD.MM.YY>", "", CMPL0 NULL, 0 },
+	{ "<DD.MM.YYYY>", "", CMPL0 NULL, 0 },
+	{ "<MM/DD/YY>", "", CMPL0 NULL, 0 },
+	{ "<MM/DD/YYYY>", "", CMPL0 NULL, 0 },
+	{ "<\"next day\">", "", CMPL0 NULL, 0 },
+	{ "<\"next week\">", "", CMPL0 NULL, 0 },
+	{ "<\"next month\">", "", CMPL0 NULL, 0 },
+	{ "<\"next year\">", "", CMPL0 NULL, 0 },
+	{ "<\"now + N days\">", "", CMPL0 NULL, 0 },
+	{ "<\"now + N weeks\">", "", CMPL0 NULL, 0 },
+	{ "<\"now + N months\">", "", CMPL0 NULL, 0 },
+	{ "<\"now + N years\">", "", CMPL0 NULL, 0 },
+	{ "today", "", CMPL0 NULL, 0 },
+	{ "tomorrow", "", CMPL0 NULL, 0 },
+	{ NULL, NULL, NULL, NULL, 0 }
+};
+
+Menu runattab[] = {
+	{ "<HH:MM>", "", CMPL(H) (char **)runatdatetab, sizeof(struct ghs) },
+	{ "1AM", "",  CMPL(H) (char **)runatdatetab, sizeof(struct ghs) },
+	{ "2AM", "", CMPL(H) (char **)runatdatetab, sizeof(struct ghs) },
+	{ "3AM", "", CMPL(H) (char **)runatdatetab, sizeof(struct ghs) },
+	{ "4AM", "", CMPL(H) (char **)runatdatetab, sizeof(struct ghs) },
+	{ "5AM", "", CMPL(H) (char **)runatdatetab, sizeof(struct ghs) },
+	{ "6AM", "", CMPL(H) (char **)runatdatetab, sizeof(struct ghs) },
+	{ "7AM", "", CMPL(H) (char **)runatdatetab, sizeof(struct ghs) },
+	{ "8AM", "", CMPL(H) (char **)runatdatetab, sizeof(struct ghs) },
+	{ "9AM", "", CMPL(H) (char **)runatdatetab, sizeof(struct ghs) },
+	{ "10AM", "", CMPL(H) (char **)runatdatetab, sizeof(struct ghs) },
+	{ "11AM", "", CMPL(H) (char **)runatdatetab, sizeof(struct ghs) },
+	{ "12AM", "", CMPL(H) (char **)runatdatetab, sizeof(struct ghs) },
+	{ "1PM", "", CMPL(H) (char **)runatdatetab, sizeof(struct ghs) },
+	{ "2PM", "", CMPL(H) (char **)runatdatetab, sizeof(struct ghs) },
+	{ "3PM", "", CMPL(H) (char **)runatdatetab, sizeof(struct ghs) },
+	{ "4PM", "", CMPL(H) (char **)runatdatetab, sizeof(struct ghs) },
+	{ "5PM", "", CMPL(H) (char **)runatdatetab, sizeof(struct ghs) },
+	{ "6PM", "", CMPL(H) (char **)runatdatetab, sizeof(struct ghs) },
+	{ "7PM", "", CMPL(H) (char **)runatdatetab, sizeof(struct ghs) },
+	{ "8PM", "", CMPL(H) (char **)runatdatetab, sizeof(struct ghs) },
+	{ "9PM", "", CMPL(H) (char **)runatdatetab, sizeof(struct ghs) },
+	{ "10PM", "", CMPL(H) (char **)runatdatetab, sizeof(struct ghs) },
+	{ "11PM", "", CMPL(H) (char **)runatdatetab, sizeof(struct ghs) },
+	{ "12PM", "", CMPL(H) (char **)runatdatetab, sizeof(struct ghs) },
+	{ "midnight", "", CMPL(H) (char **)runatdatetab, sizeof(struct ghs) },
+	{ "noon", "", CMPL(H) (char **)runatdatetab, sizeof(struct ghs) },
+	{ "teatime", "", CMPL(H) (char **)runatdatetab, sizeof(struct ghs) },
+	{ 0, 0, 0, 0, 0 }
+};
 /* Keep in sync with grep '^\.Tg' nsh.8 | sort | uniq */
 struct ghs mantab[] = {
 	{ "ah", "Search for tag ah", CMPL0 NULL, 0 },
@@ -1946,6 +2000,7 @@ Command cmdtab[] = {
 	{ "tftp",	tftphelp,	CMPL(t) (char **)ctl_tftp, ssctl, ctlhandler,	1, 1, 0, 1 },
 	{ "resolv",	resolvhelp,	CMPL(t) (char **)ctl_resolv, ssctl, ctlhandler, 1, 1, 0, 1 },
 	{ "motd",       motdhelp,       CMPL(t) (char **)ctl_motd, ssctl, ctlhandler,    1, 1, 0, 1 },
+	{ "runat",	runathelp,	CMPL(ta) (char **)runattab, sizeof(Menu), runatcmd, 0, 0, 0, 0 },
 	{ "crontab",    crontabhelp,    CMPL(t) (char **)ctl_crontab, ssctl, ctlhandler,    1, 1, 0, 1 },
 	{ "scheduler",  crontabhelp,    CMPL(t) (char **)ctl_crontab, ssctl, ctlhandler,    1, 1, 0, 1 },
 	{ "inet",	inethelp,	CMPL(t) (char **)ctl_inet, ssctl, ctlhandler,	1, 1, 0, 1 },
@@ -2009,10 +2064,12 @@ command()
 
 	for (;;) {
 		if (!editing) {
-			printf("%s", cprompt());
+			if (interactive_mode)
+				printf("%s", cprompt());
 			if (fgets(line, sizeof(line), stdin) == NULL) {
 				if (feof(stdin) || ferror(stdin)) {
-					printf("\n");
+					if (interactive_mode)
+						printf("\n");
 					(void) quit();
 					/* NOTREACHED */
 				}
@@ -2333,6 +2390,179 @@ shell(int argc, char **argv)
 	child = -1;
 
 	return 1;
+}
+
+/* Perform some sanity checks for external runat commands. */
+static int
+runat_check_external(char *command)
+{
+	char *pathenv = getenv("PATH");
+	int have_prog;
+	
+	if (!priv) {
+		printf("%% '%s' requires privileged mode\n", command);
+		return -1;
+	}
+
+	while (command[0] == '!')
+		command++;
+
+	/*
+	 * Look up external commands in PATH now to prevent a useless
+	 * 'command not found' error at the schedule time.
+	 */
+	have_prog = findprog(command, pathenv ? pathenv : "", PROG_WHICH, 0);
+	return have_prog ? 0 : -1;
+}
+
+/* Perform some sanity checks for internal runat commands. */
+static int
+runat_check_internal(Command *c, const char *command)
+{
+	/*
+	 * In the current implementation we cannot re-exec while preserving
+	 * commands which arrive on standard input. If we simply forward lines
+	 * read from stdin over a pipe, doas(1) and su(1) will read parts of
+	 * the standard input stream destined for the privileged nsh process.
+	 * Fixing this is non-trivial since it requires smarter inter-process
+	 * communication between nsh processes.
+	 */
+	if (strcmp(c->name, "enable") == 0) {
+		printf("%% The 'enable' command is not supported by 'runat'\n");
+		return -1;
+	}
+
+	if (!priv && c->needpriv) {
+		printf("%% '%s' requires privileged mode\n", command);
+		return -1;
+	}
+
+	return 0;
+}
+
+static int
+runat_check_command(char *command)
+{
+	/*
+	 * A leading exclamation mark tells us to run an external command.
+	 */
+	if (command[0] != '!') {
+		Command *c = getcmd(command);
+		if (c == NULL) {
+			printf("%% Invalid command '%s'\n", command);
+			return -1;
+		}
+		if (runat_check_internal(c, command))
+			return -1;
+	} else {
+		if (runat_check_external(command))
+			return -1;
+	}
+
+	return 0;
+}
+
+static void
+runatcmd_usage(void)
+{
+	printf("%% runat TIMEOFDAY DATE [!]COMMAND[; COMMAND; ...]\n");
+}
+
+/*
+ * runat command.
+ */
+int
+runatcmd(int argc, char *argv[])
+{
+	char *at_argv[6] = { AT, "-f", NULL, NULL, NULL, NULL };
+	char *timeofday, *date;
+	int newcmd = 1;
+	char path[PATH_MAX];
+	int fd, i, ret = 0;
+	size_t nenv;
+	extern char **environ;
+	char **ep, **envcpy = NULL;
+
+	if (argc < 4) {
+		runatcmd_usage();
+		return 0;
+	}
+	timeofday = argv[1];
+	date = argv[2];
+	if (getcmd(timeofday) || getcmd(date)) {
+		runatcmd_usage();
+		return 0;
+	}
+
+	if (strlcpy(path, "/tmp/nsh.at.XXXXXXXX", sizeof(path)) >= sizeof(path))
+		return -1;
+
+	fd = mkstemp(path);
+	if (fd == -1) {
+		printf("%% mkstemp %s: %s\n", path, strerror(errno));
+		return -1;
+	}
+
+	/* Write out commands for at(1) to run. */
+	for (i = 3; i < argc; i++) {
+		char *arg = argv[i];
+		int newcmd_nextarg = 0;
+		size_t len;
+
+		/* Trim trailing command separators if any. */
+		len = strlen(arg);
+		while (arg > 0 && arg[len - 1] == ';') {
+			arg[--len] = '\0';
+			newcmd_nextarg = 1;
+		}
+
+		if (newcmd) {
+			if (runat_check_command(arg)) {
+				ret = -1;
+				goto done;
+			}
+		}
+
+		newcmd = newcmd_nextarg;
+
+		if (dprintf(fd, "\'%s\'%c", arg, newcmd ? '\n' : ' ') == 1) {
+			printf("%% dprintf %s: %s\n", path, strerror(errno));
+			ret = -1;
+			goto done;
+		}
+	}
+
+	/*
+	 * Copy our environment, but set SHELL to nsh such that at(1) will
+	 * invoke nsh and pass commands on standard input.
+	 */
+	for (nenv = 0, ep = environ; *ep; ep++)
+		nenv++;
+	envcpy = calloc(nenv + 1, sizeof(*envcpy));
+	if (envcpy == NULL) {
+		printf("%% %s calloc: %s\n", __func__, strerror(errno));
+		ret = -1;
+		goto done;
+	}
+	for (nenv = 0, ep = environ; *ep; nenv++, ep++) {
+		if (strncmp(*ep, "SHELL=", 6) == 0)
+			envcpy[nenv] = "SHELL=" NSH_REXEC_PATH_STR;
+		else
+			envcpy[nenv] = *ep;
+	}
+	envcpy[nenv] = NULL;
+
+	/* Invoke at(1). */
+	at_argv[2] = path;
+	at_argv[3] = timeofday;
+	at_argv[4] = date;
+	fsync(fd);
+	cmdargs_output_setenv(AT, at_argv, -1, -1, envcpy);
+done:
+	unlink(path);
+	close(fd);
+	free(envcpy);
+	return ret;
 }
 
 /*
@@ -2733,7 +2963,7 @@ flush_pf(char *arg)
  * execute indented commands from the rc file
  */
 int
-cmdrc(char rcname[FILENAME_MAX])
+cmdrc(char rcname[FILENAME_MAX], int allow_subshell)
 {
 	Command	*c = NULL, *savec = NULL;
 	FILE	*rcfile;
@@ -2760,8 +2990,14 @@ cmdrc(char rcname[FILENAME_MAX])
 			break;
 		if (line[0] == '#')
 			continue;
-		if (line[0] == '!')
-			continue;
+		if (line[0] == '!') {
+			if (!allow_subshell)
+				continue;
+			if (!priv) {
+				printf("%% Privilege required for: %s\n", line);
+				continue;
+			}
+		}
 		/*
 		 * Don't ignore indented comments with pound sign, otherwise
 		 * comments won't be saved into daemon/ctl config files.
@@ -2993,6 +3229,14 @@ do_reboot(int how)
 		    "changes.\n"
 		    "%% The 'write-config' command will save changes to %s.\n",
 		    NSHRC);
+		if (!interactive_mode)
+			return -1;
+	}
+
+	if (!interactive_mode) {
+		if (cmdargs(argv[0], argv) != 0)
+			printf("%% %s command failed\n", argv[0]);
+		return 0;
 	}
 
 	switch (how) {
