@@ -94,6 +94,7 @@ static int	pr_conf(int, char **);
 static int	pr_s_conf(int, char **);
 static int	pr_a_conf(int, char **);
 static int	pr_conf_diff(int, char **);
+static int	pr_environment(int, char **);
 static int	show_hostname(int, char **);
 static int	wr_startup(void);
 static int	wr_conf(char *);
@@ -114,6 +115,8 @@ static int	int_traceroute6(char *, int, int, char **);
 static int	int_ssh(char *, int, int, char **);
 static int	int_telnet(char *, int, int, char **);
 static int	int_do(char *, int, int, char **);
+static int	int_setenv(char *, int, int, char **);
+static int	int_unsetenv(char *, int, int, char **);
 static int	int_show(char *, int, int, char **);
 static int	int_who(char *, int, int, char **);
 static int	int_doverbose(char *, int, int, char **);
@@ -126,6 +129,8 @@ static int	hostname(int, char **);
 static int	manual(int, char**);
 static int	nocmd(int, char **);
 static int	docmd(int, char **);
+static int	setenvcmd(int, char **);
+static int	unsetenvcmd(int, char **);
 static int	shell(int, char*[]);
 static int	ping(int, char*[]);
 static int	ping6(int, char*[]);
@@ -455,6 +460,7 @@ Menu showlist[] = {
 	{ "startup-config", "Startup configuration", CMPL0 0, 0, 0, 0, pr_s_conf },
 	{ "active-config", "Configuration of active context", CMPL0 0, 0, 0, 0, pr_a_conf },
 	{ "diff-config", "Show differences between startup and running config", CMPL0 0, 0, 0, 0, pr_conf_diff },
+	{ "environment", "Show environment variables",	CMPL(e) 0, 0, 0, 1, pr_environment },
 	{ "?",		"Options",		CMPL0 0, 0, 0, 0, show_help },
 	{ "help",	0,			CMPL0 0, 0, 0, 0, show_help },
 	{ 0, 0, 0, 0, 0 }
@@ -1069,6 +1075,8 @@ static char crontabhelp[];
 static char showhelp[];
 static char whohelp[];
 static char dohelp[];
+static char setenvhelp[];
+static char unsetenvhelp[];
 static char verbosehelp[];
 static char editinghelp[];
 static char shellhelp[];
@@ -1127,6 +1135,8 @@ struct intlist Intlist[] = {
 	{ "ssh",	sshhelp,				CMPL0 0, 0, int_ssh, 0 },
 	{ "telnet",	telnethelp,				CMPL0 0, 0, int_telnet,	0 },
 	{ "do",		dohelp,					CMPL(c) 0, 0, int_do, 0 },
+	{ "setenv",	setenvhelp,				CMPL(e) 0, 0, int_setenv, 0 },
+	{ "unsetenv",	unsetenvhelp,				CMPL(e) 0, 0, int_unsetenv, 0 },
 	{ "keepalive",	"GRE tunnel keepalive",			CMPL0 0, 0, intkeepalive, 1},
 	{ "mplslabel",	"MPLS local label",			CMPL0 0, 0, intmpls, 1 },
 	{ "pwe",	"MPLS PWE3",				CMPL0 0, 0, intpwe3, 1 },
@@ -1209,6 +1219,8 @@ struct intlist Bridgelist[] = {
 	{ "ssh",	sshhelp,				CMPL0 0, 0, int_ssh, 0 },
 	{ "telnet",	telnethelp,				CMPL0 0, 0, int_telnet,	0 },
 	{ "do",		dohelp,					CMPL(c) 0, 0, int_do, 0 },
+	{ "setenv",	setenvhelp,				CMPL(e) 0, 0, int_setenv, 0 },
+	{ "unsetenv",	unsetenvhelp,				CMPL(e) 0, 0, int_unsetenv, 0 },
 	{ "rule",	"Bridge layer 2 filtering rules",	CMPL0 0, 0, brrule, 0 },
 	{ "static",	"Static bridge address entry",		CMPL0 0, 0, brstatic, 1 },
 	{ "ifpriority",	"Spanning priority of a member on an 802.1D bridge",	CMPL0 0, 0, brpri, 1 },
@@ -1572,6 +1584,20 @@ int_do(char *ifname, int ifs, int argc, char **argv)
 }
 
 static int
+int_setenv(char *ifname, int ifs, int argc, char **argv)
+{
+	setenvcmd(argc, argv);
+	return 0; /* do not leave interface context */
+}
+
+static int
+int_unsetenv(char *ifname, int ifs, int argc, char **argv)
+{
+	unsetenvcmd(argc, argv);
+	return 0; /* do not leave interface context */
+}
+
+static int
 int_show(char *ifname, int ifs, int argc, char **argv)
 {
 	showcmd(argc, argv);
@@ -1710,6 +1736,8 @@ static char
 	confighelp[] =	"Set configuration mode",
 	whohelp[] =	"Display system users",
 	dohelp[] =	"Superfluous, do is ignored and its arguments executed",
+	setenvhelp[] =	"Set an environment variable",
+	unsetenvhelp[] ="Delete an environment variable",
 	shellhelp[] =	"Invoke a subshell",
 	savehelp[] =	"Save the current configuration",
 	nreboothelp[] =	"Reboot the system",
@@ -1856,6 +1884,7 @@ struct ghs mantab[] = {
 	{ "sasyncd", "Search for tag sasyncd", CMPL0 NULL, 0 },
 	{ "scheduler", "Search for tag scheduler", CMPL0 NULL, 0 },
 	{ "sensor", "Search for tag sensor", CMPL0 NULL, 0 },
+	{ "setenv", "Search for tag setenv", CMPL0 NULL, 0 },
 	{ "sh", "Search for tag sh", CMPL0 NULL, 0 },
 	{ "shell", "Search for tag shell", CMPL0 NULL, 0 },
 	{ "show", "Search for tag show", CMPL0 NULL, 0 },
@@ -1879,6 +1908,7 @@ struct ghs mantab[] = {
 	{ "traceroute", "Search for tag traceroute", CMPL0 NULL, 0 },
 	{ "traceroute6", "Search for tag traceroute6", CMPL0 NULL, 0 },
 	{ "unprivileged", "Search for tag unprivileged", CMPL0 NULL, 0 },
+	{ "unsetenv", "Search for tag setenv", CMPL0 NULL, 0 },
 	{ "veb", "Search for tag veb", CMPL0 NULL, 0 },
 	{ "verbose", "Search for tag verbose", CMPL0 NULL, 0 },
 	{ "vlan", "Search for tag vlan", CMPL0 NULL, 0 },
@@ -1965,6 +1995,8 @@ Command cmdtab[] = {
 	{ "who",	whohelp,	CMPL0 0, 0, who,		0, 0, 0, 0 },
 	{ "no",		0,		CMPL(c) 0, 0, nocmd,		0, 0, 0, 0 },
 	{ "do",		dohelp,		CMPL(c) 0, 0, docmd,		0, 0, 0, 0 },
+	{ "setenv",	setenvhelp,	CMPL(E) 0, 0, setenvcmd,	0, 0, 0, 0 },
+	{ "unsetenv",	unsetenvhelp,	CMPL(e) 0, 0, unsetenvcmd,	0, 0, 0, 0 },
 	{ "!",		shellhelp,	CMPL0 0, 0, shell,		1, 0, 0, 0 },
 	{ "?",		helphelp,	CMPL(c) 0, 0, help,		0, 0, 0, 0 },
 	{ "manual",	manhelp,	CMPL(H) (char **)mantab, sizeof(struct ghs), manual,0, 0, 0, 0 },
@@ -2276,6 +2308,62 @@ docmd(int argc, char **argv)
 		printf("%% Invalid command %s\n", argv[0]);
 	else
 		return (*c->handler)(argc, argv, 0);
+
+	return 0;
+}
+
+static void
+usage_setenv(void)
+{
+	printf("%% setenv NAME=VALUE\n");
+	printf("%% setenv NAME=\"VALUE with spaces\"\n");
+	printf("%% setenv \"NAME with spaces\"=VALUE\n");
+}
+
+static int
+setenvcmd(int argc, char **argv)
+{
+	char *name = NULL, *value = NULL, *eq;
+
+	if (argc != 2) {
+		usage_setenv();
+		return 0;
+	}
+
+	eq = strchr(argv[1], '=');
+	if (eq == NULL) {
+		usage_setenv();
+		return 0;
+	}
+
+	name = strndup(argv[1], eq - argv[1]);
+	if (name == NULL) {
+		printf("%% setenvcmd: strndup: %s\n", strerror(errno));
+		return 0;
+	}
+
+	value = eq + 1;
+	if (setenv(name, value, 1) == -1)
+		printf("%% setenv %s=%s: %s\n", name, value, strerror(errno));
+
+	free(name);
+	return 0;
+}
+
+static int
+unsetenvcmd(int argc, char **argv)
+{
+	char *name;
+
+	if (argc != 2) {
+		printf("%% unsetenv NAME\n");
+		return 0;
+	}
+
+	name = argv[1];
+
+	if (unsetenv(name) == -1)
+		printf("%% unsetenv %s: %s\n", name, strerror(errno));
 
 	return 0;
 }
@@ -3367,4 +3455,79 @@ pr_dhcp(int argc, char **argv)
 	}
 	printf("%% show dhcp leases\n");
 	return(1);
+}
+
+static int
+envcmp(const void *item1, const void *item2)
+{
+	const char *a = *(const char **)item1;
+	const char *b = *(const char **)item2;
+
+	return strcmp(a, b);
+}
+
+static int
+pr_environment(int argc, char **argv)
+{
+	extern char **environ;
+	char **ep;
+	int fd;
+	char path[PATH_MAX];
+
+	if (strlcpy(path, "/tmp/nshrc.env.XXXXXXXX", sizeof(path)) >=
+	    sizeof(path))
+		return 0;
+
+	fd = mkstemp(path);
+	if (fd == -1) {
+		printf("%% mkstemp %s: %s\n", path, strerror(errno));
+		return 0;
+	}
+
+	if (argc >= 3) {
+		char *name, *eq, *value;
+
+		name = argv[2];
+		for (ep = environ; *ep; ep++) {
+			eq = strchr(*ep, '=');
+			if (eq && strncmp(name, *ep, eq - *ep) == 0) {
+				value = eq + 1;
+				dprintf(fd, "%s\n", value);
+				break;
+			}
+		}
+	} else {
+		char **sorted_environ;
+		int nenv;
+
+		for (nenv = 0, ep = environ; *ep; ep++) {
+			if (strchr(*ep, '=') != NULL)
+				nenv++;
+		}	
+			
+		sorted_environ = calloc(nenv + 1, sizeof(*sorted_environ));
+		if (sorted_environ == NULL) {
+			printf("%% pr_environment: calloc: %s\n", strerror(errno));
+			goto done;
+		}
+
+		for (nenv = 0, ep = environ; *ep; ep++) {
+			if (strchr(*ep, '=') != NULL)
+				sorted_environ[nenv++] = *ep;
+		}
+
+		qsort(sorted_environ, nenv, sizeof(*sorted_environ), envcmp);
+		sorted_environ[nenv] = NULL;
+
+		for (ep = sorted_environ; *ep; ep++)
+			dprintf(fd, "%s\n", *ep);
+	}
+
+	fsync(fd);
+
+	more(path);
+done:
+	unlink(path);
+	close(fd);
+	return 0;
 }
