@@ -271,7 +271,6 @@ else
 		#enable nsh 
 		rcctl enable nsh
 		#disable services now managed by nsh 
-		rcctl disable pf
 		rcctl disable ntpd
 		rcctl disable smtpd
 		rcctl disable sshd
