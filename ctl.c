@@ -20,12 +20,15 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <errno.h>
+#include <libgen.h>
+#include <histedit.h>
 #include <sys/signal.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/socket.h>
 #include <sys/syslimits.h>
 #include "externs.h"
+#include "editing.h"
 #include "ctl.h"
 
 /* table variable (for pkill usage) */
@@ -816,6 +819,127 @@ call_editor(char *name, char **args, char *z)
 	edit_file(tmpfile, daemons->mode, daemons->propername, args);
 }
 
+static void
+provide_example_config(char *filename)
+{
+	char *name;
+	char path[PATH_MAX];
+	char tmpprompt[sizeof(prompt)];
+	FILE *f = NULL, *example = NULL;
+	int ret, num;
+	struct stat sb;
+	size_t len, remain;
+
+	memset(tmpprompt, 0, sizeof(tmpprompt));
+
+	f = fopen(filename, "w+");
+	if (f == NULL)
+		return;
+
+	if (fstat(fileno(f), &sb) == -1)
+		goto done;
+	
+	if (sb.st_size != 0)
+		goto done;
+
+	name = basename(filename);
+	if (name == NULL)
+		goto done;
+	
+	ret = snprintf(path, sizeof(path), "/etc/examples/%s", name);
+	if (ret < 0 || (size_t)ret >= sizeof(path))
+		goto done;
+
+	/* Snip off rdomain trailer at end of filename. */
+	len = strlen(path);
+	while (len > 0) {
+		if (path[len - 1] >= '0' && path[len - 1] <= '9') {
+			path[len - 1] = '\0';
+			len--;
+		} else {
+			if (path[len - 1] == '.') {
+				path[len - 1] = '\0';
+				len--;
+			}
+			break;
+		}
+	}
+	if (len == 0)
+		goto done;
+
+	example = fopen(path, "r");
+	if (example == NULL)
+		goto done;
+
+	if (fstat(fileno(example), &sb) == -1)
+		goto done;
+
+	if (sb.st_size == 0)
+		goto done;
+	
+	snprintf(tmpprompt, sizeof(tmpprompt),
+	    "%s is empty. Load an example config? [Y/n]\n", filename);
+	setprompt(tmpprompt);
+
+	for (;;) {
+		const char *buf;
+
+		if ((buf = el_gets(elp, &num)) == NULL) {
+			if (num == -1) {
+				ret = -1;
+				goto done;
+			}
+			/* EOF, e.g. ^X or ^D via exit_i() in complete.c */
+			goto done;
+		}
+
+		if (strcmp(buf, "\n") == 0 ||
+		    strcasecmp(buf, "yes\n") == 0 ||
+		    strcasecmp(buf, "y\n") == 0)
+			break;
+
+		if (strcasecmp(buf, "no\n") == 0 ||
+		    strcasecmp(buf, "n\n") == 0)
+			goto done;
+
+		printf("%% Please type \"yes\" or \"no\"\n");
+	}
+
+	remain = sb.st_size;
+	while (remain > 0) {
+		char buf[8192];
+		ssize_t r;
+		size_t w;
+
+		len = (remain < sizeof(buf) ? remain : sizeof(buf));
+		r = fread(buf, 1, len, example);
+		if (r != len) {
+			if (ferror(f)) {
+				printf("%% fread %s: %s\n",
+				    path, strerror(errno));
+			}
+			break;
+		}
+
+		w = fwrite(buf, 1, len, f);
+		if (w != len) {
+			if (ferror(f)) {
+				printf("%% fwrite %s: %s\n",
+				    filename, strerror(errno));
+			}
+			break;
+		}
+
+		remain -= len;
+	}
+done:
+	fclose(f);
+	if (tmpprompt[0] != '\0')
+		restoreprompt();
+	if (example)
+		fclose(example);
+}
+
 int
 edit_file(char *tmpfile, mode_t mode, char *propername, char **args)
 {
@@ -830,6 +954,7 @@ edit_file(char *tmpfile, mode_t mode, char *propername, char **args)
 	}
 	if ((fd = acq_lock(tmpfile)) > 0) {
 		char *argv[] = { editor, tmpfile, NULL };
+		provide_example_config(tmpfile);
 		ret = cmdargs(editor, argv);
 		if (ret == 0 && chmod(tmpfile, mode) == -1) {
 			printf("%% chmod %o %s: %s\n",
