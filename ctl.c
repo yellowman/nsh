@@ -832,7 +832,7 @@ provide_example_config(char *filename)
 
 	memset(tmpprompt, 0, sizeof(tmpprompt));
 
-	f = fopen(filename, "w+");
+	f = fopen(filename, "a+");
 	if (f == NULL)
 		return;
 
