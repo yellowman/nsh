@@ -778,7 +778,7 @@ mbpr(void)
 	struct mbtypes *mp;
 	size_t size;
 	int page_size = getpagesize();
-	int nmbtypes = sizeof(mbstat.m_mtypes) / sizeof(short);
+	int nmbtypes = nitems(mbstat.m_mtypes);
 
 	memset(&seen, 0, sizeof(seen));
 
