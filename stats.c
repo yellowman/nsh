@@ -852,7 +852,7 @@ mbpr(void)
 	for (mp = mbtypes; mp->mt_name; mp++)
 		if (mbstat.m_mtypes[mp->mt_type]) {
 			seen[mp->mt_type] = YES;
-			printf("\t\t%u mbuf%s allocated to %s\n",
+			printf("\t\t%lu mbuf%s allocated to %s\n",
 			    mbstat.m_mtypes[mp->mt_type],
 			    plural((int)mbstat.m_mtypes[mp->mt_type]),
 			    mp->mt_name);
@@ -860,7 +860,7 @@ mbpr(void)
 	seen[MT_FREE] = YES;
 	for (i = 0; i < nmbtypes; i++)
 		if (!seen[i] && mbstat.m_mtypes[i]) {
-			printf("\t\t%u mbuf%s allocated to <mbuf type %d>\n",
+			printf("\t\t%lu mbuf%s allocated to <mbuf type %d>\n",
 			    mbstat.m_mtypes[i],
 			    plural((int)mbstat.m_mtypes[i]), i);
 		}
