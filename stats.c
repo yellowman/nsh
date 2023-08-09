@@ -782,7 +782,7 @@ mbpr(void)
 
 	memset(&seen, 0, sizeof(seen));
 
-	if (nmbtypes != 256) {
+	 if (nmbtypes != MBSTAT_COUNT) {
 		printf("%% mbpr: unexpected change to mbstat; check source\n");
 		return;
 	}
