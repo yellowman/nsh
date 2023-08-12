@@ -25,6 +25,7 @@
 #define ISAKMPD         "/sbin/isakmpd"
 #define IKED            "/sbin/iked"
 #define DVMRPD          "/usr/sbin/dvmrpd"
+#define RADIUSD         "/usr/sbin/radiusd"
 #define RELAYD          "/usr/sbin/relayd"
 #define DHCPD           "/usr/sbin/dhcpd"
 #define SASYNCD         "/usr/sbin/sasyncd"
@@ -52,6 +53,7 @@
 #define OSPF6CTL        "/usr/sbin/ospf6ctl"
 #define EIGRPCTL        "/usr/sbin/eigrpctl"
 #define BGPCTL          "/usr/sbin/bgpctl"
+#define RADIUSCTL	"/usr/sbin/radiusctl"
 #define RIPCTL          "/usr/sbin/ripctl"
 #define LDPCTL          "/usr/sbin/ldpctl"
 #define IPSECCTL        "/sbin/ipsecctl"
@@ -104,6 +106,7 @@ struct daemons {
 #define IPSECCONF_TEMP  "/var/run/ipsec.conf"
 #define IKECONF_TEMP    "/var/run/iked.conf"
 #define DVMRPCONF_TEMP  "/var/run/dvmrpd.conf"
+#define RADIUSCONF_TEMP	"/var/run/radiusd.conf"
 #define RADCONF_TEMP    "/var/run/rad.conf"
 #define RELAYCONF_TEMP  "/var/run/relayd.conf"
 #define SASYNCCONF_TEMP "/var/run/sasyncd.conf"
@@ -121,7 +124,7 @@ struct daemons {
 #define LDAPCONF_TEMP   "/var/run/ldapd.conf"
 #define IFSTATECONF_TEMP "/var/run/ifstated.conf"
 #define MOTD_TEMP "/var/run/motd"
-#define CRONTAB_TEMP "/var/run/crontab"
+#define CRONTAB_TEMP     "/var/run/crontab"
 
 /* ctl tests*/
 extern char *ctl_bgp_test[];
@@ -141,6 +144,7 @@ extern char *ctl_pf_test[];
 extern char *ctl_ospf_test[];
 extern char *ctl_ospf6_test[];
 extern char *ctl_rad_test[];
+extern char *ctl_radius_test[];
 extern char *ctl_relay_test[];
 /* resolvd test no config test yet */
 extern char *ctl_rip_test[];
@@ -166,6 +170,7 @@ extern struct ctl ctl_ifstate[];
 extern struct ctl ctl_ike[];
 extern struct ctl ctl_dvmrp[];
 extern struct ctl ctl_rad[];
+extern struct ctl ctl_radius[];
 extern struct ctl ctl_sasync[];
 extern struct ctl ctl_dhcp[];
 extern struct ctl ctl_snmp[];
