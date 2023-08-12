@@ -58,6 +58,7 @@ struct daemons ctl_daemons[] = {
 { "ipsec",	"IPsec IKEv1",ctl_ipsec,IPSECCONF_TEMP,	0600, 1, RT_TABLEID_MAX },
 { "ike",	"IPsec IKEv2",ctl_ike,	IKECONF_TEMP,	0600, 0, RT_TABLEID_MAX },
 { "rad",	"rad",	ctl_rad,	RADCONF_TEMP,	0600, 0, 0 },
+{ "radius",	"radius", ctl_radius,	RADIUSCONF_TEMP, 0600, 0, RT_TABLEID_MAX },
 { "dvmrp",	"DVMRP",ctl_dvmrp,	DVMRPCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
 { "sasync",	"SAsync",ctl_sasync,	SASYNCCONF_TEMP,0600, 0, RT_TABLEID_MAX },
 { "dhcp",	"DHCP",	ctl_dhcp,	DHCPCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
@@ -332,6 +333,22 @@ struct ctl ctl_rad[] = {
 	{ 0, 0, { 0 }, 0, 0, 0 }
 };
 
+/* radiusd, radiusctl */
+char *ctl_radius_test[] = { RADIUSD, "-nf", REQTEMP, NULL };
+struct ctl ctl_radius[] = {
+        { "enable",         "enable Radius daemon",
+            { RADIUSD, "-f", REQTEMP, NULL }, NULL, DB_X_ENABLE, T_EXEC },
+        { "disable",        "disable Radius daemon",
+            { PKILL, table, "radiusd", NULL }, NULL, DB_X_DISABLE, T_EXEC },
+        { "edit",           "edit, test and stage radiusd config",
+            { "radius", (char *)ctl_radius_test, NULL }, call_editor, 0,          
+            T_HANDLER_FILL1 },
+        { "check-config",   "test staged radiusd config",
+            { RADIUSD, "-nf", REQTEMP, NULL }, NULL, 0, T_EXEC },
+        { 0, 0, { 0 }, 0, 0, 0 }
+};
+
+
 /* ifstated */
 char *ctl_ifstate_test[] = { IFSTATED, "-nf", REQTEMP, NULL };
 struct ctl ctl_ifstate[] = {
@@ -342,7 +359,7 @@ struct ctl ctl_ifstate[] = {
 	{ "edit",           "edit, test and stage ifstated config",
 	    { "ifstate", (char *)ctl_ifstate_test,  NULL }, call_editor, 0,
 	    T_HANDLER_FILL1 },
-	{ "config-test",    "test staged ifstated config ",
+	{ "check-config",    "test staged ifstated config ",
             { IFSTATED, "-nvf", REQTEMP, NULL }, NULL, 0, T_EXEC },
 	{ 0, 0, { 0 }, 0, 0, 0 }
 };

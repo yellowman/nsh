@@ -356,6 +356,7 @@ nsh(p)/help
   ike           IPsec IKEv2 control
   dvmrp         DVMRP control
   rad           Router advertisement control
+  radius	RADIUS server control
   sasync        SA synchronization control
   dhcp          DHCP server control
   snmp          SNMP server control
@@ -1291,6 +1292,29 @@ daemon can be edited with
 command, the syntax is documented in
 .Xr rad.conf 5 .
 .Pp
+.Tg radius
+.Ic radius
+.Op Cm  \&? | enable | disable | edit | check-config
+.Pp
+Enable or disable or configure the
+.Xr radiusd 8
+Radius Remote Access Dial In User service daemon.
+The configuration of
+.Ic radius
+daemon can be edited with
+.Cm edit
+command, the syntax is documented in
+.Xr radiusd.conf 5 .
+.Bd -literal -offset indent
+nsh(config-p)/radius ?
+% Arguments may be abbreviated
+
+   enable       enable Radius daemon
+   disable      disable Radius daemon
+   edit         edit, test and stage radiusd config
+   check-config test staged radiusd config
+.Ed
+.Pp
 .Tg sasyncd
 .Tg sasync
 .Ic sasync
@@ -1307,7 +1331,6 @@ command, the configuration syntax of
 .Ic sasync
 daemon is documented in
 .Xr sasyncd.conf 5 .
-.Pp
 .Bd -literal -offset indent
 nsh(config-p)/sasync
 % Arguments may be abbreviated
@@ -2690,7 +2713,7 @@ This command requires root user privileges.
 .Pp
 .Ic show environment Op Ar NAME
 .Pp
-Display environment variables. 
+Display environment variables.
 If the
 .Ar NAME
 of a variable is specified then display the value of this variable.
@@ -2716,7 +2739,6 @@ nsh/setenv "MY OTHER VARIABLE"=my-name-contains-whitespace
 .Ed
 .Pp
 .Tg unsetenv
-.Pp
 .Ic unsetenv Ar NAME
 .Pp
 Delete the variable
@@ -4548,7 +4570,6 @@ For example, the following allows user 'stacy' to run
 as root via
 .Xr doas 1
 with arbitrary arguments:
-.Ed
 .Bd -literal -offset indent
 permit keepenv stacy as root cmd /usr/local/bin/nsh
 .Ed
@@ -4556,7 +4577,6 @@ permit keepenv stacy as root cmd /usr/local/bin/nsh
 The user stacy can now start
 .Nm
 as follows:
-.Pp
 .Bd -literal -offset indent
 doas /usr/local/bin/nsh
 .Ed
@@ -4608,7 +4628,6 @@ using /etc/doas.conf by referring to the groupname rather than just
 a single username (the colon before the group name is required by
 .Xr doas.conf 5
 syntax and signifies a group name argument):
-.Pp
 .Bd -literal -offset indent
 permit keepenv :nshusers as root cmd /usr/local/bin/nsh args -e
 .Ed
