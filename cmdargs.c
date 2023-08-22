@@ -54,6 +54,13 @@ cmdargs(char *cmd, char *arg[])
 int
 cmdargs_output(char *cmd, char *arg[], int stdoutfd, int stderrfd)
 {
+	return cmdargs_output_setenv(cmd, arg, stdoutfd, stderrfd, NULL);
+}
+
+int
+cmdargs_output_setenv(char *cmd, char *arg[], int stdoutfd, int stderrfd,
+    char **env)
+{
 	sig_t sigint, sigquit, sigchld;
 	int status = -1;
 
@@ -94,8 +101,11 @@ cmdargs_output(char *cmd, char *arg[], int stdoutfd, int stderrfd)
 				}
 			}
 
-			execv(shellp, arg);
-			printf("%% execv failed: %s\n", strerror(errno));
+			if (env)
+				execvpe(shellp, arg, env);
+			else
+				execv(shellp, arg);
+			printf("%% exec failed: %s\n", strerror(errno));
 			_exit(127); /* same as what ksh(1) would do here */
 		}
 			break;

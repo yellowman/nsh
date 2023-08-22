@@ -149,6 +149,7 @@ extern char metricnames[];
 /* ctl.c declarations moved to ctl.h */
 
 /* cmdargs.c */
+int cmdargs_output_setenv(char *, char **, int, int, char **);
 int cmdargs_output(char *, char **, int, int);
 int cmdargs(char *, char **);
 int nsh_setrtable(int);
