@@ -117,6 +117,7 @@ static int	int_telnet(char *, int, int, char **);
 static int	int_do(char *, int, int, char **);
 static int	int_setenv(char *, int, int, char **);
 static int	int_unsetenv(char *, int, int, char **);
+static int	int_saveenv(char *, int, int, char **);
 static int	int_show(char *, int, int, char **);
 static int	int_who(char *, int, int, char **);
 static int	int_doverbose(char *, int, int, char **);
@@ -131,6 +132,7 @@ static int	nocmd(int, char **);
 static int	docmd(int, char **);
 static int	setenvcmd(int, char **);
 static int	unsetenvcmd(int, char **);
+static int	saveenvcmd(int, char **);
 static int	shell(int, char*[]);
 static int	ping(int, char*[]);
 static int	ping6(int, char*[]);
@@ -1077,6 +1079,7 @@ static char whohelp[];
 static char dohelp[];
 static char setenvhelp[];
 static char unsetenvhelp[];
+static char saveenvhelp[];
 static char verbosehelp[];
 static char editinghelp[];
 static char shellhelp[];
@@ -1137,6 +1140,7 @@ struct intlist Intlist[] = {
 	{ "do",		dohelp,					CMPL(c) 0, 0, int_do, 0 },
 	{ "setenv",	setenvhelp,				CMPL(e) 0, 0, int_setenv, 0 },
 	{ "unsetenv",	unsetenvhelp,				CMPL(e) 0, 0, int_unsetenv, 0 },
+	{ "saveenv",	saveenvhelp,				CMPL0 0, 0, int_saveenv, 0 },
 	{ "keepalive",	"GRE tunnel keepalive",			CMPL0 0, 0, intkeepalive, 1},
 	{ "mplslabel",	"MPLS local label",			CMPL0 0, 0, intmpls, 1 },
 	{ "pwe",	"MPLS PWE3",				CMPL0 0, 0, intpwe3, 1 },
@@ -1221,6 +1225,7 @@ struct intlist Bridgelist[] = {
 	{ "do",		dohelp,					CMPL(c) 0, 0, int_do, 0 },
 	{ "setenv",	setenvhelp,				CMPL(e) 0, 0, int_setenv, 0 },
 	{ "unsetenv",	unsetenvhelp,				CMPL(e) 0, 0, int_unsetenv, 0 },
+	{ "saveenv",	saveenvhelp,				CMPL0 0, 0, int_saveenv, 0 },
 	{ "rule",	"Bridge layer 2 filtering rules",	CMPL0 0, 0, brrule, 0 },
 	{ "static",	"Static bridge address entry",		CMPL0 0, 0, brstatic, 1 },
 	{ "ifpriority",	"Spanning priority of a member on an 802.1D bridge",	CMPL0 0, 0, brpri, 1 },
@@ -1598,6 +1603,13 @@ int_unsetenv(char *ifname, int ifs, int argc, char **argv)
 }
 
 static int
+int_saveenv(char *ifname, int ifs, int argc, char **argv)
+{
+	saveenvcmd(argc, argv);
+	return 0; /* do not leave interface context */
+}
+
+static int
 int_show(char *ifname, int ifs, int argc, char **argv)
 {
 	showcmd(argc, argv);
@@ -1738,6 +1750,7 @@ static char
 	dohelp[] =	"Superfluous, do is ignored and its arguments executed",
 	setenvhelp[] =	"Set an environment variable",
 	unsetenvhelp[] ="Delete an environment variable",
+	saveenvhelp[] =	"Save environment variables set by setenv to ~/.nshenv",
 	shellhelp[] =	"Invoke a subshell",
 	savehelp[] =	"Save the current configuration",
 	nreboothelp[] =	"Reboot the system",
@@ -1997,6 +2010,7 @@ Command cmdtab[] = {
 	{ "do",		dohelp,		CMPL(c) 0, 0, docmd,		0, 0, 0, 0 },
 	{ "setenv",	setenvhelp,	CMPL(E) 0, 0, setenvcmd,	0, 0, 0, 0 },
 	{ "unsetenv",	unsetenvhelp,	CMPL(e) 0, 0, unsetenvcmd,	0, 0, 0, 0 },
+	{ "saveenv",	saveenvhelp,	CMPL0 0, 0, saveenvcmd,		0, 0, 0, 0 },
 	{ "!",		shellhelp,	CMPL0 0, 0, shell,		1, 0, 0, 0 },
 	{ "?",		helphelp,	CMPL(c) 0, 0, help,		0, 0, 0, 0 },
 	{ "manual",	manhelp,	CMPL(H) (char **)mantab, sizeof(struct ghs), manual,0, 0, 0, 0 },
@@ -2323,30 +2337,51 @@ usage_setenv(void)
 static int
 setenvcmd(int argc, char **argv)
 {
-	char *name = NULL, *value = NULL, *eq;
+	char *name, *eq, *value;
+	void *name0;
 
 	if (argc != 2) {
 		usage_setenv();
 		return 0;
 	}
 
-	eq = strchr(argv[1], '=');
-	if (eq == NULL) {
-		usage_setenv();
-		return 0;
+	if (nsh_env == NULL) {
+		nsh_env = hashtable_alloc();
+		if (nsh_env == NULL) {
+			printf("%% hashtable_alloc: %s", strerror(errno));
+			return 0;
+		}
 	}
 
-	name = strndup(argv[1], eq - argv[1]);
+	name = strdup(argv[1]);
 	if (name == NULL) {
 		printf("%% setenvcmd: strndup: %s\n", strerror(errno));
 		return 0;
 	}
 
+	eq = strchr(name, '=');
+	if (eq == NULL) {
+		usage_setenv();
+		free(name);
+		return 0;
+	}
+
+	*eq = '\0';
 	value = eq + 1;
 	if (setenv(name, value, 1) == -1)
 		printf("%% setenv %s=%s: %s\n", name, value, strerror(errno));
 
-	free(name);
+	/* Try to remove first, in case of updating an existing variable. */
+	if (hashtable_remove(nsh_env, &name0, NULL, NULL,
+	    name, strlen(name)) == 0)
+		free(name0);
+
+	if (hashtable_add(nsh_env, name, strlen(name), value, strlen(value))) {
+		printf("%% %s: hashtable_add(\"%s\", \"%s\") failed\n",
+		    __func__, name, value);
+		free(name);
+	}
+
 	return 0;
 }
 
@@ -2354,6 +2389,7 @@ static int
 unsetenvcmd(int argc, char **argv)
 {
 	char *name;
+	void *name0;
 
 	if (argc != 2) {
 		printf("%% unsetenv NAME\n");
@@ -2364,6 +2400,68 @@ unsetenvcmd(int argc, char **argv)
 
 	if (unsetenv(name) == -1)
 		printf("%% unsetenv %s: %s\n", name, strerror(errno));
+	
+	if (hashtable_remove(nsh_env, &name0, NULL, NULL,
+	    name, strlen(name)) == 0)
+		free(name0);
+
+	return 0;
+}
+
+static int
+savevar(void *keyptr, size_t keysize, void *value, size_t valsize, void *arg)
+{
+	FILE *f = arg;
+	char *name = keyptr;
+	char *val = value;
+	int ret;
+
+	ret = fprintf(f, "%s=%s\n", name, val);
+	if (ret != keysize + valsize + 2) {
+		printf("%% could not save %s=%s: %s\n", name, val,
+		    ferror(f) ? strerror(errno) : "bad write");
+		return -1;
+	}
+
+	return 0;
+}
+
+static int
+saveenvcmd(int argc, char **argv)
+{
+	char path[PATH_MAX];
+	FILE *f;
+	char *home;
+	int ret;
+
+	if (argc != 1) {
+		printf("%% usage: saveenv\n");
+		return 0;
+	}
+
+	if (nsh_env == NULL)
+		return 0;
+
+	home = getenv("HOME");
+	if (home == NULL) {
+		printf("%% cannot find home directory; HOME is not set!\n");
+		return 0;
+	}
+
+	ret = snprintf(path, sizeof(path), "%s/.nshenv", home);
+	if (ret < 0 || (size_t)ret >= sizeof(path)) {
+		printf("%% path to ~/.nshenv is too long\n");
+		return 0;
+	}
+
+	f = fopen(path, "w");
+	if (f == NULL) {
+		printf("%% fopen %s: %s\n", path, strerror(errno));
+		return 0;
+	}
+
+	hashtable_foreach(nsh_env, savevar, f);
+	fclose(f);
 
 	return 0;
 }

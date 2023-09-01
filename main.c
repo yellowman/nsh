@@ -27,6 +27,7 @@
 #include <sys/syslimits.h>
 #include <sys/ttycom.h>
 #include <sys/signal.h>
+#include <sys/stat.h>
 #include "editing.h"
 #include "stringlist.h"
 #include "externs.h"
@@ -51,7 +52,101 @@ EditLine *eli = NULL;
 EditLine *elp = NULL;
 char *cursor_pos = NULL;
 
+struct hashtable *nsh_env;	/* per-user session environment variables */
+
 void intr(void);
+
+static void
+load_userenv(void)
+{
+	char path[PATH_MAX];
+	FILE *f;
+	size_t linesize = 0;
+	ssize_t linelen;
+	char *home, *line = NULL;
+	int ret;
+	struct stat sb;
+
+	home = getenv("HOME");
+	if (home == NULL)
+		return;
+
+	if (nsh_env == NULL) {
+		nsh_env = hashtable_alloc();
+		if (nsh_env == NULL) {
+			printf("%% hashtable_alloc: %s", strerror(errno));
+			return;
+		}
+	}
+
+	ret = snprintf(path, sizeof(path), "%s/.nshenv", home);
+	if (ret < 0 || (size_t)ret >= sizeof(path))
+		return;
+
+	/* Fail silently if the file does not exist or is inaccessible. */
+	f = fopen(path, "r");
+	if (f == NULL)
+		return;
+	if (fstat(fileno(f), &sb) == -1)  {
+		fclose(f);
+		return;
+	}
+
+	/*
+	 * Fail silently if the file is owned by a different user.
+	 * In particular, we do not want to load a non-root user's
+	 * ~/.nshenv file while running as root.
+	 * In privileged mode our environment may have already been inherited
+	 * from non-root to root through exec, depending on the configuration
+	 * in case of doas(1) or su(1).
+	 */
+	if (sb.st_uid != getuid()) {
+		fclose(f);
+		return;
+	}
+
+	while ((linelen = getline(&line, &linesize, f)) != -1) {
+		char *name, *eq, *value;
+
+		while (linelen > 0 && line[linelen - 1] == '\n') {
+			line[linelen - 1] = '\0';
+			linelen--;
+		}
+
+		name = strdup(line);
+		if (name == NULL) {
+			printf("%% %s: strdup: %s", __func__, strerror(errno));
+			break;
+		}
+
+		eq = strchr(name, '=');
+		if (eq == NULL) {
+			free(name);
+			continue;
+		}
+
+		*eq = '\0';
+		value = eq + 1;
+
+		if (setenv(name, value, 1) == -1) {
+			printf("%% setenv %s=%s: %s\n",
+			    name, value, strerror(errno));
+			free(name);
+			break;
+		}
+
+		if (hashtable_add(nsh_env, name, strlen(name),
+		    value, strlen(value))) {
+			printf("%% %s: hashtable_add(\"%s\", \"%s\") failed\n",
+			    __func__, name, value);
+			free(name);
+			break;
+		}
+	}
+
+	free(line);
+	fclose(f);
+}
 
 int
 main(int argc, char *argv[])
@@ -176,6 +271,8 @@ main(int argc, char *argv[])
 		 */
 		priv = 1;
 	}
+
+	load_userenv();
 
 	top = setjmp(toplevel) == 0;
 	if (top) {

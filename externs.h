@@ -38,6 +38,8 @@ extern int priv;		/* privileged mode or not? */
 extern int privexec;		/* process was started in privileged mode? */
 extern pid_t pid;		/* process id of nsh */
 extern int cli_rtable;		/* environment rtable */
+struct hashtable;
+extern struct hashtable *nsh_env;/* per-user session environment variables */
 
 #define HSIZE	64
 extern char hname[HSIZE];	/* prefix name to mode handler */

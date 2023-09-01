@@ -2715,6 +2715,18 @@ nsh/setenv MY_VARIABLE="this value contains whitespace"
 nsh/setenv "MY OTHER VARIABLE"=my-name-contains-whitespace
 .Ed
 .Pp
+Variables set with
+.Cm setenv
+are valid for the current session and will be inherited to
+other programs started by
+.Nm .
+The
+.Cm saveenv
+command can be used to persist variables set by
+.Cm setenv
+in the file
+.Pa ~/.nshenv .
+.Pp
 .Tg unsetenv
 .Pp
 .Ic unsetenv Ar NAME
@@ -2722,6 +2734,46 @@ nsh/setenv "MY OTHER VARIABLE"=my-name-contains-whitespace
 Delete the variable
 .Ar NAME
 from the environment.
+The
+.Cm saveenv
+command can be used afterwards to delete the variable from
+.Pa ~/.nshenv
+as well.
+.Pp
+.Tg saveenv
+.Pp
+.Ic saveenv
+.Pp
+Save variables set by the
+.Cm setenv
+command to the file
+.Pa ~/.nshenv .
+If this file exists and is owned by the invoking user then
+.Nm
+will automatically load environment variables from this file at startup.
+.Pp
+.Cm saveenv
+is only effective for variables set in the current
+.Nm
+process.
+While switching from non-privileged mode to
+privileged mode with the
+.Cm enable
+command a new
+.Nm
+process will be started.
+Any variables set by
+.Cm setenv
+in non-privileged mode, before
+.Cm enable ,
+may still appear in the environment of the privileged process.
+But a
+.Cm saveenv
+command run in the privileged process will not save them.
+It is necessary to return to unprivileged mode with the
+.Cm disable
+command in order to save any variables which were set in
+unprivileged mode.
 .Pp
 .Tg flush
 .Ic flush
@@ -4874,6 +4926,20 @@ user's login profile
 shell database
 .It Pa /etc/suid_profile
 privileged shell profile
+.It Pa ~/.nshenv
+If this file exists and is owned by the invoking user then
+.Nm
+will automatically load environment variables from this file at startup.
+The
+.Cm setenv
+and
+.Cm saveenv
+commands can be used to generate this file.
+The file will not be loaded if the
+.Fl i
+or
+.Fl c
+options are used.
 .El
 .Sh SEE ALSO
 .Bd -ragged -offset indent
