@@ -58,7 +58,7 @@ more(char *fname)
 		return(0);
 	}
 
-	if (nsh_cbreak() < 0)
+	if (!interactive_mode || nsh_cbreak() < 0)
 		nopager = 1;
 
 	for (i = 0; (input = fgetln(f, &s)) != NULL; i++) {

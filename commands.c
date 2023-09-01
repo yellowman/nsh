@@ -389,7 +389,8 @@ quit(void)
 	if (privexec) {
 		exit(NSH_REXEC_EXIT_CODE_QUIT);
 	} else {
-		printf("%% Session terminated.\n");
+		if (interactive_mode)
+			printf("%% Session terminated.\n");
 		exit(0);
 	}
 	return 0;
@@ -1470,16 +1471,18 @@ interface(int argc, char **argv, char *modhvar)
 		return(0);
 	}
 
-	/* human at the keyboard */
+	/* human at the keyboard or commands on stdin */
 	for (;;) {
 		char *margp;
 
 		if (!editing) {
 			/* command line editing disabled */
-			printf("%s", iprompt());
+			if (interactive_mode)
+				printf("%s", iprompt());
 			if (fgets(line, sizeof(line), stdin) == NULL) {
 				if (feof(stdin) || ferror(stdin)) {
-					printf("\n");
+					if (interactive_mode)
+						printf("\n");
 					ifname[0] = '\0';
 					close(ifs);
 					return(0);
@@ -2055,10 +2058,12 @@ command()
 
 	for (;;) {
 		if (!editing) {
-			printf("%s", cprompt());
+			if (interactive_mode)
+				printf("%s", cprompt());
 			if (fgets(line, sizeof(line), stdin) == NULL) {
 				if (feof(stdin) || ferror(stdin)) {
-					printf("\n");
+					if (interactive_mode)
+						printf("\n");
 					(void) quit();
 					/* NOTREACHED */
 				}
@@ -3182,6 +3187,14 @@ do_reboot(int how)
 		    "changes.\n"
 		    "%% The 'write-config' command will save changes to %s.\n",
 		    NSHRC);
+		if (!interactive_mode)
+			return -1;
+	}
+
+	if (!interactive_mode) {
+		if (cmdargs(argv[0], argv) != 0)
+			printf("%% %s command failed\n", argv[0]);
+		return 0;
 	}
 
 	switch (how) {

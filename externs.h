@@ -32,6 +32,7 @@ extern int  margc;		/* makeargv() arg count */
 extern char *margv[];		/* makeargv() args */
 extern int verbose;		/* is verbose mode on? */
 extern int editing;		/* is command line editing mode on? */
+extern int interactive_mode;	/* are we in interactive mode? */
 extern int config_mode;		/* are we in comfig mode? */
 extern int bridge;		/* are we in bridge mode (or interface mode?) */
 extern int priv;		/* privileged mode or not? */
