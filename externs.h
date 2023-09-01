@@ -564,3 +564,19 @@ int mbsavis(char**, int *, const char *);
 /* ctlargs.c */
 int pr_prot1(int, char **);
 char **step_optreq(char **, char **, int, char **, int);
+
+/* hashtable.c */
+struct hashtable;
+struct hashtable *hashtable_alloc(void);
+void hashtable_free(struct hashtable *);
+int hashtable_add(struct hashtable *, void *key, size_t keysize,
+    void *value, size_t valsize);
+void *hashtable_get_keyptr(struct hashtable *, void *key, size_t keysize);
+void *hashtable_get_value(struct hashtable *, void *key, size_t keysize);
+int hashtable_remove(struct hashtable *, void **keyptr, void **value,
+    size_t *valsize, void *key, size_t keysize);
+int hashtable_contains(struct hashtable *, void *key, size_t keysize);
+int hashtable_foreach(struct hashtable *,
+    int (*cb)(void *, size_t, void *, size_t, void *),
+    void *cb_arg);
+int hashtable_num_entries(struct hashtable *);
