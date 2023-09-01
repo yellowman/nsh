@@ -2460,6 +2460,9 @@ saveenvcmd(int argc, char **argv)
 		return 0;
 	}
 
+	if (fchmod(fileno(f), S_IRUSR | S_IWUSR) == -1)
+		printf("%% chmod 600 %s: %s\n", path, strerror(errno));
+
 	hashtable_foreach(nsh_env, savevar, f);
 	fclose(f);
 
