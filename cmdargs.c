@@ -22,7 +22,9 @@
 #include <sys/socket.h>
 #include <sys/wait.h>
 
+#include <fcntl.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <signal.h>
 #include <errno.h>
@@ -54,12 +56,18 @@ cmdargs(char *cmd, char *arg[])
 int
 cmdargs_output(char *cmd, char *arg[], int stdoutfd, int stderrfd)
 {
-	return cmdargs_output_setenv(cmd, arg, stdoutfd, stderrfd, NULL);
+	return cmdargs_output_setenv(cmd, arg, stdoutfd, stderrfd, NULL, 0);
+}
+
+int
+cmdargs_nowait(char *cmd, char *arg[], int pipefd)
+{
+	return cmdargs_output_setenv(cmd, arg, -1, -1, NULL, pipefd);
 }
 
 int
 cmdargs_output_setenv(char *cmd, char *arg[], int stdoutfd, int stderrfd,
-    char **env)
+    char **env, int pipefd)
 {
 	sig_t sigint, sigquit, sigchld;
 	int status = -1;
@@ -110,6 +118,8 @@ cmdargs_output_setenv(char *cmd, char *arg[], int stdoutfd, int stderrfd,
 		}
 			break;
 		default:
+			if (pipefd)
+				return 0;
 			signal(SIGALRM, sigalarm);
 			wait(&status);  /* Wait for cmd to complete */
 			if (WIFEXITED(status)) /* normal exit? */
@@ -122,6 +132,31 @@ cmdargs_output_setenv(char *cmd, char *arg[], int stdoutfd, int stderrfd,
 	signal(SIGCHLD, sigchld);
 	signal(SIGALRM, SIG_DFL);
 	child = -1;
+
+	return status;
+}
+
+int
+cmdargs_wait_for_child(void)
+{
+	sig_t sigint, sigquit, sigchld;
+	int status = 127;
+
+	sigint = signal(SIGINT, SIG_IGN);
+	sigquit = signal(SIGQUIT, SIG_IGN);
+	sigchld = signal(SIGCHLD, SIG_DFL);
+
+	if (child != -1) {
+		signal(SIGALRM, sigalarm);
+		wait(&status);  /* Wait for cmd to complete */
+		if (WIFEXITED(status)) /* normal exit? */
+			status = WEXITSTATUS(status); /* exit code */
+		signal(SIGINT, sigint);
+		signal(SIGQUIT, sigquit);
+		signal(SIGCHLD, sigchld);
+		signal(SIGALRM, SIG_DFL);
+		child = -1;
+	}
 
 	return status;
 }

@@ -205,6 +205,17 @@ main(int argc, char *argv[])
 
 		if (!privexec)
 			printf("%% NSH v%s\n", vers);
+	} else {
+		/*
+		 * We need line-buffered mode to cross seamlessly into
+		 * the privileged process in case an 'enable' command
+		 * appears on standard input.
+		 */
+		if (setvbuf(stdin, NULL, _IOLBF, 0) != 0) {
+			/* should not happen, warn just in case */
+			printf("%% failed to enable line-buffered mode "
+			    "for stdin\n");
+		}
 	}
 
 	/* create temporal tables (if they aren't already there) */

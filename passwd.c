@@ -32,6 +32,7 @@
 #include <pwd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/socket.h>
 #include "externs.h"
 
 int read_pass(char *, size_t);
@@ -281,17 +282,31 @@ enable_passwd(int argc, char **argv)
 	return 0;
 }
 
+static int
+write_line(const char *line, size_t len, int fd)
+{
+	ssize_t written = 0, w;
+
+	do {
+		w = write(fd, line, len);
+		if (w == -1)
+			return -1;
+		written += w;
+	} while (written < len);
+
+	return 0;
+}
+
 int
 enable(int argc, char **argv)
 {
 	char *doas_argv[] = {
-		DOAS, NSH_REXEC_PATH_STR, "-e", NULL
+		NSHDOAS_PATH_STR, NULL, NULL, NULL
 	};
-	char *su_argv[] = {
-		SU, "root", "-c", NSH_REXEC_PATH_STR " -e", NULL
-		
-	};
+	char buf[64];
 	int exit_code;
+	int pfd[2];
+	pid_t pid;
 
 	if (argc != 1)
 		return enable_passwd(argc, argv);
@@ -304,36 +319,51 @@ enable(int argc, char **argv)
 		return 0;
 	}
 
+	if (socketpair(AF_UNIX, SOCK_STREAM, PF_UNSPEC, pfd) == -1) {
+		printf("%% socketpair failed: %s\n", strerror(errno));
+		return 0;
+	}
+
+	if (!interactive_mode) {
+		snprintf(buf, sizeof(buf), "%d", pfd[0]);
+		doas_argv[1] = "-F";
+		doas_argv[2] = buf;
+	}
+
 	/*
 	 * Start an nsh child process in privileged mode.
 	 * The 'priv' flag will remain at zero in our own process.
 	 */
-	printf("%% Obtaining root privileges via %s\n", DOAS);
-	exit_code = cmdargs(doas_argv[0], doas_argv);
+	pid = cmdargs_nowait(doas_argv[0], doas_argv, pfd[0]);
+	if (pid == -1)
+		return 0;
+
+	close(pfd[0]);
+
+	if (!interactive_mode) {
+		char *line = NULL;
+		size_t linesize = 0;
+		ssize_t linelen;
+
+		while ((linelen = getline(&line, &linesize, stdin)) != -1) {
+			if (write_line(line, linelen, pfd[1]) == -1) {
+				printf("%% writing to privileged child: %s\n",
+				    strerror(errno));
+				break;
+			}
+			if (strcmp(line, "disable\n") == 0)
+				break;
+		}
+		free(line);
+	}
+
+	exit_code = cmdargs_wait_for_child();
 	if (exit_code == 0)
 		return 0;
 	else if (exit_code == NSH_REXEC_EXIT_CODE_QUIT) {
 		/* The child exited due to a 'quit' command. */
 		quit();
-	}
-
-	/*
-	 * XXX We cannot differentiate a doas exit code of 1 from an
-	 * nsh exit code of 1. Under normal circumstances nsh will exit
-	 * with code zero. Just assume that doas failed to run the
-	 * command if we get here and retry with su.
-	 */
-
-	printf("%% Obtaining root privileges via %s\n", SU);
-	exit_code = cmdargs(su_argv[0], su_argv);
-
-	if (exit_code == -1 || exit_code == 127) {
-		printf("%% Entering privileged mode failed: "
-		    "Could not re-execute nsh\n");
-	} else if (exit_code == NSH_REXEC_EXIT_CODE_QUIT) {
-		/* The child exited due to a 'quit' command. */
-		quit();
-	} else if (exit_code) {
+	} else  {
 		printf("%% Privileged mode child process exited "
 		    "with error code %d\n", exit_code);
 	}

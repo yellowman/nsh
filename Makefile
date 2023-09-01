@@ -1,7 +1,7 @@
 #
 PROG= nsh
 
-SUBDIR += bgpnsh
+SUBDIR += bgpnsh nshdoas
 
 .PHONY: release dist
 
@@ -11,7 +11,6 @@ SUBDIR += bgpnsh
 DEBUG?=-O0 -g
 .endif
 
-NSH_REXEC_PATH?=/usr/local/bin/nsh
 
 .if make(install)
 DESTDIR?=/usr/local
@@ -23,7 +22,7 @@ MANDIR?=/man/man
 #CFLAGS=-O -DDHCPLEASES=\"/flash/dhcpd.leases\" -Wmissing-prototypes -Wformat -Wall -Wpointer-arith -Wbad-function-cast #-W
 CFLAGS?=-O
 CFLAGS+=-Wmissing-prototypes -Wformat -Wall -Wbad-function-cast -I/usr/local/include #-W -Wpointer-arith
-CPPFLAGS+=-DNSH_VERSION=${NSH_VERSION}  -DNSH_REXEC_PATH=${NSH_REXEC_PATH}
+CPPFLAGS+=-DNSH_VERSION=${NSH_VERSION}
 
 SRCS=arp.c compile.c main.c genget.c commands.c bgpcommands.c stats.c kroute.c
 SRCS+=ctl.c show.c if.c version.c route.c conf.c complete.c ieee80211.c
