@@ -4579,9 +4579,11 @@ Access to root privileges must be restricted to trusted users only.
 .Pp
 *NB End Security Warning
 .Pp
-Users can either start
+Users with regular shell access can start
 .Nm
-from another shell or be logged into an
+from another shell.
+.Pp
+Users will be logged into an
 .Nm
 session directly if the user account's login shell is set to
 .Nm
@@ -4604,8 +4606,10 @@ can be used with nsh arguments restricted to the
 .Fl e
 option.
 .Nm
-will attempt to obtain root privileges when privileged mode is entered,
-and with a line such as the following in
+will attempt to obtain root privileges when privileged mode is entered.
+To prevent abuse the user will be required to authenticate again with
+their own password.
+With a line such as the following in
 .Pa /etc/doas.conf
 this will succeed:
 .Bd -literal -offset indent
