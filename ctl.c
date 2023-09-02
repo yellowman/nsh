@@ -672,7 +672,7 @@ ctlhandler(int argc, char **argv, char *modhvar)
 	break;
 	case T_HANDLER_FILL1:
 		/* pointer to handler routine, fill args @ args[1] pointer */
-		if (fill_tmpfile((char **)fillargs[1], tmpfile, tmp_args))
+		if (fill_tmpfile((char **)&fillargs[1], tmpfile, tmp_args))
 			(*x->handler)(fillargs[0], tmp_args, fillargs[2]);
 		else
 			(*x->handler)(fillargs[0], (char **)fillargs[1], fillargs[2]);
