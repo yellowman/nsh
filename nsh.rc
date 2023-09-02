@@ -1,0 +1,12 @@
+#!/bin/ksh
+#
+# $OpenBSD: nsh,v 1.0  2022/04/07 01:41:16 cappuccio Exp $
+
+daemon="/usr/local/bin/nsh"
+daemon_flags=" -v -i /etc/nshrc | tee -a /var/log/nsh.log"
+
+rc_reload=NO
+
+. /etc/rc.d/rc.subr
+
+rc_cmd $1
