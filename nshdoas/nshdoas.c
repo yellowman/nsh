@@ -221,7 +221,7 @@ authuser_checkpass(char *myname, char *login_style)
 	return AUTH_OK;
 }
 
-static void
+static int
 authuser(char *myname, char *login_style, int persist)
 {
 	int i, fd = -1;
@@ -236,13 +236,14 @@ authuser(char *myname, char *login_style, int persist)
 		if (authuser_checkpass(myname, login_style) == AUTH_OK)
 			goto good;
 	}
-	exit(1);
+	return 1;
 good:
 	if (fd != -1) {
 		int secs = 5 * 60;
 		ioctl(fd, TIOCSETVERAUTH, &secs);
 		close(fd);
 	}
+	return 0;
 }
 
 int
@@ -328,7 +329,8 @@ main(int argc, char **argv)
 	if (action == 0) {
 		printf("%% No rule for %s found in /etc/doas.conf; "
 		    "root password required\n", mypw->pw_name);
-		authuser(targpw->pw_name, login_style, 0);
+		if (authuser(targpw->pw_name, login_style, 0))
+			exit(1);
 		rule = NULL;
 	} else {
 		if (action != PERMIT) {
@@ -341,8 +343,13 @@ main(int argc, char **argv)
 			if (nflag)
 				errx(1, "Authentication required");
 
-			authuser(mypw->pw_name, login_style,
-			    rule->options & PERSIST);
+			if (authuser(mypw->pw_name, login_style,
+			    rule->options & PERSIST)) {
+				printf("%% Too many authentication failures; "
+				    "root password required\n");
+				if (authuser(targpw->pw_name, login_style, 0))
+					exit(1);
+			}
 		}
 	}
 
