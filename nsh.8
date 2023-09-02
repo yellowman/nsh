@@ -430,10 +430,9 @@ If neccessary,
 then attempts to obtain root privileges.
 Depending on configuration, this step may require the user's password or
 the root password to be entered.
-Root privileges will be obtained via
-.Xr doas 1 ,
-with a fallback to
-.Xr su 1 .
+Root privileges will be obtained via access rules in
+.Xr doas.conf 5 ,
+with a fallback to the root password.
 For relevant configuration examples see
 .Sx Section 7 Allowing users to run NSH
 below.
@@ -4581,16 +4580,26 @@ command to enter
 privileged mode with root privileges.
 .Pp
 If the user should not know the root password then
-.Xr doas 1
-can be used to allow the user to either use the nsh
-.Cm enable
-command to obtain root privileges within nsh, or to launch
+.Xr doas.conf 5
+can be used with nsh arguments restricted to the
+.Fl e
+option.
 .Nm
-as root.
+will attempt to obtain root privileges when privileged mode is entered,
+and with a line such as the following in
+.Pa /etc/doas.conf
+this will succeed:
+.Bd -literal -offset indent
+permit keepenv stacy as root cmd /usr/local/bin/nsh args -e
+.Ed
 .Pp
 To allow a user to run
 .Nm
-as root and with arbitrary arguments, configure
+as root and with arbitrary arguments such as
+.Fl c
+or
+.Fl i ,
+configure
 .Pa /etc/doas.conf
 with a line starting with 'permit' to allow the full path to the
 .Nm
@@ -4607,28 +4616,10 @@ permit keepenv stacy as root cmd /usr/local/bin/nsh
 .Pp
 The user stacy can now start
 .Nm
-as follows:
+via doas with an arbitrary amount of arguments:
 .Pp
 .Bd -literal -offset indent
-doas /usr/local/bin/nsh
-.Ed
-.Pp
-If nsh arguments in
-.Pa /etc/doas.conf
-are restricted to the
-.Fl e
-option then users can use the
-.Cm enable
-command from within nsh to enter privileged mode.
-.Nm
-will try to run
-.Xr doas 1
-automatically to obtain root privileges when privileged mode is entered,
-and with a line such as the following in
-.Pa /etc/doas.conf
-this will succeed:
-.Bd -literal -offset indent
-permit keepenv stacy as root cmd /usr/local/bin/nsh args -e
+doas /usr/local/bin/nsh ...
 .Ed
 .Pp
 To allow a restricted user to run a specifc
