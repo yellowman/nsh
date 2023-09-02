@@ -150,31 +150,36 @@ permit(uid_t uid, gid_t *groups, int ngroups, const struct rule **lastr,
 	return (*lastr)->action;
 }
 
-static void
-parseconfig(const char *filename, int checkperms)
+static int
+parseconfig(const char *filename)
 {
 	extern FILE *yyfp;
 	extern int yyparse(void);
 	struct stat sb;
 
 	yyfp = fopen(filename, "r");
-	if (!yyfp)
-		err(1, checkperms ? "doas is not enabled, %s" :
-		    "could not open config file %s", filename);
+	if (!yyfp) {
+		printf("doas is not enabled, %s: %s\n", filename,
+		    strerror(errno));
+		return 1;
+	}
 
-	if (checkperms) {
-		if (fstat(fileno(yyfp), &sb) != 0)
-			err(1, "fstat(\"%s\")", filename);
-		if ((sb.st_mode & (S_IWGRP|S_IWOTH)) != 0)
-			errx(1, "%s is writable by group or other", filename);
-		if (sb.st_uid != 0)
-			errx(1, "%s is not owned by root", filename);
+	if (fstat(fileno(yyfp), &sb) != 0) {
+		printf("fstat(\"%s\"): %s\n", filename, strerror(errno));
+		return 1;
+	}
+	if ((sb.st_mode & (S_IWGRP|S_IWOTH)) != 0) {
+		printf("%s is writable by group or other", filename);
+		return 1;
+	}
+	if (sb.st_uid != 0) {
+		printf("%s is not owned by root", filename);
+		return 1;
 	}
 
 	yyparse();
 	fclose(yyfp);
-	if (parse_error)
-		exit(1);
+	return parse_error ? 1 : 0;
 }
 
 static int
@@ -260,7 +265,7 @@ main(int argc, char **argv)
 	const char *errstr;
 	char *login_style = NULL;
 	char **envp = NULL;
-	int nshfd = -1, action;
+	int nshfd = -1, action = 0;
 
 	setprogname("nshdoas");
 
@@ -316,10 +321,10 @@ main(int argc, char **argv)
 	if (targpw == NULL)
 		errx(1, "no passwd entry for target");
 
-	parseconfig("/etc/doas.conf", 1);
-
-	action = permit(uid, groups, ngroups, &rule, target, cmd[0],
-	    (const char **)cmd + 1);
+	if (parseconfig("/etc/doas.conf") == 0) {
+		action = permit(uid, groups, ngroups, &rule, target, cmd[0],
+		    (const char **)cmd + 1);
+	}
 	if (action == 0) {
 		printf("%% No rule for %s found in /etc/doas.conf; "
 		    "root password required\n", mypw->pw_name);
