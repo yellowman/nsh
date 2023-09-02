@@ -4560,6 +4560,25 @@ see the following man pages for information
 !man pfctl
 !man pf.conf
 .Sh Section 7 Allowing users to run NSH
+The design of
+.Ox
+requires root privileges to administer the network stack.
+.Pp
+*NB Security Warning!!!
+.Pp
+The doas configurations outlined below grant a non-root
+.Nm
+user the ability to obtain root privileges without knowledge of
+the root password.
+A user can abuse
+.Nm
+running as root to run arbitrary commands with the
+.Cm !
+shell escape syntax.
+Access to root privileges must be restricted to trusted users only.
+.Pp
+*NB End Security Warning
+.Pp
 Users can either start
 .Nm
 from another shell or be logged into an
@@ -4655,26 +4674,6 @@ syntax and signifies a group name argument):
 .Bd -literal -offset indent
 permit keepenv :nshusers as root cmd /usr/local/bin/nsh args -e
 .Ed
-.Pp
-*NB Security Warning!!!
-.Pp
-The doas configurations outlined here grant a non-root
-user the ability to run
-.Nm
-with all the privileges of the
-.Ox
-root user.
-The design of
-.Ox
-requires root privileges to administer the network stack.
-A user can abuse
-.Nm
-running as root to run arbitrary commands with the
-.Cm !
-shell escape syntax.
-Therefore, access to running
-.Nm
-with root privleges must be restricted to trusted users only.
 .Sh Common interface types
 Packet Filter Logging: This interface is used to pass traffic logged by
 the firewall to software which can record it.
