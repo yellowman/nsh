@@ -2434,10 +2434,10 @@ savevar(void *keyptr, size_t keysize, void *value, size_t valsize, void *arg)
 static int
 saveenvcmd(int argc, char **argv)
 {
-	char path[PATH_MAX];
+	char tmppath[PATH_MAX], path[PATH_MAX];
 	FILE *f;
 	char *home;
-	int ret;
+	int ret, fd;
 
 	if (argc != 1) {
 		printf("%% usage: saveenv\n");
@@ -2459,16 +2459,38 @@ saveenvcmd(int argc, char **argv)
 		return 0;
 	}
 
-	f = fopen(path, "w");
+	ret = snprintf(tmppath, sizeof(tmppath), "%s/.nshenv-XXXXXXXXXX", home);
+	if (ret < 0 || (size_t)ret >= sizeof(tmppath)) {
+		printf("%% path to ~/.nshenv is too long\n");
+		return 0;
+	}
+
+	fd = mkstemp(tmppath);
+	if (fd == -1) {
+		printf("%s: mkstemp %s: %s", __func__, tmppath,
+		    strerror(errno));
+		return 0;
+	}
+
+
+	f = fdopen(fd, "w");
 	if (f == NULL) {
-		printf("%% fopen %s: %s\n", path, strerror(errno));
+		printf("%% fopen %s: %s\n", tmppath, strerror(errno));
+		close(fd);
 		return 0;
 	}
 
 	if (fchmod(fileno(f), S_IRUSR | S_IWUSR) == -1)
-		printf("%% chmod 600 %s: %s\n", path, strerror(errno));
+		printf("%% chmod 600 %s: %s\n", tmppath, strerror(errno));
 
 	hashtable_foreach(nsh_env, savevar, f);
+
+	if (rename(tmppath, path) == -1) {
+		printf("%% rename %s %s: %s\n", tmppath, path, strerror(errno));
+		if (unlink(tmppath) == -1)
+			printf("%% unlink %s: %s\n", tmppath, strerror(errno));
+	}
+
 	fclose(f);
 
 	return 0;
