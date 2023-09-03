@@ -2475,8 +2475,10 @@ saveenvcmd(int argc, char **argv)
 
 	f = fdopen(fd, "w");
 	if (f == NULL) {
-		printf("%% fopen %s: %s\n", tmppath, strerror(errno));
+		printf("%% fdopen %s: %s\n", tmppath, strerror(errno));
 		close(fd);
+		if (unlink(tmppath) == -1)
+			printf("%% unlink %s: %s\n", tmppath, strerror(errno));
 		return 0;
 	}
 
