@@ -1,7 +1,7 @@
 #
 PROG= nsh
 
-SUBDIR += bgpnsh nshdoas
+SUBDIR += bgpnsh nshdoas scipts 
 
 .PHONY: release dist
 
