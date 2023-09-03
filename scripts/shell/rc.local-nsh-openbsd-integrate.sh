@@ -14,7 +14,6 @@ else
         echo "If you have an unusual config, e.g. multiple routing domains"
         echo "The import script will require user verification"
         echo "This script is designed to assist a user with using nsh on"
-        echo "top of a fresh OpenBSD installation."
         read input?"Do you want to continue? (Yes/No) [${dflt}] "
 
         if [ -z "${input}" ]; then input="${dflt}"; fi
