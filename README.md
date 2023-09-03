@@ -1,20 +1,34 @@
-nsh//network config shell//Chris Cappuccio <chris@nmedia.net> version 1.1
+# nsh 
+
+## network shell
+
+---
+Chris Cappuccio <chris@nmedia.net> version 1.1
+
 
 NSH is a CLI intended for OpenBSD-based network appliances. It replaces
 ifconfig, sysctl and route with its own simple command language, and
 encapsulates configuration for other daemons into one place, effectively
 replacing /etc/netstart and parts of /etc/rc for appliance-style usage.
 
-Daemons and services encapsulated by nsh:
+## Daemons and services encapsulated by nsh:
 
 bgpd, dhcpd, dhcpleased, dhcrelay, dvmrpd, eigrpd, ftp-proxy, ifstated, inetd, 
 iked, ipsecctl, ldapd, ldpd, npppd, ntpd, ospfd, ospf6d, pf, rad, relayd, 
 resolvd, ripd, sasyncd, slaacd, smtpd, snmpd, sshd, tftpd, tftp-proxy.
 
+---
+
+## License 
+
 NSH is freely licensed, in the BSD style.
 
 In conjunction with the OpenBSD kernel and the daemons you wish to control,
 you have a fully functioning network appliance type of system.
+
+---
+
+## NSH Manual
 
 See https://github.com/yellowman/nsh/wiki/NSH-Manual-page or 
 nsh.8 manual for detailed installation instructions and command set.
@@ -28,3 +42,62 @@ list.
 
 See https://www.youtube.com/watch?v=WMKxIHaWaG0 for an EurobsdCon 2022 
 Presentation on NSH for network administrators. 
+
+---
+
+## Quickstart Guide for installing and building **nsh** on an OpenBSD system
+
+1. Install OpenBSD on your system 
+
+2. Install the OpenBSD port of nsh on your system -(this will install the latest nsh release version)
+
+```shell
+pkg_add nsh  
+```
+
+3. Install git on your system to allow fetching more recent versions of nsh from github
+
+```shell
+pkg_add git
+```
+
+4. to download the latest development of nsh use git to download the latest nsh repository
+
+```shell
+git clone https://github.com/yellowman/nsh
+```
+
+5. change directory to the downloaded nsh directory 
+
+```shell
+cd nsh
+```
+
+6. to build the nsh sources follow the steps below
+
+6a. make objects
+
+```shell
+make obj
+```
+
+6b. make / compile the sources
+
+```shell
+make
+```
+
+6c.  Install the compiled nsh binaries and supporting files (you will need root privileges to do this).
+
+```shell
+make install
+```
+
+7. to let nsh take over the configuration of a system a number of steps that need to be carried out such as
+7a. importing the configuration of te
+
+
+
+ 
+
+
