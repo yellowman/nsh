@@ -14,12 +14,12 @@ resolvd, ripd, sasyncd, slaacd, smtpd, snmpd, sshd, tftpd, tftp-proxy.
 NSH is freely licensed, in the BSD style.
 
 In conjunction with the OpenBSD kernel and the daemons you wish to control,
-you have a fully functioning system.
+you have a fully functioning network appliance type of system.
 
 See https://github.com/yellowman/nsh/wiki/NSH-Manual-page or 
-nsh.8 manual for installation instructons and command set.
+nsh.8 manual for detailed installation instructions and command set.
 
-See the Todo list on https://github.com/users/yellowman/projects/1 for 
+See the to-do list on https://github.com/users/yellowman/projects/1 for 
 details on implementation status and future ideas.
 
 See http://github.com/yellowman/nsh/ for current source code repository.
