@@ -113,7 +113,8 @@ cmdargs_output_setenv(char *cmd, char *arg[], int stdoutfd, int stderrfd,
 				execvpe(shellp, arg, env);
 			else
 				execv(shellp, arg);
-			printf("%% exec failed: %s\n", strerror(errno));
+			printf("%% exec '%s' failed: %s\n", shellp,
+			    strerror(errno));
 			_exit(127); /* same as what ksh(1) would do here */
 		}
 			break;

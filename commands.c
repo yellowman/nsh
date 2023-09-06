@@ -2213,7 +2213,8 @@ manual(int argc, char **argv)
 				execle("/usr/bin/man", "man", "-l",
 				    "-O", tagarg, nsh8, NULL, env);
 			}
-			printf("%% execl failed: %s\n", strerror(errno));
+			printf("%% execl '/usr/bin/man' failed: %s\n",
+			   strerror(errno));
 			_exit(0);
 			break;
 		default:
@@ -2534,7 +2535,8 @@ shell(int argc, char **argv)
 				    (char *)NULL);
 			else
 				execl(shellp, shellname, (char *)NULL);
-			printf("%% execl failed: %s\n", strerror(errno));
+			printf("%% execl '%s' failed: %s\n", shellp,
+			    strerror(errno));
 			_exit(0);
 			}
 			break;
