@@ -1,5 +1,13 @@
 #!/bin/sh -
 
+#This Script integrates nsh with OpenBSD by *moving*
+#config files for daemons from \/etc\/ to \/var\/run\/
+#the moved config files are also saved to \/var\/nsh\/backup\/pre-nsh-config\/
+#this script assumes it is importing a basic single rdomain setup and will
+#attempt to import daemons that are supported by nsh.
+#only run this script if you intend to manage the system via nsh.
+
+
 dflt='No'
 
 #check if user is root
@@ -10,8 +18,12 @@ then
 else
 	#ask user do they want to continue
 	#default is No
-	echo "This script is built to suit a typical network configuration setup"
-	echo "If you have an unusual config, it is not recommended to run"
+ 	echo "This script takes a more invasive approach and is intended for 
+  	echo "Administrators who inend to permanently move to nsh to manage the 
+   	echo "configuration on the system"
+        echo "If you have an unusual config, e.g. multiple routing domains"
+	echo "If you have an unusual config, it is not recommended to run" 
+ 	echo "Without carefully reviewing the the script and"
 	read input?"Do you want to continue? (Yes/No) [${dflt}] "
 
 	if [ -z "${input}" ]; then input="${dflt}"; fi
@@ -258,7 +270,7 @@ else
 		chgrp wheel /var/log/nsh.log
 		chmod 660 /var/log/nsh.log
 		#import running Openbsd kernel configuration
-		/usr/local/bin/nsh -c ./write-config.nshrc
+		/usr/local/bin/nsh -c ../nshrc/write-config.nshrc
 		#secure nshrc config file 
 		chmod 660 /etc/nshrc
 		#Remove any networking config from /etc/ that conflicts with nsh
@@ -266,7 +278,7 @@ else
 		mv /etc/mygate /var/nsh/backup/pre-nsh-config/
 		#can we import rc.conf.local to nsh config
 		mv /etc/rc.conf.local /var/nsh/backup/pre-nsh-config/
-		cp nsh /etc/rc.d/
+		cp nsh.rc /etc/rc.d/nsh
 		chmod 555 /etc/rc.d/nsh
 		#enable nsh 
 		rcctl enable nsh
@@ -275,7 +287,8 @@ else
 		rcctl disable smtpd
 		rcctl disable sshd
 		echo reboot device for nsh configuration to take effect
-		/usr/local/bin/nsh -c ./enable-sshd.nshrc
+		/usr/local/bin/nsh -c ../nshrc/enable-sshd.nshrc
+  		/usr/local/bin/nsh -c ../nshrc/write-config.nshrc
 	else
 		exit
 	fi
