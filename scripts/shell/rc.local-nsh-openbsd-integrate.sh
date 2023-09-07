@@ -220,8 +220,12 @@ else
                 if [ -f $motd ]; then
                         cp /etc/motd /var/nsh/backup/pre-nsh-config/
                         cp /etc/motd /var/run/motd.0
-                        sed -i 's/Welcome to OpenBSD/OpenBSD/g' /var/run/motd.0
-                        ln -s /var/run/motd.0 /etc/motd
+                        echo nsh has been integrated with this OpenBSD install by copying >>/var/run/motd.0
+                        echo configs from \/etc\/  to \/var/run\/ >>/var/run/motd.0
+                        echo daemons that are started using rcctl openBSD will continue to use >>/var/run/motd.0
+                        echo the config files located in \/etc\/ >>/var/run/motd.0
+                        echo daemons started and managed by nsh will >>/var/run/motd.0
+                        echo use the files located in \var/\run\/ >>/var/run/motd.0
                         chown root /var/run/motd.0
                         chgrp wheel /var/run/motd.0
                         chmod 660 /var/run/motd.0
