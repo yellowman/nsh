@@ -93,11 +93,18 @@ make
 make install
 ```
 
-7. to let nsh take over the configuration of a system a number of steps that need to be carried out such as
-7a. importing the configuration of te
+7. To have nsh take over the configuration of a system a number of steps that need to be carried out such as
 
+7a. Backup configuration of system, daemons and network in /etc 
+7b. Copy the configuration files to /var/run/example-configfilename.0  (the .0 file extension) implies running in the default rdomain / rtable (rdomain 0)
+7c. save the running config to /etc/nshrc
+7d. secure the /etc/nshrc file so that world cannot read, write or execute it . 
+7d. configure the system to run nsh -i /etc/nshrc  either adding a line to /etc/rc.local or using an rccctl script for nsh.
 
+for the users convenience, the above steps can be largely automated by running  the **rc.local-nsh-openbsd-integration.sh** script and following on scree instructions.
 
- 
-
-
+```shell
+cd scripts/
+./rc.local-nsh-openbsd-integration.sh
+```
+8. once configuration has been imported, restart the systme to 
