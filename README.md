@@ -95,6 +95,7 @@ make install
 
 7. To have nsh take over the configuration of a system a number of steps that need to be carried out such as
 
+
 7a. Backup configuration of system, daemons and network in /etc 
 
 7b. Copy the configuration files to /var/run/example-configfilename.0  (the .0 file extension) implies running in the default rdomain / rtable (rdomain 0)
@@ -111,8 +112,11 @@ for the users convenience, the above steps can be largely automated by running  
 cd scripts/
 ./rc.local-nsh-openbsd-integration.sh
 ```
-8. once configuration has been imported, restart the system and verify nsh config is running as expected
 
-9. please provide feedback , bug repots and suggestions to the developers on 	our mailing lists  nsh [ at ] lists.deschutesdigital.com
+8. once configuration has been imported, restart the system and verify nsh config is running as expected
+   
+
+10. please provide feedback , bug repots and suggestions to the developers on 	our mailing lists  nsh [ at ] lists.deschutesdigital.com
+
 
     
