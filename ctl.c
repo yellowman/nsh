@@ -27,7 +27,6 @@
 #include <sys/stat.h>
 #include <sys/socket.h>
 #include <sys/syslimits.h>
-#include <net/if.h>
 #include "externs.h"
 #include "editing.h"
 #include "ctl.h"
@@ -39,7 +38,6 @@ static char table[16];
 void edit_crontab(char *, char **, char *);
 void install_crontab(char *, char **, char *);
 void call_editor(char *, char **, char *);
-void start_dhcpd(char *, char **, char *);
 int edit_file(char *, mode_t, char *, char **);
 void ctl_symlink(char *, char *, char *);
 int rule_writeline(char *, mode_t, char *);
@@ -388,8 +386,8 @@ struct ctl ctl_nppp[] = {
 char *ctl_dhcp_test[] = { DHCPD, "-nc", REQTEMP, NULL };
 struct ctl ctl_dhcp[] = {
 	{ "enable",        "enable DHCPd daemon",
-	    { DHCPD, "-c", REQTEMP, "-l", DHCPLEASES, NULL }, start_dhcpd,
-	    DB_X_ENABLE, T_HANDLER_FILL1 },
+	    { DHCPD, "-c", REQTEMP, "-l", DHCPLEASES, NULL }, NULL, DB_X_ENABLE,
+	    T_EXEC },
 	{ "disable",       "disable DHCPd daemon",
 	    { PKILL, table, "dhcpd", NULL }, NULL, DB_X_DISABLE, T_EXEC },
 	{ "edit",          "edit,test and stage DHCPd config",
@@ -1032,96 +1030,4 @@ rmtemp(char *file)
 		if (errno != ENOENT)
 			printf("%% Unable to remove temporary file %s: %s\n",
 			    file, strerror(errno));
-}
-
-void
-start_dhcpd(char *name, char **args, char *z)
-{
-	struct if_nameindex *ifn_list, *ifnp;
-	char **p, **dhcpd_args = NULL;
-	size_t nargs = 0, niface = 0;
-	int ifs, i;
-	char leasedb[PATH_MAX];
-
-	if (cli_rtable == 0) {
-		cmdargs(name, args);
-		return;
-	}
-
-	/*
-	 * For rdomains other than zero dhcpd(8) expects a list of
-	 * interfaces on its command line. If no interface arguments
-	 * are given then dhcpd will move itself into rdomain zero
-	 * so we really must specify a list here.
-	 *
-	 * All named interfaces must be part of the same rdomain. We
-	 * provide the list of all interfaces in our current rdomain.
-	 * dhcpd will listen on any with matching subnets in dhcpd.conf.
-	 */
-	if ((ifn_list = if_nameindex()) == NULL) {
-		printf("%% %s: if_nameindex failed\n", __func__);
-		return;
-	}
-
-	p = args;
-	while (*p) {
-		nargs++;
-		p++;
-	}
-
-	if ((ifs = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-		printf("%% %s socket: %s\n", __func__, strerror(errno));
-		goto done;
-	}
-
-	for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++) {
-		int flags, rdomain;
-
-		flags = get_ifflags(ifnp->if_name, ifs);
-		if ((flags & IFF_LOOPBACK) ||
-		    (flags & IFF_POINTOPOINT) ||
-		    (!(flags & IFF_BROADCAST)))
-			continue;
-
-		rdomain = get_rdomain(ifs, ifnp->if_name);
-		if (rdomain == cli_rtable)
-			niface++;
-	}
-
-	dhcpd_args = calloc(1 + nargs + niface + 1, sizeof(char *));
-	if (dhcpd_args == NULL) {
-		printf("%% calloc: %s\n", strerror(errno));
-		goto done;
-	}
-
-	dhcpd_args[0] = name;
-	for (i = 1; i < nargs + 1; i++) {
-		char *arg = args[i - 1];
-
-		if (strcmp(arg, DHCPLEASES) == 0) {
-			snprintf(leasedb, sizeof(leasedb), "%s.%d",
-			    arg, cli_rtable);
-			dhcpd_args[i] = leasedb;
-		} else
-			dhcpd_args[i] = arg;
-	}
-	for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++) {
-		int flags, rdomain;
-
-		flags = get_ifflags(ifnp->if_name, ifs);
-		if ((flags & IFF_LOOPBACK) ||
-		    (flags & IFF_POINTOPOINT) ||
-		    (!(flags & IFF_BROADCAST)))
-			continue;
-
-		rdomain = get_rdomain(ifs, ifnp->if_name);
-		if (rdomain == cli_rtable)
-			dhcpd_args[i++] = ifnp->if_name;
-	}
-	dhcpd_args[i] = NULL;
-
-	cmdargs(name, dhcpd_args);
-done:
-	if_freenameindex(ifn_list);
-	free(dhcpd_args);
 }
