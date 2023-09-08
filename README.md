@@ -106,7 +106,7 @@ make install
 
 7e. configure the system to run nsh -i /etc/nshrc  either adding a line to /etc/rc.local or using an rccctl script for nsh.
 
-for the users convenience, the above steps can be largely automated by running  the **rc.local-nsh-openbsd-integration.sh** script and following on scree instructions.
+For the users convenience, the above steps can be largely automated by running  the **rc.local-nsh-openbsd-integration.sh** script and following on screen instructions.
 
 ```shell
 cd scripts/
