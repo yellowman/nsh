@@ -1041,6 +1041,7 @@ start_dhcpd(char *name, char **args, char *z)
 	char **p, **dhcpd_args = NULL;
 	size_t nargs = 0, niface = 0;
 	int ifs, i;
+	char leasedb[PATH_MAX];
 
 	if (cli_rtable == 0) {
 		cmdargs(name, args);
@@ -1094,8 +1095,16 @@ start_dhcpd(char *name, char **args, char *z)
 	}
 
 	dhcpd_args[0] = name;
-	for (i = 1; i < nargs + 1; i++)
-		dhcpd_args[i] = args[i - 1];
+	for (i = 1; i < nargs + 1; i++) {
+		char *arg = args[i - 1];
+
+		if (strcmp(arg, DHCPLEASES) == 0) {
+			snprintf(leasedb, sizeof(leasedb), "%s.%d",
+			    arg, cli_rtable);
+			dhcpd_args[i] = leasedb;
+		} else
+			dhcpd_args[i] = arg;
+	}
 	for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++) {
 		int flags, rdomain;
 
