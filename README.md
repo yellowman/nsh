@@ -116,7 +116,8 @@ cd scripts/
 8. once configuration has been imported, restart the system and verify nsh config is running as expected
    
 
-10. please provide feedback , bug repots and suggestions to the developers on 	our mailing lists  nsh [ at ] lists.deschutesdigital.com
+10. please provide feedback , bug repots and suggestions to the developers on	our mailing list  <nsh@lists.deschutesdigital.com> .
+    
 
 
     
