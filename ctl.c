@@ -31,6 +31,33 @@
 #include "editing.h"
 #include "ctl.h"
 
+static inline void
+ctl2toctl(struct ctl *ctl, const struct ctl2 *ctl2)
+{
+	ctl->name = ctl2->name;
+	ctl->help = ctl2->help;
+	memcpy(ctl->args, ctl2->args, sizeof(ctl->args));
+	if (ctl2->type == T_HANDLER_FILL1)
+		ctl->args[1] = (char *)ctl2->test_args;
+	ctl->handler = ctl2->handler;
+	ctl->flag_x = ctl->flag_x;
+	ctl->type = ctl->type;
+}
+
+static inline void
+daemons2todaemons(struct daemons *daemons, struct ctl *ctl1,
+    const struct daemons2 *daemons2)
+{
+	daemons->name = daemons2->name;
+	daemons->propername = daemons2->propername;
+	ctl2toctl(ctl1, daemons2->table);
+	daemons->table = ctl1;
+	daemons->tmpfile = daemons2->tmpfile;
+	daemons->mode = daemons2->mode;
+	daemons->doreload = daemons2->doreload;
+	daemons->rtablemax = daemons2->rtablemax;
+}
+
 /* table variable (for pkill usage) */
 static char table[16];
 
@@ -60,7 +87,6 @@ struct daemons ctl_daemons[] = {
 { "rad",	"rad",	ctl_rad,	RADCONF_TEMP,	0600, 0, 0 },
 { "dvmrp",	"DVMRP",ctl_dvmrp,	DVMRPCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
 { "sasync",	"SAsync",ctl_sasync,	SASYNCCONF_TEMP,0600, 0, RT_TABLEID_MAX },
-{ "dhcp",	"DHCP",	ctl_dhcp,	DHCPCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
 { "snmp",	"SNMP",	ctl_snmp,	SNMPCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
 { "sshd",	"SSH",	ctl_sshd,	SSHDCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
 { "ntp",	"NTP",	ctl_ntp,	NTPCONF_TEMP,	0600, 0, 0 },
@@ -78,6 +104,10 @@ struct daemons ctl_daemons[] = {
 { "crontab",	"crontab",  ctl_crontab, CRONTAB_TEMP, 0600, 0, 0 },
 { "scheduler",	"scheduler",  ctl_crontab, CRONTAB_TEMP, 0600, 0, 0 },
 { 0, 0, 0, 0, 0, 0 }
+};
+
+struct daemons2 ctl_daemons2[] = {
+{ "dhcp",	"DHCP",	ctl_dhcp,	DHCPCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
 };
 
 /* per-daemon commands, and their C or executable functions */ 
@@ -383,20 +413,20 @@ struct ctl ctl_nppp[] = {
 };
 
 /* dhcpd */
-char *ctl_dhcp_test[] = { DHCPD, "-nc", REQTEMP, NULL };
-struct ctl ctl_dhcp[] = {
+struct ctl2 ctl_dhcp[] = {
 	{ "enable",        "enable DHCPd daemon",
-	    { DHCPD, "-c", REQTEMP, "-l", DHCPLEASES, NULL }, NULL, DB_X_ENABLE,
-	    T_EXEC },
+	    { DHCPD, "-c", REQTEMP, "-l", DHCPLEASES, NULL }, { NULL, }, NULL,
+	    DB_X_ENABLE, T_EXEC },
 	{ "disable",       "disable DHCPd daemon",
-	    { PKILL, table, "dhcpd", NULL }, NULL, DB_X_DISABLE, T_EXEC },
+	    { PKILL, table, "dhcpd", NULL }, { NULL, }, NULL,
+	    DB_X_DISABLE, T_EXEC },
 	{ "edit",          "edit,test and stage DHCPd config",
-	    { "dhcp", (char *)ctl_dhcp_test, NULL }, call_editor, 0,
+	    { "dhcp", NULL }, { DHCPD, "-nc", REQTEMP, NULL }, call_editor, 0,
 	    T_HANDLER_FILL1 },
 	{ "config-test",   "test staged DHCPd config",
-            { DHCPD, "-nc", REQTEMP, "-l", DHCPLEASES, NULL }, NULL, 0,
-            T_EXEC },
-	{ 0, 0, { 0 }, 0, 0, 0 }
+            { DHCPD, "-nc", REQTEMP, "-l", DHCPLEASES, NULL }, { NULL, },
+	    NULL, 0, T_EXEC },
+	{ NULL, NULL, { NULL }, { NULL }, NULL, 0, 0 }
 };
 
 /* snmpd, snmpctl */
@@ -597,18 +627,35 @@ int
 ctlhandler(int argc, char **argv, char *modhvar)
 {
 	struct daemons *daemons;
+	struct daemons2 *daemons2;
 	struct ctl *x;
+	struct ctl2 *x2;
+	struct daemons daemons1;
+	struct ctl ctl1;
 	char tmpfile[PATH_MAX];
 	char *step_args[NOPTFILL] = { NULL, NULL, NULL, NULL, NULL, NULL };
 	char *tmp_args[NOPTFILL] = { NULL, NULL, NULL, NULL, NULL, NULL };
 	char **fillargs;
+	char **xargs;
+	int xtype;
+	void (*xhandler)();
+	int xflag_x;
+	char **xtest_args = NULL;
+
+	memset(&daemons1, 0, sizeof(daemons1));
 
 	/* loop daemon list to find table pointer */
 	daemons = (struct daemons *) genget(hname, (char **)ctl_daemons,
 	    sizeof(struct daemons));
-	if (daemons == 0) {
-		printf("%% Internal error - Invalid argument %s\n", argv[1]);
-		return 0;
+	if (daemons == NULL) {
+		daemons2 = (struct daemons2 *) genget(hname,
+		    (char **)ctl_daemons2, sizeof(struct daemons2));
+		if (daemons2 == NULL) {
+			printf("%% Internal error - Invalid argument %s\n", argv[1]);
+			return 0;
+		}
+		daemons2todaemons(&daemons1, &ctl1, daemons2);
+		daemons = &daemons1;
 	} else if (Ambiguous(daemons)) {
 		printf("%% Internal error - Ambiguous argument %s\n", argv[1]);
 		return 0;
@@ -646,36 +693,59 @@ ctlhandler(int argc, char **argv, char *modhvar)
 		return 0;
 	}
 
-	x = (struct ctl *) genget(argv[1], (char **)daemons->table,
-	    sizeof(struct ctl));
-	if (x == 0) {
-		printf("%% Invalid argument %s\n", argv[1]);
-		return 0;
-	} else if (Ambiguous(x)) {
-		printf("%% Ambiguous argument %s\n", argv[1]);
-		return 0;
+	if (daemons1.name != NULL) {
+		x2 = (struct ctl2 *) genget(argv[1],
+		    (char **)daemons2->table, sizeof(struct ctl2));
+		if (x2 == NULL) {
+			printf("%% Invalid argument %s\n", argv[1]);
+			return 0;
+		} else if (Ambiguous(x2)) {
+			printf("%% Ambiguous argument %s\n", argv[1]);
+			return 0;
+		}
+		xargs = x2->args;
+		xtype = x2->type;
+		xhandler = x2->handler;
+		xflag_x = x2->flag_x;
+		xtest_args = x2->test_args;
+	} else {
+		x = (struct ctl *) genget(argv[1], (char **)daemons->table,
+		    sizeof(struct ctl));
+		if (x == NULL) {
+			printf("%% Invalid argument %s\n", argv[1]);
+			return 0;
+		} else if (Ambiguous(x)) {
+			printf("%% Ambiguous argument %s\n", argv[1]);
+			return 0;
+		}
+		xargs = x->args;
+		xtype = x->type;
+		xhandler = x->handler;
+		xflag_x = x->flag_x;
+		if (x->type == T_HANDLER_FILL1)
+			xtest_args = (char **)x->args[1];
 	}
 
-	fillargs = step_optreq(x->args, step_args, argc, argv, 2);
+	fillargs = step_optreq(xargs, step_args, argc, argv, 2);
 	if (fillargs == NULL)
 		return 0;
 
-	switch(x->type) {
+	switch(xtype) {
 		/* fill_tmpfile will return 0 if tmpfile or args are NULL */
 	case T_HANDLER:
 		/* pointer to handler routine, fill main args */
 		if (fill_tmpfile(fillargs, tmpfile, tmp_args)) {
-			(*x->handler)(tmp_args[0], tmp_args[1], tmp_args[2]);
+			(*xhandler)(tmp_args[0], tmp_args[1], tmp_args[2]);
 		} else {
-			(*x->handler)(fillargs[0], fillargs[1], fillargs[2]);
+			(*xhandler)(fillargs[0], fillargs[1], fillargs[2]);
 		}
 	break;
 	case T_HANDLER_FILL1:
 		/* pointer to handler routine, fill args @ args[1] pointer */
-		if (fill_tmpfile((char **)fillargs[1], tmpfile, tmp_args))
-			(*x->handler)(fillargs[0], tmp_args, fillargs[2]);
+		if (fill_tmpfile(xtest_args, tmpfile, tmp_args))
+			(*xhandler)(fillargs[0], tmp_args, fillargs[2]);
 		else
-			(*x->handler)(fillargs[0], (char **)fillargs[1], fillargs[2]);
+			(*xhandler)(fillargs[0], xtest_args, fillargs[2]);
 	break;
 	case T_EXEC:
 		/* command to execute via execv syscall, fill main args */
@@ -686,8 +756,8 @@ ctlhandler(int argc, char **argv, char *modhvar)
 	break;
 	}
 
-	if (x->flag_x != 0) {
-		flag_x("ctl", daemons->name, x->flag_x, NULL);
+	if (xflag_x != 0) {
+		flag_x("ctl", daemons->name, xflag_x, NULL);
 	}
 
 	return 1;
@@ -801,22 +871,34 @@ call_editor(char *name, char **args, char *z)
 	int found = 0;
 	char tmpfile[64];
 	struct daemons *daemons;
+	struct daemons2 *daemons2;
 
-	for (daemons = ctl_daemons; daemons->name != 0; daemons++)
+	for (daemons = ctl_daemons; daemons->name != 0; daemons++) {
 		if (strncmp(daemons->name, name, strlen(name)) == 0) {
 			found = 1;
 			break;
 		}
+	}
+	if (found) {
+		snprintf(tmpfile, sizeof(tmpfile), "%s.%d", daemons->tmpfile,
+		    cli_rtable);
+		edit_file(tmpfile, daemons->mode, daemons->propername, args);
+		return;
+	}
 
+	for (daemons2 = ctl_daemons2; daemons2->name != 0; daemons2++) {
+		if (strncmp(daemons2->name, name, strlen(name)) == 0) {
+			found = 1;
+			break;
+		}
+	}
 	if (!found) {
 		printf("%% call_editor internal error\n");
 		return;
 	}
-
-	snprintf(tmpfile, sizeof(tmpfile), "%s.%d", daemons->tmpfile,
+	snprintf(tmpfile, sizeof(tmpfile), "%s.%d", daemons2->tmpfile,
 	    cli_rtable);
-
-	edit_file(tmpfile, daemons->mode, daemons->propername, args);
+	edit_file(tmpfile, daemons2->mode, daemons2->propername, args);
 }
 
 static void

@@ -79,6 +79,16 @@ struct ctl {
         int type;
 };
 
+struct ctl2 {
+        char *name;
+        char *help;
+        char *args[32];
+        char *test_args[32];
+        void (*handler)();
+        int flag_x;
+        int type;
+};
+
 #define T_HANDLER       1
 #define T_HANDLER_FILL1 2
 #define T_EXEC          3
@@ -86,6 +96,16 @@ struct daemons {
         char *name;
         char *propername;
         struct ctl *table;
+        char *tmpfile;
+        mode_t mode;
+        int doreload;
+        int rtablemax;
+};
+
+struct daemons2 {
+        char *name;
+        char *propername;
+        struct ctl2 *table;
         char *tmpfile;
         mode_t mode;
         int doreload;
@@ -167,7 +187,7 @@ extern struct ctl ctl_ike[];
 extern struct ctl ctl_dvmrp[];
 extern struct ctl ctl_rad[];
 extern struct ctl ctl_sasync[];
-extern struct ctl ctl_dhcp[];
+extern struct ctl2 ctl_dhcp[];
 extern struct ctl ctl_snmp[];
 extern struct ctl ctl_smtp[];
 extern struct ctl ctl_sshd[];
