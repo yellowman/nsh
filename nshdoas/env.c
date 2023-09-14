@@ -104,12 +104,12 @@ createenv(const struct rule *rule, const struct passwd *mypw,
 	addnode(env, "HOME", targpw->pw_dir);
 	addnode(env, "LOGNAME", targpw->pw_name);
 	addnode(env, "PATH", getenv("PATH"));
-	addnode(env, "SHELL", targpw->pw_shell);
+	addnode(env, "SHELL", mypw->pw_shell); /* preserve "SHELL=nsh" */
 	addnode(env, "USER", targpw->pw_name);
 
 	fillenv(env, copyset);
 
-	if (rule->options & KEEPENV) {
+	if (rule && (rule->options & KEEPENV)) {
 		extern const char **environ;
 
 		for (i = 0; environ[i] != NULL; i++) {
@@ -228,7 +228,7 @@ prepenv(const struct rule *rule, const struct passwd *mypw,
 	struct env *env;
 
 	env = createenv(rule, mypw, targpw);
-	if (rule->envlist)
+	if (rule && rule->envlist)
 		fillenv(env, rule->envlist);
 
 	return flattenenv(env);

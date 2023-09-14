@@ -393,8 +393,7 @@ main(int argc, char **argv)
 		    mypw->pw_name, cmd[0], targpw->pw_name, cwd);
 	}
 
-	if (rule)
-		envp = prepenv(rule, mypw, targpw);
+	envp = prepenv(rule, mypw, targpw);
 
 	/* setusercontext set path for the next process, so reset it for us */
 	if (setenv("PATH", formerpath, 1) == -1)
