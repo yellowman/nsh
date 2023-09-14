@@ -426,7 +426,7 @@ void conf_ctl(FILE *output, char *delim, char *name, int rtableid)
 	if (x == NULL) {
 		x2 = (struct daemons2 *)genget(name, (char **)ctl_daemons2,
 		    sizeof(struct daemons2));
-		if (x2 == NULL) {
+		if (x2 == NULL || Ambiguous(x2)) {
 			printf("%% conf_ctl: %s: genget internal failure\n",
 			    name);
 			return;

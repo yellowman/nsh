@@ -650,7 +650,7 @@ ctlhandler(int argc, char **argv, char *modhvar)
 	if (daemons == NULL) {
 		daemons2 = (struct daemons2 *) genget(hname,
 		    (char **)ctl_daemons2, sizeof(struct daemons2));
-		if (daemons2 == NULL) {
+		if (daemons2 == NULL || Ambiguous(daemons2)) {
 			printf("%% Internal error - Invalid argument %s\n", argv[1]);
 			return 0;
 		}
