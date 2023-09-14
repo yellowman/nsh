@@ -172,6 +172,7 @@ extern char *ctl_sshd_test[];
 /* tftpproxy test no config test yet */
 
 extern struct daemons ctl_daemons[];
+extern struct daemons2 ctl_daemons2[];
 extern struct ctl ctl_pf[];
 extern struct ctl ctl_ospf[];
 extern struct ctl ctl_ospf6[];
