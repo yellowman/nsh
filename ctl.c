@@ -83,8 +83,9 @@ daemons2todaemons(struct daemons *daemons, const struct daemons2 *daemons2)
 static char table[16];
 
 /* service routines */
-void edit_crontab(char *, char **, char *);
-void install_crontab(char *, char **, char *);
+void edit_crontab(char *);
+void install_crontab(char *);
+void edit_motd(char *);
 void call_editor(char *, char **, char *);
 int edit_file(char *, mode_t, char *, char **);
 void ctl_symlink(char *, char *, char *);
@@ -146,7 +147,7 @@ struct ctl ctl_crontab[] = {
 /* MOTD */
 struct ctl ctl_motd[] = {
         { "edit",           "edit message-of-the-day",
-            { "motd", NULL, NULL }, call_editor, 0, T_HANDLER },
+            { "motd", NULL, NULL }, edit_motd, 0, T_HANDLER },
         { 0, 0, { 0 }, 0, 0, 0 }
 };
 
@@ -662,6 +663,7 @@ ctlhandler(int argc, char **argv, char *modhvar)
 	int xflag_x;
 	char **xtest_args = NULL;
 	int rv = 0;
+	int nargs;
 
 	memset(&daemons1, 0, sizeof(daemons1));
 
@@ -757,10 +759,37 @@ ctlhandler(int argc, char **argv, char *modhvar)
 		/* fill_tmpfile will return 0 if tmpfile or args are NULL */
 	case T_HANDLER:
 		/* pointer to handler routine, fill main args */
-		if (fill_tmpfile(fillargs, tmpfile, tmp_args)) {
+		nargs = fill_tmpfile(fillargs, tmpfile, tmp_args);
+		switch (nargs) {
+		case 0:
+			(*xhandler)();
+			break;
+		case 1:
+			(*xhandler)(tmp_args[0]);
+			break;
+		case 2:
+			(*xhandler)(tmp_args[0], tmp_args[1]);
+			break;
+		case 3:
 			(*xhandler)(tmp_args[0], tmp_args[1], tmp_args[2]);
-		} else {
-			(*xhandler)(fillargs[0], fillargs[1], fillargs[2]);
+			break;
+		case 4:
+			(*xhandler)(tmp_args[0], tmp_args[1], tmp_args[2],
+			    tmp_args[3]);
+			break;
+		case 5:
+			(*xhandler)(tmp_args[0], tmp_args[1], tmp_args[2],
+			    tmp_args[3], tmp_args[4]);
+			break;
+		case 6:
+			(*xhandler)(tmp_args[0], tmp_args[1], tmp_args[2],
+			    tmp_args[3], tmp_args[4], tmp_args[5]);
+			break;
+		case NOPTFILL: /* bump this when adding more cases */
+		default:
+			printf("%% handler %s %s requires too many "
+			    "arguments: %d\n", hname, argv[1], nargs);
+			break;
 		}
 	break;
 	case T_HANDLER_FILL1:
@@ -788,15 +817,20 @@ done:
 	return rv;
 }
 
+/*
+ * Copy arguments from fillargs to tmp_args with temporary filenames
+ * expanded. Return the number of arguments stored in tmp_args.
+ * The maximum number of arguments allowed is NOPTFILL - 1.
+ */
 int
 fill_tmpfile(char **fillargs, char *tmpfile, char **tmp_args)
 {
-	int i;
+	int i, n;
 
 	if (fillargs == NULL || tmpfile == NULL)
 		return 0;
 
-	for (i = 0; i < NOPTFILL - 1; i++) {
+	for (i = 0, n = 0; i < NOPTFILL - 1; i++) {
 		if(fillargs[i] == NULL) {
 			break;
 		}
@@ -805,12 +839,14 @@ fill_tmpfile(char **fillargs, char *tmpfile, char **tmp_args)
 		} else {
 			tmp_args[i] = fillargs[i];
 		}
+		n++;
 	}
-	return 1;
+
+	return n;
 }
 
 void
-edit_crontab(char *name, char **args, char *z)
+edit_crontab(char *name)
 {
 	char *crontab_argv[] = { CRONTAB, "-u", "root", "-l", NULL };
 	char tmpfile[PATH_MAX];
@@ -851,7 +887,7 @@ edit_crontab(char *name, char **args, char *z)
 		}
 	}
 
-	if (edit_file(tmpfile, daemons->mode, daemons->propername, args) == 0) {
+	if (edit_file(tmpfile, daemons->mode, daemons->propername, NULL) == 0) {
 		crontab_argv[3] = tmpfile;
 		if (cmdargs(CRONTAB, crontab_argv) != 0)
 			printf("%% failed to install crontab\n");
@@ -861,7 +897,7 @@ done:
 }
 
 void
-install_crontab(char *name, char **args, char *z)
+install_crontab(char *name)
 {
 	char *crontab_argv[] = { CRONTAB, "-u", "root", NULL, NULL };
 	char tmpfile[PATH_MAX];
@@ -888,6 +924,12 @@ install_crontab(char *name, char **args, char *z)
 			printf("%% failed to install crontab\n");
 		rls_lock(fd);
 	}
+}
+
+void
+edit_motd(char *name)
+{
+	call_editor(name, NULL, NULL);
 }
 
 void
