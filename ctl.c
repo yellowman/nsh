@@ -44,18 +44,39 @@ ctl2toctl(struct ctl *ctl, const struct ctl2 *ctl2)
 	ctl->type = ctl->type;
 }
 
-static inline void
-daemons2todaemons(struct daemons *daemons, struct ctl *ctl1,
-    const struct daemons2 *daemons2)
+static inline int
+daemons2todaemons(struct daemons *daemons, const struct daemons2 *daemons2)
 {
+	size_t nentries = 0;
+	struct ctl *ctl1;
+	struct ctl2 *ctl2;
+
+	ctl2 = daemons2->table;
+	while (ctl2 && ctl2->name) {
+		nentries++;
+		ctl2++;
+	}
+	daemons->table = calloc(nentries + 1, sizeof(struct ctl));
+	if (daemons->table == NULL) {
+		printf("%% %s: malloc: %s\n", __func__, strerror(errno));
+		return 1;
+	}
+	ctl1 = daemons->table;
+	ctl2 = daemons2->table;
+	while (ctl2 && ctl2->name) {
+		ctl2toctl(ctl1, ctl2);
+		ctl1++;
+		ctl2++;
+	}
+
 	daemons->name = daemons2->name;
 	daemons->propername = daemons2->propername;
-	ctl2toctl(ctl1, daemons2->table);
-	daemons->table = ctl1;
 	daemons->tmpfile = daemons2->tmpfile;
 	daemons->mode = daemons2->mode;
 	daemons->doreload = daemons2->doreload;
 	daemons->rtablemax = daemons2->rtablemax;
+
+	return 0;
 }
 
 /* table variable (for pkill usage) */
@@ -631,7 +652,6 @@ ctlhandler(int argc, char **argv, char *modhvar)
 	struct ctl *x;
 	struct ctl2 *x2;
 	struct daemons daemons1;
-	struct ctl ctl1;
 	char tmpfile[PATH_MAX];
 	char *step_args[NOPTFILL] = { NULL, NULL, NULL, NULL, NULL, NULL };
 	char *tmp_args[NOPTFILL] = { NULL, NULL, NULL, NULL, NULL, NULL };
@@ -641,8 +661,10 @@ ctlhandler(int argc, char **argv, char *modhvar)
 	void (*xhandler)();
 	int xflag_x;
 	char **xtest_args = NULL;
+	int rv = 0;
 
 	memset(&daemons1, 0, sizeof(daemons1));
+
 
 	/* loop daemon list to find table pointer */
 	daemons = (struct daemons *) genget(hname, (char **)ctl_daemons,
@@ -654,7 +676,8 @@ ctlhandler(int argc, char **argv, char *modhvar)
 			printf("%% Internal error - Invalid argument %s\n", argv[1]);
 			return 0;
 		}
-		daemons2todaemons(&daemons1, &ctl1, daemons2);
+		if (daemons2todaemons(&daemons1, daemons2))
+			goto done;
 		daemons = &daemons1;
 	} else if (Ambiguous(daemons)) {
 		printf("%% Internal error - Ambiguous argument %s\n", argv[1]);
@@ -664,7 +687,7 @@ ctlhandler(int argc, char **argv, char *modhvar)
 	if (cli_rtable > daemons->rtablemax) {
 		printf("%% Command %s not available via rtable %d\n",
 		    daemons->name, cli_rtable);
-		return 0;
+		goto done;
 	}
 
 	snprintf(table, sizeof(table), "-T%d", cli_rtable);
@@ -676,21 +699,21 @@ ctlhandler(int argc, char **argv, char *modhvar)
 		/* action specified or indented command specified */
 		if (argc == 2 && isprefix(argv[1], "rules")) {
 			/* skip 'X rules' line */
-			return(0);
+			goto done;
 		}
 		if (isprefix(modhvar, "rules")) {
 			if (!daemons->tmpfile) {
 				printf("%% writeline without tmpfile\n");
-				return 0;
+				goto done;
 			}
 			/* write indented line to tmp config file */
 			rule_writeline(tmpfile, daemons->mode, saveline);
-			return 0;
+			goto done;
 		}
 	}
 	if (argc < 2 || argv[1][0] == '?') {
 		gen_help((char **)daemons->table, "", "", sizeof(struct ctl));
-		return 0;
+		goto done;
 	}
 
 	if (daemons1.name != NULL) {
@@ -698,10 +721,10 @@ ctlhandler(int argc, char **argv, char *modhvar)
 		    (char **)daemons2->table, sizeof(struct ctl2));
 		if (x2 == NULL) {
 			printf("%% Invalid argument %s\n", argv[1]);
-			return 0;
+			goto done;
 		} else if (Ambiguous(x2)) {
 			printf("%% Ambiguous argument %s\n", argv[1]);
-			return 0;
+			goto done;
 		}
 		xargs = x2->args;
 		xtype = x2->type;
@@ -713,10 +736,10 @@ ctlhandler(int argc, char **argv, char *modhvar)
 		    sizeof(struct ctl));
 		if (x == NULL) {
 			printf("%% Invalid argument %s\n", argv[1]);
-			return 0;
+			goto done;
 		} else if (Ambiguous(x)) {
 			printf("%% Ambiguous argument %s\n", argv[1]);
-			return 0;
+			goto done;
 		}
 		xargs = x->args;
 		xtype = x->type;
@@ -728,7 +751,7 @@ ctlhandler(int argc, char **argv, char *modhvar)
 
 	fillargs = step_optreq(xargs, step_args, argc, argv, 2);
 	if (fillargs == NULL)
-		return 0;
+		goto done;
 
 	switch(xtype) {
 		/* fill_tmpfile will return 0 if tmpfile or args are NULL */
@@ -759,8 +782,10 @@ ctlhandler(int argc, char **argv, char *modhvar)
 	if (xflag_x != 0) {
 		flag_x("ctl", daemons->name, xflag_x, NULL);
 	}
-
-	return 1;
+	rv = 1;
+done:
+	free(daemons1.table);
+	return rv;
 }
 
 int
