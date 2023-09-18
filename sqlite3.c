@@ -13,6 +13,7 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
+#include <errno.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -213,20 +214,23 @@ db_select_name_rtable(StringList *words, int rtableid)
 int
 sq3simple(char *sql, StringList *words)
 {
-	sqlite3		*db;
+	sqlite3		*db = NULL;
 	sqlite3_stmt	*stmt;
 	char		*result, *new = NULL;
 	int		rv, len, tlen = 0;
 
 	if (sqlite3_open(SQ3DBFILE, &db)) {
-		printf("%% database file open failed: %s\n", sqlite3_errmsg(db));
-		return -1;
+		printf("%% database file open failed: %s\n",
+		    db ? sqlite3_errmsg(db) : strerror(ENOMEM));
+		tlen = -1;
+		goto done;
 	}
 	if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL)
 	    != SQLITE_OK) {
 		printf("%% sqlite3_prepare_v2 failed: %s (%s)\n",
 		    sqlite3_errmsg(db), sql);
-		return -1;
+		tlen = -1;
+		goto done;
 	}
 
 	while ((rv = sqlite3_step(stmt)) == SQLITE_ROW) {
@@ -240,12 +244,20 @@ sq3simple(char *sql, StringList *words)
 		strlcpy(new, result, len);
 		sl_add(words, new);
 	}
-	sqlite3_finalize(stmt);
-	sqlite3_close(db);
 
-	if (rv != SQLITE_DONE) {
-		printf("%% sq3simple: error: %s\n", sqlite3_errmsg(db));
-		return -1;
+	if (rv == SQLITE_ERROR) {
+		printf("%% sqlite3_step: %s\n", sqlite3_errmsg(db));
+		tlen = -1;
 	}
+
+	rv = sqlite3_finalize(stmt);
+	if (rv != SQLITE_OK) {
+		printf("%% sqlite3_finalize: %s\n", sqlite3_errstr(rv));
+		tlen = -1;
+	}
+done:
+	if (db)
+		sqlite3_close(db);
+
 	return tlen;
 }
