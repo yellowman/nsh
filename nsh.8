@@ -1319,11 +1319,12 @@ nsh(config-p)/sasync
 .Tg dhcpd
 .Tg dhcp
 .Ic dhcp
-.Op Cm  \&? | enable | disable | edit
+.Op Cm  \&? | enable | disable | edit | restart
 .Pp
-Enable or disable or configure the
+Enable, disable, configure, or restart the
 .Xr dhcpd 8
 Dynamic Host Configuration Protocol daemon.
+This daemon acts as a DHCP server.
 The configuration of
 .Ic dhcp
 daemon can be edited with
@@ -1332,6 +1333,9 @@ command, the configuration syntax of
 .Ic dhcp
 daemon is documented in
 .Xr dhcpd.conf 5 .
+Configuration file changes will not take effect until
+.Xr dhcpd 8
+is restarted.
 .Pp
 .Tg snmpd
 .Tg snmp

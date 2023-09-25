@@ -89,6 +89,7 @@ void install_crontab(char *);
 void edit_motd(char *);
 void call_editor(char *, char **, char *);
 void start_dhcpd(char *, char *, char *, char *, char *);
+void restart_dhcpd(char *, char *, char *, char *, char *);
 int edit_file(char *, mode_t, char *, char **);
 void ctl_symlink(char *, char *, char *);
 int rule_writeline(char *, mode_t, char *);
@@ -450,6 +451,9 @@ struct ctl2 ctl_dhcp[] = {
 	{ "config-test",   "test staged DHCPd config",
             { DHCPD, "-nc", REQTEMP, "-l", DHCPLEASES, NULL }, { NULL, },
 	    NULL, 0, T_EXEC },
+	{ "restart",        "restart DHCPd daemon",
+	    { DHCPD, "-c", REQTEMP, "-l", DHCPLEASES, NULL }, { NULL, },
+	    restart_dhcpd, DB_X_ENABLE, T_HANDLER },
 	{ NULL, NULL, { NULL }, { NULL }, NULL, 0, 0 }
 };
 
@@ -817,6 +821,16 @@ ctlhandler(int argc, char **argv, char *modhvar)
 done:
 	free(daemons1.table);
 	return rv;
+}
+
+void
+restart_dhcpd(char *arg0, char *arg1, char *arg2, char *arg3, char *arg4)
+{
+	char *argv_pkill[] = { PKILL, table, "dhcpd", NULL };
+
+	cmdargs(argv_pkill[0], argv_pkill);
+	sleep(1);
+	start_dhcpd(arg0, arg1, arg2, arg3, arg4);
 }
 
 /*
