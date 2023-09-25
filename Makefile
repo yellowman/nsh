@@ -35,7 +35,7 @@ LDADD=-lutil -ledit -ltermcap -lsqlite3 -L/usr/local/lib #-static
 
 MAN=nsh.8
 
-compile.c: compile.sh
+compile.c: compile.sh *.c *.h
 	sh ${.CURDIR}/compile.sh
 
 mantab.c: mantab.sh nsh.8
