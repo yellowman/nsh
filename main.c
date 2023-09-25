@@ -203,8 +203,13 @@ main(int argc, char *argv[])
 			    "will switch to the root user.\n");
 		}
 
-		if (!privexec)
-			printf("%% NSH v%s\n", vers);
+		if (!privexec) {
+			if (strstr(vers, "-current") != NULL)
+				printf("%% NSH v%s; Compiled by %s@%s on %s\n",
+				    vers, compiledby, compilehost, compiled);
+			else
+				printf("%% NSH v%s\n", vers);
+		}
 	} else {
 		/*
 		 * We need line-buffered mode to cross seamlessly into
