@@ -148,6 +148,32 @@ load_userenv(void)
 	fclose(f);
 }
 
+static void
+create_db(void)
+{
+	/* create temporal tables (if they aren't already there) */
+	if (db_create_table_rtables() < 0)
+		printf("%% database rtables creation failed\n");
+	if (db_create_table_flag_x("ctl") < 0)
+		printf("%% database ctl creation failed\n");
+	if (db_create_table_flag_x("dhcrelay") < 0)
+		printf("%% database dhcrelay creation failed\n");
+	if (db_create_table_flag_x("ipv6linklocal") < 0)
+		printf("%% database ipv6linklocal creation failed\n");
+	if (db_create_table_flag_x("lladdr") < 0)
+		printf("%% database lladdr creation failed\n");
+	if (db_create_table_flag_x("authkey") < 0)
+		printf("%% database authkey creation failed\n");
+	if (db_create_table_flag_x("peerkey") < 0)
+		printf("%% database peerkey creation failed\n");
+	if (db_create_table_nameservers() < 0)
+		printf("%% database nameservers creation failed\n");
+	if (db_create_table_flag_x("pppoeipaddrmode") < 0)
+		printf("%% database pppoeipaddrmode creation failed\n");
+	if (db_create_table_flag_x("pin") < 0)
+		printf("%% database pin creation failed\n");
+}
+
 int
 main(int argc, char *argv[])
 {
@@ -223,33 +249,13 @@ main(int argc, char *argv[])
 		}
 	}
 
-	/* create temporal tables (if they aren't already there) */
-	if (db_create_table_rtables() < 0)
-		printf("%% database rtables creation failed\n");
-	if (db_create_table_flag_x("ctl") < 0)
-		printf("%% database ctl creation failed\n");
-	if (db_create_table_flag_x("dhcrelay") < 0)
-		printf("%% database dhcrelay creation failed\n");
-	if (db_create_table_flag_x("ipv6linklocal") < 0)
-		printf("%% database ipv6linklocal creation failed\n");
-	if (db_create_table_flag_x("lladdr") < 0)
-		printf("%% database lladdr creation failed\n");
-	if (db_create_table_flag_x("authkey") < 0)
-		printf("%% database authkey creation failed\n");
-	if (db_create_table_flag_x("peerkey") < 0)
-		printf("%% database peerkey creation failed\n");
-	if (db_create_table_nameservers() < 0)
-		printf("%% database nameservers creation failed\n");
-	if (db_create_table_flag_x("pppoeipaddrmode") < 0)
-		printf("%% database pppoeipaddrmode creation failed\n");
-	if (db_create_table_flag_x("pin") < 0)
-		printf("%% database pin creation failed\n");
-
 	if (iflag) {
 		/*
 		 * Interpret config file and exit
 		 */
 		priv = 1;
+
+		create_db();
 
 		/*
 		 * Set carp group carpdemote to 128 during initialization
@@ -270,6 +276,8 @@ main(int argc, char *argv[])
 		 * Interpret command file and exit
 		 */
 		priv = 1;
+
+		create_db();
 
 		cmdrc(rc);
 
@@ -293,6 +301,9 @@ main(int argc, char *argv[])
 		 */
 		priv = 1;
 	}
+
+	if (priv)
+		create_db();
 
 	load_userenv();
 
