@@ -133,6 +133,7 @@ struct daemons ctl_daemons[] = {
 
 struct daemons2 ctl_daemons2[] = {
 { "dhcp",	"DHCP",	ctl_dhcp,	DHCPCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
+{ NULL, NULL, NULL, NULL, 0, 0, 0 }
 };
 
 /* per-daemon commands, and their C or executable functions */ 
