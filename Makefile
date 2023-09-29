@@ -13,9 +13,9 @@ DEBUG?=-O0 -g
 
 
 .if make(install)
-DESTDIR?=/usr/local
-BINDIR?=/bin
-MANDIR?=/man/man
+PREFIX?=/usr/local
+BINDIR?=${PREFIX}/bin
+MANDIR?=${PREFIX}/man/man
 .endif
 
 # For use with flashrd:
