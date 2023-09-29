@@ -10,9 +10,9 @@ DEBUG?=-O0 -g
 .endif
 
 .if make(install)
-DESTDIR?=/usr/local
-BINDIR?=/bin
-MANDIR?=/man/man
+PREFIX?=/usr/local
+BINDIR?=${PREFIX}/bin
+MANDIR?=${PREFIX}/man/man
 .endif
 
 CFLAGS+=-Wmissing-prototypes -Wformat -Wall -Wbad-function-cast

@@ -10,9 +10,9 @@ DEBUG?=-O0 -g
 .endif
 
 .if make(install)
-DESTDIR?=/usr/local
-BINDIR?=/libexec
-MANDIR?=/man/man
+PREFIX?=/usr/local
+BINDIR?=${PREFIX}/libexec
+MANDIR?=${PREFIX}/man/man
 .endif
 
 CFLAGS+=-Wmissing-prototypes -Wformat -Wall -Wbad-function-cast
