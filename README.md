@@ -3,7 +3,7 @@
 ## network shell
 
 ---
-Chris Cappuccio <chris@nmedia.net> version 1.1
+Chris Cappuccio <chris@nmedia.net>
 
 
 NSH is a CLI intended for OpenBSD-based network appliances. It replaces
