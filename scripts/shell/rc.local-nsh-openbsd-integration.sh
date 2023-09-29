@@ -217,7 +217,7 @@ else
                         ln -s /var/run/motd.0 /etc/motd
                         chown root /var/run/motd.0
                         chgrp wheel /var/run/motd.0
-                        chmod 660 /var/run/motd.0
+                        chmod 664 /var/run/motd.0
                 else
                         echo etc-motd does not exist, not importing!
                 fi
