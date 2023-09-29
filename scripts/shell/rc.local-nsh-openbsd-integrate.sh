@@ -228,7 +228,7 @@ else
                         echo use the files located in \var/\run\/ >>/var/run/motd.0
                         chown root /var/run/motd.0
                         chgrp wheel /var/run/motd.0
-                        chmod 660 /var/run/motd.0
+                        chmod 664 /var/run/motd.0
                 else
                         echo etc-motd does not exist, not importing!
                 fi
