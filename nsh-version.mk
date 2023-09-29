@@ -44,9 +44,10 @@
 #    Before running 'make release' again, ensure your work tree is clean.
 #    In any case, remove botched generated tarballs and new dist-list files:
 #      rm nsh-1.x.tar.gz nsh-dist.txt.new
-#    If an error left behind any nsh-version.mk modifications, revert them:
-#      With Git: git restore nsh-version.mk
-#      With Got: got revert nsh-version.mk
+#    If an error left behind any nsh-version.mk modifications, revert them,
+#    keeping the version number bump intact:
+#      With Git: git restore -p nsh-version.mk
+#      With Got: got revert -p nsh-version.mk
 #  
 # 4) Copy nsh-1.x.tar.gz to /usr/ports/distfiles and update the
 #    nsh port in /usr/ports/shells/nsh to the new release.
