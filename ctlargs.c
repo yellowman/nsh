@@ -93,7 +93,7 @@ step_optreq(char **xargs, char **args, int argc, char **argv, int skip)
 	}
 
 	/* copy xargs to args, replace OPT/REQ args with argv past skip */
-	for (i = 0; i < NOPTFILL - 2; i++) {
+	for (i = 0; i < NOPTFILL - 1; i++) {
 		if (xargs[i] == NULL) {
 			args[i] = NULL;
 			if (i > 1)
