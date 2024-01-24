@@ -219,7 +219,7 @@ main(int argc, char *argv[])
 	if (iflag)
 		rmtemp(SQ3DBFILE);
 
-	interactive_mode = isatty(STDIN_FILENO);
+	interactive_mode = !cflag && !iflag && isatty(STDIN_FILENO);
 	if (interactive_mode) {
 		editing = 1;
 
