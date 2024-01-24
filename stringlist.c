@@ -89,3 +89,44 @@ sl_free(StringList *sl, int all)
 	}
 	free(sl);
 }
+
+/*
+ * sl_makestr(): Flatten a string list to a string, separating
+ * strings in the list with the given separator.
+ * Return NULL on failure. Result must be freed by caller.
+ */
+char *
+sl_makestr(StringList *sl, const char *sep)
+{
+	size_t len = 0;
+	int i;
+	char *s;
+
+	for (i = 0; i < sl->sl_cur; i++) {
+		len += strlen(sl->sl_str[i]);
+		if (i + 1 < sl->sl_cur)
+			len += strlen(sep);
+	}
+
+	if (len == 0)
+		return NULL;
+
+	s = malloc(len + 1);	
+	if (s == NULL)
+		return NULL;
+
+	s[0] = '\0';
+	for (i = 0; i < sl->sl_cur; i++) {
+		if (strlcat(s, sl->sl_str[i], len + 1) >= len + 1) {
+			free(s);
+			return NULL;
+		}
+		if (i + 1 < sl->sl_cur &&
+		    strlcat(s, sep, len + 1) >= len + 1) {
+			free(s);
+			return NULL;
+		}
+	}
+
+	return s;
+}

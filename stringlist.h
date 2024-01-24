@@ -46,6 +46,7 @@ StringList	*sl_init(void);
 void		 sl_add(StringList *, char *);
 void		 sl_free(StringList *, int);
 char		*sl_find(StringList *, char *);
+char		*sl_makestr(StringList *, const char *);
 __END_DECLS
 
 #endif /* _STRINGLIST_H */
