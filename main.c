@@ -255,6 +255,8 @@ main(int argc, char *argv[])
 		 */
 		priv = 1;
 
+		setwinsize(0);
+
 		create_db();
 
 		/*
@@ -276,6 +278,8 @@ main(int argc, char *argv[])
 		 * Interpret command file and exit
 		 */
 		priv = 1;
+
+		setwinsize(0);
 
 		create_db();
 
