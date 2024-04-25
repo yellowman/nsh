@@ -2050,6 +2050,7 @@ manual(int argc, char **argv)
 			 */
 			const char *env[] = {
 				"PAGER=less",
+				"LESSSECURE=1",
 				lessenv,
 				termenv,
 				NULL
