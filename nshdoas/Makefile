@@ -1,7 +1,7 @@
 #
 PROG= nshdoas
 
-.PATH=${.CURDIR}/..
+.PATH:${.CURDIR}/..
 
 .include "../nsh-version.mk"
 

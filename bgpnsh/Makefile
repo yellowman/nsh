@@ -1,7 +1,7 @@
 #
 PROG= bgpnsh
 
-.PATH=${.CURDIR}/..:${.CURDIR}
+.PATH:${.CURDIR}/..
 
 .include "../nsh-version.mk"
 
