@@ -128,7 +128,23 @@ command.
 .Ss INTERACTIVE FEATURES
 When run without any command line arguments,
 .Nm
-presents an unprivileged shell to the user.
+presents an interactive shell to the user.
+If
+.Nm
+is run as root user then
+.Nm
+shall start as a privileged full functionality shell.
+If
+.Nm
+is run as a non-root user then
+.Nm
+shall start as an unprivileged and limited functionality shell.
+Privileged
+.Nm
+shell functionality can be enabled using the
+.Cm enable
+command.
+.Pp
 All
 .Nm
 interactive command line modes allow basic command line editing features from
@@ -1306,7 +1322,6 @@ command, the configuration syntax of
 .Ic sasync
 daemon is documented in
 .Xr sasyncd.conf 5 .
-.Pp
 .Bd -literal -offset indent
 nsh(config-p)/sasync
 % Arguments may be abbreviated
@@ -2693,7 +2708,7 @@ This command requires root user privileges.
 .Pp
 .Ic show environment Op Ar NAME
 .Pp
-Display environment variables. 
+Display environment variables.
 If the
 .Ar NAME
 of a variable is specified then display the value of this variable.
@@ -2705,7 +2720,8 @@ Otherwise, display all existing environment variable names and values.
 Set the environment variable
 .Ar NAME
 to the specified
-.Ar VALUE.
+.Ar VALUE
+.
 If a
 .Ar NAME
 or
@@ -2722,7 +2738,8 @@ Variables set with
 .Cm setenv
 are valid for the current session and will be inherited to
 other programs started by
-.Nm .
+.Nm
+.
 The
 .Cm saveenv
 command can be used to persist variables set by
@@ -2731,7 +2748,6 @@ in the file
 .Pa ~/.nshenv .
 .Pp
 .Tg unsetenv
-.Pp
 .Ic unsetenv Ar NAME
 .Pp
 Delete the variable
@@ -2744,7 +2760,6 @@ command can be used afterwards to delete the variable from
 as well.
 .Pp
 .Tg saveenv
-.Pp
 .Ic saveenv
 .Pp
 Save variables set by the
@@ -4576,9 +4591,14 @@ user the ability to obtain root privileges without knowledge of
 the root password.
 A user can abuse
 .Nm
-running as root to run arbitrary commands with the
-.Cm !
+running as root to run arbitrary commands with the !
 shell escape syntax.
+.Pp
+e.g.
+.Bd -literal -offset indet
+nsh(p)/!adduser new-unauthorised-user
+.Ed
+.Pp
 Access to root privileges must be restricted to trusted users only.
 .Pp
 *NB End Security Warning
@@ -4636,7 +4656,6 @@ For example, the following allows user 'stacy' to run
 as root via
 .Xr doas 1
 with arbitrary arguments:
-.Ed
 .Bd -literal -offset indent
 permit keepenv stacy as root cmd /usr/local/bin/nsh
 .Ed
@@ -4644,7 +4663,6 @@ permit keepenv stacy as root cmd /usr/local/bin/nsh
 The user stacy can now start
 .Nm
 via doas with an arbitrary amount of arguments:
-.Pp
 .Bd -literal -offset indent
 doas /usr/local/bin/nsh ...
 .Ed
@@ -4678,7 +4696,6 @@ using /etc/doas.conf by referring to the groupname rather than just
 a single username (the colon before the group name is required by
 .Xr doas.conf 5
 syntax and signifies a group name argument):
-.Pp
 .Bd -literal -offset indent
 permit keepenv :nshusers as root cmd /usr/local/bin/nsh args -e
 .Ed
@@ -4913,7 +4930,6 @@ This must be an absolute path to the
 file that should be displayed.
 Defaults to
 .Pa /usr/local/man/man8/nsh.8
-.Pp
 .Sh FILES
 .Bl -tag -width /etc/suid_profile -compact
 .It Pa /etc/nshrc
