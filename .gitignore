@@ -1,1 +1,15 @@
 obj/**
+*.d
+*.o
+bgpnsh/*.d
+bgpnsh/*.o
+bgpnsh/compile.c
+bgpnsh/bgpnsh
+compile.c
+mantab.c
+nsh
+nshdoas/*.d
+nshdoas/*.o
+nshdoas/compile.c
+nshdoas/nshdoas
+nshdoas/parse.c
