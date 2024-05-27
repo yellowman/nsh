@@ -985,14 +985,14 @@ call_editor(char *name, char **args, char *z)
 	edit_file(tmpfile, daemons2->mode, daemons2->propername, args);
 }
 
-static void
+static int
 provide_example_config(char *filename)
 {
 	char *name;
 	char path[PATH_MAX];
 	char tmpprompt[sizeof(prompt)];
 	FILE *f = NULL, *example = NULL;
-	int ret, num;
+	int ret = 0, n, num;
 	struct stat sb;
 	size_t len, remain;
 
@@ -1000,7 +1000,7 @@ provide_example_config(char *filename)
 
 	f = fopen(filename, "a+");
 	if (f == NULL)
-		return;
+		return 0;
 
 	if (fstat(fileno(f), &sb) == -1)
 		goto done;
@@ -1012,8 +1012,8 @@ provide_example_config(char *filename)
 	if (name == NULL)
 		goto done;
 	
-	ret = snprintf(path, sizeof(path), "/etc/examples/%s", name);
-	if (ret < 0 || (size_t)ret >= sizeof(path))
+	n = snprintf(path, sizeof(path), "/etc/examples/%s", name);
+	if (n < 0 || (size_t)n >= sizeof(path))
 		goto done;
 
 	/* Snip off rdomain trailer at end of filename. */
@@ -1104,6 +1104,7 @@ done:
 		restoreprompt();
 	if (example)
 		fclose(example);
+	return ret;
 }
 
 int
@@ -1112,6 +1113,7 @@ edit_file(char *tmpfile, mode_t mode, char *propername, char **args)
 	char *editor;
 	int fd;
 	int ret = 0;
+	sig_t sigint;
 
 	/* acq lock, call editor, test config with cmd and args, release lock */
 	if ((editor = getenv("VISUAL")) == NULL) {
@@ -1120,8 +1122,17 @@ edit_file(char *tmpfile, mode_t mode, char *propername, char **args)
 	}
 	if ((fd = acq_lock(tmpfile)) > 0) {
 		char *argv[] = { editor, tmpfile, NULL };
-		provide_example_config(tmpfile);
-		ret = cmdargs(editor, argv);
+
+		/*
+		 * Temporarily disable command.c intr() handler to ensure
+		 * we tidy up the lock file when the user hits Ctrl-C at
+		 * at prompt.
+		 */
+		sigint = signal(SIGINT, SIG_IGN);
+
+		ret = provide_example_config(tmpfile);
+		if (ret == 0)
+			ret = cmdargs(editor, argv);
 		if (ret == 0 && chmod(tmpfile, mode) == -1) {
 			printf("%% chmod %o %s: %s\n",
 			    mode, tmpfile, strerror(errno));
@@ -1130,6 +1141,7 @@ edit_file(char *tmpfile, mode_t mode, char *propername, char **args)
 		if (ret == 0 && args != NULL)
 			ret = cmdargs(args[0], args);
 		rls_lock(fd);
+		signal(SIGINT, sigint); /* Restore SIGINT handler. */
 	} else {
 		printf ("%% %s configuration is locked for editing\n",
 		    propername);
