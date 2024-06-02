@@ -73,34 +73,32 @@ git clone https://github.com/yellowman/nsh
 cd nsh
 ```
 
-6. to build the nsh sources follow the steps below
-
-6a. make / compile the sources
+6. use make  to build / compile the sources
 
 ```shell
 make
 ```
 
-6b.  Install the compiled nsh binaries and supporting files (you will need root privileges to do this).
+7.  Install the compiled nsh binaries and supporting files (you will need root privileges to do this).
 
 ```shell
 make install
 ```
 
-7. To have nsh take over the configuration of a system a number of steps that need to be carried out such as
+8. To have nsh take over the configuration of a system a number of steps that need to be carried out such as
 
 
-7a. Backup configuration of system, daemons and network in /etc 
+9. Backup configuration of system, daemons and network in /etc 
 
-7b. Copy the configuration files to /var/run/example-configfilename.0  (the .0 file extension) implies running in the default rdomain / rtable (rdomain 0)
+10. Copy the configuration files to /var/run/example-configfilename.0  (the .0 file extension) implies running in the default rdomain / rtable (rdomain 0)
 
-7c. save the running config to /etc/nshrc
+11. save the running config to /etc/nshrc
 
-7d. secure the /etc/nshrc file so that world cannot read, write or execute it . 
+12. secure the /etc/nshrc file so that world cannot read, write or execute it . 
 
-7e. configure the system to run nsh -i /etc/nshrc  either adding a line to /etc/rc.local or using an rccctl script for nsh.
+13. configure the system to run nsh -i /etc/nshrc  either adding a line to /etc/rc.local or using an rccctl script for nsh.
 
-For the users convenience, the above steps can be largely automated by running  the **rc.local-nsh-openbsd-integrate.sh** script and following on screen instructions.
+For the users convenience, the above steps (9-13) can be largely automated by running  the **rc.local-nsh-openbsd-integrate.sh** script and following on screen instructions.
 
 ```shell
 cd nsh
@@ -111,10 +109,19 @@ chmod 700 rc.local-nsh-openbsd-integrate.sh
 
 ```
 
-8. once configuration has been imported, restart the system and verify nsh config is running as expected
+14. Installing NSH setting NSH as the default shell for a user
+
+- Login as the user
+- locate nsh 
+- at the command prompt run chsh -s /usr/local/bin/nsh
+```shell
+chsh -s /usr/local/bin/nsh
+```
+
+15. once configuration has been imported, restart the system and verify nsh config is running as expected
    
 
-10. please provide feedback , bug repots and suggestions to the developers on	our mailing list  <nsh@lists.deschutesdigital.com> .
+16. please provide feedback , bug repots and suggestions to the developers on	our mailing list  <nsh@lists.deschutesdigital.com> .
     
 
 
