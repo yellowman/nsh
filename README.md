@@ -108,18 +108,16 @@ chmod 700 rc.local-nsh-openbsd-integrate.sh
 ./rc.local-nsh-openbsd-integrate.sh
 
 ```
+14. once configuration has been imported, restart the system and verify nsh config is running as expected.
 
-14. Installing NSH setting NSH as the default shell for a user
+15. Setting NSH as the default shell for a user
 
 - Login as the user
-- locate nsh 
-- at the command prompt run chsh -s /usr/local/bin/nsh
+- locate nsh binary, it is usually in /usr/local/bin/nsh
+- at the command prompt run chsh -s command to set the shell to path to the nsh binary
 ```shell
 chsh -s /usr/local/bin/nsh
 ```
-
-15. once configuration has been imported, restart the system and verify nsh config is running as expected
-   
 
 16. please provide feedback , bug repots and suggestions to the developers on	our mailing list  <nsh@lists.deschutesdigital.com> .
     
