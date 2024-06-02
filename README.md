@@ -75,19 +75,13 @@ cd nsh
 
 6. to build the nsh sources follow the steps below
 
-6a. make objects
-
-```shell
-make obj
-```
-
-6b. make / compile the sources
+6a. make / compile the sources
 
 ```shell
 make
 ```
 
-6c.  Install the compiled nsh binaries and supporting files (you will need root privileges to do this).
+6b.  Install the compiled nsh binaries and supporting files (you will need root privileges to do this).
 
 ```shell
 make install
@@ -106,11 +100,15 @@ make install
 
 7e. configure the system to run nsh -i /etc/nshrc  either adding a line to /etc/rc.local or using an rccctl script for nsh.
 
-For the users convenience, the above steps can be largely automated by running  the **rc.local-nsh-openbsd-integration.sh** script and following on screen instructions.
+For the users convenience, the above steps can be largely automated by running  the **rc.local-nsh-openbsd-integrate.sh** script and following on screen instructions.
 
 ```shell
-cd scripts/
-./rc.local-nsh-openbsd-integration.sh
+cd nsh
+cd scripts
+cd shell
+chmod 700 rc.local-nsh-openbsd-integrate.sh
+./rc.local-nsh-openbsd-integrate.sh
+
 ```
 
 8. once configuration has been imported, restart the system and verify nsh config is running as expected
