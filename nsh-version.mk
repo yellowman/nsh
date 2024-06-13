@@ -19,7 +19,8 @@
 #
 # 3) Run 'make release' to create nsh-1.x.tar.gz.
 #
-#    If this command shows changes to nsh-dist.txt then a file called
+#    This command may throw minor errors which relate to 
+#    changes to nsh-dist.txt if that is the case then a file called
 #    nsh-dist.txt.new will be created. Review the changes and decide
 #    what to do about each newly added or removed file.
 #
