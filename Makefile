@@ -17,7 +17,7 @@ MANDIR?=${PREFIX}/man/man
 .endif
 
 # For use with flashrd:
-#CFLAGS=-O -DDHCPLEASES=\"/flash/dhcpd.leases\" -Wmissing-prototypes -Wformat -Wall -Wpointer-arith -Wbad-function-cast #-W
+CFLAGS=-O -DDHCPLEASES=\"/flash/dhcpd.leases\" -Wmissing-prototypes -Wformat -Wall -Wpointer-arith -Wbad-function-cast #-W
 CFLAGS?=-O
 CFLAGS+=-Wmissing-prototypes -Wformat -Wall -Wbad-function-cast -I/usr/local/include -Wno-error -Wno-unused-variable -Wno-implicit-function-declaration -Wno-pointer-sign -Wbad-function-cast -o ${.TARGET} #-W -Wpointer-arith
 CPPFLAGS+=-DNSH_VERSION=${NSH_VERSION}
@@ -75,6 +75,17 @@ LDADD=-lbsd -ledit -ltermcap -lsqlite3 -L/usr/local/lib
 
 linux/compile.c: linux/compile.sh
 	cd linux; sh ${.CURDIR}/linux/compile.sh
+.endif
+
+.if $(OSNAME) == "FreeBSD"
+SRCS=freebsd/ctl.c freebsd/utils.c freebsd/compile.c freebsd/who.c freebsd/main.c freebsd/genget.c freebsd/more.c freebsd/complete.c freebsd/passwd.c
+SRCS+=freebsd/conf.c freebsd/version.c freebsd/sqlite3.c
+SRCS+=freebsd/commands.c
+CLEANFILES+=freebsd/compile.c
+LDADD=-ledit -lutil -lpthread -lmemstat -lelf -lkvm -lxo -lm -ltermcap -lsqlite3 -L/usr/lib -L/usr/local/lib
+
+freebsd/compile.c: freebsd/compile.sh
+	cd freebsd; sh ${.CURDIR}/freebsd/compile.sh
 .endif
 
 MAN=nsh.8
