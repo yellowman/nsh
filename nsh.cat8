@@ -1,0 +1,3370 @@
+NSH(8)                    BSD System Manager's Manual                   NSH(8)
+
+NNAAMMEE
+     nnsshh — network configuration shell
+
+SSYYNNOOPPSSIISS
+     nnsshh [--eevv] [--ii _r_c_f_i_l_e] [--cc _c_o_n_f_i_g_-_s_c_r_i_p_t_-_f_i_l_e]
+
+DDEESSCCRRIIPPTTIIOONN
+     nnsshh is a command interpreter intended for both interactive and shell
+     script use.  nnsshh is an alternative to: ifconfig(8), sysctl(8), route(8),
+     and encapsulates configuration for other daemons into one place.  nnsshh
+     provides an alternative to: netstart(8) and parts of rc(8).  nnsshh has its
+     own command language similar to the configuration language used by many
+     network appliance vendors.
+
+     nnsshh encapsulates the many available networking services and daemons that
+     are included in OpenBSD base, see the _S_E_E _A_L_S_O section for a complete
+     list.
+
+     nnsshh is a shell to configure OpenBSD kernel's networking functions such as
+     routing of packets, firewalling, network address translation, rate limit‐
+     ing, bandwidth queueing, LAN bridging, IP tunnelling, and encryption.
+     nnsshh provides simple wrappers around these functions to aid setting up a
+     network.  The goals of this software are:
+
+     --   Make the command syntax uniform
+
+     --   Bring all configuration together in a single configuration file
+
+     --   Provide a wrapper for any OpenBSD ctl utility such as ospfctl(8),
+         ipsecctl(8), and bgpctl(8).
+
+     nnsshh encapsulates those configuration files, so that their native configu‐
+     ration files are encapsulated within the nnsshh configuration framework.
+     nnsshh does not in any way obfuscate the configuration syntax that is
+     utilised or provided by these ctl.c based programs.  nnsshh allows the ad‐
+     ministrator to view and edit all configuration in one place.
+
+   CCOOMMMMAANNDD LLIINNEE AARRGGUUMMEENNTTSS
+     When nnsshh is run without arguments it loads an interactive shell.
+
+     The options are as follows:
+
+     --vv      Produce verbose output
+
+     --cc _c_o_n_f_i_g_-_s_c_r_i_p_t_-_f_i_l_e
+             Execute the command(s) in the _c_o_n_f_i_g_-_s_c_r_i_p_t_-_f_i_l_e.  This is typi‐
+             cally used to implement scripted changes to configuration.
+
+     --ii _r_c_f_i_l_e
+             Load the initial system configuration from the command(s) in the
+             _r_c_f_i_l_e.  This is typically used to clear the configuration and
+             load a full nnsshh configuration script from rcfile .
+
+     --ee      Start nnsshh in a privileged mode session.  This option is not in‐
+             tended to be used directly.  It is used internally by nnsshh while
+             restarting itself with root privileges when a non-root user runs
+             the eennaabbllee command.
+
+   IINNTTEERRAACCTTIIVVEE FFEEAATTUURREESS
+     When run without any command line arguments, nnsshh presents an interactive
+     shell to the user.  If nnsshh is run as root user then nnsshh shall start as a
+     privileged full functionality shell.  If nnsshh is run as a non-root user
+     then nnsshh shall start as an unprivileged and limited functionality shell.
+     Privileged nnsshh shell functionality can be enabled using the eennaabbllee com‐
+     mand.
+
+     All nnsshh interactive command line modes allow basic command line editing
+     features from editline(7) library.  The command history of the current
+     session is available through the up / down arrow keys.
+
+     It is possible to repeat the commands from the command history.
+
+     Any command can be abbreviated as long as the abbreviation is not ambigu‐
+     ous.  E.g. 'show running-config' can be abbreviated to 'sho run'.
+
+     If the user enters a command that is ambiguous nnsshh warns the user with
+     'Ambiguous argument' message, E.g. ambiguous command entry.
+
+           nsh/show i
+           % Ambiguous argument i
+
+   CCoommmmaanndd lliinnee ccoommpplleettiioonn
+     nnsshh has double <Tab> command line completion for user convenience if the
+     command is not ambiguous double <Tab> completes the command.
+
+     E.g show all available valid commands  with double tab key sequence
+     <tab><tab>
+
+           nsh(config-p)/
+           !               exit            ipsec           ping    smtp
+           ?               flush           ldap            ping6   snmp
+           arp             ftp-proxy       ldp             pipex   ssh
+           bgp             group           motd            quit    sshd
+           bridge          halt            mpls            rad     telnet
+           configure       help            nameserver      reboot  tftp
+           ddb             hostname        ndp             relay   tftp-proxy
+           dhcp            ifstate         no              resolv  traceroute
+           disable         ike             nppp            rip     traceroute6
+           dvmrp           inet            ntp             route   verbose
+           editing         interface       ospf            rtable  who
+           eigrp           ip              ospf6           sasync  write-config
+           enable          ip6             pf              show
+           nsh(config-p)/
+     If what is typed is ambiguous double tab presents the administrator with
+     the available command line options that match what has been typed thus
+     far.
+
+     E.g. command line completion display for all commands begining with i
+
+           nsh(config-p)/i
+           ifstate         inet            ip              ipsec
+           ike             interface       ip6
+
+   CCoommmmaanndd HHiissttoorryy
+     Use the up arrow on most keyboards to review the previous commands en‐
+     tered in the current session.  The command being currently viewed can be
+     repeated by hitting enter.
+
+   RReevveerrssiinngg CCoommmmaannddss
+     nnsshh commands can be reversed in the following ways:
+
+     --   Any affirmative commands that do not contain eennaabbllee keyword can be
+         reversed with the nnoo keyword in front of the affirmative version of
+         the command.  e.g. reverse allowing IP packet forwarding.
+
+               nsh(config-p)/ip forwarding
+               nsh(config-p)/no ip forwarding
+
+     --   Any affirmative commands that contain eennaabbllee keyword can be reversed
+         with ddiissaabbllee keyword.  E.g reverse enabling packet filter firewall
+         command.
+
+               nsh(config-p)/pf enable
+               %pf enabled
+               nsh(config-p)/pf disable
+               %pf disabled
+
+   SSttaannddaarrdd PPrroommpptt vvss PPrriivviilleeggeedd PPrroommpptt vvss CCoonnffiigguurraattiioonn mmooddee PPrroommpptt
+     SSttaannddaarrdd PPrroommpptt The shell starts out with an unprivileged prompt which
+     displays as the text of the FQDN (fully qualified domain name) of the ma‐
+     chine followed by a forward slash.  This unprivileged prompt will allow
+     only basic diagnostic commands and does not allow viewing sensitive con‐
+     figuration information.
+
+     --   e.g. standard prompt of the device firewall.machine.com
+
+               firewall.machinename.com/
+
+     PPrriivviilleeggeedd PPrroommpptt The privileged shell is accessed using the eennaabbllee com‐
+     mand.  It allows the administrator to run privileged diagnostic commands.
+     If external commands are enabled, external commands can be invoked by the
+     user in privileged mode.  The privileged mode alone will not allow
+     changes to the system via nnsshh commands.  The privileged shell is indi‐
+     cated by the FQDN of the machine followed by (p) and followed by a /
+
+     --   E.g. privileged shell prompt of the device firewall.machine.com
+
+               firewall.machinename.com(p)/
+
+     CCoonnffiigguurraattiioonn MMooddee PPrroommpptt The ccoonnffiigguurree command allows the administrator
+     to make changes to the system configuration.  This additional command is
+     a safeguard against accidental configuration of a system.  I.e. a user
+     can run privileged diagnostic commands, however without configuration
+     mode being enabled, nnsshh will not permit any modifications to the system
+     configuration.
+
+     E.g. user elevating privileges from privilege disabled, to enabled privi‐
+     lege mode and finally configuration mode on a system called host‐
+     name.nsh.org
+
+           % NSH v1.1
+           hostname.nsh.org/
+           hostname.nsh.org/enable
+           hostname.nsh.org(p)/
+           hostname.nsh.org(p)/configure
+           hostname.nsh.org(config-p)/
+
+     For the purposes of this manual, any examples the machine is called nnsshh
+
+     --   E.g. standard prompt appearing in examples in this manual
+
+               nsh/
+
+     --   E.g. privileged prompt appearing in examples in this manual
+
+               nsh(p)/
+
+IINNTTEERRAACCTTIIVVEE CCOOMMMMAANNDDSS
+     ? | hheellpp [nsh-command]
+
+     Display available commands and options that can used in the current nnsshh
+     mode.  The help or ? can be followed by a nnsshh command, nnsshh displays the
+     purpose of the specified command.
+
+     --   E.g. display help on the rtable command
+
+               nsh(config-p)/? rtable
+               % rtable: Routing table switch
+
+     --   E.g. display help for all available commands.
+
+               nsh(p)/help
+               % Commands may be abbreviated.
+               % Commands are:
+
+                 hostname      Set system hostname
+                 interface     Modify interface parameters
+                 rtable        Routing table switch
+                 group         Modify group attributes
+                 arp           Static ARP set
+                 ndp           Static NDP set
+                 nameserver    set or remove static DNS nameservers
+                 bridge        Modify bridge parameters
+                 show          Show system information
+                 ip            Set IP networking parameters
+                 ip6           Set IPv6 networking parameters
+                 mpls          Set MPLS network parameters
+                 ddb           Set DDB parameters
+                 pipex         Set PIPEX parameters
+                 flush         Flush system tables
+                 enable        Enable privileged mode
+                 disable       Disable privileged mode
+                 route         Add a host or network route
+                 pf            Packet filter control
+                 ospf          OSPF control
+                 ospf6         OSPF6 control
+                 eigrp         EIGRP control
+                 bgp           BGP control
+                 rip           RIP control
+                 ldp           LDP control
+                 relay         Relay control
+                 ipsec         IPsec IKEv1 control
+                 ike           IPsec IKEv2 control
+                 dvmrp         DVMRP control
+                 rad           Router advertisement control
+                 sasync        SA synchronization control
+                 dhcp          DHCP server control
+                 snmp          SNMP server control
+                 ldap          LDAP server control
+                 smtp          SMTP server control
+                 sshd          SSH server control
+                 ntp           NTP synchronization control
+                 nppp          PPP server control
+                 ifstate       ifstate server control
+                 ftp-proxy     ftp-proxy server control
+                 tftp-proxy    tftp-proxy server control
+                 tftp          TFTP server control
+                 resolv        Resolver configuration control
+                 motd          Message of-the-day
+                 inet          Inet super-server control
+                 ping          Send IPv4 ICMP echo request
+                 ping6         Send IPv6 ICMP echo request
+                 traceroute    Print the route to IPv4 host
+                 traceroute6   Print the route to IPv6 host
+                 ssh           SSH connection to remote host
+                 telnet        Telnet connection to remote host
+                 reboot        Reboot the system
+                 halt          Halt the system
+                 powerdown     Power the system down
+                 write-config  Save the current configuration
+                 verbose       Set verbose diagnostics
+                 editing       Set command line editing
+                 who           Display system users
+                 !             Invoke a subshell
+                 ?             Print help information
+                 quit          Close current connection
+               nsh(p)/
+
+     mmaannuuaall [_s_e_a_r_c_h _t_a_g]
+
+     Display the nnsshh manual page.  If a _s_e_a_r_c_h _t_a_g is specified then jump to
+     the first section matching this tag if one or more matching tags exist.
+
+     hhoossttnnaammee [_h_o_s_t_n_a_m_e]
+
+     hostname without arguments displays the current configured hostname of
+     the system.  hostname with an argument will set hostname to the argu‐
+     ment's value.
+
+     --   e.g. set hostname to the myfirewallname.com .
+
+               nsh(config-p)/hostname myfirewallname.com
+               myfirewallname.com(p)/
+
+     eennaabbllee
+
+     Start a privileged shell to allow the user to run privileged commands.
+     If an enable secret is set, the user shall be prompted to enter the se‐
+     cret to access the privileged shell.  If neccessary, nnsshh then attempts to
+     obtain root privileges.  Depending on configuration, this step may re‐
+     quire the user's password or the root password to be entered.  Root priv‐
+     ileges will be obtained via access rules in doas.conf(5), with a fallback
+     to the root password.  For relevant configuration examples see _S_e_c_t_i_o_n _7
+     _A_l_l_o_w_i_n_g _u_s_e_r_s _t_o _r_u_n _N_S_H below.
+
+     [no] eennaabbllee _s_e_c_r_e_t
+
+     Set or the password that an administrator would enter to access the priv‐
+     ileged shell.
+
+     --   e.g. Set a password manually to yourpassword
+
+               nsh(config-p)/enable secret yourpassword
+
+     --   e.g. Set a password using a previously set encrypted password
+
+               nsh(config-p)/enable secret blowfish $2b$10$kKSJFDd....NqIUaTCZ0=
+
+     ddiissaabbllee
+
+     Exit privileged mode.  Useful if you have completed configuration but
+     still want the ability to run diagnostics in an unprivileged nnsshh shell.
+
+     [no] rrttaabbllee [_t_a_b_l_e_-_i_d] [_n_a_m_e]
+
+     rtable when used with a specified table-id can execute services, diagnos‐
+     tic commands (ping, traceroute) and set routes under alternate routing
+     tables.  The default OpenBSD kernel can accommodate 256 rtables.  They
+     have a 1:1 relationship with routing domains, except that routing domain
+     0 can contain multiple routing tables.  In addition, routing tables ini‐
+     tialized prior to their corresponding routing domain rdomain(4) , shall
+     be initialised with a routing domain of 0.
+
+     --   e.g. Create a new routing table rdomain 3 create a loopback for rdo‐
+         main 3.
+
+               nsh(config-p)/interface lo3
+               nsh(interface-lo3)/rdomain 3
+               nsh(interface-lo3)/inet 127.0.0.1/8
+
+     --   configure a physical interface
+
+               nsh(config-p)/interface em0
+               nsh(interface-em0)/rdomain 3
+               nsh(interface-em0)/inet 10.255.0.10/24
+
+     --   Once the rdomain has been initialized (by creating a loopback inside
+         the
+          rdomain) the administrator can add routes to the rtable.
+
+               nsh(config-p)/rtable 3 customer label network3
+               nsh(p-rtable 3)/route 0.0.0.0/0 10.255.0.1
+
+     --   One can configure any service or daemon inside that routing domain
+         e.g.  to setup ssh in rdomain 3
+
+               nsh(p-rtable 3)/sshd edit
+               nsh(p-rtable 3)/sshd enable
+
+     --   The rtable command also supports unprivileged mode usage to execute
+         diagnostic commands in the respective route domain / VRF.
+
+               nsh(p)/disable
+               nsh/rtable 3
+               nsh(rtable 3)/ping 10.255.0.10
+               %PING 10.255.0.10 (10.255.0.10): 56 data bytes
+               %64 bytes from 10.255.0.10: icmp_seq=0 ttl=255 time=0.090 ms
+
+     --   To leave the rtable menu the user can type rtable 0 to return to the
+         main routing table.
+
+               nsh(p-rtable 3)/rtable 0
+               nsh(p)/
+
+     [no] ggrroouupp [_g_r_o_u_p_-_n_a_m_e] [ccaarrppddeemmoottee] [demotion-counter]
+
+     Modify group attributes for the group-name named group.  TBC
+
+     [no] aarrpp [_I_P_v_4_-_A_d_d_r_e_s_s] [_M_A_C_-_A_d_d_r_e_s_s]
+
+     Set or remove a static IP address and MAC address binding for Address
+     Resolution Protocol.  TBC
+
+     [no] nnddpp [_I_P_v_6_-_A_d_d_r_e_s_s] [_M_A_C_-_A_d_d_r_e_s_s] [tteemmpp] [pprrooxxyy]
+
+     Set or remove a static IPv6 address and MAC address binding for the IPv6
+     Neighbour Discovery Protocol (NDP).  The entry will be permanent unless
+     the word tteemmpp is given in the command.  If the word pprrooxxyy is given, this
+     system will act as an ND Proxy server, responding to requests for
+     _I_P_v_6_-_A_d_d_r_e_s_s even though the MAC address is not its own.
+
+     [no] bbrriiddggee [_b_r_i_d_g_e_-_n_a_m_e]
+
+     Modify bridge configuration on the named bridge or layer 2 forwarding in‐
+     terfaces such as, bridge(4), veb(4), tpmr(4).  See also OpenBSD manual
+     pages for bridge(4), veb(4), tpmr(4) and ifconfig(8) (accessible via the
+     following nnsshh commands):
+
+           !man bridge
+           !man ifconfig
+
+     --   e.g. configure bridge settings on bridge1, and display bridge config‐
+         uration help.
+     E.g show available bridge configuration commands.
+
+           nsh(config-p)/bridge bridge100
+           nsh(bridge-bridge100)/?
+           % Commands may be abbreviated.
+           % Type 'exit' at a prompt to leave bridge configuration mode.
+           % Bridge configuration commands are:
+
+             description   Bridge description
+             member        Bridge member(s)
+             span          Bridge spanning port(s)
+             blocknonip    Block non-IP traffic forwarding on member(s)
+             discover      Mark member(s) as discovery port(s)
+             learning      Mark member(s) as learning port(s)
+             stp           Enable 802.1D spanning tree protocol on member(s)
+             maxaddr       Maximum address cache size
+             timeout       Address cache timeout
+             maxage        Time for 802.1D configuration to remain valid
+             fwddelay      Time before bridge begins forwarding packets
+             hellotime     802.1D configuration packet broadcast interval
+             priority      Spanning priority for all members on an 802.1D bridge
+             ping          Send IPv4 ICMP echo request
+             ping6         Send IPv6 ICMP echo request
+             traceroute    Print the route to IPv4 host
+             traceroute6   Print the route to IPv6 host
+             ssh           SSH connection to remote host
+             telnet        Telnet connection to remote host
+             rule          Bridge layer 2 filtering rules
+             static        Static bridge address entry
+             ifpriority    Spanning priority of a member on an 802.1D bridge
+             ifcost        Spanning tree path cost of a member on 802.1D bridge
+             link          Link level options
+             txprio        Priority in tunnel protocol headers
+             rxprio        Source used for packet priority
+             vnetid        Virtual interface network identifier
+             parent        Parent interface
+             tunneldomain  Tunnel parameters
+             protect       Configure protected bridge domains
+             shutdown      Shutdown bridge
+             show          Show system information
+             who           Display system users
+             verbose       Set verbose diagnostics
+             editing       Set command line editing
+             !             Invoke a subshell
+             ?             Options
+             manual        Display the NSH manual
+             exit          Leave bridge config mode and return to global config mode
+           nsh(bridge-bridge100)/
+     [no] mmeemmbbeerr [_i_n_t_e_r_f_a_c_e_-_n_a_m_e]
+
+     Add a named interface as a member port to the layer 2 bridge device.  Us‐
+     ing the no suffix removes the named interface from the layer 2 bridge de‐
+     vice.
+
+     E.g. configure a standard bridge(4) device called bridge101 and add vlan
+     101 and vether101 as member ports.
+
+           nsh(config-p)/bridge bridge101
+           nsh(bridge-bridge101)/member vether101
+           nsh(bridge-bridge101)/member vlan101
+           nsh(bridge-bridge101)/exit
+     E.g. configure a virtual ethernet bridge veb(4) device called veb101 and
+     add vlan 101 and vether101 as member ports.
+
+           nsh(config-p)/bridge veb101
+           nsh(bridge-veb101)/member vether101
+           nsh(bridge-veb101)/member vlan101
+           nsh(bridge-veb101)/exit
+     E.g. configure a virtual ethernet bridge veb(4) device called veb101 and
+     add vlan 101 and vether101 as member ports.
+
+           nsh(config-p)/bridge tpmr101
+           nsh(bridge-tpmr101)/member vether101
+           nsh(bridge-tpmr101)/member vlan101
+           nsh(bridge-tpmr101)/exit
+     Note tpmr(4) is a layer 2 mac relay and it does not have layer2 to physi‐
+     cal interface mac learning capabilities it is simply a relay, its purpose
+     is to minimise processing when forwarding packets transparently between
+     two and only two interfaces on a machine.  Consequentially not all bridge
+     configuration commands will be accepted by the system.  If an unsupported
+     command is issued to a tpmr interface the system will display the follow‐
+     ing when rejecting the configuration command
+
+           % Inappropriate ioctl for device
+     [no] pprrootteecctteedd [_i_n_t_e_r_f_a_c_e_-_n_a_m_e]
+
+     This command requires that the named interface is already a member of the
+     layer 2 bridge device.  Add the named interface to a protected domain.
+     Any member ports in the same bridge in the same protected domain are iso‐
+     lated from each other.  No layer 2 communication is possible between
+     memers ports in the same port protection group.  Protected domains allow
+     for selective port isolation and or private vlan functionality.
+
+     E.g. enable port isolation between vether101 and vlan101 which are member
+     ports of the bridge veb101.
+
+           nsh(config-p)/bridge veb101
+           nsh(bridge-veb101)/protect vether101 20
+           nsh(bridge-veb101)/protect vlan101 20
+           nsh(bridge-veb101)/exit
+     [no] iipp66 [?? | ffoorrwwaarrddiinngg | mmffoorrwwaarrddiinngg | mmuullttiippaatthh | mmaaxxiiffpprreeffiixxeess |
+     mmaaxxiiffddeeffrroouutteerrss | mmaaxxddyynnrroouutteess]
+
+     Configure IPv6 networking parameters, such as forwarding, multicast for‐
+     warding, multipath routing, etc.
+
+     --   e.g. list available IPv6 configuration options
+
+               nsh(config-p)/ip6
+               % Commands may be abbreviated.
+               % 'ip6' commands are:
+                 forwarding       Enable IPv6 Forwarding
+                 mforwarding      Enable IPv6 Multicast Forwarding
+                 multipath        Multipath routing
+                 maxdynroutes     Max IPv6 Dyn Routes
+                 ?                Help
+
+     [no] iipp66 ffoorrwwaarrddiinngg
+
+     Enable or disable forwarding (routing /NAT) of IPv6 packets through the
+     kernel.
+
+           nsh(config-p)/ip6 forwarding
+
+     [no] iipp66 ffoorrwwaarrddiinngg
+
+     Enable or disable forwarding of IPv6 multicast packets through the ker‐
+     nel.
+
+           nsh(config-p)/ip6 mforwarding
+
+     [no] iipp66 mmuullttiippaatthh
+
+     Enable or disable multipath routing for IPv6 addresses.  If multipath is
+     disabled, only the first selected route is used for a given destination
+     regardless of how many routes exist in the routing table.
+
+           nsh(config-p)/ip6 multipath
+
+     [no] iipp66 mmaaxxddyynnrroouutteess [_m_a_x_-_r_o_u_t_e_-_v_a_l_u_e]
+
+     Set or disable the limit on maximum number of IPv6 routes created as a
+     result of incomming ICMPv6 redirects.  The max-route-value can be set to
+     any value 0-20480 or -1.  A value of 0 prevents any routes being created
+     as a result of incoming ICMPv6 redirects.  Set to -1 to disable the
+     limit.  The default value for maxdynroutes is 4096.
+
+           nsh(config-p)/ip6 maxdynroutes 8192
+     [no] mmppllss [?? | ttttll | mmaappttttll--iipp | mmaappttttll--iipp66] Configure MPLS (Multi Proto‐
+     col Label Switching) network parameters in the kernel.
+
+           nsh(config-p)/mpls ?
+           % Commands may be abbreviated.
+           % 'mpls' commands are:
+
+             ttl         MPLS ttl
+             mapttl-ip   MPLS mapttl IPv4
+             mapttl-ip6  MPLS mapttl IPv6
+             ?           Help
+
+     [no] mmppllss ttttll [_0_-_2_5_5]
+
+     Configure the default MPLS (Multi Protocol Label Switching) TTL (time to
+     live) in the kernel for MPLS shim headers of generated (not forwarded)
+     MPLS packets.  The default value is 255.
+
+           nsh(config-p)/mpls ttl 64
+
+     [no] mmppllss mmaappttttll--iipp [_0_-_1]
+
+     Set or unset whether the kernel decrements the TTL of the IP packet
+     header that is encapsulated in mpls packet, when the packet is mpls label
+     switched (forwarded via MPLS).  This is useful when diagnosing failures
+     in the forwarding path of an MPLS tunnel.  If set to 0, the encapsulated
+     payload IP header TTL is not modified while passing through MPLS and the
+     MPLS label stack.  The default value is 1.
+
+           nsh(config-p)/mpls mapttl-ip 1
+
+     [no] mmppllss mmaappttttll--iipp66 [_0_-_1]
+
+     Set or unset whether or not the kernel decrements the TTL of the IPv6
+     packet header that is encapsulated in mpls packet, when the packet is
+     mpls label switched (forwarded via MPLS).  This feature is useful when
+     diagnosing failures in the forwarding path of an MPLS tunnel.  If set to
+     0, the encapsulated payload IPv6 header TTL field is not modified while
+     passing through MPLS and the MPLS label stack.  The default value is 0.
+
+           nsh(config-p)/mpls mapttl-ip6 1
+
+     [no] ddddbb [?? | ppaanniicc | ccoonnssoollee | lloogg]
+
+     Configure or remove kernel debug (DDB) options.
+
+           nsh(config-p)/ddb ?
+           % Commands may be abbreviated.
+           % 'ddb' commands are:
+
+             panic    DDB panic
+             console  DDB console
+             log      DDB log
+             ?        Help
+
+
+     [no] ddddbb ppaanniicc
+
+     Enable or disable dropping the system to the kernel debugger in the event
+     of a system panic.  By default, dropping to the ddb debugger in a system
+     panic is enabled.
+
+           nsh(config-p)/ddb panic
+
+     [no] ddddbb ccoonnssoollee
+
+     Enable access to the kernel debugger from the console using an architec‐
+     ture-dependent magic key sequence on the console or a debugger button.
+     When running OpenBSD with a securelevel(7) greater than 0, this feature
+     cannot be enabled.  By default accessing the ddb debugger from the con‐
+     sole is disabled.
+
+           nsh(config-p)/ddb console
+
+     [no] ddddbb lloogg
+
+     Enable or disable logging the output of the kernel debugger in the kernel
+     message buffer.  By default ddb debugger output logging to the kernel
+     message buffer is enabled.
+
+           nsh(config-p)/ddb log
+
+     [no] ppiippeexx [?? | eennaabbllee]
+
+     Enable or disable pipex(4) processing on pppac(4) and pppx(4) interfaces.
+     pipex(4) handles PPP frames and forwards IP packets in-kernel.  It accel‐
+     erates the performance of packet forwarding, because it reduces copying
+     of packets between kernel and userland.  By default pipex is disabled.
+
+           nsh(config-p)/pipex enable
+
+     ppff [?? | eennaabbllee | ddiissaabbllee | eeddiitt | cchheecckk--ccoonnffiigg | rreellooaadd]
+
+     Control the configuration and operation of the pf (Packet Filter) fire‐
+     wall.
+
+           nsh(config-p)/pf ?
+           % Arguments may be abbreviated
+
+              enable       enable pf firewall
+              disable      disable pf firewall
+              edit         edit, test and stage firewall rules
+              check-config test and display staged firewall rules
+              reload       test and apply staged firewall rules
+           nsh(config-p)/
+
+     ppff eeddiitt
+
+     Open the default editor for the user and allow the user modify and stage
+     the firewall configuration.  The edited ruleset is automatically vali‐
+     dated by nnsshh with pfctl(8) on exiting the editor.  If the user entered pf
+     configuration is incorrect on exiting the editor, nnsshh will display a syn‐
+     tax error warning with each line number that fails the syntax check.
+
+     E.g. warning displayed by ppff eeddiitt when the incorrect syntax is used.
+
+           nsh(config-p)/pf edit
+           /var/run/pf.conf.0:15: syntax error
+           /var/run/pf.conf.0:17: syntax error
+     Note! firewall configuration changes DO NOT take effect until the ppff
+     rreellooaadd command is excecuted.  The editor used by nnsshh can be customised to
+     your preferred editor using the EDITOR or VISUAL environment variables.
+     For packet filter configuration syntax, refer to pf.conf(5).
+
+           nsh(p)/!man pf.conf
+           nsh(config-p)/pf edit
+
+     ppff cchheecckk--ccoonnffiigg
+
+     The ppff cchheecckk--ccoonnffiigg command uses OpenBSD pfctl(8) to validate the syntax
+     of the staged pf configuration.  If the staged pf configuration passes
+     the syntax checker, the rules will be displayed in order with their rule
+     number.  If the staged pf configuration fails the syntax checker, the
+     line numbers with the syntax errors will be listed.
+
+     ppff rreellooaadd
+
+     The ppff rreellooaadd command uses OpenBSD pfctl(8) to validate the syntax of the
+     staged pf configuration.  If the ppff eeddiitt config passes, nnsshh commits the
+     new configuration atomically.  In other words ppff rreellooaadd checks firewall
+     configuration using OpenBSD pfctl(8) and if the pf configuration passes
+     nnsshh commits the configuration so that it is active in the kernel.  If the
+     user entered pf configuration is not correct.  nnsshh will issue warning
+     listing the line numbers where the syntax is incorrect.  E.g. Example
+     syntax warning issued by pf reload warning that there is an error in
+     lines 15 and 17 of the user entered pf configuration.
+
+           nsh(config-p)/pf reload
+           /var/run/pf.conf.0:15: syntax error
+           /var/run/pf.conf.0:17: syntax error
+           pfctl: Syntax error in config file: pf rules not loaded
+
+     oossppff [?? | eennaabbllee | ddiissaabbllee | eeddiitt | rreellooaadd | ffiibb | lloogg] Enable, disable
+     or configure ospfd(8), the OSPF (Open Shortest Path First) daemon.
+
+           nsh(config-p)/ospf enable
+
+     oossppff eeddiitt Edit the configuration of the OSPF daemon.  The edited ruleset
+     is automatically validated on saving and exiting the editor.  Note ospfd
+     configuration changes DO NOT take effect until the "ospf reload" command
+     is entered.  The editor used by nnsshh can be customised to your preferred
+     editor using the EDITOR or VISUAL environment variables.  For OSPF con‐
+     figuration syntax, refer to ospfd.conf(5).
+
+           nsh(p)/!man ospfd.conf
+           nsh(config-p)/ospf edit
+
+     oossppff rreellooaadd Reread and apply the OSPF configuration.
+
+           nsh(config-p)/ospf reload
+
+     oossppff ffiibb [?? | ccoouuppllee | ddeeccoouuppllee | rreellooaadd]
+
+     Configure whether or not ospfd(8) updates the forwarding information base
+     (the active kernel routing tables).  this is an active control not a per‐
+     sistent configuration setting.  See "fib-update" in ospfd.conf(5) for
+     more information.  The decouple feature is useful for monitoring OSPF
+     networks without affecting the routing table of the system.  OSPF decou‐
+     ple should only be done where there is only one link between the system
+     and the rest of the OSPF network.  The ospf fib reload command re fetches
+     and relearns the routes in the FIB and passes them to the ospfd daemon
+     for processing.
+
+           nsh(config-p)/ospf fib decouple
+
+     oossppff lloogg [?? | vveerrbboossee | bbrriieeff]
+
+     Configure the detail level of ospfd(8) logging messages.  Set ospf log
+     verbose to enable detailed debug log output from ospfd.  set ospf log
+     brief to disable detailed debug log output from ospfd.
+
+           nsh(config-p)/ospf log verbose
+
+     eeiiggrrpp [?? | eennaabbllee | ddiissaabbllee | eeddiitt] [ooppttiioonnss]
+
+     Enable or disable or configure the eigrpd(8) Enhanced Interior Gateway
+     Routing Protocol daemon.  The configuration of eeiiggrrpp daemon can be edited
+     with eeddiitt command, the configuration syntax of eeiiggrrpp daemon is documented
+     in eigrpd.conf(5) manual page.  Thre are a number of ooppttiioonnss that can be
+     used to control the operation of eigrpd(8) daemon, these options are doc‐
+     umented in the eigrpctl(8) manual page.
+
+     bbggpp [?? | eennaabbllee | ddiissaabbllee | eeddiitt] [ooppttiioonnss]
+
+     Enable or disable or configure bgpd(8), the Border Gateway Protocol dae‐
+     mon.  Configuration of the bbggpp daemon can be edited with eeddiitt command,
+     the syntax is documented in bgpd.conf(5).  Thre are a number of ooppttiioonnss
+     that can be used to control the operation of bgpd(8), documented in
+     bgpctl(8).
+
+     rriipp [?? | eennaabbllee | ddiissaabbllee | eeddiitt] [ooppttiioonnss]
+
+     Enable or disable or configure the ripd(8) Routing Information Protocol
+     daemon.  The configuration of rriipp daemon can be edited with eeddiitt command,
+     the configuration syntax is documented in ripd.conf(5).  Thre are a num‐
+     ber of ooppttiioonnss that can be used to control the operation of ripd(8) dae‐
+     mon, these options are documented in ripctl(8).
+
+     llddpp [?? | eennaabbllee | ddiissaabbllee | eeddiitt] [ooppttiioonnss]
+
+     Enable or disable or configure the ldpd(8) Label Distribution Protocol
+     daemon.  The configuration of llddpp daemon can be edited with eeddiitt command,
+     the configuration syntax of llddpp daemon is documented in ldpd.conf(5).
+     Thre are a number of ooppttiioonnss that can be used to control the operation of
+     ldpd(8) daemon, these options are documented in ldpctl(8).
+
+     rreellaayy [?? | eennaabbllee | ddiissaabbllee | eeddiitt] [ooppttiioonnss]
+
+     Enable or disable or configure the relayd(8), a load balancer and TLS
+     termination daemon.  The configuration of rreellaayy daemon can be edited with
+     eeddiitt command, the syntax is documented in relayd.conf(5).  There are a
+     number of ooppttiioonnss that can be used to control the operation of relayd(8)
+     daemon, these options are documented in relayctl(8).
+
+     iippsseecc [?? | eennaabbllee | ddiissaabbllee | eeddiitt | rreellooaadd]
+
+     Enable or disable or configure the isakmpd(8) Internet Key Exchange ver‐
+     sion 1 IKEv1 ISAKMP / Oakley daemon.  The configuration of iippsseecc daemon
+     can be edited with eeddiitt command, the configuration syntax of iippsseecc daemon
+     is documented in isakmpd.conf(5) and ipsec.conf(5).
+
+     iikkee [?? | eennaabbllee | ddiissaabbllee | eeddiitt] [_o_p_t_i_o_n_s]
+
+     Enable or disable or configure the iked(8) Internet Key Exchange version
+     2 IKEv2 daemon.  The configuration of iikkee daemon can be edited with eeddiitt
+     command, the configuration syntax of iikkee daemon is documented in
+     iked.conf(5).  _o_p_t_i_o_n_s to control the iked(8) daemon in a similar manner
+     to ikectl(8) i.e to force ike daemon to run in active mode or passive
+     mode, or reload the the daemon configuration.  These features are docu‐
+     mented in ikectl(8).
+
+     ddvvmmrrpp [?? | eennaabbllee | ddiissaabbllee | eeddiitt]
+
+     Enable or disable or configure the dvmrpd(8) Distance Vector Multicast
+     Routing Protocol daemon.  The configuration of ddvvmmrrpp daemon can be edited
+     with eeddiitt command, the configuration syntax of ddvvmmrrpp daemon is documented
+     in dvmrpd.conf(5) manual page.
+
+     rraadd [?? | eennaabbllee | ddiissaabbllee | eeddiitt]
+
+     Enable or disable or configure the rad(8) Router Advertisement daemon for
+     IPv6.  The configuration of rraadd daemon can be edited with eeddiitt command,
+     the syntax is documented in rad.conf(5).
+
+     ssaassyynncc [?? | eennaabbllee | ddiissaabbllee | eeddiitt]
+
+     Enable or disable or configure the sasyncd(8) IPSec Security Association
+     synchronisation daemon for failover gateways.  The configuration of
+     ssaassyynncc daemon can be edited with eeddiitt command, the configuration syntax
+     of ssaassyynncc daemon is documented in sasyncd.conf(5).
+
+           nsh(config-p)/sasync
+           % Arguments may be abbreviated
+
+              enable  enable sasyncd service
+              disable disable sasyncd service
+              edit    edit,test and stage sasyncd config
+
+     ddhhccpp [?? | eennaabbllee | ddiissaabbllee | eeddiitt | rreessttaarrtt]
+
+     Enable, disable, configure, or restart the dhcpd(8) Dynamic Host Configu‐
+     ration Protocol daemon.  This daemon acts as a DHCP server.  The configu‐
+     ration of ddhhccpp daemon can be edited with eeddiitt command, the configuration
+     syntax of ddhhccpp daemon is documented in dhcpd.conf(5).  Configuration file
+     changes will not take effect until dhcpd(8) is restarted.
+
+     ssnnmmpp [?? | eennaabbllee | ddiissaabbllee | eeddiitt | ttrraapp] [_o_p_t_i_o_n_s]
+
+     Enable or disable or configure the snmpd(8) Lightweight Directory Access
+     Protocol daemon.  The configuration of ssnnmmpp daemon can be edited with
+     eeddiitt command, the configuration syntax of ssnnmmpp daemon is documented in
+     snmpd.conf(5).
+
+     llddaapp [?? | eennaabbllee | ddiissaabbllee | eeddiitt] [_o_p_t_i_o_n_s]
+
+     Enable or disable or configure the ldapd(8) Lightweight Directory Access
+     Protocol daemon.  The configuration of llddaapp daemon can be edited with
+     eeddiitt command, the configuration syntax of llddaapp daemon is documented in
+     ldapd.conf(5).  _o_p_t_i_o_n_s to control the ldapd(8) daemon in a similar man‐
+     ner to ldapctl(8) e.g. to set log verbose vs brief or to compact / re-in‐
+     dex the LDAP database are documented in ldapctl(8).
+
+     ssmmttpp [?? | eennaabbllee | ddiissaabbllee | eeddiitt] [options]
+
+     Enable or disable or configure the smtpd(8) OpenSMTPD Simple Mail Trans‐
+     fer Protocol daemon.  The configuration of ssmmttpp daemon can be edited with
+     eeddiitt command, the configuration syntax of ssmmttpp daemon is documented in
+     smtpd.conf(5) manual page.
+
+     _o_p_t_i_o_n_s to control smtpd(8) in a similar manner to smtpctl(8) i.e pausing
+     / resuming mta (mail transfer agents) / mda (mail delivery agents) are
+     documented in smtpctl(8).
+
+     sssshhdd [?? | eennaabbllee | ddiissaabbllee | eeddiitt]
+
+     Enable or disable or configure the sshd(8) OpenSSH secure shell daemon.
+     The configuration of sssshhdd daemon can be edited with eeddiitt command, the
+     syntax is documented in sshd_config(5).
+
+     nnttpp [eennaabbllee | ddiissaabbllee | eeddiitt]
+
+     Enable or disable or configure the ntpd(8) Open network time protocol
+     daemon.  The configuration of nnttpp daemon can be edited with eeddiitt command,
+     the syntax is documented in ntpd.conf(5).
+
+     nnpppppp [?? | eennaabbllee | ddiissaabbllee | sseessssiioonn | mmoonniittoorr | eeddiitt] [cclleeaarr _? | _a_l_l |
+     _p_p_p_-_i_d | _a_d_d_r_e_s_s | _i_n_t_e_r_f_a_c_e | _p_r_o_t_o_c_o_l | _r_e_a_l_m | _u_s_e_r_n_a_m_e] [sseessssiioonn _?
+     _|_a_l_l | _b_r_i_e_f | _p_a_c_k_e_t_s] [mmoonniittoorr _? | _a_l_l | _p_p_p_-_i_d | _a_d_d_r_e_s_s | _i_n_t_e_r_f_a_c_e |
+     _p_r_o_t_o_c_o_l | _r_e_a_l_m | _u_s_e_r_n_a_m_e]
+
+     Enable or disable or configure the npppd(8) new Point-to-Point Protocol
+     daemon.  The nnpppppp daemon supports termination of PPPoE, PPTP and L2TP PPP
+     tunnels.  npppd(8) works with pipex(4) for improved throughput through
+     the ppp tunnels.
+
+     The configuration of nnpppppp daemon can be edited with eeddiitt command, the
+     syntax is documented in npppd.conf(5).
+
+     iiffssttaattee [eennaabbllee | ddiissaabbllee | eeddiitt]
+
+     Enable or disable or configure the ifstated(8) interface state daemon.
+     The configuration of iiffssttaattee daemon can be edited with eeddiitt command, the
+     syntax is documented in ifstated.conf(5).
+
+     ffttpp--pprrooxxyy [eennaabbllee | ddiissaabbllee] Activate or deactivate the local ftp proxy
+     on the system.  ftp-proxy in order to function properly requires pf to be
+     enabled on the system.  nnsshh starts ftp-proxy on 127.0.0.1 (rdomain 0) by
+     default.  Redirect rules in pf must be used to direct outside traffic
+     from any rdomain to the local tftp daemon.
+
+     --   e.g. enable ftp-proxy
+
+               nsh(config-p)/ftp-proxy enable
+
+     ttffttpp--pprrooxxyy [eennaabbllee | ddiissaabbllee]
+
+     Activate or deactivate the local tftp proxy on the system.  tftp-proxy in
+     order to function properly requires pf to be enabled on the system.  nnsshh
+     starts tftp-proxy on 127.0.0.1 (domain 0), port 6969 by default.  Redi‐
+     rect rules in pf must be used to direct outside traffic from any rdomain
+     to the local tftp proxy.
+
+     --   e.g. enable tftp-proxy and redirects needed to use it.
+
+               nsh(config-p)/tftp-proxy enable
+
+     --   Add firewall rule in pf to divert tftp requests to tftp proxy
+
+               nsh(config-p)/pf edit
+
+               pass in quick on $int_if inet proto udp from $lan to port tftp
+               divert-to 127.0.0.1 port 6969
+               pass out quick on $ext_if inet proto udp from $lan to port tftp
+               group proxy divert-reply
+
+     ttffttpp [eennaabbllee | ddiissaabbllee]
+
+     Enable or disable the tftp daemon.  nnsshh starts tftpd on 127.0.0.1, port
+     69 by default.
+
+     rreessoollvv [eennaabbllee | ddiissaabbllee]
+
+     Enable or disable resolvd(8).  resolvd(8) is enabled by default and is
+     required to learn DNS information over DHCP and IPv6 RA.  If resolvd(8)
+     is disabled then the resolv.conf(5) file must be maintained manually.
+
+     [no] nnaammeesseerrvveerr _I_P_-_a_d_d_r_e_s_s_1 [_I_P_-_a_d_d_r_e_s_s_2 _._._. _I_P_-_a_d_d_r_e_s_s_5]
+
+     Configure static DNS name resolution servers used by the system.  Up to 5
+     IPv4 and/or IPv6.  _I_P_-_a_d_d_r_e_s_s arguments can be specified, which will then
+     be added to resolv.conf(5) via resolvd(8).
+
+     The nnoo nnaammeesseerrvveerr command removes any previously configured static DNS
+     servers.
+
+     The nnaammeesseerrvveerr command requires resolvd(8) to be enabled.  DNS servers
+     learned via DHCP or IPv6 RA are not affected by the nnaammeesseerrvveerr command.
+
+     iinneett [eennaabbllee | ddiissaabbllee | eeddiitt]
+
+     Enable or disable or configure the inetd(8) inet superserver daemon.  The
+     configuration of inet daemon can be edited with eeddiitt command, the syntax
+     is documented in inetd.conf(8).
+
+     ppiinngg [options] _h_o_s_t
+
+     Send ICMP ECHO_REQUEST packets to an IPv4 network _h_o_s_t, specified by name
+     or IPv4 address.  The _o_p_t_i_o_n_s are documented in the ping(8).
+
+     ppiinngg66 [options] _h_o_s_t
+
+     Send ICMP ECHO_REQUEST packets to an IPv6 network _h_o_s_t, specified by name
+     or IPv6 address.  The _o_p_t_i_o_n_s are documented in the ping6(8) manual page.
+
+     ttrraacceerroouuttee [options] _h_o_s_t
+
+     Trace and print the route packets take to an IPv4 network _h_o_s_t, specified
+     by name or IP address.  The _o_p_t_i_o_n_s are documented in traceroute(8).
+
+     ttrraacceerroouuttee66 [options] _h_o_s_t
+
+     Trace and print the route packets take to an IPv6 network _h_o_s_t, specified
+     by name or IP address.  The _o_p_t_i_o_n_s are documented in traceroute6(8).
+
+     sssshh [_o_p_t_i_o_n_s] [--pp _p_o_r_t] _h_o_s_t
+
+     Open a OpenSSH ssh(1) session to the remote system _h_o_s_t, specified by
+     name or IP address.  The _p_o_r_t is the TCP port on the remote host which
+     you wish to connect.  The _o_p_t_i_o_n_s are documented in ssh(1).
+
+     tteellnneett [_o_p_t_i_o_n_s] [_h_o_s_t] [port]
+
+     Open a telnet(1) session to the given TCP _p_o_r_t on the remote server _h_o_s_t,
+     specified by name or IP address.  If the port is not specified the IANA
+     assigned port 23 for telnet will be used.  The _o_p_t_i_o_n_s are documented in
+     telnet(1).
+
+     ccrroonnttaabb [eeddiitt | iinnssttaallll]
+
+     Edit the configuration of scheduled background jobs which are managed by
+     cron(8).  Only the crontab file of the root user can be edited.  See the
+     crontab(5) man page for information about configuration file syntax.
+
+     nnsshh stores a private copy of the root user's crontab in
+     _/_v_a_r_/_r_u_n_/_c_r_o_n_t_a_b_._0.  The ccrroonnttaabb eeddiitt command edits this file and then
+     installs it to the system by running the crontab(1) command.
+
+     The ccrroonnttaabb iinnssttaallll command skips editing but otherwise has the same ef‐
+     fect.  This command can be used to overwrite the system crontab in case
+     it has become out of sync with the copy managed by nnsshh.
+
+     sscchheedduulleerr [eeddiitt | iinnssttaallll]
+
+     The sscchheedduulleerr command is an alias for the ccrroonnttaabb command described
+     above.
+
+     rreebboooott
+
+     Restart the system.  Requires nnsshh to be in privileged mode and requires
+     root user privileges.
+
+     --   E.g. restart the system
+
+               nsh(config-p)/reboot
+               % Reboot initiated
+
+     hhaalltt Shut down the system.  The system will halt and then wait for a key
+     to be pressed on the console before rebooting.  Requires nnsshh to be in
+     privileged mode and requires root user privileges.
+
+     --   e.g. shutdown the system
+
+               nsh(p)/halt
+               % Shutdown initiated
+
+     ppoowweerrddoowwnn Shut down the system and then turn off power.  Restarting the
+     system will require access to the power-on button.  Requires nnsshh to be in
+     privileged mode and requires root user privileges.
+
+     --   e.g. power the system down
+
+               nsh(p)/powerdown
+               % Shutdown initiated
+
+     wwrriittee--ccoonnffiigg
+
+     Save the running configuration to the permanent configuration space.  On
+     the next startup of the system, this saved configuration is used.
+
+     --   e.g. save the configuration on the system
+
+               nsh(p)/write-config
+               % Configuration saved
+
+     [no] vveerrbboossee
+
+     Verbose mode sets nnsshh to display extra information on entered commands.
+     It is useful during a diagnostic and troubleshooting session.
+
+     --   E.g. enable verbose output
+
+               nsh/verbose
+               % Diagnostic mode enabled
+
+     --   If you do not wish to have the extra information displayed, you may
+         disable verbose mode.
+
+               nsh/no verbose
+               % Diagnostic mode disabled
+     sshhooww [hostname | interface | autoconf | ip | inet | inet6 | route |
+     route6 | sadb | arp | ndp | vlan | kernel | bgp | ospf | ospf6 | pf |
+     eigrp | rip | ldp | ike | ipsec | dvmrp | relay | dhcp | smtp | ldap |
+     monitor | version | users | crontab | running-config | startup-config |?
+     | help]
+
+     The main diagnostic and informational command is 'show'.  show without
+     arguments  displays the available diagnostic show sub commands.
+
+     --   E.g using show and its built in help
+
+               nsh(p)/show
+               % Commands may be abbreviated.
+               % 'show' commands are:
+
+                 hostname        Router hostname
+                 interface       Interface config
+                 autoconf        IPv4/IPv6 autoconf state
+                 ip              IP address information
+                 inet            IPv4 address information
+                 inet6           IPv6 address information
+                 route           IPv4 route table or route lookup
+                 route6          IPv6 route table or route lookup
+                 sadb            Security Association Database
+                 arp             ARP table
+                 ndp             NDP table
+                 vlan            802.1Q/802.1ad VLANs
+                 bridge          Ethernet bridges
+                 kernel          Kernel statistics
+                 bgp             BGP information
+                 ospf            OSPF information
+                 ospf6           OSPF6 information
+                 pf              Packet Filter firewall information
+                 eigrp           EIGRP information
+                 rip             RIP information
+                 ldp             LDP information
+                 ike             IKE information
+                 ipsec           IPsec information
+                 dvmrp           DVMRP information
+                 relay           Relay server
+                 dhcp            DHCP server
+                 smtp            SMTP server
+                 ldap            LDAP server
+                 monitor         Monitor routing/arp table changes
+                 version         Software information
+                 users           System users
+                 crontab         Scheduled background jobs
+                 running-config  Operating configuration
+                 startup-config  Startup configuration
+                 ?               Options
+               nsh(p)/
+
+     sshhooww hhoossttnnaammee
+
+     Display the system's currently assigned hostname.
+
+     --   e.g. display the name of the device
+
+               nsh(p)/show hostname
+               % devicename.com
+
+     sshhooww iinntteerrffaaccee [_i_n_t_e_r_f_a_c_e_-_n_a_m_e] [ssttaattuuss]
+
+     Display essential information about the system network interfaces includ‐
+     ing any network bridges / switches.  show interface without any arguments
+     displays information about all interfaces available on the system.  The
+     ssttaattuuss keyword shows a useful summary (including the Name, Admin Status,
+     Link state, and Media type) of each hardware and other configured network
+     interfaces on the system.
+
+     show interface _i_n_t_e_r_f_a_c_e_-_n_a_m_e Display information about a specific inter‐
+     face.
+
+     --   e.g. display information about the loopback interface.
+
+               nsh/show interface lo0
+               % lo0
+                 Interface is up (last change 22:07:02), protocol is up
+                 Interface type Loopback
+                 Internet address ::1/128, fe80::1%lo0/64, 127.0.0.1/8
+                 rdomain 0, MTU 32768 bytes
+                 4 packets input, 160 bytes, 0 errors, 0 drops
+                 4 packets output, 160 bytes, 0 errors, 0 unsupported
+
+     --   "Interface is up" means that the interface is turned on in software.
+         "Protocol is up" means that the interface is configured and ready to
+         run.  The "Interface type" explains what the interface is used for on
+         the system.  Some interfaces are not intended to pass traffic for
+         network users, and instead handle internal functions on the system.
+         See ifconfig(8) for more information on interface types supported by
+         OpenBSD.
+
+     --   "Internet address" shows the IPv4 and IPv6 addresses configured for
+         the interface, if any.  IPv6 addresses with a % sign are "link-local"
+         and not valid outside of the context of the interface name specified.
+         MTU describes the Maximum Transmission Unit, the largest size of a
+         packet which the kernel can transmit on this interface.
+
+     --   The statistics show the number of packets, bytes, errors, and dropped
+         packets in both incoming and outgoing directions.  The average in‐
+         put/output sizes describe the median size of packets going in and out
+         the interface.  Note that the total bytes in and/or out may not be
+         accurate.  OpenBSD uses an unsigned long type to hold the byte count.
+         When the byte count exceeds the storage limit of an unsigned long
+         (4,294,967,295 on a 32 bit architecture or 18,446,744,073,709,551,615
+         on a 64-bit architecture), the counter will overflow, causing it to
+         roll over to 0.  The average packet size is inaccurate when the total
+         byte count rolls over, because the total number of packets reflects
+         bytes that are no longer counted.
+
+     --   With verbose mode enabled, 'show interface' displays the raw kernel
+         flags for an interface.  See ifmedia(4) for an explanation of these
+         flags.
+
+
+               nsh(p)/show interface lo0
+               % lo0
+                 Interface is up (last change 22:13:28), protocol is up
+                 Interface type Loopback
+                 Internet address ::1/128, fe80::1%lo0/64, 127.0.0.1/8
+                 rdomain 0, MTU 32768 bytes
+                 4 packets input, 160 bytes, 0 errors, 0 drops
+                 4 packets output, 160 bytes, 0 errors, 0 unsupported
+                 Flags:
+                   <UP,LOOPBACK,RUNNING,MULTICAST>
+                 Hardware features:
+
+
+     --   With a bridge, verbose mode displays spanning tree member states and
+         bridge members.
+
+               nsh/show int bridge0
+               % bridge0
+                 Bridge is up (last change 00:00:21), protocol is up
+                 Interface type Ethernet Bridge
+                 0 packets input, 0 bytes, 0 errors, 0 drops
+                 0 packets output, 0 bytes, 0 errors, 0 unsupported
+                 Flags:
+                   <UP,RUNNING>
+                 STP member state:
+                   sis0: listening
+
+
+     --   With an IEEE 802.11 wireless interface, verbose mode displays the
+         network ID, network key, and power-saving mode (if enabled).
+
+               nsh/show int athn0
+               % athn0
+                 BLah blah
+                 IEEE 802.11
+                   network id blah
+                   network key blah
+                   powersaving (111 ms)
+
+
+     --   With an interface that supports media commands, including Ethernet
+         and IEEE 802.11 wireless interfaces, verbose mode displays which me‐
+         dia types are available.
+
+               nsh/show int sis0
+               % sis0
+                 Supported media types:
+                   media none
+                   media 10baseT
+                   media 10baseT, mediaopt full-duplex
+                   media 100baseTX
+                   media 100baseTX, mediaopt full-duplex
+                   media autoselect
+
+     e.g. briefly list the status of all interfaces on the system.
+
+           nsh(p)/show interface status
+           % Name    Status  Link            Media
+             lo0     up      -
+             em0     up      active          Ethernet 1000baseT full-duplex
+             enc0    down    active
+             pflog0  up      -
+             tpmr1   up      active
+             vether1 up      active          Ethernet
+             vether2 up      active          Ethernet
+             vether10 up      active          Ethernet
+             vether11 up      active          Ethernet
+             bridge101 up      -
+             vether20 up      active          Ethernet
+             vether21 up      active          Ethernet
+             veb201  up      -
+           nsh(p)/
+
+     sshhooww aauuttooccoonnff
+
+     Display the interfaces on the system that are dynamically configured and
+     the current state and configured settings such as IP addresses, routes
+     nameservers and the server that the system recieved the autoconf settings
+     from.
+
+     e.g. list current autoconfiguration state of the system.
+
+           nsh(p)/show autoconf
+           em0 [Bound]
+                   inet 10.0.2.15 netmask 255.255.255.0
+                   default gateway 10.0.2.2
+                   nameservers 10.0.0.1 192.168.0.1
+                   lease 17 hours
+                   dhcp server 10.0.2.2
+
+     sshhooww [ip | inet | inet6]
+
+     Display the IP addresses on all interfaces, their respective rdomains and
+     where the ip address was configured from on the system including:
+
+     --   static
+
+     --   dhcp
+
+     --   ppp
+
+     --   link-local
+
+     E.g show all ipv4 and IPv6 adddresses on the system
+
+           nsh(p)/show ip
+           Address      Interface  RDomain  Type
+           10.0.2.15    em0              0  dhcp
+           10.10.10.10  em1            200  static
+           127.0.0.1    lo0              0  static
+           127.0.0.1    lo0            200  static
+           ::1          lo0              0  static
+           ::1          lo200          200  static
+           fe80:4::1    lo0              0  link-local
+           nsh(p)/
+     E.g. show only IPv4 addresses on the system.
+
+           nsh(config-p)/show inet
+           Address      Interface  RDomain  Type
+           10.0.2.15    em0              0  dhcp
+           10.10.10.10  em1            200  static
+           127.0.0.1    lo0              0  static
+           127.0.0.1    lo200          200  static
+     E.g. show only IPv6 addresses on the system.
+
+           sh(config-p)/show inet6
+           Address    Interface  RDomain  Type
+           ::1        lo0              0  static
+           ::1        lo200          200  static
+           fe80:4::1  lo0              0  link-local
+
+     sshhooww rroouuttee
+
+     Display a dump of the kernel's IPv4 routing table, including ARP entries.
+
+     e.g. display contents of the IPv4 routing table.
+
+           nsh/show route
+           Flags: U - up, G - gateway, H - host, L - link layer, R - reject (unreachable),
+                  D - dynamic, S - static
+
+           % IPv4 routing table:
+
+           Destination     Gateway           Flags  Refs  Packets    Mtu  Interface
+           0.0.0.0/0       172.20.1.1        UGS      3     57502      -   sis0
+           127.0.0.0/8     127.0.0.1         UGRS     0         0  33224   lo0
+           127.0.0.1       127.0.0.1         UH       2        12  33224   lo0
+           172.20.1.0/24   link#1            U        0         0      -   sis0
+           172.20.1.1      8:0:20:71:22:e7   UHL      1         0      -   sis0
+           172.20.1.2      127.0.0.1         UGHS     0         0  33224   lo0
+           172.20.1.23     link#1            UHL      1      1764      -   sis0
+           172.20.1.255    link#1            UHL      2      1555      -   sis0
+           224.0.0.0/4     127.0.0.1         URS      0         0  33224   lo0
+
+     --   The destination column is simply the destination network which the
+         route describes.  The gateway is the next hop for this route to pass
+         through.  Gateways which are described as 'link#' are local area net‐
+         works or members of local area networks.
+
+     --   The flags are useful to determine if the kernel is using a particular
+         route or not.
+
+     --   U - up
+           This route is active G - gateway
+           The destination of this route is behind a gateway (next hop).  H -
+         host
+           This route describes a host on the local network.  L - link layer
+           The destination has been or needs to be discovered through a layer
+         2 protocol R - reject
+           This route is unreachable, and therefore marked unusable in the
+         kernel D - dynamic
+           This is a dynamic route which has is managed through routing soft‐
+         ware on
+           the local system (such as ripd, ospfd or bgpd) S - static
+           This is a static route set by a user
+
+     sshhooww rroouuttee66
+
+     Display a dump of the kernel's IPv6 routing table, including neighbour
+     entries.
+
+     e.g. display contents of the IPv6 routing table.
+
+           nsh(p)/show route6
+           Flags: U - up, G - gateway, H - host, L - link layer, R - reject (unreachable),
+                  D - dynamic, S - static, T - MPLS, c - CLONED, l - LOCAL
+
+           % IPv6:
+           Destination         Gateway        Flags    Refs    Use    Mtu  Interface
+           ::/96               ::1            UGRS        0      0  32768   lo0
+           ::1                 ::1            UH         10     20  32768   lo0
+           ::ffff:0.0.0.0/96   ::1            UGRS        0      0  32768   lo0
+           2002::/24           ::1            UGRS        0      0  32768   lo0
+           2002:7f00::/24      ::1            UGRS        0      0  32768   lo0
+           2002:e000::/20      ::1            UGRS        0      0  32768   lo0
+           2002:ff00::/24      ::1            UGRS        0      0  32768   lo0
+           fe80::/10           ::1            UGRS        0      0  32768   lo0
+           fec0::/10           ::1            UGRS        0      0  32768   lo0
+           fe80::1%lo0         fe80::1%lo0    UH          0      0  32768   lo0
+           ff01::/16           ::1            UGRS        0      0  32768   lo0
+           ff01::%lo0/32       fe80::1%lo0    U           0      1  32768   lo0
+           ff02::/16           ::1            UGRS        0      0  32768   lo0
+           ff02::%lo0/32       fe80::1%lo0    U           0      1  32768   lo0
+           nsh(p)/
+
+     sshhooww ssaaddbb
+
+     Display the IPSEC security association database of the system.
+
+     sshhooww aarrpp
+
+     Display Address Resolution Protocol table of the system, listing IPv4 to
+     layer2 mac-address entries, the interfaces they were learned on and the
+     expiry of each interfaces.  Locally configured IPv4 addresses appear as
+     permanent arp entries.
+
+     e.g. display contents of the arp table.
+
+           nsh(p)/show arp
+           Host           Ethernet Address   Netif Expire     Flags
+           10.0.2.2       52:54:00:12:35:02    em0 2m14s
+           10.0.2.15      08:00:27:bd:cb:77    em0 permanent  l
+           nsh(p)/
+
+     sshhooww nnddpp
+
+     Display Neighbour Discovery Protocol NDP table.  Neighbour Discovery Pro‐
+     tocol database of the system, listing IPv6 to layer2 mac-address entries,
+     the interfaces they were learned on and the expiry of each interfaces.
+     Locally configured IPv6 addresses appear as permanent ndp entries.
+
+     e.g. display contents of the ndp table.
+
+           nsh(p)/show ndp
+           Neighbor                       Linklayer Address   Netif Expire    S Flags
+           fe80::a00:27ff:febd:cb77%em0   08:00:27:bd:cb:77     em0 permanent R l
+           fe80::cafe:babe:beef:face%em0  52:54:00:12:35:02     em0 17m03s
+           nsh(p)/
+
+     sshhooww vvllaann [vlan-id] [<rangestart-vlan-id> <range-end-vlan-id>]
+
+     Display all virtual local area network interfaces configured on the sys‐
+     tem.  It Lists the following:
+
+     --   the vlan interface name
+
+     --   the vlan's parent interfaces
+
+     --   the status of the interface
+
+     --   the rdomain of the interface
+
+     --   any layer2 forwarding device the vlan interface is a member of
+
+     --   the vlan interface description.
+     List of vlans displayed can be restricted to an individual vlan if its
+     vlan-id is supplied as an optional argument.  The vlans displayed can be
+     restricted to a range of vlans if the start and end vlan-id are supplied
+     as 2 optional consequitive arguments in ascending order.
+
+     E.g. display all vlan interfaces on the system
+
+           nsh(p)/show vlan
+           % Interface  Tag   Status  Type    RDomain  Parent  Bridge   Description
+             vlan4093   4093  up      802.1Q      200  em1     -        Chris-VLAN
+             vlan100    100   up      802.1Q        0  em1     -        Stefan-VLAN
+             vlan200    200   up      802.1Q      200  em1     tpmr100  Tom-VLAN
+           nsh(p)/
+     e.g. display information on all vlans with vnetid/tag of 200.
+
+           nsh(p)/show vlan 200
+           % Interface  Tag   Status  Type     RDomain   Parent    Bridge   Description
+             vlan200    200   up      802.1Q       200   em1       tpmr100  Tom-VLAN
+           nsh(p)/
+
+     E.g. show vlan interfaces with vlan-ids the range 100 to 4093
+
+           nsh(p)/show vlan 100 4093
+           % Interface  Tag   Status  Type    RDomain  Parent  Bridge   Description
+             vlan4093   4093  up      802.1Q      200  em1     -        Chris-VLAN
+             vlan200    200   up      802.1Q      200  em1     tpmr100  Tom-VLAN
+
+     sshhooww bbrriiddggee [bridge-interface | veb-interace | tpmr-interface]
+
+     Without specifying an argument, it displays all layer2 forwarding devices
+     configured on the system, and all members of each layer2 forwarding de‐
+     vice, and any description of the layer2 forwarding device.  Layer 2 for‐
+     warding devices supported by this command include bridge(4) standard
+     bridge, veb(4) virtual ethernet bridge and the tpmr(4) two port mac relay
+     device.
+
+     e.g. Display all layer2 forwarding devices and their member ports
+
+           nsh(p)/show bridge
+           % Bridge    Status  Member Interfaces
+             bridge1   down
+                       Description: -
+             bridge100 up      vlan100
+                       Description: Tom-Smyths-Bridge
+             veb200    up      vlan200
+                       Description: Chris-Cappuccios-Bridge
+             tpmr102   up      vether1102 vether2102
+                       Description: dlg-bridge
+           nsh(p)/
+     e.g. Display the information the tpmr102 layer2 forwarding device
+
+           nsh(p)/show bridge tpmr102
+           % Bridge    Status  Member Interfaces
+             tpmr102   up      vether1102 vether2102
+                       Description: 2PortMacRelay-bridge-102
+
+     sshhooww kkeerrnneell [_i_p | _a_h | _e_s_p | _t_c_p | _i_c_m_p | _i_g_m_p | _i_p_c_o_m_p | _r_o_u_t_e | _c_a_r_p |
+     _m_b_u_f | _p_f]
+
+     Display kernel statistics available for query.  Display kernel statistics
+     as selected by the argument.  Executing show kernel without an argument
+     lists all available statistics
+
+     e.g. show available kernel statistics.
+
+           nsh(p)/show kernel
+           % Arguments may be abbreviated
+
+             show kernel ip     Internet Protocol statistics
+             show kernel ah     Authentication Header statistics
+             show kernel esp    Encapsulated Security Payload statistics
+             show kernel tcp    Transmission Control Protocol statistics
+             show kernel udp    Unreliable Datagram Protocol statistics
+             show kernel icmp   Internet Control Message Protocol statistics
+             show kernel igmp   Internet Group Management Protocol statistics
+             show kernel ipcomp IP Compression statistics
+             show kernel route  Routing statistics
+             show kernel carp   Common Address Redundancy Protocol statistics
+             show kernel mbuf   Packet memory buffer statistics
+             show kernel pf     Packet Filter statistics
+           nsh(p)/
+
+     e.g. show packet filter kernel statistics
+
+           nsh(p)/show kernel pf
+           % pf statistics:
+           Status: Enabled for 0 days 23:58:32              Debug: err
+
+           State Table                          Total             Rate
+             current entries                        7
+             half-open tcp                          0
+             searches                          284973            3.3/s
+             inserts                              836            0.0/s
+             removals                             829            0.0/s
+           Counters
+             match                                841            0.0/s
+             bad-offset                             0            0.0/s
+             fragment                               0            0.0/s
+             short                                  0            0.0/s
+             normalize                              0            0.0/s
+             memory                                 0            0.0/s
+             bad-timestamp                          0            0.0/s
+             congestion                             0            0.0/s
+             ip-option                              1            0.0/s
+             proto-cksum                            0            0.0/s
+             state-mismatch                         0            0.0/s
+             state-insert                           0            0.0/s
+             state-limit                            0            0.0/s
+             src-limit                              0            0.0/s
+             synproxy                               0            0.0/s
+             translate                              0            0.0/s
+             no-route                               0            0.0/s
+           nsh(p)/
+
+     sshhooww bbggpp [_a_n_n_o_u_n_c_e_d | _i_n_t_e_r_f_a_c_e_s | _n_e_x_t_h_o_p | _s_u_m_m_a_r_y | _r_i_b | _n_e_i_g_h_b_o_r |
+     _i_p]
+
+     Display status for bgpd(8) Border Gateway Protocol BGPv4 dynamic routing
+     on this system.  e.g. show bgp
+
+           nsh(p)/show bgp
+           % Arguments may be abbreviated
+
+             show bgp announced  All announced networks information
+             show bgp interfaces Interface states information
+             show bgp nexthop    BGP nexthop routes information
+             show bgp summary    Neighbor session states and counters information
+             show bgp rib        Routing Information Base information
+             show bgp neighbor   Detailed peer information
+             show bgp ip         IP BGP information
+           nsh(p)/
+
+     sshhooww oossppff [_f_i_b | _d_a_t_a_b_a_s_e | _i_n_t_e_r_f_a_c_e_s | _n_e_i_g_h_b_o_r | _r_i_b | _s_u_m_m_a_r_y]
+
+     Display the state of ospfd(8) Open Shortest Path First OSPF dynamic links
+     state routing protocol for IPv4 on this system.
+
+           nsh(p)/show ospf
+           % Arguments may be abbreviated
+
+             show ospf fib        Forward Information Base information
+             show ospf database   Link State Database information
+             show ospf interfaces Interface information
+             show ospf neighbor   Neighbor information
+             show ospf rib        Routing Information Base information
+             show ospf summary    Summary information
+           nsh(p)/
+
+     sshhooww oossppff66 [_f_i_b | _d_a_t_a_b_a_s_e | _i_n_t_e_r_f_a_c_e_s | _n_e_i_g_h_b_o_r | _r_i_b | _s_u_m_m_a_r_y]
+
+     Display the state of ospf6d(8) Open Shortest Path First OSPFv3 daemon for
+     dynamic links state routing protocol for IPv6 on this system.
+
+           nsh(p)/show ospf6
+           % Arguments may be abbreviated
+
+             show ospf6 fib        Forward Information Base information
+             show ospf6 database   Link State Database information
+             show ospf6 interfaces Interface information
+             show ospf6 neighbor   Neighbor information
+             show ospf6 rib        Routing Information Base information
+             show ospf6 summary    Summary information
+           nsh(p)/
+
+     sshhooww ppff [_a_l_l | _a_n_c_h_o_r_s | _i_n_f_o | _l_a_b_e_l_s | _m_e_m_o_r_y | _q_u_e_u_e_s | _r_u_l_e_s |
+     _s_o_u_r_c_e_s |]
+      states | tables | timeouts | osfingerprint | interfaces
+
+     Display the status of pf(4) OpenBSD Packet Filter firewall.  uusseess
+     pfctl(8) with the -s (show) command with modifier arguments to display
+     various aspects the current pf status on the system.
+
+           nsh(p)/show pf
+           % Arguments may be abbreviated
+
+             show pf all           all pf info except fingerprints and interfaces information
+             show pf anchors       currently loaded anchors in main pf ruleset information
+             show pf info          pf filter statistics, counters and tracking information
+             show pf labels        per rule stats (bytes, packets and states) information
+             show pf memory        current pf pool memory hard limit information
+             show pf queues        currently loaded pf queue definition information
+             show pf rules         active pf firewall rule information
+             show pf sources       contents of the pf source tracking table information
+             show pf states        contents of the pf state table information
+             show pf tables        pf table information
+             show pf timeouts      current pf global timeout information
+             show pf osfingerprint pf Operating System fingerprint information
+             show pf interfaces    pf usable interfaces/ interface group information
+           nsh(p)/
+     sshhooww eeiiggrrpp [_i_n_t_e_r_f_a_c_e_s | _n_e_i_g_h_b_o_r | _t_o_p_o_l_o_g_y | _t_r_a_f_f_i_c]
+
+     Display the status of eigrpd(8) Enhanced Interior Gateway Routing Proto‐
+     col (EIGRP) daemon.
+
+           nsh(p)/show eigrp
+           % Arguments may be abbreviated
+
+             show eigrp interfaces Interface information
+             show eigrp neighbor   Neighbor information
+             show eigrp topology   Topology information
+             show eigrp traffic    Traffic information
+           nsh(p)/
+
+     sshhooww rriipp [_f_i_b | _i_n_t_e_r_f_a_c_e_s | _n_e_i_g_h_b_o_r | _r_i_b]
+
+     Display the status of ripd(8) Routing Information Protocol RIP daemon for
+     dynamic distance vector routing protocol on this system.
+
+           nsh(p)/show rip
+           % Arguments may be abbreviated
+
+             show rip fib        Forward Information Base information
+             show rip interfaces Interfaces information
+             show rip neighbor   Neighbor information
+             show rip rib        Routing Information Base information
+           nsh(p)/
+
+     sshhooww llddpp [_f_i_b | _i_n_t_e_r_f_a_c_e_s | _n_e_i_g_h_b_o_r | _l_i_b | _d_i_s_c_o_v_e_r_y | _l_2_v_p_n]
+
+     Display information on the status of ldpd(8) Label Distribution protocol
+     LDP routing daemon for MPLS Multi Protocol label Switching on this sys‐
+     tem.
+
+           nsh(p)/show ldp
+           % Arguments may be abbreviated
+
+             show ldp fib        Forward Information Base information
+             show ldp interfaces Interfaces information
+             show ldp neighbor   Neighbors information
+             show ldp lib        Label Information Base information
+             show ldp discovery  Adjacencies information
+             show ldp l2vpn      Pseudowire information
+           nsh(p)/
+
+     sshhooww iikkee [_m_o_n_i_t_o_r]
+
+     Display Information on the Internet Key Exchange IKEv2 daemon on this
+     system.
+
+     sshhooww iippsseecc [_f_l_o_w_s | _s_a_d_b]
+
+     Display IPSECurity information related to either IPSEC flows or the Secu‐
+     rity Association Database on the system.
+
+     sshhooww ddvvmmrrpp [_i_g_m_p | _i_n_t_e_r_f_a_c_e_s | _m_f_c | _n_e_i_g_h_b_o_r | _r_i_b | _s_u_m_m_a_r_y]
+
+     Display status information from dvmrpd(8) the Distance Vector Multicast
+     Routing Protocol (DVMRP) daemon.
+
+           nsh(p)/show dvmrp
+           % Arguments may be abbreviated
+
+             show dvmrp igmp       Internet Group Message Protocol information
+             show dvmrp interfaces Interfaces information
+             show dvmrp mfc        Multicast Forwarding Cache information
+             show dvmrp neighbor   Neighbor information
+             show dvmrp rib        Routing Information Base information
+             show dvmrp summary    Summary information
+           nsh(p)/
+     rreellaayy [_h_o_s_t_s | _r_e_d_i_r_e_c_t_s | _s_t_a_t_u_s | _s_e_s_s_i_o_n_s | _s_u_m_m_a_r_y]
+
+     Display status information from relayd(8) daemon for loadbalancing, TLS
+     termination and content switching.
+
+           nsh(p)/show relay
+           % Arguments may be abbreviated
+
+             show relay hosts     hosts information
+             show relay redirects redirects information
+             show relay status    status information
+             show relay sessions  sessions information
+             show relay summary   summary information
+           nsh(p)/
+
+     sshhooww ddhhccpp [_l_e_a_s_e_s] Display leases recored in the lease database as handed
+     out by dhcpd(8) Dynamic Host Configuration Protocol (DHCP) daemon.
+
+     sshhooww llddaapp [_s_t_a_t_s] Display statistics from ldapd(8) Lightweight Directory
+     Access Protocol (LDAP) daemon.
+
+     sshhooww mmoonniittoorr
+
+     Start an interactive console monitor mode for the system's routing
+     socket.  The monitor displays raw descriptions of the data passing into
+     the kernel's routing socket and dumps of the kernel's routing messages to
+     the machine.  Press enter or control-C to exit this mode.
+
+     sshhooww vveerrssiioonn
+
+     Display basic version information about the host and about NSH, includ‐
+     ing,
+      the system's  uptime and kernel version.  It also shows both the kernel
+     that nnsshh was compiled under, and the current kernel that nnsshh is running
+     under.  nnsshh should always be running on a kernel that is of a similar
+     version to the version of the kernel/header files that nnsshh was compiled
+     under.  This ensures that nnsshh can interact with the kernel properly (and
+     vice versa).
+
+           nsh/show version
+           % NSH v1.1
+           Compiled 03-Apr-22 06:03 by _pbuild@amd64-1.ports.openbsd.org
+           uptime: 1 day, 2 hours, 17 minutes
+           system: OpenBSD/amd64 version 7.1
+           cpu: Intel(R) Core(TM) i7-10610U CPU @ 1.80GHz
+           memory: 8175MB
+           kernel: OpenBSD 7.1 (GENERIC.MP) #459: Mon Apr  4 18:16:13 MDT 2022
+               deraadt@amd64.openbsd.org:/usr/src/sys/arch/amd64/compile/GENERIC.MP
+
+     sshhooww ccrroonnttaabb
+
+     Display the scheduled background jobs of the root user which are managed
+     by cron(8).  See the crontab(5) manual page for information about sched‐
+     uling rules syntax.
+
+     sshhooww sscchheedduulleerr
+
+     Alias for the sshhooww ccrroonnttaabb command described above.
+
+     sshhooww rruunnnniinngg--ccoonnffiigg
+
+     Display the current running configuration on the system, including inter‐
+     face and bridge configurations, routes, the system hostname, firewall
+     rules, and other information compiled by nnsshh.
+
+     sshhooww ssttaarrttuupp--ccoonnffiigg
+
+     Display the startup configuration on the system, read from nshrc, includ‐
+     ing interface and bridge configuration, routes, the system hostname,
+     firewall rules, and other information compiled by nnsshh.
+
+     sshhooww ddiiffff--ccoonnffiigg
+
+     Display differences between the startup configuration and the running
+     configuration.  This command requires root user privileges.
+
+     sshhooww eennvviirroonnmmeenntt [_N_A_M_E]
+
+     Display environment variables.  If the _N_A_M_E of a variable is specified
+     then display the value of this variable.  Otherwise, display all existing
+     environment variable names and values.
+
+     sseetteennvv _N_A_M_E_=_V_A_L_U_E
+
+     Set the environment variable _N_A_M_E to the specified _V_A_L_U_E If a _N_A_M_E or
+     _V_A_L_U_E contains whitespace then it must be quoted in double-quotes.  For
+     example:
+
+           nsh/setenv EDITOR=/usr/local/bin/emacs
+           nsh/setenv MY_VARIABLE="this value contains whitespace"
+           nsh/setenv "MY OTHER VARIABLE"=my-name-contains-whitespace
+
+     Variables set with sseetteennvv are valid for the current session and will be
+     inherited to other programs started by nnsshh The ssaavveeeennvv command can be
+     used to persist variables set by sseetteennvv in the file _~_/_._n_s_h_e_n_v.
+
+     uunnsseetteennvv _N_A_M_E
+
+     Delete the variable _N_A_M_E from the environment.  The ssaavveeeennvv command can
+     be used afterwards to delete the variable from _~_/_._n_s_h_e_n_v as well.
+
+     ssaavveeeennvv
+
+     Save variables set by the sseetteennvv command to the file _~_/_._n_s_h_e_n_v.  If this
+     file exists and is owned by the invoking user then nnsshh will automatically
+     load environment variables from this file at startup.
+
+     ssaavveeeennvv is only effective for variables set in the current nnsshh process.
+     While switching from non-privileged mode to privileged mode with the
+     eennaabbllee command a new nnsshh process will be started.  Any variables set by
+     sseetteennvv in non-privileged mode, before eennaabbllee, may still appear in the en‐
+     vironment of the privileged process.  But a ssaavveeeennvv command run in the
+     privileged process will not save them.  It is necessary to return to un‐
+     privileged mode with the ddiissaabbllee command in order to save any variables
+     which were set in unprivileged mode.
+
+     fflluusshh [routes | arp | ndp | line | bridge-dyn | bridge-all | bridge-rule
+     | pf | history |? | help]
+
+     Clear various system tables.
+
+     fflluusshh rroouutteess
+
+     Clear the system routing table.
+
+     fflluusshh aarrpp
+
+     Clear the system arp cache and static arp table.
+
+     fflluusshh nnddpp
+
+     Clear the system NDP cache and static NDP table.
+
+     fflluusshh bbrriiddggee--ddyynn _b_r_i_d_g_e_-_n_a_m_e
+
+     Clear dynamically learned members from the named bridge.
+
+           nsh/flush bridge-dyn bridge0
+
+     Delete all dynamically learned members from bridge0.  Note! any members
+     set manually (static members) are not removed by this command.
+
+     fflluusshh bbrriiddggee--aallll _b_r_i_d_g_e_-_n_a_m_e
+
+     Clear dynamically and statically learned members from the named bridge.
+
+           nsh/flush bridge-all bridge0
+
+     fflluusshh bbrriiddggee--rruullee _b_r_i_d_g_e_-_n_a_m_e _i_n_t_e_r_f_a_c_e_-_n_a_m_e
+
+     Clear all rules on the named bridge on the named interface.
+
+           nsh/flush bridge-rule bridge0 vether0
+
+     fflluusshh hhiissttoorryy
+
+     Clear the command history
+
+     [no] rroouuttee [destination] [_/_p_r_e_f_i_x_l_e_n | _n_e_t_m_a_s_k] _g_a_t_e_w_a_y [flags]
+
+     Add or remove static routes.  IPv4 addresses can be configured with pre‐
+     fix length in CIDR or dotted decimal IP netmasks (e.g. 255.255.255.0) to
+     describe the route.  The IPv6 address may only be configured with a pre‐
+     fix length.  This command only runs in privileged mode.
+
+     --   e.g. setup routes on the system
+
+               nsh(config-p)/route 192.168.0.0/16 1.2.3.4
+
+     --   is equivalent to:
+
+               nsh(config-p)/route 192.168.0.0/255.255.0.0 1.2.3.4
+
+     --   Use the nnoo keyword to remove the specific route (if present) in the
+         routing table.
+
+               nsh(config-p)/no route 192.168.0.0/16 1.2.3.4
+
+     --   If you do not specify a mask, nnsshh assumes you are routing a host ad‐
+         dress (/32 in ipv4).
+
+               nsh(config-p)/route 10.6.6.4 1.2.3.4
+
+     --   Routing flags may be defined after a route.
+
+               nsh(config-p)/route 127.0.0.0/8 127.0.0.1 reject
+
+     --   or
+
+               nsh(config-p)/route ::/96 ::1 reject
+
+   RRoouuttee FFllaaggss
+     Flags: bbllaacckkhhoollee | cclloonniinngg | iiffaaccee | lllliinnffoo | nnmmppaatthh | nnoossttaattiicc | pprroottoo11
+     | pprroottoo22 | rreejjeecctt [mtu _m_t_u_-_b_y_t_e_s] [expire _s_e_c_o_n_d_s]
+
+     blackhole       RTF_BLACKHOLE   discard packets for this route
+     cloning         RTF_CLONING     generate a new route on use
+     iface           !RTF_GATEWAY    destination is directly reachable
+     llinfo          RTF_LLINFO      translates proto addr(l3) to link addr(l2)
+     nompath         !RTF_MPATH      do not allow multiple gateways for this route
+     nostatic        !RTF_STATIC     do not save this in the static routing table
+     proto1          RTF_PROTO1      protocol specific flag #1
+     proto2          RTF_PROTO2      protocol specific flag #2
+     reject          RTF_REJECT      reject packets with ICMP unreachable
+     qquuiitt
+
+     exit nnsshh
+
+     [no] vveerrbboossee
+
+     Sets verbose mode on / off.  (By default verbose mode is off).  Use the
+     nnoo keyword turn verbose mode off.
+
+           nsh(p)/verbose
+           % Diagnostic mode enabled
+
+           nsh(p)/no verbose
+           % Diagnostic mode disabled
+
+
+     [no] eeddiittiinngg
+
+     Set command line editing on / off.  (If defaults to on).  Use the nnoo key‐
+     word to turn command editing mode off.
+
+           nsh(p)/editing
+           % Command line editing enabled
+
+           nsh(p)/no editing
+           % Command line editing disabled
+
+     nnsshh((pp))//!! [sshheellll--ccoommmmaanndd] _a_r_g_u_m_e_n_t_-_1 [_a_r_g_u_m_e_n_t_-_n]
+
+     Invoke a shell or run an entered shell-command with arguments if re‐
+     quired.  (requires privileged mode).  The active users login shell is the
+     shell that is invoked by this feature.  This feature disabled to enhance
+     security.
+
+     E.g. list files in /root
+
+           nsh(p)/!ls /root
+
+           helloworld.c
+           helloworld2.c
+
+           nsh(p)/!
+
+           OpenBSDshell#
+
+     [no] iipp [aarrppttiimmeeoouutt | aarrppddoowwnn | ccaarrpp | ccaarrpp--lloogg | ccaarrpp--pprreeeemmpptt |
+     ffoorrwwaarrddiinngg | mmffoorrwwaarrddiinngg | mmttuu--ppaatthh--ddiisscc | mmttuu--ddiisscc--ttiimmeeoouutt | iippiipp | ggrree
+     | wwccccpp | eetthheerriipp | iippccoommpp | eesspp | eesspp--uuddppeennccaapp | eesspp--uuddppeennccaapp--ppoorrtt | aahh |
+     ssoouurrcceerroouuttee | eennccddeebbuugg | sseenndd--rreeddiirreeccttss | iiffqq--mmaaxxlleenn | ddiirreecctteedd--bbrrooaaddccaasstt
+     | mmuullttiippaatthh | ddeeffaauulltt--ttttll ||??]
+
+     Modify system kernel ip processing parameters or features.  (requires
+     privileged mode).
+
+     All commands in this category allow the 'no' modifier to disable the op‐
+     tion.
+
+           nsh(config-p)/ip ?
+           % Commands may be abbreviated.
+           % 'ip' commands are:
+
+             arptimeout          Seconds for ARP entries to remain in cache
+             arpdown             Seconds before resending unanswered ARP requests
+             carp                Allow CARP
+             carp-log            CARP Logging Priority
+             carp-preempt        CARP Virtual Host Preemption
+             forwarding          Enable IPv4 Forwarding
+             mforwarding         Enable IPv4 Multicast Forwarding
+             mtu-path-disc       Enable IPv4 MTU Path Discovery
+             mtu-disc-timeout    Seconds that MTU entries remain in Path MTU discovery cache
+             ipip                Allow IP-in-IP Encapsulation
+             gre                 Allow Generic Route Encapsulation
+             wccp                Allow Web Cache Control Protocol
+             etherip             Allow Ether-IP Encapsulation
+             ipcomp              Allow IP Compression
+             esp                 Allow Encapsulated Security Payload
+             esp-udpencap        Allow ESP encapsulation within UDP
+             esp-udpencap-port   UDP port number for encapsulation
+             ah                  Allow Authentication Header
+             sourceroute         Process Loose/Strict Source Route Options
+             encdebug            Enable if_enc debugging
+             send-redirects      Send ICMP redirects
+             ifq-maxlen          IPv4 ifqueue max length
+             directed-broadcast  Allow directed broadcasts
+             multipath           Multipath routing
+             default-ttl         Default IP packet TTL
+             ?                   Options
+
+     iipp aarrppttiimmeeoouutt _s_e_c_o_n_d_s
+
+     Sets the timeout (seconds) for ARP entries to remain in cache on this
+     system.
+
+     When the system stops receiving ARP packets from the host and, the
+     aarrppttiimmoouutt seconds pass, the arp entries are removed from the ARP cache.
+     If a service or user requests to communicate with the IP address of the
+     removed cache entry the system requests via broadcast an ARP request.
+     Lower aarrppttiimmeeoouutt values increase the broadcast traffic on the underlying
+     network.  While higher aarrppttiimmeeoouutt values increase the time it takes to
+     resolve a host.  This setting should be the same or lower on a router
+     than the bridge MAC table timeout on an intermediate bridge.
+
+           nsh(config-p)/ip arptimeout 300
+
+     [no] iipp aarrppddoowwnn _s_e_c_o_n_d_s
+
+     Set or remove configured timeout (seconds) the system waits before re‐
+     sending an unanswered ARP request.
+
+     If the ARP system fails to resolve a MAC address, the system waits for iipp
+     aarrppddoowwnn number of seconds before retrying.
+
+     Lower settings increases the broadcast traffic on the underlying network
+     while higher settings increases the time it takes to resolve a host (af‐
+     ter the host boots up) and on a network that is experiencing packet loss.
+
+           nsh(config-p)/ip arpdown 20
+
+     [no] iipp ccaarrpp
+
+     Enable or disable carp(4) functionality in the system kernel.  Carp is a
+     BSD licensed technology for router redundancy utilising a virtual ip that
+     floats between 2 or more routers on a LAN segment, it is similar to VRRP
+     or HSRP.
+
+           nsh(config-p)/ip carp
+
+     [no] iipp ccaarrpp--lloogg _0_-_7
+
+     Enable or disable logging of carp state change, bad packets and other er‐
+     rors in the system kernel.  carp-log may be set to a value between 0 and
+     7 corresponding with standard syslog(3) priorities.  The default value is
+     2, which limits logging to changes in CARP state.
+
+           nsh(config-p)/ip carp-log 7
+
+     [no] iipp ccaarrpp--pprreeeemmpptt
+
+     Enable or disable the device taking master role from an existing master
+     carp router
+
+           nsh(config-p)/ip carp-preempt
+
+     [no] iipp ffoorrwwaarrddiinngg
+
+     Enable or disable IP packet forwarding in the system kernel.  This must
+     be set in order to use routing, NAT, IPsec or packet filter features.
+
+           nsh(config-p)/ip forwarding
+
+     [no] iipp iippiipp
+
+     Enable or disable IP-in-IP encapsulation in the system kernel.
+
+           nsh(config-p)/ip ipip
+
+     [no] iipp ggrree
+
+     Enable or disable Generic Route Encapsulation in the system kernel.  Must
+     be used to enable gre(4) interfaces.
+
+           nsh(config-p)/ip gre
+
+     [no] iipp wwccccpp
+
+     Enable or disable GRE-based Web Cache Control Protocol packets to manage
+     caching device.  Must be used to enable WCCP on gre(4) interfaces.
+
+           nsh(config-p)/ip wccp
+
+     [no] iipp eetthheerriipp
+
+     Enable or disable GRE-based Ether-IP encapsulation in the system kernel.
+
+           nsh(config-p)/ip etherip
+
+     [no] iipp iippccoommpp
+
+     Enable or disable IPComp internet protocol compression in the system ker‐
+     nel.
+
+           nsh(config-p)/ip ipcomp
+
+     [no] iipp eesspp
+
+     Enable or disable IPsec Encapsulated Security Payload procesing in the
+     system kernel.  (Enabled by default.)
+
+           nsh(config-p)/ip esp
+
+     [no] iipp eesspp--uuddppeennccaapp Enable or Disable processing of UDP encapsulated ESP
+     packets in the system kernel.  (Enabled by default.)
+
+           nsh(config-p)/ip esp-udpencap
+
+     [no] iipp eesspp--uuddppeennccaapp--ppoorrtt _0_-_6_5_5_3_5 Sets the value of the UDP port that
+     triggers decapsulation for incoming UDP encapsulated ESP packets.  (The
+     default port is 4500) udp encapsulated esp packets are useful for
+     traversing NAT routers.
+
+           nsh(config-p)/ip esp-udpencap-port 4600
+
+     [no] iipp aahh
+
+     Enable or disable IPsec Authentication Header processing in the system
+     kernel.  (Enabled by default.)
+
+           nsh(config-p)/ip ah
+
+     [no] iipp ssoouurrcceerroouuttee
+
+     Enable or disable processing loose or strict source routing options on IP
+     packet headers.  Do not enable this option on systems connected to the
+     public internet.
+
+           nsh(config-p)/ip sourceroute
+
+     [no] iipp eennccddeebbuugg
+
+     Enable or disable printing debug messages for the enc(4) interface to the
+     kernel output.  Note! Requires a kernel compiled with ENCDEBUG option.
+
+           nsh(config-p)/ip encdebug
+
+     [no] iipp sseenndd--rreeddiirreeccttss
+
+     Controls whether or not the system sends ICMP redirects to local hosts.
+     (Enabled by default).
+
+     When there is a direct path on the local network from one host to an‐
+     other, but one of those hosts chooses to talk through the router instead,
+     the system sends an ICMP redirect to the originating host.  This redirect
+     tells the host the direct path on the network to send further packets.
+
+           nsh(config-p)/ip send-redirects
+
+     [no] iipp ddiirreecctteedd--bbrrooaaddccaasstt
+
+     Enable or disable kernel forwarding of IP traffic to the broadcast ad‐
+     dress of any interface on the system.  This setting is useful for limit‐
+     ing certain types of DoS attacks.
+
+     [no] iipp mmuullttiippaatthh
+
+     Enable or disable ip multicast forwarding in the system kernel.  (Dis‐
+     abled by default.)
+
+           nsh(config-p)/ip mforwarding
+
+     [no] iipp ddeeffaauulltt--ttttll _t_t_l
+
+     Sets the default ttl used on IP packets originating from this system.
+     Valid ttl value is in the range 1-255.
+
+     The TTL, or time-to-live, is decremented by one each time the packet
+     passes through another router on the internet.  The default TTL that the
+     system uses is 64, therefore it allows for the packet to pass through up
+     to 64 routers (also called hops) before reaching its destination.  The
+     main purpose of the TTL is to avoid routing loops in the network.
+
+           nsh(config-p)/ip default-ttl 128
+
+     iipp ??
+
+     Displays the help menu and available ip command options.
+
+           nsh(config-p)/ip ?
+
+     [no] iinntteerrffaaccee [inet | ip | autoconf4 | description | group | rdomain | |
+     rtlabel | priority| llpriority | mtu | metric | link | arp | lladdr |
+     nwid | nwkey | powersave | txpower | bssid | media | mediaopt | auth |
+     peer | pppoe | tunnel | tunneldomain | txprio | rxprio | vnetid |
+     vnetflowid | parent | patch | keepalive | mplslabel | pwe | syncdev |
+     syncpeer | maxupd | vhid | advbase | advskew | carppass | carpdev |
+     carpnode | carppeer | balancing | pflow | debug | dhcrelay | wol | mpls |
+     inet6 | autoconf6 | autoconfprivacy | temporary | monitor | wgpeer |
+     wgport | wgkey | wgrtable | trunkport | trunkproto | shutdown | show | |?
+     | manual | exit] interface mode commands, are commands that can be ap‐
+     plied to a specific named interface.
+
+           nsh(interface-em0)/?
+           % Commands may be abbreviated.
+           % Type 'exit' at a prompt to leave interface configuration mode.
+           % Interface configuration commands are:
+
+             inet             IPv4/IPv6 addresses
+             ip               Alias for the "inet" command
+             autoconf4        IPv4 Autoconfigurable address (DHCP)
+             description      Interface description
+             group            Interface group
+             rdomain          Interface routing domain
+             rtlabel          Interface route labels
+             priority         Data packet priority
+             llpriority       Link Level packet priority
+             mtu              Maximum Transmission Unit
+             metric           Routing metric
+             link             Link level options
+             arp              Address Resolution Protocol
+             staticarp        Always use static ARP to find other hosts
+             lladdr           Link Level (MAC) Address
+             nwid             802.11 network ID
+             nwkey            802.11 network key
+             powersave        802.11 powersaving mode
+             txpower          802.11 transmit power
+             bssid            802.11 bss id
+             media            Media type
+             mediaopt         Media options
+             auth             PPP authentication
+             peer             PPP peer authentication
+             pppoe            PPPoE settings
+             tunnel           Tunnel parameters
+             tunneldomain     Tunnel routing domain for transit
+             txprio           Priority in tunnel protocol headers
+             rxprio           Source used for packet priority
+             vnetid           Virtual interface network identifier
+             vnetflowid       Use part of vnetid as flowid
+             parent           Parent interface
+             patch            Pair interface
+             ping             Send IPv4 ICMP echo request
+             ping6            Send IPv6 ICMP echo request
+             traceroute       Print the route to IPv4 host
+             traceroute6      Print the route to IPv6 host
+             ssh              SSH connection to remote host
+             telnet           Telnet connection to remote host
+             keepalive        GRE tunnel keepalive
+             mplslabel        MPLS local label
+             pwe              MPLS PWE3
+             syncdev          PFsync control message interface
+             syncpeer         PFsync peer address
+             maxupd           PFsync max updates, defer first packet
+             vhid             CARP virtual host ID
+             advbase          CARP advertisement interval
+             advskew          CARP advertisement skew
+             carppass         CARP passphrase
+             carpdev          CARP device
+             carpnode         CARP additional vhid/advskew
+             carppeer         CARP peer
+             balancing        CARP balancing mode
+             pflow            pflow data export
+             debug            Driver dependent debugging
+             dhcrelay         DHCP Relay Agent
+             wol              Wake On LAN
+             mpls             MPLS
+             inet6            IPv6 addresses
+             autoconf6        IPv6 Autoconfigurable address
+             autoconfprivacy  Privacy addresses for IPv6 autoconf
+             temporary        Temporary addresses for IPv6 autoconf
+             monitor          Monitor mode for incoming traffic
+             wgpeer           Wireguard peer config
+             wgport           Wireguard UDP port
+             wgkey            Wireguard private key
+             wgrtable         Wireguard routing table
+             trunkport        Add child interface(s) to trunk
+             trunkproto       Define trunkproto
+             shutdown         Shutdown interface
+             show             Show system information
+             who              Display system users
+             verbose          Set verbose diagnostics
+             editing          Set command line editing
+             !                Invoke a subshell
+             ?                Options
+             manual           Display the NSH manual
+             exit             Leave interface config mode and return to global config mode
+             ?                Options
+
+     [no] iinneett [_a_d_d_r_e_s_s_/_p_r_e_f_i_x_-_l_e_n_g_t_h | _a_d_d_r_e_s_s_/_n_e_t_m_a_s_k]
+
+     Adds or removes the specified IPv4 or IPv6 address on the interface.  An
+     IPv4 address can be configured with CIDR bitlength, or classic netmask.
+
+           nsh(interface-fxp0)/inet 192.168.100.1/24
+     or
+
+           nsh(interface-fxp0)/inet 192.168.100.1/255.255.255.0
+
+     An IPv6 address may be configured with a network prefix length.
+
+           nsh(interface-lo0)/inet ::1/128
+
+     The command nnoo iinneett without futher arguments removes all IPv4 addresses
+     from the interface.  The nnoo iinneett66 command (see below) may be used to re‐
+     move all IPv6 addresses.
+
+     [no] iinneett aauuttooccoonnff
+
+     Equivalent to the aauuttooccoonnff44 command.
+
+     [no] iinneett ddhhccpp
+
+     Equivalent to the aauuttooccoonnff44 command.
+
+     [no] iipp
+
+     Equivalent to the iinneett command, for convenience.  All parameters accepted
+     by iinneett are also accepted by iipp, including aauuttooccoonnff and ddhhccpp.
+
+     [no] aalliiaass
+
+     Deprecated and also equivalent to the iinneett command.
+
+     [no] aauuttooccoonnff44
+
+     Enables or disables DHCP on a given (broadcast and layer2 capable) inter‐
+     face.
+
+     DHCP client notes: DHCP client mode takes control of default gateway
+     route.  There is currently no way to control default gateway if DHCP
+     client is used on multiple interfaces.  The first DHCP client interface
+     to succeed in obtaining a lease sets the default gateway.
+
+     [no] ddeessccrriippttiioonn _t_e_x_t
+
+     Adds or removes a descriptive label to the interface.
+
+           nsh(interface-em0)/description Chris-WAN01-Link
+
+     [no] ggrroouupp _g_r_o_u_p_-_n_a_m_e [another-group-name...groupname-N]
+
+     Adds or removes a group label to the interface.  The group can then be
+     referred to in other configuration such as the firewall pf configuration.
+     This is useful for grouping similar interfaces together and, can reduce
+     the size of your firewall rule set.  An interface can be a member of mul‐
+     tiple groups.
+
+           nsh(interface-em0)/group WAN
+
+     [no] rrddoommaaiinn _r_o_u_t_i_n_g_-_d_o_m_a_i_n_-_n_u_m_b_e_r
+
+     Set the rdomain(4) or routing domain of an interface.  Note that this
+     command clears all existing ip configuration on the interface.  There‐
+     fore, you should run this command before any configuring any other set‐
+     ting on the interface.
+
+     [no] rrttllaabbeell [_r_t_a_b_l_e_-_i_d]
+
+     Set or remove the rtable(4) id on an interface.  Each rdomain(4) can con‐
+     tain multiple rtable(4) this feature allows for policy routing within
+     each rdomain.
+
+     [no] pprriioorriittyy _0_-_1_5
+
+     Set the interface routing priority to a value in the range of 0 to 15
+     with smaller numbers being better.  The default priority of an interface
+     is 0, except for IEEE 802.11 wireless interfaces (priority 4), umb(4) in‐
+     terfaces (priority 6), and carp(4) interfaces (priority 15).  The default
+     priority of newly connected routes (routes created by configuring an IP
+     address on an interface) is calculated by adding 4 (RTP_CONNECTED) to the
+     interface priority.  The default priority of new static routes added to
+     the kernel is calculated by adding 8 (RTP_STATIC) to the interface prior‐
+     ity.
+
+     [no] llllpprriioorriittyy _0_-_7 Sets or remove the priority for link layer communica‐
+     tions on the interface to a value between 0-7 arp(8) ndp(8) bpf(4)
+     pppoe(4)
+
+           nsh(interface-em0)/llpriority 7
+
+     [no] mmttuu _m_t_u_-_b_y_t_e_s
+
+     Add or remove a configured Maximum Transmission Unit (MTU) on the inter‐
+     face.  This is the maximum packet size that the operating system is per‐
+     mitted to transmit.  Use the nnoo keyword to set mmttuu to reset the interface
+     MTU to the default value for that interface type.
+
+     The output of 'show interface' displays a 'hardmtu' value which is the
+     maximum mtu value supported by the hardware and driver currently in‐
+     stalled.  The mtu command fails gracefully if the specified mtu exceeds
+     the hardmtu value of the interface.
+
+     A larger MTU is particularly useful for underlay interfaces which encap‐
+     sulated tunneled traffic traverses or for features which stack tags, such
+     as pppoe(4), vxlan(4), etherip(4), eoip(4), gre(4), vlan(4), QinQ, svlan
+     or tagging or QinQ (svlan) tagging and MPLS devices such as mpe(4),
+     mpip(4), and mpw(4).
+
+     nsh(interface-vr0)/mtu 1600
+
+     [no] mmeettrriicc _0_-_2_1_4_7_4_8_3_6_4_7
+
+     Set routing metric for the interface.  Using nnoo keyword before metric
+     sets the interface metric to the default value of zero.
+
+           nsh(interface-fxp0)/metric 2
+
+     [no] lliinnkk <<00||11||22>>
+
+     Set any of the link flags on the interface.  Using nnoo keyword before lliinnkk
+     XXYYZZ removes the specified link flags 'XYZ'.  Using nnoo keyword before lliinnkk
+     removes all link flags from the interface.
+
+           nsh(interface-gre0)/no link 0
+     Each different interface type uses link flags for different purposes.
+
+     [no] aarrpp
+
+     Enable or disable arp(8) Address Resolution Protocol ARP on the inter‐
+     face.  (Enabled by default.)
+
+           nsh(interface-fxp0)/arp
+           nsh(interface-fxp0)/no arp
+
+     [no] ssttaattiiccaarrpp
+
+     Always use static ARP entries to find other hosts reachable via the in‐
+     terface.  (Disabled by default.)
+
+           nsh(interface-fxp0)/staticarp
+           nsh(interface-fxp0)/no staticarp
+
+     Only hosts with entries in the static ARP table will be reachable via the
+     interface.  Static ARP entries can be configured using the aarrpp command in
+     the global context (not the aarrpp command in the interface context).
+
+     When ssttaattiiccaarrpp is enabled no ARP requests will be sent out on the inter‐
+     face, while responses to incoming ARP requests for the interface's own
+     addresses will still be sent.  If ARP was previously disabled on the in‐
+     terface with the nnoo aarrpp command then ARP will be automatically re-enabled
+     to allow outgoing ARP responses.
+
+     [no] llllaaddddrr _m_a_c_-_a_d_d_r_e_s_s | _r_a_n_d_o_m
+
+     Set or remove the mac address on the interface.  The administrator can
+     specific a macadress in colon notation e.g.  00:11:22:33:44:55 or random
+     to request a random mac address assignment for the interface.
+
+           nsh(interface-vether3)/lladdr random
+           nsh(interface-vether3)/lladdr 00:11:22:33:44:55
+
+     [no] nnwwiidd _n_e_t_w_o_r_k_-_i_d
+
+     Set or remove the configured network ID for an 802.11 capable interface.
+     Use the nnoo keyword before the nnwwiidd to reset to the default value of a
+     blank network ID.
+
+     [no] nnwwkkeeyy _k_e_y
+
+     Set the WEP network key for an 802.11 capable interface.  Use the nnoo key‐
+     word before nwkey to turn off WEP.
+
+     [no] ppoowweerrssaavvee _t_i_m_e
+
+     Set the 802.11 powersaving mode to X ms of time.  Use the nnoo keyword be‐
+     fore powersave to set the powersave mode to the default powersave time.
+
+     [no] ttxxppoowweerr _d_B_m
+
+     Set the transmit power on an 802.11 radio network interface manually.
+     Power units are in dBm.  Use the nnoo keyword before ttxxppoowweerr to set the ra‐
+     dio transmit power to automatic.
+
+     E.g to set the tx power of iwn0  to 10dBm simply enter the command below:
+
+           nsh(interface-iwn0)/txpower 10
+
+     [no] bbssssiidd _m_a_c_-_a_d_d_r_e_s_s
+
+     Set or remove the configured BSSID of a radio interface to a specific MAC
+     address, the mac-address should be entered in semi colon format e.g.
+     12:34:56:78:9a:bc.
+
+     E.g. set the bssid of radio interface iwn0
+
+           nsh(interface-iwn0)/bssid 12:34:56:78:90:12
+
+     [no] mmeeddiiaa [type] [instance]
+
+     Set the media type of the interface.  Entering media without an argument
+     diplays help for the media settings available for the interface.
+
+     E.g. show media settings supported by an intel pro 1000 em(4) interface
+
+     nsh(interface-em0)media
+
+     %autoselect | 10baseT | 100baseTx | 1000baseT.
+
+     E.g to set the speed of the network interface speed to 1000mb/s
+
+           nsh(interface-em0)/media 1000baseT
+     Note! Enabling verbose mode and running show interface <interfacename>
+     displays all media settings supported by the network interface.
+
+           nsh(p)/verbose
+           % Diagnostic mode enabled
+
+           nsh(p)/sho int vr0
+           % vr0
+             Interface is up (last change 37d 12:16:02), protocol is up
+             Interface type Ethernet (Broadcast), hardware address 00:0d:b9:29:6b:50
+             Media type autoselect (100baseTX full-duplex), status active
+             Internet address 100.64.0.1/24, fe80::20d:b9ff:fe29:6b50%vr0/64
+             Routing Domain 0, MTU 1500 bytes (hardmtu 1740), Line Rate 100 Mbps
+             187081496 packets input, 232860544316 bytes, 19 errors, 0 drops
+             102231197 packets output, 21564487790 bytes, 0 errors, 3267264 unsupported
+             1244 input, 210 output (average bytes/packet)
+             0 collisions
+             Flags:
+               <UP,BROADCAST,RUNNING,SIMPLEX,MULTICAST>
+             Hardware features:
+               <CSUM_IPv4,CSUM_TCPv4,CSUM_UDPv4,VLAN_MTU,VLAN_HWTAGGING,WOL>
+             Supported media types on vr0:
+               media none
+               media 10baseT
+               media 10baseT, mediaopt full-duplex
+               media 100baseTX
+               media 100baseTX, mediaopt full-duplex
+               media autoselect
+
+     To force the interface to use a particular media type,
+
+           nsh(interface-vr0)/media 10baseT
+
+     [no] mmeeddiiaaoopptt _o_p_t_i_o_n
+
+     Set or remove media options such as full-duplex / half-duplex.
+
+     e.g to set vr0 interface to full-duplex mode:
+
+           nsh(interface-vr0)/mediaopt full-duplex
+
+           nsh(interface-vr0)/no mediaopt full-duplex
+
+     [no] aauutthh pprroottoo _p_a_p | _c_h_a_p nnaammee _n_a_m_e_-_t_e_x_t kkeeyy _k_e_y_-_t_e_x_t
+
+     Set or remove the PPP authentication parameters for the interface.
+
+     [no] ppeeeerr pprroottoo _p_a_p | _c_h_a_p nnaammee _n_a_m_e_-_t_e_x_t kkeeyy _k_e_y_-_t_e_x_t [ffllaagg _c_a_l_l_i_n |
+     _n_o_r_e_c_h_a_l_a_n_g_e]
+
+     Set or remove configured peer PPP authentication parameters for the in‐
+     terface.
+
+     [no] ttuunnnneell _s_o_u_r_c_e_-_i_p _d_e_s_t_i_n_a_t_i_o_n_-_i_p [ttttll _0_-_2_5_5] [df] [ecn]
+
+     Set or remove tunnel assignments with this command.  Note that tunnel as‐
+     signments are only valid on gif and gre interfaces at this time.  TODO
+
+           nsh(interface-gre0)/tunnel 12.3.3.3 12.6.6.6
+
+     [no] ttuunnnneellddoommaaiinn [rdomain-id]
+
+     Set or remove tunnel routing domain over which tunnel encapsulated pack‐
+     ets are to be exchanged between tunnel ip endpoints.
+
+     [no] ttxxpprriioo [_0_-_7 | _p_a_c_k_e_t | _p_a_y_l_o_a_d]
+
+     Set or remove configured transmit priority of the headers of a tunnel in‐
+     terface.  Valid options are standard traffic priority values (0-7) or set
+     the headers according to encapsulated packet or payload priority.
+
+     E.g. to set the priority of headers of the tunnel gre1 to match that of
+     the payload.
+
+           nsh(interface-gre1)/txprio payload
+
+     [no] rrxxpprriioo [_0_-_7 | _p_a_c_k_e_t | _p_a_y_l_o_a_d]
+
+     Set or remove configured receive priority of the headers of a tunnel in‐
+     terfaces are standard traffic priority values (0-7) or set the headers
+     according to encapsulated packet / payload priority).
+
+     E.g. to set the priority of headers of tunnel gre1 manually to 7 regard‐
+     less of payload:
+
+           nsh(interface-gre1)/rxprio 7
+
+     [no] vvnneettiidd [0-16777215 | 1-4094]
+
+     On a vxlan(4) interface, set or remove the 24 bit virtual network identi‐
+     fier VNI tag.  Virtual network identifier tags are typically used in
+     large multi tenant VXLAN multiple routing domain environments and have an
+     acceptable range of 0-16777215.
+
+     On a vlan(4) interface, set or remove the VLAN ID in IEEE 802.1Q vlan tag
+     If vnetid invoked inside a vlan interface the acceptable range is the
+     standard 12-bit vlan id 1-4094.
+
+     E.g. set vxlan100 vnetid to 8192.
+
+           nsh(interface-vxlan100)/vnetid 8192
+
+     [no] vvnneettfflloowwiidd
+
+     Allow or disallow the interface to use a portion of the virtual network
+     identifier space as a flow identifier.  This allows loadbalancing of the
+     encapsulated traffic over multiple links.
+
+     E.g. enable vnetflowid load balancing for gre1.
+
+           nsh(interface-gre1)/vnetflowid
+
+     [no] ppaarreenntt _p_a_r_e_n_t_-_i_n_t_e_r_f_a_c_e
+
+     Set or remove the parent interface for a vlan(4) interface.
+
+     E.g. set the parent interface of vlan1024 to em0.
+
+           nsh(interface-vlan1024)/parent em0
+
+     [no] ppaattcchh _p_a_i_r_-_i_n_t_e_r_f_a_c_e_-_n_a_m_e
+
+     Set or remove patch (layer1+ connection) between current interface and
+     another pair(4) interface.  A patch is a CPU efficient way of forwarding
+     packets between two pair(4) interfaces, the forwarding mechanisim is
+     layer1 like a cable what is sent by one pair(4) interface is recived by
+     the other pair(4) interface and vice versa.  Patch can only connect two
+     pair(4) interfaces, no other interface types are supported.
+
+     E.g. To connect pair1 and pair2 interfaces with a virtual patch cable.
+           nsh(config-p)/interface pair1
+
+           nsh(interface-pair1)/patch pair2
+
+     [no] kkeeeeppaalliivvee [_p_e_r_i_o_d _c_o_u_n_t]
+
+     Enable or disable gre / gre based interfaces sending keepalive packets
+     sent every period seconds.  A second timer is run with a timeout of count
+     * period.  If no keepalive response is received during that time, the
+     link is considered down.  The minimal usable count is 2 since the round-
+     trip time of keepalive packets
+      needs to be taken into account.
+
+     E.g. enable keepalives on interface gre1 at 1 second interval and down
+     count of 3.
+
+           nsh(interface-gre1)/keepalive 1 3
+
+     [no] mmppllssllaabbeell [_1_6_-_1_0_2_4_5_7_5]
+
+     Set or remove the local MPLS label to the specified mplslabel this label
+     on the local system shall de-encapsulated for input.  (MPLS labels 0-15
+     inclusive are reserved labels and cannot be used).  MPLS labels are sup‐
+     ported for mpe(4), mpip(4) and mpw(4) interfaces.
+
+     E.g. set the mpls label to 10240 on interface mpe1.
+
+           nsh(interface-mpe1)/mplslabel 10240
+
+     [no] ppwwee nneeiigghhbboorr [_n_e_i_g_h_b_o_r_-_l_a_b_e_l _n_e_i_g_h_b_o_r_-_i_p]
+
+     Set or remove the configuration of the PWE3 neighbor, configured with an
+     MPLS neighbor label and a neighbor ip.  neighbor-label can be any value
+     16-1024575.  neighbour-ip should be set to the ip address of the PWE3
+     neighbor.
+
+     [no] ppwwee [_c_w]
+
+     Enable or disable the use of PWE3 Control Word.  The control word is used
+     to facilitate fragmentation across mpls packets.  This option supported
+     on the mpip(4) and mpw(4) interfaces.
+
+     E.g. enable control word on an mpls pseudo wire interface mpw1.
+
+           nsh(interface-mpw1)/pw cw
+
+     [no] ppwwee [_f_a_t]
+
+     Enables or disables the use of PWE flow-aware transport FAT flow label.
+     This option supported on the mpip(4) and mpw(4) interfaces.
+
+     E.g. Enable flow-aware transport flow label on mpls ip interface mpip1
+
+           interface-mpip1)/pw fat
+
+     [no] ssyynnccddeevv _s_y_n_c_d_e_v_-_n_a_m_e
+
+     Configures or removes the data interface through which pfsync update mes‐
+     sages are sent.  Note that the pfsync protocol currently includes no au‐
+     thentication method.  It is advisable to layer authentication, signing
+     and (possibly encrypted tunnels for the underlay interfaces.  For sim‐
+     plicity on co-located pfsynced firewalls a secure way to use pfsync, is
+     through a a direct (layer1 (i.e. no switches)) cable connecting directly
+     between two pfsync capable devices (i.e. a conenction made with an ether‐
+     net patch cable).  This command is valid only for pfsync(4) interfaces.
+
+     E.g. Set the physical interface em1 as the pfsync0 syncdev
+
+           nsh(interface-pfsync0)/syncdev em1
+
+     [no] ssyynnccppeeeerr [_i_p_v_4_-_p_e_e_r_-_p_f_s_y_n_c_-_a_d_d_r_e_s_s]
+
+     Set or remove a manually entered ip address of the pfsync interface of a
+     peer pf sync firewall.  By default, state change messages are sent out on
+     the synchronisation interface using IP multicast packets to the
+     224.0.0.240 group address.  When syncpeer ip address is set the sync mes‐
+     sages are sent via unicast to the specified ipv4-peer-pfsync-address.
+     This command is valid only for pfsync(4) interfaces.
+
+     E.g. set sync messages to use unicast peer ip address 192.0.0.10 which is
+     reachable via syncdev interface.
+
+           nsh(interface-pfsync0)/syncpeer 192.0.0.10
+
+     [no] mmaaxxuuppdd _0_-_2_5_5 [defer]
+
+     Configures or removes the maximum number of updates which are collapsible
+     into one for a single state.  The default value is 128.  The transmission
+     a pfsync update packet shall be delayed by a maximum of 1 second.  The
+     defer flag defers the first packet of each connection from being deliv‐
+     ered until the state is active on pfsync peer.  This command is valid
+     only for pfsync(4) interfaces.
+
+     E.g. set the pfsync to aggregate the maximum number of state changes be‐
+     fore sending a pfsync update message (reduce pfsync traffic updates)
+
+     nsh(interface-pfsync0)/maxupd 255
+
+     E.g. set pfsync to aggregate a max of 32 state changes in one packet and
+     delay fowarding of new connection packets until peers pfstate is synchro‐
+     nised use:
+
+           nsh(interface-pfsync0)/maxupd 32 defer
+
+     [no] vvhhiidd [_1_-_2_5_5]
+
+     Configure or remove the virtual host ID for the Common Address Redundancy
+     CARP protocol.  vhid is valid for carp(4) interfaces only.
+
+     E.g. set virtual router host id on carp0 interface to 12.
+
+           nsh(interface-carp0)/vhid 12
+
+     [no] aaddvvbbaassee [_0_-_2_5_4]
+
+     Configure or remove the advertisement interval in seconds for the master
+     host to advertise itself.  advbase is valid for carp(4) interfaces only.
+
+     E.g. set the advertisement interval to 10 seconds on carp0 interface.
+
+           nshpromot(interface-carp0)/advbase 10
+
+     [no] aaddvvsskkeeww _s_k_e_w
+
+     Configure or remove the carp advertisement skew on the active carp inter‐
+     face.  The formula is advbase + (advskew / 255).  If the master does not
+     advertise within three times this interval, this host assumes master role
+     and starts advertising as master.  The device with the highest advskew
+     value is least likely to become master, a device with a high advskew only
+     becomes master if all other devices are offline. advskew is valid for
+     carp(4) interfaces only.
+
+     E.g. set the advskew to 20 on carp0 interface.
+
+           nsh(interface-carp0)/advskew 20
+
+     [no] ccaarrppppaassss _p_a_s_s_p_h_r_a_s_e
+
+     Configure or remove the CARP passphrase of the active interface.  The
+     passphrase can be up to 19 characters long and can contain special char‐
+     acters.  There is no passphrase by default.  carpass is valid for carp(4)
+     interfaces only.
+
+     E.g. Set carp0 carp passphrase to 19CharPassphrase!!! including exclama‐
+     tion marks.
+
+           nsh(interface-carp0)/carppass 19CharPassphrase!!!
+
+     [no] ccaarrppddeevv [_i_n_t_e_r_f_a_c_e_-_n_a_m_e]
+
+     Set or remove the interface on which the selected carp interface's carp
+     advertisements are sent and received.  The carpdev is the "real inter‐
+     face" over which the carp virtual IP is accessible.  carpdev is valid for
+     carp(4) interfaces only.
+
+     E.g set carp0 to use vlan10 as its carpdev.
+
+           nsh(interface-carp0)/carpdev vlan10
+
+     [no] ccaarrppnnooddee [_v_h_i_d] [advskew] [state]
+
+     Set or remove carpnode parameter on a carp interface.  carpnode facili‐
+     tates loadbalancing across carp nodes.  Each carpdevice that you wish to
+     loadbalance should have a carpnode and advskew entry on each carp device.
+     carpnode is valid for carp(4) interfaces only.
+
+     E.g. For a 3 node carp cluster, one can setup carpnode loadbalanced en‐
+     tries as follows.
+
+     on carp router 1
+
+           nsh(interface-carp0)/carpnode 1 10
+     on caro router 2
+
+           nsh(interface-carp0)/carpnode 1 20
+     on carp router 3
+
+           nsh(interface-carp0)/carpnode 1 30
+
+     [no] ccaarrppppeeeerr [_p_e_e_r_-_i_p_-_a_d_d_r_e_s_s]
+
+     Set or remove the carppeer ip address of a carp peer on the active carp
+     interface.  carppeer is valid for carp(4) interfaces only.
+
+     E.g. set carppeer to 10.2.3.4 on carp0 interface.
+
+           nsh(interface-carp0)/carppeer 10.2.3.4
+
+     [no] bbaallaanncciinngg [_n_o_n_e | _i_p | _i_p_-_s_t_e_a_l_t_h | _i_p_-_u_n_i_c_a_s_t]
+
+     Set or remove the balancing mode on the active carp interface.  Valid
+     balancing modes are as follows:
+     ••   none                    no load-balancing.
+     ••   ip                      IP load balancing on top of Layer 2 multicast
+         MAC                         (requires multicast mac support on the
+         network switch)
+     ••   ip-stealth              carp wont send packets with its own virtual
+         MAC                         address as the source.
+                                 Stealth mode prevents a switch from learning
+         the                         virtual MAC address, therefore the switch
+         would                          unicast flood traffic to all switch
+         ports
+                                 (unless there is some swithc acls to prevent
+         flooding                         unnecessarily.
+     ••   ip-unicast              Used in conjunction with a HUB or a switch
+         that                         can replicate packets (monitoring or
+         mirror) or                         other non-standard switch forward‐
+         ing mechanism.
+     Note: IP balancing is being used on a firewall, it is recommended to con‐
+     figure the carpnodes in a symmetrical manner.  This is achieved by simply
+     using the same carpnodes list on all sides of the firewall.  This ensures
+     that packets of one connection pass in and out on the same host and are
+     not routed asymmetrically.
+
+     balancing is valid when used in carp(4) interfaces.
+
+     E.g. enable standard IP balancing over layer2 multicast mac on carp0 in‐
+     terface
+
+     nsh(interface-carp0)/balancing ip
+
+     [no] ppffllooww [sseennddeerr _s_e_n_d_e_r_-_i_p rreecceeiivveerr _r_e_c_e_i_v_e_r_-_i_p_:_p_o_r_t] [vveerrssiioonn _5 | _9 |
+     _1_0]
+
+     Set or remove pflow export to a pflow(4) interface.  plfow without argu‐
+     ments displays command help.  To set a up a pflow export the sender-ip
+     and receiver-ip:port must be specified.  The specified pflow sender-ip
+     address must exist on an interface on the system already.  The receiver-
+     ip:port is the address of the flow collector in your network.  version
+     specifies the export flow prtocol i.e. netflow version (5 or 9) or the
+     standardised IPFIX (10).
+
+     The pflow interface attempts aggregate multiple pflow records in one ex‐
+     port UDP packet.  The aggregation algoritim record for longer than 30
+     seconds.  The packet size and thus the maximum number of flows is con‐
+     trolled by the mtu of the inteface the flows are exported via.
+
+     There is a one-to-one correspondence between packets seen by bpf(4) on
+     the pflow interface and packets sent out to the flow receiver.  I.e. if a
+     packet with 30 flows on pflow, then the same 30 flows were sent out to
+     the receiver.
+
+     pflow command is valid only on a pflow(4) interface.
+
+     E.g. to setup a pflow export from 10.1.1.1 to an IPFIX flow collector
+     listening on another server on 10.1.1.2 port 4739.
+
+           nsh(config-p)/interface pflow0
+
+           nsh(interface-pflow0)/pflow sender 10.1.1.1 receiver 10.1.1.2:4379 version 10
+
+     [no] ddeebbuugg
+
+     Set or remove the driver-dependant debugging flag for an interface.  Use‐
+     ful for troubleshooting.
+
+     E.g to set debugging on a carp0 interface.
+
+           nsh(interface-carp0)/debug
+
+     [no] ddhhccrreellaayy [_d_h_c_p_-_s_e_r_v_e_r_-_i_p]
+
+     Set or remove dhcp relay agent on the selected interface.  The
+     dhcrelay(8) service listens on the selected interface for broadcast dhcp
+     requests and then wrap the recieved broadcast request in a unicast ip
+     packet and send it to a DHCP server specified by dhcp-server-ip.
+
+     E.g. set up dhcprelay on em0 and send requests to DHCP server 10.1.1.2
+
+           nsh(interface-em0)/dhcrelay 10.1.1.2
+
+     [no] wwooll
+
+     Enable or disable WOL (wake on lan) functionality on the selected inter‐
+     face.  The interface and device bios or firmware must support WOL func‐
+     tionality.
+
+     E.g. to enable wake on lan on interface em0.
+
+           nsh(config-p)/interface em0
+
+           nsh(interface-em0)/wol
+
+     [no] mmppllss
+
+     Set or remove the MPLS flag on the selected interface,if mpls is set on
+     the interface, the interface can send and receive mpls traffic.
+
+     E.g enable mpls on em0
+
+           nsh(config-p)/interface em0
+
+           nsh(interface-em0)/mpls
+
+     [no] iinneett66 [_a_d_d_r_e_s_s_/_p_r_e_f_i_x_-_l_e_n_g_t_h]
+
+     Adds or removes the specified IPv6 address on the interface.  The IPv6
+     address may be configured with a network prefix length.
+
+           nsh(interface-lo0)/inet6 ::1/128
+
+     The command nnoo iinneett66 without futher arguments removes all IPv6 addresses
+     from the interface, including link-local addresses.
+
+     The command iinneett66 without further arguments enables link-local addresses
+     on the interface.
+
+     E.g. to enable ipv6 link local address on em0
+
+           nsh(config-p)/interface em0
+
+           nsh(interface-em0)/inet6
+
+     [no] iinneett66 aauuttooccoonnff
+
+     Equivalent to the aauuttooccoonnff66 command.
+
+     [no] aauuttooccoonnff66
+
+     Enable or disable IPv6 auto configuration of Ipv6 address on the inte‐
+     face.  If autoconf6 is used alone (without temporary or autoconfprivacy
+     being set on the interface then the autoconfigured address assigned is
+     repeatable based on the MAC address of the interface (EUI64).
+
+     E.g. enable ipv6 autoconf address on the interface em0.
+
+           nsh(config-p)/interface em0
+
+           nsh(interface-em0)/autoconf6
+
+     [no] tteemmppoorraarryy
+
+     Configure or remove temporary address extension for stateless ipv6 auto‐
+     configuaration.  Temporary address assignments prevents a repeatable IPv6
+     address being assigned to the device to reduce the possibility of
+     longterm external tracking of device (users) activity.
+
+     E.g. enable ipv6 autoconf with a temporary address on the interface em0.
+
+           nsh(config-p)/interface em0
+
+           nsh(interface-em0)/autoconf6
+
+           nsh(interface-em0)/temporary
+
+     [no] aauuttooccoonnffpprriivvaaccyy
+
+     deprecated. alias for Cm temporary above.  Randomised addresses used to
+     be called autoconfprivacy extensions for IPv6.  Temporary addressing is a
+     better description as privacy is not necessarily guaranteed by random IP
+     addressing of a device.
+
+     E.g. enable ipv6 autoconf with "privacy" random temp address on the in‐
+     terface em0.
+
+           nsh(config-p)/interface em0
+
+           nsh(interface-em0)/autoconf6
+
+           nsh(interface-em0)/autoconfprivacy
+
+     [no] mmoonniittoorr
+
+     Configure or remove the monitor flag on the selected interface.  Prevents
+     the packets being processed in the network stack.  Useful for intrusion
+     detection sniffing and other diagnostics.
+
+     E.g. to enable ipv6 autoconf with "privacy" random temp address on the
+     interface em0
+
+           nsh(config-p)/interface em0
+
+           nsh(interface-em0)/monitor
+
+     [no] wwggppeeeerr [_p_u_b_l_i_c_-_k_e_y] [eennddppooiinntt _e_n_d_p_o_i_n_t_-_i_p_:_p_o_r_t | aaiipp
+     _a_l_l_o_w_e_d_-_i_p_/_p_r_e_f_i_x | ppsskk _p_r_e_-_s_h_a_r_e_d_-_k_e_y | ppkkaa _i_n_t_e_r_v_a_l_-_s_e_c]
+
+     Configure or remove a wireguard peer with the peers publickey.  The pub‐
+     lic-key is 32 bytes and base64-encoded.
+
+     ppkkaa _i_n_t_e_r_v_a_l_-_s_e_c The persistent keep alive (pka) option sets the interval
+     of keepalive packets in seconds.  By default pka is is disabled i.e. the
+     interval is 0.  pka can help maintain connectivity to a peer that would
+     otherwise be denied unsolicited traffic by an intermediate firewall or
+     NAT device.  Empirically, an interval of 25 seconds should suffice for
+     most firewall configurations.
+
+     ppsskk _p_r_e_-_s_h_a_r_e_d_-_k_e_y The psk and preshared-key is optional but recommended
+     as it supplements the public key cryptography with symmetric key cryptog‐
+     raphy.
+
+     aaiipp _a_l_l_o_w_e_d_-_i_p_/_p_r_e_f_i_x Set the peer's allowed IPv4 or IPv6 addresses or
+     prefixes for tunnelled traffic.  The option be repeated to set multiple
+     allowed ip/ranges.  No addresses are allowed by default.
+
+     --   E.g set the a peer with the following requirements:
+
+         ••   public key EJqeFntM71Dfvn/LDu88gLOWw8aeOHoxrshOEHFd6lQ=
+
+         ••   from an ip of 10.1.2.3/32
+
+         ••   with a keep alive packet interval of 25 seconds
+
+           nsh(config-p)/interface wg0
+
+           nsh(interface-wg0)/wgpeer EJqeFntM71Dfvn/LDu88gLOWw8aeOHoxrshOEHFd6lQ=
+           aip 10.1.2.3/32 endpoint 10.1.2.3:5252
+           psk oJo0kNhoF3TElGUXDg4b0H6IJvOiVCAc/tuaJa1nmVU=
+     wwggkkeeyy [_p_r_i_v_a_t_e_k_e_y] Set the private key of the current wg(4) wireguard in‐
+     terface.  When wwggkkeeyy is run without an argument a new wireguard key is
+     generated for the interface.  The privatekey is 32 bytes and base64-en‐
+     coded.
+
+     E.g. set the private key of wg(4) wireguard interface wg0 to a specific
+     key.
+
+           nsh(config-p)/interface wg0
+
+           nsh(interface-wg0)/wgkey QComa+ca+mWih+Vl/5G/p+UwhYy17hw5vdwysZpIAn0=
+
+     [no] wwggppoorrtt _0_-_6_5_5_3_5
+
+     Set or remove the configuration for the local UDP port to be used by the
+     current wireguard interface when exchanging traffic with its wireguard
+     peers.  The interface binds to INADDR_ANY and IN6ADDR_ANY_INIT.  If
+     wwggppoorrtt is entered without an argument wireguard selects its own port au‐
+     tomatically.
+
+     E.g. set wireguard interface wg0 to listen on 18443 UDP.
+
+           nsh(config-p)/interface wg0
+
+           nsh(interface-wg0)/wgport 18443
+
+     [no] wwggrrttaabbllee [_r_t_a_b_l_e_-_i_d]
+
+     Set or remove the configuration of which routing table the Exchange traf‐
+     fic with peers under.  The routing table choice is made using rtable-id
+     which would be a value between 0 and 255 on a default OpenBSD kernel.
+     The routing domain of the wgrtable does not need be in the same routing
+     domain to which the interface is attached.  wgrtable configures which
+     rdomain(4) the interface's tunnelled traffic appears.
+
+     E.g. set wireguard interface wg0  routing table to routing domain 5.
+
+           nsh(config-p)/interface wg0
+
+           nsh(interface-wg0)/wgrtable 5
+
+     [no] sshhuuttddoowwnn
+
+     Administratively turn off or on the current interface.
+
+     Using this command to shutdown and then turn up an interface resets the
+     interface.
+
+           nsh(interface-de0)/shutdown
+           nsh(interface-de0)/no shutdown
+
+SSeeccttiioonn 55 >> BBrriiddggee mmooddee ccoommmmaannddss
+     see the following man pages for information
+
+     !man bridge
+
+     !man ifconfig
+
+SSeeccttiioonn 66 >> PPFF mmooddee ccoommmmaannddss
+     see the following man pages for information
+
+     !man pfctl !man pf.conf
+
+SSeeccttiioonn 77 AAlllloowwiinngg uusseerrss ttoo rruunn NNSSHH
+     The design of OpenBSD requires root privileges to administer the network
+     stack.
+
+     *NB Security Warning!!!
+
+     The doas configurations outlined below grant a non-root nnsshh user the
+     ability to obtain root privileges without knowledge of the root password.
+     A user can abuse nnsshh running as root to run arbitrary commands with the !
+     shell escape syntax.
+
+     e.g.
+
+          nsh(p)/!adduser new-unauthorised-user
+
+     Access to root privileges must be restricted to trusted users only.
+
+     *NB End Security Warning
+
+     Users with regular shell access can start nnsshh from another shell.
+
+     Users will be logged into an nnsshh session directly if the user account's
+     login shell is set to nnsshh as follows:
+
+           usermod -s /usr/local/bin/nsh nshuser
+
+     (replace 'nshuser' with the actual user name)
+
+     If a user has knowlege of the root password they can use the nsh eennaabbllee
+     command to enter nnsshh privileged mode with root privileges.
+
+     If the user should not know the root password then doas.conf(5) can be
+     used with nsh arguments restricted to the --ee option.  nnsshh will attempt to
+     obtain root privileges when privileged mode is entered.  To prevent abuse
+     the user will be required to authenticate again with their own password.
+     With a line such as the following in _/_e_t_c_/_d_o_a_s_._c_o_n_f this will succeed:
+
+           permit keepenv stacy as root cmd /usr/local/bin/nsh args -e
+
+     To allow a user to run nnsshh as root and with arbitrary arguments such as
+     --cc or --ii, configure _/_e_t_c_/_d_o_a_s_._c_o_n_f with a line starting with 'permit' to
+     allow the full path to the nnsshh binary without any other restrictions.
+     For example, the following allows user 'stacy' to run nnsshh as root via
+     doas(1) with arbitrary arguments:
+
+           permit keepenv stacy as root cmd /usr/local/bin/nsh
+
+     The user stacy can now start nnsshh via doas with an arbitrary amount of ar‐
+     guments:
+
+           doas /usr/local/bin/nsh ...
+
+     To allow a restricted user to run a specifc nnsshh script only, configure
+     /etc/doas.conf to require specific arguments to nsh that involve the --cc
+     option.  The following example allows a backupuser to display the run‐
+     ning-config:
+
+           permit nopass backupuser as root cmd /usr/local/bin/nsh args -c /etc/showrunconfig.nshrc
+
+     Where the file _/_e_t_c_/_s_h_o_w_r_u_n_c_o_n_f_i_g_._n_s_h_r_c would not be writable by the
+     backupuser account and would look like this:
+
+           enable
+           show running-config
+           quit
+
+     A more standards RBAC based approach would be to create a group
+     “nshusers” on the system for users with the role of managing the system
+     via nsh.  Then allow users that are members of a group to run nnsshh using
+     /etc/doas.conf by referring to the groupname rather than just a single
+     username (the colon before the group name is required by doas.conf(5)
+     syntax and signifies a group name argument):
+
+           permit keepenv :nshusers as root cmd /usr/local/bin/nsh args -e
+
+CCoommmmoonn iinntteerrffaaccee ttyyppeess
+     Packet Filter Logging: This interface is used to pass traffic logged by
+     the firewall to software which can record it.  These interface names
+     start with 'pflog'.
+
+     IPsec Loopback: This interface is used internally in the system to pass
+     decapsulated IPsec traffic.  All traffic from this interface has already
+     been authenticated and unencrypted from the IPsec subsystem.  This is
+     useful when writing firewall rules.  These interface names start with
+     'enc'.
+
+     Generic Tunnel: This interface is used to configure a network tunnel to
+     another host or router.  It follows the RFC1933 tunnelling standard.
+     These interface names start with 'gif'.
+
+     Ethernet Bridge: This interface is used to configure layer 2 bridging be‐
+     tween physical and virtual network ports on a system.  These interface
+     names start with 'bridge'.
+
+     Ethernet: This is a physical Ethernet interface, running at 10, 100, or
+     1000 megabits per second.  These interface names are based on the name of
+     the driver, and vary with different Ethernet chip types.
+
+     IEEE 802.1Q Virtual: This is a virtual Ethernet, Token Ring, or FDDI in‐
+     terface.  It uses the IEEE 802.1Q protocol to segment real Ethernet in‐
+     terfaces into multiple layer 2 networks.  These interface names start
+     with 'vlan'.
+
+     Virtual: This is a virtual interface of any type.  Often several differ‐
+     ent interfaces use this type.  Several versions of OpenBSD use this type
+     to denote virtual IEEE 802.1Q interfaces, described above.
+
+     PPP: This interface implements the Point to Point Protocol (PPP).  PPP,
+     described in RFC 1661, creates a network over serial communication lines.
+     It is used over modem connections, direct serial links, leased lines, and
+     over virtual IP based connections such as in SSH sessions.  These inter‐
+     face names start with 'ppp' when referring to a version which supports
+     serial and modem connections.  Other interface types may also implement
+     the Point to Point Protocol.
+
+     IEEE 802.11 Wireless: This interface implements the IEEE 802.11 wireless
+     LAN protocol.  Many implementations of this network have little or no se‐
+     curity unless used with proper encryption such as IPsec.  These interface
+     names are based on the name of the driver, and vary with different wire‐
+     less chip types.
+
+IInntteerrffaaccee ffllaaggss
+     ••   UUPP
+
+                   Interface is up
+
+     ••   BBRROOAADDCCAASSTT
+
+                   broadcast address valid
+
+     ••   DDEEBBUUGG
+
+                   debugging enabed (only some network drivers use this)
+
+     ••   LLOOOOPPBBAACCKK
+
+                   Interface is a loopback network (internal to the machine)
+
+     ••   PPOOIINNTTOOPPOOIINNTT
+
+                   Interface is point-to-point link
+
+     ••   NNOOAARRPP
+
+                   Address Resolution Protocol is disabled on this interface
+
+     ••   PPRROOMMIISSCC
+
+                   Interface is in promiscuous mode, the system's software to
+                   receive all packets visible to the network card,
+                   even if they are not destined for this host
+
+     ••   AALLLLMMUULLTTII
+
+                   This causes the interface to receive all multicast traffic,
+                   even for multicast networks that it was not signed up for
+
+     ••   OOAACCTTIIVVEE
+
+                   Transmission in progress.            An interface that dis‐
+         plays this flag continuously may be           stuck.            You
+         may be able to reset an interface that is in this state           by
+         using and then reversing the 'shutdown' command from the
+                   interface menu.
+
+                   E.g. reset an interface.
+
+                               nsh(p)interface vr0
+                               nsh(interface-vr0)/shutdown
+                               nsh(interface-vr0)/no shutdown
+     ••   SSIIMMPPLLEEXX
+
+                         Can't hear own transmissions
+
+     ••   LLIINNKK00
+
+                         This flag has different meanings with different in‐
+         terface                types
+
+     ••   LLIINNKK11
+
+                         This flag has different meanings with different in‐
+         terface                types
+
+     ••   LLIINNKK22
+
+                         This flag has different meanings with different in‐
+         terface                types
+
+     ••   MMUULLTTIICCAASSTT                 This interface supports multicast
+
+AALLTTQQ nnootteess
+     TODO
+
+IInntteerrffaaccee--ssppeecciiffiicc nnootteess
+     There are several special interfaces.
+
+   ggrree
+     The gre interface allows for tunnel construction using the Cisco GRE en‐
+     capsulation protocol.
+      You can use the tunnel command under interface mode to create a tunnel.
+
+           nsh(interface-gre0)/tunnel 1.2.3.4 5.5.5.5
+     enc (IPsec Loopback)
+
+     enc (specifically, enc0) is the encapsulating interface.  It is a soft‐
+     ware loopback mechanism used to control non-encapsulated IPsec traffic
+     using the pf firewall ruleset.  It allows an administrator to see outgo‐
+     ing packets before they have been processed by IPsec, or incoming packets
+     after they have been processed.
+
+     All traffic out of enc0 is already decrypted and authenticated via IPsec.
+     Thus, it is helpful when writing firewall rulesets.
+
+   pppppp ((PPooiinntt ttoo PPooiinntt PPrroottooccooll))
+     The serial line Point-to-Point protocol uses this interface.
+
+   ssll ((SSeerriiaall LLiinnee IInntteerrffaaccee PPrroottooccooll))
+     The Serial Line Internet Protocol uses this interface.
+
+     tun (Tunnel Interface)
+
+     This is another software loopback mechanism.  It allows user processes to
+     create their own virtual network interfaces.  It is used by the PPPoE im‐
+     plementation.
+
+   ggiiff
+     This interface is used for RFC 1933 IPv[46] to IPv[46] tunnels.
+
+           nsh(interface-gif0)/tunnel 1.2.3.4 5.5.5.5
+     tunnels can be used between rdomains.
+
+           nsh(interface-gif0)/tunnel 1.2.3.4 5.5.5.5 rdomain 5
+
+   ppfflloogg
+     Packets logged from the packet filter are visible on this interface
+
+   vvllaann
+     This interface type allows virtual LANs to be setup over an Ethernet port
+     using the 802.1Q protocol.  E.g. setup a virtual interface with the
+     192.168.44.1 IP address, with 802.1Q trunking on the fxp3 physical inter‐
+     face, and a vlan ID of 4.
+
+           nsh(interface-vlan0)/vnetid 4
+
+           nsh(interface-vlan0)/parent fxp3
+
+           nsh(interface-vlan0)/address 192.168.44.1/24
+
+   SSvvllaann
+     This interface type allows virtual LANs to be setup over an Ethernet port
+     using 802.1AD provider bridge.
+
+     This product includes software developed by the University of California,
+     Berkeley and its contributors.
+
+     This product includes software developed by Jason L. Wright
+
+     This product includes software developed by the NetBSD Foundation Incor‐
+     porated and its contributors.
+
+     EDITOR was used to specify the name of an (old-style) line editor, such
+     as ed(1), and VISUAL was used to specify a (new-style) screen editor,
+     such as vi(1).  Hence if VISUAL is set, it overrides EDITOR.  TODO
+
+EENNVVIIRROONNMMEENNTT
+     NSH_MANUAL_PAGE
+     The manual page displayed by the built-in mmaannuuaall command.  This must be
+     an absolute path to the mdoc(7) file that should be displayed.  Defaults
+     to _/_u_s_r_/_l_o_c_a_l_/_m_a_n_/_m_a_n_8_/_n_s_h_._8
+
+FFIILLEESS
+     /etc/nshrc         global configuration file
+     ~/.profile         user's login profile
+     /etc/shells        shell database
+     /etc/suid_profile  privileged shell profile
+     ~/.nshenv          If this file exists and is owned by the invoking user
+                        then nnsshh will automatically load environment variables
+                        from this file at startup.  The sseetteennvv and ssaavveeeennvv
+                        commands can be used to generate this file.  The file
+                        will not be loaded if the --ii or --cc options are used.
+
+SSEEEE AALLSSOO
+           ed(1), mg(1), stty(1), vi(1), pf(4), bgpd.conf(5), dhcpd.conf(5),
+           ospf6d.conf(5), ospfd.conf(5), pf.conf(5), relayd.conf(5),
+           resolv.conf(5), shells(5), environ(7), script(7), bgpd(8),
+           dhcpd(8), dhcpleased(8), dvmrpd(8), eigrpd(8), ftpd(8),
+           ftp-proxy(8), ifstated(8), iked(8), inetd(8), ipsecctl(8), ldapd(8)
+           ldpd(8), npppd(8), ntpd(8), ospf6d(8), ospfd(8), pfctl(8),
+           relayd(8), resolvd(8), ripd(8), rad(8), sasyncd(8), slaacd(8),
+           smtpd(8), snmpd(8), sshd(8), tftp-proxy(8), tftpd(8),
+
+     Chris Cappuccio, _h_t_t_p_:_/_/_w_w_w_._n_m_e_d_i_a_._n_e_t_/_n_s_h_/, 2014.
+
+     Chris Cappuccio, _h_t_t_p_s_:_/_/_g_i_t_h_u_b_._c_o_m_/_y_e_l_l_o_w_m_a_n_/_n_s_h, 2022.
+
+     Stephen G. Kochan and Patrick H. Wood, _U_N_I_X _S_h_e_l_l _P_r_o_g_r_a_m_m_i_n_g_, _3_r_d
+     _E_d_i_t_i_o_n, _S_a_m_s, 2003, ISBN 0672324903.
+
+AAUUTTHHOORRSS
+     This shell was originally designed and written by Chris Cappuccio
+     <_c_h_r_i_s_@_n_m_e_d_i_a_._n_e_t>, and is now co-maintained by Stefan Sperling
+     <_s_t_s_p_@_o_p_e_n_b_s_d_._o_r_g> and Tom Smyth <_t_o_m_._s_m_y_t_h_@_w_i_r_e_l_e_s_s_c_o_n_n_e_c_t_._e_u>.
+
+BBUUGGSS
+BSD                             April 09, 2023                             BSD
