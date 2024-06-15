@@ -67,6 +67,7 @@ darwin/compile.c: darwin/compile.sh
 	cd darwin; sh ${.CURDIR}/darwin/compile.sh
 .endif
 
+# For Linux, install bmake and run `bmake`
 .if $(OSNAME) == "Linux"
 SRCS=linux/ctl.c linux/compile.c linux/main.c linux/genget.c linux/commands.c linux/more.c linux/complete.c linux/passwd.c
 SRCS+=linux/conf.c linux/sqlite3.c linux/version.c linux/who.c
