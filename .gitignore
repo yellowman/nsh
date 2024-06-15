@@ -13,3 +13,4 @@ nshdoas/*.o
 nshdoas/compile.c
 nshdoas/nshdoas
 nshdoas/parse.c
+.depend
