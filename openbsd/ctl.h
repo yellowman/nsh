@@ -58,7 +58,6 @@
 #define IKECTL          "/usr/sbin/ikectl"
 #define DVMRPCTL        "/usr/sbin/dvmrpctl"
 #define RELAYCTL        "/usr/sbin/relayctl"
-#define SNMPCTL         "/usr/sbin/snmpctl"
 #define SMTPCTL         "/usr/sbin/smtpctl"
 #define LDAPCTL         "/usr/sbin/ldapctl"
 

@@ -19,7 +19,8 @@
 #
 # 3) Run 'make release' to create nsh-1.x.tar.gz.
 #
-#    If this command shows changes to nsh-dist.txt then a file called
+#    This command may throw minor errors which relate to 
+#    changes to nsh-dist.txt if that is the case then a file called
 #    nsh-dist.txt.new will be created. Review the changes and decide
 #    what to do about each newly added or removed file.
 #
@@ -91,7 +92,7 @@ NSH_RELEASE=No
 
 # Version number of the most recently published release.
 # Should be cranked immediately before publishing a new release.
-NSH_VERSION_NUMBER=1.2
+NSH_VERSION_NUMBER=1.2.1
 
 .if ${NSH_RELEASE} == Yes
 NSH_VERSION=${NSH_VERSION_NUMBER}

@@ -470,8 +470,6 @@ struct ctl ctl_snmp[] = {
 	    T_HANDLER_FILL1 },
 	{ "config-test",   "test staged OpenSNMPD config",
             { SNMPD, "-nvf", REQTEMP, NULL }, NULL, 0, T_EXEC },
-	{ "trap",	   "send traps",
-	    { SNMPCTL, "trap", "send", REQ, OPT, NULL }, NULL, 0, T_EXEC },
 	{ 0, 0, { 0 }, 0, 0, 0 }
 };
 
