@@ -302,7 +302,7 @@ show_int(int argc, char **argv, FILE *outfile)
 			close(ifs);
 			return 0;
 		}
-		fputs("% Name    Status  Link        Routing-Domain  Media",
+		fputs("% Name    Status  Link        Routing-Domain  Media\n",
 		    outfile);
 		for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++)
 			show_int_status(ifnp->if_name, ifs, outfile);
