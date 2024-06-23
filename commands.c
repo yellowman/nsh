@@ -76,6 +76,7 @@ struct intlist *whichlist;
 pid_t	child;
 
 static int	disable(void);
+static int      clear(void);
 static int	doverbose(int, char**);
 static int	doediting(int, char**);
 static int	doconfig(int, char**);
@@ -124,6 +125,7 @@ static int	int_doverbose(char *, int, int, char **);
 static int	int_doediting(char *, int, int, char **);
 static int	int_manual(char *, int, int, char **);
 static int	int_shell(char *, int, int, char **);
+static int      int_clear(void);
 static int	int_help(void);
 static int	int_exit(void);
 static int	hostname(int, char **);
@@ -1694,6 +1696,7 @@ static char
 	rtablehelp[] = 	"Routing table switch",
 	grouphelp[] =	"Modify group attributes",
 	arphelp[] = 	"Static ARP set",
+	clearhelp[]=	"Clear the terminal screen",
 #ifdef notyet
 	parphelp[] =	"Proxy ARP set",
 #endif
@@ -1813,6 +1816,7 @@ Command cmdtab[] = {
 	{ "pipex",	pipexhelp,	CMPL(ta) (char **)pipextab, sizeof(Menu), ipcmd,	1, 1, 1, 0 },
 	{ "flush",	flushhelp,	CMPL(ta) (char **)flushlist, sizeof(Menu), flushcmd,	1, 0, 0, 0 },
 	{ "enable",	enablehelp,	CMPL(ta) (char **)enabletab, sizeof(Menu), enable,	0, 0, 0, 0 },
+	{ "clear",      clearhelp,      CMPL0 0, 0, clear,              0, 0, 0, 0 },
 	{ "disable",	disablehelp,	CMPL0 0, 0, disable,		1, 0, 0, 0 },
 	{ "route",	routehelp,	CMPL0 0, 0, route,		1, 1, 1, 0 },
 	{ "pf",		pfhelp,		CMPL(t) (char **)ctl_pf, ssctl, ctlhandler,	1, 1, 0, 1 },
@@ -2659,6 +2663,14 @@ group(int argc, char **argv)
 	return 0;
 }
 
+//clear terminal screen
+int
+clear(void)
+{
+	char *argv[] = {CLEAR, NULL, NULL };	
+        cmdargs(CLEAR, argv);
+	return 0; 
+}
 /*
  * disable privileged mode
  */
