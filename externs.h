@@ -174,6 +174,7 @@ extern pid_t child;
 #define DEFAULT_EDITOR	"/usr/bin/vi"
 #define NSHRC_TEMP	"/var/run/nshrc"
 #define NSHRC		"/etc/nshrc"
+#define CLEAR		"/usr/bin/clear"
 #define PING		"/sbin/ping"
 #define PING6		"/sbin/ping6"
 #define TRACERT		"/usr/sbin/traceroute"

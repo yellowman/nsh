@@ -174,19 +174,16 @@ is not ambiguous double <Tab> completes the command.
 E.g show all available valid commands  with double tab key sequence <tab><tab>
 .Bd -literal -offset indent
 nsh(config-p)/
-!		exit		ipsec		ping	smtp
-?		flush		ldap		ping6	snmp
-arp		ftp-proxy	ldp		pipex	ssh
-bgp		group		motd		quit	sshd
-bridge		halt		mpls		rad	telnet
-configure	help		nameserver	reboot	tftp
-ddb		hostname	ndp		relay	tftp-proxy
-dhcp		ifstate		no		resolv	traceroute
-disable		ike		nppp		rip	traceroute6
-dvmrp		inet		ntp		route	verbose
-editing		interface	ospf		rtable	who
-eigrp		ip		ospf6		sasync	write-config
-enable		ip6		pf		show
+!		disable		halt		ldap		ospf		relay		smtp		verbose
+?		do		help		ldp		ospf6		resolv		snmp		who
+arp		dvmrp		hostname	manual		pf		rip		ssh		write-config
+bgp		editing		ifstate		motd		ping		route		sshd
+bridge		eigrp		ike		mpls		ping6		rtable		telnet
+clear		enable		inet		nameserver	pipex		sasync		tftp
+configure	exit		interface	ndp		powerdown	saveenv		tftp-proxy
+crontab		flush		ip		no		quit		scheduler	traceroute
+ddb		ftp-proxy	ip6		nppp		rad		setenv		traceroute6
+dhcp		group		ipsec		ntp		reboot		show		unsetenv
 nsh(config-p)/
 .Ed
 If what is typed is ambiguous double tab presents the administrator
@@ -358,6 +355,7 @@ nsh(p)/help
   pipex         Set PIPEX parameters
   flush         Flush system tables
   enable        Enable privileged mode
+  clear         Clear the terminal screen
   disable       Disable privileged mode
   route         Add a host or network route
   pf            Packet filter control
@@ -479,6 +477,16 @@ Useful if you have completed configuration but still want the ability to run
 diagnostics in an unprivileged
 .Nm
 shell.
+.Pp
+.Tg clear
+.Ic clear
+.Pp
+Wipe contents of terminal and scrollback buffer and present a
+.Nm
+prompt at the first line of the active terminal.
+See also
+.Xr clear 1
+for more information.
 .Pp
 .Tg rtable
 .Tg rdomain
@@ -1368,7 +1376,7 @@ daemon can be edited with
 command, the configuration syntax of
 .Ic snmp
 daemon is documented in
-.Xr snmpd.conf 5 
+.Xr snmpd.conf 5
 .Pp
 .Tg ldapd
 .Tg ldap
