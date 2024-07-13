@@ -1850,6 +1850,7 @@ Command cmdtab[] = {
 	{ "inet",	inethelp,	CMPL(t) (char **)ctl_inet, ssctl, ctlhandler,	1, 1, 0, 1 },
 	{ "ping",	pinghelp,	CMPL0 0, 0, ping,		0, 0, 0, 0 },
 	{ "ping6",	ping6help,	CMPL0 0, 0, ping6,		0, 0, 0, 0 },
+	{ "su",		enablehelp,     CMPL(ta) (char **)enabletab, sizeof(Menu), enable,      0, 0, 0, 0 },
 	{ "traceroute", tracerthelp,	CMPL0 0, 0, traceroute,		0, 0, 0, 0 },
 	{ "traceroute6", tracert6help,  CMPL0 0, 0, traceroute6,	 0, 0, 0, 0 },
 	{ "ssh",	sshhelp,	CMPL0 0, 0, ssh,		0, 0, 0, 0 },
