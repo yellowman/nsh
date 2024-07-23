@@ -174,16 +174,21 @@ is not ambiguous double <Tab> completes the command.
 E.g show all available valid commands  with double tab key sequence <tab><tab>
 .Bd -literal -offset indent
 nsh(config-p)/
-!		disable		halt		ldap		ospf		relay		smtp		verbose
-?		do		help		ldp		ospf6		resolv		snmp		who
-arp		dvmrp		hostname	manual		pf		rip		ssh		write-config
-bgp		editing		ifstate		motd		ping		route		sshd
-bridge		eigrp		ike		mpls		ping6		rtable		telnet
-clear		enable		inet		nameserver	pipex		sasync		tftp
-configure	exit		interface	ndp		powerdown	saveenv		tftp-proxy
-crontab		flush		ip		no		quit		scheduler	traceroute
-ddb		ftp-proxy	ip6		nppp		rad		setenv		traceroute6
-dhcp		group		ipsec		ntp		reboot		show		unsetenv
+&		enable		ldap		pipex		smtp
+?		exit		ldp		powerdown	snmp
+arp		flush		manual		quit		ssh
+bgp		ftp-proxy	motd		rad		sshd
+bridge		group		mpls		reboot		telnet
+clear		halt		nameserver	relay		tftp
+configure	help		ndp		resolv		tftp-proxy
+crontab		hostname	no		rip		traceroute
+ddb		ifstate		nppp		route		traceroute6
+dhcp		ike		ntp		rtable		unsetenv
+disable		inet		ospf		sasync		verbose
+do		interface	ospf6		saveenv		who
+dvmrp		ip		pf		scheduler	write-config
+editing		ip6		ping		setenv
+eigrp		ipsec		ping6		show
 nsh(config-p)/
 .Ed
 If what is typed is ambiguous double tab presents the administrator
@@ -398,7 +403,7 @@ nsh(p)/help
   verbose       Set verbose diagnostics
   editing       Set command line editing
   who           Display system users
-  !             Invoke a subshell
+  &             Invoke a subshell or execute arguments in a subshell
   ?             Print help information
   quit          Close current connection
 nsh(p)/
@@ -620,8 +625,8 @@ and
 .Nm
 commands):
 .Bd -literal -offset indent
-!man bridge
-!man ifconfig
+&man bridge
+&man ifconfig
 .Ed
 .Bl -dash
 .It
@@ -671,7 +676,7 @@ nsh(bridge-bridge100)/?
   who           Display system users
   verbose       Set verbose diagnostics
   editing       Set command line editing
-  !             Invoke a subshell
+  &             Invoke a subshell or execute arguments in a subshell
   ?             Options
   manual        Display the NSH manual
   exit          Leave bridge config mode and return to global config mode
@@ -1002,7 +1007,7 @@ EDITOR or VISUAL environment variables.
 For packet filter configuration syntax, refer to
 .Xr pf.conf 5 .
 .Bd -literal -offset indent
-nsh(p)/!man pf.conf
+nsh(p)/&man pf.conf
 nsh(config-p)/pf edit
 .Ed
 .Pp
@@ -1075,7 +1080,7 @@ EDITOR or VISUAL environment variables.
 For OSPF configuration syntax, refer to
 .Xr ospfd.conf 5 .
 .Bd -literal -offset indent
-nsh(p)/!man ospfd.conf
+nsh(p)/&man ospfd.conf
 nsh(config-p)/ospf edit
 .Ed
 .Pp
@@ -2964,7 +2969,7 @@ nsh(p)/no editing
 .Tg ksh
 .Tg sh
 .Tg csh
-.Ic nsh(p)/!
+.Ic nsh(p)/&
 .Op Cm shell-command
 .Ar argument-1
 .Op Ar argument-n
@@ -2976,12 +2981,12 @@ This feature disabled to enhance security.
 .Pp
 E.g. list files in /root
 .Bd -literal -offset indent
-nsh(p)/!ls /root
+nsh(p)/&ls /root
 
 helloworld.c
 helloworld2.c
 
-nsh(p)/!
+nsh(p)/&
 
 OpenBSDshell#
 .Ed
@@ -3375,7 +3380,7 @@ nsh(interface-em0)/?
   who              Display system users
   verbose          Set verbose diagnostics
   editing          Set command line editing
-  !                Invoke a subshell
+  &             Invoke a subshell or execute arguments in a subshell
   ?                Options
   manual           Display the NSH manual
   exit             Leave interface config mode and return to global config mode
@@ -4578,14 +4583,14 @@ nsh(interface-de0)/no shutdown
 .Sh Section 5 > Bridge mode commands
 see the following man pages for information
 .Pp
-!man bridge
+&man bridge
 .Pp
-!man ifconfig
+&man ifconfig
 .Sh Section 6 > PF mode commands
 see the following man pages for information
 .Pp
-!man pfctl
-!man pf.conf
+&man pfctl
+&man pf.conf
 .Sh Section 7 Allowing users to run NSH
 The design of
 .Ox
@@ -4599,12 +4604,12 @@ user the ability to obtain root privileges without knowledge of
 the root password.
 A user can abuse
 .Nm
-running as root to run arbitrary commands with the !
+running as root to run arbitrary commands with the &
 shell escape syntax.
 .Pp
 e.g.
 .Bd -literal -offset indet
-nsh(p)/!adduser new-unauthorised-user
+nsh(p)/&adduser new-unauthorised-user
 .Ed
 .Pp
 Access to root privileges must be restricted to trusted users only.

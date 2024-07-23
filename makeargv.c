@@ -52,11 +52,11 @@ makeargv(void)
 
 	margc = 0;
 	cp = line;
-	if (*cp == '!') {	/* Special case shell escape */
+	if (*cp == '&') {	/* Special case shell escape */
 		/* save for shell command */
 		strlcpy(saveline, line, sizeof(saveline));
 
-		*argp++ = "!";	/* No room in string to get this */
+		*argp++ = "&";	/* No room in string to get this */
 		margc++;
 		cp++;
 	}

@@ -1192,7 +1192,7 @@ struct intlist Intlist[] = {
 	{ "who",	whohelp,				CMPL0 0, 0, int_who, 0 },
 	{ "verbose",	verbosehelp,				CMPL0 0, 0, int_doverbose, 1 },
 	{ "editing",	editinghelp,				CMPL0 0, 0, int_doediting, 1 },
-	{ "!",		shellhelp,				CMPL0 0, 0, int_shell, 0 },
+	{ "&",		shellhelp,				CMPL0 0, 0, int_shell, 0 },
         { "?",		"Options",				CMPL0 0, 0, int_help, 0 },
 	{ "manual",	manhelp,				CMPL(H) (char **)mantab, sizeof(struct ghs), int_manual, 0 },
         { "help",	0,					CMPL0 0, 0, int_help, 0 },
@@ -1245,7 +1245,7 @@ struct intlist Bridgelist[] = {
 	{ "who",	whohelp,				CMPL0 0, 0, int_who, 0 },
 	{ "verbose",	verbosehelp,				CMPL0 0, 0, int_doverbose, 1 },
 	{ "editing",	editinghelp,				CMPL0 0, 0, int_doediting, 1 },
-	{ "!",		shellhelp,				CMPL0 0, 0, int_shell, 0 },
+	{ "&",		shellhelp,				CMPL0 0, 0, int_shell, 0 },
 
 /* Help commands */
 	{ "?",		"Options",				CMPL0 0, 0, int_help, 0 },
@@ -1757,7 +1757,7 @@ static char
 	setenvhelp[] =	"Set an environment variable",
 	unsetenvhelp[] ="Delete an environment variable",
 	saveenvhelp[] =	"Save environment variables set by setenv to ~/.nshenv",
-	shellhelp[] =	"Invoke a subshell",
+	shellhelp[] =	"Invoke a subshell or execute arguments in a subshell",
 	savehelp[] =	"Save the current configuration",
 	nreboothelp[] =	"Reboot the system",
 	halthelp[] =	"Halt the system",
@@ -1867,7 +1867,7 @@ Command cmdtab[] = {
 	{ "setenv",	setenvhelp,	CMPL(E) 0, 0, setenvcmd,	0, 0, 0, 0 },
 	{ "unsetenv",	unsetenvhelp,	CMPL(e) 0, 0, unsetenvcmd,	0, 0, 0, 0 },
 	{ "saveenv",	saveenvhelp,	CMPL0 0, 0, saveenvcmd,		0, 0, 0, 0 },
-	{ "!",		shellhelp,	CMPL0 0, 0, shell,		1, 0, 0, 0 },
+	{ "&",		shellhelp,	CMPL0 0, 0, shell,		1, 0, 0, 0 },
 	{ "?",		helphelp,	CMPL(c) 0, 0, help,		0, 0, 0, 0 },
 	{ "manual",	manhelp,	CMPL(H) (char **)mantab, sizeof(struct ghs), manual,0, 0, 0, 0 },
 	{ "exit",	exithelp,	CMPL0 0, 0, exitconfig,		1, 0, 0, 0 },
@@ -2844,6 +2844,10 @@ cmdrc(char rcname[FILENAME_MAX])
 			continue;
 		if (line[0] == '!')
 			continue;
+		if (line[0] == '&')
+                        continue;
+
+
 		/*
 		 * Don't ignore indented comments with pound sign, otherwise
 		 * comments won't be saved into daemon/ctl config files.
