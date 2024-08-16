@@ -874,13 +874,14 @@ void conf_vnetflowid(FILE *output, int ifs, char *ifname)
 void conf_patch(FILE *output, int ifs, char *ifname)
 {
 	struct ifreq ifr;
+	char ifix_buf[IFNAMSIZ];
 
 	memset(&ifr, 0, sizeof(ifr));
 	strlcpy(ifr.ifr_name, ifname, IFNAMSIZ);
 
 	if (ioctl(ifs, SIOCGIFPAIR, &ifr) == 0 && ifr.ifr_index != 0 &&
-	    if_indextoname(ifr.ifr_index, ifname) != NULL)
-		fprintf(output, " patch %s\n", ifname);
+	    if_indextoname(ifr.ifr_index, ifix_buf) != NULL)
+		fprintf(output, " patch %s\n", ifix_buf);
 }
 
 void conf_parent(FILE *output, int ifs, char *ifname)
