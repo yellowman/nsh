@@ -433,6 +433,29 @@ myfirewallname.com(p)/
 .Ed
 .El
 .Pp
+.Tg su
+.Tg doas
+.Tg sudo
+.Tg enable
+.Ic su
+.Pp
+An alias for the
+.Cm enable
+.Nm
+command.
+The
+.Cm su
+alias is to facilitate users used to running BSD systems elevate
+privileges with a similar user experience to running
+.Xr su 1
+commmand in other shells.
+See
+.Cm enable
+command below for more details.
+.Pp
+.Tg su
+.Tg doas
+.Tg sudo
 .Tg enable
 .Ic enable
 .Pp
@@ -4774,7 +4797,7 @@ different wireless chip types.
 .It
 .Ic DEBUG
 .Pp
-  		debugging enabed (only some network drivers use this)
+  		debugging enabled (only some network drivers use this)
 .Pp
 .It
 .Ic LOOPBACK
