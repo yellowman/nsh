@@ -398,7 +398,7 @@ nsh(p)/help
   verbose       Set verbose diagnostics
   editing       Set command line editing
   who           Display system users
-  !             Invoke a subshell
+  !             Invoke a subshell or run an executable
   ?             Print help information
   quit          Close current connection
 nsh(p)/
@@ -694,7 +694,7 @@ nsh(bridge-bridge100)/?
   who           Display system users
   verbose       Set verbose diagnostics
   editing       Set command line editing
-  !             Invoke a subshell
+  !             Invoke a subshell or run an executable
   ?             Options
   manual        Display the NSH manual
   exit          Leave bridge config mode and return to global config mode
@@ -2988,14 +2988,27 @@ nsh(p)/no editing
 .Tg sh
 .Tg csh
 .Ic nsh(p)/!
-.Op Cm shell-command
-.Ar argument-1
+.Ar Cm shell-command
+.Op argument-1
 .Op Ar argument-n
 .Pp
-Invoke a shell or run an entered shell-command with arguments if required.
+Invoke a shell or run an entered executable with arguments if required.
 (requires privileged mode).
 The active users login shell is the shell that is invoked by this feature.
-This feature disabled to enhance security.
+This feature can be disabled to restrict users from starting a different
+shell or executable from
+.Nm
+.
+If ! is entered without arguments in privilaged mode or global config mode,
+no operation will be carried out and the user will be returned to the same
+.Nm
+command prompt.
+If ! is entered without arguments in interface or bridge config mode the, 
+no operation will be carried out but the user will be returned to the global
+configuration mode.
+This is to facilitate users interactively copying and pasting
+.Nm
+configurations between devices which would contain the "!" spacing character.
 .Pp
 E.g. list files in /root
 .Bd -literal -offset indent
@@ -3004,9 +3017,9 @@ nsh(p)/!ls /root
 helloworld.c
 helloworld2.c
 
-nsh(p)/!
+nsh(p)/!ksh
 
-OpenBSDshell#
+kshprompt#
 .Ed
 .Pp
 .Tg ip
@@ -3398,7 +3411,7 @@ nsh(interface-em0)/?
   who              Display system users
   verbose          Set verbose diagnostics
   editing          Set command line editing
-  !                Invoke a subshell
+  !                Invoke a subshell or run an executable
   ?                Options
   manual           Display the NSH manual
   exit             Leave interface config mode and return to global config mode

@@ -1652,8 +1652,13 @@ int_manual(char *ifname, int ifs, int argc, char **argv)
 static int
 int_shell(char *ifname, int ifs, int argc, char **argv)
 {
-	shell(argc, argv);
-	return 0; /* do not leave interface context */
+	if (argc >1) 
+	{
+		shell(argc, argv);
+		return 0; /* do not leave interface context after execution */
+	}
+	else
+	return 1; /* this is to allow for pasting configs with "!" separators */
 }
 
 static int
@@ -1757,7 +1762,7 @@ static char
 	setenvhelp[] =	"Set an environment variable",
 	unsetenvhelp[] ="Delete an environment variable",
 	saveenvhelp[] =	"Save environment variables set by setenv to ~/.nshenv",
-	shellhelp[] =	"Invoke a subshell",
+	shellhelp[] =	"Invoke a subshell or run an executable",
 	savehelp[] =	"Save the current configuration",
 	nreboothelp[] =	"Reboot the system",
 	halthelp[] =	"Halt the system",
@@ -2365,8 +2370,10 @@ shell(int argc, char **argv)
 	sigint = signal(SIGINT, SIG_IGN);
 	sigquit = signal(SIGQUIT, SIG_IGN);
 	sigchld = signal(SIGCHLD, SIG_DFL);
-
-	switch(child = fork()) {
+        if (argc <= 1) /* only fork if you have a command or shell to execute*/
+		return 1;
+	else {
+		switch(child = fork()) {
 		case -1:
 			printf("%% fork failed: %s\n", strerror(errno));
 			break;
@@ -2384,14 +2391,10 @@ shell(int argc, char **argv)
 			 */
 			char *shellp;
 			char *shellname = shellp = "/bin/sh";
-
-			if (argc > 1)
-				execl(shellp, shellname, "-c", &saveline[1],
-				    (char *)NULL);
-			else
-				execl(shellp, shellname, (char *)NULL);
+			execl(shellp, shellname, "-c", &saveline[1],
+				(char *)NULL);
 			printf("%% execl '%s' failed: %s\n", shellp,
-			    strerror(errno));
+				strerror(errno));
 			_exit(0);
 			}
 			break;
@@ -2399,7 +2402,7 @@ shell(int argc, char **argv)
 			signal(SIGALRM, sigalarm);
  			wait(0);  /* Wait for shell to complete */
 			break;
-	}
+		}
 
 	signal(SIGINT, sigint);
 	signal(SIGQUIT, sigquit);
@@ -2408,6 +2411,8 @@ shell(int argc, char **argv)
 	child = -1;
 
 	return 1;
+	}	
+	
 }
 
 /*
