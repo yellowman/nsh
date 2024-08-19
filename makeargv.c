@@ -59,6 +59,8 @@ makeargv(void)
 		*argp++ = "!";	/* No room in string to get this */
 		margc++;
 		cp++;
+		cursor_argc = 0;
+		cursor_argo = 0;
 	}
 	while ((c = *cp)) {
 		int inquote = 0;
