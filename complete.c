@@ -65,6 +65,7 @@ static unsigned char complete_nocmd(struct ghs *, char *, int, EditLine *,
 				   char **, int, int);
 static unsigned char complete_docmd(struct ghs *, char *, int, EditLine *,
 				   char **, int, int);
+static unsigned char complete_doint(char *, int, EditLine *, char **, int, int);
 static unsigned char complete_noint(char *, int, EditLine *, char **, int, int);
 static unsigned char complete_args(struct ghs *, char *, int, EditLine *,
 				   char **, int, int);
@@ -620,8 +621,14 @@ complete(EditLine *el, char **table, size_t stlen)
 	if (c == (struct ghs *)-1 || c == 0 || Ambiguous(c))
 		return (CC_ERROR);
 
-	if (strcmp(c->name, "do") == 0) /* Completing "do " command. */
-		return(complete_docmd(c, word, dolist, el, (char **)cmdtab, stlen, -1));
+	if (strcmp(c->name, "do") == 0) { /* Completing "do " command. */
+		if (table == (char **)whichlist)
+			return (complete_doint(word, dolist, el, table, stlen,
+			    cursor_argc - 1));
+		else
+			return (complete_docmd(c, word, dolist, el,
+			    (char **)cmdtab, stlen, -1));
+	}
 
 	if (strcmp(c->name, "no") == 0) /* Completing "no " command. */
 		return(complete_nocmd(c, word, dolist, el, table, stlen, -1));
@@ -781,6 +788,51 @@ complete_docmd(struct ghs *docmd, char *word, int dolist, EditLine *el,
 		/* Complete "do <partial command name>" */
 		return (complete_command(word, dolist, el, (char **)cmdtab,
 		    sizeof(Command)));
+	}
+
+	return (CC_ERROR); /* invalid command in margv[1] */
+}
+
+/* complete a "do ..." command in interface context */
+unsigned char
+complete_doint(char *word, int dolist, EditLine *el,
+    char **whichlist, int stlen, int level)
+{
+	struct intlist *table = (struct intlist *)whichlist;
+	struct intlist *c, *dc;
+
+	if (margc == 1) {
+		/* Complete "do " using the list of known commands. */
+		return (complete_command(word, dolist, el, (char **)table,
+		    stlen));
+	}
+
+	/* Determine whether the no-command's name has been completed. */
+	dc = NULL;
+	for (c = table; c->name; c++) {
+		if (strcmp(c->name, margv[1]) == 0) {
+			dc = c;
+			break;
+		}
+	}
+	if (dc) {
+		struct ghs *ghs = (struct ghs *)dc;
+
+		level = cursor_argc - 2; /* "do" + command name */
+
+		/* Complete "no <command name> [more arguments]" */
+		return (complete_args(ghs, word, dolist, el,
+		    ghs->table, ghs->stlen, level));
+	}
+
+	/* Check for a partially completed valid command name. */
+	for (c = table; c->name; c++) {
+		if (isprefix(margv[1], c->name) == 0)
+			continue;
+
+		/* Complete "do <partial command name>" */
+		return (complete_command(word, dolist, el,
+		    (char **)table, stlen));
 	}
 
 	return (CC_ERROR); /* invalid command in margv[1] */
