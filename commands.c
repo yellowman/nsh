@@ -2161,8 +2161,6 @@ nocmd(int argc, char **argv)
 static int
 docmd(int argc, char **argv)
 {
-	Command *c;
-
 	if (argc < 2) {
 		printf("%% command name not provided\n");
 		return 0;
@@ -2176,13 +2174,41 @@ docmd(int argc, char **argv)
 		return 0;
 	}
 
-	c = getcmd(argv[0]);
-	if (Ambiguous(c))
-		printf("%% Ambiguous command %s\n", argv[0]);
-	else if (c == NULL)
-		printf("%% Invalid command %s\n", argv[0]);
-	else
-		return (*c->handler)(argc, argv, 0);
+	if (ifname[0] != '\0') { /* Interface or Bridge context */
+		struct intlist *i;
+		int ifs;
+
+		ifs = socket(AF_INET, SOCK_DGRAM, 0);
+		if (ifs < 0) {
+			printf("%% socket failed: %s\n", strerror(errno));
+			return 0;
+		}
+		i = (struct intlist *) genget(argv[0], (char **)whichlist,
+		    sizeof(struct intlist));
+		if (Ambiguous(i)) {
+			printf("%% Ambiguous command\n");
+		} else if (i == 0) {
+			printf("%% Invalid command\n");
+		} else {
+			int save_cli_rtable = cli_rtable;
+			cli_rtable = 0;
+
+			((*i->handler) (ifname, ifs, argc, argv));
+
+			cli_rtable = save_cli_rtable;
+		}
+		close(ifs);
+	} else {
+		Command *c;
+
+		c = getcmd(argv[0]);
+		if (Ambiguous(c))
+			printf("%% Ambiguous command %s\n", argv[0]);
+		else if (c == NULL)
+			printf("%% Invalid command %s\n", argv[0]);
+		else
+			return (*c->handler)(argc, argv, 0);
+	}
 
 	return 0;
 }
