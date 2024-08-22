@@ -1252,7 +1252,7 @@ struct intlist Bridgelist[] = {
 	{ "manual",	manhelp,				CMPL(H) (char **)mantab, sizeof(struct ghs), int_manual, 0 },
 	{ "help",	0,					CMPL0 0, 0, int_help, 0 },
 	{ "exit",	"Leave bridge config mode and return to global config mode ",
-								CMPL0 0, 0, int_exit },
+								CMPL0 0, 0, int_exit, 0 },
 	{ 0, 0, 0, 0, 0, 0 }
 };
 
