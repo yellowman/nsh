@@ -70,8 +70,7 @@
 
 char hname[HSIZE];
 char hbuf[MAXHOSTNAMELEN];	/* host name */
-char ifname[IFNAMSIZ]= "";		/* interface name */
-
+char ifname[IFNAMSIZ];		/* interface name */
 struct intlist *whichlist;
 
 pid_t	child;
@@ -128,7 +127,6 @@ static int	int_manual(char *, int, int, char **);
 static int	int_shell(char *, int, int, char **);
 static int      int_clear(void);
 static int	int_help(void);
-static int 	int_interface(char *, int, int, char **);
 static int	int_exit(void);
 static int	hostname(int, char **);
 static int	manual(int, char**);
@@ -1068,294 +1066,6 @@ flush_help(void)
 	return 0;
 }
 
- 
-static int
-is_bad_input(const char *buf, size_t num)
-{
-        int i;
-
-        if (num >= sizeof(line)) {
-                printf("%% Input exceeds permitted length\n");
-                return 1;
-        }
-
-        for (i = 0; i < num; i++) {
-                if (!isprint((unsigned char)buf[i])) {
-                        printf("%% Input contains bad character\n");
-                        return 1;
-                }
-        }
-                        
-        return 0;
-}
-                        
-/*
- * Try to read a non-empty command into the global line buffer.
- * Return -1 upon error from el_gets().
- * If successful, enter the command into editing history and
- * return the amount of characters read.
- * The Enter key by itself has no effect.
- * Return 0 if EOF or ".." is read.
- * Do not add ".." to editing history. 
- */
-static int
-read_command_line(EditLine *el, History *hist)
-{
-        const char *buf;
-        int num;
-        
-        do {
-                num = 0;
-                if ((buf = el_gets(el, &num)) == NULL) {
-                        if (num == -1)
-                                return -1;
-                        /* EOF, e.g. ^X or ^D via exit_i() in complete.c */
-                        return 0;
-                }
-                while (num > 0 && isspace((unsigned char)buf[num - 1]))
-                        num--;
-                if (is_bad_input(buf, num))                                                                             
-                        continue;
-        } while (num == 0); /* Enter key */
-
-        if (num == 2 && strncmp(buf, "..", num) == 0)
-                return 0;
-
-        memcpy(line, buf, (size_t)num);
-        line[num] = '\0';
-        history(hist, &ev, H_ENTER, buf);
-        return num;
-}
-
-/*
- * command handler for interface and bridge modes
- *
- * acts as a loop for human keyboard user, and as a one time command
- * lookup for rcfile -c or -i usage
- *
- * if a function returns to interface() with a 1, interface() will break
- * the user back to command() mode.
- *
- * While this function is active the global ifname buffer contains the
- * name of the interface being configured.
- * Ensure that the ifname buffer gets cleared on exit. This allows nested
- * commands to tell whether a interface/bridge context is active, and which
- * interface/bridge is being configured.
- */
-static int
-interface(int argc, char **argv, char *modhvar)
-{
-        int ifs, set = 1;
-        char *tmp;
-        char *ifunit = NULL;
-        struct intlist *i;      /* pointer to current command */
-        struct ifreq ifr;
-
-       if (!modhvar) {
-                if (NO_ARG(argv[0])) {
-                        argv++;
-                        argc--;
-                        set = 0;
-                }
-                if (argc == 3) {                                                                                        
-                        /*
-                         * Allow "interface-name interface-number" as some
-                         * network switches do: interface em 0
-                         */
-                        ifunit = argv[2];
-                } else if (argc != 2) {
-                        printf("%% [no] interface <interface name>\n");
-                        return(0);
-                }
-                tmp = argv[1];
-        } else {
-                /* called from cmdrc(), processing config file rules only */
-                if (argc == 2 && strcmp(modhvar, argv[1]) == 0) {
-                         /* do-nothing */
-                        return(0);
-                }
-                tmp = modhvar;
-        }
-
-       if (strlen(tmp) > IFNAMSIZ-1) {
-                printf("%% interface name too long\n");
-                return(0);
-        }
-
-
-        strlcpy(ifname, tmp, IFNAMSIZ);
-        if (ifunit) {
-                const char *errstr;
-                size_t len = strlen(ifname);
-                strtonum(ifunit, 0, INT_MAX, &errstr);
-                if (errstr) {
-                        printf("%% interface unit %s is %s\n", ifunit, errstr);
-                        ifname[0] = '\0';
-                        return(1);
-                }
-                if (len > 0 && isdigit((unsigned char)(ifname[len - 1]))) {
-                        printf("%% interface unit %s is redundant\n", ifunit);
-                        ifname[0] = '\0';
-                        return(1);
-                }
-                strlcat(ifname, ifunit, sizeof(ifname));
-                printf("%% Interface name is %s not \"%s %s\"\n",
-                    ifname, tmp, ifunit);
-        }
-        strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
-
-        ifs = socket(AF_INET, SOCK_DGRAM, 0);
-        if (ifs < 0) {                                                                                                  
-                printf("%% socket failed: %s\n", strerror(errno));
-                ifname[0] = '\0';
-                return(1);
-        }
-
-        if (!is_valid_ifname(ifname)) {
-                if (set == 0) {
-                        printf("%% interface %s not found\n", ifname);
-                        close(ifs);
-                        return(0);
-                }
-                if (ioctl(ifs, SIOCIFCREATE, &ifr) == -1) {
-                        if (errno == EINVAL)
-                                printf("%% interface %s not found\n", ifname);
-                        else
-                                printf("%% unable to create interface %s: %s\n",
-                                    ifname, strerror(errno));
-                        ifname[0] = '\0';
-                        close(ifs);
-                        return(0);
-                }
-        }
-
-        if (set == 0) {
-                if (ioctl(ifs, SIOCIFDESTROY, &ifr) == -1) {
-                        printf("%% unable to remove interface %s: %s\n",
-                            ifname, strerror(errno));
-                } else {
-                        /* remove interface routes? */
-                }
-                ifname[0] = '\0';
-                close(ifs);
-                return(0);
-        }
-
-        if (is_bridge(ifs, ifname)) {
-                /* whichlist also used by help, command completion code */
-                whichlist = Bridgelist;
-                bridge = 1;
-        } else {
-                whichlist = Intlist;
-                bridge = 0;
-        }
-
-        imr_init(ifname);
-
-        if (modhvar) {
-               /* direct rcfile -i or -c initialization */
-                char *argp;                                                                                             
-
-                if (argc - 1 > NARGS)  
-                        argc = NARGS;
-                if (argv[0] == 0) {
-                        ifname[0] = '\0';
-                        return(0);
-                }
-                if (NO_ARG(argv[0]))
-                        argp = argv[1];
-                else
-                        argp = argv[0];
-                i = (struct intlist *) genget(argp, (char **)
-                    whichlist, sizeof(struct intlist));
-                if (Ambiguous(i)) {
-                        printf("%% Ambiguous command\n");
-                } else if (i == 0) {
-                        printf("%% Invalid command\n");
-                } else {
-                        int save_cli_rtable = cli_rtable;
-                        cli_rtable = 0;
-
-                        ((*i->handler) (ifname, ifs, argc, argv));
-                                                                                                                        
-                        cli_rtable = save_cli_rtable;
-                }
-
-                ifname[0] = '\0';
-                return(0);
-        }
-
-        /* human at the keyboard or commands on stdin */
-        for (;;) {
-                char *margp;
-
-                if (!editing) {
-                        /* command line editing disabled */
-                        if (interactive_mode)
-                                printf("%s", iprompt());
-                        if (fgets(line, sizeof(line), stdin) == NULL) {
-                                if (feof(stdin) || ferror(stdin)) {
-                                        if (interactive_mode)
-                                                printf("\n");
-                                        ifname[0] = '\0';
-                                        close(ifs);
-                                        return(0);
-                                }
-                               break;
-                        }   
-                        if (line[0] == '\0')
-                                break;
-                } else {
-                        int num;
-                
-                        cursor_pos = NULL;
-                        num = read_command_line(eli, histi);                                                            
-                        if (num == 0)
-                                break;
-                        if (num == -1) {
-                                printf("%% Input error: %s\n",
-                                    strerror(errno));
-                                ifname[0] = '\0';
-                                close(ifs);
-                                return(1);
-                        }
-                }
-
-                makeargv();
-                if (margv[0] == 0)
-                        break;
-                if (NO_ARG(margv[0]))
-                        margp = margv[1];
-                else
-                        margp = margv[0];
-                i = (struct intlist *) genget(margp, (char **)
-                    whichlist, sizeof(struct intlist));
-                if (Ambiguous(i)) {
-                        printf("%% Ambiguous command\n");
-               } else if (i == 0) {                                                                                    
-                        int val = 1;
-
-                        if (editing)
-                                val = el_burrito(eli, margc, margv);
-                        if (val)
-                                printf("%% Invalid command\n");
-                } else {
-                        int save_cli_rtable = cli_rtable;
-                        cli_rtable = 0;
-
-                        if ((*i->handler) (ifname, ifs, margc, margv)) {
-                                cli_rtable = save_cli_rtable;
-                                break;
-                        }
-                        cli_rtable = save_cli_rtable;
-                }
-        }
-
-        ifname[0] = '\0';
-        close(ifs);
-        return(0);
-}
-
 /*
  * Data structures and routines for the interface configuration mode
  */
@@ -1486,8 +1196,6 @@ struct intlist Intlist[] = {
         { "?",		"Options",				CMPL0 0, 0, int_help, 0 },
 	{ "manual",	manhelp,				CMPL(H) (char **)mantab, sizeof(struct ghs), int_manual, 0 },
         { "help",	0,					CMPL0 0, 0, int_help, 0 },
-	{ "interface",  "jump to config mode of another interface",
-                                                                CMPL(i) 0, 0, int_interface, 0 },
 	{ "exit",	"Leave interface config mode and return to global config mode ",
 								CMPL0 0, 0, int_exit, 0 },
 
@@ -1543,22 +1251,298 @@ struct intlist Bridgelist[] = {
 	{ "?",		"Options",				CMPL0 0, 0, int_help, 0 },
 	{ "manual",	manhelp,				CMPL(H) (char **)mantab, sizeof(struct ghs), int_manual, 0 },
 	{ "help",	0,					CMPL0 0, 0, int_help, 0 },
-	{ "interface",  "jump to config mode of another interface",
-                                                                CMPL(i) 0, 0, int_interface, 0 },
 	{ "exit",	"Leave bridge config mode and return to global config mode ",
-								CMPL0 0, 0, int_exit, 0 },
+								CMPL0 0, 0, int_exit },
 	{ 0, 0, 0, 0, 0, 0 }
 };
+
 size_t Bridgelist_nitems = nitems(Bridgelist);
 
 static int
-int_interface(char *ifname, int ifs, int argc, char **argv)
+is_bad_input(const char *buf, size_t num)
 {
-        int_exit(); 
-        /*interface(*ifname, argc, **argv);*/
-                                            
+	int i;
+
+	if (num >= sizeof(line)) {
+		printf("%% Input exceeds permitted length\n");
+		return 1;
+	}
+
+	for (i = 0; i < num; i++) {
+		if (!isprint((unsigned char)buf[i])) {
+			printf("%% Input contains bad character\n");
+			return 1;
+		}
+	}
+
+	return 0;
 }
 
+/*
+ * Try to read a non-empty command into the global line buffer.
+ * Return -1 upon error from el_gets().
+ * If successful, enter the command into editing history and
+ * return the amount of characters read.
+ * The Enter key by itself has no effect.
+ * Return 0 if EOF or ".." is read.
+ * Do not add ".." to editing history.
+ */
+static int
+read_command_line(EditLine *el, History *hist)
+{
+	const char *buf;
+	int num;
+
+	do {
+		num = 0;
+		if ((buf = el_gets(el, &num)) == NULL) {
+			if (num == -1)
+				return -1;
+			/* EOF, e.g. ^X or ^D via exit_i() in complete.c */
+			return 0;
+		}
+		while (num > 0 && isspace((unsigned char)buf[num - 1]))
+			num--;
+		if (is_bad_input(buf, num))
+			continue;
+	} while (num == 0); /* Enter key */
+
+	if (num == 2 && strncmp(buf, "..", num) == 0)
+		return 0;
+
+	memcpy(line, buf, (size_t)num);
+	line[num] = '\0';
+	history(hist, &ev, H_ENTER, buf);
+	return num;
+}
+
+/*
+ * command handler for interface and bridge modes
+ *
+ * acts as a loop for human keyboard user, and as a one time command
+ * lookup for rcfile -c or -i usage
+ *
+ * if a function returns to interface() with a 1, interface() will break
+ * the user back to command() mode.
+ *
+ * While this function is active the global ifname buffer contains the
+ * name of the interface being configured.
+ * Ensure that the ifname buffer gets cleared on exit. This allows nested
+ * commands to tell whether a interface/bridge context is active, and which
+ * interface/bridge is being configured.
+ */
+static int
+interface(int argc, char **argv, char *modhvar)
+{
+	int ifs, set = 1;
+	char *tmp;
+	char *ifunit = NULL;
+	struct intlist *i;	/* pointer to current command */
+	struct ifreq ifr;
+
+	if (!modhvar) {
+		if (NO_ARG(argv[0])) {
+			argv++;
+			argc--;
+			set = 0;
+		}
+		if (argc == 3) {
+			/*
+			 * Allow "interface-name interface-number" as some
+			 * network switches do: interface em 0
+			 */
+			ifunit = argv[2];
+		} else if (argc != 2) {
+			printf("%% [no] interface <interface name>\n");
+			return(0);
+		}
+		tmp = argv[1];
+	} else {
+		/* called from cmdrc(), processing config file rules only */
+		if (argc == 2 && strcmp(modhvar, argv[1]) == 0) {
+			 /* do-nothing */
+			return(0);
+		}
+		tmp = modhvar;
+	}
+
+	if (strlen(tmp) > IFNAMSIZ-1) {
+		printf("%% interface name too long\n");
+		return(0);
+	}
+
+	strlcpy(ifname, tmp, IFNAMSIZ);
+	if (ifunit) {
+		const char *errstr;
+		size_t len = strlen(ifname);
+		strtonum(ifunit, 0, INT_MAX, &errstr);
+		if (errstr) {
+			printf("%% interface unit %s is %s\n", ifunit, errstr);
+			ifname[0] = '\0';
+			return(1);
+		}
+		if (len > 0 && isdigit((unsigned char)(ifname[len - 1]))) {
+			printf("%% interface unit %s is redundant\n", ifunit);
+			ifname[0] = '\0';
+			return(1);
+		}
+		strlcat(ifname, ifunit, sizeof(ifname));
+		printf("%% Interface name is %s not \"%s %s\"\n",
+		    ifname, tmp, ifunit);
+	}
+	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
+
+	ifs = socket(AF_INET, SOCK_DGRAM, 0);
+	if (ifs < 0) {
+		printf("%% socket failed: %s\n", strerror(errno));
+		ifname[0] = '\0';
+		return(1);
+	}
+
+	if (!is_valid_ifname(ifname)) {
+		if (set == 0) {
+			printf("%% interface %s not found\n", ifname);
+			close(ifs);
+			return(0);
+		}
+		if (ioctl(ifs, SIOCIFCREATE, &ifr) == -1) {
+			if (errno == EINVAL)
+				printf("%% interface %s not found\n", ifname);
+			else
+				printf("%% unable to create interface %s: %s\n",
+				    ifname, strerror(errno));
+			ifname[0] = '\0';
+			close(ifs);
+			return(0);
+		}
+	}
+
+	if (set == 0) {
+		if (ioctl(ifs, SIOCIFDESTROY, &ifr) == -1) {
+			printf("%% unable to remove interface %s: %s\n",
+			    ifname, strerror(errno));
+		} else {
+			/* remove interface routes? */
+		}
+		ifname[0] = '\0';
+		close(ifs);
+		return(0);
+	}
+
+	if (is_bridge(ifs, ifname)) {
+		/* whichlist also used by help, command completion code */
+		whichlist = Bridgelist;
+		bridge = 1;
+	} else {
+		whichlist = Intlist;
+		bridge = 0;
+	}
+
+	imr_init(ifname);
+
+	if (modhvar) {
+		/* direct rcfile -i or -c initialization */
+		char *argp;
+
+		if (argc - 1 > NARGS)
+			argc = NARGS;
+		if (argv[0] == 0) {
+			ifname[0] = '\0';
+			return(0);
+		}
+		if (NO_ARG(argv[0]))
+			argp = argv[1];
+		else
+			argp = argv[0];
+		i = (struct intlist *) genget(argp, (char **)
+		    whichlist, sizeof(struct intlist));
+		if (Ambiguous(i)) {
+			printf("%% Ambiguous command\n");
+		} else if (i == 0) {
+			printf("%% Invalid command\n");
+		} else {
+			int save_cli_rtable = cli_rtable;
+			cli_rtable = 0;
+
+			((*i->handler) (ifname, ifs, argc, argv));
+
+			cli_rtable = save_cli_rtable;
+		}
+
+		ifname[0] = '\0';
+		return(0);
+	}
+
+	/* human at the keyboard or commands on stdin */
+	for (;;) {
+		char *margp;
+
+		if (!editing) {
+			/* command line editing disabled */
+			if (interactive_mode)
+				printf("%s", iprompt());
+			if (fgets(line, sizeof(line), stdin) == NULL) {
+				if (feof(stdin) || ferror(stdin)) {
+					if (interactive_mode)
+						printf("\n");
+					ifname[0] = '\0';
+					close(ifs);
+					return(0);
+				}
+				break;
+			}
+			if (line[0] == '\0')
+				break;
+		} else {
+			int num;
+
+			cursor_pos = NULL;
+			num = read_command_line(eli, histi);
+			if (num == 0)
+				break;
+			if (num == -1) {
+				printf("%% Input error: %s\n",
+				    strerror(errno));
+				ifname[0] = '\0';
+				close(ifs);
+				return(1);
+			}
+		}
+
+		makeargv();
+		if (margv[0] == 0)
+			break;
+		if (NO_ARG(margv[0]))
+			margp = margv[1];
+		else
+			margp = margv[0];
+		i = (struct intlist *) genget(margp, (char **)
+		    whichlist, sizeof(struct intlist));
+		if (Ambiguous(i)) {
+			printf("%% Ambiguous command\n");
+		} else if (i == 0) {
+			int val = 1;
+
+			if (editing)
+				val = el_burrito(eli, margc, margv);
+			if (val)
+				printf("%% Invalid command\n");
+		} else {
+			int save_cli_rtable = cli_rtable;
+			cli_rtable = 0;
+
+			if ((*i->handler) (ifname, ifs, margc, margv)) {
+				cli_rtable = save_cli_rtable;
+				break;
+			}
+			cli_rtable = save_cli_rtable;
+		}
+	}
+
+	ifname[0] = '\0';
+	close(ifs);
+	return(0);
+}
 
 static int
 int_ping(char *ifname, int ifs, int argc, char **argv)
