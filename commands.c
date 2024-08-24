@@ -1387,7 +1387,7 @@ interface(int argc, char **argv, char *modhvar)
 			return(1);
 		}
 		strlcat(ifname, ifunit, sizeof(ifname));
-		printf("%% Interface name is %s not \"%s %s\"\n",
+		printf("%% Using interface \"%s\", not \"%s %s\"\n",
 		    ifname, tmp, ifunit);
 	}
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
