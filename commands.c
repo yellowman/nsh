@@ -71,6 +71,7 @@
 char hname[HSIZE];
 char hbuf[MAXHOSTNAMELEN];	/* host name */
 char ifname[IFNAMSIZ];		/* interface name */
+char next_ifname[IFNAMSIZ];	/* switch interfaces in interface context */
 struct intlist *whichlist;
 
 pid_t	child;
@@ -147,6 +148,7 @@ static int 	nreboot(void);
 static int 	halt(void);
 static int 	powerdown(void);
 static void	pf_stats(void);
+static int	int_interface(char *, int, int, char **);
 
 #include "commands.h"
 
@@ -1087,6 +1089,7 @@ static char verbosehelp[];
 static char editinghelp[];
 static char shellhelp[];
 static char manhelp[];
+static char interfacehelp[];
 extern struct ghs mantab[];
 
 struct intlist Intlist[] = {
@@ -1187,6 +1190,7 @@ struct intlist Intlist[] = {
 	{ "chgpin",	"Permanently change SIM PIN",		CMPL0 0, 0, intumb, 0 },
 	{ "class",	"Preferred cell classes",		CMPL0 0, 0, intumb, 1 },
 	{ "roaming",	"Enable data roaming",			CMPL0 0, 0, intumb, 1 },
+  	{ "interface",  interfacehelp,				CMPL(i) 0, 0, int_interface, 1 },
 	{ "shutdown",   "Shutdown interface",			CMPL0 0, 0, intflags, 1 },
 	{ "show",	showhelp,				CMPL(ta) (char **)showlist, sizeof(Menu), int_show, 0 },
 	{ "who",	whohelp,				CMPL0 0, 0, int_who, 0 },
@@ -1240,6 +1244,7 @@ struct intlist Bridgelist[] = {
 	{ "parent",	"Parent interface",			CMPL(i) 0, 0, intparent, 1 },
 	{ "tunneldomain", "Tunnel parameters",			CMPL0 0, 0, intmpls, 1 },
 	{ "protect",	"Configure protected bridge domains",	CMPL0 0, 0, brprotect, 1 },
+  	{ "interface",  interfacehelp,				CMPL(i) 0, 0, int_interface, 1 },
 	{ "shutdown",	"Shutdown bridge",			CMPL0 0, 0, intflags, 1 },
 	{ "show",	showhelp,				CMPL(ta) (char **)showlist, sizeof(Menu), int_show, 0 },
 	{ "who",	whohelp,				CMPL0 0, 0, int_who, 0 },
@@ -1537,11 +1542,80 @@ interface(int argc, char **argv, char *modhvar)
 			}
 			cli_rtable = save_cli_rtable;
 		}
+
+		if (i && i->handler == int_interface && next_ifname[0] != '\0' &&
+		    strcmp(next_ifname, ifname) != 0) {
+			strlcpy(ifname, next_ifname, sizeof(ifname));
+			memset(next_ifname, 0, sizeof(next_ifname));
+			strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
+			imr_init(ifname);
+			if (is_bridge(ifs, ifname)) {
+				whichlist = Bridgelist;
+				bridge = 1;
+			} else {
+				whichlist = Intlist;
+				bridge = 0;
+			}
+		}
 	}
 
 	ifname[0] = '\0';
 	close(ifs);
 	return(0);
+}
+
+static int
+int_interface(char *old_ifname, int ifs, int argc, char **argv)
+{
+	struct ifreq ifr;
+	char *new_ifname;
+	int set = 1;
+	
+	if (NO_ARG(argv[0])) {
+		argv++;
+		argc--;
+		set = 0;
+	}
+
+	if (argc != 2) {
+		printf("%% usage: [no] interface <ifname>\n");
+		return 0;
+	}
+
+	new_ifname = argv[1];
+	if (!is_valid_ifname(new_ifname)) {
+		if (set == 0) {
+			printf("%% interface %s not found\n", new_ifname);
+			return 0; /* do not leave interface context */
+		}
+		strlcpy(ifr.ifr_name, new_ifname, sizeof(ifr.ifr_name));
+		if (ioctl(ifs, SIOCIFCREATE, &ifr) == -1) {
+			if (errno == EINVAL)
+				printf("%% interface %s not found\n", new_ifname);
+			else
+				printf("%% unable to create interface %s: %s\n",
+				    new_ifname, strerror(errno));
+			return 0; /* do not leave interface context */
+		}
+		strlcpy(next_ifname, new_ifname, sizeof(next_ifname));
+		return 0; /* do not leave interface context */
+	}
+
+	if (set == 0) {
+		strlcpy(ifr.ifr_name, new_ifname, sizeof(ifr.ifr_name));
+		if (ioctl(ifs, SIOCIFDESTROY, &ifr) == -1) {
+			printf("%% unable to remove interface %s: %s\n",
+			    new_ifname, strerror(errno));
+		} else {
+			/* remove interface routes? */
+		}
+		if (strcmp(old_ifname, new_ifname) == 0)
+			return 1; /* leave interface context */
+		return 0; /* do not leave interface context */
+	}
+
+	strlcpy(next_ifname, new_ifname, sizeof(next_ifname));
+	return 0; /* do not leave interface context */
 }
 
 static int
