@@ -40,8 +40,10 @@ See http://github.com/yellowman/nsh/ for current source code repository.
 See http://www.nmedia.net/nsh/ for example configurations and mailing
 list.
 
+See https://www.youtube.com/watch?v=9T9-v5NLjXk for a BSDCAN 2024 
+Presentation on Supporting Business IT and network needs with OpenBSD and NSH By: Tom Smyth
 See https://www.youtube.com/watch?v=WMKxIHaWaG0 for an EurobsdCon 2022 
-Presentation on NSH for network administrators. 
+Presentation on NSH for network administrators By: Tom Smyth 
 
 ---
 
