@@ -30,7 +30,7 @@ you have a fully functioning network appliance type of system.
 
 ## NSH Manual
 
-See https://github.com/yellowman/nsh/wiki/NSH-Manual-page or 
+See [https://github.com/yellowman/nsh/wiki/NSH-Manual-page](https://github.com/yellowman/nsh/wiki/NSH-1.2.x-Manual-Page) or 
 nsh.8 manual for detailed installation instructions and command set.
 
 See the to-do list on https://github.com/users/yellowman/projects/1 for 
