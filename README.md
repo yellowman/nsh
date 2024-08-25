@@ -30,9 +30,18 @@ you have a fully functioning network appliance type of system.
 
 ## NSH Manual
 
-See [https://github.com/yellowman/nsh/wiki/NSH-Manual-page](https://github.com/yellowman/nsh/wiki/NSH-1.2.x-Manual-Page) or 
-nsh.8 manual for detailed installation instructions and command set.
+See [https://github.com/yellowman/nsh/wiki/NSH-Manual-page](https://github.com/yellowman/nsh/wiki/NSH-1.2.x-Manual-Page) 
+or nsh.8 manual for detailed installation instructions and command set.
 
+nsh manual is available on your system by simply typing the command:
+
+```shell
+man nsh
+```
+
+---
+
+## Other Relevant NSH Documentation
 See the to-do list on https://github.com/users/yellowman/projects/1 for 
 details on implementation status and future ideas.
 
@@ -42,6 +51,7 @@ list.
 
 See https://www.youtube.com/watch?v=9T9-v5NLjXk for a BSDCAN 2024 
 Presentation on Supporting Business IT and network needs with OpenBSD and NSH By: Tom Smyth
+
 See https://www.youtube.com/watch?v=WMKxIHaWaG0 for an EurobsdCon 2022 
 Presentation on NSH for network administrators By: Tom Smyth 
 
