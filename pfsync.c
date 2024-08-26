@@ -77,10 +77,17 @@ intsyncdev(char *ifname, int ifs, int argc, char **argv)
 		}
 
 	if (set) {
-		strlcpy(preq.pfsyncr_syncdev, argv[0],
-			sizeof(preq.pfsyncr_syncdev));
-		set_ifflag(ifs, ifname, IFF_UP);
-	} else
+		if (argv[0] != NULL) { 		
+			strlcpy(preq.pfsyncr_syncdev, argv[0],
+				sizeof(preq.pfsyncr_syncdev));
+			set_ifflag(ifs, ifname, IFF_UP);
+		}
+		else {
+			printf("%% Invalid synchronization interface: %s\n",
+				strerror(errno));	
+		}
+	} 
+	else
 		bzero((char *) &preq.pfsyncr_syncdev,
 		      sizeof(preq.pfsyncr_syncdev));
 
