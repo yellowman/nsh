@@ -522,7 +522,10 @@ ndpdump(struct sockaddr_in6 *addr, int cflag)
 
 			isrouter = nbi->isrouter;
 			prbs = nbi->asked;
-		} else {
+		} 
+		else {
+			printf("\n%% %s: failed to get neighbor information\n",
+                    routename6(sin));
 			printf("  ");
 		}
 
@@ -536,10 +539,6 @@ ndpdump(struct sockaddr_in6 *addr, int cflag)
 
 		printf("\n");
 	}
-
-	if (!nbi)
-		printf("\n%% %s: failed to get neighbor information\n",
-		    routename6(sin));
 
 	free(buf);
 }
