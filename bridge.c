@@ -1178,14 +1178,8 @@ bridge_addaddr(int s, char *brdg, char *ifname, char *addr)
 	struct ether_addr *ea;
 
 	strlcpy(ifba.ifba_name, brdg, sizeof(ifba.ifba_name));
-	if(ifname == NULL) {
-		printf("%% Invalid ifname : %s\n", addr);
-		 strerror(errno);
-                return (EX_IOERR);
-	}
-	else {
-		strlcpy(ifba.ifba_ifsname, ifname, sizeof(ifba.ifba_ifsname));
-	}
+	strlcpy(ifba.ifba_ifsname, ifname, sizeof(ifba.ifba_ifsname));
+
 	ea = ether_aton(addr);
 	if (ea == NULL) {
 		printf("%% Invalid address: %s\n", addr);
