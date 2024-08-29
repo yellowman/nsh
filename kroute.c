@@ -100,6 +100,7 @@ struct rtdump *getrtdump(int af, int flags, int tableid)
 	rtdump->buf = NULL;
 
 	while (1) {
+		char *p;
 		if (sysctl(mib, 7, NULL, &needed, NULL, 0) < 0) {
 			if (errno != ENOENT)
 				printf("%% getrtdump: unable to get estimate: %s\n",
@@ -108,11 +109,12 @@ struct rtdump *getrtdump(int af, int flags, int tableid)
 		}
 		if (needed == 0)
 			break;
-		if ((rtdump->buf = realloc(rtdump->buf, needed)) == NULL) {
+		if ((p = realloc(rtdump->buf, needed)) == NULL) {
 			printf("%% getrtdump: realloc: %s\n", strerror(errno));
-			free(rtdump);
+			freertdump(rtdump);
 			return(NULL);
 		}
+		rtdump->buf = p;
 		if (sysctl(mib, 7, rtdump->buf, &needed, NULL, 0) < 0) {
 			if (errno == ENOMEM)
 				continue;
