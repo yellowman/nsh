@@ -669,6 +669,8 @@ complete_nocmd(struct ghs *nocmd, char *word, int dolist, EditLine *el,
 			if (c->nocmd || c->name == NULL /* sentinel */)
 				nocmdtab_nitems++;
 		}
+		if (nocmdtab_nitems == 0)
+			return (CC_ERROR);
 		nocmdtab = calloc(nocmdtab_nitems, sizeof(*nocmdtab));
 		if (nocmdtab == NULL)
 			return (CC_ERROR);
