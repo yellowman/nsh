@@ -379,6 +379,7 @@ ndpdump(struct sockaddr_in6 *addr, int cflag)
 	mib[5] = RTF_LLINFO;
 	mib[6] = cli_rtable;
 	while (1) {
+		char *p;
 		if (sysctl(mib, 7, NULL, &needed, NULL, 0) == -1) {
 			printf("%% sysctl(PF_ROUTE estimate): %s\n",
 			    strerror(errno));
@@ -386,15 +387,18 @@ ndpdump(struct sockaddr_in6 *addr, int cflag)
 		}
 		if (needed == 0)
 			break;
-		if ((buf = realloc(buf, needed)) == NULL) {
+		if ((p = realloc(buf, needed)) == NULL) {
 			printf("%% realloc: %s\n", strerror(errno));
+			free(buf);
 			return;
 		}
+		buf = p;
 		if (sysctl(mib, 7, buf, &needed, NULL, 0) == -1) {
 			if (errno == ENOMEM)
 				continue;
 			printf("%% sysctl(PF_ROUTE, NET_RT_FLAGS): %s\n",
 			    strerror(errno));
+			free(buf);
 			return;
 		}
 		lim = buf + needed;
