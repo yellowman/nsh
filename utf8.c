@@ -43,8 +43,10 @@ mbs2ws(wchar_t **ws, size_t *wlen, const char *s)
 		if (err)
 			return err;
 		*wlen = mbstowcs(NULL, vis, 0);
-		if (*wlen == (size_t)-1)
+		if (*wlen == (size_t)-1) {
+			free(vis);
 			return -1; /* give up */
+		}
 	}
 
 	*ws = calloc(*wlen + 1, sizeof(**ws));
