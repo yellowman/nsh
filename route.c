@@ -206,7 +206,7 @@ route(int argc, char **argv)
 	switch (dest.family) {
 	case AF_INET:
 		net = in4_netaddr(dest.addr.in.s_addr,
-		    (u_int32_t)htonl(0xffffffff << (32 - dest.bitlen)));
+		    (u_int32_t)htonl(0xffffffffULL << (32 - dest.bitlen)));
 		if (ntohl(dest.addr.in.s_addr) != net) {
 			tmp.s_addr = htonl(net);
 			printf("%% Inconsistent address and mask (%s/%i?)\n",

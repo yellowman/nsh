@@ -1535,7 +1535,7 @@ pack_ifaliasreq(struct ifaliasreq *ip4req, ip_t *ip,
 	sin = (struct sockaddr_in *)&ip4req->ifra_mask;
 	sin->sin_family = AF_INET;
 	sin->sin_len = sizeof(struct sockaddr_in);
-	mask = htonl(0xffffffff << (32 - ip->bitlen));
+	mask = htonl(0xffffffffULL << (32 - ip->bitlen));
 	memcpy(&sin->sin_addr.s_addr, &mask, sizeof(in_addr_t));
 	/* set destination/broadcast address */
 	if (in4dest->s_addr != 0) {
