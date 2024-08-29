@@ -357,7 +357,7 @@ ndpdump(struct sockaddr_in6 *addr, int cflag)
 	struct rt_msghdr *rtm;
 	struct sockaddr_in6 *sin;
 	struct sockaddr_dl *sdl;
-	struct in6_nbrinfo *nbi;
+	struct in6_nbrinfo *nbi = NULL;
 	struct timeval now;
 	int addrwidth;
 	int llwidth;
