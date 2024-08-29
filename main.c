@@ -56,6 +56,14 @@ struct hashtable *nsh_env;	/* per-user session environment variables */
 
 void intr(void);
 
+volatile sig_atomic_t caught_sigwinch;
+
+void
+catchsigwinch(int signo)
+{
+	caught_sigwinch = signo;
+}
+
 static void
 load_userenv(void)
 {
@@ -313,7 +321,7 @@ main(int argc, char *argv[])
 
 	top = setjmp(toplevel) == 0;
 	if (top) {
-		(void)signal(SIGWINCH, setwinsize);
+		(void)signal(SIGWINCH, catchsigwinch);
 		(void)signal(SIGINT, (sig_t)intr);
 		(void)setwinsize(0);
 	} else

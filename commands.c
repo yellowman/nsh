@@ -76,6 +76,8 @@ struct intlist *whichlist;
 
 pid_t	child;
 
+extern volatile sig_atomic_t caught_sigwinch;
+
 static int	disable(void);
 static int      clear(void);
 static int	doverbose(int, char**);
@@ -1990,6 +1992,10 @@ command()
 	}
 
 	for (;;) {
+		if (caught_sigwinch) {
+			(void)setwinsize(caught_sigwinch);
+			caught_sigwinch = 0;
+		}
 		if (!editing) {
 			if (interactive_mode)
 				printf("%s", cprompt());
