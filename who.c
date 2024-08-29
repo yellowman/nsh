@@ -75,6 +75,7 @@ who(int argc, char **argv)
 	}
 	(void) printf ("%% users=%d\n", count);
 
+	fclose(utmp);
 	return(0);
 }
 
