@@ -87,6 +87,7 @@ int
 growwgdata(size_t by)
 {
 	ptrdiff_t peer_offset, aip_offset;
+	struct wg_interface_io	*p;
 
 	if (wg_interface == NULL)
 		wgdata.wgd_size = sizeof(*wg_interface);
@@ -95,11 +96,12 @@ growwgdata(size_t by)
 	aip_offset = (void *)wg_aip - (void *)wg_interface;
 
 	wgdata.wgd_size += by;
-	wgdata.wgd_interface = realloc(wg_interface, wgdata.wgd_size);
-	if (wgdata.wgd_interface == NULL) {
+	p = realloc(wg_interface, wgdata.wgd_size);
+	if (p == NULL) {
 		printf("%% growwgdata: realloc: %s\n", strerror(errno));
 		return(-1);
 	}
+	wgdata.wgd_interface = p;
 	if (wg_interface == NULL)
 		bzero(wgdata.wgd_interface, sizeof(*wg_interface));
 	wg_interface = wgdata.wgd_interface;
