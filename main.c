@@ -339,7 +339,8 @@ main(int argc, char *argv[])
 void
 usage(void)
 {
-	fprintf(stderr, "usage: %s [-v] [-i rcfile | -c rcfile]\n", __progname);
+	fprintf(stderr, "usage: %s [-v] [-i rcfile | -c rcfile]\n",
+	    getprogname());
 	fprintf(stderr, "           -v indicates verbose operation\n");
 	fprintf(stderr, "           -i rcfile loads initial system" \
 		    " configuration from rcfile\n");

@@ -1065,7 +1065,7 @@ initedit()
 	editing = 1;
 
 	if (!elc) {
-		elc = el_init(__progname, stdin, stdout, stderr);
+		elc = el_init(getprogname(), stdin, stdout, stderr);
 		if (histc)
 			el_set(elc, EL_HIST, history, histc); /* use history */
 		el_set(elc, EL_EDITOR, "emacs"); /* default type */
@@ -1078,7 +1078,7 @@ initedit()
 		el_set(elc, EL_SIGNAL, 1);
 	}
 	if (!eli) {
-		eli = el_init(__progname, stdin, stdout, stderr);
+		eli = el_init(getprogname(), stdin, stdout, stderr);
 		if (histi)
 			el_set(eli, EL_HIST, history, histi);
 		el_set(eli, EL_EDITOR, "emacs");
@@ -1093,7 +1093,7 @@ initedit()
 		el_set(eli, EL_SIGNAL, 1);
 	}
 	if (!elp) {
-		elp = el_init(__progname, stdin, stdout, stderr);
+		elp = el_init(getprogname(), stdin, stdout, stderr);
 		el_set(elp, EL_EDITOR, "emacs"); /* default type */
 		el_set(elp, EL_PROMPT, pprompt); /* set the prompt
 						  * function */

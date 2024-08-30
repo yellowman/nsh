@@ -32,7 +32,6 @@ struct rtdump {
 	char *lim;	/* end of routing table */
 };
 
-extern char *__progname;	/* duh */
 extern char *vers;		/* the version of nsh */
 extern char saveline[1024];	/* command line */
 #define NARGS  (sizeof(line)/2)	/* max arguments in char line[] */
