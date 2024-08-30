@@ -355,7 +355,7 @@ ndpdump(struct sockaddr_in6 *addr, int cflag)
 	size_t needed;
 	char *lim, *buf = NULL, *next;
 	struct rt_msghdr *rtm;
-	struct sockaddr_in6 *sin;
+	struct sockaddr_in6 *sin = NULL;
 	struct sockaddr_dl *sdl;
 	struct in6_nbrinfo *nbi = NULL;
 	struct timeval now;
@@ -541,7 +541,7 @@ ndpdump(struct sockaddr_in6 *addr, int cflag)
 		printf("\n");
 	}
 
-	if (!nbi)
+	if (!nbi && sin)
 		printf("\n%% %s: failed to get neighbor information\n",
 		    routename6(sin));
 
