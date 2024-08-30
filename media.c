@@ -57,7 +57,7 @@ uint64_t lookup_media_word(const struct ifmedia_description *, uint64_t, const c
 void print_media_word(uint64_t, int, int, FILE *);
 void conf_print_media_word(FILE *, int);
 
-const int ifm_status_valid_list[] =
+const uint64_t ifm_status_valid_list[] =
     IFM_STATUS_VALID_LIST;
 
 const struct ifmedia_status_description ifm_status_descriptions[] =
