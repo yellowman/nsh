@@ -469,7 +469,13 @@ intcdev(char *ifname, int ifs, int argc, char **argv)
 	return (0);
 }
 
-void
+/* 
+ * Change the carp demotion counter.
+ * Return 1 if the counter was changed.
+ * Return 0 if the counter was already at or beyond the desired "lock" value.
+ * Return -1 on error.
+ */
+int
 carplock(int lock)
 {
 	int ifs;
@@ -481,7 +487,20 @@ carplock(int lock)
 	ifs = socket(AF_INET, SOCK_DGRAM, 0);
 	if (ifs == -1) {
 		printf("%% carplock: socket: %s\n", strerror(errno));
-		return;
+		return -1;
+	}
+
+	if (ioctl(ifs, SIOCGIFGATTR, (caddr_t)&ifgr) == -1) {
+		printf("%% carplock: SIOCGIFGATTR %s: %s\n",
+		    ifgr.ifgr_name, strerror(errno));
+		close(ifs);
+		return -1;
+	}
+
+	if ((lock >= 0 && ifgr.ifgr_attrib.ifg_carp_demoted >= lock) ||
+	    (lock < 0 && ifgr.ifgr_attrib.ifg_carp_demoted <= lock)) {
+		close(ifs);
+		return 0; /* already "locked" */
 	}
 
 	ifgr.ifgr_attrib.ifg_carp_demoted = lock;
@@ -489,4 +508,6 @@ carplock(int lock)
 	if (ioctl(ifs, SIOCSIFGATTR, (caddr_t)&ifgr) == -1)
 		printf("%% carplock: SIOCSIFGATTR: %s\n", strerror(errno));
 	close(ifs);
+
+	return 1;
 }

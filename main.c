@@ -258,6 +258,8 @@ main(int argc, char *argv[])
 	}
 
 	if (iflag) {
+		int carp_locked;
+
 		/*
 		 * Interpret config file and exit
 		 */
@@ -270,14 +272,15 @@ main(int argc, char *argv[])
 		/*
 		 * Set carp group carpdemote to 128 during initialization
 		 */
-		carplock(128);
+		carp_locked = carplock(128);
 
 		cmdrc(rc);
 
 		/*
-		 * Initialization over
+		 * Initialization over; reset carpdemote if it was raised by us.
 		 */
-		carplock(-128);
+		if (carp_locked == 1)
+			carplock(-128);
 
 		exit(0);
 	}
