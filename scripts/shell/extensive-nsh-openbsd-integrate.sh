@@ -20,8 +20,8 @@ else
 	#default is No
  	echo "This script takes a more invasive approach and is intended for" 
   	echo "administrators who intend to permanently move to nsh to manage the"
-   	echo "configuration on the system"
-        echo "If you have an unusual config, e.g. multiple routing domains, it "
+	echo "configuration on the system"
+	echo "If you have an unusual config, e.g. multiple routing domains, it "
 	echo "is not recommended to continue without carefully reviewing the script"
 	read input?"Do you want to continue? (Yes/No) [${dflt}] "
 
