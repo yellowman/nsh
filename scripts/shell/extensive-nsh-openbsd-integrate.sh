@@ -272,9 +272,12 @@ else
 		/usr/local/bin/nsh -c ../nshrc/write-config.nshrc
 		#secure nshrc config file 
 		chmod 660 /etc/nshrc
-		#Remove any networking config from /etc/ that conflicts with nsh
-		cp /etc/hostname.* /var/nsh/backup/pre-nsh-config/
-		cp /etc/mygate /var/nsh/backup/pre-nsh-config/
+		#backup name config of the box 
+  		cp /etc/hosts /var/nsh/backup/pre-nsh-config/
+    		cp /etc/myname /var/nsh/backup/pre-nsh-config/
+  		#Remove any networking config from /etc/ that conflicts with nsh
+		mv /etc/hostname.* /var/nsh/backup/pre-nsh-config/
+		mv /etc/mygate /var/nsh/backup/pre-nsh-config/
 		#can we import rc.conf.local to nsh config
 		cp /etc/rc.conf.local /var/nsh/backup/pre-nsh-config/
 		cp nsh.rc /etc/rc.d/nsh
