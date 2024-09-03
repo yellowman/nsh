@@ -221,6 +221,14 @@ route(int argc, char **argv)
 		return(1);
 	}
 
+	/*
+	 * Adding blackhole or reject routes requires a gateway even if the
+	 * "iface" parameter was specified. A gateway argument is required when
+	 * adding routes so simply setting the GATEWAY flag here is sufficient.
+	 */
+	if (cmd == RTM_ADD && (flags & (RTF_BLACKHOLE|RTF_REJECT)))
+		flags |= RTF_GATEWAY;
+
 	flags |= RTF_UP;
 
 	/*
