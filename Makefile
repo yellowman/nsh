@@ -41,6 +41,10 @@ compile.c: compile.sh *.c *.h
 mantab.c: mantab.sh nsh.8
 	sh ${.CURDIR}/mantab.sh ${.CURDIR}/nsh.8 > mantab.c
 
+afterinstall:
+	test -e ${PREFIX}/bin/save.sh || install -m 755 -o root -g bin \
+		${.CURDIR}/save-rw.sh ${PREFIX}/bin/save.sh
+
 release: clean
 	sed -i -e "s/_RELEASE=No/_RELEASE=Yes/" ${.CURDIR}/nsh-version.mk
 	${MAKE} -C ${.CURDIR} dist
