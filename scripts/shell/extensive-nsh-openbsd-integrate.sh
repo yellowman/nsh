@@ -18,12 +18,12 @@ then
 else
 	#ask user do they want to continue
 	#default is No
- 	echo "This script takes a more invasive approach and is intended for 
-  	echo "Administrators who inend to permanently move to nsh to manage the 
+ 	echo "This script takes a more invasive approach and is intended for" 
+  	echo "administrators who intend to permanently move to nsh to manage the"
    	echo "configuration on the system"
         echo "If you have an unusual config, e.g. multiple routing domains"
 	echo "If you have an unusual config, it is not recommended to run" 
- 	echo "Without carefully reviewing the the script and"
+ 	echo "Without carefully reviewing the script and"
 	read input?"Do you want to continue? (Yes/No) [${dflt}] "
 
 	if [ -z "${input}" ]; then input="${dflt}"; fi
