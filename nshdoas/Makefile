@@ -22,11 +22,17 @@ CPPFLAGS+=-I${.CURDIR}/.. -I ${.CURDIR}
 SRCS=parse.y nshdoas.c env.c
 LDADD=-lutil
 
+.if make(static)
+LDADD+=-static
+.endif
+
 BINOWN= root
 BINMODE=4555
 
 YFLAGS=
 
 NOMAN=yes
+
+static: all
 
 .include <bsd.prog.mk>

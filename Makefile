@@ -31,9 +31,26 @@ SRCS+=trunk.c who.c more.c stringlist.c utils.c sqlite3.c ppp.c prompt.c
 SRCS+=nopt.c pflow.c wg.c nameserver.c ndp.c umb.c utf8.c cmdargs.c ctlargs.c
 SRCS+=helpcommands.c makeargv.c hashtable.c mantab.c
 CLEANFILES+=compile.c mantab.c
-LDADD=-lutil -ledit -ltermcap -lsqlite3 -L/usr/local/lib #-static
+
+LDADD=-lutil -ledit -ltermcap
+
+.if make(static)
+NSH_SQLITE_LIBS!=/usr/bin/pkg-config --libs --static sqlite3
+.else
+NSH_SQLITE_LIBS!=/usr/bin/pkg-config --libs sqlite3
+.endif
+LDADD+=${NSH_SQLITE_LIBS}
+
+.if make(static)
+LDADD+=-static
+.endif
 
 MAN=nsh.8
+
+# convenience target for producing statically linked binaries
+static: $(PROG)
+	${MAKE} -C ${.CURDIR}/bgpnsh static
+	${MAKE} -C ${.CURDIR}/nshdoas static
 
 compile.c: compile.sh *.c *.h
 	sh ${.CURDIR}/compile.sh
