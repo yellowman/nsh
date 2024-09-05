@@ -643,16 +643,13 @@ show_autoconf(int argc, char **argv)
 	for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++) {
 		if (ifname && strcmp(ifname, ifnp->if_name) != 0)
 			continue;
-
 		ifxflags = get_ifxflags(ifnp->if_name, ifs);
-#ifdef IFXF_AUTOCONF4		/* 6.6+ */
 		if ((ifxflags & IFXF_AUTOCONF4) && dhcpleased_is_running()) {
 			char *args[] = { DHCPLEASECTL, "-l",
 			    ifnp->if_name, NULL };
 			cmdargs_output(DHCPLEASECTL, args, fd, nullfd);
 			have_output = 1;
 		}
-#endif
 		if ((ifxflags & IFXF_AUTOCONF6) && slaacd_is_running()) {
 			char *args[] = { SLAACCTL, "show", "interface",
 			    ifnp->if_name, NULL };
@@ -2522,26 +2519,16 @@ intxflags(char *ifname, int ifs, int argc, char **argv)
 		set = 1;
 
 	if (isprefix(argv[0], "autoconfprivacy")) {
-#ifdef IFXF_INET6_NOPRIVACY	/* pre-6.9 */
-		value = -IFXF_INET6_NOPRIVACY;
-#endif
-#ifdef IFXF_AUTOCONF6TEMP	/* 6.9+ */
 		value = IFXF_AUTOCONF6TEMP;
 	} else if (isprefix(argv[0], "temporary")) {
 		value = IFXF_AUTOCONF6TEMP;
-#endif
-#ifdef IFXF_MONITOR		/* 6.9+ */
 	} else if (isprefix(argv[0], "monitor")) {
 		value = IFXF_MONITOR;
-#endif
-#ifdef IFXF_AUTOCONF4		/* 6.6+ */
 	} else if (isprefix(argv[0], "autoconf4")) {
 		/* Have "autoconf4" on pppoe(4) do the right thing. */
 		if (is_pppoe(ifname, ifs))
 			return run_ipcp(ifname, ifs, set);
-
 		value = IFXF_AUTOCONF4;
-#endif
 	} else if (isprefix(argv[0], "autoconf6")) {
 		value = IFXF_AUTOCONF6;
 	} else if (isprefix(argv[0], "mpls")) {
