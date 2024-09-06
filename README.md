@@ -32,10 +32,10 @@ you have a fully functioning network appliance type of system.
 See [https://github.com/yellowman/nsh/wiki/NSH-Manual-page](https://github.com/yellowman/nsh/wiki/NSH-1.2.x-Manual-Page) 
 or nsh.8 manual for detailed installation instructions and command set.
 
-nsh manual is available on your system by simply typing the command:
+nsh manual is available on your system shell by simply typing the command:
 
 ```shell
-ksh# man nsh
+ man nsh
 ```
 
 ---
@@ -48,12 +48,12 @@ used network functionality.
 this feature is available in nsh by simply typing the command:
 
 ```shell
-nsh(p)/ manual [searchterm]
+manual [searchterm]
 ```
 E.g. searching vlan functionality 
 
 ```shell
-nsh(p)/ manual vlan
+manual vlan
 ```
 
 The system also gives a list of searchable terms through double tab completion.
@@ -78,42 +78,36 @@ Presentation on NSH for network administrators By: Tom Smyth
 
 ## Quickstart Guide for installing and building **nsh** on an OpenBSD system
 
-1. Install OpenBSD on your system 
+1. Install OpenBSD on your system  by running the following commands in your system shell
 
-2. Install the OpenBSD port of nsh on your system -(this will install the latest nsh release version)
-
+2. Install the OpenBSD port of nsh on your system (this will install the latest nsh release version)
 ```shell
-ksh# pkg_add nsh  
+pkg_add nsh  
 ```
 
 3. Install git on your system to allow fetching more recent versions of nsh from github
-
 ```shell
-ksh# pkg_add git
+pkg_add git
 ```
 
-4. to download the latest development of nsh use git to download the latest nsh repository
-
+4. To download the latest development of nsh use git to download the latest nsh repository
 ```shell
-ksh# git clone https://github.com/yellowman/nsh
+git clone https://github.com/yellowman/nsh
 ```
 
-5. change directory to the downloaded nsh directory 
-
+5. Change directory to the downloaded nsh directory
 ```shell
-ksh# cd nsh
+cd nsh
 ```
 
-6. use make  to build / compile the sources
-
+6. Run make to build / compile the sources
 ```shell
-ksh# make
+make
 ```
 
-7.  Install the compiled nsh binaries and supporting files (you will need root privileges to do this).
-
+7. Install the compiled nsh binaries and supporting files (you will need root privileges to do this).
 ```shell
-ksh# make install
+make install
 ```
 
 8. To have nsh take over the configuration of a system a number of steps that need to be carried out such as
@@ -128,23 +122,23 @@ ksh# make install
 
 13. configure the system to run nsh -i /etc/nshrc  either adding a line to /etc/rc.local or using an rccctl script for nsh.
 
-For the users convenience, the above steps (9-13) can be largely automated by running  the **rc.local-nsh-openbsd-integrate.sh** script and following on screen instructions.
+  For the users convenience, the above steps (9-13) can be largely automated by running  the **rc.local-nsh-openbsd-integrate.sh** script  in your system shell
+  and following on screen instructions.
 
 - If you have downloaded nsh via git you can run the integration script as follows 
 ```shell
-ksh# cd nsh
-ksh# cd scripts
-ksh# cd shell
-ksh# chmod 700 rc.local-nsh-openbsd-integrate.sh
-ksh# ./rc.local-nsh-openbsd-integrate.sh
+cd nsh
+cd scripts/shell
+chmod 700 rc.local-nsh-openbsd-integrate.sh
+./rc.local-nsh-openbsd-integrate.sh
 ```
+
 - If you have installed nsh via the OpenBSD ports package you can run the integration script as follows
 ```shell
-ksh# cd /usr/local/share/exampes/nsh
-ksh# cd scripts
-ksh# cd shell
-ksh# chmod 700 rc.local-nsh-openbsd-integrate.sh
-ksh# ./rc.local-nsh-openbsd-integrate.sh
+cd /usr/local/share/exampes/nsh
+cd scripts/shell
+chmod 700 rc.local-nsh-openbsd-integrate.sh
+./rc.local-nsh-openbsd-integrate.sh
 ```
 
 14. once configuration has been imported, restart the system and verify nsh config is running as expected.
@@ -154,9 +148,9 @@ ksh# ./rc.local-nsh-openbsd-integrate.sh
 - Login as the user
 - locate nsh binary, it is usually in /usr/local/bin/nsh
 - at the command prompt run chsh -s command to set the shell to path to the nsh binary
+by running the following command in your system shell
 ```shell
-ksh# chsh -s /usr/local/bin/nsh
+chsh -s /usr/local/bin/nsh
 ```
 
 16. please provide feedback , bug repots and suggestions to the developers on	our mailing list  <nsh@lists.deschutesdigital.com> .
-
