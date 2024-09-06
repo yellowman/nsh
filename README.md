@@ -3,8 +3,7 @@
 ## network shell
 
 ---
-Chris Cappuccio <chris@nmedia.net>
-
+Author and Founder of the project: Chris Cappuccio <chris@nmedia.net>
 
 NSH is a CLI intended for OpenBSD-based network appliances. It replaces
 ifconfig, sysctl and route with its own simple command language, and
@@ -36,8 +35,28 @@ or nsh.8 manual for detailed installation instructions and command set.
 nsh manual is available on your system by simply typing the command:
 
 ```shell
-man nsh
+ksh# man nsh
 ```
+
+---
+
+## Manual pages from within NSH
+
+For your convenience we have included handy manual page search  for commonly 
+used network functionality. 
+
+this feature is available in nsh by simply typing the command:
+
+```shell
+nsh(p)/ manual [searchterm]
+```
+E.g. searching vlan functionality 
+
+```shell
+nsh(p)/ manual vlan
+```
+
+The system also gives a list of searchable terms through double tab completion.
 
 ---
 
@@ -64,41 +83,40 @@ Presentation on NSH for network administrators By: Tom Smyth
 2. Install the OpenBSD port of nsh on your system -(this will install the latest nsh release version)
 
 ```shell
-pkg_add nsh  
+ksh# pkg_add nsh  
 ```
 
 3. Install git on your system to allow fetching more recent versions of nsh from github
 
 ```shell
-pkg_add git
+ksh# pkg_add git
 ```
 
 4. to download the latest development of nsh use git to download the latest nsh repository
 
 ```shell
-git clone https://github.com/yellowman/nsh
+ksh# git clone https://github.com/yellowman/nsh
 ```
 
 5. change directory to the downloaded nsh directory 
 
 ```shell
-cd nsh
+ksh# cd nsh
 ```
 
 6. use make  to build / compile the sources
 
 ```shell
-make
+ksh# make
 ```
 
 7.  Install the compiled nsh binaries and supporting files (you will need root privileges to do this).
 
 ```shell
-make install
+ksh# make install
 ```
 
 8. To have nsh take over the configuration of a system a number of steps that need to be carried out such as
-
 
 9. Backup configuration of system, daemons and network in /etc 
 
@@ -112,14 +130,23 @@ make install
 
 For the users convenience, the above steps (9-13) can be largely automated by running  the **rc.local-nsh-openbsd-integrate.sh** script and following on screen instructions.
 
+- If you have downloaded nsh via git you can run the integration script as follows 
 ```shell
-cd nsh
-cd scripts
-cd shell
-chmod 700 rc.local-nsh-openbsd-integrate.sh
-./rc.local-nsh-openbsd-integrate.sh
-
+ksh# cd nsh
+ksh# cd scripts
+ksh# cd shell
+ksh# chmod 700 rc.local-nsh-openbsd-integrate.sh
+ksh# ./rc.local-nsh-openbsd-integrate.sh
 ```
+- If you have installed nsh via the OpenBSD ports package you can run the integration script as follows
+```shell
+ksh# cd /usr/local/share/exampes/nsh
+ksh# cd scripts
+ksh# cd shell
+ksh# chmod 700 rc.local-nsh-openbsd-integrate.sh
+ksh# ./rc.local-nsh-openbsd-integrate.sh
+```
+
 14. once configuration has been imported, restart the system and verify nsh config is running as expected.
 
 15. Setting NSH as the default shell for a user
@@ -128,11 +155,8 @@ chmod 700 rc.local-nsh-openbsd-integrate.sh
 - locate nsh binary, it is usually in /usr/local/bin/nsh
 - at the command prompt run chsh -s command to set the shell to path to the nsh binary
 ```shell
-chsh -s /usr/local/bin/nsh
+ksh# chsh -s /usr/local/bin/nsh
 ```
 
 16. please provide feedback , bug repots and suggestions to the developers on	our mailing list  <nsh@lists.deschutesdigital.com> .
-    
 
-
-    
