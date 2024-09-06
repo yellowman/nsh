@@ -67,10 +67,9 @@
 /scripts/nshrc/test/broken-commands.nshrc
 /scripts/nshrc/write-config.nshrc
 /scripts/shell
-/scripts/shell/extensive-nsh-openbsd-integration.sh
+/scripts/shell/extensive-nsh-openbsd-integrate.sh
 /scripts/shell/nsh.rc
 /scripts/shell/rc.local-nsh-openbsd-integrate.sh
-/scripts/shell/rc.local-nsh-openbsd-integration.sh
 /show.c
 /sqlite3.c
 /stats.c

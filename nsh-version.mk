@@ -92,7 +92,7 @@ NSH_RELEASE=No
 
 # Version number of the most recently published release.
 # Should be cranked immediately before publishing a new release.
-NSH_VERSION_NUMBER=1.2.1
+NSH_VERSION_NUMBER=1.2.2
 
 .if ${NSH_RELEASE} == Yes
 NSH_VERSION=${NSH_VERSION_NUMBER}
