@@ -129,16 +129,14 @@ make install
 ```shell
 cd nsh
 cd scripts/shell
-chmod 700 rc.local-nsh-openbsd-integrate.sh
-./rc.local-nsh-openbsd-integrate.sh
+sh ./rc.local-nsh-openbsd-integrate.sh
 ```
 
 - If you have installed nsh via the OpenBSD ports package you can run the integration script as follows
 ```shell
 cd /usr/local/share/exampes/nsh
 cd scripts/shell
-chmod 700 rc.local-nsh-openbsd-integrate.sh
-./rc.local-nsh-openbsd-integrate.sh
+sh ./rc.local-nsh-openbsd-integrate.sh
 ```
 
 14. once configuration has been imported, restart the system and verify nsh config is running as expected.
