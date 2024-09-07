@@ -364,6 +364,28 @@ struct prot1 ldcs[] = {
 	{ 0, 0, { 0 } }
 };
 
+struct prot1 logcs[] = {
+        { "authlog",        "/var/log/authlog",                                            
+            { TAIL,  "-n", "100", "/var/log/authlog", NULL, NULL } },
+	{ "daemon",	    "/var/log/daemon",
+            { TAIL,  "-n", "100", "/var/log/daemon", NULL, NULL } },
+        { "dmesg",          "the system messages",
+            { DMESG, NULL, NULL, NULL, NULL, NULL } },
+	{ "console-dmesg",  "startup & console messages",
+            { DMESG, "-s", NULL, NULL, NULL, NULL } },
+	{ "maillog",	    "/var/log/maillog",                                            
+            { TAIL,  "-n", "100", "/var/log/maillog", NULL, NULL } },
+	{ "messages",	    "/var/log/messages",
+            { TAIL, "-n", "100", "/var/log/messages", NULL, NULL } },
+        { "secure", 	    "/var/log/authlog",
+            { TAIL, "-n", "100", "/var/log/authlog", NULL, NULL } },
+        { "security",	     "/var/log/security.out",
+            { TAIL, "-n", "100", "/var/log/security.out", NULL, NULL } },
+                { 0, 0, { 0 } }
+};
+
+
+
 extern struct prot1 bgcs[];
 
 /* show yyy zzz */
@@ -381,6 +403,7 @@ struct prot prots[] = {
 	{ "relay",	rlcs },
 	{ "smtp",	smcs },
 	{ "ldap",	ldcs },
+	{ "log", 	logcs },
 	{ 0,		0 }
 };
 
@@ -463,6 +486,7 @@ Menu showlist[] = {
 	{ "monitor",	"Monitor routing/arp table changes", CMPL0 0, 0, 0, 0, monitor },
 	{ "version",	"Software information",	CMPL0 0, 0, 0, 0, version },
 	{ "users",	"System users",		CMPL0 0, 0, 0, 0, who },
+	{ "log",    "display specified log file", CMPL(ta) (char **)logcs, sizeof(struct prot1), 1, 2, pr_prot1 },
 	{ "crontab",	"Scheduled background jobs",	CMPL0 0, 0, 0, 0, pr_crontab },
 	{ "scheduler",	"Scheduled background jobs",	CMPL0 0, 0, 0, 0, pr_crontab },
 	{ "running-config",	"Operating configuration", CMPL0 0, 0, 0, 0, pr_conf },
@@ -3446,6 +3470,8 @@ pr_crontab(int argc, char **argv, FILE *outfile)
 
 	return 0;
 }
+
+
 
 int
 pr_routes(int argc, char **argv)

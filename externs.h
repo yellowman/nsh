@@ -176,6 +176,8 @@ extern pid_t child;
 #define CLEAR		"/usr/bin/clear"
 #define PING		"/sbin/ping"
 #define PING6		"/sbin/ping6"
+#define DMESG		"/sbin/dmesg"
+#define TAIL		"/usr/bin/tail"
 #define TRACERT		"/usr/sbin/traceroute"
 #define TRACERT6	"/usr/sbin/traceroute6"
 #define TELNET		"/usr/bin/telnet"
@@ -577,6 +579,7 @@ int mbsavis(char**, int *, const char *);
 
 /* ctlargs.c */
 int pr_prot1(int, char **);
+int pr_protandfree(int, char**);
 char **step_optreq(char **, char **, int, char **, int);
 
 /* hashtable.c */

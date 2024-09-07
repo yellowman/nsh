@@ -1854,10 +1854,15 @@ nsh/no verbose
 .El
 .Tg show
 .Ic show
-.Op hostname | interface | autoconf | ip | inet | inet6 | route | route6\
- | sadb | arp | ndp | vlan | kernel | bgp | ospf | ospf6 | pf | eigrp | rip\
- | ldp | ike | ipsec | dvmrp | relay | dhcp | smtp | ldap | monitor\
- | version | users | crontab | running-config | startup-config |\&? | help
+.Op \&? | dvmrp | ip | ospf6 | smtp\
+ | active-config | eigrp | ipsec | pf | startup-config\
+ | arp | enviornment | kernel | relay | users\
+ | autoconf | help | ldap | rip | version\
+ | bgp | hostname | ldp | route | vlan\
+ | bridge | ike | log | route6\
+ | crontab | inet | monitor | running-config\
+ | dhcp | inet6 | ndp | sadb\
+ | diff-config | interface | ospf | scheduler
 .Pp
 The main diagnostic and informational command is 'show'.
 show without arguments  displays the available diagnostic show sub commands.
@@ -1865,7 +1870,7 @@ show without arguments  displays the available diagnostic show sub commands.
 .It
 E.g using show and its built in help
 .Bd -literal -offset indent
-nsh(p)/show
+nsh(p)//show
 % Commands may be abbreviated.
 % 'show' commands are:
 
@@ -1900,9 +1905,14 @@ nsh(p)/show
   monitor         Monitor routing/arp table changes
   version         Software information
   users           System users
+  log             display specified log file
   crontab         Scheduled background jobs
+  scheduler       Scheduled background jobs
   running-config  Operating configuration
   startup-config  Startup configuration
+  active-config   Configuration of active context
+  diff-config     Show differences between startup and running config
+  environment     Show environment variables
   ?               Options
 nsh(p)/
 .Ed
@@ -2367,7 +2377,8 @@ nsh(p)/show bridge tpmr102
 .Tg mbuf
 .Tg pf
 .Ic show kernel
-.Op Ar ip | ah | esp | tcp | icmp | igmp | ipcomp | route | carp | mbuf | pf
+.Op Ar ip | ah | esp | tcp | icmp | igmp\
+ | ipcomp | route | carp | mbuf | pf
 .Pp
 Display kernel statistics available for query.
 Display kernel statistics as selected by the argument.
@@ -2700,6 +2711,50 @@ cpu: Intel(R) Core(TM) i7-10610U CPU @ 1.80GHz
 memory: 8175MB
 kernel: OpenBSD 7.1 (GENERIC.MP) #459: Mon Apr  4 18:16:13 MDT 2022
     deraadt@amd64.openbsd.org:/usr/src/sys/arch/amd64/compile/GENERIC.MP
+.Ed
+.Pp
+.Tg show
+.Tg user
+.Tg who
+.Ic show users
+.Pp
+Display the active system users similar to the command
+.Xr who 1 .
+manual page for more information.
+.Pp
+.Tg log
+.Tg syslog
+.Tg message
+.Tg tail
+.Tg cat
+.Tg dmesg
+.Tg show
+.Ic show log
+.Op \&? |authlog | daemon | dmesg | console-dmesg\
+ | maillog | messages | secure | security
+.Pp
+show the last 100 lines of the selected log file.
+Most of the
+.Cm show log
+commands use the standard
+.Xr tail 1
+commmand.
+The dmesg logs are displayed using the
+.Xr dmesg 8
+command.
+.Bd -literal -offset indent
+nsh(config-p)/show log ?
+% Arguments may be abbreviated
+
+  show log authlog       /var/log/authlog information
+  show log daemon        /var/log/daemon information
+  show log dmesg         the system messages information
+  show log console-dmesg startup & console messages information
+  show log maillog       /var/log/maillog information
+  show log messages      /var/log/messages information
+  show log secure        /var/log/authlog information
+  show log security      /var/log/security.out information
+nsh(config-p)/
 .Ed
 .Pp
 .Ic show crontab
