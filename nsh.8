@@ -174,16 +174,21 @@ is not ambiguous double <Tab> completes the command.
 E.g show all available valid commands  with double tab key sequence <tab><tab>
 .Bd -literal -offset indent
 nsh(config-p)/
-!		disable		halt		ldap		ospf		relay		smtp		verbose
-?		do		help		ldp		ospf6		resolv		snmp		who
-arp		dvmrp		hostname	manual		pf		rip		ssh		write-config
-bgp		editing		ifstate		motd		ping		route		sshd
-bridge		eigrp		ike		mpls		ping6		rtable		telnet
-clear		enable		inet		nameserver	pipex		sasync		tftp
-configure	exit		interface	ndp		powerdown	saveenv		tftp-proxy
-crontab		flush		ip		no		quit		scheduler	traceroute
-ddb		ftp-proxy	ip6		nppp		rad		setenv		traceroute6
-dhcp		group		ipsec		ntp		reboot		show		unsetenv
+!		enable		ldap		ping6		show
+?		exit		ldp		pipex		smtp
+arp		flush		logger		powerdown	snmp
+bgp		ftp-proxy	manual		quit		ssh
+bridge		group		motd		rad		sshd
+clear		halt		mpls		reboot		telnet
+configure	help		nameserver	relay		tftp
+crontab		hostname	ndp		resolv		tftp-proxy
+ddb		ifstate		no		rip		traceroute
+dhcp		ike		nppp		route		traceroute6
+disable		inet		ntp		rtable		unsetenv
+do		interface	ospf		sasync		verbose
+dvmrp		ip		ospf6		saveenv		who
+editing		ip6		pf		scheduler	write-config
+eigrp		ipsec		ping		setenv
 nsh(config-p)/
 .Ed
 If what is typed is ambiguous double tab presents the administrator
@@ -339,52 +344,12 @@ nsh(p)/help
 % Commands may be abbreviated.
 % Commands are:
 
-  hostname      Set system hostname
-  interface     Modify interface parameters
   rtable        Routing table switch
-  group         Modify group attributes
-  arp           Static ARP set
-  ndp           Static NDP set
-  nameserver    set or remove static DNS nameservers
-  bridge        Modify bridge parameters
   show          Show system information
-  ip            Set IP networking parameters
-  ip6           Set IPv6 networking parameters
-  mpls          Set MPLS network parameters
-  ddb           Set DDB parameters
-  pipex         Set PIPEX parameters
   flush         Flush system tables
   enable        Enable privileged mode
   clear         Clear the terminal screen
   disable       Disable privileged mode
-  route         Add a host or network route
-  pf            Packet filter control
-  ospf          OSPF control
-  ospf6         OSPF6 control
-  eigrp         EIGRP control
-  bgp           BGP control
-  rip           RIP control
-  ldp           LDP control
-  relay         Relay control
-  ipsec         IPsec IKEv1 control
-  ike           IPsec IKEv2 control
-  dvmrp         DVMRP control
-  rad           Router advertisement control
-  sasync        SA synchronization control
-  dhcp          DHCP server control
-  snmp          SNMP server control
-  ldap          LDAP server control
-  smtp          SMTP server control
-  sshd          SSH server control
-  ntp           NTP synchronization control
-  nppp          PPP server control
-  ifstate       ifstate server control
-  ftp-proxy     ftp-proxy server control
-  tftp-proxy    tftp-proxy server control
-  tftp          TFTP server control
-  resolv        Resolver configuration control
-  motd          Message of-the-day
-  inet          Inet super-server control
   ping          Send IPv4 ICMP echo request
   ping6         Send IPv6 ICMP echo request
   traceroute    Print the route to IPv4 host
@@ -392,14 +357,22 @@ nsh(p)/help
   ssh           SSH connection to remote host
   telnet        Telnet connection to remote host
   reboot        Reboot the system
+  logger        Write a message to syslog on the system
   halt          Halt the system
   powerdown     Power the system down
   write-config  Save the current configuration
   verbose       Set verbose diagnostics
   editing       Set command line editing
+  configure     Set configuration mode
   who           Display system users
+  do            Superfluous, do is ignored and its arguments executed
+  setenv        Set an environment variable
+  unsetenv      Delete an environment variable
+  saveenv       Save environment variables set by setenv to ~/.nshenv
   !             Invoke a subshell or run an executable
   ?             Print help information
+  manual        Display the NSH manual
+  exit          Leave configuration mode and return to privileged mode
   quit          Close current connection
 nsh(p)/
 .Ed
@@ -678,6 +651,11 @@ nsh(bridge-bridge100)/?
   traceroute6   Print the route to IPv6 host
   ssh           SSH connection to remote host
   telnet        Telnet connection to remote host
+  logger        Write a message to syslog on the system
+  do            Superfluous, do is ignored and its arguments executed
+  setenv        Set an environment variable
+  unsetenv      Delete an environment variable
+  saveenv       Save environment variables set by setenv to ~/.nshenv
   rule          Bridge layer 2 filtering rules
   static        Static bridge address entry
   ifpriority    Spanning priority of a member on an 802.1D bridge
@@ -689,6 +667,7 @@ nsh(bridge-bridge100)/?
   parent        Parent interface
   tunneldomain  Tunnel parameters
   protect       Configure protected bridge domains
+  interface     Modify interface parameters
   shutdown      Shutdown bridge
   show          Show system information
   who           Display system users
@@ -1765,6 +1744,38 @@ The
 command is an alias for the
 .Cm crontab
 command described above.
+.Pp
+.Tg logger
+.Tg syslog
+.Tg log
+.Tg message
+.Ic logger
+.Ar log message
+.Pp
+The logger command allows the user to enter arbitary messages into
+the system log.
+It can be useful to mark external events of note for diagnostics
+and context in analysis later on.
+See
+.Xr logger 1
+for more information.
+.Bl -dash
+.It
+E.g recording a power outage in the log for future reference.
+.Bd -literal -offset indent
+nsh(config-p)/logger power failure in facility
+nsh(config-p)/logger interface drops due to unprotected devices
+nsh(config-p)/!tail /var/log/messages
+Sep  8 13:03:30 tobsd /bsd: scsibus2 at vscsi0: 256 targets
+Sep  8 13:03:30 tobsd /bsd: softraid0 at root
+Sep  8 13:03:30 tobsd /bsd: scsibus3 at softraid0: 256 targets
+Sep  8 13:03:30 tobsd /bsd: root on sd0a (619d721c1c3c871d.a) swap on sd0b dump on sd0b
+Sep  8 13:03:30 tobsd savecore: /dev/sd0b: Device busy
+Sep  8 13:03:55 tobsd reorder_kernel: kernel relinking done
+Sep  8 15:05:06 tobsd tom: power failure in facility
+Sep  8 15:05:37 tobsd tom: interface drops due to unprotected devices
+.Ed
+.El
 .Pp
 .Tg reboot
 .Ic reboot
@@ -3338,7 +3349,7 @@ nsh(interface-em0)/?
 % Interface configuration commands are:
 
   inet             IPv4/IPv6 addresses
-  ip               Alias for the "inet" command
+  ip               Alias for "inet" command
   autoconf4        IPv4 Autoconfigurable address (DHCP)
   description      Interface description
   group            Interface group
@@ -3376,6 +3387,11 @@ nsh(interface-em0)/?
   traceroute6      Print the route to IPv6 host
   ssh              SSH connection to remote host
   telnet           Telnet connection to remote host
+  logger           Write a message to syslog on the system
+  do               Superfluous, do is ignored and its arguments executed
+  setenv           Set an environment variable
+  unsetenv         Delete an environment variable
+  saveenv          Save environment variables set by setenv to ~/.nshenv
   keepalive        GRE tunnel keepalive
   mplslabel        MPLS local label
   pwe              MPLS PWE3
@@ -3406,6 +3422,13 @@ nsh(interface-em0)/?
   wgrtable         Wireguard routing table
   trunkport        Add child interface(s) to trunk
   trunkproto       Define trunkproto
+  apn              Access Point Name
+  setpin           Set SIM card PIN
+  setpuk           Set new SIM card PIN using PUK for validation
+  chgpin           Permanently change SIM PIN
+  class            Preferred cell classes
+  roaming          Enable data roaming
+  interface        Modify interface parameters
   shutdown         Shutdown interface
   show             Show system information
   who              Display system users
@@ -3415,7 +3438,6 @@ nsh(interface-em0)/?
   ?                Options
   manual           Display the NSH manual
   exit             Leave interface config mode and return to global config mode
-  ?                Options
 .Ed
 .Pp
 .Op no

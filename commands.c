@@ -112,6 +112,7 @@ static int	flush_ndp_cache(void);
 static int	flush_history(void);
 static int	is_bad_input(const char *, size_t);
 static int	read_command_line(EditLine *, History *);
+static int 	int_logger(char *, int, int, char **);
 static int	int_ping(char *, int, int, char **);
 static int	int_ping6(char *, int, int, char **);
 static int	int_traceroute(char *, int, int, char **);
@@ -132,6 +133,7 @@ static int      int_clear(void);
 static int	int_help(void);
 static int	int_exit(void);
 static int	hostname(int, char **);
+static int      logger(int, char **);
 static int	manual(int, char**);
 static int	nocmd(int, char **);
 static int	docmd(int, char **);
@@ -1075,6 +1077,7 @@ flush_help(void)
  */
 
 static char pinghelp[];
+static char loggerhelp[];
 static char ping6help[];
 static char tracerthelp[];
 static char tracert6help[];
@@ -1145,6 +1148,7 @@ struct intlist Intlist[] = {
 	{ "traceroute6", tracert6help,				CMPL0 0, 0, int_traceroute6, 0 },
 	{ "ssh",	sshhelp,				CMPL0 0, 0, int_ssh, 0 },
 	{ "telnet",	telnethelp,				CMPL0 0, 0, int_telnet,	0 },
+	{ "logger",     loggerhelp,                             CMPL0 0, 0, int_logger, 0 },
 	{ "do",		dohelp,					CMPL(c) 0, 0, int_do, 0 },
 	{ "setenv",	setenvhelp,				CMPL(e) 0, 0, int_setenv, 0 },
 	{ "unsetenv",	unsetenvhelp,				CMPL(e) 0, 0, int_unsetenv, 0 },
@@ -1231,6 +1235,7 @@ struct intlist Bridgelist[] = {
 	{ "traceroute6", tracert6help,				CMPL0 0, 0, int_traceroute6, 0 },
 	{ "ssh",	sshhelp,				CMPL0 0, 0, int_ssh, 0 },
 	{ "telnet",	telnethelp,				CMPL0 0, 0, int_telnet,	0 },
+	{ "logger",     loggerhelp,                             CMPL0 0, 0, int_logger, 0 },
 	{ "do",		dohelp,					CMPL(c) 0, 0, int_do, 0 },
 	{ "setenv",	setenvhelp,				CMPL(e) 0, 0, int_setenv, 0 },
 	{ "unsetenv",	unsetenvhelp,				CMPL(e) 0, 0, int_unsetenv, 0 },
@@ -1621,6 +1626,14 @@ int_interface(char *old_ifname, int ifs, int argc, char **argv)
 }
 
 static int
+int_logger(char *ifname, int ifs, int argc, char **argv)
+{
+        logger(argc, argv);
+        return 0; /* do not leave interface context */
+}
+
+
+static int
 int_ping(char *ifname, int ifs, int argc, char **argv)
 {
 	ping(argc, argv);
@@ -1833,6 +1846,7 @@ static char
 	verbosehelp[] =	"Set verbose diagnostics",
 	editinghelp[] = "Set command line editing",
 	confighelp[] =	"Set configuration mode",
+	loggerhelp[] =  "Write a message to syslog on the system",
 	whohelp[] =	"Display system users",
 	dohelp[] =	"Superfluous, do is ignored and its arguments executed",
 	setenvhelp[] =	"Set an environment variable",
@@ -1936,6 +1950,7 @@ Command cmdtab[] = {
 	{ "ssh",	sshhelp,	CMPL0 0, 0, ssh,		0, 0, 0, 0 },
 	{ "telnet",	telnethelp,	CMPL0 0, 0, telnet,		0, 0, 0, 0 },
 	{ "reboot",	nreboothelp,	CMPL0 0, 0, nreboot,		1, 0, 0, 0 },
+	{ "logger",     loggerhelp,     CMPL0 0, 0, logger,             0, 0, 0, 0 },
 	{ "halt",	halthelp,	CMPL0 0, 0, halt,		1, 0, 0, 0 },
 	{ "powerdown",	powerdownhelp,	CMPL0 0, 0, powerdown,		1, 0, 0, 0 },
 	{ "write-config", savehelp,	CMPL0 0, 0, wr_startup,		1, 0, 0, 0 },
@@ -2203,6 +2218,22 @@ int show_hostname(int argc, char **argv)
 
 	return 0;
 }
+/* logger command */
+
+
+
+int
+logger(int argc, char *argv[])
+{
+        if (argc < 2) {  
+                printf("%% Invalid arguments\n");
+                return 1;
+        } else {
+                cmdargs(LOGGER, argv);
+        }
+        return 0;
+}
+
 
 /*
  * "no" command
