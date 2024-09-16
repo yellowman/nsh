@@ -220,7 +220,7 @@ else
 		motd='/etc/motd'
 		if [ -f $motd ]; then
 			cp /etc/motd /var/nsh/backup/pre-nsh-config/
-			cp /etc/motd /var/run/motd.0
+			mv /etc/motd /var/run/motd.0
 			sed -i 's/Welcome to OpenBSD/OpenBSD/g' /var/run/motd.0
 			ln -s /var/run/motd.0 /etc/motd
 			chown root /var/run/motd.0
