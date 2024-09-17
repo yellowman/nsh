@@ -1,4 +1,4 @@
-.\"     $OpenBSD: nsh.8,v 1.2.2 2024/09/06 10:22:00 UTC chrisc $
+.\"     $OpenBSD: nsh.8,v 1.2.3 2024/09/17 17:57:00 UTC chrisc $
 .\"
 .\" Copyright (c) 2002-2024 Chris Cappuccio.  All rights reserved.
 .\"
@@ -24,7 +24,7 @@
 .\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd $Mdocdate: September 06 2024 $
+.Dd $Mdocdate: September 17 2024 $
 .Dt NSH 8
 .Os
 .Sh NAME
@@ -338,7 +338,7 @@ nsh(config-p)/? rtable
 % rtable: Routing table switch
 .Ed
 .It
-E.g. display help for all available commands.
+E.g. display help for all available commands in privleged mode
 .Bd -literal -offset indent
 nsh(p)/help
 % Commands may be abbreviated.
@@ -375,6 +375,87 @@ nsh(p)/help
   exit          Leave configuration mode and return to privileged mode
   quit          Close current connection
 nsh(p)/
+.Ed
+.It
+E.g. display help for all available commands in config  mode
+.Bd -literal -offset indent
+nsh(config-p)/?
+% Commands may be abbreviated.
+% Commands are:
+
+  hostname      Set system hostname
+  interface     Modify interface parameters
+  rtable        Routing table switch
+  group         Modify group attributes
+  arp           Static ARP set
+  ndp           Static NDP set
+  nameserver    set or remove static DNS nameservers
+  bridge        Modify bridge parameters
+  show          Show system information
+  ip            Set IP networking parameters
+  ip6           Set IPv6 networking parameters
+  mpls          Set MPLS network parameters
+  ddb           Set DDB parameters
+  pipex         Set PIPEX parameters
+  flush         Flush system tables
+  enable        Enable privileged mode
+  clear         Clear the terminal screen
+  disable       Disable privileged mode
+  route         Add a host or network route
+  pf            Packet filter control
+  ospf          OSPF control
+  ospf6         OSPF6 control
+  eigrp         EIGRP control
+  bgp           BGP control
+  rip           RIP control
+  ldp           LDP control
+  relay         Relay control
+  ipsec         IPsec IKEv1 control
+  ike           IPsec IKEv2 control
+  dvmrp         DVMRP control
+  rad           Router advertisement control
+  sasync        SA synchronization control
+  dhcp          DHCP server control
+  snmp          SNMP server control
+  ldap          LDAP server control
+  smtp          SMTP server control
+  sshd          SSH server control
+  ntp           NTP synchronization control
+  nppp          PPP server control
+  ifstate       ifstate server control
+  ftp-proxy     ftp-proxy server control
+  tftp-proxy    tftp-proxy server control
+  tftp          TFTP server control
+  resolv        Resolver configuration control
+  motd          Message of-the-day
+  crontab       Configure scheduled background jobs
+  scheduler     Configure scheduled background jobs
+  inet          Inet super-server control
+  ping          Send IPv4 ICMP echo request
+  ping6         Send IPv6 ICMP echo request
+  traceroute    Print the route to IPv4 host
+  traceroute6   Print the route to IPv6 host
+  ssh           SSH connection to remote host
+  telnet        Telnet connection to remote host
+  reboot        Reboot the system
+  logger        Write a message to syslog on the system
+  halt          Halt the system
+  powerdown     Power the system down
+  write-config  Save the current configuration
+  verbose       Set verbose diagnostics
+  editing       Set command line editing
+  configure     Set configuration mode
+  who           Display system users
+  do            Superfluous, do is ignored and its arguments executed
+  setenv        Set an environment variable
+  unsetenv      Delete an environment variable
+  saveenv       Save environment variables set by setenv to ~/.nshenv
+  !             Invoke a subshell or run an executable
+  ?             Print help information
+  manual        Display the NSH manual
+  exit          Leave configuration mode and return to privileged mode
+  quit          Close current connection
+nsh(config-p)/
 .Ed
 .El
 .Pp
