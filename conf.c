@@ -533,7 +533,6 @@ dhcpleased_has_defaultroute(struct sockaddr_rtlabel *sr)
 int
 dhcpleased_controls_interface(char *ifname, int ifs)
 {
-#ifdef IFXF_AUTOCONF4		/* 6.6+ */
 	int ifxflags;
 
 	if (!dhcpleased_is_running())
@@ -541,9 +540,6 @@ dhcpleased_controls_interface(char *ifname, int ifs)
 
 	ifxflags = get_ifxflags(ifname, ifs);
 	return ((ifxflags & IFXF_AUTOCONF4) != 0);
-#else
-	return 0;
-#endif
 }
 
 /*
@@ -946,18 +942,10 @@ void conf_ifxflags(FILE *output, int ifs, char *ifname)
 			fprintf(output, " mpls\n");
 		if (ifr.ifr_flags & IFXF_AUTOCONF6)
 			fprintf(output, " autoconf6\n");
-#ifdef IFXF_INET6_NOPRIVACY	/* pre-6.9 */
-		if (ifr.ifr_flags & IFXF_INET6_NOPRIVACY)
-			fprintf(output, " no autoconfprivacy\n");
-#endif
-#ifdef IFXF_AUTOCONF6TEMP	/* 6.9+ */
 		if (ifr.ifr_flags & IFXF_AUTOCONF6TEMP)
 			fprintf(output, " temporary\n");
-#endif
-#ifdef IFXF_MONITOR		/* 6.9+ */
 		if (ifr.ifr_flags & IFXF_MONITOR)
 			fprintf(output, " monitor\n");
-#endif
 		if (ifr.ifr_flags & IFXF_WOL)
 			fprintf(output, " wol\n");
 	}

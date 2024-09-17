@@ -1102,9 +1102,7 @@ struct intlist Intlist[] = {
 	{ "inet",	"IPv4/IPv6 addresses",			CMPL(h) (char **)intiphelp, sizeof(struct ghs), intip, 1 },
 	{ "ip",		"Alias for \"inet\" command",		CMPL(h) (char **)intiphelp, sizeof(struct ghs), intip, 1 },
 	{ "alias",	NULL, /* backwards compatibilty */	CMPL(h) (char **)intiphelp, sizeof(struct ghs), intip, 1 },
-#ifdef IFXF_AUTOCONF4		/* 6.6+ */
 	{ "autoconf4",  "IPv4 Autoconfigurable address (DHCP)",	CMPL0 0, 0, intxflags, 1 },
-#endif
 	{ "description", "Interface description",		CMPL0 0, 0, intdesc, 1 },
 	{ "group",	"Interface group",			CMPL0 0, 0, intgroup, 1 },
 	{ "rdomain",	"Interface routing domain",		CMPL0 0, 0, intrdomain, 1 },
@@ -1174,16 +1172,9 @@ struct intlist Intlist[] = {
 	{ "mpls",	"MPLS",					CMPL0 0, 0, intxflags, 1 },
 	{ "inet6",	"IPv6 addresses",			CMPL(h) (char **)intip6help, sizeof(struct ghs), intip, 1 },
 	{ "autoconf6",  "IPv6 Autoconfigurable address",	CMPL0 0, 0, intxflags, 1 },
-#ifdef IFXF_INET6_NOPRIVACY	/* pre-6.9 */
-	{ "autoconfprivacy", "Privacy addresses for IPv6 autoconf", CMPL0 0, 0, intxflags, 1 },
-#endif
-#ifdef IFXF_AUTOCONF6TEMP	/* 6.9+ */
 	{ "autoconfprivacy", "Privacy addresses for IPv6 autoconf", CMPL0 0, 0, intxflags, 1 }, /* XXX bkcompat */
 	{ "temporary",	"Temporary addresses for IPv6 autoconf", CMPL0 0, 0, intxflags, 1 },
-#endif
-#ifdef IFXF_MONITOR		/* 6.9+ */
 	{ "monitor",	"Monitor mode for incoming traffic",	CMPL0 0, 0, intxflags, 1 },
-#endif
 	{ "wgpeer",	"Wireguard peer config",		CMPL0 0, 0, intwgpeer, 1 },
 	{ "wgport",	"Wireguard UDP port",			CMPL0 0, 0, intwg, 1 },
 	{ "wgkey",	"Wireguard private key",		CMPL0 0, 0, intwg, 1 },
