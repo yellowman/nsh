@@ -1990,7 +1990,7 @@ command()
 	Command  *c;
 	u_int num;
 
-	init_bgpd_socket_path(getrtable());
+	init_bgpd_socket_path(cli_rtable);
 
 	if (editing) {
 		inithist();
@@ -2957,7 +2957,7 @@ cmdrc(char rcname[FILENAME_MAX])
 	unsigned int lnum;	/* line number */
 	u_int	z = 0;		/* max length of cmdtab argument */
 
-	init_bgpd_socket_path(getrtable());
+	init_bgpd_socket_path(cli_rtable);
 
 	if ((rcfile = fopen(rcname, "r")) == 0) {
 		printf("%% Unable to open %s: %s\n", rcname, strerror(errno));
