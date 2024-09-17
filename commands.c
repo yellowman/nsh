@@ -3049,8 +3049,10 @@ cmdrc(char rcname[FILENAME_MAX])
 			break;
 		if (line[0] == '#')
 			continue;
-		if (line[0] == '!')
+		if (line[0] == '!') {
+			savec = NULL;
 			continue;
+		}
 		/*
 		 * Don't ignore indented comments with pound sign, otherwise
 		 * comments won't be saved into daemon/ctl config files.
@@ -3060,7 +3062,7 @@ cmdrc(char rcname[FILENAME_MAX])
 		if (line[0] == ' ')
 			strlcpy(saveline, line, sizeof(saveline));
 		makeargv();
-		if (margv[0] == 0)
+		if (margv[0] == 0 && !savec)
 			continue;
 		if (line[0] == ' ' && (!savec || savec->modh < 1)) {
 			printf("%% No mode handler specified before"
