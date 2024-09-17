@@ -1465,11 +1465,25 @@ interface(int argc, char **argv, char *modhvar)
 			printf("%% Invalid command\n");
 		} else {
 			int save_cli_rtable = cli_rtable;
-			cli_rtable = 0;
 
+			/*
+			 * Run the handler in the default routing domain.
+			 * This requires privileged mode if we are not
+			 * already in rdomain 0.
+			 */
+			if (getrtable() != 0 && !priv) {
+				printf("%% Privilege required\n");
+				return (0);
+			}
+
+			if (cli_rtable != 0 && nsh_setrtable(0) == 0)
+				cli_rtable = 0;
+	
 			((*i->handler) (ifname, ifs, argc, argv));
 
-			cli_rtable = save_cli_rtable;
+			if (save_cli_rtable != cli_rtable &&
+			    nsh_setrtable(cli_rtable) == 0)
+				cli_rtable = save_cli_rtable;
 		}
 
 		ifname[0] = '\0';
@@ -1532,13 +1546,29 @@ interface(int argc, char **argv, char *modhvar)
 				printf("%% Invalid command\n");
 		} else {
 			int save_cli_rtable = cli_rtable;
-			cli_rtable = 0;
+			int ret;
 
-			if ((*i->handler) (ifname, ifs, margc, margv)) {
-				cli_rtable = save_cli_rtable;
-				break;
+			/*
+			 * Run the handler in the default routing domain.
+			 * This requires privileged mode if we are not
+			 * already in rdomain 0.
+			 */
+			if (getrtable() != 0 && !priv) {
+				printf("%% Privilege required\n");
+				return (0);
 			}
-			cli_rtable = save_cli_rtable;
+
+			if (cli_rtable != 0 && nsh_setrtable(0) == 0)
+				cli_rtable = 0;
+
+			ret = (*i->handler) (ifname, ifs, margc, margv);
+
+			if (cli_rtable != save_cli_rtable &&
+			    nsh_setrtable(cli_rtable) == 0)
+				cli_rtable = save_cli_rtable;
+
+			if (ret)
+				break;
 		}
 
 		if (i && i->handler == int_interface && next_ifname[0] != '\0' &&
@@ -2298,11 +2328,25 @@ docmd(int argc, char **argv)
 			printf("%% Invalid command\n");
 		} else {
 			int save_cli_rtable = cli_rtable;
-			cli_rtable = 0;
+
+			/*
+			 * Run the handler in the default routing domain.
+			 * This requires privileged mode if we are not
+			 * already in rdomain 0.
+			 */
+			if (getrtable() != 0 && !priv) {
+				printf("%% Privilege required\n");
+				return 0;
+			}
+
+			if (cli_rtable != 0 && nsh_setrtable(cli_rtable) == 0)
+				cli_rtable = 0;
 
 			((*i->handler) (ifname, ifs, argc, argv));
 
-			cli_rtable = save_cli_rtable;
+			if (save_cli_rtable != cli_rtable &&
+			    nsh_setrtable(cli_rtable) == 0)
+				cli_rtable = save_cli_rtable;
 		}
 		close(ifs);
 	} else {
@@ -2652,7 +2696,7 @@ argvtostring(int argc, char **argv, char *string, int strlen)
 int
 rtable(int argc, char **argv)
 {
-	int table, set, pos, found;
+	int table, set, pos, found, curtable;
 	const char *errstr;
 	char rtname[64];
 	StringList *resp;
@@ -2682,6 +2726,23 @@ rtable(int argc, char **argv)
 		return 1;
 	}
 
+	curtable = getrtable();
+	if (cli_rtable != curtable) {
+		printf("%% WARNING: nsh process rtable is out of sync "
+		    "(want %d, have %d); "
+		    "This is probably a bug in nsh, please report it.\n",
+		    cli_rtable, curtable);
+	}
+
+	/*
+	 * The kernel will prevent unprivileged users from switching
+	 * away from rdomains other than 0.
+	 */
+	if (set && !priv && cli_rtable != 0 && cli_rtable != table) {
+		printf("%% Privilege required\n");
+		return 1;
+	}
+
 	argc -= 2;
 	argv += 2;
 
@@ -2705,7 +2766,13 @@ rtable(int argc, char **argv)
 	}
 
 	if (set && (found && !pos)) {
+		if (!priv && cli_rtable != 0) {
+			printf("%% Privilege required\n");
+			return 1;
+		}
 		/* Table found, skip database action */
+		if (nsh_setrtable(table))
+			return 1;
 		cli_rtable = table;
 		return 0;
 	}
@@ -2720,6 +2787,8 @@ rtable(int argc, char **argv)
 		}
 	} else if (table == 0)  {
 		/* Do not add the kernel's default rtable 0 to the database. */
+		if (nsh_setrtable(0))
+			return 1;
 		cli_rtable = 0;
 		return 0;
 	}
@@ -2732,8 +2801,12 @@ rtable(int argc, char **argv)
 			printf("%% rtable db insertion error\n");
 			return 1;
 		}
+		if (nsh_setrtable(table))
+			return 1;
 		cli_rtable = table;
 	} else {
+		if (nsh_setrtable(0))
+			return 1;
 		cli_rtable = 0;
 	}
 

@@ -89,7 +89,7 @@ cmdargs_output_setenv(char *cmd, char *arg[], int stdoutfd, int stderrfd,
 			signal(SIGINT, SIG_DFL);
 			signal(SIGCHLD, SIG_DFL);
 
-			if (cli_rtable != 0 && nsh_setrtable(cli_rtable))
+			if (nsh_setrtable(cli_rtable))
 				_exit(0);
 
 			if (stdoutfd != -1) {
@@ -178,7 +178,7 @@ nsh_setrtable(int rtableid)
 			    cli_rtable);
 			break;
 		case EPERM:
-			printf("%% nsh not running as root?\n");
+			printf("%% Privileged required\n");
 			break;
 		default:
 			printf("%% setrtable failed: %d\n", errno);
