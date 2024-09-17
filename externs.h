@@ -86,7 +86,6 @@ void conf_pppoe(FILE *, int, char *);
 void conf_sppp(FILE *, int, char *);
 
 /* conf.c */
-#define LEASEPREFIX	"/var/db/dhclient.leases"
 #define DHCPLEASECTL	"/usr/sbin/dhcpleasectl"
 #define SLAACCTL	"/usr/sbin/slaacctl"
 int conf(FILE *);
@@ -326,7 +325,6 @@ int parse_ipv6(char *, struct in6_addr *);
 #endif
 
 /* if.c */
-#define DHCLIENT	"/sbin/dhclient"
 #define DHCRELAY	"/usr/sbin/dhcrelay"
 #define RAD		"/usr/sbin/rad"
 #define DHCPLEASED_SOCK	"/dev/dhcpleased.sock"

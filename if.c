@@ -1337,23 +1337,8 @@ intip(char *ifname, int ifs, int argc, char **argv)
 			}
 			return intxflags(ifname, ifs, argc_dhcp, argv_dhcp);
 		} else {
-			/*
-			 * On OpenBSD 7.2, dhclient(8) is just a stub and will
-			 * likewise set the autoconf4 flag for dhcpleased(8).
-			 * On earlier releases, dhclient(8) will get a lease.
-			 */
-			char *args[] = { PKILL, "dhclient", ifname, NULL };
-			char *args_set[] = { DHCLIENT, ifname, NULL };
-			char leasefile[sizeof(LEASEPREFIX)+1+IFNAMSIZ];
-
-			if (set)
-				cmdargs(DHCLIENT, args_set);
-			else {
-				cmdargs(PKILL, args);
-				snprintf(leasefile, sizeof(leasefile), "%s.%s",
-				    LEASEPREFIX, ifname);
-				rmtemp(leasefile);
-			}
+			printf("%% cannot get DHCP leases because dhcpleased "
+			    "is not running\n");
 			return (0);
 		}
 	}

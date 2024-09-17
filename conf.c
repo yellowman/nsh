@@ -86,7 +86,6 @@ void conf_keepalive(FILE *, int, char *);
 void conf_rtflags(char *, int, struct rt_msghdr *rtm);
 int dhcpleased_has_defaultroute(struct sockaddr_rtlabel *);
 int dhcpleased_controls_interface(char *, int);
-int dhclient_isenabled(char *);
 int default_txprio(char *);
 int default_rxprio(char *);
 int default_llpriority(char *);
@@ -591,40 +590,6 @@ dhcpleased_has_address(char *ifname, const char *address,
 	return (address_found);
 }
 
-/*
- * see if ("option routers %s;\n",dst) is preset in any possible dhclient
- * lease file
- */
-int dhclient_isenabled(char *dst)
-{
-	int gatewayfound = 0;
-	struct stat enst;
-	struct if_nameindex *ifn_list, *ifnp;
-	char ortext[128];
-	char leasefile[sizeof(LEASEPREFIX)+IFNAMSIZ+1];
-
-	if ((ifn_list = if_nameindex()) == NULL) {
-		printf("%% dhclient_isenabled: if_nameindex failed\n");
-		return 0;
-	}
-
-	snprintf(ortext, sizeof(ortext), "  option routers %s;\n", dst);
-
-	for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++) {
-		snprintf(leasefile, sizeof(leasefile), "%s.%s", LEASEPREFIX,
-		    ifnp->if_name);
-		if (stat(leasefile, &enst) == 0 && S_ISREG(enst.st_mode))
-			if(scantext(leasefile, ortext)) {
-				gatewayfound = 1;
-				break;
-			}
-	}
-
-	if_freenameindex(ifn_list);
-
-	return (gatewayfound);
-}
-
 /* find string in file */
 int scantext(char *fname, char *string)
 {
@@ -811,18 +776,11 @@ void conf_lladdr(FILE *output, char *ifname)
 
 int conf_ifaddr_dhcp(FILE *output, char *ifname, int ifs, int flags)
 {
-	FILE *dhcpif = NULL;
 	int ippntd;
-	char leasefile[sizeof(LEASEPREFIX)+1+IFNAMSIZ];
 
-	/* find dhcpleased/dhclient controlled interfaces */
-	snprintf(leasefile, sizeof(leasefile), "%s.%s",
-	    LEASEPREFIX, ifname);
-	if (dhcpleased_controls_interface(ifname, ifs) ||
-	    (dhcpif = fopen(leasefile, "r")) != NULL) {
+	/* find dhcpleased controlled interfaces */
+	if (dhcpleased_controls_interface(ifname, ifs)) {
 		fprintf(output, " autoconf4\n");
-		if (dhcpif)
-			fclose(dhcpif);
 		/* print all non-autoconf ipv6 addresses */
 		conf_ifaddrs(output, ifname, flags, AF_INET6);
 		ippntd = 1;
@@ -1680,11 +1638,10 @@ conf_print_rtm(FILE *output, struct rt_msghdr *rtm, char *delim, int af)
 		}
 		/*
 		 * Suppress printing IPv4 route if it's the default
-		 * route and dhcp (dhcpleased or dhclient) is enabled.
+		 * route and dhcp (dhcpleased) is enabled.
 		 */
 		else if (!(af == AF_INET && isdefaultroute(dst, mask)
-		    && (dhcpleased_has_defaultroute(sa_rl) ||
-		    dhclient_isenabled(routename(gate))))) {
+		    && dhcpleased_has_defaultroute(sa_rl))) {
 			fprintf(output, "%s%s ", delim, netname(dst, mask));
 			fprintf(output, "%s%s\n", routename(gate), flags);
 		}

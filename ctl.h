@@ -2,7 +2,6 @@
    daemon control */
 
 /* if.c related */
-#define DHCLIENT        "/sbin/dhclient"
 #define DHCRELAY        "/usr/sbin/dhcrelay"
 #define RAD             "/usr/sbin/rad"
 #define DHCPLEASED_SOCK "/dev/dhcpleased.sock"
