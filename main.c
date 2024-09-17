@@ -257,6 +257,8 @@ main(int argc, char *argv[])
 		}
 	}
 
+	cli_rtable = getrtable();
+
 	if (iflag) {
 		int carp_locked;
 
