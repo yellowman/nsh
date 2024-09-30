@@ -365,24 +365,64 @@ struct prot1 ldcs[] = {
 	    { LDAPCTL, "stats", NULL } },
 	{ 0, 0, { 0 } }
 };
+struct prot1 systatcs[] = {
+        { "interface",		"Interface",
+		{ SYSTAT,  "-d 3", "ifstat", NULL, NULL, NULL }  },
+        { "net",		"Network connection", 
+		{ SYSTAT,  "-d 3", "netstat", NULL, NULL, NULL }  },
+        { "mbuf",		"Network data memory buffer",
+		{ SYSTAT,  "-d 3", "mbuf", NULL, NULL, NULL }  }, 
+        { "queues",		"Active Packet Filter queue",
+		{ SYSTAT,  "-d 3", "queues", NULL, NULL, NULL }  },
+        { "rules",		"Active Packet Filter rule",
+		{ SYSTAT,  "-d 3", "rules", NULL, NULL, NULL }  },
+        { "states",		"Packet Filter connection state",
+		{ SYSTAT,  "-d 3", "state", NULL, NULL, NULL }  },
+        { "packet-filter",	"Packet Filter ",
+		{ SYSTAT,  "-d 3", "pf", NULL, NULL, NULL }  },                              
+        { "sensors",		"Supported hardware sensor reading",
+		{ SYSTAT,  "-d 3", "sensors", NULL, NULL, NULL }  },
+        { "pigs",		"CPU resource hog program",
+		{ SYSTAT,  "-d 3", "pigs", NULL, NULL, NULL }  },
+        { "virtual-memory",	"Virtual memory usage",
+		{ SYSTAT,  "-d 3", "vmstat", NULL, NULL, NULL }  },
+        { "cpu",		"CPU usage",
+     		{ SYSTAT,  "-d 3", "cpu", NULL, NULL, NULL }  },
+        { "uvm",		"UVM subsystem",
+		{ SYSTAT,  "-d 3", "uvm", NULL, NULL, NULL }  },
+        { "swap",		"Swap space usage",
+		{ SYSTAT,  "-d 3", "swap", NULL, NULL, NULL }  },
+        { "pool",		"Kernel pool usage",
+                { SYSTAT,  "-d 3", "pool", NULL, NULL, NULL }  },
+        { "pcache",		"Kernel pool per CPU cache",
+	        { SYSTAT,  "-d 3", "pcache", NULL, NULL, NULL }  },
+        { "malloc",		"Kernel memory allocation type",
+		{ SYSTAT,  "-d 3", "malloc", NULL, NULL, NULL }  },
+        { "bucket",             "Kernel malloc bucket",
+		{ SYSTAT,  "-d 3", "bucket", NULL, NULL, NULL }  },
+        { 0, 0, 0, 0 }
+};
+
+
 
 extern struct prot1 bgcs[];
 
 /* show yyy zzz */
 struct prot prots[] = {
-	{ "bgp",	bgcs },
-	{ "ospf",	oscs },
-	{ "ospf6",	os6cs },
-	{ "pf",		pfcs },
-	{ "eigrp",	eics },
-	{ "rip",	rics },
-	{ "ike",	ikcs },
-	{ "ipsec",	iscs },
-	{ "ldp",	lics },
-	{ "dvmrp",	dvcs },
-	{ "relay",	rlcs },
-	{ "smtp",	smcs },
-	{ "ldap",	ldcs },
+	{ "bgp",		bgcs },
+	{ "ospf",		oscs },
+	{ "ospf6",		os6cs },
+	{ "pf",			pfcs },
+	{ "eigrp",		eics },
+	{ "rip",		rics },
+	{ "ike",		ikcs },
+	{ "ipsec",		iscs },
+	{ "ldp",		lics },
+	{ "dvmrp",		dvcs },
+	{ "relay",		rlcs },
+	{ "smtp",		smcs },
+	{ "ldap",		ldcs },
+	{ "system-stats",	systatcs },
 	{ 0,		0 }
 };
 
@@ -463,6 +503,7 @@ Menu showlist[] = {
 	{ "smtp",	"SMTP server",		CMPL(ta) (char **)smcs, sizeof(struct prot1), 0, 1, pr_prot1 },
 	{ "ldap",	"LDAP server",		CMPL(ta) (char **)ldcs, sizeof(struct prot1), 0, 1, pr_prot1 },
 	{ "monitor",	"Monitor routing/arp table changes", CMPL0 0, 0, 0, 0, monitor },
+	{ "system-stats",	"System, firewall and kernel statistics", CMPL(ta) (char **)systatcs, sizeof(struct prot1), 0, 3, pr_prot1 },
 	{ "version",	"Software information",	CMPL0 0, 0, 0, 0, version },
 	{ "users",	"System users",		CMPL0 0, 0, 0, 0, who },
 	{ "crontab",	"Scheduled background jobs",	CMPL0 0, 0, 0, 0, pr_crontab },

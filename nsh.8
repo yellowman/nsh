@@ -1949,7 +1949,8 @@ nsh/no verbose
 .Op hostname | interface | autoconf | ip | inet | inet6 | route | route6\
  | sadb | arp | ndp | vlan | kernel | bgp | ospf | ospf6 | pf | eigrp | rip\
  | ldp | ike | ipsec | dvmrp | relay | dhcp | smtp | ldap | monitor\
- | version | users | crontab | running-config | startup-config |\&? | help
+ | version | users | crontab | running-config | startup-config\
+ | system-stats |\&? | help
 .Pp
 The main diagnostic and informational command is 'show'.
 show without arguments  displays the available diagnostic show sub commands.
@@ -1990,6 +1991,7 @@ nsh(p)/show
   smtp            SMTP server
   ldap            LDAP server
   monitor         Monitor routing/arp table changes
+  system-stats    System, firewall and kernel statistics
   version         Software information
   users           System users
   crontab         Scheduled background jobs
@@ -2763,6 +2765,713 @@ Start an interactive console monitor mode for the system's routing socket.
 The monitor displays raw descriptions of the data passing into the kernel's
 routing socket and dumps of the kernel's routing messages to the machine.
 Press enter or control-C to exit this mode.
+.Pp
+.Tg show
+.Tg stat
+.Tg systat
+.Tg statistics
+.Ic show system-stats
+.Op bucket | mbuf | pigs | sensors | virtual-memory\
+ | cpu | net | pool | states\
+ | interface | packet-filter | queues | swap\
+ | malloc | pcache | rules | uvm
+.Pp
+.Cm show
+.Cm system-stats
+displays various system statistics using curses display and the
+.Xr systat 1
+command with the -d 3 option set, the behaviour of the command in
+.Nm .
+is to display 3 screens of data and then return back to
+.Nm .
+.Bd -literal -offset indent
+nsh(p)/show system-stats
+% Arguments may be abbreviated
+
+  show system-stats interface      Interface information
+  show system-stats net            Network connection information
+  show system-stats mbuf           Network data memory buffer information
+  show system-stats queues         Active Packet Filter queue information
+  show system-stats rules          Active Packet Filter rule information
+  show system-stats states         Packet Filter connection state information
+  show system-stats packet-filter  Packet Filter  information
+  show system-stats sensors        Supported hardware sensor reading information
+  show system-stats pigs           CPU resource hog program information
+  show system-stats virtual-memory Virtual memory usage information
+  show system-stats cpu            CPU usage information
+  show system-stats uvm            UVM subsystem information
+  show system-stats swap           Swap space usage information
+  show system-stats pool           Kernel pool usage information
+  show system-stats pcache         Kernel pool per CPU cache information
+  show system-stats malloc         Kernel memory allocation type information
+  show system-stats bucket         Kernel malloc bucket information
+nsh(p)/show system-stats
+.Ed
+.Pp
+.Tg statistics
+.Tg show
+.Tg systat
+.Tg interface
+.Ic show system-stats interface
+.Pp
+Display network interface statistics from
+.Xr systat 1
+the output is the same as the
+.Xr systat 1
+command with the ifstat argument on
+.Ox .
+.Bd -literal -offset indent
+nsh(p)/show system-stats interface
+   0 users Load 0.03 0.05 0.01                             nsh 22:36:37
+
+IFACE     STATE DESC     IPKTS IBYTES IFAILS  OPKTS OBYTES OFAILS  COLLS
+em0       up:U               0      0      0      0      0      0      0
+em1       dn:U               0      0      0      0      0      0      0
+enc0      dn:U               0      0      0      0      0      0      0
+lo0       up                 0      0      0      0      0      0      0
+pflog0    up                 0      0      0      0      0      0      0
+Totals                       0      0      0      0      0      0      0
+.Ed
+.Pp
+.Tg statistics
+.Tg show
+.Tg systat
+.Tg net
+.Tg netstat
+.Ic show system-stats net
+.Pp
+Display network connections.
+Each address is displayed numerically in the format "hostip:port"
+The output is the same as the
+.Xr systat 1
+command with the netstat argument on
+.Ox .
+.Bd -literal -offset indent
+nsh(p)/show system-stats net
+   0 users Load 0.03 0.04 0.00                      nsh 22:39:37
+
+LOCAL ADDRESS    FOREIGN ADDRESS     PROTO   RECV-Q  SEND-Q STATE
+10.0.2.15:23041  10.4.90.123:123     udp          0       0
+10.0.2.15:12678  10.4.89.123:123     udp          0       0
+.Ed
+.Pp
+.Tg statistics
+.Tg show
+.Tg systat
+.Tg mbuf
+.Ic show system-stats mbuf
+.Pp
+Display mbuf usage information from kernel pools and mbuf cluster pool
+statistics of each network interface.
+This command is the equivalent of running the
+.Xr systat 1
+command with the mbuf argument
+.Ox .
+.Bd -literal -offset indent
+nsh(p)/show system-stats mbuf
+   0 users Load 0.52 0.37 0.17                     nsh 23:27:47
+
+IFACE            RING    LIVELOCKS  SIZE ALIVE   LWM   HWM   CWM
+System           mbufs           0   256    95           9
+                 mcl2k              2048     0           3
+                 mcl2k2             2112    18           3
+                 mcl4k              4096     0           3
+                 mcl8k              8192     0           3
+                 mcl9k              9216     0           1
+                 mcl12k            12288     0           2
+                 mcl16k            16384     0           3
+                 mcl64k            65536     0           3
+lo0
+em0                                 2050    18    16   256    18
+em1
+enc0
+pflog0
+.Ed
+.Pp
+.Tg statistics
+.Tg show
+.Tg systat
+.Tg queue
+.Tg QOS
+.Tg pf
+.Tg shaping
+.Ic show system-stats queues
+.Pp
+Display currently active
+.Xr pf 4
+queues.
+The output is the same as the
+.Xr systat 1
+command with the queues argument on
+.Ox .
+.Bd -literal -offset indent
+nsh(p)/show system-stats queues
+   0 users Load 0.01 0.02 0.00                               nsh 00:34:38
+
+QUEUE        BW/FL SCH    PKTS  BYTES  DROP_P DROP_B QLEN BORR SUSP P/S  B/S
+rootq on em0   20M fifo      0      0       0      0    0
+ main          20M fifo      0      0       0      0    0
+  qdef       9600K fifo     28   2125       0      0    0
+  qweb       9600K fifo      0      0       0      0    0
+  sdqpri      700K fifo      0      0       0      0    0
+  qdns        200K fifo    549  49360       0      0    0
+ spamd       1000  fifo      0      0       0      0    0
+.Ed
+.Pp
+.Tg statistics
+.Tg show
+.Tg systat
+.Tg rules
+.Tg pf
+.Ic show system-stats rules
+.Pp
+Display
+.Xr pf 4
+rule statistics.
+The ouput is the same as the
+.Xr systat 1
+command with the rules argument
+.Ox .
+.Bd -literal -offset indent
+nsh(p)/show system-stats rules
+   0 users Load 0.39 0.17 0.06                                 nsh 00:41:41
+
+RU  A D L Q IF   PR   K  PKTS BYTES STATE MAX INFO
+ 0  B A                     0     0     0     return all
+ 1  P A               K  1190 98403     8     all
+ 2  M I   Q em0  tcp        0     0     0     from any to any port = ftp  queue
+ 3  M I   Q em0  tcp        0     0     0     from any to any port = www  queue
+ 4  M O     em0  udp     1152 87696     0     all  queue qdns
+ 5  M O     em0  icmp       0     0     0     all  queue qdef
+ 6  B I     !lo0 tcp        0     0     0     turn from any to any port 6000:6
+ 7  B O L        tcp        0     0     0     return all user = 55
+ 8  B O L        udp        0     0     0     return all user = 55
+.Ed
+.Pp
+sd.Tg statistics
+.Tg show
+.Tg systat
+.Tg pf
+.Tg states
+.Ic show system-stats states
+.Pp
+Display list of connections in the PF state table.
+.Xr systat 1
+command with the states argument on
+.Ox .
+.Bd -literal -offset indent
+nsh(p)/show system-stats states
+   0 users Load 0.03 0.08 0.06                              nsh 00:49:41
+
+PR   D SRC              DEST              STATE   AGE   EXP  PKTS BYTES R
+udp  O 10.0.2.15:12678  10.4.89.123:123    2:2   9479    28   600 45600
+udp  O 10.0.2.15:23041  10.4.90.123:123    2:2   9479    56   602 45752
+.Ed
+.Pp
+.Tg statistics
+.Tg show
+.Tg systat
+.Tg pf
+.Ic show system-stats packet-filter
+.Pp
+Display general
+.Xr pf 4
+statistics.
+output of the command is identical to that of
+.Xr systat 1
+command with the pf argument on
+.Ox .
+.Bd -literal -offset indent
+nsh(p)/show system-stats packet-filter
+   0 users Load 0.05 0.10 0.08 (1-42 of 48)             nsh 00:59:36
+
+            TYPE NAME                  VALUE       RATE
+              pf Status              Enabled
+              pf Since              02:47:57
+              pf Debug                   err
+              pf Hostid           0xe9bfd8a6
+
+           state Count                     2
+           state searches               1322       0.13
+           state inserts                   8       0.00
+           state removals                  6       0.00
+
+       src track Count                     0
+       src track searches                  0       0.00
+       src track inserts                   0       0.00
+       src track removals                  0       0.00
+
+        fragment Count                     0
+        fragment searches                  0       0.00
+        fragment inserts                   0       0.00
+        fragment removals                  0       0.00
+
+         counter match                     8       0.00
+         counter bad-offset                0       0.00
+         counter fragment                  0       0.00
+         counter short                     0       0.00
+         counter normalize                 0       0.00
+         counter memory                    0       0.00
+         counter bad-timestamp             0       0.00
+         counter congestion                0       0.00
+         counter ip-option                 0       0.00
+         counter proto-cksum               0       0.00
+         counter state-mismatch            0       0.00
+         counter state-insert              0       0.00
+         counter state-limit               0       0.00
+         counter src-limit                 0       0.00
+         counter synproxy                  0       0.00
+         counter translate                 0       0.00
+         counter no-route                  0       0.00
+
+   limit counter max states per rule       0       0.00
+   limit counter max-src-states            0       0.00
+   limit counter max-src-nodes             0       0.00
+.Ed
+.Pp
+.Tg statistics
+.Tg show
+.Tg systat
+.Tg sensor
+.Tg hardware
+.Tg enviornment
+.Ic show system-stats sensors
+.Pp
+Display live readings from supported hardware sensors
+Each address is displayed numerically in the format "hostip:port"
+.Xr systat 1
+command with the sensors argument on
+.Ox .
+.Bd -literal -offset indent
+nsh(p)/show system-stats sensors
+   0 users Load 0.00 0.00 0.00                          nsh 01:46:11
+
+SENSOR                         VALUE  STATUS  DESCRIPTION
+acpibat0.volt0            10.00 V DC          voltage
+acpibat0.volt1            10.00 V DC          current voltage
+acpibat0.power0               0.00 W          rate
+acpibat0.watthour0          50.00 Wh          last full capacity
+acpibat0.watthour1           0.10 Wh          warning capacity
+acpibat0.watthour2           0.05 Wh          low capacity
+acpibat0.watthour3          49.50 Wh    OK    remaining capacity
+acpibat0.watthour4          50.00 Wh          design capacity
+acpibat0.raw0                  0 raw    OK    battery idle
+acpiac0.indicator0                On          power supply
+.Ed
+.Pp
+.Tg statistics
+.Tg show
+.Tg systat
+.Tg top
+.Tg pig
+.Tg hog
+.Tg resource
+.Ic show system-stats pigs
+.Pp
+Display processes resident in main memory and gettting largest
+portion of the processor.
+This has the same output as the
+.Xr systat 1
+command with the pigs argument on
+.Ox .
+.Bd -literal -offset indent
+nsh(p)/show system-stats pigs
+   0 users Load 0.00 0.00 0.00                           nsh 02:55:02
+
+     PID USER      NAME         CPU     20\    40\    60\    80\  100\
+                   <idle>     88.28 #############################
+   13920 _relayd   relayd      2.93
+.Ed
+.Pp
+.Tg statistics
+.Tg show
+.Tg systat
+.Tg virtual-memory
+.Tg vmstat
+.Tg interrupt
+.Tg io
+.Tg load
+.Tg interface
+.Ic show system-stats virtual-memory
+.Pp
+Display statistics related to virtual memory usage,
+process scheduling, device interrupts, system name
+translation caching, disk I/O
+the output is the same as the
+.Xr systat 1
+command with no argument or with the vmstat argument on
+.Ox .
+.Bd -literal -offset indent
+nsh(p)/show system-stats vmstat
+   0 users Load 0.01 0.01 0.00                              nsh 02:59:46
+
+            memory totals (in KB)            PAGING SWAPPING   Interrupts
+           real   virtual     free           in  out in  out   321 total
+Active   368476    368476  5867920   ops                           em0
+All     2236328   2236328  5867920   pages                         em1
+                                                                 1 ahci0
+Proc:r  d  s  w    Csw   Trp   Sys   Int   Sof  Flt     forks      ohci0
+         153        41   289   159     1   101  293     fkppw      pckbc0
+                                                        fksvm      pckbc0
+   0.1%Int   0.0%Spn   0.1%Sys   0.3%Usr  99.5%Idle     pwait  302 clock
+|    |    |    |    |    |    |    |    |    |    |     relck   18 ipi
+                                                        rlkok
+                                                        noram
+Namei         Sys-cache    Proc-cache    No-cache    12 ndcpy
+    Calls     hits    %    hits     %    miss   %       fltcp
+      122      122  100                             280 zfod
+                                                        cow
+Disks   sd0   cd0   sd1                           67535 fmin
+seeks                                             90046 ftarg
+xfers     1                                             itarg
+speed    7K          2K                               2 wired
+  sec   0.0         0.0                                 pdfre
+                                                        pdscn
+                                                        pzidl       IPKTS
+                                                     12 kmape       OPKTS
+.Ed
+.Pp
+.Tg statistics
+.Tg show
+.Tg systat
+.Tg cpu
+.Tg processor
+.Tg load
+.Tg top
+.Ic show system-stats cpu
+.Pp
+Display average usage of each CPU, similar to the summary on the output
+of
+.Xr top 1
+command.
+The output is the same as
+.Xr systat 1
+command with the cpu argument on
+.Ox .
+.Bd -literal -offset indent
+nsh(p)/show system-stats cpu
+   0 users Load 0.00 0.01 0.00                          nsh 03:11:16
+
+CPU    User       Nice    System        Spin   Interrupt        Idle
+0      0.0%       0.0%      100%        0.0%        0.0%        0.0%
+1      0.0%       0.0%      0.0%        0.0%        0.0%        100%
+.Ed
+.Pp
+.Tg statistics
+.Tg show
+.Tg systat
+.Tg uvm
+.Tg swap
+.Tg load
+.Tg memory
+.Ic show system-stats uvm
+.Pp
+Display statistics for the UVM virtual memory system which manages
+access to the computer's memory resources.
+User processes and the kernel access these resources through UVM's
+external interface.
+UVM subsystem manages
+.Bl -item -offset indent
+.It
+initialise UVM subsystems
+.It
+manage virtual address spaces
+.It
+resolve page faults
+.It
+memory map files and devices
+.It
+perform uio-based I/O to virtual memory
+.It
+allocate and free kernel virtual memory
+.It
+allocate and free physical memory
+.El
+.Pp
+The output is the same as the
+.Xr systat 1
+command with the uvm argument on
+.Ox .
+.Bd -literal -offset indent
+nsh(p)/show system-stats uvm
+   0 users Load 0.02 0.04 0.01                          nsh 03:22:20
+
+
+ ===== Page Counters    ===== Stats Counters     ===== Fault Counters
+ 1978K npages           7120K FAULTS                   fltnoram
+ 1432K FREE             7389K TRAPS                    fltnoanon
+ 92122 ACTIVE          123678 INTRS                    fltnoamap
+173997 inactive         1528K SWTCH                    fltpgwait
+       paging           2124K SOFTS                    fltpgrele
+     2 wired            6874K SYSCALLS          251193 fltrelck
+241374 zeropages              pageins           247509 fltrelckok
+    25 PERCPUCACHES           pgswapin          298012 FLTANGET
+                              pgswapout                fltanretry
+                         1905 forks             356067 FLTAMCOPY
+ ===== Pageout Params      11 forks_ppwait       83976 fltnamap
+ 67535 freemin            764 forks_sharevm     351294 fltnomap
+ 90046 freetarg         11298 pga_zerohit       400526 FLTLGET
+       inactarg          2387 pga_zeromiss      251198 fltget
+675354 wiredmax                                 266959 FLT_ANON
+    25 anonmin          ===== Daemon Counters    31053 flt_acow
+    12 vtextmin               pdwoke            355410 FLT_OBJ
+    25 vnodemin               pdrevs             41427 flt_prcopy
+    10 anonminpct             pdswout            6439K FLT_PRZERO
+     5 vtextminpct            swpgonly
+    10 vnodeminpct            pdfreed       ===== Swap Counters
+                              pdscans             nswapdev
+ ===== Misc Counters          pdanscan            swpages
+       fpswtch                pdobscan            swpginuse
+    12 kmapent                pdreact             swpgonly
+                              pdbusy              nswget
+ ===== Constants              pdpageouts
+  4096 pagesize               pdpending     ===== Per-CPU Counters
+  4095 pagemask               pddeact       6002K PCPHIT
+    12 pageshift                           863424 PCPMISS
+.Ed
+.Pp
+.Tg statistics
+.Tg show
+.Tg systat
+.Tg swap
+.Tg memory
+.Tg load
+.Ic show system-stats swap
+.Pp
+Show information about swap space usage on all the swap areas
+compiled into the kernel.
+The graph shows the percentage of space in use on each partition.
+Areas known to the kernel but not in use are shown as not available.
+The output is the same as the
+.Xr systat 1
+command with the swap argument on
+.Ox .
+.Bd -literal -offset indent
+nsh(p)/show system-stats swap
+   0 users Load 0.04 0.03 0.00                           nsh 03:33:22
+
+DISK     512-blocks USED       20\      40\      60\      80\     100\
+                         No swap devices
+.Ed
+.Pp
+.Tg statistics
+.Tg show
+.Tg systat
+.Tg pool
+.Tg vmstat
+.Ic show system-stats pool
+.Pp
+Display kernel
+.Xr pool 9
+statistics simialar to the output the
+.Xr vmstat 8
+command with the -m switch.
+The output is the same as the
+.Xr systat 1
+command with the pool argument on
+.Ox .
+.Bd -literal -offset indent
+nsh(p)/show system-stats pool
+   0 users Load 0.01 0.00 0.00 (1-42 of 164)                 nsh 03:41:17
+
+NAME         SIZE REQUESTS   FAIL    INUSE    PGREQ    PGREL    NPAGE HIWA
+acpiwqpl       32     1978      0        0        1        0        1    1
+aesni         576        0      0        0        1        0        1    1
+amapchunkpl   152   210000      0     4957      227       35      192  192
+amappl         88    21258      0     1223       46       18       28   32
+amappl1        80    35443      0     4726      104        2      102  103
+amappl10      152      901      0       70        3        0        3    3
+amappl11      160      913      0       68        4        1        3    3
+amappl12      168     3733      0       89        7        2        5    5
+amappl13      176      907      0       35        2        0        2    2
+amappl14      184     1619      0       84        6        1        5    5
+amappl15      192      665      0       16        2        1        1    1
+amappl16      200   305009      0      999      110       53       57   61
+amappl2        88    12272      0     1565      130       95       35  108
+amappl3        96     6278      0      674       23        6       17   17
+amappl4       104     4894      0      501       53       39       14   45
+amappl5       112     1569      0      167        8        2        6    6
+amappl6       120     1581      0      146        8        3        5    5
+amappl7       128     1668      0      113        5        1        4    4
+amappl8       136     2568      0      178       57       46       11   31
+amappl9       144      968      0       81       19       15        4    4
+anonpl         24  8040785      0    76043      525       49      476  477
+aobjpl         72        4      0        2        1        0        1    1
+arp            88        2      0        2        1        0        1    1
+art_heap4     256       96      0       96        6        0        6    6
+art_heap8    4096        1      0        1        1        0        1    1
+art_node       16       22      0       22        1        0        1    1
+art_table      32       97      0       97        1        0        1    1
+bufpl         280    91099      0    72676     5578      313     5265 5578
+dino2pl       256    35129      0    13892      879       10      869  869
+dirhash      1024      534      0      498       63        0       63   63
+dma128        128        5      0        0        1        1        0    1
+dma16          16        2      0        0        1        1        0    1
+dma256        256       17      0        0        1        1        0    1
+dma32          32       15      0        0        1        1        0    1
+dma4096      4096        2      0        0        1        1        0    1
+dma512        512        6      0        3        1        0        1    1
+dma64          64        3      0        0        1        1        0    1
+extentpl       40       66      0       20        1        0        1    1
+fdescpl       432     1161      0       69       12        4        8    9
+ffsino        240    35129      0    13892      828       10      818  818
+filepl        120   192747      0      631       22        1       21   21
+futexpl        64     4543      0       27        2        1        1    1
+.Ed
+.Pp
+.Tg statistics
+.Tg show
+.Tg systat
+.Tg pcache
+.Tg cpu
+.Tg processor
+.Tg cache
+.Ic show system-stats pcache
+.Pp
+Display kernel
+.Xr pool 9
+per CPU Cache statistics.
+The output of this command in
+.Nm
+is the same as the
+.Xr systat 1
+command with the pcache argument
+.Ox
+.Bd -literal -offset indent
+nsh(p)/show system-stats pcache
+   0 users Load 0.00 0.00 0.00                               nsh 07:27:07
+
+NAME       LEN IDLE  NGC  CPU         REQ        REL       LREQ       LREL
+knotepl      8    0   34    0     5083315    5082739        134         61
+                            1     4391987    4392854         46        153
+mbufpl       8    0  192    0      381062     373361       2781       1818
+                            1      422272     431527       1841       2996
+mcl12k       8    0    1    0         356        365          0          0
+                            1         298        313          0          1
+mcl16k       8    0    4    0         661        701          6          9
+                            1         557        565          7          8
+mcl2k        8    0    0    0       17175      17019         50         30
+                            1       15455      15628         31         51
+mcl2k2       8    0   95    0        1417       1248         22          0
+                            1          42        988          0        117
+mcl4k        8    0    5    0        4665       4797         13         28
+                            1        3807       3731         25         15
+mcl64k       8    0    8    0        2619       2894         23         56
+                            1        2722       2528         53         28
+mcl8k        8    0    2    0        3853       3927         14         22
+                            1        3221       3180         20         14
+mcl9k        8    0    1    0          82        103          0          1
+                            1          71         75          0          0
+mtagpl   b   8    0    0    0           1          2          0          0
+                            1           0          0          0          0
+pvpl         8    * 3895    0     5773656    5773193     664752     666800
+                            1     4615157    4695887     525893     533869
+.Ed
+.Pp
+.Tg statistics
+.Tg show
+.Tg systat
+.Tg cpu
+.Tg processor
+.Tg malloc
+.Tg memory
+.Ic show system-stats malloc
+.Pp
+Display kernel
+.Xr malloc 9
+type statistic similar to the output of
+.Xr vmstat 8
+command with the -m switch.
+The output is the same as the
+.Xr systat 1
+command with the malloc argument
+.Bd -literal -offset indent
+nsh(p)/show system-stats malloc
+   0 users Load 0.12 0.03 0.01                                 nsh 07:07:43
+
+TYPE          INUSE MEMUSE HIGHUS  LIMIT REQUESTS TYPE  KERN BUCKETS
+ACPI           2057 248272 418160   220M   120878     0      |||||.||........
+ISOFS mount       1  32768  32768   220M        1     0      ...........|....
+MSDOSFS mount     1  16384  16384   220M        1     0      ..........|.....
+NDP               5     80     80   220M        5     0      |...............
+NFS daemon        1  16384  16384   220M        1     0      ..........|.....
+NFS srvsock       1    128    128   220M        1     0      ...|............
+SYN cache         2  16384  16384   220M        2     0      .........|......
+UFS mount        33  83792  83792   220M       33     0      |.|||||||.||....
+UFS quota         1  32768  32768   220M        1     0      ...........|....
+USB              26   6720   6720   220M       32     0      |||||..|........
+USB HC            1    512    512   220M        1     0      .....|..........
+USB device        6    720    720   220M        8     0      ||.|.|..........
+UVM amap       2711 182528 182656   220M    28453     0      |||||||..|......
+UVM aobj          3   2080   2336   220M        5     0      |...|..|........
+VM map            2   1024   1024   220M        2     0      .....|..........
+VM swap           1     64   2192   220M        4     0      |.|....|........
+counters         48  35200  35200   220M       48     0      ..|||||.||......
+crypto data       1   1024   1024   220M        1     0      ......|.........
+devbuf         2061  2785K  2785K   220M     2974     0      ||||||||||||||..
+dirhash         168  38256  38256   220M      195     0      |||||||.........
+ether_multi       1     64     64   220M        1     0      ..|.............
+exec              0      0   1584   220M     1247     0      ||..|.|.........
+file desc        17  11264  12800   220M       51     0      .....||.........
+ifaddr           25   2176   2176   220M       25     0      .||.|...........
+ifgroup          24   1344   1344   220M       30     0      .|.|............
+in_multi         11    832    832   220M       11     0      .|.|............
+ioctlops          0      0   4096   220M     1592     0      ....|||||.......
+kqueue          108 207360 236032   220M      225     0      .....|.|........
+log               0      0    320   220M        3     0      ..||............
+mount             8   8192   8192   220M        8     0      ......|.........
+pcb              17  12384  12384   220M       17     0      ||....|.........
+pf               19  15424  19200   220M       40     0      ..|.|..||.......
+pinsyscall      132 270336 288768   220M     4212     0      ....||||........
+proc            261 150304 159296   220M      843     0      |.|...|.||......
+rtable           58   1952   2240   220M      195     0      |||||...........
+sem               2    160    160   220M        2     0      .|.|............
+shm               3   5376   5376   220M        3     0      ....|.|.|.......
+sysctl            2    576    576   220M        2     0      ..|..|..........
+tdb               3    768    768   220M        3     0      ....|...........
+temp              9  6793K  6921K   220M   469133     0      |||||||||||.|..|
+ttys             61 207872 207872   220M       61     0      .....||.|||.....
+vnodes           92   6528  81920   220M     1419     0      ..|||...........
+.Ed
+.Pp
+.Tg statistics
+.Tg show
+.Tg systat
+.Tg malloc
+.Tg bucket
+.Ic show system-stats bucket
+.Pp
+Display kernel
+.Xr malloc 9
+bucket statistics similar to the output of
+.Xr vmstat 8
+command with the -m switch.
+The output is the same as
+.Xr systat 1
+command with the bucket argument on
+.Ox
+.Bd -literal -offset indent
+nsh(p)/show system-stats bucket
+   0 users Load 0.09 0.05 0.01                           nsh 08:56:59
+
+BUCKET     REQUESTS        INUSE      FREE         HIWAT     COULDFREE
+16             5377         1472        64          1280             0
+32            12847         1106       430           640            58
+64           201827          969       823           320          4332
+128          161454         2821       187           160           421
+256          320113          471         9            80             0
+512            2224          174         2            40             0
+1024           3680           64         4            20             0
+2048           3643          356        12            10           289
+4096           2792          559         1             5             0
+8192            189           39         1             5             0
+16384          1061            9         0             5             0
+32768             7            5         0             5             0
+65536          2346            0         0             5             0
+131072            3            1         0             5             0
+262144            0            0         0             5             0
+524288            1            1         0             5             0
+.Ed
 .Pp
 .Ic show version
 .Pp
