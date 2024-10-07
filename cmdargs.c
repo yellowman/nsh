@@ -174,7 +174,7 @@ nsh_setrtable(int rtableid)
 		ret = errno;
 		switch(errno) {
 		case EINVAL:
-			printf("%% rtable %d not initialized\n", rtable);
+			printf("%% rtable %d not initialized\n", rtableid);
 			break;
 		case EPERM:
 			printf("%% Privileged required\n");
