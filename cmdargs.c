@@ -174,7 +174,8 @@ nsh_setrtable(int rtableid)
 		ret = errno;
 		switch(errno) {
 		case EINVAL:
-			printf("%% rtable %d not initialized\n", rtableid);
+			printf("%% rtable %d not initialised\n", rtableid);
+			printf("%% set rdomain %d and an IP address on an interface to initalise the rtable\n", rtableid);
 			break;
 		case EPERM:
 			printf("%% Privileged required\n");
