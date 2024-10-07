@@ -59,6 +59,9 @@
 #define RELAYCTL        "/usr/sbin/relayctl"
 #define SMTPCTL         "/usr/sbin/smtpctl"
 #define LDAPCTL         "/usr/sbin/ldapctl"
+/* other binaries */
+#define SYSTAT		"/usr/bin/systat"
+
 
 /* argument list replacement */
 #define OPT     (void *)1
