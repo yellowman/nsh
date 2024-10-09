@@ -756,8 +756,6 @@ conf_ndp(FILE *output, char *delim)
 		rtm = (struct rt_msghdr *)next;
 		if (rtm->rtm_version != RTM_VERSION)
 			continue;
-		if (!(rtm->rtm_flags & RTF_HOST))
-			continue;
 		conf_ndp_entry(output, delim, rtm);
 	}
 	freertdump(rtdump);
@@ -769,6 +767,19 @@ conf_ndp_entry(FILE *output, char *delim, struct rt_msghdr *rtm)
 {
 	struct sockaddr_in6 *sin6;
 	struct sockaddr_dl *sdl;
+	static struct in6_nbrinfo *nbi;
+
+	/* Ignore entries which describe routes to networks. */
+	if (!(rtm->rtm_flags & RTF_HOST))
+		return;
+
+	/*
+	 * Ignore local entries. These correspond to addresses configured
+	 * on our network interfaces, and will already be preserved in case
+	 * of static IPs, and should not be preserved for dynamic IPs.
+	 */
+	if (rtm->rtm_flags & RTF_LOCAL)
+		return;
 	
 	sin6 = (struct sockaddr_in6 *)((char *)rtm + rtm->rtm_hdrlen);
 	in6_fillscopeid(sin6);
@@ -776,6 +787,15 @@ conf_ndp_entry(FILE *output, char *delim, struct rt_msghdr *rtm)
 	if (sdl->sdl_family != AF_LINK)
 		return;
 
+	/* Skip table entries for addresses learned via NDP protocol. */
+	nbi = getnbrinfo(&sin6->sin6_addr, sdl->sdl_index, 0);
+	if (nbi == NULL || nbi->expire != 0)
+		return;
+
+	/*
+	 * This is a 'permanent' non-local entry. We assume this entry
+	 * was manually added to the NDP table, and should be preserved.
+	 */
 	fprintf(output, "%s%s %s", delim, routename6(sin6), ether_str(sdl));
 	if (rtm->rtm_flags & RTF_ANNOUNCE)
 		fputs(" proxy", output);
