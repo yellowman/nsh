@@ -2345,7 +2345,8 @@ intrtlabel(char *ifname, int ifs, int argc, char **argv)
 int
 intparent(char *ifname, int ifs, int argc, char **argv)
 {
-	int set;
+	int set, ret;
+	unsigned long cmd;
 	struct if_parent ifp;
 
 	if (NO_ARG(argv[0])) {
@@ -2374,9 +2375,22 @@ intparent(char *ifname, int ifs, int argc, char **argv)
 		return 0;
 	}
 
-	if (ioctl(ifs, set ? SIOCSIFPARENT : SIOCDIFPARENT, &ifp) == -1)
-		printf("%% intparent: SIOC%sIFPARENT: %s\n", set ? "S" : "D",
-		    strerror(errno));
+	cmd = (set ? SIOCSIFPARENT : SIOCDIFPARENT);
+	ret = ioctl(ifs, cmd, &ifp);
+	if (ret == -1) {
+	if (errno == EBUSY) {
+	                int flags = get_ifflags(ifname, ifs);
+	                  if (flags & IFF_UP) {
+                        /* Toggle interface down and retry. and bring the interface back up*/
+	                        set_ifflags(ifname, ifs, flags & ~IFF_UP);
+	                        ret = ioctl(ifs, cmd, &ifp);
+	                        set_ifflags(ifname, ifs, flags);
+	                }
+	        }
+	        if (ret == -1)
+	                printf("%% intparent: SIOC%sIFPARENT: %s\n",
+	                    set ? "S" : "D", strerror(errno));
+	}
 
 	return 0;
 }
