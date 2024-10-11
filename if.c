@@ -2378,18 +2378,18 @@ intparent(char *ifname, int ifs, int argc, char **argv)
 	cmd = (set ? SIOCSIFPARENT : SIOCDIFPARENT);
 	ret = ioctl(ifs, cmd, &ifp);
 	if (ret == -1) {
-	if (errno == EBUSY) {
-	                int flags = get_ifflags(ifname, ifs);
-	                  if (flags & IFF_UP) {
+		if (errno == EBUSY) {
+			int flags = get_ifflags(ifname, ifs);
+			if (flags & IFF_UP) {
                         /* Toggle interface down and retry. and bring the interface back up*/
-	                        set_ifflags(ifname, ifs, flags & ~IFF_UP);
-	                        ret = ioctl(ifs, cmd, &ifp);
-	                        set_ifflags(ifname, ifs, flags);
-	                }
-	        }
-	        if (ret == -1)
-	                printf("%% intparent: SIOC%sIFPARENT: %s\n",
-	                    set ? "S" : "D", strerror(errno));
+				set_ifflags(ifname, ifs, flags & ~IFF_UP);
+				ret = ioctl(ifs, cmd, &ifp);
+				set_ifflags(ifname, ifs, flags);
+			}
+		}
+		if (ret == -1)
+			printf("%% intparent: SIOC%sIFPARENT: %s\n",
+			    set ? "S" : "D", strerror(errno));
 	}
 
 	return 0;
