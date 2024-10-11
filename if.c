@@ -2381,7 +2381,7 @@ intparent(char *ifname, int ifs, int argc, char **argv)
 		if (errno == EBUSY) {
 			int flags = get_ifflags(ifname, ifs);
 			if (flags & IFF_UP) {
-                        /* Toggle interface down and retry. and bring the interface back up*/
+				/* Put interface down, retry, and put it up. */
 				set_ifflags(ifname, ifs, flags & ~IFF_UP);
 				ret = ioctl(ifs, cmd, &ifp);
 				set_ifflags(ifname, ifs, flags);
