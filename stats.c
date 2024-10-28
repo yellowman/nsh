@@ -92,7 +92,7 @@ void	inet6print(struct in6_addr *, int, char *, int);
  * Dump TCP statistics structure.
  */
 void
-tcp_stats()
+tcp_stats(void)
 {
 	struct tcpstat tcpstat;
 	int mib[] = { CTL_NET, AF_INET, IPPROTO_TCP, TCPCTL_STATS };
@@ -222,7 +222,7 @@ tcp_stats()
  * Dump UDP statistics structure.
  */
 void
-udp_stats()
+udp_stats(void)
 {
 	struct udpstat udpstat;
 	u_long delivered;
@@ -270,7 +270,7 @@ udp_stats()
  * Dump IP statistics structure.
  */
 void
-ip_stats()
+ip_stats(void)
 {
 	struct ipstat ipstat;
 	int mib[] = { CTL_NET, AF_INET, IPPROTO_IP, IPCTL_STATS };
@@ -373,7 +373,7 @@ static	char *icmpnames[ICMP_MAXTYPE + 1] = {
  * Dump ICMP statistics.
  */
 void
-icmp_stats()
+icmp_stats(void)
 {
 	struct icmpstat icmpstat;
 	int i, first;
@@ -430,7 +430,7 @@ icmp_stats()
  * Dump IGMP statistics structure.
  */
 void
-igmp_stats()
+igmp_stats(void)
 {
 	struct igmpstat igmpstat;
 	int mib[] = { CTL_NET, AF_INET, IPPROTO_IGMP, IGMPCTL_STATS };
@@ -465,7 +465,7 @@ igmp_stats()
  * Dump AH statistics structure.
  */
 void
-ah_stats()
+ah_stats(void)
 {
 	struct ahstat ahstat;
 	int mib[] = { CTL_NET, AF_INET, IPPROTO_AH, AHCTL_STATS };
@@ -511,7 +511,7 @@ ah_stats()
  * Dump ESP statistics structure.
  */
 void
-esp_stats()
+esp_stats(void)
 {
 	struct espstat espstat;
 	int mib[] = { CTL_NET, AF_INET, IPPROTO_ESP, ESPCTL_STATS };
@@ -558,7 +558,7 @@ esp_stats()
  * Dump IP-in-IP statistics structure.
  */
 void
-ipip_stats()
+ipip_stats(void)
 {
 	struct ipipstat ipipstat;
 	int mib[] = { CTL_NET, AF_INET, IPPROTO_IPIP, IPIPCTL_STATS };
@@ -592,7 +592,7 @@ ipip_stats()
  * Dump CARP statistics structure.
  */
 void
-carp_stats()
+carp_stats(void)
 {
 	struct carpstats carpstat;
 	int mib[] = { CTL_NET, AF_INET, IPPROTO_CARP, CARPCTL_STATS };
@@ -633,7 +633,7 @@ carp_stats()
  * Dump pfsync statistics structure.
  */
 void
-pfsync_stats()
+pfsync_stats(void)
 {
 	struct pfsyncstats pfsyncstat;
 	int mib[] = { CTL_NET, AF_INET, IPPROTO_PFSYNC, PFSYNCCTL_STATS };
@@ -674,7 +674,7 @@ pfsync_stats()
  * Dump IPCOMP statistics structure.
  */
 void
-ipcomp_stats()
+ipcomp_stats(void)
 {
 	struct ipcompstat ipcompstat;
 	int mib[] = { CTL_NET, AF_INET, IPPROTO_IPCOMP, IPCOMPCTL_STATS };
@@ -715,7 +715,7 @@ ipcomp_stats()
  * Print routing statistics
  */
 void
-rt_stats()
+rt_stats(void)
 {
 	struct rtstat rtstat;
  	int mib[] = { CTL_NET, PF_ROUTE, 0, 0, NET_RT_STATS, 0 };

@@ -182,7 +182,7 @@ static struct fpf {
 static struct stt {
 	char *name;
 	char *help;
-	void (*handler) ();
+	void (*handler)(void);
 } stts[] = {
 	{ "ip",		"Internet Protocol",			ip_stats },
 	{ "ah",		"Authentication Header",		ah_stats },
