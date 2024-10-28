@@ -365,6 +365,7 @@ struct prot1 ldcs[] = {
 	    { LDAPCTL, "stats", NULL } },
 	{ 0, 0, { 0 } }
 };
+
 struct prot1 systatcs[] = {
         { "interface",		"Interface",
 		{ SYSTAT,  "-d 3", "ifstat", NULL, NULL, NULL }  },
@@ -400,10 +401,8 @@ struct prot1 systatcs[] = {
 		{ SYSTAT,  "-d 3", "malloc", NULL, NULL, NULL }  },
         { "bucket",             "Kernel malloc bucket",
 		{ SYSTAT,  "-d 3", "bucket", NULL, NULL, NULL }  },
-        { 0, 0, 0, 0 }
+	{ 0, 0, { 0 } }
 };
-
-
 
 extern struct prot1 bgcs[];
 
