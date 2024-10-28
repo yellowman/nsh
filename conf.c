@@ -412,43 +412,21 @@ void conf_ctl(FILE *output, char *delim, char *name, int rtableid)
 {
 	FILE *conf;
 	struct daemons *x;
-	struct daemons2 *x2;
-	struct ctl *ctl, *x_table = NULL;
-	struct ctl2 *ctl2, *x2_table = NULL;
+	struct ctl *ctl;
 	char tmp_str[TMPSIZ], tmpfile[64];
 	char *fenablenm = NULL, *fothernm = NULL, *flocalnm = NULL;
-	int defenable = 0, pntdrules = 0, pntdflag = 0, dbflag, x_doreload = 0;
-	char *x_tmpfile, *x_name;
+	int defenable = 0, pntdrules = 0, pntdflag = 0, dbflag;
 
 	x = (struct daemons *)genget(name, (char **)ctl_daemons,
 	    sizeof(struct daemons));
-	if (x == NULL) {
-		x2 = (struct daemons2 *)genget(name, (char **)ctl_daemons2,
-		    sizeof(struct daemons2));
-		if (x2 == NULL || Ambiguous(x2)) {
-			printf("%% conf_ctl: %s: genget internal failure\n",
-			    name);
-			return;
-		}
-		x_tmpfile = x2->tmpfile;
-		x_name = x2->name;
-		x_doreload = x2->doreload;
-		x2_table = x2->table;
-	} else {
-		if (Ambiguous(x)) {
-			printf("%% conf_ctl: %s: genget internal failure\n",
-			    name);
-			return;
-		}
-
-		x_tmpfile = x->tmpfile;
-		x_name = x->name;
-		x_doreload = x->doreload;
-		x_table = x->table;
+	if (x == NULL || Ambiguous(x)) {
+		printf("%% conf_ctl: %s: genget internal failure\n",
+		    name);
+		return;
 	}
 
 	/* print rules if they exist */
-	snprintf(tmpfile, sizeof(tmpfile), "%s.%d", x_tmpfile, rtableid);
+	snprintf(tmpfile, sizeof(tmpfile), "%s.%d", x->tmpfile, rtableid);
 	if ((conf = fopen(tmpfile, "r")) != NULL) {
 		fprintf(output, "%s%s rules\n", delim, name);
 		for (;;) {
@@ -465,39 +443,36 @@ void conf_ctl(FILE *output, char *delim, char *name, int rtableid)
 		printf("%% conf_ctl: %s: %s\n", tmpfile, strerror(errno));
 
 	/* fill in argument names from table */
-	for (ctl = x_table; ctl != NULL && ctl->name != NULL; ctl++) {
+	for (ctl = x->table; ctl != NULL && ctl->name != NULL; ctl++) {
 		get_argnames(ctl->flag_x, ctl->name, &defenable, &fenablenm,
-		    &flocalnm, &fothernm);
-	}
-	for (ctl2 = x2_table; ctl2 != NULL && ctl2->name != NULL; ctl2++) {
-		get_argnames(ctl2->flag_x, ctl2->name, &defenable, &fenablenm,
 		    &flocalnm, &fothernm);
 	}
 
 	/* print rules as currently enabled in running time database */
-	if ((dbflag = db_select_flag_x_dbflag_rtable("ctl", x_name, rtableid))
+	if ((dbflag = db_select_flag_x_dbflag_rtable("ctl", x->name, rtableid))
 	    < 0) {
-		printf("%% database ctl select failure (%s, %d)\n", x_name, rtableid);
+		printf("%% database ctl select failure (%s, %d)\n", x->name,
+		    rtableid);
 		return;
 	}
 	switch(dbflag) {
 	case DB_X_ENABLE:
-		fprintf(output, "%s%s %s\n", delim, x_name, fenablenm ?
+		fprintf(output, "%s%s %s\n", delim, x->name, fenablenm ?
 		    fenablenm : "enable");
 		pntdflag = 1;
 		break;
 	case DB_X_LOCAL:
-		fprintf(output, "%s%s %s\n", delim, x_name, flocalnm ?
+		fprintf(output, "%s%s %s\n", delim, x->name, flocalnm ?
 		    flocalnm : "local");
 		pntdflag = 1;
 		break;
 	case DB_X_OTHER:
-		fprintf(output, "%s%s %s\n", delim, x_name, fothernm ?
+		fprintf(output, "%s%s %s\n", delim, x->name, fothernm ?
 		    fothernm : "other");
 		pntdflag = 1;
 		break;
 	case DB_X_DISABLE_ALWAYS:
-		fprintf(output, "%s%s disable\n", delim, x_name);
+		fprintf(output, "%s%s disable\n", delim, x->name);
 		pntdflag = 1;
 		/* FALLTHROUGH */
 	case DB_X_DISABLE:
@@ -511,12 +486,12 @@ void conf_ctl(FILE *output, char *delim, char *name, int rtableid)
 		printf("%% conf_ctl: dbflag %d unknown\n", dbflag);
 	}
 	if (defenable) {
-		fprintf(output, "%s%s %s\n", delim, x_name, fenablenm ?
+		fprintf(output, "%s%s %s\n", delim, x->name, fenablenm ?
 		    fenablenm : "enable");
 		pntdflag = 1;
 	}
-	if (pntdrules && x_doreload) {
-		fprintf(output, "%s%s reload\n", delim, x_name);
+	if (pntdrules && x->doreload) {
+		fprintf(output, "%s%s reload\n", delim, x->name);
 		pntdflag = 1;
 	}
 	if (pntdflag)

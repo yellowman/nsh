@@ -75,15 +75,6 @@ struct ctl {
         char *name;
         char *help;
         char *args[32];
-        void (*handler)();
-        int flag_x;
-        int type;
-};
-
-struct ctl2 {
-        char *name;
-        char *help;
-        char *args[32];
         char *test_args[32];
         void (*handler)();
         int flag_x;
@@ -102,17 +93,6 @@ struct daemons {
         int doreload;
         int rtablemax;
 };
-
-struct daemons2 {
-        char *name;
-        char *propername;
-        struct ctl2 *table;
-        char *tmpfile;
-        mode_t mode;
-        int doreload;
-        int rtablemax;
-};
-
 
 /* tmp config locations */
 #define PFCONF_TEMP     "/var/run/pf.conf"
@@ -173,7 +153,6 @@ extern char *ctl_sshd_test[];
 /* tftpproxy test no config test yet */
 
 extern struct daemons ctl_daemons[];
-extern struct daemons2 ctl_daemons2[];
 extern struct ctl ctl_pf[];
 extern struct ctl ctl_ospf[];
 extern struct ctl ctl_ospf6[];
@@ -189,7 +168,7 @@ extern struct ctl ctl_ike[];
 extern struct ctl ctl_dvmrp[];
 extern struct ctl ctl_rad[];
 extern struct ctl ctl_sasync[];
-extern struct ctl2 ctl_dhcp[];
+extern struct ctl ctl_dhcp[];
 extern struct ctl ctl_snmp[];
 extern struct ctl ctl_smtp[];
 extern struct ctl ctl_sshd[];
