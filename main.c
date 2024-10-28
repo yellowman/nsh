@@ -58,7 +58,7 @@ void intr(void);
 
 volatile sig_atomic_t caught_sigwinch;
 
-void
+static void
 catchsigwinch(int signo)
 {
 	caught_sigwinch = signo;
