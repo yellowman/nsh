@@ -1132,6 +1132,7 @@ static char unsetenvhelp[];
 static char saveenvhelp[];
 static char verbosehelp[];
 static char editinghelp[];
+static char clearhelp[];
 static char shellhelp[];
 static char manhelp[];
 static char interfacehelp[];
@@ -1233,6 +1234,7 @@ struct intlist Intlist[] = {
 	{ "who",	whohelp,				CMPL0 0, 0, int_who, 0 },
 	{ "verbose",	verbosehelp,				CMPL0 0, 0, int_doverbose, 1 },
 	{ "editing",	editinghelp,				CMPL0 0, 0, int_doediting, 1 },
+	{ "clear",	clearhelp,				CMPL0 0, 0, int_clear, 0 },
 	{ "!",		shellhelp,				CMPL0 0, 0, int_shell, 0 },
         { "?",		"Options",				CMPL0 0, 0, int_help, 0 },
 	{ "manual",	manhelp,				CMPL(H) (char **)mantab, sizeof(struct ghs), int_manual, 0 },
@@ -1288,6 +1290,7 @@ struct intlist Bridgelist[] = {
 	{ "who",	whohelp,				CMPL0 0, 0, int_who, 0 },
 	{ "verbose",	verbosehelp,				CMPL0 0, 0, int_doverbose, 1 },
 	{ "editing",	editinghelp,				CMPL0 0, 0, int_doediting, 1 },
+	{ "clear",	clearhelp,				CMPL0 0, 0, int_clear, 0 },
 	{ "!",		shellhelp,				CMPL0 0, 0, int_shell, 0 },
 
 /* Help commands */
@@ -1809,6 +1812,12 @@ int_shell(char *ifname, int ifs, int argc, char **argv)
 	}
 	else
 	return 1; /* this is to allow for pasting configs with "!" separators */
+}
+
+static int
+int_clear(void)
+{
+	clear();
 }
 
 static int
