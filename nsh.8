@@ -1859,10 +1859,16 @@ Sep  8 15:05:37 tobsd tom: interface drops due to unprotected devices
 .El
 .Pp
 .Tg reboot
+.Tg restart
+.Tg reload
 .Ic reboot
 .Pp
 Restart the system.
-Requires
+.Nm
+when processing the command will warn the user if there are
+unsaved changes to the running-config.
+The user will be prompted to confirm the reboot in any case.
+The command requires
 .Nm
 to be in privileged mode and requires root user privileges.
 .Bl -dash
@@ -1870,7 +1876,35 @@ to be in privileged mode and requires root user privileges.
 E.g. restart the system
 .Bd -literal -offset indent
 nsh(config-p)/reboot
-% Reboot initiated
+% WARNING: The running configuration contains unsaved changes!
+% The 'show diff-config' command will display unsaved changes.
+% The 'write-config' command will save changes to /etc/nshrc.
+Proceed with reboot? [yes/no]
+.Ed
+.El
+.Pp
+.Tg reboot
+.Tg restart
+.Tg reload
+.Ic reload
+.Pp
+an alias for the reboot command above.
+.Nm
+when processing the command will warn the user if there are
+unsaved changes to the running-config.
+The user will be prompted to confirm the reboot in any case.
+The command requires
+.Nm
+to be in privileged mode and requires root user privileges.
+.Bl -dash
+.It
+E.g. restart the system
+.Bd -literal -offset indent
+nsh(config-p)/reload
+% WARNING: The running configuration contains unsaved changes!
+% The 'show diff-config' command will display unsaved changes.
+% The 'write-config' command will save changes to /etc/nshrc.
+Proceed with reboot? [yes/no]
 .Ed
 .El
 .Pp

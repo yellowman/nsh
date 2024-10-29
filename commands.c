@@ -2048,6 +2048,7 @@ size_t cmdtab_nitems = nitems(cmdtab);
  */
 
 static Command  cmdtab2[] = {
+	{ "reload",     nreboothelp,    CMPL0 0, 0, nreboot,            1, 0, 0, 0 },
 	{ "su",         enablehelp,     CMPL(ta) (char **)enabletab, sizeof(Menu), enable,      0, 0, 0, 0 },
 	{ 0,		0,		CMPL0 0, 0, 0,		0, 0, 0, 0 }
 };
