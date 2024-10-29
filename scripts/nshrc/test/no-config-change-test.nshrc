@@ -1,0 +1,17 @@
+clear
+config
+exit
+config
+interface lo0
+show active
+!
+interface lo0
+show active 
+exit
+telnet 127.0.0.1 22
+logger does this message appear in /var/log/messages
+!tail -n 5 /var/log/messages
+telnet 127.0.0.1 22
+traceroute 127.0.0.1
+ping 127.0.0.1
+exit
