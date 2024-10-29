@@ -374,8 +374,7 @@ char addrnames[] =
 "\1DST\2GATEWAY\3NETMASK\4GENMASK\5IFP\6IFA\7AUTHOR\010BRD";
 
 void
-print_rtmsg(rtm)
-	struct rt_msghdr *rtm;
+print_rtmsg(struct rt_msghdr *rtm)
 {
 	struct if_msghdr *ifm;
 	struct ifa_msghdr *ifam;
@@ -413,9 +412,7 @@ print_rtmsg(rtm)
 }
 
 void
-print_getmsg(rtm, msglen)
-	struct rt_msghdr *rtm;
-	int msglen;
+print_getmsg(struct rt_msghdr *rtm, int msglen)
 {
 	struct sockaddr *dst = NULL, *gate = NULL, *mask = NULL;
 	struct sockaddr_dl *ifp = NULL;
@@ -505,8 +502,7 @@ print_getmsg(rtm, msglen)
 }
 
 void
-pmsg_common(rtm)
-	struct rt_msghdr *rtm;
+pmsg_common(struct rt_msghdr *rtm)
 {
 	(void) printf("%% locks: ");
 	bprintf(stdout, rtm->rtm_rmx.rmx_locks, metricnames);
@@ -517,9 +513,7 @@ pmsg_common(rtm)
 }
 
 void
-pmsg_addrs(cp, addrs)
-	char	*cp;
-	int	addrs;
+pmsg_addrs(char	*cp, int addrs)
 {
 	struct sockaddr *sa;
 	int i;
@@ -540,10 +534,7 @@ pmsg_addrs(cp, addrs)
 }
 
 void
-bprintf(fp, b, s)
-	FILE *fp;
-	int b;
-	u_char *s;
+bprintf(FILE *fp, int b, u_char *s)
 {
 	int i;
 	int gotsome = 0;
@@ -688,8 +679,7 @@ ip_route(ip_t *dest, ip_t *gate, u_short cmd, int flags, int tableid,
  * there is no error or we displayed the error message (get)
  */
 int
-rtmsg(cmd, flags, proxy, export, tableid)
-	int cmd, flags, proxy, export, tableid;
+rtmsg(int cmd, int flags, int proxy, int export, int tableid)
 {
 	static int seq;
 	struct rt_msghdr *rtm;
