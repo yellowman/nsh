@@ -3660,23 +3660,56 @@ command in order to save any variables which were set in
 unprivileged mode.
 .Pp
 .Tg flush
+.Tg reset
+.Tg kill
 .Ic flush
 .Op routes | arp | ndp | line | bridge-dyn | bridge-all | bridge-rule | pf | history |\&? | help
 .Pp
-Clear various system tables.
+Clear various system tables, from
+.Ox
+systems such as
+.Xr bridge 4
+or,
+.Xr pf 4
+or,
+.Xr route 4
+or,
+.Xr arp 8
+or,
+.Xr ndp 8 .
+.Bd -literal -offset indent
+nsh(p)/flush ?
+% Commands may be abbreviated.
+% 'flush' commands are:
+
+  routes       IP routes
+  arp          ARP cache
+  ndp          NDP cache
+  line         Active user
+  bridge-dyn   Dynamically learned bridge addresses
+  bridge-all   Dynamic and static bridge addresses
+  bridge-rule  Layer 2 filter rules for a bridge member port
+  pf           pf NAT/filter/queue rules, states, tables
+  history      Command history
+  ?            Options
+.Ed
 .Pp
+.Tg route
 .Ic flush routes
 .Pp
 Clear the system routing table.
 .Pp
+.Tg arp
 .Ic flush arp
 .Pp
 Clear the system arp cache and static arp table.
 .Pp
+.Tg ndp
 .Ic flush ndp
 .Pp
 Clear the system NDP cache and static NDP table.
 .Pp
+.Tg bridge
 .Ic flush bridge-dyn
 .Ar bridge-name
 .Pp
@@ -3689,6 +3722,7 @@ Delete all dynamically learned members from bridge0.
 Note! any members set manually (static members) are not removed by this
 command.
 .Pp
+.Tg bridge
 .Ic flush bridge-all
 .Ar bridge-name
 .Pp
@@ -3697,6 +3731,7 @@ Clear dynamically and statically learned members from the named bridge.
 nsh/flush bridge-all bridge0
 .Ed
 .Pp
+.Tg bridge
 .Ic flush bridge-rule
 .Ar bridge-name
 .Ar interface-name
@@ -3706,10 +3741,36 @@ Clear all rules on the named bridge on the named interface.
 nsh/flush bridge-rule bridge0 vether0
 .Ed
 .Pp
+.Tg history
 .Ic flush history
 .Pp
 Clear the command history
 .Pp
+.Tg pf
+.Tg flush
+.Ic flush
+.Op all | filter | os-fingerprint | reset | source-table |\
+states | stats | tables
+.Pp
+Clear or reset various aspects of PF firewall states.
+The Flush commands implement the
+.Ox
+.Xr pfctl 8
+command with the -F switch and various arguments to specify
+the property in PF you wish to flush.
+.Bd -literal -offset indent
+nsh(p)/flush pf ?
+% Arguments may be abbreviated
+
+  flush pf all            all PF elements flush
+  flush pf filter         filter rules flush
+  flush pf os-fingerprint passive OS detection fingerprints flush
+  flush pf reset          limits, timeouts and options flush
+  flush pf source-table   source tracking table flush
+  flush pf states         NAT/filter states flush
+  flush pf stats          info and stats flush
+  flush pf tables         PF address tables flush
+.Ed
 .Tg route
 .Op no
 .Ic route
