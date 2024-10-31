@@ -47,7 +47,7 @@ void restart_dhcpd(int, char **, ...);
 /* subroutines */
 int fill_tmpfile(char **, char *, char **);
 int edit_file(char *, mode_t, char *, char **);
-int rule_writeline(char *, mode_t, char *);
+int rule_writeline(char *, mode_t, char *, int);
 int acq_lock(char *);
 void rls_lock(int);
 
@@ -662,7 +662,8 @@ ctlhandler(int argc, char **argv, ...)
 				goto done;
 			}
 			/* write indented line to tmp config file */
-			rule_writeline(tmpfile, daemons->mode, saveline);
+			rule_writeline(tmpfile, daemons->mode, saveline,
+			    cli_rtable);
 			goto done;
 		}
 	}
@@ -1048,7 +1049,7 @@ edit_file(char *tmpfile, mode_t mode, char *propername, char **args)
 }
 
 int
-rule_writeline(char *fname, mode_t mode, char *writeline)
+rule_writeline(char *fname, mode_t mode, char *writeline, int rdomain)
 {
 	FILE *rulefile;
 
@@ -1057,8 +1058,12 @@ rule_writeline(char *fname, mode_t mode, char *writeline)
 		printf("%% Rule write failed: %s\n", strerror(errno));
 		return(1);
 	}
-	if (writeline[0] == ' ')
+	if (writeline[0] == ' ') {
 		writeline++;
+		/* Lines for rdomain-specific daemons are indented twice. */
+		if (rdomain > 0 && writeline[0] == ' ')
+			writeline++;
+	}
 	fprintf(rulefile, "%s", writeline);
 	fclose(rulefile);
 	chmod(fname, mode);
