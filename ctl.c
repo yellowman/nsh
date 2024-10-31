@@ -47,7 +47,7 @@ void restart_dhcpd(int, char **, ...);
 /* subroutines */
 int fill_tmpfile(char **, char *, char **);
 int edit_file(char *, mode_t, char *, char **);
-int rule_writeline(char *, mode_t, char *, int);
+int rule_writeline(FILE *, char *, int);
 int acq_lock(char *);
 void rls_lock(int);
 
@@ -626,6 +626,8 @@ ctlhandler(int argc, char **argv, ...)
 	int nargs;
 	va_list ap;
 	char *modhvar;
+	static FILE *rulesfile;
+	static char tmpfile_cur[PATH_MAX];
 
 	va_start(ap, argv);
 	modhvar = va_arg(ap, char *);
@@ -646,9 +648,18 @@ ctlhandler(int argc, char **argv, ...)
 	}
 
 	snprintf(table, sizeof(table), "-T%d", cli_rtable);
-	if (daemons->tmpfile)
+	if (daemons->tmpfile) {
 		snprintf(tmpfile, sizeof(tmpfile), "%s.%d", daemons->tmpfile,
 		    cli_rtable);
+		if (tmpfile_cur[0] != '\0' && rulesfile &&
+		    strcmp(tmpfile_cur, tmpfile) != 0) {
+			fclose(rulesfile);
+			rulesfile = NULL;
+		}
+	} else if (rulesfile) {
+		fclose(rulesfile);
+		rulesfile = NULL;
+	}
 
 	if (modhvar) {
 		/* action specified or indented command specified */
@@ -661,10 +672,24 @@ ctlhandler(int argc, char **argv, ...)
 				printf("%% writeline without tmpfile\n");
 				goto done;
 			}
+			if (rulesfile == NULL) {
+				rulesfile = fopen(tmpfile, "w");
+				if (rulesfile == NULL) {
+					printf("%% error opening %s for "
+					    "writing: %s", tmpfile,
+					    strerror(errno));
+					goto done;
+				}
+				fchmod(fileno(rulesfile), daemons->mode);
+				strlcpy(tmpfile_cur, tmpfile,
+				    sizeof(tmpfile_cur));
+			}
 			/* write indented line to tmp config file */
-			rule_writeline(tmpfile, daemons->mode, saveline,
-			    cli_rtable);
+			rule_writeline(rulesfile, saveline, cli_rtable);
 			goto done;
+		} else if (rulesfile) {
+			fclose(rulesfile);
+			rulesfile = NULL;
 		}
 	}
 	if (argc < 2 || argv[1][0] == '?') {
@@ -1049,24 +1074,16 @@ edit_file(char *tmpfile, mode_t mode, char *propername, char **args)
 }
 
 int
-rule_writeline(char *fname, mode_t mode, char *writeline, int rdomain)
+rule_writeline(FILE *rulesfile, char *writeline, int rdomain)
 {
-	FILE *rulefile;
-
-	rulefile = fopen(fname, "a");
-	if (rulefile == NULL) {
-		printf("%% Rule write failed: %s\n", strerror(errno));
-		return(1);
-	}
 	if (writeline[0] == ' ') {
 		writeline++;
 		/* Lines for rdomain-specific daemons are indented twice. */
 		if (rdomain > 0 && writeline[0] == ' ')
 			writeline++;
 	}
-	fprintf(rulefile, "%s", writeline);
-	fclose(rulefile);
-	chmod(fname, mode);
+	fprintf(rulesfile, "%s", writeline);
+	fflush(rulesfile);
 	return(0);
 }
 
