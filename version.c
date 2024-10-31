@@ -27,7 +27,7 @@
 #include "externs.h"
 
 int
-version(int argc, char **argv)
+version(int argc, char **argv, ...)
 {
 	char cpubuf[1024];
 	char kernver[1024];

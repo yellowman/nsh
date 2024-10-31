@@ -74,9 +74,9 @@ extern char *nopterr;
 int nopt(int, char **, struct nopts *);
 
 /* ppp.c */
-int intsppp(char *, int, int, char **);
+int intsppp(int, char **, ...);
 void pppoe_ipcp(char *, int, int);
-int intpppoe(char *, int, int, char **);
+int intpppoe(int, char **, ...);
 int is_pppoe(char *, int);
 #define NSH_PPPOE_IPADDR_IPCP 1
 #define NSH_PPPOE_IPADDR_STATIC 2
@@ -144,7 +144,7 @@ extern u_long rtm_inits;
 #define FLUSH 0
 struct rtdump *getrtdump(int, int, int);
 void freertdump(struct rtdump *);
-int monitor(int, char **);
+int monitor(int, char **, ...);
 int rtmsg(int, int, int, int, int);
 void flushroutes(int, int);
 void bprintf(FILE *, int, u_char *);
@@ -191,7 +191,7 @@ extern pid_t child;
 #ifndef DHCPLEASES
 #define DHCPLEASES	"/var/db/dhcpd.leases"
 #endif
-int quit(void);
+int quit(int, char **, ...);
 void sigalarm(int);
 void command(void);
 int argvtostring(int, char **, char *, int);
@@ -206,7 +206,7 @@ void restoreprompt(void);
 extern char prompt[128];
 extern char saved_prompt[sizeof(prompt)];
 
-int group (int, char **);
+int group (int, char **, ...);
 void gen_help(char **, char *, char *, int);
 void makeargv(void);
 extern size_t cursor_argc;
@@ -218,7 +218,7 @@ typedef struct cmd {
 	char *complete;		/* context sensitive completion list */
 	char **table;		/* next table for context completion */
 	int stlen;		/* struct length (for rows in next table) */
-	int (*handler) ();	/* routine which executes command */
+	int (*handler) (int, char **, ...); /* routine which executes command */
 	int needpriv;		/* Do we need privilege to execute? */
 	int needconfig;		/* Do we need config mode to execute? */
 	int nocmd;		/* Can we specify 'no ...command...'? */
@@ -233,7 +233,7 @@ typedef struct menu {
 	int stlen;		/* struct length (for rows in next table) */
 	int minarg;		/* Minimum number of arguments */
 	int maxarg;		/* Maximum number of arguments */
-	int (*handler)();	/* Routine to perform (for special ops) */
+	int (*handler)(int, char **, ...);	/* Routine to perform */
 } Menu;
 
 struct intlist {
@@ -242,7 +242,7 @@ struct intlist {
 	char *complete;		/* context sensitive completion list */
 	char **table;		/* next table for context completion */
 	int stlen;		/* struct length (for rows in next table) */
-	int (*handler)();       /* Routine to perform (for special ops) */
+	int (*handler)(int, char **, ...);       /* Routine to perform */
 	int nocmd;		/* Can we specify 'no ...command...'? */
 };
 
@@ -274,9 +274,9 @@ const char *get_string(const char *, const char *, u_int8_t *, int *);
 void make_string(char *str, int, const u_int8_t *buf, int);
 int get_nwinfo(char *, char *, int, int);
 int get_nwpowersave(int, char *);
-int intnwkey(char *, int, int, char **);
-int inttxpower(char *, int, int, char **);
-int intbssid(char *, int, int, char **);
+int intnwkey(int, char **, ...);
+int inttxpower(int, char **, ...);
+int intbssid(int, char **, ...);
 
 /* stats.c */
 void rt_stats(void);
@@ -306,13 +306,13 @@ int Ambiguous(void *);
 
 /* sysctl.c */
 int sysctl_int(int[], int, int);
-int ipsysctl(int, char *, char *, int);
+int ipsysctl(int, char **, ...);
 void conf_sysctls(FILE *);
 
 /* route.c */
 #define NO_NETMASK 0
 #define ASSUME_NETMASK 1
-int route(int, char**);
+int route(int, char**, ...);
 void show_route(char *, int);
 int is_ip_addr(char *);
 #ifdef _IP_T_
@@ -339,10 +339,10 @@ int parse_ipv6(char *, struct in6_addr *);
 #define DEFAULT_LLPRIORITY 3
 void imr_init(char *);
 int is_valid_ifname(char *);
-int show_int(int, char **, FILE *);
-int show_vlans(int, char **);
-int show_ip(int, char **);
-int show_autoconf(int, char **);
+int show_int(int, char **, ...);
+int show_vlans(int, char **, ...);
+int show_ip(int, char **, ...);
+int show_autoconf(int, char **, ...);
 int get_rdomain(int, char *);
 int get_ifdata(char *, int);
 int get_ifflags(char *, int);
@@ -353,30 +353,30 @@ u_int32_t in4_netaddr(u_int32_t, u_int32_t);
 u_int32_t in4_brdaddr(u_int32_t, u_int32_t);
 extern struct ghs intiphelp[];
 extern struct ghs intip6help[];
-int intip(char *, int, int, char **);
+int intip(int, char **, ...);
 int intipcp(char *, int, int, char **);
-int intmtu(char *, int, int, char **);
-int intkeepalive(char *, int, int, char **);
-int intrdomain(char *, int, int, char **);
-int intdhcrelay(char *, int, int, char **);
-int intmetric(char *, int, int, char **);
-int intllprio(char *, int, int, char **);
-int intflags(char *, int, int, char **);
-int intxflags(char *, int, int, char **);
+int intmtu(int, char **, ...);
+int intkeepalive(int, char **, ...);
+int intrdomain(int, char **, ...);
+int intdhcrelay(int, char **, ...);
+int intmetric(int, char **, ...);
+int intllprio(int, char **, ...);
+int intflags(int, char **, ...);
+int intxflags(int, char **, ...);
 int intaf(char *, int, int, char **);
-int intlink(char *, int, int, char **);
-int intnwid(char *, int, int, char **);
-int intpowersave(char *, int, int, char **);
-int intdesc(char *, int, int, char **);
-int intpflow(char *, int, int, char **);
-int intlladdr(char *, int, int, char **);
-int intgroup(char *, int, int, char **);
-int intrtlabel(char *, int, int, char **);
-int intparent(char *, int, int, char **);
-int intpatch(char *, int, int, char **);
-int intmpls(char *, int, int, char **);
-int intpwe3(char *, int, int, char **);
-int intvnetflowid(char *, int, int, char **);
+int intlink(int, char **, ...);
+int intnwid(int, char **, ...);
+int intpowersave(int, char **, ...);
+int intdesc(int, char **, ...);
+int intpflow(int, char **, ...);
+int intlladdr(int, char **, ...);
+int intgroup(int, char **, ...);
+int intrtlabel(int, char **, ...);
+int intparent(int, char **, ...);
+int intpatch(int, char **, ...);
+int intmpls(int, char **, ...);
+int intpwe3(int, char **, ...);
+int intvnetflowid(int, char **, ...);
 int addaf(char *, int, int);
 int removeaf(char *, int, int);
 int check_daemon_control_socket(const char *);
@@ -388,7 +388,7 @@ char *get_hwdaddr(char *);
 void intr(void);
 
 /* version.c */
-int version(int, char **);
+int version(int, char **, ...);
 
 /* compile.c */
 extern char compiled[], compiledby[], compiledon[], compilehost[];
@@ -403,20 +403,20 @@ int bridge_addrs(int, char *, char *, char *, FILE *);
 int set_ifflag(int, char *, short);
 int clr_ifflag(int, char *, short);
 int is_bridge(int, char *);
-int brport(char *, int, int, char **);
-int brval(char *, int, int, char **);
-int brrule(char *, int, int, char **);
-int brstatic(char *, int, int, char **);
-int brpri(char *, int, int, char **);
-int flush_bridgedyn(char *);
-int flush_bridgeall(char *);
-int flush_bridgerule(char *, char*);
-int brprotect(char *, int, int, char **);
-int show_bridges(int, char **);
+int brport(int, char **, ...);
+int brval(int, char **, ...);
+int brrule(int, char **, ...);
+int brstatic(int, char **, ...);
+int brpri(int, char **, ...);
+int flush_bridgedyn(int , char **, ...);
+int flush_bridgeall(int, char **, ...);
+int flush_bridgerule(int, char **, ...);
+int brprotect(int, char **, ...);
+int show_bridges(int, char **, ...);
 
 /* tunnel.c */
-int inttunnel(char *, int, int, char **);
-int intvnetid(char *, int, int, char **);
+int inttunnel(int, char **, ...);
+int intvnetid(int, char **, ...);
 int get_physrtable(int, char *);
 int get_physttl(int, char *);
 int get_physecn(int, char *);
@@ -428,8 +428,8 @@ int64_t get_vnetid(int, char *);
 int media_status(int, char *, char *, FILE *);
 void media_supported(int, char *, char *, char *, FILE *);
 int phys_status(int, char *, char *, char *, int, int);
-int intmedia(char *, int, int, char **);
-int intmediaopt(char *, int, int, char **);
+int intmedia(int, char **, ...);
+int intmediaopt(int, char **, ...);
 int conf_media_status(FILE *, int, char *);
 struct ifmediareq;
 const char *get_ifm_linkstate_str(struct ifmediareq *);
@@ -441,13 +441,13 @@ const char *get_ifm_subtype_str(uint64_t);
 #define NSHPASSWD_TEMP "/var/run/nshpasswd"
 int read_pass(char *, size_t);
 int gen_salt(char *, size_t);
-int enable(int, char **);
+int enable(int, char **, ...);
 
 /* pfsync.c */
 #define PFSYNC_MAXUPDATES 128
-int intsyncdev(char *, int, int, char **);
-int intsyncpeer(char *, int, int, char  **);
-int intmaxupd(char *, int, int, char **);
+int intsyncdev(int, char **, ...);
+int intsyncpeer(int, char **, ...);
+int intmaxupd(int, char **, ...);
 int conf_pfsync(FILE *, int, char *);
 
 /* carp.c */
@@ -456,26 +456,26 @@ int conf_pfsync(FILE *, int, char *);
 #define CARP_VHID 2
 #define CARP_PEER 3
 #define CARP_BALANCING 4
-int intcarp(char *, int, int, char **);
-int intcpass(char *, int, int, char **);
-int intcnode(char *, int, int, char **);
+int intcarp(int, char **, ...);
+int intcpass(int, char **, ...);
+int intcnode(int, char **, ...);
 int conf_carp(FILE *, int, char *);
 int carp_state(int, char *, FILE *);
-int intcdev(char *, int, int, char **);
+int intcdev(int, char **, ...);
 int carplock(int);
 
 /* trunk.c */
-int inttrunkport(char *, int, int, char **);
-int inttrunkproto(char *, int, int, char **);
+int inttrunkport(int, char **, ...);
+int inttrunkproto(int, char **, ...);
 int conf_trunk(FILE *output, int ifs, char *ifname);
 void show_trunk(int ifs, char *ifname, FILE *);
 
 /* who.c */
-int who(int, char **);
+int who(int, char **, ...);
 
 /* arp.c */
 int arpget(const char *);
-int arpset(int, char **);
+int arpset(int, char **, ...);
 void arpdump(void);
 void conf_arp(FILE *, char *);
 char *sec2str(time_t);
@@ -483,7 +483,7 @@ struct sockaddr_dl;
 char *ether_str(struct sockaddr_dl *);
 
 /* ndp.c */
-int ndpset(int, char **);
+int ndpset(int, char **, ...);
 void ndpget(const char *);
 int ndpdelete(const char *);
 struct sockaddr_in6;
@@ -491,7 +491,7 @@ void ndpdump(struct sockaddr_in6 *, int);
 void conf_ndp(FILE *output, char *delim);
 
 /* nameserver.c */
-int nameserverset(int, char **);
+int nameserverset(int, char **, ...);
 void conf_nameserver(FILE *);
 
 /* more.c */
@@ -558,13 +558,13 @@ int pflow_addr(const char *, struct sockaddr_storage *);
 int pflow_status(int, int, char *, char *);
 
 /* wg.c */
-int intwg(char *, int, int, char **);
-int intwgpeer(char *, int, int, char **);
+int intwg(int, char **, ...);
+int intwgpeer(int, char **, ...);
 void conf_wg(FILE *, int, char *);
 void show_wg(int, char *, FILE *);
 
 /* umb.c */
-int intumb(char *, int, int, char **);
+int intumb(int, char **, ...);
 void conf_umb(FILE *, int, char *);
 void show_umb(int, char *, FILE *);
 
@@ -575,7 +575,7 @@ int mbs2ws(wchar_t **, size_t *, const char *);
 int mbsavis(char**, int *, const char *);
 
 /* ctlargs.c */
-int pr_prot1(int, char **);
+int pr_prot1(int, char **, ...);
 char **step_optreq(char **, char **, int, char **, int);
 
 /* hashtable.c */

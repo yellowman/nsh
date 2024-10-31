@@ -74,7 +74,7 @@ Menu showlist[] = {
 };
 
 static int
-showcmd(int argc, char **argv)
+showcmd(int argc, char **argv, ...)
 {
 	Menu *s;	/* pointer to current command */
 
@@ -106,7 +106,7 @@ showcmd(int argc, char **argv)
 }
 
 int
-quit(void)
+quit(int argc, char **argv, ...)
 {
 	printf("%% Session terminated.\n");
 	exit(0);

@@ -69,20 +69,20 @@
 #define IFNAME  (void *)3
 #define REQTEMP (void *)4                                                       
 #define SIZE_CONF_TEMP 64
-int ctlhandler(int, char **, char *);
+int ctlhandler(int, char **, ...);
 void rmtemp(char *);
 struct ctl {
         char *name;
         char *help;
         char *args[32];
         char *test_args[32];
-        void (*handler)();
+        void (*handler)(int, char **, ...);
         int flag_x;
         int type;
 };
 
 #define T_HANDLER       1
-#define T_HANDLER_FILL1 2
+#define T_HANDLER_TEST  2
 #define T_EXEC          3
 struct daemons {
         char *name;

@@ -29,7 +29,7 @@ struct prot {
 extern char bgpd_socket_path[PATH_MAX];
 void init_bgpd_socket_path(int);
 extern struct prot prots[];
-int show_help(int, char **);
+int show_help(int, char **, ...);
 Command *getcmd(char *);
 extern Menu showlist[];
 void makeargv(void);
@@ -38,4 +38,4 @@ extern int	nsh_setrtable(int);
 extern void	sigalarm(int);
 extern char hbuf[MAXHOSTNAMELEN];
 extern char ifname[IFNAMSIZ];
-int	help(int, char**);
+int	help(int, char **, ...);

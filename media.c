@@ -33,6 +33,7 @@
  */
 
 #include <stdio.h>
+#include <stdarg.h>
 #include <sys/types.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -73,10 +74,18 @@ const struct ifmedia_description ifm_option_descriptions[] =
     IFM_OPTION_DESCRIPTIONS;
 
 int
-intmedia(char *ifname, int ifs, int argc, char **argv)
+intmedia(int argc, char **argv, ...)
 {
 	const char *errmsg = NULL;
 	uint64_t set, media_current, type, subtype, inst;
+	va_list ap;
+	char *ifname;
+	int ifs;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -137,9 +146,17 @@ intmedia(char *ifname, int ifs, int argc, char **argv)
 }
 
 int
-intmediaopt(char *ifname, int ifs, int argc, char **argv)
+intmediaopt(int argc, char **argv, ...)
 {
 	int set, media_current, mediaopt;
+	va_list ap;
+	char *ifname;
+	int ifs;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
 		set = 0;

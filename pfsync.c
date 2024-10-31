@@ -17,6 +17,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdarg.h>
 #include <errno.h>
 #include <sys/limits.h>
 #include <sys/types.h>
@@ -34,11 +35,19 @@
 #define PFSYNC_MAXUPDATES 128
 
 int
-intsyncdev(char *ifname, int ifs, int argc, char **argv)
+intsyncdev(int argc, char **argv, ...)
 {
 	struct ifreq ifr;
 	struct pfsyncreq preq;
 	int set;
+	va_list ap;
+	char *ifname;
+	int ifs;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -96,12 +105,20 @@ intsyncdev(char *ifname, int ifs, int argc, char **argv)
 }
 
 int
-intsyncpeer(char *ifname, int ifs, int argc, char **argv)
+intsyncpeer(int argc, char **argv, ...)
 {
 	struct ifreq ifr;
 	struct pfsyncreq preq;
 	struct addrinfo hints, *peerres;
 	int set, ecode;
+	va_list ap;
+	char *ifname;
+	int ifs;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -169,13 +186,21 @@ intsyncpeer(char *ifname, int ifs, int argc, char **argv)
 }
 
 int
-intmaxupd(char *ifname, int ifs, int argc, char **argv)
+intmaxupd(int argc, char **argv, ...)
 {
 	struct ifreq ifr;
 	struct pfsyncreq preq;
 	u_int32_t val;
 	int set;
 	const char *errmsg = NULL;
+	va_list ap;
+	char *ifname;
+	int ifs;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
 		set = 0;

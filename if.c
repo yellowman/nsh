@@ -16,6 +16,7 @@
 
 #include <sys/tree.h>
 
+#include <stdarg.h>
 #include <stdio.h>
 #include <ctype.h>
 #include <fcntl.h>
@@ -229,7 +230,7 @@ show_int_status(char *ifname, int ifs, FILE *outfile)
 }
 
 int
-show_int(int argc, char **argv, FILE *outfile)
+show_int(int argc, char **argv, ...)
 {
 	struct ifaddrs *ifap, *ifa;
 	struct if_nameindex *ifn_list, *ifnp;
@@ -238,7 +239,8 @@ show_int(int argc, char **argv, FILE *outfile)
 	struct sockaddr_in *sin = NULL, *sinmask = NULL, *sindest;
 	struct sockaddr_in6 *sin6 = NULL, *sin6mask = NULL, *sin6dest;
 	struct timeval tv;
-
+	FILE *outfile;
+	va_list ap;
 	short tmp;
 	int ifs, br, flags, days, hours, mins, pntd;
 	int ippntd = 0;
@@ -250,6 +252,10 @@ show_int(int argc, char **argv, FILE *outfile)
 	char tmp_str[512], tmp_str2[512], ifdescr[IFDESCRSIZE];
 
 	memset(ifname, 0, sizeof(ifname));
+
+	va_start(ap, argv);
+	outfile = va_arg(ap, FILE *);
+	va_end(ap);
 
 	if (argc == 4) {
 		/*
@@ -595,7 +601,7 @@ show_int(int argc, char **argv, FILE *outfile)
 }
 
 int
-show_autoconf(int argc, char **argv)
+show_autoconf(int argc, char **argv, ...)
 {
 	struct if_nameindex *ifn_list, *ifnp;
 	char *ifname = NULL;
@@ -719,7 +725,7 @@ RB_PROTOTYPE(ip_tree, ip_tree_entry, entry, ip_tree_cmp);
 RB_GENERATE(ip_tree, ip_tree_entry, entry, ip_tree_cmp);
 
 int
-show_ip(int argc, char **argv)
+show_ip(int argc, char **argv, ...)
 {
 	struct ifaddrs *ifap, *ifa;
 	struct sockaddr_in *sin = NULL, *sinmask = NULL;
@@ -1220,7 +1226,7 @@ intipusage(const char *cmdname, const char *msg)
 }
 
 int
-intip(char *ifname, int ifs, int argc, char **argv)
+intip(int argc, char **argv, ...)
 {
 	int s, set, flags, argcmax;
 	int argc0 = argc;
@@ -1233,6 +1239,14 @@ intip(char *ifname, int ifs, int argc, char **argv)
 	/* ipv6 structures */
 	struct in6_addr in6dest;
 	struct in6_aliasreq ip6req;
+	va_list ap;
+	char *ifname;
+	int ifs;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -1333,7 +1347,7 @@ intip(char *ifname, int ifs, int argc, char **argv)
 				argv_dhcp = args;
 				argc_dhcp = nitems(args) - 1;
 			}
-			return intxflags(ifname, ifs, argc_dhcp, argv_dhcp);
+			return intxflags(argc_dhcp, argv_dhcp, ifname, ifs);
 		} else {
 			printf("%% cannot get DHCP leases because dhcpleased "
 			    "is not running\n");
@@ -1354,7 +1368,7 @@ intip(char *ifname, int ifs, int argc, char **argv)
 			argv_xflags = args;
 			argc_xflags = nitems(args) - 1;
 		}
-		return intxflags(ifname, ifs, argc_xflags, argv_xflags);
+		return intxflags(argc_xflags, argv_xflags, ifname, ifs);
 	}
 
 	memset(&ip, 0, sizeof(ip));
@@ -1586,12 +1600,20 @@ ipv6ll_db_store(struct sockaddr_in6 *sin6, struct sockaddr_in6 *sin6mask,
  * addr/port parsing lifted from sbin/ifconfig/ifconfig.c
  */
 int
-intpflow(char *ifname, int ifs, int argc, char **argv)
+intpflow(int argc, char **argv, ...)
 {
 	struct ifreq ifr;
 	struct pflowreq preq;
 	int set;
 	const char *errmsg = NULL;
+	va_list ap;
+	char *ifname;
+	int ifs;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -1654,10 +1676,18 @@ intpflow(char *ifname, int ifs, int argc, char **argv)
 }
 
 int
-intpatch(char *ifname, int ifs, int argc, char **argv)
+intpatch(int argc, char **argv, ...)
 {
 	int set;
 	struct ifreq ifr;
+	va_list ap;
+	char *ifname;
+	int ifs;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -1693,11 +1723,19 @@ intpatch(char *ifname, int ifs, int argc, char **argv)
 }
 
 int
-intmtu(char *ifname, int ifs, int argc, char **argv)
+intmtu(int argc, char **argv, ...)
 {
 	struct ifreq ifr;
 	int set;
 	const char *errmsg = NULL;
+	va_list ap;
+	char *ifname;
+	int ifs;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -1732,11 +1770,19 @@ intmtu(char *ifname, int ifs, int argc, char **argv)
 }
 
 int
-intkeepalive(char *ifname, int ifs, int argc, char **argv)
+intkeepalive(int argc, char **argv, ...)
 {
 	struct ifkalivereq ikar;
 	int set;
 	const char *errmsg = NULL;
+	va_list ap;
+	char *ifname;
+	int ifs;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -1800,7 +1846,7 @@ static struct mplsc {
 
 /* from ifconfig.c */
 int
-intmpls(char *ifname, int ifs, int argc, char **argv)
+intmpls(int argc, char **argv, ...)
 {
 	int set;
 	unsigned long cmd;
@@ -1808,6 +1854,14 @@ intmpls(char *ifname, int ifs, int argc, char **argv)
 	struct shim_hdr shim;
 	struct mplsc *x;
 	const char *errstr;
+	va_list ap;
+	char *ifname;
+	int ifs;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
 
 	bzero(&ifr, sizeof(ifr));
 
@@ -1941,7 +1995,7 @@ pwe3usage(void)
 }
 
 int
-intpwe3(char *ifname, int ifs, int argc, char **argv)
+intpwe3(int argc, char **argv, ...)
 {
 	int set, ch, error;
 	unsigned long cmd;
@@ -1953,6 +2007,14 @@ intpwe3(char *ifname, int ifs, int argc, char **argv)
 	struct if_laddrreq req;
 	struct addrinfo hints, *res;
 	struct sockaddr_mpls *smpls = (struct sockaddr_mpls *)&req.dstaddr;
+	va_list ap;
+	char *ifname;
+	int ifs;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
 
 	bzero(&ifr, sizeof(ifr));
 	bzero(&req, sizeof(req));
@@ -2066,11 +2128,17 @@ intpwe3(char *ifname, int ifs, int argc, char **argv)
 }
 
 int
-intdhcrelay(char *ifname, int ifs, int argc, char **argv)
+intdhcrelay(int argc, char **argv, ...)
 {
-	char *cmd[] = { DHCRELAY, "-i", ifname, NULL, NULL };
+	char *cmd[] = { DHCRELAY, "-i", NULL, NULL, NULL };
 	int set, alen;
 	struct in_addr notused;
+	va_list ap;
+	char *ifname;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -2135,13 +2203,21 @@ intdhcrelay(char *ifname, int ifs, int argc, char **argv)
 }
 
 int
-intmetric(char *ifname, int ifs, int argc, char **argv)
+intmetric(int argc, char **argv, ...)
 {
 	struct ifreq ifr;
 	int set, max;
 	unsigned long theioctl;
 	char *type;
 	const char *errmsg = NULL;
+	va_list ap;
+	char *ifname;
+	int ifs;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -2200,11 +2276,19 @@ intmetric(char *ifname, int ifs, int argc, char **argv)
 }
 
 int
-intllprio(char *ifname, int ifs, int argc, char **argv)
+intllprio(int argc, char **argv, ...)
 {
 	struct ifreq ifr;
 	int set;
 	const char *errmsg = NULL;
+	va_list ap;
+	char *ifname;
+	int ifs;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -2246,10 +2330,18 @@ intllprio(char *ifname, int ifs, int argc, char **argv)
 }
 
 int
-intgroup(char *ifname, int ifs, int argc, char **argv)
+intgroup(int argc, char **argv, ...)
 {
 	int set, i;
 	struct ifgroupreq ifgr;
+	va_list ap;
+	char *ifname;
+	int ifs;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -2301,10 +2393,18 @@ intgroup(char *ifname, int ifs, int argc, char **argv)
 }
 
 int
-intrtlabel(char *ifname, int ifs, int argc, char **argv)
+intrtlabel(int argc, char **argv, ...)
 {
 	int set;
 	struct ifreq ifr;
+	va_list ap;
+	char *ifname;
+	int ifs;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -2343,11 +2443,19 @@ intrtlabel(char *ifname, int ifs, int argc, char **argv)
 }
 
 int
-intparent(char *ifname, int ifs, int argc, char **argv)
+intparent(int argc, char **argv, ...)
 {
 	int set, ret;
 	unsigned long cmd;
 	struct if_parent ifp;
+	va_list ap;
+	char *ifname;
+	int ifs;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -2399,9 +2507,17 @@ intparent(char *ifname, int ifs, int argc, char **argv)
 }
 
 int
-intflags(char *ifname, int ifs, int argc, char **argv)
+intflags(int argc, char **argv, ...)
 {
 	int set, value, flags, iftype;
+	va_list ap;
+	char *ifname;
+	int ifs;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -2510,9 +2626,17 @@ intaf(char *ifname, int ifs, int argc, char **argv)
 }
 
 int
-intxflags(char *ifname, int ifs, int argc, char **argv)
+intxflags(int argc, char **argv, ...)
 {
 	int set, value, flags;
+	va_list ap;
+	char *ifname;
+	int ifs;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -2566,10 +2690,18 @@ intxflags(char *ifname, int ifs, int argc, char **argv)
 }
 
 int
-intlink(char *ifname, int ifs, int argc, char **argv)
+intlink(int argc, char **argv, ...)
 {
 	const char *errmsg = NULL;
 	int set, i, flags, value = 0;
+	va_list ap;
+	char *ifname;
+	int ifs;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -2628,11 +2760,19 @@ intlink(char *ifname, int ifs, int argc, char **argv)
 }
 
 int
-intnwid(char *ifname, int ifs, int argc, char **argv)
+intnwid(int argc, char **argv, ...)
 {
 	struct ieee80211_nwid nwid;
 	struct ifreq ifr;
 	int set, len;
+	va_list ap;
+	char *ifname;
+	int ifs;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -2671,11 +2811,19 @@ intnwid(char *ifname, int ifs, int argc, char **argv)
 }
 
 int
-intpowersave(char *ifname, int ifs, int argc, char **argv)
+intpowersave(int argc, char **argv, ...)
 {
 	const char *errmsg = NULL;
 	struct ieee80211_power power;
 	int  set;
+	va_list ap;
+	char *ifname;
+	int ifs;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -2722,13 +2870,22 @@ intpowersave(char *ifname, int ifs, int argc, char **argv)
 }
 
 int
-intlladdr(char *ifname, int ifs, int argc, char **argv)
+intlladdr(int argc, char **argv, ...)
 {
 	StringList *hwdaddr;
 	char *lladdr, llorig[sizeof("00:00:00:00:00:00") + 1];
 	struct ether_addr *addr;
 	struct ifreq ifr;
 	int set;
+	va_list ap;
+	char *ifname;
+	int ifs;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
+
 
 	if (NO_ARG(argv[0])) {
 		argv++;
@@ -2822,11 +2979,19 @@ intlladdr(char *ifname, int ifs, int argc, char **argv)
 }
 
 int
-intrdomain(char *ifname, int ifs, int argc, char **argv)
+intrdomain(int argc, char **argv, ...)
 {
 	int set, rdomain;
 	const char *errmsg = NULL;
 	struct ifreq ifr;
+	va_list ap;
+	char *ifname;
+	int ifs; 
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -2862,11 +3027,19 @@ intrdomain(char *ifname, int ifs, int argc, char **argv)
 }
 
 int
-intdesc(char *ifname, int ifs, int argc, char **argv)
+intdesc(int argc, char **argv, ...)
 {
 	int set;
 	char desc[IFDESCRSIZE];
 	struct ifreq ifr;
+	va_list ap;
+	char *ifname;
+	int ifs;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -2898,10 +3071,18 @@ intdesc(char *ifname, int ifs, int argc, char **argv)
 }
 
 int
-intvnetflowid(char *ifname, int ifs, int argc, char **argv)
+intvnetflowid(int argc, char **argv, ...)
 {
 	int set;
 	struct ifreq ifr;
+	va_list ap;
+	char *ifname;
+	int ifs;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -3057,7 +3238,7 @@ show_vlan(int start_vnetid, int end_vnetid)
 }
 
 int
-show_vlans(int argc, char **argv)
+show_vlans(int argc, char **argv, ...)
 {
 	long long start_vnetid = -1, end_vnetid = -1;
 	const char *errstr;

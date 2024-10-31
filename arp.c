@@ -160,7 +160,7 @@ rtget(struct sockaddr_inarp **sinp, struct sockaddr_dl **sdlp,
  * Set an individual arp entry
  */
 int
-arpset(int argc, char *argv[])
+arpset(int argc, char *argv[], ...)
 {
 	struct sockaddr_inarp *sin;
 	struct sockaddr_dl *sdl;

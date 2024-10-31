@@ -117,7 +117,7 @@ char ifix_buf[IFNAMSIZ];		/* if_indextoname() */
 
 static int getsocket(void);
 int parse_host(const char *, struct sockaddr_in6 *);
-int ndpset(int, char **);
+int ndpset(int, char **, ...);
 void ndpget(const char *);
 int ndpdelete(const char *);
 void ndpdump(struct sockaddr_in6 *, int);
@@ -182,7 +182,7 @@ static int	flags, found_entry;
  * Set an individual neighbor cache entry
  */
 int
-ndpset(int argc, char *argv[])
+ndpset(int argc, char *argv[], ...)
 {
 	struct sockaddr_in6 *sin = &sin_m;
 	struct sockaddr_dl *sdl;

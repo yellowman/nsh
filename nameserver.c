@@ -74,7 +74,7 @@ resolvd_is_disabled(void)
 }
 
 int
-nameserverset(int argc, char *argv[])
+nameserverset(int argc, char *argv[], ...)
 {
 	int i, set = 1;
 

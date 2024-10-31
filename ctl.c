@@ -22,6 +22,7 @@
 #include <errno.h>
 #include <libgen.h>
 #include <histedit.h>
+#include <stdarg.h>
 #include <sys/signal.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -35,17 +36,18 @@
 /* table variable (for pkill usage) */
 static char table[16];
 
-/* service routines */
-void edit_crontab(char *);
-void install_crontab(char *);
-void edit_motd(char *);
-void call_editor(char *, char **, char *);
-void start_dhcpd(char *, char *, char *, char *, char *);
-void restart_dhcpd(char *, char *, char *, char *, char *);
-int edit_file(char *, mode_t, char *, char **);
-void ctl_symlink(char *, char *, char *);
-int rule_writeline(char *, mode_t, char *);
+/* service routines, used as handlers in struct ctl */
+void edit_crontab(int, char **, ...);
+void install_crontab(int, char **, ...);
+void edit_motd(int, char **, ...);
+void call_editor(int, char **, ...);
+void start_dhcpd(int, char **, ...);
+void restart_dhcpd(int, char **, ...);
+
+/* subroutines */
 int fill_tmpfile(char **, char *, char **);
+int edit_file(char *, mode_t, char *, char **);
+int rule_writeline(char *, mode_t, char *);
 int acq_lock(char *);
 void rls_lock(int);
 
@@ -111,7 +113,7 @@ struct ctl ctl_pf[] = {
 	    { PFCTL, "-d", NULL }, { NULL }, NULL, DB_X_DISABLE, T_EXEC },
 	{ "edit",	"edit, test and stage firewall rules",
 	    { "pf",  NULL },
-	    { PFCTL, "-nf", REQTEMP, NULL }, call_editor, 0, T_HANDLER_FILL1 },
+	    { PFCTL, "-nf", REQTEMP, NULL }, call_editor, 0, T_HANDLER_TEST },
 	{ "check-config",     "test and display staged firewall rules",
             { PFCTL, "-nvvf", REQTEMP, NULL }, { NULL }, NULL, 0, T_EXEC },
 	{ "reload",	"test and apply staged firewall rules",
@@ -129,7 +131,7 @@ struct ctl ctl_ospf[] = {
 	    T_EXEC },
 	{ "edit",          "edit, test and stage OSPFd config",
 	    { "ospf", NULL },
-	    { OSPFD, "-nf", REQTEMP, NULL }, call_editor, 0, T_HANDLER_FILL1 },
+	    { OSPFD, "-nf", REQTEMP, NULL }, call_editor, 0, T_HANDLER_TEST },
 	{ "check-config",  "test staged OSPFd config",
             { OSPFD, "-nvf", REQTEMP, NULL }, { NULL }, NULL, 0, T_EXEC },
 	{ "reload",        "test and appy staged OSPFd config",
@@ -153,7 +155,7 @@ struct ctl ctl_ospf6[] = {
 	    T_EXEC },
 	{ "edit",           "edit, test and stage OSPF6d config",
 	    { "ospf6", NULL }, { OSPF6D, "-nf", REQTEMP, NULL },
-	    call_editor, 0, T_HANDLER_FILL1 },
+	    call_editor, 0, T_HANDLER_TEST },
 	{ "check-config",   "test staged OSPF6d config",   
             { OSPF6D, "-nvf", REQTEMP, NULL }, { NULL }, NULL, 0, T_EXEC },
 	{ "reload",         "test and apply staged OSPF6d config",
@@ -175,7 +177,7 @@ struct ctl ctl_eigrp[] = {
 	    T_EXEC },
 	{ "edit",           "edit, test and stage EIGRPd config",
 	    { "eigrp", NULL }, { EIGRPD, "-nf", REQTEMP, NULL },
-	    call_editor, 0, T_HANDLER_FILL1 },
+	    call_editor, 0, T_HANDLER_TEST },
         { "check-config",   "test staged EIGRPd config",
             { EIGRPD, "-nvf", REQTEMP, NULL }, { NULL }, NULL, 0, T_EXEC },
 	{ "reload",         "test and apply stagged EIGRPd config",
@@ -198,7 +200,7 @@ struct ctl ctl_bgp[] = {
 	    { PKILL, "bgpd", NULL }, { NULL }, NULL, DB_X_DISABLE, T_EXEC },
 	{ "edit",            "edit, test and stage OpenBGPD config",
 	    { "bgp", NULL }, { BGPD, "-nf", REQTEMP, NULL, NULL },
-	    call_editor, 0, T_HANDLER_FILL1 },
+	    call_editor, 0, T_HANDLER_TEST },
 	{ "check-config",    "test staged OpenBGPD config",
             { BGPD, "-nvf",REQTEMP, NULL }, { NULL }, NULL, 0, T_EXEC },
 	{ "reload",          "test and apply staged OpenBGPD config",
@@ -221,7 +223,7 @@ struct ctl ctl_rip[] = {
 	    { PKILL, table, "ripd", NULL }, { NULL }, NULL, DB_X_DISABLE, T_EXEC },
 	{ "edit",            "edit, test and stage RIPd config",
 	    { "rip", NULL }, { RIPD, "-nf", REQTEMP, NULL },
-	    call_editor, 0, T_HANDLER_FILL1 },
+	    call_editor, 0, T_HANDLER_TEST },
 	{ "check-config",    "test staged RIPd config",
             { RIPD, "-nvf", REQTEMP, NULL }, { NULL }, NULL, 0, T_EXEC },
 	{ "reload",	     "test and apply staged ripd config",
@@ -241,7 +243,7 @@ struct ctl ctl_ldp[] = {
 	   { PKILL, "ldpd", NULL }, { NULL }, NULL, DB_X_DISABLE, T_EXEC },
 	{ "edit",          "edit, test and stage LDPd config",
 	   { "ldp", NULL }, { LDPD, "-nf", REQTEMP, NULL },
-	   call_editor, 0, T_HANDLER_FILL1 },
+	   call_editor, 0, T_HANDLER_TEST },
         { "check-config",  "test staged LDPd config",
             { LDPD, "-nvf", REQTEMP, NULL }, { NULL }, NULL, 0, T_EXEC },
 	{ "reload",        "test and apply staged LDPd config",
@@ -264,7 +266,7 @@ struct ctl ctl_ipsec[] = {
 	    T_EXEC },
 	{ "edit",           "edit, test and stage isakmpd config",   
 	    { "ipsec", NULL }, { IPSECCTL, "-nf", REQTEMP, NULL },
-	    call_editor, 0, T_HANDLER_FILL1 },
+	    call_editor, 0, T_HANDLER_TEST },
 	{ "check-config",   "test staged isakmpd config",
             { IPSECCTL, "-nvvf", REQTEMP, NULL }, { NULL }, NULL, 0, T_EXEC },
 	{ "reload",         "test and apply staged isakmpd config",
@@ -292,7 +294,7 @@ struct ctl ctl_ike[] = {
 	    { IKECTL, "decouple", NULL }, { NULL }, NULL, 0, T_EXEC },
 	{ "edit",           "edit, test and stage IKEd config",
 	    { "ike", NULL }, { IKED, "-nf", REQTEMP, NULL },
-	    call_editor, 0, T_HANDLER_FILL1 },
+	    call_editor, 0, T_HANDLER_TEST },
 	{ "check-config",   "test IKEd config",
             { IKED, "-nvf", REQTEMP, NULL }, { NULL }, NULL, 0, T_EXEC },
 	{ "reload",         "test and apply IKEd config",
@@ -314,7 +316,7 @@ struct ctl ctl_dvmrp[] = {
 	    T_EXEC },
 	{ "edit",          "edit,test and stage DVMRPd config",
 	    { "dvmrp",  NULL }, { DVMRPD, "-nf", REQTEMP, NULL },
-	    call_editor, 0, T_HANDLER_FILL1 },
+	    call_editor, 0, T_HANDLER_TEST },
 	{ "config-test",   "test staged DVMRPd config",
             { DVMRPD, "-nvf", REQTEMP, NULL }, { NULL }, NULL, 0, T_EXEC },
 	{ "log",           "configure DVMRPd logging, brief/verbose",
@@ -332,7 +334,7 @@ struct ctl ctl_rad[] = {
 	    { PKILL, "rad", NULL }, { NULL }, NULL, DB_X_DISABLE, T_EXEC },
 	{ "edit",           "edit,test and stage RAD config",
 	    { "rad", NULL}, { RAD, "-nf", REQTEMP, NULL },
-	    call_editor, 0, T_HANDLER_FILL1 },
+	    call_editor, 0, T_HANDLER_TEST },
 	{ "check-config",   "test staged RAD config",                                   
             { RAD, "-nvf", REQTEMP, NULL }, { NULL }, NULL, 0, T_EXEC },
 	{ NULL, NULL, { NULL }, { NULL }, NULL, 0, 0 }
@@ -348,7 +350,7 @@ struct ctl ctl_ifstate[] = {
 	    T_EXEC },
 	{ "edit",           "edit, test and stage ifstated config",
 	    { "ifstate", NULL }, { IFSTATED, "-nf", REQTEMP, NULL },
-	    call_editor, 0, T_HANDLER_FILL1 },
+	    call_editor, 0, T_HANDLER_TEST },
 	{ "config-test",    "test staged ifstated config ",
             { IFSTATED, "-nvf", REQTEMP, NULL }, { NULL }, NULL, 0, T_EXEC },
 	{ NULL, NULL, { NULL }, { NULL }, NULL, 0, 0 }
@@ -364,7 +366,7 @@ struct ctl ctl_sasync[] = {
 	    T_EXEC },
 	{ "edit",         "edit, test and stage SAsyncd config",
 	    { "sasync", NULL }, { SASYNCD, "-nvvc", REQTEMP, NULL },
-	    call_editor, 0, T_HANDLER_FILL1 },
+	    call_editor, 0, T_HANDLER_TEST },
 	{ "check-config", "test staged SAsyncd config",
             { SASYNCD, "-nvvc", REQTEMP, NULL }, { NULL }, NULL, 0, T_EXEC },
 	{ NULL, NULL, { NULL }, { NULL }, NULL, 0, 0 }
@@ -389,7 +391,7 @@ struct ctl ctl_nppp[] = {
 	    T_EXEC },
 	{ "edit",	    "edit ,test and stage nPPPd config",
 	    { "nppp", NULL }, { NPPPD, "-nf", REQTEMP, NULL },
-	    call_editor, 0, T_HANDLER_FILL1 },
+	    call_editor, 0, T_HANDLER_TEST },
 	{ "check-config",   "test staged nPPPd config",
             { NPPPD, "-nvf", REQTEMP, NULL }, { NULL }, NULL, 0, T_EXEC },
 	{ NULL, NULL, { NULL }, { NULL }, NULL, 0, 0 }
@@ -405,7 +407,7 @@ struct ctl ctl_dhcp[] = {
 	    DB_X_DISABLE, T_EXEC },
 	{ "edit",          "edit,test and stage DHCPd config",
 	    { "dhcp", NULL }, { DHCPD, "-nc", REQTEMP, NULL }, call_editor, 0,
-	    T_HANDLER_FILL1 },
+	    T_HANDLER_TEST },
 	{ "config-test",   "test staged DHCPd config",
             { DHCPD, "-nc", REQTEMP, "-l", DHCPLEASES, NULL }, { NULL },
 	    NULL, 0, T_EXEC },
@@ -425,7 +427,7 @@ struct ctl ctl_snmp[] = {
 	    T_EXEC },
 	{ "edit",          "edit,test and stage OpenSNMPD config",
 	    { "snmp", NULL }, { SNMPD, "-nf", REQTEMP, NULL },
-	    call_editor, 0, T_HANDLER_FILL1 },
+	    call_editor, 0, T_HANDLER_TEST },
 	{ "config-test",   "test staged OpenSNMPD config",
             { SNMPD, "-nvf", REQTEMP, NULL }, { NULL }, NULL, 0, T_EXEC },
 	{ NULL, NULL, { NULL }, { NULL }, NULL, 0, 0 }
@@ -441,7 +443,7 @@ struct ctl ctl_sshd[] = {
 	    DB_X_DISABLE, T_EXEC },
 	{ "edit",            "edit, test and stage OpenSSHD config",
 	    { "sshd", NULL }, { SSHD, "-tf", REQTEMP, NULL }, call_editor, 0,
-	    T_HANDLER_FILL1 },
+	    T_HANDLER_TEST },
 	{ "config-test",     "test staged OpenSSHD config",
             { SSHD, "-tf", REQTEMP, NULL }, { NULL }, NULL, 0, T_EXEC },
 	{ NULL, NULL, { NULL }, { NULL }, NULL, 0, 0 }
@@ -456,7 +458,7 @@ struct ctl ctl_ntp[] = {
 	    { PKILL, "ntpd", NULL }, { NULL }, NULL, DB_X_DISABLE, T_EXEC },
 	{ "edit",             "edit, test and stage OpenNTPD config",
 	    { "ntp", NULL }, { NTPD, "-nf", REQTEMP, NULL },
-	    call_editor, 0, T_HANDLER_FILL1 },
+	    call_editor, 0, T_HANDLER_TEST },
 	{ "check-config",     "test staged OpenNTPD config",
             { NTPD, "-nvf", REQTEMP, NULL }, { NULL }, NULL, 0, T_EXEC },
 	{ NULL, NULL, { NULL }, { NULL }, NULL, 0, 0 }
@@ -472,7 +474,7 @@ struct ctl ctl_relay[] = {
 	    T_EXEC },
         { "edit",             "edit, test and stage relayd config",
 	    { "relay", NULL }, { RELAYD, "-nf", REQTEMP, NULL },
-	    call_editor, 0, T_HANDLER_FILL1 },
+	    call_editor, 0, T_HANDLER_TEST },
 	{ "check-config",     "test staged relayd config",
             { RELAYD, "-nvf", REQTEMP, NULL }, { NULL}, NULL, 0, T_EXEC },
         { "reload",           "test and apply staged relayd config",
@@ -503,7 +505,7 @@ struct ctl ctl_smtp[] = {
 	    T_EXEC },
 	{ "edit",          "edit,test and stage OpenSMTPD config",
 	    { "smtp", NULL }, { SMTPD, "-nf", REQTEMP, NULL },
-	    call_editor, 0, T_HANDLER_FILL1 },
+	    call_editor, 0, T_HANDLER_TEST },
 	{ "config-test",   "test OpenSMTPD config",
             { SMTPD, "-nvf", REQTEMP, NULL }, { NULL }, NULL, 0, T_EXEC },
 	{ "log",           "set OpenSMTPD logging brief/verbose config",
@@ -570,7 +572,7 @@ struct ctl ctl_inet[] = {
 	    { PKILL, table, "inetd", NULL }, { NULL }, NULL, DB_X_DISABLE,
 	    T_EXEC },
 	{ "edit",       "edit inetd superserver config",
-	    { "inet", NULL, NULL }, { NULL }, call_editor, 0, T_HANDLER_FILL1 },
+	    { "inet", NULL, NULL }, { NULL }, call_editor, 0, T_HANDLER_TEST },
 	{ NULL, NULL, { NULL }, { NULL }, NULL, 0, 0 }
 };
 
@@ -583,7 +585,7 @@ struct ctl ctl_ldap[] = {
 	    T_EXEC },
 	{ "edit",           "edit, test and stage LDAPd config",
 	    { "ldap", NULL }, { LDAPD, "-nf", REQTEMP, NULL },
-	    call_editor, 0, T_HANDLER_FILL1 },
+	    call_editor, 0, T_HANDLER_TEST },
 	{ "config-test",    "test staged LDAPd config",
             { LDAPD, "-nvf", REQTEMP, NULL }, { NULL }, NULL, 0, T_EXEC },
 	{ "log",            "config LDAPd logging, brief/verbose",
@@ -594,13 +596,6 @@ struct ctl ctl_ldap[] = {
 	    { LDAPCTL, "index", NULL }, { NULL }, NULL, 0, T_EXEC },
 	{ NULL, NULL, { NULL }, { NULL }, NULL, 0, 0 }
 };
-
-void
-ctl_symlink(char *temp, char *real, char *z)
-{
-	rmtemp(temp);
-	symlink(real, temp);
-}
 
 /* flag to other nsh sessions or nsh conf() that actions have been taken */
 void
@@ -619,7 +614,7 @@ flag_x(char *name, char *daemon, int dbflag, char *data)
 
 /* the main entry point into ctl.c from CLI */
 int
-ctlhandler(int argc, char **argv, char *modhvar)
+ctlhandler(int argc, char **argv, ...)
 {
 	struct daemons *daemons;
 	struct ctl *x;
@@ -629,6 +624,12 @@ ctlhandler(int argc, char **argv, char *modhvar)
 	char **fillargs;
 	int rv = 0;
 	int nargs;
+	va_list ap;
+	char *modhvar;
+
+	va_start(ap, argv);
+	modhvar = va_arg(ap, char *);
+	va_end(ap);
 
 	/* loop daemon list to find table pointer */
 	daemons = (struct daemons *) genget(hname, (char **)ctl_daemons,
@@ -689,44 +690,21 @@ ctlhandler(int argc, char **argv, char *modhvar)
 	case T_HANDLER:
 		/* pointer to handler routine, fill main args */
 		nargs = fill_tmpfile(fillargs, tmpfile, tmp_args);
-		switch (nargs) {
-		case 0:
-			(*x->handler)();
-			break;
-		case 1:
-			(*x->handler)(tmp_args[0]);
-			break;
-		case 2:
-			(*x->handler)(tmp_args[0], tmp_args[1]);
-			break;
-		case 3:
-			(*x->handler)(tmp_args[0], tmp_args[1], tmp_args[2]);
-			break;
-		case 4:
-			(*x->handler)(tmp_args[0], tmp_args[1], tmp_args[2],
-			    tmp_args[3]);
-			break;
-		case 5:
-			(*x->handler)(tmp_args[0], tmp_args[1], tmp_args[2],
-			    tmp_args[3], tmp_args[4]);
-			break;
-		case 6:
-			(*x->handler)(tmp_args[0], tmp_args[1], tmp_args[2],
-			    tmp_args[3], tmp_args[4], tmp_args[5]);
-			break;
-		case NOPTFILL: /* bump this when adding more cases */
-		default:
+		/* bump NOPTFILL when adding more arguments */
+		if (nargs < NOPTFILL) {
+			(*x->handler)(nargs, tmp_args);
+		} else {
 			printf("%% handler %s %s requires too many "
 			    "arguments: %d\n", hname, argv[1], nargs);
 			break;
 		}
 	break;
-	case T_HANDLER_FILL1:
-		/* pointer to handler routine, fill args @ args[1] pointer */
+	case T_HANDLER_TEST:
+		/* pointer to handler with a test command, fill test args */
 		if (fill_tmpfile(x->test_args, tmpfile, tmp_args))
-			(*x->handler)(fillargs[0], tmp_args, fillargs[2]);
+			(*x->handler)(1, &fillargs[0], tmp_args);
 		else
-			(*x->handler)(fillargs[0], x->test_args, fillargs[2]);
+			(*x->handler)(1, &fillargs[0], x->test_args);
 	break;
 	case T_EXEC:
 		/* command to execute via execv syscall, fill main args */
@@ -746,13 +724,13 @@ done:
 }
 
 void
-restart_dhcpd(char *arg0, char *arg1, char *arg2, char *arg3, char *arg4)
+restart_dhcpd(int argc, char **argv, ...)
 {
 	char *argv_pkill[] = { PKILL, table, "dhcpd", NULL };
 
 	cmdargs(argv_pkill[0], argv_pkill);
 	sleep(1);
-	start_dhcpd(arg0, arg1, arg2, arg3, arg4);
+	start_dhcpd(argc, argv);
 }
 
 /*
@@ -784,8 +762,9 @@ fill_tmpfile(char **fillargs, char *tmpfile, char **tmp_args)
 }
 
 void
-edit_crontab(char *name)
+edit_crontab(int argc, char **argv, ...)
 {
+	char *name = argv[0];
 	char *crontab_argv[] = { CRONTAB, "-u", "root", "-l", NULL };
 	char tmpfile[PATH_MAX];
 	int found = 0;
@@ -835,8 +814,9 @@ done:
 }
 
 void
-install_crontab(char *name)
+install_crontab(int argc, char **argv, ...)
 {
+	char *name = argv[0];
 	char *crontab_argv[] = { CRONTAB, "-u", "root", NULL, NULL };
 	char tmpfile[PATH_MAX];
 	int fd, found = 0;
@@ -865,17 +845,24 @@ install_crontab(char *name)
 }
 
 void
-edit_motd(char *name)
+edit_motd(int argc, char **argv, ...)
 {
-	call_editor(name, NULL, NULL);
+	call_editor(argc, argv);
 }
 
 void
-call_editor(char *name, char **args, char *z)
+call_editor(int argc, char **argv, ...)
 {
+	char *name = argv[0];
 	int found = 0;
 	char tmpfile[64];
 	struct daemons *daemons;
+	va_list ap;
+	char **args;
+
+	va_start(ap, argv);
+	args = va_arg(ap, char **);
+	va_end(ap);
 
 	for (daemons = ctl_daemons; daemons->name != 0; daemons++) {
 		if (strncmp(daemons->name, name, strlen(name)) == 0) {
@@ -1120,7 +1107,7 @@ rmtemp(char *file)
 }
 
 void
-start_dhcpd(char *arg0, char *arg1, char *arg2, char *arg3, char *arg4)
+start_dhcpd(int argc, char **argv, ...)
 {
 	struct if_nameindex *ifn_list, *ifnp;
 	char **dhcpd_args = NULL;
@@ -1169,16 +1156,16 @@ start_dhcpd(char *arg0, char *arg1, char *arg2, char *arg3, char *arg4)
 	}
 
 	i = 0;
-	dhcpd_args[i++] = arg0; /* dhcpd */
-	dhcpd_args[i++] = arg1; /* -c */
-	dhcpd_args[i++] = arg2; /* dhcpd.conf */
-	dhcpd_args[i++] = arg3; /* -l */
+	dhcpd_args[i++] = argv[0]; /* dhcpd */
+	dhcpd_args[i++] = argv[1]; /* -c */
+	dhcpd_args[i++] = argv[2]; /* dhcpd.conf */
+	dhcpd_args[i++] = argv[3]; /* -l */
 	if (cli_rtable != 0) {
 		snprintf(leasedb, sizeof(leasedb), "%s.%d",
-		    arg4, cli_rtable);
+		    argv[4], cli_rtable);
 		dhcpd_args[i++] = leasedb; /* rdomain's leasedb */
 	} else 
-		dhcpd_args[i++] = arg4; /* default leasedb */
+		dhcpd_args[i++] = argv[4]; /* default leasedb */
 
 	for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++) {
 		int flags, rdomain;
@@ -1195,7 +1182,7 @@ start_dhcpd(char *arg0, char *arg1, char *arg2, char *arg3, char *arg4)
 	}
 	dhcpd_args[i] = NULL;
 
-	cmdargs(arg0, dhcpd_args);
+	cmdargs(argv[0], dhcpd_args);
 done:
 	if_freenameindex(ifn_list);
 	free(dhcpd_args);

@@ -44,7 +44,7 @@ routeusage(void)
 }
 
 int
-route(int argc, char **argv)
+route(int argc, char **argv, ...)
 {
 	u_short cmd = 0;
 	u_int32_t net;

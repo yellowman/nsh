@@ -4,6 +4,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <stdarg.h>
 #include <string.h>
 #include <errno.h>
 #include <stdint.h>
@@ -36,9 +37,17 @@ static struct nopts tunnelopts[] = {
 };
 
 int
-intvnetid(char *ifname, int ifs, int argc, char **argv)
+intvnetid(int argc, char **argv, ...)
 {
 	int set;
+	va_list ap;
+	char *ifname;
+	int ifs;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -70,12 +79,20 @@ tunnelusage(void)
 }
 
 int
-inttunnel(char *ifname, int ifs, int argc, char **argv)
+inttunnel(int argc, char **argv, ...)
 {
 	int set, ch, df = 0, ecn = 0;
 	char *src = NULL, *dst = NULL, *rdomain = NULL, *ttl = NULL;
 	char *dstip = NULL, *dstport = NULL;
 	char buf[MAXHOSTNAMELEN+sizeof (":65535")];
+	va_list ap;
+	char *ifname;
+	int ifs;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
 		set = 0;

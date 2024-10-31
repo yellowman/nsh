@@ -19,6 +19,7 @@
 #include <string.h>
 #include <netinet/in.h>
 #include <stdlib.h>
+#include <stdarg.h>
 #include <sys/param.h>
 #include <sys/sysctl.h>
 #include <sys/socket.h>
@@ -196,12 +197,20 @@ struct ipsysctl pipexsysctls[] = {
 };
 
 int
-ipsysctl(int set, char *cmd, char *arg, int type)
+ipsysctl(int set, char **cmd, ...)
 {
 	int32_t larg;
 	const char *errmsg = NULL;
 	struct ipsysctl *x;
 	struct sysctltab *stab;
+	va_list ap;
+	char *arg;
+	int type;
+
+	va_start(ap, cmd);
+	arg = va_arg(ap, char *);
+	type = va_arg(ap, int);
+	va_end(ap);
 
 	for (stab = sysctls; stab-> name != NULL; stab++)
 		if(stab->pf == type)
@@ -211,13 +220,13 @@ ipsysctl(int set, char *cmd, char *arg, int type)
 		return 0;
 	}
 
-	x = (struct ipsysctl *) genget(cmd, (char **)stab->sysctl,
+	x = (struct ipsysctl *) genget(*cmd, (char **)stab->sysctl,
 	    sizeof(struct ipsysctl));
 	if (x == 0) {
-		printf("%% Invalid argument %s\n", cmd);
+		printf("%% Invalid argument %s\n", *cmd);
 		return 0;
 	} else if (Ambiguous(x)) {
-		printf("%% Ambiguous argument %s\n", cmd);
+		printf("%% Ambiguous argument %s\n", *cmd);
 		return 0;
 	}
 

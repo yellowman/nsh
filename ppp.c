@@ -17,6 +17,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdarg.h>
 #include <errno.h>
 #include <sys/socket.h>
 #include <sys/param.h>
@@ -68,11 +69,19 @@ peerusage(void)
 
 /* auth proto, auth name, auth key, peer proto, peer name, peer key, peer flag */
 int
-intsppp(char *ifname, int ifs, int argc, char **argv)
+intsppp(int argc, char **argv, ...)
 {
 	struct sauthreq spa;
 	struct ifreq ifr;
 	int set, ch, i, cmd = 0;
+	va_list ap;
+	char *ifname;
+	int ifs;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
 
 	/* command options for 'auth' */
 	static struct nopts authopts[] = {
@@ -313,10 +322,18 @@ pppoe_ipcp(char *ifname, int ifs, int set)
 
 /* pppoe dev, pppoe svc, pppoe ac */
 int
-intpppoe(char *ifname, int ifs, int argc, char **argv)
+intpppoe(int argc, char **argv, ...)
 {
 	struct pppoediscparms parms;
 	int set, ch;
+	va_list ap;
+	char *ifname;
+	int ifs;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
 
 	/* command options for 'auth' */
 	static struct nopts authopts[] = {

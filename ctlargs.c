@@ -26,7 +26,7 @@
 #include "ctl.h"
 
 int
-pr_prot1(int argc, char **argv)
+pr_prot1(int argc, char **argv, ...)
 {
 	struct prot1 *x;
 	struct prot *prot;

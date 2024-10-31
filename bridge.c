@@ -29,6 +29,7 @@
 #include <stdio.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <stdarg.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <sys/param.h>
@@ -115,10 +116,18 @@ static struct brc brps[] = {
 };
 
 int
-brport(char *ifname, int ifs, int argc, char **argv)
+brport(int argc, char **argv, ...)
 {
 	int set, i;
 	struct brc *x;
+	va_list ap;
+	char *ifname;
+	int ifs;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -222,12 +231,20 @@ static struct brc brvs[] = {
 };
 
 int
-brval(char *ifname, int ifs, int argc, char **argv)
+brval(int argc, char **argv, ...)
 {
 	int set;
 	u_int32_t val = 0;
 	const char *errmsg = NULL;
 	struct brc *x;
+	va_list ap;
+	char *ifname;
+	int ifs;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -323,8 +340,17 @@ brval(char *ifname, int ifs, int argc, char **argv)
 }
 
 int
-brrule(char *ifname, int ifs, int argc, char **argv)
+brrule(int argc, char **argv, ...)
 {
+	va_list ap;
+	char *ifname;
+	int ifs;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
+
 	if (NO_ARG(argv[0])) {
 		printf("%% all rules for a member must be applied in order\n");
 		printf("%% use flush bridge-rules <bridge> <member>\n");
@@ -345,9 +371,17 @@ brrule(char *ifname, int ifs, int argc, char **argv)
 }
 
 int
-brstatic(char *ifname, int ifs, int argc, char **argv)
+brstatic(int argc, char **argv, ...)
 {
 	int set;
+	va_list ap;
+	char *ifname;
+	int ifs;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -387,11 +421,19 @@ static struct brd brds[] = {
 };
 
 int
-brpri(char *ifname, int ifs, int argc, char **argv)
+brpri(int argc, char **argv, ...)
 {
 	int set, val;
 	const char *errmsg = NULL;
 	struct brd *x;
+	va_list ap;
+	char *ifname;
+	int ifs;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -469,9 +511,15 @@ brpri(char *ifname, int ifs, int argc, char **argv)
  * flush wrappers here
  */
 int
-flush_bridgedyn(char *brdg)
+flush_bridgedyn(int argc, char **argv, ...)
 {
+	va_list ap;
+	char *brdg;
 	int ifs;
+
+	va_start(ap, argv);
+	brdg = va_arg(ap, char *);
+	va_end (ap);
 
 	ifs = socket(AF_INET, SOCK_DGRAM, 0);
 	if (ifs < 0) {
@@ -492,9 +540,15 @@ flush_bridgedyn(char *brdg)
 }
 
 int
-flush_bridgeall(char *brdg)
+flush_bridgeall(int argc, char **argv, ...)
 {
+	va_list ap;
+	char *brdg;
 	int ifs;
+
+	va_start(ap, argv);
+	brdg = va_arg(ap, char *);
+	va_end(ap);
 
 	ifs = socket(AF_INET, SOCK_DGRAM, 0);
 	if (ifs < 0) {
@@ -515,9 +569,16 @@ flush_bridgeall(char *brdg)
 }
 
 int
-flush_bridgerule(char *brdg, char *member)
+flush_bridgerule(int argc, char **argv, ...)
 {
+	va_list ap;
+	char *brdg, *member;
 	int ifs;
+
+	va_start(ap, argv);
+	brdg = va_arg(ap, char *);
+	member = va_arg(ap, char *);
+	va_end(ap);
 
 	ifs = socket(AF_INET, SOCK_DGRAM, 0);
 	if (ifs < 0) {
@@ -1625,9 +1686,17 @@ brprotect_usage(void)
 }
 
 int
-brprotect(char *ifname, int ifs, int argc, char **argv)
+brprotect(int argc, char **argv, ...)
 {
 	int set;
+	va_list ap;
+	char *ifname;
+	int ifs;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -1755,7 +1824,7 @@ out:
 }
 
 int
-show_bridges(int argc, char **argv)
+show_bridges(int argc, char **argv, ...)
 {
 	switch (argc) {
 	case 2:

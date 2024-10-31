@@ -4,6 +4,7 @@
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdarg.h>
 #include <time.h>
 #include <sys/sockio.h>
 #include <sys/ioctl.h>
@@ -454,10 +455,18 @@ static struct wgc {
 };
 
 int
-intwg(char *ifname, int ifs, int argc, char **argv)
+intwg(int argc, char **argv, ...)
 {
 	int set;
 	struct wgc *x;
+	va_list ap;
+	char *ifname;
+	int ifs;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
 
 	/* freshen up at the NULL basin */
         wgdata.wgd_size = 0;
@@ -557,9 +566,17 @@ wgpeerusage(void)
 }
 
 int
-intwgpeer(char *ifname, int ifs, int argc, char **argv)
+intwgpeer(int argc, char **argv, ...)
 {
 	int set, ch;
+	va_list ap;
+	char *ifname;
+	int ifs;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
 
 	/* command options for 'wgpeer' */
 	static struct nopts wgpeeropts[] = {

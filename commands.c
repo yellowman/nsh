@@ -49,6 +49,7 @@
 #include <string.h>
 #include <errno.h>
 #include <signal.h>
+#include <stdarg.h>
 #include <sys/fcntl.h>
 #include <sys/stat.h>
 #include <sys/socket.h>
@@ -78,81 +79,81 @@ pid_t	child;
 
 extern volatile sig_atomic_t caught_sigwinch;
 
-static int	disable(void);
-static int      clear(void);
-static int	doverbose(int, char**);
-static int	doediting(int, char**);
-static int	doconfig(int, char**);
-static int	exitconfig(int, char**);
-int		rtable(int, char**);
-int		group(int, char**);
-static int	pr_crontab(int, char **, FILE *);
-static int	pr_routes(int, char **);
-static int	pr_routes6(int, char **);
-static int	pr_arp(int, char **);
-static int	pr_ndp(int, char **);
-static int	pr_sadb(int, char **);
-static int	pr_kernel(int, char **);
-static int	pr_dhcp(int, char **);
-static int	pr_conf(int, char **);
-static int	pr_s_conf(int, char **);
-static int	pr_a_conf(int, char **);
-static int	pr_conf_diff(int, char **);
-static int	pr_environment(int, char **);
-static int	show_hostname(int, char **);
-static int	wr_startup(void);
+static int	disable(int, char **, ...);
+static int      clear(int, char **, ...);
+static int	doverbose(int, char**, ...);
+static int	doediting(int, char**, ...);
+static int	doconfig(int, char**, ...);
+static int	exitconfig(int, char **, ...);
+static int	rtable(int, char**, ...);
+static int	pr_crontab(int, char **, ...);
+static int	pr_routes(int, char **, ...);
+static int	pr_routes6(int, char **, ...);
+static int	pr_arp(int, char **, ...);
+static int	pr_ndp(int, char **, ...);
+static int	pr_sadb(int, char **, ...);
+static int	pr_kernel(int, char **, ...);
+static int	pr_dhcp(int, char **, ...);
+static int	pr_conf(int, char **, ...);
+static int	pr_s_conf(int, char **, ...);
+static int	pr_a_conf(int, char **, ...);
+static int	pr_conf_diff(int, char **, ...);
+static int	pr_environment(int, char **, ...);
+static int	show_hostname(int, char **, ...);
+static int	wr_startup(int, char **, ...);
 static int	wr_conf(char *);
-static int	sysctlhelp(int, char **, char **, int);
-static int	flush_pf(char *);
-static int	flush_help(void);
-static int	flush_line(char *);
-static int	flush_ip_routes(void);
-static int	flush_arp_cache(void);
-static int	flush_ndp_cache(void);
-static int	flush_history(void);
+static int	sysctlhelp(int, char **, ...);
+static int	flush_pf(int, char **, ...);
+static int	flush_help(int, char **, ...);
+static int	flush_line(int, char **, ...);
+static int	flush_ip_routes(int, char **, ...);
+static int	flush_arp_cache(int, char **, ...);
+static int	flush_ndp_cache(int, char **, ...);
+static int	flush_history(int, char **, ...);
 static int	is_bad_input(const char *, size_t);
 static int	read_command_line(EditLine *, History *);
-static int 	int_logger(char *, int, int, char **);
-static int	int_ping(char *, int, int, char **);
-static int	int_ping6(char *, int, int, char **);
-static int	int_traceroute(char *, int, int, char **);
-static int	int_traceroute6(char *, int, int, char **);
-static int	int_ssh(char *, int, int, char **);
-static int	int_telnet(char *, int, int, char **);
-static int	int_do(char *, int, int, char **);
-static int	int_setenv(char *, int, int, char **);
-static int	int_unsetenv(char *, int, int, char **);
-static int	int_saveenv(char *, int, int, char **);
-static int	int_show(char *, int, int, char **);
-static int	int_who(char *, int, int, char **);
-static int	int_doverbose(char *, int, int, char **);
-static int	int_doediting(char *, int, int, char **);
-static int	int_manual(char *, int, int, char **);
-static int	int_shell(char *, int, int, char **);
-static int      int_clear(void);
-static int	int_help(void);
-static int	int_exit(void);
-static int	hostname(int, char **);
-static int      logger(int, char **);
-static int	manual(int, char**);
-static int	nocmd(int, char **);
-static int	docmd(int, char **);
-static int	setenvcmd(int, char **);
-static int	unsetenvcmd(int, char **);
-static int	saveenvcmd(int, char **);
-static int	shell(int, char*[]);
-static int	ping(int, char*[]);
-static int	ping6(int, char*[]);
-static int	traceroute(int, char*[]);
-static int	traceroute6(int, char*[]);
-static int	ssh(int, char*[]);
-static int	telnet(int, char*[]);
+static int 	int_logger(int, char **, ...);
+static int	int_ping(int, char **, ...);
+static int	int_ping6(int, char **, ...);
+static int	int_traceroute(int, char **, ...);
+static int	int_traceroute6(int, char **, ...);
+static int	int_ssh(int, char **, ...);
+static int	int_telnet(int, char **, ...);
+static int	int_do(int, char **, ...);
+static int	int_setenv(int, char **, ...);
+static int	int_unsetenv(int, char **, ...);
+static int	int_saveenv(int, char **, ...);
+static int	int_show(int, char **, ...);
+static int	int_who(int, char **, ...);
+static int	int_doverbose(int, char **, ...);
+static int	int_doediting(int, char **, ...);
+static int	int_manual(int, char **, ...);
+static int	int_shell(int, char ** ,...);
+static int      int_clear(int, char **, ...);
+static int	int_help(int, char **, ...);
+static int	int_exit(int, char **, ...);
+static int	hostname(int, char **, ...);
+static int      logger(int, char **, ...);
+static int	manual(int, char**, ...);
+static int	nocmd(int, char **, ...);
+static int	docmd(int, char **, ...);
+static int	setenvcmd(int, char **, ...);
+static int	unsetenvcmd(int, char **, ...);
+static int	saveenvcmd(int, char **, ...);
+static int	shell(int, char **, ...);
+static int	ping(int, char **, ...);
+static int	ping6(int, char**, ...);
+static int	traceroute(int, char**, ...);
+static int	traceroute6(int, char**, ...);
+static int	ssh(int, char**, ...);
+static int	telnet(int, char**, ...);
        void	p_argv(int, char **);
-static int 	nreboot(void);
-static int 	halt(void);
-static int 	powerdown(void);
+static int 	nreboot(int, char **, ...);
+static int 	halt(int, char **, ...);
+static int 	powerdown(int, char **, ...);
 static void	pf_stats(void);
-static int	int_interface(char *, int, int, char **);
+static int	interface(int, char **, ...);
+static int	int_interface(int, char **, ...);
 
 #include "commands.h"
 
@@ -431,7 +432,7 @@ struct prot prots[] = {
  */
 
 int
-quit(void)
+quit(int argc, char **argv, ...)
 {
 	if (privexec) {
 		exit(NSH_REXEC_EXIT_CODE_QUIT);
@@ -518,7 +519,7 @@ Menu showlist[] = {
 };
 
 static int
-showcmd(int argc, char **argv)
+showcmd(int argc, char **argv, ...)
 {
 	Menu *s;	/* pointer to current command */
 	int error = 0, outfd = -1;
@@ -943,7 +944,7 @@ Menu pipextab[] = {
 };
 
 static int
-ipcmd(int argc, char **argv)
+ipcmd(int argc, char **argv, ...)
 {
 	Menu *i;     /* pointer to current command */
 	struct sysctltab *stab;
@@ -992,18 +993,27 @@ ipcmd(int argc, char **argv)
 	}
 
 	if (i->handler)
-		success = (*i->handler)(set, argv[1],
+		success = (*i->handler)(set, &argv[1],
 		    (i->maxarg > 0) ? argv[2] : 0, stab->pf);
 	return(success);
 }
 
 static int
-sysctlhelp(int unused1, char **unused2, char **unused3, int type)
+sysctlhelp(int unused1, char **unused2, ...)
 {
 	Menu *i = NULL, *j = NULL; /* pointer to current command */
 	char *prefix = NULL;
 	u_int z = 0;
 	struct sysctltab *stab;
+	va_list ap;
+	char **unused3 = NULL;
+	int type;
+
+	va_start(ap, unused2);
+	unused3 = va_arg(ap, char **);
+	if (unused3) { /* silence "unused variable" compiler warning */ }
+	type = va_arg(ap, int);
+	va_end(ap);
 
 	for (stab = sysctls; stab->name != NULL; stab++)
 		if (stab->pf == type) {
@@ -1051,12 +1061,12 @@ Menu flushlist[] = {
 };
 
 static int
-flushcmd(int argc, char **argv)
+flushcmd(int argc, char **argv, ...)
 {
 	Menu *f;
 
 	if (argc < 2) {
-		flush_help();
+		flush_help(argc, argv);
 		return 0;
 	}
 
@@ -1077,22 +1087,30 @@ flushcmd(int argc, char **argv)
 		return 0;
 	}
 	if (f->handler)
-		(*f->handler)((f->maxarg > 0) ? argv[2] : 0,
+		(*f->handler)(0, NULL, (f->maxarg > 0) ? argv[2] : 0,
 		    (f->maxarg > 1) ? argv[3] : 0);
 
 	return(1);
 }
 
 static int
-flush_line(char *line)
+flush_line(int argc, char **argv, ...)
 {
-	char *argv[] = { PKILL, "-9", "-t", line, NULL };
-	cmdargs(PKILL, argv);
+	va_list ap;
+	char *line;
+	char * args[5] = { PKILL, "-9", "-t", /* line */ NULL, NULL };
+
+	va_start(ap, argv);
+	line = va_arg(ap, char *);
+	va_end(ap);
+
+	args[3] = line;
+	cmdargs(PKILL, args);
 	return (1);
 }
 
 static int
-flush_help(void)
+flush_help(int argc, char **argv, ...)
 {
 	Menu *f;
 	u_int z = 0;
@@ -1378,13 +1396,19 @@ read_command_line(EditLine *el, History *hist)
  * interface/bridge is being configured.
  */
 static int
-interface(int argc, char **argv, char *modhvar)
+interface(int argc, char **argv, ...)
 {
 	int ifs, set = 1;
 	char *tmp;
 	char *ifunit = NULL;
 	struct intlist *i;	/* pointer to current command */
 	struct ifreq ifr;
+	va_list ap;
+	char *modhvar;
+
+	va_start(ap, argv);
+	modhvar = va_arg(ap, char *);
+	va_end(ap);
 
 	if (!modhvar) {
 		if (NO_ARG(argv[0])) {
@@ -1522,7 +1546,7 @@ interface(int argc, char **argv, char *modhvar)
 			if (cli_rtable != 0 && nsh_setrtable(0) == 0)
 				cli_rtable = 0;
 	
-			((*i->handler) (ifname, ifs, argc, argv));
+			(*i->handler)(argc, argv, ifname, ifs);
 
 			if (save_cli_rtable != cli_rtable &&
 			    nsh_setrtable(cli_rtable) == 0)
@@ -1604,7 +1628,7 @@ interface(int argc, char **argv, char *modhvar)
 			if (cli_rtable != 0 && nsh_setrtable(0) == 0)
 				cli_rtable = 0;
 
-			ret = (*i->handler) (ifname, ifs, margc, margv);
+			ret = (*i->handler)(margc, margv, ifname, ifs);
 
 			if (cli_rtable != save_cli_rtable &&
 			    nsh_setrtable(cli_rtable) == 0)
@@ -1636,11 +1660,19 @@ interface(int argc, char **argv, char *modhvar)
 }
 
 static int
-int_interface(char *old_ifname, int ifs, int argc, char **argv)
+int_interface(int argc, char **argv, ...)
 {
 	struct ifreq ifr;
 	char *new_ifname;
 	int set = 1;
+	va_list ap;
+	char *old_ifname;
+	int ifs;
+
+	va_start(ap, argv);
+	old_ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
 	
 	if (NO_ARG(argv[0])) {
 		argv++;
@@ -1690,120 +1722,119 @@ int_interface(char *old_ifname, int ifs, int argc, char **argv)
 }
 
 static int
-int_logger(char *ifname, int ifs, int argc, char **argv)
+int_logger(int argc, char **argv, ...)
 {
         logger(argc, argv);
         return 0; /* do not leave interface context */
 }
 
-
 static int
-int_ping(char *ifname, int ifs, int argc, char **argv)
+int_ping(int argc, char **argv, ...)
 {
 	ping(argc, argv);
 	return 0; /* do not leave interface context */
 }
 
 static int
-int_ping6(char *ifname, int ifs, int argc, char **argv)
+int_ping6(int argc, char **argv, ...)
 {
 	ping6(argc, argv);
 	return 0; /* do not leave interface context */
 }
 
 static int
-int_traceroute(char *ifname, int ifs, int argc, char **argv)
+int_traceroute(int argc, char **argv, ...)
 {
 	traceroute(argc, argv);
 	return 0; /* do not leave interface context */
 }
 
 static int
-int_traceroute6(char *ifname, int ifs, int argc, char **argv)
+int_traceroute6(int argc, char **argv, ...)
 {
 	traceroute6(argc, argv);
 	return 0; /* do not leave interface context */
 }
 
 static int
-int_ssh(char *ifname, int ifs, int argc, char **argv)
+int_ssh(int argc, char **argv, ...)
 {
 	ssh(argc, argv);
 	return 0; /* do not leave interface context */
 }
 
 static int
-int_telnet(char *ifname, int ifs, int argc, char **argv)
+int_telnet(int argc, char **argv, ...)
 {
 	telnet(argc, argv);
 	return 0; /* do not leave interface context */
 }
 
 static int
-int_do(char *ifname, int ifs, int argc, char **argv)
+int_do(int argc, char **argv, ...)
 {
 	docmd(argc, argv);
 	return 0; /* do not leave interface context */
 }
 
 static int
-int_setenv(char *ifname, int ifs, int argc, char **argv)
+int_setenv(int argc, char **argv, ...)
 {
 	setenvcmd(argc, argv);
 	return 0; /* do not leave interface context */
 }
 
 static int
-int_unsetenv(char *ifname, int ifs, int argc, char **argv)
+int_unsetenv(int argc, char **argv, ...)
 {
 	unsetenvcmd(argc, argv);
 	return 0; /* do not leave interface context */
 }
 
 static int
-int_saveenv(char *ifname, int ifs, int argc, char **argv)
+int_saveenv(int argc, char **argv, ...)
 {
 	saveenvcmd(argc, argv);
 	return 0; /* do not leave interface context */
 }
 
 static int
-int_show(char *ifname, int ifs, int argc, char **argv)
+int_show(int argc, char **argv, ...)
 {
 	showcmd(argc, argv);
 	return 0; /* do not leave interface context */
 }
 
 static int
-int_who(char *ifname, int ifs, int argc, char **argv)
+int_who(int argc, char **argv, ...)
 {
 	who(argc, argv);
 	return 0; /* do not leave interface context */
 }
 
 static int
-int_doverbose(char *ifname, int ifs, int argc, char **argv)
+int_doverbose(int argc, char **argv, ...)
 {
 	doverbose(argc, argv);
 	return 0; /* do not leave interface context */
 }
 
 static int
-int_doediting(char *ifname, int ifs, int argc, char **argv)
+int_doediting(int argc, char **argv, ...)
 {
 	doediting(argc, argv);
 	return 0; /* do not leave interface context */
 }
 
 static int
-int_manual(char *ifname, int ifs, int argc, char **argv)
+int_manual(int argc, char **argv, ...)
 {
 	manual(argc, argv);
 	return 0; /* do not leave interface context */
 }
 
 static int
-int_shell(char *ifname, int ifs, int argc, char **argv)
+int_shell(int argc, char **argv, ...)
 {
 	if (argc >1) 
 	{
@@ -1815,13 +1846,13 @@ int_shell(char *ifname, int ifs, int argc, char **argv)
 }
 
 static int
-int_clear(void)
+int_clear(int argc, char **argv, ...)
 {
-	clear();
+	return clear(argc, argv);
 }
 
 static int
-int_help(void)
+int_help(int argc, char **argv, ...)
 {
 	struct intlist *i; /* pointer to current command */
 	u_int z = 0;
@@ -1845,7 +1876,7 @@ int_help(void)
 }
 
 static int
-int_exit(void)
+int_exit(int argc, char **argv, ...)
 {
 	return 1; /* leave interface config mode */
 }
@@ -2088,7 +2119,7 @@ command()
 				if (feof(stdin) || ferror(stdin)) {
 					if (interactive_mode)
 						printf("\n");
-					(void) quit();
+					(void) quit(0, NULL);
 					/* NOTREACHED */
 				}
 				break;
@@ -2168,7 +2199,7 @@ manual_usage(void)
 }
 
 static int
-manual(int argc, char **argv)
+manual(int argc, char **argv, ...)
 {
 	sig_t sigint, sigquit, sigchld;
 	char term[32], *termenv = NULL;
@@ -2260,8 +2291,8 @@ manual(int argc, char **argv)
 /*
  * Hostname command.
  */
-int
-hostname(int argc, char **argv)
+static int
+hostname(int argc, char **argv, ...)
 {
 	argv++;
 	argc--;
@@ -2279,7 +2310,8 @@ hostname(int argc, char **argv)
 	return 0;
 }
 
-int show_hostname(int argc, char **argv)
+static int
+show_hostname(int argc, char **argv, ...)
 {
 	if (gethostname(hbuf, sizeof(hbuf)))
 		printf("%% gethostname: %s\n", strerror(errno));
@@ -2288,12 +2320,11 @@ int show_hostname(int argc, char **argv)
 
 	return 0;
 }
+
 /* logger command */
 
-
-
 int
-logger(int argc, char *argv[])
+logger(int argc, char *argv[], ...)
 {
         if (argc < 2) {  
                 printf("%% Invalid arguments\n");
@@ -2310,7 +2341,7 @@ logger(int argc, char *argv[])
  * This is a pseudo command table entry used for TAB-completion purposes.
  */
 static int
-nocmd(int argc, char **argv)
+nocmd(int argc, char **argv, ...)
 {
 	Command  *cmd = NULL, *c;
 
@@ -2345,7 +2376,7 @@ nocmd(int argc, char **argv)
  * switches which offer a "do" command for context switching.
  */
 static int
-docmd(int argc, char **argv)
+docmd(int argc, char **argv, ...)
 {
 	if (argc < 2) {
 		printf("%% command name not provided\n");
@@ -2391,7 +2422,7 @@ docmd(int argc, char **argv)
 			if (cli_rtable != 0 && nsh_setrtable(cli_rtable) == 0)
 				cli_rtable = 0;
 
-			((*i->handler) (ifname, ifs, argc, argv));
+			(*i->handler)(argc, argv, ifname, ifs);
 
 			if (save_cli_rtable != cli_rtable &&
 			    nsh_setrtable(cli_rtable) == 0)
@@ -2422,7 +2453,7 @@ usage_setenv(void)
 }
 
 static int
-setenvcmd(int argc, char **argv)
+setenvcmd(int argc, char **argv, ...)
 {
 	char *name, *eq, *value;
 	void *name0;
@@ -2473,7 +2504,7 @@ setenvcmd(int argc, char **argv)
 }
 
 static int
-unsetenvcmd(int argc, char **argv)
+unsetenvcmd(int argc, char **argv, ...)
 {
 	char *name;
 	void *name0;
@@ -2514,7 +2545,7 @@ savevar(void *keyptr, size_t keysize, void *value, size_t valsize, void *arg)
 }
 
 static int
-saveenvcmd(int argc, char **argv)
+saveenvcmd(int argc, char **argv, ...)
 {
 	char tmppath[PATH_MAX], path[PATH_MAX];
 	FILE *f;
@@ -2583,8 +2614,8 @@ saveenvcmd(int argc, char **argv)
 /*
  * Shell command.
  */
-int
-shell(int argc, char **argv)
+static int
+shell(int argc, char **argv, ...)
 {
 	sig_t sigint, sigquit, sigchld;
 
@@ -2640,7 +2671,7 @@ shell(int argc, char **argv)
  * ping command.
  */
 int
-ping(int argc, char *argv[])
+ping(int argc, char *argv[], ...)
 {
 	if (argc < 2) {
 		printf("%% Invalid arguments\n");
@@ -2652,7 +2683,7 @@ ping(int argc, char *argv[])
 }
 
 int
-ping6(int argc, char *argv[])
+ping6(int argc, char *argv[], ...)
 {
 	if (argc < 2) {
 		printf("%% Invalid arguments\n");
@@ -2667,7 +2698,7 @@ ping6(int argc, char *argv[])
  * telnet command.
  */
 int
-telnet(int argc, char *argv[])
+telnet(int argc, char *argv[], ...)
 {
 	if (argc < 2) {
 		printf("%% Invalid arguments\n");
@@ -2682,7 +2713,7 @@ telnet(int argc, char *argv[])
  * ssh command.
  */
 int
-ssh(int argc, char *argv[])
+ssh(int argc, char *argv[], ...)
 {
 	if (argc < 2) {
 		printf("%% Invalid arguments\n");
@@ -2697,7 +2728,7 @@ ssh(int argc, char *argv[])
  * traceroute command.
  */
 int
-traceroute(int argc, char *argv[])
+traceroute(int argc, char *argv[], ...)
 {
 	if (argc < 2) {
 		printf("%% Invalid arguments\n");
@@ -2709,7 +2740,7 @@ traceroute(int argc, char *argv[])
 }
 
 int
-traceroute6(int argc, char *argv[])
+traceroute6(int argc, char *argv[], ...)
 {
 	if (argc < 2) {
 		printf("%% Invalid arguments\n");
@@ -2742,8 +2773,8 @@ argvtostring(int argc, char **argv, char *string, int strlen)
 	return i;
 }
 
-int
-rtable(int argc, char **argv)
+static int
+rtable(int argc, char **argv, ...)
 {
 	int table, set, pos, found, curtable;
 	const char *errstr;
@@ -2866,7 +2897,7 @@ rtable(int argc, char **argv)
  * Group attribute command.
  */
 int
-group(int argc, char **argv)
+group(int argc, char **argv, ...)
 {
 	int counter = 1, set, ifs;
 	const char *errstr;
@@ -2920,18 +2951,18 @@ group(int argc, char **argv)
 }
 
 //clear terminal screen
-int
-clear(void)
+static int
+clear(int argc, char **argv, ...)
 {
-	char *argv[] = {CLEAR, NULL, NULL };	
-        cmdargs(CLEAR, argv);
+	char *args[] = {CLEAR, NULL, NULL };	
+        cmdargs(CLEAR, args);
 	return 0; 
 }
 /*
  * disable privileged mode
  */
-int
-disable(void)
+static int
+disable(int argc, char **argv, ...)
 {
 	if (privexec) {
 		exit(0);
@@ -2945,8 +2976,8 @@ disable(void)
 /*
  * verbose diagnostics
  */
-int
-doverbose(int argc, char **argv)
+static int
+doverbose(int argc, char **argv, ...)
 {
 	if (argc > 1) {
 		if (NO_ARG(argv[0])) {
@@ -2964,8 +2995,8 @@ doverbose(int argc, char **argv)
 	return 0;
 }
 
-int
-doediting(int argc, char **argv)
+static int
+doediting(int argc, char **argv, ...)
 {
 	if (argc > 1) {
 		if (NO_ARG(argv[0])) {
@@ -2984,8 +3015,8 @@ doediting(int argc, char **argv)
 	return 0;
 }
 
-int
-doconfig(int argc, char **argv)
+static int
+doconfig(int argc, char **argv, ...)
 {
 	if (argc > 1) {
 		if (NO_ARG(argv[0])) {
@@ -3003,8 +3034,8 @@ doconfig(int argc, char **argv)
 	return 0;
 }
 
-int
-exitconfig(int argc, char **argv)
+static int
+exitconfig(int argc, char **argv, ...)
 {
 	if (!config_mode) {
 		printf ("%% Configuration mode is already disabled\n");
@@ -3016,7 +3047,7 @@ exitconfig(int argc, char **argv)
 }
 
 int
-flush_history(void)
+flush_history(int argc, char **argv, ...)
 {
 	if (!editing) {
 		printf("%% Command line editing not enabled\n");
@@ -3038,10 +3069,16 @@ flush_history(void)
 /*
  * pf toilet flusher
  */
-int
-flush_pf(char *arg)
+static int
+flush_pf(int argc, char **argv, ...)
 {
 	struct fpf *x;
+	va_list ap;
+	char *arg;
+
+	va_start(ap, argv);
+	arg = va_arg(ap, char *);
+	va_end(ap);
 
 	if (!arg || arg[0] == '?') {
 		gen_help((char **)fpfs, "flush pf", "flush",
@@ -3203,9 +3240,9 @@ p_argv(int argc, char **argv)
 }
 
 int
-wr_startup(void)
+wr_startup(int argc, char **argv, ...)
 {
-	char *argv[] = { SAVESCRIPT, NSHRC_TEMP, NULL };
+	char *args[] = { SAVESCRIPT, NSHRC_TEMP, NULL };
 
 	if (wr_conf(NSHRC_TEMP))
 		printf("%% Saving configuration\n");
@@ -3213,7 +3250,7 @@ wr_startup(void)
 		printf("%% Unable to save configuration: %s\n",
 		    strerror(errno));
 
-	cmdargs(SAVESCRIPT, argv);
+	cmdargs(SAVESCRIPT, args);
 
 	return(1);
 }
@@ -3396,43 +3433,44 @@ done:
  * Reboot
  */
 int
-nreboot(void)
+nreboot(int argc, char **argv, ...)
 {
 	return do_reboot(RB_AUTOBOOT);
 }
 
 int
-halt(void)
+halt(int argc, char **argv, ...)
 {
 	return do_reboot(RB_HALT);
 }
 
 int
-powerdown(void)
+powerdown(int argc, char **argv, ...)
 {
 	return do_reboot(RB_POWERDOWN);
 }
+
 /*
  * Flush wrappers
  */
-int
-flush_ip_routes(void)
+static int
+flush_ip_routes(int argc, char **argv, ...)
 {
 	flushroutes(AF_INET, AF_INET);
 
 	return(0);
 }
 
-int
-flush_arp_cache(void)
+static int
+flush_arp_cache(int argc, char **argv, ...)
 {
 	flushroutes(AF_INET, AF_LINK);
 
 	return(0);
 }
 
-int
-flush_ndp_cache(void)
+static int
+flush_ndp_cache(int argc, char **argv, ...)
 {
 	ndpdump(NULL, 1);
 	return(0);
@@ -3441,8 +3479,8 @@ flush_ndp_cache(void)
 /*
  * Show wrappers
  */
-int
-pr_conf(int argc, char **argv)
+static int
+pr_conf(int argc, char **argv, ...)
 {
 	if (priv != 1) {
 		printf ("%% Privilege required\n");
@@ -3462,8 +3500,8 @@ pr_conf(int argc, char **argv)
 /*
  * Show startup config
  */
-int
-pr_s_conf(int argc, char **argv)
+static int
+pr_s_conf(int argc, char **argv, ...)
 {
 	int ret;
 
@@ -3481,8 +3519,8 @@ pr_s_conf(int argc, char **argv)
  * Show running-config for the active context.
  * Currently only supports the interface/bridge context.
  */
-int
-pr_a_conf(int argc, char **argv)
+static int
+pr_a_conf(int argc, char **argv, ...)
 {
 	if (priv != 1) {
 		printf ("%% Privilege required\n");
@@ -3501,8 +3539,8 @@ pr_a_conf(int argc, char **argv)
 /*
  * Show differences between startup and running config.
  */
-int
-pr_conf_diff(int argc, char **argv)
+static int
+pr_conf_diff(int argc, char **argv, ...)
 {
 	int conf_fd = -1, diff_fd = -1;
 	char confpath[PATH_MAX];
@@ -3574,9 +3612,15 @@ done:
 }
 
 static int
-pr_crontab(int argc, char **argv, FILE *outfile)
+pr_crontab(int argc, char **argv, ...)
 {
 	char *crontab_argv[] = { CRONTAB, "-l", "-u", "root", NULL };
+	va_list ap;
+	FILE *outfile;
+
+	va_start(ap, argv);
+	outfile = va_arg(ap, FILE *);
+	va_end(ap);
 
 	if (priv != 1) {
 		printf("%% Privilege required\n");
@@ -3593,8 +3637,8 @@ pr_crontab(int argc, char **argv, FILE *outfile)
 	return 0;
 }
 
-int
-pr_routes(int argc, char **argv)
+static int
+pr_routes(int argc, char **argv, ...)
 {
 	switch(argc) {
 	case 2:
@@ -3610,8 +3654,8 @@ pr_routes(int argc, char **argv)
 	return 0;
 }
 
-int
-pr_routes6(int argc, char **argv)
+static int
+pr_routes6(int argc, char **argv, ...)
 {
 	switch(argc) {
 	case 2:
@@ -3628,7 +3672,7 @@ pr_routes6(int argc, char **argv)
 }
 
 int
-pr_arp(int argc, char **argv)
+pr_arp(int argc, char **argv, ...)
 {
 	switch(argc) {
 	case 2:
@@ -3643,8 +3687,8 @@ pr_arp(int argc, char **argv)
 	return 0;
 }
 
-int
-pr_ndp(int argc, char **argv)
+static int
+pr_ndp(int argc, char **argv, ...)
 {
 	switch(argc) {
 	case 2:
@@ -3659,16 +3703,16 @@ pr_ndp(int argc, char **argv)
 	return 0;
 }
 
-int
-pr_sadb(int argc, char **argv)
+static int
+pr_sadb(int argc, char **argv, ...)
 {
 	p_rttables(PF_KEY, 0, 0);
 
 	return 0;
 }
 
-int
-pr_kernel(int argc, char **argv)
+static int
+pr_kernel(int argc, char **argv, ...)
 {
 	struct stt *x;
 
@@ -3702,8 +3746,8 @@ pf_stats(void)
 	return;
 }
 
-int
-pr_dhcp(int argc, char **argv)
+static int
+pr_dhcp(int argc, char **argv, ...)
 {
 	if (argc == 3 && argv[2][0] != '?') {
 		if (isprefix(argv[2], "leases")) {
@@ -3727,7 +3771,7 @@ envcmp(const void *item1, const void *item2)
 }
 
 static int
-pr_environment(int argc, char **argv)
+pr_environment(int argc, char **argv, ...)
 {
 	extern char **environ;
 	char **ep;

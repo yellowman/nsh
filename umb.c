@@ -14,6 +14,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <stdarg.h>
 #include <string.h>
 #include <unistd.h>
 #include <util.h>
@@ -510,10 +511,18 @@ static struct umbc {
 };
 
 int
-intumb(char *ifname, int ifs, int argc, char **argv)
+intumb(int argc, char **argv, ...)
 {
 	int set;
 	struct umbc *x;
+	va_list ap;
+	char *ifname;
+	int ifs;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
 		set = 0;

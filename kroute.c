@@ -280,7 +280,7 @@ _monitor_sig(int signo)
 }
 
 int
-monitor(int argc, char **argv)
+monitor(int argc, char **argv, ...)
 {
 	int s, m, n, saveverbose;
 	fd_set fds; 

@@ -298,7 +298,7 @@ write_line(const char *line, size_t len, int fd)
 }
 
 int
-enable(int argc, char **argv)
+enable(int argc, char **argv, ...)
 {
 	char *doas_argv[] = {
 		NSHDOAS_PATH_STR, NULL, NULL, NULL
@@ -362,7 +362,7 @@ enable(int argc, char **argv)
 		return 0;
 	else if (exit_code == NSH_REXEC_EXIT_CODE_QUIT) {
 		/* The child exited due to a 'quit' command. */
-		quit();
+		quit(0, NULL);
 	} else  {
 		printf("%% Privileged mode child process exited "
 		    "with error code %d\n", exit_code);

@@ -64,6 +64,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
+#include <stdarg.h>
 #include <sys/limits.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
@@ -166,12 +167,20 @@ make_string(char *str, int str_len, const u_int8_t *buf, int buf_len)
 
 /* was setifnwkey() */
 int
-intnwkey(char *ifname, int ifs, int argc, char **argv)
+intnwkey(int argc, char **argv, ...)
 {
 	int i, len, set;
 	char *cp = NULL, *val = NULL;
 	struct ieee80211_nwkey nwkey;
 	u_int8_t keybuf[IEEE80211_WEP_NKID][16];
+	va_list ap;
+	char *ifname;
+	int ifs;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -426,11 +435,19 @@ get_nwinfo(char *ifname, char *str, int str_len, int type)
 }
 
 int
-inttxpower(char *ifname, int ifs, int argc, char **argv)
+inttxpower(int argc, char **argv, ...)
 {
 	const char *errmsg = NULL;
 	struct ieee80211_txpower txpower;
 	short dbm, set;
+	va_list ap;
+	char *ifname;
+	int ifs;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -472,11 +489,19 @@ inttxpower(char *ifname, int ifs, int argc, char **argv)
 }
 
 int
-intbssid(char *ifname, int ifs, int argc, char **argv)
+intbssid(int argc, char **argv, ...)
 {
 	struct ieee80211_bssid bssid;
 	struct ether_addr *ea;
 	short set;
+	va_list ap;
+	char *ifname;
+	int ifs;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
 		set = 0;

@@ -27,7 +27,7 @@
 #include "commands.h"
 
 int
-show_help(int argc, char **argv)
+show_help(int argc, char **argv, ...)
 {
 	Menu *s; /* pointer to current command */
 	u_int z = 0;
@@ -77,7 +77,7 @@ gen_help(char **x, char *cmdprefix, char *descrsuffix, int szstruct)
  * Help command.
  */
 int
-help(int argc, char **argv)
+help(int argc, char **argv, ...)
 {
 	Command *c;
 

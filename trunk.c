@@ -26,6 +26,7 @@
  */
 
 #include <stdio.h>
+#include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
@@ -41,10 +42,18 @@
 struct trunk_protos tpr[] = TRUNK_PROTOS;
 
 int
-inttrunkport(char *ifname, int ifs, int argc, char **argv)
+inttrunkport(int argc, char **argv, ...)
 {
 	struct trunk_reqport rp;
 	int set, i;
+	va_list ap;
+	char *ifname;
+	int ifs;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -114,10 +123,18 @@ inttrunkport(char *ifname, int ifs, int argc, char **argv)
 }
 
 int
-inttrunkproto(char *ifname, int ifs, int argc, char **argv)
+inttrunkproto(int argc, char **argv, ...)
 {
 	int i, set;
 	struct trunk_reqall ra;
+	va_list ap;
+	char *ifname;
+	int ifs;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
 		set = 0;

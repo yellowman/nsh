@@ -16,6 +16,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdarg.h>
 #include <string.h>
 #include <errno.h>
 #include <sys/limits.h>
@@ -46,13 +47,21 @@ static struct intc {
 static const char *carp_bal_modes[] = { CARP_BAL_MODES };
 
 int
-intcarp(char *ifname, int ifs, int argc, char **argv)
+intcarp(int argc, char **argv, ...)
 {
 	const char *errmsg = NULL;
 	struct ifreq ifr;
 	struct carpreq creq;
 	int set, bal_mode = 0, val = 0;
 	struct intc *x;
+	va_list ap;
+	char *ifname;
+	int ifs;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -196,11 +205,19 @@ intcarp(char *ifname, int ifs, int argc, char **argv)
 }
 
 int
-intcpass(char *ifname, int ifs, int argc, char **argv)
+intcpass(int argc, char **argv, ...)
 {
 	struct ifreq ifr;
 	struct carpreq creq;
 	int set;
+	va_list ap;
+	char *ifname;
+	int ifs;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -238,13 +255,21 @@ intcpass(char *ifname, int ifs, int argc, char **argv)
 }
 
 int
-intcnode(char *ifname, int ifs, int argc, char **argv)
+intcnode(int argc, char **argv, ...)
 {
 	struct ifreq ifr;
 	struct carpreq creq;
 	const char *errmsg = NULL;
 	int set, i, last;
 	u_int vhid, advskew;
+	va_list ap;
+	char *ifname;
+	int ifs;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -428,11 +453,19 @@ carp_state(int s, char *ifname, FILE *outfile)
 }
 
 int
-intcdev(char *ifname, int ifs, int argc, char **argv)
+intcdev(int argc, char **argv, ...)
 {
 	struct ifreq ifr;
 	struct carpreq creq;
 	int set;
+	va_list ap;
+	char *ifname;
+	int ifs;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
 		set = 0;

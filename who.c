@@ -46,7 +46,7 @@ void  output(struct utmp *);
 void  output_labels(void);
 
 int
-who(int argc, char **argv)
+who(int argc, char **argv, ...)
 {
 	FILE *utmp;
 	struct utmp who;
