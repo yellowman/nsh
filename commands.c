@@ -170,13 +170,14 @@ static struct fpf {
 	char *cmd;
 	char *arg;
 } fpfs[] = {
-	{ "all",	"all PF elements",	PFCTL,	"-Fall" },
-	{ "nat",	"NAT rules",		PFCTL,	"-Fnat" },
-	{ "queue",	"queue rules",		PFCTL,	"-Fqueue" },
-	{ "filter",	"filter rules",		PFCTL,	"-Frules" },
-	{ "states",	"NAT/filter states",	PFCTL,	"-Fstate" },
-	{ "stats",	"PF statistics",	PFCTL,	"-Finfo" },
-	{ "tables",	"PF address tables",	PFCTL,	"-FTables" },
+	{ "all",            "all PF elements",	        PFCTL,  "-Fall" },
+	{ "filter",         "filter rules",		PFCTL,  "-Frules" },
+	{ "os-fingerprint", "passive OS detection fingerprints",  PFCTL,  "-Fosfp" },
+	{ "reset",          "limits, timeouts and options",       PFCTL,  "-FReset" },
+	{ "source-table",   "source tracking table",    PFCTL,  "-FSources" },
+	{ "states",         "NAT/filter states",	PFCTL,  "-Fstate" },
+	{ "stats",          "info and stats",	        PFCTL,  "-Finfo" },
+	{ "tables",         "PF address tables",	PFCTL,  "-FTables" },
 	{ 0, 0, 0, 0 }
 };
 
