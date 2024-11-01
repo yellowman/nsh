@@ -393,7 +393,7 @@ arpsearch(FILE *output, char *delim, in_addr_t addr, void (*action)
 	struct rtdump *rtdump;
 	int found_entry = 0;
 
-	rtdump = getrtdump(AF_INET, RTF_LLINFO, 0);
+	rtdump = getrtdump(AF_INET, RTF_LLINFO, cli_rtable);
 	if (rtdump == NULL)
 		return 0;
 	for (next = rtdump->buf; next < rtdump->lim; next += rtm->rtm_msglen)
