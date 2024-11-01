@@ -69,7 +69,6 @@ u_long	rtm_inits;
 
 char	*mylink_ntoa(const struct sockaddr_dl *);
 
-void	 flushroutes(int, int);
 void	 print_rtmsg(struct rt_msghdr *);
 void	 print_getmsg(struct rt_msghdr *, int);
 void	 pmsg_common(struct rt_msghdr *);
@@ -147,7 +146,7 @@ freertdump(struct rtdump *rtdump)
  * sockaddrs match requested address families
  */
 void
-flushroutes(int af, int af2)
+flushroutes(int af, int af2, int flush_verbose)
 {
 	int rlen, seqno, s;
 	char *next;
@@ -203,12 +202,13 @@ flushroutes(int af, int af2)
 		rlen = write(s, next, rtm->rtm_msglen);
 		if (rlen < (int)rtm->rtm_msglen) {
 			if (errno == ESRCH) {
-				printf("%% No such route to delete:");
-				print_addrs((char *)rtm + rtm->rtm_hdrlen,
-				   rtm->rtm_addrs);
-				putchar('\n');
-				fflush(stdout);
-
+				if (flush_verbose) {
+					printf("%% No such route to delete:");
+					print_addrs((char *)rtm +
+					    rtm->rtm_hdrlen, rtm->rtm_addrs);
+					putchar('\n');
+					fflush(stdout);
+				}
 				seqno++;
 				continue;
 			}
@@ -220,7 +220,7 @@ flushroutes(int af, int af2)
 		if (verbose) {
 			printf("\n%% Wrote message:\n");
 			print_rtmsg(rtm);
-		} else {
+		} else if (flush_verbose) {
 			printf("%% %-20.20s ", routename(sa));
 			printf("%-20.20s flushed\n", routename(sa2));
 		}
@@ -229,6 +229,9 @@ flushroutes(int af, int af2)
 		printf("\n");
 	if (!seqno)
 		printf("%% No entires found to flush\n");
+	else
+		printf("%% %d routing table entr%s flushed\n", seqno,
+		    seqno == 1 ? "y" : "ies");
 	freertdump(rtdump);
 	close(s);
 	return;

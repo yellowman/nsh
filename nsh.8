@@ -3695,14 +3695,20 @@ nsh(p)/flush ?
 .Ed
 .Pp
 .Tg route
-.Ic flush routes
+.Ic flush routes Oo Ic verbose Oc
 .Pp
 Clear the system routing table.
+If the
+.Ic verbose
+flag is used then show which routes were deleted.
 .Pp
 .Tg arp
-.Ic flush arp
+.Ic flush arp Oo Ic verbose Oc
 .Pp
 Clear the system arp cache and static arp table.
+If the
+.Ic verbose
+flag is used then show which ARP entries were deleted.
 .Pp
 .Tg ndp
 .Ic flush ndp

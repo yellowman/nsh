@@ -1046,9 +1046,17 @@ sysctlhelp(int unused1, char **unused2, ...)
  * Data structures and routines for the "flush" command.
  */
 
+struct ghs flushtab[] = {
+	{ "<cr>", "Type Enter to run command", CMPL0 NULL, 0 },
+	{ "verbose", "Show verbose diagnostics", CMPL0 NULL, 0 },
+	{ NULL, NULL, NULL, NULL, 0 }
+};
+
 Menu flushlist[] = {
-	{ "routes",	"IP routes", CMPL0 0, 0, 0, 0, flush_ip_routes },
-	{ "arp",	"ARP cache", CMPL0 0, 0, 0, 0, flush_arp_cache },
+	{ "routes",	"IP routes", CMPL(h) (char **)flushtab,
+	    sizeof(struct ghs), 0, 1, flush_ip_routes },
+	{ "arp",	"ARP cache", CMPL(h) (char **)flushtab,
+	    sizeof(struct ghs), 0, 1, flush_arp_cache },
 	{ "ndp",	"NDP cache", CMPL0 0, 0, 0, 0, flush_ndp_cache },
 	{ "line",	"Active user", CMPL0 0, 0, 1, 1, flush_line },
 	{ "bridge-dyn",	"Dynamically learned bridge addresses", CMPL0 0, 0, 1, 1, flush_bridgedyn },
@@ -3457,7 +3465,14 @@ powerdown(int argc, char **argv, ...)
 static int
 flush_ip_routes(int argc, char **argv, ...)
 {
-	flushroutes(AF_INET, AF_INET);
+	va_list ap;
+	char *verbose_arg;
+
+	va_start(ap, argv);
+	verbose_arg = va_arg(ap, char *);
+	va_end(ap);
+
+	flushroutes(AF_INET, AF_INET, verbose_arg != NULL);
 
 	return(0);
 }
@@ -3465,7 +3480,14 @@ flush_ip_routes(int argc, char **argv, ...)
 static int
 flush_arp_cache(int argc, char **argv, ...)
 {
-	flushroutes(AF_INET, AF_LINK);
+	va_list ap;
+	char *verbose_arg;
+
+	va_start(ap, argv);
+	verbose_arg = va_arg(ap, char *);
+	va_end(ap);
+
+	flushroutes(AF_INET, AF_INET, verbose_arg != NULL);
 
 	return(0);
 }

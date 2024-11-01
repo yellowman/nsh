@@ -146,7 +146,7 @@ struct rtdump *getrtdump(int, int, int);
 void freertdump(struct rtdump *);
 int monitor(int, char **, ...);
 int rtmsg(int, int, int, int, int);
-void flushroutes(int, int);
+void flushroutes(int, int, int);
 void bprintf(FILE *, int, u_char *);
 #ifdef _NET_IF_DL_H_
 char *mylink_ntoa(const struct sockaddr_dl *);
