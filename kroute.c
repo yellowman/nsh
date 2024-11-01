@@ -173,6 +173,8 @@ flushroutes(int af, int af2)
 		rtm = (struct rt_msghdr *)next;
 		if ((rtm->rtm_flags & (RTF_GATEWAY|RTF_STATIC|RTF_LLINFO)) == 0)
 			continue;
+		if (af2 == AF_LINK && (rtm->rtm_flags & RTF_LOCAL))
+			continue;
 		if (verbose) {
 			printf("\n%% Read message:\n");
 			print_rtmsg(rtm);
