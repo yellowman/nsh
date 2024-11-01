@@ -40,6 +40,7 @@
 #include <net/if.h>
 #include <net/route.h>
 #include <net/if_dl.h>
+#include <net/if_types.h>
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
 #include <arpa/inet.h>
@@ -173,11 +174,47 @@ flushroutes(int af, int af2, int flush_verbose)
 		rtm = (struct rt_msghdr *)next;
 		if ((rtm->rtm_flags & (RTF_GATEWAY|RTF_STATIC|RTF_LLINFO)) == 0)
 			continue;
-		if (af2 == AF_LINK && (rtm->rtm_flags & RTF_LOCAL))
-			continue;
 		if (verbose) {
 			printf("\n%% Read message:\n");
 			print_rtmsg(rtm);
+		}
+		if (af2 == AF_LINK) {
+			if ((rtm->rtm_flags & RTF_LLINFO) == 0 ||
+			    (rtm->rtm_flags & RTF_LOCAL))
+				continue;
+			if (rtm->rtm_addrs) {
+				struct sockaddr_dl *sdl = NULL;
+				char *cp;
+				unsigned int i;
+
+				cp = ((char *)rtm + rtm->rtm_hdrlen);
+				for (i = 1; i && sdl == NULL; i <<= 1) {
+					if ((i & rtm->rtm_addrs) == 0)
+						continue;
+					sa = (struct sockaddr *)cp;
+					switch (i) {
+					case RTA_IFP:
+						sdl = (struct sockaddr_dl *)sa;
+						break;
+					default:
+						break;
+					}
+					ADVANCE(cp, sa);
+				}
+				if (sdl) {
+					switch (sdl->sdl_type) {
+					case IFT_ETHER:
+					case IFT_FDDI:
+					case IFT_ISO88023:
+					case IFT_ISO88024:
+					case IFT_ISO88025:
+					case IFT_CARP:
+						break;
+					default:
+						continue;
+					}
+				}
+			}
 		}
 		sa = (struct sockaddr *)((char *)rtm + rtm->rtm_hdrlen);
 		sa2 = (struct sockaddr *)(ROUNDUP(sa->sa_len) + (char *)sa);
