@@ -74,6 +74,7 @@ void	 print_rtmsg(struct rt_msghdr *);
 void	 print_getmsg(struct rt_msghdr *, int);
 void	 pmsg_common(struct rt_msghdr *);
 void	 pmsg_addrs(char *, int);
+void	 print_addrs(char *, int);
 void	 bprintf(FILE *, int, u_char *);
 
 /*
@@ -201,6 +202,16 @@ flushroutes(int af, int af2)
 		rtm->rtm_seq = seqno;
 		rlen = write(s, next, rtm->rtm_msglen);
 		if (rlen < (int)rtm->rtm_msglen) {
+			if (errno == ESRCH) {
+				printf("%% No such route to delete:");
+				print_addrs((char *)rtm + rtm->rtm_hdrlen,
+				   rtm->rtm_addrs);
+				putchar('\n');
+				fflush(stdout);
+
+				seqno++;
+				continue;
+			}
 			printf("%% Unable to write to routing socket: %s\n",
 			    strerror(errno));
 			break;
@@ -517,22 +528,31 @@ pmsg_common(struct rt_msghdr *rtm)
 void
 pmsg_addrs(char	*cp, int addrs)
 {
-	struct sockaddr *sa;
-	int i;
-
 	if (addrs == 0)
 		return;
 	(void) printf("%% sockaddrs: ");
 	bprintf(stdout, addrs, addrnames);
 	(void) putchar('\n');
+	print_addrs(cp, addrs);
+	(void) putchar('\n');
+	(void) fflush(stdout);
+}
+
+void
+print_addrs(char *cp, int addrs)
+{
+	struct sockaddr *sa;
+	int i;
+
+	if (addrs == 0)
+		return;
+
 	for (i = 1; i; i <<= 1)
 		if (i & addrs) {
 			sa = (struct sockaddr *)cp;
 			(void) printf(" %s", routename(sa));
 			ADVANCE(cp, sa);
 		}
-	(void) putchar('\n');
-	(void) fflush(stdout);
 }
 
 void
