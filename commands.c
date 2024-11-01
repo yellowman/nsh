@@ -3487,7 +3487,7 @@ flush_arp_cache(int argc, char **argv, ...)
 	verbose_arg = va_arg(ap, char *);
 	va_end(ap);
 
-	flushroutes(AF_INET, AF_INET, verbose_arg != NULL);
+	flushroutes(AF_INET, AF_LINK, verbose_arg != NULL);
 
 	return(0);
 }
