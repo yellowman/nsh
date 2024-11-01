@@ -163,7 +163,7 @@ flushroutes(int af, int af2, int flush_verbose)
 	}
 
 	shutdown(s, 0); /* Don't want to read back our messages */
-	rtdump = getrtdump(af, 0, 0);
+	rtdump = getrtdump(af, 0, cli_rtable);
 	if (rtdump == NULL) {
 		close(s);
 		return;
