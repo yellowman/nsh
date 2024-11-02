@@ -3848,6 +3848,8 @@ pr_environment(int argc, char **argv, ...)
 
 		for (ep = sorted_environ; *ep; ep++)
 			dprintf(fd, "%s\n", *ep);
+
+		free(sorted_environ);
 	}
 
 	fsync(fd);
