@@ -245,8 +245,8 @@ sq3simple(char *sql, StringList *words)
 		sl_add(words, new);
 	}
 
-	if (rv == SQLITE_ERROR) {
-		printf("%% sqlite3_step: %s\n", sqlite3_errmsg(db));
+	if (rv != SQLITE_DONE) {
+		printf("%% sqlite3_step: %s\n", sqlite3_errstr(rv));
 		tlen = -1;
 	}
 
