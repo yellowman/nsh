@@ -217,7 +217,7 @@ sq3simple(char *sql, StringList *words)
 	sqlite3		*db = NULL;
 	sqlite3_stmt	*stmt;
 	char		*result, *new = NULL;
-	int		rv, len, tlen = 0;
+	int		rv, tlen = 0;
 
 	if (sqlite3_open(SQ3DBFILE, &db)) {
 		printf("%% database file open failed: %s\n",
@@ -235,13 +235,13 @@ sq3simple(char *sql, StringList *words)
 
 	while ((rv = sqlite3_step(stmt)) == SQLITE_ROW) {
 		result = (char *)sqlite3_column_text(stmt, 0);
-		len = strlen(result) + 1;
-		if ((new = malloc(len)) == NULL) {
-			printf("%% sq3simple: malloc failed\n");
+		new = strdup(result);
+		if (new == NULL) {
+			printf("%% sq3simple: strdup failed: %s\n",
+			    strerror(errno));
 			break;
 		}
-		tlen += len;
-		strlcpy(new, result, len);
+		tlen += strlen(new) + 1;
 		sl_add(words, new);
 	}
 
