@@ -2136,7 +2136,8 @@ command()
 		} else {
 			const char *buf;
 			cursor_pos = NULL;
-
+ 			line[0] = '\0';
+			
 			if ((buf = el_gets(elc, &num)) == NULL || num == 0)
 				break;
 
