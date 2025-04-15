@@ -3008,14 +3008,14 @@ intrdomain(int argc, char **argv, ...)
 		printf("%% no rdomain\n");
 		return(0);
 	}
-
-	rdomain = strtonum(argv[0], 0, RT_TABLEID_MAX, &errmsg);
-	if (errmsg) {
-		printf("%% Routing domain %s invalid (%s)\n", argv[0], errmsg);
-		return(0);
-	}
-	if (set)
+	if (set) {
+		rdomain = strtonum(argv[0], 0, RT_TABLEID_MAX, &errmsg);
+		if (errmsg) {
+			printf("%% Routing domain %s invalid (%s)\n", argv[0], errmsg);
+			return(0);
+		}
 		ifr.ifr_rdomainid = rdomain;
+	}
 	else
 		ifr.ifr_rdomainid = 0;
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
