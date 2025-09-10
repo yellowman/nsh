@@ -3173,7 +3173,7 @@ cmdrc(char rcname[FILENAME_MAX])
 			 * command was not indented, or indented for a mode 2
 			 * handler. process normally.
 			 */
-			if (NO_ARG(margv[0])) {
+			if (margv[0] && NO_ARG(margv[0])) {
 				c = getcmd(margv[1]);
 				if (line[0] != ' ')
 					savec = c;
@@ -3184,7 +3184,7 @@ cmdrc(char rcname[FILENAME_MAX])
 					printf("\n");
 					continue;
 				}
-			} else {
+			} else if (margv[0]) {
 				c = getcmd(margv[0]);
 				if (line[0] != ' ')
 					savec = c;
@@ -3207,6 +3207,9 @@ cmdrc(char rcname[FILENAME_MAX])
 						continue;
 					}
 				}
+			} else {
+				/* margv[0] is NULL, skip*/
+				continue;
 			}
 		}
 		if (Ambiguous(c)) {
