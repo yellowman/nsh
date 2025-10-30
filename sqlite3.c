@@ -57,7 +57,7 @@ db_insert_flag_x(char *name, char *ctl, int rtableid, int flag, char *data)
 	char		query[QSZ];
 
 	snprintf(query, QSZ, "INSERT INTO '%s' VALUES('%s', %d, %d, '%s')",
-	    name, ctl, rtableid, flag, data);
+	    name, ctl, rtableid, flag, data ? data : "");
 	return(sq3simple(query, NULL));
 }
 
