@@ -425,22 +425,24 @@ void conf_ctl(FILE *output, char *delim, char *name, int rtableid)
 		return;
 	}
 
-	/* print rules if they exist */
-	snprintf(tmpfile, sizeof(tmpfile), "%s.%d", x->tmpfile, rtableid);
-	if ((conf = fopen(tmpfile, "r")) != NULL) {
-		fprintf(output, "%s%s rules\n", delim, name);
-		for (;;) {
-			if(fgets(tmp_str, TMPSIZ, conf) == NULL)
-				break;
-			if(tmp_str[0] == 0)
-				break;
-			fprintf(output, "%s %s", delim, tmp_str);
-		}
-		fclose(conf);
-		fprintf(output, "%s!\n", delim);
-		pntdrules = 1;
-	} else if (errno != ENOENT || (errno == ENOENT && verbose))
-		printf("%% conf_ctl: %s: %s\n", tmpfile, strerror(errno));
+	/* print rules if they exist (only when tmpfile base is defined) */
+	if (x->tmpfile != NULL) {
+		snprintf(tmpfile, sizeof(tmpfile), "%s.%d", x->tmpfile, rtableid);
+		if ((conf = fopen(tmpfile, "r")) != NULL) {
+			fprintf(output, "%s%s rules\n", delim, name);
+			for (;;) {
+				if(fgets(tmp_str, TMPSIZ, conf) == NULL)
+					break;
+				if(tmp_str[0] == 0)
+					break;
+				fprintf(output, "%s %s", delim, tmp_str);
+			}
+			fclose(conf);
+			fprintf(output, "%s!\n", delim);
+			pntdrules = 1;
+		} else if (errno != ENOENT || (errno == ENOENT && verbose))
+			printf("%% conf_ctl: %s: %s\n", tmpfile, strerror(errno));
+	}
 
 	/* fill in argument names from table */
 	for (ctl = x->table; ctl != NULL && ctl->name != NULL; ctl++) {
