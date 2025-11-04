@@ -40,13 +40,18 @@
 #include <net/if.h>
 #include <sys/param.h>
 #include <sys/tty.h>
+#include <sys/wait.h>
 #include <unistd.h>
 #include "editing.h"
 #include "stringlist.h"
 #include "externs.h"
+#include "commands.h"
+#include "ctl.h"
 
 #define ttyout stdout
 #define ttyin stdin
+
+extern char bgpd_socket_path[PATH_MAX];
 
 unsigned char complete(EditLine *, char **, size_t);
 
@@ -54,6 +59,7 @@ static int	     comparstr(const void *, const void *);
 static unsigned char complete_ambiguous(char *, int, StringList *, EditLine *,
 				char *);
 static unsigned char complete_command(char *, int, EditLine *, char **, int);
+static unsigned char complete_bgpneighbor(char *, int, EditLine *);
 static unsigned char complete_subcommand(char *, int, EditLine *, char **, int);
 static unsigned char complete_local(char *, int, EditLine *);
 static unsigned char complete_ifname(char *, int, EditLine *);
@@ -181,19 +187,59 @@ static unsigned char
 complete_subcommand(char *word, int list, EditLine *el, char **table, int stlen)
 {
 	struct ghs *ghs = NULL;
+	struct prot1 *p1;
 
 	if (table == NULL)
 		return(CC_ERROR);
 
+	/* Special handling for "show bgp neighbor [argument]" completion */
+	/* Check if we're completing the argument to "show bgp neighbor" */
+	if (stlen == sizeof(struct prot1) && margc >= 3 && 
+	    isprefix(margv[0], "show") && isprefix(margv[1], "bgp") &&
+	    margv[2] && strcmp(margv[2], "neighbor") == 0) {
+		/* We've completed "neighbor" (margv[2]), now check if we're at the argument */
+		/* When at "show bgp neighbor " (with space):
+		 * - margc = 4 (show, bgp, neighbor, empty)
+		 * - cursor_argc = 3 (pointing to empty arg at position 3)
+		 * When typing "show bgp neighbor 192":
+		 * - margc = 4 (show, bgp, neighbor, "192")
+		 * - cursor_argc = 3 (pointing to "192" at position 3)
+		 */
+		if (cursor_argc >= 3) {
+			/* We're at or past position 3 (the argument position) */
+			/* If cursor_argc > 3, we're definitely past neighbor */
+			/* If cursor_argc == 3, we're at the argument position (margv[3]) */
+			return (complete_bgpneighbor(word, list, el));
+		}
+	}
+
 	ghs = (struct ghs *)genget(margv[cursor_argc-1], table, stlen);
 	if (ghs == 0 || Ambiguous(ghs))
 		return(CC_ERROR);
+
+	/* Additional check after genget finds the subcommand */
+	if (stlen == sizeof(struct prot1)) {
+		p1 = (struct prot1 *)ghs;
+		if (p1->name && strcmp(p1->name, "neighbor") == 0 &&
+		    margc >= 3 && isprefix(margv[0], "show") &&
+		    isprefix(margv[1], "bgp")) {
+			/* We matched "neighbor", check if we're completing its argument */
+			if (cursor_argc >= 4 || (cursor_argc == 3 && (margc > 3 || word[0] != '\0'))) {
+				return (complete_bgpneighbor(word, list, el));
+			}
+		}
+	}
 
 	/*
 	 * XXX completion lists that hit subcommand tables don't get more than
 	 * the first CMPL arg tested in complete_args as long as the level
 	 * 0 is passed to complete_args
 	 */
+	/* prot1 structures don't have a complete field, so we can't use complete_args.
+	 * Return error to indicate no completion is available. */
+	if (stlen == sizeof(struct prot1)) {
+		return (CC_ERROR);
+	}
 	return(complete_args(ghs, word, list, el, table, stlen, 0));
 }
 
@@ -525,6 +571,235 @@ done:
 	return (rv);
 }
 
+/*
+ * Helper function to parse bgpctl output and add neighbors to words list
+ * Returns 0 on success, -1 on error
+ */
+static int
+parse_bgpctl_output(FILE *fp, StringList *words, size_t wordlen, int show_help,
+    const char *word)
+{
+	char line[256];
+	char *neighbor, *p;
+	int found = 0;
+
+	/* Skip header line */
+	if (fgets(line, sizeof(line), fp) == NULL)
+		return -1;
+
+	/* Parse neighbor lines - first field is either IP or description */
+	while (fgets(line, sizeof(line), fp) != NULL) {
+		/* Remove newline */
+		p = strchr(line, '\n');
+		if (p != NULL)
+			*p = '\0';
+
+		/* Skip empty lines */
+		if (line[0] == '\0')
+			continue;
+
+		/* Extract first field (neighbor IP or description) */
+		neighbor = line;
+		/* Skip leading whitespace */
+		while (*neighbor == ' ' || *neighbor == '\t')
+			neighbor++;
+		/* Find end of first field (first whitespace after neighbor) */
+		p = neighbor;
+		while (*p != '\0' && *p != ' ' && *p != '\t')
+			p++;
+		if (p == neighbor)
+			continue;
+		*p = '\0';
+
+		/* Check if this neighbor already exists in the list (avoid duplicates) */
+		int is_duplicate = 0;
+		size_t i;
+		for (i = 0; i < words->sl_cur; i++) {
+			if (strcmp(words->sl_str[i], neighbor) == 0) {
+				is_duplicate = 1;
+				break;
+			}
+		}
+
+		if (is_duplicate)
+			continue;
+
+		/* Match against word prefix */
+		/* If show_help is true, collect all neighbors */
+		if (show_help || (wordlen <= strlen(neighbor) && 
+		    strncmp(word, neighbor, wordlen) == 0)) {
+			char *dup = strdup(neighbor);
+			if (dup == NULL)
+				return -1;
+			sl_add(words, dup);
+			found = 1;
+		}
+	}
+
+	return found ? 0 : -1;
+}
+
+/*
+ * Helper function to execute bgpctl command and parse output
+ * Returns 0 on success, -1 on error
+ */
+static int
+execute_bgpctl_and_parse(char **cmd, StringList *words, size_t wordlen,
+    int show_help, const char *word)
+{
+	FILE *fp;
+	int pipefd[2];
+	pid_t pid;
+
+	/* Create pipe for capturing bgpctl output */
+	if (pipe(pipefd) == -1) {
+		printf("%% complete_bgpneighbor: pipe: %s\n", strerror(errno));
+		return -1;
+	}
+
+	/* Execute bgpctl command */
+	pid = fork();
+	if (pid == -1) {
+		printf("%% complete_bgpneighbor: fork: %s\n", strerror(errno));
+		close(pipefd[0]);
+		close(pipefd[1]);
+		return -1;
+	}
+
+	if (pid == 0) {
+		/* Child: redirect stdout to pipe */
+		close(pipefd[0]);
+		if (pipefd[1] != STDOUT_FILENO) {
+			dup2(pipefd[1], STDOUT_FILENO);
+			close(pipefd[1]);
+		}
+
+		/* Set routing table if needed */
+		if (nsh_setrtable(cli_rtable))
+			_exit(1);
+
+		execv(cmd[0], cmd);
+		_exit(1);
+	}
+
+	/* Parent: read from pipe */
+	close(pipefd[1]);
+	fp = fdopen(pipefd[0], "r");
+	if (fp == NULL) {
+		close(pipefd[0]);
+		waitpid(pid, NULL, 0);
+		return -1;
+	}
+
+	/* Parse output */
+	int rv = parse_bgpctl_output(fp, words, wordlen, show_help, word);
+
+	fclose(fp);
+	waitpid(pid, NULL, 0);
+	return rv;
+}
+
+static unsigned char
+complete_bgpneighbor(char *word, int list, EditLine *el)
+{
+	StringList *words;
+	size_t wordlen;
+	unsigned char rv;
+	char *cmd_with_desc[] = { BGPCTL, "-s", bgpd_socket_path, "show", "summary", "terse", NULL };
+	char *cmd_with_ip[] = { BGPCTL, "-s", bgpd_socket_path, "-n", "show", "summary", "terse", NULL };
+	int show_help;
+
+	words = sl_init();
+	
+	/* Check if user wants help - show usage + neighbors list */
+	/* Check both the word parameter and margv[3] if we're at position 3 */
+	wordlen = strlen(word);
+	
+	/* Trim leading/trailing whitespace from word for comparison */
+	char *word_start = word;
+	while (*word_start == ' ' || *word_start == '\t')
+		word_start++;
+	char *word_end = word + wordlen;
+	while (word_end > word_start && (word_end[-1] == ' ' || word_end[-1] == '\t'))
+		word_end--;
+	size_t word_trimmed_len = word_end - word_start;
+	
+	/* Check if word is "?" or "help" */
+	show_help = (word_trimmed_len == 1 && word_start[0] == '?') ||
+	            (word_trimmed_len == 4 && strncmp(word_start, "help", 4) == 0);
+	
+	/* Also check margv[3] if we're in "show bgp neighbor" context */
+	if (!show_help && margc >= 4 && 
+	    isprefix(margv[0], "show") && isprefix(margv[1], "bgp") &&
+	    margv[2] && strcmp(margv[2], "neighbor") == 0 &&
+	    margv[3]) {
+		if (strcmp(margv[3], "?") == 0 || strcmp(margv[3], "help") == 0)
+			show_help = 1;
+	}
+	
+	/* If showing help, collect all neighbors (ignore word filter) */
+	if (show_help)
+		wordlen = 0;
+
+	/* First, parse bgpctl show summary terse (with descriptions/IPs) */
+	/* This gets neighbors by description if configured, or by IP if not */
+	execute_bgpctl_and_parse(cmd_with_desc, words, wordlen, show_help, word);
+
+	/* Then, parse bgpctl -n show summary terse (IPs only) */
+	/* This gets all neighbors by IP address */
+	/* Duplicates are automatically removed by parse_bgpctl_output */
+	execute_bgpctl_and_parse(cmd_with_ip, words, wordlen, show_help, word);
+
+	/* Add "help" and "?" to the completion list if they match the word */
+	if (wordlen == 0 || (wordlen > 0 && word[0] == '?')) {
+		char *help_q = strdup("?");
+		if (help_q != NULL) {
+			/* Check for duplicate before adding */
+			size_t i;
+			int is_dup = 0;
+			for (i = 0; i < words->sl_cur; i++) {
+				if (strcmp(words->sl_str[i], "?") == 0) {
+					is_dup = 1;
+					free(help_q);
+					break;
+				}
+			}
+			if (!is_dup)
+				sl_add(words, help_q);
+		}
+	}
+	if (wordlen == 0 || (wordlen >= 1 && strncmp(word, "help", wordlen) == 0)) {
+		char *help_str = strdup("help");
+		if (help_str != NULL) {
+			/* Check for duplicate before adding */
+			size_t i;
+			int is_dup = 0;
+			for (i = 0; i < words->sl_cur; i++) {
+				if (strcmp(words->sl_str[i], "help") == 0) {
+					is_dup = 1;
+					free(help_str);
+					break;
+				}
+			}
+			if (!is_dup)
+				sl_add(words, help_str);
+		}
+	}
+
+	/* If showing help, display usage message first, then neighbors list */
+	if (show_help) {
+		printf("\n%% Usage: show bgp neighbor [neighbor-IP | neighbor-description]\n");
+		printf("%% Arguments may be abbreviated.\n");
+		printf("%% Currently configured neighbors are listed below:\n\n");
+		/* Force list mode when showing help */
+		list = 1;
+	}
+
+	rv = complete_ambiguous(word, list, words, el, " ");
+	sl_free(words, 1);
+	return (rv);
+}
+
 static unsigned char
 complete_environment(char *word, int dolist, EditLine *el, int set)
 {
@@ -634,6 +909,15 @@ complete(EditLine *el, char **table, size_t stlen)
 		return(complete_nocmd(c, word, dolist, el, table, stlen, -1));
 
 	celems = strlen(c->complete);
+
+	/* Special handling for "show bgp neighbor [argument]" completion */
+	/* Check if we're completing argument to "show bgp neighbor" */
+	if (margc >= 3 && isprefix(margv[0], "show") && isprefix(margv[1], "bgp") &&
+	    margv[2] && strcmp(margv[2], "neighbor") == 0 &&
+	    cursor_argc >= 3 && cursor_argc > celems) {
+		/* We're past the complete string length, so we're completing the argument */
+		return (complete_bgpneighbor(word, dolist, el));
+	}
 
 	if (cursor_argc > celems)
 		return (CC_ERROR);
@@ -946,6 +1230,9 @@ complete_args(struct ghs *c, char *word, int dolist, EditLine *el, char **table,
 #ifdef CMPLDEBUG
 	printf("[%s]",&c->complete[level]);
 #endif
+	
+
+	
 	switch (c->complete[level]) {
 	case 'l':	/* local complete */
 		return (complete_local(word, dolist, el));
@@ -959,6 +1246,8 @@ complete_args(struct ghs *c, char *word, int dolist, EditLine *el, char **table,
 		return (complete_ifbridge(word, dolist, el));
 	case 'r':
 		return (complete_rtable(word, dolist, el));
+	case 'B':	/* BGP neighbor complete */
+		return (complete_bgpneighbor(word, dolist, el));
 	case 't':	/* points to a table */
 		if (c->table == NULL)
 			return(CC_ERROR);
