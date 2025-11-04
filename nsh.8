@@ -2578,6 +2578,38 @@ nsh(p)/show bgp
 nsh(p)/
 .Ed
 .Pp
+.Ic show bgp neighbor
+.Op Ar neighbor-IP | neighbor-description | help | \&?
+.Pp
+Display detailed information for a specific BGP neighbor.
+The neighbor argument can be specified by IP address or by description.
+Neighbor arguments may NOT be abbreviated.
+Tab completion is available for neighbor IPs and descriptions.
+.Bd -literal -offset indent
+nsh(config-p)/show bgp neighbor ?
+
+% Usage: show bgp neighbor [neighbor-IP | neighbor-description]
+% Neighbor arguments may NOT be abbreviated.
+% Currently configured neighbors are listed below:
+
+  192.0.2.3
+  2001:db8::2
+  upstream2-4
+  upstream2-6
+
+nsh(p)/show bgp neighbor
+192.0.2.3  2001:db8::2  ?  help  upstream2-4  upstream2-6
+.Ed
+.Pp
+Typing
+.Ic show bgp neighbor
+followed by double TAB will display all available neighbors.
+Typing
+.Ic show bgp neighbor help
+or
+.Ic show bgp neighbor \&?
+will display usage information and a list of all configured neighbors.
+.Pp
 .Tg ip
 .Tg ospf
 .Tg route
