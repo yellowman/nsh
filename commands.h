@@ -25,6 +25,9 @@ struct prot {
 	struct prot1 *table;
 };
 
+typedef struct cmd Command;
+typedef struct menu Menu;
+
 #define BGPD_SOCKET_PATH "/var/run/bgpd.sock"
 extern char bgpd_socket_path[PATH_MAX];
 void init_bgpd_socket_path(int);
