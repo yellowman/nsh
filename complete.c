@@ -789,7 +789,7 @@ complete_bgpneighbor(char *word, int list, EditLine *el)
 	/* If showing help, display usage message first, then neighbors list */
 	if (show_help) {
 		printf("\n%% Usage: show bgp neighbor [neighbor-IP | neighbor-description]\n");
-		printf("%% Arguments may be abbreviated.\n");
+		printf("%% Neigbor arguments may NOT be abbreviated.\n");
 		printf("%% Currently configured neighbors are listed below:\n\n");
 		/* Force list mode when showing help */
 		list = 1;
