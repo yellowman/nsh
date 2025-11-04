@@ -18,12 +18,17 @@
 #include <net/if.h>	/* IFNAMSIZ */
 
 #include <sys/types.h>
+#include <sys/wait.h>
 
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
 
 #include "externs.h"
 #include "commands.h"
 #include "ctl.h"
+#include "stringlist.h"
 
 int
 pr_prot1(int argc, char **argv, ...)
@@ -60,6 +65,158 @@ pr_prot1(int argc, char **argv, ...)
 		return 0;
 	} else if (Ambiguous(x)) {
 		printf("%% Ambiguous argument %s\n", argv[2]);
+		return 0;
+	}
+
+	/* Special handling for "show bgp neighbor help" or "show bgp neighbor ?" */
+	if (argc >= 4 && x->name && strcmp(x->name, "neighbor") == 0 &&
+	    prot->name && strcmp(prot->name, "bgp") == 0 &&
+	    argv[3] && (strcmp(argv[3], "?") == 0 || strcmp(argv[3], "help") == 0)) {
+		printf("\n%% Usage: show bgp neighbor [neighbor-IP | neighbor-description]\n");
+		printf("%% Neighbor arguments may NOT be abbreviated.\n");
+		printf("%% Currently configured neighbors are listed below:\n\n");
+		
+		/* Get and display neighbor list */
+		char *cmd_with_desc[] = { BGPCTL, "-s", bgpd_socket_path, "show", "summary", "terse", NULL };
+		char *cmd_with_ip[] = { BGPCTL, "-s", bgpd_socket_path, "-n", "show", "summary", "terse", NULL };
+		char line[256];
+		FILE *fp;
+		int pipefd[2];
+		pid_t pid;
+		char *neighbor, *p;
+		StringList *neighbors;
+		int i;
+
+		neighbors = sl_init();
+
+		/* First, get neighbors with descriptions */
+		if (pipe(pipefd) == 0) {
+			pid = fork();
+			if (pid == 0) {
+				close(pipefd[0]);
+				if (pipefd[1] != STDOUT_FILENO) {
+					dup2(pipefd[1], STDOUT_FILENO);
+					close(pipefd[1]);
+				}
+				if (nsh_setrtable(cli_rtable))
+					_exit(1);
+				execv(cmd_with_desc[0], cmd_with_desc);
+				_exit(1);
+			}
+			close(pipefd[1]);
+			fp = fdopen(pipefd[0], "r");
+			if (fp != NULL) {
+				if (fgets(line, sizeof(line), fp) != NULL) {
+					while (fgets(line, sizeof(line), fp) != NULL) {
+						p = strchr(line, '\n');
+						if (p != NULL)
+							*p = '\0';
+						if (line[0] == '\0')
+							continue;
+						neighbor = line;
+						while (*neighbor == ' ' || *neighbor == '\t')
+							neighbor++;
+						p = neighbor;
+						while (*p != '\0' && *p != ' ' && *p != '\t')
+							p++;
+						if (p == neighbor)
+							continue;
+						*p = '\0';
+						
+						/* Check for duplicate */
+						int is_dup = 0;
+						for (i = 0; i < neighbors->sl_cur; i++) {
+							if (strcmp(neighbors->sl_str[i], neighbor) == 0) {
+								is_dup = 1;
+								break;
+							}
+						}
+						if (!is_dup) {
+							char *dup = strdup(neighbor);
+							if (dup != NULL)
+								sl_add(neighbors, dup);
+						}
+					}
+				}
+				fclose(fp);
+				waitpid(pid, NULL, 0);
+			}
+		}
+
+		/* Then, get neighbors by IP */
+		if (pipe(pipefd) == 0) {
+			pid = fork();
+			if (pid == 0) {
+				close(pipefd[0]);
+				if (pipefd[1] != STDOUT_FILENO) {
+					dup2(pipefd[1], STDOUT_FILENO);
+					close(pipefd[1]);
+				}
+				if (nsh_setrtable(cli_rtable))
+					_exit(1);
+				execv(cmd_with_ip[0], cmd_with_ip);
+				_exit(1);
+			}
+			close(pipefd[1]);
+			fp = fdopen(pipefd[0], "r");
+			if (fp != NULL) {
+				if (fgets(line, sizeof(line), fp) != NULL) {
+					while (fgets(line, sizeof(line), fp) != NULL) {
+						p = strchr(line, '\n');
+						if (p != NULL)
+							*p = '\0';
+						if (line[0] == '\0')
+							continue;
+						neighbor = line;
+						while (*neighbor == ' ' || *neighbor == '\t')
+							neighbor++;
+						p = neighbor;
+						while (*p != '\0' && *p != ' ' && *p != '\t')
+							p++;
+						if (p == neighbor)
+							continue;
+						*p = '\0';
+						
+						/* Check for duplicate */
+						int is_dup = 0;
+						for (i = 0; i < neighbors->sl_cur; i++) {
+							if (strcmp(neighbors->sl_str[i], neighbor) == 0) {
+								is_dup = 1;
+								break;
+							}
+						}
+						if (!is_dup) {
+							char *dup = strdup(neighbor);
+							if (dup != NULL)
+								sl_add(neighbors, dup);
+						}
+					}
+				}
+				fclose(fp);
+				waitpid(pid, NULL, 0);
+			}
+		}
+
+		/* Display neighbors */
+		if (neighbors->sl_cur > 0) {
+			/* Simple bubble sort (no need for qsort with comparstr) */
+			int j;
+			char *tmp;
+			for (i = 0; i < neighbors->sl_cur - 1; i++) {
+				for (j = i + 1; j < neighbors->sl_cur; j++) {
+					if (strcmp(neighbors->sl_str[i], neighbors->sl_str[j]) > 0) {
+						tmp = neighbors->sl_str[i];
+						neighbors->sl_str[i] = neighbors->sl_str[j];
+						neighbors->sl_str[j] = tmp;
+					}
+				}
+			}
+			for (i = 0; i < neighbors->sl_cur; i++) {
+				printf("  %s\n", neighbors->sl_str[i]);
+			}
+		}
+		
+		sl_free(neighbors, 1);
 		return 0;
 	}
 
