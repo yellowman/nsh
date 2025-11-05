@@ -392,7 +392,7 @@ brstatic(int argc, char **argv, ...)
 	argv++;
 	argc--;
 
-	if ((set && argc != 2) || ((!set && argc <1) || (!set && argc > 2))) {
+	if ((set && argc != 2) || ((!set && argc < 1) || (!set && argc > 2))) {
 		printf("%% static <mac address> <member>\n");
 		printf("%% no static <mac address> [member]\n");
 		return 0;
