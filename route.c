@@ -80,7 +80,7 @@ route(int argc, char **argv, ...)
 
 	if (argc < 1) {
 		routeusage();
-		return(1);
+		return 1;
 	}
 
 	memset(&rt_metrics, 0, sizeof(rt_metrics));
@@ -90,7 +90,7 @@ route(int argc, char **argv, ...)
 	parse_ip_pfx(argv[0], ASSUME_NETMASK, &dest);
 	if (dest.family == 0)
 		/* bad arguments */
-		return(1);
+		return 1;
 
 	argc--;
 	argv++;
@@ -101,7 +101,7 @@ route(int argc, char **argv, ...)
 			if (!inet_pton(AF_INET, argv[0], &gate.addr.in)) {
 				printf("%% %s is not an IPv4 address\n",
 				    argv[0]);
-				return(1);
+				return 1;
 			}
 			gate.family = AF_INET;
 			break;
@@ -109,13 +109,13 @@ route(int argc, char **argv, ...)
 			if (parse_ipv6(argv[0], &gate.addr.in6) != 0) {
 				printf("%% %s is not an IPv6 address\n",
 				    argv[0]);
-				return(1);
+				return 1;
 			}
 			gate.family = AF_INET6;
 			break;
 		default:
 			printf("%% unknown gateway address family %d\n", dest.family);
-			return(1);
+			return 1;
 		}
 
 		flags |= RTF_GATEWAY;
@@ -123,7 +123,7 @@ route(int argc, char **argv, ...)
 		argv++;
 	} else if (cmd == RTM_ADD) {
 		printf("%% No gateway specified\n");
-		return(1);
+		return 1;
 	}
 
 	if (argc >= 1) {
@@ -147,7 +147,7 @@ route(int argc, char **argv, ...)
 				if (errmsg) {
 					printf("%% Invalid expire %s: %s\n",
 					    argv[noptind - 1], errmsg);
-					return(0);
+					return 0;
 				}
 				rt_metrics.rmx_expire = relative_expire ?
 				    relative_expire + time(NULL) : 0;
@@ -168,7 +168,7 @@ route(int argc, char **argv, ...)
 				if (errmsg) {
 					printf("%% Invalid route mtu %s: %s\n",
 					    argv[noptind - 1], errmsg);
-					return(0);
+					return 0;
 				}
 				inits |= RTV_MTU;
 				break;
@@ -186,7 +186,7 @@ route(int argc, char **argv, ...)
 				break;
 			default:
 				printf("%% route: nopt table error\n");
-				return(0);
+				return 0;
 			}
 		}
 	}
@@ -198,7 +198,7 @@ route(int argc, char **argv, ...)
 			printf(": %s", argv[noptind]);
 		printf("\n");
 		routeusage();
-		return(0);
+		return 0;
 	}
 	/*
 	 * Detect if a user is adding a route with a non-network address.
@@ -211,14 +211,14 @@ route(int argc, char **argv, ...)
 			tmp.s_addr = htonl(net);
 			printf("%% Inconsistent address and mask (%s/%i?)\n",
 			    inet_ntoa(tmp), dest.bitlen);
-			return(1);
+			return 1;
 		}
 	case AF_INET6:
 		/* XXX invent check */
 		break;
 	default:
 		printf("%% unknown destination address family %d\n", dest.family);
-		return(1);
+		return 1;
 	}
 
 	/*
@@ -238,7 +238,7 @@ route(int argc, char **argv, ...)
 		ip_route(&dest, &gate, cmd, flags, cli_rtable, rt_metrics, inits);
 	else
 		ip_route(&dest, NULL, cmd, flags, cli_rtable, rt_metrics, inits);
-	return(0);
+	return 0;
 }
 
 int is_ip_addr(char *arg)
@@ -246,10 +246,10 @@ int is_ip_addr(char *arg)
 	ip_t argip;
 
 	if (inet_pton(AF_INET, arg, &argip.addr.in))
-		return(1);
+		return 1;
 	if (parse_ipv6(arg, &argip.addr.in6) == 0)
-		return(1);
-	return(0);
+		return 1;
+	return 0;
 }
 
 void show_route(char *arg, int tableid)

@@ -50,7 +50,7 @@ cprompt(void)
 	    cli_rtable ? "rtable " : "", cli_rtable ? tmp : "",
 	    pr ?")" : "");
 
-	return(prompt);
+	return prompt;
 }
 
 char *
@@ -60,13 +60,13 @@ iprompt(void)
 	snprintf(prompt, sizeof(prompt), "%s(%s-%s)/", hbuf,
 	    bridge ? "bridge" : "interface", ifname);
 
-	return(prompt);
+	return prompt;
 }
 
 char *
 pprompt(void)
 {
-	return(prompt);
+	return prompt;
 }
 
 void

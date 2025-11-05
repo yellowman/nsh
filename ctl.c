@@ -1084,7 +1084,7 @@ rule_writeline(FILE *rulesfile, char *writeline, int rdomain)
 	}
 	fprintf(rulesfile, "%s", writeline);
 	fflush(rulesfile);
-	return(0);
+	return 0;
 }
 
 int
@@ -1101,12 +1101,12 @@ acq_lock(char *fname)
 	 */
 	snprintf(lockf, sizeof(lockf), "%s.lock", fname);
 	if ((fd = open(lockf, O_RDWR | O_CREAT, 0600)) == -1)
-			return(-1);
+			return -1;
 	if (flock(fd, LOCK_EX | LOCK_NB) == 0)
-		return(fd);
+		return fd;
 	else {
 		close(fd);
-		return(-1);
+		return -1;
 	}
 }
 

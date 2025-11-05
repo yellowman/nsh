@@ -567,11 +567,11 @@ getnbrinfo(struct in6_addr *addr, int ifindex, int warning)
 			printf("%% getnbrinfo: ioctl(SIOCGNBRINFO_IN6): %s\n",
 			    strerror(errno));
 		close(s);
-		return(NULL);
+		return NULL;
 	}
 
 	close(s);
-	return(&nbi);
+	return &nbi;
 }
 
 int
@@ -609,7 +609,7 @@ rtmsg_ndp(int cmd)
 	switch (cmd) {
 	default:
 		printf("%% rtmsg_ndp: internal wrong cmd\n");
-		return(-1);
+		return -1;
 	case RTM_ADD:
 		rtm->rtm_addrs |= RTA_GATEWAY;
 		if (expire_time) {
@@ -666,7 +666,7 @@ doit:
 		if (errno != ESRCH || cmd != RTM_DELETE) {
 			printf("%% rtmsg_ndp: writing to routing socket: %s\n",
 			    strerror(errno));
-			return(-1);
+			return -1;
 		}
 	}
 	do {
@@ -675,7 +675,7 @@ doit:
 	    rtm->rtm_seq != seq || rtm->rtm_pid != pid));
 	if (l == -1) {
 		printf("%% rtmsg_ndp: read from routing socket\n");
-		return(-1);
+		return -1;
 	}
 	return (0);
 }

@@ -68,7 +68,7 @@ inttrunkport(int argc, char **argv, ...)
 	if ((!set && argc < 1) || (set && argc < 1)) {
 		printf("%% trunkport <ifname> [ifname ...]\n");
 		printf("%% no trunkport <ifname> [ifname ...]\n");
-		return(0);
+		return 0;
 	}
 
 	bzero(&rp, sizeof(rp));
@@ -149,7 +149,7 @@ inttrunkproto(int argc, char **argv, ...)
 	if ((!set && argc != 1) || (set && argc != 1)) {
                 printf("%% trunkproto <proto>\n");
                 printf("%% no trunkproto\n");
-                return(0);
+		return 0;
         }
 
 	bzero(&ra, sizeof(ra));
@@ -167,7 +167,7 @@ inttrunkproto(int argc, char **argv, ...)
 			for (i = 0; i < TRUNK_PROTO_MAX; ++i)
 				printf("%s%s", i == 0 ? "" : "|", tpr[i].tpr_name);
 			printf(">\n");
-			return(0);
+			return 0;
 		}
 	} else
 		ra.ra_proto = TRUNK_PROTO_DEFAULT;

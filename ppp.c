@@ -128,7 +128,7 @@ intsppp(int argc, char **argv, ...)
 	}
 	if (isc == NULL) {
 		printf("%% intsppp: Internal error\n");
-		return(0);
+		return 0;
 	}
 
 	argc--;
@@ -143,7 +143,7 @@ intsppp(int argc, char **argv, ...)
 	/* usage? */
 	if (argc < 1 && set) {
 		(*isc->usage)();
-		return(0);
+		return 0;
 	}
 
 	/* parse */
@@ -161,7 +161,7 @@ intsppp(int argc, char **argv, ...)
 			if (!spa.proto) {
 				printf("%% Unknown proto: %s\n",
 				    argv[noptind -1 ]);
-				return(0);
+				return 0;
 			}
 			break;
 #define	__name	1<<1
@@ -171,7 +171,7 @@ intsppp(int argc, char **argv, ...)
 			    sizeof(spa.name)) >= sizeof(spa.name)) {
 				printf("%% Name too long (> %zu): %s\n",
 				    sizeof(spa.name), argv[noptind - 1]);
-				return(0);
+				return 0;
 			}
 			break;
 #define	__key	1<<2
@@ -181,7 +181,7 @@ intsppp(int argc, char **argv, ...)
 			    sizeof(spa.secret)) >= sizeof(spa.secret)) {
 				printf("%% Key too long (> %zu): %s\n",
 				    sizeof(spa.secret), argv[noptind - 1]);
-				return(0);
+				return 0;
 			}
 			break;
 #define	__flag	1<<3
@@ -195,12 +195,12 @@ intsppp(int argc, char **argv, ...)
 			} else {
 				printf("%% Unknown flag: %s",
 			    argv[noptind - 1]);
-				return(0);
+				return 0;
 			}
 			break;
 		default:
 			printf("%% intsppp: nopt table error\n");
-			return(0);
+			return 0;
 		}
 
 	if (argc - noptind != 0) {
@@ -210,7 +210,7 @@ intsppp(int argc, char **argv, ...)
 			printf(": %s", argv[noptind]);
 		printf("\n");
 		(*isc->usage)();
-		return(0);
+		return 0;
 	}
 
 	if (argc < 1)
@@ -359,14 +359,14 @@ intpppoe(int argc, char **argv, ...)
 	/* usage? */
  	if (argc < 1 && set) {
 		pppoeusage();
-		return(0);
+		return 0;
 	}
 
 	strlcpy(parms.ifname, ifname, sizeof(parms.ifname));
 	if (ioctl(ifs, PPPOEGETPARMS, &parms)) {
 		printf("%% intpppoe: PPPOEGETPARMS: %s\n",
 		    strerror(errno));
-		return(0);
+		return 0;
 	}
 
 	/* parse */
@@ -381,7 +381,7 @@ intpppoe(int argc, char **argv, ...)
 				    " long (> %zu): %s\n",
 				    sizeof(parms.ac_name),
 				    argv[noptind - 1]);
-				return(0);
+				return 0;
 			}
 			break;
 		case 'd':       /* dev */
@@ -391,7 +391,7 @@ intpppoe(int argc, char **argv, ...)
 				printf("%% dev name too long (> %zu): %s\n",
 				    sizeof(parms.eth_ifname),
 				    argv[noptind - 1]);
-				return(0);
+				return 0;
 			}
 			break;
 		case 's':	/* svc */
@@ -402,12 +402,12 @@ intpppoe(int argc, char **argv, ...)
 				printf("%% service name too long (> %zu): %s\n",
 				    sizeof(parms.service_name),
 				    argv[noptind - 1]);
-				return(0);
+				return 0;
 			}
 			break;
 		default:
 			printf("%% intpppoe: nopt table error\n");
-			return(0);
+			return 0;
 		}
 
 	if (argc - noptind != 0) {
@@ -417,7 +417,7 @@ intpppoe(int argc, char **argv, ...)
 			printf(": %s", argv[noptind]);
 		printf("\n");
 		pppoeusage();
-		return(0);
+		return 0;
 	}
 
 	if (!set) {

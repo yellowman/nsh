@@ -534,10 +534,10 @@ intumb(int argc, char **argv, ...)
 	x=(struct umbc *) genget(argv[0], (char **)umbcs, sizeof(struct umbc));
 	if (x == 0) {
 		printf("%% intumb: Internal error - Invalid argument %s\n", argv[0]);
-		return(0);
+		return 0;
 	} else if (Ambiguous(x)) {
 		printf("%% intumb: Internal error - Ambiguous argument %s\n", argv[0]);
-		return(0);
+		return 0;
 	}
 
 	argc--;
@@ -547,13 +547,13 @@ intumb(int argc, char **argv, ...)
 	    ((!set && argc > 0) || (set && argc != 0))) {
 		printf("%% %s\n", x->name);
 		printf("%% no %s\n", x->name);
-		return(0);
+		return 0;
 	}
 
 	if (((x->type == UMB_CHGPIN) || (x->type == UMB_PUK)) &&
 	    (set && argc != 2)) {
 		printf("%% %s <%s> <%s>\n", x->name, x->descr, x->descr2);
-		return(0);
+		return 0;
 	}
 
 	if ((x->type == UMB_APN || x->type == UMB_PIN || x->type ==
@@ -561,7 +561,7 @@ intumb(int argc, char **argv, ...)
 	    ((!set && argc > 1) || (set && argc != 1))) {
 		printf("%% %s <%s>\n", x->name, x->descr);
 		printf("%% no %s [%s]\n", x->name, x->descr);
-		return(0);
+		return 0;
 	}
 
 	switch(x->type) {

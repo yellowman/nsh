@@ -268,11 +268,11 @@ show_int(int argc, char **argv, ...)
 		strtonum(argv[3], 0, INT_MAX, &errstr);
 		if (errstr) {
 			printf("%% interface unit %s is %s\n", argv[3], errstr);
-			return(1);
+			return 1;
 		}
 		if (len2 > 0 && isdigit((unsigned char)(argv[2][len2 - 1]))) {
 			printf("%% interface unit %s is redundant\n", argv[3]);
-			return(1);
+			return 1;
 		}
 		strlcat(ifname, argv[3], sizeof(ifname));
 		printf("%% Interface name is %s not \"%s %s\"\n",
@@ -282,7 +282,7 @@ show_int(int argc, char **argv, ...)
 
 	if ((ifs = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
 		printf("%% show_int: %s\n", strerror(errno));
-		return(1);
+		return 1;
 	}
 
 	/*
@@ -301,7 +301,7 @@ show_int(int argc, char **argv, ...)
 		}
 		if_freenameindex(ifn_list);
 		close(ifs);
-		return(0);
+		return 0;
 	} else if (isprefix(ifname, "status")) {
 		if ((ifn_list = if_nameindex()) == NULL) {
 			printf("%% show_int: if_nameindex failed\n");
@@ -314,11 +314,11 @@ show_int(int argc, char **argv, ...)
 			show_int_status(ifnp->if_name, ifs, outfile);
 		if_freenameindex(ifn_list);
 		close(ifs);
-		return(0);
+		return 0;
 	} else if (!is_valid_ifname(ifname)) {
 		printf("%% interface %s not found\n", ifname);
 		close(ifs);
-		return(1);
+		return 1;
 	}
 
 	if (!(br = is_bridge(ifs, (char *)ifname)))
@@ -335,7 +335,7 @@ show_int(int argc, char **argv, ...)
 	if (ioctl(ifs, SIOCGIFDATA, (caddr_t)&ifr) < 0) {
 		printf("%% show_int: SIOCGIFDATA: %s\n", strerror(errno));
 		close(ifs);
-		return(1);
+		return 1;
 	}
 
 	fprintf(outfile, "%% %s", ifname);
@@ -389,7 +389,7 @@ show_int(int argc, char **argv, ...)
 	show_umb(ifs, ifname, outfile);
 	show_trunk(ifs, ifname, outfile);
 	if (media_status(ifs, ifname, "  Media type ", outfile))
-		return(1);
+		return 1;
 
 	/*
 	 * Print interface IP address, and broadcast or
@@ -399,7 +399,7 @@ show_int(int argc, char **argv, ...)
 	if (getifaddrs(&ifap) != 0) {
 		printf("%% show_int: getifaddrs failed: %s\n",
 		    strerror(errno));
-		return(1);
+		return 1;
 	}
 
 	/*
@@ -597,7 +597,7 @@ show_int(int argc, char **argv, ...)
 	}
 
 	close(ifs);
-	return(0);
+	return 0;
 }
 
 int
@@ -943,7 +943,7 @@ in4_brdaddr(u_int32_t addr, u_int32_t mask)
 	net = in4_netaddr(addr, mask);
 	bcast = net | ~ntohl(mask);
 
-	return(bcast);
+	return bcast;
 }
 
 char *
@@ -957,7 +957,7 @@ get_hwdaddr(char *ifname)
 
 	if (getifaddrs(&ifap) != 0) {
 		printf("%% get_hwdaddr: getifaddrs: %s\n", strerror(errno));
-		return(NULL);
+		return NULL;
 	}
 
 	for (ifa = ifap; ifa; ifa = ifa->ifa_next)
@@ -987,7 +987,7 @@ get_hwdaddr(char *ifname)
 
 	freeifaddrs(ifap);
 
-	return(val);
+	return val;
 }
 
 char *
@@ -997,11 +997,11 @@ iftype(int int_type)
 
 	for (i = 0; i < nitems(iftypes); i++)
 		if (int_type == iftypes[i].type)
-			return(iftypes[i].name);
+			return iftypes[i].name;
 
 	if (verbose)
 		printf("%% iftype: int_type %x\n", int_type);
-	return("Unknown");
+	return "Unknown";
 }
 
 int
@@ -1046,7 +1046,7 @@ is_valid_ifname(char *ifname)
 
 	if ((ifn_list = if_nameindex()) == NULL) {
 		printf("%% is_valid_ifname: if_nameindex failed\n");
-		return(0);
+		return 0;
 	}
 	for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++) {
 		if (strcasecmp(ifname, ifnp->if_name) == 0)
@@ -1055,9 +1055,9 @@ is_valid_ifname(char *ifname)
 	if_freenameindex(ifn_list);
 
 	if (count == 1)
-		return(1);
+		return 1;
 	else
-		return(0);
+		return 0;
 }
 
 int
@@ -1073,7 +1073,7 @@ get_ifflags(char *ifname, int ifs)
 		flags = 0;
 	} else
 		flags = ifr.ifr_flags;
-	return(flags);
+	return flags;
 }
 
 /*
@@ -1093,7 +1093,7 @@ set_ifflags(char *ifname, int ifs, int flags)
 		printf("%% set_ifflags: SIOCSIFFLAGS: %s\n", strerror(errno));
 	}
 
-        return(0);
+	return 0;
 }
 
 int
@@ -1110,7 +1110,7 @@ get_ifxflags(char *ifname, int ifs)
 		flags = 0;
 	} else
 		flags = ifr.ifr_flags;
-	return(flags);
+	return flags;
 }
 
 int
@@ -1127,7 +1127,7 @@ set_ifxflags(char *ifname, int ifs, int flags)
 		    strerror(errno));
 	}
 
-	return(0);
+	return 0;
 }
 
 /* addaf, removeaf heavily derived from sbin/ifconfig/ifconfig.c */
@@ -1141,9 +1141,9 @@ addaf(char *ifname, int af, int ifs)
 	if (ioctl(ifs, SIOCIFAFATTACH, (caddr_t)&ifar) < 0) {
 		printf("%% addaf: SIOCIFAFATTACH: %s\n",
 		    strerror(errno));
-		return(1);
+		return 1;
 	}
-	return(0);
+	return 0;
 }
 
 int
@@ -1156,9 +1156,9 @@ removeaf(char *ifname, int af, int ifs)
 	if (ioctl(ifs, SIOCIFAFDETACH, (caddr_t)&ifar) < 0) {
 		printf("%% removeaf: SIOCIFAFDETACH: %s\n",
 		    strerror(errno));
-		return(1);
+		return 1;
 	}
-	return(0);
+	return 0;
 }
 
 int
@@ -1298,7 +1298,7 @@ intip(int argc, char **argv, ...)
 		    (strcmp(cmdname, "inet") == 0 ||
 		    strcmp(cmdname, "inet6") == 0)) {
 			intaf(ifname, ifs, argc0, argv0);
-			return(0);
+			return 0;
 		}
 
 		/*
@@ -1306,14 +1306,14 @@ intip(int argc, char **argv, ...)
 		 */
 		if (set && strcmp(cmdname, "inet6") == 0) {
 			intaf(ifname, ifs, argc0, argv0);
-			return(0);
+			return 0;
 		}
 
 		intipusage(cmdname, msg);
-		return(0);
+		return 0;
 	} else if (argc < 1 || argc > argcmax) {
 		intipusage(cmdname, msg);
-		return(0);
+		return 0;
 	}
 
 	/* ignore 'address' keyword, don't print error */
@@ -1376,17 +1376,17 @@ intip(int argc, char **argv, ...)
 
 	if (ip.family == 0)
 		/* bad IP specified */
-		return(0);
+		return 0;
 
 	/* The inet6 command is IPv6-only. */
 	if (strcmp(cmdname, "inet6") == 0 && ip.family != AF_INET6) {
 		printf("%% %s is not a valid IPv6 address\n", argv[0]);
-		return(0);
+		return 0;
 	}
 
 	if (set && !(flags & IFF_POINTOPOINT) && ip.bitlen == -1) {
 		printf("%% Netmask not specified\n");
-		return(0);
+		return 0;
 	}
 
 	if (ip.bitlen == -1) {
@@ -1409,7 +1409,7 @@ intip(int argc, char **argv, ...)
 		memset(&in4dest, 0, sizeof(in4dest));
 		if (argc == 2 && !inet_pton(AF_INET, argv[1], &in4dest)) {
 			printf("%% Invalid %s address\n", msg);
-			return(0);
+			return 0;
 		}
 		memset(&ip4req, 0, sizeof(ip4req));
 		pack_ifaliasreq(&ip4req, &ip, &in4dest, ifname);
@@ -1422,7 +1422,7 @@ intip(int argc, char **argv, ...)
 		memset(&in6dest, 0, sizeof(in6dest));
 		if (argc == 2 && parse_ipv6(argv[1], &in6dest) != 0) {
 			printf("%% Invalid destination address %s\n", argv[1]);
-			return(0);
+			return 0;
 		}
 		memset(&ip6req, 0, sizeof(ip6req));
 		pack_in6aliasreq(&ip6req, &ip, &in6dest, ifname);
@@ -1430,7 +1430,7 @@ intip(int argc, char **argv, ...)
 		s = socket(PF_INET6, SOCK_DGRAM, 0);
 		if (s < 0) {
 			printf("%% socket failed: %s\n", strerror(errno));
-			return(0);
+			return 0;
 		}
 		/* turn on inet6 */
 		addaf(ifname, AF_INET6, ifs);
@@ -1466,7 +1466,7 @@ intip(int argc, char **argv, ...)
 			set_ifflags(ifname, ifs, flags | IFF_UP);
 	}
 
-	return(0);
+	return 0;
 }
 
 int
@@ -1634,13 +1634,13 @@ intpflow(int argc, char **argv, ...)
 		    "[version 5|9|10]\n"
 		    "%% no pflow [sender x.x.x.x receiver x.x.x.x:port "
 		    "version 5|9|10]\n");
-		return(0);
+		return 0;
 	}
 
 	if (set) {
 	        if (strchr(argv[3], ':') == NULL) {
 			printf("%% Receiver has no port specified\n");
-			return(0);
+			return 0;
 		}
 	}
 
@@ -1653,9 +1653,9 @@ intpflow(int argc, char **argv, ...)
 	preq.addrmask = PFLOW_MASK_SRCIP | PFLOW_MASK_DSTIP;
 	if (set) {
 		if (pflow_addr(argv[1], &preq.flowsrc) < 0)
-			return(0);
+			return 0;
 		if (pflow_addr(argv[3], &preq.flowdst) < 0)
-			return(0);
+			return 0;
 		if (argc == 6) {
 			preq.version = strtonum(argv[5], 5, PFLOW_PROTO_MAX,
 			    &errmsg);
@@ -1663,7 +1663,7 @@ intpflow(int argc, char **argv, ...)
 	                if (errmsg) {
 				printf("%% Invalid pflow version %s: %s\n",
 				    argv[0], errmsg);
-				return(0);
+				return 0;
 			}
                 }
 	}
@@ -1672,7 +1672,7 @@ intpflow(int argc, char **argv, ...)
 		printf("%% Unable to set pflow parameters: %s\n",
 		    strerror(errno));
 
-	return(0);
+	return 0;
 }
 
 int
@@ -1750,14 +1750,14 @@ intmtu(int argc, char **argv, ...)
 	if ((!set && argc > 1) || (set && argc != 1)) {
 		printf("%% mtu <mtu>\n");
 		printf("%% no mtu [mtu]\n");
-		return(0);
+		return 0;
 	}
 
 	if (set) {
 		ifr.ifr_mtu = strtonum(argv[0], 0, INT_MAX, &errmsg);
 		if (errmsg) {
 			printf("%% Invalid MTU %s: %s\n", argv[0], errmsg);
-			return(0);
+			return 0;
 		}
 	} else
 		ifr.ifr_mtu = default_mtu(ifname);
@@ -1766,7 +1766,7 @@ intmtu(int argc, char **argv, ...)
 	if (ioctl(ifs, SIOCSIFMTU, (caddr_t)&ifr) < 0)
 		printf("%% intmtu: SIOCSIFMTU: %s\n", strerror(errno));
 
-	return(0);
+	return 0;
 }
 
 int
@@ -1797,7 +1797,7 @@ intkeepalive(int argc, char **argv, ...)
 	if ((!set && argc > 2) || (set && argc != 2)) {
 		printf("%% keepalive <period> <count>\n");
 		printf("%% no keepalive [period] [count]\n");
-		return(0);
+		return 0;
 	}
 
 	bzero(&ikar, sizeof(ikar));
@@ -1806,12 +1806,12 @@ intkeepalive(int argc, char **argv, ...)
 		ikar.ikar_timeo = strtonum(argv[0], 1, 3600, &errmsg);
 		if (errmsg) {
 			printf("%% Invalid period %s: %s\n", argv[0], errmsg);
-			return(0);
+			return 0;
 		}
 		ikar.ikar_cnt = strtonum(argv[1], 2, 600, &errmsg);
 		if (errmsg) {
 			printf("%% Invalid count %s: %s\n", argv[1], errmsg);
-			return(0);
+			return 0;
 		}
 	}
 
@@ -1824,7 +1824,7 @@ intkeepalive(int argc, char **argv, ...)
 			    strerror(errno));
 	}
 
-	return(0);
+	return 0;
 }
 
 #define MPLSLABEL 1
@@ -1889,7 +1889,7 @@ intmpls(int argc, char **argv, ...)
 	if ((!set && argc > 1) || (set && argc != 1)) {
 		printf("%% %s <%s>\n", x->name, x->descr);
 		printf("%% no %s [%s]\n", x->name, x->descr);
-		return(0);
+		return 0;
 	}
 
 	switch(x->type) {
@@ -1903,7 +1903,7 @@ intmpls(int argc, char **argv, ...)
 			if (errstr) {
 				printf("%% Invalid MPLS Label %s: %s\n",
 				    argv[0], errstr);
-				return(0);
+				return 0;
 			}
 			cmd = SIOCSETLABEL;
 		} else {
@@ -1917,7 +1917,7 @@ intmpls(int argc, char **argv, ...)
 			if (errstr) {
 				printf("%% intmpls: rdomain %s: %s\n", argv[0],
 				    errstr);
-				return(0);
+				return 0;
 			}
 		} else {
 			ifr.ifr_rdomainid = 0;
@@ -1936,7 +1936,7 @@ intmpls(int argc, char **argv, ...)
 				if (errstr) {
 					printf("%% intmpls: txprio %s: %s\n",
 					    argv[0], errstr);
-					return(0);
+					return 0;
 				}
 			}
 		} else {
@@ -1958,7 +1958,7 @@ intmpls(int argc, char **argv, ...)
 				if (errstr) {
 					printf("%% intmpls: txprio %s: %s\n",
 					    argv[0], errstr);
-					return(0);
+					return 0;
 				}
 			}
 		} else {
@@ -1968,7 +1968,7 @@ intmpls(int argc, char **argv, ...)
 		break;
 	default:
 		printf("%% intmpls: Internal error\n");
-		return(0);
+		return 0;
 		break;
 	}
 
@@ -2041,7 +2041,7 @@ intpwe3(int argc, char **argv, ...)
 	/* usage? */
 	if (argc < 1) {
 		pwe3usage();
-		return(0);
+		return 0;
 	}
 
 	strlcpy(ifr.ifr_name, ifname, IFNAMSIZ);
@@ -2113,7 +2113,7 @@ intpwe3(int argc, char **argv, ...)
 			printf(": %s", argv[noptind]);
 		printf("\n");
 		pwe3usage();
-		return(0);
+		return 0;
 	}
 
 	if (ioctl(ifs, cmd, arg) < 0) {
@@ -2153,7 +2153,7 @@ intdhcrelay(int argc, char **argv, ...)
 	if ((!set && argc > 1) || (set && argc != 1)) {
 		printf("%% dhcrelay <relayserver>\n");
 		printf("%% no dhcrelay [relayserver]\n");
-		return(0);
+		return 0;
 	}
 
 	if (argc) {
@@ -2180,14 +2180,14 @@ intdhcrelay(int argc, char **argv, ...)
 			else
 				printf("%% int_dhcrelay: conf_dhcrelay failed:"
 				    " %d\n", alen);
-			return(0);
+			return 0;
 		}
 
 		/* bail if dhcrelay not relaying to specified dhcp server */
 		if (argc && strcmp(server, argv[0]) != 0) {
 			printf("%% Server expected: %s (not %s)\n", server,
 			    argv[0]);
-			return(0);
+			return 0;
 		}
 
 		flag_x("dhcrelay", ifname, DB_X_REMOVE, NULL);
@@ -2199,7 +2199,7 @@ intdhcrelay(int argc, char **argv, ...)
 
 		cmdargs(PKILL, killcmd);
 	}
-	return(0);
+	return 0;
 }
 
 int
@@ -2236,7 +2236,7 @@ intmetric(int argc, char **argv, ...)
 		theioctl = SIOCSIFPRIORITY;
 	} else {
 		printf("%% intmetric internal failure\n");
-		return(0);
+		return 0;
 	}
 
 	argc--;
@@ -2245,7 +2245,7 @@ intmetric(int argc, char **argv, ...)
 	if ((!set && argc > 1) || (set && argc != 1)) {
 		printf("%% %s <%s>\n", type, type);
 		printf("%% no %s [%s]\n", type, type);
-		return(0);
+		return 0;
 	}
 
 	if (set) {
@@ -2255,7 +2255,7 @@ intmetric(int argc, char **argv, ...)
 		if (errmsg) {
 			printf("%% Invalid %s %s: %s\n", type, argv[0],
 			    errmsg);
-			return(0);
+			return 0;
 		}
 		ifr.ifr_metric = num;
 	} else {
@@ -2264,7 +2264,7 @@ intmetric(int argc, char **argv, ...)
 
 	if (errmsg) {
 		printf("%% Invalid %s %s: %s\n", type, argv[0], errmsg);
-		return(0);
+		return 0;
 	}
 
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
@@ -2272,7 +2272,7 @@ intmetric(int argc, char **argv, ...)
 		printf("%% intmetric: SIOCSIF%s: %s\n", type,
 		    strerror(errno));
 
-	return(0);
+	return 0;
 }
 
 int
@@ -2300,7 +2300,7 @@ intllprio(int argc, char **argv, ...)
 	if ((!set && argc > 2) || (set && argc != 2)) {
 		printf("%% llpriority <priority>\n");
 		printf("%% no llpriority [priority]\n");
-		return(0);
+		return 0;
 	}
 
 	if (set) {
@@ -2310,7 +2310,7 @@ intllprio(int argc, char **argv, ...)
 		if (errmsg) {
 			printf("%% Invalid llpriority %s: %s\n", argv[0],
 			    errmsg);
-			return(0);
+			return 0;
 		}
 		ifr.ifr_llprio = num;
 	} else {
@@ -2319,14 +2319,14 @@ intllprio(int argc, char **argv, ...)
 
 	if (errmsg) {
 		printf("%% Invalid llpriority %s: %s\n", argv[0], errmsg);
-		return(0);
+		return 0;
 	}
 
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 	if (ioctl(ifs, SIOCSIFLLPRIO, (caddr_t)&ifr) < 0)
 		printf("%% intllprio: SIOCSIFLLPRIO: %s\n", strerror(errno));
 
-	return(0);
+	return 0;
 }
 
 int
@@ -2540,7 +2540,7 @@ intflags(int argc, char **argv, ...)
 		value = IFF_STATICARP;
 	} else {
 		printf("%% intflags: Internal error\n");
-		return(0);
+		return 0;
 	}
 
 	/*
@@ -2588,7 +2588,7 @@ intflags(int argc, char **argv, ...)
 		printf("%% intflags: value internal error\n");
 	}
 	set_ifflags(ifname, ifs, flags);
-	return(0);
+	return 0;
 }
 
 int
@@ -2605,7 +2605,7 @@ intaf(char *ifname, int ifs, int argc, char **argv)
 
 	if (argc > 1) {
 		printf("%% Invalid argument\n");
-		return(1);
+		return 1;
 	}
 
 	/* Do not use isprefix() here because it would always be ambiguous. */
@@ -2622,7 +2622,7 @@ intaf(char *ifname, int ifs, int argc, char **argv)
 	} else {
 		printf("%% intaf: unknown address family %s\n", argv[0]);
 	}
-	return(0);
+	return 0;
 }
 
 int
@@ -2665,7 +2665,7 @@ intxflags(int argc, char **argv, ...)
 		value = IFXF_WOL;
 	} else {
 		printf("%% intxflags: Internal error\n");
-		return(0);
+		return 0;
 	}
 
 	flags = get_ifxflags(ifname, ifs);
@@ -2686,7 +2686,7 @@ intxflags(int argc, char **argv, ...)
 		printf("%% intxflags: value internal error\n");
 	}
 	set_ifxflags(ifname, ifs, flags);
-	return(0);
+	return 0;
 }
 
 int
@@ -2716,7 +2716,7 @@ intlink(int argc, char **argv, ...)
 	if ((set && argc < 1) || argc > 3) {
 		printf("%% link <012>\n");
 		printf("%% no link [012]\n");
-		return(0);
+		return 0;
 	}
 
 	flags = get_ifflags(ifname, ifs);
@@ -2734,7 +2734,7 @@ intlink(int argc, char **argv, ...)
 		if (errmsg) {
 			printf("%% Invalid link flag %s: %s\n", argv[i],
 			    errmsg);
-			return(0);
+			return 0;
 		}
 		switch(a) {
 		case 0:
@@ -2756,7 +2756,7 @@ intlink(int argc, char **argv, ...)
 
 	set_ifflags(ifname, ifs, flags);
 
-	return(0);
+	return 0;
 }
 
 int
@@ -2787,7 +2787,7 @@ intnwid(int argc, char **argv, ...)
 	if ((set && argc != 1) || (!set && argc > 1)) {
 		printf("%% nwid <nwid>\n");
 		printf("%% no nwid [nwid]\n");
-		return(0);
+		return 0;
 	}
 
 	len = sizeof(nwid.i_nwid);
@@ -2795,7 +2795,7 @@ intnwid(int argc, char **argv, ...)
 	if (set) {
 		if (get_string(argv[0], NULL, nwid.i_nwid, &len) == NULL) {
 			printf("%% intnwid: bad input\n");
-			return(0);
+			return 0;
 		}
 	} else
 		len = 0; /* nwid "" */
@@ -2807,7 +2807,7 @@ intnwid(int argc, char **argv, ...)
 	if (ioctl(ifs, SIOCS80211NWID, (caddr_t)&ifr) < 0)
 		printf("%% intnwid: SIOCS80211NWID: %s\n", strerror(errno));
 
-	return(0);
+	return 0;
 }
 
 int
@@ -2845,7 +2845,7 @@ intpowersave(int argc, char **argv, ...)
 	if (ioctl(ifs, SIOCG80211POWER, (caddr_t)&power) == -1) {
 		printf("%% intpowersave: SIOCG80211POWER: %s\n",
 		    strerror(errno));
-		return(0);
+		return 0;
 	}
 
 	if (argc == 1) {
@@ -2853,7 +2853,7 @@ intpowersave(int argc, char **argv, ...)
 		if (errmsg) {
 			printf("%% Power save invalid %s: %s", argv[0],
 			    errmsg);
-			return(0);
+			return 0;
 		}
 	} else {
 		power.i_maxsleep = DEFAULT_POWERSAVE;
@@ -2863,10 +2863,10 @@ intpowersave(int argc, char **argv, ...)
 	if (ioctl(ifs, SIOCS80211POWER, (caddr_t)&power) == -1) {
 		printf("%% intpowersave: SIOCS80211POWER: %s\n",
 		    strerror(errno));
-		return(0);
+		return 0;
 	}
 
-	return(0);
+	return 0;
 }
 
 int
@@ -2897,26 +2897,26 @@ intlladdr(int argc, char **argv, ...)
 	if (set && argc < 2) {
 		printf ("%% lladdr <link level address|random>\n");
 		printf ("%% no lladdr\n");
-		return(0);
+		return 0;
 	}
 
 	if ((lladdr = get_hwdaddr(ifname)) == NULL) {
 		printf("%% Failed to retrieve current link level address\n");
-		return(1);
+		return 1;
 	}
 
 	hwdaddr = sl_init();
 	if (db_select_flag_x_ctl(hwdaddr, "lladdr", ifname) < 0) {
 		printf("%% database failure select flag x ctl\n");
 		sl_free(hwdaddr, 1);
-		return(1);
+		return 1;
 	}
 	if (hwdaddr->sl_cur > 0) {
 		strlcpy(llorig, hwdaddr->sl_str[0], sizeof(llorig));
 		if (!set && db_delete_flag_x_ctl("lladdr", ifname, 0) < 0) {
 				printf("%% database delete failure\n");
 				sl_free(hwdaddr, 1);
-				return(1);
+				return 1;
 		}
 	} else {
 		strlcpy(llorig, lladdr, sizeof(llorig));
@@ -2924,12 +2924,12 @@ intlladdr(int argc, char **argv, ...)
 		    llorig) < 0) {
 			printf("%% database delete failure\n");
 			sl_free(hwdaddr, 1);
-			return(1);
+			return 1;
 		}
 		if (!set) {
 			printf("%% No stored lladdr to reinstate\n");
 			sl_free(hwdaddr, 1);
-			return(1);
+			return 1;
 		}
 	}
 	sl_free(hwdaddr, 1);
@@ -2950,11 +2950,11 @@ intlladdr(int argc, char **argv, ...)
 				    "fields, up to two digits each,\n"
 				    " %% separated with colons"
 				    " (1:23:45:ab:cd:ef)\n");
-				return(1);
+				return 1;
 			} else {
 				printf("%% database corrupted, unable to "
 				    " retrieve original lladdr\n");
-				return(1);
+				return 1;
 			}
 		}
 	}
@@ -2972,10 +2972,10 @@ intlladdr(int argc, char **argv, ...)
 			printf("%% intlladdr: SIOCSIFLLADDR: %s\n",
 			    strerror(errno));
 		}
-		return(1);
+		return 1;
 	}
 
-	return(0);
+	return 0;
 }
 
 int
@@ -3006,13 +3006,13 @@ intrdomain(int argc, char **argv, ...)
 	if (set && argc < 1) {
 		printf("%% rdomain <routing domain number>\n");
 		printf("%% no rdomain\n");
-		return(0);
+		return 0;
 	}
 	if (set) {
 		rdomain = strtonum(argv[0], 0, RT_TABLEID_MAX, &errmsg);
 		if (errmsg) {
 			printf("%% Routing domain %s invalid (%s)\n", argv[0], errmsg);
-			return(0);
+			return 0;
 		}
 		ifr.ifr_rdomainid = rdomain;
 	}
@@ -3022,7 +3022,7 @@ intrdomain(int argc, char **argv, ...)
 	if (ioctl(ifs, SIOCSIFRDOMAIN, &ifr) < 0)
 		printf("%% intrdomain: SIOCSIFRDOMAIN: %s\n", strerror(errno));
 
-	return(0);
+	return 0;
 }
 
 int
@@ -3053,7 +3053,7 @@ intdesc(int argc, char **argv, ...)
 	if (set && argc < 1) {
 		printf("%% description <text of description>\n");
 		printf("%% no description\n");
-		return(0);
+		return 0;
 	}
 
 	argvtostring(argc, argv, desc, sizeof(desc));
@@ -3066,7 +3066,7 @@ intdesc(int argc, char **argv, ...)
 	if (ioctl(ifs, SIOCSIFDESCR, &ifr) < 0)
 		printf("%% intdesc: SIOCSIFDESCR: %s\n", strerror(errno));
 
-	return(0);
+	return 0;
 }
 
 int
@@ -3096,7 +3096,7 @@ intvnetflowid(int argc, char **argv, ...)
 	if (set && argc != 0) {
 		printf("%% vnetflowid\n");
 		printf("%% no vnetlowid\n");
-		return(0);
+		return 0;
 	}
 
 	if (set)
@@ -3107,7 +3107,7 @@ intvnetflowid(int argc, char **argv, ...)
 	if (ioctl(ifs, SIOCSVNETFLOWID, &ifr) < 0)
 		printf("%% intvnetflowid: SIOCSVNETFLOWID: %s\n", strerror(errno));
 
-	return(0);
+	return 0;
 }
 
 int

@@ -43,28 +43,28 @@ version(int argc, char **argv, ...)
 	len = sizeof(physmem);
 	if (sysctl(mib, 2, &physmem, &len, NULL, 0) == -1) {
 		printf("%% HW_PHYSMEM: %s\n", strerror(errno));
-		return(1);
+		return 1;
 	}
 	mib[0] = CTL_HW;
 	mib[1] = HW_MODEL;
 	len = sizeof(cpubuf);
 	if (sysctl(mib, 2, &cpubuf, &len, NULL, 0) == -1) {
 		printf("%% HW_MODEL: %s\n", strerror(errno));
-		return(1);
+		return 1;
 	}
 	mib[0] = CTL_KERN;
 	mib[1] = KERN_BOOTTIME;
 	len = sizeof(boottime);
 	if (sysctl(mib, 2, &boottime, &len, NULL, 0) == -1) {
 		printf("%% KERN_BOOTTIME: %s\n", strerror(errno));
-		return(1);
+		return 1;
 	}
 	mib[0] = CTL_KERN;
 	mib[1] = KERN_VERSION;
 	len = sizeof(kernver);
 	if (sysctl(mib, 2, &kernver, &len, NULL, 0) == -1) {
 		printf("%% KERN_VERSION: %s\n", strerror(errno));
-		return(1);
+		return 1;
 	}
 	mib[0] = CTL_NET;
 	mib[1] = PF_INET;
@@ -73,7 +73,7 @@ version(int argc, char **argv, ...)
 	mib[4] = IFQCTL_DROPS;
 	if (uname(&un)) {
 		printf("%% uname: %s\n", strerror(errno));
-		return(1);
+		return 1;
 	}
 	gettimeofday(&tv, (struct timezone *)0);
 	c = difftime(tv.tv_sec, boottime.tv_sec);
@@ -117,6 +117,6 @@ version(int argc, char **argv, ...)
 	printf("cpu: %s\n", cpubuf);
 	printf("memory: %sB\n", format_k(physmem / 1024));
 	printf("kernel: %s", kernver);
-	return(0);
+	return 0;
 }
 

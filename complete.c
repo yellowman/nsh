@@ -156,7 +156,7 @@ complete_command(char *word, int list, EditLine *el, char **table, int stlen)
 	unsigned char rv;
 
 	if (table == NULL)
-		return(CC_ERROR);
+		return CC_ERROR;
 
 	words = sl_init();
 	wordlen = strlen(word);
@@ -183,18 +183,18 @@ complete_subcommand(char *word, int list, EditLine *el, char **table, int stlen)
 	struct ghs *ghs = NULL;
 
 	if (table == NULL)
-		return(CC_ERROR);
+		return CC_ERROR;
 
 	ghs = (struct ghs *)genget(margv[cursor_argc-1], table, stlen);
 	if (ghs == 0 || Ambiguous(ghs))
-		return(CC_ERROR);
+		return CC_ERROR;
 
 	/*
 	 * XXX completion lists that hit subcommand tables don't get more than
 	 * the first CMPL arg tested in complete_args as long as the level
 	 * 0 is passed to complete_args
 	 */
-	return(complete_args(ghs, word, list, el, table, stlen, 0));
+	return complete_args(ghs, word, list, el, table, stlen, 0);
 }
 
 /*
@@ -340,13 +340,13 @@ exit_i(EditLine *el, int ch)
 unsigned char
 complt_i(EditLine *el, int ch)
 {
-	return(complete(el, (char **)whichlist, sizeof(struct intlist)));
+	return complete(el, (char **)whichlist, sizeof(struct intlist));
 }
 
 unsigned char
 complt_c(EditLine *el, int ch)
 {
-	return(complete(el, (char **)cmdtab, sizeof(struct cmd)));
+	return complete(el, (char **)cmdtab, sizeof(struct cmd));
 }
 
 unsigned char
@@ -406,13 +406,13 @@ complete_ifgroup(char *word, int list, EditLine *el)
 
 	if ((ifs = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
 		printf("%% complete_ifgroup: %s\n", strerror(errno));
-		return(1);
+		return 1;
 	}
 
 	if (ioctl(ifs, SIOCGIFGLIST, (caddr_t)&ifgr) == -1) {
 		printf("%% SIOCGIFGLIST: %s\n", strerror(errno));
 		close(ifs);
-		return(1);
+		return 1;
 	}
 
 	len = ifgr.ifgr_len;
@@ -420,14 +420,14 @@ complete_ifgroup(char *word, int list, EditLine *el)
 	if (ifgr.ifgr_groups == NULL) {
 		printf("%% calloc: %s\n", strerror(errno));
 		close(ifs);
-		return(1);
+		return 1;
 	}
 
 	if (ioctl(ifs, SIOCGIFGLIST, (caddr_t)&ifgr) == -1) {
 		printf("%% SIOCGIFGLIST: %s\n", strerror(errno));
 		free(ifgr.ifgr_groups);
 		close(ifs);
-		return(1);
+		return 1;
 	}
 
 	ngroups = len / sizeof(ifgr.ifgr_groups[0]);
@@ -463,7 +463,7 @@ complete_ifbridge(char *word, int list, EditLine *el)
 
 	if ((ifs = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
 		printf("%% complete_ifbridge: %s\n", strerror(errno));
-		return(1);
+		return 1;
 	}
 
 	for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++) {
@@ -613,8 +613,8 @@ complete(EditLine *el, char **table, size_t stlen)
 		return (complete_command(word, dolist, el, table, stlen));
 
 	if (NO_ARG(margv[0]) && table == (char **)whichlist) {
-		return(complete_noint(word, dolist, el, table, stlen,
-		    cursor_argc - 1));
+		return complete_noint(word, dolist, el, table, stlen,
+		    cursor_argc - 1);
 	}
 
 	c = (struct ghs *) genget(margv[0], table, stlen);
@@ -631,7 +631,7 @@ complete(EditLine *el, char **table, size_t stlen)
 	}
 
 	if (strcmp(c->name, "no") == 0) /* Completing "no " command. */
-		return(complete_nocmd(c, word, dolist, el, table, stlen, -1));
+		return complete_nocmd(c, word, dolist, el, table, stlen, -1);
 
 	celems = strlen(c->complete);
 
@@ -650,7 +650,7 @@ complete(EditLine *el, char **table, size_t stlen)
 		level = 0; /* table has been switched */
 		i++;
 	}
-	return(complete_args(c, word, dolist, el, table, stlen, level));
+	return complete_args(c, word, dolist, el, table, stlen, level);
 }
 
 unsigned char
@@ -961,18 +961,18 @@ complete_args(struct ghs *c, char *word, int dolist, EditLine *el, char **table,
 		return (complete_rtable(word, dolist, el));
 	case 't':	/* points to a table */
 		if (c->table == NULL)
-			return(CC_ERROR);
+			return CC_ERROR;
 		return (complete_command(word, dolist, el, c->table, c->stlen));
 	case 'a':
 		if (c->table == NULL)
-			return(CC_ERROR);
+			return CC_ERROR;
 		return (complete_subcommand(word, dolist, el, c->table, c->stlen));
 	case 'H':
 		help_vertical = 1;
 		/* fallthrough */
 	case 'h':
 		if (c->table == NULL)
-			return(CC_ERROR);
+			return CC_ERROR;
 		return (complete_showhelp(word, el, c->table, c->stlen, c->name,
 		    help_vertical));
 	case 'E':
@@ -1131,7 +1131,7 @@ el_burrito(EditLine *el, int argc, char **argv)
 	int val;
 
 	if (!editing)	/* Nothing to parse, fail */
-		return(1);
+		return 1;
 
 	/*
 	 * el_parse will always return a non-error status if someone specifies
@@ -1141,12 +1141,12 @@ el_burrito(EditLine *el, int argc, char **argv)
 	 */
 	colon = strchr(argv[0], ':');
 	if (colon)
-		return(1);
+		return 1;
 
 	val = el_parse(el, argc, (const char **)argv);
 
 	if (val == 0)
-		return(0);
+		return 0;
 	else
-		return(1);
+		return 1;
 }

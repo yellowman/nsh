@@ -96,7 +96,7 @@ struct rtdump *getrtdump(int af, int flags, int tableid)
 
 	if ((rtdump = malloc(sizeof(struct rtdump))) == NULL) {
 		printf("%% getrtdump: rtdump malloc: %s\n", strerror(errno));
-		return(NULL);
+		return NULL;
 	}
 	rtdump->buf = NULL;
 
@@ -106,14 +106,14 @@ struct rtdump *getrtdump(int af, int flags, int tableid)
 			if (errno != ENOENT)
 				printf("%% getrtdump: unable to get estimate: %s\n",
 				    strerror(errno));
-			return(NULL);
+			return NULL;
 		}
 		if (needed == 0)
 			break;
 		if ((p = realloc(rtdump->buf, needed)) == NULL) {
 			printf("%% getrtdump: realloc: %s\n", strerror(errno));
 			freertdump(rtdump);
-			return(NULL);
+			return NULL;
 		}
 		rtdump->buf = p;
 		if (sysctl(mib, 7, rtdump->buf, &needed, NULL, 0) < 0) {
@@ -122,17 +122,17 @@ struct rtdump *getrtdump(int af, int flags, int tableid)
 			printf("%% getrtdump: sysctl routing table: %s\n",
 			    strerror(errno));
 			freertdump(rtdump);
-			return(NULL);
+			return NULL;
 		}
 		rtdump->lim = rtdump->buf + needed;
 		break;
 	}
 	if (rtdump->buf == NULL) {
 		free(rtdump);
-		return(NULL);
+		return NULL;
 	}
 
-	return(rtdump);
+	return rtdump;
 }
 
 void
@@ -392,7 +392,7 @@ monitor(int argc, char **argv, ...)
 	verbose = saveverbose;
 	(void)signal(SIGINT, (sig_t)intr);
 	close(s);
-	return(0);
+	return 0;
 }
 
 char *msgtypes[] = {
@@ -705,7 +705,7 @@ ip_route(ip_t *dest, ip_t *gate, u_short cmd, int flags, int tableid,
 		break;
 	default:
 		printf("%% ip_route: can't handle af %d\n", dest->family);
-		return(0);
+		return 0;
 		break;
 	}
 	if ((l = rtmsg(cmd, flags, 0, 0, tableid)) < 0) {
@@ -732,7 +732,7 @@ ip_route(ip_t *dest, ip_t *gate, u_short cmd, int flags, int tableid,
 	} else if (cmd == RTM_GET)
 		/* ip_route is also used by 'show route' */
 		print_getmsg(&m_rtmsg.m_rtm, l);
-	return(0);
+	return 0;
 }
 
 /*
@@ -754,7 +754,7 @@ rtmsg(int cmd, int flags, int proxy, int export, int tableid)
 	if (s < 0) {
 		printf("%% Unable to open routing socket: %s\n",
 		    strerror(errno));
-		return(1);
+		return 1;
 	}
 
 	errno = 0;

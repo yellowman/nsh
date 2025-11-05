@@ -497,7 +497,7 @@ routename(struct sockaddr *sa)
 	switch (sa->sa_family) {
 	case AF_INET:
 		if (sa->sa_len == 0)
-			return("0.0.0.0");
+			return "0.0.0.0";
 		else
 			return
 			    (routename4(((struct sockaddr_in *)sa)->
