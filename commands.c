@@ -157,7 +157,8 @@ static int	int_interface(int, char **, ...);
 
 #include "commands.h"
 
-void sigalarm(int blahfart)
+void
+sigalarm(int blahfart)
 {
 	if (child != -1) {
 		kill(child, SIGKILL);

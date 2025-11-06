@@ -372,7 +372,8 @@ deletetunnel(int s, char *ifname)
 	return 1;
 }
 
-int get_physrtable(int s, char *ifname)
+int
+get_physrtable(int s, char *ifname)
 {
 	struct ifreq ifr;
 
@@ -384,7 +385,8 @@ int get_physrtable(int s, char *ifname)
 		return ifr.ifr_rdomainid;
 }
 
-int get_physttl(int s, char *ifname)
+int
+get_physttl(int s, char *ifname)
 {
 	struct ifreq ifr;
 
@@ -396,7 +398,8 @@ int get_physttl(int s, char *ifname)
 		return ifr.ifr_ttl;
 }
 
-int get_physdf(int s, char *ifname)
+int
+get_physdf(int s, char *ifname)
 {
 	struct ifreq ifr;
 
@@ -408,7 +411,8 @@ int get_physdf(int s, char *ifname)
 		return ifr.ifr_df;
 }
 
-int get_physecn(int s, char *ifname)
+int
+get_physecn(int s, char *ifname)
 {
 	struct ifreq ifr;
 
@@ -420,7 +424,8 @@ int get_physecn(int s, char *ifname)
 		return ifr.ifr_metric;
 }
 
-int64_t get_vnetid(int s, char *ifname)
+int64_t
+get_vnetid(int s, char *ifname)
 {
 	struct ifreq ifr;
 

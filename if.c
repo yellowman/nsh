@@ -104,7 +104,8 @@ static const struct {
 	{ "Unspecified",		IFT_OTHER },
 };
 
-void imr_init(char *ifname)
+void
+imr_init(char *ifname)
 {
 	if (strcmp(ifname, imrif) == 0)
 			return;

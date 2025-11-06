@@ -299,7 +299,8 @@ conf(FILE *output)
 	return 0;
 }
 
-void conf_rtables(FILE *output)
+void
+conf_rtables(FILE *output)
 {
 	int i, rtableid;
 	StringList *rtables;
@@ -327,7 +328,8 @@ void conf_rtables(FILE *output)
 	sl_free(rtables, 1);
 }
 
-void conf_rtables_rtable(FILE *output, int rtableid)
+void
+conf_rtables_rtable(FILE *output, int rtableid)
 {
 	int i;
 	StringList *rtable_name, *rtable_daemons;
@@ -408,7 +410,8 @@ get_argnames(int flag_x, char *name, int *defenable, char **fenablenm,
 	}
 }
 
-void conf_ctl(FILE *output, char *delim, char *name, int rtableid)
+void
+conf_ctl(FILE *output, char *delim, char *name, int rtableid)
 {
 	FILE *conf;
 	struct daemons *x;
@@ -564,7 +567,8 @@ dhcpleased_has_address(char *ifname, const char *address,
 }
 
 /* find string in file */
-int scantext(char *fname, char *string)
+int
+scantext(char *fname, char *string)
 {
 	FILE *file;
 	char line[128];
@@ -588,7 +592,8 @@ int scantext(char *fname, char *string)
 	return found;
 }
 
-int islateif(char *ifname)
+int
+islateif(char *ifname)
 {
 	int i;
 
@@ -617,7 +622,8 @@ conf_db_single(FILE *output, char *dbname, char *lookup, char *ifname)
 	sl_free(dbreturn, 1);
 }
 
-void conf_interfaces(FILE *output, char *only, int exact_match)
+void
+conf_interfaces(FILE *output, char *only, int exact_match)
 {
 	int ifs, flags, ippntd, br;
 	char ifdescr[IFDESCRSIZE];
@@ -726,7 +732,8 @@ void conf_interfaces(FILE *output, char *only, int exact_match)
 	if_freenameindex(ifn_list);
 }
 
-void conf_lladdr(FILE *output, char *ifname)
+void
+conf_lladdr(FILE *output, char *ifname)
 {
 	StringList *hwdaddr;
 	char *lladdr;
@@ -747,7 +754,8 @@ void conf_lladdr(FILE *output, char *ifname)
 	sl_free(hwdaddr, 1);
 }
 
-int conf_ifaddr_dhcp(FILE *output, char *ifname, int ifs, int flags)
+int
+conf_ifaddr_dhcp(FILE *output, char *ifname, int ifs, int flags)
 {
 	int ippntd;
 
@@ -776,7 +784,8 @@ int conf_ifaddr_dhcp(FILE *output, char *ifname, int ifs, int flags)
 	return ippntd;
 }
 
-void conf_vnetid(FILE *output, int ifs, char *ifname)
+void
+conf_vnetid(FILE *output, int ifs, char *ifname)
 {
 	int64_t vnetid;
 
@@ -788,7 +797,8 @@ void conf_vnetid(FILE *output, int ifs, char *ifname)
 	}
 }
 
-void conf_vnetflowid(FILE *output, int ifs, char *ifname)
+void
+conf_vnetflowid(FILE *output, int ifs, char *ifname)
 {
 	struct ifreq ifr;
 
@@ -802,7 +812,8 @@ void conf_vnetflowid(FILE *output, int ifs, char *ifname)
 		fprintf(output, " vnetflowid\n");
 }
 
-void conf_patch(FILE *output, int ifs, char *ifname)
+void
+conf_patch(FILE *output, int ifs, char *ifname)
 {
 	struct ifreq ifr;
 	char ifix_buf[IFNAMSIZ];
@@ -815,7 +826,8 @@ void conf_patch(FILE *output, int ifs, char *ifname)
 		fprintf(output, " patch %s\n", ifix_buf);
 }
 
-void conf_parent(FILE *output, int ifs, char *ifname)
+void
+conf_parent(FILE *output, int ifs, char *ifname)
 {
 	struct if_parent ifp;
 
@@ -832,7 +844,8 @@ void conf_parent(FILE *output, int ifs, char *ifname)
 	fprintf(output, " parent %s\n", ifp.ifp_parent);
 }
 
-void conf_ifflags(FILE *output, int flags, char *ifname, int ippntd, u_char ift)
+void
+conf_ifflags(FILE *output, int flags, char *ifname, int ippntd, u_char ift)
 {
 	if (flags & IFF_DEBUG)
 		fprintf(output, " debug\n");
@@ -871,7 +884,8 @@ void conf_ifflags(FILE *output, int flags, char *ifname, int ippntd, u_char ift)
 	fprintf(output, "!\n");
 }
 
-int conf_dhcrelay(char *ifname, char *server, int serverlen)
+int
+conf_dhcrelay(char *ifname, char *server, int serverlen)
 {
 	StringList *data;
 	int alen;
@@ -887,7 +901,8 @@ int conf_dhcrelay(char *ifname, char *server, int serverlen)
 	return alen;
 }
 
-void conf_pflow(FILE *output, int ifs, char *ifname)
+void
+conf_pflow(FILE *output, int ifs, char *ifname)
 {
 	char sender[INET6_ADDRSTRLEN];
 	char receiver[INET6_ADDRSTRLEN];
@@ -906,7 +921,8 @@ void conf_pflow(FILE *output, int ifs, char *ifname)
 	    sender, receiver, version);
 }
 
-void conf_ifxflags(FILE *output, int ifs, char *ifname)
+void
+conf_ifxflags(FILE *output, int ifs, char *ifname)
 {
 	struct ifreq ifr;
 
@@ -928,7 +944,8 @@ void conf_ifxflags(FILE *output, int ifs, char *ifname)
 	}
 }
 
-void conf_rdomain(FILE *output, int ifs, char *ifname)
+void
+conf_rdomain(FILE *output, int ifs, char *ifname)
 {
 	int rdomainid;
 
@@ -937,7 +954,8 @@ void conf_rdomain(FILE *output, int ifs, char *ifname)
 		fprintf(output, " rdomain %d\n", rdomainid);
 }
 	
-int get_rdomain(int ifs, char *ifname)
+int
+get_rdomain(int ifs, char *ifname)
 {
 	struct ifreq ifr;
 
@@ -949,7 +967,8 @@ int get_rdomain(int ifs, char *ifname)
 	return -1;
 }
 
-void conf_keepalive(FILE *output, int ifs, char *ifname)
+void
+conf_keepalive(FILE *output, int ifs, char *ifname)
 {
 	struct ifkalivereq ikar;
 
@@ -962,7 +981,8 @@ void conf_keepalive(FILE *output, int ifs, char *ifname)
 		    ikar.ikar_timeo, ikar.ikar_cnt);
 }
 
-void conf_pwe3(FILE *output, int ifs, char *ifname)
+void
+conf_pwe3(FILE *output, int ifs, char *ifname)
 {
 	int error, nei = 0, fat = 0, cw = 0;
 	struct shim_hdr shim;
@@ -1023,7 +1043,8 @@ void conf_pwe3(FILE *output, int ifs, char *ifname)
 
 }
 
-void conf_tunnel(FILE *output, int ifs, char *ifname)
+void
+conf_tunnel(FILE *output, int ifs, char *ifname)
 {
 	int dstport, physrtable;
 	char tmpa[IPSIZ], tmpb[IPSIZ];
@@ -1048,7 +1069,8 @@ void conf_tunnel(FILE *output, int ifs, char *ifname)
 		fprintf(output, " tunneldomain %i\n", physrtable);
 }
 
-void conf_ifmetrics(FILE *output, int ifs, struct if_data if_data,
+void
+conf_ifmetrics(FILE *output, int ifs, struct if_data if_data,
     char *ifname)
 {
 	char tmp[TMPSIZ];
@@ -1113,7 +1135,8 @@ void conf_ifmetrics(FILE *output, int ifs, struct if_data if_data,
 	}
 }
 
-void conf_brcfg(FILE *output, int ifs, struct if_nameindex *ifn_list,
+void
+conf_brcfg(FILE *output, int ifs, struct if_nameindex *ifn_list,
     char *ifname)
 {
 	struct if_nameindex *br_ifnp;
@@ -1204,7 +1227,8 @@ ipv6ll_db_compare(struct sockaddr_in6 *sin6, struct sockaddr_in6 *sin6mask,
 }
 
 
-int conf_ifaddrs(FILE *output, char *ifname, int flags, int af)
+int
+conf_ifaddrs(FILE *output, char *ifname, int flags, int af)
 {
 	struct ifaddrs *ifa, *ifap;
 	struct sockaddr_in *sin, *sinmask, *sindest;
