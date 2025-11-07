@@ -29,17 +29,19 @@
  * SUCH DAMAGE.
  */
 
+#include <sys/types.h>
+#include <sys/mbuf.h>
 #include <sys/param.h>
+#include <sys/pool.h>
+#include <sys/protosw.h>
 #include <sys/queue.h>
 #include <sys/socket.h>
 #include <sys/socketvar.h>
-#include <sys/mbuf.h>
-#include <sys/protosw.h>
 #include <sys/sysctl.h>
-#include <sys/pool.h>
-#include <errno.h>
 
+#include <net/if.h>
 #include <net/route.h>
+
 #include <netinet/in.h>
 #include <netinet/in_systm.h>
 #include <netinet/ip.h>
@@ -64,17 +66,20 @@
 #include <netinet/ip_ipcomp.h>
 #include <netinet/ip_ether.h>
 #include <netinet/ip_carp.h>
-#include <net/if.h>
+
 #include <net/pfvar.h>
 #include <net/if_pfsync.h>
 
 #include <arpa/inet.h>
+
+#include <errno.h>
 #include <limits.h>
 #include <netdb.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <stdlib.h>
+
 #include "externs.h"
 
 static int sflag = 1;
