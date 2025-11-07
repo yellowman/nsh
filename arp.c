@@ -33,29 +33,33 @@
  */
 
 #include <sys/file.h>
+#include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/sysctl.h>
-#include <sys/ioctl.h>
 #include <sys/time.h>
+
 #include <net/bpf.h>
 #include <net/if.h>
 #include <net/if_dl.h>
 #include <net/if_types.h>
 #include <net/route.h>
+
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
+
 #include <arpa/inet.h>
 
-#include <netdb.h>
-#include <errno.h>
 #include <err.h>
+#include <errno.h>
+#include <ifaddrs.h>
+#include <limits.h>
+#include <netdb.h>
+#include <paths.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <paths.h>
 #include <unistd.h>
-#include <limits.h>
-#include <ifaddrs.h>
+
 #include "externs.h"
 
 /* ROUNDUP() is nasty, but it is identical to what's in the kernel. */
