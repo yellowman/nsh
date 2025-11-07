@@ -14,20 +14,22 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include <stdio.h>
-#include <unistd.h>
-#include <stdlib.h>
-#include <limits.h>
-#include <string.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <setjmp.h>
-#include <locale.h>
+#include <sys/signal.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/syslimits.h>
 #include <sys/ttycom.h>
-#include <sys/signal.h>
-#include <sys/stat.h>
+
+#include <errno.h>
+#include <fcntl.h>
+#include <limits.h>
+#include <locale.h>
+#include <setjmp.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
 #include "editing.h"
 #include "stringlist.h"
 #include "externs.h"
