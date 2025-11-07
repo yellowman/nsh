@@ -14,22 +14,28 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#include <sys/ioctl.h>
+#include <sys/limits.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+
+#include <net/if.h>
+
+#include <netinet/in.h>
+#include <netinet/ip_ipsp.h>
+
+#include <net/pfvar.h>
+#include <net/if_pfsync.h>
+
+#include <arpa/inet.h>
+
+#include <errno.h>
+#include <netdb.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdarg.h>
-#include <errno.h>
-#include <sys/limits.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netdb.h>
-#include <sys/ioctl.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <net/if.h>
-#include <net/pfvar.h>
-#include <netinet/ip_ipsp.h>
-#include <net/if_pfsync.h>
+
 #include "externs.h"
 
 #define PFSYNC_MAXUPDATES 128
