@@ -1110,7 +1110,7 @@ flush_line(int argc, char **argv, ...)
 {
 	va_list ap;
 	char *line;
-	char * args[5] = { PKILL, "-9", "-t", /* line */ NULL, NULL };
+	char *args[5] = { PKILL, "-9", "-t", /* line */ NULL, NULL };
 
 	va_start(ap, argv);
 	line = va_arg(ap, char *);
