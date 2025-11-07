@@ -13,13 +13,15 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
-#include <errno.h>
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include <sys/socket.h>
 #include <sys/limits.h>
+#include <sys/socket.h>
+
+#include <errno.h>
 #include <sqlite3.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
 #include "stringlist.h"
 #include "externs.h"
 
