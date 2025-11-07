@@ -25,18 +25,23 @@
  *
  */
 
-#include <stdio.h>
-#include <stdarg.h>
-#include <stdlib.h>
-#include <string.h>
-#include <errno.h>
+#include <sys/ioctl.h>
 #include <sys/limits.h>
 #include <sys/socket.h>
-#include <sys/ioctl.h>
-#include <netinet/in.h>
+
 #include <net/if.h>
+
+#include <netinet/in.h>
 #include <netinet/if_ether.h>
+
 #include <net/if_trunk.h>
+
+#include <errno.h>
+#include <stdarg.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
 #include "externs.h"
 
 struct trunk_protos tpr[] = TRUNK_PROTOS;
