@@ -32,22 +32,25 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/types.h>
 #include <sys/ioctl.h>
-
 #include <sys/socket.h>
 #include <sys/syslimits.h>
-#include <net/route.h>
+#include <sys/types.h>
+
 #include <net/if.h>
+#include <net/route.h>
+
 #include <netinet/in.h>
 #include <netinet/in_var.h>
 #include <netinet6/in6_var.h>
 #include <netinet6/nd6.h>
-#include <arpa/inet.h>
+
 #include <net/if_pflow.h>
 
-#include <netdb.h>
+#include <arpa/inet.h>
+
 #include <errno.h>
+#include <netdb.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
