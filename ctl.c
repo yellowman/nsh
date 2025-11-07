@@ -14,21 +14,24 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#include <sys/signal.h>
+#include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/syslimits.h>
+#include <sys/types.h>
+
+#include <net/if.h>
+
+#include <errno.h>
+#include <fcntl.h>
+#include <histedit.h>
+#include <libgen.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <fcntl.h>
 #include <unistd.h>
-#include <errno.h>
-#include <libgen.h>
-#include <histedit.h>
-#include <stdarg.h>
-#include <sys/signal.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/socket.h>
-#include <sys/syslimits.h>
-#include <net/if.h>
+
 #include "externs.h"
 #include "editing.h"
 #include "ctl.h"
