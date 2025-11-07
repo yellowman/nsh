@@ -14,16 +14,20 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include <stdio.h>
-#include <ctype.h>
-#include <string.h>
-#include <errno.h>
 #include <sys/param.h>
+#include <sys/socket.h>
 #include <sys/sysctl.h>
 #include <sys/utsname.h>
-#include <sys/socket.h>
+
 #include <net/if.h>
+
 #include <netinet/in.h>
+
+#include <ctype.h>
+#include <errno.h>
+#include <stdio.h>
+#include <string.h>
+
 #include "externs.h"
 
 int
