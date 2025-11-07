@@ -63,7 +63,7 @@ intvnetid(int argc, char **argv, ...)
 		printf("%% vnetid <vnetid>\n");
 		printf("%% no vnetid [vnetid]\n");
 		return 0;
-        }
+	}
 	if (set)
 		setvnetid(ifs, ifname, argv[0]);
 	else
@@ -381,7 +381,7 @@ get_physrtable(int s, char *ifname)
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 	if (ioctl(s, SIOCGLIFPHYRTABLE, (caddr_t)&ifr) < 0)
 		return 0;
-        else
+	else
 		return ifr.ifr_rdomainid;
 }
 
