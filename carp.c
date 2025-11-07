@@ -14,21 +14,26 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#include <sys/ioctl.h>
+#include <sys/limits.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+
+#include <net/if.h>
+
+#include <netinet/in.h>
+#include <netinet/ip_carp.h>
+
+#include <arpa/inet.h>
+
+#include <errno.h>
+#include <netdb.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdarg.h>
 #include <string.h>
-#include <errno.h>
-#include <sys/limits.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <sys/ioctl.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <netinet/ip_carp.h>
-#include <net/if.h>
-#include <netdb.h>
 #include <unistd.h>
+
 #include "externs.h"
 
 static struct intc {
