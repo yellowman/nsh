@@ -381,7 +381,8 @@ void
 icmp_stats(void)
 {
 	struct icmpstat icmpstat;
-	int i, first;
+	int i;
+	int first;
 	int mib[] = { CTL_NET, AF_INET, IPPROTO_ICMP, ICMPCTL_STATS };
 	size_t len = sizeof(icmpstat);
 
@@ -776,8 +777,14 @@ static struct mbtypes {
 void
 mbpr(void)
 {
-	int totmem, totused, totmbufs, totpct;
-	int i, mib[4], npools, flag = 0;
+	int totmem;
+	int totused;
+	int totmbufs;
+	int totpct;
+	int i;
+	int mib[4];
+	int npools;
+	int flag = 0;
 	bool seen[256];
 	struct kinfo_pool pool;
 	struct mbtypes *mp;
