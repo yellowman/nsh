@@ -770,7 +770,8 @@ restart_dhcpd(int argc, char **argv, ...)
 int
 fill_tmpfile(char **fillargs, char *tmpfile, char **tmp_args)
 {
-	int i, n;
+	int i;
+	int n;
 
 	if (fillargs == NULL || tmpfile == NULL)
 		return 0;
@@ -848,7 +849,8 @@ install_crontab(int argc, char **argv, ...)
 	char *name = argv[0];
 	char *crontab_argv[] = { CRONTAB, "-u", "root", NULL, NULL };
 	char tmpfile[PATH_MAX];
-	int fd, found = 0;
+	int fd;
+	int found = 0;
 	struct daemons *daemons;
 
 	for (daemons = ctl_daemons; daemons->name != 0; daemons++)
@@ -917,9 +919,12 @@ provide_example_config(char *filename)
 	char path[PATH_MAX];
 	char tmpprompt[sizeof(prompt)];
 	FILE *f = NULL, *example = NULL;
-	int ret = 0, n, num;
+	int ret = 0;
+	int n;
+	int num;
 	struct stat sb;
-	size_t len, remain;
+	size_t len;
+	size_t remain;
 
 	memset(tmpprompt, 0, sizeof(tmpprompt));
 
@@ -1137,7 +1142,8 @@ start_dhcpd(int argc, char **argv, ...)
 	struct if_nameindex *ifn_list, *ifnp;
 	char **dhcpd_args = NULL;
 	size_t niface = 0;
-	int ifs, i;
+	int ifs;
+	int i;
 	char leasedb[PATH_MAX];
 
 	/*
@@ -1161,7 +1167,8 @@ start_dhcpd(int argc, char **argv, ...)
 	}
 
 	for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++) {
-		int flags, rdomain;
+		int flags;
+		int rdomain;
 
 		flags = get_ifflags(ifnp->if_name, ifs);
 		if ((flags & IFF_LOOPBACK) ||
@@ -1193,7 +1200,8 @@ start_dhcpd(int argc, char **argv, ...)
 		dhcpd_args[i++] = argv[4]; /* default leasedb */
 
 	for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++) {
-		int flags, rdomain;
+		int flags;
+		int rdomain;
 
 		flags = get_ifflags(ifnp->if_name, ifs);
 		if ((flags & IFF_LOOPBACK) ||
