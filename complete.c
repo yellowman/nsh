@@ -101,8 +101,10 @@ complete_ambiguous(char *word, int list, StringList *words, EditLine *el,
 {
 	char insertstr[MAXPATHLEN];
 	char *lastmatch;
-	int i, j;
-	size_t matchlen, wordlen;
+	int i;
+	int j;
+	size_t matchlen;
+	size_t wordlen;
 
 	wordlen = strlen(word);
 	if (words->sl_cur == 0)
@@ -264,7 +266,8 @@ complete_showhelp(char *word, EditLine *el, char **table, int stlen,
 	StringList *helplist;
 	int i;
 	size_t wordlen;
-	int cmdlen, max_cmdmlen = 0;
+	int cmdlen;
+	int max_cmdmlen = 0;
 
 	cmdlist = sl_init();
 	helplist = sl_init();
@@ -400,7 +403,9 @@ complete_ifgroup(char *word, int list, EditLine *el)
 	struct ifgroupreq ifgr;
 	struct ifg_req *ifg;
 	int ifs;
-	u_int len, ngroups, i;
+	u_int len;
+	u_int ngroups;
+	u_int i;
 
 	words = sl_init();
 	wordlen = strlen(word);
@@ -490,7 +495,8 @@ complete_rtable(char *word, int list, EditLine *el)
 {
 	StringList *words, *rtables;
 	size_t wordlen = strlen(word);
-	int i, rv = CC_ERROR;
+	int i;
+	int rv = CC_ERROR;
 	char *s = NULL;
 
 	words = sl_init();
@@ -582,7 +588,10 @@ complete(EditLine *el, char **table, size_t stlen)
 	static char word[256];
 	struct ghs *c;
 	const LineInfo *lf;
-	int celems, dolist, level, i;
+	int celems;
+	int dolist;
+	int level;
+	int i;
 	size_t len;
 
 	lf = el_line(el);
@@ -663,7 +672,8 @@ complete_nocmd(struct ghs *nocmd, char *word, int dolist, EditLine *el,
 	static Command *nocmdtab;
 	static size_t nocmdtab_nitems;
 	Command *c, *nc;
-	int i, j;
+	int i;
+	int j;
 
 	/* One-shot initialization since this is a static variable. */
 	if (nocmdtab == NULL) {
@@ -852,7 +862,8 @@ complete_noint(char *word, int dolist, EditLine *el,
 	struct intlist *table = (struct intlist *)whichlist;
 	struct intlist *notab, *c, *nc;
 	size_t table_nitems;
-	int i, j;
+	int i;
+	int j;
 
 	if (stlen != sizeof(*table))
 		return (CC_ERROR);
@@ -995,8 +1006,12 @@ complete_args(struct ghs *c, char *word, int dolist, EditLine *el, char **table,
 void
 list_vertical(StringList *sl)
 {
-	int i, j, w;
-	int columns, width, lines;
+	int i;
+	int j;
+	int w;
+	int columns;
+	int width;
+	int lines;
 	char *p;
 
 	width = 0;
