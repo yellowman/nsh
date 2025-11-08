@@ -174,8 +174,11 @@ make_string(char *str, int str_len, const u_int8_t *buf, int buf_len)
 int
 intnwkey(int argc, char **argv, ...)
 {
-	int i, len, set;
-	char *cp = NULL, *val = NULL;
+	int i;
+	int len;
+	int set;
+	char *cp = NULL;
+	char *val = NULL;
 	struct ieee80211_nwkey nwkey;
 	u_int8_t keybuf[IEEE80211_WEP_NKID][16];
 	va_list ap;
@@ -270,7 +273,10 @@ int
 get_nwinfo(char *ifname, char *str, int str_len, int type)
 {
 	char tmp[128];
-	int ifs, len, i, nwkey_verbose;
+	int ifs;
+	int len;
+	int i;
+	int nwkey_verbose;
 
 	ifs = socket(AF_INET, SOCK_DGRAM, 0);
 	if (ifs < 0) {
@@ -444,7 +450,8 @@ inttxpower(int argc, char **argv, ...)
 {
 	const char *errmsg = NULL;
 	struct ieee80211_txpower txpower;
-	short dbm, set;
+	short dbm;
+	short set;
 	va_list ap;
 	char *ifname;
 	int ifs;
