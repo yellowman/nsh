@@ -363,7 +363,8 @@ show_wg(int ifs, char *ifname, FILE *outfile)
 void
 conf_wg(FILE *output, int ifs, char *ifname)
 {
-	size_t			 i, j;
+	size_t			 i;
+	size_t			 j;
 	char			 hbuf[NI_MAXHOST], sbuf[NI_MAXSERV];
 	char			 key[WG_BASE64_KEY_LEN + 1],psk[WG_BASE64_KEY_LEN + 1];
 
@@ -572,7 +573,8 @@ wgpeerusage(void)
 int
 intwgpeer(int argc, char **argv, ...)
 {
-	int set, ch;
+	int set;
+	int ch;
 	va_list ap;
 	char *ifname;
 	int ifs;
