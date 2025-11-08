@@ -76,7 +76,8 @@ resolvd_is_disabled(void)
 int
 nameserverset(int argc, char *argv[], ...)
 {
-	int i, set = 1;
+	int i;
+	int set = 1;
 
 	if (argc < 2)
 		return nameserver_usage();
