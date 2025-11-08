@@ -611,8 +611,12 @@ netname6(struct sockaddr_in6 *sa6, struct sockaddr_in6 *mask)
 {
 	struct sockaddr_in6 sin6;
 	u_char *p;
-	int masklen, final = 0, illegal = 0;
-	int i, lim, error;
+	int masklen;
+	int final = 0;
+	int illegal = 0;
+	int i;
+	int lim;
+	int error;
 	char hbuf[NI_MAXHOST];
 
 	sin6 = *sa6;
