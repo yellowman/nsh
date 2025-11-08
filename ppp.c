@@ -79,7 +79,10 @@ intsppp(int argc, char **argv, ...)
 {
 	struct sauthreq spa;
 	struct ifreq ifr;
-	int set, ch, i, cmd = 0;
+	int set;
+	int ch;
+	int i;
+	int cmd = 0;
 	va_list ap;
 	char *ifname;
 	int ifs;
@@ -260,7 +263,9 @@ pppoeusage(void)
 void
 pppoe_ipcp(char *ifname, int ifs, int set)
 {
-	int unit, flags, up;
+	int unit;
+	int flags;
+	int up;
 	struct ifaliasreq ip4req;
 	ip_t in4dest, in4gate;
 	char dest_str[16];
@@ -331,7 +336,8 @@ int
 intpppoe(int argc, char **argv, ...)
 {
 	struct pppoediscparms parms;
-	int set, ch;
+	int set;
+	int ch;
 	va_list ap;
 	char *ifname;
 	int ifs;
@@ -505,7 +511,8 @@ void
 pppoe_conf_default_route(FILE *output, char *ifname, char *delim,
     char *netname, char *routename, char *flags)
 {
-	int ipaddrmode, unit;
+	int ipaddrmode;
+	int unit;
 
 	ipaddrmode = pppoe_get_ipaddrmode(ifname);
 	if (ipaddrmode == NSH_PPPOE_IPADDR_STATIC) {
