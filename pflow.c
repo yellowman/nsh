@@ -61,8 +61,12 @@ int
 pflow_addr(const char *val, struct sockaddr_storage *ss)
 {
 	struct addrinfo hints, *res0;
-	int error, flag;
-	char *cp, *ip, *port, buf[HOST_NAME_MAX + 1 + sizeof(":65535")];
+	int error;
+	int flag;
+	char *cp;
+	char *ip;
+	char *port;
+	char buf[HOST_NAME_MAX + 1 + sizeof(":65535")];
 
 	if (strlcpy(buf, val, sizeof(buf)) >= sizeof(buf)) {
 		printf("%% pflow_addr: bad value: (%s)\n", val);
