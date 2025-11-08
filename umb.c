@@ -82,7 +82,8 @@ show_umb(int ifs, char *ifname, FILE *outfile)
 	char	 pn[UMB_PHONENR_MAXLEN+1];
 	char	 astr[INET6_ADDRSTRLEN];
 
-	int 	 i,n;
+	int 	 i;
+	int	 n;
 
 	memset((char *)&mi, 0, sizeof(mi));
 	ifr.ifr_data = (caddr_t)&mi;
