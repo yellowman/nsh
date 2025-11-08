@@ -309,7 +309,8 @@ conf(FILE *output)
 void
 conf_rtables(FILE *output)
 {
-	int i, rtableid;
+	int i;
+	int rtableid;
 	StringList *rtables;
 
 	rtables = sl_init();
@@ -632,7 +633,10 @@ conf_db_single(FILE *output, char *dbname, char *lookup, char *ifname)
 void
 conf_interfaces(FILE *output, char *only, int exact_match)
 {
-	int ifs, flags, ippntd, br;
+	int ifs;
+	int flags;
+	int ippntd;
+	int br;
 	char ifdescr[IFDESCRSIZE];
 
 	struct if_nameindex *ifn_list, *ifnp;
@@ -991,7 +995,10 @@ conf_keepalive(FILE *output, int ifs, char *ifname)
 void
 conf_pwe3(FILE *output, int ifs, char *ifname)
 {
-	int error, nei = 0, fat = 0, cw = 0;
+	int error;
+	int nei = 0;
+	int fat = 0;
+	int cw = 0;
 	struct shim_hdr shim;
 	struct ifreq ifr;
 
@@ -1053,7 +1060,8 @@ conf_pwe3(FILE *output, int ifs, char *ifname)
 void
 conf_tunnel(FILE *output, int ifs, char *ifname)
 {
-	int dstport, physrtable;
+	int dstport;
+	int physrtable;
 	char tmpa[IPSIZ], tmpb[IPSIZ];
 
 	if ((dstport=
@@ -1200,7 +1208,8 @@ int
 ipv6ll_db_compare(struct sockaddr_in6 *sin6, struct sockaddr_in6 *sin6mask,
     char *ifname)
 {
-	int count, scope;
+	int count;
+	int scope;
 	StringList *data;
 	struct in6_addr store;
 
