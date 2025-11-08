@@ -224,7 +224,8 @@ authuser_checkpass(char *myname, char *login_style)
 static int
 authuser(char *myname, char *login_style, int persist)
 {
-	int i, fd = -1;
+	int i;
+	int fd = -1;
 
 	if (persist)
 		fd = open("/dev/tty", O_RDWR);
@@ -259,7 +260,8 @@ main(int argc, char **argv)
 	uid_t target = 0;
 	gid_t groups[NGROUPS_MAX + 1];
 	int ngroups;
-	int ch, rv;
+	int ch;
+	int rv;
 	int nflag = 0;
 	char cwdpath[PATH_MAX];
 	const char *cwd;
