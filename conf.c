@@ -296,7 +296,7 @@ conf(FILE *output)
 	fprintf(output, "!\n");
 	conf_nameserver(output);
 
-	return(0);
+	return 0;
 }
 
 void conf_rtables(FILE *output)
@@ -572,7 +572,7 @@ int scantext(char *fname, char *string)
 
 	if ((file = fopen(fname, "r")) == 0) {
 		printf("%% Unable to open %s: %s\n", fname, strerror(errno));
-		return(0);
+		return 0;
 	}
 
 	for (;;) {
@@ -585,7 +585,7 @@ int scantext(char *fname, char *string)
 	}
 
 	fclose(file);
-	return(found);
+	return found;
 }
 
 int islateif(char *ifname)
@@ -594,9 +594,9 @@ int islateif(char *ifname)
 
 	for (i = 0; i < nitems(latestartifs); i++)
 		if (isprefix(latestartifs[i].name, ifname))  
-			return(1);
+			return 1;
 
-	return(0);
+	return 0;
 }
 
 void
@@ -884,7 +884,7 @@ int conf_dhcrelay(char *ifname, char *server, int serverlen)
 	}
 	sl_free(data, 1);
 
-	return(alen);
+	return alen;
 }
 
 void conf_pflow(FILE *output, int ifs, char *ifname)
@@ -1198,7 +1198,7 @@ ipv6ll_db_compare(struct sockaddr_in6 *sin6, struct sockaddr_in6 *sin6mask,
 		sin6->sin6_addr.s6_addr[2] = store.s6_addr[0];
 		sin6->sin6_addr.s6_addr[3] = store.s6_addr[1];
 		sin6->sin6_scope_id = scope;
-		return(count);
+		return count;
 	}
 	return 1;
 }
@@ -1215,7 +1215,7 @@ int conf_ifaddrs(FILE *output, char *ifname, int flags, int af)
 	if (getifaddrs(&ifap) != 0) {
 		printf("%% conf: getifaddrs failed: %s\n",
 		strerror(errno));
-		return(-1);
+		return -1;
 	}
 
 	/*
@@ -1326,9 +1326,9 @@ default_mtu(char *ifname)
 
 	for (i = 0; i < nitems(defmtus); i++)
 		if (isprefix(defmtus[i].name, ifname))  
-			return(defmtus[i].mtu);
+			return defmtus[i].mtu;
 
-	return(DEFAULT_MTU); /* default mtu */
+	return DEFAULT_MTU; /* default mtu */
 }
 
 int
@@ -1338,7 +1338,7 @@ default_txprio(char *ifname)
 
 	for (i = 0; i < nitems(defprios); i++)
 		if (isprefix(defprios[i].name, ifname))
-			return(defprios[i].txprio);
+			return defprios[i].txprio;
 
 	return 0;	/* default txprio */
 }
@@ -1350,7 +1350,7 @@ default_rxprio(char *ifname)
 
 	for (i = 0; i < nitems(defprios); i++)
 		if (isprefix(defprios[i].name, ifname))
-			return(defprios[i].rxprio);
+			return defprios[i].rxprio;
 
 	return 0;	/* default rxprio */
 }
@@ -1362,7 +1362,7 @@ default_llpriority(char *ifname)
 
 	for (i = 0; i < nitems(defllpriority); i++)
 		if (isprefix(defllpriority[i].name, ifname))
-			return(defllpriority[i].llpriority);
+			return defllpriority[i].llpriority;
 
 	return IFQ_DEFPRIO;	/* default llpriority */
 }
@@ -1380,11 +1380,11 @@ conf_routes(FILE *output, char *delim, int af, int flags, int tableid)
 
 	if (tableid < 0 || tableid > RT_TABLEID_MAX) {
 		printf("%% conf_routes: tableid %d out of range\n", tableid);
-		return(1);
+		return 1;
 	}
 	rtdump = getrtdump(0, flags, tableid);
 	if (rtdump == NULL)
-		return(1);
+		return 1;
 
 	/* walk through routing table */
 	for (next = rtdump->buf; next < rtdump->lim; next += rtm->rtm_msglen) {
@@ -1402,7 +1402,7 @@ conf_routes(FILE *output, char *delim, int af, int flags, int tableid)
 			    strerror(rtm->rtm_errno), rtm->rtm_errno);
 	}
 	freertdump(rtdump);
-	return(1);
+	return 1;
 }
 
 void

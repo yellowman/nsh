@@ -107,7 +107,7 @@ intcarp(int argc, char **argv, ...)
 			val = strtonum(argv[0], 0, 254, &errmsg);
 			if (errmsg) {
 				printf("%% %s value out of range: %s\n", x->name, errmsg);
-				return(0);
+				return 0;
 			}
 		}
 		break;
@@ -117,7 +117,7 @@ intcarp(int argc, char **argv, ...)
 			val = strtonum(argv[0], 0, 255, &errmsg);
 			if (errmsg) {
 				printf("%% %s value out of range: %s\n", x->name, errmsg);
-				return(0);
+				return 0;
 			}
 		}
 		break;
@@ -135,7 +135,7 @@ intcarp(int argc, char **argv, ...)
 					    carp_bal_modes[i]);
 				printf(">\n");
 				printf("%% no %s\n", x->name);
-				return(0);
+				return 0;
 			}
 		}
 		break;
@@ -174,13 +174,13 @@ intcarp(int argc, char **argv, ...)
 			if ((ecode = getaddrinfo(argv[0], NULL, &hints, &peerres)) != 0) {
 				printf("%% error in parsing address string: %s\n",
 				    gai_strerror(ecode));
-				return(0);
+				return 0;
 			}
 
 			/* do we need this if hints.ai_family = AF_INET? */
 			if (peerres->ai_addr->sa_family != AF_INET) {
 				printf("%% only IPv4 addresses supported for the CARP peer\n");
-				return(0);
+				return 0;
 			}
 
 			creq.carpr_peer.s_addr = ((struct sockaddr_in *)
@@ -294,13 +294,13 @@ intcnode(int argc, char **argv, ...)
 	vhid = strtonum(argv[0], 1, 255, &errmsg);
 	if (errmsg) {
 		printf("%% vhid value out of range: %s\n", errmsg);
-		return(0);
+		return 0;
 	}
 	if (argv[1]) {
 		advskew = strtonum(argv[1], 0, 255, &errmsg);
 		if (errmsg) {
 			printf("%% advskew value out of range: %s\n", errmsg);
-			return(0);
+			return 0;
 		}
 	} else {
 		advskew = 0;
@@ -323,13 +323,13 @@ intcnode(int argc, char **argv, ...)
 		if (set && ((i + 1) == CARP_MAXNODES)) {
 			printf("%% maximum carp nodes reached, unable to add "
 			    "more\n");
-			return(0);
+			return 0;
 		}
 	}
 	if (!set && !creq.carpr_vhids[i]) {
 		printf("%% unable to delete vhid %u, does not exist on %s\n",
 		    vhid, ifname);
-		return(0);
+		return 0;
 	}
 
 	if (set) {
@@ -425,7 +425,7 @@ carp_state(int s, char *ifname, FILE *outfile)
 		fputc('\n', outfile);
 
 	if (creq.carpr_vhids[0] == 0)
-		return(0);
+		return 0;
 
 	for (i = 0; creq.carpr_vhids[i]; i++) {
 		if (creq.carpr_states[i] <= CARP_MAXSTATE)
@@ -449,7 +449,7 @@ carp_state(int s, char *ifname, FILE *outfile)
 		}
 	}
 
-	return(0);
+	return 0;
 }
 
 int

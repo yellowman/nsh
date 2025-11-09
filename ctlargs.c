@@ -123,5 +123,5 @@ step_optreq(char **xargs, char **args, int argc, char **argv, int skip)
 		}
 	}
 
-	return(args);
+	return args;
 }

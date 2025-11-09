@@ -101,7 +101,7 @@ intmedia(int argc, char **argv, ...)
 		printf("%% media <type> [instance]\n");
 		printf("%% no media [type] [instance]\n");
 		media_supported(ifs, ifname, "% ", "%   ", stdout);
-		return(0);
+		return 0;
 	}
 
 	media_current = init_current_media(ifs, ifname);
@@ -113,7 +113,7 @@ intmedia(int argc, char **argv, ...)
 		else
 			printf("%% Failed to initialize media: %s\n",
 			    strerror(errno));
-		return(0);
+		return 0;
 	}
 
 	if (argc == 2) {
@@ -121,7 +121,7 @@ intmedia(int argc, char **argv, ...)
 		if (errmsg) {
 			printf("%% Invalid media instance: %s: %s\n", argv[1],
 			    errmsg);
-			return(0);
+			return 0;
 		}
 	} else {
 		inst = IFM_INST(media_current);
@@ -135,14 +135,14 @@ intmedia(int argc, char **argv, ...)
 		subtype = get_media_subtype(type, DEFAULT_MEDIA_TYPE);
 
 	if (subtype == -1)
-		return(0);
+		return 0;
 
 	/* Build the new media_current word */
 	media_current = IFM_MAKEWORD(type, subtype, 0, inst);
 
 	process_media_commands(ifs, ifname, media_current);
 
-	return(0);
+	return 0;
 }
 
 int
@@ -171,7 +171,7 @@ intmediaopt(int argc, char **argv, ...)
 	if ((set && (argc != 1)) || (!set && (argc > 1))) {
 		printf("%% mediaopt <option>\n");
 		printf("%% no mediaopt [option]\n");
-		return(0);
+		return 0;
 	}
 
         media_current = init_current_media(ifs, ifname);
@@ -183,7 +183,7 @@ intmediaopt(int argc, char **argv, ...)
 		else
 			printf("%% Failed to initialize media: %s\n",
 			    strerror(errno));
-		return(0);
+		return 0;
 	}
 
 	if (argc == 1)
@@ -192,7 +192,7 @@ intmediaopt(int argc, char **argv, ...)
 		mediaopt = IFM_OPTIONS(media_current);
 
 	if (mediaopt == -1)
-		return(0);
+		return 0;
 
 	if (set)
 		media_current |= mediaopt;
@@ -201,7 +201,7 @@ intmediaopt(int argc, char **argv, ...)
 
 	process_media_commands(ifs, ifname, media_current);
 
-	return(0);
+	return 0;
 }
 
 void
@@ -232,17 +232,17 @@ init_current_media(int s, char *ifname)
 		 * that there are more, so we can ignore it.
 		 */
 		if (errno != E2BIG)
-			return(-1);
+			return -1;
 	}
 	media_current = ifmr.ifm_current;
 
 	/* Sanity. */
 	if (IFM_TYPE(media_current) == 0) {
 		printf("%% init_current_media: %s: no link type?\n", ifname);
-		return(-1);
+		return -1;
 	}
 
-	return(media_current);
+	return media_current;
 }
 
 const char *
@@ -369,7 +369,7 @@ get_media_options(uint64_t type, const char *val)
 	optlist = (char *)strdup(val);
 	if (optlist == NULL) {
 		printf("%% get_media_options: strdup: %s\n", strerror(errno));
-		return(-1);
+		return -1;
 	}
 	str = optlist;
 
@@ -382,7 +382,7 @@ get_media_options(uint64_t type, const char *val)
 			printf("%% get_media_options: unknown %s media option: %s\n",
 			     get_media_type_string(type), str);
 			free(optlist);
-			return(-1);
+			return -1;
 		}
 		rval |= IFM_OPTIONS(option);
 	}
@@ -474,7 +474,7 @@ int buf_len, int buf2_len)
 	bzero(&req, sizeof(req));
 	(void) strlcpy(req.iflr_name, ifname, sizeof(req.iflr_name));
 	if (ioctl(s, SIOCGLIFPHYADDR, (caddr_t) &req) < 0)
-		return(-1);
+		return -1;
 	if (req.addr.ss_family == AF_INET6)
 		in6_fillscopeid((struct sockaddr_in6 *)&req.addr);
 	if (getnameinfo((struct sockaddr *)&req.addr, req.addr.ss_len,
@@ -492,9 +492,9 @@ int buf_len, int buf2_len)
 	if (getnameinfo((struct sockaddr *)&req.dstaddr, req.dstaddr.ss_len,
 	    tmp_buf2, buf2_len, 0, 0, niflag) != 0) {
 		printf("%% phys_status: 1/getnameinfo failure\n");
-		return(-1);
+		return -1;
 	}
-	return(ntohs(dstport));
+	return ntohs(dstport);
 }
 
 int
@@ -511,16 +511,16 @@ conf_media_status(FILE *output, int s, char *ifname)
 		if (errno != ENOTTY)
 			printf("%% conf_media_status: 1/SIOCGIFMEDIA: %s\n",
 			    strerror(errno));
-		return(0);
+		return 0;
 	}
 
 	if (ifmr.ifm_count == 0)
-		return(0);
+		return 0;
 
 	media_list = calloc(ifmr.ifm_count, sizeof(*media_list));
 	if (media_list == NULL) {
 		printf("%% conf_media_status: calloc: %s\n", strerror(errno));
-		return(0);
+		return 0;
 	}
 	ifmr.ifm_ulist = media_list;
 
@@ -528,7 +528,7 @@ conf_media_status(FILE *output, int s, char *ifname)
 		printf("%% conf_media_status: 2/SIOCGIFMEDIA: %s\n",
 		    strerror(errno));
 		free(media_list);
-		return(0);
+		return 0;
 	}
 
 	if (ifmr.ifm_current >= ifmr.ifm_active) {
@@ -538,7 +538,7 @@ conf_media_status(FILE *output, int s, char *ifname)
 	}
 
 	free(media_list);
-	return(rval);
+	return rval;
 }
 
 int

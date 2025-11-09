@@ -55,7 +55,7 @@ more(char *fname)
 		else
 			printf ("%% more: fopen(%s): %s\n", fname,
 			    strerror(errno));
-		return(0);
+		return 0;
 	}
 
 	if (!interactive_mode || nsh_cbreak() < 0)
@@ -115,7 +115,7 @@ quit:
 
 	fclose(f);
 	free(ws);
-	return(1);
+	return 1;
 }
 
 int
@@ -124,7 +124,7 @@ nsh_cbreak(void)
 	struct termios	newtty;
 
 	if (tcgetattr(fileno(stdout), &oldtty) < 0)
-		return(-1);
+		return -1;
 
 	(void)memcpy(&newtty, &oldtty, sizeof(newtty));
 
@@ -133,8 +133,8 @@ nsh_cbreak(void)
 	newtty.c_cc[VTIME] = 0;			/* no timeout */
 
 	if (tcsetattr(fileno(stdout), TCSAFLUSH, &newtty) < 0)
-		return(-1);
-	return(0);
+		return -1;
+	return 0;
 }
 
 void

@@ -197,7 +197,7 @@ intnwkey(int argc, char **argv, ...)
 		printf("%% nwkey persist:<key>\n");
 		printf("%% nwkey <n>:<k1>,<k2>,<k3>,<k4>\n");
 		printf("%% no nwkey\n");
-		return(0);
+		return 0;
 	}
 	if(set)
 		val = argv[0];
@@ -229,19 +229,19 @@ set_nwkey:
 				len = sizeof(keybuf[i]);
 				val = (char *)get_string(val, ",", keybuf[i], &len);
 				if (val == NULL)
-					return(0);
+					return 0;
 				nwkey.i_key[i].i_keylen = len;
 				nwkey.i_key[i].i_keydat = keybuf[i];
 			}
 			if (cp != NULL) {
 				printf("%% intnwkey: too many keys\n");
-				return(0);
+				return 0;
 			}
 		} else {
 			len = sizeof(keybuf[i]);
 			val = (char *)get_string(val, NULL, keybuf[0], &len);
 			if (val == NULL)
-				return(0);
+				return 0;
 			nwkey.i_key[0].i_keylen = len;
 			nwkey.i_key[0].i_keydat = keybuf[0];
 			i = 1;
@@ -255,7 +255,7 @@ set_nwkey:
 	(void) strlcpy(nwkey.i_name, ifname, sizeof(nwkey.i_name));
 	if (ioctl(ifs, SIOCS80211NWKEY, (caddr_t)&nwkey) == -1)
 		printf("%% intnwkey: SIOCS80211NWKEY: %s\n", strerror(errno));
-	return(0);
+	return 0;
 }
 
 /*
@@ -431,7 +431,7 @@ get_nwinfo(char *ifname, char *str, int str_len, int type)
 	} /* switch {} */
 
 	close(ifs);
-	return(strlen(str));
+	return strlen(str);
 }
 
 int
@@ -462,7 +462,7 @@ inttxpower(int argc, char **argv, ...)
 	if ((set && argc != 1) || (!set && argc > 1)) {
 		printf("%% txpower <dBm>\n");
 		printf("%% no txpower     (auto-select)\n");
-		return(0);
+		return 0;
 	}
 
 	strlcpy(txpower.i_name, ifname, sizeof(txpower.i_name));
@@ -475,7 +475,7 @@ inttxpower(int argc, char **argv, ...)
 		if (errmsg) {
 			printf("%% inttxpower: txpower %sdBm: %s\n", argv[0],
 			    errmsg);
-			return(0);
+			return 0;
 		}
 		txpower.i_val = (int16_t)dbm;
 		txpower.i_mode = IEEE80211_TXPOWER_MODE_FIXED;
@@ -485,7 +485,7 @@ inttxpower(int argc, char **argv, ...)
 		printf("%% inttxpower: SIOCS80211TXPOWER failed: %s\n",
 		    strerror(errno));
 
-	return(0);
+	return 0;
 }
 
 int
@@ -516,14 +516,14 @@ intbssid(int argc, char **argv, ...)
 	if ((set && argc != 1) || (!set && argc > 1)) {
 		printf("%% bssid <xx:xx:xx:xx:xx:xx>\n");
 		printf("%% no bssid       (auto-select)\n");
-		return(0);
+		return 0;
 	}
 
 	if (set) {
 		ea = ether_aton(argv[0]);
 		if (ea == NULL) {
 			printf("%% Invalid bssid\n");
-			return(0);
+			return 0;
 		}
 		memcpy(&bssid.i_bssid, ea->ether_addr_octet,
 		    sizeof(bssid.i_bssid));

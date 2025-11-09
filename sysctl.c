@@ -97,10 +97,10 @@ sysctl_int(int mib[], int val, int read)
 				printf("%% mib[%i] == %i\n",i,mib[i]);
 			}
 		}
-		return(-1);
+		return -1;
 	}
 
-	return(old);
+	return old;
 }
 
 struct sysctltab sysctls[] = {
@@ -236,7 +236,7 @@ ipsysctl(int set, char **cmd, ...)
 			if (errmsg) {
 				printf("%% Invalid argument %s: %s\n", arg,
 				    errmsg);
-				return(0);
+				return 0;
 			}
 		} else
 			larg = 1;
@@ -245,7 +245,7 @@ ipsysctl(int set, char **cmd, ...)
 
 	sysctl_int(x->mib, larg, 0);
 
-	return(1);
+	return 1;
 }
 
 void

@@ -148,7 +148,7 @@ intsyncpeer(int argc, char **argv, ...)
 	if (ioctl(ifs, SIOCGETPFSYNC, (caddr_t)&ifr) == -1) {
 			printf("%% intsyncpeer: SIOCGETPFSYNC: %s\n",
 			    strerror(errno));
-		return(0);
+		return 0;
 	}
 
 	if (set) {

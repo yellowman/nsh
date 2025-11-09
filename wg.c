@@ -55,12 +55,12 @@ void	wgpeerusage(void);
 	uint8_t _tmp[WG_KEY_LEN]; int _r;				\
 	if (strlen(src) != WG_BASE64_KEY_LEN) {				\
 		printf("%% " fn_name ": invalid length\n");		\
-		return(-1);						\
+		return -1;						\
 	}								\
 	if ((_r = b64_pton(src, _tmp, sizeof(_tmp))) != sizeof(_tmp)) {	\
 		printf("%% " fn_name ": invalid base64 %d/%zu\n",	\
 		    _r, sizeof(_tmp));					\
-		return(-1);						\
+		return -1;						\
 	}								\
 	memcpy(dst, _tmp, WG_KEY_LEN);					\
 } while (0)
@@ -74,14 +74,14 @@ int
 ensurewginterface(void)
 {
 	if (wg_interface != NULL)
-		return(0);
+		return 0;
 	wgdata.wgd_size = sizeof(*wg_interface);
 	wgdata.wgd_interface = wg_interface = calloc(1, wgdata.wgd_size);
 	if (wg_interface == NULL) {
 		printf("%% ensurewginterface: calloc: %s\n", strerror(errno));
-		return(-1);
+		return -1;
 	}
-	return(0);
+	return 0;
 }
 
 int
@@ -100,7 +100,7 @@ growwgdata(size_t by)
 	p = realloc(wg_interface, wgdata.wgd_size);
 	if (p == NULL) {
 		printf("%% growwgdata: realloc: %s\n", strerror(errno));
-		return(-1);
+		return -1;
 	}
 	wgdata.wgd_interface = p;
 	if (wg_interface == NULL)
@@ -113,14 +113,14 @@ growwgdata(size_t by)
 		wg_aip = (void *)wg_interface + aip_offset;
 
 	bzero((char *)wg_interface + wgdata.wgd_size - by, by);
-	return(0);
+	return 0;
 }
 
 int
 setwgpeer(const char *peerkey_b64)
 {
 	if (growwgdata(sizeof(*wg_peer)) < 0)
-		return(-1);
+		return -1;
 	if (wg_aip)
 		wg_peer = (struct wg_peer_io *)wg_aip;
 	else
@@ -129,7 +129,7 @@ setwgpeer(const char *peerkey_b64)
 	wg_peer->p_flags |= WG_PEER_HAS_PUBLIC;
 	WG_LOAD_KEY(wg_peer->p_public, peerkey_b64, "setwgpeer");
 	wg_interface->i_peers_count++;
-	return(0);
+	return 0;
 }
 
  
@@ -139,12 +139,12 @@ setwgpeerdesc(const char *descr)
 #ifdef WG_PEER_SET_DESCRIPTION /* OpenBSD 7.4+ */
 	if (wg_peer == NULL) {
 		printf("%% setwgpeerdesc: wgpeer not set\n");
-		return(-1);
+		return -1;
 	}
 	wg_peer->p_flags |= WG_PEER_SET_DESCRIPTION;
 	strlcpy(wg_peer->p_description, descr, IFDESCRSIZE);
 #endif
-	return(0);
+	return 0;
 }
 
 int
@@ -153,11 +153,11 @@ setwgpeeraip(const char *aip)
 	int res;
 	if (wg_peer == NULL) {
 		printf("%% setwgpeeraip: wgpeer not set\n");
-		return(-1);
+		return -1;
 	}
 
 	if (growwgdata(sizeof(*wg_aip)) < 0)
-		return(-1);
+		return -1;
 
 	if ((res = inet_net_pton(AF_INET, aip, &wg_aip->a_ipv4,
 	    sizeof(wg_aip->a_ipv4))) != -1) {
@@ -167,7 +167,7 @@ setwgpeeraip(const char *aip)
 		wg_aip->a_af = AF_INET6;
 	} else {
 		printf("%% setwgpeeraip: bad address\n");
-		return(-1);
+		return -1;
 	}
 
 	wg_aip->a_cidr = res;
@@ -176,7 +176,7 @@ setwgpeeraip(const char *aip)
 	wg_peer->p_aips_count++;
 
 	wg_aip++;
-	return(0);
+	return 0;
 }
 
 int
@@ -186,15 +186,15 @@ setwgpeerep(const char *hostport)
 
 	if (wg_peer == NULL) {
 		printf("%% setwgpeerep: wgpeer not set\n");
-		return(-1);
+		return -1;
 	}
 
 	if (pflow_addr(hostport, &ss) < 0)
-		return(-1);
+		return -1;
 
 	wg_peer->p_flags |= WG_PEER_HAS_ENDPOINT;
 	memcpy(&wg_peer->p_sa, &ss, ss.ss_len);
-	return(0);
+	return 0;
 }
 
 int
@@ -202,11 +202,11 @@ setwgpeerpsk(const char *psk_b64)
 {
 	if (wg_peer == NULL) {
 		printf("%% setwgpeerpsk: wgpsk: wgpeer not set\n");
-		return(-1);
+		return -1;
 	}
 	wg_peer->p_flags |= WG_PEER_HAS_PSK;
 	WG_LOAD_KEY(wg_peer->p_psk, psk_b64, "setwgpeerpsk");
-	return(0);
+	return 0;
 }
 
 int
@@ -215,7 +215,7 @@ setwgpeerpka(const char *pka)
 	const char *errmsg = NULL;
 	if (wg_peer == NULL) {
 		printf("%% setwgpeerpka: wgpeer not set\n");
-		return(-1);
+		return -1;
 	}
 
 	/* 43200 == 12h, reasonable for a 16 bit value */
@@ -223,9 +223,9 @@ setwgpeerpka(const char *pka)
 	wg_peer->p_pka = strtonum(pka, 0, 43200, &errmsg);
 	if (errmsg) {
 		printf("%% setwgpeerpka: %s, %s\n", pka, errmsg);
-		return(-1);
+		return -1;
 	}
-	return(0);
+	return 0;
 }
 
 int
@@ -233,24 +233,24 @@ setwgport(const char *port)
 {
 	const char *errmsg = NULL;
 	if (ensurewginterface() < 0)
-		return(-1);
+		return -1;
 	wg_interface->i_flags |= WG_INTERFACE_HAS_PORT;
 	wg_interface->i_port = strtonum(port, 0, 65535, &errmsg);
 	if (errmsg) {
 		printf("%% setwgport: wgport: %s, %s\n", port, errmsg);
-		return(-1);
+		return -1;
 	}
-	return(0);
+	return 0;
 }
 
 int
 setwgkey(const char *private_b64)
 {
 	if (ensurewginterface() < 0)
-		return(-1);
+		return -1;
 	wg_interface->i_flags |= WG_INTERFACE_HAS_PRIVATE;
 	WG_LOAD_KEY(wg_interface->i_private, private_b64, "setwgkey");
-	return(0);
+	return 0;
 }
 
 int
@@ -258,14 +258,14 @@ setwgrtable(const char *id)
 {
 	const char *errmsg = NULL;
 	if (ensurewginterface() < 0)
-		return(-1);
+		return -1;
 	wg_interface->i_flags |= WG_INTERFACE_HAS_RTABLE;
 	wg_interface->i_rtable = strtonum(id, 0, RT_TABLEID_MAX, &errmsg);
 	if (errmsg) {
 		printf("%% setwgrtable: wgrtable %s: %s\n", id, errmsg);
-		return(-1);
+		return -1;
 	}
-	return(0);
+	return 0;
 }
 
 int
@@ -273,20 +273,20 @@ unsetwgpeerpsk()
 {
 	if (wg_peer == NULL) {
 		printf("%% unsetwgpeerpsk: wgpeer not set\n");
-		return(-1);
+		return -1;
 	}
 	wg_peer->p_flags |= WG_PEER_HAS_PSK;
 	bzero(wg_peer->p_psk, WG_KEY_LEN);
-	return(0);
+	return 0;
 }
 
 int
 unsetwgpeerall()
 {
 	if (ensurewginterface() < 0)
-		return(-1);
+		return -1;
 	wg_interface->i_flags |= WG_INTERFACE_REPLACE_PEERS;
-	return(0);
+	return 0;
 }
 
 int
@@ -297,10 +297,10 @@ getwg(int ifs)
 	for (last_size = wgdata.wgd_size;; last_size = wgdata.wgd_size) {
 		if (ioctl(ifs, SIOCGWG, (caddr_t)&wgdata) < 0) {
 			if (errno == ENOTTY)
-				return(-1);
+				return -1;
                         printf("%% getwg: SIOCGWG: %s\n", strerror(errno));
 			free(wgdata.wgd_interface);
-			return(-1);
+			return -1;
 		}
 		if (last_size >= wgdata.wgd_size)
 			break;
@@ -308,10 +308,10 @@ getwg(int ifs)
 		    wgdata.wgd_size);
 		if (!wgdata.wgd_interface) {
 			printf("%% getwg: realloc: %s\n", strerror(errno));
-			return(-1);
+			return -1;
 		}
 	}
-	return(0);
+	return 0;
 }
 
 void
@@ -484,10 +484,10 @@ intwg(int argc, char **argv, ...)
 	x=(struct wgc *) genget(argv[0], (char **)wgcs, sizeof(struct wgc));
 	if (x == 0) {
 		printf("%% intwg: Internal error - Invalid argument %s\n", argv[0]);
-		return(0);
+		return 0;
 	} else if (Ambiguous(x)) {
 		printf("%% intwg: Internal error - Ambiguous argument %s\n", argv[0]);
-		return(0);
+		return 0;
  	}
 
 	argc--;
@@ -497,7 +497,7 @@ intwg(int argc, char **argv, ...)
 	    (x->type == WGKEY && argc > 1)) {
 		printf("%% %s <%s>\n", x->name, x->descr);
 		printf("%% no %s [%s]\n", x->name, x->descr);
-		return(0);
+		return 0;
 	}
 
 	switch(x->type) {
@@ -546,7 +546,7 @@ intwg(int argc, char **argv, ...)
 	free(wgdata.wgd_interface);
         wgdata.wgd_size = 0;
 
-	return(0);
+	return 0;
 }
 
 void
@@ -610,7 +610,7 @@ intwgpeer(int argc, char **argv, ...)
 	if (argc == 0) {
 		if (set) {
 			wgpeerusage();
-			return(0);
+			return 0;
 		} else {
 			if (unsetwgpeerall() < 0)
 				goto wgerr;
@@ -679,7 +679,7 @@ intwgpeer(int argc, char **argv, ...)
 #endif
 		default:
 			printf("%% intwgpeer: nopt table error\n");
-			return(0);
+			return 0;
 		}
 
 	if (argc - noptind != 0) {
@@ -689,7 +689,7 @@ intwgpeer(int argc, char **argv, ...)
 			printf(": %s", argv[noptind]);
 		printf("\n");
 		wgpeerusage();
-		return(0);
+		return 0;
 	}
 
 	strlcpy(wgdata.wgd_name, ifname, sizeof(wgdata.wgd_name));
@@ -700,5 +700,5 @@ wgerr:
 	free(wgdata.wgd_interface);
 	wgdata.wgd_size = 0;
 
-	return(0);
+	return 0;
 }

@@ -182,11 +182,11 @@ arpset(int argc, char *argv[], ...)
 		printf("%% %s <inet addr> <ether addr> [temp | permanent] "
 		    "[pub]\n", argv[0]);
 		printf("%% no %s <inet addr> [ether addr]\n", argv[0]);
-		return(1);
+		return 1;
 	}
 
 	if (!set) {
-		return(arpdelete(argv[1], NULL));
+		return arpdelete(argv[1], NULL);
 	}
 
 	if (argc >= 3) {
@@ -411,7 +411,7 @@ arpsearch(FILE *output, char *delim, in_addr_t addr, void (*action)
 		(*action)(output, delim, sdl, sin, rtm);
 	}
 	freertdump(rtdump);
-	return(found_entry);
+	return found_entry;
 }
 
 /*
@@ -535,7 +535,7 @@ ether_str(struct sockaddr_dl *sdl)
 	} else
 		snprintf(hbuf, sizeof(hbuf), "(incomplete)");
 
-	return(hbuf);
+	return hbuf;
 }
 
 /* -1 error */
@@ -562,7 +562,7 @@ rtmsg_arp(int cmd, int flags, int doing_proxy, int export_only)
 	switch (cmd) {
 	default:
 		printf("%% rtmsg_arp: internal wrong cmd\n");
-		return(-1);
+		return -1;
 		/*NOTREACHED*/
 	case RTM_ADD:
 		rtm->rtm_addrs |= RTA_GATEWAY;
@@ -668,5 +668,5 @@ sec2str(time_t total)
 	}
 	snprintf(p, ep - p, "%ds", secs);
 
-	return(result);
+	return result;
 }

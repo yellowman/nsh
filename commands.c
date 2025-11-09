@@ -610,7 +610,7 @@ done:
 		printf("%% close %s: %s\n", outpath, strerror(errno));
 	if (unlink(outpath) == -1)
 		printf("%% unlink %s: %s\n", outpath, strerror(errno));
-	return(error);
+	return error;
 }
 
 /*
@@ -996,7 +996,7 @@ ipcmd(int argc, char **argv, ...)
 	if (i->handler)
 		success = (*i->handler)(set, &argv[1],
 		    (i->maxarg > 0) ? argv[2] : 0, stab->pf);
-	return(success);
+	return success;
 }
 
 static int
@@ -1099,7 +1099,7 @@ flushcmd(int argc, char **argv, ...)
 		(*f->handler)(0, NULL, (f->maxarg > 0) ? argv[2] : 0,
 		    (f->maxarg > 1) ? argv[3] : 0);
 
-	return(1);
+	return 1;
 }
 
 static int
@@ -1433,21 +1433,21 @@ interface(int argc, char **argv, ...)
 			ifunit = argv[2];
 		} else if (argc != 2) {
 			printf("%% [no] interface <interface name>\n");
-			return(0);
+			return 0;
 		}
 		tmp = argv[1];
 	} else {
 		/* called from cmdrc(), processing config file rules only */
 		if (argc == 2 && strcmp(modhvar, argv[1]) == 0) {
 			 /* do-nothing */
-			return(0);
+			return 0;
 		}
 		tmp = modhvar;
 	}
 
 	if (strlen(tmp) > IFNAMSIZ-1) {
 		printf("%% interface name too long\n");
-		return(0);
+		return 0;
 	}
 
 	strlcpy(ifname, tmp, IFNAMSIZ);
@@ -1458,12 +1458,12 @@ interface(int argc, char **argv, ...)
 		if (errstr) {
 			printf("%% interface unit %s is %s\n", ifunit, errstr);
 			ifname[0] = '\0';
-			return(1);
+			return 1;
 		}
 		if (len > 0 && isdigit((unsigned char)(ifname[len - 1]))) {
 			printf("%% interface unit %s is redundant\n", ifunit);
 			ifname[0] = '\0';
-			return(1);
+			return 1;
 		}
 		strlcat(ifname, ifunit, sizeof(ifname));
 		printf("%% Using interface \"%s\", not \"%s %s\"\n",
@@ -1475,14 +1475,14 @@ interface(int argc, char **argv, ...)
 	if (ifs < 0) {
 		printf("%% socket failed: %s\n", strerror(errno));
 		ifname[0] = '\0';
-		return(1);
+		return 1;
 	}
 
 	if (!is_valid_ifname(ifname)) {
 		if (set == 0) {
 			printf("%% interface %s not found\n", ifname);
 			close(ifs);
-			return(0);
+			return 0;
 		}
 		if (ioctl(ifs, SIOCIFCREATE, &ifr) == -1) {
 			if (errno == EINVAL)
@@ -1492,7 +1492,7 @@ interface(int argc, char **argv, ...)
 				    ifname, strerror(errno));
 			ifname[0] = '\0';
 			close(ifs);
-			return(0);
+			return 0;
 		}
 	}
 
@@ -1505,7 +1505,7 @@ interface(int argc, char **argv, ...)
 		}
 		ifname[0] = '\0';
 		close(ifs);
-		return(0);
+		return 0;
 	}
 
 	if (is_bridge(ifs, ifname)) {
@@ -1527,7 +1527,7 @@ interface(int argc, char **argv, ...)
 			argc = NARGS;
 		if (argv[0] == 0) {
 			ifname[0] = '\0';
-			return(0);
+			return 0;
 		}
 		if (NO_ARG(argv[0]))
 			argp = argv[1];
@@ -1563,7 +1563,7 @@ interface(int argc, char **argv, ...)
 		}
 
 		ifname[0] = '\0';
-		return(0);
+		return 0;
 	}
 
 	/* human at the keyboard or commands on stdin */
@@ -1580,7 +1580,7 @@ interface(int argc, char **argv, ...)
 						printf("\n");
 					ifname[0] = '\0';
 					close(ifs);
-					return(0);
+					return 0;
 				}
 				break;
 			}
@@ -1598,7 +1598,7 @@ interface(int argc, char **argv, ...)
 				    strerror(errno));
 				ifname[0] = '\0';
 				close(ifs);
-				return(1);
+				return 1;
 			}
 		}
 
@@ -1665,7 +1665,7 @@ interface(int argc, char **argv, ...)
 
 	ifname[0] = '\0';
 	close(ifs);
-	return(0);
+	return 0;
 }
 
 static int
@@ -1845,7 +1845,7 @@ int_manual(int argc, char **argv, ...)
 static int
 int_shell(int argc, char **argv, ...)
 {
-	if (argc >1) 
+	if (argc > 1) 
 	{
 		shell(argc, argv);
 		return 0; /* do not leave interface context after execution */
@@ -3061,7 +3061,7 @@ flush_history(int argc, char **argv, ...)
 {
 	if (!editing) {
 		printf("%% Command line editing not enabled\n");
-		return(1);
+		return 1;
 	}
 
 	/*
@@ -3073,7 +3073,7 @@ flush_history(int argc, char **argv, ...)
 	inithist();
 	initedit();
 
-	return(0);
+	return 0;
 }
 
 /*
@@ -3109,7 +3109,7 @@ flush_pf(int argc, char **argv, ...)
 		cmdargs(x->cmd, argv);
 	}
 
-	return(1);
+	return 1;
 }
 
 /*
@@ -3265,7 +3265,7 @@ wr_startup(int argc, char **argv, ...)
 
 	cmdargs(SAVESCRIPT, args);
 
-	return(1);
+	return 1;
 }
 
 /*
@@ -3478,7 +3478,7 @@ flush_ip_routes(int argc, char **argv, ...)
 
 	flushroutes(AF_INET, AF_INET, verbose_arg != NULL);
 
-	return(0);
+	return 0;
 }
 
 static int
@@ -3493,14 +3493,14 @@ flush_arp_cache(int argc, char **argv, ...)
 
 	flushroutes(AF_INET, AF_LINK, verbose_arg != NULL);
 
-	return(0);
+	return 0;
 }
 
 static int
 flush_ndp_cache(int argc, char **argv, ...)
 {
 	ndpdump(NULL, 1);
-	return(0);
+	return 0;
 }
 
 /*
@@ -3511,17 +3511,17 @@ pr_conf(int argc, char **argv, ...)
 {
 	if (priv != 1) {
 		printf ("%% Privilege required\n");
-		return(0);
+		return 0;
 	}
 
 	if (!wr_conf(NSHRC_TEMP)) {
 		printf("%% Couldn't generate configuration\n");
-		return(0);
+		return 0;
 	}
 
 	more(NSHRC_TEMP);
 
-	return(1);
+	return 1;
 }
 
 /*
@@ -3534,12 +3534,12 @@ pr_s_conf(int argc, char **argv, ...)
 
 	if (priv != 1) {
 		printf ("%% Privilege required\n");
-		return(0);
+		return 0;
 	}
 
 	ret = more(NSHRC);
 
-	return(ret);
+	return ret;
 }
 
 /*
@@ -3551,16 +3551,16 @@ pr_a_conf(int argc, char **argv, ...)
 {
 	if (priv != 1) {
 		printf ("%% Privilege required\n");
-		return(0);
+		return 0;
 	}
 
 	if (ifname[0] == '\0') {
 		printf ("%% Interface or Bridge context required\n");
-		return(0);
+		return 0;
 	}
 
 	conf_interfaces(stdout, ifname, 1);
-	return(0);
+	return 0;
 }
 
 /*
@@ -3759,7 +3759,7 @@ pr_kernel(int argc, char **argv, ...)
 	if (x->handler) /* not likely to be false */
 		(*x->handler)();
 
-	return(0);
+	return 0;
 }
 
 void
@@ -3779,13 +3779,13 @@ pr_dhcp(int argc, char **argv, ...)
 	if (argc == 3 && argv[2][0] != '?') {
 		if (isprefix(argv[2], "leases")) {
 			more(DHCPLEASES);
-			return(0);
+			return 0;
 		}
 		printf("%% argument %s not recognized\n", argv[2]);
-		return(1);
+		return 1;
 	}
 	printf("%% show dhcp leases\n");
-	return(1);
+	return 1;
 }
 
 static int

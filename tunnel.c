@@ -62,7 +62,7 @@ intvnetid(int argc, char **argv, ...)
 	if ((set && argc != 1) || (!set && argc > 1)) {
 		printf("%% vnetid <vnetid>\n");
 		printf("%% no vnetid [vnetid]\n");
-                return(0);
+		return 0;
         }
 	if (set)
 		setvnetid(ifs, ifname, argv[0]);
@@ -106,7 +106,7 @@ inttunnel(int argc, char **argv, ...)
 
 	if (set && argc < 2) {
 		tunnelusage();
-		return(0);
+		return 0;
 	}
 
 	if (argc > 0 && is_ip_addr(argv[0])) {
@@ -125,7 +125,7 @@ inttunnel(int argc, char **argv, ...)
 		} else {
 			if (strlcpy(buf, dst, sizeof(buf)) >= sizeof(buf)) {
 				printf("%% inttunnel: destination overflow\n");
-				return(0);
+				return 0;
 			}
 			dstport = strchr(buf, ':');
 			*dstport++ = '\0';
@@ -164,7 +164,7 @@ inttunnel(int argc, char **argv, ...)
 			printf(": %s", argv[noptind]);
 		printf("\n");
 		tunnelusage();
-		return(0);
+		return 0;
 	}
 
 	if (set) {
@@ -183,7 +183,7 @@ inttunnel(int argc, char **argv, ...)
 		settunneldf(ifs, ifname, 0);
 		settunnelecn(ifs, ifname, 0);
 	}
-	return(0);
+	return 0;
 }
 
 int
@@ -196,19 +196,19 @@ settunnel(int s, char *ifname, char *src, char *dstip, char *dstport)
 	if ((ecode = getaddrinfo(src, NULL, NULL, &srcres)) != 0) {
 		printf("%% unable to parse source address string: %s\n",
 		     gai_strerror(ecode));
-		return(0);
+		return 0;
 	}
 
 	if ((ecode = getaddrinfo(dstip, dstport, NULL, &dstres)) != 0) {
 		printf("%% unable to parse destination address string: %s\n",
 		     gai_strerror(ecode));
-		return(0);
+		return 0;
 	}
 
 	if (srcres->ai_addr->sa_family != dstres->ai_addr->sa_family) {
 		printf(
 		    "%% source and destination address families do not match");
-		return(0);
+		return 0;
 	}
 
 	if (srcres->ai_addrlen > sizeof(req.addr) ||
@@ -233,7 +233,7 @@ settunnel(int s, char *ifname, char *src, char *dstip, char *dstport)
  end:
 	freeaddrinfo(srcres);
 	freeaddrinfo(dstres);
-	return(1);
+	return 1;
 }
 
 void
@@ -367,9 +367,9 @@ deletetunnel(int s, char *ifname)
 	if (ioctl(s, SIOCDIFPHYADDR, &ifr) < 0) {
 		printf("%% deletetunnel: SIOCDIFPHYADDR: %s\n",
 		    strerror(errno));
-		return(0);
+		return 0;
 	}
-	return(1);
+	return 1;
 }
 
 int get_physrtable(int s, char *ifname)

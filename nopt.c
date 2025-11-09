@@ -29,28 +29,28 @@ nopt(int argc, char **argv, struct nopts *tokens)
 	struct nopts *op;
 
 	if (argc < 1)
-		return(-1);
+		return -1;
 	op = (struct nopts *)genget(argv[noptind], (char **)tokens,
 	    sizeof(struct nopts));
 	if (op == 0) {
 		nopterr = "Invalid argument";
-		return(-1);
+		return -1;
 	}
 	if (Ambiguous(op)) {
 		nopterr = "Ambiguous argument";
-		return(-1);
+		return -1;
 	}
 	if (op->type == req_2arg) {
 		if ((argc - noptind) < 3) {
 			nopterr = "Missing required argument";
-			return(-1);
+			return -1;
 		}
 		noptind += 3;
 	}
 	if (op->type == req_arg) {
 		if ((argc - noptind) < 2) {
 			nopterr = "Missing required argument";
-			return(-1);
+			return -1;
 		}
 		noptind += 2;
 	}

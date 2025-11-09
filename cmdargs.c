@@ -186,5 +186,5 @@ nsh_setrtable(int rtableid)
 	} else
 		init_bgpd_socket_path(rtableid);
 
-	return(ret);
+	return ret;
 }

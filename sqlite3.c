@@ -31,14 +31,14 @@ int
 db_create_table_rtables(void)
 {
 	char query[]="CREATE TABLE IF NOT EXISTS rtables (rtable INTEGER PRIMARY KEY, name TEXT)";
-	return(sq3simple(query, NULL));
+	return sq3simple(query, NULL);
 }
 
 int
 db_create_table_nameservers(void)
 {
 	char query[]="CREATE TABLE IF NOT EXISTS nameservers (nameserver TEXT)";
-	return(sq3simple(query, NULL));
+	return sq3simple(query, NULL);
 }
 
 int
@@ -48,7 +48,7 @@ db_create_table_flag_x(char *name)
 
 	snprintf(query, QSZ, "CREATE TABLE IF NOT EXISTS %s (ctl TEXT, rtable INTEGER, flag INTEGER,"
 	    "data TEXT)", name);
-	return(sq3simple(query, NULL));
+	return sq3simple(query, NULL);
 }
 
 int
@@ -58,7 +58,7 @@ db_insert_flag_x(char *name, char *ctl, int rtableid, int flag, char *data)
 
 	snprintf(query, QSZ, "INSERT INTO '%s' VALUES('%s', %d, %d, '%s')",
 	    name, ctl, rtableid, flag, data ? data : "");
-	return(sq3simple(query, NULL));
+	return sq3simple(query, NULL);
 }
 
 int
@@ -67,7 +67,7 @@ db_insert_rtables(int rtableid, char *name)
 	char		query[QSZ];
 
 	snprintf(query, QSZ, "INSERT INTO 'rtables' VALUES(%d, '%s')", rtableid, name);
-	return(sq3simple(query, NULL));
+	return sq3simple(query, NULL);
 }
 
 int
@@ -76,7 +76,7 @@ db_delete_rtables_rtable(int rtableid)
 	char		query[QSZ];
 
 	snprintf(query, QSZ, "DELETE FROM 'rtables' WHERE rtable=%d", rtableid);
-	return(sq3simple(query, NULL));
+	return sq3simple(query, NULL);
 }
 
 int
@@ -86,7 +86,7 @@ db_insert_nameserver(char *nameserver)
 
 	snprintf(query, QSZ, "INSERT OR REPLACE INTO 'nameservers' VALUES('%s')",
 	    nameserver);
-	return(sq3simple(query, NULL));
+	return sq3simple(query, NULL);
 }
 
 int
@@ -95,7 +95,7 @@ db_delete_flag_x_ctl(char *name, char *ctl, int rtable)
 	char		query[QSZ];
 
 	snprintf(query, QSZ, "DELETE FROM '%s' WHERE ctl='%s' AND rtable=%d", name, ctl, rtable);
-	return(sq3simple(query, NULL));
+	return sq3simple(query, NULL);
 }
 
 int
@@ -104,7 +104,7 @@ db_delete_flag_x_ctl_data(char *name, char *ctl, char *data)
 	char		query[QSZ];
 
 	snprintf(query, QSZ, "DELETE FROM '%s' WHERE ctl='%s' AND data='%s'", name, ctl, data);
-	return(sq3simple(query, NULL));
+	return sq3simple(query, NULL);
 }
 
 int
@@ -113,7 +113,7 @@ db_delete_nameservers(void)
 	char		query[QSZ];
 
 	snprintf(query, QSZ, "DELETE FROM 'nameservers'");
-	return(sq3simple(query, NULL));
+	return sq3simple(query, NULL);
 }
 
 int
@@ -122,7 +122,7 @@ db_select_flag_x_ctl_data(StringList *words, char *name, char *ctl, char *data)
 	char		query[QSZ];
 
 	snprintf(query, QSZ, "SELECT data FROM '%s' WHERE ctl='%s' AND data='%s'", name, ctl, data);
-	return(sq3simple(query, words));
+	return sq3simple(query, words);
 }
 
 int
@@ -131,14 +131,14 @@ db_select_flag_x_ctl(StringList *words, char *name, char *ctl)
 	char		query [QSZ];
 
 	snprintf(query, QSZ, "SELECT data FROM '%s' WHERE ctl='%s'", name, ctl);
-	return(sq3simple(query, words));
+	return sq3simple(query, words);
 }
 
 int
 db_select_rtable_rtables(StringList *words)
 {
 	char query[]="SELECT rtable FROM rtables";
-	return(sq3simple(query, words));
+	return sq3simple(query, words);
 }
 
 int
@@ -147,7 +147,7 @@ db_select_rtables_rtable(StringList *words, int rtableid)
 	char		query[QSZ];
 
 	snprintf(query, QSZ, "SELECT name FROM rtables WHERE rtable=%d", rtableid);
-	return(sq3simple(query,words));
+	return sq3simple(query, words);
 }
 
 int
@@ -156,7 +156,7 @@ db_select_flag_x_ctl_rtable(StringList *words, char *name, int rtableid)
 	char            query[QSZ];
 
 	snprintf(query, QSZ, "SELECT ctl FROM %s WHERE rtable=%d", name, rtableid);
-	return(sq3simple(query, words));
+	return sq3simple(query, words);
 }
 
 int
@@ -166,7 +166,7 @@ db_select_flag_x_data_ctl_rtable(StringList *words, char *name, char *ctl, int r
 
 	snprintf(query, QSZ, "SELECT data FROM %s WHERE ctl='%s' AND rtable=%d",
 	    name, ctl, rtableid);
-	return(sq3simple(query, words));
+	return sq3simple(query, words);
 }
 
 int
@@ -198,7 +198,7 @@ int
 db_select_nameservers(StringList *words)
 {
 	char query[]="SELECT nameserver FROM nameservers";
-	return(sq3simple(query, words));
+	return sq3simple(query, words);
 }
 
 int
@@ -207,7 +207,7 @@ db_select_name_rtable(StringList *words, int rtableid)
 	char		query[QSZ];
 
 	snprintf(query, QSZ, "SELECT name FROM rtables WHERE rtable='%d'", rtableid);
-	return(sq3simple(query, words));
+	return sq3simple(query, words);
 }
 
 /* simple query execution, dump results straight into words */

@@ -54,12 +54,12 @@ who(int argc, char **argv, ...)
 
 	if (argc == 2 && !isprefix(argv[1], "users")) {
 		printf("%% Too many arguments\n");
-		return(0);
+		return 0;
 	}
 
 	if ((utmp = fopen(_PATH_UTMP, "r")) == NULL) {
 		printf("%% who: fopen %s: %s\n",_PATH_UTMP,strerror(errno));
-		return(0);
+		return 0;
 	}
 
 #define HOST_WIDTH 40
@@ -76,7 +76,7 @@ who(int argc, char **argv, ...)
 	(void) printf ("%% users=%d\n", count);
 
 	fclose(utmp);
-	return(0);
+	return 0;
 }
 
 void
