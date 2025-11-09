@@ -2961,7 +2961,7 @@ group(int argc, char **argv, ...)
 	return 0;
 }
 
-//clear terminal screen
+/* clear terminal screen */
 static int
 clear(int argc, char **argv, ...)
 {

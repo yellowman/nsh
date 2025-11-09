@@ -40,8 +40,12 @@ jmp_buf toplevel;
 char *vers = NSH_VERSION_STR;
 int bridge = 0;		/* bridge mode for interface() */
 int verbose = 0;	/* verbose mode */
-int priv = 0, privexec = 0, cli_rtable = 0;
-int editing = 0, interactive_mode = 0, config_mode = 0;;
+int priv = 0;
+int privexec = 0;
+int cli_rtable = 0;
+int editing = 0;
+int interactive_mode = 0;
+int config_mode = 0;
 pid_t pid;
 
 History *histi = NULL;
