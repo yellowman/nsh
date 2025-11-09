@@ -241,7 +241,8 @@ route(int argc, char **argv, ...)
 	return 0;
 }
 
-int is_ip_addr(char *arg)
+int
+is_ip_addr(char *arg)
 {
 	ip_t argip;
 
@@ -252,7 +253,8 @@ int is_ip_addr(char *arg)
 	return 0;
 }
 
-void show_route(char *arg, int tableid)
+void
+show_route(char *arg, int tableid)
 {
 	ip_t dest;
 	struct rt_metrics rt_metrics;
@@ -275,7 +277,8 @@ void show_route(char *arg, int tableid)
 	return;
 }
 
-int parse_ipv6(char *arg, struct in6_addr *addr)
+int
+parse_ipv6(char *arg, struct in6_addr *addr)
 {
 	struct addrinfo hints, *res;
 	int error;
@@ -319,7 +322,8 @@ int parse_ipv6(char *arg, struct in6_addr *addr)
  * If ip_route() sees that the destination ip_t.bitlen == -1, it does not
  * setup a netmask sockaddr in the routing message
  */
-void parse_ip_pfx(char *arg, int type, ip_t *argip)
+void
+parse_ip_pfx(char *arg, int type, ip_t *argip)
 {
 	struct in_addr mask;
 	char *q, *s;
