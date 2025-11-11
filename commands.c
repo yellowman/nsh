@@ -42,32 +42,36 @@
  * SUCH DAMAGE.
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <ctype.h>
-#include <unistd.h>
-#include <string.h>
-#include <errno.h>
-#include <signal.h>
-#include <stdarg.h>
 #include <sys/fcntl.h>
-#include <sys/stat.h>
-#include <sys/socket.h>
+#include <sys/ioctl.h>
 #include <sys/param.h>
 #include <sys/reboot.h>
+#include <sys/socket.h>
 #include <sys/sockio.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
-#include <sys/ioctl.h>
+
 #include <net/if.h>
 #include <net/route.h>
+
+#include <ctype.h>
+#include <errno.h>
 #include <limits.h>
-#include <util.h>
 #include <pwd.h>
+#include <signal.h>
+#include <stdarg.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <util.h>
+
 #include "editing.h"
 #include "stringlist.h"
 #include "externs.h"
 #include "sysctl.h"
 #include "ctl.h"
+#include "commands.h"
 
 char hname[HSIZE];
 char hbuf[MAXHOSTNAMELEN];	/* host name */
@@ -154,8 +158,6 @@ static int 	powerdown(int, char **, ...);
 static void	pf_stats(void);
 static int	interface(int, char **, ...);
 static int	int_interface(int, char **, ...);
-
-#include "commands.h"
 
 void
 sigalarm(int blahfart)

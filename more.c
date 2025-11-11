@@ -14,15 +14,16 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include <stdio.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <termios.h>
-#include <errno.h>
-#include <string.h>
-#include <stdlib.h>
-#include <sys/ttycom.h>
 #include <sys/ioctl.h>
+#include <sys/ttycom.h>
+
+#include <errno.h>
+#include <fcntl.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <termios.h>
+#include <unistd.h>
 #include <wchar.h>
 
 #include "externs.h"

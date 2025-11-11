@@ -14,19 +14,24 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include <stdio.h>
-#include <ctype.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <string.h>
-#include <netdb.h>
+#include <sys/ioctl.h>
 #include <sys/param.h>
 #include <sys/socket.h>
-#include <sys/ioctl.h>
 #include <sys/sysctl.h>
-#include <netinet/in.h>
+
 #include <net/route.h>
+
+#include <netinet/in.h>
+
 #include <arpa/inet.h>
+
+#include <ctype.h>
+#include <netdb.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
 #include "ip.h"
 #include "externs.h"
 

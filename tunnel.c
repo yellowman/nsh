@@ -1,20 +1,23 @@
 /* From: $OpenBSD: /usr/src/sbin/ifconfig/ifconfig.c,v 1.295 2015/01/16 06:39:58 deraadt Exp $ */
 
-#include <stdio.h>
-#include <sys/types.h>
-#include <unistd.h>
-#include <stdlib.h>
-#include <stdarg.h>
-#include <string.h>
-#include <errno.h>
-#include <stdint.h>
+#include <sys/ioctl.h>
 #include <sys/param.h>
 #include <sys/socket.h>
-#include <sys/ioctl.h>
+#include <sys/types.h>
+
 #include <net/if.h>
 #include <net/if_dl.h>
+
 #include <netinet/in.h>
+
+#include <errno.h>
 #include <netdb.h>
+#include <stdarg.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
 
 #include "externs.h"
 

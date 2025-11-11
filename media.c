@@ -32,20 +32,24 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <stdio.h>
-#include <stdarg.h>
-#include <sys/types.h>
-#include <unistd.h>
-#include <stdlib.h>
-#include <string.h>
+#include <sys/ioctl.h>
 #include <sys/param.h>
 #include <sys/socket.h>
-#include <sys/ioctl.h>
+#include <sys/types.h>
+
 #include <net/if.h>
 #include <net/if_media.h>
+
 #include <netinet/in.h>
+
 #include <errno.h>
 #include <netdb.h>
+#include <stdarg.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
 #include "externs.h"
 
 int init_current_media(int, char *);

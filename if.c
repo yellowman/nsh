@@ -14,40 +14,47 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include <sys/tree.h>
-
-#include <stdarg.h>
-#include <stdio.h>
-#include <ctype.h>
-#include <fcntl.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <string.h>
-#include <errno.h>
-#include <stdint.h>
-#include <sys/socket.h>
-#include <sys/param.h>
-#include <sys/sockio.h>
 #include <sys/ioctl.h>
+#include <sys/param.h>
+#include <sys/socket.h>
+#include <sys/sockio.h>
+#include <sys/tree.h>
 #include <sys/un.h>
+
 #include <net/if.h>
-#include <net/if_types.h>
 #include <net/if_dl.h>
+#include <net/if_types.h>
 #include <net/route.h>
+
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
 #include <netinet6/in6_var.h>
 #include <netinet6/nd6.h>
-#include <netmpls/mpls.h>
-#include <netdb.h>
-#include <net/if_vlan_var.h>
-#include <net/if_pflow.h>
+
 #include <net/if_media.h>
+#include <net/if_pflow.h>
+#include <net/if_vlan_var.h>
+
 #include <net80211/ieee80211.h>
 #include <net80211/ieee80211_ioctl.h>
-#include <ifaddrs.h>
+
+#include <netmpls/mpls.h>
+
 #include <arpa/inet.h>
+
+#include <ctype.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <ifaddrs.h>
 #include <limits.h>
+#include <netdb.h>
+#include <stdarg.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
 #include "ip.h"
 #include "bridge.h"
 #include "stringlist.h"

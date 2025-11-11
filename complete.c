@@ -28,19 +28,22 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/ioctl.h>
+#include <sys/param.h>
+#include <sys/socket.h>
+#include <sys/tty.h>
+
+#include <net/if.h>
+
+#include <dirent.h>
 #include <err.h>
 #include <errno.h>
-#include <dirent.h>
+#include <ifaddrs.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/socket.h>
-#include <sys/ioctl.h>
-#include <ifaddrs.h>
-#include <net/if.h>
-#include <sys/param.h>
-#include <sys/tty.h>
 #include <unistd.h>
+
 #include "editing.h"
 #include "stringlist.h"
 #include "externs.h"

@@ -14,23 +14,29 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <stdarg.h>
-#include <errno.h>
-#include <sys/socket.h>
-#include <sys/param.h>
-#include <sys/sockio.h>
 #include <sys/ioctl.h>
+#include <sys/param.h>
+#include <sys/socket.h>
+#include <sys/sockio.h>
+
 #include <net/if.h>
 #include <net/route.h>
+
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
-#include <arpa/inet.h>
+
 #include <net/ppp_defs.h>
 #include <net/if_sppp.h>
 #include <net/if_pppoe.h>
+
+#include <arpa/inet.h>
+
+#include <errno.h>
+#include <stdarg.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
 #include "ip.h"
 #include "stringlist.h"
 #include "externs.h"

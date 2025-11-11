@@ -29,10 +29,11 @@
  * SUCH DAMAGE.
  */
 
+#include <sys/types.h>
+#include <sys/mbuf.h>
 #include <sys/param.h>
 #include <sys/protosw.h>
 #include <sys/socket.h>
-#include <sys/mbuf.h>
 #include <sys/sysctl.h>
 
 #include <net/if.h>
@@ -40,16 +41,18 @@
 #include <net/if_types.h>
 #include <net/pfkeyv2.h>
 #include <net/route.h>
+
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
 #include <netinet/ip_ipsp.h>
+
 #include <arpa/inet.h>
 
 #include <err.h>
 #include <errno.h>
 #include <netdb.h>
-#include <stdio.h>
 #include <stddef.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>

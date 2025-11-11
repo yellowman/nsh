@@ -1,20 +1,24 @@
 /* From: $OpenBSD: ifconfig.c,v 1.430 2020/11/06 21:24:47 kn Exp $	*/
 
-#include <stdio.h>
+#include <sys/ioctl.h>
+#include <sys/sockio.h>
+
+#include <net/if_wg.h>
+
+#include <netinet/in.h>
+
+#include <arpa/inet.h>
+
 #include <ctype.h>
+#include <errno.h>
+#include <netdb.h>
+#include <resolv.h>
+#include <stdarg.h>
+#include <stddef.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdarg.h>
 #include <time.h>
-#include <sys/sockio.h>
-#include <sys/ioctl.h>
-#include <net/if_wg.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <netdb.h>
-#include <errno.h>
-#include <stddef.h>
-#include <resolv.h>
 
 #include "externs.h"
 

@@ -15,19 +15,19 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include <sys/param.h>	/* MAXHOSTNAMELEN */
-#include <net/if.h>	/* IFNAMSIZ */
-
-#include <sys/types.h>
+#include <sys/param.h>
 #include <sys/socket.h>
+#include <sys/types.h>
 #include <sys/wait.h>
 
+#include <net/if.h>
+
+#include <errno.h>
 #include <fcntl.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <signal.h>
-#include <errno.h>
 #include <unistd.h>
 
 #include "externs.h"

@@ -29,31 +29,34 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/param.h>
-#include <sys/socket.h>
+#include <sys/types.h>
 #include <sys/ioctl.h>
 #include <sys/mbuf.h>
-#include <sys/sysctl.h>
+#include <sys/param.h>
 #include <sys/signal.h>
-#include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/sysctl.h>
 
 #include <net/if.h>
-#include <net/route.h>
 #include <net/if_dl.h>
 #include <net/if_types.h>
+#include <net/route.h>
+
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
-#include <arpa/inet.h>
-#include <netdb.h>
 
+#include <arpa/inet.h>
+
+#include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <unistd.h>
+#include <netdb.h>
+#include <paths.h>
 #include <stdio.h>
-#include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
-#include <paths.h>
+#include <unistd.h>
+
 #include "ip.h"
 #define _WANT_SO_
 #include "externs.h"

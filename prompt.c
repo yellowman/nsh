@@ -15,10 +15,10 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include <sys/param.h>	/* MAXHOSTNAMELEN */
-#include <net/if.h>	/* IFNAMSIZ */
-
+#include <sys/param.h>
 #include <sys/types.h>
+
+#include <net/if.h>
 
 #include <stdio.h>
 #include <string.h>

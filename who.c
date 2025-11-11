@@ -30,15 +30,16 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/types.h>
+
 #include <errno.h>
 #include <paths.h>
 #include <pwd.h>
-#include <utmp.h>
 #include <stdio.h>
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
+#include <utmp.h>
 
 #include "externs.h"
 
