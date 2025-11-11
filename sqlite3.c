@@ -218,8 +218,10 @@ sq3simple(char *sql, StringList *words)
 {
 	sqlite3		*db = NULL;
 	sqlite3_stmt	*stmt;
-	char		*result, *new = NULL;
-	int		rv, tlen = 0;
+	char		*result;
+	char		*new = NULL;
+	int		rv;
+	int		tlen = 0;
 
 	if (sqlite3_open(SQ3DBFILE, &db)) {
 		printf("%% database file open failed: %s\n",

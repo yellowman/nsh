@@ -250,9 +250,16 @@ show_int(int argc, char **argv, ...)
 	FILE *outfile;
 	va_list ap;
 	short tmp;
-	int ifs, br, flags, days, hours, mins, pntd;
+	int ifs;
+	int br;
+	int flags;
+	int days;
+	int hours;
+	int mins;
+	int pntd;
 	int ippntd = 0;
-	int physrt, physttl;
+	int physrt;
+	int physttl;
 	time_t c;
 	char *type, *lladdr;
 	char ifname[IFNAMSIZ];
@@ -957,7 +964,8 @@ in4_brdaddr(u_int32_t addr, u_int32_t mask)
 char *
 get_hwdaddr(char *ifname)
 {
-	int i, found = 0;
+	int i;
+	int found = 0;
 	char *val = NULL;
 	struct ifaddrs *ifap, *ifa;
 	struct ether_addr *ea;
@@ -1015,7 +1023,8 @@ iftype(int int_type)
 int
 get_ifdata(char *ifname, int type)
 {
-	int ifs, value = 0;
+	int ifs;
+	int value = 0;
 	struct ifreq ifr;
 	struct if_data if_data;
 
@@ -1172,7 +1181,8 @@ removeaf(char *ifname, int af, int ifs)
 int
 check_daemon_control_socket(const char *sockname)
 {
-	int sock, error;
+	int sock;
+	int error;
 	struct sockaddr_un sun;
 
 	sock = socket(AF_UNIX, SOCK_STREAM, 0);
@@ -1236,7 +1246,10 @@ intipusage(const char *cmdname, const char *msg)
 int
 intip(int argc, char **argv, ...)
 {
-	int s, set, flags, argcmax;
+	int s;
+	int set;
+	int flags;
+	int argcmax;
 	int argc0 = argc;
 	char **argv0 = argv;
 	char *msg, *cmdname;
@@ -2005,7 +2018,9 @@ pwe3usage(void)
 int
 intpwe3(int argc, char **argv, ...)
 {
-	int set, ch, error;
+	int set;
+	int ch;
+	int error;
 	unsigned long cmd;
 	caddr_t arg;
 	const char *errstr;
@@ -2139,7 +2154,8 @@ int
 intdhcrelay(int argc, char **argv, ...)
 {
 	char *cmd[] = { DHCRELAY, "-i", NULL, NULL, NULL };
-	int set, alen;
+	int set;
+	int alen;
 	struct in_addr notused;
 	va_list ap;
 	char *ifname;
@@ -2214,7 +2230,8 @@ int
 intmetric(int argc, char **argv, ...)
 {
 	struct ifreq ifr;
-	int set, max;
+	int set;
+	int max;
 	unsigned long theioctl;
 	char *type;
 	const char *errmsg = NULL;
@@ -2340,7 +2357,8 @@ intllprio(int argc, char **argv, ...)
 int
 intgroup(int argc, char **argv, ...)
 {
-	int set, i;
+	int set;
+	int i;
 	struct ifgroupreq ifgr;
 	va_list ap;
 	char *ifname;
@@ -2453,7 +2471,8 @@ intrtlabel(int argc, char **argv, ...)
 int
 intparent(int argc, char **argv, ...)
 {
-	int set, ret;
+	int set;
+	int ret;
 	unsigned long cmd;
 	struct if_parent ifp;
 	va_list ap;
@@ -2517,7 +2536,10 @@ intparent(int argc, char **argv, ...)
 int
 intflags(int argc, char **argv, ...)
 {
-	int set, value, flags, iftype;
+	int set;
+	int value;
+	int flags;
+	int iftype;
 	va_list ap;
 	char *ifname;
 	int ifs;
@@ -2636,7 +2658,9 @@ intaf(char *ifname, int ifs, int argc, char **argv)
 int
 intxflags(int argc, char **argv, ...)
 {
-	int set, value, flags;
+	int set;
+	int value;
+	int flags;
 	va_list ap;
 	char *ifname;
 	int ifs;
@@ -2701,7 +2725,10 @@ int
 intlink(int argc, char **argv, ...)
 {
 	const char *errmsg = NULL;
-	int set, i, flags, value = 0;
+	int set;
+	int i;
+	int flags;
+	int value = 0;
 	va_list ap;
 	char *ifname;
 	int ifs;
@@ -2772,7 +2799,8 @@ intnwid(int argc, char **argv, ...)
 {
 	struct ieee80211_nwid nwid;
 	struct ifreq ifr;
-	int set, len;
+	int set;
+	int len;
 	va_list ap;
 	char *ifname;
 	int ifs;
@@ -2989,7 +3017,8 @@ intlladdr(int argc, char **argv, ...)
 int
 intrdomain(int argc, char **argv, ...)
 {
-	int set, rdomain;
+	int set;
+	int rdomain;
 	const char *errmsg = NULL;
 	struct ifreq ifr;
 	va_list ap;
@@ -3124,7 +3153,11 @@ show_vlan(int start_vnetid, int end_vnetid)
 	struct if_nameindex *ifn_list, *ifnp;
 	struct ifreq ifr;
 	struct if_parent ifp;
-	int ifs, vnetid, flags, bridx, rdomain;
+	int ifs;
+	int vnetid;
+	int flags;
+	int bridx;
+	int rdomain;
 	const char *parent, *description, *bridgename;
 	char ifdescr[IFDESCRSIZE];
 	char vnetid_str[5];

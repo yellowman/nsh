@@ -84,9 +84,16 @@ tunnelusage(void)
 int
 inttunnel(int argc, char **argv, ...)
 {
-	int set, ch, df = 0, ecn = 0;
-	char *src = NULL, *dst = NULL, *rdomain = NULL, *ttl = NULL;
-	char *dstip = NULL, *dstport = NULL;
+	int set;
+	int ch;
+	int df = 0;
+	int ecn = 0;
+	char *src = NULL;
+	char *dst = NULL;
+	char *rdomain = NULL;
+	char *ttl = NULL;
+	char *dstip = NULL;
+	char *dstport = NULL;
 	char buf[MAXHOSTNAMELEN+sizeof (":65535")];
 	va_list ap;
 	char *ifname;

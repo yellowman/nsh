@@ -45,9 +45,12 @@ int
 more(char *fname)
 {
 	FILE   *f;
-	char   *input, c;
-	size_t	s, wlen;
-	int	i, nopager = 0;
+	char   *input;
+	char   c;
+	size_t	s;
+	size_t	wlen;
+	int	i;
+	int	nopager = 0;
 	wchar_t *ws = NULL;
 
 	if ((f = fopen(fname, "r")) == NULL) {

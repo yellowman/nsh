@@ -952,7 +952,8 @@ ipcmd(int argc, char **argv, ...)
 {
 	Menu *i;     /* pointer to current command */
 	struct sysctltab *stab;
-	int set, success = 0;
+	int set;
+	int success = 0;
 
 	if (NO_ARG(argv[0])) {
 		argv++;
@@ -1410,7 +1411,8 @@ read_command_line(EditLine *el, History *hist)
 static int
 interface(int argc, char **argv, ...)
 {
-	int ifs, set = 1;
+	int ifs;
+	int set = 1;
 	char *tmp;
 	char *ifunit = NULL;
 	struct intlist *i;	/* pointer to current command */
@@ -2563,7 +2565,8 @@ saveenvcmd(int argc, char **argv, ...)
 	char tmppath[PATH_MAX], path[PATH_MAX];
 	FILE *f;
 	char *home;
-	int ret, fd;
+	int ret;
+	int fd;
 
 	if (argc != 1) {
 		printf("%% usage: saveenv\n");
@@ -2767,7 +2770,8 @@ traceroute6(int argc, char *argv[], ...)
 int
 argvtostring(int argc, char **argv, char *string, int strlen)
 {
-	int i, j;
+	int i;
+	int j;
 
 	for (i = 0, j = 0; argc && i < (strlen - 1); i++) {
 		if (argv[0][j] == '\0') {
@@ -2789,7 +2793,11 @@ argvtostring(int argc, char **argv, char *string, int strlen)
 static int
 rtable(int argc, char **argv, ...)
 {
-	int table, set, pos, found, curtable;
+	int table;
+	int set;
+	int pos;
+	int found;
+	int curtable;
 	const char *errstr;
 	char rtname[64];
 	StringList *resp;

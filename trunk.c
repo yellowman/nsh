@@ -50,7 +50,8 @@ int
 inttrunkport(int argc, char **argv, ...)
 {
 	struct trunk_reqport rp;
-	int set, i;
+	int set;
+	int i;
 	va_list ap;
 	char *ifname;
 	int ifs;
@@ -130,7 +131,8 @@ inttrunkport(int argc, char **argv, ...)
 int
 inttrunkproto(int argc, char **argv, ...)
 {
-	int i, set;
+	int i;
+	int set;
 	struct trunk_reqall ra;
 	va_list ap;
 	char *ifname;

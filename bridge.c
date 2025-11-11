@@ -122,7 +122,8 @@ static struct brc brps[] = {
 int
 brport(int argc, char **argv, ...)
 {
-	int set, i;
+	int set;
+	int i;
 	struct brc *x;
 	va_list ap;
 	char *ifname;
@@ -427,7 +428,8 @@ static struct brd brds[] = {
 int
 brpri(int argc, char **argv, ...)
 {
-	int set, val;
+	int set;
+	int val;
 	const char *errmsg = NULL;
 	struct brd *x;
 	va_list ap;
@@ -838,7 +840,8 @@ bridge_list(int s, char *brdg, char *delim, char *br_str, int str_len, int type)
 {
 	struct ifbreq *reqp;
 	struct ifbifconf bifc;
-	u_int i, len = 8192;
+	u_int i;
+	u_int len = 8192;
 	int identified = 0;
 	char buf[256], *inbuf = NULL, *inb;
 	uint32_t v;
@@ -1272,7 +1275,8 @@ bridge_addrs(int s, char *brdg, char *hdr_delim, char *body_delim,
 	struct ifbaconf ifbac;
 	struct ifbareq *ifba;
 	char buf[sizeof(ifba->ifba_ifsname) + 1], *inbuf = NULL, *inb;
-	u_int i, len = 8192;
+	u_int i;
+	u_int len = 8192;
 
 	while (1) {
 		ifbac.ifbac_len = len;
@@ -1320,7 +1324,8 @@ bridge_confaddrs(int s, char *brdg, char *delim, FILE *output)
 	struct ifbaconf ifbac;
 	struct ifbareq *ifba;
 	char buf[sizeof(ifba->ifba_ifsname) + 1], *inbuf = NULL, *inb;
-	u_int i, len = 8192;
+	u_int i;
+	u_int len = 8192;
 
 	while (1) {
 		ifbac.ifbac_len = len;
@@ -1416,7 +1421,8 @@ bridge_rules(int s, char *brdg, char *ifname, char *delim, FILE *output)
 	char *inbuf = NULL, *inb;
 	struct ifbrlconf ifc;
 	struct ifbrlreq *ifrp, ifreq;
-	u_int i, len = 8192;
+	u_int i;
+	u_int len = 8192;
 
 	while (1) {
 		ifc.ifbrl_len = len;
@@ -1733,7 +1739,12 @@ int
 show_bridge(char *ifname)
 {
 	struct if_nameindex *ifn_list, *ifnp;
-	int ifs, flags, totlen, len, found_bridge = 0, header_shown = 0;
+	int ifs;
+	int flags;
+	int totlen;
+	int len;
+	int found_bridge = 0;
+	int header_shown = 0;
 	char buf[1024], *p, *member;
 	struct ifreq ifr;
 	char ifdescr[IFDESCRSIZE], *description;

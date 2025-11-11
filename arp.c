@@ -468,8 +468,12 @@ void
 print_entry(FILE *output, char *delim, struct sockaddr_dl *sdl,
     struct sockaddr_inarp *sin, struct rt_msghdr *rtm)
 {
-	char ifix_buf[IFNAMSIZ], *ifname, *host;
-	int addrwidth, llwidth, ifwidth ;
+	char ifix_buf[IFNAMSIZ];
+	char *ifname;
+	char *host;
+	int addrwidth;
+	int llwidth;
+	int ifwidth;
 	struct timeval now;
 
 	if (output != NULL) {
@@ -639,7 +643,10 @@ char *
 sec2str(time_t total)
 {
 	static char result[256];
-	int days, hours, mins, secs;
+	int days;
+	int hours;
+	int mins;
+	int secs;
 	int first = 1;
 	char *p = result;
 	char *ep = &result[sizeof(result)];

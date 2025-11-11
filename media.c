@@ -152,7 +152,9 @@ intmedia(int argc, char **argv, ...)
 int
 intmediaopt(int argc, char **argv, ...)
 {
-	int set, media_current, mediaopt;
+	int set;
+	int media_current;
+	int mediaopt;
 	va_list ap;
 	char *ifname;
 	int ifs;
@@ -592,7 +594,8 @@ media_status(int s, char *ifname, char *delim, FILE *outfile)
 
 	if (ifmr.ifm_status & IFM_AVALID) {
 		const struct ifmedia_status_description *ifms;
-		int bitno, found = 0;
+		int bitno;
+		int found = 0;
 
 		fprintf(outfile, ", status ");
 		for (bitno = 0; ifm_status_valid_list[bitno] != 0; bitno++) {
@@ -632,7 +635,9 @@ media_supported(int s, char *ifname, char *hdr_delim, char *body_delim,
     FILE *outfile)
 {
 	u_int64_t *media_list;
-	int i, type, printed_type;
+	int i;
+	int type;
+	int printed_type;
 	struct ifmediareq ifmr;
 
 	memset(&ifmr, 0, sizeof(ifmr));

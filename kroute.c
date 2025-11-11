@@ -152,7 +152,9 @@ freertdump(struct rtdump *rtdump)
 void
 flushroutes(int af, int af2, int flush_verbose)
 {
-	int rlen, seqno, s;
+	int rlen;
+	int seqno;
+	int s;
 	char *next;
 	struct rt_msghdr *rtm;
 	struct sockaddr *sa, *sa2;
@@ -315,7 +317,8 @@ mylink_ntoa(const struct sockaddr_dl *sdl)
 int
 prefixlen(int len, struct sockaddr_in6 *sin6)
 {
-	int q, r;
+	int q;
+	int r;
 
 	q = len >> 3;
 	r = len & 7;
@@ -338,7 +341,10 @@ _monitor_sig(int signo)
 int
 monitor(int argc, char **argv, ...)
 {
-	int s, m, n, saveverbose;
+	int s;
+	int m;
+	int n;
+	int saveverbose;
 	fd_set fds; 
 	struct timeval to;
 	char msg[2048];
@@ -749,7 +755,8 @@ rtmsg(int cmd, int flags, int proxy, int export, int tableid)
 	static int seq;
 	struct rt_msghdr *rtm;
 	char *cp = m_rtmsg.m_space;
-	int l, s;
+	int l;
+	int s;
 
 	s = socket(PF_ROUTE, SOCK_RAW, 0);
 	rtm = &m_rtmsg.m_rtm;

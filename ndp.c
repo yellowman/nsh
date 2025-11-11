@@ -578,7 +578,8 @@ getnbrinfo(struct in6_addr *addr, int ifindex, int warning)
 int
 ndp_ether_aton(const char *a, u_char *n)
 {
-	int i, o[6];
+	int i;
+	int o[6];
 
 	i = sscanf(a, "%x:%x:%x:%x:%x:%x", &o[0], &o[1], &o[2],
 	    &o[3], &o[4], &o[5]);

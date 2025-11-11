@@ -116,7 +116,8 @@ intsyncpeer(int argc, char **argv, ...)
 	struct ifreq ifr;
 	struct pfsyncreq preq;
 	struct addrinfo hints, *peerres;
-	int set, ecode;
+	int set;
+	int ecode;
 	va_list ap;
 	char *ifname;
 	int ifs;

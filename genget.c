@@ -45,7 +45,8 @@ int
 isprefix(char *s1, char *s2)
 {
     char *os1;
-    char c1, c2;
+    char c1;
+    char c2;
 
     if (*s1 == '\0')
 	return -1;

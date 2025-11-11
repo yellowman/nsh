@@ -53,10 +53,13 @@ route(int argc, char **argv, ...)
 {
 	u_short cmd = 0;
 	u_int32_t net;
-	ip_t dest, gate;
+	ip_t dest;
+	ip_t gate;
 	struct in_addr tmp;
 	struct rt_metrics rt_metrics;
-	int ch, inits = 0, flags = RTF_STATIC | RTF_MPATH;
+	int ch;
+	int inits = 0;
+	int flags = RTF_STATIC | RTF_MPATH;
 
 	static struct nopts routeflags[] = {
 		{ "blackhole",	no_arg,		'b' },

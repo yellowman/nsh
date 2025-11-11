@@ -191,7 +191,10 @@ create_db(void)
 int
 main(int argc, char *argv[])
 {
-	int top, ch, iflag = 0, cflag = 0;
+	int top;
+	int ch;
+	int iflag = 0;
+	int cflag = 0;
 	char rc[PATH_MAX];
 
 	setlocale(LC_CTYPE, "");

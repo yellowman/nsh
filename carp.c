@@ -57,7 +57,9 @@ intcarp(int argc, char **argv, ...)
 	const char *errmsg = NULL;
 	struct ifreq ifr;
 	struct carpreq creq;
-	int set, bal_mode = 0, val = 0;
+	int set;
+	int bal_mode = 0;
+	int val = 0;
 	struct intc *x;
 	va_list ap;
 	char *ifname;
@@ -265,8 +267,11 @@ intcnode(int argc, char **argv, ...)
 	struct ifreq ifr;
 	struct carpreq creq;
 	const char *errmsg = NULL;
-	int set, i, last;
-	u_int vhid, advskew;
+	int set;
+	int i;
+	int last;
+	u_int vhid;
+	u_int advskew;
 	va_list ap;
 	char *ifname;
 	int ifs;
@@ -407,7 +412,8 @@ carp_state(int s, char *ifname, FILE *outfile)
 	struct carpreq creq;
 	const char *carp_states[] = { CARP_STATES };
 	const char *state = NULL;
-	int i, pntd = 0;
+	int i;
+	int pntd = 0;
 
 	bzero((char *) &creq, sizeof(struct carpreq));
 	ifr.ifr_data = (caddr_t) & creq;

@@ -78,7 +78,9 @@ void conf_sysctl(FILE *, char *, struct ipsysctl *);
 int
 sysctl_int(int mib[], int val, int read)
 {
-	int i, old, *valp;
+	int i;
+	int old;
+	int *valp;
 	size_t len;
 
 	if (read)
