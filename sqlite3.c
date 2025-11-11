@@ -185,7 +185,7 @@ db_select_flag_x_dbflag_rtable(char *name, char *ctl, int rtableid)
 	if((rv = sq3simple(query, words)) > 0) {
 		rv = strtonum(words->sl_str[0], INT_MIN, INT_MAX, &errmsg);
 		if (errmsg) {
-			printf("%% db_select_flag_x_dbflag_rtable %s: %s\n", 
+			printf("%% db_select_flag_x_dbflag_rtable %s: %s\n",
                             words->sl_str[0], errmsg);
 			rv = -1;
                 }
