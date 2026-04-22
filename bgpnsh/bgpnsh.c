@@ -143,20 +143,33 @@ command(void)
 		const char *buf;
 		cursor_pos = NULL;
 
-		if ((buf = el_gets(elc, &num)) == NULL || num == 0)
-			break;
+		if (editing && !isatty(STDIN_FILENO))
+			endedit();
+		if (!isatty(STDIN_FILENO) || elc == NULL) {
+			size_t linelen;
 
-		if (buf[--num]  == '\n') {
-			if (num == 0)
+			if (fgets(line, sizeof(line), stdin) == NULL)
 				break;
+			linelen = strlen(line);
+			while (linelen > 0 && (line[linelen - 1] == '\n' ||
+			    line[linelen - 1] == '\r'))
+				line[--linelen] = '\0';
+		} else {
+			if ((buf = el_gets(elc, &num)) == NULL || num == 0)
+				break;
+
+			if (buf[--num]  == '\n') {
+				if (num == 0)
+					break;
+			}
+			if (num >= sizeof(line)) {
+				printf("%% Input exceeds permitted length\n");
+				break;
+			}
+			memcpy(line, buf, (size_t)num);
+			line[num] = '\0';
+			history(histc, &ev, H_ENTER, buf);
 		}
-		if (num >= sizeof(line)) {
-			printf("%% Input exceeds permitted length\n");
-			break;
-		}
-		memcpy(line, buf, (size_t)num);
-		line[num] = '\0';
-		history(histc, &ev, H_ENTER, buf);
 
 		if (line[0] == 0)
 			break;

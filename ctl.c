@@ -915,6 +915,7 @@ provide_example_config(char *filename)
 	char tmpprompt[sizeof(prompt)];
 	FILE *f = NULL, *example = NULL;
 	int ret = 0, n, num;
+	char linebuf[64];
 	struct stat sb;
 	size_t len, remain;
 
@@ -972,7 +973,13 @@ provide_example_config(char *filename)
 	for (;;) {
 		const char *buf;
 
-		if ((buf = el_gets(elp, &num)) == NULL) {
+		if (!isatty(STDIN_FILENO) || elp == NULL) {
+			if (fgets(linebuf, sizeof(linebuf), stdin) == NULL) {
+				ret = -1;
+				goto done;
+			}
+			buf = linebuf;
+		} else if ((buf = el_gets(elp, &num)) == NULL) {
 			if (num == -1) {
 				ret = -1;
 				goto done;

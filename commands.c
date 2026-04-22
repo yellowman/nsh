@@ -1571,6 +1571,8 @@ interface(int argc, char **argv, ...)
 	for (;;) {
 		char *margp;
 
+		if (editing && !isatty(STDIN_FILENO))
+			endedit();
 		if (!editing) {
 			/* command line editing disabled */
 			if (interactive_mode)
@@ -2122,6 +2124,8 @@ command()
 			(void)setwinsize(caught_sigwinch);
 			caught_sigwinch = 0;
 		}
+		if (editing && !isatty(STDIN_FILENO))
+			endedit();
 		if (!editing) {
 			if (interactive_mode)
 				printf("%s", cprompt());
@@ -3371,6 +3375,7 @@ static int
 do_reboot(int how)
 {
 	const char *buf;
+	char linebuf[64];
 	int ret = 0, num, have_changes;
 	char *argv[3] = { REBOOT, NULL, NULL };
 
@@ -3413,7 +3418,13 @@ do_reboot(int how)
 	}
 
 	for (;;) {
-		if ((buf = el_gets(elp, &num)) == NULL) {
+		if (!isatty(STDIN_FILENO) || elp == NULL) {
+			if (fgets(linebuf, sizeof(linebuf), stdin) == NULL) {
+				ret = -1;
+				goto done;
+			}
+			buf = linebuf;
+		} else if ((buf = el_gets(elp, &num)) == NULL) {
 			if (num == -1) {
 				ret = -1;
 				goto done;

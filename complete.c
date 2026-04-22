@@ -1062,6 +1062,12 @@ endhist()
 void
 initedit()
 {
+	if (!isatty(STDIN_FILENO)) {
+		printf("%% Command line editing requires a terminal\n");
+		editing = 0;
+		return;
+	}
+
 	editing = 1;
 
 	if (!elc) {
@@ -1117,6 +1123,10 @@ endedit()
 	if (eli) {
 		el_end(eli);
 		eli = NULL;
+	}
+	if (elp) {
+		el_end(elp);
+		elp = NULL;
 	}
 }
 
