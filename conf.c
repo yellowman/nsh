@@ -362,8 +362,8 @@ conf_rtables(FILE *output)
 void
 conf_rtables_rtable(FILE *output, int rtableid)
 {
-	int i;
-	StringList *rtable_name, *rtable_daemons;
+	struct daemons *d;
+	StringList *rtable_name;
 
 	rtable_name = sl_init();
 
@@ -391,18 +391,10 @@ conf_rtables_rtable(FILE *output, int rtableid)
 	conf_routes(output, " route ", AF_INET, RTF_STATIC, rtableid);
 	conf_routes(output, " route ", AF_INET6, RTF_STATIC, rtableid);
 
-	rtable_daemons = sl_init();
-
-	if (db_select_flag_x_ctl_rtable(rtable_daemons, "ctl", rtableid) < 0) {
-		printf("%% database failure select ctl rtable\n");
-		sl_free(rtable_daemons, 1);
-		return;
-	} else {
-		for (i = 0; i < rtable_daemons->sl_cur; i++)
-			conf_ctl(output, " ", rtable_daemons->sl_str[i], rtableid);
-	}
-
-	sl_free(rtable_daemons, 1);
+	/* conf_ctl() prints nothing for a daemon without rules or a state */
+	for (d = ctl_daemons; d->name != NULL; d++)
+		if (d->rtablemax >= rtableid)
+			conf_ctl(output, " ", d->name, rtableid);
 
 	fprintf(output, "!\n");
 }

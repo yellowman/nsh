@@ -555,7 +555,6 @@ int db_select_rtable_rtables(StringList *);
 int db_select_rtables_rtable(StringList *, int);
 int db_select_rtables_ctl(StringList *, char *);
 int db_select_name_rtable(StringList *, int);
-int db_select_flag_x_ctl_rtable(StringList *, char *, int);
 int db_select_flag_x_data_ctl_rtable(StringList *, char *, char *, int);
 int db_select_nameservers(StringList *);
 #endif
