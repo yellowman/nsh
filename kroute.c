@@ -841,7 +841,7 @@ rtnameserver(int argc, char *argv[], int tableid)
 	argv++;
 
 	if ((if_index = if_nametoindex(if_name)) == 0) {
-		printf("%% rtnameserver: unknown interface: %s", if_name);
+		printf("%% rtnameserver: unknown interface: %s\n", if_name);
 		return (1);
 	}
 
@@ -857,11 +857,11 @@ rtnameserver(int argc, char *argv[], int tableid)
 	for (; argc > 0 && ns4_count + ns6_count < 5; argc--, argv++) {
 		error = getaddrinfo(*argv, NULL, &hints, &res);
 		if (error) {
-			printf("%% rtnameserver: %s", gai_strerror(error));
+			printf("%% rtnameserver: %s\n", gai_strerror(error));
 			continue;
 		}
 		if (res == NULL) {
-			printf("%% rtnameserver: %s: unknown", *argv);
+			printf("%% rtnameserver: %s: unknown\n", *argv);
 			continue;
 		}
 
@@ -884,10 +884,10 @@ rtnameserver(int argc, char *argv[], int tableid)
 
 	if (verbose) {
 		for (i = 0; i < ns4_count; i++)
-			printf("v4: %s", inet_ntop(AF_INET, &ns4[i], buf,
+			printf("v4: %s\n", inet_ntop(AF_INET, &ns4[i], buf,
 			    sizeof(buf)));
 		for (i = 0; i < ns6_count; i++)
-			printf("v6: %s", inet_ntop(AF_INET6, &ns6[i], buf,
+			printf("v6: %s\n", inet_ntop(AF_INET6, &ns6[i], buf,
 			    sizeof(buf)));
 	}
 
@@ -925,12 +925,11 @@ rtnameserver(int argc, char *argv[], int tableid)
 	s = socket(AF_ROUTE, SOCK_RAW, AF_UNSPEC);
 	if (s == -1) {
 		printf("%% rtnameserver: socket: %s\n", strerror(errno));
-		close(s);
 		return (1);
 	}
 
 	if (writev(s, iov, iovcnt) == -1) {
-		printf("%% rtnameserver: failed to send routing message: %s",
+		printf("%% rtnameserver: failed to send routing message: %s\n",
 		    strerror(errno));
 		error = 1;
 	}
@@ -943,7 +942,7 @@ rtnameserver(int argc, char *argv[], int tableid)
 	memcpy(rtdns.sr_dns, ns6, rtdns.sr_len - 2);
 
 	if (writev(s, iov, iovcnt) == -1) {
-		printf("%% rtnameserver: failed to send routing message: %s",
+		printf("%% rtnameserver: failed to send routing message: %s\n",
 		    strerror(errno));
 		error = 1;
 	}

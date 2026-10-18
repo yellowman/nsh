@@ -35,7 +35,7 @@ nameserver_usage(void)
 {
 	printf("%% nameserver IP-address1 [IP-address2 ... IP-address5]\n");
 	printf("%% no nameserver\n");
-	return (0);
+	return (1);
 }
 
 int
