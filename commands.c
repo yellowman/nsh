@@ -68,6 +68,7 @@
 #include "externs.h"
 #include "sysctl.h"
 #include "ctl.h"
+#include "conftree.h"
 
 char hname[HSIZE];
 char hbuf[MAXHOSTNAMELEN];	/* host name */
@@ -3576,17 +3577,75 @@ pr_a_conf(int argc, char **argv, ...)
 }
 
 /*
- * Show differences between startup and running config.
+ * the command a configuration line runs (as cmdrc() finds it)
+ */
+static Command *
+conf_command(char *line)
+{
+	char word[2][64];
+	Command *c;
+	int n;
+
+	if ((n = sscanf(line, "%63s %63s", word[0], word[1])) < 1)
+		return NULL;
+	if (NO_ARG(word[0])) {
+		if (n < 2)
+			return NULL;
+		c = getcmd(word[1]);
+	} else
+		c = getcmd(word[0]);
+	if (c == NULL || Ambiguous(c))
+		return NULL;
+	return c;
+}
+
+/*
+ * what the statement in line does with the indented lines after it
+ */
+static int
+conf_mode(char *line)
+{
+	Command *c;
+
+	if ((c = conf_command(line)) == NULL)
+		return CT_LEAF;
+	if (c->modh == 2)
+		return CT_NESTED;
+	if (c->modh == 1)
+		return CT_LINES;
+	return CT_LEAF;
+}
+
+/*
+ * whether line is "<daemon> rules", whose indented lines are the
+ * daemon's configuration file, in order
+ */
+static int
+conf_ordered(char *line)
+{
+	char word[2][64];
+	Command *c;
+
+	if (sscanf(line, "%63s %63s", word[0], word[1]) != 2)
+		return 0;
+	c = getcmd(word[0]);
+	return (c != NULL && !Ambiguous(c) && c->handler == ctlhandler &&
+	    isprefix(word[1], "rules"));
+}
+
+/*
+ * Show differences between startup and running config, block by block:
+ * the lines of a block are compared as a set, a daemon's rules as a
+ * sequence.
  */
 static int
 pr_conf_diff(int argc, char **argv, ...)
 {
-	int conf_fd = -1, diff_fd = -1;
+	int conf_fd = -1, out_fd = -1, ndiff;
 	char confpath[PATH_MAX];
-	char diffpath[PATH_MAX];
-	char *diff_argv[9] = {
-	    DIFF, "-u", "-L", NULL, "-L", NULL, NULL, NULL, NULL
-	};
+	char outpath[PATH_MAX];
+	struct cnode *startup = NULL, *running = NULL;
+	FILE *out = NULL;
 
 	if (priv != 1) {
 		printf("%% Privilege required\n");
@@ -3601,8 +3660,8 @@ pr_conf_diff(int argc, char **argv, ...)
 	if (strlcpy(confpath, "/tmp/nshrc.XXXXXXXX", sizeof(confpath)) >=
 	    sizeof(confpath))
 		return 0;
-	if (strlcpy(diffpath, "/tmp/nshrc.diff.XXXXXXXX", sizeof(diffpath)) >=
-	    sizeof(diffpath))
+	if (strlcpy(outpath, "/tmp/nshrc.compare.XXXXXXXX", sizeof(outpath)) >=
+	    sizeof(outpath))
 		return 0;
 
 	conf_fd = mkstemp(confpath);
@@ -3611,9 +3670,9 @@ pr_conf_diff(int argc, char **argv, ...)
 		return 0;
 	}
 
-	diff_fd = mkstemp(diffpath);
-	if (diff_fd == -1) {
-		printf("%% mkstemp %s: %s\n", diffpath, strerror(errno));
+	out_fd = mkstemp(outpath);
+	if (out_fd == -1) {
+		printf("%% mkstemp %s: %s\n", outpath, strerror(errno));
 		goto done;
 	}
 
@@ -3622,26 +3681,40 @@ pr_conf_diff(int argc, char **argv, ...)
 		goto done;
 	}
 
-	diff_argv[3] = "startup-config";
-	diff_argv[5] = "running-config";
 	if (access(NSHRC, R_OK) == -1) {
 		if (errno != ENOENT) {
 			printf("%% access %s: %s\n", NSHRC, strerror(errno));
 			goto done;
 		}
-		diff_argv[6] = "/dev/null";
+		startup = conftree_read("/dev/null", conf_mode, conf_ordered);
 	} else
-		diff_argv[6] = NSHRC;
-	diff_argv[7] = confpath;
+		startup = conftree_read(NSHRC, conf_mode, conf_ordered);
+	running = conftree_read(confpath, conf_mode, conf_ordered);
+	if (startup == NULL || running == NULL)
+		goto done;
 
-	if (cmdargs_output(DIFF, diff_argv, diff_fd, -1) > 1)
-		printf("%% %s command failed\n", DIFF);
-
-	more(diffpath);
+	if ((out = fdopen(out_fd, "w")) == NULL) {
+		printf("%% fdopen %s: %s\n", outpath, strerror(errno));
+		goto done;
+	}
+	fprintf(out, "--- startup-config\n+++ running-config\n");
+	if ((ndiff = conftree_compare(out, startup, running)) == -1)
+		goto done;
+	if (fflush(out) == EOF) {
+		printf("%% %s: %s\n", outpath, strerror(errno));
+		goto done;
+	}
+	if (ndiff > 0)
+		more(outpath);
 done:
-	if (diff_fd != -1) {
-		unlink(diffpath);
-		close(diff_fd);
+	conftree_free(startup);
+	conftree_free(running);
+	if (out_fd != -1) {
+		unlink(outpath);
+		if (out != NULL)
+			fclose(out);
+		else
+			close(out_fd);
 	}
 	if (conf_fd != -1) {
 		unlink(confpath);

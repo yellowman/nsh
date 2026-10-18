@@ -3569,7 +3569,17 @@ firewall rules, and other information compiled by
 .Ic show diff-config
 .Pp
 Display differences between the startup configuration and the running
-configuration.
+configuration, block by block.
+Each line that only the startup configuration has is marked with
+.Sq - ,
+and each line that only the running configuration has with
+.Sq + .
+The interface or other block that contains them is shown above them,
+unmarked.
+The lines within a block are compared regardless of their order,
+except for the rules of a daemon, such as
+.Cm pf rules ,
+whose order matters.
 This command requires root user privileges.
 .Pp
 .Ic show environment Op Ar NAME
