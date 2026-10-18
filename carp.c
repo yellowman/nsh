@@ -502,9 +502,10 @@ intcnode(int argc, char **argv, ...)
 	argc--;
 	argv++;
 
-	if ((!set && argc != 1) || (set && argc > 3) || (set && argc < 1)) {
+	/* no carpnode takes what carpnode does, and removes the vhid */
+	if (argc < 1 || argc > 3) {
 		printf("%% carpnode <vhid> [advskew] [state]\n");
-		printf("%% no carpnode <vhid>\n");
+		printf("%% no carpnode <vhid> [advskew] [state]\n");
 		return (0);
 	}
 	bzero((char *) &creq, sizeof(struct carpreq));

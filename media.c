@@ -107,14 +107,14 @@ intmedia(int argc, char **argv, ...)
 	 * A media word is taken whole, and some media are there only with
 	 * an option, 1000baseT only with full-duplex on most phys
 	 */
-	if (set && argc >= 3 && isprefix(argv[argc - 2], "mediaopt")) {
+	if (argc >= 3 && isprefix(argv[argc - 2], "mediaopt")) {
 		opts = argv[argc - 1];
 		argc -= 2;
 	}
 
 	if ((set && (argc < 1 || argc > 2)) || (!set && argc > 2)) {
 		printf("%% media <type> [instance] [mediaopt <options>]\n");
-		printf("%% no media [type] [instance]\n");
+		printf("%% no media [type] [instance] [mediaopt <options>]\n");
 		media_supported(ifs, ifname, "% ", "%   ", stdout);
 		return 0;
 	}
@@ -151,7 +151,8 @@ intmedia(int argc, char **argv, ...)
 
 	if (subtype == -1)
 		return 0;
-	if (opts != NULL && (options = get_media_options(type, opts)) == -1)
+	if (set && opts != NULL &&
+	    (options = get_media_options(type, opts)) == -1)
 		return 0;
 
 	/* Build the new media_current word */

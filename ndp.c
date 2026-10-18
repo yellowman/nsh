@@ -206,10 +206,11 @@ ndpset(int argc, char *argv[], ...)
 		argv++;
 	}
 
-	if ((set && (argc < 3 || argc > 5)) || (!set && argc != 2)) {
+	if (argc < (set ? 3 : 2) || argc > 5) {
 		printf("%% %s <inet6 addr> <ether addr> [temp] [proxy]\n",
 		    argv[0]);
-		printf("%% no %s <inet6 addr>\n", argv[0]);
+		printf("%% no %s <inet6 addr> [<ether addr> [temp] [proxy]]\n",
+		    argv[0]);
 		return 1;
 	}
 

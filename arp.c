@@ -182,11 +182,11 @@ arpset(int argc, char *argv[], ...)
 		argv++;
 	}
 
-	if ((set && (argc < 3 || argc > 6)) ||
-	    (!set && (argc < 2 || argc > 3))) {
+	if (argc < (set ? 3 : 2) || argc > 6) {
 		printf("%% %s <inet addr> <ether addr> [temp | permanent] "
 		    "[pub]\n", argv[0]);
-		printf("%% no %s <inet addr> [ether addr]\n", argv[0]);
+		printf("%% no %s <inet addr> [<ether addr> [temp | permanent] "
+		    "[pub]]\n", argv[0]);
 		return 1;
 	}
 

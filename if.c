@@ -1755,9 +1755,10 @@ intip(int argc, char **argv, ...)
 		return 0;
 	}
 
-	if (nopts > 0 && (!set || ip.family != AF_INET6)) {
+	/* no takes them as well, and an eui64 address is one to delete */
+	if (nopts > 0 && ip.family != AF_INET6) {
 		printf("%% anycast, eui64, vltime and pltime go with an IPv6"
-		    " address being set\n");
+		    " address\n");
 		return 0;
 	}
 	if (ip6_opts(nopts, optv, &o) == -1)

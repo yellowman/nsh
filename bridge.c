@@ -1613,7 +1613,7 @@ void
 brprotect_usage(void)
 {
 	printf("%% protect <if> <domain-ids>\n");
-	printf("%% no protect <if>\n");
+	printf("%% no protect <if> [domain-ids]\n");
 }
 
 int
@@ -1633,7 +1633,7 @@ brprotect(int argc, char **argv, ...)
 		set = 0;
 		argv++;
 		argc--;
-		if (argc != 2) {
+		if (argc != 2 && argc != 3) {
 			brprotect_usage();
 			return 0;
 		}

@@ -35,7 +35,7 @@ int
 nameserver_usage(void)
 {
 	printf("%% nameserver IP-address1 [IP-address2 ... IP-address5]\n");
-	printf("%% no nameserver\n");
+	printf("%% no nameserver [IP-address1 ... IP-address5]\n");
 	return (1);
 }
 
@@ -85,7 +85,7 @@ nameserverset(int argc, char *argv[], ...)
 	if (NO_ARG(argv[0])) {
 		argv++;
 		argc--;
-		if (argc != 1)
+		if (argc > 6)
 			return nameserver_usage();
 		set = 0;
 	} else {
@@ -133,7 +133,8 @@ nameserverset(int argc, char *argv[], ...)
 	}
 
 	argv[0] = "lo0";
-	return rtnameserver(argc, argv, 0 /* always use rtable 0 */);
+	/* no nameserver proposes none, whatever addresses it was given */
+	return rtnameserver(set ? argc : 1, argv, 0 /* always use rtable 0 */);
 }
 
 void

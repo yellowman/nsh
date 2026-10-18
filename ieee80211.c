@@ -199,12 +199,12 @@ intnwkey(int argc, char **argv, ...)
 	argc--;
 	argv++;
 
-	if((!set && argc != 0) || (set && argc != 1)) {
+	if((!set && argc > 1) || (set && argc != 1)) {
 		printf("%% nwkey <key>\n");
 		printf("%% nwkey persist\n");
 		printf("%% nwkey persist:<key>\n");
 		printf("%% nwkey <n>:<k1>,<k2>,<k3>,<k4>\n");
-		printf("%% no nwkey\n");
+		printf("%% no nwkey [key]\n");
 		return 0;
 	}
 	if(set)
