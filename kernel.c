@@ -35,6 +35,7 @@ static const u_long bridge_ioctls[] = {
 };
 
 static const u_long carp_ioctls[] = {
+	SIOCSVH,
 	0
 };
 
@@ -207,6 +208,7 @@ static const u_long pflow_ioctls[] = {
 static const u_long pfsync_ioctls[] = {
 	SIOCSIFPARENT,
 	SIOCDIFPARENT,
+	SIOCSETPFSYNC,
 	0
 };
 

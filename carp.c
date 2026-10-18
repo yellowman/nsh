@@ -25,11 +25,13 @@
 #include <sys/ioctl.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <net/if_types.h>
 #include <netinet/ip_carp.h>
 #include <net/if.h>
 #include <netdb.h>
 #include <unistd.h>
 #include "externs.h"
+#include "settings.h"
 
 static struct intc {
 	char *name;
@@ -45,6 +47,216 @@ static struct intc {
 };
 
 static const char *carp_bal_modes[] = { CARP_BAL_MODES };
+
+static int carp_getvh(int, struct ifreq *);
+static int carp_setvh(int, struct ifreq *);
+static int cand_getvh(char *, struct carpreq *);
+static int cand_setvh(int, char *, struct carpreq *);
+static void sort_vhids(struct carpreq *);
+
+/* SIOCGVH, or in configure private the candidate's */
+static int
+carp_getvh(int ifs, struct ifreq *ifr)
+{
+	if (candidate)
+		return cand_getvh(ifr->ifr_name, (struct carpreq *)ifr->ifr_data);
+	return ioctl(ifs, SIOCGVH, (caddr_t)ifr);
+}
+
+/* SIOCSVH, or in configure private the candidate's */
+static int
+carp_setvh(int ifs, struct ifreq *ifr)
+{
+	if (candidate)
+		return cand_setvh(ifs, ifr->ifr_name,
+		    (struct carpreq *)ifr->ifr_data);
+	return ioctl(ifs, SIOCSVH, (caddr_t)ifr);
+}
+
+/*
+ * SIOCGVH in configure private: the carpreq the candidate's lines are
+ * what conf_carp() prints of, the vhids in order as SIOCGVH has them
+ */
+static int
+cand_getvh(char *ifname, struct carpreq *creq)
+{
+	char line[1024], *l, *w, *p;
+	const char *errmsg;
+	size_t n;
+	int i;
+
+	if (!cand_takes(ifname, SIOCSVH)) {
+		errno = ENOTTY;
+		return -1;
+	}
+	memset(creq, 0, sizeof(*creq));
+	creq->carpr_advbase = CARP_DFLTINTV;
+	creq->carpr_peer.s_addr = htonl(INADDR_CARP_GROUP);
+	if ((l = cand_line("carpdev", 0)) != NULL)
+		strlcpy(creq->carpr_carpdev, l + strlen("carpdev "),
+		    sizeof(creq->carpr_carpdev));
+	if ((l = cand_line("carppass", 0)) != NULL)
+		strlcpy((char *)creq->carpr_key, l + strlen("carppass "),
+		    sizeof(creq->carpr_key));
+	if ((l = cand_line("advbase", 0)) != NULL)
+		creq->carpr_advbase = strtonum(l + strlen("advbase "), 0, 255,
+		    &errmsg);
+	if ((l = cand_line("vhid", 0)) != NULL)
+		creq->carpr_vhids[0] = strtonum(l + strlen("vhid "), 1, 255,
+		    &errmsg);
+	if ((l = cand_line("advskew", 0)) != NULL)
+		creq->carpr_advskews[0] = strtonum(l + strlen("advskew "), 0,
+		    254, &errmsg);
+	for (n = 0, i = 0; i < CARP_MAXNODES &&
+	    (l = cand_line("carpnode", n)) != NULL; n++, i++) {
+		/* carpnode vhid advskew */
+		strlcpy(line, l, sizeof(line));
+		strtok_r(line, " ", &p);
+		if ((w = strtok_r(NULL, " ", &p)) != NULL)
+			creq->carpr_vhids[i] = strtonum(w, 1, 255, &errmsg);
+		if ((w = strtok_r(NULL, " ", &p)) != NULL)
+			creq->carpr_advskews[i] = strtonum(w, 0, 254, &errmsg);
+	}
+	sort_vhids(creq);
+	if ((l = cand_line("carppeer", 0)) != NULL)
+		inet_pton(AF_INET, l + strlen("carppeer "), &creq->carpr_peer);
+	if ((l = cand_line("balancing", 0)) != NULL)
+		for (i = 0; i <= CARP_BAL_MAXID; i++)
+			if (strcmp(l + strlen("balancing "),
+			    carp_bal_modes[i]) == 0)
+				creq->carpr_balancing = i;
+	return 0;
+}
+
+/* The vhids, and their advskews, in order, as carp_vhids_ioctl() keeps them */
+static void
+sort_vhids(struct carpreq *creq)
+{
+	u_int8_t v, a;
+	int i, j;
+
+	for (i = 1; i < CARP_MAXNODES && creq->carpr_vhids[i]; i++)
+		for (j = i; j > 0 &&
+		    creq->carpr_vhids[j - 1] > creq->carpr_vhids[j]; j--) {
+			v = creq->carpr_vhids[j];
+			a = creq->carpr_advskews[j];
+			creq->carpr_vhids[j] = creq->carpr_vhids[j - 1];
+			creq->carpr_advskews[j] = creq->carpr_advskews[j - 1];
+			creq->carpr_vhids[j - 1] = v;
+			creq->carpr_advskews[j - 1] = a;
+		}
+}
+
+/*
+ * SIOCSVH in configure private: what carpioctl(), carp_set_ifp() and
+ * carp_vhids_ioctl() refuse is refused with their errno, and the lines
+ * become what conf_carp() would print of the result
+ */
+static int
+cand_setvh(int ifs, char *ifname, struct carpreq *r)
+{
+	struct carpreq cur;
+	u_int8_t taken[256];
+	char *l;
+	size_t k;
+	int i, n, v, many, tries;
+
+	if (cand_getvh(ifname, &cur) == -1)
+		return -1;
+	if (r->carpr_carpdev[0] != '\0' &&
+	    strcmp(r->carpr_carpdev, cur.carpr_carpdev) != 0) {
+		if (!cand_hasif(r->carpr_carpdev) ||
+		    cand_gettype(r->carpr_carpdev) != IFT_ETHER) {
+			errno = EINVAL;
+			return -1;
+		}
+		if (!(cand_getflags(r->carpr_carpdev, ifs) & IFF_MULTICAST)) {
+			errno = EADDRNOTAVAIL;
+			return -1;
+		}
+		strlcpy(cur.carpr_carpdev, r->carpr_carpdev,
+		    sizeof(cur.carpr_carpdev));
+	}
+	if (r->carpr_vhids[0] != 0 &&
+	    memcmp(r->carpr_vhids, cur.carpr_vhids, sizeof(cur.carpr_vhids))) {
+		memset(taken, 0, sizeof(taken));
+		for (n = 0; n < CARP_MAXNODES && r->carpr_vhids[n]; n++) {
+			if (taken[r->carpr_vhids[n]] ||
+			    r->carpr_advskews[n] >= 255) {
+				errno = EINVAL;
+				return -1;
+			}
+			taken[r->carpr_vhids[n]] = 1;
+		}
+		if (n <= 1)
+			r->carpr_balancing = CARP_BAL_NONE;
+		else if (r->carpr_balancing == CARP_BAL_NONE &&
+		    cur.carpr_balancing == CARP_BAL_NONE)
+			r->carpr_balancing = CARP_BAL_IP;
+		memcpy(cur.carpr_vhids, r->carpr_vhids, sizeof(cur.carpr_vhids));
+		memcpy(cur.carpr_advskews, r->carpr_advskews,
+		    sizeof(cur.carpr_advskews));
+		sort_vhids(&cur);
+	} else
+		for (i = 0; i < CARP_MAXNODES && cur.carpr_vhids[i]; i++)
+			cur.carpr_advskews[i] = r->carpr_advskews[i];
+	if (r->carpr_advbase > 255 || r->carpr_balancing > CARP_BAL_MAXID) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	if (cur.carpr_carpdev[0] != '\0')
+		cand_setting(ST_ON, "carpdev %s", cur.carpr_carpdev);
+	if (r->carpr_key[0] != '\0')
+		cand_setting(ST_ON, "carppass %.*s", CARP_KEY_LEN,
+		    r->carpr_key);
+	else
+		cand_setting(ST_DEFAULT, "carppass");
+	if (r->carpr_advbase >= 0 && r->carpr_advbase != CARP_DFLTINTV)
+		cand_setting(ST_ON, "advbase %d", r->carpr_advbase);
+	else if (r->carpr_advbase >= 0)
+		cand_setting(ST_DEFAULT, "advbase");
+	/*
+	 * One vhid is a vhid line, more are carpnode lines. A carpnode
+	 * line for a vhid the result does not have goes.
+	 */
+	many = cur.carpr_vhids[1] != 0;
+	for (k = 0, tries = 0; tries <= CARP_MAXNODES &&
+	    (l = cand_line("carpnode", k)) != NULL; tries++) {
+		v = atoi(l + strlen("carpnode "));
+		for (i = 0; many && i < CARP_MAXNODES && cur.carpr_vhids[i] &&
+		    cur.carpr_vhids[i] != v; i++)
+			;
+		if (many && i < CARP_MAXNODES && cur.carpr_vhids[i] == v)
+			k++;
+		else
+			cand_setting(ST_DEFAULT, "carpnode %d", v);
+	}
+	if (!many && cur.carpr_vhids[0] != 0) {
+		cand_setting(ST_ON, "vhid %d", cur.carpr_vhids[0]);
+		if (cur.carpr_advskews[0] != 0)
+			cand_setting(ST_ON, "advskew %d", cur.carpr_advskews[0]);
+		else
+			cand_setting(ST_DEFAULT, "advskew");
+	} else {
+		cand_setting(ST_DEFAULT, "vhid");
+		cand_setting(ST_DEFAULT, "advskew");
+		for (i = 0; i < CARP_MAXNODES && cur.carpr_vhids[i]; i++)
+			cand_setting(ST_ON, "carpnode %d %d",
+			    cur.carpr_vhids[i], cur.carpr_advskews[i]);
+	}
+	if (r->carpr_peer.s_addr != 0 &&
+	    r->carpr_peer.s_addr != htonl(INADDR_CARP_GROUP))
+		cand_setting(ST_ON, "carppeer %s", inet_ntoa(r->carpr_peer));
+	else
+		cand_setting(ST_DEFAULT, "carppeer");
+	if (r->carpr_balancing != CARP_BAL_NONE)
+		cand_setting(ST_ON, "balancing %s",
+		    carp_bal_modes[r->carpr_balancing]);
+	else
+		cand_setting(ST_DEFAULT, "balancing");
+	return 0;
+}
 
 int
 intcarp(int argc, char **argv, ...)
@@ -99,7 +311,7 @@ intcarp(int argc, char **argv, ...)
 	ifr.ifr_data = (caddr_t) & creq;
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 
-	if (ioctl(ifs, SIOCGVH, (caddr_t) & ifr) == -1) {
+	if (carp_getvh(ifs, &ifr) == -1) {
 		printf("%% intcarp: SIOCGVH: %s\n", strerror(errno));
 		return (0);
 	}
@@ -199,7 +411,7 @@ intcarp(int argc, char **argv, ...)
 			creq.carpr_balancing = 0;
 	}
 
-	if (ioctl(ifs, SIOCSVH, (caddr_t) & ifr) == -1) {
+	if (carp_setvh(ifs, &ifr) == -1) {
 		if (errno == EINVAL)
 			printf("%% value out of range\n");
 		else
@@ -247,7 +459,7 @@ intcpass(int argc, char **argv, ...)
 	ifr.ifr_data = (caddr_t) & creq;
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 
-	if (ioctl(ifs, SIOCGVH, (caddr_t) & ifr) == -1) {
+	if (carp_getvh(ifs, &ifr) == -1) {
 		printf("%% intpass: SIOCGVH: %s\n", strerror(errno));
 		return (0);
 	}
@@ -258,7 +470,7 @@ intcpass(int argc, char **argv, ...)
 		bzero((char *)&creq.carpr_key, sizeof(creq.carpr_key));
 	}
 
-	if (ioctl(ifs, SIOCSVH, (caddr_t) & ifr) == -1)
+	if (carp_setvh(ifs, &ifr) == -1)
 		printf("%% intcpass: SIOCSVH: %s\n", strerror(errno));
 	return (0);
 }
@@ -316,7 +528,7 @@ intcnode(int argc, char **argv, ...)
 		advskew = 0;
 	}
 
-	if (ioctl(ifs, SIOCGVH, (caddr_t) & ifr) == -1) {
+	if (carp_getvh(ifs, &ifr) == -1) {
 		printf("%% intcnode: SIOCGVH: %s\n", strerror(errno));
 		return (0);
 	}
@@ -356,7 +568,7 @@ intcnode(int argc, char **argv, ...)
 		}
 	}
 
-	if (ioctl(ifs, SIOCSVH, (caddr_t) & ifr) == -1)
+	if (carp_setvh(ifs, &ifr) == -1)
 		printf("%% intcnode: SIOCSVH: %s\n", strerror(errno));
         return (0);
 }
@@ -500,7 +712,7 @@ intcdev(int argc, char **argv, ...)
 	ifr.ifr_data = (caddr_t) & creq;
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 
-	if (ioctl(ifs, SIOCGVH, (caddr_t) & ifr) == -1) {
+	if (carp_getvh(ifs, &ifr) == -1) {
 		printf("%% intcdev: SIOCGVH: %s\n", strerror(errno));
 		return (0);
 	}
@@ -509,7 +721,7 @@ intcdev(int argc, char **argv, ...)
 	else
 		bzero((char *)&creq.carpr_carpdev, sizeof(creq.carpr_carpdev));
 
-	if (ioctl(ifs, SIOCSVH, (caddr_t) & ifr) == -1)
+	if (carp_setvh(ifs, &ifr) == -1)
 		printf("%% intcdev: SIOCSVH: %s\n", strerror(errno));
 
 	return (0);

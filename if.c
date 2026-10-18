@@ -1412,7 +1412,7 @@ cand_hasaddr(int af)
  * for an interface that is up only when no address line says so already,
  * and for pppoe always.
  */
-static void
+void
 cand_upline(char *ifname, int bringup)
 {
 	if (cand_ispppoe(ifname)) {
