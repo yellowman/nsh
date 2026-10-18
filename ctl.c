@@ -61,6 +61,10 @@ static int ctl_cand_stage(struct daemons *, char *, char *, char *,
 static void ctl_cand_unstage(char *, char *);
 static void ctl_cand_follow(struct daemons *, char *, int);
 
+/* the rules file an rc file is writing, and its name */
+static FILE *rulesfile;
+static char tmpfile_cur[PATH_MAX];
+
 /* master daemon list */
 struct daemons ctl_daemons[] = {
 { "pf",		"PF",	ctl_pf,		PFCONF_TEMP,	0600, 1, 0 },
@@ -635,8 +639,6 @@ ctlhandler(int argc, char **argv, ...)
 	int nargs;
 	va_list ap;
 	char *modhvar;
-	static FILE *rulesfile;
-	static char tmpfile_cur[PATH_MAX];
 
 	va_start(ap, argv);
 	modhvar = va_arg(ap, char *);
@@ -941,6 +943,80 @@ ctl_cand_unstage(char *dir, char *path)
 	unlink(lock);
 	unlink(path);
 	rmdir(dir);
+}
+
+/* An rc file is done: close the rules file it was writing */
+void
+ctl_rules_done(void)
+{
+	if (rulesfile != NULL) {
+		fclose(rulesfile);
+		rulesfile = NULL;
+	}
+	tmpfile_cur[0] = '\0';
+}
+
+/*
+ * Is line one of a daemon's, as conf() prints it: CTL_RULES, CTL_STATE
+ * or CTL_FOLLOW, with the daemon's name in name, or 0
+ */
+int
+ctl_line(char *line, char *name, size_t len)
+{
+	struct daemons *d;
+	struct ctl *x;
+	char w[2][64];
+
+	if (sscanf(line, "%63s %63s", w[0], w[1]) != 2)
+		return 0;
+	for (d = ctl_daemons; d->name != NULL; d++)
+		if (strcmp(d->name, w[0]) == 0)
+			break;
+	if (d->name == NULL)
+		return 0;
+	strlcpy(name, d->name, len);
+	if (strcmp(w[1], "rules") == 0)
+		return CTL_RULES;
+	if ((d->doreload && strcmp(w[1], "reload") == 0) ||
+	    (d->table == ctl_crontab && strcmp(w[1], "install") == 0))
+		return CTL_FOLLOW;
+	for (x = d->table; x->name != NULL; x++)
+		if (strcmp(x->name, w[1]) == 0)
+			return x->flag_x != 0 ? CTL_STATE : 0;
+	return 0;
+}
+
+/*
+ * Daemon name's rules in rtableid, which an rc file cannot write empty
+ * or take away: with keep, an empty file, else none
+ */
+int
+ctl_rules_clear(char *name, int rtableid, int keep)
+{
+	struct daemons *d;
+	char path[PATH_MAX];
+	int fd;
+
+	for (d = ctl_daemons; d->name != NULL; d++)
+		if (strcmp(d->name, name) == 0)
+			break;
+	if (d->name == NULL || d->tmpfile == NULL)
+		return -1;
+	snprintf(path, sizeof(path), "%s.%d", d->tmpfile, rtableid);
+	if (!keep) {
+		if (unlink(path) == -1 && errno != ENOENT) {
+			printf("%% unlink %s: %s\n", path, strerror(errno));
+			return -1;
+		}
+		return 0;
+	}
+	if ((fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, d->mode)) == -1) {
+		printf("%% %s: %s\n", path, strerror(errno));
+		return -1;
+	}
+	fchmod(fd, d->mode);
+	close(fd);
+	return 0;
 }
 
 /* The line conf prints after a daemon's rules: pf reload, crontab install */

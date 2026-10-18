@@ -106,7 +106,6 @@ static int	cand_refused(char *, int);
 static int	cand_leave(void);
 static int	pr_environment(int, char **, ...);
 static int	show_hostname(int, char **, ...);
-static int	wr_startup(int, char **, ...);
 static int	wr_conf(char *);
 static int	sysctlhelp(int, char **, ...);
 static int	flush_pf(int, char **, ...);
@@ -1996,7 +1995,7 @@ static char
 	unsetenvhelp[] ="Delete an environment variable",
 	saveenvhelp[] =	"Save environment variables set by setenv to ~/.nshenv",
 	shellhelp[] =	"Invoke a subshell or run an executable",
-	savehelp[] =	"Save the current configuration",
+	commithelp[] =	"Make the candidate the running configuration, and save it",
 	nreboothelp[] =	"Reboot the system",
 	halthelp[] =	"Halt the system",
 	powerdownhelp[] ="Power the system down",
@@ -2095,10 +2094,10 @@ Command cmdtab[] = {
 	{ "logger",     loggerhelp,     CMPL0 0, 0, logger,             0, 0, 0, 0 },
 	{ "halt",	halthelp,	CMPL0 0, 0, halt,		1, 0, 0, 0 },
 	{ "powerdown",	powerdownhelp,	CMPL0 0, 0, powerdown,		1, 0, 0, 0 },
-	{ "write-config", savehelp,	CMPL0 0, 0, wr_startup,		1, 0, 0, 0 },
 	{ "verbose",	verbosehelp,	CMPL0 0, 0, doverbose,		0, 0, 1, 0 },
 	{ "editing",	editinghelp,	CMPL0 0, 0, doediting,		0, 0, 1, 0 },
 	{ "configure",	confighelp,	CMPL0 0, 0, doconfig,		1, 0, 1, 0 },
+	{ "commit",	commithelp,	CMPL0 0, 0, commit,		1, 0, 0, 0, CAND_RUN },
 	{ "rollback",	rollbackhelp,	CMPL0 0, 0, cand_rollback,	1, 1, 0, 0, CAND_RUN },
 	{ "who",	whohelp,	CMPL0 0, 0, who,		0, 0, 0, 0 },
 	{ "no",		0,		CMPL(c) 0, 0, nocmd,		0, 0, 0, 0 },
@@ -3361,6 +3360,7 @@ cmdrc(char rcname[FILENAME_MAX])
 			init_bgpd_socket_path(cli_rtable);
 	}
 	in_rc = 0;
+	ctl_rules_done();
 	fclose(rcfile);
 	return 0;
 }
@@ -3376,8 +3376,9 @@ p_argv(int argc, char **argv)
 	return;
 }
 
+/* Save the running configuration as nshrc */
 int
-wr_startup(int argc, char **argv, ...)
+conf_save(void)
 {
 	char *args[] = { SAVESCRIPT, NSHRC_TEMP, NULL };
 
@@ -3506,7 +3507,7 @@ do_reboot(int how)
 		    "unsaved changes!\n"
 		    "%% The 'show diff-config' command will display unsaved "
 		    "changes.\n"
-		    "%% The 'write-config' command will save changes to %s.\n",
+		    "%% The 'commit' command will save changes to %s.\n",
 		    NSHRC);
 		if (!interactive_mode)
 			return -1;
@@ -3720,7 +3721,7 @@ conf_command(char *line)
 /*
  * what the statement in line does with the indented lines after it
  */
-static int
+int
 conf_mode(char *line)
 {
 	Command *c;
@@ -3738,7 +3739,7 @@ conf_mode(char *line)
  * whether line is "<daemon> rules", whose indented lines are the
  * daemon's configuration file, in order
  */
-static int
+int
 conf_ordered(char *line)
 {
 	char word[2][64];

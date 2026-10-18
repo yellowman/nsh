@@ -175,11 +175,12 @@ E.g show all available valid commands  with double tab key sequence <tab><tab>
 .Bd -literal -offset indent
 nsh(config-p)/
 !		enable		ldap		ping6		show
-?		exit		ldp		pipex		smtp
-arp		flush		logger		powerdown	snmp
-bgp		ftp-proxy	manual		quit		ssh
-bridge		group		motd		rad		sshd
-clear		halt		mpls		reboot		telnet
+?		eigrp		ipsec		ping		setenv
+arp		exit		ldp		pipex		smtp
+bgp		flush		logger		powerdown	snmp
+bridge		ftp-proxy	manual		quit		ssh
+clear		group		motd		rad		sshd
+commit		halt		mpls		reboot		telnet
 configure	help		nameserver	relay		tftp
 crontab		hostname	ndp		resolv		tftp-proxy
 ddb		ifstate		no		rip		traceroute
@@ -187,8 +188,7 @@ dhcp		ike		nppp		route		traceroute6
 disable		inet		ntp		rtable		unsetenv
 do		interface	ospf		sasync		verbose
 dvmrp		ip		ospf6		saveenv		who
-editing		ip6		pf		scheduler	write-config
-eigrp		ipsec		ping		setenv
+editing		ip6		pf		scheduler
 nsh(config-p)/
 .Ed
 If what is typed is ambiguous double tab presents the administrator
@@ -323,8 +323,10 @@ displays the candidate,
 displays how it differs from the running configuration, and
 .Cm rollback
 discards this session's changes to it.
-A candidate cannot be applied to the system yet, and configuration mode
-cannot be left while the candidate has changes.
+.Cm commit
+makes the candidate the running configuration, all of it or none, and
+saves it.
+Configuration mode cannot be left while the candidate has changes.
 .Pp
 For the purposes of this manual, any examples the machine is called
 .Nm
@@ -384,10 +386,10 @@ nsh(p)/help
   logger        Write a message to syslog on the system
   halt          Halt the system
   powerdown     Power the system down
-  write-config  Save the current configuration
   verbose       Set verbose diagnostics
   editing       Set command line editing
   configure     Set configuration mode
+  commit        Make the candidate the running configuration, and save it
   who           Display system users
   do            Superfluous, do is ignored and its arguments executed
   setenv        Set an environment variable
@@ -465,10 +467,10 @@ nsh(config-p)/?
   logger        Write a message to syslog on the system
   halt          Halt the system
   powerdown     Power the system down
-  write-config  Save the current configuration
   verbose       Set verbose diagnostics
   editing       Set command line editing
   configure     Set configuration mode
+  commit        Make the candidate the running configuration, and save it
   who           Display system users
   do            Superfluous, do is ignored and its arguments executed
   setenv        Set an environment variable
@@ -1902,7 +1904,7 @@ E.g. restart the system
 nsh(config-p)/reboot
 % WARNING: The running configuration contains unsaved changes!
 % The 'show diff-config' command will display unsaved changes.
-% The 'write-config' command will save changes to /etc/nshrc.
+% The 'commit' command will save changes to /etc/nshrc.
 Proceed with reboot? [yes/no]
 .Ed
 .El
@@ -1927,7 +1929,7 @@ E.g. restart the system
 nsh(config-p)/reload
 % WARNING: The running configuration contains unsaved changes!
 % The 'show diff-config' command will display unsaved changes.
-% The 'write-config' command will save changes to /etc/nshrc.
+% The 'commit' command will save changes to /etc/nshrc.
 Proceed with reboot? [yes/no]
 .Ed
 .El
@@ -1965,17 +1967,36 @@ nsh(p)/powerdown
 .Ed
 .El
 .Pp
-.Tg write-config
-.Ic write-config
+.Tg commit
+.Ic commit
 .Pp
-Save the running configuration to the permanent configuration space.
-On the next startup of the system, this saved configuration is used.
+In
+.Cm configure private ,
+make the candidate the running configuration, then save the running
+configuration to the permanent configuration space, which the next
+startup of the system uses.
+The differences between the running configuration and the candidate
+are applied through the commands that read the saved configuration at
+startup: what the candidate takes away first, in the reverse of the
+order the configuration is shown in, then what it adds, in that order.
+A cloned interface the candidate has no block for is destroyed, and a
+physical one has its lines taken away.
+If the running configuration then differs from the candidate, the
+differences are shown as
+.Cm show diff-config
+shows them, and the commit is undone.
+After a commit, the candidate starts again from the new running
+configuration.
+Outside
+.Cm configure private ,
+.Cm commit
+saves the running configuration.
 .Bl -dash
 .It
 e.g. save the configuration on the system
 .Bd -literal -offset indent
-nsh(p)/write-config
-% Configuration saved
+nsh(p)/commit
+% Saving configuration
 .Ed
 .El
 .Pp

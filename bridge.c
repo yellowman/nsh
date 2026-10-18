@@ -1719,6 +1719,21 @@ static char *brnames[] = { "priority", "hellotime", "fwddelay", "maxage",
     "maxaddr", "timeout", "member", "stp", "span", "learning", "discover",
     "blocknonip", "ifpriority", "ifcost", "protect", "static", "rule" };
 
+/* Is line a port list, whose ports its command takes one by one? */
+int
+brport_list(char *line)
+{
+	size_t i, len;
+
+	for (i = 0; i < nitems(brlists); i++) {
+		len = strlen(brlists[i].name);
+		if (strncmp(line, brlists[i].name, len) == 0 &&
+		    line[len] == ' ')
+			return 1;
+	}
+	return 0;
+}
+
 /* By name, as bridge(4) lists the last member added first and veb(4) last */
 static int
 brport_cmp(const void *a, const void *b)

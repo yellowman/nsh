@@ -272,6 +272,90 @@ conf(FILE *output)
 	return 0;
 }
 
+/* The first word of the lines a CONF_FUNC row prints */
+static const struct {
+	void (*conf)(FILE *);
+	char *word;
+} confwords[] = {
+	{ conf_hostname,	"hostname" },
+	{ conf_secret,		"enable" },
+	{ conf_sysctls,		"ip" },
+	{ conf_sysctls,		"ip6" },
+	{ conf_sysctls,		"mpls" },
+	{ conf_sysctls,		"ddb" },
+	{ conf_sysctls,		"pipex" },
+	{ conf_top_arp,		"arp" },
+	{ conf_top_ndp,		"ndp" },
+	{ conf_top_routes,	"route" },
+	{ conf_crontab,		"crontab" },
+	{ conf_crontab,		"scheduler" },
+	{ conf_rtables,		"rtable" },
+	{ conf_nameserver,	"nameserver" },
+};
+
+/*
+ * Where conf() prints a top-level line: its row, so that a line which
+ * must come after another (a vlan after its trunk, routes after the
+ * interfaces) ranks after it. A line no row prints ranks last.
+ */
+int
+conf_rank(char *line)
+{
+	char word[64], name[IFNAMSIZ];
+	size_t i, j;
+
+	if (strncmp(line, "no ", 3) == 0)
+		line += 3;
+	if (sscanf(line, "%63s", word) != 1)
+		return nitems(confrows);
+	if ((strcmp(word, "interface") == 0 || strcmp(word, "bridge") == 0) &&
+	    sscanf(line, "%*s %15s", name) == 1) {
+		/* conf_interfaces(): a named row, or else the rest */
+		for (i = 0; i < nitems(confrows); i++)
+			if (confrows[i].kind == CONF_IFS &&
+			    confrows[i].name != NULL &&
+			    isprefix(confrows[i].name, name))
+				return i;
+		for (i = 0; i < nitems(confrows); i++)
+			if (confrows[i].kind == CONF_IFS &&
+			    confrows[i].name == NULL)
+				return i;
+	}
+	for (i = 0; i < nitems(confrows); i++) {
+		if (confrows[i].kind == CONF_CTL &&
+		    strcmp(confrows[i].name, word) == 0)
+			return i;
+		if (confrows[i].kind != CONF_FUNC)
+			continue;
+		for (j = 0; j < nitems(confwords); j++)
+			if (confwords[j].conf == confrows[i].conf &&
+			    strcmp(confwords[j].word, word) == 0)
+				return i;
+	}
+	return nitems(confrows);
+}
+
+/* Where conf_rtables_rtable() prints a line of an rtable's block */
+int
+conf_rank_rtable(char *line)
+{
+	char word[64];
+	struct daemons *d;
+
+	if (sscanf(line, "%63s", word) != 1)
+		return 0;
+	if (strcmp(word, "arp") == 0)
+		return 0;
+	if (strcmp(word, "ndp") == 0)
+		return 1;
+	if (strcmp(word, "route") == 0)
+		return 2;
+	for (d = ctl_daemons; d->name != NULL; d++)
+		if (strcmp(d->name, word) == 0)
+			return 3 + (d - ctl_daemons);
+	return 3 + (d - ctl_daemons);
+}
+
 static void
 conf_hostname(FILE *output)
 {

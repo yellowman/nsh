@@ -230,8 +230,9 @@ conftree_free(struct cnode *n)
 }
 
 /*
- * Print the differences between the trees old and new to out. Returns
- * how many lines or blocks were removed or added, or -1 on failure.
+ * Print the differences between the trees old and new to out, or with
+ * out NULL only count them. Returns how many lines or blocks were
+ * removed or added, or -1 on failure.
  */
 int
 conftree_compare(FILE *out, struct cnode *old, struct cnode *new)
@@ -498,8 +499,9 @@ static void
 emit(struct cmpctx *c, char mark, struct cnode *n)
 {
 	for (; c->nprinted < c->nheads; c->nprinted++)
-		fprintf(c->out, " %*s%s\n", c->nprinted, "",
-		    c->heads[c->nprinted]->text);
+		if (c->out != NULL)
+			fprintf(c->out, " %*s%s\n", c->nprinted, "",
+			    c->heads[c->nprinted]->text);
 	emit_tree(c, mark, c->nheads, n);
 	c->ndiff++;
 }
@@ -509,7 +511,8 @@ emit_tree(struct cmpctx *c, char mark, int depth, struct cnode *n)
 {
 	size_t i;
 
-	fprintf(c->out, "%c%*s%s\n", mark, depth, "", n->text);
+	if (c->out != NULL)
+		fprintf(c->out, "%c%*s%s\n", mark, depth, "", n->text);
 	for (i = 0; i < n->nkids; i++)
 		emit_tree(c, mark, depth + 1, n->kids[i]);
 }
@@ -702,6 +705,24 @@ conftree_line(struct cnode *root, char *block, char *name, size_t n)
 		    n-- == 0)
 			return p->kids[i]->text;
 	return NULL;
+}
+
+/*
+ * Has block, as conftree_line() takes it, a line with line's key, its
+ * first keylen words, as samekey() compares them?
+ */
+int
+conftree_haskey(struct cnode *root, char *block, char *line, int keylen)
+{
+	struct cnode *p;
+	size_t i;
+
+	if ((p = block == NULL ? root : find_stmt(root, block, 0, 0)) == NULL)
+		return 0;
+	for (i = 0; i < p->nkids; i++)
+		if (samekey(p->kids[i]->text, line, keylen))
+			return 1;
+	return 0;
 }
 
 /*

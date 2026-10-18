@@ -68,7 +68,6 @@ static void cand_block(char *, size_t, char *, int);
 static int cand_vsetting(char *, int, int, const char *, va_list);
 static const struct kcloner *cand_cloner(char *);
 static size_t cloner_namelen(char *);
-static int cand_cloneable(char *);
 
 /* configure private: start a candidate from the running configuration */
 int
@@ -714,7 +713,7 @@ cloner_namelen(char *name)
 }
 
 /* Could the running kernel create an interface called name? */
-static int
+int
 cand_cloneable(char *name)
 {
 	struct if_clonereq ifcr;

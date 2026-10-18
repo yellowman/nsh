@@ -89,6 +89,8 @@ void conf_sppp(FILE *, int, char *);
 #define DHCPLEASECTL	"/usr/sbin/dhcpleasectl"
 #define SLAACCTL	"/usr/sbin/slaacctl"
 int conf(FILE *);
+int conf_rank(char *);
+int conf_rank_rtable(char *);
 void conf_interfaces(FILE *, char *, int);
 #define MTU_IGNORE ULONG_MAX	/* ignore this "default" mtu */
 u_long default_mtu(char *);
@@ -202,6 +204,9 @@ void sigalarm(int);
 void command(void);
 int argvtostring(int, char **, char *, int);
 int cmdrc(char rcname[FILENAME_MAX]);
+int conf_save(void);
+int conf_mode(char *);
+int conf_ordered(char *);
 
 /* prompt.c */
 char *iprompt(void);
@@ -413,6 +418,7 @@ int bridge_rules(int, char *, char *, char *, FILE *);
 int bridge_list(int, char *, char *, char *, int, int);
 int bridge_member_search(int, char *);
 int bridge_addrs(int, char *, char *, char *, FILE *);
+int brport_list(char *);
 int set_ifflag(int, char *, short);
 int clr_ifflag(int, char *, short);
 int is_bridge(int, char *);
@@ -641,3 +647,7 @@ int cand_rtable_set(int, int, char *);
 char *cand_rule(char *, size_t);
 int cand_setrules(char *, char **, size_t);
 struct cnode *running_tree(void);
+int cand_cloneable(char *);
+
+/* commit.c */
+int commit(int, char **, ...);

@@ -81,6 +81,15 @@ struct ctl {
         int type;
 };
 
+/* What a daemon's line is, as conf() prints it (ctl_line()) */
+#define CTL_RULES	1	/* "pf rules", its file in the lines under it */
+#define CTL_STATE	2	/* "pf enable", "sshd disable" */
+#define CTL_FOLLOW	3	/* "pf reload", "crontab install", after the rules */
+
+int ctl_line(char *, char *, size_t);
+int ctl_rules_clear(char *, int, int);
+void ctl_rules_done(void);
+
 #define T_HANDLER       1
 #define T_HANDLER_TEST  2
 #define T_EXEC          3
