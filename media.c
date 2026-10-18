@@ -48,15 +48,15 @@
 #include <netdb.h>
 #include "externs.h"
 
-int init_current_media(int, char *);
-void process_media_commands(int, char *, int);
+uint64_t init_current_media(int, char *);
+void process_media_commands(int, char *, uint64_t);
 const char *get_media_type_string(uint64_t);
 const char *get_media_subtype_string(uint64_t);
 uint64_t get_media_subtype(uint64_t, const char *);
 uint64_t get_media_options(uint64_t, const char *);
 uint64_t lookup_media_word(const struct ifmedia_description *, uint64_t, const char *);
 void print_media_word(uint64_t, int, int, FILE *);
-void conf_print_media_word(FILE *, int);
+void conf_print_media_word(FILE *, uint64_t);
 
 const uint64_t ifm_status_valid_list[] =
     IFM_STATUS_VALID_LIST;
@@ -77,7 +77,8 @@ int
 intmedia(int argc, char **argv, ...)
 {
 	const char *errmsg = NULL;
-	uint64_t set, media_current, type, subtype, inst;
+	uint64_t set, media_current, type, subtype, inst, options = 0;
+	char *opts = NULL;
 	va_list ap;
 	char *ifname;
 	int ifs;
@@ -97,8 +98,17 @@ intmedia(int argc, char **argv, ...)
 	argv++;
 	argc--;
 
+	/*
+	 * A media word is taken whole, and some media are there only with
+	 * an option, 1000baseT only with full-duplex on most phys
+	 */
+	if (set && argc >= 3 && isprefix(argv[argc - 2], "mediaopt")) {
+		opts = argv[argc - 1];
+		argc -= 2;
+	}
+
 	if ((set && (argc < 1 || argc > 2)) || (!set && argc > 2)) {
-		printf("%% media <type> [instance]\n");
+		printf("%% media <type> [instance] [mediaopt <options>]\n");
 		printf("%% no media [type] [instance]\n");
 		media_supported(ifs, ifname, "% ", "%   ", stdout);
 		return 0;
@@ -136,9 +146,11 @@ intmedia(int argc, char **argv, ...)
 
 	if (subtype == -1)
 		return 0;
+	if (opts != NULL && (options = get_media_options(type, opts)) == -1)
+		return 0;
 
 	/* Build the new media_current word */
-	media_current = IFM_MAKEWORD(type, subtype, 0, inst);
+	media_current = IFM_MAKEWORD(type, subtype, options, inst);
 
 	process_media_commands(ifs, ifname, media_current);
 
@@ -148,7 +160,8 @@ intmedia(int argc, char **argv, ...)
 int
 intmediaopt(int argc, char **argv, ...)
 {
-	int set, media_current, mediaopt;
+	uint64_t media_current, mediaopt;
+	int set;
 	va_list ap;
 	char *ifname;
 	int ifs;
@@ -205,7 +218,7 @@ intmediaopt(int argc, char **argv, ...)
 }
 
 void
-process_media_commands(int s, char *name, int media_current)
+process_media_commands(int s, char *name, uint64_t media_current)
 {
 	struct ifreq ifr;
 
@@ -217,10 +230,10 @@ process_media_commands(int s, char *name, int media_current)
 		    strerror(errno));
 }
 
-int
+uint64_t
 init_current_media(int s, char *ifname)
 {
-	int media_current;
+	uint64_t media_current;
 	struct ifmediareq ifmr;
 
 	(void) memset(&ifmr, 0, sizeof(ifmr));
@@ -432,15 +445,14 @@ print_media_word(uint64_t ifmw, int print_type, int as_syntax, FILE *outfile)
 }
 
 void
-conf_print_media_word(FILE *output, int ifmw)
+conf_print_media_word(FILE *output, uint64_t ifmw)
 {
 	const struct ifmedia_description *desc;
-	int seen_option = 0;
+	uint64_t seen_option = 0;
 
 	fprintf(output, " media %s", get_media_subtype_string(ifmw));
 	if (IFM_INST(ifmw) != 0)
-		printf(" %llu", IFM_INST(ifmw));
-	fprintf(output, "\n");
+		fprintf(output, " %llu", IFM_INST(ifmw));
 
 	/* Find options. */
 	for (desc = ifm_option_descriptions; desc->ifmt_string != NULL;
@@ -455,8 +467,7 @@ conf_print_media_word(FILE *output, int ifmw)
 			seen_option |= IFM_OPTIONS(desc->ifmt_word);
 		}
 	}
-	if (seen_option)
-		fprintf(output, "\n");
+	fprintf(output, "\n");
 }
 
 int
@@ -531,7 +542,9 @@ conf_media_status(FILE *output, int s, char *ifname)
 		return 0;
 	}
 
-	if (ifmr.ifm_current >= ifmr.ifm_active) {
+	if (IFM_SUBTYPE(ifmr.ifm_current) != IFM_AUTO ||
+	    IFM_OPTIONS(ifmr.ifm_current) != 0 ||
+	    IFM_INST(ifmr.ifm_current) != 0) {
 		/* a media type was set manually */
 		rval = 1;
 		conf_print_media_word(output, ifmr.ifm_current);

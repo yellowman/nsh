@@ -4716,8 +4716,11 @@ nsh(interface-iwn0)/bssid 12:34:56:78:90:12
 .Ic media
 .Op type
 .Op instance
+.Op Cm mediaopt Ar options
 .Pp
-Set the media type of the interface.
+Set the media type of the interface, and its options with it.
+A driver takes some media only with an option, such as 1000baseT only
+with full-duplex.
 Entering media without an argument diplays help for the media settings
 available for the interface.
 .Pp
