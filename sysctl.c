@@ -36,6 +36,7 @@
 #include <netmpls/mpls.h>
 #include <ddb/db_var.h>
 #include "externs.h"
+#include "settings.h"
 #include "sysctl.h"
 
 #define	MIB_STOP	INT_MAX
@@ -65,6 +66,7 @@
 #define	DEFAULT_DAD_COUNT		1	/* net.inet6.ip6.dad_count */
 
 void conf_sysctl(FILE *, char *, struct ipsysctl *);
+static void sysctl_line(char *, size_t, char *, struct ipsysctl *, int);
 
 /*
  * sysctl_int: get or set an int value
@@ -247,6 +249,19 @@ ipsysctl(int set, char **cmd, ...)
 	} else
 		larg = x->def_larg;
 
+	if (candidate) {
+		char line[128];
+
+		/* the line conf() would print, in place of the sysctl's */
+		sysctl_line(line, sizeof(line), stab->name, x, larg);
+		if (line[0] == '\0')
+			cand_setting(ST_DEFAULT, "%s %s", stab->name, x->name);
+		else if (strncmp(line, "no ", 3) == 0)
+			cand_setting(ST_OFF, "%s", line + 3);
+		else
+			cand_setting(ST_ON, "%s", line);
+		return 1;
+	}
 	sysctl_int(x->mib, larg, 0);
 
 	return 1;
@@ -264,32 +279,44 @@ conf_sysctls(FILE *output)
 void
 conf_sysctl(FILE *output, char *prefix, struct ipsysctl *x)
 {
-	int tmp = 0;
+	char line[128];
+	int v;
 
 	for (; x != NULL && x->name != NULL; x++) {
-		if (x->def_larg || x->enable == SYSCTL_VALUE) {
-			/* this sysctl takes a value */
-			tmp = sysctl_int(x->mib, 0, 1);
-			if (tmp == x->def_larg || tmp == -1)
-				continue;
-			fprintf(output, "%s %s %i\n", prefix, x->name, tmp);
+		/* -1: this kernel has no such sysctl */
+		if ((v = sysctl_int(x->mib, 0, 1)) == -1)
 			continue;
-		}
-		switch(x->enable) {	/* on/off */
-		case 0:	/* default is enabled */
-			if (sysctl_int(x->mib, 0, 1) == 0)
-				fprintf(output, "no %s %s\n", prefix, x->name);
-			break;
-		case 1: /* default is not enabled */
-			if (sysctl_int(x->mib, 0, 1) == 1)
-				fprintf(output, "%s %s\n", prefix, x->name);
-			break;
-		case 2: /* show either way */
-			if ((tmp = sysctl_int(x->mib, 0, 1)) == 1)
-				fprintf(output, "%s %s\n", prefix, x->name);
-			else if (tmp == 0)
-				fprintf(output, "no %s %s\n", prefix, x->name);
-			break;
-		}
+		sysctl_line(line, sizeof(line), prefix, x, v);
+		if (line[0] != '\0')
+			fprintf(output, "%s\n", line);
+	}
+}
+
+/* The line conf() prints for sysctl x at value v, or "" if none */
+static void
+sysctl_line(char *buf, size_t len, char *prefix, struct ipsysctl *x, int v)
+{
+	buf[0] = '\0';
+	if (x->def_larg || x->enable == SYSCTL_VALUE) {
+		/* this sysctl takes a value */
+		if (v != x->def_larg)
+			snprintf(buf, len, "%s %s %i", prefix, x->name, v);
+		return;
+	}
+	switch(x->enable) {	/* on/off */
+	case 0:	/* default is enabled */
+		if (v == 0)
+			snprintf(buf, len, "no %s %s", prefix, x->name);
+		break;
+	case 1: /* default is not enabled */
+		if (v == 1)
+			snprintf(buf, len, "%s %s", prefix, x->name);
+		break;
+	case 2: /* show either way */
+		if (v == 1)
+			snprintf(buf, len, "%s %s", prefix, x->name);
+		else if (v == 0)
+			snprintf(buf, len, "no %s %s", prefix, x->name);
+		break;
 	}
 }

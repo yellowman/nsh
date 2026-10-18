@@ -42,6 +42,12 @@ static const struct setting top_settings[] = {
 	{ "hostname",		S_VALUE },
 	{ "interface",		S_BLOCK },
 	{ "bridge",		S_BLOCK },
+	/* sysctls, a line each: "ip forwarding", "no ip esp" */
+	{ "ip",			S_STATE,	2 },
+	{ "ip6",		S_STATE,	2 },
+	{ "mpls",		S_STATE,	2 },
+	{ "ddb",		S_STATE,	2 },
+	{ "pipex",		S_STATE,	2 },
 	{ NULL,			0 }
 };
 
