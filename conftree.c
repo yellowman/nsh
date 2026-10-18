@@ -40,6 +40,11 @@
  * or '+' in front of a line that only the old or the new tree has, and
  * a ' ' in front of the statements that contain them.  Without the
  * first column, each line reads as it does in the file.
+ *
+ * conftree_edit() changes a tree as one configuration command would,
+ * and a journal records the edits so that they can be made again on a
+ * newer copy of the running configuration. conftree_write() prints a
+ * tree in the form conftree_read() reads.
  */
 
 #include <sys/types.h>
@@ -80,8 +85,20 @@ struct ckey {
 	size_t i;
 };
 
+struct cedit {
+	int op;
+	char *block;		/* NULL for the top level */
+	char *line;
+};
+
+struct cjournal {
+	struct cedit *edits;
+	size_t nedits;
+};
+
 static struct cnode *cnode_add(struct cnode *, char *, int);
 static int blank(char *);
+static int storable(char *);
 static int match(struct cnode *, struct cnode *, size_t *, size_t *);
 static int ckeycmp(const void *, const void *);
 static int compare_block(struct cmpctx *, struct cnode *, struct cnode *);
@@ -89,6 +106,15 @@ static int compare_set(struct cmpctx *, struct cnode *, struct cnode *);
 static int compare_seq(struct cmpctx *, struct cnode *, struct cnode *);
 static void emit(struct cmpctx *, char, struct cnode *);
 static void emit_tree(struct cmpctx *, char, int, struct cnode *);
+static struct cnode *find_kid(struct cnode *, char *);
+static void remove_kid(struct cnode *, size_t);
+static int set_text(struct cnode *, char *);
+static char *skipno(char *);
+static int samename(char *, char *);
+static int hasword(char *, char *, size_t);
+static int list_add(struct cnode *, char *);
+static int list_del(struct cnode *, size_t, char *);
+static void write_node(FILE *, int, struct cnode *);
 
 /*
  * Read the configuration file at path. mode(statement) says what the
@@ -214,6 +240,18 @@ conftree_compare(FILE *out, struct cnode *old, struct cnode *new)
 		return -1;
 	return c.ndiff;
 }
+
+/*
+ * Can conftree_read() read s back as the line it is (not blank, not
+ * indented, not a comment or a '!', and one line?)
+ */
+static int
+storable(char *s)
+{
+	return !blank(s) && s[0] != ' ' && s[0] != '!' && s[0] != '#' &&
+	    strchr(s, '\n') == NULL;
+}
+
 
 static struct cnode *
 cnode_add(struct cnode *parent, char *text, int ordered)
@@ -453,4 +491,392 @@ emit_tree(struct cmpctx *c, char mark, int depth, struct cnode *n)
 	fprintf(c->out, "%c%*s%s\n", mark, depth, "", n->text);
 	for (i = 0; i < n->nkids; i++)
 		emit_tree(c, mark, depth + 1, n->kids[i]);
+}
+
+/*
+ * Change the tree as one configuration command would.  block is the
+ * statement the line belongs under, or NULL for the top level; for
+ * CE_BLOCK and CE_NOBLOCK, line is the top-level statement itself. A
+ * line set or added under a block that is not there creates the block.
+ * block must be a statement that takes indented lines.  The name of a
+ * line is its first word, after a "no".  Returns CE_CHANGED, CE_NOOP,
+ * or -1 on failure, including a line the file could not hold.
+ */
+int
+conftree_edit(struct cnode *root, int op, char *block, char *line)
+{
+	struct cnode *p = root, *n;
+	size_t i;
+	int ret = CE_NOOP;
+
+	if (!storable(line) || (block != NULL && !storable(block))) {
+		printf("%% conftree_edit: not a configuration line: \"%s\"\n",
+		    storable(line) ? block : line);
+		return -1;
+	}
+
+	switch (op) {
+	case CE_BLOCK:
+		if (find_kid(root, line) != NULL)
+			return CE_NOOP;
+		return cnode_add(root, line, 0) == NULL ? -1 : CE_CHANGED;
+	case CE_NOBLOCK:
+		for (i = root->nkids; i-- > 0; ) {
+			if (strcmp(root->kids[i]->text, line) == 0) {
+				remove_kid(root, i);
+				ret = CE_CHANGED;
+			}
+		}
+		return ret;
+	}
+
+	if (block != NULL && (p = find_kid(root, block)) == NULL) {
+		if (op != CE_SET && op != CE_ADD && op != CE_LISTADD)
+			return CE_NOOP;
+		if ((p = cnode_add(root, block, 0)) == NULL)
+			return -1;
+		ret = CE_CHANGED;
+	}
+
+	switch (op) {
+	case CE_SET:
+		n = NULL;
+		for (i = 0; i < p->nkids; i++) {
+			if (!samename(p->kids[i]->text, line))
+				continue;
+			if (n == NULL) {
+				n = p->kids[i];
+				if (strcmp(n->text, line) != 0) {
+					if (set_text(n, line) == -1)
+						return -1;
+					ret = CE_CHANGED;
+				}
+			} else {
+				remove_kid(p, i--);
+				ret = CE_CHANGED;
+			}
+		}
+		if (n == NULL) {
+			if (cnode_add(p, line, 0) == NULL)
+				return -1;
+			ret = CE_CHANGED;
+		}
+		return ret;
+	case CE_UNSET:
+		for (i = p->nkids; i-- > 0; ) {
+			if (samename(p->kids[i]->text, line)) {
+				remove_kid(p, i);
+				ret = CE_CHANGED;
+			}
+		}
+		return ret;
+	case CE_ADD:
+		if (find_kid(p, line) != NULL)
+			return ret;
+		return cnode_add(p, line, 0) == NULL ? -1 : CE_CHANGED;
+	case CE_DEL:
+		for (i = p->nkids; i-- > 0; ) {
+			if (strcmp(p->kids[i]->text, line) == 0) {
+				remove_kid(p, i);
+				ret = CE_CHANGED;
+			}
+		}
+		return ret;
+	case CE_LISTADD:
+		for (i = 0; i < p->nkids; i++)
+			if (samename(p->kids[i]->text, line))
+				break;
+		if (i == p->nkids) {
+			/*
+			 * Start the line with its name and add the values to
+			 * it, so each is there once; with none, there is no
+			 * line.
+			 */
+			if ((n = cnode_add(p, line, 0)) == NULL)
+				return -1;
+			n->text[strcspn(n->text, " ")] = '\0';
+			switch (list_add(n, line)) {
+			case CE_CHANGED:
+				return CE_CHANGED;
+			case -1:
+				remove_kid(p, i);
+				return -1;
+			}
+			remove_kid(p, i);
+			return ret;
+		}
+		switch (list_add(p->kids[i], line)) {
+		case -1:
+			return -1;
+		case CE_CHANGED:
+			ret = CE_CHANGED;
+		}
+		return ret;
+	case CE_LISTDEL:
+		for (i = 0; i < p->nkids; i++)
+			if (samename(p->kids[i]->text, line))
+				return list_del(p, i, line);
+		return ret;
+	}
+	printf("%% conftree_edit: unknown edit %d\n", op);
+	return -1;
+}
+
+/* Is there a top-level statement that reads line? */
+int
+conftree_has(struct cnode *root, char *line)
+{
+	return find_kid(root, line) != NULL;
+}
+
+/* Does the top-level statement block have a line named name? */
+int
+conftree_named(struct cnode *root, char *block, char *name)
+{
+	struct cnode *p;
+	size_t i;
+
+	if ((p = find_kid(root, block)) == NULL)
+		return 0;
+	for (i = 0; i < p->nkids; i++)
+		if (samename(p->kids[i]->text, name))
+			return 1;
+	return 0;
+}
+
+/*
+ * Print the tree as a configuration file: each statement with its
+ * lines indented below it and a '!' after them.
+ */
+int
+conftree_write(FILE *out, struct cnode *root)
+{
+	size_t i;
+
+	for (i = 0; i < root->nkids; i++)
+		write_node(out, 0, root->kids[i]);
+	return ferror(out) ? -1 : 0;
+}
+
+struct cjournal *
+cjournal_new(void)
+{
+	return calloc(1, sizeof(struct cjournal));
+}
+
+/* Record an edit, to make it again later with cjournal_replay() */
+int
+cjournal_add(struct cjournal *j, int op, char *block, char *line)
+{
+	struct cedit *e;
+
+	e = reallocarray(j->edits, j->nedits + 1, sizeof(*e));
+	if (e == NULL)
+		return -1;
+	j->edits = e;
+	e = &j->edits[j->nedits];
+	e->op = op;
+	e->block = NULL;
+	if (block != NULL && (e->block = strdup(block)) == NULL)
+		return -1;
+	if ((e->line = strdup(line)) == NULL) {
+		free(e->block);
+		return -1;
+	}
+	j->nedits++;
+	return 0;
+}
+
+size_t
+cjournal_len(struct cjournal *j)
+{
+	return j->nedits;
+}
+
+/*
+ * Make the recorded edits on root, in order. On a newer copy of the
+ * running configuration, this keeps what changed there and puts each
+ * recorded edit on top of it.
+ */
+int
+cjournal_replay(struct cjournal *j, struct cnode *root)
+{
+	size_t i;
+
+	for (i = 0; i < j->nedits; i++)
+		if (conftree_edit(root, j->edits[i].op, j->edits[i].block,
+		    j->edits[i].line) == -1)
+			return -1;
+	return 0;
+}
+
+void
+cjournal_free(struct cjournal *j)
+{
+	size_t i;
+
+	if (j == NULL)
+		return;
+	for (i = 0; i < j->nedits; i++) {
+		free(j->edits[i].block);
+		free(j->edits[i].line);
+	}
+	free(j->edits);
+	free(j);
+}
+
+static struct cnode *
+find_kid(struct cnode *p, char *text)
+{
+	size_t i;
+
+	for (i = 0; i < p->nkids; i++)
+		if (strcmp(p->kids[i]->text, text) == 0)
+			return p->kids[i];
+	return NULL;
+}
+
+static void
+remove_kid(struct cnode *p, size_t i)
+{
+	conftree_free(p->kids[i]);
+	memmove(&p->kids[i], &p->kids[i + 1],
+	    (p->nkids - i - 1) * sizeof(*p->kids));
+	p->nkids--;
+}
+
+static int
+set_text(struct cnode *n, char *text)
+{
+	char *t;
+
+	if ((t = strdup(text)) == NULL)
+		return -1;
+	free(n->text);
+	n->text = t;
+	return 0;
+}
+
+/* "no mtu 1400" -> "mtu 1400" */
+static char *
+skipno(char *s)
+{
+	return strncmp(s, "no ", 3) == 0 ? s + 3 : s;
+}
+
+/* Do two lines set the same thing: is their first word, after "no", the same? */
+static int
+samename(char *a, char *b)
+{
+	size_t la, lb;
+
+	a = skipno(a);
+	b = skipno(b);
+	la = strcspn(a, " ");
+	lb = strcspn(b, " ");
+	return la == lb && strncmp(a, b, la) == 0;
+}
+
+/* Is w, len bytes long, one of the words after the first in text? */
+static int
+hasword(char *text, char *w, size_t len)
+{
+	size_t l;
+
+	text += strcspn(text, " ");
+	while (*text == ' ') {
+		text++;
+		l = strcspn(text, " ");
+		if (l == len && strncmp(text, w, len) == 0)
+			return 1;
+		text += l;
+	}
+	return 0;
+}
+
+/* Add the values in line (the words after its name) to n's line */
+static int
+list_add(struct cnode *n, char *line)
+{
+	char *v, *t;
+	size_t l, len;
+	int ret = CE_NOOP;
+
+	v = line + strcspn(line, " ");
+	while (*v == ' ') {
+		v++;
+		l = strcspn(v, " ");
+		if (l > 0 && !hasword(n->text, v, l)) {
+			len = strlen(n->text);
+			if ((t = realloc(n->text, len + l + 2)) == NULL)
+				return -1;
+			t[len] = ' ';
+			memcpy(t + len + 1, v, l);
+			t[len + l + 1] = '\0';
+			n->text = t;
+			ret = CE_CHANGED;
+		}
+		v += l;
+	}
+	return ret;
+}
+
+/*
+ * Remove the values in line from p's line i, and the line if no value
+ * is left. A line with no values removes the whole line.
+ */
+static int
+list_del(struct cnode *p, size_t i, char *line)
+{
+	struct cnode *n = p->kids[i];
+	char *t, *w, *end;
+	size_t l, len;
+	int ret = CE_NOOP;
+
+	if (line[strcspn(line, " ")] == '\0') {
+		remove_kid(p, i);
+		return CE_CHANGED;
+	}
+	len = strlen(n->text);
+	if ((t = malloc(len + 1)) == NULL)
+		return -1;
+	l = strcspn(n->text, " ");
+	memcpy(t, n->text, l);
+	end = t + l;
+	for (w = n->text + l; *w == ' '; w += l) {
+		w++;
+		l = strcspn(w, " ");
+		if (l > 0 && hasword(line, w, l)) {
+			ret = CE_CHANGED;
+			continue;
+		}
+		*end++ = ' ';
+		memcpy(end, w, l);
+		end += l;
+	}
+	*end = '\0';
+	if (ret == CE_NOOP) {
+		free(t);
+		return ret;
+	}
+	if (strchr(t, ' ') == NULL) {
+		free(t);
+		remove_kid(p, i);
+		return CE_CHANGED;
+	}
+	free(n->text);
+	n->text = t;
+	return ret;
+}
+
+static void
+write_node(FILE *out, int depth, struct cnode *n)
+{
+	size_t i;
+
+	fprintf(out, "%*s%s\n", depth, "", n->text);
+	for (i = 0; i < n->nkids; i++)
+		write_node(out, depth + 1, n->kids[i]);
+	if (n->nkids > 0)
+		fprintf(out, "%*s!\n", depth, "");
 }
