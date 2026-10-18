@@ -77,6 +77,7 @@ static const struct setting if_settings[] = {
 	{ "powersave",		S_VALUE },
 	{ "autoconf4",		S_STATE },
 	{ "inet",		S_ENTRY,	2 | CK_ADDR },
+	{ "media",		S_VALUE },
 	{ "keepalive",		S_VALUE },
 	{ "syncdev",		S_VALUE },
 	{ "syncpeer",		S_VALUE },

@@ -47,6 +47,7 @@
 #include <errno.h>
 #include <netdb.h>
 #include "externs.h"
+#include "settings.h"
 
 uint64_t init_current_media(int, char *);
 void process_media_commands(int, char *, uint64_t);
@@ -57,6 +58,10 @@ uint64_t get_media_options(uint64_t, const char *);
 uint64_t lookup_media_word(const struct ifmedia_description *, uint64_t, const char *);
 void print_media_word(uint64_t, int, int, FILE *);
 void conf_print_media_word(FILE *, uint64_t);
+static int media_set(uint64_t);
+static void media_line(char *, size_t, uint64_t);
+static uint64_t cand_media(char *, uint64_t);
+static int cand_setmedia(int, char *, uint64_t);
 
 const uint64_t ifm_status_valid_list[] =
     IFM_STATUS_VALID_LIST;
@@ -222,6 +227,11 @@ process_media_commands(int s, char *name, uint64_t media_current)
 {
 	struct ifreq ifr;
 
+	if (candidate) {
+		cand_setmedia(s, name, media_current);
+		return;
+	}
+
 	(void) strlcpy(ifr.ifr_name, name, sizeof(ifr.ifr_name));
 	ifr.ifr_media = media_current;
 
@@ -255,7 +265,78 @@ init_current_media(int s, char *ifname)
 		return -1;
 	}
 
+	if (candidate)
+		return cand_media(ifname, IFM_TYPE(media_current));
 	return media_current;
+}
+
+/*
+ * The media word the candidate has for ifname, of the type the kernel
+ * says the interface has: its media line, or autoselect
+ */
+static uint64_t
+cand_media(char *ifname, uint64_t type)
+{
+	char line[256], *l, *p;
+	const char *errmsg;
+	uint64_t subtype, inst = 0, options = 0;
+
+	if ((l = cand_line("media", 0)) == NULL)
+		return IFM_MAKEWORD(type, IFM_AUTO, 0, 0);
+	/* media <subtype> [instance] [mediaopt <options>] */
+	strlcpy(line, l, sizeof(line));
+	p = line;
+	strsep(&p, " ");
+	if ((subtype = get_media_subtype(type, strsep(&p, " "))) == -1)
+		return -1;
+	if (p != NULL && strncmp(p, "mediaopt ", 9) != 0) {
+		inst = strtonum(strsep(&p, " "), 0, IFM_INST_MAX, &errmsg);
+		if (errmsg)
+			return -1;
+	}
+	if (p != NULL && strncmp(p, "mediaopt ", 9) == 0 &&
+	    (options = get_media_options(type, p + 9)) == -1)
+		return -1;
+	return IFM_MAKEWORD(type, subtype, options, inst);
+}
+
+/*
+ * SIOCSIFMEDIA in configure private: ifmedia_ioctl() takes a word the
+ * driver lists, and conf_media_status() prints it if it was set
+ */
+static int
+cand_setmedia(int s, char *ifname, uint64_t word)
+{
+	struct ifmediareq ifmr;
+	uint64_t *list;
+	char line[256];
+	int i;
+
+	memset(&ifmr, 0, sizeof(ifmr));
+	strlcpy(ifmr.ifm_name, ifname, sizeof(ifmr.ifm_name));
+	if (ioctl(s, SIOCGIFMEDIA, (caddr_t)&ifmr) == -1 ||
+	    (list = calloc(ifmr.ifm_count, sizeof(*list))) == NULL) {
+		printf("%% cand_setmedia: %s\n", strerror(errno));
+		return -1;
+	}
+	ifmr.ifm_ulist = list;
+	if (ioctl(s, SIOCGIFMEDIA, (caddr_t)&ifmr) == -1) {
+		printf("%% cand_setmedia: %s\n", strerror(errno));
+		free(list);
+		return -1;
+	}
+	for (i = 0; i < ifmr.ifm_count && list[i] != word; i++)
+		;
+	free(list);
+	if (i == ifmr.ifm_count) {
+		printf("%% process_media_commands: SIOCSIFMEDIA: %s\n",
+		    strerror(EINVAL));
+		return -1;
+	}
+	if (!media_set(word))
+		return cand_setting(ST_DEFAULT, "media");
+	media_line(line, sizeof(line), word);
+	return cand_setting(ST_ON, "%s", line);
 }
 
 const char *
@@ -444,15 +525,27 @@ print_media_word(uint64_t ifmw, int print_type, int as_syntax, FILE *outfile)
 	}
 }
 
-void
-conf_print_media_word(FILE *output, uint64_t ifmw)
+/* Does conf_media_status() print ifmw, as set rather than the default? */
+static int
+media_set(uint64_t ifmw)
+{
+	return IFM_SUBTYPE(ifmw) != IFM_AUTO || IFM_OPTIONS(ifmw) != 0 ||
+	    IFM_INST(ifmw) != 0;
+}
+
+/* conf_print_media_word()'s line for ifmw */
+static void
+media_line(char *buf, size_t len, uint64_t ifmw)
 {
 	const struct ifmedia_description *desc;
 	uint64_t seen_option = 0;
+	char tmp[32];
 
-	fprintf(output, " media %s", get_media_subtype_string(ifmw));
-	if (IFM_INST(ifmw) != 0)
-		fprintf(output, " %llu", IFM_INST(ifmw));
+	snprintf(buf, len, "media %s", get_media_subtype_string(ifmw));
+	if (IFM_INST(ifmw) != 0) {
+		snprintf(tmp, sizeof(tmp), " %llu", IFM_INST(ifmw));
+		strlcat(buf, tmp, len);
+	}
 
 	/* Find options. */
 	for (desc = ifm_option_descriptions; desc->ifmt_string != NULL;
@@ -460,14 +553,20 @@ conf_print_media_word(FILE *output, uint64_t ifmw)
 		if (IFM_TYPE_MATCH(desc->ifmt_word, ifmw) &&
 		    (IFM_OPTIONS(ifmw) & IFM_OPTIONS(desc->ifmt_word)) != 0 &&
 		    (seen_option & IFM_OPTIONS(desc->ifmt_word)) == 0) {
-			if (seen_option == 0)
-				fprintf(output, " mediaopt ");
-			fprintf(output, "%s%s", seen_option ? "," : "",
-			    desc->ifmt_string);
+			strlcat(buf, seen_option ? "," : " mediaopt ", len);
+			strlcat(buf, desc->ifmt_string, len);
 			seen_option |= IFM_OPTIONS(desc->ifmt_word);
 		}
 	}
-	fprintf(output, "\n");
+}
+
+void
+conf_print_media_word(FILE *output, uint64_t ifmw)
+{
+	char line[256];
+
+	media_line(line, sizeof(line), ifmw);
+	fprintf(output, " %s\n", line);
 }
 
 int
@@ -542,9 +641,7 @@ conf_media_status(FILE *output, int s, char *ifname)
 		return 0;
 	}
 
-	if (IFM_SUBTYPE(ifmr.ifm_current) != IFM_AUTO ||
-	    IFM_OPTIONS(ifmr.ifm_current) != 0 ||
-	    IFM_INST(ifmr.ifm_current) != 0) {
+	if (media_set(ifmr.ifm_current)) {
 		/* a media type was set manually */
 		rval = 1;
 		conf_print_media_word(output, ifmr.ifm_current);
