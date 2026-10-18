@@ -2799,19 +2799,22 @@ traceroute6(int argc, char *argv[], ...)
 int
 argvtostring(int argc, char **argv, char *string, int strlen)
 {
-	int i, j;
+	int i, j, sep = 0;
 
 	for (i = 0, j = 0; argc && i < (strlen - 1); i++) {
 		if (argv[0][j] == '\0') {
 			argc--, argv++;
 			string[i] = ' ';
 			j = 0;
+			sep = 1;
 			continue;
 		}
 		string[i] = argv[0][j];
 		j++;
+		sep = 0;
 	}
-	if (i > 0)
+	/* drop the space after the last word, not a character of it */
+	if (sep)
 		i--;
 	string[i] = '\0';
 

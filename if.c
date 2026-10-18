@@ -2327,17 +2327,17 @@ intllprio(int argc, char **argv, ...)
 
 		num = strtonum(argv[1], 0, 15, &errmsg);
 		if (errmsg) {
-			printf("%% Invalid llpriority %s: %s\n", argv[0],
+			printf("%% Invalid llpriority %s: %s\n", argv[1],
 			    errmsg);
 			return 0;
 		}
 		ifr.ifr_llprio = num;
 	} else {
-		ifr.ifr_llprio = DEFAULT_LLPRIORITY;
+		ifr.ifr_llprio = default_llpriority(ifname);
 	}
 
 	if (errmsg) {
-		printf("%% Invalid llpriority %s: %s\n", argv[0], errmsg);
+		printf("%% Invalid llpriority %s: %s\n", argv[1], errmsg);
 		return 0;
 	}
 

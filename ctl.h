@@ -13,7 +13,6 @@
 #define ROUNDMBPS(bps) ((float)bps == ((bps / 1000 / 1000) * 1000 * 1000))
 #define ROUNDKBPS(bps) ((float)bps == ((bps / 1000) * 1000))
 #define ROUNDKBYTES(bytes) ((float)bytes == ((bytes / 1024) * 1024))
-#define DEFAULT_LLPRIORITY 3
 
 /* service daemons */
 #define OSPFD           "/usr/sbin/ospfd"
