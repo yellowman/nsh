@@ -78,6 +78,7 @@ char next_ifname[IFNAMSIZ];	/* switch interfaces in interface context */
 struct intlist *whichlist;
 
 pid_t	child;
+static int in_rc;		/* cmdrc() is reading a file */
 
 extern volatile sig_atomic_t caught_sigwinch;
 
@@ -1567,7 +1568,7 @@ interface(int argc, char **argv, ...)
 			(*i->handler)(argc, argv, ifname, ifs);
 
 			if (save_cli_rtable != cli_rtable &&
-			    nsh_setrtable(cli_rtable) == 0)
+			    nsh_setrtable(save_cli_rtable) == 0)
 				cli_rtable = save_cli_rtable;
 		}
 
@@ -1653,7 +1654,7 @@ interface(int argc, char **argv, ...)
 			ret = (*i->handler)(margc, margv, ifname, ifs);
 
 			if (cli_rtable != save_cli_rtable &&
-			    nsh_setrtable(cli_rtable) == 0)
+			    nsh_setrtable(save_cli_rtable) == 0)
 				cli_rtable = save_cli_rtable;
 
 			if (ret)
@@ -2462,13 +2463,13 @@ docmd(int argc, char **argv, ...)
 				return 0;
 			}
 
-			if (cli_rtable != 0 && nsh_setrtable(cli_rtable) == 0)
+			if (cli_rtable != 0 && nsh_setrtable(0) == 0)
 				cli_rtable = 0;
 
 			(*i->handler)(argc, argv, ifname, ifs);
 
 			if (save_cli_rtable != cli_rtable &&
-			    nsh_setrtable(cli_rtable) == 0)
+			    nsh_setrtable(save_cli_rtable) == 0)
 				cli_rtable = save_cli_rtable;
 		}
 		close(ifs);
@@ -2822,6 +2823,28 @@ argvtostring(int argc, char **argv, char *string, int strlen)
 	return i;
 }
 
+/*
+ * Move to table.  Reading a file, a table the kernel does not have yet
+ * takes its block's lines all the same: a route among them makes the
+ * table (RTM_ADD does), and cmdrc() moves into it then
+ */
+static int
+rtable_enter(int table)
+{
+	if (in_rc && getrtable() != table) {
+		if (setrtable(table) == 0)
+			init_bgpd_socket_path(table);
+		else if (errno != EINVAL)
+			return nsh_setrtable(table);
+		cli_rtable = table;
+		return 0;
+	}
+	if (nsh_setrtable(table))
+		return 1;
+	cli_rtable = table;
+	return 0;
+}
+
 static int
 rtable(int argc, char **argv, ...)
 {
@@ -2905,10 +2928,7 @@ rtable(int argc, char **argv, ...)
 			return 1;
 		}
 		/* Table found, skip database action */
-		if (nsh_setrtable(table))
-			return 1;
-		cli_rtable = table;
-		return 0;
+		return rtable_enter(table);
 	}
 	if (!set) {
 		if (!found) {
@@ -2935,9 +2955,8 @@ rtable(int argc, char **argv, ...)
 			printf("%% rtable db insertion error\n");
 			return 1;
 		}
-		if (nsh_setrtable(table))
+		if (rtable_enter(table))
 			return 1;
-		cli_rtable = table;
 	} else {
 		if (nsh_setrtable(0))
 			return 1;
@@ -3203,6 +3222,7 @@ cmdrc(char rcname[FILENAME_MAX])
 	char	modhvar[128];	/* required variable in mode handler cmd */
 	unsigned int lnum;	/* line number */
 	u_int	z = 0;		/* max length of cmdtab argument */
+	int	rc_rtable = cli_rtable;	/* where a block's lines go back to */
 
 	init_bgpd_socket_path(cli_rtable);
 
@@ -3215,6 +3235,7 @@ cmdrc(char rcname[FILENAME_MAX])
 		if (strlen(c->name) > z)
 			z = strlen(c->name);
 	c = NULL;
+	in_rc = 1;
 
 	for (lnum = 1; ; lnum++) {
 		if (fgets(line, sizeof(line), rcfile) == NULL)
@@ -3230,6 +3251,10 @@ cmdrc(char rcname[FILENAME_MAX])
 			continue;
 		if (line[0] == '!') {
 			savec = NULL;
+			/* an rtable block ends here, and so does its rtable */
+			if (cli_rtable != rc_rtable &&
+			    nsh_setrtable(rc_rtable) == 0)
+				cli_rtable = rc_rtable;
 			continue;
 		}
 		/*
@@ -3319,7 +3344,11 @@ cmdrc(char rcname[FILENAME_MAX])
 			(*c->handler) (margc, margv, modhvar);
 		else
 			(*c->handler) (margc, margv, 0);
+		/* a table the line made can be entered now */
+		if (cli_rtable != getrtable() && setrtable(cli_rtable) == 0)
+			init_bgpd_socket_path(cli_rtable);
 	}
+	in_rc = 0;
 	fclose(rcfile);
 	return 0;
 }

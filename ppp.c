@@ -377,7 +377,7 @@ pppoe_ipcp(char *ifname, int ifs, int set)
 
 	strlcpy(ip4req.ifra_name, ifname, sizeof(ip4req.ifra_name));
 	if (ioctl(ifs, set ? SIOCAIFADDR : SIOCDIFADDR, &ip4req) < 0) {
-		printf("%% pppoe_ipcp: SIOC%dIFADDR: %s\n",
+		printf("%% pppoe_ipcp: SIOC%cIFADDR: %s\n",
 		    set ? 'A' : 'D', strerror(errno));
 	}
 
