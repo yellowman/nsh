@@ -490,7 +490,7 @@ intbssid(int argc, char **argv, ...)
 
 	strlcpy(bssid.i_name, ifname, sizeof(bssid.i_name));
 	if (ioctl(ifs, SIOCS80211BSSID, &bssid) == -1) {
-		printf("%% inttxpower: SIOCS80211BSSID failed: %s\n",
+		printf("%% intbssid: SIOCS80211BSSID failed: %s\n",
 		    strerror(errno));
 	}
 

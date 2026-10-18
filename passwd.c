@@ -66,10 +66,12 @@ int
 write_pass(char *cpass)
 {
 	FILE *pwdhandle;
+	mode_t mask;
 
-	umask(S_IWGRP | S_IRWXO);
+	mask = umask(S_IWGRP | S_IRWXO);
 	/* maybe we should flock here? */
 	pwdhandle = fopen(NSHPASSWD_TEMP, "w");
+	umask(mask);
 	if (pwdhandle == NULL) {
 		printf("%% Unable to write run-time crypt repository: %s\n",
 		       strerror(errno));
@@ -248,7 +250,7 @@ enable_passwd(int argc, char **argv)
 
 	case 4:
 		if (!isprefix(argv[1], "secret")) {
-			printf("%% Invalid argument: %s\n", argv[2]);
+			printf("%% Invalid argument: %s\n", argv[1]);
 			return 0;
 		}
 
