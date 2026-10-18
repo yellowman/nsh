@@ -1515,6 +1515,9 @@ conf_routes(FILE *output, char *delim, int af, int flags, int tableid)
 		sa = (struct sockaddr *)(next + rtm->rtm_hdrlen);
 		if (af != AF_UNSPEC && sa->sa_family != af)
 			continue;
+		/* an expiring route is not configuration */
+		if (rtm->rtm_rmx.rmx_expire)
+			continue;
 		if (!rtm->rtm_errno) {
 			if (rtm->rtm_addrs)
 				conf_print_rtm(output, rtm, delim, af);
@@ -1624,7 +1627,6 @@ static const struct {
 	{ "cloning",	RTF_CLONING },
 	{ "iface",	-RTF_GATEWAY },
 	{ "llinfo",	RTF_LLINFO },
-	{ "nompath",	-RTF_MPATH },
 	{ "nostatic",	-RTF_STATIC },
 	{ "proto1",	RTF_PROTO1 },
 	{ "proto2",	RTF_PROTO2 },
@@ -1650,12 +1652,6 @@ conf_rtflags(char *txt, int flags, struct rt_msghdr *rtm)
 	if (rtm->rtm_rmx.rmx_mtu && rtm->rtm_rmx.rmx_mtu != ROUTEMTU) {
 		char sn1[16];
 		snprintf(sn1, sizeof(sn1), " mtu %d", rtm->rtm_rmx.rmx_mtu);
-		strlcat(txt, sn1, TMPSIZ);
-	}
-	if (rtm->rtm_rmx.rmx_expire) {
-		char sn1[16];
-		snprintf(sn1, sizeof(sn1), " expire %lld",
-		    rtm->rtm_rmx.rmx_expire);
 		strlcat(txt, sn1, TMPSIZ);
 	}
 }

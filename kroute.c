@@ -633,13 +633,14 @@ bprintf(FILE *fp, int b, u_char *s)
  */
 int
 ip_route(ip_t *dest, ip_t *gate, u_short cmd, int flags, int tableid,
-    struct rt_metrics rt_metrics, int inits)
+    struct rt_metrics metrics, int inits)
 {
 	int l;
 	int len = dest->bitlen;
 	static char line_kroute[MAXHOSTNAMELEN];
 
 	rtm_addrs = 0, rtm_inits = inits;
+	rt_metrics = metrics;
 	memset(&so_dst, 0, sizeof (so_dst));
 	memset(&so_gate, 0, sizeof (so_gate));
 	memset(&so_mask, 0, sizeof (so_mask));
@@ -705,7 +706,7 @@ ip_route(ip_t *dest, ip_t *gate, u_short cmd, int flags, int tableid,
 		break;
 	default:
 		printf("%% ip_route: can't handle af %d\n", dest->family);
-		return 0;
+		return 1;
 		break;
 	}
 	if ((l = rtmsg(cmd, flags, 0, 0, tableid)) < 0) {
@@ -729,6 +730,7 @@ ip_route(ip_t *dest, ip_t *gate, u_short cmd, int flags, int tableid,
 			    line_kroute, sizeof(line_kroute)));
 		else
 			printf("%% ip_route: rtmsg: %s\n", strerror(errno));
+		return 1;
 	} else if (cmd == RTM_GET)
 		/* ip_route is also used by 'show route' */
 		print_getmsg(&m_rtmsg.m_rtm, l);

@@ -50,8 +50,10 @@ route(int argc, char **argv, ...)
 	u_int32_t net;
 	ip_t dest, gate;
 	struct in_addr tmp;
+	struct in6_addr tmp6;
 	struct rt_metrics rt_metrics;
-	int ch, inits = 0, flags = RTF_STATIC | RTF_MPATH;
+	char buf[INET6_ADDRSTRLEN];
+	int i, ch, inits = 0, flags = RTF_STATIC | RTF_MPATH;
 
 	static struct nopts routeflags[] = {
 		{ "blackhole",	no_arg,		'b' },
@@ -126,11 +128,11 @@ route(int argc, char **argv, ...)
 		return 1;
 	}
 
+	noptind = 0;
 	if (argc >= 1) {
 		long long relative_expire;
 
 		/* parse flags */
-		noptind = 0;
 		while ((ch = nopt(argc, argv, routeflags)) != -1) {
 			switch (ch) {
 			const char *errmsg = NULL;
@@ -147,7 +149,7 @@ route(int argc, char **argv, ...)
 				if (errmsg) {
 					printf("%% Invalid expire %s: %s\n",
 					    argv[noptind - 1], errmsg);
-					return 0;
+					return 1;
 				}
 				rt_metrics.rmx_expire = relative_expire ?
 				    relative_expire + time(NULL) : 0;
@@ -168,7 +170,7 @@ route(int argc, char **argv, ...)
 				if (errmsg) {
 					printf("%% Invalid route mtu %s: %s\n",
 					    argv[noptind - 1], errmsg);
-					return 0;
+					return 1;
 				}
 				inits |= RTV_MTU;
 				break;
@@ -186,7 +188,7 @@ route(int argc, char **argv, ...)
 				break;
 			default:
 				printf("%% route: nopt table error\n");
-				return 0;
+				return 1;
 			}
 		}
 	}
@@ -198,7 +200,7 @@ route(int argc, char **argv, ...)
 			printf(": %s", argv[noptind]);
 		printf("\n");
 		routeusage();
-		return 0;
+		return 1;
 	}
 	/*
 	 * Detect if a user is adding a route with a non-network address.
@@ -213,8 +215,17 @@ route(int argc, char **argv, ...)
 			    inet_ntoa(tmp), dest.bitlen);
 			return 1;
 		}
+		break;
 	case AF_INET6:
-		/* XXX invent check */
+		tmp6 = dest.addr.in6;
+		for (i = dest.bitlen; i < 128; i++)
+			tmp6.s6_addr[i / 8] &= ~(0x80 >> (i % 8));
+		if (memcmp(&tmp6, &dest.addr.in6, sizeof(tmp6)) != 0) {
+			printf("%% Inconsistent address and mask (%s/%i?)\n",
+			    inet_ntop(AF_INET6, &tmp6, buf, sizeof(buf)),
+			    dest.bitlen);
+			return 1;
+		}
 		break;
 	default:
 		printf("%% unknown destination address family %d\n", dest.family);
@@ -234,11 +245,8 @@ route(int argc, char **argv, ...)
 	/*
 	 * Do the route...
 	 */
-	if (flags & RTF_GATEWAY)
-		ip_route(&dest, &gate, cmd, flags, cli_rtable, rt_metrics, inits);
-	else
-		ip_route(&dest, NULL, cmd, flags, cli_rtable, rt_metrics, inits);
-	return 0;
+	return ip_route(&dest, gate.family ? &gate : NULL, cmd, flags,
+	    cli_rtable, rt_metrics, inits);
 }
 
 int
