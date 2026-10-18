@@ -49,6 +49,8 @@ static int cand_sppp(char *, int, int, struct sauthreq *, char *);
 static void pppoe_line(char *, size_t, struct pppoediscparms *);
 static int pppoe_get(int, struct pppoediscparms *);
 static int pppoe_set(int, struct pppoediscparms *);
+static int pppoe_nodev(int, char *);
+static int pppoe_cand(struct pppoediscparms *);
 static int pppoe_isether(char *);
 
 /* options for 'proto' */
@@ -393,7 +395,7 @@ int
 intpppoe(int argc, char **argv, ...)
 {
 	struct pppoediscparms parms;
-	int set, ch;
+	int set, ch, dev = 0;
 	va_list ap;
 	char *ifname;
 	int ifs;
@@ -496,15 +498,14 @@ intpppoe(int argc, char **argv, ...)
 	}
 
 	if (!set) {
-		if (parms.eth_ifname[0] != '\0')
-			printf("%% The pppoe dev of %s cannot be removed\n",
-			    ifname);
+		dev = parms.eth_ifname[0] != '\0';
 		memset(&parms.ac_name, 0, sizeof(parms.ac_name));
 		memset(&parms.service_name, 0, sizeof(parms.service_name));
 		memset(&parms.eth_ifname, 0, sizeof(parms.eth_ifname));
 	}
 
-	if (pppoe_set(ifs, &parms) == -1)
+	if (pppoe_set(ifs, &parms) == -1 ||
+	    (!set && dev && pppoe_nodev(ifs, ifname) == -1))
 		printf("%% intpppoe: PPPOESETPARMS: %s\n", strerror(errno));
 
 	return (0);
@@ -550,25 +551,61 @@ pppoe_get(int ifs, struct pppoediscparms *parms)
 
 /*
  * PPPOESETPARMS, or in configure private its change to the candidate.
- * It keeps the dev when given none.
+ * It keeps the dev when given none, and drops it, and changes nothing
+ * else, when given one that is no Ethernet interface (ENXIO).
  */
 static int
 pppoe_set(int ifs, struct pppoediscparms *parms)
 {
 	struct pppoediscparms cur;
-	char line[1024];
 
 	if (!candidate)
 		return ioctl(ifs, PPPOESETPARMS, parms);
 	memset(&cur, 0, sizeof(cur));
 	strlcpy(cur.ifname, parms->ifname, sizeof(cur.ifname));
-	if (parms->eth_ifname[0] == '\0' && pppoe_get(ifs, &cur) == 0)
+	if (pppoe_get(ifs, &cur) == -1)
+		return -1;
+	if (parms->eth_ifname[0] == '\0')
 		strlcpy(parms->eth_ifname, cur.eth_ifname,
 		    sizeof(parms->eth_ifname));
+	else if (!pppoe_isether(parms->eth_ifname)) {
+		memset(&cur.eth_ifname, 0, sizeof(cur.eth_ifname));
+		pppoe_cand(&cur);
+		errno = ENXIO;
+		return -1;
+	}
+	return pppoe_cand(parms);
+}
+
+/* The candidate's pppoe line for parms, or none */
+static int
+pppoe_cand(struct pppoediscparms *parms)
+{
+	char line[1024];
+
 	if (!(*parms->eth_ifname | *parms->ac_name | *parms->service_name))
 		return cand_setting(ST_DEFAULT, "pppoe");
 	pppoe_line(line, sizeof(line), parms);
 	return cand_setting(ST_ON, "%s", line);
+}
+
+/*
+ * Take away ifname's pppoe dev: PPPOESETPARMS drops it before it
+ * refuses a dev that is no Ethernet interface, and no interface is "-"
+ */
+static int
+pppoe_nodev(int ifs, char *ifname)
+{
+	struct pppoediscparms parms;
+
+	memset(&parms, 0, sizeof(parms));
+	strlcpy(parms.ifname, ifname, sizeof(parms.ifname));
+	strlcpy(parms.eth_ifname, "-", sizeof(parms.eth_ifname));
+	if (pppoe_set(ifs, &parms) == 0)
+		errno = EINVAL;
+	else if (errno == ENXIO)
+		return 0;
+	return -1;
 }
 
 /* Is name an Ethernet interface, as PPPOESETPARMS wants for a dev? */
