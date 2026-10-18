@@ -29,7 +29,7 @@ SRCS+=ctl.c show.c if.c version.c route.c conf.c complete.c ieee80211.c
 SRCS+=bridge.c tunnel.c media.c sysctl.c passwd.c pfsync.c carp.c
 SRCS+=trunk.c who.c more.c stringlist.c utils.c sqlite3.c ppp.c prompt.c
 SRCS+=nopt.c pflow.c wg.c nameserver.c ndp.c umb.c utf8.c cmdargs.c ctlargs.c
-SRCS+=helpcommands.c makeargv.c hashtable.c mantab.c conftree.c
+SRCS+=helpcommands.c makeargv.c hashtable.c mantab.c conftree.c candidate.c
 CLEANFILES+=compile.c mantab.c
 
 LDADD=-lutil -ledit -ltermcap

@@ -53,6 +53,7 @@
 #include "stringlist.h"
 #include "externs.h"
 #include "ctl.h"
+#include "conftree.h"
 
 char *iftype(int int_type);
 const char *get_linkstate(int, int);
@@ -1763,6 +1764,17 @@ intmtu(int argc, char **argv, ...)
 	} else
 		ifr.ifr_mtu = default_mtu(ifname);
 
+	if (candidate) {
+		if (set && default_mtu(ifname) == MTU_IGNORE) {
+			printf("%% The configuration does not keep the mtu"
+			    " of %s\n", ifname);
+			return 0;
+		}
+		if (conf_mtu_shown(ifname, ifr.ifr_mtu))
+			return cand_edit(CE_SET, "mtu %d", ifr.ifr_mtu);
+		return cand_edit(CE_UNSET, "mtu");
+	}
+
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 	if (ioctl(ifs, SIOCSIFMTU, (caddr_t)&ifr) < 0)
 		printf("%% intmtu: SIOCSIFMTU: %s\n", strerror(errno));
@@ -2268,6 +2280,12 @@ intmetric(int argc, char **argv, ...)
 		return 0;
 	}
 
+	if (candidate) {
+		if (ifr.ifr_metric != 0)
+			return cand_edit(CE_SET, "%s %d", type, ifr.ifr_metric);
+		return cand_edit(CE_UNSET, "%s", type);
+	}
+
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 	if (ioctl(ifs, theioctl, (caddr_t)&ifr) < 0)
 		printf("%% intmetric: SIOCSIF%s: %s\n", type,
@@ -2323,6 +2341,13 @@ intllprio(int argc, char **argv, ...)
 		return 0;
 	}
 
+	if (candidate) {
+		if (ifr.ifr_llprio != default_llpriority(ifname))
+			return cand_edit(CE_SET, "llpriority %d",
+			    ifr.ifr_llprio);
+		return cand_edit(CE_UNSET, "llpriority");
+	}
+
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 	if (ioctl(ifs, SIOCSIFLLPRIO, (caddr_t)&ifr) < 0)
 		printf("%% intllprio: SIOCSIFLLPRIO: %s\n", strerror(errno));
@@ -2370,6 +2395,21 @@ intgroup(int argc, char **argv, ...)
 			printf("%% Group name too long (%s)\n", argv[i]);
 			return 0;
 		}
+	}
+
+	if (candidate) {
+		char groups[1024];
+		size_t need = 0;
+
+		for (i = 0; i < argc; i++)
+			need += strlen(argv[i]) + 1;
+		if (need > sizeof(groups)) {
+			printf("%% Too many groups\n");
+			return 0;
+		}
+		argvtostring(argc, argv, groups, sizeof(groups));
+		return cand_edit(set ? CE_LISTADD : CE_LISTDEL, "group %s",
+		    groups);
 	}
 
 	for (i = 0; i < argc; i++) {
@@ -2507,6 +2547,41 @@ intparent(int argc, char **argv, ...)
 	return 0;
 }
 
+/*
+ * intflags() in configure private: the lines conf_ifflags() would
+ * print once the flag is set or cleared.
+ */
+static int
+cand_ifflags(char *ifname, int value, int set)
+{
+	switch (value) {
+	case IFF_DEBUG:
+		return cand_edit(set ? CE_SET : CE_UNSET, "debug");
+	case IFF_STATICARP:
+		if (!set)
+			return cand_edit(CE_UNSET, "staticarp");
+		/* static ARP turns ARP back on, as below */
+		cand_edit(CE_UNSET, "arp");
+		return cand_edit(CE_SET, "staticarp");
+	case -IFF_NOARP:
+		if (set)
+			return cand_edit(CE_UNSET, "arp");
+		/* turning ARP off turns static ARP off too */
+		cand_edit(CE_UNSET, "staticarp");
+		return cand_edit(CE_SET, "no arp");
+	case -IFF_UP:
+		if (set)
+			return cand_edit(CE_SET, "shutdown");
+		/* an address brings an interface up without saying so */
+		if (!isprefix("pppoe", ifname) &&
+		    (cand_named("inet") || cand_named("autoconf4")))
+			return cand_edit(CE_UNSET, "shutdown");
+		return cand_edit(CE_SET, "no shutdown");
+	}
+	printf("%% cand_ifflags: value internal error\n");
+	return 0;
+}
+
 int
 intflags(int argc, char **argv, ...)
 {
@@ -2554,6 +2629,9 @@ intflags(int argc, char **argv, ...)
 		printf("%% wireguard interfaces do not support ARP\n");
 		return (0);
 	}
+
+	if (candidate)
+		return cand_ifflags(ifname, value, set);
 
 	flags = get_ifflags(ifname, ifs);
 	/*
@@ -3019,6 +3097,12 @@ intrdomain(int argc, char **argv, ...)
 	}
 	else
 		ifr.ifr_rdomainid = 0;
+	if (candidate) {
+		if (ifr.ifr_rdomainid > 0)
+			return cand_edit(CE_SET, "rdomain %d",
+			    ifr.ifr_rdomainid);
+		return cand_edit(CE_UNSET, "rdomain");
+	}
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 	if (ioctl(ifs, SIOCSIFRDOMAIN, &ifr) < 0)
 		printf("%% intrdomain: SIOCSIFRDOMAIN: %s\n", strerror(errno));
@@ -3058,6 +3142,12 @@ intdesc(int argc, char **argv, ...)
 	}
 
 	argvtostring(argc, argv, desc, sizeof(desc));
+
+	if (candidate) {
+		if (set && desc[0] != '\0')
+			return cand_edit(CE_SET, "description %s", desc);
+		return cand_edit(CE_UNSET, "description");
+	}
 
 	if (set)
 		ifr.ifr_data = (caddr_t)&desc;

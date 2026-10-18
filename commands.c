@@ -99,6 +99,8 @@ static int	pr_conf(int, char **, ...);
 static int	pr_s_conf(int, char **, ...);
 static int	pr_a_conf(int, char **, ...);
 static int	pr_conf_diff(int, char **, ...);
+static int	cand_refused(char *, int);
+static int	cand_leave(void);
 static int	pr_environment(int, char **, ...);
 static int	show_hostname(int, char **, ...);
 static int	wr_startup(int, char **, ...);
@@ -437,6 +439,9 @@ struct prot prots[] = {
 int
 quit(int argc, char **argv, ...)
 {
+	if (cand_changed())
+		printf("%% Uncommitted changes in the candidate were"
+		    " discarded\n");
 	if (privexec) {
 		exit(NSH_REXEC_EXIT_CODE_QUIT);
 	} else {
@@ -514,7 +519,8 @@ Menu showlist[] = {
 	{ "running-config",	"Operating configuration", CMPL0 0, 0, 0, 0, pr_conf },
 	{ "startup-config", "Startup configuration", CMPL0 0, 0, 0, 0, pr_s_conf },
 	{ "active-config", "Configuration of active context", CMPL0 0, 0, 0, 0, pr_a_conf },
-	{ "diff-config", "Show differences between startup and running config", CMPL0 0, 0, 0, 0, pr_conf_diff },
+	{ "diff-config", "Show differences between startup and running config, or running and candidate", CMPL0 0, 0, 0, 0, pr_conf_diff },
+	{ "candidate-config", "Candidate configuration of configure private", CMPL0 0, 0, 0, 0, pr_cand_conf },
 	{ "environment", "Show environment variables",	CMPL(e) 0, 0, 0, 1, pr_environment },
 	{ "?",		"Options",		CMPL0 0, 0, 0, 0, show_help },
 	{ "help",	0,			CMPL0 0, 0, 0, 0, show_help },
@@ -1173,17 +1179,17 @@ struct intlist Intlist[] = {
 	{ "ip",		"Alias for \"inet\" command",		CMPL(h) (char **)intiphelp, sizeof(struct ghs), intip, 1 },
 	{ "alias",	NULL, /* backwards compatibilty */	CMPL(h) (char **)intiphelp, sizeof(struct ghs), intip, 1 },
 	{ "autoconf4",  "IPv4 Autoconfigurable address (DHCP)",	CMPL0 0, 0, intxflags, 1 },
-	{ "description", "Interface description",		CMPL0 0, 0, intdesc, 1 },
-	{ "group",	"Interface group",			CMPL0 0, 0, intgroup, 1 },
-	{ "rdomain",	"Interface routing domain",		CMPL0 0, 0, intrdomain, 1 },
+	{ "description", "Interface description",		CMPL0 0, 0, intdesc, 1, CAND_EDIT },
+	{ "group",	"Interface group",			CMPL0 0, 0, intgroup, 1, CAND_EDIT },
+	{ "rdomain",	"Interface routing domain",		CMPL0 0, 0, intrdomain, 1, CAND_EDIT },
 	{ "rtlabel",	"Interface route labels",		CMPL0 0, 0, intrtlabel, 1 },
-	{ "priority",	"Data packet priority",			CMPL0 0, 0, intmetric, 1 },
-	{ "llpriority",	"Link Level packet priority",		CMPL0 0, 0, intllprio, 1 },
-	{ "mtu",	"Maximum Transmission Unit",		CMPL0 0, 0, intmtu, 1 },
-	{ "metric",	"Routing metric",			CMPL0 0, 0, intmetric, 1 },
+	{ "priority",	"Data packet priority",			CMPL0 0, 0, intmetric, 1, CAND_EDIT },
+	{ "llpriority",	"Link Level packet priority",		CMPL0 0, 0, intllprio, 1, CAND_EDIT },
+	{ "mtu",	"Maximum Transmission Unit",		CMPL0 0, 0, intmtu, 1, CAND_EDIT },
+	{ "metric",	"Routing metric",			CMPL0 0, 0, intmetric, 1, CAND_EDIT },
 	{ "link",	"Link level options",			CMPL0 0, 0, intlink, 1 },
-	{ "arp",	"Address Resolution Protocol",		CMPL0 0, 0, intflags, 1 },
-	{ "staticarp",	"Always use static ARP to find other hosts",CMPL0 0, 0, intflags, 1 },
+	{ "arp",	"Address Resolution Protocol",		CMPL0 0, 0, intflags, 1, CAND_EDIT },
+	{ "staticarp",	"Always use static ARP to find other hosts",CMPL0 0, 0, intflags, 1, CAND_EDIT },
 	{ "lladdr",	"Link Level (MAC) Address",		CMPL0 0, 0, intlladdr, 1 },
 	{ "nwid",	"802.11 network ID",			CMPL0 0, 0, intnwid, 1 },
 	{ "nwkey",	"802.11 network key",			CMPL0 0, 0, intnwkey, 1 },
@@ -1210,17 +1216,17 @@ struct intlist Intlist[] = {
 	{ "vnetflowid",	"Use part of vnetid as flowid",		CMPL0 0, 0, intvnetflowid, 1 },
 	{ "parent",	"Parent interface",			CMPL(i) 0, 0, intparent, 1 },
 	{ "patch",	"Pair interface",			CMPL(i) 0, 0, intpatch, 1 },
-	{ "ping",	pinghelp,				CMPL0 0, 0, int_ping, 0 },
-	{ "ping6",	ping6help,				CMPL0 0, 0, int_ping6, 0 },
-	{ "traceroute", tracerthelp,				CMPL0 0, 0, int_traceroute, 0 },
-	{ "traceroute6", tracert6help,				CMPL0 0, 0, int_traceroute6, 0 },
-	{ "ssh",	sshhelp,				CMPL0 0, 0, int_ssh, 0 },
-	{ "telnet",	telnethelp,				CMPL0 0, 0, int_telnet,	0 },
-	{ "logger",     loggerhelp,                             CMPL0 0, 0, int_logger, 0 },
-	{ "do",		dohelp,					CMPL(c) 0, 0, int_do, 0 },
-	{ "setenv",	setenvhelp,				CMPL(e) 0, 0, int_setenv, 0 },
-	{ "unsetenv",	unsetenvhelp,				CMPL(e) 0, 0, int_unsetenv, 0 },
-	{ "saveenv",	saveenvhelp,				CMPL0 0, 0, int_saveenv, 0 },
+	{ "ping",	pinghelp,				CMPL0 0, 0, int_ping, 0, CAND_RUN },
+	{ "ping6",	ping6help,				CMPL0 0, 0, int_ping6, 0, CAND_RUN },
+	{ "traceroute", tracerthelp,				CMPL0 0, 0, int_traceroute, 0, CAND_RUN },
+	{ "traceroute6", tracert6help,				CMPL0 0, 0, int_traceroute6, 0, CAND_RUN },
+	{ "ssh",	sshhelp,				CMPL0 0, 0, int_ssh, 0, CAND_RUN },
+	{ "telnet",	telnethelp,				CMPL0 0, 0, int_telnet,	0, CAND_RUN },
+	{ "logger",     loggerhelp,                             CMPL0 0, 0, int_logger, 0, CAND_RUN },
+	{ "do",		dohelp,					CMPL(c) 0, 0, int_do, 0, CAND_RUN },
+	{ "setenv",	setenvhelp,				CMPL(e) 0, 0, int_setenv, 0, CAND_RUN },
+	{ "unsetenv",	unsetenvhelp,				CMPL(e) 0, 0, int_unsetenv, 0, CAND_RUN },
+	{ "saveenv",	saveenvhelp,				CMPL0 0, 0, int_saveenv, 0, CAND_RUN },
 	{ "keepalive",	"GRE tunnel keepalive",			CMPL0 0, 0, intkeepalive, 1},
 	{ "mplslabel",	"MPLS local label",			CMPL0 0, 0, intmpls, 1 },
 	{ "pwe",	"MPLS PWE3",				CMPL0 0, 0, intpwe3, 1 },
@@ -1236,7 +1242,7 @@ struct intlist Intlist[] = {
 	{ "carppeer",	"CARP peer",				CMPL0 0, 0, intcarp, 1 },
 	{ "balancing",	"CARP balancing mode",			CMPL0 0, 0, intcarp, 1 },
 	{ "pflow",	"pflow data export",			CMPL0 0, 0, intpflow, 1 },
-	{ "debug",	"Driver dependent debugging",		CMPL0 0, 0, intflags, 1 },
+	{ "debug",	"Driver dependent debugging",		CMPL0 0, 0, intflags, 1, CAND_EDIT },
 	{ "dhcrelay",	"DHCP Relay Agent",			CMPL0 0, 0, intdhcrelay, 1 },
 	{ "wol",	"Wake On LAN",				CMPL0 0, 0, intxflags, 1 },
 	{ "mpls",	"MPLS",					CMPL0 0, 0, intxflags, 1 },
@@ -1258,18 +1264,18 @@ struct intlist Intlist[] = {
 	{ "class",	"Preferred cell classes",		CMPL0 0, 0, intumb, 1 },
 	{ "roaming",	"Enable data roaming",			CMPL0 0, 0, intumb, 1 },
   	{ "interface",  interfacehelp,				CMPL(i) 0, 0, int_interface, 1 },
-	{ "shutdown",   "Shutdown interface",			CMPL0 0, 0, intflags, 1 },
-	{ "show",	showhelp,				CMPL(ta) (char **)showlist, sizeof(Menu), int_show, 0 },
-	{ "who",	whohelp,				CMPL0 0, 0, int_who, 0 },
-	{ "verbose",	verbosehelp,				CMPL0 0, 0, int_doverbose, 1 },
-	{ "editing",	editinghelp,				CMPL0 0, 0, int_doediting, 1 },
-	{ "clear",	clearhelp,				CMPL0 0, 0, int_clear, 0 },
-	{ "!",		shellhelp,				CMPL0 0, 0, int_shell, 0 },
-        { "?",		"Options",				CMPL0 0, 0, int_help, 0 },
-	{ "manual",	manhelp,				CMPL(H) (char **)mantab, sizeof(struct ghs), int_manual, 0 },
-        { "help",	0,					CMPL0 0, 0, int_help, 0 },
+	{ "shutdown",   "Shutdown interface",			CMPL0 0, 0, intflags, 1, CAND_EDIT },
+	{ "show",	showhelp,				CMPL(ta) (char **)showlist, sizeof(Menu), int_show, 0, CAND_RUN },
+	{ "who",	whohelp,				CMPL0 0, 0, int_who, 0, CAND_RUN },
+	{ "verbose",	verbosehelp,				CMPL0 0, 0, int_doverbose, 1, CAND_RUN },
+	{ "editing",	editinghelp,				CMPL0 0, 0, int_doediting, 1, CAND_RUN },
+	{ "clear",	clearhelp,				CMPL0 0, 0, int_clear, 0, CAND_RUN },
+	{ "!",		shellhelp,				CMPL0 0, 0, int_shell, 0, CAND_RUN },
+        { "?",		"Options",				CMPL0 0, 0, int_help, 0, CAND_RUN },
+	{ "manual",	manhelp,				CMPL(H) (char **)mantab, sizeof(struct ghs), int_manual, 0, CAND_RUN },
+        { "help",	0,					CMPL0 0, 0, int_help, 0, CAND_RUN },
 	{ "exit",	"Leave interface config mode and return to global config mode ",
-								CMPL0 0, 0, int_exit, 0 },
+								CMPL0 0, 0, int_exit, 0, CAND_RUN },
 
 	{ 0, 0, 0, 0, 0 }
 };
@@ -1278,7 +1284,7 @@ size_t Intlist_nitems = nitems(Intlist);
 
 struct intlist Bridgelist[] = {
 /* Bridge mode commands */
-	{ "description", "Bridge description",			CMPL0 0, 0, intdesc, 1 },
+	{ "description", "Bridge description",			CMPL0 0, 0, intdesc, 1, CAND_EDIT },
 	{ "member",	"Bridge member(s)",			CMPL(i) 0, 0, brport, 1 },
 	{ "span",	"Bridge spanning port(s)",		CMPL(i) 0, 0, brport, 1 },
 	{ "blocknonip",	"Block non-IP traffic forwarding on member(s)",		CMPL0 0, 0, brport, 1 },
@@ -1291,17 +1297,17 @@ struct intlist Bridgelist[] = {
 	{ "fwddelay",	"Time before bridge begins forwarding packets",		CMPL0 0, 0, brval, 1 },
 	{ "hellotime",	"802.1D configuration packet broadcast interval",	CMPL0 0, 0, brval, 1 },
 	{ "priority",	"Spanning priority for all members on an 802.1D bridge",CMPL0 0, 0, brval, 1},
-	{ "ping",	pinghelp,				CMPL0 0, 0, int_ping, 0 },
-	{ "ping6",	ping6help,				CMPL0 0, 0, int_ping6, 0 },
-	{ "traceroute", tracerthelp,				CMPL0 0, 0, int_traceroute, 0 },
-	{ "traceroute6", tracert6help,				CMPL0 0, 0, int_traceroute6, 0 },
-	{ "ssh",	sshhelp,				CMPL0 0, 0, int_ssh, 0 },
-	{ "telnet",	telnethelp,				CMPL0 0, 0, int_telnet,	0 },
-	{ "logger",     loggerhelp,                             CMPL0 0, 0, int_logger, 0 },
-	{ "do",		dohelp,					CMPL(c) 0, 0, int_do, 0 },
-	{ "setenv",	setenvhelp,				CMPL(e) 0, 0, int_setenv, 0 },
-	{ "unsetenv",	unsetenvhelp,				CMPL(e) 0, 0, int_unsetenv, 0 },
-	{ "saveenv",	saveenvhelp,				CMPL0 0, 0, int_saveenv, 0 },
+	{ "ping",	pinghelp,				CMPL0 0, 0, int_ping, 0, CAND_RUN },
+	{ "ping6",	ping6help,				CMPL0 0, 0, int_ping6, 0, CAND_RUN },
+	{ "traceroute", tracerthelp,				CMPL0 0, 0, int_traceroute, 0, CAND_RUN },
+	{ "traceroute6", tracert6help,				CMPL0 0, 0, int_traceroute6, 0, CAND_RUN },
+	{ "ssh",	sshhelp,				CMPL0 0, 0, int_ssh, 0, CAND_RUN },
+	{ "telnet",	telnethelp,				CMPL0 0, 0, int_telnet,	0, CAND_RUN },
+	{ "logger",     loggerhelp,                             CMPL0 0, 0, int_logger, 0, CAND_RUN },
+	{ "do",		dohelp,					CMPL(c) 0, 0, int_do, 0, CAND_RUN },
+	{ "setenv",	setenvhelp,				CMPL(e) 0, 0, int_setenv, 0, CAND_RUN },
+	{ "unsetenv",	unsetenvhelp,				CMPL(e) 0, 0, int_unsetenv, 0, CAND_RUN },
+	{ "saveenv",	saveenvhelp,				CMPL0 0, 0, int_saveenv, 0, CAND_RUN },
 	{ "rule",	"Bridge layer 2 filtering rules",	CMPL0 0, 0, brrule, 0 },
 	{ "static",	"Static bridge address entry",		CMPL0 0, 0, brstatic, 1 },
 	{ "ifpriority",	"Spanning priority of a member on an 802.1D bridge",	CMPL0 0, 0, brpri, 1 },
@@ -1314,20 +1320,20 @@ struct intlist Bridgelist[] = {
 	{ "tunneldomain", "Tunnel parameters",			CMPL0 0, 0, intmpls, 1 },
 	{ "protect",	"Configure protected bridge domains",	CMPL0 0, 0, brprotect, 1 },
   	{ "interface",  interfacehelp,				CMPL(i) 0, 0, int_interface, 1 },
-	{ "shutdown",	"Shutdown bridge",			CMPL0 0, 0, intflags, 1 },
-	{ "show",	showhelp,				CMPL(ta) (char **)showlist, sizeof(Menu), int_show, 0 },
-	{ "who",	whohelp,				CMPL0 0, 0, int_who, 0 },
-	{ "verbose",	verbosehelp,				CMPL0 0, 0, int_doverbose, 1 },
-	{ "editing",	editinghelp,				CMPL0 0, 0, int_doediting, 1 },
-	{ "clear",	clearhelp,				CMPL0 0, 0, int_clear, 0 },
-	{ "!",		shellhelp,				CMPL0 0, 0, int_shell, 0 },
+	{ "shutdown",	"Shutdown bridge",			CMPL0 0, 0, intflags, 1, CAND_EDIT },
+	{ "show",	showhelp,				CMPL(ta) (char **)showlist, sizeof(Menu), int_show, 0, CAND_RUN },
+	{ "who",	whohelp,				CMPL0 0, 0, int_who, 0, CAND_RUN },
+	{ "verbose",	verbosehelp,				CMPL0 0, 0, int_doverbose, 1, CAND_RUN },
+	{ "editing",	editinghelp,				CMPL0 0, 0, int_doediting, 1, CAND_RUN },
+	{ "clear",	clearhelp,				CMPL0 0, 0, int_clear, 0, CAND_RUN },
+	{ "!",		shellhelp,				CMPL0 0, 0, int_shell, 0, CAND_RUN },
 
 /* Help commands */
-	{ "?",		"Options",				CMPL0 0, 0, int_help, 0 },
-	{ "manual",	manhelp,				CMPL(H) (char **)mantab, sizeof(struct ghs), int_manual, 0 },
-	{ "help",	0,					CMPL0 0, 0, int_help, 0 },
+	{ "?",		"Options",				CMPL0 0, 0, int_help, 0, CAND_RUN },
+	{ "manual",	manhelp,				CMPL(H) (char **)mantab, sizeof(struct ghs), int_manual, 0, CAND_RUN },
+	{ "help",	0,					CMPL0 0, 0, int_help, 0, CAND_RUN },
 	{ "exit",	"Leave bridge config mode and return to global config mode ",
-								CMPL0 0, 0, int_exit, 0 },
+								CMPL0 0, 0, int_exit, 0, CAND_RUN },
 	{ 0, 0, 0, 0, 0, 0 }
 };
 
@@ -1480,7 +1486,13 @@ interface(int argc, char **argv, ...)
 		return 1;
 	}
 
-	if (!is_valid_ifname(ifname)) {
+	if (candidate && cand_interface(set, ifname, &bridge) != 0) {
+		ifname[0] = '\0';
+		close(ifs);
+		return 0;
+	}
+
+	if (!candidate && !is_valid_ifname(ifname)) {
 		if (set == 0) {
 			printf("%% interface %s not found\n", ifname);
 			close(ifs);
@@ -1498,7 +1510,7 @@ interface(int argc, char **argv, ...)
 		}
 	}
 
-	if (set == 0) {
+	if (!candidate && set == 0) {
 		if (ioctl(ifs, SIOCIFDESTROY, &ifr) == -1) {
 			printf("%% unable to remove interface %s: %s\n",
 			    ifname, strerror(errno));
@@ -1510,7 +1522,9 @@ interface(int argc, char **argv, ...)
 		return 0;
 	}
 
-	if (is_bridge(ifs, ifname)) {
+	if (candidate)
+		whichlist = bridge ? Bridgelist : Intlist;
+	else if (is_bridge(ifs, ifname)) {
 		/* whichlist also used by help, command completion code */
 		whichlist = Bridgelist;
 		bridge = 1;
@@ -1541,6 +1555,8 @@ interface(int argc, char **argv, ...)
 			printf("%% Ambiguous command\n");
 		} else if (i == 0) {
 			printf("%% Invalid command\n");
+		} else if (cand_refused(i->name, i->cand)) {
+			/* cand_refused() said why */
 		} else {
 			int save_cli_rtable = cli_rtable;
 
@@ -1624,6 +1640,8 @@ interface(int argc, char **argv, ...)
 				val = el_burrito(eli, margc, margv);
 			if (val)
 				printf("%% Invalid command\n");
+		} else if (cand_refused(i->name, i->cand)) {
+			/* cand_refused() said why */
 		} else {
 			int save_cli_rtable = cli_rtable;
 			int ret;
@@ -1960,6 +1978,7 @@ static char
 	verbosehelp[] =	"Set verbose diagnostics",
 	editinghelp[] = "Set command line editing",
 	confighelp[] =	"Set configuration mode",
+	rollbackhelp[] = "Discard the changes in the candidate (configure private)",
 	loggerhelp[] =  "Write a message to syslog on the system",
 	whohelp[] =	"Display system users",
 	dohelp[] =	"Superfluous, do is ignored and its arguments executed",
@@ -2008,14 +2027,14 @@ Menu grouptab[] = {
 
 #define ssctl sizeof(struct ctl)
 Command cmdtab[] = {
-	{ "hostname",	hostnamehelp,	CMPL0 0, 0, hostname,		1, 1, 0, 0 },
-	{ "interface",	interfacehelp,	CMPL(i) 0, 0, interface,	1, 1, 1, 1 },
+	{ "hostname",	hostnamehelp,	CMPL0 0, 0, hostname,		1, 1, 0, 0, CAND_EDIT },
+	{ "interface",	interfacehelp,	CMPL(i) 0, 0, interface,	1, 1, 1, 1, CAND_EDIT },
 	{ "rtable",	rtablehelp,	CMPL(rh) (char **)rtabletab, sizeof(struct ghs), rtable,	0, 0, 1, 2 },
 	{ "group",	grouphelp,	CMPL(gth) (char **)grouptab, sizeof(Menu), group, 1, 1, 1, 0 },
 	{ "arp",	arphelp,	CMPL0 0, 0, arpset,		1, 1, 1, 0 },
 	{ "ndp",	ndphelp,	CMPL0 0, 0, ndpset,		1, 1, 1, 0 },
 	{ "nameserver",	nameserverhelp,	CMPL0 0, 0, nameserverset,	1, 1, 1, 0 },
-	{ "bridge",	bridgehelp,	CMPL(i) 0, 0, interface,	1, 1, 1, 1 },
+	{ "bridge",	bridgehelp,	CMPL(i) 0, 0, interface,	1, 1, 1, 1, CAND_EDIT },
 	{ "show",	showhelp,	CMPL(ta) (char **)showlist, sizeof(Menu), showcmd,	0, 0, 0, 0 },
 	{ "ip",		iphelp,		CMPL(ta) (char **)iptab, sizeof(Menu), ipcmd,		1, 1, 1, 0 },
 	{ "ip6",	ip6help,	CMPL(ta) (char **)ip6tab, sizeof(Menu), ipcmd,		1, 1, 1, 0 },
@@ -2070,6 +2089,7 @@ Command cmdtab[] = {
 	{ "verbose",	verbosehelp,	CMPL0 0, 0, doverbose,		0, 0, 1, 0 },
 	{ "editing",	editinghelp,	CMPL0 0, 0, doediting,		0, 0, 1, 0 },
 	{ "configure",	confighelp,	CMPL0 0, 0, doconfig,		1, 0, 1, 0 },
+	{ "rollback",	rollbackhelp,	CMPL0 0, 0, cand_rollback,	1, 1, 0, 0, CAND_RUN },
 	{ "who",	whohelp,	CMPL0 0, 0, who,		0, 0, 0, 0 },
 	{ "no",		0,		CMPL(c) 0, 0, nocmd,		0, 0, 0, 0 },
 	{ "do",		dohelp,		CMPL(c) 0, 0, docmd,		0, 0, 0, 0 },
@@ -2196,6 +2216,8 @@ command()
 			printf("%% Command requires configure mode\n");
 			continue;
 		}
+		if ((c->needconfig || c->modh) && cand_refused(c->name, c->cand))
+			continue;
 		if (c->modh)
 			strlcpy(hname, c->name, HSIZE);
 		if ((*c->handler) (margc, margv, 0)) {
@@ -2319,6 +2341,8 @@ hostname(int argc, char **argv, ...)
 	}
 
 	if (argc == 1) {
+		if (candidate)
+			return cand_edit(CE_SET, "hostname %s", *argv);
 		if (sethostname(*argv, strlen(*argv)))
 			printf("%% sethostname: %s\n", strerror(errno));
         } else
@@ -2422,6 +2446,8 @@ docmd(int argc, char **argv, ...)
 			printf("%% Ambiguous command\n");
 		} else if (i == 0) {
 			printf("%% Invalid command\n");
+		} else if (cand_refused(i->name, i->cand)) {
+			/* cand_refused() said why */
 		} else {
 			int save_cli_rtable = cli_rtable;
 
@@ -2453,6 +2479,9 @@ docmd(int argc, char **argv, ...)
 			printf("%% Ambiguous command %s\n", argv[0]);
 		else if (c == NULL)
 			printf("%% Invalid command %s\n", argv[0]);
+		else if ((c->needconfig || c->modh) &&
+		    cand_refused(c->name, c->cand))
+			return 0;
 		else
 			return (*c->handler)(argc, argv, 0);
 	}
@@ -2984,6 +3013,8 @@ disable(int argc, char **argv, ...)
 		exit(0);
 		return 0;
 	}
+	if (cand_leave())
+		return 0;
 	priv = 0;
 	config_mode = 0;
 	return 0;
@@ -3038,6 +3069,12 @@ doconfig(int argc, char **argv, ...)
 		if (NO_ARG(argv[0])) {
 			return exitconfig(argc, argv);
 		} else if (isprefix(argv[1], "terminal")) {
+			if (cand_leave())
+				return 0;
+			config_mode = 1;
+		} else if (isprefix(argv[1], "private")) {
+			if (cand_begin() == -1)
+				return 0;
 			config_mode = 1;
 		} else {
 			printf ("%% Invalid argument\n");
@@ -3057,8 +3094,32 @@ exitconfig(int argc, char **argv, ...)
 		printf ("%% Configuration mode is already disabled\n");
 		return 1;
 	}
+	if (cand_leave())
+		return 0;
 
 	config_mode = 0;
+	return 0;
+}
+
+static int
+cand_refused(char *name, int cand)
+{
+	if (!candidate || cand != CAND_NO)
+		return 0;
+	printf("%% %s is not supported in configure private yet\n", name);
+	return 1;
+}
+
+static int
+cand_leave(void)
+{
+	if (cand_changed()) {
+		printf("%% The candidate has uncommitted changes;"
+		    " 'rollback' discards them\n");
+		return 1;
+	}
+	if (candidate)
+		cand_end();
 	return 0;
 }
 
@@ -3149,6 +3210,11 @@ cmdrc(char rcname[FILENAME_MAX])
 			break;
 		if (line[0] == 0)
 			break;
+		if (candidate) {
+			printf("%% configure private is not supported in rc"
+			    " files (line %u)\n", lnum);
+			break;
+		}
 		if (line[0] == '#')
 			continue;
 		if (line[0] == '!') {
@@ -3634,17 +3700,43 @@ conf_ordered(char *line)
 }
 
 /*
- * Show differences between startup and running config, block by block:
+ * The running configuration, read into a tree
+ */
+struct cnode *
+running_tree(void)
+{
+	char path[PATH_MAX];
+	struct cnode *t = NULL;
+	int fd;
+
+	if (strlcpy(path, "/tmp/nshrc.XXXXXXXX", sizeof(path)) >= sizeof(path))
+		return NULL;
+	if ((fd = mkstemp(path)) == -1) {
+		printf("%% mkstemp %s: %s\n", path, strerror(errno));
+		return NULL;
+	}
+	if (wr_conf(path))
+		t = conftree_read(path, conf_mode, conf_ordered);
+	else
+		printf("%% Couldn't generate configuration\n");
+	unlink(path);
+	close(fd);
+	return t;
+}
+
+/*
+ * show differences between startup and running config, or in configure
+ * private between running config and the candidate, block by block.
+ *
  * the lines of a block are compared as a set, a daemon's rules as a
  * sequence.
  */
 static int
 pr_conf_diff(int argc, char **argv, ...)
 {
-	int conf_fd = -1, out_fd = -1, ndiff;
-	char confpath[PATH_MAX];
+	int out_fd = -1, ndiff;
 	char outpath[PATH_MAX];
-	struct cnode *startup = NULL, *running = NULL;
+	struct cnode *old = NULL, *new = NULL;
 	FILE *out = NULL;
 
 	if (priv != 1) {
@@ -3657,48 +3749,44 @@ pr_conf_diff(int argc, char **argv, ...)
 		return 0;
 	}
 
-	if (strlcpy(confpath, "/tmp/nshrc.XXXXXXXX", sizeof(confpath)) >=
-	    sizeof(confpath))
-		return 0;
-	if (strlcpy(outpath, "/tmp/nshrc.compare.XXXXXXXX", sizeof(outpath)) >=
+	if (strlcpy(outpath, "/tmp/nshrc.diff.XXXXXXXX", sizeof(outpath)) >=
 	    sizeof(outpath))
 		return 0;
-
-	conf_fd = mkstemp(confpath);
-	if (conf_fd == -1) {
-		printf("%% mkstemp %s: %s\n", confpath, strerror(errno));
-		return 0;
-	}
 
 	out_fd = mkstemp(outpath);
 	if (out_fd == -1) {
 		printf("%% mkstemp %s: %s\n", outpath, strerror(errno));
-		goto done;
+		return 0;
 	}
 
-	if (!wr_conf(confpath)) {
-		printf("%% Couldn't generate configuration\n");
-		goto done;
+	if (candidate) {
+		old = running_tree();
+		new = cand_tree();
+	} else {
+		if (access(NSHRC, R_OK) == -1) {
+			if (errno != ENOENT) {
+				printf("%% access %s: %s\n", NSHRC,
+				    strerror(errno));
+				goto done;
+			}
+			old = conftree_read("/dev/null", conf_mode,
+			    conf_ordered);
+		} else
+			old = conftree_read(NSHRC, conf_mode, conf_ordered);
+		new = running_tree();
 	}
-
-	if (access(NSHRC, R_OK) == -1) {
-		if (errno != ENOENT) {
-			printf("%% access %s: %s\n", NSHRC, strerror(errno));
-			goto done;
-		}
-		startup = conftree_read("/dev/null", conf_mode, conf_ordered);
-	} else
-		startup = conftree_read(NSHRC, conf_mode, conf_ordered);
-	running = conftree_read(confpath, conf_mode, conf_ordered);
-	if (startup == NULL || running == NULL)
+	if (old == NULL || new == NULL)
 		goto done;
 
 	if ((out = fdopen(out_fd, "w")) == NULL) {
 		printf("%% fdopen %s: %s\n", outpath, strerror(errno));
 		goto done;
 	}
-	fprintf(out, "--- startup-config\n+++ running-config\n");
-	if ((ndiff = conftree_compare(out, startup, running)) == -1)
+	if (candidate)
+		fprintf(out, "--- running-config\n+++ candidate-config\n");
+	else
+		fprintf(out, "--- startup-config\n+++ running-config\n");
+	if ((ndiff = conftree_compare(out, old, new)) == -1)
 		goto done;
 	if (fflush(out) == EOF) {
 		printf("%% %s: %s\n", outpath, strerror(errno));
@@ -3707,19 +3795,14 @@ pr_conf_diff(int argc, char **argv, ...)
 	if (ndiff > 0)
 		more(outpath);
 done:
-	conftree_free(startup);
-	conftree_free(running);
-	if (out_fd != -1) {
-		unlink(outpath);
-		if (out != NULL)
-			fclose(out);
-		else
-			close(out_fd);
-	}
-	if (conf_fd != -1) {
-		unlink(confpath);
-		close(conf_fd);
-	}
+	conftree_free(old);
+	if (!candidate)
+		conftree_free(new);	/* the candidate's tree is its own */
+	unlink(outpath);
+	if (out != NULL)
+		fclose(out);
+	else
+		close(out_fd);
 	return 0;
 }
 

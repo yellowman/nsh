@@ -58,7 +58,6 @@
 			 */
 #define TMPSIZ 1024	/* size of temp strings */
 #define ROUTEMTU 32768	/* common route MTU */
-#define MTU_IGNORE ULONG_MAX	/* ignore this "default" mtu */
 
 void conf_db_single(FILE *, char *, char *, char *);
 void conf_print_rtm(FILE *, struct rt_msghdr *, char *, int);
@@ -88,7 +87,6 @@ int dhcpleased_has_defaultroute(struct sockaddr_rtlabel *);
 int dhcpleased_controls_interface(char *, int);
 int default_txprio(char *);
 int default_rxprio(char *);
-int default_llpriority(char *);
 int islateif(char *);
 int isdefaultroute(struct sockaddr *, struct sockaddr *);
 int scantext(char *, char *);
@@ -1219,8 +1217,7 @@ conf_ifmetrics(FILE *output, int ifs, struct if_data if_data,
 	/*
 	 * print interface mtu, metric
 	 */
-	if (if_data.ifi_mtu != default_mtu(ifname) &&
-	   default_mtu(ifname) != MTU_IGNORE && if_data.ifi_mtu != 0)
+	if (conf_mtu_shown(ifname, if_data.ifi_mtu))
 		fprintf(output, " mtu %u\n", if_data.ifi_mtu);
 	if (if_data.ifi_metric)
 		fprintf(output, " metric %u\n", if_data.ifi_metric);
@@ -1517,6 +1514,14 @@ default_rxprio(char *ifname)
 			return defprios[i].rxprio;
 
 	return 0;	/* default rxprio */
+}
+
+/* Does conf() print this mtu for ifname: is it set, and not the default? */
+int
+conf_mtu_shown(char *ifname, u_long mtu)
+{
+	return mtu != 0 && default_mtu(ifname) != MTU_IGNORE &&
+	    mtu != default_mtu(ifname);
 }
 
 int

@@ -90,7 +90,10 @@ void conf_sppp(FILE *, int, char *);
 #define SLAACCTL	"/usr/sbin/slaacctl"
 int conf(FILE *);
 void conf_interfaces(FILE *, char *, int);
+#define MTU_IGNORE ULONG_MAX	/* ignore this "default" mtu */
 u_long default_mtu(char *);
+int default_llpriority(char *);
+int conf_mtu_shown(char *, u_long);
 int conf_routes(FILE *, char *, int, int, int);
 int conf_dhcrelay(char *, char *, int);
 int dhcpleased_has_address(char *, const char *, const char *);
@@ -222,6 +225,7 @@ typedef struct cmd {
 	int needconfig;		/* Do we need config mode to execute? */
 	int nocmd;		/* Can we specify 'no ...command...'? */
 	int modh;		/* Is it a mode handler for cmdrc()? */
+	int cand;		/* What it does in configure private (CAND_*) */
 } Command;
 
 typedef struct menu {
@@ -243,6 +247,7 @@ struct intlist {
 	int stlen;		/* struct length (for rows in next table) */
 	int (*handler)(int, char **, ...);       /* Routine to perform */
 	int nocmd;		/* Can we specify 'no ...command...'? */
+	int cand;		/* What it does in configure private (CAND_*) */
 };
 
 /* generic help /complt struct */
@@ -592,3 +597,21 @@ int hashtable_foreach(struct hashtable *,
     int (*cb)(void *, size_t, void *, size_t, void *),
     void *cb_arg);
 int hashtable_num_entries(struct hashtable *);
+
+/* candidate.c */
+#define CAND_NO		0	/* refused in configure private, for now */
+#define CAND_RUN	1	/* runs as it does outside configure private */
+#define CAND_EDIT	2	/* its handler edits the candidate */
+struct cnode;
+extern int candidate;
+int cand_begin(void);
+void cand_end(void);
+int cand_changed(void);
+int cand_edit(int, const char *, ...)
+    __attribute__((__format__ (printf, 2, 3)));
+int cand_named(char *);
+int cand_interface(int, char *, int *);
+struct cnode *cand_tree(void);
+int pr_cand_conf(int, char **, ...);
+int cand_rollback(int, char **, ...);
+struct cnode *running_tree(void);

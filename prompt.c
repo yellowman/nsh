@@ -43,7 +43,7 @@ cprompt(void)
 	pr = priv | cli_rtable | config_mode;
 	snprintf(prompt, sizeof(prompt), "%s%s%s%s%s%s%s%s%s/", hbuf,
 	    pr ? "(" : "",
-	    config_mode ? "config" : "",
+	    config_mode ? (candidate ? "config-private" : "config") : "",
 	    config_mode && priv ? "-" : "",
 	    priv ? "p" : "",
 	    (( priv && cli_rtable) || (config_mode && cli_rtable)) ? "-" : "",

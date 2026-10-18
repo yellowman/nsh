@@ -302,6 +302,26 @@ hostname.nsh.org(p)/configure
 hostname.nsh.org(config-p)/
 .Ed
 .Pp
+.Tg private
+.Cm configure private
+enters configuration mode with a candidate configuration that belongs
+to this session.
+The candidate starts as the running configuration, and supported
+commands change the candidate instead of the system; the prompt shows
+.Ql (config-private-p) .
+Commands that do not support a candidate yet are refused with a message.
+Changes that other sessions make to the running configuration show
+through in the candidate, with this session's changes on top.
+.Pp
+.Cm show candidate-config
+displays the candidate,
+.Cm show diff-config
+displays how it differs from the running configuration, and
+.Cm rollback
+discards this session's changes to it.
+A candidate cannot be applied to the system yet, and configuration mode
+cannot be left while the candidate has changes.
+.Pp
 For the purposes of this manual, any examples the machine is called
 .Nm
 .
@@ -3570,6 +3590,10 @@ firewall rules, and other information compiled by
 .Pp
 Display differences between the startup configuration and the running
 configuration, block by block.
+In
+.Cm configure private ,
+display differences between the running configuration and the
+candidate instead.
 Each line that only the startup configuration has is marked with
 .Sq - ,
 and each line that only the running configuration has with
@@ -3581,6 +3605,12 @@ except for the rules of a daemon, such as
 .Cm pf rules ,
 whose order matters.
 This command requires root user privileges.
+.Pp
+.Ic show candidate-config
+.Pp
+In
+.Cm configure private ,
+display the candidate configuration.
 .Pp
 .Ic show environment Op Ar NAME
 .Pp
