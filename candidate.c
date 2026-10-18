@@ -61,6 +61,8 @@ static struct cjournal *cand_journal;	/* the changes it made */
 
 static int cand_record(char *, struct sedit *);
 static int cand_set(int, int, char *, char *);
+static void cand_block(char *, size_t, char *, int);
+static int cand_vsetting(char *, int, int, const char *, va_list);
 static const struct kcloner *cand_cloner(char *);
 static size_t cloner_namelen(char *);
 static int cand_cloneable(char *);
@@ -110,24 +112,25 @@ cand_changed(void)
 int
 cand_setting(int state, const char *fmt, ...)
 {
-	char line[1024], block[sizeof("interface ") + IFNAMSIZ];
 	va_list ap;
-	int n;
 
 	va_start(ap, fmt);
-	n = vsnprintf(line, sizeof(line), fmt, ap);
+	cand_vsetting(ifname, bridge, state, fmt, ap);
 	va_end(ap);
-	if (n < 0 || (size_t)n >= sizeof(line)) {
-		printf("%% Configuration line too long\n");
-		return 0;
-	}
-	if (ifname[0] == '\0') {
-		cand_set(CTX_TOP, state, NULL, line);
-		return 0;
-	}
-	snprintf(block, sizeof(block), "%s %s",
-	    bridge ? "bridge" : "interface", ifname);
-	cand_set(bridge ? CTX_BRIDGE : CTX_IF, state, block, line);
+	return 0;
+}
+
+/* cand_setting() for another interface, in the block the candidate has */
+int
+cand_ifsetting(char *name, int state, const char *fmt, ...)
+{
+	char head[sizeof("interface ") + IFNAMSIZ];
+	va_list ap;
+
+	cand_block(head, sizeof(head), name, 1);
+	va_start(ap, fmt);
+	cand_vsetting(name, conftree_has(cand, head), state, fmt, ap);
+	va_end(ap);
 	return 0;
 }
 
@@ -140,8 +143,19 @@ cand_line(char *name, size_t n)
 {
 	char block[sizeof("interface ") + IFNAMSIZ];
 
-	snprintf(block, sizeof(block), "%s %s",
-	    bridge ? "bridge" : "interface", ifname);
+	cand_block(block, sizeof(block), ifname, bridge);
+	return conftree_line(cand, block, name, n);
+}
+
+/* cand_line() for another interface */
+char *
+cand_ifline(char *ifn, char *name, size_t n)
+{
+	char block[sizeof("interface ") + IFNAMSIZ];
+
+	cand_block(block, sizeof(block), ifn, 1);
+	if (!conftree_has(cand, block))
+		cand_block(block, sizeof(block), ifn, 0);
 	return conftree_line(cand, block, name, n);
 }
 
@@ -357,6 +371,35 @@ cand_rollback(int argc, char **argv, ...)
 	cand_journal = j;
 	printf("%% Candidate reset to the running configuration\n");
 	return 0;
+}
+
+/* The head of an interface's block: bridge or interface, and its name */
+static void
+cand_block(char *buf, size_t len, char *name, int isbridge)
+{
+	snprintf(buf, len, "%s %s", isbridge ? "bridge" : "interface", name);
+}
+
+/*
+ * Put the setting fmt names into state, in name's block, a bridge block
+ * if isbridge, or at the top level if name is empty
+ */
+static int
+cand_vsetting(char *name, int isbridge, int state, const char *fmt,
+    va_list ap)
+{
+	char line[1024], block[sizeof("interface ") + IFNAMSIZ];
+	int n;
+
+	n = vsnprintf(line, sizeof(line), fmt, ap);
+	if (n < 0 || (size_t)n >= sizeof(line)) {
+		printf("%% Configuration line too long\n");
+		return 0;
+	}
+	if (name[0] == '\0')
+		return cand_set(CTX_TOP, state, NULL, line);
+	cand_block(block, sizeof(block), name, isbridge);
+	return cand_set(isbridge ? CTX_BRIDGE : CTX_IF, state, block, line);
 }
 
 /*

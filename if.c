@@ -1985,6 +1985,44 @@ ipv6ll_db_store(struct sockaddr_in6 *sin6, struct sockaddr_in6 *sin6mask,
 }
 
 /*
+ * pflow in configure private. The line has the addresses as
+ * pflow_status() prints them and the version; one the command leaves
+ * out is the candidate's, or the kernel's default.
+ */
+static int
+cand_pflow(char *ifname, int set, struct pflowreq *preq)
+{
+	char src[PFLOW_ADDRSTRLEN], dst[PFLOW_ADDRSTRLEN], *l;
+	const char *errmsg;
+	int version = PFLOW_PROTO_DEFAULT;
+
+	if (!cand_takes(ifname, SIOCSETPFLOW)) {
+		printf("%% pflow not supported on %s\n", ifname);
+		return 0;
+	}
+	if (!set)
+		return cand_setting(ST_DEFAULT, "pflow");
+	if (pflow_addrstr(&preq->flowsrc, src) ||
+	    pflow_addrstr(&preq->flowdst, dst)) {
+		printf("%% pflow needs a sender and a receiver address\n");
+		return 0;
+	}
+	if (preq->flowsrc.ss_family != preq->flowdst.ss_family) {
+		printf("%% sender and receiver address families do not"
+		    " match\n");
+		return 0;
+	}
+	if (preq->addrmask & PFLOW_MASK_VERSION)
+		version = preq->version;
+	else if ((l = cand_line("pflow", 0)) != NULL &&
+	    (l = strrchr(l, ' ')) != NULL)
+		version = strtonum(l + 1, PFLOW_PROTO_5, PFLOW_PROTO_MAX,
+		    &errmsg);
+	return cand_setting(ST_ON, "pflow sender %s receiver %s version %d",
+	    src, dst, version);
+}
+
+/*
  * addr/port parsing lifted from sbin/ifconfig/ifconfig.c
  */
 int
@@ -2063,11 +2101,61 @@ intpflow(int argc, char **argv, ...)
                 }
 	}
 
+	if (candidate)
+		return cand_pflow(ifname, set, &preq);
+
 	if (ioctl(ifs, SIOCSETPFLOW, (caddr_t)&ifr) == -1)
 		printf("%% Unable to set pflow parameters: %s\n",
 		    strerror(errno));
 
 	return 0;
+}
+
+/*
+ * patch in configure private. conf_patch() prints a pair's patch line on
+ * both ends, so the peer's block changes too, and pair_ioctl()'s refusals
+ * are refused first: a pair patched to itself, or to anything but a pair
+ * (ENODEV), or to one patched elsewhere (EBUSY). Patching to a new peer
+ * unpatches the old one.
+ */
+static int
+cand_patch(char *ifname, char *peer)
+{
+	char old[IFNAMSIZ], *l;
+
+	if (!cand_takes(ifname, SIOCSIFPAIR)) {
+		printf("%% patch not supported on %s\n", ifname);
+		return 0;
+	}
+	if (peer != NULL) {
+		if (strcmp(peer, ifname) == 0) {
+			printf("%% %s cannot be patched to itself\n", ifname);
+			return 0;
+		}
+		if (!cand_hasif(peer)) {
+			printf("%% interface %s not found\n", peer);
+			return 0;
+		}
+		if (!cand_takes(peer, SIOCSIFPAIR)) {
+			printf("%% %s is not a pair interface\n", peer);
+			return 0;
+		}
+		if ((l = cand_ifline(peer, "patch", 0)) != NULL &&
+		    strcmp(l + strlen("patch "), ifname) != 0) {
+			printf("%% %s is patched to %s\n", peer,
+			    l + strlen("patch "));
+			return 0;
+		}
+	}
+	old[0] = '\0';
+	if ((l = cand_line("patch", 0)) != NULL)
+		strlcpy(old, l + strlen("patch "), sizeof(old));
+	if (old[0] != '\0' && (peer == NULL || strcmp(old, peer) != 0))
+		cand_ifsetting(old, ST_DEFAULT, "patch");
+	if (peer == NULL)
+		return cand_setting(ST_DEFAULT, "patch");
+	cand_setting(ST_ON, "patch %s", peer);
+	return cand_ifsetting(peer, ST_ON, "patch %s", ifname);
 }
 
 int
@@ -2099,6 +2187,9 @@ intpatch(int argc, char **argv, ...)
 		printf("%% no patch [pair interface]\n");
 		return 0;
 	}
+
+	if (candidate)
+		return cand_patch(ifname, set ? argv[0] : NULL);
 
 	bzero(&ifr, sizeof(ifr));
 
@@ -2465,6 +2556,66 @@ pwe3usage(void)
 	printf("%% no pwe fat...\n");
 }
 
+/*
+ * pwe in configure private. conf_pwe3() prints the neighbor, cw and fat
+ * on one line, so the command changes what the candidate's line says.
+ * nei, cw and fat are what intpwe3() parsed.
+ */
+static int
+cand_pwe3(char *ifname, int set, int nei, int cw, int fat,
+    struct if_laddrreq *req)
+{
+	char line[1024], neighbor[sizeof(" neighbor 1048575 ") + NI_MAXHOST];
+	char host[NI_MAXHOST], *l, *w, *p;
+	int error;
+
+	if ((nei && !cand_takes(ifname, set ? SIOCSPWE3NEIGHBOR :
+	    SIOCDPWE3NEIGHBOR)) ||
+	    (cw != -1 && !cand_takes(ifname, SIOCSPWE3CTRLWORD)) ||
+	    (fat != -1 && !cand_takes(ifname, SIOCSPWE3FAT))) {
+		printf("%% PWE3 not supported on %s\n", ifname);
+		return 0;
+	}
+
+	neighbor[0] = '\0';
+	if ((l = cand_line("pwe", 0)) != NULL) {
+		/* pwe [neighbor label address] [cw] [fat] */
+		strlcpy(line, l, sizeof(line));
+		strtok_r(line, " ", &p);
+		while ((w = strtok_r(NULL, " ", &p)) != NULL) {
+			if (strcmp(w, "neighbor") == 0) {
+				w = strtok_r(NULL, " ", &p);
+				l = strtok_r(NULL, " ", &p);
+				if (w != NULL && l != NULL)
+					snprintf(neighbor, sizeof(neighbor),
+					    " neighbor %s %s", w, l);
+			} else if (strcmp(w, "cw") == 0 && cw == -1)
+				cw = 1;
+			else if (strcmp(w, "fat") == 0 && fat == -1)
+				fat = 1;
+		}
+	}
+	if (nei && !set)
+		neighbor[0] = '\0';
+	else if (nei) {
+		error = getnameinfo((struct sockaddr *)&req->addr,
+		    req->addr.ss_len, host, sizeof(host), NULL, 0,
+		    NI_NUMERICHOST);
+		if (error != 0) {
+			printf("%% intpwe3: getnameinfo: %s\n",
+			    gai_strerror(error));
+			return 0;
+		}
+		snprintf(neighbor, sizeof(neighbor), " neighbor %u %s",
+		    ((struct sockaddr_mpls *)&req->dstaddr)->smpls_label, host);
+	}
+
+	if (neighbor[0] == '\0' && cw != 1 && fat != 1)
+		return cand_setting(ST_DEFAULT, "pwe");
+	return cand_setting(ST_ON, "pwe%s%s%s", neighbor,
+	    cw == 1 ? " cw" : "", fat == 1 ? " fat" : "");
+}
+
 /* One pwe ioctl, saying why not if the kernel refuses it */
 static int
 pwe3_ioctl(int ifs, char *ifname, unsigned long cmd, caddr_t arg)
@@ -2582,6 +2733,9 @@ intpwe3(int argc, char **argv, ...)
 		return 0;
 	}
 
+	if (candidate)
+		return cand_pwe3(ifname, set, nei, cw, fat, &req);
+
 	if (nei && pwe3_ioctl(ifs, ifname, set ? SIOCSPWE3NEIGHBOR :
 	    SIOCDPWE3NEIGHBOR, (caddr_t)&req) == -1)
 		return 0;
@@ -2635,6 +2789,23 @@ intdhcrelay(int argc, char **argv, ...)
 			printf("%% Not a valid IPv4 address: %s\n", argv[0]);
 			return 0;
 		}
+	}
+
+	if (candidate) {
+		char *l;
+
+		if (set)
+			return cand_setting(ST_ON, "dhcrelay %s", argv[0]);
+		if ((l = cand_line("dhcrelay", 0)) == NULL) {
+			printf("%% No relay configured for %s\n", ifname);
+			return 0;
+		}
+		l += strlen("dhcrelay ");
+		if (argc && strcmp(l, argv[0]) != 0) {
+			printf("%% Server expected: %s (not %s)\n", l, argv[0]);
+			return 0;
+		}
+		return cand_setting(ST_DEFAULT, "dhcrelay");
 	}
 
 	if (set) {
@@ -2934,6 +3105,12 @@ intrtlabel(int argc, char **argv, ...)
 		ifr.ifr_data = (caddr_t)argv[0];
 	} else {
 		ifr.ifr_data = (caddr_t)(const char *)"";
+	}
+
+	if (candidate) {
+		if (set)
+			return cand_setting(ST_ON, "rtlabel %s", argv[0]);
+		return cand_setting(ST_DEFAULT, "rtlabel");
 	}
 
 	if (ioctl(ifs, SIOCSIFRTLABEL, &ifr) == -1)
@@ -3310,6 +3487,24 @@ intxflags(int argc, char **argv, ...)
 	return 0;
 }
 
+/* The link flags the candidate's link line sets */
+static int
+cand_linkflags(void)
+{
+	char line[sizeof("link 0 1 2")], *l, *w, *p;
+	int flags = 0;
+
+	if ((l = cand_line("link", 0)) == NULL)
+		return 0;
+	strlcpy(line, l, sizeof(line));
+	strtok_r(line, " ", &p);
+	while ((w = strtok_r(NULL, " ", &p)) != NULL)
+		flags |= strcmp(w, "0") == 0 ? IFF_LINK0 :
+		    strcmp(w, "1") == 0 ? IFF_LINK1 :
+		    strcmp(w, "2") == 0 ? IFF_LINK2 : 0;
+	return flags;
+}
+
 int
 intlink(int argc, char **argv, ...)
 {
@@ -3340,7 +3535,7 @@ intlink(int argc, char **argv, ...)
 		return 0;
 	}
 
-	flags = get_ifflags(ifname, ifs);
+	flags = candidate ? cand_linkflags() : get_ifflags(ifname, ifs);
 
 	if (!set && argc == 0) {
 		/*
@@ -3373,6 +3568,15 @@ intlink(int argc, char **argv, ...)
 			flags |= value;
 		else
 			flags &= ~value;
+	}
+
+	if (candidate) {
+		if (!(flags & (IFF_LINK0|IFF_LINK1|IFF_LINK2)))
+			return cand_setting(ST_DEFAULT, "link");
+		return cand_setting(ST_ON, "link%s%s%s",
+		    flags & IFF_LINK0 ? " 0" : "",
+		    flags & IFF_LINK1 ? " 1" : "",
+		    flags & IFF_LINK2 ? " 2" : "");
 	}
 
 	set_ifflags(ifname, ifs, flags);
@@ -3490,6 +3694,64 @@ intpowersave(int argc, char **argv, ...)
 	return 0;
 }
 
+/*
+ * lladdr in configure private. conf_lladdr() prints the address only
+ * when it differs from the one the interface had, which intlladdr() keeps
+ * in the database when it first changes it. The kernel takes an address
+ * only for an Ethernet interface, and no multicast address (EINVAL).
+ */
+static int
+cand_lladdr(char *ifname, char *arg)
+{
+	StringList *orig;
+	struct ether_addr *ea, eabuf;
+	char addr[sizeof("00:00:00:00:00:00")], *cur;
+	int i, same = 0;
+
+	if (arg == NULL)
+		return cand_setting(ST_DEFAULT, "lladdr");
+	if (cand_gettype(ifname) != IFT_ETHER) {
+		printf("%% %s has no Ethernet address to set\n", ifname);
+		return 0;
+	}
+	if (isprefix(arg, "random")) {
+		arc4random_buf(&eabuf, sizeof(eabuf));
+		eabuf.ether_addr_octet[0] &= 0xfc;
+		ea = &eabuf;
+	} else if ((ea = ether_aton(arg)) == NULL) {
+		printf("%% MAC addresses are six hexadecimal fields, up to two"
+		    " digits each,\n%% separated with colons"
+		    " (1:23:45:ab:cd:ef)\n");
+		return 0;
+	}
+	if (ETHER_IS_MULTICAST(ea->ether_addr_octet)) {
+		printf("%% %s is a multicast address\n", arg);
+		return 0;
+	}
+	for (i = 0; i < ETHER_ADDR_LEN && ea->ether_addr_octet[i] == 0; i++)
+		;
+	if (i == ETHER_ADDR_LEN) {
+		printf("%% The configuration does not keep a zero lladdr\n");
+		return 0;
+	}
+	strlcpy(addr, ether_ntoa(ea), sizeof(addr));
+
+	if (if_nametoindex(ifname) != 0) {
+		orig = sl_init();
+		if (db_select_flag_x_ctl(orig, "lladdr", ifname) < 0)
+			printf("%% lladdr database select failed\n");
+		else if (orig->sl_cur > 0)
+			same = strcmp(orig->sl_str[0], addr) == 0;
+		else
+			same = (cur = get_hwdaddr(ifname)) != NULL &&
+			    strcmp(cur, addr) == 0;
+		sl_free(orig, 1);
+	}
+	if (same)
+		return cand_setting(ST_DEFAULT, "lladdr");
+	return cand_setting(ST_ON, "lladdr %s", addr);
+}
+
 int
 intlladdr(int argc, char **argv, ...)
 {
@@ -3520,6 +3782,9 @@ intlladdr(int argc, char **argv, ...)
 		printf ("%% no lladdr\n");
 		return 0;
 	}
+
+	if (candidate)
+		return cand_lladdr(ifname, set ? argv[1] : NULL);
 
 	if ((lladdr = get_hwdaddr(ifname)) == NULL) {
 		printf("%% Failed to retrieve current link level address\n");
