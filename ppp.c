@@ -35,6 +35,7 @@
 #include "ip.h"
 #include "stringlist.h"
 #include "externs.h"
+#include "settings.h"
 
 #define TYPESZ 16
 
@@ -43,6 +44,12 @@ void peerusage(void);
 void pppoeusage(void);
 int pppoe_get_ifunit(char *);
 void conf_sppp_mh(FILE *, struct sauthreq *, char *, char *);
+static void sppp_line(char *, size_t, struct sauthreq *, char *, char *);
+static int cand_sppp(char *, int, int, struct sauthreq *, char *);
+static void pppoe_line(char *, size_t, struct pppoediscparms *);
+static int pppoe_get(int, struct pppoediscparms *);
+static int pppoe_set(int, struct pppoediscparms *);
+static int pppoe_isether(char *);
 
 /* options for 'proto' */
 static struct {
@@ -230,6 +237,9 @@ intsppp(int argc, char **argv, ...)
 		memset(&spa.secret, '\0', sizeof(spa.secret));
 	}
 
+	if (candidate)
+		return cand_sppp(ifname, set, cmd & __key, &spa, isc->name);
+
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 	if (ioctl(ifs, SIOCSSPPPPARAMS, &ifr) == -1) {
 		printf("%% intspppproto: SIOCSSPPPPARAMS: "
@@ -249,6 +259,57 @@ intsppp(int argc, char **argv, ...)
 	}
 
 	return 0;
+}
+
+/* conf_sppp()'s line for spa and the key the database has */
+static void
+sppp_line(char *buf, size_t len, struct sauthreq *spa, char *key, char *pfx)
+{
+	char *proto = NULL;
+	int i;
+
+	for (i = 0; i < nitems(spppproto); i++)
+		if (spa->proto == spppproto[i].type)
+			proto = spppproto[i].name;
+	snprintf(buf, len, "%s%s%s%s%s%s%s%s%s", pfx,
+	    proto ? " proto " : "", proto ? proto : "",
+	    spa->name[0] ? " name " : "", (char *)spa->name,
+	    key[0] ? " key " : "", key,
+	    spa->flags & AUTHFLAG_NOCALLOUT ? " flag callin" : "",
+	    spa->flags & AUTHFLAG_NORECHALLENGE ? " flag norechallenge" : "");
+}
+
+/*
+ * auth and peer in configure private. sppp_set_params() keeps the
+ * secret when given none, and intsppp() the key it stored.
+ */
+static int
+cand_sppp(char *ifname, int set, int haskey, struct sauthreq *spa, char *pfx)
+{
+	char line[1024], key[AUTHMAXLEN], *l, *p, *w;
+
+	if (!cand_takes(ifname, SIOCSSPPPPARAMS)) {
+		printf("%% intspppproto: SIOCSSPPPPARAMS: SPPPIOS%sAUTH: %s\n",
+		    spa->cmd == SPPPIOSMAUTH ? "M" : "H", strerror(ENOTTY));
+		return 0;
+	}
+	if (!set)
+		return cand_setting(ST_DEFAULT, "%s", pfx);
+	key[0] = '\0';
+	if (haskey)
+		strlcpy(key, (char *)spa->secret, sizeof(key));
+	else if ((l = cand_line(pfx, 0)) != NULL) {
+		strlcpy(line, l, sizeof(line));
+		p = line;
+		strsep(&p, " ");
+		while ((w = strsep(&p, " ")) != NULL && p != NULL)
+			if (strcmp(w, "key") == 0)
+				strlcpy(key, strsep(&p, " "), sizeof(key));
+			else
+				strsep(&p, " ");
+	}
+	sppp_line(line, sizeof(line), spa, key, pfx);
+	return cand_setting(ST_ON, "%s", line);
 }
 
 void
@@ -370,7 +431,7 @@ intpppoe(int argc, char **argv, ...)
 	}
 
 	strlcpy(parms.ifname, ifname, sizeof(parms.ifname));
-	if (ioctl(ifs, PPPOEGETPARMS, &parms)) {
+	if (pppoe_get(ifs, &parms) == -1) {
 		printf("%% intpppoe: PPPOEGETPARMS: %s\n",
 		    strerror(errno));
 		return 0;
@@ -429,7 +490,7 @@ intpppoe(int argc, char **argv, ...)
 
 	/* PPPOESETPARMS drops the dev it had before refusing one */
 	if (set && parms.eth_ifname[0] != '\0' &&
-	    get_ifdata(parms.eth_ifname, IFDATA_IFTYPE) != IFT_ETHER) {
+	    !pppoe_isether(parms.eth_ifname)) {
 		printf("%% intpppoe: PPPOESETPARMS: %s\n", strerror(ENXIO));
 		return 0;
 	}
@@ -443,10 +504,80 @@ intpppoe(int argc, char **argv, ...)
 		memset(&parms.eth_ifname, 0, sizeof(parms.eth_ifname));
 	}
 
-	if (ioctl(ifs, PPPOESETPARMS, &parms))
+	if (pppoe_set(ifs, &parms) == -1)
 		printf("%% intpppoe: PPPOESETPARMS: %s\n", strerror(errno));
 
 	return (0);
+}
+
+/* conf_pppoe()'s line for parms */
+static void
+pppoe_line(char *buf, size_t len, struct pppoediscparms *parms)
+{
+	snprintf(buf, len, "pppoe%s%s%s%s%s%s",
+	    parms->eth_ifname[0] ? " dev " : "", parms->eth_ifname,
+	    parms->ac_name[0] ? " ac " : "", parms->ac_name,
+	    parms->service_name[0] ? " svc " : "", parms->service_name);
+}
+
+/* PPPOEGETPARMS, or in configure private the candidate's pppoe line */
+static int
+pppoe_get(int ifs, struct pppoediscparms *parms)
+{
+	char line[1024], *l, *p, *w, *v;
+
+	if (!candidate)
+		return ioctl(ifs, PPPOEGETPARMS, parms);
+	if (!cand_takes(parms->ifname, PPPOESETPARMS)) {
+		errno = ENOTTY;
+		return -1;
+	}
+	if ((l = cand_line("pppoe", 0)) == NULL)
+		return 0;
+	strlcpy(line, l, sizeof(line));
+	p = line;
+	strsep(&p, " ");
+	while ((w = strsep(&p, " ")) != NULL && (v = strsep(&p, " ")) != NULL)
+		if (strcmp(w, "dev") == 0)
+			strlcpy(parms->eth_ifname, v, sizeof(parms->eth_ifname));
+		else if (strcmp(w, "ac") == 0)
+			strlcpy(parms->ac_name, v, sizeof(parms->ac_name));
+		else if (strcmp(w, "svc") == 0)
+			strlcpy(parms->service_name, v,
+			    sizeof(parms->service_name));
+	return 0;
+}
+
+/*
+ * PPPOESETPARMS, or in configure private its change to the candidate.
+ * It keeps the dev when given none.
+ */
+static int
+pppoe_set(int ifs, struct pppoediscparms *parms)
+{
+	struct pppoediscparms cur;
+	char line[1024];
+
+	if (!candidate)
+		return ioctl(ifs, PPPOESETPARMS, parms);
+	memset(&cur, 0, sizeof(cur));
+	strlcpy(cur.ifname, parms->ifname, sizeof(cur.ifname));
+	if (parms->eth_ifname[0] == '\0' && pppoe_get(ifs, &cur) == 0)
+		strlcpy(parms->eth_ifname, cur.eth_ifname,
+		    sizeof(parms->eth_ifname));
+	if (!(*parms->eth_ifname | *parms->ac_name | *parms->service_name))
+		return cand_setting(ST_DEFAULT, "pppoe");
+	pppoe_line(line, sizeof(line), parms);
+	return cand_setting(ST_ON, "%s", line);
+}
+
+/* Is name an Ethernet interface, as PPPOESETPARMS wants for a dev? */
+static int
+pppoe_isether(char *name)
+{
+	if (candidate)
+		return cand_hasif(name) && cand_gettype(name) == IFT_ETHER;
+	return get_ifdata(name, IFDATA_IFTYPE) == IFT_ETHER;
 }
 
 int
@@ -539,6 +670,7 @@ void
 conf_pppoe(FILE *output, int ifs, char *ifname)
 {
 	struct pppoediscparms parms;
+	char line[1024];
 
 	strlcpy(parms.ifname, ifname, sizeof(parms.ifname));
 	if (ioctl(ifs, PPPOEGETPARMS, &parms))
@@ -546,14 +678,8 @@ conf_pppoe(FILE *output, int ifs, char *ifname)
 
 	if (!(*parms.eth_ifname | *parms.ac_name | *parms.service_name))
 		return;
-	fprintf(output, " pppoe");
-	if (*parms.eth_ifname)
-		fprintf(output, " dev %s", parms.eth_ifname);
-	if (*parms.ac_name)
-		fprintf(output, " ac %s", parms.ac_name);
-	if (*parms.service_name)
-		fprintf(output, " svc %s", parms.service_name);
-	fprintf(output, "\n");
+	pppoe_line(line, sizeof(line), &parms);
+	fprintf(output, " %s\n", line);
 }
 
 void
@@ -582,32 +708,18 @@ conf_sppp(FILE *output, int ifs, char *ifname)
 void
 conf_sppp_mh(FILE *output, struct sauthreq *spa, char *ifname, char *pfx)
 {
-	int i;
-	char type[TYPESZ];
+	char type[TYPESZ], line[1024];
 	StringList *req;
 
 	if (!(spa->proto | spa->name[0] | (spa->flags &
 	    AUTHFLAG_NOCALLOUT) | (spa->flags & AUTHFLAG_NORECHALLENGE)))
 		return;
-	fprintf(output, " %s", pfx);
-	if (spa->proto)
-		for (i = 0; i < nitems(spppproto); i++)
-			if (spa->proto == spppproto[i].type)
-				fprintf(output, " proto %s", spppproto[i].name);
-	if (spa->name[0])
-		fprintf(output, " name %s", spa->name);
 
 	snprintf(type, TYPESZ, "%skey", pfx);
 	req = sl_init();
-	if (db_select_flag_x_ctl(req, type, ifname) >= 0) {
-		if (req->sl_cur > 0)
-			fprintf(output, " key %s", req->sl_str[0]);
-	}
+	sppp_line(line, sizeof(line), spa,
+	    db_select_flag_x_ctl(req, type, ifname) >= 0 && req->sl_cur > 0 ?
+	    req->sl_str[0] : "", pfx);
 	sl_free(req, 1);
-
-	if (spa->flags & AUTHFLAG_NOCALLOUT)
-		fprintf(output, " flag callin");
-	if (spa->flags & AUTHFLAG_NORECHALLENGE)
-		fprintf(output, " flag norechallenge");
-	fprintf(output, "\n");
+	fprintf(output, " %s\n", line);
 }

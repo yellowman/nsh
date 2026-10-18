@@ -30,7 +30,8 @@
 # The ioctls in @drv are nsh's commands that only some drivers take.
 # ifioctl() hands them to the driver, and a driver without a case for
 # one answers ENOTTY. The scanner checks that, and that no file in sys
-# but the cloners' takes them, so an interface no cloner made takes none.
+# but the cloners' and the files of the ioctl functions their handlers
+# call takes them, so an interface no cloner made takes none.
 
 use strict;
 use warnings;
@@ -62,7 +63,8 @@ my @drv = qw(SIOCSLIFPHYADDR SIOCDIFPHYADDR SIOCSLIFPHYRTABLE
     SIOCSVNETFLOWID SIOCSIFPARENT SIOCDIFPARENT SIOCSIFPAIR SIOCSETKALIVE
     SIOCSTXHPRIO SIOCSRXHPRIO SIOCSETLABEL SIOCDELLABEL SIOCSPWE3CTRLWORD
     SIOCSPWE3FAT SIOCSPWE3NEIGHBOR SIOCDPWE3NEIGHBOR SIOCSETPFLOW SIOCSVH
-    SIOCSETPFSYNC SIOCSTRUNK SIOCSTRUNKPORT SIOCSTRUNKDELPORT SIOCSWG);
+    SIOCSETPFSYNC SIOCSTRUNK SIOCSTRUNKPORT SIOCSTRUNKDELPORT SIOCSWG
+    SIOCSSPPPPARAMS PPPOESETPARMS);
 my %drv = map { $_ => 1 } @drv;
 
 @ARGV == 2 or die "usage: kernscan.pl srcdir label\n";
@@ -71,6 +73,8 @@ my @dirs = map { "$src/sys/$_" } qw(net netinet netinet6 netmpls);
 
 my %body;		# function name => its body, by file
 my %global;		# function name => its body, from any of @dirs
+my %where;		# function name => its file, from any of @dirs
+my %reached;		# ioctl functions in other files the cloners reach
 my @cloners;		# [ name, create function, file ]
 
 foreach my $dir (@dirs) {
@@ -79,6 +83,7 @@ foreach my $dir (@dirs) {
 		my $text = slurp("$dir/$f");
 		my $fns = functions($text);
 		$global{$_} = $fns->{$_} foreach keys %$fns;
+		$where{$_} = $f foreach keys %$fns;
 		next unless $text =~ /IF_CLONE_INITIALIZER\s*\(\s*"/;
 		$body{$f} = $fns;
 		while ($text =~ /IF_CLONE_INITIALIZER\s*\(\s*"(\w+)"\s*,\s*
@@ -89,7 +94,6 @@ foreach my $dir (@dirs) {
 	closedir($dh);
 }
 die "no cloners in $src/sys\n" unless @cloners;
-drv_only_cloners(map { $_->[2] } @cloners);
 
 my (@rows, @arrays);
 foreach my $c (sort { $a->[0] cmp $b->[0] } @cloners) {
@@ -131,6 +135,7 @@ foreach my $c (sort { $a->[0] cmp $b->[0] } @cloners) {
 	my %takes;
 	foreach my $fn (reach($fns, $ioctl, 1)) {
 		my $b = defined $fns->{$fn} ? $fns->{$fn} : $global{$fn};
+		$reached{$fn} = 1 unless defined $fns->{$fn};
 		while ($b =~ /\bcase\s+(\w+)\s*:/g) {
 			$takes{$1} = 1 if $drv{$1};
 		}
@@ -146,6 +151,7 @@ foreach my $c (sort { $a->[0] cmp $b->[0] } @cloners) {
 foreach my $k (sort keys %choose) {
 	die "%choose has $k, which is no cloner's\n" unless $used{$k};
 }
+drv_only_cloners([ map { $_->[2] } @cloners ], [ sort keys %reached ]);
 
 print <<"EOF";
 /*
@@ -166,6 +172,9 @@ print <<"EOF";
 #include <net/if_pflow.h>
 #include <net/if_trunk.h>
 #include <net/if_wg.h>
+#include <net/ppp_defs.h>
+#include <net/if_sppp.h>
+#include <net/if_pppoe.h>
 #include "kernel.h"
 
 const char kernel_source[] = "$label";
@@ -216,29 +225,42 @@ sub reach {
 	return sort keys %seen;
 }
 
-# Only the cloners' files may take the ioctls in @drv, and net/if.c may
-# only hand them on to the driver: ifioctl()'s case for them falls to
-# its default, pru_control() and then if_ioctl. Anything else in sys, a
-# hardware driver say, stops the scan.
+# Only the cloners' files may take the ioctls in @drv, and the file of
+# an ioctl function their handlers call (if_spppsubr.c for pppoe) when
+# no other file calls it. net/if.c may only hand them on to the driver:
+# ifioctl()'s case for them falls to its default, pru_control() and
+# then if_ioctl. Anything else in sys, a hardware driver say, stops the
+# scan.
 sub drv_only_cloners {
-	my %ok = map { $_ => 1 } @_;
-	my @files;
+	my ($cloners, $reached) = @_;
+	my %ok = map { $_ => 1 } @$cloners;
+	my (@files, @taken, %called);
 
 	-d "$src/sys/dev" or die "$src/sys/dev: no hardware drivers to check\n";
 	find_c("$src/sys", \@files);
 	foreach my $path (@files) {
 		my $text = slurp($path);
 		my ($f) = $path =~ m{([^/]+)$};
+		foreach my $fn (@$reached) {
+			$called{$fn} = 1 if !$ok{$f} && $f ne $where{$fn} &&
+			    $text =~ /\b$fn\s*\(/;
+		}
 		foreach my $i (@drv) {
 			next unless $text =~ /\bcase\s+$i\s*:/;
-			next if $ok{$f} && $path =~ m{/sys/net(inet6?|mpls)?/};
-			die "$i is taken in $path, which no cloner is\n"
-			    unless $path =~ m{/sys/net/if\.c$};
+			push @taken, [ $i, $path, $f ];
+			next unless $path =~ m{/sys/net/if\.c$};
 			$text =~ /\bcase\s+$i\s*:(\s*case\s+\w+\s*:)*\s*
 			    if\s*\(\(error\s*=\s*suser\(p\)\)\s*!=\s*0\)\s*
 			    break;\s*default:\s*error\s*=\s*pru_control\(/x or
 			    die "net/if.c does more with $i than hand it on\n";
 		}
+	}
+	$ok{$where{$_}} = 1 foreach grep { !$called{$_} } @$reached;
+	foreach my $t (@taken) {
+		my ($i, $path, $f) = @$t;
+		next if $ok{$f} && $path =~ m{/sys/net(inet6?|mpls)?/};
+		die "$i is taken in $path, which no cloner is\n"
+		    unless $path =~ m{/sys/net/if\.c$};
 	}
 }
 

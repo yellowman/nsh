@@ -16,6 +16,9 @@
 #include <net/if_pflow.h>
 #include <net/if_trunk.h>
 #include <net/if_wg.h>
+#include <net/ppp_defs.h>
+#include <net/if_sppp.h>
+#include <net/if_pppoe.h>
 #include "kernel.h"
 
 const char kernel_source[] = "OpenBSD-current, git c30c84965dc4 of 2026-10-17";
@@ -223,6 +226,8 @@ static const u_long ppp_ioctls[] = {
 };
 
 static const u_long pppoe_ioctls[] = {
+	SIOCSSPPPPARAMS,
+	PPPOESETPARMS,
 	0
 };
 
