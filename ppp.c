@@ -24,6 +24,7 @@
 #include <sys/sockio.h>
 #include <sys/ioctl.h>
 #include <net/if.h>
+#include <net/if_types.h>
 #include <net/route.h>
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
@@ -188,12 +189,12 @@ intsppp(int argc, char **argv, ...)
 		case 'f':	/* flag */
 			cmd |= __flag;
 			if (isprefix(argv[noptind - 1], "callin")) {
-				spa.flags = AUTHFLAG_NOCALLOUT;
+				spa.flags |= AUTHFLAG_NOCALLOUT;
 			} else if (isprefix(argv[noptind - 1],
 			    "norechallenge")) {
-				spa.flags = AUTHFLAG_NORECHALLENGE;
+				spa.flags |= AUTHFLAG_NORECHALLENGE;
 			} else {
-				printf("%% Unknown flag: %s",
+				printf("%% Unknown flag: %s\n",
 			    argv[noptind - 1]);
 				return 0;
 			}
@@ -213,6 +214,12 @@ intsppp(int argc, char **argv, ...)
 		return 0;
 	}
 
+	/* sppp_set_params() takes proto 0 to remove all of it */
+	if (set && !(cmd & __proto)) {
+		(*isc->usage)();
+		return 0;
+	}
+
 	if (argc < 1)
 		cmd = __proto | __name | __key | __flag;
 
@@ -226,8 +233,8 @@ intsppp(int argc, char **argv, ...)
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 	if (ioctl(ifs, SIOCSSPPPPARAMS, &ifr) == -1) {
 		printf("%% intspppproto: SIOCSSPPPPARAMS: "
-		    "SPPPIOS%sAUTH: %s\n", strerror(errno),
-		    isc->cmd == SPPPIOSMAUTH ? "M" : "H");
+		    "SPPPIOS%sAUTH: %s\n",
+		    isc->cmd == SPPPIOSMAUTH ? "M" : "H", strerror(errno));
 		return 0;
 	}
 	if (cmd & __key) {
@@ -420,7 +427,17 @@ intpppoe(int argc, char **argv, ...)
 		return 0;
 	}
 
+	/* PPPOESETPARMS drops the dev it had before refusing one */
+	if (set && parms.eth_ifname[0] != '\0' &&
+	    get_ifdata(parms.eth_ifname, IFDATA_IFTYPE) != IFT_ETHER) {
+		printf("%% intpppoe: PPPOESETPARMS: %s\n", strerror(ENXIO));
+		return 0;
+	}
+
 	if (!set) {
+		if (parms.eth_ifname[0] != '\0')
+			printf("%% The pppoe dev of %s cannot be removed\n",
+			    ifname);
 		memset(&parms.ac_name, 0, sizeof(parms.ac_name));
 		memset(&parms.service_name, 0, sizeof(parms.service_name));
 		memset(&parms.eth_ifname, 0, sizeof(parms.eth_ifname));
