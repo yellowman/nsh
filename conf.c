@@ -139,8 +139,21 @@ static const struct {
 	{ "tpmr",	IFQ_MAXPRIO },
 };
 
+static void conf_hostname(FILE *);
+static void conf_secret(FILE *);
+static void conf_top_arp(FILE *);
+static void conf_top_ndp(FILE *);
+static void conf_top_routes(FILE *);
+static void conf_top_routes6(FILE *);
+static void conf_crontab(FILE *);
+
+#define CONF_SEP	0	/* a "!" line */
+#define CONF_FUNC	1	/* conf(output) prints the section */
+#define CONF_IFS	2	/* interfaces named name*, or with NULL the rest */
+#define CONF_CTL	3	/* the daemon called name */
+
 /*
- * these interfaces get started in a specific order
+ * CONF_IFS interfaces get started in a specific order
  *
  * pfsync gets delayed until pf rules are loaded
  *
@@ -154,70 +167,26 @@ static const struct {
  * routes to be set.  TUN might depend on PPPoE, and GIF or GRE may depend on
  * either of them.
  */
-
 static const struct {
+	int kind;
 	char *name;
-} latestartifs[] = {
-	{ "aggr" },
-	{ "trunk" },
-	{ "svlan" },
-	{ "vlan" },
-	{ "carp" },
-	{ "pppoe" },
-	{ "pfsync" },
-	{ "tun" },
-	{ "tap" },
-	{ "gif" },
-	{ "etherip" },
-	{ "gre" },
-	{ "egre" },
-	{ "nvgre" },
-	{ "eoip" },
-	{ "vxlan" },
-	{ "pflow" },
-	{ "wg" },
-	{ "bridge" },
-	{ "veb" },
-	{ "tpmr" }
-};
-
-int
-conf(FILE *output)
-{
-	char cpass[_PASSWORD_LEN+1];
-	char hostbuf[MAXHOSTNAMELEN];
-	off_t offset;
-
-	fprintf(output, "!\n");
-
-	gethostname (hostbuf, sizeof(hostbuf));
-	fprintf(output, "hostname %s\n", hostbuf);
-	if (read_pass(cpass, sizeof(cpass))) {
-		fprintf(output, "enable secret blowfish %s\n", cpass);
-	} else {
-		if (errno != ENOENT)
-			printf("%% Unable to read run-time crypt repository:"
-			    " %s\n", strerror(errno));
-	}
-	fprintf(output, "!\n");
-	conf_ctl(output, "", "motd", 0);
-
-	/*
-	 * start all intefaces not listed in 'latestartifs'
-	 */
-	conf_interfaces(output, NULL, 0);
-	/*
-	 * start these interfaces in specific order
-	 */
-	conf_interfaces(output, "aggr", 0);
-	conf_interfaces(output, "trunk", 0);
-	conf_interfaces(output, "svlan", 0);
-	conf_interfaces(output, "vlan", 0);
-	conf_interfaces(output, "carp", 0);
-	conf_interfaces(output, "pppoe", 0);
-
-	fprintf(output, "!\n");
-
+	void (*conf)(FILE *);
+} confrows[] = {
+	{ CONF_SEP,	NULL,		NULL },
+	{ CONF_FUNC,	NULL,		conf_hostname },
+	{ CONF_FUNC,	NULL,		conf_secret },
+	{ CONF_SEP,	NULL,		NULL },
+	{ CONF_CTL,	"motd",		NULL },
+	/* start all interfaces not named in a CONF_IFS row */
+	{ CONF_IFS,	NULL,		NULL },
+	/* start these interfaces in specific order */
+	{ CONF_IFS,	"aggr",		NULL },
+	{ CONF_IFS,	"trunk",	NULL },
+	{ CONF_IFS,	"svlan",	NULL },
+	{ CONF_IFS,	"vlan",		NULL },
+	{ CONF_IFS,	"carp",		NULL },
+	{ CONF_IFS,	"pppoe",	NULL },
+	{ CONF_SEP,	NULL,		NULL },
 	/*
 	 * check out how sysctls are doing these days
 	 *
@@ -225,78 +194,141 @@ conf(FILE *output)
 	 * (such as interface flags), must display if the kernel's default
 	 * setting is not currently set.
 	 */
-	conf_sysctls(output);
+	{ CONF_FUNC,	NULL,		conf_sysctls },
+	{ CONF_SEP,	NULL,		NULL },
+	/* print static arp and route entries in configuration file format */
+	{ CONF_FUNC,	NULL,		conf_top_arp },
+	{ CONF_FUNC,	NULL,		conf_top_ndp },
+	{ CONF_FUNC,	NULL,		conf_top_routes },
+	{ CONF_FUNC,	NULL,		conf_top_routes6 },
+	{ CONF_SEP,	NULL,		NULL },
+	/* these interfaces must start after routes are set */
+	{ CONF_IFS,	"tun",		NULL },
+	{ CONF_IFS,	"tap",		NULL },
+	{ CONF_IFS,	"gif",		NULL },
+	{ CONF_IFS,	"etherip",	NULL },
+	{ CONF_IFS,	"gre",		NULL },
+	{ CONF_IFS,	"egre",		NULL },
+	{ CONF_IFS,	"nvgre",	NULL },
+	{ CONF_IFS,	"eoip",		NULL },
+	{ CONF_IFS,	"vxlan",	NULL },
+	{ CONF_IFS,	"wg",		NULL },
+	{ CONF_IFS,	"bridge",	NULL },
+	{ CONF_IFS,	"veb",		NULL },
+	{ CONF_IFS,	"tpmr",		NULL },
+	{ CONF_SEP,	NULL,		NULL },
+	{ CONF_CTL,	"pf",		NULL },
+	/* these interfaces must start after pf is loaded */
+	{ CONF_IFS,	"pfsync",	NULL },
+	{ CONF_IFS,	"pflow",	NULL },
+	{ CONF_CTL,	"snmp",		NULL },
+	{ CONF_CTL,	"resolv",	NULL },
+	{ CONF_CTL,	"ldp",		NULL },
+	{ CONF_CTL,	"rip",		NULL },
+	{ CONF_CTL,	"ospf",		NULL },
+	{ CONF_CTL,	"ospf6",	NULL },
+	{ CONF_CTL,	"bgp",		NULL },
+	{ CONF_CTL,	"ifstate",	NULL },
+	{ CONF_CTL,	"ipsec",	NULL },
+	{ CONF_CTL,	"ike",		NULL },
+	{ CONF_CTL,	"rad",		NULL },
+	{ CONF_CTL,	"dvmrp",	NULL },
+	{ CONF_CTL,	"relay",	NULL },
+	{ CONF_CTL,	"sasync",	NULL },
+	{ CONF_CTL,	"dhcp",		NULL },
+	{ CONF_CTL,	"ntp",		NULL },
+	{ CONF_CTL,	"smtp",		NULL },
+	{ CONF_CTL,	"ldap",		NULL },
+	{ CONF_CTL,	"ftp-proxy",	NULL },
+	{ CONF_CTL,	"inet",		NULL },
+	{ CONF_CTL,	"sshd",		NULL },
+	{ CONF_FUNC,	NULL,		conf_crontab },
+	{ CONF_FUNC,	NULL,		conf_rtables },
+	{ CONF_SEP,	NULL,		NULL },
+	{ CONF_FUNC,	NULL,		conf_nameserver },
+};
 
-	fprintf(output, "!\n");
+int
+conf(FILE *output)
+{
+	size_t i;
 
-	/*
-	 * print static arp and route entries in configuration file format
-	 */
+	for (i = 0; i < nitems(confrows); i++) {
+		switch (confrows[i].kind) {
+		case CONF_SEP:
+			fprintf(output, "!\n");
+			break;
+		case CONF_FUNC:
+			confrows[i].conf(output);
+			break;
+		case CONF_IFS:
+			conf_interfaces(output, confrows[i].name, 0);
+			break;
+		case CONF_CTL:
+			conf_ctl(output, "", confrows[i].name, 0);
+			break;
+		}
+	}
+
+	return 0;
+}
+
+static void
+conf_hostname(FILE *output)
+{
+	char hostbuf[MAXHOSTNAMELEN];
+
+	gethostname (hostbuf, sizeof(hostbuf));
+	fprintf(output, "hostname %s\n", hostbuf);
+}
+
+static void
+conf_secret(FILE *output)
+{
+	char cpass[_PASSWORD_LEN+1];
+
+	if (read_pass(cpass, sizeof(cpass))) {
+		fprintf(output, "enable secret blowfish %s\n", cpass);
+	} else {
+		if (errno != ENOENT)
+			printf("%% Unable to read run-time crypt repository:"
+			    " %s\n", strerror(errno));
+	}
+}
+
+static void
+conf_top_arp(FILE *output)
+{
 	conf_arp(output, "arp ");
+}
+
+static void
+conf_top_ndp(FILE *output)
+{
 	conf_ndp(output, "ndp ");
+}
+
+static void
+conf_top_routes(FILE *output)
+{
 	conf_routes(output, "route ", AF_INET, RTF_STATIC, 0);
+}
+
+static void
+conf_top_routes6(FILE *output)
+{
 	conf_routes(output, "route ", AF_INET6, RTF_STATIC, 0);
+}
 
-	fprintf(output, "!\n");
-	/*
-	 * these interfaces must start after routes are set
-	 */
-	conf_interfaces(output, "tun", 0);
-	conf_interfaces(output, "tap", 0);
-	conf_interfaces(output, "gif", 0);
-	conf_interfaces(output, "etherip", 0);
-	conf_interfaces(output, "gre", 0);
-	conf_interfaces(output, "egre", 0);
-	conf_interfaces(output, "nvgre", 0);
-	conf_interfaces(output, "eoip", 0);
-	conf_interfaces(output, "vxlan", 0);
-	conf_interfaces(output, "wg", 0);
-	conf_interfaces(output, "bridge", 0);
-	conf_interfaces(output, "veb", 0);
-	conf_interfaces(output, "tpmr", 0);
-
-	fprintf(output, "!\n");
-	conf_ctl(output, "", "pf", 0);
-
-	/*
-	 * this interface must start after pf is loaded
-	 */
-	conf_interfaces(output, "pfsync", 0);
-	conf_interfaces(output, "pflow", 0);
-
-	conf_ctl(output, "", "snmp", 0);
-	conf_ctl(output, "", "resolv", 0);
-	conf_ctl(output, "", "ldp", 0);
-	conf_ctl(output, "", "rip", 0);
-	conf_ctl(output, "", "ospf", 0);
-	conf_ctl(output, "", "ospf6", 0);
-	conf_ctl(output, "", "bgp", 0);
-	conf_ctl(output, "", "ifstate", 0);
-	conf_ctl(output, "", "ipsec", 0);
-	conf_ctl(output, "", "ike", 0);
-	conf_ctl(output, "", "rad", 0);
-	conf_ctl(output, "", "dvmrp", 0);
-	conf_ctl(output, "", "relay", 0);
-	conf_ctl(output, "", "sasync", 0);
-	conf_ctl(output, "", "dhcp", 0);
-	conf_ctl(output, "", "ntp", 0);
-	conf_ctl(output, "", "smtp", 0);
-	conf_ctl(output, "", "ldap", 0);
-	conf_ctl(output, "", "ftp-proxy", 0);
-	conf_ctl(output, "", "inet", 0);
-	conf_ctl(output, "", "sshd", 0);
+static void
+conf_crontab(FILE *output)
+{
+	off_t offset;
 
 	offset = ftello(output);
 	conf_ctl(output, "", "crontab", 0);
 	if (offset != ftello(output)) /* we have custom crontab rules */
 		fprintf(output, "crontab install\n");
-
-	conf_rtables(output);
-
-	fprintf(output, "!\n");
-	conf_nameserver(output);
-
-	return 0;
 }
 
 void
@@ -595,10 +627,11 @@ scantext(char *fname, char *string)
 int
 islateif(char *ifname)
 {
-	int i;
+	size_t i;
 
-	for (i = 0; i < nitems(latestartifs); i++)
-		if (isprefix(latestartifs[i].name, ifname))  
+	for (i = 0; i < nitems(confrows); i++)
+		if (confrows[i].kind == CONF_IFS && confrows[i].name != NULL &&
+		    isprefix(confrows[i].name, ifname))
 			return 1;
 
 	return 0;
