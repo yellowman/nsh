@@ -24,6 +24,7 @@
 
 #include "stringlist.h"
 #include "externs.h"
+#include "settings.h"
 
 int nameserver_usage(void);
 int nameserver4_valid(char *);
@@ -98,6 +99,17 @@ nameserverset(int argc, char *argv[], ...)
 				return (1);
 			}
 		}
+	}
+
+	if (candidate) {
+		char line[256] = "nameserver";
+
+		for (i = 1; set && i < argc; i++) {
+			strlcat(line, " ", sizeof(line));
+			strlcat(line, argv[i], sizeof(line));
+		}
+		cand_setting(set ? ST_ON : ST_OFF, "%s", line);
+		return (0);
 	}
 
 	/*

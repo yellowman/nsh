@@ -52,6 +52,7 @@ static const struct setting top_settings[] = {
 	{ "arp",		S_ENTRY,	2 },
 	{ "ndp",		S_ENTRY,	2 },
 	{ "route",		S_ENTRY,	3 },
+	{ "nameserver",		S_VALUE },
 	{ NULL,			0 }
 };
 
