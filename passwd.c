@@ -34,6 +34,7 @@
 #include <sys/stat.h>
 #include <sys/socket.h>
 #include "externs.h"
+#include "settings.h"
 
 int read_pass(char *, size_t);
 int write_pass(char *);
@@ -245,6 +246,9 @@ enable_passwd(int argc, char **argv)
 			printf("%% crypt failed\n");
 			return 0;
 		}
+		if (candidate)
+			return cand_setting(ST_ON, "enable secret blowfish %s",
+			    cpass);
 		write_pass(cpass);
 		return 0;
 
@@ -273,6 +277,9 @@ enable_passwd(int argc, char **argv)
 
 		/* set crypted pass */
 		strlcpy(pass, argv[3], sizeof(pass));
+		if (candidate)
+			return cand_setting(ST_ON, "enable secret blowfish %s",
+			    pass);
 		write_pass(pass);
 		return 0;
 

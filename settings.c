@@ -40,6 +40,7 @@ struct setting {
 
 static const struct setting top_settings[] = {
 	{ "hostname",		S_VALUE },
+	{ "enable",		S_VALUE,	2 },	/* "enable secret" */
 	{ "motd",		S_ENTRY,	2 },
 	{ "interface",		S_BLOCK },
 	{ "bridge",		S_BLOCK },
