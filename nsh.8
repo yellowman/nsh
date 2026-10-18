@@ -5352,11 +5352,40 @@ nsh(interface-em0)/mpls
 .Op no
 .Ic inet6
 .Op Ar address/prefix-length
+.Op Cm anycast
+.Op Cm eui64
+.Op Cm vltime Ar seconds
+.Op Cm pltime Ar seconds
 .Pp
 Adds or removes the specified IPv6 address on the interface.
 The IPv6 address may be configured with a network prefix length.
 .Bd -literal -offset indent
 nsh(interface-lo0)/inet6 ::1/128
+.Ed
+.Pp
+Options after the address:
+.Bl -tag -width "vltime seconds"
+.It Cm anycast
+The address is an anycast address.
+.It Cm eui64
+Fill the low 64 bits of the address, which must be 0, with the interface
+ID of the interface's link-local address.
+The configuration shows the address that results.
+.It Cm vltime Ar seconds
+How long the address is valid.
+The address is removed when it runs out.
+.It Cm pltime Ar seconds
+How long the address is preferred, no longer than
+.Cm vltime ,
+which it is if not given.
+.El
+.Pp
+Both lifetimes count from when the address is set, and the configuration
+keeps them as given.
+Without them, the address does not expire.
+.Bd -literal -offset indent
+nsh(interface-em0)/inet6 2001:db8::/64 eui64
+nsh(interface-em0)/inet6 2001:db8:1::1/64 vltime 86400 pltime 3600
 .Ed
 .Pp
 The command

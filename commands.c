@@ -1202,13 +1202,6 @@ struct intlist Intlist[] = {
 	{ "auth",	"PPP authentication",			CMPL0 0, 0, intsppp, 1 },
 	{ "peer",	"PPP peer authentication",		CMPL0 0, 0, intsppp, 1},
 	{ "pppoe",	"PPPoE settings",			CMPL0 0, 0, intpppoe, 1 },
-#ifdef notyet
-	{ "vltime",	"IPv6 valid lifetime",			CMPL0 0, 0, intvltime, 1 },
-	{ "pltime",	"IPv6 preferred lifetime",		CMPL0 0, 0, intpltime, 1 },
-	{ "anycast",	"IPv6 anycast address bit",		CMPL0 0, 0, intanycast, 1 },
-	{ "tentative",	"IPv6 tentative address bit",		CMPL0 0, 0, inttentative, 1 },
-	{ "eui64",	"IPv6 automatic interface index",	CMPL0 0, 0, inteui64, 1 },
-#endif
 	{ "tunnel",	"Tunnel parameters",			CMPL0 0, 0, inttunnel, 1},
 	{ "tunneldomain", "Tunnel routing domain for transit",	CMPL0 0, 0, intmpls, 1 },
 	{ "txprio",	"Priority in tunnel protocol headers",	CMPL0 0, 0, intmpls, 1 },

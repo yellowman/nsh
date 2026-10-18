@@ -35,6 +35,7 @@
 #include <netinet/ip.h>
 #include <netinet/if_ether.h>
 #include <netinet6/in6_var.h>
+#include <netinet6/nd6.h>
 #include <net/if_vlan_var.h>
 #include <net/route.h>
 #include <net/pfvar.h>
@@ -1371,7 +1372,9 @@ conf_ifaddrs(FILE *output, char *ifname, int flags, int af)
 	struct sockaddr_in *sin, *sinmask, *sindest;
 	struct sockaddr_in6 *sin6, *sin6mask, *sin6dest;
 	struct in6_ifreq ifr6;
-	int ippntd = 0;
+	struct in6_addrlifetime lt;
+	char opts[sizeof(" anycast vltime 4294967295 pltime 4294967295")];
+	int ippntd = 0, s6 = -1, anycast;
 
 	if (getifaddrs(&ifap) != 0) {
 		printf("%% conf: getifaddrs failed: %s\n",
@@ -1391,7 +1394,6 @@ conf_ifaddrs(FILE *output, char *ifname, int flags, int af)
 			continue;
 
 		switch (ifa->ifa_addr->sa_family) {
-		int s;
 		case AF_INET:
 			if (af != AF_INET && af != 0)
 				continue;
@@ -1440,15 +1442,17 @@ conf_ifaddrs(FILE *output, char *ifname, int flags, int af)
 				continue;
 			in6_fillscopeid(sin6);
 
-			/* get address flags */
-			memset(&ifr6, 0, sizeof(ifr6));
-			strlcpy(ifr6.ifr_name, ifname, sizeof(ifr6.ifr_name));
-			memcpy(&ifr6.ifr_addr, &sin6, sizeof(ifr6.ifr_addr));
-			s = socket(PF_INET6, SOCK_DGRAM, 0);
-			if (s < 0)
+			if (s6 == -1 &&
+			    (s6 = socket(PF_INET6, SOCK_DGRAM, 0)) == -1)
 				printf("%% conf_ifaddrs: socket: %s\n",
 				    strerror(errno));
-			if (ioctl(s, SIOCGIFAFLAG_IN6, (caddr_t)&ifr6) < 0) {
+
+			/* get address flags */
+			anycast = 0;
+			memset(&ifr6, 0, sizeof(ifr6));
+			strlcpy(ifr6.ifr_name, ifname, sizeof(ifr6.ifr_name));
+			memcpy(&ifr6.ifr_addr, sin6, sizeof(ifr6.ifr_addr));
+			if (ioctl(s6, SIOCGIFAFLAG_IN6, (caddr_t)&ifr6) < 0) {
 				if (errno != EADDRNOTAVAIL)
 					printf("%% conf_ifaddrs: " \
 					    "SIOCGIFAFLAG_IN6: %s\n",
@@ -1457,7 +1461,22 @@ conf_ifaddrs(FILE *output, char *ifname, int flags, int af)
 				/* skip autoconf addresses */
 				if (ifr6.ifr_ifru.ifru_flags6 & IN6_IFF_AUTOCONF)
 					continue;
+				anycast = (ifr6.ifr_ifru.ifru_flags6 &
+				    IN6_IFF_ANYCAST) != 0;
 			}
+
+			/* and lifetimes, as they were given */
+			lt.ia6t_vltime = lt.ia6t_pltime = ND6_INFINITE_LIFETIME;
+			memset(&ifr6, 0, sizeof(ifr6));
+			strlcpy(ifr6.ifr_name, ifname, sizeof(ifr6.ifr_name));
+			memcpy(&ifr6.ifr_addr, sin6, sizeof(ifr6.ifr_addr));
+			if (ioctl(s6, SIOCGIFALIFETIME_IN6, (caddr_t)&ifr6) == 0)
+				lt = ifr6.ifr_ifru.ifru_lifetime;
+			else if (errno != EADDRNOTAVAIL)
+				printf("%% conf_ifaddrs: SIOCGIFALIFETIME_IN6:"
+				    " %s\n", strerror(errno));
+			ip6_optstr(opts, sizeof(opts), anycast,
+			    lt.ia6t_vltime, lt.ia6t_pltime);
 
 			if (flags & IFF_POINTOPOINT) {
 				fprintf(output, " inet %s", routename6(sin6));
@@ -1468,6 +1487,7 @@ conf_ifaddrs(FILE *output, char *ifname, int flags, int af)
 				fprintf(output, " inet %s",
 				    netname6(sin6, sin6mask));
 			}
+			fprintf(output, "%s", opts);
 			ippntd = 1;
 			break;
 		default:
@@ -1476,6 +1496,8 @@ conf_ifaddrs(FILE *output, char *ifname, int flags, int af)
 		fprintf(output, "\n");
 	}
 	freeifaddrs(ifap);
+	if (s6 != -1)
+		close(s6);
 
 	return ippntd;
 }

@@ -343,6 +343,7 @@ int parse_ipv6(char *, struct in6_addr *);
 void imr_init(char *);
 int is_valid_ifname(char *);
 int show_int(int, char **, ...);
+void ip6_optstr(char *, size_t, int, u_int32_t, u_int32_t);
 int show_vlans(int, char **, ...);
 int show_ip(int, char **, ...);
 int show_autoconf(int, char **, ...);

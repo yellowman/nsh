@@ -1218,6 +1218,137 @@ struct ghs intip6help[] = {
 };
 
 
+/* The options after an IPv6 address (ip6_opts()) */
+static struct nopts ip6optlist[] = {
+	{ "anycast",	no_arg,		'a' },
+	{ "eui64",	no_arg,		'e' },
+	{ "vltime",	req_arg,	'v' },
+	{ "pltime",	req_arg,	'p' },
+	{ NULL,		0,		0 }
+};
+
+struct ip6opts {
+	int anycast;
+	int eui64;
+	u_int32_t vltime;	/* ND6_INFINITE_LIFETIME if not given */
+	u_int32_t pltime;
+};
+
+/*
+ * Read the options after an IPv6 address: anycast, eui64, and vltime
+ * and pltime in seconds. An omitted pltime is the vltime, as
+ * in6_update_ifa() refuses a pltime longer than the vltime. Returns 0,
+ * or -1 after saying why not.
+ */
+static int
+ip6_opts(int argc, char **argv, struct ip6opts *o)
+{
+	const char *errstr;
+	u_int32_t t;
+	int ch, pltime = 0;
+
+	memset(o, 0, sizeof(*o));
+	o->vltime = o->pltime = ND6_INFINITE_LIFETIME;
+	noptind = 0;
+	while (noptind < argc && (ch = nopt(argc, argv, ip6optlist)) != -1) {
+		switch (ch) {
+		case 'a':
+			o->anycast = 1;
+			break;
+		case 'e':
+			o->eui64 = 1;
+			break;
+		case 'v':
+		case 'p':
+			/* a vltime of 0 adds no address */
+			t = strtonum(argv[noptind - 1], 1,
+			    ND6_INFINITE_LIFETIME - 1, &errstr);
+			if (errstr) {
+				printf("%% %s %s: %s\n", ch == 'v' ? "vltime" :
+				    "pltime", argv[noptind - 1], errstr);
+				return -1;
+			}
+			if (ch == 'v')
+				o->vltime = t;
+			else {
+				o->pltime = t;
+				pltime = 1;
+			}
+			break;
+		}
+	}
+	if (noptind < argc) {
+		printf("%% %s: %s\n", nopterr, argv[noptind]);
+		return -1;
+	}
+	if (!pltime)
+		o->pltime = o->vltime;
+	if (o->pltime > o->vltime) {
+		printf("%% pltime must not be longer than vltime\n");
+		return -1;
+	}
+	return 0;
+}
+
+/*
+ * eui64: the interface ID of name's link-local address goes in the low
+ * 64 bits of a, which must be 0, as ifconfig(8) does it
+ */
+static int
+ip6_eui64(char *name, struct in6_addr *a)
+{
+	struct ifaddrs *ifap, *ifa;
+	struct sockaddr_in6 *sin6;
+	int found = 0;
+
+	if (memcmp(&a->s6_addr[8], &in6addr_any.s6_addr[8], 8) != 0) {
+		printf("%% eui64: the address already has an interface ID\n");
+		return -1;
+	}
+	if (getifaddrs(&ifap) != 0) {
+		printf("%% eui64: getifaddrs: %s\n", strerror(errno));
+		return -1;
+	}
+	for (ifa = ifap; ifa != NULL && !found; ifa = ifa->ifa_next) {
+		if (ifa->ifa_addr == NULL ||
+		    ifa->ifa_addr->sa_family != AF_INET6 ||
+		    strcmp(ifa->ifa_name, name) != 0)
+			continue;
+		sin6 = (struct sockaddr_in6 *)ifa->ifa_addr;
+		if (IN6_IS_ADDR_LINKLOCAL(&sin6->sin6_addr)) {
+			memcpy(&a->s6_addr[8], &sin6->sin6_addr.s6_addr[8], 8);
+			found = 1;
+		}
+	}
+	freeifaddrs(ifap);
+	if (!found)
+		printf("%% eui64: %s has no link-local address\n", name);
+	return found ? 0 : -1;
+}
+
+/*
+ * What conf_ifaddrs() prints after an IPv6 address for its options. A
+ * pltime the same as the vltime goes without saying.
+ */
+void
+ip6_optstr(char *buf, size_t len, int anycast, u_int32_t vltime,
+    u_int32_t pltime)
+{
+	char t[sizeof(" pltime 4294967295")];
+
+	buf[0] = '\0';
+	if (anycast)
+		strlcat(buf, " anycast", len);
+	if (vltime != ND6_INFINITE_LIFETIME) {
+		snprintf(t, sizeof(t), " vltime %u", vltime);
+		strlcat(buf, t, len);
+	}
+	if (pltime != ND6_INFINITE_LIFETIME && pltime != vltime) {
+		snprintf(t, sizeof(t), " pltime %u", pltime);
+		strlcat(buf, t, len);
+	}
+}
+
 /*
  * An address as conf_ifaddrs() prints it, a link-local one with its
  * scope after it instead of in it
@@ -1325,10 +1456,11 @@ cand_noaf(char *ifname, int af)
  */
 static int
 cand_ip(char *ifname, int set, int flags, ip_t *ip, int argc, char **argv,
-    char *msg)
+    char *msg, struct ip6opts *o)
 {
 	char addr[INET6_ADDRSTRLEN + IFNAMSIZ];
 	char dest[INET6_ADDRSTRLEN + IFNAMSIZ];
+	char opts[sizeof(" anycast vltime 4294967295 pltime 4294967295")];
 	struct in_addr in4dest;
 	struct in6_addr in6dest;
 	in_addr_t mask;
@@ -1393,8 +1525,10 @@ cand_ip(char *ifname, int set, int flags, ip_t *ip, int argc, char **argv,
 			printf("%% An IPv6 prefix length must be 1 or more\n");
 			return 0;
 		}
+		ip6_optstr(opts, sizeof(opts), o->anycast, o->vltime,
+		    o->pltime);
 		if (!(flags & IFF_POINTOPOINT)) {
-			cand_setting(ST_ON, "inet %s/%d", addr, bitlen);
+			cand_setting(ST_ON, "inet %s/%d%s", addr, bitlen, opts);
 			break;
 		}
 		if (!IN6_IS_ADDR_UNSPECIFIED(&in6dest)) {
@@ -1407,8 +1541,8 @@ cand_ip(char *ifname, int set, int flags, ip_t *ip, int argc, char **argv,
 			    sizeof(dest));
 		}
 		/* conf_ifaddrs() prints no prefix length */
-		cand_setting(ST_ON, "inet %s%s%s", addr, dest[0] ? " " : "",
-		    dest);
+		cand_setting(ST_ON, "inet %s%s%s%s", addr, dest[0] ? " " : "",
+		    dest, opts);
 		break;
 	default:
 		printf("%% unknown address family: %d\n", ip->family);
@@ -1425,6 +1559,8 @@ intipusage(const char *cmdname, const char *msg)
 	    msg ? "[" : "", msg ? msg : "", msg ? "]" : "");
 	printf("%% %s <address>/<netmask> %s%s%s\n", cmdname,
 	    msg ? "[" : "", msg ? msg : "", msg ? "]" : "");
+	printf("%% %s <IPv6 address>/<bits> ... [anycast] [eui64]"
+	    " [vltime <seconds>] [pltime <seconds>]\n", cmdname);
 	printf("%% no %s [<address>[/prefix-len]]\n", cmdname);
 	printf("%% no %s [<address>[/netmask]]\n", cmdname);
 }
@@ -1432,11 +1568,12 @@ intipusage(const char *cmdname, const char *msg)
 int
 intip(int argc, char **argv, ...)
 {
-	int s, set, flags, argcmax;
+	int s, set, flags, argcmax, i, nopts;
 	int argc0 = argc;
 	char **argv0 = argv;
-	char *msg, *cmdname;
+	char *msg, *cmdname, **optv;
 	ip_t ip;
+	struct ip6opts o;
 	/* ipv4 structures */
 	struct in_addr in4dest;
 	struct ifaliasreq ip4req;
@@ -1494,6 +1631,15 @@ intip(int argc, char **argv, ...)
 		msg = NULL;
 	}
 
+	/* after the address and a destination or broadcast address, options */
+	for (i = 1; i < argc; i++)
+		if (genget(argv[i], (char **)ip6optlist,
+		    sizeof(struct nopts)) != 0)
+			break;
+	nopts = argc > i ? argc - i : 0;
+	optv = argv + argc - nopts;
+	argc -= nopts;
+
 	if (argc == 0) {
 		/*
 		 * The inet and inet6 commands allow for removing all
@@ -1535,6 +1681,12 @@ intip(int argc, char **argv, ...)
 	    (isprefix(argv[0], "address") && !isprefix(argv[0], "autoconf"))) {
 		argc--;
 		argv++;
+	}
+
+	if (nopts > 0 &&
+	    (isprefix(argv[0], "dhcp") || isprefix(argv[0], "autoconf"))) {
+		intipusage(cmdname, msg);
+		return 0;
 	}
 
 	/*
@@ -1603,8 +1755,23 @@ intip(int argc, char **argv, ...)
 		return 0;
 	}
 
+	if (nopts > 0 && (!set || ip.family != AF_INET6)) {
+		printf("%% anycast, eui64, vltime and pltime go with an IPv6"
+		    " address being set\n");
+		return 0;
+	}
+	if (ip6_opts(nopts, optv, &o) == -1)
+		return 0;
+	if (o.eui64) {
+		/* the link-local address the interface ID comes from */
+		if (!candidate)
+			addaf(ifname, AF_INET6, ifs);
+		if (ip6_eui64(ifname, &ip.addr.in6) == -1)
+			return 0;
+	}
+
 	if (candidate)
-		return cand_ip(ifname, set, flags, &ip, argc, argv, msg);
+		return cand_ip(ifname, set, flags, &ip, argc, argv, msg, &o);
 
 	if (ip.bitlen == -1) {
 		/*
@@ -1643,6 +1810,10 @@ intip(int argc, char **argv, ...)
 		}
 		memset(&ip6req, 0, sizeof(ip6req));
 		pack_in6aliasreq(&ip6req, &ip, &in6dest, ifname);
+		ip6req.ifra_lifetime.ia6t_vltime = o.vltime;
+		ip6req.ifra_lifetime.ia6t_pltime = o.pltime;
+		if (o.anycast)
+			ip6req.ifra_flags |= IN6_IFF_ANYCAST;
 		/* get inet6 socket */
 		s = socket(PF_INET6, SOCK_DGRAM, 0);
 		if (s < 0) {
