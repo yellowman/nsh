@@ -21,8 +21,10 @@ struct ipsysctl {
 					 * sysctls */
 	int             enable;	/* if on/off sysctl, 0 default is enabled, 1
 				 * default is disabled, 2 always show ena ble
-				 * or disable */
+				 * or disable; SYSCTL_VALUE for a value whose
+				 * default is 0 */
 };
+#define SYSCTL_VALUE	3
 
 struct sysctltab {
 	char           *name;

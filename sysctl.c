@@ -59,6 +59,10 @@
 #define	DEFAULT_PORTLAST		49151	/* net.inet.ip.portlast */
 #define	DEFAULT_PORTHIFIRST		49152	/* net.inet.ip.porthifirst */
 #define	DEFAULT_PORTHILAST		65535	/* net.inet.ip.porthilast */
+#define	DEFAULT_HLIM			64	/* net.inet6.ip6.hlim */
+#define	DEFAULT_LOG_INTERVAL		5	/* net.inet6.ip6.log_interval */
+#define	DEFAULT_HDRNESTLIMIT		10	/* net.inet6.ip6.hdrnestlimit */
+#define	DEFAULT_DAD_COUNT		1	/* net.inet6.ip6.dad_count */
 
 void conf_sysctl(FILE *, char *, struct ipsysctl *);
 
@@ -89,7 +93,8 @@ sysctl_int(int mib[], int val, int read)
 	if (sysctl(mib, i, &old, &len, valp, sizeof(int)) == -1) {
 		if (!read) {
 			printf("%% sysctl_int: sysctl: %s\n", strerror(errno));
-		} else if (errno != ENOPROTOOPT) {
+		} else if (errno != ENOPROTOOPT && errno != EOPNOTSUPP) {
+			/* those two say this kernel has no such sysctl */
 			printf("%% sysctl_int: sysctl: %s\n", strerror(errno));
 			for (i = 0; i < 6; i++) {
 		                if (mib[i] == MIB_STOP)
@@ -134,15 +139,15 @@ struct ipsysctl ipsysctls[] = {
 { "multipath",		{ CTL_NET, PF_INET, IPPROTO_IP, IPCTL_MULTIPATH, MIB_STOP, 0 },		0, 1	},
 { "arptimeout",		{ CTL_NET, PF_INET, IPPROTO_IP, IPCTL_ARPTIMEOUT, MIB_STOP, 0 },        DEFAULT_ARPTIMEOUT, 0 },
 { "arpdown",		{ CTL_NET, PF_INET, IPPROTO_IP, IPCTL_ARPDOWN, MIB_STOP, 0 },           DEFAULT_ARPDOWN, 0 },
-{ "maxqueue",		{ CTL_NET, PF_INET, IPPROTO_IP, IPCTL_IPPORT_MAXQUEUE, MIB_STOP, 0 },	0, 1	},
+{ "maxqueue",		{ CTL_NET, PF_INET, IPPROTO_IP, IPCTL_IPPORT_MAXQUEUE, MIB_STOP, 0 },	DEFAULT_MAXQUEUE, 0 },
 { "mtudisc",		{ CTL_NET, PF_INET, IPPROTO_IP, IPCTL_MTUDISC, MIB_STOP, 0 },		0, 0	},
 { "mtudisctimeout",	{ CTL_NET, PF_INET, IPPROTO_IP, IPCTL_MTUDISCTIMEOUT, MIB_STOP, 0},	DEFAULT_MTUDISCTIMEOUT, 0	},
 { "ipsec-timeout",	{ CTL_NET, PF_INET, IPPROTO_IP, IPCTL_IPSEC_TIMEOUT, MIB_STOP, 0},	DEFAULT_IPSEC_TIMEOUT, 0	},
 { "ipsec-soft-timeout",	{ CTL_NET, PF_INET, IPPROTO_IP, IPCTL_IPSEC_SOFT_TIMEOUT, MIB_STOP, 0},	DEFAULT_IPSEC_SOFT_TIMEOUT, 0	},
-{ "ipsec-allocs",	{ CTL_NET, PF_INET, IPPROTO_IP, IPCTL_IPSEC_ALLOCATIONS, MIB_STOP, 0},	0, 1	},
-{ "ipsec-soft-allocs",	{ CTL_NET, PF_INET, IPPROTO_IP, IPCTL_IPSEC_SOFT_ALLOCATIONS, MIB_STOP, 0}, 0, 1},
-{ "ipsec-bytes",	{ CTL_NET, PF_INET, IPPROTO_IP, IPCTL_IPSEC_BYTES, MIB_STOP, 0},	0, 1	},
-{ "ipsec-soft-bytes",	{ CTL_NET, PF_INET, IPPROTO_IP, IPCTL_IPSEC_SOFT_BYTES, MIB_STOP, 0},	0, 1	},
+{ "ipsec-allocs",	{ CTL_NET, PF_INET, IPPROTO_IP, IPCTL_IPSEC_ALLOCATIONS, MIB_STOP, 0},	0, SYSCTL_VALUE },
+{ "ipsec-soft-allocs",	{ CTL_NET, PF_INET, IPPROTO_IP, IPCTL_IPSEC_SOFT_ALLOCATIONS, MIB_STOP, 0}, 0, SYSCTL_VALUE },
+{ "ipsec-bytes",	{ CTL_NET, PF_INET, IPPROTO_IP, IPCTL_IPSEC_BYTES, MIB_STOP, 0},	0, SYSCTL_VALUE },
+{ "ipsec-soft-bytes",	{ CTL_NET, PF_INET, IPPROTO_IP, IPCTL_IPSEC_SOFT_BYTES, MIB_STOP, 0},	0, SYSCTL_VALUE },
 { "ipsec-expire-acquire", { CTL_NET, PF_INET, IPPROTO_IP, IPCTL_IPSEC_EXPIRE_ACQUIRE, MIB_STOP, 0}, DEFAULT_IPSEC_EXPIRE_ACQUIRE, 0 },
 { "ipsec-firstuse",	{ CTL_NET, PF_INET, IPPROTO_IP, IPCTL_IPSEC_FIRSTUSE, MIB_STOP, 0}, DEFAULT_IPSEC_FIRSTUSE, 0 },
 { "ipsec-soft-firstuse",{ CTL_NET, PF_INET, IPPROTO_IP, IPCTL_IPSEC_SOFT_FIRSTUSE, MIB_STOP, 0}, DEFAULT_IPSEC_SOFT_FIRSTUSE, 0 },
@@ -162,18 +167,17 @@ struct ipsysctl ip6sysctls[] = {
 { "mforwarding",	{ CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_MFORWARDING, MIB_STOP, 0 },	0, 1	},
 { "maxdynroutes", 	{ CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_MAXDYNROUTES, MIB_STOP, 0 },	DEFAULT_MAXDYNROUTES, 0 },
 { "send-redirect",	{ CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_SENDREDIRECTS, MIB_STOP, 0 },0, 0	},
-{ "hoplimit",		{ CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_DEFHLIM, MIB_STOP, 0},	0, 1	},
+{ "hoplimit",		{ CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_DEFHLIM, MIB_STOP, 0},	DEFAULT_HLIM, 0 },
 { "defmcasthlim",       { CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_DEFMCASTHLIM, MIB_STOP, 0},	1, 0	},
 { "maxfragpackets",     { CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_MAXFRAGPACKETS, MIB_STOP, 0}, DEFAULT_MAXFRAGPACKETS, 0 },
 { "maxfrags",   	{ CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_MAXFRAGS, MIB_STOP, 0}, DEFAULT_MAXFRAGS, 0 },
-{ "mtudisctimeout",	{ CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_MTUDISCTIMEOUT, MIB_STOP, 0}, 0, 1  },
+{ "mtudisctimeout",	{ CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_MTUDISCTIMEOUT, MIB_STOP, 0}, DEFAULT_MTUDISCTIMEOUT, 0 },
 { "multicast_mtudisc",	{ CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_MCAST_PMTU, MIB_STOP, 0}, 0, 1  },
-{ "log_interval",	{ CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_LOG_INTERVAL, MIB_STOP, 0}, 0, 1  },
+{ "log_interval",	{ CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_LOG_INTERVAL, MIB_STOP, 0}, DEFAULT_LOG_INTERVAL, 0 },
 { "auto_flowlabel",	{ CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_AUTO_FLOWLABEL, MIB_STOP, 0}, 0, 0  },
 { "neighborgcthresh",	{ CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_NEIGHBORGCTHRESH, MIB_STOP, 0 }, DEFAULT_NEIGHBORGCTHRESH , 0 },
-{ "hdrnestlimit",	{ CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_HDRNESTLIMIT, MIB_STOP, 0 }, 0, 1  },
-{ "dad_count",		{ CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_DAD_COUNT, MIB_STOP, 0}, 0, 0  },
-{ "dad_pending",	{ CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_DAD_PENDING, MIB_STOP, 0}, 0, 1  },
+{ "hdrnestlimit",	{ CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_HDRNESTLIMIT, MIB_STOP, 0 }, DEFAULT_HDRNESTLIMIT, 0 },
+{ "dad_count",		{ CTL_NET, PF_INET6, IPPROTO_IPV6, IPV6CTL_DAD_COUNT, MIB_STOP, 0}, DEFAULT_DAD_COUNT, 0 },
 { 0, { 0, 0, 0, 0, 0, 0 }, 0, 0 }
 };
 
@@ -263,7 +267,8 @@ conf_sysctl(FILE *output, char *prefix, struct ipsysctl *x)
 	int tmp = 0;
 
 	for (; x != NULL && x->name != NULL; x++) {
-		if (x->def_larg) {	/* this sysctl takes a value */
+		if (x->def_larg || x->enable == SYSCTL_VALUE) {
+			/* this sysctl takes a value */
 			tmp = sysctl_int(x->mib, 0, 1);
 			if (tmp == x->def_larg || tmp == -1)
 				continue;
