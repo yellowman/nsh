@@ -1176,10 +1176,10 @@ extern struct ghs mantab[];
 
 struct intlist Intlist[] = {
 /* Interface mode commands */
-	{ "inet",	"IPv4/IPv6 addresses",			CMPL(h) (char **)intiphelp, sizeof(struct ghs), intip, 1 },
-	{ "ip",		"Alias for \"inet\" command",		CMPL(h) (char **)intiphelp, sizeof(struct ghs), intip, 1 },
-	{ "alias",	NULL, /* backwards compatibilty */	CMPL(h) (char **)intiphelp, sizeof(struct ghs), intip, 1 },
-	{ "autoconf4",  "IPv4 Autoconfigurable address (DHCP)",	CMPL0 0, 0, intxflags, 1 },
+	{ "inet",	"IPv4/IPv6 addresses",			CMPL(h) (char **)intiphelp, sizeof(struct ghs), intip, 1, CAND_EDIT },
+	{ "ip",		"Alias for \"inet\" command",		CMPL(h) (char **)intiphelp, sizeof(struct ghs), intip, 1, CAND_EDIT },
+	{ "alias",	NULL, /* backwards compatibilty */	CMPL(h) (char **)intiphelp, sizeof(struct ghs), intip, 1, CAND_EDIT },
+	{ "autoconf4",  "IPv4 Autoconfigurable address (DHCP)",	CMPL0 0, 0, intxflags, 1, CAND_EDIT },
 	{ "description", "Interface description",		CMPL0 0, 0, intdesc, 1, CAND_EDIT },
 	{ "group",	"Interface group",			CMPL0 0, 0, intgroup, 1, CAND_EDIT },
 	{ "rdomain",	"Interface routing domain",		CMPL0 0, 0, intrdomain, 1, CAND_EDIT },
@@ -1245,13 +1245,13 @@ struct intlist Intlist[] = {
 	{ "pflow",	"pflow data export",			CMPL0 0, 0, intpflow, 1 },
 	{ "debug",	"Driver dependent debugging",		CMPL0 0, 0, intflags, 1, CAND_EDIT },
 	{ "dhcrelay",	"DHCP Relay Agent",			CMPL0 0, 0, intdhcrelay, 1 },
-	{ "wol",	"Wake On LAN",				CMPL0 0, 0, intxflags, 1 },
-	{ "mpls",	"MPLS",					CMPL0 0, 0, intxflags, 1 },
-	{ "inet6",	"IPv6 addresses",			CMPL(h) (char **)intip6help, sizeof(struct ghs), intip, 1 },
-	{ "autoconf6",  "IPv6 Autoconfigurable address",	CMPL0 0, 0, intxflags, 1 },
-	{ "autoconfprivacy", "Privacy addresses for IPv6 autoconf", CMPL0 0, 0, intxflags, 1 }, /* XXX bkcompat */
-	{ "temporary",	"Temporary addresses for IPv6 autoconf", CMPL0 0, 0, intxflags, 1 },
-	{ "monitor",	"Monitor mode for incoming traffic",	CMPL0 0, 0, intxflags, 1 },
+	{ "wol",	"Wake On LAN",				CMPL0 0, 0, intxflags, 1, CAND_EDIT },
+	{ "mpls",	"MPLS",					CMPL0 0, 0, intxflags, 1, CAND_EDIT },
+	{ "inet6",	"IPv6 addresses",			CMPL(h) (char **)intip6help, sizeof(struct ghs), intip, 1, CAND_EDIT },
+	{ "autoconf6",  "IPv6 Autoconfigurable address",	CMPL0 0, 0, intxflags, 1, CAND_EDIT },
+	{ "autoconfprivacy", "Privacy addresses for IPv6 autoconf", CMPL0 0, 0, intxflags, 1, CAND_EDIT }, /* XXX bkcompat */
+	{ "temporary",	"Temporary addresses for IPv6 autoconf", CMPL0 0, 0, intxflags, 1, CAND_EDIT },
+	{ "monitor",	"Monitor mode for incoming traffic",	CMPL0 0, 0, intxflags, 1, CAND_EDIT },
 	{ "wgpeer",	"Wireguard peer config",		CMPL0 0, 0, intwgpeer, 1 },
 	{ "wgport",	"Wireguard UDP port",			CMPL0 0, 0, intwg, 1 },
 	{ "wgkey",	"Wireguard private key",		CMPL0 0, 0, intwg, 1 },

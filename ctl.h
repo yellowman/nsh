@@ -9,6 +9,7 @@
 #define IFDATA_MTU 1            /* request for if_data.ifi_mtu */
 #define IFDATA_BAUDRATE 2       /* request for if_data.ifi_baudrate */
 #define IFDATA_IFTYPE 3         /* request for if_data.ifi_type */
+#define IFDATA_CAPABILITIES 4   /* request for if_data.ifi_capabilities */
 #define MBPS(bps) (bps / 1000 / 1000)
 #define ROUNDMBPS(bps) ((float)bps == ((bps / 1000 / 1000) * 1000 * 1000))
 #define ROUNDKBPS(bps) ((float)bps == ((bps / 1000) * 1000))

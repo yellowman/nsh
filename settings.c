@@ -35,6 +35,7 @@
 struct setting {
 	char *name;		/* the line's first word, without "no" */
 	int kind;		/* S_* */
+	int keylen;		/* its key, if not its name (conftree.h) */
 };
 
 static const struct setting top_settings[] = {
@@ -52,6 +53,13 @@ static const struct setting if_settings[] = {
 	{ "metric",		S_VALUE },
 	{ "priority",		S_VALUE },
 	{ "llpriority",		S_VALUE },
+	{ "autoconf4",		S_STATE },
+	{ "inet",		S_ENTRY,	2 | CK_ADDR },
+	{ "mpls",		S_FLAG },
+	{ "autoconf6",		S_FLAG },
+	{ "temporary",		S_FLAG },
+	{ "monitor",		S_FLAG },
+	{ "wol",		S_FLAG },
 	{ "debug",		S_FLAG },
 	{ "arp",		S_NOFLAG },
 	{ "staticarp",		S_FLAG },
@@ -74,18 +82,22 @@ static const struct setting *setting_find(int, const char *);
 
 /*
  * The edit that puts line's setting in context ctx into the given state
- * (ST_*). line is canonical and never starts with "no".  Writes the
- * line to edit to out and returns its CE_* edit, or -1 if no setting
- * has the line's name or out is too small.
+ * (ST_*). line is canonical and never starts with "no". Fills in e and
+ * returns 0, or -1 if no setting has the line's name or the line is too
+ * long. Turning off a list value, an entry or a block that is not there
+ * is an error, so that edit is strict.
  */
 int
-setting_edit(int ctx, int state, const char *line, char *out, size_t outlen)
+setting_edit(int ctx, int state, const char *line, struct sedit *e)
 {
 	const struct setting *s;
 	int op, n, neg = 0;
 
 	if ((s = setting_find(ctx, line)) == NULL)
 		return -1;
+	e->keylen = s->keylen > 0 ? s->keylen : 1;
+	e->strict = state == ST_OFF &&
+	    (s->kind == S_LIST || s->kind == S_ENTRY || s->kind == S_BLOCK);
 
 	switch (s->kind) {
 	case S_VALUE:
@@ -105,7 +117,7 @@ setting_edit(int ctx, int state, const char *line, char *out, size_t outlen)
 		    state == ST_OFF ? CE_LISTDEL : CE_UNSET;
 		break;
 	case S_ENTRY:
-		op = state == ST_ON ? CE_ADD : CE_DEL;
+		op = state == ST_ON ? CE_SET : CE_UNSET;
 		break;
 	case S_BLOCK:
 		op = state == ST_ON ? CE_BLOCK : CE_NOBLOCK;
@@ -114,14 +126,12 @@ setting_edit(int ctx, int state, const char *line, char *out, size_t outlen)
 		return -1;
 	}
 
-	/* an unset needs only the name */
-	if (op == CE_UNSET)
-		n = snprintf(out, outlen, "%.*s", (int)strcspn(line, " "), line);
-	else
-		n = snprintf(out, outlen, "%s%s", neg ? "no " : "", line);
-	if (n < 0 || (size_t)n >= outlen)
+	/* an unset finds the lines it removes by their key alone */
+	n = snprintf(e->line, sizeof(e->line), "%s%s", neg ? "no " : "", line);
+	if (n < 0 || (size_t)n >= sizeof(e->line))
 		return -1;
-	return op;
+	e->op = op;
+	return 0;
 }
 
 /* The setting in context ctx named by line's first word */

@@ -25,7 +25,7 @@
 #define S_NOFLAG	3	/* "no" and the line, or none: "no arp" */
 #define S_STATE		4	/* the line, "no" and the line, or none */
 #define S_LIST		5	/* one line listing values: "group a b" */
-#define S_ENTRY		6	/* any number of lines: "inet 192.0.2.1/24" */
+#define S_ENTRY		6	/* a line for each key: "inet 192.0.2.1/24" */
 #define S_BLOCK		7	/* a top-level block: "interface em0" */
 
 /* What a command did to a setting */
@@ -33,4 +33,12 @@
 #define ST_OFF		2	/* turned it off: "no ..." */
 #define ST_DEFAULT	3	/* left it as conf() prints no line for */
 
-int setting_edit(int, int, const char *, char *, size_t);
+/* The edit that puts a setting into a state (setting_edit()) */
+struct sedit {
+	int op;			/* CE_* */
+	int keylen;		/* the line's key, for CE_SET and CE_UNSET */
+	int strict;		/* if it changes nothing, say so */
+	char line[1024];
+};
+
+int setting_edit(int, int, const char *, struct sedit *);

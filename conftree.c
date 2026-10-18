@@ -89,6 +89,7 @@ struct cedit {
 	int op;
 	char *block;		/* NULL for the top level */
 	char *line;
+	int keylen;
 };
 
 struct cjournal {
@@ -111,6 +112,7 @@ static void remove_kid(struct cnode *, size_t);
 static int set_text(struct cnode *, char *);
 static char *skipno(char *);
 static int samename(char *, char *);
+static int samekey(char *, char *, int);
 static int hasword(char *, char *, size_t);
 static int list_add(struct cnode *, char *);
 static int list_del(struct cnode *, size_t, char *);
@@ -499,11 +501,13 @@ emit_tree(struct cmpctx *c, char mark, int depth, struct cnode *n)
  * CE_BLOCK and CE_NOBLOCK, line is the top-level statement itself. A
  * line set or added under a block that is not there creates the block.
  * block must be a statement that takes indented lines.  The name of a
- * line is its first word, after a "no".  Returns CE_CHANGED, CE_NOOP,
- * or -1 on failure, including a line the file could not hold.
+ * line is its first word, after a "no"; CE_SET and CE_UNSET match lines
+ * by their key, the first keylen words, as samekey() compares them.
+ * Returns CE_CHANGED, CE_NOOP, or -1 on failure, including a line the
+ * file could not hold.
  */
 int
-conftree_edit(struct cnode *root, int op, char *block, char *line)
+conftree_edit(struct cnode *root, int op, char *block, char *line, int keylen)
 {
 	struct cnode *p = root, *n;
 	size_t i;
@@ -542,7 +546,7 @@ conftree_edit(struct cnode *root, int op, char *block, char *line)
 	case CE_SET:
 		n = NULL;
 		for (i = 0; i < p->nkids; i++) {
-			if (!samename(p->kids[i]->text, line))
+			if (!samekey(p->kids[i]->text, line, keylen))
 				continue;
 			if (n == NULL) {
 				n = p->kids[i];
@@ -564,7 +568,7 @@ conftree_edit(struct cnode *root, int op, char *block, char *line)
 		return ret;
 	case CE_UNSET:
 		for (i = p->nkids; i-- > 0; ) {
-			if (samename(p->kids[i]->text, line)) {
+			if (samekey(p->kids[i]->text, line, keylen)) {
 				remove_kid(p, i);
 				ret = CE_CHANGED;
 			}
@@ -629,19 +633,22 @@ conftree_has(struct cnode *root, char *line)
 	return find_kid(root, line) != NULL;
 }
 
-/* Does the top-level statement block have a line named name? */
-int
-conftree_named(struct cnode *root, char *block, char *name)
+/*
+ * The n'th line named name, from 0, in the top-level statement block,
+ * or NULL if there are not that many
+ */
+char *
+conftree_line(struct cnode *root, char *block, char *name, size_t n)
 {
 	struct cnode *p;
 	size_t i;
 
 	if ((p = find_kid(root, block)) == NULL)
-		return 0;
+		return NULL;
 	for (i = 0; i < p->nkids; i++)
-		if (samename(p->kids[i]->text, name))
-			return 1;
-	return 0;
+		if (samename(p->kids[i]->text, name) && n-- == 0)
+			return p->kids[i]->text;
+	return NULL;
 }
 
 /*
@@ -666,7 +673,7 @@ cjournal_new(void)
 
 /* Record an edit, to make it again later with cjournal_replay() */
 int
-cjournal_add(struct cjournal *j, int op, char *block, char *line)
+cjournal_add(struct cjournal *j, int op, char *block, char *line, int keylen)
 {
 	struct cedit *e;
 
@@ -676,6 +683,7 @@ cjournal_add(struct cjournal *j, int op, char *block, char *line)
 	j->edits = e;
 	e = &j->edits[j->nedits];
 	e->op = op;
+	e->keylen = keylen;
 	e->block = NULL;
 	if (block != NULL && (e->block = strdup(block)) == NULL)
 		return -1;
@@ -705,7 +713,7 @@ cjournal_replay(struct cjournal *j, struct cnode *root)
 
 	for (i = 0; i < j->nedits; i++)
 		if (conftree_edit(root, j->edits[i].op, j->edits[i].block,
-		    j->edits[i].line) == -1)
+		    j->edits[i].line, j->edits[i].keylen) == -1)
 			return -1;
 	return 0;
 }
@@ -764,17 +772,46 @@ skipno(char *s)
 	return strncmp(s, "no ", 3) == 0 ? s + 3 : s;
 }
 
-/* Do two lines set the same thing: is their first word, after "no", the same? */
+/* Do two lines have the same name: their first word, after "no"? */
 static int
 samename(char *a, char *b)
 {
+	return samekey(a, b, 1);
+}
+
+/*
+ * Do two lines have the same key, the same first k words after "no"?
+ * With CK_ADDR in k, the last word is an address and its "/prefixlen"
+ * is not part of the key, so "inet 192.0.2.1/24" and "inet 192.0.2.1/25"
+ * have the same key, 2 | CK_ADDR.
+ */
+static int
+samekey(char *a, char *b, int k)
+{
 	size_t la, lb;
+	int n = k & ~CK_ADDR;
 
 	a = skipno(a);
 	b = skipno(b);
-	la = strcspn(a, " ");
-	lb = strcspn(b, " ");
-	return la == lb && strncmp(a, b, la) == 0;
+	for (;;) {
+		if (n == 1 && (k & CK_ADDR)) {
+			la = strcspn(a, " /");
+			lb = strcspn(b, " /");
+		} else {
+			la = strcspn(a, " ");
+			lb = strcspn(b, " ");
+		}
+		if (la != lb || strncmp(a, b, la) != 0)
+			return 0;
+		if (--n <= 0)
+			return 1;
+		a += la;
+		b += lb;
+		if (*a == '\0' || *b == '\0')	/* shorter than the key */
+			return *a == *b;
+		a++;
+		b++;
+	}
 }
 
 /* Is w, len bytes long, one of the words after the first in text? */

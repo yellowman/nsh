@@ -310,6 +310,10 @@ The candidate starts as the running configuration, and supported
 commands change the candidate instead of the system; the prompt shows
 .Ql (config-private-p) .
 Commands that do not support a candidate yet are refused with a message.
+Supported commands refuse what the kernel would refuse, and settings
+the configuration cannot hold together, such as an IPv4 address and
+.Cm autoconf4
+on one interface.
 Changes that other sessions make to the running configuration show
 through in the candidate, with this session's changes on top.
 .Pp

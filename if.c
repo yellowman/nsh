@@ -1031,6 +1031,8 @@ get_ifdata(char *ifname, int type)
 			value = if_data.ifi_baudrate;
 		else if (type == IFDATA_IFTYPE)
 			value = if_data.ifi_type;
+		else if (type == IFDATA_CAPABILITIES)
+			value = if_data.ifi_capabilities;
 	}
 	close(ifs);
 	return (value);
@@ -1216,6 +1218,206 @@ struct ghs intip6help[] = {
 };
 
 
+/*
+ * An address as conf_ifaddrs() prints it, a link-local one with its
+ * scope after it instead of in it
+ */
+static void
+cand_addrstr(int af, void *addr, char *ifname, char *buf, size_t len)
+{
+	struct in6_addr ll;
+
+	if (af == AF_INET6 && IN6_IS_ADDR_LINKLOCAL((struct in6_addr *)addr)) {
+		memcpy(&ll, addr, sizeof(ll));
+		ll.s6_addr[2] = ll.s6_addr[3] = 0;
+		if (inet_ntop(af, &ll, buf, len) == NULL)
+			buf[0] = '\0';
+		strlcat(buf, "%", len);
+		strlcat(buf, ifname, len);
+	} else if (inet_ntop(af, addr, buf, len) == NULL)
+		buf[0] = '\0';
+}
+
+/*
+ * Does a link-local address given with a %scope name another interface?
+ * in6_check_embed_scope() refuses it. parse_ipv6() puts the scope in
+ * the address, where the kernel keeps it.
+ */
+static int
+cand_otherscope(struct in6_addr *a, char *ifname)
+{
+	u_int16_t id;
+
+	if (!IN6_IS_ADDR_LINKLOCAL(a))
+		return 0;
+	memcpy(&id, &a->s6_addr[2], sizeof(id));
+	if (id == 0 || id == htons(if_nametoindex(ifname)))
+		return 0;
+	printf("%% The scope of a link-local address on %s must be %s\n",
+	    ifname, ifname);
+	return 1;
+}
+
+/*
+ * Has the candidate an address line of family af, or of any family if
+ * af is 0? An IPv6 address has a ':' and an IPv4 address has none.
+ */
+static int
+cand_hasaddr(int af)
+{
+	char *l;
+	size_t n;
+
+	for (n = 0; (l = cand_line("inet", n)) != NULL; n++)
+		if (af == 0 || (strchr(l, ':') != NULL) == (af == AF_INET6))
+			return 1;
+	return 0;
+}
+
+/*
+ * The shutdown line, after the candidate's addresses change. An address
+ * brings the interface up (intip()), as turning on autoconf4, autoconf6
+ * or temporary does (SIOCSIFXFLAGS). conf_ifflags() prints "no shutdown"
+ * for an interface that is up only when no address line says so already,
+ * and for pppoe always.
+ */
+static void
+cand_upline(char *ifname, int bringup)
+{
+	if (cand_ispppoe(ifname)) {
+		if (bringup)
+			cand_setting(ST_OFF, "shutdown");
+		return;
+	}
+	if (!bringup && cand_state("shutdown") == ST_ON)
+		return;			/* down, and stays down */
+	if (cand_hasaddr(0) || cand_state("autoconf4") == ST_ON)
+		cand_setting(ST_DEFAULT, "shutdown");
+	else
+		cand_setting(ST_OFF, "shutdown");
+}
+
+/* no inet, no inet6 in configure private: each address of family af goes */
+static int
+cand_noaf(char *ifname, int af)
+{
+	char line[1024], *l;
+	size_t n = 0;
+
+	while ((l = cand_line("inet", n)) != NULL) {
+		if ((strchr(l, ':') != NULL) != (af == AF_INET6)) {
+			n++;
+			continue;
+		}
+		strlcpy(line, l, sizeof(line));
+		cand_setting(ST_OFF, "%s", line);
+		if ((l = cand_line("inet", n)) != NULL && strcmp(l, line) == 0)
+			n++;		/* it did not go */
+	}
+	cand_upline(ifname, 0);
+	return 0;
+}
+
+/*
+ * intip() in configure private: the address line, as conf_ifaddrs()
+ * prints it. What in_ioctl() or in6_update_ifa() would refuse, and an
+ * address conf_ifaddr_dhcp() would not print, is refused here.
+ */
+static int
+cand_ip(char *ifname, int set, int flags, ip_t *ip, int argc, char **argv,
+    char *msg)
+{
+	char addr[INET6_ADDRSTRLEN + IFNAMSIZ];
+	char dest[INET6_ADDRSTRLEN + IFNAMSIZ];
+	struct in_addr in4dest;
+	struct in6_addr in6dest;
+	in_addr_t mask;
+	int pppoe = cand_ispppoe(ifname), bitlen;
+
+	if (ip->family == AF_INET6 && cand_otherscope(&ip->addr.in6, ifname))
+		return 0;
+	cand_addrstr(ip->family, &ip->addr, ifname, addr, sizeof(addr));
+	if (!set) {
+		cand_setting(ST_OFF, "inet %s", addr);
+		cand_upline(ifname, 0);
+		return 0;
+	}
+	if (pppoe ? cand_state("autoconf4") != ST_OFF :
+	    ip->family == AF_INET && cand_state("autoconf4") == ST_ON) {
+		printf("%% %s takes its %saddresses from %s,"
+		    " set \"no autoconf4\" first\n", ifname,
+		    pppoe ? "" : "IPv4 ", pppoe ? "IPCP" : "DHCP");
+		return 0;
+	}
+	dest[0] = '\0';
+
+	switch (ip->family) {
+	case AF_INET:
+		memset(&in4dest, 0, sizeof(in4dest));
+		if (argc == 2 && !inet_pton(AF_INET, argv[1], &in4dest)) {
+			printf("%% Invalid %s address\n", msg);
+			return 0;
+		}
+		if (flags & IFF_POINTOPOINT) {
+			/* conf_ifaddrs() prints no prefix length */
+			if (in4dest.s_addr != INADDR_ANY)
+				cand_addrstr(AF_INET, &in4dest, ifname, dest,
+				    sizeof(dest));
+			cand_setting(ST_ON, "inet %s%s%s", addr,
+			    dest[0] ? " " : "", dest);
+			break;
+		}
+		/* nor the broadcast address the kernel would choose */
+		mask = htonl(0xffffffffULL << (32 - ip->bitlen));
+		if (in4dest.s_addr != INADDR_ANY && ntohl(in4dest.s_addr) !=
+		    in4_brdaddr(ip->addr.in.s_addr, mask))
+			cand_addrstr(AF_INET, &in4dest, ifname, dest,
+			    sizeof(dest));
+		cand_setting(ST_ON, "inet %s/%d%s%s", addr, ip->bitlen,
+		    dest[0] ? " " : "", dest);
+		break;
+	case AF_INET6:
+		if (argc == 2 && !(flags & IFF_POINTOPOINT)) {
+			printf("%% An IPv6 address has no %s address\n", msg);
+			return 0;
+		}
+		memset(&in6dest, 0, sizeof(in6dest));
+		if (argc == 2 && parse_ipv6(argv[1], &in6dest) != 0) {
+			printf("%% Invalid destination address %s\n", argv[1]);
+			return 0;
+		}
+		if (cand_otherscope(&in6dest, ifname))
+			return 0;
+		bitlen = ip->bitlen == -1 ? 128 : ip->bitlen;
+		if (bitlen == 0) {
+			printf("%% An IPv6 prefix length must be 1 or more\n");
+			return 0;
+		}
+		if (!(flags & IFF_POINTOPOINT)) {
+			cand_setting(ST_ON, "inet %s/%d", addr, bitlen);
+			break;
+		}
+		if (!IN6_IS_ADDR_UNSPECIFIED(&in6dest)) {
+			if (bitlen != 128) {
+				printf("%% With a destination address, the"
+				    " prefix length must be 128\n");
+				return 0;
+			}
+			cand_addrstr(AF_INET6, &in6dest, ifname, dest,
+			    sizeof(dest));
+		}
+		/* conf_ifaddrs() prints no prefix length */
+		cand_setting(ST_ON, "inet %s%s%s", addr, dest[0] ? " " : "",
+		    dest);
+		break;
+	default:
+		printf("%% unknown address family: %d\n", ip->family);
+		return 0;
+	}
+	cand_upline(ifname, 1);
+	return 0;
+}
+
 void
 intipusage(const char *cmdname, const char *msg)
 {
@@ -1279,7 +1481,8 @@ intip(int argc, char **argv, ...)
 	argc--;
 	argv++;
 
-	flags = get_ifflags(ifname, ifs);
+	flags = candidate ? cand_getflags(ifname, ifs) :
+	    get_ifflags(ifname, ifs);
 	if (flags & IFF_POINTOPOINT) {
 		argcmax = 2;
 		msg = "destination";
@@ -1299,6 +1502,10 @@ intip(int argc, char **argv, ...)
 		if (!set &&
 		    (strcmp(cmdname, "inet") == 0 ||
 		    strcmp(cmdname, "inet6") == 0)) {
+			if (candidate)
+				return cand_noaf(ifname,
+				    strcmp(cmdname, "inet6") == 0 ?
+				    AF_INET6 : AF_INET);
 			intaf(ifname, ifs, argc0, argv0);
 			return 0;
 		}
@@ -1307,6 +1514,11 @@ intip(int argc, char **argv, ...)
 		 * The inet6 command allows for enabling IPv6 link-local.
 		 */
 		if (set && strcmp(cmdname, "inet6") == 0) {
+			if (candidate) {
+				printf("%% inet6 without an address is not"
+				    " saved in the configuration\n");
+				return 0;
+			}
 			intaf(ifname, ifs, argc0, argv0);
 			return 0;
 		}
@@ -1390,6 +1602,9 @@ intip(int argc, char **argv, ...)
 		printf("%% Netmask not specified\n");
 		return 0;
 	}
+
+	if (candidate)
+		return cand_ip(ifname, set, flags, &ip, argc, argv, msg);
 
 	if (ip.bitlen == -1) {
 		/*
@@ -2572,11 +2787,8 @@ cand_ifflags(char *ifname, int value, int set)
 	case -IFF_UP:
 		if (set)
 			return cand_setting(ST_ON, "shutdown");
-		/* an address brings an interface up without saying so */
-		if (!isprefix("pppoe", ifname) &&
-		    (cand_named("inet") || cand_named("autoconf4")))
-			return cand_setting(ST_DEFAULT, "shutdown");
-		return cand_setting(ST_OFF, "shutdown");
+		cand_upline(ifname, 1);
+		return 0;
 	}
 	printf("%% cand_ifflags: value internal error\n");
 	return 0;
@@ -2623,7 +2835,8 @@ intflags(int argc, char **argv, ...)
 	 * wg(4) sets IFF_NOARP by default and this should not be changed.
 	 * The kernel doesn't prevent this flag from being cleared (as of 7.2).
 	 */
-	iftype = get_ifdata(ifname, IFDATA_IFTYPE);
+	iftype = candidate ? cand_gettype(ifname) :
+	    get_ifdata(ifname, IFDATA_IFTYPE);
 	if (iftype == IFT_WIREGUARD &&
 	    (value == -IFF_NOARP || value == IFF_STATICARP)) {
 		printf("%% wireguard interfaces do not support ARP\n");
@@ -2704,6 +2917,69 @@ intaf(char *ifname, int ifs, int argc, char **argv)
 	return 0;
 }
 
+/*
+ * autoconf4 in configure private. conf_ifaddr_dhcp() prints no IPv4
+ * address with autoconf4, and none at all for pppoe, where autoconf4
+ * means IPCP and is the default; there "no autoconf4" is a line too.
+ */
+static int
+cand_autoconf4(char *ifname, int set)
+{
+	int pppoe = cand_ispppoe(ifname), was = cand_state("autoconf4");
+
+	if (set && cand_hasaddr(pppoe ? 0 : AF_INET)) {
+		printf("%% Remove the %saddresses of %s first\n",
+		    pppoe ? "" : "IPv4 ", ifname);
+		return 0;
+	}
+	if (pppoe)
+		return cand_setting(set ? ST_ON : ST_OFF, "autoconf4");
+	cand_setting(set ? ST_ON : ST_DEFAULT, "autoconf4");
+	cand_upline(ifname, set && was != ST_ON);
+	return 0;
+}
+
+/* intxflags() in configure private, for the flags conf_ifxflags() prints */
+static int
+cand_ifxflags(char *ifname, int value, int set)
+{
+	char *name;
+	int was;
+
+	switch (value) {
+	case IFXF_MPLS:
+		name = "mpls";
+		break;
+	case IFXF_AUTOCONF6:
+		name = "autoconf6";
+		break;
+	case IFXF_AUTOCONF6TEMP:
+		name = "temporary";
+		break;
+	case IFXF_MONITOR:
+		name = "monitor";
+		break;
+	case IFXF_WOL:
+		/* SIOCSIFXFLAGS: ENOTSUP without IFCAP_WOL */
+		if (set && if_nametoindex(ifname) != 0 &&
+		    !(get_ifdata(ifname, IFDATA_CAPABILITIES) & IFCAP_WOL)) {
+			printf("%% %s does not support wake on LAN\n", ifname);
+			return 0;
+		}
+		name = "wol";
+		break;
+	default:
+		printf("%% cand_ifxflags: value internal error\n");
+		return 0;
+	}
+	was = cand_state(name);
+	cand_setting(set ? ST_ON : ST_OFF, "%s", name);
+	if (set && was != ST_ON &&
+	    (value == IFXF_AUTOCONF6 || value == IFXF_AUTOCONF6TEMP))
+		cand_upline(ifname, 1);
+	return 0;
+}
+
 int
 intxflags(int argc, char **argv, ...)
 {
@@ -2731,6 +3007,8 @@ intxflags(int argc, char **argv, ...)
 	} else if (isprefix(argv[0], "monitor")) {
 		value = IFXF_MONITOR;
 	} else if (isprefix(argv[0], "autoconf4")) {
+		if (candidate)
+			return cand_autoconf4(ifname, set);
 		/* Have "autoconf4" on pppoe(4) do the right thing. */
 		if (is_pppoe(ifname, ifs))
 			return run_ipcp(ifname, ifs, set);
@@ -2746,6 +3024,9 @@ intxflags(int argc, char **argv, ...)
 		printf("%% intxflags: Internal error\n");
 		return 0;
 	}
+
+	if (candidate)
+		return cand_ifxflags(ifname, value, set);
 
 	flags = get_ifxflags(ifname, ifs);
 	if (value < 0) {

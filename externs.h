@@ -608,7 +608,11 @@ void cand_end(void);
 int cand_changed(void);
 int cand_setting(int, const char *, ...)
     __attribute__((__format__ (printf, 2, 3)));
-int cand_named(char *);
+char *cand_line(char *, size_t);
+int cand_state(char *);
+int cand_getflags(char *, int);
+int cand_gettype(char *);
+int cand_ispppoe(char *);
 int cand_interface(int, char *, int *);
 struct cnode *cand_tree(void);
 int pr_cand_conf(int, char **, ...);

@@ -48,31 +48,22 @@
 #include <errno.h>
 #include "stringlist.h"
 #include "externs.h"
+#include "ctl.h"
 #include "commands.h"
 #include "conftree.h"
 #include "settings.h"
+#include "kernel.h"
 
 int candidate;				/* configure private is on */
 
 static struct cnode *cand;		/* this session's view of it */
 static struct cjournal *cand_journal;	/* the changes it made */
 
-static int cand_record(int, char *, char *);
+static int cand_record(char *, struct sedit *);
 static int cand_set(int, int, char *, char *);
-static int cand_bridgelike(char *);
+static const struct kcloner *cand_cloner(char *);
+static size_t cloner_namelen(char *);
 static int cand_cloneable(char *);
-
-/*
- * Interfaces that is_bridge() calls bridges, which conf() prints as
- * "bridge <name>" and which take the Bridgelist commands.  A new one
- * is not in the kernel yet to ask, so its cloner's name says.  From the
- * kernel: if_type IFT_BRIDGE in if_bridge.c, if_veb.c and if_tpmr.c,
- * and a SIOCBRDGRTS handler in if_bpe.c, if_gre.c (nvgre) and
- * if_vxlan.c.
- */
-static const char *bridgelike[] = {
-	"bridge", "veb", "tpmr", "bpe", "nvgre", "vxlan",
-};
 
 /* configure private: start a candidate from the running configuration */
 int
@@ -140,15 +131,67 @@ cand_setting(int state, const char *fmt, ...)
 	return 0;
 }
 
-/* Does the candidate's block for the current interface have a line named name? */
-int
-cand_named(char *name)
+/*
+ * The n'th line named name, from 0, in the candidate's block for the
+ * current interface, or NULL
+ */
+char *
+cand_line(char *name, size_t n)
 {
 	char block[sizeof("interface ") + IFNAMSIZ];
 
 	snprintf(block, sizeof(block), "%s %s",
 	    bridge ? "bridge" : "interface", ifname);
-	return conftree_named(cand, block, name);
+	return conftree_line(cand, block, name, n);
+}
+
+/*
+ * The state of the setting name for the current interface: its line,
+ * its line with "no", or no line (ST_*)
+ */
+int
+cand_state(char *name)
+{
+	char *l;
+
+	if ((l = cand_line(name, 0)) == NULL)
+		return ST_DEFAULT;
+	return strncmp(l, "no ", 3) == 0 ? ST_OFF : ST_ON;
+}
+
+/*
+ * The if_flags of an interface: the kernel's, or for one only the
+ * candidate has, what its cloner's create function sets
+ */
+int
+cand_getflags(char *name, int ifs)
+{
+	const struct kcloner *kc;
+
+	if (if_nametoindex(name) != 0)
+		return get_ifflags(name, ifs);
+	return (kc = cand_cloner(name)) != NULL ? kc->flags : 0;
+}
+
+/* The if_type of an interface, from the kernel or its cloner */
+int
+cand_gettype(char *name)
+{
+	const struct kcloner *kc;
+
+	if (if_nametoindex(name) != 0)
+		return get_ifdata(name, IFDATA_IFTYPE);
+	return (kc = cand_cloner(name)) != NULL ? kc->type : 0;
+}
+
+/* Is name a pppoe(4) interface? */
+int
+cand_ispppoe(char *name)
+{
+	const struct kcloner *kc;
+
+	return (kc = cand_cloner(name)) != NULL &&
+	    strcmp(kc->name, "pppoe") == 0;
 }
 
 /*
@@ -161,13 +204,15 @@ int
 cand_interface(int set, char *name, int *isbridge)
 {
 	char head[sizeof("interface ") + IFNAMSIZ];
+	const struct kcloner *kc;
 
 	snprintf(head, sizeof(head), "bridge %s", name);
 	if (conftree_has(cand, head))
 		*isbridge = 1;
 	else {
 		snprintf(head, sizeof(head), "interface %s", name);
-		*isbridge = !conftree_has(cand, head) && cand_bridgelike(name);
+		*isbridge = !conftree_has(cand, head) &&
+		    (kc = cand_cloner(name)) != NULL && kc->bridge;
 	}
 	snprintf(head, sizeof(head), "%s %s",
 	    *isbridge ? "bridge" : "interface", name);
@@ -286,58 +331,71 @@ cand_rollback(int argc, char **argv, ...)
 static int
 cand_set(int ctx, int state, char *block, char *line)
 {
-	char edit[1024];
-	int op;
+	struct sedit e;
 
-	if ((op = setting_edit(ctx, state, line, edit, sizeof(edit))) == -1) {
+	if (setting_edit(ctx, state, line, &e) == -1) {
 		printf("%% cand_set: no setting for \"%s\"\n", line);
 		return -1;
 	}
-	return cand_record(op, block, edit);
+	return cand_record(block, &e);
 }
 
 /*
  * Make an edit on the session's view and record it if it changed
- * anything. Removing a line or value that is not there says so.
+ * anything. A strict edit that changes nothing says so.
  */
 static int
-cand_record(int op, char *block, char *line)
+cand_record(char *block, struct sedit *e)
 {
 	int r;
 
-	if ((r = conftree_edit(cand, op, block, line)) == -1)
+	if ((r = conftree_edit(cand, e->op, block, e->line, e->keylen)) == -1)
 		return -1;
-	if (r == CE_NOOP && (op == CE_DEL || op == CE_LISTDEL ||
-	    op == CE_NOBLOCK)) {
-		printf("%% %s: not in the candidate\n", line);
+	if (r == CE_NOOP && e->strict) {
+		printf("%% %s: not in the candidate\n", e->line);
 		return 0;
 	}
-	if (r == CE_CHANGED &&
-	    cjournal_add(cand_journal, op, block, line) == -1) {
+	if (r == CE_CHANGED && cjournal_add(cand_journal, e->op, block,
+	    e->line, e->keylen) == -1) {
 		printf("%% cand_record: %s\n", strerror(errno));
 		return -1;
 	}
 	return 0;
 }
 
-static int
-cand_bridgelike(char *name)
+/* The kernel's cloner for an interface called name, or NULL */
+static const struct kcloner *
+cand_cloner(char *name)
 {
-	size_t i, l;
+	const struct kcloner *kc;
+	size_t l;
 
-	for (i = 0; i < nitems(bridgelike); i++) {
-		l = strlen(bridgelike[i]);
-		if (strncmp(name, bridgelike[i], l) == 0 &&
-		    name[l] >= '0' && name[l] <= '9')
-			return 1;
-	}
-	return 0;
+	if ((l = cloner_namelen(name)) == 0)
+		return NULL;
+	for (kc = kcloners; kc->name != NULL; kc++)
+		if (strlen(kc->name) == l && strncmp(kc->name, name, l) == 0)
+			return kc;
+	return NULL;
 }
 
 /*
- * Could the kernel create an interface called name: is it a cloner's
- * name (SIOCIFGCLONERS) followed by a unit number?
+ * How much of name is a cloner's name, if the rest is a unit number as
+ * if_clone_lookup() takes it: decimal, at most INT_MAX, and no leading
+ * zero. 0 if name is not a cloned interface's name.
  */
+static size_t
+cloner_namelen(char *name)
+{
+	size_t l = strcspn(name, "0123456789"), n = strlen(name);
+	const char *errstr;
+
+	if (l == 0 || l == n || n >= IFNAMSIZ || (name[l] == '0' && n - l > 1))
+		return 0;
+	strtonum(name + l, 0, INT_MAX, &errstr);
+	return errstr == NULL ? l : 0;
+}
+
+/* Could the running kernel create an interface called name? */
 static int
 cand_cloneable(char *name)
 {
@@ -346,6 +404,8 @@ cand_cloneable(char *name)
 	size_t l;
 	int s, i, ret = 0;
 
+	if ((l = cloner_namelen(name)) == 0)
+		return 0;
 	if ((s = socket(AF_INET, SOCK_DGRAM, 0)) == -1)
 		return 0;
 	memset(&ifcr, 0, sizeof(ifcr));
@@ -360,9 +420,7 @@ cand_cloneable(char *name)
 	if (ifcr.ifcr_count > ifcr.ifcr_total)
 		ifcr.ifcr_count = ifcr.ifcr_total;
 	for (cp = buf, i = 0; i < ifcr.ifcr_count; i++, cp += IFNAMSIZ) {
-		l = strnlen(cp, IFNAMSIZ);
-		if (strncmp(name, cp, l) == 0 && name[l] != '\0' &&
-		    strspn(name + l, "0123456789") == strlen(name + l)) {
+		if (strnlen(cp, IFNAMSIZ) == l && strncmp(name, cp, l) == 0) {
 			ret = 1;
 			break;
 		}
