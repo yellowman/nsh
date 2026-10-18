@@ -74,6 +74,7 @@
 #include <netinet/if_ether.h>
 #include <net80211/ieee80211.h>
 #include <net80211/ieee80211_ioctl.h>
+#include "stringlist.h"
 #include "externs.h"
 
 const char *
@@ -102,7 +103,7 @@ get_string(const char *val, const char *sep, u_int8_t *buf, int *lenp)
 				return NULL;
 			}
 		}
-		if (p > buf + len) {
+		if (p >= buf + len) {
 			if (hexstr)
 				printf("%% get_string: hexadecimal digits too long\n");
 			else
@@ -170,7 +171,7 @@ int
 intnwkey(int argc, char **argv, ...)
 {
 	int i, len, set;
-	char *cp = NULL, *val = NULL;
+	char *val = NULL;
 	struct ieee80211_nwkey nwkey;
 	u_int8_t keybuf[IEEE80211_WEP_NKID][16];
 	va_list ap;
@@ -233,7 +234,7 @@ set_nwkey:
 				nwkey.i_key[i].i_keylen = len;
 				nwkey.i_key[i].i_keydat = keybuf[i];
 			}
-			if (cp != NULL) {
+			if (*val != '\0') {
 				printf("%% intnwkey: too many keys\n");
 				return 0;
 			}
@@ -253,8 +254,14 @@ set_nwkey:
 		nwkey.i_key[i].i_keydat = NULL;
 	}
 	(void) strlcpy(nwkey.i_name, ifname, sizeof(nwkey.i_name));
-	if (ioctl(ifs, SIOCS80211NWKEY, (caddr_t)&nwkey) == -1)
+	if (ioctl(ifs, SIOCS80211NWKEY, (caddr_t)&nwkey) == -1) {
 		printf("%% intnwkey: SIOCS80211NWKEY: %s\n", strerror(errno));
+		return 0;
+	}
+	/* the kernel shows no key, so get_nwinfo() prints the one kept here */
+	db_delete_flag_x_ctl("nwkey", ifname, 0);
+	if (set)
+		db_insert_flag_x("nwkey", ifname, 0, DB_X_ENABLE, argv[0]);
 	return 0;
 }
 
@@ -264,8 +271,7 @@ set_nwkey:
 int
 get_nwinfo(char *ifname, char *str, int str_len, int type)
 {
-	char tmp[128];
-	int ifs, len, i, nwkey_verbose;
+	int ifs, len;
 
 	ifs = socket(AF_INET, SOCK_DGRAM, 0);
 	if (ifs < 0) {
@@ -321,11 +327,8 @@ get_nwinfo(char *ifname, char *str, int str_len, int type)
 		strlcpy(power.i_name, ifname, sizeof(power.i_name));
 
 		if (ioctl(ifs, SIOCG80211POWER, &power) == 0) {
-			if (power.i_enabled &&
-			    power.i_maxsleep != DEFAULT_POWERSAVE)
+			if (power.i_enabled)
 				snprintf(str, str_len, "%d", power.i_maxsleep);
-			else if (power.i_enabled)
-				memset(&str, '\0', str_len); /* "powersave " */
 		} else {
 			printf("%% get_nwinfo: SIOCG80211POWER: %s\n",
 			    strerror(errno));
@@ -357,74 +360,22 @@ get_nwinfo(char *ifname, char *str, int str_len, int type)
 	case NWKEY:
 	{
 		struct ieee80211_nwkey nwkey;
-		u_int8_t keybuf[IEEE80211_WEP_NKID][16];
+		StringList *key;
 
 		memset(&nwkey, 0, sizeof(nwkey));
 		(void) strlcpy(nwkey.i_name, ifname, sizeof(nwkey.i_name));
 		if (ioctl(ifs, SIOCG80211NWKEY, (caddr_t) & nwkey) == 0 &&
 		    nwkey.i_wepon > 0) {
-			/* try to retrieve WEP keys */
-			for (i = 0; i < IEEE80211_WEP_NKID; i++) {
-				nwkey.i_key[i].i_keydat = keybuf[i];
-				nwkey.i_key[i].i_keylen = sizeof(keybuf[i]);
+			key = sl_init();
+			if (db_select_flag_x_ctl(key, "nwkey", ifname) >= 0 &&
+			    key->sl_cur > 0) {
+				if (strpbrk(key->sl_str[0], " \t") != NULL)
+					snprintf(str, str_len, "\"%s\"",
+					    key->sl_str[0]);
+				else
+					strlcpy(str, key->sl_str[0], str_len);
 			}
-			if (ioctl(ifs, SIOCG80211NWKEY, (caddr_t) & nwkey)
-			    == -1) {
-				strlcat(str, "*****", str_len);
-			} else {
-				nwkey_verbose = 0;
-				/*
-				 * check to see non default key or multiple keys
-				 * defined
-				 */
-				if (nwkey.i_defkid != 1) {
-					nwkey_verbose = 1;
-				} else {
-					for (i = 1; i < IEEE80211_WEP_NKID; i++)
-					{
-						if (nwkey.i_key[i].i_keylen !=
-						    0) {
-							nwkey_verbose = 1;
-							break;
-						}
-					}
-				}
-				/* check extra ambiguity with keywords */
-				if (!nwkey_verbose) {
-					uint8_t *kdat = nwkey.i_key[0].i_keydat;
-					size_t klen = nwkey.i_key[0].i_keylen;
-					if (klen >= 2 &&
-					    isdigit((unsigned char)kdat[0]) &&
-					    kdat[1] == ':')
-						nwkey_verbose = 1;
-					else if (klen >= 7 &&
-					    isprefix(kdat, "persist"))
-						nwkey_verbose = 1;
-				}
-				if (nwkey_verbose) {
-					snprintf(tmp, sizeof(tmp), "%d:",
-					    nwkey.i_defkid);
-					strlcat(str, tmp, str_len);
-				}
-				for (i = 0; i < IEEE80211_WEP_NKID; i++) {
-					if (i > 0)
-						strlcat(str, ",", str_len);
-					if (nwkey.i_key[i].i_keylen < 0) {
-						strlcat(str, "persist",
-						    str_len);
-					} else {
-						/*
-						 * XXX - sanity check
-						 * nwkey.i_key[i].i_keylen
-						 */
-						make_string(str, str_len,
-						    nwkey.i_key[i].i_keydat,
-						    nwkey.i_key[i].i_keylen);
-					}
-					if (!nwkey_verbose)
-						break;
-				}
-			}
+			sl_free(key, 1);
 		}
 	}
 	break;

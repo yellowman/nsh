@@ -3663,6 +3663,7 @@ intpowersave(int argc, char **argv, ...)
  	if (argc > 1) {
 		printf("%% powersave [milisec]\n");
 		printf("%% no powersave [milisec]\n");
+		return 0;
 	}
 
 	strlcpy(power.i_name, ifname, sizeof(power.i_name));
@@ -3676,7 +3677,7 @@ intpowersave(int argc, char **argv, ...)
 	if (argc == 1) {
 		power.i_maxsleep = strtonum(argv[0], 0, 1000, &errmsg);
 		if (errmsg) {
-			printf("%% Power save invalid %s: %s", argv[0],
+			printf("%% Power save invalid %s: %s\n", argv[0],
 			    errmsg);
 			return 0;
 		}
