@@ -404,6 +404,7 @@ extern char compiled[], compiledby[], compiledon[], compilehost[];
 
 /* bridge.c */
 long bridge_cfg(int, char *, int);
+void conf_brcfg(FILE *, int, char *);
 int bridge_confaddrs(int, char *, char *, FILE *);
 int bridge_rules(int, char *, char *, char *, FILE *);
 int bridge_list(int, char *, char *, char *, int, int);
@@ -617,6 +618,7 @@ int cand_changed(void);
 int cand_setting(int, const char *, ...)
     __attribute__((__format__ (printf, 2, 3)));
 char *cand_line(char *, size_t);
+int cand_putlines(char **, size_t, char *);
 int cand_ifsetting(char *, int, const char *, ...)
     __attribute__((__format__ (printf, 3, 4)));
 char *cand_ifline(char *, char *, size_t);

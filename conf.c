@@ -70,7 +70,6 @@ void conf_vnetid(FILE *, int, char *);
 void conf_vnetflowid(FILE *, int, char *);
 void conf_parent(FILE *, int, char *);
 void conf_patch(FILE *, int, char *);
-void conf_brcfg(FILE *, int, struct if_nameindex *, char *);
 void conf_ifxflags(FILE *, int, char *);
 void conf_rtables(FILE *);
 void conf_rtables_rtable(FILE *, int);
@@ -661,7 +660,6 @@ struct intconf {
 	char *ifname;
 	int flags;			/* from SIOCGIFFLAGS */
 	struct if_data *if_data;	/* from SIOCGIFDATA */
-	struct if_nameindex *ifn_list;	/* every interface */
 	int ippntd;			/* set by the address row */
 };
 
@@ -706,12 +704,6 @@ intconf_ifaddr(struct intconf *ic)
 {
 	ic->ippntd = conf_ifaddr_dhcp(ic->output, ic->ifname, ic->ifs,
 	    ic->flags);
-}
-
-static void
-intconf_brcfg(struct intconf *ic)
-{
-	conf_brcfg(ic->output, ic->ifs, ic->ifn_list, ic->ifname);
 }
 
 static void
@@ -775,7 +767,7 @@ static const struct {
 	{ INTCONF_ALL,		conf_tunnel,		NULL },
 	{ INTCONF_ALL,		NULL,			intconf_ifmetrics },
 	{ INTCONF_ALL,		NULL,			intconf_ifaddr },
-	{ INTCONF_BRIDGE,	NULL,			intconf_brcfg },
+	{ INTCONF_BRIDGE,	conf_brcfg,		NULL },
 	{ INTCONF_NOTBRIDGE,	NULL,			intconf_media_status },
 	{ INTCONF_NOTBRIDGE,	conf_keepalive,		NULL },
 	{ INTCONF_NOTBRIDGE,	NULL,			intconf_pfsync },
@@ -851,7 +843,6 @@ conf_interfaces(FILE *output, char *only, int exact_match)
 		ic.ifname = ifnp->if_name;
 		ic.flags = flags;
 		ic.if_data = &if_data;
-		ic.ifn_list = ifn_list;
 		ic.ippntd = 0;
 
 		for (i = 0; i < nitems(intconf_rows); i++) {
@@ -1264,60 +1255,6 @@ conf_ifmetrics(FILE *output, int ifs, struct if_data if_data,
 		if (get_nwinfo(ifname, tmp, TMPSIZ, POWERSAVE) != 0)
 			fprintf(output, " powersave %s\n", tmp);
 	}
-}
-
-void
-conf_brcfg(FILE *output, int ifs, struct if_nameindex *ifn_list,
-    char *ifname)
-{
-	struct if_nameindex *br_ifnp;
-
-	char tmp_str[TMPSIZ];
-	long l_tmp;
-
-	if ((l_tmp = bridge_cfg(ifs, ifname, PRIORITY))
-	    != -1 && l_tmp != DEFAULT_PRIORITY)
-		fprintf(output, " priority %ld\n", l_tmp);
-	if ((l_tmp = bridge_cfg(ifs, ifname, HELLOTIME))
-	    != -1 && l_tmp != DEFAULT_HELLOTIME)
-		fprintf(output, " hellotime %ld\n", l_tmp);
-	if ((l_tmp = bridge_cfg(ifs, ifname, FWDDELAY))
-	    != -1 && l_tmp != DEFAULT_FWDDELAY)
-		fprintf(output, " fwddelay %ld\n", l_tmp);
-	if ((l_tmp = bridge_cfg(ifs, ifname, MAXAGE))
-	    != -1 && l_tmp != DEFAULT_MAXAGE)
-		fprintf(output, " maxage %ld\n", l_tmp);
-	if ((l_tmp = bridge_cfg(ifs, ifname, MAXADDR))
-	    != -1 && l_tmp != DEFAULT_MAXADDR)
-		fprintf(output, " maxaddr %ld\n", l_tmp);
-	if ((l_tmp = bridge_cfg(ifs, ifname, TIMEOUT))
-	    != -1 && l_tmp != DEFAULT_TIMEOUT)
-		fprintf(output, " timeout %ld\n", l_tmp);
-
-	if (bridge_list(ifs, ifname, NULL, tmp_str, TMPSIZ, MEMBER))
-		fprintf(output, " member %s\n", tmp_str);
-	if (bridge_list(ifs, ifname, NULL, tmp_str, TMPSIZ, STP))
-		fprintf(output, " stp %s\n", tmp_str);
-	if (bridge_list(ifs, ifname, NULL, tmp_str, TMPSIZ, SPAN))
-		fprintf(output, " span %s\n", tmp_str);
-	if (bridge_list(ifs, ifname, NULL, tmp_str, TMPSIZ, NOLEARNING))
-		fprintf(output, " no learning %s\n", tmp_str);
-	if (bridge_list(ifs, ifname, NULL, tmp_str, TMPSIZ, NODISCOVER))
-		fprintf(output, " no discover %s\n", tmp_str);
-	if (bridge_list(ifs, ifname, NULL, tmp_str, TMPSIZ, BLOCKNONIP))
-		fprintf(output, " blocknonip %s\n", tmp_str);
-	if (bridge_list(ifs, ifname, " ", tmp_str, TMPSIZ, CONF_IFPRIORITY))
-		fprintf(output, "%s", tmp_str);
-	if (bridge_list(ifs, ifname, " ", tmp_str, TMPSIZ, CONF_IFCOST))
-		fprintf(output, "%s", tmp_str);
-	if (bridge_list(ifs, ifname, " ", tmp_str, TMPSIZ, PROTECTED))
-		fprintf(output, "%s", tmp_str);
-	bridge_confaddrs(ifs, ifname, " static ", output);
-
-	for (br_ifnp = ifn_list; br_ifnp->if_name != NULL; br_ifnp++)
-		/* try all interface names for member rules */
-		bridge_rules(ifs, ifname, br_ifnp->if_name, " rule ",
-		    output);
 }
 
 int

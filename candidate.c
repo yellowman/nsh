@@ -160,6 +160,60 @@ cand_ifline(char *ifn, char *name, size_t n)
 }
 
 /*
+ * Make the current interface's lines called one of names[] the lines in
+ * buf, which a conf() printer wrote: each in place of the lines of its
+ * key, and none it did not write.  A line with "no" turns its setting
+ * off.  buf is changed.
+ */
+int
+cand_putlines(char **names, size_t nnames, char *buf)
+{
+	char **lines = NULL, **gone = NULL, **v, *l, *p;
+	size_t i, j, n, nlines = 0, ngone = 0;
+	int ret = -1;
+
+	for (p = buf; (l = strsep(&p, "\n")) != NULL; ) {
+		if (*l != ' ')
+			continue;
+		if ((v = reallocarray(lines, nlines + 1,
+		    sizeof(*lines))) == NULL)
+			goto done;
+		lines = v;
+		lines[nlines++] = l + 1;
+	}
+
+	for (i = 0; i < nlines; i++)
+		if (strncmp(lines[i], "no ", 3) == 0)
+			cand_setting(ST_OFF, "%s", lines[i] + 3);
+		else
+			cand_setting(ST_ON, "%s", lines[i]);
+	for (i = 0; i < nnames; i++)
+		for (n = 0; (l = cand_line(names[i], n)) != NULL; n++) {
+			for (j = 0; j < nlines && strcmp(lines[j], l) != 0; j++)
+				;
+			if (j < nlines)
+				continue;
+			if ((v = reallocarray(gone, ngone + 1,
+			    sizeof(*gone))) == NULL)
+				goto done;
+			gone = v;
+			if ((gone[ngone] = strdup(l)) == NULL)
+				goto done;
+			ngone++;
+		}
+	for (i = 0; i < ngone; i++)
+		cand_setting(ST_DEFAULT, "%s", strncmp(gone[i], "no ", 3) == 0 ?
+		    gone[i] + 3 : gone[i]);
+	ret = 0;
+done:
+	for (i = 0; i < ngone; i++)
+		free(gone[i]);
+	free(gone);
+	free(lines);
+	return ret;
+}
+
+/*
  * The state of the setting name for the current interface: its line,
  * its line with "no", or no line (ST_*)
  */

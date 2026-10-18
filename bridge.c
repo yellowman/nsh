@@ -79,6 +79,8 @@ int	bridge_protect(const char *, int, const char *, const char *);
 int	bridge_unprotect(const char *, int, const char *);
 void	brprotect_usage(void);
 int	show_bridge(char *);
+static int br_ioctl(int, u_long, void *);
+static int br_portname(int, char *);
 
 char *stpstates[] = {
 	"disabled",
@@ -156,8 +158,7 @@ brport(int argc, char **argv, ...)
 	}
 
 	for (i = 0; i < argc; i++) {
-		if (!is_valid_ifname(argv[i]) ||
-		    is_bridge(ifs, argv[i])) {
+		if (!br_portname(ifs, argv[i])) {
 			printf("%% Invalid interface name %s\n", argv[i]);
 			continue;
 		}
@@ -165,7 +166,11 @@ brport(int argc, char **argv, ...)
 		case BRPORT_MEMBER:
 			if (set) {
 				/* adding a member activates a bridge */
-				if (bridge_add(ifs, ifname, argv[i]) == 0)
+				if (bridge_add(ifs, ifname, argv[i]) != 0)
+					break;
+				if (candidate)
+					cand_upline(ifname, 1);
+				else
 					set_ifflag(ifs, ifname, IFF_UP);
 			} else
 				bridge_delete(ifs, ifname, argv[i]);
@@ -399,7 +404,7 @@ brstatic(int argc, char **argv, ...)
 		return 0;
 	}
 
-	if (argv[1] && (!is_valid_ifname(argv[1]) || is_bridge(ifs, argv[1])))
+	if (argv[1] && !br_portname(ifs, argv[1]))
 	{
 		printf("%% invalid member: %s\n", argv[1]);
 		return 0;
@@ -607,7 +612,7 @@ bridge_ifsetflag(int s, char *brdg, char *ifsname, u_int32_t flag)
 
 	strlcpy(req.ifbr_name, brdg, sizeof(req.ifbr_name));
 	strlcpy(req.ifbr_ifsname, ifsname, sizeof(req.ifbr_ifsname));
-	if (ioctl(s, SIOCBRDGGIFFLGS, (caddr_t)&req) < 0) {
+	if (br_ioctl(s, SIOCBRDGGIFFLGS, (caddr_t)&req) < 0) {
 		if (errno == ESRCH)
 			printf("%% %s is not a member of %s\n", ifsname, brdg);
 		else
@@ -618,7 +623,7 @@ bridge_ifsetflag(int s, char *brdg, char *ifsname, u_int32_t flag)
 
 	req.ifbr_ifsflags |= flag;
 
-	if (ioctl(s, SIOCBRDGSIFFLGS, (caddr_t)&req) < 0) {
+	if (br_ioctl(s, SIOCBRDGSIFFLGS, (caddr_t)&req) < 0) {
 		printf("%% cannot set flags for %s on %s: %s\n", ifsname, brdg,
 		    strerror(errno));
 		return (EX_IOERR);
@@ -634,7 +639,7 @@ bridge_ifclrflag(int s, char *brdg, char *ifsname, u_int32_t flag)
 	strlcpy(req.ifbr_name, brdg, sizeof(req.ifbr_name));
 	strlcpy(req.ifbr_ifsname, ifsname, sizeof(req.ifbr_ifsname));
 
-	if (ioctl(s, SIOCBRDGGIFFLGS, (caddr_t)&req) < 0) {
+	if (br_ioctl(s, SIOCBRDGGIFFLGS, (caddr_t)&req) < 0) {
 		if (errno == ESRCH)
 			printf("%% %s is not a member of %s\n", ifsname, brdg);
 		else
@@ -645,7 +650,7 @@ bridge_ifclrflag(int s, char *brdg, char *ifsname, u_int32_t flag)
 
 	req.ifbr_ifsflags &= ~flag;
 
-	if (ioctl(s, SIOCBRDGSIFFLGS, (caddr_t)&req) < 0) {
+	if (br_ioctl(s, SIOCBRDGSIFFLGS, (caddr_t)&req) < 0) {
 		printf("%% cannot set flags for %s on %s: %s\n", ifsname, brdg,
 		    strerror(errno));
 		return (EX_IOERR);
@@ -815,32 +820,13 @@ bridge_cfg(int s, char *brdg, int type)
 	return (val);
 }
 
-/* By name, as bridge(4) lists the last member added first and veb(4) last */
-static int
-bridge_cmp(const void *a, const void *b)
+/* The ports SIOCBRDGIFS lists for brdg, *n of them, or NULL */
+static struct ifbreq *
+bridge_ports(int s, char *brdg, size_t *n)
 {
-	const struct ifbreq *x = a, *y = b;
-
-	return strcmp(x->ifbr_ifsname, y->ifbr_ifsname);
-}
-
-/*
- * hacked up bridge_list()
- *
- * conf() will ask us for a text list of interfaces filled into br_str
- *        except for ifpriority which will be filled in with "ifpriority"
- *	  as well since it returns multiple lines
- * show_int() will ask for SHOW_STPSTATE which has NULL br/str_len
- */
-int
-bridge_list(int s, char *brdg, char *delim, char *br_str, int str_len, int type)
-{
-	struct ifbreq *reqp;
 	struct ifbifconf bifc;
-	u_int i, len = 8192;
-	int identified = 0;
-	char buf[256], *inbuf = NULL, *inb;
-	uint32_t v;
+	u_int len = 8192;
+	char *inbuf = NULL, *inb;
 
 	while (1) {
 		strlcpy(bifc.ifbic_name, brdg, sizeof(bifc.ifbic_name));
@@ -848,53 +834,48 @@ bridge_list(int s, char *brdg, char *delim, char *br_str, int str_len, int type)
 		inb = realloc(inbuf, len);
 		if (inb == NULL) {
 			free(inbuf);
-			printf("%% bridge_list: malloc: %s\n", strerror(errno));
-			return 0;
+			printf("%% bridge_ports: malloc: %s\n", strerror(errno));
+			return NULL;
 		}
 		bifc.ifbic_buf = inbuf = inb;
 		if (ioctl(s, SIOCBRDGIFS, &bifc) < 0) {
 			if (errno != ENOTTY)
-				printf("%% bridge_list: SIOCBRDGIFS: %s\n",
+				printf("%% bridge_ports: SIOCBRDGIFS: %s\n",
 				    strerror(errno));
 			free(inbuf);
-			return 0;
+			return NULL;
 		}
-		if (bifc.ifbic_len + sizeof(*reqp) < len)
+		if (bifc.ifbic_len + sizeof(struct ifbreq) < len)
 			break;
 		len *= 2;
 	}
+	*n = bifc.ifbic_len / sizeof(struct ifbreq);
+	return bifc.ifbic_req;
+}
+
+/*
+ * hacked up bridge_list()
+ *
+ * show_int() will ask for SHOW_STPSTATE, and bridge_member_search()
+ * and show_bridge() for MEMBER
+ */
+int
+bridge_list(int s, char *brdg, char *delim, char *br_str, int str_len, int type)
+{
+	struct ifbreq *reqs, *reqp;
+	size_t i, n;
+	int identified = 0;
+	char buf[256];
+
+	if ((reqs = bridge_ports(s, brdg, &n)) == NULL)
+		return 0;
 
 	/* clear out br_str */
 	br_str[0] = '\0';
 
-	qsort(bifc.ifbic_req, bifc.ifbic_len / sizeof(*reqp), sizeof(*reqp),
-	    bridge_cmp);
-	for (i = 0; i < bifc.ifbic_len / sizeof(*reqp); i++) {
-		reqp = bifc.ifbic_req + i;
+	for (i = 0; i < n; i++) {
+		reqp = &reqs[i];
 		switch (type) {
-		case CONF_IFPRIORITY:
-			if((reqp->ifbr_ifsflags & IFBIF_STP) &&
-			    (reqp->ifbr_priority != DEFAULT_IFPRIORITY)) {
-			/* rework flow at some point XXX */
-				snprintf(buf, sizeof(buf),
-				    "%sifpriority %s %u\n", delim,
-				    reqp->ifbr_ifsname, reqp->ifbr_priority);
-				strlcat(br_str, buf, str_len);
-				identified++;
-			}
-			break;
-		case CONF_IFCOST:
-			/* a cost the kernel did not work out from the speed */
-			if((reqp->ifbr_ifsflags & IFBIF_STP) &&
-			(reqp->ifbr_stpflags & kern_bstp_port_admcost)) {
-			/* rework flow at some point XXX */
-				snprintf(buf, sizeof(buf),
-				    "%sifcost %s %u\n", delim,
-				    reqp->ifbr_ifsname, reqp->ifbr_path_cost);
-				strlcat(br_str, buf, str_len);
-				identified++;
-			}
-			break;
 		case SHOW_STPSTATE:
 			if (reqp->ifbr_ifsflags & IFBIF_STP) {
 				snprintf(buf, sizeof(buf),
@@ -913,67 +894,9 @@ bridge_list(int s, char *brdg, char *delim, char *br_str, int str_len, int type)
 				identified++;
 			}
 			break;
-		case NOLEARNING:
-			if (!(reqp->ifbr_ifsflags & IFBIF_LEARNING) &&
-			    !(reqp->ifbr_ifsflags & IFBIF_SPAN)) {
-				snprintf(buf, sizeof(buf), "%s%s",
-				    br_str[0] ? " " : "", reqp->ifbr_ifsname);
-				strlcat(br_str, buf, str_len);
-				identified++;
-			}
-			break;
-		case NODISCOVER:
-			if (!(reqp->ifbr_ifsflags & IFBIF_DISCOVER) &&
-			    !(reqp->ifbr_ifsflags & IFBIF_SPAN)) {
-				snprintf(buf, sizeof(buf), "%s%s",
-				    br_str[0] ? " " : "", reqp->ifbr_ifsname);
-				strlcat(br_str, buf, str_len);
-				identified++;
-			}
-			break;
-		case BLOCKNONIP:
-			if (reqp->ifbr_ifsflags & IFBIF_BLOCKNONIP) {
-				snprintf(buf, sizeof(buf), "%s%s",
-				    br_str[0] ? " " : "", reqp->ifbr_ifsname);
-				strlcat(br_str, buf, str_len);
-				identified++;
-			}
-			break;
-		case STP:
-			if (reqp->ifbr_ifsflags & IFBIF_STP) {
-				snprintf(buf, sizeof(buf), "%s%s",
-				    br_str[0] ? " " : "", reqp->ifbr_ifsname);
-				strlcat(br_str, buf, str_len);
-				identified++;
-			}
-			break;
-		case SPAN:
-			if (reqp->ifbr_ifsflags & IFBIF_SPAN) {
-				snprintf(buf, sizeof(buf), "%s%s",
-				    br_str[0] ? " " : "", reqp->ifbr_ifsname);
-				strlcat(br_str, buf, str_len);
-				identified++;
-			}
-			break;
-		case PROTECTED:
-			if (reqp->ifbr_protected == 0)
-				break;
-			v = ffs(reqp->ifbr_protected);
-			snprintf(buf, sizeof(buf), "%sprotect %s %u", delim,
-			    reqp->ifbr_ifsname, v);
-			strlcat(br_str, buf, str_len);
-			while (++v < 32) {
-				if ((1 << (v - 1)) & reqp->ifbr_protected) {
-					snprintf(buf, sizeof(buf), ",%u", v);
-					strlcat(br_str, buf, str_len);
-				}
-			}
-			strlcat(br_str, "\n", str_len);
-			identified++;
-			break;
 		}
 	}
-	free(bifc.ifbic_buf);
+	free(reqs);
 	return (identified);
 }
 
@@ -1027,7 +950,7 @@ bridge_add(int s, char *brdg, char *ifn)
 
 	strlcpy(req.ifbr_name, brdg, sizeof(req.ifbr_name));
 	strlcpy(req.ifbr_ifsname, ifn, sizeof(req.ifbr_ifsname));
-	if (ioctl(s, SIOCBRDGADD, &req) < 0) {
+	if (br_ioctl(s, SIOCBRDGADD, &req) < 0) {
 		printf("%% cannot add member %s on %s: %s\n", ifn, brdg,
 			strerror(errno));
 		if (errno == EPERM)
@@ -1044,7 +967,7 @@ bridge_delete(int s, char *brdg, char *ifn)
 
 	strlcpy(req.ifbr_name, (char *)brdg, sizeof(req.ifbr_name));
 	strlcpy(req.ifbr_ifsname, ifn, sizeof(req.ifbr_ifsname));
-	if (ioctl(s, SIOCBRDGDEL, &req) < 0) {
+	if (br_ioctl(s, SIOCBRDGDEL, &req) < 0) {
 		printf("%% unable to delete member: SIOCBRDGDEL: %s\n",
 		    strerror(errno));
 		if (errno == EPERM)
@@ -1061,7 +984,7 @@ bridge_addspan(int s, char *brdg, char *ifn)
 
 	strlcpy(req.ifbr_name, brdg, sizeof(req.ifbr_name));
 	strlcpy(req.ifbr_ifsname, ifn, sizeof(req.ifbr_ifsname));
-	if (ioctl(s, SIOCBRDGADDS, &req) < 0) {
+	if (br_ioctl(s, SIOCBRDGADDS, &req) < 0) {
 		printf("%% cannot add span %s on %s: %s\n", ifn, brdg,
 		    strerror(errno));
 		if (errno == EPERM)
@@ -1078,7 +1001,7 @@ bridge_delspan(int s, char *brdg, char *ifn)
 
 	strlcpy(req.ifbr_name, brdg, sizeof(req.ifbr_name));
 	strlcpy(req.ifbr_ifsname, ifn, sizeof(req.ifbr_ifsname));
-	if (ioctl(s, SIOCBRDGDELS, &req) < 0) {
+	if (br_ioctl(s, SIOCBRDGDELS, &req) < 0) {
 		printf("%% cannot delete span %s on %s: %s\n", ifn, brdg,
 		    strerror(errno));
 		if (errno == EPERM)
@@ -1195,7 +1118,7 @@ bridge_deladdr(int s, char *brdg, char *addr)
 	}
 	bcopy(ea, &ifba.ifba_dst, sizeof(struct ether_addr));
 
-	if (ioctl(s, SIOCBRDGDADDR, &ifba) < 0) {
+	if (br_ioctl(s, SIOCBRDGDADDR, &ifba) < 0) {
 		printf("%% unable to delete %s from %s\n", addr, brdg);
 		return (EX_IOERR);
 	}
@@ -1256,7 +1179,7 @@ bridge_addaddr(int s, char *brdg, char *ifname, char *addr)
 	bcopy(ea, &ifba.ifba_dst, sizeof(struct ether_addr));
 	ifba.ifba_flags = IFBAF_STATIC;
 
-	if (ioctl(s, SIOCBRDGSADDR, &ifba) < 0) {
+	if (br_ioctl(s, SIOCBRDGSADDR, &ifba) < 0) {
 		char tmp[128];
 
 		snprintf(tmp, sizeof(tmp), "%% unable to add %s to %s: %s\n",
@@ -1547,7 +1470,8 @@ bridge_rule(int s, char *brdg, int targc, char **targv, int ln)
 	argc--; argv++;
 
 	sec++; /* 4 */
-	if (argc == 0 || !is_valid_ifname(argv[0]))
+	if (argc == 0 || !(candidate ? cand_hasif(argv[0]) :
+	    is_valid_ifname(argv[0])))
 		goto bad_rule;
 	strlcpy(rule.ifbr_ifsname, argv[0], sizeof(rule.ifbr_ifsname));
 	argc--; argv++;
@@ -1599,7 +1523,7 @@ bridge_rule(int s, char *brdg, int targc, char **targv, int ln)
 		sec++;
 	}
 
-	if (ioctl(s, SIOCBRDGARL, &rule) < 0) {
+	if (br_ioctl(s, SIOCBRDGARL, &rule) < 0) {
 		printf("%% unable to add rule: SIOCBRDGARL: %s\n",
 		    strerror(errno));
 		return (EX_IOERR);
@@ -1657,7 +1581,7 @@ bridge_protect(const char *ifname, int sock, const char *ifsname,
 		str = strtok(NULL, ",");
 	}
 
-	if (ioctl(sock, SIOCBRDGSIFPROT, (caddr_t)&breq) == -1) {
+	if (br_ioctl(sock, SIOCBRDGSIFPROT, (caddr_t)&breq) == -1) {
 		printf("%% protect %s %s: %s\n", ifsname, val, strerror(errno));
 		free(optlist);
 		return 1;
@@ -1677,7 +1601,7 @@ bridge_unprotect(const char *ifname, int sock, const char *ifsname)
 
 	breq.ifbr_protected = 0;
 
-	if (ioctl(sock, SIOCBRDGSIFPROT, (caddr_t)&breq) == -1) {
+	if (br_ioctl(sock, SIOCBRDGSIFPROT, (caddr_t)&breq) == -1) {
 		printf("%% no protect %s: %s\n", ifsname, strerror(errno));
 		return 1;
 	}
@@ -1721,7 +1645,7 @@ brprotect(int argc, char **argv, ...)
 		}
 	}
 
-	if (!is_valid_ifname(argv[1]) || is_bridge(ifs, argv[1])) {
+	if (!br_portname(ifs, argv[1])) {
 		printf("%% Invalid interface name %s\n", argv[1]);
 		return 0;
 	}
@@ -1732,6 +1656,566 @@ brprotect(int argc, char **argv, ...)
 	else
 		bridge_unprotect(ifname, ifs, argv[1]);
 	return 0;
+}
+
+/*
+ * A bridge as conf_brcfg() prints it.  In configure private the bridge
+ * ioctls nsh sends change the one the candidate's lines describe, as
+ * the driver would change the kernel's (net/if_bridge.c, bridgectl.c,
+ * bridgestp.c and if_veb.c).
+ */
+struct brport {
+	char name[IFNAMSIZ];
+	u_int32_t flags;	/* IFBIF_*, IFBIF_SPAN for a span port */
+	u_int8_t prio;		/* with IFBIF_STP */
+	u_int32_t cost;		/* with IFBIF_STP, if set by hand, or 0 */
+	u_int32_t prot;		/* protected domains, a bit each */
+};
+
+/* A static address or a rule, as conf_brcfg() prints it after its name */
+struct brline {
+	char ifs[IFNAMSIZ];	/* the member it is for */
+	char *text;
+};
+
+struct brcfg {
+	long val[TIMEOUT + 1];	/* by PRIORITY to TIMEOUT, -1 for none */
+	struct brport *ports;
+	size_t nports;
+	struct brline *statics, *rules;
+	size_t nstatics, nrules;
+};
+
+static const struct {
+	char *name;
+	long def;
+} brvals[] = {		/* by PRIORITY to TIMEOUT */
+	{ "priority",	DEFAULT_PRIORITY },
+	{ "hellotime",	DEFAULT_HELLOTIME },
+	{ "fwddelay",	DEFAULT_FWDDELAY },
+	{ "maxage",	DEFAULT_MAXAGE },
+	{ "maxaddr",	DEFAULT_MAXADDR },
+	{ "timeout",	DEFAULT_TIMEOUT },
+};
+
+/* The port lists: the members with flag set and without, or the spans */
+static const struct {
+	char *name;
+	u_int32_t flag, without;
+} brlists[] = {
+	{ "member",	 0,			0 },
+	{ "stp",	 IFBIF_STP,		0 },
+	{ "span",	 IFBIF_SPAN,		0 },
+	{ "no learning", 0,			IFBIF_LEARNING },
+	{ "no discover", 0,			IFBIF_DISCOVER },
+	{ "blocknonip",	 IFBIF_BLOCKNONIP,	0 },
+};
+
+/* The lines for a member's STP priority, STP cost and protected domains */
+static char *brper[] = { "ifpriority", "ifcost", "protect" };
+
+/* The candidate lines a struct brcfg makes */
+static char *brnames[] = { "priority", "hellotime", "fwddelay", "maxage",
+    "maxaddr", "timeout", "member", "stp", "span", "learning", "discover",
+    "blocknonip", "ifpriority", "ifcost", "protect", "static", "rule" };
+
+/* By name, as bridge(4) lists the last member added first and veb(4) last */
+static int
+brport_cmp(const void *a, const void *b)
+{
+	const struct brport *x = a, *y = b;
+
+	return strcmp(x->name, y->name);
+}
+
+static void
+brcfg_free(struct brcfg *b)
+{
+	size_t i;
+
+	for (i = 0; i < b->nstatics; i++)
+		free(b->statics[i].text);
+	for (i = 0; i < b->nrules; i++)
+		free(b->rules[i].text);
+	free(b->statics);
+	free(b->rules);
+	free(b->ports);
+}
+
+/* The port called name, or with add a new one, if it has none; or NULL */
+static struct brport *
+brcfg_port(struct brcfg *b, const char *name, int add)
+{
+	struct brport *p;
+	size_t i;
+
+	for (i = 0; i < b->nports; i++)
+		if (strcmp(b->ports[i].name, name) == 0)
+			return add ? NULL : &b->ports[i];
+	if (!add || strlen(name) >= IFNAMSIZ ||
+	    (p = reallocarray(b->ports, b->nports + 1, sizeof(*p))) == NULL)
+		return NULL;
+	b->ports = p;
+	p = &b->ports[b->nports++];
+	memset(p, 0, sizeof(*p));
+	strlcpy(p->name, name, sizeof(p->name));
+	return p;
+}
+
+/* The member called name, not a span port, or NULL */
+static struct brport *
+brcfg_member(struct brcfg *b, const char *name)
+{
+	struct brport *p = brcfg_port(b, name, 0);
+
+	return p != NULL && !(p->flags & IFBIF_SPAN) ? p : NULL;
+}
+
+/*
+ * Add a static address, or with rule a rule, from its line after its
+ * name: "00:1b:21:0a:0b:01 em2", "block in on em0"
+ */
+static int
+brcfg_line(struct brcfg *b, int rule, const char *text)
+{
+	struct brline **l = rule ? &b->rules : &b->statics, *v;
+	size_t *n = rule ? &b->nrules : &b->nstatics, len;
+	const char *ifs;
+
+	if (rule) {
+		if ((ifs = strstr(text, " on ")) != NULL)
+			ifs += 4;
+	} else if ((ifs = strchr(text, ' ')) != NULL)
+		ifs++;
+	if (ifs == NULL || (len = strcspn(ifs, " ")) == 0 || len >= IFNAMSIZ)
+		return -1;
+	if ((v = reallocarray(*l, *n + 1, sizeof(**l))) == NULL)
+		return -1;
+	*l = v;
+	v += *n;
+	memset(v->ifs, 0, sizeof(v->ifs));
+	memcpy(v->ifs, ifs, len);
+	if ((v->text = strdup(text)) == NULL)
+		return -1;
+	(*n)++;
+	return 0;
+}
+
+static void
+brcfg_delline(struct brline *l, size_t *n, size_t i)
+{
+	free(l[i].text);
+	memmove(&l[i], &l[i + 1], (--*n - i) * sizeof(*l));
+}
+
+/* The index of the static entry for ea, or -1 */
+static int
+brcfg_static(struct brcfg *b, struct ether_addr *ea)
+{
+	char *mac = ether_ntoa(ea);
+	size_t i, len = strlen(mac);
+
+	for (i = 0; i < b->nstatics; i++)
+		if (strncmp(b->statics[i].text, mac, len) == 0 &&
+		    b->statics[i].text[len] == ' ')
+			return i;
+	return -1;
+}
+
+/* bridge_ifremove(): the member's static addresses and rules go with it */
+static void
+brcfg_del(struct brcfg *b, struct brport *p)
+{
+	size_t i;
+
+	for (i = b->nstatics; i-- > 0; )
+		if (strcmp(b->statics[i].ifs, p->name) == 0)
+			brcfg_delline(b->statics, &b->nstatics, i);
+	for (i = b->nrules; i-- > 0; )
+		if (strcmp(b->rules[i].ifs, p->name) == 0)
+			brcfg_delline(b->rules, &b->nrules, i);
+	i = p - b->ports;
+	memmove(p, p + 1, (b->nports - i - 1) * sizeof(*p));
+	b->nports--;
+}
+
+/* The bridge brdg in the kernel */
+static int
+brcfg_kernel(int s, char *brdg, struct brcfg *b)
+{
+	struct ifbreq *reqs;
+	struct brport *p;
+	char *buf = NULL, *l, *t;
+	size_t i, n, len;
+	FILE *f;
+	int ret = -1;
+
+	memset(b, 0, sizeof(*b));
+	for (i = 0; i <= TIMEOUT; i++)
+		b->val[i] = bridge_cfg(s, brdg, i);
+	if ((reqs = bridge_ports(s, brdg, &n)) == NULL)
+		n = 0;
+	for (i = 0; i < n; i++) {
+		if ((p = brcfg_port(b, reqs[i].ifbr_ifsname, 1)) == NULL)
+			goto done;
+		p->flags = reqs[i].ifbr_ifsflags;
+		p->prio = reqs[i].ifbr_priority;
+		if (reqs[i].ifbr_stpflags & kern_bstp_port_admcost)
+			p->cost = reqs[i].ifbr_path_cost;
+		p->prot = reqs[i].ifbr_protected;
+	}
+
+	/* the static addresses, then the members' rules, as they print */
+	if ((f = open_memstream(&buf, &len)) == NULL)
+		goto done;
+	bridge_confaddrs(s, brdg, "s", f);
+	for (i = 0; i < b->nports; i++)
+		if (!(b->ports[i].flags & IFBIF_SPAN))
+			bridge_rules(s, brdg, b->ports[i].name, "r", f);
+	if (fclose(f) == EOF)
+		goto done;
+	for (t = buf; (l = strsep(&t, "\n")) != NULL; )
+		if (*l != '\0' && brcfg_line(b, *l == 'r', l + 1) == -1)
+			goto done;
+	ret = 0;
+done:
+	free(reqs);
+	free(buf);
+	return ret;
+}
+
+/* The bridge the candidate's lines describe */
+static int
+brcfg_cand(struct brcfg *b)
+{
+	struct brport *p;
+	char line[1024], *l, *w, *ws;
+	const char *e;
+	size_t i, n, no;
+	u_int v;
+
+	memset(b, 0, sizeof(*b));
+	for (i = 0; i <= TIMEOUT; i++)
+		b->val[i] = (l = cand_line(brvals[i].name, 0)) == NULL ?
+		    brvals[i].def :
+		    strtol(l + strlen(brvals[i].name) + 1, NULL, 10);
+
+	for (i = 0; i < nitems(brlists); i++) {
+		/* "no learning" is a learning line */
+		no = strncmp(brlists[i].name, "no ", 3) == 0 ? 3 : 0;
+		if ((l = cand_line(brlists[i].name + no, 0)) == NULL)
+			continue;
+		strlcpy(line, l + strlen(brlists[i].name) + 1, sizeof(line));
+		for (ws = line; (w = strsep(&ws, " ")) != NULL; ) {
+			if (i == 0 || brlists[i].flag == IFBIF_SPAN) {
+				if ((p = brcfg_port(b, w, 1)) == NULL)
+					goto bad;
+				p->flags = i == 0 ? IFBIF_LEARNING |
+				    IFBIF_DISCOVER : IFBIF_SPAN;
+			} else if ((p = brcfg_member(b, w)) == NULL)
+				goto bad;
+			if (brlists[i].flag == IFBIF_STP)
+				p->prio = DEFAULT_IFPRIORITY;
+			if (i != 0 && brlists[i].flag != IFBIF_SPAN)
+				p->flags = (p->flags | brlists[i].flag) &
+				    ~brlists[i].without;
+		}
+	}
+
+	/* "ifpriority em0 64", "ifcost em0 2000", "protect em0 1,2" */
+	for (i = 0; i < nitems(brper); i++)
+		for (n = 0; (l = cand_line(brper[i], n)) != NULL; n++) {
+			strlcpy(line, l + strlen(brper[i]) + 1, sizeof(line));
+			ws = line;
+			if ((p = brcfg_member(b, strsep(&ws, " "))) == NULL ||
+			    ws == NULL || (i < 2 && !(p->flags & IFBIF_STP)))
+				goto bad;
+			if (i == 0)
+				p->prio = strtonum(ws, 0, 0xff, &e);
+			else if (i == 1)
+				p->cost = strtonum(ws, 1,
+				    kern_bstp_max_path_cost, &e);
+			else
+				while ((w = strsep(&ws, ",")) != NULL &&
+				    (v = strtonum(w, 1, 31, &e)) != 0)
+					p->prot |= 1 << (v - 1);
+			if (e != NULL)
+				goto bad;
+		}
+	for (n = 0; (l = cand_line("static", n)) != NULL; n++)
+		if (brcfg_line(b, 0, l + strlen("static ")) == -1)
+			goto bad;
+	for (n = 0; (l = cand_line("rule", n)) != NULL; n++)
+		if (brcfg_line(b, 1, l + strlen("rule ")) == -1)
+			goto bad;
+	return 0;
+bad:
+	printf("%% brcfg_cand: cannot read \"%s\"\n", l);
+	return -1;
+}
+
+static void
+brcfg_print(FILE *output, struct brcfg *b)
+{
+	struct brport *p;
+	size_t i, j;
+	int n, v;
+
+	qsort(b->ports, b->nports, sizeof(*b->ports), brport_cmp);
+	for (i = 0; i <= TIMEOUT; i++)
+		if (b->val[i] != -1 && b->val[i] != brvals[i].def)
+			fprintf(output, " %s %ld\n", brvals[i].name, b->val[i]);
+	for (i = 0; i < nitems(brlists); i++) {
+		for (n = 0, j = 0; j < b->nports; j++) {
+			p = &b->ports[j];
+			if (((p->flags & IFBIF_SPAN) != 0) !=
+			    (brlists[i].flag == IFBIF_SPAN) ||
+			    (p->flags & brlists[i].flag) != brlists[i].flag ||
+			    (p->flags & brlists[i].without) != 0)
+				continue;
+			if (n++ == 0)
+				fprintf(output, " %s", brlists[i].name);
+			fprintf(output, " %s", p->name);
+		}
+		if (n)
+			fprintf(output, "\n");
+	}
+	for (j = 0; j < b->nports; j++)
+		if ((b->ports[j].flags & IFBIF_STP) &&
+		    b->ports[j].prio != DEFAULT_IFPRIORITY)
+			fprintf(output, " ifpriority %s %u\n", b->ports[j].name,
+			    b->ports[j].prio);
+	for (j = 0; j < b->nports; j++)
+		if ((b->ports[j].flags & IFBIF_STP) && b->ports[j].cost != 0)
+			fprintf(output, " ifcost %s %u\n", b->ports[j].name,
+			    b->ports[j].cost);
+	for (j = 0; j < b->nports; j++) {
+		if (b->ports[j].prot == 0)
+			continue;
+		fprintf(output, " protect %s", b->ports[j].name);
+		for (n = 0, v = 1; v < 32; v++)
+			if (b->ports[j].prot & (1 << (v - 1)))
+				fprintf(output, n++ ? ",%d" : " %d", v);
+		fprintf(output, "\n");
+	}
+	for (j = 0; j < b->nstatics; j++)
+		fprintf(output, " static %s\n", b->statics[j].text);
+	for (j = 0; j < b->nrules; j++)
+		fprintf(output, " rule %s\n", b->rules[j].text);
+}
+
+void
+conf_brcfg(FILE *output, int ifs, char *ifname)
+{
+	struct brcfg b;
+
+	if (brcfg_kernel(ifs, ifname, &b) == 0)
+		brcfg_print(output, &b);
+	brcfg_free(&b);
+}
+
+/* Adding name to the candidate's bridge brdg, as a span port with span */
+static int
+brcfg_add(struct brcfg *b, char *brdg, char *name, int span)
+{
+	struct brport *p;
+
+	if (!cand_hasif(name))
+		return ENOENT;
+	if (cand_gettype(name) != IFT_ETHER)
+		return EINVAL;
+	if ((p = brcfg_port(b, name, 0)) != NULL)
+		return (p->flags & IFBIF_SPAN) && !span ? EBUSY : EEXIST;
+	if (cand_listowner(brdg, "member", name) != NULL)
+		return EBUSY;
+	if ((p = brcfg_port(b, name, 1)) == NULL)
+		return ENOMEM;
+	p->flags = span ? IFBIF_SPAN : IFBIF_LEARNING | IFBIF_DISCOVER;
+	return 0;
+}
+
+/* bridge_findbif(): name, a member of the candidate's bridge */
+static int
+brcfg_findbif(struct brcfg *b, char *name, struct brport **p)
+{
+	if (!cand_hasif(name))
+		return ENOENT;
+	return (*p = brcfg_member(b, name)) == NULL ? ESRCH : 0;
+}
+
+/* A rule, as the kernel keeps it: one for each way it goes */
+static int
+brcfg_rule(struct brcfg *b, struct ifbrlreq *req)
+{
+	static const u_int8_t ways[] = { BRL_FLAG_IN, BRL_FLAG_OUT };
+	struct ifbrlreq r;
+	char *buf = NULL;
+	size_t i, len;
+	FILE *f;
+	int ret = 0;
+
+	for (i = 0; i < nitems(ways) && ret == 0; i++) {
+		if (!(req->ifbr_flags & ways[i]))
+			continue;
+		r = *req;
+		r.ifbr_flags &= ~(BRL_FLAG_IN | BRL_FLAG_OUT);
+		r.ifbr_flags |= ways[i];
+		if ((f = open_memstream(&buf, &len)) == NULL)
+			return ENOMEM;
+		bridge_showrule(&r, "", f);
+		if (fclose(f) == EOF || len == 0)
+			ret = ENOMEM;
+		else {
+			buf[len - 1] = '\0';
+			if (brcfg_line(b, 1, buf) == -1)
+				ret = ENOMEM;
+		}
+		free(buf);
+		buf = NULL;
+	}
+	return ret;
+}
+
+/*
+ * A bridge ioctl in configure private: the driver's answer, as
+ * bridge_ioctl() gives it, for the bridge the candidate's lines describe,
+ * whose lines then become the bridge it leaves
+ */
+static int
+cand_bridge(u_long cmd, void *data)
+{
+	char *brdg = data;	/* each request starts with the bridge's name */
+	struct ifbreq *req = data;
+	struct ifbareq *ba = data;
+	struct ifbrlreq *rl = data;
+	struct brcfg b;
+	struct brport *p;
+	char *buf = NULL, text[64];
+	size_t len;
+	FILE *f;
+	int e = 0, i;
+
+	if (!cand_takes(brdg, cmd)) {
+		errno = ENOTTY;
+		return -1;
+	}
+	if (brcfg_cand(&b) == -1) {
+		e = EINVAL;
+		goto done;
+	}
+	switch (cmd) {
+	case SIOCBRDGADD:
+	case SIOCBRDGADDS:
+		e = brcfg_add(&b, brdg, req->ifbr_ifsname,
+		    cmd == SIOCBRDGADDS);
+		break;
+	case SIOCBRDGDEL:
+		if ((e = brcfg_findbif(&b, req->ifbr_ifsname, &p)) == 0)
+			brcfg_del(&b, p);
+		break;
+	case SIOCBRDGDELS:
+		if (!cand_hasif(req->ifbr_ifsname))
+			e = ENOENT;
+		else if ((p = brcfg_port(&b, req->ifbr_ifsname, 0)) == NULL ||
+		    !(p->flags & IFBIF_SPAN))
+			e = ESRCH;
+		else
+			brcfg_del(&b, p);
+		break;
+	case SIOCBRDGGIFFLGS:
+		if ((e = brcfg_findbif(&b, req->ifbr_ifsname, &p)) == 0) {
+			req->ifbr_ifsflags = p->flags;
+			req->ifbr_protected = p->prot;
+		}
+		goto done;
+	case SIOCBRDGSIFFLGS:
+		if (req->ifbr_ifsflags & IFBIF_RO_MASK) {
+			e = EINVAL;
+			break;
+		}
+		if ((e = brcfg_findbif(&b, req->ifbr_ifsname, &p)) != 0)
+			break;
+		/* a driver with no spanning tree has no ioctls for it */
+		if ((req->ifbr_ifsflags & IFBIF_STP) &&
+		    !cand_takes(brdg, SIOCBRDGSIFPRIO)) {
+			e = EINVAL;
+			break;
+		}
+		/* bstp_add() */
+		if ((req->ifbr_ifsflags & IFBIF_STP) &&
+		    !(p->flags & IFBIF_STP)) {
+			p->prio = DEFAULT_IFPRIORITY;
+			p->cost = 0;
+		}
+		p->flags = req->ifbr_ifsflags;
+		break;
+	case SIOCBRDGSIFPROT:
+		if ((e = brcfg_findbif(&b, req->ifbr_ifsname, &p)) == 0)
+			p->prot = req->ifbr_protected;
+		break;
+	case SIOCBRDGSADDR:
+		if ((e = brcfg_findbif(&b, ba->ifba_ifsname, &p)) != 0)
+			break;
+		if ((i = brcfg_static(&b, &ba->ifba_dst)) != -1)
+			brcfg_delline(b.statics, &b.nstatics, i);
+		snprintf(text, sizeof(text), "%s %s", ether_ntoa(&ba->ifba_dst),
+		    ba->ifba_ifsname);
+		if (brcfg_line(&b, 0, text) == -1)
+			e = ENOMEM;
+		break;
+	case SIOCBRDGDADDR:
+		if ((i = brcfg_static(&b, &ba->ifba_dst)) == -1)
+			e = ENOENT;
+		else
+			brcfg_delline(b.statics, &b.nstatics, i);
+		break;
+	case SIOCBRDGARL:
+		if ((rl->ifbr_action != BRL_ACTION_BLOCK &&
+		    rl->ifbr_action != BRL_ACTION_PASS) ||
+		    !(rl->ifbr_flags & (BRL_FLAG_IN | BRL_FLAG_OUT)))
+			e = EINVAL;
+		else if ((e = brcfg_findbif(&b, rl->ifbr_ifsname, &p)) == 0)
+			e = brcfg_rule(&b, rl);
+		break;
+	default:
+		e = ENOTTY;
+	}
+	if (e != 0)
+		goto done;
+	if ((f = open_memstream(&buf, &len)) == NULL) {
+		e = errno;
+		goto done;
+	}
+	brcfg_print(f, &b);
+	if (fclose(f) == EOF || cand_putlines(brnames, nitems(brnames),
+	    buf) == -1)
+		e = ENOMEM;
+done:
+	free(buf);
+	brcfg_free(&b);
+	if (e != 0) {
+		errno = e;
+		return -1;
+	}
+	return 0;
+}
+
+/* The kernel's bridge ioctls, or in configure private the candidate's */
+static int
+br_ioctl(int s, u_long cmd, void *data)
+{
+	if (candidate)
+		return cand_bridge(cmd, data);
+	return ioctl(s, cmd, data);
+}
+
+/* Can name be a port of a bridge, as far as the kernel or candidate says? */
+static int
+br_portname(int ifs, char *name)
+{
+	if (candidate)
+		return cand_hasif(name) && !cand_isbridge(name);
+	return is_valid_ifname(name) && !is_bridge(ifs, name);
 }
 
 int

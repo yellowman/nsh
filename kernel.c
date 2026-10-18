@@ -19,6 +19,7 @@
 #include <net/ppp_defs.h>
 #include <net/if_sppp.h>
 #include <net/if_pppoe.h>
+#include <net/if_bridge.h>
 #include "kernel.h"
 
 const char kernel_source[] = "OpenBSD-current, git c30c84965dc4 of 2026-10-17";
@@ -41,10 +42,32 @@ static const u_long bpe_ioctls[] = {
 	SIOCDIFPARENT,
 	SIOCSTXHPRIO,
 	SIOCSRXHPRIO,
+	SIOCBRDGSCACHE,
+	SIOCBRDGSTO,
+	SIOCBRDGSADDR,
+	SIOCBRDGDADDR,
 	0
 };
 
 static const u_long bridge_ioctls[] = {
+	SIOCBRDGADD,
+	SIOCBRDGDEL,
+	SIOCBRDGADDS,
+	SIOCBRDGDELS,
+	SIOCBRDGGIFFLGS,
+	SIOCBRDGSIFFLGS,
+	SIOCBRDGSCACHE,
+	SIOCBRDGSTO,
+	SIOCBRDGSPRI,
+	SIOCBRDGSHT,
+	SIOCBRDGSFD,
+	SIOCBRDGSMA,
+	SIOCBRDGSIFPRIO,
+	SIOCBRDGSIFCOST,
+	SIOCBRDGSADDR,
+	SIOCBRDGDADDR,
+	SIOCBRDGARL,
+	SIOCBRDGSIFPROT,
 	0
 };
 
@@ -202,6 +225,10 @@ static const u_long nvgre_ioctls[] = {
 	SIOCDIFPARENT,
 	SIOCSTXHPRIO,
 	SIOCSRXHPRIO,
+	SIOCBRDGSCACHE,
+	SIOCBRDGSTO,
+	SIOCBRDGSADDR,
+	SIOCBRDGDADDR,
 	0
 };
 
@@ -262,6 +289,8 @@ static const u_long tap_ioctls[] = {
 };
 
 static const u_long tpmr_ioctls[] = {
+	SIOCBRDGADD,
+	SIOCBRDGDEL,
 	0
 };
 
@@ -281,6 +310,18 @@ static const u_long veb_ioctls[] = {
 	SIOCDVNETID,
 	SIOCSTXHPRIO,
 	SIOCSRXHPRIO,
+	SIOCBRDGADD,
+	SIOCBRDGDEL,
+	SIOCBRDGADDS,
+	SIOCBRDGDELS,
+	SIOCBRDGGIFFLGS,
+	SIOCBRDGSIFFLGS,
+	SIOCBRDGSCACHE,
+	SIOCBRDGSTO,
+	SIOCBRDGSADDR,
+	SIOCBRDGDADDR,
+	SIOCBRDGARL,
+	SIOCBRDGSIFPROT,
 	0
 };
 
@@ -314,6 +355,10 @@ static const u_long vxlan_ioctls[] = {
 	SIOCDIFPARENT,
 	SIOCSTXHPRIO,
 	SIOCSRXHPRIO,
+	SIOCBRDGSCACHE,
+	SIOCBRDGSTO,
+	SIOCBRDGSADDR,
+	SIOCBRDGDADDR,
 	0
 };
 

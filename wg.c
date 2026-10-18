@@ -794,8 +794,8 @@ cand_setwg(char *name, struct wg_interface_io *wi)
 {
 	static char *names[] = { "wgport", "wgrtable", "wgkey", "wgpeer" };
 	struct wgif w;
-	char *buf = NULL, **lines = NULL, **gone = NULL, **v, *l, *p;
-	size_t len, i, j, n, nlines = 0, ngone = 0;
+	char *buf = NULL, *l;
+	size_t len, i, n;
 	FILE *f;
 	int ret = -1;
 
@@ -818,42 +818,8 @@ cand_setwg(char *name, struct wg_interface_io *wi)
 	wgif_print(f, &w);
 	if (fclose(f) == EOF)
 		goto done;
-	for (p = buf; (l = strsep(&p, "\n")) != NULL; ) {
-		if (*l != ' ')
-			continue;
-		if ((v = reallocarray(lines, nlines + 1,
-		    sizeof(*lines))) == NULL)
-			goto done;
-		lines = v;
-		lines[nlines++] = l + 1;
-	}
-
-	/* the lines it prints, in place of the lines of their keys */
-	for (i = 0; i < nlines; i++)
-		cand_setting(ST_ON, "%s", lines[i]);
-	/* and none it does not */
-	for (i = 0; i < nitems(names); i++)
-		for (n = 0; (l = cand_line(names[i], n)) != NULL; n++) {
-			for (j = 0; j < nlines && strcmp(lines[j], l) != 0; j++)
-				;
-			if (j < nlines)
-				continue;
-			if ((v = reallocarray(gone, ngone + 1,
-			    sizeof(*gone))) == NULL)
-				goto done;
-			gone = v;
-			if ((gone[ngone] = strdup(l)) == NULL)
-				goto done;
-			ngone++;
-		}
-	for (i = 0; i < ngone; i++)
-		cand_setting(ST_DEFAULT, "%s", gone[i]);
-	ret = 0;
+	ret = cand_putlines(names, nitems(names), buf);
 done:
-	for (i = 0; i < ngone; i++)
-		free(gone[i]);
-	free(gone);
-	free(lines);
 	free(buf);
 	wgif_free(&w);
 	return ret;
