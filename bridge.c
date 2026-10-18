@@ -1734,6 +1734,20 @@ brport_list(char *line)
 	return 0;
 }
 
+/* Is line one of a member's own, whose first value is the member? */
+int
+brport_one(char *line)
+{
+	size_t i, len;
+
+	for (i = 0; i < nitems(brper); i++) {
+		len = strlen(brper[i]);
+		if (strncmp(line, brper[i], len) == 0 && line[len] == ' ')
+			return 1;
+	}
+	return 0;
+}
+
 /* By name, as bridge(4) lists the last member added first and veb(4) last */
 static int
 brport_cmp(const void *a, const void *b)

@@ -423,6 +423,7 @@ int bridge_list(int, char *, char *, char *, int, int);
 int bridge_member_search(int, char *);
 int bridge_addrs(int, char *, char *, char *, FILE *);
 int brport_list(char *);
+int brport_one(char *);
 int set_ifflag(int, char *, short);
 int clr_ifflag(int, char *, short);
 int is_bridge(int, char *);

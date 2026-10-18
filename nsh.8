@@ -313,7 +313,9 @@ Commands that do not support a candidate yet are refused with a message.
 Supported commands refuse what the kernel would refuse, and settings
 the configuration cannot hold together, such as an IPv4 address and
 .Cm autoconf4
-on one interface.
+on one interface;
+.Cm commit check
+checks the candidate as a whole.
 Changes that other sessions make to the running configuration show
 through in the candidate, with this session's changes on top.
 .Pp
@@ -1971,7 +1973,7 @@ nsh(p)/powerdown
 .Pp
 .Tg commit
 .Ic commit
-.Op Cm confirmed Op Ar minutes
+.Op Cm check | Cm confirmed Op Ar minutes
 .Pp
 In
 .Cm configure private ,
@@ -2001,6 +2003,33 @@ and
 one the same as the last saved is not kept again.
 .Pp
 With
+.Cm check ,
+show what would keep the candidate from becoming the running
+configuration that can be seen before it does, and change nothing:
+.Bl -dash -compact
+.It
+an interface a line names, as a parent, carpdev, syncdev, patch, trunk
+port, pppoe dev or bridge port, that the candidate does not have and
+that is not hardware that is there;
+.It
+a port in two trunks, a member of two bridges, or a bridge option,
+such as stp, for an interface that is not a member;
+.It
+an address on two interfaces in one rdomain;
+.It
+a vlan's vnetid twice on one parent, or a carp vhid twice on one
+carpdev;
+.It
+a daemon in an rtable whose table is not there and that nothing
+makes, a route in it or an interface in its rdomain;
+.It
+daemon rules, new or changed, that the daemon's own test refuses, as
+its edit tests them.
+.El
+.Cm commit
+checks the same first, and refuses a candidate with any of them.
+.Pp
+With
 .Cm confirmed ,
 the candidate becomes the running configuration but is not saved, and
 unless
@@ -2023,6 +2052,13 @@ e.g. save the configuration on the system
 .Bd -literal -offset indent
 nsh(p)/commit
 % Saving configuration
+.Ed
+.It
+e.g. check the candidate
+.Bd -literal -offset indent
+nsh(config-private-p)/commit check
+% interface vlan10: parent trunk0 is no interface
+% Configuration check fails: 1 problem
 .Ed
 .It
 e.g. commit, and go back unless it is confirmed within 5 minutes

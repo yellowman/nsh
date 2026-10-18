@@ -1019,6 +1019,54 @@ ctl_rules_clear(char *name, int rtableid, int keep)
 	return 0;
 }
 
+/*
+ * Test daemon name's rules, its n lines, as its edit tests them: -1 if
+ * the test fails, else 0, as for a daemon whose edit tests nothing
+ */
+int
+ctl_rules_test(char *name, char **lines, size_t n)
+{
+	char dir[] = "/tmp/nsh.XXXXXXXXXX", path[PATH_MAX];
+	char *args[NOPTFILL] = { NULL };
+	struct daemons *d;
+	struct ctl *x;
+	size_t i;
+	FILE *f;
+	int ret;
+
+	for (d = ctl_daemons; d->name != NULL; d++)
+		if (strcmp(d->name, name) == 0)
+			break;
+	if (d->name == NULL || d->tmpfile == NULL)
+		return 0;
+	for (x = d->table; x->name != NULL; x++)
+		if (x->type == T_HANDLER_TEST && x->test_args[0] != NULL)
+			break;
+	if (x->name == NULL)
+		return 0;
+	if (mkdtemp(dir) == NULL) {
+		printf("%% mkdtemp %s: %s\n", dir, strerror(errno));
+		return -1;
+	}
+	snprintf(path, sizeof(path), "%s/%s", dir, basename(d->tmpfile));
+	if ((f = fopen(path, "w")) == NULL) {
+		printf("%% %s: %s\n", path, strerror(errno));
+		rmdir(dir);
+		return -1;
+	}
+	for (i = 0; i < n; i++)
+		fprintf(f, "%s\n", lines[i]);
+	if (fclose(f) == EOF) {
+		printf("%% %s: %s\n", path, strerror(errno));
+		ctl_cand_unstage(dir, path);
+		return -1;
+	}
+	fill_tmpfile(x->test_args, path, args);
+	ret = cmdargs(args[0], args) == 0 ? 0 : -1;
+	ctl_cand_unstage(dir, path);
+	return ret;
+}
+
 /* The line conf prints after a daemon's rules: pf reload, crontab install */
 static void
 ctl_cand_follow(struct daemons *d, char *name, int rules)

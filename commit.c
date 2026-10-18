@@ -43,6 +43,14 @@
  * Each configuration saved is kept, the last ROLLBACKS of them, for
  * rollback N and show rollback.
  *
+ * commit check shows what would keep the candidate from being the
+ * running configuration that it can see before then: an interface a
+ * line names that is not there, one in two trunks or bridges, a bridge
+ * option for one not its member, an address twice in one rdomain, a
+ * vlan or carp id twice on one interface, a daemon in an rtable nothing
+ * makes, and daemon rules their test refuses. commit refuses a
+ * candidate with any of them.
+ *
  * commit confirmed does all that but save, and a process waits; unless
  * a commit confirms it first, at the deadline the running configuration
  * goes back to how it was before the first commit not confirmed
@@ -51,9 +59,12 @@
  */
 
 #include <sys/types.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/sysctl.h>
 #include <sys/wait.h>
 #include <net/if.h>
+#include <net/route.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -100,7 +111,37 @@ struct ranked {
 	size_t i;
 };
 
+/* What each interface claims that only one may: a port, an address */
+struct claims {
+	struct {
+		char *what;
+		char who[IFNAMSIZ];
+	} *v;
+	size_t n;
+};
+
+/* An interface's lines that name other interfaces: the word, or 0 all */
+static const struct {
+	char *name;
+	int word;
+} ifrefs[] = {
+	{ "parent", 1 }, { "carpdev", 1 }, { "syncdev", 1 }, { "patch", 1 },
+	{ "pppoe dev", 1 }, { "trunkport", 0 },
+};
+
 static int take(struct cnode *, struct cnode *);
+static int check(struct cnode *, struct cnode *);
+static int check_if(struct cnode *, char *, char *, struct claims *);
+static int check_ports(struct cnode *, char *, char *, char *,
+    struct claims *);
+static int check_ids(struct cnode *, char *, char *, struct claims *);
+static int check_rtable(struct cnode *, char *);
+static int check_rules(struct cnode *, struct cnode *, char *);
+static int ifthere(struct cnode *, char *);
+static int inwords(char *, char *);
+static int rtable_there(int);
+static char *claim(struct claims *, char *, char *);
+static int problem(const char *, ...);
 static int apply(struct cnode *, struct cnode *);
 static int waiter(time_t);
 static int unconfirm(struct cnode *, time_t);
@@ -149,13 +190,24 @@ commit(int argc, char **argv, ...)
 	struct cnode *want, *was, *now, *back = NULL;
 	const char *errstr;
 	time_t when = 0;
-	int minutes = 0;
+	int minutes = 0, checking = 0, bad;
 
-	if (argc > 3 || (argc > 1 && !isprefix(argv[1], "confirmed"))) {
-		printf("%% commit [confirmed [minutes]]\n");
+	if (argc > 1) {
+		checking = isprefix(argv[1], "check") != 0;
+		/* c alone could be either */
+		if (checking == (isprefix(argv[1], "confirmed") != 0) ||
+		    (checking && argc > 2))
+			argc = 4;
+	}
+	if (argc > 3) {
+		printf("%% commit [check | confirmed [minutes]]\n");
 		return 0;
 	}
-	if (argc > 1) {
+	if (checking && !candidate) {
+		printf("%% commit check requires configure private\n");
+		return 0;
+	}
+	if (argc > 1 && !checking) {
 		minutes = CONFIRMMIN;
 		if (argc == 3 && (minutes = strtonum(argv[2], 1, CONFIRMMAX,
 		    &errstr)) == 0) {
@@ -181,6 +233,15 @@ commit(int argc, char **argv, ...)
 		return 0;
 	if ((was = running_tree()) == NULL)
 		return 0;
+	if ((bad = check(was, want)) != 0 || checking) {
+		if (bad == 0)
+			printf("%% Configuration check succeeds\n");
+		else
+			printf("%% %s: %d problem%s\n", checking ?
+			    "Configuration check fails" : "Commit refused",
+			    bad, bad == 1 ? "" : "s");
+		goto done;
+	}
 	if (minutes > 0) {
 		/* back to before the first commit not confirmed */
 		if ((back = unconfirmed()) == NULL &&
@@ -216,6 +277,297 @@ done:
 	conftree_free(back);
 	conftree_free(was);
 	return 0;
+}
+
+/*
+ * What would keep want from becoming the running configuration, was,
+ * that can be seen before it does: each problem shown, and how many
+ */
+static int
+check(struct cnode *was, struct cnode *want)
+{
+	struct claims c = { NULL, 0 };
+	char *s, name[IFNAMSIZ];
+	size_t i;
+	int bad = 0;
+
+	bad += check_rules(was, want, NULL);
+	for (i = 0; (s = conftree_stmt(want, i)) != NULL; i++)
+		if (ifblock(s, name, sizeof(name)))
+			bad += check_if(want, s, name, &c);
+		else if (strncmp(s, "rtable ", 7) == 0)
+			bad += check_rtable(want, s) + check_rules(was, want, s);
+	for (i = 0; i < c.n; i++)
+		free(c.v[i].what);
+	free(c.v);
+	return bad;
+}
+
+/* An interface's block, block, for interface name */
+static int
+check_if(struct cnode *want, char *block, char *name, struct claims *c)
+{
+	char *l, *v, *last, *word, *who, what[128], rd[32], buf[1024];
+	size_t i, n, len;
+	int bad = 0, w;
+
+	for (n = 0; (l = conftree_line(want, block, NULL, n)) != NULL; n++) {
+		for (i = 0; i < nitems(ifrefs); i++) {
+			len = strlen(ifrefs[i].name);
+			if (strncmp(l, ifrefs[i].name, len) == 0 &&
+			    l[len] == ' ')
+				break;
+		}
+		if (i == nitems(ifrefs)) {
+			if (brport_list(l) || brport_one(l))
+				bad += check_ports(want, block, name, l, c);
+			continue;
+		}
+		/* the interfaces it names */
+		strlcpy(buf, l + len, sizeof(buf));
+		for (w = 1, word = strtok_r(buf, " ", &last); word != NULL;
+		    word = strtok_r(NULL, " ", &last), w++) {
+			if (ifrefs[i].word != 0 && w != ifrefs[i].word)
+				continue;
+			if (!ifthere(want, word))
+				bad += problem("%s: %s %s is no interface",
+				    block, ifrefs[i].name, word);
+			snprintf(what, sizeof(what), "trunkport %s", word);
+			if (strcmp(ifrefs[i].name, "trunkport") == 0 &&
+			    (who = claim(c, what, name)) != NULL)
+				bad += problem("%s: trunkport %s is %s's too",
+				    block, word, who);
+		}
+	}
+
+	/* an address, once in an rdomain */
+	if ((v = conftree_line(want, block, "rdomain", 0)) != NULL)
+		strlcpy(rd, v + strlen("rdomain "), sizeof(rd));
+	else
+		strlcpy(rd, "0", sizeof(rd));
+	for (n = 0; (l = conftree_line(want, block, "inet", n)) != NULL; n++) {
+		strlcpy(buf, l + strlen("inet"), sizeof(buf));
+		/* an address, not dhcp or autoconf */
+		if ((word = strtok_r(buf, " ", &last)) == NULL ||
+		    strchr(word, '/') == NULL)
+			continue;
+		word[strcspn(word, "/")] = '\0';
+		snprintf(what, sizeof(what), "inet %s rdomain %s", word, rd);
+		if ((who = claim(c, what, name)) != NULL)
+			bad += problem("%s: inet %s is %s's too, in rdomain %s",
+			    block, word, who, rd);
+	}
+	return bad + check_ids(want, block, name, c);
+}
+
+/* A bridge's line, l, that names its ports */
+static int
+check_ports(struct cnode *want, char *block, char *name, char *l,
+    struct claims *c)
+{
+	char *p, *who, *m, *word, *last, what[128], list[32], buf[1024];
+	int bad = 0;
+
+	/* its name, "no learning" one of them, and then its ports */
+	p = l + (strncmp(l, "no ", 3) == 0 ? 3 : 0);
+	snprintf(list, sizeof(list), "%.*s", (int)(strcspn(p, " ") +
+	    (p - l)), l);
+	m = conftree_line(want, block, "member", 0);
+	strlcpy(buf, l + strlen(list), sizeof(buf));
+	for (word = strtok_r(buf, " ", &last); word != NULL;
+	    word = brport_one(l) ? NULL : strtok_r(NULL, " ", &last)) {
+		if (!ifthere(want, word))
+			bad += problem("%s: %s %s is no interface", block,
+			    list, word);
+		if (strcmp(list, "member") == 0) {
+			snprintf(what, sizeof(what), "member %s", word);
+			if ((who = claim(c, what, name)) != NULL)
+				bad += problem("%s: member %s is %s's too",
+				    block, word, who);
+		} else if (strcmp(list, "span") != 0 &&
+		    (m == NULL || !inwords(m + strlen("member"), word)))
+			bad += problem("%s: %s %s is no member", block, list,
+			    word);
+	}
+	return bad;
+}
+
+/* A vlan's id, once on its parent, and carp's, once on its carpdev */
+static int
+check_ids(struct cnode *want, char *block, char *name, struct claims *c)
+{
+	char *dev, *l, *who, what[128];
+	size_t n;
+	int bad = 0, id;
+
+	if ((strncmp(name, "vlan", 4) == 0 || strncmp(name, "svlan", 5) == 0) &&
+	    (dev = conftree_line(want, block, "parent", 0)) != NULL &&
+	    (l = conftree_line(want, block, "vnetid", 0)) != NULL &&
+	    sscanf(l, "vnetid %d", &id) == 1) {
+		snprintf(what, sizeof(what), "vnetid %d %s", id, dev);
+		if ((who = claim(c, what, name)) != NULL)
+			bad += problem("%s: vnetid %d on %s is %s's too", block,
+			    id, dev + strlen("parent "), who);
+	}
+	if ((dev = conftree_line(want, block, "carpdev", 0)) == NULL)
+		return bad;
+	for (n = 0; (l = conftree_line(want, block, NULL, n)) != NULL; n++) {
+		if (sscanf(l, "vhid %d", &id) != 1 &&
+		    sscanf(l, "carpnode %d", &id) != 1)
+			continue;
+		snprintf(what, sizeof(what), "vhid %d %s", id, dev);
+		if ((who = claim(c, what, name)) != NULL)
+			bad += problem("%s: vhid %d on %s is %s's too", block,
+			    id, dev + strlen("carpdev "), who);
+	}
+	return bad;
+}
+
+/*
+ * An rtable's block: a daemon runs in it only if its table is there,
+ * or something makes it, a route in it or an interface in its rdomain
+ */
+static int
+check_rtable(struct cnode *want, char *block)
+{
+	char *l, *s, *v, name[32], rd[32];
+	size_t i, n;
+	int id = rtableid(block);
+
+	if (rtable_there(id) || conftree_line(want, block, "route", 0) != NULL)
+		return 0;
+	snprintf(rd, sizeof(rd), "rdomain %d", id);
+	for (i = 0; (s = conftree_stmt(want, i)) != NULL; i++)
+		if ((v = conftree_line(want, s, "rdomain", 0)) != NULL &&
+		    strcmp(v, rd) == 0)
+			return 0;
+	for (n = 0; (l = conftree_line(want, block, NULL, n)) != NULL; n++)
+		if (ctl_line(l, name, sizeof(name)) == CTL_STATE)
+			return problem("%s: %s, but nothing makes table %d: a "
+			    "route in it, or an interface in rdomain %d", block,
+			    l, id, id);
+	return 0;
+}
+
+/* Daemon rules under block, or the top level, new or changed: tested */
+static int
+check_rules(struct cnode *was, struct cnode *want, char *block)
+{
+	char **lines = NULL, **nl, *l, *k, *f, *fp = NULL, *tp, name[32];
+	size_t i, j;
+	int bad = 0;
+
+	f = block == NULL ? NULL : counterpart(was, NULL, block);
+	for (i = 0; (l = conftree_line(want, block, NULL, i)) != NULL; i++) {
+		if (ctl_line(l, name, sizeof(name)) != CTL_RULES)
+			continue;
+		if ((tp = under(block, l)) == NULL)
+			break;
+		free(fp);
+		fp = NULL;
+		if ((block == NULL || f != NULL) &&
+		    (fp = under(f, l)) != NULL &&
+		    samelines(was, fp, want, tp)) {
+			free(tp);
+			continue;
+		}
+		for (j = 0; (k = conftree_line(want, tp, NULL, j)) != NULL;
+		    j++) {
+			if ((nl = reallocarray(lines, j + 1,
+			    sizeof(*lines))) == NULL)
+				break;
+			lines = nl;
+			lines[j] = k;
+		}
+		if (j > 0 && ctl_rules_test(name, lines, j) == -1)
+			bad += problem("%s%s%s: %s's test refuses them",
+			    block != NULL ? block : "", block != NULL ? ", " :
+			    "", l, name);
+		free(tp);
+	}
+	free(fp);
+	free(lines);
+	return bad;
+}
+
+/* Is name an interface the candidate has, or hardware that is there? */
+static int
+ifthere(struct cnode *want, char *name)
+{
+	char head[sizeof("interface ") + IFNAMSIZ];
+
+	if (strlen(name) >= IFNAMSIZ)
+		return 0;
+	snprintf(head, sizeof(head), "interface %s", name);
+	if (has(want, NULL, head))
+		return 1;
+	snprintf(head, sizeof(head), "bridge %s", name);
+	if (has(want, NULL, head))
+		return 1;
+	/* what a commit would not destroy */
+	return !cand_cloneable(name) && is_valid_ifname(name);
+}
+
+/* Is w one of the words of list? */
+static int
+inwords(char *list, char *w)
+{
+	size_t len = strlen(w), l;
+
+	for (; *(list += strspn(list, " ")) != '\0'; list += l) {
+		l = strcspn(list, " ");
+		if (l == len && strncmp(list, w, len) == 0)
+			return 1;
+	}
+	return 0;
+}
+
+/* Is there routing table id? */
+static int
+rtable_there(int id)
+{
+	int mib[6] = { CTL_NET, PF_ROUTE, 0, 0, NET_RT_TABLE, id };
+	struct rt_tableinfo info;
+	size_t len = sizeof(info);
+
+	return sysctl(mib, 6, &info, &len, NULL, 0) != -1;
+}
+
+/*
+ * The interface that claimed what before, if not who, or NULL, and
+ * then what is who's
+ */
+static char *
+claim(struct claims *c, char *what, char *who)
+{
+	void *v;
+	size_t i;
+
+	for (i = 0; i < c->n; i++)
+		if (strcmp(c->v[i].what, what) == 0)
+			return strcmp(c->v[i].who, who) == 0 ? NULL :
+			    c->v[i].who;
+	if ((v = reallocarray(c->v, c->n + 1, sizeof(*c->v))) == NULL)
+		return NULL;
+	c->v = v;
+	if ((c->v[c->n].what = strdup(what)) == NULL)
+		return NULL;
+	strlcpy(c->v[c->n++].who, who, sizeof(c->v[0].who));
+	return NULL;
+}
+
+/* A problem: shown, and counted as one */
+static int
+problem(const char *fmt, ...)
+{
+	va_list ap;
+
+	printf("%% ");
+	va_start(ap, fmt);
+	vprintf(fmt, ap);
+	va_end(ap);
+	printf("\n");
+	return 1;
 }
 
 /*
