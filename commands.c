@@ -3382,11 +3382,12 @@ conf_save(void)
 {
 	char *args[] = { SAVESCRIPT, NSHRC_TEMP, NULL };
 
-	if (wr_conf(NSHRC_TEMP))
-		printf("%% Saving configuration\n");
-	else
+	if (!wr_conf(NSHRC_TEMP)) {
 		printf("%% Unable to save configuration: %s\n",
 		    strerror(errno));
+		return 0;
+	}
+	printf("%% Saving configuration\n");
 
 	cmdargs(SAVESCRIPT, args);
 
@@ -3400,17 +3401,17 @@ int
 wr_conf(char *fname)
 {
 	FILE *rchandle;
-	int success = 1;
+	int fd;
 
-	if ((rchandle = fopen(fname, "w")) == NULL)
-		success = 0;
-	else {
-		fchmod(fileno(rchandle), 0640);
-		conf(rchandle);
-		fclose(rchandle);
+	/* its secrets are never for others to read, not even at first */
+	if ((fd = open(fname, O_WRONLY | O_CREAT | O_TRUNC, 0640)) == -1)
+		return 0;
+	if (fchmod(fd, 0640) == -1 || (rchandle = fdopen(fd, "w")) == NULL) {
+		close(fd);
+		return 0;
 	}
-
-	return (success);
+	conf(rchandle);
+	return fclose(rchandle) != EOF;
 }
 
 static int
