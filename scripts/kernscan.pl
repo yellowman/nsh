@@ -32,6 +32,9 @@
 # one answers ENOTTY. The scanner checks that, and that no file in sys
 # but the cloners' and the files of the ioctl functions their handlers
 # call takes them, so an interface no cloner made takes none.
+#
+# @limits are values the kernel checks that no header userland includes
+# defines, each read from the one #define it has.
 
 use strict;
 use warnings;
@@ -67,8 +70,27 @@ my @drv = qw(SIOCSLIFPHYADDR SIOCDIFPHYADDR SIOCSLIFPHYRTABLE
     SIOCSSPPPPARAMS PPPOESETPARMS);
 my %drv = map { $_ => 1 } @drv;
 
+# Limits the kernel checks that no header userland includes defines:
+# kernel.c's name for each, and the file and macro it is read from
+my @limits = (
+	[ 'kern_txpower_min', 'net80211/ieee80211_var.h',
+	    'IEEE80211_TXPOWER_MIN' ],
+	[ 'kern_txpower_max', 'net80211/ieee80211_var.h',
+	    'IEEE80211_TXPOWER_MAX' ],
+);
+
 @ARGV == 2 or die "usage: kernscan.pl srcdir label\n";
 my ($src, $label) = @ARGV;
+
+my @lines;		# kernel.c's line for each limit
+foreach my $l (@limits) {
+	my ($name, $file, $macro) = @$l;
+	open(my $fh, '<', "$src/sys/$file") or die "$src/sys/$file: $!\n";
+	my ($v) = join('', <$fh>) =~ /^#define\s+$macro\s+\(?(-?\d+)\)?\s/m
+	    or die "$macro: not a number in $file\n";
+	close($fh);
+	push @lines, "const int $name = $v;\t/* $macro */\n";
+}
 my @dirs = map { "$src/sys/$_" } qw(net netinet netinet6 netmpls);
 
 my %body;		# function name => its body, by file
@@ -180,6 +202,7 @@ print <<"EOF";
 const char kernel_source[] = "$label";
 
 EOF
+print @lines, "\n";
 print join("\n", @arrays), "\n";
 print "const struct kcloner kcloners[] = {\n";
 print @rows;

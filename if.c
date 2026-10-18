@@ -3625,6 +3625,9 @@ intnwid(int argc, char **argv, ...)
 	} else
 		len = 0; /* nwid "" */
 
+	if (candidate)
+		return cand_nwid(ifname, nwid.i_nwid, len);
+
 	nwid.i_len = len;
 	ifr.ifr_data = (caddr_t)&nwid;
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
@@ -3640,7 +3643,7 @@ intpowersave(int argc, char **argv, ...)
 {
 	const char *errmsg = NULL;
 	struct ieee80211_power power;
-	int  set;
+	int  set, maxsleep;
 	va_list ap;
 	char *ifname;
 	int ifs;
@@ -3666,6 +3669,20 @@ intpowersave(int argc, char **argv, ...)
 		return 0;
 	}
 
+	if (argc == 1) {
+		maxsleep = strtonum(argv[0], 0, 1000, &errmsg);
+		if (errmsg) {
+			printf("%% Power save invalid %s: %s\n", argv[0],
+			    errmsg);
+			return 0;
+		}
+	} else {
+		maxsleep = DEFAULT_POWERSAVE;
+	}
+
+	if (candidate)
+		return cand_powersave(ifname, set, maxsleep);
+
 	strlcpy(power.i_name, ifname, sizeof(power.i_name));
 
 	if (ioctl(ifs, SIOCG80211POWER, (caddr_t)&power) == -1) {
@@ -3674,16 +3691,7 @@ intpowersave(int argc, char **argv, ...)
 		return 0;
 	}
 
-	if (argc == 1) {
-		power.i_maxsleep = strtonum(argv[0], 0, 1000, &errmsg);
-		if (errmsg) {
-			printf("%% Power save invalid %s: %s\n", argv[0],
-			    errmsg);
-			return 0;
-		}
-	} else {
-		power.i_maxsleep = DEFAULT_POWERSAVE;
-	}
+	power.i_maxsleep = maxsleep;
 	power.i_enabled = set;
 
 	if (ioctl(ifs, SIOCS80211POWER, (caddr_t)&power) == -1) {

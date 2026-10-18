@@ -76,6 +76,13 @@
 #include <net80211/ieee80211_ioctl.h>
 #include "stringlist.h"
 #include "externs.h"
+#include "settings.h"
+#include "kernel.h"
+
+static int cand_80211(char *, char *);
+static void nwkey_str(char *, size_t, char *);
+static int cand_nwkey(char *, struct ieee80211_nwkey *, char *);
+static int cand_txpower(char *, int);
 
 const char *
 get_string(const char *val, const char *sep, u_int8_t *buf, int *lenp)
@@ -253,6 +260,8 @@ set_nwkey:
 		nwkey.i_key[i].i_keylen = 0;
 		nwkey.i_key[i].i_keydat = NULL;
 	}
+	if (candidate)
+		return cand_nwkey(ifname, &nwkey, set ? argv[0] : NULL);
 	(void) strlcpy(nwkey.i_name, ifname, sizeof(nwkey.i_name));
 	if (ioctl(ifs, SIOCS80211NWKEY, (caddr_t)&nwkey) == -1) {
 		printf("%% intnwkey: SIOCS80211NWKEY: %s\n", strerror(errno));
@@ -368,13 +377,8 @@ get_nwinfo(char *ifname, char *str, int str_len, int type)
 		    nwkey.i_wepon > 0) {
 			key = sl_init();
 			if (db_select_flag_x_ctl(key, "nwkey", ifname) >= 0 &&
-			    key->sl_cur > 0) {
-				if (strpbrk(key->sl_str[0], " \t") != NULL)
-					snprintf(str, str_len, "\"%s\"",
-					    key->sl_str[0]);
-				else
-					strlcpy(str, key->sl_str[0], str_len);
-			}
+			    key->sl_cur > 0)
+				nwkey_str(str, str_len, key->sl_str[0]);
 			sl_free(key, 1);
 		}
 	}
@@ -432,6 +436,9 @@ inttxpower(int argc, char **argv, ...)
 		txpower.i_mode = IEEE80211_TXPOWER_MODE_FIXED;
 	}
 
+	if (candidate)
+		return cand_txpower(ifname, txpower.i_val);
+
 	if (ioctl(ifs, SIOCS80211TXPOWER, (caddr_t)&txpower) == -1)
 		printf("%% inttxpower: SIOCS80211TXPOWER failed: %s\n",
 		    strerror(errno));
@@ -488,4 +495,91 @@ intbssid(int argc, char **argv, ...)
 	}
 
 	return (0);
+}
+
+/*
+ * Is name an 802.11 interface, in configure private? It is if
+ * SIOCG80211NWID answers, as conf_ifmetrics() asks; if not, the
+ * handler's error is what says so.
+ */
+static int
+cand_80211(char *name, char *what)
+{
+	char tmp[IEEE80211_NWID_LEN * 2 + 8];
+
+	if (get_nwinfo(name, tmp, sizeof(tmp), NWID) != 0)
+		return 1;
+	printf("%% %s: %s\n", what, strerror(ENOTTY));
+	return 0;
+}
+
+/* A WEP key as intnwkey() kept it, quoted as makeargv() reads it back */
+static void
+nwkey_str(char *buf, size_t len, char *key)
+{
+	if (strpbrk(key, " \t") != NULL)
+		snprintf(buf, len, "\"%s\"", key);
+	else
+		strlcpy(buf, key, len);
+}
+
+/*
+ * nwid in configure private. SIOCS80211NWID turns WEP off, so the nwkey
+ * line goes too.
+ */
+int
+cand_nwid(char *ifname, u_int8_t *nwid, int len)
+{
+	char str[IEEE80211_NWID_LEN * 2 + 8];
+
+	if (!cand_80211(ifname, "intnwid: SIOCS80211NWID"))
+		return 0;
+	make_string(str, sizeof(str), nwid, len);
+	cand_setting(ST_ON, "nwid %s", str);
+	return cand_setting(ST_DEFAULT, "nwkey");
+}
+
+/* nwkey in configure private, as ieee80211_ioctl_setnwkeys() takes it */
+static int
+cand_nwkey(char *ifname, struct ieee80211_nwkey *nwkey, char *key)
+{
+	char str[256];
+
+	if (!cand_80211(ifname, "intnwkey: SIOCS80211NWKEY"))
+		return 0;
+	if (nwkey->i_wepon == IEEE80211_NWKEY_OPEN)
+		return cand_setting(ST_DEFAULT, "nwkey");
+	if (nwkey->i_defkid < 1 || nwkey->i_defkid > IEEE80211_WEP_NKID) {
+		printf("%% intnwkey: SIOCS80211NWKEY: %s\n", strerror(EINVAL));
+		return 0;
+	}
+	nwkey_str(str, sizeof(str), key);
+	return cand_setting(ST_ON, "nwkey %s", str);
+}
+
+/* txpower in configure private: conf prints none for the most */
+static int
+cand_txpower(char *ifname, int dbm)
+{
+	if (!cand_80211(ifname, "inttxpower: SIOCS80211TXPOWER failed"))
+		return 0;
+	if (dbm < kern_txpower_min || dbm > kern_txpower_max) {
+		printf("%% inttxpower: SIOCS80211TXPOWER failed: %s\n",
+		    strerror(EINVAL));
+		return 0;
+	}
+	if (dbm == kern_txpower_max)
+		return cand_setting(ST_DEFAULT, "txpower");
+	return cand_setting(ST_ON, "txpower %d", dbm);
+}
+
+/* powersave in configure private */
+int
+cand_powersave(char *ifname, int set, int maxsleep)
+{
+	if (!cand_80211(ifname, "intpowersave: SIOCG80211POWER"))
+		return 0;
+	if (!set)
+		return cand_setting(ST_DEFAULT, "powersave");
+	return cand_setting(ST_ON, "powersave %d", maxsleep);
 }

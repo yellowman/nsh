@@ -282,6 +282,8 @@ int get_nwinfo(char *, char *, int, int);
 int get_nwpowersave(int, char *);
 int intnwkey(int, char **, ...);
 int inttxpower(int, char **, ...);
+int cand_nwid(char *, u_int8_t *, int);
+int cand_powersave(char *, int, int);
 int intbssid(int, char **, ...);
 
 /* stats.c */
