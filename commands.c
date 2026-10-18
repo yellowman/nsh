@@ -79,6 +79,7 @@ struct intlist *whichlist;
 
 pid_t	child;
 static int in_rc;		/* cmdrc() is reading a file */
+static int rc_head;		/* and its line is a block's head */
 
 extern volatile sig_atomic_t caught_sigwinch;
 
@@ -1438,10 +1439,6 @@ interface(int argc, char **argv, ...)
 		tmp = argv[1];
 	} else {
 		/* called from cmdrc(), processing config file rules only */
-		if (argc == 2 && strcmp(modhvar, argv[1]) == 0) {
-			 /* do-nothing */
-			return 0;
-		}
 		tmp = modhvar;
 	}
 
@@ -1514,6 +1511,13 @@ interface(int argc, char **argv, ...)
 		return 0;
 	}
 
+	/* a block's head, which makes a cloned interface as its lines do */
+	if (rc_head) {
+		ifname[0] = '\0';
+		close(ifs);
+		return 0;
+	}
+
 	if (candidate)
 		whichlist = bridge ? Bridgelist : Intlist;
 	else if (is_bridge(ifs, ifname)) {
@@ -1535,6 +1539,7 @@ interface(int argc, char **argv, ...)
 			argc = NARGS;
 		if (argv[0] == 0) {
 			ifname[0] = '\0';
+			close(ifs);
 			return 0;
 		}
 		if (NO_ARG(argv[0]))
@@ -1559,6 +1564,8 @@ interface(int argc, char **argv, ...)
 			 */
 			if (getrtable() != 0 && !priv) {
 				printf("%% Privilege required\n");
+				ifname[0] = '\0';
+				close(ifs);
 				return (0);
 			}
 
@@ -1573,6 +1580,7 @@ interface(int argc, char **argv, ...)
 		}
 
 		ifname[0] = '\0';
+		close(ifs);
 		return 0;
 	}
 
@@ -3340,9 +3348,13 @@ cmdrc(char rcname[FILENAME_MAX])
 			p_argv(margc, margv);
 			printf("\n");
 		}
-		if (c->modh == 1)
-			(*c->handler) (margc, margv, modhvar);
-		else
+		if (c->modh == 1) {
+			/* a statement's no, "no interface vlan5", has no block */
+			rc_head = line[0] != ' ';
+			(*c->handler) (margc, margv, rc_head &&
+			    NO_ARG(margv[0]) ? NULL : modhvar);
+			rc_head = 0;
+		} else
 			(*c->handler) (margc, margv, 0);
 		/* a table the line made can be entered now */
 		if (cli_rtable != getrtable() && setrtable(cli_rtable) == 0)
