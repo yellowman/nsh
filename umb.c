@@ -26,6 +26,7 @@
 #include "externs.h"
 
 void	umb_printclasses(char *, int, FILE *);
+void	umb_classes(char *, size_t, uint32_t);
 int	umb_parse_classes(const char *);
 void	umb_setpin(int, char *, const char *);
 void	umb_chgpin(int, char *, const char *, const char *);
@@ -292,6 +293,24 @@ umb_printclasses(char *tag, int c, FILE *outfile)
 	fputc('\n', outfile);
 }
 
+/* The classes in c, one name for each, as umb_parse_classes() reads them */
+void
+umb_classes(char *buf, size_t len, uint32_t c)
+{
+	uint32_t v;
+	int i;
+
+	strlcpy(buf, c ? "" : "none", len);
+	for (i = 0; umb_dataclass[i].descr != NULL; i++) {
+		v = umb_dataclass[i].val;
+		if (!(c & v) || (v & (v - 1)) != 0)
+			continue;
+		if (buf[0] != '\0')
+			strlcat(buf, ",", len);
+		strlcat(buf, umb_dataclass[i].descr, len);
+	}
+}
+
 int
 umb_parse_classes(const char *spec)
 {
@@ -307,6 +326,11 @@ umb_parse_classes(const char *spec)
 		if ((v = umb_descr2val(umb_dataclass, str)) != 0 ||
 		    (v = umb_descr2val(umb_classalias, str)) != 0)
 			c |= v;
+		else if (strcasecmp(str, "none") != 0) {
+			printf("%% Unknown class %s\n", str);
+			free(optlist);
+			return -1;
+		}
 		str = strtok(NULL, ",");
 	}
 	free(optlist);
@@ -391,9 +415,11 @@ umb_apn(int ifs, char *ifname, const char *apn)
 		return;
 	}
 
-	if (apn == NULL)
+	if (apn == NULL) {
+		/* the length is what the next connect sends */
 		memset(mp.apn, 0, sizeof (mp.apn));
-	else if ((mp.apnlen = char_to_utf16(apn, mp.apn,
+		mp.apnlen = 0;
+	} else if ((mp.apnlen = char_to_utf16(apn, mp.apn,
 	    sizeof (mp.apn))) == -1) {
 		printf("%% APN too long\n");
 		return;
@@ -624,7 +650,7 @@ conf_umb(FILE *output, int ifs, char *ifname)
 {
 	struct umb_parameter mp;
 	struct ifreq ifr;
-	char apn[UMB_APN_MAXLEN+1];
+	char apn[UMB_APN_MAXLEN+1], classes[128];
 
 	memset((char *)&mp, 0, sizeof(mp));
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
@@ -639,8 +665,8 @@ conf_umb(FILE *output, int ifs, char *ifname)
 	conf_umb_pin(output, ifname);
 	if (mp.roaming)
 		fprintf(output, " roaming\n");
-	fprintf(output, " class %s\n",
-	    umb_val2descr(umb_dataclass, mp.preferredclasses));
+	umb_classes(classes, sizeof(classes), mp.preferredclasses);
+	fprintf(output, " class %s\n", classes);
 }
 
 void
