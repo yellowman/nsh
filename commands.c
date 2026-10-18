@@ -2948,7 +2948,7 @@ rtable(int argc, char **argv, ...)
 int
 group(int argc, char **argv, ...)
 {
-	int counter = 1, set, ifs;
+	int counter = 1, set, ifs, ret = 0;
 	const char *errstr;
 	struct ifgroupreq ifgr;
 
@@ -2959,11 +2959,18 @@ group(int argc, char **argv, ...)
 	} else
 		set = 1;
 
-	if ((argc < 3) || ((argc == 3 || argc == 4) &&
-	    !isprefix(argv[2], "carpdemote"))) {
+	if (argc < 3 || argc > 4 || !isprefix(argv[2], "carpdemote")) {
 		printf("%% group <group-name> carpdemote [demotion-counter]\n");
 		printf("%% no group <group-name> carpdemote [demotion-counter]\n");
 		return 1;
+	}
+
+	if (argc == 4) {
+		counter = strtonum(argv[3], 0, 128, &errstr);
+		if (errstr) {
+			printf("%% invalid carp demotion: %s\n", errstr);
+			return 1;
+		}
 	}
 
 	ifs = socket(AF_INET, SOCK_DGRAM, 0);
@@ -2976,27 +2983,22 @@ group(int argc, char **argv, ...)
 	bzero(&ifgr, sizeof(ifgr));
 	strlcpy(ifgr.ifgr_name, argv[1], sizeof(ifgr.ifgr_name));
 
-	if (set) {
-		if (argc == 4) {
-			counter = strtonum(argv[3], 0, 128, &errstr);
-			if (errstr) {
-				printf("%% invalid carp demotion: %s\n", errstr);
-				return 1;
-			}
-		} else
-			counter = 1;
-		ifgr.ifgr_attrib.ifg_carp_demoted = counter;
-	} else
-		ifgr.ifgr_attrib.ifg_carp_demoted = 0;
+	/* the kernel adds the counter to the group's */
+	ifgr.ifgr_attrib.ifg_carp_demoted = set ? counter : -counter;
 
 	if (ioctl(ifs, SIOCSIFGATTR, (caddr_t)&ifgr) == -1) {
 		if (errno == ENOENT)
 			printf("%% group %s does not exist\n", ifgr.ifgr_name);
+		else if (errno == EINVAL)
+			printf("%% group %s: demotion counter must stay within"
+			    " 0 and 255\n", ifgr.ifgr_name);
 		else
 			printf("%% group: SIOCSIFGATTR: %s\n", strerror(errno));
+		ret = 1;
 	}
+	close(ifs);
 
-	return 0;
+	return ret;
 }
 
 //clear terminal screen
