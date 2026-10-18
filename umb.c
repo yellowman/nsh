@@ -5,6 +5,7 @@
 #include <sys/ioctl.h>
 
 #include <net/if.h>
+#include <net/if_types.h>
 #include <arpa/inet.h>
 
 #include <netdb.h>
@@ -24,6 +25,7 @@
 
 #include "stringlist.h"
 #include "externs.h"
+#include "settings.h"
 
 void	umb_printclasses(char *, int, FILE *);
 void	umb_classes(char *, size_t, uint32_t);
@@ -38,6 +40,7 @@ void	umb_roaming(int, char *, int);
 void	conf_umb_pin(FILE *, char *);
 void	utf16_to_char(uint16_t *, int, char *, size_t);
 int	char_to_utf16(const char *, uint16_t *, size_t);
+static int cand_umb(char *, int, int, char *);
 
 const struct umb_valdescr umb_regstate[] = MBIM_REGSTATE_DESCRIPTIONS;
 const struct umb_valdescr umb_dataclass[] = MBIM_DATACLASS_DESCRIPTIONS;
@@ -590,6 +593,10 @@ intumb(int argc, char **argv, ...)
 		return 0;
 	}
 
+	/* setpuk and chgpin act on the SIM, outside configure private too */
+	if (candidate && x->type != UMB_PUK && x->type != UMB_CHGPIN)
+		return cand_umb(ifname, set, x->type, argv[0]);
+
 	switch(x->type) {
 	case UMB_APN:
 		if (!set) {
@@ -641,6 +648,56 @@ intumb(int argc, char **argv, ...)
 
 	default:
 		printf("%% intumb: internal error\n");
+	}
+	return 0;
+}
+
+/*
+ * apn, setpin, class and roaming in configure private, as conf_umb()
+ * would print them once umb took them
+ */
+static int
+cand_umb(char *ifname, int set, int type, char *arg)
+{
+	static char *fn[] = { NULL, "umb_apn", "umb_pinop", NULL, NULL,
+	    "umb_setclass", "umb_roaming" };
+	char buf[256];
+	size_t i;
+	int c;
+
+	if (cand_gettype(ifname) != IFT_MBIM) {
+		printf("%% %s: SIOCGUMBPARAM: %s\n", fn[type], strerror(ENOTTY));
+		return 0;
+	}
+	switch (type) {
+	case UMB_APN:
+		if (!set)
+			return cand_setting(ST_DEFAULT, "apn");
+		if (strlen(arg) > UMB_APN_MAXLEN) {
+			printf("%% APN too long\n");
+			return 0;
+		}
+		/* utf16_to_char() prints a character outside ASCII as '?' */
+		strlcpy(buf, arg, sizeof(buf));
+		for (i = 0; buf[i] != '\0'; i++)
+			if (!isascii((unsigned char)buf[i]))
+				buf[i] = '?';
+		return cand_setting(ST_ON, "apn %s", buf);
+	case UMB_PIN:
+		if (!set)
+			return cand_setting(ST_DEFAULT, "setpin");
+		if (strlen(arg) > MBIM_PIN_MAXLEN / 2) {
+			printf("%% PIN too long\n");
+			return 0;
+		}
+		return cand_setting(ST_ON, "setpin %s", arg);
+	case UMB_CLASS:
+		if ((c = set ? umb_parse_classes(arg) : MBIM_DATACLASS_NONE) == -1)
+			return 0;
+		umb_classes(buf, sizeof(buf), c);
+		return cand_setting(ST_ON, "class %s", buf);
+	case UMB_ROAMING:
+		return cand_setting(set ? ST_ON : ST_DEFAULT, "roaming");
 	}
 	return 0;
 }
