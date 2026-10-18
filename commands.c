@@ -2030,7 +2030,7 @@ Menu grouptab[] = {
 Command cmdtab[] = {
 	{ "hostname",	hostnamehelp,	CMPL0 0, 0, hostname,		1, 1, 0, 0, CAND_EDIT },
 	{ "interface",	interfacehelp,	CMPL(i) 0, 0, interface,	1, 1, 1, 1, CAND_EDIT },
-	{ "rtable",	rtablehelp,	CMPL(rh) (char **)rtabletab, sizeof(struct ghs), rtable,	0, 0, 1, 2 },
+	{ "rtable",	rtablehelp,	CMPL(rh) (char **)rtabletab, sizeof(struct ghs), rtable,	0, 0, 1, 2, CAND_EDIT },
 	{ "group",	grouphelp,	CMPL(gth) (char **)grouptab, sizeof(Menu), group, 1, 1, 1, 0, CAND_RUN },
 	{ "arp",	arphelp,	CMPL0 0, 0, arpset,		1, 1, 1, 0, CAND_EDIT },
 	{ "ndp",	ndphelp,	CMPL0 0, 0, ndpset,		1, 1, 1, 0, CAND_EDIT },
@@ -2853,6 +2853,11 @@ rtable(int argc, char **argv, ...)
 	if (errstr) {
 		printf("%% invalid table id: %s\n", errstr);
 		return 1;
+	}
+
+	if (candidate) {
+		pos = argvtostring(argc - 2, argv + 2, rtname, sizeof(rtname));
+		return cand_rtable_set(set, table, pos ? rtname : NULL);
 	}
 
 	curtable = getrtable();

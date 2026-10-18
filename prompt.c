@@ -33,21 +33,21 @@ char saved_prompt[sizeof(prompt)];
 char *
 cprompt(void)
 {
-	int pr;
+	int pr, rt = candidate ? cand_rtable : cli_rtable;
 	char tmp[4];
 
-	if (cli_rtable)
-		snprintf(tmp, sizeof(tmp), "%d", cli_rtable);
+	if (rt)
+		snprintf(tmp, sizeof(tmp), "%d", rt);
 
 	gethostname(hbuf, sizeof(hbuf));
-	pr = priv | cli_rtable | config_mode;
+	pr = priv | rt | config_mode;
 	snprintf(prompt, sizeof(prompt), "%s%s%s%s%s%s%s%s%s/", hbuf,
 	    pr ? "(" : "",
 	    config_mode ? (candidate ? "config-private" : "config") : "",
 	    config_mode && priv ? "-" : "",
 	    priv ? "p" : "",
-	    (( priv && cli_rtable) || (config_mode && cli_rtable)) ? "-" : "",
-	    cli_rtable ? "rtable " : "", cli_rtable ? tmp : "",
+	    ((priv && rt) || (config_mode && rt)) ? "-" : "",
+	    rt ? "rtable " : "", rt ? tmp : "",
 	    pr ?")" : "");
 
 	return prompt;

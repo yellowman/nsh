@@ -55,11 +55,13 @@
 #include "kernel.h"
 
 int candidate;				/* configure private is on */
+int cand_rtable;			/* the rtable its lines are for */
 
 static struct cnode *cand;		/* this session's view of it */
 static struct cjournal *cand_journal;	/* the changes it made */
 
 static int cand_record(char *, struct sedit *);
+static int cand_rtblock(char *, size_t, int);
 static int cand_set(int, int, char *, char *);
 static void cand_block(char *, size_t, char *, int);
 static int cand_vsetting(char *, int, int, const char *, va_list);
@@ -82,6 +84,7 @@ cand_begin(void)
 		return -1;
 	}
 	candidate = 1;
+	cand_rtable = 0;
 	return 0;
 }
 
@@ -94,6 +97,7 @@ cand_end(void)
 	cand = NULL;
 	cand_journal = NULL;
 	candidate = 0;
+	cand_rtable = 0;
 }
 
 /* Has this session changed its candidate? */
@@ -136,15 +140,20 @@ cand_ifsetting(char *name, int state, const char *fmt, ...)
 
 /*
  * The n'th line named name, from 0, in the candidate's block for the
- * current interface, or at the top level outside one, or NULL
+ * current interface, or at the top level outside one, or in the current
+ * rtable's block if it is a line of an rtable's, or NULL
  */
 char *
 cand_line(char *name, size_t n)
 {
-	char block[sizeof("interface ") + IFNAMSIZ];
+	char block[sizeof("interface ") + IFNAMSIZ], rtblock[96];
 
-	if (ifname[0] == '\0')
+	if (ifname[0] == '\0') {
+		if (cand_rtable != 0 && setting_has(CTX_RTABLE, name) &&
+		    cand_rtblock(rtblock, sizeof(rtblock), cand_rtable) == 0)
+			return conftree_line(cand, rtblock, name, n);
 		return conftree_line(cand, NULL, name, n);
+	}
 	cand_block(block, sizeof(block), ifname, bridge);
 	return conftree_line(cand, block, name, n);
 }
@@ -322,6 +331,71 @@ cand_listowner(char *name, char *list, char *value)
 	return NULL;
 }
 
+/*
+ * rtable in configure private: with set, the lines of an rtable's that
+ * follow are table's, in its block, called name if name is not NULL,
+ * which is made if the candidate has none; without, the block goes.
+ * Table 0's are the top level's.
+ */
+int
+cand_rtable_set(int set, int table, char *name)
+{
+	char block[96], line[96];
+	struct sedit e;
+	int has;
+
+	has = cand_rtblock(block, sizeof(block), table) == 0;
+	if (!set) {
+		if (table == 0) {
+			printf("%% cannot remove rtable %d\n", table);
+			return 1;
+		}
+		if (!has) {
+			printf("%% rtable %d is not in the candidate\n", table);
+			return 1;
+		}
+		cand_set(CTX_TOP, ST_OFF, NULL, block);
+		cand_rtable = 0;
+		return 0;
+	}
+	if (table != 0) {
+		if (name != NULL && name[0] != '\0')
+			snprintf(line, sizeof(line), "rtable %d %s", table,
+			    name);
+		else
+			snprintf(line, sizeof(line), "rtable %d", table);
+		if (!has)
+			cand_set(CTX_TOP, ST_ON, NULL, line);
+		else if (name != NULL && strcmp(block, line) != 0) {
+			/* renamed, with its lines */
+			e.op = CE_RENAME;
+			e.keylen = 1;
+			e.strict = 0;
+			strlcpy(e.line, line, sizeof(e.line));
+			cand_record(block, &e);
+		}
+	}
+	cand_rtable = table;
+	return 0;
+}
+
+/* The candidate's block for rtable table, in buf, or -1 if it has none */
+static int
+cand_rtblock(char *buf, size_t len, int table)
+{
+	char key[32], *s;
+	size_t i;
+	int n;
+
+	n = snprintf(key, sizeof(key), "rtable %d", table);
+	for (i = 0; (s = conftree_stmt(cand, i)) != NULL; i++)
+		if (strncmp(s, key, n) == 0 && (s[n] == '\0' || s[n] == ' ')) {
+			strlcpy(buf, s, len);
+			return 0;
+		}
+	return -1;
+}
+
 /* Is name a pppoe(4) interface? */
 int
 cand_ispppoe(char *name)
@@ -488,7 +562,7 @@ static int
 cand_vsetting(char *name, int isbridge, int state, const char *fmt,
     va_list ap)
 {
-	char line[1024], block[sizeof("interface ") + IFNAMSIZ];
+	char line[1024], block[sizeof("interface ") + IFNAMSIZ], rtblock[96];
 	int n;
 
 	n = vsnprintf(line, sizeof(line), fmt, ap);
@@ -496,8 +570,12 @@ cand_vsetting(char *name, int isbridge, int state, const char *fmt,
 		printf("%% Configuration line too long\n");
 		return 0;
 	}
-	if (name[0] == '\0')
+	if (name[0] == '\0') {
+		if (cand_rtable != 0 && setting_has(CTX_RTABLE, line) &&
+		    cand_rtblock(rtblock, sizeof(rtblock), cand_rtable) == 0)
+			return cand_set(CTX_RTABLE, state, rtblock, line);
 		return cand_set(CTX_TOP, state, NULL, line);
+	}
 	cand_block(block, sizeof(block), name, isbridge);
 	return cand_set(isbridge ? CTX_BRIDGE : CTX_IF, state, block, line);
 }

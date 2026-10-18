@@ -22,6 +22,7 @@ int is_bridge(int, char *);
 int db_select_rtable_rtables(StringList *);
 
 int candidate;		/* bgpnsh has no configure private */
+int cand_rtable;
 
 int
 is_bridge(int s, char *brdg)

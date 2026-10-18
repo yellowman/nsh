@@ -52,6 +52,7 @@ static const struct setting top_settings[] = {
 	{ "arp",		S_ENTRY,	2 },
 	{ "ndp",		S_ENTRY,	2 },
 	{ "route",		S_ENTRY,	3 },
+	{ "rtable",		S_BLOCK },
 	{ "nameserver",		S_VALUE },
 	{ NULL,			0 }
 };
@@ -153,9 +154,17 @@ static const struct setting bridge_settings[] = {
 	{ NULL,			0 }
 };
 
+/* an rtable's, which are the top level's for its table */
+static const struct setting rtable_settings[] = {
+	{ "arp",		S_ENTRY,	2 },
+	{ "ndp",		S_ENTRY,	2 },
+	{ "route",		S_ENTRY,	3 },
+	{ NULL,			0 }
+};
+
 /* indexed by CTX_* */
 static const struct setting *contexts[] = {
-	top_settings, if_settings, bridge_settings,
+	top_settings, if_settings, bridge_settings, rtable_settings,
 };
 
 static const struct setting *setting_find(int, const char *);
@@ -212,6 +221,13 @@ setting_edit(int ctx, int state, const char *line, struct sedit *e)
 		return -1;
 	e->op = op;
 	return 0;
+}
+
+/* Has context ctx a setting named by line's first word? */
+int
+setting_has(int ctx, const char *line)
+{
+	return setting_find(ctx, line) != NULL;
 }
 
 /* The setting in context ctx named by line's first word */

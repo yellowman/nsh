@@ -28,6 +28,7 @@
 #define CE_LISTDEL	6	/* the values leave it, and an empty line goes */
 #define CE_BLOCK	7	/* the statement is there, at the top level */
 #define CE_NOBLOCK	8	/* the statement and its lines go */
+#define CE_RENAME	9	/* the statement reads line, with its lines */
 
 /*
  * The key of a line, by which CE_SET and CE_UNSET find the lines they

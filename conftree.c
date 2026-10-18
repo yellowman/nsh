@@ -498,7 +498,9 @@ emit_tree(struct cmpctx *c, char mark, int depth, struct cnode *n)
 /*
  * Change the tree as one configuration command would.  block is the
  * statement the line belongs under, or NULL for the top level; for
- * CE_BLOCK and CE_NOBLOCK, line is the top-level statement itself. A
+ * CE_BLOCK and CE_NOBLOCK, line is the top-level statement itself, and
+ * CE_RENAME makes the top-level statement block read line, unless
+ * there is already a statement that does. A
  * line set or added under a block that is not there creates the block.
  * block must be a statement that takes indented lines.  The name of a
  * line is its first word, after a "no"; CE_SET and CE_UNSET match lines
@@ -532,6 +534,11 @@ conftree_edit(struct cnode *root, int op, char *block, char *line, int keylen)
 			}
 		}
 		return ret;
+	case CE_RENAME:
+		if (block == NULL || (p = find_kid(root, block)) == NULL ||
+		    find_kid(root, line) != NULL)
+			return CE_NOOP;
+		return set_text(p, line) == -1 ? -1 : CE_CHANGED;
 	}
 
 	if (block != NULL && (p = find_kid(root, block)) == NULL) {

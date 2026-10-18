@@ -18,6 +18,7 @@
 #define CTX_TOP		0	/* the top level */
 #define CTX_IF		1	/* an interface block */
 #define CTX_BRIDGE	2	/* a bridge block */
+#define CTX_RTABLE	3	/* an rtable block */
 
 /* How lines of one name go together (settings.c) */
 #define S_VALUE		1	/* one line with a value: "mtu 1400" */
@@ -42,3 +43,4 @@ struct sedit {
 };
 
 int setting_edit(int, int, const char *, struct sedit *);
+int setting_has(int, const char *);
