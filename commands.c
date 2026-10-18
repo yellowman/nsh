@@ -69,6 +69,7 @@
 #include "sysctl.h"
 #include "ctl.h"
 #include "conftree.h"
+#include "settings.h"
 
 char hname[HSIZE];
 char hbuf[MAXHOSTNAMELEN];	/* host name */
@@ -2342,7 +2343,7 @@ hostname(int argc, char **argv, ...)
 
 	if (argc == 1) {
 		if (candidate)
-			return cand_edit(CE_SET, "hostname %s", *argv);
+			return cand_setting(ST_ON, "hostname %s", *argv);
 		if (sethostname(*argv, strlen(*argv)))
 			printf("%% sethostname: %s\n", strerror(errno));
         } else

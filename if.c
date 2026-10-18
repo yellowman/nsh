@@ -53,7 +53,7 @@
 #include "stringlist.h"
 #include "externs.h"
 #include "ctl.h"
-#include "conftree.h"
+#include "settings.h"
 
 char *iftype(int int_type);
 const char *get_linkstate(int, int);
@@ -1771,8 +1771,8 @@ intmtu(int argc, char **argv, ...)
 			return 0;
 		}
 		if (conf_mtu_shown(ifname, ifr.ifr_mtu))
-			return cand_edit(CE_SET, "mtu %d", ifr.ifr_mtu);
-		return cand_edit(CE_UNSET, "mtu");
+			return cand_setting(ST_ON, "mtu %d", ifr.ifr_mtu);
+		return cand_setting(ST_DEFAULT, "mtu");
 	}
 
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
@@ -2282,8 +2282,9 @@ intmetric(int argc, char **argv, ...)
 
 	if (candidate) {
 		if (ifr.ifr_metric != 0)
-			return cand_edit(CE_SET, "%s %d", type, ifr.ifr_metric);
-		return cand_edit(CE_UNSET, "%s", type);
+			return cand_setting(ST_ON, "%s %d", type,
+			    ifr.ifr_metric);
+		return cand_setting(ST_DEFAULT, "%s", type);
 	}
 
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
@@ -2343,9 +2344,9 @@ intllprio(int argc, char **argv, ...)
 
 	if (candidate) {
 		if (ifr.ifr_llprio != default_llpriority(ifname))
-			return cand_edit(CE_SET, "llpriority %d",
+			return cand_setting(ST_ON, "llpriority %d",
 			    ifr.ifr_llprio);
-		return cand_edit(CE_UNSET, "llpriority");
+		return cand_setting(ST_DEFAULT, "llpriority");
 	}
 
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
@@ -2408,8 +2409,7 @@ intgroup(int argc, char **argv, ...)
 			return 0;
 		}
 		argvtostring(argc, argv, groups, sizeof(groups));
-		return cand_edit(set ? CE_LISTADD : CE_LISTDEL, "group %s",
-		    groups);
+		return cand_setting(set ? ST_ON : ST_OFF, "group %s", groups);
 	}
 
 	for (i = 0; i < argc; i++) {
@@ -2556,27 +2556,27 @@ cand_ifflags(char *ifname, int value, int set)
 {
 	switch (value) {
 	case IFF_DEBUG:
-		return cand_edit(set ? CE_SET : CE_UNSET, "debug");
+		return cand_setting(set ? ST_ON : ST_OFF, "debug");
 	case IFF_STATICARP:
 		if (!set)
-			return cand_edit(CE_UNSET, "staticarp");
+			return cand_setting(ST_OFF, "staticarp");
 		/* static ARP turns ARP back on, as below */
-		cand_edit(CE_UNSET, "arp");
-		return cand_edit(CE_SET, "staticarp");
+		cand_setting(ST_ON, "arp");
+		return cand_setting(ST_ON, "staticarp");
 	case -IFF_NOARP:
 		if (set)
-			return cand_edit(CE_UNSET, "arp");
+			return cand_setting(ST_ON, "arp");
 		/* turning ARP off turns static ARP off too */
-		cand_edit(CE_UNSET, "staticarp");
-		return cand_edit(CE_SET, "no arp");
+		cand_setting(ST_OFF, "staticarp");
+		return cand_setting(ST_OFF, "arp");
 	case -IFF_UP:
 		if (set)
-			return cand_edit(CE_SET, "shutdown");
+			return cand_setting(ST_ON, "shutdown");
 		/* an address brings an interface up without saying so */
 		if (!isprefix("pppoe", ifname) &&
 		    (cand_named("inet") || cand_named("autoconf4")))
-			return cand_edit(CE_UNSET, "shutdown");
-		return cand_edit(CE_SET, "no shutdown");
+			return cand_setting(ST_DEFAULT, "shutdown");
+		return cand_setting(ST_OFF, "shutdown");
 	}
 	printf("%% cand_ifflags: value internal error\n");
 	return 0;
@@ -3099,9 +3099,9 @@ intrdomain(int argc, char **argv, ...)
 		ifr.ifr_rdomainid = 0;
 	if (candidate) {
 		if (ifr.ifr_rdomainid > 0)
-			return cand_edit(CE_SET, "rdomain %d",
+			return cand_setting(ST_ON, "rdomain %d",
 			    ifr.ifr_rdomainid);
-		return cand_edit(CE_UNSET, "rdomain");
+		return cand_setting(ST_DEFAULT, "rdomain");
 	}
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 	if (ioctl(ifs, SIOCSIFRDOMAIN, &ifr) < 0)
@@ -3145,8 +3145,8 @@ intdesc(int argc, char **argv, ...)
 
 	if (candidate) {
 		if (set && desc[0] != '\0')
-			return cand_edit(CE_SET, "description %s", desc);
-		return cand_edit(CE_UNSET, "description");
+			return cand_setting(ST_ON, "description %s", desc);
+		return cand_setting(ST_OFF, "description");
 	}
 
 	if (set)

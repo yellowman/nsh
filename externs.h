@@ -606,7 +606,7 @@ extern int candidate;
 int cand_begin(void);
 void cand_end(void);
 int cand_changed(void);
-int cand_edit(int, const char *, ...)
+int cand_setting(int, const char *, ...)
     __attribute__((__format__ (printf, 2, 3)));
 int cand_named(char *);
 int cand_interface(int, char *, int *);

@@ -26,9 +26,11 @@
  * Each nsh session is its own process, so its candidate is private.
  *
  * A command takes part only as its table row says (cand): a CAND_EDIT
- * handler checks 'candidate' and calls cand_edit() where it would have
- * changed the kernel, a CAND_RUN command runs as it always does, and
- * any other command is refused until its handler is converted.
+ * handler checks 'candidate' and calls cand_setting() where it would
+ * have changed the kernel, a CAND_RUN command runs as it always does,
+ * and any other command is refused until its handler is converted.
+ * cand_setting() says what the command did to a setting; the settings
+ * table (settings.c) turns that into the edit.
  */
 
 #include <sys/types.h>
@@ -48,6 +50,7 @@
 #include "externs.h"
 #include "commands.h"
 #include "conftree.h"
+#include "settings.h"
 
 int candidate;				/* configure private is on */
 
@@ -55,6 +58,7 @@ static struct cnode *cand;		/* this session's view of it */
 static struct cjournal *cand_journal;	/* the changes it made */
 
 static int cand_record(int, char *, char *);
+static int cand_set(int, int, char *, char *);
 static int cand_bridgelike(char *);
 static int cand_cloneable(char *);
 
@@ -107,12 +111,13 @@ cand_changed(void)
 }
 
 /*
- * Change the candidate as a command would have changed the kernel.  In
- * interface or bridge mode the line goes into that interface's block.
- * op is one of conftree_edit()'s CE_* edits.
+ * A command in configure private: put the setting that line names into
+ * state (ST_*), as the command would have in the kernel. In interface
+ * or bridge mode the line goes into that interface's block.  line is
+ * canonical, as conf() prints it, without "no".
  */
 int
-cand_edit(int op, const char *fmt, ...)
+cand_setting(int state, const char *fmt, ...)
 {
 	char line[1024], block[sizeof("interface ") + IFNAMSIZ];
 	va_list ap;
@@ -126,12 +131,12 @@ cand_edit(int op, const char *fmt, ...)
 		return 0;
 	}
 	if (ifname[0] == '\0') {
-		cand_record(op, NULL, line);
+		cand_set(CTX_TOP, state, NULL, line);
 		return 0;
 	}
 	snprintf(block, sizeof(block), "%s %s",
 	    bridge ? "bridge" : "interface", ifname);
-	cand_record(op, block, line);
+	cand_set(bridge ? CTX_BRIDGE : CTX_IF, state, block, line);
 	return 0;
 }
 
@@ -176,7 +181,7 @@ cand_interface(int set, char *name, int *isbridge)
 			printf("%% interface %s cannot be removed\n", name);
 			return 1;
 		}
-		cand_record(CE_NOBLOCK, NULL, head);
+		cand_set(CTX_TOP, ST_OFF, NULL, head);
 		return 1;
 	}
 	if (!conftree_has(cand, head) && !is_valid_ifname(name) &&
@@ -184,7 +189,7 @@ cand_interface(int set, char *name, int *isbridge)
 		printf("%% interface %s not found\n", name);
 		return 1;
 	}
-	cand_record(CE_BLOCK, NULL, head);
+	cand_set(CTX_TOP, ST_ON, NULL, head);
 	return 0;
 }
 
@@ -276,9 +281,24 @@ cand_rollback(int argc, char **argv, ...)
 }
 
 /*
+ * Put line's setting in context ctx into state, in block or at the top level
+ */
+static int
+cand_set(int ctx, int state, char *block, char *line)
+{
+	char edit[1024];
+	int op;
+
+	if ((op = setting_edit(ctx, state, line, edit, sizeof(edit))) == -1) {
+		printf("%% cand_set: no setting for \"%s\"\n", line);
+		return -1;
+	}
+	return cand_record(op, block, edit);
+}
+
+/*
  * Make an edit on the session's view and record it if it changed
- * anything.  Removing a line or value that is not there says so;
- * resetting what is already the default does not.
+ * anything. Removing a line or value that is not there says so.
  */
 static int
 cand_record(int op, char *block, char *line)
