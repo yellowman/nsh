@@ -622,14 +622,154 @@ conf_db_single(FILE *output, char *dbname, char *lookup, char *ifname)
 	sl_free(dbreturn, 1);
 }
 
+/*
+ * What conf_interfaces() knows about the interface it is printing
+ */
+struct intconf {
+	FILE *output;
+	int ifs;
+	char *ifname;
+	int flags;			/* from SIOCGIFFLAGS */
+	struct if_data *if_data;	/* from SIOCGIFDATA */
+	struct if_nameindex *ifn_list;	/* every interface */
+	int ippntd;			/* set by the address row */
+};
+
+static void
+intconf_description(struct intconf *ic)
+{
+	char ifdescr[IFDESCRSIZE];
+	struct ifreq ifrdesc;
+
+	/*
+	 * description, if available
+	 * copied straight from ifconfig.c
+	 */
+	memset(&ifrdesc, 0, sizeof(ifrdesc));
+	strlcpy(ifrdesc.ifr_name, ic->ifname, sizeof(ifrdesc.ifr_name));
+	ifrdesc.ifr_data = (caddr_t)&ifdescr;
+	if (ioctl(ic->ifs, SIOCGIFDESCR, &ifrdesc) == 0 &&
+	    strlen(ifrdesc.ifr_data))
+		fprintf(ic->output, " description %s\n", ifrdesc.ifr_data);
+}
+
+static void
+intconf_lladdr(struct intconf *ic)
+{
+	conf_lladdr(ic->output, ic->ifname);
+}
+
+static void
+intconf_carp(struct intconf *ic)
+{
+	conf_carp(ic->output, ic->ifs, ic->ifname);
+}
+
+static void
+intconf_ifmetrics(struct intconf *ic)
+{
+	conf_ifmetrics(ic->output, ic->ifs, *ic->if_data, ic->ifname);
+}
+
+static void
+intconf_ifaddr(struct intconf *ic)
+{
+	ic->ippntd = conf_ifaddr_dhcp(ic->output, ic->ifname, ic->ifs,
+	    ic->flags);
+}
+
+static void
+intconf_brcfg(struct intconf *ic)
+{
+	conf_brcfg(ic->output, ic->ifs, ic->ifn_list, ic->ifname);
+}
+
+static void
+intconf_media_status(struct intconf *ic)
+{
+	conf_media_status(ic->output, ic->ifs, ic->ifname);
+}
+
+static void
+intconf_pfsync(struct intconf *ic)
+{
+	conf_pfsync(ic->output, ic->ifs, ic->ifname);
+}
+
+static void
+intconf_trunk(struct intconf *ic)
+{
+	conf_trunk(ic->output, ic->ifs, ic->ifname);
+}
+
+static void
+intconf_dhcrelay(struct intconf *ic)
+{
+	char tmp[24];
+
+	if (conf_dhcrelay(ic->ifname, tmp, sizeof(tmp)) > 0)
+		fprintf(ic->output, " dhcrelay %s\n", tmp);
+}
+
+static void
+intconf_ifflags(struct intconf *ic)
+{
+	conf_ifflags(ic->output, ic->flags, ic->ifname, ic->ippntd,
+	    ic->if_data->ifi_type);
+}
+
+#define INTCONF_ALL		0	/* every interface */
+#define INTCONF_BRIDGE		1	/* bridge interfaces only */
+#define INTCONF_NOTBRIDGE	2	/* every other interface */
+
+/*
+ * What conf_interfaces() prints for each interface, one row at a time.
+ *
+ * The output order is important!
+ */
+static const struct {
+	int scope;
+	void (*conf)(FILE *, int, char *);
+	void (*conf_ic)(struct intconf *);
+} intconf_rows[] = {
+	{ INTCONF_ALL,		NULL,			intconf_description },
+	{ INTCONF_ALL,		NULL,			intconf_lladdr },
+	{ INTCONF_ALL,		conf_vnetid,		NULL },
+	{ INTCONF_ALL,		conf_vnetflowid,	NULL },
+	{ INTCONF_ALL,		conf_parent,		NULL },
+	{ INTCONF_ALL,		conf_patch,		NULL },
+	{ INTCONF_ALL,		conf_rdomain,		NULL },
+	{ INTCONF_ALL,		conf_intrtlabel,	NULL },
+	{ INTCONF_ALL,		conf_intgroup,		NULL },
+	{ INTCONF_ALL,		NULL,			intconf_carp },
+	{ INTCONF_ALL,		conf_tunnel,		NULL },
+	{ INTCONF_ALL,		NULL,			intconf_ifmetrics },
+	{ INTCONF_ALL,		NULL,			intconf_ifaddr },
+	{ INTCONF_BRIDGE,	NULL,			intconf_brcfg },
+	{ INTCONF_NOTBRIDGE,	NULL,			intconf_media_status },
+	{ INTCONF_NOTBRIDGE,	conf_keepalive,		NULL },
+	{ INTCONF_NOTBRIDGE,	NULL,			intconf_pfsync },
+	{ INTCONF_NOTBRIDGE,	NULL,			intconf_trunk },
+	{ INTCONF_NOTBRIDGE,	conf_pflow,		NULL },
+	{ INTCONF_NOTBRIDGE,	conf_pwe3,		NULL },
+	{ INTCONF_NOTBRIDGE,	conf_ifxflags,		NULL },
+	{ INTCONF_NOTBRIDGE,	NULL,			intconf_dhcrelay },
+	{ INTCONF_NOTBRIDGE,	conf_sppp,		NULL },
+	{ INTCONF_NOTBRIDGE,	conf_pppoe,		NULL },
+	{ INTCONF_NOTBRIDGE,	conf_wg,		NULL },
+	{ INTCONF_NOTBRIDGE,	conf_umb,		NULL },
+	{ INTCONF_ALL,		NULL,			intconf_ifflags },
+};
+
 void
 conf_interfaces(FILE *output, char *only, int exact_match)
 {
-	int ifs, flags, ippntd, br;
-	char ifdescr[IFDESCRSIZE];
+	int ifs, flags, br;
+	size_t i;
+	struct intconf ic;
 
 	struct if_nameindex *ifn_list, *ifnp;
-	struct ifreq ifr, ifrdesc;
+	struct ifreq ifr;
 	struct if_data if_data;
 
 	if ((ifn_list = if_nameindex()) == NULL) {
@@ -670,63 +810,30 @@ conf_interfaces(FILE *output, char *only, int exact_match)
 			continue;
 		}
 
-		/* The output order is important! */
-
 		/* set interface/bridge mode */
 		if (!(br = is_bridge(ifs, ifnp->if_name)))
 			br = 0;
 		fprintf(output, "%s %s\n", br ? "bridge" : "interface",
 		    ifnp->if_name);
 
-		/*
-		 * description, if available
-		 * copied straight from ifconfig.c
-		 */
-		memset(&ifrdesc, 0, sizeof(ifrdesc));
-		strlcpy(ifrdesc.ifr_name, ifnp->if_name,
-		    sizeof(ifrdesc.ifr_name));
-		ifrdesc.ifr_data = (caddr_t)&ifdescr;
-		if (ioctl(ifs, SIOCGIFDESCR, &ifrdesc) == 0 &&
-		    strlen(ifrdesc.ifr_data))
-			fprintf(output, " description %s\n", ifrdesc.ifr_data);
+		ic.output = output;
+		ic.ifs = ifs;
+		ic.ifname = ifnp->if_name;
+		ic.flags = flags;
+		ic.if_data = &if_data;
+		ic.ifn_list = ifn_list;
+		ic.ippntd = 0;
 
-		conf_lladdr(output, ifnp->if_name);
-
-		conf_vnetid(output, ifs, ifnp->if_name);
-		conf_vnetflowid(output, ifs, ifnp->if_name);
-		conf_parent(output, ifs, ifnp->if_name);
-		conf_patch(output, ifs, ifnp->if_name);
-		conf_rdomain(output, ifs, ifnp->if_name);
-		conf_intrtlabel(output, ifs, ifnp->if_name);
-		conf_intgroup(output, ifs, ifnp->if_name);
-		conf_carp(output, ifs, ifnp->if_name);
-		conf_tunnel(output,  ifs, ifnp->if_name);
-		conf_ifmetrics(output,  ifs, if_data, ifnp->if_name);
-
-		ippntd = conf_ifaddr_dhcp(output, ifnp->if_name, ifs, flags);
-
-		if (br) {
-			conf_brcfg(output, ifs, ifn_list, ifnp->if_name);
-		} else {
-			char tmp[24];
-
-			conf_media_status(output, ifs, ifnp->if_name);
-			conf_keepalive(output, ifs, ifnp->if_name);
-			conf_pfsync(output, ifs, ifnp->if_name);
-			conf_trunk(output, ifs, ifnp->if_name);
-			conf_pflow(output, ifs, ifnp->if_name);
-			conf_pwe3(output, ifs, ifnp->if_name);
-			conf_ifxflags(output, ifs, ifnp->if_name);
-			if (conf_dhcrelay(ifnp->if_name, tmp, sizeof(tmp))
-			    > 0)
-				fprintf(output, " dhcrelay %s\n", tmp);
-			conf_sppp(output, ifs, ifnp->if_name);
-			conf_pppoe(output, ifs, ifnp->if_name);
-			conf_wg(output, ifs, ifnp->if_name);
-			conf_umb(output, ifs, ifnp->if_name);
+		for (i = 0; i < nitems(intconf_rows); i++) {
+			if ((intconf_rows[i].scope == INTCONF_BRIDGE && !br) ||
+			    (intconf_rows[i].scope == INTCONF_NOTBRIDGE && br))
+				continue;
+			if (intconf_rows[i].conf != NULL)
+				intconf_rows[i].conf(output, ifs,
+				    ifnp->if_name);
+			else
+				intconf_rows[i].conf_ic(&ic);
 		}
-		conf_ifflags(output, flags, ifnp->if_name, ippntd,
-		    if_data.ifi_type);
 	}
 	close(ifs);
 	if_freenameindex(ifn_list);
