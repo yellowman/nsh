@@ -110,15 +110,53 @@ pflow_addr(const char *val, struct sockaddr_storage *ss)
 	return 0;
 }
 
+/*
+ * An address as pflow_addr() reads it back, in result, PFLOW_ADDRSTRLEN
+ * long: an IPv6 address in [], and ":port" if it has one.
+ * Returns 1 if the address is not set.
+ */
+int
+pflow_addrstr(struct sockaddr_storage *ss, char *result)
+{
+	char buf[NI_MAXHOST];
+	in_port_t port;
+	int error;
+
+	switch (ss->ss_family) {
+	case AF_INET:
+		if (((struct sockaddr_in *)ss)->sin_addr.s_addr == INADDR_ANY)
+			return 1;
+		port = ((struct sockaddr_in *)ss)->sin_port;
+		break;
+	case AF_INET6:
+		if (IN6_IS_ADDR_UNSPECIFIED(
+		    &((struct sockaddr_in6 *)ss)->sin6_addr))
+			return 1;
+		port = ((struct sockaddr_in6 *)ss)->sin6_port;
+		break;
+	default:
+		return 1;
+	}
+	error = getnameinfo((struct sockaddr *)ss, ss->ss_len, buf,
+	    sizeof(buf), NULL, 0, NI_NUMERICHOST);
+	if (error) {
+		printf("%% pflow_addrstr: getnameinfo: %s\n",
+		    gai_strerror(error));
+		return 1;
+	}
+	snprintf(result, PFLOW_ADDRSTRLEN, ss->ss_family == AF_INET6 ?
+	    "[%s]" : "%s", buf);
+	if (port != 0)
+		snprintf(result + strlen(result), PFLOW_ADDRSTRLEN -
+		    strlen(result), ":%u", ntohs(port));
+	return 0;
+}
+
 int
 pflow_status(int type, int ifs, char *ifname, char *result)
 {
 	struct ifreq ifr;
 	struct pflowreq preq;
-	struct sockaddr_in *sin;
-	struct sockaddr_in6 *sin6;
-	int error;
-	char buf[INET6_ADDRSTRLEN];
 
 	bzero(&ifr, sizeof(struct ifreq));
 	bzero(&preq, sizeof(struct pflowreq));
@@ -128,88 +166,12 @@ pflow_status(int type, int ifs, char *ifname, char *result)
 	if (ioctl(ifs, SIOCGETPFLOW, (caddr_t) & ifr) == -1)
 		return 1;
 
-	if (type == PFLOW_SENDER) {
-		if (preq.flowsrc.ss_family == AF_INET ||
-		    preq.flowsrc.ss_family == AF_INET6) {
-			error = getnameinfo((struct sockaddr *) & preq.flowsrc,
-			    preq.flowsrc.ss_len, buf, sizeof(buf), NULL, 0,
-			    NI_NUMERICHOST);
-			if (error) {
-				printf("%% pflow_status: getnameinfo/0: %s\n",
-				    gai_strerror(error));
-				return 1;
-			}
-		}
-		switch (preq.flowsrc.ss_family) {
-		case AF_INET:
-			sin = (struct sockaddr_in *) & preq.flowsrc;
-			if (sin->sin_addr.s_addr == INADDR_ANY)
-				return 1;
-			strlcpy(result, buf, INET6_ADDRSTRLEN);
-			if (sin->sin_port != 0) {
-				snprintf(buf, INET6_ADDRSTRLEN, ":%u",
-				    ntohs(sin->sin_port));
-				strlcat(result, buf, INET6_ADDRSTRLEN);
-			}
-			break;
-		case AF_INET6:
-			sin6 = (struct sockaddr_in6 *) & preq.flowsrc;
-			if (IN6_IS_ADDR_UNSPECIFIED(&sin6->sin6_addr))
-				return 1;
-			strlcpy(result, buf, INET6_ADDRSTRLEN);
-			if (sin6->sin6_port != 0) {
-				snprintf(buf, INET6_ADDRSTRLEN, ":%u",
-				    ntohs(sin6->sin6_port));
-				strlcat(result, buf, INET6_ADDRSTRLEN);
-			}
-			break;
-		default:
-			return 1;
-		}
-		return 0;
-	}
-	if (type == PFLOW_RECEIVER) {
-		if (preq.flowdst.ss_family == AF_INET ||
-		    preq.flowdst.ss_family == AF_INET6) {
-			error = getnameinfo((struct sockaddr *) & preq.flowdst,
-			    preq.flowdst.ss_len, buf, sizeof(buf), NULL, 0,
-			    NI_NUMERICHOST);
-			if (error) {
-				printf("%% pflow_status: getnameinfo/1: %s\n",
-				    gai_strerror(error));
-				return 1;
-			}
-		}
-		switch (preq.flowdst.ss_family) {
-		case AF_INET:
-			sin = (struct sockaddr_in *) & preq.flowdst;
-			if (sin->sin_addr.s_addr == INADDR_ANY)
-				return 1;
-			snprintf(result, INET6_ADDRSTRLEN, "%s", buf);
-			if (sin->sin_port != 0) {
-				snprintf(buf, INET6_ADDRSTRLEN, ":%u",
-				    ntohs(sin->sin_port));
-				strlcat(result, buf, INET6_ADDRSTRLEN);
-			}
-			break;
-		case AF_INET6:
-			sin6 = (struct sockaddr_in6 *) & preq.flowdst;
-			if (IN6_IS_ADDR_UNSPECIFIED(&sin6->sin6_addr))
-				return 1;
-			snprintf(result, INET6_ADDRSTRLEN, "%s", buf);
-			if (sin6->sin6_port != 0) {
-				snprintf(buf, sizeof(buf), ":%u",
-				    ntohs(sin6->sin6_port));
-				strlcat(result, buf, INET6_ADDRSTRLEN);
-			}
-			break;
-		default:
-			return 1;
-		}	
-		return 0;
-	}
+	if (type == PFLOW_SENDER)
+		return pflow_addrstr(&preq.flowsrc, result);
+	if (type == PFLOW_RECEIVER)
+		return pflow_addrstr(&preq.flowdst, result);
 	if (type == PFLOW_VERSION) {
-		snprintf(result, INET6_ADDRSTRLEN, "%d", preq.version);
+		snprintf(result, PFLOW_ADDRSTRLEN, "%d", preq.version);
 		return 0;
 	}
 	return 1;

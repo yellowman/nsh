@@ -2019,9 +2019,9 @@ intpflow(int argc, char **argv, ...)
 	    !isprefix(argv[2], "receiver") ||
 	    (argc == 6 && !isprefix(argv[4], "version"))))) {
 		printf("%% pflow sender <x.x.x.x> receiver <x.x.x.x:port> "
-		    "[version 5|9|10]\n"
+		    "[version 5|10]\n"
 		    "%% no pflow [sender x.x.x.x receiver x.x.x.x:port "
-		    "version 5|9|10]\n");
+		    "version 5|10]\n");
 		return 0;
 	}
 
@@ -2050,7 +2050,14 @@ intpflow(int argc, char **argv, ...)
 			preq.addrmask |= PFLOW_MASK_VERSION;
 	                if (errmsg) {
 				printf("%% Invalid pflow version %s: %s\n",
-				    argv[0], errmsg);
+				    argv[5], errmsg);
+				return 0;
+			}
+			/* pflowioctl() takes these */
+			if (preq.version != PFLOW_PROTO_5 &&
+			    preq.version != PFLOW_PROTO_10) {
+				printf("%% Invalid pflow version %s: 5 or 10\n",
+				    argv[5]);
 				return 0;
 			}
                 }
@@ -2297,8 +2304,9 @@ intmpls(int argc, char **argv, ...)
 			bzero(&shim, sizeof(shim));
 			ifr.ifr_data = (caddr_t)&shim;
 
-			shim.shim_label = strtonum(argv[0], 0, MPLS_LABEL_MAX,
-			    &errstr);
+			/* the kernel keeps 0 to 15 for itself */
+			shim.shim_label = strtonum(argv[0],
+			    MPLS_LABEL_RESERVED_MAX + 1, MPLS_LABEL_MAX, &errstr);
 			if (errstr) {
 				printf("%% Invalid MPLS Label %s: %s\n",
 				    argv[0], errstr);
@@ -2339,7 +2347,7 @@ intmpls(int argc, char **argv, ...)
 				}
 			}
 		} else {
-			ifr.ifr_hdrprio = 0;
+			ifr.ifr_hdrprio = default_txprio(ifname);
 		}
 		cmd = SIOCSTXHPRIO;
 		break;
@@ -2355,13 +2363,13 @@ intmpls(int argc, char **argv, ...)
 				ifr.ifr_hdrprio = strtonum(argv[0],
 				    IF_HDRPRIO_MIN, IF_HDRPRIO_MAX, &errstr);
 				if (errstr) {
-					printf("%% intmpls: txprio %s: %s\n",
+					printf("%% intmpls: rxprio %s: %s\n",
 					    argv[0], errstr);
 					return 0;
 				}
 			}
 		} else {
-			ifr.ifr_hdrprio = 0;
+			ifr.ifr_hdrprio = default_rxprio(ifname);
 		}
 		cmd = SIOCSRXHPRIO;
 		break;
@@ -2393,16 +2401,25 @@ pwe3usage(void)
 	printf("%% no pwe fat...\n");
 }
 
+/* One pwe ioctl, saying why not if the kernel refuses it */
+static int
+pwe3_ioctl(int ifs, char *ifname, unsigned long cmd, caddr_t arg)
+{
+	if (ioctl(ifs, cmd, arg) == 0)
+		return 0;
+	if (errno == ENOTTY)
+		printf("%% PWE3 not supported on %s\n", ifname);
+	else
+		printf("%% intpwe3: ioctl: %s\n", strerror(errno));
+	return -1;
+}
+
 int
 intpwe3(int argc, char **argv, ...)
 {
-	int set, ch, error;
-	unsigned long cmd;
-	caddr_t arg;
+	int set, ch, error, cw = -1, fat = -1, nei = 0;
 	const char *errstr;
-
 	struct ifreq ifr;
-
 	struct if_laddrreq req;
 	struct addrinfo hints, *res;
 	struct sockaddr_mpls *smpls = (struct sockaddr_mpls *)&req.dstaddr;
@@ -2446,64 +2463,50 @@ intpwe3(int argc, char **argv, ...)
 	strlcpy(ifr.ifr_name, ifname, IFNAMSIZ);
 	strlcpy(req.iflr_name, ifname, IFNAMSIZ);
 
-	/* parse */
+	/* parse all of it, then make each change */
 	noptind = 0;
 	while ((ch = nopt(argc, argv, pwe3opts)) != -1)
 		switch (ch) {
 		case 'c':	/* cw */
-			if (set) {
-				cmd = SIOCSPWE3CTRLWORD;
-				ifr.ifr_pwe3 = 1;
-			} else {
-				cmd = SIOCSPWE3CTRLWORD;
-				ifr.ifr_pwe3 = 0;
-			}
-			arg = (caddr_t)&ifr;
+			cw = set;
 			break;
 		case 'f':	/* fat */
-			if (set) {
-				cmd = SIOCSPWE3FAT;
-				ifr.ifr_pwe3 = 1;
-			} else {
-				cmd = SIOCSPWE3FAT;
-				ifr.ifr_pwe3 = 0;
-			}
-			arg = (caddr_t)&ifr;
+			fat = set;
 			break;
 		case 'n':	/* neighbor */
-			if (set) {
-				hints.ai_family = AF_UNSPEC;
-				hints.ai_socktype = SOCK_DGRAM;
-				error = getaddrinfo(argv[noptind - 1], NULL, &hints, &res);
-				if (error != 0) {
-					printf("%% intpwe3: neighbor %s: %s\n",
-					    argv[noptind - 1], gai_strerror(error));
-					return (0);
-				}
-				smpls->smpls_len = sizeof(*smpls);
-				smpls->smpls_family = AF_MPLS;
-				smpls->smpls_label = strtonum(argv[noptind - 2],
-				    (MPLS_LABEL_RESERVED_MAX + 1), MPLS_LABEL_MAX,
-				    &errstr);
-				if (errstr != NULL) {
-					printf("%% intpwe3: invalid label %s: %s\n",
-					    argv[noptind - 2], errstr);
-					return (0);
-				}
-				if (res->ai_addrlen > sizeof(req.addr)) {
-					printf("%% intpwe3: invalid address %s\n",
-					    argv[noptind - 2]);
-					return (0);
-				}
-				memcpy(&req.addr, res->ai_addr, res->ai_addrlen);
-				freeaddrinfo(res);
-				cmd = SIOCSPWE3NEIGHBOR;
-			} else {
-				cmd = SIOCDPWE3NEIGHBOR;
+			nei = 1;
+			if (!set)
+				break;
+			hints.ai_family = AF_UNSPEC;
+			hints.ai_socktype = SOCK_DGRAM;
+			error = getaddrinfo(argv[noptind - 1], NULL, &hints,
+			    &res);
+			if (error != 0) {
+				printf("%% intpwe3: neighbor %s: %s\n",
+				    argv[noptind - 1], gai_strerror(error));
+				return (0);
 			}
-			arg = (caddr_t)&req;
-		break;
-	}
+			smpls->smpls_len = sizeof(*smpls);
+			smpls->smpls_family = AF_MPLS;
+			smpls->smpls_label = strtonum(argv[noptind - 2],
+			    (MPLS_LABEL_RESERVED_MAX + 1), MPLS_LABEL_MAX,
+			    &errstr);
+			if (errstr != NULL) {
+				printf("%% intpwe3: invalid label %s: %s\n",
+				    argv[noptind - 2], errstr);
+				freeaddrinfo(res);
+				return (0);
+			}
+			if (res->ai_addrlen > sizeof(req.addr)) {
+				printf("%% intpwe3: invalid address %s\n",
+				    argv[noptind - 1]);
+				freeaddrinfo(res);
+				return (0);
+			}
+			memcpy(&req.addr, res->ai_addr, res->ai_addrlen);
+			freeaddrinfo(res);
+			break;
+		}
 
 	if (argc - noptind != 0) {
 		/* leftover salmon */
@@ -2515,12 +2518,18 @@ intpwe3(int argc, char **argv, ...)
 		return 0;
 	}
 
-	if (ioctl(ifs, cmd, arg) < 0) {
-		if (errno == ENOTTY)
-			printf("%% PWE3 not supported on %s\n", ifname);
-		else
-			printf("%% intpwe3: ioctl: %s\n",
-			    strerror(errno));
+	if (nei && pwe3_ioctl(ifs, ifname, set ? SIOCSPWE3NEIGHBOR :
+	    SIOCDPWE3NEIGHBOR, (caddr_t)&req) == -1)
+		return 0;
+	if (cw != -1) {
+		ifr.ifr_pwe3 = cw;
+		if (pwe3_ioctl(ifs, ifname, SIOCSPWE3CTRLWORD,
+		    (caddr_t)&ifr) == -1)
+			return 0;
+	}
+	if (fat != -1) {
+		ifr.ifr_pwe3 = fat;
+		pwe3_ioctl(ifs, ifname, SIOCSPWE3FAT, (caddr_t)&ifr);
 	}
 
 	return (0);

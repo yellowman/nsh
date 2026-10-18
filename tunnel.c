@@ -202,13 +202,14 @@ settunnel(int s, char *ifname, char *src, char *dstip, char *dstport)
 	if ((ecode = getaddrinfo(dstip, dstport, NULL, &dstres)) != 0) {
 		printf("%% unable to parse destination address string: %s\n",
 		     gai_strerror(ecode));
+		freeaddrinfo(srcres);
 		return 0;
 	}
 
 	if (srcres->ai_addr->sa_family != dstres->ai_addr->sa_family) {
 		printf(
-		    "%% source and destination address families do not match");
-		return 0;
+		    "%% source and destination address families do not match\n");
+		goto end;
 	}
 
 	if (srcres->ai_addrlen > sizeof(req.addr) ||
@@ -249,6 +250,7 @@ settunnelrdomain(int ifs, char *ifname, char *rdomain)
 	rdomainid = strtonum(rdomain, 0, RT_TABLEID_MAX, &errmsg);
 	if (errmsg) {
 		printf("%% invalid routing domain id %s: %s\n", rdomain, errmsg);
+		return;
 	}
 	bzero(&ifr, sizeof(ifr));
 	ifr.ifr_rdomainid = rdomainid;

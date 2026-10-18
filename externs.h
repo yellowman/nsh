@@ -93,6 +93,8 @@ void conf_interfaces(FILE *, char *, int);
 #define MTU_IGNORE ULONG_MAX	/* ignore this "default" mtu */
 u_long default_mtu(char *);
 int default_llpriority(char *);
+int default_txprio(char *);
+int default_rxprio(char *);
 int conf_mtu_shown(char *, u_long);
 int conf_routes(FILE *, char *, int, int, int);
 int conf_dhcrelay(char *, char *, int);
@@ -556,8 +558,10 @@ int db_select_flag_x_dbflag_rtable(char *, char *, int);
 #define PFLOW_SENDER 0
 #define PFLOW_RECEIVER 1
 #define PFLOW_VERSION 2
+#define PFLOW_ADDRSTRLEN (NI_MAXHOST + sizeof("[]:65535"))
 #ifdef _SYS_SOCKET_H_
 int pflow_addr(const char *, struct sockaddr_storage *);
+int pflow_addrstr(struct sockaddr_storage *, char *);
 #endif
 int pflow_status(int, int, char *, char *);
 

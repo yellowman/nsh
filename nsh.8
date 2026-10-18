@@ -4946,7 +4946,7 @@ nsh(interface-gre1)/keepalive 1 3
 .Tg label
 .Op no
 .Ic mplslabel
-.Op Ar 16-1024575
+.Op Ar 16-1048575
 .Pp
 Set or remove the local MPLS label to the specified mplslabel this label on
 the local system shall de-encapsulated for input.
@@ -5251,7 +5251,7 @@ nsh(interface-carp0)/balancing ip
 .Op no
 .Ic pflow
 .Op Cm sender Ar sender-ip Cm receiver Ar receiver-ip:port
-.Op Cm version Ar 5 | 9 | 10
+.Op Cm version Ar 5 | 10
 .Pp
 Set or remove pflow export to a
 .Xr pflow 4
@@ -5261,7 +5261,8 @@ To set a up a pflow export the sender-ip and receiver-ip:port must be specified.
 The specified pflow sender-ip address must exist on an interface on the
 system already.
 The receiver-ip:port is the address of the flow collector in your network.
-version specifies the export flow prtocol i.e. netflow version (5 or 9) or
+An IPv6 address goes in brackets, as in [2001:db8::2]:4739.
+version specifies the export flow prtocol i.e. netflow version 5 or
 the standardised IPFIX (10).
 .Pp
 The pflow interface attempts aggregate multiple pflow records in one

@@ -86,8 +86,6 @@ void conf_keepalive(FILE *, int, char *);
 void conf_rtflags(char *, int, struct rt_msghdr *rtm);
 int dhcpleased_has_defaultroute(struct sockaddr_rtlabel *);
 int dhcpleased_controls_interface(char *, int);
-int default_txprio(char *);
-int default_rxprio(char *);
 int islateif(char *);
 int isdefaultroute(struct sockaddr *, struct sockaddr *);
 int scantext(char *, char *);
@@ -988,16 +986,11 @@ conf_ifflags(FILE *output, int flags, char *ifname, int ippntd, u_char ift)
 {
 	if (flags & IFF_DEBUG)
 		fprintf(output, " debug\n");
-	if (flags & (IFF_LINK0|IFF_LINK1|IFF_LINK2)) {
-		fprintf(output, " link ");
-		if(flags & IFF_LINK0)
-			fprintf(output, "0 ");
-		if(flags & IFF_LINK1)
-			fprintf(output, "1 ");
-		if(flags & IFF_LINK2)
-			fprintf(output, "2");
-		fprintf(output, "\n");
-	}
+	if (flags & (IFF_LINK0|IFF_LINK1|IFF_LINK2))
+		fprintf(output, " link%s%s%s\n",
+		    flags & IFF_LINK0 ? " 0" : "",
+		    flags & IFF_LINK1 ? " 1" : "",
+		    flags & IFF_LINK2 ? " 2" : "");
 
 	/* wg(4) sets IFF_NOARP by default and this should not be changed. */
 	if (ift != IFT_WIREGUARD) {
@@ -1043,9 +1036,9 @@ conf_dhcrelay(char *ifname, char *server, int serverlen)
 void
 conf_pflow(FILE *output, int ifs, char *ifname)
 {
-	char sender[INET6_ADDRSTRLEN];
-	char receiver[INET6_ADDRSTRLEN];
-	char version[INET6_ADDRSTRLEN];
+	char sender[PFLOW_ADDRSTRLEN];
+	char receiver[PFLOW_ADDRSTRLEN];
+	char version[PFLOW_ADDRSTRLEN];
 
 	if (pflow_status(PFLOW_SENDER, ifs, ifname, sender)) {
 		return;
