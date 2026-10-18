@@ -30,6 +30,7 @@ struct kcloner {
 
 extern const char kernel_source[];	/* the source it was read from */
 
-/* limits the kernel checks that no header userland includes defines */
+/* values the kernel checks or reports that no userland header defines */
 extern const int kern_txpower_min, kern_txpower_max;
+extern const int kern_bstp_port_admcost, kern_bstp_max_path_cost;
 extern const struct kcloner kcloners[];

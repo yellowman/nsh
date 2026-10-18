@@ -33,8 +33,8 @@
 # but the cloners' and the files of the ioctl functions their handlers
 # call takes them, so an interface no cloner made takes none.
 #
-# @limits are values the kernel checks that no header userland includes
-# defines, each read from the one #define it has.
+# @limits are values the kernel checks or reports that no header
+# userland includes defines, each read from the one #define it has.
 
 use strict;
 use warnings;
@@ -70,13 +70,15 @@ my @drv = qw(SIOCSLIFPHYADDR SIOCDIFPHYADDR SIOCSLIFPHYRTABLE
     SIOCSSPPPPARAMS PPPOESETPARMS);
 my %drv = map { $_ => 1 } @drv;
 
-# Limits the kernel checks that no header userland includes defines:
-# kernel.c's name for each, and the file and macro it is read from
+# Values the kernel checks or reports that no header userland includes
+# defines: kernel.c's name for each, and the file and macro it is read from
 my @limits = (
 	[ 'kern_txpower_min', 'net80211/ieee80211_var.h',
 	    'IEEE80211_TXPOWER_MIN' ],
 	[ 'kern_txpower_max', 'net80211/ieee80211_var.h',
 	    'IEEE80211_TXPOWER_MAX' ],
+	[ 'kern_bstp_port_admcost', 'net/if_bridge.h', 'BSTP_PORT_ADMCOST' ],
+	[ 'kern_bstp_max_path_cost', 'net/bridgestp.c', 'BSTP_MAX_PATH_COST' ],
 );
 
 @ARGV == 2 or die "usage: kernscan.pl srcdir label\n";
@@ -86,7 +88,8 @@ my @lines;		# kernel.c's line for each limit
 foreach my $l (@limits) {
 	my ($name, $file, $macro) = @$l;
 	open(my $fh, '<', "$src/sys/$file") or die "$src/sys/$file: $!\n";
-	my ($v) = join('', <$fh>) =~ /^#define\s+$macro\s+\(?(-?\d+)\)?\s/m
+	my ($v) = join('', <$fh>) =~
+	    /^#define\s+$macro\s+\(?(-?\d+|0x[0-9a-fA-F]+)\)?\s/m
 	    or die "$macro: not a number in $file\n";
 	close($fh);
 	push @lines, "const int $name = $v;\t/* $macro */\n";

@@ -49,6 +49,7 @@
 #include <limits.h>
 #include "externs.h"
 #include "bridge.h"
+#include "kernel.h"
 
 int	clr_ifflag(int, char *, short);
 int 	bridge_ifsetflag(int, char *, char *, u_int32_t);
@@ -164,8 +165,8 @@ brport(int argc, char **argv, ...)
 		case BRPORT_MEMBER:
 			if (set) {
 				/* adding a member activates a bridge */
-				set_ifflag(ifs, ifname, IFF_UP);
-				bridge_add(ifs, ifname, argv[i]);
+				if (bridge_add(ifs, ifname, argv[i]) == 0)
+					set_ifflag(ifs, ifname, IFF_UP);
 			} else
 				bridge_delete(ifs, ifname, argv[i]);
 			break;
@@ -423,7 +424,8 @@ static struct brd brds[] = {
 int
 brpri(int argc, char **argv, ...)
 {
-	int set, val;
+	int set;
+	long long val = 0;
 	const char *errmsg = NULL;
 	struct brd *x;
 	va_list ap;
@@ -467,39 +469,31 @@ brpri(int argc, char **argv, ...)
 
 	if (!is_valid_ifname(argv[0]) || is_bridge(ifs, argv[0]))
 	{
-		printf("%% invalid member name: %s", argv[0]);
+		printf("%% invalid member name: %s\n", argv[0]);
 		return 0;
 	}
 
-	errno = 0;
-	val = strtonum(argv[1], 0, 0xff, &errmsg);
-	if (errmsg) {
-		printf("%% invalid priority %s: %s\n", argv[1], errmsg);
-		return (0);
-        }
+	/* ifbr_priority is a byte; the kernel takes the cost as an int */
+	if (set) {
+		val = strtonum(argv[1], 0, x->type == BRPRI_IFPRIORITY ?
+		    0xff : kern_bstp_max_path_cost, &errmsg);
+		if (errmsg) {
+			printf("%% invalid %s %s: %s\n", x->descr, argv[1],
+			    errmsg);
+			return (0);
+		}
+	}
 
 	switch(x->type) {
 	case BRPRI_IFPRIORITY:
-		if (set) {
-			if (val > 0xff) {
-				printf("%% %s exceeds limit\n", x->name);
-				return 0;
-			}
+		if (set)
 			bridge_ifprio(ifs, ifname, argv[0], val);
-		} else {
+		else
 			bridge_ifprio(ifs, ifname, argv[0], DEFAULT_IFPRIORITY);
-		}
 	break;
 	case BRPRI_IFCOST:
-		if (set) {
-			if (val > 65535) {
-				printf("%% %s exceeds limit\n", x->name);
-				return 0;
-			}
-			bridge_ifcost(ifs, ifname, argv[0], val);
-		} else {
-			bridge_ifcost(ifs, ifname, argv[0], DEFAULT_IFCOST);
-		}
+		/* 0 has the kernel work the cost out from the speed again */
+		bridge_ifcost(ifs, ifname, argv[0], val);
 	break;
 	}
 
@@ -821,6 +815,15 @@ bridge_cfg(int s, char *brdg, int type)
 	return (val);
 }
 
+/* By name, as bridge(4) lists the last member added first and veb(4) last */
+static int
+bridge_cmp(const void *a, const void *b)
+{
+	const struct ifbreq *x = a, *y = b;
+
+	return strcmp(x->ifbr_ifsname, y->ifbr_ifsname);
+}
+
 /*
  * hacked up bridge_list()
  *
@@ -864,6 +867,8 @@ bridge_list(int s, char *brdg, char *delim, char *br_str, int str_len, int type)
 	/* clear out br_str */
 	br_str[0] = '\0';
 
+	qsort(bifc.ifbic_req, bifc.ifbic_len / sizeof(*reqp), sizeof(*reqp),
+	    bridge_cmp);
 	for (i = 0; i < bifc.ifbic_len / sizeof(*reqp); i++) {
 		reqp = bifc.ifbic_req + i;
 		switch (type) {
@@ -879,8 +884,9 @@ bridge_list(int s, char *brdg, char *delim, char *br_str, int str_len, int type)
 			}
 			break;
 		case CONF_IFCOST:
+			/* a cost the kernel did not work out from the speed */
 			if((reqp->ifbr_ifsflags & IFBIF_STP) &&
-			(reqp->ifbr_path_cost != DEFAULT_IFCOST)) {
+			(reqp->ifbr_stpflags & kern_bstp_port_admcost)) {
 			/* rework flow at some point XXX */
 				snprintf(buf, sizeof(buf),
 				    "%sifcost %s %u\n", delim,
@@ -899,9 +905,10 @@ bridge_list(int s, char *brdg, char *delim, char *br_str, int str_len, int type)
 			}
 			break;
 		case MEMBER:
-			if (reqp->ifbr_ifsname[0] != '\0') {
-				snprintf(buf, sizeof(buf), "%s ",
-				    reqp->ifbr_ifsname);
+			if (reqp->ifbr_ifsname[0] != '\0' &&
+			    !(reqp->ifbr_ifsflags & IFBIF_SPAN)) {
+				snprintf(buf, sizeof(buf), "%s%s",
+				    br_str[0] ? " " : "", reqp->ifbr_ifsname);
 				strlcat(br_str, buf, str_len);
 				identified++;
 			}
@@ -909,8 +916,8 @@ bridge_list(int s, char *brdg, char *delim, char *br_str, int str_len, int type)
 		case NOLEARNING:
 			if (!(reqp->ifbr_ifsflags & IFBIF_LEARNING) &&
 			    !(reqp->ifbr_ifsflags & IFBIF_SPAN)) {
-				snprintf(buf, sizeof(buf), "%s ",
-				    reqp->ifbr_ifsname);
+				snprintf(buf, sizeof(buf), "%s%s",
+				    br_str[0] ? " " : "", reqp->ifbr_ifsname);
 				strlcat(br_str, buf, str_len);
 				identified++;
 			}
@@ -918,32 +925,32 @@ bridge_list(int s, char *brdg, char *delim, char *br_str, int str_len, int type)
 		case NODISCOVER:
 			if (!(reqp->ifbr_ifsflags & IFBIF_DISCOVER) &&
 			    !(reqp->ifbr_ifsflags & IFBIF_SPAN)) {
-				snprintf(buf, sizeof(buf), "%s ",
-				    reqp->ifbr_ifsname);
+				snprintf(buf, sizeof(buf), "%s%s",
+				    br_str[0] ? " " : "", reqp->ifbr_ifsname);
 				strlcat(br_str, buf, str_len);
 				identified++;
 			}
 			break;
 		case BLOCKNONIP:
 			if (reqp->ifbr_ifsflags & IFBIF_BLOCKNONIP) {
-				snprintf(buf, sizeof(buf), "%s ",
-				    reqp->ifbr_ifsname);
+				snprintf(buf, sizeof(buf), "%s%s",
+				    br_str[0] ? " " : "", reqp->ifbr_ifsname);
 				strlcat(br_str, buf, str_len);
 				identified++;
 			}
 			break;
 		case STP:
 			if (reqp->ifbr_ifsflags & IFBIF_STP) {
-				snprintf(buf, sizeof(buf), "%s ",
-				    reqp->ifbr_ifsname);
+				snprintf(buf, sizeof(buf), "%s%s",
+				    br_str[0] ? " " : "", reqp->ifbr_ifsname);
 				strlcat(br_str, buf, str_len);
 				identified++;
 			}
 			break;
 		case SPAN:
 			if (reqp->ifbr_ifsflags & IFBIF_SPAN) {
-				snprintf(buf, sizeof(buf), "%s ",
-				    reqp->ifbr_ifsname);
+				snprintf(buf, sizeof(buf), "%s%s",
+				    br_str[0] ? " " : "", reqp->ifbr_ifsname);
 				strlcat(br_str, buf, str_len);
 				identified++;
 			}
@@ -1567,7 +1574,7 @@ bridge_rule(int s, char *brdg, int targc, char **targv, int ln)
 				goto bad_rule;
 			}
 			if (strlcpy(rule.ifbr_tagname, argv[1],
-			    PF_TAG_NAME_SIZE) > PF_TAG_NAME_SIZE) {
+			    PF_TAG_NAME_SIZE) >= PF_TAG_NAME_SIZE) {
 				printf("%% tag name too long\n");
 				goto bad_rule;
 			}
@@ -1651,7 +1658,7 @@ bridge_protect(const char *ifname, int sock, const char *ifsname,
 	}
 
 	if (ioctl(sock, SIOCBRDGSIFPROT, (caddr_t)&breq) == -1) {
-		printf("%% protect %s %s: %s\n", ifname, val, strerror(errno));
+		printf("%% protect %s %s: %s\n", ifsname, val, strerror(errno));
 		free(optlist);
 		return 1;
 	}
@@ -1671,7 +1678,7 @@ bridge_unprotect(const char *ifname, int sock, const char *ifsname)
 	breq.ifbr_protected = 0;
 
 	if (ioctl(sock, SIOCBRDGSIFPROT, (caddr_t)&breq) == -1) {
-		printf("%% no protect %s: %s\n", ifname, strerror(errno));
+		printf("%% no protect %s: %s\n", ifsname, strerror(errno));
 		return 1;
 	}
 
@@ -1719,10 +1726,12 @@ brprotect(int argc, char **argv, ...)
 		return 0;
 	}
 
+	/* a failure is not a reason to leave bridge mode */
 	if (set)
-		return bridge_protect(ifname, ifs, argv[1], argv[2]);
+		bridge_protect(ifname, ifs, argv[1], argv[2]);
 	else
-		return bridge_unprotect(ifname, ifs, argv[1]);
+		bridge_unprotect(ifname, ifs, argv[1]);
+	return 0;
 }
 
 int

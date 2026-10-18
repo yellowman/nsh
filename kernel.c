@@ -25,6 +25,8 @@ const char kernel_source[] = "OpenBSD-current, git c30c84965dc4 of 2026-10-17";
 
 const int kern_txpower_min = -50;	/* IEEE80211_TXPOWER_MIN */
 const int kern_txpower_max = 100;	/* IEEE80211_TXPOWER_MAX */
+const int kern_bstp_port_admcost = 0x0008;	/* BSTP_PORT_ADMCOST */
+const int kern_bstp_max_path_cost = 200000000;	/* BSTP_MAX_PATH_COST */
 
 static const u_long aggr_ioctls[] = {
 	SIOCSTRUNK,

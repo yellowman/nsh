@@ -14,7 +14,6 @@
 #define DEFAULT_MAXADDR		100
 #define DEFAULT_TIMEOUT		240
 #define DEFAULT_IFPRIORITY	128
-#define DEFAULT_IFCOST		55
 
 /* request types for bridge_list() */
 
