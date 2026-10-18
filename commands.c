@@ -2031,7 +2031,7 @@ Command cmdtab[] = {
 	{ "hostname",	hostnamehelp,	CMPL0 0, 0, hostname,		1, 1, 0, 0, CAND_EDIT },
 	{ "interface",	interfacehelp,	CMPL(i) 0, 0, interface,	1, 1, 1, 1, CAND_EDIT },
 	{ "rtable",	rtablehelp,	CMPL(rh) (char **)rtabletab, sizeof(struct ghs), rtable,	0, 0, 1, 2 },
-	{ "group",	grouphelp,	CMPL(gth) (char **)grouptab, sizeof(Menu), group, 1, 1, 1, 0 },
+	{ "group",	grouphelp,	CMPL(gth) (char **)grouptab, sizeof(Menu), group, 1, 1, 1, 0, CAND_RUN },
 	{ "arp",	arphelp,	CMPL0 0, 0, arpset,		1, 1, 1, 0, CAND_EDIT },
 	{ "ndp",	ndphelp,	CMPL0 0, 0, ndpset,		1, 1, 1, 0, CAND_EDIT },
 	{ "nameserver",	nameserverhelp,	CMPL0 0, 0, nameserverset,	1, 1, 1, 0, CAND_EDIT },
