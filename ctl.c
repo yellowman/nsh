@@ -78,7 +78,6 @@ struct daemons ctl_daemons[] = {
 { "inet",	"Inet",	ctl_inet,	INETCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
 { "smtp",	"SMTP",	ctl_smtp,	SMTPCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
 { "ldap",	"LDAP",	ctl_ldap,	LDAPCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
-{ "ifstate",	"If state",ctl_ifstate,	IFSTATECONF_TEMP,0600, 0, RT_TABLEID_MAX },
 { "motd",        "MOTD",  ctl_motd,        MOTD_TEMP,0644, 0, 0 },
 { "crontab",	"crontab",  ctl_crontab, CRONTAB_TEMP, 0600, 0, 0 },
 { "scheduler",	"scheduler",  ctl_crontab, CRONTAB_TEMP, 0600, 0, 0 },
@@ -676,7 +675,7 @@ ctlhandler(int argc, char **argv, ...)
 				rulesfile = fopen(tmpfile, "w");
 				if (rulesfile == NULL) {
 					printf("%% error opening %s for "
-					    "writing: %s", tmpfile,
+					    "writing: %s\n", tmpfile,
 					    strerror(errno));
 					goto done;
 				}

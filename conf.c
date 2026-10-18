@@ -222,6 +222,7 @@ static const struct {
 	{ CONF_CTL,	"rip",		NULL },
 	{ CONF_CTL,	"ospf",		NULL },
 	{ CONF_CTL,	"ospf6",	NULL },
+	{ CONF_CTL,	"eigrp",	NULL },
 	{ CONF_CTL,	"bgp",		NULL },
 	{ CONF_CTL,	"ifstate",	NULL },
 	{ CONF_CTL,	"ipsec",	NULL },
@@ -231,10 +232,13 @@ static const struct {
 	{ CONF_CTL,	"relay",	NULL },
 	{ CONF_CTL,	"sasync",	NULL },
 	{ CONF_CTL,	"dhcp",		NULL },
+	{ CONF_CTL,	"nppp",		NULL },
 	{ CONF_CTL,	"ntp",		NULL },
 	{ CONF_CTL,	"smtp",		NULL },
 	{ CONF_CTL,	"ldap",		NULL },
 	{ CONF_CTL,	"ftp-proxy",	NULL },
+	{ CONF_CTL,	"tftp-proxy",	NULL },
+	{ CONF_CTL,	"tftp",		NULL },
 	{ CONF_CTL,	"inet",		NULL },
 	{ CONF_CTL,	"sshd",		NULL },
 	{ CONF_FUNC,	NULL,		conf_crontab },
@@ -421,7 +425,9 @@ get_argnames(int flag_x, char *name, int *defenable, char **fenablenm,
 		*defenable = 1;
 		/* FALLTHROUGH */
 	case DB_X_ENABLE:
-		*fenablenm = name;
+		/* the first, as dhcp's restart enables it too */
+		if (*fenablenm == NULL)
+			*fenablenm = name;
 		break;
 	case DB_X_LOCAL:
 		*flocalnm = name;
