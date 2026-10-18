@@ -25,6 +25,9 @@
  * changed since shows through, with this session's changes on top.
  * Each nsh session is its own process, so its candidate is private.
  *
+ * rollback N starts the copy over as configuration N, as it was saved
+ * (ROLLBACK), and then nothing other sessions change shows through.
+ *
  * A command takes part only as its table row says (cand): a CAND_EDIT
  * handler checks 'candidate' and calls cand_setting() where it would
  * have changed the kernel, a CAND_RUN command runs as it always does,
@@ -59,6 +62,7 @@ int cand_rtable;			/* the rtable its lines are for */
 
 static struct cnode *cand;		/* this session's view of it */
 static struct cjournal *cand_journal;	/* the changes it made */
+static struct cnode *cand_base;		/* what rollback N loaded, or NULL */
 
 static int cand_record(char *, struct sedit *);
 static int cand_rtblock(char *, size_t, int);
@@ -93,8 +97,10 @@ void
 cand_end(void)
 {
 	conftree_free(cand);
+	conftree_free(cand_base);
 	cjournal_free(cand_journal);
 	cand = NULL;
+	cand_base = NULL;
 	cand_journal = NULL;
 	candidate = 0;
 	cand_rtable = 0;
@@ -104,7 +110,8 @@ cand_end(void)
 int
 cand_changed(void)
 {
-	return candidate && cjournal_len(cand_journal) > 0;
+	return candidate &&
+	    (cjournal_len(cand_journal) > 0 || cand_base != NULL);
 }
 
 /*
@@ -524,15 +531,19 @@ cand_interface(int set, char *name, int *isbridge)
 
 /*
  * The candidate as it stands: the journal replayed on a fresh copy of
- * the running configuration.  It becomes the session's view, so the
- * caller must not free it.
+ * the running configuration, or of what rollback N loaded.  It becomes
+ * the session's view, so the caller must not free it.
  */
 struct cnode *
 cand_tree(void)
 {
 	struct cnode *t;
 
-	if ((t = running_tree()) == NULL)
+	if (cand_base == NULL)
+		t = running_tree();
+	else if ((t = conftree_copy(cand_base)) == NULL)
+		printf("%% cand_tree: %s\n", strerror(errno));
+	if (t == NULL)
 		return NULL;
 	if (cjournal_replay(cand_journal, t) == -1) {
 		printf("%% cand_tree: %s\n", strerror(errno));
@@ -579,33 +590,68 @@ pr_cand_conf(int argc, char **argv, ...)
 	return 0;
 }
 
-/* rollback [0]: drop this session's changes to the candidate */
+/*
+ * rollback [N]: drop this session's changes to the candidate, which is
+ * the running configuration again, or configuration N as it was saved
+ */
 int
 cand_rollback(int argc, char **argv, ...)
 {
-	struct cnode *t;
+	char path[PATH_MAX];
+	struct cnode *t, *base = NULL;
 	struct cjournal *j;
+	const char *errstr;
+	int n = 0;
 
 	if (!candidate) {
 		printf("%% rollback requires configure private\n");
 		return 0;
 	}
-	if (argc > 2 || (argc == 2 && strcmp(argv[1], "0") != 0)) {
-		printf("%% rollback [0]\n");
+	if (argc > 2) {
+		printf("%% rollback [0-%d]\n", ROLLBACKS - 1);
 		return 0;
 	}
-	if ((t = running_tree()) == NULL)
+	if (argc == 2) {
+		n = strtonum(argv[1], 0, ROLLBACKS - 1, &errstr);
+		if (errstr != NULL) {
+			printf("%% rollback %s is %s\n", argv[1], errstr);
+			return 0;
+		}
+	}
+	if (n == 0)
+		t = running_tree();
+	else {
+		snprintf(path, sizeof(path), ROLLBACK, n);
+		if (access(path, R_OK) == -1) {
+			printf("%% rollback %d: %s\n", n, strerror(errno));
+			return 0;
+		}
+		if ((base = conftree_read(path, conf_mode, conf_ordered)) ==
+		    NULL)
+			return 0;
+		if ((t = conftree_copy(base)) == NULL)
+			printf("%% cand_rollback: %s\n", strerror(errno));
+	}
+	if (t == NULL) {
+		conftree_free(base);
 		return 0;
+	}
 	if ((j = cjournal_new()) == NULL) {
 		printf("%% cand_rollback: %s\n", strerror(errno));
 		conftree_free(t);
+		conftree_free(base);
 		return 0;
 	}
 	conftree_free(cand);
+	conftree_free(cand_base);
 	cjournal_free(cand_journal);
 	cand = t;
+	cand_base = base;
 	cand_journal = j;
-	printf("%% Candidate reset to the running configuration\n");
+	if (n == 0)
+		printf("%% Candidate reset to the running configuration\n");
+	else
+		printf("%% Candidate loaded from rollback %d\n", n);
 	return 0;
 }
 

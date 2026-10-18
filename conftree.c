@@ -229,6 +229,32 @@ conftree_free(struct cnode *n)
 	free(n);
 }
 
+/* A copy of the tree n, or NULL */
+struct cnode *
+conftree_copy(struct cnode *n)
+{
+	struct cnode *c;
+	size_t i;
+
+	if ((c = calloc(1, sizeof(*c))) == NULL)
+		return NULL;
+	c->ordered = n->ordered;
+	if ((n->text != NULL && (c->text = strdup(n->text)) == NULL) ||
+	    (n->nkids > 0 &&
+	    (c->kids = calloc(n->nkids, sizeof(*c->kids))) == NULL)) {
+		conftree_free(c);
+		return NULL;
+	}
+	for (i = 0; i < n->nkids; i++) {
+		if ((c->kids[i] = conftree_copy(n->kids[i])) == NULL) {
+			conftree_free(c);
+			return NULL;
+		}
+		c->nkids++;
+	}
+	return c;
+}
+
 /*
  * Print the differences between the trees old and new to out, or with
  * out NULL only count them. Returns how many lines or blocks were

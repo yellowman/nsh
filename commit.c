@@ -39,15 +39,22 @@
  * what its hardware has. If it does not, a script back to the
  * configuration as it was undoes the commit, and what did not take is
  * shown.
+ *
+ * Each configuration saved is kept, the last ROLLBACKS of them, for
+ * rollback N and show rollback.
  */
 
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <net/if.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <limits.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 #include "externs.h"
 #include "ctl.h"
@@ -104,6 +111,9 @@ static int context(char *);
 static int rtableid(char *);
 static int ifblock(char *, char *, size_t);
 static int clear(struct commit *, char *, int, int);
+static void history(void);
+static int samefile(char *, char *);
+static int copyfile(char *, char *);
 static int sub_begin(struct commit *, struct sub *);
 static void sub_end(struct commit *, struct sub *, const char *, char *,
     int);
@@ -122,8 +132,11 @@ commit(int argc, char **argv, ...)
 		printf("%% commit\n");
 		return 0;
 	}
-	if (!candidate)
-		return conf_save();
+	if (!candidate) {
+		if (conf_save())
+			history();
+		return 0;
+	}
 	if ((want = cand_tree()) == NULL)
 		return 0;
 	if ((was = running_tree()) == NULL)
@@ -151,7 +164,8 @@ commit(int argc, char **argv, ...)
 			goto done;
 		}
 	}
-	conf_save();
+	if (conf_save())
+		history();
 	/* a new candidate, from the new running configuration */
 	cand_end();
 	cand_begin();
@@ -745,6 +759,154 @@ clear(struct commit *c, char *stmt, int rtable, int keep)
 	    sizeof(c->clears[c->nclears].name));
 	c->clears[c->nclears].rtable = rtable;
 	c->clears[c->nclears++].keep = keep;
+	return 0;
+}
+
+/*
+ * Keep the configuration just saved as rollback 0, each kept before it
+ * one further on, and the oldest no more; unless rollback 0 is the same
+ */
+static void
+history(void)
+{
+	char from[PATH_MAX], to[PATH_MAX];
+	int i;
+
+	snprintf(to, sizeof(to), ROLLBACK, 0);
+	if (samefile(NSHRC_TEMP, to))
+		return;
+	if (mkdir(NSHDB, 0700) == -1 && errno != EEXIST) {
+		printf("%% mkdir %s: %s\n", NSHDB, strerror(errno));
+		return;
+	}
+	for (i = ROLLBACKS - 1; i > 0; i--) {
+		snprintf(from, sizeof(from), ROLLBACK, i - 1);
+		snprintf(to, sizeof(to), ROLLBACK, i);
+		if (rename(from, to) == -1 && errno != ENOENT) {
+			printf("%% rename %s: %s\n", from, strerror(errno));
+			return;
+		}
+	}
+	snprintf(to, sizeof(to), ROLLBACK, 0);
+	copyfile(NSHRC_TEMP, to);
+}
+
+/* Do the files a and b hold the same? */
+static int
+samefile(char *a, char *b)
+{
+	char x[BUFSIZ], y[BUFSIZ];
+	FILE *fa, *fb;
+	size_t n;
+	int same = 0;
+
+	if ((fa = fopen(a, "r")) == NULL)
+		return 0;
+	if ((fb = fopen(b, "r")) == NULL) {
+		fclose(fa);
+		return 0;
+	}
+	do {
+		n = fread(x, 1, sizeof(x), fa);
+		if (fread(y, 1, sizeof(y), fb) != n || memcmp(x, y, n) != 0)
+			goto done;
+	} while (n == sizeof(x));
+	same = !ferror(fa) && !ferror(fb);
+done:
+	fclose(fa);
+	fclose(fb);
+	return same;
+}
+
+/* Copy file from to to, made 0600, or none of it; -1 if it cannot */
+static int
+copyfile(char *from, char *to)
+{
+	char buf[BUFSIZ];
+	FILE *in, *out;
+	size_t n;
+	int fd, ret = -1;
+
+	if ((in = fopen(from, "r")) == NULL) {
+		printf("%% %s: %s\n", from, strerror(errno));
+		return -1;
+	}
+	if ((fd = open(to, O_WRONLY | O_CREAT | O_TRUNC, 0600)) == -1) {
+		printf("%% %s: %s\n", to, strerror(errno));
+		fclose(in);
+		return -1;
+	}
+	if ((out = fdopen(fd, "w")) == NULL) {
+		printf("%% %s: %s\n", to, strerror(errno));
+		close(fd);
+		goto done;
+	}
+	while ((n = fread(buf, 1, sizeof(buf), in)) > 0)
+		if (fwrite(buf, 1, n, out) != n)
+			break;
+	if (ferror(in))
+		printf("%% %s: %s\n", from, strerror(errno));
+	else if (ferror(out))
+		printf("%% %s: %s\n", to, strerror(errno));
+	else
+		ret = 0;
+	if (fclose(out) == EOF && ret == 0) {
+		printf("%% %s: %s\n", to, strerror(errno));
+		ret = -1;
+	}
+done:
+	if (ret == -1)
+		unlink(to);
+	fclose(in);
+	return ret;
+}
+
+/*
+ * show rollback [N]: when each configuration kept was saved, or
+ * configuration N
+ */
+int
+pr_rollback(int argc, char **argv, ...)
+{
+	char path[PATH_MAX], when[64], line[BUFSIZ];
+	struct stat sb;
+	const char *errstr;
+	va_list ap;
+	FILE *out, *f;
+	int i, n;
+
+	va_start(ap, argv);
+	out = va_arg(ap, FILE *);
+	va_end(ap);
+
+	if (priv != 1) {
+		printf("%% Privilege required\n");
+		return 0;
+	}
+	if (argc == 3) {
+		n = strtonum(argv[2], 0, ROLLBACKS - 1, &errstr);
+		if (errstr != NULL) {
+			printf("%% rollback %s is %s\n", argv[2], errstr);
+			return 0;
+		}
+		snprintf(path, sizeof(path), ROLLBACK, n);
+		if ((f = fopen(path, "r")) == NULL) {
+			printf("%% rollback %d: %s\n", n, strerror(errno));
+			return 0;
+		}
+		while (fgets(line, sizeof(line), f) != NULL)
+			fputs(line, out);
+		fclose(f);
+		return 0;
+	}
+	for (i = 0; i < ROLLBACKS; i++) {
+		snprintf(path, sizeof(path), ROLLBACK, i);
+		if (stat(path, &sb) == -1)
+			continue;
+		strftime(when, sizeof(when), "%Y-%m-%d %H:%M:%S %Z",
+		    localtime(&sb.st_mtime));
+		fprintf(out, "%2d  %s\n", i, when);
+	}
 	return 0;
 }
 

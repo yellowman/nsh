@@ -174,21 +174,21 @@ is not ambiguous double <Tab> completes the command.
 E.g show all available valid commands  with double tab key sequence <tab><tab>
 .Bd -literal -offset indent
 nsh(config-p)/
-!		enable		ldap		ping6		show
-?		eigrp		ipsec		ping		setenv
-arp		exit		ldp		pipex		smtp
-bgp		flush		logger		powerdown	snmp
-bridge		ftp-proxy	manual		quit		ssh
-clear		group		motd		rad		sshd
-commit		halt		mpls		reboot		telnet
-configure	help		nameserver	relay		tftp
-crontab		hostname	ndp		resolv		tftp-proxy
-ddb		ifstate		no		rip		traceroute
-dhcp		ike		nppp		route		traceroute6
-disable		inet		ntp		rtable		unsetenv
-do		interface	ospf		sasync		verbose
-dvmrp		ip		ospf6		saveenv		who
-editing		ip6		pf		scheduler
+!		eigrp		ipsec		ping		scheduler
+?		enable		ldap		ping6		setenv
+arp		exit		ldp		pipex		show
+bgp		flush		logger		powerdown	smtp
+bridge		ftp-proxy	manual		quit		snmp
+clear		group		motd		rad		ssh
+commit		halt		mpls		reboot		sshd
+configure	help		nameserver	relay		telnet
+crontab		hostname	ndp		resolv		tftp
+ddb		ifstate		no		rip		tftp-proxy
+dhcp		ike		nppp		rollback	traceroute
+disable		inet		ntp		route		traceroute6
+do		interface	ospf		rtable		unsetenv
+dvmrp		ip		ospf6		sasync		verbose
+editing		ip6		pf		saveenv		who
 nsh(config-p)/
 .Ed
 If what is typed is ambiguous double tab presents the administrator
@@ -322,7 +322,8 @@ displays the candidate,
 .Cm show diff-config
 displays how it differs from the running configuration, and
 .Cm rollback
-discards this session's changes to it.
+discards this session's changes to it, or makes it a configuration
+saved before.
 .Cm commit
 makes the candidate the running configuration, all of it or none, and
 saves it.
@@ -471,6 +472,7 @@ nsh(config-p)/?
   editing       Set command line editing
   configure     Set configuration mode
   commit        Make the candidate the running configuration, and save it
+  rollback      Discard the candidate's changes, or load a saved configuration
   who           Display system users
   do            Superfluous, do is ignored and its arguments executed
   setenv        Set an environment variable
@@ -1991,11 +1993,47 @@ Outside
 .Cm configure private ,
 .Cm commit
 saves the running configuration.
+The last 50 configurations saved are kept, for
+.Cm rollback
+and
+.Cm show rollback ;
+one the same as the last saved is not kept again.
 .Bl -dash
 .It
 e.g. save the configuration on the system
 .Bd -literal -offset indent
 nsh(p)/commit
+% Saving configuration
+.Ed
+.El
+.Pp
+.Tg rollback
+.Ic rollback
+.Op Ar N
+.Pp
+In
+.Cm configure private ,
+discard this session's changes to the candidate, which is the running
+configuration again.
+With
+.Ar N
+from 1 to 49, the candidate is the configuration saved
+.Ar N
+saves before the last, as
+.Cm show rollback
+lists them, instead; then what other sessions change does not show
+through in it.
+.Cm show diff-config
+displays what
+.Cm commit
+would change.
+.Bl -dash
+.It
+e.g. go back to the configuration saved before the last
+.Bd -literal -offset indent
+nsh(config-private-p)/rollback 1
+% Candidate loaded from rollback 1
+nsh(config-private-p)/commit
 % Saving configuration
 .Ed
 .El
@@ -3636,6 +3674,14 @@ This command requires root user privileges.
 In
 .Cm configure private ,
 display the candidate configuration.
+.Pp
+.Ic show rollback Op Ar N
+.Pp
+Display when each configuration kept by
+.Cm commit
+was saved, numbered from 0, the last saved, or display configuration
+.Ar N .
+This command requires privileged mode.
 .Pp
 .Ic show environment Op Ar NAME
 .Pp
@@ -5988,6 +6034,9 @@ Defaults to
 .Bl -tag -width /etc/suid_profile -compact
 .It Pa /etc/nshrc
 global configuration file
+.It Pa /var/db/nsh/nshrc.N
+configurations saved before, for
+.Cm rollback
 .It Pa ~/.profile
 user's login profile
 .It Pa /etc/shells
