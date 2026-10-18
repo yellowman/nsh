@@ -62,6 +62,7 @@ static struct cjournal *cand_journal;	/* the changes it made */
 
 static int cand_record(char *, struct sedit *);
 static int cand_rtblock(char *, size_t, int);
+static char *cand_rtcur(char *, size_t);
 static int cand_set(int, int, char *, char *);
 static void cand_block(char *, size_t, char *, int);
 static int cand_vsetting(char *, int, int, const char *, va_list);
@@ -331,29 +332,38 @@ cand_listowner(char *name, char *list, char *value)
 	return NULL;
 }
 
-/* The n'th line, from 0, of the top-level statement stmt, or NULL */
+/* The n'th line, from 0, of a daemon's rules stmt, or NULL */
 char *
 cand_rule(char *stmt, size_t n)
 {
-	return conftree_line(cand, stmt, NULL, n);
+	char rt[96], block[160];
+
+	if (cand_rtcur(rt, sizeof(rt)) == NULL)
+		return conftree_line(cand, stmt, NULL, n);
+	snprintf(block, sizeof(block), "%s\n%s", rt, stmt);
+	return conftree_line(cand, block, NULL, n);
 }
 
 /*
- * Make the n lines in lines the lines of stmt, an ordered statement at
- * the top level, in order; with none, stmt goes
+ * Make the n lines in lines the lines of a daemon's rules stmt, an
+ * ordered statement, in order; with none, stmt goes
  */
 int
 cand_setrules(char *stmt, char **lines, size_t n)
 {
 	struct sedit e;
-	char *l;
+	char rtbuf[96], block[160], *rt, *l;
 	size_t i;
 
+	if ((rt = cand_rtcur(rtbuf, sizeof(rtbuf))) != NULL)
+		snprintf(block, sizeof(block), "%s\n%s", rt, stmt);
+	else
+		strlcpy(block, stmt, sizeof(block));
 	for (i = 0; i < n && (l = cand_rule(stmt, i)) != NULL &&
 	    strcmp(l, lines[i]) == 0; i++)
 		;
 	if (i == n && cand_rule(stmt, n) == NULL &&
-	    (n > 0 || !conftree_has(cand, stmt)))
+	    (n > 0 || !conftree_has(cand, block)))
 		return 0;
 	for (i = 0; i < n; i++)
 		if (strlen(lines[i]) >= sizeof(e.line)) {
@@ -364,12 +374,12 @@ cand_setrules(char *stmt, char **lines, size_t n)
 	e.strict = 0;
 	e.op = CE_NOBLOCK;
 	strlcpy(e.line, stmt, sizeof(e.line));
-	if (cand_record(NULL, &e) == -1)
+	if (cand_record(rt, &e) == -1)
 		return -1;
 	e.op = CE_SEQ;
 	for (i = 0; i < n; i++) {
 		strlcpy(e.line, lines[i], sizeof(e.line));
-		if (cand_record(stmt, &e) == -1)
+		if (cand_record(block, &e) == -1)
 			return -1;
 	}
 	return 0;
@@ -438,6 +448,15 @@ cand_rtblock(char *buf, size_t len, int table)
 			return 0;
 		}
 	return -1;
+}
+
+/* The current rtable's block, in buf, or NULL for table 0 */
+static char *
+cand_rtcur(char *buf, size_t len)
+{
+	if (cand_rtable == 0 || cand_rtblock(buf, len, cand_rtable) == -1)
+		return NULL;
+	return buf;
 }
 
 /* Is name a pppoe(4) interface? */

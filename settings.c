@@ -191,6 +191,27 @@ static const struct setting rtable_settings[] = {
 	{ "arp",		S_ENTRY,	2 },
 	{ "ndp",		S_ENTRY,	2 },
 	{ "route",		S_ENTRY,	3 },
+	/* the daemons that run in an rtable */
+	{ "ospf",		S_ENTRY,	2 },
+	{ "ospf6",		S_ENTRY,	2 },
+	{ "eigrp",		S_ENTRY,	2 },
+	{ "rip",		S_ENTRY,	2 },
+	{ "relay",		S_ENTRY,	2 },
+	{ "ipsec",		S_ENTRY,	2 },
+	{ "ike",		S_ENTRY,	2 },
+	{ "dvmrp",		S_ENTRY,	2 },
+	{ "sasync",		S_ENTRY,	2 },
+	{ "snmp",		S_ENTRY,	2 },
+	{ "sshd",		S_ENTRY,	2 },
+	{ "ifstate",		S_ENTRY,	2 },
+	{ "ftp-proxy",		S_ENTRY,	2 },
+	{ "tftp-proxy",		S_ENTRY,	2 },
+	{ "tftp",		S_ENTRY,	2 },
+	{ "nppp",		S_ENTRY,	2 },
+	{ "inet",		S_ENTRY,	2 },
+	{ "smtp",		S_ENTRY,	2 },
+	{ "ldap",		S_ENTRY,	2 },
+	{ "dhcp",		S_ENTRY,	2 },
 	{ NULL,			0 }
 };
 

@@ -100,6 +100,7 @@ struct cjournal {
 static struct cnode *cnode_add(struct cnode *, char *, int);
 static int blank(char *);
 static int storable(char *);
+static int storable_stmt(char *);
 static int match(struct cnode *, struct cnode *, size_t *, size_t *);
 static int ckeycmp(const void *, const void *);
 static int compare_block(struct cmpctx *, struct cnode *, struct cnode *);
@@ -108,6 +109,7 @@ static int compare_seq(struct cmpctx *, struct cnode *, struct cnode *);
 static void emit(struct cmpctx *, char, struct cnode *);
 static void emit_tree(struct cmpctx *, char, int, struct cnode *);
 static struct cnode *find_kid(struct cnode *, char *);
+static struct cnode *find_stmt(struct cnode *, char *, int, int);
 static void remove_kid(struct cnode *, size_t);
 static int set_text(struct cnode *, char *);
 static char *skipno(char *);
@@ -252,6 +254,23 @@ storable(char *s)
 {
 	return !blank(s) && s[0] != ' ' && s[0] != '!' && s[0] != '#' &&
 	    strchr(s, '\n') == NULL;
+}
+
+/* Can s be a block as conftree_edit() takes it? */
+static int
+storable_stmt(char *s)
+{
+	size_t len;
+
+	for (;;) {
+		len = strcspn(s, "\n");
+		if (s[0] == ' ' || s[0] == '!' || s[0] == '#' ||
+		    strspn(s, " \t") >= len)
+			return 0;
+		if (s[len] == '\0')
+			return 1;
+		s += len + 1;
+	}
 }
 
 
@@ -497,14 +516,15 @@ emit_tree(struct cmpctx *c, char mark, int depth, struct cnode *n)
 
 /*
  * Change the tree as one configuration command would.  block is the
- * statement the line belongs under, or NULL for the top level; for
- * CE_BLOCK and CE_NOBLOCK, line is the top-level statement itself, and
- * CE_RENAME makes the top-level statement block read line, unless
- * there is already a statement that does. CE_SEQ adds line after the
- * lines of block, an ordered statement made if it is not there, even
- * if it has the line already; line is a line of a daemon's file, which
- * may be blank or start with a space, '!' or '#'. A
- * line set or added under a block that is not there creates the block.
+ * statement the line belongs under, or NULL for the top level: a
+ * top-level statement, or a statement under one, named by the two
+ * joined by a newline. For CE_BLOCK and CE_NOBLOCK, line is the
+ * statement itself, and CE_RENAME makes the top-level statement block
+ * read line, unless there is already a statement that does. CE_SEQ
+ * adds line after the lines of block, an ordered statement made if it
+ * is not there, even if it has the line already; line is a line of a
+ * daemon's file, which may be blank or start with a space, '!' or '#'.
+ * A line set or added under a block that is not there creates the block.
  * block must be a statement that takes indented lines.  The name of a
  * line is its first word, after a "no"; CE_SET and CE_UNSET match lines
  * by their key, the first keylen words, as samekey() compares them.
@@ -524,7 +544,7 @@ conftree_edit(struct cnode *root, int op, char *block, char *line, int keylen)
 		    line);
 		return -1;
 	}
-	if (block != NULL && !storable(block)) {
+	if (block != NULL && !storable_stmt(block)) {
 		printf("%% conftree_edit: not a configuration line: \"%s\"\n",
 		    block);
 		return -1;
@@ -532,13 +552,17 @@ conftree_edit(struct cnode *root, int op, char *block, char *line, int keylen)
 
 	switch (op) {
 	case CE_BLOCK:
-		if (find_kid(root, line) != NULL)
+		if (block != NULL && (p = find_stmt(root, block, 1, 0)) == NULL)
+			return -1;
+		if (find_kid(p, line) != NULL)
 			return CE_NOOP;
-		return cnode_add(root, line, 0) == NULL ? -1 : CE_CHANGED;
+		return cnode_add(p, line, 0) == NULL ? -1 : CE_CHANGED;
 	case CE_NOBLOCK:
-		for (i = root->nkids; i-- > 0; ) {
-			if (strcmp(root->kids[i]->text, line) == 0) {
-				remove_kid(root, i);
+		if (block != NULL && (p = find_stmt(root, block, 0, 0)) == NULL)
+			return CE_NOOP;
+		for (i = p->nkids; i-- > 0; ) {
+			if (strcmp(p->kids[i]->text, line) == 0) {
+				remove_kid(p, i);
 				ret = CE_CHANGED;
 			}
 		}
@@ -549,16 +573,15 @@ conftree_edit(struct cnode *root, int op, char *block, char *line, int keylen)
 			return CE_NOOP;
 		return set_text(p, line) == -1 ? -1 : CE_CHANGED;
 	case CE_SEQ:
-		if ((p = find_kid(root, block)) == NULL &&
-		    (p = cnode_add(root, block, 1)) == NULL)
+		if ((p = find_stmt(root, block, 1, 1)) == NULL)
 			return -1;
 		return cnode_add(p, line, 0) == NULL ? -1 : CE_CHANGED;
 	}
 
-	if (block != NULL && (p = find_kid(root, block)) == NULL) {
+	if (block != NULL && (p = find_stmt(root, block, 0, 0)) == NULL) {
 		if (op != CE_SET && op != CE_ADD && op != CE_LISTADD)
 			return CE_NOOP;
-		if ((p = cnode_add(root, block, 0)) == NULL)
+		if ((p = find_stmt(root, block, 1, 0)) == NULL)
 			return -1;
 		ret = CE_CHANGED;
 	}
@@ -647,11 +670,11 @@ conftree_edit(struct cnode *root, int op, char *block, char *line, int keylen)
 	return -1;
 }
 
-/* Is there a top-level statement that reads line? */
+/* Is there a statement line, as conftree_edit() takes a block? */
 int
 conftree_has(struct cnode *root, char *line)
 {
-	return find_kid(root, line) != NULL;
+	return find_stmt(root, line, 0, 0) != NULL;
 }
 
 /* The n'th top-level statement, from 0, or NULL if there are not that many */
@@ -663,8 +686,8 @@ conftree_stmt(struct cnode *root, size_t n)
 
 /*
  * The n'th line named name, or of any name if name is NULL, from 0, in
- * the top-level statement block, or at the top level if block is NULL,
- * or NULL if there are not that many
+ * block, as conftree_edit() takes it, or at the top level if block is
+ * NULL, or NULL if there are not that many
  */
 char *
 conftree_line(struct cnode *root, char *block, char *name, size_t n)
@@ -672,7 +695,7 @@ conftree_line(struct cnode *root, char *block, char *name, size_t n)
 	struct cnode *p;
 	size_t i;
 
-	if ((p = block == NULL ? root : find_kid(root, block)) == NULL)
+	if ((p = block == NULL ? root : find_stmt(root, block, 0, 0)) == NULL)
 		return NULL;
 	for (i = 0; i < p->nkids; i++)
 		if ((name == NULL || samename(p->kids[i]->text, name)) &&
@@ -772,6 +795,41 @@ find_kid(struct cnode *p, char *text)
 		if (strcmp(p->kids[i]->text, text) == 0)
 			return p->kids[i];
 	return NULL;
+}
+
+/*
+ * The statement name names, as conftree_edit() takes a block, or NULL;
+ * with make, it and any it is under are made if they are not there,
+ * it ordered if ordered is not 0
+ */
+static struct cnode *
+find_stmt(struct cnode *p, char *name, int make, int ordered)
+{
+	struct cnode *n;
+	size_t len, i;
+	char *s;
+
+	for (;;) {
+		len = strcspn(name, "\n");
+		for (i = 0; i < p->nkids; i++)
+			if (strncmp(p->kids[i]->text, name, len) == 0 &&
+			    p->kids[i]->text[len] == '\0')
+				break;
+		if (i < p->nkids)
+			n = p->kids[i];
+		else {
+			if (!make || (s = strndup(name, len)) == NULL)
+				return NULL;
+			n = cnode_add(p, s, name[len] == '\0' && ordered);
+			free(s);
+			if (n == NULL)
+				return NULL;
+		}
+		if (name[len] == '\0')
+			return n;
+		p = n;
+		name += len + 1;
+	}
 }
 
 static void

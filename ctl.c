@@ -53,6 +53,7 @@ int rule_writeline(FILE *, char *, int);
 int acq_lock(char *);
 void rls_lock(int);
 static int ctl_cand(struct daemons *, struct ctl *, char **);
+static int ctl_cand_takes(struct ctl *);
 static int ctl_cand_edit(struct daemons *, char *, char **);
 static int ctl_cand_test(struct daemons *, char *, char **);
 static int ctl_cand_stage(struct daemons *, char *, char *, char *,
@@ -649,7 +650,8 @@ ctlhandler(int argc, char **argv, ...)
 		return 0;
 	}
 
-	if (cli_rtable > daemons->rtablemax) {
+	/* in configure private, ctl_cand() checks the table */
+	if (!candidate && cli_rtable > daemons->rtablemax) {
 		printf("%% Command %s not available via rtable %d\n",
 		    daemons->name, cli_rtable);
 		goto done;
@@ -765,9 +767,9 @@ done:
 /*
  * A daemon's command in configure private: enable and disable leave the
  * line conf prints for its state, edit edits its rules in the
- * candidate, and its configuration test tests those. Returns 0 for
- * the rest, which act on the running daemon as outside configure
- * private.
+ * candidate, and its configuration test tests those, all in the
+ * candidate's rtable. Returns 0 for the rest, which act on the running
+ * daemon as outside configure private.
  */
 static int
 ctl_cand(struct daemons *d, struct ctl *x, char **fillargs)
@@ -775,12 +777,17 @@ ctl_cand(struct daemons *d, struct ctl *x, char **fillargs)
 	struct daemons *c;
 	struct ctl *t;
 	char *enable = "enable", stmt[64];
+	int rt, takes;
 
-	if (cand_rtable != 0) {
-		printf("%% %s in an rtable is not supported in configure"
-		    " private yet\n", d->name);
+	takes = ctl_cand_takes(x);
+	rt = takes ? cand_rtable : cli_rtable;
+	if (rt > d->rtablemax) {
+		printf("%% Command %s not available via rtable %d\n",
+		    d->name, rt);
 		return 1;
 	}
+	if (!takes)
+		return 0;
 	/* the name conf gives it: scheduler is crontab */
 	for (c = ctl_daemons; c->table != d->table; c++)
 		;
@@ -816,10 +823,24 @@ ctl_cand(struct daemons *d, struct ctl *x, char **fillargs)
 			printf("%% no %s in the candidate\n", stmt);
 		return 1;
 	}
-	if (strcmp(x->name, "check-config") == 0 ||
-	    strcmp(x->name, "config-test") == 0)
-		return ctl_cand_test(d, c->name, fillargs);
-	return 0;
+	return ctl_cand_test(d, c->name, fillargs);
+}
+
+/* Does configure private take x into the candidate? */
+static int
+ctl_cand_takes(struct ctl *x)
+{
+	switch (x->flag_x) {
+	case DB_X_ENABLE:
+	case DB_X_ENABLE_DEFAULT:
+	case DB_X_DISABLE:
+	case DB_X_DISABLE_ALWAYS:
+		return 1;
+	}
+	return x->handler == call_editor || x->handler == edit_motd ||
+	    x->handler == edit_crontab || x->handler == install_crontab ||
+	    strcmp(x->name, "check-config") == 0 ||
+	    strcmp(x->name, "config-test") == 0;
 }
 
 /* edit in configure private: its rules for d, called name */
