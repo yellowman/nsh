@@ -66,8 +66,8 @@
 
 int rtget(struct sockaddr_inarp **, struct sockaddr_dl **, int, int, int);
 int arpdelete(const char *, const char *);
-int arpsearch(FILE *, char *, in_addr_t addr, void (*action)(FILE *, char *,
-	struct sockaddr_dl *sdl, struct sockaddr_inarp *sin,
+int arpsearch(FILE *, char *, in_addr_t addr, int, void (*action)(FILE *,
+	char *, struct sockaddr_dl *sdl, struct sockaddr_inarp *sin,
 	struct rt_msghdr *rtm));
 void print_entry(FILE *, char *, struct sockaddr_dl *sdl,
 	struct sockaddr_inarp *sin, struct rt_msghdr *rtm);
@@ -360,7 +360,8 @@ arpget(const char *host)
 	    W_ADDR, W_ADDR, "Host", W_LL, W_LL, "Ethernet Address",
 	    W_IF, W_IF, "Netif", "Expire", "Flags");
 
-	found_entry = arpsearch(NULL, "", sin->sin_addr.s_addr, print_entry);
+	found_entry = arpsearch(NULL, "", sin->sin_addr.s_addr, cli_rtable,
+	    print_entry);
 	if (found_entry == 0) {
 		printf("%% %-*.*s no entry\n", W_ADDR, W_ADDR,
 		    inet_ntoa(sin->sin_addr));
@@ -435,8 +436,8 @@ delete:
  * Search the entire arp table, and do some action on matching entries.
  */
 int
-arpsearch(FILE *output, char *delim, in_addr_t addr, void (*action)
-    (FILE *output, char *delim, struct sockaddr_dl *sdl,
+arpsearch(FILE *output, char *delim, in_addr_t addr, int tableid,
+    void (*action)(FILE *output, char *delim, struct sockaddr_dl *sdl,
     struct sockaddr_inarp *sin, struct rt_msghdr *rtm))
 {
 	char *next;
@@ -446,7 +447,7 @@ arpsearch(FILE *output, char *delim, in_addr_t addr, void (*action)
 	struct rtdump *rtdump;
 	int found_entry = 0;
 
-	rtdump = getrtdump(AF_INET, RTF_LLINFO, cli_rtable);
+	rtdump = getrtdump(AF_INET, RTF_LLINFO, tableid);
 	if (rtdump == NULL)
 		return 0;
 	for (next = rtdump->buf; next < rtdump->lim; next += rtm->rtm_msglen)
@@ -477,13 +478,13 @@ arpdump(void)
 	    W_ADDR, W_ADDR, "Host", W_LL, W_LL, "Ethernet Address",
 	    W_IF, W_IF, "Netif", "Expire", "Flags");
 
-	arpsearch(NULL, "", 0, print_entry);
+	arpsearch(NULL, "", 0, cli_rtable, print_entry);
 }
 
 void
-conf_arp(FILE *output, char *delim)
+conf_arp(FILE *output, char *delim, int tableid)
 {
-	arpsearch(output, delim, 0, conf_arp_entry);
+	arpsearch(output, delim, 0, tableid, conf_arp_entry);
 }
 
 void

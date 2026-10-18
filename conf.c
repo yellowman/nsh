@@ -294,13 +294,13 @@ conf_secret(FILE *output)
 static void
 conf_top_arp(FILE *output)
 {
-	conf_arp(output, "arp ");
+	conf_arp(output, "arp ", 0);
 }
 
 static void
 conf_top_ndp(FILE *output)
 {
-	conf_ndp(output, "ndp ");
+	conf_ndp(output, "ndp ", 0);
 }
 
 static void
@@ -368,8 +368,10 @@ conf_rtables_rtable(FILE *output, int rtableid)
 		sl_free(rtable_name, 1);
 		return;
 	} else {
-		fprintf(output, "rtable %d %s\n", rtableid,
-		    rtable_name->sl_str[0]);
+		fprintf(output, "rtable %d", rtableid);
+		if (rtable_name->sl_str[0][0] != '\0')
+			fprintf(output, " %s", rtable_name->sl_str[0]);
+		fprintf(output, "\n");
 	}
 
 	sl_free(rtable_name, 1);
@@ -380,8 +382,8 @@ conf_rtables_rtable(FILE *output, int rtableid)
 	 * rdomain is created by specifing one on an interface prior
 	 * to this point. An rdomain creates a new corresponding rtable)
 	 */
-	conf_arp(output, " arp ");
-	conf_ndp(output, " ndp ");
+	conf_arp(output, " arp ", rtableid);
+	conf_ndp(output, " ndp ", rtableid);
 	conf_routes(output, " route ", AF_INET, RTF_STATIC, rtableid);
 	conf_routes(output, " route ", AF_INET6, RTF_STATIC, rtableid);
 

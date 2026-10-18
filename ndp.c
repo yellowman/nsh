@@ -126,7 +126,7 @@ static struct in6_nbrinfo *getnbrinfo(struct in6_addr *, int, int);
 int ndp_ether_aton(const char *, u_char *);
 int rtmsg_ndp(int);
 int rtget_ndp(struct sockaddr_in6 **, struct sockaddr_dl **);
-void conf_ndp(FILE *output, char *delim);
+void conf_ndp(FILE *output, char *delim, int);
 void conf_ndp_entry(FILE *, char *, struct  rt_msghdr *);
 static void conf_ndp_line(FILE *, char *, struct sockaddr_in6 *,
     struct sockaddr_dl *, int);
@@ -797,13 +797,13 @@ rtget_ndp(struct sockaddr_in6 **sinp, struct sockaddr_dl **sdlp)
 }
 
 void
-conf_ndp(FILE *output, char *delim)
+conf_ndp(FILE *output, char *delim, int tableid)
 {
 	char *next;
 	struct rt_msghdr *rtm;
 	struct rtdump *rtdump;
 
-	if ((rtdump = getrtdump(AF_INET6, RTF_LLINFO, 0)) == NULL)
+	if ((rtdump = getrtdump(AF_INET6, RTF_LLINFO, tableid)) == NULL)
 	    return;
 
 	for (next = rtdump->buf; next < rtdump->lim; next += rtm->rtm_msglen) {

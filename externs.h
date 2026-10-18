@@ -490,7 +490,7 @@ int who(int, char **, ...);
 int arpget(const char *);
 int arpset(int, char **, ...);
 void arpdump(void);
-void conf_arp(FILE *, char *);
+void conf_arp(FILE *, char *, int);
 char *sec2str(time_t);
 struct sockaddr_dl;
 char *ether_str(struct sockaddr_dl *);
@@ -501,7 +501,7 @@ void ndpget(const char *);
 int ndpdelete(const char *);
 struct sockaddr_in6;
 void ndpdump(struct sockaddr_in6 *, int);
-void conf_ndp(FILE *output, char *delim);
+void conf_ndp(FILE *output, char *delim, int);
 
 /* nameserver.c */
 int nameserverset(int, char **, ...);
