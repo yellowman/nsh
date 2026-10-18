@@ -89,6 +89,11 @@ intcarp(int argc, char **argv, ...)
 		printf("%% no %s [%s]\n", x->name, x->descr);
 		return (0);
 	}
+	/* SIOCSVH keeps the vhids when the first is 0 */
+	if (!set && x->type == CARP_VHID) {
+		printf("%% The vhid of %s cannot be removed\n", ifname);
+		return (0);
+	}
 	bzero(&ifr, sizeof(ifr));
 	bzero((char *) &creq, sizeof(struct carpreq));
 	ifr.ifr_data = (caddr_t) & creq;
@@ -114,7 +119,7 @@ intcarp(int argc, char **argv, ...)
 	case CARP_VHID:
 		if (set) {
 			errno = 0;
-			val = strtonum(argv[0], 0, 255, &errmsg);
+			val = strtonum(argv[0], 1, 255, &errmsg);
 			if (errmsg) {
 				printf("%% %s value out of range: %s\n", x->name, errmsg);
 				return 0;
@@ -157,10 +162,7 @@ intcarp(int argc, char **argv, ...)
 			creq.carpr_advbase = CARP_DFLTINTV;
 		break;
 	case CARP_VHID:
-		if(set)
-			creq.carpr_vhids[0] = (int)val;
-		else
-			creq.carpr_vhids[0] = -1;
+		creq.carpr_vhids[0] = (int)val;
 		break;
 	case CARP_PEER:
 		if(set) {
@@ -180,11 +182,13 @@ intcarp(int argc, char **argv, ...)
 			/* do we need this if hints.ai_family = AF_INET? */
 			if (peerres->ai_addr->sa_family != AF_INET) {
 				printf("%% only IPv4 addresses supported for the CARP peer\n");
+				freeaddrinfo(peerres);
 				return 0;
 			}
 
 			creq.carpr_peer.s_addr = ((struct sockaddr_in *)
 			    peerres->ai_addr)->sin_addr.s_addr;
+			freeaddrinfo(peerres);
 		} else
 			creq.carpr_peer.s_addr = htonl(INADDR_CARP_GROUP);
 		break;
@@ -232,6 +236,11 @@ intcpass(int argc, char **argv, ...)
 	if ((!set && argc > 1) || (set && argc != 1)) {
 		printf("%% pass <passphrase>\n");
 		printf("%% no pass [passphrase]\n");
+		return (0);
+	}
+	if (set && strlen(argv[0]) >= CARP_KEY_LEN) {
+		printf("%% carppass is at most %d characters\n",
+		    CARP_KEY_LEN - 1);
 		return (0);
 	}
 	bzero((char *) &creq, sizeof(struct carpreq));
@@ -297,7 +306,8 @@ intcnode(int argc, char **argv, ...)
 		return 0;
 	}
 	if (argv[1]) {
-		advskew = strtonum(argv[1], 0, 255, &errmsg);
+		/* carp_vhids_ioctl() refuses 255 */
+		advskew = strtonum(argv[1], 0, 254, &errmsg);
 		if (errmsg) {
 			printf("%% advskew value out of range: %s\n", errmsg);
 			return 0;
@@ -312,21 +322,19 @@ intcnode(int argc, char **argv, ...)
 	}
 
 	/* find last used vhid */
-	for (last = 0; creq.carpr_vhids[last]; last++) {
+	for (last = 0; last < CARP_MAXNODES && creq.carpr_vhids[last]; last++) {
 	}
 	last--;
 
-	/* find next free vhid */
-	for (i = 0; creq.carpr_vhids[i]; i++) {
+	/* find this vhid, or the next free one */
+	for (i = 0; i < CARP_MAXNODES && creq.carpr_vhids[i]; i++)
 		if (vhid == creq.carpr_vhids[i])
 			break;
-		if (set && ((i + 1) == CARP_MAXNODES)) {
-			printf("%% maximum carp nodes reached, unable to add "
-			    "more\n");
-			return 0;
-		}
+	if (set && i == CARP_MAXNODES) {
+		printf("%% maximum carp nodes reached, unable to add more\n");
+		return 0;
 	}
-	if (!set && !creq.carpr_vhids[i]) {
+	if (!set && (i == CARP_MAXNODES || !creq.carpr_vhids[i])) {
 		printf("%% unable to delete vhid %u, does not exist on %s\n",
 		    vhid, ifname);
 		return 0;
@@ -382,7 +390,7 @@ conf_carp(FILE *output, int s, char *ifname)
 			    creq.carpr_advskews[0]);
 		break;
 	default:
-		for (i = 0; creq.carpr_vhids[i]; i++)
+		for (i = 0; i < CARP_MAXNODES && creq.carpr_vhids[i]; i++)
 			fprintf(output, " carpnode %i %i\n",
 			    creq.carpr_vhids[i], creq.carpr_advskews[i]);
 		break;
@@ -427,7 +435,7 @@ carp_state(int s, char *ifname, FILE *outfile)
 	if (creq.carpr_vhids[0] == 0)
 		return 0;
 
-	for (i = 0; creq.carpr_vhids[i]; i++) {
+	for (i = 0; i < CARP_MAXNODES && creq.carpr_vhids[i]; i++) {
 		if (creq.carpr_states[i] <= CARP_MAXSTATE)
 			state = carp_states[creq.carpr_states[i]];
 		if (creq.carpr_vhids[1] == 0) {
@@ -480,6 +488,11 @@ intcdev(int argc, char **argv, ...)
 	if ((!set && argc > 1) || (set && argc != 1)) {
 		printf("%% carpdev <carpdev>\n");
 		printf("%% no carpdev\n");
+		return (0);
+	}
+	/* SIOCSVH keeps the carpdev when the name is empty */
+	if (!set) {
+		printf("%% The carpdev of %s cannot be removed\n", ifname);
 		return (0);
 	}
 

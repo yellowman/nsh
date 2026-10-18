@@ -34,6 +34,33 @@
 
 #define PFSYNC_MAXUPDATES 128
 
+/*
+ * SIOCSETPFSYNC. pfsync refuses a new syncdev or syncpeer while it runs
+ * (EBUSY), so then it goes down for the change, and comes back up if it
+ * still has a syncdev.
+ */
+static int
+pfsync_set(int ifs, struct ifreq *ifr)
+{
+	struct pfsyncreq *preq = (struct pfsyncreq *)ifr->ifr_data;
+	int flags, ret, saved;
+
+	if ((ret = ioctl(ifs, SIOCSETPFSYNC, (caddr_t)ifr)) == 0 ||
+	    errno != EBUSY)
+		return ret;
+	if (!((flags = get_ifflags(ifr->ifr_name, ifs)) & IFF_UP)) {
+		errno = EBUSY;
+		return ret;
+	}
+	set_ifflags(ifr->ifr_name, ifs, flags & ~IFF_UP);
+	ret = ioctl(ifs, SIOCSETPFSYNC, (caddr_t)ifr);
+	saved = errno;
+	if (ret == -1 || preq->pfsyncr_syncdev[0] != '\0')
+		set_ifflags(ifr->ifr_name, ifs, flags);
+	errno = saved;
+	return ret;
+}
+
 int
 intsyncdev(int argc, char **argv, ...)
 {
@@ -85,22 +112,23 @@ intsyncdev(int argc, char **argv, ...)
 			return (0);
 		}
 
-	if (set) {
+	if (set)
 		strlcpy(preq.pfsyncr_syncdev, argv[0],
 			sizeof(preq.pfsyncr_syncdev));
-		set_ifflag(ifs, ifname, IFF_UP);
-	} else
+	else
 		bzero((char *) &preq.pfsyncr_syncdev,
 		      sizeof(preq.pfsyncr_syncdev));
 
-	if (ioctl(ifs, SIOCSETPFSYNC, (caddr_t) & ifr) == -1) {
+	if (pfsync_set(ifs, &ifr) == -1) {
 		if (errno == ENOBUFS)
 			printf("%% Invalid synchronization interface: %s\n",
 			    argv[0]);
 		else
 			printf("%% intsyncdev: SIOCSETPFSYNC: %s\n",
 			    strerror(errno));
-	}
+	} else if (set)
+		/* pfsync_up() needs the syncdev */
+		set_ifflag(ifs, ifname, IFF_UP);
 	return (0);
 }
 
@@ -174,7 +202,7 @@ intsyncpeer(int argc, char **argv, ...)
 		preq.pfsyncr_syncpeer.s_addr = 0;
 	}
 
-	if (ioctl(ifs, SIOCSETPFSYNC, (caddr_t)&ifr) == -1) {
+	if (pfsync_set(ifs, &ifr) == -1) {
 			printf("%% intsyncpeer: SIOCSETPFSYNC: %s\n",
 			    strerror(errno));
 	}
@@ -228,17 +256,19 @@ intmaxupd(int argc, char **argv, ...)
 	}
 	if (set) {
 		errno = 0;
-		val = strtonum(argv[0], 0, INT_MAX, &errmsg);
+		/* the kernel takes at most 255 */
+		val = strtonum(argv[0], 0, 255, &errmsg);
 		if (errmsg) {
 			printf("%% maxupd value out of range %s: %s\n", argv[0],
 			    errmsg);
 			return (0);
 		}
 		preq.pfsyncr_maxupdates = (int)val;
-		if (argc == 2)
-			preq.pfsyncr_defer = 1;
-	} else
+		preq.pfsyncr_defer = argc == 2;
+	} else {
 		preq.pfsyncr_maxupdates = PFSYNC_MAXUPDATES;
+		preq.pfsyncr_defer = 0;
+	}
 
 	if (ioctl(ifs, SIOCSETPFSYNC, (caddr_t) & ifr) == -1) {
 		if (errno == EINVAL)

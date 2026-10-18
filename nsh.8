@@ -5061,7 +5061,8 @@ The default value is 128.
 The transmission a pfsync update packet shall be delayed by a maximum of 1
 second.
 The defer flag defers the first packet of each connection from being
-delivered until the state is active on pfsync peer.
+delivered until the state is active on pfsync peer; without it, there is
+no defer.
 This command is valid only for
 .Xr pfsync 4
 interfaces.
@@ -5080,11 +5081,10 @@ nsh(interface-pfsync0)/maxupd 32 defer
 .Tg carp
 .Tg hsrp
 .Tg vrrp
-.Op no
 .Ic vhid
-.Op Ar 1-255
+.Ar 1-255
 .Pp
-Configure or remove the virtual host ID for the Common Address Redundancy
+Configure the virtual host ID for the Common Address Redundancy
 CARP protocol.
 vhid is valid for
 .Xr carp 4
@@ -5147,11 +5147,10 @@ marks.
 nsh(interface-carp0)/carppass 19CharPassphrase!!!
 .Ed
 .Pp
-.Op no
 .Ic carpdev
-.Op Ar interface-name
+.Ar interface-name
 .Pp
-Set or remove the interface on which the selected carp interface's carp
+Set the interface on which the selected carp interface's carp
 advertisements are sent and received.
 The carpdev is the "real interface" over which the carp virtual IP is
 accessible.
