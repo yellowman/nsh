@@ -17,6 +17,7 @@
 #include <resolv.h>
 
 #include "externs.h"
+#include "settings.h"
 
 int	setwgpeer(const char *);
 int	setwgpeerep(const char *);
@@ -40,6 +41,45 @@ int	getwg(int);
 
 void	wgpeerusage(void);
 static void wg_quote(FILE *, char *);
+static void wg_unquote(char *, char *, size_t);
+static int wg_key(const char *, uint8_t *);
+static int wg_readaip(const char *, struct wg_aip_io *);
+static int wg_sameaip(struct wg_aip_io *, struct wg_aip_io *);
+static int wg_set(int, struct wg_data_io *);
+
+/*
+ * A wg interface as wg_ioctl_get() would list it: the kernel's, for
+ * conf_wg(), or the candidate's in configure private
+ */
+struct wgifpeer {
+	uint8_t			 public[WG_KEY_LEN];
+	uint8_t			 psk[WG_KEY_LEN];	/* none if 0 */
+	uint16_t		 pka;			/* none if 0 */
+	struct sockaddr_storage	 sa;			/* none if AF_UNSPEC */
+	char			 descr[IFDESCRSIZE];
+	struct wg_aip_io	*aips;			/* in the order given */
+	size_t			 naips;
+};
+
+struct wgif {
+	int			 hasprivate;
+	uint8_t			 private[WG_KEY_LEN];
+	uint16_t		 port;			/* none if 0 */
+	int			 rtable;		/* none if 0 */
+	struct wgifpeer		*peers;
+	size_t			 npeers;
+};
+
+static struct wgifpeer *wgif_peer(struct wgif *, uint8_t *, int);
+static void wgif_delpeer(struct wgif *, size_t);
+static int wgif_addaip(struct wgifpeer *, struct wg_aip_io *);
+static int wgif_aip(struct wgif *, struct wgifpeer *, struct wg_aip_io *);
+static void wgif_free(struct wgif *);
+static int wgif_kernel(struct wgif *, struct wg_interface_io *);
+static int wgif_apply(struct wgif *, struct wg_interface_io *);
+static int wgif_line(struct wgif *, char *);
+static void wgif_print(FILE *, struct wgif *);
+static int cand_setwg(char *, struct wg_interface_io *);
 
 /*
  * WireGuard configuration
@@ -148,10 +188,28 @@ setwgpeerdesc(const char *descr)
 	return 0;
 }
 
+/* An aip as inet_net_pton() reads it */
+static int
+wg_readaip(const char *s, struct wg_aip_io *a)
+{
+	int res;
+
+	memset(a, 0, sizeof(*a));
+	if ((res = inet_net_pton(AF_INET, s, &a->a_ipv4,
+	    sizeof(a->a_ipv4))) != -1)
+		a->a_af = AF_INET;
+	else if ((res = inet_net_pton(AF_INET6, s, &a->a_ipv6,
+	    sizeof(a->a_ipv6))) != -1)
+		a->a_af = AF_INET6;
+	else
+		return -1;
+	a->a_cidr = res;
+	return 0;
+}
+
 int
 setwgpeeraip(const char *aip)
 {
-	int res;
 	if (wg_peer == NULL) {
 		printf("%% setwgpeeraip: wgpeer not set\n");
 		return -1;
@@ -160,18 +218,10 @@ setwgpeeraip(const char *aip)
 	if (growwgdata(sizeof(*wg_aip)) < 0)
 		return -1;
 
-	if ((res = inet_net_pton(AF_INET, aip, &wg_aip->a_ipv4,
-	    sizeof(wg_aip->a_ipv4))) != -1) {
-		wg_aip->a_af = AF_INET;
-	} else if ((res = inet_net_pton(AF_INET6, aip, &wg_aip->a_ipv6,
-	    sizeof(wg_aip->a_ipv6))) != -1) {
-		wg_aip->a_af = AF_INET6;
-	} else {
+	if (wg_readaip(aip, wg_aip) == -1) {
 		printf("%% setwgpeeraip: bad address\n");
 		return -1;
 	}
-
-	wg_aip->a_cidr = res;
 
 	wg_peer->p_flags |= WG_PEER_REPLACE_AIPS;
 	wg_peer->p_aips_count++;
@@ -371,66 +421,333 @@ wg_quote(FILE *output, char *s)
 			    strchr(" \t\"'\\", *s) != NULL ? "\\" : "", *s);
 }
 
-void
-conf_wg(FILE *output, int ifs, char *ifname)
+/* A description as wg_quote() wrote it */
+static void
+wg_unquote(char *s, char *d, size_t len)
 {
+	size_t n = strlen(s);
+
+	if (n >= 2 && s[0] == '"' && s[n - 1] == '"') {
+		s[n - 1] = '\0';
+		strlcpy(d, s + 1, len);
+		return;
+	}
+	for (; *s != '\0' && len > 1; s++, len--) {
+		if (*s == '\\' && s[1] != '\0')
+			s++;
+		*d++ = *s;
+	}
+	*d = '\0';
+}
+
+static int
+wg_key(const char *b64, uint8_t *key)
+{
+	WG_LOAD_KEY(key, b64, "wg_key");
+	return 0;
+}
+
+/* Do a and b name one prefix, as the kernel's aip table finds them? */
+static int
+wg_sameaip(struct wg_aip_io *a, struct wg_aip_io *b)
+{
+	uint8_t *x = (uint8_t *)&a->a_addr, *y = (uint8_t *)&b->a_addr;
+	int n = a->a_cidr;
+
+	if (a->a_af != b->a_af || a->a_cidr != b->a_cidr ||
+	    memcmp(x, y, n / 8) != 0)
+		return 0;
+	return n % 8 == 0 || ((x[n / 8] ^ y[n / 8]) & 0xff << (8 - n % 8)) == 0;
+}
+
+/* w's peer with public key public, added last if add and w has none */
+static struct wgifpeer *
+wgif_peer(struct wgif *w, uint8_t *public, int add)
+{
+	struct wgifpeer *p;
+	size_t i;
+
+	for (i = 0; i < w->npeers; i++)
+		if (memcmp(w->peers[i].public, public, WG_KEY_LEN) == 0)
+			return &w->peers[i];
+	if (!add)
+		return NULL;
+	if ((p = reallocarray(w->peers, w->npeers + 1, sizeof(*p))) == NULL) {
+		printf("%% wgif_peer: %s\n", strerror(errno));
+		return NULL;
+	}
+	w->peers = p;
+	p = &w->peers[w->npeers++];
+	memset(p, 0, sizeof(*p));
+	memcpy(p->public, public, WG_KEY_LEN);
+	return p;
+}
+
+static void
+wgif_delpeer(struct wgif *w, size_t i)
+{
+	free(w->peers[i].aips);
+	memmove(&w->peers[i], &w->peers[i + 1],
+	    (w->npeers - i - 1) * sizeof(*w->peers));
+	w->npeers--;
+}
+
+static int
+wgif_addaip(struct wgifpeer *p, struct wg_aip_io *a)
+{
+	struct wg_aip_io *aips;
+
+	aips = reallocarray(p->aips, p->naips + 1, sizeof(*aips));
+	if (aips == NULL) {
+		printf("%% wgif_addaip: %s\n", strerror(errno));
+		return -1;
+	}
+	p->aips = aips;
+	p->aips[p->naips++] = *a;
+	return 0;
+}
+
+/*
+ * wg_aip_add(): a prefix is one peer's aip, and given to another peer
+ * it moves there, as it was first given
+ */
+static int
+wgif_aip(struct wgif *w, struct wgifpeer *p, struct wg_aip_io *a)
+{
+	struct wgifpeer *q;
+	struct wg_aip_io b;
+	size_t i, j;
+
+	for (i = 0; i < w->npeers; i++) {
+		q = &w->peers[i];
+		for (j = 0; j < q->naips; j++) {
+			if (!wg_sameaip(&q->aips[j], a))
+				continue;
+			if (q == p)
+				return 0;
+			b = q->aips[j];
+			memmove(&q->aips[j], &q->aips[j + 1],
+			    (q->naips - j - 1) * sizeof(*q->aips));
+			q->naips--;
+			return wgif_addaip(p, &b);
+		}
+	}
+	return wgif_addaip(p, a);
+}
+
+static void
+wgif_free(struct wgif *w)
+{
+	size_t i;
+
+	for (i = 0; i < w->npeers; i++)
+		free(w->peers[i].aips);
+	free(w->peers);
+	memset(w, 0, sizeof(*w));
+}
+
+/* w from what SIOCGWG listed */
+static int
+wgif_kernel(struct wgif *w, struct wg_interface_io *wi)
+{
+	struct wg_peer_io *p = &wi->i_peers[0];
+	struct wgifpeer *wp;
+	size_t i, j;
+
+	memset(w, 0, sizeof(*w));
+	if (wi->i_flags & WG_INTERFACE_HAS_PORT)
+		w->port = wi->i_port;
+	if (wi->i_flags & WG_INTERFACE_HAS_RTABLE)
+		w->rtable = wi->i_rtable;
+	if (wi->i_flags & WG_INTERFACE_HAS_PRIVATE) {
+		w->hasprivate = 1;
+		memcpy(w->private, wi->i_private, WG_KEY_LEN);
+	}
+	for (i = 0; i < wi->i_peers_count; i++) {
+		if ((wp = wgif_peer(w, p->p_public, 1)) == NULL)
+			return -1;
+		if (p->p_flags & WG_PEER_HAS_PSK)
+			memcpy(wp->psk, p->p_psk, WG_KEY_LEN);
+		if (p->p_flags & WG_PEER_HAS_PKA)
+			wp->pka = p->p_pka;
+		if (p->p_flags & WG_PEER_HAS_ENDPOINT)
+			memcpy(&wp->sa, &p->p_sa, p->p_sa.sa_len);
+#ifdef WG_PEER_SET_DESCRIPTION	/* OpenBSD 7.4+ */
+		strlcpy(wp->descr, p->p_description, sizeof(wp->descr));
+#endif
+		/* the kernel lists the last aip given first */
+		for (j = p->p_aips_count; j-- > 0; )
+			if (wgif_addaip(wp, &p->p_aips[j]) == -1)
+				return -1;
+		p = (struct wg_peer_io *)&p->p_aips[p->p_aips_count];
+	}
+	return 0;
+}
+
+/*
+ * What wg_ioctl_set() makes of w and wi. The kernel also drops a peer
+ * whose public key is the interface's own, which needs curve25519.
+ */
+static int
+wgif_apply(struct wgif *w, struct wg_interface_io *wi)
+{
+	struct wg_peer_io *p = &wi->i_peers[0];
+	struct wgifpeer *wp;
+	size_t i, j;
+
+	if (wi->i_flags & WG_INTERFACE_REPLACE_PEERS)
+		while (w->npeers > 0)
+			wgif_delpeer(w, 0);
+	if (wi->i_flags & WG_INTERFACE_HAS_PRIVATE) {
+		w->hasprivate = 1;
+		memcpy(w->private, wi->i_private, WG_KEY_LEN);
+		/* noise_local_set_private() keeps it clamped */
+		w->private[0] &= 248;
+		w->private[31] = (w->private[31] & 127) | 64;
+	}
+	if (wi->i_flags & WG_INTERFACE_HAS_PORT)
+		w->port = wi->i_port;
+	if (wi->i_flags & WG_INTERFACE_HAS_RTABLE)
+		w->rtable = wi->i_rtable;
+
+	for (i = 0; i < wi->i_peers_count;
+	    i++, p = (struct wg_peer_io *)&p->p_aips[p->p_aips_count]) {
+		if (!(p->p_flags & WG_PEER_HAS_PUBLIC))
+			continue;
+		if ((wp = wgif_peer(w, p->p_public, 0)) == NULL) {
+			if (p->p_flags & (WG_PEER_REMOVE | WG_PEER_UPDATE))
+				continue;
+			if ((wp = wgif_peer(w, p->p_public, 1)) == NULL)
+				return -1;
+		}
+		if (p->p_flags & WG_PEER_REMOVE) {
+			wgif_delpeer(w, wp - w->peers);
+			continue;
+		}
+		if (p->p_flags & WG_PEER_HAS_ENDPOINT)
+			memcpy(&wp->sa, &p->p_sa, p->p_sa.sa_len);
+		if (p->p_flags & WG_PEER_HAS_PSK)
+			memcpy(wp->psk, p->p_psk, WG_KEY_LEN);
+		if (p->p_flags & WG_PEER_HAS_PKA)
+			wp->pka = p->p_pka;
+		if (p->p_flags & WG_PEER_REPLACE_AIPS)
+			wp->naips = 0;
+#ifdef WG_PEER_SET_DESCRIPTION
+		if (p->p_flags & WG_PEER_SET_DESCRIPTION)
+			strlcpy(wp->descr, p->p_description, sizeof(wp->descr));
+#endif
+		for (j = 0; j < p->p_aips_count; j++)
+			if (wgif_aip(w, wp, &p->p_aips[j]) == -1)
+				return -1;
+	}
+	return 0;
+}
+
+/* Read one of wgif_print()'s lines into w */
+static int
+wgif_line(struct wgif *w, char *line)
+{
+	char buf[1024], *p, *word, *val;
+	uint8_t key[WG_KEY_LEN];
+	struct wgifpeer *wp;
+	struct wg_aip_io a;
+	const char *errmsg;
+
+	if (strlcpy(buf, line, sizeof(buf)) >= sizeof(buf))
+		return -1;
+	p = buf;
+	word = strsep(&p, " ");
+	if (p == NULL)
+		return -1;
+	if (strcmp(word, "wgport") == 0) {
+		w->port = strtonum(p, 0, 65535, &errmsg);
+		return errmsg ? -1 : 0;
+	}
+	if (strcmp(word, "wgrtable") == 0) {
+		w->rtable = strtonum(p, 0, RT_TABLEID_MAX, &errmsg);
+		return errmsg ? -1 : 0;
+	}
+	if (strcmp(word, "wgkey") == 0) {
+		w->hasprivate = 1;
+		return wg_key(p, w->private);
+	}
+	if (wg_key(strsep(&p, " "), key) == -1 ||
+	    (wp = wgif_peer(w, key, 1)) == NULL)
+		return -1;
+	while ((word = strsep(&p, " ")) != NULL) {
+		if (p == NULL)
+			return -1;
+		if (strcmp(word, "description") == 0) {
+			wg_unquote(p, wp->descr, sizeof(wp->descr));
+			break;
+		}
+		val = strsep(&p, " ");
+		if (strcmp(word, "psk") == 0) {
+			if (wg_key(val, wp->psk) == -1)
+				return -1;
+		} else if (strcmp(word, "pka") == 0) {
+			wp->pka = strtonum(val, 0, 43200, &errmsg);
+			if (errmsg)
+				return -1;
+		} else if (strcmp(word, "endpoint") == 0) {
+			if (pflow_addr(val, &wp->sa) == -1)
+				return -1;
+		} else if (strcmp(word, "aip") == 0) {
+			if (wg_readaip(val, &a) == -1 ||
+			    wgif_addaip(wp, &a) == -1)
+				return -1;
+		} else
+			return -1;
+	}
+	return 0;
+}
+
+/* conf_wg()'s lines for w */
+static void
+wgif_print(FILE *output, struct wgif *w)
+{
+	static const uint8_t	 zero[WG_KEY_LEN];
+	struct wgifpeer		*p;
 	size_t			 i, j;
 	char			 hbuf[NI_MAXHOST], sbuf[NI_MAXSERV];
 	char			 key[WG_BASE64_KEY_LEN + 1],psk[WG_BASE64_KEY_LEN + 1];
 
-	strlcpy(wgdata.wgd_name, ifname, sizeof(wgdata.wgd_name));
-	wgdata.wgd_size = 0;
-	wgdata.wgd_interface = NULL;
-
-	if (getwg(ifs) < 0)
-		return;
-	wg_interface = wgdata.wgd_interface;
-
-	if (wg_interface->i_flags & WG_INTERFACE_HAS_PORT)
-		fprintf(output, " wgport %hu\n", wg_interface->i_port);
-	if (wg_interface->i_flags & WG_INTERFACE_HAS_RTABLE)
-		fprintf(output, " wgrtable %d\n", wg_interface->i_rtable);
-	if (wg_interface->i_flags & WG_INTERFACE_HAS_PRIVATE) {
-		b64_ntop(wg_interface->i_private, WG_KEY_LEN,
-		    key, sizeof(key));
+	if (w->port)
+		fprintf(output, " wgport %hu\n", w->port);
+	if (w->rtable)
+		fprintf(output, " wgrtable %d\n", w->rtable);
+	if (w->hasprivate) {
+		b64_ntop(w->private, WG_KEY_LEN, key, sizeof(key));
 		fprintf(output, " wgkey %s\n", key);
 	}
 
-	wg_peer = &wg_interface->i_peers[0];
-	for (i = 0; i < wg_interface->i_peers_count; i++) {
-		b64_ntop(wg_peer->p_public, WG_KEY_LEN,
-		    key, sizeof(key));
-		if (!(wg_peer->p_flags & WG_PEER_HAS_PSK) &&
-		    !(wg_peer->p_flags & WG_PEER_HAS_PKA) &&
-		    !(wg_peer->p_flags & WG_PEER_HAS_ENDPOINT) &&
-#ifdef WG_PEER_SET_DESCRIPTION	/* OpenBSD 7.4+ */
-		    !(strlen(wg_peer->p_description)) &&
-#endif
-		    (wg_peer->p_aips_count == 0))
+	for (i = 0; i < w->npeers; i++) {
+		p = &w->peers[i];
+		b64_ntop(p->public, WG_KEY_LEN, key, sizeof(key));
+		if (memcmp(p->psk, zero, WG_KEY_LEN) == 0 && p->pka == 0 &&
+		    p->sa.ss_family == AF_UNSPEC && p->descr[0] == '\0' &&
+		    p->naips == 0)
 			fprintf(output, " wgpeer %s\n", key);
 
-#ifdef WG_PEER_SET_DESCRIPTION
-		if (strlen(wg_peer->p_description)) {
+		if (p->descr[0] != '\0') {
 			fprintf(output, " wgpeer %s description ", key);
-			wg_quote(output, wg_peer->p_description);
+			wg_quote(output, p->descr);
 			fprintf(output, "\n");
 		}
-#endif
 
-		if (wg_peer->p_flags & WG_PEER_HAS_PSK) {
-			b64_ntop(wg_peer->p_psk, WG_KEY_LEN, psk,
-			    sizeof(psk));
+		if (memcmp(p->psk, zero, WG_KEY_LEN) != 0) {
+			b64_ntop(p->psk, WG_KEY_LEN, psk, sizeof(psk));
 			fprintf(output, " wgpeer %s psk %s\n", key, psk);
 		}
 
-		if (wg_peer->p_flags & WG_PEER_HAS_PKA && wg_peer->p_pka)
-			fprintf(output, " wgpeer %s pka %u\n", key, wg_peer->p_pka);
+		if (p->pka)
+			fprintf(output, " wgpeer %s pka %u\n", key, p->pka);
 
-		if (wg_peer->p_flags & WG_PEER_HAS_ENDPOINT) {
-			if (getnameinfo(&wg_peer->p_sa, wg_peer->p_sa.sa_len,
+		if (p->sa.ss_family != AF_UNSPEC) {
+			if (getnameinfo((struct sockaddr *)&p->sa, p->sa.ss_len,
 			    hbuf, sizeof(hbuf), sbuf, sizeof(sbuf),
 			    NI_NUMERICHOST | NI_NUMERICSERV) == 0) {
-				if (wg_peer->p_sa.sa_family == AF_INET6)
+				if (p->sa.ss_family == AF_INET6)
 					fprintf(output, " wgpeer %s endpoint [%s]:%s\n", key, hbuf, sbuf);
 				else
 					fprintf(output, " wgpeer %s endpoint %s:%s\n", key, hbuf, sbuf);
@@ -439,20 +756,116 @@ conf_wg(FILE *output, int ifs, char *ifname)
 			}
 		}
 
-		wg_aip = &wg_peer->p_aips[0];
-		if (wg_peer->p_aips_count)
+		if (p->naips)
 			fprintf(output, " wgpeer %s", key);
-		/* the kernel lists the last aip given first */
-		for (j = wg_peer->p_aips_count; j-- > 0; ) {
-			inet_ntop(wg_aip[j].a_af, &wg_aip[j].a_addr,
+		for (j = 0; j < p->naips; j++) {
+			inet_ntop(p->aips[j].a_af, &p->aips[j].a_addr,
 			    hbuf, sizeof(hbuf));
-			fprintf(output, " aip %s/%d", hbuf, wg_aip[j].a_cidr);
+			fprintf(output, " aip %s/%d", hbuf, p->aips[j].a_cidr);
 		}
-		if (wg_peer->p_aips_count)
+		if (p->naips)
 			fprintf(output, "\n");
-		wg_peer = (struct wg_peer_io *)(wg_aip + wg_peer->p_aips_count);
 	}
+}
+
+void
+conf_wg(FILE *output, int ifs, char *ifname)
+{
+	struct wgif w;
+
+	strlcpy(wgdata.wgd_name, ifname, sizeof(wgdata.wgd_name));
+	wgdata.wgd_size = 0;
+	wgdata.wgd_interface = NULL;
+
+	if (getwg(ifs) < 0)
+		return;
+	if (wgif_kernel(&w, wgdata.wgd_interface) == 0)
+		wgif_print(output, &w);
+	wgif_free(&w);
 	free(wgdata.wgd_interface);
+}
+
+/*
+ * SIOCSWG in configure private: the interface's wg lines become what
+ * conf_wg() would print once the kernel had made the change
+ */
+static int
+cand_setwg(char *name, struct wg_interface_io *wi)
+{
+	static char *names[] = { "wgport", "wgrtable", "wgkey", "wgpeer" };
+	struct wgif w;
+	char *buf = NULL, **lines = NULL, **gone = NULL, **v, *l, *p;
+	size_t len, i, j, n, nlines = 0, ngone = 0;
+	FILE *f;
+	int ret = -1;
+
+	if (!cand_takes(name, SIOCSWG)) {
+		errno = ENOTTY;
+		return -1;
+	}
+	memset(&w, 0, sizeof(w));
+	for (i = 0; i < nitems(names); i++)
+		for (n = 0; (l = cand_line(names[i], n)) != NULL; n++)
+			if (wgif_line(&w, l) == -1) {
+				printf("%% cand_setwg: cannot read \"%s\"\n", l);
+				errno = EINVAL;
+				goto done;
+			}
+	if (wgif_apply(&w, wi) == -1)
+		goto done;
+	if ((f = open_memstream(&buf, &len)) == NULL)
+		goto done;
+	wgif_print(f, &w);
+	if (fclose(f) == EOF)
+		goto done;
+	for (p = buf; (l = strsep(&p, "\n")) != NULL; ) {
+		if (*l != ' ')
+			continue;
+		if ((v = reallocarray(lines, nlines + 1,
+		    sizeof(*lines))) == NULL)
+			goto done;
+		lines = v;
+		lines[nlines++] = l + 1;
+	}
+
+	/* the lines it prints, in place of the lines of their keys */
+	for (i = 0; i < nlines; i++)
+		cand_setting(ST_ON, "%s", lines[i]);
+	/* and none it does not */
+	for (i = 0; i < nitems(names); i++)
+		for (n = 0; (l = cand_line(names[i], n)) != NULL; n++) {
+			for (j = 0; j < nlines && strcmp(lines[j], l) != 0; j++)
+				;
+			if (j < nlines)
+				continue;
+			if ((v = reallocarray(gone, ngone + 1,
+			    sizeof(*gone))) == NULL)
+				goto done;
+			gone = v;
+			if ((gone[ngone] = strdup(l)) == NULL)
+				goto done;
+			ngone++;
+		}
+	for (i = 0; i < ngone; i++)
+		cand_setting(ST_DEFAULT, "%s", gone[i]);
+	ret = 0;
+done:
+	for (i = 0; i < ngone; i++)
+		free(gone[i]);
+	free(gone);
+	free(lines);
+	free(buf);
+	wgif_free(&w);
+	return ret;
+}
+
+/* SIOCSWG, or in configure private its change to the candidate */
+static int
+wg_set(int ifs, struct wg_data_io *wgd)
+{
+	if (candidate)
+		return cand_setwg(wgd->wgd_name, wgd->wgd_interface);
+	return ioctl(ifs, SIOCSWG, (caddr_t)wgd);
 }
 
 #define WGPEER 1
@@ -557,7 +970,7 @@ intwg(int argc, char **argv, ...)
 
 	strlcpy(wgdata.wgd_name, ifname, sizeof(wgdata.wgd_name));
 
-	if (ioctl(ifs, SIOCSWG, (caddr_t)&wgdata) == -1)
+	if (wg_set(ifs, &wgdata) == -1)
 		printf("%% intwg: SIOCSWG: %s\n", strerror(errno));
 wgerr:
 	free(wgdata.wgd_interface);
@@ -714,7 +1127,7 @@ intwgpeer(int argc, char **argv, ...)
 
 	strlcpy(wgdata.wgd_name, ifname, sizeof(wgdata.wgd_name));
 
-	if (ioctl(ifs, SIOCSWG, (caddr_t)&wgdata) == -1)
+	if (wg_set(ifs, &wgdata) == -1)
 		printf("%% intwgpeer: SIOCSWG: %s\n", strerror(errno));
 wgerr:
 	free(wgdata.wgd_interface);
