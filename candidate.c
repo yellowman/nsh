@@ -184,6 +184,40 @@ cand_gettype(char *name)
 	return (kc = cand_cloner(name)) != NULL ? kc->type : 0;
 }
 
+/*
+ * Does the kernel take the driver ioctl cmd for name? Only the drivers of
+ * cloned interfaces take the ioctls kernel.c lists; any other answers
+ * ENOTTY.
+ */
+int
+cand_takes(char *name, u_long cmd)
+{
+	const struct kcloner *kc;
+	const u_long *p;
+
+	if ((kc = cand_cloner(name)) == NULL)
+		return 0;
+	for (p = kc->ioctls; *p != 0; p++)
+		if (*p == cmd)
+			return 1;
+	return 0;
+}
+
+/* Has the candidate an interface or bridge block for name? */
+int
+cand_hasif(char *name)
+{
+	char head[sizeof("interface ") + IFNAMSIZ];
+
+	if (strlen(name) >= IFNAMSIZ)
+		return 0;
+	snprintf(head, sizeof(head), "interface %s", name);
+	if (conftree_has(cand, head))
+		return 1;
+	snprintf(head, sizeof(head), "bridge %s", name);
+	return conftree_has(cand, head);
+}
+
 /* Is name a pppoe(4) interface? */
 int
 cand_ispppoe(char *name)

@@ -15,17 +15,22 @@
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #
 # kernscan.pl: write kernel.c, the table of what the kernel's interface
-# cloners make, from the kernel source
+# cloners make and which driver ioctls they take, from the kernel source
 #
 #	perl scripts/kernscan.pl /usr/src "OpenBSD 7.8" > kernel.c
 #
 # For each cloner (IF_CLONE_INITIALIZER), the create function and the
 # functions it calls in the same file are read for the if_flags and
 # if_type they set, and the if_ioctl handler they install is read for
-# SIOCBRDGRTS, which is_bridge() asks. The scanner stops rather than
-# guess: a cloner whose create path sets if_flags or if_type more than
-# one way must be listed in %choose, and a choice must still be one of
-# the ways the source has.
+# SIOCBRDGRTS, which is_bridge() asks, and for the ioctls in @drv. The
+# scanner stops rather than guess: a cloner whose create path sets
+# if_flags or if_type more than one way must be listed in %choose, and a
+# choice must still be one of the ways the source has.
+#
+# The ioctls in @drv are nsh's commands that only some drivers take.
+# ifioctl() hands them to the driver, and a driver without a case for
+# one answers ENOTTY. The scanner checks that, and that no file in sys
+# but the cloners' takes them, so an interface no cloner made takes none.
 
 use strict;
 use warnings;
@@ -52,19 +57,29 @@ my %attach = (
 	ether_ifattach	=> 'IFT_ETHER',
 );
 
+my @drv = qw(SIOCSLIFPHYADDR SIOCDIFPHYADDR SIOCSLIFPHYRTABLE
+    SIOCSLIFPHYTTL SIOCSLIFPHYDF SIOCSLIFPHYECN SIOCSVNETID SIOCDVNETID
+    SIOCSVNETFLOWID SIOCSIFPARENT SIOCDIFPARENT SIOCSIFPAIR SIOCSETKALIVE
+    SIOCSTXHPRIO SIOCSRXHPRIO SIOCSETLABEL SIOCDELLABEL SIOCSPWE3CTRLWORD
+    SIOCSPWE3FAT SIOCSPWE3NEIGHBOR SIOCDPWE3NEIGHBOR SIOCSETPFLOW);
+my %drv = map { $_ => 1 } @drv;
+
 @ARGV == 2 or die "usage: kernscan.pl srcdir label\n";
 my ($src, $label) = @ARGV;
 my @dirs = map { "$src/sys/$_" } qw(net netinet netinet6 netmpls);
 
 my %body;		# function name => its body, by file
+my %global;		# function name => its body, from any of @dirs
 my @cloners;		# [ name, create function, file ]
 
 foreach my $dir (@dirs) {
 	opendir(my $dh, $dir) or die "$dir: $!\n";
 	foreach my $f (sort grep { /\.c$/ } readdir($dh)) {
 		my $text = slurp("$dir/$f");
+		my $fns = functions($text);
+		$global{$_} = $fns->{$_} foreach keys %$fns;
 		next unless $text =~ /IF_CLONE_INITIALIZER\s*\(\s*"/;
-		$body{$f} = functions($text);
+		$body{$f} = $fns;
 		while ($text =~ /IF_CLONE_INITIALIZER\s*\(\s*"(\w+)"\s*,\s*
 		    (\w+)\s*,/gx) {
 			push @cloners, [ $1, $2, $f ];
@@ -73,8 +88,9 @@ foreach my $dir (@dirs) {
 	closedir($dh);
 }
 die "no cloners in $src/sys\n" unless @cloners;
+drv_only_cloners(map { $_->[2] } @cloners);
 
-my @rows;
+my (@rows, @arrays);
 foreach my $c (sort { $a->[0] cmp $b->[0] } @cloners) {
 	my ($name, $create, $f) = @$c;
 	my $fns = $body{$f};
@@ -110,9 +126,21 @@ foreach my $c (sort { $a->[0] cmp $b->[0] } @cloners) {
 	my $bridge = ($type eq 'IFT_BRIDGE' ||
 	    $fns->{$ioctl} =~ /\bcase\s+SIOCBRDGRTS\s*:/) ? 1 : 0;
 
-	push @rows, sprintf("\t{ \"%s\", %s, %d,\n\t    %s },\n", $name,
-	    $type eq '' ? '0' : $type, $bridge,
-	    join(' | ', sort keys %flags) || '0');
+	# the driver ioctls its handler, or what that calls, has a case for
+	my %takes;
+	foreach my $fn (reach($fns, $ioctl, 1)) {
+		my $b = defined $fns->{$fn} ? $fns->{$fn} : $global{$fn};
+		while ($b =~ /\bcase\s+(\w+)\s*:/g) {
+			$takes{$1} = 1 if $drv{$1};
+		}
+	}
+	my @takes = grep { $takes{$_} } @drv;
+	push @arrays, sprintf("static const u_long %s_ioctls[] = {\n%s\t0\n};\n",
+	    $name, join('', map { "\t$_,\n" } @takes));
+
+	push @rows, sprintf("\t{ \"%s\", %s, %d,\n\t    %s,\n\t    %s_ioctls },\n",
+	    $name, $type eq '' ? '0' : $type, $bridge,
+	    join(' | ', sort keys %flags) || '0', $name);
 }
 foreach my $k (sort keys %choose) {
 	die "%choose has $k, which is no cloner's\n" unless $used{$k};
@@ -121,23 +149,28 @@ foreach my $k (sort keys %choose) {
 print <<"EOF";
 /*
  * What the kernel's interface cloners make: the if_type and if_flags
- * each create function sets, and whether is_bridge() calls it a bridge.
+ * each create function sets, whether is_bridge() calls it a bridge, and
+ * which of nsh's driver ioctls it takes.
  * Made by scripts/kernscan.pl; do not edit. From:
  *	$label
  */
 
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/sockio.h>
 #include <net/if.h>
 #include <net/if_types.h>
+#include <netinet/in.h>
+#include <net/if_pflow.h>
 #include "kernel.h"
 
 const char kernel_source[] = "$label";
 
-const struct kcloner kcloners[] = {
 EOF
+print join("\n", @arrays), "\n";
+print "const struct kcloner kcloners[] = {\n";
 print @rows;
-print "\t{ NULL, 0, 0, 0 }\n};\n";
+print "\t{ NULL, 0, 0, 0, NULL }\n};\n";
 
 # The one value a cloner's create path sets, or the one %choose names
 sub pick {
@@ -157,20 +190,66 @@ sub pick {
 	return @w ? $w[0] : '';
 }
 
-# The functions fn calls, in the same file, and fn itself
+# The functions fn calls, in the same file, and fn itself. With ioctls,
+# also the ioctl functions it calls in other files, which take what the
+# driver hands on.
 sub reach {
-	my ($fns, $fn) = @_;
+	my ($fns, $fn, $ioctls) = @_;
 	my %seen = ($fn => 1);
 	my @todo = ($fn);
 
 	while (my $f = shift @todo) {
-		while ($fns->{$f} =~ /\b(\w+)\s*\(/g) {
-			next if $seen{$1} || !defined $fns->{$1};
-			$seen{$1} = 1;
-			push @todo, $1;
+		my $b = defined $fns->{$f} ? $fns->{$f} : $global{$f};
+		while ($b =~ /\b(\w+)\s*\(/g) {
+			my $c = $1;
+			next if $seen{$c};
+			next unless defined $fns->{$c} ||
+			    ($ioctls && $c =~ /ioctl/ && defined $global{$c});
+			$seen{$c} = 1;
+			push @todo, $c;
 		}
 	}
 	return sort keys %seen;
+}
+
+# Only the cloners' files may take the ioctls in @drv, and net/if.c may
+# only hand them on to the driver: ifioctl()'s case for them falls to
+# its default, pru_control() and then if_ioctl. Anything else in sys, a
+# hardware driver say, stops the scan.
+sub drv_only_cloners {
+	my %ok = map { $_ => 1 } @_;
+	my @files;
+
+	-d "$src/sys/dev" or die "$src/sys/dev: no hardware drivers to check\n";
+	find_c("$src/sys", \@files);
+	foreach my $path (@files) {
+		my $text = slurp($path);
+		my ($f) = $path =~ m{([^/]+)$};
+		foreach my $i (@drv) {
+			next unless $text =~ /\bcase\s+$i\s*:/;
+			next if $ok{$f} && $path =~ m{/sys/net(inet6?|mpls)?/};
+			die "$i is taken in $path, which no cloner is\n"
+			    unless $path =~ m{/sys/net/if\.c$};
+			$text =~ /\bcase\s+$i\s*:(\s*case\s+\w+\s*:)*\s*
+			    if\s*\(\(error\s*=\s*suser\(p\)\)\s*!=\s*0\)\s*
+			    break;\s*default:\s*error\s*=\s*pru_control\(/x or
+			    die "net/if.c does more with $i than hand it on\n";
+		}
+	}
+}
+
+sub find_c {
+	my ($dir, $files) = @_;
+	opendir(my $dh, $dir) or die "$dir: $!\n";
+	foreach my $e (sort readdir($dh)) {
+		next if $e =~ /^\./;
+		if (-d "$dir/$e" && ! -l "$dir/$e") {
+			find_c("$dir/$e", $files);
+		} elsif ($e =~ /\.c$/) {
+			push @$files, "$dir/$e";
+		}
+	}
+	closedir($dh);
 }
 
 # The functions in a file: a name at the start of a line, its

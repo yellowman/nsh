@@ -47,14 +47,23 @@ static const struct setting top_settings[] = {
 
 static const struct setting if_settings[] = {
 	{ "description",	S_VALUE },
+	{ "vnetid",		S_VALUE },
+	{ "vnetflowid",		S_FLAG },
+	{ "parent",		S_VALUE },
 	{ "rdomain",		S_VALUE },
 	{ "group",		S_LIST },
+	{ "tunnel",		S_VALUE },
+	{ "tunneldomain",	S_VALUE },
 	{ "mtu",		S_VALUE },
 	{ "metric",		S_VALUE },
 	{ "priority",		S_VALUE },
 	{ "llpriority",		S_VALUE },
+	{ "txprio",		S_VALUE },
+	{ "rxprio",		S_VALUE },
 	{ "autoconf4",		S_STATE },
 	{ "inet",		S_ENTRY,	2 | CK_ADDR },
+	{ "keepalive",		S_VALUE },
+	{ "mplslabel",		S_VALUE },
 	{ "mpls",		S_FLAG },
 	{ "autoconf6",		S_FLAG },
 	{ "temporary",		S_FLAG },
@@ -69,6 +78,11 @@ static const struct setting if_settings[] = {
 
 static const struct setting bridge_settings[] = {
 	{ "description",	S_VALUE },
+	{ "vnetid",		S_VALUE },
+	{ "parent",		S_VALUE },
+	{ "tunneldomain",	S_VALUE },
+	{ "txprio",		S_VALUE },
+	{ "rxprio",		S_VALUE },
 	{ "shutdown",		S_STATE },
 	{ NULL,			0 }
 };

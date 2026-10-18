@@ -17,6 +17,7 @@
 #include <netdb.h>
 
 #include "externs.h"
+#include "settings.h"
 
 int settunnel(int, char *, char *, char *, char *);
 void settunnelrdomain(int, char *, char *);
@@ -27,6 +28,13 @@ void setvnetid(int, char *, char *);
 void delvnetid(int, char *);
 int deletetunnel(int, char *);
 void tunnelusage(void);
+static int vnetid_arg(char *, int64_t *);
+static int cand_vnetid(char *, int, char *);
+static int tunnel_ttl(char *);
+static int tunnel_rdomain(char *);
+static int tunnel_addr(char *, char *, char *, char *, int *);
+static int cand_tunnel(char *, int, char *, char *, char *, char *, char *,
+    int, int);
 
 static struct nopts tunnelopts[] = {
 	{ "rdomain",	req_arg,	'r' },
@@ -64,11 +72,42 @@ intvnetid(int argc, char **argv, ...)
 		printf("%% no vnetid [vnetid]\n");
 		return 0;
         }
+	if (candidate)
+		return cand_vnetid(ifname, set, argv[0]);
 	if (set)
 		setvnetid(ifs, ifname, argv[0]);
 	else
 		delvnetid(ifs, ifname);
 	return (0);
+}
+
+/* vnetid in configure private */
+static int
+cand_vnetid(char *ifname, int set, char *vnetida)
+{
+	int64_t vnetid;
+
+	if (!cand_takes(ifname, SIOCSVNETID)) {
+		printf("%% vnetid not supported on %s\n", ifname);
+		return 0;
+	}
+	if (!set) {
+		if (!cand_takes(ifname, SIOCDVNETID)) {
+			printf("%% The vnetid of %s cannot be removed\n",
+			    ifname);
+			return 0;
+		}
+		return cand_setting(ST_DEFAULT, "vnetid");
+	}
+	if (vnetid_arg(vnetida, &vnetid) == -1)
+		return 0;
+	if (vnetid == 0) {
+		printf("%% The configuration does not keep vnetid 0\n");
+		return 0;
+	}
+	if (vnetid < 0)
+		return cand_setting(ST_ON, "vnetid any");
+	return cand_setting(ST_ON, "vnetid %lld", vnetid);
 }
 
 void
@@ -167,6 +206,10 @@ inttunnel(int argc, char **argv, ...)
 		return 0;
 	}
 
+	if (candidate)
+		return cand_tunnel(ifname, set, src, dstip, dstport, rdomain,
+		    ttl, df, ecn);
+
 	if (set) {
 		settunnel(ifs, ifname, src, dstip, dstport);
 		if (rdomain)
@@ -179,11 +222,131 @@ inttunnel(int argc, char **argv, ...)
 			settunnelecn(ifs, ifname, 1);
 	} else {
 		deletetunnel(ifs, ifname);
-		settunnelttl(ifs, ifname, "0");
 		settunneldf(ifs, ifname, 0);
 		settunnelecn(ifs, ifname, 0);
 	}
 	return 0;
+}
+
+/*
+ * tunnel in configure private. The line has the addresses as
+ * conf_tunnel() prints them, then ttl, ecn and df. The kernel keeps the
+ * ttl, ecn and df a tunnel command leaves out, so they come from the
+ * candidate's line. rdomain is the tunneldomain line.
+ */
+static int
+cand_tunnel(char *ifname, int set, char *src, char *dstip, char *dstport,
+    char *rdomain, char *ttla, int df, int ecn)
+{
+	char s[NI_MAXHOST], d[NI_MAXHOST], line[1024], port[sizeof(":65535")];
+	char ttls[sizeof(" ttl 255")], *l, *w, *p;
+	const char *errmsg;
+	int af, daf, dport, ttl = 0, rdomainid = 0;
+
+	if (!cand_takes(ifname, set ? SIOCSLIFPHYADDR : SIOCDIFPHYADDR)) {
+		printf("%% tunnel not supported on %s\n", ifname);
+		return 0;
+	}
+	if (!set)
+		return cand_setting(ST_DEFAULT, "tunnel");
+	if (src == NULL || dstip == NULL) {
+		tunnelusage();
+		return 0;
+	}
+	if (rdomain != NULL) {
+		if (!cand_takes(ifname, SIOCSLIFPHYRTABLE)) {
+			printf("%% cannot set tunnel rdomain on %s interface\n",
+			    ifname);
+			return 0;
+		}
+		if ((rdomainid = tunnel_rdomain(rdomain)) == -1)
+			return 0;
+	}
+	if (ttla != NULL) {
+		if (!cand_takes(ifname, SIOCSLIFPHYTTL)) {
+			printf("%% tunnel ttl not supported on %s\n", ifname);
+			return 0;
+		}
+		if ((ttl = tunnel_ttl(ttla)) == -1)
+			return 0;
+	}
+	if (df && !cand_takes(ifname, SIOCSLIFPHYDF)) {
+		printf("%% tunnel df not supported on %s\n", ifname);
+		return 0;
+	}
+	if (ecn && !cand_takes(ifname, SIOCSLIFPHYECN)) {
+		printf("%% tunnel ecn not supported on %s\n", ifname);
+		return 0;
+	}
+	if ((af = tunnel_addr("source", src, NULL, s, NULL)) == 0 ||
+	    (daf = tunnel_addr("destination", dstip, dstport, d, &dport)) == 0)
+		return 0;
+	if (af != daf) {
+		printf("%% source and destination address families do not"
+		    " match\n");
+		return 0;
+	}
+
+	if ((l = cand_line("tunnel", 0)) != NULL) {
+		/* tunnel src dst, then what the kernel keeps */
+		strlcpy(line, l, sizeof(line));
+		strtok_r(line, " ", &p);
+		strtok_r(NULL, " ", &p);
+		strtok_r(NULL, " ", &p);
+		while ((w = strtok_r(NULL, " ", &p)) != NULL) {
+			if (strcmp(w, "ttl") == 0) {
+				w = strtok_r(NULL, " ", &p);
+				if (ttl == 0 && w != NULL)
+					ttl = strtonum(w, 1, 0xff, &errmsg);
+			} else if (strcmp(w, "ecn") == 0)
+				ecn = 1;
+			else if (strcmp(w, "df") == 0)
+				df = 1;
+		}
+	}
+
+	port[0] = ttls[0] = '\0';
+	if (dport > 0)
+		snprintf(port, sizeof(port), ":%d", dport);
+	if (ttl > 0)
+		snprintf(ttls, sizeof(ttls), " ttl %d", ttl);
+	cand_setting(ST_ON, "tunnel %s %s%s%s%s%s", s, d, port, ttls,
+	    ecn ? " ecn" : "", df ? " df" : "");
+	if (rdomain == NULL)
+		return 0;
+	if (rdomainid != 0)
+		return cand_setting(ST_ON, "tunneldomain %d", rdomainid);
+	return cand_setting(ST_DEFAULT, "tunneldomain");
+}
+
+/*
+ * A tunnel address as conf_tunnel() prints it, in buf (NI_MAXHOST), and
+ * if portp, its port. Returns its family, or 0 after saying why not.
+ */
+static int
+tunnel_addr(char *what, char *ip, char *port, char *buf, int *portp)
+{
+	struct addrinfo *res;
+	int ecode, af;
+
+	if ((ecode = getaddrinfo(ip, port, NULL, &res)) != 0) {
+		printf("%% unable to parse %s address string: %s\n", what,
+		    gai_strerror(ecode));
+		return 0;
+	}
+	af = res->ai_family;
+	if (portp != NULL)
+		*portp = ntohs(af == AF_INET6 ?
+		    ((struct sockaddr_in6 *)res->ai_addr)->sin6_port :
+		    ((struct sockaddr_in *)res->ai_addr)->sin_port);
+	ecode = getnameinfo(res->ai_addr, res->ai_addrlen, buf, NI_MAXHOST,
+	    NULL, 0, NI_NUMERICHOST);
+	freeaddrinfo(res);
+	if (ecode != 0) {
+		printf("%% %s address %s: %s\n", what, ip, gai_strerror(ecode));
+		return 0;
+	}
+	return af;
 }
 
 int
@@ -237,21 +400,29 @@ settunnel(int s, char *ifname, char *src, char *dstip, char *dstport)
 	return 1;
 }
 
-void
-settunnelrdomain(int ifs, char *ifname, char *rdomain)
+/* A tunnel's rdomain, or -1 after saying why not */
+static int
+tunnel_rdomain(char *rdomain)
 {
-	int rdomainid;
 	const char *errmsg = NULL;
-	struct ifreq ifr;
-
-	if (rdomain == NULL)
-		return;
+	int rdomainid;
 
 	rdomainid = strtonum(rdomain, 0, RT_TABLEID_MAX, &errmsg);
 	if (errmsg) {
 		printf("%% invalid routing domain id %s: %s\n", rdomain, errmsg);
-		return;
+		return -1;
 	}
+	return rdomainid;
+}
+
+void
+settunnelrdomain(int ifs, char *ifname, char *rdomain)
+{
+	int rdomainid;
+	struct ifreq ifr;
+
+	if (rdomain == NULL || (rdomainid = tunnel_rdomain(rdomain)) == -1)
+		return;
 	bzero(&ifr, sizeof(ifr));
 	ifr.ifr_rdomainid = rdomainid;
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
@@ -271,21 +442,29 @@ settunnelrdomain(int ifs, char *ifname, char *rdomain)
 	}
 }
 
-void
-settunnelttl(int ifs, char *ifname, char *ttla)
+/* A tunnel's ttl, 1 to 255 as the kernel takes it, or -1 */
+static int
+tunnel_ttl(char *ttla)
 {
 	const char *errmsg = NULL;
 	int ttl;
+
+	ttl = strtonum(ttla, 1, 0xff, &errmsg);
+	if (errmsg) {
+		printf("%% Invalid ttl %s: %s\n", ttla, errmsg);
+		return -1;
+	}
+	return ttl;
+}
+
+void
+settunnelttl(int ifs, char *ifname, char *ttla)
+{
+	int ttl;
 	struct ifreq ifr;
 
-	if (ttla == NULL)
+	if (ttla == NULL || (ttl = tunnel_ttl(ttla)) == -1)
 		return;
-
-	ttl = strtonum(ttla, 0, 0xff, &errmsg);
-	if (errmsg) {
-		printf("%% settunnelttl %s: %s\n", ttla, errmsg);
-		return;
-	}
 
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 	ifr.ifr_ttl = ttl;
@@ -315,26 +494,32 @@ settunnelecn(int ifs, char *ifname, int ecn)
 		printf("%% settunnelecn: SIOCSLIFPHYECN: %s\n", strerror(errno));
 }
 
+/* A vnetid into *vnetid, any as -1; -1 after saying why not */
+static int
+vnetid_arg(char *vnetida, int64_t *vnetid)
+{
+	const char *errmsg = NULL;
+
+	if (isprefix("any", vnetida)) {
+		*vnetid = -1;
+		return 0;
+	}
+	*vnetid = strtonum(vnetida, 0, INT64_MAX, &errmsg);
+	if (errmsg) {
+		printf("%% vnetid %s out of range: %s\n", vnetida, errmsg);
+		return -1;
+	}
+	return 0;
+}
+
 void
 setvnetid(int ifs, char *ifname, char *vnetida)
 {
-	const char *errmsg = NULL;
 	int64_t vnetid;
 	struct ifreq ifr;
 
-	if (vnetida == NULL)
+	if (vnetida == NULL || vnetid_arg(vnetida, &vnetid) == -1)
 		return;
-
-	if (isprefix("any", vnetida)) {
-		vnetid = -1;
-	} else {
-		vnetid = strtonum(vnetida, 0, INT64_MAX, &errmsg);
-		if (errmsg) {
-			printf("%% vnetid %s out of range: %s\n", vnetida,
-			    errmsg);
-			return;
-		}
-	}
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 	ifr.ifr_vnetid = vnetid;
 	if (ioctl(ifs, SIOCSVNETID, (caddr_t)&ifr) < 0) {

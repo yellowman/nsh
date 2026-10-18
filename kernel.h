@@ -25,6 +25,7 @@ struct kcloner {
 	int type;		/* the if_type it sets: IFT_ETHER */
 	int bridge;		/* is_bridge() calls it a bridge */
 	int flags;		/* the if_flags it sets: IFF_BROADCAST | ... */
+	const u_long *ioctls;	/* the driver ioctls it takes, then 0 */
 };
 
 extern const char kernel_source[];	/* the source it was read from */

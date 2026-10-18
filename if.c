@@ -2214,11 +2214,23 @@ intkeepalive(int argc, char **argv, ...)
 			printf("%% Invalid period %s: %s\n", argv[0], errmsg);
 			return 0;
 		}
-		ikar.ikar_cnt = strtonum(argv[1], 2, 600, &errmsg);
+		/* the kernel takes at most 256 */
+		ikar.ikar_cnt = strtonum(argv[1], 2, 256, &errmsg);
 		if (errmsg) {
 			printf("%% Invalid count %s: %s\n", argv[1], errmsg);
 			return 0;
 		}
+	}
+
+	if (candidate) {
+		if (!cand_takes(ifname, SIOCSETKALIVE)) {
+			printf("%% Keepalive not available on %s\n", ifname);
+			return 0;
+		}
+		if (set)
+			return cand_setting(ST_ON, "keepalive %d %d",
+			    ikar.ikar_timeo, ikar.ikar_cnt);
+		return cand_setting(ST_DEFAULT, "keepalive");
 	}
 
 	strlcpy(ikar.ikar_name, ifname, sizeof(ikar.ikar_name));
@@ -2249,6 +2261,50 @@ static struct mplsc {
 	{ "rxprio",	"priority or packet|payload|outer", RXPRIO },
 	{ 0,		0,			0		}
 };
+
+/* A txprio or rxprio line, as conf_ifmetrics() prints it */
+static int
+cand_hdrprio(char *name, int prio, int def)
+{
+	if (prio == def)
+		return cand_setting(ST_DEFAULT, "%s", name);
+	switch (prio) {
+	case IF_HDRPRIO_PACKET:
+		return cand_setting(ST_ON, "%s packet", name);
+	case IF_HDRPRIO_PAYLOAD:
+		return cand_setting(ST_ON, "%s payload", name);
+	case IF_HDRPRIO_OUTER:
+		return cand_setting(ST_ON, "%s outer", name);
+	}
+	return cand_setting(ST_ON, "%s %d", name, prio);
+}
+
+/* intmpls() in configure private */
+static int
+cand_mpls(char *ifname, int type, int set, struct ifreq *ifr,
+    struct shim_hdr *shim)
+{
+	switch (type) {
+	case MPLSLABEL:
+		if (set)
+			return cand_setting(ST_ON, "mplslabel %u",
+			    shim->shim_label);
+		return cand_setting(ST_DEFAULT, "mplslabel");
+	case TUNNELDOMAIN:
+		if (ifr->ifr_rdomainid != 0)
+			return cand_setting(ST_ON, "tunneldomain %d",
+			    ifr->ifr_rdomainid);
+		return cand_setting(ST_DEFAULT, "tunneldomain");
+	case TXPRIO:
+		return cand_hdrprio("txprio", ifr->ifr_hdrprio,
+		    default_txprio(ifname));
+	case RXPRIO:
+		return cand_hdrprio("rxprio", ifr->ifr_hdrprio,
+		    default_rxprio(ifname));
+	}
+	printf("%% cand_mpls: Internal error\n");
+	return 0;
+}
 
 /* from ifconfig.c */
 int
@@ -2377,6 +2433,14 @@ intmpls(int argc, char **argv, ...)
 		printf("%% intmpls: Internal error\n");
 		return 0;
 		break;
+	}
+
+	if (candidate) {
+		if (!cand_takes(ifname, cmd)) {
+			printf("%% %s not supported on %s\n", x->name, ifname);
+			return 0;
+		}
+		return cand_mpls(ifname, x->type, set, &ifr, &shim);
 	}
 
 	if (ioctl(ifs, cmd, (caddr_t)&ifr) < 0) {
@@ -2920,6 +2984,23 @@ intparent(int argc, char **argv, ...)
 	}
 
 	cmd = (set ? SIOCSIFPARENT : SIOCDIFPARENT);
+	if (candidate) {
+		if (!cand_takes(ifname, cmd)) {
+			printf("%% parent not supported on %s\n", ifname);
+			return 0;
+		}
+		if (!set)
+			return cand_setting(ST_DEFAULT, "parent");
+		if (strcmp(argv[0], ifname) == 0) {
+			printf("%% %s cannot be its own parent\n", ifname);
+			return 0;
+		}
+		if (!cand_hasif(argv[0])) {
+			printf("%% interface %s not found\n", argv[0]);
+			return 0;
+		}
+		return cand_setting(ST_ON, "parent %s", argv[0]);
+	}
 	ret = ioctl(ifs, cmd, &ifp);
 	if (ret == -1) {
 		int cmd_errno = errno;
@@ -3649,6 +3730,14 @@ intvnetflowid(int argc, char **argv, ...)
 		printf("%% vnetflowid\n");
 		printf("%% no vnetlowid\n");
 		return 0;
+	}
+
+	if (candidate) {
+		if (!cand_takes(ifname, SIOCSVNETFLOWID)) {
+			printf("%% vnetflowid not supported on %s\n", ifname);
+			return 0;
+		}
+		return cand_setting(set ? ST_ON : ST_OFF, "vnetflowid");
 	}
 
 	if (set)
