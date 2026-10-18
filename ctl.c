@@ -32,6 +32,8 @@
 #include "externs.h"
 #include "editing.h"
 #include "ctl.h"
+#include "stringlist.h"
+#include "settings.h"
 
 /* table variable (for pkill usage) */
 static char table[16];
@@ -50,6 +52,13 @@ int edit_file(char *, mode_t, char *, char **);
 int rule_writeline(FILE *, char *, int);
 int acq_lock(char *);
 void rls_lock(int);
+static int ctl_cand(struct daemons *, struct ctl *, char **);
+static int ctl_cand_edit(struct daemons *, char *, char **);
+static int ctl_cand_test(struct daemons *, char *, char **);
+static int ctl_cand_stage(struct daemons *, char *, char *, char *,
+    size_t);
+static void ctl_cand_unstage(char *, char *);
+static void ctl_cand_follow(struct daemons *, char *, int);
 
 /* master daemon list */
 struct daemons ctl_daemons[] = {
@@ -710,6 +719,11 @@ ctlhandler(int argc, char **argv, ...)
 	if (fillargs == NULL)
 		goto done;
 
+	if (candidate && ctl_cand(daemons, x, fillargs)) {
+		rv = 1;
+		goto done;
+	}
+
 	switch(x->type) {
 		/* fill_tmpfile will return 0 if tmpfile or args are NULL */
 	case T_HANDLER:
@@ -746,6 +760,176 @@ ctlhandler(int argc, char **argv, ...)
 	rv = 1;
 done:
 	return rv;
+}
+
+/*
+ * A daemon's command in configure private: enable and disable leave the
+ * line conf prints for its state, edit edits its rules in the
+ * candidate, and its configuration test tests those. Returns 0 for
+ * the rest, which act on the running daemon as outside configure
+ * private.
+ */
+static int
+ctl_cand(struct daemons *d, struct ctl *x, char **fillargs)
+{
+	struct daemons *c;
+	struct ctl *t;
+	char *enable = "enable", stmt[64];
+
+	if (cand_rtable != 0) {
+		printf("%% %s in an rtable is not supported in configure"
+		    " private yet\n", d->name);
+		return 1;
+	}
+	/* the name conf gives it: scheduler is crontab */
+	for (c = ctl_daemons; c->table != d->table; c++)
+		;
+	for (t = d->table; t->name != NULL; t++)
+		if (t->flag_x == DB_X_ENABLE ||
+		    t->flag_x == DB_X_ENABLE_DEFAULT) {
+			enable = t->name;
+			break;
+		}
+	snprintf(stmt, sizeof(stmt), "%s rules", c->name);
+
+	switch (x->flag_x) {
+	case DB_X_ENABLE:
+	case DB_X_ENABLE_DEFAULT:
+		cand_setting(ST_DEFAULT, "%s disable", c->name);
+		cand_setting(ST_ON, "%s %s", c->name, enable);
+		return 1;
+	case DB_X_DISABLE:
+		cand_setting(ST_DEFAULT, "%s %s", c->name, enable);
+		return 1;
+	case DB_X_DISABLE_ALWAYS:
+		cand_setting(ST_DEFAULT, "%s %s", c->name, enable);
+		cand_setting(ST_ON, "%s disable", c->name);
+		return 1;
+	}
+	if (x->handler == call_editor || x->handler == edit_motd ||
+	    x->handler == edit_crontab)
+		return ctl_cand_edit(d, c->name,
+		    x->type == T_HANDLER_TEST ? x->test_args : NULL);
+	if (x->handler == install_crontab) {
+		/* crontab install follows the rules */
+		if (cand_rule(stmt, 0) == NULL)
+			printf("%% no %s in the candidate\n", stmt);
+		return 1;
+	}
+	if (strcmp(x->name, "check-config") == 0 ||
+	    strcmp(x->name, "config-test") == 0)
+		return ctl_cand_test(d, c->name, fillargs);
+	return 0;
+}
+
+/* edit in configure private: its rules for d, called name */
+static int
+ctl_cand_edit(struct daemons *d, char *name, char **test)
+{
+	char dir[] = "/tmp/nsh.XXXXXXXXXX", path[PATH_MAX], stmt[64];
+	char *args[NOPTFILL] = { NULL }, *line = NULL;
+	StringList *lines;
+	size_t size = 0;
+	ssize_t len;
+	FILE *f;
+
+	snprintf(stmt, sizeof(stmt), "%s rules", name);
+	if (ctl_cand_stage(d, stmt, dir, path, sizeof(path)) == -1)
+		return 1;
+	if (test != NULL)
+		fill_tmpfile(test, path, args);
+	edit_file(path, d->mode, d->propername, test != NULL ? args : NULL);
+	if ((f = fopen(path, "r")) == NULL) {
+		printf("%% %s: %s\n", path, strerror(errno));
+		ctl_cand_unstage(dir, path);
+		return 1;
+	}
+	lines = sl_init();
+	while ((len = getline(&line, &size, f)) != -1) {
+		if (len > 0 && line[len - 1] == '\n')
+			line[len - 1] = '\0';
+		sl_add(lines, strdup(line));
+	}
+	fclose(f);
+	if (cand_setrules(stmt, lines->sl_str, lines->sl_cur) == 0)
+		ctl_cand_follow(d, name, lines->sl_cur > 0);
+	free(line);
+	sl_free(lines, 1);
+	ctl_cand_unstage(dir, path);
+	return 1;
+}
+
+/* A configuration test in configure private, on its rules for d */
+static int
+ctl_cand_test(struct daemons *d, char *name, char **fillargs)
+{
+	char dir[] = "/tmp/nsh.XXXXXXXXXX", path[PATH_MAX], stmt[64];
+	char *args[NOPTFILL] = { NULL };
+
+	snprintf(stmt, sizeof(stmt), "%s rules", name);
+	if (cand_rule(stmt, 0) == NULL) {
+		printf("%% no %s in the candidate\n", stmt);
+		return 1;
+	}
+	if (ctl_cand_stage(d, stmt, dir, path, sizeof(path)) == -1)
+		return 1;
+	fill_tmpfile(fillargs, path, args);
+	cmdargs(args[0], args);
+	ctl_cand_unstage(dir, path);
+	return 1;
+}
+
+/*
+ * The candidate's lines of stmt in a file in a directory of its own,
+ * dir, a mkdtemp() template, named as d's staged file is, in path
+ */
+static int
+ctl_cand_stage(struct daemons *d, char *stmt, char *dir, char *path,
+    size_t len)
+{
+	char *l;
+	size_t n;
+	FILE *f;
+
+	if (mkdtemp(dir) == NULL) {
+		printf("%% mkdtemp %s: %s\n", dir, strerror(errno));
+		return -1;
+	}
+	snprintf(path, len, "%s/%s", dir, basename(d->tmpfile));
+	if ((f = fopen(path, "w")) == NULL) {
+		printf("%% %s: %s\n", path, strerror(errno));
+		rmdir(dir);
+		return -1;
+	}
+	for (n = 0; (l = cand_rule(stmt, n)) != NULL; n++)
+		fprintf(f, "%s\n", l);
+	if (fclose(f) == EOF) {
+		printf("%% %s: %s\n", path, strerror(errno));
+		ctl_cand_unstage(dir, path);
+		return -1;
+	}
+	return 0;
+}
+
+static void
+ctl_cand_unstage(char *dir, char *path)
+{
+	char lock[PATH_MAX];
+
+	snprintf(lock, sizeof(lock), "%s.lock", path);
+	unlink(lock);
+	unlink(path);
+	rmdir(dir);
+}
+
+/* The line conf prints after a daemon's rules: pf reload, crontab install */
+static void
+ctl_cand_follow(struct daemons *d, char *name, int rules)
+{
+	if (d->doreload)
+		cand_setting(rules ? ST_ON : ST_DEFAULT, "%s reload", name);
+	if (d->table == ctl_crontab)
+		cand_setting(rules ? ST_ON : ST_DEFAULT, "%s install", name);
 }
 
 void

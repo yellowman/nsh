@@ -331,6 +331,50 @@ cand_listowner(char *name, char *list, char *value)
 	return NULL;
 }
 
+/* The n'th line, from 0, of the top-level statement stmt, or NULL */
+char *
+cand_rule(char *stmt, size_t n)
+{
+	return conftree_line(cand, stmt, NULL, n);
+}
+
+/*
+ * Make the n lines in lines the lines of stmt, an ordered statement at
+ * the top level, in order; with none, stmt goes
+ */
+int
+cand_setrules(char *stmt, char **lines, size_t n)
+{
+	struct sedit e;
+	char *l;
+	size_t i;
+
+	for (i = 0; i < n && (l = cand_rule(stmt, i)) != NULL &&
+	    strcmp(l, lines[i]) == 0; i++)
+		;
+	if (i == n && cand_rule(stmt, n) == NULL &&
+	    (n > 0 || !conftree_has(cand, stmt)))
+		return 0;
+	for (i = 0; i < n; i++)
+		if (strlen(lines[i]) >= sizeof(e.line)) {
+			printf("%% %s: line %zu is too long\n", stmt, i + 1);
+			return -1;
+		}
+	e.keylen = 1;
+	e.strict = 0;
+	e.op = CE_NOBLOCK;
+	strlcpy(e.line, stmt, sizeof(e.line));
+	if (cand_record(NULL, &e) == -1)
+		return -1;
+	e.op = CE_SEQ;
+	for (i = 0; i < n; i++) {
+		strlcpy(e.line, lines[i], sizeof(e.line));
+		if (cand_record(stmt, &e) == -1)
+			return -1;
+	}
+	return 0;
+}
+
 /*
  * rtable in configure private: with set, the lines of an rtable's that
  * follow are table's, in its block, called name if name is not NULL,

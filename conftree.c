@@ -500,7 +500,10 @@ emit_tree(struct cmpctx *c, char mark, int depth, struct cnode *n)
  * statement the line belongs under, or NULL for the top level; for
  * CE_BLOCK and CE_NOBLOCK, line is the top-level statement itself, and
  * CE_RENAME makes the top-level statement block read line, unless
- * there is already a statement that does. A
+ * there is already a statement that does. CE_SEQ adds line after the
+ * lines of block, an ordered statement made if it is not there, even
+ * if it has the line already; line is a line of a daemon's file, which
+ * may be blank or start with a space, '!' or '#'. A
  * line set or added under a block that is not there creates the block.
  * block must be a statement that takes indented lines.  The name of a
  * line is its first word, after a "no"; CE_SET and CE_UNSET match lines
@@ -515,9 +518,15 @@ conftree_edit(struct cnode *root, int op, char *block, char *line, int keylen)
 	size_t i;
 	int ret = CE_NOOP;
 
-	if (!storable(line) || (block != NULL && !storable(block))) {
+	if (op == CE_SEQ ? block == NULL || strchr(line, '\n') != NULL :
+	    !storable(line)) {
 		printf("%% conftree_edit: not a configuration line: \"%s\"\n",
-		    storable(line) ? block : line);
+		    line);
+		return -1;
+	}
+	if (block != NULL && !storable(block)) {
+		printf("%% conftree_edit: not a configuration line: \"%s\"\n",
+		    block);
 		return -1;
 	}
 
@@ -539,6 +548,11 @@ conftree_edit(struct cnode *root, int op, char *block, char *line, int keylen)
 		    find_kid(root, line) != NULL)
 			return CE_NOOP;
 		return set_text(p, line) == -1 ? -1 : CE_CHANGED;
+	case CE_SEQ:
+		if ((p = find_kid(root, block)) == NULL &&
+		    (p = cnode_add(root, block, 1)) == NULL)
+			return -1;
+		return cnode_add(p, line, 0) == NULL ? -1 : CE_CHANGED;
 	}
 
 	if (block != NULL && (p = find_kid(root, block)) == NULL) {
@@ -648,9 +662,9 @@ conftree_stmt(struct cnode *root, size_t n)
 }
 
 /*
- * The n'th line named name, from 0, in the top-level statement block,
- * or at the top level if block is NULL, or NULL if there are not that
- * many
+ * The n'th line named name, or of any name if name is NULL, from 0, in
+ * the top-level statement block, or at the top level if block is NULL,
+ * or NULL if there are not that many
  */
 char *
 conftree_line(struct cnode *root, char *block, char *name, size_t n)
@@ -661,7 +675,8 @@ conftree_line(struct cnode *root, char *block, char *name, size_t n)
 	if ((p = block == NULL ? root : find_kid(root, block)) == NULL)
 		return NULL;
 	for (i = 0; i < p->nkids; i++)
-		if (samename(p->kids[i]->text, name) && n-- == 0)
+		if ((name == NULL || samename(p->kids[i]->text, name)) &&
+		    n-- == 0)
 			return p->kids[i]->text;
 	return NULL;
 }

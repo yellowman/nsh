@@ -40,6 +40,7 @@ struct setting {
 
 static const struct setting top_settings[] = {
 	{ "hostname",		S_VALUE },
+	{ "motd",		S_ENTRY,	2 },
 	{ "interface",		S_BLOCK },
 	{ "bridge",		S_BLOCK },
 	/* sysctls, a line each: "ip forwarding", "no ip esp" */
@@ -52,6 +53,37 @@ static const struct setting top_settings[] = {
 	{ "arp",		S_ENTRY,	2 },
 	{ "ndp",		S_ENTRY,	2 },
 	{ "route",		S_ENTRY,	3 },
+	/*
+	 * a daemon's lines: "pf enable", "pf reload"; its rules are a
+	 * statement of their own, "pf rules"
+	 */
+	{ "pf",			S_ENTRY,	2 },
+	{ "snmp",		S_ENTRY,	2 },
+	{ "resolv",		S_ENTRY,	2 },
+	{ "ldp",		S_ENTRY,	2 },
+	{ "rip",		S_ENTRY,	2 },
+	{ "ospf",		S_ENTRY,	2 },
+	{ "ospf6",		S_ENTRY,	2 },
+	{ "eigrp",		S_ENTRY,	2 },
+	{ "bgp",		S_ENTRY,	2 },
+	{ "ifstate",		S_ENTRY,	2 },
+	{ "ipsec",		S_ENTRY,	2 },
+	{ "ike",		S_ENTRY,	2 },
+	{ "rad",		S_ENTRY,	2 },
+	{ "dvmrp",		S_ENTRY,	2 },
+	{ "relay",		S_ENTRY,	2 },
+	{ "sasync",		S_ENTRY,	2 },
+	{ "dhcp",		S_ENTRY,	2 },
+	{ "nppp",		S_ENTRY,	2 },
+	{ "ntp",		S_ENTRY,	2 },
+	{ "smtp",		S_ENTRY,	2 },
+	{ "ldap",		S_ENTRY,	2 },
+	{ "ftp-proxy",		S_ENTRY,	2 },
+	{ "tftp-proxy",		S_ENTRY,	2 },
+	{ "tftp",		S_ENTRY,	2 },
+	{ "inet",		S_ENTRY,	2 },
+	{ "sshd",		S_ENTRY,	2 },
+	{ "crontab",		S_ENTRY,	2 },
 	{ "rtable",		S_BLOCK },
 	{ "nameserver",		S_VALUE },
 	{ NULL,			0 }

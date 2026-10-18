@@ -639,4 +639,6 @@ int pr_cand_conf(int, char **, ...);
 int cand_rollback(int, char **, ...);
 extern int cand_rtable;
 int cand_rtable_set(int, int, char *);
+char *cand_rule(char *, size_t);
+int cand_setrules(char *, char **, size_t);
 struct cnode *running_tree(void);
