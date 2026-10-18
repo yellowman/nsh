@@ -101,6 +101,8 @@ getsocket(void)
 	}
 	if (setsockopt(s, PF_ROUTE, ROUTE_TABLEFILTER, &cli_rtable, len) < 0) {
 		printf("%% getsocket: setsockopt: %s\n", strerror(errno));
+		close(s);
+		s = -1;
 		return -1;
 	}
 
@@ -178,7 +180,8 @@ arpset(int argc, char *argv[], ...)
 		argv++;
 	}
 
-	if ((set && (argc < 3 || argc > 6)) || (!set && argc != 3)) {
+	if ((set && (argc < 3 || argc > 6)) ||
+	    (!set && (argc < 2 || argc > 3))) {
 		printf("%% %s <inet addr> <ether addr> [temp | permanent] "
 		    "[pub]\n", argv[0]);
 		printf("%% no %s <inet addr> [ether addr]\n", argv[0]);
@@ -207,7 +210,7 @@ arpset(int argc, char *argv[], ...)
 		if (ea == NULL) {
 			printf("%% arpset: invalid ethernet"
 			    " address: %s\n", eaddr);
-			return (0);
+			return (1);
 		}
 	}
 	memcpy(LLADDR(&sdl_m), ea, sizeof(*ea));
@@ -223,7 +226,7 @@ arpset(int argc, char *argv[], ...)
 			if (flags & RTF_PERMANENT_ARP) {
 				/* temp or permanent, not both */
 				printf("%% temp or permanent, not both\n");
-				return (0);
+				return (1);
 			}
 		} else if (isprefix(argv[i], "pub")) {
 			flags |= RTF_ANNOUNCE;
@@ -233,16 +236,16 @@ arpset(int argc, char *argv[], ...)
 			if (expire_time != 0) {
 				/* temp or permanent, not both */
 				printf("%% temp or permanent, not both\n");
-				return (0);
+				return (1);
 			}
 		} else {
 			printf("%% invalid parameter: %s\n", argv[i]);
-			return (0);
+			return (1);
 		}
 	}
 
 tryagain:
-	if (rtget(&sin, &sdl, flags, doing_proxy, export_only) < 0) {
+	if (rtget(&sin, &sdl, flags, doing_proxy, export_only)) {
 		printf("%% %s\n", host);
 		return (1);
 	}
@@ -338,7 +341,7 @@ arpdelete(const char *host, const char *info)
 	if (getinetaddr(host, &sin->sin_addr) == -1)
 		return (1);
 tryagain:
-	if (rtget(&sin, &sdl, 0, doing_proxy, export_only) < 0) {
+	if (rtget(&sin, &sdl, 0, doing_proxy, export_only)) {
 		printf("%% %s\n", host);
 		return (1);
 	}

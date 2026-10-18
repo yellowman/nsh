@@ -137,12 +137,14 @@ getsocket(void)
 		return rtsock;
 	rtsock = socket(AF_ROUTE, SOCK_RAW, 0);
 	if (rtsock == -1) {
-		printf("%% routing socket: %s", strerror(errno));
+		printf("%% routing socket: %s\n", strerror(errno));
 		return -1;
 	}
 	if (setsockopt(rtsock, AF_ROUTE, ROUTE_TABLEFILTER, &cli_rtable,
 	    len) == -1) {
-		printf("%% ROUTE_TABLEFILTER: %s", strerror(errno));
+		printf("%% ROUTE_TABLEFILTER: %s\n", strerror(errno));
+		close(rtsock);
+		rtsock = -1;
 		return -1;
 	}
 
@@ -224,8 +226,9 @@ ndpset(int argc, char *argv[], ...)
 	if (parse_host(host, sin))
 		return 1;
 	ea = (u_char *)LLADDR(&sdl_m);
-	if (ndp_ether_aton(eaddr, ea) == 0)
-		sdl_m.sdl_alen = 6;
+	if (ndp_ether_aton(eaddr, ea) != 0)
+		return 1;
+	sdl_m.sdl_alen = 6;
 	expire_time = 0;
 	flags = 0;
 	for (i = 3; i < argc; i++) {
@@ -238,12 +241,12 @@ ndpset(int argc, char *argv[], ...)
 			flags |= RTF_ANNOUNCE;
 		} else {
 			printf("%% invalid parameter: %s\n", argv[i]);
-			return (0);
+			return (1);
 		}
 	}
 
 	if (rtget_ndp(&sin, &sdl)) {
-		printf("%% RTM_GET(%s) failed", host);
+		printf("%% RTM_GET(%s) failed\n", host);
 		return 1;
 	}
 
@@ -304,12 +307,13 @@ ndpdelete(const char *host)
 	struct rt_msghdr *rtm = &m_rtmsg.m_rtm;
 	struct sockaddr_dl *sdl;
 
-	getsocket();
+	if (getsocket() < 0)
+		return 1;
 	sin_m = blank_sin;
 	if (parse_host(host, sin))
 		return 1;
 	if (rtget_ndp(&sin, &sdl)) {
-		printf("%% RTM_GET(%s) failed", host);
+		printf("%% RTM_GET(%s) failed\n", host);
 		return 1;
 	}
 
@@ -577,10 +581,13 @@ getnbrinfo(struct in6_addr *addr, int ifindex, int warning)
 int
 ndp_ether_aton(const char *a, u_char *n)
 {
-	int i, o[6];
+	int i, j, o[6];
 
 	i = sscanf(a, "%x:%x:%x:%x:%x:%x", &o[0], &o[1], &o[2],
 	    &o[3], &o[4], &o[5]);
+	for (j = 0; i == 6 && j < 6; j++)
+		if ((u_int)o[j] > 0xff)
+			i = 0;
 	if (i != 6) {
 		printf("%% ndp_ether_aton: invalid Ethernet address '%s'\n", a);
 		return (1);
