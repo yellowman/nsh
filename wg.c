@@ -39,6 +39,7 @@ void	process_wg_commands(char *, int);
 int	getwg(int);
 
 void	wgpeerusage(void);
+static void wg_quote(FILE *, char *);
 
 /*
  * WireGuard configuration
@@ -356,6 +357,20 @@ show_wg(int ifs, char *ifname, FILE *outfile)
 	free(wgdata.wgd_interface);
 }
 
+/* A description, quoted as makeargv() reads it back */
+static void
+wg_quote(FILE *output, char *s)
+{
+	if (strpbrk(s, " \t\"'\\") == NULL)
+		fprintf(output, "%s", s);
+	else if (strchr(s, '"') == NULL)
+		fprintf(output, "\"%s\"", s);
+	else
+		for (; *s != '\0'; s++)
+			fprintf(output, "%s%c",
+			    strchr(" \t\"'\\", *s) != NULL ? "\\" : "", *s);
+}
+
 void
 conf_wg(FILE *output, int ifs, char *ifname)
 {
@@ -396,7 +411,9 @@ conf_wg(FILE *output, int ifs, char *ifname)
 
 #ifdef WG_PEER_SET_DESCRIPTION
 		if (strlen(wg_peer->p_description)) {
-			fprintf(output, " wgpeer %s description %s\n", key, wg_peer->p_description);
+			fprintf(output, " wgpeer %s description ", key);
+			wg_quote(output, wg_peer->p_description);
+			fprintf(output, "\n");
 		}
 #endif
 
@@ -425,15 +442,15 @@ conf_wg(FILE *output, int ifs, char *ifname)
 		wg_aip = &wg_peer->p_aips[0];
 		if (wg_peer->p_aips_count)
 			fprintf(output, " wgpeer %s", key);
-		for (j = 0; j < wg_peer->p_aips_count; j++) {
-			inet_ntop(wg_aip->a_af, &wg_aip->a_addr,
+		/* the kernel lists the last aip given first */
+		for (j = wg_peer->p_aips_count; j-- > 0; ) {
+			inet_ntop(wg_aip[j].a_af, &wg_aip[j].a_addr,
 			    hbuf, sizeof(hbuf));
-			fprintf(output, " aip %s/%d", hbuf, wg_aip->a_cidr);
-			wg_aip++;
+			fprintf(output, " aip %s/%d", hbuf, wg_aip[j].a_cidr);
 		}
 		if (wg_peer->p_aips_count)
 			fprintf(output, "\n");
-		wg_peer = (struct wg_peer_io *)wg_aip;
+		wg_peer = (struct wg_peer_io *)(wg_aip + wg_peer->p_aips_count);
 	}
 	free(wgdata.wgd_interface);
 }
@@ -496,46 +513,45 @@ intwg(int argc, char **argv, ...)
 	if ((!set && argc > 1) || (x->type != WGKEY && set && argc != 1) ||
 	    (x->type == WGKEY && argc > 1)) {
 		printf("%% %s <%s>\n", x->name, x->descr);
-		printf("%% no %s [%s]\n", x->name, x->descr);
+		if (x->type != WGKEY)
+			printf("%% no %s [%s]\n", x->name, x->descr);
+		return 0;
+	}
+
+	/* SIOCSWG sets a private key, and nothing takes one away */
+	if (x->type == WGKEY && !set) {
+		printf("%% The private key of %s cannot be removed\n", ifname);
 		return 0;
 	}
 
 	switch(x->type) {
 	case WGPORT:
-		if (!set) {
-			setwgport("0");
-		} else {
-			setwgport(argv[0]);
-		}
+		if (setwgport(set ? argv[0] : "0") < 0)
+			goto wgerr;
 		break;
 
 	case WGKEY:
-		if (!set) {
-			setwgkey("");
+		if (argc == 1) {
+			if (setwgkey(argv[0]) < 0)
+				goto wgerr;
 		} else {
-			if (argc == 1) {
-				setwgkey(argv[0]);
-			} else {
-				uint8_t key[WG_KEY_LEN];
-				char keyb64[WG_BASE64_KEY_LEN+1];
+			uint8_t key[WG_KEY_LEN];
+			char keyb64[WG_BASE64_KEY_LEN+1];
 
-				printf("%% Using randomly generated private key for %s\n", ifname);
+			printf("%% Using randomly generated private key for %s\n", ifname);
 
-				arc4random_buf(key, WG_KEY_LEN);
-				/* we encode just to instantly decode, unroll setwgkey? */
-				b64_ntop(key, WG_KEY_LEN, keyb64, WG_BASE64_KEY_LEN+1);
+			arc4random_buf(key, WG_KEY_LEN);
+			/* we encode just to instantly decode, unroll setwgkey? */
+			b64_ntop(key, WG_KEY_LEN, keyb64, WG_BASE64_KEY_LEN+1);
 
-				setwgkey(keyb64);
-			}
+			if (setwgkey(keyb64) < 0)
+				goto wgerr;
 		}
 		break;
 
 	case WGRTABLE:
-		if (!set) {
-			setwgrtable("0");
-		} else {
-			setwgrtable(argv[0]);
-		}
+		if (setwgrtable(set ? argv[0] : "0") < 0)
+			goto wgerr;
 		break;
 	}
 
@@ -543,6 +559,7 @@ intwg(int argc, char **argv, ...)
 
 	if (ioctl(ifs, SIOCSWG, (caddr_t)&wgdata) == -1)
 		printf("%% intwg: SIOCSWG: %s\n", strerror(errno));
+wgerr:
 	free(wgdata.wgd_interface);
         wgdata.wgd_size = 0;
 
@@ -624,6 +641,9 @@ intwgpeer(int argc, char **argv, ...)
 
 		if (!set && argc == 1)
 			wg_peer->p_flags |= WG_PEER_REMOVE;
+		else if (!set)
+			/* change a peer, never add one */
+			wg_peer->p_flags |= WG_PEER_UPDATE;
 
 		/* hide public key from nopt */
 		argc--;
