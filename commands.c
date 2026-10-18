@@ -1257,7 +1257,7 @@ struct intlist Intlist[] = {
 	{ "chgpin",	"Permanently change SIM PIN",		CMPL0 0, 0, intumb, 0, CAND_RUN },
 	{ "class",	"Preferred cell classes",		CMPL0 0, 0, intumb, 1, CAND_EDIT },
 	{ "roaming",	"Enable data roaming",			CMPL0 0, 0, intumb, 1, CAND_EDIT },
-  	{ "interface",  interfacehelp,				CMPL(i) 0, 0, int_interface, 1 },
+	{ "interface",  interfacehelp,				CMPL(i) 0, 0, int_interface, 1, CAND_EDIT },
 	{ "shutdown",   "Shutdown interface",			CMPL0 0, 0, intflags, 1, CAND_EDIT },
 	{ "show",	showhelp,				CMPL(ta) (char **)showlist, sizeof(Menu), int_show, 0, CAND_RUN },
 	{ "who",	whohelp,				CMPL0 0, 0, int_who, 0, CAND_RUN },
@@ -1313,7 +1313,7 @@ struct intlist Bridgelist[] = {
 	{ "parent",	"Parent interface",			CMPL(i) 0, 0, intparent, 1, CAND_EDIT },
 	{ "tunneldomain", "Tunnel parameters",			CMPL0 0, 0, intmpls, 1, CAND_EDIT },
 	{ "protect",	"Configure protected bridge domains",	CMPL0 0, 0, brprotect, 1 },
-  	{ "interface",  interfacehelp,				CMPL(i) 0, 0, int_interface, 1 },
+	{ "interface",  interfacehelp,				CMPL(i) 0, 0, int_interface, 1, CAND_EDIT },
 	{ "shutdown",	"Shutdown bridge",			CMPL0 0, 0, intflags, 1, CAND_EDIT },
 	{ "show",	showhelp,				CMPL(ta) (char **)showlist, sizeof(Menu), int_show, 0, CAND_RUN },
 	{ "who",	whohelp,				CMPL0 0, 0, int_who, 0, CAND_RUN },
@@ -1669,7 +1669,8 @@ interface(int argc, char **argv, ...)
 			memset(next_ifname, 0, sizeof(next_ifname));
 			strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 			imr_init(ifname);
-			if (is_bridge(ifs, ifname)) {
+			if (candidate ? cand_isbridge(ifname) :
+			    is_bridge(ifs, ifname)) {
 				whichlist = Bridgelist;
 				bridge = 1;
 			} else {
@@ -1711,6 +1712,15 @@ int_interface(int argc, char **argv, ...)
 	}
 
 	new_ifname = argv[1];
+	if (candidate) {
+		int isbridge;
+
+		if (cand_interface(set, new_ifname, &isbridge) == 0)
+			strlcpy(next_ifname, new_ifname, sizeof(next_ifname));
+		/* the one this mode is in was taken out: leave it */
+		return !set && strcmp(old_ifname, new_ifname) == 0 &&
+		    !cand_hasif(new_ifname);
+	}
 	if (!is_valid_ifname(new_ifname)) {
 		if (set == 0) {
 			printf("%% interface %s not found\n", new_ifname);

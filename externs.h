@@ -628,6 +628,7 @@ int cand_takes(char *, u_long);
 int cand_hasif(char *);
 char *cand_listowner(char *, char *, char *);
 int cand_interface(int, char *, int *);
+int cand_isbridge(char *);
 struct cnode *cand_tree(void);
 int pr_cand_conf(int, char **, ...);
 int cand_rollback(int, char **, ...);

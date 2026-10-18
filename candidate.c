@@ -277,6 +277,24 @@ cand_ispppoe(char *name)
 }
 
 /*
+ * Is name a bridge in the candidate: a bridge block, or else no
+ * interface block and a cloner that makes bridges?
+ */
+int
+cand_isbridge(char *name)
+{
+	char head[sizeof("interface ") + IFNAMSIZ];
+	const struct kcloner *kc;
+
+	snprintf(head, sizeof(head), "bridge %s", name);
+	if (conftree_has(cand, head))
+		return 1;
+	snprintf(head, sizeof(head), "interface %s", name);
+	return !conftree_has(cand, head) &&
+	    (kc = cand_cloner(name)) != NULL && kc->bridge;
+}
+
+/*
  * interface or bridge <name> in configure private: find or start the
  * interface's block in the candidate, or remove it with "no".  Sets
  * *isbridge to whether it takes the Bridgelist commands.  Returns 0 to
@@ -286,16 +304,8 @@ int
 cand_interface(int set, char *name, int *isbridge)
 {
 	char head[sizeof("interface ") + IFNAMSIZ];
-	const struct kcloner *kc;
 
-	snprintf(head, sizeof(head), "bridge %s", name);
-	if (conftree_has(cand, head))
-		*isbridge = 1;
-	else {
-		snprintf(head, sizeof(head), "interface %s", name);
-		*isbridge = !conftree_has(cand, head) &&
-		    (kc = cand_cloner(name)) != NULL && kc->bridge;
-	}
+	*isbridge = cand_isbridge(name);
 	snprintf(head, sizeof(head), "%s %s",
 	    *isbridge ? "bridge" : "interface", name);
 
