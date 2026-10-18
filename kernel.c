@@ -12,12 +12,17 @@
 #include <net/if.h>
 #include <net/if_types.h>
 #include <netinet/in.h>
+#include <netinet/if_ether.h>
 #include <net/if_pflow.h>
+#include <net/if_trunk.h>
 #include "kernel.h"
 
 const char kernel_source[] = "OpenBSD-current, git c30c84965dc4 of 2026-10-17";
 
 static const u_long aggr_ioctls[] = {
+	SIOCSTRUNK,
+	SIOCSTRUNKPORT,
+	SIOCSTRUNKDELPORT,
 	0
 };
 
@@ -250,6 +255,9 @@ static const u_long tpmr_ioctls[] = {
 };
 
 static const u_long trunk_ioctls[] = {
+	SIOCSTRUNK,
+	SIOCSTRUNKPORT,
+	SIOCSTRUNKDELPORT,
 	0
 };
 

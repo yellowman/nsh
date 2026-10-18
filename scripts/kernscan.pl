@@ -62,7 +62,7 @@ my @drv = qw(SIOCSLIFPHYADDR SIOCDIFPHYADDR SIOCSLIFPHYRTABLE
     SIOCSVNETFLOWID SIOCSIFPARENT SIOCDIFPARENT SIOCSIFPAIR SIOCSETKALIVE
     SIOCSTXHPRIO SIOCSRXHPRIO SIOCSETLABEL SIOCDELLABEL SIOCSPWE3CTRLWORD
     SIOCSPWE3FAT SIOCSPWE3NEIGHBOR SIOCDPWE3NEIGHBOR SIOCSETPFLOW SIOCSVH
-    SIOCSETPFSYNC);
+    SIOCSETPFSYNC SIOCSTRUNK SIOCSTRUNKPORT SIOCSTRUNKDELPORT);
 my %drv = map { $_ => 1 } @drv;
 
 @ARGV == 2 or die "usage: kernscan.pl srcdir label\n";
@@ -162,7 +162,9 @@ print <<"EOF";
 #include <net/if.h>
 #include <net/if_types.h>
 #include <netinet/in.h>
+#include <netinet/if_ether.h>
 #include <net/if_pflow.h>
+#include <net/if_trunk.h>
 #include "kernel.h"
 
 const char kernel_source[] = "$label";

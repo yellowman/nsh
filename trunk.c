@@ -35,11 +35,117 @@
 #include <sys/ioctl.h>
 #include <netinet/in.h>
 #include <net/if.h>
+#include <net/if_types.h>
 #include <netinet/if_ether.h>
 #include <net/if_trunk.h>
 #include "externs.h"
+#include "settings.h"
 
 struct trunk_protos tpr[] = TRUNK_PROTOS;
+
+static int in_list(char *, char *);
+static int cand_trunkport(char *, int, int, char **);
+static int cand_trunkproto(char *, int);
+
+/* Is word among the values of line, after its name? */
+static int
+in_list(char *line, char *word)
+{
+	char buf[1024], *w, *p;
+
+	if (line == NULL)
+		return 0;
+	strlcpy(buf, line, sizeof(buf));
+	strtok_r(buf, " ", &p);
+	while ((w = strtok_r(NULL, " ", &p)) != NULL)
+		if (strcmp(w, word) == 0)
+			return 1;
+	return 0;
+}
+
+/*
+ * trunkport in configure private: the ports trunk_port_create() and
+ * aggr_add_port() would refuse are refused, with inttrunkport()'s
+ * messages, before any is added
+ */
+static int
+cand_trunkport(char *ifname, int set, int argc, char **argv)
+{
+	char ports[1024], *l, *w, *p;
+	int i, n = 0, aggr = strncmp(ifname, "aggr", strlen("aggr")) == 0;
+
+	if (!cand_takes(ifname, SIOCSTRUNKPORT)) {
+		printf("%% %s not trunk\n", ifname);
+		return 0;
+	}
+	if ((l = cand_line("trunkport", 0)) != NULL) {
+		strlcpy(ports, l, sizeof(ports));
+		strtok_r(ports, " ", &p);
+		while ((w = strtok_r(NULL, " ", &p)) != NULL)
+			n++;
+	}
+	for (i = 0; i < argc; i++) {
+		if (!set) {
+			if (!in_list(cand_line("trunkport", 0), argv[i])) {
+				printf("%% Port %s not part of %s\n", argv[i],
+				    ifname);
+				return 1;
+			}
+			continue;
+		}
+		if (!cand_hasif(argv[i]) || strcmp(argv[i], ifname) == 0) {
+			printf("%% inttrunkport: SIOCSTRUNKPORT: %s\n",
+			    strerror(EINVAL));
+			return 0;
+		}
+		if (cand_gettype(argv[i]) != IFT_ETHER) {
+			printf("%% inttrunkport: SIOCSTRUNKPORT: %s\n",
+			    strerror(EPROTONOSUPPORT));
+			return 0;
+		}
+		/* a port of any trunk, and for aggr of a bridge (EBUSY) */
+		if (in_list(cand_line("trunkport", 0), argv[i]) ||
+		    cand_listowner(ifname, "trunkport", argv[i]) != NULL ||
+		    (aggr && cand_listowner(ifname, "member", argv[i]))) {
+			printf("%% Failed (port %s already assigned to a trunk"
+			    " group)\n", argv[i]);
+			return 0;
+		}
+		if (++n > TRUNK_MAX_PORTS) {
+			printf("%% inttrunkport: SIOCSTRUNKPORT: %s\n",
+			    strerror(ENOSPC));
+			return 0;
+		}
+	}
+	argvtostring(argc, argv, ports, sizeof(ports));
+	return cand_setting(set ? ST_ON : ST_OFF, "trunkport %s", ports);
+}
+
+/*
+ * trunkproto in configure private. aggr takes only lacp
+ * (EPROTONOSUPPORT), and conf_trunk() prints any other than the default.
+ */
+static int
+cand_trunkproto(char *ifname, int proto)
+{
+	int i;
+
+	if (!cand_takes(ifname, SIOCSTRUNK)) {
+		printf("%% %s not trunk\n", ifname);
+		return 0;
+	}
+	if (strncmp(ifname, "aggr", strlen("aggr")) == 0 &&
+	    proto != TRUNK_PROTO_LACP) {
+		printf("%% inttrunkproto: SIOCSTRUNK: %s\n",
+		    strerror(EPROTONOSUPPORT));
+		return 0;
+	}
+	if (proto == TRUNK_PROTO_DEFAULT)
+		return cand_setting(ST_DEFAULT, "trunkproto");
+	for (i = 0; tpr[i].tpr_proto != proto; i++)
+		;
+	return cand_setting(ST_ON, "trunkproto %s", tpr[i].tpr_name);
+}
 
 int
 inttrunkport(int argc, char **argv, ...)
@@ -70,6 +176,9 @@ inttrunkport(int argc, char **argv, ...)
 		printf("%% no trunkport <ifname> [ifname ...]\n");
 		return 0;
 	}
+
+	if (candidate)
+		return cand_trunkport(ifname, set, argc, argv);
 
 	bzero(&rp, sizeof(rp));
 	strlcpy(rp.rp_ifname, ifname, sizeof(rp.rp_ifname));
@@ -112,7 +221,7 @@ inttrunkport(int argc, char **argv, ...)
 					break;
 				default:
 					printf("%% inttrunkport:"
-					    " SIOCSTRUNKDELPORT: %s\n,",
+					    " SIOCSTRUNKDELPORT: %s\n",
 				    strerror(errno));
 				}
 				return 1;
@@ -146,7 +255,7 @@ inttrunkproto(int argc, char **argv, ...)
 	argc--;
 	argv++;
 
-	if ((!set && argc != 1) || (set && argc != 1)) {
+	if ((!set && argc > 1) || (set && argc != 1)) {
                 printf("%% trunkproto <proto>\n");
                 printf("%% no trunkproto\n");
 		return 0;
@@ -171,6 +280,9 @@ inttrunkproto(int argc, char **argv, ...)
 		}
 	} else
 		ra.ra_proto = TRUNK_PROTO_DEFAULT;
+
+	if (candidate)
+		return cand_trunkproto(ifname, ra.ra_proto);
 
 	if (ioctl(ifs, SIOCSTRUNK, &ra) != 0) {
 		switch(errno) {

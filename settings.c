@@ -77,6 +77,8 @@ static const struct setting if_settings[] = {
 	{ "syncdev",		S_VALUE },
 	{ "syncpeer",		S_VALUE },
 	{ "maxupd",		S_VALUE },
+	{ "trunkproto",		S_VALUE },
+	{ "trunkport",		S_LIST },
 	{ "pflow",		S_VALUE },
 	{ "mplslabel",		S_VALUE },
 	{ "pwe",		S_VALUE },

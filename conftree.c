@@ -633,6 +633,13 @@ conftree_has(struct cnode *root, char *line)
 	return find_kid(root, line) != NULL;
 }
 
+/* The n'th top-level statement, from 0, or NULL if there are not that many */
+char *
+conftree_stmt(struct cnode *root, size_t n)
+{
+	return n < root->nkids ? root->kids[n]->text : NULL;
+}
+
 /*
  * The n'th line named name, from 0, in the top-level statement block,
  * or NULL if there are not that many

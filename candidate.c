@@ -232,6 +232,40 @@ cand_hasif(char *name)
 	return conftree_has(cand, head);
 }
 
+/*
+ * The interface, other than name, whose candidate block has a line
+ * called list with value among the words after its name, or NULL
+ */
+char *
+cand_listowner(char *name, char *list, char *value)
+{
+	static char owner[IFNAMSIZ];
+	char line[1024], *s, *ifn, *l, *w, *p;
+	size_t i, n;
+
+	for (i = 0; (s = conftree_stmt(cand, i)) != NULL; i++) {
+		if (strncmp(s, "interface ", strlen("interface ")) == 0)
+			ifn = s + strlen("interface ");
+		else if (strncmp(s, "bridge ", strlen("bridge ")) == 0)
+			ifn = s + strlen("bridge ");
+		else
+			continue;
+		if (strcmp(ifn, name) == 0)
+			continue;
+		for (n = 0; (l = conftree_line(cand, s, list, n)) != NULL;
+		    n++) {
+			strlcpy(line, l, sizeof(line));
+			strtok_r(line, " ", &p);
+			while ((w = strtok_r(NULL, " ", &p)) != NULL)
+				if (strcmp(w, value) == 0) {
+					strlcpy(owner, ifn, sizeof(owner));
+					return owner;
+				}
+		}
+	}
+	return NULL;
+}
+
 /* Is name a pppoe(4) interface? */
 int
 cand_ispppoe(char *name)
