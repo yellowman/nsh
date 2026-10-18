@@ -472,7 +472,7 @@ brpri(int argc, char **argv, ...)
 		return 0;
 	}
 
-	if (!is_valid_ifname(argv[0]) || is_bridge(ifs, argv[0]))
+	if (!br_portname(ifs, argv[0]))
 	{
 		printf("%% invalid member name: %s\n", argv[0]);
 		return 0;
@@ -1018,7 +1018,7 @@ bridge_timeout(int s, char *brdg, int val)
 
 	strlcpy(bp.ifbrp_name, brdg, sizeof(bp.ifbrp_name));
 	bp.ifbrp_ctime = val;
-	if (ioctl(s, SIOCBRDGSTO, (caddr_t)&bp) < 0) {
+	if (br_ioctl(s, SIOCBRDGSTO, (caddr_t)&bp) < 0) {
 		printf("%% bridge_timeout: SIOCBRDGSTO: %s\n",
 		   strerror(errno));
 		return (EX_IOERR);
@@ -1033,7 +1033,7 @@ bridge_maxage(int s, char *brdg, u_int32_t val)
 
 	strlcpy(bp.ifbrp_name, brdg, sizeof(bp.ifbrp_name));
 	bp.ifbrp_maxage = val;
-	if (ioctl(s, SIOCBRDGSMA, (caddr_t)&bp) < 0) {
+	if (br_ioctl(s, SIOCBRDGSMA, (caddr_t)&bp) < 0) {
 		printf("%% unable to set maxage: SIOCBRDGSMA: %s\n",
 		    strerror(errno));
 		return (EX_IOERR);
@@ -1049,7 +1049,7 @@ bridge_priority(int s, char *brdg, u_int32_t val)
 
 	strlcpy(bp.ifbrp_name, brdg, sizeof(bp.ifbrp_name));
 	bp.ifbrp_prio = val;
-	if (ioctl(s, SIOCBRDGSPRI, (caddr_t)&bp) < 0) {
+	if (br_ioctl(s, SIOCBRDGSPRI, (caddr_t)&bp) < 0) {
 		printf("%% unable to set priority: SIOCBRDGSPRI: %s\n",
 		    strerror(errno));
 		return (EX_IOERR);
@@ -1064,7 +1064,7 @@ bridge_fwddelay(int s, char *brdg, u_int32_t val)
 
 	strlcpy(bp.ifbrp_name, brdg, sizeof(bp.ifbrp_name));
 	bp.ifbrp_fwddelay = val;
-	if (ioctl(s, SIOCBRDGSFD, (caddr_t)&bp) < 0) {
+	if (br_ioctl(s, SIOCBRDGSFD, (caddr_t)&bp) < 0) {
 		printf("%% unable to set fwddelay: SIOCBRDGSFD: %s\n",
 		    strerror(errno));
 		return (EX_IOERR);
@@ -1080,7 +1080,7 @@ bridge_hellotime(int s, char *brdg, u_int32_t val)
 
 	strlcpy(bp.ifbrp_name, brdg, sizeof(bp.ifbrp_name));
 	bp.ifbrp_hellotime = val;
-	if (ioctl(s, SIOCBRDGSHT, (caddr_t)&bp) < 0) {
+	if (br_ioctl(s, SIOCBRDGSHT, (caddr_t)&bp) < 0) {
 		printf("%% unable to set hellotime: SIOCBRDGSHT: %s\n",
 		    strerror(errno));
 		return (EX_IOERR);
@@ -1096,7 +1096,7 @@ bridge_maxaddr(int s, char *brdg, u_int32_t val)
 
 	strlcpy(bp.ifbrp_name, brdg, sizeof(bp.ifbrp_name));
 	bp.ifbrp_csize = val;
-	if (ioctl(s, SIOCBRDGSCACHE, (caddr_t)&bp) < 0) {
+	if (br_ioctl(s, SIOCBRDGSCACHE, (caddr_t)&bp) < 0) {
 		printf("%% unable to set maxaddr: SIOCBRDGSCACHE: %s\n",
 		    strerror(errno));
 		return (EX_IOERR);
@@ -1136,7 +1136,7 @@ bridge_ifprio(int s, char *brdg, char *ifname, int val)
 
 	breq.ifbr_priority = val;
 
-	if (ioctl(s, SIOCBRDGSIFPRIO, (caddr_t)&breq) < 0) {
+	if (br_ioctl(s, SIOCBRDGSIFPRIO, (caddr_t)&breq) < 0) {
 		printf("%% bridge_ifprio: SIOCBRDGSIFPRIO: %s\n",
 		    strerror(errno));
 		return (EX_IOERR);
@@ -1154,7 +1154,7 @@ bridge_ifcost(int s, char *brdg, char *ifname, int val)
 
 	breq.ifbr_path_cost = val;
 
-	if (ioctl(s, SIOCBRDGSIFCOST, (caddr_t)&breq) < 0) {
+	if (br_ioctl(s, SIOCBRDGSIFCOST, (caddr_t)&breq) < 0) {
 		printf("%% bridge_ifcost: SIOCBRDGSIFCOST: %s\n",
 		    strerror(errno));
 		return (EX_IOERR);
@@ -2034,6 +2034,16 @@ brcfg_add(struct brcfg *b, char *brdg, char *name, int span)
 	return 0;
 }
 
+/* A time bstp_ioctl() keeps in ticks: secs, if from min to max ticks */
+static int
+brcfg_time(struct brcfg *b, int i, int secs, int min, int max)
+{
+	if (secs * kern_bstp_tick_val < min || secs * kern_bstp_tick_val > max)
+		return EINVAL;
+	b->val[i] = secs;
+	return 0;
+}
+
 /* bridge_findbif(): name, a member of the candidate's bridge */
 static int
 brcfg_findbif(struct brcfg *b, char *name, struct brport **p)
@@ -2086,6 +2096,7 @@ cand_bridge(u_long cmd, void *data)
 {
 	char *brdg = data;	/* each request starts with the bridge's name */
 	struct ifbreq *req = data;
+	struct ifbrparam *bp = data;
 	struct ifbareq *ba = data;
 	struct ifbrlreq *rl = data;
 	struct brcfg b;
@@ -2176,6 +2187,55 @@ cand_bridge(u_long cmd, void *data)
 			e = EINVAL;
 		else if ((e = brcfg_findbif(&b, rl->ifbr_ifsname, &p)) == 0)
 			e = brcfg_rule(&b, rl);
+		break;
+	case SIOCBRDGSPRI:
+		if (bp->ifbrp_prio > kern_bstp_max_priority)
+			e = EINVAL;
+		else
+			b.val[PRIORITY] = bp->ifbrp_prio -
+			    bp->ifbrp_prio % kern_bstp_priority_step;
+		break;
+	case SIOCBRDGSHT:
+		/* bstp_create()'s protocol, which nsh never changes */
+		if (kern_bstp_protover != kern_bstp_ht_protover)
+			e = EPERM;
+		else
+			e = brcfg_time(&b, HELLOTIME, bp->ifbrp_hellotime,
+			    kern_bstp_min_hello_time, kern_bstp_max_hello_time);
+		break;
+	case SIOCBRDGSFD:
+		e = brcfg_time(&b, FWDDELAY, bp->ifbrp_fwddelay,
+		    kern_bstp_min_fwd_delay, kern_bstp_max_fwd_delay);
+		break;
+	case SIOCBRDGSMA:
+		e = brcfg_time(&b, MAXAGE, bp->ifbrp_maxage,
+		    kern_bstp_min_max_age, kern_bstp_max_max_age);
+		break;
+	case SIOCBRDGSCACHE:
+		b.val[MAXADDR] = bp->ifbrp_csize;
+		break;
+	case SIOCBRDGSTO:
+		if (bp->ifbrp_ctime < 0)
+			e = EINVAL;
+		else
+			b.val[TIMEOUT] = bp->ifbrp_ctime;
+		break;
+	case SIOCBRDGSIFPRIO:
+	case SIOCBRDGSIFCOST:
+		if ((e = brcfg_findbif(&b, req->ifbr_ifsname, &p)) != 0)
+			break;
+		if (!(p->flags & IFBIF_STP))
+			e = EINVAL;
+		else if (cmd == SIOCBRDGSIFCOST) {
+			if (req->ifbr_path_cost > kern_bstp_max_path_cost)
+				e = EINVAL;
+			else	/* 0 has the kernel work it out from the speed */
+				p->cost = req->ifbr_path_cost;
+		} else if (req->ifbr_priority > kern_bstp_max_port_priority)
+			e = EINVAL;
+		else
+			p->prio = req->ifbr_priority -
+			    req->ifbr_priority % kern_bstp_port_priority_step;
 		break;
 	default:
 		e = ENOTTY;

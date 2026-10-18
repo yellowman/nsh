@@ -33,4 +33,11 @@ extern const char kernel_source[];	/* the source it was read from */
 /* values the kernel checks or reports that no userland header defines */
 extern const int kern_txpower_min, kern_txpower_max;
 extern const int kern_bstp_port_admcost, kern_bstp_max_path_cost;
+extern const int kern_bstp_max_priority, kern_bstp_max_port_priority;
+extern const int kern_bstp_tick_val, kern_bstp_min_hello_time;
+extern const int kern_bstp_max_hello_time, kern_bstp_min_fwd_delay;
+extern const int kern_bstp_max_fwd_delay, kern_bstp_min_max_age;
+extern const int kern_bstp_max_max_age, kern_bstp_priority_step;
+extern const int kern_bstp_port_priority_step, kern_bstp_protover;
+extern const int kern_bstp_ht_protover;
 extern const struct kcloner kcloners[];

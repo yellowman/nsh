@@ -74,7 +74,8 @@ my @drv = qw(SIOCSLIFPHYADDR SIOCDIFPHYADDR SIOCSLIFPHYRTABLE
 my %drv = map { $_ => 1 } @drv;
 
 # Values the kernel checks or reports that no header userland includes
-# defines: kernel.c's name for each, and the file and macro it is read from
+# defines: kernel.c's name for each, and the file and macro it is read
+# from, or the file, a pattern in its code and what the pattern finds
 my @limits = (
 	[ 'kern_txpower_min', 'net80211/ieee80211_var.h',
 	    'IEEE80211_TXPOWER_MIN' ],
@@ -82,6 +83,32 @@ my @limits = (
 	    'IEEE80211_TXPOWER_MAX' ],
 	[ 'kern_bstp_port_admcost', 'net/if_bridge.h', 'BSTP_PORT_ADMCOST' ],
 	[ 'kern_bstp_max_path_cost', 'net/bridgestp.c', 'BSTP_MAX_PATH_COST' ],
+	[ 'kern_bstp_max_priority', 'net/bridgestp.c', 'BSTP_MAX_PRIORITY' ],
+	[ 'kern_bstp_max_port_priority', 'net/bridgestp.c',
+	    'BSTP_MAX_PORT_PRIORITY' ],
+	[ 'kern_bstp_tick_val', 'net/bridgestp.c', 'BSTP_TICK_VAL' ],
+	[ 'kern_bstp_min_hello_time', 'net/bridgestp.c',
+	    'BSTP_MIN_HELLO_TIME' ],
+	[ 'kern_bstp_max_hello_time', 'net/bridgestp.c',
+	    'BSTP_MAX_HELLO_TIME' ],
+	[ 'kern_bstp_min_fwd_delay', 'net/bridgestp.c',
+	    'BSTP_MIN_FORWARD_DELAY' ],
+	[ 'kern_bstp_max_fwd_delay', 'net/bridgestp.c',
+	    'BSTP_MAX_FORWARD_DELAY' ],
+	[ 'kern_bstp_min_max_age', 'net/bridgestp.c', 'BSTP_MIN_MAX_AGE' ],
+	[ 'kern_bstp_max_max_age', 'net/bridgestp.c', 'BSTP_MAX_MAX_AGE' ],
+	[ 'kern_bstp_priority_step', 'net/bridgestp.c',
+	    case_finds('SIOCBRDGSPRI', 'val -= val % (\d+);'),
+	    'what SIOCBRDGSPRI rounds down to' ],
+	[ 'kern_bstp_port_priority_step', 'net/bridgestp.c',
+	    case_finds('SIOCBRDGSIFPRIO', 'val -= val % (\d+);'),
+	    'what SIOCBRDGSIFPRIO rounds down to' ],
+	[ 'kern_bstp_protover', 'net/bridgestp.c',
+	    qr/\bbs->bs_protover = (BSTP_PROTO_\w+);/,
+	    'the protocol bstp_create() sets' ],
+	[ 'kern_bstp_ht_protover', 'net/bridgestp.c',
+	    case_finds('SIOCBRDGSHT', 'bs->bs_protover != (BSTP_PROTO_\w+)'),
+	    'the only protocol SIOCBRDGSHT takes' ],
 );
 
 @ARGV == 2 or die "usage: kernscan.pl srcdir label\n";
@@ -89,13 +116,24 @@ my ($src, $label) = @ARGV;
 
 my @lines;		# kernel.c's line for each limit
 foreach my $l (@limits) {
-	my ($name, $file, $macro) = @$l;
-	open(my $fh, '<', "$src/sys/$file") or die "$src/sys/$file: $!\n";
-	my ($v) = join('', <$fh>) =~
-	    /^#define\s+$macro\s+\(?(-?\d+|0x[0-9a-fA-F]+)\)?\s/m
-	    or die "$macro: not a number in $file\n";
-	close($fh);
-	push @lines, "const int $name = $v;\t/* $macro */\n";
+	my ($name, $file, $what, $about) = @$l;
+	my $v;
+	if (ref $what) {
+		($v) = slurp("$src/sys/$file") =~ $what
+		    or die "$name: $about: not in $file\n";
+	} else {
+		open(my $fh, '<', "$src/sys/$file")
+		    or die "$src/sys/$file: $!\n";
+		my $text = join('', <$fh>);
+		close($fh);
+		# "-50", "0x0008" or "(6 * 256)"
+		my ($n, $times) = $text =~ /^\#define\s+$what\s+
+		    \(?(-?\d+|0x[0-9a-fA-F]+)(?:\s*\*\s*(\d+))?\)?\s/mx
+		    or die "$what: not a number in $file\n";
+		$v = defined $times ? $n * $times : $n;
+		$about = $what;
+	}
+	push @lines, "const int $name = $v;\t/* $about */\n";
 }
 my @dirs = map { "$src/sys/$_" } qw(net netinet netinet6 netmpls);
 
@@ -330,6 +368,13 @@ sub functions {
 }
 
 # A file without its comments and preprocessor lines
+# A pattern for what one case of a switch says before the next case: the
+# code of "case $label:", up to and with $what, which captures a value
+sub case_finds {
+	my ($label, $what) = @_;
+	return qr/\bcase\s+$label:(?:(?!\bcase\b|\bdefault\b).)*?$what/s;
+}
+
 sub slurp {
 	my ($path) = @_;
 	open(my $fh, '<', $path) or die "$path: $!\n";

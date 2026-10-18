@@ -28,6 +28,19 @@ const int kern_txpower_min = -50;	/* IEEE80211_TXPOWER_MIN */
 const int kern_txpower_max = 100;	/* IEEE80211_TXPOWER_MAX */
 const int kern_bstp_port_admcost = 0x0008;	/* BSTP_PORT_ADMCOST */
 const int kern_bstp_max_path_cost = 200000000;	/* BSTP_MAX_PATH_COST */
+const int kern_bstp_max_priority = 61440;	/* BSTP_MAX_PRIORITY */
+const int kern_bstp_max_port_priority = 240;	/* BSTP_MAX_PORT_PRIORITY */
+const int kern_bstp_tick_val = 256;	/* BSTP_TICK_VAL */
+const int kern_bstp_min_hello_time = 256;	/* BSTP_MIN_HELLO_TIME */
+const int kern_bstp_max_hello_time = 512;	/* BSTP_MAX_HELLO_TIME */
+const int kern_bstp_min_fwd_delay = 1024;	/* BSTP_MIN_FORWARD_DELAY */
+const int kern_bstp_max_fwd_delay = 7680;	/* BSTP_MAX_FORWARD_DELAY */
+const int kern_bstp_min_max_age = 1536;	/* BSTP_MIN_MAX_AGE */
+const int kern_bstp_max_max_age = 10240;	/* BSTP_MAX_MAX_AGE */
+const int kern_bstp_priority_step = 4096;	/* what SIOCBRDGSPRI rounds down to */
+const int kern_bstp_port_priority_step = 16;	/* what SIOCBRDGSIFPRIO rounds down to */
+const int kern_bstp_protover = BSTP_PROTO_RSTP;	/* the protocol bstp_create() sets */
+const int kern_bstp_ht_protover = BSTP_PROTO_STP;	/* the only protocol SIOCBRDGSHT takes */
 
 static const u_long aggr_ioctls[] = {
 	SIOCSTRUNK,
