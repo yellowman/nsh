@@ -16,6 +16,7 @@
 
 #include <stdio.h>
 #include <ctype.h>
+#include <errno.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
@@ -29,10 +30,16 @@
 #include <arpa/inet.h>
 #include "ip.h"
 #include "externs.h"
+#include "settings.h"
 
 #define ASSUME_NETMASK 1
 
+#define ROUNDUP(a) \
+	((a) > 0 ? (1 + (((a) - 1) | (sizeof(long) - 1))) : sizeof(long))
+#define ADVANCE(x, n) (x += ROUNDUP((n)->sa_len))
+
 void routeusage(void);
+static int isword(const char *, int, const char *);
 
 void
 routeusage(void)
@@ -240,6 +247,12 @@ route(int argc, char **argv, ...)
 	if (cmd == RTM_ADD && (flags & (RTF_BLACKHOLE|RTF_REJECT)))
 		flags |= RTF_GATEWAY;
 
+	if (candidate && cmd == RTM_ADD && rt_metrics.rmx_expire != 0) {
+		printf("%% an expiring route is not saved in the"
+		    " configuration\n");
+		return 1;
+	}
+
 	flags |= RTF_UP;
 
 	/*
@@ -247,6 +260,107 @@ route(int argc, char **argv, ...)
 	 */
 	return ip_route(&dest, gate.family ? &gate : NULL, cmd, flags,
 	    cli_rtable, rt_metrics, inits);
+}
+
+/*
+ * A routing message in configure private: RTM_ADD or RTM_DELETE as
+ * rtm_output() and rtable_insert() take it, on the routes the
+ * candidate's lines describe, each the line conf_print_rtm() prints for
+ * it.  Returns the message's length, or -1 with errno the kernel's.
+ */
+int
+route_cand(struct rt_msghdr *rtm)
+{
+	struct sockaddr *sa, *dst = NULL, *gate = NULL, *mask = NULL;
+	struct rtmsg m;
+	char d[NI_MAXHOST + 5], g[NI_MAXHOST], *buf = NULL, *l, *key = NULL;
+	char *cp;
+	size_t len, n, found = 0;
+	FILE *f;
+	int i;
+
+	cp = (char *)rtm + rtm->rtm_hdrlen;
+	for (i = 1; i; i <<= 1)
+		if (i & rtm->rtm_addrs) {
+			sa = (struct sockaddr *)cp;
+			if (i == RTA_DST)
+				dst = sa;
+			else if (i == RTA_GATEWAY)
+				gate = sa;
+			else if (i == RTA_NETMASK)
+				mask = sa;
+			ADVANCE(cp, sa);
+		}
+	if (dst == NULL || mask == NULL) {
+		errno = EINVAL;
+		return -1;
+	}
+	strlcpy(d, netname(dst, mask), sizeof(d));
+	if (gate != NULL)
+		strlcpy(g, routename(gate), sizeof(g));
+
+	switch (rtm->rtm_type) {
+	case RTM_ADD:
+		if (gate == NULL) {
+			errno = EINVAL;
+			return -1;
+		}
+		/* no two routes alike, and a second only if both may be */
+		for (n = 0; (l = cand_line("route", n)) != NULL; n++)
+			if (isword(l, 1, d) && (!(rtm->rtm_flags & RTF_MPATH) ||
+			    isword(l, 2, g))) {
+				errno = EEXIST;
+				return -1;
+			}
+		/* the route as the kernel keeps it */
+		memcpy(&m, rtm, rtm->rtm_msglen);
+		m.m_rtm.rtm_flags |= RTF_UP;
+		memset(&m.m_rtm.rtm_rmx, 0, sizeof(m.m_rtm.rtm_rmx));
+		if (rtm->rtm_inits & RTV_MTU)
+			m.m_rtm.rtm_rmx.rmx_mtu = rtm->rtm_rmx.rmx_mtu;
+		if ((f = open_memstream(&buf, &len)) == NULL)
+			return -1;
+		conf_print_rtm(f, &m.m_rtm, "route ", dst->sa_family);
+		if (fclose(f) == EOF || len == 0) {
+			free(buf);
+			errno = EINVAL;
+			return -1;
+		}
+		buf[len - 1] = '\0';
+		cand_setting(ST_ON, "%s", buf);
+		free(buf);
+		break;
+	case RTM_DELETE:
+		/* without a gateway, only a route that is alone */
+		for (n = 0; (l = cand_line("route", n)) != NULL; n++)
+			if (isword(l, 1, d) &&
+			    (gate == NULL || isword(l, 2, g)) && found++ == 0)
+				key = l;
+		if (found != 1) {
+			errno = ESRCH;
+			return -1;
+		}
+		cand_setting(ST_OFF, "%s", key);
+		break;
+	default:
+		errno = EOPNOTSUPP;
+		return -1;
+	}
+	return rtm->rtm_msglen;
+}
+
+/* Is word n of line, from 0, s? */
+static int
+isword(const char *line, int n, const char *s)
+{
+	size_t len;
+
+	while (n-- > 0) {
+		line += strcspn(line, " ");
+		line += strspn(line, " ");
+	}
+	len = strcspn(line, " ");
+	return len == strlen(s) && strncmp(line, s, len) == 0;
 }
 
 int

@@ -103,6 +103,7 @@
 #include <limits.h>
 #include <err.h>
 #include "externs.h"
+#include "settings.h"
 
 /* packing rule for routing socket */
 #define ROUNDUP(a) \
@@ -127,6 +128,9 @@ int rtmsg_ndp(int);
 int rtget_ndp(struct sockaddr_in6 **, struct sockaddr_dl **);
 void conf_ndp(FILE *output, char *delim);
 void conf_ndp_entry(FILE *, char *, struct  rt_msghdr *);
+static void conf_ndp_line(FILE *, char *, struct sockaddr_in6 *,
+    struct sockaddr_dl *, int);
+static int ndp_cand(const char *, struct sockaddr_dl *);
 
 static int
 getsocket(void)
@@ -209,8 +213,11 @@ ndpset(int argc, char *argv[], ...)
 		return 1;
 	}
 
-	if (!set)
+	if (!set) {
+		if (candidate)
+			return ndp_cand(argv[1], NULL);
 		return ndpdelete(argv[1]);
+	}
 
 	if (argc >= 3) {
 		host = argv[1];
@@ -220,7 +227,7 @@ ndpset(int argc, char *argv[], ...)
 		eaddr = NULL;
 	}
 
-	if (getsocket() < 0)
+	if (!candidate && getsocket() < 0)
 		return 1;
 
 	if (parse_host(host, sin))
@@ -244,6 +251,8 @@ ndpset(int argc, char *argv[], ...)
 			return (1);
 		}
 	}
+	if (candidate)
+		return ndp_cand(host, &sdl_m);
 
 	if (rtget_ndp(&sin, &sdl)) {
 		printf("%% RTM_GET(%s) failed\n", host);
@@ -277,6 +286,44 @@ overwrite:
 	sdl_m.sdl_type = sdl->sdl_type;
 	sdl_m.sdl_index = sdl->sdl_index;
 	return (rtmsg_ndp(RTM_ADD));
+}
+
+/*
+ * ndp in configure private: the line conf_ndp_entry() prints for host's
+ * entry, or with sdl NULL, no line for host
+ */
+static int
+ndp_cand(const char *host, struct sockaddr_dl *sdl)
+{
+	struct sockaddr_in6 sin6 = blank_sin;
+	char *buf = NULL;
+	size_t len;
+	FILE *f;
+
+	if (parse_host(host, &sin6))
+		return 1;
+	if (sdl == NULL) {
+		cand_setting(ST_OFF, "ndp %s", routename6(&sin6));
+		return 0;
+	}
+	if (expire_time != 0) {
+		printf("%% temp entries are not saved in the configuration\n");
+		return 1;
+	}
+	if ((f = open_memstream(&buf, &len)) == NULL) {
+		printf("%% ndp_cand: %s\n", strerror(errno));
+		return 1;
+	}
+	conf_ndp_line(f, "ndp ", &sin6, sdl, flags);
+	if (fclose(f) == EOF || len == 0) {
+		printf("%% ndp_cand: no line for %s\n", host);
+		free(buf);
+		return 1;
+	}
+	buf[len - 1] = '\0';
+	cand_setting(ST_ON, "%s", buf);
+	free(buf);
+	return 0;
 }
 
 /*
@@ -803,8 +850,16 @@ conf_ndp_entry(FILE *output, char *delim, struct rt_msghdr *rtm)
 	 * This is a 'permanent' non-local entry. We assume this entry
 	 * was manually added to the NDP table, and should be preserved.
 	 */
+	conf_ndp_line(output, delim, sin6, sdl, rtm->rtm_flags);
+}
+
+/* A static entry's line */
+static void
+conf_ndp_line(FILE *output, char *delim, struct sockaddr_in6 *sin6,
+    struct sockaddr_dl *sdl, int flags)
+{
 	fprintf(output, "%s%s %s", delim, routename6(sin6), ether_str(sdl));
-	if (rtm->rtm_flags & RTF_ANNOUNCE)
+	if (flags & RTF_ANNOUNCE)
 		fputs(" proxy", output);
 	fputs("\n", output);
 }

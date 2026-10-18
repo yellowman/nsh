@@ -61,7 +61,6 @@
 #define ROUTEMTU 32768	/* common route MTU */
 
 void conf_db_single(FILE *, char *, char *, char *);
-void conf_print_rtm(FILE *, struct rt_msghdr *, char *, int);
 int conf_ifaddrs(FILE *, char *, int, int);
 int conf_ifaddr_dhcp(FILE *, char *, int, int);
 void conf_lladdr(FILE *, char *);

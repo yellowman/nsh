@@ -642,7 +642,8 @@ conftree_stmt(struct cnode *root, size_t n)
 
 /*
  * The n'th line named name, from 0, in the top-level statement block,
- * or NULL if there are not that many
+ * or at the top level if block is NULL, or NULL if there are not that
+ * many
  */
 char *
 conftree_line(struct cnode *root, char *block, char *name, size_t n)
@@ -650,7 +651,7 @@ conftree_line(struct cnode *root, char *block, char *name, size_t n)
 	struct cnode *p;
 	size_t i;
 
-	if ((p = find_kid(root, block)) == NULL)
+	if ((p = block == NULL ? root : find_kid(root, block)) == NULL)
 		return NULL;
 	for (i = 0; i < p->nkids; i++)
 		if (samename(p->kids[i]->text, name) && n-- == 0)

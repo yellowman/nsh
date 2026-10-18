@@ -136,13 +136,15 @@ cand_ifsetting(char *name, int state, const char *fmt, ...)
 
 /*
  * The n'th line named name, from 0, in the candidate's block for the
- * current interface, or NULL
+ * current interface, or at the top level outside one, or NULL
  */
 char *
 cand_line(char *name, size_t n)
 {
 	char block[sizeof("interface ") + IFNAMSIZ];
 
+	if (ifname[0] == '\0')
+		return conftree_line(cand, NULL, name, n);
 	cand_block(block, sizeof(block), ifname, bridge);
 	return conftree_line(cand, block, name, n);
 }

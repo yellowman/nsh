@@ -97,6 +97,8 @@ int default_txprio(char *);
 int default_rxprio(char *);
 int conf_mtu_shown(char *, u_long);
 int conf_routes(FILE *, char *, int, int, int);
+struct rt_msghdr;
+void conf_print_rtm(FILE *, struct rt_msghdr *, char *, int);
 int conf_dhcrelay(char *, char *, int);
 int dhcpleased_has_address(char *, const char *, const char *);
 
@@ -327,6 +329,7 @@ int is_ip_addr(char *);
 void parse_ip_pfx(char *, int, ip_t *);
 int ip_route(ip_t *, ip_t *, u_short, int, int, struct rt_metrics, int inits);
 #endif
+int route_cand(struct rt_msghdr *);
 int rtnameserver(int, char *[], int);
 #ifdef _NETINET6_IN6_H_
 int parse_ipv6(char *, struct in6_addr *);

@@ -750,14 +750,7 @@ rtmsg(int cmd, int flags, int proxy, int export, int tableid)
 	char *cp = m_rtmsg.m_space;
 	int l, s;
 
-	s = socket(PF_ROUTE, SOCK_RAW, 0);
 	rtm = &m_rtmsg.m_rtm;
-
-	if (s < 0) {
-		printf("%% Unable to open routing socket: %s\n",
-		    strerror(errno));
-		return 1;
-	}
 
 	errno = 0;
 	memset(&m_rtmsg, 0, sizeof(m_rtmsg));
@@ -794,6 +787,15 @@ rtmsg(int cmd, int flags, int proxy, int export, int tableid)
 	rtm->rtm_msglen = l = cp - (char *)&m_rtmsg;
 	if (verbose)
 		print_rtmsg(rtm);
+
+	if (candidate && cmd != RTM_GET)
+		return route_cand(rtm);
+
+	if ((s = socket(PF_ROUTE, SOCK_RAW, 0)) < 0) {
+		printf("%% Unable to open routing socket: %s\n",
+		    strerror(errno));
+		return 1;
+	}
 
 	if ((write(s, (char *)&m_rtmsg, l)) < 0) {
 		/* on a write, the calling function will notify user of error */

@@ -57,6 +57,7 @@
 #include <limits.h>
 #include <ifaddrs.h>
 #include "externs.h"
+#include "settings.h"
 
 /* ROUNDUP() is nasty, but it is identical to what's in the kernel. */
 #define ROUNDUP(a) \
@@ -77,6 +78,7 @@ void conf_arp_entry(FILE *, char *, struct sockaddr_dl *,
 int getinetaddr(const char *, struct in_addr *);
 static int getsocket(void);
 int rtmsg_arp(int, int, int, int);
+static int arp_cand(const char *, struct ether_addr *, int);
 
 static int s = -1;
 
@@ -189,6 +191,8 @@ arpset(int argc, char *argv[], ...)
 	}
 
 	if (!set) {
+		if (candidate)
+			return arp_cand(argv[1], NULL, 0);
 		return arpdelete(argv[1], NULL);
 	}
 
@@ -199,7 +203,7 @@ arpset(int argc, char *argv[], ...)
 		host = argv[1];
 		eaddr = NULL;
 	}
-	if (getsocket() < 0)
+	if (!candidate && getsocket() < 0)
 		return (1);
 	sdl_m = blank_sdl;		/* struct copy */
 	sin_m = blank_sin;		/* struct copy */
@@ -243,6 +247,8 @@ arpset(int argc, char *argv[], ...)
 			return (1);
 		}
 	}
+	if (candidate)
+		return arp_cand(host, ea, flags);
 
 tryagain:
 	if (rtget(&sin, &sdl, flags, doing_proxy, export_only)) {
@@ -284,6 +290,50 @@ overwrite:
 	sdl_m.sdl_type = sdl->sdl_type;
 	sdl_m.sdl_index = sdl->sdl_index;
 	return (rtmsg_arp(RTM_ADD, flags, doing_proxy, export_only));
+}
+
+/*
+ * arp in configure private: the line conf_arp_entry() prints for host's
+ * entry, or with ea NULL, no line for host
+ */
+static int
+arp_cand(const char *host, struct ether_addr *ea, int flags)
+{
+	struct sockaddr_inarp sin = blank_sin;
+	struct sockaddr_dl sdl = blank_sdl;
+	struct rt_msghdr rtm;
+	char *buf = NULL;
+	size_t len;
+	FILE *f;
+
+	if (getinetaddr(host, &sin.sin_addr) == -1)
+		return (1);
+	if (ea == NULL) {
+		cand_setting(ST_OFF, "arp %s", inet_ntoa(sin.sin_addr));
+		return (0);
+	}
+	if (expire_time != 0) {
+		printf("%% temp entries are not saved in the configuration\n");
+		return (1);
+	}
+	memcpy(LLADDR(&sdl), ea, sizeof(*ea));
+	sdl.sdl_alen = sizeof(*ea);
+	memset(&rtm, 0, sizeof(rtm));
+	rtm.rtm_flags = flags;
+	if ((f = open_memstream(&buf, &len)) == NULL) {
+		printf("%% arp_cand: %s\n", strerror(errno));
+		return (1);
+	}
+	conf_arp_entry(f, "arp ", &sdl, &sin, &rtm);
+	if (fclose(f) == EOF || len == 0) {
+		printf("%% arp_cand: no line for %s\n", host);
+		free(buf);
+		return (1);
+	}
+	buf[len - 1] = '\0';
+	cand_setting(ST_ON, "%s", buf);
+	free(buf);
+	return (0);
 }
 
 #define W_ADDR	36

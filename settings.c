@@ -48,6 +48,10 @@ static const struct setting top_settings[] = {
 	{ "mpls",		S_STATE,	2 },
 	{ "ddb",		S_STATE,	2 },
 	{ "pipex",		S_STATE,	2 },
+	/* an entry each: "arp 192.0.2.1 ...", "route 10.0.0.0/8 192.0.2.1" */
+	{ "arp",		S_ENTRY,	2 },
+	{ "ndp",		S_ENTRY,	2 },
+	{ "route",		S_ENTRY,	3 },
 	{ NULL,			0 }
 };
 
