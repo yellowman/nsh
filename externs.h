@@ -184,6 +184,7 @@ extern pid_t child;
 #define NSHDB		"/var/db/nsh"	/* the configurations saved */
 #define ROLLBACKS	50		/* how many, rollback 0 the last */
 #define ROLLBACK	NSHDB "/nshrc.%d"
+#define CONFIRM		"/var/run/nshconfirm"	/* a commit to confirm */
 #define CLEAR		"/usr/bin/clear"
 #define LOGGER		"/usr/bin/logger"
 #define PING		"/sbin/ping"
@@ -655,3 +656,4 @@ int cand_cloneable(char *);
 /* commit.c */
 int commit(int, char **, ...);
 int pr_rollback(int, char **, ...);
+int commit_expire(void);

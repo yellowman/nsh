@@ -42,18 +42,28 @@
  *
  * Each configuration saved is kept, the last ROLLBACKS of them, for
  * rollback N and show rollback.
+ *
+ * commit confirmed does all that but save, and a process waits; unless
+ * a commit confirms it first, at the deadline the running configuration
+ * goes back to how it was before the first commit not confirmed
+ * (commit_expire()). What it goes back to and when are in CONFIRM, as
+ * the configuration itself is not saved until confirmed.
  */
 
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <net/if.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <paths.h>
+#include <signal.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <syslog.h>
 #include <time.h>
 #include <unistd.h>
 #include "externs.h"
@@ -62,6 +72,8 @@
 #include "settings.h"
 
 #define MAXCLEARS	64
+#define CONFIRMMIN	10	/* commit confirmed's minutes, if not given */
+#define CONFIRMMAX	1440
 
 struct commit {
 	FILE *f;			/* the script */
@@ -88,7 +100,14 @@ struct ranked {
 	size_t i;
 };
 
+static int take(struct cnode *, struct cnode *);
 static int apply(struct cnode *, struct cnode *);
+static int waiter(time_t);
+static int unconfirm(struct cnode *, time_t);
+static struct cnode *unconfirmed(void);
+static time_t deadline(void);
+static void confirmed(void);
+static void report(const char *);
 static int removals(struct commit *, char *, char *, int, const char *);
 static int additions(struct commit *, char *, char *, int, const char *);
 static int unset(struct commit *, char *, int, int, const char *, char *);
@@ -119,61 +138,279 @@ static void sub_end(struct commit *, struct sub *, const char *, char *,
     int);
 
 /*
- * commit: in configure private, make the candidate the running
- * configuration, all of it or none, then save the running
- * configuration; elsewhere, save it
+ * commit [confirmed [minutes]]: in configure private, make the
+ * candidate the running configuration, all of it or none, then save the
+ * running configuration; or with confirmed, do not save it, and roll it
+ * back unless a commit confirms it in time. Elsewhere, save it.
  */
 int
 commit(int argc, char **argv, ...)
 {
-	struct cnode *want, *was, *now = NULL, *back = NULL;
+	struct cnode *want, *was, *now, *back = NULL;
+	const char *errstr;
+	time_t when = 0;
+	int minutes = 0;
 
-	if (argc != 1) {
-		printf("%% commit\n");
+	if (argc > 3 || (argc > 1 && !isprefix(argv[1], "confirmed"))) {
+		printf("%% commit [confirmed [minutes]]\n");
 		return 0;
 	}
+	if (argc > 1) {
+		minutes = CONFIRMMIN;
+		if (argc == 3 && (minutes = strtonum(argv[2], 1, CONFIRMMAX,
+		    &errstr)) == 0) {
+			printf("%% minutes %s is %s\n", argv[2], errstr);
+			return 0;
+		}
+		if (!candidate) {
+			printf("%% commit confirmed requires configure "
+			    "private\n");
+			return 0;
+		}
+	}
+	/* one not confirmed in time goes back first */
+	commit_expire();
 	if (!candidate) {
-		if (conf_save())
+		if (conf_save()) {
+			confirmed();
 			history();
+		}
 		return 0;
 	}
 	if ((want = cand_tree()) == NULL)
 		return 0;
 	if ((was = running_tree()) == NULL)
 		return 0;
-	if (conftree_compare(NULL, was, want) != 0) {
-		if (apply(was, want) == -1 || (now = running_tree()) == NULL)
-			goto done;
-		if (differ(NULL, now, want) != 0) {
-			printf("%% Commit failed: the running configuration "
-			    "differs from the candidate\n");
-			differ(stdout, now, want);
-			conftree_free(now);
-			if ((now = running_tree()) == NULL ||
-			    apply(now, was) == -1 ||
-			    (back = running_tree()) == NULL)
-				goto done;
-			if (differ(NULL, back, was) == 0)
-				printf("%% The running configuration is as it "
-				    "was\n");
-			else {
-				printf("%% The running configuration differs "
-				    "from how it was\n");
-				differ(stdout, back, was);
-			}
+	if (minutes > 0) {
+		/* back to before the first commit not confirmed */
+		if ((back = unconfirmed()) == NULL &&
+		    (back = conftree_copy(was)) == NULL) {
+			printf("%% commit: %s\n", strerror(errno));
 			goto done;
 		}
+		when = time(NULL) + minutes * 60;
+		if (waiter(when) == -1)
+			goto done;
 	}
-	if (conf_save())
-		history();
+	if (conftree_compare(NULL, was, want) != 0 && take(was, want) == -1)
+		goto done;
+	if (minutes > 0) {
+		if (unconfirm(back, when) == -1) {
+			printf("%% Nothing can roll this commit back: undone\n");
+			if ((now = running_tree()) != NULL)
+				apply(now, was);
+			conftree_free(now);
+			goto done;
+		}
+		printf("%% Commit within %d minute%s to keep this, or it is "
+		    "rolled back\n", minutes, minutes == 1 ? "" : "s");
+	} else {
+		confirmed();
+		if (conf_save())
+			history();
+	}
 	/* a new candidate, from the new running configuration */
 	cand_end();
 	cand_begin();
 done:
 	conftree_free(back);
-	conftree_free(now);
 	conftree_free(was);
 	return 0;
+}
+
+/*
+ * Make the running configuration, was, read as want, or undo that; -1
+ * if it does not read as want
+ */
+static int
+take(struct cnode *was, struct cnode *want)
+{
+	struct cnode *now = NULL, *back = NULL;
+	int ret = -1;
+
+	if (apply(was, want) == -1 || (now = running_tree()) == NULL)
+		goto done;
+	if (differ(NULL, now, want) == 0) {
+		ret = 0;
+		goto done;
+	}
+	printf("%% Commit failed: the running configuration differs from "
+	    "the candidate\n");
+	differ(stdout, now, want);
+	conftree_free(now);
+	if ((now = running_tree()) == NULL || apply(now, was) == -1 ||
+	    (back = running_tree()) == NULL)
+		goto done;
+	if (differ(NULL, back, was) == 0)
+		printf("%% The running configuration is as it was\n");
+	else {
+		printf("%% The running configuration differs from how it "
+		    "was\n");
+		differ(stdout, back, was);
+	}
+done:
+	conftree_free(back);
+	conftree_free(now);
+	return ret;
+}
+
+/*
+ * A commit not confirmed by its deadline goes back: the running
+ * configuration is made the one before the first commit not confirmed.
+ * Returns 1 if one went back, else 0.
+ */
+int
+commit_expire(void)
+{
+	struct cnode *back, *now = NULL, *after = NULL;
+	time_t when;
+
+	if ((when = deadline()) == 0 || time(NULL) < when ||
+	    (back = unconfirmed()) == NULL)
+		return 0;
+	if ((now = running_tree()) != NULL &&
+	    (conftree_compare(NULL, now, back) == 0 ||
+	    apply(now, back) == 0) &&
+	    (after = running_tree()) != NULL &&
+	    differ(NULL, after, back) == 0)
+		report("Commit not confirmed: rolled back");
+	else {
+		report("Commit not confirmed: rolled back, but the running "
+		    "configuration differs from how it was");
+		if (after != NULL)
+			differ(stdout, after, back);
+	}
+	/* unless another commit confirmed has come since */
+	if (deadline() == when && unlink(CONFIRM) == -1)
+		printf("%% unlink %s: %s\n", CONFIRM, strerror(errno));
+	conftree_free(after);
+	conftree_free(now);
+	conftree_free(back);
+	return 1;
+}
+
+/*
+ * A process of its own, apart from the session, to wait for when and
+ * then roll back a commit not confirmed: -1 if there cannot be one
+ */
+static int
+waiter(time_t when)
+{
+	time_t left;
+	pid_t pid;
+	int fd, status;
+
+	fflush(stdout);
+	switch (pid = fork()) {
+	case -1:
+		printf("%% commit confirmed: fork: %s\n", strerror(errno));
+		return -1;
+	case 0:
+		break;
+	default:
+		if (waitpid(pid, &status, 0) == -1 || !WIFEXITED(status) ||
+		    WEXITSTATUS(status) != 0) {
+			printf("%% commit confirmed: no process to wait\n");
+			return -1;
+		}
+		return 0;
+	}
+	/* its child, so init and not the session waits for it */
+	switch (fork()) {
+	case -1:
+		_exit(1);
+	case 0:
+		break;
+	default:
+		_exit(0);
+	}
+	setsid();
+	signal(SIGHUP, SIG_IGN);
+	signal(SIGINT, SIG_IGN);
+	signal(SIGQUIT, SIG_IGN);
+	signal(SIGTSTP, SIG_IGN);
+	if ((fd = open(_PATH_DEVNULL, O_RDWR)) != -1) {
+		dup2(fd, STDIN_FILENO);
+		dup2(fd, STDOUT_FILENO);
+		dup2(fd, STDERR_FILENO);
+		if (fd > STDERR_FILENO)
+			close(fd);
+	}
+	while ((left = when - time(NULL)) > 0)
+		sleep(left > INT_MAX ? INT_MAX : left);
+	commit_expire();
+	_exit(0);
+}
+
+/* Roll back to back at when, unless confirmed: CONFIRM, or -1 */
+static int
+unconfirm(struct cnode *back, time_t when)
+{
+	char path[PATH_MAX];
+	FILE *f;
+	int fd;
+
+	snprintf(path, sizeof(path), "%s.new", CONFIRM);
+	if ((fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0600)) == -1) {
+		printf("%% %s: %s\n", path, strerror(errno));
+		return -1;
+	}
+	if ((f = fdopen(fd, "w")) == NULL) {
+		printf("%% %s: %s\n", path, strerror(errno));
+		close(fd);
+		unlink(path);
+		return -1;
+	}
+	fprintf(f, "# deadline %lld\n", (long long)when);
+	if (conftree_write(f, back) == -1 || fclose(f) == EOF ||
+	    rename(path, CONFIRM) == -1) {
+		printf("%% %s: %s\n", path, strerror(errno));
+		unlink(path);
+		return -1;
+	}
+	return 0;
+}
+
+/* What a commit not confirmed goes back to, or NULL if there is none */
+static struct cnode *
+unconfirmed(void)
+{
+	if (access(CONFIRM, F_OK) == -1)
+		return NULL;
+	return conftree_read(CONFIRM, conf_mode, conf_ordered);
+}
+
+/* When a commit not confirmed goes back, or 0 if there is none */
+static time_t
+deadline(void)
+{
+	long long when;
+	FILE *f;
+
+	if ((f = fopen(CONFIRM, "r")) == NULL)
+		return 0;
+	if (fscanf(f, "# deadline %lld", &when) != 1)
+		when = 0;
+	fclose(f);
+	return when;
+}
+
+/* The commit not confirmed is: nothing rolls it back */
+static void
+confirmed(void)
+{
+	if (unlink(CONFIRM) == 0)
+		printf("%% Commit confirmed\n");
+	else if (errno != ENOENT)
+		printf("%% unlink %s: %s\n", CONFIRM, strerror(errno));
+}
+
+/* What a rollback did, to the session if there is one, and the log */
+static void
+report(const char *msg)
+{
+	printf("%% %s\n", msg);
+	syslog(LOG_WARNING, "%s", msg);
 }
 
 /* Make the running configuration, from, read as to */

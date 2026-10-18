@@ -1971,6 +1971,7 @@ nsh(p)/powerdown
 .Pp
 .Tg commit
 .Ic commit
+.Op Cm confirmed Op Ar minutes
 .Pp
 In
 .Cm configure private ,
@@ -1998,11 +1999,38 @@ The last 50 configurations saved are kept, for
 and
 .Cm show rollback ;
 one the same as the last saved is not kept again.
+.Pp
+With
+.Cm confirmed ,
+the candidate becomes the running configuration but is not saved, and
+unless
+.Cm commit
+comes again within
+.Ar minutes ,
+10 if not given and at most 1440, the running configuration goes back
+to how it was before the first commit not confirmed, which is logged
+with
+.Xr syslog 3 .
+A commit before then confirms it, and saves it; so does
+.Cm commit
+outside
+.Cm configure private .
+A system started again before then starts with the configuration saved
+before it.
 .Bl -dash
 .It
 e.g. save the configuration on the system
 .Bd -literal -offset indent
 nsh(p)/commit
+% Saving configuration
+.Ed
+.It
+e.g. commit, and go back unless it is confirmed within 5 minutes
+.Bd -literal -offset indent
+nsh(config-private-p)/commit confirmed 5
+% Commit within 5 minutes to keep this, or it is rolled back
+nsh(config-private-p)/commit
+% Commit confirmed
 % Saving configuration
 .Ed
 .El
@@ -6037,6 +6065,10 @@ global configuration file
 .It Pa /var/db/nsh/nshrc.N
 configurations saved before, for
 .Cm rollback
+.It Pa /var/run/nshconfirm
+what a
+.Cm commit confirmed
+goes back to, and when
 .It Pa ~/.profile
 user's login profile
 .It Pa /etc/shells
