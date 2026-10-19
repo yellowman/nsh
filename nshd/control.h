@@ -22,11 +22,13 @@ struct ctl_conn {
 	uid_t			 uid;
 	gid_t			 gid;
 	int			 pending;	/* a request not answered */
+	void			*arg;		/* what its handler keeps */
 };
 
 int	control_init(const char *, mode_t, gid_t);
 int	control_listen(int, int (*)(struct ctl_conn *, struct imsg *),
-	    void (*)(struct ctl_conn *));
+	    void (*)(struct ctl_conn *), int (*)(struct ctl_conn *));
 int	control_reply(uint32_t, uint32_t, const void *, size_t);
+void	control_drop(uint32_t);
 struct ctl_conn	*control_connbyid(uint32_t);
 void	control_close_all(void);

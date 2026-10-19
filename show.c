@@ -55,6 +55,8 @@
 #include <unistd.h>
 
 #include "externs.h"
+#include "facts.h"
+#include "showfacts.h"
 
 char	*any_ntoa(const struct sockaddr *);
 char	*link_print(struct sockaddr *);
@@ -271,6 +273,136 @@ p_rtentry(struct rt_msghdr *rtm)
 		printf("%6s ", "-");
 	putchar((rtm->rtm_rmx.rmx_locks & RTV_MTU) ? 'L' : ' ');
 	printf(" %.16s", if_indextoname(rtm->rtm_index, ifbuf));
+	putchar('\n');
+}
+
+/* a route, as the table has it */
+static struct facts_field route_fields[] = {
+	[RT_DST] =	{ "destination",	FACT_ADDRESS },
+	[RT_MASK] =	{ "netmask",		FACT_ADDRESS },
+	[RT_GATEWAY] =	{ "gateway",		FACT_ADDRESS },
+	[RT_GWTYPE] =	{ "gateway-type",	FACT_U64 },
+	[RT_GWNAME] =	{ "gateway-name",	FACT_STRING },
+	[RT_FLAGS] =	{ "flags",		FACT_U64 },
+	[RT_REFS] =	{ "refs",		FACT_U64 },
+	[RT_USE] =	{ "use",		FACT_U64 },
+	[RT_MTU] =	{ "mtu",		FACT_U64 },
+	[RT_LOCKS] =	{ "locks",		FACT_U64 },
+	[RT_PRIORITY] =	{ "priority",		FACT_U64 },
+	[RT_IF] =	{ "interface",		FACT_STRING },
+};
+struct facts_kind kind_route = { "route", route_fields, RT_NFIELDS };
+
+void
+route_facts_init(void)
+{
+	facts_bitnames(&route_fields[RT_FLAGS], routeflags);
+	facts_bitnames(&route_fields[RT_LOCKS], metricnames);
+	if_typenames(&route_fields[RT_GWTYPE]);
+	lookup_facts_init();
+}
+
+/* a link address's type and name, as facts */
+void
+facts_sdl(struct facts_value *type, struct facts_value *name, char *buf,
+    size_t len, struct sockaddr *sa)
+{
+	struct sockaddr_dl	*sdl = (struct sockaddr_dl *)sa;
+
+	if (sa == NULL || sa->sa_family != AF_LINK)
+		return;
+	facts_u64(type, sdl->sdl_type);
+	if (sdl->sdl_nlen == 0)
+		return;
+	snprintf(buf, len, "%.*s", sdl->sdl_nlen, sdl->sdl_data);
+	facts_string(name, buf);
+}
+
+/*
+ * The routes of rt, from *cur, that are of af, as facts: budget at
+ * most. 1 if there are more, 0 if not, -1 if a record failed.
+ */
+int
+route_facts(struct facts_out *o, struct rtdump *rt, char **cur, int af,
+    int budget)
+{
+	struct facts_value	 v[RT_NFIELDS];
+	struct rt_msghdr	*rtm;
+	struct sockaddr		*sa, *rti_info[RTAX_MAX];
+	char			 ifbuf[IF_NAMESIZE], gwname[IFNAMSIZ + 1];
+	int			 n = 0;
+
+	for (; *cur < rt->lim; *cur += rtm->rtm_msglen) {
+		rtm = (struct rt_msghdr *)*cur;
+		if (n == budget)
+			return (1);
+		if (rtm->rtm_version != RTM_VERSION)
+			continue;
+		sa = (struct sockaddr *)(*cur + rtm->rtm_hdrlen);
+		if ((af != AF_UNSPEC && sa->sa_family != af) ||
+		    sa->sa_family == AF_KEY)
+			continue;
+		get_rtaddrs(rtm->rtm_addrs, sa, rti_info);
+		if (rti_info[RTAX_DST] == NULL)
+			continue;
+		memset(v, 0, sizeof(v));
+		facts_sockaddr(&v[RT_DST], rti_info[RTAX_DST]);
+		facts_sockaddr(&v[RT_MASK], rti_info[RTAX_NETMASK]);
+		facts_sockaddr(&v[RT_GATEWAY], rti_info[RTAX_GATEWAY]);
+		facts_sdl(&v[RT_GWTYPE], &v[RT_GWNAME], gwname,
+		    sizeof(gwname), rti_info[RTAX_GATEWAY]);
+		facts_u64(&v[RT_FLAGS], rtm->rtm_flags);
+		facts_u64(&v[RT_REFS], rtm->rtm_rmx.rmx_refcnt);
+		facts_u64(&v[RT_USE], rtm->rtm_rmx.rmx_pksent);
+		facts_u64(&v[RT_MTU], rtm->rtm_rmx.rmx_mtu);
+		facts_u64(&v[RT_LOCKS], rtm->rtm_rmx.rmx_locks);
+		facts_u64(&v[RT_PRIORITY], rtm->rtm_priority);
+		if (if_indextoname(rtm->rtm_index, ifbuf) != NULL)
+			facts_string(&v[RT_IF], ifbuf);
+		if (facts_record(o, &kind_route, v) == -1)
+			return (-1);
+		n++;
+	}
+	return (0);
+}
+
+/* a route as p_rtentry() printed it, the table's headers first */
+void
+route_render(struct frec *r, int *count)
+{
+	struct sockaddr_storage	 dst, mask, gw;
+	const char		*ifname;
+	int interesting = RTF_UP | RTF_GATEWAY | RTF_HOST | RTF_DYNAMIC |
+	    RTF_LLINFO | RTF_STATIC | RTF_REJECT | RTF_MPLS | RTF_CLONED |
+	    RTF_LOCAL;
+	int			 af, flags;
+
+	if (!fsockaddr(r, RT_DST, &dst))
+		return;
+	af = dst.ss_family;
+	if ((*count)++ == 0) {
+		pr_flags(af);
+		pr_family(af);
+		pr_rthdr(af);
+	}
+	flags = fu(r, RT_FLAGS, 0);
+	p_sockaddr((struct sockaddr *)&dst, fsockaddr(r, RT_MASK, &mask) ?
+	    (struct sockaddr *)&mask : NULL, flags, WID_DST(af));
+	if (sdl_build(r, RT_GATEWAY, RT_GWTYPE, RT_GWNAME, &gw) ||
+	    fsockaddr(r, RT_GATEWAY, &gw))
+		p_sockaddr((struct sockaddr *)&gw, NULL, RTF_HOST, WID_GW(af));
+	else
+		printf("%-*s ", WID_GW(af), "");
+	p_flags(flags & interesting, "%-6.6s ");
+	printf("%6u %8llu ", (u_int)fu(r, RT_REFS, 0),
+	    (unsigned long long)fu(r, RT_USE, 0));
+	if (fu(r, RT_MTU, 0))
+		printf("%6u ", (u_int)fu(r, RT_MTU, 0));
+	else
+		printf("%6s ", "-");
+	putchar((fu(r, RT_LOCKS, 0) & RTV_MTU) ? 'L' : ' ');
+	ifname = fs(r, RT_IF);
+	printf(" %.16s", ifname ? ifname : "(null)");
 	putchar('\n');
 }
 

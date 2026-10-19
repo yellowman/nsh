@@ -421,7 +421,6 @@ int bridge_confaddrs(int, char *, char *, FILE *);
 int bridge_rules(int, char *, char *, char *, FILE *);
 int bridge_list(int, char *, char *, char *, int, int);
 int bridge_member_search(int, char *);
-int bridge_addrs(int, char *, char *, char *, FILE *);
 int brport_list(char *);
 int brport_one(char *);
 int set_ifflag(int, char *, short);
@@ -449,7 +448,6 @@ int64_t get_vnetid(int, char *);
 
 /* media.c */
 #define DEFAULT_MEDIA_TYPE	"autoselect"
-int media_status(int, char *, char *, FILE *);
 void media_supported(int, char *, char *, char *, FILE *);
 int phys_status(int, char *, char *, char *, int, int);
 int intmedia(int, char **, ...);
@@ -484,7 +482,6 @@ int intcarp(int, char **, ...);
 int intcpass(int, char **, ...);
 int intcnode(int, char **, ...);
 int conf_carp(FILE *, int, char *);
-int carp_state(int, char *, FILE *);
 int intcdev(int, char **, ...);
 int carplock(int);
 
@@ -492,7 +489,6 @@ int carplock(int);
 int inttrunkport(int, char **, ...);
 int inttrunkproto(int, char **, ...);
 int conf_trunk(FILE *output, int ifs, char *ifname);
-void show_trunk(int ifs, char *ifname, FILE *);
 
 /* who.c */
 int who(int, char **, ...);
@@ -590,12 +586,10 @@ int pflow_status(int, int, char *, char *);
 int intwg(int, char **, ...);
 int intwgpeer(int, char **, ...);
 void conf_wg(FILE *, int, char *);
-void show_wg(int, char *, FILE *);
 
 /* umb.c */
 int intumb(int, char **, ...);
 void conf_umb(FILE *, int, char *);
-void show_umb(int, char *, FILE *);
 
 /* utf8.c */
 #ifdef _WCHAR_H_

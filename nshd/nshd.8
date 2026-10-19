@@ -27,17 +27,23 @@ reads the system's configuration for
 .Xr nsh 8 ,
 which asks it over a socket.
 It is privilege separated.
-The parent process, as root, binds the sockets and starts six children:
+The parent process, as root, binds the sockets and starts the children:
 .Bl -tag -width "frontend"
 .It relay
 Runs as _nshd in a
 .Xr chroot 2 ,
 and passes on what one child may send another, and nothing else.
 .It show
-Runs as _nshd in a
-.Xr chroot 2
-and answers the read-only socket, with what anyone may see.
-It has no path to the others.
+Four of them, each as _nshd in a
+.Xr chroot 2 ,
+answer the read-only socket, with what anyone may see: interfaces
+and routes, as facts the client renders.
+A long answer holds up only the one show that makes it, and is made
+only as the client reads it.
+A show has no path to the others.
+It is not
+.Xr pledge 2 Ns d ,
+as no promise has the interface ioctls it asks.
 .It frontend
 Runs as _nshd in a
 .Xr chroot 2
@@ -57,14 +63,14 @@ with kernel its one peer.
 It keeps nothing yet.
 .El
 .Pp
-Each child but relay has one pipe, to relay.
+Each child but relay has one pipe, to relay, each show its own.
 The parent reads only what relay tells it.
 A child that exits, or sends what it may not, is started again, and
 those that talk to it forget what it held: its sessions, or the answers
 it had not yet given.
 A child that fails five times in a minute stays down.
-Then the others answer for it, or, for show and frontend, its socket
-refuses connections.
+Then the others answer for it, or, for frontend or the last show to
+stay down, its socket refuses connections.
 If relay fails, every child starts again with it; if relay fails five
 times in a minute,
 .Nm

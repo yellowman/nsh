@@ -50,6 +50,8 @@
 #include "externs.h"
 #include "bridge.h"
 #include "kernel.h"
+#include "facts.h"
+#include "showfacts.h"
 
 int	clr_ifflag(int, char *, short);
 int 	bridge_ifsetflag(int, char *, char *, u_int32_t);
@@ -856,8 +858,7 @@ bridge_ports(int s, char *brdg, size_t *n)
 /*
  * hacked up bridge_list()
  *
- * show_int() will ask for SHOW_STPSTATE, and bridge_member_search()
- * and show_bridge() for MEMBER
+ * bridge_member_search() and show_bridge() ask for MEMBER
  */
 int
 bridge_list(int s, char *brdg, char *delim, char *br_str, int str_len, int type)
@@ -876,15 +877,6 @@ bridge_list(int s, char *brdg, char *delim, char *br_str, int str_len, int type)
 	for (i = 0; i < n; i++) {
 		reqp = &reqs[i];
 		switch (type) {
-		case SHOW_STPSTATE:
-			if (reqp->ifbr_ifsflags & IFBIF_STP) {
-				snprintf(buf, sizeof(buf),
-				    "%s%s: %s\n", delim, reqp->ifbr_ifsname,
-				    stpstates[reqp->ifbr_state]);
-				strlcat(br_str, buf, str_len);
-				identified++;
-			}
-			break;
 		case MEMBER:
 			if (reqp->ifbr_ifsname[0] != '\0' &&
 			    !(reqp->ifbr_ifsflags & IFBIF_SPAN)) {
@@ -1191,14 +1183,67 @@ bridge_addaddr(int s, char *brdg, char *ifname, char *addr)
 	return (0);
 }
 
-int
-bridge_addrs(int s, char *brdg, char *hdr_delim, char *body_delim,
-    FILE *outfile)
+/* a bridge's members, and the addresses it learned, as facts */
+static struct facts_field bridgemember_fields[] = {
+	[BRM_NAME] =		{ "name",	FACT_STRING },
+	[BRM_FLAGS] =		{ "flags",	FACT_U64 },
+	[BRM_STATE] =		{ "stp-state",	FACT_U64 },
+};
+struct facts_kind kind_bridgemember = { "bridge-member", bridgemember_fields,
+    BRM_NFIELDS };
+
+static struct facts_field bridgeaddr_fields[] = {
+	[BRA_ADDRESS] =		{ "address",	FACT_ADDRESS },
+	[BRA_MEMBER] =		{ "member",	FACT_STRING },
+	[BRA_AGE] =		{ "age",	FACT_U64 },
+	[BRA_FLAGS] =		{ "flags",	FACT_U64 },
+};
+struct facts_kind kind_bridgeaddr = { "bridge-address", bridgeaddr_fields,
+    BRA_NFIELDS };
+
+void
+bridge_facts_init(void)
 {
+	static struct facts_name	 states[nitems(stpstates)];
+	size_t				 i;
+
+	facts_bitnames(&bridgemember_fields[BRM_FLAGS], IFBIFBITS);
+	for (i = 0; i < nitems(stpstates); i++) {
+		states[i].value = i;
+		states[i].name = stpstates[i];
+	}
+	bridgemember_fields[BRM_STATE].naming = FACT_VALUES;
+	bridgemember_fields[BRM_STATE].names = states;
+	bridgemember_fields[BRM_STATE].nnames = nitems(stpstates);
+	facts_bitnames(&bridgeaddr_fields[BRA_FLAGS], IFBAFBITS);
+}
+
+/* brdg's members, and the addresses it learned */
+void
+bridge_facts(struct facts_out *o, int s, char *brdg)
+{
+	struct facts_value v[BRA_NFIELDS > BRM_NFIELDS ? BRA_NFIELDS :
+	    BRM_NFIELDS];
+	struct ifbreq *reqs;
 	struct ifbaconf ifbac;
 	struct ifbareq *ifba;
 	char buf[sizeof(ifba->ifba_ifsname) + 1], *inbuf = NULL, *inb;
-	u_int i, len = 8192;
+	size_t i, n;
+	u_int len = 8192;
+
+	if ((reqs = bridge_ports(s, brdg, &n)) != NULL) {
+		for (i = 0; i < n; i++) {
+			memset(v, 0, sizeof(v));
+			memcpy(buf, reqs[i].ifbr_ifsname,
+			    sizeof(reqs[i].ifbr_ifsname));
+			buf[sizeof(reqs[i].ifbr_ifsname)] = '\0';
+			facts_string(&v[BRM_NAME], buf);
+			facts_u64(&v[BRM_FLAGS], reqs[i].ifbr_ifsflags);
+			facts_u64(&v[BRM_STATE], reqs[i].ifbr_state);
+			facts_record(o, &kind_bridgemember, v);
+		}
+		free(reqs);
+	}
 
 	while (1) {
 		ifbac.ifbac_len = len;
@@ -1207,7 +1252,7 @@ bridge_addrs(int s, char *brdg, char *hdr_delim, char *body_delim,
 			free(inbuf);
 			printf("%% bridge_addrs: malloc: %s\n",
 			    strerror(errno));
-			return 0;
+			return;
 		}
 		ifbac.ifbac_buf = inbuf = inb;
 		strlcpy(ifbac.ifbac_name, brdg, sizeof(ifbac.ifbac_name));
@@ -1216,28 +1261,80 @@ bridge_addrs(int s, char *brdg, char *hdr_delim, char *body_delim,
 				printf("%% bridge_addrs: SIOCBRDGRTS: %s\n",
 				    strerror(errno));
 			free(inbuf);
-			return 0;
+			return;
 		}
 		if (ifbac.ifbac_len + sizeof(*ifba) < len)
 			break;
 		len *= 2;
 	}
-	if (ifbac.ifbac_len / sizeof(*ifba)) {
-		fprintf(outfile, "%sLearned addresses:\n", hdr_delim);
-		fprintf(outfile, "%saddress           member age\n",
-		    body_delim);
-	}
 
 	for (i = 0; i < ifbac.ifbac_len / sizeof(*ifba); i++) {
 		ifba = ifbac.ifbac_req + i;
-		strlcpy(buf, ifba->ifba_ifsname, sizeof(buf));
-		fprintf(outfile, "%s%s %-6s %u ", body_delim,
-		    ether_ntoa(&ifba->ifba_dst), buf, ifba->ifba_age);
-		bprintf(outfile, ifba->ifba_flags, IFBAFBITS);
-		fputc('\n', outfile);
+		memset(v, 0, sizeof(v));
+		facts_address(&v[BRA_ADDRESS], FACT_LINK, &ifba->ifba_dst,
+		    sizeof(ifba->ifba_dst), 0);
+		memcpy(buf, ifba->ifba_ifsname, sizeof(ifba->ifba_ifsname));
+		buf[sizeof(ifba->ifba_ifsname)] = '\0';
+		facts_string(&v[BRA_MEMBER], buf);
+		facts_u64(&v[BRA_AGE], ifba->ifba_age);
+		facts_u64(&v[BRA_FLAGS], ifba->ifba_flags);
+		facts_record(o, &kind_bridgeaddr, v);
 	}
 	free(inbuf);
-	return (0);
+}
+
+/* r's string i, or "" */
+static const char *
+bridge_s(struct frec *r, int i)
+{
+	const char	*s = fs(r, i);
+
+	return (s != NULL ? s : "");
+}
+
+/* a bridge's STP members and learned addresses, as show_int() printed */
+void
+bridge_render(struct frecs *rs, FILE *outfile)
+{
+	const struct facts_value *a;
+	struct ether_addr ea;
+	struct frec *r;
+	uint64_t state;
+	int n;
+
+	for (n = 0, r = NULL; (r = frec_next(rs, r, &kind_bridgemember)); )
+		if (fu(r, BRM_FLAGS, 0) & IFBIF_STP)
+			n++;
+	if (n) {
+		fprintf(outfile, "  STP member state%s:\n", n > 1 ?  "s" : "");
+		for (r = NULL; (r = frec_next(rs, r, &kind_bridgemember)); ) {
+			if (!(fu(r, BRM_FLAGS, 0) & IFBIF_STP))
+				continue;
+			state = fu(r, BRM_STATE, 0);
+			if (state < nitems(stpstates))
+				fprintf(outfile, "    %s: %s\n",
+				    bridge_s(r, BRM_NAME), stpstates[state]);
+			else
+				fprintf(outfile, "    %s: %llu\n",
+				    bridge_s(r, BRM_NAME),
+				    (unsigned long long)state);
+		}
+	}
+
+	if (frec_next(rs, NULL, &kind_bridgeaddr) != NULL) {
+		fprintf(outfile, "  Learned addresses:\n");
+		fprintf(outfile, "    address           member age\n");
+	}
+	for (r = NULL; (r = frec_next(rs, r, &kind_bridgeaddr)); ) {
+		memset(&ea, 0, sizeof(ea));
+		if ((a = FV(r, BRA_ADDRESS, FACT_ADDRESS)) != NULL &&
+		    a->v.a.len == sizeof(ea))
+			memcpy(&ea, a->v.a.bytes, sizeof(ea));
+		fprintf(outfile, "    %s %-6s %u ", ether_ntoa(&ea),
+		    bridge_s(r, BRA_MEMBER), (u_int)fu(r, BRA_AGE, 0));
+		bprintf(outfile, fu(r, BRA_FLAGS, 0), IFBAFBITS);
+		fputc('\n', outfile);
+	}
 }
 
 int

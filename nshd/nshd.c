@@ -21,27 +21,31 @@
 /*
  * nshd: the configuration, and the only thing that changes the kernel.
  *
- * parent binds the two sockets and starts relay and five children, each
+ * parent binds the two sockets and starts relay and the children, each
  * this program again with a flag for its part:
  *
  *	relay (-R)	_nshd, chroot: every message between the others
- *	show (-S)	_nshd, chroot: the read-only socket
+ *	show (-Sn)	_nshd, chroot: the read-only socket, SHOWS of
+ *			them, n from 0, so one long answer holds up no other
  *	frontend (-F)	_nshd, chroot: the read-write socket, sessions
  *	config (-C)	_nshd, chroot: sessions' state, what to ask kernel
  *	kernel (-K)	root: reads and changes the kernel
  *	archive (-A)	_nshd, chroot: the configurations saved
  *
- * Each child has one imsg pipe, to relay, as fd 3, and frontend and show
- * have their sockets as fd 4. parent gives relay each child's pipe, and
- * from then on reads only what relay sends it, on a pipe that passes it
- * no descriptor.
+ * Each child has one imsg pipe, to relay, as fd 3, a show as much as any
+ * other, though relay forwards nothing from a show; frontend and each
+ * show have their socket as fd 4, and no other child has it. parent
+ * gives relay each child's pipe, and from then on reads only what relay
+ * sends it, on a pipe that passes it no descriptor.
  *
  * nshd stays up for all that depends on it. A child that relay says went
  * wrong, its pipe closed or a rule broken, is killed and started again,
- * and relay tells its peers. One that fails RESTARTS times in RESTART_SECS stays down:
- * its peers answer for it, and if it is frontend or show, its socket is
- * closed. If relay goes wrong, every child goes with it, and all start
- * again; if relay fails RESTARTS times in RESTART_SECS, nshd ends.
+ * and relay tells its peers. One that fails RESTARTS times in
+ * RESTART_SECS stays down: its peers answer for it, and if it is
+ * frontend, or the last show, parent closes the socket, which no process
+ * then holds, so clients are refused. If relay goes wrong, every child
+ * goes with it, and all start again; if relay fails RESTARTS times in
+ * RESTART_SECS, nshd ends.
  */
 
 #include <sys/types.h>
@@ -74,6 +78,7 @@
 
 static struct child {
 	enum nshd_proc	 proc;
+	int		 instance;
 	char		*name;
 	char		*flag;
 	pid_t		 pid;
@@ -82,12 +87,16 @@ static struct child {
 	time_t		 fails[RESTARTS];	/* the last ones, monotonic */
 	int		 down;
 } children[] = {
-	{ PROC_RELAY,	 "relay",	"-R" },
-	{ PROC_SHOW,	 "show",	"-S" },
-	{ PROC_FRONTEND, "frontend",	"-F" },
-	{ PROC_CONFIG,	 "config",	"-C" },
-	{ PROC_KERNEL,	 "kernel",	"-K" },
-	{ PROC_ARCHIVE,	 "archive",	"-A" },
+	{ PROC_RELAY,	 0, "relay",	"-R" },
+	/* SHOWS of them */
+	{ PROC_SHOW,	 0, "show0",	"-S0" },
+	{ PROC_SHOW,	 1, "show1",	"-S1" },
+	{ PROC_SHOW,	 2, "show2",	"-S2" },
+	{ PROC_SHOW,	 3, "show3",	"-S3" },
+	{ PROC_FRONTEND, 0, "frontend",	"-F" },
+	{ PROC_CONFIG,	 0, "config",	"-C" },
+	{ PROC_KERNEL,	 0, "kernel",	"-K" },
+	{ PROC_ARCHIVE,	 0, "archive",	"-A" },
 };
 #define NPROC	(sizeof(children) / sizeof(children[0]))
 
@@ -98,7 +107,8 @@ static void		 spawn(struct child *);
 static pid_t		 start_child(struct child *, int, int);
 static void		 restart(struct child *, const char *);
 static int		 failed(struct child *);
-static struct child	*child(enum nshd_proc);
+static struct child	*child(enum nshd_proc, int);
+static int		 shows_down(void);
 static __dead void	 parent_shutdown(int, const char *);
 static __dead void	 usage(void);
 
@@ -121,11 +131,12 @@ main(int argc, char *argv[])
 {
 	struct event		 ev_sigint, ev_sigterm, ev_sighup, ev_sigchld;
 	struct group		*gr;
-	int			 c, role = PROC_PARENT;
+	const char		*errstr;
+	int			 c, role = PROC_PARENT, instance = 0;
 
 	argv0 = argv[0] != NULL ? argv[0] : "nshd";
 
-	while ((c = getopt(argc, argv, "ACdFKRSv")) != -1) {
+	while ((c = getopt(argc, argv, "ACdFKRS:v")) != -1) {
 		switch (c) {
 		case 'A':
 			role = PROC_ARCHIVE;
@@ -147,6 +158,9 @@ main(int argc, char *argv[])
 			break;
 		case 'S':
 			role = PROC_SHOW;
+			instance = strtonum(optarg, 0, SHOWS - 1, &errstr);
+			if (errstr != NULL)
+				usage();
 			break;
 		case 'v':
 			opt_verbose++;
@@ -163,7 +177,7 @@ main(int argc, char *argv[])
 	case PROC_RELAY:
 		relay(opt_debug, opt_verbose);
 	case PROC_SHOW:
-		showproc(opt_debug, opt_verbose);
+		showproc(opt_debug, opt_verbose, instance);
 	case PROC_FRONTEND:
 		frontend(opt_debug, opt_verbose);
 	case PROC_CONFIG:
@@ -224,14 +238,27 @@ main(int argc, char *argv[])
 }
 
 static struct child *
-child(enum nshd_proc proc)
+child(enum nshd_proc proc, int instance)
 {
 	size_t	 i;
 
 	for (i = 0; i < NPROC; i++)
-		if (children[i].proc == proc)
+		if (children[i].proc == proc &&
+		    children[i].instance == instance)
 			return (&children[i]);
 	return (NULL);
+}
+
+/* whether every show is down */
+static int
+shows_down(void)
+{
+	size_t	 i;
+
+	for (i = 0; i < NPROC; i++)
+		if (children[i].proc == PROC_SHOW && !children[i].down)
+			return (0);
+	return (1);
 }
 
 /*
@@ -242,7 +269,7 @@ static void
 spawn_all(void)
 {
 	struct nshd_child	 ch;
-	struct child		*r = child(PROC_RELAY);
+	struct child		*r = child(PROC_RELAY, 0);
 	size_t			 i;
 	int			 sp[2];
 
@@ -262,6 +289,7 @@ spawn_all(void)
 			continue;
 		}
 		ch.proc = children[i].proc;
+		ch.instance = children[i].instance;
 		ch.generation = children[i].generation;
 		if (imsg_compose_event(iev_relay, IMSG_DOWN, 0, 0, -1, &ch,
 		    sizeof(ch)) == -1)
@@ -285,6 +313,7 @@ spawn(struct child *c)
 		fd = rofd;
 	c->pid = start_child(c, sp[1], fd);
 	ch.proc = c->proc;
+	ch.instance = c->instance;
 	ch.generation = ++c->generation;
 	if (imsg_compose_event(iev_relay, IMSG_PIPE, 0, 0, sp[0], &ch,
 	    sizeof(ch)) == -1)
@@ -391,11 +420,12 @@ restart(struct child *c, const char *why)
 	if (c->proc == PROC_FRONTEND) {
 		close(rwfd);
 		rwfd = -1;
-	} else if (c->proc == PROC_SHOW) {
+	} else if (c->proc == PROC_SHOW && shows_down()) {
 		close(rofd);
 		rofd = -1;
 	}
 	ch.proc = c->proc;
+	ch.instance = c->instance;
 	ch.generation = c->generation;
 	if (imsg_compose_event(iev_relay, IMSG_DOWN, 0, 0, -1, &ch,
 	    sizeof(ch)) == -1)
@@ -458,18 +488,18 @@ parent_dispatch(int fd, short event, void *arg)
 
 	if (event & EV_READ) {
 		if ((n = imsgbuf_read(&relay_in)) == -1 || n == 0) {
-			restart(child(PROC_RELAY), "closed its pipe");
+			restart(child(PROC_RELAY, 0), "closed its pipe");
 			return;
 		}
 	}
 	if ((event & EV_WRITE) && imsgbuf_write(&iev->ibuf) == -1) {
-		restart(child(PROC_RELAY), "closed its pipe");
+		restart(child(PROC_RELAY, 0), "closed its pipe");
 		return;
 	}
 
 	for (;;) {
 		if ((n = imsgbuf_get(&relay_in, &imsg)) == -1) {
-			restart(child(PROC_RELAY),
+			restart(child(PROC_RELAY, 0),
 			    "sent what imsg cannot read");
 			return;
 		}
@@ -477,12 +507,13 @@ parent_dispatch(int fd, short event, void *arg)
 			break;
 		if (imsg_get_type(&imsg) != IMSG_BROKEN ||
 		    imsg_get_data(&imsg, &ch, sizeof(ch)) == -1 ||
-		    (c = child(ch.proc)) == NULL || c->proc == PROC_RELAY) {
+		    (c = child(ch.proc, ch.instance)) == NULL ||
+		    c->proc == PROC_RELAY) {
 			snprintf(why, sizeof(why),
 			    "sent imsg %u, which it may not",
 			    imsg_get_type(&imsg));
 			imsg_free(&imsg);
-			restart(child(PROC_RELAY), why);
+			restart(child(PROC_RELAY, 0), why);
 			return;
 		}
 		imsg_free(&imsg);

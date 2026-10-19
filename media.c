@@ -48,6 +48,8 @@
 #include <netdb.h>
 #include "externs.h"
 #include "settings.h"
+#include "facts.h"
+#include "showfacts.h"
 
 uint64_t init_current_media(int, char *);
 void process_media_commands(int, char *, uint64_t);
@@ -652,86 +654,205 @@ conf_media_status(FILE *output, int s, char *ifname)
 	return rval;
 }
 
-int
-media_status(int s, char *ifname, char *delim, FILE *outfile)
+/* a media word, current, active or supported, as facts */
+static struct facts_name media_roles[] = {
+	{ MEDIA_CURRENT, "current" },
+	{ MEDIA_ACTIVE, "active" },
+	{ MEDIA_SUPPORTED, "supported" },
+};
+static struct facts_field media_fields[] = {
+	[MEDIA_ROLE] =		{ "role",	FACT_U64, FACT_VALUES,
+				    media_roles, 3 },
+	[MEDIA_WORD] =		{ "word",	FACT_U64 },
+	[MEDIA_TYPE] =		{ "type",	FACT_STRING },
+	[MEDIA_SUBTYPE] =	{ "subtype",	FACT_STRING },
+	[MEDIA_INSTANCE] =	{ "instance",	FACT_U64 },
+	[MEDIA_OPTIONS] =	{ "options",	FACT_STRING },
+};
+struct facts_kind kind_media = { "media", media_fields, MEDIA_NFIELDS };
+
+void
+media_facts_init(void)
 {
-	uint64_t *media_list;
-	struct ifmediareq ifmr;
+}
+
+static void
+media_record(struct facts_out *o, uint64_t role, uint64_t word)
+{
+	struct facts_value	 v[MEDIA_NFIELDS];
+	const char		*s;
+	uint64_t		 seen = 0;
+	char			 options[128];
+
+	memset(v, 0, sizeof(v));
+	facts_u64(&v[MEDIA_ROLE], role);
+	facts_u64(&v[MEDIA_WORD], word);
+	if ((s = get_ifm_type_str(word)) != NULL)
+		facts_string(&v[MEDIA_TYPE], s);
+	if ((s = get_ifm_subtype_str(word)) != NULL)
+		facts_string(&v[MEDIA_SUBTYPE], s);
+	facts_u64(&v[MEDIA_INSTANCE], IFM_INST(word));
+	get_ifm_options_str(options, sizeof(options), word, &seen);
+	if (options[0] != '\0')
+		facts_string(&v[MEDIA_OPTIONS], options);
+	facts_record(o, &kind_media, v);
+}
+
+/*
+ * ifname's media: current and active, and those it supports if
+ * supported, and in its record, ifv, how many and their status
+ */
+void
+media_facts(struct facts_out *o, int s, char *ifname, struct facts_value *ifv,
+    int supported)
+{
+	uint64_t		*media_list = NULL;
+	struct ifmediareq	 ifmr;
+	int			 i;
 
 	memset(&ifmr, 0, sizeof(ifmr));
 	strlcpy(ifmr.ifm_name, ifname, sizeof(ifmr.ifm_name));
-
 	if (ioctl(s, SIOCGIFMEDIA, (caddr_t)&ifmr) < 0) {
-		if (errno != ENOTTY) {
+		if (errno != ENOTTY)
 			printf("%% media_status: SIOCGIFMEDIA: %s\n",
 			    strerror(errno));
-			return 1;
+		return;
+	}
+	if (ifmr.ifm_count > 0) {
+		media_list = calloc(ifmr.ifm_count, sizeof(*media_list));
+		if (media_list == NULL) {
+			printf("%% media_status: calloc: %s\n",
+			    strerror(errno));
+			return;
 		}
-		return 0;
+		ifmr.ifm_ulist = media_list;
+		if (ioctl(s, SIOCGIFMEDIA, (caddr_t)&ifmr) < 0) {
+			printf("%% media_status: SIOCGIFMEDIA: %s\n",
+			    strerror(errno));
+			free(media_list);
+			return;
+		}
 	}
+	facts_u64(&ifv[IF_MEDIACOUNT], ifmr.ifm_count);
+	facts_u64(&ifv[IF_MEDIASTATUS], ifmr.ifm_status);
+	media_record(o, MEDIA_CURRENT, ifmr.ifm_current);
+	media_record(o, MEDIA_ACTIVE, ifmr.ifm_active);
+	for (i = 0; supported && media_list != NULL && i < ifmr.ifm_count; i++)
+		media_record(o, MEDIA_SUPPORTED, media_list[i]);
+	free(media_list);
+}
 
-	if (ifmr.ifm_count == 0) {
+/* the word of rs's media record of role, or 0 */
+static uint64_t
+media_word(struct frecs *rs, uint64_t role, int *found)
+{
+	struct frec	*r;
+
+	for (r = NULL; (r = frec_next(rs, r, &kind_media)) != NULL; )
+		if (fu(r, MEDIA_ROLE, -1) == role) {
+			if (found)
+				*found = 1;
+			return (fu(r, MEDIA_WORD, 0));
+		}
+	return (0);
+}
+
+void
+media_status_words(struct frecs *rs, uint64_t *current, uint64_t *active)
+{
+	*current = media_word(rs, MEDIA_CURRENT, NULL);
+	*active = media_word(rs, MEDIA_ACTIVE, NULL);
+}
+
+/* the link state media says, as get_ifm_linkstate_str() did */
+const char *
+media_linkstate(struct frecs *rs, struct frec *ifr)
+{
+	struct ifmediareq	 ifmr;
+
+	memset(&ifmr, 0, sizeof(ifmr));
+	ifmr.ifm_current = media_word(rs, MEDIA_CURRENT, NULL);
+	ifmr.ifm_status = fu(ifr, IF_MEDIASTATUS, 0);
+	return (get_ifm_linkstate_str(&ifmr));
+}
+
+/* media, as media_status() printed it */
+void
+media_render(struct frecs *rs, struct frec *ifr, FILE *outfile)
+{
+	uint64_t	 current, active, status;
+	int		 found = 0;
+
+	current = media_word(rs, MEDIA_CURRENT, &found);
+	if (!found)
+		return;
+	if (fu(ifr, IF_MEDIACOUNT, 0) == 0) {
 		if (verbose)
-			printf("%% %s: No media types?\n", ifname);
-		return 0;
+			printf("%% %s: No media types?\n", fs(ifr, IF_NAME));
+		return;
 	}
+	active = media_word(rs, MEDIA_ACTIVE, NULL);
+	status = fu(ifr, IF_MEDIASTATUS, 0);
 
-	media_list = calloc(ifmr.ifm_count, sizeof(*media_list));
-	if (media_list == NULL) {
-		printf("%% media_status: calloc: %s\n", strerror(errno));
-		return 1;
-	}
-	ifmr.ifm_ulist = media_list;
-
-	if (ioctl(s, SIOCGIFMEDIA, (caddr_t)&ifmr) < 0) {
-		printf("%% media_status: SIOCGIFMEDIA: %s\n", strerror(errno));
-		free(media_list);
-		return 1;
-	}
-
-	fprintf(outfile, "%s", delim);
-	print_media_word(ifmr.ifm_current, 0, 0, outfile);
-	if (ifmr.ifm_active != ifmr.ifm_current) {
+	fprintf(outfile, "  Media type ");
+	print_media_word(current, 0, 0, outfile);
+	if (active != current) {
 		fprintf(outfile, " (");
-		print_media_word(ifmr.ifm_active, 0, 0, outfile);
+		print_media_word(active, 0, 0, outfile);
 		fputc(')', outfile);
 	}
 
-	if (ifmr.ifm_status & IFM_AVALID) {
+	if (status & IFM_AVALID) {
 		const struct ifmedia_status_description *ifms;
-		int bitno, found = 0;
+		int bitno, printed = 0;
 
 		fprintf(outfile, ", status ");
 		for (bitno = 0; ifm_status_valid_list[bitno] != 0; bitno++) {
-
 			for (ifms = ifm_status_descriptions;
 			     ifms->ifms_valid != 0; ifms++) {
-
-				if (ifms->ifms_type !=
-				      IFM_TYPE(ifmr.ifm_current) ||
+				if (ifms->ifms_type != IFM_TYPE(current) ||
 				    ifms->ifms_valid !=
 				      ifm_status_valid_list[bitno])
 					continue;
-
-				fprintf(outfile, "%s%s", found ? ", " : "",
-				    IFM_STATUS_DESC(ifms, ifmr.ifm_status));
-				found = 1;
-
-				/*
-				 * For each valid indicator bit, there's only
-				 * one entry for each media type, so
-				 * terminate the inner loop now.
-				 */
+				fprintf(outfile, "%s%s", printed ? ", " : "",
+				    IFM_STATUS_DESC(ifms, status));
+				printed = 1;
 				break;
 			}
 		}
-		if (found == 0)
+		if (printed == 0)
 			fprintf(outfile, "unknown");
 	}
 	fputc('\n', outfile);
+}
 
-	free(media_list);
-	return 0;
+/* what media an interface supports, as media_supported() printed it */
+void
+media_render_supported(struct frecs *rs, struct frec *ifr, FILE *outfile)
+{
+	struct frec	*r;
+	uint64_t	 word;
+	int		 type, printed_type;
+
+	for (type = IFM_NMIN; type <= IFM_NMAX; type += IFM_NMIN) {
+		printed_type = 0;
+		for (r = NULL; (r = frec_next(rs, r, &kind_media)) != NULL; ) {
+			if (fu(r, MEDIA_ROLE, -1) != MEDIA_SUPPORTED)
+				continue;
+			word = fu(r, MEDIA_WORD, 0);
+			if (IFM_TYPE(word) != type)
+				continue;
+			if (printed_type == 0) {
+				fprintf(outfile,
+				    "  Supported media types on %s:\n",
+				    fs(ifr, IF_NAME));
+				printed_type = 1;
+			}
+			fprintf(outfile, "    ");
+			print_media_word(word, 0, 1, outfile);
+			fputc('\n', outfile);
+		}
+	}
 }
 
 void

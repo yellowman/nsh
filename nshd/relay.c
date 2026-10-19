@@ -46,16 +46,21 @@
 
 static struct peer {
 	enum nshd_proc	 proc;
+	int		 instance;
 	char		*name;
 	struct imsgev	*iev;
 	uint32_t	 generation;
 	int		 down;
 } peers[NCHILD] = {
-	{ PROC_SHOW,	 "show" },
-	{ PROC_FRONTEND, "frontend" },
-	{ PROC_CONFIG,	 "config" },
-	{ PROC_KERNEL,	 "kernel" },
-	{ PROC_ARCHIVE,	 "archive" },
+	/* SHOWS of them */
+	{ PROC_SHOW,	 0, "show0" },
+	{ PROC_SHOW,	 1, "show1" },
+	{ PROC_SHOW,	 2, "show2" },
+	{ PROC_SHOW,	 3, "show3" },
+	{ PROC_FRONTEND, 0, "frontend" },
+	{ PROC_CONFIG,	 0, "config" },
+	{ PROC_KERNEL,	 0, "kernel" },
+	{ PROC_ARCHIVE,	 0, "archive" },
 };
 
 /* all that may pass between the children: who sends what to whom */
@@ -86,7 +91,7 @@ static void		 relay_detach(struct peer *);
 static void		 relay_start(struct peer *);
 static void		 relay_tell(struct peer *);
 static int		 joined(struct peer *, struct peer *);
-static struct peer	*peer(enum nshd_proc);
+static struct peer	*peer(enum nshd_proc, int);
 
 void
 relay(int debug, int verbose)
@@ -104,12 +109,12 @@ relay(int debug, int verbose)
 }
 
 static struct peer *
-peer(enum nshd_proc proc)
+peer(enum nshd_proc proc, int instance)
 {
 	int	 i;
 
 	for (i = 0; i < NCHILD; i++)
-		if (peers[i].proc == proc)
+		if (peers[i].proc == proc && peers[i].instance == instance)
 			return (&peers[i]);
 	return (NULL);
 }
@@ -151,7 +156,8 @@ relay_dispatch_parent(int fd, short event, void *arg)
 		case IMSG_DOWN:
 			/* one gone wrong was reported, and let go, first */
 			if (imsg_get_data(&imsg, &ch, sizeof(ch)) == -1 ||
-			    (p = peer(ch.proc)) == NULL || p->iev != NULL ||
+			    (p = peer(ch.proc, ch.instance)) == NULL ||
+			    p->iev != NULL ||
 			    (imsg_get_type(&imsg) == IMSG_PIPE &&
 			    (cfd = imsg_get_fd(&imsg)) == -1))
 				fatalx("%s: bad imsg %u", __func__,
@@ -272,7 +278,7 @@ relay_dispatch(int fd, short event, void *arg)
 		for (i = 0; i < sizeof(routes) / sizeof(routes[0]); i++)
 			if (routes[i].from == from->proc &&
 			    routes[i].type == type)
-				to = peer(routes[i].to);
+				to = peer(routes[i].to, 0);
 		if (to == NULL) {
 			imsg_free(&imsg);
 			relay_broken(from, "sent imsg %u, which it may not",
@@ -309,6 +315,7 @@ relay_broken(struct peer *p, const char *fmt, ...)
 
 	relay_detach(p);
 	ch.proc = p->proc;
+	ch.instance = p->instance;
 	ch.generation = p->generation;
 	if (imsg_compose_event(iev_parent, IMSG_BROKEN, 0, 0, -1, &ch,
 	    sizeof(ch)) == -1)

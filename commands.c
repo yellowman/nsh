@@ -70,6 +70,8 @@
 #include "ctl.h"
 #include "conftree.h"
 #include "settings.h"
+#include "facts.h"
+#include "showfacts.h"
 
 char hname[HSIZE];
 char hbuf[MAXHOSTNAMELEN];	/* host name */
@@ -3899,7 +3901,7 @@ pr_routes(int argc, char **argv, ...)
 	switch(argc) {
 	case 2:
 		/* show primary routing table */
-		p_rttables(AF_INET, cli_rtable, 0);
+		facts_show(stdout, "route inet %d", cli_rtable);
 		break;
 	case 3:
 		/* show a specific route */
@@ -3916,7 +3918,7 @@ pr_routes6(int argc, char **argv, ...)
 	switch(argc) {
 	case 2:
 		/* show primary routing table */
-		p_rttables(AF_INET6, cli_rtable, 0);
+		facts_show(stdout, "route inet6 %d", cli_rtable);
 		break;
 	case 3:
 		/* show a specific route */

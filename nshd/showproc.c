@@ -16,12 +16,23 @@
 
 /*
  * show: the read-only socket, answered here and nowhere else, with what
- * anyone may see. It has no peer, so nothing a client sends here
- * reaches the processes that change anything.
+ * anyone may see. SHOWS of these share it. Each has no peer, so
+ * nothing a client sends here reaches the processes that change
+ * anything.
+ *
+ * A show of state answers with facts, made a batch at a time, as the
+ * client reads them, by nsh's own code. What that code prints, as it
+ * always has, goes to an unlinked file on fd 1, and from there to the
+ * client, as messages.
+ *
+ * show is not pledged: no promise has the ioctls show interface asks,
+ * for tunnels, carp, wg, trunk, umb, 802.11, bridges and more. It runs
+ * as _nshd, chrooted, with no peer.
  */
 
 #include <sys/types.h>
 #include <sys/queue.h>
+#include <sys/socket.h>
 
 #include <event.h>
 #include <imsg.h>
@@ -35,20 +46,46 @@
 #include "log.h"
 #include "nshd.h"
 #include "control.h"
+#include "facts.h"
+#include "showfacts.h"
+
+#define SHOW_LOW	32	/* messages a client has unread, when more are made */
+#define SHOW_BATCH	256	/* records made at a time, about */
+
+/* an answer of facts, as its client reads it */
+struct answer {
+	struct facts_answer	*a;
+	struct facts_out	 o;
+	struct ctl_conn		*c;
+	int			 failed;
+};
 
 static struct imsgev	*iev_relay;
 
 static void	show_dispatch_relay(int, short, void *);
 static int	show_client(struct ctl_conn *, struct imsg *);
 static int	show_answer(uint32_t, int32_t, const char *);
+static int	show_facts(struct ctl_conn *, char *);
+static int	show_more(struct ctl_conn *);
+static int	show_result(struct ctl_conn *, int32_t);
+static void	show_gone(struct ctl_conn *);
+static void	show_emit(void *, const void *, size_t);
+static void	show_printed(struct answer *);
 
 void
-showproc(int debug, int verbose)
+showproc(int debug, int verbose, int instance)
 {
-	child_start("show", debug, verbose);
+	static char	 name[16];
+	char		 path[] = "/tmp/nshd.show.XXXXXXXXXX";
+	int		 fd;
+
+	snprintf(name, sizeof(name), "show%d", instance);
+	child_start(name, debug, verbose);
+	if ((fd = mkstemp(path)) == -1 || unlink(path) == -1 ||
+	    dup2(fd, STDOUT_FILENO) == -1)
+		fatal("%s", path);
+	close(fd);
 	privdrop();
-	if (pledge("stdio unix", NULL) == -1)
-		fatal("pledge");
 
 	if ((iev_relay = imsgev_new(3, show_dispatch_relay, 0)) == NULL)
 		fatal(NULL);
@@ -74,7 +111,8 @@ show_dispatch_relay(int fd, short event, void *arg)
 		switch (imsg_get_type(&imsg)) {
 		/* its socket is fd 4, from parent */
 		case IMSG_STARTUP:
-			if (control_listen(4, show_client, NULL) == -1)
+			if (control_listen(4, show_client, show_gone,
+			    show_more) == -1)
 				fatalx("cannot listen on %s", NSHD_RO_SOCKET);
 			break;
 		default:
@@ -96,6 +134,9 @@ show_client(struct ctl_conn *c, struct imsg *imsg)
 	char			 host[HOST_NAME_MAX + 1], *out;
 	int			 ret, status = 1;
 
+	/* one request at a time */
+	if (c->arg != NULL)
+		return (-1);
 	switch (imsg_get_type(imsg)) {
 	case IMSG_CTL_HELLO:
 		if (imsg_get_data(imsg, &hello, sizeof(hello)) == -1)
@@ -109,9 +150,8 @@ show_client(struct ctl_conn *c, struct imsg *imsg)
 		    memchr(show.words, '\0', sizeof(show.words)) == NULL)
 			return (-1);
 		if (strcmp(show.words, "hostname") != 0)
-			ret = asprintf(&out, "%% show %s: not answered by "
-			    "nshd\n", show.words);
-		else if (gethostname(host, sizeof(host)) == -1)
+			return (show_facts(c, show.words));
+		if (gethostname(host, sizeof(host)) == -1)
 			ret = asprintf(&out, "%% gethostname failed\n");
 		else {
 			ret = asprintf(&out, "%s\n", host);
@@ -137,4 +177,109 @@ show_answer(uint32_t id, int32_t status, const char *text)
 	if (control_reply(id, IMSG_CTL_OUTPUT, text, strlen(text)) == -1)
 		return (-1);
 	return (control_reply(id, IMSG_CTL_RESULT, &r, sizeof(r)));
+}
+
+/* the facts words ask, begun; or that nshd does not answer them */
+static int
+show_facts(struct ctl_conn *c, char *words)
+{
+	struct answer		*an;
+	char			*out;
+	int			 ret;
+
+	if ((an = calloc(1, sizeof(*an))) == NULL)
+		fatal("%s", __func__);
+	if ((an->a = facts_answer(words)) == NULL) {
+		free(an);
+		if (asprintf(&out, "%% show %s: not answered by nshd\n",
+		    words) == -1)
+			fatal("%s", __func__);
+		ret = show_answer(c->id, 1, out);
+		free(out);
+		return (ret);
+	}
+	an->c = c;
+	facts_out_init(&an->o, show_emit, an);
+	c->arg = an;
+	return (show_more(c));
+}
+
+/*
+ * More of c's answer, while c has read most of what it was sent, and
+ * its result once it is all made; -1 closes c
+ */
+static int
+show_more(struct ctl_conn *c)
+{
+	struct answer		*an = c->arg;
+	int			 more = 1;
+
+	if (an == NULL)
+		return (0);
+	while (more == 1 && imsgbuf_queuelen(&c->iev.ibuf) < SHOW_LOW) {
+		more = facts_more(an->a, &an->o, SHOW_BATCH);
+		show_printed(an);
+		if (an->failed)
+			return (-1);
+	}
+	if (more == 1)
+		return (0);
+	show_gone(c);
+	return (show_result(c, more == 0 ? 0 : 1));
+}
+
+/* the end of an answer of facts, after however much c has unread */
+static int
+show_result(struct ctl_conn *c, int32_t status)
+{
+	struct nshd_result	 r;
+
+	r.status = status;
+	return (imsg_compose_event(&c->iev, IMSG_CTL_RESULT, 0, 0, -1, &r,
+	    sizeof(r)) == -1 ? -1 : 0);
+}
+
+static void
+show_gone(struct ctl_conn *c)
+{
+	struct answer	*an = c->arg;
+
+	if (an == NULL)
+		return;
+	facts_answer_free(an->a);
+	free(an);
+	c->arg = NULL;
+}
+
+/* a unit, to the client; however much it has unread, as it is a batch */
+static void
+show_emit(void *arg, const void *buf, size_t len)
+{
+	struct answer	*an = arg;
+
+	if (imsg_compose_event(&an->c->iev, IMSG_CTL_FACTS, 0, 0, -1, buf,
+	    len) == -1)
+		an->failed = 1;
+}
+
+/* what nsh's code printed as it made facts, as messages */
+static void
+show_printed(struct answer *an)
+{
+	char	 buf[1024];
+	off_t	 off = 0;
+	ssize_t	 n;
+
+	if (fflush(stdout) == EOF)
+		log_warn("%s: stdout", __func__);
+	clearerr(stdout);
+	while ((n = pread(STDOUT_FILENO, buf, sizeof(buf) - 1, off)) > 0) {
+		buf[n] = '\0';
+		off += n;
+		if (facts_message(&an->o, "%s", buf) == -1)
+			an->failed = 1;
+	}
+	if (off > 0 && (ftruncate(STDOUT_FILENO, 0) == -1 ||
+	    lseek(STDOUT_FILENO, 0, SEEK_SET) == -1))
+		fatal("%s", __func__);
 }

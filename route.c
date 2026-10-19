@@ -31,6 +31,8 @@
 #include "ip.h"
 #include "externs.h"
 #include "settings.h"
+#include "facts.h"
+#include "showfacts.h"
 
 #define ASSUME_NETMASK 1
 
@@ -375,28 +377,17 @@ is_ip_addr(char *arg)
 	return 0;
 }
 
+/* show route address: asked of nshd, and rendered here */
 void
 show_route(char *arg, int tableid)
 {
 	ip_t dest;
-	struct rt_metrics rt_metrics;
 
 	memset(&dest, 0, sizeof(ip_t));
-	memset(&rt_metrics, 0, sizeof(rt_metrics));
-
 	parse_ip_pfx(arg, NO_NETMASK, &dest);
 	if (dest.family == 0)
 		return;
-
-	ip_route(&dest, NULL, RTM_GET, RTF_UP, tableid, rt_metrics, 0);
-
-	/*
-	 * ip_route() calls rtmsg() which calls
-	 * print_getmsg() on RTM_GET to show a route,
-	 * so nothing else needs to happen here...
-	 */
-
-	return;
+	facts_show(stdout, "lookup %s %d", arg, tableid);
 }
 
 int

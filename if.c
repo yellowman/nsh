@@ -54,20 +54,25 @@
 #include "externs.h"
 #include "ctl.h"
 #include "settings.h"
+#include "facts.h"
+#include "showfacts.h"
 
 char *iftype(int int_type);
 const char *get_linkstate(int, int);
-void show_int_status(char *, int, FILE *);
 char *get_hwdaddr(char *ifname);
 void pack_ifaliasreq(struct ifaliasreq *, ip_t *, struct in_addr *, char *);
 void pack_in6aliasreq(struct in6_aliasreq *, ip_t *, struct in6_addr *, char *);
 void ipv6ll_db_store(struct sockaddr_in6 *, struct sockaddr_in6 *, int, char *);
-void printifhwfeatures(int, char *, FILE *);
 void intipusage(const char *, const char *);
 int run_ipcp(char *, int, int);
-void show_vnet_parent(int, char *, FILE *);
 void pwe3usage(void);
 int show_vlan(int, int);
+
+/* lifted right from ifconfig.c */
+#define HWFEATURESBITS							\
+	"\024\1CSUM_IPv4\2CSUM_TCPv4\3CSUM_UDPv4"			\
+	"\5VLAN_MTU\6VLAN_HWTAGGING\10CSUM_TCPv6"			\
+	"\11CSUM_UDPv6\20WOL"
 
 static struct ifmpwreq imrsave;
 static char imrif[IFNAMSIZ];
@@ -130,96 +135,552 @@ get_linkstate(int mt, int link_state)
 	return buf;
 }
 
-void
-show_int_status(char *ifname, int ifs, FILE *outfile)
-{
-	struct ifreq ifr;
-	struct ifmediareq ifmr;
-	int flags;
-	struct if_data if_data;
-	struct sockaddr_dl *sdl = NULL;
-	const char *link_state_desc = NULL;
-	struct ifaddrs *ifap, *ifa;
-	uint64_t *media_list = NULL, seen_options = 0;
-	const char *ifm_type = NULL, *ifm_subtype = NULL;
-	char ifm_options_current[128];
-	char ifm_options_active[128];
+/* an interface, and its addresses, as facts */
+static struct facts_field interface_fields[] = {
+	[IF_NAME] =		{ "name",		FACT_STRING },
+	[IF_DESCR] =		{ "description",	FACT_STRING },
+	[IF_BRIDGE] =		{ "bridge",		FACT_U64 },
+	[IF_FLAGS] =		{ "flags",		FACT_U64 },
+	[IF_LASTCHANGE] =	{ "last-change",	FACT_TIME },
+	[IF_TYPE] =		{ "type",		FACT_U64 },
+	[IF_LLADDR] =		{ "hardware-address",	FACT_ADDRESS },
+	[IF_LINK] =		{ "link",		FACT_STRING },
+	[IF_RDOMAIN] =		{ "rdomain",		FACT_U64 },
+	[IF_MTU] =		{ "mtu",		FACT_U64 },
+	[IF_HARDMTU] =		{ "hardmtu",		FACT_U64 },
+	[IF_BAUDRATE] =		{ "line-rate",		FACT_U64 },
+	[IF_IPACKETS] =		{ "input-packets",	FACT_U64 },
+	[IF_IBYTES] =		{ "input-bytes",	FACT_U64 },
+	[IF_IERRORS] =		{ "input-errors",	FACT_U64 },
+	[IF_IQDROPS] =		{ "input-drops",	FACT_U64 },
+	[IF_OPACKETS] =		{ "output-packets",	FACT_U64 },
+	[IF_OBYTES] =		{ "output-bytes",	FACT_U64 },
+	[IF_OERRORS] =		{ "output-errors",	FACT_U64 },
+	[IF_NOPROTO] =		{ "unsupported",	FACT_U64 },
+	[IF_COLLISIONS] =	{ "collisions",		FACT_U64 },
+	[IF_CAPABILITIES] =	{ "hardware-features",	FACT_U64 },
+	[IF_MEDIACOUNT] =	{ "media-count",	FACT_U64 },
+	[IF_MEDIASTATUS] =	{ "media-status",	FACT_U64 },
+	[IF_TUNSRC] =		{ "tunnel-source",	FACT_ADDRESS },
+	[IF_TUNDST] =		{ "tunnel-destination",	FACT_ADDRESS },
+	[IF_TUNPORT] =		{ "tunnel-port",	FACT_U64 },
+	[IF_TUNRDOMAIN] =	{ "tunnel-rdomain",	FACT_U64 },
+	[IF_TUNTTL] =		{ "tunnel-ttl",		FACT_U64 },
+	[IF_VNETID] =		{ "vnetid",		FACT_U64 },
+	[IF_PARENT] =		{ "parent",		FACT_STRING },
+	[IF_SSID] =		{ "ssid",		FACT_STRING },
+	[IF_POWERSAVE] =	{ "powersave",		FACT_U64 },
+	[IF_CARPBALANCING] =	{ "carp-balancing",	FACT_U64 },
+	[IF_CARPPEER] =		{ "carp-peer",		FACT_ADDRESS },
+	[IF_CARPDEV] =		{ "carp-device",	FACT_STRING },
+	[IF_CARPADVBASE] =	{ "carp-advbase",	FACT_U64 },
+	[IF_WGPUBLIC] =		{ "wireguard-public-key", FACT_STRING },
+	[IF_TRUNKPARENT] =	{ "trunk-parent",	FACT_STRING },
+	[IF_TRUNKFLAGS] =	{ "trunk-port-flags",	FACT_U64 },
+	[IF_TRUNKPROTO] =	{ "trunk-protocol",	FACT_U64 },
+};
+struct facts_kind kind_interface = { "interface", interface_fields,
+    IF_NFIELDS };
 
-	ifm_options_current[0] = '\0';
-	ifm_options_active[0] = '\0';
+static struct facts_field address_fields[] = {
+	[ADDR_ADDRESS] =	{ "address",		FACT_ADDRESS },
+	[ADDR_MASK] =		{ "netmask",		FACT_ADDRESS },
+	[ADDR_DST] =		{ "destination",	FACT_ADDRESS },
+	[ADDR_BRD] =		{ "broadcast",		FACT_ADDRESS },
+};
+struct facts_kind kind_address = { "address", address_fields, ADDR_NFIELDS };
+
+/* the names of interface types, for f */
+void
+if_typenames(struct facts_field *f)
+{
+	struct facts_name	*names;
+	size_t			 i;
+
+	if ((names = calloc(nitems(iftypes), sizeof(*names))) == NULL)
+		return;
+	for (i = 0; i < nitems(iftypes); i++) {
+		names[i].value = iftypes[i].type;
+		names[i].name = iftypes[i].name;
+	}
+	f->naming = FACT_VALUES;
+	f->names = names;
+	f->nnames = nitems(iftypes);
+}
+
+void
+if_facts_init(void)
+{
+	facts_bitnames(&interface_fields[IF_FLAGS], ifnetflags);
+	if_typenames(&interface_fields[IF_TYPE]);
+	facts_bitnames(&interface_fields[IF_CAPABILITIES], HWFEATURESBITS);
+	carp_balnames(&interface_fields[IF_CARPBALANCING]);
+	trunk_names(&interface_fields[IF_TRUNKPROTO],
+	    &interface_fields[IF_TRUNKFLAGS]);
+}
+
+/*
+ * An interface, as show interface shows it: the records of what is
+ * on it, its addresses, media and the rest, then its own, which ends
+ * them. With detail, the media it supports, and a bridge's members
+ * and the addresses it learned.
+ */
+int
+if_facts(struct facts_out *o, char *ifname, int detail)
+{
+	struct facts_value	 v[IF_NFIELDS], av[ADDR_NFIELDS];
+	struct ifreq		 ifr, ifrdesc;
+	struct if_laddrreq	 req;
+	struct if_parent	 ifp;
+	struct if_data		 if_data;
+	struct ifaddrs		*ifap = NULL, *ifa;
+	struct sockaddr_dl	*sdl;
+	struct sockaddr_in	*sin;
+	struct sockaddr_in6	*sin6;
+	static char		 ifdescr[IFDESCRSIZE], ssid[512], ps[512];
+	static char		 parent[IFNAMSIZ];
+	const char		*errstr;
+	int			 ifs, flags, i, r = 0;
+
+	if (!is_valid_ifname(ifname))
+		return (facts_message(o, "%% interface %s not found\n",
+		    ifname));
+	if ((ifs = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
+		return (facts_message(o, "%% show_int: %s\n",
+		    strerror(errno)));
+
+	memset(v, 0, sizeof(v));
+	facts_string(&v[IF_NAME], ifname);
+	facts_u64(&v[IF_BRIDGE], is_bridge(ifs, ifname) ? 1 : 0);
+	flags = get_ifflags(ifname, ifs);
+	facts_u64(&v[IF_FLAGS], (u_int)flags);
 
 	memset(&ifr, 0, sizeof(ifr));
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
-
-	flags = get_ifflags(ifname, ifs);
 	ifr.ifr_data = (caddr_t)&if_data;
 	if (ioctl(ifs, SIOCGIFDATA, (caddr_t)&ifr) < 0) {
-		printf("%% show_int_status: SIOCGIFDATA: %s\n",
+		r = facts_message(o, "%% show_int: SIOCGIFDATA: %s\n",
 		    strerror(errno));
-		return;
-	}
-	if (ioctl(ifs, SIOCGIFRDOMAIN, (caddr_t)&ifr) == -1) {
-		printf("%% show_int_status: SIOCGIFRDOMAIN: %s\n",
-		    strerror(errno));
-		return;
+		close(ifs);
+		return (r);
 	}
 
-	memset(&ifmr, 0, sizeof(ifmr));
-	strlcpy(ifmr.ifm_name, ifname, sizeof(ifmr.ifm_name));
+	memset(&ifrdesc, 0, sizeof(ifrdesc));
+	strlcpy(ifrdesc.ifr_name, ifname, sizeof(ifrdesc.ifr_name));
+	ifdescr[0] = '\0';
+	ifrdesc.ifr_data = (caddr_t)&ifdescr;
+	if (ioctl(ifs, SIOCGIFDESCR, &ifrdesc) == 0 && strlen(ifdescr))
+		facts_string(&v[IF_DESCR], ifdescr);
+
+	if (if_data.ifi_lastchange.tv_sec)
+		facts_time(&v[IF_LASTCHANGE], if_data.ifi_lastchange.tv_sec,
+		    if_data.ifi_lastchange.tv_usec * 1000);
+	facts_u64(&v[IF_TYPE], if_data.ifi_type);
+	facts_u64(&v[IF_MTU], if_data.ifi_mtu);
+	facts_u64(&v[IF_BAUDRATE], if_data.ifi_baudrate);
+	facts_u64(&v[IF_IPACKETS], if_data.ifi_ipackets);
+	facts_u64(&v[IF_IBYTES], if_data.ifi_ibytes);
+	facts_u64(&v[IF_IERRORS], if_data.ifi_ierrors);
+	facts_u64(&v[IF_IQDROPS], if_data.ifi_iqdrops);
+	facts_u64(&v[IF_OPACKETS], if_data.ifi_opackets);
+	facts_u64(&v[IF_OBYTES], if_data.ifi_obytes);
+	facts_u64(&v[IF_OERRORS], if_data.ifi_oerrors);
+	facts_u64(&v[IF_NOPROTO], if_data.ifi_noproto);
+	facts_u64(&v[IF_COLLISIONS], if_data.ifi_collisions);
+	facts_u64(&v[IF_CAPABILITIES], (u_int)if_data.ifi_capabilities);
+
+	if (ioctl(ifs, SIOCGIFRDOMAIN, (caddr_t)&ifr) != -1)
+		facts_u64(&v[IF_RDOMAIN], ifr.ifr_rdomainid);
+	if (ioctl(ifs, SIOCGIFHARDMTU, (caddr_t)&ifr) != -1 &&
+	    ifr.ifr_hardmtu)
+		facts_u64(&v[IF_HARDMTU], ifr.ifr_hardmtu);
+
+	wg_facts(o, ifs, ifname, v);
+	umb_facts(o, ifs, ifname);
+	trunk_facts(o, ifs, ifname, v);
+	media_facts(o, ifs, ifname, v, detail);
 
 	if (getifaddrs(&ifap) != 0) {
-		printf("%% show_int_status: getifaddrs: %s\n",
+		r = facts_message(o, "%% show_int: getifaddrs failed: %s\n",
 		    strerror(errno));
-		return;
+		close(ifs);
+		return (r);
 	}
 	for (ifa = ifap; ifa; ifa = ifa->ifa_next) {
-		if (ifa->ifa_addr->sa_family == AF_LINK &&
-		    (strcmp(ifname, ifa->ifa_name) == 0)) {
+		if (ifa->ifa_addr == NULL ||
+		    strncmp(ifname, ifa->ifa_name, IFNAMSIZ))
+			continue;
+		memset(av, 0, sizeof(av));
+		switch (ifa->ifa_addr->sa_family) {
+		case AF_LINK:
+			/* the hardware address, and how the link is */
 			sdl = (struct sockaddr_dl *)ifa->ifa_addr;
-			link_state_desc = get_linkstate(sdl->sdl_type,
-			    if_data.ifi_link_state);
+			if (v[IF_LINK].type == FACT_NONE)
+				facts_string(&v[IF_LINK], get_linkstate(
+				    sdl->sdl_type, if_data.ifi_link_state));
+			if (sdl->sdl_alen == ETHER_ADDR_LEN &&
+			    (sdl->sdl_type == IFT_ETHER ||
+			    sdl->sdl_type == IFT_IEEE80211) &&
+			    v[IF_LLADDR].type == FACT_NONE)
+				for (i = 0; i < ETHER_ADDR_LEN; i++)
+					if (LLADDR(sdl)[i] != 0) {
+						facts_sockaddr(&v[IF_LLADDR],
+						    ifa->ifa_addr);
+						break;
+					}
+			continue;
+		case AF_INET:
+			sin = (struct sockaddr_in *)ifa->ifa_addr;
+			if (sin->sin_addr.s_addr == INADDR_ANY)
+				continue;
+			if (flags & IFF_POINTOPOINT)
+				facts_sockaddr(&av[ADDR_DST], ifa->ifa_dstaddr);
+			else if (flags & IFF_BROADCAST)
+				facts_sockaddr(&av[ADDR_BRD],
+				    ifa->ifa_broadaddr);
+			break;
+		case AF_INET6:
+			sin6 = (struct sockaddr_in6 *)ifa->ifa_addr;
+			if (IN6_IS_ADDR_UNSPECIFIED(&sin6->sin6_addr))
+				continue;
+			if (flags & IFF_POINTOPOINT)
+				facts_sockaddr(&av[ADDR_DST], ifa->ifa_dstaddr);
+			break;
+		default:
+			continue;
+		}
+		facts_sockaddr(&av[ADDR_ADDRESS], ifa->ifa_addr);
+		facts_sockaddr(&av[ADDR_MASK], ifa->ifa_netmask);
+		if (facts_record(o, &kind_address, av) == -1)
+			r = -1;
+	}
+
+	/* a tunnel's endpoints */
+	memset(&req, 0, sizeof(req));
+	strlcpy(req.iflr_name, ifname, sizeof(req.iflr_name));
+	if (ioctl(ifs, SIOCGLIFPHYADDR, (caddr_t)&req) == 0) {
+		facts_sockaddr(&v[IF_TUNSRC], (struct sockaddr *)&req.addr);
+		facts_sockaddr(&v[IF_TUNDST], (struct sockaddr *)&req.dstaddr);
+		if (req.dstaddr.ss_family == AF_INET)
+			facts_u64(&v[IF_TUNPORT], ntohs(((struct sockaddr_in *)
+			    &req.dstaddr)->sin_port));
+		else if (req.dstaddr.ss_family == AF_INET6)
+			facts_u64(&v[IF_TUNPORT], ntohs(((struct sockaddr_in6 *)
+			    &req.dstaddr)->sin6_port));
+		facts_u64(&v[IF_TUNRDOMAIN], get_physrtable(ifs, ifname));
+		facts_u64(&v[IF_TUNTTL], get_physttl(ifs, ifname));
+	}
+	carp_facts(o, ifs, ifname, v);
+	if (ioctl(ifs, SIOCGVNETID, (caddr_t)&ifr) != -1)
+		facts_u64(&v[IF_VNETID], ifr.ifr_vnetid);
+	memset(&ifp, 0, sizeof(ifp));
+	strlcpy(ifp.ifp_name, ifname, sizeof(ifp.ifp_name));
+	if (ioctl(ifs, SIOCGIFPARENT, (caddr_t)&ifp) != -1) {
+		strlcpy(parent, ifp.ifp_parent, sizeof(parent));
+		facts_string(&v[IF_PARENT], parent);
+	}
+
+	/* the key nsh.db keeps for a network is for no one here */
+	if (get_nwinfo(ifname, ssid, sizeof(ssid), NWID) != 0) {
+		facts_string(&v[IF_SSID], ssid);
+		if (get_nwinfo(ifname, ps, sizeof(ps), POWERSAVE) != 0) {
+			i = strtonum(ps, 0, INT_MAX, &errstr);
+			if (errstr == NULL)
+				facts_u64(&v[IF_POWERSAVE], i);
+		}
+	}
+
+	if (detail && v[IF_BRIDGE].v.u)
+		bridge_facts(o, ifs, ifname);
+
+	freeifaddrs(ifap);
+	close(ifs);
+	if (facts_record(o, &kind_interface, v) == -1)
+		r = -1;
+	return (r);
+}
+
+/* an interface, as show interface printed it */
+void
+if_render(struct frecs *rs, FILE *outfile)
+{
+	struct frec		*ifr = TAILQ_LAST(rs, frecs), *a;
+	struct sockaddr_storage	 ss, ms, ds;
+	struct sockaddr_in	*sin = (struct sockaddr_in *)&ss;
+	struct sockaddr_in	*sinmask = (struct sockaddr_in *)&ms;
+	struct sockaddr_in	*sindest = (struct sockaddr_in *)&ds;
+	struct sockaddr_in6	*sin6 = (struct sockaddr_in6 *)&ss;
+	struct sockaddr_in6	*sin6mask = (struct sockaddr_in6 *)&ms;
+	struct sockaddr_in6	*sin6dest = (struct sockaddr_in6 *)&ds;
+	const struct facts_value *t;
+	struct timeval		 tv;
+	char			 src[NI_MAXHOST], dst[NI_MAXHOST];
+	time_t			 c;
+	int			 br, flags, days, hours, mins, pntd, ippntd = 0;
+	uint64_t		 type, ib, ip, ob, op;
+
+	if (ifr == NULL || ifr->k != &kind_interface)
+		return;
+	br = fu(ifr, IF_BRIDGE, 0);
+	flags = fu(ifr, IF_FLAGS, 0);
+
+	fprintf(outfile, "%% %s", fs(ifr, IF_NAME));
+	if (fs(ifr, IF_DESCR) != NULL)
+		fprintf(outfile, " (%s)", fs(ifr, IF_DESCR));
+	fputc('\n', outfile);
+
+	fprintf(outfile, "  %s is %s", br ? "Bridge" : "Interface",
+	    flags & IFF_UP ? "up" : "down");
+
+	if ((t = FV(ifr, IF_LASTCHANGE, FACT_TIME)) != NULL &&
+	    t->v.t.sec) {
+		gettimeofday(&tv, (struct timezone *)0);
+		c = difftime(tv.tv_sec, t->v.t.sec);
+		days = c / (24 * 60 * 60);
+		c %= (24 * 60 * 60);
+		hours = c / (60 * 60);
+		c %= (60 * 60);
+		mins = c / 60;
+		c %= 60;
+		fprintf(outfile, " (last change ");
+		if (days)
+			fprintf(outfile, "%id ", days);
+		fprintf(outfile, "%02i:%02i:%02i)", hours, mins, (int)c);
+	}
+
+	fprintf(outfile, ", protocol is %s\n",
+	    flags & IFF_RUNNING ? "up" : "down");
+
+	type = fu(ifr, IF_TYPE, 0);
+	fprintf(outfile, "  Interface type %s", iftype(type));
+	if (type != IFT_WIREGUARD) {
+		if (flags & IFF_BROADCAST)
+			fprintf(outfile, " (Broadcast)");
+		else if (flags & IFF_POINTOPOINT)
+			fprintf(outfile, " (PointToPoint)");
+	}
+	if ((t = FV(ifr, IF_LLADDR, FACT_ADDRESS)) != NULL &&
+	    t->v.a.len == ETHER_ADDR_LEN)
+		fprintf(outfile, ", hardware address %s",
+		    ether_ntoa((struct ether_addr *)t->v.a.bytes));
+	fputc('\n', outfile);
+
+	wg_render(rs, ifr, outfile);
+	umb_render(rs, outfile);
+	trunk_render(rs, ifr, outfile);
+	media_render(rs, ifr, outfile);
+
+	/*
+	 * Print interface IP address, and broadcast or
+	 * destination if available.  But, don't print broadcast
+	 * if it is what we would expect given the ip and netmask!
+	 */
+	for (a = NULL; (a = frec_next(rs, a, &kind_address)) != NULL; ) {
+		if (!fsockaddr(a, ADDR_ADDRESS, &ss))
+			continue;
+		fsockaddr(a, ADDR_MASK, &ms);
+		if (!ippntd)
+			fprintf(outfile, "  Internet address");
+		fprintf(outfile, "%s %s", ippntd ? "," : "",
+		    ss.ss_family == AF_INET ?
+		    netname4(sin->sin_addr.s_addr, sinmask) :
+		    netname6(sin6, sin6mask));
+		ippntd = 1;
+
+		switch (ss.ss_family) {
+		case AF_INET:
+			if (flags & IFF_POINTOPOINT) {
+				if (fsockaddr(a, ADDR_DST, &ds))
+					fprintf(outfile, " (Destination %s)",
+					    routename4(
+					    sindest->sin_addr.s_addr));
+			} else if (flags & IFF_BROADCAST &&
+			    fsockaddr(a, ADDR_BRD, &ds)) {
+				/*
+				 * no reason to show the broadcast addr
+				 * if it is standard (this should always
+				 * be true unless someone has messed up their
+				 * network or they are playing around...)
+				 */
+				if (ntohl(sindest->sin_addr.s_addr) !=
+				    in4_brdaddr(sin->sin_addr.s_addr,
+				    sinmask->sin_addr.s_addr) &&
+				    ntohl(sindest->sin_addr.s_addr) !=
+				    INADDR_ANY)
+					fprintf(outfile, " (Broadcast %s)",
+					    inet_ntoa(sindest->sin_addr));
+			}
+			break;
+		case AF_INET6:
+			if (flags & IFF_POINTOPOINT &&
+			    fsockaddr(a, ADDR_DST, &ds))
+				fprintf(outfile, " (Destination %s)",
+				    routename6(sin6dest));
 			break;
 		}
 	}
+	if (ippntd)
+		fputc('\n', outfile);
 
-	if (ioctl(ifs, SIOCGIFMEDIA, (caddr_t)&ifmr) != -1 &&
-	    ifmr.ifm_count > 0) {
-		media_list = calloc(ifmr.ifm_count, sizeof(*media_list));
-		if (media_list == NULL) {
-			printf("%% show_int_status: calloc: %s\n",
-			    strerror(errno));
-			return;
+	if (!br) {
+		/* a tunnel with a destination port, as phys_status() said */
+		if (fu(ifr, IF_TUNPORT, 0) > 0 &&
+		    fsockaddr(ifr, IF_TUNSRC, &ss) &&
+		    fsockaddr(ifr, IF_TUNDST, &ds) &&
+		    getnameinfo((struct sockaddr *)&ss, ss.ss_len, src,
+		    sizeof(src), 0, 0, NI_NUMERICHOST) == 0 &&
+		    getnameinfo((struct sockaddr *)&ds, ds.ss_len, dst,
+		    sizeof(dst), 0, 0, NI_NUMERICHOST) == 0) {
+			fprintf(outfile, "  Tunnel source %s destination %s",
+			    src, dst);
+			if (fu(ifr, IF_TUNRDOMAIN, 0) != 0)
+				fprintf(outfile, " destination rdomain %i",
+				    (int)fu(ifr, IF_TUNRDOMAIN, 0));
+			if (fu(ifr, IF_TUNTTL, 0) != 0)
+				fprintf(outfile, " ttl %i",
+				    (int)fu(ifr, IF_TUNTTL, 0));
+			fputc('\n', outfile);
 		}
-		ifmr.ifm_ulist = media_list;
-		if (ioctl(ifs, SIOCGIFMEDIA, (caddr_t)&ifmr) == -1) {
-			printf("%% show_int_status: SIOCGIFMEDIA: %s\n",
-			    strerror(errno));
-			return;
-		}
-		if (link_state_desc == NULL)
-			link_state_desc = get_ifm_linkstate_str(&ifmr);
+		carp_render(rs, ifr, outfile);
+
+		fputc(' ', outfile);
+		if (fhas(ifr, IF_VNETID))
+			fprintf(outfile, " vnetid %llu,",
+			    (unsigned long long)fu(ifr, IF_VNETID, 0));
+		if (fs(ifr, IF_PARENT) != NULL)
+			fprintf(outfile, " parent %s,", fs(ifr, IF_PARENT));
+		if (fhas(ifr, IF_RDOMAIN))
+			fprintf(outfile, " rdomain %d,",
+			    (int)fu(ifr, IF_RDOMAIN, 0));
+
+		/*
+		 * Display MTU, line rate
+		 */
+		fprintf(outfile, " MTU %u bytes", (u_int)fu(ifr, IF_MTU, 0));
+		if (fu(ifr, IF_HARDMTU, 0))
+			fprintf(outfile, " (hardmtu %u)",
+			    (u_int)fu(ifr, IF_HARDMTU, 0));
+		if (fu(ifr, IF_BAUDRATE, 0))
+			fprintf(outfile, ", Line Rate %llu %s",
+			    (unsigned long long)(MBPS(fu(ifr, IF_BAUDRATE, 0)) ?
+			    MBPS(fu(ifr, IF_BAUDRATE, 0)) :
+			    fu(ifr, IF_BAUDRATE, 0) / 1000),
+			    MBPS(fu(ifr, IF_BAUDRATE, 0)) ? "Mbps" : "Kbps");
+
+		fputc('\n', outfile);
 	}
+
+	if (fs(ifr, IF_SSID) != NULL) {
+		fprintf(outfile, "  SSID %s", fs(ifr, IF_SSID));
+		if (fhas(ifr, IF_POWERSAVE))
+			fprintf(outfile, ", powersaving (%d ms)\n",
+			    (int)fu(ifr, IF_POWERSAVE, 0));
+		fputc('\n', outfile);
+	}
+
+	/*
+	 * Display remaining info from if_data structure
+	 */
+	ip = fu(ifr, IF_IPACKETS, 0);
+	ib = fu(ifr, IF_IBYTES, 0);
+	op = fu(ifr, IF_OPACKETS, 0);
+	ob = fu(ifr, IF_OBYTES, 0);
+	fprintf(outfile, "  %llu packets input, %llu bytes, %llu errors, "
+	    "%llu drops\n", (unsigned long long)ip, (unsigned long long)ib,
+	    (unsigned long long)fu(ifr, IF_IERRORS, 0),
+	    (unsigned long long)fu(ifr, IF_IQDROPS, 0));
+	fprintf(outfile, "  %llu packets output, %llu bytes, %llu errors, "
+	    "%llu unsupported\n", (unsigned long long)op,
+	    (unsigned long long)ob,
+	    (unsigned long long)fu(ifr, IF_OERRORS, 0),
+	    (unsigned long long)fu(ifr, IF_NOPROTO, 0));
+	if (ib && ip && (ib / ip) >= ETHERMIN) {
+		/* < ETHERMIN means byte counter probably rolled over */
+		fprintf(outfile, "  %llu input", (unsigned long long)(ib / ip));
+		pntd = 1;
+	} else
+		pntd = 0;
+	if (ob && op && (ob / op) >= ETHERMIN) {
+		/* < ETHERMIN means byte counter probably rolled over */
+		fprintf(outfile, "%s%llu output", pntd ? ", " : "  ",
+		    (unsigned long long)(ob / op));
+		pntd = 1;
+	}
+	if (pntd)
+		fprintf(outfile, " (average bytes/packet)\n");
+
+	switch (type) {
+	/*
+	 * These appear to be the only interface types to increase collision
+	 * count in the OpenBSD 3.2 kernel.
+	 */
+	case IFT_ETHER:
+	case IFT_SLIP:
+	case IFT_PROPVIRTUAL:
+	case IFT_IEEE80211:
+		fprintf(outfile, "  %llu collisions\n",
+		    (unsigned long long)fu(ifr, IF_COLLISIONS, 0));
+		break;
+	default:
+		break;
+	}
+
+	if (verbose) {
+		if (flags) {
+			fprintf(outfile, "  Flags:\n    ");
+			bprintf(outfile, flags, ifnetflags);
+			fputc('\n', outfile);
+		}
+		fprintf(outfile, "  Hardware features:\n    ");
+		bprintf(outfile, fu(ifr, IF_CAPABILITIES, 0), HWFEATURESBITS);
+		fputc('\n', outfile);
+		if (br)
+			bridge_render(rs, outfile);
+		media_render_supported(rs, ifr, outfile);
+	}
+}
+
+/* an interface, as show interface status printed it */
+void
+if_render_status(struct frecs *rs, FILE *outfile)
+{
+	struct frec	*ifr = TAILQ_LAST(rs, frecs);
+	const char	*link_state_desc, *ifm_type = NULL, *ifm_subtype = NULL;
+	uint64_t	 current = 0, active = 0, seen_options = 0;
+	char		 ifm_options_current[128];
+	char		 ifm_options_active[128];
+
+	if (ifr == NULL || ifr->k != &kind_interface ||
+	    !fhas(ifr, IF_RDOMAIN))
+		return;
+	ifm_options_current[0] = '\0';
+	ifm_options_active[0] = '\0';
+
+	media_status_words(rs, &current, &active);
+	link_state_desc = fs(ifr, IF_LINK);
+	if (link_state_desc == NULL && fu(ifr, IF_MEDIACOUNT, 0) > 0)
+		link_state_desc = media_linkstate(rs, ifr);
 
 	/* Avoid displaying "unknown" for any non-physical interface. */
 	if (link_state_desc == NULL || strcmp(link_state_desc, "unknown") == 0)
 		link_state_desc = "-";
 
 	get_ifm_options_str(ifm_options_current, sizeof(ifm_options_current),
-	    ifmr.ifm_current, &seen_options);
-	if (IFM_OPTIONS(ifmr.ifm_current) != IFM_OPTIONS(ifmr.ifm_active)) {
+	    current, &seen_options);
+	if (IFM_OPTIONS(current) != IFM_OPTIONS(active)) {
 		get_ifm_options_str(ifm_options_active,
-		    sizeof(ifm_options_active), ifmr.ifm_active, &seen_options);
+		    sizeof(ifm_options_active), active, &seen_options);
 	}
 
-	ifm_type = get_ifm_type_str(ifmr.ifm_active);
+	ifm_type = get_ifm_type_str(active);
 	/* Avoid displaying "autoselect" for any non-physical interface. */
-	if (IFM_SUBTYPE(ifmr.ifm_active) != IFM_AUTO)
-		ifm_subtype = get_ifm_subtype_str(ifmr.ifm_active);
+	if (IFM_SUBTYPE(active) != IFM_AUTO)
+		ifm_subtype = get_ifm_subtype_str(active);
 
-
-	fprintf(outfile, "  %-7s %-7s %-15s %10u  %s%s%s%s%s%s%s\n", ifname,
-	    (flags & IFF_UP) ? "up" : "down", link_state_desc,
-	    ifr.ifr_rdomainid,
+	fprintf(outfile, "  %-7s %-7s %-15s %10u  %s%s%s%s%s%s%s\n",
+	    fs(ifr, IF_NAME),
+	    (fu(ifr, IF_FLAGS, 0) & IFF_UP) ? "up" : "down", link_state_desc,
+	    (u_int)fu(ifr, IF_RDOMAIN, 0),
 	    ifm_type ? ifm_type : "",
 	    ifm_type ? " " : "",
 	    ifm_subtype ? ifm_subtype : "",
@@ -227,31 +688,15 @@ show_int_status(char *ifname, int ifs, FILE *outfile)
 	    ifm_options_current,
 	    ifm_options_current[0] != '\0' ? " " : "",
 	    ifm_options_active[0] != '\0' ? ifm_options_active : "");
-
-	free(media_list);
 }
 
+/* show interface [status|name]: asked of nshd, and rendered here */
 int
 show_int(int argc, char **argv, ...)
 {
-	struct ifaddrs *ifap, *ifa;
-	struct if_nameindex *ifn_list, *ifnp;
-	struct ifreq ifr, ifrdesc;
-	struct if_data if_data;
-	struct sockaddr_in *sin = NULL, *sinmask = NULL, *sindest;
-	struct sockaddr_in6 *sin6 = NULL, *sin6mask = NULL, *sin6dest;
-	struct timeval tv;
-	FILE *outfile;
-	va_list ap;
-	short tmp;
-	int ifs, br, flags, days, hours, mins, pntd;
-	int ippntd = 0;
-	int physrt, physttl;
-	time_t c;
-	char *type, *lladdr;
-	char ifname[IFNAMSIZ];
-
-	char tmp_str[512], tmp_str2[512], ifdescr[IFDESCRSIZE];
+	FILE		*outfile;
+	va_list		 ap;
+	char		 ifname[IFNAMSIZ];
 
 	memset(ifname, 0, sizeof(ifname));
 
@@ -282,324 +727,17 @@ show_int(int argc, char **argv, ...)
 	} if (argc == 3)
 		strlcpy(ifname, argv[2], sizeof(ifname));
 
-	if ((ifs = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-		printf("%% show_int: %s\n", strerror(errno));
-		return 1;
-	}
-
-	/*
-	 * Show all interfaces when no ifname specified.
-	 */
-	if (ifname[0] == '\0') {
-		if ((ifn_list = if_nameindex()) == NULL) {
-			printf("%% show_int: if_nameindex failed\n");
-			close(ifs);
-			return 0;
-		}
-		for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++) {
-			char *args[] = { NULL, NULL, ifnp->if_name };
-
-			show_int(3, args, outfile);
-		}
-		if_freenameindex(ifn_list);
-		close(ifs);
-		return 0;
-	} else if (isprefix(ifname, "status")) {
-		if ((ifn_list = if_nameindex()) == NULL) {
-			printf("%% show_int: if_nameindex failed\n");
-			close(ifs);
-			return 0;
-		}
-		fputs("% Name    Status  Link        Routing-Domain  Media\n",
-		    outfile);
-		for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++)
-			show_int_status(ifnp->if_name, ifs, outfile);
-		if_freenameindex(ifn_list);
-		close(ifs);
-		return 0;
-	} else if (!is_valid_ifname(ifname)) {
+	if (ifname[0] == '\0')
+		return (facts_show(outfile, "interface%s",
+		    verbose ? " detail" : ""));
+	if (isprefix(ifname, "status"))
+		return (facts_show(outfile, "interface status"));
+	if (!is_valid_ifname(ifname)) {
 		printf("%% interface %s not found\n", ifname);
-		close(ifs);
 		return 1;
 	}
-
-	if (!(br = is_bridge(ifs, (char *)ifname)))
-		br = 0;
-
-	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
-
-	/*
-	 * Show up/down status and last change time
-	 */
-	flags = get_ifflags(ifname, ifs);
-
-	ifr.ifr_data = (caddr_t)&if_data;
-	if (ioctl(ifs, SIOCGIFDATA, (caddr_t)&ifr) < 0) {
-		printf("%% show_int: SIOCGIFDATA: %s\n", strerror(errno));
-		close(ifs);
-		return 1;
-	}
-
-	fprintf(outfile, "%% %s", ifname);
-
-	/* description */
-	memset(&ifrdesc, 0, sizeof(ifrdesc));
-	strlcpy(ifrdesc.ifr_name, ifname, sizeof(ifrdesc.ifr_name));
-	ifrdesc.ifr_data = (caddr_t)&ifdescr;
-	if (ioctl(ifs, SIOCGIFDESCR, &ifrdesc) == 0 &&
-	    strlen(ifrdesc.ifr_data))
-		fprintf(outfile, " (%s)", ifrdesc.ifr_data);
-
-	fputc('\n', outfile);
-
-	fprintf(outfile, "  %s is %s", br ? "Bridge" : "Interface",
-	    flags & IFF_UP ? "up" : "down");
-
-	if (if_data.ifi_lastchange.tv_sec) {
-		gettimeofday(&tv, (struct timezone *)0);
-		c = difftime(tv.tv_sec, if_data.ifi_lastchange.tv_sec);
-		days = c / (24 * 60 * 60);
-		c %= (24 * 60 * 60);
-		hours = c / (60 * 60);
-		c %= (60 * 60);
-		mins = c / 60;
-		c %= 60;
-		fprintf(outfile, " (last change ");
-		if (days)
-			fprintf(outfile, "%id ", days);
-		fprintf(outfile, "%02i:%02i:%02i)", hours, mins, (int)c);
-	}
-
-	fprintf(outfile, ", protocol is %s\n",
-	    flags & IFF_RUNNING ? "up" : "down");
-
-	type = iftype(if_data.ifi_type);
-
-	fprintf(outfile, "  Interface type %s", type);
-	if (if_data.ifi_type != IFT_WIREGUARD) {
-		if (flags & IFF_BROADCAST)
-			fprintf(outfile, " (Broadcast)");
-		else if (flags & IFF_POINTOPOINT)
-			fprintf(outfile, " (PointToPoint)");
-	}
-
-	if ((lladdr = get_hwdaddr(ifname)) != NULL)
-		fprintf(outfile, ", hardware address %s", lladdr);
-	fputc('\n', outfile);
-
-	show_wg(ifs, ifname, outfile);
-	show_umb(ifs, ifname, outfile);
-	show_trunk(ifs, ifname, outfile);
-	if (media_status(ifs, ifname, "  Media type ", outfile))
-		return 1;
-
-	/*
-	 * Print interface IP address, and broadcast or
-	 * destination if available.  But, don't print broadcast
-	 * if it is what we would expect given the ip and netmask!
-	 */
-	if (getifaddrs(&ifap) != 0) {
-		printf("%% show_int: getifaddrs failed: %s\n",
-		    strerror(errno));
-		return 1;
-	}
-
-	/*
-	 * Cycle through getifaddrs for interfaces with our
-	 * desired name that sport AF_INET, print the IP and
-	 * related information.
-	 */
-	for (ifa = ifap; ifa; ifa = ifa->ifa_next) {
-		if (ifa->ifa_addr == NULL)
-			continue;
-		if (strncmp(ifname, ifa->ifa_name, IFNAMSIZ))
-			continue;
-
-		switch (ifa->ifa_addr->sa_family) {
-		case AF_INET:
-			sin = (struct sockaddr_in *)ifa->ifa_addr;
-			sinmask = (struct sockaddr_in *)ifa->ifa_netmask;
-			if (sin->sin_addr.s_addr == INADDR_ANY)
-				continue;
-			break;
-		case AF_INET6:
-			sin6 = (struct sockaddr_in6 *)ifa->ifa_addr;
-			sin6mask = (struct sockaddr_in6 *)ifa->ifa_netmask;
-			if (IN6_IS_ADDR_UNSPECIFIED(&sin6->sin6_addr))
-				continue;
-			in6_fillscopeid(sin6);
-			break;
-		default:
-			continue;
-		}
-
-		if (!ippntd)
-			fprintf(outfile, "  Internet address");
-
-		fprintf(outfile, "%s %s", ippntd ? "," : "",
-		    ifa->ifa_addr->sa_family == AF_INET ?
-		    netname4(sin->sin_addr.s_addr, sinmask) :
-		    netname6(sin6, sin6mask));
-
-		ippntd = 1;
-
-		switch (ifa->ifa_addr->sa_family) {
-		case AF_INET:
-			if (flags & IFF_POINTOPOINT) {
-				sindest = (struct sockaddr_in *)
-				    ifa->ifa_dstaddr;
-				fprintf(outfile, " (Destination %s)",
-				    routename4(sindest->sin_addr.s_addr));
-			} else if (flags & IFF_BROADCAST) {
-				sindest = (struct sockaddr_in *)
-				    ifa->ifa_broadaddr;
-				/*
-				 * no reason to show the broadcast addr
-				 * if it is standard (this should always
-				 * be true unless someone has messed up their
-				 * network or they are playing around...)
-				 */
-				if (ntohl(sindest->sin_addr.s_addr) !=
-				    in4_brdaddr(sin->sin_addr.s_addr,
-				    sinmask->sin_addr.s_addr) &&
-				    ntohl(sindest->sin_addr.s_addr) !=
-				    INADDR_ANY)
-					fprintf(outfile, " (Broadcast %s)",
-					    inet_ntoa(sindest->sin_addr));
-			}
-			break;
-		case AF_INET6:
-			if (flags & IFF_POINTOPOINT) {
-				sin6dest = (struct sockaddr_in6 *)
-				    ifa->ifa_dstaddr;
-				in6_fillscopeid(sin6dest);
-				fprintf(outfile, " (Destination %s)",
-				    routename6(sin6dest));
-			}
-			break;
-		default:
-			fprintf(outfile, " unknown");
-			break;
-		}
-	}
-
-	if (ippntd) {
-		fputc('\n', outfile);
-	}
-	freeifaddrs(ifap);
-
-	if (!br) {
-		if (phys_status(ifs, ifname, tmp_str, tmp_str2,
-		    sizeof(tmp_str), sizeof(tmp_str2)) > 0) {
-			fprintf(outfile, "  Tunnel source %s destination %s",
-			    tmp_str, tmp_str2);
-			if (((physrt = get_physrtable(ifs, ifname)) != 0))
-				fprintf(outfile, " destination rdomain %i",
-				    physrt);
-			if (((physttl = get_physttl(ifs, ifname)) != 0))
-				fprintf(outfile, " ttl %i", physttl);
-			fputc('\n', outfile);
-		}
-		carp_state(ifs, ifname, outfile);
-
-		fputc(' ', outfile);
-		show_vnet_parent(ifs, ifname, outfile);
-		if (ioctl(ifs, SIOCGIFRDOMAIN, (caddr_t)&ifr) != -1)
-			fprintf(outfile, " rdomain %d,", ifr.ifr_rdomainid);
-
-		/*
-		 * Display MTU, line rate
-		 */
-		fprintf(outfile, " MTU %u bytes", if_data.ifi_mtu);
-		if (ioctl(ifs, SIOCGIFHARDMTU, (caddr_t)&ifr) != -1) {
-			if (ifr.ifr_hardmtu)
-				fprintf(outfile, " (hardmtu %u)",
-				    ifr.ifr_hardmtu);
-		}
-		if (if_data.ifi_baudrate)
-			fprintf(outfile, ", Line Rate %qu %s",
-			    MBPS(if_data.ifi_baudrate) ?
-			    MBPS(if_data.ifi_baudrate) :
-			    if_data.ifi_baudrate / 1000,
-			    MBPS(if_data.ifi_baudrate) ? "Mbps" : "Kbps");
-
-		fputc('\n', outfile);
-	}
-
-	if (get_nwinfo(ifname, tmp_str, sizeof(tmp_str), NWID) != 0) {
-		fprintf(outfile, "  SSID %s", tmp_str);
-		if(get_nwinfo(ifname, tmp_str, sizeof(tmp_str), NWKEY) != 0)
-			fprintf(outfile, ", key %s", tmp_str);
-		if ((get_nwinfo(ifname, tmp_str, sizeof(tmp_str),
-		    POWERSAVE)) != 0)
-			fprintf(outfile, ", powersaving (%s ms)\n", tmp_str);
-		fputc('\n', outfile);
-	}
-
-	/*
-	 * Display remaining info from if_data structure
-	 */
-	fprintf(outfile, "  %qu packets input, %qu bytes, %qu errors, %qu drops\n",
-	    if_data.ifi_ipackets, if_data.ifi_ibytes, if_data.ifi_ierrors,
-	    if_data.ifi_iqdrops);
-	fprintf(outfile, "  %qu packets output, %qu bytes, %qu errors, "
-	    "%qu unsupported\n",
-	    if_data.ifi_opackets, if_data.ifi_obytes, if_data.ifi_oerrors,
-	    if_data.ifi_noproto);
-	if (if_data.ifi_ibytes && if_data.ifi_ipackets &&
-	    (if_data.ifi_ibytes / if_data.ifi_ipackets) >= ETHERMIN) {
-		/* < ETHERMIN means byte counter probably rolled over */
-		fprintf(outfile, "  %qu input", if_data.ifi_ibytes /
-		    if_data.ifi_ipackets);
-		pntd = 1;
-	} else
-		pntd = 0;
-	if (if_data.ifi_obytes && if_data.ifi_opackets &&
-	    (if_data.ifi_obytes / if_data.ifi_opackets) >= ETHERMIN) {
-		/* < ETHERMIN means byte counter probably rolled over */
-		fprintf(outfile, "%s%qu output", pntd ? ", " : "  ",
-		    if_data.ifi_obytes / if_data.ifi_opackets);
-		pntd = 1;
-	}
-	if (pntd)
-		fprintf(outfile, " (average bytes/packet)\n");
-
-	switch(if_data.ifi_type) {
-	/*
-	 * These appear to be the only interface types to increase collision
-	 * count in the OpenBSD 3.2 kernel.
-	 */
-	case IFT_ETHER:
-	case IFT_SLIP:
-	case IFT_PROPVIRTUAL:
-	case IFT_IEEE80211:
-		fprintf(outfile, "  %qu collisions\n", if_data.ifi_collisions);
-		break;
-	default:
-		break;
-	}
-
-	if(verbose) {
-		if (flags) {
-			fprintf(outfile, "  Flags:\n    ");
-			bprintf(outfile, flags, ifnetflags);
-			fputc('\n', outfile);
-		}
-		printifhwfeatures(ifs, ifname, outfile);
-		if (br) {
-			if ((tmp = bridge_list(ifs, ifname, "    ", tmp_str,
-			    sizeof(tmp_str), SHOW_STPSTATE))) {
-				fprintf(outfile, "  STP member state%s:\n",
-				    tmp > 1 ?  "s" : "");
-				fprintf(outfile, "%s", tmp_str);
-			}
-			bridge_addrs(ifs, ifname, "  ", "    ", outfile);
-		}
-		media_supported(ifs, ifname, "  ", "    ", outfile);
-	}
-
-	close(ifs);
-	return 0;
+	return (facts_show(outfile, "interface %s%s", ifname,
+	    verbose ? " detail" : ""));
 }
 
 int
@@ -882,49 +1020,6 @@ done:
 	freeifaddrs(ifap);
 	close(s);
 	return (0);
-}
-
-void
-show_vnet_parent(int ifs, char *ifname, FILE *outfile)
-{
-	struct if_parent ifp;
-	struct ifreq ifr;
-
-	bzero(&ifr, sizeof(ifr));
-	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
-	if (ioctl(ifs, SIOCGVNETID, (caddr_t)&ifr) != -1)
-		fprintf(outfile, " vnetid %llu,", ifr.ifr_vnetid);
-	bzero(&ifp, sizeof(ifp));
-	strlcpy(ifp.ifp_name, ifname, sizeof(ifp.ifp_name));
-	if (ioctl(ifs, SIOCGIFPARENT, (caddr_t)&ifp) != -1)
-		fprintf(outfile, " parent %s,", ifp.ifp_parent);
-}
-
-/* lifted right from ifconfig.c */
-#define HWFEATURESBITS							\
-	"\024\1CSUM_IPv4\2CSUM_TCPv4\3CSUM_UDPv4"			\
-	"\5VLAN_MTU\6VLAN_HWTAGGING\10CSUM_TCPv6"			\
-	"\11CSUM_UDPv6\20WOL"
-
-/* lifted right from ifconfig.c */
-void
-printifhwfeatures(int ifs, char *ifname, FILE *outfile)
-{
-	struct ifreq	ifr;
-	struct if_data	ifrdat;
-
-	bzero(&ifrdat, sizeof(ifrdat));
-	ifr.ifr_data = (caddr_t)&ifrdat;
-	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
-
-	if (ioctl(ifs, SIOCGIFDATA, (caddr_t)&ifr) == -1) {
-		fprintf(outfile, "%% printifhwfeatures: SIOCGIFDATA: %s\n",
-		    strerror(errno));
-		return;
-	}
-	fprintf(outfile, "  Hardware features:\n    ");
-	bprintf(outfile, (u_int)ifrdat.ifi_capabilities, HWFEATURESBITS);
-	fputc('\n', outfile);
 }
 
 u_int32_t

@@ -35,6 +35,8 @@
 
 #include "stringlist.h"
 #include "externs.h"
+#include "facts.h"
+#include "showfacts.h"
 #include "nshd/nshd.h"
 
 static int	nshd_next(struct imsgbuf *, struct imsg *);
@@ -195,6 +197,84 @@ done:
 		fclose(f);
 	if (out != -1)
 		unlink(path);
+	imsgbuf_clear(&ib);
+	close(fd);
+	return (ret);
+}
+
+/*
+ * show words, as nshd's show processes answer them: facts read into in
+ * as they come, and text printed. -1 if there is no nshd to ask, else 1
+ * if the show was answered and 0 if not.
+ */
+int
+nshd_facts(char *words, struct facts_in *in)
+{
+	struct nshd_show	 show;
+	struct nshd_result	 r = { 0 };
+	struct imsgbuf		 ib;
+	struct imsg		 imsg;
+	struct ibuf		 b;
+	int			 fd, done = 0, ret = 0;
+
+	if ((fd = nshd_open(NSHD_RO_SOCKET, &ib)) == -1) {
+		if (errno != EPROTO)
+			return (-1);
+		printf("%% nshd: not a version nsh speaks\n");
+		return (0);
+	}
+
+	memset(&show, 0, sizeof(show));
+	if (strlcpy(show.words, words, sizeof(show.words)) >=
+	    sizeof(show.words)) {
+		printf("%% show %s: too long\n", words);
+		goto done;
+	}
+	if (imsg_compose(&ib, IMSG_CTL_SHOW, 0, 0, -1, &show,
+	    sizeof(show)) == -1 || imsgbuf_flush(&ib) == -1) {
+		printf("%% nshd: %s\n", strerror(errno));
+		goto done;
+	}
+	while (!done) {
+		if (nshd_next(&ib, &imsg) == -1) {
+			printf("%% nshd: gone before it answered\n");
+			goto done;
+		}
+		switch (imsg_get_type(&imsg)) {
+		case IMSG_CTL_OUTPUT:
+			if (imsg_get_ibuf(&imsg, &b) == -1) {
+				printf("%% nshd: output nsh cannot read\n");
+				imsg_free(&imsg);
+				goto done;
+			}
+			fwrite(ibuf_data(&b), 1, ibuf_size(&b), stdout);
+			break;
+		case IMSG_CTL_FACTS:
+			if (imsg_get_ibuf(&imsg, &b) == -1 ||
+			    facts_read(in, ibuf_data(&b), ibuf_size(&b)) ==
+			    -1) {
+				printf("%% nshd: facts nsh cannot read\n");
+				imsg_free(&imsg);
+				goto done;
+			}
+			break;
+		case IMSG_CTL_RESULT:
+			if (imsg_get_data(&imsg, &r, sizeof(r)) == -1) {
+				printf("%% nshd: a result nsh cannot read\n");
+				imsg_free(&imsg);
+				goto done;
+			}
+			done = 1;
+			break;
+		default:
+			printf("%% nshd: a message nsh does not know\n");
+			imsg_free(&imsg);
+			goto done;
+		}
+		imsg_free(&imsg);
+	}
+	ret = r.status == 0;
+done:
 	imsgbuf_clear(&ib);
 	close(fd);
 	return (ret);

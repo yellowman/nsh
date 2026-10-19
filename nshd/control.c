@@ -46,6 +46,7 @@ static struct {
 	int		 fd;
 	int		(*handler)(struct ctl_conn *, struct imsg *);
 	void		(*closed)(struct ctl_conn *);
+	int		(*written)(struct ctl_conn *);
 } control_state = { .fd = -1 };
 
 static TAILQ_HEAD(, ctl_conn) ctl_conns = TAILQ_HEAD_INITIALIZER(ctl_conns);
@@ -105,10 +106,14 @@ control_init(const char *path, mode_t mode, gid_t gid)
 	return (fd);
 }
 
-/* accept on fd; each client's messages go to handler, closed when it goes */
+/*
+ * accept on fd; each client's messages go to handler, closed when it
+ * goes, and written each time some of what it was sent is written; -1
+ * from handler or written closes the client
+ */
 int
 control_listen(int fd, int (*handler)(struct ctl_conn *, struct imsg *),
-    void (*closed)(struct ctl_conn *))
+    void (*closed)(struct ctl_conn *), int (*written)(struct ctl_conn *))
 {
 	if (control_state.fd != -1)
 		fatalx("%s: a second socket", __func__);
@@ -116,6 +121,7 @@ control_listen(int fd, int (*handler)(struct ctl_conn *, struct imsg *),
 	control_state.fd = fd;
 	control_state.handler = handler;
 	control_state.closed = closed;
+	control_state.written = written;
 	if (listen(fd, CONTROL_BACKLOG) == -1) {
 		log_warn("%s: listen", __func__);
 		return (-1);
@@ -250,7 +256,9 @@ control_dispatch(int fd, short event, void *arg)
 		}
 	}
 	if (event & EV_WRITE) {
-		if (imsgbuf_write(&c->iev.ibuf) == -1) {
+		if (imsgbuf_write(&c->iev.ibuf) == -1 ||
+		    (control_state.written != NULL &&
+		    control_state.written(c) == -1)) {
 			control_close(c);
 			return;
 		}
@@ -284,7 +292,11 @@ control_close_all(void)
 		control_close(c);
 }
 
-/* a message to the client id, if it is still there */
+/*
+ * a message to the client id, if it is still there: -1 if it leaves
+ * too much unread to take it, and whoever asked closes it, so a handler
+ * does not close the client it is handling
+ */
 int
 control_reply(uint32_t id, uint32_t type, const void *data, size_t len)
 {
@@ -293,9 +305,17 @@ control_reply(uint32_t id, uint32_t type, const void *data, size_t len)
 	if ((c = control_connbyid(id)) == NULL)
 		return (0);
 	if (imsgbuf_queuelen(&c->iev.ibuf) > CONTROL_QUEUE ||
-	    imsg_compose_event(&c->iev, type, 0, 0, -1, data, len) == -1) {
-		control_close(c);
+	    imsg_compose_event(&c->iev, type, 0, 0, -1, data, len) == -1)
 		return (-1);
-	}
 	return (0);
+}
+
+/* the client id, closed, if it is still there */
+void
+control_drop(uint32_t id)
+{
+	struct ctl_conn	*c;
+
+	if ((c = control_connbyid(id)) != NULL)
+		control_close(c);
 }

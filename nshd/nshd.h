@@ -54,10 +54,12 @@ struct nshd_result {
 
 /*
  * parent to relay: a child's pipe, or that it is down; relay to parent:
- * a child gone wrong. Each start of a child is a generation of it
+ * a child gone wrong. Each start of a child is a generation of it, and
+ * instance tells the shows apart
  */
 struct nshd_child {
 	int32_t			proc;
+	int32_t			instance;
 	uint32_t		generation;
 };
 
@@ -89,16 +91,18 @@ enum nshd_proc {
 	PROC_ARCHIVE
 };
 
-#define NCHILD	5	/* the processes relay joins */
+#define SHOWS		4	/* shows, which share the read-only socket */
+#define NCHILD		(4 + SHOWS)	/* the processes relay joins */
 
 enum nshd_imsg {
 	IMSG_NONE,
 
 	/* with clients, on either socket */
 	IMSG_CTL_HELLO,		/* nshd_hello; nshd_session back */
-	IMSG_CTL_SHOW,		/* nshd_show; output, then a result */
+	IMSG_CTL_SHOW,		/* nshd_show; output or facts, then a result */
 	IMSG_CTL_OUTPUT,	/* text */
 	IMSG_CTL_RESULT,	/* nshd_result */
+	IMSG_CTL_FACTS,		/* a unit of facts, as facts.h has it */
 
 	/* between nshd's processes */
 	IMSG_CTL_CLOSE,		/* frontend to config: a session is gone */
@@ -132,7 +136,7 @@ void		 privdrop(void);
 
 /* each process but parent */
 __dead void	 relay(int, int);
-__dead void	 showproc(int, int);
+__dead void	 showproc(int, int, int);
 __dead void	 frontend(int, int);
 __dead void	 configproc(int, int);
 __dead void	 kernproc(int, int);

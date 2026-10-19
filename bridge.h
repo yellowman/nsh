@@ -17,7 +17,6 @@
 
 /* request types for bridge_list() */
 
-#define SHOW_STPSTATE	101
 #define MEMBER		102
 
 /* blah */

@@ -80,7 +80,8 @@ frontend_dispatch_relay(int fd, short event, void *arg)
 		switch (imsg_get_type(&imsg)) {
 		/* its socket is fd 4, from parent */
 		case IMSG_STARTUP:
-			if (control_listen(4, frontend_client, frontend_gone) == -1)
+			if (control_listen(4, frontend_client, frontend_gone,
+			    NULL) == -1)
 				fatalx("cannot listen on %s", NSHD_SOCKET);
 			break;
 		case IMSG_RESTART:
@@ -101,8 +102,10 @@ frontend_dispatch_relay(int fd, short event, void *arg)
 		case IMSG_CTL_OUTPUT:
 			if (imsg_get_ibuf(&imsg, &b) == -1)
 				fatal("%s", __func__);
-			control_reply(imsg_get_id(&imsg), imsg_get_type(&imsg),
-			    ibuf_data(&b), ibuf_size(&b));
+			if (control_reply(imsg_get_id(&imsg),
+			    imsg_get_type(&imsg), ibuf_data(&b),
+			    ibuf_size(&b)) == -1)
+				control_drop(imsg_get_id(&imsg));
 			break;
 		default:
 			log_debug("%s: unexpected imsg %u", __func__,

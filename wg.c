@@ -18,6 +18,8 @@
 
 #include "externs.h"
 #include "settings.h"
+#include "facts.h"
+#include "showfacts.h"
 
 int	setwgpeer(const char *);
 int	setwgpeerep(const char *);
@@ -368,46 +370,82 @@ getwg(int ifs)
 	return 0;
 }
 
+/* a wg interface's peers, as facts */
+static struct facts_field wgpeer_fields[] = {
+	[WGP_PUBLIC] =		{ "public-key",		FACT_STRING },
+	[WGP_DESCR] =		{ "description",	FACT_STRING },
+	[WGP_HANDSHAKE] =	{ "last-handshake",	FACT_TIME },
+};
+struct facts_kind kind_wgpeer = { "wg-peer", wgpeer_fields, WGP_NFIELDS };
+
+/* ifname's wg peers, and in ifv its public key */
 void
-show_wg(int ifs, char *ifname, FILE *outfile)
+wg_facts(struct facts_out *o, int ifs, char *ifname, struct facts_value *ifv)
 {
-	int			 i;
-	struct timespec		 now;
+	struct facts_value	 v[WGP_NFIELDS];
+	struct wg_interface_io	*wi;
+	struct wg_peer_io	*p;
+	static char		 public[WG_BASE64_KEY_LEN + 1];
 	char			 key[WG_BASE64_KEY_LEN + 1];
+	int			 i;
 
 	strlcpy(wgdata.wgd_name, ifname, sizeof(wgdata.wgd_name));
 	wgdata.wgd_size = 0;
 	wgdata.wgd_interface = NULL;
-
 	if (getwg(ifs) < 0)
 		return;
-	wg_interface = wgdata.wgd_interface;
+	wi = wgdata.wgd_interface;
 
-	if (wg_interface->i_flags & WG_INTERFACE_HAS_PUBLIC) {
-		b64_ntop(wg_interface->i_public, WG_KEY_LEN,
-		    key, sizeof(key));
-		fprintf(outfile, "  Wireguard publickey %s\n", key);
+	if (wi->i_flags & WG_INTERFACE_HAS_PUBLIC) {
+		b64_ntop(wi->i_public, WG_KEY_LEN, public, sizeof(public));
+		facts_string(&ifv[IF_WGPUBLIC], public);
 	}
 
-	wg_peer = &wg_interface->i_peers[0];
-	for (i = 0; i < wg_interface->i_peers_count; i++) {
-		b64_ntop(wg_peer->p_public, WG_KEY_LEN,
-		    key, sizeof(key));
-		fprintf(outfile, "  Wireguard peer %s", key);
+	p = &wi->i_peers[0];
+	for (i = 0; i < wi->i_peers_count; i++) {
+		memset(v, 0, sizeof(v));
+		b64_ntop(p->p_public, WG_KEY_LEN, key, sizeof(key));
+		facts_string(&v[WGP_PUBLIC], key);
 #ifdef WG_PEER_SET_DESCRIPTION	/* OpenBSD 7.4+ */
-		if (strlen(wg_peer->p_description)) {
-			printf(" (%s)\n", wg_peer->p_description);
-		}
+		if (strlen(p->p_description))
+			facts_string(&v[WGP_DESCR], p->p_description);
 #endif
+		if (p->p_last_handshake.tv_sec != 0)
+			facts_time(&v[WGP_HANDSHAKE],
+			    p->p_last_handshake.tv_sec,
+			    p->p_last_handshake.tv_nsec);
+		facts_record(o, &kind_wgpeer, v);
+		p = (struct wg_peer_io *)&p->p_aips[p->p_aips_count];
+	}
+	free(wgdata.wgd_interface);
+	wgdata.wgd_interface = NULL;
+}
 
-		if (wg_peer->p_last_handshake.tv_sec != 0) {
+/* wg, as show_wg() printed it */
+void
+wg_render(struct frecs *rs, struct frec *ifr, FILE *outfile)
+{
+	const struct facts_value	*t;
+	struct frec			*r;
+	struct timespec			 now;
+	const char			*s;
+
+	if ((s = fs(ifr, IF_WGPUBLIC)) != NULL)
+		fprintf(outfile, "  Wireguard publickey %s\n", s);
+
+	for (r = NULL; (r = frec_next(rs, r, &kind_wgpeer)) != NULL; ) {
+		s = fs(r, WGP_PUBLIC);
+		fprintf(outfile, "  Wireguard peer %s", s != NULL ? s : "");
+		if ((s = fs(r, WGP_DESCR)) != NULL && s[0] != '\0')
+			fprintf(outfile, " (%s)\n", s);
+		if ((t = FV(r, WGP_HANDSHAKE, FACT_TIME)) != NULL &&
+		    t->v.t.sec != 0) {
 			timespec_get(&now, TIME_UTC);
 			fprintf(outfile, " last handshake: %lld seconds ago\n",
-			    now.tv_sec - wg_peer->p_last_handshake.tv_sec);
+			    (long long)(now.tv_sec - t->v.t.sec));
 		}
 		putc('\n', outfile);
 	}
-	free(wgdata.wgd_interface);
 }
 
 /* A description, quoted as makeargv() reads it back */

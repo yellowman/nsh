@@ -23,6 +23,8 @@
 #include "editing.h"
 #include "stringlist.h"
 #include "externs.h"
+#include "facts.h"
+#include "showfacts.h"
 
 char *vers = NSH_VERSION_STR;
 int bridge, verbose, priv, privexec, cli_rtable;
@@ -50,6 +52,12 @@ intr(void)
 /* nshd does not ask itself */
 int
 nshd_show(char *words)
+{
+	return -1;
+}
+
+int
+nshd_facts(char *words, struct facts_in *in)
 {
 	return -1;
 }

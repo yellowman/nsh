@@ -26,6 +26,8 @@
 #include "stringlist.h"
 #include "externs.h"
 #include "settings.h"
+#include "facts.h"
+#include "showfacts.h"
 
 void	umb_printclasses(char *, int, FILE *);
 void	umb_classes(char *, size_t, uint32_t);
@@ -68,9 +70,119 @@ umb_descr2val(const struct umb_valdescr *vdp, char *str)
 	return 0;
 }
 
-void
-show_umb(int ifs, char *ifname, FILE *outfile)
+/* 3GPP 24.008 cause codes */
+static const struct umb_valdescr umb_nwerrors[] = {
+	{ 2, "SIM not activated" },
+	{ 4, "Roaming not supported" },
+	{ 6, "SIM reported stolen" },
+	{ 7, "No GPRS subscription" },
+	{ 8, "GPRS and non-GPRS services not allowed" },
+	{ 11, "Subscription expired" },
+	{ 12, "Subscription does not cover current location" },
+	{ 13, "No roaming in this location" },
+	{ 14, "GPRS not supported" },
+	{ 15, "No subscription for the service" },
+	{ 17, "Registration failed" },
+	{ 22, "Network congestion" },
+	{ 0, NULL }
+};
+
+static const struct umb_valdescr umb_pinstates[] = {
+	{ UMB_PIN_REQUIRED, "required" },
+	{ UMB_PIN_UNLOCKED, "valid" },
+	{ UMB_PUK_REQUIRED, "locked (PUK required)" },
+	{ 0, NULL }
+};
+
+static const struct umb_valdescr umb_cellclasses[] = {
+	{ MBIM_CELLCLASS_GSM, "GSM" },
+	{ MBIM_CELLCLASS_CDMA, "CDMA" },
+	{ 0, NULL }
+};
+
+/* a umb interface, and its name servers, as facts */
+static struct facts_field umb_fields[] = {
+	[UMB_ERROR] =		{ "error",		FACT_U64 },
+	[UMB_ROAMING] =		{ "roaming",		FACT_U64 },
+	[UMB_REGSTATE] =	{ "registration",	FACT_U64 },
+	[UMB_ROAMINGTEXT] =	{ "roaming-text",	FACT_STRING },
+	[UMB_CLASSES] =		{ "available-classes",	FACT_U64 },
+	[UMB_STATE] =		{ "state",		FACT_U64 },
+	[UMB_CELLCLASS] =	{ "cell-type",		FACT_U64 },
+	[UMB_HIGHESTCLASS] =	{ "cell-class",		FACT_U64 },
+	[UMB_RSSI] =		{ "rssi",		FACT_I64 },
+	[UMB_UPLINK] =		{ "uplink-speed",	FACT_U64 },
+	[UMB_DOWNLINK] =	{ "downlink-speed",	FACT_U64 },
+	[UMB_SIMSTATE] =	{ "sim-state",		FACT_U64 },
+	[UMB_PINSTATE] =	{ "pin-state",		FACT_U64 },
+	[UMB_PINLEFT] =		{ "pin-attempts-left",	FACT_I64 },
+	[UMB_SID] =		{ "subscriber-id",	FACT_STRING },
+	[UMB_ICCID] =		{ "icc-id",		FACT_STRING },
+	[UMB_PROVIDER] =	{ "provider",		FACT_STRING },
+	[UMB_PROVIDERID] =	{ "provider-id",	FACT_STRING },
+	[UMB_HWINFO] =		{ "device",		FACT_STRING },
+	[UMB_DEVID] =		{ "device-id",		FACT_STRING },
+	[UMB_FWINFO] =		{ "firmware",		FACT_STRING },
+	[UMB_PHONE] =		{ "phone-number",	FACT_STRING },
+	[UMB_APN] =		{ "apn",		FACT_STRING },
+};
+struct facts_kind kind_umb = { "umb", umb_fields, UMB_NFIELDS };
+
+static struct facts_field umbdns_fields[] = {
+	[UMBDNS_ADDRESS] =	{ "address",		FACT_ADDRESS },
+};
+struct facts_kind kind_umbdns = { "umb-name-server", umbdns_fields,
+    UMBDNS_NFIELDS };
+
+/* names for f from a table of the kernel's, as bits or values */
+static void
+umb_names(struct facts_field *f, uint8_t naming,
+    const struct umb_valdescr *vd)
 {
+	struct facts_name	*fn;
+	size_t			 i, n;
+
+	for (n = 0; vd[n].descr != NULL; n++)
+		;
+	if ((fn = calloc(n, sizeof(*fn))) == NULL)
+		return;
+	for (i = 0; i < n; i++) {
+		fn[i].value = (uint32_t)vd[i].val;
+		fn[i].name = vd[i].descr;
+	}
+	f->naming = naming;
+	f->names = fn;
+	f->nnames = n;
+}
+
+void
+umb_facts_init(void)
+{
+	umb_names(&umb_fields[UMB_ERROR], FACT_VALUES, umb_nwerrors);
+	umb_names(&umb_fields[UMB_REGSTATE], FACT_VALUES, umb_regstate);
+	umb_names(&umb_fields[UMB_CLASSES], FACT_BITS, umb_dataclass);
+	umb_names(&umb_fields[UMB_STATE], FACT_VALUES, umb_istate);
+	umb_names(&umb_fields[UMB_CELLCLASS], FACT_VALUES, umb_cellclasses);
+	umb_names(&umb_fields[UMB_HIGHESTCLASS], FACT_VALUES, umb_dataclass);
+	umb_names(&umb_fields[UMB_SIMSTATE], FACT_VALUES, umb_simstate);
+	umb_names(&umb_fields[UMB_PINSTATE], FACT_VALUES, umb_pinstates);
+}
+
+/* a string of the kernel's, if it has one */
+static void
+umb_string(struct facts_value *v, uint16_t *in, int inlen, char *out,
+    size_t outlen)
+{
+	utf16_to_char(in, inlen, out, outlen);
+	if (out[0] != '\0')
+		facts_string(v, out);
+}
+
+/* ifname's umb, and its name servers */
+void
+umb_facts(struct facts_out *o, int ifs, char *ifname)
+{
+	struct facts_value v[UMB_NFIELDS], dv[UMBDNS_NFIELDS];
 	struct umb_info mi;
 	struct ifreq ifr;
 
@@ -84,9 +196,8 @@ show_umb(int ifs, char *ifname, FILE *outfile)
 	char	 iccid[UMB_ICCID_MAXLEN+1];
 	char	 apn[UMB_APN_MAXLEN+1];
 	char	 pn[UMB_PHONENR_MAXLEN+1];
-	char	 astr[INET6_ADDRSTRLEN];
 
-	int 	 i,n;
+	int 	 i;
 
 	memset((char *)&mi, 0, sizeof(mi));
 	ifr.ifr_data = (caddr_t)&mi;
@@ -94,106 +205,145 @@ show_umb(int ifs, char *ifname, FILE *outfile)
 	if (ioctl(ifs, SIOCGUMBINFO, (caddr_t)&ifr) == -1)
 		return;
 
-	if (mi.nwerror) {
-		/* 3GPP 24.008 Cause Code */
+	memset(v, 0, sizeof(v));
+	if (mi.nwerror)
+		facts_u64(&v[UMB_ERROR], (uint32_t)mi.nwerror);
+	facts_u64(&v[UMB_ROAMING], mi.enable_roaming ? 1 : 0);
+	facts_u64(&v[UMB_REGSTATE], (uint32_t)mi.regstate);
+	umb_string(&v[UMB_ROAMINGTEXT], mi.roamingtxt, UMB_ROAMINGTEXT_MAXLEN,
+	    roamingtxt, sizeof(roamingtxt));
+	facts_u64(&v[UMB_CLASSES], mi.supportedclasses);
+	facts_u64(&v[UMB_STATE], (uint32_t)mi.state);
+	facts_u64(&v[UMB_CELLCLASS], mi.cellclass);
+	facts_u64(&v[UMB_HIGHESTCLASS], mi.highestclass);
+	if (mi.rssi != UMB_VALUE_UNKNOWN)
+		facts_i64(&v[UMB_RSSI], mi.rssi);
+	facts_u64(&v[UMB_UPLINK], mi.uplink_speed);
+	facts_u64(&v[UMB_DOWNLINK], mi.downlink_speed);
+	facts_u64(&v[UMB_SIMSTATE], (uint32_t)mi.sim_state);
+	facts_u64(&v[UMB_PINSTATE], (uint32_t)mi.pin_state);
+	if (mi.pin_attempts_left != UMB_VALUE_UNKNOWN)
+		facts_i64(&v[UMB_PINLEFT], mi.pin_attempts_left);
+	umb_string(&v[UMB_SID], mi.sid, UMB_SUBSCRIBERID_MAXLEN, sid,
+	    sizeof(sid));
+	umb_string(&v[UMB_ICCID], mi.iccid, UMB_ICCID_MAXLEN, iccid,
+	    sizeof(iccid));
+	umb_string(&v[UMB_PROVIDER], mi.provider, UMB_PROVIDERNAME_MAXLEN,
+	    provider, sizeof(provider));
+	umb_string(&v[UMB_PROVIDERID], mi.providerid, UMB_PROVIDERID_MAXLEN,
+	    providerid, sizeof(providerid));
+	umb_string(&v[UMB_HWINFO], mi.hwinfo, UMB_HWINFO_MAXLEN, hwinfo,
+	    sizeof(hwinfo));
+	umb_string(&v[UMB_DEVID], mi.devid, UMB_DEVID_MAXLEN, devid,
+	    sizeof(devid));
+	umb_string(&v[UMB_FWINFO], mi.fwinfo, UMB_FWINFO_MAXLEN, fwinfo,
+	    sizeof(fwinfo));
+	umb_string(&v[UMB_PHONE], mi.pn, UMB_PHONENR_MAXLEN, pn, sizeof(pn));
+	umb_string(&v[UMB_APN], mi.apn, UMB_APN_MAXLEN, apn, sizeof(apn));
+	facts_record(o, &kind_umb, v);
+
+	for (i = 0; i < UMB_MAX_DNSSRV; i++) {
+		if (mi.ipv4dns[i].s_addr == INADDR_ANY)
+			break;
+		memset(dv, 0, sizeof(dv));
+		facts_address(&dv[UMBDNS_ADDRESS], FACT_INET, &mi.ipv4dns[i],
+		    sizeof(mi.ipv4dns[i]), 0);
+		facts_record(o, &kind_umbdns, dv);
+	}
+	for (i = 0; i < UMB_MAX_DNSSRV; i++) {
+		if (memcmp(&mi.ipv6dns[i], &in6addr_any,
+		    sizeof (mi.ipv6dns[i])) == 0)
+			break;
+		memset(dv, 0, sizeof(dv));
+		facts_address(&dv[UMBDNS_ADDRESS], FACT_INET6, &mi.ipv6dns[i],
+		    sizeof(mi.ipv6dns[i]), 0);
+		facts_record(o, &kind_umbdns, dv);
+	}
+}
+
+/* r's string i, or "" */
+static const char *
+umb_s(struct frec *r, int i)
+{
+	const char	*s = fs(r, i);
+
+	return (s != NULL ? s : "");
+}
+
+/* umb, as show_umb() printed it */
+void
+umb_render(struct frecs *rs, FILE *outfile)
+{
+	const struct umb_valdescr *vd;
+	const struct facts_value *a;
+	struct frec	*r, *d;
+	const char	*sid, *iccid, *provider, *providerid, *hwinfo, *devid;
+	const char	*fwinfo, *pn, *apn;
+	char		 astr[INET6_ADDRSTRLEN];
+	uint64_t	 err, up, down, pin;
+	int		 n;
+
+	if ((r = frec_next(rs, NULL, &kind_umb)) == NULL)
+		return;
+
+	if ((err = fu(r, UMB_ERROR, 0)) != 0) {
 		fprintf(outfile, "  error: ");
-		switch (mi.nwerror) {
-		case 2:
-			fprintf(outfile, "SIM not activated");
-			break;
-		case 4:
-			fprintf(outfile, "Roaming not supported");
-			break;
-		case 6:
-			fprintf(outfile, "SIM reported stolen");
-			break;
-		case 7:
-			fprintf(outfile, "No GPRS subscription");
-			break;
-		case 8:
-			fprintf(outfile, "GPRS and non-GPRS services "
-			    "not allowed");
-			break;
-		case 11:
-			fprintf(outfile, "Subscription expired");
-			break;
-		case 12:
-			fprintf(outfile, "Subscription does not cover "
-			    "current location");
-			break;
-		case 13:
-			fprintf(outfile, "No roaming in this location");
-			break;
-		case 14:
-			fprintf(outfile, "GPRS not supported");
-			break;
-		case 15:
-			fprintf(outfile, "No subscription for the service");
-			break;
-		case 17:
-			fprintf(outfile, "Registration failed");
-			break;
-		case 22:
-			fprintf(outfile, "Network congestion");
-			break;
-		default:
-			fprintf(outfile, "Error code %d", mi.nwerror);
-			break;
-		}
+		for (vd = umb_nwerrors; vd->descr != NULL; vd++)
+			if ((uint32_t)vd->val == err)
+				break;
+		if (vd->descr != NULL)
+			fprintf(outfile, "%s", vd->descr);
+		else
+			fprintf(outfile, "Error code %d", (int)err);
 		putc('\n', outfile);
 	}
 
 	fprintf(outfile, "  roaming %s registration %s",
-	    mi.enable_roaming ? "enabled" : "disabled",
-	    umb_val2descr(umb_regstate, mi.regstate));
-	utf16_to_char(mi.roamingtxt, UMB_ROAMINGTEXT_MAXLEN,
-	    roamingtxt, sizeof (roamingtxt));
-	if (roamingtxt[0])
-		fprintf(outfile, " [%s]", roamingtxt);
+	    fu(r, UMB_ROAMING, 0) ? "enabled" : "disabled",
+	    umb_val2descr(umb_regstate, (int)fu(r, UMB_REGSTATE, 0)));
+	if (umb_s(r, UMB_ROAMINGTEXT)[0])
+		fprintf(outfile, " [%s]", umb_s(r, UMB_ROAMINGTEXT));
 	fputc('\n', outfile);
 
-	umb_printclasses("available classes", mi.supportedclasses, outfile);
+	umb_printclasses("available classes", (int)fu(r, UMB_CLASSES, 0),
+	    outfile);
 	fprintf(outfile, "  state %s cell-class %s",
-	    umb_val2descr(umb_istate, mi.state),
-	    umb_val2descr(umb_dataclass, mi.highestclass));
-	if (mi.rssi != UMB_VALUE_UNKNOWN && mi.rssi != 0)
-		fprintf(outfile, " rssi %ddBm", mi.rssi);
-	if (mi.uplink_speed != 0 || mi.downlink_speed != 0) {
+	    umb_val2descr(umb_istate, (int)fu(r, UMB_STATE, 0)),
+	    umb_val2descr(umb_dataclass, (int)fu(r, UMB_HIGHESTCLASS, 0)));
+	if ((a = FV(r, UMB_RSSI, FACT_I64)) != NULL && a->v.i != 0)
+		fprintf(outfile, " rssi %ddBm", (int)a->v.i);
+	up = fu(r, UMB_UPLINK, 0);
+	down = fu(r, UMB_DOWNLINK, 0);
+	if (up != 0 || down != 0) {
 		char s[2][FMT_SCALED_STRSIZE];
-		if (fmt_scaled(mi.uplink_speed, s[0]) != 0)
-			snprintf(s[0], sizeof (s[0]), "%llu", mi.uplink_speed);
-		if (fmt_scaled(mi.downlink_speed, s[1]) != 0)
-			snprintf(s[1], sizeof (s[1]), "%llu", mi.downlink_speed);
+		if (fmt_scaled(up, s[0]) != 0)
+			snprintf(s[0], sizeof (s[0]), "%llu",
+			    (unsigned long long)up);
+		if (fmt_scaled(down, s[1]) != 0)
+			snprintf(s[1], sizeof (s[1]), "%llu",
+			    (unsigned long long)down);
 		fprintf(outfile, " speed %sbps up %sbps down", s[0], s[1]);
 	}
 	fputc('\n', outfile);
 
 	fprintf(outfile, "  SIM %s PIN ",
-	    umb_val2descr(umb_simstate, mi.sim_state));
-	switch (mi.pin_state) {
-	case UMB_PIN_REQUIRED:
-		fprintf(outfile, "required");
-		break;
-	case UMB_PIN_UNLOCKED:
-		fprintf(outfile, "valid");
-		break;
-	case UMB_PUK_REQUIRED:
-		fprintf(outfile, "locked (PUK required)");
-		break;
-	default:
-		fprintf(outfile, "unknown state (%d)", mi.pin_state);
-		break;
-	}
-	if (mi.pin_attempts_left != UMB_VALUE_UNKNOWN)
-		fprintf(outfile, " (%d attempts left)", mi.pin_attempts_left);
+	    umb_val2descr(umb_simstate, (int)fu(r, UMB_SIMSTATE, 0)));
+	pin = fu(r, UMB_PINSTATE, 0);
+	for (vd = umb_pinstates; vd->descr != NULL; vd++)
+		if ((uint32_t)vd->val == pin)
+			break;
+	if (vd->descr != NULL)
+		fprintf(outfile, "%s", vd->descr);
+	else
+		fprintf(outfile, "unknown state (%d)", (int)pin);
+	if ((a = FV(r, UMB_PINLEFT, FACT_I64)) != NULL)
+		fprintf(outfile, " (%d attempts left)", (int)a->v.i);
 	fputc('\n', outfile);
 
-	utf16_to_char(mi.sid, UMB_SUBSCRIBERID_MAXLEN, sid, sizeof (sid));
-	utf16_to_char(mi.iccid, UMB_ICCID_MAXLEN, iccid, sizeof (iccid));
-	utf16_to_char(mi.provider, UMB_PROVIDERNAME_MAXLEN,
-	    provider, sizeof (provider));
-	utf16_to_char(mi.providerid, UMB_PROVIDERID_MAXLEN,
-	    providerid, sizeof (providerid));
+	sid = umb_s(r, UMB_SID);
+	iccid = umb_s(r, UMB_ICCID);
+	provider = umb_s(r, UMB_PROVIDER);
+	providerid = umb_s(r, UMB_PROVIDERID);
 	if (sid[0] || iccid[0]) {
 		fprintf(outfile, "  ");
 		n = 0;
@@ -202,12 +352,12 @@ show_umb(int ifs, char *ifname, FILE *outfile)
 			    n++ ? " " : "", sid);
 		if (iccid[0])
 			fprintf(outfile, "%sICC-id %s", n++ ? " " : "", iccid);
-		printf("\n");
+		fputc('\n', outfile);
 	}
 
-	utf16_to_char(mi.hwinfo, UMB_HWINFO_MAXLEN, hwinfo, sizeof (hwinfo));
-	utf16_to_char(mi.devid, UMB_DEVID_MAXLEN, devid, sizeof (devid));
-	utf16_to_char(mi.fwinfo, UMB_FWINFO_MAXLEN, fwinfo, sizeof (fwinfo));
+	hwinfo = umb_s(r, UMB_HWINFO);
+	devid = umb_s(r, UMB_DEVID);
+	fwinfo = umb_s(r, UMB_FWINFO);
 	if (hwinfo[0] || devid[0] || fwinfo[0]) {
 		fprintf(outfile, "  ");
 		n = 0;
@@ -215,7 +365,7 @@ show_umb(int ifs, char *ifname, FILE *outfile)
 			fprintf(outfile, "%sdevice %s", n++ ? " " : "", hwinfo);
 		if (devid[0]) {
 			fprintf(outfile, "%s", n++ ? " " : "");
-			switch (mi.cellclass) {
+			switch (fu(r, UMB_CELLCLASS, 0)) {
 			case MBIM_CELLCLASS_GSM:
 				fprintf(outfile, "IMEI");
 				break;
@@ -241,8 +391,8 @@ show_umb(int ifs, char *ifname, FILE *outfile)
 		fputc('\n', outfile);
 	}
 
-	utf16_to_char(mi.pn, UMB_PHONENR_MAXLEN, pn, sizeof (pn));
-	utf16_to_char(mi.apn, UMB_APN_MAXLEN, apn, sizeof (apn));
+	pn = umb_s(r, UMB_PHONE);
+	apn = umb_s(r, UMB_APN);
 	if (pn[0] || apn[0] || provider[0] || providerid[0]) {
 		fprintf(outfile, "  ");
 		n = 0;
@@ -259,19 +409,13 @@ show_umb(int ifs, char *ifname, FILE *outfile)
 		fputc('\n', outfile);
 	}
 
-	for (i = 0, n = 0; i < UMB_MAX_DNSSRV; i++) {
-		if (mi.ipv4dns[i].s_addr == INADDR_ANY)
-			break;
+	for (d = NULL, n = 0; (d = frec_next(rs, d, &kind_umbdns)) != NULL; ) {
+		if ((a = FV(d, UMBDNS_ADDRESS, FACT_ADDRESS)) == NULL ||
+		    (a->v.a.family != FACT_INET && a->v.a.family != FACT_INET6))
+			continue;
 		fprintf(outfile, "%s %s", n++ ? "" : "  dns",
-		    inet_ntop(AF_INET, &mi.ipv4dns[i], astr, sizeof(astr)));
-	}
-
-	for (i = 0; i < UMB_MAX_DNSSRV; i++) {
-		if (memcmp(&mi.ipv6dns[i], &in6addr_any,
-		    sizeof (mi.ipv6dns[i])) == 0)
-			break;
-		fprintf(outfile, "%s %s", n++ ? "" : "  dns",
-		    inet_ntop(AF_INET6, &mi.ipv6dns[i], astr, sizeof(astr)));
+		    inet_ntop(a->v.a.family == FACT_INET ? AF_INET : AF_INET6,
+		    a->v.a.bytes, astr, sizeof(astr)));
 	}
 
 	if (n)

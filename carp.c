@@ -32,6 +32,8 @@
 #include <unistd.h>
 #include "externs.h"
 #include "settings.h"
+#include "facts.h"
+#include "showfacts.h"
 
 static struct intc {
 	char *name;
@@ -616,61 +618,138 @@ conf_carp(FILE *output, int s, char *ifname)
 	return (0);
 }
 
-int
-carp_state(int s, char *ifname, FILE *outfile)
+/* a carp interface's vhids, as facts */
+static struct facts_field carp_fields[] = {
+	[CARPV_VHID] =		{ "vhid",	FACT_U64 },
+	[CARPV_STATE] =		{ "state",	FACT_U64 },
+	[CARPV_ADVSKEW] =	{ "advskew",	FACT_U64 },
+};
+struct facts_kind kind_carp = { "carp-vhid", carp_fields, CARPV_NFIELDS };
+
+/* names for values from a table of strings, for f */
+static void
+carp_names(struct facts_field *f, const char **names, size_t n)
 {
-	struct ifreq ifr;
-	struct carpreq creq;
-	const char *carp_states[] = { CARP_STATES };
-	const char *state = NULL;
-	int i, pntd = 0;
+	struct facts_name	*fn;
+	size_t			 i;
+
+	if ((fn = calloc(n, sizeof(*fn))) == NULL)
+		return;
+	for (i = 0; i < n; i++) {
+		fn[i].value = i;
+		fn[i].name = names[i];
+	}
+	f->naming = FACT_VALUES;
+	f->names = fn;
+	f->nnames = n;
+}
+
+void
+carp_balnames(struct facts_field *f)
+{
+	carp_names(f, carp_bal_modes, nitems(carp_bal_modes));
+}
+
+void
+carp_facts_init(void)
+{
+	static const char *carp_states[] = { CARP_STATES };
+
+	carp_names(&carp_fields[CARPV_STATE], carp_states,
+	    nitems(carp_states));
+}
+
+/* ifname's carp: in ifv its balancing, peer, device and advbase */
+void
+carp_facts(struct facts_out *o, int s, char *ifname, struct facts_value *ifv)
+{
+	struct facts_value	 v[CARPV_NFIELDS];
+	struct ifreq		 ifr;
+	struct carpreq		 creq;
+	static char		 carpdev[IFNAMSIZ];
+	int			 i;
 
 	bzero((char *) &creq, sizeof(struct carpreq));
 	ifr.ifr_data = (caddr_t) & creq;
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 
 	if (ioctl(s, SIOCGVH, (caddr_t) & ifr) == -1)
-		return (0);
+		return;
 
-	if (creq.carpr_balancing <= CARP_BAL_MAXID) {
+	facts_u64(&ifv[IF_CARPBALANCING], creq.carpr_balancing);
+	if (creq.carpr_peer.s_addr != htonl(INADDR_CARP_GROUP))
+		facts_address(&ifv[IF_CARPPEER], FACT_INET,
+		    &creq.carpr_peer, sizeof(creq.carpr_peer), 0);
+	strlcpy(carpdev, creq.carpr_carpdev, sizeof(carpdev));
+	facts_string(&ifv[IF_CARPDEV], carpdev);
+	facts_u64(&ifv[IF_CARPADVBASE], creq.carpr_advbase);
+
+	for (i = 0; i < CARP_MAXNODES && creq.carpr_vhids[i]; i++) {
+		memset(v, 0, sizeof(v));
+		facts_u64(&v[CARPV_VHID], creq.carpr_vhids[i]);
+		facts_u64(&v[CARPV_STATE], creq.carpr_states[i]);
+		facts_u64(&v[CARPV_ADVSKEW], creq.carpr_advskews[i]);
+		facts_record(o, &kind_carp, v);
+	}
+}
+
+/* carp, as carp_state() printed it */
+void
+carp_render(struct frecs *rs, struct frec *ifr, FILE *outfile)
+{
+	const char	*carp_states[] = { CARP_STATES };
+	const char	*state = NULL, *carpdev;
+	struct frec	*r, *first;
+	struct in_addr	 peer;
+	const struct facts_value *pv;
+	uint64_t	 bal;
+	int		 i, pntd = 0;
+
+	if (!fhas(ifr, IF_CARPBALANCING))
+		return;
+
+	bal = fu(ifr, IF_CARPBALANCING, 0);
+	if (bal <= CARP_BAL_MAXID) {
 		fprintf(outfile, "  CARP balancing mode %s",
-		    carp_bal_modes[creq.carpr_balancing]);
+		    carp_bal_modes[bal]);
 		pntd = 1;
 	}
 
-	if (creq.carpr_peer.s_addr != htonl(INADDR_CARP_GROUP)) {
-		fprintf(outfile, " peer %s", inet_ntoa(creq.carpr_peer));
+	if ((pv = FV(ifr, IF_CARPPEER, FACT_ADDRESS)) != NULL) {
+		memcpy(&peer, pv->v.a.bytes, sizeof(peer));
+		fprintf(outfile, " peer %s", inet_ntoa(peer));
 		pntd = 1;
 	}
 	if (pntd)
 		fputc('\n', outfile);
 
-	if (creq.carpr_vhids[0] == 0)
-		return 0;
+	if ((first = frec_next(rs, NULL, &kind_carp)) == NULL)
+		return;
+	carpdev = fs(ifr, IF_CARPDEV);
+	if (carpdev == NULL || carpdev[0] == '\0')
+		carpdev = "none";
 
-	for (i = 0; i < CARP_MAXNODES && creq.carpr_vhids[i]; i++) {
-		if (creq.carpr_states[i] <= CARP_MAXSTATE)
-			state = carp_states[creq.carpr_states[i]];
-		if (creq.carpr_vhids[1] == 0) {
+	for (i = 0, r = first; r != NULL; i++,
+	    r = frec_next(rs, r, &kind_carp)) {
+		if (fu(r, CARPV_STATE, 0) <= CARP_MAXSTATE)
+			state = carp_states[fu(r, CARPV_STATE, 0)];
+		if (frec_next(rs, first, &kind_carp) == NULL) {
 			fprintf(outfile, "  CARP state %s, "
 			    "device %s vhid %u advbase %d advskew %u\n", state,
-			    creq.carpr_carpdev[0] != '\0' ?
-			    creq.carpr_carpdev : "none", creq.carpr_vhids[0],
-			    creq.carpr_advbase, creq.carpr_advskews[0]);
+			    carpdev, (u_int)fu(r, CARPV_VHID, 0),
+			    (int)fu(ifr, IF_CARPADVBASE, 0),
+			    (u_int)fu(r, CARPV_ADVSKEW, 0));
 		} else {
 			if (i == 0) {
 				fprintf(outfile,
-				    "  CARP device %s advbase %d\n",
-				    creq.carpr_carpdev[0] != '\0' ?
-				    creq.carpr_carpdev : "none",
-				    creq.carpr_advbase);
+				    "  CARP device %s advbase %d\n", carpdev,
+				    (int)fu(ifr, IF_CARPADVBASE, 0));
 			}
 			fprintf(outfile, "  CARP state %s vhid %u advskew %u\n",
-			    state, creq.carpr_vhids[i], creq.carpr_advskews[i]);
+			    state, (u_int)fu(r, CARPV_VHID, 0),
+			    (u_int)fu(r, CARPV_ADVSKEW, 0));
 		}
 	}
-
-	return 0;
 }
 
 int

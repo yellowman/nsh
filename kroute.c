@@ -57,6 +57,8 @@
 #include "ip.h"
 #define _WANT_SO_
 #include "externs.h"
+#include "facts.h"
+#include "showfacts.h"
 
 int 	sigflag = 0;
 static struct	rt_metrics	rt_metrics;
@@ -71,7 +73,6 @@ u_long	rtm_inits;
 char	*mylink_ntoa(const struct sockaddr_dl *);
 
 void	 print_rtmsg(struct rt_msghdr *);
-void	 print_getmsg(struct rt_msghdr *, int);
 void	 pmsg_common(struct rt_msghdr *);
 void	 pmsg_addrs(char *, int);
 void	 print_addrs(char *, int);
@@ -464,94 +465,260 @@ print_rtmsg(struct rt_msghdr *rtm)
 	}
 }
 
-void
-print_getmsg(struct rt_msghdr *rtm, int msglen)
-{
-	struct sockaddr *dst = NULL, *gate = NULL, *mask = NULL;
-	struct sockaddr_dl *ifp = NULL;
-	struct sockaddr_rtlabel *sa_rl = NULL;
-	struct sockaddr *sa;
-	char *cp;
-	int i;
+/* the route the kernel would use, as facts */
+static struct facts_field lookup_fields[] = {
+	[LK_QUERY] =	{ "query",		FACT_ADDRESS },
+	[LK_ERRNO] =	{ "errno",		FACT_U64 },
+	[LK_RTERRNO] =	{ "reply-errno",	FACT_U64 },
+	[LK_DST] =	{ "destination",	FACT_ADDRESS },
+	[LK_MASK] =	{ "netmask",		FACT_ADDRESS },
+	[LK_GATEWAY] =	{ "gateway",		FACT_ADDRESS },
+	[LK_GWTYPE] =	{ "gateway-type",	FACT_U64 },
+	[LK_GWNAME] =	{ "gateway-name",	FACT_STRING },
+	[LK_GENMASK] =	{ "genmask",		FACT_ADDRESS },
+	[LK_IFP] =	{ "link",		FACT_ADDRESS },
+	[LK_IFPTYPE] =	{ "link-type",		FACT_U64 },
+	[LK_IFPNAME] =	{ "interface",		FACT_STRING },
+	[LK_IFA] =	{ "interface-address",	FACT_ADDRESS },
+	[LK_BRD] =	{ "broadcast",		FACT_ADDRESS },
+	[LK_LABEL] =	{ "label",		FACT_STRING },
+	[LK_FLAGS] =	{ "flags",		FACT_U64 },
+	[LK_ADDRS] =	{ "addresses",		FACT_U64 },
+	[LK_MTU] =	{ "mtu",		FACT_U64 },
+	[LK_HOPCOUNT] =	{ "hopcount",		FACT_U64 },
+	[LK_EXPIRE] =	{ "expires",		FACT_I64 },
+	[LK_LOCKS] =	{ "locks",		FACT_U64 },
+	[LK_INITS] =	{ "inits",		FACT_U64 },
+};
+struct facts_kind kind_lookup = { "route-lookup", lookup_fields,
+    LK_NFIELDS };
 
-	(void) printf("%% route lookup for:\t%s\n", routename(&so_dst.sa));
-	if (rtm->rtm_msglen > msglen) {
-		printf("%% message length mismatch, in packet %d,"
-		    " returned %d\n", rtm->rtm_msglen, msglen);
-	}
-	if (rtm->rtm_errno)  {
-		(void) printf("%% print_getmsg: RTM_GET: %s (errno %d)\n", 
-		    strerror(rtm->rtm_errno), rtm->rtm_errno);
+/* what an RTM_GET found, kept until the request is done */
+static struct facts_value lookup_v[LK_NFIELDS];
+static int		 lookup_kept;
+
+void
+lookup_facts_init(void)
+{
+	facts_bitnames(&lookup_fields[LK_FLAGS], routeflags);
+	facts_bitnames(&lookup_fields[LK_ADDRS], addrnames);
+	facts_bitnames(&lookup_fields[LK_LOCKS], metricnames);
+	facts_bitnames(&lookup_fields[LK_INITS], metricnames);
+	if_typenames(&lookup_fields[LK_GWTYPE]);
+	if_typenames(&lookup_fields[LK_IFPTYPE]);
+}
+
+/* what an RTM_GET found, or err if the kernel took no request */
+static void
+lookup_record(struct rt_msghdr *rtm, int err)
+{
+	struct facts_value	*v = lookup_v;
+	struct sockaddr		*sa, *dst = NULL, *mask = NULL;
+	struct sockaddr_rtlabel	*sr;
+	static char		 gwname[IFNAMSIZ + 1], ifpname[IFNAMSIZ + 1];
+	static char		 label[RTLABEL_LEN];
+	char			*cp;
+	int			 i;
+
+	memset(lookup_v, 0, sizeof(lookup_v));
+	lookup_kept = 1;
+	facts_sockaddr(&v[LK_QUERY], &so_dst.sa);
+	if (rtm == NULL)
+		facts_u64(&v[LK_ERRNO], err);
+	else if (rtm->rtm_errno)
+		facts_u64(&v[LK_RTERRNO], rtm->rtm_errno);
+	if (rtm == NULL || rtm->rtm_errno)
 		return;
-	}
+
 	cp = ((char *)rtm + rtm->rtm_hdrlen);
-	if (rtm->rtm_addrs)
-		for (i = 1; i; i <<= 1)
-			if (i & rtm->rtm_addrs) {
-				sa = (struct sockaddr *)cp;
-				switch (i) {
-				case RTA_DST:
-					dst = sa;
-					break;
-				case RTA_GATEWAY:
-					gate = sa;
-					break;
-				case RTA_NETMASK:
-					mask = sa;
-					break;
-				case RTA_IFP:
-					if (sa->sa_family == AF_LINK &&
-					   ((struct sockaddr_dl *)sa)->sdl_nlen)
-					    ifp = (struct sockaddr_dl *)sa;
-					break;
-				case RTA_LABEL:
-					sa_rl = (struct sockaddr_rtlabel *)sa;
-					break;
-				}
-				ADVANCE(cp, sa);
-			}
+	for (i = 1; i && rtm->rtm_addrs; i <<= 1) {
+		if ((i & rtm->rtm_addrs) == 0)
+			continue;
+		sa = (struct sockaddr *)cp;
+		switch (i) {
+		case RTA_DST:
+			dst = sa;
+			break;
+		case RTA_GATEWAY:
+			facts_sockaddr(&v[LK_GATEWAY], sa);
+			facts_sdl(&v[LK_GWTYPE], &v[LK_GWNAME], gwname,
+			    sizeof(gwname), sa);
+			break;
+		case RTA_NETMASK:
+			mask = sa;
+			break;
+		case RTA_GENMASK:
+			facts_sockaddr(&v[LK_GENMASK], sa);
+			break;
+		case RTA_IFP:
+			facts_sockaddr(&v[LK_IFP], sa);
+			facts_sdl(&v[LK_IFPTYPE], &v[LK_IFPNAME], ifpname,
+			    sizeof(ifpname), sa);
+			break;
+		case RTA_IFA:
+			facts_sockaddr(&v[LK_IFA], sa);
+			break;
+		case RTA_BRD:
+			facts_sockaddr(&v[LK_BRD], sa);
+			break;
+		case RTA_LABEL:
+			sr = (struct sockaddr_rtlabel *)sa;
+			strlcpy(label, sr->sr_label, sizeof(label));
+			facts_string(&v[LK_LABEL], label);
+			break;
+		}
+		ADVANCE(cp, sa);
+	}
 	if (dst && mask)
 		mask->sa_family = dst->sa_family;       /* XXX */
-	if (dst)
-		(void)printf("\tdestination:\t%s\n", routename(dst));
-	if (mask)
-		(void)printf("\tnetmask:\t%s\n", routename(mask));
-	if (gate && rtm->rtm_flags & RTF_GATEWAY)
-		(void)printf("\tgateway:\t%s\n", routename(gate));
-	if (ifp)
-		(void)printf("\tinterface:\t%.*s\n",
-		    ifp->sdl_nlen, ifp->sdl_data);
+	facts_sockaddr(&v[LK_DST], dst);
+	facts_sockaddr(&v[LK_MASK], mask);
+	facts_u64(&v[LK_FLAGS], rtm->rtm_flags);
+	facts_u64(&v[LK_ADDRS], rtm->rtm_addrs);
+	facts_u64(&v[LK_MTU], rtm->rtm_rmx.rmx_mtu);
+	facts_u64(&v[LK_HOPCOUNT], rtm->rtm_rmx.rmx_hopcount);
+	if (rtm->rtm_rmx.rmx_expire)
+		facts_i64(&v[LK_EXPIRE], rtm->rtm_rmx.rmx_expire - time(0));
+	facts_u64(&v[LK_LOCKS], rtm->rtm_rmx.rmx_locks);
+	facts_u64(&v[LK_INITS], rtm->rtm_inits);
+}
+
+/* the route the kernel would use in table for query, as facts */
+int
+lookup_facts(struct facts_out *o, char *query, int table)
+{
+	ip_t			 dest;
+	struct rt_metrics	 metrics;
+	int			 v = verbose;
+
+	memset(&dest, 0, sizeof(dest));
+	memset(&metrics, 0, sizeof(metrics));
+	parse_ip_pfx(query, NO_NETMASK, &dest);	/* it says what is wrong */
+	if (dest.family == 0)
+		return (0);
+	lookup_kept = 0;
+	verbose = 0;	/* the request rtmsg() echoes is nsh's, not a fact */
+	ip_route(&dest, NULL, RTM_GET, RTF_UP, table, metrics, 0);
+	verbose = v;
+	/* and only now, as nsh may render it as it goes */
+	if (lookup_kept)
+		return (facts_record(o, &kind_lookup, lookup_v));
+	return (0);
+}
+
+/* a lookup, as print_getmsg() printed it */
+void
+lookup_render(struct frec *r)
+{
+	struct sockaddr_storage	 q, sa;
+	struct sockaddr		*s = (struct sockaddr *)&sa;
+	const struct facts_value *qv;
+	char			 buf[INET6_ADDRSTRLEN];
+	int			 e, flags, addrs, i;
+
+	if (fhas(r, LK_ERRNO)) {
+		e = fu(r, LK_ERRNO, 0);
+		buf[0] = '\0';
+		if ((qv = FV(r, LK_QUERY, FACT_ADDRESS)) != NULL)
+			inet_ntop(qv->v.a.family == FACT_INET6 ? AF_INET6 :
+			    AF_INET, qv->v.a.bytes, buf, sizeof(buf));
+		if (e == ESRCH || e == ENETUNREACH)
+			printf("%% Unable to find route: %s\n", buf);
+		else
+			printf("%% ip_route: rtmsg: %s\n", strerror(e));
+		return;
+	}
+	fsockaddr(r, LK_QUERY, &q);
+	printf("%% route lookup for:\t%s\n", routename((struct sockaddr *)&q));
+	if (fhas(r, LK_RTERRNO)) {
+		e = fu(r, LK_RTERRNO, 0);
+		printf("%% print_getmsg: RTM_GET: %s (errno %d)\n",
+		    strerror(e), e);
+		return;
+	}
+	flags = fu(r, LK_FLAGS, 0);
+	addrs = fu(r, LK_ADDRS, 0);
+	if (fsockaddr(r, LK_DST, &sa))
+		printf("\tdestination:\t%s\n", routename(s));
+	if (fsockaddr(r, LK_MASK, &sa))
+		printf("\tnetmask:\t%s\n", routename(s));
+	if ((sdl_build(r, LK_GATEWAY, LK_GWTYPE, LK_GWNAME, &sa) ||
+	    fsockaddr(r, LK_GATEWAY, &sa)) && flags & RTF_GATEWAY)
+		printf("\tgateway:\t%s\n", routename(s));
+	if (fs(r, LK_IFPNAME) != NULL)
+		printf("\tinterface:\t%s\n", fs(r, LK_IFPNAME));
 	if (verbose) {
-		(void)printf("\tflags:\t");
-		bprintf(stdout, rtm->rtm_flags, routeflags);
+		printf("\tflags:\t");
+		bprintf(stdout, flags, routeflags);
 		printf("\n");
 	}
-	if (sa_rl != NULL)
-		printf("\tlabel:\t\t%s\n", sa_rl->sr_label);
-
-#define lock(f) ((rtm->rtm_rmx.rmx_locks & __CONCAT(RTV_,f)) ? 'L' : ' ')
-
-	/*
-	 * we ignore most statistics and locks right now for simplicity
-	 */
-	if (rtm->rtm_rmx.rmx_mtu)
-		printf("\tmtu:\t\t%u\n", rtm->rtm_rmx.rmx_mtu);
-	if (rtm->rtm_rmx.rmx_hopcount)
-		printf("\thopcount:\t%u\n", rtm->rtm_rmx.rmx_hopcount);
-	if (rtm->rtm_rmx.rmx_expire) {
-		rtm->rtm_rmx.rmx_expire -= time(0);
-		printf("\texpires:\t%lld sec\n", rtm->rtm_rmx.rmx_expire);
-	}
+	if (fs(r, LK_LABEL) != NULL)
+		printf("\tlabel:\t\t%s\n", fs(r, LK_LABEL));
+	if (fu(r, LK_MTU, 0))
+		printf("\tmtu:\t\t%u\n", (u_int)fu(r, LK_MTU, 0));
+	if (fu(r, LK_HOPCOUNT, 0))
+		printf("\thopcount:\t%u\n", (u_int)fu(r, LK_HOPCOUNT, 0));
+	if (FV(r, LK_EXPIRE, FACT_I64) != NULL)
+		printf("\texpires:\t%lld sec\n",
+		    (long long)FV(r, LK_EXPIRE, FACT_I64)->v.i);
 
 #define RTA_IGN (RTA_DST|RTA_GATEWAY|RTA_NETMASK|RTA_IFP|RTA_IFA|RTA_BRD)
-        if (verbose)
-                pmsg_common(rtm);
-        else if (rtm->rtm_addrs &~ RTA_IGN) {
-		(void) printf("\tsockaddrs:\t");
-		bprintf(stdout, rtm->rtm_addrs, addrnames);
+	if (verbose) {
+		printf("%% locks: ");
+		bprintf(stdout, fu(r, LK_LOCKS, 0), metricnames);
+		printf(" inits: ");
+		bprintf(stdout, fu(r, LK_INITS, 0), metricnames);
+		printf("\n");
+		if (addrs == 0)
+			return;
+		printf("%% sockaddrs: ");
+		bprintf(stdout, addrs, addrnames);
+		putchar('\n');
+		/* each address, in the order of the bits that name it */
+		for (i = 1; i; i <<= 1) {
+			if ((i & addrs) == 0)
+				continue;
+			switch (i) {
+			case RTA_DST:
+				fsockaddr(r, LK_DST, &sa);
+				break;
+			case RTA_GATEWAY:
+				if (!sdl_build(r, LK_GATEWAY, LK_GWTYPE,
+				    LK_GWNAME, &sa))
+					fsockaddr(r, LK_GATEWAY, &sa);
+				break;
+			case RTA_NETMASK:
+				fsockaddr(r, LK_MASK, &sa);
+				break;
+			case RTA_GENMASK:
+				fsockaddr(r, LK_GENMASK, &sa);
+				break;
+			case RTA_IFP:
+				sdl_build(r, LK_IFP, LK_IFPTYPE, LK_IFPNAME,
+				    &sa);
+				break;
+			case RTA_IFA:
+				fsockaddr(r, LK_IFA, &sa);
+				break;
+			case RTA_BRD:
+				fsockaddr(r, LK_BRD, &sa);
+				break;
+			case RTA_LABEL:
+				printf(" %s", fs(r, LK_LABEL) ?
+				    fs(r, LK_LABEL) : "");
+				continue;
+			default:
+				continue;
+			}
+			printf(" %s", sa.ss_family ? routename(s) : "");
+		}
+		putchar('\n');
+	} else if (addrs & ~RTA_IGN) {
+		printf("\tsockaddrs:\t");
+		bprintf(stdout, addrs, addrnames);
 		putchar('\n');
 	}
-#undef  RTA_IGN
+#undef RTA_IGN
 }
 
 void
@@ -715,11 +882,8 @@ ip_route(ip_t *dest, ip_t *gate, u_short cmd, int flags, int tableid,
 			printf("%% Gateway is unreachable: %s\n",
 			    inet_ntop(gate->family, &gate->addr,
 			    line_kroute, sizeof(line_kroute)));
-		else if (cmd == RTM_GET &&
-		    (errno == ESRCH || errno == ENETUNREACH))
-			printf("%% Unable to find route: %s\n",
-			    inet_ntop(dest->family, &dest->addr,
-			    line_kroute, sizeof(line_kroute)));
+		else if (cmd == RTM_GET)
+			lookup_record(NULL, errno);
 		else if (cmd == RTM_DELETE && errno == ESRCH)
 			printf("%% No such route to delete: %s\n",
 			    inet_ntop(dest->family, &dest->addr,
@@ -733,7 +897,7 @@ ip_route(ip_t *dest, ip_t *gate, u_short cmd, int flags, int tableid,
 		return 1;
 	} else if (cmd == RTM_GET)
 		/* ip_route is also used by 'show route' */
-		print_getmsg(&m_rtmsg.m_rtm, l);
+		lookup_record(&m_rtmsg.m_rtm, 0);
 	return 0;
 }
 
