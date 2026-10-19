@@ -1,0 +1,86 @@
+.\" Copyright (c) 2026 Chris Cappuccio <chris@nmedia.net>
+.\"
+.\" Permission to use, copy, modify, and distribute this software for any
+.\" purpose with or without fee is hereby granted, provided that the above
+.\" copyright notice and this permission notice appear in all copies.
+.\"
+.\" THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+.\" WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+.\" MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+.\" ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+.\" WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+.\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+.\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+.\"
+.Dd $Mdocdate$
+.Dt NSHD 8
+.Os
+.Sh NAME
+.Nm nshd
+.Nd network configuration daemon
+.Sh SYNOPSIS
+.Nm
+.Op Fl dv
+.Sh DESCRIPTION
+.Nm
+reads the system's configuration for
+.Xr nsh 8 ,
+which asks it over a socket.
+It is privilege separated.
+The parent process, as root, binds the sockets and starts six children:
+.Bl -tag -width "frontend"
+.It relay
+Runs as _nshd in a
+.Xr chroot 2 ,
+and passes on what one child may send another, and nothing else.
+.It show
+Runs as _nshd in a
+.Xr chroot 2
+and answers the read-only socket, with what anyone may see.
+It has no path to the others.
+.It frontend
+Runs as _nshd in a
+.Xr chroot 2
+and answers the read-write socket.
+Each client is a session, which asks one thing at a time.
+.It config
+Runs as _nshd in a
+.Xr chroot 2 ,
+holds the sessions, and asks kernel for what they need.
+.It kernel
+Runs as root, and reads the configuration from the kernel.
+It answers config and no one else.
+.It archive
+Runs as _nshd in a
+.Xr chroot 2 ,
+with kernel its one peer.
+It keeps nothing yet.
+.El
+.Pp
+Each child but relay has one pipe, to relay.
+The parent reads only what relay tells it.
+If a child sends what it may not, or exits,
+.Nm
+exits.
+.Pp
+Only root and the members of the group _nshd may connect to the
+read-write socket, and every session there may see the running
+configuration.
+The read-only socket is for anyone.
+.Pp
+The options are as follows:
+.Bl -tag -width Ds
+.It Fl d
+Do not daemonize, and log to standard error.
+.It Fl v
+Produce more verbose output.
+.El
+.Sh FILES
+.Bl -tag -width "/var/run/nshd.ro.sockXX" -compact
+.It Pa /var/run/nshd.sock
+the read-write socket, mode 0660, group _nshd
+.It Pa /var/run/nshd.ro.sock
+the read-only socket, mode 0666
+.El
+.Sh SEE ALSO
+.Xr nsh 8

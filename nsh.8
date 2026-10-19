@@ -3720,6 +3720,11 @@ Display the current running configuration on the system, including
 interface and bridge configurations, routes, the system hostname, firewall
 rules, and other information compiled by
 .Nm .
+Where
+.Xr nshd 8
+runs, the configuration is the one it reads, and root or a member of the
+group _nshd may see it without
+.Cm enable .
 .Pp
 .Ic show startup-config
 .Pp
@@ -6172,6 +6177,7 @@ options are used.
 .Xr ldapd 8
 .Xr ldpd 8 ,
 .Xr npppd 8 ,
+.Xr nshd 8 ,
 .Xr ntpd 8 ,
 .Xr ospf6d 8 ,
 .Xr ospfd 8 ,

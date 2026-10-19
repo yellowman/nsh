@@ -540,6 +540,9 @@ int string_index(char *, char **);
 char *format_time(time_t);
 char *format_k(uint64_t amt);
 
+/* client.c */
+int nshd_show(char *);
+
 /* sqlite3.c */
 #define SQ3DBFILE "/var/run/nsh.db"
 #define DB_X_ENABLE 1		/* enable command */
@@ -549,6 +552,7 @@ char *format_k(uint64_t amt);
 #define DB_X_REMOVE 5		/* remove command */
 #define DB_X_ENABLE_DEFAULT 6	/* enable command, always prints enable until disabled */
 #define DB_X_DISABLE_ALWAYS 7	/* disable command, always prints if disabled */
+void db_create(void);
 int db_create_table_rtables(void);
 int db_create_table_flag_x(char *);
 int db_create_table_nameservers(void);

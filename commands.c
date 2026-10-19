@@ -3643,6 +3643,12 @@ flush_ndp_cache(int argc, char **argv, ...)
 static int
 pr_conf(int argc, char **argv, ...)
 {
+	int ret;
+
+	/* nshd's, where it runs */
+	if ((ret = nshd_show("running-config")) != -1)
+		return ret;
+
 	if (priv != 1) {
 		printf ("%% Privilege required\n");
 		return 0;

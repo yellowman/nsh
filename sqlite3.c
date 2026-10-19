@@ -27,6 +27,32 @@ int sq3simple(char *, StringList *);
 
 #define QSZ 1024 /* maximum query text size */
 
+void
+db_create(void)
+{
+	/* create temporal tables (if they aren't already there) */
+	if (db_create_table_rtables() < 0)
+		printf("%% database rtables creation failed\n");
+	if (db_create_table_flag_x("ctl") < 0)
+		printf("%% database ctl creation failed\n");
+	if (db_create_table_flag_x("dhcrelay") < 0)
+		printf("%% database dhcrelay creation failed\n");
+	if (db_create_table_flag_x("ipv6linklocal") < 0)
+		printf("%% database ipv6linklocal creation failed\n");
+	if (db_create_table_flag_x("lladdr") < 0)
+		printf("%% database lladdr creation failed\n");
+	if (db_create_table_flag_x("authkey") < 0)
+		printf("%% database authkey creation failed\n");
+	if (db_create_table_flag_x("peerkey") < 0)
+		printf("%% database peerkey creation failed\n");
+	if (db_create_table_nameservers() < 0)
+		printf("%% database nameservers creation failed\n");
+	if (db_create_table_flag_x("pppoeipaddrmode") < 0)
+		printf("%% database pppoeipaddrmode creation failed\n");
+	if (db_create_table_flag_x("pin") < 0)
+		printf("%% database pin creation failed\n");
+}
+
 int
 db_create_table_rtables(void)
 {
