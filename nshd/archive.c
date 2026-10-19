@@ -66,6 +66,7 @@ archive_dispatch_relay(int fd, short event, void *arg)
 			break;
 		switch (imsg_get_type(&imsg)) {
 		case IMSG_STARTUP:
+		case IMSG_RESTART:
 			break;
 		default:
 			log_debug("%s: unexpected imsg %u", __func__,

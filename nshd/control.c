@@ -274,6 +274,16 @@ control_dispatch(int fd, short event, void *arg)
 	imsg_event_add(&c->iev);
 }
 
+/* every client, closed */
+void
+control_close_all(void)
+{
+	struct ctl_conn	*c;
+
+	while ((c = TAILQ_FIRST(&ctl_conns)) != NULL)
+		control_close(c);
+}
+
 /* a message to the client id, if it is still there */
 int
 control_reply(uint32_t id, uint32_t type, const void *data, size_t len)

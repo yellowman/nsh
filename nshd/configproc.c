@@ -16,8 +16,11 @@
 
 /*
  * config: the sessions, and what they ask of kernel, all through relay.
- * Each request to kernel has an id of its own; kernel's answers for it
- * go to the session that asked, if that session is still there.
+ * Each request to kernel has an id of its own, with config's generation
+ * in its top bits, so an answer meant for a config before this one is
+ * known for what it is; kernel's answers for it go to the session that
+ * asked, if that session is still there. When frontend starts again,
+ * every session is gone; when kernel does, what it was asked is lost.
  */
 
 #include <sys/types.h>
@@ -52,6 +55,10 @@ struct request {
 static TAILQ_HEAD(, session)	sessions = TAILQ_HEAD_INITIALIZER(sessions);
 static TAILQ_HEAD(, request)	requests = TAILQ_HEAD_INITIALIZER(requests);
 static uint32_t			request_id;
+static int			kernel_down;
+
+#define REQUEST_GEN_SHIFT	24	/* generation above, count below */
+#define REQUEST_COUNT		((1U << REQUEST_GEN_SHIFT) - 1)
 
 static struct imsgev	*iev_relay;
 
@@ -59,6 +66,7 @@ static void		 config_dispatch_relay(int, short, void *);
 static void		 config_show(uint32_t, struct nshd_show *);
 static void		 config_answer(uint32_t, int32_t, const char *, ...)
 			    __attribute__((__format__ (printf, 3, 4)));
+static void		 config_restart(struct nshd_restart *);
 static struct session	*session_find(uint32_t);
 static struct request	*request_find(uint32_t);
 
@@ -87,6 +95,8 @@ config_dispatch_relay(int fd, short event, void *arg)
 	struct nshd_session	 s;
 	struct nshd_show	 show;
 	struct nshd_result	 res;
+	struct nshd_startup	 st;
+	struct nshd_restart	 rs;
 	struct session		*sp;
 	struct request		*r;
 	uint32_t		 id;
@@ -103,6 +113,14 @@ config_dispatch_relay(int fd, short event, void *arg)
 		id = imsg_get_id(&imsg);
 		switch (imsg_get_type(&imsg)) {
 		case IMSG_STARTUP:
+			if (imsg_get_data(&imsg, &st, sizeof(st)) == -1)
+				fatalx("%s: bad IMSG_STARTUP", __func__);
+			request_id = st.generation << REQUEST_GEN_SHIFT;
+			break;
+		case IMSG_RESTART:
+			if (imsg_get_data(&imsg, &rs, sizeof(rs)) == -1)
+				fatalx("%s: bad IMSG_RESTART", __func__);
+			config_restart(&rs);
 			break;
 		case IMSG_CTL_HELLO:
 			if (imsg_get_data(&imsg, &peer, sizeof(peer)) == -1)
@@ -137,8 +155,10 @@ config_dispatch_relay(int fd, short event, void *arg)
 			}
 			break;
 		case IMSG_KRN_TEXT:
-			if ((r = request_find(id)) == NULL ||
-			    imsg_get_ibuf(&imsg, &b) == -1)
+			/* for a config before this one, or a request failed */
+			if ((r = request_find(id)) == NULL)
+				break;
+			if (imsg_get_ibuf(&imsg, &b) == -1)
 				fatalx("%s: bad IMSG_KRN_TEXT", __func__);
 			if (session_find(r->session) != NULL &&
 			    imsg_compose_event(iev_relay, IMSG_CTL_OUTPUT,
@@ -147,8 +167,9 @@ config_dispatch_relay(int fd, short event, void *arg)
 				fatal("%s", __func__);
 			break;
 		case IMSG_KRN_END:
-			if ((r = request_find(id)) == NULL ||
-			    imsg_get_data(&imsg, &res, sizeof(res)) == -1)
+			if ((r = request_find(id)) == NULL)
+				break;
+			if (imsg_get_data(&imsg, &res, sizeof(res)) == -1)
 				fatalx("%s: bad IMSG_KRN_END", __func__);
 			if (session_find(r->session) != NULL)
 				config_answer(r->session, res.status, NULL);
@@ -178,7 +199,11 @@ config_show(uint32_t session, struct nshd_show *show)
 		    show->words);
 		return;
 	}
-	if (request_id == UINT32_MAX) {
+	if (kernel_down) {
+		config_answer(session, 1, "%% nshd: kernel is down\n");
+		return;
+	}
+	if ((request_id & REQUEST_COUNT) == REQUEST_COUNT) {
 		config_answer(session, 1, "%% nshd: request ids exhausted\n");
 		return;
 	}
@@ -216,6 +241,43 @@ config_answer(uint32_t session, int32_t status, const char *fmt, ...)
 	if (imsg_compose_event(iev_relay, IMSG_CTL_RESULT, session, 0, -1,
 	    &r, sizeof(r)) == -1)
 		fatal("%s", __func__);
+}
+
+/*
+ * A peer started again, or is down: frontend's sessions are gone, and
+ * kernel's answers to what it was asked will not come
+ */
+static void
+config_restart(struct nshd_restart *rs)
+{
+	struct session	*sp;
+	struct request	*r;
+
+	switch (rs->proc) {
+	case PROC_FRONTEND:
+		while ((sp = TAILQ_FIRST(&sessions)) != NULL) {
+			TAILQ_REMOVE(&sessions, sp, entry);
+			free(sp);
+		}
+		/* no session again has 0, and a new one may have the id */
+		TAILQ_FOREACH(r, &requests, entry)
+			r->session = 0;
+		break;
+	case PROC_KERNEL:
+		kernel_down = rs->down;
+		while ((r = TAILQ_FIRST(&requests)) != NULL) {
+			if (session_find(r->session) != NULL)
+				config_answer(r->session, 1, kernel_down ?
+				    "%% nshd: kernel is down\n" :
+				    "%% nshd: kernel started again, and its "
+				    "answer is lost\n");
+			TAILQ_REMOVE(&requests, r, entry);
+			free(r);
+		}
+		break;
+	default:
+		fatalx("%s: from %d", __func__, rs->proc);
+	}
 }
 
 static struct session *

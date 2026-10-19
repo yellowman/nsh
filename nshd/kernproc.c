@@ -72,6 +72,7 @@ kern_dispatch_relay(int fd, short event, void *arg)
 			break;
 		switch (imsg_get_type(&imsg)) {
 		case IMSG_STARTUP:
+		case IMSG_RESTART:
 			break;
 		case IMSG_KRN_SNAPSHOT:
 			kern_snapshot(imsg_get_id(&imsg));

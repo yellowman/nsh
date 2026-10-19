@@ -59,7 +59,14 @@ It keeps nothing yet.
 .Pp
 Each child but relay has one pipe, to relay.
 The parent reads only what relay tells it.
-If a child sends what it may not, or exits,
+A child that exits, or sends what it may not, is started again, and
+those that talk to it forget what it held: its sessions, or the answers
+it had not yet given.
+A child that fails five times in a minute stays down.
+Then the others answer for it, or, for show and frontend, its socket
+refuses connections.
+If relay fails, every child starts again with it; if relay fails five
+times in a minute,
 .Nm
 exits.
 .Pp

@@ -52,9 +52,24 @@ struct nshd_result {
 	int32_t		status;
 };
 
-/* parent to relay, with a child's pipe; relay to parent, a child gone wrong */
+/*
+ * parent to relay: a child's pipe, or that it is down; relay to parent:
+ * a child gone wrong. Each start of a child is a generation of it
+ */
 struct nshd_child {
 	int32_t			proc;
+	uint32_t		generation;
+};
+
+/* relay to a child, at each start: its generation */
+struct nshd_startup {
+	uint32_t		generation;
+};
+
+/* relay to a child: one of its peers started again, or is down */
+struct nshd_restart {
+	int32_t			proc;
+	int32_t			down;
 };
 
 /* a client's hello, with who it is, from frontend to config */
@@ -88,8 +103,10 @@ enum nshd_imsg {
 	/* between nshd's processes */
 	IMSG_CTL_CLOSE,		/* frontend to config: a session is gone */
 	IMSG_PIPE,		/* parent to relay: nshd_child, and its pipe */
+	IMSG_DOWN,		/* parent to relay: nshd_child stays down */
 	IMSG_BROKEN,		/* relay to parent: nshd_child gone wrong */
-	IMSG_STARTUP,		/* relay to a child: all is in place */
+	IMSG_STARTUP,		/* relay to a child: nshd_startup */
+	IMSG_RESTART,		/* relay to a child: nshd_restart */
 	IMSG_KRN_SNAPSHOT,	/* config to kernel: the running configuration */
 	IMSG_KRN_TEXT,		/* kernel to config: text */
 	IMSG_KRN_END		/* kernel to config: nshd_result */

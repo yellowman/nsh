@@ -1,6 +1,8 @@
 obj/**
 *.d
 *.o
+*.orig
+.gitignore
 bgpnsh/*.d
 bgpnsh/*.o
 bgpnsh/compile.c
@@ -8,6 +10,12 @@ bgpnsh/bgpnsh
 compile.c
 mantab.c
 nsh
+nshd/*.orig
+nshd/.gitignore
+nshd/*.d
+nshd/*.o
+nshd/compile.c
+nshd/nshd
 nshdoas/*.d
 nshdoas/*.o
 nshdoas/compile.c

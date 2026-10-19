@@ -22,7 +22,10 @@
  * the child that routes[] names for its sender and type, unaltered,
  * reading nothing but the header. A child that sends what routes[] does
  * not name, or what imsg cannot read, or whose pipe closes, is reported
- * to parent.
+ * to parent. parent kills it, and gives relay the pipe of the one it
+ * starts in its place, or says it stays down; relay tells its peers
+ * (IMSG_RESTART), so they forget what it held, and tells a child it
+ * starts which of its peers are down.
  */
 
 #include <sys/types.h>
@@ -45,6 +48,8 @@ static struct peer {
 	enum nshd_proc	 proc;
 	char		*name;
 	struct imsgev	*iev;
+	uint32_t	 generation;
+	int		 down;
 } peers[NCHILD] = {
 	{ PROC_SHOW,	 "show" },
 	{ PROC_FRONTEND, "frontend" },
@@ -71,11 +76,16 @@ static const struct route {
 };
 
 static struct imsgev	*iev_parent;
+static int		 started;	/* every child has been told */
 
 static void		 relay_dispatch_parent(int, short, void *);
 static void		 relay_dispatch(int, short, void *);
 static void		 relay_broken(struct peer *, const char *, ...)
 			    __attribute__((__format__ (printf, 2, 3)));
+static void		 relay_detach(struct peer *);
+static void		 relay_start(struct peer *);
+static void		 relay_tell(struct peer *);
+static int		 joined(struct peer *, struct peer *);
 static struct peer	*peer(enum nshd_proc);
 
 void
@@ -104,7 +114,20 @@ peer(enum nshd_proc proc)
 	return (NULL);
 }
 
-/* each child's pipe, from parent */
+/* whether a route joins a and b */
+static int
+joined(struct peer *a, struct peer *b)
+{
+	size_t	 i;
+
+	for (i = 0; i < sizeof(routes) / sizeof(routes[0]); i++)
+		if ((routes[i].from == a->proc && routes[i].to == b->proc) ||
+		    (routes[i].from == b->proc && routes[i].to == a->proc))
+			return (1);
+	return (0);
+}
+
+/* each child's pipe, or that it stays down, from parent */
 static void
 relay_dispatch_parent(int fd, short event, void *arg)
 {
@@ -113,7 +136,7 @@ relay_dispatch_parent(int fd, short event, void *arg)
 	struct nshd_child	 ch;
 	struct peer		*p;
 	ssize_t			 n;
-	int			 i, cfd;
+	int			 i, cfd = -1;
 
 	if (imsgev_io(iev, event) == -1)
 		exit(0);
@@ -125,24 +148,36 @@ relay_dispatch_parent(int fd, short event, void *arg)
 			break;
 		switch (imsg_get_type(&imsg)) {
 		case IMSG_PIPE:
+		case IMSG_DOWN:
+			/* one gone wrong was reported, and let go, first */
 			if (imsg_get_data(&imsg, &ch, sizeof(ch)) == -1 ||
 			    (p = peer(ch.proc)) == NULL || p->iev != NULL ||
-			    (cfd = imsg_get_fd(&imsg)) == -1)
-				fatalx("%s: bad IMSG_PIPE", __func__);
+			    (imsg_get_type(&imsg) == IMSG_PIPE &&
+			    (cfd = imsg_get_fd(&imsg)) == -1))
+				fatalx("%s: bad imsg %u", __func__,
+				    imsg_get_type(&imsg));
+			p->generation = ch.generation;
+			p->down = imsg_get_type(&imsg) == IMSG_DOWN;
 			/* a child's pipe passes no descriptors */
-			if ((p->iev = imsgev_new(cfd, relay_dispatch, 0)) ==
-			    NULL)
+			if (!p->down && (p->iev = imsgev_new(cfd,
+			    relay_dispatch, 0)) == NULL)
 				fatal(NULL);
+			if (started) {
+				if (!p->down)
+					relay_start(p);
+				relay_tell(p);
+				break;
+			}
 			for (i = 0; i < NCHILD; i++)
-				if (peers[i].iev == NULL)
+				if (peers[i].iev == NULL && !peers[i].down)
 					break;
 			if (i < NCHILD)
 				break;
 			/* every pipe is here: the children may talk */
+			started = 1;
 			for (i = 0; i < NCHILD; i++)
-				if (imsg_compose_event(peers[i].iev,
-				    IMSG_STARTUP, 0, 0, -1, NULL, 0) == -1)
-					fatal("%s: startup", peers[i].name);
+				if (!peers[i].down)
+					relay_start(&peers[i]);
 			break;
 		default:
 			fatalx("%s: unexpected imsg %u", __func__,
@@ -151,6 +186,56 @@ relay_dispatch_parent(int fd, short event, void *arg)
 		imsg_free(&imsg);
 	}
 	imsg_event_add(iev);
+}
+
+/* p, told its generation, and which of its peers are down */
+static void
+relay_start(struct peer *p)
+{
+	struct nshd_startup	 st;
+	struct nshd_restart	 r;
+	int			 i;
+
+	st.generation = p->generation;
+	if (imsg_compose_event(p->iev, IMSG_STARTUP, 0, 0, -1, &st,
+	    sizeof(st)) == -1)
+		fatal("%s: startup", p->name);
+	for (i = 0; i < NCHILD; i++) {
+		if (!peers[i].down || !joined(p, &peers[i]))
+			continue;
+		r.proc = peers[i].proc;
+		r.down = 1;
+		if (imsg_compose_event(p->iev, IMSG_RESTART, 0, 0, -1, &r,
+		    sizeof(r)) == -1)
+			fatal("%s: a peer down", p->name);
+	}
+}
+
+/* p's peers, told it started again, or is down */
+static void
+relay_tell(struct peer *p)
+{
+	struct nshd_restart	 r;
+	int			 i;
+
+	r.proc = p->proc;
+	r.down = p->down;
+	for (i = 0; i < NCHILD; i++)
+		if (&peers[i] != p && peers[i].iev != NULL &&
+		    joined(p, &peers[i]) &&
+		    imsg_compose_event(peers[i].iev, IMSG_RESTART, 0, 0, -1,
+		    &r, sizeof(r)) == -1)
+			fatal("%s", __func__);
+}
+
+static void
+relay_detach(struct peer *p)
+{
+	event_del(&p->iev->ev);
+	imsgbuf_clear(&p->iev->ibuf);
+	close(p->iev->ibuf.fd);
+	free(p->iev);
+	p->iev = NULL;
 }
 
 /* what a child sends, to the child routes[] names, unaltered */
@@ -194,6 +279,7 @@ relay_dispatch(int fd, short event, void *arg)
 			    type);
 			return;
 		}
+		/* gone, its peers not yet told: these crossed */
 		if (to->iev == NULL)
 			log_debug("%s is gone: imsg %u from %s dropped",
 			    to->name, type, from->name);
@@ -221,13 +307,9 @@ relay_broken(struct peer *p, const char *fmt, ...)
 	log_warnx("%s %s", p->name, why);
 	free(why);
 
-	event_del(&p->iev->ev);
-	imsgbuf_clear(&p->iev->ibuf);
-	close(p->iev->ibuf.fd);
-	free(p->iev);
-	p->iev = NULL;
-
+	relay_detach(p);
 	ch.proc = p->proc;
+	ch.generation = p->generation;
 	if (imsg_compose_event(iev_parent, IMSG_BROKEN, 0, 0, -1, &ch,
 	    sizeof(ch)) == -1)
 		fatal("%s", __func__);

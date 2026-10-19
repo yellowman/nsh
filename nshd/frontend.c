@@ -38,10 +38,12 @@
 #include "control.h"
 
 static struct imsgev	*iev_relay;
+static int		 config_down;
 
 static void	frontend_dispatch_relay(int, short, void *);
 static int	frontend_client(struct ctl_conn *, struct imsg *);
 static void	frontend_gone(struct ctl_conn *);
+static int	frontend_answer(struct ctl_conn *, struct imsg *);
 
 void
 frontend(int debug, int verbose)
@@ -60,11 +62,12 @@ frontend(int debug, int verbose)
 static void
 frontend_dispatch_relay(int fd, short event, void *arg)
 {
-	struct imsgev	*iev = arg;
-	struct ctl_conn	*c;
-	struct imsg	 imsg;
-	struct ibuf	 b;
-	ssize_t		 n;
+	struct imsgev		*iev = arg;
+	struct ctl_conn		*c;
+	struct imsg		 imsg;
+	struct ibuf		 b;
+	struct nshd_restart	 r;
+	ssize_t			 n;
 
 	if (imsgev_io(iev, event) == -1)
 		exit(0);
@@ -79,6 +82,14 @@ frontend_dispatch_relay(int fd, short event, void *arg)
 		case IMSG_STARTUP:
 			if (control_listen(4, frontend_client, frontend_gone) == -1)
 				fatalx("cannot listen on %s", NSHD_SOCKET);
+			break;
+		case IMSG_RESTART:
+			/* config forgot every session: so do their clients */
+			if (imsg_get_data(&imsg, &r, sizeof(r)) == -1 ||
+			    r.proc != PROC_CONFIG)
+				fatalx("%s: bad IMSG_RESTART", __func__);
+			control_close_all();
+			config_down = r.down;
 			break;
 		/* config's answers, to the session each names, if there */
 		case IMSG_CTL_HELLO:
@@ -115,6 +126,8 @@ frontend_client(struct ctl_conn *c, struct imsg *imsg)
 	if (c->pending)
 		return (-1);
 	c->pending = 1;
+	if (config_down)
+		return (frontend_answer(c, imsg));
 	switch (imsg_get_type(imsg)) {
 	case IMSG_CTL_HELLO:
 		if (imsg_get_data(imsg, &peer.hello, sizeof(peer.hello)) == -1)
@@ -144,4 +157,37 @@ frontend_gone(struct ctl_conn *c)
 	if (imsg_compose_event(iev_relay, IMSG_CTL_CLOSE, c->id, 0, -1,
 	    NULL, 0) == -1)
 		fatal("%s", __func__);
+}
+
+/* with config down, what it would have answered, as far as it can */
+static int
+frontend_answer(struct ctl_conn *c, struct imsg *imsg)
+{
+	struct nshd_hello	 hello;
+	struct nshd_show	 show;
+	struct nshd_session	 s;
+	struct nshd_result	 r;
+	const char		*down = "% nshd: config is down\n";
+
+	c->pending = 0;
+	switch (imsg_get_type(imsg)) {
+	case IMSG_CTL_HELLO:
+		if (imsg_get_data(imsg, &hello, sizeof(hello)) == -1)
+			return (-1);
+		s.version = NSHD_VERSION;
+		s.id = c->id;
+		s.priv = 1;
+		return (control_reply(c->id, IMSG_CTL_HELLO, &s, sizeof(s)));
+	case IMSG_CTL_SHOW:
+		if (imsg_get_data(imsg, &show, sizeof(show)) == -1 ||
+		    memchr(show.words, '\0', sizeof(show.words)) == NULL)
+			return (-1);
+		r.status = 1;
+		if (control_reply(c->id, IMSG_CTL_OUTPUT, down,
+		    strlen(down)) == -1)
+			return (-1);
+		return (control_reply(c->id, IMSG_CTL_RESULT, &r, sizeof(r)));
+	default:
+		return (-1);
+	}
 }
