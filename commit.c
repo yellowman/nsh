@@ -51,6 +51,9 @@
  * makes, and daemon rules their test refuses. commit refuses a
  * candidate with any of them.
  *
+ * nsh -i makes the running configuration its file as commit does the
+ * candidate, all of it that takes; nothing is undone (commit_boot()).
+ *
  * commit confirmed does all that but save, and a process waits; unless
  * a commit confirms it first, at the deadline the running configuration
  * goes back to how it was before the first commit not confirmed
@@ -607,6 +610,43 @@ done:
 }
 
 /*
+ * nsh -i: make the running configuration the one in path, as commit
+ * makes it the candidate, but never undone: what check finds is shown,
+ * all that takes stays, and what did not take is shown. Returns 1 if
+ * the running configuration then differs from it, else 0.
+ */
+int
+commit_boot(char *path)
+{
+	struct cnode *want, *was = NULL, *now = NULL;
+	int ret = 1;
+
+	if ((want = conftree_read(path, conf_mode, conf_ordered)) == NULL)
+		return 1;
+	if ((was = running_tree()) == NULL)
+		goto done;
+	/* shown, but a system starts with what takes */
+	check(was, want);
+	if (conftree_compare(NULL, was, want) != 0 && apply(was, want) == -1)
+		goto done;
+	if ((now = running_tree()) == NULL)
+		goto done;
+	if (differ(NULL, now, want) == 0)
+		ret = 0;
+	else {
+		printf("%% The running configuration differs from %s\n", path);
+		differ(stdout, now, want);
+		syslog(LOG_WARNING, "the running configuration differs from %s",
+		    path);
+	}
+done:
+	conftree_free(now);
+	conftree_free(was);
+	conftree_free(want);
+	return ret;
+}
+
+/*
  * A commit not confirmed by its deadline goes back: the running
  * configuration is made the one before the first commit not confirmed.
  * Returns 1 if one went back, else 0.
@@ -885,7 +925,10 @@ removals(struct commit *c, char *fblock, char *tblock, int there,
 					    " ", k);
 			}
 			sub_end(c, &s, in, l, 0);
-		} else if (t == NULL && unset(c, tblock, there,
+		} else if (fblock == NULL && ifblock(l, name, sizeof(name)))
+			/* a physical interface stays, with nothing on it */
+			;
+		else if (t == NULL && unset(c, tblock, there,
 		    context(fblock), in, l) == -1)
 			goto done;
 	}

@@ -109,11 +109,26 @@ Execute the command(s) in the
 .Ar config-script-file .
 This is typically used to implement scripted changes to configuration.
 .It Fl i Ar rcfile
-Load the initial system configuration from the command(s) in the
-.Ar rcfile .
-This is typically used to clear the configuration and load a full
+Make the running configuration that of
+.Ar rcfile ,
+as
+.Cm commit
+makes it the candidate's: what the running configuration has and
+.Ar rcfile
+does not is taken away, and what
+.Ar rcfile
+has is added.
+This is typically used at boot.
+What
+.Cm commit check
+finds is shown, but does not stop it, and nothing that takes is undone.
+If the running configuration then differs from
+.Ar rcfile ,
+the difference is shown and logged with
+.Xr syslog 3 ,
+and
 .Nm
-configuration script from rcfile .
+exits 1.
 .It Fl e
 Start
 .Nm

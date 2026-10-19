@@ -658,3 +658,4 @@ int cand_cloneable(char *);
 int commit(int, char **, ...);
 int pr_rollback(int, char **, ...);
 int commit_expire(void);
+int commit_boot(char *);

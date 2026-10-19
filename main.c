@@ -260,7 +260,7 @@ main(int argc, char *argv[])
 	cli_rtable = getrtable();
 
 	if (iflag) {
-		int carp_locked;
+		int carp_locked, status;
 
 		/*
 		 * Interpret config file and exit
@@ -276,7 +276,8 @@ main(int argc, char *argv[])
 		 */
 		carp_locked = carplock(128);
 
-		cmdrc(rc);
+		/* the running configuration is made the file's, all of it */
+		status = commit_boot(rc);
 
 		/*
 		 * Initialization over; reset carpdemote if it was raised by us.
@@ -284,7 +285,7 @@ main(int argc, char *argv[])
 		if (carp_locked == 1)
 			carplock(-128);
 
-		exit(0);
+		exit(status);
 	}
 	if (cflag) {
 		/*
