@@ -78,7 +78,7 @@ cand_trunkport(char *ifname, int set, int argc, char **argv)
 
 	if (!cand_takes(ifname, SIOCSTRUNKPORT)) {
 		printf("%% %s not trunk\n", ifname);
-		return 0;
+		return -1;
 	}
 	if ((l = cand_line("trunkport", 0)) != NULL) {
 		strlcpy(ports, l, sizeof(ports));
@@ -91,19 +91,19 @@ cand_trunkport(char *ifname, int set, int argc, char **argv)
 			if (!in_list(cand_line("trunkport", 0), argv[i])) {
 				printf("%% Port %s not part of %s\n", argv[i],
 				    ifname);
-				return 1;
+				return -1;
 			}
 			continue;
 		}
 		if (!cand_hasif(argv[i]) || strcmp(argv[i], ifname) == 0) {
 			printf("%% inttrunkport: SIOCSTRUNKPORT: %s\n",
 			    strerror(EINVAL));
-			return 0;
+			return -1;
 		}
 		if (cand_gettype(argv[i]) != IFT_ETHER) {
 			printf("%% inttrunkport: SIOCSTRUNKPORT: %s\n",
 			    strerror(EPROTONOSUPPORT));
-			return 0;
+			return -1;
 		}
 		/* a port of any trunk, and for aggr of a bridge (EBUSY) */
 		if (in_list(cand_line("trunkport", 0), argv[i]) ||
@@ -111,12 +111,12 @@ cand_trunkport(char *ifname, int set, int argc, char **argv)
 		    (aggr && cand_listowner(ifname, "member", argv[i]))) {
 			printf("%% Failed (port %s already assigned to a trunk"
 			    " group)\n", argv[i]);
-			return 0;
+			return -1;
 		}
 		if (++n > TRUNK_MAX_PORTS) {
 			printf("%% inttrunkport: SIOCSTRUNKPORT: %s\n",
 			    strerror(ENOSPC));
-			return 0;
+			return -1;
 		}
 	}
 	argvtostring(argc, argv, ports, sizeof(ports));
@@ -134,13 +134,13 @@ cand_trunkproto(char *ifname, int proto)
 
 	if (!cand_takes(ifname, SIOCSTRUNK)) {
 		printf("%% %s not trunk\n", ifname);
-		return 0;
+		return -1;
 	}
 	if (strncmp(ifname, "aggr", strlen("aggr")) == 0 &&
 	    proto != TRUNK_PROTO_LACP) {
 		printf("%% inttrunkproto: SIOCSTRUNK: %s\n",
 		    strerror(EPROTONOSUPPORT));
-		return 0;
+		return -1;
 	}
 	if (proto == TRUNK_PROTO_DEFAULT)
 		return cand_setting(ST_DEFAULT, "trunkproto");
@@ -153,7 +153,7 @@ int
 inttrunkport(int argc, char **argv, ...)
 {
 	struct trunk_reqport rp;
-	int set, i;
+	int set, i, r = 0;
 	va_list ap;
 	char *ifname;
 	int ifs;
@@ -176,7 +176,7 @@ inttrunkport(int argc, char **argv, ...)
 	if ((!set && argc < 1) || (set && argc < 1)) {
 		printf("%% trunkport <ifname> [ifname ...]\n");
 		printf("%% no trunkport <ifname> [ifname ...]\n");
-		return 0;
+		return -1;
 	}
 
 	if (candidate)
@@ -208,6 +208,7 @@ inttrunkport(int argc, char **argv, ...)
 					    " SIOCSTRUNKPORT: %s\n",
 				    strerror(errno));
 				}
+				r = -1;
 			}
 		} else {
 			strlcpy(rp.rp_portname, argv[i],
@@ -226,11 +227,11 @@ inttrunkport(int argc, char **argv, ...)
 					    " SIOCSTRUNKDELPORT: %s\n",
 				    strerror(errno));
 				}
-				return 1;
+				return -1;
 			}
 		}
 	}
-	return 0;
+	return r;
 }
 
 int
@@ -260,7 +261,7 @@ inttrunkproto(int argc, char **argv, ...)
 	if ((!set && argc > 1) || (set && argc != 1)) {
                 printf("%% trunkproto <proto>\n");
                 printf("%% no trunkproto\n");
-		return 0;
+		return -1;
         }
 
 	bzero(&ra, sizeof(ra));
@@ -278,7 +279,7 @@ inttrunkproto(int argc, char **argv, ...)
 			for (i = 0; i < TRUNK_PROTO_MAX; ++i)
 				printf("%s%s", i == 0 ? "" : "|", tpr[i].tpr_name);
 			printf(">\n");
-			return 0;
+			return -1;
 		}
 	} else
 		ra.ra_proto = TRUNK_PROTO_DEFAULT;
@@ -294,7 +295,7 @@ inttrunkproto(int argc, char **argv, ...)
 		default:
 			printf("%% inttrunkproto: SIOCSTRUNK: %s\n", strerror(errno));
 		}
-		return 1;
+		return -1;
 	}
 
 	return 0;
