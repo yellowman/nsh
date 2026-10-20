@@ -845,8 +845,11 @@ carplock(int lock)
 
 	ifgr.ifgr_attrib.ifg_carp_demoted = lock;
 
-	if (ioctl(ifs, SIOCSIFGATTR, (caddr_t)&ifgr) == -1)
+	if (ioctl(ifs, SIOCSIFGATTR, (caddr_t)&ifgr) == -1) {
 		printf("%% carplock: SIOCSIFGATTR: %s\n", strerror(errno));
+		close(ifs);
+		return -1;
+	}
 	close(ifs);
 
 	return 1;
