@@ -86,7 +86,6 @@ int dhcpleased_has_defaultroute(struct sockaddr_rtlabel *);
 int dhcpleased_controls_interface(char *, int);
 int islateif(char *);
 int isdefaultroute(struct sockaddr *, struct sockaddr *);
-int scantext(char *, char *);
 int ipv6ll_db_compare(struct sockaddr_in6 *, struct sockaddr_in6 *,
     char *);
 
@@ -631,76 +630,6 @@ dhcpleased_controls_interface(char *ifname, int ifs)
 
 	ifxflags = get_ifxflags(ifname, ifs);
 	return ((ifxflags & IFXF_AUTOCONF4) != 0);
-}
-
-/*
- * Check whether a specific IPv4 addresses on an interface is
- * managed by dhcpleased.
- */
-int
-dhcpleased_has_address(char *ifname, const char *address,
-    const char *netmask)
-{
-	char *argv[] = { DHCPLEASECTL, "-l", ifname, NULL };
-	int address_found = 0;
-	char ortext[128];
-	char outpath[PATH_MAX];
-	int fd = -1, nullfd = -1;
-
-	if (!dhcpleased_is_running())
-		return 0;
-
-	snprintf(ortext, sizeof(ortext), "\tinet %s netmask %s\n",
-	    address, netmask);
-
-	nullfd = open("/dev/null", O_WRONLY | O_NOFOLLOW | O_CLOEXEC);
-	if (nullfd == -1) {
-		printf("%% open /dev/null: %s\n", strerror(errno));
-		return 0;
-	}
-
-	strlcpy(outpath, "/tmp/nsh-XXXXXX", sizeof(outpath));
-	fd = mkstemp(outpath);
-	if (fd == -1) {
-		printf("%% mkstemp: %s\n", strerror(errno));
-		close(nullfd);
-		return 0;
-	}
-
-	if (cmdargs_output(DHCPLEASECTL, argv, fd, nullfd) == 0 &&
-	    scantext(outpath, ortext))
-		address_found = 1;
-
-	unlink(outpath);
-	close(fd);
-	close(nullfd);
-	return (address_found);
-}
-
-/* find string in file */
-int
-scantext(char *fname, char *string)
-{
-	FILE *file;
-	char line[128];
-	int found = 0;
-
-	if ((file = fopen(fname, "r")) == 0) {
-		printf("%% Unable to open %s: %s\n", fname, strerror(errno));
-		return 0;
-	}
-
-	for (;;) {
-		if (fgets(line, sizeof(line), file) == NULL)
-			break;
-		if (strcmp(line, string) == 0) {
-			found = 1;
-			break;
-		}
-	}
-
-	fclose(file);
-	return found;
 }
 
 int

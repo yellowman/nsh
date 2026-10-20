@@ -49,6 +49,14 @@ const char	*fs(struct frec *, int);
 int		 fsockaddr(struct frec *, int, struct sockaddr_storage *);
 int		 fhas(struct frec *, int);
 
+/*
+ * Who answers: nshd's show processes, for anyone, or its kernel, for
+ * root and _nshd; nsh, where nshd does not run, answers all of them
+ */
+#define FACTS_SHOW	0x1
+#define FACTS_KERNEL	0x2
+extern int	 facts_from;	/* what this process answers */
+
 /* what to answer: words, a request from a client, as nshd takes them */
 struct facts_answer *facts_answer(char *);
 int		 facts_more(struct facts_answer *, struct facts_out *, int);
@@ -71,6 +79,10 @@ extern struct facts_kind kind_carp, kind_wgpeer, kind_umb, kind_umbdns;
 extern struct facts_kind kind_trunkport, kind_bridgemember;
 extern struct facts_kind kind_bridgeaddr, kind_bridge, kind_arp, kind_ndp;
 extern struct facts_kind kind_vlan, kind_version, kind_login, kind_hostname;
+extern struct facts_kind kind_ip, kind_dhcplease, kind_dhcproute;
+extern struct facts_kind kind_dhcpns, kind_slaacif, kind_slaacra;
+extern struct facts_kind kind_slaacprefix, kind_slaacrdns, kind_slaacaddr;
+extern struct facts_kind kind_slaacdfr, kind_slaacdns;
 
 enum { MSG_TEXT };
 
@@ -98,35 +110,61 @@ enum {
 	IF_NFIELDS
 };
 
-enum { ADDR_ADDRESS, ADDR_MASK, ADDR_DST, ADDR_BRD, ADDR_NFIELDS };
+enum { ADDR_ADDRESS, ADDR_MASK, ADDR_DST, ADDR_BRD, ADDR_IF, ADDR_NFIELDS };
 
 enum { MEDIA_ROLE, MEDIA_WORD, MEDIA_TYPE, MEDIA_SUBTYPE, MEDIA_INSTANCE,
-	MEDIA_OPTIONS, MEDIA_NFIELDS };
+	MEDIA_OPTIONS, MEDIA_IF, MEDIA_NFIELDS };
 #define MEDIA_CURRENT	0
 #define MEDIA_ACTIVE	1
 #define MEDIA_SUPPORTED	2
 
-enum { CARPV_VHID, CARPV_STATE, CARPV_ADVSKEW, CARPV_NFIELDS };
+enum { CARPV_VHID, CARPV_STATE, CARPV_ADVSKEW, CARPV_IF, CARPV_NFIELDS };
 
-enum { WGP_PUBLIC, WGP_DESCR, WGP_HANDSHAKE, WGP_NFIELDS };
+enum { WGP_PUBLIC, WGP_DESCR, WGP_HANDSHAKE, WGP_IF, WGP_NFIELDS };
 
 enum {
 	UMB_ERROR, UMB_ROAMING, UMB_REGSTATE, UMB_ROAMINGTEXT, UMB_CLASSES,
 	UMB_STATE, UMB_CELLCLASS, UMB_HIGHESTCLASS, UMB_RSSI, UMB_UPLINK,
 	UMB_DOWNLINK, UMB_SIMSTATE, UMB_PINSTATE, UMB_PINLEFT, UMB_SID,
 	UMB_ICCID, UMB_PROVIDER, UMB_PROVIDERID, UMB_HWINFO, UMB_DEVID,
-	UMB_FWINFO, UMB_PHONE, UMB_APN, UMB_NFIELDS
+	UMB_FWINFO, UMB_PHONE, UMB_APN, UMB_IF, UMB_NFIELDS
 };
 
-enum { UMBDNS_ADDRESS, UMBDNS_NFIELDS };
+enum { UMBDNS_ADDRESS, UMBDNS_IF, UMBDNS_NFIELDS };
 
-enum { TPORT_NAME, TPORT_FLAGS, TPORT_NFIELDS };
+enum { TPORT_NAME, TPORT_FLAGS, TPORT_IF, TPORT_NFIELDS };
 
-enum { BRM_NAME, BRM_FLAGS, BRM_STATE, BRM_NFIELDS };
+enum { BRM_NAME, BRM_FLAGS, BRM_STATE, BRM_IF, BRM_NFIELDS };
 
-enum { BRA_ADDRESS, BRA_MEMBER, BRA_AGE, BRA_FLAGS, BRA_NFIELDS };
+enum { BRA_ADDRESS, BRA_MEMBER, BRA_AGE, BRA_FLAGS, BRA_IF, BRA_NFIELDS };
 
 enum { BR_NAME, BR_FLAGS, BR_DESCR, BR_NFIELDS };
+
+enum { IP_ADDRESS, IP_MASK, IP_IF, IP_RDOMAIN, IP_FLAGS6, IP_SOURCE,
+	IP_NFIELDS };
+
+enum { DHCP_IF, DHCP_STATE, DHCP_ADDRESS, DHCP_MASK, DHCP_REQUESTED,
+	DHCP_LEASE, DHCP_SERVER, DHCP_NFIELDS };
+enum { DHCPR_DEST, DHCPR_MASK, DHCPR_GW, DHCPR_IF, DHCPR_NFIELDS };
+enum { DHCPNS_ADDRESS, DHCPNS_IF, DHCPNS_NFIELDS };
+
+enum { SLAAC_IF, SLAAC_INDEX, SLAAC_RUNNING, SLAAC_TEMPORARY, SLAAC_LLADDR,
+	SLAAC_INET6, SLAAC_NFIELDS };
+enum { SRA_ROUTER, SRA_WHEN, SRA_SEEN, SRA_HOPLIMIT, SRA_MANAGED,
+	SRA_OTHER, SRA_LIFETIME, SRA_PREF, SRA_REACHABLE, SRA_RETRANS,
+	SRA_MTU, SRA_IF, SRA_NFIELDS };
+enum { SPFX_PREFIX, SPFX_LEN, SPFX_ONLINK, SPFX_AUTONOMOUS, SPFX_VLTIME,
+	SPFX_PLTIME, SPFX_ROUTER, SPFX_IF, SPFX_NFIELDS };
+enum { SRDNS_ADDRESS, SRDNS_LIFETIME, SRDNS_ROUTER, SRDNS_IF,
+	SRDNS_NFIELDS };
+/* slaacd's proposals: what each has, then what its kind has */
+enum { SP_ID, SP_STATE, SP_TIMEOUT, SP_WHEN, SP_SEEN, SP_IF, SP_NFIELDS };
+enum { SADDR_ADDRESS = SP_NFIELDS, SADDR_PREFIX, SADDR_LEN,
+	SADDR_TEMPORARY, SADDR_VLTIME, SADDR_PLTIME, SADDR_NFIELDS };
+enum { SDFR_ROUTER = SP_NFIELDS, SDFR_LIFETIME, SDFR_PREF, SDFR_NFIELDS };
+#define SLAAC_RDNS	8	/* name servers a proposal has, at most */
+enum { SDNS_ROUTER = SP_NFIELDS, SDNS_LIFETIME, SDNS_SERVER,
+	SDNS_NFIELDS = SDNS_SERVER + SLAAC_RDNS };
 
 enum { ARP_ADDRESS, ARP_LLADDR, ARP_IF, ARP_FLAGS, ARP_PROXY, ARP_EXPIRE,
 	ARP_NFIELDS };
@@ -162,7 +200,7 @@ void	 if_typenames(struct facts_field *);
 int	 sdl_build(struct frec *, int, int, int, struct sockaddr_storage *);
 void	 facts_sdl(struct facts_value *, struct facts_value *, char *, size_t,
 	    struct sockaddr *);
-int	 nshd_facts(char *, struct facts_in *);
+int	 nshd_facts(int, char *, struct facts_in *);
 int	 route_facts(struct facts_out *, struct rtdump *, char **, int, int);
 void	 route_render(struct frec *, int *);
 int	 lookup_facts(struct facts_out *, char *, int);
@@ -205,6 +243,7 @@ void	 vlan_render(struct frec *, int);
 void	 vlan_none(int, int);
 void	 stats_facts_init(void);
 struct statgroup *stats_group(const char *);
+int	 stats_where(struct statgroup *);
 const struct facts_kind *stats_kind(const char *);
 int	 stats_facts(struct facts_out *, struct statgroup *);
 void	 stats_render(struct frec *);
@@ -216,5 +255,10 @@ void	 users_render(struct frec *, int);
 void	 users_end(int);
 int	 hostname_facts(struct facts_out *);
 void	 hostname_render(struct frec *);
+int	 ip_facts(struct facts_out *, int, int);
+int	 dhcpleased_has_lease(char *, struct in_addr *, struct in_addr *);
+void	 ip_render(struct frecs *);
+int	 autoconf_facts(struct facts_out *, char *);
+void	 autoconf_render(struct frecs *, struct frec *);
 
 #endif /* SHOWFACTS_H */

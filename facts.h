@@ -21,11 +21,12 @@
  * field or the values of an enum. A record is its template's id and
  * its values, in the template's order, any of them absent.
  *
- * Each template and each record is one unit, which fits in one imsg.
- * Templates are a reply's own: each reply sends a kind's template
- * before its first record of that kind, with ids from 0, and a reader
- * reads one reply, so what passes units on keeps nothing between
- * replies. Integers go in network byte order. A unit:
+ * Each template and each record is one unit, which fits in one imsg;
+ * an imsg of facts is one or more whole units. Templates are a reply's
+ * own: each reply sends a kind's template before its first record of
+ * that kind, with ids from 0, and a reader reads one reply, so what
+ * passes units on keeps nothing between replies. Integers go in network
+ * byte order. A unit:
  *
  *	u8 FACTS_TEMPLATE, u16 id, string kind, u16 fields, and per field:
  *	    string name, u8 type, u8 naming, u16 names, and per name:

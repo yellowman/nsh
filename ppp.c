@@ -629,8 +629,12 @@ is_pppoe(char *ifname, int ifs)
 	return 1;
 }
 
-int
-pppoe_get_ipaddrmode(char *ifname)
+/*
+ * ifname's IP address mode, as nsh.db has it; one it does not have is
+ * ipcp, and init records it so
+ */
+static int
+pppoe_ipaddrmode(char *ifname, int init)
 {
 	StringList *ipaddrmode;
 	int ret = 0;
@@ -644,7 +648,9 @@ pppoe_get_ipaddrmode(char *ifname)
 	}
 
 	if (ipaddrmode->sl_cur == 0) { /* ipaddrmode not yet initalized */
-		db_insert_flag_x("pppoeipaddrmode", ifname, 0, 0, "ipcp");
+		if (init)
+			db_insert_flag_x("pppoeipaddrmode", ifname, 0, 0,
+			    "ipcp");
 		ret = NSH_PPPOE_IPADDR_IPCP;
 	} else {
 		if (strcmp(ipaddrmode->sl_str[0], "ipcp") == 0)
@@ -658,6 +664,19 @@ pppoe_get_ipaddrmode(char *ifname)
 
 	sl_free(ipaddrmode, 1);
 	return ret;
+}
+
+int
+pppoe_get_ipaddrmode(char *ifname)
+{
+	return (pppoe_ipaddrmode(ifname, 1));
+}
+
+/* the same, for a show, which never writes */
+int
+pppoe_show_ipaddrmode(char *ifname)
+{
+	return (pppoe_ipaddrmode(ifname, 0));
 }
 
 int

@@ -72,6 +72,8 @@
 #include "log.h"
 #include "nshd.h"
 #include "control.h"
+#include "facts.h"
+#include "showfacts.h"
 
 #define RESTARTS	5	/* failures in RESTART_SECS, and one stays down */
 #define RESTART_SECS	60
@@ -626,6 +628,47 @@ imsgev_io(struct imsgev *iev, short event)
 		}
 	}
 	return (0);
+}
+
+/* stdout, from now on, to an unlinked file, which printed() reads */
+void
+capture_stdout(void)
+{
+	char	 path[] = "/tmp/nshd.out.XXXXXXXXXX";
+	int	 fd;
+
+	if ((fd = mkstemp(path)) == -1 || unlink(path) == -1 ||
+	    dup2(fd, STDOUT_FILENO) == -1)
+		fatal("%s", path);
+	close(fd);
+}
+
+/*
+ * What nsh's code printed since, as messages in o, or forgotten if o is
+ * NULL; -1 if a message could not be made
+ */
+int
+printed(struct facts_out *o)
+{
+	char	 buf[1024];
+	off_t	 off = 0;
+	ssize_t	 n;
+	int	 r = 0;
+
+	if (fflush(stdout) == EOF)
+		log_warn("%s: stdout", __func__);
+	clearerr(stdout);
+	while (o != NULL &&
+	    (n = pread(STDOUT_FILENO, buf, sizeof(buf) - 1, off)) > 0) {
+		buf[n] = '\0';
+		off += n;
+		if (facts_message(o, "%s", buf) == -1)
+			r = -1;
+	}
+	if (ftruncate(STDOUT_FILENO, 0) == -1 ||
+	    lseek(STDOUT_FILENO, 0, SEEK_SET) == -1)
+		fatal("%s", __func__);
+	return (r);
 }
 
 /* text as messages of type, NSHD_TEXT bytes at most each */

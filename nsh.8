@@ -2398,6 +2398,11 @@ ppp
 link-local
 .El
 .Pp
+Where
+.Xr nshd 8
+runs, only root and the group _nshd, who may ask its kernel, see what
+configured an IPv4 address.
+.Pp
 E.g show all ipv4 and IPv6 adddresses on the system
 .Bd -literal -offset indent
 nsh(p)/show ip
@@ -2408,7 +2413,7 @@ Address      Interface  RDomain  Type
 127.0.0.1    lo0            200  static
 ::1          lo0              0  static
 ::1          lo200          200  static
-fe80:4::1    lo0              0  link-local
+fe80::1      lo0              0  link-local
 nsh(p)/
 .Ed
 E.g. show only IPv4 addresses on the system.
@@ -2423,10 +2428,10 @@ Address      Interface  RDomain  Type
 E.g. show only IPv6 addresses on the system.
 .Bd -literal -offset indent
 sh(config-p)/show inet6
-Address    Interface  RDomain  Type
-::1        lo0              0  static
-::1        lo200          200  static
-fe80:4::1  lo0              0  link-local
+Address  Interface  RDomain  Type
+::1      lo0              0  static
+::1      lo200          200  static
+fe80::1  lo0              0  link-local
 .Ed
 .Pp
 .Tg route

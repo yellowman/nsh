@@ -203,12 +203,13 @@ done:
 }
 
 /*
- * show words, as nshd's show processes answer them: facts read into in
- * as they come, and text printed. -1 if there is no nshd to ask, else 1
- * if the show was answered and 0 if not.
+ * show words, as nshd answers them, on the read-write socket if rw, its
+ * kernel's, else as its show processes do: facts read into in as they
+ * come, and text printed. -1 if there is no nshd to ask, or none this
+ * user may, else 1 if the show was answered and 0 if not.
  */
 int
-nshd_facts(char *words, struct facts_in *in)
+nshd_facts(int rw, char *words, struct facts_in *in)
 {
 	struct nshd_show	 show;
 	struct nshd_result	 r = { 0 };
@@ -217,7 +218,7 @@ nshd_facts(char *words, struct facts_in *in)
 	struct ibuf		 b;
 	int			 fd, done = 0, ret = 0;
 
-	if ((fd = nshd_open(NSHD_RO_SOCKET, &ib)) == -1) {
+	if ((fd = nshd_open(rw ? NSHD_SOCKET : NSHD_RO_SOCKET, &ib)) == -1) {
 		if (errno != EPROTO)
 			return (-1);
 		printf("%% nshd: not a version nsh speaks\n");

@@ -100,6 +100,7 @@ frontend_dispatch_relay(int fd, short event, void *arg)
 				c->pending = 0;
 			/* FALLTHROUGH */
 		case IMSG_CTL_OUTPUT:
+		case IMSG_CTL_FACTS:
 			if (imsg_get_ibuf(&imsg, &b) == -1)
 				fatal("%s", __func__);
 			if (control_reply(imsg_get_id(&imsg),

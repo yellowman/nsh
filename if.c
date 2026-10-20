@@ -187,6 +187,7 @@ static struct facts_field address_fields[] = {
 	[ADDR_MASK] =		{ "netmask",		FACT_ADDRESS },
 	[ADDR_DST] =		{ "destination",	FACT_ADDRESS },
 	[ADDR_BRD] =		{ "broadcast",		FACT_ADDRESS },
+	[ADDR_IF] =		{ "interface",		FACT_STRING },
 };
 struct facts_kind kind_address = { "address", address_fields, ADDR_NFIELDS };
 
@@ -364,6 +365,7 @@ if_facts(struct facts_out *o, char *ifname, int detail)
 		}
 		facts_sockaddr(&av[ADDR_ADDRESS], ifa->ifa_addr);
 		facts_sockaddr(&av[ADDR_MASK], ifa->ifa_netmask);
+		facts_string(&av[ADDR_IF], ifname);
 		if (facts_record(o, &kind_address, av) == -1)
 			r = -1;
 	}
@@ -753,14 +755,11 @@ show_int(int argc, char **argv, ...)
 	    verbose ? " detail" : ""));
 }
 
+/* show autoconf: asked of nshd, and rendered here */
 int
 show_autoconf(int argc, char **argv, ...)
 {
-	struct if_nameindex *ifn_list, *ifnp;
 	char *ifname = NULL;
-	char outpath[PATH_MAX];
-	int ifs = -1, fd = -1, nullfd = -1, ifxflags;
-	int have_output = 0;
 
 	if (argc == 3) {
 		ifname = argv[2];
@@ -769,64 +768,119 @@ show_autoconf(int argc, char **argv, ...)
 			return (1);
 		}
 	}
+	return (facts_show(stdout, "autoconf%s%s", ifname ? " " : "",
+	    ifname ? ifname : ""));
+}
 
-	nullfd = open("/dev/null", O_WRONLY | O_NOFOLLOW | O_CLOEXEC);
-	if (nullfd == -1) {
-		printf("%% open /dev/null: %s\n", strerror(errno));
-		return (1);
+/* what configured an IPv4 address */
+#define NSH_IP_FLAG_DHCP	0x01
+#define NSH_IP_FLAG_IPCP	0x02
+#define NSH_IP_FLAG_STATIC	0x04
+
+/* an address, as facts; what configured an IPv4 one, where known */
+static const struct facts_name ip_sources[] = {
+	{ NSH_IP_FLAG_DHCP,	"dhcp" },
+	{ NSH_IP_FLAG_IPCP,	"ipcp" },
+	{ NSH_IP_FLAG_STATIC,	"static" },
+};
+static const struct facts_name ip_flags6[] = {
+	{ IN6_IFF_ANYCAST,	"anycast" },
+	{ IN6_IFF_TENTATIVE,	"tentative" },
+	{ IN6_IFF_DUPLICATED,	"duplicated" },
+	{ IN6_IFF_DETACHED,	"detached" },
+	{ IN6_IFF_DEPRECATED,	"deprecated" },
+	{ IN6_IFF_AUTOCONF,	"autoconf" },
+	{ IN6_IFF_TEMPORARY,	"temporary" },
+};
+static struct facts_field ip_fields[] = {
+	[IP_ADDRESS] =	{ "address",	FACT_ADDRESS },
+	[IP_MASK] =	{ "netmask",	FACT_ADDRESS },
+	[IP_IF] =	{ "interface",	FACT_STRING },
+	[IP_RDOMAIN] =	{ "rdomain",	FACT_U64 },
+	[IP_FLAGS6] =	{ "flags",	FACT_U64, FACT_BITS, ip_flags6,
+			    nitems(ip_flags6) },
+	[IP_SOURCE] =	{ "configured-by", FACT_U64, FACT_VALUES, ip_sources,
+			    nitems(ip_sources) },
+};
+struct facts_kind kind_ip = { "ip-address", ip_fields, IP_NFIELDS };
+
+/* what configured ifa's IPv4 address; dhcpleased leases on autoconf4 */
+static int
+ip_source(struct ifaddrs *ifa, int s)
+{
+	struct in_addr	 addr, mask;
+
+	addr = ((struct sockaddr_in *)ifa->ifa_addr)->sin_addr;
+	mask = ((struct sockaddr_in *)ifa->ifa_netmask)->sin_addr;
+	if ((get_ifxflags(ifa->ifa_name, s) & IFXF_AUTOCONF4) &&
+	    dhcpleased_has_lease(ifa->ifa_name, &addr, &mask))
+		return (NSH_IP_FLAG_DHCP);
+	if (is_pppoe(ifa->ifa_name, s) &&
+	    pppoe_show_ipaddrmode(ifa->ifa_name) == NSH_PPPOE_IPADDR_IPCP)
+		return (NSH_IP_FLAG_IPCP);
+	return (NSH_IP_FLAG_STATIC);
+}
+
+/*
+ * Every address of af, or of each family, as facts; with source, what
+ * configured each IPv4 one, as only root may learn
+ */
+int
+ip_facts(struct facts_out *o, int af, int source)
+{
+	struct facts_value v[IP_NFIELDS];
+	struct ifaddrs *ifap, *ifa;
+	struct in6_ifreq ifr6;
+	struct ifreq ifr;
+	int s, r = 0;
+
+	s = socket(PF_INET6, SOCK_DGRAM, 0);
+	if (s < 0) {
+		printf("%% show_ip: socket: %s\n", strerror(errno));
+		return (-1);
 	}
 
-	if ((ifs = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-		printf("%% socket: %s\n", strerror(errno));
-		close(nullfd);
-		return (1);
+	if (getifaddrs(&ifap) != 0) {
+		printf("%% show_ip: getifaddrs: %s\n", strerror(errno));
+		close(s);
+		return (-1);
 	}
 
-	if ((ifn_list = if_nameindex()) == NULL) {
-		printf("%% if_nameindex: %s\n", strerror(errno));
-		close(nullfd);
-		close(ifs);
-		return (1);
-	}
-
-	strlcpy(outpath, "/tmp/nsh-XXXXXX", sizeof(outpath));
-	fd = mkstemp(outpath);
-	if (fd == -1) {
-		printf("%% mkstemp: %s\n", strerror(errno));
-		close(nullfd);
-		close(ifs);
-		if_freenameindex(ifn_list);
-		return (1);
-	}
-
-	for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++) {
-		if (ifname && strcmp(ifname, ifnp->if_name) != 0)
+	for (ifa = ifap; ifa && r != -1; ifa = ifa->ifa_next) {
+		if (ifa->ifa_addr->sa_family != AF_INET &&
+		    ifa->ifa_addr->sa_family != AF_INET6)
+			continue;
+		if (af != AF_UNSPEC && ifa->ifa_addr->sa_family != af)
 			continue;
 
-		ifxflags = get_ifxflags(ifnp->if_name, ifs);
-		if ((ifxflags & IFXF_AUTOCONF4) && dhcpleased_is_running()) {
-			char *args[] = { DHCPLEASECTL, "-l",
-			    ifnp->if_name, NULL };
-			cmdargs_output(DHCPLEASECTL, args, fd, nullfd);
-			have_output = 1;
+		memset(v, 0, sizeof(v));
+		facts_sockaddr(&v[IP_ADDRESS], ifa->ifa_addr);
+		facts_sockaddr(&v[IP_MASK], ifa->ifa_netmask);
+		facts_string(&v[IP_IF], ifa->ifa_name);
+		memset(&ifr, 0, sizeof(ifr));
+		strlcpy(ifr.ifr_name, ifa->ifa_name, sizeof(ifr.ifr_name));
+		if (ioctl(s, SIOCGIFRDOMAIN, (caddr_t)&ifr) != -1)
+			facts_u64(&v[IP_RDOMAIN], ifr.ifr_rdomainid);
+
+		if (ifa->ifa_addr->sa_family == AF_INET) {
+			if (source)
+				facts_u64(&v[IP_SOURCE], ip_source(ifa, s));
+		} else {
+			memset(&ifr6, 0, sizeof(ifr6));
+			strlcpy(ifr6.ifr_name, ifa->ifa_name,
+			    sizeof(ifr6.ifr_name));
+			memcpy(&ifr6.ifr_addr, ifa->ifa_addr,
+			    sizeof(ifr6.ifr_addr));
+			if (ioctl(s, SIOCGIFAFLAG_IN6, (caddr_t)&ifr6) == 0)
+				facts_u64(&v[IP_FLAGS6],
+				    ifr6.ifr_ifru.ifru_flags6);
 		}
-		if ((ifxflags & IFXF_AUTOCONF6) && slaacd_is_running()) {
-			char *args[] = { SLAACCTL, "show", "interface",
-			    ifnp->if_name, NULL };
-			cmdargs_output(SLAACCTL, args, fd, nullfd);
-			have_output = 1;
-		}
+		r = facts_record(o, &kind_ip, v);
 	}
 
-	if (have_output)
-		more(outpath);
-
-	unlink(outpath);
-	if_freenameindex(ifn_list);
-	close(nullfd);
-	close(fd);
-	close(ifs);
-	return (0);
+	freeifaddrs(ifap);
+	close(s);
+	return (r);
 }
 
 struct ip_tree_entry {
@@ -835,9 +889,6 @@ struct ip_tree_entry {
 	const char *ifname;
 	int rdomain;
 	int flags;		/* custom IPv4 address flags */
-#define NSH_IP_FLAG_DHCP	0x01
-#define NSH_IP_FLAG_IPCP	0x02
-#define NSH_IP_FLAG_STATIC	0x04
 	int flags6;		/* IN6_IFF_ flags */
 	union {
 		struct in_addr in;
@@ -877,48 +928,25 @@ RB_HEAD(ip_tree, ip_tree_entry);
 RB_PROTOTYPE(ip_tree, ip_tree_entry, entry, ip_tree_cmp);
 RB_GENERATE(ip_tree, ip_tree_entry, entry, ip_tree_cmp);
 
-int
-show_ip(int argc, char **argv, ...)
+/* the addresses in rs, as show_ip() printed them, sorted */
+void
+ip_render(struct frecs *rs)
 {
-	struct ifaddrs *ifap, *ifa;
-	struct sockaddr_in *sin = NULL, *sinmask = NULL;
-	struct sockaddr_in6 *sin6 = NULL;
-	struct in6_ifreq ifr6;
-	int af = -1, s = -1;
+	struct sockaddr_storage ss;
 	char buf[INET6_ADDRSTRLEN];
-	char maskbuf[INET_ADDRSTRLEN];
 	char flagsbuf[64];
 	struct ip_tree tree;
 	struct ip_tree_entry *e = NULL;
+	struct frec *r;
 	int max_addr_strlen = 0;
 	size_t addr_strlen;
-	struct ifreq ifr;
 
 	RB_INIT(&tree);
 
-	s = socket(PF_INET6, SOCK_DGRAM, 0);
-	if (s < 0) {
-		printf("%% show_ip: socket: %s\n", strerror(errno));
-		return (0);
-	}
-
-	if (getifaddrs(&ifap) != 0) {
-		printf("%% show_ip: getifaddrs: %s\n", strerror(errno));
-		close(s);
-		return (0);
-	}
-
-	if (strcmp(argv[1], "inet") == 0)
-		af = AF_INET;
-	else if (strcmp(argv[1], "inet6") == 0)
-		af = AF_INET6;
-
 	/* Collect IPs */
-	for (ifa = ifap; ifa; ifa = ifa->ifa_next) {
-		if (ifa->ifa_addr->sa_family != AF_INET &&
-		    ifa->ifa_addr->sa_family != AF_INET6)
-			continue;
-		if (af != -1 && ifa->ifa_addr->sa_family != af)
+	for (r = NULL; (r = frec_next(rs, r, &kind_ip)) != NULL; ) {
+		if (!fsockaddr(r, IP_ADDRESS, &ss) ||
+		    (ss.ss_family != AF_INET && ss.ss_family != AF_INET6))
 			continue;
 
 		e = calloc(1, sizeof(*e));
@@ -927,52 +955,22 @@ show_ip(int argc, char **argv, ...)
 			goto done;
 		}
 
-		e->family = ifa->ifa_addr->sa_family;
-		e->ifname = ifa->ifa_name;
-		memset(&ifr, 0, sizeof(ifr));
-		strlcpy(ifr.ifr_name, ifa->ifa_name, sizeof(ifr.ifr_name));
-		if (ioctl(s, SIOCGIFRDOMAIN, (caddr_t)&ifr) != -1)
-			e->rdomain = ifr.ifr_rdomainid;;
-
-		if (ifa->ifa_addr->sa_family == AF_INET) {
-			sin = (struct sockaddr_in *)ifa->ifa_addr;
-			sinmask = (struct sockaddr_in *)ifa->ifa_netmask;
-			memcpy(&e->addr.in, &sin->sin_addr, sizeof(e->addr.in));
-			if (inet_ntop(e->family, &e->addr.in,
-			    buf, sizeof(buf)) == NULL) {
-				printf("%% inet_ntop: %s\n", strerror(errno));
-				goto done;
-			}
-			if (inet_ntop(e->family, &sinmask->sin_addr,
-			    maskbuf, sizeof(maskbuf)) == NULL) {
-				printf("%% inet_ntop: %s\n", strerror(errno));
-				goto done;
-			}
-			if (dhcpleased_has_address(ifa->ifa_name, buf, maskbuf))
-				e->flags |= NSH_IP_FLAG_DHCP;
-			else if (is_pppoe(ifa->ifa_name, s) &&
-			    pppoe_get_ipaddrmode(ifa->ifa_name) ==
-			    NSH_PPPOE_IPADDR_IPCP)
-				e->flags |= NSH_IP_FLAG_IPCP;
-			else
-				e->flags |= NSH_IP_FLAG_STATIC;
-		} else {
-			sin6 = (struct sockaddr_in6 *)ifa->ifa_addr;
-			memcpy(&e->addr.in6, &sin6->sin6_addr,
-			    sizeof(e->addr.in6));
-			if (inet_ntop(e->family, &e->addr.in6,
-			    buf, sizeof(buf)) == NULL) {
-				printf("%% inet_ntop: %s\n", strerror(errno));
-				goto done;
-			}
-			memset(&ifr6, 0, sizeof(ifr6));
-			strlcpy(ifr6.ifr_name, e->ifname, sizeof(ifr6.ifr_name));
-			memcpy(&ifr6.ifr_addr, sin6, sizeof(ifr6.ifr_addr));
-			if (ioctl(s, SIOCGIFAFLAG_IN6, (caddr_t)&ifr6) == 0)
-				e->flags6 = ifr6.ifr_ifru.ifru_flags6;
+		e->family = ss.ss_family;
+		e->ifname = fs(r, IP_IF) != NULL ? fs(r, IP_IF) : "";
+		e->rdomain = fu(r, IP_RDOMAIN, 0);
+		e->flags = fu(r, IP_SOURCE, 0);
+		e->flags6 = fu(r, IP_FLAGS6, 0);
+		if (e->family == AF_INET)
+			e->addr.in = ((struct sockaddr_in *)&ss)->sin_addr;
+		else
+			e->addr.in6 = ((struct sockaddr_in6 *)&ss)->sin6_addr;
+		if (inet_ntop(e->family, &e->addr, buf, sizeof(buf)) == NULL) {
+			printf("%% inet_ntop: %s\n", strerror(errno));
+			goto done;
 		}
 
-		RB_INSERT(ip_tree, &tree, e);
+		if (RB_INSERT(ip_tree, &tree, e) != NULL)
+			free(e);
 		e = NULL;
 
 		addr_strlen = strlen(buf);
@@ -1030,8 +1028,18 @@ done:
 		RB_REMOVE(ip_tree, &tree, e);
 		free(e);
 	}
-	freeifaddrs(ifap);
-	close(s);
+}
+
+/* show ip, show inet and show inet6: asked of nshd, and rendered here */
+int
+show_ip(int argc, char **argv, ...)
+{
+	if (strcmp(argv[1], "inet") == 0)
+		facts_show(stdout, "ip inet");
+	else if (strcmp(argv[1], "inet6") == 0)
+		facts_show(stdout, "ip inet6");
+	else
+		facts_show(stdout, "ip");
 	return (0);
 }
 
@@ -1303,12 +1311,6 @@ int
 dhcpleased_is_running(void)
 {
 	return check_daemon_control_socket(DHCPLEASED_SOCK);
-}
-
-int
-slaacd_is_running(void)
-{
-	return check_daemon_control_socket(SLAACD_SOCK);
 }
 
 struct ghs intiphelp[] = {

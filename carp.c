@@ -623,6 +623,7 @@ static struct facts_field carp_fields[] = {
 	[CARPV_VHID] =		{ "vhid",	FACT_U64 },
 	[CARPV_STATE] =		{ "state",	FACT_U64 },
 	[CARPV_ADVSKEW] =	{ "advskew",	FACT_U64 },
+	[CARPV_IF] =		{ "interface",	FACT_STRING },
 };
 struct facts_kind kind_carp = { "carp-vhid", carp_fields, CARPV_NFIELDS };
 
@@ -689,6 +690,7 @@ carp_facts(struct facts_out *o, int s, char *ifname, struct facts_value *ifv)
 		facts_u64(&v[CARPV_VHID], creq.carpr_vhids[i]);
 		facts_u64(&v[CARPV_STATE], creq.carpr_states[i]);
 		facts_u64(&v[CARPV_ADVSKEW], creq.carpr_advskews[i]);
+		facts_string(&v[CARPV_IF], ifname);
 		facts_record(o, &kind_carp, v);
 	}
 }

@@ -343,6 +343,7 @@ conf_trunk(FILE *output, int ifs, char *ifname)
 static struct facts_field trunkport_fields[] = {
 	[TPORT_NAME] =		{ "name",	FACT_STRING },
 	[TPORT_FLAGS] =		{ "flags",	FACT_U64 },
+	[TPORT_IF] =		{ "interface",	FACT_STRING },
 };
 struct facts_kind kind_trunkport = { "trunk-port", trunkport_fields,
     TPORT_NFIELDS };
@@ -408,6 +409,7 @@ trunk_facts(struct facts_out *o, int ifs, char *ifname, struct facts_value *ifv)
 			memset(v, 0, sizeof(v));
 			facts_string(&v[TPORT_NAME], rpbuf[i].rp_portname);
 			facts_u64(&v[TPORT_FLAGS], rpbuf[i].rp_flags);
+			facts_string(&v[TPORT_IF], ifname);
 			facts_record(o, &kind_trunkport, v);
 		}
 	}

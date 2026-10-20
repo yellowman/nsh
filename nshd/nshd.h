@@ -102,7 +102,7 @@ enum nshd_imsg {
 	IMSG_CTL_SHOW,		/* nshd_show; output or facts, then a result */
 	IMSG_CTL_OUTPUT,	/* text */
 	IMSG_CTL_RESULT,	/* nshd_result */
-	IMSG_CTL_FACTS,		/* a unit of facts, as facts.h has it */
+	IMSG_CTL_FACTS,		/* units of facts, as facts.h has them */
 
 	/* between nshd's processes */
 	IMSG_CTL_CLOSE,		/* frontend to config: a session is gone */
@@ -113,7 +113,9 @@ enum nshd_imsg {
 	IMSG_RESTART,		/* relay to a child: nshd_restart */
 	IMSG_KRN_SNAPSHOT,	/* config to kernel: the running configuration */
 	IMSG_KRN_TEXT,		/* kernel to config: text */
-	IMSG_KRN_END		/* kernel to config: nshd_result */
+	IMSG_KRN_END,		/* kernel to config: nshd_result */
+	IMSG_KRN_SHOW,		/* config to kernel: nshd_show, facts back */
+	IMSG_KRN_FACTS		/* kernel to config: units of facts */
 };
 
 struct imsgev {
@@ -131,6 +133,9 @@ struct imsgev	*imsgev_new(int, void (*)(int, short, void *), int);
 int		 imsgev_io(struct imsgev *, short);
 int		 imsg_text(struct imsgev *, uint32_t, uint32_t, const char *,
 		    size_t);
+struct facts_out;
+void		 capture_stdout(void);
+int		 printed(struct facts_out *);
 void		 child_start(const char *, int, int);
 void		 privdrop(void);
 

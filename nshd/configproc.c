@@ -19,8 +19,9 @@
  * Each request to kernel has an id of its own, with config's generation
  * in its top bits, so an answer meant for a config before this one is
  * known for what it is; kernel's answers for it go to the session that
- * asked, if that session is still there. When frontend starts again,
- * every session is gone; when kernel does, what it was asked is lost.
+ * asked, if that session is still there, its facts passed on unread.
+ * When frontend starts again, every session is gone; when kernel does,
+ * what it was asked is lost.
  */
 
 #include <sys/types.h>
@@ -155,15 +156,17 @@ config_dispatch_relay(int fd, short event, void *arg)
 			}
 			break;
 		case IMSG_KRN_TEXT:
+		case IMSG_KRN_FACTS:
 			/* for a config before this one, or a request failed */
 			if ((r = request_find(id)) == NULL)
 				break;
 			if (imsg_get_ibuf(&imsg, &b) == -1)
-				fatalx("%s: bad IMSG_KRN_TEXT", __func__);
+				fatalx("%s: bad kernel answer", __func__);
 			if (session_find(r->session) != NULL &&
-			    imsg_compose_event(iev_relay, IMSG_CTL_OUTPUT,
-			    r->session, 0, -1, ibuf_data(&b), ibuf_size(&b)) ==
-			    -1)
+			    imsg_compose_event(iev_relay,
+			    imsg_get_type(&imsg) == IMSG_KRN_TEXT ?
+			    IMSG_CTL_OUTPUT : IMSG_CTL_FACTS, r->session, 0, -1,
+			    ibuf_data(&b), ibuf_size(&b)) == -1)
 				fatal("%s", __func__);
 			break;
 		case IMSG_KRN_END:
@@ -194,11 +197,6 @@ config_show(uint32_t session, struct nshd_show *show)
 		config_answer(session, 1, "%% nshd: hello first\n");
 		return;
 	}
-	if (strcmp(show->words, "running-config") != 0) {
-		config_answer(session, 1, "%% show %s: not answered by nshd\n",
-		    show->words);
-		return;
-	}
 	if (kernel_down) {
 		config_answer(session, 1, "%% nshd: kernel is down\n");
 		return;
@@ -212,8 +210,11 @@ config_show(uint32_t session, struct nshd_show *show)
 	r->id = ++request_id;
 	r->session = session;
 	TAILQ_INSERT_TAIL(&requests, r, entry);
-	if (imsg_compose_event(iev_relay, IMSG_KRN_SNAPSHOT, r->id, 0, -1,
-	    NULL, 0) == -1)
+	/* kernel answers the rest with facts, or says it does not */
+	if ((strcmp(show->words, "running-config") == 0 ?
+	    imsg_compose_event(iev_relay, IMSG_KRN_SNAPSHOT, r->id, 0, -1,
+	    NULL, 0) : imsg_compose_event(iev_relay, IMSG_KRN_SHOW, r->id, 0,
+	    -1, show, sizeof(*show))) == -1)
 		fatal("%s", __func__);
 }
 

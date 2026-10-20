@@ -57,7 +57,7 @@ nshd_show(char *words)
 }
 
 int
-nshd_facts(char *words, struct facts_in *in)
+nshd_facts(int rw, char *words, struct facts_in *in)
 {
 	return -1;
 }

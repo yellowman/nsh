@@ -375,6 +375,7 @@ static struct facts_field wgpeer_fields[] = {
 	[WGP_PUBLIC] =		{ "public-key",		FACT_STRING },
 	[WGP_DESCR] =		{ "description",	FACT_STRING },
 	[WGP_HANDSHAKE] =	{ "last-handshake",	FACT_TIME },
+	[WGP_IF] =		{ "interface",		FACT_STRING },
 };
 struct facts_kind kind_wgpeer = { "wg-peer", wgpeer_fields, WGP_NFIELDS };
 
@@ -414,6 +415,7 @@ wg_facts(struct facts_out *o, int ifs, char *ifname, struct facts_value *ifv)
 			facts_time(&v[WGP_HANDSHAKE],
 			    p->p_last_handshake.tv_sec,
 			    p->p_last_handshake.tv_nsec);
+		facts_string(&v[WGP_IF], ifname);
 		facts_record(o, &kind_wgpeer, v);
 		p = (struct wg_peer_io *)&p->p_aips[p->p_aips_count];
 	}

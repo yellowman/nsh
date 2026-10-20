@@ -160,7 +160,6 @@ static int	telnet(int, char**, ...);
 static int 	nreboot(int, char **, ...);
 static int 	halt(int, char **, ...);
 static int 	powerdown(int, char **, ...);
-static void	pf_stats(void);
 static int	interface(int, char **, ...);
 static int	int_interface(int, char **, ...);
 
@@ -195,21 +194,20 @@ static struct fpf {
 static struct stt {
 	char *name;
 	char *help;
-	void (*handler)(void);
 } stts[] = {
-	{ "ip",		"Internet Protocol",			0 },
-	{ "ah",		"Authentication Header",		0 },
-	{ "esp",	"Encapsulated Security Payload",	0 },
-	{ "tcp",	"Transmission Control Protocol",	0 },
-	{ "udp",	"Unreliable Datagram Protocol",		0 },
-	{ "icmp",	"Internet Control Message Protocol",	0 },
-	{ "igmp",	"Internet Group Management Protocol",	0 },
-	{ "ipcomp",	"IP Compression",			0 },
-	{ "route",	"Routing",				0 },
-	{ "carp",	"Common Address Redundancy Protocol",	0 },
-	{ "mbuf",	"Packet memory buffer",			0 },
-	{ "pf",		"Packet Filter",			pf_stats },
-	{ 0,		0,					0 }
+	{ "ip",		"Internet Protocol" },
+	{ "ah",		"Authentication Header" },
+	{ "esp",	"Encapsulated Security Payload" },
+	{ "tcp",	"Transmission Control Protocol" },
+	{ "udp",	"Unreliable Datagram Protocol" },
+	{ "icmp",	"Internet Control Message Protocol" },
+	{ "igmp",	"Internet Group Management Protocol" },
+	{ "ipcomp",	"IP Compression" },
+	{ "route",	"Routing" },
+	{ "carp",	"Common Address Redundancy Protocol" },
+	{ "mbuf",	"Packet memory buffer" },
+	{ "pf",		"Packet Filter" },
+	{ 0,		0 }
 };
 
 
@@ -4023,23 +4021,9 @@ pr_kernel(int argc, char **argv, ...)
 		printf("%% Ambiguous argument %s\n", argv[2]);
 		return 0;
 	}
-	if (x->handler)
-		(*x->handler)();
-	else
-		facts_show(stdout, "statistics %s", x->name);
+	facts_show(stdout, "statistics %s", x->name);
 
 	return 0;
-}
-
-void
-pf_stats(void)
-{
-	char *argv[] = { PFCTL, "-sinfo", NULL };
-
-	printf("%% pf statistics:\n");
-
-	cmdargs(PFCTL, argv);
-	return;
 }
 
 static int

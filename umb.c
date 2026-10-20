@@ -125,11 +125,13 @@ static struct facts_field umb_fields[] = {
 	[UMB_FWINFO] =		{ "firmware",		FACT_STRING },
 	[UMB_PHONE] =		{ "phone-number",	FACT_STRING },
 	[UMB_APN] =		{ "apn",		FACT_STRING },
+	[UMB_IF] =		{ "interface",		FACT_STRING },
 };
 struct facts_kind kind_umb = { "umb", umb_fields, UMB_NFIELDS };
 
 static struct facts_field umbdns_fields[] = {
 	[UMBDNS_ADDRESS] =	{ "address",		FACT_ADDRESS },
+	[UMBDNS_IF] =		{ "interface",		FACT_STRING },
 };
 struct facts_kind kind_umbdns = { "umb-name-server", umbdns_fields,
     UMBDNS_NFIELDS };
@@ -240,6 +242,7 @@ umb_facts(struct facts_out *o, int ifs, char *ifname)
 	    sizeof(fwinfo));
 	umb_string(&v[UMB_PHONE], mi.pn, UMB_PHONENR_MAXLEN, pn, sizeof(pn));
 	umb_string(&v[UMB_APN], mi.apn, UMB_APN_MAXLEN, apn, sizeof(apn));
+	facts_string(&v[UMB_IF], ifname);
 	facts_record(o, &kind_umb, v);
 
 	for (i = 0; i < UMB_MAX_DNSSRV; i++) {
@@ -248,6 +251,7 @@ umb_facts(struct facts_out *o, int ifs, char *ifname)
 		memset(dv, 0, sizeof(dv));
 		facts_address(&dv[UMBDNS_ADDRESS], FACT_INET, &mi.ipv4dns[i],
 		    sizeof(mi.ipv4dns[i]), 0);
+		facts_string(&dv[UMBDNS_IF], ifname);
 		facts_record(o, &kind_umbdns, dv);
 	}
 	for (i = 0; i < UMB_MAX_DNSSRV; i++) {
@@ -257,6 +261,7 @@ umb_facts(struct facts_out *o, int ifs, char *ifname)
 		memset(dv, 0, sizeof(dv));
 		facts_address(&dv[UMBDNS_ADDRESS], FACT_INET6, &mi.ipv6dns[i],
 		    sizeof(mi.ipv6dns[i]), 0);
+		facts_string(&dv[UMBDNS_IF], ifname);
 		facts_record(o, &kind_umbdns, dv);
 	}
 }

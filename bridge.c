@@ -1188,6 +1188,7 @@ static struct facts_field bridgemember_fields[] = {
 	[BRM_NAME] =		{ "name",	FACT_STRING },
 	[BRM_FLAGS] =		{ "flags",	FACT_U64 },
 	[BRM_STATE] =		{ "stp-state",	FACT_U64 },
+	[BRM_IF] =		{ "interface",	FACT_STRING },
 };
 struct facts_kind kind_bridgemember = { "bridge-member", bridgemember_fields,
     BRM_NFIELDS };
@@ -1197,6 +1198,7 @@ static struct facts_field bridgeaddr_fields[] = {
 	[BRA_MEMBER] =		{ "member",	FACT_STRING },
 	[BRA_AGE] =		{ "age",	FACT_U64 },
 	[BRA_FLAGS] =		{ "flags",	FACT_U64 },
+	[BRA_IF] =		{ "interface",	FACT_STRING },
 };
 struct facts_kind kind_bridgeaddr = { "bridge-address", bridgeaddr_fields,
     BRA_NFIELDS };
@@ -1247,6 +1249,7 @@ bridge_members(struct facts_out *o, int s, char *brdg)
 		facts_string(&v[BRM_NAME], buf);
 		facts_u64(&v[BRM_FLAGS], reqs[i].ifbr_ifsflags);
 		facts_u64(&v[BRM_STATE], reqs[i].ifbr_state);
+		facts_string(&v[BRM_IF], brdg);
 		r = facts_record(o, &kind_bridgemember, v);
 	}
 	free(reqs);
@@ -1299,6 +1302,7 @@ bridge_facts(struct facts_out *o, int s, char *brdg)
 		facts_string(&v[BRA_MEMBER], buf);
 		facts_u64(&v[BRA_AGE], ifba->ifba_age);
 		facts_u64(&v[BRA_FLAGS], ifba->ifba_flags);
+		facts_string(&v[BRA_IF], brdg);
 		facts_record(o, &kind_bridgeaddr, v);
 	}
 	free(inbuf);

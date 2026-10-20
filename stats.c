@@ -29,6 +29,39 @@
  * SUCH DAMAGE.
  */
 
+/*
+ * pf_print() is print_status() of pfctl_parser.c:
+ *
+ * Copyright (c) 2001 Daniel Hartmeier
+ * Copyright (c) 2002 - 2013 Henning Brauer <henning@openbsd.org>
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *
+ *    - Redistributions of source code must retain the above copyright
+ *      notice, this list of conditions and the following disclaimer.
+ *    - Redistributions in binary form must reproduce the above
+ *      copyright notice, this list of conditions and the following
+ *      disclaimer in the documentation and/or other materials provided
+ *      with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+ * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+ * COPYRIGHT HOLDERS OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+#define SYSLOG_NAMES	/* pf's debug level, as pfctl names it */
 #include <sys/param.h>
 #include <sys/queue.h>
 #include <sys/socket.h>
@@ -37,7 +70,10 @@
 #include <sys/protosw.h>
 #include <sys/sysctl.h>
 #include <sys/pool.h>
+#include <sys/ioctl.h>
+#include <sys/syslog.h>
 #include <errno.h>
+#include <fcntl.h>
 
 #include <net/route.h>
 #include <netinet/in.h>
@@ -75,6 +111,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include "externs.h"
@@ -92,6 +129,7 @@ struct statfield {
 	size_t		 off;
 	size_t		 size;		/* of one */
 	size_t		 n;
+	int		 string;	/* a string, not a number */
 };
 
 #define SF(s, f)	{ #f, offsetof(struct s, f), \
@@ -99,6 +137,8 @@ struct statfield {
 #define SFA(s, f)	{ #f, offsetof(struct s, f), \
 			    sizeof(((struct s *)0)->f[0]), \
 			    nitems(((struct s *)0)->f) }
+#define SFS(s, f)	{ #f, offsetof(struct s, f), \
+			    sizeof(((struct s *)0)->f), 1, 1 }
 
 /* a group of statistics: where it comes from, and how it prints */
 struct statgroup {
@@ -112,6 +152,7 @@ struct statgroup {
 	size_t			 nf;
 	int			(*get)(struct statgroup *, void *);
 	void			(*print)(void *);
+	int			 kernel;	/* only root may get it */
 	struct facts_kind	 kind;
 	size_t			*off, *sz;	/* each field's member */
 };
@@ -841,6 +882,138 @@ mb_print(void *p)
 	printf("\t%lu calls to protocol drain routines\n", mbstat.m_drain);
 }
 
+/* what pfctl -s info prints */
+struct pfinfo {
+	struct pf_status	 status;
+	struct pfioc_synflwats	 wats;
+};
+
+static const char	*pf_reasons[PFRES_MAX+1] = PFRES_NAMES;
+static const char	*pf_fcounters[FCNT_MAX+1] =
+    { "searches", "inserts", "removals", NULL };
+
+/*
+ * Get pf's status, which only root may.
+ */
+static int
+pf_get(struct statgroup *g, void *p)
+{
+	struct pfinfo *pi = p;
+	int dev, r = -1;
+
+	if ((dev = open("/dev/pf", O_RDONLY)) == -1) {
+		printf("%% pf_stats: /dev/pf: %s\n", strerror(errno));
+		return (-1);
+	}
+	if (ioctl(dev, DIOCGETSTATUS, &pi->status) == -1)
+		printf("%% pf_stats: DIOCGETSTATUS: %s\n", strerror(errno));
+	else if (ioctl(dev, DIOCGETSYNFLWATS, &pi->wats) == -1)
+		printf("%% pf_stats: DIOCGETSYNFLWATS: %s\n",
+		    strerror(errno));
+	else
+		r = 0;
+	close(dev);
+	return (r);
+}
+
+/* a debug level's name, as pfctl's loglevel_to_string() gives it */
+static const char *
+pf_loglevel(int level)
+{
+	CODE *c;
+
+	for (c = prioritynames; c->c_name; c++)
+		if (c->c_val == level)
+			return (c->c_name);
+	return ("unknown");
+}
+
+/*
+ * Print pf's status, as pfctl -s info does.
+ */
+static void
+pf_print(void *p)
+{
+	struct pfinfo	*pi = p;
+	struct pf_status *s = &pi->status;
+	char		 statline[80], debug[32];
+	const char	*running;
+	time_t		 runtime = 0;
+	struct timespec	 uptime;
+	int		 i;
+
+	printf("%% pf statistics:\n");
+	if (!clock_gettime(CLOCK_BOOTTIME, &uptime))
+		runtime = uptime.tv_sec - s->since;
+	running = s->running ? "Enabled" : "Disabled";
+
+	if (runtime) {
+		unsigned int	sec, min, hrs;
+		time_t		day = runtime;
+
+		sec = day % 60;
+		day /= 60;
+		min = day % 60;
+		day /= 60;
+		hrs = day % 24;
+		day /= 24;
+		snprintf(statline, sizeof(statline),
+		    "Status: %s for %lld days %.2u:%.2u:%.2u",
+		    running, (long long)day, hrs, min, sec);
+	} else
+		snprintf(statline, sizeof(statline), "Status: %s", running);
+	printf("%-44s", statline);
+	snprintf(debug, sizeof(debug), "Debug: %s", pf_loglevel(s->debug));
+	printf("%15s\n\n", debug);
+
+	if (s->ifname[0] != 0) {
+		printf("Interface Stats for %-16s %5s %16s\n",
+		    s->ifname, "IPv4", "IPv6");
+		printf("  %-25s %14llu %16llu\n", "Bytes In",
+		    (unsigned long long)s->bcounters[0][0],
+		    (unsigned long long)s->bcounters[1][0]);
+		printf("  %-25s %14llu %16llu\n", "Bytes Out",
+		    (unsigned long long)s->bcounters[0][1],
+		    (unsigned long long)s->bcounters[1][1]);
+		printf("  Packets In\n");
+		printf("    %-23s %14llu %16llu\n", "Passed",
+		    (unsigned long long)s->pcounters[0][0][PF_PASS],
+		    (unsigned long long)s->pcounters[1][0][PF_PASS]);
+		printf("    %-23s %14llu %16llu\n", "Blocked",
+		    (unsigned long long)s->pcounters[0][0][PF_DROP],
+		    (unsigned long long)s->pcounters[1][0][PF_DROP]);
+		printf("  Packets Out\n");
+		printf("    %-23s %14llu %16llu\n", "Passed",
+		    (unsigned long long)s->pcounters[0][1][PF_PASS],
+		    (unsigned long long)s->pcounters[1][1][PF_PASS]);
+		printf("    %-23s %14llu %16llu\n\n", "Blocked",
+		    (unsigned long long)s->pcounters[0][1][PF_DROP],
+		    (unsigned long long)s->pcounters[1][1][PF_DROP]);
+	}
+	printf("%-27s %14s %16s\n", "State Table", "Total", "Rate");
+	printf("  %-25s %14u %14s\n", "current entries", s->states, "");
+	printf("  %-25s %14u %14s\n", "half-open tcp", s->states_halfopen, "");
+	for (i = 0; i < FCNT_MAX; i++) {
+		printf("  %-25s %14llu ", pf_fcounters[i],
+			    (unsigned long long)s->fcounters[i]);
+		if (runtime > 0)
+			printf("%14.1f/s\n",
+			    (double)s->fcounters[i] / (double)runtime);
+		else
+			printf("%14s\n", "");
+	}
+	printf("Counters\n");
+	for (i = 0; i < PFRES_MAX; i++) {
+		printf("  %-25s %14llu ", pf_reasons[i],
+		    (unsigned long long)s->counters[i]);
+		if (runtime > 0)
+			printf("%14.1f/s\n",
+			    (double)s->counters[i] / (double)runtime);
+		else
+			printf("%14s\n", "");
+	}
+}
+
 /*
  * Each group of statistics is a kind of record, its fields the members
  * of the kernel's structure, by their names: an array's elements are
@@ -1010,6 +1183,25 @@ static const struct statfield mb_fields[] = {
 	SF(mbinfo, mclpool.pr_maxpages), SF(mbinfo, page_size),
 };
 
+static const struct statfield pf_fields[] = {
+	SFA(pfinfo, status.counters), SFA(pfinfo, status.lcounters),
+	SFA(pfinfo, status.fcounters), SFA(pfinfo, status.scounters),
+	SFA(pfinfo, status.ncounters), SFA(pfinfo, status.pcounters[0][0]),
+	SFA(pfinfo, status.pcounters[0][1]),
+	SFA(pfinfo, status.pcounters[1][0]),
+	SFA(pfinfo, status.pcounters[1][1]), SFA(pfinfo, status.bcounters[0]),
+	SFA(pfinfo, status.bcounters[1]), SF(pfinfo, status.stateid),
+	SFA(pfinfo, status.syncookies_inflight), SF(pfinfo, status.since),
+	SF(pfinfo, status.running), SF(pfinfo, status.states),
+	SF(pfinfo, status.states_halfopen), SF(pfinfo, status.src_nodes),
+	SF(pfinfo, status.fragments), SF(pfinfo, status.debug),
+	SF(pfinfo, status.hostid), SF(pfinfo, status.reass),
+	SF(pfinfo, status.syncookies_active),
+	SF(pfinfo, status.syncookies_mode), SFS(pfinfo, status.ifname),
+	SFA(pfinfo, status.pf_chksum), SF(pfinfo, wats.hiwat),
+	SF(pfinfo, wats.lowat),
+};
+
 #define G(w, s, f, n, ...) \
 	{ w, #f "_stats", { __VA_ARGS__ }, n, ENOPROTOOPT, sizeof(struct s), \
 	    f##_fields, nitems(f##_fields), stats_sysctl, f##_print }
@@ -1038,6 +1230,8 @@ static struct statgroup groups[] = {
 	    stats_sysctl, rt_print },
 	{ "mbuf", "mbpr", { 0 }, 0, 0, sizeof(struct mbinfo), mb_fields,
 	    nitems(mb_fields), mb_get, mb_print },
+	{ "pf", "pf_stats", { 0 }, 0, 0, sizeof(struct pfinfo), pf_fields,
+	    nitems(pf_fields), pf_get, pf_print, 1 },
 };
 
 /* g's structure, from the kernel: 0, 1 if it has none, -1 */
@@ -1081,7 +1275,8 @@ stats_facts_init(void)
 					continue;
 				else
 					ff[n].name = s;
-				ff[n].type = FACT_U64;
+				ff[n].type = g->f[i].string ? FACT_STRING :
+				    FACT_U64;
 				g->off[n] = g->f[i].off + j * g->f[i].size;
 				g->sz[n++] = g->f[i].size;
 			}
@@ -1102,6 +1297,13 @@ stats_group(const char *word)
 		if (g->kind.name != NULL && strcmp(g->word, word) == 0)
 			return (g);
 	return (NULL);
+}
+
+/* who may answer for g */
+int
+stats_where(struct statgroup *g)
+{
+	return (g->kernel ? FACTS_KERNEL : FACTS_SHOW);
 }
 
 const struct facts_kind *
@@ -1179,8 +1381,14 @@ stats_facts(struct facts_out *o, struct statgroup *g)
 		return (-1);
 	}
 	if ((r = g->get(g, p)) == 0) {
-		for (i = 0; i < g->kind.nfields; i++)
-			facts_u64(&v[i], member_get(p + g->off[i], g->sz[i]));
+		for (i = 0; i < g->kind.nfields; i++) {
+			if (g->kind.fields[i].type == FACT_STRING) {
+				p[g->off[i] + g->sz[i] - 1] = '\0';
+				facts_string(&v[i], p + g->off[i]);
+			} else
+				facts_u64(&v[i], member_get(p + g->off[i],
+				    g->sz[i]));
+		}
 		r = facts_record(o, &g->kind, v);
 	}
 	free(v);
@@ -1201,8 +1409,12 @@ stats_render(struct frec *r)
 			break;
 	if (g == groups + nitems(groups) || (p = calloc(1, g->size)) == NULL)
 		return;
-	for (i = 0; i < g->kind.nfields; i++)
-		member_put(p + g->off[i], g->sz[i], fu(r, i, 0));
+	for (i = 0; i < g->kind.nfields; i++) {
+		if (g->kind.fields[i].type != FACT_STRING)
+			member_put(p + g->off[i], g->sz[i], fu(r, i, 0));
+		else if (fs(r, i) != NULL)
+			strlcpy(p + g->off[i], fs(r, i), g->sz[i]);
+	}
 	g->print(p);
 	free(p);
 }

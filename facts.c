@@ -416,8 +416,9 @@ facts_in_init(struct facts_in *in, void (*record)(void *,
 }
 
 /*
- * One unit: a template kept, or a record given to in->record; -1 if
- * it is not one, or names a template not sent, or one sent twice
+ * A message's units, each template kept and each record given to
+ * in->record; -1 at one that is not one, or names a template not sent,
+ * or one sent twice
  */
 int
 facts_read(struct facts_in *in, const void *buf, size_t len)
@@ -428,28 +429,29 @@ facts_read(struct facts_in *in, const void *buf, size_t len)
 	uint8_t			 what;
 	uint16_t		 id;
 
-	what = get8(&r);
-	id = get16(&r);
-	if (r.bad || id >= FACTS_KINDS)
-		return (-1);
-	switch (what) {
-	case FACTS_TEMPLATE:
-		if (in->t[id] != NULL || (t = template_read(&r, id)) == NULL)
+	do {
+		what = get8(&r);
+		id = get16(&r);
+		if (r.bad || id >= FACTS_KINDS)
 			return (-1);
-		if (r.left != 0) {
-			template_free(t);
+		switch (what) {
+		case FACTS_TEMPLATE:
+			if (in->t[id] != NULL ||
+			    (t = template_read(&r, id)) == NULL)
+				return (-1);
+			in->t[id] = t;
+			break;
+		case FACTS_RECORD:
+			if ((t = in->t[id]) == NULL ||
+			    record_read(&r, t, v) == -1)
+				return (-1);
+			in->record(in->arg, t, v);
+			break;
+		default:
 			return (-1);
 		}
-		in->t[id] = t;
-		return (0);
-	case FACTS_RECORD:
-		if ((t = in->t[id]) == NULL ||
-		    record_read(&r, t, v) == -1 || r.left != 0)
-			return (-1);
-		in->record(in->arg, t, v);
-		return (0);
-	}
-	return (-1);
+	} while (r.left != 0);
+	return (0);
 }
 
 void

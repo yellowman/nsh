@@ -30,6 +30,12 @@
  *	version				what runs, and since when
  *	users				who is logged in
  *	hostname			the host's name
+ *	ip [inet|inet6]			every address, and, from kernel,
+ *					what configured each IPv4 one
+ *	autoconf [name]			what dhcpleased and slaacd know,
+ *					from kernel
+ *
+ * statistics pf, too, comes from kernel, as it needs /dev/pf.
  *
  * nshd's show processes answer them a batch at a time, as the client
  * reads; nsh asks nshd, or, where nshd does not run, answers them
@@ -76,16 +82,23 @@ static struct facts_kind *kinds[] = {
 	&kind_address, &kind_media, &kind_carp, &kind_wgpeer, &kind_umb,
 	&kind_umbdns, &kind_trunkport, &kind_bridgemember, &kind_bridgeaddr,
 	&kind_bridge, &kind_arp, &kind_ndp, &kind_vlan, &kind_version,
-	&kind_login, &kind_hostname
+	&kind_login, &kind_hostname, &kind_ip, &kind_dhcplease,
+	&kind_dhcproute, &kind_dhcpns, &kind_slaacif, &kind_slaacra,
+	&kind_slaacprefix, &kind_slaacrdns, &kind_slaacaddr, &kind_slaacdfr,
+	&kind_slaacdns
 };
 
 enum answer_type {
 	ANS_INTERFACE, ANS_ROUTE, ANS_LOOKUP, ANS_ARP, ANS_NDP, ANS_VLAN,
-	ANS_BRIDGE, ANS_STATISTICS, ANS_VERSION, ANS_USERS, ANS_HOSTNAME
+	ANS_BRIDGE, ANS_STATISTICS, ANS_VERSION, ANS_USERS, ANS_HOSTNAME,
+	ANS_IP, ANS_AUTOCONF
 };
+
+int	facts_from = FACTS_SHOW | FACTS_KERNEL;
 
 struct facts_answer {
 	enum answer_type	 type;
+	int			 where;		/* who answers */
 	char			*copy;		/* the words, split */
 	char			*w[4];
 	int			 n;
@@ -363,6 +376,7 @@ facts_answer(char *words)
 	w = a->w;
 	n = a->n;
 	a->start = a->end = -1;
+	a->where = FACTS_SHOW;
 	if (n == 0)
 		goto bad;
 	if (n <= 3 && strcmp(w[0], "interface") == 0) {
@@ -421,6 +435,23 @@ facts_answer(char *words)
 		a->type = ANS_STATISTICS;
 		if ((a->stats = stats_group(w[1])) == NULL)
 			goto bad;
+		a->where = stats_where(a->stats);
+	} else if (n <= 2 && strcmp(w[0], "ip") == 0) {
+		a->type = ANS_IP;
+		a->where = FACTS_SHOW | FACTS_KERNEL;
+		a->af = AF_UNSPEC;
+		if (n == 2 && strcmp(w[1], "inet") == 0)
+			a->af = AF_INET;
+		else if (n == 2 && strcmp(w[1], "inet6") == 0)
+			a->af = AF_INET6;
+		else if (n == 2)
+			goto bad;
+	} else if (n <= 2 && strcmp(w[0], "autoconf") == 0) {
+		a->type = ANS_AUTOCONF;
+		a->where = FACTS_KERNEL;
+		if (n == 2 && strlcpy(a->name, w[1], sizeof(a->name)) >=
+		    sizeof(a->name))
+			goto bad;
 	} else if (n == 1 && strcmp(w[0], "version") == 0)
 		a->type = ANS_VERSION;
 	else if (n == 1 && strcmp(w[0], "users") == 0)
@@ -428,6 +459,8 @@ facts_answer(char *words)
 	else if (n == 1 && strcmp(w[0], "hostname") == 0)
 		a->type = ANS_HOSTNAME;
 	else
+		goto bad;
+	if ((a->where & facts_from) == 0)
 		goto bad;
 	return (a);
 bad:
@@ -501,6 +534,13 @@ facts_more(struct facts_answer *a, struct facts_out *o, int budget)
 		break;
 	case ANS_HOSTNAME:
 		r = hostname_facts(o);
+		break;
+	case ANS_IP:
+		/* what configured an address, only where kernel's are */
+		r = ip_facts(o, a->af, (facts_from & FACTS_KERNEL) != 0);
+		break;
+	case ANS_AUTOCONF:
+		r = autoconf_facts(o, a->name[0] != '\0' ? a->name : NULL);
 		break;
 	}
 	a->done = 1;
@@ -607,6 +647,9 @@ render_record(void *arg, const struct facts_template *t,
 		} else if (r->k == &kind_bridge) {
 			bridge_show_render(&rd->block, r, rd->count++);
 			block_free(&rd->block);
+		} else if (r->k == &kind_dhcplease || r->k == &kind_slaacif) {
+			autoconf_render(&rd->block, r);
+			block_free(&rd->block);
 		}
 		return;
 	}
@@ -622,9 +665,10 @@ render_emit(void *arg, const void *buf, size_t len)
 }
 
 /*
- * The words fmt makes, asked of nshd, or of nsh itself where nshd does
- * not run, and rendered to out; "interface status" renders interfaces
- * as show interface status does
+ * The words fmt makes, asked of nshd, its kernel where they may be and
+ * this user may ask it, else its shows, or of nsh itself where nshd
+ * does not run, and rendered to out; "interface status" renders
+ * interfaces as show interface status does
  */
 int
 facts_show(FILE *out, const char *fmt, ...)
@@ -666,13 +710,17 @@ facts_show(FILE *out, const char *fmt, ...)
 		arp_header();
 	else if (a->type == ANS_NDP)
 		ndp_header();
-	if ((r = nshd_facts(w, &in)) == -1) {
+	r = -1;
+	if (a->where & FACTS_KERNEL)
+		r = nshd_facts(1, w, &in);
+	if (r == -1 && (a->where & FACTS_SHOW))
+		r = nshd_facts(0, w, &in);
+	if (r == -1) {
 		facts_out_init(&o, render_emit, &in);
 		while ((r = facts_more(a, &o, 1024)) == 1)
 			;
 		r = r == 0;
 	}
-	block_free(&rd.block);
 
 	/* what a show prints after its records, or for none */
 	switch (a->type) {
@@ -691,9 +739,14 @@ facts_show(FILE *out, const char *fmt, ...)
 		if (r == 1)
 			users_end(rd.count);
 		break;
+	case ANS_IP:
+		if (r == 1)
+			ip_render(&rd.block);
+		break;
 	default:
 		break;
 	}
+	block_free(&rd.block);
 	facts_answer_free(a);
 	facts_in_free(&in);
 	free(words);

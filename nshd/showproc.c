@@ -72,21 +72,16 @@ static int	show_more(struct ctl_conn *);
 static int	show_result(struct ctl_conn *, int32_t);
 static void	show_gone(struct ctl_conn *);
 static void	show_emit(void *, const void *, size_t);
-static void	show_printed(struct answer *);
 
 void
 showproc(int debug, int verbose, int instance)
 {
 	static char	 name[16];
-	char		 path[] = "/tmp/nshd.show.XXXXXXXXXX";
-	int		 fd;
 
 	snprintf(name, sizeof(name), "show%d", instance);
 	child_start(name, debug, verbose);
-	if ((fd = mkstemp(path)) == -1 || unlink(path) == -1 ||
-	    dup2(fd, STDOUT_FILENO) == -1)
-		fatal("%s", path);
-	close(fd);
+	capture_stdout();
+	facts_from = FACTS_SHOW;
 	if ((utmpfd = open(_PATH_UTMP, O_RDONLY)) == -1)
 		log_warn("%s", _PATH_UTMP);
 	privdrop();
@@ -208,7 +203,8 @@ show_more(struct ctl_conn *c)
 		return (0);
 	while (more == 1 && imsgbuf_queuelen(&c->iev.ibuf) < SHOW_LOW) {
 		more = facts_more(an->a, &an->o, SHOW_BATCH);
-		show_printed(an);
+		if (printed(&an->o) == -1)
+			an->failed = 1;
 		if (an->failed)
 			return (-1);
 	}
@@ -250,26 +246,4 @@ show_emit(void *arg, const void *buf, size_t len)
 	if (imsg_compose_event(&an->c->iev, IMSG_CTL_FACTS, 0, 0, -1, buf,
 	    len) == -1)
 		an->failed = 1;
-}
-
-/* what nsh's code printed as it made facts, as messages */
-static void
-show_printed(struct answer *an)
-{
-	char	 buf[1024];
-	off_t	 off = 0;
-	ssize_t	 n;
-
-	if (fflush(stdout) == EOF)
-		log_warn("%s: stdout", __func__);
-	clearerr(stdout);
-	while ((n = pread(STDOUT_FILENO, buf, sizeof(buf) - 1, off)) > 0) {
-		buf[n] = '\0';
-		off += n;
-		if (facts_message(&an->o, "%s", buf) == -1)
-			an->failed = 1;
-	}
-	if (off > 0 && (ftruncate(STDOUT_FILENO, 0) == -1 ||
-	    lseek(STDOUT_FILENO, 0, SEEK_SET) == -1))
-		fatal("%s", __func__);
 }

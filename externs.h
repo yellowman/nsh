@@ -81,13 +81,12 @@ int is_pppoe(char *, int);
 #define NSH_PPPOE_IPADDR_IPCP 1
 #define NSH_PPPOE_IPADDR_STATIC 2
 int pppoe_get_ipaddrmode(char *);
+int pppoe_show_ipaddrmode(char *);
 void pppoe_conf_default_route(FILE *, char *, char *, char *, char *, char *);
 void conf_pppoe(FILE *, int, char *);
 void conf_sppp(FILE *, int, char *);
 
 /* conf.c */
-#define DHCPLEASECTL	"/usr/sbin/dhcpleasectl"
-#define SLAACCTL	"/usr/sbin/slaacctl"
 int conf(FILE *);
 int conf_rank(char *);
 int conf_rank_rtable(char *);
@@ -102,7 +101,6 @@ int conf_routes(FILE *, char *, int, int, int);
 struct rt_msghdr;
 void conf_print_rtm(FILE *, struct rt_msghdr *, char *, int);
 int conf_dhcrelay(char *, char *, int);
-int dhcpleased_has_address(char *, const char *, const char *);
 
 /* show.c */
 void p_rttables(int, u_int, int);
@@ -385,7 +383,6 @@ int addaf(char *, int, int);
 int removeaf(char *, int, int);
 int check_daemon_control_socket(const char *);
 int dhcpleased_is_running(void);
-int slaacd_is_running(void);
 char *get_hwdaddr(char *);
 
 /* main.c */

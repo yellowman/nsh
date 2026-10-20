@@ -668,6 +668,7 @@ static struct facts_field media_fields[] = {
 	[MEDIA_SUBTYPE] =	{ "subtype",	FACT_STRING },
 	[MEDIA_INSTANCE] =	{ "instance",	FACT_U64 },
 	[MEDIA_OPTIONS] =	{ "options",	FACT_STRING },
+	[MEDIA_IF] =		{ "interface",	FACT_STRING },
 };
 struct facts_kind kind_media = { "media", media_fields, MEDIA_NFIELDS };
 
@@ -677,7 +678,7 @@ media_facts_init(void)
 }
 
 static void
-media_record(struct facts_out *o, uint64_t role, uint64_t word)
+media_record(struct facts_out *o, char *ifname, uint64_t role, uint64_t word)
 {
 	struct facts_value	 v[MEDIA_NFIELDS];
 	const char		*s;
@@ -695,6 +696,7 @@ media_record(struct facts_out *o, uint64_t role, uint64_t word)
 	get_ifm_options_str(options, sizeof(options), word, &seen);
 	if (options[0] != '\0')
 		facts_string(&v[MEDIA_OPTIONS], options);
+	facts_string(&v[MEDIA_IF], ifname);
 	facts_record(o, &kind_media, v);
 }
 
@@ -735,10 +737,10 @@ media_facts(struct facts_out *o, int s, char *ifname, struct facts_value *ifv,
 	}
 	facts_u64(&ifv[IF_MEDIACOUNT], ifmr.ifm_count);
 	facts_u64(&ifv[IF_MEDIASTATUS], ifmr.ifm_status);
-	media_record(o, MEDIA_CURRENT, ifmr.ifm_current);
-	media_record(o, MEDIA_ACTIVE, ifmr.ifm_active);
+	media_record(o, ifname, MEDIA_CURRENT, ifmr.ifm_current);
+	media_record(o, ifname, MEDIA_ACTIVE, ifmr.ifm_active);
 	for (i = 0; supported && media_list != NULL && i < ifmr.ifm_count; i++)
-		media_record(o, MEDIA_SUPPORTED, media_list[i]);
+		media_record(o, ifname, MEDIA_SUPPORTED, media_list[i]);
 	free(media_list);
 }
 
