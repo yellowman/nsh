@@ -271,9 +271,7 @@ main(int argc, char *argv[])
 
 		db_create();
 
-		cmdrc(rc);
-
-		exit(0);
+		exit(cmdrc(rc) == 0 ? 0 : 1);
 	}
 	if (privexec) {
 		/*

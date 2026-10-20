@@ -1411,7 +1411,7 @@ read_command_line(EditLine *el, History *hist)
 static int
 interface(int argc, char **argv, ...)
 {
-	int ifs, set = 1;
+	int ifs, set = 1, r;
 	char *tmp;
 	char *ifunit = NULL;
 	struct intlist *i;	/* pointer to current command */
@@ -1437,7 +1437,7 @@ interface(int argc, char **argv, ...)
 			ifunit = argv[2];
 		} else if (argc != 2) {
 			printf("%% [no] interface <interface name>\n");
-			return 0;
+			return -1;
 		}
 		tmp = argv[1];
 	} else {
@@ -1447,7 +1447,7 @@ interface(int argc, char **argv, ...)
 
 	if (strlen(tmp) > IFNAMSIZ-1) {
 		printf("%% interface name too long\n");
-		return 0;
+		return -1;
 	}
 
 	strlcpy(ifname, tmp, IFNAMSIZ);
@@ -1458,12 +1458,12 @@ interface(int argc, char **argv, ...)
 		if (errstr) {
 			printf("%% interface unit %s is %s\n", ifunit, errstr);
 			ifname[0] = '\0';
-			return 1;
+			return -1;
 		}
 		if (len > 0 && isdigit((unsigned char)(ifname[len - 1]))) {
 			printf("%% interface unit %s is redundant\n", ifunit);
 			ifname[0] = '\0';
-			return 1;
+			return -1;
 		}
 		strlcat(ifname, ifunit, sizeof(ifname));
 		printf("%% Using interface \"%s\", not \"%s %s\"\n",
@@ -1475,20 +1475,20 @@ interface(int argc, char **argv, ...)
 	if (ifs < 0) {
 		printf("%% socket failed: %s\n", strerror(errno));
 		ifname[0] = '\0';
-		return 1;
+		return -1;
 	}
 
-	if (candidate && cand_interface(set, ifname, &bridge) != 0) {
+	if (candidate && (r = cand_interface(set, ifname, &bridge)) != 0) {
 		ifname[0] = '\0';
 		close(ifs);
-		return 0;
+		return r == -1 ? -1 : 0;
 	}
 
 	if (!candidate && !is_valid_ifname(ifname)) {
 		if (set == 0) {
 			printf("%% interface %s not found\n", ifname);
 			close(ifs);
-			return 0;
+			return -1;
 		}
 		if (ioctl(ifs, SIOCIFCREATE, &ifr) == -1) {
 			if (errno == EINVAL)
@@ -1498,20 +1498,20 @@ interface(int argc, char **argv, ...)
 				    ifname, strerror(errno));
 			ifname[0] = '\0';
 			close(ifs);
-			return 0;
+			return -1;
 		}
 	}
 
 	if (!candidate && set == 0) {
+		r = 0;
 		if (ioctl(ifs, SIOCIFDESTROY, &ifr) == -1) {
 			printf("%% unable to remove interface %s: %s\n",
 			    ifname, strerror(errno));
-		} else {
-			/* remove interface routes? */
+			r = -1;
 		}
 		ifname[0] = '\0';
 		close(ifs);
-		return 0;
+		return r;
 	}
 
 	/* a block's head, which makes a cloned interface as its lines do */
@@ -1551,6 +1551,7 @@ interface(int argc, char **argv, ...)
 			argp = argv[0];
 		i = (struct intlist *) genget(argp, (char **)
 		    whichlist, sizeof(struct intlist));
+		r = -1;
 		if (Ambiguous(i)) {
 			printf("%% Ambiguous command\n");
 		} else if (i == 0) {
@@ -1569,13 +1570,15 @@ interface(int argc, char **argv, ...)
 				printf("%% Privilege required\n");
 				ifname[0] = '\0';
 				close(ifs);
-				return (0);
+				return -1;
 			}
 
 			if (cli_rtable != 0 && nsh_setrtable(0) == 0)
 				cli_rtable = 0;
 	
-			(*i->handler)(argc, argv, ifname, ifs);
+			/* a line leaves no mode */
+			r = (*i->handler)(argc, argv, ifname, ifs) == -1 ? -1 :
+			    0;
 
 			if (save_cli_rtable != cli_rtable &&
 			    nsh_setrtable(save_cli_rtable) == 0)
@@ -1584,7 +1587,7 @@ interface(int argc, char **argv, ...)
 
 		ifname[0] = '\0';
 		close(ifs);
-		return 0;
+		return r;
 	}
 
 	/* human at the keyboard or commands on stdin */
@@ -1621,7 +1624,7 @@ interface(int argc, char **argv, ...)
 				    strerror(errno));
 				ifname[0] = '\0';
 				close(ifs);
-				return 1;
+				return -1;
 			}
 		}
 
@@ -1656,7 +1659,9 @@ interface(int argc, char **argv, ...)
 			 */
 			if (getrtable() != 0 && !priv) {
 				printf("%% Privilege required\n");
-				return (0);
+				ifname[0] = '\0';
+				close(ifs);
+				return -1;
 			}
 
 			if (cli_rtable != 0 && nsh_setrtable(0) == 0)
@@ -1668,7 +1673,7 @@ interface(int argc, char **argv, ...)
 			    nsh_setrtable(save_cli_rtable) == 0)
 				cli_rtable = save_cli_rtable;
 
-			if (ret)
+			if (ret == 1)
 				break;
 		}
 
@@ -1699,7 +1704,7 @@ int_interface(int argc, char **argv, ...)
 {
 	struct ifreq ifr;
 	char *new_ifname;
-	int set = 1;
+	int set = 1, r;
 	va_list ap;
 	char *old_ifname;
 	int ifs;
@@ -1717,23 +1722,24 @@ int_interface(int argc, char **argv, ...)
 
 	if (argc != 2) {
 		printf("%% usage: [no] interface <ifname>\n");
-		return 0;
+		return -1;
 	}
 
 	new_ifname = argv[1];
 	if (candidate) {
 		int isbridge;
 
-		if (cand_interface(set, new_ifname, &isbridge) == 0)
+		if ((r = cand_interface(set, new_ifname, &isbridge)) == -1)
+			return -1;
+		if (r == 0)
 			strlcpy(next_ifname, new_ifname, sizeof(next_ifname));
 		/* the one this mode is in was taken out: leave it */
-		return !set && strcmp(old_ifname, new_ifname) == 0 &&
-		    !cand_hasif(new_ifname);
+		return !set && strcmp(old_ifname, new_ifname) == 0;
 	}
 	if (!is_valid_ifname(new_ifname)) {
 		if (set == 0) {
 			printf("%% interface %s not found\n", new_ifname);
-			return 0; /* do not leave interface context */
+			return -1;
 		}
 		strlcpy(ifr.ifr_name, new_ifname, sizeof(ifr.ifr_name));
 		if (ioctl(ifs, SIOCIFCREATE, &ifr) == -1) {
@@ -1742,7 +1748,7 @@ int_interface(int argc, char **argv, ...)
 			else
 				printf("%% unable to create interface %s: %s\n",
 				    new_ifname, strerror(errno));
-			return 0; /* do not leave interface context */
+			return -1;
 		}
 		strlcpy(next_ifname, new_ifname, sizeof(next_ifname));
 		return 0; /* do not leave interface context */
@@ -1753,8 +1759,7 @@ int_interface(int argc, char **argv, ...)
 		if (ioctl(ifs, SIOCIFDESTROY, &ifr) == -1) {
 			printf("%% unable to remove interface %s: %s\n",
 			    new_ifname, strerror(errno));
-		} else {
-			/* remove interface routes? */
+			return -1;
 		}
 		if (strcmp(old_ifname, new_ifname) == 0)
 			return 1; /* leave interface context */
@@ -2233,9 +2238,8 @@ command()
 			continue;
 		if (c->modh)
 			strlcpy(hname, c->name, HSIZE);
-		if ((*c->handler) (margc, margv, 0)) {
+		if ((*c->handler) (margc, margv, 0) == 1)
 			break;
-		}
 	}
 }
 
@@ -3246,6 +3250,7 @@ flush_pf(int argc, char **argv, ...)
  * read a text file and execute commands
  * take into account that we may have mode handlers int cmdtab that
  * execute indented commands from the rc file
+ * -1 if a line failed, the rest run all the same, else 0
  */
 int
 cmdrc(char rcname[FILENAME_MAX])
@@ -3256,12 +3261,13 @@ cmdrc(char rcname[FILENAME_MAX])
 	unsigned int lnum;	/* line number */
 	u_int	z = 0;		/* max length of cmdtab argument */
 	int	rc_rtable = cli_rtable;	/* where a block's lines go back to */
+	int	status = 0;	/* -1 once a line has failed */
 
 	init_bgpd_socket_path(cli_rtable);
 
 	if ((rcfile = fopen(rcname, "r")) == 0) {
 		printf("%% Unable to open %s: %s\n", rcname, strerror(errno));
-		return 1;
+		return -1;
 	}
 
 	for (c = cmdtab; c->name; c++)
@@ -3278,6 +3284,7 @@ cmdrc(char rcname[FILENAME_MAX])
 		if (candidate) {
 			printf("%% configure private is not supported in rc"
 			    " files (line %u)\n", lnum);
+			status = -1;
 			break;
 		}
 		if (line[0] == '#')
@@ -3306,6 +3313,7 @@ cmdrc(char rcname[FILENAME_MAX])
 			    " indented command? (line %u) ", lnum);
 			p_argv(margc, margv);
 			printf("\n");
+			status = -1;
 			continue;
 		}
 		if (line[0] != ' ' || (line[0] == ' ' && line[1] != ' '
@@ -3323,6 +3331,7 @@ cmdrc(char rcname[FILENAME_MAX])
 					    lnum);
 					p_argv(margc, margv);
 					printf("\n");
+					status = -1;
 					continue;
 				}
 			} else if (margv[0]) {
@@ -3345,6 +3354,7 @@ cmdrc(char rcname[FILENAME_MAX])
 						    lnum);
 						p_argv(margc, margv);
 						printf("\n");
+						status = -1;
 						continue;
 					}
 				}
@@ -3357,12 +3367,14 @@ cmdrc(char rcname[FILENAME_MAX])
 			printf("%% Ambiguous rc command (line %u) ", lnum);
 			p_argv(margc, margv);
 			printf("\n");
+			status = -1;
 			continue;
 		}
 		if (c == 0) {
 			printf("%% Invalid rc command (line %u) ", lnum);
 			p_argv(margc, margv);
 			printf("\n");
+			status = -1;
 			continue;
 		}
 		if (verbose) {
@@ -3376,11 +3388,12 @@ cmdrc(char rcname[FILENAME_MAX])
 		if (c->modh == 1) {
 			/* a statement's no, "no interface vlan5", has no block */
 			rc_head = line[0] != ' ';
-			(*c->handler) (margc, margv, rc_head &&
-			    NO_ARG(margv[0]) ? NULL : modhvar);
+			if ((*c->handler) (margc, margv, rc_head &&
+			    NO_ARG(margv[0]) ? NULL : modhvar) == -1)
+				status = -1;
 			rc_head = 0;
-		} else
-			(*c->handler) (margc, margv, 0);
+		} else if ((*c->handler) (margc, margv, 0) == -1)
+			status = -1;
 		/* a table the line made can be entered now */
 		if (cli_rtable != getrtable() && setrtable(cli_rtable) == 0)
 			init_bgpd_socket_path(cli_rtable);
@@ -3388,7 +3401,7 @@ cmdrc(char rcname[FILENAME_MAX])
 	in_rc = 0;
 	ctl_rules_done();
 	fclose(rcfile);
-	return 0;
+	return status;
 }
 
 void

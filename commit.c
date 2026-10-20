@@ -581,16 +581,20 @@ static int
 take(struct cnode *was, struct cnode *want)
 {
 	struct cnode *now = NULL, *back = NULL;
-	int ret = -1;
+	int ret = -1, failed;
 
-	if (apply(was, want) == -1 || (now = running_tree()) == NULL)
+	if ((failed = apply(was, want)) == -1 ||
+	    (now = running_tree()) == NULL)
 		goto done;
-	if (differ(NULL, now, want) == 0) {
+	if (!failed && differ(NULL, now, want) == 0) {
 		ret = 0;
 		goto done;
 	}
-	printf("%% Commit failed: the running configuration differs from "
-	    "the candidate\n");
+	if (failed)
+		printf("%% Commit failed: a line it ran failed\n");
+	else
+		printf("%% Commit failed: the running configuration differs "
+		    "from the candidate\n");
 	differ(stdout, now, want);
 	conftree_free(now);
 	if ((now = running_tree()) == NULL || apply(now, was) == -1 ||
@@ -613,13 +617,14 @@ done:
  * nsh -i: make the running configuration the one in path, as commit
  * makes it the candidate, but never undone: what check finds is shown,
  * all that takes stays, and what did not take is shown. Returns 1 if
- * the running configuration then differs from it, else 0.
+ * a line failed or the running configuration then differs from it,
+ * else 0.
  */
 int
 commit_boot(char *path)
 {
 	struct cnode *want, *was = NULL, *now = NULL;
-	int ret = 1;
+	int ret = 1, failed = 0;
 
 	if ((want = conftree_read(path, conf_mode, conf_ordered)) == NULL)
 		return 1;
@@ -627,12 +632,13 @@ commit_boot(char *path)
 		goto done;
 	/* shown, but a system starts with what takes */
 	check(was, want);
-	if (conftree_compare(NULL, was, want) != 0 && apply(was, want) == -1)
+	if (conftree_compare(NULL, was, want) != 0 &&
+	    (failed = apply(was, want)) == -1)
 		goto done;
 	if ((now = running_tree()) == NULL)
 		goto done;
 	if (differ(NULL, now, want) == 0)
-		ret = 0;
+		ret = failed;
 	else {
 		printf("%% The running configuration differs from %s\n", path);
 		differ(stdout, now, want);
@@ -662,7 +668,7 @@ commit_expire(void)
 		return 0;
 	if ((now = running_tree()) != NULL &&
 	    (conftree_compare(NULL, now, back) == 0 ||
-	    apply(now, back) == 0) &&
+	    apply(now, back) != -1) &&
 	    (after = running_tree()) != NULL &&
 	    differ(NULL, after, back) == 0)
 		report("Commit not confirmed: rolled back");
@@ -805,13 +811,16 @@ report(const char *msg)
 	syslog(LOG_WARNING, "%s", msg);
 }
 
-/* Make the running configuration, from, read as to */
+/*
+ * Make the running configuration, from, read as to: -1 if the script
+ * could not run, 1 if a line of it failed, else 0
+ */
 static int
 apply(struct cnode *from, struct cnode *to)
 {
 	struct commit *c;
 	char path[] = "/tmp/nshcommit.XXXXXXXX";
-	int fd, i, save, rt, ret = -1;
+	int fd, i, save, rt, failed, ret = -1;
 
 	if ((c = calloc(1, sizeof(*c))) == NULL) {
 		printf("%% commit: %s\n", strerror(errno));
@@ -852,7 +861,7 @@ apply(struct cnode *from, struct cnode *to)
 			    1);
 	save = candidate;
 	candidate = 0;
-	cmdrc(path);
+	failed = cmdrc(path) == -1;
 	candidate = save;
 	/* and none once it stopped the daemon */
 	for (i = 0; i < c->nclears; i++)
@@ -861,7 +870,7 @@ apply(struct cnode *from, struct cnode *to)
 			    0);
 	if (cli_rtable != rt && nsh_setrtable(rt) == 0)
 		cli_rtable = rt;
-	ret = 0;
+	ret = failed;
 done:
 	unlink(path);
 	free(c);

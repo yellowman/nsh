@@ -118,17 +118,19 @@ cand_changed(void)
  * A command in configure private: put the setting that line names into
  * state (ST_*), as the command would have in the kernel. In interface
  * or bridge mode the line goes into that interface's block.  line is
- * canonical, as conf() prints it, without "no".
+ * canonical, as conf() prints it, without "no". -1 if it could not,
+ * said why, else 0, as a handler returns.
  */
 int
 cand_setting(int state, const char *fmt, ...)
 {
 	va_list ap;
+	int r;
 
 	va_start(ap, fmt);
-	cand_vsetting(ifname, bridge, state, fmt, ap);
+	r = cand_vsetting(ifname, bridge, state, fmt, ap);
 	va_end(ap);
-	return 0;
+	return r;
 }
 
 /* cand_setting() for another interface, in the block the candidate has */
@@ -137,12 +139,13 @@ cand_ifsetting(char *name, int state, const char *fmt, ...)
 {
 	char head[sizeof("interface ") + IFNAMSIZ];
 	va_list ap;
+	int r;
 
 	cand_block(head, sizeof(head), name, 1);
 	va_start(ap, fmt);
-	cand_vsetting(name, conftree_has(cand, head), state, fmt, ap);
+	r = cand_vsetting(name, conftree_has(cand, head), state, fmt, ap);
 	va_end(ap);
-	return 0;
+	return r;
 }
 
 /*
@@ -497,7 +500,8 @@ cand_isbridge(char *name)
  * interface or bridge <name> in configure private: find or start the
  * interface's block in the candidate, or remove it with "no".  Sets
  * *isbridge to whether it takes the Bridgelist commands.  Returns 0 to
- * go on into interface mode, 1 when there is nothing more to do.
+ * go on into interface mode, 1 when there is nothing more to do, and
+ * -1 when it could not, said why.
  */
 int
 cand_interface(int set, char *name, int *isbridge)
@@ -511,22 +515,20 @@ cand_interface(int set, char *name, int *isbridge)
 	if (!set) {
 		if (!conftree_has(cand, head)) {
 			printf("%% interface %s not found\n", name);
-			return 1;
+			return -1;
 		}
 		if (!cand_cloneable(name)) {
 			printf("%% interface %s cannot be removed\n", name);
-			return 1;
+			return -1;
 		}
-		cand_set(CTX_TOP, ST_OFF, NULL, head);
-		return 1;
+		return cand_set(CTX_TOP, ST_OFF, NULL, head) == -1 ? -1 : 1;
 	}
 	if (!conftree_has(cand, head) && !is_valid_ifname(name) &&
 	    !cand_cloneable(name)) {
 		printf("%% interface %s not found\n", name);
-		return 1;
+		return -1;
 	}
-	cand_set(CTX_TOP, ST_ON, NULL, head);
-	return 0;
+	return cand_set(CTX_TOP, ST_ON, NULL, head) == -1 ? -1 : 0;
 }
 
 /*
@@ -676,7 +678,7 @@ cand_vsetting(char *name, int isbridge, int state, const char *fmt,
 	n = vsnprintf(line, sizeof(line), fmt, ap);
 	if (n < 0 || (size_t)n >= sizeof(line)) {
 		printf("%% Configuration line too long\n");
-		return 0;
+		return -1;
 	}
 	if (name[0] == '\0') {
 		if (cand_rtable != 0 && setting_has(CTX_RTABLE, line) &&
@@ -705,18 +707,24 @@ cand_set(int ctx, int state, char *block, char *line)
 
 /*
  * Make an edit on the session's view and record it if it changed
- * anything. A strict edit that changes nothing says so.
+ * anything. A strict edit that changes nothing says so, and fails.
  */
 static int
 cand_record(char *block, struct sedit *e)
 {
 	int r;
 
-	if ((r = conftree_edit(cand, e->op, block, e->line, e->keylen)) == -1)
+	errno = 0;
+	if ((r = conftree_edit(cand, e->op, block, e->line, e->keylen)) ==
+	    -1) {
+		/* conftree_edit() says why, but when memory ran out */
+		if (errno == ENOMEM)
+			printf("%% cand_record: %s\n", strerror(errno));
 		return -1;
+	}
 	if (r == CE_NOOP && e->strict) {
 		printf("%% %s: not in the candidate\n", e->line);
-		return 0;
+		return -1;
 	}
 	if (r == CE_CHANGED && cjournal_add(cand_journal, e->op, block,
 	    e->line, e->keylen) == -1) {

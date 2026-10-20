@@ -224,6 +224,10 @@ void makeargv(void);
 extern size_t cursor_argc;
 extern size_t cursor_argo;
 
+/*
+ * A command's handler returns 0 when it did what was asked, -1 when it
+ * did not, having said why, and 1 to leave the mode it runs in
+ */
 typedef struct cmd {
 	char *name;		/* command name */
 	char *help;		/* help string (NULL for no help) */
