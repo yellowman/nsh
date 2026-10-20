@@ -645,7 +645,8 @@ capture_stdout(void)
 
 /*
  * What nsh's code printed since, as messages in o, or forgotten if o is
- * NULL; -1 if a message could not be made
+ * NULL; -1 if a message could not be made, or what was printed could
+ * not all be kept
  */
 int
 printed(struct facts_out *o)
@@ -655,8 +656,10 @@ printed(struct facts_out *o)
 	ssize_t	 n;
 	int	 r = 0;
 
-	if (fflush(stdout) == EOF)
+	if (fflush(stdout) == EOF) {
 		log_warn("%s: stdout", __func__);
+		r = -1;
+	}
 	clearerr(stdout);
 	while (o != NULL &&
 	    (n = pread(STDOUT_FILENO, buf, sizeof(buf) - 1, off)) > 0) {
