@@ -58,6 +58,8 @@
 #include <ifaddrs.h>
 #include "externs.h"
 #include "settings.h"
+#include "facts.h"
+#include "showfacts.h"
 
 /* ROUNDUP() is nasty, but it is identical to what's in the kernel. */
 #define ROUNDUP(a) \
@@ -69,13 +71,10 @@ int arpdelete(const char *, const char *);
 int arpsearch(FILE *, char *, in_addr_t addr, int, void (*action)(FILE *,
 	char *, struct sockaddr_dl *sdl, struct sockaddr_inarp *sin,
 	struct rt_msghdr *rtm));
-void print_entry(FILE *, char *, struct sockaddr_dl *sdl,
-	struct sockaddr_inarp *sin, struct rt_msghdr *rtm);
 void nuke_entry(struct sockaddr_dl *sdl,
 	struct sockaddr_inarp *sin, struct rt_msghdr *rtm);
 void conf_arp_entry(FILE *, char *, struct sockaddr_dl *,
 	struct sockaddr_inarp *, struct rt_msghdr *);
-int getinetaddr(const char *, struct in_addr *);
 static int getsocket(void);
 int rtmsg_arp(int, int, int, int);
 static int arp_cand(const char *, struct ether_addr *, int);
@@ -340,34 +339,20 @@ arp_cand(const char *host, struct ether_addr *ea, int flags)
 #define W_LL	17
 #define W_IF	6
 
-/*
- * Display an individual arp entry
- */
-int
-arpget(const char *host)
+/* the table's headers */
+void
+arp_header(void)
 {
-	struct sockaddr_inarp *sin;
-	int found_entry;
-
-	sin = &sin_m;
-	sin_m = blank_sin;		/* struct copy */
-	if (getinetaddr(host, &sin->sin_addr) == -1) {
-		printf("%% arpget: getinetaddr: failure %s\n", strerror(errno));
-		return (1);
-	}
-
 	printf("%-*.*s %-*.*s %*.*s %-10.10s %5s\n",
 	    W_ADDR, W_ADDR, "Host", W_LL, W_LL, "Ethernet Address",
 	    W_IF, W_IF, "Netif", "Expire", "Flags");
+}
 
-	found_entry = arpsearch(NULL, "", sin->sin_addr.s_addr, cli_rtable,
-	    print_entry);
-	if (found_entry == 0) {
-		printf("%% %-*.*s no entry\n", W_ADDR, W_ADDR,
-		    inet_ntoa(sin->sin_addr));
-		return (1);
-	}
-	return (0);
+/* an address the table does not have */
+void
+arp_noentry(const char *host)
+{
+	printf("%% %-*.*s no entry\n", W_ADDR, W_ADDR, host);
 }
 
 /*
@@ -468,19 +453,6 @@ arpsearch(FILE *output, char *delim, in_addr_t addr, int tableid,
 	return found_entry;
 }
 
-/*
- * Dump the entire ARP table
- */
-void
-arpdump(void)
-{
-	printf("%-*.*s %-*.*s %*.*s %-10.10s %5s\n",
-	    W_ADDR, W_ADDR, "Host", W_LL, W_LL, "Ethernet Address",
-	    W_IF, W_IF, "Netif", "Expire", "Flags");
-
-	arpsearch(NULL, "", 0, cli_rtable, print_entry);
-}
-
 void
 conf_arp(FILE *output, char *delim, int tableid)
 {
@@ -511,56 +483,117 @@ conf_arp_entry(FILE *output, char *delim, struct sockaddr_dl *sdl,
 	fputs("\n", output);
 }
 
+/* an entry, as facts */
+static struct facts_field arp_fields[] = {
+	[ARP_ADDRESS] =	{ "address",		FACT_ADDRESS },
+	[ARP_LLADDR] =	{ "link-address",	FACT_ADDRESS },
+	[ARP_IF] =	{ "interface",		FACT_STRING },
+	[ARP_FLAGS] =	{ "flags",		FACT_U64 },
+	[ARP_PROXY] =	{ "proxy",		FACT_U64 },
+	[ARP_EXPIRE] =	{ "expire",		FACT_TIME },
+};
+struct facts_kind kind_arp = { "arp-entry", arp_fields, ARP_NFIELDS };
+
+void
+arp_facts_init(void)
+{
+	facts_bitnames(&arp_fields[ARP_FLAGS], routeflags);
+}
+
+/*
+ * The entries of rt, from *cur, or only addr's: budget at most. 1 if
+ * there are more, 0 if not, -1 if a record failed.
+ */
+int
+arp_facts(struct facts_out *o, struct rtdump *rt, char **cur,
+    struct in_addr *addr, int budget)
+{
+	struct facts_value	 v[ARP_NFIELDS];
+	struct rt_msghdr	*rtm;
+	struct sockaddr_inarp	*sin;
+	struct sockaddr_dl	*sdl;
+	char			 ifbuf[IF_NAMESIZE];
+	int			 n = 0;
+
+	for (; *cur < rt->lim; *cur += rtm->rtm_msglen) {
+		rtm = (struct rt_msghdr *)*cur;
+		if (n == budget)
+			return (1);
+		if (rtm->rtm_version != RTM_VERSION)
+			continue;
+		sin = (struct sockaddr_inarp *)(*cur + rtm->rtm_hdrlen);
+		sdl = (struct sockaddr_dl *)(sin + 1);
+		if (addr != NULL && addr->s_addr != sin->sin_addr.s_addr)
+			continue;
+		memset(v, 0, sizeof(v));
+		facts_sockaddr(&v[ARP_ADDRESS], (struct sockaddr *)sin);
+		facts_sockaddr(&v[ARP_LLADDR], (struct sockaddr *)sdl);
+		if (if_indextoname(sdl->sdl_index, ifbuf) != NULL)
+			facts_string(&v[ARP_IF], ifbuf);
+		facts_u64(&v[ARP_FLAGS], rtm->rtm_flags);
+		facts_u64(&v[ARP_PROXY], (sin->sin_other & SIN_PROXY) != 0);
+		if (rtm->rtm_rmx.rmx_expire != 0)
+			facts_time(&v[ARP_EXPIRE], rtm->rtm_rmx.rmx_expire, 0);
+		if (facts_record(o, &kind_arp, v) == -1)
+			return (-1);
+		n++;
+	}
+	return (0);
+}
+
 /*
  * Display an arp entry
  */
 void
-print_entry(FILE *output, char *delim, struct sockaddr_dl *sdl,
-    struct sockaddr_inarp *sin, struct rt_msghdr *rtm)
+arp_render(struct frec *r)
 {
-	char ifix_buf[IFNAMSIZ], *ifname, *host;
+	const struct facts_value *e;
+	struct sockaddr_storage sa, ll;
+	const char *ifname;
+	char *host;
 	int addrwidth, llwidth, ifwidth ;
+	uint64_t flags;
 	struct timeval now;
-
-	if (output != NULL) {
-		printf("%% print_entry: unprepared\n");
-		return;
-	}
 
 	gettimeofday(&now, 0);
 
-	host = inet_ntoa(sin->sin_addr);
+	fsockaddr(r, ARP_ADDRESS, &sa);
+	fsockaddr(r, ARP_LLADDR, &ll);
+	host = inet_ntoa(((struct sockaddr_in *)&sa)->sin_addr);
 
 	addrwidth = strlen(host);
 	if (addrwidth < W_ADDR)
 		addrwidth = W_ADDR;
-	llwidth = strlen(ether_str(sdl));
+	llwidth = strlen(ether_str((struct sockaddr_dl *)&ll));
 	if (W_ADDR + W_LL - addrwidth > llwidth)
 		llwidth = W_ADDR + W_LL - addrwidth;
-	ifname = if_indextoname(sdl->sdl_index, ifix_buf);
+	ifname = fs(r, ARP_IF);
 	if (!ifname)
 		ifname = "?";
 	ifwidth = strlen(ifname);
 	if (W_ADDR + W_LL + W_IF - addrwidth - llwidth > ifwidth)
 		ifwidth = W_ADDR + W_LL + W_IF - addrwidth - llwidth;
 
-	printf("%s%-*.*s %-*.*s %*.*s", delim, addrwidth, addrwidth, host,
-	    llwidth, llwidth, ether_str(sdl), ifwidth, ifwidth, ifname);
+	printf("%-*.*s %-*.*s %*.*s", addrwidth, addrwidth, host,
+	    llwidth, llwidth, ether_str((struct sockaddr_dl *)&ll), ifwidth,
+	    ifwidth, ifname);
 
-	if (rtm->rtm_flags & (RTF_PERMANENT_ARP|RTF_LOCAL))
+	flags = fu(r, ARP_FLAGS, 0);
+	e = FV(r, ARP_EXPIRE, FACT_TIME);
+	if (flags & (RTF_PERMANENT_ARP|RTF_LOCAL))
 		printf(" %-10.10s", "permanent");
-	else if (rtm->rtm_rmx.rmx_expire == 0)
+	else if (e == NULL)
 		printf(" %-10.10s", "static");
-	else if (rtm->rtm_rmx.rmx_expire > now.tv_sec)
+	else if (e->v.t.sec > now.tv_sec)
 		printf(" %-10.10s",
-		    sec2str(rtm->rtm_rmx.rmx_expire - now.tv_sec));
+		    sec2str(e->v.t.sec - now.tv_sec));
 	else
 		printf(" %-10.10s", "expired");
 
 	printf(" %s%s%s\n",
-	    (rtm->rtm_flags & RTF_LOCAL) ? "l" : "",
-	    (sin->sin_other & SIN_PROXY) ? "P" : "",
-	    (rtm->rtm_flags & RTF_ANNOUNCE) ? "p" : "");
+	    (flags & RTF_LOCAL) ? "l" : "",
+	    fu(r, ARP_PROXY, 0) ? "P" : "",
+	    (flags & RTF_ANNOUNCE) ? "p" : "");
 }
 
 /*

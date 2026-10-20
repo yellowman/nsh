@@ -208,6 +208,18 @@ if_typenames(struct facts_field *f)
 	f->nnames = nitems(iftypes);
 }
 
+/* a VLAN, as facts */
+static struct facts_field vlan_fields[] = {
+	[VLAN_NAME] =		{ "name",		FACT_STRING },
+	[VLAN_VNETID] =		{ "vnetid",		FACT_U64 },
+	[VLAN_FLAGS] =		{ "flags",		FACT_U64 },
+	[VLAN_RDOMAIN] =	{ "rdomain",		FACT_U64 },
+	[VLAN_PARENT] =		{ "parent",		FACT_STRING },
+	[VLAN_BRIDGE] =		{ "bridge",		FACT_STRING },
+	[VLAN_DESCR] =		{ "description",	FACT_STRING },
+};
+struct facts_kind kind_vlan = { "vlan", vlan_fields, VLAN_NFIELDS };
+
 void
 if_facts_init(void)
 {
@@ -217,6 +229,7 @@ if_facts_init(void)
 	carp_balnames(&interface_fields[IF_CARPBALANCING]);
 	trunk_names(&interface_fields[IF_TRUNKPROTO],
 	    &interface_fields[IF_TRUNKFLAGS]);
+	facts_bitnames(&vlan_fields[VLAN_FLAGS], ifnetflags);
 }
 
 /*
@@ -4121,31 +4134,30 @@ intvnetflowid(int argc, char **argv, ...)
 	return 0;
 }
 
+/* the VLANs of tag start, or from start to end, or every one */
 int
-show_vlan(int start_vnetid, int end_vnetid)
+vlan_facts(struct facts_out *o, int start_vnetid, int end_vnetid)
 {
+	struct facts_value v[VLAN_NFIELDS];
 	struct if_nameindex *ifn_list, *ifnp;
 	struct ifreq ifr;
 	struct if_parent ifp;
-	int ifs, vnetid, flags, bridx, rdomain;
-	const char *parent, *description, *bridgename;
+	int ifs, vnetid, bridx, r = 0;
 	char ifdescr[IFDESCRSIZE];
-	char vnetid_str[5];
-	int found_vnetid = 0, header_shown = 0;
 	char ifix_buf[IFNAMSIZ];
 
 	if ((ifs = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
 		printf("%% show_vlan: %s\n", strerror(errno));
-		return 0;
+		return (-1);
 	}
 
 	if ((ifn_list = if_nameindex()) == NULL) {
 		printf("%% show_vlan: if_nameindex failed\n");
 		close(ifs);
-		return 0;
+		return (-1);
 	}
 
-	for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++) {
+	for (ifnp = ifn_list; ifnp->if_name != NULL && r != -1; ifnp++) {
 		if (!isprefix("vlan", ifnp->if_name) &&
 		    !isprefix("svlan", ifnp->if_name))
 			continue;
@@ -4177,13 +4189,11 @@ show_vlan(int start_vnetid, int end_vnetid)
 		}
 		if (end_vnetid != -1 && vnetid > end_vnetid)
 			continue;
-		found_vnetid = 1;
 
-		if (!header_shown) {
-			puts("% Interface  Tag   Status  Type    "
-			    "RDomain  Parent  Bridge   Description");
-			header_shown = 1;
-		}
+		memset(v, 0, sizeof(v));
+		facts_string(&v[VLAN_NAME], ifnp->if_name);
+		if (vnetid != -1)
+			facts_u64(&v[VLAN_VNETID], vnetid);
 
 		memset(&ifp, 0, sizeof(ifp));
 		if (strlcpy(ifp.ifp_name, ifnp->if_name,
@@ -4192,7 +4202,6 @@ show_vlan(int start_vnetid, int end_vnetid)
 			   ifnp->if_name);
 			continue;
 		}
-		parent = "-";
 		if (ioctl(ifs, SIOCGIFPARENT, &ifp) == -1) {
 			if (errno != EADDRNOTAVAIL) {
 				printf("%% %s: SIOCGIFPARENT: %s\n",
@@ -4200,51 +4209,72 @@ show_vlan(int start_vnetid, int end_vnetid)
 				continue;
 			}
 		} else
-			parent = ifp.ifp_parent;
+			facts_string(&v[VLAN_PARENT], ifp.ifp_parent);
 
 		if (ioctl(ifs, SIOCGIFRDOMAIN, (caddr_t)&ifr) != -1)
-			rdomain = ifr.ifr_rdomainid;
-		else
-			rdomain = 0;
+			facts_u64(&v[VLAN_RDOMAIN], ifr.ifr_rdomainid);
 
-		flags = get_ifflags(ifnp->if_name, ifs);
+		facts_u64(&v[VLAN_FLAGS], get_ifflags(ifnp->if_name, ifs));
 
 		memset(ifdescr, 0, sizeof(ifdescr));
 		ifr.ifr_data = (caddr_t)&ifdescr;
 		if (ioctl(ifs, SIOCGIFDESCR, &ifr) == 0)
-			description = ifr.ifr_data;
-		else
-			description = "";
-
-		if (vnetid == -1)
-			strlcpy(vnetid_str, "-", sizeof(vnetid_str));
-		else
-			snprintf(vnetid_str, sizeof(vnetid_str), "%d", vnetid);
+			facts_string(&v[VLAN_DESCR], ifdescr);
 
 		bridx = bridge_member_search(ifs, ifnp->if_name);
-		if (bridx)
-			bridgename = if_indextoname(bridx, ifix_buf);
-		else
-			bridgename = "-";
+		if (bridx && if_indextoname(bridx, ifix_buf) != NULL)
+			facts_string(&v[VLAN_BRIDGE], ifix_buf);
 
-		printf("  %-10s %-5s %-7s %-8s %6d  %-7s %-8s %s\n",
-		   ifnp->if_name, vnetid_str, (flags & IFF_UP) ? "up" : "down",
-		    isprefix("vlan", ifnp->if_name) ? "802.1Q" : "802.1ad",
-		    rdomain, parent, bridgename, description);
-	}
-
-	if (!found_vnetid) {
-		if (end_vnetid == -1)
-			printf("%% no VLAN with tag %d configured\n",
-			    start_vnetid);
-		else
-			printf("%% no VLANs with tag between %d and %d "
-			    "configured\n", start_vnetid, end_vnetid);
+		r = facts_record(o, &kind_vlan, v);
 	}
 
 	if_freenameindex(ifn_list);
 	close(ifs);
-	return 0;
+	return (r);
+}
+
+/* a VLAN, as show_vlan() printed it, the headers before the first */
+void
+vlan_render(struct frec *r, int n)
+{
+	const char *name, *parent, *bridgename, *description;
+	char vnetid_str[5];
+
+	if (n == 0)
+		puts("% Interface  Tag   Status  Type    "
+		    "RDomain  Parent  Bridge   Description");
+
+	if ((name = fs(r, VLAN_NAME)) == NULL)
+		name = "";
+	if ((parent = fs(r, VLAN_PARENT)) == NULL)
+		parent = "-";
+	if ((bridgename = fs(r, VLAN_BRIDGE)) == NULL)
+		bridgename = "-";
+	if ((description = fs(r, VLAN_DESCR)) == NULL)
+		description = "";
+
+	if (!fhas(r, VLAN_VNETID))
+		strlcpy(vnetid_str, "-", sizeof(vnetid_str));
+	else
+		snprintf(vnetid_str, sizeof(vnetid_str), "%d",
+		    (int)fu(r, VLAN_VNETID, 0));
+
+	printf("  %-10s %-5s %-7s %-8s %6d  %-7s %-8s %s\n",
+	   name, vnetid_str, (fu(r, VLAN_FLAGS, 0) & IFF_UP) ? "up" : "down",
+	    isprefix("vlan", (char *)name) ? "802.1Q" : "802.1ad",
+	    (int)fu(r, VLAN_RDOMAIN, 0), parent, bridgename, description);
+}
+
+/* no VLAN of tag start, or between start and end */
+void
+vlan_none(int start_vnetid, int end_vnetid)
+{
+	if (end_vnetid == -1)
+		printf("%% no VLAN with tag %d configured\n",
+		    start_vnetid);
+	else
+		printf("%% no VLANs with tag between %d and %d "
+		    "configured\n", start_vnetid, end_vnetid);
 }
 
 int
@@ -4255,7 +4285,7 @@ show_vlans(int argc, char **argv, ...)
 
 	switch (argc) {
 	case 2:
-		show_vlan(-1, -1);
+		facts_show(stdout, "vlan");
 		break;
 	case 3:
 		start_vnetid = strtonum(argv[2], EVL_VLID_NULL,
@@ -4264,7 +4294,7 @@ show_vlans(int argc, char **argv, ...)
 			printf("%% VLAN tag %s is %s\n", argv[2], errstr);
 			break;
 		}
-		show_vlan(start_vnetid, -1);
+		facts_show(stdout, "vlan %lld", start_vnetid);
 		break;
 	case 4:
 		start_vnetid = strtonum(argv[2], EVL_VLID_NULL,
@@ -4284,7 +4314,8 @@ show_vlans(int argc, char **argv, ...)
 			    "than VLAN End Tag\n");
 			break;
 		}
-		show_vlan(start_vnetid, end_vnetid);
+		facts_show(stdout, "vlan %lld %lld", start_vnetid,
+		    end_vnetid);
 		break;
 	}
 	return 0;

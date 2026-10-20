@@ -36,14 +36,20 @@ and passes on what one child may send another, and nothing else.
 .It show
 Four of them, each as _nshd in a
 .Xr chroot 2 ,
-answer the read-only socket, with what anyone may see: interfaces
-and routes, as facts the client renders.
+answer the read-only socket, with what anyone may see: interfaces,
+routes, the ARP and neighbor tables, VLANs, bridges, kernel
+statistics, the version, who is logged in and the hostname, as facts
+the client renders.
 A long answer holds up only the one show that makes it, and is made
 only as the client reads it.
 A show has no path to the others.
 It is not
 .Xr pledge 2 Ns d ,
 as no promise has the interface ioctls it asks.
+Each opens
+.Pa /var/run/utmp
+before its
+.Xr chroot 2 .
 .It frontend
 Runs as _nshd in a
 .Xr chroot 2

@@ -298,23 +298,6 @@ int cand_powersave(char *, int, int);
 int intbssid(int, char **, ...);
 
 /* stats.c */
-void rt_stats(void);
-void tcp_stats(void);
-void udp_stats(void);
-void ip_stats(void);
-void icmp_stats(void);
-void igmp_stats(void);
-void ah_stats(void);
-void esp_stats(void);
-void ipip_stats(void);
-void carp_stats(void);
-void pfsync_stats(void);
-void ipcomp_stats(void);
-
-/* mbuf.c */
-void mbpr(void);
-
-/* kread.c */
 char *plural(int);
 char *plurales(int);
 
@@ -494,9 +477,9 @@ int conf_trunk(FILE *output, int ifs, char *ifname);
 int who(int, char **, ...);
 
 /* arp.c */
-int arpget(const char *);
 int arpset(int, char **, ...);
-void arpdump(void);
+struct in_addr;
+int getinetaddr(const char *, struct in_addr *);
 void conf_arp(FILE *, char *, int);
 char *sec2str(time_t);
 struct sockaddr_dl;
@@ -504,10 +487,10 @@ char *ether_str(struct sockaddr_dl *);
 
 /* ndp.c */
 int ndpset(int, char **, ...);
-void ndpget(const char *);
 int ndpdelete(const char *);
 struct sockaddr_in6;
-void ndpdump(struct sockaddr_in6 *, int);
+int parse_host(const char *, struct sockaddr_in6 *);
+void ndpflush(void);
 void conf_ndp(FILE *output, char *delim, int);
 
 /* nameserver.c */

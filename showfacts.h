@@ -26,6 +26,11 @@
 #include <sys/queue.h>
 
 struct rtdump;
+struct statgroup;
+struct sockaddr;
+struct sockaddr_storage;
+struct in_addr;
+struct sockaddr_in6;
 
 /* a record kept for rendering, bound to the kind nsh knows it as */
 struct frec {
@@ -64,7 +69,8 @@ extern struct facts_kind kind_message, kind_route, kind_lookup;
 extern struct facts_kind kind_interface, kind_address, kind_media;
 extern struct facts_kind kind_carp, kind_wgpeer, kind_umb, kind_umbdns;
 extern struct facts_kind kind_trunkport, kind_bridgemember;
-extern struct facts_kind kind_bridgeaddr;
+extern struct facts_kind kind_bridgeaddr, kind_bridge, kind_arp, kind_ndp;
+extern struct facts_kind kind_vlan, kind_version, kind_login, kind_hostname;
 
 enum { MSG_TEXT };
 
@@ -120,6 +126,27 @@ enum { BRM_NAME, BRM_FLAGS, BRM_STATE, BRM_NFIELDS };
 
 enum { BRA_ADDRESS, BRA_MEMBER, BRA_AGE, BRA_FLAGS, BRA_NFIELDS };
 
+enum { BR_NAME, BR_FLAGS, BR_DESCR, BR_NFIELDS };
+
+enum { ARP_ADDRESS, ARP_LLADDR, ARP_IF, ARP_FLAGS, ARP_PROXY, ARP_EXPIRE,
+	ARP_NFIELDS };
+
+enum { NDP_ADDRESS, NDP_LLADDR, NDP_IF, NDP_FLAGS, NDP_EXPIRE, NDP_STATE,
+	NDP_ROUTER, NDP_PROBES, NDP_ERRNO, NDP_NFIELDS };
+
+enum { VLAN_NAME, VLAN_VNETID, VLAN_FLAGS, VLAN_RDOMAIN, VLAN_PARENT,
+	VLAN_BRIDGE, VLAN_DESCR, VLAN_NFIELDS };
+
+enum {
+	VER_NSH, VER_COMPILED, VER_COMPILEDBY, VER_COMPILEHOST, VER_BOOTTIME,
+	VER_SYSNAME, VER_MACHINE, VER_RELEASE, VER_CPU, VER_MEMORY,
+	VER_KERNEL, VER_NFIELDS
+};
+
+enum { LOGIN_USER, LOGIN_LINE, LOGIN_TIME, LOGIN_HOST, LOGIN_NFIELDS };
+
+enum { HOST_NAME };
+
 /* collectors and renderers, in the files of what they show */
 void	 route_facts_init(void);
 void	 lookup_facts_init(void);
@@ -159,5 +186,35 @@ void	 trunk_facts(struct facts_out *, int, char *, struct facts_value *);
 void	 trunk_render(struct frecs *, struct frec *, FILE *);
 void	 bridge_facts(struct facts_out *, int, char *);
 void	 bridge_render(struct frecs *, FILE *);
+int	 bridge_show_facts(struct facts_out *, char *);
+void	 bridge_show_render(struct frecs *, struct frec *, int);
+void	 arp_facts_init(void);
+int	 arp_facts(struct facts_out *, struct rtdump *, char **,
+	    struct in_addr *, int);
+void	 arp_header(void);
+void	 arp_render(struct frec *);
+void	 arp_noentry(const char *);
+void	 ndp_facts_init(void);
+int	 ndp_facts(struct facts_out *, struct rtdump *, char **,
+	    struct sockaddr_in6 *, int);
+void	 ndp_header(void);
+void	 ndp_render(struct frec *, char *, size_t);
+void	 ndp_end(const char *, const char *);
+int	 vlan_facts(struct facts_out *, int, int);
+void	 vlan_render(struct frec *, int);
+void	 vlan_none(int, int);
+void	 stats_facts_init(void);
+struct statgroup *stats_group(const char *);
+const struct facts_kind *stats_kind(const char *);
+int	 stats_facts(struct facts_out *, struct statgroup *);
+void	 stats_render(struct frec *);
+int	 version_facts(struct facts_out *);
+void	 version_render(struct frec *);
+extern int utmpfd;
+int	 users_facts(struct facts_out *);
+void	 users_render(struct frec *, int);
+void	 users_end(int);
+int	 hostname_facts(struct facts_out *);
+void	 hostname_render(struct frec *);
 
 #endif /* SHOWFACTS_H */

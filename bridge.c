@@ -1201,6 +1201,14 @@ static struct facts_field bridgeaddr_fields[] = {
 struct facts_kind kind_bridgeaddr = { "bridge-address", bridgeaddr_fields,
     BRA_NFIELDS };
 
+/* a bridge, after its members, as show bridge shows it */
+static struct facts_field bridge_fields[] = {
+	[BR_NAME] =		{ "name",		FACT_STRING },
+	[BR_FLAGS] =		{ "flags",		FACT_U64 },
+	[BR_DESCR] =		{ "description",	FACT_STRING },
+};
+struct facts_kind kind_bridge = { "bridge", bridge_fields, BR_NFIELDS };
+
 void
 bridge_facts_init(void)
 {
@@ -1216,34 +1224,47 @@ bridge_facts_init(void)
 	bridgemember_fields[BRM_STATE].names = states;
 	bridgemember_fields[BRM_STATE].nnames = nitems(stpstates);
 	facts_bitnames(&bridgeaddr_fields[BRA_FLAGS], IFBAFBITS);
+	facts_bitnames(&bridge_fields[BR_FLAGS], ifnetflags);
+}
+
+/* brdg's members; -1 if a record failed */
+static int
+bridge_members(struct facts_out *o, int s, char *brdg)
+{
+	struct facts_value v[BRM_NFIELDS];
+	struct ifbreq *reqs;
+	char buf[sizeof(reqs->ifbr_ifsname) + 1];
+	size_t i, n;
+	int r = 0;
+
+	if ((reqs = bridge_ports(s, brdg, &n)) == NULL)
+		return (0);
+	for (i = 0; i < n && r != -1; i++) {
+		memset(v, 0, sizeof(v));
+		memcpy(buf, reqs[i].ifbr_ifsname,
+		    sizeof(reqs[i].ifbr_ifsname));
+		buf[sizeof(reqs[i].ifbr_ifsname)] = '\0';
+		facts_string(&v[BRM_NAME], buf);
+		facts_u64(&v[BRM_FLAGS], reqs[i].ifbr_ifsflags);
+		facts_u64(&v[BRM_STATE], reqs[i].ifbr_state);
+		r = facts_record(o, &kind_bridgemember, v);
+	}
+	free(reqs);
+	return (r);
 }
 
 /* brdg's members, and the addresses it learned */
 void
 bridge_facts(struct facts_out *o, int s, char *brdg)
 {
-	struct facts_value v[BRA_NFIELDS > BRM_NFIELDS ? BRA_NFIELDS :
-	    BRM_NFIELDS];
-	struct ifbreq *reqs;
+	struct facts_value v[BRA_NFIELDS];
 	struct ifbaconf ifbac;
 	struct ifbareq *ifba;
 	char buf[sizeof(ifba->ifba_ifsname) + 1], *inbuf = NULL, *inb;
-	size_t i, n;
+	size_t i;
 	u_int len = 8192;
 
-	if ((reqs = bridge_ports(s, brdg, &n)) != NULL) {
-		for (i = 0; i < n; i++) {
-			memset(v, 0, sizeof(v));
-			memcpy(buf, reqs[i].ifbr_ifsname,
-			    sizeof(reqs[i].ifbr_ifsname));
-			buf[sizeof(reqs[i].ifbr_ifsname)] = '\0';
-			facts_string(&v[BRM_NAME], buf);
-			facts_u64(&v[BRM_FLAGS], reqs[i].ifbr_ifsflags);
-			facts_u64(&v[BRM_STATE], reqs[i].ifbr_state);
-			facts_record(o, &kind_bridgemember, v);
-		}
-		free(reqs);
-	}
+	bridge_members(o, s, brdg);
 
 	while (1) {
 		ifbac.ifbac_len = len;
@@ -2404,102 +2425,121 @@ br_portname(int ifs, char *name)
 	return is_valid_ifname(name) && !is_bridge(ifs, name);
 }
 
+/* every bridge, or ifname, each after its members */
 int
-show_bridge(char *ifname)
+bridge_show_facts(struct facts_out *o, char *ifname)
 {
+	struct facts_value v[BR_NFIELDS];
 	struct if_nameindex *ifn_list, *ifnp;
-	int ifs, flags, totlen, len, found_bridge = 0, header_shown = 0;
-	char buf[1024], *p, *member;
 	struct ifreq ifr;
-	char ifdescr[IFDESCRSIZE], *description;
+	char ifdescr[IFDESCRSIZE];
+	int ifs, r = 0;
 
 	if ((ifs = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
 		printf("%% show_bridge: socket: %s\n", strerror(errno));
-		return 0;
+		return (-1);
 	}
 
 	if (ifname) {
 		if (!is_valid_ifname(ifname) || !is_bridge(ifs, ifname)) {
 			printf("%% interface %s is not a bridge\n", ifname);
 			close(ifs);
-			return 0;
+			return (-1);
 		}
 	}
 
 	if ((ifn_list = if_nameindex()) == NULL) {
 		printf("%% show_vlan: if_nameindex failed\n");
 		close(ifs);
-		return 0;
+		return (-1);
 	}
 
-	for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++) {
+	for (ifnp = ifn_list; ifnp->if_name != NULL && r != -1; ifnp++) {
 		if (ifname) {
 			if (strcmp(ifname, ifnp->if_name) != 0)
 				continue;
-			found_bridge = 1;
 		} else if (!is_bridge(ifs, ifnp->if_name))
 			continue;
 
-		if (!header_shown) {
-			puts("% Bridge    Status  Member Interfaces");
-			header_shown = 1;
+		if (bridge_members(o, ifs, ifnp->if_name) == -1) {
+			r = -1;
+			break;
 		}
-		if (bridge_list(ifs, ifnp->if_name, NULL, buf, sizeof(buf),
-		    MEMBER) == 0)
-			buf[0] = '\0';
-
-		flags = get_ifflags(ifnp->if_name, ifs);
-
-		len = printf("  %-9s %-7s", ifnp->if_name,
-		    (flags & IFF_UP) ? "up" : "down");
-		if (len < 0) {
-			printf("\n%% show_bridge: printf failed: %s\n",
-			    strerror(errno));
-			goto out;
-		}
-		totlen = len;
-
-		p = buf;
-		while ((member = strsep(&p, " ")) != NULL) {
-			if (totlen + strlen(member) >= 80) {
-				printf("\n                   ");
-				len = 19;
-				totlen = len;
-			}
-
-			len = printf(" %s", member);
-			if (len < 0) {
-				printf("\n%% show_bridge: printf failed: %s\n",
-				    strerror(errno));
-				goto out;
-			}
-			totlen += len;
-		}
-		printf("\n");
+		memset(v, 0, sizeof(v));
+		facts_string(&v[BR_NAME], ifnp->if_name);
+		facts_u64(&v[BR_FLAGS], get_ifflags(ifnp->if_name, ifs));
 
 		memset(&ifr, 0, sizeof(ifr));
-		if (strlcpy(ifr.ifr_name, ifnp->if_name,
-		    sizeof(ifr.ifr_name)) >= sizeof(ifr.ifr_name)) {
-			printf("%% %s: interface name is too long\n",
-			   ifnp->if_name);
-			continue;
-		}
-
+		strlcpy(ifr.ifr_name, ifnp->if_name, sizeof(ifr.ifr_name));
+		memset(ifdescr, 0, sizeof(ifdescr));
 		ifr.ifr_data = (caddr_t)&ifdescr;
 		if (ioctl(ifs, SIOCGIFDESCR, &ifr) == 0 &&
 		    ifr.ifr_data[0] != '\0')
-			description = ifr.ifr_data;
-		else
-			description = "-";
-		printf("            Description: %s\n", description);
+			facts_string(&v[BR_DESCR], ifdescr);
+		r = facts_record(o, &kind_bridge, v);
 
-		if (found_bridge)
+		if (ifname)
 			break;
 	}
-out:
 	if_freenameindex(ifn_list);
 	close(ifs);
-	return 0;
+	return (r);
+}
+
+/*
+ * A bridge, b, its members in rs, as show_bridge() printed it, the
+ * headers before the first
+ */
+void
+bridge_show_render(struct frecs *rs, struct frec *b, int n)
+{
+	struct frec *r;
+	const char *name;
+	int totlen, len;
+	char buf[1024], tmp[256], *p, *member;
+
+	if (n == 0)
+		puts("% Bridge    Status  Member Interfaces");
+
+	/* as bridge_list() lists them */
+	buf[0] = '\0';
+	for (r = NULL; (r = frec_next(rs, r, &kind_bridgemember)); ) {
+		if ((name = fs(r, BRM_NAME)) == NULL || name[0] == '\0' ||
+		    (fu(r, BRM_FLAGS, 0) & IFBIF_SPAN))
+			continue;
+		snprintf(tmp, sizeof(tmp), "%s%s", buf[0] ? " " : "", name);
+		strlcat(buf, tmp, sizeof(buf));
+	}
+
+	len = printf("  %-9s %-7s", bridge_s(b, BR_NAME),
+	    (fu(b, BR_FLAGS, 0) & IFF_UP) ? "up" : "down");
+	if (len < 0) {
+		printf("\n%% show_bridge: printf failed: %s\n",
+		    strerror(errno));
+		return;
+	}
+	totlen = len;
+
+	p = buf;
+	while ((member = strsep(&p, " ")) != NULL) {
+		if (totlen + strlen(member) >= 80) {
+			printf("\n                   ");
+			len = 19;
+			totlen = len;
+		}
+
+		len = printf(" %s", member);
+		if (len < 0) {
+			printf("\n%% show_bridge: printf failed: %s\n",
+			    strerror(errno));
+			return;
+		}
+		totlen += len;
+	}
+	printf("\n");
+
+	printf("            Description: %s\n", fs(b, BR_DESCR) != NULL ?
+	    fs(b, BR_DESCR) : "-");
 }
 
 int
@@ -2507,10 +2547,10 @@ show_bridges(int argc, char **argv, ...)
 {
 	switch (argc) {
 	case 2:
-		show_bridge(NULL);
+		facts_show(stdout, "bridge");
 		break;
 	case 3:
-		show_bridge(argv[2]);
+		facts_show(stdout, "bridge %s", argv[2]);
 		break;
 	}
 	return 0;

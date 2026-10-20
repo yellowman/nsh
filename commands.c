@@ -60,6 +60,8 @@
 #include <sys/ioctl.h>
 #include <net/if.h>
 #include <net/route.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 #include <limits.h>
 #include <util.h>
 #include <pwd.h>
@@ -189,22 +191,23 @@ static struct fpf {
 	{ 0, 0, 0, 0 }
 };
 
+/* statistics without a handler are facts, of their name */
 static struct stt {
 	char *name;
 	char *help;
 	void (*handler)(void);
 } stts[] = {
-	{ "ip",		"Internet Protocol",			ip_stats },
-	{ "ah",		"Authentication Header",		ah_stats },
-	{ "esp",	"Encapsulated Security Payload",	esp_stats },
-	{ "tcp",	"Transmission Control Protocol",	tcp_stats },
-	{ "udp",	"Unreliable Datagram Protocol",		udp_stats },
-	{ "icmp",	"Internet Control Message Protocol",	icmp_stats },
-	{ "igmp",	"Internet Group Management Protocol",	igmp_stats },
-	{ "ipcomp",	"IP Compression",			ipcomp_stats },
-	{ "route",	"Routing",				rt_stats },
-	{ "carp",	"Common Address Redundancy Protocol",	carp_stats },
-	{ "mbuf",	"Packet memory buffer",			mbpr },
+	{ "ip",		"Internet Protocol",			0 },
+	{ "ah",		"Authentication Header",		0 },
+	{ "esp",	"Encapsulated Security Payload",	0 },
+	{ "tcp",	"Transmission Control Protocol",	0 },
+	{ "udp",	"Unreliable Datagram Protocol",		0 },
+	{ "icmp",	"Internet Control Message Protocol",	0 },
+	{ "igmp",	"Internet Group Management Protocol",	0 },
+	{ "ipcomp",	"IP Compression",			0 },
+	{ "route",	"Routing",				0 },
+	{ "carp",	"Common Address Redundancy Protocol",	0 },
+	{ "mbuf",	"Packet memory buffer",			0 },
 	{ "pf",		"Packet Filter",			pf_stats },
 	{ 0,		0,					0 }
 };
@@ -2365,12 +2368,34 @@ hostname(int argc, char **argv, ...)
 static int
 show_hostname(int argc, char **argv, ...)
 {
-	if (gethostname(hbuf, sizeof(hbuf)))
-		printf("%% gethostname: %s\n", strerror(errno));
-	else
-		printf("%s\n", hbuf);
-
+	facts_show(stdout, "hostname");
 	return 0;
+}
+
+static struct facts_field hostname_fields[] = {
+	[HOST_NAME] =	{ "name",	FACT_STRING },
+};
+struct facts_kind kind_hostname = { "hostname", hostname_fields, 1 };
+
+int
+hostname_facts(struct facts_out *o)
+{
+	struct facts_value v[1];
+	char host[MAXHOSTNAMELEN];
+
+	if (gethostname(host, sizeof(host))) {
+		printf("%% gethostname: %s\n", strerror(errno));
+		return (-1);
+	}
+	memset(v, 0, sizeof(v));
+	facts_string(&v[HOST_NAME], host);
+	return (facts_record(o, &kind_hostname, v));
+}
+
+void
+hostname_render(struct frec *r)
+{
+	printf("%s\n", fs(r, HOST_NAME) != NULL ? fs(r, HOST_NAME) : "");
 }
 
 /* logger command */
@@ -3635,7 +3660,7 @@ flush_arp_cache(int argc, char **argv, ...)
 static int
 flush_ndp_cache(int argc, char **argv, ...)
 {
-	ndpdump(NULL, 1);
+	ndpflush();
 	return 0;
 }
 
@@ -3932,14 +3957,21 @@ pr_routes6(int argc, char **argv, ...)
 int
 pr_arp(int argc, char **argv, ...)
 {
+	struct in_addr in;
+
 	switch(argc) {
 	case 2:
 		/* show arp table */
-		arpdump();
+		facts_show(stdout, "arp %d", cli_rtable);
 		break;
 	case 3:
 		/* specific address */
-		arpget(argv[2]);
+		if (getinetaddr(argv[2], &in) == -1) {
+			printf("%% arpget: getinetaddr: failure %s\n",
+			    strerror(errno));
+			break;
+		}
+		facts_show(stdout, "arp %d %s", cli_rtable, inet_ntoa(in));
 		break;
 	}
 	return 0;
@@ -3948,14 +3980,18 @@ pr_arp(int argc, char **argv, ...)
 static int
 pr_ndp(int argc, char **argv, ...)
 {
+	struct sockaddr_in6 sin6;
+
 	switch(argc) {
 	case 2:
 		/* show ndp table */
-		ndpdump(NULL, 0);
+		facts_show(stdout, "ndp %d", cli_rtable);
 		break;
 	case 3:
 		/* specific address */
-		ndpget(argv[2]);
+		if (parse_host(argv[2], &sin6))
+			break;
+		facts_show(stdout, "ndp %d %s", cli_rtable, argv[2]);
 		break;
 	}
 	return 0;
@@ -3987,8 +4023,10 @@ pr_kernel(int argc, char **argv, ...)
 		printf("%% Ambiguous argument %s\n", argv[2]);
 		return 0;
 	}
-	if (x->handler) /* not likely to be false */
+	if (x->handler)
 		(*x->handler)();
+	else
+		facts_show(stdout, "statistics %s", x->name);
 
 	return 0;
 }

@@ -22,13 +22,22 @@
  *					prints only when verbose
  *	route inet|inet6 table		a routing table
  *	lookup address table		the route the kernel would use
+ *	arp table [address]		the ARP table, or one entry
+ *	ndp table [address]		the neighbor cache, or one entry
+ *	vlan [tag [tag]]		VLANs: all, one tag, or a range
+ *	bridge [name]			bridges, or one
+ *	statistics group		a group of kernel statistics
+ *	version				what runs, and since when
+ *	users				who is logged in
+ *	hostname			the host's name
  *
  * nshd's show processes answer them a batch at a time, as the client
  * reads; nsh asks nshd, or, where nshd does not run, answers them
  * itself. Either way nsh renders the records as the text it printed
- * before. An interface's records come before its own record, which
- * ends them. What a collector prints, as nsh's helpers always have,
- * reaches the terminal here, and nshd sends it as a message.
+ * before. An interface's or a bridge's records come before its own
+ * record, which ends them. What a collector prints, as nsh's helpers
+ * always have, reaches the terminal here, and nshd sends it as a
+ * message.
  */
 
 #include <sys/types.h>
@@ -39,10 +48,12 @@
 #include <net/if_dl.h>
 #include <net/route.h>
 #include <netinet/in.h>
+#include <netinet/if_ether.h>
 #include <arpa/inet.h>
 
 #include <errno.h>
 #include <limits.h>
+#include <netdb.h>
 #include <stddef.h>
 #include <stdarg.h>
 #include <stdint.h>
@@ -63,22 +74,34 @@ struct facts_kind kind_message = { "message", message_fields, 1 };
 static struct facts_kind *kinds[] = {
 	&kind_message, &kind_route, &kind_lookup, &kind_interface,
 	&kind_address, &kind_media, &kind_carp, &kind_wgpeer, &kind_umb,
-	&kind_umbdns, &kind_trunkport, &kind_bridgemember, &kind_bridgeaddr
+	&kind_umbdns, &kind_trunkport, &kind_bridgemember, &kind_bridgeaddr,
+	&kind_bridge, &kind_arp, &kind_ndp, &kind_vlan, &kind_version,
+	&kind_login, &kind_hostname
 };
 
-enum answer_type { ANS_INTERFACE, ANS_ROUTE, ANS_LOOKUP };
+enum answer_type {
+	ANS_INTERFACE, ANS_ROUTE, ANS_LOOKUP, ANS_ARP, ANS_NDP, ANS_VLAN,
+	ANS_BRIDGE, ANS_STATISTICS, ANS_VERSION, ANS_USERS, ANS_HOSTNAME
+};
 
 struct facts_answer {
 	enum answer_type	 type;
-	struct if_nameindex	*ifn;	/* every interface, or NULL */
-	size_t			 next;
-	char			 name[IFNAMSIZ];
-	struct rtdump		*rt;
-	char			*cur;
+	char			*copy;		/* the words, split */
+	char			*w[4];
+	int			 n;
+	char			 name[IFNAMSIZ];	/* one interface */
+	int			 detail;	/* interface detail */
 	int			 af;
 	int			 table;
-	int			 detail;	/* interface detail */
-	char			 query[INET6_ADDRSTRLEN + 5];
+	int			 one;		/* arp, ndp: one address */
+	struct in_addr		 in;
+	struct sockaddr_in6	 sin6;
+	int			 start, end;	/* vlan tags, or -1 */
+	struct statgroup	*stats;
+	struct if_nameindex	*ifn;		/* every interface */
+	size_t			 next;
+	struct rtdump		*rt;
+	char			*cur;
 	int			 done;
 };
 
@@ -124,6 +147,9 @@ facts_init(void)
 	umb_facts_init();
 	trunk_facts_init();
 	bridge_facts_init();
+	arp_facts_init();
+	ndp_facts_init();
+	stats_facts_init();
 }
 
 int
@@ -296,43 +322,57 @@ frec_next(struct frecs *rs, struct frec *r, const struct facts_kind *k)
 	return (NULL);
 }
 
-/* what words ask, or NULL, with why in msg */
+static int
+answer_table(struct facts_answer *a, const char *w)
+{
+	const char	*errstr;
+
+	a->table = strtonum(w, 0, RT_TABLEID_MAX, &errstr);
+	return (errstr ? -1 : 0);
+}
+
+static int
+answer_tag(int *tag, const char *w)
+{
+	const char	*errstr;
+
+	*tag = strtonum(w, EVL_VLID_NULL, EVL_VLID_MAX, &errstr);
+	return (errstr ? -1 : 0);
+}
+
+/* what words ask, or NULL if they ask nothing a show answers */
 struct facts_answer *
 facts_answer(char *words)
 {
 	struct facts_answer	*a;
-	char			*w[4], *copy, *p, *last;
-	const char		*errstr;
-	int			 n = 0;
+	struct addrinfo		 hints, *res;
+	char			*p, *last, **w;
+	int			 n;
 
 	facts_init();
-	if ((copy = strdup(words)) == NULL)
+	if ((a = calloc(1, sizeof(*a))) == NULL)
 		return (NULL);
-	for (p = strtok_r(copy, " ", &last); p != NULL;
+	if ((a->copy = strdup(words)) == NULL)
+		goto bad;
+	for (p = strtok_r(a->copy, " ", &last); p != NULL;
 	    p = strtok_r(NULL, " ", &last)) {
-		if (n == 4) {
-			free(copy);
-			return (NULL);
-		}
-		w[n++] = p;
+		if (a->n == 4)
+			goto bad;
+		a->w[a->n++] = p;
 	}
-	if ((a = calloc(1, sizeof(*a))) == NULL) {
-		free(copy);
-		return (NULL);
-	}
-	if (n >= 1 && n <= 3 && strcmp(w[0], "interface") == 0) {
+	w = a->w;
+	n = a->n;
+	a->start = a->end = -1;
+	if (n == 0)
+		goto bad;
+	if (n <= 3 && strcmp(w[0], "interface") == 0) {
 		a->type = ANS_INTERFACE;
 		if (n > 1 && strcmp(w[n - 1], "detail") == 0) {
 			a->detail = 1;
 			n--;
 		}
-		if (n == 3)
-			goto bad;
-		if (n == 2) {
-			if (strlcpy(a->name, w[1], sizeof(a->name)) >=
-			    sizeof(a->name))
-				goto bad;
-		} else if ((a->ifn = if_nameindex()) == NULL)
+		if (n == 3 || (n == 2 && strlcpy(a->name, w[1],
+		    sizeof(a->name)) >= sizeof(a->name)))
 			goto bad;
 	} else if (n == 3 && strcmp(w[0], "route") == 0) {
 		a->type = ANS_ROUTE;
@@ -342,29 +382,62 @@ facts_answer(char *words)
 			a->af = AF_INET6;
 		else
 			goto bad;
+		if (answer_table(a, w[2]) == -1)
+			goto bad;
 	} else if (n == 3 && strcmp(w[0], "lookup") == 0) {
 		a->type = ANS_LOOKUP;
-		if (strlcpy(a->query, w[1], sizeof(a->query)) >=
-		    sizeof(a->query))
+		if (strlen(w[1]) >= INET6_ADDRSTRLEN + 5 ||
+		    answer_table(a, w[2]) == -1)
 			goto bad;
-	} else
+	} else if ((n == 2 || n == 3) && strcmp(w[0], "arp") == 0) {
+		a->type = ANS_ARP;
+		if (answer_table(a, w[1]) == -1)
+			goto bad;
+		if (n == 3 && inet_pton(AF_INET, w[2], &a->in) != 1)
+			goto bad;
+		a->one = n == 3;
+	} else if ((n == 2 || n == 3) && strcmp(w[0], "ndp") == 0) {
+		a->type = ANS_NDP;
+		if (answer_table(a, w[1]) == -1)
+			goto bad;
+		if (n == 3) {
+			memset(&hints, 0, sizeof(hints));
+			hints.ai_family = AF_INET6;
+			hints.ai_flags = AI_NUMERICHOST;
+			if (getaddrinfo(w[2], NULL, &hints, &res) != 0)
+				goto bad;
+			memcpy(&a->sin6, res->ai_addr, sizeof(a->sin6));
+			freeaddrinfo(res);
+			a->one = 1;
+		}
+	} else if (n <= 3 && strcmp(w[0], "vlan") == 0) {
+		a->type = ANS_VLAN;
+		if ((n > 1 && answer_tag(&a->start, w[1]) == -1) ||
+		    (n > 2 && answer_tag(&a->end, w[2]) == -1))
+			goto bad;
+	} else if (n <= 2 && strcmp(w[0], "bridge") == 0)
+		a->type = ANS_BRIDGE;
+	else if (n == 2 && strcmp(w[0], "statistics") == 0) {
+		a->type = ANS_STATISTICS;
+		if ((a->stats = stats_group(w[1])) == NULL)
+			goto bad;
+	} else if (n == 1 && strcmp(w[0], "version") == 0)
+		a->type = ANS_VERSION;
+	else if (n == 1 && strcmp(w[0], "users") == 0)
+		a->type = ANS_USERS;
+	else if (n == 1 && strcmp(w[0], "hostname") == 0)
+		a->type = ANS_HOSTNAME;
+	else
 		goto bad;
-	if (a->type != ANS_INTERFACE) {
-		a->table = strtonum(w[2], 0, RT_TABLEID_MAX, &errstr);
-		if (errstr)
-			goto bad;
-	}
-	free(copy);
 	return (a);
 bad:
-	free(copy);
 	facts_answer_free(a);
 	return (NULL);
 }
 
 /*
  * Some of a's records, about budget of them, into o: 1 if there are
- * more, 0 if a is done, -1 if a record could not be made
+ * more, 0 if a is done, -1 if it failed
  */
 int
 facts_more(struct facts_answer *a, struct facts_out *o, int budget)
@@ -375,35 +448,63 @@ facts_more(struct facts_answer *a, struct facts_out *o, int budget)
 		return (0);
 	switch (a->type) {
 	case ANS_INTERFACE:
-		if (a->ifn == NULL) {
+		if (a->name[0] != '\0')
 			r = if_facts(o, a->name, a->detail);
-			a->done = 1;
-			return (r == -1 ? -1 : 0);
-		}
-		if (a->ifn[a->next].if_name == NULL) {
-			a->done = 1;
-			return (0);
-		}
-		if (if_facts(o, a->ifn[a->next++].if_name, a->detail) == -1)
-			return (-1);
-		return (1);
+		else if (a->ifn == NULL && (a->ifn = if_nameindex()) == NULL) {
+			printf("%% if_nameindex: %s\n", strerror(errno));
+			r = -1;
+		} else if (a->ifn[a->next].if_name != NULL)
+			return (if_facts(o, a->ifn[a->next++].if_name,
+			    a->detail) == -1 ? -1 : 1);
+		break;
 	case ANS_ROUTE:
+	case ANS_ARP:
+	case ANS_NDP:
 		if (a->rt == NULL) {
-			if ((a->rt = getrtdump(a->af, 0, a->table)) == NULL) {
-				a->done = 1;
-				return (0);
-			}
+			if (a->type == ANS_ROUTE)
+				a->rt = getrtdump(a->af, 0, a->table);
+			else
+				a->rt = getrtdump(a->type == ANS_ARP ?
+				    AF_INET : AF_INET6, RTF_LLINFO, a->table);
+			if (a->rt == NULL)
+				break;
 			a->cur = a->rt->buf;
 		}
-		r = route_facts(o, a->rt, &a->cur, a->af, budget);
-		if (r != 1)
-			a->done = 1;
-		return (r);
+		if (a->type == ANS_ROUTE)
+			r = route_facts(o, a->rt, &a->cur, a->af, budget);
+		else if (a->type == ANS_ARP)
+			r = arp_facts(o, a->rt, &a->cur, a->one ? &a->in :
+			    NULL, budget);
+		else
+			r = ndp_facts(o, a->rt, &a->cur, a->one ? &a->sin6 :
+			    NULL, budget);
+		if (r == 1)
+			return (1);
+		break;
 	case ANS_LOOKUP:
-		a->done = 1;
-		return (lookup_facts(o, a->query, a->table));
+		r = lookup_facts(o, a->w[1], a->table);
+		break;
+	case ANS_VLAN:
+		r = vlan_facts(o, a->start, a->end);
+		break;
+	case ANS_BRIDGE:
+		r = bridge_show_facts(o, a->n == 2 ? a->w[1] : NULL);
+		break;
+	case ANS_STATISTICS:
+		r = stats_facts(o, a->stats);
+		break;
+	case ANS_VERSION:
+		r = version_facts(o);
+		break;
+	case ANS_USERS:
+		r = users_facts(o);
+		break;
+	case ANS_HOSTNAME:
+		r = hostname_facts(o);
+		break;
 	}
-	return (-1);
+	a->done = 1;
+	return (r == -1 ? -1 : 0);
 }
 
 void
@@ -415,6 +516,7 @@ facts_answer_free(struct facts_answer *a)
 		if_freenameindex(a->ifn);
 	if (a->rt != NULL)
 		freertdump(a->rt);
+	free(a->copy);
 	free(a);
 }
 
@@ -422,8 +524,9 @@ facts_answer_free(struct facts_answer *a)
 struct render {
 	int			 status;	/* show interface status */
 	FILE			*out;
-	int			 routes;	/* routes rendered */
-	struct frecs		 block;		/* an interface's records */
+	int			 count;		/* records rendered */
+	char			 failed[NI_MAXHOST];	/* ndp: no info */
+	struct frecs		 block;		/* records before their end */
 	const struct facts_kind	*kind[FACTS_KINDS];
 	int			 map[FACTS_KINDS][FACTS_FIELDS];
 };
@@ -444,19 +547,20 @@ static void
 render_record(void *arg, const struct facts_template *t,
     const struct facts_value *v)
 {
-	struct render	*rd = arg;
-	struct frec	*r;
-	size_t		 i;
+	struct render		*rd = arg;
+	const struct facts_kind	*k = NULL;
+	struct frec		*r;
+	size_t			 i;
 
 	/* bound once, to the kind nsh knows by its name, if any */
 	if (rd->kind[t->id] == NULL) {
 		for (i = 0; i < sizeof(kinds) / sizeof(kinds[0]); i++)
-			if (strcmp(t->kind, kinds[i]->name) == 0) {
-				rd->kind[t->id] = kinds[i];
-				facts_bind(t, kinds[i], rd->map[t->id]);
-			}
-		if (rd->kind[t->id] == NULL)
+			if (strcmp(t->kind, kinds[i]->name) == 0)
+				k = kinds[i];
+		if (k == NULL && (k = stats_kind(t->kind)) == NULL)
 			return;
+		rd->kind[t->id] = k;
+		facts_bind(t, k, rd->map[t->id]);
 	}
 	if ((r = calloc(1, sizeof(*r))) == NULL)
 		return;
@@ -472,10 +576,26 @@ render_record(void *arg, const struct facts_template *t,
 		if (fs(r, MSG_TEXT) != NULL)
 			printf("%s", fs(r, MSG_TEXT));
 	} else if (r->k == &kind_route) {
-		route_render(r, &rd->routes);
+		route_render(r, &rd->count);
 		fflush(stdout);
 	} else if (r->k == &kind_lookup)
 		lookup_render(r);
+	else if (r->k == &kind_arp) {
+		arp_render(r);
+		rd->count++;
+	} else if (r->k == &kind_ndp) {
+		ndp_render(r, rd->failed, sizeof(rd->failed));
+		rd->count++;
+	} else if (r->k == &kind_vlan)
+		vlan_render(r, rd->count++);
+	else if (r->k == &kind_login)
+		users_render(r, rd->count++);
+	else if (r->k == &kind_version)
+		version_render(r);
+	else if (r->k == &kind_hostname)
+		hostname_render(r);
+	else if (r->k == stats_kind(r->k->name))
+		stats_render(r);
 	else {
 		TAILQ_INSERT_TAIL(&rd->block, r, entry);
 		if (r->k == &kind_interface) {
@@ -483,6 +603,9 @@ render_record(void *arg, const struct facts_template *t,
 				if_render_status(&rd->block, rd->out);
 			else
 				if_render(&rd->block, rd->out);
+			block_free(&rd->block);
+		} else if (r->k == &kind_bridge) {
+			bridge_show_render(&rd->block, r, rd->count++);
 			block_free(&rd->block);
 		}
 		return;
@@ -522,7 +645,6 @@ facts_show(FILE *out, const char *fmt, ...)
 		return (1);
 	}
 
-	facts_init();
 	memset(&rd, 0, sizeof(rd));
 	TAILQ_INIT(&rd.block);
 	rd.out = out;
@@ -531,24 +653,48 @@ facts_show(FILE *out, const char *fmt, ...)
 		rd.status = 1;
 		w = "interface";
 	}
+	if ((a = facts_answer(w)) == NULL) {
+		printf("%% show %s: not a show nsh knows\n", w);
+		free(words);
+		return (1);
+	}
 	facts_in_init(&in, render_record, &rd);
 	if (rd.status)
 		fputs("% Name    Status  Link        Routing-Domain  Media\n",
 		    out);
+	else if (a->type == ANS_ARP)
+		arp_header();
+	else if (a->type == ANS_NDP)
+		ndp_header();
 	if ((r = nshd_facts(w, &in)) == -1) {
-		if ((a = facts_answer(w)) == NULL) {
-			printf("%% show %s: not a show nsh knows\n", w);
-			facts_in_free(&in);
-			free(words);
-			return (1);
-		}
 		facts_out_init(&o, render_emit, &in);
 		while ((r = facts_more(a, &o, 1024)) == 1)
 			;
-		facts_answer_free(a);
 		r = r == 0;
 	}
 	block_free(&rd.block);
+
+	/* what a show prints after its records, or for none */
+	switch (a->type) {
+	case ANS_ARP:
+		if (a->one && rd.count == 0)
+			arp_noentry(a->w[2]);
+		break;
+	case ANS_NDP:
+		ndp_end(rd.failed, a->one && rd.count == 0 ? a->w[2] : NULL);
+		break;
+	case ANS_VLAN:
+		if (r == 1 && rd.count == 0)
+			vlan_none(a->start, a->end);
+		break;
+	case ANS_USERS:
+		if (r == 1)
+			users_end(rd.count);
+		break;
+	default:
+		break;
+	}
+	facts_answer_free(a);
 	facts_in_free(&in);
 	free(words);
 	return (r == 1 ? 0 : 1);

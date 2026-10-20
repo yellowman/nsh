@@ -27,7 +27,7 @@
  *
  * show is not pledged: no promise has the ioctls show interface asks,
  * for tunnels, carp, wg, trunk, umb, 802.11, bridges and more. It runs
- * as _nshd, chrooted, with no peer.
+ * as _nshd, chrooted, with no peer, and keeps utmp open from before.
  */
 
 #include <sys/types.h>
@@ -35,6 +35,7 @@
 #include <sys/socket.h>
 
 #include <event.h>
+#include <fcntl.h>
 #include <imsg.h>
 #include <limits.h>
 #include <stdint.h>
@@ -42,6 +43,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <utmp.h>
 
 #include "log.h"
 #include "nshd.h"
@@ -85,6 +87,8 @@ showproc(int debug, int verbose, int instance)
 	    dup2(fd, STDOUT_FILENO) == -1)
 		fatal("%s", path);
 	close(fd);
+	if ((utmpfd = open(_PATH_UTMP, O_RDONLY)) == -1)
+		log_warn("%s", _PATH_UTMP);
 	privdrop();
 
 	if ((iev_relay = imsgev_new(3, show_dispatch_relay, 0)) == NULL)
@@ -131,8 +135,6 @@ show_client(struct ctl_conn *c, struct imsg *imsg)
 	struct nshd_hello	 hello;
 	struct nshd_session	 s;
 	struct nshd_show	 show;
-	char			 host[HOST_NAME_MAX + 1], *out;
-	int			 ret, status = 1;
 
 	/* one request at a time */
 	if (c->arg != NULL)
@@ -149,19 +151,7 @@ show_client(struct ctl_conn *c, struct imsg *imsg)
 		if (imsg_get_data(imsg, &show, sizeof(show)) == -1 ||
 		    memchr(show.words, '\0', sizeof(show.words)) == NULL)
 			return (-1);
-		if (strcmp(show.words, "hostname") != 0)
-			return (show_facts(c, show.words));
-		if (gethostname(host, sizeof(host)) == -1)
-			ret = asprintf(&out, "%% gethostname failed\n");
-		else {
-			ret = asprintf(&out, "%s\n", host);
-			status = 0;
-		}
-		if (ret == -1)
-			fatal("%s", __func__);
-		ret = show_answer(c->id, status, out);
-		free(out);
-		return (ret);
+		return (show_facts(c, show.words));
 	default:
 		return (-1);
 	}

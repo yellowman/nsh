@@ -31,52 +31,117 @@
  */
 
 #include <sys/types.h>
+#include <sys/queue.h>
 #include <sys/stat.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <paths.h>
 #include <pwd.h>
 #include <utmp.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 #include "externs.h"
+#include "facts.h"
+#include "showfacts.h"
+
+#define HOST_WIDTH 40
+#define NAME_WIDTH 8
 
 void  output(struct utmp *);
 void  output_labels(void);
 
+int utmpfd = -1;	/* nshd's show opens it before it chroots */
+
+/* a login, as facts */
+static struct facts_field login_fields[] = {
+	[LOGIN_USER] =	{ "user",	FACT_STRING },
+	[LOGIN_LINE] =	{ "line",	FACT_STRING },
+	[LOGIN_TIME] =	{ "time",	FACT_TIME },
+	[LOGIN_HOST] =	{ "host",	FACT_STRING },
+};
+struct facts_kind kind_login = { "login", login_fields, LOGIN_NFIELDS };
+
 int
 who(int argc, char **argv, ...)
 {
-	FILE *utmp;
-	struct utmp who;
-	int count = 0;
-
 	if (argc == 2 && !isprefix(argv[1], "users")) {
 		printf("%% Too many arguments\n");
 		return 0;
 	}
 
-	if ((utmp = fopen(_PATH_UTMP, "r")) == NULL) {
+	facts_show(stdout, "users");
+	return 0;
+}
+
+int
+users_facts(struct facts_out *o)
+{
+	struct facts_value v[LOGIN_NFIELDS];
+	struct utmp who;
+	char name[UT_NAMESIZE + 1], line[UT_LINESIZE + 1];
+	char host[UT_HOSTSIZE + 1];
+	off_t off;
+	int fd, r = 0;
+
+	if ((fd = utmpfd) == -1 && (fd = open(_PATH_UTMP, O_RDONLY)) == -1) {
 		printf("%% who: fopen %s: %s\n",_PATH_UTMP,strerror(errno));
-		return 0;
+		return -1;
 	}
 
-#define HOST_WIDTH 40
-#define NAME_WIDTH 8
-
-	output_labels();
-
-	while (fread((char *)&who, sizeof(who), 1, utmp) == 1) {
+	for (off = 0; r != -1 && pread(fd, &who, sizeof(who), off) ==
+	    sizeof(who); off += sizeof(who)) {
 		if (*who.ut_name && *who.ut_line) {
-			output(&who);
-			count++;
+			memset(v, 0, sizeof(v));
+			snprintf(name, sizeof(name), "%.*s", UT_NAMESIZE,
+			    who.ut_name);
+			snprintf(line, sizeof(line), "%.*s", UT_LINESIZE,
+			    who.ut_line);
+			snprintf(host, sizeof(host), "%.*s", UT_HOSTSIZE,
+			    who.ut_host);
+			facts_string(&v[LOGIN_USER], name);
+			facts_string(&v[LOGIN_LINE], line);
+			facts_time(&v[LOGIN_TIME], who.ut_time, 0);
+			facts_string(&v[LOGIN_HOST], host);
+			r = facts_record(o, &kind_login, v);
 		}
 	}
-	(void) printf ("%% users=%d\n", count);
 
-	fclose(utmp);
-	return 0;
+	if (fd != utmpfd)
+		close(fd);
+	return r;
+}
+
+/* a login, as who() printed it, the labels before the first */
+void
+users_render(struct frec *r, int n)
+{
+	const struct facts_value *t;
+	struct utmp up;
+
+	if (n == 0)
+		output_labels();
+	memset(&up, 0, sizeof(up));
+	if (fs(r, LOGIN_USER) != NULL)
+		strncpy(up.ut_name, fs(r, LOGIN_USER), sizeof(up.ut_name));
+	if (fs(r, LOGIN_LINE) != NULL)
+		strncpy(up.ut_line, fs(r, LOGIN_LINE), sizeof(up.ut_line));
+	if (fs(r, LOGIN_HOST) != NULL)
+		strncpy(up.ut_host, fs(r, LOGIN_HOST), sizeof(up.ut_host));
+	if ((t = FV(r, LOGIN_TIME, FACT_TIME)) != NULL)
+		up.ut_time = t->v.t.sec;
+	output(&up);
+}
+
+/* after n logins */
+void
+users_end(int n)
+{
+	if (n == 0)
+		output_labels();
+	(void) printf ("%% users=%d\n", n);
 }
 
 void

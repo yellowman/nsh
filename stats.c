@@ -71,19 +71,52 @@
 #include <arpa/inet.h>
 #include <limits.h>
 #include <netdb.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include "externs.h"
+#include "facts.h"
+#include "showfacts.h"
 
 static int sflag = 1;
 
 #define YES     1
 typedef int bool;
 
-struct  mbstat mbstat;
-struct kinfo_pool mbpool, mclpool;
+/* a member of a statistics structure, or an array of them */
+struct statfield {
+	const char	*name;
+	size_t		 off;
+	size_t		 size;		/* of one */
+	size_t		 n;
+};
+
+#define SF(s, f)	{ #f, offsetof(struct s, f), \
+			    sizeof(((struct s *)0)->f), 1 }
+#define SFA(s, f)	{ #f, offsetof(struct s, f), \
+			    sizeof(((struct s *)0)->f[0]), \
+			    nitems(((struct s *)0)->f) }
+
+/* a group of statistics: where it comes from, and how it prints */
+struct statgroup {
+	const char		*word;
+	const char		*fn;		/* who says what failed */
+	int			 mib[6];
+	u_int			 miblen;
+	int			 none;		/* the errno of no such group */
+	size_t			 size;
+	const struct statfield	*f;
+	size_t			 nf;
+	int			(*get)(struct statgroup *, void *);
+	void			(*print)(void *);
+	struct facts_kind	 kind;
+	size_t			*off, *sz;	/* each field's member */
+};
+
+static int	stats_sysctl(struct statgroup *, void *);
 
 char	*inet6name(struct in6_addr *);
 void	inet6print(struct in6_addr *, int, char *, int);
@@ -91,18 +124,10 @@ void	inet6print(struct in6_addr *, int, char *, int);
 /*
  * Dump TCP statistics structure.
  */
-void
-tcp_stats(void)
+static void
+tcp_print(void *p)
 {
-	struct tcpstat tcpstat;
-	int mib[] = { CTL_NET, AF_INET, IPPROTO_TCP, TCPCTL_STATS };
-	size_t len = sizeof(tcpstat);
-
-	if (sysctl(mib, nitems(mib), &tcpstat, &len, NULL, 0) == -1) {
-		if (errno != ENOPROTOOPT)
-			printf("%% tcp_stats: sysctl: %s\n",strerror(errno));
-		return;
-	}
+	struct tcpstat tcpstat = *(struct tcpstat *)p;
 
 	printf ("%% tcp:\n");
 
@@ -221,19 +246,11 @@ tcp_stats(void)
 /*
  * Dump UDP statistics structure.
  */
-void
-udp_stats(void)
+static void
+udp_print(void *p)
 {
-	struct udpstat udpstat;
+	struct udpstat udpstat = *(struct udpstat *)p;
 	u_long delivered;
-	int mib[] = { CTL_NET, AF_INET, IPPROTO_UDP, UDPCTL_STATS };
-	size_t len = sizeof(udpstat);
-
-	if (sysctl(mib, nitems(mib), &udpstat, &len, NULL, 0) == -1) {
-		if (errno != ENOPROTOOPT)
-			printf("%% udp_stats: sysctl: %s\n",strerror(errno));
-		return;
-	}
 
 	printf("%% udp:\n");
 #define	p(f, m) if (udpstat.f || sflag <= 1) \
@@ -269,18 +286,10 @@ udp_stats(void)
 /*
  * Dump IP statistics structure.
  */
-void
-ip_stats(void)
+static void
+ip_print(void *p)
 {
-	struct ipstat ipstat;
-	int mib[] = { CTL_NET, AF_INET, IPPROTO_IP, IPCTL_STATS };
-	size_t len = sizeof(ipstat);
-
-	if (sysctl(mib, nitems(mib), &ipstat, &len, NULL, 0) == -1) {
-		if (errno != ENOPROTOOPT)
-			printf("%% ip_stats: sysctl: %s\n",strerror(errno));
-		return;
-	}
+	struct ipstat ipstat = *(struct ipstat *)p;
 
 	printf("%% ip:\n");
 
@@ -372,19 +381,11 @@ static	char *icmpnames[ICMP_MAXTYPE + 1] = {
 /*
  * Dump ICMP statistics.
  */
-void
-icmp_stats(void)
+static void
+icmp_print(void *p)
 {
-	struct icmpstat icmpstat;
+	struct icmpstat icmpstat = *(struct icmpstat *)p;
 	int i, first;
-	int mib[] = { CTL_NET, AF_INET, IPPROTO_ICMP, ICMPCTL_STATS };
-	size_t len = sizeof(icmpstat);
-
-	if (sysctl(mib, nitems(mib), &icmpstat, &len, NULL, 0) == -1) {
-		if (errno != ENOPROTOOPT)
-			printf("%% icmp_stats: sysctl: %s\n",strerror(errno));
-		return;
-	}
 
 	printf("%% icmp:\n");
 
@@ -429,18 +430,10 @@ icmp_stats(void)
 /*
  * Dump IGMP statistics structure.
  */
-void
-igmp_stats(void)
+static void
+igmp_print(void *p)
 {
-	struct igmpstat igmpstat;
-	int mib[] = { CTL_NET, AF_INET, IPPROTO_IGMP, IGMPCTL_STATS };
-	size_t len = sizeof(igmpstat);
-
-	if (sysctl(mib, nitems(mib), &igmpstat, &len, NULL, 0) == -1) {
-		if (errno != ENOPROTOOPT)
-			printf("%% igmp_stats: sysctl: %s\n",strerror(errno));
-		return;
-	}
+	struct igmpstat igmpstat = *(struct igmpstat *)p;
 
 	printf("%% igmp:\n");
 
@@ -464,18 +457,10 @@ igmp_stats(void)
 /*
  * Dump AH statistics structure.
  */
-void
-ah_stats(void)
+static void
+ah_print(void *p)
 {
-	struct ahstat ahstat;
-	int mib[] = { CTL_NET, AF_INET, IPPROTO_AH, AHCTL_STATS };
-	size_t len = sizeof(ahstat);
-
-	if (sysctl(mib, nitems(mib), &ahstat, &len, NULL, 0) == -1) {
-		if (errno != ENOPROTOOPT)
-			printf("%% ah_stats: sysctl: %s\n",strerror(errno));
-                return;
-        }
+	struct ahstat ahstat = *(struct ahstat *)p;
 
 	printf("%% ah:\n");
 
@@ -510,18 +495,10 @@ ah_stats(void)
 /*
  * Dump ESP statistics structure.
  */
-void
-esp_stats(void)
+static void
+esp_print(void *p)
 {
-	struct espstat espstat;
-	int mib[] = { CTL_NET, AF_INET, IPPROTO_ESP, ESPCTL_STATS };
-	size_t len = sizeof(espstat);
-
-	if (sysctl(mib, nitems(mib), &espstat, &len, NULL, 0) == -1) {
-		if (errno != ENOPROTOOPT)
-			printf("%% esp_stats: sysctl: %s\n",strerror(errno));
-		return;
-	}
+	struct espstat espstat = *(struct espstat *)p;
 
 	printf("%% esp:\n");
 
@@ -557,19 +534,11 @@ esp_stats(void)
 /*
  * Dump IP-in-IP statistics structure.
  */
-void
-ipip_stats(void)
+static void
+ipip_print(void *p)
 {
-	struct ipipstat ipipstat;
-	int mib[] = { CTL_NET, AF_INET, IPPROTO_IPIP, IPIPCTL_STATS };
-	size_t len = sizeof(ipipstat);
+	struct ipipstat ipipstat = *(struct ipipstat *)p;
 
-	if (sysctl(mib, nitems(mib), &ipipstat, &len, NULL, 0) == -1) {
-		if (errno != ENOPROTOOPT)
-			printf("%% ipip_stats: sysctl: %s\n",strerror(errno));
-		return;
-	}
-	
 	printf("%% ipip:\n");
 
 #define p(f, m) if (ipipstat.f || sflag <= 1) \
@@ -591,18 +560,10 @@ ipip_stats(void)
 /*
  * Dump CARP statistics structure.
  */
-void
-carp_stats(void)
+static void
+carp_print(void *p)
 {
-	struct carpstats carpstat;
-	int mib[] = { CTL_NET, AF_INET, IPPROTO_CARP, CARPCTL_STATS };
-	size_t len = sizeof(carpstat);
-
-	if (sysctl(mib, nitems(mib), &carpstat, &len, NULL, 0) == -1) {
-		if (errno != ENOPROTOOPT)
-			printf("%% carp_stats: sysctl: %s\n",strerror(errno));
-		return;
-	}
+	struct carpstats carpstat = *(struct carpstats *)p;
 
 	printf("%% carp:\n");
 #define p(f, m) if (carpstat.f || sflag <= 1) \
@@ -632,18 +593,10 @@ carp_stats(void)
 /*
  * Dump pfsync statistics structure.
  */
-void
-pfsync_stats(void)
+static void
+pfsync_print(void *p)
 {
-	struct pfsyncstats pfsyncstat;
-	int mib[] = { CTL_NET, AF_INET, IPPROTO_PFSYNC, PFSYNCCTL_STATS };
-	size_t len = sizeof(pfsyncstat);
-
-	if (sysctl(mib, nitems(mib), &pfsyncstat, &len, NULL, 0) == -1) {
-		if (errno != ENOPROTOOPT)
-			printf("%% pfsync_stats: sysctl: %s\n",strerror(errno));
-		return;
-	}
+	struct pfsyncstats pfsyncstat = *(struct pfsyncstats *)p;
 
 	printf("%% pfsync:\n");
 #define p(f, m) if (pfsyncstat.f || sflag <= 1) \
@@ -673,18 +626,10 @@ pfsync_stats(void)
 /*
  * Dump IPCOMP statistics structure.
  */
-void
-ipcomp_stats(void)
+static void
+ipcomp_print(void *p)
 {
-	struct ipcompstat ipcompstat;
-	int mib[] = { CTL_NET, AF_INET, IPPROTO_IPCOMP, IPCOMPCTL_STATS };
-	size_t len = sizeof(ipcompstat);
-
-	if (sysctl(mib, nitems(mib), &ipcompstat, &len, NULL, 0) == -1) {
-		if (errno != ENOPROTOOPT)
-			printf("%% ipcomp_stats: sysctl: %s\n",strerror(errno));
-		return;
-	}
+	struct ipcompstat ipcompstat = *(struct ipcompstat *)p;
 
 	printf("%% ipcomp:\n");
 
@@ -714,18 +659,11 @@ ipcomp_stats(void)
 /*
  * Print routing statistics
  */
-void
-rt_stats(void)
+static void
+rt_print(void *p)
 {
-	struct rtstat rtstat;
- 	int mib[] = { CTL_NET, PF_ROUTE, 0, 0, NET_RT_STATS, 0 };
- 	size_t size = sizeof (rtstat);
- 
-	if (sysctl(mib, nitems(mib), &rtstat, &size, NULL, 0) < 0) {
-		printf("%% rt_stats: sysctl: %s\n", strerror(errno));
-		return;
-	}
- 
+	struct rtstat rtstat = *(struct rtstat *)p;
+
 	printf("%% routing:\n");
 	printf("\t%u bad routing redirect%s\n",
 	    rtstat.rts_badredirect, plural(rtstat.rts_badredirect));   
@@ -765,35 +703,37 @@ static struct mbtypes {
 	{ 0, 0 }
 };
 
-/*
- * Print mbuf statistics.
- */
-void
-mbpr(void)
-{
-	int totmem, totused, totmbufs, totpct;
-	int i, mib[4], npools, flag = 0;
-	bool seen[256];
-	struct kinfo_pool pool;
-	struct mbtypes *mp;
-	size_t size;
-	int page_size = getpagesize();
-	int nmbtypes = nitems(mbstat.m_mtypes);
+/* what mbpr() prints */
+struct mbinfo {
+	struct mbstat		 mbstat;
+	struct kinfo_pool	 mbpool, mclpool;
+	int			 page_size;
+};
 
-	memset(&seen, 0, sizeof(seen));
+/*
+ * Get mbuf statistics.
+ */
+static int
+mb_get(struct statgroup *g, void *p)
+{
+	struct mbinfo *mb = p;
+	int i, mib[4], npools, flag = 0;
+	struct kinfo_pool pool;
+	size_t size;
+	int nmbtypes = nitems(mb->mbstat.m_mtypes);
 
 	 if (nmbtypes != MT_NTYPES) {
 		printf("%% mbpr: unexpected change to mbstat; check source\n");
-		return;
+		return (-1);
 	}
 
 	mib[0] = CTL_KERN;
 	mib[1] = KERN_MBSTAT;
-	size = sizeof(mbstat);
+	size = sizeof(mb->mbstat);
 
-	if (sysctl(mib, 2, &mbstat, &size, NULL, 0) < 0) {
+	if (sysctl(mib, 2, &mb->mbstat, &size, NULL, 0) < 0) {
 		printf("%% mbpr: sysctl mbstat: %s\n", strerror(errno));
-		return;
+		return (-1);
 	}
 
 	mib[0] = CTL_KERN;
@@ -803,7 +743,7 @@ mbpr(void)
 
 	if (sysctl(mib, 3, &npools, &size, NULL, 0) < 0) {
 		printf("%% mbpr: sysctl npools: %s\n", strerror(errno));
-		return;
+		return (-1);
 	}
 
 	for (i = 1; npools; i++) {
@@ -819,7 +759,7 @@ mbpr(void)
 				continue;
 			printf("%% mbpr: sysctl pool size: %s\n",
 			    strerror(errno));
-			return;
+			return (-1);
 		}
 		npools--;
 		mib[2] = KERN_POOL_NAME;
@@ -827,15 +767,15 @@ mbpr(void)
 		if (sysctl(mib, 4, &name, &size, NULL, 0) < 0) {
 			printf("%% mbpr: sysctl pool name: %s\n",
 			    strerror(errno));
-			return;
+			return (-1);
 		}
 
 		if (!strncmp(name, "mbpl", strlen("mbpl"))) {
-			bcopy(&pool, &mbpool, sizeof(struct kinfo_pool));
+			bcopy(&pool, &mb->mbpool, sizeof(struct kinfo_pool));
 			flag++;
 		} else {
 			if (!strncmp(name, "mclpl", strlen("mclpl"))) {
-				bcopy(&pool, &mclpool,
+				bcopy(&pool, &mb->mclpool,
 				    sizeof(struct kinfo_pool));
 				flag++;
 			}
@@ -844,6 +784,27 @@ mbpr(void)
 		if (flag == 2)
 			break;
 	}
+	mb->page_size = getpagesize();
+	return (0);
+}
+
+/*
+ * Print mbuf statistics.
+ */
+static void
+mb_print(void *p)
+{
+	struct mbinfo *mb = p;
+	struct mbstat mbstat = mb->mbstat;
+	struct kinfo_pool mbpool = mb->mbpool, mclpool = mb->mclpool;
+	int totmem, totused, totmbufs, totpct;
+	int i;
+	bool seen[256];
+	struct mbtypes *mp;
+	int page_size = mb->page_size;
+	int nmbtypes = nitems(mbstat.m_mtypes);
+
+	memset(&seen, 0, sizeof(seen));
 
 	totmbufs = 0;
 	for (mp = mbtypes; mp->mt_name; mp++)
@@ -878,4 +839,370 @@ mbpr(void)
 	printf("\t%lu requests for memory denied\n", mbstat.m_drops);
 	printf("\t%lu requests for memory delayed\n", mbstat.m_wait);
 	printf("\t%lu calls to protocol drain routines\n", mbstat.m_drain);
+}
+
+/*
+ * Each group of statistics is a kind of record, its fields the members
+ * of the kernel's structure, by their names: an array's elements are
+ * name[i]. nsh puts what the record says back where it came from and
+ * prints the structure as it always has.
+ */
+static const struct statfield ip_fields[] = {
+	SF(ipstat, ips_total), SF(ipstat, ips_badsum),
+	SF(ipstat, ips_toosmall), SF(ipstat, ips_tooshort),
+	SF(ipstat, ips_badhlen), SF(ipstat, ips_badlen),
+	SF(ipstat, ips_badoptions), SF(ipstat, ips_badvers),
+	SF(ipstat, ips_fragments), SF(ipstat, ips_fragdropped),
+	SF(ipstat, ips_badfrags), SF(ipstat, ips_fragtimeout),
+	SF(ipstat, ips_reassembled), SF(ipstat, ips_delivered),
+	SF(ipstat, ips_noproto), SF(ipstat, ips_forward),
+	SF(ipstat, ips_cantforward), SF(ipstat, ips_redirectsent),
+	SF(ipstat, ips_localout), SF(ipstat, ips_rawout),
+	SF(ipstat, ips_odropped), SF(ipstat, ips_noroute),
+	SF(ipstat, ips_fragmented), SF(ipstat, ips_ofragments),
+	SF(ipstat, ips_cantfrag), SF(ipstat, ips_rcvmemdrop),
+	SF(ipstat, ips_toolong), SF(ipstat, ips_nogif),
+	SF(ipstat, ips_badaddr), SF(ipstat, ips_inswcsum),
+	SF(ipstat, ips_outswcsum), SF(ipstat, ips_notmember),
+};
+static const struct statfield ah_fields[] = {
+	SF(ahstat, ahs_input), SF(ahstat, ahs_output), SF(ahstat, ahs_nopf),
+	SF(ahstat, ahs_hdrops), SF(ahstat, ahs_pdrops), SF(ahstat, ahs_notdb),
+	SF(ahstat, ahs_badkcr), SF(ahstat, ahs_badauth),
+	SF(ahstat, ahs_noxform), SF(ahstat, ahs_qfull), SF(ahstat, ahs_wrap),
+	SF(ahstat, ahs_replay), SF(ahstat, ahs_badauthl),
+	SF(ahstat, ahs_invalid), SF(ahstat, ahs_toobig),
+	SF(ahstat, ahs_crypto), SF(ahstat, ahs_ibytes),
+	SF(ahstat, ahs_obytes),
+};
+static const struct statfield esp_fields[] = {
+	SF(espstat, esps_input), SF(espstat, esps_output),
+	SF(espstat, esps_nopf), SF(espstat, esps_hdrops),
+	SF(espstat, esps_pdrops), SF(espstat, esps_notdb),
+	SF(espstat, esps_badkcr), SF(espstat, esps_badenc),
+	SF(espstat, esps_badauth), SF(espstat, esps_noxform),
+	SF(espstat, esps_qfull), SF(espstat, esps_wrap),
+	SF(espstat, esps_replay), SF(espstat, esps_badilen),
+	SF(espstat, esps_invalid), SF(espstat, esps_toobig),
+	SF(espstat, esps_crypto), SF(espstat, esps_udpencin),
+	SF(espstat, esps_udpencout), SF(espstat, esps_udpinval),
+	SF(espstat, esps_ibytes), SF(espstat, esps_obytes),
+};
+static const struct statfield tcp_fields[] = {
+	SF(tcpstat, tcps_sndtotal), SF(tcpstat, tcps_sndpack),
+	SF(tcpstat, tcps_sndbyte), SF(tcpstat, tcps_sndrexmitpack),
+	SF(tcpstat, tcps_sndrexmitbyte), SF(tcpstat, tcps_sndrexmitfast),
+	SF(tcpstat, tcps_sndacks), SF(tcpstat, tcps_delack),
+	SF(tcpstat, tcps_sndurg), SF(tcpstat, tcps_sndprobe),
+	SF(tcpstat, tcps_sndwinup), SF(tcpstat, tcps_sndctrl),
+	SF(tcpstat, tcps_outswcsum), SF(tcpstat, tcps_rcvtotal),
+	SF(tcpstat, tcps_rcvackpack), SF(tcpstat, tcps_rcvackbyte),
+	SF(tcpstat, tcps_rcvdupack), SF(tcpstat, tcps_rcvacktoomuch),
+	SF(tcpstat, tcps_rcvacktooold), SF(tcpstat, tcps_rcvpack),
+	SF(tcpstat, tcps_rcvbyte), SF(tcpstat, tcps_rcvduppack),
+	SF(tcpstat, tcps_rcvdupbyte), SF(tcpstat, tcps_pawsdrop),
+	SF(tcpstat, tcps_rcvpartduppack), SF(tcpstat, tcps_rcvpartdupbyte),
+	SF(tcpstat, tcps_rcvoopack), SF(tcpstat, tcps_rcvoobyte),
+	SF(tcpstat, tcps_rcvpackafterwin), SF(tcpstat, tcps_rcvbyteafterwin),
+	SF(tcpstat, tcps_rcvwinprobe), SF(tcpstat, tcps_rcvwinupd),
+	SF(tcpstat, tcps_rcvafterclose), SF(tcpstat, tcps_rcvbadsum),
+	SF(tcpstat, tcps_rcvbadoff), SF(tcpstat, tcps_rcvshort),
+	SF(tcpstat, tcps_rcvnosec), SF(tcpstat, tcps_rcvmemdrop),
+	SF(tcpstat, tcps_inswcsum), SF(tcpstat, tcps_rcvbadsig),
+	SF(tcpstat, tcps_rcvgoodsig), SF(tcpstat, tcps_connattempt),
+	SF(tcpstat, tcps_accepts), SF(tcpstat, tcps_connects),
+	SF(tcpstat, tcps_closed), SF(tcpstat, tcps_drops),
+	SF(tcpstat, tcps_conndrained), SF(tcpstat, tcps_conndrops),
+	SF(tcpstat, tcps_rttupdated), SF(tcpstat, tcps_segstimed),
+	SF(tcpstat, tcps_rexmttimeo), SF(tcpstat, tcps_timeoutdrop),
+	SF(tcpstat, tcps_persisttimeo), SF(tcpstat, tcps_keeptimeo),
+	SF(tcpstat, tcps_keepprobe), SF(tcpstat, tcps_keepdrops),
+	SF(tcpstat, tcps_predack), SF(tcpstat, tcps_preddat),
+	SF(tcpstat, tcps_pcbhashmiss), SF(tcpstat, tcps_ecn_accepts),
+	SF(tcpstat, tcps_ecn_rcvece), SF(tcpstat, tcps_ecn_rcvcwr),
+	SF(tcpstat, tcps_ecn_rcvce), SF(tcpstat, tcps_ecn_sndect),
+	SF(tcpstat, tcps_ecn_sndece), SF(tcpstat, tcps_ecn_sndcwr),
+	SF(tcpstat, tcps_cwr_frecovery), SF(tcpstat, tcps_cwr_timeout),
+	SF(tcpstat, tcps_cwr_ecn), SF(tcpstat, tcps_badsyn),
+	SF(tcpstat, tcps_sc_added), SF(tcpstat, tcps_sc_collisions),
+	SF(tcpstat, tcps_sc_completed), SF(tcpstat, tcps_sc_aborted),
+	SF(tcpstat, tcps_sc_timed_out), SF(tcpstat, tcps_sc_overflowed),
+	SF(tcpstat, tcps_sc_bucketoverflow), SF(tcpstat, tcps_sc_reset),
+	SF(tcpstat, tcps_sc_unreach), SF(tcpstat, tcps_sc_retransmitted),
+	SF(tcpstat, tcps_sc_dupesyn), SF(tcpstat, tcps_sc_dropped),
+	SF(tcpstat, tcps_sack_recovery_episode),
+	SF(tcpstat, tcps_sack_rexmits), SF(tcpstat, tcps_sack_rexmit_bytes),
+	SF(tcpstat, tcps_sack_rcv_opts), SF(tcpstat, tcps_sack_snd_opts),
+};
+static const struct statfield udp_fields[] = {
+	SF(udpstat, udps_ipackets), SF(udpstat, udps_hdrops),
+	SF(udpstat, udps_badlen), SF(udpstat, udps_badsum),
+	SF(udpstat, udps_nosum), SF(udpstat, udps_inswcsum),
+	SF(udpstat, udps_outswcsum), SF(udpstat, udps_noport),
+	SF(udpstat, udps_noportbcast), SF(udpstat, udps_nosec),
+	SF(udpstat, udps_fullsock), SF(udpstat, udps_opackets),
+	SF(udpstat, udps_pcbhashmiss),
+};
+static const struct statfield icmp_fields[] = {
+	SF(icmpstat, icps_error), SF(icmpstat, icps_oldicmp),
+	SFA(icmpstat, icps_outhist), SF(icmpstat, icps_badcode),
+	SF(icmpstat, icps_tooshort), SF(icmpstat, icps_checksum),
+	SF(icmpstat, icps_badlen), SFA(icmpstat, icps_inhist),
+	SF(icmpstat, icps_reflect),
+};
+static const struct statfield igmp_fields[] = {
+	SF(igmpstat, igps_rcv_total), SF(igmpstat, igps_rcv_tooshort),
+	SF(igmpstat, igps_rcv_badsum), SF(igmpstat, igps_rcv_queries),
+	SF(igmpstat, igps_rcv_badqueries), SF(igmpstat, igps_rcv_reports),
+	SF(igmpstat, igps_rcv_badreports), SF(igmpstat, igps_rcv_ourreports),
+	SF(igmpstat, igps_snd_reports),
+};
+static const struct statfield ipip_fields[] = {
+	SF(ipipstat, ipips_ipackets), SF(ipipstat, ipips_opackets),
+	SF(ipipstat, ipips_hdrops), SF(ipipstat, ipips_pdrops),
+	SF(ipipstat, ipips_spoof), SF(ipipstat, ipips_qfull),
+	SF(ipipstat, ipips_ibytes), SF(ipipstat, ipips_obytes),
+	SF(ipipstat, ipips_family), SF(ipipstat, ipips_unspec),
+};
+static const struct statfield carp_fields[] = {
+	SF(carpstats, carps_ipackets), SF(carpstats, carps_ipackets6),
+	SF(carpstats, carps_badif), SF(carpstats, carps_badttl),
+	SF(carpstats, carps_hdrops), SF(carpstats, carps_badsum),
+	SF(carpstats, carps_badver), SF(carpstats, carps_badlen),
+	SF(carpstats, carps_badauth), SF(carpstats, carps_badvhid),
+	SF(carpstats, carps_badaddrs), SF(carpstats, carps_opackets),
+	SF(carpstats, carps_opackets6), SF(carpstats, carps_onomem),
+	SF(carpstats, carps_preempt),
+};
+static const struct statfield pfsync_fields[] = {
+	SF(pfsyncstats, pfsyncs_ipackets), SF(pfsyncstats, pfsyncs_ipackets6),
+	SF(pfsyncstats, pfsyncs_badif), SF(pfsyncstats, pfsyncs_badttl),
+	SF(pfsyncstats, pfsyncs_hdrops), SF(pfsyncstats, pfsyncs_badver),
+	SF(pfsyncstats, pfsyncs_badauth), SF(pfsyncstats, pfsyncs_badact),
+	SF(pfsyncstats, pfsyncs_badlen), SF(pfsyncstats, pfsyncs_badval),
+	SF(pfsyncstats, pfsyncs_stale), SF(pfsyncstats, pfsyncs_badstate),
+	SF(pfsyncstats, pfsyncs_opackets), SF(pfsyncstats, pfsyncs_opackets6),
+	SF(pfsyncstats, pfsyncs_onomem), SF(pfsyncstats, pfsyncs_oerrors),
+};
+static const struct statfield ipcomp_fields[] = {
+	SF(ipcompstat, ipcomps_input), SF(ipcompstat, ipcomps_output),
+	SF(ipcompstat, ipcomps_nopf), SF(ipcompstat, ipcomps_hdrops),
+	SF(ipcompstat, ipcomps_pdrops), SF(ipcompstat, ipcomps_notdb),
+	SF(ipcompstat, ipcomps_badkcr), SF(ipcompstat, ipcomps_noxform),
+	SF(ipcompstat, ipcomps_qfull), SF(ipcompstat, ipcomps_wrap),
+	SF(ipcompstat, ipcomps_invalid), SF(ipcompstat, ipcomps_toobig),
+	SF(ipcompstat, ipcomps_crypto), SF(ipcompstat, ipcomps_minlen),
+	SF(ipcompstat, ipcomps_ibytes), SF(ipcompstat, ipcomps_obytes),
+};
+static const struct statfield rt_fields[] = {
+	SF(rtstat, rts_badredirect), SF(rtstat, rts_dynamic),
+	SF(rtstat, rts_newgateway), SF(rtstat, rts_unreach),
+	SF(rtstat, rts_wildcard),
+};
+
+static const struct statfield mb_fields[] = {
+	SF(mbinfo, mbstat.m_drops), SF(mbinfo, mbstat.m_wait),
+	SF(mbinfo, mbstat.m_drain), SFA(mbinfo, mbstat.m_mtypes),
+	SF(mbinfo, mbpool.pr_size), SF(mbinfo, mbpool.pr_npages),
+	SF(mbinfo, mbpool.pr_nout), SF(mbinfo, mclpool.pr_size),
+	SF(mbinfo, mclpool.pr_npages), SF(mbinfo, mclpool.pr_nout),
+	SF(mbinfo, mclpool.pr_hiwat), SF(mbinfo, mclpool.pr_itemsperpage),
+	SF(mbinfo, mclpool.pr_maxpages), SF(mbinfo, page_size),
+};
+
+#define G(w, s, f, n, ...) \
+	{ w, #f "_stats", { __VA_ARGS__ }, n, ENOPROTOOPT, sizeof(struct s), \
+	    f##_fields, nitems(f##_fields), stats_sysctl, f##_print }
+
+static struct statgroup groups[] = {
+	G("ip", ipstat, ip, 4, CTL_NET, AF_INET, IPPROTO_IP, IPCTL_STATS),
+	G("ah", ahstat, ah, 4, CTL_NET, AF_INET, IPPROTO_AH, AHCTL_STATS),
+	G("esp", espstat, esp, 4, CTL_NET, AF_INET, IPPROTO_ESP, ESPCTL_STATS),
+	G("tcp", tcpstat, tcp, 4, CTL_NET, AF_INET, IPPROTO_TCP, TCPCTL_STATS),
+	G("udp", udpstat, udp, 4, CTL_NET, AF_INET, IPPROTO_UDP, UDPCTL_STATS),
+	G("icmp", icmpstat, icmp, 4,
+	    CTL_NET, AF_INET, IPPROTO_ICMP, ICMPCTL_STATS),
+	G("igmp", igmpstat, igmp, 4,
+	    CTL_NET, AF_INET, IPPROTO_IGMP, IGMPCTL_STATS),
+	G("ipip", ipipstat, ipip, 4,
+	    CTL_NET, AF_INET, IPPROTO_IPIP, IPIPCTL_STATS),
+	G("carp", carpstats, carp, 4,
+	    CTL_NET, AF_INET, IPPROTO_CARP, CARPCTL_STATS),
+	G("pfsync", pfsyncstats, pfsync, 4,
+	    CTL_NET, AF_INET, IPPROTO_PFSYNC, PFSYNCCTL_STATS),
+	G("ipcomp", ipcompstat, ipcomp, 4,
+	    CTL_NET, AF_INET, IPPROTO_IPCOMP, IPCOMPCTL_STATS),
+	/* routing always says why it failed */
+	{ "route", "rt_stats", { CTL_NET, PF_ROUTE, 0, 0, NET_RT_STATS, 0 },
+	    6, 0, sizeof(struct rtstat), rt_fields, nitems(rt_fields),
+	    stats_sysctl, rt_print },
+	{ "mbuf", "mbpr", { 0 }, 0, 0, sizeof(struct mbinfo), mb_fields,
+	    nitems(mb_fields), mb_get, mb_print },
+};
+
+/* g's structure, from the kernel: 0, 1 if it has none, -1 */
+static int
+stats_sysctl(struct statgroup *g, void *p)
+{
+	size_t	 len = g->size;
+
+	if (sysctl(g->mib, g->miblen, p, &len, NULL, 0) == -1) {
+		if (errno == g->none)
+			return (1);
+		printf("%% %s: sysctl: %s\n", g->fn, strerror(errno));
+		return (-1);
+	}
+	return (0);
+}
+
+/* each group's kind, its fields one per member, or per element */
+void
+stats_facts_init(void)
+{
+	struct statgroup	*g;
+	struct facts_field	*ff;
+	size_t			 i, j, n, total;
+	char			*s;
+
+	for (g = groups; g < groups + nitems(groups); g++) {
+		for (total = 0, i = 0; i < g->nf; i++)
+			total += g->f[i].n;
+		ff = calloc(total, sizeof(*ff));
+		g->off = calloc(total, sizeof(*g->off));
+		g->sz = calloc(total, sizeof(*g->sz));
+		if (ff == NULL || g->off == NULL || g->sz == NULL)
+			continue;
+		for (n = 0, i = 0; i < g->nf; i++)
+			for (j = 0; j < g->f[i].n; j++) {
+				if (g->f[i].n == 1)
+					ff[n].name = g->f[i].name;
+				else if (asprintf(&s, "%s[%zu]", g->f[i].name,
+				    j) == -1)
+					continue;
+				else
+					ff[n].name = s;
+				ff[n].type = FACT_U64;
+				g->off[n] = g->f[i].off + j * g->f[i].size;
+				g->sz[n++] = g->f[i].size;
+			}
+		if (n != total || asprintf(&s, "%s-statistics", g->word) == -1)
+			continue;
+		g->kind.name = s;
+		g->kind.fields = ff;
+		g->kind.nfields = n;
+	}
+}
+
+struct statgroup *
+stats_group(const char *word)
+{
+	struct statgroup	*g;
+
+	for (g = groups; g < groups + nitems(groups); g++)
+		if (g->kind.name != NULL && strcmp(g->word, word) == 0)
+			return (g);
+	return (NULL);
+}
+
+const struct facts_kind *
+stats_kind(const char *name)
+{
+	struct statgroup	*g;
+
+	for (g = groups; g < groups + nitems(groups); g++)
+		if (g->kind.name != NULL && strcmp(g->kind.name, name) == 0)
+			return (&g->kind);
+	return (NULL);
+}
+
+static uint64_t
+member_get(const char *p, size_t size)
+{
+	uint8_t		 u8;
+	uint16_t	 u16;
+	uint32_t	 u32;
+	uint64_t	 u64 = 0;
+
+	switch (size) {
+	case 1:
+		memcpy(&u8, p, size);
+		return (u8);
+	case 2:
+		memcpy(&u16, p, size);
+		return (u16);
+	case 4:
+		memcpy(&u32, p, size);
+		return (u32);
+	case 8:
+		memcpy(&u64, p, size);
+	}
+	return (u64);
+}
+
+static void
+member_put(char *p, size_t size, uint64_t u64)
+{
+	uint8_t		 u8 = u64;
+	uint16_t	 u16 = u64;
+	uint32_t	 u32 = u64;
+
+	switch (size) {
+	case 1:
+		memcpy(p, &u8, size);
+		break;
+	case 2:
+		memcpy(p, &u16, size);
+		break;
+	case 4:
+		memcpy(p, &u32, size);
+		break;
+	case 8:
+		memcpy(p, &u64, size);
+	}
+}
+
+/* g, as a record; a group the kernel does not have makes none */
+int
+stats_facts(struct facts_out *o, struct statgroup *g)
+{
+	struct facts_value	*v;
+	char			*p;
+	size_t			 i;
+	int			 r;
+
+	p = calloc(1, g->size);
+	v = calloc(g->kind.nfields, sizeof(*v));
+	if (p == NULL || v == NULL) {
+		printf("%% stats_facts: %s\n", strerror(errno));
+		free(p);
+		free(v);
+		return (-1);
+	}
+	if ((r = g->get(g, p)) == 0) {
+		for (i = 0; i < g->kind.nfields; i++)
+			facts_u64(&v[i], member_get(p + g->off[i], g->sz[i]));
+		r = facts_record(o, &g->kind, v);
+	}
+	free(v);
+	free(p);
+	return (r == -1 ? -1 : 0);
+}
+
+/* a group's record, printed as nsh printed its structure */
+void
+stats_render(struct frec *r)
+{
+	struct statgroup	*g;
+	char			*p;
+	size_t			 i;
+
+	for (g = groups; g < groups + nitems(groups); g++)
+		if (r->k == &g->kind)
+			break;
+	if (g == groups + nitems(groups) || (p = calloc(1, g->size)) == NULL)
+		return;
+	for (i = 0; i < g->kind.nfields; i++)
+		member_put(p + g->off[i], g->sz[i], fu(r, i, 0));
+	g->print(p);
+	free(p);
 }

@@ -64,7 +64,7 @@
 
 #define FACTS_UNIT	16000	/* a unit, at most: one imsg */
 #define FACTS_KINDS	32	/* templates in one answer, at most */
-#define FACTS_FIELDS	64	/* fields of a kind, at most */
+#define FACTS_FIELDS	256	/* fields of a kind, at most */
 #define FACTS_ADDRLEN	32	/* bytes of an address, at most */
 
 struct facts_name {

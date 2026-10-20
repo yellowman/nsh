@@ -104,25 +104,24 @@
 #include <err.h>
 #include "externs.h"
 #include "settings.h"
+#include "facts.h"
+#include "showfacts.h"
 
 /* packing rule for routing socket */
 #define ROUNDUP(a) \
 	((a) > 0 ? (1 + (((a) - 1) | (sizeof(long) - 1))) : sizeof(long))
 #define ADVANCE(x, n) (x += ROUNDUP((n)->sa_len))
 
-static int tflag;
 static int rtsock = -1;
 
 char host_buf[NI_MAXHOST];		/* getnameinfo() */
-char ifix_buf[IFNAMSIZ];		/* if_indextoname() */
 
 static int getsocket(void);
 int parse_host(const char *, struct sockaddr_in6 *);
 int ndpset(int, char **, ...);
-void ndpget(const char *);
 int ndpdelete(const char *);
-void ndpdump(struct sockaddr_in6 *, int);
-static struct in6_nbrinfo *getnbrinfo(struct in6_addr *, int, int);
+void ndpflush(void);
+static struct in6_nbrinfo *getnbrinfo(struct in6_addr *, int);
 int ndp_ether_aton(const char *, u_char *);
 int rtmsg_ndp(int);
 int rtget_ndp(struct sockaddr_in6 **, struct sockaddr_dl **);
@@ -182,7 +181,7 @@ static struct	sockaddr_in6 blank_sin = {sizeof(blank_sin), AF_INET6 }, sin_m;
 static struct	sockaddr_dl blank_sdl = {sizeof(blank_sdl), AF_LINK }, sdl_m;
 static struct	sockaddr_dl ifp_m = { sizeof(ifp_m), AF_LINK };
 static time_t	expire_time;
-static int	flags, found_entry;
+static int	flags;
 
 /*
  * Set an individual neighbor cache entry
@@ -328,24 +327,6 @@ ndp_cand(const char *host, struct sockaddr_dl *sdl)
 }
 
 /*
- * Display an individual neighbor cache entry
- */
-void
-ndpget(const char *host)
-{
-	struct sockaddr_in6 *sin = &sin_m;
-
-	sin_m = blank_sin;
-	if (parse_host(host, sin))
-		return;
-
-	found_entry = 0;
-	ndpdump(sin, 0);
-	if (found_entry == 0)
-		printf("%s -- no entry\n", host);
-}
-
-/*
  * Delete a neighbor cache entry
  */
 int
@@ -398,10 +379,10 @@ delete:
 #define W_IF	7
 
 /*
- * Dump the entire neighbor cache
+ * Flush the neighbor cache of what the kernel cloned
  */
 void
-ndpdump(struct sockaddr_in6 *addr, int cflag)
+ndpflush(void)
 {
 	int mib[7];
 	size_t needed;
@@ -409,18 +390,6 @@ ndpdump(struct sockaddr_in6 *addr, int cflag)
 	struct rt_msghdr *rtm;
 	struct sockaddr_in6 *sin = NULL;
 	struct sockaddr_dl *sdl;
-	struct in6_nbrinfo *nbi = NULL;
-	struct timeval now;
-	int addrwidth;
-	int llwidth;
-	int ifwidth;
-	char *ifname;
-
-	/* Print header */
-	if (!tflag && !cflag)
-		printf("%-*.*s %-*.*s %*.*s %-9.9s %1s %5s\n",
-		    W_ADDR, W_ADDR, "Neighbor", W_LL, W_LL, "Linklayer Address",
-		    W_IF, W_IF, "Netif", "Expire", "S", "Flags");
 
 	lim = NULL;
 	mib[0] = CTL_NET;
@@ -458,8 +427,6 @@ ndpdump(struct sockaddr_in6 *addr, int cflag)
 	}
 
 	for (next = buf; next && lim && next < lim; next += rtm->rtm_msglen) {
-		int isrouter = 0, prbs = 0;
-
 		rtm = (struct rt_msghdr *)next;
 		if (rtm->rtm_version != RTM_VERSION)
 			continue;
@@ -498,113 +465,234 @@ ndpdump(struct sockaddr_in6 *addr, int cflag)
 		if (!(rtm->rtm_flags & RTF_HOST))
 			continue;
 
+		if (IN6_IS_ADDR_MULTICAST(&sin->sin6_addr))
+			continue;
+		getnameinfo((struct sockaddr *)sin, sin->sin6_len, host_buf,
+		    sizeof(host_buf), NULL, 0, NI_NUMERICHOST);
+		if (rtm->rtm_flags & RTF_CLONED)
+			ndpdelete(host_buf);
+	}
+
+	free(buf);
+}
+
+/* a neighbor, as facts; with no state, the kernel would not say */
+static struct facts_field ndp_fields[] = {
+	[NDP_ADDRESS] =	{ "address",		FACT_ADDRESS },
+	[NDP_LLADDR] =	{ "link-address",	FACT_ADDRESS },
+	[NDP_IF] =	{ "interface",		FACT_STRING },
+	[NDP_FLAGS] =	{ "flags",		FACT_U64 },
+	[NDP_EXPIRE] =	{ "expire",		FACT_TIME },
+	[NDP_STATE] =	{ "state",		FACT_I64 },
+	[NDP_ROUTER] =	{ "router",		FACT_U64 },
+	[NDP_PROBES] =	{ "probes",		FACT_U64 },
+	[NDP_ERRNO] =	{ "info-errno",		FACT_U64 },
+};
+struct facts_kind kind_ndp = { "ndp-entry", ndp_fields, NDP_NFIELDS };
+
+static const struct facts_name ndp_states[] = {
+	{ (uint64_t)ND6_LLINFO_NOSTATE,	"nostate" },
+	{ ND6_LLINFO_INCOMPLETE,	"incomplete" },
+	{ ND6_LLINFO_REACHABLE,		"reachable" },
+	{ ND6_LLINFO_STALE,		"stale" },
+	{ ND6_LLINFO_DELAY,		"delay" },
+	{ ND6_LLINFO_PROBE,		"probe" },
+};
+
+void
+ndp_facts_init(void)
+{
+	facts_bitnames(&ndp_fields[NDP_FLAGS], routeflags);
+	ndp_fields[NDP_STATE].naming = FACT_VALUES;
+	ndp_fields[NDP_STATE].names = ndp_states;
+	ndp_fields[NDP_STATE].nnames = nitems(ndp_states);
+}
+
+/*
+ * The neighbors of rt, from *cur, or only addr: budget at most. 1 if
+ * there are more, 0 if not, -1 if a record failed.
+ */
+int
+ndp_facts(struct facts_out *o, struct rtdump *rt, char **cur,
+    struct sockaddr_in6 *addr, int budget)
+{
+	struct facts_value	 v[NDP_NFIELDS];
+	struct rt_msghdr	*rtm;
+	struct sockaddr_in6	*sin;
+	struct sockaddr_dl	*sdl;
+	struct in6_nbrinfo	*nbi;
+	char			 ifbuf[IF_NAMESIZE];
+	int			 n = 0;
+
+	for (; *cur < rt->lim; *cur += rtm->rtm_msglen) {
+		rtm = (struct rt_msghdr *)*cur;
+		if (n == budget)
+			return (1);
+		if (rtm->rtm_version != RTM_VERSION)
+			continue;
+		sin = (struct sockaddr_in6 *)(*cur + rtm->rtm_hdrlen);
+		in6_fillscopeid(sin);
+		sdl = (struct sockaddr_dl *)((char *)sin +
+		    ROUNDUP(sin->sin6_len));
+
+		/* as ndpflush() skips them */
+		if (sdl->sdl_family != AF_LINK ||
+		    !(rtm->rtm_flags & RTF_HOST))
+			continue;
+
 		if (addr) {
 			if (!IN6_ARE_ADDR_EQUAL(&addr->sin6_addr,
 			    &sin->sin6_addr) || addr->sin6_scope_id !=
 			    sin->sin6_scope_id)
 				continue;
-			found_entry = 1;
 		} else if (IN6_IS_ADDR_MULTICAST(&sin->sin6_addr))
 			continue;
-		getnameinfo((struct sockaddr *)sin, sin->sin6_len, host_buf,
-		    sizeof(host_buf), NULL, 0, NI_NUMERICHOST);
-		if (cflag) {
-			if (rtm->rtm_flags & RTF_CLONED)
-				ndpdelete(host_buf);
-			continue;
-		}
-		gettimeofday(&now, 0);
-		if (tflag) {
-			char buf[sizeof("00:00:00")];
-			struct tm *tm;
-
-			tm = localtime(&now.tv_sec);
-			if (tm != NULL) {
-				strftime(buf, sizeof(buf), "%H:%M:%S", tm);
-				printf("%s.%06ld ", buf, now.tv_usec);
-			}
-		}
-
-		addrwidth = strlen(host_buf);
-		if (addrwidth < W_ADDR)
-			addrwidth = W_ADDR;
-		llwidth = strlen(ether_str(sdl));
-		if (W_ADDR + W_LL - addrwidth > llwidth)
-			llwidth = W_ADDR + W_LL - addrwidth;
-		ifname = if_indextoname(sdl->sdl_index, ifix_buf);
-		if (!ifname)
-			ifname = "?";
-		ifwidth = strlen(ifname);
-		if (W_ADDR + W_LL + W_IF - addrwidth - llwidth > ifwidth)
-			ifwidth = W_ADDR + W_LL + W_IF - addrwidth - llwidth;
-
-		printf("%-*.*s %-*.*s %*.*s", addrwidth, addrwidth, host_buf,
-		    llwidth, llwidth, ether_str(sdl), ifwidth, ifwidth, ifname);
-
-		/* Print neighbor discovery specific information */
-		nbi = getnbrinfo(&sin->sin6_addr, sdl->sdl_index, 1);
-		if (nbi) {
-			if (nbi->expire > now.tv_sec) {
-				printf(" %-9.9s",
-				    sec2str(nbi->expire - now.tv_sec));
-			} else if (nbi->expire == 0)
-				printf(" %-9.9s", "permanent");
-			else
-				printf(" %-9.9s", "expired");
-
-			switch (nbi->state) {
-			case ND6_LLINFO_NOSTATE:
-				 printf(" N");
-				 break;
-			case ND6_LLINFO_INCOMPLETE:
-				 printf(" I");
-				 break;
-			case ND6_LLINFO_REACHABLE:
-				 printf(" R");
-				 break;
-			case ND6_LLINFO_STALE:
-				 printf(" S");
-				 break;
-			case ND6_LLINFO_DELAY:
-				 printf(" D");
-				 break;
-			case ND6_LLINFO_PROBE:
-				 printf(" P");
-				 break;
-			default:
-				 printf(" ?");
-				 break;
-			}
-
-			isrouter = nbi->isrouter;
-			prbs = nbi->asked;
-		} else {
-			printf("  ");
-		}
-
-		printf(" %s%s%s",
-		    (rtm->rtm_flags & RTF_LOCAL) ? "l" : "",
-		    isrouter ? "R" : "",
-		    (rtm->rtm_flags & RTF_ANNOUNCE) ? "p" : "");
-
-		if (prbs)
-			printf(" %d", prbs);
-
-		printf("\n");
+		memset(v, 0, sizeof(v));
+		facts_sockaddr(&v[NDP_ADDRESS], (struct sockaddr *)sin);
+		facts_sockaddr(&v[NDP_LLADDR], (struct sockaddr *)sdl);
+		if (if_indextoname(sdl->sdl_index, ifbuf) != NULL)
+			facts_string(&v[NDP_IF], ifbuf);
+		facts_u64(&v[NDP_FLAGS], rtm->rtm_flags);
+		if ((nbi = getnbrinfo(&sin->sin6_addr, sdl->sdl_index))) {
+			facts_time(&v[NDP_EXPIRE], nbi->expire, 0);
+			facts_i64(&v[NDP_STATE], nbi->state);
+			facts_u64(&v[NDP_ROUTER], nbi->isrouter);
+			facts_u64(&v[NDP_PROBES], nbi->asked);
+		} else
+			facts_u64(&v[NDP_ERRNO], errno);
+		if (facts_record(o, &kind_ndp, v) == -1)
+			return (-1);
+		n++;
 	}
-
-	if (!nbi && sin)
-		printf("\n%% %s: failed to get neighbor information\n",
-		    routename6(sin));
-
-	free(buf);
+	return (0);
 }
 
+/* the cache's headers */
+void
+ndp_header(void)
+{
+	printf("%-*.*s %-*.*s %*.*s %-9.9s %1s %5s\n",
+	    W_ADDR, W_ADDR, "Neighbor", W_LL, W_LL, "Linklayer Address",
+	    W_IF, W_IF, "Netif", "Expire", "S", "Flags");
+}
+
+/*
+ * A neighbor, as ndpdump() printed it; failed is its address if the
+ * kernel would say no more of it, else empty
+ */
+void
+ndp_render(struct frec *r, char *failed, size_t len)
+{
+	const struct facts_value *e, *st;
+	struct sockaddr_storage sa, ll;
+	struct sockaddr_in6 *sin = (struct sockaddr_in6 *)&sa;
+	struct timeval now;
+	const char *ifname;
+	char host[NI_MAXHOST];
+	int addrwidth, llwidth, ifwidth, isrouter = 0, prbs = 0;
+	int64_t expire;
+	uint64_t flags;
+
+	fsockaddr(r, NDP_ADDRESS, &sa);
+	fsockaddr(r, NDP_LLADDR, &ll);
+	if (getnameinfo((struct sockaddr *)sin, sin->sin6_len, host,
+	    sizeof(host), NULL, 0, NI_NUMERICHOST) != 0)
+		host[0] = '\0';
+	gettimeofday(&now, 0);
+
+	addrwidth = strlen(host);
+	if (addrwidth < W_ADDR)
+		addrwidth = W_ADDR;
+	llwidth = strlen(ether_str((struct sockaddr_dl *)&ll));
+	if (W_ADDR + W_LL - addrwidth > llwidth)
+		llwidth = W_ADDR + W_LL - addrwidth;
+	ifname = fs(r, NDP_IF);
+	if (!ifname)
+		ifname = "?";
+	ifwidth = strlen(ifname);
+	if (W_ADDR + W_LL + W_IF - addrwidth - llwidth > ifwidth)
+		ifwidth = W_ADDR + W_LL + W_IF - addrwidth - llwidth;
+
+	printf("%-*.*s %-*.*s %*.*s", addrwidth, addrwidth, host,
+	    llwidth, llwidth, ether_str((struct sockaddr_dl *)&ll), ifwidth,
+	    ifwidth, ifname);
+
+	/* Print neighbor discovery specific information */
+	if (fhas(r, NDP_ERRNO))
+		printf("%% getnbrinfo: ioctl(SIOCGNBRINFO_IN6): %s\n",
+		    strerror(fu(r, NDP_ERRNO, 0)));
+	if ((st = FV(r, NDP_STATE, FACT_I64)) != NULL) {
+		e = FV(r, NDP_EXPIRE, FACT_TIME);
+		expire = e != NULL ? e->v.t.sec : 0;
+		if (expire > now.tv_sec) {
+			printf(" %-9.9s",
+			    sec2str(expire - now.tv_sec));
+		} else if (expire == 0)
+			printf(" %-9.9s", "permanent");
+		else
+			printf(" %-9.9s", "expired");
+
+		switch (st->v.i) {
+		case ND6_LLINFO_NOSTATE:
+			 printf(" N");
+			 break;
+		case ND6_LLINFO_INCOMPLETE:
+			 printf(" I");
+			 break;
+		case ND6_LLINFO_REACHABLE:
+			 printf(" R");
+			 break;
+		case ND6_LLINFO_STALE:
+			 printf(" S");
+			 break;
+		case ND6_LLINFO_DELAY:
+			 printf(" D");
+			 break;
+		case ND6_LLINFO_PROBE:
+			 printf(" P");
+			 break;
+		default:
+			 printf(" ?");
+			 break;
+		}
+
+		isrouter = fu(r, NDP_ROUTER, 0);
+		prbs = fu(r, NDP_PROBES, 0);
+		failed[0] = '\0';
+	} else {
+		printf("  ");
+		strlcpy(failed, routename6(sin), len);
+	}
+
+	flags = fu(r, NDP_FLAGS, 0);
+	printf(" %s%s%s",
+	    (flags & RTF_LOCAL) ? "l" : "",
+	    isrouter ? "R" : "",
+	    (flags & RTF_ANNOUNCE) ? "p" : "");
+
+	if (prbs)
+		printf(" %d", prbs);
+
+	printf("\n");
+}
+
+/* after the neighbors: the last one's missing state, or none at all */
+void
+ndp_end(const char *failed, const char *nohost)
+{
+	if (failed[0] != '\0')
+		printf("\n%% %s: failed to get neighbor information\n",
+		    failed);
+	if (nohost != NULL)
+		printf("%s -- no entry\n", nohost);
+}
+
+/* what the kernel knows of addr; NULL, with errno, if nothing */
 static struct in6_nbrinfo *
-getnbrinfo(struct in6_addr *addr, int ifindex, int warning)
+getnbrinfo(struct in6_addr *addr, int ifindex)
 {
 	static struct in6_nbrinfo nbi;
-	int s;
+	int s, e;
 
 	if ((s = socket(AF_INET6, SOCK_DGRAM, 0)) == -1) {
 		printf("%% socket: %s\n", strerror(errno));
@@ -615,10 +703,9 @@ getnbrinfo(struct in6_addr *addr, int ifindex, int warning)
 	if_indextoname(ifindex, nbi.ifname);
 	nbi.addr = *addr;
 	if (ioctl(s, SIOCGNBRINFO_IN6, (caddr_t)&nbi) == -1) {
-		if (warning)
-			printf("%% getnbrinfo: ioctl(SIOCGNBRINFO_IN6): %s\n",
-			    strerror(errno));
+		e = errno;
 		close(s);
+		errno = e;
 		return NULL;
 	}
 
@@ -843,7 +930,7 @@ conf_ndp_entry(FILE *output, char *delim, struct rt_msghdr *rtm)
 		return;
 
 	/* Skip table entries for addresses learned via NDP protocol. */
-	nbi = getnbrinfo(&sin6->sin6_addr, sdl->sdl_index, 0);
+	nbi = getnbrinfo(&sin6->sin6_addr, sdl->sdl_index);
 	if (nbi == NULL || nbi->expire != 0)
 		return;
 
