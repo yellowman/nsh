@@ -730,11 +730,11 @@ show_int(int argc, char **argv, ...)
 		strtonum(argv[3], 0, INT_MAX, &errstr);
 		if (errstr) {
 			printf("%% interface unit %s is %s\n", argv[3], errstr);
-			return 1;
+			return -1;
 		}
 		if (len2 > 0 && isdigit((unsigned char)(argv[2][len2 - 1]))) {
 			printf("%% interface unit %s is redundant\n", argv[3]);
-			return 1;
+			return -1;
 		}
 		strlcat(ifname, argv[3], sizeof(ifname));
 		printf("%% Interface name is %s not \"%s %s\"\n",
@@ -749,7 +749,7 @@ show_int(int argc, char **argv, ...)
 		return (facts_show(outfile, "interface status"));
 	if (!is_valid_ifname(ifname)) {
 		printf("%% interface %s not found\n", ifname);
-		return 1;
+		return -1;
 	}
 	return (facts_show(outfile, "interface %s%s", ifname,
 	    verbose ? " detail" : ""));
@@ -765,7 +765,7 @@ show_autoconf(int argc, char **argv, ...)
 		ifname = argv[2];
 		if (!is_valid_ifname(ifname)) {
 			printf("%% interface %s not found\n", ifname);
-			return (1);
+			return -1;
 		}
 	}
 	return (facts_show(stdout, "autoconf%s%s", ifname ? " " : "",
@@ -1035,12 +1035,10 @@ int
 show_ip(int argc, char **argv, ...)
 {
 	if (strcmp(argv[1], "inet") == 0)
-		facts_show(stdout, "ip inet");
-	else if (strcmp(argv[1], "inet6") == 0)
-		facts_show(stdout, "ip inet6");
-	else
-		facts_show(stdout, "ip");
-	return (0);
+		return facts_show(stdout, "ip inet");
+	if (strcmp(argv[1], "inet6") == 0)
+		return facts_show(stdout, "ip inet6");
+	return facts_show(stdout, "ip");
 }
 
 u_int32_t
@@ -1211,6 +1209,7 @@ set_ifflags(char *ifname, int ifs, int flags)
 
 	if (ioctl(ifs, SIOCSIFFLAGS, (caddr_t)&ifr) < 0) {
 		printf("%% set_ifflags: SIOCSIFFLAGS: %s\n", strerror(errno));
+		return -1;
 	}
 
 	return 0;
@@ -1245,6 +1244,7 @@ set_ifxflags(char *ifname, int ifs, int flags)
 	if (ioctl(ifs, SIOCSIFXFLAGS, (caddr_t)&ifr) < 0) {
 		printf("%% set_ifxflags: SIOCSIFXFLAGS: %s\n",
 		    strerror(errno));
+		return -1;
 	}
 
 	return 0;
@@ -1261,7 +1261,7 @@ addaf(char *ifname, int af, int ifs)
 	if (ioctl(ifs, SIOCIFAFATTACH, (caddr_t)&ifar) < 0) {
 		printf("%% addaf: SIOCIFAFATTACH: %s\n",
 		    strerror(errno));
-		return 1;
+		return -1;
 	}
 	return 0;
 }
@@ -1276,7 +1276,7 @@ removeaf(char *ifname, int af, int ifs)
 	if (ioctl(ifs, SIOCIFAFDETACH, (caddr_t)&ifar) < 0) {
 		printf("%% removeaf: SIOCIFAFDETACH: %s\n",
 		    strerror(errno));
-		return 1;
+		return -1;
 	}
 	return 0;
 }
@@ -1520,22 +1520,19 @@ cand_hasaddr(int af)
  * brings the interface up (intip()), as turning on autoconf4, autoconf6
  * or temporary does (SIOCSIFXFLAGS). conf_ifflags() prints "no shutdown"
  * for an interface that is up only when no address line says so already,
- * and for pppoe always.
+ * and for pppoe always. -1 if the line could not be set, as a handler
+ * returns.
  */
-void
+int
 cand_upline(char *ifname, int bringup)
 {
-	if (cand_ispppoe(ifname)) {
-		if (bringup)
-			cand_setting(ST_OFF, "shutdown");
-		return;
-	}
+	if (cand_ispppoe(ifname))
+		return bringup ? cand_setting(ST_OFF, "shutdown") : 0;
 	if (!bringup && cand_state("shutdown") == ST_ON)
-		return;			/* down, and stays down */
+		return 0;		/* down, and stays down */
 	if (cand_hasaddr(0) || cand_state("autoconf4") == ST_ON)
-		cand_setting(ST_DEFAULT, "shutdown");
-	else
-		cand_setting(ST_OFF, "shutdown");
+		return cand_setting(ST_DEFAULT, "shutdown");
+	return cand_setting(ST_OFF, "shutdown");
 }
 
 /* no inet, no inet6 in configure private: each address of family af goes */
@@ -1544,6 +1541,7 @@ cand_noaf(char *ifname, int af)
 {
 	char line[1024], *l;
 	size_t n = 0;
+	int r = 0;
 
 	while ((l = cand_line("inet", n)) != NULL) {
 		if ((strchr(l, ':') != NULL) != (af == AF_INET6)) {
@@ -1551,12 +1549,14 @@ cand_noaf(char *ifname, int af)
 			continue;
 		}
 		strlcpy(line, l, sizeof(line));
-		cand_setting(ST_OFF, "%s", line);
+		if (cand_setting(ST_OFF, "%s", line) == -1)
+			r = -1;
 		if ((l = cand_line("inet", n)) != NULL && strcmp(l, line) == 0)
 			n++;		/* it did not go */
 	}
-	cand_upline(ifname, 0);
-	return 0;
+	if (cand_upline(ifname, 0) == -1)
+		r = -1;
+	return r;
 }
 
 /*
@@ -1577,19 +1577,19 @@ cand_ip(char *ifname, int set, int flags, ip_t *ip, int argc, char **argv,
 	int pppoe = cand_ispppoe(ifname), bitlen;
 
 	if (ip->family == AF_INET6 && cand_otherscope(&ip->addr.in6, ifname))
-		return 0;
+		return -1;
 	cand_addrstr(ip->family, &ip->addr, ifname, addr, sizeof(addr));
 	if (!set) {
-		cand_setting(ST_OFF, "inet %s", addr);
-		cand_upline(ifname, 0);
-		return 0;
+		if (cand_setting(ST_OFF, "inet %s", addr) == -1)
+			return -1;
+		return cand_upline(ifname, 0);
 	}
 	if (pppoe ? cand_state("autoconf4") != ST_OFF :
 	    ip->family == AF_INET && cand_state("autoconf4") == ST_ON) {
 		printf("%% %s takes its %saddresses from %s,"
 		    " set \"no autoconf4\" first\n", ifname,
 		    pppoe ? "" : "IPv4 ", pppoe ? "IPCP" : "DHCP");
-		return 0;
+		return -1;
 	}
 	dest[0] = '\0';
 
@@ -1598,15 +1598,16 @@ cand_ip(char *ifname, int set, int flags, ip_t *ip, int argc, char **argv,
 		memset(&in4dest, 0, sizeof(in4dest));
 		if (argc == 2 && !inet_pton(AF_INET, argv[1], &in4dest)) {
 			printf("%% Invalid %s address\n", msg);
-			return 0;
+			return -1;
 		}
 		if (flags & IFF_POINTOPOINT) {
 			/* conf_ifaddrs() prints no prefix length */
 			if (in4dest.s_addr != INADDR_ANY)
 				cand_addrstr(AF_INET, &in4dest, ifname, dest,
 				    sizeof(dest));
-			cand_setting(ST_ON, "inet %s%s%s", addr,
-			    dest[0] ? " " : "", dest);
+			if (cand_setting(ST_ON, "inet %s%s%s", addr,
+			    dest[0] ? " " : "", dest) == -1)
+				return -1;
 			break;
 		}
 		/* nor the broadcast address the kernel would choose */
@@ -1615,51 +1616,54 @@ cand_ip(char *ifname, int set, int flags, ip_t *ip, int argc, char **argv,
 		    in4_brdaddr(ip->addr.in.s_addr, mask))
 			cand_addrstr(AF_INET, &in4dest, ifname, dest,
 			    sizeof(dest));
-		cand_setting(ST_ON, "inet %s/%d%s%s", addr, ip->bitlen,
-		    dest[0] ? " " : "", dest);
+		if (cand_setting(ST_ON, "inet %s/%d%s%s", addr, ip->bitlen,
+		    dest[0] ? " " : "", dest) == -1)
+			return -1;
 		break;
 	case AF_INET6:
 		if (argc == 2 && !(flags & IFF_POINTOPOINT)) {
 			printf("%% An IPv6 address has no %s address\n", msg);
-			return 0;
+			return -1;
 		}
 		memset(&in6dest, 0, sizeof(in6dest));
 		if (argc == 2 && parse_ipv6(argv[1], &in6dest) != 0) {
 			printf("%% Invalid destination address %s\n", argv[1]);
-			return 0;
+			return -1;
 		}
 		if (cand_otherscope(&in6dest, ifname))
-			return 0;
+			return -1;
 		bitlen = ip->bitlen == -1 ? 128 : ip->bitlen;
 		if (bitlen == 0) {
 			printf("%% An IPv6 prefix length must be 1 or more\n");
-			return 0;
+			return -1;
 		}
 		ip6_optstr(opts, sizeof(opts), o->anycast, o->vltime,
 		    o->pltime);
 		if (!(flags & IFF_POINTOPOINT)) {
-			cand_setting(ST_ON, "inet %s/%d%s", addr, bitlen, opts);
+			if (cand_setting(ST_ON, "inet %s/%d%s", addr, bitlen,
+			    opts) == -1)
+				return -1;
 			break;
 		}
 		if (!IN6_IS_ADDR_UNSPECIFIED(&in6dest)) {
 			if (bitlen != 128) {
 				printf("%% With a destination address, the"
 				    " prefix length must be 128\n");
-				return 0;
+				return -1;
 			}
 			cand_addrstr(AF_INET6, &in6dest, ifname, dest,
 			    sizeof(dest));
 		}
 		/* conf_ifaddrs() prints no prefix length */
-		cand_setting(ST_ON, "inet %s%s%s%s", addr, dest[0] ? " " : "",
-		    dest, opts);
+		if (cand_setting(ST_ON, "inet %s%s%s%s", addr,
+		    dest[0] ? " " : "", dest, opts) == -1)
+			return -1;
 		break;
 	default:
 		printf("%% unknown address family: %d\n", ip->family);
-		return 0;
+		return -1;
 	}
-	cand_upline(ifname, 1);
-	return 0;
+	return cand_upline(ifname, 1);
 }
 
 void
@@ -1678,7 +1682,7 @@ intipusage(const char *cmdname, const char *msg)
 int
 intip(int argc, char **argv, ...)
 {
-	int s, set, flags, argcmax, i, nopts;
+	int s, set, flags, argcmax, i, nopts, r = 0;
 	int argc0 = argc;
 	char **argv0 = argv;
 	char *msg, *cmdname, **optv;
@@ -1722,7 +1726,7 @@ intip(int argc, char **argv, ...)
 		cmdname = "inet6";
 	} else {
 		printf("%% intip: Internal error\n");
-		return 0;
+		return -1;
 	}
 
 	argc--;
@@ -1762,8 +1766,7 @@ intip(int argc, char **argv, ...)
 				return cand_noaf(ifname,
 				    strcmp(cmdname, "inet6") == 0 ?
 				    AF_INET6 : AF_INET);
-			intaf(ifname, ifs, argc0, argv0);
-			return 0;
+			return intaf(ifname, ifs, argc0, argv0);
 		}
 
 		/*
@@ -1773,17 +1776,16 @@ intip(int argc, char **argv, ...)
 			if (candidate) {
 				printf("%% inet6 without an address is not"
 				    " saved in the configuration\n");
-				return 0;
+				return -1;
 			}
-			intaf(ifname, ifs, argc0, argv0);
-			return 0;
+			return intaf(ifname, ifs, argc0, argv0);
 		}
 
 		intipusage(cmdname, msg);
-		return 0;
+		return -1;
 	} else if (argc < 1 || argc > argcmax) {
 		intipusage(cmdname, msg);
-		return 0;
+		return -1;
 	}
 
 	/* ignore 'address' keyword, don't print error */
@@ -1796,7 +1798,7 @@ intip(int argc, char **argv, ...)
 	if (nopts > 0 &&
 	    (isprefix(argv[0], "dhcp") || isprefix(argv[0], "autoconf"))) {
 		intipusage(cmdname, msg);
-		return 0;
+		return -1;
 	}
 
 	/*
@@ -1827,7 +1829,7 @@ intip(int argc, char **argv, ...)
 		} else {
 			printf("%% cannot get DHCP leases because dhcpleased "
 			    "is not running\n");
-			return (0);
+			return -1;
 		}
 	}
 
@@ -1857,28 +1859,28 @@ intip(int argc, char **argv, ...)
 	/* The inet6 command is IPv6-only. */
 	if (strcmp(cmdname, "inet6") == 0 && ip.family != AF_INET6) {
 		printf("%% %s is not a valid IPv6 address\n", argv[0]);
-		return 0;
+		return -1;
 	}
 
 	if (set && !(flags & IFF_POINTOPOINT) && ip.bitlen == -1) {
 		printf("%% Netmask not specified\n");
-		return 0;
+		return -1;
 	}
 
 	/* no takes them as well, and an eui64 address is one to delete */
 	if (nopts > 0 && ip.family != AF_INET6) {
 		printf("%% anycast, eui64, vltime and pltime go with an IPv6"
 		    " address\n");
-		return 0;
+		return -1;
 	}
 	if (ip6_opts(nopts, optv, &o) == -1)
-		return 0;
+		return -1;
 	if (o.eui64) {
 		/* the link-local address the interface ID comes from */
-		if (!candidate)
-			addaf(ifname, AF_INET6, ifs);
+		if (!candidate && addaf(ifname, AF_INET6, ifs) == -1)
+			return -1;
 		if (ip6_eui64(ifname, &ip.addr.in6) == -1)
-			return 0;
+			return -1;
 	}
 
 	if (candidate)
@@ -1904,20 +1906,22 @@ intip(int argc, char **argv, ...)
 		memset(&in4dest, 0, sizeof(in4dest));
 		if (argc == 2 && !inet_pton(AF_INET, argv[1], &in4dest)) {
 			printf("%% Invalid %s address\n", msg);
-			return 0;
+			return -1;
 		}
 		memset(&ip4req, 0, sizeof(ip4req));
 		pack_ifaliasreq(&ip4req, &ip, &in4dest, ifname);
 		/* do it */
-		if (ioctl(ifs, set ? SIOCAIFADDR : SIOCDIFADDR, &ip4req) < 0)
+		if (ioctl(ifs, set ? SIOCAIFADDR : SIOCDIFADDR, &ip4req) < 0) {
 			printf("%% intip: SIOC%sIFADDR: %s\n", set ? "A" : "D",
 			    strerror(errno));
+			r = -1;
+		}
 		break;
 	case AF_INET6:
 		memset(&in6dest, 0, sizeof(in6dest));
 		if (argc == 2 && parse_ipv6(argv[1], &in6dest) != 0) {
 			printf("%% Invalid destination address %s\n", argv[1]);
-			return 0;
+			return -1;
 		}
 		memset(&ip6req, 0, sizeof(ip6req));
 		pack_in6aliasreq(&ip6req, &ip, &in6dest, ifname);
@@ -1929,10 +1933,13 @@ intip(int argc, char **argv, ...)
 		s = socket(PF_INET6, SOCK_DGRAM, 0);
 		if (s < 0) {
 			printf("%% socket failed: %s\n", strerror(errno));
-			return 0;
+			return -1;
 		}
-		/* turn on inet6 */
-		addaf(ifname, AF_INET6, ifs);
+		/* turn on inet6: an address needs it, a removal does not */
+		if (addaf(ifname, AF_INET6, ifs) == -1 && set) {
+			close(s);
+			return -1;
+		}
 		/* do it */
 		if (ioctl(s, set ? SIOCAIFADDR_IN6 : SIOCDIFADDR_IN6, &ip6req)
 		    < 0) {
@@ -1942,6 +1949,7 @@ intip(int argc, char **argv, ...)
 			else
 				printf("%% intip: SIOC%sIFADDR_IN6: %s\n",
 				    set ? "A" : "D", strerror(errno));
+			r = -1;
 		} else {
 			ipv6ll_db_store(
 			    (struct sockaddr_in6 *)&ip6req.ifra_addr,
@@ -1952,20 +1960,20 @@ intip(int argc, char **argv, ...)
 		break;
 	default:
 		printf("%% unknown address family: %d\n", ip.family);
-		break;
+		return -1;
 	}
 
 	/*
 	 * Some interfaces, such as vport(4), will not come UP
 	 * automatically when the first IP address is added.
 	 */
-	if (set) {
+	if (set && r == 0) {
 		flags = get_ifflags(ifname, ifs);
 		if ((flags & IFF_UP) == 0)
-			set_ifflags(ifname, ifs, flags | IFF_UP);
+			r = set_ifflags(ifname, ifs, flags | IFF_UP);
 	}
 
-	return 0;
+	return r;
 }
 
 int
@@ -1976,7 +1984,7 @@ intipcp(char *ifname, int ifs, int argc, char **argv)
 	/* Only pppoe(4) interfaces make use of sppp(4). */
 	if (!is_pppoe(ifname, ifs)) {
 		printf("%% %s: not a PPPoE interface\n", ifname);
-		return 0;
+		return -1;
 	}
 
 	if (NO_ARG(argv[0])) {
@@ -2109,19 +2117,19 @@ cand_pflow(char *ifname, int set, struct pflowreq *preq)
 
 	if (!cand_takes(ifname, SIOCSETPFLOW)) {
 		printf("%% pflow not supported on %s\n", ifname);
-		return 0;
+		return -1;
 	}
 	if (!set)
 		return cand_setting(ST_DEFAULT, "pflow");
 	if (pflow_addrstr(&preq->flowsrc, src) ||
 	    pflow_addrstr(&preq->flowdst, dst)) {
 		printf("%% pflow needs a sender and a receiver address\n");
-		return 0;
+		return -1;
 	}
 	if (preq->flowsrc.ss_family != preq->flowdst.ss_family) {
 		printf("%% sender and receiver address families do not"
 		    " match\n");
-		return 0;
+		return -1;
 	}
 	if (preq->addrmask & PFLOW_MASK_VERSION)
 		version = preq->version;
@@ -2171,13 +2179,13 @@ intpflow(int argc, char **argv, ...)
 		    "[version 5|10]\n"
 		    "%% no pflow [sender x.x.x.x receiver x.x.x.x:port "
 		    "version 5|10]\n");
-		return 0;
+		return -1;
 	}
 
 	if (set) {
 	        if (strchr(argv[3], ':') == NULL) {
 			printf("%% Receiver has no port specified\n");
-			return 0;
+			return -1;
 		}
 	}
 
@@ -2190,9 +2198,9 @@ intpflow(int argc, char **argv, ...)
 	preq.addrmask = PFLOW_MASK_SRCIP | PFLOW_MASK_DSTIP;
 	if (set) {
 		if (pflow_addr(argv[1], &preq.flowsrc) < 0)
-			return 0;
+			return -1;
 		if (pflow_addr(argv[3], &preq.flowdst) < 0)
-			return 0;
+			return -1;
 		if (argc == 6) {
 			preq.version = strtonum(argv[5], 5, PFLOW_PROTO_MAX,
 			    &errmsg);
@@ -2200,14 +2208,14 @@ intpflow(int argc, char **argv, ...)
 	                if (errmsg) {
 				printf("%% Invalid pflow version %s: %s\n",
 				    argv[5], errmsg);
-				return 0;
+				return -1;
 			}
 			/* pflowioctl() takes these */
 			if (preq.version != PFLOW_PROTO_5 &&
 			    preq.version != PFLOW_PROTO_10) {
 				printf("%% Invalid pflow version %s: 5 or 10\n",
 				    argv[5]);
-				return 0;
+				return -1;
 			}
                 }
 	}
@@ -2215,9 +2223,11 @@ intpflow(int argc, char **argv, ...)
 	if (candidate)
 		return cand_pflow(ifname, set, &preq);
 
-	if (ioctl(ifs, SIOCSETPFLOW, (caddr_t)&ifr) == -1)
+	if (ioctl(ifs, SIOCSETPFLOW, (caddr_t)&ifr) == -1) {
 		printf("%% Unable to set pflow parameters: %s\n",
 		    strerror(errno));
+		return -1;
+	}
 
 	return 0;
 }
@@ -2236,36 +2246,38 @@ cand_patch(char *ifname, char *peer)
 
 	if (!cand_takes(ifname, SIOCSIFPAIR)) {
 		printf("%% patch not supported on %s\n", ifname);
-		return 0;
+		return -1;
 	}
 	if (peer != NULL) {
 		if (strcmp(peer, ifname) == 0) {
 			printf("%% %s cannot be patched to itself\n", ifname);
-			return 0;
+			return -1;
 		}
 		if (!cand_hasif(peer)) {
 			printf("%% interface %s not found\n", peer);
-			return 0;
+			return -1;
 		}
 		if (!cand_takes(peer, SIOCSIFPAIR)) {
 			printf("%% %s is not a pair interface\n", peer);
-			return 0;
+			return -1;
 		}
 		if ((l = cand_ifline(peer, "patch", 0)) != NULL &&
 		    strcmp(l + strlen("patch "), ifname) != 0) {
 			printf("%% %s is patched to %s\n", peer,
 			    l + strlen("patch "));
-			return 0;
+			return -1;
 		}
 	}
 	old[0] = '\0';
 	if ((l = cand_line("patch", 0)) != NULL)
 		strlcpy(old, l + strlen("patch "), sizeof(old));
-	if (old[0] != '\0' && (peer == NULL || strcmp(old, peer) != 0))
-		cand_ifsetting(old, ST_DEFAULT, "patch");
+	if (old[0] != '\0' && (peer == NULL || strcmp(old, peer) != 0) &&
+	    cand_ifsetting(old, ST_DEFAULT, "patch") == -1)
+		return -1;
 	if (peer == NULL)
 		return cand_setting(ST_DEFAULT, "patch");
-	cand_setting(ST_ON, "patch %s", peer);
+	if (cand_setting(ST_ON, "patch %s", peer) == -1)
+		return -1;
 	return cand_ifsetting(peer, ST_ON, "patch %s", ifname);
 }
 
@@ -2296,7 +2308,7 @@ intpatch(int argc, char **argv, ...)
 	if ((set && argc != 1) || (!set && argc > 1)) {
 		printf("%% patch <pair interface>\n");
 		printf("%% no patch [pair interface]\n");
-		return 0;
+		return -1;
 	}
 
 	if (candidate)
@@ -2308,13 +2320,15 @@ intpatch(int argc, char **argv, ...)
 	if (set) {
 		if ((ifr.ifr_index = if_nametoindex(argv[0])) == 0) {
 			printf("%% invalid interface %s\n", argv[0]);
-			return 0;
+			return -1;
 		}
 	} else {
 		ifr.ifr_index = 0;
 	}
-	if (ioctl(ifs, SIOCSIFPAIR, &ifr) == -1)
+	if (ioctl(ifs, SIOCSIFPAIR, &ifr) == -1) {
 		printf("%% intpatch: SIOCSIFPAIR: %s\n", strerror(errno));
+		return -1;
+	}
 
 	return 0;
 }
@@ -2347,14 +2361,14 @@ intmtu(int argc, char **argv, ...)
 	if ((!set && argc > 1) || (set && argc != 1)) {
 		printf("%% mtu <mtu>\n");
 		printf("%% no mtu [mtu]\n");
-		return 0;
+		return -1;
 	}
 
 	if (set) {
 		ifr.ifr_mtu = strtonum(argv[0], 0, INT_MAX, &errmsg);
 		if (errmsg) {
 			printf("%% Invalid MTU %s: %s\n", argv[0], errmsg);
-			return 0;
+			return -1;
 		}
 	} else
 		ifr.ifr_mtu = default_mtu(ifname);
@@ -2363,7 +2377,7 @@ intmtu(int argc, char **argv, ...)
 		if (set && default_mtu(ifname) == MTU_IGNORE) {
 			printf("%% The configuration does not keep the mtu"
 			    " of %s\n", ifname);
-			return 0;
+			return -1;
 		}
 		if (conf_mtu_shown(ifname, ifr.ifr_mtu))
 			return cand_setting(ST_ON, "mtu %d", ifr.ifr_mtu);
@@ -2371,8 +2385,10 @@ intmtu(int argc, char **argv, ...)
 	}
 
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
-	if (ioctl(ifs, SIOCSIFMTU, (caddr_t)&ifr) < 0)
+	if (ioctl(ifs, SIOCSIFMTU, (caddr_t)&ifr) < 0) {
 		printf("%% intmtu: SIOCSIFMTU: %s\n", strerror(errno));
+		return -1;
+	}
 
 	return 0;
 }
@@ -2405,7 +2421,7 @@ intkeepalive(int argc, char **argv, ...)
 	if ((!set && argc > 2) || (set && argc != 2)) {
 		printf("%% keepalive <period> <count>\n");
 		printf("%% no keepalive [period] [count]\n");
-		return 0;
+		return -1;
 	}
 
 	bzero(&ikar, sizeof(ikar));
@@ -2414,20 +2430,20 @@ intkeepalive(int argc, char **argv, ...)
 		ikar.ikar_timeo = strtonum(argv[0], 1, 3600, &errmsg);
 		if (errmsg) {
 			printf("%% Invalid period %s: %s\n", argv[0], errmsg);
-			return 0;
+			return -1;
 		}
 		/* the kernel takes at most 256 */
 		ikar.ikar_cnt = strtonum(argv[1], 2, 256, &errmsg);
 		if (errmsg) {
 			printf("%% Invalid count %s: %s\n", argv[1], errmsg);
-			return 0;
+			return -1;
 		}
 	}
 
 	if (candidate) {
 		if (!cand_takes(ifname, SIOCSETKALIVE)) {
 			printf("%% Keepalive not available on %s\n", ifname);
-			return 0;
+			return -1;
 		}
 		if (set)
 			return cand_setting(ST_ON, "keepalive %d %d",
@@ -2442,6 +2458,7 @@ intkeepalive(int argc, char **argv, ...)
 		else
 			printf("%% intkeepalive: SIOCSETKALIVE: %s\n",
 			    strerror(errno));
+		return -1;
 	}
 
 	return 0;
@@ -2505,7 +2522,7 @@ cand_mpls(char *ifname, int type, int set, struct ifreq *ifr,
 		    default_rxprio(ifname));
 	}
 	printf("%% cand_mpls: Internal error\n");
-	return 0;
+	return -1;
 }
 
 /* from ifconfig.c */
@@ -2541,10 +2558,10 @@ intmpls(int argc, char **argv, ...)
 	x=(struct mplsc *) genget(argv[0], (char **)mplscs, sizeof(struct mplsc));
 	if (x == 0) {
 		printf("%% Internal error - Invalid argument %s\n", argv[0]);
-		return 0;
+		return -1;
 	} else if (Ambiguous(x)) {
 		printf("%% Internal error - Ambiguous argument %s\n", argv[0]);
-		return 0;
+		return -1;
 	}
 
 	argc--;
@@ -2553,7 +2570,7 @@ intmpls(int argc, char **argv, ...)
 	if ((!set && argc > 1) || (set && argc != 1)) {
 		printf("%% %s <%s>\n", x->name, x->descr);
 		printf("%% no %s [%s]\n", x->name, x->descr);
-		return 0;
+		return -1;
 	}
 
 	switch(x->type) {
@@ -2568,7 +2585,7 @@ intmpls(int argc, char **argv, ...)
 			if (errstr) {
 				printf("%% Invalid MPLS Label %s: %s\n",
 				    argv[0], errstr);
-				return 0;
+				return -1;
 			}
 			cmd = SIOCSETLABEL;
 		} else {
@@ -2582,7 +2599,7 @@ intmpls(int argc, char **argv, ...)
 			if (errstr) {
 				printf("%% intmpls: rdomain %s: %s\n", argv[0],
 				    errstr);
-				return 0;
+				return -1;
 			}
 		} else {
 			ifr.ifr_rdomainid = 0;
@@ -2601,7 +2618,7 @@ intmpls(int argc, char **argv, ...)
 				if (errstr) {
 					printf("%% intmpls: txprio %s: %s\n",
 					    argv[0], errstr);
-					return 0;
+					return -1;
 				}
 			}
 		} else {
@@ -2623,7 +2640,7 @@ intmpls(int argc, char **argv, ...)
 				if (errstr) {
 					printf("%% intmpls: rxprio %s: %s\n",
 					    argv[0], errstr);
-					return 0;
+					return -1;
 				}
 			}
 		} else {
@@ -2633,14 +2650,13 @@ intmpls(int argc, char **argv, ...)
 		break;
 	default:
 		printf("%% intmpls: Internal error\n");
-		return 0;
-		break;
+		return -1;
 	}
 
 	if (candidate) {
 		if (!cand_takes(ifname, cmd)) {
 			printf("%% %s not supported on %s\n", x->name, ifname);
-			return 0;
+			return -1;
 		}
 		return cand_mpls(ifname, x->type, set, &ifr, &shim);
 	}
@@ -2651,6 +2667,7 @@ intmpls(int argc, char **argv, ...)
 		else
 			printf("%% intmpls: ioctl: %s\n",
 			    strerror(errno));
+		return -1;
 	}
 
 	return (0);
@@ -2685,7 +2702,7 @@ cand_pwe3(char *ifname, int set, int nei, int cw, int fat,
 	    (cw != -1 && !cand_takes(ifname, SIOCSPWE3CTRLWORD)) ||
 	    (fat != -1 && !cand_takes(ifname, SIOCSPWE3FAT))) {
 		printf("%% PWE3 not supported on %s\n", ifname);
-		return 0;
+		return -1;
 	}
 
 	neighbor[0] = '\0';
@@ -2715,7 +2732,7 @@ cand_pwe3(char *ifname, int set, int nei, int cw, int fat,
 		if (error != 0) {
 			printf("%% intpwe3: getnameinfo: %s\n",
 			    gai_strerror(error));
-			return 0;
+			return -1;
 		}
 		snprintf(neighbor, sizeof(neighbor), " neighbor %u %s",
 		    ((struct sockaddr_mpls *)&req->dstaddr)->smpls_label, host);
@@ -2783,7 +2800,7 @@ intpwe3(int argc, char **argv, ...)
 	/* usage? */
 	if (argc < 1) {
 		pwe3usage();
-		return 0;
+		return -1;
 	}
 
 	strlcpy(ifr.ifr_name, ifname, IFNAMSIZ);
@@ -2810,7 +2827,7 @@ intpwe3(int argc, char **argv, ...)
 			if (error != 0) {
 				printf("%% intpwe3: neighbor %s: %s\n",
 				    argv[noptind - 1], gai_strerror(error));
-				return (0);
+				return -1;
 			}
 			smpls->smpls_len = sizeof(*smpls);
 			smpls->smpls_family = AF_MPLS;
@@ -2821,13 +2838,13 @@ intpwe3(int argc, char **argv, ...)
 				printf("%% intpwe3: invalid label %s: %s\n",
 				    argv[noptind - 2], errstr);
 				freeaddrinfo(res);
-				return (0);
+				return -1;
 			}
 			if (res->ai_addrlen > sizeof(req.addr)) {
 				printf("%% intpwe3: invalid address %s\n",
 				    argv[noptind - 1]);
 				freeaddrinfo(res);
-				return (0);
+				return -1;
 			}
 			memcpy(&req.addr, res->ai_addr, res->ai_addrlen);
 			freeaddrinfo(res);
@@ -2841,7 +2858,7 @@ intpwe3(int argc, char **argv, ...)
 			printf(": %s", argv[noptind]);
 		printf("\n");
 		pwe3usage();
-		return 0;
+		return -1;
 	}
 
 	if (candidate)
@@ -2849,16 +2866,17 @@ intpwe3(int argc, char **argv, ...)
 
 	if (nei && pwe3_ioctl(ifs, ifname, set ? SIOCSPWE3NEIGHBOR :
 	    SIOCDPWE3NEIGHBOR, (caddr_t)&req) == -1)
-		return 0;
+		return -1;
 	if (cw != -1) {
 		ifr.ifr_pwe3 = cw;
 		if (pwe3_ioctl(ifs, ifname, SIOCSPWE3CTRLWORD,
 		    (caddr_t)&ifr) == -1)
-			return 0;
+			return -1;
 	}
 	if (fat != -1) {
 		ifr.ifr_pwe3 = fat;
-		pwe3_ioctl(ifs, ifname, SIOCSPWE3FAT, (caddr_t)&ifr);
+		if (pwe3_ioctl(ifs, ifname, SIOCSPWE3FAT, (caddr_t)&ifr) == -1)
+			return -1;
 	}
 
 	return (0);
@@ -2868,7 +2886,7 @@ int
 intdhcrelay(int argc, char **argv, ...)
 {
 	char *cmd[] = { DHCRELAY, "-i", NULL, NULL, NULL };
-	int set, alen;
+	int set, alen, r;
 	struct in_addr notused;
 	va_list ap;
 	char *ifname;
@@ -2890,7 +2908,7 @@ intdhcrelay(int argc, char **argv, ...)
 	if ((!set && argc > 1) || (set && argc != 1)) {
 		printf("%% dhcrelay <relayserver>\n");
 		printf("%% no dhcrelay [relayserver]\n");
-		return 0;
+		return -1;
 	}
 
 	if (argc) {
@@ -2898,7 +2916,7 @@ intdhcrelay(int argc, char **argv, ...)
 			cmd[3] = argv[0];
 		} else {
 			printf("%% Not a valid IPv4 address: %s\n", argv[0]);
-			return 0;
+			return -1;
 		}
 	}
 
@@ -2909,19 +2927,20 @@ intdhcrelay(int argc, char **argv, ...)
 			return cand_setting(ST_ON, "dhcrelay %s", argv[0]);
 		if ((l = cand_line("dhcrelay", 0)) == NULL) {
 			printf("%% No relay configured for %s\n", ifname);
-			return 0;
+			return -1;
 		}
 		l += strlen("dhcrelay ");
 		if (argc && strcmp(l, argv[0]) != 0) {
 			printf("%% Server expected: %s (not %s)\n", l, argv[0]);
-			return 0;
+			return -1;
 		}
 		return cand_setting(ST_DEFAULT, "dhcrelay");
 	}
 
 	if (set) {
 		flag_x("dhcrelay", ifname, DB_X_ENABLE, argv[0]);
-		cmdargs(DHCRELAY, cmd);
+		if (cmdargs(DHCRELAY, cmd) != 0)
+			return -1;
 	} else {
 		char server[24], argue[SIZE_CONF_TEMP];
 		char *killcmd[] = { PKILL, "-xf", NULL, NULL };
@@ -2934,14 +2953,14 @@ intdhcrelay(int argc, char **argv, ...)
 			else
 				printf("%% int_dhcrelay: conf_dhcrelay failed:"
 				    " %d\n", alen);
-			return 0;
+			return -1;
 		}
 
 		/* bail if dhcrelay not relaying to specified dhcp server */
 		if (argc && strcmp(server, argv[0]) != 0) {
 			printf("%% Server expected: %s (not %s)\n", server,
 			    argv[0]);
-			return 0;
+			return -1;
 		}
 
 		flag_x("dhcrelay", ifname, DB_X_REMOVE, NULL);
@@ -2951,7 +2970,10 @@ intdhcrelay(int argc, char **argv, ...)
 		    cmd[2], server);
 		killcmd[2] = argue;
 
-		cmdargs(PKILL, killcmd);
+		/* 1: no dhcrelay ran */
+		r = cmdargs(PKILL, killcmd);
+		if (r == -1 || r > 1)
+			return -1;
 	}
 	return 0;
 }
@@ -2990,7 +3012,7 @@ intmetric(int argc, char **argv, ...)
 		theioctl = SIOCSIFPRIORITY;
 	} else {
 		printf("%% intmetric internal failure\n");
-		return 0;
+		return -1;
 	}
 
 	argc--;
@@ -2999,7 +3021,7 @@ intmetric(int argc, char **argv, ...)
 	if ((!set && argc > 1) || (set && argc != 1)) {
 		printf("%% %s <%s>\n", type, type);
 		printf("%% no %s [%s]\n", type, type);
-		return 0;
+		return -1;
 	}
 
 	if (set) {
@@ -3009,7 +3031,7 @@ intmetric(int argc, char **argv, ...)
 		if (errmsg) {
 			printf("%% Invalid %s %s: %s\n", type, argv[0],
 			    errmsg);
-			return 0;
+			return -1;
 		}
 		ifr.ifr_metric = num;
 	} else {
@@ -3018,7 +3040,7 @@ intmetric(int argc, char **argv, ...)
 
 	if (errmsg) {
 		printf("%% Invalid %s %s: %s\n", type, argv[0], errmsg);
-		return 0;
+		return -1;
 	}
 
 	if (candidate) {
@@ -3029,9 +3051,11 @@ intmetric(int argc, char **argv, ...)
 	}
 
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
-	if (ioctl(ifs, theioctl, (caddr_t)&ifr) < 0)
+	if (ioctl(ifs, theioctl, (caddr_t)&ifr) < 0) {
 		printf("%% intmetric: SIOCSIF%s: %s\n", type,
 		    strerror(errno));
+		return -1;
+	}
 
 	return 0;
 }
@@ -3061,7 +3085,7 @@ intllprio(int argc, char **argv, ...)
 	if ((!set && argc > 2) || (set && argc != 2)) {
 		printf("%% llpriority <priority>\n");
 		printf("%% no llpriority [priority]\n");
-		return 0;
+		return -1;
 	}
 
 	if (set) {
@@ -3071,7 +3095,7 @@ intllprio(int argc, char **argv, ...)
 		if (errmsg) {
 			printf("%% Invalid llpriority %s: %s\n", argv[1],
 			    errmsg);
-			return 0;
+			return -1;
 		}
 		ifr.ifr_llprio = num;
 	} else {
@@ -3080,7 +3104,7 @@ intllprio(int argc, char **argv, ...)
 
 	if (errmsg) {
 		printf("%% Invalid llpriority %s: %s\n", argv[1], errmsg);
-		return 0;
+		return -1;
 	}
 
 	if (candidate) {
@@ -3091,8 +3115,10 @@ intllprio(int argc, char **argv, ...)
 	}
 
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
-	if (ioctl(ifs, SIOCSIFLLPRIO, (caddr_t)&ifr) < 0)
+	if (ioctl(ifs, SIOCSIFLLPRIO, (caddr_t)&ifr) < 0) {
 		printf("%% intllprio: SIOCSIFLLPRIO: %s\n", strerror(errno));
+		return -1;
+	}
 
 	return 0;
 }
@@ -3100,7 +3126,7 @@ intllprio(int argc, char **argv, ...)
 int
 intgroup(int argc, char **argv, ...)
 {
-	int set, i;
+	int set, i, r = 0;
 	struct ifgroupreq ifgr;
 	va_list ap;
 	char *ifname;
@@ -3124,18 +3150,18 @@ intgroup(int argc, char **argv, ...)
 	if (argc < 1) {
 		printf("%% group <group-name> [group-name ...]\n");
 		printf("%% no group <group-name> [group-name ...]\n");
-		return 0;
+		return -1;
 	}
 
 	for (i = 0; i < argc; i++) {
 		/* Validate supplied argument(s) before applying them */
 		if (isdigit((unsigned char)argv[i][strlen(argv[i]) - 1])) {
 			printf("%% Group names may not end with a digit\n");
-			return 0;
+			return -1;
 		}
 		if (strlen(argv[i]) >= IFNAMSIZ) {
 			printf("%% Group name too long (%s)\n", argv[i]);
-			return 0;
+			return -1;
 		}
 	}
 
@@ -3147,7 +3173,7 @@ intgroup(int argc, char **argv, ...)
 			need += strlen(argv[i]) + 1;
 		if (need > sizeof(groups)) {
 			printf("%% Too many groups\n");
-			return 0;
+			return -1;
 		}
 		argvtostring(argc, argv, groups, sizeof(groups));
 		return cand_setting(set ? ST_ON : ST_OFF, "group %s", groups);
@@ -3166,12 +3192,13 @@ intgroup(int argc, char **argv, ...)
 			default:
 				printf("%% intgroup: SIOC%sIFGROUP: %s\n",
 				    set ? "S" : "D", strerror(errno));
+				r = -1;
 				break;
 			}
 		}
 	}
 
-	return 0;
+	return r;
 }
 
 int
@@ -3206,12 +3233,12 @@ intrtlabel(int argc, char **argv, ...)
 		if (argc < 1) {
 			printf("%% rtlabel <route-label>\n");
 			printf("%% no rtlabel [route-label]\n");
-			return 0;
+			return -1;
 		}
 		if (strlen(argv[0]) >= RTLABEL_LEN) {
 			printf("%% label too long (max %d char)\n",
 			    RTLABEL_LEN - 1);
-			return 0;
+			return -1;
 		}
 		ifr.ifr_data = (caddr_t)argv[0];
 	} else {
@@ -3224,8 +3251,10 @@ intrtlabel(int argc, char **argv, ...)
 		return cand_setting(ST_DEFAULT, "rtlabel");
 	}
 
-	if (ioctl(ifs, SIOCSIFRTLABEL, &ifr) == -1)
+	if (ioctl(ifs, SIOCSIFRTLABEL, &ifr) == -1) {
 		printf("%% intrtlabel: SIOCSIFRTLABEL: %s\n", strerror(errno));
+		return -1;
+	}
 
 	return 0;
 }
@@ -3258,7 +3287,7 @@ intparent(int argc, char **argv, ...)
 	if ((set && argc != 1) || (!set && argc > 1)) {
                 printf("%% parent <parent interface>\n");
                 printf("%% no parent [parent interface]\n");
-                return 0;
+                return -1;
         }
 
 	bzero(&ifp, sizeof(ifp));
@@ -3268,24 +3297,24 @@ intparent(int argc, char **argv, ...)
 	if (set && strlcpy(ifp.ifp_parent, argv[0], sizeof(ifp.ifp_parent)) >=
 	    sizeof(ifp.ifp_parent)) {
 		printf("%% parent name too long\n");
-		return 0;
+		return -1;
 	}
 
 	cmd = (set ? SIOCSIFPARENT : SIOCDIFPARENT);
 	if (candidate) {
 		if (!cand_takes(ifname, cmd)) {
 			printf("%% parent not supported on %s\n", ifname);
-			return 0;
+			return -1;
 		}
 		if (!set)
 			return cand_setting(ST_DEFAULT, "parent");
 		if (strcmp(argv[0], ifname) == 0) {
 			printf("%% %s cannot be its own parent\n", ifname);
-			return 0;
+			return -1;
 		}
 		if (!cand_hasif(argv[0])) {
 			printf("%% interface %s not found\n", argv[0]);
-			return 0;
+			return -1;
 		}
 		return cand_setting(ST_ON, "parent %s", argv[0]);
 	}
@@ -3296,16 +3325,21 @@ intparent(int argc, char **argv, ...)
 			int flags = get_ifflags(ifname, ifs);
 			if (flags & IFF_UP) {
 				/* Put interface down, retry, and put it up. */
-				set_ifflags(ifname, ifs, flags & ~IFF_UP);
+				if (set_ifflags(ifname, ifs, flags & ~IFF_UP)
+				    == -1)
+					return -1;
 				ret = ioctl(ifs, cmd, &ifp);
 				if (ret == -1)
 					cmd_errno = errno;
-				set_ifflags(ifname, ifs, flags);
+				if (set_ifflags(ifname, ifs, flags) == -1)
+					return -1;
 			}
 		}
-		if (ret == -1)
+		if (ret == -1) {
 			printf("%% intparent: SIOC%sIFPARENT: %s\n",
 			    set ? "S" : "D", strerror(cmd_errno));
+			return -1;
+		}
 	}
 
 	return 0;
@@ -3325,22 +3359,23 @@ cand_ifflags(char *ifname, int value, int set)
 		if (!set)
 			return cand_setting(ST_OFF, "staticarp");
 		/* static ARP turns ARP back on, as below */
-		cand_setting(ST_ON, "arp");
+		if (cand_setting(ST_ON, "arp") == -1)
+			return -1;
 		return cand_setting(ST_ON, "staticarp");
 	case -IFF_NOARP:
 		if (set)
 			return cand_setting(ST_ON, "arp");
 		/* turning ARP off turns static ARP off too */
-		cand_setting(ST_OFF, "staticarp");
+		if (cand_setting(ST_OFF, "staticarp") == -1)
+			return -1;
 		return cand_setting(ST_OFF, "arp");
 	case -IFF_UP:
 		if (set)
 			return cand_setting(ST_ON, "shutdown");
-		cand_upline(ifname, 1);
-		return 0;
+		return cand_upline(ifname, 1);
 	}
 	printf("%% cand_ifflags: value internal error\n");
-	return 0;
+	return -1;
 }
 
 int
@@ -3377,7 +3412,7 @@ intflags(int argc, char **argv, ...)
 		value = IFF_STATICARP;
 	} else {
 		printf("%% intflags: Internal error\n");
-		return 0;
+		return -1;
 	}
 
 	/*
@@ -3389,7 +3424,7 @@ intflags(int argc, char **argv, ...)
 	if (iftype == IFT_WIREGUARD &&
 	    (value == -IFF_NOARP || value == IFF_STATICARP)) {
 		printf("%% wireguard interfaces do not support ARP\n");
-		return (0);
+		return -1;
 	}
 
 	if (candidate)
@@ -3427,9 +3462,9 @@ intflags(int argc, char **argv, ...)
 			flags &= ~value;
 	} else {
 		printf("%% intflags: value internal error\n");
+		return -1;
 	}
-	set_ifflags(ifname, ifs, flags);
-	return 0;
+	return set_ifflags(ifname, ifs, flags);
 }
 
 int
@@ -3446,24 +3481,18 @@ intaf(char *ifname, int ifs, int argc, char **argv)
 
 	if (argc > 1) {
 		printf("%% Invalid argument\n");
-		return 1;
+		return -1;
 	}
 
 	/* Do not use isprefix() here because it would always be ambiguous. */
-	if (strcmp(argv[0], "inet6") == 0) {
-		if (set)
-			addaf(ifname, AF_INET6, ifs);
-		else
-			removeaf(ifname, AF_INET6, ifs);
-	} else if (strcmp(argv[0], "inet") == 0) {
-		if (set)
-			addaf(ifname, AF_INET, ifs);
-		else
-			removeaf(ifname, AF_INET, ifs);
-	} else {
-		printf("%% intaf: unknown address family %s\n", argv[0]);
-	}
-	return 0;
+	if (strcmp(argv[0], "inet6") == 0)
+		return set ? addaf(ifname, AF_INET6, ifs) :
+		    removeaf(ifname, AF_INET6, ifs);
+	if (strcmp(argv[0], "inet") == 0)
+		return set ? addaf(ifname, AF_INET, ifs) :
+		    removeaf(ifname, AF_INET, ifs);
+	printf("%% intaf: unknown address family %s\n", argv[0]);
+	return -1;
 }
 
 /*
@@ -3479,13 +3508,13 @@ cand_autoconf4(char *ifname, int set)
 	if (set && cand_hasaddr(pppoe ? 0 : AF_INET)) {
 		printf("%% Remove the %saddresses of %s first\n",
 		    pppoe ? "" : "IPv4 ", ifname);
-		return 0;
+		return -1;
 	}
 	if (pppoe)
 		return cand_setting(set ? ST_ON : ST_OFF, "autoconf4");
-	cand_setting(set ? ST_ON : ST_DEFAULT, "autoconf4");
-	cand_upline(ifname, set && was != ST_ON);
-	return 0;
+	if (cand_setting(set ? ST_ON : ST_DEFAULT, "autoconf4") == -1)
+		return -1;
+	return cand_upline(ifname, set && was != ST_ON);
 }
 
 /* intxflags() in configure private, for the flags conf_ifxflags() prints */
@@ -3513,19 +3542,20 @@ cand_ifxflags(char *ifname, int value, int set)
 		if (set && if_nametoindex(ifname) != 0 &&
 		    !(get_ifdata(ifname, IFDATA_CAPABILITIES) & IFCAP_WOL)) {
 			printf("%% %s does not support wake on LAN\n", ifname);
-			return 0;
+			return -1;
 		}
 		name = "wol";
 		break;
 	default:
 		printf("%% cand_ifxflags: value internal error\n");
-		return 0;
+		return -1;
 	}
 	was = cand_state(name);
-	cand_setting(set ? ST_ON : ST_OFF, "%s", name);
+	if (cand_setting(set ? ST_ON : ST_OFF, "%s", name) == -1)
+		return -1;
 	if (set && was != ST_ON &&
 	    (value == IFXF_AUTOCONF6 || value == IFXF_AUTOCONF6TEMP))
-		cand_upline(ifname, 1);
+		return cand_upline(ifname, 1);
 	return 0;
 }
 
@@ -3571,7 +3601,7 @@ intxflags(int argc, char **argv, ...)
 		value = IFXF_WOL;
 	} else {
 		printf("%% intxflags: Internal error\n");
-		return 0;
+		return -1;
 	}
 
 	if (candidate)
@@ -3593,9 +3623,9 @@ intxflags(int argc, char **argv, ...)
 			flags &= ~value;
 	} else {
 		printf("%% intxflags: value internal error\n");
+		return -1;
 	}
-	set_ifxflags(ifname, ifs, flags);
-	return 0;
+	return set_ifxflags(ifname, ifs, flags);
 }
 
 /* The link flags the candidate's link line sets */
@@ -3643,7 +3673,7 @@ intlink(int argc, char **argv, ...)
 	if ((set && argc < 1) || argc > 3) {
 		printf("%% link <012>\n");
 		printf("%% no link [012]\n");
-		return 0;
+		return -1;
 	}
 
 	flags = candidate ? cand_linkflags() : get_ifflags(ifname, ifs);
@@ -3661,7 +3691,7 @@ intlink(int argc, char **argv, ...)
 		if (errmsg) {
 			printf("%% Invalid link flag %s: %s\n", argv[i],
 			    errmsg);
-			return 0;
+			return -1;
 		}
 		switch(a) {
 		case 0:
@@ -3690,9 +3720,7 @@ intlink(int argc, char **argv, ...)
 		    flags & IFF_LINK2 ? " 2" : "");
 	}
 
-	set_ifflags(ifname, ifs, flags);
-
-	return 0;
+	return set_ifflags(ifname, ifs, flags);
 }
 
 int
@@ -3723,7 +3751,7 @@ intnwid(int argc, char **argv, ...)
 	if ((set && argc != 1) || (!set && argc > 1)) {
 		printf("%% nwid <nwid>\n");
 		printf("%% no nwid [nwid]\n");
-		return 0;
+		return -1;
 	}
 
 	len = sizeof(nwid.i_nwid);
@@ -3731,7 +3759,7 @@ intnwid(int argc, char **argv, ...)
 	if (set) {
 		if (get_string(argv[0], NULL, nwid.i_nwid, &len) == NULL) {
 			printf("%% intnwid: bad input\n");
-			return 0;
+			return -1;
 		}
 	} else
 		len = 0; /* nwid "" */
@@ -3743,8 +3771,10 @@ intnwid(int argc, char **argv, ...)
 	ifr.ifr_data = (caddr_t)&nwid;
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 
-	if (ioctl(ifs, SIOCS80211NWID, (caddr_t)&ifr) < 0)
+	if (ioctl(ifs, SIOCS80211NWID, (caddr_t)&ifr) < 0) {
 		printf("%% intnwid: SIOCS80211NWID: %s\n", strerror(errno));
+		return -1;
+	}
 
 	return 0;
 }
@@ -3777,7 +3807,7 @@ intpowersave(int argc, char **argv, ...)
  	if (argc > 1) {
 		printf("%% powersave [milisec]\n");
 		printf("%% no powersave [milisec]\n");
-		return 0;
+		return -1;
 	}
 
 	if (argc == 1) {
@@ -3785,7 +3815,7 @@ intpowersave(int argc, char **argv, ...)
 		if (errmsg) {
 			printf("%% Power save invalid %s: %s\n", argv[0],
 			    errmsg);
-			return 0;
+			return -1;
 		}
 	} else {
 		maxsleep = DEFAULT_POWERSAVE;
@@ -3799,7 +3829,7 @@ intpowersave(int argc, char **argv, ...)
 	if (ioctl(ifs, SIOCG80211POWER, (caddr_t)&power) == -1) {
 		printf("%% intpowersave: SIOCG80211POWER: %s\n",
 		    strerror(errno));
-		return 0;
+		return -1;
 	}
 
 	power.i_maxsleep = maxsleep;
@@ -3808,7 +3838,7 @@ intpowersave(int argc, char **argv, ...)
 	if (ioctl(ifs, SIOCS80211POWER, (caddr_t)&power) == -1) {
 		printf("%% intpowersave: SIOCS80211POWER: %s\n",
 		    strerror(errno));
-		return 0;
+		return -1;
 	}
 
 	return 0;
@@ -3832,7 +3862,7 @@ cand_lladdr(char *ifname, char *arg)
 		return cand_setting(ST_DEFAULT, "lladdr");
 	if (cand_gettype(ifname) != IFT_ETHER) {
 		printf("%% %s has no Ethernet address to set\n", ifname);
-		return 0;
+		return -1;
 	}
 	if (isprefix(arg, "random")) {
 		arc4random_buf(&eabuf, sizeof(eabuf));
@@ -3842,17 +3872,17 @@ cand_lladdr(char *ifname, char *arg)
 		printf("%% MAC addresses are six hexadecimal fields, up to two"
 		    " digits each,\n%% separated with colons"
 		    " (1:23:45:ab:cd:ef)\n");
-		return 0;
+		return -1;
 	}
 	if (ETHER_IS_MULTICAST(ea->ether_addr_octet)) {
 		printf("%% %s is a multicast address\n", arg);
-		return 0;
+		return -1;
 	}
 	for (i = 0; i < ETHER_ADDR_LEN && ea->ether_addr_octet[i] == 0; i++)
 		;
 	if (i == ETHER_ADDR_LEN) {
 		printf("%% The configuration does not keep a zero lladdr\n");
-		return 0;
+		return -1;
 	}
 	strlcpy(addr, ether_ntoa(ea), sizeof(addr));
 
@@ -3900,7 +3930,7 @@ intlladdr(int argc, char **argv, ...)
 	if (set && argc < 2) {
 		printf ("%% lladdr <link level address|random>\n");
 		printf ("%% no lladdr\n");
-		return 0;
+		return -1;
 	}
 
 	if (candidate)
@@ -3908,21 +3938,21 @@ intlladdr(int argc, char **argv, ...)
 
 	if ((lladdr = get_hwdaddr(ifname)) == NULL) {
 		printf("%% Failed to retrieve current link level address\n");
-		return 1;
+		return -1;
 	}
 
 	hwdaddr = sl_init();
 	if (db_select_flag_x_ctl(hwdaddr, "lladdr", ifname) < 0) {
 		printf("%% database failure select flag x ctl\n");
 		sl_free(hwdaddr, 1);
-		return 1;
+		return -1;
 	}
 	if (hwdaddr->sl_cur > 0) {
 		strlcpy(llorig, hwdaddr->sl_str[0], sizeof(llorig));
 		if (!set && db_delete_flag_x_ctl("lladdr", ifname, 0) < 0) {
 				printf("%% database delete failure\n");
 				sl_free(hwdaddr, 1);
-				return 1;
+				return -1;
 		}
 	} else {
 		strlcpy(llorig, lladdr, sizeof(llorig));
@@ -3930,12 +3960,12 @@ intlladdr(int argc, char **argv, ...)
 		    llorig) < 0) {
 			printf("%% database delete failure\n");
 			sl_free(hwdaddr, 1);
-			return 1;
+			return -1;
 		}
 		if (!set) {
 			printf("%% No stored lladdr to reinstate\n");
 			sl_free(hwdaddr, 1);
-			return 1;
+			return -1;
 		}
 	}
 	sl_free(hwdaddr, 1);
@@ -3956,11 +3986,11 @@ intlladdr(int argc, char **argv, ...)
 				    "fields, up to two digits each,\n"
 				    " %% separated with colons"
 				    " (1:23:45:ab:cd:ef)\n");
-				return 1;
+				return -1;
 			} else {
 				printf("%% database corrupted, unable to "
 				    " retrieve original lladdr\n");
-				return 1;
+				return -1;
 			}
 		}
 	}
@@ -3978,7 +4008,7 @@ intlladdr(int argc, char **argv, ...)
 			printf("%% intlladdr: SIOCSIFLLADDR: %s\n",
 			    strerror(errno));
 		}
-		return 1;
+		return -1;
 	}
 
 	return 0;
@@ -4012,13 +4042,13 @@ intrdomain(int argc, char **argv, ...)
 	if (set && argc < 1) {
 		printf("%% rdomain <routing domain number>\n");
 		printf("%% no rdomain\n");
-		return 0;
+		return -1;
 	}
 	if (set) {
 		rdomain = strtonum(argv[0], 0, RT_TABLEID_MAX, &errmsg);
 		if (errmsg) {
 			printf("%% Routing domain %s invalid (%s)\n", argv[0], errmsg);
-			return 0;
+			return -1;
 		}
 		ifr.ifr_rdomainid = rdomain;
 	}
@@ -4031,8 +4061,10 @@ intrdomain(int argc, char **argv, ...)
 		return cand_setting(ST_DEFAULT, "rdomain");
 	}
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
-	if (ioctl(ifs, SIOCSIFRDOMAIN, &ifr) < 0)
+	if (ioctl(ifs, SIOCSIFRDOMAIN, &ifr) < 0) {
 		printf("%% intrdomain: SIOCSIFRDOMAIN: %s\n", strerror(errno));
+		return -1;
+	}
 
 	return 0;
 }
@@ -4065,7 +4097,7 @@ intdesc(int argc, char **argv, ...)
 	if (set && argc < 1) {
 		printf("%% description <text of description>\n");
 		printf("%% no description\n");
-		return 0;
+		return -1;
 	}
 
 	argvtostring(argc, argv, desc, sizeof(desc));
@@ -4081,8 +4113,10 @@ intdesc(int argc, char **argv, ...)
 	else
 		ifr.ifr_data = (caddr_t)"";
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
-	if (ioctl(ifs, SIOCSIFDESCR, &ifr) < 0)
+	if (ioctl(ifs, SIOCSIFDESCR, &ifr) < 0) {
 		printf("%% intdesc: SIOCSIFDESCR: %s\n", strerror(errno));
+		return -1;
+	}
 
 	return 0;
 }
@@ -4114,13 +4148,13 @@ intvnetflowid(int argc, char **argv, ...)
 	if (set && argc != 0) {
 		printf("%% vnetflowid\n");
 		printf("%% no vnetlowid\n");
-		return 0;
+		return -1;
 	}
 
 	if (candidate) {
 		if (!cand_takes(ifname, SIOCSVNETFLOWID)) {
 			printf("%% vnetflowid not supported on %s\n", ifname);
-			return 0;
+			return -1;
 		}
 		return cand_setting(set ? ST_ON : ST_OFF, "vnetflowid");
 	}
@@ -4130,8 +4164,10 @@ intvnetflowid(int argc, char **argv, ...)
 	else
 		ifr.ifr_vnetid = 0;
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
-	if (ioctl(ifs, SIOCSVNETFLOWID, &ifr) < 0)
+	if (ioctl(ifs, SIOCSVNETFLOWID, &ifr) < 0) {
 		printf("%% intvnetflowid: SIOCSVNETFLOWID: %s\n", strerror(errno));
+		return -1;
+	}
 
 	return 0;
 }
@@ -4287,38 +4323,35 @@ show_vlans(int argc, char **argv, ...)
 
 	switch (argc) {
 	case 2:
-		facts_show(stdout, "vlan");
-		break;
+		return facts_show(stdout, "vlan");
 	case 3:
 		start_vnetid = strtonum(argv[2], EVL_VLID_NULL,
 		    EVL_VLID_MAX, &errstr);
 		if (errstr) {
 			printf("%% VLAN tag %s is %s\n", argv[2], errstr);
-			break;
+			return -1;
 		}
-		facts_show(stdout, "vlan %lld", start_vnetid);
-		break;
+		return facts_show(stdout, "vlan %lld", start_vnetid);
 	case 4:
 		start_vnetid = strtonum(argv[2], EVL_VLID_NULL,
 		    EVL_VLID_MAX, &errstr);
 		if (errstr) {
 			printf("%% VLAN tag %s is %s\n", argv[2], errstr);
-			break;
+			return -1;
 		}
 		end_vnetid = strtonum(argv[3], EVL_VLID_NULL,
 		    EVL_VLID_MAX, &errstr);
 		if (errstr) {
 			printf("%% VLAN tag %s is %s\n", argv[3], errstr);
-			break;
+			return -1;
 		}
 		if (start_vnetid >= end_vnetid) {
 			printf("%% VLAN Start Tag must be smaller "
 			    "than VLAN End Tag\n");
-			break;
+			return -1;
 		}
-		facts_show(stdout, "vlan %lld %lld", start_vnetid,
+		return facts_show(stdout, "vlan %lld %lld", start_vnetid,
 		    end_vnetid);
-		break;
 	}
 	return 0;
 }
