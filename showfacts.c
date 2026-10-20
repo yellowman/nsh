@@ -594,11 +594,12 @@ facts_more(struct facts_answer *a, struct facts_out *o, int budget)
 	case ANS_PROGRAM:
 		/* as nsh runs a program, and as it pages a file */
 		if ((args = prot1_args(a->prog, a->args, a->n - 4, a->w + 4,
-		    a->table)) != NULL)
-			cmdargs(args[0], args);
+		    a->table)) == NULL || cmdargs(args[0], args) != 0)
+			r = -1;
 		break;
 	case ANS_LEASES:
-		more(DHCPLEASES);
+		if (!more(DHCPLEASES))
+			r = -1;
 		break;
 	}
 	a->done = 1;
@@ -752,7 +753,8 @@ render_emit(void *arg, const void *buf, size_t len)
  * The words fmt makes, asked of nshd, its system where they may be and
  * this user may ask it, else its shows, or of nsh itself where nshd
  * does not run, and rendered to out; "interface status" renders
- * interfaces as show interface status does
+ * interfaces as show interface status does: 0, or -1 if the show
+ * failed, having said why, as a handler returns
  */
 int
 facts_show(FILE *out, const char *fmt, ...)
@@ -770,7 +772,7 @@ facts_show(FILE *out, const char *fmt, ...)
 	va_end(ap);
 	if (r == -1) {
 		printf("%% facts_show: %s\n", strerror(errno));
-		return (1);
+		return (-1);
 	}
 
 	memset(&rd, 0, sizeof(rd));
@@ -784,7 +786,7 @@ facts_show(FILE *out, const char *fmt, ...)
 	if ((a = facts_answer(w)) == NULL) {
 		printf("%% show %s: not a show nsh knows\n", w);
 		free(words);
-		return (1);
+		return (-1);
 	}
 	facts_in_init(&in, render_record, &rd);
 	if (rd.status)
@@ -838,5 +840,5 @@ facts_show(FILE *out, const char *fmt, ...)
 	facts_answer_free(a);
 	facts_in_free(&in);
 	free(words);
-	return (r == 1 ? 0 : 1);
+	return (r == 1 ? 0 : -1);
 }

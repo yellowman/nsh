@@ -43,10 +43,10 @@ pr_prot1(int argc, char **argv, ...)
 	    sizeof(struct prot));
 	if (prot == 0) {
 		printf("%% Internal error - Invalid argument %s\n", argv[1]);
-		return 0;
+		return -1;
 	} else if (Ambiguous(prot)) {
 		printf("%% Internal error - Ambiguous argument %s\n", argv[1]);
-		return 0;
+		return -1;
 	}
 
 	snprintf(prefix, sizeof(prefix), "show %s", prot->name);
@@ -61,21 +61,19 @@ pr_prot1(int argc, char **argv, ...)
 	    sizeof(struct prot1));
 	if (x == 0) {
 		printf("%% Invalid argument %s\n", argv[2]);
-		return 0;
+		return -1;
 	} else if (Ambiguous(x)) {
 		printf("%% Ambiguous argument %s\n", argv[2]);
-		return 0;
+		return -1;
 	}
 
 	fillargs = step_optreq(x->args, args, argc, argv, 3);
 	if (fillargs == NULL)
-		return 0;
+		return -1;
 
 	/* systat draws on this terminal; nshd's system runs the rest */
-	if (prot1_find(prot->name, x->name) == NULL) {
-		cmdargs(fillargs[0], fillargs);
-		return 1;
-	}
+	if (prot1_find(prot->name, x->name) == NULL)
+		return cmdargs(fillargs[0], fillargs) == 0 ? 0 : -1;
 	words[0] = '\0';
 	for (i = 3; i < argc; i++) {
 		/* a show's words have no space, none is empty, and they fit */
@@ -83,13 +81,11 @@ pr_prot1(int argc, char **argv, ...)
 		    strlcat(words, " ", sizeof(words)) >= sizeof(words) ||
 		    strlcat(words, argv[i], sizeof(words)) >= sizeof(words)) {
 			printf("%% Invalid argument %s\n", argv[i]);
-			return 0;
+			return -1;
 		}
 	}
-	facts_show(stdout, "program %d %s %s%s", cli_rtable, prot->name,
-	    x->name, words);
-
-	return 1;
+	return facts_show(stdout, "program %d %s %s%s", cli_rtable,
+	    prot->name, x->name, words);
 }
 
 /*

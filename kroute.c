@@ -345,7 +345,7 @@ monitor(int argc, char **argv, ...)
 	if (s < 0) {
 		printf("%% Unable to open routing socket: %s\n",
 		    strerror(errno));
-		return 1;
+		return -1;
 	}
 	saveverbose = verbose;
 	verbose = 1;
@@ -355,7 +355,7 @@ monitor(int argc, char **argv, ...)
 		perror (strerror(errno));
 		verbose = saveverbose;
 		close (s);
-		return (0);
+		return (-1);
 	}
 
 	printf("%% Entering monitor mode ... press ENTER or ^C to leave ...\n");

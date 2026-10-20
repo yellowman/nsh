@@ -69,11 +69,10 @@ who(int argc, char **argv, ...)
 {
 	if (argc == 2 && !isprefix(argv[1], "users")) {
 		printf("%% Too many arguments\n");
-		return 0;
+		return -1;
 	}
 
-	facts_show(stdout, "users");
-	return 0;
+	return facts_show(stdout, "users");
 }
 
 int
