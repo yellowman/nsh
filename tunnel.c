@@ -20,12 +20,12 @@
 #include "settings.h"
 
 int settunnel(int, char *, char *, char *, char *);
-void settunnelrdomain(int, char *, char *);
-void settunnelttl(int, char *, char *);
-void settunneldf(int, char *, int);
-void settunnelecn(int, char *, int);
-void setvnetid(int, char *, char *);
-void delvnetid(int, char *);
+int settunnelrdomain(int, char *, char *);
+int settunnelttl(int, char *, char *);
+int settunneldf(int, char *, int);
+int settunnelecn(int, char *, int);
+int setvnetid(int, char *, char *);
+int delvnetid(int, char *);
 int deletetunnel(int, char *);
 void tunnelusage(void);
 static int vnetid_arg(char *, int64_t *);
@@ -70,15 +70,13 @@ intvnetid(int argc, char **argv, ...)
 	if ((set && argc != 1) || (!set && argc > 1)) {
 		printf("%% vnetid <vnetid>\n");
 		printf("%% no vnetid [vnetid]\n");
-		return 0;
+		return -1;
         }
 	if (candidate)
 		return cand_vnetid(ifname, set, argv[0]);
 	if (set)
-		setvnetid(ifs, ifname, argv[0]);
-	else
-		delvnetid(ifs, ifname);
-	return (0);
+		return setvnetid(ifs, ifname, argv[0]);
+	return delvnetid(ifs, ifname);
 }
 
 /* vnetid in configure private */
@@ -89,21 +87,21 @@ cand_vnetid(char *ifname, int set, char *vnetida)
 
 	if (!cand_takes(ifname, SIOCSVNETID)) {
 		printf("%% vnetid not supported on %s\n", ifname);
-		return 0;
+		return -1;
 	}
 	if (!set) {
 		if (!cand_takes(ifname, SIOCDVNETID)) {
 			printf("%% The vnetid of %s cannot be removed\n",
 			    ifname);
-			return 0;
+			return -1;
 		}
 		return cand_setting(ST_DEFAULT, "vnetid");
 	}
 	if (vnetid_arg(vnetida, &vnetid) == -1)
-		return 0;
+		return -1;
 	if (vnetid == 0) {
 		printf("%% The configuration does not keep vnetid 0\n");
-		return 0;
+		return -1;
 	}
 	if (vnetid < 0)
 		return cand_setting(ST_ON, "vnetid any");
@@ -120,7 +118,7 @@ tunnelusage(void)
 int
 inttunnel(int argc, char **argv, ...)
 {
-	int set, ch, df = 0, ecn = 0;
+	int set, ch, df = 0, ecn = 0, r;
 	char *src = NULL, *dst = NULL, *rdomain = NULL, *ttl = NULL;
 	char *dstip = NULL, *dstport = NULL;
 	char buf[MAXHOSTNAMELEN+sizeof (":65535")];
@@ -145,7 +143,7 @@ inttunnel(int argc, char **argv, ...)
 
 	if (set && argc < 2) {
 		tunnelusage();
-		return 0;
+		return -1;
 	}
 
 	if (argc > 0 && is_ip_addr(argv[0])) {
@@ -164,7 +162,7 @@ inttunnel(int argc, char **argv, ...)
 		} else {
 			if (strlcpy(buf, dst, sizeof(buf)) >= sizeof(buf)) {
 				printf("%% inttunnel: destination overflow\n");
-				return 0;
+				return -1;
 			}
 			dstport = strchr(buf, ':');
 			*dstport++ = '\0';
@@ -203,7 +201,7 @@ inttunnel(int argc, char **argv, ...)
 			printf(": %s", argv[noptind]);
 		printf("\n");
 		tunnelusage();
-		return 0;
+		return -1;
 	}
 
 	if (candidate)
@@ -211,21 +209,23 @@ inttunnel(int argc, char **argv, ...)
 		    ttl, df, ecn);
 
 	if (set) {
-		settunnel(ifs, ifname, src, dstip, dstport);
-		if (rdomain)
-			settunnelrdomain(ifs, ifname, rdomain);
-		if (ttl)
-			settunnelttl(ifs, ifname, ttl);
-		if (df)
-			settunneldf(ifs, ifname, 1);
-		if (ecn)
-			settunnelecn(ifs, ifname, 1);
+		r = settunnel(ifs, ifname, src, dstip, dstport);
+		if (rdomain && settunnelrdomain(ifs, ifname, rdomain) == -1)
+			r = -1;
+		if (ttl && settunnelttl(ifs, ifname, ttl) == -1)
+			r = -1;
+		if (df && settunneldf(ifs, ifname, 1) == -1)
+			r = -1;
+		if (ecn && settunnelecn(ifs, ifname, 1) == -1)
+			r = -1;
 	} else {
-		deletetunnel(ifs, ifname);
-		settunneldf(ifs, ifname, 0);
-		settunnelecn(ifs, ifname, 0);
+		r = deletetunnel(ifs, ifname);
+		if (settunneldf(ifs, ifname, 0) == -1)
+			r = -1;
+		if (settunnelecn(ifs, ifname, 0) == -1)
+			r = -1;
 	}
-	return 0;
+	return r;
 }
 
 /*
@@ -245,46 +245,46 @@ cand_tunnel(char *ifname, int set, char *src, char *dstip, char *dstport,
 
 	if (!cand_takes(ifname, set ? SIOCSLIFPHYADDR : SIOCDIFPHYADDR)) {
 		printf("%% tunnel not supported on %s\n", ifname);
-		return 0;
+		return -1;
 	}
 	if (!set)
 		return cand_setting(ST_DEFAULT, "tunnel");
 	if (src == NULL || dstip == NULL) {
 		tunnelusage();
-		return 0;
+		return -1;
 	}
 	if (rdomain != NULL) {
 		if (!cand_takes(ifname, SIOCSLIFPHYRTABLE)) {
 			printf("%% cannot set tunnel rdomain on %s interface\n",
 			    ifname);
-			return 0;
+			return -1;
 		}
 		if ((rdomainid = tunnel_rdomain(rdomain)) == -1)
-			return 0;
+			return -1;
 	}
 	if (ttla != NULL) {
 		if (!cand_takes(ifname, SIOCSLIFPHYTTL)) {
 			printf("%% tunnel ttl not supported on %s\n", ifname);
-			return 0;
+			return -1;
 		}
 		if ((ttl = tunnel_ttl(ttla)) == -1)
-			return 0;
+			return -1;
 	}
 	if (df && !cand_takes(ifname, SIOCSLIFPHYDF)) {
 		printf("%% tunnel df not supported on %s\n", ifname);
-		return 0;
+		return -1;
 	}
 	if (ecn && !cand_takes(ifname, SIOCSLIFPHYECN)) {
 		printf("%% tunnel ecn not supported on %s\n", ifname);
-		return 0;
+		return -1;
 	}
 	if ((af = tunnel_addr("source", src, NULL, s, NULL)) == 0 ||
 	    (daf = tunnel_addr("destination", dstip, dstport, d, &dport)) == 0)
-		return 0;
+		return -1;
 	if (af != daf) {
 		printf("%% source and destination address families do not"
 		    " match\n");
-		return 0;
+		return -1;
 	}
 
 	if ((l = cand_line("tunnel", 0)) != NULL) {
@@ -310,8 +310,9 @@ cand_tunnel(char *ifname, int set, char *src, char *dstip, char *dstport,
 		snprintf(port, sizeof(port), ":%d", dport);
 	if (ttl > 0)
 		snprintf(ttls, sizeof(ttls), " ttl %d", ttl);
-	cand_setting(ST_ON, "tunnel %s %s%s%s%s%s", s, d, port, ttls,
-	    ecn ? " ecn" : "", df ? " df" : "");
+	if (cand_setting(ST_ON, "tunnel %s %s%s%s%s%s", s, d, port, ttls,
+	    ecn ? " ecn" : "", df ? " df" : "") == -1)
+		return -1;
 	if (rdomain == NULL)
 		return 0;
 	if (rdomainid != 0)
@@ -353,20 +354,20 @@ int
 settunnel(int s, char *ifname, char *src, char *dstip, char *dstport)
 {
 	struct addrinfo *srcres, *dstres;
-	int ecode;
+	int ecode, r = -1;
 	struct if_laddrreq req;
 
 	if ((ecode = getaddrinfo(src, NULL, NULL, &srcres)) != 0) {
 		printf("%% unable to parse source address string: %s\n",
 		     gai_strerror(ecode));
-		return 0;
+		return -1;
 	}
 
 	if ((ecode = getaddrinfo(dstip, dstport, NULL, &dstres)) != 0) {
 		printf("%% unable to parse destination address string: %s\n",
 		     gai_strerror(ecode));
 		freeaddrinfo(srcres);
-		return 0;
+		return -1;
 	}
 
 	if (srcres->ai_addr->sa_family != dstres->ai_addr->sa_family) {
@@ -392,12 +393,13 @@ settunnel(int s, char *ifname, char *src, char *dstip, char *dstport)
 		else
 			printf("%% settunnel: SIOCSLIFPHYADDR: %s\n",
 			    strerror(errno));
-	}
+	} else
+		r = 0;
 
  end:
 	freeaddrinfo(srcres);
 	freeaddrinfo(dstres);
-	return 1;
+	return r;
 }
 
 /* A tunnel's rdomain, or -1 after saying why not */
@@ -415,14 +417,14 @@ tunnel_rdomain(char *rdomain)
 	return rdomainid;
 }
 
-void
+int
 settunnelrdomain(int ifs, char *ifname, char *rdomain)
 {
 	int rdomainid;
 	struct ifreq ifr;
 
 	if (rdomain == NULL || (rdomainid = tunnel_rdomain(rdomain)) == -1)
-		return;
+		return -1;
 	bzero(&ifr, sizeof(ifr));
 	ifr.ifr_rdomainid = rdomainid;
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
@@ -439,7 +441,9 @@ settunnelrdomain(int ifs, char *ifname, char *rdomain)
 			    strerror(errno));
 			break;
 		}
+		return -1;
 	}
+	return 0;
 }
 
 /* A tunnel's ttl, 1 to 255 as the kernel takes it, or -1 */
@@ -457,41 +461,50 @@ tunnel_ttl(char *ttla)
 	return ttl;
 }
 
-void
+int
 settunnelttl(int ifs, char *ifname, char *ttla)
 {
 	int ttl;
 	struct ifreq ifr;
 
 	if (ttla == NULL || (ttl = tunnel_ttl(ttla)) == -1)
-		return;
+		return -1;
 
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 	ifr.ifr_ttl = ttl;
-	if (ioctl(ifs, SIOCSLIFPHYTTL, (caddr_t)&ifr) < 0)
+	if (ioctl(ifs, SIOCSLIFPHYTTL, (caddr_t)&ifr) < 0) {
 		printf("%% settunnelttl: SIOCSLIFPHYTTL: %s\n", strerror(errno));
+		return -1;
+	}
+	return 0;
 }
 
-void
+int
 settunneldf(int ifs, char *ifname, int df)
 {
 	struct ifreq ifr;
 
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 	ifr.ifr_df = df;
-	if (ioctl(ifs, SIOCSLIFPHYDF, (caddr_t)&ifr) == -1)
+	if (ioctl(ifs, SIOCSLIFPHYDF, (caddr_t)&ifr) == -1) {
 		printf("%% settunneldf: SIOCSLIFPHYDF: %s\n", strerror(errno));
+		return -1;
+	}
+	return 0;
 }
 
-void
+int
 settunnelecn(int ifs, char *ifname, int ecn)
 {
 	struct ifreq ifr;
 
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 	ifr.ifr_metric = ecn;
-	if (ioctl(ifs, SIOCSLIFPHYECN, (caddr_t)&ifr) == -1)
+	if (ioctl(ifs, SIOCSLIFPHYECN, (caddr_t)&ifr) == -1) {
 		printf("%% settunnelecn: SIOCSLIFPHYECN: %s\n", strerror(errno));
+		return -1;
+	}
+	return 0;
 }
 
 /* A vnetid into *vnetid, any as -1; -1 after saying why not */
@@ -512,14 +525,14 @@ vnetid_arg(char *vnetida, int64_t *vnetid)
 	return 0;
 }
 
-void
+int
 setvnetid(int ifs, char *ifname, char *vnetida)
 {
 	int64_t vnetid;
 	struct ifreq ifr;
 
 	if (vnetida == NULL || vnetid_arg(vnetida, &vnetid) == -1)
-		return;
+		return -1;
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 	ifr.ifr_vnetid = vnetid;
 	if (ioctl(ifs, SIOCSVNETID, (caddr_t)&ifr) < 0) {
@@ -530,17 +543,22 @@ setvnetid(int ifs, char *ifname, char *vnetida)
 			printf("%% setvnetid SIOCSVNETID: %s\n",
 			    strerror(errno));
 		}
+		return -1;
 	}
+	return 0;
 }
 
-void
+int
 delvnetid(int ifs, char *ifname)
 {
 	struct ifreq ifr;
 
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
-	if (ioctl(ifs, SIOCDVNETID, &ifr) < 0)
+	if (ioctl(ifs, SIOCDVNETID, &ifr) < 0) {
 		printf("%% delvnetid SIOCDVNETID: %s\n", strerror(errno));
+		return -1;
+	}
+	return 0;
 }
 
 int
@@ -554,9 +572,9 @@ deletetunnel(int s, char *ifname)
 	if (ioctl(s, SIOCDIFPHYADDR, &ifr) < 0) {
 		printf("%% deletetunnel: SIOCDIFPHYADDR: %s\n",
 		    strerror(errno));
-		return 0;
+		return -1;
 	}
-	return 1;
+	return 0;
 }
 
 int

@@ -138,7 +138,7 @@ intsppp(int argc, char **argv, ...)
 	}
 	if (isc == NULL) {
 		printf("%% intsppp: Internal error\n");
-		return 0;
+		return -1;
 	}
 
 	argc--;
@@ -153,7 +153,7 @@ intsppp(int argc, char **argv, ...)
 	/* usage? */
 	if (argc < 1 && set) {
 		(*isc->usage)();
-		return 0;
+		return -1;
 	}
 
 	/* parse */
@@ -171,7 +171,7 @@ intsppp(int argc, char **argv, ...)
 			if (!spa.proto) {
 				printf("%% Unknown proto: %s\n",
 				    argv[noptind -1 ]);
-				return 0;
+				return -1;
 			}
 			break;
 #define	__name	1<<1
@@ -181,7 +181,7 @@ intsppp(int argc, char **argv, ...)
 			    sizeof(spa.name)) >= sizeof(spa.name)) {
 				printf("%% Name too long (> %zu): %s\n",
 				    sizeof(spa.name), argv[noptind - 1]);
-				return 0;
+				return -1;
 			}
 			break;
 #define	__key	1<<2
@@ -191,7 +191,7 @@ intsppp(int argc, char **argv, ...)
 			    sizeof(spa.secret)) >= sizeof(spa.secret)) {
 				printf("%% Key too long (> %zu): %s\n",
 				    sizeof(spa.secret), argv[noptind - 1]);
-				return 0;
+				return -1;
 			}
 			break;
 #define	__flag	1<<3
@@ -205,12 +205,12 @@ intsppp(int argc, char **argv, ...)
 			} else {
 				printf("%% Unknown flag: %s\n",
 			    argv[noptind - 1]);
-				return 0;
+				return -1;
 			}
 			break;
 		default:
 			printf("%% intsppp: nopt table error\n");
-			return 0;
+			return -1;
 		}
 
 	if (argc - noptind != 0) {
@@ -220,13 +220,13 @@ intsppp(int argc, char **argv, ...)
 			printf(": %s", argv[noptind]);
 		printf("\n");
 		(*isc->usage)();
-		return 0;
+		return -1;
 	}
 
 	/* sppp_set_params() takes proto 0 to remove all of it */
 	if (set && !(cmd & __proto)) {
 		(*isc->usage)();
-		return 0;
+		return -1;
 	}
 
 	if (argc < 1)
@@ -247,7 +247,7 @@ intsppp(int argc, char **argv, ...)
 		printf("%% intspppproto: SIOCSSPPPPARAMS: "
 		    "SPPPIOS%sAUTH: %s\n",
 		    isc->cmd == SPPPIOSMAUTH ? "M" : "H", strerror(errno));
-		return 0;
+		return -1;
 	}
 	if (cmd & __key) {
 		char type[TYPESZ];
@@ -293,7 +293,7 @@ cand_sppp(char *ifname, int set, int haskey, struct sauthreq *spa, char *pfx)
 	if (!cand_takes(ifname, SIOCSSPPPPARAMS)) {
 		printf("%% intspppproto: SIOCSSPPPPARAMS: SPPPIOS%sAUTH: %s\n",
 		    spa->cmd == SPPPIOSMAUTH ? "M" : "H", strerror(ENOTTY));
-		return 0;
+		return -1;
 	}
 	if (!set)
 		return cand_setting(ST_DEFAULT, "%s", pfx);
@@ -321,10 +321,10 @@ pppoeusage(void)
 	printf("%% no pppoe\n");
 }
 
-void
+int
 pppoe_ipcp(char *ifname, int ifs, int set)
 {
-	int unit, flags, up;
+	int unit, flags, up, r = 0;
 	struct ifaliasreq ip4req;
 	ip_t in4dest, in4gate;
 	char dest_str[16];
@@ -341,13 +341,14 @@ pppoe_ipcp(char *ifname, int ifs, int set)
 
 	unit = pppoe_get_ifunit(ifname);
 	if (unit == -1)
-		return;
+		return -1;
 
 	flags = get_ifflags(ifname, ifs);
 	up = (flags & IFF_UP) ? 1 : 0;
 	if (up) {
 		flags &= ~IFF_UP;
-		set_ifflags(ifname, ifs, flags);
+		if (set_ifflags(ifname, ifs, flags) == -1)
+			r = -1;
 	}
 	
 	/*
@@ -379,15 +380,18 @@ pppoe_ipcp(char *ifname, int ifs, int set)
 	if (ioctl(ifs, set ? SIOCAIFADDR : SIOCDIFADDR, &ip4req) < 0) {
 		printf("%% pppoe_ipcp: SIOC%cIFADDR: %s\n",
 		    set ? 'A' : 'D', strerror(errno));
+		r = -1;
 	}
 
 	/* Wildcard IPv4 default route: 0.0.0.$(unit + 1) */
-	ip_route(&in4dest, &in4gate, set ? RTM_ADD : RTM_DELETE,
+	if (ip_route(&in4dest, &in4gate, set ? RTM_ADD : RTM_DELETE,
 	    RTF_STATIC | RTF_MPATH | RTF_GATEWAY | RTF_UP,
-	    cli_rtable, rt_metrics, 0);
+	    cli_rtable, rt_metrics, 0) != 0)
+		r = -1;
 
-	if (set || up)
-		set_ifflags(ifname, ifs, flags | IFF_UP);
+	if ((set || up) && set_ifflags(ifname, ifs, flags | IFF_UP) == -1)
+		r = -1;
+	return r;
 }
 
 /* pppoe dev, pppoe svc, pppoe ac */
@@ -429,14 +433,14 @@ intpppoe(int argc, char **argv, ...)
 	/* usage? */
  	if (argc < 1 && set) {
 		pppoeusage();
-		return 0;
+		return -1;
 	}
 
 	strlcpy(parms.ifname, ifname, sizeof(parms.ifname));
 	if (pppoe_get(ifs, &parms) == -1) {
 		printf("%% intpppoe: PPPOEGETPARMS: %s\n",
 		    strerror(errno));
-		return 0;
+		return -1;
 	}
 
 	/* parse */
@@ -451,7 +455,7 @@ intpppoe(int argc, char **argv, ...)
 				    " long (> %zu): %s\n",
 				    sizeof(parms.ac_name),
 				    argv[noptind - 1]);
-				return 0;
+				return -1;
 			}
 			break;
 		case 'd':       /* dev */
@@ -461,7 +465,7 @@ intpppoe(int argc, char **argv, ...)
 				printf("%% dev name too long (> %zu): %s\n",
 				    sizeof(parms.eth_ifname),
 				    argv[noptind - 1]);
-				return 0;
+				return -1;
 			}
 			break;
 		case 's':	/* svc */
@@ -472,12 +476,12 @@ intpppoe(int argc, char **argv, ...)
 				printf("%% service name too long (> %zu): %s\n",
 				    sizeof(parms.service_name),
 				    argv[noptind - 1]);
-				return 0;
+				return -1;
 			}
 			break;
 		default:
 			printf("%% intpppoe: nopt table error\n");
-			return 0;
+			return -1;
 		}
 
 	if (argc - noptind != 0) {
@@ -487,14 +491,14 @@ intpppoe(int argc, char **argv, ...)
 			printf(": %s", argv[noptind]);
 		printf("\n");
 		pppoeusage();
-		return 0;
+		return -1;
 	}
 
 	/* PPPOESETPARMS drops the dev it had before refusing one */
 	if (set && parms.eth_ifname[0] != '\0' &&
 	    !pppoe_isether(parms.eth_ifname)) {
 		printf("%% intpppoe: PPPOESETPARMS: %s\n", strerror(ENXIO));
-		return 0;
+		return -1;
 	}
 
 	if (!set) {
@@ -505,8 +509,10 @@ intpppoe(int argc, char **argv, ...)
 	}
 
 	if (pppoe_set(ifs, &parms) == -1 ||
-	    (!set && dev && pppoe_nodev(ifs, ifname) == -1))
+	    (!set && dev && pppoe_nodev(ifs, ifname) == -1)) {
 		printf("%% intpppoe: PPPOESETPARMS: %s\n", strerror(errno));
+		return -1;
+	}
 
 	return (0);
 }

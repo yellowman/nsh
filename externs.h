@@ -75,7 +75,7 @@ int nopt(int, char **, struct nopts *);
 
 /* ppp.c */
 int intsppp(int, char **, ...);
-void pppoe_ipcp(char *, int, int);
+int pppoe_ipcp(char *, int, int);
 int intpppoe(int, char **, ...);
 int is_pppoe(char *, int);
 #define NSH_PPPOE_IPADDR_IPCP 1

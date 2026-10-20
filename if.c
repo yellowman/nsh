@@ -1999,9 +1999,7 @@ intipcp(char *ifname, int ifs, int argc, char **argv)
 	else
 		db_insert_flag_x("pppoeipaddrmode", ifname, 0, 0, "static");
 
-	pppoe_ipcp(ifname, ifs, set);
-
-	return 0;
+	return pppoe_ipcp(ifname, ifs, set);
 }
 
 int

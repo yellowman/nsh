@@ -968,7 +968,7 @@ static struct wgc {
 int
 intwg(int argc, char **argv, ...)
 {
-	int set;
+	int set, r = -1;
 	struct wgc *x;
 	va_list ap;
 	char *ifname;
@@ -995,10 +995,10 @@ intwg(int argc, char **argv, ...)
 	x=(struct wgc *) genget(argv[0], (char **)wgcs, sizeof(struct wgc));
 	if (x == 0) {
 		printf("%% intwg: Internal error - Invalid argument %s\n", argv[0]);
-		return 0;
+		return -1;
 	} else if (Ambiguous(x)) {
 		printf("%% intwg: Internal error - Ambiguous argument %s\n", argv[0]);
-		return 0;
+		return -1;
  	}
 
 	argc--;
@@ -1009,13 +1009,13 @@ intwg(int argc, char **argv, ...)
 		printf("%% %s <%s>\n", x->name, x->descr);
 		if (x->type != WGKEY)
 			printf("%% no %s [%s]\n", x->name, x->descr);
-		return 0;
+		return -1;
 	}
 
 	/* SIOCSWG sets a private key, and nothing takes one away */
 	if (x->type == WGKEY && !set) {
 		printf("%% The private key of %s cannot be removed\n", ifname);
-		return 0;
+		return -1;
 	}
 
 	switch(x->type) {
@@ -1053,11 +1053,13 @@ intwg(int argc, char **argv, ...)
 
 	if (wg_set(ifs, &wgdata) == -1)
 		printf("%% intwg: SIOCSWG: %s\n", strerror(errno));
+	else
+		r = 0;
 wgerr:
 	free(wgdata.wgd_interface);
         wgdata.wgd_size = 0;
 
-	return 0;
+	return r;
 }
 
 void
@@ -1082,7 +1084,7 @@ intwgpeer(int argc, char **argv, ...)
 {
 	struct wg_aip_io *drop = NULL, *d;
 	size_t ndrop = 0;
-	int set, ch;
+	int set, ch, r = -1;
 	va_list ap;
 	char *ifname;
 	int ifs;
@@ -1124,7 +1126,7 @@ intwgpeer(int argc, char **argv, ...)
 	if (argc == 0) {
 		if (set) {
 			wgpeerusage();
-			return 0;
+			return -1;
 		} else {
 			if (unsetwgpeerall() < 0)
 				goto wgerr;
@@ -1201,7 +1203,7 @@ intwgpeer(int argc, char **argv, ...)
 #endif
 		default:
 			printf("%% intwgpeer: nopt table error\n");
-			return 0;
+			return -1;
 		}
 
 	if (argc - noptind != 0) {
@@ -1222,10 +1224,12 @@ intwgpeer(int argc, char **argv, ...)
 
 	if (wg_set(ifs, &wgdata) == -1)
 		printf("%% intwgpeer: SIOCSWG: %s\n", strerror(errno));
+	else
+		r = 0;
 wgerr:
 	free(drop);
 	free(wgdata.wgd_interface);
 	wgdata.wgd_size = 0;
 
-	return 0;
+	return r;
 }
