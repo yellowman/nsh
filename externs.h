@@ -316,7 +316,7 @@ void conf_sysctls(FILE *);
 #define NO_NETMASK 0
 #define ASSUME_NETMASK 1
 int route(int, char**, ...);
-void show_route(char *, int);
+int show_route(char *, int);
 int is_ip_addr(char *);
 #ifdef _IP_T_
 void parse_ip_pfx(char *, int, ip_t *);

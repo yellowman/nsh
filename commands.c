@@ -552,16 +552,16 @@ showcmd(int argc, char **argv, ...)
 	s = (Menu *) genget(argv[1], (char **) showlist, sizeof(Menu));
 	if (s == 0) {
 		printf("%% Invalid argument %s\n", argv[1]);
-		return 0;
+		return -1;
 	} else if (Ambiguous(s)) {
 		printf("%% Ambiguous argument %s\n", argv[1]);
-		return 0;
+		return -1;
 	}
 	if (((s->minarg + 2) > argc) || ((s->maxarg + 2) < argc)) {
 		printf("%% Wrong number of argument%s to 'show %s' command"
 		    " (min %i, max %i)\n", argc <= 2 ? "" : "s", s->name,
 		    s->minarg, s->maxarg);
-		return 0;
+		return -1;
 	}
 
 	if (strlcpy(outpath, "/tmp/nsh.show.XXXXXXXX", sizeof(outpath)) >=
@@ -571,11 +571,12 @@ showcmd(int argc, char **argv, ...)
 	outfd = mkstemp(outpath);
 	if (outfd == -1) {
 		printf("%% mkstemp %s: %s\n", outpath, strerror(errno));
-		return 0;
+		return -1;
 	}
 
 	if (fstat(outfd, &sb) == -1) {
 		printf("%% fstat %s: %s\n", outpath, strerror(errno));
+		error = -1;
 		goto done;
 	}
 
@@ -586,6 +587,7 @@ showcmd(int argc, char **argv, ...)
 		fd = dup(outfd);
 		if (fd == -1) {
 			printf("%% dup %s\n", strerror(errno));
+			error = -1;
 			goto done;
 		}
 
@@ -593,11 +595,14 @@ showcmd(int argc, char **argv, ...)
 		if (f == NULL) {
 			printf("%% dup %s\n", strerror(errno));
 			close(fd);
+			error = -1;
 			goto done;
 		}
 		error = (*s->handler)(argc, argv, f);
-		if (fflush(f) == EOF)
+		if (fflush(f) == EOF) {
 			printf("%% fflush %s: %s\n", outpath, strerror(errno));
+			error = -1;
+		}
 		fclose(f); /* fd is closed via f */
 	}
 
@@ -612,6 +617,7 @@ showcmd(int argc, char **argv, ...)
 		lseek(outfd, 0, SEEK_SET);
 		if (fstat(outfd, &sb2) == -1) {
 			printf("%% fstat %s: %s\n", outpath, strerror(errno));
+			error = -1;
 			goto done;
 		}
 		if (sb.st_size != sb2.st_size ||
@@ -620,11 +626,15 @@ showcmd(int argc, char **argv, ...)
 			more(outpath);
 	}
 done:
-	if (close(outfd) == EOF)
+	if (close(outfd) == EOF) {
 		printf("%% close %s: %s\n", outpath, strerror(errno));
-	if (unlink(outpath) == -1)
+		error = -1;
+	}
+	if (unlink(outpath) == -1) {
 		printf("%% unlink %s: %s\n", outpath, strerror(errno));
-	return error;
+		error = -1;
+	}
+	return error ? -1 : 0;
 }
 
 /*
@@ -1096,21 +1106,22 @@ flushcmd(int argc, char **argv, ...)
 	f = (Menu *) genget(argv[1], (char **)flushlist, sizeof(Menu));
 	if (f == 0) {
 		printf("%% Invalid argument %s\n", argv[1]);
-		return 0;
+		return -1;
 	} else if (Ambiguous(f)) {
 		printf("%% Ambiguous argument %s\n", argv[1]);
-		return 0;
+		return -1;
 	}
 	if (((f->minarg + 2) > argc) || ((f->maxarg + 2) < argc)) {
 		printf("%% Wrong argument%s to 'flush %s' command.\n",
 		    argc <= 2 ? "" : "s", f->name);
-		return 0;
+		return -1;
 	}
-	if (f->handler)
-		(*f->handler)(0, NULL, (f->maxarg > 0) ? argv[2] : 0,
-		    (f->maxarg > 1) ? argv[3] : 0);
+	if (f->handler &&
+	    (*f->handler)(0, NULL, (f->maxarg > 0) ? argv[2] : 0,
+	    (f->maxarg > 1) ? argv[3] : 0) == -1)
+		return -1;
 
-	return 1;
+	return 0;
 }
 
 static int
@@ -1119,14 +1130,16 @@ flush_line(int argc, char **argv, ...)
 	va_list ap;
 	char *line;
 	char * args[5] = { PKILL, "-9", "-t", /* line */ NULL, NULL };
+	int r;
 
 	va_start(ap, argv);
 	line = va_arg(ap, char *);
 	va_end(ap);
 
 	args[3] = line;
-	cmdargs(PKILL, args);
-	return (1);
+	/* 1: nothing ran on the line */
+	r = cmdargs(PKILL, args);
+	return r == -1 || r > 1 ? -1 : 0;
 }
 
 static int
@@ -1773,113 +1786,113 @@ int_interface(int argc, char **argv, ...)
 static int
 int_logger(int argc, char **argv, ...)
 {
-        logger(argc, argv);
-        return 0; /* do not leave interface context */
+	/* do not leave interface context */
+	return logger(argc, argv) == -1 ? -1 : 0;
 }
 
 static int
 int_ping(int argc, char **argv, ...)
 {
-	ping(argc, argv);
-	return 0; /* do not leave interface context */
+	/* do not leave interface context */
+	return ping(argc, argv) == -1 ? -1 : 0;
 }
 
 static int
 int_ping6(int argc, char **argv, ...)
 {
-	ping6(argc, argv);
-	return 0; /* do not leave interface context */
+	/* do not leave interface context */
+	return ping6(argc, argv) == -1 ? -1 : 0;
 }
 
 static int
 int_traceroute(int argc, char **argv, ...)
 {
-	traceroute(argc, argv);
-	return 0; /* do not leave interface context */
+	/* do not leave interface context */
+	return traceroute(argc, argv) == -1 ? -1 : 0;
 }
 
 static int
 int_traceroute6(int argc, char **argv, ...)
 {
-	traceroute6(argc, argv);
-	return 0; /* do not leave interface context */
+	/* do not leave interface context */
+	return traceroute6(argc, argv) == -1 ? -1 : 0;
 }
 
 static int
 int_ssh(int argc, char **argv, ...)
 {
-	ssh(argc, argv);
-	return 0; /* do not leave interface context */
+	/* do not leave interface context */
+	return ssh(argc, argv) == -1 ? -1 : 0;
 }
 
 static int
 int_telnet(int argc, char **argv, ...)
 {
-	telnet(argc, argv);
-	return 0; /* do not leave interface context */
+	/* do not leave interface context */
+	return telnet(argc, argv) == -1 ? -1 : 0;
 }
 
 static int
 int_do(int argc, char **argv, ...)
 {
-	docmd(argc, argv);
-	return 0; /* do not leave interface context */
+	/* do not leave interface context */
+	return docmd(argc, argv) == -1 ? -1 : 0;
 }
 
 static int
 int_setenv(int argc, char **argv, ...)
 {
-	setenvcmd(argc, argv);
-	return 0; /* do not leave interface context */
+	/* do not leave interface context */
+	return setenvcmd(argc, argv) == -1 ? -1 : 0;
 }
 
 static int
 int_unsetenv(int argc, char **argv, ...)
 {
-	unsetenvcmd(argc, argv);
-	return 0; /* do not leave interface context */
+	/* do not leave interface context */
+	return unsetenvcmd(argc, argv) == -1 ? -1 : 0;
 }
 
 static int
 int_saveenv(int argc, char **argv, ...)
 {
-	saveenvcmd(argc, argv);
-	return 0; /* do not leave interface context */
+	/* do not leave interface context */
+	return saveenvcmd(argc, argv) == -1 ? -1 : 0;
 }
 
 static int
 int_show(int argc, char **argv, ...)
 {
-	showcmd(argc, argv);
-	return 0; /* do not leave interface context */
+	/* do not leave interface context */
+	return showcmd(argc, argv) == -1 ? -1 : 0;
 }
 
 static int
 int_who(int argc, char **argv, ...)
 {
-	who(argc, argv);
-	return 0; /* do not leave interface context */
+	/* do not leave interface context */
+	return who(argc, argv) == -1 ? -1 : 0;
 }
 
 static int
 int_doverbose(int argc, char **argv, ...)
 {
-	doverbose(argc, argv);
-	return 0; /* do not leave interface context */
+	/* do not leave interface context */
+	return doverbose(argc, argv) == -1 ? -1 : 0;
 }
 
 static int
 int_doediting(int argc, char **argv, ...)
 {
-	doediting(argc, argv);
-	return 0; /* do not leave interface context */
+	/* do not leave interface context */
+	return doediting(argc, argv) == -1 ? -1 : 0;
 }
 
 static int
 int_manual(int argc, char **argv, ...)
 {
-	manual(argc, argv);
-	return 0; /* do not leave interface context */
+	/* do not leave interface context */
+	return manual(argc, argv) == -1 ? -1 : 0;
 }
 
 static int
@@ -2263,13 +2276,13 @@ manual(int argc, char **argv, ...)
 
 	if (argc != 1 && argc != 2) {
 		manual_usage();
-		return 1;
+		return -1;
 	}
 
 	if (argc == 2) {
 		if (strcmp(argv[1], "?") == 0) {
 			manual_usage();
-			return 1;
+			return 0;
 		}
 		snprintf(tag, sizeof(tag), "tag=%s", argv[1]);
 		tagarg = tag;
@@ -2354,24 +2367,25 @@ hostname(int argc, char **argv, ...)
 
 	if (argc > 1) {
 		printf("%% Invalid arguments\n");
-		return 1;
+		return -1;
 	}
 
 	if (argc == 1) {
 		if (candidate)
 			return cand_setting(ST_ON, "hostname %s", *argv);
-		if (sethostname(*argv, strlen(*argv)))
+		if (sethostname(*argv, strlen(*argv))) {
 			printf("%% sethostname: %s\n", strerror(errno));
-        } else
-		show_hostname(0, NULL);
-	return 0;
+			return -1;
+		}
+		return 0;
+	}
+	return show_hostname(0, NULL);
 }
 
 static int
 show_hostname(int argc, char **argv, ...)
 {
-	facts_show(stdout, "hostname");
-	return 0;
+	return facts_show(stdout, "hostname");
 }
 
 static struct facts_field hostname_fields[] = {
@@ -2407,7 +2421,7 @@ logger(int argc, char *argv[], ...)
 {
         if (argc < 2) {  
                 printf("%% Invalid arguments\n");
-                return 1;
+                return -1;
         } else {
                 cmdargs(LOGGER, argv);
         }
@@ -2426,12 +2440,12 @@ nocmd(int argc, char **argv, ...)
 
 	if (!NO_ARG(argv[0])) {
 		printf("%% nocmd: invalid command %s\n", argv[0]);
-		return 0;
+		return -1;
 	}
 
 	if (argc < 2) {
 		printf("%% nocmd: command name not provided\n");
-		return 0;
+		return -1;
 	}
 
 	for (c = cmdtab; c->name; c++) {
@@ -2443,7 +2457,7 @@ nocmd(int argc, char **argv, ...)
 
 	if (cmd == NULL) {
 		printf("%% nocmd: command %s not found\n", argv[1]);
-		return 0;
+		return -1;
 	}
 
 	return (*c->handler)(argc, argv, 0);
@@ -2459,7 +2473,7 @@ docmd(int argc, char **argv, ...)
 {
 	if (argc < 2) {
 		printf("%% command name not provided\n");
-		return 0;
+		return -1;
 	}
 
 	argv++;
@@ -2467,7 +2481,7 @@ docmd(int argc, char **argv, ...)
 
 	if (NO_ARG(argv[0])) {
 		printf("%% 'no' commands are not supported with 'do'\n");
-		return 0;
+		return -1;
 	}
 
 	if (ifname[0] != '\0') { /* Interface or Bridge context */
@@ -2477,7 +2491,7 @@ docmd(int argc, char **argv, ...)
 		ifs = socket(AF_INET, SOCK_DGRAM, 0);
 		if (ifs < 0) {
 			printf("%% socket failed: %s\n", strerror(errno));
-			return 0;
+			return -1;
 		}
 		i = (struct intlist *) genget(argv[0], (char **)whichlist,
 		    sizeof(struct intlist));
@@ -2497,7 +2511,7 @@ docmd(int argc, char **argv, ...)
 			 */
 			if (getrtable() != 0 && !priv) {
 				printf("%% Privilege required\n");
-				return 0;
+				return -1;
 			}
 
 			if (cli_rtable != 0 && nsh_setrtable(0) == 0)
@@ -2551,14 +2565,14 @@ setenvcmd(int argc, char **argv, ...)
 		nsh_env = hashtable_alloc();
 		if (nsh_env == NULL) {
 			printf("%% hashtable_alloc: %s", strerror(errno));
-			return 0;
+			return -1;
 		}
 	}
 
 	name = strdup(argv[1]);
 	if (name == NULL) {
 		printf("%% setenvcmd: strndup: %s\n", strerror(errno));
-		return 0;
+		return -1;
 	}
 
 	eq = strchr(name, '=');
@@ -2595,7 +2609,7 @@ unsetenvcmd(int argc, char **argv, ...)
 
 	if (argc != 2) {
 		printf("%% unsetenv NAME\n");
-		return 0;
+		return -1;
 	}
 
 	name = argv[1];
@@ -2638,7 +2652,7 @@ saveenvcmd(int argc, char **argv, ...)
 
 	if (argc != 1) {
 		printf("%% usage: saveenv\n");
-		return 0;
+		return -1;
 	}
 
 	if (nsh_env == NULL)
@@ -2647,19 +2661,19 @@ saveenvcmd(int argc, char **argv, ...)
 	home = getenv("HOME");
 	if (home == NULL) {
 		printf("%% cannot find home directory; HOME is not set!\n");
-		return 0;
+		return -1;
 	}
 
 	ret = snprintf(path, sizeof(path), "%s/.nshenv", home);
 	if (ret < 0 || (size_t)ret >= sizeof(path)) {
 		printf("%% path to ~/.nshenv is too long\n");
-		return 0;
+		return -1;
 	}
 
 	ret = snprintf(tmppath, sizeof(tmppath), "%s/.nshenv-XXXXXXXXXX", home);
 	if (ret < 0 || (size_t)ret >= sizeof(tmppath)) {
 		printf("%% path to ~/.nshenv is too long\n");
-		return 0;
+		return -1;
 	}
 
 	fd = mkstemp(tmppath);
@@ -2676,7 +2690,7 @@ saveenvcmd(int argc, char **argv, ...)
 		close(fd);
 		if (unlink(tmppath) == -1)
 			printf("%% unlink %s: %s\n", tmppath, strerror(errno));
-		return 0;
+		return -1;
 	}
 
 	if (fchmod(fileno(f), S_IRUSR | S_IWUSR) == -1)
@@ -2759,7 +2773,7 @@ ping(int argc, char *argv[], ...)
 {
 	if (argc < 2) {
 		printf("%% Invalid arguments\n");
-		return 1;
+		return -1;
 	} else {
 		cmdargs(PING, argv);
 	}
@@ -2771,7 +2785,7 @@ ping6(int argc, char *argv[], ...)
 {
 	if (argc < 2) {
 		printf("%% Invalid arguments\n");
-		return 1;
+		return -1;
 	} else {
 		cmdargs(PING6, argv);
 	}
@@ -2786,7 +2800,7 @@ telnet(int argc, char *argv[], ...)
 {
 	if (argc < 2) {
 		printf("%% Invalid arguments\n");
-		return 1;
+		return -1;
 	} else {
 		cmdargs(TELNET, argv);
 	}
@@ -2801,7 +2815,7 @@ ssh(int argc, char *argv[], ...)
 {
 	if (argc < 2) {
 		printf("%% Invalid arguments\n");
-		return 1;
+		return -1;
 	} else {
 		cmdargs(SSH, argv);
 	}
@@ -2816,7 +2830,7 @@ traceroute(int argc, char *argv[], ...)
 {
 	if (argc < 2) {
 		printf("%% Invalid arguments\n");
-		return 1;
+		return -1;
 	} else {
 		cmdargs(TRACERT, argv);
 	}
@@ -2828,7 +2842,7 @@ traceroute6(int argc, char *argv[], ...)
 {
 	if (argc < 2) {
 		printf("%% Invalid arguments\n");
-		return 1;
+		return -1;
 	} else {
 		cmdargs(TRACERT6, argv);
 	}
@@ -2897,7 +2911,7 @@ rtable(int argc, char **argv, ...)
 		/* Disallow unprivileged users from removing an rtable */
 		if (!priv) {
 			printf("%% Privilege required\n");
-			return 1;
+			return -1;
 		}
 	} else {
 		set = 1;
@@ -2906,13 +2920,13 @@ rtable(int argc, char **argv, ...)
 	if (argc < 2) {
 		printf("%% rtable <table id> [name]\n");
 		printf("%% no rtable <table id>\n");
-		return 1;
+		return -1;
 	}
 
 	table = strtonum(argv[1], 0, RT_TABLEID_MAX, &errstr);
 	if (errstr) {
 		printf("%% invalid table id: %s\n", errstr);
-		return 1;
+		return -1;
 	}
 
 	if (candidate) {
@@ -2934,7 +2948,7 @@ rtable(int argc, char **argv, ...)
 	 */
 	if (set && !priv && cli_rtable != 0 && cli_rtable != table) {
 		printf("%% Privilege required\n");
-		return 1;
+		return -1;
 	}
 
 	argc -= 2;
@@ -2956,47 +2970,47 @@ rtable(int argc, char **argv, ...)
 	 */
 	if ((!found || pos) && !priv) {
 		printf("%% Privilege required\n");
-		return 1;
+		return -1;
 	}
 
 	if (set && (found && !pos)) {
 		if (!priv && cli_rtable != 0) {
 			printf("%% Privilege required\n");
-			return 1;
+			return -1;
 		}
 		/* Table found, skip database action */
-		return rtable_enter(table);
+		return rtable_enter(table) ? -1 : 0;
 	}
 	if (!set) {
 		if (!found) {
 			printf("%% rtable %d does not exist in database\n",
 			    table);
-			return 1;
+			return -1;
 		} else if (table == 0) {
 			printf("%% cannot remove rtable %d\n", table);
-			return 1;
+			return -1;
 		}
 	} else if (table == 0)  {
 		/* Do not add the kernel's default rtable 0 to the database. */
 		if (nsh_setrtable(0))
-			return 1;
+			return -1;
 		cli_rtable = 0;
 		return 0;
 	}
 	if (db_delete_rtables_rtable(table) < 0) {
 		printf("%% rtable db removal error\n");
-		return 1;
+		return -1;
 	}
 	if (set) {
 		if (db_insert_rtables(table, rtname) < 0) {
 			printf("%% rtable db insertion error\n");
-			return 1;
+			return -1;
 		}
 		if (rtable_enter(table))
-			return 1;
+			return -1;
 	} else {
 		if (nsh_setrtable(0))
-			return 1;
+			return -1;
 		cli_rtable = 0;
 	}
 
@@ -3023,14 +3037,14 @@ group(int argc, char **argv, ...)
 	if (argc < 3 || argc > 4 || !isprefix(argv[2], "carpdemote")) {
 		printf("%% group <group-name> carpdemote [demotion-counter]\n");
 		printf("%% no group <group-name> carpdemote [demotion-counter]\n");
-		return 1;
+		return -1;
 	}
 
 	if (argc == 4) {
 		counter = strtonum(argv[3], 0, 128, &errstr);
 		if (errstr) {
 			printf("%% invalid carp demotion: %s\n", errstr);
-			return 1;
+			return -1;
 		}
 	}
 
@@ -3038,7 +3052,7 @@ group(int argc, char **argv, ...)
 	if (ifs < 0) {
 		printf("%% group: socket: %s\n", strerror(errno));
 
-		return 1;
+		return -1;
 	}
 
 	bzero(&ifgr, sizeof(ifgr));
@@ -3055,7 +3069,7 @@ group(int argc, char **argv, ...)
 			    " 0 and 255\n", ifgr.ifgr_name);
 		else
 			printf("%% group: SIOCSIFGATTR: %s\n", strerror(errno));
-		ret = 1;
+		ret = -1;
 	}
 	close(ifs);
 
@@ -3081,7 +3095,7 @@ disable(int argc, char **argv, ...)
 		return 0;
 	}
 	if (cand_leave())
-		return 0;
+		return -1;
 	priv = 0;
 	config_mode = 0;
 	return 0;
@@ -3098,7 +3112,7 @@ doverbose(int argc, char **argv, ...)
 			verbose = 0;
 		} else {
 			printf ("%% Invalid argument\n");
-			return 1;
+			return -1;
 		}
 	} else {
 		verbose = 1;
@@ -3117,7 +3131,7 @@ doediting(int argc, char **argv, ...)
 			endedit();
                 } else {
 			printf ("%% Invalid argument\n");
-			return 1;
+			return -1;
 		}
 	} else {
 		initedit();
@@ -3137,15 +3151,15 @@ doconfig(int argc, char **argv, ...)
 			return exitconfig(argc, argv);
 		} else if (isprefix(argv[1], "terminal")) {
 			if (cand_leave())
-				return 0;
+				return -1;
 			config_mode = 1;
 		} else if (isprefix(argv[1], "private")) {
 			if (cand_begin() == -1)
-				return 0;
+				return -1;
 			config_mode = 1;
 		} else {
 			printf ("%% Invalid argument\n");
-			return 1;
+			return -1;
 		}
 	} else {
 		config_mode = 1;
@@ -3159,10 +3173,10 @@ exitconfig(int argc, char **argv, ...)
 {
 	if (!config_mode) {
 		printf ("%% Configuration mode is already disabled\n");
-		return 1;
+		return -1;
 	}
 	if (cand_leave())
-		return 0;
+		return -1;
 
 	config_mode = 0;
 	return 0;
@@ -3195,7 +3209,7 @@ flush_history(int argc, char **argv, ...)
 {
 	if (!editing) {
 		printf("%% Command line editing not enabled\n");
-		return 1;
+		return -1;
 	}
 
 	/*
@@ -3232,18 +3246,16 @@ flush_pf(int argc, char **argv, ...)
 	x = (struct fpf *) genget(arg, (char **)fpfs, sizeof(struct fpf));
 	if (x == 0) {
 		printf("%% Invalid argument %s\n", arg);
-		return 0;
+		return -1;
 	} else if (Ambiguous(x)) {
 		printf("%% Ambiguous argument %s\n", arg);
-		return 0;
+		return -1;
 	}
 
 	{
 		char *argv[] = { x->cmd, x->arg, NULL };
-		cmdargs(x->cmd, argv);
+		return cmdargs(x->cmd, argv) == 0 ? 0 : -1;
 	}
-
-	return 1;
 }
 
 /*
@@ -3556,7 +3568,7 @@ do_reboot(int how)
 	if (!interactive_mode) {
 		if (cmdargs(argv[0], argv) != 0)
 			printf("%% %s command failed\n", argv[0]);
-		return 0;
+		return -1;
 	}
 
 	switch (how) {
@@ -3574,7 +3586,7 @@ do_reboot(int how)
 		break;
 	default:
 		printf("%% Invalid reboot parameter 0x%x\n", how);
-		return 0;
+		return -1;
 	}
 
 	for (;;) {
@@ -3689,12 +3701,12 @@ pr_conf(int argc, char **argv, ...)
 
 	if (priv != 1) {
 		printf ("%% Privilege required\n");
-		return 0;
+		return -1;
 	}
 
 	if (!wr_conf(NSHRC_TEMP)) {
 		printf("%% Couldn't generate configuration\n");
-		return 0;
+		return -1;
 	}
 
 	more(NSHRC_TEMP);
@@ -3712,7 +3724,7 @@ pr_s_conf(int argc, char **argv, ...)
 
 	if (priv != 1) {
 		printf ("%% Privilege required\n");
-		return 0;
+		return -1;
 	}
 
 	ret = more(NSHRC);
@@ -3729,12 +3741,12 @@ pr_a_conf(int argc, char **argv, ...)
 {
 	if (priv != 1) {
 		printf ("%% Privilege required\n");
-		return 0;
+		return -1;
 	}
 
 	if (ifname[0] == '\0') {
 		printf ("%% Interface or Bridge context required\n");
-		return 0;
+		return -1;
 	}
 
 	conf_interfaces(stdout, ifname, 1);
@@ -3840,12 +3852,12 @@ pr_conf_diff(int argc, char **argv, ...)
 
 	if (priv != 1) {
 		printf("%% Privilege required\n");
-		return 0;
+		return -1;
 	}
 
 	if (getuid() != 0) {
 		printf("%% Root privileges required\n");
-		return 0;
+		return -1;
 	}
 
 	if (strlcpy(outpath, "/tmp/nshrc.diff.XXXXXXXX", sizeof(outpath)) >=
@@ -3855,7 +3867,7 @@ pr_conf_diff(int argc, char **argv, ...)
 	out_fd = mkstemp(outpath);
 	if (out_fd == -1) {
 		printf("%% mkstemp %s: %s\n", outpath, strerror(errno));
-		return 0;
+		return -1;
 	}
 
 	if (candidate) {
@@ -3918,15 +3930,17 @@ pr_crontab(int argc, char **argv, ...)
 
 	if (priv != 1) {
 		printf("%% Privilege required\n");
-		return 0 ;
+		return -1;
 	}
 
 	fprintf(outfile, "%% To view crontab syntax documentation in NSH, "
 	    "run: !man 5 crontab\n\n");
 	fflush(outfile);
 
-	if (cmdargs_output(CRONTAB, crontab_argv, fileno(outfile), -1) != 0)
+	if (cmdargs_output(CRONTAB, crontab_argv, fileno(outfile), -1) != 0) {
 		printf("%% crontab command failed\n");
+		return -1;
+	}
 
 	return 0;
 }
@@ -3937,12 +3951,10 @@ pr_routes(int argc, char **argv, ...)
 	switch(argc) {
 	case 2:
 		/* show primary routing table */
-		facts_show(stdout, "route inet %d", cli_rtable);
-		break;
+		return facts_show(stdout, "route inet %d", cli_rtable);
 	case 3:
 		/* show a specific route */
-		show_route(argv[2], cli_rtable);
-		break;
+		return show_route(argv[2], cli_rtable);
 	}
 
 	return 0;
@@ -3954,12 +3966,10 @@ pr_routes6(int argc, char **argv, ...)
 	switch(argc) {
 	case 2:
 		/* show primary routing table */
-		facts_show(stdout, "route inet6 %d", cli_rtable);
-		break;
+		return facts_show(stdout, "route inet6 %d", cli_rtable);
 	case 3:
 		/* show a specific route */
-		show_route(argv[2], cli_rtable);
-		break;
+		return show_route(argv[2], cli_rtable);
 	}
 
 	return 0;
@@ -3973,17 +3983,16 @@ pr_arp(int argc, char **argv, ...)
 	switch(argc) {
 	case 2:
 		/* show arp table */
-		facts_show(stdout, "arp %d", cli_rtable);
-		break;
+		return facts_show(stdout, "arp %d", cli_rtable);
 	case 3:
 		/* specific address */
 		if (getinetaddr(argv[2], &in) == -1) {
 			printf("%% arpget: getinetaddr: failure %s\n",
 			    strerror(errno));
-			break;
+			return -1;
 		}
-		facts_show(stdout, "arp %d %s", cli_rtable, inet_ntoa(in));
-		break;
+		return facts_show(stdout, "arp %d %s", cli_rtable,
+		    inet_ntoa(in));
 	}
 	return 0;
 }
@@ -3996,14 +4005,12 @@ pr_ndp(int argc, char **argv, ...)
 	switch(argc) {
 	case 2:
 		/* show ndp table */
-		facts_show(stdout, "ndp %d", cli_rtable);
-		break;
+		return facts_show(stdout, "ndp %d", cli_rtable);
 	case 3:
 		/* specific address */
 		if (parse_host(argv[2], &sin6))
-			break;
-		facts_show(stdout, "ndp %d %s", cli_rtable, argv[2]);
-		break;
+			return -1;
+		return facts_show(stdout, "ndp %d %s", cli_rtable, argv[2]);
 	}
 	return 0;
 }
@@ -4011,9 +4018,7 @@ pr_ndp(int argc, char **argv, ...)
 static int
 pr_sadb(int argc, char **argv, ...)
 {
-	facts_show(stdout, "sadb");
-
-	return 0;
+	return facts_show(stdout, "sadb");
 }
 
 static int
@@ -4029,14 +4034,12 @@ pr_kernel(int argc, char **argv, ...)
 	x = (struct stt *) genget(argv[2], (char **)stts, sizeof(struct stt));
 	if (x == 0) {
 		printf("%% Invalid argument %s\n", argv[2]);
-		return 0;
+		return -1;
 	} else if (Ambiguous(x)) {
 		printf("%% Ambiguous argument %s\n", argv[2]);
-		return 0;
+		return -1;
 	}
-	facts_show(stdout, "statistics %s", x->name);
-
-	return 0;
+	return facts_show(stdout, "statistics %s", x->name);
 }
 
 static int
@@ -4044,14 +4047,13 @@ pr_dhcp(int argc, char **argv, ...)
 {
 	if (argc == 3 && argv[2][0] != '?') {
 		if (isprefix(argv[2], "leases")) {
-			facts_show(stdout, "dhcp leases");
-			return 0;
+			return facts_show(stdout, "dhcp leases");
 		}
 		printf("%% argument %s not recognized\n", argv[2]);
-		return 1;
+		return -1;
 	}
 	printf("%% show dhcp leases\n");
-	return 1;
+	return -1;
 }
 
 static int
@@ -4078,7 +4080,7 @@ pr_environment(int argc, char **argv, ...)
 	fd = mkstemp(path);
 	if (fd == -1) {
 		printf("%% mkstemp %s: %s\n", path, strerror(errno));
-		return 0;
+		return -1;
 	}
 
 	if (argc >= 3) {

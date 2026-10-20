@@ -411,13 +411,14 @@ cand_rtable_set(int set, int table, char *name)
 	if (!set) {
 		if (table == 0) {
 			printf("%% cannot remove rtable %d\n", table);
-			return 1;
+			return -1;
 		}
 		if (!has) {
 			printf("%% rtable %d is not in the candidate\n", table);
-			return 1;
+			return -1;
 		}
-		cand_set(CTX_TOP, ST_OFF, NULL, block);
+		if (cand_set(CTX_TOP, ST_OFF, NULL, block) == -1)
+			return -1;
 		cand_rtable = 0;
 		return 0;
 	}
@@ -427,15 +428,17 @@ cand_rtable_set(int set, int table, char *name)
 			    name);
 		else
 			snprintf(line, sizeof(line), "rtable %d", table);
-		if (!has)
-			cand_set(CTX_TOP, ST_ON, NULL, line);
-		else if (name != NULL && strcmp(block, line) != 0) {
+		if (!has) {
+			if (cand_set(CTX_TOP, ST_ON, NULL, line) == -1)
+				return -1;
+		} else if (name != NULL && strcmp(block, line) != 0) {
 			/* renamed, with its lines */
 			e.op = CE_RENAME;
 			e.keylen = 1;
 			e.strict = 0;
 			strlcpy(e.line, line, sizeof(e.line));
-			cand_record(block, &e);
+			if (cand_record(block, &e) == -1)
+				return -1;
 		}
 	}
 	cand_rtable = table;

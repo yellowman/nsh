@@ -383,7 +383,7 @@ is_ip_addr(char *arg)
 }
 
 /* show route address: asked of nshd, and rendered here */
-void
+int
 show_route(char *arg, int tableid)
 {
 	ip_t dest;
@@ -391,8 +391,8 @@ show_route(char *arg, int tableid)
 	memset(&dest, 0, sizeof(ip_t));
 	parse_ip_pfx(arg, NO_NETMASK, &dest);
 	if (dest.family == 0)
-		return;
-	facts_show(stdout, "lookup %s %d", arg, tableid);
+		return -1;
+	return facts_show(stdout, "lookup %s %d", arg, tableid);
 }
 
 int
