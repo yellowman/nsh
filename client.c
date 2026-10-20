@@ -27,6 +27,8 @@
 #include <errno.h>
 #include <event.h>
 #include <imsg.h>
+#include <poll.h>
+#include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -39,21 +41,43 @@
 #include "showfacts.h"
 #include "nshd/nshd.h"
 
-static int	nshd_next(struct imsgbuf *, struct imsg *);
-static int	nshd_open(char *, struct imsgbuf *);
+static volatile sig_atomic_t	nshd_intr;	/* ^C, while nshd answers */
 
-/* the next message, read as it comes; -1 if nshd is gone */
+static int	nshd_next(struct imsgbuf *, struct imsg *, const sigset_t *);
+static int	nshd_open(char *, struct imsgbuf *);
+static void	nshd_sigint(int);
+
+/*
+ * The next message, read as it comes; -1 if nshd is gone. With
+ * waiting, the signal mask to wait with, -1 too if SIGINT ends a wait.
+ */
 static int
-nshd_next(struct imsgbuf *ib, struct imsg *imsg)
+nshd_next(struct imsgbuf *ib, struct imsg *imsg, const sigset_t *waiting)
 {
-	ssize_t	 n;
+	struct pollfd	 pfd;
+	ssize_t		 n;
 
 	for (;;) {
 		if ((n = imsgbuf_get(ib, imsg)) != 0)
 			return (n == 1 ? 0 : -1);
+		if (waiting != NULL) {
+			pfd.fd = ib->fd;
+			pfd.events = POLLIN;
+			if (ppoll(&pfd, 1, NULL, waiting) == -1) {
+				if (errno == EINTR && !nshd_intr)
+					continue;
+				return (-1);
+			}
+		}
 		if (imsgbuf_read(ib) != 1)
 			return (-1);
 	}
+}
+
+static void
+nshd_sigint(int sig)
+{
+	nshd_intr = 1;
 }
 
 /*
@@ -90,7 +114,7 @@ nshd_open(char *path, struct imsgbuf *ib)
 	hello.version = NSHD_VERSION;
 	if (imsg_compose(ib, IMSG_CTL_HELLO, 0, 0, -1, &hello,
 	    sizeof(hello)) == -1 || imsgbuf_flush(ib) == -1 ||
-	    nshd_next(ib, &imsg) == -1) {
+	    nshd_next(ib, &imsg, NULL) == -1) {
 		imsgbuf_clear(ib);
 		close(fd);
 		errno = EPROTO;
@@ -154,7 +178,7 @@ nshd_show(char *words)
 		goto done;
 	}
 	while (!done) {
-		if (nshd_next(&ib, &imsg) == -1) {
+		if (nshd_next(&ib, &imsg, NULL) == -1) {
 			printf("%% nshd: gone before it answered\n");
 			goto done;
 		}
@@ -206,7 +230,8 @@ done:
  * show words, as nshd answers them, on the read-write socket if rw, its
  * kernel's, else as its show processes do: facts read into in as they
  * come, and text printed. -1 if there is no nshd to ask, or none this
- * user may, else 1 if the show was answered and 0 if not.
+ * user may, else 1 if the show was answered and 0 if not, as when ^C
+ * ends it, which closes the session, so nshd stops what it runs.
  */
 int
 nshd_facts(int rw, char *words, struct facts_in *in)
@@ -216,6 +241,8 @@ nshd_facts(int rw, char *words, struct facts_in *in)
 	struct imsgbuf		 ib;
 	struct imsg		 imsg;
 	struct ibuf		 b;
+	struct sigaction	 sa, osa;
+	sigset_t		 block, saved, waiting;
 	int			 fd, done = 0, ret = 0;
 
 	if ((fd = nshd_open(rw ? NSHD_SOCKET : NSHD_RO_SOCKET, &ib)) == -1) {
@@ -224,6 +251,18 @@ nshd_facts(int rw, char *words, struct facts_in *in)
 		printf("%% nshd: not a version nsh speaks\n");
 		return (0);
 	}
+
+	/* ^C is taken only while waiting for nshd, so none is missed */
+	sigemptyset(&block);
+	sigaddset(&block, SIGINT);
+	sigprocmask(SIG_BLOCK, &block, &saved);
+	waiting = saved;
+	sigdelset(&waiting, SIGINT);
+	memset(&sa, 0, sizeof(sa));
+	sa.sa_handler = nshd_sigint;
+	sigemptyset(&sa.sa_mask);
+	sigaction(SIGINT, &sa, &osa);
+	nshd_intr = 0;
 
 	memset(&show, 0, sizeof(show));
 	if (strlcpy(show.words, words, sizeof(show.words)) >=
@@ -237,8 +276,11 @@ nshd_facts(int rw, char *words, struct facts_in *in)
 		goto done;
 	}
 	while (!done) {
-		if (nshd_next(&ib, &imsg) == -1) {
-			printf("%% nshd: gone before it answered\n");
+		if (nshd_next(&ib, &imsg, &waiting) == -1) {
+			if (nshd_intr)
+				putchar('\n');
+			else
+				printf("%% nshd: gone before it answered\n");
 			goto done;
 		}
 		switch (imsg_get_type(&imsg)) {
@@ -278,5 +320,8 @@ nshd_facts(int rw, char *words, struct facts_in *in)
 done:
 	imsgbuf_clear(&ib);
 	close(fd);
+	/* a ^C pending now ends nothing */
+	sigprocmask(SIG_SETMASK, &saved, NULL);
+	sigaction(SIGINT, &osa, NULL);
 	return (ret);
 }

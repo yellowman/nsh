@@ -103,7 +103,6 @@ void conf_print_rtm(FILE *, struct rt_msghdr *, char *, int);
 int conf_dhcrelay(char *, char *, int);
 
 /* show.c */
-void p_rttables(int, u_int, int);
 #ifdef _NETINET_IN_H_
 char *routename4(in_addr_t);
 char *netname4(in_addr_t, struct sockaddr_in *);
@@ -578,8 +577,11 @@ int mbs2ws(wchar_t **, size_t *, const char *);
 int mbsavis(char**, int *, const char *);
 
 /* ctlargs.c */
+struct prot1;
 int pr_prot1(int, char **, ...);
 char **step_optreq(char **, char **, int, char **, int);
+struct prot1 *prot1_find(char *, char *);
+char **prot1_args(struct prot1 *, char **, int, char **, int);
 
 /* hashtable.c */
 struct hashtable;

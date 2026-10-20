@@ -115,7 +115,10 @@ enum nshd_imsg {
 	IMSG_KRN_TEXT,		/* kernel to config: text */
 	IMSG_KRN_END,		/* kernel to config: nshd_result */
 	IMSG_KRN_SHOW,		/* config to kernel: nshd_show, facts back */
-	IMSG_KRN_FACTS		/* kernel to config: units of facts */
+	IMSG_KRN_FACTS,		/* kernel to config: units of facts */
+	IMSG_CTL_READ,		/* frontend to config: a client read all */
+	IMSG_KRN_READ,		/* config to kernel: a request's client did */
+	IMSG_KRN_STOP		/* config to kernel: a request's session is gone */
 };
 
 struct imsgev {

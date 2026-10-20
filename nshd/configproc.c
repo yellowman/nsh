@@ -20,6 +20,8 @@
  * in its top bits, so an answer meant for a config before this one is
  * known for what it is; kernel's answers for it go to the session that
  * asked, if that session is still there, its facts passed on unread.
+ * kernel learns when a session's client has read all it was sent, and
+ * when the session is gone, so it stops what it streams the session.
  * When frontend starts again, every session is gone; when kernel does,
  * what it was asked is lost.
  */
@@ -68,6 +70,7 @@ static void		 config_show(uint32_t, struct nshd_show *);
 static void		 config_answer(uint32_t, int32_t, const char *, ...)
 			    __attribute__((__format__ (printf, 3, 4)));
 static void		 config_restart(struct nshd_restart *);
+static void		 config_tell(uint32_t, uint32_t);
 static struct session	*session_find(uint32_t);
 static struct request	*request_find(uint32_t);
 
@@ -154,6 +157,10 @@ config_dispatch_relay(int fd, short event, void *arg)
 				TAILQ_REMOVE(&sessions, sp, entry);
 				free(sp);
 			}
+			config_tell(id, IMSG_KRN_STOP);
+			break;
+		case IMSG_CTL_READ:
+			config_tell(id, IMSG_KRN_READ);
 			break;
 		case IMSG_KRN_TEXT:
 		case IMSG_KRN_FACTS:
@@ -257,6 +264,7 @@ config_restart(struct nshd_restart *rs)
 	switch (rs->proc) {
 	case PROC_FRONTEND:
 		while ((sp = TAILQ_FIRST(&sessions)) != NULL) {
+			config_tell(sp->id, IMSG_KRN_STOP);
 			TAILQ_REMOVE(&sessions, sp, entry);
 			free(sp);
 		}
@@ -279,6 +287,18 @@ config_restart(struct nshd_restart *rs)
 	default:
 		fatalx("%s: from %d", __func__, rs->proc);
 	}
+}
+
+/* to kernel: type, for each request of session not finished */
+static void
+config_tell(uint32_t session, uint32_t type)
+{
+	struct request	*r;
+
+	TAILQ_FOREACH(r, &requests, entry)
+		if (r->session == session && imsg_compose_event(iev_relay,
+		    type, r->id, 0, -1, NULL, 0) == -1)
+			fatal("%s", __func__);
 }
 
 static struct session *

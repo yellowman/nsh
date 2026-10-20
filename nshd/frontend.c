@@ -17,8 +17,9 @@
 /*
  * frontend: the read-write socket. Each client is a session; what it
  * sends goes to config, through relay, under the session's id, and what
- * config answers for that id goes back to it. frontend checks only that
- * a message is one a client may send, and is whole; it reads no
+ * config answers for that id goes back to it, and config learns each
+ * time the client has read all of it. frontend checks only that a
+ * message is one a client may send, and is whole; it reads no
  * configuration.
  */
 
@@ -43,6 +44,7 @@ static int		 config_down;
 static void	frontend_dispatch_relay(int, short, void *);
 static int	frontend_client(struct ctl_conn *, struct imsg *);
 static void	frontend_gone(struct ctl_conn *);
+static int	frontend_written(struct ctl_conn *);
 static int	frontend_answer(struct ctl_conn *, struct imsg *);
 
 void
@@ -81,7 +83,7 @@ frontend_dispatch_relay(int fd, short event, void *arg)
 		/* its socket is fd 4, from parent */
 		case IMSG_STARTUP:
 			if (control_listen(4, frontend_client, frontend_gone,
-			    NULL) == -1)
+			    frontend_written) == -1)
 				fatalx("cannot listen on %s", NSHD_SOCKET);
 			break;
 		case IMSG_RESTART:
@@ -161,6 +163,17 @@ frontend_gone(struct ctl_conn *c)
 	if (imsg_compose_event(iev_relay, IMSG_CTL_CLOSE, c->id, 0, -1,
 	    NULL, 0) == -1)
 		fatal("%s", __func__);
+}
+
+/* the client has read all it was sent, so kernel may stream it more */
+static int
+frontend_written(struct ctl_conn *c)
+{
+	if (imsgbuf_queuelen(&c->iev.ibuf) == 0 &&
+	    imsg_compose_event(iev_relay, IMSG_CTL_READ, c->id, 0, -1, NULL,
+	    0) == -1)
+		fatal("%s", __func__);
+	return (0);
 }
 
 /* with config down, what it would have answered, as far as it can */

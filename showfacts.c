@@ -34,8 +34,15 @@
  *					what configured each IPv4 one
  *	autoconf [name]			what dhcpleased and slaacd know,
  *					from kernel
+ *	sadb				the SPD's IPsec flows
+ *	program table prot sub [arg...]	what show prot sub runs, as
+ *					text, from kernel
+ *	dhcp leases			dhcpd's leases, as text, from
+ *					kernel
  *
- * statistics pf, too, comes from kernel, as it needs /dev/pf.
+ * statistics pf, too, comes from kernel, as it needs /dev/pf. kernel
+ * runs a program, or reads the leases, in a child of its own, and
+ * streams what it prints as messages, as the client reads them.
  *
  * nshd's show processes answer them a batch at a time, as the client
  * reads; nsh asks nshd, or, where nshd does not run, answers them
@@ -85,13 +92,13 @@ static struct facts_kind *kinds[] = {
 	&kind_login, &kind_hostname, &kind_ip, &kind_dhcplease,
 	&kind_dhcproute, &kind_dhcpns, &kind_slaacif, &kind_slaacra,
 	&kind_slaacprefix, &kind_slaacrdns, &kind_slaacaddr, &kind_slaacdfr,
-	&kind_slaacdns
+	&kind_slaacdns, &kind_flow
 };
 
 enum answer_type {
 	ANS_INTERFACE, ANS_ROUTE, ANS_LOOKUP, ANS_ARP, ANS_NDP, ANS_VLAN,
 	ANS_BRIDGE, ANS_STATISTICS, ANS_VERSION, ANS_USERS, ANS_HOSTNAME,
-	ANS_IP, ANS_AUTOCONF
+	ANS_IP, ANS_AUTOCONF, ANS_SADB, ANS_PROGRAM, ANS_LEASES
 };
 
 int	facts_from = FACTS_SHOW | FACTS_KERNEL;
@@ -100,8 +107,10 @@ struct facts_answer {
 	enum answer_type	 type;
 	int			 where;		/* who answers */
 	char			*copy;		/* the words, split */
-	char			*w[4];
+	char			*w[4 + NOPTFILL - 1];
 	int			 n;
+	struct prot1		*prog;		/* the show a program makes */
+	char			*args[NOPTFILL];	/* and its arguments */
 	char			 name[IFNAMSIZ];	/* one interface */
 	int			 detail;	/* interface detail */
 	int			 af;
@@ -180,6 +189,24 @@ facts_message(struct facts_out *o, const char *fmt, ...)
 		return (-1);
 	facts_string(&v[MSG_TEXT], s);
 	r = facts_record(o, &kind_message, v);
+	free(s);
+	return (r);
+}
+
+/* len bytes of text as a message, a NUL in them shown as '?' */
+int
+facts_text(struct facts_out *o, const char *buf, size_t len)
+{
+	char	*s;
+	size_t	 i;
+	int	 r;
+
+	if ((s = malloc(len + 1)) == NULL)
+		return (-1);
+	for (i = 0; i < len; i++)
+		s[i] = buf[i] == '\0' ? '?' : buf[i];
+	s[len] = '\0';
+	r = facts_message(o, "%s", s);
 	free(s);
 	return (r);
 }
@@ -369,7 +396,7 @@ facts_answer(char *words)
 		goto bad;
 	for (p = strtok_r(a->copy, " ", &last); p != NULL;
 	    p = strtok_r(NULL, " ", &last)) {
-		if (a->n == 4)
+		if (a->n == sizeof(a->w) / sizeof(a->w[0]))
 			goto bad;
 		a->w[a->n++] = p;
 	}
@@ -452,6 +479,18 @@ facts_answer(char *words)
 		if (n == 2 && strlcpy(a->name, w[1], sizeof(a->name)) >=
 		    sizeof(a->name))
 			goto bad;
+	} else if (n == 1 && strcmp(w[0], "sadb") == 0)
+		a->type = ANS_SADB;
+	else if (n >= 4 && strcmp(w[0], "program") == 0) {
+		a->type = ANS_PROGRAM;
+		a->where = FACTS_KERNEL;
+		if (answer_table(a, w[1]) == -1 ||
+		    (a->prog = prot1_find(w[2], w[3])) == NULL)
+			goto bad;
+	} else if (n == 2 && strcmp(w[0], "dhcp") == 0 &&
+	    strcmp(w[1], "leases") == 0) {
+		a->type = ANS_LEASES;
+		a->where = FACTS_KERNEL;
 	} else if (n == 1 && strcmp(w[0], "version") == 0)
 		a->type = ANS_VERSION;
 	else if (n == 1 && strcmp(w[0], "users") == 0)
@@ -493,8 +532,15 @@ facts_more(struct facts_answer *a, struct facts_out *o, int budget)
 	case ANS_ROUTE:
 	case ANS_ARP:
 	case ANS_NDP:
+	case ANS_SADB:
 		if (a->rt == NULL) {
-			if (a->type == ANS_ROUTE)
+			if (a->type == ANS_SADB) {
+				/* said why, unless there is no IPsec */
+				if ((a->rt = sadb_dump()) == NULL) {
+					r = -1;
+					break;
+				}
+			} else if (a->type == ANS_ROUTE)
 				a->rt = getrtdump(a->af, 0, a->table);
 			else
 				a->rt = getrtdump(a->type == ANS_ARP ?
@@ -503,7 +549,9 @@ facts_more(struct facts_answer *a, struct facts_out *o, int budget)
 				break;
 			a->cur = a->rt->buf;
 		}
-		if (a->type == ANS_ROUTE)
+		if (a->type == ANS_SADB)
+			r = sadb_facts(o, a->rt, &a->cur, budget);
+		else if (a->type == ANS_ROUTE)
 			r = route_facts(o, a->rt, &a->cur, a->af, budget);
 		else if (a->type == ANS_ARP)
 			r = arp_facts(o, a->rt, &a->cur, a->one ? &a->in :
@@ -542,9 +590,70 @@ facts_more(struct facts_answer *a, struct facts_out *o, int budget)
 	case ANS_AUTOCONF:
 		r = autoconf_facts(o, a->name[0] != '\0' ? a->name : NULL);
 		break;
+	case ANS_PROGRAM:
+	case ANS_LEASES:
+		facts_stream(a, 0);
+		break;
 	}
 	a->done = 1;
 	return (r == -1 ? -1 : 0);
+}
+
+/* whether a's show is text nshd's kernel streams, from a child */
+int
+facts_streams(struct facts_answer *a)
+{
+	return (a->type == ANS_PROGRAM || a->type == ANS_LEASES);
+}
+
+/*
+ * a's text, to stdout, as nsh printed it: in nsh, the program run as
+ * nsh runs one, and the leases paged; in the child of nshd's kernel
+ * whose stdout is the stream, the program in its place, and the leases
+ * as they are
+ */
+void
+facts_stream(struct facts_answer *a, int child)
+{
+	char	**args, buf[8192];
+	size_t	  n;
+	FILE	 *f;
+
+	switch (a->type) {
+	case ANS_PROGRAM:
+		if ((args = prot1_args(a->prog, a->args, a->n - 4, a->w + 4,
+		    a->table)) == NULL)
+			break;
+		if (!child) {
+			cmdargs(args[0], args);
+			break;
+		}
+		if (nsh_setrtable(a->table) != 0)
+			break;
+		execv(args[0], args);
+		printf("%% exec '%s' failed: %s\n", args[0], strerror(errno));
+		break;
+	case ANS_LEASES:
+		/* more() measures lines by a terminal a child has not */
+		if (!child) {
+			more(DHCPLEASES);
+			break;
+		}
+		if ((f = fopen(DHCPLEASES, "r")) == NULL) {
+			if (errno == ENOENT)
+				printf("%% File %s not found\n", DHCPLEASES);
+			else
+				printf("%% more: fopen(%s): %s\n", DHCPLEASES,
+				    strerror(errno));
+			break;
+		}
+		while ((n = fread(buf, 1, sizeof(buf), f)) > 0)
+			fwrite(buf, 1, n, stdout);
+		fclose(f);
+		break;
+	default:
+		break;
+	}
 }
 
 void
@@ -634,6 +743,8 @@ render_record(void *arg, const struct facts_template *t,
 		version_render(r);
 	else if (r->k == &kind_hostname)
 		hostname_render(r);
+	else if (r->k == &kind_flow)
+		sadb_render(r, &rd->count);
 	else if (r->k == stats_kind(r->k->name))
 		stats_render(r);
 	else {
@@ -742,6 +853,10 @@ facts_show(FILE *out, const char *fmt, ...)
 	case ANS_IP:
 		if (r == 1)
 			ip_render(&rd.block);
+		break;
+	case ANS_SADB:
+		if (r == 1 && rd.count == 0)
+			printf("%% SADB empty\n");
 		break;
 	default:
 		break;

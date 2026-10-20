@@ -20,10 +20,13 @@
 #include <sys/types.h>
 
 #include <stdio.h>
+#include <string.h>
 
 #include "externs.h"
 #include "commands.h"
 #include "ctl.h"
+#include "facts.h"
+#include "showfacts.h"
 
 int
 pr_prot1(int argc, char **argv, ...)
@@ -32,7 +35,8 @@ pr_prot1(int argc, char **argv, ...)
 	struct prot *prot;
 	char *args[NOPTFILL] = { NULL, NULL, NULL, NULL, NULL, NULL, NULL };
 	char **fillargs;
-	char prefix[64];
+	char prefix[64], words[NOPTFILL * 64];
+	int i;
 
 	/* loop protocol list to find table pointer */
 	prot = (struct prot *) genget(argv[1], (char **)prots,
@@ -67,9 +71,62 @@ pr_prot1(int argc, char **argv, ...)
 	if (fillargs == NULL)
 		return 0;
 
-	cmdargs(fillargs[0], fillargs);
+	/* systat draws on this terminal; nshd's kernel runs the rest */
+	if (prot1_find(prot->name, x->name) == NULL) {
+		cmdargs(fillargs[0], fillargs);
+		return 1;
+	}
+	words[0] = '\0';
+	for (i = 3; i < argc; i++) {
+		/* a show's words have no space, none is empty, and they fit */
+		if (argv[i][0] == '\0' || strchr(argv[i], ' ') != NULL ||
+		    strlcat(words, " ", sizeof(words)) >= sizeof(words) ||
+		    strlcat(words, argv[i], sizeof(words)) >= sizeof(words)) {
+			printf("%% Invalid argument %s\n", argv[i]);
+			return 0;
+		}
+	}
+	facts_show(stdout, "program %d %s %s%s", cli_rtable, prot->name,
+	    x->name, words);
 
 	return 1;
+}
+
+/*
+ * The show of prot that sub names, as pr_prot1() names them, whose
+ * program nshd's kernel may run: NULL if there is none, as systat's
+ * is not, which draws on nsh's terminal
+ */
+struct prot1 *
+prot1_find(char *prot, char *sub)
+{
+	struct prot *p;
+	struct prot1 *x;
+	size_t len = strlen(sub);
+
+	for (p = prots; p->name != NULL; p++)
+		if (strcmp(p->name, prot) == 0)
+			break;
+	if (p->name == NULL || strcmp(p->name, "system-stats") == 0)
+		return NULL;
+	/* a name in the table may end with spaces */
+	for (x = p->table; x->name != NULL; x++)
+		if (strncmp(x->name, sub, len) == 0 &&
+		    x->name[len + strspn(x->name + len, " ")] == '\0')
+			return x;
+	return NULL;
+}
+
+/*
+ * x's program and its arguments, in args, those x leaves to fill
+ * filled from argc words of argv, bgpctl's socket the one of table:
+ * NULL if they do not fill them, said why
+ */
+char **
+prot1_args(struct prot1 *x, char **args, int argc, char **argv, int table)
+{
+	init_bgpd_socket_path(table);
+	return step_optreq(x->args, args, argc, argv, 0);
 }
 
 char **

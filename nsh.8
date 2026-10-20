@@ -2198,6 +2198,12 @@ nsh(p)/
 .Ed
 .El
 .Pp
+Where
+.Xr nshd 8
+runs, its kernel runs a daemon's control program for a show, but
+systat for system-stats, and reads the DHCP leases, for root and the
+group _nshd; what they print is not paged, and Control-C stops it.
+.Pp
 .Ic show hostname
 .Pp
 Display the system's currently assigned hostname.
@@ -2520,7 +2526,7 @@ nsh(p)/
 .Tg ipsec
 .Ic show sadb
 .Pp
-Display the IPSEC security association database of the system.
+Display the IPsec flows of the system's security policy database.
 .Pp
 .Tg arp
 .Ic show arp

@@ -63,12 +63,15 @@ int		 facts_more(struct facts_answer *, struct facts_out *, int);
 void		 facts_answer_free(struct facts_answer *);
 int		 facts_show(FILE *, const char *, ...)
 		    __attribute__((__format__ (printf, 2, 3)));
+int		 facts_streams(struct facts_answer *);
+void		 facts_stream(struct facts_answer *, int);
 
 /* each kind, for the record it is and the renderer that knows it */
 void		 facts_init(void);
 void		 facts_bitnames(struct facts_field *, const char *);
 int		 facts_message(struct facts_out *, const char *, ...)
 		    __attribute__((__format__ (printf, 2, 3)));
+int		 facts_text(struct facts_out *, const char *, size_t);
 void		 facts_sockaddr(struct facts_value *, struct sockaddr *);
 struct frec	*frec_next(struct frecs *, struct frec *,
 		    const struct facts_kind *);
@@ -82,7 +85,7 @@ extern struct facts_kind kind_vlan, kind_version, kind_login, kind_hostname;
 extern struct facts_kind kind_ip, kind_dhcplease, kind_dhcproute;
 extern struct facts_kind kind_dhcpns, kind_slaacif, kind_slaacra;
 extern struct facts_kind kind_slaacprefix, kind_slaacrdns, kind_slaacaddr;
-extern struct facts_kind kind_slaacdfr, kind_slaacdns;
+extern struct facts_kind kind_slaacdfr, kind_slaacdns, kind_flow;
 
 enum { MSG_TEXT };
 
@@ -183,6 +186,10 @@ enum {
 
 enum { LOGIN_USER, LOGIN_LINE, LOGIN_TIME, LOGIN_HOST, LOGIN_NFIELDS };
 
+enum { FLOW_SRC, FLOW_SRCMASK, FLOW_SRCPORT, FLOW_DST, FLOW_DSTMASK,
+	FLOW_DSTPORT, FLOW_PROTO, FLOW_PEER, FLOW_SATYPE, FLOW_TYPE,
+	FLOW_DIRECTION, FLOW_NFIELDS };
+
 enum { HOST_NAME };
 
 /* collectors and renderers, in the files of what they show */
@@ -260,5 +267,8 @@ int	 dhcpleased_has_lease(char *, struct in_addr *, struct in_addr *);
 void	 ip_render(struct frecs *);
 int	 autoconf_facts(struct facts_out *, char *);
 void	 autoconf_render(struct frecs *, struct frec *);
+struct rtdump *sadb_dump(void);
+int	 sadb_facts(struct facts_out *, struct rtdump *, char **, int);
+void	 sadb_render(struct frec *, int *);
 
 #endif /* SHOWFACTS_H */

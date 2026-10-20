@@ -3998,7 +3998,7 @@ pr_ndp(int argc, char **argv, ...)
 static int
 pr_sadb(int argc, char **argv, ...)
 {
-	p_rttables(PF_KEY, 0, 0);
+	facts_show(stdout, "sadb");
 
 	return 0;
 }
@@ -4031,7 +4031,7 @@ pr_dhcp(int argc, char **argv, ...)
 {
 	if (argc == 3 && argv[2][0] != '?') {
 		if (isprefix(argv[2], "leases")) {
-			more(DHCPLEASES);
+			facts_show(stdout, "dhcp leases");
 			return 0;
 		}
 		printf("%% argument %s not recognized\n", argv[2]);

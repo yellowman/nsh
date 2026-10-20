@@ -38,8 +38,8 @@ Four of them, each as _nshd in a
 .Xr chroot 2 ,
 answer the read-only socket, with what anyone may see: interfaces,
 routes, the ARP and neighbor tables, VLANs, bridges, kernel
-statistics, the version, who is logged in and the hostname, as facts
-the client renders.
+statistics, the IPsec flows, the version, who is logged in and the
+hostname, as facts the client renders.
 A long answer holds up only the one show that makes it, and is made
 only as the client reads it.
 A show has no path to the others.
@@ -62,6 +62,9 @@ holds the sessions, and asks kernel for what they need.
 .It kernel
 Runs as root, and reads the configuration from the kernel.
 It answers config and no one else.
+What a daemon's control program prints for a show, and the DHCP
+leases, a child of its own prints, and kernel streams it only as fast
+as the client reads it; the child is killed if the client goes first.
 .It archive
 Runs as _nshd in a
 .Xr chroot 2 ,

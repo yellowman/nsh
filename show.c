@@ -95,12 +95,8 @@ static const struct bits bits[] = {
 void	pr_rthdr(int);
 void	pr_flags(int);
 
-void	p_rtentry(struct rt_msghdr *);
-void	p_pfkentry(struct sadb_msg *);
 void	pr_family(int);
 void	p_encap(struct sockaddr *, struct sockaddr *, int);
-void	p_protocol(struct sadb_protocol *, struct sockaddr *, struct
-	    sadb_protocol *, int);
 void	p_sockaddr(struct sockaddr *, struct sockaddr *, int, int);
 void	p_flags(int, char *);
 void	index_pfk(struct sadb_msg *, void **);
@@ -116,87 +112,48 @@ pr_flags(int af)
 }
 
 /*
- * Print routing tables.
+ * The SPD's flows, as the kernel dumps them: NULL if it cannot, said
+ * why, but for a kernel without IPsec
  */
-void
-p_rttables(int af, u_int tableid, int flags)
+struct rtdump *
+sadb_dump(void)
 {
-	struct rt_msghdr *rtm;
-	struct sadb_msg *msg;
-	char *next, *buf = NULL, *lim = NULL;
-	size_t needed;
-	int mib[7];
-	struct sockaddr *sa;
-	struct rtdump *rtdump;
+	struct rtdump	*spd;
+	size_t		 needed;
+	char		*p;
+	int		 mib[4] = { CTL_NET, PF_KEY, PF_KEY_V2,
+			    NET_KEY_SPD_DUMP };
 
-	rtdump = getrtdump(af, flags, tableid);
-	if (rtdump == NULL)
-		return;
-
-	for (next = rtdump->buf; next < rtdump->lim; next += rtm->rtm_msglen) {
-		rtm = (struct rt_msghdr *)next;
-		if (rtm->rtm_version != RTM_VERSION)
-			continue;
-		sa = (struct sockaddr *)(next + rtm->rtm_hdrlen);
-		if (af != AF_UNSPEC && sa->sa_family != af)
-			continue;
-		if (next == rtdump->buf) {
-			/* start of the loop? print headers */
-			pr_flags(sa->sa_family);
-		pr_family(sa->sa_family);
-			pr_rthdr(sa->sa_family);
-		}
-		p_rtentry(rtm);
+	if ((spd = calloc(1, sizeof(*spd))) == NULL) {
+		printf("%% sadb_dump: %s\n", strerror(errno));
+		return (NULL);
 	}
-	freertdump(rtdump);
-
-	if (af != 0 && af != PF_KEY)
-		return;
-
-	mib[0] = CTL_NET;
-	mib[1] = PF_KEY;
-	mib[2] = PF_KEY_V2;
-	mib[3] = NET_KEY_SPD_DUMP;
-	mib[4] = mib[5] = 0;
-
-	if (sysctl(mib, 4, NULL, &needed, NULL, 0) == -1) {
-		if (errno != ENOPROTOOPT)
-			printf("%% p_rttables: spd-sysctl-estimate: %s\n",
+	for (;;) {
+		if (sysctl(mib, 4, NULL, &needed, NULL, 0) == -1) {
+			if (errno != ENOPROTOOPT)
+				printf("%% sadb_dump: spd-sysctl-estimate: "
+				    "%s\n", strerror(errno));
+			break;
+		}
+		if ((p = realloc(spd->buf, needed)) == NULL) {
+			printf("%% sadb_dump: spd malloc: %s\n",
 			    strerror(errno));
-		return;
-	}
-	if (needed > 0) {
-		if ((buf = malloc(needed)) == 0) {
-			printf("%% p_rttables: spd malloc: %s\n",
+			break;
+		}
+		spd->buf = p;
+		if (sysctl(mib, 4, spd->buf, &needed, NULL, 0) == 0) {
+			spd->lim = spd->buf + needed;
+			return (spd);
+		}
+		/* the SPD grew since it was estimated */
+		if (errno != ENOMEM) {
+			printf("%% sadb_dump: spd sysctl: %s\n",
 			    strerror(errno));
-			return;
+			break;
 		}
-		if (sysctl(mib, 4, buf, &needed, NULL, 0) == -1) {
-			free(buf);
-			printf("%% p_rttables: spd sysctl: %s\n",
-			    strerror(errno));
-			return;
-		}
-		lim = buf + needed;
 	}
-
-	if (buf) {
-		printf("\n%% Encap:\n");
-
-		for (next = buf; next < lim; next += msg->sadb_msg_len *
-		    PFKEYV2_CHUNK) {
-			msg = (struct sadb_msg *)next;
-			if (msg->sadb_msg_len == 0)
-				break;
-			if (next == buf)
-				pr_rthdr(PF_KEY);
-			p_pfkentry(msg);
-		}
-		free(buf);
-		buf = NULL;
-	} else {
-		printf("%% SADB empty\n");
-	}
+	freertdump(spd);
+	return (NULL);
 }
 
 /* 
@@ -237,43 +194,6 @@ get_rtaddrs(int addrs, struct sockaddr *sa, struct sockaddr **rti_info)
 		} else
 			rti_info[i] = NULL;
 	}
-}
-
-/*
- * Print a routing table entry.
- */
-void
-p_rtentry(struct rt_msghdr *rtm)
-{
-	struct sockaddr	*sa = (struct sockaddr *)((char *)rtm + rtm->rtm_hdrlen);
-	struct sockaddr	*mask, *rti_info[RTAX_MAX];
-	char		 ifbuf[IF_NAMESIZE];
-	int interesting = RTF_UP | RTF_GATEWAY | RTF_HOST | RTF_DYNAMIC |
-	    RTF_LLINFO | RTF_STATIC | RTF_REJECT | RTF_MPLS | RTF_CLONED |
-	    RTF_LOCAL;
-
-	if (sa->sa_family == AF_KEY)
-		return;
-
-	get_rtaddrs(rtm->rtm_addrs, sa, rti_info);
-
-	mask = rti_info[RTAX_NETMASK];
-	if ((sa = rti_info[RTAX_DST]) == NULL)
-		return;
-
-	p_sockaddr(sa, mask, rtm->rtm_flags, WID_DST(sa->sa_family));
-	p_sockaddr(rti_info[RTAX_GATEWAY], NULL, RTF_HOST,
-	    WID_GW(sa->sa_family));
-	p_flags(rtm->rtm_flags & interesting, "%-6.6s ");
-	printf("%6u %8llu ", rtm->rtm_rmx.rmx_refcnt,
-	    rtm->rtm_rmx.rmx_pksent);
-	if (rtm->rtm_rmx.rmx_mtu)
-		printf("%6u ", rtm->rtm_rmx.rmx_mtu);
-	else
-		printf("%6s ", "-");
-	putchar((rtm->rtm_rmx.rmx_locks & RTV_MTU) ? 'L' : ' ');
-	printf(" %.16s", if_indextoname(rtm->rtm_index, ifbuf));
-	putchar('\n');
 }
 
 /* a route, as the table has it */
@@ -366,7 +286,7 @@ route_facts(struct facts_out *o, struct rtdump *rt, char **cur, int af,
 	return (0);
 }
 
-/* a route as p_rtentry() printed it, the table's headers first */
+/* a route as show route printed it, the table's headers first */
 void
 route_render(struct frec *r, int *count)
 {
@@ -406,44 +326,177 @@ route_render(struct frec *r, int *count)
 	putchar('\n');
 }
 
-/*
- * Print a pfkey/encap entry.
- */
-void
-p_pfkentry(struct sadb_msg *msg)
+/* an IPsec flow, as the SPD has it */
+static const struct facts_name flow_satypes[] = {
+	{ SADB_SATYPE_ESP,	"esp" },
+	{ SADB_SATYPE_AH,	"ah" },
+	{ SADB_X_SATYPE_IPCOMP,	"ipcomp" },
+	{ SADB_X_SATYPE_IPIP,	"ipip" },
+};
+static const struct facts_name flow_types[] = {
+	{ SADB_X_FLOW_TYPE_USE,		"use" },
+	{ SADB_X_FLOW_TYPE_REQUIRE,	"require" },
+	{ SADB_X_FLOW_TYPE_ACQUIRE,	"acquire" },
+	{ SADB_X_FLOW_TYPE_DENY,	"deny" },
+	{ SADB_X_FLOW_TYPE_BYPASS,	"bypass" },
+	{ SADB_X_FLOW_TYPE_DONTACQ,	"dontacq" },
+};
+static const struct facts_name flow_directions[] = {
+	{ IPSP_DIRECTION_IN,	"in" },
+	{ IPSP_DIRECTION_OUT,	"out" },
+};
+static struct facts_field flow_fields[] = {
+	[FLOW_SRC] =		{ "source",		FACT_ADDRESS },
+	[FLOW_SRCMASK] =	{ "source-mask",	FACT_ADDRESS },
+	[FLOW_SRCPORT] =	{ "source-port",	FACT_U64 },
+	[FLOW_DST] =		{ "destination",	FACT_ADDRESS },
+	[FLOW_DSTMASK] =	{ "destination-mask",	FACT_ADDRESS },
+	[FLOW_DSTPORT] =	{ "destination-port",	FACT_U64 },
+	[FLOW_PROTO] =		{ "protocol",		FACT_U64 },
+	[FLOW_PEER] =		{ "peer",		FACT_ADDRESS },
+	[FLOW_SATYPE] =		{ "sa-type",		FACT_U64, FACT_VALUES,
+				    flow_satypes, nitems(flow_satypes) },
+	[FLOW_TYPE] =		{ "type",		FACT_U64, FACT_VALUES,
+				    flow_types, nitems(flow_types) },
+	[FLOW_DIRECTION] =	{ "direction",		FACT_U64, FACT_VALUES,
+				    flow_directions, nitems(flow_directions) },
+};
+struct facts_kind kind_flow = { "ipsec-flow", flow_fields, FLOW_NFIELDS };
+
+/* the address an extension of msg holds, or NULL */
+static struct sockaddr *
+flow_sa(void **headers, int ext)
 {
-	struct sadb_address	*saddr;
+	struct sadb_address	*saddr = headers[ext];
+
+	return (saddr != NULL ? (struct sockaddr *)(saddr + 1) : NULL);
+}
+
+static uint16_t
+flow_port(struct sockaddr *sa)
+{
+	switch (sa->sa_family) {
+	case AF_INET:
+		return (ntohs(((struct sockaddr_in *)sa)->sin_port));
+	case AF_INET6:
+		return (ntohs(((struct sockaddr_in6 *)sa)->sin6_port));
+	}
+	return (0);
+}
+
+/*
+ * The flows of spd, from *cur, as facts: budget at most. 1 if there
+ * are more, 0 if not, -1 if a record failed.
+ */
+int
+sadb_facts(struct facts_out *o, struct rtdump *spd, char **cur, int budget)
+{
+	struct facts_value	 v[FLOW_NFIELDS];
+	struct sadb_msg		*msg;
 	struct sadb_protocol	*sap, *saft;
-	struct sockaddr		*sa, *mask;
+	struct sockaddr		*src, *srcmask, *dst, *dstmask;
 	void			*headers[SADB_EXT_MAX + 1];
+	int			 n = 0;
 
-	bzero(headers, sizeof(headers));
-	index_pfk(msg, headers);
+	for (; *cur < spd->lim; *cur += msg->sadb_msg_len * PFKEYV2_CHUNK) {
+		msg = (struct sadb_msg *)*cur;
+		if (msg->sadb_msg_len == 0)
+			break;
+		if (n == budget)
+			return (1);
+		bzero(headers, sizeof(headers));
+		index_pfk(msg, headers);
+		sap = headers[SADB_X_EXT_PROTOCOL];
+		saft = headers[SADB_X_EXT_FLOW_TYPE];
+		/* always set, and bypass and deny flows have no peer */
+		if ((src = flow_sa(headers, SADB_X_EXT_SRC_FLOW)) == NULL ||
+		    (srcmask = flow_sa(headers, SADB_X_EXT_SRC_MASK)) ==
+		    NULL ||
+		    (dst = flow_sa(headers, SADB_X_EXT_DST_FLOW)) == NULL ||
+		    (dstmask = flow_sa(headers, SADB_X_EXT_DST_MASK)) ==
+		    NULL || sap == NULL || saft == NULL)
+			continue;
+		memset(v, 0, sizeof(v));
+		facts_sockaddr(&v[FLOW_SRC], src);
+		facts_sockaddr(&v[FLOW_SRCMASK], srcmask);
+		facts_u64(&v[FLOW_SRCPORT], flow_port(src));
+		facts_sockaddr(&v[FLOW_DST], dst);
+		facts_sockaddr(&v[FLOW_DSTMASK], dstmask);
+		facts_u64(&v[FLOW_DSTPORT], flow_port(dst));
+		facts_u64(&v[FLOW_PROTO], sap->sadb_protocol_proto);
+		facts_sockaddr(&v[FLOW_PEER],
+		    flow_sa(headers, SADB_EXT_ADDRESS_DST));
+		facts_u64(&v[FLOW_SATYPE], msg->sadb_msg_satype);
+		facts_u64(&v[FLOW_TYPE], saft->sadb_protocol_proto);
+		facts_u64(&v[FLOW_DIRECTION], saft->sadb_protocol_direction);
+		if (facts_record(o, &kind_flow, v) == -1)
+			return (-1);
+		n++;
+	}
+	return (0);
+}
 
-	/* These are always set */
-	saddr = headers[SADB_X_EXT_SRC_FLOW];
-	sa = (struct sockaddr *)(saddr + 1);
-	saddr = headers[SADB_X_EXT_SRC_MASK];
-	mask = (struct sockaddr *)(saddr + 1);
-	p_encap(sa, mask, WID_DST(sa->sa_family));
+/* "/" and what names says value is, or dflt */
+static void
+flow_name(const struct facts_name *names, size_t n, uint64_t value,
+    const char *dflt)
+{
+	size_t	 i;
 
-	/* These are always set, too. */
-	saddr = headers[SADB_X_EXT_DST_FLOW];
-	sa = (struct sockaddr *)(saddr + 1);
-	saddr = headers[SADB_X_EXT_DST_MASK];
-	mask = (struct sockaddr *)(saddr + 1);
-	p_encap(sa, mask, WID_DST(sa->sa_family));
+	for (i = 0; i < n; i++)
+		if (names[i].value == value) {
+			printf("/%s", names[i].name);
+			return;
+		}
+	printf("/%s", dflt);
+}
 
-	/* Bypass and deny flows do not set SADB_EXT_ADDRESS_DST! */
-	sap = headers[SADB_X_EXT_PROTOCOL];
-	saft = headers[SADB_X_EXT_FLOW_TYPE];
-	saddr = headers[SADB_EXT_ADDRESS_DST];
-	if (saddr)
-		sa = (struct sockaddr *)(saddr + 1);
+/* a flow's source or destination, with its port */
+static void
+flow_encap(struct frec *r, int addr, int mask, int port)
+{
+	struct sockaddr_storage	 sa, m;
+
+	fsockaddr(r, addr, &sa);
+	fsockaddr(r, mask, &m);
+	switch (sa.ss_family) {
+	case AF_INET:
+		((struct sockaddr_in *)&sa)->sin_port = htons(fu(r, port, 0));
+		break;
+	case AF_INET6:
+		((struct sockaddr_in6 *)&sa)->sin6_port =
+		    htons(fu(r, port, 0));
+		break;
+	}
+	p_encap((struct sockaddr *)&sa, (struct sockaddr *)&m,
+	    WID_DST(sa.ss_family));
+}
+
+/* a flow as show sadb printed it, the SPD's headers first */
+void
+sadb_render(struct frec *r, int *count)
+{
+	struct sockaddr_storage	 peer;
+
+	if (!fhas(r, FLOW_SRC) || !fhas(r, FLOW_DST))
+		return;
+	if ((*count)++ == 0) {
+		printf("\n%% Encap:\n");
+		pr_rthdr(PF_KEY);
+	}
+	flow_encap(r, FLOW_SRC, FLOW_SRCMASK, FLOW_SRCPORT);
+	flow_encap(r, FLOW_DST, FLOW_DSTMASK, FLOW_DSTPORT);
+	printf("%-6u", (u_int)fu(r, FLOW_PROTO, 0));
+	if (fsockaddr(r, FLOW_PEER, &peer))
+		p_sockaddr((struct sockaddr *)&peer, NULL, 0, -1);
 	else
-		sa = NULL;
-	p_protocol(sap, sa, saft, msg->sadb_msg_satype);
-
+		printf("none");
+	flow_name(flow_satypes, nitems(flow_satypes), fu(r, FLOW_SATYPE, 0),
+	    "<unknown>");
+	flow_name(flow_types, nitems(flow_types), fu(r, FLOW_TYPE, 0),
+	    "<unknown type>");
+	flow_name(flow_directions, nitems(flow_directions),
+	    fu(r, FLOW_DIRECTION, 0), "<unknown>");
 	printf("\n");
 }
 
@@ -498,69 +551,6 @@ p_encap(struct sockaddr *sa, struct sockaddr *mask, int width)
 		printf("%s", cp);
 	else {
 		printf("%-*s %-5u ", width, cp, port);
-	}
-}
-
-void
-p_protocol(struct sadb_protocol *sap, struct sockaddr *sa, struct sadb_protocol
-    *saft, int proto)
-{
-	printf("%-6u", sap->sadb_protocol_proto);
-
-	if (sa)
-		p_sockaddr(sa, NULL, 0, -1);
-	else
-		printf("none");
-
-	switch (proto) {
-	case SADB_SATYPE_ESP:
-		printf("/esp");
-		break;
-	case SADB_SATYPE_AH:
-		printf("/ah");
-		break;
-	case SADB_X_SATYPE_IPCOMP:
-		printf("/ipcomp");
-		break;
-	case SADB_X_SATYPE_IPIP:
-		printf("/ipip");
-		break;
-	default:
-		printf("/<unknown>");
-	}
-
-	switch(saft->sadb_protocol_proto) {
-	case SADB_X_FLOW_TYPE_USE:
-		printf("/use");
-		break;
-	case SADB_X_FLOW_TYPE_REQUIRE:
-		printf("/require");
-		break;
-	case SADB_X_FLOW_TYPE_ACQUIRE:
-		printf("/acquire");
-		break;
-	case SADB_X_FLOW_TYPE_DENY:
-		printf("/deny");
-		break;
-	case SADB_X_FLOW_TYPE_BYPASS:
-		printf("/bypass");
-		break;
-	case SADB_X_FLOW_TYPE_DONTACQ:
-		printf("/dontacq");
-		break;
-	default:
-		printf("/<unknown type>");
-	}
-
-	switch(saft->sadb_protocol_direction) {
-	case IPSP_DIRECTION_IN:
-		printf("/in");
-		break;
-	case IPSP_DIRECTION_OUT:
-		printf("/out");
-		break;
-	default:
-		printf("/<unknown>");
 	}
 }
 
