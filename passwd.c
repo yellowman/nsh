@@ -163,7 +163,8 @@ secretusage(void)
 }
 
 /*
- * enable privileged mode
+ * enable privileged mode: with no argument, 1 if the session may, or 0
+ * having said why not; with secret, a handler's status
  */
 static int
 enable_passwd(int argc, char **argv)
@@ -188,8 +189,10 @@ enable_passwd(int argc, char **argv)
 			}
 		}
 		p = getpass("Privileged Mode Secret:");
-		if (p == NULL || *p == '\0')
+		if (p == NULL || *p == '\0') {
+			printf("%% Secret incorrect\n");
 			return 0;
+		}
 
 		if (strcmp(crypt(p, pass), pass) == 0) {
 			return 1;
@@ -208,35 +211,35 @@ enable_passwd(int argc, char **argv)
 		} else {
 			if (isprefix(argv[1], "secret")) {
 				secretusage();
-				return 0;
+				return -1;
 			}
 			printf("%% Invalid argument: %s\n", argv[1]);
-			return 0;
+			return -1;
 		}
 
 	case 3:
 		if (!isprefix(argv[1], "secret")) {
 			printf("%% Invalid argument: %s\n", argv[1]);
-			return 0;
+			return -1;
 		}
 
 		if (config_mode != 1) {
 			printf("%% Configuration mode required\n");
-			return 0;
+			return -1;
 		}
 		if (priv != 1) { /* redundant, but kept here just in case */
 			printf("%% Privilege required\n");
-			return 0;
+			return -1;
 		}
 
 		if (strlen(argv[2]) < 8) {
 			printf("%% Secret too short; at least 8 characters required\n");
-			return 0;
+			return -1;
 		}
 		if (strlen(argv[2]) > _PASSWORD_LEN) {
 			printf("%% Secret too long; at most %d characters allowed\n",
 			    _PASSWORD_LEN);
-			return 0;
+			return -1;
 		}
 			
 		/* crypt plaintext and save as pass */
@@ -244,48 +247,46 @@ enable_passwd(int argc, char **argv)
 		gen_salt(salt, sizeof(salt));
 		if ((cpass = crypt(pass, salt)) == NULL) {
 			printf("%% crypt failed\n");
-			return 0;
+			return -1;
 		}
 		if (candidate)
 			return cand_setting(ST_ON, "enable secret blowfish %s",
 			    cpass);
-		write_pass(cpass);
-		return 0;
+		return write_pass(cpass) ? 0 : -1;
 
 	case 4:
 		if (!isprefix(argv[1], "secret")) {
 			printf("%% Invalid argument: %s\n", argv[1]);
-			return 0;
+			return -1;
 		}
 
 		if (!isprefix(argv[2], "blowfish")) {
 			printf("%% Invalid cipher: %s\n", argv[2]);
-			return 0;
+			return -1;
 		}
 
 		if (config_mode != 1) {
 			printf("%% Configuration mode required\n");
-			return 0;
+			return -1;
 		}
 		if (priv != 1) { /* redundant, but kept here just in case */
 			printf("%% Privilege required\n");
-			return 0;
+			return -1;
 		}
 
 		if (!validate_cpass(argv[2], argv[3]))
-			return 0;
+			return -1;
 
 		/* set crypted pass */
 		strlcpy(pass, argv[3], sizeof(pass));
 		if (candidate)
 			return cand_setting(ST_ON, "enable secret blowfish %s",
 			    pass);
-		write_pass(pass);
-		return 0;
+		return write_pass(pass) ? 0 : -1;
 
 	default:
 		printf("%% Too many arguments\n");
-		return 0;
+		return -1;
 	}
 
 	return 0;
@@ -320,8 +321,10 @@ enable(int argc, char **argv, ...)
 	if (argc != 1)
 		return enable_passwd(argc, argv);
 
-	if (priv == 1 || !enable_passwd(argc, argv))
+	if (priv == 1)
 		return 0;
+	if (!enable_passwd(argc, argv))
+		return -1;
 	
 	if (getuid() == 0) {
 		priv = 1;
@@ -330,7 +333,7 @@ enable(int argc, char **argv, ...)
 
 	if (socketpair(AF_UNIX, SOCK_STREAM, PF_UNSPEC, pfd) == -1) {
 		printf("%% socketpair failed: %s\n", strerror(errno));
-		return 0;
+		return -1;
 	}
 
 	if (!interactive_mode) {
@@ -344,8 +347,11 @@ enable(int argc, char **argv, ...)
 	 * The 'priv' flag will remain at zero in our own process.
 	 */
 	pid = cmdargs_nowait(doas_argv[0], doas_argv, pfd[0]);
-	if (pid == -1)
-		return 0;
+	if (pid == -1) {
+		close(pfd[0]);
+		close(pfd[1]);
+		return -1;
+	}
 
 	close(pfd[0]);
 
@@ -367,6 +373,7 @@ enable(int argc, char **argv, ...)
 	}
 
 	exit_code = cmdargs_wait_for_child();
+	close(pfd[1]);
 	if (exit_code == 0)
 		return 0;
 	else if (exit_code == NSH_REXEC_EXIT_CODE_QUIT) {
@@ -377,5 +384,5 @@ enable(int argc, char **argv, ...)
 		    "with error code %d\n", exit_code);
 	}
 
-	return 0;
+	return -1;
 }
