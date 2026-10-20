@@ -3697,7 +3697,7 @@ pr_conf(int argc, char **argv, ...)
 
 	/* nshd's, where it runs */
 	if ((ret = nshd_show("running-config")) != -1)
-		return ret;
+		return ret == 1 ? 0 : -1;
 
 	if (priv != 1) {
 		printf ("%% Privilege required\n");
@@ -3709,9 +3709,7 @@ pr_conf(int argc, char **argv, ...)
 		return -1;
 	}
 
-	more(NSHRC_TEMP);
-
-	return 1;
+	return more(NSHRC_TEMP) ? 0 : -1;
 }
 
 /*
@@ -3720,16 +3718,12 @@ pr_conf(int argc, char **argv, ...)
 static int
 pr_s_conf(int argc, char **argv, ...)
 {
-	int ret;
-
 	if (priv != 1) {
 		printf ("%% Privilege required\n");
 		return -1;
 	}
 
-	ret = more(NSHRC);
-
-	return ret;
+	return more(NSHRC) ? 0 : -1;
 }
 
 /*
@@ -3845,7 +3839,7 @@ running_tree(void)
 static int
 pr_conf_diff(int argc, char **argv, ...)
 {
-	int out_fd = -1, ndiff;
+	int out_fd = -1, ndiff, ret = -1;
 	char outpath[PATH_MAX];
 	struct cnode *old = NULL, *new = NULL;
 	FILE *out = NULL;
@@ -3903,8 +3897,7 @@ pr_conf_diff(int argc, char **argv, ...)
 		printf("%% %s: %s\n", outpath, strerror(errno));
 		goto done;
 	}
-	if (ndiff > 0)
-		more(outpath);
+	ret = ndiff == 0 || more(outpath) ? 0 : -1;
 done:
 	conftree_free(old);
 	if (!candidate)
@@ -3914,7 +3907,7 @@ done:
 		fclose(out);
 	else
 		close(out_fd);
-	return 0;
+	return ret;
 }
 
 static int
@@ -4070,7 +4063,7 @@ pr_environment(int argc, char **argv, ...)
 {
 	extern char **environ;
 	char **ep;
-	int fd;
+	int fd, ret = -1;
 	char path[PATH_MAX];
 
 	if (strlcpy(path, "/tmp/nshrc.env.XXXXXXXX", sizeof(path)) >=
@@ -4126,9 +4119,9 @@ pr_environment(int argc, char **argv, ...)
 
 	fsync(fd);
 
-	more(path);
+	ret = more(path) ? 0 : -1;
 done:
 	unlink(path);
 	close(fd);
-	return 0;
+	return ret;
 }

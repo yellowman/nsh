@@ -589,8 +589,8 @@ pr_cand_conf(int argc, char **argv, ...)
 	if (conftree_write(f, t) == -1 || fflush(f) == EOF) {
 		printf("%% %s: %s\n", path, strerror(errno));
 		ret = -1;
-	} else
-		more(path);
+	} else if (!more(path))
+		ret = -1;
 	unlink(path);
 	fclose(f);
 	return ret;
