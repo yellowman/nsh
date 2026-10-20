@@ -30,6 +30,12 @@
  * says its session is gone, or config starts again, which kill the
  * child; or when kernel ends. config sending what it may not, or
  * sending it wrong, is reported, as it went wrong.
+ *
+ * kernel is a session of its own, which parent clears when kernel goes,
+ * and each stream's child leads a process group of its own, which is
+ * killed when the stream stops. A child keeps root for a program, as
+ * its daemon's control socket is root's; for the leases, it opens them
+ * and becomes NSHD_CHECK_USER.
  */
 
 #include <sys/types.h>
@@ -39,8 +45,10 @@
 #include <errno.h>
 #include <event.h>
 #include <fcntl.h>
+#include <grp.h>
 #include <imsg.h>
 #include <paths.h>
+#include <pwd.h>
 #include <signal.h>
 #include <stdarg.h>
 #include <stdint.h>
@@ -77,6 +85,8 @@ static uint8_t		 units[FACTS_UNIT];	/* not yet sent */
 static size_t		 nunits;
 static TAILQ_HEAD(, stream) streams = TAILQ_HEAD_INITIALIZER(streams);
 static int		 nstreams;
+static uid_t		 check_uid;	/* NSHD_CHECK_USER's */
+static gid_t		 check_gid;
 
 static void	kern_dispatch_relay(int, short, void *);
 static void	kern_dispatch_config(int, short, void *);
@@ -89,6 +99,7 @@ static void	kern_emit(void *, const void *, size_t);
 static void	kern_flush(uint32_t);
 static void	kern_stream(uint32_t, struct facts_answer *);
 static __dead void kern_child(int, struct facts_answer *);
+static void	kern_drop(void);
 static void	kern_stream_read(int, short, void *);
 static void	kern_stream_more(uint32_t);
 static void	kern_stream_stop(struct stream *);
@@ -104,8 +115,15 @@ void
 kernproc(int debug, int v)
 {
 	static struct event	 ev_sigchld;
+	struct passwd		*pw;
 
 	child_start("kernel", debug, v);
+	if (setsid() == -1)
+		fatal("setsid");
+	if ((pw = getpwnam(NSHD_CHECK_USER)) == NULL)
+		fatalx("unknown user %s", NSHD_CHECK_USER);
+	check_uid = pw->pw_uid;
+	check_gid = pw->pw_gid;
 	capture_stdout();
 
 	/* nsh's code here is nsh's as root */
@@ -345,6 +363,8 @@ kern_stream(uint32_t id, struct facts_answer *a)
 	case 0:
 		kern_child(fds[1], a);
 	}
+	/* as the child does, so neither waits on the other */
+	setpgid(s->pid, s->pid);
 	close(fds[1]);
 	s->id = id;
 	s->fd = fds[0];
@@ -362,6 +382,7 @@ kern_child(int fd, struct facts_answer *a)
 {
 	int	 null;
 
+	setpgid(0, 0);
 	/* as a program expects them, and as kernel's are not */
 	signal(SIGINT, SIG_DFL);
 	signal(SIGTERM, SIG_DFL);
@@ -373,9 +394,19 @@ kern_child(int fd, struct facts_answer *a)
 	    dup2(null, STDIN_FILENO) == -1)
 		_exit(127);
 	closefrom(STDERR_FILENO + 1);
-	facts_stream(a, 1);
+	facts_stream(a, kern_drop);
 	fflush(stdout);
 	_exit(0);
+}
+
+/* a stream's child, once it holds what it needed root for */
+static void
+kern_drop(void)
+{
+	if (setgroups(1, &check_gid) == -1 ||
+	    setresgid(check_gid, check_gid, check_gid) == -1 ||
+	    setresuid(check_uid, check_uid, check_uid) == -1)
+		_exit(127);
 }
 
 /* what a stream's child printed, as a message to its client */
@@ -422,13 +453,16 @@ kern_stream_more(uint32_t id)
 		}
 }
 
-/* s, its child killed: it ends once the child is reaped */
+/*
+ * s, and the process group its child leads, killed: it ends once the
+ * child is reaped
+ */
 static void
 kern_stream_stop(struct stream *s)
 {
 	s->stopped = 1;
 	if (s->pid != 0)
-		kill(s->pid, SIGKILL);
+		killpg(s->pid, SIGKILL);
 	if (s->fd != -1) {
 		event_del(&s->ev);
 		close(s->fd);
@@ -470,6 +504,6 @@ kern_exit(void)
 
 	TAILQ_FOREACH(s, &streams, entry)
 		if (s->pid != 0)
-			kill(s->pid, SIGKILL);
+			killpg(s->pid, SIGKILL);
 	exit(0);
 }

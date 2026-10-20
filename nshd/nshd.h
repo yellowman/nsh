@@ -23,6 +23,7 @@
 #define NSHD_H
 
 #define NSHD_GROUP	"nshadmin"	/* who may use the read-write socket */
+#define NSHD_CHECK_USER	"_nshcheck"	/* kernel's helpers, but root's */
 #define NSHD_SOCKET	"/var/run/nshd.sock"	/* 0660, group nshadmin */
 #define NSHD_RO_SOCKET	"/var/run/nshd.ro.sock"	/* 0666 */
 

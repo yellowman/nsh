@@ -592,7 +592,7 @@ facts_more(struct facts_answer *a, struct facts_out *o, int budget)
 		break;
 	case ANS_PROGRAM:
 	case ANS_LEASES:
-		facts_stream(a, 0);
+		facts_stream(a, NULL);
 		break;
 	}
 	a->done = 1;
@@ -607,13 +607,15 @@ facts_streams(struct facts_answer *a)
 }
 
 /*
- * a's text, to stdout, as nsh printed it: in nsh, the program run as
- * nsh runs one, and the leases paged; in the child of nshd's kernel
- * whose stdout is the stream, the program in its place, and the leases
- * as they are
+ * a's text, to stdout, as nsh printed it: in nsh, drop NULL, the
+ * program run as nsh runs one, and the leases paged; in the child of
+ * nshd's kernel whose stdout is the stream, the program in its place,
+ * and the leases as they are, read once the child has called drop to
+ * give up root. A program keeps root: its daemon's control socket is
+ * root's, as are /dev/pf and PF_KEY
  */
 void
-facts_stream(struct facts_answer *a, int child)
+facts_stream(struct facts_answer *a, void (*drop)(void))
 {
 	char	**args, buf[8192];
 	size_t	  n;
@@ -624,7 +626,7 @@ facts_stream(struct facts_answer *a, int child)
 		if ((args = prot1_args(a->prog, a->args, a->n - 4, a->w + 4,
 		    a->table)) == NULL)
 			break;
-		if (!child) {
+		if (drop == NULL) {
 			cmdargs(args[0], args);
 			break;
 		}
@@ -635,10 +637,11 @@ facts_stream(struct facts_answer *a, int child)
 		break;
 	case ANS_LEASES:
 		/* more() measures lines by a terminal a child has not */
-		if (!child) {
+		if (drop == NULL) {
 			more(DHCPLEASES);
 			break;
 		}
+		/* dhcpd's, 0640 */
 		if ((f = fopen(DHCPLEASES, "r")) == NULL) {
 			if (errno == ENOENT)
 				printf("%% File %s not found\n", DHCPLEASES);
@@ -647,6 +650,7 @@ facts_stream(struct facts_answer *a, int child)
 				    strerror(errno));
 			break;
 		}
+		drop();
 		while ((n = fread(buf, 1, sizeof(buf), f)) > 0)
 			fwrite(buf, 1, n, stdout);
 		fclose(f);

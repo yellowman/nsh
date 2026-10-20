@@ -29,12 +29,14 @@
  *			them, n from 0, so one long answer holds up no other
  *	frontend (-F)	_nshfront, chroot: the read-write socket, sessions
  *	config (-C)	_nshconf, chroot: sessions' state, what to ask kernel
- *	kernel (-K)	root: reads and changes the kernel
+ *	kernel (-K)	root, a session of its own: reads and changes the
+ *			kernel
  *	archive (-A)	_nsharc, chroot: the configurations saved
  *
  * Each user is a role's alone, so no child may signal another of
  * another role, or reach its files; the group nshadmin may use the
- * read-write socket.
+ * read-write socket. kernel's helpers that need not be root run as
+ * NSHD_CHECK_USER, whose uid is theirs alone too.
  *
  * Two children that talk, frontend and config, config and kernel, do so
  * on a pipe of their own, which parent makes, so each knows who sent
@@ -61,6 +63,9 @@
 #include <sys/types.h>
 #include <sys/queue.h>
 #include <sys/socket.h>
+#include <sys/sysctl.h>
+#include <sys/signal.h>
+#include <sys/proc.h>
 #include <sys/wait.h>
 
 #include <err.h>
@@ -89,6 +94,7 @@
 
 #define RESTARTS	5	/* failures in RESTART_SECS, and one stays down */
 #define RESTART_SECS	60
+#define CLEAR_TRIES	200	/* kernel's helpers killed, 10 ms apart */
 
 static struct child {
 	enum nshd_proc	 proc;
@@ -141,6 +147,9 @@ static int		 out_open(struct child *);
 static void		 out_close(struct child *);
 static void		 out_write(int, short, void *);
 static void		 restart(struct child *, const char *);
+static int		 kernel_clear(struct child *);
+static struct kinfo_proc *procs(int, int, size_t *);
+static const char	*how(int);
 static int		 failed(struct child *);
 static struct child	*child(enum nshd_proc, int);
 static int		 shows_down(void);
@@ -150,6 +159,7 @@ static __dead void	 usage(void);
 
 static char		*argv0;
 static int		 opt_debug, opt_verbose, rwfd, rofd;
+static uid_t		 check_uid;	/* NSHD_CHECK_USER's */
 static struct imsgev	*iev_relay;	/* to relay, with descriptors */
 static struct imsgbuf	 relay_in;	/* from relay, without */
 
@@ -265,7 +275,7 @@ main(int argc, char *argv[])
 
 	spawn_all();
 
-	if (pledge("stdio sendfd proc exec", NULL) == -1)
+	if (pledge("stdio sendfd proc exec ps", NULL) == -1)
 		fatal("pledge");
 
 	event_dispatch();
@@ -296,7 +306,10 @@ shows_down(void)
 	return (1);
 }
 
-/* each child's user, which is not root, nor any other role's uid */
+/*
+ * each child's user, and kernel's helpers', which is not root, nor any
+ * other role's uid
+ */
 static void
 users(void)
 {
@@ -317,6 +330,14 @@ users(void)
 				errx(1, "%s and %s are one uid",
 				    children[j].user, children[i].user);
 	}
+	if ((pw = getpwnam(NSHD_CHECK_USER)) == NULL)
+		errx(1, "unknown user %s", NSHD_CHECK_USER);
+	if ((check_uid = pw->pw_uid) == 0)
+		errx(1, "%s is root", NSHD_CHECK_USER);
+	for (i = 0; i < NPROC; i++)
+		if (children[i].user != NULL && uid[i] == check_uid)
+			errx(1, "%s and %s are one uid", children[i].user,
+			    NSHD_CHECK_USER);
 }
 
 /*
@@ -606,7 +627,10 @@ restart(struct child *c, const char *why)
 
 	if (c->proc == PROC_RELAY) {
 		for (i = 0; i < NPROC; i++) {
-			if (children[i].pid > 0)
+			if (children[i].proc == PROC_KERNEL) {
+				if (kernel_clear(&children[i]) == -1)
+					children[i].down = 1;
+			} else if (children[i].pid > 0)
 				kill(children[i].pid, SIGKILL);
 			children[i].pid = -1;	/* reaped on SIGCHLD */
 			out_close(&children[i]);
@@ -623,7 +647,10 @@ restart(struct child *c, const char *why)
 		return;
 	}
 
-	if (c->pid > 0)
+	if (c->proc == PROC_KERNEL) {
+		if (kernel_clear(c) == -1)
+			down = 1;
+	} else if (c->pid > 0)
 		kill(c->pid, SIGKILL);
 	c->pid = -1;
 	out_close(c);
@@ -650,13 +677,111 @@ restart(struct child *c, const char *why)
 		fatal("%s: down", c->name);
 }
 
+/*
+ * kernel gone, or to go, and its helpers with it: each process of its
+ * session, which kernel made as it started, and of NSHD_CHECK_USER's,
+ * killed until none is left. kernel is reaped last, so its session is
+ * no other's while its helpers are found by it. -1 if one outlives
+ * CLEAR_TRIES, and no other kernel may start to race with it
+ */
+static int
+kernel_clear(struct child *k)
+{
+	struct kinfo_proc	*kp;
+	uint64_t		 sess = 0, own = 0;
+	size_t			 n, i;
+	int			 tries, left, status;
+
+	if (k->pid <= 0)
+		return (0);
+	if ((kp = procs(KERN_PROC_PID, k->pid, &n)) != NULL && n == 1)
+		sess = kp->p_sess;
+	free(kp);
+	if ((kp = procs(KERN_PROC_PID, getpid(), &n)) != NULL && n == 1)
+		own = kp->p_sess;
+	free(kp);
+	/* not yet a session of its own, so no helper either */
+	if (sess == own)
+		sess = 0;
+	kill(k->pid, SIGKILL);
+
+	for (tries = 0;; tries++) {
+		if ((kp = procs(KERN_PROC_ALL, 0, &n)) == NULL) {
+			logit(LOG_CRIT, "kernel's helpers: sysctl: %s",
+			    strerror(errno));
+			return (-1);
+		}
+		for (i = 0, left = 0; i < n; i++)
+			if ((kp[i].p_psflags & PS_ZOMBIE) == 0 &&
+			    ((sess != 0 && kp[i].p_sess == sess) ||
+			    kp[i].p_ruid == check_uid)) {
+				kill(kp[i].p_pid, SIGKILL);
+				left++;
+			}
+		free(kp);
+		if (left == 0)
+			break;
+		if (tries == CLEAR_TRIES) {
+			logit(LOG_CRIT, "%d of kernel's helpers outlive "
+			    "SIGKILL: kernel stays down", left);
+			return (-1);
+		}
+		nanosleep(&(struct timespec){ 0, 10000000 }, NULL);
+	}
+	if (waitpid(k->pid, &status, 0) == k->pid)
+		log_warnx("%s %s", k->name, how(status));
+	k->pid = -1;
+	return (0);
+}
+
+/* the processes op and arg name, as kern.proc has them, or NULL */
+static struct kinfo_proc *
+procs(int op, int arg, size_t *n)
+{
+	struct kinfo_proc	*kp;
+	int			 mib[6] = { CTL_KERN, KERN_PROC, op, arg,
+				    sizeof(*kp), 0 };
+	size_t			 len;
+
+	for (;;) {
+		if (sysctl(mib, 6, NULL, &len, NULL, 0) == -1)
+			return (NULL);
+		/* and room for some started since */
+		len += 16 * sizeof(*kp);
+		mib[5] = len / sizeof(*kp);
+		if ((kp = malloc(len)) == NULL)
+			return (NULL);
+		if (sysctl(mib, 6, kp, &len, NULL, 0) == 0)
+			break;
+		free(kp);
+		if (errno != ENOMEM)
+			return (NULL);
+	}
+	*n = len / sizeof(*kp);
+	return (kp);
+}
+
+/* how a child ended, by its status */
+static const char *
+how(int status)
+{
+	static char	 why[32];
+
+	if (WIFSIGNALED(status))
+		snprintf(why, sizeof(why), "killed by signal %d",
+		    WTERMSIG(status));
+	else
+		snprintf(why, sizeof(why), "exited %d", WEXITSTATUS(status));
+	return (why);
+}
+
 static void
 parent_sig_handler(int sig, short event, void *arg)
 {
-	char	 why[32];
-	int	 status, serrno = errno;
-	size_t	 i;
-	pid_t	 pid;
+	const char	*why;
+	int		 status, serrno = errno;
+	size_t		 i;
+	pid_t		 pid;
 
 	switch (sig) {
 	case SIGINT:
@@ -665,18 +790,13 @@ parent_sig_handler(int sig, short event, void *arg)
 	case SIGHUP:
 		break;
 	case SIGCHLD:
-		while ((pid = waitpid(-1, &status, WNOHANG)) > 0)
+		/* but kernel, a session of its own: kernel_clear() reaps it */
+		while ((pid = waitpid(0, &status, WNOHANG)) > 0)
 			for (i = 0; i < NPROC; i++) {
 				if (pid != children[i].pid)
 					continue;
 				children[i].pid = -1;
-				if (WIFSIGNALED(status))
-					snprintf(why, sizeof(why),
-					    "killed by signal %d",
-					    WTERMSIG(status));
-				else
-					snprintf(why, sizeof(why), "exited %d",
-					    WEXITSTATUS(status));
+				why = how(status);
 				/*
 				 * relay says when a child went wrong: every
 				 * child goes when relay does, and that is
@@ -749,8 +869,9 @@ parent_shutdown(int status, const char *why)
 
 	log_info("%s", why);
 	for (i = 0; i < NPROC; i++)
-		if (children[i].pid > 0)
+		if (children[i].pid > 0 && children[i].proc != PROC_KERNEL)
 			kill(children[i].pid, SIGTERM);
+	kernel_clear(child(PROC_KERNEL, 0));
 	exit(status);
 }
 

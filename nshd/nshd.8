@@ -67,7 +67,16 @@ Runs as root, and reads the configuration from the kernel.
 It answers config and no one else.
 What a daemon's control program prints for a show, and the DHCP
 leases, a child of its own prints, and kernel streams it only as fast
-as the client reads it; the child is killed if the client goes first.
+as the client reads it; the child, and its process group, are killed
+if the client goes first.
+A control program runs as root, as its daemon's control socket,
+.Pa /dev/pf
+and PF_KEY are root's; the child that prints the leases opens them,
+then becomes _nshcheck.
+kernel is a session of its own: when it goes, the parent kills every
+process left in that session, and every process of _nshcheck's,
+before another kernel starts.
+If one outlives SIGKILL, no other kernel starts.
 .It archive
 Runs as _nsharc in a
 .Xr chroot 2 ,
@@ -96,8 +105,8 @@ Each child's
 .Xr chroot 2
 is its user's home directory.
 .Nm
-does not start unless each user exists, is not root, and has a uid no
-other role's user has.
+does not start unless each user, and _nshcheck, exists, is not root,
+and has a uid no other has.
 .Pp
 Only root and the members of the group nshadmin may connect to the
 read-write socket, and every session there may see the running
