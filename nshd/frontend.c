@@ -51,7 +51,7 @@ void
 frontend(int debug, int verbose)
 {
 	child_start("frontend", debug, verbose);
-	privdrop();
+	privdrop(PROC_FRONTEND);
 	if (pledge("stdio unix", NULL) == -1)
 		fatal("pledge");
 

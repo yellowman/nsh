@@ -22,8 +22,8 @@
 #ifndef NSHD_H
 #define NSHD_H
 
-#define NSHD_USER	"_nshd"
-#define NSHD_SOCKET	"/var/run/nshd.sock"	/* 0660, group _nshd */
+#define NSHD_GROUP	"nshadmin"	/* who may use the read-write socket */
+#define NSHD_SOCKET	"/var/run/nshd.sock"	/* 0660, group nshadmin */
 #define NSHD_RO_SOCKET	"/var/run/nshd.ro.sock"	/* 0666 */
 
 #define NSHD_VERSION	1	/* of what a client and nshd say */
@@ -140,7 +140,7 @@ struct facts_out;
 void		 capture_stdout(void);
 int		 printed(struct facts_out *);
 void		 child_start(const char *, int, int);
-void		 privdrop(void);
+void		 privdrop(enum nshd_proc);
 
 /* each process but parent */
 __dead void	 relay(int, int);

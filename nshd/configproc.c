@@ -78,7 +78,7 @@ void
 configproc(int debug, int verbose)
 {
 	child_start("config", debug, verbose);
-	privdrop();
+	privdrop(PROC_CONFIG);
 	if (pledge("stdio", NULL) == -1)
 		fatal("pledge");
 

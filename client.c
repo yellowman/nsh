@@ -16,7 +16,7 @@
 
 /*
  * nsh as a client of nshd(8), where nshd runs. Who may connect to its
- * read-write socket, root or the group _nshd, has what an enabled
+ * read-write socket, root or the group nshadmin, has what an enabled
  * nsh has there.
  */
 

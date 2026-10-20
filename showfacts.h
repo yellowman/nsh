@@ -51,7 +51,7 @@ int		 fhas(struct frec *, int);
 
 /*
  * Who answers: nshd's show processes, for anyone, or its kernel, for
- * root and _nshd; nsh, where nshd does not run, answers all of them
+ * root and nshadmin; nsh, where nshd does not run, answers all of them
  */
 #define FACTS_SHOW	0x1
 #define FACTS_KERNEL	0x2

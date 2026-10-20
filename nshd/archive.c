@@ -39,7 +39,7 @@ void
 archive(int debug, int verbose)
 {
 	child_start("archive", debug, verbose);
-	privdrop();
+	privdrop(PROC_ARCHIVE);
 	if (pledge("stdio", NULL) == -1)
 		fatal("pledge");
 

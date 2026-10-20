@@ -27,7 +27,7 @@
  *
  * show is not pledged: no promise has the ioctls show interface asks,
  * for tunnels, carp, wg, trunk, umb, 802.11, bridges and more. It runs
- * as _nshd, chrooted, with no peer, and keeps utmp open from before.
+ * as _nshshow, chrooted, with no peer, and keeps utmp open from before.
  */
 
 #include <sys/types.h>
@@ -84,7 +84,7 @@ showproc(int debug, int verbose, int instance)
 	facts_from = FACTS_SHOW;
 	if ((utmpfd = open(_PATH_UTMP, O_RDONLY)) == -1)
 		log_warn("%s", _PATH_UTMP);
-	privdrop();
+	privdrop(PROC_SHOW);
 
 	if ((iev_relay = imsgev_new(3, show_dispatch_relay, 0)) == NULL)
 		fatal(NULL);

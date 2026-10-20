@@ -2202,7 +2202,7 @@ Where
 .Xr nshd 8
 runs, its kernel runs a daemon's control program for a show, but
 systat for system-stats, and reads the DHCP leases, for root and the
-group _nshd; what they print is not paged, and Control-C stops it.
+group nshadmin; what they print is not paged, and Control-C stops it.
 .Pp
 .Ic show hostname
 .Pp
@@ -2406,7 +2406,7 @@ link-local
 .Pp
 Where
 .Xr nshd 8
-runs, only root and the group _nshd, who may ask its kernel, see what
+runs, only root and the group nshadmin, who may ask its kernel, see what
 configured an IPv4 address.
 .Pp
 E.g show all ipv4 and IPv6 adddresses on the system
@@ -3734,7 +3734,7 @@ rules, and other information compiled by
 Where
 .Xr nshd 8
 runs, the configuration is the one it reads, and root or a member of the
-group _nshd may see it without
+group nshadmin may see it without
 .Cm enable .
 .Pp
 .Ic show startup-config

@@ -24,13 +24,17 @@
  * parent binds the two sockets and starts relay and the children, each
  * this program again with a flag for its part:
  *
- *	relay (-R)	_nshd, chroot: every message between the others
- *	show (-Sn)	_nshd, chroot: the read-only socket, SHOWS of
+ *	relay (-R)	_nshrelay, chroot: every message between the others
+ *	show (-Sn)	_nshshow, chroot: the read-only socket, SHOWS of
  *			them, n from 0, so one long answer holds up no other
- *	frontend (-F)	_nshd, chroot: the read-write socket, sessions
- *	config (-C)	_nshd, chroot: sessions' state, what to ask kernel
+ *	frontend (-F)	_nshfront, chroot: the read-write socket, sessions
+ *	config (-C)	_nshconf, chroot: sessions' state, what to ask kernel
  *	kernel (-K)	root: reads and changes the kernel
- *	archive (-A)	_nshd, chroot: the configurations saved
+ *	archive (-A)	_nsharc, chroot: the configurations saved
+ *
+ * Each user is a role's alone, so no child may signal another of
+ * another role, or reach its files; the group nshadmin may use the
+ * read-write socket.
  *
  * Each child has one imsg pipe, to relay, as fd 3, a show as much as any
  * other, though relay forwards nothing from a show; frontend and each
@@ -83,22 +87,23 @@ static struct child {
 	int		 instance;
 	char		*name;
 	char		*flag;
+	char		*user;		/* chrooted to its home, or root */
 	pid_t		 pid;
 	uint32_t	 generation;
 	unsigned int	 nfails;
 	time_t		 fails[RESTARTS];	/* the last ones, monotonic */
 	int		 down;
 } children[] = {
-	{ PROC_RELAY,	 0, "relay",	"-R" },
+	{ PROC_RELAY,	 0, "relay",	"-R",	"_nshrelay" },
 	/* SHOWS of them */
-	{ PROC_SHOW,	 0, "show0",	"-S0" },
-	{ PROC_SHOW,	 1, "show1",	"-S1" },
-	{ PROC_SHOW,	 2, "show2",	"-S2" },
-	{ PROC_SHOW,	 3, "show3",	"-S3" },
-	{ PROC_FRONTEND, 0, "frontend",	"-F" },
-	{ PROC_CONFIG,	 0, "config",	"-C" },
-	{ PROC_KERNEL,	 0, "kernel",	"-K" },
-	{ PROC_ARCHIVE,	 0, "archive",	"-A" },
+	{ PROC_SHOW,	 0, "show0",	"-S0",	"_nshshow" },
+	{ PROC_SHOW,	 1, "show1",	"-S1",	"_nshshow" },
+	{ PROC_SHOW,	 2, "show2",	"-S2",	"_nshshow" },
+	{ PROC_SHOW,	 3, "show3",	"-S3",	"_nshshow" },
+	{ PROC_FRONTEND, 0, "frontend",	"-F",	"_nshfront" },
+	{ PROC_CONFIG,	 0, "config",	"-C",	"_nshconf" },
+	{ PROC_KERNEL,	 0, "kernel",	"-K",	NULL },
+	{ PROC_ARCHIVE,	 0, "archive",	"-A",	"_nsharc" },
 };
 #define NPROC	(sizeof(children) / sizeof(children[0]))
 
@@ -111,6 +116,7 @@ static void		 restart(struct child *, const char *);
 static int		 failed(struct child *);
 static struct child	*child(enum nshd_proc, int);
 static int		 shows_down(void);
+static void		 users(void);
 static __dead void	 parent_shutdown(int, const char *);
 static __dead void	 usage(void);
 
@@ -194,10 +200,9 @@ main(int argc, char *argv[])
 
 	if (geteuid())
 		errx(1, "need root privileges");
-	if (getpwnam(NSHD_USER) == NULL)
-		errx(1, "unknown user %s", NSHD_USER);
-	if ((gr = getgrnam(NSHD_USER)) == NULL)
-		errx(1, "unknown group %s", NSHD_USER);
+	users();
+	if ((gr = getgrnam(NSHD_GROUP)) == NULL)
+		errx(1, "unknown group %s", NSHD_GROUP);
 	/* what children start from, once daemon() has left the directory */
 	if (strchr(argv0, '/') != NULL && (argv0 = realpath(argv0, NULL)) ==
 	    NULL)
@@ -261,6 +266,29 @@ shows_down(void)
 		if (children[i].proc == PROC_SHOW && !children[i].down)
 			return (0);
 	return (1);
+}
+
+/* each child's user, which is not root, nor any other role's uid */
+static void
+users(void)
+{
+	struct passwd	*pw;
+	uid_t		 uid[NPROC];
+	size_t		 i, j;
+
+	for (i = 0; i < NPROC; i++) {
+		if (children[i].user == NULL)
+			continue;
+		if ((pw = getpwnam(children[i].user)) == NULL)
+			errx(1, "unknown user %s", children[i].user);
+		if ((uid[i] = pw->pw_uid) == 0)
+			errx(1, "%s is root", children[i].user);
+		for (j = 0; j < i; j++)
+			if (children[j].user != NULL && uid[j] == uid[i] &&
+			    strcmp(children[j].user, children[i].user) != 0)
+				errx(1, "%s and %s are one uid",
+				    children[j].user, children[i].user);
+	}
 }
 
 /*
@@ -564,14 +592,15 @@ child_start(const char *name, int debug, int verbose)
 	signal(SIGHUP, SIG_IGN);
 }
 
-/* chroot to _nshd's home and become _nshd */
+/* chroot to proc's user's home and become its user */
 void
-privdrop(void)
+privdrop(enum nshd_proc proc)
 {
 	struct passwd	*pw;
+	const char	*user = child(proc, 0)->user;
 
-	if ((pw = getpwnam(NSHD_USER)) == NULL)
-		fatalx("unknown user %s", NSHD_USER);
+	if ((pw = getpwnam(user)) == NULL)
+		fatalx("unknown user %s", user);
 	if (chroot(pw->pw_dir) == -1)
 		fatal("chroot %s", pw->pw_dir);
 	if (chdir("/") == -1)

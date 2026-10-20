@@ -103,7 +103,7 @@ void
 relay(int debug, int verbose)
 {
 	child_start("relay", debug, verbose);
-	privdrop();
+	privdrop(PROC_RELAY);
 	if (pledge("stdio recvfd", NULL) == -1)
 		fatal("pledge");
 
