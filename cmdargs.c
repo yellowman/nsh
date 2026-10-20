@@ -36,9 +36,10 @@
 /*
  * cmd, multiple args
  *
- * If no error occurs then return the program's exit code (>= 0).
- * Return -1 on error to run the program or if the program was
- * terminated in an abnormal way, such as being killed by a signal.
+ * If no error occurs then return the program's exit code (>= 0), or
+ * 127 if the child could not run it, as ksh(1) does, having said why.
+ * Return -1 if no child could be made, which is said, or if the program
+ * was terminated in an abnormal way, such as being killed by a signal.
  */
 int
 cmdargs(char *cmd, char *arg[])
@@ -49,9 +50,7 @@ cmdargs(char *cmd, char *arg[])
 /*
  * cmd, multiple args, capture stdout and stderr output
  *
- * If no error occurs then return the program's exit code (>= 0).
- * Return -1 on error to run the program or if the program was
- * terminated in an abnormal way, such as being killed by a signal.
+ * Returns what cmdargs() returns.
  */
 int
 cmdargs_output(char *cmd, char *arg[], int stdoutfd, int stderrfd)
@@ -79,7 +78,7 @@ cmdargs_output_setenv(char *cmd, char *arg[], int stdoutfd, int stderrfd,
 	switch (child = fork()) {
 		case -1:
 			printf("%% fork failed: %s\n", strerror(errno));
-			return -1;
+			break;
 
 		case 0:
 		{
@@ -90,14 +89,14 @@ cmdargs_output_setenv(char *cmd, char *arg[], int stdoutfd, int stderrfd,
 			signal(SIGCHLD, SIG_DFL);
 
 			if (nsh_setrtable(cli_rtable))
-				_exit(0);
+				_exit(127);
 
 			if (stdoutfd != -1) {
 				if (stdoutfd != STDOUT_FILENO &&
 				    dup2(stdoutfd, STDOUT_FILENO) == -1) {
 					printf("%% dup2: %s\n",
 					    strerror(errno));
-					_exit(0);
+					_exit(127);
 				}
 			}
 			if (stderrfd != -1) {
@@ -105,7 +104,7 @@ cmdargs_output_setenv(char *cmd, char *arg[], int stdoutfd, int stderrfd,
 				    dup2(stderrfd, STDERR_FILENO) == -1) {
 					printf("%% dup2 failed: %s\n",
 					    strerror(errno));
-					_exit(0);
+					_exit(127);
 				}
 			}
 
@@ -125,6 +124,8 @@ cmdargs_output_setenv(char *cmd, char *arg[], int stdoutfd, int stderrfd,
 			wait(&status);  /* Wait for cmd to complete */
 			if (WIFEXITED(status)) /* normal exit? */
 				status = WEXITSTATUS(status); /* exit code */
+			else
+				status = -1;
 			break;
 	}
 
