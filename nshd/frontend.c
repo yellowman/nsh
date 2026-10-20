@@ -196,7 +196,7 @@ frontend_gone(struct ctl_conn *c)
 		fatal("%s", __func__);
 }
 
-/* the client has read all it was sent, so kernel may stream it more */
+/* the client has read all it was sent, so system may stream it more */
 static int
 frontend_written(struct ctl_conn *c)
 {

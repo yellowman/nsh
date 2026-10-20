@@ -15,7 +15,7 @@
  */
 
 /*
- * archive: the configurations saved, for kernel alone, through relay. It
+ * archive: the configurations saved, for system alone, through relay. It
  * keeps none yet.
  */
 

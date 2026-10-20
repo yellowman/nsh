@@ -28,17 +28,17 @@
  *	show (-Sn)	_nshshow, chroot: the read-only socket, SHOWS of
  *			them, n from 0, so one long answer holds up no other
  *	frontend (-F)	_nshfront, chroot: the read-write socket, sessions
- *	config (-C)	_nshconf, chroot: sessions' state, what to ask kernel
- *	kernel (-K)	root, a session of its own: reads and changes the
- *			kernel
+ *	config (-C)	_nshconf, chroot: sessions' state, what to ask system
+ *	system (-Y)	root, a session of its own: reads and changes the
+ *			kernel, the daemons and the saved configuration
  *	archive (-A)	_nsharc, chroot: the configurations saved
  *
  * Each user is a role's alone, so no child may signal another of
  * another role, or reach its files; the group nshadmin may use the
- * read-write socket. kernel's helpers that need not be root run as
+ * read-write socket. system's helpers that need not be root run as
  * NSHD_CHECK_USER, whose uid is theirs alone too.
  *
- * Two children that talk, frontend and config, config and kernel, do so
+ * Two children that talk, frontend and config, config and system, do so
  * on a pipe of their own, which parent makes, so each knows who sent
  * what it reads. Each child has a pipe to relay, as fd 3, which tells
  * it when it may start, and to which it tells a peer gone wrong; one
@@ -94,7 +94,7 @@
 
 #define RESTARTS	5	/* failures in RESTART_SECS, and one stays down */
 #define RESTART_SECS	60
-#define CLEAR_TRIES	200	/* kernel's helpers killed, 10 ms apart */
+#define CLEAR_TRIES	200	/* system's helpers killed, 10 ms apart */
 
 static struct child {
 	enum nshd_proc	 proc;
@@ -119,7 +119,7 @@ static struct child {
 	{ PROC_SHOW,	 3, "show3",	"-S3",	"_nshshow" },
 	{ PROC_FRONTEND, 0, "frontend",	"-F",	"_nshfront" },
 	{ PROC_CONFIG,	 0, "config",	"-C",	"_nshconf" },
-	{ PROC_KERNEL,	 0, "kernel",	"-K",	NULL },
+	{ PROC_SYSTEM,	 0, "system",	"-Y",	NULL },
 	{ PROC_ARCHIVE,	 0, "archive",	"-A",	"_nsharc" },
 };
 #define NPROC	(sizeof(children) / sizeof(children[0]))
@@ -129,7 +129,7 @@ static const struct pair {
 	enum nshd_proc	 a, b;
 } pairs[] = {
 	{ PROC_FRONTEND, PROC_CONFIG },
-	{ PROC_CONFIG,	 PROC_KERNEL },
+	{ PROC_CONFIG,	 PROC_SYSTEM },
 };
 #define NPAIRS	(sizeof(pairs) / sizeof(pairs[0]))
 
@@ -147,7 +147,7 @@ static int		 out_open(struct child *);
 static void		 out_close(struct child *);
 static void		 out_write(int, short, void *);
 static void		 restart(struct child *, const char *);
-static int		 kernel_clear(struct child *);
+static int		 system_clear(struct child *);
 static struct kinfo_proc *procs(int, int, size_t *);
 static const char	*how(int);
 static int		 failed(struct child *);
@@ -182,7 +182,7 @@ main(int argc, char *argv[])
 
 	argv0 = argv[0] != NULL ? argv[0] : "nshd";
 
-	while ((c = getopt(argc, argv, "ACdFKRS:v")) != -1) {
+	while ((c = getopt(argc, argv, "ACdFRS:vY")) != -1) {
 		switch (c) {
 		case 'A':
 			role = PROC_ARCHIVE;
@@ -196,9 +196,6 @@ main(int argc, char *argv[])
 		case 'F':
 			role = PROC_FRONTEND;
 			break;
-		case 'K':
-			role = PROC_KERNEL;
-			break;
 		case 'R':
 			role = PROC_RELAY;
 			break;
@@ -210,6 +207,9 @@ main(int argc, char *argv[])
 			break;
 		case 'v':
 			opt_verbose++;
+			break;
+		case 'Y':
+			role = PROC_SYSTEM;
 			break;
 		default:
 			usage();
@@ -228,8 +228,8 @@ main(int argc, char *argv[])
 		frontend(opt_debug, opt_verbose);
 	case PROC_CONFIG:
 		configproc(opt_debug, opt_verbose);
-	case PROC_KERNEL:
-		kernproc(opt_debug, opt_verbose);
+	case PROC_SYSTEM:
+		systemproc(opt_debug, opt_verbose);
 	case PROC_ARCHIVE:
 		archive(opt_debug, opt_verbose);
 	case PROC_PARENT:
@@ -307,7 +307,7 @@ shows_down(void)
 }
 
 /*
- * each child's user, and kernel's helpers', which is not root, nor any
+ * each child's user, and system's helpers', which is not root, nor any
  * other role's uid
  */
 static void
@@ -627,8 +627,8 @@ restart(struct child *c, const char *why)
 
 	if (c->proc == PROC_RELAY) {
 		for (i = 0; i < NPROC; i++) {
-			if (children[i].proc == PROC_KERNEL) {
-				if (kernel_clear(&children[i]) == -1)
+			if (children[i].proc == PROC_SYSTEM) {
+				if (system_clear(&children[i]) == -1)
 					children[i].down = 1;
 			} else if (children[i].pid > 0)
 				kill(children[i].pid, SIGKILL);
@@ -647,8 +647,8 @@ restart(struct child *c, const char *why)
 		return;
 	}
 
-	if (c->proc == PROC_KERNEL) {
-		if (kernel_clear(c) == -1)
+	if (c->proc == PROC_SYSTEM) {
+		if (system_clear(c) == -1)
 			down = 1;
 	} else if (c->pid > 0)
 		kill(c->pid, SIGKILL);
@@ -678,14 +678,14 @@ restart(struct child *c, const char *why)
 }
 
 /*
- * kernel gone, or to go, and its helpers with it: each process of its
- * session, which kernel made as it started, and of NSHD_CHECK_USER's,
- * killed until none is left. kernel is reaped last, so its session is
+ * system gone, or to go, and its helpers with it: each process of its
+ * session, which system made as it started, and of NSHD_CHECK_USER's,
+ * killed until none is left. system is reaped last, so its session is
  * no other's while its helpers are found by it. -1 if one outlives
- * CLEAR_TRIES, and no other kernel may start to race with it
+ * CLEAR_TRIES, and no other system may start to race with it
  */
 static int
-kernel_clear(struct child *k)
+system_clear(struct child *k)
 {
 	struct kinfo_proc	*kp;
 	uint64_t		 sess = 0, own = 0;
@@ -707,7 +707,7 @@ kernel_clear(struct child *k)
 
 	for (tries = 0;; tries++) {
 		if ((kp = procs(KERN_PROC_ALL, 0, &n)) == NULL) {
-			logit(LOG_CRIT, "kernel's helpers: sysctl: %s",
+			logit(LOG_CRIT, "system's helpers: sysctl: %s",
 			    strerror(errno));
 			return (-1);
 		}
@@ -722,8 +722,8 @@ kernel_clear(struct child *k)
 		if (left == 0)
 			break;
 		if (tries == CLEAR_TRIES) {
-			logit(LOG_CRIT, "%d of kernel's helpers outlive "
-			    "SIGKILL: kernel stays down", left);
+			logit(LOG_CRIT, "%d of system's helpers outlive "
+			    "SIGKILL: system stays down", left);
 			return (-1);
 		}
 		nanosleep(&(struct timespec){ 0, 10000000 }, NULL);
@@ -790,7 +790,7 @@ parent_sig_handler(int sig, short event, void *arg)
 	case SIGHUP:
 		break;
 	case SIGCHLD:
-		/* but kernel, a session of its own: kernel_clear() reaps it */
+		/* but system, a session of its own: system_clear() reaps it */
 		while ((pid = waitpid(0, &status, WNOHANG)) > 0)
 			for (i = 0; i < NPROC; i++) {
 				if (pid != children[i].pid)
@@ -869,9 +869,9 @@ parent_shutdown(int status, const char *why)
 
 	log_info("%s", why);
 	for (i = 0; i < NPROC; i++)
-		if (children[i].pid > 0 && children[i].proc != PROC_KERNEL)
+		if (children[i].pid > 0 && children[i].proc != PROC_SYSTEM)
 			kill(children[i].pid, SIGTERM);
-	kernel_clear(child(PROC_KERNEL, 0));
+	system_clear(child(PROC_SYSTEM, 0));
 	exit(status);
 }
 

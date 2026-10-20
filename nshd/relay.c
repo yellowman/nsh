@@ -57,7 +57,7 @@ static struct peer {
 	{ PROC_SHOW,	 3, "show3" },
 	{ PROC_FRONTEND, 0, "frontend" },
 	{ PROC_CONFIG,	 0, "config" },
-	{ PROC_KERNEL,	 0, "kernel" },
+	{ PROC_SYSTEM,	 0, "system" },
 	{ PROC_ARCHIVE,	 0, "archive" },
 };
 

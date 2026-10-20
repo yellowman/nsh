@@ -30,17 +30,17 @@
  *	version				what runs, and since when
  *	users				who is logged in
  *	hostname			the host's name
- *	ip [inet|inet6]			every address, and, from kernel,
+ *	ip [inet|inet6]			every address, and, from system,
  *					what configured each IPv4 one
  *	autoconf [name]			what dhcpleased and slaacd know,
- *					from kernel
+ *					from system
  *	sadb				the SPD's IPsec flows
  *	program table prot sub [arg...]	what show prot sub runs, as
- *					text, from kernel
+ *					text, from system
  *	dhcp leases			dhcpd's leases, as text, from
- *					kernel
+ *					system
  *
- * statistics pf, too, comes from kernel, as it needs /dev/pf. kernel
+ * statistics pf, too, comes from system, as it needs /dev/pf. system
  * runs a program, or reads the leases, in a child of its own, and
  * streams what it prints as messages, as the client reads them.
  *
@@ -101,7 +101,7 @@ enum answer_type {
 	ANS_IP, ANS_AUTOCONF, ANS_SADB, ANS_PROGRAM, ANS_LEASES
 };
 
-int	facts_from = FACTS_SHOW | FACTS_KERNEL;
+int	facts_from = FACTS_SHOW | FACTS_SYSTEM;
 
 struct facts_answer {
 	enum answer_type	 type;
@@ -465,7 +465,7 @@ facts_answer(char *words)
 		a->where = stats_where(a->stats);
 	} else if (n <= 2 && strcmp(w[0], "ip") == 0) {
 		a->type = ANS_IP;
-		a->where = FACTS_SHOW | FACTS_KERNEL;
+		a->where = FACTS_SHOW | FACTS_SYSTEM;
 		a->af = AF_UNSPEC;
 		if (n == 2 && strcmp(w[1], "inet") == 0)
 			a->af = AF_INET;
@@ -475,7 +475,7 @@ facts_answer(char *words)
 			goto bad;
 	} else if (n <= 2 && strcmp(w[0], "autoconf") == 0) {
 		a->type = ANS_AUTOCONF;
-		a->where = FACTS_KERNEL;
+		a->where = FACTS_SYSTEM;
 		if (n == 2 && strlcpy(a->name, w[1], sizeof(a->name)) >=
 		    sizeof(a->name))
 			goto bad;
@@ -483,14 +483,14 @@ facts_answer(char *words)
 		a->type = ANS_SADB;
 	else if (n >= 4 && strcmp(w[0], "program") == 0) {
 		a->type = ANS_PROGRAM;
-		a->where = FACTS_KERNEL;
+		a->where = FACTS_SYSTEM;
 		if (answer_table(a, w[1]) == -1 ||
 		    (a->prog = prot1_find(w[2], w[3])) == NULL)
 			goto bad;
 	} else if (n == 2 && strcmp(w[0], "dhcp") == 0 &&
 	    strcmp(w[1], "leases") == 0) {
 		a->type = ANS_LEASES;
-		a->where = FACTS_KERNEL;
+		a->where = FACTS_SYSTEM;
 	} else if (n == 1 && strcmp(w[0], "version") == 0)
 		a->type = ANS_VERSION;
 	else if (n == 1 && strcmp(w[0], "users") == 0)
@@ -584,8 +584,8 @@ facts_more(struct facts_answer *a, struct facts_out *o, int budget)
 		r = hostname_facts(o);
 		break;
 	case ANS_IP:
-		/* what configured an address, only where kernel's are */
-		r = ip_facts(o, a->af, (facts_from & FACTS_KERNEL) != 0);
+		/* what configured an address, only where system's are */
+		r = ip_facts(o, a->af, (facts_from & FACTS_SYSTEM) != 0);
 		break;
 	case ANS_AUTOCONF:
 		r = autoconf_facts(o, a->name[0] != '\0' ? a->name : NULL);
@@ -599,7 +599,7 @@ facts_more(struct facts_answer *a, struct facts_out *o, int budget)
 	return (r == -1 ? -1 : 0);
 }
 
-/* whether a's show is text nshd's kernel streams, from a child */
+/* whether a's show is text nshd's system streams, from a child */
 int
 facts_streams(struct facts_answer *a)
 {
@@ -609,7 +609,7 @@ facts_streams(struct facts_answer *a)
 /*
  * a's text, to stdout, as nsh printed it: in nsh, drop NULL, the
  * program run as nsh runs one, and the leases paged; in the child of
- * nshd's kernel whose stdout is the stream, the program in its place,
+ * nshd's system whose stdout is the stream, the program in its place,
  * and the leases as they are, read once the child has called drop to
  * give up root. A program keeps root: its daemon's control socket is
  * root's, as are /dev/pf and PF_KEY
@@ -780,7 +780,7 @@ render_emit(void *arg, const void *buf, size_t len)
 }
 
 /*
- * The words fmt makes, asked of nshd, its kernel where they may be and
+ * The words fmt makes, asked of nshd, its system where they may be and
  * this user may ask it, else its shows, or of nsh itself where nshd
  * does not run, and rendered to out; "interface status" renders
  * interfaces as show interface status does
@@ -826,7 +826,7 @@ facts_show(FILE *out, const char *fmt, ...)
 	else if (a->type == ANS_NDP)
 		ndp_header();
 	r = -1;
-	if (a->where & FACTS_KERNEL)
+	if (a->where & FACTS_SYSTEM)
 		r = nshd_facts(1, w, &in);
 	if (r == -1 && (a->where & FACTS_SHOW))
 		r = nshd_facts(0, w, &in);

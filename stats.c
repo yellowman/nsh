@@ -152,7 +152,7 @@ struct statgroup {
 	size_t			 nf;
 	int			(*get)(struct statgroup *, void *);
 	void			(*print)(void *);
-	int			 kernel;	/* only root may get it */
+	int			 root;		/* only root may get it */
 	struct facts_kind	 kind;
 	size_t			*off, *sz;	/* each field's member */
 };
@@ -1303,7 +1303,7 @@ stats_group(const char *word)
 int
 stats_where(struct statgroup *g)
 {
-	return (g->kernel ? FACTS_KERNEL : FACTS_SHOW);
+	return (g->root ? FACTS_SYSTEM : FACTS_SHOW);
 }
 
 const struct facts_kind *

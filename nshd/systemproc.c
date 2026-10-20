@@ -15,7 +15,7 @@
  */
 
 /*
- * kernel: root, and nsh's own code, which reads and changes the kernel.
+ * system: root, and nsh's own code, which reads and changes the kernel.
  * It answers config, on their pipe, one request at a time, in order:
  * the running configuration as text, and the shows only root may make
  * as facts, with what nsh's code prints as it makes them, as messages.
@@ -23,15 +23,15 @@
  * message as fit.
  *
  * But a show of text, what a program prints or the leases, may be long,
- * or go on until it is stopped: a child of kernel's prints it, and
- * kernel streams it as messages, as many as KERN_WINDOW before the
+ * or go on until it is stopped: a child of system's prints it, and
+ * system streams it as messages, as many as SYS_WINDOW before the
  * client has read them, while it answers other requests. A stream ends
  * when its child's output does and its child is reaped, or when config
  * says its session is gone, or config starts again, which kill the
- * child; or when kernel ends. config sending what it may not, or
+ * child; or when system ends. config sending what it may not, or
  * sending it wrong, is reported, as it went wrong.
  *
- * kernel is a session of its own, which parent clears when kernel goes,
+ * system is a session of its own, which parent clears when system goes,
  * and each stream's child leads a process group of its own, which is
  * killed when the stream stops. A child keeps root for a program, as
  * its daemon's control socket is root's; for the leases, it opens them
@@ -64,9 +64,9 @@
 #include "facts.h"
 #include "showfacts.h"
 
-#define KERN_BATCH	256	/* records made before what is printed is sent */
-#define KERN_STREAMS	16	/* streams at once, at most */
-#define KERN_WINDOW	16	/* messages a stream sends its client unread */
+#define SYS_BATCH	256	/* records made before what is printed is sent */
+#define SYS_STREAMS	16	/* streams at once, at most */
+#define SYS_WINDOW	16	/* messages a stream sends its client unread */
 
 /* a show's text, which a child prints, as messages to its client */
 struct stream {
@@ -88,36 +88,36 @@ static int		 nstreams;
 static uid_t		 check_uid;	/* NSHD_CHECK_USER's */
 static gid_t		 check_gid;
 
-static void	kern_dispatch_relay(int, short, void *);
-static void	kern_dispatch_config(int, short, void *);
-static void	kern_forget_config(void);
-static void	kern_snapshot(uint32_t);
-static void	kern_show(uint32_t, char *);
-static void	kern_end(uint32_t, int32_t, const char *, ...)
+static void	system_dispatch_relay(int, short, void *);
+static void	system_dispatch_config(int, short, void *);
+static void	system_forget_config(void);
+static void	system_snapshot(uint32_t);
+static void	system_show(uint32_t, char *);
+static void	system_end(uint32_t, int32_t, const char *, ...)
 		    __attribute__((__format__ (printf, 3, 4)));
-static void	kern_emit(void *, const void *, size_t);
-static void	kern_flush(uint32_t);
-static void	kern_stream(uint32_t, struct facts_answer *);
-static __dead void kern_child(int, struct facts_answer *);
-static void	kern_drop(void);
-static void	kern_stream_read(int, short, void *);
-static void	kern_stream_more(uint32_t);
-static void	kern_stream_stop(struct stream *);
-static void	kern_stream_done(struct stream *);
-static void	kern_sigchld(int, short, void *);
-static __dead void kern_exit(void);
+static void	system_emit(void *, const void *, size_t);
+static void	system_flush(uint32_t);
+static void	system_stream(uint32_t, struct facts_answer *);
+static __dead void system_child(int, struct facts_answer *);
+static void	system_drop(void);
+static void	system_stream_read(int, short, void *);
+static void	system_stream_more(uint32_t);
+static void	system_stream_stop(struct stream *);
+static void	system_stream_done(struct stream *);
+static void	system_sigchld(int, short, void *);
+static __dead void system_exit(void);
 
 static struct link	 config = {
-	PROC_CONFIG, kern_dispatch_config, kern_forget_config
+	PROC_CONFIG, system_dispatch_config, system_forget_config
 };
 
 void
-kernproc(int debug, int v)
+systemproc(int debug, int v)
 {
 	static struct event	 ev_sigchld;
 	struct passwd		*pw;
 
-	child_start("kernel", debug, v);
+	child_start("system", debug, v);
 	if (setsid() == -1)
 		fatal("setsid");
 	if ((pw = getpwnam(NSHD_CHECK_USER)) == NULL)
@@ -128,28 +128,28 @@ kernproc(int debug, int v)
 
 	/* nsh's code here is nsh's as root */
 	priv = 1;
-	facts_from = FACTS_KERNEL;
+	facts_from = FACTS_SYSTEM;
 	db_create();
 
-	if ((iev_relay = imsgev_new(3, kern_dispatch_relay, 0)) == NULL)
+	if ((iev_relay = imsgev_new(3, system_dispatch_relay, 0)) == NULL)
 		fatal(NULL);
 	links_init(&config, 1, iev_relay);
-	signal_set(&ev_sigchld, SIGCHLD, kern_sigchld, NULL);
+	signal_set(&ev_sigchld, SIGCHLD, system_sigchld, NULL);
 	signal_add(&ev_sigchld, NULL);
 	event_dispatch();
-	kern_exit();
+	system_exit();
 }
 
-/* relay's word that kernel may start */
+/* relay's word that system may start */
 static void
-kern_dispatch_relay(int fd, short event, void *arg)
+system_dispatch_relay(int fd, short event, void *arg)
 {
 	struct imsgev		*iev = arg;
 	struct imsg		 imsg;
 	ssize_t			 n;
 
 	if (imsgev_io(iev, event) == -1)
-		kern_exit();
+		system_exit();
 
 	for (;;) {
 		if ((n = imsgbuf_get(&iev->ibuf, &imsg)) == -1)
@@ -159,7 +159,7 @@ kern_dispatch_relay(int fd, short event, void *arg)
 		if (imsg_get_type(&imsg) != IMSG_STARTUP) {
 			log_warnx("relay sent imsg %u, which it may not",
 			    imsg_get_type(&imsg));
-			kern_exit();
+			system_exit();
 		}
 		imsg_free(&imsg);
 	}
@@ -168,7 +168,7 @@ kern_dispatch_relay(int fd, short event, void *arg)
 
 /* config's requests */
 static void
-kern_dispatch_config(int fd, short event, void *arg)
+system_dispatch_config(int fd, short event, void *arg)
 {
 	struct imsgev		*iev = arg;
 	struct imsg		 imsg;
@@ -190,23 +190,23 @@ kern_dispatch_config(int fd, short event, void *arg)
 		if (n == 0)
 			break;
 		switch (type = imsg_get_type(&imsg)) {
-		case IMSG_KRN_SNAPSHOT:
-			kern_snapshot(imsg_get_id(&imsg));
+		case IMSG_SYS_SNAPSHOT:
+			system_snapshot(imsg_get_id(&imsg));
 			break;
-		case IMSG_KRN_SHOW:
+		case IMSG_SYS_SHOW:
 			if (imsg_get_data(&imsg, &show, sizeof(show)) == -1 ||
 			    memchr(show.words, '\0', sizeof(show.words)) ==
 			    NULL)
 				goto bad;
-			kern_show(imsg_get_id(&imsg), show.words);
+			system_show(imsg_get_id(&imsg), show.words);
 			break;
-		case IMSG_KRN_READ:
-			kern_stream_more(imsg_get_id(&imsg));
+		case IMSG_SYS_READ:
+			system_stream_more(imsg_get_id(&imsg));
 			break;
-		case IMSG_KRN_STOP:
+		case IMSG_SYS_STOP:
 			TAILQ_FOREACH(s, &streams, entry)
 				if (s->id == imsg_get_id(&imsg)) {
-					kern_stream_stop(s);
+					system_stream_stop(s);
 					break;
 				}
 			break;
@@ -225,17 +225,17 @@ kern_dispatch_config(int fd, short event, void *arg)
 
 /* config started again, or is down: what it asked is lost */
 static void
-kern_forget_config(void)
+system_forget_config(void)
 {
 	struct stream	*s, *next;
 
 	TAILQ_FOREACH_SAFE(s, &streams, entry, next)
-		kern_stream_stop(s);
+		system_stream_stop(s);
 }
 
 /* the running configuration, as conf() writes it, then how it went */
 static void
-kern_snapshot(uint32_t id)
+system_snapshot(uint32_t id)
 {
 	struct nshd_result	 r = { 0 };
 	FILE			*f;
@@ -251,18 +251,18 @@ kern_snapshot(uint32_t id)
 		if (fclose(f) == EOF) {
 			log_warn("%s: fclose", __func__);
 			r.status = -1;
-		} else if (imsg_text(config.iev, IMSG_KRN_TEXT, id, buf,
+		} else if (imsg_text(config.iev, IMSG_SYS_TEXT, id, buf,
 		    len) == -1)
 			fatal("%s", __func__);
 	}
 	free(buf);
-	if (link_compose(&config, IMSG_KRN_END, id, &r, sizeof(r)) == -1)
+	if (link_compose(&config, IMSG_SYS_END, id, &r, sizeof(r)) == -1)
 		fatal("%s", __func__);
 }
 
 /* the facts words ask, all of them, then how it went; or a stream */
 static void
-kern_show(uint32_t id, char *words)
+system_show(uint32_t id, char *words)
 {
 	struct facts_answer	*a;
 	struct facts_out	 o;
@@ -270,28 +270,28 @@ kern_show(uint32_t id, char *words)
 
 	printed(NULL);
 	if ((a = facts_answer(words)) == NULL) {
-		kern_end(id, 1, "%% show %s: not answered by nshd\n", words);
+		system_end(id, 1, "%% show %s: not answered by nshd\n", words);
 		return;
 	}
 	if (facts_streams(a)) {
-		kern_stream(id, a);
+		system_stream(id, a);
 		facts_answer_free(a);
 		return;
 	}
-	facts_out_init(&o, kern_emit, &id);
+	facts_out_init(&o, system_emit, &id);
 	while (more == 1) {
-		more = facts_more(a, &o, KERN_BATCH);
+		more = facts_more(a, &o, SYS_BATCH);
 		if (printed(&o) == -1)
 			more = -1;
 	}
 	facts_answer_free(a);
-	kern_flush(id);
-	kern_end(id, more != 0, NULL);
+	system_flush(id);
+	system_end(id, more != 0, NULL);
 }
 
 /* to config: a line of text, if fmt, and how request id ended */
 static void
-kern_end(uint32_t id, int32_t status, const char *fmt, ...)
+system_end(uint32_t id, int32_t status, const char *fmt, ...)
 {
 	struct nshd_result	 r;
 	va_list			 ap;
@@ -303,87 +303,87 @@ kern_end(uint32_t id, int32_t status, const char *fmt, ...)
 		len = vasprintf(&s, fmt, ap);
 		va_end(ap);
 		if (len == -1 ||
-		    imsg_text(config.iev, IMSG_KRN_TEXT, id, s, len) == -1)
+		    imsg_text(config.iev, IMSG_SYS_TEXT, id, s, len) == -1)
 			fatal("%s", __func__);
 		free(s);
 	}
 	r.status = status;
-	if (link_compose(&config, IMSG_KRN_END, id, &r, sizeof(r)) == -1)
+	if (link_compose(&config, IMSG_SYS_END, id, &r, sizeof(r)) == -1)
 		fatal("%s", __func__);
 }
 
 /* a unit of facts, for request *arg, kept until a message is full */
 static void
-kern_emit(void *arg, const void *buf, size_t len)
+system_emit(void *arg, const void *buf, size_t len)
 {
 	uint32_t	*id = arg;
 
 	if (nunits + len > sizeof(units))
-		kern_flush(*id);
+		system_flush(*id);
 	memcpy(units + nunits, buf, len);
 	nunits += len;
 }
 
 /* the units kept, to config, as one message */
 static void
-kern_flush(uint32_t id)
+system_flush(uint32_t id)
 {
 	if (nunits == 0)
 		return;
-	if (link_compose(&config, IMSG_KRN_FACTS, id, units, nunits) == -1)
+	if (link_compose(&config, IMSG_SYS_FACTS, id, units, nunits) == -1)
 		fatal("%s", __func__);
 	nunits = 0;
 }
 
 /* a's text, which a child prints, streamed to request id's client */
 static void
-kern_stream(uint32_t id, struct facts_answer *a)
+system_stream(uint32_t id, struct facts_answer *a)
 {
 	struct stream	*s;
 	int		 fds[2];
 
-	if (nstreams == KERN_STREAMS) {
-		kern_end(id, 1, "%% nshd: %d shows already stream\n",
-		    KERN_STREAMS);
+	if (nstreams == SYS_STREAMS) {
+		system_end(id, 1, "%% nshd: %d shows already stream\n",
+		    SYS_STREAMS);
 		return;
 	}
 	if (pipe2(fds, O_CLOEXEC) == -1) {
-		kern_end(id, 1, "%% nshd: pipe: %s\n", strerror(errno));
+		system_end(id, 1, "%% nshd: pipe: %s\n", strerror(errno));
 		return;
 	}
 	if ((s = calloc(1, sizeof(*s))) == NULL)
 		fatal(NULL);
 	switch (s->pid = fork()) {
 	case -1:
-		kern_end(id, 1, "%% nshd: fork: %s\n", strerror(errno));
+		system_end(id, 1, "%% nshd: fork: %s\n", strerror(errno));
 		close(fds[0]);
 		close(fds[1]);
 		free(s);
 		return;
 	case 0:
-		kern_child(fds[1], a);
+		system_child(fds[1], a);
 	}
 	/* as the child does, so neither waits on the other */
 	setpgid(s->pid, s->pid);
 	close(fds[1]);
 	s->id = id;
 	s->fd = fds[0];
-	s->window = KERN_WINDOW;
-	facts_out_init(&s->o, kern_emit, &s->id);
-	event_set(&s->ev, s->fd, EV_READ | EV_PERSIST, kern_stream_read, s);
+	s->window = SYS_WINDOW;
+	facts_out_init(&s->o, system_emit, &s->id);
+	event_set(&s->ev, s->fd, EV_READ | EV_PERSIST, system_stream_read, s);
 	event_add(&s->ev, NULL);
 	TAILQ_INSERT_TAIL(&streams, s, entry);
 	nstreams++;
 }
 
-/* the child: a's text, to fd, with nothing else of kernel's */
+/* the child: a's text, to fd, with nothing else of system's */
 static __dead void
-kern_child(int fd, struct facts_answer *a)
+system_child(int fd, struct facts_answer *a)
 {
 	int	 null;
 
 	setpgid(0, 0);
-	/* as a program expects them, and as kernel's are not */
+	/* as a program expects them, and as system's are not */
 	signal(SIGINT, SIG_DFL);
 	signal(SIGTERM, SIG_DFL);
 	signal(SIGCHLD, SIG_DFL);
@@ -394,14 +394,14 @@ kern_child(int fd, struct facts_answer *a)
 	    dup2(null, STDIN_FILENO) == -1)
 		_exit(127);
 	closefrom(STDERR_FILENO + 1);
-	facts_stream(a, kern_drop);
+	facts_stream(a, system_drop);
 	fflush(stdout);
 	_exit(0);
 }
 
 /* a stream's child, once it holds what it needed root for */
 static void
-kern_drop(void)
+system_drop(void)
 {
 	if (setgroups(1, &check_gid) == -1 ||
 	    setresgid(check_gid, check_gid, check_gid) == -1 ||
@@ -411,7 +411,7 @@ kern_drop(void)
 
 /* what a stream's child printed, as a message to its client */
 static void
-kern_stream_read(int fd, short event, void *arg)
+system_stream_read(int fd, short event, void *arg)
 {
 	struct stream	*s = arg;
 	char		 buf[NSHD_TEXT];
@@ -426,21 +426,21 @@ kern_stream_read(int fd, short event, void *arg)
 		log_warnx("%s: a message of %zd bytes", __func__, n);
 		n = -1;
 	}
-	kern_flush(s->id);
+	system_flush(s->id);
 	if (n == -1)
-		kern_stream_stop(s);
+		system_stream_stop(s);
 	else if (n == 0) {
 		event_del(&s->ev);
 		close(s->fd);
 		s->fd = -1;
-		kern_stream_done(s);
+		system_stream_done(s);
 	} else if (--s->window == 0)
 		event_del(&s->ev);
 }
 
 /* request id's client read all it was sent: its stream may send more */
 static void
-kern_stream_more(uint32_t id)
+system_stream_more(uint32_t id)
 {
 	struct stream	*s;
 
@@ -448,7 +448,7 @@ kern_stream_more(uint32_t id)
 		if (s->id == id) {
 			if (s->window == 0 && s->fd != -1)
 				event_add(&s->ev, NULL);
-			s->window = KERN_WINDOW;
+			s->window = SYS_WINDOW;
 			break;
 		}
 }
@@ -458,7 +458,7 @@ kern_stream_more(uint32_t id)
  * child is reaped
  */
 static void
-kern_stream_stop(struct stream *s)
+system_stream_stop(struct stream *s)
 {
 	s->stopped = 1;
 	if (s->pid != 0)
@@ -468,16 +468,16 @@ kern_stream_stop(struct stream *s)
 		close(s->fd);
 		s->fd = -1;
 	}
-	kern_stream_done(s);
+	system_stream_done(s);
 }
 
 /* s, if its output has ended and its child is reaped: how it went */
 static void
-kern_stream_done(struct stream *s)
+system_stream_done(struct stream *s)
 {
 	if (s->fd != -1 || s->pid != 0)
 		return;
-	kern_end(s->id, s->stopped, NULL);
+	system_end(s->id, s->stopped, NULL);
 	TAILQ_REMOVE(&streams, s, entry);
 	nstreams--;
 	free(s);
@@ -485,20 +485,20 @@ kern_stream_done(struct stream *s)
 
 /* the streams' children that are gone; no other child is reaped */
 static void
-kern_sigchld(int sig, short event, void *arg)
+system_sigchld(int sig, short event, void *arg)
 {
 	struct stream	*s, *next;
 
 	TAILQ_FOREACH_SAFE(s, &streams, entry, next)
 		if (s->pid != 0 && waitpid(s->pid, NULL, WNOHANG) == s->pid) {
 			s->pid = 0;
-			kern_stream_done(s);
+			system_stream_done(s);
 		}
 }
 
-/* kernel ends, and with it what its streams' children print */
+/* system ends, and with it what its streams' children print */
 static __dead void
-kern_exit(void)
+system_exit(void)
 {
 	struct stream	*s;
 

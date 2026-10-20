@@ -23,7 +23,7 @@
 #define NSHD_H
 
 #define NSHD_GROUP	"nshadmin"	/* who may use the read-write socket */
-#define NSHD_CHECK_USER	"_nshcheck"	/* kernel's helpers, but root's */
+#define NSHD_CHECK_USER	"_nshcheck"	/* system's helpers, but root's */
 #define NSHD_SOCKET	"/var/run/nshd.sock"	/* 0660, group nshadmin */
 #define NSHD_RO_SOCKET	"/var/run/nshd.ro.sock"	/* 0666 */
 
@@ -83,7 +83,7 @@ enum nshd_proc {
 	PROC_SHOW,
 	PROC_FRONTEND,
 	PROC_CONFIG,
-	PROC_KERNEL,
+	PROC_SYSTEM,
 	PROC_ARCHIVE
 };
 
@@ -107,14 +107,14 @@ enum nshd_imsg {
 	IMSG_BROKEN,		/* to relay, and parent: nshd_child gone wrong */
 	IMSG_STARTUP,		/* relay to a child: nshd_startup */
 	IMSG_PEER,		/* parent to a child: nshd_child, its pipe or none */
-	IMSG_KRN_SNAPSHOT,	/* config to kernel: the running configuration */
-	IMSG_KRN_TEXT,		/* kernel to config: text */
-	IMSG_KRN_END,		/* kernel to config: nshd_result */
-	IMSG_KRN_SHOW,		/* config to kernel: nshd_show, facts back */
-	IMSG_KRN_FACTS,		/* kernel to config: units of facts */
+	IMSG_SYS_SNAPSHOT,	/* config to system: the running configuration */
+	IMSG_SYS_TEXT,		/* system to config: text */
+	IMSG_SYS_END,		/* system to config: nshd_result */
+	IMSG_SYS_SHOW,		/* config to system: nshd_show, facts back */
+	IMSG_SYS_FACTS,		/* system to config: units of facts */
 	IMSG_CTL_READ,		/* frontend to config: a client read all */
-	IMSG_KRN_READ,		/* config to kernel: a request's client did */
-	IMSG_KRN_STOP		/* config to kernel: a request's session is gone */
+	IMSG_SYS_READ,		/* config to system: a request's client did */
+	IMSG_SYS_STOP		/* config to system: a request's session is gone */
 };
 
 struct imsgev {
@@ -160,7 +160,7 @@ __dead void	 relay(int, int);
 __dead void	 showproc(int, int, int);
 __dead void	 frontend(int, int);
 __dead void	 configproc(int, int);
-__dead void	 kernproc(int, int);
+__dead void	 systemproc(int, int);
 __dead void	 archive(int, int);
 
 #endif /* NSHD_H */

@@ -228,7 +228,7 @@ done:
 
 /*
  * show words, as nshd answers them, on the read-write socket if rw, its
- * kernel's, else as its show processes do: facts read into in as they
+ * system's, else as its show processes do: facts read into in as they
  * come, and text printed. -1 if there is no nshd to ask, or none this
  * user may, else 1 if the show was answered and 0 if not, as when ^C
  * ends it, which closes the session, so nshd stops what it runs.

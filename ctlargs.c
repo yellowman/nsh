@@ -71,7 +71,7 @@ pr_prot1(int argc, char **argv, ...)
 	if (fillargs == NULL)
 		return 0;
 
-	/* systat draws on this terminal; nshd's kernel runs the rest */
+	/* systat draws on this terminal; nshd's system runs the rest */
 	if (prot1_find(prot->name, x->name) == NULL) {
 		cmdargs(fillargs[0], fillargs);
 		return 1;
@@ -94,7 +94,7 @@ pr_prot1(int argc, char **argv, ...)
 
 /*
  * The show of prot that sub names, as pr_prot1() names them, whose
- * program nshd's kernel may run: NULL if there is none, as systat's
+ * program nshd's system may run: NULL if there is none, as systat's
  * is not, which draws on nsh's terminal
  */
 struct prot1 *

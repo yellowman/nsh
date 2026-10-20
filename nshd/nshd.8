@@ -28,7 +28,7 @@ reads the system's configuration for
 which asks it over a socket.
 It is privilege separated.
 The parent process, as root, binds the sockets and starts the children,
-each but kernel as a user of its own, so that none may signal or reach
+each but system as a user of its own, so that none may signal or reach
 the files of a child of another role:
 .Bl -tag -width "frontend"
 .It relay
@@ -61,22 +61,23 @@ Each client is a session, which asks one thing at a time.
 .It config
 Runs as _nshconf in a
 .Xr chroot 2 ,
-holds the sessions, and asks kernel for what they need.
-.It kernel
-Runs as root, and reads the configuration from the kernel.
+holds the sessions, and asks system for what they need.
+.It system
+Runs as root, and reads the configuration from the kernel, the
+daemons and the saved configuration.
 It answers config and no one else.
 What a daemon's control program prints for a show, and the DHCP
-leases, a child of its own prints, and kernel streams it only as fast
+leases, a child of its own prints, and system streams it only as fast
 as the client reads it; the child, and its process group, are killed
 if the client goes first.
 A control program runs as root, as its daemon's control socket,
 .Pa /dev/pf
 and PF_KEY are root's; the child that prints the leases opens them,
 then becomes _nshcheck.
-kernel is a session of its own: when it goes, the parent kills every
+system is a session of its own: when it goes, the parent kills every
 process left in that session, and every process of _nshcheck's,
-before another kernel starts.
-If one outlives SIGKILL, no other kernel starts.
+before another system starts.
+If one outlives SIGKILL, no other system starts.
 .It archive
 Runs as _nsharc in a
 .Xr chroot 2 ,
@@ -84,7 +85,7 @@ with no peer yet.
 It keeps nothing yet.
 .El
 .Pp
-frontend and config, and config and kernel, each talk on a pipe of
+frontend and config, and config and system, each talk on a pipe of
 their own, which the parent makes, so each knows who sent what it
 reads.
 A child takes a peer's pipe from the parent alone.
@@ -113,7 +114,7 @@ read-write socket, and every session there may see the running
 configuration.
 The read-only socket is for anyone.
 .Pp
-kernel does as root what config asks of it, so a config gone wrong may
+system does as root what config asks of it, so a config gone wrong may
 ask it anything a session may: config is trusted as the read-write
 socket's users are.
 relay carries no request; gone wrong, it can stop the children, or have

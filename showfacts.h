@@ -50,11 +50,11 @@ int		 fsockaddr(struct frec *, int, struct sockaddr_storage *);
 int		 fhas(struct frec *, int);
 
 /*
- * Who answers: nshd's show processes, for anyone, or its kernel, for
+ * Who answers: nshd's show processes, for anyone, or its system, for
  * root and nshadmin; nsh, where nshd does not run, answers all of them
  */
 #define FACTS_SHOW	0x1
-#define FACTS_KERNEL	0x2
+#define FACTS_SYSTEM	0x2
 extern int	 facts_from;	/* what this process answers */
 
 /* what to answer: words, a request from a client, as nshd takes them */

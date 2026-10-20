@@ -2200,7 +2200,7 @@ nsh(p)/
 .Pp
 Where
 .Xr nshd 8
-runs, its kernel runs a daemon's control program for a show, but
+runs, its system process runs a daemon's control program for a show, but
 systat for system-stats, and reads the DHCP leases, for root and the
 group nshadmin; what they print is not paged, and Control-C stops it.
 .Pp
@@ -2406,8 +2406,8 @@ link-local
 .Pp
 Where
 .Xr nshd 8
-runs, only root and the group nshadmin, who may ask its kernel, see what
-configured an IPv4 address.
+runs, only root and the group nshadmin, who may ask its system process,
+see what configured an IPv4 address.
 .Pp
 E.g show all ipv4 and IPv6 adddresses on the system
 .Bd -literal -offset indent
