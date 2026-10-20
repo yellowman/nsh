@@ -193,7 +193,7 @@ commit(int argc, char **argv, ...)
 	struct cnode *want, *was, *now, *back = NULL;
 	const char *errstr;
 	time_t when = 0;
-	int minutes = 0, checking = 0, bad;
+	int minutes = 0, checking = 0, bad, ret = -1;
 
 	if (argc > 1) {
 		checking = isprefix(argv[1], "check") != 0;
@@ -204,42 +204,43 @@ commit(int argc, char **argv, ...)
 	}
 	if (argc > 3) {
 		printf("%% commit [check | confirmed [minutes]]\n");
-		return 0;
+		return -1;
 	}
 	if (checking && !candidate) {
 		printf("%% commit check requires configure private\n");
-		return 0;
+		return -1;
 	}
 	if (argc > 1 && !checking) {
 		minutes = CONFIRMMIN;
 		if (argc == 3 && (minutes = strtonum(argv[2], 1, CONFIRMMAX,
 		    &errstr)) == 0) {
 			printf("%% minutes %s is %s\n", argv[2], errstr);
-			return 0;
+			return -1;
 		}
 		if (!candidate) {
 			printf("%% commit confirmed requires configure "
 			    "private\n");
-			return 0;
+			return -1;
 		}
 	}
 	/* one not confirmed in time goes back first */
 	commit_expire();
 	if (!candidate) {
-		if (conf_save()) {
-			confirmed();
-			history();
-		}
+		if (!conf_save())
+			return -1;
+		confirmed();
+		history();
 		return 0;
 	}
 	if ((want = cand_tree()) == NULL)
-		return 0;
+		return -1;
 	if ((was = running_tree()) == NULL)
-		return 0;
+		return -1;
 	if ((bad = check(was, want)) != 0 || checking) {
-		if (bad == 0)
+		if (bad == 0) {
 			printf("%% Configuration check succeeds\n");
-		else
+			ret = 0;
+		} else
 			printf("%% %s: %d problem%s\n", checking ?
 			    "Configuration check fails" : "Commit refused",
 			    bad, bad == 1 ? "" : "s");
@@ -258,12 +259,15 @@ commit(int argc, char **argv, ...)
 	}
 	if (conftree_compare(NULL, was, want) != 0 && take(was, want) == -1)
 		goto done;
+	/* taken: what fails after is said, and the candidate starts again */
+	ret = 0;
 	if (minutes > 0) {
 		if (unconfirm(back, when) == -1) {
 			printf("%% Nothing can roll this commit back: undone\n");
 			if ((now = running_tree()) != NULL)
 				apply(now, was);
 			conftree_free(now);
+			ret = -1;
 			goto done;
 		}
 		printf("%% Commit within %d minute%s to keep this, or it is "
@@ -272,14 +276,17 @@ commit(int argc, char **argv, ...)
 		confirmed();
 		if (conf_save())
 			history();
+		else
+			ret = -1;
 	}
 	/* a new candidate, from the new running configuration */
 	cand_end();
-	cand_begin();
+	if (cand_begin() == -1)
+		ret = -1;
 done:
 	conftree_free(back);
 	conftree_free(was);
-	return 0;
+	return ret;
 }
 
 /*
@@ -1522,18 +1529,18 @@ pr_rollback(int argc, char **argv, ...)
 
 	if (priv != 1) {
 		printf("%% Privilege required\n");
-		return 0;
+		return -1;
 	}
 	if (argc == 3) {
 		n = strtonum(argv[2], 0, ROLLBACKS - 1, &errstr);
 		if (errstr != NULL) {
 			printf("%% rollback %s is %s\n", argv[2], errstr);
-			return 0;
+			return -1;
 		}
 		snprintf(path, sizeof(path), ROLLBACK, n);
 		if ((f = fopen(path, "r")) == NULL) {
 			printf("%% rollback %d: %s\n", n, strerror(errno));
-			return 0;
+			return -1;
 		}
 		while (fgets(line, sizeof(line), f) != NULL)
 			fputs(line, out);

@@ -567,32 +567,33 @@ pr_cand_conf(int argc, char **argv, ...)
 	char path[PATH_MAX];
 	struct cnode *t;
 	FILE *f;
-	int fd;
+	int fd, ret = 0;
 
 	if (!candidate) {
 		printf("%% Not in configure private\n");
-		return 0;
+		return -1;
 	}
 	if ((t = cand_tree()) == NULL)
-		return 0;
+		return -1;
 	strlcpy(path, "/tmp/nshrc.cand.XXXXXXXX", sizeof(path));
 	if ((fd = mkstemp(path)) == -1) {
 		printf("%% mkstemp %s: %s\n", path, strerror(errno));
-		return 0;
+		return -1;
 	}
 	if ((f = fdopen(fd, "w")) == NULL) {
 		printf("%% fdopen %s: %s\n", path, strerror(errno));
 		unlink(path);
 		close(fd);
-		return 0;
+		return -1;
 	}
-	if (conftree_write(f, t) == -1 || fflush(f) == EOF)
+	if (conftree_write(f, t) == -1 || fflush(f) == EOF) {
 		printf("%% %s: %s\n", path, strerror(errno));
-	else
+		ret = -1;
+	} else
 		more(path);
 	unlink(path);
 	fclose(f);
-	return 0;
+	return ret;
 }
 
 /*
@@ -610,17 +611,17 @@ cand_rollback(int argc, char **argv, ...)
 
 	if (!candidate) {
 		printf("%% rollback requires configure private\n");
-		return 0;
+		return -1;
 	}
 	if (argc > 2) {
 		printf("%% rollback [0-%d]\n", ROLLBACKS - 1);
-		return 0;
+		return -1;
 	}
 	if (argc == 2) {
 		n = strtonum(argv[1], 0, ROLLBACKS - 1, &errstr);
 		if (errstr != NULL) {
 			printf("%% rollback %s is %s\n", argv[1], errstr);
-			return 0;
+			return -1;
 		}
 	}
 	if (n == 0)
@@ -629,23 +630,23 @@ cand_rollback(int argc, char **argv, ...)
 		snprintf(path, sizeof(path), ROLLBACK, n);
 		if (access(path, R_OK) == -1) {
 			printf("%% rollback %d: %s\n", n, strerror(errno));
-			return 0;
+			return -1;
 		}
 		if ((base = conftree_read(path, conf_mode, conf_ordered)) ==
 		    NULL)
-			return 0;
+			return -1;
 		if ((t = conftree_copy(base)) == NULL)
 			printf("%% cand_rollback: %s\n", strerror(errno));
 	}
 	if (t == NULL) {
 		conftree_free(base);
-		return 0;
+		return -1;
 	}
 	if ((j = cjournal_new()) == NULL) {
 		printf("%% cand_rollback: %s\n", strerror(errno));
 		conftree_free(t);
 		conftree_free(base);
-		return 0;
+		return -1;
 	}
 	conftree_free(cand);
 	conftree_free(cand_base);
