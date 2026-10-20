@@ -186,7 +186,7 @@ arpset(int argc, char *argv[], ...)
 		    "[pub]\n", argv[0]);
 		printf("%% no %s <inet addr> [<ether addr> [temp | permanent] "
 		    "[pub]]\n", argv[0]);
-		return 1;
+		return -1;
 	}
 
 	if (!set) {
@@ -203,17 +203,17 @@ arpset(int argc, char *argv[], ...)
 		eaddr = NULL;
 	}
 	if (!candidate && getsocket() < 0)
-		return (1);
+		return -1;
 	sdl_m = blank_sdl;		/* struct copy */
 	sin_m = blank_sin;		/* struct copy */
 	if (getinetaddr(host, &sin->sin_addr) == -1)
-		return (1);
+		return -1;
 	if (set) {
 		ea = ether_aton(eaddr);
 		if (ea == NULL) {
 			printf("%% arpset: invalid ethernet"
 			    " address: %s\n", eaddr);
-			return (1);
+			return -1;
 		}
 	}
 	memcpy(LLADDR(&sdl_m), ea, sizeof(*ea));
@@ -229,7 +229,7 @@ arpset(int argc, char *argv[], ...)
 			if (flags & RTF_PERMANENT_ARP) {
 				/* temp or permanent, not both */
 				printf("%% temp or permanent, not both\n");
-				return (1);
+				return -1;
 			}
 		} else if (isprefix(argv[i], "pub")) {
 			flags |= RTF_ANNOUNCE;
@@ -239,11 +239,11 @@ arpset(int argc, char *argv[], ...)
 			if (expire_time != 0) {
 				/* temp or permanent, not both */
 				printf("%% temp or permanent, not both\n");
-				return (1);
+				return -1;
 			}
 		} else {
 			printf("%% invalid parameter: %s\n", argv[i]);
-			return (1);
+			return -1;
 		}
 	}
 	if (candidate)
@@ -252,7 +252,7 @@ arpset(int argc, char *argv[], ...)
 tryagain:
 	if (rtget(&sin, &sdl, flags, doing_proxy, export_only)) {
 		printf("%% %s\n", host);
-		return (1);
+		return -1;
 	}
 	if (sin->sin_addr.s_addr == sin_m.sin_addr.s_addr) {
 		if (sdl->sdl_family == AF_LINK &&
@@ -270,11 +270,11 @@ tryagain:
 
 		if (doing_proxy == 0) {
 			printf("%% arpset: can only proxy for %s\n", host);
-			return (1);
+			return -1;
 		}
 		if (sin_m.sin_other & SIN_PROXY) {
 			printf("%% arpset: proxy entry exists for non 802 device\n");
-			return (1);
+			return -1;
 		}
 		sin_m.sin_other = SIN_PROXY;
 		export_only = 1;
@@ -284,7 +284,7 @@ tryagain:
 overwrite:
 	if (sdl->sdl_family != AF_LINK) {
 		printf("%% arpset: cannot intuit interface index and type for %s\n", host);
-		return (1);
+		return -1;
 	}
 	sdl_m.sdl_type = sdl->sdl_type;
 	sdl_m.sdl_index = sdl->sdl_index;
@@ -304,16 +304,15 @@ arp_cand(const char *host, struct ether_addr *ea, int flags)
 	char *buf = NULL;
 	size_t len;
 	FILE *f;
+	int r;
 
 	if (getinetaddr(host, &sin.sin_addr) == -1)
-		return (1);
-	if (ea == NULL) {
-		cand_setting(ST_OFF, "arp %s", inet_ntoa(sin.sin_addr));
-		return (0);
-	}
+		return -1;
+	if (ea == NULL)
+		return cand_setting(ST_OFF, "arp %s", inet_ntoa(sin.sin_addr));
 	if (expire_time != 0) {
 		printf("%% temp entries are not saved in the configuration\n");
-		return (1);
+		return -1;
 	}
 	memcpy(LLADDR(&sdl), ea, sizeof(*ea));
 	sdl.sdl_alen = sizeof(*ea);
@@ -321,18 +320,18 @@ arp_cand(const char *host, struct ether_addr *ea, int flags)
 	rtm.rtm_flags = flags;
 	if ((f = open_memstream(&buf, &len)) == NULL) {
 		printf("%% arp_cand: %s\n", strerror(errno));
-		return (1);
+		return -1;
 	}
 	conf_arp_entry(f, "arp ", &sdl, &sin, &rtm);
 	if (fclose(f) == EOF || len == 0) {
 		printf("%% arp_cand: no line for %s\n", host);
 		free(buf);
-		return (1);
+		return -1;
 	}
 	buf[len - 1] = '\0';
-	cand_setting(ST_ON, "%s", buf);
+	r = cand_setting(ST_ON, "%s", buf);
 	free(buf);
-	return (0);
+	return r;
 }
 
 #define W_ADDR	36
@@ -372,14 +371,14 @@ arpdelete(const char *host, const char *info)
 	if (info && isprefix((char *)info, "proxy"))
 		export_only = 1;
 	if (getsocket() < 0)
-		return (1);
+		return -1;
 	sin_m = blank_sin;		/* struct copy */
 	if (getinetaddr(host, &sin->sin_addr) == -1)
-		return (1);
+		return -1;
 tryagain:
 	if (rtget(&sin, &sdl, 0, doing_proxy, export_only)) {
 		printf("%% %s\n", host);
-		return (1);
+		return -1;
 	}
 	if (sin->sin_addr.s_addr == sin_m.sin_addr.s_addr) {
 		if (sdl->sdl_family == AF_LINK && rtm->rtm_flags & RTF_LLINFO) {
@@ -400,7 +399,7 @@ tryagain:
 
 	if (sin_m.sin_other & SIN_PROXY) {
 		printf("%% arpdelete: can't locate %s\n", host);
-		return (1);
+		return -1;
 	} else {
 		sin_m.sin_other = SIN_PROXY;
 		goto tryagain;
@@ -408,11 +407,11 @@ tryagain:
 delete:
 	if (sdl->sdl_family != AF_LINK) {
 		printf("%% cannot locate %s\n", host);
-		return (1);
+		return -1;
 	}
 	if (rtmsg_arp(RTM_DELETE, 0, doing_proxy, export_only)) {
 		printf("%% delete failure: %s\n", strerror(errno));
-		return (1);
+		return -1;
 	}
 	return (0);
 }
@@ -698,8 +697,10 @@ doit:
 	} while (l > 0 && (rtm->rtm_version != RTM_VERSION ||
 	    rtm->rtm_seq != seq || rtm->rtm_pid != pid));
 
-	if (l < 0)
+	if (l < 0) {
 		printf("%% rtmsg_arp: read from routing socket\n");
+		return (-1);
+	}
 	return (0);
 }
 

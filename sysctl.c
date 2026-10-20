@@ -223,17 +223,17 @@ ipsysctl(int set, char **cmd, ...)
 			break;
 	if (stab->pf != type) {
 		printf("%% table lookup failed (%d)\n", type);
-		return 0;
+		return -1;
 	}
 
 	x = (struct ipsysctl *) genget(*cmd, (char **)stab->sysctl,
 	    sizeof(struct ipsysctl));
 	if (x == 0) {
 		printf("%% Invalid argument %s\n", *cmd);
-		return 0;
+		return -1;
 	} else if (Ambiguous(x)) {
 		printf("%% Ambiguous argument %s\n", *cmd);
-		return 0;
+		return -1;
 	}
 
 	if (set) {
@@ -242,7 +242,7 @@ ipsysctl(int set, char **cmd, ...)
 			if (errmsg) {
 				printf("%% Invalid argument %s: %s\n", arg,
 				    errmsg);
-				return 0;
+				return -1;
 			}
 		} else
 			larg = 1;
@@ -255,16 +255,16 @@ ipsysctl(int set, char **cmd, ...)
 		/* the line conf() would print, in place of the sysctl's */
 		sysctl_line(line, sizeof(line), stab->name, x, larg);
 		if (line[0] == '\0')
-			cand_setting(ST_DEFAULT, "%s %s", stab->name, x->name);
-		else if (strncmp(line, "no ", 3) == 0)
-			cand_setting(ST_OFF, "%s", line + 3);
-		else
-			cand_setting(ST_ON, "%s", line);
-		return 1;
+			return cand_setting(ST_DEFAULT, "%s %s", stab->name,
+			    x->name);
+		if (strncmp(line, "no ", 3) == 0)
+			return cand_setting(ST_OFF, "%s", line + 3);
+		return cand_setting(ST_ON, "%s", line);
 	}
-	sysctl_int(x->mib, larg, 0);
+	if (sysctl_int(x->mib, larg, 0) == -1)
+		return -1;
 
-	return 1;
+	return 0;
 }
 
 void

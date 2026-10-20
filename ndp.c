@@ -210,7 +210,7 @@ ndpset(int argc, char *argv[], ...)
 		    argv[0]);
 		printf("%% no %s <inet6 addr> [<ether addr> [temp] [proxy]]\n",
 		    argv[0]);
-		return 1;
+		return -1;
 	}
 
 	if (!set) {
@@ -228,13 +228,13 @@ ndpset(int argc, char *argv[], ...)
 	}
 
 	if (!candidate && getsocket() < 0)
-		return 1;
+		return -1;
 
 	if (parse_host(host, sin))
-		return 1;
+		return -1;
 	ea = (u_char *)LLADDR(&sdl_m);
 	if (ndp_ether_aton(eaddr, ea) != 0)
-		return 1;
+		return -1;
 	sdl_m.sdl_alen = 6;
 	expire_time = 0;
 	flags = 0;
@@ -248,7 +248,7 @@ ndpset(int argc, char *argv[], ...)
 			flags |= RTF_ANNOUNCE;
 		} else {
 			printf("%% invalid parameter: %s\n", argv[i]);
-			return (1);
+			return -1;
 		}
 	}
 	if (candidate)
@@ -256,7 +256,7 @@ ndpset(int argc, char *argv[], ...)
 
 	if (rtget_ndp(&sin, &sdl)) {
 		printf("%% RTM_GET(%s) failed\n", host);
-		return 1;
+		return -1;
 	}
 
 	if (IN6_ARE_ADDR_EQUAL(&sin->sin6_addr, &sin_m.sin6_addr) &&
@@ -274,14 +274,14 @@ ndpset(int argc, char *argv[], ...)
 		 * IPv4 arp command retries with sin_other = SIN_PROXY here.
 		 */
 		printf("%% ndpset: cannot configure a new entry\n");
-		return 1;
+		return -1;
 	}
 
 overwrite:
 	if (sdl->sdl_family != AF_LINK) {
 		printf("%% cannot intuit interface index and type for %s\n",
 		    host);
-		return (1);
+		return -1;
 	}
 	sdl_m.sdl_type = sdl->sdl_type;
 	sdl_m.sdl_index = sdl->sdl_index;
@@ -299,31 +299,30 @@ ndp_cand(const char *host, struct sockaddr_dl *sdl)
 	char *buf = NULL;
 	size_t len;
 	FILE *f;
+	int r;
 
 	if (parse_host(host, &sin6))
-		return 1;
-	if (sdl == NULL) {
-		cand_setting(ST_OFF, "ndp %s", routename6(&sin6));
-		return 0;
-	}
+		return -1;
+	if (sdl == NULL)
+		return cand_setting(ST_OFF, "ndp %s", routename6(&sin6));
 	if (expire_time != 0) {
 		printf("%% temp entries are not saved in the configuration\n");
-		return 1;
+		return -1;
 	}
 	if ((f = open_memstream(&buf, &len)) == NULL) {
 		printf("%% ndp_cand: %s\n", strerror(errno));
-		return 1;
+		return -1;
 	}
 	conf_ndp_line(f, "ndp ", &sin6, sdl, flags);
 	if (fclose(f) == EOF || len == 0) {
 		printf("%% ndp_cand: no line for %s\n", host);
 		free(buf);
-		return 1;
+		return -1;
 	}
 	buf[len - 1] = '\0';
-	cand_setting(ST_ON, "%s", buf);
+	r = cand_setting(ST_ON, "%s", buf);
 	free(buf);
-	return 0;
+	return r;
 }
 
 /*
@@ -337,13 +336,13 @@ ndpdelete(const char *host)
 	struct sockaddr_dl *sdl;
 
 	if (getsocket() < 0)
-		return 1;
+		return -1;
 	sin_m = blank_sin;
 	if (parse_host(host, sin))
-		return 1;
+		return -1;
 	if (rtget_ndp(&sin, &sdl)) {
 		printf("%% RTM_GET(%s) failed\n", host);
-		return 1;
+		return -1;
 	}
 
 	if (IN6_ARE_ADDR_EQUAL(&sin->sin6_addr, &sin_m.sin6_addr) &&
@@ -357,16 +356,18 @@ ndpdelete(const char *host)
 		/*
 		 * IPv4 arp command retries with sin_other = SIN_PROXY here.
 		 */
-		return 1;
+		printf("%% cannot locate %s\n", host);
+		return -1;
 	}
 
 delete:
 	if (sdl->sdl_family != AF_LINK) {
 		printf("%% cannot locate %s\n", host);
-		return (1);
+		return -1;
 	}
-	if (rtmsg_ndp(RTM_DELETE) == 0)
-		printf("%% %s deleted\n", host);
+	if (rtmsg_ndp(RTM_DELETE) == -1)
+		return -1;
+	printf("%% %s deleted\n", host);
 
 	return 0;
 }

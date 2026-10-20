@@ -36,7 +36,7 @@ nameserver_usage(void)
 {
 	printf("%% nameserver IP-address1 [IP-address2 ... IP-address5]\n");
 	printf("%% no nameserver [IP-address1 ... IP-address5]\n");
-	return (1);
+	return (-1);
 }
 
 int
@@ -96,7 +96,7 @@ nameserverset(int argc, char *argv[], ...)
 			if (!nameserver4_valid(argv[i]) &&
 			    !nameserver6_valid(argv[i])) {
 				printf("%% invalid address: %s\n", argv[i]);
-				return (1);
+				return -1;
 			}
 		}
 	}
@@ -108,8 +108,7 @@ nameserverset(int argc, char *argv[], ...)
 			strlcat(line, " ", sizeof(line));
 			strlcat(line, argv[i], sizeof(line));
 		}
-		cand_setting(set ? ST_ON : ST_OFF, "%s", line);
-		return (0);
+		return cand_setting(set ? ST_ON : ST_OFF, "%s", line);
 	}
 
 	/*
@@ -120,21 +119,23 @@ nameserverset(int argc, char *argv[], ...)
 	 */
 	if (db_delete_nameservers() < 0) {
 		printf("%% nameservers db deletion error\n");
-		return (1);
+		return -1;
 	}
 
 	if (set) {
 		for (i = 1; i < argc; i++) {
 			if (db_insert_nameserver(argv[i]) < 0) {
 				printf("%% nameservers db insertion error\n");
-				return (1);
+				return -1;
 			}
 		}
 	}
 
 	argv[0] = "lo0";
 	/* no nameserver proposes none, whatever addresses it was given */
-	return rtnameserver(set ? argc : 1, argv, 0 /* always use rtable 0 */);
+	if (rtnameserver(set ? argc : 1, argv, 0 /* always use rtable 0 */))
+		return (-1);
+	return (0);
 }
 
 void

@@ -91,7 +91,7 @@ route(int argc, char **argv, ...)
 
 	if (argc < 1) {
 		routeusage();
-		return 1;
+		return -1;
 	}
 
 	memset(&rt_metrics, 0, sizeof(rt_metrics));
@@ -101,7 +101,7 @@ route(int argc, char **argv, ...)
 	parse_ip_pfx(argv[0], ASSUME_NETMASK, &dest);
 	if (dest.family == 0)
 		/* bad arguments */
-		return 1;
+		return -1;
 
 	argc--;
 	argv++;
@@ -112,7 +112,7 @@ route(int argc, char **argv, ...)
 			if (!inet_pton(AF_INET, argv[0], &gate.addr.in)) {
 				printf("%% %s is not an IPv4 address\n",
 				    argv[0]);
-				return 1;
+				return -1;
 			}
 			gate.family = AF_INET;
 			break;
@@ -120,13 +120,13 @@ route(int argc, char **argv, ...)
 			if (parse_ipv6(argv[0], &gate.addr.in6) != 0) {
 				printf("%% %s is not an IPv6 address\n",
 				    argv[0]);
-				return 1;
+				return -1;
 			}
 			gate.family = AF_INET6;
 			break;
 		default:
 			printf("%% unknown gateway address family %d\n", dest.family);
-			return 1;
+			return -1;
 		}
 
 		flags |= RTF_GATEWAY;
@@ -134,7 +134,7 @@ route(int argc, char **argv, ...)
 		argv++;
 	} else if (cmd == RTM_ADD) {
 		printf("%% No gateway specified\n");
-		return 1;
+		return -1;
 	}
 
 	noptind = 0;
@@ -158,7 +158,7 @@ route(int argc, char **argv, ...)
 				if (errmsg) {
 					printf("%% Invalid expire %s: %s\n",
 					    argv[noptind - 1], errmsg);
-					return 1;
+					return -1;
 				}
 				rt_metrics.rmx_expire = relative_expire ?
 				    relative_expire + time(NULL) : 0;
@@ -179,7 +179,7 @@ route(int argc, char **argv, ...)
 				if (errmsg) {
 					printf("%% Invalid route mtu %s: %s\n",
 					    argv[noptind - 1], errmsg);
-					return 1;
+					return -1;
 				}
 				inits |= RTV_MTU;
 				break;
@@ -197,7 +197,7 @@ route(int argc, char **argv, ...)
 				break;
 			default:
 				printf("%% route: nopt table error\n");
-				return 1;
+				return -1;
 			}
 		}
 	}
@@ -209,7 +209,7 @@ route(int argc, char **argv, ...)
 			printf(": %s", argv[noptind]);
 		printf("\n");
 		routeusage();
-		return 1;
+		return -1;
 	}
 	/*
 	 * Detect if a user is adding a route with a non-network address.
@@ -222,7 +222,7 @@ route(int argc, char **argv, ...)
 			tmp.s_addr = htonl(net);
 			printf("%% Inconsistent address and mask (%s/%i?)\n",
 			    inet_ntoa(tmp), dest.bitlen);
-			return 1;
+			return -1;
 		}
 		break;
 	case AF_INET6:
@@ -233,12 +233,12 @@ route(int argc, char **argv, ...)
 			printf("%% Inconsistent address and mask (%s/%i?)\n",
 			    inet_ntop(AF_INET6, &tmp6, buf, sizeof(buf)),
 			    dest.bitlen);
-			return 1;
+			return -1;
 		}
 		break;
 	default:
 		printf("%% unknown destination address family %d\n", dest.family);
-		return 1;
+		return -1;
 	}
 
 	/*
@@ -252,7 +252,7 @@ route(int argc, char **argv, ...)
 	if (candidate && cmd == RTM_ADD && rt_metrics.rmx_expire != 0) {
 		printf("%% an expiring route is not saved in the"
 		    " configuration\n");
-		return 1;
+		return -1;
 	}
 
 	flags |= RTF_UP;
@@ -260,8 +260,10 @@ route(int argc, char **argv, ...)
 	/*
 	 * Do the route...
 	 */
-	return ip_route(&dest, gate.family ? &gate : NULL, cmd, flags,
-	    cli_rtable, rt_metrics, inits);
+	if (ip_route(&dest, gate.family ? &gate : NULL, cmd, flags,
+	    cli_rtable, rt_metrics, inits) != 0)
+		return -1;
+	return 0;
 }
 
 /*
@@ -329,8 +331,10 @@ route_cand(struct rt_msghdr *rtm)
 			return -1;
 		}
 		buf[len - 1] = '\0';
-		cand_setting(ST_ON, "%s", buf);
+		i = cand_setting(ST_ON, "%s", buf);
 		free(buf);
+		if (i == -1)
+			return -1;
 		break;
 	case RTM_DELETE:
 		/* without a gateway, only a route that is alone */
@@ -342,7 +346,8 @@ route_cand(struct rt_msghdr *rtm)
 			errno = ESRCH;
 			return -1;
 		}
-		cand_setting(ST_OFF, "%s", key);
+		if (cand_setting(ST_OFF, "%s", key) == -1)
+			return -1;
 		break;
 	default:
 		errno = EOPNOTSUPP;

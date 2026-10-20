@@ -976,10 +976,10 @@ ipcmd(int argc, char **argv, ...)
 	    sizeof(struct sysctltab));
         if (stab == 0) {
                 printf("%% Invalid argument %s\n", argv[0]);
-                return 0;
+                return -1;
         } else if (Ambiguous(stab)) {
                 printf("%% Ambiguous argument %s\n", argv[0]);
-                return 0;
+                return -1;
         }
 
 	if (argc < 2) {
@@ -993,15 +993,15 @@ ipcmd(int argc, char **argv, ...)
         i = (Menu *)genget(argv[1], (char **)stab->table, sizeof(Menu));
 	if (i == 0) {
 		printf("%% Invalid argument %s\n", argv[1]);
-		return 0;
+		return -1;
 	} else if (Ambiguous(i)) {
 		printf("%% Ambiguous argument %s\n", argv[1]);
-		return 0;
+		return -1;
 	}
 	if (((i->minarg + 2) > argc) || ((i->maxarg + 2) < argc)) {
 		printf("%% Wrong argument%s to '%s %s' command.\n",
 		    argc <= 2 ? "" : "s", argv[0], i->name);
-		return 0;
+		return -1;
 	}
 
 	if (i->handler)
