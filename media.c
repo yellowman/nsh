@@ -52,7 +52,7 @@
 #include "showfacts.h"
 
 uint64_t init_current_media(int, char *);
-void process_media_commands(int, char *, uint64_t);
+int process_media_commands(int, char *, uint64_t);
 const char *get_media_type_string(uint64_t);
 const char *get_media_subtype_string(uint64_t);
 uint64_t get_media_subtype(uint64_t, const char *);
@@ -118,7 +118,7 @@ intmedia(int argc, char **argv, ...)
 		printf("%% media <type> [instance] [mediaopt <options>]\n");
 		printf("%% no media [type] [instance] [mediaopt <options>]\n");
 		media_supported(ifs, ifname, "% ", "%   ", stdout);
-		return 0;
+		return -1;
 	}
 
 	media_current = init_current_media(ifs, ifname);
@@ -130,7 +130,7 @@ intmedia(int argc, char **argv, ...)
 		else
 			printf("%% Failed to initialize media: %s\n",
 			    strerror(errno));
-		return 0;
+		return -1;
 	}
 
 	if (argc == 2) {
@@ -138,7 +138,7 @@ intmedia(int argc, char **argv, ...)
 		if (errmsg) {
 			printf("%% Invalid media instance: %s: %s\n", argv[1],
 			    errmsg);
-			return 0;
+			return -1;
 		}
 	} else {
 		inst = IFM_INST(media_current);
@@ -152,17 +152,15 @@ intmedia(int argc, char **argv, ...)
 		subtype = get_media_subtype(type, DEFAULT_MEDIA_TYPE);
 
 	if (subtype == -1)
-		return 0;
+		return -1;
 	if (set && opts != NULL &&
 	    (options = get_media_options(type, opts)) == -1)
-		return 0;
+		return -1;
 
 	/* Build the new media_current word */
 	media_current = IFM_MAKEWORD(type, subtype, options, inst);
 
-	process_media_commands(ifs, ifname, media_current);
-
-	return 0;
+	return process_media_commands(ifs, ifname, media_current);
 }
 
 int
@@ -192,7 +190,7 @@ intmediaopt(int argc, char **argv, ...)
 	if ((set && (argc != 1)) || (!set && (argc > 1))) {
 		printf("%% mediaopt <option>\n");
 		printf("%% no mediaopt [option]\n");
-		return 0;
+		return -1;
 	}
 
         media_current = init_current_media(ifs, ifname);
@@ -204,7 +202,7 @@ intmediaopt(int argc, char **argv, ...)
 		else
 			printf("%% Failed to initialize media: %s\n",
 			    strerror(errno));
-		return 0;
+		return -1;
 	}
 
 	if (argc == 1)
@@ -213,34 +211,33 @@ intmediaopt(int argc, char **argv, ...)
 		mediaopt = IFM_OPTIONS(media_current);
 
 	if (mediaopt == -1)
-		return 0;
+		return -1;
 
 	if (set)
 		media_current |= mediaopt;
 	else
 		media_current &= ~mediaopt;
 
-	process_media_commands(ifs, ifname, media_current);
-
-	return 0;
+	return process_media_commands(ifs, ifname, media_current);
 }
 
-void
+int
 process_media_commands(int s, char *name, uint64_t media_current)
 {
 	struct ifreq ifr;
 
-	if (candidate) {
-		cand_setmedia(s, name, media_current);
-		return;
-	}
+	if (candidate)
+		return cand_setmedia(s, name, media_current);
 
 	(void) strlcpy(ifr.ifr_name, name, sizeof(ifr.ifr_name));
 	ifr.ifr_media = media_current;
 
-	if (ioctl(s, SIOCSIFMEDIA, (caddr_t)&ifr) < 0)
+	if (ioctl(s, SIOCSIFMEDIA, (caddr_t)&ifr) < 0) {
 		printf("%% process_media_commands: SIOCSIFMEDIA: %s\n",
 		    strerror(errno));
+		return -1;
+	}
+	return 0;
 }
 
 uint64_t

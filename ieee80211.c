@@ -205,7 +205,7 @@ intnwkey(int argc, char **argv, ...)
 		printf("%% nwkey persist:<key>\n");
 		printf("%% nwkey <n>:<k1>,<k2>,<k3>,<k4>\n");
 		printf("%% no nwkey [key]\n");
-		return 0;
+		return -1;
 	}
 	if(set)
 		val = argv[0];
@@ -237,19 +237,19 @@ set_nwkey:
 				len = sizeof(keybuf[i]);
 				val = (char *)get_string(val, ",", keybuf[i], &len);
 				if (val == NULL)
-					return 0;
+					return -1;
 				nwkey.i_key[i].i_keylen = len;
 				nwkey.i_key[i].i_keydat = keybuf[i];
 			}
 			if (*val != '\0') {
 				printf("%% intnwkey: too many keys\n");
-				return 0;
+				return -1;
 			}
 		} else {
 			len = sizeof(keybuf[i]);
 			val = (char *)get_string(val, NULL, keybuf[0], &len);
 			if (val == NULL)
-				return 0;
+				return -1;
 			nwkey.i_key[0].i_keylen = len;
 			nwkey.i_key[0].i_keydat = keybuf[0];
 			i = 1;
@@ -265,7 +265,7 @@ set_nwkey:
 	(void) strlcpy(nwkey.i_name, ifname, sizeof(nwkey.i_name));
 	if (ioctl(ifs, SIOCS80211NWKEY, (caddr_t)&nwkey) == -1) {
 		printf("%% intnwkey: SIOCS80211NWKEY: %s\n", strerror(errno));
-		return 0;
+		return -1;
 	}
 	/* the kernel shows no key, so get_nwinfo() prints the one kept here */
 	db_delete_flag_x_ctl("nwkey", ifname, 0);
@@ -417,7 +417,7 @@ inttxpower(int argc, char **argv, ...)
 	if ((set && argc != 1) || (!set && argc > 1)) {
 		printf("%% txpower <dBm>\n");
 		printf("%% no txpower     (auto-select)\n");
-		return 0;
+		return -1;
 	}
 
 	strlcpy(txpower.i_name, ifname, sizeof(txpower.i_name));
@@ -430,7 +430,7 @@ inttxpower(int argc, char **argv, ...)
 		if (errmsg) {
 			printf("%% inttxpower: txpower %sdBm: %s\n", argv[0],
 			    errmsg);
-			return 0;
+			return -1;
 		}
 		txpower.i_val = (int16_t)dbm;
 		txpower.i_mode = IEEE80211_TXPOWER_MODE_FIXED;
@@ -439,9 +439,11 @@ inttxpower(int argc, char **argv, ...)
 	if (candidate)
 		return cand_txpower(ifname, txpower.i_val);
 
-	if (ioctl(ifs, SIOCS80211TXPOWER, (caddr_t)&txpower) == -1)
+	if (ioctl(ifs, SIOCS80211TXPOWER, (caddr_t)&txpower) == -1) {
 		printf("%% inttxpower: SIOCS80211TXPOWER failed: %s\n",
 		    strerror(errno));
+		return -1;
+	}
 
 	return 0;
 }
@@ -474,14 +476,14 @@ intbssid(int argc, char **argv, ...)
 	if ((set && argc != 1) || (!set && argc > 1)) {
 		printf("%% bssid <xx:xx:xx:xx:xx:xx>\n");
 		printf("%% no bssid       (auto-select)\n");
-		return 0;
+		return -1;
 	}
 
 	if (set) {
 		ea = ether_aton(argv[0]);
 		if (ea == NULL) {
 			printf("%% Invalid bssid\n");
-			return 0;
+			return -1;
 		}
 		memcpy(&bssid.i_bssid, ea->ether_addr_octet,
 		    sizeof(bssid.i_bssid));
@@ -492,6 +494,7 @@ intbssid(int argc, char **argv, ...)
 	if (ioctl(ifs, SIOCS80211BSSID, &bssid) == -1) {
 		printf("%% intbssid: SIOCS80211BSSID failed: %s\n",
 		    strerror(errno));
+		return -1;
 	}
 
 	return (0);
@@ -533,9 +536,10 @@ cand_nwid(char *ifname, u_int8_t *nwid, int len)
 	char str[IEEE80211_NWID_LEN * 2 + 8];
 
 	if (!cand_80211(ifname, "intnwid: SIOCS80211NWID"))
-		return 0;
+		return -1;
 	make_string(str, sizeof(str), nwid, len);
-	cand_setting(ST_ON, "nwid %s", str);
+	if (cand_setting(ST_ON, "nwid %s", str) == -1)
+		return -1;
 	return cand_setting(ST_DEFAULT, "nwkey");
 }
 
@@ -546,12 +550,12 @@ cand_nwkey(char *ifname, struct ieee80211_nwkey *nwkey, char *key)
 	char str[256];
 
 	if (!cand_80211(ifname, "intnwkey: SIOCS80211NWKEY"))
-		return 0;
+		return -1;
 	if (nwkey->i_wepon == IEEE80211_NWKEY_OPEN)
 		return cand_setting(ST_DEFAULT, "nwkey");
 	if (nwkey->i_defkid < 1 || nwkey->i_defkid > IEEE80211_WEP_NKID) {
 		printf("%% intnwkey: SIOCS80211NWKEY: %s\n", strerror(EINVAL));
-		return 0;
+		return -1;
 	}
 	nwkey_str(str, sizeof(str), key);
 	return cand_setting(ST_ON, "nwkey %s", str);
@@ -562,11 +566,11 @@ static int
 cand_txpower(char *ifname, int dbm)
 {
 	if (!cand_80211(ifname, "inttxpower: SIOCS80211TXPOWER failed"))
-		return 0;
+		return -1;
 	if (dbm < kern_txpower_min || dbm > kern_txpower_max) {
 		printf("%% inttxpower: SIOCS80211TXPOWER failed: %s\n",
 		    strerror(EINVAL));
-		return 0;
+		return -1;
 	}
 	if (dbm == kern_txpower_max)
 		return cand_setting(ST_DEFAULT, "txpower");
@@ -578,7 +582,7 @@ int
 cand_powersave(char *ifname, int set, int maxsleep)
 {
 	if (!cand_80211(ifname, "intpowersave: SIOCG80211POWER"))
-		return 0;
+		return -1;
 	if (!set)
 		return cand_setting(ST_DEFAULT, "powersave");
 	return cand_setting(ST_ON, "powersave %d", maxsleep);
