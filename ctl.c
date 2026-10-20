@@ -198,7 +198,7 @@ struct ctl ctl_eigrp[] = {
 	{ "fib",            "fib couple/decouple",
 	    { EIGRPCTL, "fib", REQ, NULL }, { NULL }, NULL, 0, T_EXEC },
 	{ "log",            "config EIGRPd loggging, brief/verbose",
-	    { EIGRPCTL, "lob", REQ, NULL }, { NULL }, NULL, 0, T_EXEC },
+	    { EIGRPCTL, "log", REQ, NULL }, { NULL }, NULL, 0, T_EXEC },
 	{ "show",           "show fib/interfaces/neighbor/topology/traffic",
             { EIGRPCTL, "show", REQ, NULL }, { NULL }, NULL, 0, T_EXEC },
 	{ NULL, NULL, { NULL }, { NULL }, NULL, 0, 0 }
@@ -264,7 +264,7 @@ struct ctl ctl_ldp[] = {
 	{ "fib",           "fib couple/decouple",
 	   { LDPCTL, "fib", REQ, NULL }, { NULL }, NULL, 0, T_EXEC },
 	{ "clear",         "clear LDPd neighbors",
-            { LDPCTL, "show", REQ, NULL }, { NULL }, NULL, 0, T_EXEC },
+            { LDPCTL, "clear", REQ, NULL }, { NULL }, NULL, 0, T_EXEC },
 	{ "show",          "show LDPd fib/interfaces/discovery/neighbor/lib",
             { LDPCTL, "show", REQ, NULL }, { NULL }, NULL, 0, T_EXEC },
 	{ NULL, NULL, { NULL }, { NULL }, NULL, 0, 0 }
