@@ -2936,7 +2936,8 @@ intdhcrelay(int argc, char **argv, ...)
 	}
 
 	if (set) {
-		flag_x("dhcrelay", ifname, DB_X_ENABLE, argv[0]);
+		if (flag_x("dhcrelay", ifname, DB_X_ENABLE, argv[0]) == -1)
+			return -1;
 		if (cmdargs(DHCRELAY, cmd) != 0)
 			return -1;
 	} else {
@@ -2961,7 +2962,8 @@ intdhcrelay(int argc, char **argv, ...)
 			return -1;
 		}
 
-		flag_x("dhcrelay", ifname, DB_X_REMOVE, NULL);
+		if (flag_x("dhcrelay", ifname, DB_X_REMOVE, NULL) == -1)
+			return -1;
 
 		/* setup argument list as one argument for pkill -xf */
 		snprintf(argue, sizeof(argue), "%s %s %s %s", cmd[0], cmd[1],

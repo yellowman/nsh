@@ -76,7 +76,7 @@ struct ctl {
         char *help;
         char *args[32];
         char *test_args[32];
-        void (*handler)(int, char **, ...);
+        int (*handler)(int, char **, ...);
         int flag_x;
         int type;
 };
@@ -192,4 +192,4 @@ extern struct ctl ctl_ldap[];
 extern struct ctl ctl_motd[];
 extern struct ctl ctl_crontab[];
 extern struct ctl ctl_resolv[];
-void flag_x(char *, char *, int, char *);
+int flag_x(char *, char *, int, char *);

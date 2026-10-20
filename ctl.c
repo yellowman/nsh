@@ -39,12 +39,12 @@
 static char table[16];
 
 /* service routines, used as handlers in struct ctl */
-void edit_crontab(int, char **, ...);
-void install_crontab(int, char **, ...);
-void edit_motd(int, char **, ...);
-void call_editor(int, char **, ...);
-void start_dhcpd(int, char **, ...);
-void restart_dhcpd(int, char **, ...);
+int edit_crontab(int, char **, ...);
+int install_crontab(int, char **, ...);
+int edit_motd(int, char **, ...);
+int call_editor(int, char **, ...);
+int start_dhcpd(int, char **, ...);
+int restart_dhcpd(int, char **, ...);
 
 /* subroutines */
 int fill_tmpfile(char **, char *, char **);
@@ -52,6 +52,7 @@ int edit_file(char *, mode_t, char *, char **);
 int rule_writeline(FILE *, char *, int);
 int acq_lock(char *);
 void rls_lock(int);
+static int ctl_exec(char *, char **);
 static int ctl_cand(struct daemons *, struct ctl *, char **);
 static int ctl_cand_takes(struct ctl *);
 static int ctl_cand_edit(struct daemons *, char *, char **);
@@ -59,7 +60,7 @@ static int ctl_cand_test(struct daemons *, char *, char **);
 static int ctl_cand_stage(struct daemons *, char *, char *, char *,
     size_t);
 static void ctl_cand_unstage(char *, char *);
-static void ctl_cand_follow(struct daemons *, char *, int);
+static int ctl_cand_follow(struct daemons *, char *, int);
 
 /* the rules file an rc file is writing, and its name */
 static FILE *rulesfile;
@@ -611,18 +612,20 @@ struct ctl ctl_ldap[] = {
 };
 
 /* flag to other nsh sessions or nsh conf() that actions have been taken */
-void
+int
 flag_x(char *name, char *daemon, int dbflag, char *data)
 {
 	if (db_delete_flag_x_ctl(name, daemon, cli_rtable) < 0) {
 		printf("%% database delete failure ctl ctl\n");
-		return;
+		return -1;
 	}
 	if (dbflag == DB_X_REMOVE)
-		return;
+		return 0;
 	if (db_insert_flag_x(name, daemon, cli_rtable, dbflag, data) < 0) {
 		printf("%% database insert failure ctl ctl\n");
+		return -1;
 	}
+	return 0;
 }
 
 /* the main entry point into ctl.c from CLI */
@@ -636,7 +639,7 @@ ctlhandler(int argc, char **argv, ...)
 	char *tmp_args[NOPTFILL] = { NULL, NULL, NULL, NULL, NULL, NULL };
 	char **fillargs;
 	int rv = 0;
-	int nargs;
+	int nargs, r;
 	va_list ap;
 	char *modhvar;
 
@@ -649,13 +652,14 @@ ctlhandler(int argc, char **argv, ...)
 	    sizeof(struct daemons));
 	if (daemons == NULL || Ambiguous(daemons)) {
 		printf("%% Internal error - Invalid argument %s\n", argv[1]);
-		return 0;
+		return -1;
 	}
 
 	/* in configure private, ctl_cand() checks the table */
 	if (!candidate && cli_rtable > daemons->rtablemax) {
 		printf("%% Command %s not available via rtable %d\n",
 		    daemons->name, cli_rtable);
+		rv = -1;
 		goto done;
 	}
 
@@ -682,6 +686,7 @@ ctlhandler(int argc, char **argv, ...)
 		if (isprefix(modhvar, "rules")) {
 			if (!daemons->tmpfile) {
 				printf("%% writeline without tmpfile\n");
+				rv = -1;
 				goto done;
 			}
 			if (rulesfile == NULL) {
@@ -690,6 +695,7 @@ ctlhandler(int argc, char **argv, ...)
 					printf("%% error opening %s for "
 					    "writing: %s\n", tmpfile,
 					    strerror(errno));
+					rv = -1;
 					goto done;
 				}
 				fchmod(fileno(rulesfile), daemons->mode);
@@ -713,18 +719,22 @@ ctlhandler(int argc, char **argv, ...)
 	    sizeof(struct ctl));
 	if (x == NULL) {
 		printf("%% Invalid argument %s\n", argv[1]);
+		rv = -1;
 		goto done;
 	} else if (Ambiguous(x)) {
 		printf("%% Ambiguous argument %s\n", argv[1]);
+		rv = -1;
 		goto done;
 	}
 
 	fillargs = step_optreq(x->args, step_args, argc, argv, 2);
-	if (fillargs == NULL)
+	if (fillargs == NULL) {
+		rv = -1;
 		goto done;
+	}
 
-	if (candidate && ctl_cand(daemons, x, fillargs)) {
-		rv = 1;
+	if (candidate && (r = ctl_cand(daemons, x, fillargs)) != 0) {
+		rv = r == -1 ? -1 : 0;
 		goto done;
 	}
 
@@ -735,33 +745,31 @@ ctlhandler(int argc, char **argv, ...)
 		nargs = fill_tmpfile(fillargs, tmpfile, tmp_args);
 		/* bump NOPTFILL when adding more arguments */
 		if (nargs < NOPTFILL) {
-			(*x->handler)(nargs, tmp_args);
+			rv = (*x->handler)(nargs, tmp_args);
 		} else {
 			printf("%% handler %s %s requires too many "
 			    "arguments: %d\n", hname, argv[1], nargs);
-			break;
+			rv = -1;
 		}
 	break;
 	case T_HANDLER_TEST:
 		/* pointer to handler with a test command, fill test args */
 		if (fill_tmpfile(x->test_args, tmpfile, tmp_args))
-			(*x->handler)(1, &fillargs[0], tmp_args);
-		else
-			(*x->handler)(1, &fillargs[0], x->test_args);
+			rv = (*x->handler)(1, &fillargs[0], tmp_args);
+		else	/* no test: inet */
+			rv = (*x->handler)(1, &fillargs[0], (char **)NULL);
 	break;
 	case T_EXEC:
 		/* command to execute via execv syscall, fill main args */
 		if (fill_tmpfile(fillargs, tmpfile, tmp_args))
-			cmdargs(tmp_args[0], tmp_args);
+			rv = ctl_exec(tmp_args[0], tmp_args);
 		else
-			cmdargs(fillargs[0], fillargs);
+			rv = ctl_exec(fillargs[0], fillargs);
 	break;
 	}
 
-	if (x->flag_x != 0) {
-		flag_x("ctl", daemons->name, x->flag_x, NULL);
-	}
-	rv = 1;
+	if (rv == 0 && x->flag_x != 0)
+		rv = flag_x("ctl", daemons->name, x->flag_x, NULL);
 done:
 	return rv;
 }
@@ -770,8 +778,9 @@ done:
  * A daemon's command in configure private: enable and disable leave the
  * line conf prints for its state, edit edits its rules in the
  * candidate, and its configuration test tests those, all in the
- * candidate's rtable. Returns 0 for the rest, which act on the running
- * daemon as outside configure private.
+ * candidate's rtable: 1 when done, -1 when it failed, said why. Returns
+ * 0 for the rest, which act on the running daemon as outside configure
+ * private.
  */
 static int
 ctl_cand(struct daemons *d, struct ctl *x, char **fillargs)
@@ -786,7 +795,7 @@ ctl_cand(struct daemons *d, struct ctl *x, char **fillargs)
 	if (rt > d->rtablemax) {
 		printf("%% Command %s not available via rtable %d\n",
 		    d->name, rt);
-		return 1;
+		return -1;
 	}
 	if (!takes)
 		return 0;
@@ -804,15 +813,18 @@ ctl_cand(struct daemons *d, struct ctl *x, char **fillargs)
 	switch (x->flag_x) {
 	case DB_X_ENABLE:
 	case DB_X_ENABLE_DEFAULT:
-		cand_setting(ST_DEFAULT, "%s disable", c->name);
-		cand_setting(ST_ON, "%s %s", c->name, enable);
+		if (cand_setting(ST_DEFAULT, "%s disable", c->name) == -1 ||
+		    cand_setting(ST_ON, "%s %s", c->name, enable) == -1)
+			return -1;
 		return 1;
 	case DB_X_DISABLE:
-		cand_setting(ST_DEFAULT, "%s %s", c->name, enable);
+		if (cand_setting(ST_DEFAULT, "%s %s", c->name, enable) == -1)
+			return -1;
 		return 1;
 	case DB_X_DISABLE_ALWAYS:
-		cand_setting(ST_DEFAULT, "%s %s", c->name, enable);
-		cand_setting(ST_ON, "%s disable", c->name);
+		if (cand_setting(ST_DEFAULT, "%s %s", c->name, enable) == -1 ||
+		    cand_setting(ST_ON, "%s disable", c->name) == -1)
+			return -1;
 		return 1;
 	}
 	if (x->handler == call_editor || x->handler == edit_motd ||
@@ -821,8 +833,10 @@ ctl_cand(struct daemons *d, struct ctl *x, char **fillargs)
 		    x->type == T_HANDLER_TEST ? x->test_args : NULL);
 	if (x->handler == install_crontab) {
 		/* crontab install follows the rules */
-		if (cand_rule(stmt, 0) == NULL)
+		if (cand_rule(stmt, 0) == NULL) {
 			printf("%% no %s in the candidate\n", stmt);
+			return -1;
+		}
 		return 1;
 	}
 	return ctl_cand_test(d, c->name, fillargs);
@@ -845,7 +859,11 @@ ctl_cand_takes(struct ctl *x)
 	    strcmp(x->name, "config-test") == 0;
 }
 
-/* edit in configure private: its rules for d, called name */
+/*
+ * edit in configure private: its rules for d, called name, which the
+ * candidate takes even when its test fails, as outside configure
+ * private: 1, or -1 when it failed
+ */
 static int
 ctl_cand_edit(struct daemons *d, char *name, char **test)
 {
@@ -855,17 +873,19 @@ ctl_cand_edit(struct daemons *d, char *name, char **test)
 	size_t size = 0;
 	ssize_t len;
 	FILE *f;
+	int ret;
 
 	snprintf(stmt, sizeof(stmt), "%s rules", name);
 	if (ctl_cand_stage(d, stmt, dir, path, sizeof(path)) == -1)
-		return 1;
-	if (test != NULL)
-		fill_tmpfile(test, path, args);
-	edit_file(path, d->mode, d->propername, test != NULL ? args : NULL);
+		return -1;
+	if (test != NULL && fill_tmpfile(test, path, args) == 0)
+		test = NULL;	/* no test: inet */
+	ret = edit_file(path, d->mode, d->propername,
+	    test != NULL ? args : NULL);
 	if ((f = fopen(path, "r")) == NULL) {
 		printf("%% %s: %s\n", path, strerror(errno));
 		ctl_cand_unstage(dir, path);
-		return 1;
+		return -1;
 	}
 	lines = sl_init();
 	while ((len = getline(&line, &size, f)) != -1) {
@@ -874,32 +894,37 @@ ctl_cand_edit(struct daemons *d, char *name, char **test)
 		sl_add(lines, strdup(line));
 	}
 	fclose(f);
-	if (cand_setrules(stmt, lines->sl_str, lines->sl_cur) == 0)
-		ctl_cand_follow(d, name, lines->sl_cur > 0);
+	if (cand_setrules(stmt, lines->sl_str, lines->sl_cur) == -1 ||
+	    ctl_cand_follow(d, name, lines->sl_cur > 0) == -1)
+		ret = -1;
 	free(line);
 	sl_free(lines, 1);
 	ctl_cand_unstage(dir, path);
-	return 1;
+	return ret == -1 ? -1 : 1;
 }
 
-/* A configuration test in configure private, on its rules for d */
+/*
+ * A configuration test in configure private, on its rules for d: 1, or
+ * -1 when the test could not run, as T_EXEC outside configure private
+ */
 static int
 ctl_cand_test(struct daemons *d, char *name, char **fillargs)
 {
 	char dir[] = "/tmp/nsh.XXXXXXXXXX", path[PATH_MAX], stmt[64];
 	char *args[NOPTFILL] = { NULL };
+	int ret;
 
 	snprintf(stmt, sizeof(stmt), "%s rules", name);
 	if (cand_rule(stmt, 0) == NULL) {
 		printf("%% no %s in the candidate\n", stmt);
-		return 1;
+		return -1;
 	}
 	if (ctl_cand_stage(d, stmt, dir, path, sizeof(path)) == -1)
-		return 1;
+		return -1;
 	fill_tmpfile(fillargs, path, args);
-	cmdargs(args[0], args);
+	ret = ctl_exec(args[0], args);
 	ctl_cand_unstage(dir, path);
-	return 1;
+	return ret == -1 ? -1 : 1;
 }
 
 /*
@@ -1068,23 +1093,41 @@ ctl_rules_test(char *name, char **lines, size_t n)
 }
 
 /* The line conf prints after a daemon's rules: pf reload, crontab install */
-static void
+static int
 ctl_cand_follow(struct daemons *d, char *name, int rules)
 {
-	if (d->doreload)
-		cand_setting(rules ? ST_ON : ST_DEFAULT, "%s reload", name);
-	if (d->table == ctl_crontab)
-		cand_setting(rules ? ST_ON : ST_DEFAULT, "%s install", name);
+	if (d->doreload && cand_setting(rules ? ST_ON : ST_DEFAULT,
+	    "%s reload", name) == -1)
+		return -1;
+	if (d->table == ctl_crontab && cand_setting(rules ? ST_ON :
+	    ST_DEFAULT, "%s install", name) == -1)
+		return -1;
+	return 0;
 }
 
-void
+/*
+ * Run a daemon's program: -1 if it could not run, which cmdargs() said.
+ * Its exit status is its own to report: pfctl -e fails when pf is
+ * enabled, pkill when nothing matched.
+ */
+static int
+ctl_exec(char *cmd, char **args)
+{
+	int r;
+
+	r = cmdargs(cmd, args);
+	return r == -1 || r == 127 ? -1 : 0;
+}
+
+int
 restart_dhcpd(int argc, char **argv, ...)
 {
 	char *argv_pkill[] = { PKILL, table, "dhcpd", NULL };
 
-	cmdargs(argv_pkill[0], argv_pkill);
+	if (ctl_exec(argv_pkill[0], argv_pkill) == -1)
+		return -1;
 	sleep(1);
-	start_dhcpd(argc, argv);
+	return start_dhcpd(argc, argv);
 }
 
 /*
@@ -1115,13 +1158,13 @@ fill_tmpfile(char **fillargs, char *tmpfile, char **tmp_args)
 	return n;
 }
 
-void
+int
 edit_crontab(int argc, char **argv, ...)
 {
 	char *name = argv[0];
 	char *crontab_argv[] = { CRONTAB, "-u", "root", "-l", NULL };
 	char tmpfile[PATH_MAX];
-	int found = 0;
+	int found = 0, ret = -1;
 	struct daemons *daemons;
 	int fd = -1;
 
@@ -1133,7 +1176,7 @@ edit_crontab(int argc, char **argv, ...)
 
 	if (!found) {
 		printf("%% edit_crontab internal error\n");
-		return;
+		return -1;
 	}
 
 	snprintf(tmpfile, sizeof(tmpfile), "%s.%d", daemons->tmpfile,
@@ -1143,12 +1186,12 @@ edit_crontab(int argc, char **argv, ...)
 	if (fd == -1) {
 		if (errno != ENOENT) {
 			printf("%% open %s: %s\n", tmpfile, strerror(errno));
-			return;
+			return -1;
 		}
 		fd = open(tmpfile, O_RDWR | O_CREAT | O_EXCL, daemons->mode);
 		if (fd == -1) {
 			printf("%% open %s: %s\n", tmpfile, strerror(errno));
-			return;
+			return -1;
 		}
 
 		/* Populate temporary file with current crontab. */
@@ -1162,12 +1205,15 @@ edit_crontab(int argc, char **argv, ...)
 		crontab_argv[3] = tmpfile;
 		if (cmdargs(CRONTAB, crontab_argv) != 0)
 			printf("%% failed to install crontab\n");
+		else
+			ret = 0;
 	}
 done:
 	close(fd);
+	return ret;
 }
 
-void
+int
 install_crontab(int argc, char **argv, ...)
 {
 	char *name = argv[0];
@@ -1184,27 +1230,35 @@ install_crontab(int argc, char **argv, ...)
 
 	if (!found) {
 		printf("%% install_crontab internal error\n");
-		return;
+		return -1;
 	}
 
 	snprintf(tmpfile, sizeof(tmpfile), "%s.%d", daemons->tmpfile,
 	    cli_rtable);
 
-	if ((fd = acq_lock(tmpfile)) > 0) {
-		crontab_argv[3] = tmpfile;
-		if (cmdargs(CRONTAB, crontab_argv) != 0)
-			printf("%% failed to install crontab\n");
-		rls_lock(fd);
+	if ((fd = acq_lock(tmpfile)) <= 0) {
+		printf("%% %s configuration is locked for editing\n",
+		    daemons->propername);
+		return -1;
 	}
+	crontab_argv[3] = tmpfile;
+	if (cmdargs(CRONTAB, crontab_argv) != 0) {
+		printf("%% failed to install crontab\n");
+		rls_lock(fd);
+		return -1;
+	}
+	rls_lock(fd);
+	return 0;
 }
 
-void
+int
 edit_motd(int argc, char **argv, ...)
 {
-	call_editor(argc, argv);
+	/* no test */
+	return call_editor(argc, argv, (char **)NULL);
 }
 
-void
+int
 call_editor(int argc, char **argv, ...)
 {
 	char *name = argv[0];
@@ -1227,12 +1281,12 @@ call_editor(int argc, char **argv, ...)
 
 	if (!found) {
 		printf("%% call_editor internal error\n");
-		return;
+		return -1;
 	}
 
 	snprintf(tmpfile, sizeof(tmpfile), "%s.%d", daemons->tmpfile,
 	    cli_rtable);
-	edit_file(tmpfile, daemons->mode, daemons->propername, args);
+	return edit_file(tmpfile, daemons->mode, daemons->propername, args);
 }
 
 static int
@@ -1364,6 +1418,10 @@ done:
 	return ret;
 }
 
+/*
+ * Edit tmpfile and test it with args: 0, or -1 if it could not, or the
+ * editor or the test failed, which say why
+ */
 int
 edit_file(char *tmpfile, mode_t mode, char *propername, char **args)
 {
@@ -1393,7 +1451,7 @@ edit_file(char *tmpfile, mode_t mode, char *propername, char **args)
 		if (ret == 0 && chmod(tmpfile, mode) == -1) {
 			printf("%% chmod %o %s: %s\n",
 			    mode, tmpfile, strerror(errno));
-			ret = 1;
+			ret = -1;
 		}
 		if (ret == 0 && args != NULL)
 			ret = cmdargs(args[0], args);
@@ -1402,10 +1460,10 @@ edit_file(char *tmpfile, mode_t mode, char *propername, char **args)
 	} else {
 		printf ("%% %s configuration is locked for editing\n",
 		    propername);
-		return 1;
+		return -1;
 	}
 
-	return ret;
+	return ret == 0 ? 0 : -1;
 }
 
 int
@@ -1463,13 +1521,13 @@ rmtemp(char *file)
 			    file, strerror(errno));
 }
 
-void
+int
 start_dhcpd(int argc, char **argv, ...)
 {
 	struct if_nameindex *ifn_list, *ifnp;
 	char **dhcpd_args = NULL;
 	size_t niface = 0;
-	int ifs, i;
+	int ifs = -1, i, ret = -1;
 	char leasedb[PATH_MAX];
 
 	/*
@@ -1484,7 +1542,7 @@ start_dhcpd(int argc, char **argv, ...)
 	 */
 	if ((ifn_list = if_nameindex()) == NULL) {
 		printf("%% %s: if_nameindex failed\n", __func__);
-		return;
+		return -1;
 	}
 
 	if ((ifs = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
@@ -1539,8 +1597,11 @@ start_dhcpd(int argc, char **argv, ...)
 	}
 	dhcpd_args[i] = NULL;
 
-	cmdargs(argv[0], dhcpd_args);
+	ret = ctl_exec(argv[0], dhcpd_args);
 done:
+	if (ifs != -1)
+		close(ifs);
 	if_freenameindex(ifn_list);
 	free(dhcpd_args);
+	return ret;
 }
