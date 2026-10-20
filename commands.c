@@ -74,6 +74,7 @@
 #include "settings.h"
 #include "facts.h"
 #include "showfacts.h"
+#include "session.h"
 
 char hname[HSIZE];
 char hbuf[MAXHOSTNAMELEN];	/* host name */
@@ -84,6 +85,13 @@ struct intlist *whichlist;
 pid_t	child;
 static int in_rc;		/* cmdrc() is reading a file */
 static int rc_head;		/* and its line is a block's head */
+
+/* what of this file's a session keeps (session.c) */
+struct sglobal commands_sglobals[] = {
+	SGLOBAL(hname), SGLOBAL(ifname), SGLOBAL(next_ifname),
+	SGLOBAL(whichlist), SGLOBAL(in_rc), SGLOBAL(rc_head),
+	{ NULL }
+};
 
 extern volatile sig_atomic_t caught_sigwinch;
 

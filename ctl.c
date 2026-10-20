@@ -34,6 +34,7 @@
 #include "ctl.h"
 #include "stringlist.h"
 #include "settings.h"
+#include "session.h"
 
 /* table variable (for pkill usage) */
 static char table[16];
@@ -65,6 +66,12 @@ static int ctl_cand_follow(struct daemons *, char *, int);
 /* the rules file an rc file is writing, and its name */
 static FILE *rulesfile;
 static char tmpfile_cur[PATH_MAX];
+
+/* what of this file's a session keeps (session.c) */
+struct sglobal ctl_sglobals[] = {
+	SGLOBAL(rulesfile), SGLOBAL(tmpfile_cur),
+	{ NULL }
+};
 
 /* master daemon list */
 struct daemons ctl_daemons[] = {

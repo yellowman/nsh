@@ -1,0 +1,178 @@
+# Every writable global of nsh's code, as nm(1) names it (a function's
+# static as function.name), by file, and what it is. nsh-checks' globals
+# check fails on one not listed, or listed and gone.
+#
+#	session	a session's: in an SGLOBAL table (session.c), kept in its
+#		struct session_state and swapped by session_enter() and
+#		session_leave()
+#	process	the process's own, the same for every session
+#	scratch	written and read within one request
+#	table	initialized, and written by nothing, or only once for the
+#		process by what fills it in
+#
+# file		class	names
+arp.c		process	rtmsg_arp.seq s
+arp.c		scratch	ether_str.hbuf expire_time sdl_m sec2str.result
+			sin_m
+arp.c		table	arp_fields blank_sdl blank_sin ifp_m kind_arp
+			so_1mask
+autoconf.c	table	dhcp_fields dhcpns_fields dhcproute_fields
+			kind_dhcplease kind_dhcpns kind_dhcproute
+			kind_slaacaddr kind_slaacdfr kind_slaacdns
+			kind_slaacif kind_slaacprefix kind_slaacra
+			kind_slaacrdns slaac_fields slaacaddr_fields
+			slaacdfr_fields slaacdns_fields
+			slaacprefix_fields slaacra_fields
+			slaacrdns_fields
+bgpcommands.c	session	bgpd_socket_path
+bgpcommands.c	table	bgcs
+bridge.c	process	bridge_facts_init.states
+bridge.c	table	brds bridge_fields bridgeaddr_fields
+			bridgemember_fields brlists brnames brper brps
+			brvals brvs kind_bridge kind_bridgeaddr
+			kind_bridgemember stpstates
+candidate.c	session	cand cand_base cand_journal cand_rtable
+			candidate
+candidate.c	scratch	cand_listowner.owner
+candidate.c	table	candidate_sglobals
+carp.c		scratch	carp_facts.carpdev
+carp.c		table	carp_bal_modes carp_facts_init.carp_states
+			carp_fields intcs kind_carp
+client.c	process	nshd_intr
+commands.c	session	hname ifname in_rc next_ifname rc_head whichlist
+commands.c	process	child
+commands.c	scratch	hbuf
+commands.c	table	Bridgelist Bridgelist_nitems Intlist
+			Intlist_nitems ahtab arpdowntab arphelp
+			arptimeouttab bgphelp bridgehelp carploggingtab
+			carppreempttab carptab clearhelp cmdtab cmdtab2
+			cmdtab_nitems commands_sglobals commithelp
+			confighelp crontabhelp ddbhelp ddbtab
+			defaultttltab demotecountertab dhcphelp dhcs
+			directedbroadcaststab disablehelp dohelp dvcs
+			dvmrphelp editinghelp eics eigrphelp enablehelp
+			enabletab encdebugtab esptab espudpencapporttab
+			espudpencaptab etheriptab exithelp flushhelp
+			flushlist flushtab forwardingtab fpfs
+			ftpproxyhelp gretab grouphelp grouptab halthelp
+			helphelp hostname_fields hostnamehelp
+			ifstatehelp ikcs ikehelp inethelp interfacehelp
+			ip6help ip6tab ipcomptab iphelp ipiptab
+			ipsecallocstab ipsecbytestab
+			ipsecexpireacquiretab ipsecfirstusetab ipsechelp
+			ipsecinvalidlifetab ipsecpfstab
+			ipsecsoftallocstab ipsecsoftbytestab
+			ipsecsoftfirstusetab ipsecsofttimeouttab
+			ipsectimeouttab iptab iscs kind_hostname
+			ldaphelp ldcs ldphelp lics loggerhelp manhelp
+			maxqueuetab mforwardingtab motdhelp mplshelp
+			mplstab mtudisctab mtudisctimeouttab
+			multipathtab nameserverhelp ndphelp nppphelp
+			nreboothelp ntphelp os6cs oscs ospf6help
+			ospfhelp pfcs pfhelp ping6help pinghelp
+			pipexhelp pipextab portfirsttab porthifirsttab
+			porthilasttab portlasttab powerdownhelp prots
+			quithelp radhelp relayhelp resolvhelp rics
+			riphelp rlcs rollbackhelp routehelp rtablehelp
+			rtabletab sasynchelp saveenvhelp secrettab
+			sendredirectstab setenvhelp shellhelp showarptab
+			showhelp showlist showndptab showroutetab
+			showvlantab smcs smtphelp snmphelp
+			sourceroutetab sshdhelp sshhelp stts systatcs
+			telnethelp tftphelp tftpproxyhelp tracert6help
+			tracerthelp unsetenvhelp verbosehelp wccptab
+			whohelp
+commit.c	table	ifrefs
+complete.c	process	complete.word complete_nocmd.nocmdtab
+			complete_nocmd.nocmdtab_nitems
+			complete_noint.nobridgetab
+			complete_noint.nointtab
+			complete_noint.notab_nitems
+conf.c		table	confrows confwords defllpriority defmtus
+			defprios intconf_rows rtflags
+ctl.c		session	rulesfile tmpfile_cur
+ctl.c		scratch	table
+ctl.c		table	ctl_bgp ctl_crontab ctl_daemons ctl_dhcp
+			ctl_dvmrp ctl_eigrp ctl_ftpproxy ctl_ifstate
+			ctl_ike ctl_inet ctl_ipsec ctl_ldap ctl_ldp
+			ctl_motd ctl_nppp ctl_ntp ctl_ospf ctl_ospf6
+			ctl_pf ctl_rad ctl_relay ctl_resolv ctl_rip
+			ctl_sasync ctl_sglobals ctl_smtp ctl_snmp
+			ctl_sshd ctl_tftp ctl_tftpproxy
+genget.c	process	ambiguous
+if.c		session	imrif imrsave
+if.c		scratch	get_linkstate.buf if_facts.ifdescr
+			if_facts.parent if_facts.ps if_facts.ssid
+if.c		table	address_fields if_sglobals iftypes
+			interface_fields intip6help intiphelp
+			intpwe3.pwe3opts ip6optlist ip_fields ip_flags6
+			ip_sources kind_address kind_interface kind_ip
+			kind_vlan mplscs vlan_fields
+kernel.c	table	kcloners
+kroute.c	process	rtmsg.seq sigflag
+kroute.c	scratch	ip_route.line_kroute lookup_kept
+			lookup_record.gwname lookup_record.ifpname
+			lookup_record.label lookup_v m_rtmsg
+			mylink_ntoa.obuf rt_metrics rtm_addrs rtm_inits
+			so_dst so_gate so_ifp so_mask
+kroute.c	table	addrnames hexlist ifnetflags kind_lookup
+			lookup_fields metricnames msgtypes routeflags
+main.c		session	bridge cli_rtable config_mode priv verbose
+main.c		process	caught_sigwinch cursor_pos editing elc eli elp
+			ev histc histi interactive_mode nsh_env pid
+			privexec toplevel
+main.c		table	vers
+makeargv.c	session	cursor_argc cursor_argo line margc margv
+			saveline
+media.c		table	ifm_option_descriptions ifm_status_descriptions
+			ifm_subtype_descriptions ifm_type_descriptions
+			kind_media media_fields media_roles
+more.c		process	oldtty winsize
+ndp.c		process	rtmsg_ndp.seq rtsock
+ndp.c		scratch	conf_ndp_entry.nbi expire_time flags
+			getnbrinfo.nbi host_buf rtget_ndp.ksin sdl_m
+			sin_m
+ndp.c		table	blank_sdl blank_sin ifp_m kind_ndp ndp_fields
+			ndp_states
+nopt.c		scratch	nopterr noptind
+ppp.c		table	intpppoe.authopts intsppp.authopts
+			intsppp.peeropts spppproto
+prompt.c	session	prompt saved_prompt
+route.c		table	route.routeflags
+session.c	process	fresh total
+session.c	table	session_sglobals sglobals
+settings.c	table	bridge_settings contexts if_settings
+			rtable_settings top_settings
+show.c		process	domain routename.first
+show.c		scratch	any_ntoa.obuf line_show routename.name
+show.c		table	flow_directions flow_fields flow_satypes
+			flow_types kind_flow kind_route route_fields
+showfacts.c	process	facts_from facts_init.done
+showfacts.c	table	kind_message kinds message_fields
+stats.c		table	ah_fields carp_fields esp_fields facilitynames
+			groups icmp_fields icmpnames igmp_fields
+			ip_fields ipcomp_fields ipip_fields mb_fields
+			mbtypes pf_fcounters pf_fields pf_reasons
+			pfsync_fields prioritynames rt_fields sflag
+			tcp_fields tcpstates udp_fields
+sysctl.c	table	ddbsysctls ip6sysctls ipsysctls mplssysctls
+			pipexsysctls sysctls
+trunk.c		scratch	trunk_facts.parent
+trunk.c		table	kind_trunkport tpr trunkport_fields
+tunnel.c	table	tunnelopts
+umb.c		scratch	umb_val2descr.sval
+umb.c		table	cand_umb.fn kind_umb kind_umbdns umb_actstate
+			umb_cellclasses umb_classalias umb_dataclass
+			umb_fields umb_istate umb_nwerrors umb_pinstates
+			umb_pktstate umb_regstate umb_simstate umbcs
+			umbdns_fields
+utils.c		scratch	format_k.idx format_k.retarray
+			format_time.result
+version.c	table	kind_version version_fields
+wg.c		scratch	wg_aip wg_facts.public wg_interface wg_peer
+			wgdata
+wg.c		table	intwgpeer.wgpeeropts kind_wgpeer wg_names wgcs
+			wgpeer_fields
+who.c		process	utmpfd
+who.c		scratch	output.now
+who.c		table	kind_login login_fields

@@ -37,7 +37,7 @@ extern char saveline[1024];	/* command line */
 #define NARGS  (sizeof(line)/2)	/* max arguments in char line[] */
 extern char line[1024];		/* command line for makeargv() */
 extern int  margc;		/* makeargv() arg count */
-extern char *margv[];		/* makeargv() args */
+extern char *margv[NARGS];	/* makeargv() args */
 extern int verbose;		/* is verbose mode on? */
 extern int editing;		/* is command line editing mode on? */
 extern int interactive_mode;	/* are we in interactive mode? */

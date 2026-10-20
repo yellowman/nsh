@@ -56,6 +56,7 @@
 #include "settings.h"
 #include "facts.h"
 #include "showfacts.h"
+#include "session.h"
 
 char *iftype(int int_type);
 const char *get_linkstate(int, int);
@@ -76,6 +77,12 @@ int show_vlan(int, int);
 
 static struct ifmpwreq imrsave;
 static char imrif[IFNAMSIZ];
+
+/* what of this file's a session keeps (session.c) */
+struct sglobal if_sglobals[] = {
+	SGLOBAL(imrsave), SGLOBAL(imrif),
+	{ NULL }
+};
 
 static const struct {
 	char *name;

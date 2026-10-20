@@ -56,6 +56,7 @@
 #include "conftree.h"
 #include "settings.h"
 #include "kernel.h"
+#include "session.h"
 
 int candidate;				/* configure private is on */
 int cand_rtable;			/* the rtable its lines are for */
@@ -63,6 +64,13 @@ int cand_rtable;			/* the rtable its lines are for */
 static struct cnode *cand;		/* this session's view of it */
 static struct cjournal *cand_journal;	/* the changes it made */
 static struct cnode *cand_base;		/* what rollback N loaded, or NULL */
+
+/* what of this file's a session keeps (session.c) */
+struct sglobal candidate_sglobals[] = {
+	SGLOBAL(candidate), SGLOBAL(cand_rtable), SGLOBAL(cand),
+	SGLOBAL(cand_journal), SGLOBAL(cand_base),
+	{ NULL }
+};
 
 static int cand_record(char *, struct sedit *);
 static int cand_rtblock(char *, size_t, int);
