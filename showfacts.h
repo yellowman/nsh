@@ -63,8 +63,11 @@ int		 facts_more(struct facts_answer *, struct facts_out *, int);
 void		 facts_answer_free(struct facts_answer *);
 int		 facts_show(FILE *, const char *, ...)
 		    __attribute__((__format__ (printf, 2, 3)));
-int		 facts_streams(struct facts_answer *);
-void		 facts_stream(struct facts_answer *, void (*)(void));
+
+/* what nshd's system streams, from a child: a program, or dhcpd's leases */
+#define FACTS_PROGRAM	1
+#define FACTS_LEASES	2
+int		 facts_streams(struct facts_answer *, char ***, int *);
 
 /* each kind, for the record it is and the renderer that knows it */
 void		 facts_init(void);

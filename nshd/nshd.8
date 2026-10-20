@@ -70,10 +70,13 @@ What a daemon's control program prints for a show, and the DHCP
 leases, a child of its own prints, and system streams it only as fast
 as the client reads it; the child, and its process group, are killed
 if the client goes first.
-A control program runs as root, as its daemon's control socket,
+The program is the one nsh's tables name for the show, never one a
+client names, and the child runs it as _nshcheck, unless system names
+it as one that keeps root: a daemon's control program, as its control
+socket,
 .Pa /dev/pf
-and PF_KEY are root's; the child that prints the leases opens them,
-then becomes _nshcheck.
+and PF_KEY are root's.
+The child that prints the leases opens them, then becomes _nshcheck.
 system is a session of its own: when it goes, the parent kills every
 process left in that session, and every process of _nshcheck's,
 before another system starts.

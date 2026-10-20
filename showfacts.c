@@ -514,7 +514,8 @@ bad:
 int
 facts_more(struct facts_answer *a, struct facts_out *o, int budget)
 {
-	int	 r = 0;
+	char	**args;
+	int	  r = 0;
 
 	if (a->done)
 		return (0);
@@ -591,72 +592,40 @@ facts_more(struct facts_answer *a, struct facts_out *o, int budget)
 		r = autoconf_facts(o, a->name[0] != '\0' ? a->name : NULL);
 		break;
 	case ANS_PROGRAM:
+		/* as nsh runs a program, and as it pages a file */
+		if ((args = prot1_args(a->prog, a->args, a->n - 4, a->w + 4,
+		    a->table)) != NULL)
+			cmdargs(args[0], args);
+		break;
 	case ANS_LEASES:
-		facts_stream(a, NULL);
+		more(DHCPLEASES);
 		break;
 	}
 	a->done = 1;
 	return (r == -1 ? -1 : 0);
 }
 
-/* whether a's show is text nshd's system streams, from a child */
-int
-facts_streams(struct facts_answer *a)
-{
-	return (a->type == ANS_PROGRAM || a->type == ANS_LEASES);
-}
-
 /*
- * a's text, to stdout, as nsh printed it: in nsh, drop NULL, the
- * program run as nsh runs one, and the leases paged; in the child of
- * nshd's system whose stdout is the stream, the program in its place,
- * and the leases as they are, read once the child has called drop to
- * give up root. A program keeps root: its daemon's control socket is
- * root's, as are /dev/pf and PF_KEY
+ * Whether a's show is text nshd's system streams, from a child, and
+ * what: FACTS_PROGRAM, the program and its arguments in *argv, which
+ * are a's, and the routing table it runs in in *table; or
+ * FACTS_LEASES. 0 if it is not, or -1 if a's words do not fill the
+ * program's arguments, said why
  */
-void
-facts_stream(struct facts_answer *a, void (*drop)(void))
+int
+facts_streams(struct facts_answer *a, char ***argv, int *table)
 {
-	char	**args, buf[8192];
-	size_t	  n;
-	FILE	 *f;
-
 	switch (a->type) {
 	case ANS_PROGRAM:
-		if ((args = prot1_args(a->prog, a->args, a->n - 4, a->w + 4,
+		if ((*argv = prot1_args(a->prog, a->args, a->n - 4, a->w + 4,
 		    a->table)) == NULL)
-			break;
-		if (drop == NULL) {
-			cmdargs(args[0], args);
-			break;
-		}
-		if (nsh_setrtable(a->table) != 0)
-			break;
-		execv(args[0], args);
-		printf("%% exec '%s' failed: %s\n", args[0], strerror(errno));
-		break;
+			return (-1);
+		*table = a->table;
+		return (FACTS_PROGRAM);
 	case ANS_LEASES:
-		/* more() measures lines by a terminal a child has not */
-		if (drop == NULL) {
-			more(DHCPLEASES);
-			break;
-		}
-		/* dhcpd's, 0640 */
-		if ((f = fopen(DHCPLEASES, "r")) == NULL) {
-			if (errno == ENOENT)
-				printf("%% File %s not found\n", DHCPLEASES);
-			else
-				printf("%% more: fopen(%s): %s\n", DHCPLEASES,
-				    strerror(errno));
-			break;
-		}
-		drop();
-		while ((n = fread(buf, 1, sizeof(buf), f)) > 0)
-			fwrite(buf, 1, n, stdout);
-		fclose(f);
-		break;
+		return (FACTS_LEASES);
 	default:
-		break;
+		return (0);
 	}
 }
 

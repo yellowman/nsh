@@ -33,9 +33,12 @@
  *
  * system is a session of its own, which parent clears when system goes,
  * and each stream's child leads a process group of its own, which is
- * killed when the stream stops. A child keeps root for a program, as
- * its daemon's control socket is root's; for the leases, it opens them
- * and becomes NSHD_CHECK_USER.
+ * killed when the stream stops. What a child runs is an operation, and
+ * the operation says who the child is: a show's program runs as
+ * NSHD_CHECK_USER, but for the programs root_programs names, each an
+ * exception that keeps root; dhcpd's leases are opened as root and
+ * copied as NSHD_CHECK_USER. The program, and its arguments, are nsh's
+ * table's for the show's words; no request names a path.
  */
 
 #include <sys/types.h>
@@ -61,12 +64,24 @@
 #include "nshd.h"
 #include "stringlist.h"
 #include "externs.h"
+#include "ctl.h"
 #include "facts.h"
 #include "showfacts.h"
 
 #define SYS_BATCH	256	/* records made before what is printed is sent */
 #define SYS_STREAMS	16	/* streams at once, at most */
 #define SYS_WINDOW	16	/* messages a stream sends its client unread */
+
+/*
+ * The programs a show runs that keep root, each an exception: a
+ * daemon's control socket is 0660 root:wheel, smtpd answers its shows
+ * only to euid 0, /dev/pf is 0600 and PF_KEY root's. Any other runs as
+ * NSHD_CHECK_USER
+ */
+static const char *root_programs[] = {
+	BGPCTL, DVMRPCTL, EIGRPCTL, IKECTL, LDAPCTL, LDPCTL, OSPF6CTL,
+	OSPFCTL, RELAYCTL, RIPCTL, SMTPCTL, PFCTL, IPSECCTL
+};
 
 /* a show's text, which a child prints, as messages to its client */
 struct stream {
@@ -97,8 +112,9 @@ static void	system_end(uint32_t, int32_t, const char *, ...)
 		    __attribute__((__format__ (printf, 3, 4)));
 static void	system_emit(void *, const void *, size_t);
 static void	system_flush(uint32_t);
-static void	system_stream(uint32_t, struct facts_answer *);
-static __dead void system_child(int, struct facts_answer *);
+static void	system_stream(uint32_t, int, char **, int);
+static __dead void system_child(int, int, char **, int);
+static int	system_root(const char *);
 static void	system_drop(void);
 static void	system_stream_read(int, short, void *);
 static void	system_stream_more(uint32_t);
@@ -266,19 +282,26 @@ system_show(uint32_t id, char *words)
 {
 	struct facts_answer	*a;
 	struct facts_out	 o;
-	int			 more = 1;
+	char			**argv;
+	int			 more = 1, op, table;
 
 	printed(NULL);
 	if ((a = facts_answer(words)) == NULL) {
 		system_end(id, 1, "%% show %s: not answered by nshd\n", words);
 		return;
 	}
-	if (facts_streams(a)) {
-		system_stream(id, a);
+	facts_out_init(&o, system_emit, &id);
+	if ((op = facts_streams(a, &argv, &table)) != 0) {
+		/* -1: the words do not fill the program's, said why */
+		if (op == -1) {
+			printed(&o);
+			system_flush(id);
+			system_end(id, 1, NULL);
+		} else
+			system_stream(id, op, argv, table);
 		facts_answer_free(a);
 		return;
 	}
-	facts_out_init(&o, system_emit, &id);
 	while (more == 1) {
 		more = facts_more(a, &o, SYS_BATCH);
 		if (printed(&o) == -1)
@@ -335,9 +358,9 @@ system_flush(uint32_t id)
 	nunits = 0;
 }
 
-/* a's text, which a child prints, streamed to request id's client */
+/* op's text, which a child prints, streamed to request id's client */
 static void
-system_stream(uint32_t id, struct facts_answer *a)
+system_stream(uint32_t id, int op, char **argv, int table)
 {
 	struct stream	*s;
 	int		 fds[2];
@@ -361,7 +384,7 @@ system_stream(uint32_t id, struct facts_answer *a)
 		free(s);
 		return;
 	case 0:
-		system_child(fds[1], a);
+		system_child(fds[1], op, argv, table);
 	}
 	/* as the child does, so neither waits on the other */
 	setpgid(s->pid, s->pid);
@@ -376,10 +399,13 @@ system_stream(uint32_t id, struct facts_answer *a)
 	nstreams++;
 }
 
-/* the child: a's text, to fd, with nothing else of system's */
+/* the child: op's text, to fd, with nothing else of system's */
 static __dead void
-system_child(int fd, struct facts_answer *a)
+system_child(int fd, int op, char **argv, int table)
 {
+	char	 buf[8192];
+	size_t	 n;
+	FILE	*f;
 	int	 null;
 
 	setpgid(0, 0);
@@ -394,9 +420,45 @@ system_child(int fd, struct facts_answer *a)
 	    dup2(null, STDIN_FILENO) == -1)
 		_exit(127);
 	closefrom(STDERR_FILENO + 1);
-	facts_stream(a, system_drop);
+	switch (op) {
+	case FACTS_PROGRAM:
+		if (nsh_setrtable(table) != 0)
+			break;
+		if (!system_root(argv[0]))
+			system_drop();
+		execv(argv[0], argv);
+		printf("%% exec '%s' failed: %s\n", argv[0], strerror(errno));
+		break;
+	case FACTS_LEASES:
+		/* dhcpd's, 0640 */
+		if ((f = fopen(DHCPLEASES, "r")) == NULL) {
+			if (errno == ENOENT)
+				printf("%% File %s not found\n", DHCPLEASES);
+			else
+				printf("%% more: fopen(%s): %s\n", DHCPLEASES,
+				    strerror(errno));
+			break;
+		}
+		system_drop();
+		while ((n = fread(buf, 1, sizeof(buf), f)) > 0)
+			fwrite(buf, 1, n, stdout);
+		fclose(f);
+		break;
+	}
 	fflush(stdout);
 	_exit(0);
+}
+
+/* whether program keeps root, an exception root_programs names */
+static int
+system_root(const char *program)
+{
+	size_t	 i;
+
+	for (i = 0; i < sizeof(root_programs) / sizeof(root_programs[0]); i++)
+		if (strcmp(program, root_programs[i]) == 0)
+			return (1);
+	return (0);
 }
 
 /* a stream's child, once it holds what it needed root for */
