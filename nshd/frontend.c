@@ -16,11 +16,11 @@
 
 /*
  * frontend: the read-write socket. Each client is a session; what it
- * sends goes to config, through relay, under the session's id, and what
+ * sends goes to config, on their pipe, under the session's id, and what
  * config answers for that id goes back to it, and config learns each
  * time the client has read all of it. frontend checks only that a
- * message is one a client may send, and is whole; it reads no
- * configuration.
+ * message is one a client may send, or config, and is whole; it reads
+ * no configuration.
  */
 
 #include <sys/types.h>
@@ -39,36 +39,40 @@
 #include "control.h"
 
 static struct imsgev	*iev_relay;
-static int		 config_down;
 
 static void	frontend_dispatch_relay(int, short, void *);
+static void	frontend_dispatch_config(int, short, void *);
+static void	frontend_forget_config(void);
 static int	frontend_client(struct ctl_conn *, struct imsg *);
 static void	frontend_gone(struct ctl_conn *);
 static int	frontend_written(struct ctl_conn *);
 static int	frontend_answer(struct ctl_conn *, struct imsg *);
+
+static struct link	 config = {
+	PROC_CONFIG, frontend_dispatch_config, frontend_forget_config
+};
 
 void
 frontend(int debug, int verbose)
 {
 	child_start("frontend", debug, verbose);
 	privdrop(PROC_FRONTEND);
-	if (pledge("stdio unix", NULL) == -1)
+	if (pledge("stdio unix recvfd", NULL) == -1)
 		fatal("pledge");
 
 	if ((iev_relay = imsgev_new(3, frontend_dispatch_relay, 0)) == NULL)
 		fatal(NULL);
+	links_init(&config, 1, iev_relay);
 	event_dispatch();
 	exit(0);
 }
 
+/* relay's word that frontend may start */
 static void
 frontend_dispatch_relay(int fd, short event, void *arg)
 {
 	struct imsgev		*iev = arg;
-	struct ctl_conn		*c;
 	struct imsg		 imsg;
-	struct ibuf		 b;
-	struct nshd_restart	 r;
 	ssize_t			 n;
 
 	if (imsgev_io(iev, event) == -1)
@@ -79,22 +83,42 @@ frontend_dispatch_relay(int fd, short event, void *arg)
 			fatal("imsgbuf_get");
 		if (n == 0)
 			break;
-		switch (imsg_get_type(&imsg)) {
-		/* its socket is fd 4, from parent */
-		case IMSG_STARTUP:
-			if (control_listen(4, frontend_client, frontend_gone,
-			    frontend_written) == -1)
-				fatalx("cannot listen on %s", NSHD_SOCKET);
+		/* its socket is fd 5, from parent */
+		if (imsg_get_type(&imsg) != IMSG_STARTUP)
+			fatalx("relay sent imsg %u, which it may not",
+			    imsg_get_type(&imsg));
+		if (control_listen(5, frontend_client, frontend_gone,
+		    frontend_written) == -1)
+			fatalx("cannot listen on %s", NSHD_SOCKET);
+		imsg_free(&imsg);
+	}
+	imsg_event_add(iev);
+}
+
+/* config's answers, to the session each names, if there */
+static void
+frontend_dispatch_config(int fd, short event, void *arg)
+{
+	struct imsgev		*iev = arg;
+	struct ctl_conn		*c;
+	struct imsg		 imsg;
+	struct ibuf		 b;
+	uint32_t		 type;
+	ssize_t			 n;
+
+	if (imsgev_io(iev, event) == -1) {
+		link_broken(&config, "closed its pipe");
+		return;
+	}
+
+	for (;;) {
+		if ((n = imsgbuf_get(&iev->ibuf, &imsg)) == -1) {
+			link_broken(&config, "sent what imsg cannot read");
+			return;
+		}
+		if (n == 0)
 			break;
-		case IMSG_RESTART:
-			/* config forgot every session: so do their clients */
-			if (imsg_get_data(&imsg, &r, sizeof(r)) == -1 ||
-			    r.proc != PROC_CONFIG)
-				fatalx("%s: bad IMSG_RESTART", __func__);
-			control_close_all();
-			config_down = r.down;
-			break;
-		/* config's answers, to the session each names, if there */
+		switch (type = imsg_get_type(&imsg)) {
 		case IMSG_CTL_HELLO:
 		case IMSG_CTL_RESULT:
 			/* the request's end */
@@ -105,18 +129,26 @@ frontend_dispatch_relay(int fd, short event, void *arg)
 		case IMSG_CTL_FACTS:
 			if (imsg_get_ibuf(&imsg, &b) == -1)
 				fatal("%s", __func__);
-			if (control_reply(imsg_get_id(&imsg),
-			    imsg_get_type(&imsg), ibuf_data(&b),
-			    ibuf_size(&b)) == -1)
+			if (control_reply(imsg_get_id(&imsg), type,
+			    ibuf_data(&b), ibuf_size(&b)) == -1)
 				control_drop(imsg_get_id(&imsg));
 			break;
 		default:
-			log_debug("%s: unexpected imsg %u", __func__,
-			    imsg_get_type(&imsg));
+			imsg_free(&imsg);
+			link_broken(&config, "sent imsg %u, which it may not",
+			    type);
+			return;
 		}
 		imsg_free(&imsg);
 	}
 	imsg_event_add(iev);
+}
+
+/* config started again, or is down: it forgot every session */
+static void
+frontend_forget_config(void)
+{
+	control_close_all();
 }
 
 /*
@@ -132,7 +164,7 @@ frontend_client(struct ctl_conn *c, struct imsg *imsg)
 	if (c->pending)
 		return (-1);
 	c->pending = 1;
-	if (config_down)
+	if (config.down)
 		return (frontend_answer(c, imsg));
 	switch (imsg_get_type(imsg)) {
 	case IMSG_CTL_HELLO:
@@ -140,16 +172,16 @@ frontend_client(struct ctl_conn *c, struct imsg *imsg)
 			return (-1);
 		peer.uid = c->uid;
 		peer.gid = c->gid;
-		if (imsg_compose_event(iev_relay, IMSG_CTL_HELLO, c->id, 0,
-		    -1, &peer, sizeof(peer)) == -1)
+		if (link_compose(&config, IMSG_CTL_HELLO, c->id, &peer,
+		    sizeof(peer)) == -1)
 			fatal("%s", __func__);
 		return (0);
 	case IMSG_CTL_SHOW:
 		if (imsg_get_data(imsg, &show, sizeof(show)) == -1 ||
 		    memchr(show.words, '\0', sizeof(show.words)) == NULL)
 			return (-1);
-		if (imsg_compose_event(iev_relay, IMSG_CTL_SHOW, c->id, 0,
-		    -1, &show, sizeof(show)) == -1)
+		if (link_compose(&config, IMSG_CTL_SHOW, c->id, &show,
+		    sizeof(show)) == -1)
 			fatal("%s", __func__);
 		return (0);
 	default:
@@ -160,8 +192,7 @@ frontend_client(struct ctl_conn *c, struct imsg *imsg)
 static void
 frontend_gone(struct ctl_conn *c)
 {
-	if (imsg_compose_event(iev_relay, IMSG_CTL_CLOSE, c->id, 0, -1,
-	    NULL, 0) == -1)
+	if (link_compose(&config, IMSG_CTL_CLOSE, c->id, NULL, 0) == -1)
 		fatal("%s", __func__);
 }
 
@@ -170,8 +201,7 @@ static int
 frontend_written(struct ctl_conn *c)
 {
 	if (imsgbuf_queuelen(&c->iev.ibuf) == 0 &&
-	    imsg_compose_event(iev_relay, IMSG_CTL_READ, c->id, 0, -1, NULL,
-	    0) == -1)
+	    link_compose(&config, IMSG_CTL_READ, c->id, NULL, 0) == -1)
 		fatal("%s", __func__);
 	return (0);
 }

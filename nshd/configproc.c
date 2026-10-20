@@ -15,15 +15,16 @@
  */
 
 /*
- * config: the sessions, and what they ask of kernel, all through relay.
- * Each request to kernel has an id of its own, with config's generation
- * in its top bits, so an answer meant for a config before this one is
- * known for what it is; kernel's answers for it go to the session that
- * asked, if that session is still there, its facts passed on unread.
- * kernel learns when a session's client has read all it was sent, and
- * when the session is gone, so it stops what it streams the session.
- * When frontend starts again, every session is gone; when kernel does,
- * what it was asked is lost.
+ * config: the sessions, from frontend, and what they ask of kernel,
+ * each on its own pipe. Each request to kernel has an id of its own,
+ * with config's generation in its top bits, so an answer meant for a
+ * config before this one is known for what it is; kernel's answers for
+ * it go to the session that asked, if that session is still there, its
+ * facts passed on unread. kernel learns when a session's client has
+ * read all it was sent, and when the session is gone, so it stops what
+ * it streams the session. When frontend starts again, every session is
+ * gone; when kernel does, what it was asked is lost. A peer that sends
+ * what it may not, or sends it wrong, is reported, as it went wrong.
  */
 
 #include <sys/types.h>
@@ -58,7 +59,6 @@ struct request {
 static TAILQ_HEAD(, session)	sessions = TAILQ_HEAD_INITIALIZER(sessions);
 static TAILQ_HEAD(, request)	requests = TAILQ_HEAD_INITIALIZER(requests);
 static uint32_t			request_id;
-static int			kernel_down;
 
 #define REQUEST_GEN_SHIFT	24	/* generation above, count below */
 #define REQUEST_COUNT		((1U << REQUEST_GEN_SHIFT) - 1)
@@ -66,44 +66,46 @@ static int			kernel_down;
 static struct imsgev	*iev_relay;
 
 static void		 config_dispatch_relay(int, short, void *);
+static void		 config_dispatch_frontend(int, short, void *);
+static void		 config_dispatch_kernel(int, short, void *);
+static void		 config_forget_frontend(void);
+static void		 config_forget_kernel(void);
 static void		 config_show(uint32_t, struct nshd_show *);
 static void		 config_answer(uint32_t, int32_t, const char *, ...)
 			    __attribute__((__format__ (printf, 3, 4)));
-static void		 config_restart(struct nshd_restart *);
 static void		 config_tell(uint32_t, uint32_t);
 static struct session	*session_find(uint32_t);
 static struct request	*request_find(uint32_t);
+
+static struct link	 links[] = {
+#define FRONTEND	0
+	{ PROC_FRONTEND, config_dispatch_frontend, config_forget_frontend },
+#define KERNEL		1
+	{ PROC_KERNEL,	 config_dispatch_kernel,   config_forget_kernel },
+};
 
 void
 configproc(int debug, int verbose)
 {
 	child_start("config", debug, verbose);
 	privdrop(PROC_CONFIG);
-	if (pledge("stdio", NULL) == -1)
+	if (pledge("stdio recvfd", NULL) == -1)
 		fatal("pledge");
 
 	if ((iev_relay = imsgev_new(3, config_dispatch_relay, 0)) == NULL)
 		fatal(NULL);
+	links_init(links, sizeof(links) / sizeof(links[0]), iev_relay);
 	event_dispatch();
 	exit(0);
 }
 
-/* frontend's requests and kernel's answers, through relay */
+/* relay's word of config's generation */
 static void
 config_dispatch_relay(int fd, short event, void *arg)
 {
 	struct imsgev		*iev = arg;
 	struct imsg		 imsg;
-	struct ibuf		 b;
-	struct nshd_peer	 peer;
-	struct nshd_session	 s;
-	struct nshd_show	 show;
-	struct nshd_result	 res;
 	struct nshd_startup	 st;
-	struct nshd_restart	 rs;
-	struct session		*sp;
-	struct request		*r;
-	uint32_t		 id;
 	ssize_t			 n;
 
 	if (imsgev_io(iev, event) == -1)
@@ -114,21 +116,47 @@ config_dispatch_relay(int fd, short event, void *arg)
 			fatal("imsgbuf_get");
 		if (n == 0)
 			break;
+		if (imsg_get_type(&imsg) != IMSG_STARTUP ||
+		    imsg_get_data(&imsg, &st, sizeof(st)) == -1)
+			fatalx("relay sent imsg %u, which it may not",
+			    imsg_get_type(&imsg));
+		request_id = st.generation << REQUEST_GEN_SHIFT;
+		imsg_free(&imsg);
+	}
+	imsg_event_add(iev);
+}
+
+/* frontend's requests, each for a session */
+static void
+config_dispatch_frontend(int fd, short event, void *arg)
+{
+	struct imsgev		*iev = arg;
+	struct link		*l = &links[FRONTEND];
+	struct imsg		 imsg;
+	struct nshd_peer	 peer;
+	struct nshd_session	 s;
+	struct nshd_show	 show;
+	struct session		*sp;
+	uint32_t		 id, type;
+	ssize_t			 n;
+
+	if (imsgev_io(iev, event) == -1) {
+		link_broken(l, "closed its pipe");
+		return;
+	}
+
+	for (;;) {
+		if ((n = imsgbuf_get(&iev->ibuf, &imsg)) == -1) {
+			link_broken(l, "sent what imsg cannot read");
+			return;
+		}
+		if (n == 0)
+			break;
 		id = imsg_get_id(&imsg);
-		switch (imsg_get_type(&imsg)) {
-		case IMSG_STARTUP:
-			if (imsg_get_data(&imsg, &st, sizeof(st)) == -1)
-				fatalx("%s: bad IMSG_STARTUP", __func__);
-			request_id = st.generation << REQUEST_GEN_SHIFT;
-			break;
-		case IMSG_RESTART:
-			if (imsg_get_data(&imsg, &rs, sizeof(rs)) == -1)
-				fatalx("%s: bad IMSG_RESTART", __func__);
-			config_restart(&rs);
-			break;
+		switch (type = imsg_get_type(&imsg)) {
 		case IMSG_CTL_HELLO:
 			if (imsg_get_data(&imsg, &peer, sizeof(peer)) == -1)
-				fatalx("%s: bad IMSG_CTL_HELLO", __func__);
+				goto bad;
 			if ((sp = session_find(id)) == NULL) {
 				if ((sp = calloc(1, sizeof(*sp))) == NULL)
 					fatal(NULL);
@@ -141,15 +169,15 @@ config_dispatch_relay(int fd, short event, void *arg)
 			s.version = NSHD_VERSION;
 			s.id = id;
 			s.priv = 1;
-			if (imsg_compose_event(iev_relay, IMSG_CTL_HELLO, id, 0,
-			    -1, &s, sizeof(s)) == -1)
+			if (link_compose(l, IMSG_CTL_HELLO, id, &s,
+			    sizeof(s)) == -1)
 				fatal("%s", __func__);
 			break;
 		case IMSG_CTL_SHOW:
 			if (imsg_get_data(&imsg, &show, sizeof(show)) == -1 ||
 			    memchr(show.words, '\0', sizeof(show.words)) ==
 			    NULL)
-				fatalx("%s: bad IMSG_CTL_SHOW", __func__);
+				goto bad;
 			config_show(id, &show);
 			break;
 		case IMSG_CTL_CLOSE:
@@ -162,37 +190,79 @@ config_dispatch_relay(int fd, short event, void *arg)
 		case IMSG_CTL_READ:
 			config_tell(id, IMSG_KRN_READ);
 			break;
+		default:
+			goto bad;
+		}
+		imsg_free(&imsg);
+	}
+	imsg_event_add(iev);
+	return;
+ bad:
+	imsg_free(&imsg);
+	link_broken(l, "sent imsg %u, which it may not, or not whole", type);
+}
+
+/* kernel's answers, each for a request */
+static void
+config_dispatch_kernel(int fd, short event, void *arg)
+{
+	struct imsgev		*iev = arg;
+	struct link		*l = &links[KERNEL];
+	struct imsg		 imsg;
+	struct ibuf		 b;
+	struct nshd_result	 res;
+	struct request		*r;
+	uint32_t		 type;
+	ssize_t			 n;
+
+	if (imsgev_io(iev, event) == -1) {
+		link_broken(l, "closed its pipe");
+		return;
+	}
+
+	for (;;) {
+		if ((n = imsgbuf_get(&iev->ibuf, &imsg)) == -1) {
+			link_broken(l, "sent what imsg cannot read");
+			return;
+		}
+		if (n == 0)
+			break;
+		r = request_find(imsg_get_id(&imsg));
+		switch (type = imsg_get_type(&imsg)) {
 		case IMSG_KRN_TEXT:
 		case IMSG_KRN_FACTS:
 			/* for a config before this one, or a request failed */
-			if ((r = request_find(id)) == NULL)
+			if (r == NULL)
 				break;
 			if (imsg_get_ibuf(&imsg, &b) == -1)
-				fatalx("%s: bad kernel answer", __func__);
+				fatal("%s", __func__);
 			if (session_find(r->session) != NULL &&
-			    imsg_compose_event(iev_relay,
-			    imsg_get_type(&imsg) == IMSG_KRN_TEXT ?
-			    IMSG_CTL_OUTPUT : IMSG_CTL_FACTS, r->session, 0, -1,
-			    ibuf_data(&b), ibuf_size(&b)) == -1)
+			    link_compose(&links[FRONTEND],
+			    type == IMSG_KRN_TEXT ? IMSG_CTL_OUTPUT :
+			    IMSG_CTL_FACTS, r->session, ibuf_data(&b),
+			    ibuf_size(&b)) == -1)
 				fatal("%s", __func__);
 			break;
 		case IMSG_KRN_END:
-			if ((r = request_find(id)) == NULL)
-				break;
 			if (imsg_get_data(&imsg, &res, sizeof(res)) == -1)
-				fatalx("%s: bad IMSG_KRN_END", __func__);
+				goto bad;
+			if (r == NULL)
+				break;
 			if (session_find(r->session) != NULL)
 				config_answer(r->session, res.status, NULL);
 			TAILQ_REMOVE(&requests, r, entry);
 			free(r);
 			break;
 		default:
-			log_debug("%s: unexpected imsg %u", __func__,
-			    imsg_get_type(&imsg));
+			goto bad;
 		}
 		imsg_free(&imsg);
 	}
 	imsg_event_add(iev);
+	return;
+ bad:
+	imsg_free(&imsg);
+	link_broken(l, "sent imsg %u, which it may not, or not whole", type);
 }
 
 static void
@@ -204,7 +274,7 @@ config_show(uint32_t session, struct nshd_show *show)
 		config_answer(session, 1, "%% nshd: hello first\n");
 		return;
 	}
-	if (kernel_down) {
+	if (links[KERNEL].down) {
 		config_answer(session, 1, "%% nshd: kernel is down\n");
 		return;
 	}
@@ -219,9 +289,9 @@ config_show(uint32_t session, struct nshd_show *show)
 	TAILQ_INSERT_TAIL(&requests, r, entry);
 	/* kernel answers the rest with facts, or says it does not */
 	if ((strcmp(show->words, "running-config") == 0 ?
-	    imsg_compose_event(iev_relay, IMSG_KRN_SNAPSHOT, r->id, 0, -1,
-	    NULL, 0) : imsg_compose_event(iev_relay, IMSG_KRN_SHOW, r->id, 0,
-	    -1, show, sizeof(*show))) == -1)
+	    link_compose(&links[KERNEL], IMSG_KRN_SNAPSHOT, r->id, NULL, 0) :
+	    link_compose(&links[KERNEL], IMSG_KRN_SHOW, r->id, show,
+	    sizeof(*show))) == -1)
 		fatal("%s", __func__);
 }
 
@@ -240,52 +310,48 @@ config_answer(uint32_t session, int32_t status, const char *fmt, ...)
 		va_end(ap);
 		if (len == -1)
 			fatal("%s", __func__);
-		if (imsg_text(iev_relay, IMSG_CTL_OUTPUT, session, s,
-		    len) == -1)
+		if (imsg_text(links[FRONTEND].iev, IMSG_CTL_OUTPUT, session,
+		    s, len) == -1)
 			fatal("%s", __func__);
 		free(s);
 	}
 	r.status = status;
-	if (imsg_compose_event(iev_relay, IMSG_CTL_RESULT, session, 0, -1,
-	    &r, sizeof(r)) == -1)
+	if (link_compose(&links[FRONTEND], IMSG_CTL_RESULT, session, &r,
+	    sizeof(r)) == -1)
 		fatal("%s", __func__);
 }
 
-/*
- * A peer started again, or is down: frontend's sessions are gone, and
- * kernel's answers to what it was asked will not come
- */
+/* frontend started again, or is down: its sessions are gone */
 static void
-config_restart(struct nshd_restart *rs)
+config_forget_frontend(void)
 {
 	struct session	*sp;
 	struct request	*r;
 
-	switch (rs->proc) {
-	case PROC_FRONTEND:
-		while ((sp = TAILQ_FIRST(&sessions)) != NULL) {
-			config_tell(sp->id, IMSG_KRN_STOP);
-			TAILQ_REMOVE(&sessions, sp, entry);
-			free(sp);
-		}
-		/* no session again has 0, and a new one may have the id */
-		TAILQ_FOREACH(r, &requests, entry)
-			r->session = 0;
-		break;
-	case PROC_KERNEL:
-		kernel_down = rs->down;
-		while ((r = TAILQ_FIRST(&requests)) != NULL) {
-			if (session_find(r->session) != NULL)
-				config_answer(r->session, 1, kernel_down ?
-				    "%% nshd: kernel is down\n" :
-				    "%% nshd: kernel started again, and its "
-				    "answer is lost\n");
-			TAILQ_REMOVE(&requests, r, entry);
-			free(r);
-		}
-		break;
-	default:
-		fatalx("%s: from %d", __func__, rs->proc);
+	while ((sp = TAILQ_FIRST(&sessions)) != NULL) {
+		config_tell(sp->id, IMSG_KRN_STOP);
+		TAILQ_REMOVE(&sessions, sp, entry);
+		free(sp);
+	}
+	/* no session again has 0, and a new one may have the id */
+	TAILQ_FOREACH(r, &requests, entry)
+		r->session = 0;
+}
+
+/* kernel started again, or is down: what it was asked is lost */
+static void
+config_forget_kernel(void)
+{
+	struct request	*r;
+
+	while ((r = TAILQ_FIRST(&requests)) != NULL) {
+		if (session_find(r->session) != NULL)
+			config_answer(r->session, 1, links[KERNEL].down ?
+			    "%% nshd: kernel is down\n" :
+			    "%% nshd: kernel started again, and its answer is "
+			    "lost\n");
+		TAILQ_REMOVE(&requests, r, entry);
+		free(r);
 	}
 }
 
@@ -296,8 +362,8 @@ config_tell(uint32_t session, uint32_t type)
 	struct request	*r;
 
 	TAILQ_FOREACH(r, &requests, entry)
-		if (r->session == session && imsg_compose_event(iev_relay,
-		    type, r->id, 0, -1, NULL, 0) == -1)
+		if (r->session == session && link_compose(&links[KERNEL],
+		    type, r->id, NULL, 0) == -1)
 			fatal("%s", __func__);
 }
 

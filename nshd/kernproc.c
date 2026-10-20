@@ -16,7 +16,7 @@
 
 /*
  * kernel: root, and nsh's own code, which reads and changes the kernel.
- * It answers config, through relay, one request at a time, in order:
+ * It answers config, on their pipe, one request at a time, in order:
  * the running configuration as text, and the shows only root may make
  * as facts, with what nsh's code prints as it makes them, as messages.
  * A show's answer is made whole, as it is small, its units as many to a
@@ -28,7 +28,8 @@
  * client has read them, while it answers other requests. A stream ends
  * when its child's output does and its child is reaped, or when config
  * says its session is gone, or config starts again, which kill the
- * child; or when kernel ends.
+ * child; or when kernel ends. config sending what it may not, or
+ * sending it wrong, is reported, as it went wrong.
  */
 
 #include <sys/types.h>
@@ -78,6 +79,8 @@ static TAILQ_HEAD(, stream) streams = TAILQ_HEAD_INITIALIZER(streams);
 static int		 nstreams;
 
 static void	kern_dispatch_relay(int, short, void *);
+static void	kern_dispatch_config(int, short, void *);
+static void	kern_forget_config(void);
 static void	kern_snapshot(uint32_t);
 static void	kern_show(uint32_t, char *);
 static void	kern_end(uint32_t, int32_t, const char *, ...)
@@ -92,6 +95,10 @@ static void	kern_stream_stop(struct stream *);
 static void	kern_stream_done(struct stream *);
 static void	kern_sigchld(int, short, void *);
 static __dead void kern_exit(void);
+
+static struct link	 config = {
+	PROC_CONFIG, kern_dispatch_config, kern_forget_config
+};
 
 void
 kernproc(int debug, int v)
@@ -108,20 +115,19 @@ kernproc(int debug, int v)
 
 	if ((iev_relay = imsgev_new(3, kern_dispatch_relay, 0)) == NULL)
 		fatal(NULL);
+	links_init(&config, 1, iev_relay);
 	signal_set(&ev_sigchld, SIGCHLD, kern_sigchld, NULL);
 	signal_add(&ev_sigchld, NULL);
 	event_dispatch();
 	kern_exit();
 }
 
-/* config's requests, through relay */
+/* relay's word that kernel may start */
 static void
 kern_dispatch_relay(int fd, short event, void *arg)
 {
 	struct imsgev		*iev = arg;
 	struct imsg		 imsg;
-	struct nshd_show	 show;
-	struct stream		*s, *next;
 	ssize_t			 n;
 
 	if (imsgev_io(iev, event) == -1)
@@ -132,14 +138,40 @@ kern_dispatch_relay(int fd, short event, void *arg)
 			fatal("imsgbuf_get");
 		if (n == 0)
 			break;
-		switch (imsg_get_type(&imsg)) {
-		case IMSG_STARTUP:
+		if (imsg_get_type(&imsg) != IMSG_STARTUP) {
+			log_warnx("relay sent imsg %u, which it may not",
+			    imsg_get_type(&imsg));
+			kern_exit();
+		}
+		imsg_free(&imsg);
+	}
+	imsg_event_add(iev);
+}
+
+/* config's requests */
+static void
+kern_dispatch_config(int fd, short event, void *arg)
+{
+	struct imsgev		*iev = arg;
+	struct imsg		 imsg;
+	struct nshd_show	 show;
+	struct stream		*s;
+	uint32_t		 type;
+	ssize_t			 n;
+
+	if (imsgev_io(iev, event) == -1) {
+		link_broken(&config, "closed its pipe");
+		return;
+	}
+
+	for (;;) {
+		if ((n = imsgbuf_get(&iev->ibuf, &imsg)) == -1) {
+			link_broken(&config, "sent what imsg cannot read");
+			return;
+		}
+		if (n == 0)
 			break;
-		case IMSG_RESTART:
-			/* config, kernel's one peer: what it asked is lost */
-			TAILQ_FOREACH_SAFE(s, &streams, entry, next)
-				kern_stream_stop(s);
-			break;
+		switch (type = imsg_get_type(&imsg)) {
 		case IMSG_KRN_SNAPSHOT:
 			kern_snapshot(imsg_get_id(&imsg));
 			break;
@@ -147,7 +179,7 @@ kern_dispatch_relay(int fd, short event, void *arg)
 			if (imsg_get_data(&imsg, &show, sizeof(show)) == -1 ||
 			    memchr(show.words, '\0', sizeof(show.words)) ==
 			    NULL)
-				fatalx("%s: bad IMSG_KRN_SHOW", __func__);
+				goto bad;
 			kern_show(imsg_get_id(&imsg), show.words);
 			break;
 		case IMSG_KRN_READ:
@@ -161,12 +193,26 @@ kern_dispatch_relay(int fd, short event, void *arg)
 				}
 			break;
 		default:
-			log_debug("%s: unexpected imsg %u", __func__,
-			    imsg_get_type(&imsg));
+			goto bad;
 		}
 		imsg_free(&imsg);
 	}
 	imsg_event_add(iev);
+	return;
+ bad:
+	imsg_free(&imsg);
+	link_broken(&config, "sent imsg %u, which it may not, or not whole",
+	    type);
+}
+
+/* config started again, or is down: what it asked is lost */
+static void
+kern_forget_config(void)
+{
+	struct stream	*s, *next;
+
+	TAILQ_FOREACH_SAFE(s, &streams, entry, next)
+		kern_stream_stop(s);
 }
 
 /* the running configuration, as conf() writes it, then how it went */
@@ -187,13 +233,12 @@ kern_snapshot(uint32_t id)
 		if (fclose(f) == EOF) {
 			log_warn("%s: fclose", __func__);
 			r.status = -1;
-		} else if (imsg_text(iev_relay, IMSG_KRN_TEXT, id, buf,
+		} else if (imsg_text(config.iev, IMSG_KRN_TEXT, id, buf,
 		    len) == -1)
 			fatal("%s", __func__);
 	}
 	free(buf);
-	if (imsg_compose_event(iev_relay, IMSG_KRN_END, id, 0, -1, &r,
-	    sizeof(r)) == -1)
+	if (link_compose(&config, IMSG_KRN_END, id, &r, sizeof(r)) == -1)
 		fatal("%s", __func__);
 }
 
@@ -240,13 +285,12 @@ kern_end(uint32_t id, int32_t status, const char *fmt, ...)
 		len = vasprintf(&s, fmt, ap);
 		va_end(ap);
 		if (len == -1 ||
-		    imsg_text(iev_relay, IMSG_KRN_TEXT, id, s, len) == -1)
+		    imsg_text(config.iev, IMSG_KRN_TEXT, id, s, len) == -1)
 			fatal("%s", __func__);
 		free(s);
 	}
 	r.status = status;
-	if (imsg_compose_event(iev_relay, IMSG_KRN_END, id, 0, -1, &r,
-	    sizeof(r)) == -1)
+	if (link_compose(&config, IMSG_KRN_END, id, &r, sizeof(r)) == -1)
 		fatal("%s", __func__);
 }
 
@@ -268,8 +312,7 @@ kern_flush(uint32_t id)
 {
 	if (nunits == 0)
 		return;
-	if (imsg_compose_event(iev_relay, IMSG_KRN_FACTS, id, 0, -1, units,
-	    nunits) == -1)
+	if (link_compose(&config, IMSG_KRN_FACTS, id, units, nunits) == -1)
 		fatal("%s", __func__);
 	nunits = 0;
 }

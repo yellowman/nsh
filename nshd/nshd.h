@@ -16,7 +16,7 @@
 
 /*
  * nshd's messages, with its clients, which include this after
- * <event.h> and <imsg.h>, and between its processes, through relay.
+ * <event.h> and <imsg.h>, and between its processes.
  */
 
 #ifndef NSHD_H
@@ -53,9 +53,10 @@ struct nshd_result {
 };
 
 /*
- * parent to relay: a child's pipe, or that it is down; relay to parent:
- * a child gone wrong. Each start of a child is a generation of it, and
- * instance tells the shows apart
+ * parent to relay: a child's pipe, or that it is down; parent to a
+ * child: a peer's pipe, or that it is down; a child to relay, and relay
+ * to parent: a peer gone wrong. Each start of a child is a generation
+ * of it, and instance tells the shows apart
  */
 struct nshd_child {
 	int32_t			proc;
@@ -66,12 +67,6 @@ struct nshd_child {
 /* relay to a child, at each start: its generation */
 struct nshd_startup {
 	uint32_t		generation;
-};
-
-/* relay to a child: one of its peers started again, or is down */
-struct nshd_restart {
-	int32_t			proc;
-	int32_t			down;
 };
 
 /* a client's hello, with who it is, from frontend to config */
@@ -108,9 +103,9 @@ enum nshd_imsg {
 	IMSG_CTL_CLOSE,		/* frontend to config: a session is gone */
 	IMSG_PIPE,		/* parent to relay: nshd_child, and its pipe */
 	IMSG_DOWN,		/* parent to relay: nshd_child stays down */
-	IMSG_BROKEN,		/* relay to parent: nshd_child gone wrong */
+	IMSG_BROKEN,		/* to relay, and parent: nshd_child gone wrong */
 	IMSG_STARTUP,		/* relay to a child: nshd_startup */
-	IMSG_RESTART,		/* relay to a child: nshd_restart */
+	IMSG_PEER,		/* parent to a child: nshd_child, its pipe or none */
 	IMSG_KRN_SNAPSHOT,	/* config to kernel: the running configuration */
 	IMSG_KRN_TEXT,		/* kernel to config: text */
 	IMSG_KRN_END,		/* kernel to config: nshd_result */
@@ -128,6 +123,17 @@ struct imsgev {
 	short		 events;
 };
 
+/* a child's peer, and the pipe between them, from parent */
+struct link {
+	enum nshd_proc	 proc;
+	void		(*handler)(int, short, void *);
+	void		(*forget)(void);	/* all the peer held */
+	struct imsgev	*iev;		/* or NULL: gone, or down */
+	struct imsgev	*wrong;		/* gone wrong: held, unread */
+	uint32_t	 generation;
+	int		 down;
+};
+
 /* nshd.c */
 void		 imsg_event_add(struct imsgev *);
 int		 imsg_compose_event(struct imsgev *, uint32_t, uint32_t, pid_t,
@@ -141,6 +147,12 @@ void		 capture_stdout(void);
 int		 printed(struct facts_out *);
 void		 child_start(const char *, int, int);
 void		 privdrop(enum nshd_proc);
+int		 joined(enum nshd_proc, enum nshd_proc);
+void		 links_init(struct link *, size_t, struct imsgev *);
+int		 link_compose(struct link *, uint32_t, uint32_t, const void *,
+		    size_t);
+void		 link_broken(struct link *, const char *, ...)
+		    __attribute__((__format__ (printf, 2, 3)));
 
 /* each process but parent */
 __dead void	 relay(int, int);

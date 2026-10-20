@@ -34,7 +34,8 @@ the files of a child of another role:
 .It relay
 Runs as _nshrelay in a
 .Xr chroot 2 ,
-and passes on what one child may send another, and nothing else.
+tells each child when it may start, and the parent which child a peer
+says went wrong, and carries no request.
 .It show
 Four of them, each as _nshshow in a
 .Xr chroot 2 ,
@@ -70,15 +71,19 @@ as the client reads it; the child is killed if the client goes first.
 .It archive
 Runs as _nsharc in a
 .Xr chroot 2 ,
-with kernel its one peer.
+with no peer yet.
 It keeps nothing yet.
 .El
 .Pp
-Each child but relay has one pipe, to relay, each show its own.
+frontend and config, and config and kernel, each talk on a pipe of
+their own, which the parent makes, so each knows who sent what it
+reads.
+A child takes a peer's pipe from the parent alone.
+Each child also has a pipe to relay.
 The parent reads only what relay tells it.
-A child that exits, or sends what it may not, is started again, and
-those that talk to it forget what it held: its sessions, or the answers
-it had not yet given.
+A child that exits, or sends relay or a peer what it may not, is
+started again, with new pipes to its peers, and they forget what it
+held: its sessions, or the answers it had not yet given.
 A child that fails five times in a minute stays down.
 Then the others answer for it, or, for frontend or the last show to
 stay down, its socket refuses connections.
@@ -98,6 +103,12 @@ Only root and the members of the group nshadmin may connect to the
 read-write socket, and every session there may see the running
 configuration.
 The read-only socket is for anyone.
+.Pp
+kernel does as root what config asks of it, so a config gone wrong may
+ask it anything a session may: config is trusted as the read-write
+socket's users are.
+relay carries no request; gone wrong, it can stop the children, or have
+them started again, and nothing more.
 .Pp
 The options are as follows:
 .Bl -tag -width Ds
