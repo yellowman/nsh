@@ -85,6 +85,8 @@ struct intlist *whichlist;
 pid_t	child;
 static int in_rc;		/* cmdrc() is reading a file */
 static int rc_head;		/* and its line is a block's head */
+static int oneline;		/* cmdline() runs it: its mode stays */
+static struct cnode *snapshot;	/* config's running configuration */
 
 /* what of this file's a session keeps (session.c) */
 struct sglobal commands_sglobals[] = {
@@ -116,6 +118,7 @@ static int	pr_a_conf(int, char **, ...);
 static int	pr_conf_diff(int, char **, ...);
 static int	cand_refused(char *, int);
 static int	cand_leave(void);
+static int	cmdline_if(void);
 static int	pr_environment(int, char **, ...);
 static int	show_hostname(int, char **, ...);
 static int	wr_conf(char *);
@@ -1557,6 +1560,12 @@ interface(int argc, char **argv, ...)
 
 	imr_init(ifname);
 
+	/* a line at a time (cmdline()): the mode is entered, and stays */
+	if (oneline && !modhvar) {
+		close(ifs);
+		return 0;
+	}
+
 	if (modhvar) {
 		/* direct rcfile -i or -c initialization */
 		char *argp;
@@ -2264,6 +2273,117 @@ command()
 		if ((*c->handler) (margc, margv, 0) == 1)
 			break;
 	}
+}
+
+/*
+ * One line, as a terminal gives it, in configure private: in an
+ * interface's mode, the interface's command, int_exit() leaving the
+ * mode; else a command, interface or bridge entering its mode, which
+ * stays for the lines after it. In nshd's config, only what edits the
+ * candidate, and leaving a mode. What the handler returns, or -1 if
+ * none ran, said why.
+ */
+int
+cmdline(char *text)
+{
+	Command *c;
+	char *p;
+	int r;
+
+	if (strlcpy(line, text, sizeof(line)) >= sizeof(line)) {
+		printf("%% Input exceeds permitted length\n");
+		return -1;
+	}
+	makeargv();
+	if (margv[0] == NULL)
+		return 0;
+	if (ifname[0] != '\0')
+		return cmdline_if();
+	if ((p = NO_ARG(margv[0]) ? margv[1] : margv[0]) == NULL ||
+	    (c = getcmd(p)) == 0) {
+		printf("%% Invalid command\n");
+		return -1;
+	}
+	if (Ambiguous(c)) {
+		printf("%% Ambiguous command\n");
+		return -1;
+	}
+	if (NO_ARG(margv[0]) && ! c->nocmd) {
+		printf("%% Invalid command: %s %s\n", margv[0], margv[1]);
+		return -1;
+	}
+	if (c->needpriv != 0 && priv != 1) {
+		printf("%% Privilege required\n");
+		return -1;
+	}
+	if (c->needconfig != 0 && config_mode != 1) {
+		printf("%% Command requires configure mode\n");
+		return -1;
+	}
+	if ((c->needconfig || c->modh) && cand_refused(c->name, c->cand))
+		return -1;
+	if (in_config && c->cand != CAND_EDIT && c->handler != exitconfig) {
+		printf("%% %s is not through nshd's configure private\n",
+		    c->name);
+		return -1;
+	}
+	if (c->modh)
+		strlcpy(hname, c->name, HSIZE);
+	oneline = 1;
+	r = (*c->handler)(margc, margv, 0);
+	oneline = 0;
+	return r;
+}
+
+/* A line in an interface's mode, as interface()'s loop runs it */
+static int
+cmdline_if(void)
+{
+	struct intlist *i = NULL;
+	char *p;
+	int r;
+
+	if ((p = NO_ARG(margv[0]) ? margv[1] : margv[0]) != NULL)
+		i = (struct intlist *)genget(p, (char **)whichlist,
+		    sizeof(struct intlist));
+	if (Ambiguous(i)) {
+		printf("%% Ambiguous command\n");
+		return -1;
+	}
+	if (i == 0) {
+		printf("%% Invalid command\n");
+		return -1;
+	}
+	if (cand_refused(i->name, i->cand))
+		return -1;
+	if (in_config && i->cand != CAND_EDIT && i->handler != int_exit) {
+		printf("%% %s is not through nshd's configure private\n",
+		    i->name);
+		return -1;
+	}
+	if ((r = (*i->handler)(margc, margv, ifname, -1)) == 1) {
+		ifname[0] = '\0';
+		return 0;
+	}
+	if (i->handler == int_interface && next_ifname[0] != '\0' &&
+	    strcmp(next_ifname, ifname) != 0) {
+		strlcpy(ifname, next_ifname, sizeof(ifname));
+		memset(next_ifname, 0, sizeof(next_ifname));
+		imr_init(ifname);
+		bridge = cand_isbridge(ifname);
+		whichlist = bridge ? Bridgelist : Intlist;
+	}
+	return r;
+}
+
+/* Leave configure private, from any mode, as exit does at the top */
+int
+cmdexit(void)
+{
+	char *argv[] = { "exit", NULL };
+
+	ifname[0] = '\0';
+	return exitconfig(1, argv);
 }
 
 /*
@@ -3817,12 +3937,29 @@ conf_ordered(char *line)
 /*
  * The running configuration, read into a tree
  */
+/*
+ * nshd's config: the running configuration as system's last snapshot
+ * gave it, which running_tree() gives from now on
+ */
+void
+running_set(struct cnode *t)
+{
+	conftree_free(snapshot);
+	snapshot = t;
+}
+
 struct cnode *
 running_tree(void)
 {
 	char path[PATH_MAX];
 	struct cnode *t = NULL;
 	int fd;
+
+	if (snapshot != NULL) {
+		if ((t = conftree_copy(snapshot)) == NULL)
+			printf("%% running_tree: %s\n", strerror(errno));
+		return t;
+	}
 
 	if (strlcpy(path, "/tmp/nshrc.XXXXXXXX", sizeof(path)) >= sizeof(path))
 		return NULL;

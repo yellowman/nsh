@@ -71,6 +71,11 @@ cmdargs_output_setenv(char *cmd, char *arg[], int stdoutfd, int stderrfd,
 	sig_t sigint, sigquit, sigchld;
 	int status = -1;
 
+	/* nshd's config has no program of its own to run */
+	if (in_config) {
+		printf("%% %s: nshd's config runs no program\n", cmd);
+		return 127;
+	}
 	sigint = signal(SIGINT, SIG_IGN);
 	sigquit = signal(SIGQUIT, SIG_IGN);
 	sigchld = signal(SIGCHLD, SIG_DFL);

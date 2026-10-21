@@ -206,6 +206,9 @@ void sigalarm(int);
 void command(void);
 int argvtostring(int, char **, char *, int);
 int cmdrc(char rcname[FILENAME_MAX]);
+int cmdline(char *);
+int cmdexit(void);
+extern int in_config;
 int conf_save(void);
 int conf_mode(char *);
 int conf_ordered(char *);
@@ -638,7 +641,9 @@ int cand_rtable_set(int, int, char *);
 char *cand_rule(char *, size_t);
 int cand_setrules(char *, char **, size_t);
 struct cnode *running_tree(void);
+void running_set(struct cnode *);
 int cand_cloneable(char *);
+int cand_write(FILE *);
 
 /* commit.c */
 #define MAXCLEARS	64

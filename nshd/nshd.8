@@ -62,6 +62,19 @@ Each client is a session, which asks one thing at a time.
 Runs as _nshconf in a
 .Xr chroot 2 ,
 holds the sessions, and asks system for what they need.
+A session in
+.Cm configure private
+has a candidate of its own, which config edits a line at a time, with
+nsh's own commands, as they run in
+.Cm configure private :
+the running configuration, and what they read of the kernel, are those
+of a snapshot system makes when a session enters
+.Cm configure private
+or shows its candidate.
+config is
+.Xr pledge 2 Ns d
+to stdio: it reads no kernel, opens no file and runs no program of its
+own, and refuses a line that would.
 .It system
 Runs as root, and reads the configuration from the kernel, the
 daemons and the saved configuration.

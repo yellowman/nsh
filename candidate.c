@@ -568,14 +568,11 @@ cand_tree(void)
 	return cand;
 }
 
-/* show candidate-config */
+/* The candidate, written to f: -1 if it could not be, said why */
 int
-pr_cand_conf(int argc, char **argv, ...)
+cand_write(FILE *f)
 {
-	char path[PATH_MAX];
 	struct cnode *t;
-	FILE *f;
-	int fd, ret = 0;
 
 	if (!candidate) {
 		printf("%% Not in configure private\n");
@@ -583,6 +580,25 @@ pr_cand_conf(int argc, char **argv, ...)
 	}
 	if ((t = cand_tree()) == NULL)
 		return -1;
+	if (conftree_write(f, t) == -1 || fflush(f) == EOF) {
+		printf("%% cand_write: %s\n", strerror(errno));
+		return -1;
+	}
+	return 0;
+}
+
+/* show candidate-config */
+int
+pr_cand_conf(int argc, char **argv, ...)
+{
+	char path[PATH_MAX];
+	FILE *f;
+	int fd, ret = 0;
+
+	if (!candidate) {
+		printf("%% Not in configure private\n");
+		return -1;
+	}
 	strlcpy(path, "/tmp/nshrc.cand.XXXXXXXX", sizeof(path));
 	if ((fd = mkstemp(path)) == -1) {
 		printf("%% mkstemp %s: %s\n", path, strerror(errno));
@@ -594,10 +610,7 @@ pr_cand_conf(int argc, char **argv, ...)
 		close(fd);
 		return -1;
 	}
-	if (conftree_write(f, t) == -1 || fflush(f) == EOF) {
-		printf("%% %s: %s\n", path, strerror(errno));
-		ret = -1;
-	} else if (!more(path))
+	if (cand_write(f) == -1 || !more(path))
 		ret = -1;
 	unlink(path);
 	fclose(f);

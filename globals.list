@@ -40,8 +40,8 @@ carp.c		table	carp_bal_modes carp_facts_init.carp_states
 			carp_fields intcs kind_carp
 client.c	process	nshd_intr
 commands.c	session	hname ifname in_rc next_ifname rc_head whichlist
-commands.c	process	child
-commands.c	scratch	hbuf
+commands.c	process	child snapshot
+commands.c	scratch	hbuf oneline
 commands.c	table	Bridgelist Bridgelist_nitems Intlist
 			Intlist_nitems ahtab arpdowntab arphelp
 			arptimeouttab bgphelp bridgehelp carploggingtab
@@ -144,7 +144,7 @@ ppp.c		table	intpppoe.authopts intsppp.authopts
 			intsppp.peeropts spppproto
 prompt.c	session	prompt saved_prompt
 route.c		table	route.routeflags
-session.c	process	fresh total
+session.c	process	fresh in_config total
 session.c	table	session_sglobals sglobals
 settings.c	table	bridge_settings contexts if_settings
 			rtable_settings top_settings

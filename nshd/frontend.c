@@ -40,6 +40,13 @@
 
 static struct imsgev	*iev_relay;
 
+/* a client's request, as config takes it */
+union frontend_request {
+	struct nshd_show	 show;
+	struct nshd_configure	 cf;
+	struct nshd_line	 line;
+};
+
 static void	frontend_dispatch_relay(int, short, void *);
 static void	frontend_dispatch_config(int, short, void *);
 static void	frontend_forget_config(void);
@@ -47,6 +54,7 @@ static int	frontend_client(struct ctl_conn *, struct imsg *);
 static void	frontend_gone(struct ctl_conn *);
 static int	frontend_written(struct ctl_conn *);
 static int	frontend_answer(struct ctl_conn *, struct imsg *);
+static ssize_t	frontend_whole(struct imsg *, union frontend_request *);
 
 static struct link	 config = {
 	PROC_CONFIG, frontend_dispatch_config, frontend_forget_config
@@ -127,6 +135,7 @@ frontend_dispatch_config(int fd, short event, void *arg)
 			/* FALLTHROUGH */
 		case IMSG_CTL_OUTPUT:
 		case IMSG_CTL_FACTS:
+		case IMSG_CTL_CONTEXT:
 			if (imsg_get_ibuf(&imsg, &b) == -1)
 				fatal("%s", __func__);
 			if (control_reply(imsg_get_id(&imsg), type,
@@ -160,6 +169,8 @@ frontend_client(struct ctl_conn *c, struct imsg *imsg)
 {
 	struct nshd_peer	 peer;
 	struct nshd_show	 show;
+	union frontend_request	 r;
+	ssize_t			 len;
 
 	if (c->pending)
 		return (-1);
@@ -182,6 +193,15 @@ frontend_client(struct ctl_conn *c, struct imsg *imsg)
 			return (-1);
 		if (link_compose(&config, IMSG_CTL_SHOW, c->id, &show,
 		    sizeof(show)) == -1)
+			fatal("%s", __func__);
+		return (0);
+	case IMSG_CTL_CONFIGURE:
+	case IMSG_CTL_LINE:
+	case IMSG_CTL_EXIT:
+		if ((len = frontend_whole(imsg, &r)) == -1)
+			return (-1);
+		if (link_compose(&config, imsg_get_type(imsg), c->id,
+		    len > 0 ? &r : NULL, len) == -1)
 			fatal("%s", __func__);
 		return (0);
 	default:
@@ -211,9 +231,9 @@ static int
 frontend_answer(struct ctl_conn *c, struct imsg *imsg)
 {
 	struct nshd_hello	 hello;
-	struct nshd_show	 show;
 	struct nshd_session	 s;
 	struct nshd_result	 r;
+	union frontend_request	 req;
 	const char		*down = "% nshd: config is down\n";
 
 	c->pending = 0;
@@ -226,8 +246,10 @@ frontend_answer(struct ctl_conn *c, struct imsg *imsg)
 		s.priv = 1;
 		return (control_reply(c->id, IMSG_CTL_HELLO, &s, sizeof(s)));
 	case IMSG_CTL_SHOW:
-		if (imsg_get_data(imsg, &show, sizeof(show)) == -1 ||
-		    memchr(show.words, '\0', sizeof(show.words)) == NULL)
+	case IMSG_CTL_CONFIGURE:
+	case IMSG_CTL_LINE:
+	case IMSG_CTL_EXIT:
+		if (frontend_whole(imsg, &req) == -1)
 			return (-1);
 		r.status = 1;
 		if (control_reply(c->id, IMSG_CTL_OUTPUT, down,
@@ -237,4 +259,32 @@ frontend_answer(struct ctl_conn *c, struct imsg *imsg)
 	default:
 		return (-1);
 	}
+}
+
+/*
+ * A client's request but hello, into r, if it is whole, as config takes
+ * it: its length, or -1
+ */
+static ssize_t
+frontend_whole(struct imsg *imsg, union frontend_request *r)
+{
+	switch (imsg_get_type(imsg)) {
+	case IMSG_CTL_SHOW:
+		if (imsg_get_data(imsg, &r->show, sizeof(r->show)) == -1 ||
+		    memchr(r->show.words, '\0', sizeof(r->show.words)) == NULL)
+			return (-1);
+		return (sizeof(r->show));
+	case IMSG_CTL_CONFIGURE:
+		if (imsg_get_data(imsg, &r->cf, sizeof(r->cf)) == -1)
+			return (-1);
+		return (sizeof(r->cf));
+	case IMSG_CTL_LINE:
+		if (imsg_get_data(imsg, &r->line, sizeof(r->line)) == -1 ||
+		    memchr(r->line.line, '\0', sizeof(r->line.line)) == NULL)
+			return (-1);
+		return (sizeof(r->line));
+	case IMSG_CTL_EXIT:
+		return (imsg_get_len(imsg) == 0 ? 0 : -1);
+	}
+	return (-1);
 }

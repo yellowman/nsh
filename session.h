@@ -30,8 +30,17 @@ struct sglobal {
 
 struct session_state;
 
+extern int in_config;
+
 struct session_state	*session_new(void);
 void			 session_free(struct session_state *);
 void			 session_enter(struct session_state *);
 void			 session_leave(struct session_state *);
 const struct sglobal	*session_global(size_t);
+int			 session_running(char *, size_t);
+int			 session_configure(struct session_state *);
+int			 session_line(struct session_state *, char *);
+int			 session_exit(struct session_state *);
+void			 session_mode(struct session_state *, int *, int *,
+			    char *, size_t, int *);
+int			 session_candidate(struct session_state *);

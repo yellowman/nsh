@@ -1173,6 +1173,35 @@ printed(struct facts_out *o)
 }
 
 /*
+ * What nsh's code printed since, as text messages of type for id on
+ * iev, as imsg_text() sends them; -1 if a message could not be made, or
+ * what was printed could not all be kept
+ */
+int
+printed_text(struct imsgev *iev, uint32_t type, uint32_t id)
+{
+	char	 buf[NSHD_TEXT];
+	off_t	 off = 0;
+	ssize_t	 n;
+	int	 r = 0;
+
+	if (fflush(stdout) == EOF) {
+		log_warn("%s: stdout", __func__);
+		r = -1;
+	}
+	clearerr(stdout);
+	while ((n = pread(STDOUT_FILENO, buf, sizeof(buf), off)) > 0) {
+		off += n;
+		if (imsg_text(iev, type, id, buf, n) == -1)
+			r = -1;
+	}
+	if (ftruncate(STDOUT_FILENO, 0) == -1 ||
+	    lseek(STDOUT_FILENO, 0, SEEK_SET) == -1)
+		fatal("%s", __func__);
+	return (r);
+}
+
+/*
  * text as messages of type, NSHD_TEXT bytes at most each; on no pipe,
  * lost, as link_compose() loses it
  */

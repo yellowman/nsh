@@ -128,7 +128,23 @@ static void write_node(FILE *, int, struct cnode *);
 struct cnode *
 conftree_read(char *path, int (*mode)(char *), int (*ordered)(char *))
 {
+	struct cnode *t;
 	FILE *f;
+
+	if ((f = fopen(path, "r")) == NULL) {
+		printf("%% %s: %s\n", path, strerror(errno));
+		return NULL;
+	}
+	t = conftree_fread(f, path, mode, ordered);
+	fclose(f);
+	return t;
+}
+
+/* conftree_read() of f, which path names in what it says */
+struct cnode *
+conftree_fread(FILE *f, char *path, int (*mode)(char *),
+    int (*ordered)(char *))
+{
 	struct cnode *root, *top = NULL, *stmt = NULL;
 	int topmode = CT_LEAF;
 	char *line = NULL;
@@ -136,10 +152,6 @@ conftree_read(char *path, int (*mode)(char *), int (*ordered)(char *))
 	ssize_t linelen;
 	unsigned int lnum = 0;
 
-	if ((f = fopen(path, "r")) == NULL) {
-		printf("%% %s: %s\n", path, strerror(errno));
-		return NULL;
-	}
 	if ((root = calloc(1, sizeof(*root))) == NULL)
 		goto fail;
 
@@ -204,14 +216,12 @@ conftree_read(char *path, int (*mode)(char *), int (*ordered)(char *))
 		root = NULL;
 	}
 	free(line);
-	fclose(f);
 	return root;
 
 fail:
 	printf("%% conftree_read: %s\n", strerror(errno));
 	conftree_free(root);
 	free(line);
-	fclose(f);
 	return NULL;
 }
 

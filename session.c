@@ -19,12 +19,14 @@
  * Sessions, each running with its own state: session_enter() puts a
  * session's globals in place, and session_leave() keeps them and puts
  * back the process's, as they were before any session, so nothing of
- * one session is seen by another.
+ * one session is seen by another. nshd's config runs configure private
+ * for its sessions through the rest, a request at a time.
  */
 #include <sys/param.h>	/* MAXHOSTNAMELEN */
 #include <sys/socket.h>
 #include <net/if.h>
 #include <netinet/in.h>
+#include <errno.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -32,7 +34,10 @@
 #include "externs.h"
 #include "commands.h"
 #include "ctl.h"
+#include "conftree.h"
 #include "session.h"
+
+int in_config;		/* nshd's config: no kernel, file or program its own */
 
 extern struct sglobal candidate_sglobals[], commands_sglobals[];
 extern struct sglobal ctl_sglobals[], if_sglobals[];
@@ -128,6 +133,97 @@ session_leave(struct session_state *s)
 {
 	copy(s->mem, 1);
 	copy(fresh, 0);
+}
+
+/*
+ * The running configuration, text as system's snapshot has it, which
+ * running_tree() gives from now on: -1 if it could not be read, said why
+ */
+int
+session_running(char *text, size_t len)
+{
+	struct cnode *t;
+	FILE *f;
+
+	if ((f = fmemopen(len > 0 ? text : "\n", len > 0 ? len : 1,
+	    "r")) == NULL) {
+		printf("%% session_running: %s\n", strerror(errno));
+		return -1;
+	}
+	t = conftree_fread(f, "the running configuration", conf_mode,
+	    conf_ordered);
+	fclose(f);
+	if (t == NULL)
+		return -1;
+	running_set(t);
+	return 0;
+}
+
+/* configure private, in s, privileged: as a handler returns */
+int
+session_configure(struct session_state *s)
+{
+	int r;
+
+	session_enter(s);
+	priv = 1;
+	if ((r = cand_begin()) == 0)
+		config_mode = 1;
+	session_leave(s);
+	return r;
+}
+
+/* A line of configure private's, in s, as cmdline() runs it */
+int
+session_line(struct session_state *s, char *line)
+{
+	int r;
+
+	session_enter(s);
+	r = cmdline(line);
+	session_leave(s);
+	return r;
+}
+
+/* Leave configure private, in s, from any mode */
+int
+session_exit(struct session_state *s)
+{
+	int r = 0;
+
+	session_enter(s);
+	if (config_mode)
+		r = cmdexit();
+	session_leave(s);
+	return r;
+}
+
+/*
+ * s's mode: whether in configure private, the rtable its lines are for,
+ * and the interface whose mode it is in, or "", and whether a bridge
+ */
+void
+session_mode(struct session_state *s, int *private, int *rtable,
+    char *ifn, size_t len, int *isbridge)
+{
+	session_enter(s);
+	*private = config_mode && candidate;
+	*rtable = cand_rtable;
+	strlcpy(ifn, ifname, len);
+	*isbridge = bridge;
+	session_leave(s);
+}
+
+/* show candidate-config, in s, to stdout */
+int
+session_candidate(struct session_state *s)
+{
+	int r;
+
+	session_enter(s);
+	r = cand_write(stdout);
+	session_leave(s);
+	return r;
 }
 
 /* The nth global a session keeps, or NULL */

@@ -17,8 +17,9 @@
 /*
  * system: root, and nsh's own code, which reads and changes the kernel.
  * It answers config, on their pipe, one request at a time, in order:
- * the running configuration as text, and the shows only root may make
- * as facts, with what nsh's code prints as it makes them, as messages.
+ * the running configuration as text, and what configure private reads
+ * of the kernel as facts, and the shows only root may make as facts,
+ * with what nsh's code prints as it makes them, as messages.
  * A show's answer is made whole, as it is small, its units as many to a
  * message as fit.
  *
@@ -43,7 +44,10 @@
 
 #include <sys/types.h>
 #include <sys/queue.h>
+#include <sys/socket.h>
 #include <sys/wait.h>
+#include <net/if.h>
+#include <netinet/in.h>
 
 #include <errno.h>
 #include <event.h>
@@ -66,6 +70,7 @@
 #include "externs.h"
 #include "ctl.h"
 #include "facts.h"
+#include "kfacts.h"
 #include "showfacts.h"
 
 #define SYS_BATCH	256	/* records made before what is printed is sent */
@@ -106,7 +111,7 @@ static gid_t		 check_gid;
 static void	system_dispatch_relay(int, short, void *);
 static void	system_dispatch_config(int, short, void *);
 static void	system_forget_config(void);
-static void	system_snapshot(uint32_t);
+static void	system_snapshot(uint32_t, int);
 static void	system_show(uint32_t, char *);
 static void	system_end(uint32_t, int32_t, const char *, ...)
 		    __attribute__((__format__ (printf, 3, 4)));
@@ -189,6 +194,7 @@ system_dispatch_config(int fd, short event, void *arg)
 	struct imsgev		*iev = arg;
 	struct imsg		 imsg;
 	struct nshd_show	 show;
+	struct nshd_snapshot	 snap;
 	struct stream		*s;
 	uint32_t		 type;
 	ssize_t			 n;
@@ -207,7 +213,9 @@ system_dispatch_config(int fd, short event, void *arg)
 			break;
 		switch (type = imsg_get_type(&imsg)) {
 		case IMSG_SYS_SNAPSHOT:
-			system_snapshot(imsg_get_id(&imsg));
+			if (imsg_get_data(&imsg, &snap, sizeof(snap)) == -1)
+				goto bad;
+			system_snapshot(imsg_get_id(&imsg), snap.facts);
 			break;
 		case IMSG_SYS_SHOW:
 			if (imsg_get_data(&imsg, &show, sizeof(show)) == -1 ||
@@ -249,11 +257,16 @@ system_forget_config(void)
 		system_stream_stop(s);
 }
 
-/* the running configuration, as conf() writes it, then how it went */
+/*
+ * the running configuration, as conf() writes it, with facts what
+ * configure private reads of the kernel, then how it went
+ */
 static void
-system_snapshot(uint32_t id)
+system_snapshot(uint32_t id, int facts)
 {
 	struct nshd_result	 r = { 0 };
+	struct facts_out	 o;
+	struct kfacts		*k;
 	FILE			*f;
 	char			*buf = NULL;
 	size_t			 len = 0;
@@ -272,6 +285,18 @@ system_snapshot(uint32_t id)
 			fatal("%s", __func__);
 	}
 	free(buf);
+	if (r.status == 0 && facts) {
+		if ((k = kfacts_scan()) == NULL) {
+			log_warn("%s: kfacts_scan", __func__);
+			r.status = -1;
+		} else {
+			facts_out_init(&o, system_emit, &id);
+			if (kfacts_emit(&o, k) == -1)
+				r.status = -1;
+			system_flush(id);
+			kfacts_free(k);
+		}
+	}
 	if (link_compose(&config, IMSG_SYS_END, id, &r, sizeof(r)) == -1)
 		fatal("%s", __func__);
 }

@@ -946,6 +946,12 @@ ctl_cand_stage(struct daemons *d, char *stmt, char *dir, char *path,
 	size_t n;
 	FILE *f;
 
+	/* nshd's config has no file of its own to stage */
+	if (in_config) {
+		printf("%% %s: not staged through nshd's configure private\n",
+		    stmt);
+		return -1;
+	}
 	if (mkdtemp(dir) == NULL) {
 		printf("%% mkdtemp %s: %s\n", dir, strerror(errno));
 		return -1;

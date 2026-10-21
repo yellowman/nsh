@@ -30,6 +30,8 @@
 #define NSHD_VERSION	1	/* of what a client and nshd say */
 #define NSHD_TEXT	8192	/* text in one message, at most */
 #define NSHD_WORDS	256	/* a show's words, at most */
+#define NSHD_LINE	1024	/* a line of configuration, with its NUL */
+#define NSHD_IFNAME	16	/* an interface's name, IFNAMSIZ */
 
 /* a client's first message */
 struct nshd_hello {
@@ -51,6 +53,30 @@ struct nshd_show {
 /* how a request ended: 0, or not */
 struct nshd_result {
 	int32_t		status;
+};
+
+/* which configure: private, for now the only one */
+struct nshd_configure {
+	int32_t		mode;
+};
+#define NSHD_PRIVATE	1
+
+/* a line of configuration, in the session's mode */
+struct nshd_line {
+	char		line[NSHD_LINE];
+};
+
+/* a session's mode, after what may change it */
+struct nshd_context {
+	int32_t		mode;		/* 0, or NSHD_PRIVATE */
+	int32_t		rtable;		/* the rtable its lines are for */
+	int32_t		bridge;		/* the interface is a bridge */
+	char		ifname[NSHD_IFNAME];	/* whose mode, or "" */
+};
+
+/* config to system: the running configuration, and with facts, kfacts.h's */
+struct nshd_snapshot {
+	int32_t		facts;
 };
 
 /*
@@ -114,7 +140,13 @@ enum nshd_imsg {
 	IMSG_SYS_FACTS,		/* system to config: units of facts */
 	IMSG_CTL_READ,		/* frontend to config: a client read all */
 	IMSG_SYS_READ,		/* config to system: a request's client did */
-	IMSG_SYS_STOP		/* config to system: a request's session is gone */
+	IMSG_SYS_STOP,		/* config to system: a request's session is gone */
+
+	/* with clients, on the read-write socket */
+	IMSG_CTL_CONFIGURE,	/* nshd_configure; a context, then a result */
+	IMSG_CTL_LINE,		/* nshd_line; output, a context, a result */
+	IMSG_CTL_EXIT,		/* leave configure; a context, then a result */
+	IMSG_CTL_CONTEXT	/* nshd_context */
 };
 
 struct imsgev {
@@ -146,6 +178,7 @@ int		 imsg_text(struct imsgev *, uint32_t, uint32_t, const char *,
 struct facts_out;
 void		 capture_stdout(void);
 int		 printed(struct facts_out *);
+int		 printed_text(struct imsgev *, uint32_t, uint32_t);
 void		 child_start(const char *, int, int);
 void		 privdrop(enum nshd_proc);
 int		 joined(enum nshd_proc, enum nshd_proc);
