@@ -1989,6 +1989,7 @@ nsh(p)/powerdown
 .Tg commit
 .Ic commit
 .Op Cm check | Cm confirmed Op Ar minutes
+.Op Cm comment Ar text
 .Pp
 In
 .Cm configure private ,
@@ -2014,8 +2015,18 @@ saves the running configuration.
 The last 50 configurations saved are kept, for
 .Cm rollback
 and
-.Cm show rollback ;
+.Cm show rollback ,
+each with who saved it and the
+.Ar text
+of
+.Cm comment ,
+if given;
 one the same as the last saved is not kept again.
+.Cm check
+and
+.Cm confirmed
+save nothing, and take no
+.Cm comment .
 .Pp
 With
 .Cm check ,
@@ -2066,6 +2077,12 @@ before it.
 e.g. save the configuration on the system
 .Bd -literal -offset indent
 nsh(p)/commit
+% Saving configuration
+.Ed
+.It
+e.g. commit, and say why
+.Bd -literal -offset indent
+nsh(config-private-p)/commit comment vlan 20 for the lab
 % Saving configuration
 .Ed
 .It
@@ -3774,8 +3791,10 @@ display the candidate configuration.
 .Pp
 Display when each configuration kept by
 .Cm commit
-was saved, numbered from 0, the last saved, or display configuration
-.Ar N .
+was saved, who saved it and their comment, numbered from 0, the last
+saved, or display configuration
+.Ar N ,
+which begins with a comment line saying who saved it and why.
 This command requires privileged mode.
 .Pp
 .Ic show environment Op Ar NAME

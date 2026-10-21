@@ -44,7 +44,8 @@
  * shown.
  *
  * Each configuration saved is kept, the last ROLLBACKS of them, for
- * rollback N and show rollback.
+ * rollback N and show rollback, with who saved it and the comment they
+ * gave, on a line of its own that cmdrc() and conftree_read() skip.
  *
  * commit check shows what would keep the candidate from being the
  * running configuration that it can see before then: an interface a
@@ -70,10 +71,12 @@
 #include <sys/wait.h>
 #include <net/if.h>
 #include <netinet/in.h>
+#include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
 #include <paths.h>
+#include <pwd.h>
 #include <signal.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -170,27 +173,46 @@ static int context(char *);
 static int rtableid(char *);
 static int ifblock(char *, char *, size_t);
 static int clear(struct commit *, char *, int, int);
-static void history(void);
+static const char *committer(void);
 static int samefile(char *, char *);
-static int copyfile(char *, char *);
+static int copyfile(char *, char *, char *);
 static int sub_begin(struct commit *, struct sub *);
 static void sub_end(struct commit *, struct sub *, const char *, char *,
     int);
 
 /*
- * commit [confirmed [minutes]]: in configure private, make the
- * candidate the running configuration, all of it or none, then save the
- * running configuration; or with confirmed, do not save it, and roll it
- * back unless a commit confirms it in time. Elsewhere, save it.
+ * commit [confirmed [minutes]] [comment text]: in configure private,
+ * make the candidate the running configuration, all of it or none, then
+ * save the running configuration; or with confirmed, do not save it,
+ * and roll it back unless a commit confirms it in time. Elsewhere, save
+ * it. The comment is kept with what is saved.
  */
 int
 commit(int argc, char **argv, ...)
 {
 	struct cnode *want, *was, *now, *back = NULL;
+	char comment[COMMENTMAX] = "";
 	const char *errstr;
 	time_t when = 0;
-	int minutes = 0, checking = 0, bad, ret = -1;
+	int minutes = 0, checking = 0, bad, ret = -1, i, j, said = 1;
 
+	/* comment, at least "com" of it, and the words after it */
+	for (i = 1; i < argc && (strlen(argv[i]) < 3 ||
+	    !isprefix(argv[i], "comment")); i++)
+		;
+	if (i < argc) {
+		said = i + 1 < argc;
+		for (j = i + 1; j < argc; j++)
+			if ((j > i + 1 && strlcat(comment, " ",
+			    sizeof(comment)) >= sizeof(comment)) ||
+			    strlcat(comment, argv[j], sizeof(comment)) >=
+			    sizeof(comment)) {
+				printf("%% comment is longer than %d\n",
+				    COMMENTMAX - 1);
+				return -1;
+			}
+		argc = i;
+	}
 	if (argc > 1) {
 		checking = isprefix(argv[1], "check") != 0;
 		/* c alone could be either */
@@ -198,8 +220,14 @@ commit(int argc, char **argv, ...)
 		    (checking && argc > 2))
 			argc = 4;
 	}
-	if (argc > 3) {
-		printf("%% commit [check | confirmed [minutes]]\n");
+	if (argc > 3 || !said) {
+		printf("%% commit [check | confirmed [minutes]] "
+		    "[comment text]\n");
+		return -1;
+	}
+	if (comment[0] != '\0' && argc > 1) {
+		printf("%% commit %s saves nothing to comment\n",
+		    checking ? "check" : "confirmed");
 		return -1;
 	}
 	if (checking && !candidate) {
@@ -225,7 +253,7 @@ commit(int argc, char **argv, ...)
 		if (!conf_save())
 			return -1;
 		confirmed();
-		history();
+		rollback_keep(committer(), comment);
 		return 0;
 	}
 	if ((want = cand_tree()) == NULL)
@@ -271,7 +299,7 @@ commit(int argc, char **argv, ...)
 	} else {
 		confirmed();
 		if (conf_save())
-			history();
+			rollback_keep(committer(), comment);
 		else
 			ret = -1;
 	}
@@ -1442,36 +1470,57 @@ clear(struct commit *c, char *stmt, int rtable, int keep)
 	return 0;
 }
 
-/*
- * Keep the configuration just saved as rollback 0, each kept before it
- * one further on, and the oldest no more; unless rollback 0 is the same
- */
-static void
-history(void)
+/* Who commits: the session's login name, or else the user's */
+static const char *
+committer(void)
 {
-	char from[PATH_MAX], to[PATH_MAX];
+	struct passwd *pw;
+	char *l;
+
+	if ((l = getlogin()) != NULL)
+		return l;
+	return (pw = getpwuid(getuid())) != NULL ? pw->pw_name : "?";
+}
+
+/*
+ * Keep the configuration just saved as rollback 0, with who saved it and
+ * their comment, if not empty; each kept before it one further on, and
+ * the oldest no more; unless rollback 0 is the same. -1 if it could not,
+ * said why
+ */
+int
+rollback_keep(const char *who, const char *comment)
+{
+	char from[PATH_MAX], to[PATH_MAX], head[64 + COMMENTMAX], *p;
 	int i;
 
 	snprintf(to, sizeof(to), ROLLBACK, 0);
 	if (samefile(NSHRC_TEMP, to))
-		return;
+		return 0;
 	if (mkdir(NSHDB, 0700) == -1 && errno != EEXIST) {
 		printf("%% mkdir %s: %s\n", NSHDB, strerror(errno));
-		return;
+		return -1;
 	}
 	for (i = ROLLBACKS - 1; i > 0; i--) {
 		snprintf(from, sizeof(from), ROLLBACK, i - 1);
 		snprintf(to, sizeof(to), ROLLBACK, i);
 		if (rename(from, to) == -1 && errno != ENOENT) {
 			printf("%% rename %s: %s\n", from, strerror(errno));
-			return;
+			return -1;
 		}
 	}
+	/* one line, of words alone */
+	snprintf(head, sizeof(head) - 1, "%s%s%s%s", ROLLBACK_HEAD, who,
+	    comment[0] != '\0' ? ": " : "", comment);
+	for (p = head; *p != '\0'; p++)
+		if (iscntrl((unsigned char)*p))
+			*p = ' ';
+	strlcat(head, "\n", sizeof(head));
 	snprintf(to, sizeof(to), ROLLBACK, 0);
-	copyfile(NSHRC_TEMP, to);
+	return copyfile(NSHRC_TEMP, to, head);
 }
 
-/* Do the files a and b hold the same? */
+/* Do the files a and b hold the same, but for b's line of who saved it? */
 static int
 samefile(char *a, char *b)
 {
@@ -1486,6 +1535,9 @@ samefile(char *a, char *b)
 		fclose(fa);
 		return 0;
 	}
+	if (fgets(y, sizeof(y), fb) == NULL ||
+	    strncmp(y, ROLLBACK_HEAD, strlen(ROLLBACK_HEAD)) != 0)
+		rewind(fb);
 	do {
 		n = fread(x, 1, sizeof(x), fa);
 		if (fread(y, 1, sizeof(y), fb) != n || memcmp(x, y, n) != 0)
@@ -1498,9 +1550,9 @@ done:
 	return same;
 }
 
-/* Copy file from to to, made 0600, or none of it; -1 if it cannot */
+/* Copy file from to to, after head, made 0600, or none of it; -1 if not */
 static int
-copyfile(char *from, char *to)
+copyfile(char *from, char *to, char *head)
 {
 	char buf[BUFSIZ];
 	FILE *in, *out;
@@ -1521,6 +1573,7 @@ copyfile(char *from, char *to)
 		close(fd);
 		goto done;
 	}
+	fputs(head, out);
 	while ((n = fread(buf, 1, sizeof(buf), in)) > 0)
 		if (fwrite(buf, 1, n, out) != n)
 			break;
@@ -1542,13 +1595,13 @@ done:
 }
 
 /*
- * show rollback [N]: when each configuration kept was saved, or
- * configuration N
+ * show rollback [N]: when each configuration kept was saved, who saved
+ * it and their comment, or configuration N
  */
 int
 pr_rollback(int argc, char **argv, ...)
 {
-	char path[PATH_MAX], when[64], line[BUFSIZ];
+	char path[PATH_MAX], when[64], line[BUFSIZ], *who, *why;
 	struct stat sb;
 	const char *errstr;
 	va_list ap;
@@ -1585,7 +1638,22 @@ pr_rollback(int argc, char **argv, ...)
 			continue;
 		strftime(when, sizeof(when), "%Y-%m-%d %H:%M:%S %Z",
 		    localtime(&sb.st_mtime));
-		fprintf(out, "%2d  %s\n", i, when);
+		/* one saved before who saved it was kept says when alone */
+		who = why = NULL;
+		if ((f = fopen(path, "r")) != NULL) {
+			if (fgets(line, sizeof(line), f) != NULL &&
+			    strncmp(line, ROLLBACK_HEAD,
+			    strlen(ROLLBACK_HEAD)) == 0) {
+				line[strcspn(line, "\n")] = '\0';
+				why = line + strlen(ROLLBACK_HEAD);
+				who = strsep(&why, ":");
+				if (why != NULL)
+					why += strspn(why, " ");
+			}
+			fclose(f);
+		}
+		fprintf(out, "%2d  %s%s%s%s%s\n", i, when, who ? "  " : "",
+		    who ? who : "", why ? "  " : "", why ? why : "");
 	}
 	return 0;
 }

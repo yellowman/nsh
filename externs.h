@@ -181,6 +181,7 @@ extern pid_t child;
 #define NSHDB		"/var/db/nsh"	/* the configurations saved */
 #define ROLLBACKS	50		/* how many, rollback 0 the last */
 #define ROLLBACK	NSHDB "/nshrc.%d"
+#define ROLLBACK_HEAD	"# saved by "	/* who saved it, and why */
 #define CONFIRM		"/var/run/nshconfirm"	/* a commit to confirm */
 #define CLEAR		"/usr/bin/clear"
 #define LOGGER		"/usr/bin/logger"
@@ -641,6 +642,7 @@ int cand_cloneable(char *);
 
 /* commit.c */
 #define MAXCLEARS	64
+#define COMMENTMAX	256	/* a commit's comment, with its NUL */
 /* What makes one configuration read as another */
 struct script {
 	char *text;			/* lines, as cmdrc() reads them */
@@ -656,6 +658,7 @@ int commit(int, char **, ...);
 int pr_rollback(int, char **, ...);
 int commit_expire(void);
 int commit_boot(char *);
+int rollback_keep(const char *, const char *);
 int script_make(struct cnode *, struct cnode *, struct script *);
 int script_run(struct script *);
 void script_free(struct script *);
