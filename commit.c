@@ -34,6 +34,9 @@
  *  * a daemon's rules come whole, and what conf() prints after them,
  *    its reload or install, comes when they are new or it starts.
  *
+ * script_make() makes the script from the two trees alone, and
+ * script_run() runs it, so one process may make what another runs.
+ *
  * Then the running configuration must read as the candidate does, but
  * for a physical interface the candidate has no block for, which keeps
  * what its hardware has. If it does not, a script back to the
@@ -85,19 +88,13 @@
 #include "settings.h"
 #include "kfacts.h"
 
-#define MAXCLEARS	64
 #define CONFIRMMIN	10	/* commit confirmed's minutes, if not given */
 #define CONFIRMMAX	1440
 
 struct commit {
-	FILE *f;			/* the script */
+	FILE *f;			/* the script's lines */
 	struct cnode *from, *to;	/* the configurations it goes between */
-	struct {
-		char name[32];
-		int rtable;
-		int keep;
-	} clears[MAXCLEARS];		/* daemon rules no script can write */
-	int nclears;
+	struct script *s;
 };
 
 /* A buffer for a block's lines, whose head waits on them */
@@ -813,32 +810,72 @@ report(const char *msg)
 static int
 apply(struct cnode *from, struct cnode *to)
 {
-	struct commit *c;
-	char path[] = "/tmp/nshcommit.XXXXXXXX";
-	int fd, i, save, rt, failed, ret = -1;
+	struct script s;
+	int ret;
 
-	if ((c = calloc(1, sizeof(*c))) == NULL) {
+	if (script_make(from, to, &s) == -1)
+		return -1;
+	ret = script_run(&s);
+	script_free(&s);
+	return ret;
+}
+
+/*
+ * The script that makes from read as to, into s, from the trees alone;
+ * -1 if it could not be made, said why
+ */
+int
+script_make(struct cnode *from, struct cnode *to, struct script *s)
+{
+	struct commit c;
+	int ret = -1;
+
+	memset(s, 0, sizeof(*s));
+	c.from = from;
+	c.to = to;
+	c.s = s;
+	if ((c.f = open_memstream(&s->text, &s->len)) == NULL) {
 		printf("%% commit: %s\n", strerror(errno));
 		return -1;
 	}
-	c->from = from;
-	c->to = to;
+	if (removals(&c, NULL, NULL, 1, "") != -1 &&
+	    additions(&c, NULL, NULL, 1, "") != -1)
+		ret = 0;
+	if (fclose(c.f) == EOF && ret == 0) {
+		printf("%% commit: %s\n", strerror(errno));
+		ret = -1;
+	}
+	if (ret == -1)
+		script_free(s);
+	return ret;
+}
+
+/*
+ * Run s, as cmdrc() runs nshrc at boot: -1 if it could not run, 1 if a
+ * line of it failed, else 0
+ */
+int
+script_run(struct script *s)
+{
+	char path[] = "/tmp/nshcommit.XXXXXXXX";
+	FILE *f;
+	int fd, i, save, rt, failed, ret = -1;
+
 	if ((fd = mkstemp(path)) == -1) {
 		printf("%% mkstemp %s: %s\n", path, strerror(errno));
-		free(c);
 		return -1;
 	}
-	if ((c->f = fdopen(fd, "w")) == NULL) {
+	if ((f = fdopen(fd, "w")) == NULL) {
 		printf("%% commit: %s\n", strerror(errno));
 		close(fd);
 		goto done;
 	}
-	if (removals(c, NULL, NULL, 1, "") == -1 ||
-	    additions(c, NULL, NULL, 1, "") == -1) {
-		fclose(c->f);
+	if (s->len > 0 && fwrite(s->text, s->len, 1, f) != 1) {
+		printf("%% %s: %s\n", path, strerror(errno));
+		fclose(f);
 		goto done;
 	}
-	if (fclose(c->f) == EOF) {
+	if (fclose(f) == EOF) {
 		printf("%% %s: %s\n", path, strerror(errno));
 		goto done;
 	}
@@ -850,26 +887,33 @@ apply(struct cnode *from, struct cnode *to)
 		cli_rtable = 0;
 	}
 	/* empty rules before the script starts a daemon on them */
-	for (i = 0; i < c->nclears; i++)
-		if (c->clears[i].keep)
-			ctl_rules_clear(c->clears[i].name, c->clears[i].rtable,
+	for (i = 0; i < s->nclears; i++)
+		if (s->clears[i].keep)
+			ctl_rules_clear(s->clears[i].name, s->clears[i].rtable,
 			    1);
 	save = candidate;
 	candidate = 0;
 	failed = cmdrc(path) == -1;
 	candidate = save;
 	/* and none once it stopped the daemon */
-	for (i = 0; i < c->nclears; i++)
-		if (!c->clears[i].keep)
-			ctl_rules_clear(c->clears[i].name, c->clears[i].rtable,
+	for (i = 0; i < s->nclears; i++)
+		if (!s->clears[i].keep)
+			ctl_rules_clear(s->clears[i].name, s->clears[i].rtable,
 			    0);
 	if (cli_rtable != rt && nsh_setrtable(rt) == 0)
 		cli_rtable = rt;
 	ret = failed;
 done:
 	unlink(path);
-	free(c);
 	return ret;
+}
+
+void
+script_free(struct script *s)
+{
+	free(s->text);
+	s->text = NULL;
+	s->len = 0;
 }
 
 /*
@@ -1387,14 +1431,14 @@ clear(struct commit *c, char *stmt, int rtable, int keep)
 
 	if (ctl_line(stmt, name, sizeof(name)) != CTL_RULES)
 		return 0;
-	if (c->nclears == MAXCLEARS) {
+	if (c->s->nclears == MAXCLEARS) {
 		printf("%% commit: too many daemon rules to clear\n");
 		return -1;
 	}
-	strlcpy(c->clears[c->nclears].name, name,
-	    sizeof(c->clears[c->nclears].name));
-	c->clears[c->nclears].rtable = rtable;
-	c->clears[c->nclears++].keep = keep;
+	strlcpy(c->s->clears[c->s->nclears].name, name,
+	    sizeof(c->s->clears[c->s->nclears].name));
+	c->s->clears[c->s->nclears].rtable = rtable;
+	c->s->clears[c->s->nclears++].keep = keep;
 	return 0;
 }
 

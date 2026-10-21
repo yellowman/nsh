@@ -640,7 +640,22 @@ struct cnode *running_tree(void);
 int cand_cloneable(char *);
 
 /* commit.c */
+#define MAXCLEARS	64
+/* What makes one configuration read as another */
+struct script {
+	char *text;			/* lines, as cmdrc() reads them */
+	size_t len;
+	struct {
+		char name[32];
+		int rtable;
+		int keep;
+	} clears[MAXCLEARS];		/* daemon rules no script can write */
+	int nclears;
+};
 int commit(int, char **, ...);
 int pr_rollback(int, char **, ...);
 int commit_expire(void);
 int commit_boot(char *);
+int script_make(struct cnode *, struct cnode *, struct script *);
+int script_run(struct script *);
+void script_free(struct script *);
