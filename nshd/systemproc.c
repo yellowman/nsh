@@ -44,10 +44,14 @@
  * A commit's requests come from config in order: the parts BEGIN and
  * APPLY take, as chunks, then BEGIN, which makes the commit record,
  * APPLY, which runs the script, SAVE, which saves what runs and takes
- * the record away, and RECORD, when the commit went back to how it was.
- * An apply and a save each run in a child of system's, a job, in a
- * process group of its own, its output sent as it comes; past its time
- * the group is sent SIGTERM, and a grace later SIGKILL, and it fails.
+ * the record away, and RECORD, when the commit went back to how it was;
+ * and before them TEST, a daemon's test of its rules. An apply, a save
+ * and a test each run in a child of system's, a job, in a process group
+ * of its own, its output sent as it comes; past its time the group is
+ * sent SIGTERM, and a grace later SIGKILL, and it fails. A test runs as
+ * NSHD_CHECK_USER, its rules staged in a directory of their own, its
+ * own, but for the daemons root_tests names, each an exception that
+ * keeps root, its rules root's.
  * While a job runs, config's requests wait for it, but what a stream's
  * client read and a session gone.
  *
@@ -70,6 +74,7 @@
 #include <event.h>
 #include <fcntl.h>
 #include <grp.h>
+#include <limits.h>
 #include <imsg.h>
 #include <paths.h>
 #include <pwd.h>
@@ -102,12 +107,13 @@
 #endif
 
 /*
- * A job: an apply or a save, and how long it may run, then the grace
- * between SIGTERM and SIGKILL. Each to measure on OpenBSD, on a full
- * table: these are not measured
+ * A job: an apply, a save or a test, and how long it may run, then the
+ * grace between SIGTERM and SIGKILL. Each to measure on OpenBSD, on a
+ * full table: these are not measured
  */
 #define JOB_APPLY	0
 #define JOB_SAVE	1
+#define JOB_TEST	2
 static const struct {
 	const char	*what;
 	int		 secs;
@@ -115,6 +121,16 @@ static const struct {
 } jobs[] = {
 	{ "apply",	900,	10 },	/* a script that starts every daemon */
 	{ "save",	300,	10 },	/* conf(), and the save script */
+	{ "test",	120,	5 },	/* a validation: bgpd -n on a full table */
+};
+
+/*
+ * The daemons whose test keeps root, each an exception: each reads, as
+ * root, what its rules name. relayd and ldapd their keys, npppd its
+ * secrets, sasyncd its shared key, and sshd its host keys
+ */
+static const char *root_tests[] = {
+	"relay", "ldap", "nppp", "sasync", "sshd"
 };
 
 /*
@@ -140,7 +156,7 @@ struct stream {
 	struct facts_out	 o;
 };
 
-/* the job running, which a child of system's runs */
+/* the job running, which a child of system's runs, and what it takes */
 struct job {
 	uint32_t		 id;		/* the request */
 	int			 kind;
@@ -150,6 +166,13 @@ struct job {
 	int			 fd;		/* its output, or -1 at its end */
 	int			 killed;	/* the signal its group got last */
 	struct event		 ev, tm;
+	struct nshd_apply	*apply;
+	char			 who[64];	/* a save's */
+	char			 comment[NSHD_COMMENT];
+	char			*args[NOPTFILL];	/* a test's */
+	int			 root;
+	char			 dir[PATH_MAX];	/* and its rules', removed after */
+	char			 path[PATH_MAX];
 };
 
 /* a request of config's, which waits while a job runs */
@@ -215,11 +238,12 @@ static void	system_save(uint32_t, struct nshd_save *);
 static void	system_saved(int);
 static void	system_back(uint32_t);
 static void	system_rollback(uint32_t, int);
+static void	system_test(uint32_t, char *);
 static void	system_printed(uint32_t, int32_t);
-static void	system_job(uint32_t, int, struct nshd_apply *, const char *,
-		    const char *);
-static __dead void system_job_child(int, int, struct nshd_apply *,
-		    const char *, const char *);
+static struct job *system_job_new(uint32_t, int);
+static void	system_job(struct job *);
+static __dead void system_job_child(int, struct job *);
+static void	system_job_free(struct job *);
 static void	system_job_read(int, short, void *);
 static void	system_job_late(int, short, void *);
 static void	system_job_done(void);
@@ -358,6 +382,7 @@ system_whole(uint32_t type, const void *data, size_t len)
 	struct nshd_apply	 a;
 	struct nshd_save	 sv;
 	struct nshd_rollback	 rb;
+	struct nshd_test	 t;
 	int			 i;
 
 	switch (type) {
@@ -404,6 +429,11 @@ system_whole(uint32_t type, const void *data, size_t len)
 			return (-1);
 		memcpy(&rb, data, len);
 		return (rb.n < 0 || rb.n >= NSHD_ROLLBACKS ? -1 : 0);
+	case IMSG_SYS_TEST:
+		if (len != sizeof(t))
+			return (-1);
+		memcpy(&t, data, len);
+		return (memchr(t.name, '\0', sizeof(t.name)) == NULL ? -1 : 0);
 	}
 	return (-1);
 }
@@ -418,6 +448,7 @@ system_request(uint32_t type, uint32_t id, const void *data, size_t len)
 	struct nshd_apply	 a;
 	struct nshd_save	 sv;
 	struct nshd_rollback	 rb;
+	struct nshd_test	 t;
 	struct stream		*s;
 
 	switch (type) {
@@ -462,6 +493,10 @@ system_request(uint32_t type, uint32_t id, const void *data, size_t len)
 		break;
 	case IMSG_SYS_ROLLBACK_LIST:
 		system_rollback(id, -1);
+		break;
+	case IMSG_SYS_TEST:
+		memcpy(&t, data, sizeof(t));
+		system_test(id, t.name);
 		break;
 	}
 	return (0);
@@ -953,7 +988,10 @@ system_begin(uint32_t id, uid_t uid)
 static void
 system_apply(uint32_t id, struct nshd_apply *a)
 {
-	system_job(id, JOB_APPLY, a, NULL, NULL);
+	struct job	*j = system_job_new(id, JOB_APPLY);
+
+	j->apply = a;
+	system_job(j);
 	system_parts_free();
 }
 
@@ -961,10 +999,62 @@ system_apply(uint32_t id, struct nshd_apply *a)
 static void
 system_save(uint32_t id, struct nshd_save *sv)
 {
-	char	 who[64];
+	struct job	*j = system_job_new(id, JOB_SAVE);
 
-	user_name(sv->uid, who, sizeof(who));
-	system_job(id, JOB_SAVE, NULL, who, sv->comment);
+	user_name(sv->uid, j->who, sizeof(j->who));
+	strlcpy(j->comment, sv->comment, sizeof(j->comment));
+	system_job(j);
+}
+
+/*
+ * daemon name's test of its rules, the part sent, staged in a directory
+ * of their own, in a job
+ */
+static void
+system_test(uint32_t id, char *name)
+{
+	struct job	*j;
+	size_t		 i;
+	int		 fd;
+
+	if (!ctl_rules_args(name, NULL, NULL, 0, NULL)) {
+		printf("%% nshd: %s's rules have no test\n", name);
+		system_printed(id, 1);
+		system_parts_free();
+		return;
+	}
+	j = system_job_new(id, JOB_TEST);
+	for (i = 0; i < sizeof(root_tests) / sizeof(root_tests[0]); i++)
+		if (strcmp(name, root_tests[i]) == 0)
+			j->root = 1;
+	strlcpy(j->dir, "/tmp/nshtest.XXXXXXXXXX", sizeof(j->dir));
+	if (mkdtemp(j->dir) == NULL) {
+		printf("%% nshd: mkdtemp %s: %s\n", j->dir, strerror(errno));
+		j->dir[0] = '\0';
+		goto fail;
+	}
+	ctl_rules_args(name, j->dir, j->path, sizeof(j->path), j->args);
+	if ((fd = open(j->path, O_WRONLY | O_CREAT | O_EXCL, 0600)) == -1) {
+		printf("%% nshd: %s: %s\n", j->path, strerror(errno));
+		j->path[0] = '\0';
+		goto fail;
+	}
+	if ((!j->root && (fchown(fd, check_uid, check_gid) == -1 ||
+	    chown(j->dir, check_uid, check_gid) == -1)) ||
+	    (partlen[NSHD_SCRIPT] > 0 && write(fd, parts[NSHD_SCRIPT],
+	    partlen[NSHD_SCRIPT]) != (ssize_t)partlen[NSHD_SCRIPT])) {
+		printf("%% nshd: %s: %s\n", j->path, strerror(errno));
+		close(fd);
+		goto fail;
+	}
+	close(fd);
+	system_job(j);
+	system_parts_free();
+	return;
+ fail:
+	system_printed(id, -1);
+	system_job_free(j);
+	system_parts_free();
 }
 
 /*
@@ -1040,51 +1130,61 @@ system_printed(uint32_t id, int32_t status)
 	system_end(id, status, NULL);
 }
 
-/* a job of kind, for request id: an apply of a, or a save by who */
-static void
-system_job(uint32_t id, int kind, struct nshd_apply *a, const char *who,
-    const char *comment)
+/* a job of kind, for request id, to fill, then start */
+static struct job *
+system_job_new(uint32_t id, int kind)
 {
-	struct timeval	 tv = { jobs[kind].secs, 0 };
+	struct job	*j;
+
+	if ((j = calloc(1, sizeof(*j))) == NULL)
+		fatal(NULL);
+	j->id = id;
+	j->kind = kind;
+	j->fd = -1;
+	return (j);
+}
+
+/* j, which a child of system's runs, now the job running */
+static void
+system_job(struct job *j)
+{
+	struct timeval	 tv = { jobs[j->kind].secs, 0 };
 	int		 fds[2];
-	pid_t		 jp;
 
 	fflush(stdout);
 	if (pipe2(fds, O_CLOEXEC) == -1) {
 		printf("%% nshd: pipe: %s\n", strerror(errno));
-		system_printed(id, -1);
-		return;
+		goto fail;
 	}
-	switch (jp = fork()) {
+	switch (j->pid = fork()) {
 	case -1:
 		printf("%% nshd: fork: %s\n", strerror(errno));
 		close(fds[0]);
 		close(fds[1]);
-		system_printed(id, -1);
-		return;
+		goto fail;
 	case 0:
-		system_job_child(fds[1], kind, a, who, comment);
+		system_job_child(fds[1], j);
 	}
 	/* as the child does, so neither waits on the other */
-	setpgid(jp, jp);
+	setpgid(j->pid, j->pid);
 	close(fds[1]);
-	if ((job = calloc(1, sizeof(*job))) == NULL)
-		fatal(NULL);
-	job->id = id;
-	job->kind = kind;
-	job->pid = job->pgid = jp;
-	job->fd = fds[0];
+	j->pgid = j->pid;
+	j->fd = fds[0];
+	job = j;
 	event_set(&job->ev, job->fd, EV_READ | EV_PERSIST, system_job_read,
 	    NULL);
 	event_add(&job->ev, NULL);
 	evtimer_set(&job->tm, system_job_late, NULL);
 	evtimer_add(&job->tm, &tv);
+	return;
+ fail:
+	system_printed(j->id, -1);
+	system_job_free(j);
 }
 
 /* the job's child: what it prints, to fd, with nothing else of system's */
 static __dead void
-system_job_child(int fd, int kind, struct nshd_apply *a, const char *who,
-    const char *comment)
+system_job_child(int fd, struct job *j)
 {
 	struct script	 sc;
 	int		 i, null, r;
@@ -1101,27 +1201,37 @@ system_job_child(int fd, int kind, struct nshd_apply *a, const char *who,
 	    dup2(null, STDIN_FILENO) == -1)
 		_exit(2);
 	closefrom(STDERR_FILENO + 1);
-	if (kind == JOB_APPLY) {
+	switch (j->kind) {
+	case JOB_APPLY:
 		memset(&sc, 0, sizeof(sc));
 		sc.text = parts[NSHD_SCRIPT];
 		sc.len = partlen[NSHD_SCRIPT];
-		for (i = 0; i < a->nclears; i++) {
-			strlcpy(sc.clears[i].name, a->clears[i].name,
+		for (i = 0; i < j->apply->nclears; i++) {
+			strlcpy(sc.clears[i].name, j->apply->clears[i].name,
 			    sizeof(sc.clears[i].name));
-			sc.clears[i].rtable = a->clears[i].rtable;
-			sc.clears[i].keep = a->clears[i].keep;
+			sc.clears[i].rtable = j->apply->clears[i].rtable;
+			sc.clears[i].keep = j->apply->clears[i].keep;
 		}
-		sc.nclears = a->nclears;
+		sc.nclears = j->apply->nclears;
 		/* -1, it could not run; 1, a line of it failed */
 		r = script_run(&sc);
-		fflush(stdout);
-		_exit(r == -1 ? 2 : r);
+		break;
+	case JOB_SAVE:
+		if ((r = conf_save()))
+			rollback_keep(j->who, j->comment);
+		r = !r;
+		break;
+	default:
+		if (!j->root)
+			system_drop();
+		execv(j->args[0], j->args);
+		printf("%% exec '%s' failed: %s\n", j->args[0],
+		    strerror(errno));
+		r = -1;
+		break;
 	}
-	r = conf_save();
-	if (r)
-		rollback_keep(who, comment);
 	fflush(stdout);
-	_exit(r ? 0 : 1);
+	_exit(r == -1 ? 2 : r);
 }
 
 /* what the job's child printed, to config as it comes */
@@ -1195,8 +1305,19 @@ system_job_done(void)
 	if (j->kind == JOB_SAVE)
 		system_saved(status == 0);
 	system_printed(j->id, status);
-	free(j);
+	system_job_free(j);
 	system_drain();
+}
+
+/* j, and its test's rules, gone */
+static void
+system_job_free(struct job *j)
+{
+	if (j->path[0] != '\0')
+		unlink(j->path);
+	if (j->dir[0] != '\0')
+		rmdir(j->dir);
+	free(j);
 }
 
 /* the commit record into rec, state RECORD_NONE if none: -1, said, if not */

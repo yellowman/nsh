@@ -34,10 +34,11 @@
  * candidate, and kept for every session until the next.
  *
  * A commit is one at a time, of all sessions': config plans it from a
- * snapshot, and system records it (BEGIN), runs its script (APPLY) and,
- * if a snapshot after reads as the candidate, saves what runs (SAVE);
- * if not, it runs the script back, and the record goes (RECORD). It
- * runs to its end if its session goes. commit check stops at the plan.
+ * snapshot, system tests the daemons' rules it changes (TEST), then
+ * records it (BEGIN), runs its script (APPLY) and, if a snapshot after
+ * reads as the candidate, saves what runs (SAVE); if not, it runs the
+ * script back, and the record goes (RECORD). It runs to its end if its
+ * session goes. commit check stops after the tests.
  */
 
 #include <sys/types.h>
@@ -70,7 +71,7 @@
 #endif
 
 /* what a session waits on a snapshot for */
-enum { WAIT_NONE, WAIT_CONFIGURE, WAIT_CANDIDATE, WAIT_CHECK, WAIT_RESET };
+enum { WAIT_NONE, WAIT_CONFIGURE, WAIT_CANDIDATE, WAIT_RESET };
 
 struct session {
 	TAILQ_ENTRY(session)	 entry;
@@ -99,6 +100,7 @@ enum { REQ_ANSWER, REQ_COMMIT, REQ_ROLLBACK };
 /* the commit, and what it waits on */
 enum {
 	COMMIT_PLAN,		/* a snapshot, to plan from */
+	COMMIT_TEST,		/* a daemon's test of its rules */
 	COMMIT_BEGIN,		/* the record made */
 	COMMIT_APPLY,		/* the script run */
 	COMMIT_VERIFY,		/* a snapshot, to verify */
@@ -113,6 +115,8 @@ struct commit {
 	uid_t			 uid;
 	int			 step;
 	int			 waits;		/* on a snapshot */
+	int			 check;		/* commit check */
+	int			 test;		/* the plan's test running */
 	int			 failed;	/* a line of the script failed */
 	char			 comment[NSHD_COMMENT];
 	struct plan		*plan;
@@ -167,6 +171,8 @@ static struct request	*config_request(uint32_t, int);
 static void		 commit_wait(int);
 static void		 commit_snapshot(void);
 static void		 commit_ended(int32_t);
+static void		 commit_test(int);
+static void		 commit_go(void);
 static int		 commit_part(int32_t, const char *, size_t);
 static void		 commit_apply(int);
 static void		 commit_save(void);
@@ -543,10 +549,6 @@ config_commit(uint32_t session, struct nshd_commit *c)
 
 	if ((sp = config_private(session)) == NULL)
 		return;
-	if (c->check) {
-		config_wait(sp, WAIT_CHECK);
-		return;
-	}
 	if (commit != NULL) {
 		config_answer(session, 1, "%% Commit refused: uid %u commits "
 		    "now\n", (unsigned int)commit->uid);
@@ -556,6 +558,7 @@ config_commit(uint32_t session, struct nshd_commit *c)
 		fatal(NULL);
 	commit->session = session;
 	commit->uid = sp->uid;
+	commit->check = c->check;
 	strlcpy(commit->comment, c->comment, sizeof(commit->comment));
 	commit_wait(COMMIT_PLAN);
 }
@@ -709,7 +712,6 @@ config_snapshot_done(int32_t status)
 {
 	struct session	*sp;
 	struct snapshot	*s = snap;
-	struct plan	*p;
 	int		 r, mode;
 
 	snap = NULL;
@@ -738,10 +740,6 @@ config_snapshot_done(int32_t status)
 		case WAIT_CANDIDATE:
 			r = session_candidate(sp->st);
 			mode = 0;
-			break;
-		case WAIT_CHECK:
-			r = session_plan(sp->st, 1, &p);
-			mode = 1;
 			break;
 		case WAIT_RESET:
 			r = session_rollback(sp->st, NULL, 0, 0);
@@ -811,30 +809,21 @@ commit_wait(int step)
 static void
 commit_snapshot(void)
 {
-	struct nshd_begin	 b;
 	struct session		*sp;
-	struct plan		*p;
 	int			 r;
 
 	commit->waits = 0;
 	switch (commit->step) {
 	case COMMIT_PLAN:
 		if ((sp = session_find(commit->session)) == NULL ||
-		    session_plan(sp->st, 0, &commit->plan) == -1) {
+		    session_plan(sp->st, commit->check, &commit->plan) == -1)
 			commit_end(-1, NULL);
-			return;
-		}
-		p = commit->plan;
-		if (p->same) {
-			commit_save();
-			return;
-		}
-		if (commit_part(NSHD_BEFORE, p->text[PLAN_BEFORE],
-		    p->len[PLAN_BEFORE]) == -1 || commit_part(NSHD_WANT,
-		    p->text[PLAN_WANT], p->len[PLAN_WANT]) == -1)
-			return;
-		b.uid = commit->uid;
-		commit_request(COMMIT_BEGIN, IMSG_SYS_BEGIN, &b, sizeof(b));
+		else if (commit->plan == NULL)
+			commit_end(0, NULL);
+		else if (commit->plan->ntests > 0)
+			commit_test(0);
+		else
+			commit_go();
 		break;
 	case COMMIT_VERIFY:
 		if ((r = session_verify(commit->plan, commit->failed)) == 0)
@@ -863,6 +852,17 @@ commit_ended(int32_t status)
 	int		 r;
 
 	switch (commit->step) {
+	case COMMIT_TEST:
+		session_tested(commit->plan, commit->test, status != 0);
+		if (commit->test + 1 < commit->plan->ntests)
+			commit_test(commit->test + 1);
+		else if (session_verdict(commit->plan) == -1)
+			commit_end(-1, NULL);
+		else if (commit->check)
+			commit_end(0, NULL);
+		else
+			commit_go();
+		break;
 	case COMMIT_BEGIN:
 		if (status != 0)
 			commit_end(-1, NULL);
@@ -888,6 +888,40 @@ commit_ended(int32_t status)
 		commit_end(-1, NULL);
 		break;
 	}
+}
+
+/* the plan's nth test of a daemon's rules, which system runs */
+static void
+commit_test(int n)
+{
+	struct plan_test	*t = &commit->plan->tests[n];
+	struct nshd_test	 nt;
+
+	commit->test = n;
+	memset(&nt, 0, sizeof(nt));
+	strlcpy(nt.name, t->name, sizeof(nt.name));
+	if (commit_part(NSHD_SCRIPT, t->text, t->len) == -1)
+		return;
+	commit_request(COMMIT_TEST, IMSG_SYS_TEST, &nt, sizeof(nt));
+}
+
+/* the plan checked: what runs saved, if it is the candidate, or begun */
+static void
+commit_go(void)
+{
+	struct plan		*p = commit->plan;
+	struct nshd_begin	 b;
+
+	if (p->same) {
+		commit_save();
+		return;
+	}
+	if (commit_part(NSHD_BEFORE, p->text[PLAN_BEFORE],
+	    p->len[PLAN_BEFORE]) == -1 || commit_part(NSHD_WANT,
+	    p->text[PLAN_WANT], p->len[PLAN_WANT]) == -1)
+		return;
+	b.uid = commit->uid;
+	commit_request(COMMIT_BEGIN, IMSG_SYS_BEGIN, &b, sizeof(b));
 }
 
 /* a part of the commit's, to system, as chunks: -1 if too long, said */

@@ -38,6 +38,14 @@ struct cnode;
 #define PLAN_PARTS	3
 #define PLAN_CLEARS	64	/* externs.h's MAXCLEARS */
 
+/* a daemon's test of its rules, which system runs for a plan */
+struct plan_test {
+	char		 name[32];	/* the daemon */
+	char		*label;		/* the line, and its block */
+	char		*text;		/* the rules */
+	size_t		 len;
+};
+
 struct plan {
 	int		 same;		/* the candidate is what runs */
 	char		*text[PLAN_PARTS];
@@ -48,6 +56,10 @@ struct plan {
 		int	 keep;
 	}		 clears[PLAN_CLEARS];	/* the script's */
 	int		 nclears;
+	struct plan_test *tests;	/* to run before the verdict */
+	int		 ntests;
+	int		 bad;		/* the problems found, but theirs */
+	int		 checking;	/* commit check */
 	struct cnode	*was, *want;
 };
 
@@ -67,6 +79,8 @@ void			 session_mode(struct session_state *, int *, int *,
 int			 session_candidate(struct session_state *);
 int			 session_plan(struct session_state *, int,
 			    struct plan **);
+void			 session_tested(struct plan *, int, int);
+int			 session_verdict(struct plan *);
 int			 session_verify(struct plan *, int);
 int			 session_verify_back(struct plan *);
 void			 plan_free(struct plan *);

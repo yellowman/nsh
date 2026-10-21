@@ -89,6 +89,7 @@ struct ctl {
 int ctl_line(char *, char *, size_t);
 int ctl_rules_clear(char *, int, int);
 int ctl_rules_test(char *, char **, size_t);
+int ctl_rules_args(char *, char *, char *, size_t, char **);
 void ctl_rules_done(void);
 
 #define T_HANDLER       1

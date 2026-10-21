@@ -230,7 +230,9 @@ session_candidate(struct session_state *s)
  * A commit of s's candidate, into *pp, checked, as commit check says it
  * when checking, which plans nothing: as a handler returns, -1 when the
  * candidate may not become the running configuration or no plan could
- * be made, said why
+ * be made, said why. Daemons' tests of rules are the plan's, and the
+ * verdict waits on them (session_verdict()); with them, a plan is made
+ * when checking too
  */
 int
 session_plan(struct session_state *s, int checking, struct plan **pp)
@@ -251,8 +253,12 @@ session_plan(struct session_state *s, int checking, struct plan **pp)
 		printf("%% session_plan: %s\n", strerror(errno));
 		goto done;
 	}
-	if ((p->was = running_tree()) == NULL ||
-	    commit_checks(p->was, p->want, checking) == -1)
+	if ((p->was = running_tree()) == NULL)
+		goto done;
+	p->bad = commit_problems(p->was, p->want);
+	p->ntests = commit_deferred(&p->tests);
+	p->checking = checking;
+	if (p->ntests == 0 && commit_verdict(p->bad, checking) == -1)
 		goto done;
 	if (!checking) {
 		p->same = conftree_compare(NULL, p->was, p->want) == 0;
@@ -260,6 +266,8 @@ session_plan(struct session_state *s, int checking, struct plan **pp)
 		    plan_text(p, PLAN_WANT, p->want) == -1 ||
 		    plan_script(p, p->was, p->want) == -1))
 			goto done;
+	}
+	if (!checking || p->ntests > 0) {
 		*pp = p;
 		p = NULL;
 	}
@@ -268,6 +276,22 @@ done:
 	session_leave(s);
 	plan_free(p);
 	return r;
+}
+
+/* p's nth test refused its rules, if failed, a problem said */
+void
+session_tested(struct plan *p, int n, int failed)
+{
+	if (failed)
+		p->bad += commit_refused_by(p->tests[n].label,
+		    p->tests[n].name);
+}
+
+/* The verdict on p, its tests run, as commit_checks() says it */
+int
+session_verdict(struct plan *p)
+{
+	return commit_verdict(p->bad, p->checking);
 }
 
 /*
@@ -324,6 +348,11 @@ plan_free(struct plan *p)
 		return;
 	for (i = 0; i < PLAN_PARTS; i++)
 		free(p->text[i]);
+	for (i = 0; i < p->ntests; i++) {
+		free(p->tests[i].label);
+		free(p->tests[i].text);
+	}
+	free(p->tests);
 	conftree_free(p->was);
 	conftree_free(p->want);
 	free(p);

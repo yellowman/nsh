@@ -90,6 +90,7 @@
 #include "conftree.h"
 #include "settings.h"
 #include "kfacts.h"
+#include "session.h"
 
 #define CONFIRMMIN	10	/* commit confirmed's minutes, if not given */
 #define CONFIRMMAX	1440
@@ -123,6 +124,10 @@ struct claims {
 	size_t n;
 };
 
+/* in nshd's config, the tests of rules check() keeps for system */
+static struct plan_test *deferred;
+static int ndeferred;
+
 /* An interface's lines that name other interfaces: the word, or 0 all */
 static const struct {
 	char *name;
@@ -140,6 +145,7 @@ static int check_ports(struct cnode *, char *, char *, char *,
 static int check_ids(struct cnode *, char *, char *, struct claims *);
 static int check_rtable(struct cnode *, char *);
 static int check_rules(struct cnode *, struct cnode *, char *);
+static int rules_test(char *, char **, size_t, char *);
 static int ifthere(struct cnode *, char *);
 static int inwords(char *, char *);
 static char *claim(struct claims *, char *, char *);
@@ -314,9 +320,21 @@ done:
 int
 commit_checks(struct cnode *was, struct cnode *want, int checking)
 {
-	int bad;
+	return commit_verdict(check(was, want), checking);
+}
 
-	if ((bad = check(was, want)) == 0 && !checking)
+/* The problems check() finds with want, each said, and how many */
+int
+commit_problems(struct cnode *was, struct cnode *want)
+{
+	return check(was, want);
+}
+
+/* The verdict on bad problems, said as commit_checks() says it */
+int
+commit_verdict(int bad, int checking)
+{
+	if (bad == 0 && !checking)
 		return 0;
 	if (bad == 0)
 		printf("%% Configuration check succeeds\n");
@@ -553,6 +571,7 @@ static int
 check_rules(struct cnode *was, struct cnode *want, char *block)
 {
 	char **lines = NULL, **nl, *l, *k, *f, *fp = NULL, *tp, name[32];
+	char label[512];
 	size_t i, j;
 	int bad = 0;
 
@@ -578,15 +597,77 @@ check_rules(struct cnode *was, struct cnode *want, char *block)
 			lines = nl;
 			lines[j] = k;
 		}
-		if (j > 0 && ctl_rules_test(name, lines, j) == -1)
-			bad += problem("%s%s%s: %s's test refuses them",
-			    block != NULL ? block : "", block != NULL ? ", " :
-			    "", l, name);
+		snprintf(label, sizeof(label), "%s%s%s", block != NULL ?
+		    block : "", block != NULL ? ", " : "", l);
+		if (j > 0 && rules_test(name, lines, j, label) == -1)
+			bad += commit_refused_by(label, name);
 		free(tp);
 	}
 	free(fp);
 	free(lines);
 	return bad;
+}
+
+/*
+ * Test daemon name's rules, its n lines, which label names: -1 if the
+ * test refuses them, else 0. nshd's config runs no test: it keeps them
+ * for system, as commit_deferred() gives them
+ */
+static int
+rules_test(char *name, char **lines, size_t n, char *label)
+{
+	struct plan_test *t, *nt;
+	FILE *f;
+	size_t i;
+
+	if (!in_config)
+		return ctl_rules_test(name, lines, n);
+	if (!ctl_rules_args(name, NULL, NULL, 0, NULL))
+		return 0;
+	if ((nt = reallocarray(deferred, ndeferred + 1,
+	    sizeof(*deferred))) == NULL) {
+		printf("%% commit: %s\n", strerror(errno));
+		return -1;
+	}
+	deferred = nt;
+	t = &deferred[ndeferred];
+	memset(t, 0, sizeof(*t));
+	strlcpy(t->name, name, sizeof(t->name));
+	if ((t->label = strdup(label)) == NULL ||
+	    (f = open_memstream(&t->text, &t->len)) == NULL) {
+		printf("%% commit: %s\n", strerror(errno));
+		free(t->label);
+		return -1;
+	}
+	for (i = 0; i < n; i++)
+		fprintf(f, "%s\n", lines[i]);
+	if (fclose(f) == EOF) {
+		printf("%% commit: %s\n", strerror(errno));
+		free(t->label);
+		free(t->text);
+		return -1;
+	}
+	ndeferred++;
+	return 0;
+}
+
+/* The tests rules_test() kept for system, into *tp, now the caller's */
+int
+commit_deferred(struct plan_test **tp)
+{
+	int n = ndeferred;
+
+	*tp = deferred;
+	deferred = NULL;
+	ndeferred = 0;
+	return n;
+}
+
+/* A daemon's test refuses its rules, which label names: a problem */
+int
+commit_refused_by(char *label, char *name)
+{
+	return problem("%s: %s's test refuses them", label, name);
 }
 
 /* Is name an interface the candidate has, or hardware that is there? */

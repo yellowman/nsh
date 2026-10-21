@@ -82,6 +82,7 @@ commands.c	table	Bridgelist Bridgelist_nitems Intlist
 			telnethelp tftphelp tftpproxyhelp tracert6help
 			tracerthelp unsetenvhelp verbosehelp wccptab
 			whohelp
+commit.c	scratch	deferred ndeferred
 commit.c	table	ifrefs
 complete.c	process	complete.word complete_nocmd.nocmdtab
 			complete_nocmd.nocmdtab_nitems

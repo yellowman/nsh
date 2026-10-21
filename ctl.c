@@ -1066,32 +1066,17 @@ ctl_rules_test(char *name, char **lines, size_t n)
 {
 	char dir[] = "/tmp/nsh.XXXXXXXXXX", path[PATH_MAX];
 	char *args[NOPTFILL] = { NULL };
-	struct daemons *d;
-	struct ctl *x;
 	size_t i;
 	FILE *f;
 	int ret;
 
-	for (d = ctl_daemons; d->name != NULL; d++)
-		if (strcmp(d->name, name) == 0)
-			break;
-	if (d->name == NULL || d->tmpfile == NULL)
+	if (!ctl_rules_args(name, NULL, NULL, 0, NULL))
 		return 0;
-	for (x = d->table; x->name != NULL; x++)
-		if (x->type == T_HANDLER_TEST && x->test_args[0] != NULL)
-			break;
-	if (x->name == NULL)
-		return 0;
-	if (in_config) {
-		printf("%% %s's rules: not tested through nshd's configure "
-		    "private\n", name);
-		return -1;
-	}
 	if (mkdtemp(dir) == NULL) {
 		printf("%% mkdtemp %s: %s\n", dir, strerror(errno));
 		return -1;
 	}
-	snprintf(path, sizeof(path), "%s/%s", dir, basename(d->tmpfile));
+	ctl_rules_args(name, dir, path, sizeof(path), args);
 	if ((f = fopen(path, "w")) == NULL) {
 		printf("%% %s: %s\n", path, strerror(errno));
 		rmdir(dir);
@@ -1104,10 +1089,37 @@ ctl_rules_test(char *name, char **lines, size_t n)
 		ctl_cand_unstage(dir, path);
 		return -1;
 	}
-	fill_tmpfile(x->test_args, path, args);
 	ret = cmdargs(args[0], args) == 0 ? 0 : -1;
 	ctl_cand_unstage(dir, path);
 	return ret;
+}
+
+/*
+ * Does daemon name's edit test its rules? If so, 1, and with dir, the
+ * path in dir its rules are staged at, into path, and the test's
+ * arguments, which name it, into args, NOPTFILL of them
+ */
+int
+ctl_rules_args(char *name, char *dir, char *path, size_t len, char **args)
+{
+	struct daemons *d;
+	struct ctl *x;
+
+	for (d = ctl_daemons; d->name != NULL; d++)
+		if (strcmp(d->name, name) == 0)
+			break;
+	if (d->name == NULL || d->tmpfile == NULL)
+		return 0;
+	for (x = d->table; x->name != NULL; x++)
+		if (x->type == T_HANDLER_TEST && x->test_args[0] != NULL)
+			break;
+	if (x->name == NULL)
+		return 0;
+	if (dir != NULL) {
+		snprintf(path, len, "%s/%s", dir, basename(d->tmpfile));
+		fill_tmpfile(x->test_args, path, args);
+	}
+	return 1;
 }
 
 /* The line conf prints after a daemon's rules: pf reload, crontab install */

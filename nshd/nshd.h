@@ -98,7 +98,7 @@ struct nshd_rollback {
 struct nshd_chunk {
 	int32_t		part;
 };
-#define NSHD_SCRIPT	0	/* what APPLY runs */
+#define NSHD_SCRIPT	0	/* what APPLY runs, or the rules TEST tests */
 #define NSHD_BEFORE	1	/* what BEGIN records: what runs */
 #define NSHD_WANT	2	/* and what is wanted */
 #define NSHD_PARTS	3
@@ -122,6 +122,11 @@ struct nshd_apply {
 struct nshd_save {
 	uint32_t	uid;
 	char		comment[NSHD_COMMENT];
+};
+
+/* config to system: test daemon name's rules, the part sent */
+struct nshd_test {
+	char		name[32];
 };
 
 /*
@@ -202,7 +207,8 @@ enum nshd_imsg {
 	IMSG_SYS_SAVE,		/* nshd_save: what runs saved, the record gone */
 	IMSG_SYS_RECORD,	/* the commit begun went back to how it was */
 	IMSG_SYS_ROLLBACK_READ,	/* nshd_rollback: configuration n */
-	IMSG_SYS_ROLLBACK_LIST	/* show rollback's list */
+	IMSG_SYS_ROLLBACK_LIST,	/* show rollback's list */
+	IMSG_SYS_TEST		/* nshd_test: the test run, its status */
 };
 
 struct imsgev {
