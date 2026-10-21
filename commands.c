@@ -2540,7 +2540,13 @@ docmd(int argc, char **argv, ...)
 			printf("%% Ambiguous command %s\n", argv[0]);
 		else if (c == NULL)
 			printf("%% Invalid command %s\n", argv[0]);
-		else if ((c->needconfig || c->modh) &&
+		else if (c->needpriv != 0 && priv != 1) {
+			printf("%% Privilege required\n");
+			return -1;
+		} else if (c->needconfig != 0 && config_mode != 1) {
+			printf("%% Command requires configure mode\n");
+			return -1;
+		} else if ((c->needconfig || c->modh) &&
 		    cand_refused(c->name, c->cand))
 			return 0;
 		else
