@@ -109,6 +109,11 @@ if.c		table	address_fields if_sglobals iftypes
 			ip_sources kind_address kind_interface kind_ip
 			kind_vlan mplscs vlan_fields
 kernel.c	table	kcloners
+kfacts.c	process	kf
+kfacts.c	scratch	kf_lladdr.buf
+kfacts.c	table	kcfields kdfields kiffields kind_cloner
+			kind_daemons kind_if kind_media kind_rtable
+			kmfields krfields
 kroute.c	process	rtmsg.seq sigflag
 kroute.c	scratch	ip_route.line_kroute lookup_kept
 			lookup_record.gwname lookup_record.ifpname

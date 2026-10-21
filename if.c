@@ -56,6 +56,7 @@
 #include "settings.h"
 #include "facts.h"
 #include "showfacts.h"
+#include "kfacts.h"
 #include "session.h"
 
 char *iftype(int int_type);
@@ -1414,33 +1415,23 @@ ip6_opts(int argc, char **argv, struct ip6opts *o)
 static int
 ip6_eui64(char *name, struct in6_addr *a)
 {
-	struct ifaddrs *ifap, *ifa;
-	struct sockaddr_in6 *sin6;
-	int found = 0;
+	struct in6_addr ll;
+	int found;
 
 	if (memcmp(&a->s6_addr[8], &in6addr_any.s6_addr[8], 8) != 0) {
 		printf("%% eui64: the address already has an interface ID\n");
 		return -1;
 	}
-	if (getifaddrs(&ifap) != 0) {
+	if ((found = kf_ll6(name, &ll)) == -1) {
 		printf("%% eui64: getifaddrs: %s\n", strerror(errno));
 		return -1;
 	}
-	for (ifa = ifap; ifa != NULL && !found; ifa = ifa->ifa_next) {
-		if (ifa->ifa_addr == NULL ||
-		    ifa->ifa_addr->sa_family != AF_INET6 ||
-		    strcmp(ifa->ifa_name, name) != 0)
-			continue;
-		sin6 = (struct sockaddr_in6 *)ifa->ifa_addr;
-		if (IN6_IS_ADDR_LINKLOCAL(&sin6->sin6_addr)) {
-			memcpy(&a->s6_addr[8], &sin6->sin6_addr.s6_addr[8], 8);
-			found = 1;
-		}
-	}
-	freeifaddrs(ifap);
-	if (!found)
+	if (!found) {
 		printf("%% eui64: %s has no link-local address\n", name);
-	return found ? 0 : -1;
+		return -1;
+	}
+	memcpy(&a->s6_addr[8], &ll.s6_addr[8], 8);
+	return 0;
 }
 
 /*
@@ -1499,7 +1490,7 @@ cand_otherscope(struct in6_addr *a, char *ifname)
 	if (!IN6_IS_ADDR_LINKLOCAL(a))
 		return 0;
 	memcpy(&id, &a->s6_addr[2], sizeof(id));
-	if (id == 0 || id == htons(if_nametoindex(ifname)))
+	if (id == 0 || id == htons(kf_index(ifname)))
 		return 0;
 	printf("%% The scope of a link-local address on %s must be %s\n",
 	    ifname, ifname);
@@ -1815,7 +1806,7 @@ intip(int argc, char **argv, ...)
 	 */
 	if (strcmp(cmdname, "inet6") != 0 &&
 	    (isprefix(argv[0], "dhcp") || isprefix(argv[0], "autoconf"))) {
-		if (dhcpleased_is_running()) {
+		if (kf_dhcpleased()) {
 			/*
 			 * dhclient(8) has gone away as of OpenBSD 7.2+.
 			 * dhcpleased(8) should always be running and will
@@ -3546,8 +3537,8 @@ cand_ifxflags(char *ifname, int value, int set)
 		break;
 	case IFXF_WOL:
 		/* SIOCSIFXFLAGS: ENOTSUP without IFCAP_WOL */
-		if (set && if_nametoindex(ifname) != 0 &&
-		    !(get_ifdata(ifname, IFDATA_CAPABILITIES) & IFCAP_WOL)) {
+		if (set && kf_index(ifname) != 0 &&
+		    !(kf_caps(ifname) & IFCAP_WOL)) {
 			printf("%% %s does not support wake on LAN\n", ifname);
 			return -1;
 		}
@@ -3860,7 +3851,6 @@ intpowersave(int argc, char **argv, ...)
 static int
 cand_lladdr(char *ifname, char *arg)
 {
-	StringList *orig;
 	struct ether_addr *ea, eabuf;
 	char addr[sizeof("00:00:00:00:00:00")], *cur;
 	int i, same = 0;
@@ -3893,17 +3883,9 @@ cand_lladdr(char *ifname, char *arg)
 	}
 	strlcpy(addr, ether_ntoa(ea), sizeof(addr));
 
-	if (if_nametoindex(ifname) != 0) {
-		orig = sl_init();
-		if (db_select_flag_x_ctl(orig, "lladdr", ifname) < 0)
-			printf("%% lladdr database select failed\n");
-		else if (orig->sl_cur > 0)
-			same = strcmp(orig->sl_str[0], addr) == 0;
-		else
-			same = (cur = get_hwdaddr(ifname)) != NULL &&
-			    strcmp(cur, addr) == 0;
-		sl_free(orig, 1);
-	}
+	if (kf_index(ifname) != 0)
+		same = (cur = kf_lladdr(ifname)) != NULL &&
+		    strcmp(cur, addr) == 0;
 	if (same)
 		return cand_setting(ST_DEFAULT, "lladdr");
 	return cand_setting(ST_ON, "lladdr %s", addr);

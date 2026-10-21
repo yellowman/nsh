@@ -64,10 +64,9 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
-#include <sys/sysctl.h>
 #include <sys/wait.h>
 #include <net/if.h>
-#include <net/route.h>
+#include <netinet/in.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -84,6 +83,7 @@
 #include "ctl.h"
 #include "conftree.h"
 #include "settings.h"
+#include "kfacts.h"
 
 #define MAXCLEARS	64
 #define CONFIRMMIN	10	/* commit confirmed's minutes, if not given */
@@ -142,7 +142,6 @@ static int check_rtable(struct cnode *, char *);
 static int check_rules(struct cnode *, struct cnode *, char *);
 static int ifthere(struct cnode *, char *);
 static int inwords(char *, char *);
-static int rtable_there(int);
 static char *claim(struct claims *, char *, char *);
 static int problem(const char *, ...);
 static int apply(struct cnode *, struct cnode *);
@@ -444,7 +443,7 @@ check_rtable(struct cnode *want, char *block)
 	size_t i, n;
 	int id = rtableid(block);
 
-	if (rtable_there(id) || conftree_line(want, block, "route", 0) != NULL)
+	if (kf_rtable(id) || conftree_line(want, block, "route", 0) != NULL)
 		return 0;
 	snprintf(rd, sizeof(rd), "rdomain %d", id);
 	for (i = 0; (s = conftree_stmt(want, i)) != NULL; i++)
@@ -515,7 +514,7 @@ ifthere(struct cnode *want, char *name)
 	if (has(want, NULL, head))
 		return 1;
 	/* what a commit would not destroy */
-	return !cand_cloneable(name) && is_valid_ifname(name);
+	return !cand_cloneable(name) && kf_valid(name);
 }
 
 /* Is w one of the words of list? */
@@ -530,17 +529,6 @@ inwords(char *list, char *w)
 			return 1;
 	}
 	return 0;
-}
-
-/* Is there routing table id? */
-static int
-rtable_there(int id)
-{
-	int mib[6] = { CTL_NET, PF_ROUTE, 0, 0, NET_RT_TABLE, id };
-	struct rt_tableinfo info;
-	size_t len = sizeof(info);
-
-	return sysctl(mib, 6, &info, &len, NULL, 0) != -1;
 }
 
 /*

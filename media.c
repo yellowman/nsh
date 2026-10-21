@@ -50,6 +50,7 @@
 #include "settings.h"
 #include "facts.h"
 #include "showfacts.h"
+#include "kfacts.h"
 
 uint64_t init_current_media(int, char *);
 int process_media_commands(int, char *, uint64_t);
@@ -244,20 +245,9 @@ uint64_t
 init_current_media(int s, char *ifname)
 {
 	uint64_t media_current;
-	struct ifmediareq ifmr;
 
-	(void) memset(&ifmr, 0, sizeof(ifmr));
-	(void) strlcpy(ifmr.ifm_name, ifname, sizeof(ifmr.ifm_name));
-
-	if (ioctl(s, SIOCGIFMEDIA, (caddr_t) & ifmr) < 0) {
-		/*
-		 * If we get E2BIG, the kernel is telling us
-		 * that there are more, so we can ignore it.
-		 */
-		if (errno != E2BIG)
-			return -1;
-	}
-	media_current = ifmr.ifm_current;
+	if (kf_media(s, ifname, &media_current, NULL, NULL) == -1)
+		return -1;
 
 	/* Sanity. */
 	if (IFM_TYPE(media_current) == 0) {
@@ -307,28 +297,18 @@ cand_media(char *ifname, uint64_t type)
 static int
 cand_setmedia(int s, char *ifname, uint64_t word)
 {
-	struct ifmediareq ifmr;
-	uint64_t *list;
+	uint64_t *list, cur;
 	char line[256];
-	int i;
+	size_t i, n;
 
-	memset(&ifmr, 0, sizeof(ifmr));
-	strlcpy(ifmr.ifm_name, ifname, sizeof(ifmr.ifm_name));
-	if (ioctl(s, SIOCGIFMEDIA, (caddr_t)&ifmr) == -1 ||
-	    (list = calloc(ifmr.ifm_count, sizeof(*list))) == NULL) {
+	if (kf_media(s, ifname, &cur, &list, &n) == -1) {
 		printf("%% cand_setmedia: %s\n", strerror(errno));
 		return -1;
 	}
-	ifmr.ifm_ulist = list;
-	if (ioctl(s, SIOCGIFMEDIA, (caddr_t)&ifmr) == -1) {
-		printf("%% cand_setmedia: %s\n", strerror(errno));
-		free(list);
-		return -1;
-	}
-	for (i = 0; i < ifmr.ifm_count && list[i] != word; i++)
+	for (i = 0; i < n && list[i] != word; i++)
 		;
 	free(list);
-	if (i == ifmr.ifm_count) {
+	if (i == n) {
 		printf("%% process_media_commands: SIOCSIFMEDIA: %s\n",
 		    strerror(EINVAL));
 		return -1;

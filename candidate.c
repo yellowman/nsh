@@ -39,9 +39,8 @@
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/socket.h>
-#include <sys/ioctl.h>
-#include <sys/sockio.h>
 #include <net/if.h>
+#include <netinet/in.h>
 #include <limits.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -56,6 +55,7 @@
 #include "conftree.h"
 #include "settings.h"
 #include "kernel.h"
+#include "kfacts.h"
 #include "session.h"
 
 int candidate;				/* configure private is on */
@@ -265,8 +265,8 @@ cand_getflags(char *name, int ifs)
 {
 	const struct kcloner *kc;
 
-	if (if_nametoindex(name) != 0)
-		return get_ifflags(name, ifs);
+	if (kf_index(name) != 0)
+		return kf_flags(name, ifs);
 	return (kc = cand_cloner(name)) != NULL ? kc->flags : 0;
 }
 
@@ -276,8 +276,8 @@ cand_gettype(char *name)
 {
 	const struct kcloner *kc;
 
-	if (if_nametoindex(name) != 0)
-		return get_ifdata(name, IFDATA_IFTYPE);
+	if (kf_index(name) != 0)
+		return kf_type(name);
 	return (kc = cand_cloner(name)) != NULL ? kc->type : 0;
 }
 
@@ -534,7 +534,7 @@ cand_interface(int set, char *name, int *isbridge)
 		}
 		return cand_set(CTX_TOP, ST_OFF, NULL, head) == -1 ? -1 : 1;
 	}
-	if (!conftree_has(cand, head) && !is_valid_ifname(name) &&
+	if (!conftree_has(cand, head) && !kf_valid(name) &&
 	    !cand_cloneable(name)) {
 		printf("%% interface %s not found\n", name);
 		return -1;
@@ -782,34 +782,7 @@ cloner_namelen(char *name)
 int
 cand_cloneable(char *name)
 {
-	struct if_clonereq ifcr;
-	char *buf = NULL, *cp;
 	size_t l;
-	int s, i, ret = 0;
 
-	if ((l = cloner_namelen(name)) == 0)
-		return 0;
-	if ((s = socket(AF_INET, SOCK_DGRAM, 0)) == -1)
-		return 0;
-	memset(&ifcr, 0, sizeof(ifcr));
-	if (ioctl(s, SIOCIFGCLONERS, &ifcr) == -1)
-		goto done;
-	if ((buf = calloc(ifcr.ifcr_total, IFNAMSIZ)) == NULL)
-		goto done;
-	ifcr.ifcr_count = ifcr.ifcr_total;
-	ifcr.ifcr_buffer = buf;
-	if (ioctl(s, SIOCIFGCLONERS, &ifcr) == -1)
-		goto done;
-	if (ifcr.ifcr_count > ifcr.ifcr_total)
-		ifcr.ifcr_count = ifcr.ifcr_total;
-	for (cp = buf, i = 0; i < ifcr.ifcr_count; i++, cp += IFNAMSIZ) {
-		if (strnlen(cp, IFNAMSIZ) == l && strncmp(name, cp, l) == 0) {
-			ret = 1;
-			break;
-		}
-	}
-done:
-	free(buf);
-	close(s);
-	return ret;
+	return (l = cloner_namelen(name)) != 0 && kf_cloner(name, l);
 }

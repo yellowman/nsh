@@ -1492,8 +1492,10 @@ interface(int argc, char **argv, ...)
 	}
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 
-	ifs = socket(AF_INET, SOCK_DGRAM, 0);
-	if (ifs < 0) {
+	/* configure private asks the kernel only through kfacts.c */
+	if (candidate)
+		ifs = -1;
+	else if ((ifs = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
 		printf("%% socket failed: %s\n", strerror(errno));
 		ifname[0] = '\0';
 		return -1;

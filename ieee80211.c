@@ -78,6 +78,7 @@
 #include "externs.h"
 #include "settings.h"
 #include "kernel.h"
+#include "kfacts.h"
 
 static int cand_80211(char *, char *);
 static void nwkey_str(char *, size_t, char *);
@@ -508,9 +509,7 @@ intbssid(int argc, char **argv, ...)
 static int
 cand_80211(char *name, char *what)
 {
-	char tmp[IEEE80211_NWID_LEN * 2 + 8];
-
-	if (get_nwinfo(name, tmp, sizeof(tmp), NWID) != 0)
+	if (kf_wifi(name))
 		return 1;
 	printf("%% %s: %s\n", what, strerror(ENOTTY));
 	return 0;
