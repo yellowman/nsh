@@ -214,6 +214,43 @@ session_mode(struct session_state *s, int *private, int *rtable,
 	session_leave(s);
 }
 
+/*
+ * show diff-config, in s, to stdout: how its candidate differs from the
+ * running configuration, nothing if it does not
+ */
+int
+session_diff(struct session_state *s)
+{
+	struct cnode *old, *new;
+	char *buf = NULL;
+	size_t len = 0;
+	FILE *f;
+	int n = -1;
+
+	session_enter(s);
+	if (!candidate) {
+		printf("%% Not in configure private\n");
+		goto done;
+	}
+	if ((f = open_memstream(&buf, &len)) == NULL) {
+		printf("%% session_diff: %s\n", strerror(errno));
+		goto done;
+	}
+	if ((old = running_tree()) != NULL && (new = cand_tree()) != NULL)
+		n = conftree_compare(f, old, new);
+	conftree_free(old);
+	if (fclose(f) == EOF) {
+		printf("%% session_diff: %s\n", strerror(errno));
+		n = -1;
+	}
+	if (n > 0)
+		printf("--- running-config\n+++ candidate-config\n%s", buf);
+done:
+	free(buf);
+	session_leave(s);
+	return n == -1 ? -1 : 0;
+}
+
 /* show candidate-config, in s, to stdout */
 int
 session_candidate(struct session_state *s)

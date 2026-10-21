@@ -71,7 +71,7 @@
 #endif
 
 /* what a session waits on a snapshot for */
-enum { WAIT_NONE, WAIT_CONFIGURE, WAIT_CANDIDATE, WAIT_RESET };
+enum { WAIT_NONE, WAIT_CONFIGURE, WAIT_CANDIDATE, WAIT_DIFF, WAIT_RESET };
 
 struct session {
 	TAILQ_ENTRY(session)	 entry;
@@ -448,13 +448,15 @@ config_show(uint32_t session, struct nshd_show *show)
 		config_answer(session, 1, "%% nshd: hello first\n");
 		return;
 	}
-	if (strcmp(show->words, "candidate-config") == 0) {
+	if (strcmp(show->words, "candidate-config") == 0 ||
+	    strcmp(show->words, "diff-config") == 0) {
 		if (sp->st == NULL) {
 			config_answer(session, 1,
 			    "%% Not in configure private\n");
 			return;
 		}
-		config_wait(sp, WAIT_CANDIDATE);
+		config_wait(sp, show->words[0] == 'c' ? WAIT_CANDIDATE :
+		    WAIT_DIFF);
 		return;
 	}
 	if (links[SYSTEM].down) {
@@ -739,6 +741,10 @@ config_snapshot_done(int32_t status)
 			break;
 		case WAIT_CANDIDATE:
 			r = session_candidate(sp->st);
+			mode = 0;
+			break;
+		case WAIT_DIFF:
+			r = session_diff(sp->st);
 			mode = 0;
 			break;
 		case WAIT_RESET:

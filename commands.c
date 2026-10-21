@@ -2232,6 +2232,11 @@ command()
 
 		if (line[0] == 0)
 			break;
+		/* configure private, nshd's */
+		if (nshd_private) {
+			cmdline_nshd(line);
+			continue;
+		}
 		makeargv();
 		if (margv[0] == 0) {
 			break;
@@ -2374,6 +2379,95 @@ cmdline_if(void)
 		whichlist = bridge ? Bridgelist : Intlist;
 	}
 	return r;
+}
+
+/*
+ * A line of configure private's, where nshd has it (nshd_private): what
+ * edits the candidate, and leaving a mode or configure private, to
+ * nshd, as text; what runs as it does outside configure private, here,
+ * commit, rollback and show candidate-config asking nshd as they run;
+ * and what configure private refuses, refused. What the handler
+ * returns, or -1 if none ran, said why
+ */
+int
+cmdline_nshd(char *text)
+{
+	struct intlist *i = NULL;
+	char buf[sizeof(line)], *p;
+	Command *c;
+
+	if (strlcpy(buf, text, sizeof(buf)) >= sizeof(buf) ||
+	    strlcpy(line, buf, sizeof(line)) >= sizeof(line)) {
+		printf("%% Input exceeds permitted length\n");
+		return -1;
+	}
+	makeargv();
+	if (margv[0] == NULL)
+		return 0;
+	p = NO_ARG(margv[0]) ? margv[1] : margv[0];
+	if (ifname[0] != '\0') {
+		if (p != NULL)
+			i = (struct intlist *)genget(p, (char **)whichlist,
+			    sizeof(struct intlist));
+		if (Ambiguous(i)) {
+			printf("%% Ambiguous command\n");
+			return -1;
+		}
+		if (i == 0) {
+			printf("%% Invalid command\n");
+			return -1;
+		}
+		if (i->cand == CAND_EDIT || i->handler == int_exit)
+			return nshd_line(buf);
+		if (i->cand == CAND_RUN)
+			return (*i->handler)(margc, margv, ifname, -1);
+		printf("%% %s is not supported in configure private yet\n",
+		    i->name);
+		return -1;
+	}
+	if (p == NULL || (c = getcmd(p)) == 0) {
+		printf("%% Invalid command\n");
+		return -1;
+	}
+	if (Ambiguous(c)) {
+		printf("%% Ambiguous command\n");
+		return -1;
+	}
+	if (NO_ARG(margv[0]) && ! c->nocmd) {
+		printf("%% Invalid command: %s %s\n", margv[0], margv[1]);
+		return -1;
+	}
+	if (c->needpriv != 0 && priv != 1) {
+		printf("%% Privilege required\n");
+		return -1;
+	}
+	if (c->cand == CAND_EDIT)
+		return nshd_line(buf);
+	if (c->handler == exitconfig ||
+	    (c->handler == doconfig && NO_ARG(margv[0])))
+		return nshd_exit();
+	if (c->handler == doconfig || (c->needconfig &&
+	    c->cand != CAND_RUN)) {
+		printf("%% %s is not supported in configure private yet\n",
+		    c->name);
+		return -1;
+	}
+	if (c->modh)
+		strlcpy(hname, c->name, HSIZE);
+	return (*c->handler)(margc, margv, 0);
+}
+
+/*
+ * The mode nshd gives configure private's session, nsh's: whether in
+ * configure private, and the interface or bridge whose mode it is in
+ */
+void
+nshd_mode(int private, char *ifn, int isbridge)
+{
+	config_mode = private;
+	strlcpy(ifname, ifn, sizeof(ifname));
+	bridge = isbridge;
+	whichlist = bridge ? Bridgelist : Intlist;
 }
 
 /* Leave configure private, from any mode, as exit does at the top */
@@ -3276,6 +3370,8 @@ doediting(int argc, char **argv, ...)
 static int
 doconfig(int argc, char **argv, ...)
 {
+	int r;
+
 	if (argc > 1) {
 		if (NO_ARG(argv[0])) {
 			return exitconfig(argc, argv);
@@ -3284,6 +3380,9 @@ doconfig(int argc, char **argv, ...)
 				return -1;
 			config_mode = 1;
 		} else if (isprefix(argv[1], "private")) {
+			/* nshd's, where it runs */
+			if ((r = nshd_configure()) != NSHD_ABSENT)
+				return r;
 			if (cand_begin() == -1)
 				return -1;
 			config_mode = 1;
@@ -3995,6 +4094,10 @@ pr_conf_diff(int argc, char **argv, ...)
 		printf("%% Privilege required\n");
 		return -1;
 	}
+
+	/* configure private, nshd's */
+	if (nshd_private)
+		return nshd_cshow("diff-config");
 
 	if (getuid() != 0) {
 		printf("%% Root privileges required\n");

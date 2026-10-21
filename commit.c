@@ -236,6 +236,14 @@ commit(int argc, char **argv, ...)
 		    checking ? "check" : "confirmed");
 		return -1;
 	}
+	/* configure private, nshd's */
+	if (nshd_private) {
+		if (argc > 1 && !checking) {
+			printf("%% commit confirmed is not through nshd yet\n");
+			return -1;
+		}
+		return nshd_commit(checking, comment);
+	}
 	if (checking && !candidate) {
 		printf("%% commit check requires configure private\n");
 		return -1;
@@ -1736,10 +1744,11 @@ done:
 int
 pr_rollback(int argc, char **argv, ...)
 {
+	char words[sizeof("rollback 99")];
 	const char *errstr;
 	va_list ap;
 	FILE *out;
-	int n;
+	int n, ret;
 
 	va_start(ap, argv);
 	out = va_arg(ap, FILE *);
@@ -1755,8 +1764,16 @@ pr_rollback(int argc, char **argv, ...)
 			printf("%% rollback %s is %s\n", argv[2], errstr);
 			return -1;
 		}
-		return rollback_text(n, out);
 	}
+	/* nshd's, where it runs */
+	if (argc == 3)
+		snprintf(words, sizeof(words), "rollback %d", n);
+	else
+		strlcpy(words, "rollback", sizeof(words));
+	if ((ret = nshd_show(words)) != -1)
+		return ret == 1 ? 0 : -1;
+	if (argc == 3)
+		return rollback_text(n, out);
 	rollback_list(out);
 	return 0;
 }

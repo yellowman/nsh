@@ -346,6 +346,35 @@ makes the candidate the running configuration, all of it or none, and
 saves it.
 Configuration mode cannot be left while the candidate has changes.
 .Pp
+Where
+.Xr nshd 8
+runs,
+.Cm configure private
+is a session of nshd's, even for root: the candidate is nshd's, and
+the lines that change it, or leave a mode, go to nshd, which answers
+with what they did and the mode the session is in.
+Commands that run as they do outside configure private, such as
+.Cm show
+and
+.Cm ping ,
+run in
+.Nm .
+.Cm commit ,
+.Cm rollback ,
+.Cm show candidate-config
+and
+.Cm show diff-config
+ask nshd, which commits one session's candidate at a time;
+.Cm commit confirmed
+is refused there.
+Those not in the group nshadmin, which may use nshd's read-write
+socket, are refused.
+An interrupt while nshd answers leaves configure private, and the
+candidate with it; nshd finishes what it was asked.
+Where nshd does not run,
+.Nm
+keeps the candidate itself.
+.Pp
 For the purposes of this manual, any examples the machine is called
 .Nm
 .

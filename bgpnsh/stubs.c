@@ -26,6 +26,8 @@ int cmdargs(char *, char **);
 int candidate;		/* bgpnsh has no configure private */
 int cand_rtable;
 int in_config;		/* nor is it nshd's config */
+int nshd_private;	/* nor configure private in nshd */
+int nshd_rtable;
 
 int
 is_bridge(int s, char *brdg)

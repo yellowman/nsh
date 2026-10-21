@@ -44,6 +44,7 @@
 #include "editing.h"
 #include "stringlist.h"
 #include "externs.h"
+#include "commands.h"
 
 #define ttyout stdout
 #define ttyin stdin
@@ -346,6 +347,9 @@ complt_i(EditLine *el, int ch)
 unsigned char
 complt_c(EditLine *el, int ch)
 {
+	/* an interface's mode, nshd's: nsh's loop reads its lines */
+	if (nshd_private && ifname[0] != '\0')
+		return complt_i(el, ch);
 	return complete(el, (char **)cmdtab, sizeof(struct cmd));
 }
 

@@ -61,3 +61,42 @@ nshd_facts(int rw, char *words, struct facts_in *in)
 {
 	return -1;
 }
+
+/* configure private here is config's own, never nshd's session */
+int nshd_private, nshd_rtable;
+
+int
+nshd_configure(void)
+{
+	return NSHD_ABSENT;
+}
+
+int
+nshd_line(char *text)
+{
+	return -1;
+}
+
+int
+nshd_exit(void)
+{
+	return -1;
+}
+
+int
+nshd_commit(int check, char *comment)
+{
+	return -1;
+}
+
+int
+nshd_rollback(int n)
+{
+	return -1;
+}
+
+int
+nshd_cshow(char *words)
+{
+	return -1;
+}

@@ -208,6 +208,8 @@ int argvtostring(int, char **, char *, int);
 int cmdrc(char rcname[FILENAME_MAX]);
 int cmdline(char *);
 int cmdexit(void);
+int cmdline_nshd(char *);
+void nshd_mode(int, char *, int);
 extern int in_config;
 int conf_save(void);
 int conf_mode(char *);
@@ -524,7 +526,16 @@ char *format_time(time_t);
 char *format_k(uint64_t amt);
 
 /* client.c */
+#define NSHD_ABSENT	(-2)	/* no nshd runs here */
+extern int nshd_private;
+extern int nshd_rtable;
 int nshd_show(char *);
+int nshd_configure(void);
+int nshd_line(char *);
+int nshd_exit(void);
+int nshd_commit(int, char *);
+int nshd_rollback(int);
+int nshd_cshow(char *);
 
 /* sqlite3.c */
 #define SQ3DBFILE "/var/run/nsh.db"
