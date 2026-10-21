@@ -20,6 +20,8 @@
 
 int is_bridge(int, char *);
 int db_select_rtable_rtables(StringList *);
+int prot1_run(char *, char *, int, char **, char **);
+int cmdargs(char *, char **);
 
 int candidate;		/* bgpnsh has no configure private */
 int cand_rtable;
@@ -34,4 +36,11 @@ int
 db_select_rtable_rtables(StringList *words)
 {
 	return -1;
+}
+
+/* bgpnsh runs a daemon's show itself, as its user: it has no nshd */
+int
+prot1_run(char *prot, char *sub, int argc, char **argv, char **args)
+{
+	return cmdargs(args[0], args) == 0 ? 0 : -1;
 }

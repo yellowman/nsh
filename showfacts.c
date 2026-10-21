@@ -750,6 +750,31 @@ render_emit(void *arg, const void *buf, size_t len)
 }
 
 /*
+ * show prot sub, a daemon's, with the argc words of argv: nshd's system
+ * runs its program, or nsh where nshd does not run; as a handler returns.
+ * bgpnsh runs it itself, with args.
+ */
+int
+prot1_run(char *prot, char *sub, int argc, char **argv, char **args)
+{
+	char	 words[NOPTFILL * 64];
+	int	 i;
+
+	words[0] = '\0';
+	for (i = 0; i < argc; i++) {
+		/* a show's words have no space, none is empty, and they fit */
+		if (argv[i][0] == '\0' || strchr(argv[i], ' ') != NULL ||
+		    strlcat(words, " ", sizeof(words)) >= sizeof(words) ||
+		    strlcat(words, argv[i], sizeof(words)) >= sizeof(words)) {
+			printf("%% Invalid argument %s\n", argv[i]);
+			return (-1);
+		}
+	}
+	return (facts_show(stdout, "program %d %s %s%s", cli_rtable, prot,
+	    sub, words));
+}
+
+/*
  * The words fmt makes, asked of nshd, its system where they may be and
  * this user may ask it, else its shows, or of nsh itself where nshd
  * does not run, and rendered to out; "interface status" renders

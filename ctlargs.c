@@ -25,8 +25,6 @@
 #include "externs.h"
 #include "commands.h"
 #include "ctl.h"
-#include "facts.h"
-#include "showfacts.h"
 
 int
 pr_prot1(int argc, char **argv, ...)
@@ -35,8 +33,7 @@ pr_prot1(int argc, char **argv, ...)
 	struct prot *prot;
 	char *args[NOPTFILL] = { NULL, NULL, NULL, NULL, NULL, NULL, NULL };
 	char **fillargs;
-	char prefix[64], words[NOPTFILL * 64];
-	int i;
+	char prefix[64];
 
 	/* loop protocol list to find table pointer */
 	prot = (struct prot *) genget(argv[1], (char **)prots,
@@ -71,21 +68,10 @@ pr_prot1(int argc, char **argv, ...)
 	if (fillargs == NULL)
 		return -1;
 
-	/* systat draws on this terminal; nshd's system runs the rest */
+	/* systat draws on this terminal; prot1_run() runs the rest */
 	if (prot1_find(prot->name, x->name) == NULL)
 		return cmdargs(fillargs[0], fillargs) == 0 ? 0 : -1;
-	words[0] = '\0';
-	for (i = 3; i < argc; i++) {
-		/* a show's words have no space, none is empty, and they fit */
-		if (argv[i][0] == '\0' || strchr(argv[i], ' ') != NULL ||
-		    strlcat(words, " ", sizeof(words)) >= sizeof(words) ||
-		    strlcat(words, argv[i], sizeof(words)) >= sizeof(words)) {
-			printf("%% Invalid argument %s\n", argv[i]);
-			return -1;
-		}
-	}
-	return facts_show(stdout, "program %d %s %s%s", cli_rtable,
-	    prot->name, x->name, words);
+	return prot1_run(prot->name, x->name, argc - 3, argv + 3, fillargs);
 }
 
 /*
