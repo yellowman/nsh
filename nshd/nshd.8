@@ -71,6 +71,17 @@ the running configuration, and what they read of the kernel, are those
 of a snapshot system makes when a session enters
 .Cm configure private
 or shows its candidate.
+A commit is one at a time, of all the sessions':
+config plans it from a snapshot, checks it, and has system record it,
+run its script, and, if a snapshot after reads as the candidate, save
+what runs; if not, system runs the script back.
+.Cm commit check
+stops at the check, and
+.Cm rollback Ar N
+takes configuration
+.Ar N
+from system.
+A commit whose session goes runs to its end.
 config is
 .Xr pledge 2 Ns d
 to stdio: it reads no kernel, opens no file and runs no program of its
@@ -90,6 +101,16 @@ socket,
 .Pa /dev/pf
 and PF_KEY are root's.
 The child that prints the leases opens them, then becomes _nshcheck.
+A commit's script, and its save, each run in a child of system's, as
+root; one that runs past its time, 900 seconds for a script and 300 for
+a save, is sent SIGTERM, with its process group, and SIGKILL 10
+seconds later, and fails.
+Other requests wait for it, but streams go on.
+system keeps a record of a commit that has begun, which a commit takes
+away when it saves or goes back; one that does not leaves it, and the
+next commit says what it left.
+While the record says a commit's changes were not saved, a commit
+that neither saves what runs nor goes back to before it is refused.
 system is a session of its own: when it goes, the parent kills every
 process left in that session, and every process of _nshcheck's,
 before another system starts.
@@ -149,6 +170,8 @@ Produce more verbose output.
 the read-write socket, mode 0660, group nshadmin
 .It Pa /var/run/nshd.ro.sock
 the read-only socket, mode 0666
+.It Pa /var/db/nsh/commit
+the commit record
 .El
 .Sh SEE ALSO
 .Xr nsh 8

@@ -20,7 +20,8 @@
  * session's globals in place, and session_leave() keeps them and puts
  * back the process's, as they were before any session, so nothing of
  * one session is seen by another. nshd's config runs configure private
- * for its sessions through the rest, a request at a time.
+ * for its sessions through the rest, a request at a time, and plans
+ * their commits, which system runs.
  */
 #include <sys/param.h>	/* MAXHOSTNAMELEN */
 #include <sys/socket.h>
@@ -39,6 +40,10 @@
 
 int in_config;		/* nshd's config: no kernel, file or program its own */
 
+#if PLAN_CLEARS != MAXCLEARS
+#error "PLAN_CLEARS is not MAXCLEARS"
+#endif
+
 extern struct sglobal candidate_sglobals[], commands_sglobals[];
 extern struct sglobal ctl_sglobals[], if_sglobals[];
 
@@ -52,6 +57,9 @@ static struct sglobal session_sglobals[] = {
 	SGLOBAL(bgpd_socket_path),
 	{ NULL }
 };
+
+static int plan_text(struct plan *, int, struct cnode *);
+static int plan_script(struct plan *, struct cnode *, struct cnode *);
 
 static struct sglobal *sglobals[] = {
 	session_sglobals, candidate_sglobals, commands_sglobals,
@@ -143,17 +151,9 @@ int
 session_running(char *text, size_t len)
 {
 	struct cnode *t;
-	FILE *f;
 
-	if ((f = fmemopen(len > 0 ? text : "\n", len > 0 ? len : 1,
-	    "r")) == NULL) {
-		printf("%% session_running: %s\n", strerror(errno));
-		return -1;
-	}
-	t = conftree_fread(f, "the running configuration", conf_mode,
-	    conf_ordered);
-	fclose(f);
-	if (t == NULL)
+	if ((t = conftree_mem(text, len, "the running configuration",
+	    conf_mode, conf_ordered)) == NULL)
 		return -1;
 	running_set(t);
 	return 0;
@@ -222,6 +222,186 @@ session_candidate(struct session_state *s)
 
 	session_enter(s);
 	r = cand_write(stdout);
+	session_leave(s);
+	return r;
+}
+
+/*
+ * A commit of s's candidate, into *pp, checked, as commit check says it
+ * when checking, which plans nothing: as a handler returns, -1 when the
+ * candidate may not become the running configuration or no plan could
+ * be made, said why
+ */
+int
+session_plan(struct session_state *s, int checking, struct plan **pp)
+{
+	struct plan *p;
+	struct cnode *t;
+	int r = -1;
+
+	*pp = NULL;
+	if ((p = calloc(1, sizeof(*p))) == NULL) {
+		printf("%% session_plan: %s\n", strerror(errno));
+		return -1;
+	}
+	session_enter(s);
+	if ((t = cand_tree()) == NULL)
+		goto done;
+	if ((p->want = conftree_copy(t)) == NULL) {
+		printf("%% session_plan: %s\n", strerror(errno));
+		goto done;
+	}
+	if ((p->was = running_tree()) == NULL ||
+	    commit_checks(p->was, p->want, checking) == -1)
+		goto done;
+	if (!checking) {
+		p->same = conftree_compare(NULL, p->was, p->want) == 0;
+		if (!p->same && (plan_text(p, PLAN_BEFORE, p->was) == -1 ||
+		    plan_text(p, PLAN_WANT, p->want) == -1 ||
+		    plan_script(p, p->was, p->want) == -1))
+			goto done;
+		*pp = p;
+		p = NULL;
+	}
+	r = 0;
+done:
+	session_leave(s);
+	plan_free(p);
+	return r;
+}
+
+/*
+ * Does the running configuration, the last snapshot's, read as p's
+ * candidate, and no line of the script failed? 0 if so; else what did
+ * not take is said, and p's script is the one back to how it was: 1, or
+ * -1 if it could not be made, said why
+ */
+int
+session_verify(struct plan *p, int failed)
+{
+	struct cnode *now;
+	int r = -1;
+
+	if ((now = running_tree()) == NULL)
+		return -1;
+	if (!failed && commit_took(now, p->want)) {
+		conftree_free(now);
+		return 0;
+	}
+	commit_untaken(now, p->want, failed);
+	conftree_free(now);
+	/* differ() took from now: the script is from all of it */
+	if ((now = running_tree()) != NULL &&
+	    plan_script(p, now, p->was) == 0)
+		r = 1;
+	conftree_free(now);
+	return r;
+}
+
+/*
+ * Whether the running configuration, the last snapshot's, is as it was
+ * before p ran: 0 if so, said
+ */
+int
+session_verify_back(struct plan *p)
+{
+	struct cnode *back;
+	int r;
+
+	if ((back = running_tree()) == NULL)
+		return -1;
+	r = commit_back(back, p->was);
+	conftree_free(back);
+	return r;
+}
+
+void
+plan_free(struct plan *p)
+{
+	int i;
+
+	if (p == NULL)
+		return;
+	for (i = 0; i < PLAN_PARTS; i++)
+		free(p->text[i]);
+	conftree_free(p->was);
+	conftree_free(p->want);
+	free(p);
+}
+
+/* The tree t, as text, as p's part */
+static int
+plan_text(struct plan *p, int part, struct cnode *t)
+{
+	FILE *f;
+	int r;
+
+	if ((f = open_memstream(&p->text[part], &p->len[part])) == NULL) {
+		printf("%% session_plan: %s\n", strerror(errno));
+		return -1;
+	}
+	r = conftree_write(f, t);
+	if (fclose(f) == EOF)
+		r = -1;
+	if (r == -1)
+		printf("%% session_plan: %s\n", strerror(errno));
+	return r;
+}
+
+/* The script that makes from read as to, as p's */
+static int
+plan_script(struct plan *p, struct cnode *from, struct cnode *to)
+{
+	struct script sc;
+	int i;
+
+	free(p->text[PLAN_SCRIPT]);
+	p->text[PLAN_SCRIPT] = NULL;
+	p->len[PLAN_SCRIPT] = 0;
+	if (script_make(from, to, &sc) == -1)
+		return -1;
+	p->text[PLAN_SCRIPT] = sc.text;
+	p->len[PLAN_SCRIPT] = sc.len;
+	for (i = 0; i < sc.nclears; i++) {
+		strlcpy(p->clears[i].name, sc.clears[i].name,
+		    sizeof(p->clears[i].name));
+		p->clears[i].rtable = sc.clears[i].rtable;
+		p->clears[i].keep = sc.clears[i].keep;
+	}
+	p->nclears = sc.nclears;
+	return 0;
+}
+
+/* A new candidate for s, from the running configuration */
+int
+session_renew(struct session_state *s)
+{
+	int r;
+
+	session_enter(s);
+	cand_end();
+	r = cand_begin();
+	session_leave(s);
+	return r;
+}
+
+/*
+ * rollback n, in s: the candidate starts over as text, configuration n
+ * as it was saved, or as the running configuration if n is 0
+ */
+int
+session_rollback(struct session_state *s, char *text, size_t len, int n)
+{
+	struct cnode *base = NULL;
+	char what[32];
+	int r;
+
+	snprintf(what, sizeof(what), "rollback %d", n);
+	if (n > 0 && (base = conftree_mem(text, len, what, conf_mode,
+	    conf_ordered)) == NULL)
+		return -1;
+	session_enter(s);
+	r = cand_restart(base, n);
 	session_leave(s);
 	return r;
 }

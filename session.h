@@ -29,6 +29,27 @@ struct sglobal {
 #define SGLOBAL(g)	{ #g, &(g), sizeof(g) }
 
 struct session_state;
+struct cnode;
+
+/* What a commit runs, from session_plan(), in the parts nshd sends */
+#define PLAN_SCRIPT	0	/* the script, then the one back */
+#define PLAN_BEFORE	1	/* the running configuration, as text */
+#define PLAN_WANT	2	/* the candidate, as text */
+#define PLAN_PARTS	3
+#define PLAN_CLEARS	64	/* externs.h's MAXCLEARS */
+
+struct plan {
+	int		 same;		/* the candidate is what runs */
+	char		*text[PLAN_PARTS];
+	size_t		 len[PLAN_PARTS];
+	struct {
+		char	 name[32];
+		int	 rtable;
+		int	 keep;
+	}		 clears[PLAN_CLEARS];	/* the script's */
+	int		 nclears;
+	struct cnode	*was, *want;
+};
 
 extern int in_config;
 
@@ -44,3 +65,11 @@ int			 session_exit(struct session_state *);
 void			 session_mode(struct session_state *, int *, int *,
 			    char *, size_t, int *);
 int			 session_candidate(struct session_state *);
+int			 session_plan(struct session_state *, int,
+			    struct plan **);
+int			 session_verify(struct plan *, int);
+int			 session_verify_back(struct plan *);
+void			 plan_free(struct plan *);
+int			 session_renew(struct session_state *);
+int			 session_rollback(struct session_state *, char *,
+			    size_t, int);

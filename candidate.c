@@ -625,8 +625,7 @@ int
 cand_rollback(int argc, char **argv, ...)
 {
 	char path[PATH_MAX];
-	struct cnode *t, *base = NULL;
-	struct cjournal *j;
+	struct cnode *base = NULL;
 	const char *errstr;
 	int n = 0;
 
@@ -645,9 +644,7 @@ cand_rollback(int argc, char **argv, ...)
 			return -1;
 		}
 	}
-	if (n == 0)
-		t = running_tree();
-	else {
+	if (n > 0) {
 		snprintf(path, sizeof(path), ROLLBACK, n);
 		if (access(path, R_OK) == -1) {
 			printf("%% rollback %d: %s\n", n, strerror(errno));
@@ -656,9 +653,25 @@ cand_rollback(int argc, char **argv, ...)
 		if ((base = conftree_read(path, conf_mode, conf_ordered)) ==
 		    NULL)
 			return -1;
-		if ((t = conftree_copy(base)) == NULL)
-			printf("%% cand_rollback: %s\n", strerror(errno));
 	}
+	return cand_restart(base, n);
+}
+
+/*
+ * The candidate starts over as base, configuration n as it was saved,
+ * which it keeps, or as the running configuration if NULL: -1 if it
+ * could not, said why
+ */
+int
+cand_restart(struct cnode *base, int n)
+{
+	struct cnode *t;
+	struct cjournal *j;
+
+	if (base == NULL)
+		t = running_tree();
+	else if ((t = conftree_copy(base)) == NULL)
+		printf("%% cand_rollback: %s\n", strerror(errno));
 	if (t == NULL) {
 		conftree_free(base);
 		return -1;

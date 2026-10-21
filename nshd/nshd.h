@@ -32,6 +32,10 @@
 #define NSHD_WORDS	256	/* a show's words, at most */
 #define NSHD_LINE	1024	/* a line of configuration, with its NUL */
 #define NSHD_IFNAME	16	/* an interface's name, IFNAMSIZ */
+#define NSHD_COMMENT	256	/* a commit's comment, with its NUL */
+#define NSHD_ROLLBACKS	50	/* configurations kept, ROLLBACKS */
+#define NSHD_CLEARS	64	/* daemons' rules a script empties, MAXCLEARS */
+#define NSHD_PART	(16 * 1024 * 1024)	/* a commit's part, at most */
 
 /* a client's first message */
 struct nshd_hello {
@@ -77,6 +81,47 @@ struct nshd_context {
 /* config to system: the running configuration, and with facts, kfacts.h's */
 struct nshd_snapshot {
 	int32_t		facts;
+};
+
+/* commit, of the session's candidate, or with check, commit check */
+struct nshd_commit {
+	int32_t		check;
+	char		comment[NSHD_COMMENT];
+};
+
+/* rollback n, or show rollback n */
+struct nshd_rollback {
+	int32_t		n;
+};
+
+/* config to system: text after this, of a part BEGIN or APPLY takes */
+struct nshd_chunk {
+	int32_t		part;
+};
+#define NSHD_SCRIPT	0	/* what APPLY runs */
+#define NSHD_BEFORE	1	/* what BEGIN records: what runs */
+#define NSHD_WANT	2	/* and what is wanted */
+#define NSHD_PARTS	3
+
+/* config to system: who begins a commit */
+struct nshd_begin {
+	uint32_t	uid;
+};
+
+/* config to system: run the script, and empty these daemons' rules */
+struct nshd_apply {
+	int32_t		nclears;
+	struct {
+		char	name[32];
+		int32_t	rtable;
+		int32_t	keep;	/* before the script, else after */
+	}		clears[NSHD_CLEARS];
+};
+
+/* config to system: save what runs, saved by uid, with the comment */
+struct nshd_save {
+	uint32_t	uid;
+	char		comment[NSHD_COMMENT];
 };
 
 /*
@@ -146,7 +191,18 @@ enum nshd_imsg {
 	IMSG_CTL_CONFIGURE,	/* nshd_configure; a context, then a result */
 	IMSG_CTL_LINE,		/* nshd_line; output, a context, a result */
 	IMSG_CTL_EXIT,		/* leave configure; a context, then a result */
-	IMSG_CTL_CONTEXT	/* nshd_context */
+	IMSG_CTL_CONTEXT,	/* nshd_context */
+	IMSG_CTL_COMMIT,	/* nshd_commit; output, a context, a result */
+	IMSG_CTL_ROLLBACK,	/* nshd_rollback; output, a context, a result */
+
+	/* config to system, for commits: each is answered as SYS_SHOW is */
+	IMSG_SYS_SCRIPT,	/* nshd_chunk, and text; no answer */
+	IMSG_SYS_BEGIN,		/* nshd_begin: the commit record made */
+	IMSG_SYS_APPLY,		/* nshd_apply: the script run, its status */
+	IMSG_SYS_SAVE,		/* nshd_save: what runs saved, the record gone */
+	IMSG_SYS_RECORD,	/* the commit begun went back to how it was */
+	IMSG_SYS_ROLLBACK_READ,	/* nshd_rollback: configuration n */
+	IMSG_SYS_ROLLBACK_LIST	/* show rollback's list */
 };
 
 struct imsgev {

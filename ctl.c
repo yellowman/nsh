@@ -1082,6 +1082,11 @@ ctl_rules_test(char *name, char **lines, size_t n)
 			break;
 	if (x->name == NULL)
 		return 0;
+	if (in_config) {
+		printf("%% %s's rules: not tested through nshd's configure "
+		    "private\n", name);
+		return -1;
+	}
 	if (mkdtemp(dir) == NULL) {
 		printf("%% mkdtemp %s: %s\n", dir, strerror(errno));
 		return -1;

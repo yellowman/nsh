@@ -47,6 +47,8 @@ struct cjournal;
 
 struct cnode *conftree_read(char *, int (*)(char *), int (*)(char *));
 struct cnode *conftree_fread(FILE *, char *, int (*)(char *), int (*)(char *));
+struct cnode *conftree_mem(char *, size_t, char *, int (*)(char *),
+    int (*)(char *));
 void conftree_free(struct cnode *);
 struct cnode *conftree_copy(struct cnode *);
 int conftree_compare(FILE *, struct cnode *, struct cnode *);

@@ -260,14 +260,8 @@ commit(int argc, char **argv, ...)
 		return -1;
 	if ((was = running_tree()) == NULL)
 		return -1;
-	if ((bad = check(was, want)) != 0 || checking) {
-		if (bad == 0) {
-			printf("%% Configuration check succeeds\n");
-			ret = 0;
-		} else
-			printf("%% %s: %d problem%s\n", checking ?
-			    "Configuration check fails" : "Commit refused",
-			    bad, bad == 1 ? "" : "s");
+	if ((bad = commit_checks(was, want, checking)) == -1 || checking) {
+		ret = bad;
 		goto done;
 	}
 	if (minutes > 0) {
@@ -310,6 +304,77 @@ commit(int argc, char **argv, ...)
 done:
 	conftree_free(back);
 	conftree_free(was);
+	return ret;
+}
+
+/*
+ * check() of want against was, as commit says it: 0 if want may become
+ * the running configuration, else -1; with checking, said either way
+ */
+int
+commit_checks(struct cnode *was, struct cnode *want, int checking)
+{
+	int bad;
+
+	if ((bad = check(was, want)) == 0 && !checking)
+		return 0;
+	if (bad == 0)
+		printf("%% Configuration check succeeds\n");
+	else
+		printf("%% %s: %d problem%s\n", checking ?
+		    "Configuration check fails" : "Commit refused",
+		    bad, bad == 1 ? "" : "s");
+	return bad == 0 ? 0 : -1;
+}
+
+/* Does the running configuration, now, read as want? */
+int
+commit_took(struct cnode *now, struct cnode *want)
+{
+	return differ(NULL, now, want) == 0;
+}
+
+/* What did not take, now against want, and failed if a line failed */
+void
+commit_untaken(struct cnode *now, struct cnode *want, int failed)
+{
+	if (failed)
+		printf("%% Commit failed: a line it ran failed\n");
+	else
+		printf("%% Commit failed: the running configuration differs "
+		    "from the candidate\n");
+	differ(stdout, now, want);
+}
+
+/* Whether the way back, back, is how it was, was: 0 if so, said */
+int
+commit_back(struct cnode *back, struct cnode *was)
+{
+	if (differ(NULL, back, was) == 0) {
+		printf("%% The running configuration is as it was\n");
+		return 0;
+	}
+	printf("%% The running configuration differs from how it was\n");
+	differ(stdout, back, was);
+	return -1;
+}
+
+/*
+ * Does configuration text now read as text want, as commit_took() reads
+ * them? 1 if it does, 0 if not, -1 if either could not be read, said why
+ */
+int
+commit_reads(char *now, size_t nowlen, char *want, size_t wantlen)
+{
+	struct cnode *n, *w = NULL;
+	int ret = -1;
+
+	if ((n = conftree_mem(now, nowlen, "a configuration", conf_mode,
+	    conf_ordered)) != NULL && (w = conftree_mem(want, wantlen,
+	    "a configuration", conf_mode, conf_ordered)) != NULL)
+		ret = commit_took(n, w);
+	conftree_free(n);
+	conftree_free(w);
 	return ret;
 }
 
@@ -606,27 +671,16 @@ take(struct cnode *was, struct cnode *want)
 	if ((failed = apply(was, want)) == -1 ||
 	    (now = running_tree()) == NULL)
 		goto done;
-	if (!failed && differ(NULL, now, want) == 0) {
+	if (!failed && commit_took(now, want)) {
 		ret = 0;
 		goto done;
 	}
-	if (failed)
-		printf("%% Commit failed: a line it ran failed\n");
-	else
-		printf("%% Commit failed: the running configuration differs "
-		    "from the candidate\n");
-	differ(stdout, now, want);
+	commit_untaken(now, want, failed);
 	conftree_free(now);
 	if ((now = running_tree()) == NULL || apply(now, was) == -1 ||
 	    (back = running_tree()) == NULL)
 		goto done;
-	if (differ(NULL, back, was) == 0)
-		printf("%% The running configuration is as it was\n");
-	else {
-		printf("%% The running configuration differs from how it "
-		    "was\n");
-		differ(stdout, back, was);
-	}
+	commit_back(back, was);
 done:
 	conftree_free(back);
 	conftree_free(now);
@@ -1601,12 +1655,10 @@ done:
 int
 pr_rollback(int argc, char **argv, ...)
 {
-	char path[PATH_MAX], when[64], line[BUFSIZ], *who, *why;
-	struct stat sb;
 	const char *errstr;
 	va_list ap;
-	FILE *out, *f;
-	int i, n;
+	FILE *out;
+	int n;
 
 	va_start(ap, argv);
 	out = va_arg(ap, FILE *);
@@ -1622,16 +1674,39 @@ pr_rollback(int argc, char **argv, ...)
 			printf("%% rollback %s is %s\n", argv[2], errstr);
 			return -1;
 		}
-		snprintf(path, sizeof(path), ROLLBACK, n);
-		if ((f = fopen(path, "r")) == NULL) {
-			printf("%% rollback %d: %s\n", n, strerror(errno));
-			return -1;
-		}
-		while (fgets(line, sizeof(line), f) != NULL)
-			fputs(line, out);
-		fclose(f);
-		return 0;
+		return rollback_text(n, out);
 	}
+	rollback_list(out);
+	return 0;
+}
+
+/* Configuration n as it was saved, to out: -1 if it could not be, said why */
+int
+rollback_text(int n, FILE *out)
+{
+	char path[PATH_MAX], line[BUFSIZ];
+	FILE *f;
+
+	snprintf(path, sizeof(path), ROLLBACK, n);
+	if ((f = fopen(path, "r")) == NULL) {
+		printf("%% rollback %d: %s\n", n, strerror(errno));
+		return -1;
+	}
+	while (fgets(line, sizeof(line), f) != NULL)
+		fputs(line, out);
+	fclose(f);
+	return 0;
+}
+
+/* When each configuration kept was saved, who saved it and why, to out */
+void
+rollback_list(FILE *out)
+{
+	char path[PATH_MAX], when[64], line[BUFSIZ], *who, *why;
+	struct stat sb;
+	FILE *f;
+	int i;
+
 	for (i = 0; i < ROLLBACKS; i++) {
 		snprintf(path, sizeof(path), ROLLBACK, i);
 		if (stat(path, &sb) == -1)
@@ -1655,7 +1730,6 @@ pr_rollback(int argc, char **argv, ...)
 		fprintf(out, "%2d  %s%s%s%s%s\n", i, when, who ? "  " : "",
 		    who ? who : "", why ? "  " : "", why ? why : "");
 	}
-	return 0;
 }
 
 /* Write to a buffer, for a block whose head waits on its lines */

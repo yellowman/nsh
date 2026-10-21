@@ -45,6 +45,8 @@ union frontend_request {
 	struct nshd_show	 show;
 	struct nshd_configure	 cf;
 	struct nshd_line	 line;
+	struct nshd_commit	 commit;
+	struct nshd_rollback	 rollback;
 };
 
 static void	frontend_dispatch_relay(int, short, void *);
@@ -198,6 +200,8 @@ frontend_client(struct ctl_conn *c, struct imsg *imsg)
 	case IMSG_CTL_CONFIGURE:
 	case IMSG_CTL_LINE:
 	case IMSG_CTL_EXIT:
+	case IMSG_CTL_COMMIT:
+	case IMSG_CTL_ROLLBACK:
 		if ((len = frontend_whole(imsg, &r)) == -1)
 			return (-1);
 		if (link_compose(&config, imsg_get_type(imsg), c->id,
@@ -249,6 +253,8 @@ frontend_answer(struct ctl_conn *c, struct imsg *imsg)
 	case IMSG_CTL_CONFIGURE:
 	case IMSG_CTL_LINE:
 	case IMSG_CTL_EXIT:
+	case IMSG_CTL_COMMIT:
+	case IMSG_CTL_ROLLBACK:
 		if (frontend_whole(imsg, &req) == -1)
 			return (-1);
 		r.status = 1;
@@ -285,6 +291,17 @@ frontend_whole(struct imsg *imsg, union frontend_request *r)
 		return (sizeof(r->line));
 	case IMSG_CTL_EXIT:
 		return (imsg_get_len(imsg) == 0 ? 0 : -1);
+	case IMSG_CTL_COMMIT:
+		if (imsg_get_data(imsg, &r->commit, sizeof(r->commit)) == -1 ||
+		    memchr(r->commit.comment, '\0',
+		    sizeof(r->commit.comment)) == NULL)
+			return (-1);
+		return (sizeof(r->commit));
+	case IMSG_CTL_ROLLBACK:
+		if (imsg_get_data(imsg, &r->rollback,
+		    sizeof(r->rollback)) == -1)
+			return (-1);
+		return (sizeof(r->rollback));
 	}
 	return (-1);
 }

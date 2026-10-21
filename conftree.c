@@ -140,6 +140,25 @@ conftree_read(char *path, int (*mode)(char *), int (*ordered)(char *))
 	return t;
 }
 
+/* conftree_read() of len bytes of text, which path names in what it says */
+struct cnode *
+conftree_mem(char *text, size_t len, char *path, int (*mode)(char *),
+    int (*ordered)(char *))
+{
+	struct cnode *t;
+	FILE *f;
+
+	/* fmemopen() takes no empty buffer */
+	if ((f = fmemopen(len > 0 ? text : "\n", len > 0 ? len : 1,
+	    "r")) == NULL) {
+		printf("%% %s: %s\n", path, strerror(errno));
+		return NULL;
+	}
+	t = conftree_fread(f, path, mode, ordered);
+	fclose(f);
+	return t;
+}
+
 /* conftree_read() of f, which path names in what it says */
 struct cnode *
 conftree_fread(FILE *f, char *path, int (*mode)(char *),

@@ -32,6 +32,12 @@
  * configuration and what the lines read of the kernel are a snapshot's,
  * system's, taken when a session enters configure private or shows its
  * candidate, and kept for every session until the next.
+ *
+ * A commit is one at a time, of all sessions': config plans it from a
+ * snapshot, and system records it (BEGIN), runs its script (APPLY) and,
+ * if a snapshot after reads as the candidate, saves what runs (SAVE);
+ * if not, it runs the script back, and the record goes (RECORD). It
+ * runs to its end if its session goes. commit check stops at the plan.
  */
 
 #include <sys/types.h>
@@ -57,8 +63,14 @@
 
 #define SNAPSHOT_TEXT	(16 * 1024 * 1024)	/* a snapshot's, at most */
 
+#define IDS_GONE	"% nshd: request ids exhausted\n"
+
+#if NSHD_CLEARS != PLAN_CLEARS
+#error "NSHD_CLEARS is not PLAN_CLEARS"
+#endif
+
 /* what a session waits on a snapshot for */
-enum { WAIT_NONE, WAIT_CONFIGURE, WAIT_CANDIDATE };
+enum { WAIT_NONE, WAIT_CONFIGURE, WAIT_CANDIDATE, WAIT_CHECK, WAIT_RESET };
 
 struct session {
 	TAILQ_ENTRY(session)	 entry;
@@ -74,6 +86,36 @@ struct request {
 	TAILQ_ENTRY(request)	 entry;
 	uint32_t		 id;
 	uint32_t		 session;	/* or 0, a snapshot config keeps */
+	int			 kind;
+	int			 n;		/* rollback n's */
+	char			*text;		/* and its text, as it comes */
+	size_t			 len;
+	int			 bad;		/* past NSHD_PART */
+};
+
+/* what a request's end does: answer the session, or what follows */
+enum { REQ_ANSWER, REQ_COMMIT, REQ_ROLLBACK };
+
+/* the commit, and what it waits on */
+enum {
+	COMMIT_PLAN,		/* a snapshot, to plan from */
+	COMMIT_BEGIN,		/* the record made */
+	COMMIT_APPLY,		/* the script run */
+	COMMIT_VERIFY,		/* a snapshot, to verify */
+	COMMIT_SAVE,		/* what runs saved */
+	COMMIT_UNDO,		/* the script back run */
+	COMMIT_BACK,		/* a snapshot, to verify that */
+	COMMIT_RECORD		/* the record gone */
+};
+
+struct commit {
+	uint32_t		 session;	/* or 0, gone */
+	uid_t			 uid;
+	int			 step;
+	int			 waits;		/* on a snapshot */
+	int			 failed;	/* a line of the script failed */
+	char			 comment[NSHD_COMMENT];
+	struct plan		*plan;
 };
 
 /* the snapshot sessions wait on, as it comes */
@@ -91,6 +133,7 @@ static TAILQ_HEAD(, request)	requests = TAILQ_HEAD_INITIALIZER(requests);
 static uint32_t			request_id;
 static struct snapshot		*snap;
 static struct kfacts		*kf_now;	/* the last snapshot's */
+static struct commit		*commit;	/* the one running, or NULL */
 
 #define REQUEST_GEN_SHIFT	24	/* generation above, count below */
 #define REQUEST_COUNT		((1U << REQUEST_GEN_SHIFT) - 1)
@@ -106,7 +149,12 @@ static void		 config_show(uint32_t, struct nshd_show *);
 static void		 config_configure(uint32_t, struct nshd_configure *);
 static void		 config_line(uint32_t, struct nshd_line *);
 static void		 config_exit(uint32_t);
+static void		 config_commit(uint32_t, struct nshd_commit *);
+static void		 config_rollback(uint32_t, struct nshd_rollback *);
+static void		 config_rolled(struct request *, int32_t);
+static struct session	*config_private(uint32_t);
 static void		 config_wait(struct session *, int);
+static void		 snapshot_take(void);
 static void		 config_snapshot(struct request *, uint32_t,
 			    struct ibuf *);
 static void		 config_snapshot_done(int32_t);
@@ -115,7 +163,15 @@ static void		 config_ran(struct session *, int, int);
 static void		 config_answer(uint32_t, int32_t, const char *, ...)
 			    __attribute__((__format__ (printf, 3, 4)));
 static void		 config_tell(uint32_t, uint32_t);
-static struct request	*config_request(uint32_t);
+static struct request	*config_request(uint32_t, int);
+static void		 commit_wait(int);
+static void		 commit_snapshot(void);
+static void		 commit_ended(int32_t);
+static int		 commit_part(int32_t, const char *, size_t);
+static void		 commit_apply(int);
+static void		 commit_save(void);
+static void		 commit_request(int, uint32_t, const void *, size_t);
+static void		 commit_end(int, const char *);
 static void		 session_gone(struct session *);
 static struct session	*session_find(uint32_t);
 static struct request	*request_find(uint32_t);
@@ -185,6 +241,8 @@ config_dispatch_frontend(int fd, short event, void *arg)
 	struct nshd_show	 show;
 	struct nshd_configure	 cf;
 	struct nshd_line	 line;
+	struct nshd_commit	 cm;
+	struct nshd_rollback	 rb;
 	struct session		*sp;
 	uint32_t		 id, type;
 	ssize_t			 n;
@@ -245,6 +303,17 @@ config_dispatch_frontend(int fd, short event, void *arg)
 				goto bad;
 			config_exit(id);
 			break;
+		case IMSG_CTL_COMMIT:
+			if (imsg_get_data(&imsg, &cm, sizeof(cm)) == -1 ||
+			    memchr(cm.comment, '\0', sizeof(cm.comment)) == NULL)
+				goto bad;
+			config_commit(id, &cm);
+			break;
+		case IMSG_CTL_ROLLBACK:
+			if (imsg_get_data(&imsg, &rb, sizeof(rb)) == -1)
+				goto bad;
+			config_rollback(id, &rb);
+			break;
 		case IMSG_CTL_CLOSE:
 			if ((sp = session_find(id)) != NULL)
 				session_gone(sp);
@@ -277,6 +346,7 @@ config_dispatch_system(int fd, short event, void *arg)
 	struct request		*r;
 	uint32_t		 type;
 	ssize_t			 n;
+	char			*p;
 
 	if (imsgev_io(iev, event) == -1) {
 		link_broken(l, "closed its pipe");
@@ -303,6 +373,22 @@ config_dispatch_system(int fd, short event, void *arg)
 				config_snapshot(r, type, &b);
 				break;
 			}
+			if (r->kind == REQ_ROLLBACK) {
+				if (type != IMSG_SYS_TEXT)
+					goto bad;
+				if (ibuf_size(&b) > NSHD_PART - r->len) {
+					r->bad = 1;
+					break;
+				}
+				if ((p = realloc(r->text, r->len +
+				    ibuf_size(&b))) == NULL)
+					fatal("%s", __func__);
+				r->text = p;
+				memcpy(r->text + r->len, ibuf_data(&b),
+				    ibuf_size(&b));
+				r->len += ibuf_size(&b);
+				break;
+			}
 			if (session_find(r->session) != NULL &&
 			    link_compose(&links[FRONTEND],
 			    type == IMSG_SYS_TEXT ? IMSG_CTL_OUTPUT :
@@ -318,8 +404,14 @@ config_dispatch_system(int fd, short event, void *arg)
 			TAILQ_REMOVE(&requests, r, entry);
 			if (snap != NULL && r->id == snap->id)
 				config_snapshot_done(res.status);
+			else if (r->kind == REQ_COMMIT) {
+				if (commit != NULL)
+					commit_ended(res.status);
+			} else if (r->kind == REQ_ROLLBACK)
+				config_rolled(r, res.status);
 			else if (session_find(r->session) != NULL)
 				config_answer(r->session, res.status, NULL);
+			free(r->text);
 			free(r);
 			break;
 		default:
@@ -338,8 +430,13 @@ static void
 config_show(uint32_t session, struct nshd_show *show)
 {
 	struct nshd_snapshot	 ns = { 0 };
+	struct nshd_rollback	 rb = { -1 };
 	struct session		*sp;
 	struct request		*r;
+	const char		*errstr;
+	uint32_t		 type = IMSG_SYS_SHOW;
+	const void		*data = show;
+	size_t			 len = sizeof(*show);
 
 	if ((sp = session_find(session)) == NULL) {
 		config_answer(session, 1, "%% nshd: hello first\n");
@@ -358,14 +455,32 @@ config_show(uint32_t session, struct nshd_show *show)
 		config_answer(session, 1, "%% nshd: system is down\n");
 		return;
 	}
-	if ((r = config_request(session)) == NULL)
+	if (strcmp(show->words, "running-config") == 0) {
+		type = IMSG_SYS_SNAPSHOT;
+		data = &ns;
+		len = sizeof(ns);
+	} else if (strcmp(show->words, "rollback") == 0) {
+		type = IMSG_SYS_ROLLBACK_LIST;
+		data = NULL;
+		len = 0;
+	} else if (strncmp(show->words, "rollback ", 9) == 0) {
+		rb.n = strtonum(show->words + 9, 0, NSHD_ROLLBACKS - 1,
+		    &errstr);
+		if (errstr != NULL) {
+			config_answer(session, 1, "%% rollback %s is %s\n",
+			    show->words + 9, errstr);
+			return;
+		}
+		type = IMSG_SYS_ROLLBACK_READ;
+		data = &rb;
+		len = sizeof(rb);
+	}
+	if ((r = config_request(session, REQ_ANSWER)) == NULL) {
+		config_answer(session, 1, "%s", IDS_GONE);
 		return;
+	}
 	/* system answers the rest with facts, or says it does not */
-	if ((strcmp(show->words, "running-config") == 0 ?
-	    link_compose(&links[SYSTEM], IMSG_SYS_SNAPSHOT, r->id, &ns,
-	    sizeof(ns)) :
-	    link_compose(&links[SYSTEM], IMSG_SYS_SHOW, r->id, show,
-	    sizeof(*show))) == -1)
+	if (link_compose(&links[SYSTEM], type, r->id, data, len) == -1)
 		fatal("%s", __func__);
 }
 
@@ -420,25 +535,138 @@ config_exit(uint32_t session)
 	config_ran(sp, sp->st == NULL ? 0 : session_exit(sp->st), 1);
 }
 
+/* commit, or commit check, of the session's candidate */
+static void
+config_commit(uint32_t session, struct nshd_commit *c)
+{
+	struct session	*sp;
+
+	if ((sp = config_private(session)) == NULL)
+		return;
+	if (c->check) {
+		config_wait(sp, WAIT_CHECK);
+		return;
+	}
+	if (commit != NULL) {
+		config_answer(session, 1, "%% Commit refused: uid %u commits "
+		    "now\n", (unsigned int)commit->uid);
+		return;
+	}
+	if ((commit = calloc(1, sizeof(*commit))) == NULL)
+		fatal(NULL);
+	commit->session = session;
+	commit->uid = sp->uid;
+	strlcpy(commit->comment, c->comment, sizeof(commit->comment));
+	commit_wait(COMMIT_PLAN);
+}
+
 /*
- * sp waits on a snapshot for what, which runs when it is in; a snapshot
- * system already makes will do
+ * rollback n: the session's candidate starts over as configuration n
+ * as it was saved, which system reads, or as what runs if n is 0
  */
 static void
+config_rollback(uint32_t session, struct nshd_rollback *rb)
+{
+	struct session	*sp;
+	struct request	*r;
+
+	if ((sp = config_private(session)) == NULL)
+		return;
+	if (rb->n < 0 || rb->n >= NSHD_ROLLBACKS) {
+		config_answer(session, 1, "%% rollback [0-%d]\n",
+		    NSHD_ROLLBACKS - 1);
+		return;
+	}
+	if (rb->n == 0) {
+		config_wait(sp, WAIT_RESET);
+		return;
+	}
+	if (links[SYSTEM].down) {
+		config_answer(session, 1, "%% nshd: system is down\n");
+		return;
+	}
+	if ((r = config_request(session, REQ_ROLLBACK)) == NULL) {
+		config_answer(session, 1, "%s", IDS_GONE);
+		return;
+	}
+	r->n = rb->n;
+	if (link_compose(&links[SYSTEM], IMSG_SYS_ROLLBACK_READ, r->id, rb,
+	    sizeof(*rb)) == -1)
+		fatal("%s", __func__);
+}
+
+/* rollback n's text is in, or why not */
+static void
+config_rolled(struct request *r, int32_t status)
+{
+	struct session	*sp;
+
+	if ((sp = session_find(r->session)) == NULL)
+		return;
+	if (status == 0 && r->bad) {
+		config_answer(sp->id, 1, "%% nshd: rollback %d is past %d "
+		    "bytes\n", r->n, NSHD_PART);
+		return;
+	}
+	if (status != 0) {
+		if (imsg_text(links[FRONTEND].iev, IMSG_CTL_OUTPUT, sp->id,
+		    r->text, r->len) == -1)
+			fatal("%s", __func__);
+		config_answer(sp->id, 1, NULL);
+		return;
+	}
+	config_ran(sp, session_rollback(sp->st, r->text, r->len, r->n), 1);
+}
+
+/* session's, if in configure private; or NULL, said why */
+static struct session *
+config_private(uint32_t session)
+{
+	struct session	*sp;
+	char		 ifn[NSHD_IFNAME];
+	int		 private = 0, rtable, bridge;
+
+	if ((sp = session_find(session)) == NULL) {
+		config_answer(session, 1, "%% nshd: hello first\n");
+		return (NULL);
+	}
+	if (sp->st != NULL)
+		session_mode(sp->st, &private, &rtable, ifn, sizeof(ifn),
+		    &bridge);
+	if (!private) {
+		config_answer(session, 1,
+		    "%% nshd: configure private first\n");
+		return (NULL);
+	}
+	return (sp);
+}
+
+/* sp waits on a snapshot for what, which runs when it is in */
+static void
 config_wait(struct session *sp, int what)
+{
+	sp->waits = what;
+	snapshot_take();
+}
+
+/*
+ * A snapshot, for the sessions and the commit that wait on it, unless
+ * system makes one already, which will do; if none can be, they are told
+ */
+static void
+snapshot_take(void)
 {
 	struct nshd_snapshot	 ns = { 1 };
 	struct request		*r;
 
-	if (links[SYSTEM].down) {
-		config_answer(sp->id, 1, "%% nshd: system is down\n");
-		return;
-	}
-	sp->waits = what;
 	if (snap != NULL)
 		return;
-	if ((r = config_request(0)) == NULL) {
-		sp->waits = WAIT_NONE;
+	if (links[SYSTEM].down) {
+		config_snapshot_lost("% nshd: system is down\n");
+		return;
+	}
+	if ((r = config_request(0, REQ_ANSWER)) == NULL) {
+		config_snapshot_lost(IDS_GONE);
 		return;
 	}
 	if ((snap = calloc(1, sizeof(*snap))) == NULL ||
@@ -481,6 +709,7 @@ config_snapshot_done(int32_t status)
 {
 	struct session	*sp;
 	struct snapshot	*s = snap;
+	struct plan	*p;
 	int		 r, mode;
 
 	snap = NULL;
@@ -510,12 +739,22 @@ config_snapshot_done(int32_t status)
 			r = session_candidate(sp->st);
 			mode = 0;
 			break;
+		case WAIT_CHECK:
+			r = session_plan(sp->st, 1, &p);
+			mode = 1;
+			break;
+		case WAIT_RESET:
+			r = session_rollback(sp->st, NULL, 0, 0);
+			mode = 1;
+			break;
 		default:
 			continue;
 		}
 		sp->waits = WAIT_NONE;
 		config_ran(sp, r, mode);
 	}
+	if (commit != NULL && commit->waits)
+		commit_snapshot();
 }
 
 /* the snapshot sessions waited on is lost, as msg says */
@@ -529,6 +768,8 @@ config_snapshot_lost(const char *msg)
 			sp->waits = WAIT_NONE;
 			config_answer(sp->id, 1, "%s", msg);
 		}
+	if (commit != NULL && commit->waits)
+		commit_end(-1, msg);
 }
 
 /*
@@ -555,6 +796,204 @@ config_ran(struct session *sp, int r, int mode)
 	    &c, sizeof(c)) == -1)
 		fatal("%s", __func__);
 	config_answer(sp->id, r == -1 ? -1 : 0, NULL);
+}
+
+/* the commit waits on a snapshot, at step */
+static void
+commit_wait(int step)
+{
+	commit->step = step;
+	commit->waits = 1;
+	snapshot_take();
+}
+
+/* the snapshot the commit waited on is in: its next step */
+static void
+commit_snapshot(void)
+{
+	struct nshd_begin	 b;
+	struct session		*sp;
+	struct plan		*p;
+	int			 r;
+
+	commit->waits = 0;
+	switch (commit->step) {
+	case COMMIT_PLAN:
+		if ((sp = session_find(commit->session)) == NULL ||
+		    session_plan(sp->st, 0, &commit->plan) == -1) {
+			commit_end(-1, NULL);
+			return;
+		}
+		p = commit->plan;
+		if (p->same) {
+			commit_save();
+			return;
+		}
+		if (commit_part(NSHD_BEFORE, p->text[PLAN_BEFORE],
+		    p->len[PLAN_BEFORE]) == -1 || commit_part(NSHD_WANT,
+		    p->text[PLAN_WANT], p->len[PLAN_WANT]) == -1)
+			return;
+		b.uid = commit->uid;
+		commit_request(COMMIT_BEGIN, IMSG_SYS_BEGIN, &b, sizeof(b));
+		break;
+	case COMMIT_VERIFY:
+		if ((r = session_verify(commit->plan, commit->failed)) == 0)
+			commit_save();
+		else if (r == 1)
+			commit_apply(COMMIT_UNDO);
+		else
+			commit_end(-1, NULL);
+		break;
+	case COMMIT_BACK:
+		/* if not, the record says it did not finish */
+		if (session_verify_back(commit->plan) == 0)
+			commit_request(COMMIT_RECORD, IMSG_SYS_RECORD, NULL,
+			    0);
+		else
+			commit_end(-1, NULL);
+		break;
+	}
+}
+
+/* system ended the commit's request: its next step */
+static void
+commit_ended(int32_t status)
+{
+	struct session	*sp;
+	int		 r;
+
+	switch (commit->step) {
+	case COMMIT_BEGIN:
+		if (status != 0)
+			commit_end(-1, NULL);
+		else
+			commit_apply(COMMIT_APPLY);
+		break;
+	case COMMIT_APPLY:
+		commit->failed = status != 0;
+		commit_wait(COMMIT_VERIFY);
+		break;
+	case COMMIT_UNDO:
+		commit_wait(COMMIT_BACK);
+		break;
+	case COMMIT_SAVE:
+		/* taken: the candidate starts again, saved or not */
+		r = status == 0 ? 0 : -1;
+		if ((sp = session_find(commit->session)) != NULL &&
+		    session_renew(sp->st) == -1)
+			r = -1;
+		commit_end(r, NULL);
+		break;
+	case COMMIT_RECORD:
+		commit_end(-1, NULL);
+		break;
+	}
+}
+
+/* a part of the commit's, to system, as chunks: -1 if too long, said */
+static int
+commit_part(int32_t part, const char *text, size_t len)
+{
+	struct nshd_chunk	 c = { part };
+	char			 buf[sizeof(c) + NSHD_TEXT];
+	size_t			 n;
+
+	if (len > NSHD_PART) {
+		commit_end(-1, "% Commit refused: the configuration is past "
+		    "what nshd takes\n");
+		return (-1);
+	}
+	memcpy(buf, &c, sizeof(c));
+	while (len > 0) {
+		n = len < NSHD_TEXT ? len : NSHD_TEXT;
+		memcpy(buf + sizeof(c), text, n);
+		if (link_compose(&links[SYSTEM], IMSG_SYS_SCRIPT, 0, buf,
+		    sizeof(c) + n) == -1)
+			fatal("%s", __func__);
+		text += n;
+		len -= n;
+	}
+	return (0);
+}
+
+/* the plan's script, run by system, at step */
+static void
+commit_apply(int step)
+{
+	struct nshd_apply	 a;
+	struct plan		*p = commit->plan;
+	int			 i;
+
+	memset(&a, 0, sizeof(a));
+	a.nclears = p->nclears;
+	for (i = 0; i < p->nclears; i++) {
+		strlcpy(a.clears[i].name, p->clears[i].name,
+		    sizeof(a.clears[i].name));
+		a.clears[i].rtable = p->clears[i].rtable;
+		a.clears[i].keep = p->clears[i].keep;
+	}
+	if (commit_part(NSHD_SCRIPT, p->text[PLAN_SCRIPT],
+	    p->len[PLAN_SCRIPT]) == -1)
+		return;
+	commit_request(step, IMSG_SYS_APPLY, &a, sizeof(a));
+}
+
+/* what runs, saved by system, with who commits and their comment */
+static void
+commit_save(void)
+{
+	struct nshd_save	 sv;
+
+	memset(&sv, 0, sizeof(sv));
+	sv.uid = commit->uid;
+	strlcpy(sv.comment, commit->comment, sizeof(sv.comment));
+	commit_request(COMMIT_SAVE, IMSG_SYS_SAVE, &sv, sizeof(sv));
+}
+
+/*
+ * A request of the commit's, to system, whose end it waits on at step,
+ * after what nsh's code printed for it
+ */
+static void
+commit_request(int step, uint32_t type, const void *data, size_t len)
+{
+	struct request	*r;
+
+	printed_text(session_find(commit->session) != NULL ?
+	    links[FRONTEND].iev : NULL, IMSG_CTL_OUTPUT, commit->session);
+	if (links[SYSTEM].down) {
+		commit_end(-1, "% nshd: system is down\n");
+		return;
+	}
+	if ((r = config_request(commit->session, REQ_COMMIT)) == NULL) {
+		commit_end(-1, IDS_GONE);
+		return;
+	}
+	commit->step = step;
+	if (link_compose(&links[SYSTEM], type, r->id, data, len) == -1)
+		fatal("%s", __func__);
+}
+
+/*
+ * The commit ends, r as a handler returns it, or with msg said after
+ * what nsh's code printed for it
+ */
+static void
+commit_end(int r, const char *msg)
+{
+	struct commit	*c = commit;
+	struct session	*sp;
+
+	commit = NULL;
+	if ((sp = session_find(c->session)) == NULL)
+		printed_text(NULL, 0, 0);
+	else if (msg != NULL) {
+		printed_text(links[FRONTEND].iev, IMSG_CTL_OUTPUT, sp->id);
+		config_answer(sp->id, 1, "%s", msg);
+	} else
+		config_ran(sp, r, 1);
+	plan_free(c->plan);
+	free(c);
 }
 
 /* to session, a line of output if fmt, and the result status */
@@ -597,6 +1036,8 @@ config_forget_frontend(void)
 	/* no session again has 0, and a new one may have the id */
 	TAILQ_FOREACH(r, &requests, entry)
 		r->session = 0;
+	if (commit != NULL)
+		commit->session = 0;
 }
 
 /* system started again, or is down: what it was asked is lost */
@@ -609,9 +1050,11 @@ config_forget_system(void)
 	    "% nshd: system started again, and its answer is lost\n";
 
 	while ((r = TAILQ_FIRST(&requests)) != NULL) {
-		if (r->session != 0 && session_find(r->session) != NULL)
+		if (r->kind != REQ_COMMIT && r->session != 0 &&
+		    session_find(r->session) != NULL)
 			config_answer(r->session, 1, "%s", lost);
 		TAILQ_REMOVE(&requests, r, entry);
+		free(r->text);
 		free(r);
 	}
 	if (snap != NULL) {
@@ -622,6 +1065,8 @@ config_forget_system(void)
 		snap = NULL;
 		config_snapshot_lost(lost);
 	}
+	if (commit != NULL)
+		commit_end(-1, lost);
 }
 
 /* to system: type, for each request of session not finished */
@@ -637,34 +1082,31 @@ config_tell(uint32_t session, uint32_t type)
 }
 
 /*
- * A request of session's, or config's own if 0, with an id of its own;
- * NULL, said, when the ids are exhausted
+ * A request of session's, or config's own if 0, of kind, with an id of
+ * its own; NULL when the ids are exhausted
  */
 static struct request *
-config_request(uint32_t session)
+config_request(uint32_t session, int kind)
 {
 	struct request	*r;
 
-	if ((request_id & REQUEST_COUNT) == REQUEST_COUNT) {
-		if (session != 0)
-			config_answer(session, 1,
-			    "%% nshd: request ids exhausted\n");
-		else
-			config_snapshot_lost("% nshd: request ids exhausted\n");
+	if ((request_id & REQUEST_COUNT) == REQUEST_COUNT)
 		return (NULL);
-	}
 	if ((r = calloc(1, sizeof(*r))) == NULL)
 		fatal(NULL);
 	r->id = ++request_id;
 	r->session = session;
+	r->kind = kind;
 	TAILQ_INSERT_TAIL(&requests, r, entry);
 	return (r);
 }
 
-/* sp is gone, and the candidate it had */
+/* sp is gone, and the candidate it had; a commit of its runs on */
 static void
 session_gone(struct session *sp)
 {
+	if (commit != NULL && commit->session == sp->id)
+		commit->session = 0;
 	TAILQ_REMOVE(&sessions, sp, entry);
 	session_free(sp->st);
 	free(sp);
