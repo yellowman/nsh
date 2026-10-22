@@ -36,6 +36,7 @@
 #define NSHD_ROLLBACKS	50	/* configurations kept, ROLLBACKS */
 #define NSHD_CLEARS	64	/* daemons' rules a script empties, MAXCLEARS */
 #define NSHD_PART	(16 * 1024 * 1024)	/* a commit's part, at most */
+#define NSHD_CONFIRMMAX	1440	/* commit confirmed's minutes, CONFIRMMAX */
 
 /* a client's first message */
 struct nshd_hello {
@@ -83,9 +84,13 @@ struct nshd_snapshot {
 	int32_t		facts;
 };
 
-/* commit, of the session's candidate, or with check, commit check */
+/*
+ * commit, of the session's candidate, or with check, commit check, or
+ * with minutes, commit confirmed
+ */
 struct nshd_commit {
 	int32_t		check;
+	int32_t		minutes;
 	char		comment[NSHD_COMMENT];
 };
 
@@ -103,10 +108,18 @@ struct nshd_chunk {
 #define NSHD_WANT	2	/* and what is wanted */
 #define NSHD_PARTS	3
 
-/* config to system: who begins a commit */
+/* config to system: who begins a commit, and if confirmed, its minutes */
 struct nshd_begin {
 	uint32_t	uid;
+	int32_t		minutes;
 };
+
+/* config to system: how the commit begun ended */
+struct nshd_record {
+	int32_t		how;
+};
+#define NSHD_BACK	0	/* gone back to how it was */
+#define NSHD_KEPT	1	/* confirmed, kept until its deadline */
 
 /* config to system: run the script, and empty these daemons' rules */
 struct nshd_apply {
@@ -211,7 +224,7 @@ enum nshd_imsg {
 	IMSG_SYS_BEGIN,		/* nshd_begin: the commit record made */
 	IMSG_SYS_APPLY,		/* nshd_apply: the script run, its status */
 	IMSG_SYS_SAVE,		/* nshd_save: what runs saved, the record gone */
-	IMSG_SYS_RECORD,	/* the commit begun went back to how it was */
+	IMSG_SYS_RECORD,	/* nshd_record: the commit begun ended */
 	IMSG_SYS_ROLLBACK_READ,	/* nshd_rollback: configuration n */
 	IMSG_SYS_ROLLBACK_LIST,	/* show rollback's list */
 	IMSG_SYS_TEST,		/* nshd_test: the test run, its status */
@@ -219,7 +232,7 @@ enum nshd_imsg {
 	/* system to parent, on parent's pipe to it, and parent's answer */
 	IMSG_CONFIRM_ARM,	/* nshd_confirm: the record made, its deadline */
 	IMSG_CONFIRM_ARMED,	/* nshd_confirm: kept, or not */
-	IMSG_CONFIRM_DONE	/* nshd_confirm: the record gone, or failed */
+	IMSG_CONFIRM_DONE	/* nshd_confirm: the record gone, or another */
 };
 
 struct imsgev {
@@ -255,7 +268,9 @@ int		 printed_text(struct imsgev *, uint32_t, uint32_t);
 void		 child_start(const char *, int, int);
 void		 privdrop(enum nshd_proc);
 int		 joined(enum nshd_proc, enum nshd_proc);
-void		 links_init(struct link *, size_t, struct imsgev *);
+void		 links_init(struct link *, size_t, struct imsgev *,
+		    void (*)(struct imsg *));
+int		 parent_compose(uint32_t, const void *, size_t);
 int		 link_compose(struct link *, uint32_t, uint32_t, const void *,
 		    size_t);
 void		 link_broken(struct link *, const char *, ...)
@@ -274,6 +289,8 @@ struct confirm {
 	size_t		 backlen;
 };
 int		 confirm_read(struct confirm *, int);
+int		 confirm_write(struct confirm *);
+int		 confirm_clear(void);
 void		 confirm_free(struct confirm *);
 
 /* each process but parent */

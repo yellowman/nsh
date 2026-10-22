@@ -77,7 +77,11 @@ daemons' rules it changes, and has system record it, run its script,
 and, if a snapshot after reads as the candidate, save what runs; if
 not, system runs the script back.
 .Cm commit check
-stops after the tests, and
+stops after the tests.
+.Cm commit confirmed
+runs its script even if the candidate is what runs, and, if a snapshot
+after reads as the candidate, keeps what runs without saving it until
+its deadline; a commit that saves confirms it.
 .Cm rollback Ar N
 takes configuration
 .Ar N
@@ -116,6 +120,11 @@ away when it saves or goes back; one that does not leaves it, and the
 next commit says what it left.
 While the record says a commit's changes were not saved, a commit
 that neither saves what runs nor goes back to before it is refused.
+A commit confirmed makes a record of a commit not confirmed too, which
+goes back to what ran before the first commit not confirmed; it tells
+the parent, and goes on once the parent keeps its deadline too.
+If the commit goes back, so does that record, to how it was before it.
+A commit that saves takes that record away before it saves.
 system is a session of its own: when it goes, the parent kills every
 process left in that session, and every process of _nshcheck's,
 before another system starts.

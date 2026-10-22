@@ -78,7 +78,7 @@ void			 session_mode(struct session_state *, int *, int *,
 			    char *, size_t, int *);
 int			 session_candidate(struct session_state *);
 int			 session_diff(struct session_state *);
-int			 session_plan(struct session_state *, int,
+int			 session_plan(struct session_state *, int, int,
 			    struct plan **);
 void			 session_tested(struct plan *, int, int);
 int			 session_verdict(struct plan *);

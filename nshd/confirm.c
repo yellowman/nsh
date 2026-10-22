@@ -54,6 +54,8 @@
 static const char *confirm_states[] = { "none", "waiting", "failed" };
 
 static int	readall(int, char *, size_t, off_t);
+static int	writeall(int, const char *, size_t);
+static int	dirsync(void);
 
 /*
  * The record into cf, with its configuration if whole, or state
@@ -121,6 +123,50 @@ confirm_read(struct confirm *cf, int whole)
 	return (-1);
 }
 
+/* cf as the record, whole or not at all, and kept: -1 if not */
+int
+confirm_write(struct confirm *cf)
+{
+	char	 tmp[] = CONFIRM_RECORD ".XXXXXXXXXX", head[CONFIRM_HEAD];
+	int	 fd, len, serrno;
+
+	len = snprintf(head, sizeof(head), HEAD_FORMAT "\n",
+	    confirm_states[cf->state], (unsigned long long)cf->id,
+	    (long long)cf->deadline, (long long)cf->until, cf->attempts,
+	    cf->demoted, cf->backlen);
+	if (mkdir(NSHDB, 0700) == -1 && errno != EEXIST)
+		return (-1);
+	if ((fd = mkstemp(tmp)) == -1)
+		return (-1);
+	if (writeall(fd, head, len) == -1 ||
+	    writeall(fd, cf->back, cf->backlen) == -1 || fsync(fd) == -1)
+		goto fail;
+	if (close(fd) == -1) {
+		fd = -1;
+		goto fail;
+	}
+	fd = -1;
+	if (rename(tmp, CONFIRM_RECORD) == -1)
+		goto fail;
+	return (dirsync());
+ fail:
+	serrno = errno;
+	if (fd != -1)
+		close(fd);
+	unlink(tmp);
+	errno = serrno;
+	return (-1);
+}
+
+/* no record, and kept so: -1 if not */
+int
+confirm_clear(void)
+{
+	if (unlink(CONFIRM_RECORD) == -1)
+		return (errno == ENOENT ? 0 : -1);
+	return (dirsync());
+}
+
 void
 confirm_free(struct confirm *cf)
 {
@@ -146,4 +192,35 @@ readall(int fd, char *buf, size_t len, off_t off)
 			return (-1);
 		}
 	return (0);
+}
+
+static int
+writeall(int fd, const char *buf, size_t len)
+{
+	ssize_t	 n;
+
+	for (; len > 0; buf += n, len -= n)
+		if ((n = write(fd, buf, len)) == -1) {
+			if (errno == EINTR) {
+				n = 0;
+				continue;
+			}
+			return (-1);
+		}
+	return (0);
+}
+
+/* NSHDB's entries, as they now are, kept: -1 if not */
+static int
+dirsync(void)
+{
+	int	 fd, r, serrno;
+
+	if ((fd = open(NSHDB, O_RDONLY | O_DIRECTORY | O_CLOEXEC)) == -1)
+		return (-1);
+	r = fsync(fd);
+	serrno = errno;
+	close(fd);
+	errno = serrno;
+	return (r);
 }

@@ -44,14 +44,15 @@
  * A commit's requests come from config in order: the parts BEGIN and
  * APPLY take, as chunks, then BEGIN, which makes the commit record,
  * APPLY, which runs the script, SAVE, which saves what runs and takes
- * the record away, and RECORD, when the commit went back to how it was;
- * and before them TEST, a daemon's test of its rules. An apply, a save
- * and a test each run in a child of system's, a job, in a process group
- * of its own, its output sent as it comes; past its time the group is
- * sent SIGTERM, and a grace later SIGKILL, and it fails. A test runs as
- * NSHD_CHECK_USER, its rules staged in a directory of their own, its
- * own, but for the daemons root_tests names, each an exception that
- * keeps root, its rules root's.
+ * the record away, and RECORD, when the commit went back to how it was,
+ * or a commit confirmed is kept; and before them TEST, a daemon's test
+ * of its rules. An apply, a save and a test each run in a child of
+ * system's, a job, in a process group of its own, its output sent as
+ * it comes; past its time the group is sent SIGTERM, and a grace later
+ * SIGKILL, and it fails. A test runs as NSHD_CHECK_USER, its rules
+ * staged in a directory of their own, its own, but for the daemons
+ * root_tests names, each an exception that keeps root, its rules
+ * root's.
  * While a job runs, config's requests wait for it, but what a stream's
  * client read and a session gone.
  *
@@ -60,6 +61,13 @@
  * applied and not saved, if the save failed. The next commit says what
  * one applying left, by what runs now; one not saved refuses it, but
  * saving what runs, or going back to how it was before that commit.
+ *
+ * A commit confirmed begins with its minutes: BEGIN makes the record of
+ * a commit not confirmed too (confirm.c), which goes back to what ran
+ * before the first commit not confirmed, and tells parent, which keeps
+ * its deadline too, and answers once parent says it does. RECORD, as
+ * kept, leaves it; as gone back, it puts back the one before. A SAVE confirms
+ * it, which takes it away first.
  */
 
 #include <sys/types.h>
@@ -207,6 +215,13 @@ static struct job	*job;
 static TAILQ_HEAD(, queued) queue = TAILQ_HEAD_INITIALIZER(queue);
 static char		*parts[NSHD_PARTS];	/* chunks, until taken */
 static size_t		 partlen[NSHD_PARTS];
+/* a commit confirmed begun: the record of one not confirmed before it */
+static struct confirm	 confirm_prev;
+static int		 confirm_begun;
+static int		 arming;	/* its BEGIN, waiting on parent */
+static uint32_t		 arming_id;
+static uint64_t		 arming_cid;
+static int		 arming_wrote;	/* the commit record, made new */
 
 static void	system_dispatch_relay(int, short, void *);
 static void	system_dispatch_config(int, short, void *);
@@ -232,11 +247,15 @@ static void	system_stream_done(struct stream *);
 static void	system_sigchld(int, short, void *);
 static int	system_chunk(const unsigned char *, size_t);
 static void	system_parts_free(void);
-static void	system_begin(uint32_t, uid_t);
+static void	system_begin(uint32_t, struct nshd_begin *);
 static void	system_apply(uint32_t, struct nshd_apply *);
 static void	system_save(uint32_t, struct nshd_save *);
 static void	system_saved(int);
-static void	system_back(uint32_t);
+static void	system_back(uint32_t, int);
+static int	system_arm(uint32_t, int, int);
+static void	system_parent(struct imsg *);
+static void	system_unarm(void);
+static void	system_done(void);
 static void	system_rollback(uint32_t, int);
 static void	system_test(uint32_t, char *);
 static void	system_printed(uint32_t, int32_t);
@@ -282,7 +301,7 @@ systemproc(int debug, int v)
 
 	if ((iev_relay = imsgev_new(3, system_dispatch_relay, 0)) == NULL)
 		fatal(NULL);
-	links_init(&config, 1, iev_relay);
+	links_init(&config, 1, iev_relay, system_parent);
 	signal_set(&ev_sigchld, SIGCHLD, system_sigchld, NULL);
 	signal_add(&ev_sigchld, NULL);
 	event_dispatch();
@@ -377,6 +396,8 @@ system_dispatch_config(int fd, short event, void *arg)
 static int
 system_whole(uint32_t type, const void *data, size_t len)
 {
+	struct nshd_begin	 bg;
+	struct nshd_record	 rc;
 	struct nshd_show	 show;
 	struct nshd_chunk	 c;
 	struct nshd_apply	 a;
@@ -389,13 +410,20 @@ system_whole(uint32_t type, const void *data, size_t len)
 	case IMSG_SYS_READ:
 	case IMSG_SYS_STOP:
 		return (0);
-	case IMSG_SYS_RECORD:
 	case IMSG_SYS_ROLLBACK_LIST:
 		return (len == 0 ? 0 : -1);
+	case IMSG_SYS_RECORD:
+		if (len != sizeof(rc))
+			return (-1);
+		memcpy(&rc, data, len);
+		return (rc.how != NSHD_BACK && rc.how != NSHD_KEPT ? -1 : 0);
 	case IMSG_SYS_SNAPSHOT:
 		return (len == sizeof(struct nshd_snapshot) ? 0 : -1);
 	case IMSG_SYS_BEGIN:
-		return (len == sizeof(struct nshd_begin) ? 0 : -1);
+		if (len != sizeof(bg))
+			return (-1);
+		memcpy(&bg, data, len);
+		return (bg.minutes < 0 || bg.minutes > NSHD_CONFIRMMAX ? -1 : 0);
 	case IMSG_SYS_SHOW:
 		if (len != sizeof(show))
 			return (-1);
@@ -445,6 +473,7 @@ system_request(uint32_t type, uint32_t id, const void *data, size_t len)
 	struct nshd_snapshot	 snap;
 	struct nshd_show	 show;
 	struct nshd_begin	 bg;
+	struct nshd_record	 rc;
 	struct nshd_apply	 a;
 	struct nshd_save	 sv;
 	struct nshd_rollback	 rb;
@@ -474,7 +503,7 @@ system_request(uint32_t type, uint32_t id, const void *data, size_t len)
 		return (system_chunk(data, len));
 	case IMSG_SYS_BEGIN:
 		memcpy(&bg, data, sizeof(bg));
-		system_begin(id, bg.uid);
+		system_begin(id, &bg);
 		break;
 	case IMSG_SYS_APPLY:
 		memcpy(&a, data, sizeof(a));
@@ -485,7 +514,8 @@ system_request(uint32_t type, uint32_t id, const void *data, size_t len)
 		system_save(id, &sv);
 		break;
 	case IMSG_SYS_RECORD:
-		system_back(id);
+		memcpy(&rc, data, sizeof(rc));
+		system_back(id, rc.how);
 		break;
 	case IMSG_SYS_ROLLBACK_READ:
 		memcpy(&rb, data, sizeof(rb));
@@ -926,10 +956,10 @@ system_parts_free(void)
  * sent: the record made, unless one a commit left refuses it
  */
 static void
-system_begin(uint32_t id, uid_t uid)
+system_begin(uint32_t id, struct nshd_begin *bg)
 {
 	struct record	 rec, now;
-	int		 r, status = 1;
+	int		 r, wrote = 0, status = 1;
 
 	if (record_read(&rec) == -1)
 		goto done;
@@ -968,7 +998,7 @@ system_begin(uint32_t id, uid_t uid)
 		}
 	} else {
 		now.state = RECORD_APPLYING;
-		now.uid = uid;
+		now.uid = bg->uid;
 		now.when = time(NULL);
 		now.before = parts[NSHD_BEFORE];
 		now.beforelen = partlen[NSHD_BEFORE];
@@ -976,12 +1006,128 @@ system_begin(uint32_t id, uid_t uid)
 		now.wantlen = partlen[NSHD_WANT];
 		if (record_write(&now) == -1)
 			goto done;
+		wrote = 1;
+	}
+	if (bg->minutes > 0) {
+		if (system_arm(id, bg->minutes, wrote) == -1) {
+			if (wrote)
+				record_clear();
+			goto done;
+		}
+		/* answered once parent keeps its deadline */
+		if (printed_text(config.iev, IMSG_SYS_TEXT, id) == -1)
+			fatal("%s", __func__);
+		record_free(&rec);
+		system_parts_free();
+		return;
 	}
 	status = 0;
  done:
 	record_free(&rec);
 	system_parts_free();
 	system_printed(id, status);
+}
+
+/*
+ * The record of a commit not confirmed, for the commit begun, request
+ * id, its deadline minutes from now: it goes back to what ran before
+ * the first commit not confirmed, or else this one; the record before
+ * it kept, to put back if this one goes back; and parent told. -1,
+ * said, if not
+ */
+static int
+system_arm(uint32_t id, int minutes, int wrote)
+{
+	struct confirm		 cf;
+	struct nshd_confirm	 cm;
+
+	confirm_free(&confirm_prev);
+	confirm_begun = 0;
+	if (confirm_read(&confirm_prev, 1) == -1) {
+		printf("%% nshd: the record of a commit not confirmed: %s\n",
+		    strerror(errno));
+		return (-1);
+	}
+	cf = confirm_prev;
+	if (cf.state != CONFIRM_WAITING) {
+		cf.back = parts[NSHD_BEFORE];
+		cf.backlen = partlen[NSHD_BEFORE];
+	}
+	cf.state = CONFIRM_WAITING;
+	cf.attempts = 0;
+	do
+		arc4random_buf(&cf.id, sizeof(cf.id));
+	while (cf.id == 0);
+	cf.deadline = time(NULL) + minutes * 60;
+	cf.until = 0;
+	if (confirm_write(&cf) == -1) {
+		printf("%% nshd: the record of a commit not confirmed: %s\n",
+		    strerror(errno));
+		confirm_free(&confirm_prev);
+		return (-1);
+	}
+	confirm_begun = 1;
+	memset(&cm, 0, sizeof(cm));
+	cm.id = cf.id;
+	if (parent_compose(IMSG_CONFIRM_ARM, &cm, sizeof(cm)) == -1)
+		fatal("%s", __func__);
+	arming = 1;
+	arming_id = id;
+	arming_cid = cf.id;
+	arming_wrote = wrote;
+	return (0);
+}
+
+/*
+ * parent's word that it keeps the deadline of the commit not confirmed,
+ * or not: if not, the commit begun is refused, and the records put back
+ */
+static void
+system_parent(struct imsg *imsg)
+{
+	struct nshd_confirm	 cm;
+
+	if (imsg_get_type(imsg) != IMSG_CONFIRM_ARMED ||
+	    imsg_get_fd(imsg) != -1 ||
+	    imsg_get_data(imsg, &cm, sizeof(cm)) == -1 || !arming ||
+	    cm.id != arming_cid)
+		fatalx("parent sent imsg %u, which it may not",
+		    imsg_get_type(imsg));
+	arming = 0;
+	if (cm.armed) {
+		system_printed(arming_id, 0);
+		return;
+	}
+	printf("%% nshd: no deadline is kept: commit refused\n");
+	system_unarm();
+	if (arming_wrote)
+		record_clear();
+	system_printed(arming_id, 1);
+}
+
+/* the record of a commit not confirmed put back as it was before */
+static void
+system_unarm(void)
+{
+	if ((confirm_prev.state == CONFIRM_NONE ? confirm_clear() :
+	    confirm_write(&confirm_prev)) == -1)
+		printf("%% nshd: the record of a commit not confirmed: %s\n",
+		    strerror(errno));
+	else
+		system_done();
+	confirm_free(&confirm_prev);
+	confirm_begun = 0;
+}
+
+/* parent told the record of a commit not confirmed is gone, or another */
+static void
+system_done(void)
+{
+	struct nshd_confirm	 cm;
+
+	memset(&cm, 0, sizeof(cm));
+	if (parent_compose(IMSG_CONFIRM_DONE, &cm, sizeof(cm)) == -1)
+		fatal("%s", __func__);
 }
 
 /* the script, the part sent, in a job */
@@ -1000,6 +1146,22 @@ static void
 system_save(uint32_t id, struct nshd_save *sv)
 {
 	struct job	*j = system_job_new(id, JOB_SAVE);
+	struct confirm	 cf;
+	int		 r;
+
+	/* a commit not confirmed is, first; a record that is not one goes */
+	if ((r = confirm_read(&cf, 0)) == -1 && errno != EFTYPE)
+		printf("%% nshd: the record of a commit not confirmed: %s\n",
+		    strerror(errno));
+	else if (r == -1 || cf.state != CONFIRM_NONE) {
+		if (confirm_clear() == -1)
+			printf("%% nshd: the record of a commit not confirmed: "
+			    "%s\n", strerror(errno));
+		else {
+			system_done();
+			printf("%% Commit confirmed\n");
+		}
+	}
 
 	user_name(sv->uid, j->who, sizeof(j->who));
 	strlcpy(j->comment, sv->comment, sizeof(j->comment));
@@ -1078,11 +1240,12 @@ system_saved(int ok)
 }
 
 /*
- * The commit went back to how it was: the record it made gone, but one
- * not saved, which it went back from, kept
+ * The commit went back to how it was, or, kept, a commit confirmed is
+ * kept until its deadline: the record it made gone, but one not saved,
+ * which it went back from, kept
  */
 static void
-system_back(uint32_t id)
+system_back(uint32_t id, int how)
 {
 	struct record	 rec;
 	int		 status = 1;
@@ -1092,6 +1255,11 @@ system_back(uint32_t id)
 			status = 0;
 		record_free(&rec);
 	}
+	/* a commit confirmed kept until its deadline, or gone back */
+	if (confirm_begun && how == NSHD_BACK)
+		system_unarm();
+	confirm_free(&confirm_prev);
+	confirm_begun = 0;
 	system_printed(id, status);
 }
 

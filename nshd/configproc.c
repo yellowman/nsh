@@ -38,7 +38,12 @@
  * records it (BEGIN), runs its script (APPLY) and, if a snapshot after
  * reads as the candidate, saves what runs (SAVE); if not, it runs the
  * script back, and the record goes (RECORD). It runs to its end if its
- * session goes. commit check stops after the tests.
+ * session goes. commit check stops after the tests. commit confirmed
+ * begins with its minutes, which has system keep the record of a commit
+ * not confirmed, and runs its script even if it is empty; then, if a
+ * snapshot reads as the candidate, the commit's record goes, and what
+ * runs is kept until the deadline, not saved. A commit that saves
+ * confirms it.
  */
 
 #include <sys/types.h>
@@ -107,7 +112,7 @@ enum {
 	COMMIT_SAVE,		/* what runs saved */
 	COMMIT_UNDO,		/* the script back run */
 	COMMIT_BACK,		/* a snapshot, to verify that */
-	COMMIT_RECORD		/* the record gone */
+	COMMIT_RECORD		/* the record gone, kept or back */
 };
 
 struct commit {
@@ -118,6 +123,8 @@ struct commit {
 	int			 check;		/* commit check */
 	int			 test;		/* the plan's test running */
 	int			 failed;	/* a line of the script failed */
+	int			 minutes;	/* commit confirmed's, or 0 */
+	int			 how;		/* it ended, NSHD_BACK or KEPT */
 	char			 comment[NSHD_COMMENT];
 	struct plan		*plan;
 };
@@ -176,6 +183,7 @@ static void		 commit_go(void);
 static int		 commit_part(int32_t, const char *, size_t);
 static void		 commit_apply(int);
 static void		 commit_save(void);
+static void		 commit_record(int);
 static void		 commit_request(int, uint32_t, const void *, size_t);
 static void		 commit_end(int, const char *);
 static void		 session_gone(struct session *);
@@ -203,7 +211,7 @@ configproc(int debug, int verbose)
 
 	if ((iev_relay = imsgev_new(3, config_dispatch_relay, 0)) == NULL)
 		fatal(NULL);
-	links_init(links, sizeof(links) / sizeof(links[0]), iev_relay);
+	links_init(links, sizeof(links) / sizeof(links[0]), iev_relay, NULL);
 	event_dispatch();
 	exit(0);
 }
@@ -556,11 +564,18 @@ config_commit(uint32_t session, struct nshd_commit *c)
 		    "now\n", (unsigned int)commit->uid);
 		return;
 	}
+	if (c->minutes < 0 || c->minutes > NSHD_CONFIRMMAX ||
+	    (c->minutes > 0 && (c->check || c->comment[0] != '\0'))) {
+		config_answer(session, 1, "%% commit confirmed takes 1 to %d "
+		    "minutes, and no check or comment\n", NSHD_CONFIRMMAX);
+		return;
+	}
 	if ((commit = calloc(1, sizeof(*commit))) == NULL)
 		fatal(NULL);
 	commit->session = session;
 	commit->uid = sp->uid;
 	commit->check = c->check;
+	commit->minutes = c->minutes;
 	strlcpy(commit->comment, c->comment, sizeof(commit->comment));
 	commit_wait(COMMIT_PLAN);
 }
@@ -822,7 +837,8 @@ commit_snapshot(void)
 	switch (commit->step) {
 	case COMMIT_PLAN:
 		if ((sp = session_find(commit->session)) == NULL ||
-		    session_plan(sp->st, commit->check, &commit->plan) == -1)
+		    session_plan(sp->st, commit->check, commit->minutes > 0,
+		    &commit->plan) == -1)
 			commit_end(-1, NULL);
 		else if (commit->plan == NULL)
 			commit_end(0, NULL);
@@ -832,9 +848,12 @@ commit_snapshot(void)
 			commit_go();
 		break;
 	case COMMIT_VERIFY:
-		if ((r = session_verify(commit->plan, commit->failed)) == 0)
-			commit_save();
-		else if (r == 1)
+		if ((r = session_verify(commit->plan, commit->failed)) == 0) {
+			if (commit->minutes > 0)
+				commit_record(NSHD_KEPT);
+			else
+				commit_save();
+		} else if (r == 1)
 			commit_apply(COMMIT_UNDO);
 		else
 			commit_end(-1, NULL);
@@ -842,8 +861,7 @@ commit_snapshot(void)
 	case COMMIT_BACK:
 		/* if not, the record says it did not finish */
 		if (session_verify_back(commit->plan) == 0)
-			commit_request(COMMIT_RECORD, IMSG_SYS_RECORD, NULL,
-			    0);
+			commit_record(NSHD_BACK);
 		else
 			commit_end(-1, NULL);
 		break;
@@ -891,7 +909,18 @@ commit_ended(int32_t status)
 		commit_end(r, NULL);
 		break;
 	case COMMIT_RECORD:
-		commit_end(-1, NULL);
+		if (commit->how != NSHD_KEPT || status != 0) {
+			commit_end(-1, NULL);
+			break;
+		}
+		printf("%% Commit within %d minute%s to keep this, or it is "
+		    "rolled back\n", commit->minutes,
+		    commit->minutes == 1 ? "" : "s");
+		r = 0;
+		if ((sp = session_find(commit->session)) != NULL &&
+		    session_renew(sp->st) == -1)
+			r = -1;
+		commit_end(r, NULL);
 		break;
 	}
 }
@@ -918,7 +947,7 @@ commit_go(void)
 	struct plan		*p = commit->plan;
 	struct nshd_begin	 b;
 
-	if (p->same) {
+	if (p->same && commit->minutes == 0) {
 		commit_save();
 		return;
 	}
@@ -927,6 +956,7 @@ commit_go(void)
 	    p->text[PLAN_WANT], p->len[PLAN_WANT]) == -1)
 		return;
 	b.uid = commit->uid;
+	b.minutes = commit->minutes;
 	commit_request(COMMIT_BEGIN, IMSG_SYS_BEGIN, &b, sizeof(b));
 }
 
@@ -988,6 +1018,17 @@ commit_save(void)
 	sv.uid = commit->uid;
 	strlcpy(sv.comment, commit->comment, sizeof(sv.comment));
 	commit_request(COMMIT_SAVE, IMSG_SYS_SAVE, &sv, sizeof(sv));
+}
+
+/* the record of the commit begun gone, as it ended, how */
+static void
+commit_record(int how)
+{
+	struct nshd_record	 rc;
+
+	rc.how = how;
+	commit->how = how;
+	commit_request(COMMIT_RECORD, IMSG_SYS_RECORD, &rc, sizeof(rc));
 }
 
 /*

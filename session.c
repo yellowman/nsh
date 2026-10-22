@@ -269,10 +269,12 @@ session_candidate(struct session_state *s)
  * candidate may not become the running configuration or no plan could
  * be made, said why. Daemons' tests of rules are the plan's, and the
  * verdict waits on them (session_verdict()); with them, a plan is made
- * when checking too
+ * when checking too. A commit confirmed records what runs and what is
+ * wanted even if they are the same
  */
 int
-session_plan(struct session_state *s, int checking, struct plan **pp)
+session_plan(struct session_state *s, int checking, int confirmed,
+    struct plan **pp)
 {
 	struct plan *p;
 	struct cnode *t;
@@ -299,7 +301,8 @@ session_plan(struct session_state *s, int checking, struct plan **pp)
 		goto done;
 	if (!checking) {
 		p->same = conftree_compare(NULL, p->was, p->want) == 0;
-		if (!p->same && (plan_text(p, PLAN_BEFORE, p->was) == -1 ||
+		if ((!p->same || confirmed) &&
+		    (plan_text(p, PLAN_BEFORE, p->was) == -1 ||
 		    plan_text(p, PLAN_WANT, p->want) == -1 ||
 		    plan_script(p, p->was, p->want) == -1))
 			goto done;

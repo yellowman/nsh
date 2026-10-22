@@ -1097,6 +1097,8 @@ privdrop(enum nshd_proc proc)
 static struct link	*links;
 static size_t		 nlinks;
 static struct imsgev	*links_relay;
+static struct imsgev	*links_parent;
+static void		(*links_other)(struct imsg *);
 
 static void		 links_dispatch(int, short, void *);
 static void		 link_take(struct imsg *);
@@ -1106,10 +1108,11 @@ static void		 link_close(struct link *);
  * A child's n peers, in l, each with its pipe from parent, on fd 4, or
  * none if it is down: those parent wrote before the child started are
  * taken first, so its first requests have a peer to go to. A peer gone
- * wrong is told relay
+ * wrong is told relay. What else parent sends on fd 4 goes to other
  */
 void
-links_init(struct link *l, size_t n, struct imsgev *relay)
+links_init(struct link *l, size_t n, struct imsgev *relay,
+    void (*other)(struct imsg *))
 {
 	struct pollfd	 pfd;
 	struct imsgev	*iev;
@@ -1120,8 +1123,10 @@ links_init(struct link *l, size_t n, struct imsgev *relay)
 	links = l;
 	nlinks = n;
 	links_relay = relay;
+	links_other = other;
 	if ((iev = imsgev_new(4, links_dispatch, 1)) == NULL)
 		fatal(NULL);
+	links_parent = iev;
 	while (have < n) {
 		if ((r = imsgbuf_get(&iev->ibuf, &imsg)) == -1)
 			fatal("%s", __func__);
@@ -1159,10 +1164,20 @@ links_dispatch(int fd, short event, void *arg)
 			fatal("%s", __func__);
 		if (n == 0)
 			break;
-		link_take(&imsg);
+		if (imsg_get_type(&imsg) != IMSG_PEER && links_other != NULL)
+			links_other(&imsg);
+		else
+			link_take(&imsg);
 		imsg_free(&imsg);
 	}
 	imsg_event_add(iev);
+}
+
+/* to parent, on fd 4 */
+int
+parent_compose(uint32_t type, const void *data, size_t len)
+{
+	return (imsg_compose_event(links_parent, type, 0, 0, -1, data, len));
 }
 
 /*

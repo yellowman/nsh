@@ -72,7 +72,7 @@ frontend(int debug, int verbose)
 
 	if ((iev_relay = imsgev_new(3, frontend_dispatch_relay, 0)) == NULL)
 		fatal(NULL);
-	links_init(&config, 1, iev_relay);
+	links_init(&config, 1, iev_relay, NULL);
 	event_dispatch();
 	exit(0);
 }
