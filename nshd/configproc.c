@@ -42,6 +42,12 @@
  * committed. A commit of the shared candidate holds it, while it runs,
  * from the others' changes.
  *
+ * archive keeps the shared candidate, and who changed it, past config's
+ * end: config sends it each time it changes, and answers the session
+ * that changed it once archive says it kept it, or that it did not; a
+ * config that starts takes what archive kept before a session enters
+ * configure. If archive is down, a change is said not to be kept.
+ *
  * A commit is one at a time, of all sessions': config plans it from a
  * snapshot, system tests the daemons' rules it changes (TEST), then
  * records it (BEGIN), runs its script (APPLY) and, if a snapshot after
@@ -61,6 +67,7 @@
 #include <net/if.h>
 #include <netinet/in.h>
 
+#include <errno.h>
 #include <event.h>
 #include <imsg.h>
 #include <stdarg.h>
@@ -96,6 +103,10 @@ struct session {
 	int			 want;	/* the configure it asked for */
 	int			 how;	/* the configure it is in, or 0 */
 	int			 waits;
+	uint32_t		 keep;	/* the keeping its answer waits on */
+	struct nshd_context	 held;	/* that answer: its context, */
+	int			 heldmode;	/* if it gives one, */
+	int			 heldr;		/* and how it ended */
 };
 
 /* a request system has not finished, and the session that asked it */
@@ -164,6 +175,12 @@ static uid_t			*editors;	/* who changed shared since */
 static size_t			 neditors;
 static unsigned int		 shared_edits;	/* its edits, before a request */
 static char			 held[64];	/* cand_held's, if it is */
+static uint32_t			 keep_sent;	/* shared, sent archive */
+static uint32_t			 keep_done;	/* the last kept, or not */
+static int			 keep_loaded;	/* what archive kept, taken */
+static char			*loading;	/* that, as it comes */
+static size_t			 loading_len;
+static int			 loading_past;	/* past NSHD_KEEPMAX */
 
 #define REQUEST_GEN_SHIFT	24	/* generation above, count below */
 #define REQUEST_COUNT		((1U << REQUEST_GEN_SHIFT) - 1)
@@ -173,8 +190,11 @@ static struct imsgev	*iev_relay;
 static void		 config_dispatch_relay(int, short, void *);
 static void		 config_dispatch_frontend(int, short, void *);
 static void		 config_dispatch_system(int, short, void *);
+static void		 config_dispatch_archive(int, short, void *);
 static void		 config_forget_frontend(void);
 static void		 config_forget_system(void);
+static void		 config_forget_archive(void);
+static void		 config_ready_archive(void);
 static void		 config_show(uint32_t, struct nshd_show *);
 static void		 config_configure(uint32_t, struct nshd_configure *);
 static void		 config_line(uint32_t, struct nshd_line *);
@@ -188,6 +208,10 @@ static void		 config_left(struct session *);
 static void		 shared_hold(struct session *);
 static void		 shared_done(struct session *);
 static size_t		 editors_say(uid_t, const char *);
+static uint32_t		 shared_keep(void);
+static int		 shared_send(uint32_t);
+static void		 shared_kept(uint32_t, const char *);
+static void		 shared_load(void);
 static void		 config_wait(struct session *, int);
 static void		 snapshot_take(void);
 static void		 config_snapshot(struct request *, uint32_t,
@@ -195,6 +219,8 @@ static void		 config_snapshot(struct request *, uint32_t,
 static void		 config_snapshot_done(int32_t);
 static void		 config_snapshot_lost(const char *);
 static void		 config_ran(struct session *, int, int);
+static void		 config_reply(struct session *, struct nshd_context *,
+			    int, int);
 static void		 config_answer(uint32_t, int32_t, const char *, ...)
 			    __attribute__((__format__ (printf, 3, 4)));
 static void		 config_tell(uint32_t, uint32_t);
@@ -220,6 +246,9 @@ static struct link	 links[] = {
 	{ PROC_FRONTEND, config_dispatch_frontend, config_forget_frontend },
 #define SYSTEM		1
 	{ PROC_SYSTEM,	 config_dispatch_system,   config_forget_system },
+#define ARCHIVE		2
+	{ PROC_ARCHIVE,	 config_dispatch_archive,  config_forget_archive,
+	    config_ready_archive },
 };
 
 void
@@ -754,6 +783,7 @@ config_left(struct session *sp)
 		return;
 	neditors = 0;
 	printf("%% Uncommitted changes discarded\n");
+	sp->keep = shared_keep();
 }
 
 /*
@@ -778,7 +808,10 @@ shared_hold(struct session *sp)
 	cand_held = held;
 }
 
-/* After: sp among who changed the shared candidate, if it did */
+/*
+ * After: if sp changed the shared candidate, sp among who did, and it
+ * kept before sp is answered
+ */
 static void
 shared_done(struct session *sp)
 {
@@ -789,21 +822,23 @@ shared_done(struct session *sp)
 		cand_held = NULL;
 		return;
 	}
-	if (sp->how != NSHD_SHARED && sp->how != NSHD_EXCLUSIVE)
+	if ((sp->how != NSHD_SHARED && sp->how != NSHD_EXCLUSIVE) ||
+	    cand_shared_edits(shared) == shared_edits)
 		return;
-	if (!cand_shared_changed(shared)) {
+	if (!cand_shared_changed(shared))
 		neditors = 0;
-		return;
+	else {
+		for (i = 0; i < neditors && editors[i] != sp->uid; i++)
+			;
+		if (i == neditors) {
+			if ((e = reallocarray(editors, neditors + 1,
+			    sizeof(*e))) == NULL)
+				fatal(NULL);
+			editors = e;
+			editors[neditors++] = sp->uid;
+		}
 	}
-	if (cand_shared_edits(shared) == shared_edits)
-		return;
-	for (i = 0; i < neditors; i++)
-		if (editors[i] == sp->uid)
-			return;
-	if ((e = reallocarray(editors, neditors + 1, sizeof(*e))) == NULL)
-		fatal(NULL);
-	editors = e;
-	editors[neditors++] = sp->uid;
+	sp->keep = shared_keep();
 }
 
 /*
@@ -827,6 +862,151 @@ editors_say(uid_t uid, const char *what)
 	if (n > 0)
 		printf("\n");
 	return (n);
+}
+
+/*
+ * The shared candidate changed: it, and who changed it, to archive to
+ * keep, the next keeping, which is its number, or 0 if archive is down
+ * or it could not be sent, said
+ */
+static uint32_t
+shared_keep(void)
+{
+	uint32_t	 seq = keep_sent + 1;
+
+	if (seq == 0)
+		seq = 1;
+	if (links[ARCHIVE].down) {
+		printf("%% nshd: archive is down: the shared candidate is not "
+		    "kept\n");
+		return (0);
+	}
+	/* if archive starts again, it is sent then */
+	if (links[ARCHIVE].iev != NULL && shared_send(seq) == -1) {
+		printf("%% nshd: the shared candidate could not be kept\n");
+		return (0);
+	}
+	keep_sent = seq;
+	return (seq);
+}
+
+/*
+ * The shared candidate as it is, and who changed it, as "editors" and a
+ * uid for each, to archive, to keep as keeping seq: -1, logged, if it
+ * could not be sent
+ */
+static int
+shared_send(uint32_t seq)
+{
+	struct nshd_keep	 k = { seq, 0 };
+	FILE			*f;
+	char			*buf = NULL;
+	size_t			 len = 0, i, n;
+	int			 r;
+
+	if ((f = open_memstream(&buf, &len)) == NULL) {
+		log_warn("%s", __func__);
+		return (-1);
+	}
+	r = fprintf(f, "editors") < 0 ? -1 : 0;
+	for (i = 0; i < neditors && r == 0; i++)
+		if (fprintf(f, " %u", (unsigned int)editors[i]) < 0)
+			r = -1;
+	if (r == 0 && (fprintf(f, "\n") < 0 ||
+	    cand_shared_write(shared, f) == -1))
+		r = -1;
+	if (fclose(f) == EOF || r == -1 || len > NSHD_KEEPMAX) {
+		log_warnx("%s: the shared candidate could not be written",
+		    __func__);
+		free(buf);
+		return (-1);
+	}
+	for (i = 0; i < len; i += n) {
+		n = len - i < NSHD_TEXT ? len - i : NSHD_TEXT;
+		if (link_compose(&links[ARCHIVE], IMSG_ARC_TEXT, 0, buf + i,
+		    n) == -1)
+			fatal("%s", __func__);
+	}
+	free(buf);
+	if (link_compose(&links[ARCHIVE], IMSG_ARC_KEEP, 0, &k,
+	    sizeof(k)) == -1)
+		fatal("%s", __func__);
+	return (0);
+}
+
+/*
+ * The shared candidate's keepings to seq are done, with warn, if they
+ * were not kept: the sessions that waited on them answered
+ */
+static void
+shared_kept(uint32_t seq, const char *warn)
+{
+	struct session	*sp;
+
+	keep_done = seq;
+	TAILQ_FOREACH(sp, &sessions, entry) {
+		if (sp->keep == 0 || (int32_t)(sp->keep - seq) > 0)
+			continue;
+		sp->keep = 0;
+		if (warn != NULL && imsg_text(links[FRONTEND].iev,
+		    IMSG_CTL_OUTPUT, sp->id, warn, strlen(warn)) == -1)
+			fatal("%s", __func__);
+		config_reply(sp, &sp->held, sp->heldr, sp->heldmode);
+	}
+}
+
+/*
+ * What archive kept, taken as the shared candidate and who changed it,
+ * if it is one; then the sessions that wait to enter configure may
+ */
+static void
+shared_load(void)
+{
+	struct session	*sp;
+	uid_t		*e;
+	char		*nl, *p, *q;
+	unsigned long	 u;
+
+	keep_loaded = 1;
+	if (loading_len > 0 && !loading_past) {
+		if ((nl = memchr(loading, '\n', loading_len)) == NULL ||
+		    strncmp(loading, "editors", 7) != 0)
+			goto bad;
+		*nl = '\0';
+		for (p = loading + 7; *p != '\0'; p = q) {
+			if (*p++ != ' ' || *p < '0' || *p > '9')
+				goto bad;
+			errno = 0;
+			u = strtoul(p, &q, 10);
+			if (errno != 0 || (uid_t)u != u || (*q != ' ' &&
+			    *q != '\0') || (*p == '0' && q - p > 1))
+				goto bad;
+			if ((e = reallocarray(editors, neditors + 1,
+			    sizeof(*e))) == NULL)
+				fatal(NULL);
+			editors = e;
+			editors[neditors++] = u;
+		}
+		if (cand_shared_read(shared, nl + 1,
+		    loading_len - (nl + 1 - loading)) == -1)
+			goto bad;
+	}
+	goto done;
+ bad:
+	log_warnx("what archive kept is not a shared candidate");
+	neditors = 0;
+ done:
+	/* nsh's code may have said why, to no session */
+	printed_text(NULL, 0, 0);
+	free(loading);
+	loading = NULL;
+	loading_len = 0;
+	loading_past = 0;
+	TAILQ_FOREACH(sp, &sessions, entry)
+		if (sp->waits == WAIT_CONFIGURE) {
+			snapshot_take();
+			break;
+		}
 }
 
 /* sp waits on a snapshot for what, which runs when it is in */
@@ -919,6 +1099,9 @@ config_snapshot_done(int32_t status)
 	TAILQ_FOREACH(sp, &sessions, entry) {
 		switch (sp->waits) {
 		case WAIT_CONFIGURE:
+			/* the shared candidate, once what archive kept is */
+			if (sp->want != NSHD_PRIVATE && !keep_loaded)
+				continue;
 			r = config_enter(sp);
 			mode = 1;
 			break;
@@ -983,8 +1166,23 @@ config_ran(struct session *sp, int r, int mode)
 	}
 	if (printed_text(links[FRONTEND].iev, IMSG_CTL_OUTPUT, sp->id) == -1)
 		r = -1;
+	/* a change to the shared candidate is answered once it is kept */
+	if (sp->keep != 0 && (int32_t)(sp->keep - keep_done) > 0) {
+		sp->held = c;
+		sp->heldmode = mode;
+		sp->heldr = r;
+		return;
+	}
+	sp->keep = 0;
+	config_reply(sp, &c, r, mode);
+}
+
+/* sp's answer: its context c, if mode, and r, as a handler returns it */
+static void
+config_reply(struct session *sp, struct nshd_context *c, int r, int mode)
+{
 	if (mode && link_compose(&links[FRONTEND], IMSG_CTL_CONTEXT, sp->id,
-	    &c, sizeof(c)) == -1)
+	    c, sizeof(*c)) == -1)
 		fatal("%s", __func__);
 	config_answer(sp->id, r == -1 ? -1 : 0, NULL);
 }
@@ -1259,8 +1457,14 @@ commit_renew(void)
 	struct session	*sp;
 
 	if (commit->shared) {
+		if (cand_shared_renew(shared) == -1)
+			return (-1);
 		neditors = 0;
-		return (cand_shared_renew(shared));
+		if ((sp = session_find(commit->session)) != NULL)
+			sp->keep = shared_keep();
+		else
+			shared_keep();
+		return (0);
 	}
 	if ((sp = session_find(commit->session)) != NULL)
 		return (session_renew(sp->st));
@@ -1338,6 +1542,113 @@ config_forget_system(void)
 	}
 	if (commit != NULL)
 		commit_end(-1, lost);
+}
+
+/* archive's answers: what it kept, for config to take, or that it kept */
+static void
+config_dispatch_archive(int fd, short event, void *arg)
+{
+	struct imsgev		*iev = arg;
+	struct link		*l = &links[ARCHIVE];
+	struct imsg		 imsg;
+	struct ibuf		 b;
+	struct nshd_keep	 k;
+	struct nshd_result	 res;
+	uint32_t		 type;
+	ssize_t			 n;
+	char			*p;
+
+	if (imsgev_io(iev, event) == -1) {
+		link_broken(l, "closed its pipe");
+		return;
+	}
+
+	for (;;) {
+		if ((n = imsgbuf_get(&iev->ibuf, &imsg)) == -1) {
+			link_broken(l, "sent what imsg cannot read");
+			return;
+		}
+		if (n == 0)
+			break;
+		switch (type = imsg_get_type(&imsg)) {
+		case IMSG_ARC_TEXT:
+			if (keep_loaded || imsg_get_ibuf(&imsg, &b) == -1)
+				goto bad;
+			if (ibuf_size(&b) > NSHD_KEEPMAX - loading_len) {
+				loading_past = 1;
+				break;
+			}
+			if ((p = realloc(loading, loading_len +
+			    ibuf_size(&b))) == NULL)
+				fatal("%s", __func__);
+			loading = p;
+			memcpy(loading + loading_len, ibuf_data(&b),
+			    ibuf_size(&b));
+			loading_len += ibuf_size(&b);
+			break;
+		case IMSG_ARC_LOADED:
+			if (keep_loaded ||
+			    imsg_get_data(&imsg, &res, sizeof(res)) == -1)
+				goto bad;
+			if (res.status != 0)
+				loading_past = 1;
+			shared_load();
+			break;
+		case IMSG_ARC_KEPT:
+			if (imsg_get_data(&imsg, &k, sizeof(k)) == -1 ||
+			    (int32_t)(k.seq - keep_done) <= 0 ||
+			    (int32_t)(k.seq - keep_sent) > 0)
+				goto bad;
+			shared_kept(k.seq, k.status == 0 ? NULL :
+			    "% nshd: archive did not keep the shared candidate\n");
+			break;
+		default:
+			goto bad;
+		}
+		imsg_free(&imsg);
+	}
+	imsg_event_add(iev);
+	return;
+ bad:
+	imsg_free(&imsg);
+	link_broken(l, "sent imsg %u, which it may not, or not whole", type);
+}
+
+/*
+ * archive started again, or is down: what it was sending is lost, and
+ * if it is down, what was not kept will not be
+ */
+static void
+config_forget_archive(void)
+{
+	free(loading);
+	loading = NULL;
+	loading_len = 0;
+	loading_past = 0;
+	if (!links[ARCHIVE].down)
+		return;
+	if (!keep_loaded)
+		shared_load();
+	if (keep_sent != keep_done)
+		shared_kept(keep_sent, "% nshd: archive is down: the shared "
+		    "candidate is not kept\n");
+}
+
+/*
+ * A pipe to archive: what it kept is asked for, if config has not taken
+ * it, or the shared candidate sent again, if archive has not said it
+ * kept it
+ */
+static void
+config_ready_archive(void)
+{
+	if (!keep_loaded) {
+		if (link_compose(&links[ARCHIVE], IMSG_ARC_LOAD, 0, NULL,
+		    0) == -1)
+			fatal("%s", __func__);
+	} else if (keep_sent != keep_done && shared_send(keep_sent) == -1)
+		shared_kept(keep_sent, "% nshd: the shared candidate could "
+		    "not be kept\n");
 }
 
 /* to system: type, for each request of session not finished */

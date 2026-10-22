@@ -153,13 +153,21 @@ If one outlives SIGKILL, no other system starts.
 .It archive
 Runs as _nsharc in a
 .Xr chroot 2 ,
-with no peer yet.
-It keeps nothing yet.
+and keeps the shared candidate, and who changed it, for config, in
+.Pa /var/db/nsh/archive ,
+which it opens before it enters the
+.Xr chroot 2 .
+config sends it each time it changes, and answers the session that
+changed it once archive has kept it, whole and synced to disk, or said
+it did not; a config that starts takes what archive kept before a
+session enters
+.Cm configure .
+If archive is down, a change is said not to be kept.
 .El
 .Pp
-frontend and config, and config and system, each talk on a pipe of
-their own, which the parent makes, so each knows who sent what it
-reads.
+frontend and config, config and system, and config and archive, each
+talk on a pipe of their own, which the parent makes, so each knows who
+sent what it reads.
 A child takes a peer's pipe from the parent alone.
 Each child also has a pipe to relay.
 The parent reads only what relay tells it, and what system says of a
@@ -217,6 +225,8 @@ the read-only socket, mode 0666
 the commit record
 .It Pa /var/db/nsh/confirm
 the record of a commit not confirmed
+.It Pa /var/db/nsh/archive/candidate
+the shared candidate, as archive keeps it
 .El
 .Sh SEE ALSO
 .Xr nsh 8

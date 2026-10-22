@@ -63,5 +63,6 @@ int conftree_write_stmt(FILE *, struct cnode *, char *, int);
 struct cjournal *cjournal_new(void);
 int cjournal_add(struct cjournal *, int, char *, char *, int);
 size_t cjournal_len(struct cjournal *);
+void cjournal_get(struct cjournal *, size_t, int *, char **, char **, int *);
 int cjournal_replay(struct cjournal *, struct cnode *);
 void cjournal_free(struct cjournal *);

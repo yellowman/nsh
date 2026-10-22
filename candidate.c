@@ -135,7 +135,8 @@ cand_begin(void)
 			cand = NULL;
 			return -1;
 		}
-	}
+	} else if (cand == NULL && cand_tree() == NULL)
+		return -1;
 	candidate = 1;
 	cand_rtable = 0;
 	return 0;
@@ -223,6 +224,159 @@ unsigned int
 cand_shared_edits(struct cand_shared *sh)
 {
 	return sh->nedits;
+}
+
+/*
+ * The shared candidate sh, to f, as cand_shared_read() reads it: what
+ * rollback N loaded, if it did, as "base LENGTH" and its text, each
+ * edit of its journal as "edit OP KEYLEN BLOCKLENGTH LINELENGTH" and
+ * its block, or -1 for none, and line, and each statement as it was
+ * before an edit first changed it as "was WHOLE TOPLENGTH IMAGELENGTH"
+ * and its name and text. -1 if it could not be written
+ */
+int
+cand_shared_write(struct cand_shared *sh, FILE *f)
+{
+	char *buf = NULL, *block, *line;
+	size_t len = 0, i;
+	FILE *m;
+	int op, keylen, r;
+
+	if (sh->base != NULL) {
+		if ((m = open_memstream(&buf, &len)) == NULL)
+			return -1;
+		r = conftree_write(m, sh->base);
+		if (fclose(m) == EOF || r == -1 ||
+		    fprintf(f, "base %zu\n", len) < 0 ||
+		    fwrite(buf, 1, len, f) != len) {
+			free(buf);
+			return -1;
+		}
+		free(buf);
+	}
+	for (i = 0; sh->journal != NULL && i < cjournal_len(sh->journal);
+	    i++) {
+		cjournal_get(sh->journal, i, &op, &block, &line, &keylen);
+		if (fprintf(f, "edit %d %d %zd %zu\n%s%s", op, keylen,
+		    block == NULL ? -1 : (ssize_t)strlen(block), strlen(line),
+		    block == NULL ? "" : block, line) < 0)
+			return -1;
+	}
+	for (i = 0; i < sh->nwas; i++)
+		if (fprintf(f, "was %d %zu %zu\n%s%s", sh->was[i].whole,
+		    strlen(sh->was[i].top), strlen(sh->was[i].image),
+		    sh->was[i].top, sh->was[i].image) < 0)
+			return -1;
+	return 0;
+}
+
+/* len bytes of text at *p, before end, as a string: NULL if not */
+static char *
+cand_field(char **p, char *end, size_t len)
+{
+	char *s;
+
+	if (len > (size_t)(end - *p) || memchr(*p, '\0', len) != NULL)
+		return NULL;
+	if ((s = strndup(*p, len)) == NULL)
+		return NULL;
+	*p += len;
+	return s;
+}
+
+/*
+ * The shared candidate sh, which no session has begun, as
+ * cand_shared_write() wrote it in the len bytes of text: -1, said why,
+ * and sh as it was, if they are not one
+ */
+int
+cand_shared_read(struct cand_shared *sh, char *text, size_t len)
+{
+	struct cnode *base = NULL;
+	struct cjournal *j;
+	struct cand_was *was = NULL, *w;
+	char head[64], canon[64], *p = text, *end = text + len, *nl;
+	char *block, *line, *top, *image;
+	size_t nwas = 0, n, ll, tl, il, i;
+	ssize_t bl;
+	int op, keylen, whole;
+
+	if ((j = cjournal_new()) == NULL) {
+		printf("%% cand_shared_read: %s\n", strerror(errno));
+		return -1;
+	}
+	while (p < end) {
+		if ((nl = memchr(p, '\n', end - p)) == NULL ||
+		    (size_t)(nl - p) >= sizeof(head))
+			goto bad;
+		memcpy(head, p, nl - p);
+		head[nl - p] = '\0';
+		p = nl + 1;
+		block = line = top = image = NULL;
+		if (sscanf(head, "base %zu", &n) == 1) {
+			snprintf(canon, sizeof(canon), "base %zu", n);
+			if (strcmp(canon, head) != 0 || base != NULL ||
+			    cjournal_len(j) > 0 || n > (size_t)(end - p) ||
+			    (base = conftree_mem(p, n, "the shared candidate",
+			    conf_mode, conf_ordered)) == NULL)
+				goto bad;
+			p += n;
+		} else if (sscanf(head, "edit %d %d %zd %zu", &op, &keylen,
+		    &bl, &ll) == 4) {
+			snprintf(canon, sizeof(canon), "edit %d %d %zd %zu", op,
+			    keylen, bl, ll);
+			if (strcmp(canon, head) != 0 || op < CE_SET ||
+			    op > CE_SEQ || bl < -1 || keylen < 0 ||
+			    (size_t)keylen > ll ||
+			    (bl >= 0 && (block = cand_field(&p, end, bl)) ==
+			    NULL) || (line = cand_field(&p, end, ll)) == NULL ||
+			    cjournal_add(j, op, block, line, keylen) == -1) {
+				free(block);
+				free(line);
+				goto bad;
+			}
+			free(block);
+			free(line);
+		} else if (sscanf(head, "was %d %zu %zu", &whole, &tl,
+		    &il) == 3) {
+			snprintf(canon, sizeof(canon), "was %d %zu %zu", whole,
+			    tl, il);
+			if (strcmp(canon, head) != 0 ||
+			    (whole != 0 && whole != 1) ||
+			    (top = cand_field(&p, end, tl)) == NULL ||
+			    (image = cand_field(&p, end, il)) == NULL ||
+			    (w = reallocarray(was, nwas + 1,
+			    sizeof(*was))) == NULL) {
+				free(top);
+				free(image);
+				goto bad;
+			}
+			was = w;
+			was[nwas].top = top;
+			was[nwas].whole = whole;
+			was[nwas++].image = image;
+		} else
+			goto bad;
+	}
+	cand_share(sh, 1);
+	cand_end();
+	cand_base = base;
+	cand_journal = j;
+	cand_was = was;
+	cand_nwas = nwas;
+	cand_share(sh, 0);
+	cand_detach();
+	return 0;
+ bad:
+	printf("%% The shared candidate kept is not one\n");
+	conftree_free(base);
+	cjournal_free(j);
+	for (i = 0; i < nwas; i++) {
+		free(was[i].top);
+		free(was[i].image);
+	}
+	free(was);
+	return -1;
 }
 
 /* Leave configure private, dropping the candidate. */

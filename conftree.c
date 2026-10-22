@@ -847,6 +847,17 @@ cjournal_len(struct cjournal *j)
 	return j->nedits;
 }
 
+/* The nth edit, as cjournal_add() took it */
+void
+cjournal_get(struct cjournal *j, size_t n, int *op, char **block,
+    char **line, int *keylen)
+{
+	*op = j->edits[n].op;
+	*block = j->edits[n].block;
+	*line = j->edits[n].line;
+	*keylen = j->edits[n].keylen;
+}
+
 /*
  * Make the recorded edits on root, in order. On a newer copy of the
  * running configuration, this keeps what changed there and puts each

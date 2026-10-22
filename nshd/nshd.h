@@ -235,7 +235,14 @@ enum nshd_imsg {
 	/* system to parent, on parent's pipe to it, and parent's answer */
 	IMSG_CONFIRM_ARM,	/* nshd_confirm: the record made, its deadline */
 	IMSG_CONFIRM_ARMED,	/* nshd_confirm: kept, or not */
-	IMSG_CONFIRM_DONE	/* nshd_confirm: the record gone, or another */
+	IMSG_CONFIRM_DONE,	/* nshd_confirm: the record gone, or another */
+
+	/* config and archive: the shared candidate, as text */
+	IMSG_ARC_TEXT,		/* text of it, either way */
+	IMSG_ARC_KEEP,		/* config: nshd_keep; keep the text sent since */
+	IMSG_ARC_KEPT,		/* archive: nshd_keep, and if it was kept */
+	IMSG_ARC_LOAD,		/* config: what was kept, as text, then LOADED */
+	IMSG_ARC_LOADED		/* archive: nshd_result */
 };
 
 struct imsgev {
@@ -245,11 +252,19 @@ struct imsgev {
 	short		 events;
 };
 
+/* config and archive: the shared candidate's nth keeping, and its status */
+struct nshd_keep {
+	uint32_t	seq;
+	int32_t		status;
+};
+#define NSHD_KEEPMAX	(16 * 1024 * 1024)	/* what archive keeps, at most */
+
 /* a child's peer, and the pipe between them, from parent */
 struct link {
 	enum nshd_proc	 proc;
 	void		(*handler)(int, short, void *);
 	void		(*forget)(void);	/* all the peer held */
+	void		(*ready)(void);		/* or NULL: a new pipe to it */
 	struct imsgev	*iev;		/* or NULL: gone, or down */
 	struct imsgev	*wrong;		/* gone wrong: held, unread */
 	uint32_t	 generation;
@@ -270,6 +285,7 @@ int		 printed(struct facts_out *);
 int		 printed_text(struct imsgev *, uint32_t, uint32_t);
 void		 child_start(const char *, int, int);
 void		 privdrop(enum nshd_proc);
+int		 proc_user(enum nshd_proc, uid_t *, gid_t *);
 int		 joined(enum nshd_proc, enum nshd_proc);
 void		 links_init(struct link *, size_t, struct imsgev *,
 		    void (*)(struct imsg *));

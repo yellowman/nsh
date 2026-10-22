@@ -31,16 +31,16 @@
  *	config (-C)	_nshconf, chroot: sessions' state, what to ask system
  *	system (-Y)	root, a session of its own: reads and changes the
  *			kernel, the daemons and the saved configuration
- *	archive (-A)	_nsharc, chroot: the configurations saved
+ *	archive (-A)	_nsharc, chroot: what config keeps past its end
  *
  * Each user is a role's alone, so no child may signal another of
  * another role, or reach its files; the group nshadmin may use the
  * read-write socket. system's helpers that need not be root run as
  * NSHD_CHECK_USER, whose uid is theirs alone too.
  *
- * Two children that talk, frontend and config, config and system, do so
- * on a pipe of their own, which parent makes, so each knows who sent
- * what it reads. Each child has a pipe to relay, as fd 3, which tells
+ * Two children that talk, frontend and config, config and system, and
+ * config and archive, do so on a pipe of their own, which parent makes,
+ * so each knows who sent what it reads. Each child has a pipe to relay, as fd 3, which tells
  * it when it may start, and to which it tells a peer gone wrong; one
  * with peers has a pipe from parent, as fd 4, which gives it each
  * peer's pipe, or says the peer is down, with the peer's generation,
@@ -147,6 +147,7 @@ static const struct pair {
 } pairs[] = {
 	{ PROC_FRONTEND, PROC_CONFIG },
 	{ PROC_CONFIG,	 PROC_SYSTEM },
+	{ PROC_CONFIG,	 PROC_ARCHIVE },
 };
 #define NPAIRS	(sizeof(pairs) / sizeof(pairs[0]))
 
@@ -1094,6 +1095,19 @@ privdrop(enum nshd_proc proc)
 		fatal("cannot drop privileges");
 }
 
+/* proc's user, its uid and gid: -1 if there is none */
+int
+proc_user(enum nshd_proc proc, uid_t *uid, gid_t *gid)
+{
+	struct passwd	*pw;
+
+	if ((pw = getpwnam(child(proc, 0)->user)) == NULL)
+		return (-1);
+	*uid = pw->pw_uid;
+	*gid = pw->pw_gid;
+	return (0);
+}
+
 static struct link	*links;
 static size_t		 nlinks;
 static struct imsgev	*links_relay;
@@ -1183,7 +1197,7 @@ parent_compose(uint32_t type, const void *data, size_t len)
 /*
  * a peer's pipe, of the generation it started with, in place of the one
  * before, or that it is down: what it held is forgotten first, as it is
- * not the peer that held it
+ * not the peer that held it, and then what is ready for it sent
  */
 static void
 link_take(struct imsg *imsg)
@@ -1205,8 +1219,12 @@ link_take(struct imsg *imsg)
 	l->generation = ch.generation;
 	l->down = fd == -1;
 	l->forget();
-	if (fd != -1 && (l->iev = imsgev_new(fd, l->handler, 0)) == NULL)
+	if (fd == -1)
+		return;
+	if ((l->iev = imsgev_new(fd, l->handler, 0)) == NULL)
 		fatal(NULL);
+	if (l->ready != NULL)
+		l->ready();
 }
 
 static void
