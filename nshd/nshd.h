@@ -60,11 +60,13 @@ struct nshd_result {
 	int32_t		status;
 };
 
-/* which configure: private, for now the only one */
+/* which configure */
 struct nshd_configure {
 	int32_t		mode;
 };
-#define NSHD_PRIVATE	1
+#define NSHD_PRIVATE	1	/* a candidate of the session's own */
+#define NSHD_SHARED	2	/* the candidate sessions share */
+#define NSHD_EXCLUSIVE	3	/* that, and no other session changes it */
 
 /* a line of configuration, in the session's mode */
 struct nshd_line {
@@ -73,7 +75,7 @@ struct nshd_line {
 
 /* a session's mode, after what may change it */
 struct nshd_context {
-	int32_t		mode;		/* 0, or NSHD_PRIVATE */
+	int32_t		mode;		/* 0, or which configure */
 	int32_t		rtable;		/* the rtable its lines are for */
 	int32_t		bridge;		/* the interface is a bridge */
 	char		ifname[NSHD_IFNAME];	/* whose mode, or "" */

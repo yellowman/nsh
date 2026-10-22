@@ -78,6 +78,7 @@ struct cand_shared	*cand_shared_new(void);
 int			 cand_shared_renew(struct cand_shared *);
 int			 cand_shared_changed(struct cand_shared *);
 unsigned int		 cand_shared_edits(struct cand_shared *);
+extern const char	*cand_held;
 int			 session_line(struct session_state *, char *);
 int			 session_exit(struct session_state *);
 void			 session_mode(struct session_state *, int *, int *,

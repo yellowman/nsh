@@ -64,13 +64,24 @@ Runs as _nshconf in a
 holds the sessions, and asks system for what they need.
 A session in
 .Cm configure private
-has a candidate of its own, which config edits a line at a time, with
-nsh's own commands, as they run in
+has a candidate of its own; the sessions in
+.Cm configure
+share one, and each sees what the others change in it.
+config edits a candidate a line at a time, with nsh's own commands, as
+they run in
 .Cm configure private :
 the running configuration, and what they read of the kernel, are those
-of a snapshot system makes when a session enters
-.Cm configure private
-or shows its candidate.
+of a snapshot system makes when a session enters configure or shows
+its candidate.
+.Cm configure exclusive
+is
+.Cm configure
+while no other session changes the shared candidate or commits any; it
+is refused while another session has it, or while another user's
+changes to the shared candidate are not committed, and leaving it, or
+its session going, discards what it did not commit.
+While a commit of the shared candidate runs, no other session changes
+it.
 A commit is one at a time, of all the sessions':
 config plans it from a snapshot and checks it, has system test the
 daemons' rules it changes, and has system record it, run its script,

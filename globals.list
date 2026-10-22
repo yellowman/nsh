@@ -33,7 +33,7 @@ bridge.c	table	brds bridge_fields bridgeaddr_fields
 			kind_bridgemember stpstates
 candidate.c	session	cand cand_base cand_journal cand_nedits cand_nwas
 			cand_rtable cand_sharing cand_was candidate
-candidate.c	scratch	cand_listowner.owner
+candidate.c	scratch	cand_held cand_listowner.owner
 candidate.c	table	candidate_sglobals
 carp.c		scratch	carp_facts.carpdev
 carp.c		table	carp_bal_modes carp_facts_init.carp_states

@@ -35,7 +35,9 @@
  *
  * nshd's configure is a candidate sessions share, struct cand_shared,
  * which a session takes as its own while it runs (session.c), and
- * leaves to the others when it leaves configure (cand_detach()).
+ * leaves to the others when it leaves configure (cand_detach()). While
+ * another session holds it, nshd's config sets cand_held, and no edit
+ * or rollback changes it.
  *
  * A command takes part only as its table row says (cand): a CAND_EDIT
  * handler checks 'candidate' and calls cand_setting() where it would
@@ -70,6 +72,7 @@
 int candidate;				/* configure private is on */
 int cand_rtable;			/* the rtable its lines are for */
 int cand_sharing;			/* the candidate is a shared one */
+const char *cand_held;			/* why it may not change now, or NULL */
 
 static struct cnode *cand;		/* this session's view of it */
 static struct cjournal *cand_journal;	/* the changes it made */
@@ -798,6 +801,11 @@ cand_restart(struct cnode *base, int n)
 	struct cnode *t;
 	struct cjournal *j;
 
+	if (cand_held != NULL) {
+		printf("%% %s\n", cand_held);
+		conftree_free(base);
+		return -1;
+	}
 	if (base == NULL)
 		t = running_tree();
 	else if ((t = conftree_copy(base)) == NULL)
@@ -884,6 +892,10 @@ cand_record(char *block, struct sedit *e)
 {
 	int r;
 
+	if (cand_held != NULL) {
+		printf("%% %s\n", cand_held);
+		return -1;
+	}
 	if (cand_remember(block, e) == -1)
 		return -1;
 	errno = 0;

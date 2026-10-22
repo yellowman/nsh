@@ -26,12 +26,21 @@
  * gone; when system does, what it was asked is lost. A peer that sends
  * what it may not, or sends it wrong, is reported, as it went wrong.
  *
- * A session in configure private has nsh's state of its own (session.c),
- * and config runs its lines through nsh's code in candidate mode, which
+ * A session in configure has nsh's state of its own (session.c), and
+ * config runs its lines through nsh's code in candidate mode, which
  * reads no kernel, no file and no program here: the running
  * configuration and what the lines read of the kernel are a snapshot's,
- * system's, taken when a session enters configure private or shows its
+ * system's, taken when a session enters configure or shows its
  * candidate, and kept for every session until the next.
+ *
+ * configure private's candidate is the session's own; configure's is
+ * one the sessions in configure share, and a commit of it commits what
+ * each changed. configure exclusive is configure, while no other
+ * session changes or commits a candidate, and it is refused while
+ * another has it, or while another's changes to the shared candidate
+ * are not committed. Leaving configure exclusive discards what was not
+ * committed. A commit of the shared candidate holds it, while it runs,
+ * from the others' changes.
  *
  * A commit is one at a time, of all sessions': config plans it from a
  * snapshot, system tests the daemons' rules it changes (TEST), then
@@ -84,6 +93,8 @@ struct session {
 	uid_t			 uid;
 	gid_t			 gid;
 	struct session_state	*st;	/* nsh's, once in configure */
+	int			 want;	/* the configure it asked for */
+	int			 how;	/* the configure it is in, or 0 */
 	int			 waits;
 };
 
@@ -126,6 +137,7 @@ struct commit {
 	int			 minutes;	/* commit confirmed's, or 0 */
 	int			 how;		/* it ended, NSHD_BACK or KEPT */
 	int			 begun;		/* and not ended, to system */
+	int			 shared;	/* of the shared candidate */
 	char			 comment[NSHD_COMMENT];
 	struct plan		*plan;
 };
@@ -146,6 +158,12 @@ static uint32_t			request_id;
 static struct snapshot		*snap;
 static struct kfacts		*kf_now;	/* the last snapshot's */
 static struct commit		*commit;	/* the one running, or NULL */
+static struct cand_shared	*shared;	/* configure's candidate */
+static struct session		*exclusive;	/* in configure exclusive */
+static uid_t			*editors;	/* who changed shared since */
+static size_t			 neditors;
+static unsigned int		 shared_edits;	/* its edits, before a request */
+static char			 held[64];	/* cand_held's, if it is */
 
 #define REQUEST_GEN_SHIFT	24	/* generation above, count below */
 #define REQUEST_COUNT		((1U << REQUEST_GEN_SHIFT) - 1)
@@ -165,6 +183,11 @@ static void		 config_commit(uint32_t, struct nshd_commit *);
 static void		 config_rollback(uint32_t, struct nshd_rollback *);
 static void		 config_rolled(struct request *, int32_t);
 static struct session	*config_private(uint32_t);
+static int		 config_enter(struct session *);
+static void		 config_left(struct session *);
+static void		 shared_hold(struct session *);
+static void		 shared_done(struct session *);
+static size_t		 editors_say(uid_t, const char *);
 static void		 config_wait(struct session *, int);
 static void		 snapshot_take(void);
 static void		 config_snapshot(struct request *, uint32_t,
@@ -187,6 +210,7 @@ static void		 commit_save(void);
 static void		 commit_record(int);
 static void		 commit_request(int, uint32_t, const void *, size_t);
 static void		 commit_end(int, const char *);
+static int		 commit_renew(void);
 static void		 session_gone(struct session *);
 static struct session	*session_find(uint32_t);
 static struct request	*request_find(uint32_t);
@@ -209,6 +233,8 @@ configproc(int debug, int verbose)
 
 	/* nsh's code here asks no kernel, opens no file, runs no program */
 	in_config = 1;
+	if ((shared = cand_shared_new()) == NULL)
+		fatal(NULL);
 
 	if ((iev_relay = imsgev_new(3, config_dispatch_relay, 0)) == NULL)
 		fatal(NULL);
@@ -460,8 +486,7 @@ config_show(uint32_t session, struct nshd_show *show)
 	if (strcmp(show->words, "candidate-config") == 0 ||
 	    strcmp(show->words, "diff-config") == 0) {
 		if (sp->st == NULL) {
-			config_answer(session, 1,
-			    "%% Not in configure private\n");
+			config_answer(session, 1, "%% Not in configure\n");
 			return;
 		}
 		config_wait(sp, show->words[0] == 'c' ? WAIT_CANDIDATE :
@@ -501,23 +526,31 @@ config_show(uint32_t session, struct nshd_show *show)
 		fatal("%s", __func__);
 }
 
-/* configure private: the session's candidate, once a snapshot is in */
+/* configure, of its mode: the session's candidate, once a snapshot is in */
 static void
 config_configure(uint32_t session, struct nshd_configure *cf)
 {
-	struct session	*sp;
+	static const char	*names[] = { "", " private", "", " exclusive" };
+	struct session		*sp;
 
 	if ((sp = session_find(session)) == NULL) {
 		config_answer(session, 1, "%% nshd: hello first\n");
 		return;
 	}
-	if (cf->mode != NSHD_PRIVATE) {
+	if (cf->mode != NSHD_PRIVATE && cf->mode != NSHD_SHARED &&
+	    cf->mode != NSHD_EXCLUSIVE) {
 		config_answer(session, 1,
-		    "%% nshd: configure private, and no other, for now\n");
+		    "%% nshd: configure, private or exclusive\n");
+		return;
+	}
+	if (sp->how != 0 && sp->how != cf->mode) {
+		config_answer(session, 1, "%% In configure%s; exit it first\n",
+		    names[sp->how]);
 		return;
 	}
 	if (sp->st == NULL && (sp->st = session_new()) == NULL)
 		fatal("%s", __func__);
+	sp->want = cf->mode;
 	config_wait(sp, WAIT_CONFIGURE);
 }
 
@@ -526,20 +559,23 @@ static void
 config_line(uint32_t session, struct nshd_line *line)
 {
 	struct session	*sp;
+	int		 r;
 
 	if ((sp = session_find(session)) == NULL) {
 		config_answer(session, 1, "%% nshd: hello first\n");
 		return;
 	}
 	if (sp->st == NULL) {
-		config_answer(session, 1,
-		    "%% nshd: configure private first\n");
+		config_answer(session, 1, "%% nshd: configure first\n");
 		return;
 	}
-	config_ran(sp, session_line(sp->st, line->line), 1);
+	shared_hold(sp);
+	r = session_line(sp->st, line->line);
+	shared_done(sp);
+	config_ran(sp, r, 1);
 }
 
-/* leave configure private, from any of its modes */
+/* leave configure, from any of its modes */
 static void
 config_exit(uint32_t session)
 {
@@ -565,6 +601,11 @@ config_commit(uint32_t session, struct nshd_commit *c)
 		    "now\n", (unsigned int)commit->uid);
 		return;
 	}
+	if (exclusive != NULL && exclusive != sp) {
+		config_answer(session, 1, "%% Commit refused: uid %u has "
+		    "configure exclusive\n", (unsigned int)exclusive->uid);
+		return;
+	}
 	if (c->minutes < 0 || c->minutes > NSHD_CONFIRMMAX ||
 	    (c->minutes > 0 && (c->check || c->comment[0] != '\0'))) {
 		config_answer(session, 1, "%% commit confirmed takes 1 to %d "
@@ -577,6 +618,7 @@ config_commit(uint32_t session, struct nshd_commit *c)
 	commit->uid = sp->uid;
 	commit->check = c->check;
 	commit->minutes = c->minutes;
+	commit->shared = sp->how != NSHD_PRIVATE;
 	strlcpy(commit->comment, c->comment, sizeof(commit->comment));
 	commit_wait(COMMIT_PLAN);
 }
@@ -621,6 +663,7 @@ static void
 config_rolled(struct request *r, int32_t status)
 {
 	struct session	*sp;
+	int		 n;
 
 	if ((sp = session_find(r->session)) == NULL)
 		return;
@@ -636,30 +679,154 @@ config_rolled(struct request *r, int32_t status)
 		config_answer(sp->id, 1, NULL);
 		return;
 	}
-	config_ran(sp, session_rollback(sp->st, r->text, r->len, r->n), 1);
+	shared_hold(sp);
+	n = session_rollback(sp->st, r->text, r->len, r->n);
+	shared_done(sp);
+	config_ran(sp, n, 1);
 }
 
-/* session's, if in configure private; or NULL, said why */
+/* session's, if in configure; or NULL, said why */
 static struct session *
 config_private(uint32_t session)
 {
 	struct session	*sp;
 	char		 ifn[NSHD_IFNAME];
-	int		 private = 0, rtable, bridge;
+	int		 in = 0, rtable, bridge;
 
 	if ((sp = session_find(session)) == NULL) {
 		config_answer(session, 1, "%% nshd: hello first\n");
 		return (NULL);
 	}
 	if (sp->st != NULL)
-		session_mode(sp->st, &private, &rtable, ifn, sizeof(ifn),
-		    &bridge);
-	if (!private) {
-		config_answer(session, 1,
-		    "%% nshd: configure private first\n");
+		session_mode(sp->st, &in, &rtable, ifn, sizeof(ifn), &bridge);
+	if (!in) {
+		config_answer(session, 1, "%% nshd: configure first\n");
 		return (NULL);
 	}
 	return (sp);
+}
+
+/*
+ * sp into the configure it asked for, if it may: configure and configure
+ * exclusive are refused while another has configure exclusive, and
+ * configure exclusive while another's changes to the shared candidate
+ * are not committed. As a handler returns
+ */
+static int
+config_enter(struct session *sp)
+{
+	int	 r;
+
+	if (sp->want != NSHD_PRIVATE && exclusive != NULL &&
+	    exclusive != sp) {
+		printf("%% Configure refused: uid %u has configure "
+		    "exclusive\n", (unsigned int)exclusive->uid);
+		return (-1);
+	}
+	if (sp->want == NSHD_EXCLUSIVE && editors_say(sp->uid,
+	    "Configure exclusive refused: changes to the shared candidate "
+	    "not committed") > 0)
+		return (-1);
+	r = session_configure(sp->st, sp->want == NSHD_PRIVATE ? NULL :
+	    shared);
+	if (r == 0) {
+		sp->how = sp->want;
+		if (sp->how == NSHD_EXCLUSIVE)
+			exclusive = sp;
+	}
+	return (r);
+}
+
+/*
+ * sp left configure: if it had configure exclusive, what the shared
+ * candidate has not committed is discarded
+ */
+static void
+config_left(struct session *sp)
+{
+	int	 how = sp->how;
+
+	sp->how = 0;
+	if (how != NSHD_EXCLUSIVE)
+		return;
+	exclusive = NULL;
+	if (!cand_shared_changed(shared) || cand_shared_renew(shared) == -1)
+		return;
+	neditors = 0;
+	printf("%% Uncommitted changes discarded\n");
+}
+
+/*
+ * Before sp runs what may change its candidate: if that is the shared
+ * one, and another session holds it, nsh's code changes nothing
+ */
+static void
+shared_hold(struct session *sp)
+{
+	if (sp->how != NSHD_SHARED && sp->how != NSHD_EXCLUSIVE)
+		return;
+	if (exclusive != NULL && exclusive != sp)
+		snprintf(held, sizeof(held), "Refused: uid %u has configure "
+		    "exclusive", (unsigned int)exclusive->uid);
+	else if (commit != NULL && commit->shared)
+		snprintf(held, sizeof(held), "Refused: uid %u commits the "
+		    "shared candidate", (unsigned int)commit->uid);
+	else {
+		shared_edits = cand_shared_edits(shared);
+		return;
+	}
+	cand_held = held;
+}
+
+/* After: sp among who changed the shared candidate, if it did */
+static void
+shared_done(struct session *sp)
+{
+	uid_t	*e;
+	size_t	 i;
+
+	if (cand_held != NULL) {
+		cand_held = NULL;
+		return;
+	}
+	if (sp->how != NSHD_SHARED && sp->how != NSHD_EXCLUSIVE)
+		return;
+	if (!cand_shared_changed(shared)) {
+		neditors = 0;
+		return;
+	}
+	if (cand_shared_edits(shared) == shared_edits)
+		return;
+	for (i = 0; i < neditors; i++)
+		if (editors[i] == sp->uid)
+			return;
+	if ((e = reallocarray(editors, neditors + 1, sizeof(*e))) == NULL)
+		fatal(NULL);
+	editors = e;
+	editors[neditors++] = sp->uid;
+}
+
+/*
+ * what, by the users but uid who changed the shared candidate, said if
+ * there are any: how many
+ */
+static size_t
+editors_say(uid_t uid, const char *what)
+{
+	size_t	 i, n = 0;
+
+	for (i = 0; i < neditors; i++) {
+		if (editors[i] == uid)
+			continue;
+		if (n++ == 0)
+			printf("%% %s, by", what);
+		else
+			printf(",");
+		printf(" uid %u", (unsigned int)editors[i]);
+	}
+	if (n > 0)
+		printf("\n");
+	return (n);
 }
 
 /* sp waits on a snapshot for what, which runs when it is in */
@@ -752,7 +919,7 @@ config_snapshot_done(int32_t status)
 	TAILQ_FOREACH(sp, &sessions, entry) {
 		switch (sp->waits) {
 		case WAIT_CONFIGURE:
-			r = session_configure(sp->st, NULL);
+			r = config_enter(sp);
 			mode = 1;
 			break;
 		case WAIT_CANDIDATE:
@@ -764,7 +931,9 @@ config_snapshot_done(int32_t status)
 			mode = 0;
 			break;
 		case WAIT_RESET:
+			shared_hold(sp);
 			r = session_rollback(sp->st, NULL, 0, 0);
+			shared_done(sp);
 			mode = 1;
 			break;
 		default:
@@ -800,13 +969,15 @@ static void
 config_ran(struct session *sp, int r, int mode)
 {
 	struct nshd_context	 c;
-	int			 private, rtable, bridge;
+	int			 in, rtable, bridge;
 
 	memset(&c, 0, sizeof(c));
 	if (sp->st != NULL) {
-		session_mode(sp->st, &private, &rtable, c.ifname,
+		session_mode(sp->st, &in, &rtable, c.ifname,
 		    sizeof(c.ifname), &bridge);
-		c.mode = private ? NSHD_PRIVATE : 0;
+		if (!in && sp->how != 0)
+			config_left(sp);
+		c.mode = in ? sp->how : 0;
 		c.rtable = rtable;
 		c.bridge = bridge;
 	}
@@ -873,7 +1044,6 @@ commit_snapshot(void)
 static void
 commit_ended(int32_t status)
 {
-	struct session	*sp;
 	int		 r;
 
 	switch (commit->step) {
@@ -906,8 +1076,7 @@ commit_ended(int32_t status)
 	case COMMIT_SAVE:
 		/* taken: the candidate starts again, saved or not */
 		r = status == 0 ? 0 : -1;
-		if ((sp = session_find(commit->session)) != NULL &&
-		    session_renew(sp->st) == -1)
+		if (commit_renew() == -1)
 			r = -1;
 		commit_end(r, NULL);
 		break;
@@ -919,11 +1088,7 @@ commit_ended(int32_t status)
 		printf("%% Commit within %d minute%s to keep this, or it is "
 		    "rolled back\n", commit->minutes,
 		    commit->minutes == 1 ? "" : "s");
-		r = 0;
-		if ((sp = session_find(commit->session)) != NULL &&
-		    session_renew(sp->st) == -1)
-			r = -1;
-		commit_end(r, NULL);
+		commit_end(commit_renew(), NULL);
 		break;
 	}
 }
@@ -1087,6 +1252,21 @@ commit_end(int r, const char *msg)
 	free(c);
 }
 
+/* the commit's candidate starts again: -1, said why, if it could not */
+static int
+commit_renew(void)
+{
+	struct session	*sp;
+
+	if (commit->shared) {
+		neditors = 0;
+		return (cand_shared_renew(shared));
+	}
+	if ((sp = session_find(commit->session)) != NULL)
+		return (session_renew(sp->st));
+	return (0);
+}
+
 /* to session, a line of output if fmt, and the result status */
 static void
 config_answer(uint32_t session, int32_t status, const char *fmt, ...)
@@ -1192,10 +1372,17 @@ config_request(uint32_t session, int kind)
 	return (r);
 }
 
-/* sp is gone, and the candidate it had; a commit of its runs on */
+/*
+ * sp is gone, and the candidate it had, or, from configure exclusive,
+ * what it did not commit; a commit of its runs on
+ */
 static void
 session_gone(struct session *sp)
 {
+	if (sp->how != 0) {
+		config_left(sp);
+		printed_text(NULL, 0, 0);
+	}
 	if (commit != NULL && commit->session == sp->id)
 		commit->session = 0;
 	TAILQ_REMOVE(&sessions, sp, entry);

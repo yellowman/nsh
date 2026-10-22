@@ -218,15 +218,16 @@ session_exit(struct session_state *s)
 }
 
 /*
- * s's mode: whether in configure private, the rtable its lines are for,
- * and the interface whose mode it is in, or "", and whether a bridge
+ * s's mode: whether in configure, private or not, the rtable its lines
+ * are for, and the interface whose mode it is in, or "", and whether a
+ * bridge
  */
 void
-session_mode(struct session_state *s, int *private, int *rtable,
+session_mode(struct session_state *s, int *in, int *rtable,
     char *ifn, size_t len, int *isbridge)
 {
 	session_enter(s);
-	*private = config_mode && candidate;
+	*in = config_mode && candidate;
 	*rtable = cand_rtable;
 	strlcpy(ifn, ifname, len);
 	*isbridge = bridge;
