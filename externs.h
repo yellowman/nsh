@@ -628,6 +628,7 @@ extern int candidate;
 int cand_begin(void);
 void cand_end(void);
 int cand_changed(void);
+int cand_conflicts(struct cnode *, int);
 int cand_setting(int, const char *, ...)
     __attribute__((__format__ (printf, 2, 3)));
 char *cand_line(char *, size_t);

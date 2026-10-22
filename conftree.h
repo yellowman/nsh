@@ -58,6 +58,7 @@ char *conftree_stmt(struct cnode *, size_t);
 char *conftree_line(struct cnode *, char *, char *, size_t);
 int conftree_haskey(struct cnode *, char *, char *, int);
 int conftree_write(FILE *, struct cnode *);
+int conftree_write_stmt(FILE *, struct cnode *, char *, int);
 
 struct cjournal *cjournal_new(void);
 int cjournal_add(struct cjournal *, int, char *, char *, int);

@@ -28,6 +28,11 @@
  * rollback N starts the copy over as configuration N, as it was saved
  * (ROLLBACK), and then nothing other sessions change shows through.
  *
+ * What each top-level statement the journal changes was before it
+ * first did is kept, so a commit that finds another commit changed it
+ * since is refused (cand_conflicts()); committing again keeps this
+ * session's changes over the other's.
+ *
  * A command takes part only as its table row says (cand): a CAND_EDIT
  * handler checks 'candidate' and calls cand_setting() where it would
  * have changed the kernel, a CAND_RUN command runs as it always does,
@@ -65,14 +70,27 @@ static struct cnode *cand;		/* this session's view of it */
 static struct cjournal *cand_journal;	/* the changes it made */
 static struct cnode *cand_base;		/* what rollback N loaded, or NULL */
 
+/* a top-level statement the journal changes, as it was before it did */
+struct cand_was {
+	char	*top;		/* the statement, or its lines' name */
+	int	 whole;		/* the statement, else the lines of that name */
+	char	*image;		/* as conftree_write_stmt() wrote it */
+};
+static struct cand_was *cand_was;
+static size_t cand_nwas;
+
 /* what of this file's a session keeps (session.c) */
 struct sglobal candidate_sglobals[] = {
 	SGLOBAL(candidate), SGLOBAL(cand_rtable), SGLOBAL(cand),
-	SGLOBAL(cand_journal), SGLOBAL(cand_base),
+	SGLOBAL(cand_journal), SGLOBAL(cand_base), SGLOBAL(cand_was),
+	SGLOBAL(cand_nwas),
 	{ NULL }
 };
 
 static int cand_record(char *, struct sedit *);
+static int cand_remember(char *, struct sedit *);
+static char *cand_image(struct cnode *, char *, int);
+static void cand_forget(void);
 static int cand_rtblock(char *, size_t, int);
 static char *cand_rtcur(char *, size_t);
 static int cand_set(int, int, char *, char *);
@@ -107,6 +125,7 @@ cand_end(void)
 	conftree_free(cand);
 	conftree_free(cand_base);
 	cjournal_free(cand_journal);
+	cand_forget();
 	cand = NULL;
 	cand_base = NULL;
 	cand_journal = NULL;
@@ -691,6 +710,7 @@ cand_restart(struct cnode *base, int n)
 	conftree_free(cand);
 	conftree_free(cand_base);
 	cjournal_free(cand_journal);
+	cand_forget();
 	cand = t;
 	cand_base = base;
 	cand_journal = j;
@@ -758,6 +778,8 @@ cand_record(char *block, struct sedit *e)
 {
 	int r;
 
+	if (cand_remember(block, e) == -1)
+		return -1;
 	errno = 0;
 	if ((r = conftree_edit(cand, e->op, block, e->line, e->keylen)) ==
 	    -1) {
@@ -776,6 +798,124 @@ cand_record(char *block, struct sedit *e)
 		return -1;
 	}
 	return 0;
+}
+
+/*
+ * Before an edit first changes a top-level statement, what it was, but
+ * on a rollback N's configuration: -1, said why, if it could not be
+ * kept
+ */
+static int
+cand_remember(char *block, struct sedit *e)
+{
+	struct cand_was *w;
+	char top[1024], *p = e->line;
+	int whole = 1;
+	size_t i;
+
+	if (cand_base != NULL)
+		return 0;
+	if (block != NULL)
+		p = block;
+	else if (e->op != CE_BLOCK && e->op != CE_NOBLOCK) {
+		/* the lines of its name, as conftree_edit() names lines */
+		if (strncmp(p, "no ", 3) == 0)
+			p += 3;
+		whole = 0;
+	}
+	strlcpy(top, p, sizeof(top));
+	top[strcspn(top, whole ? "\n" : " ")] = '\0';
+	for (i = 0; i < cand_nwas; i++)
+		if (cand_was[i].whole == whole &&
+		    strcmp(cand_was[i].top, top) == 0)
+			return 0;
+	if ((w = reallocarray(cand_was, cand_nwas + 1, sizeof(*w))) == NULL) {
+		printf("%% cand_remember: %s\n", strerror(errno));
+		return -1;
+	}
+	cand_was = w;
+	w = &cand_was[cand_nwas];
+	w->whole = whole;
+	if ((w->top = strdup(top)) == NULL) {
+		printf("%% cand_remember: %s\n", strerror(errno));
+		return -1;
+	}
+	if ((w->image = cand_image(cand, top, whole)) == NULL) {
+		free(w->top);
+		return -1;
+	}
+	cand_nwas++;
+	return 0;
+}
+
+/* What t has of top, whole or its lines, as text: NULL, said why, if not */
+static char *
+cand_image(struct cnode *t, char *top, int whole)
+{
+	char *buf = NULL;
+	size_t len = 0;
+	FILE *f;
+	int r;
+
+	if ((f = open_memstream(&buf, &len)) == NULL) {
+		printf("%% cand_image: %s\n", strerror(errno));
+		return NULL;
+	}
+	r = conftree_write_stmt(f, t, top, whole);
+	if (fclose(f) == EOF || r == -1) {
+		printf("%% cand_image: %s\n", strerror(errno));
+		free(buf);
+		return NULL;
+	}
+	return buf;
+}
+
+/*
+ * The statements the candidate changes that now, the running
+ * configuration, has changed since, each said: how many, or -1, said
+ * why. With rebase, what each was becomes what it is now, so the next
+ * commit keeps the candidate's changes over it
+ */
+int
+cand_conflicts(struct cnode *now, int rebase)
+{
+	char *image;
+	size_t i;
+	int n = 0;
+
+	for (i = 0; i < cand_nwas; i++) {
+		if ((image = cand_image(now, cand_was[i].top,
+		    cand_was[i].whole)) == NULL)
+			return -1;
+		if (strcmp(image, cand_was[i].image) == 0) {
+			free(image);
+			continue;
+		}
+		printf("%% %s: another commit changed it after this "
+		    "candidate did\n", cand_was[i].top);
+		n++;
+		if (rebase) {
+			free(cand_was[i].image);
+			cand_was[i].image = image;
+		} else
+			free(image);
+	}
+	return n;
+}
+
+/* No statement's before */
+static void
+cand_forget(void)
+{
+	size_t i;
+
+	for (i = 0; i < cand_nwas; i++) {
+		free(cand_was[i].top);
+		free(cand_was[i].image);
+	}
+	free(cand_was);
+	cand_was = NULL;
+	cand_nwas = 0;
 }
 
 /* The kernel's cloner for an interface called name, or NULL */

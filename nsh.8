@@ -2038,6 +2038,9 @@ If the running configuration then differs from the candidate, the
 differences are shown as
 .Cm show diff-config
 shows them, and the commit is undone.
+A commit is refused once if another commit changed a top-level
+statement after the candidate first changed it, each such statement
+said; committing again keeps the candidate's changes over the other's.
 After a commit, the candidate starts again from the new running
 configuration.
 Outside

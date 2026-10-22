@@ -270,7 +270,8 @@ session_candidate(struct session_state *s)
  * be made, said why. Daemons' tests of rules are the plan's, and the
  * verdict waits on them (session_verdict()); with them, a plan is made
  * when checking too. A commit confirmed records what runs and what is
- * wanted even if they are the same
+ * wanted even if they are the same. A commit is refused once if another
+ * commit changed what its candidate changes since (cand_conflicts())
  */
 int
 session_plan(struct session_state *s, int checking, int confirmed,
@@ -278,7 +279,7 @@ session_plan(struct session_state *s, int checking, int confirmed,
 {
 	struct plan *p;
 	struct cnode *t;
-	int r = -1;
+	int n, r = -1;
 
 	*pp = NULL;
 	if ((p = calloc(1, sizeof(*p))) == NULL) {
@@ -294,6 +295,14 @@ session_plan(struct session_state *s, int checking, int confirmed,
 	}
 	if ((p->was = running_tree()) == NULL)
 		goto done;
+	if (!checking && (n = cand_conflicts(p->was, 1)) != 0) {
+		if (n > 0)
+			printf("%% Commit refused: %d statement%s changed by "
+			    "another commit. Commit again to keep this "
+			    "candidate's changes over %s\n", n,
+			    n == 1 ? "" : "s", n == 1 ? "it" : "them");
+		goto done;
+	}
 	p->bad = commit_problems(p->was, p->want);
 	p->ntests = commit_deferred(&p->tests);
 	p->checking = checking;

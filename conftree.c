@@ -794,6 +794,23 @@ conftree_write(FILE *out, struct cnode *root)
 	return ferror(out) ? -1 : 0;
 }
 
+/*
+ * The top-level statements stmt names, written as conftree_write()
+ * writes them: stmt itself if whole, else each line of stmt's name, as
+ * conftree_edit() names lines
+ */
+int
+conftree_write_stmt(FILE *out, struct cnode *root, char *stmt, int whole)
+{
+	size_t i;
+
+	for (i = 0; i < root->nkids; i++)
+		if (whole ? strcmp(root->kids[i]->text, stmt) == 0 :
+		    samename(root->kids[i]->text, stmt))
+			write_node(out, 0, root->kids[i]);
+	return ferror(out) ? -1 : 0;
+}
+
 struct cjournal *
 cjournal_new(void)
 {
