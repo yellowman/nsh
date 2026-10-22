@@ -58,6 +58,17 @@
  * which no process then holds, so clients are refused. If relay goes
  * wrong, every child goes with it, and all start again; if relay fails
  * RESTARTS times in RESTART_SECS, nshd ends.
+ *
+ * A commit not confirmed has a record, which system makes, and parent
+ * reads too, so that the commit goes back even if system does not take
+ * it back. Before system runs the commit, it tells parent on parent's
+ * pipe to it, which parent reads for this alone, and parent keeps the
+ * deadline too; it reads the record again when system says it is gone,
+ * and when system starts. If system has not taken the commit back
+ * CONFIRM_GRACE past its deadline, or past when system said what it
+ * does first may end, parent starts system again, which takes it back,
+ * CONFIRM_FENCES times at most. While there is one, system stays up
+ * though its failures would keep it down, CONFIRM_STARTS times more.
  */
 
 #include <sys/types.h>
@@ -96,6 +107,11 @@
 #define RESTART_SECS	60
 #define CLEAR_TRIES	200	/* system's helpers killed, 10 ms apart */
 
+/* a commit not confirmed's, each to measure on OpenBSD */
+#define CONFIRM_GRACE	30	/* seconds past when system should be done */
+#define CONFIRM_FENCES	3	/* system started again, for it, at most */
+#define CONFIRM_STARTS	10	/* system's starts, past its failures' limit */
+
 static struct child {
 	enum nshd_proc	 proc;
 	int		 instance;
@@ -109,6 +125,7 @@ static struct child {
 	int		 down;
 	struct imsgbuf	 out;		/* its peers' pipes, from parent */
 	struct event	 outev;
+	struct event	 inev;		/* system's word to parent on it */
 	int		 hasout;
 } children[] = {
 	{ PROC_RELAY,	 0, "relay",	"-R",	"_nshrelay" },
@@ -146,6 +163,11 @@ static void		 tell(struct child *, struct child *, int);
 static int		 out_open(struct child *);
 static void		 out_close(struct child *);
 static void		 out_write(int, short, void *);
+static void		 out_read(int, short, void *);
+static void		 confirm_check(void);
+static void		 confirm_set(struct confirm *);
+static void		 confirm_unset(void);
+static void		 confirm_late(int, short, void *);
 static void		 restart(struct child *, const char *);
 static int		 system_clear(struct child *);
 static struct kinfo_proc *procs(int, int, size_t *);
@@ -162,6 +184,10 @@ static int		 opt_debug, opt_verbose, rwfd, rofd;
 static uid_t		 check_uid;	/* NSHD_CHECK_USER's */
 static struct imsgev	*iev_relay;	/* to relay, with descriptors */
 static struct imsgbuf	 relay_in;	/* from relay, without */
+static struct event	 confirm_ev;	/* past when system should be done */
+static uint64_t		 confirm_id;	/* the commit not confirmed, or 0 */
+static time_t		 confirm_due;	/* when, by the wall clock */
+static int		 confirm_fences, confirm_starts;
 
 static __dead void
 usage(void)
@@ -272,10 +298,11 @@ main(int argc, char *argv[])
 	signal_add(&ev_sighup, NULL);
 	signal_add(&ev_sigchld, NULL);
 	signal(SIGPIPE, SIG_IGN);
+	evtimer_set(&confirm_ev, confirm_late, NULL);
 
 	spawn_all();
 
-	if (pledge("stdio sendfd proc exec ps", NULL) == -1)
+	if (pledge("stdio rpath sendfd proc exec ps", NULL) == -1)
 		fatal("pledge");
 
 	event_dispatch();
@@ -416,6 +443,9 @@ start(struct child *c, int out)
 	if (c->hasout && imsgbuf_flush(&c->out) == -1)
 		fatal("%s: its peers' pipes", c->name);
 	c->pid = start_child(c, sp[1], out, fd);
+	/* a commit not confirmed it left, or one before parent started */
+	if (c->proc == PROC_SYSTEM && confirm_id == 0)
+		confirm_check();
 	ch.proc = c->proc;
 	ch.instance = c->instance;
 	ch.generation = c->generation;
@@ -546,8 +576,9 @@ tell(struct child *c, struct child *p, int fd)
 }
 
 /*
- * the pipe from parent to c, if it has peers, which parent writes and
- * never reads: c's end of it, or -1
+ * the pipe from parent to c, if it has peers, which parent writes, and
+ * reads only system's word of a commit not confirmed: c's end of it,
+ * or -1
  */
 static int
 out_open(struct child *c)
@@ -563,6 +594,10 @@ out_open(struct child *c)
 		fatal(NULL);
 	imsgbuf_allow_fdpass(&c->out);
 	event_set(&c->outev, sp[0], EV_WRITE, out_write, c);
+	if (c->proc == PROC_SYSTEM) {
+		event_set(&c->inev, sp[0], EV_READ | EV_PERSIST, out_read, c);
+		event_add(&c->inev, NULL);
+	}
 	c->hasout = 1;
 	return (sp[1]);
 }
@@ -573,6 +608,8 @@ out_close(struct child *c)
 	if (!c->hasout)
 		return;
 	event_del(&c->outev);
+	if (c->proc == PROC_SYSTEM)
+		event_del(&c->inev);
 	imsgbuf_clear(&c->out);
 	close(c->out.fd);
 	c->hasout = 0;
@@ -591,6 +628,136 @@ out_write(int fd, short event, void *arg)
 	}
 	if (imsgbuf_queuelen(&c->out) > 0)
 		event_add(&c->outev, NULL);
+}
+
+/*
+ * system's word of a commit not confirmed: its record made, which parent
+ * says it keeps the deadline of, or not; or gone. Anything else, or with
+ * a descriptor, and system goes wrong
+ */
+static void
+out_read(int fd, short event, void *arg)
+{
+	struct child		*c = arg;
+	struct imsg		 imsg;
+	struct nshd_confirm	 cm;
+	char			 why[64];
+	uint32_t		 type;
+	ssize_t			 n;
+	int			 passed;
+
+	/* c is gone, which relay tells */
+	if ((n = imsgbuf_read(&c->out)) == -1 || n == 0) {
+		event_del(&c->inev);
+		return;
+	}
+	for (;;) {
+		if ((n = imsgbuf_get(&c->out, &imsg)) == -1) {
+			restart(c, "sent parent what imsg cannot read");
+			return;
+		}
+		if (n == 0)
+			break;
+		type = imsg_get_type(&imsg);
+		if ((passed = imsg_get_fd(&imsg)) != -1)
+			close(passed);
+		if (passed != -1 || (type != IMSG_CONFIRM_ARM &&
+		    type != IMSG_CONFIRM_DONE) ||
+		    imsg_get_data(&imsg, &cm, sizeof(cm)) == -1) {
+			snprintf(why, sizeof(why),
+			    "sent parent imsg %u, which it may not", type);
+			imsg_free(&imsg);
+			restart(c, why);
+			return;
+		}
+		imsg_free(&imsg);
+		confirm_check();
+		if (type != IMSG_CONFIRM_ARM)
+			continue;
+		cm.armed = cm.id == confirm_id;
+		if (imsg_compose(&c->out, IMSG_CONFIRM_ARMED, 0, 0, -1, &cm,
+		    sizeof(cm)) == -1)
+			fatal("%s: armed", c->name);
+		event_add(&c->outev, NULL);
+	}
+}
+
+/*
+ * parent's timer for the commit not confirmed, by its record: none if
+ * there is none, it failed, or it cannot be read
+ */
+static void
+confirm_check(void)
+{
+	struct confirm	 cf;
+
+	if (confirm_read(&cf, 0) == -1) {
+		logit(LOG_CRIT, "the record of a commit not confirmed: %s",
+		    strerror(errno));
+		confirm_unset();
+	} else if (cf.state != CONFIRM_WAITING)
+		confirm_unset();
+	else
+		confirm_set(&cf);
+}
+
+/*
+ * parent's timer, CONFIRM_GRACE past cf's deadline, or its until, if
+ * later, and no sooner than CONFIRM_GRACE from now
+ */
+static void
+confirm_set(struct confirm *cf)
+{
+	struct timeval	 tv = { 0, 0 };
+	time_t		 due;
+
+	due = (cf->until > cf->deadline ? cf->until : cf->deadline) +
+	    CONFIRM_GRACE;
+	if (cf->id != confirm_id) {
+		confirm_id = cf->id;
+		confirm_starts = 0;
+	}
+	if (due != confirm_due) {
+		confirm_due = due;
+		confirm_fences = 0;
+	}
+	tv.tv_sec = due - time(NULL);
+	if (tv.tv_sec < CONFIRM_GRACE)
+		tv.tv_sec = CONFIRM_GRACE;
+	evtimer_add(&confirm_ev, &tv);
+}
+
+static void
+confirm_unset(void)
+{
+	evtimer_del(&confirm_ev);
+	confirm_id = 0;
+	confirm_due = 0;
+	confirm_fences = 0;
+	confirm_starts = 0;
+}
+
+/*
+ * system's time to take back the commit not confirmed, past, unless its
+ * record says otherwise now: system started again, which takes it back
+ */
+static void
+confirm_late(int fd, short event, void *arg)
+{
+	struct child	*s = child(PROC_SYSTEM, 0);
+	uint64_t	 id = confirm_id;
+	time_t		 due = confirm_due;
+
+	confirm_check();
+	if (confirm_id != id || confirm_due != due)
+		return;
+	if (s->down || ++confirm_fences > CONFIRM_FENCES) {
+		logit(LOG_CRIT, "system has not taken back the commit not "
+		    "confirmed, and nothing will");
+		confirm_unset();
+		return;
+	}
+	restart(s, "has not taken back the commit not confirmed");
 }
 
 /* whether c, failing now, has failed RESTARTS times in RESTART_SECS */
@@ -621,6 +788,13 @@ restart(struct child *c, const char *why)
 
 	log_warnx("%s %s", c->name, why);
 	down = failed(c);
+	/* up, to take back a commit not confirmed */
+	if (down && c->proc == PROC_SYSTEM && confirm_id != 0 &&
+	    confirm_starts < CONFIRM_STARTS) {
+		confirm_starts++;
+		log_warnx("%s stays up, for a commit not confirmed", c->name);
+		down = 0;
+	}
 	if (down)
 		log_warnx("%s failed %d times in %d seconds, and stays down",
 		    c->name, RESTARTS, RESTART_SECS);

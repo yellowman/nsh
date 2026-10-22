@@ -21,7 +21,7 @@ CFLAGS+=-I${.CURDIR} -I${.CURDIR}/.. -I/usr/local/include
 CPPFLAGS+=-DNSH_VERSION=${NSH_VERSION}
 
 SRCS=	nshd.c relay.c control.c log.c showproc.c frontend.c configproc.c
-SRCS+=	systemproc.c archive.c stubs.c
+SRCS+=	systemproc.c archive.c stubs.c confirm.c
 # nsh's own, which system runs
 SRCS+=	arp.c compile.c genget.c commands.c bgpcommands.c stats.c kroute.c
 SRCS+=	ctl.c show.c if.c version.c route.c conf.c complete.c ieee80211.c

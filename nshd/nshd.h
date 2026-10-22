@@ -129,6 +129,12 @@ struct nshd_test {
 	char		name[32];
 };
 
+/* system to parent, and back: the record of a commit not confirmed, id's */
+struct nshd_confirm {
+	uint64_t	id;
+	int32_t		armed;		/* ARMED: parent keeps its deadline */
+};
+
 /*
  * parent to relay: a child's pipe, or that it is down; parent to a
  * child: a peer's pipe, or that it is down; a child to relay, and relay
@@ -208,7 +214,12 @@ enum nshd_imsg {
 	IMSG_SYS_RECORD,	/* the commit begun went back to how it was */
 	IMSG_SYS_ROLLBACK_READ,	/* nshd_rollback: configuration n */
 	IMSG_SYS_ROLLBACK_LIST,	/* show rollback's list */
-	IMSG_SYS_TEST		/* nshd_test: the test run, its status */
+	IMSG_SYS_TEST,		/* nshd_test: the test run, its status */
+
+	/* system to parent, on parent's pipe to it, and parent's answer */
+	IMSG_CONFIRM_ARM,	/* nshd_confirm: the record made, its deadline */
+	IMSG_CONFIRM_ARMED,	/* nshd_confirm: kept, or not */
+	IMSG_CONFIRM_DONE	/* nshd_confirm: the record gone, or failed */
 };
 
 struct imsgev {
@@ -249,6 +260,21 @@ int		 link_compose(struct link *, uint32_t, uint32_t, const void *,
 		    size_t);
 void		 link_broken(struct link *, const char *, ...)
 		    __attribute__((__format__ (printf, 2, 3)));
+
+/* confirm.c: the record of a commit not confirmed */
+enum { CONFIRM_NONE, CONFIRM_WAITING, CONFIRM_FAILED };
+struct confirm {
+	int		 state;
+	uint64_t	 id;
+	time_t		 deadline;	/* when it goes back, by the wall clock */
+	time_t		 until;		/* or later, when this is, if not 0 */
+	int		 attempts;	/* to go back, begun */
+	int		 demoted;	/* carp demoted, for it */
+	char		*back;		/* the configuration it goes back to */
+	size_t		 backlen;
+};
+int		 confirm_read(struct confirm *, int);
+void		 confirm_free(struct confirm *);
 
 /* each process but parent */
 __dead void	 relay(int, int);

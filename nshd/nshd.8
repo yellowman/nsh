@@ -132,7 +132,8 @@ their own, which the parent makes, so each knows who sent what it
 reads.
 A child takes a peer's pipe from the parent alone.
 Each child also has a pipe to relay.
-The parent reads only what relay tells it.
+The parent reads only what relay tells it, and what system says of a
+commit not confirmed.
 A child that exits, or sends relay or a peer what it may not, is
 started again, with new pipes to its peers, and they forget what it
 held: its sessions, or the answers it had not yet given.
@@ -143,6 +144,13 @@ If relay fails, every child starts again with it; if relay fails five
 times in a minute,
 .Nm
 exits.
+.Pp
+A commit not confirmed has a record, which the parent reads too.
+If system has not taken the commit back 30 seconds past its deadline,
+or past when system said what it does first may end, the parent starts
+system again, which takes it back; three times at most.
+While there is one, system stays up though its failures would keep it
+down, for ten starts more.
 .Pp
 Each child's
 .Xr chroot 2
@@ -177,6 +185,8 @@ the read-write socket, mode 0660, group nshadmin
 the read-only socket, mode 0666
 .It Pa /var/db/nsh/commit
 the commit record
+.It Pa /var/db/nsh/confirm
+the record of a commit not confirmed
 .El
 .Sh SEE ALSO
 .Xr nsh 8
