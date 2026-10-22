@@ -19,10 +19,10 @@
  * read-write socket, root or the group nshadmin, has what an enabled
  * nsh has there.
  *
- * configure private, where nshd runs, is a session of its: what edits
- * the candidate, and leaving a mode, go to nshd as lines, and the mode
- * nshd gives back is nsh's, for its prompt, its completion and the
- * lines after (cmdline_nshd()).
+ * configure private, configure and configure exclusive, where nshd
+ * runs, are a session of its: what edits the candidate, and leaving a
+ * mode, go to nshd as lines, and the mode nshd gives back is nsh's, for
+ * its prompt, its completion and the lines after (cmdline_nshd()).
  */
 
 #include <sys/types.h>
@@ -46,12 +46,17 @@
 #include "showfacts.h"
 #include "nshd/nshd.h"
 
+#if NSHD_CPRIVATE != NSHD_PRIVATE || NSHD_CSHARED != NSHD_SHARED || \
+    NSHD_CEXCLUSIVE != NSHD_EXCLUSIVE
+#error "externs.h's configures are not nshd.h's"
+#endif
+
 static volatile sig_atomic_t	nshd_intr;	/* ^C, while nshd answers */
 
-int		nshd_private;	/* configure private, in nshd */
+int		nshd_config;	/* the configure nshd has, or 0 */
 int		nshd_rtable;	/* and the rtable its lines are for */
 
-/* the session configure private is, or -1 */
+/* the session a configure is, or -1 */
 static int		sfd = -1;
 static struct imsgbuf	sib;
 
@@ -342,11 +347,11 @@ done:
 }
 
 /*
- * configure private, a session of nshd's: as a handler returns, or
+ * configure, of how, a session of nshd's: as a handler returns, or
  * NSHD_ABSENT if no nshd runs here
  */
 int
-nshd_configure(void)
+nshd_configure(int how)
 {
 	struct nshd_configure	 cf;
 
@@ -357,7 +362,7 @@ nshd_configure(void)
 		    "not a version nsh speaks" : strerror(errno));
 		return (-1);
 	}
-	cf.mode = NSHD_PRIVATE;
+	cf.mode = how;
 	return (nshd_request(IMSG_CTL_CONFIGURE, &cf, sizeof(cf), 0));
 }
 
@@ -405,7 +410,16 @@ nshd_rollback(int n)
 	return (nshd_request(IMSG_CTL_ROLLBACK, &rb, sizeof(rb), 0));
 }
 
-/* show words of configure private's, candidate-config or diff-config, paged */
+/* configure, as the session has it, by name */
+const char *
+nshd_cname(void)
+{
+	return (nshd_config == NSHD_PRIVATE ? "configure private" :
+	    nshd_config == NSHD_EXCLUSIVE ? "configure exclusive" :
+	    "configure");
+}
+
+/* show words of a configure's, candidate-config or diff-config, paged */
 int
 nshd_cshow(char *words)
 {
@@ -419,7 +433,7 @@ nshd_cshow(char *words)
 /*
  * type, with len bytes of data, on the session: what nshd prints, to
  * stdout or paged, and the mode it gives taken; as a handler returns.
- * ^C leaves configure private, as nshd finishes what it was asked.
+ * ^C leaves configure, as nshd finishes what it was asked.
  */
 static int
 nshd_request(uint32_t type, const void *data, size_t len, int paged)
@@ -435,7 +449,7 @@ nshd_request(uint32_t type, const void *data, size_t len, int paged)
 	int			 fd, done = 0, gone = 1;
 
 	if (sfd == -1) {
-		printf("%% nshd: not in configure private\n");
+		printf("%% nshd: not in configure\n");
 		return (-1);
 	}
 	if (paged) {
@@ -470,9 +484,9 @@ nshd_request(uint32_t type, const void *data, size_t len, int paged)
 	while (!done) {
 		if (nshd_next(&sib, &imsg, &waiting) == -1) {
 			if (nshd_intr)
-				printf("\n%% Interrupted: configure private "
-				    "is left, and nshd finishes what it was "
-				    "asked\n");
+				printf("\n%% Interrupted: %s is left, and "
+				    "nshd finishes what it was asked\n",
+				    nshd_cname());
 			else
 				printf("%% nshd: gone before it answered\n");
 			goto done;
@@ -519,8 +533,8 @@ done:
 			more(path);
 		unlink(path);
 	}
-	/* a session nshd closed, or that did not reach configure private */
-	if (gone || !nshd_private)
+	/* a session nshd closed, or that did not reach configure */
+	if (gone || !nshd_config)
 		nshd_close();
 	/* a ^C pending now ends nothing */
 	sigprocmask(SIG_SETMASK, &saved, NULL);
@@ -532,19 +546,20 @@ done:
 static void
 nshd_context(struct nshd_context *c)
 {
-	nshd_private = c->mode == NSHD_PRIVATE;
+	nshd_config = c->mode >= NSHD_PRIVATE && c->mode <= NSHD_EXCLUSIVE ?
+	    c->mode : 0;
 	nshd_rtable = c->rtable;
-	nshd_mode(nshd_private, c->ifname, c->bridge);
+	nshd_mode(nshd_config != 0, c->ifname, c->bridge);
 }
 
-/* The session gone, and configure private with it */
+/* The session gone, and configure with it */
 static void
 nshd_close(void)
 {
 	if (sfd == -1)
 		return;
-	if (nshd_private) {
-		nshd_private = 0;
+	if (nshd_config) {
+		nshd_config = 0;
 		nshd_mode(0, "", 0);
 	}
 	nshd_rtable = 0;

@@ -33,12 +33,12 @@ char saved_prompt[sizeof(prompt)];
 char *
 cprompt(void)
 {
-	int pr, rt = candidate ? cand_rtable : nshd_private ? nshd_rtable :
+	int pr, rt = candidate ? cand_rtable : nshd_config ? nshd_rtable :
 	    cli_rtable;
 	char tmp[4];
 
 	/* an interface's mode, nshd's: nsh's loop reads its lines */
-	if (nshd_private && ifname[0] != '\0')
+	if (nshd_config && ifname[0] != '\0')
 		return iprompt();
 
 	if (rt)
@@ -48,8 +48,9 @@ cprompt(void)
 	pr = priv | rt | config_mode;
 	snprintf(prompt, sizeof(prompt), "%s%s%s%s%s%s%s%s%s/", hbuf,
 	    pr ? "(" : "",
-	    config_mode ? (candidate || nshd_private ? "config-private" :
-	    "config") : "",
+	    config_mode ? (candidate || nshd_config == NSHD_CPRIVATE ?
+	    "config-private" : nshd_config == NSHD_CEXCLUSIVE ?
+	    "config-exclusive" : "config") : "",
 	    config_mode && priv ? "-" : "",
 	    priv ? "p" : "",
 	    ((priv && rt) || (config_mode && rt)) ? "-" : "",

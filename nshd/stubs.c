@@ -62,13 +62,19 @@ nshd_facts(int rw, char *words, struct facts_in *in)
 	return -1;
 }
 
-/* configure private here is config's own, never nshd's session */
-int nshd_private, nshd_rtable;
+/* configure here is config's own, never nshd's session */
+int nshd_config, nshd_rtable;
 
 int
-nshd_configure(void)
+nshd_configure(int how)
 {
 	return NSHD_ABSENT;
+}
+
+const char *
+nshd_cname(void)
+{
+	return "configure";
 }
 
 int

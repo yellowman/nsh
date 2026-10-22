@@ -877,7 +877,7 @@ pr_cand_conf(int argc, char **argv, ...)
 	int fd, ret = 0;
 
 	/* configure private, nshd's */
-	if (nshd_private)
+	if (nshd_config)
 		return nshd_cshow("candidate-config");
 	if (!candidate) {
 		printf("%% Not in configure private\n");
@@ -913,7 +913,7 @@ cand_rollback(int argc, char **argv, ...)
 	const char *errstr;
 	int n = 0;
 
-	if (!candidate && !nshd_private) {
+	if (!candidate && !nshd_config) {
 		printf("%% rollback requires configure private\n");
 		return -1;
 	}
@@ -929,7 +929,7 @@ cand_rollback(int argc, char **argv, ...)
 		}
 	}
 	/* configure private, nshd's */
-	if (nshd_private)
+	if (nshd_config)
 		return nshd_rollback(n);
 	if (n > 0) {
 		snprintf(path, sizeof(path), ROLLBACK, n);

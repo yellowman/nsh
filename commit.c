@@ -245,7 +245,7 @@ commit(int argc, char **argv, ...)
 		}
 	}
 	/* configure private, nshd's */
-	if (nshd_private)
+	if (nshd_config)
 		return nshd_commit(checking, minutes, comment);
 	if (checking && !candidate) {
 		printf("%% commit check requires configure private\n");

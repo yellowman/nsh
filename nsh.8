@@ -378,6 +378,35 @@ Where nshd does not run,
 .Nm
 keeps the candidate itself.
 .Pp
+.Tg exclusive
+Where nshd runs,
+.Cm configure
+is a session of nshd's too, whose candidate the sessions in
+.Cm configure
+share: each sees what the others change, leaving configure leaves the
+changes for the others, and
+.Cm commit
+commits what all of them changed; the prompt shows
+.Ql (config-p) .
+nshd keeps the shared candidate on disk, so it outlasts a restart of
+the nshd process that holds it.
+.Cm configure exclusive
+is
+.Cm configure
+while no other session changes the shared candidate or commits; the
+prompt shows
+.Ql (config-exclusive-p) .
+It is refused while another session has it, or while another user's
+changes to the shared candidate are not committed, which it says by
+uid.
+Leaving it discards what was not committed.
+A session in one configure leaves it before it enters another.
+Where nshd does not run,
+.Cm configure
+changes the system as each command runs, and
+.Cm configure exclusive
+is refused.
+.Pp
 For the purposes of this manual, any examples the machine is called
 .Nm
 .
