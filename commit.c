@@ -180,8 +180,9 @@ static int rtableid(char *);
 static int ifblock(char *, char *, size_t);
 static int clear(struct commit *, char *, int, int);
 static const char *committer(void);
-static int samefile(char *, char *);
-static int copyfile(char *, char *, char *);
+static int samefile(const char *, char *);
+static int copyfile(const char *, char *, char *);
+static int syncdir(const char *);
 static int sub_begin(struct commit *, struct sub *);
 static void sub_end(struct commit *, struct sub *, const char *, char *,
     int);
@@ -261,7 +262,7 @@ commit(int argc, char **argv, ...)
 		if (!conf_save())
 			return -1;
 		confirmed();
-		rollback_keep(committer(), comment);
+		rollback_keep(NSHRC_TEMP, committer(), comment);
 		return 0;
 	}
 	if ((want = cand_tree()) == NULL)
@@ -301,7 +302,7 @@ commit(int argc, char **argv, ...)
 	} else {
 		confirmed();
 		if (conf_save())
-			rollback_keep(committer(), comment);
+			rollback_keep(NSHRC_TEMP, committer(), comment);
 		else
 			ret = -1;
 	}
@@ -1652,19 +1653,19 @@ committer(void)
 }
 
 /*
- * Keep the configuration just saved as rollback 0, with who saved it and
- * their comment, if not empty; each kept before it one further on, and
- * the oldest no more; unless rollback 0 is the same. -1 if it could not,
- * said why
+ * Keep the configuration just saved, in file, as rollback 0, with who
+ * saved it and their comment, if not empty; each kept before it one
+ * further on, and the oldest no more; unless rollback 0 is the same. -1
+ * if it could not, said why
  */
 int
-rollback_keep(const char *who, const char *comment)
+rollback_keep(const char *file, const char *who, const char *comment)
 {
 	char from[PATH_MAX], to[PATH_MAX], head[64 + COMMENTMAX], *p;
 	int i;
 
 	snprintf(to, sizeof(to), ROLLBACK, 0);
-	if (samefile(NSHRC_TEMP, to))
+	if (samefile(file, to))
 		return 0;
 	if (mkdir(NSHDB, 0700) == -1 && errno != EEXIST) {
 		printf("%% mkdir %s: %s\n", NSHDB, strerror(errno));
@@ -1686,12 +1687,90 @@ rollback_keep(const char *who, const char *comment)
 			*p = ' ';
 	strlcat(head, "\n", sizeof(head));
 	snprintf(to, sizeof(to), ROLLBACK, 0);
-	return copyfile(NSHRC_TEMP, to, head);
+	return copyfile(file, to, head);
+}
+
+/*
+ * nshd's save: the running configuration, as conf() writes it, made
+ * SAVED, root's alone, whole and on disk, or not at all: 1 if it was,
+ * else 0, said why
+ */
+int
+saved_write(void)
+{
+	char tmp[] = SAVED ".XXXXXXXXXX";
+	FILE *f;
+	int fd, ok;
+
+	if (mkdir(NSHDB, 0700) == -1 && errno != EEXIST) {
+		printf("%% mkdir %s: %s\n", NSHDB, strerror(errno));
+		return 0;
+	}
+	if ((fd = mkstemp(tmp)) == -1) {
+		printf("%% %s: %s\n", tmp, strerror(errno));
+		return 0;
+	}
+	if ((f = fdopen(fd, "w")) == NULL) {
+		printf("%% %s: %s\n", tmp, strerror(errno));
+		close(fd);
+		unlink(tmp);
+		return 0;
+	}
+	conf(f);
+	ok = fflush(f) != EOF && fsync(fd) == 0;
+	if (fclose(f) == EOF)
+		ok = 0;
+	if (!ok || rename(tmp, SAVED) == -1) {
+		printf("%% Unable to save configuration: %s\n",
+		    strerror(errno));
+		unlink(tmp);
+		return 0;
+	}
+	if (syncdir(NSHDB) == -1)
+		return 0;
+	printf("%% Saving configuration\n");
+	return 1;
+}
+
+/* nshd's saved configuration, SAVED, to out: -1 if none, said why */
+int
+saved_text(FILE *out)
+{
+	char line[BUFSIZ];
+	FILE *f;
+
+	if ((f = fopen(SAVED, "r")) == NULL) {
+		if (errno == ENOENT)
+			printf("%% No saved configuration\n");
+		else
+			printf("%% %s: %s\n", SAVED, strerror(errno));
+		return -1;
+	}
+	while (fgets(line, sizeof(line), f) != NULL)
+		fputs(line, out);
+	fclose(f);
+	return 0;
+}
+
+/* dir's entries, as they now are, kept: -1, said, if not */
+static int
+syncdir(const char *dir)
+{
+	int fd, r;
+
+	if ((fd = open(dir, O_RDONLY | O_DIRECTORY)) == -1) {
+		printf("%% %s: %s\n", dir, strerror(errno));
+		return -1;
+	}
+	if ((r = fsync(fd)) == -1)
+		printf("%% %s: %s\n", dir, strerror(errno));
+	close(fd);
+	return r;
 }
 
 /* Do the files a and b hold the same, but for b's line of who saved it? */
 static int
-samefile(char *a, char *b)
+samefile(const char *a, char *b)
 {
 	char x[BUFSIZ], y[BUFSIZ];
 	FILE *fa, *fb;
@@ -1721,7 +1800,7 @@ done:
 
 /* Copy file from to to, after head, made 0600, or none of it; -1 if not */
 static int
-copyfile(char *from, char *to, char *head)
+copyfile(const char *from, char *to, char *head)
 {
 	char buf[BUFSIZ];
 	FILE *in, *out;

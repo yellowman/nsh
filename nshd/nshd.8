@@ -104,7 +104,15 @@ to stdio: it reads no kernel, opens no file and runs no program of its
 own, and refuses a line that would.
 .It system
 Runs as root, and reads the configuration from the kernel, the
-daemons and the saved configuration.
+daemons and the saved configuration, which it alone writes, in
+.Pa /var/db/nsh ,
+where
+.Xr nsh 8 Ns 's
+own
+.Pa /etc/nshrc
+is not; nsh's
+.Cm show startup-config
+asks for it.
 It answers config and no one else.
 What a daemon's control program prints for a show, and the DHCP
 leases, a child of its own prints, and system streams it only as fast
@@ -221,6 +229,10 @@ Produce more verbose output.
 the read-write socket, mode 0660, group nshadmin
 .It Pa /var/run/nshd.ro.sock
 the read-only socket, mode 0666
+.It Pa /var/db/nsh/nshrc
+the saved configuration, root's
+.It Pa /var/db/nsh/nshrc.N
+the configurations saved before it, rollback 0 the last
 .It Pa /var/db/nsh/commit
 the commit record
 .It Pa /var/db/nsh/confirm

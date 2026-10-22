@@ -179,6 +179,7 @@ extern pid_t child;
 #define NSHRC_TEMP	"/var/run/nshrc"
 #define NSHRC		"/etc/nshrc"
 #define NSHDB		"/var/db/nsh"	/* the configurations saved */
+#define SAVED		NSHDB "/nshrc"	/* nshd's, where nshd saves */
 #define ROLLBACKS	50		/* how many, rollback 0 the last */
 #define ROLLBACK	NSHDB "/nshrc.%d"
 #define ROLLBACK_HEAD	"# saved by "	/* who saved it, and why */
@@ -684,7 +685,9 @@ int commit(int, char **, ...);
 int pr_rollback(int, char **, ...);
 int commit_expire(void);
 int commit_boot(char *);
-int rollback_keep(const char *, const char *);
+int rollback_keep(const char *, const char *, const char *);
+int saved_write(void);
+int saved_text(FILE *);
 int commit_checks(struct cnode *, struct cnode *, int);
 int commit_problems(struct cnode *, struct cnode *);
 int commit_verdict(int, int);

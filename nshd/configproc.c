@@ -530,6 +530,10 @@ config_show(uint32_t session, struct nshd_show *show)
 		type = IMSG_SYS_SNAPSHOT;
 		data = &ns;
 		len = sizeof(ns);
+	} else if (strcmp(show->words, "startup-config") == 0) {
+		type = IMSG_SYS_SAVED;
+		data = NULL;
+		len = 0;
 	} else if (strcmp(show->words, "rollback") == 0) {
 		type = IMSG_SYS_ROLLBACK_LIST;
 		data = NULL;

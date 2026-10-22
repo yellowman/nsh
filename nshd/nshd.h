@@ -242,7 +242,10 @@ enum nshd_imsg {
 	IMSG_ARC_KEEP,		/* config: nshd_keep; keep the text sent since */
 	IMSG_ARC_KEPT,		/* archive: nshd_keep, and if it was kept */
 	IMSG_ARC_LOAD,		/* config: what was kept, as text, then LOADED */
-	IMSG_ARC_LOADED		/* archive: nshd_result */
+	IMSG_ARC_LOADED,	/* archive: nshd_result */
+
+	/* config to system, answered as SYS_SHOW is */
+	IMSG_SYS_SAVED		/* the saved configuration, as text */
 };
 
 struct imsgev {

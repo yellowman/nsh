@@ -52,7 +52,7 @@
  * SIGKILL, and it fails. A test runs as NSHD_CHECK_USER, its rules
  * staged in a directory of their own, its own, but for the daemons
  * root_tests names, each an exception that keeps root, its rules
- * root's.
+ * root's. SAVE saves what runs as SAVED, whole and on disk.
  * While a job runs, config's requests wait for it, but what a stream's
  * client read and a session gone.
  *
@@ -454,6 +454,7 @@ system_whole(uint32_t type, const void *data, size_t len)
 	case IMSG_SYS_STOP:
 		return (0);
 	case IMSG_SYS_ROLLBACK_LIST:
+	case IMSG_SYS_SAVED:
 		return (len == 0 ? 0 : -1);
 	case IMSG_SYS_RECORD:
 		if (len != sizeof(rc))
@@ -567,6 +568,9 @@ system_request(uint32_t type, uint32_t id, const void *data, size_t len)
 		break;
 	case IMSG_SYS_ROLLBACK_LIST:
 		system_rollback(id, -1);
+		break;
+	case IMSG_SYS_SAVED:
+		system_rollback(id, -2);
 		break;
 	case IMSG_SYS_TEST:
 		memcpy(&t, data, sizeof(t));
@@ -1574,7 +1578,10 @@ system_back(uint32_t id, int how)
 	system_confirm(-1, 0, NULL);
 }
 
-/* configuration n as it was saved, or with n -1, the list of them */
+/*
+ * configuration n as it was saved, or with n -1, the list of them, or
+ * with -2, the saved configuration
+ */
 static void
 system_rollback(uint32_t id, int n)
 {
@@ -1587,6 +1594,8 @@ system_rollback(uint32_t id, int n)
 		fatal("%s", __func__);
 	if (n == -1)
 		rollback_list(f);
+	else if (n == -2)
+		r = saved_text(f);
 	else
 		r = rollback_text(n, f);
 	if (fclose(f) == EOF)
@@ -1700,8 +1709,8 @@ system_job_child(int fd, struct job *j)
 		r = script_run(&sc);
 		break;
 	case JOB_SAVE:
-		if ((r = conf_save()))
-			rollback_keep(j->who, j->comment);
+		if ((r = saved_write()))
+			rollback_keep(SAVED, j->who, j->comment);
 		r = !r;
 		break;
 	case JOB_RECOVER:

@@ -3954,11 +3954,16 @@ pr_conf(int argc, char **argv, ...)
 }
 
 /*
- * Show startup config
+ * Show startup config: nshd's, where nshd runs
  */
 static int
 pr_s_conf(int argc, char **argv, ...)
 {
+	int ret;
+
+	if ((ret = nshd_show("startup-config")) != -1)
+		return ret == 1 ? 0 : -1;
+
 	if (priv != 1) {
 		printf ("%% Privilege required\n");
 		return -1;
