@@ -33,6 +33,10 @@
  * since is refused (cand_conflicts()); committing again keeps this
  * session's changes over the other's.
  *
+ * nshd's configure is a candidate sessions share, struct cand_shared,
+ * which a session takes as its own while it runs (session.c), and
+ * leaves to the others when it leaves configure (cand_detach()).
+ *
  * A command takes part only as its table row says (cand): a CAND_EDIT
  * handler checks 'candidate' and calls cand_setting() where it would
  * have changed the kernel, a CAND_RUN command runs as it always does,
@@ -65,10 +69,12 @@
 
 int candidate;				/* configure private is on */
 int cand_rtable;			/* the rtable its lines are for */
+int cand_sharing;			/* the candidate is a shared one */
 
 static struct cnode *cand;		/* this session's view of it */
 static struct cjournal *cand_journal;	/* the changes it made */
 static struct cnode *cand_base;		/* what rollback N loaded, or NULL */
+static unsigned int cand_nedits;	/* the edits that changed it */
 
 /* a top-level statement the journal changes, as it was before it did */
 struct cand_was {
@@ -83,8 +89,17 @@ static size_t cand_nwas;
 struct sglobal candidate_sglobals[] = {
 	SGLOBAL(candidate), SGLOBAL(cand_rtable), SGLOBAL(cand),
 	SGLOBAL(cand_journal), SGLOBAL(cand_base), SGLOBAL(cand_was),
-	SGLOBAL(cand_nwas),
+	SGLOBAL(cand_nwas), SGLOBAL(cand_nedits), SGLOBAL(cand_sharing),
 	{ NULL }
+};
+
+/* a candidate sessions share, as each takes it as its own */
+struct cand_shared {
+	struct cnode	*cand, *base;
+	struct cjournal	*journal;
+	struct cand_was	*was;
+	size_t		 nwas;
+	unsigned int	 nedits;
 };
 
 static int cand_record(char *, struct sedit *);
@@ -99,23 +114,112 @@ static int cand_vsetting(char *, int, int, const char *, va_list);
 static const struct kcloner *cand_cloner(char *);
 static size_t cloner_namelen(char *);
 
-/* configure private: start a candidate from the running configuration */
+/*
+ * configure private: start a candidate from the running configuration,
+ * or take the shared one as it is, if it has begun
+ */
 int
 cand_begin(void)
 {
 	if (candidate)
 		return 0;
-	if ((cand = running_tree()) == NULL)
-		return -1;
-	if ((cand_journal = cjournal_new()) == NULL) {
-		printf("%% cand_begin: %s\n", strerror(errno));
-		conftree_free(cand);
-		cand = NULL;
-		return -1;
+	if (cand_journal == NULL) {
+		if ((cand = running_tree()) == NULL)
+			return -1;
+		if ((cand_journal = cjournal_new()) == NULL) {
+			printf("%% cand_begin: %s\n", strerror(errno));
+			conftree_free(cand);
+			cand = NULL;
+			return -1;
+		}
 	}
 	candidate = 1;
 	cand_rtable = 0;
 	return 0;
+}
+
+/* A candidate for sessions to share, not begun: NULL, errno set */
+struct cand_shared *
+cand_shared_new(void)
+{
+	return calloc(1, sizeof(struct cand_shared));
+}
+
+/* The shared candidate sh in as this session's if in, else out to sh */
+void
+cand_share(struct cand_shared *sh, int in)
+{
+	if (in) {
+		cand = sh->cand;
+		cand_base = sh->base;
+		cand_journal = sh->journal;
+		cand_was = sh->was;
+		cand_nwas = sh->nwas;
+		cand_nedits = sh->nedits;
+	} else {
+		sh->cand = cand;
+		sh->base = cand_base;
+		sh->journal = cand_journal;
+		sh->was = cand_was;
+		sh->nwas = cand_nwas;
+		sh->nedits = cand_nedits;
+	}
+}
+
+/* Leave the shared candidate, as it is, to the sessions that share it */
+void
+cand_detach(void)
+{
+	cand = NULL;
+	cand_base = NULL;
+	cand_journal = NULL;
+	cand_was = NULL;
+	cand_nwas = 0;
+	cand_nedits = 0;
+	candidate = 0;
+	cand_rtable = 0;
+	cand_sharing = 0;
+}
+
+/*
+ * The shared candidate sh starts again from the running configuration:
+ * -1, said why, and sh as it was, if it could not
+ */
+int
+cand_shared_renew(struct cand_shared *sh)
+{
+	struct cnode *t;
+	struct cjournal *j;
+
+	if ((t = running_tree()) == NULL)
+		return -1;
+	if ((j = cjournal_new()) == NULL) {
+		printf("%% cand_shared_renew: %s\n", strerror(errno));
+		conftree_free(t);
+		return -1;
+	}
+	cand_share(sh, 1);
+	cand_end();
+	cand = t;
+	cand_journal = j;
+	cand_share(sh, 0);
+	cand_detach();
+	return 0;
+}
+
+/* Has the shared candidate sh changed? */
+int
+cand_shared_changed(struct cand_shared *sh)
+{
+	return sh->journal != NULL &&
+	    (cjournal_len(sh->journal) > 0 || sh->base != NULL);
+}
+
+/* The edits that changed sh, since it began, counted */
+unsigned int
+cand_shared_edits(struct cand_shared *sh)
+{
+	return sh->nedits;
 }
 
 /* Leave configure private, dropping the candidate. */
@@ -129,6 +233,7 @@ cand_end(void)
 	cand = NULL;
 	cand_base = NULL;
 	cand_journal = NULL;
+	cand_nedits = 0;
 	candidate = 0;
 	cand_rtable = 0;
 }
@@ -714,6 +819,7 @@ cand_restart(struct cnode *base, int n)
 	cand = t;
 	cand_base = base;
 	cand_journal = j;
+	cand_nedits++;
 	if (n == 0)
 		printf("%% Candidate reset to the running configuration\n");
 	else
@@ -797,6 +903,8 @@ cand_record(char *block, struct sedit *e)
 		printf("%% cand_record: %s\n", strerror(errno));
 		return -1;
 	}
+	if (r == CE_CHANGED)
+		cand_nedits++;
 	return 0;
 }
 

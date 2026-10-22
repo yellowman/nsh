@@ -752,7 +752,7 @@ config_snapshot_done(int32_t status)
 	TAILQ_FOREACH(sp, &sessions, entry) {
 		switch (sp->waits) {
 		case WAIT_CONFIGURE:
-			r = session_configure(sp->st);
+			r = session_configure(sp->st, NULL);
 			mode = 1;
 			break;
 		case WAIT_CANDIDATE:

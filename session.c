@@ -19,8 +19,9 @@
  * Sessions, each running with its own state: session_enter() puts a
  * session's globals in place, and session_leave() keeps them and puts
  * back the process's, as they were before any session, so nothing of
- * one session is seen by another. nshd's config runs configure private
- * for its sessions through the rest, a request at a time, and plans
+ * one session is seen by another, but a candidate sessions share. nshd's
+ * config runs configure private, and configure, whose candidate its
+ * sessions share, through the rest, a request at a time, and plans
  * their commits, which system runs.
  */
 #include <sys/param.h>	/* MAXHOSTNAMELEN */
@@ -68,6 +69,7 @@ static struct sglobal *sglobals[] = {
 
 struct session_state {
 	unsigned char	*mem;	/* each global's bytes, in sglobals' order */
+	struct cand_shared *shared;	/* the candidate it shares, or NULL */
 };
 
 /* the globals as the process had them before the first session */
@@ -116,13 +118,15 @@ session_new(void)
 	return s;
 }
 
-/* Drop s, and what its candidate and rules file hold */
+/* Drop s, and what its candidate, if its own, and rules file hold */
 void
 session_free(struct session_state *s)
 {
 	if (s == NULL)
 		return;
 	session_enter(s);
+	if (cand_sharing)
+		cand_detach();
 	cand_end();
 	ctl_rules_done();
 	session_leave(s);
@@ -134,11 +138,18 @@ void
 session_enter(struct session_state *s)
 {
 	copy(s->mem, 0);
+	if (s->shared != NULL)
+		cand_share(s->shared, 1);
 }
 
+/* s's globals kept, the shared candidate left as s left it, if it shares */
 void
 session_leave(struct session_state *s)
 {
+	if (s->shared != NULL && cand_sharing)
+		cand_share(s->shared, 0);
+	else
+		s->shared = NULL;
 	copy(s->mem, 1);
 	copy(fresh, 0);
 }
@@ -159,13 +170,21 @@ session_running(char *text, size_t len)
 	return 0;
 }
 
-/* configure private, in s, privileged: as a handler returns */
+/*
+ * configure private, in s, privileged, or with sh, configure, whose
+ * candidate sessions share: as a handler returns
+ */
 int
-session_configure(struct session_state *s)
+session_configure(struct session_state *s, struct cand_shared *sh)
 {
 	int r;
 
 	session_enter(s);
+	if (sh != NULL && !candidate) {
+		s->shared = sh;
+		cand_share(sh, 1);
+		cand_sharing = 1;
+	}
 	priv = 1;
 	if ((r = cand_begin()) == 0)
 		config_mode = 1;

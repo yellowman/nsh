@@ -3423,6 +3423,11 @@ cand_refused(char *name, int cand)
 static int
 cand_leave(void)
 {
+	/* a shared candidate stays for the sessions that share it */
+	if (cand_sharing) {
+		cand_detach();
+		return 0;
+	}
 	if (cand_changed()) {
 		printf("%% The candidate has uncommitted changes;"
 		    " 'rollback' discards them\n");

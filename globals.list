@@ -31,8 +31,8 @@ bridge.c	table	brds bridge_fields bridgeaddr_fields
 			bridgemember_fields brlists brnames brper brps
 			brvals brvs kind_bridge kind_bridgeaddr
 			kind_bridgemember stpstates
-candidate.c	session	cand cand_base cand_journal cand_nwas cand_rtable
-			cand_was candidate
+candidate.c	session	cand cand_base cand_journal cand_nedits cand_nwas
+			cand_rtable cand_sharing cand_was candidate
 candidate.c	scratch	cand_listowner.owner
 candidate.c	table	candidate_sglobals
 carp.c		scratch	carp_facts.carpdev

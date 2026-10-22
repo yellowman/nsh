@@ -628,6 +628,10 @@ extern int candidate;
 int cand_begin(void);
 void cand_end(void);
 int cand_changed(void);
+extern int cand_sharing;
+struct cand_shared;
+void cand_share(struct cand_shared *, int);
+void cand_detach(void);
 int cand_conflicts(struct cnode *, int);
 int cand_setting(int, const char *, ...)
     __attribute__((__format__ (printf, 2, 3)));
