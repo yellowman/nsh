@@ -405,6 +405,38 @@ commit_reads(char *now, size_t nowlen, char *want, size_t wantlen)
 }
 
 /*
+ * A commit not confirmed goes back, as nshd's system takes it back: the
+ * running configuration made to read as back's text, as commit_expire()
+ * makes it. 0 if it does, else -1, said why
+ */
+int
+commit_recover(char *back, size_t backlen)
+{
+	struct cnode *b, *now = NULL, *after = NULL;
+	int ret = -1;
+
+	if ((b = conftree_mem(back, backlen, "the configuration before",
+	    conf_mode, conf_ordered)) == NULL)
+		return -1;
+	if ((now = running_tree()) != NULL &&
+	    (conftree_compare(NULL, now, b) == 0 || apply(now, b) != -1) &&
+	    (after = running_tree()) != NULL) {
+		if (commit_took(after, b)) {
+			printf("%% Commit not confirmed: rolled back\n");
+			ret = 0;
+		} else {
+			printf("%% Commit not confirmed: rolled back, but the "
+			    "running configuration differs from how it was\n");
+			differ(stdout, after, b);
+		}
+	}
+	conftree_free(after);
+	conftree_free(now);
+	conftree_free(b);
+	return ret;
+}
+
+/*
  * What would keep want from becoming the running configuration, was,
  * that can be seen before it does: each problem shown, and how many
  */

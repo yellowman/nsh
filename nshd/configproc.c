@@ -125,6 +125,7 @@ struct commit {
 	int			 failed;	/* a line of the script failed */
 	int			 minutes;	/* commit confirmed's, or 0 */
 	int			 how;		/* it ended, NSHD_BACK or KEPT */
+	int			 begun;		/* and not ended, to system */
 	char			 comment[NSHD_COMMENT];
 	struct plan		*plan;
 };
@@ -890,8 +891,10 @@ commit_ended(int32_t status)
 	case COMMIT_BEGIN:
 		if (status != 0)
 			commit_end(-1, NULL);
-		else
+		else {
+			commit->begun = 1;
 			commit_apply(COMMIT_APPLY);
+		}
 		break;
 	case COMMIT_APPLY:
 		commit->failed = status != 0;
@@ -1015,6 +1018,7 @@ commit_save(void)
 	struct nshd_save	 sv;
 
 	memset(&sv, 0, sizeof(sv));
+	commit->begun = 0;
 	sv.uid = commit->uid;
 	strlcpy(sv.comment, commit->comment, sizeof(sv.comment));
 	commit_request(COMMIT_SAVE, IMSG_SYS_SAVE, &sv, sizeof(sv));
@@ -1028,6 +1032,7 @@ commit_record(int how)
 
 	rc.how = how;
 	commit->how = how;
+	commit->begun = 0;
 	commit_request(COMMIT_RECORD, IMSG_SYS_RECORD, &rc, sizeof(rc));
 }
 
@@ -1062,10 +1067,15 @@ commit_request(int step, uint32_t type, const void *data, size_t len)
 static void
 commit_end(int r, const char *msg)
 {
-	struct commit	*c = commit;
-	struct session	*sp;
+	struct commit		*c = commit;
+	struct nshd_record	 rc = { NSHD_LEFT };
+	struct session		*sp;
 
 	commit = NULL;
+	/* system told a commit begun ended, if it did not say so itself */
+	if (c->begun && link_compose(&links[SYSTEM], IMSG_SYS_RECORD, 0, &rc,
+	    sizeof(rc)) == -1)
+		fatal("%s", __func__);
 	if ((sp = session_find(c->session)) == NULL)
 		printed_text(NULL, 0, 0);
 	else if (msg != NULL) {

@@ -125,6 +125,16 @@ goes back to what ran before the first commit not confirmed; it tells
 the parent, and goes on once the parent keeps its deadline too.
 If the commit goes back, so does that record, to how it was before it.
 A commit that saves takes that record away before it saves.
+Its deadline is its minutes from when it is kept.
+Past its deadline, system takes the commit back, once no commit it
+began and no script, save or test is in the way: it demotes carp by
+128, runs a script back, and promotes carp again once what runs reads
+as it was.
+A script back that fails is run again 5 seconds later, three times at
+most; then the record says it failed, and carp stays demoted until a
+commit saves.
+A system that starts takes back what one before it did not.
+A commit is refused if what runs is not what it was planned from.
 system is a session of its own: when it goes, the parent kills every
 process left in that session, and every process of _nshcheck's,
 before another system starts.

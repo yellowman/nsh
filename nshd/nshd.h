@@ -120,6 +120,7 @@ struct nshd_record {
 };
 #define NSHD_BACK	0	/* gone back to how it was */
 #define NSHD_KEPT	1	/* confirmed, kept until its deadline */
+#define NSHD_LEFT	2	/* the records left as they are */
 
 /* config to system: run the script, and empty these daemons' rules */
 struct nshd_apply {
