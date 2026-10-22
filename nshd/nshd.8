@@ -20,7 +20,7 @@
 .Nd network configuration daemon
 .Sh SYNOPSIS
 .Nm
-.Op Fl dv
+.Op Fl bdv
 .Sh DESCRIPTION
 .Nm
 reads the system's configuration for
@@ -198,6 +198,35 @@ system again, which takes it back; three times at most.
 While there is one, system stays up though its failures would keep it
 down, for ten starts more.
 .Pp
+With
+.Fl b ,
+as rc starts it,
+.Nm
+boots: before frontend and the shows take clients, config has system
+make the running configuration the saved one, all of it that takes, as
+.Xr nsh 8
+.Fl i
+does; what check finds is said, and a daemon's rules are tested, but
+neither keeps it from running.
+What config and system print for it is logged.
+.Nm
+returns once the boot is done, with 0 if what runs is then the saved
+configuration, else 1.
+The first time, with no saved configuration, system takes
+.Pa /etc/nshrc
+as it.
+system keeps a record of the boot, which names the boot of the host's
+it is for; an
+.Nm
+started again in the same boot of the host's boots again only if the
+boot did not end or did not go well.
+carp is demoted by 128 until the boot goes well, or, if it does not,
+until a commit saves.
+A boot that goes well takes away a record of a commit not confirmed,
+as what it would go back to runs.
+If system or config starts again during the boot, the boot starts
+again; if system stays down, the boot did not go well.
+.Pp
 Each child's
 .Xr chroot 2
 is its user's home directory.
@@ -218,6 +247,8 @@ them started again, and nothing more.
 .Pp
 The options are as follows:
 .Bl -tag -width Ds
+.It Fl b
+Boot, as above.
 .It Fl d
 Do not daemonize, and log to standard error.
 .It Fl v
@@ -237,6 +268,8 @@ the configurations saved before it, rollback 0 the last
 the commit record
 .It Pa /var/db/nsh/confirm
 the record of a commit not confirmed
+.It Pa /var/db/nsh/boot
+the record of the boot
 .It Pa /var/db/nsh/archive/candidate
 the shared candidate, as archive keeps it
 .El

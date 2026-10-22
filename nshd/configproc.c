@@ -59,6 +59,16 @@
  * snapshot reads as the candidate, the commit's record goes, and what
  * runs is kept until the deadline, not saved. A commit that saves
  * confirms it.
+ *
+ * Told at its start that the boot is not done, config boots, as nsh -i
+ * does, once there is a pipe to system: system says whether this boot
+ * of the host's is done already (BOOT), and if not, gives the saved
+ * configuration, which a commit of no session's makes what runs, all
+ * of it that takes, as nothing it checks or tests refuses it; then
+ * system records how it went (BOOTED), and relay is told. What nsh's
+ * code and system print for it is logged. If system starts again, the
+ * boot does too; if system is down, the boot did not go well. If system
+ * could not record the boot, it runs, and did not go well.
  */
 
 #include <sys/types.h>
@@ -134,7 +144,10 @@ enum {
 	COMMIT_SAVE,		/* what runs saved */
 	COMMIT_UNDO,		/* the script back run */
 	COMMIT_BACK,		/* a snapshot, to verify that */
-	COMMIT_RECORD		/* the record gone, kept or back */
+	COMMIT_RECORD,		/* the record gone, kept or back */
+	BOOT_BEGIN,		/* the boot begun, or done already */
+	BOOT_SAVED,		/* the saved configuration, to boot to */
+	BOOT_END		/* how the boot went, recorded */
 };
 
 struct commit {
@@ -149,6 +162,12 @@ struct commit {
 	int			 how;		/* it ended, NSHD_BACK or KEPT */
 	int			 begun;		/* and not ended, to system */
 	int			 shared;	/* of the shared candidate */
+	int			 boot;		/* the boot's */
+	int			 unrecorded;	/* and system could not record it */
+	int			 ok;		/* and it went well */
+	char			*saved;		/* what it boots to, as it comes */
+	size_t			 savedlen;
+	int			 savedbad;	/* past NSHD_PART */
 	char			 comment[NSHD_COMMENT];
 	struct plan		*plan;
 };
@@ -181,6 +200,7 @@ static int			 keep_loaded;	/* what archive kept, taken */
 static char			*loading;	/* that, as it comes */
 static size_t			 loading_len;
 static int			 loading_past;	/* past NSHD_KEEPMAX */
+static int			 booting;	/* the boot is not done */
 
 #define REQUEST_GEN_SHIFT	24	/* generation above, count below */
 #define REQUEST_COUNT		((1U << REQUEST_GEN_SHIFT) - 1)
@@ -194,6 +214,7 @@ static void		 config_dispatch_archive(int, short, void *);
 static void		 config_forget_frontend(void);
 static void		 config_forget_system(void);
 static void		 config_forget_archive(void);
+static void		 config_ready_system(void);
 static void		 config_ready_archive(void);
 static void		 config_show(uint32_t, struct nshd_show *);
 static void		 config_configure(uint32_t, struct nshd_configure *);
@@ -237,6 +258,13 @@ static void		 commit_record(int);
 static void		 commit_request(int, uint32_t, const void *, size_t);
 static void		 commit_end(int, const char *);
 static int		 commit_renew(void);
+static void		 boot_start(void);
+static void		 boot_text(struct ibuf *);
+static void		 boot_plan(void);
+static void		 boot_ran(int);
+static void		 boot_lost(const char *);
+static void		 boot_drop(void);
+static void		 boot_end(int32_t);
 static void		 session_gone(struct session *);
 static struct session	*session_find(uint32_t);
 static struct request	*request_find(uint32_t);
@@ -245,7 +273,8 @@ static struct link	 links[] = {
 #define FRONTEND	0
 	{ PROC_FRONTEND, config_dispatch_frontend, config_forget_frontend },
 #define SYSTEM		1
-	{ PROC_SYSTEM,	 config_dispatch_system,   config_forget_system },
+	{ PROC_SYSTEM,	 config_dispatch_system,   config_forget_system,
+	    config_ready_system },
 #define ARCHIVE		2
 	{ PROC_ARCHIVE,	 config_dispatch_archive,  config_forget_archive,
 	    config_ready_archive },
@@ -272,7 +301,7 @@ configproc(int debug, int verbose)
 	exit(0);
 }
 
-/* relay's word of config's generation */
+/* relay's word of config's generation, and whether to boot */
 static void
 config_dispatch_relay(int fd, short event, void *arg)
 {
@@ -294,6 +323,13 @@ config_dispatch_relay(int fd, short event, void *arg)
 			fatalx("relay sent imsg %u, which it may not",
 			    imsg_get_type(&imsg));
 		request_id = st.generation << REQUEST_GEN_SHIFT;
+		if (st.boot && !booting) {
+			booting = 1;
+			if (links[SYSTEM].iev != NULL)
+				boot_start();
+			else if (links[SYSTEM].down)
+				boot_end(1);
+		}
 		imsg_free(&imsg);
 	}
 	imsg_event_add(iev);
@@ -441,6 +477,12 @@ config_dispatch_system(int fd, short event, void *arg)
 				fatal("%s", __func__);
 			if (snap != NULL && r->id == snap->id) {
 				config_snapshot(r, type, &b);
+				break;
+			}
+			if (r->kind == REQ_COMMIT && commit != NULL &&
+			    commit->boot) {
+				if (type == IMSG_SYS_TEXT)
+					boot_text(&b);
 				break;
 			}
 			if (r->kind == REQ_ROLLBACK) {
@@ -1210,7 +1252,9 @@ commit_snapshot(void)
 	commit->waits = 0;
 	switch (commit->step) {
 	case COMMIT_PLAN:
-		if ((sp = session_find(commit->session)) == NULL ||
+		if (commit->boot)
+			boot_plan();
+		else if ((sp = session_find(commit->session)) == NULL ||
 		    session_plan(sp->st, commit->check, commit->minutes > 0,
 		    &commit->plan) == -1)
 			commit_end(-1, NULL);
@@ -1222,7 +1266,11 @@ commit_snapshot(void)
 			commit_go();
 		break;
 	case COMMIT_VERIFY:
-		if ((r = session_verify(commit->plan, commit->failed)) == 0) {
+		if (commit->boot)
+			boot_ran(session_boot_verify(commit->plan,
+			    commit->failed) == 0);
+		else if ((r = session_verify(commit->plan,
+		    commit->failed)) == 0) {
 			if (commit->minutes > 0)
 				commit_record(NSHD_KEPT);
 			else
@@ -1249,10 +1297,36 @@ commit_ended(int32_t status)
 	int		 r;
 
 	switch (commit->step) {
+	case BOOT_BEGIN:
+		/* if it could not be recorded, it runs */
+		if (status == NSHD_DONE)
+			boot_end(0);
+		else {
+			commit->unrecorded = status != 0;
+			commit_request(BOOT_SAVED, IMSG_SYS_SAVED, NULL, 0);
+		}
+		break;
+	case BOOT_SAVED:
+		if (status != 0) {
+			/* what it got is why */
+			log_text(commit->saved, commit->savedlen);
+			boot_ran(0);
+		} else if (commit->savedbad) {
+			log_warnx("the saved configuration is past %d bytes",
+			    NSHD_PART);
+			boot_ran(0);
+		} else
+			commit_wait(COMMIT_PLAN);
+		break;
+	case BOOT_END:
+		boot_end(commit->ok && status == 0 ? 0 : 1);
+		break;
 	case COMMIT_TEST:
 		session_tested(commit->plan, commit->test, status != 0);
 		if (commit->test + 1 < commit->plan->ntests)
 			commit_test(commit->test + 1);
+		else if (commit->boot)
+			commit_apply(COMMIT_APPLY);
 		else if (session_verdict(commit->plan) == -1)
 			commit_end(-1, NULL);
 		else if (commit->check)
@@ -1412,8 +1486,12 @@ commit_request(int step, uint32_t type, const void *data, size_t len)
 {
 	struct request	*r;
 
-	printed_text(session_find(commit->session) != NULL ?
-	    links[FRONTEND].iev : NULL, IMSG_CTL_OUTPUT, commit->session);
+	if (commit->boot)
+		printed_log();
+	else
+		printed_text(session_find(commit->session) != NULL ?
+		    links[FRONTEND].iev : NULL, IMSG_CTL_OUTPUT,
+		    commit->session);
 	if (links[SYSTEM].down) {
 		commit_end(-1, "% nshd: system is down\n");
 		return;
@@ -1438,6 +1516,16 @@ commit_end(int r, const char *msg)
 	struct nshd_record	 rc = { NSHD_LEFT };
 	struct session		*sp;
 
+	/* the boot's did not go well, and it ends once that is recorded */
+	if (c->boot) {
+		if (msg != NULL)
+			log_text(msg, strlen(msg));
+		if (c->step == BOOT_END)
+			boot_end(1);
+		else
+			boot_ran(0);
+		return;
+	}
 	commit = NULL;
 	/* system told a commit begun ended, if it did not say so itself */
 	if (c->begun && link_compose(&links[SYSTEM], IMSG_SYS_RECORD, 0, &rc,
@@ -1473,6 +1561,109 @@ commit_renew(void)
 	if ((sp = session_find(commit->session)) != NULL)
 		return (session_renew(sp->st));
 	return (0);
+}
+
+/* the boot, a commit of no session's, begun */
+static void
+boot_start(void)
+{
+	if ((commit = calloc(1, sizeof(*commit))) == NULL)
+		fatal(NULL);
+	commit->boot = 1;
+	commit_request(BOOT_BEGIN, IMSG_SYS_BOOT, NULL, 0);
+}
+
+/* system's text for the boot: the saved configuration, or logged */
+static void
+boot_text(struct ibuf *b)
+{
+	char	*p;
+
+	if (commit->step != BOOT_SAVED) {
+		log_text(ibuf_data(b), ibuf_size(b));
+		return;
+	}
+	if (ibuf_size(b) > NSHD_PART - commit->savedlen) {
+		commit->savedbad = 1;
+		return;
+	}
+	if ((p = realloc(commit->saved, commit->savedlen +
+	    ibuf_size(b))) == NULL)
+		fatal("%s", __func__);
+	commit->saved = p;
+	memcpy(commit->saved + commit->savedlen, ibuf_data(b), ibuf_size(b));
+	commit->savedlen += ibuf_size(b);
+}
+
+/* the boot's plan, from the snapshot: what is not the saved, applied */
+static void
+boot_plan(void)
+{
+	struct plan	*p;
+
+	if (session_boot_plan(commit->saved, commit->savedlen,
+	    &commit->plan) == -1)
+		boot_ran(0);
+	else if ((p = commit->plan)->same)
+		boot_ran(1);
+	else if (p->ntests > 0)
+		commit_test(0);
+	else
+		commit_apply(COMMIT_APPLY);
+}
+
+/* the boot ran, ok if it went well: system records how */
+static void
+boot_ran(int ok)
+{
+	struct nshd_result	res;
+
+	if (commit->unrecorded) {
+		boot_end(1);
+		return;
+	}
+	/* first, as a request that cannot be made ends the boot */
+	commit->step = BOOT_END;
+	commit->ok = ok;
+	res.status = !ok;
+	commit_request(BOOT_END, IMSG_SYS_BOOTED, &res, sizeof(res));
+}
+
+/* system lost the boot, as msg says: again, once system starts */
+static void
+boot_lost(const char *msg)
+{
+	log_text(msg, strlen(msg));
+	boot_drop();
+	if (links[SYSTEM].down)
+		boot_end(1);
+}
+
+/* the boot's commit, if any, gone, and what nsh's code printed logged */
+static void
+boot_drop(void)
+{
+	if (commit != NULL) {
+		plan_free(commit->plan);
+		free(commit->saved);
+		free(commit);
+		commit = NULL;
+	}
+	printed_log();
+}
+
+/* the boot done, 0 if it went well: relay told */
+static void
+boot_end(int32_t status)
+{
+	struct nshd_result	res;
+
+	boot_drop();
+	booting = 0;
+	res.status = status;
+	if (imsg_compose_event(iev_relay, IMSG_BOOTED, 0, 0, -1, &res,
+	    sizeof(res)) == -1)
+		fatal("%s", __func__);
 }
 
 /* to session, a line of output if fmt, and the result status */
@@ -1528,6 +1719,10 @@ config_forget_system(void)
 	    "% nshd: system is down\n" :
 	    "% nshd: system started again, and its answer is lost\n";
 
+	if (commit != NULL && commit->boot)
+		boot_lost(lost);
+	else if (booting && links[SYSTEM].down)
+		boot_end(1);
 	while ((r = TAILQ_FIRST(&requests)) != NULL) {
 		if (r->kind != REQ_COMMIT && r->session != 0 &&
 		    session_find(r->session) != NULL)
@@ -1636,6 +1831,14 @@ config_forget_archive(void)
 	if (keep_sent != keep_done)
 		shared_kept(keep_sent, "% nshd: archive is down: the shared "
 		    "candidate is not kept\n");
+}
+
+/* a pipe to system: the boot, if it waits on one */
+static void
+config_ready_system(void)
+{
+	if (booting && commit == NULL)
+		boot_start();
 }
 
 /*

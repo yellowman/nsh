@@ -50,6 +50,7 @@ union frontend_request {
 };
 
 static void	frontend_dispatch_relay(int, short, void *);
+static void	frontend_listen(void);
 static void	frontend_dispatch_config(int, short, void *);
 static void	frontend_forget_config(void);
 static int	frontend_client(struct ctl_conn *, struct imsg *);
@@ -77,12 +78,16 @@ frontend(int debug, int verbose)
 	exit(0);
 }
 
-/* relay's word that frontend may start */
+/*
+ * relay's word that frontend may start, and take clients, at once, or
+ * once the boot is done
+ */
 static void
 frontend_dispatch_relay(int fd, short event, void *arg)
 {
 	struct imsgev		*iev = arg;
 	struct imsg		 imsg;
+	struct nshd_startup	 st;
 	ssize_t			 n;
 
 	if (imsgev_io(iev, event) == -1)
@@ -93,16 +98,27 @@ frontend_dispatch_relay(int fd, short event, void *arg)
 			fatal("imsgbuf_get");
 		if (n == 0)
 			break;
-		/* its socket is fd 5, from parent */
-		if (imsg_get_type(&imsg) != IMSG_STARTUP)
+		if (imsg_get_type(&imsg) == IMSG_STARTUP &&
+		    imsg_get_data(&imsg, &st, sizeof(st)) == 0) {
+			if (!st.boot)
+				frontend_listen();
+		} else if (imsg_get_type(&imsg) == IMSG_LISTEN)
+			frontend_listen();
+		else
 			fatalx("relay sent imsg %u, which it may not",
 			    imsg_get_type(&imsg));
-		if (control_listen(5, frontend_client, frontend_gone,
-		    frontend_written) == -1)
-			fatalx("cannot listen on %s", NSHD_SOCKET);
 		imsg_free(&imsg);
 	}
 	imsg_event_add(iev);
+}
+
+/* clients taken, on its socket, fd 5, from parent */
+static void
+frontend_listen(void)
+{
+	if (control_listen(5, frontend_client, frontend_gone,
+	    frontend_written) == -1)
+		fatalx("cannot listen on %s", NSHD_SOCKET);
 }
 
 /* config's answers, to the session each names, if there */

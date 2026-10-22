@@ -69,6 +69,14 @@
  * does first may end, parent starts system again, which takes it back,
  * CONFIRM_FENCES times at most. While there is one, system stays up
  * though its failures would keep it down, CONFIRM_STARTS times more.
+ *
+ * With -b, as rc starts it, nshd boots: config has system make the
+ * running configuration the saved one, while frontend and the shows
+ * hold their sockets, as relay starts them while the boot is not done,
+ * and relay tells them to take clients, and parent, once config says
+ * it is. rc waits for it: the process rc started exits then, 0 if the
+ * boot went well, else 1. A relay started again before then is told
+ * the boot is not done, as are the children with it.
  */
 
 #include <sys/types.h>
@@ -85,6 +93,7 @@
 #include <fcntl.h>
 #include <grp.h>
 #include <imsg.h>
+#include <paths.h>
 #include <poll.h>
 #include <pwd.h>
 #include <signal.h>
@@ -177,11 +186,15 @@ static int		 failed(struct child *);
 static struct child	*child(enum nshd_proc, int);
 static int		 shows_down(void);
 static void		 users(void);
+static void		 daemon_boot(void);
+static void		 booted(int32_t);
 static __dead void	 parent_shutdown(int, const char *);
 static __dead void	 usage(void);
 
 static char		*argv0;
 static int		 opt_debug, opt_verbose, rwfd, rofd;
+static int		 booting;	/* -b, until config says it is done */
+static int		 boot_fd = -1;	/* to the process rc started, or -1 */
 static uid_t		 check_uid;	/* NSHD_CHECK_USER's */
 static struct imsgev	*iev_relay;	/* to relay, with descriptors */
 static struct imsgbuf	 relay_in;	/* from relay, without */
@@ -195,7 +208,7 @@ usage(void)
 {
 	extern char *__progname;
 
-	fprintf(stderr, "usage: %s [-dv]\n", __progname);
+	fprintf(stderr, "usage: %s [-bdv]\n", __progname);
 	exit(1);
 }
 
@@ -209,10 +222,13 @@ main(int argc, char *argv[])
 
 	argv0 = argv[0] != NULL ? argv[0] : "nshd";
 
-	while ((c = getopt(argc, argv, "ACdFRS:vY")) != -1) {
+	while ((c = getopt(argc, argv, "AbCdFRS:vY")) != -1) {
 		switch (c) {
 		case 'A':
 			role = PROC_ARCHIVE;
+			break;
+		case 'b':
+			booting = 1;
 			break;
 		case 'C':
 			role = PROC_CONFIG;
@@ -248,7 +264,7 @@ main(int argc, char *argv[])
 
 	switch (role) {
 	case PROC_RELAY:
-		relay(opt_debug, opt_verbose);
+		relay(opt_debug, opt_verbose, booting);
 	case PROC_SHOW:
 		showproc(opt_debug, opt_verbose, instance);
 	case PROC_FRONTEND:
@@ -276,7 +292,9 @@ main(int argc, char *argv[])
 	log_init(opt_debug, LOG_DAEMON);
 	log_setverbose(opt_verbose);
 
-	if (!opt_debug && daemon(0, 0) == -1)
+	if (!opt_debug && booting)
+		daemon_boot();
+	else if (!opt_debug && daemon(0, 0) == -1)
 		err(1, "daemon");
 
 	/* kept, and never read, for each frontend and show started */
@@ -494,6 +512,8 @@ start_child(struct child *c, int pipefd, int outfd, int sockfd)
 		argv[argc++] = "-d";
 	if (opt_verbose)
 		argv[argc++] = "-v";
+	if (c->proc == PROC_RELAY && booting)
+		argv[argc++] = "-b";
 	argv[argc++] = NULL;
 
 	execvp(argv0, argv);
@@ -995,6 +1015,7 @@ parent_dispatch(int fd, short event, void *arg)
 	struct imsgev		*iev = arg;
 	struct imsg		 imsg;
 	struct nshd_child	 ch;
+	struct nshd_result	 res;
 	struct child		*c;
 	char			 why[64];
 	ssize_t			 n;
@@ -1018,6 +1039,13 @@ parent_dispatch(int fd, short event, void *arg)
 		}
 		if (n == 0)
 			break;
+		/* the boot done, once */
+		if (imsg_get_type(&imsg) == IMSG_BOOTED && booting &&
+		    imsg_get_data(&imsg, &res, sizeof(res)) == 0) {
+			imsg_free(&imsg);
+			booted(res.status);
+			continue;
+		}
 		if (imsg_get_type(&imsg) != IMSG_BROKEN ||
 		    imsg_get_data(&imsg, &ch, sizeof(ch)) == -1 ||
 		    (c = child(ch.proc, ch.instance)) == NULL ||
@@ -1035,6 +1063,66 @@ parent_dispatch(int fd, short event, void *arg)
 			restart(c, "went wrong, relay says");
 	}
 	imsg_event_add(iev);
+}
+
+/*
+ * daemon(3), but for the process rc started, which waits, on a pipe,
+ * until the boot is done, and exits 0 if it went well, else 1, as it
+ * does if nshd ends before
+ */
+static void
+daemon_boot(void)
+{
+	char	 c;
+	ssize_t	 n;
+	int	 p[2], fd;
+
+	if (pipe2(p, O_CLOEXEC) == -1)
+		err(1, "pipe2");
+	switch (fork()) {
+	case -1:
+		err(1, "fork");
+	case 0:
+		break;
+	default:
+		close(p[1]);
+		while ((n = read(p[0], &c, 1)) == -1 && errno == EINTR)
+			;
+		_exit(n != 1 || c != '0');
+	}
+	close(p[0]);
+	boot_fd = p[1];
+	if (setsid() == -1)
+		err(1, "setsid");
+	if (chdir("/") == -1)
+		err(1, "chdir");
+	if ((fd = open(_PATH_DEVNULL, O_RDWR)) == -1)
+		err(1, "%s", _PATH_DEVNULL);
+	if (dup2(fd, STDIN_FILENO) == -1 || dup2(fd, STDOUT_FILENO) == -1 ||
+	    dup2(fd, STDERR_FILENO) == -1)
+		err(1, "dup2");
+	if (fd > STDERR_FILENO)
+		close(fd);
+}
+
+/* the boot done, as status says it went, and rc told */
+static void
+booted(int32_t status)
+{
+	char	 c = status == 0 ? '0' : '1';
+
+	booting = 0;
+	if (status == 0)
+		log_info("booted");
+	else
+		log_warnx("booted, but the running configuration is not the "
+		    "saved one");
+	if (boot_fd != -1) {
+		if (write(boot_fd, &c, 1) != 1)
+			log_warn("%s", __func__);
+		close(boot_fd);
+		boot_fd = -1;
+	}
 }
 
 static __dead void
@@ -1406,6 +1494,44 @@ printed_text(struct imsgev *iev, uint32_t type, uint32_t id)
 	    lseek(STDOUT_FILENO, 0, SEEK_SET) == -1)
 		fatal("%s", __func__);
 	return (r);
+}
+
+/* text no client asked for, logged a line at a time */
+void
+log_text(const char *text, size_t len)
+{
+	const char	*nl;
+	size_t		 n;
+
+	while (len > 0) {
+		nl = memchr(text, '\n', len);
+		n = nl != NULL ? (size_t)(nl - text) : len;
+		if (n > 0)
+			log_warnx("%.*s", (int)n, text);
+		if (nl != NULL)
+			n++;
+		text += n;
+		len -= n;
+	}
+}
+
+/* what nsh's code printed since, logged, as no client asked for it */
+void
+printed_log(void)
+{
+	char	 buf[NSHD_TEXT];
+	off_t	 off = 0;
+	ssize_t	 n;
+
+	fflush(stdout);
+	clearerr(stdout);
+	while ((n = pread(STDOUT_FILENO, buf, sizeof(buf), off)) > 0) {
+		log_text(buf, n);
+		off += n;
+	}
+	if (ftruncate(STDOUT_FILENO, 0) == -1 ||
+	    lseek(STDOUT_FILENO, 0, SEEK_SET) == -1)
+		fatal("%s", __func__);
 }
 
 /*

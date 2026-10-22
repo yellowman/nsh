@@ -24,6 +24,11 @@
  * cannot read, or whose pipe closes, is reported to parent. parent
  * kills the one reported, and gives relay the pipe of the one it starts
  * in its place, or says it stays down.
+ *
+ * Started with -b, relay tells each child at its start that the boot
+ * is not done, until config says it is (IMSG_BOOTED), which relay tells
+ * parent; then it tells frontend and each show to take clients
+ * (IMSG_LISTEN), and each started after that the boot is done.
  */
 
 #include <sys/types.h>
@@ -63,6 +68,7 @@ static struct peer {
 
 static struct imsgev	*iev_parent;
 static int		 started;	/* every child has been told */
+static int		 booting;	/* the boot is not done */
 
 static void		 relay_dispatch_parent(int, short, void *);
 static void		 relay_dispatch(int, short, void *);
@@ -70,11 +76,13 @@ static void		 relay_broken(struct peer *, const char *, ...)
 			    __attribute__((__format__ (printf, 2, 3)));
 static void		 relay_detach(struct peer *);
 static void		 relay_start(struct peer *);
+static void		 relay_booted(struct imsg *);
 static struct peer	*peer(enum nshd_proc, int);
 
 void
-relay(int debug, int verbose)
+relay(int debug, int verbose, int boot)
 {
+	booting = boot;
 	child_start("relay", debug, verbose);
 	privdrop(PROC_RELAY);
 	if (pledge("stdio recvfd", NULL) == -1)
@@ -160,13 +168,14 @@ relay_dispatch_parent(int fd, short event, void *arg)
 	imsg_event_add(iev);
 }
 
-/* p, told its generation, and that it may start */
+/* p, told its generation, whether the boot is done, and that it may start */
 static void
 relay_start(struct peer *p)
 {
 	struct nshd_startup	 st;
 
 	st.generation = p->generation;
+	st.boot = booting;
 	if (imsg_compose_event(p->iev, IMSG_STARTUP, 0, 0, -1, &st,
 	    sizeof(st)) == -1)
 		fatal("%s: startup", p->name);
@@ -213,6 +222,13 @@ relay_dispatch(int fd, short event, void *arg)
 		if (n == 0)
 			break;
 		type = imsg_get_type(&imsg);
+		/* config's word that the boot is done, once */
+		if (type == IMSG_BOOTED && from->proc == PROC_CONFIG &&
+		    booting && imsg_get_len(&imsg) == sizeof(struct nshd_result)) {
+			relay_booted(&imsg);
+			imsg_free(&imsg);
+			continue;
+		}
 		if (type != IMSG_BROKEN ||
 		    imsg_get_data(&imsg, &ch, sizeof(ch)) == -1 ||
 		    ch.instance != 0 || !joined(from->proc, ch.proc)) {
@@ -227,6 +243,27 @@ relay_dispatch(int fd, short event, void *arg)
 			fatal("%s", __func__);
 	}
 	imsg_event_add(iev);
+}
+
+/* the boot done: parent told how, and frontend and the shows to listen */
+static void
+relay_booted(struct imsg *imsg)
+{
+	struct nshd_result	 res;
+	int			 i;
+
+	if (imsg_get_data(imsg, &res, sizeof(res)) == -1)
+		fatal("%s", __func__);
+	booting = 0;
+	if (imsg_compose_event(iev_parent, IMSG_BOOTED, 0, 0, -1, &res,
+	    sizeof(res)) == -1)
+		fatal("%s", __func__);
+	for (i = 0; i < NCHILD; i++)
+		if ((peers[i].proc == PROC_FRONTEND ||
+		    peers[i].proc == PROC_SHOW) && peers[i].iev != NULL &&
+		    imsg_compose_event(peers[i].iev, IMSG_LISTEN, 0, 0, -1,
+		    NULL, 0) == -1)
+			fatal("%s: listen", peers[i].name);
 }
 
 /* a child gone wrong: no more from it, and parent told */

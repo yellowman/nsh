@@ -163,10 +163,17 @@ struct nshd_child {
 	uint32_t		generation;
 };
 
-/* relay to a child, at each start: its generation */
+/*
+ * relay to a child, at each start: its generation, and whether the
+ * boot is not done, until which frontend and the shows wait for LISTEN
+ */
 struct nshd_startup {
 	uint32_t		generation;
+	int32_t			boot;
 };
+
+/* system's answer to SYS_BOOT, but 0 to boot, or 1, it could not */
+#define NSHD_DONE	2	/* this boot of the host's is done already */
 
 /* a client's hello, with who it is, from frontend to config */
 struct nshd_peer {
@@ -245,7 +252,13 @@ enum nshd_imsg {
 	IMSG_ARC_LOADED,	/* archive: nshd_result */
 
 	/* config to system, answered as SYS_SHOW is */
-	IMSG_SYS_SAVED		/* the saved configuration, as text */
+	IMSG_SYS_SAVED,		/* the saved configuration, as text */
+	IMSG_SYS_BOOT,		/* the boot begun, or done already */
+	IMSG_SYS_BOOTED,	/* nshd_result: the boot ran, and how */
+
+	/* the boot's end, config to relay and relay to parent, and after */
+	IMSG_BOOTED,		/* nshd_result: how it went */
+	IMSG_LISTEN		/* relay to frontend and each show: take clients */
 };
 
 struct imsgev {
@@ -286,6 +299,8 @@ struct facts_out;
 void		 capture_stdout(void);
 int		 printed(struct facts_out *);
 int		 printed_text(struct imsgev *, uint32_t, uint32_t);
+void		 printed_log(void);
+void		 log_text(const char *, size_t);
 void		 child_start(const char *, int, int);
 void		 privdrop(enum nshd_proc);
 int		 proc_user(enum nshd_proc, uid_t *, gid_t *);
@@ -316,7 +331,7 @@ int		 confirm_clear(void);
 void		 confirm_free(struct confirm *);
 
 /* each process but parent */
-__dead void	 relay(int, int);
+__dead void	 relay(int, int, int);
 __dead void	 showproc(int, int, int);
 __dead void	 frontend(int, int);
 __dead void	 configproc(int, int);

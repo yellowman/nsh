@@ -94,6 +94,8 @@ int			 session_verdict(struct plan *);
 int			 session_verify(struct plan *, int);
 int			 session_verify_back(struct plan *);
 void			 plan_free(struct plan *);
+int			 session_boot_plan(char *, size_t, struct plan **);
+int			 session_boot_verify(struct plan *, int);
 int			 session_renew(struct session_state *);
 int			 session_rollback(struct session_state *, char *,
 			    size_t, int);

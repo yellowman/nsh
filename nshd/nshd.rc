@@ -1,6 +1,7 @@
 #!/bin/ksh
 
 daemon="/usr/local/sbin/nshd"
+daemon_flags="-b"
 
 . /etc/rc.d/rc.subr
 

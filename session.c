@@ -408,6 +408,58 @@ session_verify_back(struct plan *p)
 	return r;
 }
 
+/*
+ * The boot's plan, as nsh -i's commit_boot() makes it: the running
+ * configuration, the last snapshot's, made to read as text, the saved
+ * configuration, all of it that takes. What check finds is said, and
+ * the daemons' tests of rules are the plan's, but neither keeps it from
+ * running: -1 if it could not be made, said why
+ */
+int
+session_boot_plan(char *text, size_t len, struct plan **pp)
+{
+	struct plan *p;
+
+	*pp = NULL;
+	if ((p = calloc(1, sizeof(*p))) == NULL) {
+		printf("%% session_boot_plan: %s\n", strerror(errno));
+		return -1;
+	}
+	if ((p->want = conftree_mem(text, len, "the saved configuration",
+	    conf_mode, conf_ordered)) == NULL ||
+	    (p->was = running_tree()) == NULL) {
+		plan_free(p);
+		return -1;
+	}
+	p->bad = commit_problems(p->was, p->want);
+	p->ntests = commit_deferred(&p->tests);
+	p->same = conftree_compare(NULL, p->was, p->want) == 0;
+	if (!p->same && plan_script(p, p->was, p->want) == -1) {
+		plan_free(p);
+		return -1;
+	}
+	*pp = p;
+	return 0;
+}
+
+/*
+ * Does the running configuration, the last snapshot's, read as the
+ * boot's, and no line of its script failed? 0 if so, else 1, what
+ * differs said, or -1 if it could not be read
+ */
+int
+session_boot_verify(struct plan *p, int failed)
+{
+	struct cnode *now;
+	int r;
+
+	if ((now = running_tree()) == NULL)
+		return -1;
+	r = commit_booted(now, p->want) == -1 || failed;
+	conftree_free(now);
+	return r;
+}
+
 void
 plan_free(struct plan *p)
 {

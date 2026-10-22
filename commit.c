@@ -381,6 +381,21 @@ commit_back(struct cnode *back, struct cnode *was)
 }
 
 /*
+ * Does the running configuration, now, read as the saved one, want, as
+ * nshd's boot makes it? 0 if so, else -1, what differs said
+ */
+int
+commit_booted(struct cnode *now, struct cnode *want)
+{
+	if (differ(NULL, now, want) == 0)
+		return 0;
+	printf("%% The running configuration differs from the saved "
+	    "configuration\n");
+	differ(stdout, now, want);
+	return -1;
+}
+
+/*
  * Does configuration text now read as text want, as commit_took() reads
  * them? 1 if it does, 0 if not, -1 if either could not be read, said why
  */
@@ -1730,6 +1745,62 @@ saved_write(void)
 		return 0;
 	printf("%% Saving configuration\n");
 	return 1;
+}
+
+/*
+ * The first time nshd boots, with no SAVED, nsh's own NSHRC made it, as
+ * saved_write() makes one, so nothing in it is lost: -1 if it could not
+ * be, said why
+ */
+int
+saved_first(void)
+{
+	char tmp[] = SAVED ".XXXXXXXXXX", buf[BUFSIZ];
+	FILE *in, *out;
+	size_t n;
+	int fd, ok;
+
+	if (access(SAVED, F_OK) == 0)
+		return 0;
+	if (errno != ENOENT) {
+		printf("%% %s: %s\n", SAVED, strerror(errno));
+		return -1;
+	}
+	if ((in = fopen(NSHRC, "r")) == NULL) {
+		if (errno == ENOENT)
+			return 0;
+		printf("%% %s: %s\n", NSHRC, strerror(errno));
+		return -1;
+	}
+	if ((mkdir(NSHDB, 0700) == -1 && errno != EEXIST) ||
+	    (fd = mkstemp(tmp)) == -1) {
+		printf("%% %s: %s\n", tmp, strerror(errno));
+		fclose(in);
+		return -1;
+	}
+	if ((out = fdopen(fd, "w")) == NULL) {
+		printf("%% %s: %s\n", tmp, strerror(errno));
+		close(fd);
+		unlink(tmp);
+		fclose(in);
+		return -1;
+	}
+	while ((n = fread(buf, 1, sizeof(buf), in)) > 0)
+		if (fwrite(buf, 1, n, out) != n)
+			break;
+	ok = !ferror(in) && fflush(out) != EOF && fsync(fd) == 0;
+	fclose(in);
+	if (fclose(out) == EOF)
+		ok = 0;
+	if (!ok || rename(tmp, SAVED) == -1) {
+		printf("%% %s: %s\n", SAVED, strerror(errno));
+		unlink(tmp);
+		return -1;
+	}
+	if (syncdir(NSHDB) == -1)
+		return -1;
+	printf("%% %s taken as the saved configuration\n", NSHRC);
+	return 0;
 }
 
 /* nshd's saved configuration, SAVED, to out: -1 if none, said why */

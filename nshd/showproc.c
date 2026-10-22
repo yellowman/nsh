@@ -65,6 +65,7 @@ struct answer {
 static struct imsgev	*iev_relay;
 
 static void	show_dispatch_relay(int, short, void *);
+static void	show_listen(void);
 static int	show_client(struct ctl_conn *, struct imsg *);
 static int	show_answer(uint32_t, int32_t, const char *);
 static int	show_facts(struct ctl_conn *, char *);
@@ -95,9 +96,10 @@ showproc(int debug, int verbose, int instance)
 static void
 show_dispatch_relay(int fd, short event, void *arg)
 {
-	struct imsgev	*iev = arg;
-	struct imsg	 imsg;
-	ssize_t		 n;
+	struct imsgev		*iev = arg;
+	struct imsg		 imsg;
+	struct nshd_startup	 st;
+	ssize_t			 n;
 
 	if (imsgev_io(iev, event) == -1)
 		exit(0);
@@ -108,11 +110,15 @@ show_dispatch_relay(int fd, short event, void *arg)
 		if (n == 0)
 			break;
 		switch (imsg_get_type(&imsg)) {
-		/* its socket is fd 4, from parent */
+		/* clients taken at once, or once the boot is done */
 		case IMSG_STARTUP:
-			if (control_listen(4, show_client, show_gone,
-			    show_more) == -1)
-				fatalx("cannot listen on %s", NSHD_RO_SOCKET);
+			if (imsg_get_data(&imsg, &st, sizeof(st)) == -1)
+				fatalx("relay sent a startup show cannot read");
+			if (!st.boot)
+				show_listen();
+			break;
+		case IMSG_LISTEN:
+			show_listen();
 			break;
 		default:
 			log_debug("%s: unexpected imsg %u", __func__,
@@ -121,6 +127,14 @@ show_dispatch_relay(int fd, short event, void *arg)
 		imsg_free(&imsg);
 	}
 	imsg_event_add(iev);
+}
+
+/* clients taken, on its socket, fd 4, from parent */
+static void
+show_listen(void)
+{
+	if (control_listen(4, show_client, show_gone, show_more) == -1)
+		fatalx("cannot listen on %s", NSHD_RO_SOCKET);
 }
 
 /* a client's request, answered; -1 closes it */

@@ -84,12 +84,27 @@
  * starts, it takes back what a system before it did not. A BEGIN is
  * refused if what runs is not what the commit was planned from, as a
  * commit taken back meanwhile makes it.
+ *
+ * The boot, which config runs as nshd -b starts, begins with BOOT: the
+ * first time, nsh's own NSHRC is taken as the saved configuration; then
+ * the boot record, in NSHDB, says the boot of the host it is for, by
+ * kern.boottime, and that it runs, and carp is demoted, and the record
+ * says so. A system started in the boot finds the record, and demotes
+ * carp no more; a boot of the host done already is said, and is not run
+ * again. config has the saved configuration (SAVED), a snapshot, the
+ * tests, the script run (APPLY) and a snapshot, then BOOTED says if what
+ * runs is the saved configuration: if it is, the record says the boot is
+ * done, carp is promoted if it was demoted for it, and a record of a
+ * commit not confirmed goes; if not, it says the boot failed, and carp
+ * stays demoted until a commit saves.
  */
 
 #include <sys/types.h>
 #include <sys/queue.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/sysctl.h>
+#include <sys/time.h>
 #include <sys/wait.h>
 #include <net/if.h>
 #include <netinet/in.h>
@@ -126,6 +141,7 @@
 #define SYS_WINDOW	16	/* messages a stream sends its client unread */
 #define COMMIT_RECORD	NSHDB "/commit"
 #define RECORD_HEAD	128	/* the record's first line, at most */
+#define BOOT_RECORD	NSHDB "/boot"
 
 #if NSHD_CLEARS != MAXCLEARS || NSHD_ROLLBACKS != ROLLBACKS
 #error "nshd.h's sizes are not nsh's"
@@ -233,6 +249,15 @@ struct record {
 	char			*buf;		/* what was read, or NULL */
 };
 
+/* the boot record: the boot of the host it is for, how it went, carp */
+enum { BOOT_NONE, BOOT_RUNS, BOOT_FAILED, BOOT_DONE };
+static const char *boot_states[] = { "none", "runs", "failed", "done" };
+struct boot {
+	int			 state;
+	long long		 when;		/* kern.boottime */
+	int			 demoted;	/* carp demoted, for it */
+};
+
 static struct imsgev	*iev_relay;
 static uint8_t		 units[FACTS_UNIT];	/* not yet sent */
 static size_t		 nunits;
@@ -284,7 +309,14 @@ static void	system_begin(uint32_t, struct nshd_begin *);
 static void	system_apply(uint32_t, struct nshd_apply *);
 static void	system_save(uint32_t, struct nshd_save *);
 static void	system_saved(int);
+static int	system_unconfirm(void);
 static void	system_back(uint32_t, int);
+static void	system_boot(uint32_t);
+static void	system_booted(uint32_t, int);
+static void	boot_saved(void);
+static int	boot_read(struct boot *);
+static int	boot_write(struct boot *);
+static long long boot_time(void);
 static int	system_arm(uint32_t, int, int);
 static void	system_parent(struct imsg *);
 static void	system_unarm(void);
@@ -296,8 +328,6 @@ static void	system_attempted(int);
 static void	system_taken(struct confirm *, const char *);
 static void	system_failed(struct confirm *);
 static char	*system_running(size_t *);
-static void	system_log(const char *, size_t);
-static void	system_logged(void);
 static void	system_rollback(uint32_t, int);
 static void	system_test(uint32_t, char *);
 static void	system_printed(uint32_t, int32_t);
@@ -455,7 +485,10 @@ system_whole(uint32_t type, const void *data, size_t len)
 		return (0);
 	case IMSG_SYS_ROLLBACK_LIST:
 	case IMSG_SYS_SAVED:
+	case IMSG_SYS_BOOT:
 		return (len == 0 ? 0 : -1);
+	case IMSG_SYS_BOOTED:
+		return (len == sizeof(struct nshd_result) ? 0 : -1);
 	case IMSG_SYS_RECORD:
 		if (len != sizeof(rc))
 			return (-1);
@@ -523,6 +556,7 @@ system_request(uint32_t type, uint32_t id, const void *data, size_t len)
 	struct nshd_save	 sv;
 	struct nshd_rollback	 rb;
 	struct nshd_test	 t;
+	struct nshd_result	 res;
 	struct stream		*s;
 
 	switch (type) {
@@ -571,6 +605,13 @@ system_request(uint32_t type, uint32_t id, const void *data, size_t len)
 		break;
 	case IMSG_SYS_SAVED:
 		system_rollback(id, -2);
+		break;
+	case IMSG_SYS_BOOT:
+		system_boot(id);
+		break;
+	case IMSG_SYS_BOOTED:
+		memcpy(&res, data, sizeof(res));
+		system_booted(id, res.status == 0);
 		break;
 	case IMSG_SYS_TEST:
 		memcpy(&t, data, sizeof(t));
@@ -1298,7 +1339,7 @@ system_recover(struct confirm *cf)
 		    strerror(errno));
 	else
 		system_done();
-	system_logged();
+	printed_log();
 	j = system_job_new(0, JOB_RECOVER);
 	j->back = cf->back;
 	j->backlen = cf->backlen;
@@ -1354,7 +1395,7 @@ system_taken(struct confirm *cf, const char *how)
 		carplock(-128);
 	system_done();
 	log_warnx("commit not confirmed: %s", how);
-	system_logged();
+	printed_log();
 }
 
 /* cf not taken back, and its attempts done: carp stays demoted */
@@ -1397,44 +1438,6 @@ system_running(size_t *len)
 	return (buf);
 }
 
-/* text no client asked for, logged a line at a time */
-static void
-system_log(const char *text, size_t len)
-{
-	const char	*nl;
-	size_t		 n;
-
-	while (len > 0) {
-		nl = memchr(text, '\n', len);
-		n = nl != NULL ? (size_t)(nl - text) : len;
-		if (n > 0)
-			log_warnx("%.*s", (int)n, text);
-		if (nl != NULL)
-			n++;
-		text += n;
-		len -= n;
-	}
-}
-
-/* what nsh's code printed since, logged, as no client asked for it */
-static void
-system_logged(void)
-{
-	char	 buf[NSHD_TEXT];
-	off_t	 off = 0;
-	ssize_t	 n;
-
-	fflush(stdout);
-	clearerr(stdout);
-	while ((n = pread(STDOUT_FILENO, buf, sizeof(buf), off)) > 0) {
-		system_log(buf, n);
-		off += n;
-	}
-	if (ftruncate(STDOUT_FILENO, 0) == -1 ||
-	    lseek(STDOUT_FILENO, 0, SEEK_SET) == -1)
-		fatal("%s", __func__);
-}
-
 /* the script, the part sent, in a job */
 static void
 system_apply(uint32_t id, struct nshd_apply *a)
@@ -1451,10 +1454,26 @@ static void
 system_save(uint32_t id, struct nshd_save *sv)
 {
 	struct job	*j = system_job_new(id, JOB_SAVE);
+
+	/* a commit not confirmed is, first */
+	if (system_unconfirm())
+		printf("%% Commit confirmed\n");
+
+	user_name(sv->uid, j->who, sizeof(j->who));
+	strlcpy(j->comment, sv->comment, sizeof(j->comment));
+	system_job(j);
+}
+
+/*
+ * The record of a commit not confirmed gone, or one that is not one,
+ * and carp promoted if it was demoted for it: 1 if one went
+ */
+static int
+system_unconfirm(void)
+{
 	struct confirm	 cf;
 	int		 r;
 
-	/* a commit not confirmed is, first; a record that is not one goes */
 	if ((r = confirm_read(&cf, 0)) == -1 && errno != EFTYPE)
 		printf("%% nshd: the record of a commit not confirmed: %s\n",
 		    strerror(errno));
@@ -1466,13 +1485,10 @@ system_save(uint32_t id, struct nshd_save *sv)
 			if (r == 0 && cf.demoted)
 				carplock(-128);
 			system_done();
-			printf("%% Commit confirmed\n");
+			return (1);
 		}
 	}
-
-	user_name(sv->uid, j->who, sizeof(j->who));
-	strlcpy(j->comment, sv->comment, sizeof(j->comment));
-	system_job(j);
+	return (0);
 }
 
 /*
@@ -1536,9 +1552,10 @@ system_saved(int ok)
 	struct record	 rec;
 
 	committing = 0;
-	if (ok)
+	if (ok) {
 		record_clear();
-	else if (record_read(&rec) == 0) {
+		boot_saved();
+	} else if (record_read(&rec) == 0) {
 		if (rec.state == RECORD_APPLYING) {
 			rec.state = RECORD_UNSAVED;
 			record_write(&rec);
@@ -1576,6 +1593,95 @@ system_back(uint32_t id, int how)
 	committing = 0;
 	system_printed(id, status);
 	system_confirm(-1, 0, NULL);
+}
+
+/*
+ * The boot: the first time, nsh's own NSHRC taken as the saved
+ * configuration; then the boot record made, and carp demoted for it,
+ * unless a system before this did. The answer 0, to boot, NSHD_DONE if
+ * this boot of the host is done already, else 1
+ */
+static void
+system_boot(uint32_t id)
+{
+	struct boot	 b;
+	int		 status = 1;
+
+	saved_first();
+	if (boot_read(&b) == -1)
+		goto done;
+	if (b.state == BOOT_DONE) {
+		status = NSHD_DONE;
+		goto done;
+	}
+	if (b.state == BOOT_NONE) {
+		b.state = BOOT_RUNS;
+		b.when = boot_time();
+		/* recorded first: carp demoted, and not recorded, stays so */
+		if (boot_write(&b) == -1)
+			goto done;
+		if (carplock(128) == 1) {
+			b.demoted = 1;
+			boot_write(&b);
+		}
+	}
+	status = 0;
+ done:
+	system_printed(id, status);
+}
+
+/*
+ * The boot ran, ok if what runs is the saved configuration: then the
+ * record says it is done, carp is promoted if it was demoted for it,
+ * and a record of a commit not confirmed goes, as what it would go back
+ * to runs; if not, the record says it failed, and carp stays demoted
+ * until a commit saves
+ */
+static void
+system_booted(uint32_t id, int ok)
+{
+	struct boot	 b;
+	int		 demoted, status = 1;
+
+	if (boot_read(&b) == -1)
+		goto done;
+	if (b.state != BOOT_RUNS && b.state != BOOT_FAILED) {
+		printf("%% nshd: no boot runs\n");
+		goto done;
+	}
+	demoted = b.demoted;
+	if (ok) {
+		b.state = BOOT_DONE;
+		b.demoted = 0;
+	} else
+		b.state = BOOT_FAILED;
+	if (boot_write(&b) == -1)
+		goto done;
+	if (ok && demoted)
+		carplock(-128);
+	if (ok && system_unconfirm()) {
+		printf("%% nshd: the commit not confirmed went with the boot\n");
+		system_confirm(-1, 0, NULL);
+	}
+	status = 0;
+ done:
+	system_printed(id, status);
+}
+
+/* a boot that failed done, as a commit saved, carp promoted if it demoted */
+static void
+boot_saved(void)
+{
+	struct boot	 b;
+	int		 demoted;
+
+	if (boot_read(&b) == -1 || b.state != BOOT_FAILED)
+		return;
+	demoted = b.demoted;
+	b.state = BOOT_DONE;
+	b.demoted = 0;
+	if (boot_write(&b) == 0 && demoted)
+		carplock(-128);
 }
 
 /*
@@ -1667,7 +1773,7 @@ system_job(struct job *j)
 	return;
  fail:
 	if (j->kind == JOB_RECOVER) {
-		system_logged();
+		printed_log();
 		system_attempted(0);
 	} else
 		system_printed(j->id, -1);
@@ -1743,7 +1849,7 @@ system_job_read(int fd, short event, void *arg)
 	}
 	if (n > 0) {
 		if (job->kind == JOB_RECOVER)
-			system_log(buf, n);
+			log_text(buf, n);
 		else if (imsg_text(config.iev, IMSG_SYS_TEXT, job->id, buf,
 		    n) == -1)
 			fatal("%s", __func__);
@@ -1800,7 +1906,7 @@ system_job_done(void)
 	else if (WIFEXITED(j->status) && WEXITSTATUS(j->status) <= 1)
 		status = WEXITSTATUS(j->status);
 	if (j->kind == JOB_RECOVER) {
-		system_logged();
+		printed_log();
 		system_attempted(status == 0);
 	} else {
 		if (j->kind == JOB_SAVE)
@@ -1949,6 +2055,86 @@ record_free(struct record *rec)
 {
 	free(rec->buf);
 	rec->buf = NULL;
+}
+
+/*
+ * The boot record, as b: none if there is none, or it is one of another
+ * boot of the host, whose demotion went with it, or it is not one,
+ * said; -1, said, if it could not be read
+ */
+static int
+boot_read(struct boot *b)
+{
+	char	 buf[64], state[16];
+	ssize_t	 n;
+	int	 fd, i;
+
+	memset(b, 0, sizeof(*b));
+	if ((fd = open(BOOT_RECORD, O_RDONLY)) == -1) {
+		if (errno == ENOENT)
+			return (0);
+		printf("%% nshd: %s: %s\n", BOOT_RECORD, strerror(errno));
+		return (-1);
+	}
+	n = read(fd, buf, sizeof(buf) - 1);
+	close(fd);
+	buf[n > 0 ? n : 0] = '\0';
+	if (sscanf(buf, "%15s %lld %d", state, &b->when, &b->demoted) == 3 &&
+	    (b->demoted == 0 || b->demoted == 1))
+		for (i = BOOT_RUNS; i <= BOOT_DONE; i++)
+			if (strcmp(state, boot_states[i]) == 0)
+				b->state = i;
+	if (b->state == BOOT_NONE)
+		printf("%% nshd: %s is not a boot record\n", BOOT_RECORD);
+	if (b->state == BOOT_NONE || b->when != boot_time())
+		memset(b, 0, sizeof(*b));
+	return (0);
+}
+
+/* b as the boot record, whole or not at all: -1, said, if not */
+static int
+boot_write(struct boot *b)
+{
+	char	 tmp[] = BOOT_RECORD ".XXXXXXXXXX", rec[64];
+	int	 fd, len;
+
+	if (mkdir(NSHDB, 0700) == -1 && errno != EEXIST) {
+		printf("%% nshd: mkdir %s: %s\n", NSHDB, strerror(errno));
+		return (-1);
+	}
+	if ((fd = mkstemp(tmp)) == -1) {
+		printf("%% nshd: %s: %s\n", tmp, strerror(errno));
+		return (-1);
+	}
+	len = snprintf(rec, sizeof(rec), "%s %lld %d\n",
+	    boot_states[b->state], b->when, b->demoted);
+	if (write(fd, rec, len) != len || fsync(fd) == -1) {
+		printf("%% nshd: %s: %s\n", tmp, strerror(errno));
+		close(fd);
+		unlink(tmp);
+		return (-1);
+	}
+	if (close(fd) == -1 || rename(tmp, BOOT_RECORD) == -1) {
+		printf("%% nshd: %s: %s\n", tmp, strerror(errno));
+		unlink(tmp);
+		return (-1);
+	}
+	return (db_sync());
+}
+
+/* when the host booted, kern.boottime, which tells its boots apart */
+static long long
+boot_time(void)
+{
+	int		 mib[2] = { CTL_KERN, KERN_BOOTTIME };
+	struct timeval	 tv;
+	size_t		 len = sizeof(tv);
+
+	if (sysctl(mib, 2, &tv, &len, NULL, 0) == -1) {
+		printf("%% nshd: kern.boottime: %s\n", strerror(errno));
+		return (0);
+	}
+	return (tv.tv_sec);
 }
 
 /* who made rec and when, as "by NAME at WHEN" */
