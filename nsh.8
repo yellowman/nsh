@@ -364,9 +364,12 @@ run in
 .Cm show candidate-config
 and
 .Cm show diff-config
-ask nshd, which commits one session's candidate at a time;
+ask nshd, which commits one session's candidate at a time, and keeps
+the deadline of a
 .Cm commit confirmed
-is refused there.
+itself, whether or not
+.Nm
+still runs.
 Those not in the group nshadmin, which may use nshd's read-write
 socket, are refused.
 An interrupt while nshd answers leaves configure private, and the
@@ -2094,7 +2097,10 @@ comes again within
 10 if not given and at most 1440, the running configuration goes back
 to how it was before the first commit not confirmed, which is logged
 with
-.Xr syslog 3 .
+.Xr syslog 3 ;
+where
+.Xr nshd 8
+runs, it does so, and demotes carp while it does.
 A commit before then confirms it, and saves it; so does
 .Cm commit
 outside

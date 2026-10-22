@@ -382,14 +382,15 @@ nshd_exit(void)
 	return (nshd_request(IMSG_CTL_EXIT, NULL, 0, 0));
 }
 
-/* commit, or commit check, with the comment */
+/* commit, commit check, or commit confirmed for minutes, with the comment */
 int
-nshd_commit(int check, char *comment)
+nshd_commit(int check, int minutes, char *comment)
 {
 	struct nshd_commit	 c;
 
 	memset(&c, 0, sizeof(c));
 	c.check = check;
+	c.minutes = minutes;
 	strlcpy(c.comment, comment, sizeof(c.comment));
 	return (nshd_request(IMSG_CTL_COMMIT, &c, sizeof(c), 0));
 }

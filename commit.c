@@ -236,18 +236,6 @@ commit(int argc, char **argv, ...)
 		    checking ? "check" : "confirmed");
 		return -1;
 	}
-	/* configure private, nshd's */
-	if (nshd_private) {
-		if (argc > 1 && !checking) {
-			printf("%% commit confirmed is not through nshd yet\n");
-			return -1;
-		}
-		return nshd_commit(checking, comment);
-	}
-	if (checking && !candidate) {
-		printf("%% commit check requires configure private\n");
-		return -1;
-	}
 	if (argc > 1 && !checking) {
 		minutes = CONFIRMMIN;
 		if (argc == 3 && (minutes = strtonum(argv[2], 1, CONFIRMMAX,
@@ -255,11 +243,17 @@ commit(int argc, char **argv, ...)
 			printf("%% minutes %s is %s\n", argv[2], errstr);
 			return -1;
 		}
-		if (!candidate) {
-			printf("%% commit confirmed requires configure "
-			    "private\n");
-			return -1;
-		}
+	}
+	/* configure private, nshd's */
+	if (nshd_private)
+		return nshd_commit(checking, minutes, comment);
+	if (checking && !candidate) {
+		printf("%% commit check requires configure private\n");
+		return -1;
+	}
+	if (minutes > 0 && !candidate) {
+		printf("%% commit confirmed requires configure private\n");
+		return -1;
 	}
 	/* one not confirmed in time goes back first */
 	commit_expire();

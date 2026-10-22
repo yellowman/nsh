@@ -84,7 +84,7 @@ nshd_exit(void)
 }
 
 int
-nshd_commit(int check, char *comment)
+nshd_commit(int check, int minutes, char *comment)
 {
 	return -1;
 }

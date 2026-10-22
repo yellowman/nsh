@@ -533,7 +533,7 @@ int nshd_show(char *);
 int nshd_configure(void);
 int nshd_line(char *);
 int nshd_exit(void);
-int nshd_commit(int, char *);
+int nshd_commit(int, int, char *);
 int nshd_rollback(int);
 int nshd_cshow(char *);
 
