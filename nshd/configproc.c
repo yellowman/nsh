@@ -75,6 +75,12 @@
  * its commit ends, after which the candidate is what runs again. commit
  * there saves what runs; rollback has nothing to roll back.
  *
+ * nsh -c's configuration comes a part at a time, each answered, outside
+ * configure; after the last, on a snapshot, config loads it into a
+ * candidate of the session's own, as cmdrc() reads it, what changes
+ * the candidate alone, and commits it, all of it or none, and the
+ * candidate goes.
+ *
  * Told at its start that the boot is not done, config boots, as nsh -i
  * does, once there is a pipe to system: system says whether this boot
  * of the host's is done already (BOOT), and if not, gives the saved
@@ -118,7 +124,7 @@
 
 /* what a session waits on a snapshot for */
 enum { WAIT_NONE, WAIT_CONFIGURE, WAIT_CANDIDATE, WAIT_DIFF, WAIT_RESET,
-    WAIT_TERMINAL };
+    WAIT_TERMINAL, WAIT_LOAD };
 
 struct session {
 	TAILQ_ENTRY(session)	 entry;
@@ -130,6 +136,9 @@ struct session {
 	int			 how;	/* the configure it is in, or 0 */
 	int			 waits;
 	char			 line[NSHD_LINE];	/* configure terminal's */
+	char			*load;	/* nsh -c's, as it comes */
+	size_t			 loadlen;
+	char			 loaded[NSHD_COMMENT];	/* its comment */
 	uint32_t		 keep;	/* the keeping its answer waits on */
 	struct nshd_context	 held;	/* that answer: its context, */
 	int			 heldmode;	/* if it gives one, */
@@ -183,6 +192,7 @@ struct commit {
 	int			 save;		/* outside configure: a save */
 	int			 terminal;	/* configure terminal's line, */
 	int			 line;		/* and how the line ended */
+	int			 load;		/* nsh -c's */
 	int			 how;		/* it ended, NSHD_BACK or KEPT */
 	int			 begun;		/* and not ended, to system */
 	int			 shared;	/* of the shared candidate */
@@ -254,6 +264,8 @@ static void		 config_op(uint32_t, struct nshd_op *);
 static struct session	*config_private(uint32_t);
 static int		 config_in(struct session *);
 static int		 config_terminal(struct session *);
+static void		 config_load(uint32_t, struct nshd_load *);
+static int		 config_loaded(struct session *);
 static int		 config_enter(struct session *);
 static void		 config_left(struct session *);
 static void		 shared_hold(struct session *);
@@ -382,6 +394,7 @@ config_dispatch_frontend(int fd, short event, void *arg)
 	struct nshd_rollback	 rb;
 	struct nshd_enable	 en;
 	struct nshd_op		 op;
+	struct nshd_load	 ld;
 	struct session		*sp;
 	uint32_t		 id, type;
 	ssize_t			 n;
@@ -468,6 +481,14 @@ config_dispatch_frontend(int fd, short event, void *arg)
 			    memchr(op.line, '\0', sizeof(op.line)) == NULL)
 				goto bad;
 			config_op(id, &op);
+			break;
+		case IMSG_CTL_LOAD:
+			if (imsg_get_data(&imsg, &ld, sizeof(ld)) == -1 ||
+			    (ld.last != 0 && ld.last != 1) || ld.len < 0 ||
+			    ld.len > NSHD_TEXT || memchr(ld.comment, '\0',
+			    sizeof(ld.comment)) == NULL)
+				goto bad;
+			config_load(id, &ld);
 			break;
 		case IMSG_CTL_CLOSE:
 			if ((sp = session_find(id)) != NULL)
@@ -1026,6 +1047,94 @@ config_terminal(struct session *sp)
 	return (1);
 }
 
+/*
+ * nsh -c's configuration, a part, kept, answered; the last, once a
+ * snapshot is in, loaded and committed
+ */
+static void
+config_load(uint32_t session, struct nshd_load *l)
+{
+	struct session	*sp;
+	char		*p;
+
+	if ((sp = session_find(session)) == NULL) {
+		config_answer(session, 1, "%% nshd: hello first\n");
+		return;
+	}
+	if (config_in(sp)) {
+		config_answer(session, 1, "%% nshd: a configuration is loaded "
+		    "outside configure\n");
+		return;
+	}
+	if ((size_t)l->len > NSHD_PART - sp->loadlen) {
+		free(sp->load);
+		sp->load = NULL;
+		sp->loadlen = 0;
+		config_answer(session, 1, "%% nshd: a configuration past %d "
+		    "bytes\n", NSHD_PART);
+		return;
+	}
+	if (l->len > 0) {
+		if ((p = realloc(sp->load, sp->loadlen + l->len)) == NULL)
+			fatal("%s", __func__);
+		memcpy(p + sp->loadlen, l->text, l->len);
+		sp->load = p;
+		sp->loadlen += l->len;
+	}
+	if (!l->last) {
+		config_answer(session, 0, NULL);
+		return;
+	}
+	strlcpy(sp->loaded, l->comment, sizeof(sp->loaded));
+	config_wait(sp, WAIT_LOAD);
+}
+
+/*
+ * nsh -c's configuration, on a candidate of its own as what runs now:
+ * committed, if it changed it, all of it or none, and answered once the
+ * commit ends; 1 if it is committed, else as a handler returns
+ */
+static int
+config_loaded(struct session *sp)
+{
+	int	 r = -1;
+
+	if (commit != NULL)
+		printf("%% Refused: uid %u commits now\n",
+		    (unsigned int)commit->uid);
+	else if (exclusive != NULL)
+		printf("%% Refused: uid %u has configure exclusive\n",
+		    (unsigned int)exclusive->uid);
+	else {
+		if (sp->st == NULL && (sp->st = session_new()) == NULL)
+			fatal("%s", __func__);
+		if ((r = session_configure(sp->st, NULL)) == 0 &&
+		    (r = session_load(sp->st, sp->load, sp->loadlen)) == 0 &&
+		    session_changed(sp->st)) {
+			if ((commit = calloc(1, sizeof(*commit))) == NULL)
+				fatal(NULL);
+			commit->session = sp->id;
+			commit->uid = sp->uid;
+			commit->load = 1;
+			strlcpy(commit->comment, sp->loaded,
+			    sizeof(commit->comment));
+			/* planned from the snapshot it was loaded on */
+			commit->step = COMMIT_PLAN;
+			commit->waits = 1;
+			r = 1;
+		} else if (r == -1)
+			printf("%% Nothing is committed\n");
+	}
+	free(sp->load);
+	sp->load = NULL;
+	sp->loadlen = 0;
+	if (r != 1) {
+		session_free(sp->st);
+		sp->st = NULL;
+	}
+	return (r);
+}
+
 /* whether sp is in configure */
 static int
 config_in(struct session *sp)
@@ -1430,6 +1539,13 @@ config_snapshot_done(int32_t status)
 			}
 			mode = 1;
 			break;
+		case WAIT_LOAD:
+			if ((r = config_loaded(sp)) == 1) {
+				sp->waits = WAIT_NONE;
+				continue;
+			}
+			mode = 1;
+			break;
 		default:
 			continue;
 		}
@@ -1619,7 +1735,7 @@ commit_ended(int32_t status)
 	case COMMIT_SAVE:
 		/* taken: the candidate starts again, saved or not */
 		r = status == 0 ? 0 : -1;
-		if (!commit->save && commit_renew() == -1)
+		if (!commit->save && !commit->load && commit_renew() == -1)
 			r = -1;
 		commit_end(r, NULL);
 		break;
@@ -1812,6 +1928,11 @@ commit_end(int r, const char *msg)
 		r = -1;
 	if (c->terminal && c->line == -1)
 		r = -1;
+	/* nsh -c's candidate goes with it */
+	if (c->load && sp != NULL) {
+		session_free(sp->st);
+		sp->st = NULL;
+	}
 	if (sp == NULL)
 		printed_text(NULL, 0, 0);
 	else if (msg != NULL) {
@@ -2185,6 +2306,7 @@ session_gone(struct session *sp)
 		commit->session = 0;
 	TAILQ_REMOVE(&sessions, sp, entry);
 	session_free(sp->st);
+	free(sp->load);
 	free(sp);
 }
 

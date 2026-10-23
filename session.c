@@ -535,6 +535,29 @@ session_renew(struct session_state *s)
 	return r;
 }
 
+/*
+ * text, nsh -c's configuration as cmdrc() reads it, into s's candidate:
+ * as a handler returns, -1 if a line failed, said
+ */
+int
+session_load(struct session_state *s, char *text, size_t len)
+{
+	FILE *f;
+	int r;
+
+	if (len == 0)
+		return 0;
+	if ((f = fmemopen(text, len, "r")) == NULL) {
+		printf("%% session_load: %s\n", strerror(errno));
+		return -1;
+	}
+	session_enter(s);
+	r = cmdrc_file(f);
+	session_leave(s);
+	fclose(f);
+	return r;
+}
+
 /* Whether s's candidate differs from how it began */
 int
 session_changed(struct session_state *s)

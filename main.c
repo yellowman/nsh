@@ -199,16 +199,9 @@ main(int argc, char *argv[])
 	cli_rtable = getrtable();
 
 	if (cflag) {
-		/*
-		 * Interpret command file and exit
-		 */
-		priv = 1;
-
+		/* the file's configuration, which nshd loads and commits */
 		setwinsize(0);
-
-		db_create();
-
-		exit(cmdrc(rc) == 0 ? 0 : 1);
+		exit(nshd_load(rc) == 0 ? 0 : 1);
 	}
 
 	load_userenv();

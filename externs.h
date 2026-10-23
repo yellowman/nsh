@@ -192,6 +192,7 @@ void sigalarm(int);
 void command(void);
 int argvtostring(int, char **, char *, int);
 int cmdrc(char rcname[FILENAME_MAX]);
+int cmdrc_file(FILE *);
 int cmdline(char *);
 int cmdexit(void);
 int cmdline_nshd(char *);
@@ -527,6 +528,7 @@ const char *nshd_cname(void);
 int nshd_line(char *);
 int nshd_exit(void);
 int nshd_commit(int, int, char *);
+int nshd_load(const char *);
 int nshd_rollback(int);
 int nshd_cshow(char *);
 

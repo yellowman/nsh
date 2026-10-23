@@ -104,8 +104,18 @@ The options are as follows:
 .It Fl v
 Produce verbose output
 .It Fl c Ar config-script-file
-Execute the command(s) in the
-.Ar config-script-file .
+Make the configuration in
+.Ar config-script-file ,
+written as the saved configuration is, part of the running
+configuration, and save it.
+.Xr nshd 8
+loads the file into a candidate of its own, as the running
+configuration, and commits it, all of it or none, once
+.Nm
+is enabled as privileged mode is, asking for the secret if there is
+one.
+A line that is not configuration, or that fails, and nothing is
+committed.
 This is typically used to implement scripted changes to configuration.
 .El
 .Pp

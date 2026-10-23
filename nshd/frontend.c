@@ -49,6 +49,7 @@ union frontend_request {
 	struct nshd_rollback	 rollback;
 	struct nshd_enable	 enable;
 	struct nshd_op		 op;
+	struct nshd_load	 load;
 };
 
 static void	frontend_dispatch_relay(int, short, void *);
@@ -223,6 +224,7 @@ frontend_client(struct ctl_conn *c, struct imsg *imsg)
 	case IMSG_CTL_ROLLBACK:
 	case IMSG_CTL_ENABLE:
 	case IMSG_CTL_OP:
+	case IMSG_CTL_LOAD:
 		if ((len = frontend_whole(imsg, &r)) == -1)
 			return (-1);
 		if (link_compose(&config, imsg_get_type(imsg), c->id,
@@ -278,6 +280,7 @@ frontend_answer(struct ctl_conn *c, struct imsg *imsg)
 	case IMSG_CTL_ROLLBACK:
 	case IMSG_CTL_ENABLE:
 	case IMSG_CTL_OP:
+	case IMSG_CTL_LOAD:
 		if (frontend_whole(imsg, &req) == -1)
 			return (-1);
 		r.status = 1;
@@ -336,6 +339,14 @@ frontend_whole(struct imsg *imsg, union frontend_request *r)
 		    memchr(r->op.line, '\0', sizeof(r->op.line)) == NULL)
 			return (-1);
 		return (sizeof(r->op));
+	case IMSG_CTL_LOAD:
+		if (imsg_get_data(imsg, &r->load, sizeof(r->load)) == -1 ||
+		    (r->load.last != 0 && r->load.last != 1) ||
+		    r->load.len < 0 || r->load.len > NSHD_TEXT ||
+		    memchr(r->load.comment, '\0',
+		    sizeof(r->load.comment)) == NULL)
+			return (-1);
+		return (sizeof(r->load));
 	}
 	return (-1);
 }

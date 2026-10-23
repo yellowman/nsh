@@ -578,6 +578,42 @@ nshd_commit(int check, int minutes, char *comment)
 	return (nshd_request(IMSG_CTL_COMMIT, &c, sizeof(c), 0));
 }
 
+/*
+ * path's configuration, nsh -c's, as cmdrc() reads it, which nshd loads
+ * into a candidate of its own, as what runs, and commits, once enabled:
+ * as a handler returns
+ */
+int
+nshd_load(const char *path)
+{
+	struct nshd_load	 l;
+	FILE			*f;
+	int			 r;
+
+	if ((f = fopen(path, "r")) == NULL) {
+		printf("%% Unable to open %s: %s\n", path, strerror(errno));
+		return (-1);
+	}
+	if ((r = nshd_enable()) != 0) {
+		fclose(f);
+		return (-1);
+	}
+	memset(&l, 0, sizeof(l));
+	snprintf(l.comment, sizeof(l.comment), "nsh -c %s", path);
+	do {
+		l.len = fread(l.text, 1, sizeof(l.text), f);
+		if (ferror(f)) {
+			printf("%% %s: %s\n", path, strerror(errno));
+			r = -1;
+			break;
+		}
+		l.last = feof(f) != 0;
+		r = nshd_request(IMSG_CTL_LOAD, &l, sizeof(l), 0);
+	} while (r == 0 && !l.last);
+	fclose(f);
+	return (r);
+}
+
 /* rollback n */
 int
 nshd_rollback(int n)

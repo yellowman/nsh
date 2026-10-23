@@ -90,6 +90,14 @@ struct nshd_op {
 	char		line[NSHD_LINE];
 };
 
+/* nsh -c's configuration, a part at a time, committed after the last */
+struct nshd_load {
+	int32_t		last;
+	int32_t		len;		/* of text */
+	char		comment[NSHD_COMMENT];
+	char		text[NSHD_TEXT];
+};
+
 /* which configure */
 struct nshd_configure {
 	int32_t		mode;
@@ -298,7 +306,8 @@ enum nshd_imsg {
 	IMSG_CTL_TOKEN,		/* nshd_token */
 	IMSG_SYS_SECRET,	/* the enable secret's hash, as text, or none */
 	IMSG_CTL_OP,		/* nshd_op: what it prints, a result */
-	IMSG_SYS_OP		/* nshd_op: a stream, a result */
+	IMSG_SYS_OP,		/* nshd_op: a stream, a result */
+	IMSG_CTL_LOAD		/* nshd_load: a result; the last, as commit */
 };
 
 struct imsgev {
