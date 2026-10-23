@@ -65,9 +65,9 @@ commands.c	table	Bridgelist Bridgelist_nitems Intlist
 			ipsecsoftallocstab ipsecsoftbytestab
 			ipsecsoftfirstusetab ipsecsofttimeouttab
 			ipsectimeouttab iptab iscs kind_hostname
-			ldaphelp ldcs ldphelp lics loggerhelp manhelp
-			maxqueuetab mforwardingtab motdhelp mplshelp
-			mplstab mtudisctab mtudisctimeouttab
+			ldaphelp ldcs ldphelp lics loggerhelp loginhelp
+			manhelp maxqueuetab mforwardingtab motdhelp
+			mplshelp mplstab mtudisctab mtudisctimeouttab
 			multipathtab nameserverhelp ndphelp nppphelp
 			nreboothelp ntphelp os6cs oscs ospf6help
 			ospfhelp pfcs pfhelp ping6help pinghelp
@@ -142,6 +142,7 @@ ndp.c		scratch	conf_ndp_entry.nbi expire_time flags
 ndp.c		table	blank_sdl blank_sin ifp_m kind_ndp ndp_fields
 			ndp_states
 nopt.c		scratch	nopterr noptind
+passwd.c		table	login_builtin login_permtab
 ppp.c		table	intpppoe.authopts intsppp.authopts
 			intsppp.peeropts spppproto
 prompt.c	session	prompt saved_prompt

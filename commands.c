@@ -2138,6 +2138,7 @@ int_exit(int argc, char **argv, ...)
 
 static char
 	hostnamehelp[] = "Set system hostname",
+	loginhelp[] =	"Login classes and users",
 	interfacehelp[] = "Modify interface parameters",
 	rtablehelp[] = 	"Routing table switch",
 	grouphelp[] =	"Modify group attributes",
@@ -2248,6 +2249,7 @@ Menu grouptab[] = {
 #define ssctl sizeof(struct ctl)
 Command cmdtab[] = {
 	{ "hostname",	hostnamehelp,	CMPL0 0, 0, hostname,		1, 1, 0, 0, CAND_EDIT },
+	{ "login",	loginhelp,	CMPL0 0, 0, loginset,		1, 1, 1, 0, CAND_EDIT },
 	{ "interface",	interfacehelp,	CMPL(i) 0, 0, interface,	1, 1, 1, 1, CAND_EDIT },
 	{ "rtable",	rtablehelp,	CMPL(rh) (char **)rtabletab, sizeof(struct ghs), rtable,	0, 0, 1, 2, CAND_EDIT },
 	{ "group",	grouphelp,	CMPL(gth) (char **)grouptab, sizeof(Menu), group, 1, 1, 1, 0, CAND_RUN },

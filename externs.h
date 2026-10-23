@@ -183,6 +183,12 @@ extern pid_t child;
 #define REBOOT		"/sbin/reboot"
 #define HALT		"/sbin/halt"
 #define SU		"/usr/bin/su"
+#define USERADD		"/usr/sbin/useradd"
+#define USERMOD		"/usr/sbin/usermod"
+#define USERDEL		"/usr/sbin/userdel"
+#define NSH_SHELL	"/usr/local/bin/nsh"	/* an account nshd makes runs it */
+#define NSH_GROUP	"nshadmin"	/* nshd.h's NSHD_GROUP */
+#define NSHLOGIN	NSHDB "/login"	/* the login classes and users */
 #define DOAS		"/usr/bin/doas"
 #ifndef DHCPLEASES
 #define DHCPLEASES	"/var/db/dhcpd.leases"
@@ -440,6 +446,14 @@ int read_pass(char *, size_t);
 int secret_matches(const char *, const char *);
 int gen_salt(char *, size_t);
 int enable(int, char **, ...);
+#define LOGIN_VIEW	0x1	/* a login class's permissions */
+#define LOGIN_OPERATE	0x2
+#define LOGIN_CONFIGURE	0x4
+#define LOGIN_ADMIN	0x8
+#define LOGIN_ALL	0xf
+int loginset(int, char **, ...);
+int login_class_perms(const char *);
+void conf_login(FILE *);
 
 /* pfsync.c */
 #define PFSYNC_MAXUPDATES 128

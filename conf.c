@@ -169,6 +169,7 @@ static const struct {
 	{ CONF_SEP,	NULL,		NULL },
 	{ CONF_FUNC,	NULL,		conf_hostname },
 	{ CONF_FUNC,	NULL,		conf_secret },
+	{ CONF_FUNC,	NULL,		conf_login },
 	{ CONF_SEP,	NULL,		NULL },
 	{ CONF_CTL,	"motd",		NULL },
 	/* start all interfaces not named in a CONF_IFS row */
@@ -278,6 +279,7 @@ static const struct {
 } confwords[] = {
 	{ conf_hostname,	"hostname" },
 	{ conf_secret,		"enable" },
+	{ conf_login,		"login" },
 	{ conf_sysctls,		"ip" },
 	{ conf_sysctls,		"ip6" },
 	{ conf_sysctls,		"mpls" },

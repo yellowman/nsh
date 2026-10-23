@@ -601,6 +601,60 @@ myfirewallname.com(p)/
 .Ed
 .El
 .Pp
+.Tg login
+.Op no
+.Ic login class Ar name
+.Op Ar permission ...
+.Pp
+Define a login class, a set of permissions:
+.Cm view ,
+.Cm operate ,
+.Cm configure
+and
+.Cm admin .
+Three classes are built in and cannot be changed:
+.Cm read-only
+has view,
+.Cm operator
+has view and operate, and
+.Cm super-user
+has all four.
+.Pp
+.Op no
+.Ic login user Ar name Cm class Ar class
+.Op Cm password Ar hash
+.Pp
+Give the account
+.Ar name
+a login class, one that is built in or one a
+.Cm login class
+line defines.
+If the account does not exist,
+.Xr nshd 8
+makes it when the line is committed, with the password
+.Ar hash ,
+.Nm
+as its shell, and the group nshadmin, so that it can use nshd.
+The hash is a bcrypt hash, as
+.Xr encrypt 1
+makes.
+Taking the line away deletes an account that nshd made, but keeps its
+home directory.
+.Pp
+An account that nshd did not make, such as one an administrator made by
+hand, gets its class and nothing else: its line takes no password, and
+taking the line away leaves the account alone.
+No line names root, which is always super-user, or an account whose name
+begins with an underscore, as those belong to daemons.
+.Bl -dash
+.It
+e.g. Let alice, who has no account, operate and configure the system:
+.Bd -literal -offset indent
+nsh(config-p)/login class netops view operate configure
+nsh(config-p)/login user alice class netops password $2b$10$kKSJFDd....
+.Ed
+.El
+.Pp
 .Tg su
 .Tg doas
 .Tg sudo
@@ -6152,6 +6206,10 @@ configurations saved before, for
 what a
 .Cm commit confirmed
 goes back to, and when
+.It Pa /var/db/nsh/login
+the login classes and users that run, and which accounts
+.Xr nshd 8
+made
 .It Pa ~/.profile
 user's login profile
 .It Pa /etc/shells
