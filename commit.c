@@ -191,8 +191,8 @@ static void sub_end(struct commit *, struct sub *, const char *, char *,
  * commit [confirmed [minutes]] [comment text]: in configure private,
  * make the candidate the running configuration, all of it or none, then
  * save the running configuration; or with confirmed, do not save it,
- * and roll it back unless a commit confirms it in time. Elsewhere, save
- * it. The comment is kept with what is saved.
+ * and roll it back unless a commit confirms it in time. Elsewhere, nshd
+ * saves it. The comment is kept with what is saved.
  */
 int
 commit(int argc, char **argv, ...)
@@ -245,26 +245,11 @@ commit(int argc, char **argv, ...)
 			return -1;
 		}
 	}
-	/* configure private, nshd's */
-	if (nshd_config)
+	/* configure's, nshd's; outside it, what runs, which nshd saves */
+	if (nshd_config || !candidate)
 		return nshd_commit(checking, minutes, comment);
-	if (checking && !candidate) {
-		printf("%% commit check requires configure private\n");
-		return -1;
-	}
-	if (minutes > 0 && !candidate) {
-		printf("%% commit confirmed requires configure private\n");
-		return -1;
-	}
 	/* one not confirmed in time goes back first */
 	commit_expire();
-	if (!candidate) {
-		if (!conf_save())
-			return -1;
-		confirmed();
-		rollback_keep(SAVED, committer(), comment);
-		return 0;
-	}
 	if ((want = cand_tree()) == NULL)
 		return -1;
 	if ((was = running_tree()) == NULL)

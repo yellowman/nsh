@@ -65,7 +65,8 @@
  * not confirmed, and runs its script even if it is empty; then, if a
  * snapshot reads as the candidate, the commit's record goes, and what
  * runs is kept until the deadline, not saved. A commit that saves
- * confirms it.
+ * confirms it. A commit outside configure only saves what runs, as one
+ * that changes nothing does; check and confirmed are configure's.
  *
  * Told at its start that the boot is not done, config boots, as nsh -i
  * does, once there is a pipe to system: system says whether this boot
@@ -170,6 +171,7 @@ struct commit {
 	int			 test;		/* the plan's test running */
 	int			 failed;	/* a line of the script failed */
 	int			 minutes;	/* commit confirmed's, or 0 */
+	int			 save;		/* outside configure: a save */
 	int			 how;		/* it ended, NSHD_BACK or KEPT */
 	int			 begun;		/* and not ended, to system */
 	int			 shared;	/* of the shared candidate */
@@ -239,6 +241,7 @@ static void		 config_enabled(struct request *, int32_t);
 static int		 config_may(uint32_t, uint32_t);
 static void		 config_op(uint32_t, struct nshd_op *);
 static struct session	*config_private(uint32_t);
+static int		 config_in(struct session *);
 static int		 config_enter(struct session *);
 static void		 config_left(struct session *);
 static void		 shared_hold(struct session *);
@@ -692,14 +695,26 @@ config_exit(uint32_t session)
 	config_ran(sp, sp->how == 0 ? 0 : session_exit(sp->st), 1);
 }
 
-/* commit, or commit check, of the session's candidate */
+/*
+ * commit, or commit check, of the session's candidate; or outside
+ * configure, what runs saved
+ */
 static void
 config_commit(uint32_t session, struct nshd_commit *c)
 {
 	struct session	*sp;
+	int		 save;
 
-	if ((sp = config_private(session)) == NULL)
+	if ((sp = session_find(session)) == NULL) {
+		config_answer(session, 1, "%% nshd: hello first\n");
 		return;
+	}
+	if ((save = !config_in(sp)) && (c->check || c->minutes != 0)) {
+		config_answer(session, 1, "%% commit %s requires a "
+		    "candidate: configure, private or exclusive\n",
+		    c->check ? "check" : "confirmed");
+		return;
+	}
 	if (commit != NULL) {
 		config_answer(session, 1, "%% Commit refused: uid %u commits "
 		    "now\n", (unsigned int)commit->uid);
@@ -722,9 +737,13 @@ config_commit(uint32_t session, struct nshd_commit *c)
 	commit->uid = sp->uid;
 	commit->check = c->check;
 	commit->minutes = c->minutes;
-	commit->shared = sp->how != NSHD_PRIVATE;
+	commit->save = save;
+	commit->shared = !save && sp->how != NSHD_PRIVATE;
 	strlcpy(commit->comment, c->comment, sizeof(commit->comment));
-	commit_wait(COMMIT_PLAN);
+	if (save)
+		commit_save();
+	else
+		commit_wait(COMMIT_PLAN);
 }
 
 /*
@@ -932,20 +951,28 @@ static struct session *
 config_private(uint32_t session)
 {
 	struct session	*sp;
-	char		 ifn[NSHD_IFNAME];
-	int		 in = 0, rtable, bridge;
 
 	if ((sp = session_find(session)) == NULL) {
 		config_answer(session, 1, "%% nshd: hello first\n");
 		return (NULL);
 	}
-	if (sp->st != NULL)
-		session_mode(sp->st, &in, &rtable, ifn, sizeof(ifn), &bridge);
-	if (!in) {
+	if (!config_in(sp)) {
 		config_answer(session, 1, "%% nshd: configure first\n");
 		return (NULL);
 	}
 	return (sp);
+}
+
+/* whether sp is in configure */
+static int
+config_in(struct session *sp)
+{
+	char	ifn[NSHD_IFNAME];
+	int	in = 0, rtable, bridge;
+
+	if (sp->st != NULL)
+		session_mode(sp->st, &in, &rtable, ifn, sizeof(ifn), &bridge);
+	return (in);
 }
 
 /*
@@ -1519,7 +1546,7 @@ commit_ended(int32_t status)
 	case COMMIT_SAVE:
 		/* taken: the candidate starts again, saved or not */
 		r = status == 0 ? 0 : -1;
-		if (commit_renew() == -1)
+		if (!commit->save && commit_renew() == -1)
 			r = -1;
 		commit_end(r, NULL);
 		break;

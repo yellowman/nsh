@@ -2051,10 +2051,11 @@ statement after the candidate first changed it, each such statement
 said; committing again keeps the candidate's changes over the other's.
 After a commit, the candidate starts again from the new running
 configuration.
-Outside
-.Cm configure private ,
+Outside configure,
 .Cm commit
-saves the running configuration.
+has
+.Xr nshd 8
+save the running configuration.
 The last 50 configurations saved are kept, for
 .Cm rollback
 and
@@ -2114,8 +2115,7 @@ where
 runs, it does so, and demotes carp while it does.
 A commit before then confirms it, and saves it; so does
 .Cm commit
-outside
-.Cm configure private .
+outside configure.
 A system started again before then starts with the configuration saved
 before it.
 .Bl -dash
