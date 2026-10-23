@@ -49,11 +49,11 @@ intr(void)
 {
 }
 
-/* nshd does not ask itself */
+/* nshd does not ask itself, and is not a session of its own */
 int
 nshd_show(char *words)
 {
-	return -1;
+	return 0;
 }
 
 int
@@ -66,9 +66,20 @@ nshd_facts(int rw, char *words, struct facts_in *in)
 int nshd_config, nshd_rtable;
 
 int
+nshd_enable(void)
+{
+	return -1;
+}
+
+void
+nshd_disable(void)
+{
+}
+
+int
 nshd_configure(int how)
 {
-	return NSHD_ABSENT;
+	return -1;
 }
 
 const char *

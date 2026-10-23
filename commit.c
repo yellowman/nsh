@@ -1922,18 +1922,8 @@ pr_rollback(int argc, char **argv, ...)
 {
 	char words[sizeof("rollback 99")];
 	const char *errstr;
-	va_list ap;
-	FILE *out;
-	int n, ret;
+	int n;
 
-	va_start(ap, argv);
-	out = va_arg(ap, FILE *);
-	va_end(ap);
-
-	if (priv != 1) {
-		printf("%% Privilege required\n");
-		return -1;
-	}
 	if (argc == 3) {
 		n = strtonum(argv[2], 0, ROLLBACKS - 1, &errstr);
 		if (errstr != NULL) {
@@ -1941,17 +1931,12 @@ pr_rollback(int argc, char **argv, ...)
 			return -1;
 		}
 	}
-	/* nshd's, where it runs */
+	/* nshd's */
 	if (argc == 3)
 		snprintf(words, sizeof(words), "rollback %d", n);
 	else
 		strlcpy(words, "rollback", sizeof(words));
-	if ((ret = nshd_show(words)) != -1)
-		return ret == 1 ? 0 : -1;
-	if (argc == 3)
-		return rollback_text(n, out);
-	rollback_list(out);
-	return 0;
+	return nshd_show(words) ? 0 : -1;
 }
 
 /* Configuration n as it was saved, to out: -1 if it could not be, said why */

@@ -62,6 +62,11 @@ Each client is a session, which asks one thing at a time.
 Runs as _nshconf in a
 .Xr chroot 2 ,
 holds the sessions, and asks system for what they need.
+A session asks nothing but
+.Cm enable
+until it is enabled: by the enable secret, which config checks by its
+hash, which system reads, or with none if none is set; or by the token
+an enabled session of the same user's was given.
 A session in
 .Cm configure private
 has a candidate of its own; the sessions in

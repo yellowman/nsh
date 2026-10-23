@@ -205,12 +205,6 @@ main(int argc, char *argv[])
 	if (interactive_mode) {
 		editing = 1;
 
-		if (getuid() != 0) {
-			printf("%% Functionality is limited without "
-			    "root privileges.\n%% The 'enable' command "
-			    "will switch to the root user.\n");
-		}
-
 		if (!privexec) {
 			if (strstr(vers, "-current") != NULL)
 				printf("%% NSH v%s; Compiled by %s@%s on %s\n",
@@ -282,12 +276,6 @@ main(int argc, char *argv[])
 		 * back to the parent process which runs in non-privileged
 		 * mode. "quit' does the same with a special exit code to let
 		 * the parent know that it should exit immediately.
-		 */
-		priv = 1;
-	} else if (getuid() == 0) {
-		/*
-		 * Root users always start out in privileged mode.
-		 * They can use 'disable' if they want to exit priv mode.
 		 */
 		priv = 1;
 	}

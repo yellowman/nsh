@@ -266,7 +266,7 @@ frontend_answer(struct ctl_conn *c, struct imsg *imsg)
 			return (-1);
 		s.version = NSHD_VERSION;
 		s.id = c->id;
-		s.priv = 1;
+		s.priv = 0;
 		return (control_reply(c->id, IMSG_CTL_HELLO, &s, sizeof(s)));
 	case IMSG_CTL_SHOW:
 	case IMSG_CTL_CONFIGURE:

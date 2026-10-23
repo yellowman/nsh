@@ -144,21 +144,15 @@ command.
 When run without any command line arguments,
 .Nm
 presents an interactive shell to the user.
-If
 .Nm
-is run as root user then
-.Nm
-shall start as a privileged full functionality shell.
-If
-.Nm
-is run as a non-root user then
-.Nm
-shall start as an unprivileged and limited functionality shell.
+starts unprivileged, for root too.
 Privileged
 .Nm
 shell functionality can be enabled using the
 .Cm enable
-command.
+command, where
+.Xr nshd 8
+runs.
 .Pp
 All
 .Nm
@@ -346,13 +340,12 @@ makes the candidate the running configuration, all of it or none, and
 saves it.
 Configuration mode cannot be left while the candidate has changes.
 .Pp
-Where
-.Xr nshd 8
-runs,
 .Cm configure private
-is a session of nshd's, even for root: the candidate is nshd's, and
-the lines that change it, or leave a mode, go to nshd, which answers
-with what they did and the mode the session is in.
+is part of privileged mode's session of
+.Xr nshd 8 Ns 's :
+the candidate is nshd's, and the lines that change it, or leave a
+mode, go to nshd, which answers with what they did and the mode the
+session is in.
 Commands that run as they do outside configure private, such as
 .Cm show
 and
@@ -370,16 +363,10 @@ the deadline of a
 itself, whether or not
 .Nm
 still runs.
-Those not in the group nshadmin, which may use nshd's read-write
-socket, are refused.
-An interrupt while nshd answers leaves configure private, and the
-candidate with it; nshd finishes what it was asked.
-Where nshd does not run,
-.Nm
-keeps the candidate itself.
+An interrupt while nshd answers leaves privileged mode, and configure
+private and its candidate with it; nshd finishes what it was asked.
 .Pp
 .Tg exclusive
-Where nshd runs,
 .Cm configure
 is a session of nshd's too, whose candidate the sessions in
 .Cm configure
@@ -401,11 +388,6 @@ changes to the shared candidate are not committed, which it says by
 uid.
 Leaving it discards what was not committed.
 A session in one configure leaves it before it enters another.
-Where nshd does not run,
-.Cm configure
-changes the system as each command runs, and
-.Cm configure exclusive
-is refused.
 .Pp
 For the purposes of this manual, any examples the machine is called
 .Nm
@@ -620,16 +602,14 @@ command below for more details.
 .Ic enable
 .Pp
 Start a privileged shell to allow the user to run privileged commands.
+Privileged mode is a session of
+.Xr nshd 8 Ns 's ,
+which root and the group nshadmin may have.
 If an enable secret is set, the user shall be prompted to enter
-the secret to access the privileged shell.
-If neccessary,
+the secret to access the privileged shell, root too.
+Where nshd does not run,
 .Nm
-then attempts to obtain root privileges.
-Depending on configuration, this step may require the user's password or
-the root password to be entered.
-Root privileges will be obtained via access rules in
-.Xr doas.conf 5 ,
-with a fallback to the root password.
+is not privileged.
 For relevant configuration examples see
 .Sx Section 7 Allowing users to run NSH
 below.
@@ -660,6 +640,8 @@ Useful if you have completed configuration but still want the ability to run
 diagnostics in an unprivileged
 .Nm
 shell.
+Privileged mode also ends with an interrupt while nshd answers in it,
+and when nshd goes.
 .Pp
 .Tg clear
 .Ic clear
@@ -2282,11 +2264,11 @@ nsh(p)/
 .Ed
 .El
 .Pp
-Where
-.Xr nshd 8
-runs, its system process runs a daemon's control program for a show, but
-systat for system-stats, and reads the DHCP leases, for root and the
-group nshadmin; what they print is not paged, and Control-C stops it.
+In privileged mode,
+.Xr nshd 8 Ns 's
+system process runs a daemon's control program for a show, but
+systat for system-stats, and reads the DHCP leases; what they print is
+not paged, and Control-C stops it.
 .Pp
 .Ic show hostname
 .Pp
@@ -2488,10 +2470,9 @@ ppp
 link-local
 .El
 .Pp
-Where
-.Xr nshd 8
-runs, only root and the group nshadmin, who may ask its system process,
-see what configured an IPv4 address.
+Only privileged mode, which may ask
+.Xr nshd 8 Ns 's
+system process, sees what configured an IPv4 address.
 .Pp
 E.g show all ipv4 and IPv6 adddresses on the system
 .Bd -literal -offset indent
@@ -3814,12 +3795,10 @@ command described above.
 Display the current running configuration on the system, including
 interface and bridge configurations, routes, the system hostname, firewall
 rules, and other information compiled by
-.Nm .
-Where
+.Nm ,
+as
 .Xr nshd 8
-runs, the configuration is the one it reads, and root or a member of the
-group nshadmin may see it without
-.Cm enable .
+reads it.
 .Pp
 .Ic show startup-config
 .Pp

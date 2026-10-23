@@ -3324,7 +3324,7 @@ disable(int argc, char **argv, ...)
 	}
 	if (cand_leave())
 		return -1;
-	priv = 0;
+	nshd_disable();
 	config_mode = 0;
 	return 0;
 }
@@ -3374,8 +3374,6 @@ doediting(int argc, char **argv, ...)
 static int
 doconfig(int argc, char **argv, ...)
 {
-	int r;
-
 	if (argc > 1) {
 		if (NO_ARG(argv[0])) {
 			return exitconfig(argc, argv);
@@ -3384,27 +3382,16 @@ doconfig(int argc, char **argv, ...)
 				return -1;
 			config_mode = 1;
 		} else if (isprefix(argv[1], "private")) {
-			/* nshd's, where it runs */
-			if ((r = nshd_configure(NSHD_CPRIVATE)) != NSHD_ABSENT)
-				return r;
-			if (cand_begin() == -1)
-				return -1;
-			config_mode = 1;
+			return nshd_configure(NSHD_CPRIVATE);
 		} else if (isprefix(argv[1], "exclusive")) {
-			if ((r = nshd_configure(NSHD_CEXCLUSIVE)) !=
-			    NSHD_ABSENT)
-				return r;
-			printf("%% configure exclusive needs nshd\n");
-			return -1;
+			return nshd_configure(NSHD_CEXCLUSIVE);
 		} else {
 			printf ("%% Invalid argument\n");
 			return -1;
 		}
 	} else {
-		/* the candidate nshd's sessions share, where it runs */
-		if ((r = nshd_configure(NSHD_CSHARED)) != NSHD_ABSENT)
-			return r;
-		config_mode = 1;
+		/* the candidate nshd's sessions share */
+		return nshd_configure(NSHD_CSHARED);
 	}
 
 	return 0;
@@ -3940,42 +3927,16 @@ flush_ndp_cache(int argc, char **argv, ...)
 static int
 pr_conf(int argc, char **argv, ...)
 {
-	int ret;
-
-	/* nshd's, where it runs */
-	if ((ret = nshd_show("running-config")) != -1)
-		return ret == 1 ? 0 : -1;
-
-	if (priv != 1) {
-		printf ("%% Privilege required\n");
-		return -1;
-	}
-
-	if (!wr_conf(NSHRC_TEMP)) {
-		printf("%% Couldn't generate configuration\n");
-		return -1;
-	}
-
-	return more(NSHRC_TEMP) ? 0 : -1;
+	return nshd_show("running-config") ? 0 : -1;
 }
 
 /*
- * Show startup config: nshd's, where nshd runs
+ * Show startup config: nshd's
  */
 static int
 pr_s_conf(int argc, char **argv, ...)
 {
-	int ret;
-
-	if ((ret = nshd_show("startup-config")) != -1)
-		return ret == 1 ? 0 : -1;
-
-	if (priv != 1) {
-		printf ("%% Privilege required\n");
-		return -1;
-	}
-
-	return more(NSHRC) ? 0 : -1;
+	return nshd_show("startup-config") ? 0 : -1;
 }
 
 /*

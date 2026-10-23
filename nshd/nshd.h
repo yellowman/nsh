@@ -27,7 +27,7 @@
 #define NSHD_SOCKET	"/var/run/nshd.sock"	/* 0660, group nshadmin */
 #define NSHD_RO_SOCKET	"/var/run/nshd.ro.sock"	/* 0666 */
 
-#define NSHD_VERSION	1	/* of what a client and nshd say */
+#define NSHD_VERSION	2	/* of what a client and nshd say */
 #define NSHD_TEXT	8192	/* text in one message, at most */
 #define NSHD_WORDS	256	/* a show's words, at most */
 #define NSHD_LINE	1024	/* a line of configuration, with its NUL */
@@ -45,7 +45,7 @@ struct nshd_hello {
 	uint32_t	version;
 };
 
-/* nshd's answer: its version, the session, and whether it may change */
+/* nshd's answer: its version, the session, and whether it is enabled */
 struct nshd_session {
 	uint32_t	version;
 	uint32_t	id;

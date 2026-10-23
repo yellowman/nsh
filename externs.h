@@ -528,13 +528,14 @@ char *format_time(time_t);
 char *format_k(uint64_t amt);
 
 /* client.c */
-#define NSHD_ABSENT	(-2)	/* no nshd runs here */
 #define NSHD_CPRIVATE	1	/* configure private, nshd's NSHD_PRIVATE */
 #define NSHD_CSHARED	2	/* configure, NSHD_SHARED */
 #define NSHD_CEXCLUSIVE	3	/* configure exclusive, NSHD_EXCLUSIVE */
 extern int nshd_config;
 extern int nshd_rtable;
 int nshd_show(char *);
+int nshd_enable(void);
+void nshd_disable(void);
 int nshd_configure(int);
 const char *nshd_cname(void);
 int nshd_line(char *);

@@ -45,7 +45,8 @@
  * enable takes the secret, which config checks by the enable secret's
  * hash, which system reads, or none if there is none; a session enabled
  * by it is given a token, which another session of the same user's
- * gives to be enabled too.
+ * gives to be enabled too. A session not enabled may only say hello,
+ * enable, and go.
  *
  * archive keeps the shared candidate, and who changed it, past config's
  * end: config sends it each time it changes, and answers the session
@@ -234,6 +235,7 @@ static void		 config_rollback(uint32_t, struct nshd_rollback *);
 static void		 config_rolled(struct request *, int32_t);
 static void		 config_enable(uint32_t, struct nshd_enable *);
 static void		 config_enabled(struct request *, int32_t);
+static int		 config_may(uint32_t, uint32_t);
 static struct session	*config_private(uint32_t);
 static int		 config_enter(struct session *);
 static void		 config_left(struct session *);
@@ -379,7 +381,11 @@ config_dispatch_frontend(int fd, short event, void *arg)
 		if (n == 0)
 			break;
 		id = imsg_get_id(&imsg);
-		switch (type = imsg_get_type(&imsg)) {
+		if (!config_may(id, type = imsg_get_type(&imsg))) {
+			imsg_free(&imsg);
+			continue;
+		}
+		switch (type) {
 		case IMSG_CTL_HELLO:
 			if (imsg_get_data(&imsg, &peer, sizeof(peer)) == -1)
 				goto bad;
@@ -391,10 +397,9 @@ config_dispatch_frontend(int fd, short event, void *arg)
 				sp->gid = peer.gid;
 				TAILQ_INSERT_TAIL(&sessions, sp, entry);
 			}
-			/* the socket's group already decided it */
 			s.version = NSHD_VERSION;
 			s.id = id;
-			s.priv = 1;
+			s.priv = sp->enabled;
 			if (link_compose(l, IMSG_CTL_HELLO, id, &s,
 			    sizeof(s)) == -1)
 				fatal("%s", __func__);
@@ -657,21 +662,15 @@ config_line(uint32_t session, struct nshd_line *line)
 	struct session	*sp;
 	int		 r;
 
-	if ((sp = session_find(session)) == NULL) {
-		config_answer(session, 1, "%% nshd: hello first\n");
+	if ((sp = config_private(session)) == NULL)
 		return;
-	}
-	if (sp->st == NULL) {
-		config_answer(session, 1, "%% nshd: configure first\n");
-		return;
-	}
 	shared_hold(sp);
 	r = session_line(sp->st, line->line);
 	shared_done(sp);
 	config_ran(sp, r, 1);
 }
 
-/* leave configure, from any of its modes */
+/* leave configure, from any of its modes, if in it */
 static void
 config_exit(uint32_t session)
 {
@@ -681,7 +680,7 @@ config_exit(uint32_t session)
 		config_answer(session, 1, "%% nshd: hello first\n");
 		return;
 	}
-	config_ran(sp, sp->st == NULL ? 0 : session_exit(sp->st), 1);
+	config_ran(sp, sp->how == 0 ? 0 : session_exit(sp->st), 1);
 }
 
 /* commit, or commit check, of the session's candidate */
@@ -877,6 +876,23 @@ config_enabled(struct request *r, int32_t status)
 		fatal("%s", __func__);
 	explicit_bzero(&t, sizeof(t));
 	config_answer(sp->id, 0, NULL);
+}
+
+/*
+ * Whether session may ask type: what is not hello, enable, or going, a
+ * session not enabled is refused; one with no hello, its handler says
+ */
+static int
+config_may(uint32_t session, uint32_t type)
+{
+	struct session	*sp;
+
+	if (type == IMSG_CTL_HELLO || type == IMSG_CTL_ENABLE ||
+	    type == IMSG_CTL_CLOSE || type == IMSG_CTL_READ ||
+	    (sp = session_find(session)) == NULL || sp->enabled)
+		return (1);
+	config_answer(session, 1, "%% Privileged mode required\n");
+	return (0);
 }
 
 /* session's, if in configure; or NULL, said why */

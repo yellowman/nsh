@@ -15,14 +15,19 @@
  */
 
 /*
- * nsh as a client of nshd(8), where nshd runs. Who may connect to its
- * read-write socket, root or the group nshadmin, has what an enabled
- * nsh has there.
+ * nsh as a client of nshd(8). Privileged mode is a session of nshd's,
+ * on its read-write socket, which root or the group nshadmin may use:
+ * enable opens it, and nshd takes the enable secret, if there is one,
+ * and gives a token, which nsh's other connections there give, as shows
+ * do of what only nshd's system reads. Privileged mode ends with the
+ * session: disable closes it, and so does an interrupt while nshd
+ * answers on it, or nshd going. Where nshd does not run, nsh is not
+ * privileged.
  *
- * configure private, configure and configure exclusive, where nshd
- * runs, are a session of its: what edits the candidate, and leaving a
- * mode, go to nshd as lines, and the mode nshd gives back is nsh's, for
- * its prompt, its completion and the lines after (cmdline_nshd()).
+ * configure private, configure and configure exclusive are that
+ * session's: what edits the candidate, and leaving a mode, go to nshd
+ * as lines, and the mode nshd gives back is nsh's, for its prompt, its
+ * completion and the lines after (cmdline_nshd()).
  */
 
 #include <sys/types.h>
@@ -56,12 +61,16 @@ static volatile sig_atomic_t	nshd_intr;	/* ^C, while nshd answers */
 int		nshd_config;	/* the configure nshd has, or 0 */
 int		nshd_rtable;	/* and the rtable its lines are for */
 
-/* the session a configure is, or -1 */
+/* the session privileged mode is, or -1, and its token */
 static int		sfd = -1;
 static struct imsgbuf	sib;
+static uint8_t		token[NSHD_TOKEN];
+static int32_t		sstatus;	/* how its last request ended */
 
 static int	nshd_next(struct imsgbuf *, struct imsg *, const sigset_t *);
 static int	nshd_open(char *, struct imsgbuf *);
+static void	nshd_why(void);
+static int	nshd_borrow(struct imsgbuf *, const sigset_t *);
 static void	nshd_sigint(int);
 static int	nshd_request(uint32_t, const void *, size_t, int);
 static void	nshd_context(struct nshd_context *);
@@ -153,9 +162,81 @@ nshd_open(char *path, struct imsgbuf *ib)
 	return (fd);
 }
 
+/* Why nshd_open() could not */
+static void
+nshd_why(void)
+{
+	if (errno == ENOENT || errno == ECONNREFUSED)
+		printf("%% nshd is not running here\n");
+	else if (errno == EACCES)
+		printf("%% nshd: privileged mode is root's, and the group "
+		    "%s's\n", NSHD_GROUP);
+	else if (errno == EPROTO)
+		printf("%% nshd: not a version nsh speaks\n");
+	else
+		printf("%% nshd: %s\n", strerror(errno));
+}
+
 /*
- * show words, as nshd answers them, paged: -1 if there is no nshd to
- * ask, else 1 if the show was answered and 0 if not.
+ * A connection to nshd's read-write socket enabled, by the token of
+ * privileged mode's session: 0, or -1, said why. With waiting, as
+ * nshd_next() waits.
+ */
+static int
+nshd_borrow(struct imsgbuf *ib, const sigset_t *waiting)
+{
+	struct nshd_enable	 e;
+	struct nshd_result	 r;
+	struct imsg		 imsg;
+	struct ibuf		 b;
+
+	memset(&e, 0, sizeof(e));
+	e.how = NSHD_BY_TOKEN;
+	memcpy(e.token, token, sizeof(e.token));
+	if (imsg_compose(ib, IMSG_CTL_ENABLE, 0, 0, -1, &e,
+	    sizeof(e)) == -1 || imsgbuf_flush(ib) == -1) {
+		explicit_bzero(&e, sizeof(e));
+		printf("%% nshd: %s\n", strerror(errno));
+		return (-1);
+	}
+	explicit_bzero(&e, sizeof(e));
+	for (;;) {
+		if (nshd_next(ib, &imsg, waiting) == -1) {
+			if (nshd_intr)
+				putchar('\n');
+			else
+				printf("%% nshd: gone before it answered\n");
+			return (-1);
+		}
+		switch (imsg_get_type(&imsg)) {
+		case IMSG_CTL_OUTPUT:
+			if (imsg_get_ibuf(&imsg, &b) == -1) {
+				printf("%% nshd: output nsh cannot read\n");
+				imsg_free(&imsg);
+				return (-1);
+			}
+			fwrite(ibuf_data(&b), 1, ibuf_size(&b), stdout);
+			break;
+		case IMSG_CTL_RESULT:
+			if (imsg_get_data(&imsg, &r, sizeof(r)) == -1) {
+				printf("%% nshd: a result nsh cannot read\n");
+				imsg_free(&imsg);
+				return (-1);
+			}
+			imsg_free(&imsg);
+			return (r.status == 0 ? 0 : -1);
+		default:
+			printf("%% nshd: a message nsh does not know\n");
+			imsg_free(&imsg);
+			return (-1);
+		}
+		imsg_free(&imsg);
+	}
+}
+
+/*
+ * show words, as nshd answers them, paged, in privileged mode: 1 if the
+ * show was answered, else 0, said why
  */
 int
 nshd_show(char *words)
@@ -169,12 +250,16 @@ nshd_show(char *words)
 	FILE			*f = NULL;
 	int			 fd, out = -1, done = 0, ret = 0;
 
-	if ((fd = nshd_open(NSHD_SOCKET, &ib)) == -1) {
-		if (errno != EPROTO)
-			return (-1);
-		printf("%% nshd: not a version nsh speaks\n");
+	if (sfd == -1) {
+		printf("%% Privilege required\n");
 		return (0);
 	}
+	if ((fd = nshd_open(NSHD_SOCKET, &ib)) == -1) {
+		nshd_why();
+		return (0);
+	}
+	if (nshd_borrow(&ib, NULL) == -1)
+		goto done;
 
 	memset(&show, 0, sizeof(show));
 	if (strlcpy(show.words, words, sizeof(show.words)) >=
@@ -248,10 +333,11 @@ done:
 
 /*
  * show words, as nshd answers them, on the read-write socket if rw, its
- * system's, else as its show processes do: facts read into in as they
- * come, and text printed. -1 if there is no nshd to ask, or none this
- * user may, else 1 if the show was answered and 0 if not, as when ^C
- * ends it, which closes the session, so nshd stops what it runs.
+ * system's, in privileged mode, else as its show processes do: facts
+ * read into in as they come, and text printed. -1 if there is no nshd
+ * to ask, or none this user may, else 1 if the show was answered and 0
+ * if not, as when ^C ends it, which closes the connection, so nshd
+ * stops what it runs.
  */
 int
 nshd_facts(int rw, char *words, struct facts_in *in)
@@ -265,6 +351,8 @@ nshd_facts(int rw, char *words, struct facts_in *in)
 	sigset_t		 block, saved, waiting;
 	int			 fd, done = 0, ret = 0;
 
+	if (rw && sfd == -1)
+		return (-1);
 	if ((fd = nshd_open(rw ? NSHD_SOCKET : NSHD_RO_SOCKET, &ib)) == -1) {
 		if (errno != EPROTO)
 			return (-1);
@@ -284,6 +372,8 @@ nshd_facts(int rw, char *words, struct facts_in *in)
 	sigaction(SIGINT, &sa, &osa);
 	nshd_intr = 0;
 
+	if (rw && nshd_borrow(&ib, &waiting) == -1)
+		goto done;
 	memset(&show, 0, sizeof(show));
 	if (strlcpy(show.words, words, sizeof(show.words)) >=
 	    sizeof(show.words)) {
@@ -347,21 +437,60 @@ done:
 }
 
 /*
- * configure, of how, a session of nshd's: as a handler returns, or
- * NSHD_ABSENT if no nshd runs here
+ * enable: privileged mode's session opened, and enabled by the secret,
+ * which is asked for if nshd takes one; as a handler returns
  */
+int
+nshd_enable(void)
+{
+	struct nshd_enable	 e;
+	char			*p;
+	int			 r;
+
+	if (priv)
+		return (0);
+	nshd_close();
+	if ((sfd = nshd_open(NSHD_SOCKET, &sib)) == -1) {
+		nshd_why();
+		return (-1);
+	}
+	memset(&e, 0, sizeof(e));
+	e.how = NSHD_BY_SECRET;
+	if ((r = nshd_request(IMSG_CTL_ENABLE, &e, sizeof(e), 0)) == -1 &&
+	    sfd != -1 && sstatus == NSHD_NEEDSECRET) {
+		p = getpass("Privileged Mode Secret:");
+		if (p == NULL || *p == '\0')
+			printf("%% Secret incorrect\n");
+		else {
+			/* bcrypt reads 72 bytes of it, at most */
+			strlcpy(e.secret, p, sizeof(e.secret));
+			r = nshd_request(IMSG_CTL_ENABLE, &e, sizeof(e), 0);
+		}
+		if (p != NULL)
+			explicit_bzero(p, strlen(p));
+		explicit_bzero(&e, sizeof(e));
+	}
+	if (r == -1) {
+		nshd_close();
+		return (-1);
+	}
+	priv = 1;
+	return (0);
+}
+
+/* disable: privileged mode's session closed, and every mode left */
+void
+nshd_disable(void)
+{
+	nshd_close();
+}
+
+/* configure, of how, in privileged mode's session; as a handler returns */
 int
 nshd_configure(int how)
 {
 	struct nshd_configure	 cf;
 
-	if ((sfd = nshd_open(NSHD_SOCKET, &sib)) == -1) {
-		if (errno == ENOENT || errno == ECONNREFUSED)
-			return (NSHD_ABSENT);
-		printf("%% nshd: %s\n", errno == EPROTO ?
-		    "not a version nsh speaks" : strerror(errno));
-		return (-1);
-	}
 	cf.mode = how;
 	return (nshd_request(IMSG_CTL_CONFIGURE, &cf, sizeof(cf), 0));
 }
@@ -432,13 +561,15 @@ nshd_cshow(char *words)
 
 /*
  * type, with len bytes of data, on the session: what nshd prints, to
- * stdout or paged, and the mode it gives taken; as a handler returns.
- * ^C leaves configure, as nshd finishes what it was asked.
+ * stdout or paged, and the mode and token it gives taken, and how it
+ * ended, sstatus; as a handler returns. ^C closes the session, as nshd
+ * finishes what it was asked.
  */
 static int
 nshd_request(uint32_t type, const void *data, size_t len, int paged)
 {
 	struct nshd_context	 c;
+	struct nshd_token	 t;
 	struct nshd_result	 r = { -1 };
 	struct imsg		 imsg;
 	struct ibuf		 b;
@@ -448,8 +579,9 @@ nshd_request(uint32_t type, const void *data, size_t len, int paged)
 	FILE			*f = stdout;
 	int			 fd, done = 0, gone = 1;
 
+	sstatus = -1;
 	if (sfd == -1) {
-		printf("%% nshd: not in configure\n");
+		printf("%% Privilege required\n");
 		return (-1);
 	}
 	if (paged) {
@@ -484,9 +616,9 @@ nshd_request(uint32_t type, const void *data, size_t len, int paged)
 	while (!done) {
 		if (nshd_next(&sib, &imsg, &waiting) == -1) {
 			if (nshd_intr)
-				printf("\n%% Interrupted: %s is left, and "
-				    "nshd finishes what it was asked\n",
-				    nshd_cname());
+				printf("\n%% Interrupted: %s, and nshd "
+				    "finishes what it was asked\n", priv ?
+				    "privileged mode is left" : "not enabled");
 			else
 				printf("%% nshd: gone before it answered\n");
 			goto done;
@@ -509,6 +641,15 @@ nshd_request(uint32_t type, const void *data, size_t len, int paged)
 			}
 			nshd_context(&c);
 			break;
+		case IMSG_CTL_TOKEN:
+			if (imsg_get_data(&imsg, &t, sizeof(t)) == -1) {
+				printf("%% nshd: a token nsh cannot read\n");
+				imsg_free(&imsg);
+				goto done;
+			}
+			memcpy(token, t.token, sizeof(token));
+			explicit_bzero(&t, sizeof(t));
+			break;
 		case IMSG_CTL_RESULT:
 			if (imsg_get_data(&imsg, &r, sizeof(r)) == -1) {
 				printf("%% nshd: a result nsh cannot read\n");
@@ -525,6 +666,7 @@ nshd_request(uint32_t type, const void *data, size_t len, int paged)
 		imsg_free(&imsg);
 	}
 	gone = 0;
+	sstatus = r.status;
 done:
 	if (paged) {
 		if (fclose(f) == EOF)
@@ -533,8 +675,8 @@ done:
 			more(path);
 		unlink(path);
 	}
-	/* a session nshd closed, or that did not reach configure */
-	if (gone || !nshd_config)
+	/* a session nshd closed, or one nsh cannot follow */
+	if (gone)
 		nshd_close();
 	/* a ^C pending now ends nothing */
 	sigprocmask(SIG_SETMASK, &saved, NULL);
@@ -548,22 +690,22 @@ nshd_context(struct nshd_context *c)
 {
 	nshd_config = c->mode >= NSHD_PRIVATE && c->mode <= NSHD_EXCLUSIVE ?
 	    c->mode : 0;
-	nshd_rtable = c->rtable;
+	nshd_rtable = nshd_config ? c->rtable : 0;
 	nshd_mode(nshd_config != 0, c->ifname, c->bridge);
 }
 
-/* The session gone, and configure with it */
+/* The session gone, and privileged mode and every mode with it */
 static void
 nshd_close(void)
 {
 	if (sfd == -1)
 		return;
-	if (nshd_config) {
-		nshd_config = 0;
-		nshd_mode(0, "", 0);
-	}
+	nshd_config = 0;
 	nshd_rtable = 0;
+	nshd_mode(0, "", 0);
 	imsgbuf_clear(&sib);
 	close(sfd);
 	sfd = -1;
+	explicit_bzero(token, sizeof(token));
+	priv = 0;
 }
