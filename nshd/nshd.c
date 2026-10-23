@@ -354,7 +354,6 @@ spawn_all(void)
 		start(&children[i], out[i]);
 
 	memset(&st, 0, sizeof(st));
-	st.generation = 1;
 	st.boot = booting;
 	for (i = 0; i < NPROC; i++)
 		if (imsg_compose_event(children[i].iev, IMSG_STARTUP, 0, 0,
@@ -479,7 +478,6 @@ tell(struct child *c, struct child *p, int fd)
 	memset(&ch, 0, sizeof(ch));
 	ch.proc = p->proc;
 	ch.instance = p->instance;
-	ch.generation = 1;
 	if (imsg_compose(&c->out, IMSG_PEER, 0, 0, fd, &ch, sizeof(ch)) ==
 	    -1)
 		fatal("%s: %s's pipe", c->name, p->name);
@@ -830,12 +828,11 @@ static struct link	*links;
 static size_t		 nlinks;
 
 static void		 link_take(struct imsg *);
-static void		 link_close(struct link *);
 
 /*
  * A child's n peers, in l, each with its pipe from parent, on fd 4, all
  * of them written before the child started: fd 4 is closed once they
- * are taken
+ * are taken, and then each link's ready() is called
  */
 void
 links_init(struct link *l, size_t n)
@@ -871,13 +868,12 @@ links_init(struct link *l, size_t n)
 	}
 	imsgbuf_clear(&ibuf);
 	close(4);
+	for (have = 0; have < n; have++)
+		if (l[have].ready != NULL)
+			l[have].ready();
 }
 
-/*
- * a peer's pipe, of the generation it started with, in place of the one
- * before, or that it is down: what it held is forgotten first, as it is
- * not the peer that held it, and then what is ready for it sent
- */
+/* a peer's pipe, once */
 static void
 link_take(struct imsg *imsg)
 {
@@ -891,45 +887,17 @@ link_take(struct imsg *imsg)
 		for (i = 0; i < nlinks; i++)
 			if ((int)links[i].proc == ch.proc)
 				l = &links[i];
-	if (l == NULL || ch.generation < l->generation)
+	if (l == NULL || l->iev != NULL || (fd = imsg_get_fd(imsg)) == -1)
 		fatalx("%s: bad imsg %u", __func__, imsg_get_type(imsg));
-	fd = imsg_get_fd(imsg);
-	link_close(l);
-	l->generation = ch.generation;
-	l->down = fd == -1;
-	l->forget();
-	if (fd == -1)
-		return;
 	if ((l->iev = imsgev_new(fd, l->handler, 0)) == NULL)
 		fatal(NULL);
-	if (l->ready != NULL)
-		l->ready();
 }
 
-static void
-link_close(struct link *l)
-{
-	struct imsgev	**iev[] = { &l->iev, &l->wrong };
-	size_t		  i;
-
-	for (i = 0; i < 2; i++) {
-		if (*iev[i] == NULL)
-			continue;
-		event_del(&(*iev[i])->ev);
-		imsgbuf_clear(&(*iev[i])->ibuf);
-		close((*iev[i])->ibuf.fd);
-		free(*iev[i]);
-		*iev[i] = NULL;
-	}
-}
-
-/* to l's peer, if there is a pipe to it: what crosses its going is lost */
+/* to l's peer */
 int
 link_compose(struct link *l, uint32_t type, uint32_t id, const void *data,
     size_t len)
 {
-	if (l->iev == NULL)
-		return (0);
 	return (imsg_compose_event(l->iev, type, id, 0, -1, data, len));
 }
 

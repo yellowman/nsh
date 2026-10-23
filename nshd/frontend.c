@@ -66,21 +66,18 @@ union frontend_request {
 static void	frontend_dispatch_parent(int, short, void *);
 static void	frontend_listen(void);
 static void	frontend_dispatch_config(int, short, void *);
-static void	frontend_forget_config(void);
 static void	frontend_dispatch_system(int, short, void *);
-static void	frontend_forget_system(void);
 static void	frontend_asked(struct ctl_conn *, uint32_t);
 static int	frontend_client(struct ctl_conn *, struct imsg *);
 static void	frontend_gone(struct ctl_conn *);
 static int	frontend_written(struct ctl_conn *);
-static int	frontend_answer(struct ctl_conn *, struct imsg *);
 static ssize_t	frontend_whole(struct imsg *, union frontend_request *);
 
 static struct link	 links[] = {
 #define CONFIG		0
-	{ PROC_CONFIG,	 frontend_dispatch_config, frontend_forget_config },
+	{ PROC_CONFIG,	 frontend_dispatch_config },
 #define SYSTEM		1
-	{ PROC_SYSTEM,	 frontend_dispatch_system, frontend_forget_system },
+	{ PROC_SYSTEM,	 frontend_dispatch_system },
 };
 
 void
@@ -207,13 +204,6 @@ frontend_dispatch_config(int fd, short event, void *arg)
 	imsg_event_add(iev);
 }
 
-/* config started again, or is down: it forgot every session */
-static void
-frontend_forget_config(void)
-{
-	control_close_all();
-}
-
 /* system sends frontend nothing */
 static void
 frontend_dispatch_system(int fd, short event, void *arg)
@@ -239,12 +229,6 @@ frontend_dispatch_system(int fd, short event, void *arg)
 		return;
 	}
 	imsg_event_add(iev);
-}
-
-/* system started again, or is down: it forgot what it was told */
-static void
-frontend_forget_system(void)
-{
 }
 
 /*
@@ -279,8 +263,6 @@ frontend_client(struct ctl_conn *c, struct imsg *imsg)
 	if (c->pending)
 		return (-1);
 	c->pending = 1;
-	if (links[CONFIG].down)
-		return (frontend_answer(c, imsg));
 	switch (imsg_get_type(imsg)) {
 	case IMSG_CTL_HELLO:
 		if (imsg_get_data(imsg, &peer.hello, sizeof(peer.hello)) == -1)
@@ -343,46 +325,6 @@ frontend_written(struct ctl_conn *c)
 	    link_compose(&links[CONFIG], IMSG_CTL_READ, c->id, NULL, 0) == -1)
 		fatal("%s", __func__);
 	return (0);
-}
-
-/* with config down, what it would have answered, as far as it can */
-static int
-frontend_answer(struct ctl_conn *c, struct imsg *imsg)
-{
-	struct nshd_hello	 hello;
-	struct nshd_session	 s;
-	struct nshd_result	 r;
-	union frontend_request	 req;
-	const char		*down = "% nshd: config is down\n";
-
-	c->pending = 0;
-	switch (imsg_get_type(imsg)) {
-	case IMSG_CTL_HELLO:
-		if (imsg_get_data(imsg, &hello, sizeof(hello)) == -1)
-			return (-1);
-		s.version = NSHD_VERSION;
-		s.id = c->id;
-		s.priv = 0;
-		return (control_reply(c->id, IMSG_CTL_HELLO, &s, sizeof(s)));
-	case IMSG_CTL_SHOW:
-	case IMSG_CTL_CONFIGURE:
-	case IMSG_CTL_LINE:
-	case IMSG_CTL_EXIT:
-	case IMSG_CTL_COMMIT:
-	case IMSG_CTL_ROLLBACK:
-	case IMSG_CTL_ENABLE:
-	case IMSG_CTL_OP:
-	case IMSG_CTL_LOAD:
-		if (frontend_whole(imsg, &req) == -1)
-			return (-1);
-		r.status = 1;
-		if (control_reply(c->id, IMSG_CTL_OUTPUT, down,
-		    strlen(down)) == -1)
-			return (-1);
-		return (control_reply(c->id, IMSG_CTL_RESULT, &r, sizeof(r)));
-	default:
-		return (-1);
-	}
 }
 
 /*

@@ -161,12 +161,10 @@ struct nshd_asked {
 };
 
 /*
- * config to system: the session a commit is for, by frontend's
- * generation, which asked what system was told of; or session 0, the
- * boot's
+ * config to system: the session a commit is for, which asked what
+ * system was told of; or session 0, the boot's
  */
 struct nshd_whose {
-	uint32_t	generation;
 	uint32_t	session;
 };
 
@@ -212,16 +210,13 @@ struct nshd_test {
 struct nshd_child {
 	int32_t			proc;
 	int32_t			instance;
-	uint32_t		generation;
 };
 
 /*
- * parent to a child, once it may start: its generation, and whether
- * the boot is not done, until which frontend and the shows wait for
- * LISTEN
+ * parent to a child, once it may start: whether the boot is not done,
+ * until which frontend and the shows wait for LISTEN
  */
 struct nshd_startup {
-	uint32_t		generation;
 	int32_t			boot;
 };
 
@@ -336,12 +331,8 @@ struct nshd_keep {
 struct link {
 	enum nshd_proc	 proc;
 	void		(*handler)(int, short, void *);
-	void		(*forget)(void);	/* all the peer held */
-	void		(*ready)(void);		/* or NULL: a new pipe to it */
-	struct imsgev	*iev;		/* or NULL: gone, or down */
-	struct imsgev	*wrong;		/* gone wrong: held, unread */
-	uint32_t	 generation;
-	int		 down;
+	void		(*ready)(void);	/* or NULL: once every pipe is here */
+	struct imsgev	*iev;
 };
 
 /* nshd.c */
@@ -374,7 +365,6 @@ struct confirm {
 	int		 state;
 	uint64_t	 id;
 	time_t		 deadline;	/* when it goes back, by the wall clock */
-	time_t		 until;		/* or later, when this is, if not 0 */
 	int		 attempts;	/* to go back, begun */
 	int		 demoted;	/* carp demoted, for it */
 	char		*back;		/* the configuration it goes back to */

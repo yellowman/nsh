@@ -16,15 +16,13 @@
 
 /*
  * config: the sessions, from frontend, and what they ask of system,
- * each on its own pipe. Each request to system has an id of its own,
- * with config's generation in its top bits, so an answer meant for a
- * config before this one is known for what it is; system's answers for
- * it go to the session that asked, if that session is still there, its
- * facts passed on unread. system learns when a session's client has
- * read all it was sent, and when the session is gone, so it stops what
- * it streams the session. When frontend starts again, every session is
- * gone; when system does, what it was asked is lost. A peer that sends
- * what it may not, or sends it wrong, is reported, as it went wrong.
+ * each on its own pipe. Each request to system has an id of its own;
+ * system's answers for it go to the session that asked, if that
+ * session is still there, its facts passed on unread. system learns
+ * when a session's client has read all it was sent, and when the
+ * session is gone, so it stops what it streams the session. A peer that
+ * sends what it may not, or sends it wrong, ends config, and nshd with
+ * it.
  *
  * A session in configure has nsh's state of its own (session.c), and
  * config runs its lines through nsh's code in candidate mode, which
@@ -86,9 +84,8 @@
  * configuration, which a commit of no session's makes what runs, all
  * of it that takes, as nothing it checks or tests refuses it; then
  * system records how it went (BOOTED), and parent is told. What nsh's
- * code and system print for it is logged. If system starts again, the
- * boot does too; if system is down, the boot did not go well. If system
- * could not record the boot, it runs, and did not go well.
+ * code and system print for it is logged. If system could not record
+ * the boot, it runs, and did not go well.
  */
 
 #include <sys/types.h>
@@ -235,10 +232,6 @@ static int			 keep_loaded;	/* what archive kept, taken */
 static char			*loading;	/* that, as it comes */
 static size_t			 loading_len;
 static int			 loading_past;	/* past NSHD_KEEPMAX */
-static int			 booting;	/* the boot is not done */
-
-#define REQUEST_GEN_SHIFT	24	/* generation above, count below */
-#define REQUEST_COUNT		((1U << REQUEST_GEN_SHIFT) - 1)
 
 static struct imsgev	*iev_parent;
 
@@ -246,10 +239,6 @@ static void		 config_dispatch_parent(int, short, void *);
 static void		 config_dispatch_frontend(int, short, void *);
 static void		 config_dispatch_system(int, short, void *);
 static void		 config_dispatch_archive(int, short, void *);
-static void		 config_forget_frontend(void);
-static void		 config_forget_system(void);
-static void		 config_forget_archive(void);
-static void		 config_ready_system(void);
 static void		 config_ready_archive(void);
 static void		 config_show(uint32_t, struct nshd_show *);
 static void		 config_configure(uint32_t, struct nshd_configure *);
@@ -306,7 +295,6 @@ static void		 boot_start(void);
 static void		 boot_text(struct ibuf *);
 static void		 boot_plan(void);
 static void		 boot_ran(int);
-static void		 boot_lost(const char *);
 static void		 boot_drop(void);
 static void		 boot_end(int32_t);
 static void		 session_gone(struct session *);
@@ -316,13 +304,11 @@ static void		 request_free(struct request *);
 
 static struct link	 links[] = {
 #define FRONTEND	0
-	{ PROC_FRONTEND, config_dispatch_frontend, config_forget_frontend },
+	{ PROC_FRONTEND, config_dispatch_frontend },
 #define SYSTEM		1
-	{ PROC_SYSTEM,	 config_dispatch_system,   config_forget_system,
-	    config_ready_system },
+	{ PROC_SYSTEM,	 config_dispatch_system },
 #define ARCHIVE		2
-	{ PROC_ARCHIVE,	 config_dispatch_archive,  config_forget_archive,
-	    config_ready_archive },
+	{ PROC_ARCHIVE,	 config_dispatch_archive, config_ready_archive },
 };
 
 void
@@ -349,7 +335,7 @@ configproc(int debug, int verbose)
 	exit(0);
 }
 
-/* parent's word of config's generation, and whether to boot */
+/* parent's word that config may start, and whether to boot */
 static void
 config_dispatch_parent(int fd, short event, void *arg)
 {
@@ -370,14 +356,8 @@ config_dispatch_parent(int fd, short event, void *arg)
 		    imsg_get_data(&imsg, &st, sizeof(st)) == -1)
 			fatalx("parent sent imsg %u, which it may not",
 			    imsg_get_type(&imsg));
-		request_id = st.generation << REQUEST_GEN_SHIFT;
-		if (st.boot && !booting) {
-			booting = 1;
-			if (links[SYSTEM].iev != NULL)
-				boot_start();
-			else if (links[SYSTEM].down)
-				boot_end(1);
-		}
+		if (st.boot)
+			boot_start();
 		imsg_free(&imsg);
 	}
 	imsg_event_add(iev);
@@ -641,10 +621,6 @@ config_show(uint32_t session, struct nshd_show *show)
 		    WAIT_DIFF);
 		return;
 	}
-	if (links[SYSTEM].down) {
-		config_answer(session, 1, "%% nshd: system is down\n");
-		return;
-	}
 	if (strcmp(show->words, "running-config") == 0) {
 		type = IMSG_SYS_SNAPSHOT;
 		data = &ns;
@@ -817,10 +793,6 @@ config_rollback(uint32_t session, struct nshd_rollback *rb)
 		config_wait(sp, WAIT_RESET);
 		return;
 	}
-	if (links[SYSTEM].down) {
-		config_answer(session, 1, "%% nshd: system is down\n");
-		return;
-	}
 	if ((r = config_request(session, REQ_ROLLBACK)) == NULL) {
 		config_answer(session, 1, "%s", IDS_GONE);
 		return;
@@ -890,10 +862,6 @@ config_enable(uint32_t session, struct nshd_enable *e)
 	if (e->how != NSHD_BY_SECRET) {
 		config_answer(session, 1, "%% nshd: enable by a secret or a "
 		    "token\n");
-		return;
-	}
-	if (links[SYSTEM].down) {
-		config_answer(session, 1, "%% nshd: system is down\n");
 		return;
 	}
 	if ((r = config_request(session, REQ_ENABLE)) == NULL) {
@@ -981,10 +949,6 @@ config_op(uint32_t session, struct nshd_op *op)
 
 	if (session_find(session) == NULL) {
 		config_answer(session, 1, "%% nshd: hello first\n");
-		return;
-	}
-	if (links[SYSTEM].down) {
-		config_answer(session, 1, "%% nshd: system is down\n");
 		return;
 	}
 	if ((r = config_request(session, REQ_ANSWER)) == NULL) {
@@ -1285,13 +1249,7 @@ shared_keep(void)
 
 	if (seq == 0)
 		seq = 1;
-	if (links[ARCHIVE].down) {
-		printf("%% nshd: archive is down: the shared candidate is not "
-		    "kept\n");
-		return (0);
-	}
-	/* if archive starts again, it is sent then */
-	if (links[ARCHIVE].iev != NULL && shared_send(seq) == -1) {
+	if (shared_send(seq) == -1) {
 		printf("%% nshd: the shared candidate could not be kept\n");
 		return (0);
 	}
@@ -1438,10 +1396,6 @@ snapshot_take(void)
 
 	if (snap != NULL)
 		return;
-	if (links[SYSTEM].down) {
-		config_snapshot_lost("% nshd: system is down\n");
-		return;
-	}
 	if ((r = config_request(0, REQ_ANSWER)) == NULL) {
 		config_snapshot_lost(IDS_GONE);
 		return;
@@ -1878,7 +1832,6 @@ commit_new(struct session *sp)
 		fatal(NULL);
 	commit->session = sp->id;
 	commit->uid = sp->uid;
-	commit->whose.generation = links[FRONTEND].generation;
 	commit->whose.session = sp->id;
 }
 
@@ -1897,10 +1850,6 @@ commit_request(int step, uint32_t type, const void *data, size_t len)
 		printed_text(session_find(commit->session) != NULL ?
 		    links[FRONTEND].iev : NULL, IMSG_CTL_OUTPUT,
 		    commit->session);
-	if (links[SYSTEM].down) {
-		commit_end(-1, "% nshd: system is down\n");
-		return;
-	}
 	if ((r = config_request(commit->session, REQ_COMMIT)) == NULL) {
 		commit_end(-1, IDS_GONE);
 		return;
@@ -2045,16 +1994,6 @@ boot_ran(int ok)
 	commit_request(BOOT_END, IMSG_SYS_BOOTED, &res, sizeof(res));
 }
 
-/* system lost the boot, as msg says: again, once system starts */
-static void
-boot_lost(const char *msg)
-{
-	log_text(msg, strlen(msg));
-	boot_drop();
-	if (links[SYSTEM].down)
-		boot_end(1);
-}
-
 /* the boot's commit, if any, gone, and what nsh's code printed logged */
 static void
 boot_drop(void)
@@ -2075,7 +2014,6 @@ boot_end(int32_t status)
 	struct nshd_result	res;
 
 	boot_drop();
-	booting = 0;
 	res.status = status;
 	if (imsg_compose_event(iev_parent, IMSG_BOOTED, 0, 0, -1, &res,
 	    sizeof(res)) == -1)
@@ -2106,56 +2044,6 @@ config_answer(uint32_t session, int32_t status, const char *fmt, ...)
 	if (link_compose(&links[FRONTEND], IMSG_CTL_RESULT, session, &r,
 	    sizeof(r)) == -1)
 		fatal("%s", __func__);
-}
-
-/* frontend started again, or is down: its sessions are gone */
-static void
-config_forget_frontend(void)
-{
-	struct session	*sp;
-	struct request	*r;
-
-	while ((sp = TAILQ_FIRST(&sessions)) != NULL) {
-		config_tell(sp->id, IMSG_SYS_STOP);
-		session_gone(sp);
-	}
-	/* no session again has 0, and a new one may have the id */
-	TAILQ_FOREACH(r, &requests, entry)
-		r->session = 0;
-	if (commit != NULL)
-		commit->session = 0;
-}
-
-/* system started again, or is down: what it was asked is lost */
-static void
-config_forget_system(void)
-{
-	struct request	*r;
-	const char	*lost = links[SYSTEM].down ?
-	    "% nshd: system is down\n" :
-	    "% nshd: system started again, and its answer is lost\n";
-
-	if (commit != NULL && commit->boot)
-		boot_lost(lost);
-	else if (booting && links[SYSTEM].down)
-		boot_end(1);
-	while ((r = TAILQ_FIRST(&requests)) != NULL) {
-		if (r->kind != REQ_COMMIT && r->session != 0 &&
-		    session_find(r->session) != NULL)
-			config_answer(r->session, 1, "%s", lost);
-		TAILQ_REMOVE(&requests, r, entry);
-		request_free(r);
-	}
-	if (snap != NULL) {
-		facts_in_free(&snap->in);
-		kfacts_free(snap->kf);
-		free(snap->text);
-		free(snap);
-		snap = NULL;
-		config_snapshot_lost(lost);
-	}
-	if (commit != NULL)
-		commit_end(-1, lost);
 }
 
 /* archive's answers: what it kept, for config to take, or that it kept */
@@ -2228,49 +2116,12 @@ config_dispatch_archive(int fd, short event, void *arg)
 	link_broken(l, "sent imsg %u, which it may not, or not whole", type);
 }
 
-/*
- * archive started again, or is down: what it was sending is lost, and
- * if it is down, what was not kept will not be
- */
-static void
-config_forget_archive(void)
-{
-	free(loading);
-	loading = NULL;
-	loading_len = 0;
-	loading_past = 0;
-	if (!links[ARCHIVE].down)
-		return;
-	if (!keep_loaded)
-		shared_load();
-	if (keep_sent != keep_done)
-		shared_kept(keep_sent, "% nshd: archive is down: the shared "
-		    "candidate is not kept\n");
-}
-
-/* a pipe to system: the boot, if it waits on one */
-static void
-config_ready_system(void)
-{
-	if (booting && commit == NULL)
-		boot_start();
-}
-
-/*
- * A pipe to archive: what it kept is asked for, if config has not taken
- * it, or the shared candidate sent again, if archive has not said it
- * kept it
- */
+/* archive's pipe here: what it kept, asked for */
 static void
 config_ready_archive(void)
 {
-	if (!keep_loaded) {
-		if (link_compose(&links[ARCHIVE], IMSG_ARC_LOAD, 0, NULL,
-		    0) == -1)
-			fatal("%s", __func__);
-	} else if (keep_sent != keep_done && shared_send(keep_sent) == -1)
-		shared_kept(keep_sent, "% nshd: the shared candidate could "
-		    "not be kept\n");
+	if (link_compose(&links[ARCHIVE], IMSG_ARC_LOAD, 0, NULL, 0) == -1)
+		fatal("%s", __func__);
 }
 
 /* to system: type, for each request of session not finished */
@@ -2294,7 +2145,7 @@ config_request(uint32_t session, int kind)
 {
 	struct request	*r;
 
-	if ((request_id & REQUEST_COUNT) == REQUEST_COUNT)
+	if (request_id == UINT32_MAX)
 		return (NULL);
 	if ((r = calloc(1, sizeof(*r))) == NULL)
 		fatal(NULL);

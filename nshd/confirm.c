@@ -15,18 +15,16 @@
  */
 
 /*
- * The record of a commit not confirmed, which system makes, and parent
- * reads too, so that it knows when system should have taken the commit
- * back: a head line, then the configuration it goes back to.
+ * The record of a commit not confirmed, which system makes: a head
+ * line, then the configuration it goes back to.
  *
- *	STATE ID DEADLINE UNTIL ATTEMPTS DEMOTED LENGTH
+ *	STATE ID DEADLINE ATTEMPTS DEMOTED LENGTH
  *
  * STATE is waiting, until it is confirmed or goes back, or failed, if
  * it could not go back. ID, 16 hex digits and not 0, names the commit.
- * DEADLINE is when it goes back, by the wall clock, and UNTIL, if not
- * 0, when what system does first may end. ATTEMPTS to go back were
- * begun, and DEMOTED is 1 while carp is demoted for it. LENGTH is the
- * configuration's. Each is as written here, or it is not a record.
+ * DEADLINE is when it goes back, by the wall clock. ATTEMPTS to go back
+ * were begun, and DEMOTED is 1 while carp is demoted for it. LENGTH is
+ * the configuration's. Each is as written here, or it is not a record.
  */
 
 #include <sys/types.h>
@@ -49,7 +47,7 @@
 
 #define CONFIRM_RECORD	NSHDB "/confirm"
 #define CONFIRM_HEAD	128	/* the head line, at most */
-#define HEAD_FORMAT	"%s %016llx %lld %lld %d %d %zu"
+#define HEAD_FORMAT	"%s %016llx %lld %d %d %zu"
 
 static const char *confirm_states[] = { "none", "waiting", "failed" };
 
@@ -69,7 +67,7 @@ confirm_read(struct confirm *cf, int whole)
 	char			 head[CONFIRM_HEAD + 1], canon[CONFIRM_HEAD];
 	char			 state[16], *nl;
 	unsigned long long	 id;
-	long long		 deadline, until;
+	long long		 deadline;
 	size_t			 len;
 	int			 fd, i, serrno;
 
@@ -85,14 +83,14 @@ confirm_read(struct confirm *cf, int whole)
 	if ((nl = memchr(head, '\n', len)) == NULL)
 		goto bad;
 	*nl = '\0';
-	if (sscanf(head, "%15s %llx %lld %lld %d %d %zu", state, &id,
-	    &deadline, &until, &cf->attempts, &cf->demoted, &cf->backlen) != 7)
+	if (sscanf(head, "%15s %llx %lld %d %d %zu", state, &id, &deadline,
+	    &cf->attempts, &cf->demoted, &cf->backlen) != 6)
 		goto bad;
 	/* as written, and no other way */
-	snprintf(canon, sizeof(canon), HEAD_FORMAT, state, id, deadline, until,
+	snprintf(canon, sizeof(canon), HEAD_FORMAT, state, id, deadline,
 	    cf->attempts, cf->demoted, cf->backlen);
 	if (strcmp(canon, head) != 0 || id == 0 || deadline <= 0 ||
-	    until < 0 || cf->attempts < 0 || (cf->demoted != 0 &&
+	    cf->attempts < 0 || (cf->demoted != 0 &&
 	    cf->demoted != 1) || cf->backlen > NSHD_PART ||
 	    (nl - head) + 1 + (off_t)cf->backlen != sb.st_size)
 		goto bad;
@@ -103,7 +101,6 @@ confirm_read(struct confirm *cf, int whole)
 		goto bad;
 	cf->id = id;
 	cf->deadline = deadline;
-	cf->until = until;
 	if (whole) {
 		if ((cf->back = malloc(cf->backlen + 1)) == NULL ||
 		    readall(fd, cf->back, cf->backlen, (nl - head) + 1) == -1)
@@ -132,8 +129,7 @@ confirm_write(struct confirm *cf)
 
 	len = snprintf(head, sizeof(head), HEAD_FORMAT "\n",
 	    confirm_states[cf->state], (unsigned long long)cf->id,
-	    (long long)cf->deadline, (long long)cf->until, cf->attempts,
-	    cf->demoted, cf->backlen);
+	    (long long)cf->deadline, cf->attempts, cf->demoted, cf->backlen);
 	if (mkdir(NSHDB, 0700) == -1 && errno != EEXIST)
 		return (-1);
 	if ((fd = mkstemp(tmp)) == -1)

@@ -32,4 +32,3 @@ int	control_listen(int, int (*)(struct ctl_conn *, struct imsg *),
 int	control_reply(uint32_t, uint32_t, const void *, size_t);
 void	control_drop(uint32_t);
 struct ctl_conn	*control_connbyid(uint32_t);
-void	control_close_all(void);

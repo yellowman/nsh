@@ -81,8 +81,8 @@
  * Its deadline is its minutes from when it is kept, and from its BEGIN
  * until then. Past its deadline, system takes it back, but not while a
  * commit it began has not ended, or a job runs, as what that commit
- * undoes could bring back what was taken back; meanwhile the record
- * says until when that may be. carp is demoted, and the attempt recorded, then a job,
+ * undoes could bring back what was taken back. carp is demoted, and the
+ * attempt recorded, then a job,
  * JOB_RECOVER, makes what runs read as what the commit goes back to,
  * and carp is promoted again; CONFIRM_RETRY later if it fails,
  * CONFIRM_ATTEMPTS times, and then the record says it failed, and carp
@@ -191,10 +191,6 @@ static const struct {
 	{ "test",	120,	5 },	/* a validation: bgpd -n on a full table */
 	{ "recover",	900,	10 },	/* a commit not confirmed's way back */
 };
-/* a commit begun, which may still take its script, its save and back */
-#define COMMIT_SECS	(2 * (jobs[JOB_APPLY].secs + jobs[JOB_APPLY].grace) + \
-			    jobs[JOB_SAVE].secs + jobs[JOB_SAVE].grace)
-#define RECOVER_SECS	(jobs[JOB_RECOVER].secs + jobs[JOB_RECOVER].grace)
 
 /* a commit not confirmed's way back, tried this often, this far apart */
 #define CONFIRM_ATTEMPTS 3
@@ -278,12 +274,11 @@ struct record {
 
 /*
  * What frontend told system: a session's request that may begin a
- * commit, not answered, by frontend's generation; once the session is
- * gone, kept for a commit it asked, ASKED_GONE of them at most
+ * commit, not answered; once the session is gone, kept for a commit it
+ * asked, ASKED_GONE of them at most
  */
 struct asked {
 	TAILQ_ENTRY(asked)	 entry;
-	uint32_t		 generation;
 	uint32_t		 session;
 	uid_t			 uid;
 	int			 web;
@@ -328,12 +323,10 @@ static time_t		 confirm_next;	/* the next attempt, no sooner */
 static void	system_dispatch_parent(int, short, void *);
 static void	system_dispatch_config(int, short, void *);
 static void	system_dispatch_frontend(int, short, void *);
-static void	system_forget_frontend(void);
-static struct asked *asked_find(uint32_t, uint32_t);
+static struct asked *asked_find(uint32_t);
 static struct asked *asked_whose(struct nshd_whose *);
 static void	asked_free(struct asked *);
 static void	asked_trim(void);
-static void	system_forget_config(void);
 static int	system_whole(uint32_t, const void *, size_t);
 static int	system_request(uint32_t, uint32_t, const void *, size_t);
 static void	system_queue(uint32_t, uint32_t, const void *, size_t);
@@ -399,9 +392,9 @@ static __dead void system_exit(void);
 
 static struct link	 links[] = {
 #define CONFIG		0
-	{ PROC_CONFIG,	 system_dispatch_config,   system_forget_config },
+	{ PROC_CONFIG,	 system_dispatch_config },
 #define FRONTEND	1
-	{ PROC_FRONTEND, system_dispatch_frontend, system_forget_frontend },
+	{ PROC_FRONTEND, system_dispatch_frontend },
 };
 
 void
@@ -428,6 +421,8 @@ systemproc(int debug, int v)
 		fatal(NULL);
 	evtimer_set(&confirm_tm, system_confirm, NULL);
 	links_init(links, sizeof(links) / sizeof(links[0]));
+	/* a commit not confirmed that an nshd before this one left */
+	system_confirm(-1, 0, NULL);
 	signal_set(&ev_sigchld, SIGCHLD, system_sigchld, NULL);
 	signal_add(&ev_sigchld, NULL);
 	event_dispatch();
@@ -555,13 +550,12 @@ system_dispatch_frontend(int fd, short event, void *arg)
 			return;
 		}
 		imsg_free(&imsg);
-		k = asked_find(links[FRONTEND].generation, a.session);
+		k = asked_find(a.session);
 		if (type == IMSG_FRONT_ASKED) {
 			if (k != NULL)
 				asked_free(k);
 			if ((k = calloc(1, sizeof(*k))) == NULL)
 				fatal(NULL);
-			k->generation = links[FRONTEND].generation;
 			k->session = a.session;
 			k->uid = a.uid;
 			k->web = a.web != 0;
@@ -577,27 +571,13 @@ system_dispatch_frontend(int fd, short event, void *arg)
 	imsg_event_add(iev);
 }
 
-/* frontend started again, or is down: its sessions are gone */
-static void
-system_forget_frontend(void)
-{
-	struct asked	*k;
-
-	TAILQ_FOREACH(k, &askeds, entry)
-		if (!k->gone) {
-			k->gone = 1;
-			nagone++;
-		}
-	asked_trim();
-}
-
 static struct asked *
-asked_find(uint32_t generation, uint32_t session)
+asked_find(uint32_t session)
 {
 	struct asked	*k;
 
 	TAILQ_FOREACH(k, &askeds, entry)
-		if (k->generation == generation && k->session == session)
+		if (k->session == session)
 			return (k);
 	return (NULL);
 }
@@ -614,14 +594,11 @@ asked_whose(struct nshd_whose *w)
 
 	if (w->session == 0)
 		return (NULL);
-	if (links[FRONTEND].iev != NULL) {
-		pfd.fd = links[FRONTEND].iev->ibuf.fd;
-		pfd.events = POLLIN;
-		if (poll(&pfd, 1, 0) == 1)
-			system_dispatch_frontend(pfd.fd, EV_READ,
-			    links[FRONTEND].iev);
-	}
-	return (asked_find(w->generation, w->session));
+	pfd.fd = links[FRONTEND].iev->ibuf.fd;
+	pfd.events = POLLIN;
+	if (poll(&pfd, 1, 0) == 1)
+		system_dispatch_frontend(pfd.fd, EV_READ, links[FRONTEND].iev);
+	return (asked_find(w->session));
 }
 
 static void
@@ -854,34 +831,6 @@ system_drain(void)
 			return;
 		}
 	}
-}
-
-/*
- * config started again, or is down: what it asked is lost, but a job,
- * which runs to its end, as stopping an apply part way is worse
- */
-static void
-system_forget_config(void)
-{
-	struct stream	*s, *next;
-	struct queued	*q;
-
-	TAILQ_FOREACH_SAFE(s, &streams, entry, next)
-		system_stream_stop(s);
-	while ((q = TAILQ_FIRST(&queue)) != NULL) {
-		TAILQ_REMOVE(&queue, q, entry);
-		free(q);
-	}
-	system_parts_free();
-	/*
-	 * its commit ended, if it began one, and its boot; and as system
-	 * starts, what a system before this did not take back is
-	 */
-	committing = 0;
-	booting = 0;
-	confirm_free(&confirm_prev);
-	confirm_begun = 0;
-	system_confirm(-1, 0, NULL);
 }
 
 /*
@@ -1430,7 +1379,6 @@ system_arm(int minutes)
 	while (cf.id == 0);
 	cf.deadline = time(NULL) + minutes * 60;
 	confirm_minutes = minutes;
-	cf.until = 0;
 	if (confirm_write(&cf) == -1) {
 		printf("%% nshd: the record of a commit not confirmed: %s\n",
 		    strerror(errno));
@@ -1495,15 +1443,7 @@ system_confirm(int fd, short event, void *arg)
 	if (cf.state == CONFIRM_WAITING && now < due) {
 		tv.tv_sec = due - now;
 		evtimer_add(&confirm_tm, &tv);
-	} else if (cf.state == CONFIRM_WAITING && (committing ||
-	    job != NULL)) {
-		/* as long as what is in the way may take */
-		cf.until = now + (committing ? COMMIT_SECS :
-		    jobs[job->kind].secs + jobs[job->kind].grace);
-		if (confirm_write(&cf) == -1)
-			logit(LOG_CRIT, "the record of a commit not confirmed: "
-			    "%s", strerror(errno));
-	} else if (cf.state == CONFIRM_WAITING)
+	} else if (cf.state == CONFIRM_WAITING && !committing && job == NULL)
 		system_recover(&cf);
 	confirm_free(&cf);
 }
@@ -1536,7 +1476,6 @@ system_recover(struct confirm *cf)
 	if (!cf->demoted && carplock(128) == 1)
 		cf->demoted = 1;
 	cf->attempts++;
-	cf->until = time(NULL) + RECOVER_SECS;
 	if (confirm_write(cf) == -1)
 		logit(LOG_CRIT, "the record of a commit not confirmed: %s",
 		    strerror(errno));
@@ -1572,10 +1511,6 @@ system_attempted(int ok)
 		log_warnx("commit not confirmed: attempt %d of %d to roll "
 		    "back failed", cf.attempts, CONFIRM_ATTEMPTS);
 		confirm_next = time(NULL) + CONFIRM_RETRY;
-		cf.until = confirm_next + RECOVER_SECS;
-		if (confirm_write(&cf) == -1)
-			logit(LOG_CRIT, "the record of a commit not confirmed: "
-			    "%s", strerror(errno));
 	} else
 		system_failed(&cf);
 	confirm_free(&cf);
@@ -1601,7 +1536,6 @@ static void
 system_failed(struct confirm *cf)
 {
 	cf->state = CONFIRM_FAILED;
-	cf->until = 0;
 	if (confirm_write(cf) == -1)
 		logit(LOG_CRIT, "the record of a commit not confirmed: %s",
 		    strerror(errno));

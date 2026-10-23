@@ -54,14 +54,12 @@ static int		 past;		/* past NSHD_KEEPMAX */
 
 static void	archive_dispatch_parent(int, short, void *);
 static void	archive_dispatch_config(int, short, void *);
-static void	archive_forget_config(void);
+static void	archive_clear(void);
 static void	archive_open(void);
 static int	archive_keep(void);
 static void	archive_load(void);
 
-static struct link	 config = {
-	PROC_CONFIG, archive_dispatch_config, archive_forget_config
-};
+static struct link	 config = { PROC_CONFIG, archive_dispatch_config };
 
 /* d and v as child_start() takes them: nsh's externs.h has a verbose */
 void
@@ -172,7 +170,7 @@ archive_dispatch_config(int fd, short event, void *arg)
 				goto bad;
 			k.status = archive_keep();
 			/* the next text begins another */
-			archive_forget_config();
+			archive_clear();
 			if (link_compose(&config, IMSG_ARC_KEPT, 0, &k,
 			    sizeof(k)) == -1)
 				fatal("%s", __func__);
@@ -195,9 +193,9 @@ archive_dispatch_config(int fd, short event, void *arg)
 	    type);
 }
 
-/* config started again, or is down: the text it sent is not kept */
+/* the text config sent so far, dropped */
 static void
-archive_forget_config(void)
+archive_clear(void)
 {
 	free(text);
 	text = NULL;
