@@ -154,7 +154,8 @@ show_client(struct ctl_conn *c, struct imsg *imsg)
 			return (-1);
 		s.version = NSHD_VERSION;
 		s.id = c->id;
-		s.priv = 0;
+		/* shows of what anyone may see, whoever asks */
+		s.perms = NSHD_VIEW;
 		return (control_reply(c->id, IMSG_CTL_HELLO, &s, sizeof(s)));
 	case IMSG_CTL_SHOW:
 		if (imsg_get_data(imsg, &show, sizeof(show)) == -1 ||

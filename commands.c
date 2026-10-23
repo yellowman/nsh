@@ -97,7 +97,6 @@ struct sglobal commands_sglobals[] = {
 
 extern volatile sig_atomic_t caught_sigwinch;
 
-static int	disable(int, char **, ...);
 static int      clear(int, char **, ...);
 static int	doverbose(int, char**, ...);
 static int	doediting(int, char**, ...);
@@ -2184,8 +2183,6 @@ static char
 	ddbhelp[] =	"Set DDB parameters",
 	pipexhelp[] =	"Set PIPEX parameters",
 	flushhelp[] =	"Flush system tables",
-	enablehelp[] =	"Enable privileged mode",
-	disablehelp[] =	"Disable privileged mode",
 	routehelp[] =	"Add a host or network route",
 	pinghelp[] = 	"Send IPv4 ICMP echo request",
 	ping6help[] =   "Send IPv6 ICMP echo request",
@@ -2195,7 +2192,7 @@ static char
 	telnethelp[] =	"Telnet connection to remote host",
 	crontabhelp[] =	"Configure scheduled background jobs",
 	quithelp[] =	"Close current connection",
-	exithelp[] =	"Leave configuration mode and return to privileged mode",
+	exithelp[] =	"Leave configuration mode",
 	verbosehelp[] =	"Set verbose diagnostics",
 	editinghelp[] = "Set command line editing",
 	confighelp[] =	"Set configuration mode",
@@ -2213,18 +2210,6 @@ static char
 	powerdownhelp[] ="Power the system down",
 	helphelp[] =	"Print help information",
 	manhelp[] =	"Display the NSH manual";
-
-struct ghs secrettab[] = {
-	{ "<password>", "Password parameter", CMPL0 NULL, 0 },
-	{ "<cipher> <hash>", "Encrypted password parameter", CMPL0 NULL, 0 },
-	{ NULL, NULL, NULL, NULL, 0 }
-};
-
-Menu enabletab[] = {
-	{ "<cr>",	"Enable privileged mode", CMPL0 0, 0, 0, 0, enable },
-	{ "secret",	"Set privileged mode secret", CMPL(h) (char **)secrettab, sizeof(struct ghs), 0, 0, enable },
-	{ 0, 0, 0, 0, 0 }
-};
 
 struct ghs rtabletab[] = {
 	{ "<table id>", "Switch to the given rtable", CMPL0 NULL, 0 },
@@ -2264,9 +2249,7 @@ Command cmdtab[] = {
 	{ "ddb",	ddbhelp,	CMPL(ta) (char **)ddbtab, sizeof(Menu), ipcmd,		1, 1, 1, 0, CAND_EDIT },
 	{ "pipex",	pipexhelp,	CMPL(ta) (char **)pipextab, sizeof(Menu), ipcmd,	1, 1, 1, 0, CAND_EDIT },
 	{ "flush",	flushhelp,	CMPL(ta) (char **)flushlist, sizeof(Menu), flushcmd,	1, 0, 0, 0 },
-	{ "enable",	enablehelp,	CMPL(ta) (char **)enabletab, sizeof(Menu), enable,	0, 0, 0, 0, CAND_EDIT },
 	{ "clear",      clearhelp,      CMPL0 0, 0, clear,              0, 0, 0, 0 },
-	{ "disable",	disablehelp,	CMPL0 0, 0, disable,		1, 0, 0, 0 },
 	{ "route",	routehelp,	CMPL0 0, 0, route,		1, 1, 1, 0, CAND_EDIT },
 	{ "pf",		pfhelp,		CMPL(t) (char **)ctl_pf, ssctl, ctlhandler,	1, 1, 0, 1, CAND_EDIT },
 	{ "ospf",	ospfhelp,	CMPL(t) (char **)ctl_ospf, ssctl, ctlhandler,	1, 1, 0, 1, CAND_EDIT },
@@ -2335,7 +2318,6 @@ size_t cmdtab_nitems = nitems(cmdtab);
 
 static Command  cmdtab2[] = {
 	{ "reload",     nreboothelp,    CMPL0 0, 0, nreboot,            1, 0, 0, 0 },
-	{ "su",         enablehelp,     CMPL(ta) (char **)enabletab, sizeof(Menu), enable,      0, 0, 0, 0 },
 	{ 0,		0,		CMPL0 0, 0, 0,		0, 0, 0, 0 }
 };
 
@@ -2435,10 +2417,8 @@ command()
 			    margv[1]);
 			continue;
 		}
-		if (c->needpriv != 0 && priv != 1) {
-			printf("%% Privilege required\n");
+		if (c->needpriv != 0 && !nshd_priv(0))
 			continue;
-		}
 		/* a daemon's action, nshd's system's, outside configure too */
 		if (c->handler == ctlhandler && margc > 1 &&
 		    ctl_op(c->name, margv[1], 0)) {
@@ -2495,10 +2475,8 @@ cmdline(char *text)
 		printf("%% Invalid command: %s %s\n", margv[0], margv[1]);
 		return -1;
 	}
-	if (c->needpriv != 0 && priv != 1) {
-		printf("%% Privilege required\n");
+	if (c->needpriv != 0 && !nshd_priv(0))
 		return -1;
-	}
 	/* a daemon's action, nshd's system's, outside configure too */
 	if (!in_config && c->handler == ctlhandler && margc > 1 &&
 	    ctl_op(c->name, margv[1], 0))
@@ -2615,10 +2593,6 @@ cmdline_nshd(char *text)
 	}
 	if (NO_ARG(margv[0]) && ! c->nocmd) {
 		printf("%% Invalid command: %s %s\n", margv[0], margv[1]);
-		return -1;
-	}
-	if (c->needpriv != 0 && priv != 1) {
-		printf("%% Privilege required\n");
 		return -1;
 	}
 	/* a daemon's action, but what the candidate takes, nshd's system's */
@@ -2940,10 +2914,9 @@ docmd(int argc, char **argv, ...)
 			printf("%% Ambiguous command %s\n", argv[0]);
 		else if (c == NULL)
 			printf("%% Invalid command %s\n", argv[0]);
-		else if (c->needpriv != 0 && priv != 1) {
-			printf("%% Privilege required\n");
+		else if (c->needpriv != 0 && !nshd_priv(0))
 			return -1;
-		} else if (c->needconfig != 0 && config_mode != 1) {
+		else if (c->needconfig != 0 && config_mode != 1) {
 			printf("%% Command requires configure mode\n");
 			return -1;
 		} else if ((c->needconfig || c->modh) &&
@@ -3497,18 +3470,6 @@ clear(int argc, char **argv, ...)
 	char *args[] = {CLEAR, NULL, NULL };	
         cmdargs(CLEAR, args);
 	return 0; 
-}
-/*
- * disable privileged mode
- */
-static int
-disable(int argc, char **argv, ...)
-{
-	if (cand_leave())
-		return -1;
-	nshd_disable();
-	config_mode = 0;
-	return 0;
 }
 
 /*

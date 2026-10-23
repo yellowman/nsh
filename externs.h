@@ -441,11 +441,6 @@ const char *get_ifm_type_str(uint64_t);
 const char *get_ifm_subtype_str(uint64_t);
 
 /* passwd.c */
-#define NSHPASSWD_TEMP "/var/run/nshpasswd"
-int read_pass(char *, size_t);
-int secret_matches(const char *, const char *);
-int gen_salt(char *, size_t);
-int enable(int, char **, ...);
 #define LOGIN_VIEW	0x1	/* a login class's permissions */
 #define LOGIN_OPERATE	0x2
 #define LOGIN_CONFIGURE	0x4
@@ -453,6 +448,8 @@ int enable(int, char **, ...);
 #define LOGIN_ALL	0xf
 int loginset(int, char **, ...);
 int login_class_perms(const char *);
+int login_perms(uid_t);
+size_t login_hide(char *, size_t);
 void conf_login(FILE *);
 
 /* pfsync.c */
@@ -534,8 +531,7 @@ char *format_k(uint64_t amt);
 extern int nshd_config;
 extern int nshd_rtable;
 int nshd_show(char *);
-int nshd_enable(void);
-void nshd_disable(void);
+int nshd_priv(int);
 int nshd_configure(int);
 const char *nshd_cname(void);
 int nshd_line(char *);

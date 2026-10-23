@@ -101,5 +101,3 @@ int			 session_changed(struct session_state *);
 int			 session_load(struct session_state *, char *, size_t);
 int			 session_rollback(struct session_state *, char *,
 			    size_t, int);
-/* passwd.c's: does a secret crypt to the enable secret's hash */
-int			 secret_matches(const char *, const char *);

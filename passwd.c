@@ -34,66 +34,10 @@
 #include <pwd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <sys/socket.h>
 #include "externs.h"
 #include "settings.h"
 
-int read_pass(char *, size_t);
-int write_pass(char *);
 int validate_cpass(char *, char *);
-int gen_salt(char *, size_t);
-void secretusage(void);
-
-char *bcrypt_gensalt(u_int8_t);
-
-/* read_pass reads the (blowfish crypted) password from a file */
-int
-read_pass(char *pass, size_t size)
-{
-	FILE *pwdhandle;
-
-	pwdhandle = fopen(NSHPASSWD_TEMP, "r");
-	if (pwdhandle == NULL)
-		return (0);
-	if (fgets(pass, size, pwdhandle) == NULL && ferror(pwdhandle)) {
-		fclose(pwdhandle);
-		return (0);
-	}
-	fclose(pwdhandle);
-
-	return (1);
-}
-
-/* Does secret crypt to hash? */
-int
-secret_matches(const char *secret, const char *hash)
-{
-	char *c;
-
-	return ((c = crypt(secret, hash)) != NULL && strcmp(c, hash) == 0);
-}
-
-/* write the crypted password to the passwd-temp file */
-int
-write_pass(char *cpass)
-{
-	FILE *pwdhandle;
-	mode_t mask;
-
-	mask = umask(S_IWGRP | S_IRWXO);
-	/* maybe we should flock here? */
-	pwdhandle = fopen(NSHPASSWD_TEMP, "w");
-	umask(mask);
-	if (pwdhandle == NULL) {
-		printf("%% Unable to write run-time crypt repository: %s\n",
-		       strerror(errno));
-		return (0);
-	}
-	fprintf(pwdhandle, "%s", cpass);
-	fclose(pwdhandle);
-
-	return (1);
-}
 
 /* sanity checks for crypted password input */
 int
@@ -154,133 +98,6 @@ validate_cpass(char *cipher, char *cpass)
 	}
 
 	return 1;
-}
-
-int
-gen_salt(char *salt, size_t saltlen)
-{
-	/* 6 is a rounds value like from localcipher option of login.conf */
-	strlcpy(salt, bcrypt_gensalt(6), saltlen);
-	return 1;
-}
-
-void
-secretusage(void)
-{
-	printf("%% enable secret <password>\t\tSet password"
-	       "(plaintext)\n");
-	printf("%% enable secret <cipher> <hash>\t\tSet"
-	       " password(ciphertext)\n");
-}
-
-/* enable ? and enable secret: a handler's status */
-static int
-enable_passwd(int argc, char **argv)
-{
-	char *cpass;
-	char salt[_PASSWORD_LEN];
-	char pass[_PASSWORD_LEN + 1];
-
-	switch (argc) {
-
-	case 2:
-		if (argv[1][0] == '?') {
-			/* print help */
-			printf("%% enable\t\t\t\tEnable privileged mode\n");
-			printf("%% enable ?\t\t\t\tPrint help information\n");
-			secretusage();
-			return 0;
-		} else {
-			if (isprefix(argv[1], "secret")) {
-				secretusage();
-				return -1;
-			}
-			printf("%% Invalid argument: %s\n", argv[1]);
-			return -1;
-		}
-
-	case 3:
-		if (!isprefix(argv[1], "secret")) {
-			printf("%% Invalid argument: %s\n", argv[1]);
-			return -1;
-		}
-
-		if (config_mode != 1) {
-			printf("%% Configuration mode required\n");
-			return -1;
-		}
-		if (priv != 1) { /* redundant, but kept here just in case */
-			printf("%% Privilege required\n");
-			return -1;
-		}
-
-		if (strlen(argv[2]) < 8) {
-			printf("%% Secret too short; at least 8 characters required\n");
-			return -1;
-		}
-		if (strlen(argv[2]) > _PASSWORD_LEN) {
-			printf("%% Secret too long; at most %d characters allowed\n",
-			    _PASSWORD_LEN);
-			return -1;
-		}
-			
-		/* crypt plaintext and save as pass */
-		strlcpy(pass, argv[2], sizeof(pass));
-		gen_salt(salt, sizeof(salt));
-		if ((cpass = crypt(pass, salt)) == NULL) {
-			printf("%% crypt failed\n");
-			return -1;
-		}
-		if (candidate)
-			return cand_setting(ST_ON, "enable secret blowfish %s",
-			    cpass);
-		return write_pass(cpass) ? 0 : -1;
-
-	case 4:
-		if (!isprefix(argv[1], "secret")) {
-			printf("%% Invalid argument: %s\n", argv[1]);
-			return -1;
-		}
-
-		if (!isprefix(argv[2], "blowfish")) {
-			printf("%% Invalid cipher: %s\n", argv[2]);
-			return -1;
-		}
-
-		if (config_mode != 1) {
-			printf("%% Configuration mode required\n");
-			return -1;
-		}
-		if (priv != 1) { /* redundant, but kept here just in case */
-			printf("%% Privilege required\n");
-			return -1;
-		}
-
-		if (!validate_cpass(argv[2], argv[3]))
-			return -1;
-
-		/* set crypted pass */
-		strlcpy(pass, argv[3], sizeof(pass));
-		if (candidate)
-			return cand_setting(ST_ON, "enable secret blowfish %s",
-			    pass);
-		return write_pass(pass) ? 0 : -1;
-
-	default:
-		printf("%% Too many arguments\n");
-		return -1;
-	}
-
-	return 0;
-}
-
-/* enable privileged mode, nshd's; or enable ? and enable secret */
-int
-enable(int argc, char **argv, ...)
-{
-	if (argc != 1)
-		return enable_passwd(argc, argv);
-	return nshd_enable();
 }
 
 /*
@@ -777,4 +594,60 @@ conf_login(FILE *output)
 		}
 	}
 	login_unload(lines, n);
+}
+
+/*
+ * The permissions of uid's login class: root's are all of them; a user
+ * a line names has its class's; anyone else, and a user whose class is
+ * gone, has view alone
+ */
+int
+login_perms(uid_t uid)
+{
+	struct passwd *pw;
+	char class[64];
+	int made, perms;
+
+	if (uid == 0)
+		return LOGIN_ALL;
+	if ((pw = getpwuid(uid)) == NULL ||
+	    login_user_find(pw->pw_name, class, sizeof(class), &made) != 1 ||
+	    (perms = login_class_perms(class)) == -1)
+		return LOGIN_VIEW;
+	return perms;
+}
+
+/*
+ * text, len bytes, with the password hash of each login user line made
+ * "********", as conf() prints the line and a diff marks it: the hash is
+ * the line's last word. The new length, as the text only gets shorter
+ */
+size_t
+login_hide(char *text, size_t len)
+{
+	static const char pw[] = " password ";
+	char *p = text, *end = text + len, *nl, *w, *h;
+	size_t n;
+
+	for (; p < end; p = nl + 1) {
+		if ((nl = memchr(p, '\n', end - p)) == NULL)
+			nl = end;
+		w = p;
+		if (w < nl && (*w == '+' || *w == '-' || *w == ' '))
+			w++;
+		if (nl - w > 3 && strncmp(w, "no ", 3) == 0)
+			w += 3;
+		if (nl - w <= 11 || strncmp(w, "login user ", 11) != 0 ||
+		    (h = memmem(w, nl - w, pw, sizeof(pw) - 1)) == NULL)
+			continue;
+		h += sizeof(pw) - 1;
+		if (nl - h <= 8)
+			continue;
+		memcpy(h, "********", 8);
+		n = nl - (h + 8);
+		memmove(h + 8, nl, end - nl);
+		end -= n;
+		nl -= n;
+	}
+	return end - text;
 }

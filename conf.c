@@ -134,7 +134,6 @@ static const struct {
 };
 
 static void conf_hostname(FILE *);
-static void conf_secret(FILE *);
 static void conf_top_arp(FILE *);
 static void conf_top_ndp(FILE *);
 static void conf_top_routes(FILE *);
@@ -168,7 +167,6 @@ static const struct {
 } confrows[] = {
 	{ CONF_SEP,	NULL,		NULL },
 	{ CONF_FUNC,	NULL,		conf_hostname },
-	{ CONF_FUNC,	NULL,		conf_secret },
 	{ CONF_FUNC,	NULL,		conf_login },
 	{ CONF_SEP,	NULL,		NULL },
 	{ CONF_CTL,	"motd",		NULL },
@@ -278,7 +276,6 @@ static const struct {
 	char *word;
 } confwords[] = {
 	{ conf_hostname,	"hostname" },
-	{ conf_secret,		"enable" },
 	{ conf_login,		"login" },
 	{ conf_sysctls,		"ip" },
 	{ conf_sysctls,		"ip6" },
@@ -364,20 +361,6 @@ conf_hostname(FILE *output)
 
 	gethostname (hostbuf, sizeof(hostbuf));
 	fprintf(output, "hostname %s\n", hostbuf);
-}
-
-static void
-conf_secret(FILE *output)
-{
-	char cpass[_PASSWORD_LEN+1];
-
-	if (read_pass(cpass, sizeof(cpass))) {
-		fprintf(output, "enable secret blowfish %s\n", cpass);
-	} else {
-		if (errno != ENOENT)
-			printf("%% Unable to read run-time crypt repository:"
-			    " %s\n", strerror(errno));
-	}
 }
 
 static void

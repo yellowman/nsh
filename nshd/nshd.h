@@ -28,7 +28,7 @@
 #define NSHD_SOCKET	"/var/run/nshd.sock"	/* 0660, group nshadmin */
 #define NSHD_RO_SOCKET	"/var/run/nshd.ro.sock"	/* 0666 */
 
-#define NSHD_VERSION	2	/* of what a client and nshd say */
+#define NSHD_VERSION	3	/* of what a client and nshd say */
 #define NSHD_TEXT	8192	/* text in one message, at most */
 #define NSHD_WORDS	256	/* a show's words, at most */
 #define NSHD_LINE	1024	/* a line of configuration, with its NUL */
@@ -38,19 +38,24 @@
 #define NSHD_CLEARS	64	/* daemons' rules a script empties, MAXCLEARS */
 #define NSHD_PART	(16 * 1024 * 1024)	/* a commit's part, at most */
 #define NSHD_CONFIRMMAX	1440	/* commit confirmed's minutes, CONFIRMMAX */
-#define NSHD_SECRET	128	/* an enable secret, with its NUL */
-#define NSHD_TOKEN	32	/* what an enabled session gives its user's */
+
+/* the permissions a session's login class gives it */
+#define NSHD_VIEW	0x1	/* every show */
+#define NSHD_OPERATE	0x2	/* operations: clear, reboot, a daemon's */
+#define NSHD_CONFIGURE	0x4	/* configure private and terminal, commit */
+#define NSHD_ADMIN	0x8	/* configure and configure exclusive, and */
+				/* the password hashes */
 
 /* a client's first message */
 struct nshd_hello {
 	uint32_t	version;
 };
 
-/* nshd's answer: its version, the session, and whether it is enabled */
+/* nshd's answer: its version, the session, and its permissions */
 struct nshd_session {
 	uint32_t	version;
 	uint32_t	id;
-	int32_t		priv;
+	int32_t		perms;
 };
 
 /* what to show, as the show command names it */
@@ -61,24 +66,6 @@ struct nshd_show {
 /* how a request ended: 0, or not */
 struct nshd_result {
 	int32_t		status;
-};
-
-/*
- * enable, by the secret, or by the token another session of the same
- * user's was given when its secret was taken
- */
-struct nshd_enable {
-	int32_t		how;
-	char		secret[NSHD_SECRET];
-	uint8_t		token[NSHD_TOKEN];
-};
-#define NSHD_BY_SECRET	0
-#define NSHD_BY_TOKEN	1
-#define NSHD_NEEDSECRET	2	/* a result: enable takes the secret */
-
-/* the token an enabled session gives the other sessions of its user's */
-struct nshd_token {
-	uint8_t		token[NSHD_TOKEN];
 };
 
 /*
@@ -124,6 +111,11 @@ struct nshd_context {
 /* config to system: the running configuration, and with facts, kfacts.h's */
 struct nshd_snapshot {
 	int32_t		facts;
+};
+
+/* config to system: whose permissions, NSHD_*, are asked */
+struct nshd_perms {
+	uint32_t	uid;
 };
 
 /*
@@ -300,9 +292,7 @@ enum nshd_imsg {
 	IMSG_LISTEN,		/* parent to frontend and each show: take clients */
 
 	/* with clients, on the read-write socket, and config to system */
-	IMSG_CTL_ENABLE,	/* nshd_enable; with a secret a token, a result */
-	IMSG_CTL_TOKEN,		/* nshd_token */
-	IMSG_SYS_SECRET,	/* the enable secret's hash, as text, or none */
+	IMSG_SYS_PERMS,		/* nshd_perms: the uid's, as the result */
 	IMSG_CTL_OP,		/* nshd_op: what it prints, a result */
 	IMSG_SYS_OP,		/* nshd_op: a stream, a result */
 	IMSG_CTL_LOAD,		/* nshd_load: a result; the last, as commit */
@@ -346,7 +336,8 @@ int		 imsg_text(struct imsgev *, uint32_t, uint32_t, const char *,
 struct facts_out;
 void		 capture_stdout(void);
 int		 printed(struct facts_out *);
-int		 printed_text(struct imsgev *, uint32_t, uint32_t);
+int		 printed_text(struct imsgev *, uint32_t, uint32_t, int);
+size_t		 login_hide(char *, size_t);	/* passwd.c's */
 void		 printed_log(void);
 void		 log_text(const char *, size_t);
 void		 child_start(const char *, int, int);

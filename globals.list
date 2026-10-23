@@ -38,8 +38,7 @@ candidate.c	table	candidate_sglobals
 carp.c		scratch	carp_facts.carpdev
 carp.c		table	carp_bal_modes carp_facts_init.carp_states
 			carp_fields intcs kind_carp
-client.c	process	nshd_config nshd_intr nshd_rtable sfd sib sstatus
-			token
+client.c	process	nshd_config nshd_intr nshd_rtable sfd sib
 commands.c	session	hname ifname in_rc next_ifname rc_head whichlist
 commands.c	process	child snapshot
 commands.c	scratch	hbuf oneline
@@ -50,9 +49,9 @@ commands.c	table	Bridgelist Bridgelist_nitems Intlist
 			cmdtab_nitems commands_sglobals commithelp
 			confighelp crontabhelp ddbhelp ddbtab
 			defaultttltab demotecountertab dhcphelp dhcs
-			directedbroadcaststab disablehelp dohelp dvcs
-			dvmrphelp editinghelp eics eigrphelp enablehelp
-			enabletab encdebugtab esptab espudpencapporttab
+			directedbroadcaststab dohelp dvcs
+			dvmrphelp editinghelp eics eigrphelp
+			encdebugtab esptab espudpencapporttab
 			espudpencaptab etheriptab exithelp flushhelp
 			flushlist flushtab forwardingtab fpfs
 			ftpproxyhelp gretab grouphelp grouptab halthelp
@@ -75,7 +74,7 @@ commands.c	table	Bridgelist Bridgelist_nitems Intlist
 			porthilasttab portlasttab powerdownhelp prots
 			quithelp radhelp relayhelp resolvhelp rics
 			riphelp rlcs rollbackhelp routehelp rtablehelp
-			rtabletab sasynchelp saveenvhelp secrettab
+			rtabletab sasynchelp saveenvhelp
 			sendredirectstab setenvhelp shellhelp showarptab
 			showhelp showlist showndptab showroutetab
 			showvlantab smcs smtphelp snmphelp

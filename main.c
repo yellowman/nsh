@@ -104,9 +104,8 @@ load_userenv(void)
 	 * Fail silently if the file is owned by a different user.
 	 * In particular, we do not want to load a non-root user's
 	 * ~/.nshenv file while running as root.
-	 * In privileged mode our environment may have already been inherited
-	 * from non-root to root through exec, depending on the configuration
-	 * in case of doas(1) or su(1).
+	 * Our environment may have been inherited from non-root to root
+	 * through exec, as doas(1) and su(1) may do.
 	 */
 	if (sb.st_uid != getuid()) {
 		fclose(f);
@@ -205,6 +204,8 @@ main(int argc, char *argv[])
 	}
 
 	load_userenv();
+	/* nshd's session, which is what privileged means, if nshd lets us */
+	nshd_priv(1);
 
 	top = setjmp(toplevel) == 0;
 	if (top) {

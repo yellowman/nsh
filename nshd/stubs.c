@@ -71,15 +71,11 @@ nshd_op(const char *text, int rtable, struct facts_in *in)
 /* configure here is config's own, never nshd's session */
 int nshd_config, nshd_rtable;
 
+/* config's sessions are privileged by session.c, as nsh's by nshd */
 int
-nshd_enable(void)
+nshd_priv(int quiet)
 {
-	return -1;
-}
-
-void
-nshd_disable(void)
-{
+	return priv;
 }
 
 int

@@ -20,7 +20,7 @@
  * the running configuration as text, and what configure private reads
  * of the kernel as facts, and the shows only root may make as facts,
  * with what nsh's code prints as it makes them, as messages; and the
- * enable secret's hash, which config checks a session's secret by.
+ * permissions of a uid's login class, which config gives its session.
  * A show's answer is made whole, as it is small, its units as many to a
  * message as fit.
  *
@@ -371,7 +371,6 @@ static void	system_taken(struct confirm *, const char *);
 static void	system_failed(struct confirm *);
 static char	*system_running(size_t *);
 static void	system_rollback(uint32_t, int);
-static void	system_secret(uint32_t);
 static void	system_test(uint32_t, struct nshd_whose *, char *);
 static void	system_printed(uint32_t, int32_t);
 static struct job *system_job_new(uint32_t, int);
@@ -500,8 +499,12 @@ system_dispatch_config(int fd, short event, void *arg)
 			    "or not whole", type);
 			return;
 		}
-		/* what a stream's client read, and a session gone, wait not */
+		/*
+		 * what a stream's client read, a session gone, and a new
+		 * session's permissions, wait not
+		 */
 		if (type == IMSG_SYS_READ || type == IMSG_SYS_STOP ||
+		    type == IMSG_SYS_PERMS ||
 		    (job == NULL && TAILQ_EMPTY(&queue)))
 			r = system_request(type, id, data, len);
 		else
@@ -652,8 +655,9 @@ system_whole(uint32_t type, const void *data, size_t len)
 	case IMSG_SYS_ROLLBACK_LIST:
 	case IMSG_SYS_SAVED:
 	case IMSG_SYS_BOOT:
-	case IMSG_SYS_SECRET:
 		return (len == 0 ? 0 : -1);
+	case IMSG_SYS_PERMS:
+		return (len == sizeof(struct nshd_perms) ? 0 : -1);
 	case IMSG_SYS_BOOTED:
 		return (len == sizeof(struct nshd_result) ? 0 : -1);
 	case IMSG_SYS_RECORD:
@@ -718,6 +722,7 @@ static int
 system_request(uint32_t type, uint32_t id, const void *data, size_t len)
 {
 	struct nshd_snapshot	 snap;
+	struct nshd_perms	 pm;
 	struct nshd_show	 show;
 	struct nshd_begin	 bg;
 	struct nshd_record	 rc;
@@ -783,8 +788,9 @@ system_request(uint32_t type, uint32_t id, const void *data, size_t len)
 		memcpy(&res, data, sizeof(res));
 		system_booted(id, res.status == 0);
 		break;
-	case IMSG_SYS_SECRET:
-		system_secret(id);
+	case IMSG_SYS_PERMS:
+		memcpy(&pm, data, sizeof(pm));
+		system_end(id, login_perms(pm.uid), NULL);
 		break;
 	case IMSG_SYS_OP:
 		memcpy(&op, data, sizeof(op));
@@ -1876,7 +1882,7 @@ system_rollback(uint32_t id, int n)
 	if (fclose(f) == EOF)
 		fatal("%s", __func__);
 	/* why it could not, then it */
-	if (printed_text(links[CONFIG].iev, IMSG_SYS_TEXT, id) == -1)
+	if (printed_text(links[CONFIG].iev, IMSG_SYS_TEXT, id, 0) == -1)
 		r = -1;
 	if (imsg_text(links[CONFIG].iev, IMSG_SYS_TEXT, id, buf, len) == -1)
 		fatal("%s", __func__);
@@ -1884,32 +1890,12 @@ system_rollback(uint32_t id, int n)
 	system_end(id, r != 0, NULL);
 }
 
-/* the enable secret's hash, as text, or none if there is none */
-static void
-system_secret(uint32_t id)
-{
-	char	 hash[NSHD_SECRET];
-	int	 r = 0;
-
-	hash[0] = '\0';
-	if (read_pass(hash, sizeof(hash))) {
-		if (imsg_text(links[CONFIG].iev, IMSG_SYS_TEXT, id, hash,
-		    strlen(hash)) == -1)
-			fatal("%s", __func__);
-	} else if (errno != ENOENT) {
-		printf("%% Unable to read %s: %s\n", NSHPASSWD_TEMP,
-		    strerror(errno));
-		r = 1;
-	}
-	explicit_bzero(hash, sizeof(hash));
-	system_printed(id, r);
-}
-
 /* what nsh's code printed, to config, then how request id ended */
 static void
 system_printed(uint32_t id, int32_t status)
 {
-	if (printed_text(links[CONFIG].iev, IMSG_SYS_TEXT, id) == -1 && status == 0)
+	if (printed_text(links[CONFIG].iev, IMSG_SYS_TEXT, id, 0) == -1 &&
+	    status == 0)
 		status = 1;
 	system_end(id, status, NULL);
 }

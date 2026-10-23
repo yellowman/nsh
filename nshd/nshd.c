@@ -1009,13 +1009,15 @@ printed(struct facts_out *o)
 
 /*
  * What nsh's code printed since, as text messages of type for id on
- * iev, as imsg_text() sends them; -1 if a message could not be made, or
- * what was printed could not all be kept
+ * iev, as imsg_text() sends them, and with hide, with each password hash
+ * taken out (login_hide()); -1 if a message could not be made, or what
+ * was printed could not all be kept
  */
 int
-printed_text(struct imsgev *iev, uint32_t type, uint32_t id)
+printed_text(struct imsgev *iev, uint32_t type, uint32_t id, int hide)
 {
-	char	 buf[NSHD_TEXT];
+	char	 buf[NSHD_TEXT], *all = NULL, *p;
+	size_t	 len = 0;
 	off_t	 off = 0;
 	ssize_t	 n;
 	int	 r = 0;
@@ -1027,9 +1029,22 @@ printed_text(struct imsgev *iev, uint32_t type, uint32_t id)
 	clearerr(stdout);
 	while ((n = pread(STDOUT_FILENO, buf, sizeof(buf), off)) > 0) {
 		off += n;
-		if (imsg_text(iev, type, id, buf, n) == -1)
-			r = -1;
+		if (!hide) {
+			if (imsg_text(iev, type, id, buf, n) == -1)
+				r = -1;
+			continue;
+		}
+		/* whole, as a hash may be split between two reads */
+		if ((p = realloc(all, len + n)) == NULL)
+			fatal("%s", __func__);
+		all = p;
+		memcpy(all + len, buf, n);
+		len += n;
 	}
+	if (hide && len > 0 &&
+	    imsg_text(iev, type, id, all, login_hide(all, len)) == -1)
+		r = -1;
+	free(all);
 	if (ftruncate(STDOUT_FILENO, 0) == -1 ||
 	    lseek(STDOUT_FILENO, 0, SEEK_SET) == -1)
 		fatal("%s", __func__);
