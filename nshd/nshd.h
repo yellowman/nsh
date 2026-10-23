@@ -37,6 +37,8 @@
 #define NSHD_CLEARS	64	/* daemons' rules a script empties, MAXCLEARS */
 #define NSHD_PART	(16 * 1024 * 1024)	/* a commit's part, at most */
 #define NSHD_CONFIRMMAX	1440	/* commit confirmed's minutes, CONFIRMMAX */
+#define NSHD_SECRET	128	/* an enable secret, with its NUL */
+#define NSHD_TOKEN	32	/* what an enabled session gives its user's */
 
 /* a client's first message */
 struct nshd_hello {
@@ -58,6 +60,24 @@ struct nshd_show {
 /* how a request ended: 0, or not */
 struct nshd_result {
 	int32_t		status;
+};
+
+/*
+ * enable, by the secret, or by the token another session of the same
+ * user's was given when its secret was taken
+ */
+struct nshd_enable {
+	int32_t		how;
+	char		secret[NSHD_SECRET];
+	uint8_t		token[NSHD_TOKEN];
+};
+#define NSHD_BY_SECRET	0
+#define NSHD_BY_TOKEN	1
+#define NSHD_NEEDSECRET	2	/* a result: enable takes the secret */
+
+/* the token an enabled session gives the other sessions of its user's */
+struct nshd_token {
+	uint8_t		token[NSHD_TOKEN];
 };
 
 /* which configure */
@@ -258,7 +278,12 @@ enum nshd_imsg {
 
 	/* the boot's end, config to relay and relay to parent, and after */
 	IMSG_BOOTED,		/* nshd_result: how it went */
-	IMSG_LISTEN		/* relay to frontend and each show: take clients */
+	IMSG_LISTEN,		/* relay to frontend and each show: take clients */
+
+	/* with clients, on the read-write socket, and config to system */
+	IMSG_CTL_ENABLE,	/* nshd_enable; with a secret a token, a result */
+	IMSG_CTL_TOKEN,		/* nshd_token */
+	IMSG_SYS_SECRET		/* the enable secret's hash, as text, or none */
 };
 
 struct imsgev {

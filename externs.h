@@ -452,6 +452,7 @@ const char *get_ifm_subtype_str(uint64_t);
 /* passwd.c */
 #define NSHPASSWD_TEMP "/var/run/nshpasswd"
 int read_pass(char *, size_t);
+int secret_matches(const char *, const char *);
 int gen_salt(char *, size_t);
 int enable(int, char **, ...);
 

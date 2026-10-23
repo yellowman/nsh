@@ -62,6 +62,15 @@ read_pass(char *pass, size_t size)
 	return (1);
 }
 
+/* Does secret crypt to hash? */
+int
+secret_matches(const char *secret, const char *hash)
+{
+	char *c;
+
+	return ((c = crypt(secret, hash)) != NULL && strcmp(c, hash) == 0);
+}
+
 /* write the crypted password to the passwd-temp file */
 int
 write_pass(char *cpass)
@@ -194,7 +203,7 @@ enable_passwd(int argc, char **argv)
 			return 0;
 		}
 
-		if (strcmp(crypt(p, pass), pass) == 0) {
+		if (secret_matches(p, pass)) {
 			return 1;
 		} else {
 			printf("%% Secret incorrect\n");

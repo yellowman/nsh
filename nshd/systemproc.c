@@ -19,7 +19,8 @@
  * It answers config, on their pipe, one request at a time, in order:
  * the running configuration as text, and what configure private reads
  * of the kernel as facts, and the shows only root may make as facts,
- * with what nsh's code prints as it makes them, as messages.
+ * with what nsh's code prints as it makes them, as messages; and the
+ * enable secret's hash, which config checks a session's secret by.
  * A show's answer is made whole, as it is small, its units as many to a
  * message as fit.
  *
@@ -329,6 +330,7 @@ static void	system_taken(struct confirm *, const char *);
 static void	system_failed(struct confirm *);
 static char	*system_running(size_t *);
 static void	system_rollback(uint32_t, int);
+static void	system_secret(uint32_t);
 static void	system_test(uint32_t, char *);
 static void	system_printed(uint32_t, int32_t);
 static struct job *system_job_new(uint32_t, int);
@@ -486,6 +488,7 @@ system_whole(uint32_t type, const void *data, size_t len)
 	case IMSG_SYS_ROLLBACK_LIST:
 	case IMSG_SYS_SAVED:
 	case IMSG_SYS_BOOT:
+	case IMSG_SYS_SECRET:
 		return (len == 0 ? 0 : -1);
 	case IMSG_SYS_BOOTED:
 		return (len == sizeof(struct nshd_result) ? 0 : -1);
@@ -612,6 +615,9 @@ system_request(uint32_t type, uint32_t id, const void *data, size_t len)
 	case IMSG_SYS_BOOTED:
 		memcpy(&res, data, sizeof(res));
 		system_booted(id, res.status == 0);
+		break;
+	case IMSG_SYS_SECRET:
+		system_secret(id);
 		break;
 	case IMSG_SYS_TEST:
 		memcpy(&t, data, sizeof(t));
@@ -1713,6 +1719,27 @@ system_rollback(uint32_t id, int n)
 		fatal("%s", __func__);
 	free(buf);
 	system_end(id, r != 0, NULL);
+}
+
+/* the enable secret's hash, as text, or none if there is none */
+static void
+system_secret(uint32_t id)
+{
+	char	 hash[NSHD_SECRET];
+	int	 r = 0;
+
+	hash[0] = '\0';
+	if (read_pass(hash, sizeof(hash))) {
+		if (imsg_text(config.iev, IMSG_SYS_TEXT, id, hash,
+		    strlen(hash)) == -1)
+			fatal("%s", __func__);
+	} else if (errno != ENOENT) {
+		printf("%% Unable to read %s: %s\n", NSHPASSWD_TEMP,
+		    strerror(errno));
+		r = 1;
+	}
+	explicit_bzero(hash, sizeof(hash));
+	system_printed(id, r);
 }
 
 /* what nsh's code printed, to config, then how request id ended */

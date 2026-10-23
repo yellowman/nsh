@@ -42,6 +42,11 @@
  * committed. A commit of the shared candidate holds it, while it runs,
  * from the others' changes.
  *
+ * enable takes the secret, which config checks by the enable secret's
+ * hash, which system reads, or none if there is none; a session enabled
+ * by it is given a token, which another session of the same user's
+ * gives to be enabled too.
+ *
  * archive keeps the shared candidate, and who changed it, past config's
  * end: config sends it each time it changes, and answers the session
  * that changed it once archive says it kept it, or that it did not; a
@@ -117,6 +122,9 @@ struct session {
 	struct nshd_context	 held;	/* that answer: its context, */
 	int			 heldmode;	/* if it gives one, */
 	int			 heldr;		/* and how it ended */
+	int			 enabled;	/* by the secret, or a token */
+	int			 tokened;	/* it gave this token out */
+	uint8_t			 token[NSHD_TOKEN];
 };
 
 /* a request system has not finished, and the session that asked it */
@@ -129,10 +137,11 @@ struct request {
 	char			*text;		/* and its text, as it comes */
 	size_t			 len;
 	int			 bad;		/* past NSHD_PART */
+	char			*secret;	/* enable's, to check */
 };
 
 /* what a request's end does: answer the session, or what follows */
-enum { REQ_ANSWER, REQ_COMMIT, REQ_ROLLBACK };
+enum { REQ_ANSWER, REQ_COMMIT, REQ_ROLLBACK, REQ_ENABLE };
 
 /* the commit, and what it waits on */
 enum {
@@ -223,6 +232,8 @@ static void		 config_exit(uint32_t);
 static void		 config_commit(uint32_t, struct nshd_commit *);
 static void		 config_rollback(uint32_t, struct nshd_rollback *);
 static void		 config_rolled(struct request *, int32_t);
+static void		 config_enable(uint32_t, struct nshd_enable *);
+static void		 config_enabled(struct request *, int32_t);
 static struct session	*config_private(uint32_t);
 static int		 config_enter(struct session *);
 static void		 config_left(struct session *);
@@ -268,6 +279,7 @@ static void		 boot_end(int32_t);
 static void		 session_gone(struct session *);
 static struct session	*session_find(uint32_t);
 static struct request	*request_find(uint32_t);
+static void		 request_free(struct request *);
 
 static struct link	 links[] = {
 #define FRONTEND	0
@@ -349,6 +361,7 @@ config_dispatch_frontend(int fd, short event, void *arg)
 	struct nshd_line	 line;
 	struct nshd_commit	 cm;
 	struct nshd_rollback	 rb;
+	struct nshd_enable	 en;
 	struct session		*sp;
 	uint32_t		 id, type;
 	ssize_t			 n;
@@ -420,6 +433,13 @@ config_dispatch_frontend(int fd, short event, void *arg)
 				goto bad;
 			config_rollback(id, &rb);
 			break;
+		case IMSG_CTL_ENABLE:
+			if (imsg_get_data(&imsg, &en, sizeof(en)) == -1 ||
+			    memchr(en.secret, '\0', sizeof(en.secret)) == NULL)
+				goto bad;
+			config_enable(id, &en);
+			explicit_bzero(&en, sizeof(en));
+			break;
 		case IMSG_CTL_CLOSE:
 			if ((sp = session_find(id)) != NULL)
 				session_gone(sp);
@@ -485,7 +505,7 @@ config_dispatch_system(int fd, short event, void *arg)
 					boot_text(&b);
 				break;
 			}
-			if (r->kind == REQ_ROLLBACK) {
+			if (r->kind == REQ_ROLLBACK || r->kind == REQ_ENABLE) {
 				if (type != IMSG_SYS_TEXT)
 					goto bad;
 				if (ibuf_size(&b) > NSHD_PART - r->len) {
@@ -521,10 +541,11 @@ config_dispatch_system(int fd, short event, void *arg)
 					commit_ended(res.status);
 			} else if (r->kind == REQ_ROLLBACK)
 				config_rolled(r, res.status);
+			else if (r->kind == REQ_ENABLE)
+				config_enabled(r, res.status);
 			else if (session_find(r->session) != NULL)
 				config_answer(r->session, res.status, NULL);
-			free(r->text);
-			free(r);
+			request_free(r);
 			break;
 		default:
 			goto bad;
@@ -758,6 +779,104 @@ config_rolled(struct request *r, int32_t status)
 	n = session_rollback(sp->st, r->text, r->len, r->n);
 	shared_done(sp);
 	config_ran(sp, n, 1);
+}
+
+/*
+ * enable: by the secret, once system gives the enable secret's hash to
+ * check it by, or by a token another session of the user's was given
+ */
+static void
+config_enable(uint32_t session, struct nshd_enable *e)
+{
+	struct session	*sp, *o;
+	struct request	*r;
+
+	if ((sp = session_find(session)) == NULL) {
+		config_answer(session, 1, "%% nshd: hello first\n");
+		return;
+	}
+	if (e->how == NSHD_BY_TOKEN) {
+		TAILQ_FOREACH(o, &sessions, entry)
+			if (o->tokened && o->uid == sp->uid &&
+			    timingsafe_bcmp(o->token, e->token,
+			    sizeof(o->token)) == 0)
+				break;
+		if (o == NULL) {
+			config_answer(session, 1, "%% Privileged mode "
+			    "required\n");
+			return;
+		}
+		sp->enabled = 1;
+		config_answer(session, 0, NULL);
+		return;
+	}
+	if (e->how != NSHD_BY_SECRET) {
+		config_answer(session, 1, "%% nshd: enable by a secret or a "
+		    "token\n");
+		return;
+	}
+	if (links[SYSTEM].down) {
+		config_answer(session, 1, "%% nshd: system is down\n");
+		return;
+	}
+	if ((r = config_request(session, REQ_ENABLE)) == NULL) {
+		config_answer(session, 1, "%s", IDS_GONE);
+		return;
+	}
+	if ((r->secret = strdup(e->secret)) == NULL)
+		fatal("%s", __func__);
+	if (link_compose(&links[SYSTEM], IMSG_SYS_SECRET, r->id, NULL,
+	    0) == -1)
+		fatal("%s", __func__);
+}
+
+/*
+ * The enable secret's hash is in, or none, or why not: the session
+ * enabled, and given a token, if its secret crypts to it, or there is
+ * none; told the secret is needed, if it gave none
+ */
+static void
+config_enabled(struct request *r, int32_t status)
+{
+	struct nshd_token	 t;
+	struct session		*sp;
+	char			*hash;
+
+	if ((sp = session_find(r->session)) == NULL)
+		return;
+	if (status != 0 || r->bad) {
+		if (imsg_text(links[FRONTEND].iev, IMSG_CTL_OUTPUT, sp->id,
+		    r->text, r->len) == -1)
+			fatal("%s", __func__);
+		config_answer(sp->id, 1, NULL);
+		return;
+	}
+	if ((hash = strndup(r->text != NULL ? r->text : "", r->len)) == NULL)
+		fatal("%s", __func__);
+	if (hash[0] != '\0' && r->secret[0] == '\0') {
+		freezero(hash, r->len + 1);
+		config_answer(sp->id, NSHD_NEEDSECRET, NULL);
+		return;
+	}
+	if (hash[0] != '\0' && !secret_matches(r->secret, hash)) {
+		freezero(hash, r->len + 1);
+		log_warnx("session %u, uid %u: enable secret incorrect", sp->id,
+		    (unsigned int)sp->uid);
+		config_answer(sp->id, 1, "%% Secret incorrect\n");
+		return;
+	}
+	freezero(hash, r->len + 1);
+	sp->enabled = 1;
+	if (!sp->tokened) {
+		arc4random_buf(sp->token, sizeof(sp->token));
+		sp->tokened = 1;
+	}
+	memcpy(t.token, sp->token, sizeof(t.token));
+	if (link_compose(&links[FRONTEND], IMSG_CTL_TOKEN, sp->id, &t,
+	    sizeof(t)) == -1)
+		fatal("%s", __func__);
+	explicit_bzero(&t, sizeof(t));
+	config_answer(sp->id, 0, NULL);
 }
 
 /* session's, if in configure; or NULL, said why */
@@ -1728,8 +1847,7 @@ config_forget_system(void)
 		    session_find(r->session) != NULL)
 			config_answer(r->session, 1, "%s", lost);
 		TAILQ_REMOVE(&requests, r, entry);
-		free(r->text);
-		free(r);
+		request_free(r);
 	}
 	if (snap != NULL) {
 		facts_in_free(&snap->in);
@@ -1928,4 +2046,14 @@ request_find(uint32_t id)
 		if (r->id == id)
 			break;
 	return (r);
+}
+
+/* r, taken from requests, freed, and an enable secret with it */
+static void
+request_free(struct request *r)
+{
+	if (r->secret != NULL)
+		freezero(r->secret, strlen(r->secret));
+	free(r->text);
+	free(r);
 }
