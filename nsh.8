@@ -6084,7 +6084,13 @@ Defaults to
 .Sh FILES
 .Bl -tag -width /etc/suid_profile -compact
 .It Pa /etc/nshrc
-global configuration file
+the configuration
+.Xr nshd 8
+boots the first time
+.It Pa /var/db/nsh/nshrc
+the saved configuration, which
+.Xr nshd 8
+boots
 .It Pa /var/db/nsh/nshrc.N
 configurations saved before, for
 .Cm rollback
