@@ -104,7 +104,7 @@ archive_dispatch_relay(int fd, short event, void *arg)
 {
 	struct imsgev	*iev = arg;
 	struct imsg	 imsg;
-	ssize_t		 n;
+	int		 n;
 
 	if (imsgev_io(iev, event) == -1)
 		exit(0);
@@ -135,7 +135,7 @@ archive_dispatch_config(int fd, short event, void *arg)
 	struct ibuf		 b;
 	struct nshd_keep	 k;
 	uint32_t		 type;
-	ssize_t			 n;
+	int			 n;
 	char			*p;
 
 	if (imsgev_io(iev, event) == -1) {

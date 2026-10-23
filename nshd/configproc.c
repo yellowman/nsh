@@ -353,7 +353,7 @@ config_dispatch_relay(int fd, short event, void *arg)
 	struct imsgev		*iev = arg;
 	struct imsg		 imsg;
 	struct nshd_startup	 st;
-	ssize_t			 n;
+	int			 n;
 
 	if (imsgev_io(iev, event) == -1)
 		exit(0);
@@ -399,7 +399,7 @@ config_dispatch_frontend(int fd, short event, void *arg)
 	struct nshd_load	 ld;
 	struct session		*sp;
 	uint32_t		 id, type;
-	ssize_t			 n;
+	int			 n;
 
 	if (imsgev_io(iev, event) == -1) {
 		link_broken(l, "closed its pipe");
@@ -524,7 +524,7 @@ config_dispatch_system(int fd, short event, void *arg)
 	struct nshd_result	 res;
 	struct request		*r;
 	uint32_t		 type;
-	ssize_t			 n;
+	int			 n;
 	char			*p;
 
 	if (imsgev_io(iev, event) == -1) {
@@ -2166,7 +2166,7 @@ config_dispatch_archive(int fd, short event, void *arg)
 	struct nshd_keep	 k;
 	struct nshd_result	 res;
 	uint32_t		 type;
-	ssize_t			 n;
+	int			 n;
 	char			*p;
 
 	if (imsgev_io(iev, event) == -1) {

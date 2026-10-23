@@ -86,7 +86,7 @@ static int
 nshd_next(struct imsgbuf *ib, struct imsg *imsg, const sigset_t *waiting)
 {
 	struct pollfd	 pfd;
-	ssize_t		 n;
+	int		 n;
 
 	for (;;) {
 		if ((n = imsgbuf_get(ib, imsg)) != 0)

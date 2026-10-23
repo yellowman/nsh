@@ -93,6 +93,7 @@
 #include <fcntl.h>
 #include <grp.h>
 #include <imsg.h>
+#include <limits.h>
 #include <paths.h>
 #include <poll.h>
 #include <pwd.h>
@@ -192,7 +193,7 @@ static void		 booted(int32_t);
 static __dead void	 parent_shutdown(int, const char *);
 static __dead void	 usage(void);
 
-static char		*argv0;
+static char		 execpath[PATH_MAX];	/* this program, which children run */
 static int		 opt_debug, opt_verbose, rwfd, rofd;
 static int		 booting;	/* -b, until config says it is done */
 static int		 boot_fd = -1;	/* to the process rc started, or -1 */
@@ -220,8 +221,6 @@ main(int argc, char *argv[])
 	struct group		*gr;
 	const char		*errstr;
 	int			 c, role = PROC_PARENT, instance = 0;
-
-	argv0 = argv[0] != NULL ? argv[0] : "nshd";
 
 	while ((c = getopt(argc, argv, "AbCdFRS:vY")) != -1) {
 		switch (c) {
@@ -285,10 +284,8 @@ main(int argc, char *argv[])
 	users();
 	if ((gr = getgrnam(NSHD_GROUP)) == NULL)
 		errx(1, "unknown group %s", NSHD_GROUP);
-	/* what children start from, once daemon() has left the directory */
-	if (strchr(argv0, '/') != NULL && (argv0 = realpath(argv0, NULL)) ==
-	    NULL)
-		err(1, "realpath");
+	if (getexecpath(execpath, sizeof(execpath)) == -1)
+		err(1, "getexecpath");
 
 	log_init(opt_debug, LOG_DAEMON);
 	log_setverbose(opt_verbose);
@@ -519,7 +516,7 @@ start_child(struct child *c, int pipefd, int outfd, int sockfd)
 		if (fds[i] != -1 && dup2(fds[i], n++) == -1)
 			fatal("%s: its descriptors", c->name);
 
-	argv[argc++] = argv0;
+	argv[argc++] = execpath;
 	argv[argc++] = c->flag;
 	if (opt_debug)
 		argv[argc++] = "-d";
@@ -529,8 +526,8 @@ start_child(struct child *c, int pipefd, int outfd, int sockfd)
 		argv[argc++] = "-b";
 	argv[argc++] = NULL;
 
-	execvp(argv0, argv);
-	fatal("execvp");
+	execv(execpath, argv);
+	fatal("execv");
 }
 
 /* whether p talks to any other child */
@@ -677,7 +674,7 @@ out_read(int fd, short event, void *arg)
 	struct nshd_confirm	 cm;
 	char			 why[64];
 	uint32_t		 type;
-	ssize_t			 n;
+	int			 n;
 	int			 passed;
 
 	/* c is gone, which relay tells */
@@ -1031,7 +1028,7 @@ parent_dispatch(int fd, short event, void *arg)
 	struct nshd_result	 res;
 	struct child		*c;
 	char			 why[64];
-	ssize_t			 n;
+	int			 n;
 
 	if (event & EV_READ) {
 		if ((n = imsgbuf_read(&relay_in)) == -1 || n == 0) {
@@ -1268,7 +1265,7 @@ links_dispatch(int fd, short event, void *arg)
 {
 	struct imsgev	*iev = arg;
 	struct imsg	 imsg;
-	ssize_t		 n;
+	int		 n;
 
 	if (imsgev_io(iev, event) == -1) {
 		event_del(&iev->ev);
@@ -1416,7 +1413,7 @@ imsgev_new(int fd, void (*handler)(int, short, void *), int fdpass)
 int
 imsgev_io(struct imsgev *iev, short event)
 {
-	ssize_t	 n;
+	int	 n;
 
 	if (event & EV_READ) {
 		if ((n = imsgbuf_read(&iev->ibuf)) == -1) {

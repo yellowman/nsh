@@ -242,7 +242,7 @@ control_dispatch(int fd, short event, void *arg)
 {
 	struct ctl_conn	*c;
 	struct imsg	 imsg;
-	ssize_t		 n;
+	int		 n;
 
 	if ((c = control_connbyfd(fd)) == NULL) {
 		log_warnx("%s: fd %d: not found", __func__, fd);

@@ -99,7 +99,7 @@ show_dispatch_relay(int fd, short event, void *arg)
 	struct imsgev		*iev = arg;
 	struct imsg		 imsg;
 	struct nshd_startup	 st;
-	ssize_t			 n;
+	int			 n;
 
 	if (imsgev_io(iev, event) == -1)
 		exit(0);

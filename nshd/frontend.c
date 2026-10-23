@@ -114,7 +114,7 @@ frontend_dispatch_relay(int fd, short event, void *arg)
 	struct imsgev		*iev = arg;
 	struct imsg		 imsg;
 	struct nshd_startup	 st;
-	ssize_t			 n;
+	int			 n;
 
 	if (imsgev_io(iev, event) == -1)
 		exit(0);
@@ -156,7 +156,7 @@ frontend_dispatch_config(int fd, short event, void *arg)
 	struct imsg		 imsg;
 	struct ibuf		 b;
 	uint32_t		 type;
-	ssize_t			 n;
+	int			 n;
 
 	if (imsgev_io(iev, event) == -1) {
 		link_broken(&links[CONFIG], "closed its pipe");
@@ -218,7 +218,7 @@ frontend_dispatch_system(int fd, short event, void *arg)
 	struct imsgev		*iev = arg;
 	struct imsg		 imsg;
 	uint32_t		 type;
-	ssize_t			 n;
+	int			 n;
 
 	if (imsgev_io(iev, event) == -1) {
 		link_broken(&links[SYSTEM], "closed its pipe");

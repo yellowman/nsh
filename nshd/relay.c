@@ -114,7 +114,7 @@ relay_dispatch_parent(int fd, short event, void *arg)
 	struct imsg		 imsg;
 	struct nshd_child	 ch;
 	struct peer		*p;
-	ssize_t			 n;
+	int			 n;
 	int			 i, cfd = -1;
 
 	if (imsgev_io(iev, event) == -1)
@@ -200,7 +200,7 @@ relay_dispatch(int fd, short event, void *arg)
 	struct imsg		 imsg;
 	struct nshd_child	 ch;
 	uint32_t		 type;
-	ssize_t			 n;
+	int			 n;
 	size_t			 i;
 
 	for (i = 0; i < NCHILD; i++)
