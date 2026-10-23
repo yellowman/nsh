@@ -1,0 +1,16 @@
+Focused BGP argument regression
+===============================
+
+t_ctlargs.c and test.h come from smytht's unit-test contribution,
+yellowman/nsh PR #179, commit 01877f0418715cb17738359c0b879c80713eef8e.
+Only this witness is included here; the broader suite and makeargv fix
+remain separate. The four BGP KNOWN_BUG checks are now CHECKs.
+
+On OpenBSD:
+    make -f Makefile.ctlargs test
+
+The BGP and OSPF table copies must track bgpcommands.c and commands.c.
+Additional checks cover all optional prefixes through the final slot,
+one excess word, required arguments, abbreviation/ambiguity, and the
+leading NULL slots used by ctl handlers. Output includes expected parser
+error messages from rejection checks.

@@ -1,0 +1,15 @@
+# Focused regression witness from smytht's PR #179.
+# On OpenBSD: make -f Makefile.ctlargs test
+CC?= cc
+CFLAGS+= -g -O0 -Wall -DNSH_VERSION=test
+
+t_ctlargs: t_ctlargs.c test.h ../ctlargs.c ../genget.c ../externs.h ../commands.h ../ctl.h
+	${CC} ${CFLAGS} ${LDFLAGS} -o $@ t_ctlargs.c ../ctlargs.c ../genget.c ${LDLIBS}
+
+test: t_ctlargs
+	./t_ctlargs
+
+clean:
+	rm -f t_ctlargs
+
+.PHONY: test clean
