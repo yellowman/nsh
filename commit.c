@@ -262,7 +262,7 @@ commit(int argc, char **argv, ...)
 		if (!conf_save())
 			return -1;
 		confirmed();
-		rollback_keep(NSHRC_TEMP, committer(), comment);
+		rollback_keep(SAVED, committer(), comment);
 		return 0;
 	}
 	if ((want = cand_tree()) == NULL)
@@ -302,7 +302,7 @@ commit(int argc, char **argv, ...)
 	} else {
 		confirmed();
 		if (conf_save())
-			rollback_keep(NSHRC_TEMP, committer(), comment);
+			rollback_keep(SAVED, committer(), comment);
 		else
 			ret = -1;
 	}

@@ -3653,22 +3653,11 @@ p_argv(int argc, char **argv)
 	return;
 }
 
-/* Save the running configuration as nshrc */
+/* Save the running configuration where nshd saves it, SAVED */
 int
 conf_save(void)
 {
-	char *args[] = { SAVESCRIPT, NSHRC_TEMP, NULL };
-
-	if (!wr_conf(NSHRC_TEMP)) {
-		printf("%% Unable to save configuration: %s\n",
-		    strerror(errno));
-		return 0;
-	}
-	printf("%% Saving configuration\n");
-
-	cmdargs(SAVESCRIPT, args);
-
-	return 1;
+	return saved_write();
 }
 
 /*

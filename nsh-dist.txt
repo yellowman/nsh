@@ -47,8 +47,6 @@
 /ppp.c
 /prompt.c
 /route.c
-/save-ro.sh
-/save-rw.sh
 /scripts
 /scripts/nshrc
 /scripts/nshrc/enable-sshd.nshrc

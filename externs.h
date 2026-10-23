@@ -163,7 +163,6 @@ int nsh_setrtable(int);
 extern pid_t child;
 #define NOPTFILL	7
 #define DEFAULT_EDITOR	"/usr/bin/vi"
-#define NSHRC_TEMP	"/var/run/nshrc"
 #define NSHRC		"/etc/nshrc"
 #define NSHDB		"/var/db/nsh"	/* the configurations saved */
 #define SAVED		NSHDB "/nshrc"	/* nshd's, where nshd saves */
@@ -185,7 +184,6 @@ extern pid_t child;
 #define HALT		"/sbin/halt"
 #define SU		"/usr/bin/su"
 #define DOAS		"/usr/bin/doas"
-#define SAVESCRIPT	"/usr/local/bin/save.sh"
 #ifndef DHCPLEASES
 #define DHCPLEASES	"/var/db/dhcpd.leases"
 #endif
