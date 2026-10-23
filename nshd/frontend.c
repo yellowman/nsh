@@ -60,6 +60,7 @@ union frontend_request {
 	struct nshd_rollback	 rollback;
 	struct nshd_op		 op;
 	struct nshd_load	 load;
+	struct nshd_login	 login;
 };
 
 static void	frontend_dispatch_parent(int, short, void *);
@@ -280,6 +281,11 @@ frontend_client(struct ctl_conn *c, struct imsg *imsg)
 		    sizeof(show)) == -1)
 			fatal("%s", __func__);
 		return (0);
+	case IMSG_CTL_LOGIN:
+		/* the web configurator's alone */
+		if (!web_user || c->uid != web_uid)
+			return (-1);
+		/* FALLTHROUGH */
 	case IMSG_CTL_CONFIGURE:
 	case IMSG_CTL_LINE:
 	case IMSG_CTL_EXIT:
@@ -293,13 +299,15 @@ frontend_client(struct ctl_conn *c, struct imsg *imsg)
 		if (imsg_get_type(imsg) == IMSG_CTL_LINE ||
 		    imsg_get_type(imsg) == IMSG_CTL_COMMIT ||
 		    imsg_get_type(imsg) == IMSG_CTL_OP ||
-		    imsg_get_type(imsg) == IMSG_CTL_LOAD) {
+		    imsg_get_type(imsg) == IMSG_CTL_LOAD ||
+		    imsg_get_type(imsg) == IMSG_CTL_LOGIN) {
 			c->asked = 1;
 			frontend_asked(c, IMSG_FRONT_ASKED);
 		}
 		if (link_compose(&links[CONFIG], imsg_get_type(imsg), c->id,
 		    len > 0 ? &r : NULL, len) == -1)
 			fatal("%s", __func__);
+		explicit_bzero(&r, sizeof(r));
 		return (0);
 	default:
 		return (-1);
@@ -373,6 +381,13 @@ frontend_whole(struct imsg *imsg, union frontend_request *r)
 		    sizeof(r->load.comment)) == NULL)
 			return (-1);
 		return (sizeof(r->load));
+	case IMSG_CTL_LOGIN:
+		if (imsg_get_data(imsg, &r->login, sizeof(r->login)) == -1 ||
+		    memchr(r->login.name, '\0', sizeof(r->login.name)) == NULL ||
+		    memchr(r->login.password, '\0',
+		    sizeof(r->login.password)) == NULL)
+			return (-1);
+		return (sizeof(r->login));
 	}
 	return (-1);
 }

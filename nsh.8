@@ -326,6 +326,10 @@ Root is always super-user.
 A member of nshadmin that no
 .Cm login user
 line names is read-only.
+The web configurator logs in as a user that a
+.Cm login user
+line names, but never root, with that user's password, and has the
+permissions of the user's class, but never admin.
 nshd refuses what a session's class does not allow.
 Where nshd does not run, or the user may not use its socket,
 .Nm

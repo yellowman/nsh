@@ -130,6 +130,13 @@
  * load, and of any daemon's with include. Each of these runs a command
  * as root, reads a file as root, or decides who may log in. A TEST of
  * such a session's is refused those lines too, judged by what runs.
+ *
+ * A session of the web configurator's has no permissions until it logs
+ * in, which only it may: system checks the user's password itself
+ * (passwd.c's login_auth()), for a user a login user line names, never
+ * root, and keeps the uid it logged in as until frontend says the
+ * session is gone. Such a session then has the permissions of that
+ * user's class, without admin, and its commits are that user's.
  */
 
 #include <sys/types.h>
@@ -299,6 +306,13 @@ struct asked {
 };
 #define ASKED_GONE	64
 
+/* a session of the web configurator's, and the uid it logged in as */
+struct login {
+	TAILQ_ENTRY(login)	 entry;
+	uint32_t		 session;
+	uid_t			 uid;
+};
+
 /* the boot record: the boot of the host it is for, how it went, carp */
 enum { BOOT_NONE, BOOT_RUNS, BOOT_FAILED, BOOT_DONE };
 static const char *boot_states[] = { "none", "runs", "failed", "done" };
@@ -332,6 +346,7 @@ static size_t		 commit_beforelen;
 static int		 booting;	/* BOOT run, until BOOTED */
 static int		 boot_over;	/* parent said nshd booted, or BOOTED */
 static TAILQ_HEAD(, asked) askeds = TAILQ_HEAD_INITIALIZER(askeds);
+static TAILQ_HEAD(, login) logins = TAILQ_HEAD_INITIALIZER(logins);
 static int		 nagone;	/* of them, of sessions gone */
 static struct event	 confirm_tm;	/* the deadline, or the next attempt */
 static time_t		 confirm_next;	/* the next attempt, no sooner */
@@ -343,6 +358,9 @@ static struct asked *asked_find(uint32_t);
 static struct asked *asked_whose(struct nshd_whose *);
 static void	asked_free(struct asked *);
 static void	asked_trim(void);
+static struct login *login_find(uint32_t);
+static int	system_whom(struct asked *, uid_t *);
+static void	system_login(uint32_t, struct nshd_syslogin *);
 static int	system_whole(uint32_t, const void *, size_t);
 static int	system_request(uint32_t, uint32_t, const void *, size_t);
 static void	system_queue(uint32_t, uint32_t, const void *, size_t);
@@ -546,6 +564,7 @@ system_dispatch_frontend(int fd, short event, void *arg)
 	struct imsg		 imsg;
 	struct nshd_asked	 a;
 	struct asked		*k;
+	struct login		*l;
 	uint32_t		 type;
 	int			 n;
 
@@ -584,10 +603,16 @@ system_dispatch_frontend(int fd, short event, void *arg)
 			TAILQ_INSERT_TAIL(&askeds, k, entry);
 		} else if (k != NULL && type == IMSG_FRONT_ANSWERED)
 			asked_free(k);
-		else if (k != NULL && !k->gone) {
-			k->gone = 1;
-			nagone++;
-			asked_trim();
+		else if (type == IMSG_FRONT_GONE) {
+			if ((l = login_find(a.session)) != NULL) {
+				TAILQ_REMOVE(&logins, l, entry);
+				free(l);
+			}
+			if (k != NULL && !k->gone) {
+				k->gone = 1;
+				nagone++;
+				asked_trim();
+			}
 		}
 	}
 	imsg_event_add(iev);
@@ -632,6 +657,39 @@ asked_free(struct asked *k)
 	free(k);
 }
 
+/* the login of session, the web configurator's, or NULL */
+static struct login *
+login_find(uint32_t session)
+{
+	struct login	*l;
+
+	TAILQ_FOREACH(l, &logins, entry)
+		if (l->session == session)
+			return (l);
+	return (NULL);
+}
+
+/*
+ * The permissions of the request k says of, as its login class has
+ * them, and its uid, if uid: a session of the web configurator's has
+ * those of the user it logged in as, without admin, or none before
+ */
+static int
+system_whom(struct asked *k, uid_t *uid)
+{
+	struct login	*l;
+
+	if (uid != NULL)
+		*uid = k->uid;
+	if (!k->web)
+		return (login_perms(k->uid));
+	if ((l = login_find(k->session)) == NULL)
+		return (0);
+	if (uid != NULL)
+		*uid = l->uid;
+	return (login_perms(l->uid) & ~LOGIN_ADMIN);
+}
+
 /* of sessions gone, the oldest past ASKED_GONE forgotten */
 static void
 asked_trim(void)
@@ -659,7 +717,8 @@ system_whole(uint32_t type, const void *data, size_t len)
 	struct nshd_rollback	 rb;
 	struct nshd_test	 t;
 	struct nshd_sysop	 so;
-	int			 i;
+	struct nshd_syslogin	 sl;
+	int			 i, r;
 
 	switch (type) {
 	case IMSG_SYS_READ:
@@ -677,6 +736,15 @@ system_whole(uint32_t type, const void *data, size_t len)
 		return (len == 0 ? 0 : -1);
 	case IMSG_SYS_PERMS:
 		return (len == sizeof(struct nshd_perms) ? 0 : -1);
+	case IMSG_SYS_LOGIN:
+		if (len != sizeof(sl))
+			return (-1);
+		memcpy(&sl, data, len);
+		r = memchr(sl.login.name, '\0', sizeof(sl.login.name)) == NULL ||
+		    memchr(sl.login.password, '\0',
+		    sizeof(sl.login.password)) == NULL ? -1 : 0;
+		explicit_bzero(&sl, sizeof(sl));
+		return (r);
 	case IMSG_SYS_BOOTED:
 		return (len == sizeof(struct nshd_result) ? 0 : -1);
 	case IMSG_SYS_RECORD:
@@ -742,6 +810,7 @@ system_request(uint32_t type, uint32_t id, const void *data, size_t len)
 {
 	struct nshd_snapshot	 snap;
 	struct nshd_perms	 pm;
+	struct nshd_syslogin	 sl;
 	struct nshd_show	 show;
 	struct nshd_begin	 bg;
 	struct nshd_record	 rc;
@@ -809,7 +878,13 @@ system_request(uint32_t type, uint32_t id, const void *data, size_t len)
 		break;
 	case IMSG_SYS_PERMS:
 		memcpy(&pm, data, sizeof(pm));
-		system_end(id, login_perms(pm.uid), NULL);
+		/* the web configurator's, none until it logs in */
+		system_end(id, pm.web ? 0 : login_perms(pm.uid), NULL);
+		break;
+	case IMSG_SYS_LOGIN:
+		memcpy(&sl, data, sizeof(sl));
+		system_login(id, &sl);
+		explicit_bzero(&sl, sizeof(sl));
 		break;
 	case IMSG_SYS_OP:
 		memcpy(&so, data, sizeof(so));
@@ -955,7 +1030,7 @@ system_op(uint32_t id, struct nshd_sysop *so)
 		    "this operation is for\n");
 		return;
 	}
-	perms = login_perms(k->uid);
+	perms = system_whom(k, NULL);
 	asked_free(k);
 	if (!system_may(perms, LOGIN_OPERATE, "operate")) {
 		system_printed(id, 1);
@@ -987,6 +1062,40 @@ system_may(int perms, int need, const char *name)
 	printf("%% Not allowed: your login class does not have the %s "
 	    "permission\n", name);
 	return (0);
+}
+
+/*
+ * The web configurator's session logs in as a user a login user line
+ * names, never root, if the password is the user's (login_auth()); the
+ * session acts as that user after. The answer is the permissions of
+ * the user's login class, without admin, or -1, said why
+ */
+static void
+system_login(uint32_t id, struct nshd_syslogin *sl)
+{
+	struct asked	*k;
+	struct login	*l;
+	int		 uid;
+
+	printed(NULL);
+	if ((k = asked_whose(&sl->whose)) == NULL || !k->web) {
+		system_end(id, -1, "%% nshd: only the web configurator logs "
+		    "in\n");
+		return;
+	}
+	asked_free(k);
+	if ((uid = login_auth(sl->login.name, sl->login.password)) == -1) {
+		system_printed(id, -1);
+		return;
+	}
+	if ((l = login_find(sl->whose.session)) == NULL) {
+		if ((l = calloc(1, sizeof(*l))) == NULL)
+			fatal(NULL);
+		l->session = sl->whose.session;
+		TAILQ_INSERT_TAIL(&logins, l, entry);
+	}
+	l->uid = uid;
+	system_end(id, login_perms(uid) & ~LOGIN_ADMIN, NULL);
 }
 
 /* to config: a line of text, if fmt, and how request id ended */
@@ -1309,9 +1418,8 @@ system_begin(uint32_t id, struct nshd_begin *bg)
 		    "it is for\n");
 		goto done;
 	}
-	commit_uid = k->uid;
+	perms = system_whom(k, &commit_uid);
 	commit_web = k->web;
-	perms = login_perms(k->uid);
 	asked_free(k);
 	if (!system_may(perms, LOGIN_CONFIGURE, "configure"))
 		goto done;
@@ -1652,6 +1760,7 @@ system_save(uint32_t id, struct nshd_save *sv)
 	struct asked	*k;
 	struct job	*j;
 	uid_t		 uid;
+	int		 perms;
 
 	/* the commit begun's, or one that changes nothing, a request's */
 	if (committing)
@@ -1662,10 +1771,9 @@ system_save(uint32_t id, struct nshd_save *sv)
 		system_printed(id, 1);
 		return;
 	} else {
-		uid = k->uid;
+		perms = system_whom(k, &uid);
 		asked_free(k);
-		if (!system_may(login_perms(uid), LOGIN_CONFIGURE,
-		    "configure")) {
+		if (!system_may(perms, LOGIN_CONFIGURE, "configure")) {
 			system_printed(id, 1);
 			return;
 		}
@@ -1727,7 +1835,7 @@ system_test(uint32_t id, struct nshd_whose *whose, char *name)
 		return;
 	}
 	if (k != NULL)
-		perms = login_perms(k->uid);
+		perms = system_whom(k, NULL);
 	if (!system_may(perms, LOGIN_CONFIGURE, "configure") ||
 	    ((perms & LOGIN_ADMIN) == 0 && system_admin_test(name) == -1)) {
 		system_printed(id, 1);

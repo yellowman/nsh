@@ -32,6 +32,8 @@
 #include <unistd.h>
 #include <errno.h>
 #include <pwd.h>
+#include <login_cap.h>
+#include <bsd_auth.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include "externs.h"
@@ -630,6 +632,27 @@ login_perms(uid_t uid)
 	    (perms = login_class_perms(class)) == -1)
 		return LOGIN_VIEW;
 	return perms;
+}
+
+/*
+ * The uid of name, a user a login user line names, but never root, if
+ * password is its own, as auth_userokay(3) checks it; else -1, said
+ */
+int
+login_auth(char *name, char *password)
+{
+	struct passwd *pw;
+	char class[64];
+	int made;
+
+	if (strcmp(name, "root") == 0 ||
+	    login_user_find(name, class, sizeof(class), &made) != 1 ||
+	    (pw = getpwnam(name)) == NULL ||
+	    !auth_userokay(name, NULL, NULL, password)) {
+		printf("%% Login incorrect\n");
+		return -1;
+	}
+	return pw->pw_uid;
 }
 
 /*

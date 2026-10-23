@@ -449,6 +449,7 @@ const char *get_ifm_subtype_str(uint64_t);
 int loginset(int, char **, ...);
 int login_class_perms(const char *);
 int login_perms(uid_t);
+int login_auth(char *, char *);
 size_t login_hide(char *, size_t);
 void conf_login(FILE *);
 /* while a commit runs, whether its session lacks admin (ctl.c) */

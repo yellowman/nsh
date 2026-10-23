@@ -28,7 +28,7 @@
 #define NSHD_SOCKET	"/var/run/nshd.sock"	/* 0660, group nshadmin */
 #define NSHD_RO_SOCKET	"/var/run/nshd.ro.sock"	/* 0666 */
 
-#define NSHD_VERSION	3	/* of what a client and nshd say */
+#define NSHD_VERSION	4	/* of what a client and nshd say */
 #define NSHD_TEXT	8192	/* text in one message, at most */
 #define NSHD_WORDS	256	/* a show's words, at most */
 #define NSHD_LINE	1024	/* a line of configuration, with its NUL */
@@ -113,9 +113,21 @@ struct nshd_snapshot {
 	int32_t		facts;
 };
 
-/* config to system: whose permissions, NSHD_*, are asked */
+/*
+ * config to system: whose permissions, NSHD_*, are asked; a session of
+ * the web configurator's has none until it logs in
+ */
 struct nshd_perms {
 	uint32_t	uid;
+	int32_t		web;
+};
+
+/* the web configurator's session logs in as name, a login user's */
+#define NSHD_NAME	32
+#define NSHD_PASSWORD	128
+struct nshd_login {
+	char		name[NSHD_NAME];
+	char		password[NSHD_PASSWORD];
 };
 
 /*
@@ -144,8 +156,8 @@ struct nshd_chunk {
 
 /*
  * frontend to system: a session asked what may begin a commit (a line,
- * a commit, a load's part), or an operation, by uid, and if it is the
- * web configurator's
+ * a commit, a load's part), an operation or a login, by uid, and if it
+ * is the web configurator's
  */
 struct nshd_asked {
 	uint32_t	session;
@@ -165,6 +177,12 @@ struct nshd_whose {
 struct nshd_sysop {
 	struct nshd_whose whose;
 	struct nshd_op	 op;
+};
+
+/* config to system: a login, and the session that asked it */
+struct nshd_syslogin {
+	struct nshd_whose whose;
+	struct nshd_login login;
 };
 
 /* config to system: whose commit begins, and if confirmed, its minutes */
@@ -303,6 +321,8 @@ enum nshd_imsg {
 	IMSG_CTL_OP,		/* nshd_op: what it prints, a result */
 	IMSG_SYS_OP,		/* nshd_sysop: a stream, a result */
 	IMSG_CTL_LOAD,		/* nshd_load: a result; the last, as commit */
+	IMSG_CTL_LOGIN,		/* nshd_login: the web configurator's; a result */
+	IMSG_SYS_LOGIN,		/* nshd_syslogin: the permissions, as the result */
 
 	/* frontend to system: what config's commits must be for */
 	IMSG_FRONT_ASKED,	/* nshd_asked: until it is answered */

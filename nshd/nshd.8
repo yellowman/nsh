@@ -55,7 +55,8 @@ and answers the read-write socket.
 Each client is a session, which asks one thing at a time.
 frontend tells system, before config, of each request that may begin
 a commit, and of each operation, whose it is, and when it is answered;
-a client of _nshweb's uid is the web configurator's session.
+a client of _nshweb's uid is the web configurator's session, which
+alone may log in, as a user, with that user's password.
 .It config
 Runs as _nshconf in a
 .Xr chroot 2 ,
@@ -75,6 +76,9 @@ need admin too, as their candidate is every session's in them, and a
 session without admin sees no password hash of a
 .Cm login user
 line.
+The web configurator's session has no permissions until it logs in;
+then it has those of the class of the user it logged in as, without
+admin.
 A session in
 .Cm configure private
 has a candidate of its own; the sessions in
@@ -142,6 +146,12 @@ gone, was not; the uid it records is frontend's.
 system checks the permissions of that uid's login class itself, as
 config does: an operation needs operate, and a commit, its test and a
 save need configure.
+It checks a login of the web configurator's itself too, with
+.Xr auth_userokay 3 ,
+for a user a
+.Cm login user
+line names, and never root; the session then acts as that user, whose
+uid its commits record, until it goes.
 An operation a session asks, such as
 .Cm flush routes
 or a daemon's action, it runs as root, if nsh's code names it one, in

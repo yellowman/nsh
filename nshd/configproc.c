@@ -49,7 +49,9 @@
  * A session without admin sees no password hash: config takes each
  * out of what it sends such a session of the configuration.
  * An operation a session may ask, system checks and runs, and config
- * passes on.
+ * passes on. A session of the web configurator's has no permissions
+ * until it logs in, as system checks it; then it has the class of the
+ * user it logged in as, without admin.
  *
  * archive keeps the shared candidate, and who changed it, past config's
  * end: config sends it each time it changes, and answers the session
@@ -160,7 +162,7 @@ struct request {
 };
 
 /* what a request's end does: answer the session, or what follows */
-enum { REQ_ANSWER, REQ_COMMIT, REQ_ROLLBACK, REQ_PERMS, REQ_TEXT };
+enum { REQ_ANSWER, REQ_COMMIT, REQ_ROLLBACK, REQ_PERMS, REQ_TEXT, REQ_LOGIN };
 
 /* the commit, and what it waits on */
 enum {
@@ -251,6 +253,8 @@ static void		 config_rolled(struct request *, int32_t);
 static void		 config_hello(uint32_t, struct nshd_peer *);
 static void		 config_hello_answer(struct session *);
 static void		 config_perms(struct request *, int32_t);
+static void		 config_login(uint32_t, struct nshd_login *);
+static void		 config_logged(struct request *, int32_t);
 static void		 config_text(struct request *, int32_t);
 static int		 config_hides(struct session *);
 static int		 config_may(uint32_t, uint32_t);
@@ -382,6 +386,7 @@ config_dispatch_frontend(int fd, short event, void *arg)
 	struct nshd_rollback	 rb;
 	struct nshd_op		 op;
 	struct nshd_load	 ld;
+	struct nshd_login	 lg;
 	struct session		*sp;
 	uint32_t		 id, type;
 	int			 n;
@@ -456,6 +461,15 @@ config_dispatch_frontend(int fd, short event, void *arg)
 			    sizeof(ld.comment)) == NULL)
 				goto bad;
 			config_load(id, &ld);
+			break;
+		case IMSG_CTL_LOGIN:
+			if (imsg_get_data(&imsg, &lg, sizeof(lg)) == -1 ||
+			    memchr(lg.name, '\0', sizeof(lg.name)) == NULL ||
+			    memchr(lg.password, '\0', sizeof(lg.password)) ==
+			    NULL)
+				goto bad;
+			config_login(id, &lg);
+			explicit_bzero(&lg, sizeof(lg));
 			break;
 		case IMSG_CTL_CLOSE:
 			if ((sp = session_find(id)) != NULL)
@@ -560,6 +574,8 @@ config_dispatch_system(int fd, short event, void *arg)
 				config_rolled(r, res.status);
 			else if (r->kind == REQ_PERMS)
 				config_perms(r, res.status);
+			else if (r->kind == REQ_LOGIN)
+				config_logged(r, res.status);
 			else if (r->kind == REQ_TEXT)
 				config_text(r, res.status);
 			else if (session_find(r->session) != NULL)
@@ -855,6 +871,7 @@ config_hello(uint32_t session, struct nshd_peer *peer)
 	}
 	memset(&p, 0, sizeof(p));
 	p.uid = peer->uid;
+	p.web = peer->web;
 	if (link_compose(&links[SYSTEM], IMSG_SYS_PERMS, r->id, &p,
 	    sizeof(p)) == -1)
 		fatal("%s", __func__);
@@ -884,6 +901,46 @@ config_perms(struct request *r, int32_t status)
 	sp->perms = status > 0 ? status & (NSHD_VIEW | NSHD_OPERATE |
 	    NSHD_CONFIGURE | NSHD_ADMIN) : 0;
 	config_hello_answer(sp);
+}
+
+/* the web configurator's session logs in, as system checks it */
+static void
+config_login(uint32_t session, struct nshd_login *lg)
+{
+	struct nshd_syslogin	 sl;
+	struct request		*r;
+
+	if (session_find(session) == NULL) {
+		config_answer(session, 1, "%% nshd: hello first\n");
+		return;
+	}
+	if ((r = config_request(session, REQ_LOGIN)) == NULL) {
+		config_answer(session, 1, "%s", IDS_GONE);
+		return;
+	}
+	memset(&sl, 0, sizeof(sl));
+	sl.whose.session = session;
+	sl.login = *lg;
+	if (link_compose(&links[SYSTEM], IMSG_SYS_LOGIN, r->id, &sl,
+	    sizeof(sl)) == -1)
+		fatal("%s", __func__);
+	explicit_bzero(&sl, sizeof(sl));
+}
+
+/*
+ * system's answer: the permissions of the user the session logged in
+ * as, or, if it did not, -1, and the session as it was
+ */
+static void
+config_logged(struct request *r, int32_t status)
+{
+	struct session	*sp;
+
+	if ((sp = session_find(r->session)) == NULL)
+		return;
+	if (status >= 0)
+		sp->perms = status;
+	config_answer(sp->id, status >= 0 ? 0 : 1, NULL);
 }
 
 /*
@@ -927,7 +984,8 @@ config_may(uint32_t session, uint32_t type)
 	int		 need = NSHD_CONFIGURE;
 
 	if (type == IMSG_CTL_HELLO || type == IMSG_CTL_CLOSE ||
-	    type == IMSG_CTL_READ || (sp = session_find(session)) == NULL)
+	    type == IMSG_CTL_READ || type == IMSG_CTL_LOGIN ||
+	    (sp = session_find(session)) == NULL)
 		return (1);
 	if (type == IMSG_CTL_SHOW) {
 		need = NSHD_VIEW;
