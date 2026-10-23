@@ -21,6 +21,14 @@
  * time the client has read all of it. frontend checks only that a
  * message is one a client may send, or config, and is whole; it reads
  * no configuration.
+ *
+ * And it tells system, on their pipe, before config hears of it, of
+ * each request that may begin a commit, a line, a commit or a load's
+ * part, whose it is, and whether the session is the web configurator's,
+ * a client of NSHD_WEB_USER's uid; and when config answers it, and when
+ * a session goes. system begins config's commits only for a request
+ * not answered, so a config a client compromised cannot say whose they
+ * are.
  */
 
 #include <sys/types.h>
@@ -29,6 +37,7 @@
 
 #include <event.h>
 #include <imsg.h>
+#include <pwd.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -39,6 +48,8 @@
 #include "control.h"
 
 static struct imsgev	*iev_relay;
+static uid_t		 web_uid;	/* NSHD_WEB_USER's, */
+static int		 web_user;	/* if there is one */
 
 /* a client's request, as config takes it */
 union frontend_request {
@@ -56,27 +67,39 @@ static void	frontend_dispatch_relay(int, short, void *);
 static void	frontend_listen(void);
 static void	frontend_dispatch_config(int, short, void *);
 static void	frontend_forget_config(void);
+static void	frontend_dispatch_system(int, short, void *);
+static void	frontend_forget_system(void);
+static void	frontend_asked(struct ctl_conn *, uint32_t);
 static int	frontend_client(struct ctl_conn *, struct imsg *);
 static void	frontend_gone(struct ctl_conn *);
 static int	frontend_written(struct ctl_conn *);
 static int	frontend_answer(struct ctl_conn *, struct imsg *);
 static ssize_t	frontend_whole(struct imsg *, union frontend_request *);
 
-static struct link	 config = {
-	PROC_CONFIG, frontend_dispatch_config, frontend_forget_config
+static struct link	 links[] = {
+#define CONFIG		0
+	{ PROC_CONFIG,	 frontend_dispatch_config, frontend_forget_config },
+#define SYSTEM		1
+	{ PROC_SYSTEM,	 frontend_dispatch_system, frontend_forget_system },
 };
 
 void
 frontend(int debug, int verbose)
 {
+	struct passwd	*pw;
+
 	child_start("frontend", debug, verbose);
+	if ((pw = getpwnam(NSHD_WEB_USER)) != NULL) {
+		web_uid = pw->pw_uid;
+		web_user = 1;
+	}
 	privdrop(PROC_FRONTEND);
 	if (pledge("stdio unix recvfd", NULL) == -1)
 		fatal("pledge");
 
 	if ((iev_relay = imsgev_new(3, frontend_dispatch_relay, 0)) == NULL)
 		fatal(NULL);
-	links_init(&config, 1, iev_relay, NULL);
+	links_init(links, sizeof(links) / sizeof(links[0]), iev_relay, NULL);
 	event_dispatch();
 	exit(0);
 }
@@ -136,13 +159,13 @@ frontend_dispatch_config(int fd, short event, void *arg)
 	ssize_t			 n;
 
 	if (imsgev_io(iev, event) == -1) {
-		link_broken(&config, "closed its pipe");
+		link_broken(&links[CONFIG], "closed its pipe");
 		return;
 	}
 
 	for (;;) {
 		if ((n = imsgbuf_get(&iev->ibuf, &imsg)) == -1) {
-			link_broken(&config, "sent what imsg cannot read");
+			link_broken(&links[CONFIG], "sent what imsg cannot read");
 			return;
 		}
 		if (n == 0)
@@ -151,8 +174,14 @@ frontend_dispatch_config(int fd, short event, void *arg)
 		case IMSG_CTL_HELLO:
 		case IMSG_CTL_RESULT:
 			/* the request's end */
-			if ((c = control_connbyid(imsg_get_id(&imsg))) != NULL)
+			if ((c = control_connbyid(imsg_get_id(&imsg))) !=
+			    NULL) {
 				c->pending = 0;
+				if (c->asked) {
+					c->asked = 0;
+					frontend_asked(c, IMSG_FRONT_ANSWERED);
+				}
+			}
 			/* FALLTHROUGH */
 		case IMSG_CTL_OUTPUT:
 		case IMSG_CTL_FACTS:
@@ -166,7 +195,7 @@ frontend_dispatch_config(int fd, short event, void *arg)
 			break;
 		default:
 			imsg_free(&imsg);
-			link_broken(&config, "sent imsg %u, which it may not",
+			link_broken(&links[CONFIG], "sent imsg %u, which it may not",
 			    type);
 			return;
 		}
@@ -180,6 +209,56 @@ static void
 frontend_forget_config(void)
 {
 	control_close_all();
+}
+
+/* system sends frontend nothing */
+static void
+frontend_dispatch_system(int fd, short event, void *arg)
+{
+	struct imsgev		*iev = arg;
+	struct imsg		 imsg;
+	uint32_t		 type;
+	ssize_t			 n;
+
+	if (imsgev_io(iev, event) == -1) {
+		link_broken(&links[SYSTEM], "closed its pipe");
+		return;
+	}
+	if ((n = imsgbuf_get(&iev->ibuf, &imsg)) == -1) {
+		link_broken(&links[SYSTEM], "sent what imsg cannot read");
+		return;
+	}
+	if (n > 0) {
+		type = imsg_get_type(&imsg);
+		imsg_free(&imsg);
+		link_broken(&links[SYSTEM], "sent imsg %u, which it may not",
+		    type);
+		return;
+	}
+	imsg_event_add(iev);
+}
+
+/* system started again, or is down: it forgot what it was told */
+static void
+frontend_forget_system(void)
+{
+}
+
+/*
+ * to system: the session's request that may begin a commit, its answer,
+ * or the session gone
+ */
+static void
+frontend_asked(struct ctl_conn *c, uint32_t type)
+{
+	struct nshd_asked	 a;
+
+	memset(&a, 0, sizeof(a));
+	a.session = c->id;
+	a.uid = c->uid;
+	a.web = web_user && c->uid == web_uid;
+	if (link_compose(&links[SYSTEM], type, 0, &a, sizeof(a)) == -1)
+		fatal("%s", __func__);
 }
 
 /*
@@ -197,7 +276,7 @@ frontend_client(struct ctl_conn *c, struct imsg *imsg)
 	if (c->pending)
 		return (-1);
 	c->pending = 1;
-	if (config.down)
+	if (links[CONFIG].down)
 		return (frontend_answer(c, imsg));
 	switch (imsg_get_type(imsg)) {
 	case IMSG_CTL_HELLO:
@@ -205,7 +284,8 @@ frontend_client(struct ctl_conn *c, struct imsg *imsg)
 			return (-1);
 		peer.uid = c->uid;
 		peer.gid = c->gid;
-		if (link_compose(&config, IMSG_CTL_HELLO, c->id, &peer,
+		peer.web = web_user && c->uid == web_uid;
+		if (link_compose(&links[CONFIG], IMSG_CTL_HELLO, c->id, &peer,
 		    sizeof(peer)) == -1)
 			fatal("%s", __func__);
 		return (0);
@@ -213,7 +293,7 @@ frontend_client(struct ctl_conn *c, struct imsg *imsg)
 		if (imsg_get_data(imsg, &show, sizeof(show)) == -1 ||
 		    memchr(show.words, '\0', sizeof(show.words)) == NULL)
 			return (-1);
-		if (link_compose(&config, IMSG_CTL_SHOW, c->id, &show,
+		if (link_compose(&links[CONFIG], IMSG_CTL_SHOW, c->id, &show,
 		    sizeof(show)) == -1)
 			fatal("%s", __func__);
 		return (0);
@@ -227,7 +307,14 @@ frontend_client(struct ctl_conn *c, struct imsg *imsg)
 	case IMSG_CTL_LOAD:
 		if ((len = frontend_whole(imsg, &r)) == -1)
 			return (-1);
-		if (link_compose(&config, imsg_get_type(imsg), c->id,
+		/* system first, so it knows of what config may begin */
+		if (imsg_get_type(imsg) == IMSG_CTL_LINE ||
+		    imsg_get_type(imsg) == IMSG_CTL_COMMIT ||
+		    imsg_get_type(imsg) == IMSG_CTL_LOAD) {
+			c->asked = 1;
+			frontend_asked(c, IMSG_FRONT_ASKED);
+		}
+		if (link_compose(&links[CONFIG], imsg_get_type(imsg), c->id,
 		    len > 0 ? &r : NULL, len) == -1)
 			fatal("%s", __func__);
 		return (0);
@@ -239,7 +326,9 @@ frontend_client(struct ctl_conn *c, struct imsg *imsg)
 static void
 frontend_gone(struct ctl_conn *c)
 {
-	if (link_compose(&config, IMSG_CTL_CLOSE, c->id, NULL, 0) == -1)
+	frontend_asked(c, IMSG_FRONT_GONE);
+	if (link_compose(&links[CONFIG], IMSG_CTL_CLOSE, c->id, NULL, 0) ==
+	    -1)
 		fatal("%s", __func__);
 }
 
@@ -248,7 +337,7 @@ static int
 frontend_written(struct ctl_conn *c)
 {
 	if (imsgbuf_queuelen(&c->iev.ibuf) == 0 &&
-	    link_compose(&config, IMSG_CTL_READ, c->id, NULL, 0) == -1)
+	    link_compose(&links[CONFIG], IMSG_CTL_READ, c->id, NULL, 0) == -1)
 		fatal("%s", __func__);
 	return (0);
 }

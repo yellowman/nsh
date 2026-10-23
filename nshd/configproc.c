@@ -131,6 +131,7 @@ struct session {
 	uint32_t		 id;
 	uid_t			 uid;
 	gid_t			 gid;
+	int			 web;	/* the web configurator's */
 	struct session_state	*st;	/* nsh's, once in configure */
 	int			 want;	/* the configure it asked for */
 	int			 how;	/* the configure it is in, or 0 */
@@ -182,6 +183,7 @@ enum {
 
 struct commit {
 	uint32_t		 session;	/* or 0, gone */
+	struct nshd_whose	 whose;		/* as system knows it */
 	uid_t			 uid;
 	int			 step;
 	int			 waits;		/* on a snapshot */
@@ -297,6 +299,7 @@ static int		 commit_part(int32_t, const char *, size_t);
 static void		 commit_apply(int);
 static void		 commit_save(void);
 static void		 commit_record(int);
+static void		 commit_new(struct session *);
 static void		 commit_request(int, uint32_t, const void *, size_t);
 static void		 commit_end(int, const char *);
 static int		 commit_renew(void);
@@ -426,6 +429,7 @@ config_dispatch_frontend(int fd, short event, void *arg)
 				sp->id = id;
 				sp->uid = peer.uid;
 				sp->gid = peer.gid;
+				sp->web = peer.web;
 				TAILQ_INSERT_TAIL(&sessions, sp, entry);
 			}
 			s.version = NSHD_VERSION;
@@ -773,10 +777,7 @@ config_commit(uint32_t session, struct nshd_commit *c)
 		    "minutes, and no check or comment\n", NSHD_CONFIRMMAX);
 		return;
 	}
-	if ((commit = calloc(1, sizeof(*commit))) == NULL)
-		fatal(NULL);
-	commit->session = session;
-	commit->uid = sp->uid;
+	commit_new(sp);
 	commit->check = c->check;
 	commit->minutes = c->minutes;
 	commit->save = save;
@@ -1035,10 +1036,7 @@ config_terminal(struct session *sp)
 	r = session_line(sp->st, sp->line);
 	if (!session_changed(sp->st))
 		return (r);
-	if ((commit = calloc(1, sizeof(*commit))) == NULL)
-		fatal(NULL);
-	commit->session = sp->id;
-	commit->uid = sp->uid;
+	commit_new(sp);
 	commit->terminal = 1;
 	commit->line = r;
 	/* planned from the snapshot the line ran on */
@@ -1111,10 +1109,7 @@ config_loaded(struct session *sp)
 		if ((r = session_configure(sp->st, NULL)) == 0 &&
 		    (r = session_load(sp->st, sp->load, sp->loadlen)) == 0 &&
 		    session_changed(sp->st)) {
-			if ((commit = calloc(1, sizeof(*commit))) == NULL)
-				fatal(NULL);
-			commit->session = sp->id;
-			commit->uid = sp->uid;
+			commit_new(sp);
 			commit->load = 1;
 			strlcpy(commit->comment, sp->loaded,
 			    sizeof(commit->comment));
@@ -1765,6 +1760,7 @@ commit_test(int n)
 
 	commit->test = n;
 	memset(&nt, 0, sizeof(nt));
+	nt.whose = commit->whose;
 	strlcpy(nt.name, t->name, sizeof(nt.name));
 	if (commit_part(NSHD_SCRIPT, t->text, t->len) == -1)
 		return;
@@ -1789,7 +1785,8 @@ commit_go(void)
 	    p->len[PLAN_BEFORE]) == -1 || commit_part(NSHD_WANT,
 	    p->text[PLAN_WANT], p->len[PLAN_WANT]) == -1)
 		return;
-	b.uid = commit->uid;
+	memset(&b, 0, sizeof(b));
+	b.whose = commit->whose;
 	b.minutes = commit->minutes;
 	b.unsaved = commit->terminal;
 	commit_request(COMMIT_BEGIN, IMSG_SYS_BEGIN, &b, sizeof(b));
@@ -1851,7 +1848,7 @@ commit_save(void)
 
 	memset(&sv, 0, sizeof(sv));
 	commit->begun = 0;
-	sv.uid = commit->uid;
+	sv.whose = commit->whose;
 	strlcpy(sv.comment, commit->comment, sizeof(sv.comment));
 	commit_request(COMMIT_SAVE, IMSG_SYS_SAVE, &sv, sizeof(sv));
 }
@@ -1866,6 +1863,21 @@ commit_record(int how)
 	commit->how = how;
 	commit->begun = 0;
 	commit_request(COMMIT_RECORD, IMSG_SYS_RECORD, &rc, sizeof(rc));
+}
+
+/*
+ * The commit, of session sp's, which system begins only while the
+ * request frontend told it of is not answered
+ */
+static void
+commit_new(struct session *sp)
+{
+	if ((commit = calloc(1, sizeof(*commit))) == NULL)
+		fatal(NULL);
+	commit->session = sp->id;
+	commit->uid = sp->uid;
+	commit->whose.generation = links[FRONTEND].generation;
+	commit->whose.session = sp->id;
 }
 
 /*

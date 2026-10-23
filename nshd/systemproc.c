@@ -106,6 +106,19 @@
  * done, carp is promoted if it was demoted for it, and a record of a
  * commit not confirmed goes; if not, it says the boot failed, and carp
  * stays demoted until a commit saves.
+ *
+ * A commit is a session's, and frontend says whose: it tells system,
+ * on their pipe, of each request that may begin one, a line, a commit
+ * or a load's part, by whom, and whether the session is the web
+ * configurator's, before config hears of it; and when config answers
+ * it, and when a session goes. BEGIN, and TEST and SAVE before one,
+ * name the session, and are refused but while it has a request that is
+ * not answered, or, its session gone, was not; BEGIN takes that
+ * request, whose uid the commit record says. TEST of no session's, and
+ * APPLY of no commit begun, are the boot's, and refused but while it
+ * runs; BOOT is answered as done already once relay says nshd does not
+ * boot, or BOOTED has. So a config that a client compromised can begin
+ * a commit only for a request it was asked, and cannot say whose it is.
  */
 
 #include <sys/types.h>
@@ -125,6 +138,7 @@
 #include <limits.h>
 #include <imsg.h>
 #include <paths.h>
+#include <poll.h>
 #include <pwd.h>
 #include <signal.h>
 #include <stdarg.h>
@@ -264,6 +278,21 @@ struct record {
 	char			*buf;		/* what was read, or NULL */
 };
 
+/*
+ * What frontend told system: a session's request that may begin a
+ * commit, not answered, by frontend's generation; once the session is
+ * gone, kept for a commit it asked, ASKED_GONE of them at most
+ */
+struct asked {
+	TAILQ_ENTRY(asked)	 entry;
+	uint32_t		 generation;
+	uint32_t		 session;
+	uid_t			 uid;
+	int			 web;
+	int			 gone;
+};
+#define ASKED_GONE	64
+
 /* the boot record: the boot of the host it is for, how it went, carp */
 enum { BOOT_NONE, BOOT_RUNS, BOOT_FAILED, BOOT_DONE };
 static const char *boot_states[] = { "none", "runs", "failed", "done" };
@@ -292,12 +321,24 @@ static int		 confirm_minutes;
 static uint32_t		 arming_id;
 static uint64_t		 arming_cid;
 static int		 arming_wrote;	/* the commit record, made new */
-static int		 committing;	/* a commit begun, not ended */
+static int		 committing;	/* a commit begun, not ended, */
+static uid_t		 commit_uid;	/* whose, */
+static int		 commit_web;	/* and if the web configurator's */
+static int		 booting;	/* BOOT run, until BOOTED */
+static int		 boot_over;	/* relay said nshd booted, or BOOTED */
+static TAILQ_HEAD(, asked) askeds = TAILQ_HEAD_INITIALIZER(askeds);
+static int		 nagone;	/* of them, of sessions gone */
 static struct event	 confirm_tm;	/* the deadline, or the next attempt */
 static time_t		 confirm_next;	/* the next attempt, no sooner */
 
 static void	system_dispatch_relay(int, short, void *);
 static void	system_dispatch_config(int, short, void *);
+static void	system_dispatch_frontend(int, short, void *);
+static void	system_forget_frontend(void);
+static struct asked *asked_find(uint32_t, uint32_t);
+static struct asked *asked_whose(struct nshd_whose *);
+static void	asked_free(struct asked *);
+static void	asked_trim(void);
 static void	system_forget_config(void);
 static int	system_whole(uint32_t, const void *, size_t);
 static int	system_request(uint32_t, uint32_t, const void *, size_t);
@@ -346,7 +387,7 @@ static void	system_failed(struct confirm *);
 static char	*system_running(size_t *);
 static void	system_rollback(uint32_t, int);
 static void	system_secret(uint32_t);
-static void	system_test(uint32_t, char *);
+static void	system_test(uint32_t, struct nshd_whose *, char *);
 static void	system_printed(uint32_t, int32_t);
 static struct job *system_job_new(uint32_t, int);
 static void	system_job(struct job *);
@@ -364,8 +405,11 @@ static void	user_name(uid_t, char *, size_t);
 static int	db_sync(void);
 static __dead void system_exit(void);
 
-static struct link	 config = {
-	PROC_CONFIG, system_dispatch_config, system_forget_config
+static struct link	 links[] = {
+#define CONFIG		0
+	{ PROC_CONFIG,	 system_dispatch_config,   system_forget_config },
+#define FRONTEND	1
+	{ PROC_FRONTEND, system_dispatch_frontend, system_forget_frontend },
 };
 
 void
@@ -391,19 +435,21 @@ systemproc(int debug, int v)
 	if ((iev_relay = imsgev_new(3, system_dispatch_relay, 0)) == NULL)
 		fatal(NULL);
 	evtimer_set(&confirm_tm, system_confirm, NULL);
-	links_init(&config, 1, iev_relay, system_parent);
+	links_init(links, sizeof(links) / sizeof(links[0]), iev_relay,
+	    system_parent);
 	signal_set(&ev_sigchld, SIGCHLD, system_sigchld, NULL);
 	signal_add(&ev_sigchld, NULL);
 	event_dispatch();
 	system_exit();
 }
 
-/* relay's word that system may start */
+/* relay's word that system may start, and whether nshd boots */
 static void
 system_dispatch_relay(int fd, short event, void *arg)
 {
 	struct imsgev		*iev = arg;
 	struct imsg		 imsg;
+	struct nshd_startup	 st;
 	ssize_t			 n;
 
 	if (imsgev_io(iev, event) == -1)
@@ -414,11 +460,13 @@ system_dispatch_relay(int fd, short event, void *arg)
 			fatal("imsgbuf_get");
 		if (n == 0)
 			break;
-		if (imsg_get_type(&imsg) != IMSG_STARTUP) {
+		if (imsg_get_type(&imsg) != IMSG_STARTUP ||
+		    imsg_get_data(&imsg, &st, sizeof(st)) == -1) {
 			log_warnx("relay sent imsg %u, which it may not",
 			    imsg_get_type(&imsg));
 			system_exit();
 		}
+		boot_over = !st.boot;
 		imsg_free(&imsg);
 	}
 	imsg_event_add(iev);
@@ -438,13 +486,13 @@ system_dispatch_config(int fd, short event, void *arg)
 	int			 r = 0;
 
 	if (imsgev_io(iev, event) == -1) {
-		link_broken(&config, "closed its pipe");
+		link_broken(&links[CONFIG], "closed its pipe");
 		return;
 	}
 
 	for (;;) {
 		if ((n = imsgbuf_get(&iev->ibuf, &imsg)) == -1) {
-			link_broken(&config, "sent what imsg cannot read");
+			link_broken(&links[CONFIG], "sent what imsg cannot read");
 			return;
 		}
 		if (n == 0)
@@ -462,7 +510,7 @@ system_dispatch_config(int fd, short event, void *arg)
 		}
 		if (system_whole(type, data, len) == -1) {
 			imsg_free(&imsg);
-			link_broken(&config, "sent imsg %u, which it may not, "
+			link_broken(&links[CONFIG], "sent imsg %u, which it may not, "
 			    "or not whole", type);
 			return;
 		}
@@ -474,12 +522,138 @@ system_dispatch_config(int fd, short event, void *arg)
 			system_queue(type, id, data, len);
 		imsg_free(&imsg);
 		if (r == -1) {
-			link_broken(&config, "sent a part past %d bytes",
+			link_broken(&links[CONFIG], "sent a part past %d bytes",
 			    NSHD_PART);
 			return;
 		}
 	}
 	imsg_event_add(iev);
+}
+
+/* frontend's word of the requests that may begin a commit */
+static void
+system_dispatch_frontend(int fd, short event, void *arg)
+{
+	struct imsgev		*iev = arg;
+	struct imsg		 imsg;
+	struct nshd_asked	 a;
+	struct asked		*k;
+	uint32_t		 type;
+	ssize_t			 n;
+
+	if (imsgev_io(iev, event) == -1) {
+		link_broken(&links[FRONTEND], "closed its pipe");
+		return;
+	}
+
+	for (;;) {
+		if ((n = imsgbuf_get(&iev->ibuf, &imsg)) == -1) {
+			link_broken(&links[FRONTEND],
+			    "sent what imsg cannot read");
+			return;
+		}
+		if (n == 0)
+			break;
+		type = imsg_get_type(&imsg);
+		if ((type != IMSG_FRONT_ASKED && type != IMSG_FRONT_ANSWERED &&
+		    type != IMSG_FRONT_GONE) ||
+		    imsg_get_data(&imsg, &a, sizeof(a)) == -1) {
+			imsg_free(&imsg);
+			link_broken(&links[FRONTEND], "sent imsg %u, which it "
+			    "may not, or not whole", type);
+			return;
+		}
+		imsg_free(&imsg);
+		k = asked_find(links[FRONTEND].generation, a.session);
+		if (type == IMSG_FRONT_ASKED) {
+			if (k != NULL)
+				asked_free(k);
+			if ((k = calloc(1, sizeof(*k))) == NULL)
+				fatal(NULL);
+			k->generation = links[FRONTEND].generation;
+			k->session = a.session;
+			k->uid = a.uid;
+			k->web = a.web != 0;
+			TAILQ_INSERT_TAIL(&askeds, k, entry);
+		} else if (k != NULL && type == IMSG_FRONT_ANSWERED)
+			asked_free(k);
+		else if (k != NULL && !k->gone) {
+			k->gone = 1;
+			nagone++;
+			asked_trim();
+		}
+	}
+	imsg_event_add(iev);
+}
+
+/* frontend started again, or is down: its sessions are gone */
+static void
+system_forget_frontend(void)
+{
+	struct asked	*k;
+
+	TAILQ_FOREACH(k, &askeds, entry)
+		if (!k->gone) {
+			k->gone = 1;
+			nagone++;
+		}
+	asked_trim();
+}
+
+static struct asked *
+asked_find(uint32_t generation, uint32_t session)
+{
+	struct asked	*k;
+
+	TAILQ_FOREACH(k, &askeds, entry)
+		if (k->generation == generation && k->session == session)
+			return (k);
+	return (NULL);
+}
+
+/*
+ * The request a commit is for, which frontend told system of before
+ * config heard of it, or NULL: what frontend sent is read first, as
+ * system may not have read it yet
+ */
+static struct asked *
+asked_whose(struct nshd_whose *w)
+{
+	struct pollfd	 pfd;
+
+	if (w->session == 0)
+		return (NULL);
+	if (links[FRONTEND].iev != NULL) {
+		pfd.fd = links[FRONTEND].iev->ibuf.fd;
+		pfd.events = POLLIN;
+		if (poll(&pfd, 1, 0) == 1)
+			system_dispatch_frontend(pfd.fd, EV_READ,
+			    links[FRONTEND].iev);
+	}
+	return (asked_find(w->generation, w->session));
+}
+
+static void
+asked_free(struct asked *k)
+{
+	if (k->gone)
+		nagone--;
+	TAILQ_REMOVE(&askeds, k, entry);
+	free(k);
+}
+
+/* of sessions gone, the oldest past ASKED_GONE forgotten */
+static void
+asked_trim(void)
+{
+	struct asked	*k, *next;
+
+	TAILQ_FOREACH_SAFE(k, &askeds, entry, next) {
+		if (nagone <= ASKED_GONE)
+			break;
+		if (k->gone)
+			asked_free(k);
+	}
 }
 
 /* Is a request one config may send, and whole? 0 if so, else -1 */
@@ -650,7 +824,7 @@ system_request(uint32_t type, uint32_t id, const void *data, size_t len)
 		break;
 	case IMSG_SYS_TEST:
 		memcpy(&t, data, sizeof(t));
-		system_test(id, t.name);
+		system_test(id, &t.whose, t.name);
 		break;
 	}
 	return (0);
@@ -684,7 +858,7 @@ system_drain(void)
 		r = system_request(q->type, q->id, q->data, q->len);
 		free(q);
 		if (r == -1) {
-			link_broken(&config, "sent a part past %d bytes",
+			link_broken(&links[CONFIG], "sent a part past %d bytes",
 			    NSHD_PART);
 			return;
 		}
@@ -709,10 +883,11 @@ system_forget_config(void)
 	}
 	system_parts_free();
 	/*
-	 * its commit ended, if it began one; and as system starts, what a
-	 * system before this did not take back is
+	 * its commit ended, if it began one, and its boot; and as system
+	 * starts, what a system before this did not take back is
 	 */
 	committing = 0;
+	booting = 0;
 	confirm_free(&confirm_prev);
 	confirm_begun = 0;
 	system_confirm(-1, 0, NULL);
@@ -741,7 +916,7 @@ system_snapshot(uint32_t id, int facts)
 		if (fclose(f) == EOF) {
 			log_warn("%s: fclose", __func__);
 			r.status = -1;
-		} else if (imsg_text(config.iev, IMSG_SYS_TEXT, id, buf,
+		} else if (imsg_text(links[CONFIG].iev, IMSG_SYS_TEXT, id, buf,
 		    len) == -1)
 			fatal("%s", __func__);
 	}
@@ -758,7 +933,7 @@ system_snapshot(uint32_t id, int facts)
 			kfacts_free(k);
 		}
 	}
-	if (link_compose(&config, IMSG_SYS_END, id, &r, sizeof(r)) == -1)
+	if (link_compose(&links[CONFIG], IMSG_SYS_END, id, &r, sizeof(r)) == -1)
 		fatal("%s", __func__);
 }
 
@@ -840,12 +1015,12 @@ system_end(uint32_t id, int32_t status, const char *fmt, ...)
 		len = vasprintf(&s, fmt, ap);
 		va_end(ap);
 		if (len == -1 ||
-		    imsg_text(config.iev, IMSG_SYS_TEXT, id, s, len) == -1)
+		    imsg_text(links[CONFIG].iev, IMSG_SYS_TEXT, id, s, len) == -1)
 			fatal("%s", __func__);
 		free(s);
 	}
 	r.status = status;
-	if (link_compose(&config, IMSG_SYS_END, id, &r, sizeof(r)) == -1)
+	if (link_compose(&links[CONFIG], IMSG_SYS_END, id, &r, sizeof(r)) == -1)
 		fatal("%s", __func__);
 }
 
@@ -867,7 +1042,7 @@ system_flush(uint32_t id)
 {
 	if (nunits == 0)
 		return;
-	if (link_compose(&config, IMSG_SYS_FACTS, id, units, nunits) == -1)
+	if (link_compose(&links[CONFIG], IMSG_SYS_FACTS, id, units, nunits) == -1)
 		fatal("%s", __func__);
 	nunits = 0;
 }
@@ -1135,10 +1310,20 @@ system_begin(uint32_t id, struct nshd_begin *bg)
 {
 	struct record	 rec, now;
 	struct confirm	 cf;
+	struct asked	*k;
 	char		*runs;
 	size_t		 len;
 	int		 r, wrote = 0, status = 1;
 
+	memset(&rec, 0, sizeof(rec));
+	if ((k = asked_whose(&bg->whose)) == NULL) {
+		printf("%% Commit refused: frontend told system of no request "
+		    "it is for\n");
+		goto done;
+	}
+	commit_uid = k->uid;
+	commit_web = k->web;
+	asked_free(k);
 	if (record_read(&rec) == -1)
 		goto done;
 	/* configure terminal's, unsaved, would go back with one not confirmed */
@@ -1201,7 +1386,7 @@ system_begin(uint32_t id, struct nshd_begin *bg)
 		}
 	} else {
 		now.state = RECORD_APPLYING;
-		now.uid = bg->uid;
+		now.uid = commit_uid;
 		now.when = time(NULL);
 		now.before = parts[NSHD_BEFORE];
 		now.beforelen = partlen[NSHD_BEFORE];
@@ -1218,7 +1403,7 @@ system_begin(uint32_t id, struct nshd_begin *bg)
 			goto done;
 		}
 		/* answered once parent keeps its deadline */
-		if (printed_text(config.iev, IMSG_SYS_TEXT, id) == -1)
+		if (printed_text(links[CONFIG].iev, IMSG_SYS_TEXT, id) == -1)
 			fatal("%s", __func__);
 		committing = 1;
 		record_free(&rec);
@@ -1534,8 +1719,15 @@ system_running(size_t *len)
 static void
 system_apply(uint32_t id, struct nshd_apply *a)
 {
-	struct job	*j = system_job_new(id, JOB_APPLY);
+	struct job	*j;
 
+	if (!committing && !booting) {
+		printf("%% nshd: no commit is begun\n");
+		system_printed(id, 1);
+		system_parts_free();
+		return;
+	}
+	j = system_job_new(id, JOB_APPLY);
 	j->apply = a;
 	system_job(j);
 	system_parts_free();
@@ -1545,13 +1737,29 @@ system_apply(uint32_t id, struct nshd_apply *a)
 static void
 system_save(uint32_t id, struct nshd_save *sv)
 {
-	struct job	*j = system_job_new(id, JOB_SAVE);
+	struct asked	*k;
+	struct job	*j;
+	uid_t		 uid;
+
+	/* the commit begun's, or one that changes nothing, a request's */
+	if (committing)
+		uid = commit_uid;
+	else if ((k = asked_whose(&sv->whose)) == NULL) {
+		printf("%% Commit refused: frontend told system of no request "
+		    "it is for\n");
+		system_printed(id, 1);
+		return;
+	} else {
+		uid = k->uid;
+		asked_free(k);
+	}
+	j = system_job_new(id, JOB_SAVE);
 
 	/* a commit not confirmed is, first */
 	if (system_unconfirm())
 		printf("%% Commit confirmed\n");
 
-	user_name(sv->uid, j->who, sizeof(j->who));
+	user_name(uid, j->who, sizeof(j->who));
 	strlcpy(j->comment, sv->comment, sizeof(j->comment));
 	system_job(j);
 }
@@ -1588,12 +1796,19 @@ system_unconfirm(void)
  * of their own, in a job
  */
 static void
-system_test(uint32_t id, char *name)
+system_test(uint32_t id, struct nshd_whose *whose, char *name)
 {
 	struct job	*j;
 	size_t		 i;
 	int		 fd;
 
+	if (whose->session == 0 ? !booting : asked_whose(whose) == NULL) {
+		printf("%% Commit refused: frontend told system of no request "
+		    "it is for\n");
+		system_printed(id, 1);
+		system_parts_free();
+		return;
+	}
 	if (!ctl_rules_args(name, NULL, NULL, 0, NULL)) {
 		printf("%% nshd: %s's rules have no test\n", name);
 		system_printed(id, 1);
@@ -1700,6 +1915,11 @@ system_boot(uint32_t id)
 	struct boot	 b;
 	int		 status = 1;
 
+	/* a boot but while nshd boots is config's word alone */
+	if (boot_over) {
+		status = NSHD_DONE;
+		goto done;
+	}
 	saved_first();
 	if (boot_read(&b) == -1)
 		goto done;
@@ -1720,6 +1940,8 @@ system_boot(uint32_t id)
 	}
 	status = 0;
  done:
+	/* unrecorded, it runs all the same */
+	booting = status != NSHD_DONE;
 	system_printed(id, status);
 }
 
@@ -1736,6 +1958,8 @@ system_booted(uint32_t id, int ok)
 	struct boot	 b;
 	int		 demoted, status = 1;
 
+	booting = 0;
+	boot_over = 1;
 	if (boot_read(&b) == -1)
 		goto done;
 	if (b.state != BOOT_RUNS && b.state != BOOT_FAILED) {
@@ -1800,9 +2024,9 @@ system_rollback(uint32_t id, int n)
 	if (fclose(f) == EOF)
 		fatal("%s", __func__);
 	/* why it could not, then it */
-	if (printed_text(config.iev, IMSG_SYS_TEXT, id) == -1)
+	if (printed_text(links[CONFIG].iev, IMSG_SYS_TEXT, id) == -1)
 		r = -1;
-	if (imsg_text(config.iev, IMSG_SYS_TEXT, id, buf, len) == -1)
+	if (imsg_text(links[CONFIG].iev, IMSG_SYS_TEXT, id, buf, len) == -1)
 		fatal("%s", __func__);
 	free(buf);
 	system_end(id, r != 0, NULL);
@@ -1817,7 +2041,7 @@ system_secret(uint32_t id)
 
 	hash[0] = '\0';
 	if (read_pass(hash, sizeof(hash))) {
-		if (imsg_text(config.iev, IMSG_SYS_TEXT, id, hash,
+		if (imsg_text(links[CONFIG].iev, IMSG_SYS_TEXT, id, hash,
 		    strlen(hash)) == -1)
 			fatal("%s", __func__);
 	} else if (errno != ENOENT) {
@@ -1833,7 +2057,7 @@ system_secret(uint32_t id)
 static void
 system_printed(uint32_t id, int32_t status)
 {
-	if (printed_text(config.iev, IMSG_SYS_TEXT, id) == -1 && status == 0)
+	if (printed_text(links[CONFIG].iev, IMSG_SYS_TEXT, id) == -1 && status == 0)
 		status = 1;
 	system_end(id, status, NULL);
 }
@@ -1964,7 +2188,7 @@ system_job_read(int fd, short event, void *arg)
 	if (n > 0) {
 		if (job->kind == JOB_RECOVER)
 			log_text(buf, n);
-		else if (imsg_text(config.iev, IMSG_SYS_TEXT, job->id, buf,
+		else if (imsg_text(links[CONFIG].iev, IMSG_SYS_TEXT, job->id, buf,
 		    n) == -1)
 			fatal("%s", __func__);
 		return;

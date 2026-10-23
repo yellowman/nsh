@@ -38,9 +38,9 @@
  * read-write socket. system's helpers that need not be root run as
  * NSHD_CHECK_USER, whose uid is theirs alone too.
  *
- * Two children that talk, frontend and config, config and system, and
- * config and archive, do so on a pipe of their own, which parent makes,
- * so each knows who sent what it reads. Each child has a pipe to relay, as fd 3, which tells
+ * Two children that talk, frontend and config, config and system,
+ * config and archive, and frontend and system, do so on a pipe of their
+ * own, which parent makes, so each knows who sent what it reads. Each child has a pipe to relay, as fd 3, which tells
  * it when it may start, and to which it tells a peer gone wrong; one
  * with peers has a pipe from parent, as fd 4, which gives it each
  * peer's pipe, or says the peer is down, with the peer's generation,
@@ -157,6 +157,7 @@ static const struct pair {
 	{ PROC_FRONTEND, PROC_CONFIG },
 	{ PROC_CONFIG,	 PROC_SYSTEM },
 	{ PROC_CONFIG,	 PROC_ARCHIVE },
+	{ PROC_FRONTEND, PROC_SYSTEM },
 };
 #define NPAIRS	(sizeof(pairs) / sizeof(pairs[0]))
 
@@ -384,6 +385,18 @@ users(void)
 		if (children[i].user != NULL && uid[i] == check_uid)
 			errx(1, "%s and %s are one uid", children[i].user,
 			    NSHD_CHECK_USER);
+	/* the web configurator's, if there is one, which is no role's */
+	if ((pw = getpwnam(NSHD_WEB_USER)) == NULL)
+		return;
+	if (pw->pw_uid == 0)
+		errx(1, "%s is root", NSHD_WEB_USER);
+	if (pw->pw_uid == check_uid)
+		errx(1, "%s and %s are one uid", NSHD_WEB_USER,
+		    NSHD_CHECK_USER);
+	for (i = 0; i < NPROC; i++)
+		if (children[i].user != NULL && uid[i] == pw->pw_uid)
+			errx(1, "%s and %s are one uid", children[i].user,
+			    NSHD_WEB_USER);
 }
 
 /*

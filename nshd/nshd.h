@@ -24,6 +24,7 @@
 
 #define NSHD_GROUP	"nshadmin"	/* who may use the read-write socket */
 #define NSHD_CHECK_USER	"_nshcheck"	/* system's helpers, but root's */
+#define NSHD_WEB_USER	"_nshweb"	/* the web configurator's sessions */
 #define NSHD_SOCKET	"/var/run/nshd.sock"	/* 0660, group nshadmin */
 #define NSHD_RO_SOCKET	"/var/run/nshd.ro.sock"	/* 0666 */
 
@@ -149,9 +150,29 @@ struct nshd_chunk {
 #define NSHD_WANT	2	/* and what is wanted */
 #define NSHD_PARTS	3
 
-/* config to system: who begins a commit, and if confirmed, its minutes */
-struct nshd_begin {
+/*
+ * frontend to system: a session asked what may begin a commit (a line,
+ * a commit, a load's part), by uid, and if it is the web configurator's
+ */
+struct nshd_asked {
+	uint32_t	session;
 	uint32_t	uid;
+	int32_t		web;
+};
+
+/*
+ * config to system: the session a commit is for, by frontend's
+ * generation, which asked what system was told of; or session 0, the
+ * boot's
+ */
+struct nshd_whose {
+	uint32_t	generation;
+	uint32_t	session;
+};
+
+/* config to system: whose commit begins, and if confirmed, its minutes */
+struct nshd_begin {
+	struct nshd_whose whose;
 	int32_t		minutes;
 	int32_t		unsaved;	/* configure terminal's, not saved */
 };
@@ -175,14 +196,15 @@ struct nshd_apply {
 	}		clears[NSHD_CLEARS];
 };
 
-/* config to system: save what runs, saved by uid, with the comment */
+/* config to system: save what runs, for whose commit, with the comment */
 struct nshd_save {
-	uint32_t	uid;
+	struct nshd_whose whose;
 	char		comment[NSHD_COMMENT];
 };
 
-/* config to system: test daemon name's rules, the part sent */
+/* config to system: test daemon name's rules, the part sent, for whose */
 struct nshd_test {
+	struct nshd_whose whose;
 	char		name[32];
 };
 
@@ -221,6 +243,7 @@ struct nshd_peer {
 	struct nshd_hello	hello;
 	uint32_t		uid;
 	uint32_t		gid;
+	int32_t			web;	/* NSHD_WEB_USER's */
 };
 
 enum nshd_proc {
@@ -307,7 +330,12 @@ enum nshd_imsg {
 	IMSG_SYS_SECRET,	/* the enable secret's hash, as text, or none */
 	IMSG_CTL_OP,		/* nshd_op: what it prints, a result */
 	IMSG_SYS_OP,		/* nshd_op: a stream, a result */
-	IMSG_CTL_LOAD		/* nshd_load: a result; the last, as commit */
+	IMSG_CTL_LOAD,		/* nshd_load: a result; the last, as commit */
+
+	/* frontend to system: what config's commits must be for */
+	IMSG_FRONT_ASKED,	/* nshd_asked: until it is answered */
+	IMSG_FRONT_ANSWERED,	/* nshd_asked: config answered it */
+	IMSG_FRONT_GONE		/* nshd_asked: its session is gone */
 };
 
 struct imsgev {

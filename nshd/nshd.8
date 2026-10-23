@@ -58,6 +58,9 @@ Runs as _nshfront in a
 .Xr chroot 2
 and answers the read-write socket.
 Each client is a session, which asks one thing at a time.
+frontend tells system, before config, of each request that may begin
+a commit, whose it is, and when it is answered; a client of _nshweb's
+uid is the web configurator's session.
 .It config
 Runs as _nshconf in a
 .Xr chroot 2 ,
@@ -128,7 +131,9 @@ own
 is not; nsh's
 .Cm show startup-config
 asks for it.
-It answers config and no one else.
+It answers config and no one else, and begins a commit only for a
+request frontend told it of and that is not answered, or, its session
+gone, was not; the uid it records is frontend's.
 An operation a session asks, such as
 .Cm flush routes
 or a daemon's action, it runs as root, if nsh's code names it one, in
@@ -251,7 +256,8 @@ Each child's
 is its user's home directory.
 .Nm
 does not start unless each user, and _nshcheck, exists, is not root,
-and has a uid no other has.
+and has a uid no other has; nor if _nshweb, the web configurator's
+user, exists and is root or has another's uid.
 .Pp
 Only root and the members of the group nshadmin may connect to the
 read-write socket, and every session there may see the running
@@ -259,8 +265,8 @@ configuration.
 The read-only socket is for anyone.
 .Pp
 system does as root what config asks of it, so a config gone wrong may
-ask it anything a session may: config is trusted as the read-write
-socket's users are.
+ask it anything a session may, in a commit a session asked: config is
+trusted as the read-write socket's users are.
 relay carries no request; gone wrong, it can stop the children, or have
 them started again, and nothing more.
 .Pp
