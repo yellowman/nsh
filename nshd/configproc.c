@@ -76,10 +76,9 @@
  * there saves what runs; rollback has nothing to roll back.
  *
  * nsh -c's configuration comes a part at a time, each answered, outside
- * configure; after the last, on a snapshot, config loads it into a
- * candidate of the session's own, as cmdrc() reads it, what changes
- * the candidate alone, and commits it, all of it or none, and the
- * candidate goes.
+ * configure. After the last, on a snapshot, it becomes the candidate of
+ * a session of its own, in place of what runs, which is committed, all
+ * of it or none; then the candidate goes.
  *
  * Told at its start that the boot is not done, config boots, as nsh -i
  * does, once there is a pipe to system: system says whether this boot
@@ -1088,9 +1087,9 @@ config_load(uint32_t session, struct nshd_load *l)
 }
 
 /*
- * nsh -c's configuration, on a candidate of its own as what runs now:
- * committed, if it changed it, all of it or none, and answered once the
- * commit ends; 1 if it is committed, else as a handler returns
+ * nsh -c's configuration, as a candidate of its own in place of what
+ * runs: committed, if it differs, all of it or none, and answered once
+ * the commit ends; 1 if it is committed, else as a handler returns
  */
 static int
 config_loaded(struct session *sp)

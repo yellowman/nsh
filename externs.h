@@ -192,7 +192,6 @@ void sigalarm(int);
 void command(void);
 int argvtostring(int, char **, char *, int);
 int cmdrc(char rcname[FILENAME_MAX]);
-int cmdrc_file(FILE *);
 int cmdline(char *);
 int cmdexit(void);
 int cmdline_nshd(char *);

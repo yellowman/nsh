@@ -104,18 +104,21 @@ The options are as follows:
 .It Fl v
 Produce verbose output
 .It Fl c Ar config-script-file
-Make the configuration in
+Replace the running configuration with the one in
 .Ar config-script-file ,
-written as the saved configuration is, part of the running
-configuration, and save it.
+and save it.
+The file must be written as
+.Ic show running-config
+writes the configuration.
 .Xr nshd 8
-loads the file into a candidate of its own, as the running
-configuration, and commits it, all of it or none, once
+takes the file as a candidate of its own, as
+.Cm rollback Ar N
+takes a saved configuration, and commits it, all of it or none, once
 .Nm
 is enabled as privileged mode is, asking for the secret if there is
 one.
-A line that is not configuration, or that fails, and nothing is
-committed.
+If a line fails, nothing is committed.
+An empty file changes nothing.
 This is typically used to implement scripted changes to configuration.
 .El
 .Pp

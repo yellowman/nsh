@@ -536,25 +536,24 @@ session_renew(struct session_state *s)
 }
 
 /*
- * text, nsh -c's configuration as cmdrc() reads it, into s's candidate:
- * as a handler returns, -1 if a line failed, said
+ * text, nsh -c's configuration, as s's candidate in place of what it
+ * was, as rollback N takes a saved one; an empty one changes nothing:
+ * -1 if it could not, said why, else 0
  */
 int
 session_load(struct session_state *s, char *text, size_t len)
 {
-	FILE *f;
+	struct cnode *t;
 	int r;
 
 	if (len == 0)
 		return 0;
-	if ((f = fmemopen(text, len, "r")) == NULL) {
-		printf("%% session_load: %s\n", strerror(errno));
+	if ((t = conftree_mem(text, len, "the configuration loaded",
+	    conf_mode, conf_ordered)) == NULL)
 		return -1;
-	}
 	session_enter(s);
-	r = cmdrc_file(f);
+	r = cand_restart(t, -1);
 	session_leave(s);
-	fclose(f);
 	return r;
 }
 

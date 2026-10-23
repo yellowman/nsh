@@ -3680,26 +3680,8 @@ flush_pf(int argc, char **argv, ...)
 int
 cmdrc(char rcname[FILENAME_MAX])
 {
-	FILE	*rcfile;
-	int	 r;
-
-	if ((rcfile = fopen(rcname, "r")) == 0) {
-		printf("%% Unable to open %s: %s\n", rcname, strerror(errno));
-		return -1;
-	}
-	r = cmdrc_file(rcfile);
-	fclose(rcfile);
-	return r;
-}
-
-/*
- * rcfile's commands, as cmdrc() runs them; in nshd's config, nsh -c's,
- * into the candidate, what changes it alone
- */
-int
-cmdrc_file(FILE *rcfile)
-{
 	Command	*c = NULL, *savec = NULL;
+	FILE	*rcfile;
 	char	modhvar[128];	/* required variable in mode handler cmd */
 	unsigned int lnum;	/* line number */
 	u_int	z = 0;		/* max length of cmdtab argument */
@@ -3707,6 +3689,11 @@ cmdrc_file(FILE *rcfile)
 	int	status = 0;	/* -1 once a line has failed */
 
 	init_bgpd_socket_path(cli_rtable);
+
+	if ((rcfile = fopen(rcname, "r")) == 0) {
+		printf("%% Unable to open %s: %s\n", rcname, strerror(errno));
+		return -1;
+	}
 
 	for (c = cmdtab; c->name; c++)
 		if (strlen(c->name) > z)
@@ -3719,7 +3706,7 @@ cmdrc_file(FILE *rcfile)
 			break;
 		if (line[0] == 0)
 			break;
-		if (candidate && !in_config) {
+		if (candidate) {
 			printf("%% configure private is not supported in rc"
 			    " files (line %u)\n", lnum);
 			status = -1;
@@ -3815,8 +3802,8 @@ cmdrc_file(FILE *rcfile)
 			status = -1;
 			continue;
 		}
-		/* in nshd's config, what changes the candidate alone; a script's */
-		if ((in_config || in_script) && c->cand != CAND_EDIT) {
+		/* a commit's script runs configuration commands only */
+		if (in_script && c->cand != CAND_EDIT) {
 			printf("%% %s is not configuration (line %u)\n",
 			    c->name, lnum);
 			status = -1;
@@ -3839,13 +3826,13 @@ cmdrc_file(FILE *rcfile)
 			rc_head = 0;
 		} else if ((*c->handler) (margc, margv, 0) == -1)
 			status = -1;
-		/* a table the line made can be entered now, but by config */
-		if (!in_config && cli_rtable != getrtable() &&
-		    setrtable(cli_rtable) == 0)
+		/* a table the line made can be entered now */
+		if (cli_rtable != getrtable() && setrtable(cli_rtable) == 0)
 			init_bgpd_socket_path(cli_rtable);
 	}
 	in_rc = 0;
 	ctl_rules_done();
+	fclose(rcfile);
 	return status;
 }
 

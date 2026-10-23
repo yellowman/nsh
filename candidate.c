@@ -945,9 +945,9 @@ cand_rollback(int argc, char **argv, ...)
 }
 
 /*
- * The candidate starts over as base, configuration n as it was saved,
- * which it keeps, or as the running configuration if NULL: -1 if it
- * could not, said why
+ * The candidate starts over as base, which it keeps: configuration n as
+ * it was saved, or with n -1 one loaded, which says nothing; or as the
+ * running configuration if NULL: -1 if it could not, said why
  */
 int
 cand_restart(struct cnode *base, int n)
@@ -984,7 +984,7 @@ cand_restart(struct cnode *base, int n)
 	cand_nedits++;
 	if (n == 0)
 		printf("%% Candidate reset to the running configuration\n");
-	else
+	else if (n > 0)
 		printf("%% Candidate loaded from rollback %d\n", n);
 	return 0;
 }
