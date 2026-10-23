@@ -161,7 +161,8 @@ int nsh_setrtable(int);
 
 /* commands.c */
 extern pid_t child;
-#define NOPTFILL	7
+/* bgp show ip: six fixed words, three optional words, and NULL */
+#define NOPTFILL	10
 #define DEFAULT_EDITOR	"/usr/bin/vi"
 #define NSHRC		"/etc/nshrc"
 #define NSHDB		"/var/db/nsh"	/* the configurations saved */

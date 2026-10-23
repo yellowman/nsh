@@ -31,7 +31,7 @@ pr_prot1(int argc, char **argv, ...)
 {
 	struct prot1 *x;
 	struct prot *prot;
-	char *args[NOPTFILL] = { NULL, NULL, NULL, NULL, NULL, NULL, NULL };
+	char *args[NOPTFILL] = { NULL };
 	char **fillargs;
 	char prefix[64];
 
@@ -162,5 +162,7 @@ step_optreq(char **xargs, char **args, int argc, char **argv, int skip)
 		}
 	}
 
+	/* Also terminate a template that uses every argument slot. */
+	args[i] = NULL;
 	return args;
 }
