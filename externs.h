@@ -701,3 +701,4 @@ void rollback_list(FILE *);
 int script_make(struct cnode *, struct cnode *, struct script *);
 int script_run(struct script *);
 void script_free(struct script *);
+extern int in_script;

@@ -124,6 +124,9 @@ struct claims {
 	size_t n;
 };
 
+/* script_run() runs a script, which takes configuration alone */
+int in_script;
+
 /* in nshd's config, the tests of rules check() keeps for system */
 static struct plan_test *deferred;
 static int ndeferred;
@@ -1091,7 +1094,9 @@ script_run(struct script *s)
 			    1);
 	save = candidate;
 	candidate = 0;
+	in_script = 1;
 	failed = cmdrc(path) == -1;
+	in_script = 0;
 	candidate = save;
 	/* and none once it stopped the daemon */
 	for (i = 0; i < s->nclears; i++)

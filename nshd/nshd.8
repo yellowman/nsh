@@ -154,6 +154,13 @@ child of system's; one that runs past its time, 900 seconds for a
 script, 300 for a save and 120 for a test, is sent SIGTERM, with its
 process group, and SIGKILL 10 seconds later, 5 for a test, and fails.
 A script and a save run as root.
+A script takes configuration alone, the commands
+.Ic configure
+takes: a line of any other command, such as
+.Ic reboot
+or
+.Ic ping ,
+fails.
 A test runs as _nshcheck, with its rules in a directory of their own,
 both _nshcheck's, but for relayd's, ldapd's, npppd's, sasyncd's and
 sshd's, which read keys or secrets their rules name, and keep root.

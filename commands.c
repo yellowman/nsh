@@ -3815,8 +3815,8 @@ cmdrc_file(FILE *rcfile)
 			status = -1;
 			continue;
 		}
-		/* in nshd's config, what changes the candidate alone */
-		if (in_config && c->cand != CAND_EDIT) {
+		/* in nshd's config, what changes the candidate alone; a script's */
+		if ((in_config || in_script) && c->cand != CAND_EDIT) {
 			printf("%% %s is not configuration (line %u)\n",
 			    c->name, lnum);
 			status = -1;
