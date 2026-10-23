@@ -70,12 +70,15 @@ archive(int d, int v)
 	child_start("archive", d, v);
 	archive_open();
 	privdrop(PROC_ARCHIVE);
-	if (pledge("stdio rpath wpath cpath", NULL) == -1)
+	if (pledge("stdio rpath wpath cpath recvfd", NULL) == -1)
 		fatal("pledge");
 
 	if ((iev_parent = imsgev_new(3, archive_dispatch_parent, 0)) == NULL)
 		fatal(NULL);
 	links_init(&config, 1);
+	/* its pipe to config is here, and no descriptor comes after it */
+	if (pledge("stdio rpath wpath cpath", NULL) == -1)
+		fatal("pledge");
 	event_dispatch();
 	exit(0);
 }

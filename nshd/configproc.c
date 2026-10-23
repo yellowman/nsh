@@ -342,6 +342,9 @@ configproc(int debug, int verbose)
 	if ((iev_parent = imsgev_new(3, config_dispatch_parent, 0)) == NULL)
 		fatal(NULL);
 	links_init(links, sizeof(links) / sizeof(links[0]));
+	/* its peers' pipes are here, and no descriptor comes after them */
+	if (pledge("stdio", NULL) == -1)
+		fatal("pledge");
 	event_dispatch();
 	exit(0);
 }
