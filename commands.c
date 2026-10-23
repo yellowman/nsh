@@ -458,13 +458,9 @@ quit(int argc, char **argv, ...)
 	if (cand_changed())
 		printf("%% Uncommitted changes in the candidate were"
 		    " discarded\n");
-	if (privexec) {
-		exit(NSH_REXEC_EXIT_CODE_QUIT);
-	} else {
-		if (interactive_mode)
-			printf("%% Session terminated.\n");
-		exit(0);
-	}
+	if (interactive_mode)
+		printf("%% Session terminated.\n");
+	exit(0);
 	return 0;
 }
 
@@ -3318,10 +3314,6 @@ clear(int argc, char **argv, ...)
 static int
 disable(int argc, char **argv, ...)
 {
-	if (privexec) {
-		exit(0);
-		return 0;
-	}
 	if (cand_leave())
 		return -1;
 	nshd_disable();

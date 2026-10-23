@@ -275,7 +275,10 @@ else
                 /usr/local/bin/nsh -c ../nshrc/write-config.nshrc
                 #secure nshrc config file
                 chmod 660 /etc/nshrc
-                echo /usr/local/bin/nsh -i /etc/nshrc >>/etc/rc.local
+                #nshd boots /etc/nshrc, the first time, and its own after
+                cp ../../nshd/nshd.rc /etc/rc.d/nshd
+                chmod 555 /etc/rc.d/nshd
+                rcctl enable nshd
         else
                 exit
         fi

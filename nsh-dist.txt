@@ -41,14 +41,6 @@
 /nopt.c
 /nsh-version.mk
 /nsh.8
-/nsh.rc
-/nshdoas
-/nshdoas/.gitignore
-/nshdoas/Makefile
-/nshdoas/doas.h
-/nshdoas/env.c
-/nshdoas/nshdoas.c
-/nshdoas/parse.y
 /passwd.c
 /pflow.c
 /pfsync.c
@@ -68,8 +60,7 @@
 /scripts/nshrc/write-config.nshrc
 /scripts/shell
 /scripts/shell/extensive-nsh-openbsd-integrate.sh
-/scripts/shell/nsh.rc
-/scripts/shell/rc.local-nsh-openbsd-integrate.sh
+/scripts/shell/scripts/shell/rc.local-nsh-openbsd-integrate.sh
 /show.c
 /sqlite3.c
 /stats.c

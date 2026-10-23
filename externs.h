@@ -11,18 +11,6 @@
 
 #define NSH_VERSION_STR NSH_STRINGVAL(NSH_VERSION)
 
-#ifndef NSH_REXEC_PATH
-#define NSH_REXEC_PATH /usr/local/bin/nsh
-#endif
-
-#ifndef NSHDOAS_PATH
-#define NSHDOAS_PATH /usr/local/libexec/nshdoas
-#endif
-
-#define NSH_REXEC_PATH_STR		NSH_STRINGVAL(NSH_REXEC_PATH)
-#define NSH_REXEC_EXIT_CODE_QUIT	42
-#define NSHDOAS_PATH_STR		NSH_STRINGVAL(NSHDOAS_PATH)
-
 #define NO_ARG(x)	(strcasecmp(x, "no") == 0) /* absolute "no" */
 
 #define nitems(_a)	(sizeof((_a)) / sizeof((_a)[0])) /* sys/param.h */
@@ -44,7 +32,6 @@ extern int interactive_mode;	/* are we in interactive mode? */
 extern int config_mode;		/* are we in comfig mode? */
 extern int bridge;		/* are we in bridge mode (or interface mode?) */
 extern int priv;		/* privileged mode or not? */
-extern int privexec;		/* process was started in privileged mode? */
 extern pid_t pid;		/* process id of nsh */
 extern int cli_rtable;		/* environment rtable */
 struct hashtable;

@@ -1,7 +1,7 @@
 #
 PROG= nsh
 
-SUBDIR += bgpnsh nshdoas nshd
+SUBDIR += bgpnsh nshd
 
 .PHONY: release dist
 
@@ -51,7 +51,6 @@ MAN=nsh.8
 # convenience target for producing statically linked binaries
 static: $(PROG)
 	${MAKE} -C ${.CURDIR}/bgpnsh static
-	${MAKE} -C ${.CURDIR}/nshdoas static
 	${MAKE} -C ${.CURDIR}/nshd static
 
 compile.c: compile.sh *.c *.h

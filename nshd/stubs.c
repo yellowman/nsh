@@ -27,7 +27,7 @@
 #include "showfacts.h"
 
 char *vers = NSH_VERSION_STR;
-int bridge, verbose, priv, privexec, cli_rtable;
+int bridge, verbose, priv, cli_rtable;
 int editing, interactive_mode, config_mode;
 pid_t pid;
 

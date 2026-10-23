@@ -16,8 +16,3 @@ nshd/*.d
 nshd/*.o
 nshd/compile.c
 nshd/nshd
-nshdoas/*.d
-nshdoas/*.o
-nshdoas/compile.c
-nshdoas/nshdoas
-nshdoas/parse.c

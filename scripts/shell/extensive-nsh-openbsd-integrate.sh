@@ -280,10 +280,10 @@ else
 		mv /etc/mygate /var/nsh/backup/pre-nsh-config/
 		#can we import rc.conf.local to nsh config
 		cp /etc/rc.conf.local /var/nsh/backup/pre-nsh-config/
-		cp nsh.rc /etc/rc.d/nsh
-		chmod 555 /etc/rc.d/nsh
-		#enable nsh 
-		rcctl enable nsh
+		cp ../../nshd/nshd.rc /etc/rc.d/nshd
+		chmod 555 /etc/rc.d/nshd
+		#enable nshd, which boots /etc/nshrc, the first time
+		rcctl enable nshd
 		#disable services now managed by nsh 
 		rcctl disable ntpd
 		rcctl disable smtpd

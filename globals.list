@@ -127,7 +127,7 @@ kroute.c	table	addrnames hexlist ifnetflags kind_lookup
 main.c		session	bridge cli_rtable config_mode priv verbose
 main.c		process	caught_sigwinch cursor_pos editing elc eli elp
 			ev histc histi interactive_mode nsh_env pid
-			privexec toplevel
+			toplevel
 main.c		table	vers
 makeargv.c	session	cursor_argc cursor_argo line margc margv
 			saveline

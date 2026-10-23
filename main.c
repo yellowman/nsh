@@ -40,7 +40,7 @@ jmp_buf toplevel;
 char *vers = NSH_VERSION_STR;
 int bridge = 0;		/* bridge mode for interface() */
 int verbose = 0;	/* verbose mode */
-int priv = 0, privexec = 0, cli_rtable = 0;
+int priv = 0, cli_rtable = 0;
 int editing = 0, interactive_mode = 0, config_mode = 0;;
 pid_t pid;
 
@@ -159,29 +159,17 @@ load_userenv(void)
 int
 main(int argc, char *argv[])
 {
-	int top, ch, iflag = 0, cflag = 0;
+	int top, ch, cflag = 0;
 	char rc[PATH_MAX];
 
 	setlocale(LC_CTYPE, "");
 
 	pid = getpid();
 
-	while ((ch = getopt(argc, argv, "c:ei:v")) != -1)
+	while ((ch = getopt(argc, argv, "c:v")) != -1)
 		switch (ch) {
 		case 'c':
 			cflag = 1;
-			strlcpy(rc, optarg, PATH_MAX);
-			break;
-		case 'e':
-			if (getuid() != 0) {
-				fprintf(stderr, "%s: Use of -e option requires "
-				    "root privileges.\n", getprogname());
-				exit(1);
-			}
-			privexec = 1;
-			break;
-		case 'i':
-			iflag = 1;
 			strlcpy(rc, optarg, PATH_MAX);
 			break;
 		case 'v':
@@ -194,67 +182,22 @@ main(int argc, char *argv[])
 
 	argc -= optind;
 	argv += optind;
-	if (cflag && iflag)
-		usage();
 	if (argc > 0)
 		usage();
-	if (iflag)
-		rmtemp(SQ3DBFILE);
 
-	interactive_mode = !cflag && !iflag && isatty(STDIN_FILENO);
+	interactive_mode = !cflag && isatty(STDIN_FILENO);
 	if (interactive_mode) {
 		editing = 1;
 
-		if (!privexec) {
-			if (strstr(vers, "-current") != NULL)
-				printf("%% NSH v%s; Compiled by %s@%s on %s\n",
-				    vers, compiledby, compilehost, compiled);
-			else
-				printf("%% NSH v%s\n", vers);
-		}
-	} else {
-		/*
-		 * We need line-buffered mode to cross seamlessly into
-		 * the privileged process in case an 'enable' command
-		 * appears on standard input.
-		 */
-		if (setvbuf(stdin, NULL, _IOLBF, 0) != 0) {
-			/* should not happen, warn just in case */
-			printf("%% failed to enable line-buffered mode "
-			    "for stdin\n");
-		}
+		if (strstr(vers, "-current") != NULL)
+			printf("%% NSH v%s; Compiled by %s@%s on %s\n",
+			    vers, compiledby, compilehost, compiled);
+		else
+			printf("%% NSH v%s\n", vers);
 	}
 
 	cli_rtable = getrtable();
 
-	if (iflag) {
-		int carp_locked, status;
-
-		/*
-		 * Interpret config file and exit
-		 */
-		priv = 1;
-
-		setwinsize(0);
-
-		db_create();
-
-		/*
-		 * Set carp group carpdemote to 128 during initialization
-		 */
-		carp_locked = carplock(128);
-
-		/* the running configuration is made the file's, all of it */
-		status = commit_boot(rc);
-
-		/*
-		 * Initialization over; reset carpdemote if it was raised by us.
-		 */
-		if (carp_locked == 1)
-			carplock(-128);
-
-		exit(status);
-	}
 	if (cflag) {
 		/*
 		 * Interpret command file and exit
@@ -267,21 +210,6 @@ main(int argc, char *argv[])
 
 		exit(cmdrc(rc) == 0 ? 0 : 1);
 	}
-	if (privexec) {
-		/*
-		 * We start out in privileged mode.
-		 * We are already running as root as per -e option handling.
-		 * The privexec flag also affects the behaviour of commands
-		 * such as 'disable' and 'quit'. 'disable' will pass control
-		 * back to the parent process which runs in non-privileged
-		 * mode. "quit' does the same with a special exit code to let
-		 * the parent know that it should exit immediately.
-		 */
-		priv = 1;
-	}
-
-	if (priv)
-		db_create();
 
 	load_userenv();
 
@@ -305,11 +233,8 @@ main(int argc, char *argv[])
 void
 usage(void)
 {
-	fprintf(stderr, "usage: %s [-v] [-i rcfile | -c rcfile]\n",
-	    getprogname());
+	fprintf(stderr, "usage: %s [-v] [-c rcfile]\n", getprogname());
 	fprintf(stderr, "           -v indicates verbose operation\n");
-	fprintf(stderr, "           -i rcfile loads initial system" \
-		    " configuration from rcfile\n");
 	fprintf(stderr, "           -c rcfile loads commands from rcfile\n");
 	exit(1);
 }

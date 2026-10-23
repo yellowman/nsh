@@ -32,8 +32,7 @@
 .Nd network configuration shell
 .Sh SYNOPSIS
 .Nm nsh
-.Op Fl ev
-.Op Fl i Ar rcfile
+.Op Fl v
 .Op Fl c Ar config-script-file
 .Sh DESCRIPTION
 .Nm
@@ -108,38 +107,11 @@ Produce verbose output
 Execute the command(s) in the
 .Ar config-script-file .
 This is typically used to implement scripted changes to configuration.
-.It Fl i Ar rcfile
-Make the running configuration that of
-.Ar rcfile ,
-as
-.Cm commit
-makes it the candidate's: what the running configuration has and
-.Ar rcfile
-does not is taken away, and what
-.Ar rcfile
-has is added.
-This is typically used at boot.
-What
-.Cm commit check
-finds is shown, but does not stop it, and nothing that takes is undone.
-If the running configuration then differs from
-.Ar rcfile ,
-the difference is shown and logged with
-.Xr syslog 3 ,
-and
-.Nm
-exits 1.
-.It Fl e
-Start
-.Nm
-in a privileged mode session.
-This option is not intended to be used directly.
-It is used internally by
-.Nm
-while restarting itself with root privileges when a non-root user runs the
-.Cm enable
-command.
 .El
+.Pp
+At boot,
+.Xr nshd 8
+makes the running configuration the one saved.
 .Ss INTERACTIVE FEATURES
 When run without any command line arguments,
 .Nm
@@ -5842,26 +5814,10 @@ see the following man pages for information
 The design of
 .Ox
 requires root privileges to administer the network stack.
-.Pp
-*NB Security Warning!!!
-.Pp
-The doas configurations outlined below grant a non-root
 .Nm
-user the ability to obtain root privileges without knowledge of
-the root password.
-A user can abuse
-.Nm
-running as root to run arbitrary commands with the !
-shell escape syntax.
-.Pp
-e.g.
-.Bd -literal -offset indet
-nsh(p)/!adduser new-unauthorised-user
-.Ed
-.Pp
-Access to root privileges must be restricted to trusted users only.
-.Pp
-*NB End Security Warning
+runs as the user who starts it, root too, and has none:
+.Xr nshd 8
+administers the system, and privileged mode is a session of nshd's.
 .Pp
 Users with regular shell access can start
 .Nm
@@ -5878,87 +5834,22 @@ usermod -s /usr/local/bin/nsh nshuser
 .Pp
 (replace 'nshuser' with the actual user name)
 .Pp
-If a user has knowlege of the root password they can use the nsh
+Root and the members of the group nshadmin may enter privileged mode
+with the
 .Cm enable
-command to enter
-.Nm
-privileged mode with root privileges.
-.Pp
-If the user should not know the root password then
-.Xr doas.conf 5
-can be used with nsh arguments restricted to the
-.Fl e
-option.
-.Nm
-will attempt to obtain root privileges when privileged mode is entered.
-To prevent abuse the user will be required to authenticate again with
-their own password.
-With a line such as the following in
-.Pa /etc/doas.conf
-this will succeed:
+command, which asks for the enable secret, if one is set.
+To let user nshuser administer the system:
 .Bd -literal -offset indent
-permit keepenv stacy as root cmd /usr/local/bin/nsh args -e
+usermod -G nshadmin nshuser
 .Ed
 .Pp
-To allow a user to run
-.Nm
-as root and with arbitrary arguments such as
-.Fl c
-or
-.Fl i ,
-configure
-.Pa /etc/doas.conf
-with a line starting with 'permit' to allow the full path to the
-.Nm
-binary without any other restrictions.
-For example, the following allows user 'stacy' to run
-.Nm
-as root via
-.Xr doas 1
-with arbitrary arguments:
-.Bd -literal -offset indent
-permit keepenv stacy as root cmd /usr/local/bin/nsh
-.Ed
+Any user may run the shows of what anyone may see, which nshd answers
+on its read-only socket, without
+.Cm enable .
 .Pp
-The user stacy can now start
-.Nm
-via doas with an arbitrary amount of arguments:
-.Bd -literal -offset indent
-doas /usr/local/bin/nsh ...
-.Ed
-.Pp
-To allow a restricted user to run a specifc
-.Nm
-script only, configure /etc/doas.conf to require specific arguments to nsh
-that involve the
-.Fl c
-option.
-The following example allows a backupuser to display the running-config:
-.Bd -literal -offset indent
-permit nopass backupuser as root cmd /usr/local/bin/nsh args -c /etc/showrunconfig.nshrc
-.Ed
-.Pp
-Where the file
-.Pa /etc/showrunconfig.nshrc
-would not be writable by the backupuser account and would look like this:
-.Bd -literal -offset indent
-enable
-show running-config
-quit
-.Ed
-.Pp
-A more standards RBAC based approach would be to create a group
-.Dq nshusers
-on the system for users with the role of managing the system via nsh.
-Then allow users that are members of a group to run
-.Nm
-using /etc/doas.conf by referring to the groupname rather than just
-a single username (the colon before the group name is required by
-.Xr doas.conf 5
-syntax and signifies a group name argument):
-.Bd -literal -offset indent
-permit keepenv :nshusers as root cmd /usr/local/bin/nsh args -e
-.Ed
+The
+.Cm \&!
+shell escape runs a command as the user, not as root.
 .Sh Common interface types
 Packet Filter Logging: This interface is used to pass traffic logged by
 the firewall to software which can record it.
@@ -6217,10 +6108,8 @@ and
 .Cm saveenv
 commands can be used to generate this file.
 The file will not be loaded if the
-.Fl i
-or
 .Fl c
-options are used.
+option is used.
 .El
 .Sh SEE ALSO
 .Bd -ragged -offset indent
