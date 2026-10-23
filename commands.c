@@ -3558,9 +3558,8 @@ doconfig(int argc, char **argv, ...)
 		if (NO_ARG(argv[0])) {
 			return exitconfig(argc, argv);
 		} else if (isprefix(argv[1], "terminal")) {
-			if (cand_leave())
-				return -1;
-			config_mode = 1;
+			/* each line committed by nshd, not saved */
+			return nshd_configure(NSHD_CTERMINAL);
 		} else if (isprefix(argv[1], "private")) {
 			return nshd_configure(NSHD_CPRIVATE);
 		} else if (isprefix(argv[1], "exclusive")) {

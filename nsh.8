@@ -384,6 +384,22 @@ It is refused while another session has it, or while another user's
 changes to the shared candidate are not committed, which it says by
 uid.
 Leaving it discards what was not committed.
+.Pp
+.Tg terminal
+.Cm configure terminal
+is a session of nshd's whose lines change the system as they are
+typed: each line that changes the configuration nshd commits at once,
+on what runs then, applied, checked and, if it does not take, undone,
+but not saved; the prompt shows
+.Ql (config-terminal-p) .
+.Cm commit
+there saves what runs, and there is nothing to
+.Cm rollback .
+A line is refused while another session commits or has
+.Cm configure exclusive ,
+and while a
+.Cm commit confirmed
+is not confirmed.
 A session in one configure leaves it before it enters another.
 .Pp
 For the purposes of this manual, any examples the machine is called

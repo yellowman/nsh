@@ -68,6 +68,13 @@
  * confirms it. A commit outside configure only saves what runs, as one
  * that changes nothing does; check and confirmed are configure's.
  *
+ * configure terminal is a candidate of the session's own, as what runs
+ * on a snapshot taken for each line: a line that changes it is
+ * committed, and not saved, the commit's record gone once a snapshot
+ * after reads as the candidate (RECORD, as applied), and answered once
+ * its commit ends, after which the candidate is what runs again. commit
+ * there saves what runs; rollback has nothing to roll back.
+ *
  * Told at its start that the boot is not done, config boots, as nsh -i
  * does, once there is a pipe to system: system says whether this boot
  * of the host's is done already (BOOT), and if not, gives the saved
@@ -110,7 +117,8 @@
 #endif
 
 /* what a session waits on a snapshot for */
-enum { WAIT_NONE, WAIT_CONFIGURE, WAIT_CANDIDATE, WAIT_DIFF, WAIT_RESET };
+enum { WAIT_NONE, WAIT_CONFIGURE, WAIT_CANDIDATE, WAIT_DIFF, WAIT_RESET,
+    WAIT_TERMINAL };
 
 struct session {
 	TAILQ_ENTRY(session)	 entry;
@@ -121,6 +129,7 @@ struct session {
 	int			 want;	/* the configure it asked for */
 	int			 how;	/* the configure it is in, or 0 */
 	int			 waits;
+	char			 line[NSHD_LINE];	/* configure terminal's */
 	uint32_t		 keep;	/* the keeping its answer waits on */
 	struct nshd_context	 held;	/* that answer: its context, */
 	int			 heldmode;	/* if it gives one, */
@@ -172,6 +181,8 @@ struct commit {
 	int			 failed;	/* a line of the script failed */
 	int			 minutes;	/* commit confirmed's, or 0 */
 	int			 save;		/* outside configure: a save */
+	int			 terminal;	/* configure terminal's line, */
+	int			 line;		/* and how the line ended */
 	int			 how;		/* it ended, NSHD_BACK or KEPT */
 	int			 begun;		/* and not ended, to system */
 	int			 shared;	/* of the shared candidate */
@@ -242,6 +253,7 @@ static int		 config_may(uint32_t, uint32_t);
 static void		 config_op(uint32_t, struct nshd_op *);
 static struct session	*config_private(uint32_t);
 static int		 config_in(struct session *);
+static int		 config_terminal(struct session *);
 static int		 config_enter(struct session *);
 static void		 config_left(struct session *);
 static void		 shared_hold(struct session *);
@@ -643,7 +655,8 @@ config_show(uint32_t session, struct nshd_show *show)
 static void
 config_configure(uint32_t session, struct nshd_configure *cf)
 {
-	static const char	*names[] = { "", " private", "", " exclusive" };
+	static const char	*names[] = { "", " private", "", " exclusive",
+				    " terminal" };
 	struct session		*sp;
 
 	if ((sp = session_find(session)) == NULL) {
@@ -651,9 +664,9 @@ config_configure(uint32_t session, struct nshd_configure *cf)
 		return;
 	}
 	if (cf->mode != NSHD_PRIVATE && cf->mode != NSHD_SHARED &&
-	    cf->mode != NSHD_EXCLUSIVE) {
+	    cf->mode != NSHD_EXCLUSIVE && cf->mode != NSHD_TERMINAL) {
 		config_answer(session, 1,
-		    "%% nshd: configure, private or exclusive\n");
+		    "%% nshd: configure, private, exclusive or terminal\n");
 		return;
 	}
 	if (sp->how != 0 && sp->how != cf->mode) {
@@ -676,6 +689,12 @@ config_line(uint32_t session, struct nshd_line *line)
 
 	if ((sp = config_private(session)) == NULL)
 		return;
+	/* configure terminal's, once a snapshot is in */
+	if (sp->how == NSHD_TERMINAL) {
+		strlcpy(sp->line, line->line, sizeof(sp->line));
+		config_wait(sp, WAIT_TERMINAL);
+		return;
+	}
 	shared_hold(sp);
 	r = session_line(sp->st, line->line);
 	shared_done(sp);
@@ -709,7 +728,9 @@ config_commit(uint32_t session, struct nshd_commit *c)
 		config_answer(session, 1, "%% nshd: hello first\n");
 		return;
 	}
-	if ((save = !config_in(sp)) && (c->check || c->minutes != 0)) {
+	/* configure terminal's too, whose lines are committed already */
+	if ((save = !config_in(sp) || sp->how == NSHD_TERMINAL) &&
+	    (c->check || c->minutes != 0)) {
 		config_answer(session, 1, "%% commit %s requires a "
 		    "candidate: configure, private or exclusive\n",
 		    c->check ? "check" : "confirmed");
@@ -758,6 +779,11 @@ config_rollback(uint32_t session, struct nshd_rollback *rb)
 
 	if ((sp = config_private(session)) == NULL)
 		return;
+	if (sp->how == NSHD_TERMINAL) {
+		config_answer(session, 1, "%% configure terminal has no "
+		    "candidate to roll back; each line is committed\n");
+		return;
+	}
 	if (rb->n < 0 || rb->n >= NSHD_ROLLBACKS) {
 		config_answer(session, 1, "%% rollback [0-%d]\n",
 		    NSHD_ROLLBACKS - 1);
@@ -963,6 +989,43 @@ config_private(uint32_t session)
 	return (sp);
 }
 
+/*
+ * configure terminal's line, on a candidate as what runs now: committed,
+ * not saved, if it changed it, and answered once the commit ends; 1 if
+ * it is committed, else as a handler returns
+ */
+static int
+config_terminal(struct session *sp)
+{
+	int	 r;
+
+	if (commit != NULL) {
+		printf("%% Refused: uid %u commits now\n",
+		    (unsigned int)commit->uid);
+		return (-1);
+	}
+	if (exclusive != NULL) {
+		printf("%% Refused: uid %u has configure exclusive\n",
+		    (unsigned int)exclusive->uid);
+		return (-1);
+	}
+	if (session_renew(sp->st) == -1)
+		return (-1);
+	r = session_line(sp->st, sp->line);
+	if (!session_changed(sp->st))
+		return (r);
+	if ((commit = calloc(1, sizeof(*commit))) == NULL)
+		fatal(NULL);
+	commit->session = sp->id;
+	commit->uid = sp->uid;
+	commit->terminal = 1;
+	commit->line = r;
+	/* planned from the snapshot the line ran on */
+	commit->step = COMMIT_PLAN;
+	commit->waits = 1;
+	return (1);
+}
+
 /* whether sp is in configure */
 static int
 config_in(struct session *sp)
@@ -996,8 +1059,8 @@ config_enter(struct session *sp)
 	    "Configure exclusive refused: changes to the shared candidate "
 	    "not committed") > 0)
 		return (-1);
-	r = session_configure(sp->st, sp->want == NSHD_PRIVATE ? NULL :
-	    shared);
+	r = session_configure(sp->st, sp->want == NSHD_PRIVATE ||
+	    sp->want == NSHD_TERMINAL ? NULL : shared);
 	if (r == 0) {
 		sp->how = sp->want;
 		if (sp->how == NSHD_EXCLUSIVE)
@@ -1359,6 +1422,14 @@ config_snapshot_done(int32_t status)
 			shared_done(sp);
 			mode = 1;
 			break;
+		case WAIT_TERMINAL:
+			/* or answered once its commit ends */
+			if ((r = config_terminal(sp)) == 1) {
+				sp->waits = WAIT_NONE;
+				continue;
+			}
+			mode = 1;
+			break;
 		default:
 			continue;
 		}
@@ -1467,6 +1538,8 @@ commit_snapshot(void)
 		    commit->failed)) == 0) {
 			if (commit->minutes > 0)
 				commit_record(NSHD_KEPT);
+			else if (commit->terminal)
+				commit_record(NSHD_APPLIED);
 			else
 				commit_save();
 		} else if (r == 1)
@@ -1551,6 +1624,10 @@ commit_ended(int32_t status)
 		commit_end(r, NULL);
 		break;
 	case COMMIT_RECORD:
+		if (commit->how == NSHD_APPLIED) {
+			commit_end(status == 0 ? 0 : -1, NULL);
+			break;
+		}
 		if (commit->how != NSHD_KEPT || status != 0) {
 			commit_end(-1, NULL);
 			break;
@@ -1586,7 +1663,10 @@ commit_go(void)
 	struct nshd_begin	 b;
 
 	if (p->same && commit->minutes == 0) {
-		commit_save();
+		if (commit->terminal)
+			commit_end(0, NULL);
+		else
+			commit_save();
 		return;
 	}
 	if (commit_part(NSHD_BEFORE, p->text[PLAN_BEFORE],
@@ -1595,6 +1675,7 @@ commit_go(void)
 		return;
 	b.uid = commit->uid;
 	b.minutes = commit->minutes;
+	b.unsaved = commit->terminal;
 	commit_request(COMMIT_BEGIN, IMSG_SYS_BEGIN, &b, sizeof(b));
 }
 
@@ -1725,7 +1806,13 @@ commit_end(int r, const char *msg)
 	if (c->begun && link_compose(&links[SYSTEM], IMSG_SYS_RECORD, 0, &rc,
 	    sizeof(rc)) == -1)
 		fatal("%s", __func__);
-	if ((sp = session_find(c->session)) == NULL)
+	sp = session_find(c->session);
+	/* configure terminal's candidate is what runs again */
+	if (c->terminal && sp != NULL && session_renew(sp->st) == -1)
+		r = -1;
+	if (c->terminal && c->line == -1)
+		r = -1;
+	if (sp == NULL)
 		printed_text(NULL, 0, 0);
 	else if (msg != NULL) {
 		printed_text(links[FRONTEND].iev, IMSG_CTL_OUTPUT, sp->id);

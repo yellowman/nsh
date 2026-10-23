@@ -51,7 +51,10 @@
  * APPLY take, as chunks, then BEGIN, which makes the commit record,
  * APPLY, which runs the script, SAVE, which saves what runs and takes
  * the record away, and RECORD, when the commit went back to how it was,
- * or a commit confirmed is kept; and before them TEST, a daemon's test
+ * or a commit confirmed is kept, or configure terminal's, applied, is
+ * kept, not saved, which BEGIN refuses while a commit confirmed is not
+ * confirmed, as it would go back with it; and before them TEST, a
+ * daemon's test
  * of its rules. An apply, a save and a test each run in a child of
  * system's, a job, in a process group of its own, its output sent as
  * it comes; past its time the group is sent SIGTERM, and a grace later
@@ -516,14 +519,16 @@ system_whole(uint32_t type, const void *data, size_t len)
 			return (-1);
 		memcpy(&rc, data, len);
 		return (rc.how != NSHD_BACK && rc.how != NSHD_KEPT &&
-		    rc.how != NSHD_LEFT ? -1 : 0);
+		    rc.how != NSHD_LEFT && rc.how != NSHD_APPLIED ? -1 : 0);
 	case IMSG_SYS_SNAPSHOT:
 		return (len == sizeof(struct nshd_snapshot) ? 0 : -1);
 	case IMSG_SYS_BEGIN:
 		if (len != sizeof(bg))
 			return (-1);
 		memcpy(&bg, data, len);
-		return (bg.minutes < 0 || bg.minutes > NSHD_CONFIRMMAX ? -1 : 0);
+		return (bg.minutes < 0 || bg.minutes > NSHD_CONFIRMMAX ||
+		    (bg.unsaved != 0 && (bg.unsaved != 1 || bg.minutes != 0)) ?
+		    -1 : 0);
 	case IMSG_SYS_SHOW:
 		if (len != sizeof(show))
 			return (-1);
@@ -1129,12 +1134,26 @@ static void
 system_begin(uint32_t id, struct nshd_begin *bg)
 {
 	struct record	 rec, now;
+	struct confirm	 cf;
 	char		*runs;
 	size_t		 len;
 	int		 r, wrote = 0, status = 1;
 
 	if (record_read(&rec) == -1)
 		goto done;
+	/* configure terminal's, unsaved, would go back with one not confirmed */
+	if (bg->unsaved) {
+		if (confirm_read(&cf, 0) == -1) {
+			printf("%% nshd: the record of a commit not confirmed: "
+			    "%s\n", strerror(errno));
+			goto done;
+		}
+		if (cf.state != CONFIRM_NONE) {
+			printf("%% Commit refused: a commit confirmed is not "
+			    "confirmed. Commit to confirm it first\n");
+			goto done;
+		}
+	}
 	/* what runs, as the commit was planned from */
 	if ((runs = system_running(&len)) == NULL)
 		goto done;
@@ -1639,7 +1658,8 @@ system_saved(int ok)
 
 /*
  * The commit went back to how it was, or, kept, a commit confirmed is
- * kept until its deadline: the record it made gone, but one not saved,
+ * kept until its deadline, or configure terminal's, applied, is kept,
+ * not saved: the record it made gone, but one not saved,
  * which it went back from, kept; or the commit ended without either,
  * left, and the records with it
  */

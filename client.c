@@ -52,7 +52,7 @@
 #include "nshd/nshd.h"
 
 #if NSHD_CPRIVATE != NSHD_PRIVATE || NSHD_CSHARED != NSHD_SHARED || \
-    NSHD_CEXCLUSIVE != NSHD_EXCLUSIVE
+    NSHD_CEXCLUSIVE != NSHD_EXCLUSIVE || NSHD_CTERMINAL != NSHD_TERMINAL
 #error "externs.h's configures are not nshd.h's"
 #endif
 
@@ -594,6 +594,7 @@ nshd_cname(void)
 {
 	return (nshd_config == NSHD_PRIVATE ? "configure private" :
 	    nshd_config == NSHD_EXCLUSIVE ? "configure exclusive" :
+	    nshd_config == NSHD_TERMINAL ? "configure terminal" :
 	    "configure");
 }
 
@@ -737,7 +738,7 @@ done:
 static void
 nshd_context(struct nshd_context *c)
 {
-	nshd_config = c->mode >= NSHD_PRIVATE && c->mode <= NSHD_EXCLUSIVE ?
+	nshd_config = c->mode >= NSHD_PRIVATE && c->mode <= NSHD_TERMINAL ?
 	    c->mode : 0;
 	nshd_rtable = nshd_config ? c->rtable : 0;
 	nshd_mode(nshd_config != 0, c->ifname, c->bridge);

@@ -516,6 +516,7 @@ char *format_k(uint64_t amt);
 #define NSHD_CPRIVATE	1	/* configure private, nshd's NSHD_PRIVATE */
 #define NSHD_CSHARED	2	/* configure, NSHD_SHARED */
 #define NSHD_CEXCLUSIVE	3	/* configure exclusive, NSHD_EXCLUSIVE */
+#define NSHD_CTERMINAL	4	/* configure terminal, NSHD_TERMINAL */
 extern int nshd_config;
 extern int nshd_rtable;
 int nshd_show(char *);

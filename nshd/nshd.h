@@ -97,6 +97,7 @@ struct nshd_configure {
 #define NSHD_PRIVATE	1	/* a candidate of the session's own */
 #define NSHD_SHARED	2	/* the candidate sessions share */
 #define NSHD_EXCLUSIVE	3	/* that, and no other session changes it */
+#define NSHD_TERMINAL	4	/* its own, each line committed, not saved */
 
 /* a line of configuration, in the session's mode */
 struct nshd_line {
@@ -144,6 +145,7 @@ struct nshd_chunk {
 struct nshd_begin {
 	uint32_t	uid;
 	int32_t		minutes;
+	int32_t		unsaved;	/* configure terminal's, not saved */
 };
 
 /* config to system: how the commit begun ended */
@@ -153,6 +155,7 @@ struct nshd_record {
 #define NSHD_BACK	0	/* gone back to how it was */
 #define NSHD_KEPT	1	/* confirmed, kept until its deadline */
 #define NSHD_LEFT	2	/* the records left as they are */
+#define NSHD_APPLIED	3	/* configure terminal's, kept, not saved */
 
 /* config to system: run the script, and empty these daemons' rules */
 struct nshd_apply {

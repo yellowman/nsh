@@ -97,6 +97,7 @@ void			 plan_free(struct plan *);
 int			 session_boot_plan(char *, size_t, struct plan **);
 int			 session_boot_verify(struct plan *, int);
 int			 session_renew(struct session_state *);
+int			 session_changed(struct session_state *);
 int			 session_rollback(struct session_state *, char *,
 			    size_t, int);
 /* passwd.c's: does a secret crypt to the enable secret's hash */

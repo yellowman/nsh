@@ -535,6 +535,18 @@ session_renew(struct session_state *s)
 	return r;
 }
 
+/* Whether s's candidate differs from how it began */
+int
+session_changed(struct session_state *s)
+{
+	int r;
+
+	session_enter(s);
+	r = cand_changed();
+	session_leave(s);
+	return r;
+}
+
 /*
  * rollback n, in s: the candidate starts over as text, configuration n
  * as it was saved, or as the running configuration if n is 0

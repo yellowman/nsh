@@ -50,7 +50,8 @@ cprompt(void)
 	    pr ? "(" : "",
 	    config_mode ? (candidate || nshd_config == NSHD_CPRIVATE ?
 	    "config-private" : nshd_config == NSHD_CEXCLUSIVE ?
-	    "config-exclusive" : "config") : "",
+	    "config-exclusive" : nshd_config == NSHD_CTERMINAL ?
+	    "config-terminal" : "config") : "",
 	    config_mode && priv ? "-" : "",
 	    priv ? "p" : "",
 	    ((priv && rt) || (config_mode && rt)) ? "-" : "",

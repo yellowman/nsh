@@ -99,6 +99,11 @@ runs its script even if the candidate is what runs, and, if a snapshot
 after reads as the candidate, keeps what runs without saving it until
 its deadline; a commit that saves confirms it.
 A commit outside configure has system save what runs, and nothing else.
+In
+.Cm configure terminal ,
+each line that changes the session's candidate, made from what runs
+when the line comes, is committed, and not saved; commit there saves
+what runs.
 .Cm rollback Ar N
 takes configuration
 .Ar N
