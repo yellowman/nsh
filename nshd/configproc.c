@@ -46,7 +46,8 @@
  * hash, which system reads, or none if there is none; a session enabled
  * by it is given a token, which another session of the same user's
  * gives to be enabled too. A session not enabled may only say hello,
- * enable, and go.
+ * enable, and go. An operation an enabled session asks, system checks
+ * and runs, and config passes on.
  *
  * archive keeps the shared candidate, and who changed it, past config's
  * end: config sends it each time it changes, and answers the session
@@ -236,6 +237,7 @@ static void		 config_rolled(struct request *, int32_t);
 static void		 config_enable(uint32_t, struct nshd_enable *);
 static void		 config_enabled(struct request *, int32_t);
 static int		 config_may(uint32_t, uint32_t);
+static void		 config_op(uint32_t, struct nshd_op *);
 static struct session	*config_private(uint32_t);
 static int		 config_enter(struct session *);
 static void		 config_left(struct session *);
@@ -364,6 +366,7 @@ config_dispatch_frontend(int fd, short event, void *arg)
 	struct nshd_commit	 cm;
 	struct nshd_rollback	 rb;
 	struct nshd_enable	 en;
+	struct nshd_op		 op;
 	struct session		*sp;
 	uint32_t		 id, type;
 	ssize_t			 n;
@@ -444,6 +447,12 @@ config_dispatch_frontend(int fd, short event, void *arg)
 				goto bad;
 			config_enable(id, &en);
 			explicit_bzero(&en, sizeof(en));
+			break;
+		case IMSG_CTL_OP:
+			if (imsg_get_data(&imsg, &op, sizeof(op)) == -1 ||
+			    memchr(op.line, '\0', sizeof(op.line)) == NULL)
+				goto bad;
+			config_op(id, &op);
 			break;
 		case IMSG_CTL_CLOSE:
 			if ((sp = session_find(id)) != NULL)
@@ -893,6 +902,29 @@ config_may(uint32_t session, uint32_t type)
 		return (1);
 	config_answer(session, 1, "%% Privileged mode required\n");
 	return (0);
+}
+
+/* an operation, which system checks, runs and streams */
+static void
+config_op(uint32_t session, struct nshd_op *op)
+{
+	struct request	*r;
+
+	if (session_find(session) == NULL) {
+		config_answer(session, 1, "%% nshd: hello first\n");
+		return;
+	}
+	if (links[SYSTEM].down) {
+		config_answer(session, 1, "%% nshd: system is down\n");
+		return;
+	}
+	if ((r = config_request(session, REQ_ANSWER)) == NULL) {
+		config_answer(session, 1, "%s", IDS_GONE);
+		return;
+	}
+	if (link_compose(&links[SYSTEM], IMSG_SYS_OP, r->id, op,
+	    sizeof(*op)) == -1)
+		fatal("%s", __func__);
 }
 
 /* session's, if in configure; or NULL, said why */

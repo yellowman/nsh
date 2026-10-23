@@ -80,6 +80,16 @@ struct nshd_token {
 	uint8_t		token[NSHD_TOKEN];
 };
 
+/*
+ * an operation, nsh's words for it, which system runs as root, in the
+ * rtable, the client's, and streams what it prints; its status how the
+ * operation ended
+ */
+struct nshd_op {
+	int32_t		rtable;
+	char		line[NSHD_LINE];
+};
+
 /* which configure */
 struct nshd_configure {
 	int32_t		mode;
@@ -283,7 +293,9 @@ enum nshd_imsg {
 	/* with clients, on the read-write socket, and config to system */
 	IMSG_CTL_ENABLE,	/* nshd_enable; with a secret a token, a result */
 	IMSG_CTL_TOKEN,		/* nshd_token */
-	IMSG_SYS_SECRET		/* the enable secret's hash, as text, or none */
+	IMSG_SYS_SECRET,	/* the enable secret's hash, as text, or none */
+	IMSG_CTL_OP,		/* nshd_op: what it prints, a result */
+	IMSG_SYS_OP		/* nshd_op: a stream, a result */
 };
 
 struct imsgev {

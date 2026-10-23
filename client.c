@@ -71,6 +71,8 @@ static int	nshd_next(struct imsgbuf *, struct imsg *, const sigset_t *);
 static int	nshd_open(char *, struct imsgbuf *);
 static void	nshd_why(void);
 static int	nshd_borrow(struct imsgbuf *, const sigset_t *);
+static int	nshd_ask(int, uint32_t, const void *, size_t, struct facts_in *,
+		    int32_t *);
 static void	nshd_sigint(int);
 static int	nshd_request(uint32_t, const void *, size_t, int);
 static void	nshd_context(struct nshd_context *);
@@ -332,25 +334,26 @@ done:
 }
 
 /*
- * show words, as nshd answers them, on the read-write socket if rw, its
- * system's, in privileged mode, else as its show processes do: facts
- * read into in as they come, and text printed. -1 if there is no nshd
- * to ask, or none this user may, else 1 if the show was answered and 0
- * if not, as when ^C ends it, which closes the connection, so nshd
- * stops what it runs.
+ * A request of type, with len bytes of data, on a connection of its own,
+ * to nshd's read-write socket if rw, enabled by privileged mode's token,
+ * else to its read-only one: facts read into in as they come, and text
+ * printed, and how it ended, *status, or 1 if it was not answered, as
+ * when ^C ends it, which closes the connection, so nshd stops what it
+ * runs. -1 if there is no nshd to ask, or none this user may, else 0.
  */
-int
-nshd_facts(int rw, char *words, struct facts_in *in)
+static int
+nshd_ask(int rw, uint32_t type, const void *data, size_t len,
+    struct facts_in *in, int32_t *status)
 {
-	struct nshd_show	 show;
-	struct nshd_result	 r = { 0 };
+	struct nshd_result	 r = { 1 };
 	struct imsgbuf		 ib;
 	struct imsg		 imsg;
 	struct ibuf		 b;
 	struct sigaction	 sa, osa;
 	sigset_t		 block, saved, waiting;
-	int			 fd, done = 0, ret = 0;
+	int			 fd, done = 0;
 
+	*status = 1;
 	if (rw && sfd == -1)
 		return (-1);
 	if ((fd = nshd_open(rw ? NSHD_SOCKET : NSHD_RO_SOCKET, &ib)) == -1) {
@@ -374,14 +377,8 @@ nshd_facts(int rw, char *words, struct facts_in *in)
 
 	if (rw && nshd_borrow(&ib, &waiting) == -1)
 		goto done;
-	memset(&show, 0, sizeof(show));
-	if (strlcpy(show.words, words, sizeof(show.words)) >=
-	    sizeof(show.words)) {
-		printf("%% show %s: too long\n", words);
-		goto done;
-	}
-	if (imsg_compose(&ib, IMSG_CTL_SHOW, 0, 0, -1, &show,
-	    sizeof(show)) == -1 || imsgbuf_flush(&ib) == -1) {
+	if (imsg_compose(&ib, type, 0, 0, -1, data, len) == -1 ||
+	    imsgbuf_flush(&ib) == -1) {
 		printf("%% nshd: %s\n", strerror(errno));
 		goto done;
 	}
@@ -426,14 +423,66 @@ nshd_facts(int rw, char *words, struct facts_in *in)
 		}
 		imsg_free(&imsg);
 	}
-	ret = r.status == 0;
+	*status = r.status;
 done:
 	imsgbuf_clear(&ib);
 	close(fd);
 	/* a ^C pending now ends nothing */
 	sigprocmask(SIG_SETMASK, &saved, NULL);
 	sigaction(SIGINT, &osa, NULL);
-	return (ret);
+	return (0);
+}
+
+/*
+ * show words, as nshd answers them, on the read-write socket if rw, its
+ * system's, in privileged mode, else as its show processes do, as
+ * nshd_ask() asks: -1 if there is no nshd to ask, or none this user
+ * may, else 1 if the show was answered and 0 if not.
+ */
+int
+nshd_facts(int rw, char *words, struct facts_in *in)
+{
+	struct nshd_show	 show;
+	int32_t			 status;
+
+	memset(&show, 0, sizeof(show));
+	if (strlcpy(show.words, words, sizeof(show.words)) >=
+	    sizeof(show.words)) {
+		printf("%% show %s: too long\n", words);
+		return (0);
+	}
+	if (nshd_ask(rw, IMSG_CTL_SHOW, &show, sizeof(show), in,
+	    &status) == -1)
+		return (-1);
+	return (status == 0);
+}
+
+/*
+ * The operation text, in privileged mode, in rtable, which nshd's system
+ * runs, as nshd_ask() asks: facts read into in, and how it ended, its
+ * status, or 1 if it was not, said why
+ */
+int
+nshd_op(const char *text, int rtable, struct facts_in *in)
+{
+	struct nshd_op	 op;
+	int32_t		 status;
+
+	if (sfd == -1) {
+		printf("%% Privilege required\n");
+		return (1);
+	}
+	memset(&op, 0, sizeof(op));
+	op.rtable = rtable;
+	if (strlcpy(op.line, text, sizeof(op.line)) >= sizeof(op.line)) {
+		printf("%% Input exceeds permitted length\n");
+		return (1);
+	}
+	if (nshd_ask(1, IMSG_CTL_OP, &op, sizeof(op), in, &status) == -1) {
+		nshd_why();
+		return (1);
+	}
+	return (status);
 }
 
 /*

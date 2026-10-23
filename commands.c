@@ -130,6 +130,11 @@ static int	flush_ip_routes(int, char **, ...);
 static int	flush_arp_cache(int, char **, ...);
 static int	flush_ndp_cache(int, char **, ...);
 static int	flush_history(int, char **, ...);
+static int	flush_run(int, char **);
+static Menu	*flush_find(char *);
+static int	op_ask(char *, int, char **, int);
+static int	int_op(int, char **, ...);
+static struct intlist *int_op_find(int, char **);
 static int	is_bad_input(const char *, size_t);
 static int	read_command_line(EditLine *, History *);
 static int 	int_logger(int, char **, ...);
@@ -1097,8 +1102,31 @@ Menu flushlist[] = {
 	{ 0, 0, 0, 0, 0 }
 };
 
+/* flush, but help and history, as an operation nshd's system runs */
 static int
 flushcmd(int argc, char **argv, ...)
+{
+	Menu *f;
+
+	if (argc >= 2 && (f = flush_find(argv[1])) != NULL &&
+	    f->handler != flush_help && f->handler != flush_history)
+		return op_ask("flush", argc, argv, cli_rtable);
+	return flush_run(argc, argv);
+}
+
+/* flush's entry for word, or NULL */
+static Menu *
+flush_find(char *word)
+{
+	Menu *f;
+
+	f = (Menu *)genget(word, (char **)flushlist, sizeof(Menu));
+	return f == 0 || Ambiguous(f) ? NULL : f;
+}
+
+/* flush, run */
+static int
+flush_run(int argc, char **argv)
 {
 	Menu *f;
 
@@ -1147,6 +1175,152 @@ flush_line(int argc, char **argv, ...)
 	/* 1: nothing ran on the line */
 	r = cmdargs(PKILL, args);
 	return r == -1 || r > 1 ? -1 : 0;
+}
+
+/*
+ * name, and argv's words after the first, as an operation nshd's system
+ * runs in rtable: as a handler returns
+ */
+static int
+op_ask(char *name, int argc, char **argv, int rtable)
+{
+	char op[sizeof(line)];
+	int i;
+
+	strlcpy(op, name, sizeof(op));
+	for (i = 1; i < argc; i++)
+		if (strlcat(op, " ", sizeof(op)) >= sizeof(op) ||
+		    strlcat(op, argv[i], sizeof(op)) >= sizeof(op)) {
+			printf("%% Input exceeds permitted length\n");
+			return -1;
+		}
+	return facts_op(op, rtable, 0) == 0 ? 0 : -1;
+}
+
+/*
+ * The operations nshd's system runs, as root, for a privileged session:
+ * flush's, but help's and history's; reboot, halt and powerdown, which
+ * nsh has the user confirm first; diff-config, the saved configuration
+ * against what runs; crontab, root's; a daemon's action, what its table
+ * runs that is not its configuration; and an interface's bssid, setpuk
+ * and chgpin. Each
+ * is its first word, as nsh names it, and the words after it as typed.
+ * Whether argv is one: 1, or 0 having said not.
+ */
+int
+op_allowed(int argc, char **argv)
+{
+	Menu *f;
+
+	if (argc == 1 && (strcmp(argv[0], "reboot") == 0 ||
+	    strcmp(argv[0], "halt") == 0 ||
+	    strcmp(argv[0], "powerdown") == 0 ||
+	    strcmp(argv[0], "diff-config") == 0 ||
+	    strcmp(argv[0], "crontab") == 0))
+		return 1;
+	if (argc >= 2 && strcmp(argv[0], "flush") == 0 &&
+	    (f = flush_find(argv[1])) != NULL && f->handler != flush_help &&
+	    f->handler != flush_history)
+		return 1;
+	if (argc >= 3 && strcmp(argv[0], "interface") == 0 &&
+	    strlen(argv[1]) < IFNAMSIZ && int_op_find(argc - 2, argv + 2))
+		return 1;
+	if (argc >= 2 && ctl_op(argv[0], argv[1], 0))
+		return 1;
+	printf("%% %s: not an operation nshd runs\n", argv[0]);
+	return 0;
+}
+
+/*
+ * An operation op_allowed() takes, run: as a handler returns, but
+ * OP_DIFFERS from diff-config if the configurations differ
+ */
+int
+op_run(int argc, char **argv)
+{
+	struct daemons *d;
+	struct intlist *i;
+	char *rb[] = { REBOOT, NULL }, *ht[] = { HALT, NULL, NULL };
+	char *cr[] = { CRONTAB, "-l", "-u", "root", NULL };
+	int ifs, r;
+
+	if (strcmp(argv[0], "flush") == 0)
+		return flush_run(argc, argv);
+	if (strcmp(argv[0], "reboot") == 0)
+		return cmdargs(rb[0], rb) == 0 ? 0 : -1;
+	if (strcmp(argv[0], "halt") == 0 || strcmp(argv[0], "powerdown") == 0) {
+		if (argv[0][0] == 'p')
+			ht[1] = "-p";
+		return cmdargs(ht[0], ht) == 0 ? 0 : -1;
+	}
+	if (strcmp(argv[0], "diff-config") == 0)
+		return (r = saved_diff()) == 1 ? OP_DIFFERS : r;
+	if (strcmp(argv[0], "crontab") == 0) {
+		printf("%% To view crontab syntax documentation in NSH, "
+		    "run: !man 5 crontab\n\n");
+		fflush(stdout);
+		if (cmdargs(cr[0], cr) != 0) {
+			printf("%% crontab command failed\n");
+			return -1;
+		}
+		return 0;
+	}
+	if (strcmp(argv[0], "interface") == 0) {
+		i = int_op_find(argc - 2, argv + 2);
+		if ((ifs = socket(AF_INET, SOCK_DGRAM, 0)) == -1) {
+			printf("%% socket: %s\n", strerror(errno));
+			return -1;
+		}
+		r = strcmp(i->name, "bssid") == 0 ?
+		    intbssid(argc - 2, argv + 2, argv[1], ifs) :
+		    intumb(argc - 2, argv + 2, argv[1], ifs);
+		close(ifs);
+		return r;
+	}
+	d = (struct daemons *)genget(argv[0], (char **)ctl_daemons,
+	    sizeof(struct daemons));
+	strlcpy(hname, d->name, sizeof(hname));
+	return ctlhandler(argc, argv, NULL);
+}
+
+/*
+ * In an interface's mode, bssid, setpuk and chgpin, as operations nshd's
+ * system runs
+ */
+static int
+int_op(int argc, char **argv, ...)
+{
+	char *ifn, *words[NARGS + 2];
+	va_list ap;
+	int i;
+
+	va_start(ap, argv);
+	ifn = va_arg(ap, char *);
+	va_end(ap);
+
+	if (argc > NARGS) {
+		printf("%% Too many arguments\n");
+		return -1;
+	}
+	words[0] = "interface";
+	words[1] = ifn;
+	for (i = 0; i < argc; i++)
+		words[i + 2] = argv[i];
+	return op_ask("interface", argc + 2, words, 0);
+}
+
+/* The interface operation argv names, or NULL */
+static struct intlist *
+int_op_find(int argc, char **argv)
+{
+	struct intlist *i;
+	char *w = NO_ARG(argv[0]) ? argv[1] : argv[0];
+
+	if (w == NULL)
+		return NULL;
+	i = (struct intlist *)genget(w, (char **)Intlist,
+	    sizeof(struct intlist));
+	return i == 0 || Ambiguous(i) || i->handler != int_op ? NULL : i;
 }
 
 static int
@@ -1218,7 +1392,7 @@ struct intlist Intlist[] = {
 	{ "nwkey",	"802.11 network key",			CMPL0 0, 0, intnwkey, 1, CAND_EDIT },
 	{ "powersave",	"802.11 powersaving mode",		CMPL0 0, 0, intpowersave, 1, CAND_EDIT },
 	{ "txpower",	"802.11 transmit power",		CMPL0 0, 0, inttxpower, 1, CAND_EDIT },
-	{ "bssid",	"802.11 bss id",			CMPL0 0, 0, intbssid, 1, CAND_RUN },
+	{ "bssid",	"802.11 bss id",			CMPL0 0, 0, int_op, 1, CAND_RUN },
 	{ "media",	"Media type",				CMPL0 0, 0, intmedia, 1, CAND_EDIT },
 	{ "mediaopt",	"Media options",			CMPL0 0, 0, intmediaopt, 1, CAND_EDIT },
 	{ "auth",	"PPP authentication",			CMPL0 0, 0, intsppp, 1, CAND_EDIT },
@@ -1275,8 +1449,8 @@ struct intlist Intlist[] = {
 	{ "trunkproto",	"Define trunkproto",			CMPL0 0, 0, inttrunkproto, 1, CAND_EDIT },
 	{ "apn",	"Access Point Name",			CMPL0 0, 0, intumb, 1, CAND_EDIT },
 	{ "setpin",	"Set SIM card PIN",			CMPL0 0, 0, intumb, 1, CAND_EDIT },
-	{ "setpuk",	"Set new SIM card PIN using PUK for validation", CMPL0 0, 0, intumb, 0, CAND_RUN },
-	{ "chgpin",	"Permanently change SIM PIN",		CMPL0 0, 0, intumb, 0, CAND_RUN },
+	{ "setpuk",	"Set new SIM card PIN using PUK for validation", CMPL0 0, 0, int_op, 0, CAND_RUN },
+	{ "chgpin",	"Permanently change SIM PIN",		CMPL0 0, 0, int_op, 0, CAND_RUN },
 	{ "class",	"Preferred cell classes",		CMPL0 0, 0, intumb, 1, CAND_EDIT },
 	{ "roaming",	"Enable data roaming",			CMPL0 0, 0, intumb, 1, CAND_EDIT },
 	{ "interface",  interfacehelp,				CMPL(i) 0, 0, int_interface, 1, CAND_EDIT },
@@ -2263,6 +2437,12 @@ command()
 			printf("%% Privilege required\n");
 			continue;
 		}
+		/* a daemon's action, nshd's system's, outside configure too */
+		if (c->handler == ctlhandler && margc > 1 &&
+		    ctl_op(c->name, margv[1], 0)) {
+			op_ask(c->name, margc, margv, cli_rtable);
+			continue;
+		}
 		if (c->needconfig != 0 && config_mode != 1) {
 			printf("%% Command requires configure mode\n");
 			continue;
@@ -2317,6 +2497,10 @@ cmdline(char *text)
 		printf("%% Privilege required\n");
 		return -1;
 	}
+	/* a daemon's action, nshd's system's, outside configure too */
+	if (!in_config && c->handler == ctlhandler && margc > 1 &&
+	    ctl_op(c->name, margv[1], 0))
+		return op_ask(c->name, margc, margv, cli_rtable);
 	if (c->needconfig != 0 && config_mode != 1) {
 		printf("%% Command requires configure mode\n");
 		return -1;
@@ -2435,6 +2619,10 @@ cmdline_nshd(char *text)
 		printf("%% Privilege required\n");
 		return -1;
 	}
+	/* a daemon's action, but what the candidate takes, nshd's system's */
+	if (c->handler == ctlhandler && margc > 1 &&
+	    ctl_op(c->name, margv[1], 1))
+		return op_ask(c->name, margc, margv, nshd_rtable);
 	if (c->cand == CAND_EDIT)
 		return nshd_line(buf);
 	if (c->handler == exitconfig ||
@@ -3681,93 +3869,33 @@ wr_conf(char *fname)
 }
 
 static int
-conf_has_unsaved_changes(void)
-{
-	int conf_fd = -1, nshrc_fd = -1;
-	char confpath[PATH_MAX];
-	char buf1[8192];
-	char buf2[8192];
-	int ret = -1;
-
-	if (priv != 1) {
-		printf("%% Privilege required\n");
-		return -1;
-	}
-
-	if (getuid() != 0) {
-		printf("%% Root privileges required\n");
-		return -1;
-	}
-
-	if (strlcpy(confpath, "/tmp/nshrc.XXXXXXXX", sizeof(confpath)) >=
-	    sizeof(confpath))
-		return -1;
-
-	conf_fd = mkstemp(confpath);
-	if (conf_fd == -1) {
-		printf("%% mkstemp %s: %s\n", confpath, strerror(errno));
-		return -1;
-	}
-
-	if (!wr_conf(confpath)) {
-		printf("%% Couldn't generate configuration\n");
-		goto done;
-	}
-
-	nshrc_fd = open(NSHRC, O_RDONLY);
-	if (nshrc_fd == -1){
-		if (errno == ENOENT)
-			ret = 1;
-		else
-			printf("%% open %s: %s\n", NSHRC, strerror(errno));
-		goto done;
-	}
-
-	lseek(conf_fd, 0, SEEK_SET);
-
-	for (;;) {
-		ssize_t r1, r2;
-
-		r1 = read(nshrc_fd, buf1, sizeof(buf1));
-		if (r1 == -1) {
-			printf("%% read %s: %s\n", NSHRC, strerror(errno));
-			goto done;
-		}
-
-		r2 = read(conf_fd, buf2, sizeof(buf2));
-		if (r2 == -1) {
-			printf("%% read %s: %s\n", confpath, strerror(errno));
-			goto done;
-		}
-
-		if (r1 == 0 && r2 == 0) {
-			ret = 0;
-			break;
-		} else if (r1 != r2 || memcmp(buf1, buf2, r1) != 0) {
-			ret = 1;
-			break;
-		}
-	}
-done:
-	if (conf_fd != -1) {
-		unlink(confpath);
-		close(conf_fd);
-	}
-	if (nshrc_fd != -1)
-		close(nshrc_fd);
-	return ret;
-}
-
-static int
 do_reboot(int how)
 {
-	const char *buf;
+	const char *buf, *op, *prompt;
 	char linebuf[64];
 	int ret = 0, num, have_changes;
-	char *argv[3] = { REBOOT, NULL, NULL };
 
-	have_changes = conf_has_unsaved_changes();
-	if (have_changes == -1)
+	switch (how) {
+	case RB_AUTOBOOT:
+		op = "reboot";
+		prompt = "Proceed with reboot? [yes/no] ";
+		break;
+	case RB_HALT:
+		op = "halt";
+		prompt = "Proceed with shutdown? [yes/no] ";
+		break;
+	case RB_POWERDOWN:
+		op = "powerdown";
+		prompt = "Proceed with powerdown? [yes/no] ";
+		break;
+	default:
+		printf("%% Invalid reboot parameter 0x%x\n", how);
+		return -1;
+	}
+
+	/* nshd's system compares what runs with what it saved */
+	have_changes = facts_op("diff-config", cli_rtable, 1);
+	if (have_changes != 0 && have_changes != OP_DIFFERS)
 		return -1;
 	else if (have_changes) {
 		printf("%% WARNING: The running configuration contains "
@@ -3775,35 +3903,18 @@ do_reboot(int how)
 		    "%% The 'show diff-config' command will display unsaved "
 		    "changes.\n"
 		    "%% The 'commit' command will save changes to %s.\n",
-		    NSHRC);
+		    SAVED);
 		if (!interactive_mode)
 			return -1;
 	}
 
 	if (!interactive_mode) {
-		if (cmdargs(argv[0], argv) != 0)
-			printf("%% %s command failed\n", argv[0]);
+		if (facts_op(op, cli_rtable, 0) != 0)
+			printf("%% %s failed\n", op);
 		return -1;
 	}
 
-	switch (how) {
-	case RB_AUTOBOOT:
-		setprompt("Proceed with reboot? [yes/no] ");
-		break;
-	case RB_HALT:
-		argv[0] = HALT;
-		setprompt("Proceed with shutdown? [yes/no] ");
-		break;
-	case RB_POWERDOWN:
-		argv[0] = HALT;
-		argv[1] = "-p";
-		setprompt("Proceed with powerdown? [yes/no] ");
-		break;
-	default:
-		printf("%% Invalid reboot parameter 0x%x\n", how);
-		return -1;
-	}
-
+	setprompt(prompt);
 	for (;;) {
 		if (!isatty(STDIN_FILENO) || elp == NULL) {
 			if (fgets(linebuf, sizeof(linebuf), stdin) == NULL) {
@@ -3834,8 +3945,8 @@ do_reboot(int how)
 	else
 		printf("%% Shutdown initiated\n");
 
-	if (cmdargs(argv[0], argv) != 0)
-		printf("%% %s command failed\n", argv[0]);
+	if (facts_op(op, cli_rtable, 0) != 0)
+		printf("%% %s failed\n", op);
 done:
 	restoreprompt();
 	return ret;
@@ -4041,8 +4152,9 @@ running_tree(void)
 }
 
 /*
- * show differences between startup and running config, or in configure
- * private between running config and the candidate, block by block.
+ * show differences between startup and running config, as nshd's system
+ * shows them, or in configure between running config and the candidate,
+ * as its config does, block by block.
  *
  * the lines of a block are compared as a set, a daemon's rules as a
  * sequence.
@@ -4050,107 +4162,30 @@ running_tree(void)
 static int
 pr_conf_diff(int argc, char **argv, ...)
 {
-	int out_fd = -1, ndiff, ret = -1;
-	char outpath[PATH_MAX];
-	struct cnode *old = NULL, *new = NULL;
-	FILE *out = NULL;
+	int r;
 
 	if (priv != 1) {
 		printf("%% Privilege required\n");
 		return -1;
 	}
 
-	/* configure private, nshd's */
+	/* configure's, nshd's */
 	if (nshd_config)
 		return nshd_cshow("diff-config");
 
-	if (getuid() != 0) {
-		printf("%% Root privileges required\n");
-		return -1;
-	}
-
-	if (strlcpy(outpath, "/tmp/nshrc.diff.XXXXXXXX", sizeof(outpath)) >=
-	    sizeof(outpath))
-		return 0;
-
-	out_fd = mkstemp(outpath);
-	if (out_fd == -1) {
-		printf("%% mkstemp %s: %s\n", outpath, strerror(errno));
-		return -1;
-	}
-
-	if (candidate) {
-		old = running_tree();
-		new = cand_tree();
-	} else {
-		if (access(NSHRC, R_OK) == -1) {
-			if (errno != ENOENT) {
-				printf("%% access %s: %s\n", NSHRC,
-				    strerror(errno));
-				goto done;
-			}
-			old = conftree_read("/dev/null", conf_mode,
-			    conf_ordered);
-		} else
-			old = conftree_read(NSHRC, conf_mode, conf_ordered);
-		new = running_tree();
-	}
-	if (old == NULL || new == NULL)
-		goto done;
-
-	if ((out = fdopen(out_fd, "w")) == NULL) {
-		printf("%% fdopen %s: %s\n", outpath, strerror(errno));
-		goto done;
-	}
-	if (candidate)
-		fprintf(out, "--- running-config\n+++ candidate-config\n");
-	else
-		fprintf(out, "--- startup-config\n+++ running-config\n");
-	if ((ndiff = conftree_compare(out, old, new)) == -1)
-		goto done;
-	if (fflush(out) == EOF) {
-		printf("%% %s: %s\n", outpath, strerror(errno));
-		goto done;
-	}
-	ret = ndiff == 0 || more(outpath) ? 0 : -1;
-done:
-	conftree_free(old);
-	if (!candidate)
-		conftree_free(new);	/* the candidate's tree is its own */
-	unlink(outpath);
-	if (out != NULL)
-		fclose(out);
-	else
-		close(out_fd);
-	return ret;
+	r = facts_op("diff-config", cli_rtable, 0);
+	return r == 0 || r == OP_DIFFERS ? 0 : -1;
 }
 
+/* root's crontab, as nshd's system shows it */
 static int
 pr_crontab(int argc, char **argv, ...)
 {
-	char *crontab_argv[] = { CRONTAB, "-l", "-u", "root", NULL };
-	va_list ap;
-	FILE *outfile;
-
-	va_start(ap, argv);
-	outfile = va_arg(ap, FILE *);
-	va_end(ap);
-
 	if (priv != 1) {
 		printf("%% Privilege required\n");
 		return -1;
 	}
-
-	fprintf(outfile, "%% To view crontab syntax documentation in NSH, "
-	    "run: !man 5 crontab\n\n");
-	fflush(outfile);
-
-	if (cmdargs_output(CRONTAB, crontab_argv, fileno(outfile), -1) != 0) {
-		printf("%% crontab command failed\n");
-		return -1;
-	}
-
-	return 0;
+	return facts_op("crontab", cli_rtable, 0) == 0 ? 0 : -1;
 }
 
 static int

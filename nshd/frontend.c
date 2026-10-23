@@ -48,6 +48,7 @@ union frontend_request {
 	struct nshd_commit	 commit;
 	struct nshd_rollback	 rollback;
 	struct nshd_enable	 enable;
+	struct nshd_op		 op;
 };
 
 static void	frontend_dispatch_relay(int, short, void *);
@@ -221,6 +222,7 @@ frontend_client(struct ctl_conn *c, struct imsg *imsg)
 	case IMSG_CTL_COMMIT:
 	case IMSG_CTL_ROLLBACK:
 	case IMSG_CTL_ENABLE:
+	case IMSG_CTL_OP:
 		if ((len = frontend_whole(imsg, &r)) == -1)
 			return (-1);
 		if (link_compose(&config, imsg_get_type(imsg), c->id,
@@ -275,6 +277,7 @@ frontend_answer(struct ctl_conn *c, struct imsg *imsg)
 	case IMSG_CTL_COMMIT:
 	case IMSG_CTL_ROLLBACK:
 	case IMSG_CTL_ENABLE:
+	case IMSG_CTL_OP:
 		if (frontend_whole(imsg, &req) == -1)
 			return (-1);
 		r.status = 1;
@@ -328,6 +331,11 @@ frontend_whole(struct imsg *imsg, union frontend_request *r)
 		    sizeof(r->enable.secret)) == NULL)
 			return (-1);
 		return (sizeof(r->enable));
+	case IMSG_CTL_OP:
+		if (imsg_get_data(imsg, &r->op, sizeof(r->op)) == -1 ||
+		    memchr(r->op.line, '\0', sizeof(r->op.line)) == NULL)
+			return (-1);
+		return (sizeof(r->op));
 	}
 	return (-1);
 }

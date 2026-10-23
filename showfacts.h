@@ -63,6 +63,7 @@ int		 facts_more(struct facts_answer *, struct facts_out *, int);
 void		 facts_answer_free(struct facts_answer *);
 int		 facts_show(FILE *, const char *, ...)
 		    __attribute__((__format__ (printf, 2, 3)));
+int		 facts_op(const char *, int, int);
 
 /* what nshd's system streams, from a child: a program, or dhcpd's leases */
 #define FACTS_PROGRAM	1
@@ -211,6 +212,7 @@ int	 sdl_build(struct frec *, int, int, int, struct sockaddr_storage *);
 void	 facts_sdl(struct facts_value *, struct facts_value *, char *, size_t,
 	    struct sockaddr *);
 int	 nshd_facts(int, char *, struct facts_in *);
+int	 nshd_op(const char *, int, struct facts_in *);
 int	 route_facts(struct facts_out *, struct rtdump *, char **, int, int);
 void	 route_render(struct frec *, int *);
 int	 lookup_facts(struct facts_out *, char *, int);

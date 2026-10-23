@@ -119,6 +119,10 @@ is not; nsh's
 .Cm show startup-config
 asks for it.
 It answers config and no one else.
+An operation a session asks, such as
+.Cm flush routes
+or a daemon's action, it runs as root, if nsh's code names it one, in
+a child of its own, which it streams as a show's.
 What a daemon's control program prints for a show, and the DHCP
 leases, a child of its own prints, and system streams it only as fast
 as the client reads it; the child, and its process group, are killed

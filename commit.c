@@ -1823,6 +1823,32 @@ saved_text(FILE *out)
 	return 0;
 }
 
+/*
+ * show diff-config outside configure, as nshd's system shows it: the
+ * saved configuration, SAVED, or none, against what runs, block by
+ * block, to stdout, if they differ: 1 if they do, 0 if not, -1 if either
+ * cannot be read, said why
+ */
+int
+saved_diff(void)
+{
+	struct cnode *saved, *now = NULL;
+	int n = -1;
+
+	if (access(SAVED, R_OK) == -1 && errno == ENOENT)
+		saved = conftree_read("/dev/null", conf_mode, conf_ordered);
+	else
+		saved = conftree_read(SAVED, conf_mode, conf_ordered);
+	if (saved != NULL && (now = running_tree()) != NULL &&
+	    (n = conftree_compare(NULL, saved, now)) > 0) {
+		printf("--- startup-config\n+++ running-config\n");
+		n = conftree_compare(stdout, saved, now);
+	}
+	conftree_free(saved);
+	conftree_free(now);
+	return n == -1 ? -1 : n > 0;
+}
+
 /* dir's entries, as they now are, kept: -1, said, if not */
 static int
 syncdir(const char *dir)

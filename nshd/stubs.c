@@ -62,6 +62,12 @@ nshd_facts(int rw, char *words, struct facts_in *in)
 	return -1;
 }
 
+int
+nshd_op(const char *text, int rtable, struct facts_in *in)
+{
+	return 1;
+}
+
 /* configure here is config's own, never nshd's session */
 int nshd_config, nshd_rtable;
 

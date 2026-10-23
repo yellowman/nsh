@@ -248,6 +248,31 @@ the user in privileged mode.
 The privileged mode alone will not allow changes to the system via
 .Nm
 commands.
+Operations, which change no configuration, run in
+.Xr nshd 8 Ns 's
+system process, as root:
+.Cm flush ,
+but
+.Cm flush history ;
+.Cm reboot ,
+.Cm halt
+and
+.Cm powerdown ,
+once confirmed;
+.Cm show diff-config
+outside configure;
+.Cm show crontab ;
+a daemon's actions, what its commands run that are not its
+configuration, such as
+.Cm bgp fib couple
+or
+.Cm pf reload ,
+outside configure too; and in an interface's mode,
+.Cm bssid ,
+.Cm setpuk
+and
+.Cm chgpin .
+What they print is not paged, and Control-C stops it.
 The privileged shell is indicated by the FQDN of the machine followed
 by (p) and followed by a /
 .Bl -dash
@@ -1930,7 +1955,7 @@ unsaved changes to the running-config.
 The user will be prompted to confirm the reboot in any case.
 The command requires
 .Nm
-to be in privileged mode and requires root user privileges.
+to be in privileged mode.
 .Bl -dash
 .It
 E.g. restart the system
@@ -1938,7 +1963,7 @@ E.g. restart the system
 nsh(config-p)/reboot
 % WARNING: The running configuration contains unsaved changes!
 % The 'show diff-config' command will display unsaved changes.
-% The 'commit' command will save changes to /etc/nshrc.
+% The 'commit' command will save changes to /var/db/nsh/nshrc.
 Proceed with reboot? [yes/no]
 .Ed
 .El
@@ -1955,7 +1980,7 @@ unsaved changes to the running-config.
 The user will be prompted to confirm the reboot in any case.
 The command requires
 .Nm
-to be in privileged mode and requires root user privileges.
+to be in privileged mode.
 .Bl -dash
 .It
 E.g. restart the system
@@ -1963,7 +1988,7 @@ E.g. restart the system
 nsh(config-p)/reload
 % WARNING: The running configuration contains unsaved changes!
 % The 'show diff-config' command will display unsaved changes.
-% The 'commit' command will save changes to /etc/nshrc.
+% The 'commit' command will save changes to /var/db/nsh/nshrc.
 Proceed with reboot? [yes/no]
 .Ed
 .El
@@ -1975,7 +2000,7 @@ The system will halt and then wait for a key to be pressed on the
 console before rebooting.
 Requires
 .Nm
-to be in privileged mode and requires root user privileges.
+to be in privileged mode.
 .Bl -dash
 .It
 e.g. shutdown the system
@@ -1991,7 +2016,7 @@ Shut down the system and then turn off power.
 Restarting the system will require access to the power-on button.
 Requires
 .Nm
-to be in privileged mode and requires root user privileges.
+to be in privileged mode.
 .Bl -dash
 .It
 e.g. power the system down

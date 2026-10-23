@@ -42,6 +42,11 @@
  * copied as NSHD_CHECK_USER. The program, and its arguments, are nsh's
  * table's for the show's words; no request names a path.
  *
+ * An operation, which a privileged session asks, is nsh's words for it,
+ * which op_allowed() takes or refuses, said why; a stream's child, as
+ * root, in the client's rtable, runs it with nsh's own code, op_run(),
+ * and the operation's status is how the child exits.
+ *
  * A commit's requests come from config in order: the parts BEGIN and
  * APPLY take, as chunks, then BEGIN, which makes the commit record,
  * APPLY, which runs the script, SAVE, which saves what runs and takes
@@ -140,6 +145,10 @@
 #define SYS_BATCH	256	/* records made before what is printed is sent */
 #define SYS_STREAMS	16	/* streams at once, at most */
 #define SYS_WINDOW	16	/* messages a stream sends its client unread */
+#define SYS_OPWORDS	32	/* an operation's words, at most */
+
+/* what a stream's child streams: a show's, FACTS_*, or an operation's */
+#define SYS_OPERATION	3
 #define COMMIT_RECORD	NSHDB "/commit"
 #define RECORD_HEAD	128	/* the record's first line, at most */
 #define BOOT_RECORD	NSHDB "/boot"
@@ -204,6 +213,8 @@ struct stream {
 	int			 fd;		/* its output, or -1 at its end */
 	int			 window;	/* messages it may still send */
 	int			 stopped;
+	int			 op;		/* an operation's, SYS_OPERATION */
+	int			 status;	/* how its child ended */
 	struct event		 ev;
 	struct facts_out	 o;
 };
@@ -291,6 +302,7 @@ static void	system_queue(uint32_t, uint32_t, const void *, size_t);
 static void	system_drain(void);
 static void	system_snapshot(uint32_t, int);
 static void	system_show(uint32_t, char *);
+static void	system_op(uint32_t, struct nshd_op *);
 static void	system_end(uint32_t, int32_t, const char *, ...)
 		    __attribute__((__format__ (printf, 3, 4)));
 static void	system_emit(void *, const void *, size_t);
@@ -479,12 +491,19 @@ system_whole(uint32_t type, const void *data, size_t len)
 	struct nshd_save	 sv;
 	struct nshd_rollback	 rb;
 	struct nshd_test	 t;
+	struct nshd_op		 op;
 	int			 i;
 
 	switch (type) {
 	case IMSG_SYS_READ:
 	case IMSG_SYS_STOP:
 		return (0);
+	case IMSG_SYS_OP:
+		if (len != sizeof(op))
+			return (-1);
+		memcpy(&op, data, len);
+		return (memchr(op.line, '\0', sizeof(op.line)) == NULL ?
+		    -1 : 0);
 	case IMSG_SYS_ROLLBACK_LIST:
 	case IMSG_SYS_SAVED:
 	case IMSG_SYS_BOOT:
@@ -560,6 +579,7 @@ system_request(uint32_t type, uint32_t id, const void *data, size_t len)
 	struct nshd_rollback	 rb;
 	struct nshd_test	 t;
 	struct nshd_result	 res;
+	struct nshd_op		 op;
 	struct stream		*s;
 
 	switch (type) {
@@ -618,6 +638,10 @@ system_request(uint32_t type, uint32_t id, const void *data, size_t len)
 		break;
 	case IMSG_SYS_SECRET:
 		system_secret(id);
+		break;
+	case IMSG_SYS_OP:
+		memcpy(&op, data, sizeof(op));
+		system_op(id, &op);
 		break;
 	case IMSG_SYS_TEST:
 		memcpy(&t, data, sizeof(t));
@@ -769,6 +793,34 @@ system_show(uint32_t id, char *words)
 	system_end(id, more != 0, NULL);
 }
 
+/*
+ * An operation, if op_allowed() takes its words, run by a stream's
+ * child; or refused, said why
+ */
+static void
+system_op(uint32_t id, struct nshd_op *op)
+{
+	char	*argv[SYS_OPWORDS + 1], *p = op->line;
+	int	 argc = 0;
+
+	printed(NULL);
+	while (argc < SYS_OPWORDS &&
+	    (argv[argc] = strsep(&p, " \t")) != NULL)
+		if (*argv[argc] != '\0')
+			argc++;
+	if (p != NULL) {
+		system_end(id, 1, "%% nshd: an operation of more than %d "
+		    "words\n", SYS_OPWORDS);
+		return;
+	}
+	argv[argc] = NULL;
+	if (argc == 0 || !op_allowed(argc, argv)) {
+		system_printed(id, 1);
+		return;
+	}
+	system_stream(id, SYS_OPERATION, argv, op->rtable);
+}
+
 /* to config: a line of text, if fmt, and how request id ended */
 static void
 system_end(uint32_t id, int32_t status, const char *fmt, ...)
@@ -847,6 +899,7 @@ system_stream(uint32_t id, int op, char **argv, int table)
 	setpgid(s->pid, s->pid);
 	close(fds[1]);
 	s->id = id;
+	s->op = op == SYS_OPERATION;
 	s->fd = fds[0];
 	s->window = SYS_WINDOW;
 	facts_out_init(&s->o, system_emit, &s->id);
@@ -863,7 +916,7 @@ system_child(int fd, int op, char **argv, int table)
 	char	 buf[8192];
 	size_t	 n;
 	FILE	*f;
-	int	 null;
+	int	 null, argc, r;
 
 	setpgid(0, 0);
 	/* as a program expects them, and as system's are not */
@@ -886,6 +939,17 @@ system_child(int fd, int op, char **argv, int table)
 		execv(argv[0], argv);
 		printf("%% exec '%s' failed: %s\n", argv[0], strerror(errno));
 		break;
+	case SYS_OPERATION:
+		if (nsh_setrtable(table) != 0) {
+			fflush(stdout);
+			_exit(1);
+		}
+		cli_rtable = table;
+		for (argc = 0; argv[argc] != NULL; argc++)
+			;
+		r = op_run(argc, argv);
+		fflush(stdout);
+		_exit(r == -1 ? 1 : r);
 	case FACTS_LEASES:
 		/* dhcpd's, 0640 */
 		if ((f = fopen(DHCPLEASES, "r")) == NULL) {
@@ -996,7 +1060,9 @@ system_stream_done(struct stream *s)
 {
 	if (s->fd != -1 || s->pid != 0)
 		return;
-	system_end(s->id, s->stopped, NULL);
+	/* an operation's, as its child ended */
+	system_end(s->id, s->stopped ? 1 : !s->op ? 0 :
+	    WIFEXITED(s->status) ? WEXITSTATUS(s->status) : 1, NULL);
 	TAILQ_REMOVE(&streams, s, entry);
 	nstreams--;
 	free(s);
@@ -1009,7 +1075,8 @@ system_sigchld(int sig, short event, void *arg)
 	struct stream	*s, *next;
 
 	TAILQ_FOREACH_SAFE(s, &streams, entry, next)
-		if (s->pid != 0 && waitpid(s->pid, NULL, WNOHANG) == s->pid) {
+		if (s->pid != 0 &&
+		    waitpid(s->pid, &s->status, WNOHANG) == s->pid) {
 			s->pid = 0;
 			system_stream_done(s);
 		}

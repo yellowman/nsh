@@ -70,6 +70,7 @@
 #define REQTEMP (void *)4                                                       
 #define SIZE_CONF_TEMP 64
 int ctlhandler(int, char **, ...);
+int ctl_op(char *, char *, int);
 void rmtemp(char *);
 struct ctl {
         char *name;

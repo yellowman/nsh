@@ -774,6 +774,35 @@ prot1_run(char *prot, char *sub, int argc, char **argv, char **args)
 	    sub, words));
 }
 
+/* a record of an operation's, which says nothing */
+static void
+ignore_record(void *arg, const struct facts_template *t,
+    const struct facts_value *v)
+{
+}
+
+/*
+ * The operation text, in rtable, which nshd's system runs, what it
+ * prints shown, but if quiet: its status, 0, OP_DIFFERS, or another
+ * if it failed, said why
+ */
+int
+facts_op(const char *text, int rtable, int quiet)
+{
+	struct facts_in		 in;
+	struct render		 rd;
+	int			 r;
+
+	memset(&rd, 0, sizeof(rd));
+	TAILQ_INIT(&rd.block);
+	rd.out = stdout;
+	facts_in_init(&in, quiet ? ignore_record : render_record, &rd);
+	r = nshd_op(text, rtable, &in);
+	block_free(&rd.block);
+	facts_in_free(&in);
+	return (r);
+}
+
 /*
  * The words fmt makes, asked of nshd, its system where they may be and
  * this user may ask it, else its shows, or of nsh itself where nshd

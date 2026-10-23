@@ -782,6 +782,28 @@ done:
 }
 
 /*
+ * Whether daemon's action is an operation, which nshd's system runs: what
+ * its table runs that is not its configuration, enable or disable, nor
+ * in configure, what configure private takes. 1 if so, else 0
+ */
+int
+ctl_op(char *daemon, char *action, int configuring)
+{
+	struct daemons *d;
+	struct ctl *x;
+
+	d = (struct daemons *)genget(daemon, (char **)ctl_daemons,
+	    sizeof(struct daemons));
+	if (d == NULL || Ambiguous(d))
+		return 0;
+	x = (struct ctl *)genget(action, (char **)d->table, sizeof(struct ctl));
+	if (x == NULL || Ambiguous(x))
+		return 0;
+	return x->type == T_EXEC && x->flag_x == 0 &&
+	    !(configuring && ctl_cand_takes(x));
+}
+
+/*
  * A daemon's command in configure private: enable and disable leave the
  * line conf prints for its state, edit edits its rules in the
  * candidate, and its configuration test tests those, all in the
