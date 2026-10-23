@@ -947,7 +947,8 @@ config_may(uint32_t session, uint32_t type)
 static void
 config_op(uint32_t session, struct nshd_op *op)
 {
-	struct request	*r;
+	struct nshd_sysop	 so;
+	struct request		*r;
 
 	if (session_find(session) == NULL) {
 		config_answer(session, 1, "%% nshd: hello first\n");
@@ -957,8 +958,11 @@ config_op(uint32_t session, struct nshd_op *op)
 		config_answer(session, 1, "%s", IDS_GONE);
 		return;
 	}
-	if (link_compose(&links[SYSTEM], IMSG_SYS_OP, r->id, op,
-	    sizeof(*op)) == -1)
+	memset(&so, 0, sizeof(so));
+	so.whose.session = session;
+	so.op = *op;
+	if (link_compose(&links[SYSTEM], IMSG_SYS_OP, r->id, &so,
+	    sizeof(so)) == -1)
 		fatal("%s", __func__);
 }
 

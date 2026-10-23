@@ -544,7 +544,8 @@ login_user(int set, int argc, char **argv)
 int
 loginset(int argc, char **argv, ...)
 {
-	int set = 1;
+	char line[1024];
+	int i, set = 1;
 
 	if (NO_ARG(argv[0])) {
 		argv++;
@@ -553,6 +554,20 @@ loginset(int argc, char **argv, ...)
 	}
 	if (argc < 3)
 		return login_usage();
+	/* in a commit's script, of a session without admin (ctl.c's) */
+	if (!candidate) {
+		line[0] = '\0';
+		for (i = 0; i < (set ? argc : 3); i++) {
+			if (i > 0)
+				strlcat(line, " ", sizeof(line));
+			strlcat(line, argv[i], sizeof(line));
+		}
+		if (!admin_may(line, !set, 3)) {
+			printf("%% Commit refused: changing login classes and "
+			    "users needs the admin permission\n");
+			return -1;
+		}
+	}
 	if (isprefix(argv[1], "class"))
 		return login_class(set, argc, argv);
 	if (isprefix(argv[1], "user"))

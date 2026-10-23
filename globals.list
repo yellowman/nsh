@@ -92,14 +92,15 @@ complete.c	process	complete.word complete_nocmd.nocmdtab
 conf.c		table	confrows confwords defllpriority defmtus
 			defprios intconf_rows rtflags
 ctl.c		session	rulesfile tmpfile_cur
-ctl.c		scratch	table
+ctl.c		scratch	admin_cont admin_in.in admin_limited admin_refused
+			admin_tree table
 ctl.c		table	ctl_bgp ctl_crontab ctl_daemons ctl_dhcp
 			ctl_dvmrp ctl_eigrp ctl_ftpproxy ctl_ifstate
 			ctl_ike ctl_inet ctl_ipsec ctl_ldap ctl_ldp
 			ctl_motd ctl_nppp ctl_ntp ctl_ospf ctl_ospf6
 			ctl_pf ctl_rad ctl_relay ctl_resolv ctl_rip
 			ctl_sasync ctl_sglobals ctl_smtp ctl_snmp
-			ctl_sshd ctl_tftp ctl_tftpproxy
+			ctl_sshd ctl_tftp ctl_tftpproxy admin_words
 genget.c	process	ambiguous
 if.c		session	imrif imrsave
 if.c		scratch	get_linkstate.buf if_facts.ifdescr

@@ -292,6 +292,7 @@ frontend_client(struct ctl_conn *c, struct imsg *imsg)
 		/* system first, so it knows of what config may begin */
 		if (imsg_get_type(imsg) == IMSG_CTL_LINE ||
 		    imsg_get_type(imsg) == IMSG_CTL_COMMIT ||
+		    imsg_get_type(imsg) == IMSG_CTL_OP ||
 		    imsg_get_type(imsg) == IMSG_CTL_LOAD) {
 			c->asked = 1;
 			frontend_asked(c, IMSG_FRONT_ASKED);

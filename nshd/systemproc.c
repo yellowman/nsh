@@ -117,6 +117,19 @@
  * runs; BOOT is answered as done already once parent says nshd does not
  * boot, or BOOTED has. So a config that a client compromised can begin
  * a commit only for a request it was asked, and cannot say whose it is.
+ *
+ * system checks the permissions of the login class of that request's
+ * uid itself, as config does: an operation, which frontend tells it of
+ * too, needs operate; BEGIN, TEST and SAVE need configure. A commit of
+ * a session without admin may change what needs admin only as it ran
+ * before: system keeps what runs when BEGIN takes it, and the commit's
+ * script runs with it (ctl.c's admin_begin()). Login classes and users,
+ * root's crontab, and the rules of inetd, ifstated and sshd need admin;
+ * so does a line of smtpd's rules with mda, proc, a pipe, a table or a
+ * macro, of snmpd's with a trap handle or a macro, of pf's with file or
+ * load, and of any daemon's with include. Each of these runs a command
+ * as root, reads a file as root, or decides who may log in. A TEST of
+ * such a session's is refused those lines too, judged by what runs.
  */
 
 #include <sys/types.h>
@@ -312,7 +325,10 @@ static int		 confirm_begun;
 static int		 confirm_minutes;
 static int		 committing;	/* a commit begun, not ended, */
 static uid_t		 commit_uid;	/* whose, */
-static int		 commit_web;	/* and if the web configurator's */
+static int		 commit_web;	/* and if the web configurator's, */
+static int		 commit_admin;	/* if its class has admin, */
+static char		*commit_before;	/* else what ran before it */
+static size_t		 commit_beforelen;
 static int		 booting;	/* BOOT run, until BOOTED */
 static int		 boot_over;	/* parent said nshd booted, or BOOTED */
 static TAILQ_HEAD(, asked) askeds = TAILQ_HEAD_INITIALIZER(askeds);
@@ -333,7 +349,8 @@ static void	system_queue(uint32_t, uint32_t, const void *, size_t);
 static void	system_drain(void);
 static void	system_snapshot(uint32_t, int);
 static void	system_show(uint32_t, char *);
-static void	system_op(uint32_t, struct nshd_op *);
+static void	system_op(uint32_t, struct nshd_sysop *);
+static int	system_may(int, int, const char *);
 static void	system_end(uint32_t, int32_t, const char *, ...)
 		    __attribute__((__format__ (printf, 3, 4)));
 static void	system_emit(void *, const void *, size_t);
@@ -353,6 +370,7 @@ static void	system_begin(uint32_t, struct nshd_begin *);
 static void	system_apply(uint32_t, struct nshd_apply *);
 static void	system_save(uint32_t, struct nshd_save *);
 static void	system_saved(int);
+static void	system_ended(void);
 static int	system_unconfirm(void);
 static void	system_back(uint32_t, int);
 static void	system_boot(uint32_t);
@@ -372,6 +390,7 @@ static void	system_failed(struct confirm *);
 static char	*system_running(size_t *);
 static void	system_rollback(uint32_t, int);
 static void	system_test(uint32_t, struct nshd_whose *, char *);
+static int	system_admin_test(char *);
 static void	system_printed(uint32_t, int32_t);
 static struct job *system_job_new(uint32_t, int);
 static void	system_job(struct job *);
@@ -639,7 +658,7 @@ system_whole(uint32_t type, const void *data, size_t len)
 	struct nshd_save	 sv;
 	struct nshd_rollback	 rb;
 	struct nshd_test	 t;
-	struct nshd_op		 op;
+	struct nshd_sysop	 so;
 	int			 i;
 
 	switch (type) {
@@ -647,10 +666,10 @@ system_whole(uint32_t type, const void *data, size_t len)
 	case IMSG_SYS_STOP:
 		return (0);
 	case IMSG_SYS_OP:
-		if (len != sizeof(op))
+		if (len != sizeof(so))
 			return (-1);
-		memcpy(&op, data, len);
-		return (memchr(op.line, '\0', sizeof(op.line)) == NULL ?
+		memcpy(&so, data, len);
+		return (memchr(so.op.line, '\0', sizeof(so.op.line)) == NULL ?
 		    -1 : 0);
 	case IMSG_SYS_ROLLBACK_LIST:
 	case IMSG_SYS_SAVED:
@@ -731,7 +750,7 @@ system_request(uint32_t type, uint32_t id, const void *data, size_t len)
 	struct nshd_rollback	 rb;
 	struct nshd_test	 t;
 	struct nshd_result	 res;
-	struct nshd_op		 op;
+	struct nshd_sysop	 so;
 	struct stream		*s;
 
 	switch (type) {
@@ -793,8 +812,8 @@ system_request(uint32_t type, uint32_t id, const void *data, size_t len)
 		system_end(id, login_perms(pm.uid), NULL);
 		break;
 	case IMSG_SYS_OP:
-		memcpy(&op, data, sizeof(op));
-		system_op(id, &op);
+		memcpy(&so, data, sizeof(so));
+		system_op(id, &so);
 		break;
 	case IMSG_SYS_TEST:
 		memcpy(&t, data, sizeof(t));
@@ -924,12 +943,24 @@ system_show(uint32_t id, char *words)
  * child; or refused, said why
  */
 static void
-system_op(uint32_t id, struct nshd_op *op)
+system_op(uint32_t id, struct nshd_sysop *so)
 {
-	char	*argv[SYS_OPWORDS + 1], *p = op->line;
-	int	 argc = 0;
+	struct asked	*k;
+	char		*argv[SYS_OPWORDS + 1], *p = so->op.line;
+	int		 argc = 0, perms;
 
 	printed(NULL);
+	if ((k = asked_whose(&so->whose)) == NULL) {
+		system_end(id, 1, "%% nshd: frontend told system of no request "
+		    "this operation is for\n");
+		return;
+	}
+	perms = login_perms(k->uid);
+	asked_free(k);
+	if (!system_may(perms, LOGIN_OPERATE, "operate")) {
+		system_printed(id, 1);
+		return;
+	}
 	while (argc < SYS_OPWORDS &&
 	    (argv[argc] = strsep(&p, " \t")) != NULL)
 		if (*argv[argc] != '\0')
@@ -944,7 +975,18 @@ system_op(uint32_t id, struct nshd_op *op)
 		system_printed(id, 1);
 		return;
 	}
-	system_stream(id, SYS_OPERATION, argv, op->rtable);
+	system_stream(id, SYS_OPERATION, argv, so->op.rtable);
+}
+
+/* Has perms, a login class's, need, named name? 1 if so, else 0, said */
+static int
+system_may(int perms, int need, const char *name)
+{
+	if (perms & need)
+		return (1);
+	printf("%% Not allowed: your login class does not have the %s "
+	    "permission\n", name);
+	return (0);
 }
 
 /* to config: a line of text, if fmt, and how request id ended */
@@ -1259,7 +1301,7 @@ system_begin(uint32_t id, struct nshd_begin *bg)
 	struct asked	*k;
 	char		*runs;
 	size_t		 len;
-	int		 r, wrote = 0, status = 1;
+	int		 r, perms, wrote = 0, status = 1;
 
 	memset(&rec, 0, sizeof(rec));
 	if ((k = asked_whose(&bg->whose)) == NULL) {
@@ -1269,7 +1311,11 @@ system_begin(uint32_t id, struct nshd_begin *bg)
 	}
 	commit_uid = k->uid;
 	commit_web = k->web;
+	perms = login_perms(k->uid);
 	asked_free(k);
+	if (!system_may(perms, LOGIN_CONFIGURE, "configure"))
+		goto done;
+	commit_admin = (perms & LOGIN_ADMIN) != 0;
 	if (record_read(&rec) == -1)
 		goto done;
 	/* configure terminal's, unsaved, would go back with one not confirmed */
@@ -1289,7 +1335,14 @@ system_begin(uint32_t id, struct nshd_begin *bg)
 	if ((runs = system_running(&len)) == NULL)
 		goto done;
 	r = commit_reads(runs, len, parts[NSHD_BEFORE], partlen[NSHD_BEFORE]);
-	free(runs);
+	/* without admin, what runs is kept, for the commit's script */
+	free(commit_before);
+	commit_before = NULL;
+	if (r == 1 && !commit_admin) {
+		commit_before = runs;
+		commit_beforelen = len;
+	} else
+		free(runs);
 	if (r == -1)
 		goto done;
 	if (r == 0) {
@@ -1611,6 +1664,11 @@ system_save(uint32_t id, struct nshd_save *sv)
 	} else {
 		uid = k->uid;
 		asked_free(k);
+		if (!system_may(login_perms(uid), LOGIN_CONFIGURE,
+		    "configure")) {
+			system_printed(id, 1);
+			return;
+		}
 	}
 	j = system_job_new(id, JOB_SAVE);
 
@@ -1656,13 +1714,22 @@ system_unconfirm(void)
 static void
 system_test(uint32_t id, struct nshd_whose *whose, char *name)
 {
+	struct asked	*k = NULL;
 	struct job	*j;
 	size_t		 i;
-	int		 fd;
+	int		 fd, perms = LOGIN_ALL;
 
-	if (whose->session == 0 ? !booting : asked_whose(whose) == NULL) {
+	if (whose->session == 0 ? !booting : (k = asked_whose(whose)) == NULL) {
 		printf("%% Commit refused: frontend told system of no request "
 		    "it is for\n");
+		system_printed(id, 1);
+		system_parts_free();
+		return;
+	}
+	if (k != NULL)
+		perms = login_perms(k->uid);
+	if (!system_may(perms, LOGIN_CONFIGURE, "configure") ||
+	    ((perms & LOGIN_ADMIN) == 0 && system_admin_test(name) == -1)) {
 		system_printed(id, 1);
 		system_parts_free();
 		return;
@@ -1716,7 +1783,7 @@ system_saved(int ok)
 {
 	struct record	 rec;
 
-	committing = 0;
+	system_ended();
 	if (ok) {
 		record_clear();
 		boot_saved();
@@ -1727,6 +1794,16 @@ system_saved(int ok)
 		}
 		record_free(&rec);
 	}
+}
+
+/* The commit begun ended, and what ran before it with it */
+static void
+system_ended(void)
+{
+	committing = 0;
+	free(commit_before);
+	commit_before = NULL;
+	commit_beforelen = 0;
 }
 
 /*
@@ -1756,7 +1833,7 @@ system_back(uint32_t id, int how)
 		system_kept();
 	confirm_free(&confirm_prev);
 	confirm_begun = 0;
-	committing = 0;
+	system_ended();
 	system_printed(id, status);
 	system_confirm(-1, 0, NULL);
 }
@@ -1890,6 +1967,26 @@ system_rollback(uint32_t id, int n)
 	system_end(id, r != 0, NULL);
 }
 
+/*
+ * A test of daemon name's rules, the part sent, for a session without
+ * admin: -1, said, if it has a line that needs admin and did not run
+ */
+static int
+system_admin_test(char *name)
+{
+	char	*runs;
+	size_t	 len;
+	int	 r;
+
+	if ((runs = system_running(&len)) == NULL)
+		return (-1);
+	admin_begin(1, runs, len);
+	r = admin_test(name, parts[NSHD_SCRIPT], partlen[NSHD_SCRIPT]);
+	admin_end();
+	free(runs);
+	return (r);
+}
+
 /* what nsh's code printed, to config, then how request id ended */
 static void
 system_printed(uint32_t id, int32_t status)
@@ -1987,6 +2084,9 @@ system_job_child(int fd, struct job *j)
 			sc.clears[i].keep = j->apply->clears[i].keep;
 		}
 		sc.nclears = j->apply->nclears;
+		/* without admin, what needs it only as it ran before */
+		admin_begin(committing && !commit_admin, commit_before,
+		    commit_beforelen);
 		/* -1, it could not run; 1, a line of it failed */
 		r = script_run(&sc);
 		break;

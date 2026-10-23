@@ -54,8 +54,8 @@ Runs as _nshfront in a
 and answers the read-write socket.
 Each client is a session, which asks one thing at a time.
 frontend tells system, before config, of each request that may begin
-a commit, whose it is, and when it is answered; a client of _nshweb's
-uid is the web configurator's session.
+a commit, and of each operation, whose it is, and when it is answered;
+a client of _nshweb's uid is the web configurator's session.
 .It config
 Runs as _nshconf in a
 .Xr chroot 2 ,
@@ -139,6 +139,9 @@ asks for it.
 It answers config and no one else, and begins a commit only for a
 request frontend told it of and that is not answered, or, its session
 gone, was not; the uid it records is frontend's.
+system checks the permissions of that uid's login class itself, as
+config does: an operation needs operate, and a commit, its test and a
+save need configure.
 An operation a session asks, such as
 .Cm flush routes
 or a daemon's action, it runs as root, if nsh's code names it one, in
@@ -166,6 +169,15 @@ takes: a line of any other command, such as
 or
 .Ic ping ,
 fails.
+A commit of a session without admin may not change what needs admin
+(see
+.Cm login class
+in
+.Xr nsh 8 ) ,
+unless the line ran before the commit; the script fails at such a
+change, and the commit goes back.
+A test of a daemon's rules for such a session is refused the same
+lines, judged against the running configuration.
 A test runs as _nshcheck, with its rules in a directory of their own,
 both _nshcheck's, but for relayd's, ldapd's, npppd's, sasyncd's and
 sshd's, which read keys or secrets their rules name, and keep root.

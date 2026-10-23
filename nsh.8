@@ -295,9 +295,31 @@ and loading a configuration with
 .Cm configure
 and
 .Cm configure exclusive ,
-whose candidate is every session's in them; and the password hashes of
+whose candidate is every session's in them; the password hashes of
 .Cm login user
-lines, which nshd shows no session without admin.
+lines, which nshd shows no session without admin; and committing a
+change to what runs a command as root, reads a file as root, or decides
+who may log in:
+.Cm login class
+and
+.Cm login user
+lines; root's
+.Cm crontab ;
+the rules of
+.Cm inet ,
+.Cm ifstate
+and
+.Cm sshd ;
+a line of
+.Cm smtp
+rules with mda, proc, a pipe, a table or a macro; of
+.Cm snmp
+rules with a trap handle or a macro; of
+.Cm pf
+rules with file or load; and of any daemon's rules with include.
+A line continued with a backslash, and the line after it, count as
+having every such word of their daemon.
+A commit without admin may keep such a line as it ran before.
 .El
 .Pp
 Root is always super-user.

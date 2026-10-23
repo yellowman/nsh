@@ -35,6 +35,7 @@
 #include "stringlist.h"
 #include "settings.h"
 #include "session.h"
+#include "conftree.h"
 
 /* table variable (for pkill usage) */
 static char table[16];
@@ -62,6 +63,11 @@ static int ctl_cand_stage(struct daemons *, char *, char *, char *,
     size_t);
 static void ctl_cand_unstage(char *, char *);
 static int ctl_cand_follow(struct daemons *, char *, int);
+static char *rule_text(char *, int);
+static int admin_rules(struct daemons *, char *);
+static int admin_kept(struct daemons *, int, char *, int *);
+static int admin_had(struct daemons *, int, char *);
+static const char *admin_in(int);
 
 /* the rules file an rc file is writing, and its name */
 static FILE *rulesfile;
@@ -71,6 +77,48 @@ static char tmpfile_cur[PATH_MAX];
 struct sglobal ctl_sglobals[] = {
 	SGLOBAL(rulesfile), SGLOBAL(tmpfile_cur),
 	{ NULL }
+};
+
+/*
+ * While a commit runs (admin_begin()): whether its session lacks the
+ * admin permission, what ran before it, whether the rules line before
+ * went on with a backslash, and whether a line was refused
+ */
+static int admin_limited;
+static struct cnode *admin_tree;
+static int admin_cont;
+static int admin_refused;
+
+/*
+ * The daemons whose rules need admin to change at all: root's crontab,
+ * inetd's and ifstated's, which run commands as root, and sshd's,
+ * which decides who logs in as root
+ */
+#define ADMIN_WHOLE(d)	((d)->table == ctl_crontab || \
+			    (d)->table == ctl_inet || \
+			    (d)->table == ctl_ifstate || (d)->table == ctl_sshd)
+
+/*
+ * The words that make a line of a daemon's rules need admin, in any
+ * case: the daemon's, or with NULL any daemon's. Each runs a command as
+ * root, or reads a file it names
+ */
+static const struct {
+	struct ctl	*table;
+	const char	*word;
+} admin_words[] = {
+	{ ctl_smtp,	"mda" },	/* runs a command */
+	{ ctl_smtp,	"proc" },	/* proc, proc-exec */
+	{ ctl_smtp,	"|" },		/* mail to a command */
+	{ ctl_smtp,	"table" },	/* aliases, so a | */
+	{ ctl_smtp,	"$" },		/* a macro, which can */
+	{ ctl_smtp,	"=" },		/* hide any of them */
+	{ ctl_snmp,	"handle" },	/* runs a command */
+	{ ctl_snmp,	"$" },
+	{ ctl_snmp,	"=" },
+	{ ctl_pf,	"file" },	/* a table's file */
+	{ ctl_pf,	"load" },	/* an anchor's file */
+	{ NULL,		"include" },	/* rules from a file */
 };
 
 /* master daemon list */
@@ -688,11 +736,17 @@ ctlhandler(int argc, char **argv, ...)
 		/* action specified or indented command specified */
 		if (argc == 2 && isprefix(argv[1], "rules")) {
 			/* skip 'X rules' line */
+			admin_cont = 0;
 			goto done;
 		}
 		if (isprefix(modhvar, "rules")) {
 			if (!daemons->tmpfile) {
 				printf("%% writeline without tmpfile\n");
+				rv = -1;
+				goto done;
+			}
+			if (admin_limited &&
+			    admin_rules(daemons, saveline) == -1) {
 				rv = -1;
 				goto done;
 			}
@@ -1062,6 +1116,11 @@ ctl_rules_clear(char *name, int rtableid, int keep)
 			break;
 	if (d->name == NULL || d->tmpfile == NULL)
 		return -1;
+	if (admin_limited && ADMIN_WHOLE(d)) {
+		printf("%% Commit refused: changing %s's rules needs the admin "
+		    "permission\n", d->name);
+		return -1;
+	}
 	snprintf(path, sizeof(path), "%s.%d", d->tmpfile, rtableid);
 	if (!keep) {
 		if (unlink(path) == -1 && errno != ENOENT) {
@@ -1521,15 +1580,194 @@ edit_file(char *tmpfile, mode_t mode, char *propername, char **args)
 int
 rule_writeline(FILE *rulesfile, char *writeline, int rdomain)
 {
-	if (writeline[0] == ' ') {
-		writeline++;
-		/* Lines for rdomain-specific daemons are indented twice. */
-		if (rdomain > 0 && writeline[0] == ' ')
-			writeline++;
-	}
-	fprintf(rulesfile, "%s", writeline);
+	fprintf(rulesfile, "%s", rule_text(writeline, rdomain));
 	fflush(rulesfile);
 	return 0;
+}
+
+/* A line of an rc file's, as its daemon's rules file has it */
+static char *
+rule_text(char *line, int rdomain)
+{
+	if (line[0] == ' ') {
+		line++;
+		/* Lines for rdomain-specific daemons are indented twice. */
+		if (rdomain > 0 && line[0] == ' ')
+			line++;
+	}
+	return line;
+}
+
+/*
+ * A commit runs, until admin_end(). If limited, its session lacks the
+ * admin permission, so it may change what needs admin only as it ran
+ * before: before, len bytes, the running configuration as it began
+ */
+void
+admin_begin(int limited, char *before, size_t len)
+{
+	admin_end();
+	admin_limited = limited;
+	if (limited)
+		admin_tree = conftree_mem(before, len,
+		    "the configuration before", conf_mode, conf_ordered);
+}
+
+void
+admin_end(void)
+{
+	conftree_free(admin_tree);
+	admin_tree = NULL;
+	admin_limited = 0;
+	admin_refused = 0;
+}
+
+/*
+ * May the commit running set line, a top-level statement that needs
+ * admin, or with no, take away what has line's key, its first keylen
+ * words? A commit without admin may set only a line that ran before it,
+ * and take away only what did not run: 1 if it may, else 0
+ */
+int
+admin_may(char *line, int no, int keylen)
+{
+	if (!admin_limited)
+		return 1;
+	if (admin_tree == NULL)
+		return 0;
+	if (no)
+		return !conftree_haskey(admin_tree, NULL, line, keylen);
+	return conftree_has(admin_tree, line);
+}
+
+/*
+ * May the commit running, without admin, write line, of daemon d's
+ * rules in cli_rtable, an rc file's? 0 if it may, else -1, said. Once a
+ * line is refused, none after it is written, so none goes on from a
+ * line before it
+ */
+static int
+admin_rules(struct daemons *d, char *line)
+{
+	char text[sizeof(saveline)];
+
+	if (admin_refused)
+		return -1;
+	strlcpy(text, rule_text(line, cli_rtable), sizeof(text));
+	text[strcspn(text, "\n")] = '\0';
+	if (admin_kept(d, cli_rtable, text, &admin_cont)) {
+		admin_refused = 1;
+		return -1;
+	}
+	return 0;
+}
+
+/*
+ * The test of daemon name's rules, their text, for a session without
+ * admin: has it a line that needs admin and did not run before, in any
+ * rtable, as its commit's script would? -1 if it has, said, else 0
+ */
+int
+admin_test(char *name, char *text, size_t len)
+{
+	struct daemons *d;
+	char *t, *p, *l;
+	int cont = 0, r = 0;
+
+	if (!admin_limited)
+		return 0;
+	for (d = ctl_daemons; d->name != NULL; d++)
+		if (strcmp(d->name, name) == 0)
+			break;
+	if (d->name == NULL)
+		return 0;
+	if ((t = p = strndup(text, len)) == NULL) {
+		printf("%% admin_test: %s\n", strerror(errno));
+		return -1;
+	}
+	while (r == 0 && (l = strsep(&p, "\n")) != NULL)
+		if (admin_kept(d, -1, l, &cont))
+			r = -1;
+	free(t);
+	return r;
+}
+
+/*
+ * Does line, of daemon d's rules in rtable, or any with -1, need admin
+ * that the commit running lacks? Any line of a daemon whose rules need
+ * admin does, and so does a line with a word that needs admin, unless
+ * the rules had it before. A line a backslash goes on from, and the
+ * line after it, have every word of their daemon's, as one word can go
+ * on over the two. cont says if the line before went on, and is set to
+ * if this one does. 1 if it does, said, else 0
+ */
+static int
+admin_kept(struct daemons *d, int rtable, char *line, int *cont)
+{
+	size_t i, n;
+	int hit = 0, went = *cont;
+
+	n = strlen(line);
+	*cont = n > 0 && line[n - 1] == '\\';
+	if (ADMIN_WHOLE(d)) {
+		printf("%% Commit refused: changing %s's rules%s needs the admin "
+		    "permission\n", d->name, admin_in(rtable));
+		return 1;
+	}
+	for (i = 0; i < sizeof(admin_words) / sizeof(admin_words[0]); i++) {
+		if (admin_words[i].table != NULL &&
+		    admin_words[i].table != d->table)
+			continue;
+		/* every daemon has a word, include */
+		if (went || *cont ||
+		    strcasestr(line, admin_words[i].word) != NULL)
+			hit = 1;
+	}
+	if (!hit || admin_had(d, rtable, line))
+		return 0;
+	printf("%% Commit refused: this line of %s's rules%s needs the admin "
+	    "permission: %s\n", d->name, admin_in(rtable), line);
+	return 1;
+}
+
+/* " in rtable N", for an rtable but 0, or "" */
+static const char *
+admin_in(int rtable)
+{
+	static char in[32];
+
+	in[0] = '\0';
+	if (rtable > 0)
+		snprintf(in, sizeof(in), " in rtable %d", rtable);
+	return in;
+}
+
+/* Had daemon d's rules in rtable, or any with -1, line before? */
+static int
+admin_had(struct daemons *d, int rtable, char *line)
+{
+	char *s, *path;
+	size_t i;
+	int id, r = 0;
+
+	if (admin_tree == NULL)
+		return 0;
+	if (rtable <= 0) {
+		if (asprintf(&path, "%s rules\n%s", d->name, line) == -1)
+			return 0;
+		r = conftree_has(admin_tree, path);
+		free(path);
+	}
+	for (i = 0; r == 0 && (s = conftree_stmt(admin_tree, i)) != NULL; i++) {
+		if (sscanf(s, "rtable %d", &id) != 1 ||
+		    (rtable != -1 && id != rtable))
+			continue;
+		if (asprintf(&path, "%s\n%s rules\n%s", s, d->name, line) == -1)
+			return 0;
+		r = conftree_has(admin_tree, path);
+		free(path);
+	}
+	return r;
 }
 
 int

@@ -144,7 +144,8 @@ struct nshd_chunk {
 
 /*
  * frontend to system: a session asked what may begin a commit (a line,
- * a commit, a load's part), by uid, and if it is the web configurator's
+ * a commit, a load's part), or an operation, by uid, and if it is the
+ * web configurator's
  */
 struct nshd_asked {
 	uint32_t	session;
@@ -158,6 +159,12 @@ struct nshd_asked {
  */
 struct nshd_whose {
 	uint32_t	session;
+};
+
+/* config to system: an operation, and the session that asked it */
+struct nshd_sysop {
+	struct nshd_whose whose;
+	struct nshd_op	 op;
 };
 
 /* config to system: whose commit begins, and if confirmed, its minutes */
@@ -294,7 +301,7 @@ enum nshd_imsg {
 	/* with clients, on the read-write socket, and config to system */
 	IMSG_SYS_PERMS,		/* nshd_perms: the uid's, as the result */
 	IMSG_CTL_OP,		/* nshd_op: what it prints, a result */
-	IMSG_SYS_OP,		/* nshd_op: a stream, a result */
+	IMSG_SYS_OP,		/* nshd_sysop: a stream, a result */
 	IMSG_CTL_LOAD,		/* nshd_load: a result; the last, as commit */
 
 	/* frontend to system: what config's commits must be for */

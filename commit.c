@@ -1053,14 +1053,14 @@ script_make(struct cnode *from, struct cnode *to, struct script *s)
 
 /*
  * Run s, as cmdrc() runs nshrc at boot: -1 if it could not run, 1 if a
- * line of it failed, else 0
+ * line of it failed, or rules it clears stay, else 0
  */
 int
 script_run(struct script *s)
 {
 	char path[] = "/tmp/nshcommit.XXXXXXXX";
 	FILE *f;
-	int fd, i, save, rt, failed, ret = -1;
+	int fd, i, save, rt, failed, cleared = 0, ret = -1;
 
 	if ((fd = mkstemp(path)) == -1) {
 		printf("%% mkstemp %s: %s\n", path, strerror(errno));
@@ -1089,9 +1089,9 @@ script_run(struct script *s)
 	}
 	/* empty rules before the script starts a daemon on them */
 	for (i = 0; i < s->nclears; i++)
-		if (s->clears[i].keep)
-			ctl_rules_clear(s->clears[i].name, s->clears[i].rtable,
-			    1);
+		if (s->clears[i].keep && ctl_rules_clear(s->clears[i].name,
+		    s->clears[i].rtable, 1) == -1)
+			cleared = -1;
 	save = candidate;
 	candidate = 0;
 	in_script = 1;
@@ -1100,12 +1100,12 @@ script_run(struct script *s)
 	candidate = save;
 	/* and none once it stopped the daemon */
 	for (i = 0; i < s->nclears; i++)
-		if (!s->clears[i].keep)
-			ctl_rules_clear(s->clears[i].name, s->clears[i].rtable,
-			    0);
+		if (!s->clears[i].keep && ctl_rules_clear(s->clears[i].name,
+		    s->clears[i].rtable, 0) == -1)
+			cleared = -1;
 	if (cli_rtable != rt && nsh_setrtable(rt) == 0)
 		cli_rtable = rt;
-	ret = failed;
+	ret = failed || cleared == -1;
 done:
 	unlink(path);
 	return ret;

@@ -451,6 +451,11 @@ int login_class_perms(const char *);
 int login_perms(uid_t);
 size_t login_hide(char *, size_t);
 void conf_login(FILE *);
+/* while a commit runs, whether its session lacks admin (ctl.c) */
+void admin_begin(int, char *, size_t);
+void admin_end(void);
+int admin_may(char *, int, int);
+int admin_test(char *, char *, size_t);
 
 /* pfsync.c */
 #define PFSYNC_MAXUPDATES 128
