@@ -85,7 +85,7 @@
  * of the host's is done already (BOOT), and if not, gives the saved
  * configuration, which a commit of no session's makes what runs, all
  * of it that takes, as nothing it checks or tests refuses it; then
- * system records how it went (BOOTED), and relay is told. What nsh's
+ * system records how it went (BOOTED), and parent is told. What nsh's
  * code and system print for it is logged. If system starts again, the
  * boot does too; if system is down, the boot did not go well. If system
  * could not record the boot, it runs, and did not go well.
@@ -240,9 +240,9 @@ static int			 booting;	/* the boot is not done */
 #define REQUEST_GEN_SHIFT	24	/* generation above, count below */
 #define REQUEST_COUNT		((1U << REQUEST_GEN_SHIFT) - 1)
 
-static struct imsgev	*iev_relay;
+static struct imsgev	*iev_parent;
 
-static void		 config_dispatch_relay(int, short, void *);
+static void		 config_dispatch_parent(int, short, void *);
 static void		 config_dispatch_frontend(int, short, void *);
 static void		 config_dispatch_system(int, short, void *);
 static void		 config_dispatch_archive(int, short, void *);
@@ -339,16 +339,16 @@ configproc(int debug, int verbose)
 	if ((shared = cand_shared_new()) == NULL)
 		fatal(NULL);
 
-	if ((iev_relay = imsgev_new(3, config_dispatch_relay, 0)) == NULL)
+	if ((iev_parent = imsgev_new(3, config_dispatch_parent, 0)) == NULL)
 		fatal(NULL);
-	links_init(links, sizeof(links) / sizeof(links[0]), iev_relay, NULL);
+	links_init(links, sizeof(links) / sizeof(links[0]));
 	event_dispatch();
 	exit(0);
 }
 
-/* relay's word of config's generation, and whether to boot */
+/* parent's word of config's generation, and whether to boot */
 static void
-config_dispatch_relay(int fd, short event, void *arg)
+config_dispatch_parent(int fd, short event, void *arg)
 {
 	struct imsgev		*iev = arg;
 	struct imsg		 imsg;
@@ -365,7 +365,7 @@ config_dispatch_relay(int fd, short event, void *arg)
 			break;
 		if (imsg_get_type(&imsg) != IMSG_STARTUP ||
 		    imsg_get_data(&imsg, &st, sizeof(st)) == -1)
-			fatalx("relay sent imsg %u, which it may not",
+			fatalx("parent sent imsg %u, which it may not",
 			    imsg_get_type(&imsg));
 		request_id = st.generation << REQUEST_GEN_SHIFT;
 		if (st.boot && !booting) {
@@ -2065,7 +2065,7 @@ boot_drop(void)
 	printed_log();
 }
 
-/* the boot done, 0 if it went well: relay told */
+/* the boot done, 0 if it went well: parent told */
 static void
 boot_end(int32_t status)
 {
@@ -2074,7 +2074,7 @@ boot_end(int32_t status)
 	boot_drop();
 	booting = 0;
 	res.status = status;
-	if (imsg_compose_event(iev_relay, IMSG_BOOTED, 0, 0, -1, &res,
+	if (imsg_compose_event(iev_parent, IMSG_BOOTED, 0, 0, -1, &res,
 	    sizeof(res)) == -1)
 		fatal("%s", __func__);
 }

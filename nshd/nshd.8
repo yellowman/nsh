@@ -31,11 +31,6 @@ The parent process, as root, binds the sockets and starts the children,
 each but system as a user of its own, so that none may signal or reach
 the files of a child of another role:
 .Bl -tag -width "frontend"
-.It relay
-Runs as _nshrelay in a
-.Xr chroot 2 ,
-tells each child when it may start, and the parent which child a peer
-says went wrong, and carries no request.
 .It show
 Four of them, each as _nshshow in a
 .Xr chroot 2 ,
@@ -171,8 +166,7 @@ next commit says what it left.
 While the record says a commit's changes were not saved, a commit
 that neither saves what runs nor goes back to before it is refused.
 A commit confirmed makes a record of a commit not confirmed too, which
-goes back to what ran before the first commit not confirmed; it tells
-the parent, and goes on once the parent keeps its deadline too.
+goes back to what ran before the first commit not confirmed.
 If the commit goes back, so does that record, to how it was before it.
 A commit that saves takes that record away before it saves.
 Its deadline is its minutes from when it is kept.
@@ -183,12 +177,15 @@ as it was.
 A script back that fails is run again 5 seconds later, three times at
 most; then the record says it failed, and carp stays demoted until a
 commit saves.
-A system that starts takes back what one before it did not.
+When
+.Nm
+starts, system finds any commit not confirmed that an earlier run
+left, and takes it back once its deadline has passed.
 A commit is refused if what runs is not what it was planned from.
-system is a session of its own: when it goes, the parent kills every
-process left in that session, and every process of _nshcheck's,
-before another system starts.
-If one outlives SIGKILL, no other system starts.
+system is a session of its own: when
+.Nm
+ends, the parent kills every process left in that session, and every
+process of _nshcheck's.
 .It archive
 Runs as _nsharc in a
 .Xr chroot 2 ,
@@ -198,36 +195,34 @@ which it opens before it enters the
 .Xr chroot 2 .
 config sends it each time it changes, and answers the session that
 changed it once archive has kept it, whole and synced to disk, or said
-it did not; a config that starts takes what archive kept before a
-session enters
+it did not.
+When
+.Nm
+starts, config takes what archive kept before any session enters
 .Cm configure .
-If archive is down, a change is said not to be kept.
 .El
 .Pp
-frontend and config, config and system, and config and archive, each
-talk on a pipe of their own, which the parent makes, so each knows who
-sent what it reads.
-A child takes a peer's pipe from the parent alone.
-Each child also has a pipe to relay.
-The parent reads only what relay tells it, and what system says of a
-commit not confirmed.
-A child that exits, or sends relay or a peer what it may not, is
-started again, with new pipes to its peers, and they forget what it
-held: its sessions, or the answers it had not yet given.
-A child that fails five times in a minute stays down.
-Then the others answer for it, or, for frontend or the last show to
-stay down, its socket refuses connections.
-If relay fails, every child starts again with it; if relay fails five
-times in a minute,
-.Nm
-exits.
+frontend and config, config and system, config and archive, and
+frontend and system each talk on a pipe of their own, which the parent
+makes before the children start, so each knows who sent what it reads.
+Each child also has a pipe to the parent, which tells it when to
+start.
+The only message the parent accepts from a child is config's word that
+the boot is done.
 .Pp
-A commit not confirmed has a record, which the parent reads too.
-If system has not taken the commit back 30 seconds past its deadline,
-or past when system said what it does first may end, the parent starts
-system again, which takes it back; three times at most.
-While there is one, system stays up though its failures would keep it
-down, for ten starts more.
+If any child exits, or sends the parent or a peer something it may
+not,
+.Nm
+ends: the child's peers see their pipes close and exit, and the parent
+kills the rest with
+.Dv SIGKILL .
+No child is started again.
+If
+.Nm
+ends while a commit not confirmed waits, nothing takes the commit back
+until
+.Nm
+is started again.
 .Pp
 With
 .Fl b ,
@@ -255,8 +250,11 @@ carp is demoted by 128 until the boot goes well, or, if it does not,
 until a commit saves.
 A boot that goes well takes away a record of a commit not confirmed,
 as what it would go back to runs.
-If system or config starts again during the boot, the boot starts
-again; if system stays down, the boot did not go well.
+If
+.Nm
+ends during the boot, the boot did not go well, and the next
+.Nm
+started in the same boot of the host's boots again.
 .Pp
 Each child's
 .Xr chroot 2
@@ -274,8 +272,10 @@ The read-only socket is for anyone.
 system does as root what config asks of it, so a config gone wrong may
 ask it anything a session may, in a commit a session asked: config is
 trusted as the read-write socket's users are.
-relay carries no request; gone wrong, it can stop the children, or have
-them started again, and nothing more.
+After starting the children, the parent stays root only to stop
+system's leftover processes when
+.Nm
+ends.
 .Pp
 The options are as follows:
 .Bl -tag -width Ds

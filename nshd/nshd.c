@@ -21,10 +21,10 @@
 /*
  * nshd: the configuration, and the only thing that changes the kernel.
  *
- * parent binds the two sockets and starts relay and the children, each
- * this program again with a flag for its part:
+ * parent binds the two sockets and starts the children, each this
+ * program again, by the path getexecpath(3) gives, with a flag for its
+ * part:
  *
- *	relay (-R)	_nshrelay, chroot: the children's lives
  *	show (-Sn)	_nshshow, chroot: the read-only socket, SHOWS of
  *			them, n from 0, so one long answer holds up no other
  *	frontend (-F)	_nshfront, chroot: the read-write socket, sessions
@@ -40,43 +40,26 @@
  *
  * Two children that talk, frontend and config, config and system,
  * config and archive, and frontend and system, do so on a pipe of their
- * own, which parent makes, so each knows who sent what it reads. Each child has a pipe to relay, as fd 3, which tells
- * it when it may start, and to which it tells a peer gone wrong; one
- * with peers has a pipe from parent, as fd 4, which gives it each
- * peer's pipe, or says the peer is down, with the peer's generation,
- * before it starts and each time the peer starts again; frontend and
+ * own, which parent makes, so each knows who sent what it reads. Each
+ * child has a pipe to parent, as fd 3, which tells it when it may
+ * start; one with peers has a pipe from parent, as fd 4, which gives it
+ * each peer's pipe before it starts, and is closed then; frontend and
  * each show have their socket after these, and no other child has it.
- * parent gives relay each child's pipe, and from then on reads only
- * what relay sends it, on a pipe that passes it no descriptor. relay
- * passes no descriptor to a child, and carries no request.
+ * No pipe is made or passed once the children start. parent reads, of
+ * what children send, config's word that the boot is done, and nothing
+ * else.
  *
- * nshd stays up for all that depends on it. A child that relay says went
- * wrong, its pipe closed or a rule broken, relay's or a peer's, is
- * killed and started again, and its peers given new pipes. One that
- * fails RESTARTS times in RESTART_SECS stays down: its peers answer for
- * it, and if it is frontend, or the last show, parent closes the socket,
- * which no process then holds, so clients are refused. If relay goes
- * wrong, every child goes with it, and all start again; if relay fails
- * RESTARTS times in RESTART_SECS, nshd ends.
- *
- * A commit not confirmed has a record, which system makes, and parent
- * reads too, so that the commit goes back even if system does not take
- * it back. Before system runs the commit, it tells parent on parent's
- * pipe to it, which parent reads for this alone, and parent keeps the
- * deadline too; it reads the record again when system says it is gone,
- * and when system starts. If system has not taken the commit back
- * CONFIRM_GRACE past its deadline, or past when system said what it
- * does first may end, parent starts system again, which takes it back,
- * CONFIRM_FENCES times at most. While there is one, system stays up
- * though its failures would keep it down, CONFIRM_STARTS times more.
+ * A child that ends, or that breaks a rule, ends nshd: its peers find
+ * their pipes to it closed and end too, and parent ends the rest, and
+ * system's helpers with them, as they run beyond system. Nothing is
+ * started again. A commit not confirmed whose nshd ends goes back when
+ * nshd starts again, and system finds its record.
  *
  * With -b, as rc starts it, nshd boots: config has system make the
  * running configuration the saved one, while frontend and the shows
- * hold their sockets, as relay starts them while the boot is not done,
- * and relay tells them to take clients, and parent, once config says
- * it is. rc waits for it: the process rc started exits then, 0 if the
- * boot went well, else 1. A relay started again before then is told
- * the boot is not done, as are the children with it.
+ * hold their sockets, and parent tells them to take clients once config
+ * says the boot is done. rc waits for it: the process rc started exits
+ * then, 0 if the boot went well, else 1, as it does if nshd ends before.
  */
 
 #include <sys/types.h>
@@ -113,14 +96,7 @@
 #include "facts.h"
 #include "showfacts.h"
 
-#define RESTARTS	5	/* failures in RESTART_SECS, and one stays down */
-#define RESTART_SECS	60
 #define CLEAR_TRIES	200	/* system's helpers killed, 10 ms apart */
-
-/* a commit not confirmed's, each to measure on OpenBSD */
-#define CONFIRM_GRACE	30	/* seconds past when system should be done */
-#define CONFIRM_FENCES	3	/* system started again, for it, at most */
-#define CONFIRM_STARTS	10	/* system's starts, past its failures' limit */
 
 static struct child {
 	enum nshd_proc	 proc;
@@ -129,16 +105,10 @@ static struct child {
 	char		*flag;
 	char		*user;		/* chrooted to its home, or root */
 	pid_t		 pid;
-	uint32_t	 generation;
-	unsigned int	 nfails;
-	time_t		 fails[RESTARTS];	/* the last ones, monotonic */
-	int		 down;
-	struct imsgbuf	 out;		/* its peers' pipes, from parent */
-	struct event	 outev;
-	struct event	 inev;		/* system's word to parent on it */
+	struct imsgev	*iev;		/* its pipe to parent, fd 3 */
+	struct imsgbuf	 out;		/* its peers' pipes, fd 4 */
 	int		 hasout;
 } children[] = {
-	{ PROC_RELAY,	 0, "relay",	"-R",	"_nshrelay" },
 	/* SHOWS of them */
 	{ PROC_SHOW,	 0, "show0",	"-S0",	"_nshshow" },
 	{ PROC_SHOW,	 1, "show1",	"-S1",	"_nshshow" },
@@ -165,28 +135,18 @@ static const struct pair {
 static void		 parent_sig_handler(int, short, void *);
 static void		 parent_dispatch(int, short, void *);
 static void		 spawn_all(void);
-static void		 spawn(struct child *);
 static void		 start(struct child *, int);
 static pid_t		 start_child(struct child *, int, int, int);
 static int		 talks(enum nshd_proc);
-static void		 pair_peers(struct child *);
 static void		 pair(struct child *, struct child *);
 static void		 tell(struct child *, struct child *, int);
 static int		 out_open(struct child *);
-static void		 out_close(struct child *);
-static void		 out_write(int, short, void *);
-static void		 out_read(int, short, void *);
-static void		 confirm_check(void);
-static void		 confirm_set(struct confirm *);
-static void		 confirm_unset(void);
-static void		 confirm_late(int, short, void *);
-static void		 restart(struct child *, const char *);
+static __dead void	 ended(struct child *, const char *, ...)
+			    __attribute__((__format__ (printf, 2, 3)));
 static int		 system_clear(struct child *);
 static struct kinfo_proc *procs(int, int, size_t *);
 static const char	*how(int);
-static int		 failed(struct child *);
 static struct child	*child(enum nshd_proc, int);
-static int		 shows_down(void);
 static void		 users(void);
 static void		 daemon_boot(void);
 static void		 booted(int32_t);
@@ -198,12 +158,6 @@ static int		 opt_debug, opt_verbose, rwfd, rofd;
 static int		 booting;	/* -b, until config says it is done */
 static int		 boot_fd = -1;	/* to the process rc started, or -1 */
 static uid_t		 check_uid;	/* NSHD_CHECK_USER's */
-static struct imsgev	*iev_relay;	/* to relay, with descriptors */
-static struct imsgbuf	 relay_in;	/* from relay, without */
-static struct event	 confirm_ev;	/* past when system should be done */
-static uint64_t		 confirm_id;	/* the commit not confirmed, or 0 */
-static time_t		 confirm_due;	/* when, by the wall clock */
-static int		 confirm_fences, confirm_starts;
 
 static __dead void
 usage(void)
@@ -222,7 +176,7 @@ main(int argc, char *argv[])
 	const char		*errstr;
 	int			 c, role = PROC_PARENT, instance = 0;
 
-	while ((c = getopt(argc, argv, "AbCdFRS:vY")) != -1) {
+	while ((c = getopt(argc, argv, "AbCdFS:vY")) != -1) {
 		switch (c) {
 		case 'A':
 			role = PROC_ARCHIVE;
@@ -238,9 +192,6 @@ main(int argc, char *argv[])
 			break;
 		case 'F':
 			role = PROC_FRONTEND;
-			break;
-		case 'R':
-			role = PROC_RELAY;
 			break;
 		case 'S':
 			role = PROC_SHOW;
@@ -263,8 +214,6 @@ main(int argc, char *argv[])
 		usage();
 
 	switch (role) {
-	case PROC_RELAY:
-		relay(opt_debug, opt_verbose, booting);
 	case PROC_SHOW:
 		showproc(opt_debug, opt_verbose, instance);
 	case PROC_FRONTEND:
@@ -295,7 +244,7 @@ main(int argc, char *argv[])
 	else if (!opt_debug && daemon(0, 0) == -1)
 		err(1, "daemon");
 
-	/* kept, and never read, for each frontend and show started */
+	/* frontend's and the shows', once they start */
 	if ((rwfd = control_init(NSHD_SOCKET, 0660, gr->gr_gid)) == -1)
 		fatalx("cannot open %s", NSHD_SOCKET);
 	if ((rofd = control_init(NSHD_RO_SOCKET, 0666, gr->gr_gid)) == -1)
@@ -315,11 +264,13 @@ main(int argc, char *argv[])
 	signal_add(&ev_sighup, NULL);
 	signal_add(&ev_sigchld, NULL);
 	signal(SIGPIPE, SIG_IGN);
-	evtimer_set(&confirm_ev, confirm_late, NULL);
 
 	spawn_all();
+	close(rwfd);
+	close(rofd);
 
-	if (pledge("stdio rpath sendfd proc exec ps", NULL) == -1)
+	/* what ends system's helpers, as nshd ends */
+	if (pledge("stdio proc ps", NULL) == -1)
 		fatal("pledge");
 
 	event_dispatch();
@@ -336,18 +287,6 @@ child(enum nshd_proc proc, int instance)
 		    children[i].instance == instance)
 			return (&children[i]);
 	return (NULL);
-}
-
-/* whether every show is down */
-static int
-shows_down(void)
-{
-	size_t	 i;
-
-	for (i = 0; i < NPROC; i++)
-		if (children[i].proc == PROC_SHOW && !children[i].down)
-			return (0);
-	return (1);
 }
 
 /*
@@ -397,69 +336,37 @@ users(void)
 }
 
 /*
- * relay, and its pipe, written with descriptors and read without; then
- * each child that is not down, with the pipes to its peers
+ * each child, with its pipe to parent, and the pipes to its peers there
+ * before it starts; then each told it may
  */
 static void
 spawn_all(void)
 {
-	struct nshd_child	 ch;
-	struct child		*r = child(PROC_RELAY, 0);
+	struct nshd_startup	 st;
 	size_t			 i;
-	int			 sp[2], out[NPROC];
+	int			 out[NPROC];
 
-	if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK,
-	    PF_UNSPEC, sp) == -1)
-		fatal("socketpair");
-	r->pid = start_child(r, sp[1], -1, -1);
-	if ((iev_relay = imsgev_new(sp[0], parent_dispatch, 1)) == NULL ||
-	    imsgbuf_init(&relay_in, sp[0]) == -1)
-		fatal(NULL);
-
-	for (i = 0; i < NPROC; i++) {
-		out[i] = -1;
-		if (children[i].proc == PROC_RELAY || children[i].down)
-			continue;
-		children[i].generation++;
+	for (i = 0; i < NPROC; i++)
 		out[i] = out_open(&children[i]);
-	}
 	for (i = 0; i < NPAIRS; i++)
 		pair(child(pairs[i].a, 0), child(pairs[i].b, 0));
+	for (i = 0; i < NPROC; i++)
+		start(&children[i], out[i]);
 
-	for (i = 0; i < NPROC; i++) {
-		if (children[i].proc == PROC_RELAY)
-			continue;
-		if (!children[i].down) {
-			start(&children[i], out[i]);
-			continue;
-		}
-		ch.proc = children[i].proc;
-		ch.instance = children[i].instance;
-		ch.generation = children[i].generation;
-		if (imsg_compose_event(iev_relay, IMSG_DOWN, 0, 0, -1, &ch,
-		    sizeof(ch)) == -1)
-			fatal("%s: down", children[i].name);
-	}
+	memset(&st, 0, sizeof(st));
+	st.generation = 1;
+	st.boot = booting;
+	for (i = 0; i < NPROC; i++)
+		if (imsg_compose_event(children[i].iev, IMSG_STARTUP, 0, 0,
+		    -1, &st, sizeof(st)) == -1)
+			fatal("%s: startup", children[i].name);
 }
 
-/* c started again, with new pipes to its peers, each told of it */
-static void
-spawn(struct child *c)
-{
-	int	 out;
-
-	c->generation++;
-	out = out_open(c);
-	pair_peers(c);
-	start(c, out);
-}
-
-/* c, with its pipe to relay, relay the other end, and out from parent */
+/* c, with its pipe to parent, and its peers' pipes, given and closed */
 static void
 start(struct child *c, int out)
 {
-	struct nshd_child	 ch;
-	int			 sp[2], fd = -1;
+	int	 sp[2], fd = -1;
 
 	if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK,
 	    PF_UNSPEC, sp) == -1)
@@ -468,19 +375,16 @@ start(struct child *c, int out)
 		fd = rwfd;
 	else if (c->proc == PROC_SHOW)
 		fd = rofd;
-	/* its peers' pipes there before it starts */
-	if (c->hasout && imsgbuf_flush(&c->out) == -1)
-		fatal("%s: its peers' pipes", c->name);
+	if (c->hasout) {
+		if (imsgbuf_flush(&c->out) == -1)
+			fatal("%s: its peers' pipes", c->name);
+		imsgbuf_clear(&c->out);
+		close(c->out.fd);
+		c->hasout = 0;
+	}
 	c->pid = start_child(c, sp[1], out, fd);
-	/* a commit not confirmed it left, or one before parent started */
-	if (c->proc == PROC_SYSTEM && confirm_id == 0)
-		confirm_check();
-	ch.proc = c->proc;
-	ch.instance = c->instance;
-	ch.generation = c->generation;
-	if (imsg_compose_event(iev_relay, IMSG_PIPE, 0, 0, sp[0], &ch,
-	    sizeof(ch)) == -1)
-		fatal("%s: its pipe", c->name);
+	if ((c->iev = imsgev_new(sp[0], parent_dispatch, 0)) == NULL)
+		fatal(NULL);
 }
 
 /*
@@ -522,8 +426,6 @@ start_child(struct child *c, int pipefd, int outfd, int sockfd)
 		argv[argc++] = "-d";
 	if (opt_verbose)
 		argv[argc++] = "-v";
-	if (c->proc == PROC_RELAY && booting)
-		argv[argc++] = "-b";
 	argv[argc++] = NULL;
 
 	execv(execpath, argv);
@@ -555,35 +457,12 @@ joined(enum nshd_proc a, enum nshd_proc b)
 	return (0);
 }
 
-/* c and each of its peers paired */
-static void
-pair_peers(struct child *c)
-{
-	size_t	 i;
-
-	for (i = 0; i < NPAIRS; i++)
-		if (pairs[i].a == c->proc)
-			pair(c, child(pairs[i].b, 0));
-		else if (pairs[i].b == c->proc)
-			pair(c, child(pairs[i].a, 0));
-}
-
-/*
- * a pipe between a and b, each given its end; or, if one is down, the
- * other told so
- */
+/* a pipe between a and b, each given its end */
 static void
 pair(struct child *a, struct child *b)
 {
 	int	 sp[2];
 
-	if (a->down || b->down) {
-		if (!a->down)
-			tell(a, b, -1);
-		else if (!b->down)
-			tell(b, a, -1);
-		return;
-	}
 	if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK,
 	    PF_UNSPEC, sp) == -1)
 		fatal("socketpair");
@@ -591,26 +470,22 @@ pair(struct child *a, struct child *b)
 	tell(b, a, sp[1]);
 }
 
-/* to c, the pipe fd to its peer p, of p's generation, or -1: p is down */
+/* to c, the pipe fd to its peer p */
 static void
 tell(struct child *c, struct child *p, int fd)
 {
 	struct nshd_child	 ch;
 
+	memset(&ch, 0, sizeof(ch));
 	ch.proc = p->proc;
 	ch.instance = p->instance;
-	ch.generation = p->generation;
+	ch.generation = 1;
 	if (imsg_compose(&c->out, IMSG_PEER, 0, 0, fd, &ch, sizeof(ch)) ==
 	    -1)
 		fatal("%s: %s's pipe", c->name, p->name);
-	event_add(&c->outev, NULL);
 }
 
-/*
- * the pipe from parent to c, if it has peers, which parent writes, and
- * reads only system's word of a commit not confirmed: c's end of it,
- * or -1
- */
+/* the pipe from parent to c, if it has peers: c's end of it, or -1 */
 static int
 out_open(struct child *c)
 {
@@ -624,270 +499,32 @@ out_open(struct child *c)
 	if (imsgbuf_init(&c->out, sp[0]) == -1)
 		fatal(NULL);
 	imsgbuf_allow_fdpass(&c->out);
-	event_set(&c->outev, sp[0], EV_WRITE, out_write, c);
-	if (c->proc == PROC_SYSTEM) {
-		event_set(&c->inev, sp[0], EV_READ | EV_PERSIST, out_read, c);
-		event_add(&c->inev, NULL);
-	}
 	c->hasout = 1;
 	return (sp[1]);
 }
 
-static void
-out_close(struct child *c)
+/* c ended, or broke a rule, as why says: nshd ends with it */
+static __dead void
+ended(struct child *c, const char *fmt, ...)
 {
-	if (!c->hasout)
-		return;
-	event_del(&c->outev);
-	if (c->proc == PROC_SYSTEM)
-		event_del(&c->inev);
-	imsgbuf_clear(&c->out);
-	close(c->out.fd);
-	c->hasout = 0;
-}
+	va_list	 ap;
+	char	*why;
 
-/* what parent told c, once its pipe may be written */
-static void
-out_write(int fd, short event, void *arg)
-{
-	struct child	*c = arg;
-
-	/* c is gone, which relay tells, and what it was told with it */
-	if (imsgbuf_write(&c->out) == -1) {
-		imsgbuf_clear(&c->out);
-		return;
-	}
-	if (imsgbuf_queuelen(&c->out) > 0)
-		event_add(&c->outev, NULL);
-}
-
-/*
- * system's word of a commit not confirmed: its record made, which parent
- * says it keeps the deadline of, or not; or gone. Anything else, or with
- * a descriptor, and system goes wrong
- */
-static void
-out_read(int fd, short event, void *arg)
-{
-	struct child		*c = arg;
-	struct imsg		 imsg;
-	struct nshd_confirm	 cm;
-	char			 why[64];
-	uint32_t		 type;
-	int			 n;
-	int			 passed;
-
-	/* c is gone, which relay tells */
-	if ((n = imsgbuf_read(&c->out)) == -1 || n == 0) {
-		event_del(&c->inev);
-		return;
-	}
-	for (;;) {
-		if ((n = imsgbuf_get(&c->out, &imsg)) == -1) {
-			restart(c, "sent parent what imsg cannot read");
-			return;
-		}
-		if (n == 0)
-			break;
-		type = imsg_get_type(&imsg);
-		if ((passed = imsg_get_fd(&imsg)) != -1)
-			close(passed);
-		if (passed != -1 || (type != IMSG_CONFIRM_ARM &&
-		    type != IMSG_CONFIRM_DONE) ||
-		    imsg_get_data(&imsg, &cm, sizeof(cm)) == -1) {
-			snprintf(why, sizeof(why),
-			    "sent parent imsg %u, which it may not", type);
-			imsg_free(&imsg);
-			restart(c, why);
-			return;
-		}
-		imsg_free(&imsg);
-		confirm_check();
-		if (type != IMSG_CONFIRM_ARM)
-			continue;
-		cm.armed = cm.id == confirm_id;
-		if (imsg_compose(&c->out, IMSG_CONFIRM_ARMED, 0, 0, -1, &cm,
-		    sizeof(cm)) == -1)
-			fatal("%s: armed", c->name);
-		event_add(&c->outev, NULL);
-	}
-}
-
-/*
- * parent's timer for the commit not confirmed, by its record: none if
- * there is none, it failed, or it cannot be read
- */
-static void
-confirm_check(void)
-{
-	struct confirm	 cf;
-
-	if (confirm_read(&cf, 0) == -1) {
-		logit(LOG_CRIT, "the record of a commit not confirmed: %s",
-		    strerror(errno));
-		confirm_unset();
-	} else if (cf.state != CONFIRM_WAITING)
-		confirm_unset();
-	else
-		confirm_set(&cf);
-}
-
-/*
- * parent's timer, CONFIRM_GRACE past cf's deadline, or its until, if
- * later, and no sooner than CONFIRM_GRACE from now
- */
-static void
-confirm_set(struct confirm *cf)
-{
-	struct timeval	 tv = { 0, 0 };
-	time_t		 due;
-
-	due = (cf->until > cf->deadline ? cf->until : cf->deadline) +
-	    CONFIRM_GRACE;
-	if (cf->id != confirm_id) {
-		confirm_id = cf->id;
-		confirm_starts = 0;
-	}
-	if (due != confirm_due) {
-		confirm_due = due;
-		confirm_fences = 0;
-	}
-	tv.tv_sec = due - time(NULL);
-	if (tv.tv_sec < CONFIRM_GRACE)
-		tv.tv_sec = CONFIRM_GRACE;
-	evtimer_add(&confirm_ev, &tv);
-}
-
-static void
-confirm_unset(void)
-{
-	evtimer_del(&confirm_ev);
-	confirm_id = 0;
-	confirm_due = 0;
-	confirm_fences = 0;
-	confirm_starts = 0;
-}
-
-/*
- * system's time to take back the commit not confirmed, past, unless its
- * record says otherwise now: system started again, which takes it back
- */
-static void
-confirm_late(int fd, short event, void *arg)
-{
-	struct child	*s = child(PROC_SYSTEM, 0);
-	uint64_t	 id = confirm_id;
-	time_t		 due = confirm_due;
-
-	confirm_check();
-	if (confirm_id != id || confirm_due != due)
-		return;
-	if (s->down || ++confirm_fences > CONFIRM_FENCES) {
-		logit(LOG_CRIT, "system has not taken back the commit not "
-		    "confirmed, and nothing will");
-		confirm_unset();
-		return;
-	}
-	restart(s, "has not taken back the commit not confirmed");
-}
-
-/* whether c, failing now, has failed RESTARTS times in RESTART_SECS */
-static int
-failed(struct child *c)
-{
-	struct timespec	 ts;
-
-	if (clock_gettime(CLOCK_MONOTONIC, &ts) == -1)
-		fatal("clock_gettime");
-	c->fails[c->nfails++ % RESTARTS] = ts.tv_sec;
-	/* the oldest of the last RESTARTS */
-	return (c->nfails >= RESTARTS &&
-	    ts.tv_sec - c->fails[c->nfails % RESTARTS] < RESTART_SECS);
-}
-
-/*
- * c, gone wrong: killed if it is not gone already, and started again,
- * unless it has failed RESTARTS times in RESTART_SECS; relay with every
- * child, as each child's life is told on relay's pipes
- */
-static void
-restart(struct child *c, const char *why)
-{
-	struct nshd_child	 ch;
-	size_t			 i;
-	int			 down;
-
+	va_start(ap, fmt);
+	if (vasprintf(&why, fmt, ap) == -1)
+		fatal("%s", __func__);
+	va_end(ap);
 	log_warnx("%s %s", c->name, why);
-	down = failed(c);
-	/* up, to take back a commit not confirmed */
-	if (down && c->proc == PROC_SYSTEM && confirm_id != 0 &&
-	    confirm_starts < CONFIRM_STARTS) {
-		confirm_starts++;
-		log_warnx("%s stays up, for a commit not confirmed", c->name);
-		down = 0;
-	}
-	if (down)
-		log_warnx("%s failed %d times in %d seconds, and stays down",
-		    c->name, RESTARTS, RESTART_SECS);
-
-	if (c->proc == PROC_RELAY) {
-		for (i = 0; i < NPROC; i++) {
-			if (children[i].proc == PROC_SYSTEM) {
-				if (system_clear(&children[i]) == -1)
-					children[i].down = 1;
-			} else if (children[i].pid > 0)
-				kill(children[i].pid, SIGKILL);
-			children[i].pid = -1;	/* reaped on SIGCHLD */
-			out_close(&children[i]);
-		}
-		event_del(&iev_relay->ev);
-		imsgbuf_clear(&iev_relay->ibuf);
-		imsgbuf_clear(&relay_in);
-		close(iev_relay->ibuf.fd);
-		free(iev_relay);
-		iev_relay = NULL;
-		if (down)
-			parent_shutdown(1, "no child talks without relay");
-		spawn_all();
-		return;
-	}
-
-	if (c->proc == PROC_SYSTEM) {
-		if (system_clear(c) == -1)
-			down = 1;
-	} else if (c->pid > 0)
-		kill(c->pid, SIGKILL);
-	c->pid = -1;
-	out_close(c);
-	if (!down) {
-		spawn(c);
-		return;
-	}
-	c->down = 1;
-	/* its peers, told so */
-	pair_peers(c);
-	/* refused, rather than left waiting for no one */
-	if (c->proc == PROC_FRONTEND) {
-		close(rwfd);
-		rwfd = -1;
-	} else if (c->proc == PROC_SHOW && shows_down()) {
-		close(rofd);
-		rofd = -1;
-	}
-	ch.proc = c->proc;
-	ch.instance = c->instance;
-	ch.generation = c->generation;
-	if (imsg_compose_event(iev_relay, IMSG_DOWN, 0, 0, -1, &ch,
-	    sizeof(ch)) == -1)
-		fatal("%s: down", c->name);
+	free(why);
+	parent_shutdown(1, "nshd ends with it");
 }
 
 /*
  * system gone, or to go, and its helpers with it: each process of its
  * session, which system made as it started, and of NSHD_CHECK_USER's,
  * killed until none is left. system is reaped last, so its session is
- * no other's while its helpers are found by it. -1 if one outlives
- * CLEAR_TRIES, and no other system may start to race with it
+ * no other's while its helpers are found by it. -1, said, if one
+ * outlives CLEAR_TRIES
  */
 static int
 system_clear(struct child *k)
@@ -928,7 +565,7 @@ system_clear(struct child *k)
 			break;
 		if (tries == CLEAR_TRIES) {
 			logit(LOG_CRIT, "%d of system's helpers outlive "
-			    "SIGKILL: system stays down", left);
+			    "SIGKILL", left);
 			return (-1);
 		}
 		nanosleep(&(struct timespec){ 0, 10000000 }, NULL);
@@ -983,7 +620,6 @@ how(int status)
 static void
 parent_sig_handler(int sig, short event, void *arg)
 {
-	const char	*why;
 	int		 status, serrno = errno;
 	size_t		 i;
 	pid_t		 pid;
@@ -997,80 +633,50 @@ parent_sig_handler(int sig, short event, void *arg)
 	case SIGCHLD:
 		/* but system, a session of its own: system_clear() reaps it */
 		while ((pid = waitpid(0, &status, WNOHANG)) > 0)
-			for (i = 0; i < NPROC; i++) {
-				if (pid != children[i].pid)
-					continue;
-				children[i].pid = -1;
-				why = how(status);
-				/*
-				 * relay says when a child went wrong: every
-				 * child goes when relay does, and that is
-				 * relay's failure
-				 */
-				if (children[i].proc == PROC_RELAY)
-					restart(&children[i], why);
-				else
-					log_warnx("%s %s", children[i].name,
-					    why);
-			}
+			for (i = 0; i < NPROC; i++)
+				if (pid == children[i].pid) {
+					children[i].pid = -1;
+					ended(&children[i], "%s", how(status));
+				}
 		break;
 	}
 	errno = serrno;
 }
 
-/* relay's word, which is all parent reads */
+/*
+ * c's word on its pipe to parent: config's that the boot is done, once,
+ * and no other. Anything else, or the pipe closed, ends nshd
+ */
 static void
 parent_dispatch(int fd, short event, void *arg)
 {
 	struct imsgev		*iev = arg;
 	struct imsg		 imsg;
-	struct nshd_child	 ch;
 	struct nshd_result	 res;
-	struct child		*c;
-	char			 why[64];
+	struct child		*c = NULL;
+	size_t			 i;
 	int			 n;
 
-	if (event & EV_READ) {
-		if ((n = imsgbuf_read(&relay_in)) == -1 || n == 0) {
-			restart(child(PROC_RELAY, 0), "closed its pipe");
-			return;
-		}
-	}
-	if ((event & EV_WRITE) && imsgbuf_write(&iev->ibuf) == -1) {
-		restart(child(PROC_RELAY, 0), "closed its pipe");
-		return;
-	}
+	for (i = 0; i < NPROC; i++)
+		if (children[i].iev == iev)
+			c = &children[i];
+	if (c == NULL)
+		fatalx("%s: from no child", __func__);
+	if (imsgev_io(iev, event) == -1)
+		ended(c, "closed its pipe");
 
 	for (;;) {
-		if ((n = imsgbuf_get(&relay_in, &imsg)) == -1) {
-			restart(child(PROC_RELAY, 0),
-			    "sent what imsg cannot read");
-			return;
-		}
+		if ((n = imsgbuf_get(&iev->ibuf, &imsg)) == -1)
+			ended(c, "sent what imsg cannot read");
 		if (n == 0)
 			break;
-		/* the boot done, once */
-		if (imsg_get_type(&imsg) == IMSG_BOOTED && booting &&
-		    imsg_get_data(&imsg, &res, sizeof(res)) == 0) {
-			imsg_free(&imsg);
-			booted(res.status);
-			continue;
-		}
-		if (imsg_get_type(&imsg) != IMSG_BROKEN ||
-		    imsg_get_data(&imsg, &ch, sizeof(ch)) == -1 ||
-		    (c = child(ch.proc, ch.instance)) == NULL ||
-		    c->proc == PROC_RELAY) {
-			snprintf(why, sizeof(why),
-			    "sent imsg %u, which it may not",
+		if (imsg_get_type(&imsg) != IMSG_BOOTED ||
+		    c->proc != PROC_CONFIG || !booting ||
+		    imsg_get_data(&imsg, &res, sizeof(res)) == -1)
+			ended(c, "sent imsg %u, which it may not",
 			    imsg_get_type(&imsg));
-			imsg_free(&imsg);
-			restart(child(PROC_RELAY, 0), why);
-			return;
-		}
 		imsg_free(&imsg);
-		/* not one started since, nor one down already */
-		if (ch.generation == c->generation && !c->down)
-			restart(c, "went wrong, relay says");
+		booted(res.status);
 	}
 	imsg_event_add(iev);
 }
@@ -1115,13 +721,23 @@ daemon_boot(void)
 		close(fd);
 }
 
-/* the boot done, as status says it went, and rc told */
+/*
+ * the boot done, as status says it went: rc told, and frontend and the
+ * shows to take clients
+ */
 static void
 booted(int32_t status)
 {
+	size_t	 i;
 	char	 c = status == 0 ? '0' : '1';
 
 	booting = 0;
+	for (i = 0; i < NPROC; i++)
+		if ((children[i].proc == PROC_FRONTEND ||
+		    children[i].proc == PROC_SHOW) &&
+		    imsg_compose_event(children[i].iev, IMSG_LISTEN, 0, 0, -1,
+		    NULL, 0) == -1)
+			fatal("%s: listen", children[i].name);
 	if (status == 0)
 		log_info("booted");
 	else
@@ -1135,6 +751,10 @@ booted(int32_t status)
 	}
 }
 
+/*
+ * nshd ends: every child killed. SIGKILL, because a child that has gone
+ * wrong may ignore SIGTERM, or be stopped, and must not outlive nshd
+ */
 static __dead void
 parent_shutdown(int status, const char *why)
 {
@@ -1143,7 +763,7 @@ parent_shutdown(int status, const char *why)
 	log_info("%s", why);
 	for (i = 0; i < NPROC; i++)
 		if (children[i].pid > 0 && children[i].proc != PROC_SYSTEM)
-			kill(children[i].pid, SIGTERM);
+			kill(children[i].pid, SIGKILL);
 	system_clear(child(PROC_SYSTEM, 0));
 	exit(status);
 }
@@ -1208,39 +828,31 @@ proc_user(enum nshd_proc proc, uid_t *uid, gid_t *gid)
 
 static struct link	*links;
 static size_t		 nlinks;
-static struct imsgev	*links_relay;
-static struct imsgev	*links_parent;
-static void		(*links_other)(struct imsg *);
 
-static void		 links_dispatch(int, short, void *);
 static void		 link_take(struct imsg *);
 static void		 link_close(struct link *);
 
 /*
- * A child's n peers, in l, each with its pipe from parent, on fd 4, or
- * none if it is down: those parent wrote before the child started are
- * taken first, so its first requests have a peer to go to. A peer gone
- * wrong is told relay. What else parent sends on fd 4 goes to other
+ * A child's n peers, in l, each with its pipe from parent, on fd 4, all
+ * of them written before the child started: fd 4 is closed once they
+ * are taken
  */
 void
-links_init(struct link *l, size_t n, struct imsgev *relay,
-    void (*other)(struct imsg *))
+links_init(struct link *l, size_t n)
 {
 	struct pollfd	 pfd;
-	struct imsgev	*iev;
+	struct imsgbuf	 ibuf;
 	struct imsg	 imsg;
 	size_t		 have = 0;
-	ssize_t		 r;
+	int		 r;
 
 	links = l;
 	nlinks = n;
-	links_relay = relay;
-	links_other = other;
-	if ((iev = imsgev_new(4, links_dispatch, 1)) == NULL)
+	if (imsgbuf_init(&ibuf, 4) == -1)
 		fatal(NULL);
-	links_parent = iev;
+	imsgbuf_allow_fdpass(&ibuf);
 	while (have < n) {
-		if ((r = imsgbuf_get(&iev->ibuf, &imsg)) == -1)
+		if ((r = imsgbuf_get(&ibuf, &imsg)) == -1)
 			fatal("%s", __func__);
 		if (r > 0) {
 			link_take(&imsg);
@@ -1252,44 +864,13 @@ links_init(struct link *l, size_t n, struct imsgev *relay,
 		pfd.events = POLLIN;
 		if (poll(&pfd, 1, -1) == -1)
 			fatal("%s: poll", __func__);
-		if ((r = imsgbuf_read(&iev->ibuf)) == -1)
+		if ((r = imsgbuf_read(&ibuf)) == -1)
 			fatal("%s", __func__);
 		if (r == 0)
 			fatalx("%s: parent's pipe closed", __func__);
 	}
-}
-
-/* parent's word of a peer; once parent is gone, relay ends the child */
-static void
-links_dispatch(int fd, short event, void *arg)
-{
-	struct imsgev	*iev = arg;
-	struct imsg	 imsg;
-	int		 n;
-
-	if (imsgev_io(iev, event) == -1) {
-		event_del(&iev->ev);
-		return;
-	}
-	for (;;) {
-		if ((n = imsgbuf_get(&iev->ibuf, &imsg)) == -1)
-			fatal("%s", __func__);
-		if (n == 0)
-			break;
-		if (imsg_get_type(&imsg) != IMSG_PEER && links_other != NULL)
-			links_other(&imsg);
-		else
-			link_take(&imsg);
-		imsg_free(&imsg);
-	}
-	imsg_event_add(iev);
-}
-
-/* to parent, on fd 4 */
-int
-parent_compose(uint32_t type, const void *data, size_t len)
-{
-	return (imsg_compose_event(links_parent, type, 0, 0, -1, data, len));
+	imsgbuf_clear(&ibuf);
+	close(4);
 }
 
 /*
@@ -1352,37 +933,18 @@ link_compose(struct link *l, uint32_t type, uint32_t id, const void *data,
 	return (imsg_compose_event(l->iev, type, id, 0, -1, data, len));
 }
 
-/*
- * l's peer gone wrong: nothing more read from it or written to it, and
- * relay told, which tells parent, which starts it again. Its pipe stays
- * open until then, so it does not see this child go and say so
- */
+/* l's peer gone wrong: this child ends, and nshd with it */
 void
 link_broken(struct link *l, const char *fmt, ...)
 {
-	struct nshd_child	 ch;
-	va_list			 ap;
-	char			*why;
+	va_list	 ap;
+	char	*why;
 
 	va_start(ap, fmt);
 	if (vasprintf(&why, fmt, ap) == -1)
 		fatal("%s", __func__);
 	va_end(ap);
-	log_warnx("%s %s", child(l->proc, 0)->name, why);
-	free(why);
-
-	if (l->iev != NULL && l->wrong == NULL) {
-		event_del(&l->iev->ev);
-		l->wrong = l->iev;
-	} else
-		link_close(l);
-	l->iev = NULL;
-	ch.proc = l->proc;
-	ch.instance = 0;
-	ch.generation = l->generation;
-	if (imsg_compose_event(links_relay, IMSG_BROKEN, 0, 0, -1, &ch,
-	    sizeof(ch)) == -1)
-		fatal("%s", __func__);
+	fatalx("%s %s", child(l->proc, 0)->name, why);
 }
 
 /* a channel on fd, read and written by handler */

@@ -46,13 +46,13 @@
 #define ARC_CAND	"candidate"
 #define ARC_TEMP	"candidate.new"
 
-static struct imsgev	*iev_relay;
+static struct imsgev	*iev_parent;
 static int		 dir;		/* ARC_DIR */
 static char		*text;		/* to keep, as it comes */
 static size_t		 len;
 static int		 past;		/* past NSHD_KEEPMAX */
 
-static void	archive_dispatch_relay(int, short, void *);
+static void	archive_dispatch_parent(int, short, void *);
 static void	archive_dispatch_config(int, short, void *);
 static void	archive_forget_config(void);
 static void	archive_open(void);
@@ -73,9 +73,9 @@ archive(int d, int v)
 	if (pledge("stdio rpath wpath cpath", NULL) == -1)
 		fatal("pledge");
 
-	if ((iev_relay = imsgev_new(3, archive_dispatch_relay, 0)) == NULL)
+	if ((iev_parent = imsgev_new(3, archive_dispatch_parent, 0)) == NULL)
 		fatal(NULL);
-	links_init(&config, 1, iev_relay, NULL);
+	links_init(&config, 1);
 	event_dispatch();
 	exit(0);
 }
@@ -100,7 +100,7 @@ archive_open(void)
 }
 
 static void
-archive_dispatch_relay(int fd, short event, void *arg)
+archive_dispatch_parent(int fd, short event, void *arg)
 {
 	struct imsgev	*iev = arg;
 	struct imsg	 imsg;

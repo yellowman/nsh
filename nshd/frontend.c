@@ -47,7 +47,7 @@
 #include "nshd.h"
 #include "control.h"
 
-static struct imsgev	*iev_relay;
+static struct imsgev	*iev_parent;
 static uid_t		 web_uid;	/* NSHD_WEB_USER's, */
 static int		 web_user;	/* if there is one */
 
@@ -63,7 +63,7 @@ union frontend_request {
 	struct nshd_load	 load;
 };
 
-static void	frontend_dispatch_relay(int, short, void *);
+static void	frontend_dispatch_parent(int, short, void *);
 static void	frontend_listen(void);
 static void	frontend_dispatch_config(int, short, void *);
 static void	frontend_forget_config(void);
@@ -97,19 +97,19 @@ frontend(int debug, int verbose)
 	if (pledge("stdio unix recvfd", NULL) == -1)
 		fatal("pledge");
 
-	if ((iev_relay = imsgev_new(3, frontend_dispatch_relay, 0)) == NULL)
+	if ((iev_parent = imsgev_new(3, frontend_dispatch_parent, 0)) == NULL)
 		fatal(NULL);
-	links_init(links, sizeof(links) / sizeof(links[0]), iev_relay, NULL);
+	links_init(links, sizeof(links) / sizeof(links[0]));
 	event_dispatch();
 	exit(0);
 }
 
 /*
- * relay's word that frontend may start, and take clients, at once, or
+ * parent's word that frontend may start, and take clients, at once, or
  * once the boot is done
  */
 static void
-frontend_dispatch_relay(int fd, short event, void *arg)
+frontend_dispatch_parent(int fd, short event, void *arg)
 {
 	struct imsgev		*iev = arg;
 	struct imsg		 imsg;
@@ -131,7 +131,7 @@ frontend_dispatch_relay(int fd, short event, void *arg)
 		} else if (imsg_get_type(&imsg) == IMSG_LISTEN)
 			frontend_listen();
 		else
-			fatalx("relay sent imsg %u, which it may not",
+			fatalx("parent sent imsg %u, which it may not",
 			    imsg_get_type(&imsg));
 		imsg_free(&imsg);
 	}

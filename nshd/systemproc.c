@@ -29,9 +29,9 @@
  * system streams it as messages, as many as SYS_WINDOW before the
  * client has read them, while it answers other requests. A stream ends
  * when its child's output does and its child is reaped, or when config
- * says its session is gone, or config starts again, which kill the
- * child; or when system ends. config sending what it may not, or
- * sending it wrong, is reported, as it went wrong.
+ * says its session is gone, which kills the child; or when system
+ * ends. config sending what it may not, or sending it wrong, ends
+ * system, and nshd with it.
  *
  * system is a session of its own, which parent clears when system goes,
  * and each stream's child leads a process group of its own, which is
@@ -73,18 +73,16 @@
  *
  * A commit confirmed begins with its minutes: BEGIN makes the record of
  * a commit not confirmed too (confirm.c), which goes back to what ran
- * before the first commit not confirmed, and tells parent, which keeps
- * its deadline too, and answers once parent says it does. RECORD, as
+ * before the first commit not confirmed. RECORD, as
  * kept, leaves it; as gone back, it puts back the one before; as left,
  * the commit ended without either, and both records stay. A SAVE
  * confirms it, which takes it away first.
  *
  * Its deadline is its minutes from when it is kept, and from its BEGIN
  * until then. Past its deadline, system takes it back, but not while a
- * commit it began has not ended, a job runs, or a BEGIN waits on
- * parent, as what that commit undoes could bring back what was taken
- * back; meanwhile the record says until when that may be, which parent
- * reads. carp is demoted, and the attempt recorded, then a job,
+ * commit it began has not ended, or a job runs, as what that commit
+ * undoes could bring back what was taken back; meanwhile the record
+ * says until when that may be. carp is demoted, and the attempt recorded, then a job,
  * JOB_RECOVER, makes what runs read as what the commit goes back to,
  * and carp is promoted again; CONFIRM_RETRY later if it fails,
  * CONFIRM_ATTEMPTS times, and then the record says it failed, and carp
@@ -116,7 +114,7 @@
  * not answered, or, its session gone, was not; BEGIN takes that
  * request, whose uid the commit record says. TEST of no session's, and
  * APPLY of no commit begun, are the boot's, and refused but while it
- * runs; BOOT is answered as done already once relay says nshd does not
+ * runs; BOOT is answered as done already once parent says nshd does not
  * boot, or BOOTED has. So a config that a client compromised can begin
  * a commit only for a request it was asked, and cannot say whose it is.
  */
@@ -302,7 +300,7 @@ struct boot {
 	int			 demoted;	/* carp demoted, for it */
 };
 
-static struct imsgev	*iev_relay;
+static struct imsgev	*iev_parent;
 static uint8_t		 units[FACTS_UNIT];	/* not yet sent */
 static size_t		 nunits;
 static TAILQ_HEAD(, stream) streams = TAILQ_HEAD_INITIALIZER(streams);
@@ -316,22 +314,18 @@ static size_t		 partlen[NSHD_PARTS];
 /* a commit confirmed begun: the record of one not confirmed before it */
 static struct confirm	 confirm_prev;
 static int		 confirm_begun;
-static int		 arming;	/* its BEGIN, waiting on parent */
 static int		 confirm_minutes;
-static uint32_t		 arming_id;
-static uint64_t		 arming_cid;
-static int		 arming_wrote;	/* the commit record, made new */
 static int		 committing;	/* a commit begun, not ended, */
 static uid_t		 commit_uid;	/* whose, */
 static int		 commit_web;	/* and if the web configurator's */
 static int		 booting;	/* BOOT run, until BOOTED */
-static int		 boot_over;	/* relay said nshd booted, or BOOTED */
+static int		 boot_over;	/* parent said nshd booted, or BOOTED */
 static TAILQ_HEAD(, asked) askeds = TAILQ_HEAD_INITIALIZER(askeds);
 static int		 nagone;	/* of them, of sessions gone */
 static struct event	 confirm_tm;	/* the deadline, or the next attempt */
 static time_t		 confirm_next;	/* the next attempt, no sooner */
 
-static void	system_dispatch_relay(int, short, void *);
+static void	system_dispatch_parent(int, short, void *);
 static void	system_dispatch_config(int, short, void *);
 static void	system_dispatch_frontend(int, short, void *);
 static void	system_forget_frontend(void);
@@ -374,11 +368,9 @@ static void	boot_saved(void);
 static int	boot_read(struct boot *);
 static int	boot_write(struct boot *);
 static long long boot_time(void);
-static int	system_arm(uint32_t, int, int);
-static void	system_parent(struct imsg *);
+static int	system_arm(int);
 static void	system_unarm(void);
 static void	system_kept(void);
-static void	system_done(void);
 static void	system_confirm(int, short, void *);
 static void	system_recover(struct confirm *);
 static void	system_attempted(int);
@@ -432,20 +424,19 @@ systemproc(int debug, int v)
 	facts_from = FACTS_SYSTEM;
 	db_create();
 
-	if ((iev_relay = imsgev_new(3, system_dispatch_relay, 0)) == NULL)
+	if ((iev_parent = imsgev_new(3, system_dispatch_parent, 0)) == NULL)
 		fatal(NULL);
 	evtimer_set(&confirm_tm, system_confirm, NULL);
-	links_init(links, sizeof(links) / sizeof(links[0]), iev_relay,
-	    system_parent);
+	links_init(links, sizeof(links) / sizeof(links[0]));
 	signal_set(&ev_sigchld, SIGCHLD, system_sigchld, NULL);
 	signal_add(&ev_sigchld, NULL);
 	event_dispatch();
 	system_exit();
 }
 
-/* relay's word that system may start, and whether nshd boots */
+/* parent's word that system may start, and whether nshd boots */
 static void
-system_dispatch_relay(int fd, short event, void *arg)
+system_dispatch_parent(int fd, short event, void *arg)
 {
 	struct imsgev		*iev = arg;
 	struct imsg		 imsg;
@@ -462,7 +453,7 @@ system_dispatch_relay(int fd, short event, void *arg)
 			break;
 		if (imsg_get_type(&imsg) != IMSG_STARTUP ||
 		    imsg_get_data(&imsg, &st, sizeof(st)) == -1) {
-			log_warnx("relay sent imsg %u, which it may not",
+			log_warnx("parent sent imsg %u, which it may not",
 			    imsg_get_type(&imsg));
 			system_exit();
 		}
@@ -1396,19 +1387,10 @@ system_begin(uint32_t id, struct nshd_begin *bg)
 			goto done;
 		wrote = 1;
 	}
-	if (bg->minutes > 0) {
-		if (system_arm(id, bg->minutes, wrote) == -1) {
-			if (wrote)
-				record_clear();
-			goto done;
-		}
-		/* answered once parent keeps its deadline */
-		if (printed_text(links[CONFIG].iev, IMSG_SYS_TEXT, id) == -1)
-			fatal("%s", __func__);
-		committing = 1;
-		record_free(&rec);
-		system_parts_free();
-		return;
+	if (bg->minutes > 0 && system_arm(bg->minutes) == -1) {
+		if (wrote)
+			record_clear();
+		goto done;
 	}
 	committing = 1;
 	status = 0;
@@ -1419,17 +1401,15 @@ system_begin(uint32_t id, struct nshd_begin *bg)
 }
 
 /*
- * The record of a commit not confirmed, for the commit begun, request
- * id, its deadline minutes from now: it goes back to what ran before
- * the first commit not confirmed, or else this one; the record before
- * it kept, to put back if this one goes back; and parent told. -1,
- * said, if not
+ * The record of a commit not confirmed, for the commit begun, its
+ * deadline minutes from now: it goes back to what ran before the first
+ * commit not confirmed, or else this one; the record before it kept, to
+ * put back if this one goes back. -1, said, if not
  */
 static int
-system_arm(uint32_t id, int minutes, int wrote)
+system_arm(int minutes)
 {
 	struct confirm		 cf;
-	struct nshd_confirm	 cm;
 
 	confirm_free(&confirm_prev);
 	confirm_begun = 0;
@@ -1458,44 +1438,7 @@ system_arm(uint32_t id, int minutes, int wrote)
 		return (-1);
 	}
 	confirm_begun = 1;
-	memset(&cm, 0, sizeof(cm));
-	cm.id = cf.id;
-	if (parent_compose(IMSG_CONFIRM_ARM, &cm, sizeof(cm)) == -1)
-		fatal("%s", __func__);
-	arming = 1;
-	arming_id = id;
-	arming_cid = cf.id;
-	arming_wrote = wrote;
 	return (0);
-}
-
-/*
- * parent's word that it keeps the deadline of the commit not confirmed,
- * or not: if not, the commit begun is refused, and the records put back
- */
-static void
-system_parent(struct imsg *imsg)
-{
-	struct nshd_confirm	 cm;
-
-	if (imsg_get_type(imsg) != IMSG_CONFIRM_ARMED ||
-	    imsg_get_fd(imsg) != -1 ||
-	    imsg_get_data(imsg, &cm, sizeof(cm)) == -1 || !arming ||
-	    cm.id != arming_cid)
-		fatalx("parent sent imsg %u, which it may not",
-		    imsg_get_type(imsg));
-	arming = 0;
-	if (cm.armed) {
-		system_printed(arming_id, 0);
-		return;
-	}
-	printf("%% nshd: no deadline is kept: commit refused\n");
-	system_unarm();
-	if (arming_wrote)
-		record_clear();
-	committing = 0;
-	system_printed(arming_id, 1);
-	system_confirm(-1, 0, NULL);
 }
 
 /* the record of a commit not confirmed put back as it was before */
@@ -1506,8 +1449,6 @@ system_unarm(void)
 	    confirm_write(&confirm_prev)) == -1)
 		printf("%% nshd: the record of a commit not confirmed: %s\n",
 		    strerror(errno));
-	else
-		system_done();
 	confirm_free(&confirm_prev);
 	confirm_begun = 0;
 }
@@ -1526,26 +1467,13 @@ system_kept(void)
 	if (confirm_write(&cf) == -1)
 		printf("%% nshd: the record of a commit not confirmed: %s\n",
 		    strerror(errno));
-	else
-		system_done();
 	confirm_free(&cf);
-}
-
-/* parent told the record of a commit not confirmed is gone, or another */
-static void
-system_done(void)
-{
-	struct nshd_confirm	 cm;
-
-	memset(&cm, 0, sizeof(cm));
-	if (parent_compose(IMSG_CONFIRM_DONE, &cm, sizeof(cm)) == -1)
-		fatal("%s", __func__);
 }
 
 /*
  * The commit not confirmed, past its deadline, or its next attempt:
- * taken back, if no commit begun or job is in the way; if one is,
- * parent told how long it may be, and this comes again as it ends;
+ * taken back, if no commit begun or job is in the way; if one is, the
+ * record says how long it may be, and this comes again as it ends;
  * before then, the timer set for then
  */
 static void
@@ -1575,8 +1503,6 @@ system_confirm(int fd, short event, void *arg)
 		if (confirm_write(&cf) == -1)
 			logit(LOG_CRIT, "the record of a commit not confirmed: "
 			    "%s", strerror(errno));
-		else
-			system_done();
 	} else if (cf.state == CONFIRM_WAITING)
 		system_recover(&cf);
 	confirm_free(&cf);
@@ -1614,8 +1540,6 @@ system_recover(struct confirm *cf)
 	if (confirm_write(cf) == -1)
 		logit(LOG_CRIT, "the record of a commit not confirmed: %s",
 		    strerror(errno));
-	else
-		system_done();
 	printed_log();
 	j = system_job_new(0, JOB_RECOVER);
 	j->back = cf->back;
@@ -1652,8 +1576,6 @@ system_attempted(int ok)
 		if (confirm_write(&cf) == -1)
 			logit(LOG_CRIT, "the record of a commit not confirmed: "
 			    "%s", strerror(errno));
-		else
-			system_done();
 	} else
 		system_failed(&cf);
 	confirm_free(&cf);
@@ -1670,7 +1592,6 @@ system_taken(struct confirm *cf, const char *how)
 	}
 	if (cf->demoted)
 		carplock(-128);
-	system_done();
 	log_warnx("commit not confirmed: %s", how);
 	printed_log();
 }
@@ -1684,8 +1605,6 @@ system_failed(struct confirm *cf)
 	if (confirm_write(cf) == -1)
 		logit(LOG_CRIT, "the record of a commit not confirmed: %s",
 		    strerror(errno));
-	else
-		system_done();
 	logit(LOG_CRIT, "commit not confirmed: not rolled back after %d "
 	    "attempts%s", CONFIRM_ATTEMPTS, cf->demoted ?
 	    ", carp stays demoted" : "");
@@ -1784,7 +1703,6 @@ system_unconfirm(void)
 		else {
 			if (r == 0 && cf.demoted)
 				carplock(-128);
-			system_done();
 			return (1);
 		}
 	}

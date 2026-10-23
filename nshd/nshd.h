@@ -208,18 +208,7 @@ struct nshd_test {
 	char		name[32];
 };
 
-/* system to parent, and back: the record of a commit not confirmed, id's */
-struct nshd_confirm {
-	uint64_t	id;
-	int32_t		armed;		/* ARMED: parent keeps its deadline */
-};
-
-/*
- * parent to relay: a child's pipe, or that it is down; parent to a
- * child: a peer's pipe, or that it is down; a child to relay, and relay
- * to parent: a peer gone wrong. Each start of a child is a generation
- * of it, and instance tells the shows apart
- */
+/* parent to a child: a peer's pipe; instance tells the shows apart */
 struct nshd_child {
 	int32_t			proc;
 	int32_t			instance;
@@ -227,8 +216,9 @@ struct nshd_child {
 };
 
 /*
- * relay to a child, at each start: its generation, and whether the
- * boot is not done, until which frontend and the shows wait for LISTEN
+ * parent to a child, once it may start: its generation, and whether
+ * the boot is not done, until which frontend and the shows wait for
+ * LISTEN
  */
 struct nshd_startup {
 	uint32_t		generation;
@@ -248,7 +238,6 @@ struct nshd_peer {
 
 enum nshd_proc {
 	PROC_PARENT,
-	PROC_RELAY,
 	PROC_SHOW,
 	PROC_FRONTEND,
 	PROC_CONFIG,
@@ -257,7 +246,6 @@ enum nshd_proc {
 };
 
 #define SHOWS		4	/* shows, which share the read-only socket */
-#define NCHILD		(4 + SHOWS)	/* the processes relay joins */
 
 enum nshd_imsg {
 	IMSG_NONE,
@@ -271,11 +259,8 @@ enum nshd_imsg {
 
 	/* between nshd's processes */
 	IMSG_CTL_CLOSE,		/* frontend to config: a session is gone */
-	IMSG_PIPE,		/* parent to relay: nshd_child, and its pipe */
-	IMSG_DOWN,		/* parent to relay: nshd_child stays down */
-	IMSG_BROKEN,		/* to relay, and parent: nshd_child gone wrong */
-	IMSG_STARTUP,		/* relay to a child: nshd_startup */
-	IMSG_PEER,		/* parent to a child: nshd_child, its pipe or none */
+	IMSG_STARTUP,		/* parent to a child: nshd_startup */
+	IMSG_PEER,		/* parent to a child: nshd_child, its pipe */
 	IMSG_SYS_SNAPSHOT,	/* config to system: the running configuration */
 	IMSG_SYS_TEXT,		/* system to config: text */
 	IMSG_SYS_END,		/* system to config: nshd_result */
@@ -303,11 +288,6 @@ enum nshd_imsg {
 	IMSG_SYS_ROLLBACK_LIST,	/* show rollback's list */
 	IMSG_SYS_TEST,		/* nshd_test: the test run, its status */
 
-	/* system to parent, on parent's pipe to it, and parent's answer */
-	IMSG_CONFIRM_ARM,	/* nshd_confirm: the record made, its deadline */
-	IMSG_CONFIRM_ARMED,	/* nshd_confirm: kept, or not */
-	IMSG_CONFIRM_DONE,	/* nshd_confirm: the record gone, or another */
-
 	/* config and archive: the shared candidate, as text */
 	IMSG_ARC_TEXT,		/* text of it, either way */
 	IMSG_ARC_KEEP,		/* config: nshd_keep; keep the text sent since */
@@ -320,9 +300,9 @@ enum nshd_imsg {
 	IMSG_SYS_BOOT,		/* the boot begun, or done already */
 	IMSG_SYS_BOOTED,	/* nshd_result: the boot ran, and how */
 
-	/* the boot's end, config to relay and relay to parent, and after */
+	/* the boot's end, config to parent, and after */
 	IMSG_BOOTED,		/* nshd_result: how it went */
-	IMSG_LISTEN,		/* relay to frontend and each show: take clients */
+	IMSG_LISTEN,		/* parent to frontend and each show: take clients */
 
 	/* with clients, on the read-write socket, and config to system */
 	IMSG_CTL_ENABLE,	/* nshd_enable; with a secret a token, a result */
@@ -382,9 +362,7 @@ void		 child_start(const char *, int, int);
 void		 privdrop(enum nshd_proc);
 int		 proc_user(enum nshd_proc, uid_t *, gid_t *);
 int		 joined(enum nshd_proc, enum nshd_proc);
-void		 links_init(struct link *, size_t, struct imsgev *,
-		    void (*)(struct imsg *));
-int		 parent_compose(uint32_t, const void *, size_t);
+void		 links_init(struct link *, size_t);
 int		 link_compose(struct link *, uint32_t, uint32_t, const void *,
 		    size_t);
 void		 link_broken(struct link *, const char *, ...)
@@ -408,7 +386,6 @@ int		 confirm_clear(void);
 void		 confirm_free(struct confirm *);
 
 /* each process but parent */
-__dead void	 relay(int, int, int);
 __dead void	 showproc(int, int, int);
 __dead void	 frontend(int, int);
 __dead void	 configproc(int, int);

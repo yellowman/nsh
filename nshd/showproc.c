@@ -62,9 +62,9 @@ struct answer {
 	int			 failed;
 };
 
-static struct imsgev	*iev_relay;
+static struct imsgev	*iev_parent;
 
-static void	show_dispatch_relay(int, short, void *);
+static void	show_dispatch_parent(int, short, void *);
 static void	show_listen(void);
 static int	show_client(struct ctl_conn *, struct imsg *);
 static int	show_answer(uint32_t, int32_t, const char *);
@@ -87,14 +87,14 @@ showproc(int debug, int verbose, int instance)
 		log_warn("%s", _PATH_UTMP);
 	privdrop(PROC_SHOW);
 
-	if ((iev_relay = imsgev_new(3, show_dispatch_relay, 0)) == NULL)
+	if ((iev_parent = imsgev_new(3, show_dispatch_parent, 0)) == NULL)
 		fatal(NULL);
 	event_dispatch();
 	exit(0);
 }
 
 static void
-show_dispatch_relay(int fd, short event, void *arg)
+show_dispatch_parent(int fd, short event, void *arg)
 {
 	struct imsgev		*iev = arg;
 	struct imsg		 imsg;
@@ -113,7 +113,7 @@ show_dispatch_relay(int fd, short event, void *arg)
 		/* clients taken at once, or once the boot is done */
 		case IMSG_STARTUP:
 			if (imsg_get_data(&imsg, &st, sizeof(st)) == -1)
-				fatalx("relay sent a startup show cannot read");
+				fatalx("parent sent a startup show cannot read");
 			if (!st.boot)
 				show_listen();
 			break;
