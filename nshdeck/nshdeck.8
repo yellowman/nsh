@@ -168,8 +168,18 @@ sent, each an object with its kind and fields.
 GET, with
 .Ar what :
 running, startup, candidate, diff, or rollback, with
+.Ar n
+or not; or changes, with
 .Ar n .
-The configuration, as text.
+The configuration, as text: rollback without
+.Ar n
+lists those saved, and changes is what configuration
+.Ar n
+changed from the one saved before it, as
+.Cm show rollback Ar n Cm diff
+in
+.Xr nsh 8
+shows it.
 .It Cm configure
 POST, with
 .Ar mode :

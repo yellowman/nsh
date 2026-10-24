@@ -231,9 +231,47 @@ function view() {
 
 		if ($("config-form").what.value !== what)
 			return;
-		$("config-out").textContent = none ? "" : said(j);
+		if (what === "diff" && !none)
+			diffInto($("config-out"), said(j));
+		else
+			$("config-out").textContent = none ? "" : said(j);
 		$("config-empty").textContent = none ? "There is no candidate " +
 		    "until you Enter configure." : VIEWS[what][1];
+	});
+}
+
+/* a diff's text into pre, a line each, colored by what it does */
+function diffInto(pre, text) {
+	pre.textContent = "";
+	pre.classList.add("diff");
+	if (text === "")
+		return;
+	text.replace(/\n$/, "").split("\n").forEach(function (l) {
+		var c = /^(---|\+\+\+) /.test(l) ? "hdr" : l[0] === "+" ? "add" :
+		    l[0] === "-" ? "del" : l[0] === "%" ? "msg" : "";
+
+		pre.appendChild(el("span", l || " ", c));
+	});
+}
+
+/* what saved configuration n changed, under its row, or not again */
+function changed(tr, n) {
+	var b = tr.querySelector(".twisty"), next = tr.nextSibling, pre;
+
+	if (next !== null && next.classList.contains("changes")) {
+		next.remove();
+		b.setAttribute("aria-expanded", "false");
+		return;
+	}
+	next = el("tr", null, "changes");
+	next.appendChild(el("td"));
+	next.firstChild.colSpan = 5;
+	pre = next.firstChild.appendChild(el("pre", null, "term"));
+	tr.after(next);
+	b.setAttribute("aria-expanded", "true");
+	ask("GET", "config", { what: "changes", n: n }).then(function (j) {
+		diffInto(pre, said(j) || "% No changes from the configuration " +
+		    "saved before it\n");
 	});
 }
 
@@ -243,17 +281,27 @@ function saved() {
 		var t = $("saved-table"), head = el("tr"), n = 0;
 
 		t.textContent = "";
-		["", "Saved", "By", "Comment"].forEach(function (h) {
+		["", "", "Saved", "By", "Comment"].forEach(function (h) {
 			head.appendChild(el("th", h));
 		});
 		said(j).split("\n").forEach(function (l) {
-			var m = /^ *(\d+)  (.*)$/.exec(l), tr, f;
+			var m = /^ *(\d+)  (.*)$/.exec(l), tr, f, b;
 
 			if (m === null)
 				return;
 			f = m[2].split(/ {2,}/);
 			tr = el("tr", null, Number(m[1]) === chosen ?
 			    "sel" : "");
+			tr.dataset.n = m[1];
+			b = el("button", null, "twisty");
+			b.type = "button";
+			b.setAttribute("aria-expanded", "false");
+			b.setAttribute("aria-label", "What " + m[1] + " changed");
+			b.addEventListener("click", function (e) {
+				e.stopPropagation();
+				changed(tr, Number(m[1]));
+			});
+			tr.appendChild(el("td")).appendChild(b);
 			tr.appendChild(el("td", m[1], "num"));
 			tr.appendChild(el("td", f[0], "mono"));
 			tr.appendChild(el("td", f[1] || ""));
@@ -276,8 +324,7 @@ function saved() {
 function choose(n, f) {
 	chosen = n;
 	$("saved-table").querySelectorAll("tr").forEach(function (tr) {
-		tr.classList.toggle("sel", tr.firstChild.textContent ===
-		    String(n));
+		tr.classList.toggle("sel", tr.dataset.n === String(n));
 	});
 	$("saved-name").textContent = "Saved " + n + " · " + f[0] +
 	    (f[1] ? " · " + f[1] : "");

@@ -732,6 +732,7 @@ int commit_booted(struct cnode *, struct cnode *);
 int commit_reads(char *, size_t, char *, size_t);
 int commit_recover(char *, size_t);
 int rollback_text(int, FILE *);
+int rollback_diff(int, FILE *);
 void rollback_list(FILE *);
 int script_make(struct cnode *, struct cnode *, struct script *);
 int script_run(struct script *);

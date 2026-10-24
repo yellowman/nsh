@@ -364,6 +364,7 @@ enum nshd_imsg {
 	IMSG_SYS_RECORD,	/* nshd_record: the commit begun ended */
 	IMSG_SYS_ROLLBACK_READ,	/* nshd_rollback: configuration n */
 	IMSG_SYS_ROLLBACK_LIST,	/* show rollback's list */
+	IMSG_SYS_ROLLBACK_DIFF,	/* nshd_rollback: what configuration n changed */
 	IMSG_SYS_TEST,		/* nshd_test: the test run, its status */
 
 	/* config and archive: the shared candidate, as text */

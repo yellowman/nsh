@@ -451,7 +451,7 @@ static void	system_taken(struct confirm *, const char *);
 static void	system_failed(struct confirm *);
 static void	system_went(int);
 static char	*system_running(size_t *);
-static void	system_rollback(uint32_t, int);
+static void	system_rollback(uint32_t, int, int);
 static void	system_test(uint32_t, struct nshd_whose *, char *);
 static int	system_admin_test(char *);
 static void	system_printed(uint32_t, int32_t);
@@ -854,6 +854,7 @@ system_whole(uint32_t type, const void *data, size_t len)
 		return (memchr(sv.comment, '\0', sizeof(sv.comment)) ==
 		    NULL ? -1 : 0);
 	case IMSG_SYS_ROLLBACK_READ:
+	case IMSG_SYS_ROLLBACK_DIFF:
 		if (len != sizeof(rb))
 			return (-1);
 		memcpy(&rb, data, len);
@@ -925,14 +926,15 @@ system_request(uint32_t type, uint32_t id, const void *data, size_t len)
 		system_back(id, rc.how);
 		break;
 	case IMSG_SYS_ROLLBACK_READ:
+	case IMSG_SYS_ROLLBACK_DIFF:
 		memcpy(&rb, data, sizeof(rb));
-		system_rollback(id, rb.n);
+		system_rollback(id, rb.n, type == IMSG_SYS_ROLLBACK_DIFF);
 		break;
 	case IMSG_SYS_ROLLBACK_LIST:
-		system_rollback(id, -1);
+		system_rollback(id, -1, 0);
 		break;
 	case IMSG_SYS_SAVED:
-		system_rollback(id, -2);
+		system_rollback(id, -2, 0);
 		break;
 	case IMSG_SYS_BOOT:
 		system_boot(id);
@@ -2389,11 +2391,11 @@ boot_saved(void)
 }
 
 /*
- * configuration n as it was saved, or with n -1, the list of them, or
- * with -2, the saved configuration
+ * configuration n as it was saved, or with diff, what it changed, or
+ * with n -1, the list of them, or with -2, the saved configuration
  */
 static void
-system_rollback(uint32_t id, int n)
+system_rollback(uint32_t id, int n, int diff)
 {
 	char	*buf = NULL;
 	size_t	 len = 0;
@@ -2406,6 +2408,8 @@ system_rollback(uint32_t id, int n)
 		rollback_list(f);
 	else if (n == -2)
 		r = saved_text(f);
+	else if (diff)
+		r = rollback_diff(n, f);
 	else
 		r = rollback_text(n, f);
 	if (fclose(f) == EOF)

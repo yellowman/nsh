@@ -538,7 +538,7 @@ Menu showlist[] = {
 	{ "active-config", "Configuration of active context", CMPL0 0, 0, 0, 0, pr_a_conf },
 	{ "diff-config", "Show differences between startup and running config, or running and candidate", CMPL0 0, 0, 0, 0, pr_conf_diff },
 	{ "candidate-config", "Candidate configuration of configure private", CMPL0 0, 0, 0, 0, pr_cand_conf },
-	{ "rollback",	"Configurations saved, or one of them", CMPL0 0, 0, 0, 1, pr_rollback },
+	{ "rollback",	"Configurations saved, one of them, or what it changed", CMPL0 0, 0, 0, 2, pr_rollback },
 	{ "environment", "Show environment variables",	CMPL(e) 0, 0, 0, 1, pr_environment },
 	{ "?",		"Options",		CMPL0 0, 0, 0, 0, show_help },
 	{ "help",	0,			CMPL0 0, 0, 0, 0, show_help },

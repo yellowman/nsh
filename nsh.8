@@ -3926,7 +3926,7 @@ In
 .Cm configure private ,
 display the candidate configuration.
 .Pp
-.Ic show rollback Op Ar N
+.Ic show rollback Op Ar N Op Cm diff
 .Pp
 Display when each configuration kept by
 .Cm commit
@@ -3934,6 +3934,15 @@ was saved, who saved it and their comment, numbered from 0, the last
 saved, or display configuration
 .Ar N ,
 which begins with a comment line saying who saved it and why.
+With
+.Cm diff ,
+display what configuration
+.Ar N
+changed from the one saved before it,
+.Ar N
++ 1, as
+.Cm show diff-config
+displays a difference.
 This command needs the view permission.
 .Pp
 .Ic show environment Op Ar NAME

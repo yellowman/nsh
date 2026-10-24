@@ -601,12 +601,16 @@ front_fields(const char *form, int fields, struct deck_request *r)
 	/* a configuration's what, if none was named */
 	if ((fields & F_WHAT) && (seen & F_WHAT) == 0)
 		strlcpy(r->text, "running-config", sizeof(r->text));
-	if ((fields & F_WHAT) && (seen & F_N) &&
-	    strcmp(r->text, "rollback") != 0)
-		return (-1);
-	if ((fields & F_WHAT) && strcmp(r->text, "rollback") == 0 &&
-	    (seen & F_N))
+	/* n is rollback's, and changes', which needs it: what n changed */
+	if ((fields & F_WHAT) && strcmp(r->text, "changes") == 0) {
+		if ((seen & F_N) == 0)
+			return (-1);
+		snprintf(r->text, sizeof(r->text), "rollback %d diff", r->n);
+	} else if ((fields & F_WHAT) && (seen & F_N)) {
+		if (strcmp(r->text, "rollback") != 0)
+			return (-1);
 		snprintf(r->text, sizeof(r->text), "rollback %d", r->n);
+	}
 	return (0);
 }
 
@@ -615,7 +619,7 @@ static int
 front_field(int f, const char *v, struct deck_request *r)
 {
 	static const char	*whats[] = { "running", "startup",
-				    "candidate", "diff", "rollback" };
+				    "candidate", "diff", "rollback", "changes" };
 	static const char	*modes[] = { "private", "shared",
 				    "exclusive", "terminal" };
 	static const char	*logs[] = { "daemon", "messages", "authlog",
@@ -649,7 +653,7 @@ front_field(int f, const char *v, struct deck_request *r)
 		for (i = 0; i < sizeof(whats) / sizeof(whats[0]); i++)
 			if (strcmp(v, whats[i]) == 0) {
 				snprintf(r->text, sizeof(r->text), "%s%s",
-				    whats[i], i == 4 ? "" : "-config");
+				    whats[i], i >= 4 ? "" : "-config");
 				return (0);
 			}
 		return (-1);

@@ -1118,6 +1118,58 @@ pre.term.tall {
 	gap: 16px;
 }
 
+/* a diff: lines added green, taken away red, each on its own tint */
+pre.diff span {
+	display: block;
+	margin: 0 -12px;
+	padding: 0 12px;
+}
+
+pre.diff .add {
+	color: var(--on);
+	background: color-mix(in srgb, var(--on) 10%, transparent);
+}
+
+pre.diff .del {
+	color: var(--bad);
+	background: color-mix(in srgb, var(--bad) 10%, transparent);
+}
+
+pre.diff .hdr, pre.diff .msg {
+	color: var(--dim);
+}
+
+/* a row's arrow, which opens what it changed under it */
+button.twisty {
+	width: 20px;
+	height: 20px;
+	padding: 0;
+	background: none;
+	box-shadow: none;
+	color: var(--dim);
+}
+
+button.twisty::before {
+	content: "";
+	display: inline-block;
+	width: 6px;
+	height: 6px;
+	border: solid currentColor;
+	border-width: 0 1.5px 1.5px 0;
+	transform: rotate(-45deg);
+	transition: transform .15s;
+}
+
+button.twisty[aria-expanded=true]::before {
+	transform: rotate(45deg);
+}
+
+.pick tr.changes td, .pick tr.changes:hover td {
+	padding: 0 10px 10px 36px;
+	background: none;
+	cursor: default;
+}
+
 #op-kinds td.mono {
 	white-space: nowrap;
 }

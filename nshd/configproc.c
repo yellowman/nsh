@@ -741,6 +741,7 @@ config_show(uint32_t session, struct nshd_show *show)
 	struct session		*sp;
 	struct request		*r;
 	const char		*errstr;
+	char			 num[16], *p;
 	uint32_t		 type = IMSG_SYS_SHOW;
 	const void		*data = show;
 	size_t			 len = sizeof(*show);
@@ -775,14 +776,19 @@ config_show(uint32_t session, struct nshd_show *show)
 		data = NULL;
 		len = 0;
 	} else if (strncmp(show->words, "rollback ", 9) == 0) {
-		rb.n = strtonum(show->words + 9, 0, NSHD_ROLLBACKS - 1,
-		    &errstr);
+		/* rollback N, or rollback N diff, what N changed */
+		strlcpy(num, show->words + 9, sizeof(num));
+		type = IMSG_SYS_ROLLBACK_READ;
+		if ((p = strchr(num, ' ')) != NULL && strcmp(p, " diff") == 0) {
+			*p = '\0';
+			type = IMSG_SYS_ROLLBACK_DIFF;
+		}
+		rb.n = strtonum(num, 0, NSHD_ROLLBACKS - 1, &errstr);
 		if (errstr != NULL) {
 			config_answer(session, 1, "%% rollback %s is %s\n",
 			    show->words + 9, errstr);
 			return;
 		}
-		type = IMSG_SYS_ROLLBACK_READ;
 		data = &rb;
 		len = sizeof(rb);
 		kind = REQ_TEXT;

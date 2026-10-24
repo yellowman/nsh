@@ -1930,17 +1930,22 @@ done:
 }
 
 /*
- * show rollback [N]: when each configuration kept was saved, who saved
- * it and their comment, or configuration N
+ * show rollback [N [diff]]: when each configuration kept was saved, who
+ * saved it and their comment, or configuration N, or what it changed
  */
 int
 pr_rollback(int argc, char **argv, ...)
 {
-	char words[sizeof("rollback 99")];
+	char words[sizeof("rollback 99 diff")];
 	const char *errstr;
 	int n;
 
-	if (argc == 3) {
+	if (argc == 4 && !isprefix(argv[3], "diff")) {
+		printf("%% show rollback N takes diff after N, not %s\n",
+		    argv[3]);
+		return -1;
+	}
+	if (argc >= 3) {
 		n = strtonum(argv[2], 0, ROLLBACKS - 1, &errstr);
 		if (errstr != NULL) {
 			printf("%% rollback %s is %s\n", argv[2], errstr);
@@ -1948,8 +1953,9 @@ pr_rollback(int argc, char **argv, ...)
 		}
 	}
 	/* nshd's */
-	if (argc == 3)
-		snprintf(words, sizeof(words), "rollback %d", n);
+	if (argc >= 3)
+		snprintf(words, sizeof(words), "rollback %d%s", n,
+		    argc == 4 ? " diff" : "");
 	else
 		strlcpy(words, "rollback", sizeof(words));
 	return nshd_show(words) ? 0 : -1;
@@ -1971,6 +1977,41 @@ rollback_text(int n, FILE *out)
 		fputs(line, out);
 	fclose(f);
 	return 0;
+}
+
+/*
+ * What configuration n changed from the one saved before it, n + 1,
+ * block by block as show diff-config shows it, to out, or nothing if
+ * it changed nothing; said, if n + 1 is not kept. -1 if either cannot
+ * be read, said why
+ */
+int
+rollback_diff(int n, FILE *out)
+{
+	char old[PATH_MAX], new[PATH_MAX];
+	struct cnode *a = NULL, *b = NULL;
+	int r = -1;
+
+	snprintf(new, sizeof(new), ROLLBACK, n);
+	snprintf(old, sizeof(old), ROLLBACK, n + 1);
+	if (access(new, R_OK) == -1) {
+		printf("%% rollback %d: %s\n", n, strerror(errno));
+		return -1;
+	}
+	if (access(old, R_OK) == -1 && errno == ENOENT) {
+		printf("%% No configuration saved before rollback %d is kept\n",
+		    n);
+		return 0;
+	}
+	if ((a = conftree_read(old, conf_mode, conf_ordered)) != NULL &&
+	    (b = conftree_read(new, conf_mode, conf_ordered)) != NULL &&
+	    (r = conftree_compare(NULL, a, b)) > 0) {
+		fprintf(out, "--- rollback %d\n+++ rollback %d\n", n + 1, n);
+		r = conftree_compare(out, a, b);
+	}
+	conftree_free(a);
+	conftree_free(b);
+	return r == -1 ? -1 : 0;
 }
 
 /* When each configuration kept was saved, who saved it and why, to out */
