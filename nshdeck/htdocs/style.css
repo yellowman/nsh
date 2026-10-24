@@ -783,6 +783,23 @@ table.grid {
 	text-align: right;
 }
 
+.grid td.descr {
+	width: 100%;
+	min-width: 140px;
+}
+
+#if-table td:not(.descr) {
+	white-space: nowrap;
+}
+
+.grid td.type {
+	max-width: 110px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--dim);
+}
+
 /* Network: the interfaces, and the inspector of one */
 
 .netsplit {

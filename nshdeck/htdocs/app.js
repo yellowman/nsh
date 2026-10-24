@@ -386,26 +386,28 @@ function iftable() {
 	var t = $("if-table"), head = el("tr");
 
 	t.textContent = "";
-	["", "Interface", "Type", "Link", "Addresses", "MTU", "rdomain",
-	    "Description"].forEach(function (h) {
+	["", "Interface", "Description", "Link", "Addresses", "MTU",
+	    "rdomain", "Type"].forEach(function (h) {
 		head.appendChild(el("th", h));
 	});
 	t.appendChild(head);
 	ifs.forEach(function (r) {
 		var tr = el("tr", null, r.name === selected ? "sel" : "");
-		var led = el("td");
+		var led = el("td"), type = el("td", r.type || "", "type");
 
 		led.appendChild(el("i", null, "led " + state(r)));
 		tr.appendChild(led);
 		tr.appendChild(el("td", r.name, "mono"));
-		tr.appendChild(el("td", r.type || ""));
+		tr.appendChild(el("td", r.description || "", "descr"));
 		tr.appendChild(el("td", r.link || ""));
 		tr.appendChild(el("td", addresses(r.name).join(" "), "mono"));
 		tr.appendChild(el("td", r.mtu !== undefined ? r.mtu : "",
 		    "num"));
 		tr.appendChild(el("td", r.rdomain !== undefined ? r.rdomain :
 		    "", "num"));
-		tr.appendChild(el("td", r.description || ""));
+		/* short: the whole of it in its title */
+		type.title = r.type || "";
+		tr.appendChild(type);
 		tr.addEventListener("click", function () {
 			selected = r.name;
 			iftable();
