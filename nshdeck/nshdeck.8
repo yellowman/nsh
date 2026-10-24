@@ -29,13 +29,20 @@ answers the requests of a web page, which
 passes it over FastCGI, with what
 .Xr nshd 8
 answers.
-The page shows each show as tables, the configuration as text, and
-takes lines of configuration, commits, rollbacks and operations, as
+The page has six workspaces: an overview, with the box's ports drawn
+as its face shows them and the logical interfaces grouped by what they
+are on; network, routing, security and services, each with its shows,
+as tables; and the system and its changes, which takes lines of
+configuration, commits, rollbacks and operations, as
 .Xr nsh 8
-does; it follows
+does, and shows the configuration as text.
+Tab completes a line as in
+.Xr nsh 8 ,
+and ? lists what may come next.
+The page follows
 .Nm nshd Ns 's
-notices and logs as they come, and shows a show again when interfaces
-or routes change, if asked.
+notices and logs as they come, counts down a commit waiting to be
+confirmed, and draws the interfaces again when they change.
 Each user logs in with a name and password, as
 .Nm nshd
 checks them, and has the permissions of the user's login class, without
