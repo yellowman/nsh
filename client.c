@@ -23,7 +23,9 @@
  * while nshd answers closes it, and so does nshd going. nsh's other
  * connections there, as shows of what only nshd's system reads, are
  * sessions of their own, with the same permissions. Where nshd does not
- * run, or the user may not use its socket, nsh is not privileged.
+ * run, or the user may not use its socket, nsh is not privileged. nsh
+ * checks the permissions a program needs itself (nshd_runs()), and runs
+ * none for anyone but root without nshd's answer.
  *
  * configure private, configure and configure exclusive are that
  * session's: what edits the candidate, and leaving a mode, go to nshd
@@ -67,7 +69,7 @@ static int		sfd = -1;
 static struct imsgbuf	sib;
 
 static int	nshd_next(struct imsgbuf *, struct imsg *, const sigset_t *);
-static int	nshd_open(char *, struct imsgbuf *);
+static int	nshd_open(char *, struct imsgbuf *, int32_t *);
 static void	nshd_why(void);
 static int	nshd_ask(int, uint32_t, const void *, size_t, struct facts_in *,
 		    int32_t *);
@@ -110,11 +112,11 @@ nshd_sigint(int sig)
 }
 
 /*
- * A session on nshd's socket at path: its descriptor, or -1, with
- * EPROTO for an nshd that said something else.
+ * A session on nshd's socket at path, and its permissions, if perms: its
+ * descriptor, or -1, with EPROTO for an nshd that said something else.
  */
 static int
-nshd_open(char *path, struct imsgbuf *ib)
+nshd_open(char *path, struct imsgbuf *ib, int32_t *perms)
 {
 	struct sockaddr_un	 sun;
 	struct nshd_hello	 hello;
@@ -159,6 +161,8 @@ nshd_open(char *path, struct imsgbuf *ib)
 		return (-1);
 	}
 	imsg_free(&imsg);
+	if (perms != NULL)
+		*perms = s.perms;
 	return (fd);
 }
 
@@ -178,6 +182,49 @@ nshd_why(void)
 }
 
 /*
+ * May nsh run the program cmd, as the user's login class says: ping and
+ * traceroute need operate, clear nothing, and any other exec. root may
+ * run any. 1 if it may, else 0, said why
+ */
+int
+nshd_runs(const char *cmd)
+{
+	static const struct {
+		const char	*path;
+		int		 need;
+	} progs[] = {
+		{ PING,		NSHD_OPERATE },
+		{ PING6,	NSHD_OPERATE },
+		{ TRACERT,	NSHD_OPERATE },
+		{ TRACERT6,	NSHD_OPERATE },
+		{ CLEAR,	0 },
+	};
+	struct imsgbuf	 ib;
+	size_t		 i;
+	int32_t		 perms;
+	int		 fd, need = NSHD_EXEC;
+
+	if (getuid() == 0)
+		return (1);
+	for (i = 0; i < nitems(progs); i++)
+		if (strcmp(cmd, progs[i].path) == 0)
+			need = progs[i].need;
+	if (need == 0)
+		return (1);
+	if ((fd = nshd_open(NSHD_SOCKET, &ib, &perms)) == -1) {
+		nshd_why();
+		return (0);
+	}
+	imsgbuf_clear(&ib);
+	close(fd);
+	if (perms != -1 && (perms & need) != 0)
+		return (1);
+	printf("%% Not allowed: your login class does not have the %s "
+	    "permission\n", need == NSHD_EXEC ? "exec" : "operate");
+	return (0);
+}
+
+/*
  * show words, as nshd answers them on its read-write socket, paged: 1 if
  * the show was answered, else 0, said why
  */
@@ -193,7 +240,7 @@ nshd_show(char *words)
 	FILE			*f = NULL;
 	int			 fd, out = -1, done = 0, ret = 0;
 
-	if ((fd = nshd_open(NSHD_SOCKET, &ib)) == -1) {
+	if ((fd = nshd_open(NSHD_SOCKET, &ib, NULL)) == -1) {
 		nshd_why();
 		return (0);
 	}
@@ -291,7 +338,8 @@ nshd_ask(int rw, uint32_t type, const void *data, size_t len,
 	int			 fd, done = 0;
 
 	*status = 1;
-	if ((fd = nshd_open(rw ? NSHD_SOCKET : NSHD_RO_SOCKET, &ib)) == -1) {
+	if ((fd = nshd_open(rw ? NSHD_SOCKET : NSHD_RO_SOCKET, &ib,
+	    NULL)) == -1) {
 		if (errno != EPROTO)
 			return (-1);
 		printf("%% nshd: not a version nsh speaks\n");
@@ -473,7 +521,7 @@ nshd_priv(int quiet)
 {
 	if (sfd != -1)
 		return (1);
-	if ((sfd = nshd_open(NSHD_SOCKET, &sib)) == -1) {
+	if ((sfd = nshd_open(NSHD_SOCKET, &sib, NULL)) == -1) {
 		if (!quiet)
 			nshd_why();
 		return (0);

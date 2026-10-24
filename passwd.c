@@ -105,9 +105,9 @@ validate_cpass(char *cipher, char *cpass)
 /*
  * login class and login user: who may do what through nshd.
  *
- * A class is a set of permissions: view, operate, configure and admin.
- * Three classes are built in and cannot be changed: read-only (view),
- * operator (view and operate) and super-user (all four).
+ * A class is a set of permissions: view, operate, configure, admin and
+ * exec. Three classes are built in and cannot be changed: read-only
+ * (view), operator (view and operate) and super-user (all five).
  *
  * A user line gives an account its class. If the account does not
  * exist, the line must give a password, and nshd makes the account with
@@ -132,6 +132,7 @@ static const struct {
 	{ "operate",	LOGIN_OPERATE },
 	{ "configure",	LOGIN_CONFIGURE },
 	{ "admin",	LOGIN_ADMIN },
+	{ "exec",	LOGIN_EXEC },
 };
 
 static const struct {
@@ -148,7 +149,8 @@ static const struct {
 static int
 login_usage(void)
 {
-	printf("%% login class <name> [view] [operate] [configure] [admin]\n");
+	printf("%% login class <name> [view] [operate] [configure] [admin] "
+	    "[exec]\n");
 	printf("%% login user <name> class <class> [password <hash>]\n");
 	printf("%% no login class <name>\n");
 	printf("%% no login user <name>\n");

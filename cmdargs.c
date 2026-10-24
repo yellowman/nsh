@@ -76,6 +76,9 @@ cmdargs_output_setenv(char *cmd, char *arg[], int stdoutfd, int stderrfd,
 		printf("%% %s: nshd's config runs no program\n", cmd);
 		return 127;
 	}
+	/* nor does nsh run one the user's login class does not allow */
+	if (!nshd_runs(cmd))
+		return 127;
 	sigint = signal(SIGINT, SIG_IGN);
 	sigquit = signal(SIGQUIT, SIG_IGN);
 	sigchld = signal(SIGCHLD, SIG_DFL);

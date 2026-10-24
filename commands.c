@@ -3105,6 +3105,9 @@ shell(int argc, char **argv, ...)
 {
 	sig_t sigint, sigquit, sigchld;
 
+	/* a command needs the exec permission */
+	if (argc > 1 && !nshd_runs("/bin/sh"))
+		return 1;
 	sigint = signal(SIGINT, SIG_IGN);
 	sigquit = signal(SIGQUIT, SIG_IGN);
 	sigchld = signal(SIGCHLD, SIG_DFL);

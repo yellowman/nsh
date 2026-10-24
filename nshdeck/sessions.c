@@ -1266,7 +1266,7 @@ static void
 j_who(struct jbuf *j, struct user *u)
 {
 	static const char	*names[] = { "view", "operate", "configure",
-				    "admin" };
+				    "admin", "exec" };
 	size_t			 i;
 	int			 first = 1;
 

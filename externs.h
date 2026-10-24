@@ -445,7 +445,8 @@ const char *get_ifm_subtype_str(uint64_t);
 #define LOGIN_OPERATE	0x2
 #define LOGIN_CONFIGURE	0x4
 #define LOGIN_ADMIN	0x8
-#define LOGIN_ALL	0xf
+#define LOGIN_EXEC	0x10
+#define LOGIN_ALL	0x1f
 int loginset(int, char **, ...);
 int login_class_perms(const char *);
 int login_perms(uid_t);
@@ -554,6 +555,7 @@ char *format_k(uint64_t amt);
 extern int nshd_config;
 extern int nshd_rtable;
 int nshd_show(char *);
+int nshd_runs(const char *);
 int nshd_priv(int);
 int nshd_configure(int);
 const char *nshd_cname(void);

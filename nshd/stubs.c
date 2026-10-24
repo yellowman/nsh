@@ -85,6 +85,13 @@ nshd_priv(int quiet)
 	return priv;
 }
 
+/* system runs what nsh's code names, as root; config runs none */
+int
+nshd_runs(const char *cmd)
+{
+	return 1;
+}
+
 int
 nshd_configure(int how)
 {

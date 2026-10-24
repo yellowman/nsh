@@ -284,6 +284,12 @@ outside configure too; and in an interface's mode,
 and
 .Cm chgpin .
 What they print is not paged, and Control-C stops it.
+Also
+.Ic ping ,
+.Ic traceroute
+and their IPv6 forms, which
+.Nm
+runs itself, as the user.
 .It Cm configure
 .Cm configure private ,
 .Cm configure terminal ,
@@ -320,6 +326,26 @@ rules with file or load; and of any daemon's rules with include.
 A line continued with a backslash, and the line after it, count as
 having every such word of their daemon.
 A commit without admin may keep such a line as it ran before.
+A user with admin can gain root through these lines, so give admin
+only to a user who may have root.
+.It Cm exec
+Programs, which
+.Nm
+runs itself, as the user:
+.Ic \&!
+with a command,
+.Ic ssh ,
+.Ic telnet ,
+an editor, and any other program except
+.Ic ping
+and
+.Ic traceroute ,
+which need operate, and
+.Ic clear ,
+which needs nothing.
+.Nm
+checks exec itself, so it holds only for a user whose login shell is
+.Nm .
 .El
 .Pp
 Root is always super-user.
@@ -333,8 +359,7 @@ permissions of the user's class, but never admin.
 nshd refuses what a session's class does not allow.
 Where nshd does not run, or the user may not use its socket,
 .Nm
-runs only the shows anyone may see and diagnostic commands such as
-.Cm ping .
+runs only the shows anyone may see, and no program except for root.
 .Pp
 .Tg configure
 .Tg config
@@ -637,9 +662,10 @@ myfirewallname.com>
 Define a login class, a set of permissions:
 .Cm view ,
 .Cm operate ,
-.Cm configure
-and
+.Cm configure ,
 .Cm admin
+and
+.Cm exec
 (see
 .Sx Prompts, login classes and permissions ) .
 Three classes are built in and cannot be changed:
@@ -648,7 +674,7 @@ has view,
 .Cm operator
 has view and operate, and
 .Cm super-user
-has all four.
+has all five.
 .Pp
 .Op no
 .Ic login user Ar name Cm class Ar class
@@ -1839,6 +1865,7 @@ The
 .Ar options
 are documented in the
 .Xr ping 8 .
+This command needs the operate permission.
 .Pp
 .Tg ping6
 .Ic ping6
@@ -1853,6 +1880,7 @@ The
 are documented in the
 .Xr ping6 8
 manual page.
+This command needs the operate permission.
 .Pp
 .Tg traceroute
 .Ic traceroute
@@ -1866,6 +1894,7 @@ The
 .Ar options
 are documented in
 .Xr traceroute 8 .
+This command needs the operate permission.
 .Pp
 .Tg traceroute6
 .Ic traceroute6
@@ -1879,6 +1908,7 @@ The
 .Ar options
 are documented in
 .Xr traceroute6 8 .
+This command needs the operate permission.
 .Pp
 .Tg ssh
 .Ic ssh
@@ -1898,6 +1928,7 @@ The
 .Ar options
 are documented in
 .Xr ssh 1 .
+This command needs the exec permission.
 .Pp
 .Tg telnet
 .Ic telnet
@@ -1918,6 +1949,7 @@ The
 .Ar options
 are documented in
 .Xr telnet 1 .
+This command needs the exec permission.
 .Pp
 .Tg crontab
 .Ic crontab Op Cm edit | install
@@ -4212,10 +4244,8 @@ as the user, where the user may use
 .Xr nshd 8 Ns 's
 socket.
 The active users login shell is the shell that is invoked by this feature.
-This feature can be disabled to restrict users from starting a different
-shell or executable from
-.Nm
-.
+It needs the exec permission (see
+.Cm login class ) .
 If ! is entered without arguments in privilaged mode or global config mode,
 no operation will be carried out and the user will be returned to the same
 .Nm
@@ -5919,7 +5949,8 @@ on its read-only socket.
 .Pp
 The
 .Cm \&!
-shell escape runs a command as the user, not as root.
+shell escape runs a command as the user, not as root, and needs the
+exec permission.
 .Sh Common interface types
 Packet Filter Logging: This interface is used to pass traffic logged by
 the firewall to software which can record it.
@@ -6142,7 +6173,6 @@ TODO
 .Sh ENVIRONMENT
 .Bl -tag -width NSH_MANUAL_PAGE
 .It Ev NSH_MANUAL_PAGE
-.El
 The manual page displayed by the built-in
 .Cm manual
 command.
@@ -6151,6 +6181,7 @@ This must be an absolute path to the
 file that should be displayed.
 Defaults to
 .Pa /usr/local/man/man8/nsh.8
+.El
 .Sh FILES
 .Bl -tag -width /etc/suid_profile -compact
 .It Pa /etc/nshrc

@@ -46,7 +46,8 @@
  * and the tables and names for completion need view; an operation
  * needs operate; configure private, configure terminal, a commit, a
  * rollback and a load need configure. configure and configure
- * exclusive need admin, as their candidate is everyone's.
+ * exclusive need admin, as their candidate is everyone's. exec is nsh's
+ * to check, as it runs a program: config only tells it at hello.
  * A session without admin sees no password hash: config takes each
  * out of what it sends such a session of the configuration.
  * An operation a session may ask, system checks and runs, and config
@@ -1013,7 +1014,7 @@ config_perms(struct request *r, int32_t status)
 	if ((sp = session_find(r->session)) == NULL)
 		return;
 	sp->perms = status > 0 ? status & (NSHD_VIEW | NSHD_OPERATE |
-	    NSHD_CONFIGURE | NSHD_ADMIN) : 0;
+	    NSHD_CONFIGURE | NSHD_ADMIN | NSHD_EXEC) : 0;
 	config_hello_answer(sp);
 }
 

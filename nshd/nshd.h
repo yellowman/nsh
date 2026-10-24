@@ -45,6 +45,7 @@
 #define NSHD_CONFIGURE	0x4	/* configure private and terminal, commit */
 #define NSHD_ADMIN	0x8	/* configure and configure exclusive, and */
 				/* the password hashes */
+#define NSHD_EXEC	0x10	/* programs nsh runs, which nsh checks */
 
 /* a client's first message */
 struct nshd_hello {
