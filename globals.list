@@ -89,7 +89,6 @@ complete.c	process	complete.word complete_nocmd.nocmdtab
 			complete_nocmd.nocmdtab_nitems
 			complete_noint.nobridgetab
 			complete_noint.nointtab
-			complete_noint.notab_nitems
 conf.c		table	confrows confwords defllpriority defmtus
 			defprios intconf_rows rtflags
 ctl.c		session	rulesfile tmpfile_cur

@@ -362,12 +362,12 @@ complete_ifname(char *word, int list, EditLine *el)
 	const char *status_cmd = "status";
 	struct if_nameindex *ifn_list, *ifnp;
 
-	words = sl_init();
 	wordlen = strlen(word);
 
 	if ((ifn_list = if_nameindex()) == NULL)
-		return 0;
+		return (CC_ERROR);
 
+	words = sl_init();
 	for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++) {
                 if (wordlen > strlen(ifnp->if_name))
                         continue;
@@ -403,20 +403,19 @@ complete_ifgroup(char *word, int list, EditLine *el)
 	int ifs;
 	u_int len, ngroups, i;
 
-	words = sl_init();
 	wordlen = strlen(word);
 
 	bzero(&ifgr, sizeof(ifgr));
 
 	if ((ifs = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
 		printf("%% complete_ifgroup: %s\n", strerror(errno));
-		return 1;
+		return (CC_ERROR);
 	}
 
 	if (ioctl(ifs, SIOCGIFGLIST, (caddr_t)&ifgr) == -1) {
 		printf("%% SIOCGIFGLIST: %s\n", strerror(errno));
 		close(ifs);
-		return 1;
+		return (CC_ERROR);
 	}
 
 	len = ifgr.ifgr_len;
@@ -424,16 +423,17 @@ complete_ifgroup(char *word, int list, EditLine *el)
 	if (ifgr.ifgr_groups == NULL) {
 		printf("%% calloc: %s\n", strerror(errno));
 		close(ifs);
-		return 1;
+		return (CC_ERROR);
 	}
 
 	if (ioctl(ifs, SIOCGIFGLIST, (caddr_t)&ifgr) == -1) {
 		printf("%% SIOCGIFGLIST: %s\n", strerror(errno));
 		free(ifgr.ifgr_groups);
 		close(ifs);
-		return 1;
+		return (CC_ERROR);
 	}
 
+	words = sl_init();
 	ngroups = len / sizeof(ifgr.ifgr_groups[0]);
 	for (i = 0; i < ngroups; i++) {
 		ifg = &ifgr.ifgr_groups[i];
@@ -459,17 +459,18 @@ complete_ifbridge(char *word, int list, EditLine *el)
 	struct if_nameindex *ifn_list, *ifnp;
 	int ifs;
 
-	words = sl_init();
 	wordlen = strlen(word);
 
 	if ((ifn_list = if_nameindex()) == NULL)
-		return 0;
+		return (CC_ERROR);
 
 	if ((ifs = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
 		printf("%% complete_ifbridge: %s\n", strerror(errno));
-		return 1;
+		if_freenameindex(ifn_list);
+		return (CC_ERROR);
 	}
 
+	words = sl_init();
 	for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++) {
 		if (wordlen > strlen(ifnp->if_name))
 			continue;
@@ -607,7 +608,8 @@ complete(EditLine *el, char **table, size_t stlen)
 		dolist = 0;
 
 	/* if cursor and word is same, list alternatives */
-	if (strncmp(word, margv[cursor_argc], cursor_argo) == 0)
+	if (cursor_argo == 0 ||
+	    strncmp(word, margv[cursor_argc], cursor_argo) == 0)
 		dolist = 1;
 	else if (cursor_argo)
 		memcpy(word, margv[cursor_argc], cursor_argo);
@@ -695,7 +697,7 @@ complete_nocmd(struct ghs *nocmd, char *word, int dolist, EditLine *el,
 		}
 
 		/* sentinel */
-		memset(&nocmdtab[cmdtab_nitems - 1], 0, sizeof(*nocmdtab));
+		memset(&nocmdtab[nocmdtab_nitems - 1], 0, sizeof(*nocmdtab));
 	}
 
 	if (margc == 1) {
@@ -849,10 +851,9 @@ complete_noint(char *word, int dolist, EditLine *el,
     char **whichlist, int stlen, int level)
 {
 	static struct intlist *nointtab, *nobridgetab;
-	static size_t notab_nitems;
 	struct intlist *table = (struct intlist *)whichlist;
 	struct intlist *notab, *c, *nc;
-	size_t table_nitems;
+	size_t table_nitems, notab_nitems = 0;
 	int i, j;
 
 	if (stlen != sizeof(*table))
@@ -911,8 +912,7 @@ complete_noint(char *word, int dolist, EditLine *el,
 	if (cursor_argc >= 2) {
 		/* The no-command's name has been completed. */
 		nc = NULL;
-		for (i = 0; i < notab_nitems - 1; i++) {
-			c = &notab[i];
+		for (c = notab; c->name != NULL; c++) {
 			if (strcmp(margv[1], c->name) == 0) {
 				nc = c;
 				break;
@@ -928,8 +928,7 @@ complete_noint(char *word, int dolist, EditLine *el,
 	}
 
 	/* Check for a partially completed valid command name. */
-	for (i = 0; i < notab_nitems - 1; i++) {
-		c = &notab[i];
+	for (c = notab; c->name != NULL; c++) {
 		if (isprefix(margv[1], c->name) == 0)
 			continue;
 
