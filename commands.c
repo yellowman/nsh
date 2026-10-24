@@ -2600,6 +2600,10 @@ cmdline_nshd(char *text)
 	if (c->handler == ctlhandler && margc > 1 &&
 	    ctl_op(c->name, margv[1], 1))
 		return op_ask(c->name, margc, margv, nshd_rtable);
+	/* a daemon's edit, of its rules there, here as the user */
+	if (c->handler == ctlhandler && margc > 1 &&
+	    ctl_edits(c->name, margv[1]))
+		return ctl_nshd_edit(c->name);
 	if (c->cand == CAND_EDIT)
 		return nshd_line(buf);
 	if (c->handler == exitconfig ||

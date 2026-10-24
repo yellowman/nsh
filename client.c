@@ -30,7 +30,9 @@
  * configure private, configure and configure exclusive are that
  * session's: what edits the candidate, and leaving a mode, go to nshd
  * as lines, and the mode nshd gives back is nsh's, for its prompt, its
- * completion and the lines after (cmdline_nshd()).
+ * completion and the lines after (cmdline_nshd()). A daemon's edit
+ * asks nshd for its rules, edits them here, as the user, and sends them
+ * back whole.
  */
 
 #include <sys/types.h>
@@ -74,7 +76,7 @@ static void	nshd_why(void);
 static int	nshd_ask(int, uint32_t, const void *, size_t, struct facts_in *,
 		    int32_t *);
 static void	nshd_sigint(int);
-static int	nshd_request(uint32_t, const void *, size_t, int);
+static int	nshd_request(uint32_t, const void *, size_t, FILE *);
 static void	nshd_context(struct nshd_context *);
 static void	nshd_close(void);
 
@@ -538,7 +540,7 @@ nshd_configure(int how)
 	struct nshd_configure	 cf;
 
 	cf.mode = how;
-	return (nshd_request(IMSG_CTL_CONFIGURE, &cf, sizeof(cf), 0));
+	return (nshd_request(IMSG_CTL_CONFIGURE, &cf, sizeof(cf), NULL));
 }
 
 /* A line of configure private's, in the session's mode */
@@ -552,14 +554,14 @@ nshd_line(char *text)
 		printf("%% Input exceeds permitted length\n");
 		return (-1);
 	}
-	return (nshd_request(IMSG_CTL_LINE, &l, sizeof(l), 0));
+	return (nshd_request(IMSG_CTL_LINE, &l, sizeof(l), NULL));
 }
 
 /* Leave configure private, and the session, from any mode */
 int
 nshd_exit(void)
 {
-	return (nshd_request(IMSG_CTL_EXIT, NULL, 0, 0));
+	return (nshd_request(IMSG_CTL_EXIT, NULL, 0, NULL));
 }
 
 /* commit, commit check, or commit confirmed for minutes, with the comment */
@@ -572,7 +574,7 @@ nshd_commit(int check, int minutes, char *comment)
 	c.check = check;
 	c.minutes = minutes;
 	strlcpy(c.comment, comment, sizeof(c.comment));
-	return (nshd_request(IMSG_CTL_COMMIT, &c, sizeof(c), 0));
+	return (nshd_request(IMSG_CTL_COMMIT, &c, sizeof(c), NULL));
 }
 
 /*
@@ -600,7 +602,7 @@ nshd_load(const char *path)
 			break;
 		}
 		l.last = feof(f) != 0;
-		r = nshd_request(IMSG_CTL_LOAD, &l, sizeof(l), 0);
+		r = nshd_request(IMSG_CTL_LOAD, &l, sizeof(l), NULL);
 	} while (r == 0 && !l.last);
 	fclose(f);
 	return (r);
@@ -613,7 +615,7 @@ nshd_rollback(int n)
 	struct nshd_rollback	 rb;
 
 	rb.n = n;
-	return (nshd_request(IMSG_CTL_ROLLBACK, &rb, sizeof(rb), 0));
+	return (nshd_request(IMSG_CTL_ROLLBACK, &rb, sizeof(rb), NULL));
 }
 
 /* configure, as the session has it, by name */
@@ -631,20 +633,82 @@ int
 nshd_cshow(char *words)
 {
 	struct nshd_show	 show;
+	char			 path[] = "/tmp/nshd.XXXXXXXXXX";
+	FILE			*f;
+	int			 fd, r;
 
+	if ((fd = mkstemp(path)) == -1 || (f = fdopen(fd, "w")) == NULL) {
+		printf("%% %s: %s\n", path, strerror(errno));
+		if (fd != -1) {
+			unlink(path);
+			close(fd);
+		}
+		return (-1);
+	}
 	memset(&show, 0, sizeof(show));
 	strlcpy(show.words, words, sizeof(show.words));
-	return (nshd_request(IMSG_CTL_SHOW, &show, sizeof(show), 1));
+	r = nshd_request(IMSG_CTL_SHOW, &show, sizeof(show), f);
+	if (fclose(f) == EOF)
+		printf("%% %s: %s\n", path, strerror(errno));
+	else if (sfd != -1)	/* not a session gone */
+		more(path);
+	unlink(path);
+	return (r);
+}
+
+/*
+ * daemon's rules in the session's candidate, in rtable: asked for, into
+ * path; or, with set, path's text sent as them, a part at a time. As a
+ * handler returns
+ */
+int
+nshd_rules(char *daemon, int rtable, int set, char *path)
+{
+	struct nshd_rules	 rl;
+	FILE			*f;
+	int			 c, r;
+
+	if ((f = fopen(path, set ? "r" : "w+")) == NULL) {
+		printf("%% %s: %s\n", path, strerror(errno));
+		return (-1);
+	}
+	memset(&rl, 0, sizeof(rl));
+	rl.set = set;
+	rl.rtable = rtable;
+	strlcpy(rl.daemon, daemon, sizeof(rl.daemon));
+	if (!set) {
+		rl.last = 1;
+		/* what nshd said, not rules, if it failed */
+		if ((r = nshd_request(IMSG_CTL_RULES, &rl, sizeof(rl), f)) ==
+		    -1 && fseek(f, 0, SEEK_SET) == 0)
+			while ((c = getc(f)) != EOF)
+				putchar(c);
+	} else
+		do {
+			rl.len = fread(rl.text, 1, sizeof(rl.text), f);
+			if (ferror(f)) {
+				printf("%% %s: %s\n", path, strerror(errno));
+				r = -1;
+				break;
+			}
+			rl.last = feof(f) != 0;
+			r = nshd_request(IMSG_CTL_RULES, &rl, sizeof(rl), NULL);
+		} while (r == 0 && !rl.last);
+	if (fclose(f) == EOF) {
+		printf("%% %s: %s\n", path, strerror(errno));
+		r = -1;
+	}
+	return (r);
 }
 
 /*
  * type, with len bytes of data, on nsh's session, opened if it is not:
- * what nshd prints, to stdout or paged, and the mode it gives taken; as
- * a handler returns. ^C closes the session, as nshd finishes what it was
+ * what nshd prints, to out or stdout, and the mode it gives taken; as a
+ * handler returns. ^C closes the session, as nshd finishes what it was
  * asked.
  */
 static int
-nshd_request(uint32_t type, const void *data, size_t len, int paged)
+nshd_request(uint32_t type, const void *data, size_t len, FILE *out)
 {
 	struct nshd_context	 c;
 	struct nshd_result	 r = { -1 };
@@ -652,23 +716,11 @@ nshd_request(uint32_t type, const void *data, size_t len, int paged)
 	struct ibuf		 b;
 	struct sigaction	 sa, osa, opipe;
 	sigset_t		 block, saved, waiting;
-	char			 path[] = "/tmp/nshd.XXXXXXXXXX";
-	FILE			*f = stdout;
-	int			 fd, done = 0, gone = 1;
+	FILE			*f = out != NULL ? out : stdout;
+	int			 done = 0, gone = 1;
 
 	if (!nshd_priv(0))
 		return (-1);
-	if (paged) {
-		if ((fd = mkstemp(path)) == -1 ||
-		    (f = fdopen(fd, "w")) == NULL) {
-			printf("%% %s: %s\n", path, strerror(errno));
-			if (fd != -1) {
-				unlink(path);
-				close(fd);
-			}
-			return (-1);
-		}
-	}
 
 	/* ^C is taken only while waiting for nshd, so none is missed */
 	sigemptyset(&block);
@@ -738,13 +790,6 @@ nshd_request(uint32_t type, const void *data, size_t len, int paged)
 	}
 	gone = 0;
 done:
-	if (paged) {
-		if (fclose(f) == EOF)
-			printf("%% %s: %s\n", path, strerror(errno));
-		else if (!gone)
-			more(path);
-		unlink(path);
-	}
 	/* a session nshd closed, or one nsh cannot follow */
 	if (gone)
 		nshd_close();

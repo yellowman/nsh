@@ -57,6 +57,7 @@ void rls_lock(int);
 static int ctl_exec(char *, char **);
 static int ctl_cand(struct daemons *, struct ctl *, char **);
 static int ctl_cand_takes(struct ctl *);
+static int ctl_isedit(struct ctl *);
 static int ctl_cand_edit(struct daemons *, char *, char **);
 static int ctl_cand_test(struct daemons *, char *, char **);
 static int ctl_cand_stage(struct daemons *, char *, char *, char *,
@@ -910,8 +911,7 @@ ctl_cand(struct daemons *d, struct ctl *x, char **fillargs)
 			return -1;
 		return 1;
 	}
-	if (x->handler == call_editor || x->handler == edit_motd ||
-	    x->handler == edit_crontab)
+	if (ctl_isedit(x))
 		return ctl_cand_edit(d, c->name,
 		    x->type == T_HANDLER_TEST ? x->test_args : NULL);
 	if (x->handler == install_crontab) {
@@ -936,10 +936,62 @@ ctl_cand_takes(struct ctl *x)
 	case DB_X_DISABLE_ALWAYS:
 		return 1;
 	}
-	return x->handler == call_editor || x->handler == edit_motd ||
-	    x->handler == edit_crontab || x->handler == install_crontab ||
+	return ctl_isedit(x) || x->handler == install_crontab ||
 	    strcmp(x->name, "check-config") == 0 ||
 	    strcmp(x->name, "config-test") == 0;
+}
+
+/* Is x a daemon's edit of its rules? */
+static int
+ctl_isedit(struct ctl *x)
+{
+	return x->handler == call_editor || x->handler == edit_motd ||
+	    x->handler == edit_crontab;
+}
+
+/* Is action daemon's edit of its rules? */
+int
+ctl_edits(char *daemon, char *action)
+{
+	struct daemons *d;
+	struct ctl *x;
+
+	d = (struct daemons *)genget(daemon, (char **)ctl_daemons,
+	    sizeof(struct daemons));
+	if (d == NULL || Ambiguous(d))
+		return 0;
+	x = (struct ctl *)genget(action, (char **)d->table, sizeof(struct ctl));
+	return x != NULL && !Ambiguous(x) && ctl_isedit(x);
+}
+
+/*
+ * edit in a configure nshd has: daemon's rules in the session's
+ * candidate, in its rtable, asked of nshd, edited here as the user, and
+ * sent back; as a handler returns. Its test runs at commit check
+ */
+int
+ctl_nshd_edit(char *daemon)
+{
+	struct daemons *d;
+	char dir[] = "/tmp/nsh.XXXXXXXXXX", path[PATH_MAX];
+	int ret;
+
+	d = (struct daemons *)genget(daemon, (char **)ctl_daemons,
+	    sizeof(struct daemons));
+	if (d == NULL || Ambiguous(d) || d->tmpfile == NULL) {
+		printf("%% %s: no rules to edit\n", daemon);
+		return -1;
+	}
+	if (mkdtemp(dir) == NULL) {
+		printf("%% mkdtemp %s: %s\n", dir, strerror(errno));
+		return -1;
+	}
+	snprintf(path, sizeof(path), "%s/%s", dir, basename(d->tmpfile));
+	if ((ret = nshd_rules(d->name, nshd_rtable, 0, path)) == 0 &&
+	    (ret = edit_file(path, d->mode, d->propername, NULL)) == 0)
+		ret = nshd_rules(d->name, nshd_rtable, 1, path);
+	ctl_cand_unstage(dir, path);
+	return ret;
 }
 
 /*
@@ -1007,10 +1059,8 @@ ctl_cand_rules(char *name, int rtable, int set, char *text, size_t len)
 		printf("%% %s: no such daemon\n", name);
 		return -1;
 	}
-	for (x = d->table; x->name != NULL; x++)
-		if (x->handler == call_editor || x->handler == edit_motd ||
-		    x->handler == edit_crontab)
-			break;
+	for (x = d->table; x->name != NULL && !ctl_isedit(x); x++)
+		;
 	if (x->name == NULL) {
 		printf("%% %s has no rules to edit\n", d->name);
 		return -1;

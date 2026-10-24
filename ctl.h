@@ -99,6 +99,8 @@ int ctl_rules_test(char *, char **, size_t);
 int ctl_rules_args(char *, char *, char *, size_t, char **);
 void ctl_rules_done(void);
 int ctl_cand_rules(char *, int, int, char *, size_t);
+int ctl_edits(char *, char *);
+int ctl_nshd_edit(char *);
 
 #define T_HANDLER       1
 #define T_HANDLER_TEST  2

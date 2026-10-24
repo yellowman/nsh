@@ -423,6 +423,15 @@ and
 .Cm ping ,
 run in
 .Nm .
+A daemon's edit, such as
+.Cm pf edit ,
+asks nshd for the daemon's rules in the candidate, edits them in
+.Nm
+as the user, and sends them back; the daemon's test runs at
+.Cm commit
+and
+.Cm commit check ,
+not as the editor exits.
 .Cm commit ,
 .Cm rollback ,
 .Cm show candidate-config

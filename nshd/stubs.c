@@ -133,3 +133,9 @@ nshd_cshow(char *words)
 {
 	return -1;
 }
+
+int
+nshd_rules(char *daemon, int rtable, int set, char *path)
+{
+	return -1;
+}

@@ -565,6 +565,7 @@ int nshd_commit(int, int, char *);
 int nshd_load(const char *);
 int nshd_rollback(int);
 int nshd_cshow(char *);
+int nshd_rules(char *, int, int, char *);
 int show_log(int, char **, ...);
 
 /* sqlite3.c */
