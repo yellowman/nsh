@@ -29,6 +29,8 @@
  *	statistics group		a group of kernel statistics
  *	version				what runs, and since when
  *	users				who is logged in
+ *	daemons				the daemons nsh starts, and which
+ *					run, in which routing tables
  *	hostname			the host's name
  *	ip [inet|inet6]			every address, and, from system,
  *					what configured each IPv4 one
@@ -92,13 +94,13 @@ static struct facts_kind *kinds[] = {
 	&kind_login, &kind_hostname, &kind_ip, &kind_dhcplease,
 	&kind_dhcproute, &kind_dhcpns, &kind_slaacif, &kind_slaacra,
 	&kind_slaacprefix, &kind_slaacrdns, &kind_slaacaddr, &kind_slaacdfr,
-	&kind_slaacdns, &kind_flow
+	&kind_slaacdns, &kind_flow, &kind_daemon
 };
 
 enum answer_type {
 	ANS_INTERFACE, ANS_ROUTE, ANS_LOOKUP, ANS_ARP, ANS_NDP, ANS_VLAN,
 	ANS_BRIDGE, ANS_STATISTICS, ANS_VERSION, ANS_USERS, ANS_HOSTNAME,
-	ANS_IP, ANS_AUTOCONF, ANS_SADB, ANS_PROGRAM, ANS_LEASES
+	ANS_IP, ANS_AUTOCONF, ANS_SADB, ANS_PROGRAM, ANS_LEASES, ANS_DAEMONS
 };
 
 int	facts_from = FACTS_SHOW | FACTS_SYSTEM;
@@ -495,6 +497,10 @@ facts_answer(char *words)
 		a->type = ANS_VERSION;
 	else if (n == 1 && strcmp(w[0], "users") == 0)
 		a->type = ANS_USERS;
+	else if (n == 1 && strcmp(w[0], "daemons") == 0) {
+		a->type = ANS_DAEMONS;
+		a->where = FACTS_SHOW | FACTS_SYSTEM;
+	}
 	else if (n == 1 && strcmp(w[0], "hostname") == 0)
 		a->type = ANS_HOSTNAME;
 	else
@@ -580,6 +586,10 @@ facts_more(struct facts_answer *a, struct facts_out *o, int budget)
 		break;
 	case ANS_USERS:
 		r = users_facts(o);
+		break;
+	case ANS_DAEMONS:
+		/* whether pf runs, only where system's are */
+		r = daemons_facts(o, (facts_from & FACTS_SYSTEM) != 0);
 		break;
 	case ANS_HOSTNAME:
 		r = hostname_facts(o);
@@ -713,6 +723,8 @@ render_record(void *arg, const struct facts_template *t,
 		vlan_render(r, rd->count++);
 	else if (r->k == &kind_login)
 		users_render(r, rd->count++);
+	else if (r->k == &kind_daemon)
+		daemons_render(r, rd->count++);
 	else if (r->k == &kind_version)
 		version_render(r);
 	else if (r->k == &kind_hostname)

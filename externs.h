@@ -299,6 +299,7 @@ int intbssid(int, char **, ...);
 /* stats.c */
 char *plural(int);
 char *plurales(int);
+int pf_enabled(void);
 
 /* genget.c */
 int isprefix(char *, char*);

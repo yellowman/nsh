@@ -916,6 +916,25 @@ pf_get(struct statgroup *g, void *p)
 	return (r);
 }
 
+/* Is pf enabled: 1 or 0, or -1, said why, as only root may ask */
+int
+pf_enabled(void)
+{
+	struct pf_status st;
+	int dev, r = -1;
+
+	if ((dev = open("/dev/pf", O_RDONLY)) == -1) {
+		printf("%% pf: /dev/pf: %s\n", strerror(errno));
+		return (-1);
+	}
+	if (ioctl(dev, DIOCGETSTATUS, &st) == -1)
+		printf("%% pf: DIOCGETSTATUS: %s\n", strerror(errno));
+	else
+		r = st.running != 0;
+	close(dev);
+	return (r);
+}
+
 /* a debug level's name, as pfctl's loglevel_to_string() gives it */
 static const char *
 pf_loglevel(int level)

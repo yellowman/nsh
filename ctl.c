@@ -28,8 +28,11 @@
 #include <sys/stat.h>
 #include <sys/socket.h>
 #include <sys/syslimits.h>
+#include <sys/sysctl.h>
 #include <net/if.h>
 #include "externs.h"
+#include "facts.h"
+#include "showfacts.h"
 #include "editing.h"
 #include "ctl.h"
 #include "stringlist.h"
@@ -155,6 +158,16 @@ struct daemons ctl_daemons[] = {
 { "dhcp",	"DHCP",	ctl_dhcp,	DHCPCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
 { NULL, NULL, NULL, NULL, 0, 0, 0 }
 };
+
+/* a daemon nsh starts, and whether it runs, in a routing table */
+static struct facts_field daemon_fields[] = {
+	[DAEMON_NAME] =		{ "daemon",	FACT_STRING },
+	[DAEMON_PROGRAM] =	{ "program",	FACT_STRING },
+	[DAEMON_RTABLE] =	{ "rtable",	FACT_U64 },
+	[DAEMON_RUNNING] =	{ "running",	FACT_U64 },
+	[DAEMON_PROCS] =	{ "processes",	FACT_U64 },
+};
+struct facts_kind kind_daemon = { "daemon", daemon_fields, DAEMON_NFIELDS };
 
 /* per-daemon commands, and their C or executable functions */ 
 
@@ -2014,4 +2027,113 @@ done:
 	if_freenameindex(ifn_list);
 	free(dhcpd_args);
 	return ret;
+}
+
+/*
+ * Each daemon nsh starts, as facts: in table 0, and in each other
+ * routing table its program runs in, whether it runs, and how many
+ * processes of its program do. pf runs when it is enabled, which only
+ * with pf is asked
+ */
+int
+daemons_facts(struct facts_out *o, int pf)
+{
+	struct facts_value v[DAEMON_NFIELDS];
+	struct kinfo_proc *kp = NULL;
+	struct daemons *d;
+	struct ctl *x;
+	char prog[KI_MAXCOMLEN];
+	u_int count[RT_TABLEID_MAX + 1];
+	int mib[6] = { CTL_KERN, KERN_PROC, KERN_PROC_ALL, 0,
+	    sizeof(struct kinfo_proc), 0 };
+	size_t i, n, len;
+	int rt, on, r = 0;
+
+	for (;;) {
+		if (sysctl(mib, 6, NULL, &len, NULL, 0) == -1) {
+			printf("%% daemons: kern.proc: %s\n", strerror(errno));
+			return -1;
+		}
+		/* and room for some started since */
+		len += 16 * sizeof(*kp);
+		mib[5] = len / sizeof(*kp);
+		if ((kp = malloc(len)) == NULL) {
+			printf("%% daemons: %s\n", strerror(errno));
+			return -1;
+		}
+		if (sysctl(mib, 6, kp, &len, NULL, 0) == 0)
+			break;
+		free(kp);
+		if (errno != ENOMEM) {
+			printf("%% daemons: kern.proc: %s\n", strerror(errno));
+			return -1;
+		}
+	}
+	n = len / sizeof(*kp);
+	for (d = ctl_daemons; r == 0 && d->name != NULL; d++) {
+		/* what enables it runs its program, but for pf's */
+		for (x = d->table; x->name != NULL &&
+		    x->flag_x != DB_X_ENABLE && x->flag_x != DB_X_ENABLE_DEFAULT;
+		    x++)
+			;
+		if (x->name == NULL || x->args[0] == NULL)
+			continue;
+		memset(v, 0, sizeof(v));
+		facts_string(&v[DAEMON_NAME], d->name);
+		if (d->table == ctl_pf) {
+			facts_string(&v[DAEMON_PROGRAM], "pf");
+			facts_u64(&v[DAEMON_RTABLE], 0);
+			if (pf && (on = pf_enabled()) != -1)
+				facts_u64(&v[DAEMON_RUNNING], on);
+			r = facts_record(o, &kind_daemon, v);
+			continue;
+		}
+		strlcpy(prog, basename(x->args[0]), sizeof(prog));
+		memset(count, 0, sizeof(count));
+		for (i = 0; i < n; i++)
+			if (kp[i].p_rtableid <= RT_TABLEID_MAX &&
+			    strcmp(kp[i].p_comm, prog) == 0)
+				count[kp[i].p_rtableid]++;
+		facts_string(&v[DAEMON_PROGRAM], prog);
+		for (rt = 0; r == 0 && rt <= RT_TABLEID_MAX; rt++) {
+			if (rt != 0 && count[rt] == 0)
+				continue;
+			facts_u64(&v[DAEMON_RTABLE], rt);
+			facts_u64(&v[DAEMON_RUNNING], count[rt] != 0);
+			facts_u64(&v[DAEMON_PROCS], count[rt]);
+			r = facts_record(o, &kind_daemon, v);
+		}
+	}
+	free(kp);
+	return r;
+}
+
+/* a daemon, as show daemons prints it, the labels before the first */
+void
+daemons_render(struct frec *r, int n)
+{
+	const struct facts_value *rt, *on, *procs;
+	const char *name, *prog;
+
+	if (n == 0)
+		printf("%-12s %-12s %6s  %s\n", "Daemon", "Program", "Rtable",
+		    "State");
+	name = fs(r, DAEMON_NAME);
+	prog = fs(r, DAEMON_PROGRAM);
+	rt = FV(r, DAEMON_RTABLE, FACT_U64);
+	on = FV(r, DAEMON_RUNNING, FACT_U64);
+	procs = FV(r, DAEMON_PROCS, FACT_U64);
+	printf("%-12s %-12s %6llu  ", name != NULL ? name : "?",
+	    prog != NULL ? prog : "?", rt != NULL ?
+	    (unsigned long long)rt->v.u : 0ULL);
+	if (on == NULL)
+		printf("-\n");
+	else if (procs == NULL)
+		printf("%s\n", on->v.u ? "enabled" : "disabled");
+	else if (on->v.u)
+		printf("running, %llu process%s\n",
+		    (unsigned long long)procs->v.u, procs->v.u == 1 ? "" :
+		    "es");
+	else
+		printf("not running\n");
 }

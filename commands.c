@@ -104,6 +104,7 @@ static int	doconfig(int, char**, ...);
 static int	exitconfig(int, char **, ...);
 static int	rtable(int, char**, ...);
 static int	pr_crontab(int, char **, ...);
+static int	pr_daemons(int, char **, ...);
 static int	pr_routes(int, char **, ...);
 static int	pr_routes6(int, char **, ...);
 static int	pr_arp(int, char **, ...);
@@ -531,6 +532,7 @@ Menu showlist[] = {
 	{ "system-stats",	"System, firewall and kernel statistics", CMPL(ta) (char **)systatcs, sizeof(struct prot1), 0, 3, pr_prot1 },
 	{ "version",	"Software information",	CMPL0 0, 0, 0, 0, version },
 	{ "users",	"System users",		CMPL0 0, 0, 0, 0, who },
+	{ "daemons",	"Daemons, and whether each runs",	CMPL0 0, 0, 0, 0, pr_daemons },
 	{ "crontab",	"Scheduled background jobs",	CMPL0 0, 0, 0, 0, pr_crontab },
 	{ "scheduler",	"Scheduled background jobs",	CMPL0 0, 0, 0, 0, pr_crontab },
 	{ "running-config",	"Operating configuration", CMPL0 0, 0, 0, 0, pr_conf },
@@ -4152,6 +4154,13 @@ pr_conf_diff(int argc, char **argv, ...)
 
 	r = facts_op("diff-config", cli_rtable, 0);
 	return r == 0 || r == OP_DIFFERS ? 0 : -1;
+}
+
+/* the daemons nsh starts, and whether each runs */
+static int
+pr_daemons(int argc, char **argv, ...)
+{
+	return facts_show(stdout, "daemons");
 }
 
 /* root's crontab, as nshd's system shows it */

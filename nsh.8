@@ -2334,6 +2334,7 @@ nsh>show
   system-stats    System, firewall and kernel statistics
   version         Software information
   users           System users
+  daemons         Daemons, and whether each runs
   crontab         Scheduled background jobs
   running-config  Operating configuration
   startup-config  Startup configuration
@@ -3875,6 +3876,25 @@ cpu: Intel(R) Core(TM) i7-10610U CPU @ 1.80GHz
 memory: 8175MB
 kernel: OpenBSD 7.1 (GENERIC.MP) #459: Mon Apr  4 18:16:13 MDT 2022
     deraadt@amd64.openbsd.org:/usr/src/sys/arch/amd64/compile/GENERIC.MP
+.Ed
+.Pp
+.Ic show daemons
+.Pp
+Display each daemon
+.Nm
+starts, its program, and whether it runs: in routing table 0, and in
+each other routing table its program runs in, with how many of its
+processes run there.
+pf runs when it is enabled, which only root, or
+.Xr nshd 8 ,
+can see.
+.Bd -literal -offset indent
+nsh>show daemons
+Daemon       Program      Rtable  State
+pf           pf                0  enabled
+ospf         ospfd             0  running, 3 processes
+ospf         ospfd             5  running, 1 process
+bgp          bgpd              0  not running
 .Ed
 .Pp
 .Ic show crontab

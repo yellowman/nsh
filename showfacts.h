@@ -90,6 +90,7 @@ extern struct facts_kind kind_ip, kind_dhcplease, kind_dhcproute;
 extern struct facts_kind kind_dhcpns, kind_slaacif, kind_slaacra;
 extern struct facts_kind kind_slaacprefix, kind_slaacrdns, kind_slaacaddr;
 extern struct facts_kind kind_slaacdfr, kind_slaacdns, kind_flow;
+extern struct facts_kind kind_daemon;
 
 enum { MSG_TEXT };
 
@@ -189,6 +190,8 @@ enum {
 };
 
 enum { LOGIN_USER, LOGIN_LINE, LOGIN_TIME, LOGIN_HOST, LOGIN_NFIELDS };
+enum { DAEMON_NAME, DAEMON_PROGRAM, DAEMON_RTABLE, DAEMON_RUNNING,
+    DAEMON_PROCS, DAEMON_NFIELDS };
 
 enum { FLOW_SRC, FLOW_SRCMASK, FLOW_SRCPORT, FLOW_DST, FLOW_DSTMASK,
 	FLOW_DSTPORT, FLOW_PROTO, FLOW_PEER, FLOW_SATYPE, FLOW_TYPE,
@@ -265,6 +268,8 @@ extern int utmpfd;
 int	 users_facts(struct facts_out *);
 void	 users_render(struct frec *, int);
 void	 users_end(int);
+int	 daemons_facts(struct facts_out *, int);
+void	 daemons_render(struct frec *, int);
 int	 hostname_facts(struct facts_out *);
 void	 hostname_render(struct frec *);
 int	 ip_facts(struct facts_out *, int, int);
