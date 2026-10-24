@@ -809,7 +809,7 @@ table.grid {
 	align-items: start;
 }
 
-#inspector {
+#inspector, .dinsp {
 	position: sticky;
 	top: 0;
 	max-height: calc(100vh - 80px);
@@ -831,7 +831,7 @@ table.grid {
 	color: var(--text);
 }
 
-#inspector .from {
+#inspector .from, .dinsp .from {
 	margin: 0;
 	font-size: 12px;
 }
@@ -979,8 +979,44 @@ pre.stanza {
 	color: var(--bad);
 }
 
-#inspector .bar {
+#inspector .bar, .dinsp > .bar {
 	justify-content: flex-end;
+}
+
+/* a daemon's rules, as text */
+.daemons {
+	display: grid;
+	gap: 10px;
+}
+
+textarea.rules {
+	display: block;
+	width: calc(100% - 20px);
+	min-height: 260px;
+	margin: 10px;
+	padding: 8px 10px;
+	resize: vertical;
+	font: 12px/1.45 var(--mono);
+	color: var(--text);
+	background: var(--field);
+	border: 0;
+	border-radius: 6px;
+	box-shadow: var(--ring);
+	white-space: pre;
+	overflow: auto;
+}
+
+textarea.rules:focus {
+	outline: none;
+	box-shadow: var(--ring), var(--focus);
+}
+
+textarea.rules.edited {
+	box-shadow: inset 2px 0 0 var(--warn), var(--ring);
+}
+
+.igroup > .help, .igroup > .bar, .igroup > .cliline, .igroup > pre.term {
+	margin: 0 10px 10px;
 }
 
 button:disabled {
@@ -1320,7 +1356,7 @@ dialog .actions {
 	.netsplit {
 		grid-template-columns: minmax(0, 1fr);
 	}
-	#inspector {
+	#inspector, .dinsp {
 		position: static;
 		max-height: none;
 	}

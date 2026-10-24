@@ -10,6 +10,7 @@
 <script src="app.js" defer></script>
 <script src="ifdefs.js" defer></script>
 <script src="inspector.js" defer></script>
+<script src="daemons.js" defer></script>
 <script src="sheets.js" defer></script>
 <script src="xterm/xterm.js" defer></script>
 <script src="xterm/addon-fit.js" defer></script>
@@ -115,14 +116,17 @@
 </section>
 
 <section id="ws-routing" class="ws" hidden>
+<div class="daemons" data-ws="routing"></div>
 <div class="shows" data-presets="route inet 0|route inet6 0|arp 0|ndp 0"></div>
 </section>
 
 <section id="ws-security" class="ws" hidden>
+<div class="daemons" data-ws="security"></div>
 <div class="shows" data-presets="sadb|users"></div>
 </section>
 
 <section id="ws-services" class="ws" hidden>
+<div class="daemons" data-ws="services"></div>
 <div class="shows" data-presets="dhcp leases|users"></div>
 </section>
 
@@ -131,6 +135,7 @@
 <div class="seg" id="topics" role="radiogroup" aria-label="Topic">
 <label><input type="radio" name="topic" value="changes" checked><span>Changes</span></label>
 <label><input type="radio" name="topic" value="history"><span>History</span></label>
+<label><input type="radio" name="topic" value="jobs"><span>Jobs &amp; MOTD</span></label>
 <label><input type="radio" name="topic" value="live"><span>Live operations</span></label>
 </div>
 </div>
@@ -216,6 +221,10 @@
 <p class="empty">No log followed.</p>
 </div>
 </div>
+</div>
+
+<div class="topic" id="topic-jobs" hidden>
+<div class="daemons" data-ws="system"></div>
 </div>
 
 <div class="topic" id="topic-live" hidden>

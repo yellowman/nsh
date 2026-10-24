@@ -34,16 +34,23 @@ as its face shows them, each with a link light and an activity light,
 a readout of how many ports are up, the interfaces and addresses, and
 the last change, and the logical interfaces grouped by what they are on;
 network, routing, security and services, each with its shows,
-as tables, and in network an interface's settings, which can be changed
-and staged into the candidate as lines of configuration; the system
-and its changes, in three topics: changes, where configure is entered
+as tables; in network an interface's settings, which can be changed
+and staged into the candidate as lines of configuration; in routing,
+security and services the daemons there, a row for each routing table
+each is in, with whether the configuration enables it and whether it
+runs, and the one chosen with its rules as text, which can be changed
+and staged into the candidate as its edit in
+.Xr nsh 8
+does, and its live operations; the system
+and its changes, in four topics: changes, where configure is entered
 and lines of configuration are typed, as
 .Xr nsh 8
 takes them, beside a view of the changes, the candidate, the running
 or the saved configuration; history, the saved configurations as rows,
 any of which can be shown or loaded into the candidate, nshd's notices,
-and the logs followed; and live operations, each confirmed before it
-runs; and a terminal, where
+and the logs followed; jobs and MOTD, root's scheduled jobs and the
+message of the day, as the daemons are; and live operations, each
+confirmed before it runs; and a terminal, where
 .Xr nsh 8
 runs as the user, which xterm.js draws.
 Tab completes a line as in

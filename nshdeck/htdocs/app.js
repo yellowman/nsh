@@ -23,6 +23,7 @@ var jacks = {};			/* each port's button, by its name */
 var packets = {};		/* each port's packets, at the last look */
 var chosen = -1;		/* the saved configuration History shows */
 var pending = null;		/* the operation that waits to be confirmed */
+var pendingOut = null;		/* where what it prints goes */
 
 /* what each configure mode is */
 var MODES = {
@@ -210,13 +211,15 @@ function context(j) {
 /* System's topic, shown */
 function topic(name) {
 	$("topics").querySelector("[value=" + name + "]").checked = true;
-	["changes", "history", "live"].forEach(function (t) {
+	["changes", "history", "jobs", "live"].forEach(function (t) {
 		$("topic-" + t).hidden = t !== name;
 	});
 	if (name === "changes")
 		view();
 	else if (name === "history")
 		saved();
+	else if (name === "jobs")
+		daemons("system");
 }
 
 /* the configuration the View chooses, or why there is none */
@@ -368,6 +371,15 @@ function ops() {
 	});
 }
 
+/* an operation, run once it is confirmed, what it prints into out */
+function operate(line, rtable, out) {
+	pending = { line: line, rtable: rtable };
+	pendingOut = out;
+	$("op-line").textContent = line + (rtable !== "0" ?
+	    "\nin routing table " + rtable : "");
+	$("op-dialog").showModal();
+}
+
 /* how the candidate differs from what runs, in the strip */
 function changes(inConfigure) {
 	var tag = $("changes");
@@ -413,6 +425,8 @@ function workspace(name) {
 	}, LOOK);
 	if (name === "terminal")
 		terminalShown();
+	if (name === "routing" || name === "security" || name === "services")
+		daemons(name);
 	if (name === "system")
 		topic($("topics").querySelector(":checked").value);
 }
@@ -986,6 +1000,8 @@ function loggedOut() {
 	closeChoices();
 	tgone("logged out");
 	insp = null;
+	dinsp = null;
+	dchosen = {};
 	selected = "";
 	cur = null;
 	$("deck").hidden = true;
@@ -1024,6 +1040,7 @@ document.addEventListener("DOMContentLoaded", function () {
 		});
 	});
 	document.querySelectorAll(".shows").forEach(shows);
+	document.querySelectorAll(".daemons").forEach(daemonsBox);
 	ops();
 	$("topics").addEventListener("change", function (e) {
 		topic(e.target.value);
@@ -1100,10 +1117,7 @@ document.addEventListener("DOMContentLoaded", function () {
 	});
 	/* an operation runs once it is confirmed */
 	on("op-form", function (f) {
-		pending = { line: f.line.value, rtable: f.rtable.value };
-		$("op-line").textContent = pending.line + (pending.rtable !==
-		    "0" ? "\nin routing table " + pending.rtable : "");
-		$("op-dialog").showModal();
+		operate(f.line.value, f.rtable.value, $("op-out"));
 	});
 	$("op-cancel").addEventListener("click", function () {
 		$("op-dialog").close();
@@ -1111,7 +1125,7 @@ document.addEventListener("DOMContentLoaded", function () {
 	on("op-confirm", function () {
 		$("op-dialog").close();
 		ask("POST", "op", pending).then(function (j) {
-			var out = $("op-out");
+			var out = pendingOut;
 
 			out.textContent = "";
 			(j.records || []).forEach(function (r) {

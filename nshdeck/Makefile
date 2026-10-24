@@ -36,9 +36,9 @@ afterinstall:
 	    ${DESTDIR}${HTDOCS}/xterm
 	${INSTALL} -c -o root -g wheel -m 444 ${.CURDIR}/htdocs/index.html \
 	    ${.CURDIR}/htdocs/app.js ${.CURDIR}/htdocs/ifdefs.js \
-	    ${.CURDIR}/htdocs/inspector.js ${.CURDIR}/htdocs/sheets.js \
-	    ${.CURDIR}/htdocs/term.js ${.CURDIR}/htdocs/style.css \
-	    ${DESTDIR}${HTDOCS}
+	    ${.CURDIR}/htdocs/inspector.js ${.CURDIR}/htdocs/daemons.js \
+	    ${.CURDIR}/htdocs/sheets.js ${.CURDIR}/htdocs/term.js \
+	    ${.CURDIR}/htdocs/style.css ${DESTDIR}${HTDOCS}
 	${INSTALL} -c -o root -g wheel -m 444 \
 	    ${.CURDIR}/htdocs/xterm/xterm.js ${.CURDIR}/htdocs/xterm/xterm.css \
 	    ${.CURDIR}/htdocs/xterm/addon-fit.js \
