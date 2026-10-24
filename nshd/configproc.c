@@ -375,7 +375,8 @@ configproc(int debug, int verbose)
 	child_start("config", debug, verbose);
 	capture_stdout();
 	privdrop(PROC_CONFIG);
-	if (pledge("stdio recvfd", NULL) == -1)
+	/* a later pledge cannot add a promise */
+	if (pledge("stdio recvfd sendfd", NULL) == -1)
 		fatal("pledge");
 
 	/* nsh's code here asks no kernel, opens no file, runs no program */
@@ -389,8 +390,6 @@ configproc(int debug, int verbose)
 	/* its peers' pipes are here; a terminal's pty passes through */
 	imsgbuf_allow_fdpass(&links[SYSTEM].iev->ibuf);
 	imsgbuf_allow_fdpass(&links[FRONTEND].iev->ibuf);
-	if (pledge("stdio recvfd sendfd", NULL) == -1)
-		fatal("pledge");
 	event_set(&rt_ev, 5, EV_READ | EV_PERSIST, config_route, NULL);
 	event_add(&rt_ev, NULL);
 	evtimer_set(&rt_tm, config_routed, NULL);

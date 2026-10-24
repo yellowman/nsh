@@ -94,7 +94,8 @@ frontend(int debug, int verbose)
 		web_user = 1;
 	}
 	privdrop(PROC_FRONTEND);
-	if (pledge("stdio unix recvfd", NULL) == -1)
+	/* a later pledge cannot add a promise */
+	if (pledge("stdio unix recvfd sendfd", NULL) == -1)
 		fatal("pledge");
 
 	if ((iev_parent = imsgev_new(3, frontend_dispatch_parent, 0)) == NULL)
@@ -102,8 +103,6 @@ frontend(int debug, int verbose)
 	links_init(links, sizeof(links) / sizeof(links[0]));
 	/* its peers' pipes are here; a terminal's pty comes from config */
 	imsgbuf_allow_fdpass(&links[CONFIG].iev->ibuf);
-	if (pledge("stdio unix recvfd sendfd", NULL) == -1)
-		fatal("pledge");
 	event_dispatch();
 	exit(0);
 }
