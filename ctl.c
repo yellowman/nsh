@@ -987,6 +987,76 @@ ctl_cand_edit(struct daemons *d, char *name, char **test)
 }
 
 /*
+ * A daemon's rules in rtable's block of the candidate, through nshd's
+ * config: printed; or, with set, made the lines of text, as its edit
+ * makes them. 0, or -1, said why
+ */
+int
+ctl_cand_rules(char *name, int rtable, int set, char *text, size_t len)
+{
+	struct daemons *d, *c;
+	struct ctl *x;
+	StringList *lines;
+	char stmt[64], *l;
+	size_t n, i, j;
+	int saved, r = 0;
+
+	d = (struct daemons *)genget(name, (char **)ctl_daemons,
+	    sizeof(struct daemons));
+	if (d == NULL || Ambiguous(d)) {
+		printf("%% %s: no such daemon\n", name);
+		return -1;
+	}
+	for (x = d->table; x->name != NULL; x++)
+		if (x->handler == call_editor || x->handler == edit_motd ||
+		    x->handler == edit_crontab)
+			break;
+	if (x->name == NULL) {
+		printf("%% %s has no rules to edit\n", d->name);
+		return -1;
+	}
+	if (rtable < 0 || rtable > d->rtablemax) {
+		printf("%% Command %s not available via rtable %d\n", d->name,
+		    rtable);
+		return -1;
+	}
+	if (!cand_hasrtable(rtable)) {
+		printf("%% rtable %d is not in the candidate\n", rtable);
+		return -1;
+	}
+	/* the name conf gives it: scheduler is crontab */
+	for (c = ctl_daemons; c->table != d->table; c++)
+		;
+	snprintf(stmt, sizeof(stmt), "%s rules", c->name);
+	saved = cand_rtable;
+	cand_rtable = rtable;
+	if (!set) {
+		for (n = 0; (l = cand_rule(stmt, n)) != NULL; n++)
+			printf("%s\n", l);
+		cand_rtable = saved;
+		return 0;
+	}
+	lines = sl_init();
+	for (i = 0; i < len; i = j + 1) {
+		for (j = i; j < len && text[j] != '\n'; j++)
+			;
+		if ((l = strndup(text + i, j - i)) == NULL) {
+			printf("%% %s: %s\n", stmt, strerror(errno));
+			r = -1;
+			break;
+		}
+		sl_add(lines, l);
+	}
+	if (r == 0 && (cand_setrules(stmt, lines->sl_str,
+	    lines->sl_cur) == -1 || ctl_cand_follow(d, c->name,
+	    lines->sl_cur > 0) == -1))
+		r = -1;
+	sl_free(lines, 1);
+	cand_rtable = saved;
+	return r;
+}
+
+/*
  * A configuration test in configure private, on its rules for d: 1, or
  * -1 when the test could not run, as T_EXEC outside configure private
  */

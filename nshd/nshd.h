@@ -38,6 +38,8 @@
 #define NSHD_CLEARS	64	/* daemons' rules a script empties, MAXCLEARS */
 #define NSHD_PART	(16 * 1024 * 1024)	/* a commit's part, at most */
 #define NSHD_CONFIRMMAX	1440	/* commit confirmed's minutes, CONFIRMMAX */
+#define NSHD_DAEMON	16	/* a daemon's name, with its NUL */
+#define NSHD_RULES	(1024 * 1024)	/* a daemon's rules, at most */
 
 /* the permissions a session's login class gives it */
 #define NSHD_VIEW	0x1	/* every show */
@@ -87,6 +89,19 @@ struct nshd_load {
 	int32_t		last;
 	int32_t		len;		/* of text */
 	char		comment[NSHD_COMMENT];
+	char		text[NSHD_TEXT];
+};
+
+/*
+ * A daemon's rules in the session's candidate, in an rtable: asked for,
+ * or set a part at a time, as the daemon's edit sets them
+ */
+struct nshd_rules {
+	int32_t		set;		/* or 0, to ask for them */
+	int32_t		last;
+	int32_t		rtable;
+	int32_t		len;		/* of text */
+	char		daemon[NSHD_DAEMON];
 	char		text[NSHD_TEXT];
 };
 
@@ -406,7 +421,8 @@ enum nshd_imsg {
 	IMSG_CTL_COMMANDS,	/* nsh's command tables, as facts */
 	IMSG_CTL_NAMES,		/* names for completion, as facts */
 	IMSG_CTL_TERMINAL,	/* nshd_terminal; the pty, then a result */
-	IMSG_SYS_TERMINAL	/* nshd_systerm; the pty, then the end */
+	IMSG_SYS_TERMINAL,	/* nshd_systerm; the pty, then the end */
+	IMSG_CTL_RULES		/* nshd_rules: the rules asked for, a result */
 };
 
 struct imsgev {

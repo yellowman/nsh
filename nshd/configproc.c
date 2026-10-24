@@ -45,9 +45,10 @@
  * until they are in, the session may only say hello and go. A show,
  * the tables and names for completion, and a terminal need view; an
  * operation needs operate; configure private, configure terminal, a commit, a
- * rollback and a load need configure. configure and configure
- * exclusive need admin, as their candidate is everyone's. exec is nsh's
- * to check, as it runs a program: config only tells it at hello.
+ * rollback, a load and a daemon's rules need configure. configure and
+ * configure exclusive need admin, as their candidate is everyone's.
+ * exec is nsh's to check, as it runs a program: config only tells it
+ * at hello.
  * A session without admin sees no password hash: config takes each
  * out of what it sends such a session of the configuration.
  * system checks and runs an operation a session may ask, and config
@@ -81,6 +82,11 @@
  * after reads as the candidate (RECORD, as applied), and answered once
  * its commit ends, after which the candidate is what runs again. commit
  * there saves what runs; rollback has nothing to roll back.
+ *
+ * A daemon's rules come to a session in configure a part at a time,
+ * and become its candidate's, in the rtable asked for, as the daemon's
+ * edit makes them; the session may ask for them too. configure
+ * terminal takes none.
  *
  * A client that completes lines itself, as nsh's Tab does, asks config
  * for two things, sent as facts: nsh's command tables, and the names of
@@ -165,6 +171,10 @@ struct session {
 	char			*load;	/* nsh -c's, as it comes */
 	size_t			 loadlen;
 	char			 loaded[NSHD_COMMENT];	/* its comment */
+	char			*rules;	/* a daemon's, as they come, */
+	size_t			 ruleslen;
+	char			 rulesof[NSHD_DAEMON];	/* whose, or "", */
+	int			 rulesrt;	/* and the rtable's */
 	uint32_t		 keep;	/* the keeping its answer waits on */
 	struct nshd_context	 held;	/* that answer: its context, */
 	int			 heldmode;	/* if it gives one, */
@@ -313,6 +323,8 @@ static struct session	*config_private(uint32_t);
 static int		 config_in(struct session *);
 static int		 config_terminal(struct session *);
 static void		 config_load(uint32_t, struct nshd_load *);
+static void		 config_rules(uint32_t, struct nshd_rules *);
+static void		 rules_drop(struct session *);
 static int		 config_loaded(struct session *);
 static int		 config_enter(struct session *);
 static void		 config_left(struct session *);
@@ -440,6 +452,7 @@ config_dispatch_frontend(int fd, short event, void *arg)
 	struct nshd_rollback	 rb;
 	struct nshd_op		 op;
 	struct nshd_load	 ld;
+	struct nshd_rules	 rl;
 	struct nshd_login	 lg;
 	struct nshd_watch	 w;
 	struct nshd_terminal	 tm;
@@ -517,6 +530,15 @@ config_dispatch_frontend(int fd, short event, void *arg)
 			    sizeof(ld.comment)) == NULL)
 				goto bad;
 			config_load(id, &ld);
+			break;
+		case IMSG_CTL_RULES:
+			if (imsg_get_data(&imsg, &rl, sizeof(rl)) == -1 ||
+			    (rl.set != 0 && rl.set != 1) ||
+			    (rl.last != 0 && rl.last != 1) || rl.len < 0 ||
+			    rl.len > NSHD_TEXT || memchr(rl.daemon, '\0',
+			    sizeof(rl.daemon)) == NULL)
+				goto bad;
+			config_rules(id, &rl);
 			break;
 		case IMSG_CTL_LOGIN:
 			if (imsg_get_data(&imsg, &lg, sizeof(lg)) == -1 ||
@@ -1596,6 +1618,76 @@ config_load(uint32_t session, struct nshd_load *l)
 }
 
 /*
+ * A daemon's rules in the session's candidate, in an rtable: asked for,
+ * printed; or a part of them, kept, answered, and with the last, set,
+ * as the daemon's edit sets them
+ */
+static void
+config_rules(uint32_t session, struct nshd_rules *rl)
+{
+	struct session	*sp;
+	char		*p;
+	int		 r;
+
+	if ((sp = config_private(session)) == NULL)
+		return;
+	if (sp->how == NSHD_TERMINAL) {
+		rules_drop(sp);
+		config_answer(session, 1, "%% configure terminal sets no "
+		    "daemon's rules; configure private does\n");
+		return;
+	}
+	if (rl->set) {
+		if (sp->rulesof[0] == '\0') {
+			strlcpy(sp->rulesof, rl->daemon, sizeof(sp->rulesof));
+			sp->rulesrt = rl->rtable;
+		}
+		if (strcmp(sp->rulesof, rl->daemon) != 0 ||
+		    sp->rulesrt != rl->rtable) {
+			rules_drop(sp);
+			config_answer(session, 1, "%% nshd: a part of other "
+			    "rules came before the last of these\n");
+			return;
+		}
+		if ((size_t)rl->len > NSHD_RULES - sp->ruleslen ||
+		    memchr(rl->text, '\0', rl->len) != NULL) {
+			rules_drop(sp);
+			config_answer(session, 1, "%% nshd: a daemon's rules "
+			    "are text, at most %d bytes\n", NSHD_RULES);
+			return;
+		}
+		if (rl->len > 0) {
+			if ((p = realloc(sp->rules, sp->ruleslen + rl->len)) ==
+			    NULL)
+				fatal("%s", __func__);
+			memcpy(p + sp->ruleslen, rl->text, rl->len);
+			sp->rules = p;
+			sp->ruleslen += rl->len;
+		}
+		if (!rl->last) {
+			config_answer(session, 0, NULL);
+			return;
+		}
+	}
+	shared_hold(sp);
+	r = session_rules(sp->st, rl->daemon, rl->rtable, rl->set, sp->rules,
+	    sp->ruleslen);
+	shared_done(sp);
+	rules_drop(sp);
+	config_ran(sp, r, 0);
+}
+
+/* the parts of a daemon's rules the session sent, gone */
+static void
+rules_drop(struct session *sp)
+{
+	free(sp->rules);
+	sp->rules = NULL;
+	sp->ruleslen = 0;
+	sp->rulesof[0] = '\0';
+}
+
+/*
  * nsh -c's configuration, as a candidate of its own in place of what
  * runs: committed, if it differs, all of it or none, and answered once
  * the commit ends; 1 if it is committed, else as a handler returns
@@ -1694,6 +1786,7 @@ config_left(struct session *sp)
 	int	 how = sp->how;
 
 	sp->how = 0;
+	rules_drop(sp);
 	if (how != NSHD_EXCLUSIVE)
 		return;
 	exclusive = NULL;
@@ -2734,6 +2827,7 @@ session_gone(struct session *sp)
 	TAILQ_REMOVE(&sessions, sp, entry);
 	session_free(sp->st);
 	free(sp->load);
+	free(sp->rules);
 	free(sp);
 }
 

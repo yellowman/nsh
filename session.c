@@ -206,6 +206,22 @@ session_line(struct session_state *s, char *line)
 }
 
 /*
+ * A daemon's rules in rtable, in s's candidate: printed, or with set,
+ * made the lines of text, as ctl_cand_rules() does
+ */
+int
+session_rules(struct session_state *s, char *daemon, int rtable, int set,
+    char *text, size_t len)
+{
+	int r;
+
+	session_enter(s);
+	r = ctl_cand_rules(daemon, rtable, set, text, len);
+	session_leave(s);
+	return r;
+}
+
+/*
  * Send nsh's command tables to o as facts, for a client that completes
  * lines itself.  Each row of cmdtab (table 0), Intlist (1), Bridgelist
  * (2) and of every table a row points to becomes one record.  Tables are

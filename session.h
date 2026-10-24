@@ -82,6 +82,8 @@ int			 cand_shared_write(struct cand_shared *, FILE *);
 int			 cand_shared_read(struct cand_shared *, char *, size_t);
 extern const char	*cand_held;
 int			 session_line(struct session_state *, char *);
+int			 session_rules(struct session_state *, char *, int, int,
+			    char *, size_t);
 /* nsh's command tables, sent as facts */
 struct facts_out;
 int			 cmplt_facts(struct facts_out *);

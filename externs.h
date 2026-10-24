@@ -687,6 +687,7 @@ extern int cand_rtable;
 int cand_rtable_set(int, int, char *);
 char *cand_rule(char *, size_t);
 int cand_setrules(char *, char **, size_t);
+int cand_hasrtable(int);
 struct cnode *running_tree(void);
 void running_set(struct cnode *);
 int cand_cloneable(char *);

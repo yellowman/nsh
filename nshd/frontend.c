@@ -61,6 +61,7 @@ union frontend_request {
 	struct nshd_rollback	 rollback;
 	struct nshd_op		 op;
 	struct nshd_load	 load;
+	struct nshd_rules	 rules;
 	struct nshd_login	 login;
 	struct nshd_watch	 watch;
 	struct nshd_terminal	 terminal;
@@ -319,6 +320,7 @@ frontend_client(struct ctl_conn *c, struct imsg *imsg)
 	case IMSG_CTL_ROLLBACK:
 	case IMSG_CTL_OP:
 	case IMSG_CTL_LOAD:
+	case IMSG_CTL_RULES:
 	case IMSG_CTL_WATCH:
 		if ((len = frontend_whole(imsg, &r)) == -1)
 			return (-1);
@@ -410,6 +412,15 @@ frontend_whole(struct imsg *imsg, union frontend_request *r)
 		    sizeof(r->load.comment)) == NULL)
 			return (-1);
 		return (sizeof(r->load));
+	case IMSG_CTL_RULES:
+		if (imsg_get_data(imsg, &r->rules, sizeof(r->rules)) == -1 ||
+		    (r->rules.set != 0 && r->rules.set != 1) ||
+		    (r->rules.last != 0 && r->rules.last != 1) ||
+		    r->rules.len < 0 || r->rules.len > NSHD_TEXT ||
+		    memchr(r->rules.daemon, '\0',
+		    sizeof(r->rules.daemon)) == NULL)
+			return (-1);
+		return (sizeof(r->rules));
 	case IMSG_CTL_LOGIN:
 		if (imsg_get_data(imsg, &r->login, sizeof(r->login)) == -1 ||
 		    memchr(r->login.name, '\0', sizeof(r->login.name)) == NULL ||

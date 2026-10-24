@@ -751,6 +751,15 @@ cand_rtblock(char *buf, size_t len, int table)
 	return -1;
 }
 
+/* Has the candidate a block for rtable table? Table 0's is the top level */
+int
+cand_hasrtable(int table)
+{
+	char block[96];
+
+	return table == 0 || cand_rtblock(block, sizeof(block), table) == 0;
+}
+
 /* The current rtable's block, in buf, or NULL for table 0 */
 static char *
 cand_rtcur(char *buf, size_t len)

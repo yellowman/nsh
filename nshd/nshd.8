@@ -68,8 +68,8 @@ asks system for at the session's hello, by the uid frontend gives (see
 in
 .Xr nsh 8 ) .
 config refuses what they do not allow: a show without view, an
-operation without operate, and configure, a commit, a rollback or a
-load without configure.
+operation without operate, and configure, a commit, a rollback, a
+load or a daemon's rules without configure.
 exec, the programs nsh runs, is nsh's to check; config only says
 whether the class has it.
 .Cm configure
@@ -123,6 +123,12 @@ config takes the configuration that
 .Ic nsh Fl c
 sends, a part at a time, as a candidate of its own in place of what
 runs, and commits it, all of it or none.
+A session in configure, but not
+.Cm configure terminal ,
+may set a daemon's rules in its candidate, in a routing table, a part
+at a time and up to 1 MB, as the daemon's
+.Cm edit
+sets them; or ask for them.
 .Cm rollback Ar N
 takes configuration
 .Ar N
