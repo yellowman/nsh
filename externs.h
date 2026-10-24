@@ -528,11 +528,13 @@ struct cmplt {
 	StringList	*helps;		/* and each one's help, or NULL */
 	char		*cmdname;	/* a choice with help: "cmdname word" */
 	int		 vertical;	/* list the choices in columns anyway */
+	int		 help;		/* insert nothing; list every choice */
 };
-unsigned char complete_line(const char *, size_t, size_t, char *, char **,
-    size_t, struct cmplt *);
-void cmplt_free(struct cmplt *);
 #endif
+struct cmplt;
+unsigned char complete_line(const char *, size_t, size_t, char *, char **,
+    size_t, int, struct cmplt *);
+void cmplt_free(struct cmplt *);
 void inithist(void);
 void endhist(void);
 void initedit(void);

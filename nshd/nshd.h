@@ -387,7 +387,9 @@ enum nshd_imsg {
 	IMSG_SYS_NOTICE,	/* nshd_notice: system's, unasked */
 	IMSG_SYS_FOLLOW,	/* nshd_follow: FOLLOWING, then text */
 	IMSG_SYS_FOLLOWING,	/* system to config: the log is followed */
-	IMSG_SYS_LOGGED		/* nshd_logged: before a login's result */
+	IMSG_SYS_LOGGED,	/* nshd_logged: before a login's result */
+	IMSG_CTL_COMMANDS,	/* nsh's command tables, as facts */
+	IMSG_CTL_NAMES		/* names for completion, as facts */
 };
 
 struct imsgev {

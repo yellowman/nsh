@@ -285,6 +285,15 @@ frontend_client(struct ctl_conn *c, struct imsg *imsg)
 		    sizeof(show)) == -1)
 			fatal("%s", __func__);
 		return (0);
+	case IMSG_CTL_COMMANDS:
+	case IMSG_CTL_NAMES:
+		/* completion's tables and names: these carry no data */
+		if (imsg_get_len(imsg) != 0)
+			return (-1);
+		if (link_compose(&links[CONFIG], imsg_get_type(imsg), c->id,
+		    NULL, 0) == -1)
+			fatal("%s", __func__);
+		return (0);
 	case IMSG_CTL_LOGIN:
 		/* the web configurator's alone */
 		if (!web_user || c->uid != web_uid)

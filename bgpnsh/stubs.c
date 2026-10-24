@@ -18,8 +18,7 @@
 
 #include "../stringlist.h"
 
-int is_bridge(int, char *);
-int db_select_rtable_rtables(StringList *);
+int kf_names(int, StringList *);
 int prot1_run(char *, char *, int, char **, char **);
 int cmdargs(char *, char **);
 
@@ -29,14 +28,9 @@ int in_config;		/* nor is it nshd's config */
 int nshd_config;	/* nor configure in nshd */
 int nshd_rtable;
 
+/* bgpnsh completes no names of interfaces, groups, bridges or rtables */
 int
-is_bridge(int s, char *brdg)
-{
-	return 0;
-}
-
-int
-db_select_rtable_rtables(StringList *words)
+kf_names(int kind, StringList *sl)
 {
 	return -1;
 }

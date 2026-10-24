@@ -35,9 +35,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
-#include <sys/ioctl.h>
-#include <ifaddrs.h>
 #include <net/if.h>
+#include <netinet/in.h>
 #include <sys/param.h>
 #include <sys/tty.h>
 #include <unistd.h>
@@ -45,6 +44,7 @@
 #include "stringlist.h"
 #include "externs.h"
 #include "commands.h"
+#include "kfacts.h"
 
 #define ttyout stdout
 #define ttyin stdin
@@ -63,6 +63,7 @@ static unsigned char complete_ifname(char *, int, struct cmplt *);
 static unsigned char complete_ifgroup(char *, int, struct cmplt *);
 static unsigned char complete_ifbridge(char *, int, struct cmplt *);
 static unsigned char complete_rtable(char *, int, struct cmplt *);
+static unsigned char complete_names(char *, int, struct cmplt *, int, char *);
 static unsigned char complete_environment(char *, int, struct cmplt *, int);
 static unsigned char complete_nocmd(struct ghs *, char *, int, struct cmplt *,
 				   char **, int, int);
@@ -112,7 +113,7 @@ complete_ambiguous(char *word, int list, StringList *words, struct cmplt *cp,
 	if (words->sl_cur == 0)
 		return (CC_ERROR);	/* no choices available */
 
-	if (words->sl_cur == 1) {	/* only one choice available */
+	if (words->sl_cur == 1 && !cp->help) {	/* only one choice */
 		(void)strlcpy(insertstr, words->sl_str[0], sizeof insertstr);
 		(void)strlcat(insertstr, sep, sizeof insertstr);
 		(void)strlcpy(cp->insert, insertstr + wordlen,
@@ -120,7 +121,7 @@ complete_ambiguous(char *word, int list, StringList *words, struct cmplt *cp,
 		return (CC_REFRESH);
 	}
 
-	if (!list) {
+	if (!list && !cp->help) {
 		matchlen = 0;
 		if ((lastmatch = words->sl_str[0]))
 			matchlen = strlen(lastmatch);
@@ -156,7 +157,7 @@ complete_command(char *word, int list, struct cmplt *cp, char **table,
 {
 	char **c;
 	struct ghs *ghs;
-	StringList *words;
+	StringList *words, *helps;
 	size_t wordlen;
 	unsigned char rv;
 
@@ -164,18 +165,27 @@ complete_command(char *word, int list, struct cmplt *cp, char **table,
 		return CC_ERROR;
 
 	words = sl_init();
+	helps = sl_init();
 	wordlen = strlen(word);
 
 	for (c = table; *c != NULL; c = (char **)((char *)c + stlen)) {
 		ghs = (struct ghs *)c;
 		if (wordlen > strlen(ghs->name))
 			continue;
-		if (strncmp(word, ghs->name, wordlen) == 0)
+		if (strncmp(word, ghs->name, wordlen) == 0) {
 			sl_add(words, ghs->name);
+			sl_add(helps, ghs->help);
+		}
 	}
 
-	rv = complete_ambiguous(word, list, words, cp, " ");
+	/* with help, list every match in the table's order, with its help */
+	if (cp->help && words->sl_cur > 0) {
+		cmplt_list(cp, words, helps);
+		rv = CC_REDISPLAY;
+	} else
+		rv = complete_ambiguous(word, list, words, cp, " ");
 	sl_free(words, 0);
+	sl_free(helps, 0);
 	return (rv);
 }
 
@@ -287,7 +297,8 @@ complete_showhelp(char *word, struct cmplt *cp, char **table, int stlen,
 	 * brackets, "<...>" or "[...]") then we can complete this parameter.
 	 */
 	if (cmdlist->sl_cur == 1 && cmdlist->sl_str[0][0] != '<' &&
-	    cmdlist->sl_str[0][0] != '[' && cmdlist->sl_str[0][0] != '^') {
+	    cmdlist->sl_str[0][0] != '[' && cmdlist->sl_str[0][0] != '^' &&
+	    !cp->help) {
 		(void)strlcpy(insertstr, cmdlist->sl_str[0], sizeof insertstr);
 		(void)strlcat(insertstr, " ", sizeof insertstr);
 		(void)strlcpy(cp->insert, insertstr + wordlen,
@@ -327,181 +338,65 @@ complt_c(EditLine *el, int ch)
 	return complete(el, (char **)cmdtab, sizeof(struct cmd));
 }
 
-unsigned char
+/*
+ * Complete word from the names of one kind (KF_* in kfacts.h). extra,
+ * if not NULL, is one more name to offer.
+ */
+static unsigned char
+complete_names(char *word, int list, struct cmplt *cp, int kind,
+    char *extra)
+{
+	StringList *names, *words;
+	size_t wordlen = strlen(word);
+	unsigned char rv;
+	int i;
+
+	names = sl_init();
+	if (kf_names(kind, names) == -1) {
+		sl_free(names, 1);
+		return (CC_ERROR);
+	}
+	words = sl_init();
+	if (extra != NULL && strncmp(word, extra, wordlen) == 0)
+		sl_add(words, extra);
+	for (i = 0; i < names->sl_cur; i++)
+		if (strncmp(word, names->sl_str[i], wordlen) == 0)
+			sl_add(words, names->sl_str[i]);
+	rv = complete_ambiguous(word, list, words, cp, " ");
+	sl_free(words, 0);
+	sl_free(names, 1);
+	return (rv);
+}
+
+static unsigned char
 complete_ifname(char *word, int list, struct cmplt *cp)
 {
-	StringList *words;
-	size_t wordlen;
-	unsigned char rv;
-	const char *status_cmd = "status";
-	struct if_nameindex *ifn_list, *ifnp;
-
-	wordlen = strlen(word);
-
-	if ((ifn_list = if_nameindex()) == NULL)
-		return (CC_ERROR);
-
-	words = sl_init();
-	for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++) {
-                if (wordlen > strlen(ifnp->if_name))
-                        continue;
-                if (strncmp(word, ifnp->if_name, wordlen) == 0)
-                        sl_add(words, ifnp->if_name);
-        }
-
-	/* Handle the pseudo command "show interface status". */
-	if (margc >= 2 && isprefix(margv[0], "show") &&
-	    isprefix(margv[1], "interface") &&
-	    wordlen <= strlen(status_cmd) &&
-	    strncmp(word, status_cmd, wordlen) == 0) {
-		char *s = strdup(status_cmd);
-		if (s == NULL)
-			err(1, "strdup");
-		sl_add(words, s);
-	}
-
-        rv = complete_ambiguous(word, list, words, cp, " ");
-	if_freenameindex(ifn_list);
-        sl_free(words, 0);
-        return (rv);
+	/* "show interface" also takes "status" */
+	return (complete_names(word, list, cp, KF_IFS, margc >= 2 &&
+	    isprefix(margv[0], "show") && isprefix(margv[1], "interface") ?
+	    "status" : NULL));
 }
 
-unsigned char
+static unsigned char
 complete_ifgroup(char *word, int list, struct cmplt *cp)
 {
-	StringList *words;
-	size_t wordlen;
-	unsigned char rv;
-	struct ifgroupreq ifgr;
-	struct ifg_req *ifg;
-	int ifs;
-	u_int len, ngroups, i;
-
-	wordlen = strlen(word);
-
-	bzero(&ifgr, sizeof(ifgr));
-
-	if ((ifs = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-		printf("%% complete_ifgroup: %s\n", strerror(errno));
-		return (CC_ERROR);
-	}
-
-	if (ioctl(ifs, SIOCGIFGLIST, (caddr_t)&ifgr) == -1) {
-		printf("%% SIOCGIFGLIST: %s\n", strerror(errno));
-		close(ifs);
-		return (CC_ERROR);
-	}
-
-	len = ifgr.ifgr_len;
-	ifgr.ifgr_groups = calloc(1, len);
-	if (ifgr.ifgr_groups == NULL) {
-		printf("%% calloc: %s\n", strerror(errno));
-		close(ifs);
-		return (CC_ERROR);
-	}
-
-	if (ioctl(ifs, SIOCGIFGLIST, (caddr_t)&ifgr) == -1) {
-		printf("%% SIOCGIFGLIST: %s\n", strerror(errno));
-		free(ifgr.ifgr_groups);
-		close(ifs);
-		return (CC_ERROR);
-	}
-
-	words = sl_init();
-	ngroups = len / sizeof(ifgr.ifgr_groups[0]);
-	for (i = 0; i < ngroups; i++) {
-		ifg = &ifgr.ifgr_groups[i];
-		if (wordlen > strlen(ifg->ifgrq_group))
-			continue;
-		if (strncmp(word, ifg->ifgrq_group, wordlen) == 0)
-			sl_add(words, ifg->ifgrq_group);
-	}
-
-	rv = complete_ambiguous(word, list, words, cp, " ");
-	sl_free(words, 0);
-	free(ifgr.ifgr_groups);
-	close(ifs);
-	return (rv);
+	return (complete_names(word, list, cp, KF_GROUPS, NULL));
 }
 
-unsigned char
+static unsigned char
 complete_ifbridge(char *word, int list, struct cmplt *cp)
 {
-	StringList *words;
-	size_t wordlen;
-	unsigned char rv;
-	struct if_nameindex *ifn_list, *ifnp;
-	int ifs;
-
-	wordlen = strlen(word);
-
-	if ((ifn_list = if_nameindex()) == NULL)
-		return (CC_ERROR);
-
-	if ((ifs = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-		printf("%% complete_ifbridge: %s\n", strerror(errno));
-		if_freenameindex(ifn_list);
-		return (CC_ERROR);
-	}
-
-	words = sl_init();
-	for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++) {
-		if (wordlen > strlen(ifnp->if_name))
-			continue;
-		if (!is_bridge(ifs, ifnp->if_name))
-			continue;
-		if (strncmp(word, ifnp->if_name, wordlen) == 0)
-			sl_add(words, ifnp->if_name);
-	}
-
-	rv = complete_ambiguous(word, list, words, cp, " ");
-	if_freenameindex(ifn_list);
-	sl_free(words, 0);
-	close(ifs);
-	return (rv);
+	return (complete_names(word, list, cp, KF_BRIDGES, NULL));
 }
 
-unsigned char
+static unsigned char
 complete_rtable(char *word, int list, struct cmplt *cp)
 {
-	StringList *words, *rtables;
-	size_t wordlen = strlen(word);
-	int i, rv = CC_ERROR;
-	char *s = NULL;
-
-	words = sl_init();
-	rtables = sl_init();
-
-	if (db_select_rtable_rtables(rtables) < 0) {
-		printf("%% database failure select rtables rtable\n");
-		goto done;
-	}
-
 	/*
 	 * Routing table 0 always exists even if not created by nsh
 	 * and is never present in the database.
 	 */
-	s = strdup("0");
-	if (s == NULL) {
-		printf("%% strdup: %s", strerror(errno));
-		goto done;
-	}
-	sl_add(words, s);
-
-	for (i = 0; i < rtables->sl_cur; i++) {
-		char *rtable = rtables->sl_str[i];
-		if (wordlen > strlen(rtable))
-			continue;
-		if (strncmp(word, rtable, wordlen) == 0)
-			sl_add(words, rtable);
-	}
-
-	rv = complete_ambiguous(word, list, words, cp, " ");
-done:
-	sl_free(rtables, 1);
-	sl_free(words, 0);
-	free(s);
-	return (rv);
+	return (complete_names(word, list, cp, KF_RTABLES, "0"));
 }
 
 static unsigned char
@@ -562,7 +457,7 @@ complete(EditLine *el, char **table, size_t stlen)
 
 	lf = el_line(el);
 	rv = complete_line(lf->buffer, lf->lastchar - lf->buffer,
-	    lf->cursor - lf->buffer, word, table, stlen, &c);
+	    lf->cursor - lf->buffer, word, table, stlen, 0, &c);
 	if (rv == CC_REFRESH && el_insertstr(el, c.insert) == -1)
 		rv = CC_ERROR;
 	else if (rv == CC_REDISPLAY)
@@ -576,17 +471,19 @@ complete(EditLine *el, char **table, size_t stlen)
  * as table's commands take it. Into cp: text to insert at the cursor,
  * with CC_REFRESH, or the choices, with CC_REDISPLAY; or CC_ERROR.
  * word is the caller's, CMPLT_WORD bytes, the word it completed last:
- * completing the same one again lists the choices.
+ * completing the same one again lists the choices. With help, it
+ * inserts nothing and lists every choice, each with its help.
  */
 unsigned char
 complete_line(const char *buf, size_t len, size_t cursor, char *word,
-    char **table, size_t stlen, struct cmplt *cp)
+    char **table, size_t stlen, int help, struct cmplt *cp)
 {
 	struct ghs *c;
 	int celems, dolist, level, i;
 
 	memset(cp, 0, sizeof(*cp));
 	cp->words = sl_init();
+	cp->help = help;
 	if (len >= sizeof(line) || cursor > len)
 		return (CC_ERROR);
 	(void)memcpy(line, buf, len);

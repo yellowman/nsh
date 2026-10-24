@@ -46,6 +46,8 @@ struct kfacts {
 	size_t		 nifs;
 	char		(*cloners)[IFNAMSIZ];
 	size_t		 ncloners;
+	char		(*groups)[IFNAMSIZ];	/* the interface groups */
+	size_t		 ngroups;
 	unsigned char	 rtables[256];	/* 1 where the table is there */
 	int		 dhcpleased;	/* its control socket answers */
 	int		 failed;	/* kfacts_record() could not keep one */
@@ -67,6 +69,15 @@ int		 kf_media(int, char *, uint64_t *, uint64_t **, size_t *);
 int		 kf_cloner(char *, size_t);
 int		 kf_rtable(int);
 int		 kf_dhcpleased(void);
+
+/* the kinds of names kf_names() lists for completion */
+#define KF_IFS		0	/* the interfaces */
+#define KF_GROUPS	1	/* their groups */
+#define KF_BRIDGES	2	/* the bridges */
+#define KF_RTABLES	3	/* the routing tables, except table 0 */
+#ifdef _STRINGLIST_H
+int		 kf_names(int, StringList *);
+#endif
 
 #ifdef FACTS_H
 int		 kfacts_emit(struct facts_out *, struct kfacts *);

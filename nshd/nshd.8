@@ -139,6 +139,12 @@ socket parent opens for it, said once a second at most.
 It may watch logs too, which system follows, and config sends the
 session what system reads of each as notices, until the session's
 watch drops it.
+A client that completes lines itself, as Tab does in
+.Xr nsh 8 ,
+may ask for nsh's command tables and for the names of interfaces,
+groups, bridges and routing tables, if its session has view.
+The names come from config's last snapshot; if there is none yet,
+config takes one first.
 config is
 .Xr pledge 2 Ns d
 to stdio: it reads no kernel, opens no file and runs no program of its

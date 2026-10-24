@@ -114,7 +114,8 @@ kernel.c	table	kcloners
 kfacts.c	process	kf
 kfacts.c	scratch	kf_lladdr.buf
 kfacts.c	table	kcfields kdfields kiffields kind_cloner
-			kind_daemons kind_if kind_media kind_rtable
+			kind_daemons kind_group kind_if kind_media
+			kind_rtable
 			kmfields krfields
 kroute.c	process	rtmsg.seq sigflag
 kroute.c	scratch	ip_route.line_kroute lookup_kept
@@ -148,7 +149,7 @@ ppp.c		table	intpppoe.authopts intsppp.authopts
 prompt.c	session	prompt saved_prompt
 route.c		table	route.routeflags
 session.c	process	fresh in_config total
-session.c	table	session_sglobals sglobals
+session.c	table	kind_row rowfields session_sglobals sglobals
 settings.c	table	bridge_settings contexts if_settings
 			rtable_settings top_settings
 show.c		process	domain routename.first

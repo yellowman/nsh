@@ -37,6 +37,7 @@
 #include "commands.h"
 #include "ctl.h"
 #include "conftree.h"
+#include "facts.h"
 #include "session.h"
 
 int in_config;		/* nshd's config: no kernel, file or program its own */
@@ -201,6 +202,89 @@ session_line(struct session_state *s, char *line)
 	session_enter(s);
 	r = cmdline(line);
 	session_leave(s);
+	return r;
+}
+
+/*
+ * Send nsh's command tables to o as facts, for a client that completes
+ * lines itself.  Each row of cmdtab (table 0), Intlist (1), Bridgelist
+ * (2) and of every table a row points to becomes one record.  Tables are
+ * numbered in the order they are found.  A record holds the row's name,
+ * help, completion hints, the number of the table under it and, in the
+ * first three tables, nocmd.  Some tables do not start with the fields
+ * of struct ghs, as their row size shows; their rows get only a name and
+ * help, because completion does not look further into them.
+ */
+static const struct facts_field rowfields[] = {
+	{ "table",	FACT_U64 },
+	{ "name",	FACT_STRING },
+	{ "help",	FACT_STRING },
+	{ "complete",	FACT_STRING },
+	{ "sub",	FACT_U64 },
+	{ "nocmd",	FACT_U64 },
+};
+static const struct facts_kind kind_row = { "row", rowfields,
+	nitems(rowfields) };
+
+int
+cmplt_facts(struct facts_out *o)
+{
+	struct facts_value v[nitems(rowfields)];
+	struct { char **rows; size_t stlen; } *t, *nt;
+	struct ghs *g;
+	char **c;
+	size_t i, j, n = 3, max = 16;
+	int r = 0;
+
+	if ((t = calloc(max, sizeof(*t))) == NULL)
+		return -1;
+	t[0].rows = (char **)cmdtab;
+	t[0].stlen = sizeof(Command);
+	t[1].rows = (char **)Intlist;
+	t[2].rows = (char **)Bridgelist;
+	t[1].stlen = t[2].stlen = sizeof(struct intlist);
+	for (i = 0; i < n && r == 0; i++)
+		for (c = t[i].rows; *c != NULL && r == 0;
+		    c = (char **)((char *)c + t[i].stlen)) {
+			g = (struct ghs *)c;
+			memset(v, 0, sizeof(v));
+			facts_u64(&v[0], i);
+			facts_string(&v[1], g->name);
+			if (g->help != NULL)
+				facts_string(&v[2], g->help);
+			if (i == 0)
+				facts_u64(&v[5], ((Command *)c)->nocmd);
+			else if (i < 3)
+				facts_u64(&v[5], ((struct intlist *)c)->nocmd);
+			if (t[i].stlen != sizeof(struct ghs) &&
+			    t[i].stlen != sizeof(Menu) &&
+			    t[i].stlen != sizeof(Command) &&
+			    t[i].stlen != sizeof(struct intlist)) {
+				r = facts_record(o, &kind_row, v);
+				continue;
+			}
+			facts_string(&v[3], g->complete);
+			if (g->table != NULL) {
+				for (j = 0; j < n && t[j].rows != g->table; j++)
+					;
+				if (j == n && n == max) {
+					if ((nt = reallocarray(t, max * 2,
+					    sizeof(*t))) == NULL) {
+						r = -1;
+						break;
+					}
+					t = nt;
+					max *= 2;
+				}
+				if (j == n) {
+					t[n].rows = g->table;
+					t[n++].stlen = g->stlen;
+				}
+				facts_u64(&v[4], j);
+			}
+			r = facts_record(o, &kind_row, v);
+		}
+	free(t);
 	return r;
 }
 

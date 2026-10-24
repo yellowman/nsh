@@ -59,6 +59,8 @@ static int k_media(int, char *, uint64_t *, uint64_t **, size_t *);
 static int k_rtable(int);
 static int scan_if(int, struct kif *, struct ifaddrs *);
 static int scan_cloners(int, struct kfacts *);
+static int scan_groups(int, struct kfacts *);
+static int k_names(int, StringList *);
 
 void
 kfacts_set(struct kfacts *k)
@@ -332,6 +334,103 @@ kf_dhcpleased(void)
 }
 
 /*
+ * Add the names of one kind (KF_*) that completion lists to sl, each in
+ * its own allocation.  Return 0, or -1 after printing why the kernel or
+ * the database could not be read.  From a snapshot, the bridges are the
+ * interfaces of type IFT_BRIDGE, and the routing tables are those the
+ * snapshot has.  Without one, nsh asks the kernel, uses is_bridge() for
+ * the bridges, and reads the routing tables from its database.
+ */
+int
+kf_names(int kind, StringList *sl)
+{
+	char *s;
+	size_t i;
+
+	if (kf == NULL)
+		return k_names(kind, sl);
+	if (kind == KF_RTABLES) {
+		for (i = 1; i < sizeof(kf->rtables); i++)
+			if (kf->rtables[i]) {
+				if (asprintf(&s, "%zu", i) == -1)
+					return -1;
+				sl_add(sl, s);
+			}
+		return 0;
+	}
+	if (kind == KF_GROUPS) {
+		for (i = 0; i < kf->ngroups; i++) {
+			if ((s = strndup(kf->groups[i], IFNAMSIZ)) == NULL)
+				return -1;
+			sl_add(sl, s);
+		}
+		return 0;
+	}
+	for (i = 0; i < kf->nifs; i++) {
+		if (kind == KF_BRIDGES && kf->ifs[i].type != IFT_BRIDGE)
+			continue;
+		if ((s = strdup(kf->ifs[i].name)) == NULL)
+			return -1;
+		sl_add(sl, s);
+	}
+	return 0;
+}
+
+/* kf_names() without a snapshot: read the kernel and nsh's database */
+static int
+k_names(int kind, StringList *sl)
+{
+	struct if_nameindex *ifn, *p;
+	struct kfacts k;
+	char *s;
+	size_t i;
+	int ifs, r = 0;
+
+	if (kind == KF_RTABLES) {
+		if (db_select_rtable_rtables(sl) < 0) {
+			printf("%% database failure select rtables rtable\n");
+			return -1;
+		}
+		return 0;
+	}
+	if ((ifs = socket(AF_INET, SOCK_DGRAM, 0)) == -1) {
+		printf("%% socket: %s\n", strerror(errno));
+		return -1;
+	}
+	if (kind == KF_GROUPS) {
+		memset(&k, 0, sizeof(k));
+		if (scan_groups(ifs, &k) == -1) {
+			printf("%% SIOCGIFGLIST: %s\n", strerror(errno));
+			close(ifs);
+			return -1;
+		}
+		for (i = 0; i < k.ngroups && r == 0; i++)
+			if ((s = strndup(k.groups[i], IFNAMSIZ)) == NULL)
+				r = -1;
+			else
+				sl_add(sl, s);
+		free(k.groups);
+		close(ifs);
+		return r;
+	}
+	if ((ifn = if_nameindex()) == NULL) {
+		close(ifs);
+		return -1;
+	}
+	for (p = ifn; p->if_name != NULL && r == 0; p++) {
+		if (kind == KF_BRIDGES && !is_bridge(ifs, p->if_name))
+			continue;
+		if ((s = strdup(p->if_name)) == NULL)
+			r = -1;
+		else
+			sl_add(sl, s);
+	}
+	if_freenameindex(ifn);
+	close(ifs);
+	return r;
+}
+
+/*
  * All of it, from the kernel, as system sends it; NULL if it could not
  * be read, errno set
  */
@@ -351,7 +450,7 @@ kfacts_scan(void)
 		return NULL;
 	}
 	if ((ifn = if_nameindex()) == NULL || getifaddrs(&ifap) == -1 ||
-	    scan_cloners(s, k) == -1)
+	    scan_cloners(s, k) == -1 || scan_groups(s, k) == -1)
 		goto fail;
 	for (n = 0; ifn[n].if_index != 0; n++)
 		;
@@ -475,6 +574,36 @@ scan_cloners(int s, struct kfacts *k)
 	return 0;
 }
 
+/* Read the kernel's interface groups into k.  Return -1 if that fails. */
+static int
+scan_groups(int s, struct kfacts *k)
+{
+	struct ifgroupreq ifgr;
+	size_t i, n;
+
+	memset(&ifgr, 0, sizeof(ifgr));
+	if (ioctl(s, SIOCGIFGLIST, (caddr_t)&ifgr) == -1)
+		return -1;
+	if ((ifgr.ifgr_groups = calloc(1, ifgr.ifgr_len ? ifgr.ifgr_len :
+	    1)) == NULL)
+		return -1;
+	if (ioctl(s, SIOCGIFGLIST, (caddr_t)&ifgr) == -1) {
+		free(ifgr.ifgr_groups);
+		return -1;
+	}
+	n = ifgr.ifgr_len / sizeof(ifgr.ifgr_groups[0]);
+	if ((k->groups = calloc(n ? n : 1, IFNAMSIZ)) == NULL) {
+		free(ifgr.ifgr_groups);
+		return -1;
+	}
+	for (i = 0; i < n; i++)
+		memcpy(k->groups[i], ifgr.ifgr_groups[i].ifgrq_group,
+		    IFNAMSIZ);
+	k->ngroups = n;
+	free(ifgr.ifgr_groups);
+	return 0;
+}
+
 void
 kfacts_free(struct kfacts *k)
 {
@@ -486,6 +615,7 @@ kfacts_free(struct kfacts *k)
 		free(k->ifs[i].medias);
 	free(k->ifs);
 	free(k->cloners);
+	free(k->groups);
 	free(k);
 }
 
@@ -518,6 +648,8 @@ static const struct facts_field kcfields[] = {
 	{ "name",	FACT_STRING },
 };
 static const struct facts_kind kind_cloner = { "kcloner", kcfields,
+	nitems(kcfields) };
+static const struct facts_kind kind_group = { "kgroup", kcfields,
 	nitems(kcfields) };
 
 static const struct facts_field krfields[] = {
@@ -574,6 +706,15 @@ kfacts_emit(struct facts_out *o, struct kfacts *k)
 		name[len] = '\0';
 		facts_string(&v[0], name);
 		if (facts_record(o, &kind_cloner, v) == -1)
+			return -1;
+	}
+	for (i = 0; i < k->ngroups; i++) {
+		memset(v, 0, sizeof(v));
+		len = strnlen(k->groups[i], IFNAMSIZ);
+		memcpy(name, k->groups[i], len);
+		name[len] = '\0';
+		facts_string(&v[0], name);
+		if (facts_record(o, &kind_group, v) == -1)
 			return -1;
 	}
 	for (i = 0; i < sizeof(k->rtables); i++) {
@@ -680,6 +821,16 @@ kfacts_record(void *arg, const struct facts_template *t,
 			goto bad;
 		k->cloners = p;
 		memcpy(k->cloners[k->ncloners++], name, sizeof(name));
+	} else if (strcmp(t->kind, kind_group.name) == 0) {
+		facts_bind(t, &kind_group, map);
+		if (kf_str(facts_get(v, map, 0, FACT_STRING), name,
+		    sizeof(name)) == -1)
+			goto bad;
+		if ((p = reallocarray(k->groups, k->ngroups + 1,
+		    sizeof(*k->groups))) == NULL)
+			goto bad;
+		k->groups = p;
+		memcpy(k->groups[k->ngroups++], name, sizeof(name));
 	} else if (strcmp(t->kind, kind_rtable.name) == 0) {
 		facts_bind(t, &kind_rtable, map);
 		if ((f = facts_get(v, map, 0, FACT_U64)) == NULL ||

@@ -43,9 +43,10 @@
  * A session has the permissions of its user's login class, which config
  * asks system for at the session's hello, by the uid frontend gives;
  * until they are in, the session may only say hello and go. A show
- * needs view, an operation operate, and configure private, configure
- * terminal, a commit, a rollback and a load configure. configure and
- * configure exclusive need admin, as their candidate is everyone's.
+ * and the tables and names for completion need view; an operation
+ * needs operate; configure private, configure terminal, a commit, a
+ * rollback and a load need configure. configure and configure
+ * exclusive need admin, as their candidate is everyone's.
  * A session without admin sees no password hash: config takes each
  * out of what it sends such a session of the configuration.
  * An operation a session may ask, system checks and runs, and config
@@ -78,6 +79,11 @@
  * after reads as the candidate (RECORD, as applied), and answered once
  * its commit ends, after which the candidate is what runs again. commit
  * there saves what runs; rollback has nothing to roll back.
+ *
+ * A client that completes lines itself, as nsh's Tab does, asks config
+ * for two things, sent as facts: nsh's command tables, and the names of
+ * interfaces, groups, bridges and routing tables.  The names come from
+ * the last snapshot; if there is none yet, config takes one first.
  *
  * nsh -c's configuration comes a part at a time, each answered, outside
  * configure. After the last, on a snapshot, it becomes the candidate of
@@ -127,6 +133,7 @@
 #include "log.h"
 #include "nshd.h"
 #include "facts.h"
+#include "stringlist.h"
 #include "kfacts.h"
 #include "session.h"
 
@@ -140,7 +147,7 @@
 
 /* what a session waits on a snapshot for */
 enum { WAIT_NONE, WAIT_CONFIGURE, WAIT_CANDIDATE, WAIT_DIFF, WAIT_RESET,
-    WAIT_TERMINAL, WAIT_LOAD };
+    WAIT_TERMINAL, WAIT_LOAD, WAIT_NAMES };
 
 struct session {
 	TAILQ_ENTRY(session)	 entry;
@@ -260,6 +267,8 @@ static struct event		 rt_tm;		/* its notices' second, */
 static int			 rt_links;	/* and what it saw change */
 static int			 rt_all;
 static uint8_t			 rt_tables[RT_TABLEID_MAX + 1];
+static uint8_t			 units[FACTS_UNIT];	/* facts to send */
+static size_t			 nunits;		/* bytes in units */
 
 static struct imsgev	*iev_parent;
 
@@ -285,6 +294,11 @@ static int		 config_hides(struct session *);
 static int		 config_may(uint32_t, uint32_t);
 static void		 config_op(uint32_t, struct nshd_op *);
 static void		 config_watch(uint32_t, struct nshd_watch *);
+static void		 config_commands(uint32_t);
+static void		 config_names(uint32_t);
+static void		 config_named(struct session *);
+static void		 config_emit(void *, const void *, size_t);
+static void		 config_flush(struct session *);
 static void		 config_notice(int, int, uid_t, int, const char *);
 static void		 config_notice_to(uint32_t, int, uid_t, int,
 			    const char *, size_t);
@@ -512,6 +526,15 @@ config_dispatch_frontend(int fd, short event, void *arg)
 			if (imsg_get_data(&imsg, &w, sizeof(w)) == -1)
 				goto bad;
 			config_watch(id, &w);
+			break;
+		case IMSG_CTL_COMMANDS:
+		case IMSG_CTL_NAMES:
+			if (imsg_get_len(&imsg) != 0)
+				goto bad;
+			if (type == IMSG_CTL_COMMANDS)
+				config_commands(id);
+			else
+				config_names(id);
 			break;
 		case IMSG_CTL_CLOSE:
 			if ((sp = session_find(id)) != NULL)
@@ -1078,7 +1101,8 @@ config_may(uint32_t session, uint32_t type)
 	    type == IMSG_CTL_READ || type == IMSG_CTL_LOGIN ||
 	    (sp = session_find(session)) == NULL)
 		return (1);
-	if (type == IMSG_CTL_SHOW || type == IMSG_CTL_WATCH) {
+	if (type == IMSG_CTL_SHOW || type == IMSG_CTL_WATCH ||
+	    type == IMSG_CTL_COMMANDS || type == IMSG_CTL_NAMES) {
 		need = NSHD_VIEW;
 		name = "view";
 	} else if (type == IMSG_CTL_OP) {
@@ -1090,6 +1114,111 @@ config_may(uint32_t session, uint32_t type)
 	config_answer(session, 1, "%% Not allowed: your login class does not "
 	    "have the %s permission\n", name);
 	return (0);
+}
+
+/* Send nsh's command tables to the session as facts, then a result. */
+static void
+config_commands(uint32_t session)
+{
+	struct session		*sp;
+	struct facts_out	 o;
+	int			 r;
+
+	if ((sp = session_find(session)) == NULL) {
+		config_answer(session, 1, "%% nshd: hello first\n");
+		return;
+	}
+	facts_out_init(&o, config_emit, sp);
+	r = cmplt_facts(&o);
+	config_flush(sp);
+	if (r == -1)
+		config_answer(sp->id, 1, "%% nshd: the command tables "
+		    "could not be sent\n");
+	else
+		config_answer(sp->id, 0, NULL);
+}
+
+/* Send the names for completion, once there is a snapshot to read. */
+static void
+config_names(uint32_t session)
+{
+	struct session	*sp;
+
+	if ((sp = session_find(session)) == NULL) {
+		config_answer(session, 1, "%% nshd: hello first\n");
+		return;
+	}
+	if (kf_now == NULL)
+		config_wait(sp, WAIT_NAMES);
+	else
+		config_named(sp);
+}
+
+/* a name record: what kind of thing it names, and the name */
+static const struct facts_field namefields[] = {
+	{ "of",		FACT_STRING },
+	{ "name",	FACT_STRING },
+};
+static const struct facts_kind kind_name = { "name", namefields,
+	sizeof(namefields) / sizeof(namefields[0]) };
+
+/* Send the snapshot's names to sp as facts, then a result. */
+static void
+config_named(struct session *sp)
+{
+	static char		*of[] = { "interface", "group", "bridge",
+				    "rtable" };
+	struct facts_value	 v[sizeof(namefields) / sizeof(namefields[0])];
+	struct facts_out	 o;
+	StringList		*sl;
+	size_t			 i, j;
+	int			 r = 0;
+
+	facts_out_init(&o, config_emit, sp);
+	for (i = 0; i < sizeof(of) / sizeof(of[0]) && r == 0; i++) {
+		if ((sl = sl_init()) == NULL)
+			fatal("%s", __func__);
+		if (kf_names(i, sl) == -1)
+			r = -1;
+		for (j = 0; j < sl->sl_cur && r == 0; j++) {
+			memset(v, 0, sizeof(v));
+			facts_string(&v[0], of[i]);
+			facts_string(&v[1], sl->sl_str[j]);
+			r = facts_record(&o, &kind_name, v);
+		}
+		sl_free(sl, 1);
+	}
+	config_flush(sp);
+	if (r == -1)
+		config_answer(sp->id, 1, "%% nshd: the names could not be "
+		    "sent\n");
+	else
+		config_answer(sp->id, 0, NULL);
+}
+
+/*
+ * Queue a unit of facts for the session arg.  Send the queue first if
+ * the unit would not fit.
+ */
+static void
+config_emit(void *arg, const void *buf, size_t len)
+{
+	if (nunits + len > sizeof(units))
+		config_flush(arg);
+	memcpy(units + nunits, buf, len);
+	nunits += len;
+}
+
+/* Send the queued units to sp as one message. */
+static void
+config_flush(struct session *sp)
+{
+	if (nunits == 0)
+		return;
+	if (link_compose(&links[FRONTEND], IMSG_CTL_FACTS, sp->id, units,
+	    nunits) == -1)
+		fatal("%s", __func__);
+	nunits = 0;
 }
 
 /* an operation, which system checks, runs and streams */
@@ -1861,6 +1990,10 @@ config_snapshot_done(int32_t status)
 			}
 			mode = 1;
 			break;
+		case WAIT_NAMES:
+			sp->waits = WAIT_NONE;
+			config_named(sp);
+			continue;
 		default:
 			continue;
 		}
