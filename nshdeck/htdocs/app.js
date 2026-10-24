@@ -1,8 +1,9 @@
 /*
- * nshdeck's page: nshd's answers, as nshdeck gives them, in six
- * workspaces. Requests are forms, sent with X-Nshdeck: 1, which a page
- * of another site cannot send; answers are JSON. Every string nshd
- * sends is put in the page as text, never as HTML.
+ * nshdeck's page: nshd's answers, as nshdeck gives them, in seven
+ * workspaces, the last a terminal (term.js). Requests are forms, sent
+ * with X-Nshdeck: 1, which a page of another site cannot send; answers
+ * are JSON. Every string nshd sends is put in the page as text, never
+ * as HTML.
  */
 "use strict";
 
@@ -177,6 +178,8 @@ function workspace(name) {
 	});
 	if (name === "overview" || name === "network")
 		interfaces();
+	if (name === "terminal")
+		terminalShown();
 }
 
 function driver(name) {
@@ -701,6 +704,7 @@ function loggedOut() {
 		stream = null;
 	}
 	closeChoices();
+	tgone("logged out");
 	insp = null;
 	selected = "";
 	cur = null;

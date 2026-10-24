@@ -966,6 +966,26 @@ pre.term {
 	gap: 16px;
 }
 
+/* the terminal: a screen, dark whatever the page's colors are */
+#ws-terminal {
+	height: 100%;
+	grid-template-rows: auto 1fr;
+	align-content: stretch;
+}
+
+#ws-terminal .fill {
+	flex: 1;
+}
+
+#term {
+	min-height: 320px;
+	padding: 8px;
+	overflow: hidden;
+	background: #0b0d10;
+	border: 1px solid var(--line);
+	border-radius: 5px;
+}
+
 .panel {
 	background: var(--panel);
 	border: 1px solid var(--line);

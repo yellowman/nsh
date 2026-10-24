@@ -29,15 +29,17 @@ answers the requests of a web page, which
 passes it over FastCGI, with what
 .Xr nshd 8
 answers.
-The page has six workspaces: an overview, with the box's ports drawn
+The page has seven workspaces: an overview, with the box's ports drawn
 as its face shows them and the logical interfaces grouped by what they
 are on; network, routing, security and services, each with its shows,
 as tables, and in network an interface's settings, which can be changed
-and staged into the candidate as lines of configuration; and the system
+and staged into the candidate as lines of configuration; the system
 and its changes, which takes lines of
 configuration, commits, rollbacks and operations, as
 .Xr nsh 8
-does, and shows the configuration as text.
+does, and shows the configuration as text; and a terminal, where
+.Xr nsh 8
+runs as the user, which xterm.js draws.
 Tab completes a line as in
 .Xr nsh 8 ,
 and ? lists what may come next.

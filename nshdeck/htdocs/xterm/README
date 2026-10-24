@@ -1,0 +1,18 @@
+xterm.js 6.0.0 and its fit addon 0.11.0, as npm has them, unchanged,
+for nshdeck's terminal. Both are MIT licensed: LICENSE and
+LICENSE.addon-fit.
+
+	xterm.js	lib/xterm.js of @xterm/xterm 6.0.0
+	xterm.css	css/xterm.css of @xterm/xterm 6.0.0
+	addon-fit.js	lib/addon-fit.js of @xterm/addon-fit 0.11.0
+
+npm's tarballs, by sha1, as npm gives them:
+
+	@xterm/xterm 6.0.0	93637b0f2ee3a70718b5746a27c9c506af16745b
+	@xterm/addon-fit 0.11.0	ba4778b69fcc9044a060c2176bbe077657d7b37e
+
+and the files, by sha256:
+
+	14903579ff54664cd72f8e8699e6961a6272c21863ec1c3b118cdc8af5d4a972  xterm.js
+	854a7c0fb70e8b1a083c16797ab827299fb18744f5ad34f227b48337e33293c6  xterm.css
+	ba3ea256ce0620a0992a197d6c9baea64823fc93d8da07a9e366ca9943c18527  addon-fit.js

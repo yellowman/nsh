@@ -32,10 +32,18 @@ DPADD=	${LIBEVENT} ${LIBUTIL}
 HTDOCS?=/var/www/htdocs/nshdeck
 
 afterinstall:
-	${INSTALL} -d -o root -g wheel -m 755 ${DESTDIR}${HTDOCS}
+	${INSTALL} -d -o root -g wheel -m 755 ${DESTDIR}${HTDOCS} \
+	    ${DESTDIR}${HTDOCS}/xterm
 	${INSTALL} -c -o root -g wheel -m 444 ${.CURDIR}/htdocs/index.html \
 	    ${.CURDIR}/htdocs/app.js ${.CURDIR}/htdocs/ifdefs.js \
-	    ${.CURDIR}/htdocs/inspector.js ${.CURDIR}/htdocs/style.css \
+	    ${.CURDIR}/htdocs/inspector.js ${.CURDIR}/htdocs/sheets.js \
+	    ${.CURDIR}/htdocs/term.js ${.CURDIR}/htdocs/style.css \
 	    ${DESTDIR}${HTDOCS}
+	${INSTALL} -c -o root -g wheel -m 444 \
+	    ${.CURDIR}/htdocs/xterm/xterm.js ${.CURDIR}/htdocs/xterm/xterm.css \
+	    ${.CURDIR}/htdocs/xterm/addon-fit.js \
+	    ${.CURDIR}/htdocs/xterm/LICENSE \
+	    ${.CURDIR}/htdocs/xterm/LICENSE.addon-fit \
+	    ${DESTDIR}${HTDOCS}/xterm
 
 .include <bsd.prog.mk>
