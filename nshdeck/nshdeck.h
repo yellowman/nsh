@@ -46,6 +46,7 @@ enum deck_kind {
 	DECK_COMMIT,
 	DECK_ROLLBACK,
 	DECK_OP,
+	DECK_COMPLETE,
 	DECK_EVENTS
 };
 
@@ -61,8 +62,9 @@ struct deck_request {
 						/* operation, a configuration */
 	char		password[NSHD_PASSWORD];
 	char		comment[NSHD_COMMENT];
-	int32_t		n;		/* rollback n, an operation's rtable, */
-					/* or which configure */
+	int32_t		n;		/* rollback's n, an operation's */
+					/* rtable, which configure, or */
+					/* 1 for a completion's help */
 	int32_t		minutes;	/* commit confirmed's */
 	int32_t		check;		/* commit check */
 	int32_t		logs;		/* the logs events follow, as */
@@ -113,5 +115,19 @@ void		 pipe_compose(struct deck_pipe *, uint32_t, uint32_t, int,
 /* each process but parent */
 __dead void	 front(int, int);
 __dead void	 sessions(int, int);
+
+/* tables.c: completion, in session */
+struct deck_cmplt;
+struct facts_template;
+struct facts_value;
+struct deck_cmplt *deck_cmplt_new(void);
+void		 deck_cmplt_free(struct deck_cmplt *);
+void		 deck_cmplt_record(void *, const struct facts_template *,
+		    const struct facts_value *);
+int		 deck_tables_ready(void);
+int		 deck_tables(struct deck_cmplt *);
+void		 deck_complete(struct deck_cmplt *, const char *, int,
+		    const struct nshd_context *,
+		    void (*)(void *, int, const char *, const char *), void *);
 
 #endif /* NSHDECK_H */

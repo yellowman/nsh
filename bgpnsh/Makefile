@@ -18,7 +18,7 @@ MANDIR?=${PREFIX}/man/man
 CFLAGS+=-Wmissing-prototypes -Wformat -Wall -Wbad-function-cast
 CPPFLAGS+=-DNSH_VERSION=${NSH_VERSION}
 
-SRCS=bgpnsh.c compile.c bgpcommands.c complete.c genget.c more.c \
+SRCS=bgpnsh.c compile.c bgpcommands.c complete.c editing.c genget.c more.c \
 	stringlist.c utf8.c stubs.c cmdargs.c ctlargs.c prompt.c \
 	helpcommands.c makeargv.c
 CLEANFILES+=compile.c

@@ -1569,7 +1569,7 @@ read_command_line(EditLine *el, History *hist)
 		if ((buf = el_gets(el, &num)) == NULL) {
 			if (num == -1)
 				return -1;
-			/* EOF, e.g. ^X or ^D via exit_i() in complete.c */
+			/* EOF, e.g. ^X or ^D via exit_i() in editing.c */
 			return 0;
 		}
 		while (num > 0 && isspace((unsigned char)buf[num - 1]))
@@ -3897,7 +3897,7 @@ do_reboot(int how)
 				ret = -1;
 				goto done;
 			}
-			/* EOF, e.g. ^X or ^D via exit_i() in complete.c */
+			/* EOF, e.g. ^X or ^D via exit_i() in editing.c */
 			goto done;
 		}
 

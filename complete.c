@@ -46,10 +46,7 @@
 #include "commands.h"
 #include "kfacts.h"
 
-#define ttyout stdout
-#define ttyin stdin
-
-unsigned char complete(EditLine *, char **, size_t);
+int cmplt_remote;	/* for a client: list no local files or environment */
 
 static int	     comparstr(const void *, const void *);
 static unsigned char complete_ambiguous(char *, int, StringList *,
@@ -75,13 +72,7 @@ static unsigned char complete_noint(char *, int, struct cmplt *, char **, int,
 				int);
 static unsigned char complete_args(struct ghs *, char *, int, struct cmplt *,
 				   char **, int, int);
-static void list_vertical(StringList *);
 static void cmplt_list(struct cmplt *, StringList *, StringList *);
-static void cmplt_print(struct cmplt *);
-
-unsigned char complt_c(EditLine *, int);
-unsigned char complt_i(EditLine *, int);
-unsigned char exit_i(EditLine *, int);
 
 static int
 comparstr(const void *a, const void *b)
@@ -226,6 +217,8 @@ complete_local(char *word, int list, struct cmplt *cp)
 	struct dirent *dp;
 	unsigned char rv;
 
+	if (cmplt_remote)
+		return (CC_ERROR);
 	if ((file = strrchr(word, '/')) == NULL) {
 		dir[0] = '.';
 		dir[1] = '\0';
@@ -316,28 +309,6 @@ complete_showhelp(char *word, struct cmplt *cp, char **table, int stlen,
 	return (CC_REDISPLAY);
 }
 
-unsigned char
-exit_i(EditLine *el, int ch)
-{
-	printf("\n");
-	return CC_EOF;
-}
-
-unsigned char
-complt_i(EditLine *el, int ch)
-{
-	return complete(el, (char **)whichlist, sizeof(struct intlist));
-}
-
-unsigned char
-complt_c(EditLine *el, int ch)
-{
-	/* an interface's mode, nshd's: nsh's loop reads its lines */
-	if (nshd_config && ifname[0] != '\0')
-		return complt_i(el, ch);
-	return complete(el, (char **)cmdtab, sizeof(struct cmd));
-}
-
 /*
  * Complete word from the names of one kind (KF_* in kfacts.h). extra,
  * if not NULL, is one more name to offer.
@@ -408,6 +379,8 @@ complete_environment(char *word, int dolist, struct cmplt *cp, int set)
 	size_t wordlen = strlen(word);
 	int rv = CC_ERROR;
 
+	if (cmplt_remote)
+		return (CC_ERROR);
 	words = sl_init();
 
 	for (ep = environ; *ep; ep++) {
@@ -442,28 +415,6 @@ complete_environment(char *word, int dolist, struct cmplt *cp, int set)
 	rv = complete_ambiguous(word, dolist, words, cp, set ? "=" : " ");
 	sl_free(words, 1);
 	return rv;
-}
-
-/*
- * Generic complete routine: editline's line, completed at its cursor
- */
-unsigned char
-complete(EditLine *el, char **table, size_t stlen)
-{
-	static char word[CMPLT_WORD];
-	const LineInfo *lf;
-	struct cmplt c;
-	unsigned char rv;
-
-	lf = el_line(el);
-	rv = complete_line(lf->buffer, lf->lastchar - lf->buffer,
-	    lf->cursor - lf->buffer, word, table, stlen, 0, &c);
-	if (rv == CC_REFRESH && el_insertstr(el, c.insert) == -1)
-		rv = CC_ERROR;
-	else if (rv == CC_REDISPLAY)
-		cmplt_print(&c);
-	cmplt_free(&c);
-	return (rv);
 }
 
 /*
@@ -907,217 +858,10 @@ cmplt_list(struct cmplt *cp, StringList *words, StringList *helps)
 	}
 }
 
-/* cp's choices, listed below the line */
-static void
-cmplt_print(struct cmplt *cp)
-{
-	StringList *w = cp->words, *h = cp->helps;
-	int i, len, max = 0;
-
-	if (w->sl_cur > 0)
-		putc('\n', ttyout);
-	if (h == NULL || cp->vertical) {
-		list_vertical(w);
-		return;
-	}
-	for (i = 0; i < w->sl_cur; i++)
-		if ((len = strlen(w->sl_str[i])) > max)
-			max = len;
-	for (i = 0; i < w->sl_cur; i++) {
-		if (h->sl_str[i][0] == '\0')
-			fprintf(ttyout, " %s %s\n", cp->cmdname, w->sl_str[i]);
-		/*
-		 * Command help strings beginning with '^' are supposed to be
-		 * printed literally.
-		 */
-		else if (w->sl_str[i][0] == '^')
-			fprintf(ttyout, " %-*s  # %s\n", max, &w->sl_str[i][1],
-			    h->sl_str[i]);
-		else
-			fprintf(ttyout, " %s %-*s  # %s\n", cp->cmdname, max,
-			    w->sl_str[i], h->sl_str[i]);
-	}
-}
-
 void
 cmplt_free(struct cmplt *cp)
 {
 	sl_free(cp->words, 1);
 	if (cp->helps != NULL)
 		sl_free(cp->helps, 1);
-}
-
-/*
- * List words in stringlist, vertically arranged
- */
-void
-list_vertical(StringList *sl)
-{
-	int i, j, w;
-	int columns, width, lines;
-	char *p;
-
-	width = 0;
-
-	for (i = 0 ; i < sl->sl_cur ; i++) {
-		w = strlen(sl->sl_str[i]);
-		if (w > width)
-			width = w;
-	}
-	width = (width + 8) &~ 7;
-
-	columns = winsize.ws_col / width;
-	if (columns == 0)
-		columns = 1;
-	lines = (sl->sl_cur + columns - 1) / columns;
-	for (i = 0; i < lines; i++) {
-		for (j = 0; j < columns; j++) {
-			p = sl->sl_str[j * lines + i];
-			if (p)
-				fputs(p, ttyout);
-			if (j * lines + i + lines >= sl->sl_cur) {
-				putc('\n', ttyout);
-				break;
-			}
-			if (p)
-				w = strlen(p);
-			else
-				w = 0;
-			while (w < width) {
-				w = (w + 8) &~ 7;
-				(void)putc('\t', ttyout);
-			}
-		}
-	}
-}
-
-/*
- * this needs to be called before initedit()
- */
-void
-inithist()
-{
-	if (!histc) {
-		histc = history_init();	/* init the builtin history */
-		history(histc, &ev, H_SETSIZE, 100); /* remember 100 events */
-	}
-	if (!histi) {
-		histi = history_init();
-		history(histi, &ev, H_SETSIZE, 100);
-	}
-}
-
-void
-endhist()
-{
-	if (histc) {
-		history_end(histc);	/* deallocate */
-		histc = NULL;
-	}
-	if (histi) {
-		history_end(histi);
-		histi = NULL;
-	}
-}
-
-void
-initedit()
-{
-	if (!isatty(STDIN_FILENO)) {
-		printf("%% Command line editing requires a terminal\n");
-		editing = 0;
-		return;
-	}
-
-	editing = 1;
-
-	if (!elc) {
-		elc = el_init(getprogname(), stdin, stdout, stderr);
-		if (histc)
-			el_set(elc, EL_HIST, history, histc); /* use history */
-		el_set(elc, EL_EDITOR, "emacs"); /* default type */
-		el_set(elc, EL_PROMPT, cprompt); /* set the prompt
-						  * function */
-		el_set(elc, EL_ADDFN, "complt_c", "Command completion",
-		    complt_c);
-		el_set(elc, EL_BIND, "\t", "complt_c", NULL);
-		el_source(elc, NULL);	/* read ~/.editrc */
-		el_set(elc, EL_SIGNAL, 1);
-	}
-	if (!eli) {
-		eli = el_init(getprogname(), stdin, stdout, stderr);
-		if (histi)
-			el_set(eli, EL_HIST, history, histi);
-		el_set(eli, EL_EDITOR, "emacs");
-		el_set(eli, EL_PROMPT, iprompt);
-		el_set(eli, EL_ADDFN, "complt_i", "Command completion",
-		    complt_i);
-		el_set(eli, EL_BIND, "\t", "complt_i", NULL);
-		el_set(eli, EL_ADDFN, "exit_i", "Exit", exit_i);
-		el_set(eli, EL_BIND, "^X", "exit_i", NULL);
-		el_set(eli, EL_BIND, "^D", "exit_i", NULL);
-		el_source(eli, NULL);
-		el_set(eli, EL_SIGNAL, 1);
-	}
-	if (!elp) {
-		elp = el_init(getprogname(), stdin, stdout, stderr);
-		el_set(elp, EL_EDITOR, "emacs"); /* default type */
-		el_set(elp, EL_PROMPT, pprompt); /* set the prompt
-						  * function */
-		el_set(eli, EL_ADDFN, "exit_i", "Exit", exit_i);
-		el_set(eli, EL_BIND, "^X", "exit_i", NULL);
-		el_set(eli, EL_BIND, "^D", "exit_i", NULL);
-		el_source(elp, NULL);	/* read ~/.editrc */
-		el_set(elp, EL_SIGNAL, 1);
-	}
-}
-
-void
-endedit()
-{
-	editing = 0;
-
-	if (elc) {
-		el_end(elc);
-		elc = NULL;
-	}
-	if (eli) {
-		el_end(eli);
-		eli = NULL;
-	}
-	if (elp) {
-		el_end(elp);
-		elp = NULL;
-	}
-}
-
-/*
- * for the purpose of interface handler routines, 1 here is failure and
- * 0 is success
- */
-int
-el_burrito(EditLine *el, int argc, char **argv)
-{
-	char *colon;
-	int val;
-
-	if (!editing)	/* Nothing to parse, fail */
-		return 1;
-
-	/*
-	 * el_parse will always return a non-error status if someone specifies
-	 * argv[0] with a colon.  The idea of the colon is to allow host-
-	 * specific commands, which is really only useful in .editrc, so
-	 * it is invalid here.
-	 */
-	colon = strchr(argv[0], ':');
-	if (colon)
-		return 1;
-
-	val = el_parse(el, argc, (const char **)argv);
-
-	if (val == 0)
-		return 0;
-	else
-		return 1;
 }

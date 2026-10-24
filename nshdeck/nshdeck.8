@@ -70,6 +70,12 @@ It has a connection to
 .Nm nshd
 for each user logged in, known by the token in the user's cookie, and
 writes each answer as JSON.
+It completes lines itself, with
+.Xr nsh 8 Ns 's
+code: it asks
+.Nm nshd
+for the command tables once, and for the names of interfaces, groups,
+bridges and routing tables on each completion.
 .El
 .Pp
 If one of them ends,
@@ -79,7 +85,9 @@ ends.
 The last part of a request's path names it.
 A GET has its fields in its query, and a POST in a form body, of type
 application/x-www-form-urlencoded; a field may be given once.
-A POST must have the header
+Every request but
+.Cm events
+must have the header
 .Ql X-Nshdeck: 1 ,
 which a page of another site cannot send without asking the browser
 first.
@@ -160,6 +168,19 @@ an operation such as
 .Ql flush routes ,
 and its
 .Ar rtable .
+.It Cm complete
+GET, with
+.Ar line ,
+and
+.Ar help
+1 or 0.
+Completes the line at its end, in the user's mode, as Tab does in
+.Xr nsh 8 .
+Each record is of kind insert, with the text to add to the line, or of
+kind choice, with a word and its help, if it has one.
+With
+.Ar help
+1, nothing is inserted and every choice is listed.
 .It Cm events
 GET, with
 .Ar logs ,

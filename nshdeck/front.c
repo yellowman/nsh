@@ -129,6 +129,7 @@ struct params {
 #define F_MINUTES	0x200
 #define F_COMMENT	0x400
 #define F_LOGS		0x800
+#define F_HELP		0x1000
 static const struct endpoint {
 	const char	*name;
 	int		 kind;
@@ -146,6 +147,7 @@ static const struct endpoint {
 	{ "commit",	DECK_COMMIT,	1, F_CHECK | F_MINUTES | F_COMMENT },
 	{ "rollback",	DECK_ROLLBACK,	1, F_N },
 	{ "op",		DECK_OP,	1, F_LINE | F_RTABLE },
+	{ "complete",	DECK_COMPLETE,	0, F_LINE | F_HELP },
 	{ "events",	DECK_EVENTS,	0, F_LOGS },
 };
 
@@ -560,6 +562,7 @@ front_fields(const char *form, int fields, struct deck_request *r)
 		{ "mode", F_MODE }, { "line", F_LINE }, { "rtable", F_RTABLE },
 		{ "check", F_CHECK }, { "minutes", F_MINUTES },
 		{ "comment", F_COMMENT }, { "logs", F_LOGS },
+		{ "help", F_HELP },
 	};
 	char		 key[16], value[NSHD_LINE];
 	const char	*p, *eq, *end;
@@ -652,6 +655,9 @@ front_field(int f, const char *v, struct deck_request *r)
 		return (errstr == NULL ? 0 : -1);
 	case F_CHECK:
 		r->check = strtonum(v, 0, 1, &errstr);
+		return (errstr == NULL ? 0 : -1);
+	case F_HELP:
+		r->n = strtonum(v, 0, 1, &errstr);
 		return (errstr == NULL ? 0 : -1);
 	case F_MINUTES:
 		r->minutes = strtonum(v, 0, NSHD_CONFIRMMAX, &errstr);

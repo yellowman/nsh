@@ -1477,7 +1477,7 @@ provide_example_config(char *filename)
 				ret = -1;
 				goto done;
 			}
-			/* EOF, e.g. ^X or ^D via exit_i() in complete.c */
+			/* EOF, e.g. ^X or ^D via exit_i() in editing.c */
 			goto done;
 		}
 

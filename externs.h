@@ -535,6 +535,7 @@ struct cmplt;
 unsigned char complete_line(const char *, size_t, size_t, char *, char **,
     size_t, int, struct cmplt *);
 void cmplt_free(struct cmplt *);
+extern int cmplt_remote;
 void inithist(void);
 void endhist(void);
 void initedit(void);

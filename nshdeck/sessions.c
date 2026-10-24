@@ -38,6 +38,11 @@
  * no stream and nothing asked for DECK_IDLE seconds is logged out, as a
  * logout does, which closes the connection: nshd forgets the login, and
  * the candidate, with it. If nshd closes it, the user is logged out.
+ *
+ * session completes lines itself, in the user's mode, with nsh's code
+ * (tables.c), as nsh's Tab does.  It asks nshd for nsh's command tables
+ * once, and for the names of interfaces, groups, bridges and routing
+ * tables on each completion.
  */
 
 #include <sys/types.h>
@@ -122,6 +127,8 @@ struct user {
 	size_t			 outlen;
 	struct nshd_context	 ctx;
 	int			 hasctx;
+	struct deck_cmplt	*cmplt;		/* what a completion has read */
+	int			 naming;	/* its names were asked for */
 	TAILQ_HEAD(, stream)	 streams;
 	int			 watch;		/* what nshd was asked to watch */
 	int			 watching;	/* a watch waits */
@@ -160,6 +167,7 @@ static void	 gone(uint32_t);
 static void	 logout(struct user *, const char *);
 static void	 record(void *, const struct facts_template *,
 		    const struct facts_value *);
+static void	 completed(void *, int, const char *, const char *);
 static void	 head(uint32_t, int, int, const char *, int);
 static void	 reply(uint32_t, int, const char *, ...)
 		    __attribute__((__format__ (printf, 3, 4)));
@@ -681,7 +689,11 @@ next(struct user *u)
 	u->nqueue--;
 	u->cur = p;
 	u->headed = u->nrecords = u->hasctx = u->sent = 0;
-	facts_in_init(&u->in, record, u);
+	if (p->r.kind == DECK_COMPLETE) {
+		u->cmplt = deck_cmplt_new();
+		facts_in_init(&u->in, deck_cmplt_record, u->cmplt);
+	} else
+		facts_in_init(&u->in, record, u);
 	switch (p->r.kind) {
 	case DECK_SHOW:
 	case DECK_CONFIG:
@@ -720,6 +732,11 @@ next(struct user *u)
 		strlcpy(op.line, p->r.text, sizeof(op.line));
 		ask(u, IMSG_CTL_OP, &op, sizeof(op));
 		break;
+	case DECK_COMPLETE:
+		/* the tables if we have none, else the names */
+		u->naming = deck_tables_ready();
+		ask(u, u->naming ? IMSG_CTL_NAMES : IMSG_CTL_COMMANDS, NULL, 0);
+		break;
 	default:
 		/* session's own: the watch its streams want */
 		memset(&w, 0, sizeof(w));
@@ -745,11 +762,26 @@ answered(struct user *u, int32_t status)
 	struct jbuf	 j = { NULL, 0, 0 };
 	struct pending	*p = u->cur;
 	struct stream	*s;
+	const char	*why;
 	int32_t		 ro = 1;
 
 	if (p == NULL)
 		return;
 	u->nshd.paused = 0;
+	if (p->r.kind == DECK_COMPLETE && !u->naming && status == 0 &&
+	    !p->gone) {
+		/* the tables are here: build them, then ask for the names */
+		facts_in_free(&u->in);
+		facts_in_init(&u->in, deck_cmplt_record, u->cmplt);
+		if (deck_tables(u->cmplt) == 0) {
+			u->naming = 1;
+			ask(u, IMSG_CTL_NAMES, NULL, 0);
+			return;
+		}
+		why = "% nshdeck cannot use the command tables nshd sent\n";
+		kept(u, why, strlen(why));
+		status = 1;
+	}
 	if (p->id != 0 && !p->gone && p->r.kind == DECK_SHOW &&
 	    status == NSHD_ELSEWHERE && u->toro == RO_NONE) {
 		/* not the system's to answer: nshd's shows', as nsh asks */
@@ -773,6 +805,9 @@ answered(struct user *u, int32_t status)
 			}
 	} else if (!p->gone) {
 		j_answer(u);
+		if (p->r.kind == DECK_COMPLETE && status == 0)
+			deck_complete(u->cmplt, p->r.text, p->r.n, &u->ctx,
+			    completed, u);
 		J(&u->j, "],\"output\":");
 		j_str(&u->j, u->out, u->outlen);
 		if (u->hasctx) {
@@ -788,6 +823,8 @@ answered(struct user *u, int32_t status)
 		pipe_compose(&tofront, DECK_END, p->id, -1, NULL, 0);
 	}
 	facts_in_free(&u->in);
+	deck_cmplt_free(u->cmplt);
+	u->cmplt = NULL;
 	free(u->j.p);
 	memset(&u->j, 0, sizeof(u->j));
 	free(u->out);
@@ -1082,6 +1119,26 @@ record(void *arg, const struct facts_template *t, const struct facts_value *v)
 	J(j, "}");
 }
 
+/* Write one thing completion found as a record: an insert or a choice. */
+static void
+completed(void *arg, int insert, const char *s, const char *help)
+{
+	struct user	*u = arg;
+
+	if (u->nrecords++ > 0)
+		J(&u->j, ",");
+	if (insert)
+		J(&u->j, "{\"kind\":\"insert\",\"text\":");
+	else
+		J(&u->j, "{\"kind\":\"choice\",\"word\":");
+	j_str(&u->j, s, strlen(s));
+	if (help != NULL) {
+		J(&u->j, ",\"help\":");
+		j_str(&u->j, help, strlen(help));
+	}
+	J(&u->j, "}");
+}
+
 /* an answer's head, to front */
 static void
 head(uint32_t id, int status, int events, const char *token, int clear)
@@ -1306,6 +1363,7 @@ user_free(struct user *u)
 		pipe_close(&u->nshd);
 	ro_close(u);
 	facts_in_free(&u->in);
+	deck_cmplt_free(u->cmplt);
 	free(u->j.p);
 	free(u->out);
 	TAILQ_REMOVE(&users, u, entry);

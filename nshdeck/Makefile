@@ -19,9 +19,11 @@ MANDIR?=${PREFIX}/man/man
 CFLAGS+=-Wmissing-prototypes -Wformat -Wall -Wbad-function-cast
 CFLAGS+=-I${.CURDIR} -I${.CURDIR}/.. -I${.CURDIR}/../nshd
 
-SRCS=	nshdeck.c front.c sessions.c
+SRCS=	nshdeck.c front.c sessions.c tables.c
 # nshd's log, and nsh's facts, which session reads
 SRCS+=	log.c facts.c
+# nsh's completion, which session runs on nshd's tables
+SRCS+=	complete.c makeargv.c genget.c stringlist.c
 
 LDADD=	-levent -lutil
 DPADD=	${LIBEVENT} ${LIBUTIL}

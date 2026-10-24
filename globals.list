@@ -85,7 +85,7 @@ commands.c	table	Bridgelist Bridgelist_nitems Intlist
 			whohelp
 commit.c	scratch	deferred in_script ndeferred
 commit.c	table	ifrefs
-complete.c	process	complete.word complete_nocmd.nocmdtab
+complete.c	process	cmplt_remote complete_nocmd.nocmdtab
 			complete_nocmd.nocmdtab_nitems
 			complete_noint.nobridgetab
 			complete_noint.nointtab
@@ -101,6 +101,7 @@ ctl.c		table	ctl_bgp ctl_crontab ctl_daemons ctl_dhcp
 			ctl_pf ctl_rad ctl_relay ctl_resolv ctl_rip
 			ctl_sasync ctl_sglobals ctl_smtp ctl_snmp
 			ctl_sshd ctl_tftp ctl_tftpproxy admin_words
+editing.c	process	complete.word
 genget.c	process	ambiguous
 if.c		session	imrif imrsave
 if.c		scratch	get_linkstate.buf if_facts.ifdescr
