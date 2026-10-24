@@ -1,0 +1,253 @@
+.\" Copyright (c) 2026 Chris Cappuccio <chris@nmedia.net>
+.\"
+.\" Permission to use, copy, modify, and distribute this software for any
+.\" purpose with or without fee is hereby granted, provided that the above
+.\" copyright notice and this permission notice appear in all copies.
+.\"
+.\" THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+.\" WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+.\" MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+.\" ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+.\" WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+.\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+.\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+.\"
+.Dd $Mdocdate$
+.Dt NSHDECK 8
+.Os
+.Sh NAME
+.Nm nshdeck
+.Nd web configurator for nshd
+.Sh SYNOPSIS
+.Nm
+.Op Fl dv
+.Op Fl s Ar socket
+.Sh DESCRIPTION
+.Nm
+answers the requests of a web page, which
+.Xr httpd 8
+passes it over FastCGI, with what
+.Xr nshd 8
+answers.
+Each user logs in with a name and password, as
+.Nm nshd
+checks them, and has the permissions of the user's login class, without
+admin (see
+.Cm login class
+in
+.Xr nsh 8 ) .
+root may not log in.
+.Pp
+.Nm
+is privilege separated:
+.Bl -tag -width "session"
+.It parent
+Starts as root, binds the socket, and starts the other two.
+Then it runs as _nshweb, a member of the group nshadmin, and does one
+thing: when session asks, it connects to
+.Nm nshd ,
+and passes the connection on.
+.Nm nshd
+takes a client of _nshweb's uid as the web configurator's, which has
+no permissions until it logs in.
+.It front
+Runs as _nshdeck in a
+.Xr chroot 2 .
+It reads the requests
+.Xr httpd 8
+sends, and checks each one whole before session sees it.
+.It session
+Runs as _nshweb in a
+.Xr chroot 2 .
+It has a connection to
+.Nm nshd
+for each user logged in, known by the token in the user's cookie, and
+writes each answer as JSON.
+.El
+.Pp
+If one of them ends,
+.Nm
+ends.
+.Pp
+The last part of a request's path names it.
+A GET has its fields in its query, and a POST in a form body, of type
+application/x-www-form-urlencoded; a field may be given once.
+A POST must have the header
+.Ql X-Nshdeck: 1 ,
+which a page of another site cannot send without asking the browser
+first.
+Every request but
+.Cm login
+needs the cookie that
+.Cm login
+sets.
+.Bl -tag -width "configure"
+.It Cm login
+POST, with
+.Ar user
+and
+.Ar password .
+Logs the user in, and sets the cookie nshdeck, HttpOnly, Secure and
+SameSite=Strict, to a token of 32 random bytes.
+Answers the user's name and permissions.
+.It Cm logout
+POST.
+Logs the user out.
+.Nm nshd
+forgets the login, and the candidate of
+.Cm configure private
+with it.
+.It Cm whoami
+GET.
+The user's name and permissions.
+.It Cm show
+GET, with
+.Ar words ,
+as
+.Xr nsh 8
+shows them, such as
+.Ql interface
+or
+.Ql route inet 0 .
+They are asked of
+.Nm nshd Ns 's
+system and, if it does not answer them, of its shows, as
+.Xr nsh 8
+asks them.
+The answer has the records
+.Nm nshd
+sent, each an object with its kind and fields.
+.It Cm config
+GET, with
+.Ar what :
+running, startup, candidate, diff, or rollback, with
+.Ar n .
+The configuration, as text.
+.It Cm configure
+POST, with
+.Ar mode :
+private, shared, exclusive or terminal.
+.It Cm line
+POST, with
+.Ar line :
+a line of configuration, in configure.
+.It Cm exit
+POST.
+Leaves configure, or the context a line entered.
+.It Cm commit
+POST, with
+.Ar check
+1 to check the candidate only,
+.Ar minutes
+for
+.Cm commit confirmed ,
+and a
+.Ar comment .
+.It Cm rollback
+POST, with
+.Ar n .
+.It Cm op
+POST, with
+.Ar line ,
+an operation such as
+.Ql flush routes ,
+and its
+.Ar rtable .
+.It Cm events
+GET, with
+.Ar logs ,
+names joined by commas: daemon, messages, authlog or pflog.
+A stream of events, of type text/event-stream:
+.Nm nshd Ns 's
+notices, of commits, commits confirmed, commits gone back,
+.Cm configure exclusive
+taken and left, and interfaces and routes changed; and the lines of
+each log named, from its last lines.
+authlog needs the admin permission, which no web user has.
+A comment is written to the stream every 30 seconds, so that
+.Xr httpd 8
+does not close it.
+If the browser falls more than 1 MB behind, the oldest events it has
+not been sent are dropped, and it is sent a dropped event in their
+place, so that it asks again for what it shows.
+.El
+.Pp
+Each answer but an event stream's is a JSON object.
+One that
+.Nm nshd
+answered has
+.Ar records ,
+.Ar output ,
+what
+.Nm nshd
+printed,
+.Ar context ,
+where the user is in configure,
+.Ar status
+and
+.Ar ok ;
+it is sent with HTTP status 200, even when
+.Nm nshd
+refused the request.
+Other answers have an
+.Ar error
+and an HTTP status that says why: 400 for a field that cannot be taken,
+401 when the user is not logged in or the login failed, 403 for a POST
+without the header, 404 for an unknown request, 405 for the wrong
+method, 413 for a body over 8192 bytes, 415 for a POST that is not a
+form, and 503 when
+.Nm nshd
+does not answer, or too many users are logged in or a user has too
+many requests waiting.
+.Pp
+A user's requests go to
+.Nm nshd
+one at a time, and at most 16 wait.
+A long answer is read from
+.Nm nshd
+only as fast as the client reads it.
+A user with no event stream open and no request for 30 minutes is
+logged out.
+At most 64 users may be logged in, and
+.Nm
+takes at most 128 connections.
+.Pp
+.Nm
+needs the users _nshweb and _nshdeck, which may not be root or share a
+uid, and the group www, which
+.Xr httpd 8
+runs as.
+The socket is root's, mode 0660, group www.
+In
+.Xr httpd.conf 5 :
+.Bd -literal -offset indent
+server "router" {
+	listen on * tls port 443
+	location "/nshdeck/api/*" {
+		fastcgi socket "/run/nshdeck.sock"
+	}
+}
+.Ed
+.Pp
+The options are as follows:
+.Bl -tag -width Ds
+.It Fl d
+Do not daemonize, and log to standard error.
+.It Fl s Ar socket
+The socket, instead of
+.Pa /var/www/run/nshdeck.sock .
+.It Fl v
+Produce more verbose output.
+.El
+.Sh FILES
+.Bl -tag -width "/var/www/run/nshdeck.sockXX" -compact
+.It Pa /var/www/run/nshdeck.sock
+the socket
+.Xr httpd 8
+connects to
+.El
+.Sh SEE ALSO
+.Xr httpd.conf 5 ,
+.Xr httpd 8 ,
+.Xr nsh 8 ,
+.Xr nshd 8
