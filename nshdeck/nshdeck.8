@@ -30,8 +30,10 @@ passes it over FastCGI, with what
 .Xr nshd 8
 answers.
 The page has seven workspaces: an overview, with the box's ports drawn
-as its face shows them and the logical interfaces grouped by what they
-are on; network, routing, security and services, each with its shows,
+as its face shows them, each with a link light and an activity light,
+a readout of how many ports are up, the interfaces and addresses, and
+the last change, and the logical interfaces grouped by what they are on;
+network, routing, security and services, each with its shows,
 as tables, and in network an interface's settings, which can be changed
 and staged into the candidate as lines of configuration; the system
 and its changes, which takes lines of
@@ -47,6 +49,9 @@ The page follows
 .Nm nshd Ns 's
 notices and logs as they come, counts down a commit waiting to be
 confirmed, and draws the interfaces again when they change.
+While the overview is shown, it asks for the interfaces every 5 seconds:
+a port's activity light is on if the port counted packets since the
+last time.
 Each user logs in with a name and password, as
 .Nm nshd
 checks them, and has the permissions of the user's login class (see

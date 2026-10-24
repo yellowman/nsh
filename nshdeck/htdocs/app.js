@@ -17,6 +17,10 @@ var deadline = 0;		/* when a confirmed commit goes back, or 0 */
 var ticker = null;
 var comp = null;		/* the input its choices are for */
 var cur = null;			/* the user's context, as nshd last gave it */
+var LOOK = 5000;		/* how often the Overview looks at traffic, ms */
+var looker = null;
+var jacks = {};			/* each port's button, by its name */
+var packets = {};		/* each port's packets, at the last look */
 
 /* drivers of interfaces that are not ports of the box */
 var PSEUDO = ["lo", "enc", "pflog", "pfsync", "pflow", "carp", "vlan",
@@ -178,12 +182,23 @@ function workspace(name) {
 	});
 	if (name === "overview" || name === "network")
 		interfaces();
+	/* the Overview looks again every so often, for its ports' traffic */
+	clearInterval(looker);
+	looker = name !== "overview" ? null : setInterval(function () {
+		if (!document.hidden)
+			interfaces();
+	}, LOOK);
 	if (name === "terminal")
 		terminalShown();
 }
 
 function driver(name) {
 	return name.replace(/[0-9]+$/, "");
+}
+
+/* is r one of the box's ports */
+function physical(r) {
+	return PSEUDO.indexOf(driver(r.name)) === -1;
 }
 
 function flag(r, f) {
@@ -225,7 +240,7 @@ function interfaces() {
 		ifs = of(j, "interface");
 		addrs = of(j, "address");
 		faceplate();
-		cards();
+		readout();
 		logical();
 		iftable();
 		if (!$("ws-network").hidden && selected !== "" &&
@@ -234,70 +249,92 @@ function interfaces() {
 	});
 }
 
+/* a port: an RJ45 cage, with its link and activity lights in it */
+function port(name) {
+	var p = el("button"), jack = el("span", null, "jack");
+
+	p.type = "button";
+	jack.appendChild(el("i", null, "led link"));
+	jack.appendChild(el("i", null, "led act"));
+	p.appendChild(jack);
+	p.appendChild(el("span", name, "label"));
+	p.appendChild(el("span", null, "rate"));
+	p.addEventListener("click", function () {
+		selected = name;
+		workspace("network");
+	});
+	return p;
+}
+
 /*
  * the ports, as a box's face shows them, in the kernel's order, a block
- * for each driver
+ * for each driver; made again only when they are not the same ports, so
+ * that a look changes their lights and nothing else. A port's link light
+ * is its state; its activity light is on if it counted packets, in or
+ * out, since the last look
  */
 function faceplate() {
-	var ports = $("ports"), blocks = {};
+	var ports = $("ports"), blocks = {}, list = ifs.filter(physical);
+	var names = list.map(function (r) {
+		return r.name;
+	}).join(" ");
 
-	ports.textContent = "";
-	ifs.filter(function (r) {
-		return PSEUDO.indexOf(driver(r.name)) === -1;
-	}).forEach(function (r) {
-		var p = el("button", null, "port " + state(r));
-		var leds = el("span", null, "leds"), d = driver(r.name);
+	if (ports.dataset.names !== names) {
+		ports.textContent = "";
+		ports.dataset.names = names;
+		jacks = {};
+		list.forEach(function (r) {
+			var d = driver(r.name);
 
-		if (!blocks[d]) {
-			blocks[d] = el("div", null, "block");
-			blocks[d].appendChild(el("div", null, "row"));
-			blocks[d].appendChild(el("span", d, "silk"));
-			ports.appendChild(blocks[d]);
-		}
-		p.type = "button";
+			if (!blocks[d]) {
+				blocks[d] = el("div", null, "block");
+				blocks[d].appendChild(el("div", null, "row"));
+				blocks[d].appendChild(el("span", d, "silk"));
+				ports.appendChild(blocks[d]);
+			}
+			jacks[r.name] = blocks[d].firstChild.appendChild(
+			    port(r.name));
+		});
+	}
+	list.forEach(function (r) {
+		var p = jacks[r.name], n = Number(r["input-packets"] || 0) +
+		    Number(r["output-packets"] || 0);
+
+		p.className = "port " + state(r);
 		p.title = r.name + (r.description ? " — " +
 		    r.description : "") + "\n" + (r.link || "") +
 		    (addresses(r.name).length ? "\n" +
 		    addresses(r.name).join("\n") : "");
-		leds.appendChild(el("i", null, "led link"));
-		leds.appendChild(el("i", null, "led act"));
-		p.appendChild(leds);
-		p.appendChild(el("span", null, "jack"));
-		p.appendChild(el("span", r.name, "label"));
-		p.appendChild(el("span", rate(r), "rate"));
-		p.addEventListener("click", function () {
-			selected = r.name;
-			workspace("network");
-		});
-		blocks[d].firstChild.appendChild(p);
+		p.querySelector(".act").classList.toggle("on",
+		    packets[r.name] !== undefined && packets[r.name] !== n);
+		p.querySelector(".rate").textContent = rate(r);
+		packets[r.name] = n;
 	});
 }
 
-function cards() {
-	var ports = ifs.filter(function (r) {
-		return PSEUDO.indexOf(driver(r.name)) === -1;
-	});
+/* the readout on the box's face: its ports, interfaces and addresses */
+function readout() {
+	var ports = ifs.filter(physical);
 	var v4 = addrs.filter(function (a) {
 		return a.address && a.address.indexOf(":") === -1;
 	}).length;
 
-	$("c-up").textContent = ports.filter(function (r) {
+	$("r-ports").textContent = ports.filter(function (r) {
 		return state(r) === "on";
-	}).length;
-	$("c-ports").textContent = "of " + ports.length + " ports";
-	$("c-ifs").textContent = ifs.length;
-	$("c-logical").textContent = (ifs.length - ports.length) +
-	    " logical";
-	$("c-addrs").textContent = addrs.length;
-	$("c-fams").textContent = v4 + " IPv4 · " + (addrs.length - v4) +
+	}).length + " of " + ports.length + " up";
+	$("r-ifs").textContent = ifs.length + ", " + (ifs.length -
+	    ports.length) + " logical";
+	$("r-addrs").textContent = v4 + " IPv4, " + (addrs.length - v4) +
 	    " IPv6";
 }
 
-/* the logical interfaces, grouped, each with what it is on */
+/*
+ * the logical interfaces, grouped, each with what it is on; drawn again
+ * only when that changed, as the Overview looks often
+ */
 function logical() {
-	var into = $("logical"), seen = {};
+	var into = $("logical"), seen = {}, groups = [], drawn;
 
-	into.textContent = "";
 	GROUPS.forEach(function (g) {
 		var list = ifs.filter(function (r) {
 			var d = driver(r.name);
@@ -309,23 +346,33 @@ function logical() {
 			seen[r.name] = true;
 			return true;
 		});
-		var box;
 
-		if (list.length === 0)
-			return;
-		box = el("div", null, "group");
-		box.appendChild(el("h3", g.name + " · " + list.length));
-		list.forEach(function (r) {
+		if (list.length)
+			groups.push([g.name, list.map(function (r) {
+				return [r.name, state(r), g.rel(r),
+				    addresses(r.name)[0] || ""];
+			})]);
+	});
+	drawn = JSON.stringify(groups);
+	if (into.dataset.drawn === drawn)
+		return;
+	into.dataset.drawn = drawn;
+	into.textContent = "";
+	groups.forEach(function (g) {
+		var box = el("div", null, "group"), head = el("h3", g[0]);
+
+		head.appendChild(el("span", String(g[1].length), "count"));
+		box.appendChild(head);
+		g[1].forEach(function (x) {
 			var row = el("button", null, "lif");
 
 			row.type = "button";
-			row.appendChild(el("i", null, "led " + state(r)));
-			row.appendChild(el("b", r.name));
-			row.appendChild(el("span", g.rel(r), "rel"));
-			row.appendChild(el("span", addresses(r.name)[0] || "",
-			    "addr"));
+			row.appendChild(el("i", null, "led " + x[1]));
+			row.appendChild(el("b", x[0]));
+			row.appendChild(el("span", x[2], "rel"));
+			row.appendChild(el("span", x[3], "addr"));
 			row.addEventListener("click", function () {
-				selected = r.name;
+				selected = x[0];
 				workspace("network");
 			});
 			box.appendChild(row);
@@ -660,8 +707,8 @@ function noticed(d) {
 		confirmBy(0);
 	if (whose.indexOf(d.kind) !== -1 && d.kind !== "lock" &&
 	    d.kind !== "unlock") {
-		$("c-last").textContent = when;
-		$("c-lastwho").textContent = d.kind + " by uid " + d.uid;
+		$("r-last").textContent = d.kind + " " + when + ", uid " +
+		    d.uid;
 	}
 	/* interfaces or routes changed: asked again once they settle */
 	if ((d.kind === "links" || d.kind === "routes") && !document.hidden &&
@@ -703,6 +750,8 @@ function loggedOut() {
 		stream.close();
 		stream = null;
 	}
+	clearInterval(looker);
+	looker = null;
 	closeChoices();
 	tgone("logged out");
 	insp = null;
@@ -784,6 +833,11 @@ document.addEventListener("DOMContentLoaded", function () {
 		}
 		$("commit-dialog").close();
 		configure("commit", fields, asked);
+	});
+	/* a configuration chosen is shown */
+	$("config-form").addEventListener("change", function (e) {
+		if (e.target.name === "what")
+			e.target.form.requestSubmit();
 	});
 	on("config-form", function (f) {
 		var fields = { what: f.what.value };

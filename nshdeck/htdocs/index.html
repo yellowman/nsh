@@ -85,6 +85,12 @@
 <span class="serial" id="plate-ver"></span>
 </div>
 <div class="ports" id="ports" aria-label="Physical ports"></div>
+<dl class="readout" aria-label="Summary">
+<dt>Ports</dt><dd id="r-ports">&#8211;</dd>
+<dt>Interfaces</dt><dd id="r-ifs">&#8211;</dd>
+<dt>Addresses</dt><dd id="r-addrs">&#8211;</dd>
+<dt>Last change</dt><dd id="r-last">none seen</dd>
+</dl>
 <div class="status" aria-label="Status">
 <span title="nshdeck is up"><i class="led on"></i>PWR</span>
 <span title="Notices from nshd"><i class="led" id="led-sys"></i>SYS</span>
@@ -92,12 +98,6 @@
 <span title="A commit waits to be confirmed"><i class="led" id="led-cnf"></i>CNF</span>
 </div>
 <div class="ears" aria-hidden="true"></div>
-</div>
-<div class="cards">
-<div class="card"><h3>Ports up</h3><div class="num" id="c-up">&#8211;</div><div class="sub" id="c-ports"></div></div>
-<div class="card"><h3>Interfaces</h3><div class="num" id="c-ifs">&#8211;</div><div class="sub" id="c-logical"></div></div>
-<div class="card"><h3>Addresses</h3><div class="num" id="c-addrs">&#8211;</div><div class="sub" id="c-fams"></div></div>
-<div class="card"><h3>Last change</h3><div class="num small" id="c-last">&#8211;</div><div class="sub" id="c-lastwho"></div></div>
 </div>
 <div class="logical" id="logical"></div>
 </section>
@@ -130,12 +130,12 @@
 <div class="panel">
 <div class="bar"><h2>Configure</h2>
 <form id="configure-form" class="inline">
-<select name="mode" aria-label="Configure mode">
-<option value="private">private</option>
-<option value="shared">shared</option>
-<option value="exclusive">exclusive</option>
-<option value="terminal">terminal</option>
-</select>
+<div class="seg" role="radiogroup" aria-label="Configure mode">
+<label><input type="radio" name="mode" value="private" checked><span>private</span></label>
+<label><input type="radio" name="mode" value="shared"><span>shared</span></label>
+<label><input type="radio" name="mode" value="exclusive"><span>exclusive</span></label>
+<label><input type="radio" name="mode" value="terminal"><span>terminal</span></label>
+</div>
 <button>Enter</button>
 <button type="button" id="exit">Exit</button>
 </form>
@@ -153,13 +153,13 @@
 <div class="panel">
 <div class="bar"><h2>Configuration</h2>
 <form id="config-form" class="inline">
-<select name="what" aria-label="Which configuration">
-<option value="running">running</option>
-<option value="startup">startup</option>
-<option value="candidate">candidate</option>
-<option value="diff">diff</option>
-<option value="rollback">rollback</option>
-</select>
+<div class="seg" role="radiogroup" aria-label="Which configuration">
+<label><input type="radio" name="what" value="running" checked><span>running</span></label>
+<label><input type="radio" name="what" value="startup"><span>startup</span></label>
+<label><input type="radio" name="what" value="candidate"><span>candidate</span></label>
+<label><input type="radio" name="what" value="diff"><span>diff</span></label>
+<label><input type="radio" name="what" value="rollback"><span>rollback</span></label>
+</div>
 <input name="n" type="number" min="0" max="49" value="0" aria-label="Rollback number">
 <button>Show</button>
 </form>

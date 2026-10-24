@@ -1,39 +1,57 @@
 /* nshdeck's page: graphite and hairlines, a box's face for the ports */
 
 :root {
-	--bg: #0e1013;
-	--panel: #15181c;
-	--raise: #1b1f24;
-	--line: #262b31;
-	--line2: #323840;
-	--text: #e6e8eb;
-	--dim: #8a929c;
-	--faint: #5d646d;
-	--accent: #4ea1ff;
-	--on: #2fd27a;
-	--warn: #f2b33d;
-	--bad: #ff5b5b;
+	--bg: #0b0b0b;
+	--panel: #0f0f0f;
+	--side: #161616;
+	--raise: #1d1d1d;
+	--field: #080808;
+	--line: #262626;
+	--text: #f5f5f7;
+	--dim: #98989d;
+	--faint: #6e6e73;
+	--select: #ffffff12;
+	--track: #ffffff1c;
+	--segment: #48484a;
+	--accent: #0a84ff;
+	--soft: #193356;
+	--soft-ink: #a9cdff;
+	--on: #32d74b;
+	--warn: #ffb340;
+	--bad: #ff8f80;
+	--ring: inset 0 0 0 .5px #ffffff24, 0 .5px 1px #000;
+	--card: inset 0 0 0 .5px #ffffff1f, 0 1px 4px #0006;
+	--pop: 0 0 0 .5px #ffffff24, 0 12px 36px #000000b3;
+	--focus: 0 0 0 3px color-mix(in srgb, var(--accent) 45%, transparent);
 	--mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono",
 	    monospace;
-	--sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
-	    Arial, sans-serif;
+	--sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
+	    system-ui, Roboto, "Helvetica Neue", Arial, sans-serif;
 	color-scheme: dark;
 }
 
 @media (prefers-color-scheme: light) {
 	:root {
-		--bg: #f3f4f6;
+		--bg: #ffffff;
 		--panel: #ffffff;
-		--raise: #f7f8fa;
-		--line: #e2e5e9;
-		--line2: #cfd4da;
-		--text: #15181c;
-		--dim: #5b636d;
-		--faint: #8c949e;
-		--accent: #1f6fd6;
-		--on: #12a35a;
-		--warn: #c98a0c;
-		--bad: #d93636;
+		--side: #f2f2f2;
+		--raise: #ffffff;
+		--field: #ffffff;
+		--line: #e2e2e4;
+		--text: #1d1d1f;
+		--dim: #6e6e73;
+		--faint: #a1a1a6;
+		--select: #0000000d;
+		--track: #00000014;
+		--segment: #ffffff;
+		--soft: #dae9fe;
+		--soft-ink: #1e579f;
+		--on: #248a3d;
+		--warn: #c93400;
+		--bad: #d70015;
+		--ring: inset 0 0 0 .5px #00000029, 0 .5px 1.5px #0000001a;
+		--card: inset 0 0 0 .5px #00000029, 0 1px 3px #00000014;
+		--pop: 0 0 0 .5px #00000029, 0 12px 36px #00000029;
 		color-scheme: light;
 	}
 }
@@ -62,17 +80,13 @@ h1, h2, h3 {
 }
 
 h2 {
-	font-size: 11px;
-	letter-spacing: .08em;
-	text-transform: uppercase;
-	color: var(--dim);
+	font-size: 14px;
+	color: var(--text);
 }
 
 h3 {
-	font-size: 11px;
-	letter-spacing: .06em;
-	text-transform: uppercase;
-	color: var(--faint);
+	font-size: 11.5px;
+	color: var(--dim);
 }
 
 .dim {
@@ -84,43 +98,58 @@ h3 {
 	font-size: 12px;
 }
 
+/* controls: no borders, a hairline ring, as a native app's */
 button, input, select {
 	font: inherit;
 	color: var(--text);
 	background: var(--raise);
-	border: 1px solid var(--line2);
-	border-radius: 3px;
-	padding: 4px 9px;
-	height: 26px;
+	border: 0;
+	border-radius: 6px;
+	box-shadow: var(--ring);
+	padding: 4px 12px;
+	height: 28px;
 }
 
 input, select {
-	background: var(--bg);
+	background: var(--field);
+	padding: 4px 9px;
 }
 
 input:focus, select:focus, button:focus-visible {
 	outline: none;
-	border-color: var(--accent);
-	box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent);
+	box-shadow: var(--ring), var(--focus);
 }
 
 button {
 	cursor: pointer;
+	font-weight: 500;
 }
 
-button:hover {
-	border-color: var(--faint);
+button:hover:not(:disabled) {
+	background: color-mix(in srgb, var(--text) 4%, var(--raise));
+}
+
+button:active:not(:disabled) {
+	background: color-mix(in srgb, var(--text) 9%, var(--raise));
 }
 
 button.primary {
 	background: var(--accent);
-	border-color: var(--accent);
 	color: #fff;
-	font-weight: 600;
+	box-shadow: none;
+}
+
+button.primary:hover:not(:disabled) {
+	background: color-mix(in srgb, var(--accent) 90%, #000);
+}
+
+button.primary:active:not(:disabled) {
+	background: color-mix(in srgb, var(--accent) 82%, #000);
 }
 
 input[type=checkbox] {
 	height: auto;
+	box-shadow: none;
 	accent-color: var(--accent);
 }
 
@@ -129,18 +158,18 @@ input.narrow {
 }
 
 input.nope {
-	border-color: var(--bad);
+	box-shadow: inset 0 0 0 1px var(--bad);
 }
 
 /* the login */
 
 #login {
-	width: 300px;
+	width: 320px;
 	margin: 14vh auto 0;
 	padding: 28px;
-	background: var(--panel);
-	border: 1px solid var(--line);
-	border-radius: 6px;
+	background: var(--raise);
+	border-radius: 12px;
+	box-shadow: var(--pop);
 	display: grid;
 	gap: 12px;
 }
@@ -192,7 +221,7 @@ input.nope {
 	align-items: center;
 	gap: 4px;
 	padding: 7px 0 10px;
-	background: var(--panel);
+	background: var(--side);
 	border-right: 1px solid var(--line);
 }
 
@@ -207,31 +236,15 @@ input.nope {
 	border: 0;
 	border-radius: 6px;
 	background: transparent;
-	color: var(--faint);
+	box-shadow: none;
+	color: var(--dim);
 	display: grid;
 	place-items: center;
-	position: relative;
 }
 
-#rail button:hover {
+#rail button:hover:not(:disabled), #rail button.on {
 	color: var(--text);
-	background: var(--raise);
-}
-
-#rail button.on {
-	color: var(--text);
-	background: var(--raise);
-}
-
-#rail button.on::before {
-	content: "";
-	position: absolute;
-	left: -8px;
-	top: 9px;
-	bottom: 9px;
-	width: 2px;
-	border-radius: 2px;
-	background: var(--accent);
+	background: var(--select);
 }
 
 #rail svg {
@@ -281,23 +294,25 @@ input.nope {
 	text-overflow: ellipsis;
 }
 
+/* a label: a tinted pill */
 .tag {
-	font: 11px var(--mono);
-	padding: 2px 7px;
-	border: 1px solid var(--line2);
-	border-radius: 3px;
+	font-size: 12px;
+	font-weight: 500;
+	padding: 1px 8px;
+	border-radius: 5px;
+	background: var(--select);
 	color: var(--dim);
 	white-space: nowrap;
 }
 
 .tag.on {
-	color: var(--accent);
-	border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+	background: var(--soft);
+	color: var(--soft-ink);
 }
 
 .tag.warn {
+	background: color-mix(in srgb, var(--warn) 14%, transparent);
 	color: var(--warn);
-	border-color: color-mix(in srgb, var(--warn) 50%, transparent);
 }
 
 main {
@@ -339,33 +354,90 @@ main {
 	color: var(--dim);
 }
 
-/* LEDs */
+/* a segmented control: radio buttons on a track, the one chosen raised */
+.seg {
+	display: inline-flex;
+	gap: 2px;
+	padding: 2px;
+	border-radius: 7px;
+	background: var(--track);
+}
+
+.seg > label {
+	display: block;
+	position: relative;
+	cursor: pointer;
+	color: var(--text);
+}
+
+.seg input {
+	position: absolute;
+	opacity: 0;
+	width: 1px;
+	height: 1px;
+}
+
+.seg span {
+	display: block;
+	padding: 2px 11px;
+	border-radius: 5px;
+	line-height: 20px;
+}
+
+.seg > label:hover input:not(:checked) + span {
+	background: var(--select);
+}
+
+.seg input:checked + span {
+	background: var(--segment);
+	box-shadow: var(--ring);
+}
+
+.seg input:focus-visible + span {
+	box-shadow: var(--ring), var(--focus);
+}
+
+/* status dots; on the box's face, LEDs that glow */
 
 .led {
 	display: inline-block;
-	width: 7px;
-	height: 7px;
+	width: 8px;
+	height: 8px;
 	border-radius: 50%;
-	background: #3a3f46;
-	box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .35);
+	background: color-mix(in srgb, var(--faint) 45%, transparent);
 	flex: none;
 }
 
 .led.on {
 	background: var(--on);
-	box-shadow: 0 0 6px color-mix(in srgb, var(--on) 70%, transparent);
 }
 
 .led.warn {
 	background: var(--warn);
-	box-shadow: 0 0 6px color-mix(in srgb, var(--warn) 60%, transparent);
+}
+
+.chassis .led {
+	width: 7px;
+	height: 7px;
+	background: #2c2f33;
+	box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .4);
+}
+
+.chassis .led.on {
+	background: #3ee07a;
+	box-shadow: 0 0 6px #3ee07a;
+}
+
+.chassis .led.warn {
+	background: #f5b13d;
+	box-shadow: 0 0 6px #f5b13d;
 }
 
 /* the box's face: dark anodised metal, ears, a plate, the ports */
 
 .chassis {
 	display: grid;
-	grid-template-columns: 14px auto 1fr auto 14px;
+	grid-template-columns: 14px auto 1fr auto auto 14px;
 	align-items: stretch;
 	min-height: 120px;
 	border-radius: 5px;
@@ -496,36 +568,14 @@ main {
 	width: 48px;
 }
 
-.port .leds {
-	display: flex;
-	gap: 18px;
-}
-
-.port .led {
-	width: 5px;
-	height: 5px;
-	border-radius: 1px;
-}
-
-.port.on .led.link {
-	background: var(--on);
-	box-shadow: 0 0 5px var(--on);
-}
-
-.port.on .led.act {
-	background: var(--warn);
-	opacity: .75;
-}
-
-.port.warn .led.link {
-	background: var(--warn);
-	box-shadow: 0 0 5px var(--warn);
-}
-
-/* an RJ45 cage: a dark recess, its latch notch at the bottom */
+/*
+ * an RJ45 cage: a dark recess, its latch notch at the bottom, and in its
+ * top corners its lights, link on the left and activity on the right
+ */
 .port .jack {
-	width: 40px;
-	height: 30px;
+	position: relative;
+	width: 42px;
+	height: 32px;
 	background: linear-gradient(180deg, #050607, #15171a);
 	border: 1px solid #000;
 	border-radius: 2px;
@@ -533,6 +583,52 @@ main {
 	    0 1px 0 rgba(255, 255, 255, .07);
 	clip-path: polygon(0 0, 100% 0, 100% 78%, 68% 78%, 68% 100%,
 	    32% 100%, 32% 78%, 0 78%);
+}
+
+.port .jack .led {
+	position: absolute;
+	top: 3px;
+	width: 8px;
+	height: 4px;
+	border-radius: 1px;
+}
+
+.port .jack .link {
+	left: 3px;
+}
+
+.port .jack .act {
+	right: 3px;
+}
+
+.port.on .jack .link, .port .jack .act.on {
+	background: #3ee07a;
+	box-shadow: 0 0 6px #3ee07a;
+}
+
+.port.warn .jack .link {
+	background: #f5b13d;
+	box-shadow: 0 0 6px #f5b13d;
+}
+
+/* traffic: a flicker, as a port's light does */
+.port .jack .act.on {
+	animation: traffic 1.3s steps(1) infinite;
+}
+
+@keyframes traffic {
+	12% { opacity: .2; }
+	19% { opacity: 1; }
+	41% { opacity: .15; }
+	47% { opacity: 1; }
+	66% { opacity: .3; }
+	74% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.port .jack .act.on {
+		animation: none;
+	}
 }
 
 .port.off .jack {
@@ -555,33 +651,36 @@ main {
 	min-height: 11px;
 }
 
-/* cards */
-
-.cards {
+/* the readout: a display set in the box's face, its glass lit */
+.readout {
+	align-self: center;
 	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
-	gap: 10px;
+	grid-template-columns: auto auto;
+	gap: 1px 16px;
+	margin: 0 20px;
+	padding: 9px 14px;
+	border-radius: 4px;
+	border: 1px solid #000;
+	background:
+	    repeating-linear-gradient(0deg, rgba(255, 255, 255, .025) 0 1px,
+	    transparent 1px 3px),
+	    radial-gradient(ellipse at 50% 0%, #0d1714, #040605 70%);
+	box-shadow: inset 0 2px 10px rgba(0, 0, 0, .9),
+	    0 1px 0 rgba(255, 255, 255, .07);
+	font: 11.5px/1.55 var(--mono);
+	color: #86f3d6;
+	text-shadow: 0 0 6px rgba(80, 240, 200, .45);
+	white-space: nowrap;
 }
 
-.card {
-	background: var(--panel);
-	border: 1px solid var(--line);
-	border-radius: 5px;
-	padding: 11px 13px;
+.readout dt {
+	opacity: .55;
+	letter-spacing: .08em;
+	text-transform: uppercase;
 }
 
-.card .num {
-	font: 600 22px var(--mono);
-	margin-top: 4px;
-}
-
-.card .num.small {
-	font-size: 15px;
-}
-
-.card .sub {
-	color: var(--dim);
-	font-size: 12px;
+.readout dd {
+	margin: 0;
 }
 
 /* the logical interfaces, grouped */
@@ -589,19 +688,28 @@ main {
 .logical {
 	display: grid;
 	grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-	gap: 10px;
+	gap: 12px;
+	align-items: start;
 }
 
 .group {
 	background: var(--panel);
-	border: 1px solid var(--line);
-	border-radius: 5px;
-	padding: 8px 0 4px;
+	border-radius: 10px;
+	box-shadow: var(--card);
+	padding: 6px;
 }
 
 .group h3 {
-	padding: 0 12px 6px;
-	border-bottom: 1px solid var(--line);
+	display: flex;
+	gap: 7px;
+	padding: 5px 8px 7px;
+	font-size: 12.5px;
+	color: var(--text);
+}
+
+.group h3 .count {
+	color: var(--faint);
+	font-weight: 500;
 }
 
 .lif {
@@ -613,16 +721,12 @@ main {
 	gap: 8px;
 	width: 100%;
 	box-sizing: border-box;
-	padding: 5px 12px;
-	border-bottom: 1px solid var(--line);
-}
-
-.lif:last-child {
-	border-bottom: 0;
+	padding: 6px 8px;
+	border-radius: 6px;
 }
 
 .lif:hover, .lif:focus-visible {
-	background: var(--raise);
+	background: var(--select);
 }
 
 .lif b {
@@ -643,20 +747,17 @@ table.grid {
 	width: 100%;
 	border-collapse: collapse;
 	background: var(--panel);
-	border: 1px solid var(--line);
-	border-radius: 5px;
+	border-radius: 10px;
+	box-shadow: var(--card);
 	overflow: hidden;
 }
 
 .grid th {
 	text-align: left;
-	font-size: 10.5px;
+	font-size: 11.5px;
 	font-weight: 600;
-	letter-spacing: .06em;
-	text-transform: uppercase;
-	color: var(--faint);
-	background: var(--raise);
-	padding: 6px 10px;
+	color: var(--dim);
+	padding: 8px 10px 6px;
 	border-bottom: 1px solid var(--line);
 	white-space: nowrap;
 }
@@ -726,9 +827,9 @@ table.grid {
 }
 
 .igroup {
-	border: 1px solid var(--line);
-	border-radius: 4px;
-	background: var(--bg);
+	border-radius: 8px;
+	background: var(--panel);
+	box-shadow: var(--card);
 }
 
 .igroup summary {
@@ -815,10 +916,9 @@ table.grid {
 	display: inline-flex;
 	align-items: center;
 	gap: 4px;
-	padding: 1px 2px 1px 7px;
-	border: 1px solid var(--line2);
-	border-radius: 3px;
-	background: var(--raise);
+	padding: 1px 2px 1px 8px;
+	border-radius: 5px;
+	background: var(--select);
 	font-size: 12px;
 }
 
@@ -829,8 +929,8 @@ table.grid {
 .chip button {
 	height: 18px;
 	padding: 0 5px;
-	border: 0;
 	background: transparent;
+	box-shadow: none;
 	color: var(--faint);
 }
 
@@ -902,23 +1002,22 @@ button:disabled {
 
 button.preset {
 	height: 22px;
-	padding: 1px 8px;
-	font: 11px var(--mono);
-	color: var(--dim);
+	padding: 0 9px;
+	font: 11.5px var(--mono);
 }
 
 .cliline {
 	display: flex;
 	align-items: center;
 	gap: 8px;
-	background: var(--bg);
-	border: 1px solid var(--line2);
-	border-radius: 3px;
+	background: var(--field);
+	box-shadow: var(--ring);
+	border-radius: 6px;
 	padding: 0 0 0 9px;
 }
 
 .cliline:focus-within {
-	border-color: var(--accent);
+	box-shadow: var(--ring), var(--focus);
 }
 
 .cliline span {
@@ -936,23 +1035,21 @@ button.preset {
 
 .cliline input.narrow {
 	flex: none;
-	border-left: 1px solid var(--line2);
+	border-left: 1px solid var(--line);
 	border-radius: 0;
 }
 
 .cliline button {
-	border: 0;
-	border-left: 1px solid var(--line2);
-	border-radius: 0 3px 3px 0;
-	height: 24px;
+	box-shadow: none;
+	border-left: 1px solid var(--line);
+	border-radius: 0 6px 6px 0;
 }
 
 pre.term {
 	margin: 0;
 	padding: 10px 12px;
-	background: var(--bg);
-	border: 1px solid var(--line);
-	border-radius: 4px;
+	background: color-mix(in srgb, var(--text) 4%, var(--field));
+	border-radius: 6px;
 	max-height: 340px;
 	min-height: 60px;
 	overflow: auto;
@@ -982,14 +1079,14 @@ pre.term {
 	padding: 8px;
 	overflow: hidden;
 	background: #0b0d10;
-	border: 1px solid var(--line);
-	border-radius: 5px;
+	border-radius: 10px;
+	box-shadow: var(--card);
 }
 
 .panel {
 	background: var(--panel);
-	border: 1px solid var(--line);
-	border-radius: 5px;
+	border-radius: 10px;
+	box-shadow: var(--card);
 	padding: 12px;
 }
 
@@ -1016,18 +1113,18 @@ pre.term {
 	max-height: 300px;
 	max-width: 640px;
 	overflow: auto;
-	background: var(--panel);
-	border: 1px solid var(--line2);
-	border-radius: 4px;
-	box-shadow: 0 10px 30px rgba(0, 0, 0, .45);
-	padding: 3px 0;
+	background: var(--raise);
+	border-radius: 8px;
+	box-shadow: var(--pop);
+	padding: 4px;
 }
 
 .choice {
 	display: grid;
 	grid-template-columns: minmax(90px, auto) 1fr;
 	gap: 14px;
-	padding: 3px 10px;
+	padding: 3px 8px;
+	border-radius: 5px;
 	cursor: pointer;
 	font-size: 12px;
 }
@@ -1061,17 +1158,17 @@ pre.term {
 /* the commit dialog */
 
 dialog {
-	background: var(--panel);
+	background: var(--raise);
 	color: var(--text);
-	border: 1px solid var(--line2);
-	border-radius: 6px;
-	padding: 18px;
-	width: 380px;
-	box-shadow: 0 20px 50px rgba(0, 0, 0, .5);
+	border: 0;
+	border-radius: 12px;
+	padding: 20px;
+	width: 400px;
+	box-shadow: var(--pop);
 }
 
 dialog::backdrop {
-	background: rgba(0, 0, 0, .55);
+	background: rgba(0, 0, 0, .45);
 }
 
 dialog form {
@@ -1124,5 +1221,10 @@ dialog .actions {
 	}
 	.plate, .status {
 		display: none;
+	}
+	.readout {
+		grid-area: 2 / 2;
+		justify-self: start;
+		margin: 0 0 14px 22px;
 	}
 }
