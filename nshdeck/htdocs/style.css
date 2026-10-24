@@ -788,7 +788,7 @@ table.grid {
 	min-width: 140px;
 }
 
-#if-table td:not(.descr) {
+.pick td:not(.descr) {
 	white-space: nowrap;
 }
 
@@ -988,19 +988,20 @@ button:disabled {
 	cursor: default;
 }
 
-#if-table tr:not(:first-child) {
+/* a table whose rows are chosen */
+.pick td {
 	cursor: pointer;
 }
 
-#if-table tr:not(:first-child):hover td {
+.pick tr:hover td {
 	background: var(--raise);
 }
 
-#if-table tr.sel td {
+.pick tr.sel td {
 	background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
-#if-table tr.sel td:first-child {
+.pick tr.sel td:first-child {
 	box-shadow: inset 2px 0 0 var(--accent);
 }
 
@@ -1073,6 +1074,52 @@ pre.term {
 	overflow: auto;
 	white-space: pre-wrap;
 	word-break: break-word;
+}
+
+/* what a part of the page is for, and what it shows when it has nothing */
+.help {
+	margin: 0;
+	max-width: 90ch;
+	font-size: 12px;
+	color: var(--dim);
+}
+
+.help code, .empty code {
+	color: var(--text);
+}
+
+.empty {
+	display: none;
+	margin: 0;
+	padding: 10px 12px;
+	border-radius: 6px;
+	background: color-mix(in srgb, var(--text) 3%, transparent);
+	color: var(--dim);
+}
+
+pre.term:empty, ul:empty, table.grid:empty {
+	display: none;
+}
+
+:empty + .empty {
+	display: block;
+}
+
+pre.term.tall {
+	max-height: 520px;
+}
+
+.bar .fill {
+	flex: 1;
+}
+
+.topic {
+	display: grid;
+	gap: 16px;
+}
+
+#op-kinds td.mono {
+	white-space: nowrap;
 }
 
 .split {

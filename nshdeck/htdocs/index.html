@@ -70,6 +70,7 @@
 </div>
 <div class="actions">
 <button type="button" id="compare">Compare</button>
+<button type="button" id="validate">Validate</button>
 <button type="button" id="commit" class="primary">Commit</button>
 </div>
 </header>
@@ -105,7 +106,7 @@
 <section id="ws-network" class="ws" hidden>
 <div class="bar"><h2>Interfaces</h2><span class="dim" id="net-count"></span></div>
 <div class="netsplit">
-<table class="grid" id="if-table"></table>
+<table class="grid pick" id="if-table"></table>
 <aside id="inspector" class="panel" aria-label="The interface's settings">
 <p class="dim">Choose an interface to see and change its settings.</p>
 </aside>
@@ -126,9 +127,18 @@
 </section>
 
 <section id="ws-system" class="ws" hidden>
+<div class="bar">
+<div class="seg" id="topics" role="radiogroup" aria-label="Topic">
+<label><input type="radio" name="topic" value="changes" checked><span>Changes</span></label>
+<label><input type="radio" name="topic" value="history"><span>History</span></label>
+<label><input type="radio" name="topic" value="live"><span>Live operations</span></label>
+</div>
+</div>
+
+<div class="topic" id="topic-changes">
 <div class="split">
 <div class="panel">
-<div class="bar"><h2>Configure</h2>
+<div class="bar"><h2>Candidate</h2>
 <form id="configure-form" class="inline">
 <div class="seg" role="radiogroup" aria-label="Configure mode">
 <label><input type="radio" name="mode" value="private" checked><span>private</span></label>
@@ -136,50 +146,64 @@
 <label><input type="radio" name="mode" value="exclusive"><span>exclusive</span></label>
 <label><input type="radio" name="mode" value="terminal"><span>terminal</span></label>
 </div>
-<button>Enter</button>
-<button type="button" id="exit">Exit</button>
+<button id="enter">Enter</button>
+<button type="button" id="discard" disabled>Discard changes</button>
+<button type="button" id="exit" disabled>Exit</button>
 </form>
 </div>
+<p class="help" id="mode-help"></p>
 <pre id="transcript" class="term"></pre>
+<p class="empty">Type a line as at nsh's configure prompt, such as <code>hostname gw1</code>, or <code>interface em0</code> and then <code>description uplink</code>. Tab completes a word, and <code>?</code> lists what can come next.</p>
 <form id="line-form" class="cliline">
 <span id="prompt">nsh&gt;</span>
 <input name="line" class="cli" aria-label="A line of configuration" autocomplete="off" spellcheck="false">
 </form>
-<form id="rollback-form" class="inline">
-<label>Rollback <input name="n" type="number" min="0" max="49" value="0" aria-label="Rollback number"></label>
-<button>Roll back</button>
-</form>
 </div>
 <div class="panel">
-<div class="bar"><h2>Configuration</h2>
+<div class="bar"><h2>View</h2>
 <form id="config-form" class="inline">
 <div class="seg" role="radiogroup" aria-label="Which configuration">
-<label><input type="radio" name="what" value="running" checked><span>running</span></label>
-<label><input type="radio" name="what" value="startup"><span>startup</span></label>
+<label><input type="radio" name="what" value="diff" checked><span>changes</span></label>
 <label><input type="radio" name="what" value="candidate"><span>candidate</span></label>
-<label><input type="radio" name="what" value="diff"><span>diff</span></label>
-<label><input type="radio" name="what" value="rollback"><span>rollback</span></label>
+<label><input type="radio" name="what" value="running"><span>running</span></label>
+<label><input type="radio" name="what" value="startup"><span>saved</span></label>
 </div>
-<input name="n" type="number" min="0" max="49" value="0" aria-label="Rollback number">
-<button>Show</button>
 </form>
 </div>
-<pre id="config-out" class="term"></pre>
+<p class="help" id="view-help"></p>
+<pre id="config-out" class="term tall"></pre>
+<p class="empty" id="config-empty"></p>
+</div>
+</div>
+</div>
+
+<div class="topic" id="topic-history" hidden>
+<div class="split">
+<div class="panel">
+<div class="bar"><h2>Saved configurations</h2><span class="dim" id="saved-count"></span></div>
+<p class="help">Each commit saves the configuration it made, newest first. Choose one to see it; loaded into a candidate, it is reviewed under Changes and then committed, or discarded.</p>
+<table class="grid pick" id="saved-table"></table>
+<p class="empty">No configuration has been saved yet.</p>
+</div>
+<div class="panel">
+<div class="bar"><h2 id="saved-name">Saved configuration</h2>
+<span class="fill"></span>
+<button type="button" id="load" disabled>Load into the candidate</button>
+</div>
+<p class="help" id="load-help">Loading needs configure private, shared or exclusive; enter one under Changes.</p>
+<pre id="saved-out" class="term tall"></pre>
+<p class="empty">Choose a saved configuration to see it here.</p>
 </div>
 </div>
 <div class="split">
 <div class="panel">
-<div class="bar"><h2>Operation</h2></div>
-<form id="op-form" class="cliline">
-<span>op&gt;</span>
-<input name="line" class="cli" placeholder="flush routes" aria-label="Operation" autocomplete="off" spellcheck="false">
-<input name="rtable" type="number" min="0" max="255" value="0" aria-label="Routing table" class="narrow">
-<button>Run</button>
-</form>
-<pre id="op-out" class="term"></pre>
+<div class="bar"><h2>Activity</h2></div>
+<p class="help">What nshd reports as it happens: commits and who made them, confirmed commits and their deadlines, configure exclusive taken and left, and interfaces and routes that change.</p>
+<ul id="notices"></ul>
+<p class="empty">Nothing yet since this page opened.</p>
 </div>
 <div class="panel">
-<div class="bar"><h2>Events</h2>
+<div class="bar"><h2>Logs</h2>
 <form id="events-form" class="inline">
 <label><input type="checkbox" name="logs" value="daemon"> daemon</label>
 <label><input type="checkbox" name="logs" value="messages"> messages</label>
@@ -187,11 +211,30 @@
 <button>Follow</button>
 </form>
 </div>
-<ul id="notices"></ul>
+<p class="help">Check the logs to follow, then Follow: their lines show here as the system writes them.</p>
 <pre id="log" class="term"></pre>
+<p class="empty">No log followed.</p>
 </div>
 </div>
-<div class="shows" data-presets="version|hostname|users|rollback"></div>
+</div>
+
+<div class="topic" id="topic-live" hidden>
+<div class="panel">
+<div class="bar"><h2>Live operations</h2><span class="tag warn">Live operation</span></div>
+<p class="help">An operation acts on the running system at once. It is not part of a candidate, and neither Discard nor a rollback undoes it. Each asks to be confirmed, and needs the operate permission. Choose one to start its line; the number beside Run is the routing table it runs in.</p>
+<table class="grid pick" id="op-kinds"></table>
+<form id="op-form" class="cliline">
+<span>op&gt;</span>
+<input name="line" class="cli" aria-label="Operation" autocomplete="off" spellcheck="false" placeholder="an operation, such as flush arp">
+<input name="rtable" type="number" min="0" max="255" value="0" aria-label="Routing table" title="The routing table it runs in" class="narrow">
+<button>Run&#8230;</button>
+</form>
+<pre id="op-out" class="term"></pre>
+<p class="empty">What an operation prints shows here.</p>
+</div>
+</div>
+
+<div class="shows" data-presets="version|hostname|users"></div>
 </section>
 
 <section id="ws-terminal" class="ws" hidden>
@@ -219,8 +262,19 @@
 <p class="dim">A confirmed commit goes back by itself unless a commit saves it in time.</p>
 <div class="actions">
 <button type="button" id="commit-cancel">Cancel</button>
-<button type="button" id="commit-check">Check</button>
 <button class="primary">Commit</button>
+</div>
+</form>
+</dialog>
+
+<dialog id="op-dialog">
+<form id="op-confirm">
+<h2>Run a live operation</h2>
+<pre class="term" id="op-line"></pre>
+<p class="dim">It acts on the running system now. A candidate, Discard and rollbacks do not undo it.</p>
+<div class="actions">
+<button type="button" id="op-cancel">Cancel</button>
+<button class="primary">Run</button>
 </div>
 </form>
 </dialog>

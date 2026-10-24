@@ -36,10 +36,14 @@ the last change, and the logical interfaces grouped by what they are on;
 network, routing, security and services, each with its shows,
 as tables, and in network an interface's settings, which can be changed
 and staged into the candidate as lines of configuration; the system
-and its changes, which takes lines of
-configuration, commits, rollbacks and operations, as
+and its changes, in three topics: changes, where configure is entered
+and lines of configuration are typed, as
 .Xr nsh 8
-does, and shows the configuration as text; and a terminal, where
+takes them, beside a view of the changes, the candidate, the running
+or the saved configuration; history, the saved configurations as rows,
+any of which can be shown or loaded into the candidate, nshd's notices,
+and the logs followed; and live operations, each confirmed before it
+runs; and a terminal, where
 .Xr nsh 8
 runs as the user, which xterm.js draws.
 Tab completes a line as in
@@ -49,6 +53,10 @@ The page follows
 .Nm nshd Ns 's
 notices and logs as they come, counts down a commit waiting to be
 confirmed, and draws the interfaces again when they change.
+Its strip has Compare, Validate and Commit: the changes,
+.Cm commit check ,
+and
+.Cm commit .
 While the overview is shown, it asks for the interfaces every 5 seconds:
 a port's activity light is on if the port counted packets since the
 last time.

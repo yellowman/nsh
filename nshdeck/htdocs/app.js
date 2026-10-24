@@ -21,6 +21,55 @@ var LOOK = 5000;		/* how often the Overview looks at traffic, ms */
 var looker = null;
 var jacks = {};			/* each port's button, by its name */
 var packets = {};		/* each port's packets, at the last look */
+var chosen = -1;		/* the saved configuration History shows */
+var pending = null;		/* the operation that waits to be confirmed */
+
+/* what each configure mode is */
+var MODES = {
+	private: "A candidate of your own. It starts as what runs, other " +
+	    "sessions' commits show through it, and your changes stay on " +
+	    "top until you commit or discard them.",
+	shared: "One candidate for every session in shared mode: each sees " +
+	    "what the others change, Commit commits all of it, and Exit " +
+	    "leaves your changes there for the others.",
+	exclusive: "The shared candidate, while no other session changes it " +
+	    "or commits. Exit discards what was not committed.",
+	terminal: "No candidate: each line changes the running system as it " +
+	    "is typed, and is undone if it does not take. Commit saves what " +
+	    "runs."
+};
+
+/* what each view shows, and what it says when it has nothing */
+var VIEWS = {
+	diff: ["What Commit would change: lines added to what runs (+), and " +
+	    "lines taken away (−).", "No changes: the candidate is what runs."],
+	candidate: ["The candidate whole: what runs, with the changes made " +
+	    "in configure.", "The candidate is empty."],
+	running: ["What the system runs now, as nsh would save it.",
+	    "Nothing runs."],
+	startup: ["The configuration saved last, which the system starts " +
+	    "with.", "No configuration is saved."]
+};
+
+/* the operations nshd runs, each a line to start from, and what it does */
+var OPS = [
+	["flush arp", "Empties the ARP cache."],
+	["flush ndp", "Empties the NDP cache."],
+	["flush routes", "Clears the routing table."],
+	["flush pf ", "Clears pf's rules, states, tables or counters; ? " +
+	    "lists which."],
+	["flush bridge-dyn ", "Removes the addresses a bridge learned; name " +
+	    "the bridge."],
+	["bgp reload", "A daemon's action, such as bgp reload; ? after a " +
+	    "daemon's name lists its actions."],
+	["interface ", "An interface's bssid, setpuk or chgpin, after its " +
+	    "name."],
+	["diff-config", "Compares the saved configuration with what runs, " +
+	    "and changes nothing."],
+	["crontab", "Lists root's scheduled jobs, and changes nothing."],
+	["reboot", "Restarts the system; halt stops it, and powerdown turns " +
+	    "it off."]
+];
 
 /* drivers of interfaces that are not ports of the box */
 var PSEUDO = ["lo", "enc", "pflog", "pfsync", "pflow", "carp", "vlan",
@@ -133,7 +182,7 @@ function where(ctx) {
 }
 
 function context(j) {
-	var w;
+	var w, f = $("configure-form");
 
 	if (j.context === undefined)
 		return;
@@ -143,6 +192,133 @@ function context(j) {
 	$("where").classList.toggle("on", w !== "");
 	$("prompt").textContent = w ? "nsh(" + w + ")>" : "nsh>";
 	changes(j.context.mode !== 0);
+	/* the Changes topic, as the session is now */
+	if (cur.mode !== 0)
+		f.mode.value = ["", "private", "shared", "exclusive",
+		    "terminal"][cur.mode];
+	$("enter").disabled = cur.mode !== 0;
+	$("exit").disabled = cur.mode === 0;
+	$("discard").disabled = cur.mode === 0 || cur.mode === 4;
+	$("line-form").line.placeholder = cur.mode === 0 ?
+	    "Enter configure first" : "";
+	$("mode-help").textContent = MODES[f.mode.value];
+	loadable();
+	if (!$("ws-system").hidden && !$("topic-changes").hidden)
+		view();
+}
+
+/* System's topic, shown */
+function topic(name) {
+	$("topics").querySelector("[value=" + name + "]").checked = true;
+	["changes", "history", "live"].forEach(function (t) {
+		$("topic-" + t).hidden = t !== name;
+	});
+	if (name === "changes")
+		view();
+	else if (name === "history")
+		saved();
+}
+
+/* the configuration the View chooses, or why there is none */
+function view() {
+	var what = $("config-form").what.value;
+
+	$("view-help").textContent = VIEWS[what][0];
+	ask("GET", "config", { what: what }).then(function (j) {
+		var mode = (j.context || cur || { mode: 0 }).mode;
+		var none = !j.ok && mode === 0 && (what === "diff" ||
+		    what === "candidate");
+
+		if ($("config-form").what.value !== what)
+			return;
+		$("config-out").textContent = none ? "" : said(j);
+		$("config-empty").textContent = none ? "There is no candidate " +
+		    "until you Enter configure." : VIEWS[what][1];
+	});
+}
+
+/* the saved configurations, as rows: N, when, who, why */
+function saved() {
+	ask("GET", "config", { what: "rollback" }).then(function (j) {
+		var t = $("saved-table"), head = el("tr"), n = 0;
+
+		t.textContent = "";
+		["", "Saved", "By", "Comment"].forEach(function (h) {
+			head.appendChild(el("th", h));
+		});
+		said(j).split("\n").forEach(function (l) {
+			var m = /^ *(\d+)  (.*)$/.exec(l), tr, f;
+
+			if (m === null)
+				return;
+			f = m[2].split(/ {2,}/);
+			tr = el("tr", null, Number(m[1]) === chosen ?
+			    "sel" : "");
+			tr.appendChild(el("td", m[1], "num"));
+			tr.appendChild(el("td", f[0], "mono"));
+			tr.appendChild(el("td", f[1] || ""));
+			tr.appendChild(el("td", f.slice(2).join("  "),
+			    "descr"));
+			tr.addEventListener("click", function () {
+				choose(Number(m[1]), f);
+			});
+			if (n++ === 0)
+				t.appendChild(head);
+			t.appendChild(tr);
+		});
+		$("saved-count").textContent = n ? n + " kept" : "";
+		if (j.error !== undefined)
+			$("saved-out").textContent = said(j);
+	});
+}
+
+/* saved configuration n, shown */
+function choose(n, f) {
+	chosen = n;
+	$("saved-table").querySelectorAll("tr").forEach(function (tr) {
+		tr.classList.toggle("sel", tr.firstChild.textContent ===
+		    String(n));
+	});
+	$("saved-name").textContent = "Saved " + n + " · " + f[0] +
+	    (f[1] ? " · " + f[1] : "");
+	loadable();
+	ask("GET", "config", { what: "rollback", n: n }).then(function (j) {
+		if (chosen === n)
+			$("saved-out").textContent = said(j);
+	});
+}
+
+/* whether the configuration chosen can be loaded, and why not */
+function loadable() {
+	var help = $("load-help"), mode = cur ? cur.mode : 0;
+
+	$("load").disabled = chosen < 1 || mode === 0 || mode === 4;
+	if (chosen === 0)
+		help.textContent = "This is what was saved last. Discard " +
+		    "changes, under Changes, makes the candidate what runs.";
+	else if (mode === 0 || mode === 4)
+		help.textContent = "Loading needs configure private, shared " +
+		    "or exclusive; enter one under Changes.";
+	else
+		help.textContent = "Loading makes it the candidate, to review " +
+		    "under Changes and commit, or discard.";
+}
+
+/* the operations, as rows that start the line */
+function ops() {
+	var t = $("op-kinds");
+
+	OPS.forEach(function (o) {
+		var tr = el("tr");
+
+		tr.appendChild(el("td", o[0], "mono"));
+		tr.appendChild(el("td", o[1], "descr"));
+		tr.addEventListener("click", function () {
+			$("op-form").line.value = o[0];
+			$("op-form").line.focus();
+		});
+		t.appendChild(tr);
+	});
 }
 
 /* how the candidate differs from what runs, in the strip */
@@ -190,6 +366,8 @@ function workspace(name) {
 	}, LOOK);
 	if (name === "terminal")
 		terminalShown();
+	if (name === "system")
+		topic($("topics").querySelector(":checked").value);
 }
 
 function driver(name) {
@@ -707,6 +885,9 @@ function noticed(d) {
 		confirmBy(d.n);
 	else if (d.kind === "commit" || d.kind === "back")
 		confirmBy(0);
+	if ((d.kind === "commit" || d.kind === "back") &&
+	    !$("topic-history").hidden)
+		saved();
 	if (whose.indexOf(d.kind) !== -1 && d.kind !== "lock" &&
 	    d.kind !== "unlock") {
 		$("r-last").textContent = d.kind + " " + when + ", uid " +
@@ -754,6 +935,7 @@ function loggedOut() {
 	}
 	clearInterval(looker);
 	looker = null;
+	chosen = -1;
 	closeChoices();
 	tgone("logged out");
 	insp = null;
@@ -795,6 +977,10 @@ document.addEventListener("DOMContentLoaded", function () {
 		});
 	});
 	document.querySelectorAll(".shows").forEach(shows);
+	ops();
+	$("topics").addEventListener("change", function (e) {
+		topic(e.target.value);
+	});
 	document.addEventListener("keydown", keys);
 	document.addEventListener("input", function (e) {
 		if (e.target === comp)
@@ -805,22 +991,20 @@ document.addEventListener("DOMContentLoaded", function () {
 			closeChoices();
 	});
 	$("compare").addEventListener("click", function () {
-		workspace("system");
 		$("config-form").what.value = "diff";
-		ask("GET", "config", { what: "diff" }).then(function (j) {
-			$("config-out").textContent = said(j) ||
-			    "the candidate is what runs\n";
-		});
+		$("topics").querySelector("[value=changes]").checked = true;
+		workspace("system");
+	});
+	$("validate").addEventListener("click", function () {
+		$("topics").querySelector("[value=changes]").checked = true;
+		workspace("system");
+		configure("commit", { check: "1" }, "commit check");
 	});
 	$("commit").addEventListener("click", function () {
 		$("commit-dialog").showModal();
 	});
 	$("commit-cancel").addEventListener("click", function () {
 		$("commit-dialog").close();
-	});
-	$("commit-check").addEventListener("click", function () {
-		$("commit-dialog").close();
-		configure("commit", { check: "1" }, "commit check");
 	});
 	on("commit-form", function (f) {
 		var fields = {}, asked = "commit";
@@ -837,22 +1021,17 @@ document.addEventListener("DOMContentLoaded", function () {
 		configure("commit", fields, asked);
 	});
 	/* a configuration chosen is shown */
-	$("config-form").addEventListener("change", function (e) {
-		if (e.target.name === "what")
-			e.target.form.requestSubmit();
+	$("config-form").addEventListener("change", view);
+	$("configure-form").addEventListener("change", function (e) {
+		$("mode-help").textContent = MODES[e.target.value];
 	});
-	on("config-form", function (f) {
-		var fields = { what: f.what.value };
-
-		if (f.what.value === "rollback")
-			fields.n = f.n.value;
-		ask("GET", "config", fields).then(function (j) {
-			$("config-out").textContent = said(j);
-		});
-	});
+	$("mode-help").textContent = MODES.private;
 	on("configure-form", function (f) {
 		configure("configure", { mode: f.mode.value },
 		    "configure " + f.mode.value);
+	});
+	$("discard").addEventListener("click", function () {
+		configure("rollback", { n: "0" }, "rollback");
 	});
 	$("exit").addEventListener("click", function () {
 		configure("exit", {}, "exit");
@@ -866,12 +1045,25 @@ document.addEventListener("DOMContentLoaded", function () {
 				f.line.value = "";
 		});
 	});
-	on("rollback-form", function (f) {
-		configure("rollback", { n: f.n.value }, "rollback " + f.n.value);
+	$("load").addEventListener("click", function () {
+		var n = chosen;
+
+		topic("changes");
+		configure("rollback", { n: n }, "rollback " + n);
 	});
+	/* an operation runs once it is confirmed */
 	on("op-form", function (f) {
-		ask("POST", "op", { line: f.line.value,
-		    rtable: f.rtable.value }).then(function (j) {
+		pending = { line: f.line.value, rtable: f.rtable.value };
+		$("op-line").textContent = pending.line + (pending.rtable !==
+		    "0" ? "\nin routing table " + pending.rtable : "");
+		$("op-dialog").showModal();
+	});
+	$("op-cancel").addEventListener("click", function () {
+		$("op-dialog").close();
+	});
+	on("op-confirm", function () {
+		$("op-dialog").close();
+		ask("POST", "op", pending).then(function (j) {
 			var out = $("op-out");
 
 			out.textContent = "";
