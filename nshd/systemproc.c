@@ -145,6 +145,10 @@
  * root, and keeps the uid it logged in as until frontend says the
  * session is gone. Such a session then has the permissions of that
  * user's class, and its commits are that user's.
+ *
+ * Such a session's terminal is nsh, which system starts as the user it
+ * logged in as, on a pty, as login(1) would; the pty goes to config,
+ * and on to the session. nsh ends when its pty is closed.
  */
 
 #include <sys/types.h>
@@ -163,6 +167,7 @@
 #include <grp.h>
 #include <limits.h>
 #include <imsg.h>
+#include <login_cap.h>
 #include <paths.h>
 #include <poll.h>
 #include <pwd.h>
@@ -173,8 +178,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <syslog.h>
+#include <termios.h>
 #include <time.h>
 #include <unistd.h>
+#include <util.h>
 
 #include "log.h"
 #include "nshd.h"
@@ -189,6 +196,7 @@
 #define SYS_STREAMS	16	/* streams at once, at most */
 #define SYS_WINDOW	16	/* messages a stream sends its client unread */
 #define SYS_OPWORDS	32	/* an operation's words, at most */
+#define SYS_TERMINALS	64	/* web logins' terminals at once, at most */
 
 /*
  * what a stream's child streams: a show's, FACTS_*, an operation's, or a
@@ -360,6 +368,7 @@ static int		 nstreams;
 static uid_t		 check_uid;	/* NSHD_CHECK_USER's */
 static gid_t		 check_gid;
 static struct job	*job;
+static pid_t		 terminals[SYS_TERMINALS];	/* their nsh, or 0 */
 static TAILQ_HEAD(, queued) queue = TAILQ_HEAD_INITIALIZER(queue);
 static char		*parts[NSHD_PARTS];	/* chunks, until taken */
 static size_t		 partlen[NSHD_PARTS];
@@ -391,6 +400,8 @@ static void	asked_trim(void);
 static struct login *login_find(uint32_t);
 static int	system_whom(struct asked *, uid_t *);
 static void	system_login(uint32_t, struct nshd_syslogin *);
+static void	system_terminal(uint32_t, struct nshd_systerm *);
+static __dead void system_term_child(int, struct passwd *);
 static int	system_whole(uint32_t, const void *, size_t);
 static int	system_request(uint32_t, uint32_t, const void *, size_t);
 static void	system_queue(uint32_t, uint32_t, const void *, size_t);
@@ -491,6 +502,8 @@ systemproc(int debug, int v)
 		fatal(NULL);
 	evtimer_set(&confirm_tm, system_confirm, NULL);
 	links_init(links, sizeof(links) / sizeof(links[0]));
+	/* a terminal's pty goes to config */
+	imsgbuf_allow_fdpass(&links[CONFIG].iev->ibuf);
 	/* a commit not confirmed that an nshd before this one left */
 	system_confirm(-1, 0, NULL);
 	signal_set(&ev_sigchld, SIGCHLD, system_sigchld, NULL);
@@ -752,6 +765,7 @@ system_whole(uint32_t type, const void *data, size_t len)
 	struct nshd_test	 t;
 	struct nshd_sysop	 so;
 	struct nshd_syslogin	 sl;
+	struct nshd_systerm	 st;
 	struct nshd_follow	 f;
 	int			 i, r;
 
@@ -788,6 +802,12 @@ system_whole(uint32_t type, const void *data, size_t len)
 		    sizeof(sl.login.password)) == NULL ? -1 : 0;
 		explicit_bzero(&sl, sizeof(sl));
 		return (r);
+	case IMSG_SYS_TERMINAL:
+		if (len != sizeof(st))
+			return (-1);
+		memcpy(&st, data, len);
+		return (st.size.rows < 1 || st.size.rows > NSHD_TERMSIZE ||
+		    st.size.cols < 1 || st.size.cols > NSHD_TERMSIZE ? -1 : 0);
 	case IMSG_SYS_BOOTED:
 		return (len == sizeof(struct nshd_result) ? 0 : -1);
 	case IMSG_SYS_RECORD:
@@ -864,6 +884,7 @@ system_request(uint32_t type, uint32_t id, const void *data, size_t len)
 	struct nshd_result	 res;
 	struct nshd_sysop	 so;
 	struct nshd_follow	 f;
+	struct nshd_systerm	 st;
 	struct stream		*s;
 
 	switch (type) {
@@ -929,6 +950,10 @@ system_request(uint32_t type, uint32_t id, const void *data, size_t len)
 		memcpy(&sl, data, sizeof(sl));
 		system_login(id, &sl);
 		explicit_bzero(&sl, sizeof(sl));
+		break;
+	case IMSG_SYS_TERMINAL:
+		memcpy(&st, data, sizeof(st));
+		system_terminal(id, &st);
 		break;
 	case IMSG_SYS_OP:
 		memcpy(&so, data, sizeof(so));
@@ -1192,6 +1217,103 @@ system_login(uint32_t id, struct nshd_syslogin *sl)
 	    sizeof(lg)) == -1)
 		fatal("%s", __func__);
 	system_end(id, login_perms(uid), NULL);
+}
+
+/*
+ * A terminal for the web login of whose session: nsh as the login's
+ * user, on a pty of its size, which goes to config before the end; or
+ * -1, said why
+ */
+static void
+system_terminal(uint32_t id, struct nshd_systerm *st)
+{
+	struct winsize	 ws;
+	struct passwd	*pw;
+	struct asked	*k;
+	struct login	*l;
+	pid_t		 nsh;
+	int		 i, pty, tty;
+
+	if ((k = asked_whose(&st->whose)) == NULL || !k->web) {
+		system_end(id, -1, "%% nshd: only a web login has a "
+		    "terminal\n");
+		return;
+	}
+	asked_free(k);
+	if ((l = login_find(st->whose.session)) == NULL) {
+		system_end(id, -1, "%% nshd: log in first\n");
+		return;
+	}
+	for (i = 0; i < SYS_TERMINALS && terminals[i] != 0; i++)
+		;
+	if (i == SYS_TERMINALS) {
+		system_end(id, -1, "%% nshd: %d terminals already\n",
+		    SYS_TERMINALS);
+		return;
+	}
+	if ((pw = getpwuid(l->uid)) == NULL) {
+		system_end(id, -1, "%% nshd: no user %u\n", l->uid);
+		return;
+	}
+	memset(&ws, 0, sizeof(ws));
+	ws.ws_row = st->size.rows;
+	ws.ws_col = st->size.cols;
+	if (openpty(&pty, &tty, NULL, NULL, &ws) == -1) {
+		system_end(id, -1, "%% nshd: openpty: %s\n", strerror(errno));
+		return;
+	}
+	/* no child started later holds them */
+	if (fcntl(pty, F_SETFD, FD_CLOEXEC) == -1 ||
+	    fcntl(tty, F_SETFD, FD_CLOEXEC) == -1)
+		fatal("%s: fcntl", __func__);
+	if ((nsh = fork()) == -1) {
+		system_end(id, -1, "%% nshd: fork: %s\n", strerror(errno));
+		close(pty);
+		close(tty);
+		return;
+	}
+	if (nsh == 0)
+		system_term_child(tty, pw);
+	close(tty);
+	terminals[i] = nsh;
+	if (imsg_compose_event(links[CONFIG].iev, IMSG_SYS_TERMINAL, id, 0,
+	    pty, NULL, 0) == -1)
+		fatal("%s", __func__);
+	system_end(id, 0, NULL);
+}
+
+/* nsh, as pw's user, on tty, as login(1) starts a shell */
+static __dead void
+system_term_child(int tty, struct passwd *pw)
+{
+	extern char	**environ;
+	static char	*empty[] = { NULL };
+	char		*argv[] = { "-nsh", NULL };
+	sigset_t	 none;
+
+	/* as a program expects them, and as system's are not */
+	signal(SIGINT, SIG_DFL);
+	signal(SIGTERM, SIG_DFL);
+	signal(SIGCHLD, SIG_DFL);
+	signal(SIGPIPE, SIG_DFL);
+	signal(SIGHUP, SIG_DFL);
+	sigemptyset(&none);
+	sigprocmask(SIG_SETMASK, &none, NULL);
+	if (login_tty(tty) == -1)
+		_exit(1);
+	closefrom(STDERR_FILENO + 1);
+	environ = empty;
+	if (setenv("HOME", pw->pw_dir, 1) == -1 ||
+	    setenv("SHELL", NSH_SHELL, 1) == -1 ||
+	    setenv("USER", pw->pw_name, 1) == -1 ||
+	    setenv("LOGNAME", pw->pw_name, 1) == -1 ||
+	    setenv("TERM", "xterm", 1) == -1 ||
+	    setusercontext(NULL, pw, pw->pw_uid, LOGIN_SETALL) == -1)
+		_exit(1);
+	if (chdir(pw->pw_dir) == -1 && chdir("/") == -1)
+		_exit(1);
+	execv(NSH_SHELL, argv);
+	_exit(1);
 }
 
 /* to config: a line of text, if fmt, and how request id ended */
@@ -1551,6 +1673,7 @@ static void
 system_sigchld(int sig, short event, void *arg)
 {
 	struct stream	*s, *next;
+	int		 i;
 
 	TAILQ_FOREACH_SAFE(s, &streams, entry, next)
 		if (s->pid != 0 &&
@@ -1563,6 +1686,10 @@ system_sigchld(int sig, short event, void *arg)
 		job->pid = 0;
 		system_job_done();
 	}
+	for (i = 0; i < SYS_TERMINALS; i++)
+		if (terminals[i] != 0 &&
+		    waitpid(terminals[i], NULL, WNOHANG) == terminals[i])
+			terminals[i] = 0;
 }
 
 /* text of a part the next BEGIN or APPLY takes: -1 if past NSHD_PART */

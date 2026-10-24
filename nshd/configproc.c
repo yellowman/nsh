@@ -42,9 +42,9 @@
  *
  * A session has the permissions of its user's login class, which config
  * asks system for at the session's hello, by the uid frontend gives;
- * until they are in, the session may only say hello and go. A show
- * and the tables and names for completion need view; an operation
- * needs operate; configure private, configure terminal, a commit, a
+ * until they are in, the session may only say hello and go. A show,
+ * the tables and names for completion, and a terminal need view; an
+ * operation needs operate; configure private, configure terminal, a commit, a
  * rollback and a load need configure. configure and configure
  * exclusive need admin, as their candidate is everyone's. exec is nsh's
  * to check, as it runs a program: config only tells it at hello.
@@ -53,7 +53,8 @@
  * An operation a session may ask, system checks and runs, and config
  * passes on. A session of the web configurator's has no permissions
  * until it logs in, as system checks it; then it has the class of the
- * user it logged in as.
+ * user it logged in as. Its terminal, which system starts, comes back
+ * as a pty, which config passes on.
  *
  * archive keeps the shared candidate, and who changed it, past config's
  * end: config sends it each time it changes, and answers the session
@@ -290,6 +291,7 @@ static void		 config_hello_answer(struct session *);
 static void		 config_perms(struct request *, int32_t);
 static void		 config_login(uint32_t, struct nshd_login *);
 static void		 config_logged(struct request *, int32_t);
+static void		 config_pty(uint32_t, struct nshd_terminal *);
 static void		 config_text(struct request *, int32_t);
 static int		 config_hides(struct session *);
 static int		 config_may(uint32_t, uint32_t);
@@ -384,8 +386,10 @@ configproc(int debug, int verbose)
 	if ((iev_parent = imsgev_new(3, config_dispatch_parent, 0)) == NULL)
 		fatal(NULL);
 	links_init(links, sizeof(links) / sizeof(links[0]));
-	/* its peers' pipes are here, and no descriptor comes after them */
-	if (pledge("stdio", NULL) == -1)
+	/* its peers' pipes are here; a terminal's pty passes through */
+	imsgbuf_allow_fdpass(&links[SYSTEM].iev->ibuf);
+	imsgbuf_allow_fdpass(&links[FRONTEND].iev->ibuf);
+	if (pledge("stdio recvfd sendfd", NULL) == -1)
 		fatal("pledge");
 	event_set(&rt_ev, 5, EV_READ | EV_PERSIST, config_route, NULL);
 	event_add(&rt_ev, NULL);
@@ -439,6 +443,7 @@ config_dispatch_frontend(int fd, short event, void *arg)
 	struct nshd_load	 ld;
 	struct nshd_login	 lg;
 	struct nshd_watch	 w;
+	struct nshd_terminal	 tm;
 	struct session		*sp;
 	uint32_t		 id, type;
 	int			 n;
@@ -528,6 +533,13 @@ config_dispatch_frontend(int fd, short event, void *arg)
 				goto bad;
 			config_watch(id, &w);
 			break;
+		case IMSG_CTL_TERMINAL:
+			if (imsg_get_data(&imsg, &tm, sizeof(tm)) == -1 ||
+			    tm.rows < 1 || tm.rows > NSHD_TERMSIZE ||
+			    tm.cols < 1 || tm.cols > NSHD_TERMSIZE)
+				goto bad;
+			config_pty(id, &tm);
+			break;
 		case IMSG_CTL_COMMANDS:
 		case IMSG_CTL_NAMES:
 			if (imsg_get_len(&imsg) != 0)
@@ -571,7 +583,7 @@ config_dispatch_system(int fd, short event, void *arg)
 	struct request		*r;
 	struct session		*sp;
 	uint32_t		 type;
-	int			 n;
+	int			 n, pty;
 	char			*p;
 
 	if (imsgev_io(iev, event) == -1) {
@@ -686,6 +698,18 @@ config_dispatch_system(int fd, short event, void *arg)
 				goto bad;
 			if ((sp = session_find(r->session)) != NULL)
 				sp->uid = lg.uid;
+			break;
+		case IMSG_SYS_TERMINAL:
+			/* a terminal's pty, before its request's end */
+			if ((pty = imsg_get_fd(&imsg)) == -1 ||
+			    imsg_get_len(&imsg) != 0)
+				goto bad;
+			if (r == NULL || session_find(r->session) == NULL)
+				close(pty);
+			else if (imsg_compose_event(links[FRONTEND].iev,
+			    IMSG_CTL_TERMINAL, r->session, 0, pty, NULL, 0) ==
+			    -1)
+				fatal("%s", __func__);
 			break;
 		case IMSG_SYS_FOLLOWING:
 			/* a follow begun, once */
@@ -1058,6 +1082,29 @@ config_logged(struct request *r, int32_t status)
 	config_answer(sp->id, status >= 0 ? 0 : 1, NULL);
 }
 
+/* a terminal for the session's web login, as system starts it */
+static void
+config_pty(uint32_t session, struct nshd_terminal *tm)
+{
+	struct nshd_systerm	 st;
+	struct request		*r;
+
+	if (session_find(session) == NULL) {
+		config_answer(session, 1, "%% nshd: hello first\n");
+		return;
+	}
+	if ((r = config_request(session, REQ_ANSWER)) == NULL) {
+		config_answer(session, 1, "%s", IDS_GONE);
+		return;
+	}
+	memset(&st, 0, sizeof(st));
+	st.whose.session = session;
+	st.size = *tm;
+	if (link_compose(&links[SYSTEM], IMSG_SYS_TERMINAL, r->id, &st,
+	    sizeof(st)) == -1)
+		fatal("%s", __func__);
+}
+
 /*
  * The configuration's text system gave, for a session without admin,
  * with each password hash taken out, and how it went
@@ -1103,7 +1150,8 @@ config_may(uint32_t session, uint32_t type)
 	    (sp = session_find(session)) == NULL)
 		return (1);
 	if (type == IMSG_CTL_SHOW || type == IMSG_CTL_WATCH ||
-	    type == IMSG_CTL_COMMANDS || type == IMSG_CTL_NAMES) {
+	    type == IMSG_CTL_COMMANDS || type == IMSG_CTL_NAMES ||
+	    type == IMSG_CTL_TERMINAL) {
 		need = NSHD_VIEW;
 		name = "view";
 	} else if (type == IMSG_CTL_OP) {

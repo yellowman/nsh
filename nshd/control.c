@@ -332,6 +332,25 @@ control_reply(uint32_t id, uint32_t type, const void *data, size_t len)
 	return (0);
 }
 
+/* fd to the client id, as control_reply() says; fd is closed if not */
+int
+control_pass(uint32_t id, uint32_t type, int fd)
+{
+	struct ctl_conn	*c;
+
+	if ((c = control_connbyid(id)) == NULL) {
+		close(fd);
+		return (0);
+	}
+	imsgbuf_allow_fdpass(&c->iev.ibuf);
+	if (imsgbuf_queuelen(&c->iev.ibuf) > CONTROL_QUEUE ||
+	    imsg_compose_event(&c->iev, type, 0, 0, fd, NULL, 0) == -1) {
+		close(fd);
+		return (-1);
+	}
+	return (0);
+}
+
 /* the client id, closed, if it is still there */
 void
 control_drop(uint32_t id)

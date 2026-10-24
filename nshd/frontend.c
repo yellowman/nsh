@@ -25,10 +25,10 @@
  *
  * And it tells system, on their pipe, before config hears of it, of
  * each request that may begin a commit, a line, a commit or a load's
- * part, or that system checks itself, an operation, a login or a watch,
- * whose it is, and whether the session is the web configurator's,
- * a client of NSHD_WEB_USER's uid; and when config answers it, and when
- * a session goes. system begins config's commits only for a request
+ * part, or that system checks itself, an operation, a login, a
+ * terminal or a watch, whose it is, and whether the session is the web
+ * configurator's, a client of NSHD_WEB_USER's uid; and when config
+ * answers it, and when a session goes. system begins config's commits only for a request
  * not answered, so a config a client compromised cannot say whose they
  * are.
  */
@@ -64,6 +64,7 @@ union frontend_request {
 	struct nshd_load	 load;
 	struct nshd_login	 login;
 	struct nshd_watch	 watch;
+	struct nshd_terminal	 terminal;
 };
 
 static void	frontend_dispatch_parent(int, short, void *);
@@ -100,8 +101,9 @@ frontend(int debug, int verbose)
 	if ((iev_parent = imsgev_new(3, frontend_dispatch_parent, 0)) == NULL)
 		fatal(NULL);
 	links_init(links, sizeof(links) / sizeof(links[0]));
-	/* its peers' pipes are here, and no descriptor comes after them */
-	if (pledge("stdio unix", NULL) == -1)
+	/* its peers' pipes are here; a terminal's pty comes from config */
+	imsgbuf_allow_fdpass(&links[CONFIG].iev->ibuf);
+	if (pledge("stdio unix recvfd sendfd", NULL) == -1)
 		fatal("pledge");
 	event_dispatch();
 	exit(0);
@@ -159,7 +161,7 @@ frontend_dispatch_config(int fd, short event, void *arg)
 	struct imsg		 imsg;
 	struct ibuf		 b;
 	uint32_t		 type;
-	int			 n;
+	int			 n, pty;
 
 	if (imsgev_io(iev, event) == -1) {
 		link_broken(&links[CONFIG], "closed its pipe");
@@ -194,6 +196,18 @@ frontend_dispatch_config(int fd, short event, void *arg)
 				fatal("%s", __func__);
 			if (control_reply(imsg_get_id(&imsg), type,
 			    ibuf_data(&b), ibuf_size(&b)) == -1)
+				control_drop(imsg_get_id(&imsg));
+			break;
+		case IMSG_CTL_TERMINAL:
+			/* a terminal's pty, before the request's end */
+			if ((pty = imsg_get_fd(&imsg)) == -1 ||
+			    imsg_get_len(&imsg) != 0) {
+				imsg_free(&imsg);
+				link_broken(&links[CONFIG], "sent a terminal "
+				    "not whole");
+				return;
+			}
+			if (control_pass(imsg_get_id(&imsg), type, pty) == -1)
 				control_drop(imsg_get_id(&imsg));
 			break;
 		default:
@@ -295,6 +309,7 @@ frontend_client(struct ctl_conn *c, struct imsg *imsg)
 			fatal("%s", __func__);
 		return (0);
 	case IMSG_CTL_LOGIN:
+	case IMSG_CTL_TERMINAL:
 		/* the web configurator's alone */
 		if (!web_user || c->uid != web_uid)
 			return (-1);
@@ -315,6 +330,7 @@ frontend_client(struct ctl_conn *c, struct imsg *imsg)
 		    imsg_get_type(imsg) == IMSG_CTL_OP ||
 		    imsg_get_type(imsg) == IMSG_CTL_LOAD ||
 		    imsg_get_type(imsg) == IMSG_CTL_LOGIN ||
+		    imsg_get_type(imsg) == IMSG_CTL_TERMINAL ||
 		    imsg_get_type(imsg) == IMSG_CTL_WATCH) {
 			c->asked = 1;
 			frontend_asked(c, IMSG_FRONT_ASKED);
@@ -407,6 +423,13 @@ frontend_whole(struct imsg *imsg, union frontend_request *r)
 		if (imsg_get_data(imsg, &r->watch, sizeof(r->watch)) == -1)
 			return (-1);
 		return (sizeof(r->watch));
+	case IMSG_CTL_TERMINAL:
+		if (imsg_get_data(imsg, &r->terminal,
+		    sizeof(r->terminal)) == -1 ||
+		    r->terminal.rows < 1 || r->terminal.rows > NSHD_TERMSIZE ||
+		    r->terminal.cols < 1 || r->terminal.cols > NSHD_TERMSIZE)
+			return (-1);
+		return (sizeof(r->terminal));
 	}
 	return (-1);
 }

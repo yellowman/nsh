@@ -134,6 +134,13 @@ struct nshd_login {
 	char		password[NSHD_PASSWORD];
 };
 
+/* a web login's terminal: nsh, as the login's user, on a pty this size */
+#define NSHD_TERMSIZE	1000	/* its rows or columns, at most */
+struct nshd_terminal {
+	int32_t		rows;
+	int32_t		cols;
+};
+
 /*
  * commit, of the session's candidate, or with check, commit check, or
  * with minutes, commit confirmed
@@ -231,6 +238,12 @@ struct nshd_sysop {
 struct nshd_syslogin {
 	struct nshd_whose whose;
 	struct nshd_login login;
+};
+
+/* config to system: a terminal, and the session that asked it */
+struct nshd_systerm {
+	struct nshd_whose	whose;
+	struct nshd_terminal	size;
 };
 
 /* system to config: the user a web session logged in as */
@@ -390,7 +403,9 @@ enum nshd_imsg {
 	IMSG_SYS_FOLLOWING,	/* system to config: the log is followed */
 	IMSG_SYS_LOGGED,	/* nshd_logged: before a login's result */
 	IMSG_CTL_COMMANDS,	/* nsh's command tables, as facts */
-	IMSG_CTL_NAMES		/* names for completion, as facts */
+	IMSG_CTL_NAMES,		/* names for completion, as facts */
+	IMSG_CTL_TERMINAL,	/* nshd_terminal; the pty, then a result */
+	IMSG_SYS_TERMINAL	/* nshd_systerm; the pty, then the end */
 };
 
 struct imsgev {

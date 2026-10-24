@@ -56,7 +56,8 @@ Each client is a session, which asks one thing at a time.
 frontend tells system, before config, of each request that may begin
 a commit, and of each operation, whose it is, and when it is answered;
 a client of _nshweb's uid is the web configurator's session, which
-alone may log in, as a user, with that user's password.
+alone may log in, as a user, with that user's password, and ask for
+the user's terminal.
 .It config
 Runs as _nshconf in a
 .Xr chroot 2 ,
@@ -174,6 +175,15 @@ for a user a
 .Cm login user
 line names, and never root; the session then acts as that user, whose
 uid its commits record, until it goes.
+system starts such a session's terminal as
+.Xr login 1
+starts a shell: it opens a pty, and runs
+.Xr nsh 8
+on it as the user, with the user's groups and
+.Xr login.conf 5
+settings, in the user's home directory and a clean environment.
+The pty goes back to the session, through config and frontend, and
+nsh ends when the session closes it.
 An operation a session asks, such as
 .Cm flush routes
 or a daemon's action, it runs as root, if nsh's code names it one, in
