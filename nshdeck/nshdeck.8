@@ -47,8 +47,7 @@ notices and logs as they come, counts down a commit waiting to be
 confirmed, and draws the interfaces again when they change.
 Each user logs in with a name and password, as
 .Nm nshd
-checks them, and has the permissions of the user's login class, without
-admin (see
+checks them, and has the permissions of the user's login class (see
 .Cm login class
 in
 .Xr nsh 8 ) .
@@ -200,7 +199,7 @@ notices, of commits, commits confirmed, commits gone back,
 .Cm configure exclusive
 taken and left, and interfaces and routes changed; and the lines of
 each log named, from its last lines.
-authlog needs the admin permission, which no web user has.
+authlog needs the admin permission.
 A comment is written to the stream every 30 seconds, so that
 .Xr httpd 8
 does not close it.

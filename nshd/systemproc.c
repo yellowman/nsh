@@ -144,7 +144,7 @@
  * (passwd.c's login_auth()), for a user a login user line names, never
  * root, and keeps the uid it logged in as until frontend says the
  * session is gone. Such a session then has the permissions of that
- * user's class, without admin, and its commits are that user's.
+ * user's class, and its commits are that user's.
  */
 
 #include <sys/types.h>
@@ -706,7 +706,7 @@ login_find(uint32_t session)
 /*
  * The permissions of the request k says of, as its login class has
  * them, and its uid, if uid: a session of the web configurator's has
- * those of the user it logged in as, without admin, or none before
+ * those of the user it logged in as, or none before
  */
 static int
 system_whom(struct asked *k, uid_t *uid)
@@ -721,7 +721,7 @@ system_whom(struct asked *k, uid_t *uid)
 		return (0);
 	if (uid != NULL)
 		*uid = l->uid;
-	return (login_perms(l->uid) & ~LOGIN_ADMIN);
+	return (login_perms(l->uid));
 }
 
 /* of sessions gone, the oldest past ASKED_GONE forgotten */
@@ -1159,7 +1159,7 @@ system_may(int perms, int need, const char *name)
  * names, never root, if the password is the user's (login_auth()); the
  * session acts as that user after, and config takes the user's uid for
  * the session's. The answer is the permissions of the user's login
- * class, without admin, or -1, said why
+ * class, or -1, said why
  */
 static void
 system_login(uint32_t id, struct nshd_syslogin *sl)
@@ -1191,7 +1191,7 @@ system_login(uint32_t id, struct nshd_syslogin *sl)
 	if (link_compose(&links[CONFIG], IMSG_SYS_LOGGED, id, &lg,
 	    sizeof(lg)) == -1)
 		fatal("%s", __func__);
-	system_end(id, login_perms(uid) & ~LOGIN_ADMIN, NULL);
+	system_end(id, login_perms(uid), NULL);
 }
 
 /* to config: a line of text, if fmt, and how request id ended */

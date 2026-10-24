@@ -53,7 +53,7 @@
  * An operation a session may ask, system checks and runs, and config
  * passes on. A session of the web configurator's has no permissions
  * until it logs in, as system checks it; then it has the class of the
- * user it logged in as, without admin.
+ * user it logged in as.
  *
  * archive keeps the shared candidate, and who changed it, past config's
  * end: config sends it each time it changes, and answers the session
