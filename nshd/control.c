@@ -17,6 +17,7 @@
 /*
  * A socket's clients: parent binds the socket, and frontend or show
  * listens on it, each with its own handler for what a client sends.
+ * And config's routing socket, which parent opens.
  */
 
 #include <sys/types.h>
@@ -24,6 +25,7 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
+#include <net/route.h>
 
 #include <errno.h>
 #include <event.h>
@@ -103,6 +105,36 @@ control_init(const char *path, mode_t mode, gid_t gid)
 		return (-1);
 	}
 
+	return (fd);
+}
+
+/*
+ * A routing socket, of every rtable, which reads only what changes
+ * interfaces, addresses or routes: -1, errno set, if not
+ */
+int
+control_route(void)
+{
+	unsigned int	 filter = ROUTE_FILTER(RTM_IFINFO) |
+			    ROUTE_FILTER(RTM_IFANNOUNCE) |
+			    ROUTE_FILTER(RTM_NEWADDR) |
+			    ROUTE_FILTER(RTM_DELADDR) |
+			    ROUTE_FILTER(RTM_CHGADDRATTR) |
+			    ROUTE_FILTER(RTM_ADD) | ROUTE_FILTER(RTM_DELETE) |
+			    ROUTE_FILTER(RTM_CHANGE);
+	int		 fd, any = RTABLE_ANY, serrno;
+
+	if ((fd = socket(AF_ROUTE, SOCK_RAW | SOCK_CLOEXEC | SOCK_NONBLOCK,
+	    AF_UNSPEC)) == -1)
+		return (-1);
+	if (setsockopt(fd, AF_ROUTE, ROUTE_MSGFILTER, &filter,
+	    sizeof(filter)) == -1 || setsockopt(fd, AF_ROUTE,
+	    ROUTE_TABLEFILTER, &any, sizeof(any)) == -1) {
+		serrno = errno;
+		close(fd);
+		errno = serrno;
+		return (-1);
+	}
 	return (fd);
 }
 

@@ -27,6 +27,7 @@ struct ctl_conn {
 };
 
 int	control_init(const char *, mode_t, gid_t);
+int	control_route(void);
 int	control_listen(int, int (*)(struct ctl_conn *, struct imsg *),
 	    void (*)(struct ctl_conn *), int (*)(struct ctl_conn *));
 int	control_reply(uint32_t, uint32_t, const void *, size_t);

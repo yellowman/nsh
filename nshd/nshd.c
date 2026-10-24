@@ -44,7 +44,8 @@
  * child has a pipe to parent, as fd 3, which tells it when it may
  * start; one with peers has a pipe from parent, as fd 4, which gives it
  * each peer's pipe before it starts, and is closed then; frontend and
- * each show have their socket after these, and no other child has it.
+ * each show have their socket after these, and no other child has it,
+ * and config a routing socket, which tells it what the kernel changes.
  * No pipe is made or passed once the children start. parent reads, of
  * what children send, config's word that the boot is done, and nothing
  * else.
@@ -154,7 +155,7 @@ static __dead void	 parent_shutdown(int, const char *);
 static __dead void	 usage(void);
 
 static char		 execpath[PATH_MAX];	/* this program, which children run */
-static int		 opt_debug, opt_verbose, rwfd, rofd;
+static int		 opt_debug, opt_verbose, rwfd, rofd, rtfd;
 static int		 booting;	/* -b, until config says it is done */
 static int		 boot_fd = -1;	/* to the process rc started, or -1 */
 static uid_t		 check_uid;	/* NSHD_CHECK_USER's */
@@ -249,6 +250,9 @@ main(int argc, char *argv[])
 		fatalx("cannot open %s", NSHD_SOCKET);
 	if ((rofd = control_init(NSHD_RO_SOCKET, 0666, gr->gr_gid)) == -1)
 		fatalx("cannot open %s", NSHD_RO_SOCKET);
+	/* config's */
+	if ((rtfd = control_route()) == -1)
+		fatal("routing socket");
 
 	log_procinit("parent");
 	setproctitle("parent");
@@ -268,6 +272,7 @@ main(int argc, char *argv[])
 	spawn_all();
 	close(rwfd);
 	close(rofd);
+	close(rtfd);
 
 	/* what ends system's helpers, as nshd ends */
 	if (pledge("stdio proc ps", NULL) == -1)
@@ -374,6 +379,8 @@ start(struct child *c, int out)
 		fd = rwfd;
 	else if (c->proc == PROC_SHOW)
 		fd = rofd;
+	else if (c->proc == PROC_CONFIG)
+		fd = rtfd;
 	if (c->hasout) {
 		if (imsgbuf_flush(&c->out) == -1)
 			fatal("%s: its peers' pipes", c->name);

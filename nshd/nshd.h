@@ -28,7 +28,7 @@
 #define NSHD_SOCKET	"/var/run/nshd.sock"	/* 0660, group nshadmin */
 #define NSHD_RO_SOCKET	"/var/run/nshd.ro.sock"	/* 0666 */
 
-#define NSHD_VERSION	4	/* of what a client and nshd say */
+#define NSHD_VERSION	5	/* of what a client and nshd say */
 #define NSHD_TEXT	8192	/* text in one message, at most */
 #define NSHD_WORDS	256	/* a show's words, at most */
 #define NSHD_LINE	1024	/* a line of configuration, with its NUL */
@@ -139,6 +139,36 @@ struct nshd_commit {
 	int32_t		minutes;
 	char		comment[NSHD_COMMENT];
 };
+
+/*
+ * What a session watches, each a bit: a watch takes the place of the one
+ * before, and 0 watches nothing. nshd then sends the session notices,
+ * unasked, between the answers to what it asks
+ */
+struct nshd_watch {
+	int32_t		what;
+};
+#define NSHD_WATCH_COMMITS	0x1	/* commits and configure exclusive */
+#define NSHD_WATCH_KERNEL	0x2	/* interfaces, addresses and routes */
+#define NSHD_WATCH_ALL		0x3
+
+/* a notice, then its text, if it has one, of NSHD_TEXT at most */
+struct nshd_notice {
+	int32_t		kind;
+	uint32_t	uid;		/* whose, if a user's */
+	int32_t		n;		/* as the kind says */
+};
+#define NSHD_NOTICE_COMMIT	1	/* uid's commit saved; its comment */
+#define NSHD_NOTICE_CONFIRMED	2	/* uid's commit confirmed: it goes */
+					/* back in n minutes, unless saved */
+#define NSHD_NOTICE_APPLIED	3	/* uid's line of configure terminal */
+					/* committed, not saved; the line */
+#define NSHD_NOTICE_BACK	4	/* the commit not confirmed went */
+					/* back, or with n 1, could not */
+#define NSHD_NOTICE_LOCK	5	/* uid has configure exclusive */
+#define NSHD_NOTICE_UNLOCK	6	/* and left it */
+#define NSHD_NOTICE_LINKS	7	/* interfaces or addresses changed */
+#define NSHD_NOTICE_ROUTES	8	/* routes in rtable n changed */
 
 /* rollback n, or show rollback n */
 struct nshd_rollback {
@@ -327,7 +357,12 @@ enum nshd_imsg {
 	/* frontend to system: what config's commits must be for */
 	IMSG_FRONT_ASKED,	/* nshd_asked: until it is answered */
 	IMSG_FRONT_ANSWERED,	/* nshd_asked: config answered it */
-	IMSG_FRONT_GONE		/* nshd_asked: its session is gone */
+	IMSG_FRONT_GONE,	/* nshd_asked: its session is gone */
+
+	/* with clients, on the read-write socket, and system to config */
+	IMSG_CTL_WATCH,		/* nshd_watch: a result */
+	IMSG_CTL_NOTICE,	/* nshd_notice, and text: unasked */
+	IMSG_SYS_NOTICE		/* nshd_notice: system's, unasked */
 };
 
 struct imsgev {

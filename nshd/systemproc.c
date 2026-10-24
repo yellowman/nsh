@@ -405,6 +405,7 @@ static void	system_recover(struct confirm *);
 static void	system_attempted(int);
 static void	system_taken(struct confirm *, const char *);
 static void	system_failed(struct confirm *);
+static void	system_went(int);
 static char	*system_running(size_t *);
 static void	system_rollback(uint32_t, int);
 static void	system_test(uint32_t, struct nshd_whose *, char *);
@@ -1696,6 +1697,21 @@ system_taken(struct confirm *cf, const char *how)
 		carplock(-128);
 	log_warnx("commit not confirmed: %s", how);
 	printed_log();
+	system_went(0);
+}
+
+/* to config, for the sessions that watch: the commit went back, or not */
+static void
+system_went(int failed)
+{
+	struct nshd_notice	 nt;
+
+	memset(&nt, 0, sizeof(nt));
+	nt.kind = NSHD_NOTICE_BACK;
+	nt.n = failed;
+	if (links[CONFIG].iev != NULL && link_compose(&links[CONFIG],
+	    IMSG_SYS_NOTICE, 0, &nt, sizeof(nt)) == -1)
+		fatal("%s", __func__);
 }
 
 /* cf not taken back, and its attempts done: carp stays demoted */
@@ -1709,6 +1725,7 @@ system_failed(struct confirm *cf)
 	logit(LOG_CRIT, "commit not confirmed: not rolled back after %d "
 	    "attempts%s", CONFIRM_ATTEMPTS, cf->demoted ?
 	    ", carp stays demoted" : "");
+	system_went(1);
 }
 
 /* the running configuration, as conf() writes it: NULL, said, if not */

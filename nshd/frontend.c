@@ -17,8 +17,9 @@
 /*
  * frontend: the read-write socket. Each client is a session; what it
  * sends goes to config, on their pipe, under the session's id, and what
- * config answers for that id goes back to it, and config learns each
- * time the client has read all of it. frontend checks only that a
+ * config answers for that id goes back to it, with the notices config
+ * sends unasked, and config learns each time the client has read all
+ * of it. frontend checks only that a
  * message is one a client may send, or config, and is whole; it reads
  * no configuration.
  *
@@ -61,6 +62,7 @@ union frontend_request {
 	struct nshd_op		 op;
 	struct nshd_load	 load;
 	struct nshd_login	 login;
+	struct nshd_watch	 watch;
 };
 
 static void	frontend_dispatch_parent(int, short, void *);
@@ -186,6 +188,7 @@ frontend_dispatch_config(int fd, short event, void *arg)
 		case IMSG_CTL_OUTPUT:
 		case IMSG_CTL_FACTS:
 		case IMSG_CTL_CONTEXT:
+		case IMSG_CTL_NOTICE:
 			if (imsg_get_ibuf(&imsg, &b) == -1)
 				fatal("%s", __func__);
 			if (control_reply(imsg_get_id(&imsg), type,
@@ -293,6 +296,7 @@ frontend_client(struct ctl_conn *c, struct imsg *imsg)
 	case IMSG_CTL_ROLLBACK:
 	case IMSG_CTL_OP:
 	case IMSG_CTL_LOAD:
+	case IMSG_CTL_WATCH:
 		if ((len = frontend_whole(imsg, &r)) == -1)
 			return (-1);
 		/* system first, so it knows of what config may begin */
@@ -388,6 +392,10 @@ frontend_whole(struct imsg *imsg, union frontend_request *r)
 		    sizeof(r->login.password)) == NULL)
 			return (-1);
 		return (sizeof(r->login));
+	case IMSG_CTL_WATCH:
+		if (imsg_get_data(imsg, &r->watch, sizeof(r->watch)) == -1)
+			return (-1);
+		return (sizeof(r->watch));
 	}
 	return (-1);
 }

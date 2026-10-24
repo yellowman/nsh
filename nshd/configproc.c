@@ -84,6 +84,14 @@
  * a session of its own, in place of what runs, which is committed, all
  * of it or none; then the candidate goes.
  *
+ * A session may watch commits, configure exclusive, and the kernel's
+ * interfaces, addresses and routes, and config sends it a notice,
+ * unasked, as each changes: a commit saved, confirmed or applied, as it
+ * ends; a commit not confirmed gone back, as system says; configure
+ * exclusive taken or left; and, from the routing socket parent opened
+ * for it, fd 5, interfaces or addresses changed, and the rtables whose
+ * routes did, each said once a second at most.
+ *
  * Told at its start that the boot is not done, config boots, as nsh -i
  * does, once there is a pipe to system: system says whether this boot
  * of the host's is done already (BOOT), and if not, gives the saved
@@ -98,12 +106,14 @@
 #include <sys/queue.h>
 #include <sys/socket.h>
 #include <net/if.h>
+#include <net/route.h>
 #include <netinet/in.h>
 
 #include <errno.h>
 #include <event.h>
 #include <imsg.h>
 #include <stdarg.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -147,6 +157,7 @@ struct session {
 	int			 heldmode;	/* if it gives one, */
 	int			 heldr;		/* and how it ended */
 	int			 perms;		/* NSHD_*, -1 until known */
+	int			 watch;		/* NSHD_WATCH_* */
 };
 
 /* a request system has not finished, and the session that asked it */
@@ -235,6 +246,11 @@ static int			 keep_loaded;	/* what archive kept, taken */
 static char			*loading;	/* that, as it comes */
 static size_t			 loading_len;
 static int			 loading_past;	/* past NSHD_KEEPMAX */
+static struct event		 rt_ev;		/* the routing socket, */
+static struct event		 rt_tm;		/* its notices' second, */
+static int			 rt_links;	/* and what it saw change */
+static int			 rt_all;
+static uint8_t			 rt_tables[RT_TABLEID_MAX + 1];
 
 static struct imsgev	*iev_parent;
 
@@ -259,6 +275,10 @@ static void		 config_text(struct request *, int32_t);
 static int		 config_hides(struct session *);
 static int		 config_may(uint32_t, uint32_t);
 static void		 config_op(uint32_t, struct nshd_op *);
+static void		 config_watch(uint32_t, struct nshd_watch *);
+static void		 config_notice(int, int, uid_t, int, const char *);
+static void		 config_route(int, short, void *);
+static void		 config_routed(int, short, void *);
 static struct session	*config_private(uint32_t);
 static int		 config_in(struct session *);
 static int		 config_terminal(struct session *);
@@ -339,6 +359,9 @@ configproc(int debug, int verbose)
 	/* its peers' pipes are here, and no descriptor comes after them */
 	if (pledge("stdio", NULL) == -1)
 		fatal("pledge");
+	event_set(&rt_ev, 5, EV_READ | EV_PERSIST, config_route, NULL);
+	event_add(&rt_ev, NULL);
+	evtimer_set(&rt_tm, config_routed, NULL);
 	event_dispatch();
 	exit(0);
 }
@@ -387,6 +410,7 @@ config_dispatch_frontend(int fd, short event, void *arg)
 	struct nshd_op		 op;
 	struct nshd_load	 ld;
 	struct nshd_login	 lg;
+	struct nshd_watch	 w;
 	struct session		*sp;
 	uint32_t		 id, type;
 	int			 n;
@@ -471,6 +495,11 @@ config_dispatch_frontend(int fd, short event, void *arg)
 			config_login(id, &lg);
 			explicit_bzero(&lg, sizeof(lg));
 			break;
+		case IMSG_CTL_WATCH:
+			if (imsg_get_data(&imsg, &w, sizeof(w)) == -1)
+				goto bad;
+			config_watch(id, &w);
+			break;
 		case IMSG_CTL_CLOSE:
 			if ((sp = session_find(id)) != NULL)
 				session_gone(sp);
@@ -500,6 +529,7 @@ config_dispatch_system(int fd, short event, void *arg)
 	struct imsg		 imsg;
 	struct ibuf		 b;
 	struct nshd_result	 res;
+	struct nshd_notice	 nt;
 	struct request		*r;
 	uint32_t		 type;
 	int			 n;
@@ -581,6 +611,15 @@ config_dispatch_system(int fd, short event, void *arg)
 			else if (session_find(r->session) != NULL)
 				config_answer(r->session, res.status, NULL);
 			request_free(r);
+			break;
+		case IMSG_SYS_NOTICE:
+			/* a commit not confirmed gone back, or not */
+			if (imsg_get_data(&imsg, &nt, sizeof(nt)) == -1 ||
+			    nt.kind != NSHD_NOTICE_BACK ||
+			    (nt.n != 0 && nt.n != 1))
+				goto bad;
+			config_notice(NSHD_WATCH_COMMITS, NSHD_NOTICE_BACK, 0,
+			    nt.n, NULL);
 			break;
 		default:
 			goto bad;
@@ -987,7 +1026,7 @@ config_may(uint32_t session, uint32_t type)
 	    type == IMSG_CTL_READ || type == IMSG_CTL_LOGIN ||
 	    (sp = session_find(session)) == NULL)
 		return (1);
-	if (type == IMSG_CTL_SHOW) {
+	if (type == IMSG_CTL_SHOW || type == IMSG_CTL_WATCH) {
 		need = NSHD_VIEW;
 		name = "view";
 	} else if (type == IMSG_CTL_OP) {
@@ -1022,6 +1061,129 @@ config_op(uint32_t session, struct nshd_op *op)
 	if (link_compose(&links[SYSTEM], IMSG_SYS_OP, r->id, &so,
 	    sizeof(so)) == -1)
 		fatal("%s", __func__);
+}
+
+/* what the session watches, from now on */
+static void
+config_watch(uint32_t session, struct nshd_watch *w)
+{
+	struct session	*sp;
+
+	if ((sp = session_find(session)) == NULL) {
+		config_answer(session, 1, "%% nshd: hello first\n");
+		return;
+	}
+	if ((w->what & ~NSHD_WATCH_ALL) != 0) {
+		config_answer(session, 1, "%% nshd: no such watch: %#x\n",
+		    w->what & ~NSHD_WATCH_ALL);
+		return;
+	}
+	sp->watch = w->what;
+	config_answer(session, 0, NULL);
+}
+
+/*
+ * A notice of kind, about uid and n, with text, if not NULL, to each
+ * session that watches what
+ */
+static void
+config_notice(int what, int kind, uid_t uid, int n, const char *text)
+{
+	struct session		*sp;
+	struct nshd_notice	 nt;
+	char			 buf[sizeof(nt) + NSHD_COMMENT];
+	size_t			 len = 0;
+
+	memset(&nt, 0, sizeof(nt));
+	nt.kind = kind;
+	nt.uid = uid;
+	nt.n = n;
+	memcpy(buf, &nt, sizeof(nt));
+	if (text != NULL) {
+		len = strnlen(text, NSHD_COMMENT - 1);
+		memcpy(buf + sizeof(nt), text, len);
+	}
+	TAILQ_FOREACH(sp, &sessions, entry)
+		if ((sp->watch & what) != 0 && link_compose(&links[FRONTEND],
+		    IMSG_CTL_NOTICE, sp->id, buf, sizeof(nt) + len) == -1)
+			fatal("%s", __func__);
+}
+
+/*
+ * What the routing socket says changed, kept until the next second's
+ * notices: interfaces and addresses, and each rtable's routes, or every
+ * rtable's, if the kernel had more than the socket could take
+ */
+static void
+config_route(int fd, short event, void *arg)
+{
+	struct rt_msghdr	 rtm;
+	struct timeval		 tv = { 1, 0 };
+	char			 buf[2048];
+	ssize_t			 n;
+
+	for (;;) {
+		if ((n = read(fd, buf, sizeof(buf))) == -1) {
+			if (errno == EAGAIN || errno == EINTR)
+				break;
+			if (errno != ENOBUFS)
+				fatal("%s: read", __func__);
+			rt_links = rt_all = 1;
+			continue;
+		}
+		if (n == 0)
+			break;
+		/* the header every kind of message begins with */
+		if (n < (ssize_t)offsetof(struct rt_msghdr, rtm_tableid) +
+		    (ssize_t)sizeof(rtm.rtm_tableid))
+			continue;
+		memset(&rtm, 0, sizeof(rtm));
+		memcpy(&rtm, buf, (size_t)n < sizeof(rtm) ? (size_t)n :
+		    sizeof(rtm));
+		if (rtm.rtm_version != RTM_VERSION)
+			continue;
+		switch (rtm.rtm_type) {
+		case RTM_IFINFO:
+		case RTM_IFANNOUNCE:
+		case RTM_NEWADDR:
+		case RTM_DELADDR:
+		case RTM_CHGADDRATTR:
+			rt_links = 1;
+			break;
+		case RTM_ADD:
+		case RTM_DELETE:
+		case RTM_CHANGE:
+			if (rtm.rtm_tableid <= RT_TABLEID_MAX)
+				rt_tables[rtm.rtm_tableid] = 1;
+			break;
+		default:
+			continue;
+		}
+	}
+	if ((rt_links || rt_all || memchr(rt_tables, 1,
+	    sizeof(rt_tables)) != NULL) && !evtimer_pending(&rt_tm, NULL))
+		evtimer_add(&rt_tm, &tv);
+}
+
+/* the notices of what changed in the last second */
+static void
+config_routed(int fd, short event, void *arg)
+{
+	int	 i;
+
+	if (rt_links)
+		config_notice(NSHD_WATCH_KERNEL, NSHD_NOTICE_LINKS, 0, 0,
+		    NULL);
+	if (rt_all)
+		config_notice(NSHD_WATCH_KERNEL, NSHD_NOTICE_ROUTES, 0, -1,
+		    NULL);
+	else
+		for (i = 0; i <= RT_TABLEID_MAX; i++)
+			if (rt_tables[i])
+				config_notice(NSHD_WATCH_KERNEL,
+				    NSHD_NOTICE_ROUTES, 0, i, NULL);
+	rt_links = rt_all = 0;
+	memset(rt_tables, 0, sizeof(rt_tables));
 }
 
 /* session's, if in configure; or NULL, said why */
@@ -1069,6 +1231,8 @@ config_terminal(struct session *sp)
 	commit_new(sp);
 	commit->terminal = 1;
 	commit->line = r;
+	/* what its notice says */
+	strlcpy(commit->comment, sp->line, sizeof(commit->comment));
 	/* planned from the snapshot the line ran on */
 	commit->step = COMMIT_PLAN;
 	commit->waits = 1;
@@ -1197,8 +1361,11 @@ config_enter(struct session *sp)
 	    sp->want == NSHD_TERMINAL ? NULL : shared);
 	if (r == 0) {
 		sp->how = sp->want;
-		if (sp->how == NSHD_EXCLUSIVE)
+		if (sp->how == NSHD_EXCLUSIVE) {
 			exclusive = sp;
+			config_notice(NSHD_WATCH_COMMITS, NSHD_NOTICE_LOCK,
+			    sp->uid, 0, NULL);
+		}
 	}
 	return (r);
 }
@@ -1216,6 +1383,8 @@ config_left(struct session *sp)
 	if (how != NSHD_EXCLUSIVE)
 		return;
 	exclusive = NULL;
+	config_notice(NSHD_WATCH_COMMITS, NSHD_NOTICE_UNLOCK, sp->uid, 0,
+	    NULL);
 	if (!cand_shared_changed(shared) || cand_shared_renew(shared) == -1)
 		return;
 	neditors = 0;
@@ -1751,12 +1920,19 @@ commit_ended(int32_t status)
 	case COMMIT_SAVE:
 		/* taken: the candidate starts again, saved or not */
 		r = status == 0 ? 0 : -1;
+		if (r == 0)
+			config_notice(NSHD_WATCH_COMMITS, NSHD_NOTICE_COMMIT,
+			    commit->uid, 0, commit->comment);
 		if (!commit->save && !commit->load && commit_renew() == -1)
 			r = -1;
 		commit_end(r, NULL);
 		break;
 	case COMMIT_RECORD:
 		if (commit->how == NSHD_APPLIED) {
+			if (status == 0)
+				config_notice(NSHD_WATCH_COMMITS,
+				    NSHD_NOTICE_APPLIED, commit->uid, 0,
+				    commit->comment);
 			commit_end(status == 0 ? 0 : -1, NULL);
 			break;
 		}
@@ -1764,6 +1940,8 @@ commit_ended(int32_t status)
 			commit_end(-1, NULL);
 			break;
 		}
+		config_notice(NSHD_WATCH_COMMITS, NSHD_NOTICE_CONFIRMED,
+		    commit->uid, commit->minutes, NULL);
 		printf("%% Commit within %d minute%s to keep this, or it is "
 		    "rolled back\n", commit->minutes,
 		    commit->minutes == 1 ? "" : "s");
