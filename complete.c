@@ -52,25 +52,31 @@
 unsigned char complete(EditLine *, char **, size_t);
 
 static int	     comparstr(const void *, const void *);
-static unsigned char complete_ambiguous(char *, int, StringList *, EditLine *,
-				char *);
-static unsigned char complete_command(char *, int, EditLine *, char **, int);
-static unsigned char complete_subcommand(char *, int, EditLine *, char **, int);
-static unsigned char complete_local(char *, int, EditLine *);
-static unsigned char complete_ifname(char *, int, EditLine *);
-static unsigned char complete_ifgroup(char *, int, EditLine *);
-static unsigned char complete_ifbridge(char *, int, EditLine *);
-static unsigned char complete_rtable(char *, int, EditLine *);
-static unsigned char complete_environment(char *, int, EditLine *, int);
-static unsigned char complete_nocmd(struct ghs *, char *, int, EditLine *,
+static unsigned char complete_ambiguous(char *, int, StringList *,
+				struct cmplt *, char *);
+static unsigned char complete_command(char *, int, struct cmplt *, char **,
+				int);
+static unsigned char complete_subcommand(char *, int, struct cmplt *, char **,
+				int);
+static unsigned char complete_local(char *, int, struct cmplt *);
+static unsigned char complete_ifname(char *, int, struct cmplt *);
+static unsigned char complete_ifgroup(char *, int, struct cmplt *);
+static unsigned char complete_ifbridge(char *, int, struct cmplt *);
+static unsigned char complete_rtable(char *, int, struct cmplt *);
+static unsigned char complete_environment(char *, int, struct cmplt *, int);
+static unsigned char complete_nocmd(struct ghs *, char *, int, struct cmplt *,
 				   char **, int, int);
-static unsigned char complete_docmd(struct ghs *, char *, int, EditLine *,
+static unsigned char complete_docmd(struct ghs *, char *, int, struct cmplt *,
 				   char **, int, int);
-static unsigned char complete_doint(char *, int, EditLine *, char **, int, int);
-static unsigned char complete_noint(char *, int, EditLine *, char **, int, int);
-static unsigned char complete_args(struct ghs *, char *, int, EditLine *,
+static unsigned char complete_doint(char *, int, struct cmplt *, char **, int,
+				int);
+static unsigned char complete_noint(char *, int, struct cmplt *, char **, int,
+				int);
+static unsigned char complete_args(struct ghs *, char *, int, struct cmplt *,
 				   char **, int, int);
 static void list_vertical(StringList *);
+static void cmplt_list(struct cmplt *, StringList *, StringList *);
+static void cmplt_print(struct cmplt *);
 
 unsigned char complt_c(EditLine *, int);
 unsigned char complt_i(EditLine *, int);
@@ -94,7 +100,7 @@ comparstr(const void *a, const void *b)
  *	sep	separator to insert after completed word; usually " "
  */
 static unsigned char
-complete_ambiguous(char *word, int list, StringList *words, EditLine *el,
+complete_ambiguous(char *word, int list, StringList *words, struct cmplt *cp,
     char *sep)
 {
 	char insertstr[MAXPATHLEN];
@@ -109,10 +115,9 @@ complete_ambiguous(char *word, int list, StringList *words, EditLine *el,
 	if (words->sl_cur == 1) {	/* only one choice available */
 		(void)strlcpy(insertstr, words->sl_str[0], sizeof insertstr);
 		(void)strlcat(insertstr, sep, sizeof insertstr);
-		if (el_insertstr(el, insertstr + wordlen) == -1)
-			return (CC_ERROR);
-		else
-			return (CC_REFRESH);
+		(void)strlcpy(cp->insert, insertstr + wordlen,
+		    sizeof(cp->insert));
+		return (CC_REFRESH);
 	}
 
 	if (!list) {
@@ -128,19 +133,17 @@ complete_ambiguous(char *word, int list, StringList *words, EditLine *el,
 		}
 		if (matchlen > wordlen) {
 			(void)strlcpy(insertstr, lastmatch, matchlen+1);
-			if (el_insertstr(el, insertstr + wordlen) == -1)
-				return (CC_ERROR);
-			else
-					/*
-					 * XXX: really want CC_REFRESH_BEEP
-					 */
-				return (CC_REFRESH);
+			(void)strlcpy(cp->insert, insertstr + wordlen,
+			    sizeof(cp->insert));
+			/*
+			 * XXX: really want CC_REFRESH_BEEP
+			 */
+			return (CC_REFRESH);
 		}
 	}
 
-	putc('\n', ttyout);
 	qsort(words->sl_str, words->sl_cur, sizeof(char *), comparstr);
-	list_vertical(words);
+	cmplt_list(cp, words, NULL);
 	return (CC_REDISPLAY);
 }
 
@@ -148,7 +151,8 @@ complete_ambiguous(char *word, int list, StringList *words, EditLine *el,
  * Complete a command
  */
 static unsigned char
-complete_command(char *word, int list, EditLine *el, char **table, int stlen)
+complete_command(char *word, int list, struct cmplt *cp, char **table,
+    int stlen)
 {
 	char **c;
 	struct ghs *ghs;
@@ -170,7 +174,7 @@ complete_command(char *word, int list, EditLine *el, char **table, int stlen)
 			sl_add(words, ghs->name);
 	}
 
-	rv = complete_ambiguous(word, list, words, el, " ");
+	rv = complete_ambiguous(word, list, words, cp, " ");
 	sl_free(words, 0);
 	return (rv);
 }
@@ -179,7 +183,8 @@ complete_command(char *word, int list, EditLine *el, char **table, int stlen)
  * Complete a (sub)command
  */
 static unsigned char
-complete_subcommand(char *word, int list, EditLine *el, char **table, int stlen)
+complete_subcommand(char *word, int list, struct cmplt *cp, char **table,
+    int stlen)
 {
 	struct ghs *ghs = NULL;
 
@@ -195,14 +200,14 @@ complete_subcommand(char *word, int list, EditLine *el, char **table, int stlen)
 	 * the first CMPL arg tested in complete_args as long as the level
 	 * 0 is passed to complete_args
 	 */
-	return complete_args(ghs, word, list, el, table, stlen, 0);
+	return complete_args(ghs, word, list, cp, table, stlen, 0);
 }
 
 /*
  * Complete a local file
  */
 static unsigned char
-complete_local(char *word, int list, EditLine *el)
+complete_local(char *word, int list, struct cmplt *cp)
 {
 	StringList *words;
 	char dir[MAXPATHLEN];
@@ -246,13 +251,13 @@ complete_local(char *word, int list, EditLine *el)
 	}
 	closedir(dd);
 
-	rv = complete_ambiguous(file, list, words, el, " ");
+	rv = complete_ambiguous(file, list, words, cp, " ");
 	sl_free(words, 1);
 	return (rv);
 }
 
 static unsigned char
-complete_showhelp(char *word, EditLine *el, char **table, int stlen,
+complete_showhelp(char *word, struct cmplt *cp, char **table, int stlen,
     char *cmdname, int vertical)
 {
 	char insertstr[MAXPATHLEN];
@@ -260,9 +265,7 @@ complete_showhelp(char *word, EditLine *el, char **table, int stlen,
 	struct ghs *ghs;
 	StringList *cmdlist;
 	StringList *helplist;
-	int i;
 	size_t wordlen;
-	int cmdlen, max_cmdmlen = 0;
 
 	cmdlist = sl_init();
 	helplist = sl_init();
@@ -276,9 +279,6 @@ complete_showhelp(char *word, EditLine *el, char **table, int stlen,
 		if (strncmp(word, ghs->name, wordlen) == 0) {
 			sl_add(cmdlist, ghs->name);
 			sl_add(helplist, ghs->help);
-			cmdlen = strlen(ghs->name);
-			if (cmdlen > max_cmdmlen)
-				max_cmdmlen = cmdlen;
 		}
 	}
 
@@ -290,42 +290,16 @@ complete_showhelp(char *word, EditLine *el, char **table, int stlen,
 	    cmdlist->sl_str[0][0] != '[' && cmdlist->sl_str[0][0] != '^') {
 		(void)strlcpy(insertstr, cmdlist->sl_str[0], sizeof insertstr);
 		(void)strlcat(insertstr, " ", sizeof insertstr);
-		if (el_insertstr(el, insertstr + wordlen) == -1)
-			return (CC_ERROR);
-		else
-			return (CC_REFRESH);
+		(void)strlcpy(cp->insert, insertstr + wordlen,
+		    sizeof(cp->insert));
+		sl_free(cmdlist, 0);
+		sl_free(helplist, 0);
+		return (CC_REFRESH);
 	}
 
-	if (cmdlist->sl_cur > 0)
-		putc('\n', ttyout);
-	if (vertical)
-		list_vertical(cmdlist);
-	else {
-		for (i = 0 ; i < cmdlist->sl_cur ; i++) {
-			if (i < helplist->sl_cur &&
-			    helplist->sl_str[i][0] != '\0') {
-				/*
-				 * Command help strings beginning with '^'
-				 * are supposed to be printed literally.
-				 */
-				if (cmdlist->sl_str[i][0] == '^') {
-					fprintf(ttyout, " %-*s  # %s\n",
-					    max_cmdmlen,
-					    &cmdlist->sl_str[i][1],
-					    helplist->sl_str[i]);
-				} else {
-					fprintf(ttyout, " %s %-*s  # %s\n",
-					    cmdname, max_cmdmlen,
-					    cmdlist->sl_str[i],
-					    helplist->sl_str[i]);
-				}
-			} else {
-				fprintf(ttyout, " %s %s\n", cmdname,
-				    cmdlist->sl_str[i]);
-			}
-		}
-	}
-
+	cmplt_list(cp, cmdlist, helplist);
+	cp->cmdname = cmdname;
+	cp->vertical = vertical;
         sl_free(cmdlist, 0);
         sl_free(helplist, 0);
 	return (CC_REDISPLAY);
@@ -354,7 +328,7 @@ complt_c(EditLine *el, int ch)
 }
 
 unsigned char
-complete_ifname(char *word, int list, EditLine *el)
+complete_ifname(char *word, int list, struct cmplt *cp)
 {
 	StringList *words;
 	size_t wordlen;
@@ -386,14 +360,14 @@ complete_ifname(char *word, int list, EditLine *el)
 		sl_add(words, s);
 	}
 
-        rv = complete_ambiguous(word, list, words, el, " ");
+        rv = complete_ambiguous(word, list, words, cp, " ");
 	if_freenameindex(ifn_list);
         sl_free(words, 0);
         return (rv);
 }
 
 unsigned char
-complete_ifgroup(char *word, int list, EditLine *el)
+complete_ifgroup(char *word, int list, struct cmplt *cp)
 {
 	StringList *words;
 	size_t wordlen;
@@ -443,7 +417,7 @@ complete_ifgroup(char *word, int list, EditLine *el)
 			sl_add(words, ifg->ifgrq_group);
 	}
 
-	rv = complete_ambiguous(word, list, words, el, " ");
+	rv = complete_ambiguous(word, list, words, cp, " ");
 	sl_free(words, 0);
 	free(ifgr.ifgr_groups);
 	close(ifs);
@@ -451,7 +425,7 @@ complete_ifgroup(char *word, int list, EditLine *el)
 }
 
 unsigned char
-complete_ifbridge(char *word, int list, EditLine *el)
+complete_ifbridge(char *word, int list, struct cmplt *cp)
 {
 	StringList *words;
 	size_t wordlen;
@@ -480,7 +454,7 @@ complete_ifbridge(char *word, int list, EditLine *el)
 			sl_add(words, ifnp->if_name);
 	}
 
-	rv = complete_ambiguous(word, list, words, el, " ");
+	rv = complete_ambiguous(word, list, words, cp, " ");
 	if_freenameindex(ifn_list);
 	sl_free(words, 0);
 	close(ifs);
@@ -488,7 +462,7 @@ complete_ifbridge(char *word, int list, EditLine *el)
 }
 
 unsigned char
-complete_rtable(char *word, int list, EditLine *el)
+complete_rtable(char *word, int list, struct cmplt *cp)
 {
 	StringList *words, *rtables;
 	size_t wordlen = strlen(word);
@@ -522,7 +496,7 @@ complete_rtable(char *word, int list, EditLine *el)
 			sl_add(words, rtable);
 	}
 
-	rv = complete_ambiguous(word, list, words, el, " ");
+	rv = complete_ambiguous(word, list, words, cp, " ");
 done:
 	sl_free(rtables, 1);
 	sl_free(words, 0);
@@ -531,7 +505,7 @@ done:
 }
 
 static unsigned char
-complete_environment(char *word, int dolist, EditLine *el, int set)
+complete_environment(char *word, int dolist, struct cmplt *cp, int set)
 {
 	StringList *words;
 	extern char **environ;
@@ -570,40 +544,64 @@ complete_environment(char *word, int dolist, EditLine *el, int set)
 		sl_add(words, name);
 	}
 
-	rv = complete_ambiguous(word, dolist, words, el, set ? "=" : " ");
+	rv = complete_ambiguous(word, dolist, words, cp, set ? "=" : " ");
 	sl_free(words, 1);
 	return rv;
 }
 
 /*
- * Generic complete routine
+ * Generic complete routine: editline's line, completed at its cursor
  */
 unsigned char
 complete(EditLine *el, char **table, size_t stlen)
 {
-	static char word[256];
-	struct ghs *c;
+	static char word[CMPLT_WORD];
 	const LineInfo *lf;
-	int celems, dolist, level, i;
-	size_t len;
+	struct cmplt c;
+	unsigned char rv;
 
 	lf = el_line(el);
-	len = lf->lastchar - lf->buffer;
-	if (len >= sizeof(line))
+	rv = complete_line(lf->buffer, lf->lastchar - lf->buffer,
+	    lf->cursor - lf->buffer, word, table, stlen, &c);
+	if (rv == CC_REFRESH && el_insertstr(el, c.insert) == -1)
+		rv = CC_ERROR;
+	else if (rv == CC_REDISPLAY)
+		cmplt_print(&c);
+	cmplt_free(&c);
+	return (rv);
+}
+
+/*
+ * Complete the word at the cursor, byte cursor of the len bytes of buf,
+ * as table's commands take it. Into cp: text to insert at the cursor,
+ * with CC_REFRESH, or the choices, with CC_REDISPLAY; or CC_ERROR.
+ * word is the caller's, CMPLT_WORD bytes, the word it completed last:
+ * completing the same one again lists the choices.
+ */
+unsigned char
+complete_line(const char *buf, size_t len, size_t cursor, char *word,
+    char **table, size_t stlen, struct cmplt *cp)
+{
+	struct ghs *c;
+	int celems, dolist, level, i;
+
+	memset(cp, 0, sizeof(*cp));
+	cp->words = sl_init();
+	if (len >= sizeof(line) || cursor > len)
 		return (CC_ERROR);
-	(void)memcpy(line, lf->buffer, len);
+	(void)memcpy(line, buf, len);
 	line[len] = '\0';
 	if (strlen(word) > len) /* user has erased part of previous line */
 		word[len] = '\0';
-	cursor_pos = line + (lf->cursor - lf->buffer);
+	cursor_pos = line + cursor;
 	makeargv();			/* build argc/argv of current line */
 
-	if (cursor_argo >= sizeof(word))
+	if (cursor_argo >= CMPLT_WORD)
 		return (CC_ERROR);
 
 	if (margc == 0) {
 		dolist = 1;
-		return (complete_command(word, dolist, el, table, stlen));
+		return (complete_command(word, dolist, cp, table, stlen));
 	} else
 		dolist = 0;
 
@@ -616,10 +614,10 @@ complete(EditLine *el, char **table, size_t stlen)
 	word[cursor_argo] = '\0';
 
 	if (cursor_argc == 0)
-		return (complete_command(word, dolist, el, table, stlen));
+		return (complete_command(word, dolist, cp, table, stlen));
 
 	if (NO_ARG(margv[0]) && table == (char **)whichlist) {
-		return complete_noint(word, dolist, el, table, stlen,
+		return complete_noint(word, dolist, cp, table, stlen,
 		    cursor_argc - 1);
 	}
 
@@ -629,15 +627,15 @@ complete(EditLine *el, char **table, size_t stlen)
 
 	if (strcmp(c->name, "do") == 0) { /* Completing "do " command. */
 		if (table == (char **)whichlist)
-			return (complete_doint(word, dolist, el, table, stlen,
+			return (complete_doint(word, dolist, cp, table, stlen,
 			    cursor_argc - 1));
 		else
-			return (complete_docmd(c, word, dolist, el,
+			return (complete_docmd(c, word, dolist, cp,
 			    (char **)cmdtab, stlen, -1));
 	}
 
 	if (strcmp(c->name, "no") == 0) /* Completing "no " command. */
-		return complete_nocmd(c, word, dolist, el, table, stlen, -1);
+		return complete_nocmd(c, word, dolist, cp, table, stlen, -1);
 
 	celems = strlen(c->complete);
 
@@ -656,11 +654,11 @@ complete(EditLine *el, char **table, size_t stlen)
 		level = 0; /* table has been switched */
 		i++;
 	}
-	return complete_args(c, word, dolist, el, table, stlen, level);
+	return complete_args(c, word, dolist, cp, table, stlen, level);
 }
 
 unsigned char
-complete_nocmd(struct ghs *nocmd, char *word, int dolist, EditLine *el,
+complete_nocmd(struct ghs *nocmd, char *word, int dolist, struct cmplt *cp,
     char **table, int stlen, int level)
 {
 	static Command *nocmdtab;
@@ -702,7 +700,7 @@ complete_nocmd(struct ghs *nocmd, char *word, int dolist, EditLine *el,
 
 	if (margc == 1) {
 		/* Complete "no " using the list of known no-commands. */
-		return (complete_command(word, dolist, el, (char **)nocmdtab,
+		return (complete_command(word, dolist, cp, (char **)nocmdtab,
 		    sizeof(Command)));
 	}
 
@@ -729,7 +727,7 @@ complete_nocmd(struct ghs *nocmd, char *word, int dolist, EditLine *el,
 			i++;
 		}
 		/* Complete "no <command name> [more arguments]" */
-		return (complete_args(ghs, word, dolist, el,
+		return (complete_args(ghs, word, dolist, cp,
 		    ghs->table, ghs->stlen, level));
 	}
 
@@ -740,7 +738,7 @@ complete_nocmd(struct ghs *nocmd, char *word, int dolist, EditLine *el,
 			continue;
 
 		/* Complete "no <partial command name>" */
-		return (complete_command(word, dolist, el, (char **)nocmdtab,
+		return (complete_command(word, dolist, cp, (char **)nocmdtab,
 		    sizeof(Command)));
 	}
 
@@ -748,7 +746,7 @@ complete_nocmd(struct ghs *nocmd, char *word, int dolist, EditLine *el,
 }
 
 unsigned char
-complete_docmd(struct ghs *docmd, char *word, int dolist, EditLine *el,
+complete_docmd(struct ghs *docmd, char *word, int dolist, struct cmplt *cp,
     char **table, int stlen, int level)
 {
 	Command *c, *dc;
@@ -756,7 +754,7 @@ complete_docmd(struct ghs *docmd, char *word, int dolist, EditLine *el,
 
 	if (margc == 1) {
 		/* Complete "do " using the list of known commands. */
-		return (complete_command(word, dolist, el, (char **)cmdtab,
+		return (complete_command(word, dolist, cp, (char **)cmdtab,
 		    sizeof(Command)));
 	}
 
@@ -783,7 +781,7 @@ complete_docmd(struct ghs *docmd, char *word, int dolist, EditLine *el,
 			i++;
 		}
 		/* Complete "no <command name> [more arguments]" */
-		return (complete_args(ghs, word, dolist, el,
+		return (complete_args(ghs, word, dolist, cp,
 		    ghs->table, ghs->stlen, level));
 	}
 
@@ -794,7 +792,7 @@ complete_docmd(struct ghs *docmd, char *word, int dolist, EditLine *el,
 			continue;
 
 		/* Complete "do <partial command name>" */
-		return (complete_command(word, dolist, el, (char **)cmdtab,
+		return (complete_command(word, dolist, cp, (char **)cmdtab,
 		    sizeof(Command)));
 	}
 
@@ -803,7 +801,7 @@ complete_docmd(struct ghs *docmd, char *word, int dolist, EditLine *el,
 
 /* complete a "do ..." command in interface context */
 unsigned char
-complete_doint(char *word, int dolist, EditLine *el,
+complete_doint(char *word, int dolist, struct cmplt *cp,
     char **whichlist, int stlen, int level)
 {
 	struct intlist *table = (struct intlist *)whichlist;
@@ -811,7 +809,7 @@ complete_doint(char *word, int dolist, EditLine *el,
 
 	if (margc == 1) {
 		/* Complete "do " using the list of known commands. */
-		return (complete_command(word, dolist, el, (char **)table,
+		return (complete_command(word, dolist, cp, (char **)table,
 		    stlen));
 	}
 
@@ -829,7 +827,7 @@ complete_doint(char *word, int dolist, EditLine *el,
 		level = cursor_argc - 2; /* "do" + command name */
 
 		/* Complete "no <command name> [more arguments]" */
-		return (complete_args(ghs, word, dolist, el,
+		return (complete_args(ghs, word, dolist, cp,
 		    ghs->table, ghs->stlen, level));
 	}
 
@@ -839,7 +837,7 @@ complete_doint(char *word, int dolist, EditLine *el,
 			continue;
 
 		/* Complete "do <partial command name>" */
-		return (complete_command(word, dolist, el,
+		return (complete_command(word, dolist, cp,
 		    (char **)table, stlen));
 	}
 
@@ -847,7 +845,7 @@ complete_doint(char *word, int dolist, EditLine *el,
 }
 
 unsigned char
-complete_noint(char *word, int dolist, EditLine *el,
+complete_noint(char *word, int dolist, struct cmplt *cp,
     char **whichlist, int stlen, int level)
 {
 	static struct intlist *nointtab, *nobridgetab;
@@ -905,7 +903,7 @@ complete_noint(char *word, int dolist, EditLine *el,
 
 	if (margc == 1) {
 		/* Complete "no " using the list of known no-commands. */
-		return (complete_command(word, dolist, el, (char **)notab,
+		return (complete_command(word, dolist, cp, (char **)notab,
 			stlen));
 	}
 
@@ -924,7 +922,7 @@ complete_noint(char *word, int dolist, EditLine *el,
 		/* Complete "no <command name> [more arguments]" */
 		return (complete_args((struct ghs *)nc,
 		    margv[cursor_argc] ? margv[cursor_argc] : "",
-		    dolist, el, nc->table, nc->stlen, 0));
+		    dolist, cp, nc->table, nc->stlen, 0));
 	}
 
 	/* Check for a partially completed valid command name. */
@@ -933,7 +931,7 @@ complete_noint(char *word, int dolist, EditLine *el,
 			continue;
 
 		/* Complete "no <partial command name>" */
-		return (complete_command(word, dolist, el, (char **)notab,
+		return (complete_command(word, dolist, cp, (char **)notab,
 		    stlen));
 	}
 
@@ -941,8 +939,8 @@ complete_noint(char *word, int dolist, EditLine *el,
 }
 
 unsigned char
-complete_args(struct ghs *c, char *word, int dolist, EditLine *el, char **table,
-    int stlen, int level)
+complete_args(struct ghs *c, char *word, int dolist, struct cmplt *cp,
+    char **table, int stlen, int level)
 {
 	int help_vertical = 0;
 
@@ -951,42 +949,105 @@ complete_args(struct ghs *c, char *word, int dolist, EditLine *el, char **table,
 #endif
 	switch (c->complete[level]) {
 	case 'l':	/* local complete */
-		return (complete_local(word, dolist, el));
+		return (complete_local(word, dolist, cp));
 	case 'c':	/* command complete */
-		return (complete_command(word, dolist, el, table, stlen));
+		return (complete_command(word, dolist, cp, table, stlen));
 	case 'i':
-		return (complete_ifname(word, dolist, el));
+		return (complete_ifname(word, dolist, cp));
 	case 'g':
-		return (complete_ifgroup(word, dolist, el));
+		return (complete_ifgroup(word, dolist, cp));
 	case 'b':
-		return (complete_ifbridge(word, dolist, el));
+		return (complete_ifbridge(word, dolist, cp));
 	case 'r':
-		return (complete_rtable(word, dolist, el));
+		return (complete_rtable(word, dolist, cp));
 	case 't':	/* points to a table */
 		if (c->table == NULL)
 			return CC_ERROR;
-		return (complete_command(word, dolist, el, c->table, c->stlen));
+		return (complete_command(word, dolist, cp, c->table, c->stlen));
 	case 'a':
 		if (c->table == NULL)
 			return CC_ERROR;
-		return (complete_subcommand(word, dolist, el, c->table, c->stlen));
+		return (complete_subcommand(word, dolist, cp, c->table,
+		    c->stlen));
 	case 'H':
 		help_vertical = 1;
 		/* fallthrough */
 	case 'h':
 		if (c->table == NULL)
 			return CC_ERROR;
-		return (complete_showhelp(word, el, c->table, c->stlen, c->name,
+		return (complete_showhelp(word, cp, c->table, c->stlen, c->name,
 		    help_vertical));
 	case 'E':
-		return complete_environment(word, dolist, el, 1);
+		return complete_environment(word, dolist, cp, 1);
 	case 'e':
-		return complete_environment(word, dolist, el, 0);
+		return complete_environment(word, dolist, cp, 0);
 	case 'n':			/* no complete */
 		return (CC_ERROR);
 	}
 
 	return (CC_ERROR);
+}
+
+/* words, and if helps is not NULL each one's help, as cp's choices */
+static void
+cmplt_list(struct cmplt *cp, StringList *words, StringList *helps)
+{
+	char *s;
+	int i;
+
+	if (helps != NULL)
+		cp->helps = sl_init();
+	for (i = 0; i < words->sl_cur; i++) {
+		if ((s = strdup(words->sl_str[i])) == NULL)
+			err(1, "strdup");
+		sl_add(cp->words, s);
+		if (helps == NULL)
+			continue;
+		if ((s = strdup(helps->sl_str[i] ? helps->sl_str[i] : "")) ==
+		    NULL)
+			err(1, "strdup");
+		sl_add(cp->helps, s);
+	}
+}
+
+/* cp's choices, listed below the line */
+static void
+cmplt_print(struct cmplt *cp)
+{
+	StringList *w = cp->words, *h = cp->helps;
+	int i, len, max = 0;
+
+	if (w->sl_cur > 0)
+		putc('\n', ttyout);
+	if (h == NULL || cp->vertical) {
+		list_vertical(w);
+		return;
+	}
+	for (i = 0; i < w->sl_cur; i++)
+		if ((len = strlen(w->sl_str[i])) > max)
+			max = len;
+	for (i = 0; i < w->sl_cur; i++) {
+		if (h->sl_str[i][0] == '\0')
+			fprintf(ttyout, " %s %s\n", cp->cmdname, w->sl_str[i]);
+		/*
+		 * Command help strings beginning with '^' are supposed to be
+		 * printed literally.
+		 */
+		else if (w->sl_str[i][0] == '^')
+			fprintf(ttyout, " %-*s  # %s\n", max, &w->sl_str[i][1],
+			    h->sl_str[i]);
+		else
+			fprintf(ttyout, " %s %-*s  # %s\n", cp->cmdname, max,
+			    w->sl_str[i], h->sl_str[i]);
+	}
+}
+
+void
+cmplt_free(struct cmplt *cp)
+{
+	sl_free(cp->words, 1);
+	if (cp->helps != NULL)
+		sl_free(cp->helps, 1);
 }
 
 /*

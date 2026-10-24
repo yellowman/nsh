@@ -519,6 +519,20 @@ extern struct winsize winsize;
 /* complete.c */
 #define CMPL(x) __STRING(x),
 #define CMPL0   "",
+#define CMPLT_WORD	256	/* the longest word completed, with its NUL */
+#ifdef _STRINGLIST_H
+/* what completing a line's word found: text to insert, or the choices */
+struct cmplt {
+	char		 insert[1024];	/* at the cursor */
+	StringList	*words;		/* or the choices, to list */
+	StringList	*helps;		/* and each one's help, or NULL */
+	char		*cmdname;	/* a choice with help: "cmdname word" */
+	int		 vertical;	/* list the choices in columns anyway */
+};
+unsigned char complete_line(const char *, size_t, size_t, char *, char **,
+    size_t, struct cmplt *);
+void cmplt_free(struct cmplt *);
+#endif
 void inithist(void);
 void endhist(void);
 void initedit(void);
