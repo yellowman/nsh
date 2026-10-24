@@ -7,6 +7,8 @@
 <title>nshdeck</title>
 <link rel="stylesheet" href="style.css">
 <script src="app.js" defer></script>
+<script src="ifdefs.js" defer></script>
+<script src="inspector.js" defer></script>
 </head>
 <body>
 
@@ -94,7 +96,12 @@
 
 <section id="ws-network" class="ws" hidden>
 <div class="bar"><h2>Interfaces</h2><span class="dim" id="net-count"></span></div>
+<div class="netsplit">
 <table class="grid" id="if-table"></table>
+<aside id="inspector" class="panel" aria-label="The interface's settings">
+<p class="dim">Choose an interface to see and change its settings.</p>
+</aside>
+</div>
 <div class="shows" data-presets="interface|ip|vlan|bridge|arp 0|ndp 0|autoconf"></div>
 </section>
 

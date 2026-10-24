@@ -34,7 +34,8 @@ HTDOCS?=/var/www/htdocs/nshdeck
 afterinstall:
 	${INSTALL} -d -o root -g wheel -m 755 ${DESTDIR}${HTDOCS}
 	${INSTALL} -c -o root -g wheel -m 444 ${.CURDIR}/htdocs/index.html \
-	    ${.CURDIR}/htdocs/app.js ${.CURDIR}/htdocs/style.css \
+	    ${.CURDIR}/htdocs/app.js ${.CURDIR}/htdocs/ifdefs.js \
+	    ${.CURDIR}/htdocs/inspector.js ${.CURDIR}/htdocs/style.css \
 	    ${DESTDIR}${HTDOCS}
 
 .include <bsd.prog.mk>

@@ -682,6 +682,194 @@ table.grid {
 	text-align: right;
 }
 
+/* Network: the interfaces, and the inspector of one */
+
+.netsplit {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(360px, 460px);
+	gap: 16px;
+	align-items: start;
+}
+
+#inspector {
+	position: sticky;
+	top: 0;
+	max-height: calc(100vh - 80px);
+	overflow: auto;
+	gap: 10px;
+}
+
+.ihead {
+	display: flex;
+	align-items: center;
+	gap: 9px;
+	flex-wrap: wrap;
+}
+
+.ihead .iname {
+	font: 600 16px var(--mono);
+	letter-spacing: 0;
+	text-transform: none;
+	color: var(--text);
+}
+
+#inspector .from {
+	margin: 0;
+	font-size: 12px;
+}
+
+#inspector > label.dim {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 12px;
+}
+
+.igroup {
+	border: 1px solid var(--line);
+	border-radius: 4px;
+	background: var(--bg);
+}
+
+.igroup summary {
+	display: flex;
+	gap: 10px;
+	align-items: baseline;
+	padding: 7px 10px;
+	cursor: pointer;
+	font-weight: 600;
+	font-size: 12px;
+	list-style-position: inside;
+}
+
+.igroup summary .count {
+	font: 400 11px var(--mono);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.igroup[open] summary {
+	border-bottom: 1px solid var(--line);
+}
+
+.field {
+	display: grid;
+	grid-template-columns: 128px minmax(0, 1fr);
+	gap: 3px 10px;
+	align-items: center;
+	padding: 7px 10px;
+	border-bottom: 1px solid var(--line);
+	border-left: 2px solid transparent;
+}
+
+.field:last-child {
+	border-bottom: 0;
+}
+
+.field.edited {
+	border-left-color: var(--warn);
+	background: color-mix(in srgb, var(--warn) 6%, transparent);
+}
+
+.field label {
+	color: var(--dim);
+	font-size: 12px;
+}
+
+.field input:not([type=checkbox]), .field select {
+	width: 100%;
+	min-width: 0;
+}
+
+.field input[type=checkbox] {
+	justify-self: start;
+}
+
+.field .info {
+	grid-column: 2;
+	display: grid;
+	gap: 1px;
+	font-size: 11px;
+	color: var(--faint);
+}
+
+.field .info code {
+	font: 10.5px var(--mono);
+	color: var(--dim);
+}
+
+.chips, .rows {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+	align-items: center;
+}
+
+.rows {
+	flex-direction: column;
+	align-items: stretch;
+}
+
+.chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	padding: 1px 2px 1px 7px;
+	border: 1px solid var(--line2);
+	border-radius: 3px;
+	background: var(--raise);
+	font-size: 12px;
+}
+
+.rows .chip {
+	justify-content: space-between;
+}
+
+.chip button {
+	height: 18px;
+	padding: 0 5px;
+	border: 0;
+	background: transparent;
+	color: var(--faint);
+}
+
+.chip button:hover {
+	color: var(--bad);
+}
+
+.chips input.add {
+	flex: 1;
+	min-width: 90px;
+}
+
+pre.stanza {
+	max-height: 200px;
+	min-height: 0;
+}
+
+.result {
+	font: 11px var(--mono);
+	padding: 2px 0;
+}
+
+.result.ok {
+	color: var(--on);
+}
+
+.result.bad {
+	color: var(--bad);
+}
+
+#inspector .bar {
+	justify-content: flex-end;
+}
+
+button:disabled {
+	opacity: .45;
+	cursor: default;
+}
+
 #if-table tr:not(:first-child) {
 	cursor: pointer;
 }
@@ -892,6 +1080,16 @@ dialog .actions {
 	display: flex;
 	justify-content: flex-end;
 	gap: 8px;
+}
+
+@media (max-width: 1100px) {
+	.netsplit {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	#inspector {
+		position: static;
+		max-height: none;
+	}
 }
 
 @media (max-width: 720px) {

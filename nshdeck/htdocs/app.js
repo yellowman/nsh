@@ -11,10 +11,11 @@ var LOGLINES = 2000;		/* log lines kept on the page, at most */
 var ifs = [];			/* show interface's interfaces, the last */
 var addrs = [];			/* and their addresses */
 var selected = "";		/* the interface Network shows chosen */
-var refresh = null;		/* interfaces asked again, once they settle */
+var reask = null;		/* interfaces asked again, once they settle */
 var deadline = 0;		/* when a confirmed commit goes back, or 0 */
 var ticker = null;
 var comp = null;		/* the input its choices are for */
+var cur = null;			/* the user's context, as nshd last gave it */
 
 /* drivers of interfaces that are not ports of the box */
 var PSEUDO = ["lo", "enc", "pflog", "pfsync", "pflow", "carp", "vlan",
@@ -131,6 +132,7 @@ function context(j) {
 
 	if (j.context === undefined)
 		return;
+	cur = j.context;
 	w = where(j.context);
 	$("where").textContent = w || "not in configure";
 	$("where").classList.toggle("on", w !== "");
@@ -223,6 +225,9 @@ function interfaces() {
 		cards();
 		logical();
 		iftable();
+		if (!$("ws-network").hidden && selected !== "" &&
+		    (!insp || insp.name !== selected))
+			inspect(selected);
 	});
 }
 
@@ -354,6 +359,7 @@ function iftable() {
 		tr.addEventListener("click", function () {
 			selected = r.name;
 			iftable();
+			inspect(r.name);
 		});
 		t.appendChild(tr);
 	});
@@ -657,8 +663,8 @@ function noticed(d) {
 	/* interfaces or routes changed: asked again once they settle */
 	if ((d.kind === "links" || d.kind === "routes") && !document.hidden &&
 	    (!$("ws-overview").hidden || !$("ws-network").hidden)) {
-		clearTimeout(refresh);
-		refresh = setTimeout(interfaces, 1000);
+		clearTimeout(reask);
+		reask = setTimeout(interfaces, 1000);
 	}
 }
 
@@ -695,6 +701,9 @@ function loggedOut() {
 		stream = null;
 	}
 	closeChoices();
+	insp = null;
+	selected = "";
+	cur = null;
 	$("deck").hidden = true;
 	$("login").hidden = false;
 }
