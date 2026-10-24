@@ -1156,15 +1156,17 @@ system_may(int perms, int need, const char *name)
 /*
  * The web configurator's session logs in as a user a login user line
  * names, never root, if the password is the user's (login_auth()); the
- * session acts as that user after. The answer is the permissions of
- * the user's login class, without admin, or -1, said why
+ * session acts as that user after, and config takes the user's uid for
+ * the session's. The answer is the permissions of the user's login
+ * class, without admin, or -1, said why
  */
 static void
 system_login(uint32_t id, struct nshd_syslogin *sl)
 {
-	struct asked	*k;
-	struct login	*l;
-	int		 uid;
+	struct nshd_logged	 lg;
+	struct asked		*k;
+	struct login		*l;
+	int			 uid;
 
 	printed(NULL);
 	if ((k = asked_whose(&sl->whose)) == NULL || !k->web) {
@@ -1184,6 +1186,10 @@ system_login(uint32_t id, struct nshd_syslogin *sl)
 		TAILQ_INSERT_TAIL(&logins, l, entry);
 	}
 	l->uid = uid;
+	lg.uid = uid;
+	if (link_compose(&links[CONFIG], IMSG_SYS_LOGGED, id, &lg,
+	    sizeof(lg)) == -1)
+		fatal("%s", __func__);
 	system_end(id, login_perms(uid) & ~LOGIN_ADMIN, NULL);
 }
 

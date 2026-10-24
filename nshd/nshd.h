@@ -229,6 +229,11 @@ struct nshd_syslogin {
 	struct nshd_login login;
 };
 
+/* system to config: the user a web session logged in as */
+struct nshd_logged {
+	uint32_t	uid;
+};
+
 /* config to system: whose commit begins, and if confirmed, its minutes */
 struct nshd_begin {
 	struct nshd_whose whose;
@@ -378,7 +383,8 @@ enum nshd_imsg {
 	IMSG_CTL_NOTICE,	/* nshd_notice, and text: unasked */
 	IMSG_SYS_NOTICE,	/* nshd_notice: system's, unasked */
 	IMSG_SYS_FOLLOW,	/* nshd_follow: FOLLOWING, then text */
-	IMSG_SYS_FOLLOWING	/* system to config: the log is followed */
+	IMSG_SYS_FOLLOWING,	/* system to config: the log is followed */
+	IMSG_SYS_LOGGED		/* nshd_logged: before a login's result */
 };
 
 struct imsgev {

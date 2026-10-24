@@ -543,6 +543,7 @@ config_dispatch_system(int fd, short event, void *arg)
 	struct ibuf		 b;
 	struct nshd_result	 res;
 	struct nshd_notice	 nt;
+	struct nshd_logged	 lg;
 	struct request		*r;
 	struct session		*sp;
 	uint32_t		 type;
@@ -653,6 +654,14 @@ config_dispatch_system(int fd, short event, void *arg)
 				goto bad;
 			config_notice(NSHD_WATCH_COMMITS, NSHD_NOTICE_BACK, 0,
 			    nt.n, NULL);
+			break;
+		case IMSG_SYS_LOGGED:
+			/* whom a web session logged in as: it is that uid */
+			if (imsg_get_data(&imsg, &lg, sizeof(lg)) == -1 ||
+			    r == NULL || r->kind != REQ_LOGIN)
+				goto bad;
+			if ((sp = session_find(r->session)) != NULL)
+				sp->uid = lg.uid;
 			break;
 		case IMSG_SYS_FOLLOWING:
 			/* a follow begun, once */

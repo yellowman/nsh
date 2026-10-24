@@ -77,8 +77,8 @@ session without admin sees no password hash of a
 .Cm login user
 line.
 The web configurator's session has no permissions until it logs in;
-then it has those of the class of the user it logged in as, without
-admin.
+then it is the session of the user it logged in as, by that user's
+uid, with the permissions of the user's class, without admin.
 A session in
 .Cm configure private
 has a candidate of its own; the sessions in
