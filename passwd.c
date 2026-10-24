@@ -180,7 +180,7 @@ login_name_ok(const char *what, const char *name)
 	return 1;
 }
 
-/* The permissions words names, as a class's line gives them, or -1 */
+/* The permissions that words names, as a class's line gives them, or -1 */
 static int
 login_words_perms(int n, char **words)
 {
@@ -449,7 +449,7 @@ login_make(char *name, char *hash)
 
 	snprintf(home, sizeof(home), "/home/%s", name);
 	args[n++] = USERADD;
-	/* a home kept from an account deleted before, useradd -m refuses */
+	/* useradd -m refuses a home kept from an account deleted before */
 	if (lstat(home, &st) == -1)
 		args[n++] = "-m";
 	args[n++] = "-d";

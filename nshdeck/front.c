@@ -24,9 +24,10 @@
  * query of a GET or the form body of a POST, each named, once, with a
  * bound; and the cookie's token. A request must say it is the page's,
  * by an X-Nshdeck header, which a page of another site cannot send
- * without asking first; but a stream, events or a terminal's, which
- * the browser's EventSource asks for, and which cannot send it. The request goes to session as one message, zeroed
- * first; session's answer comes back to the connection as FastCGI
+ * without asking first; except a stream, events or a terminal's, which
+ * the browser's EventSource asks for, and which cannot send it. The
+ * request goes to session as one message, zeroed first; session's
+ * answer comes back to the connection as FastCGI
  * records, and the connection closes. front sends session nothing of
  * an answer's until the client has written what it was sent, when it
  * says so (DECK_READ), so a slow client holds up only its own answer.
@@ -38,9 +39,9 @@
  * DECK_UNREAD bytes waiting, the oldest go, and the client is sent a
  * dropped event in their place, so it knows to ask again for what it
  * shows. A terminal's stream never comes to that: session sends it
- * only DECK_WINDOW messages front has not written. front takes no more than DECK_CONNS
- * connections, and a request that does not arrive whole within
- * DECK_ARRIVE seconds is closed.
+ * only DECK_WINDOW messages front has not written. front takes no more
+ * than DECK_CONNS connections, and a request that does not arrive whole
+ * within DECK_ARRIVE seconds is closed.
  */
 
 #include <sys/types.h>

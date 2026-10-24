@@ -127,7 +127,7 @@ struct facts_answer {
 	int			 done;
 };
 
-/* names for the bits that s, a string for bprintf(), names, in f */
+/* names for the bits that s names (a string for bprintf()), in f */
 void
 facts_bitnames(struct facts_field *f, const char *s)
 {

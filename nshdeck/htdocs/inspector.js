@@ -2,7 +2,7 @@
  * inspector.js: an interface's settings, in Network: each as the
  * configuration nshd has it, the candidate's in configure, else what
  * runs; and what was changed, as nsh's lines, staged into the candidate,
- * in configure, which it enters, private, if it is not
+ * entering configure private first if not in configure
  */
 "use strict";
 
@@ -139,7 +139,8 @@ function inspect(name) {
 
 /*
  * a setting's control, which keeps insp.now as it changes: a value's
- * changes what follows from it, and a list's draws the inspector again
+ * control changes what follows from it, and a list's draws the
+ * inspector again
  */
 function control(d) {
 	var v = insp.now[d.key], box, input, add;
@@ -360,8 +361,8 @@ function inspector(key) {
 }
 
 /*
- * lines into the candidate, one at a time, in the interface's mode, in
- * configure, entered private if it is not; then the settings again
+ * lines into the candidate, one at a time, in the interface's mode,
+ * entering configure private if not in configure; then the settings again
  */
 function staged(lines) {
 	var head = (insp.bridge ? "bridge " : "interface ") + insp.name;

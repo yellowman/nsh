@@ -2029,7 +2029,7 @@ rollback_list(FILE *out)
 			continue;
 		strftime(when, sizeof(when), "%Y-%m-%d %H:%M:%S %Z",
 		    localtime(&sb.st_mtime));
-		/* one saved before who saved it was kept says when alone */
+		/* one saved without a head line says when alone */
 		who = why = NULL;
 		if ((f = fopen(path, "r")) != NULL) {
 			if (fgets(line, sizeof(line), f) != NULL &&

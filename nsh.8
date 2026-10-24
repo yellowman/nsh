@@ -263,7 +263,7 @@ Operations, which change no configuration, and run in
 .Xr nshd 8 Ns 's
 system process, as root:
 .Cm flush ,
-but
+except
 .Cm flush history ;
 .Cm reboot ,
 .Cm halt
@@ -301,7 +301,7 @@ and loading a configuration with
 .Cm configure
 and
 .Cm configure exclusive ,
-whose candidate is every session's in them; the password hashes of
+whose candidate every session in them shares; the password hashes of
 .Cm login user
 lines, which nshd shows no session without admin; and committing a
 change to what runs a command as root, reads a file as root, or decides
@@ -457,15 +457,15 @@ while no other session changes the shared candidate or commits; the
 prompt shows
 .Ql (config-exclusive)# .
 It is refused while another session has it, or while another user's
-changes to the shared candidate are not committed, which it says by
-uid.
+changes to the shared candidate are not committed, naming those users
+by uid.
 Leaving it discards what was not committed.
 .Pp
 .Tg terminal
 .Cm configure terminal
 is a session of nshd's whose lines change the system as they are
-typed: each line that changes the configuration nshd commits at once,
-on what runs then, applied, checked and, if it does not take, undone,
+typed: nshd commits each line that changes the configuration at once,
+on what runs then: applied, checked and, if it does not take, undone,
 but not saved; the prompt shows
 .Ql (config-terminal)# .
 .Cm commit
@@ -2118,8 +2118,8 @@ differences are shown as
 .Cm show diff-config
 shows them, and the commit is undone.
 A commit is refused once if another commit changed a top-level
-statement after the candidate first changed it, each such statement
-said; committing again keeps the candidate's changes over the other's.
+statement after the candidate first changed it, saying each such
+statement; committing again keeps the candidate's changes over the other's.
 After a commit, the candidate starts again from the new running
 configuration.
 Outside configure,
@@ -2146,7 +2146,7 @@ save nothing, and take no
 With
 .Cm check ,
 show what would keep the candidate from becoming the running
-configuration that can be seen before it does, and change nothing:
+configuration, as far as can be seen before it does, and change nothing:
 .Bl -dash -compact
 .It
 an interface a line names, as a parent, carpdev, syncdev, patch, trunk
@@ -2337,8 +2337,8 @@ Where
 .Nm
 has a session of
 .Xr nshd 8 Ns 's ,
-nshd's system process runs a daemon's control program for a show, but
-systat for system-stats, and reads the DHCP leases; what they print is
+nshd's system process runs a daemon's control program for a show,
+except systat for system-stats, and reads the DHCP leases; what they print is
 not paged, and Control-C stops it.
 .Pp
 .Ic show hostname
@@ -5927,7 +5927,8 @@ The design of
 .Ox
 requires root privileges to administer the network stack.
 .Nm
-runs as the user who starts it, root too, and has none:
+runs as the user who starts it, root too, and has no privileges of its
+own:
 .Xr nshd 8
 administers the system, and gives each user what the user's login
 class allows.

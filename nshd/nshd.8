@@ -28,7 +28,7 @@ reads the system's configuration for
 which asks it over a socket.
 It is privilege separated.
 The parent process, as root, binds the sockets and starts the children,
-each but system as a user of its own, so that none may signal or reach
+each except system as a user of its own, so that none may signal or reach
 the files of a child of another role:
 .Bl -tag -width "frontend"
 .It show
@@ -54,7 +54,7 @@ Runs as _nshfront in a
 and answers the read-write socket.
 Each client is a session, which asks one thing at a time.
 frontend tells system, before config, of each request that may begin
-a commit, and of each operation, whose it is, and when it is answered;
+a commit, and of each operation: whose it is, and when it is answered;
 a client of _nshweb's uid is the web configurator's session, which
 alone may log in, as a user, with that user's password, and ask for
 the user's terminal.
@@ -91,7 +91,7 @@ config edits a candidate a line at a time, with nsh's own commands, as
 they run in
 .Cm configure private :
 the running configuration, and what they read of the kernel, are those
-of a snapshot system makes when a session enters configure or shows
+of a snapshot that system makes when a session enters configure or shows
 its candidate.
 .Cm configure exclusive
 is
@@ -102,7 +102,7 @@ changes to the shared candidate are not committed, and leaving it, or
 its session going, discards what it did not commit.
 While a commit of the shared candidate runs, no other session changes
 it.
-A commit is one at a time, of all the sessions':
+A commit is one at a time, across all the sessions:
 config plans it from a snapshot and checks it, has system test the
 daemons' rules it changes, and has system record it, run its script,
 and, if a snapshot after reads as the candidate, save what runs; if
@@ -138,7 +138,7 @@ system says, and
 taken or left, each with the user's uid; and interfaces or addresses
 changed, and the routing tables whose routes changed, from a
 .Xr route 4
-socket parent opens for it, said once a second at most.
+socket that the parent opens for it, said once a second at most.
 It may watch logs too, which system follows, and config sends the
 session what system reads of each as notices, until the session's
 watch drops it.
@@ -164,14 +164,14 @@ is not; nsh's
 .Cm show startup-config
 asks for it.
 It answers config and no one else, and begins a commit only for a
-request frontend told it of and that is not answered, or, its session
-gone, was not; the uid it records is frontend's.
+request that frontend told it of and that is not answered, or was not
+when its session went; the uid it records is frontend's.
 system checks the permissions of that uid's login class itself, as
 config does: an operation needs operate, and a commit, its test and a
 save need configure.
 It checks a login of the web configurator's itself too, with
 .Xr auth_userokay 3 ,
-for a user a
+for a user that a
 .Cm login user
 line names, and never root; the session then acts as that user, whose
 uid its commits record, until it goes.
@@ -184,13 +184,13 @@ on it as the user, with the user's groups and
 settings, in the user's home directory and a clean environment.
 The pty goes back to the session, through config and frontend, and
 nsh ends when the session closes it.
-An operation a session asks, such as
+system runs an operation a session asks, such as
 .Cm flush routes
-or a daemon's action, it runs as root, if nsh's code names it one, in
-a child of its own, which it streams as a show's.
-What a daemon's control program prints for a show, and the DHCP
-leases, a child of its own prints, and system streams it only as fast
-as the client reads it; the child, and its process group, are killed
+or a daemon's action, as root, if nsh's code names it one, in a child
+of its own, which it streams as a show's.
+A child of its own prints what a daemon's control program prints for a
+show, and the DHCP leases, and system streams it only as fast as the
+client reads it; the child, and its process group, are killed
 if the client goes first.
 The program is the one nsh's tables name for the show, never one a
 client names, and the child runs it as _nshcheck, unless system names
@@ -231,12 +231,12 @@ A commit of a session without admin may not change what needs admin
 .Cm login class
 in
 .Xr nsh 8 ) ,
-unless the line ran before the commit; the script fails at such a
+unless the same line ran before the commit; the script fails at such a
 change, and the commit goes back.
 A test of a daemon's rules for such a session is refused the same
 lines, judged against the running configuration.
 A test runs as _nshcheck, with its rules in a directory of their own,
-both _nshcheck's, but for relayd's, ldapd's, npppd's, sasyncd's and
+both _nshcheck's, except for relayd's, ldapd's, npppd's, sasyncd's and
 sshd's, which read keys or secrets their rules name, and keep root.
 While one runs, other requests wait, but streams go on.
 system keeps a record of a commit that has begun, which a commit takes
@@ -320,15 +320,15 @@ configuration, else 1.
 The first time, with no saved configuration, system takes
 .Pa /etc/nshrc
 as it.
-system keeps a record of the boot, which names the boot of the host's
-it is for; an
+system keeps a record of the boot, which names the host's boot it is
+for; an
 .Nm
 started again in the same boot of the host's boots again only if the
 boot did not end or did not go well.
 carp is demoted by 128 until the boot goes well, or, if it does not,
 until a commit saves.
 A boot that goes well takes away a record of a commit not confirmed,
-as what it would go back to runs.
+as what runs is what it would go back to.
 If
 .Nm
 ends during the boot, the boot did not go well, and the next

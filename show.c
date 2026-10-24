@@ -436,7 +436,7 @@ sadb_facts(struct facts_out *o, struct rtdump *spd, char **cur, int budget)
 	return (0);
 }
 
-/* "/" and what names says value is, or dflt */
+/* "/" and value's name in names, or dflt */
 static void
 flow_name(const struct facts_name *names, size_t n, uint64_t value,
     const char *dflt)

@@ -100,8 +100,8 @@ prot1_find(char *prot, char *sub)
 }
 
 /*
- * x's program and its arguments, in args, those x leaves to fill
- * filled from argc words of argv, bgpctl's socket the one of table:
+ * x's program and its arguments, in args, with those x leaves to fill
+ * taken from argc words of argv, and bgpctl's socket the one of table:
  * NULL if they do not fill them, said why
  */
 char **

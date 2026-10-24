@@ -37,7 +37,7 @@ cprompt(void)
 	    cli_rtable;
 	char tmp[4];
 
-	/* an interface's mode, nshd's: nsh's loop reads its lines */
+	/* in nshd's configure, nsh's loop reads an interface mode's lines */
 	if (nshd_config && ifname[0] != '\0')
 		return iprompt();
 

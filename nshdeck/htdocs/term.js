@@ -28,7 +28,7 @@ function tsend() {
 
 	if (sending || tnumber === 0 || n === 0)
 		return;
-	/* not half of a character UTF-16 takes two for */
+	/* not half of a character that takes two UTF-16 units */
 	if (n < typing.length && /[\uD800-\uDBFF]/.test(typing[n - 1]))
 		n--;
 	keys = typing.slice(0, n);

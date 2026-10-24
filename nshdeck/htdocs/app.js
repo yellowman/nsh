@@ -731,8 +731,8 @@ function shows(div) {
 }
 
 /*
- * Tab: the input's line completed by nshd, in the user's mode; ? or a
- * Tab nshd cannot complete: its choices, under the input
+ * Tab: the input's line completed by nshdeck, in the user's mode; ? or
+ * a Tab nshdeck cannot complete: its choices, under the input
  */
 function complete(input, help) {
 	var line = (input.dataset.prefix || "") + input.value;

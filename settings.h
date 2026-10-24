@@ -32,7 +32,7 @@
 /* What a command did to a setting */
 #define ST_ON		1	/* set it, or turned it on */
 #define ST_OFF		2	/* turned it off: "no ..." */
-#define ST_DEFAULT	3	/* left it as conf() prints no line for */
+#define ST_DEFAULT	3	/* left it so conf() prints no line for it */
 
 /* The edit that puts a setting into a state (setting_edit()) */
 struct sedit {

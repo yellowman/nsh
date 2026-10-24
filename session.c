@@ -19,7 +19,7 @@
  * Sessions, each running with its own state: session_enter() puts a
  * session's globals in place, and session_leave() keeps them and puts
  * back the process's, as they were before any session, so nothing of
- * one session is seen by another, but a candidate sessions share. nshd's
+ * one session is seen by another, but a candidate that sessions share. nshd's
  * config runs configure private, and configure, whose candidate its
  * sessions share, through the rest, a request at a time, and plans
  * their commits, which system runs.

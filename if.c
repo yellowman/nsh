@@ -79,7 +79,7 @@ int show_vlan(int, int);
 static struct ifmpwreq imrsave;
 static char imrif[IFNAMSIZ];
 
-/* what of this file's a session keeps (session.c) */
+/* what a session keeps of this file (session.c) */
 struct sglobal if_sglobals[] = {
 	SGLOBAL(imrsave), SGLOBAL(imrif),
 	{ NULL }

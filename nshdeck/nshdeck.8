@@ -115,7 +115,7 @@ ends.
 The last part of a request's path names it.
 A GET has its fields in its query, and a POST in a form body, of type
 application/x-www-form-urlencoded; a field may be given once.
-Every request but a stream,
+Every request except a stream,
 .Cm events
 or
 .Cm terminal ,
@@ -123,7 +123,7 @@ must have the header
 .Ql X-Nshdeck: 1 ,
 which a page of another site cannot send without asking the browser
 first.
-Every request but
+Every request except
 .Cm login
 needs the cookie that
 .Cm login
@@ -282,7 +282,7 @@ as it takes it; past 64 KB that it has not taken, the request is
 refused, with 503.
 .El
 .Pp
-Each answer but an event stream's is a JSON object.
+Each answer except an event stream's is a JSON object.
 One that
 .Nm nshd
 answered has

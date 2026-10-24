@@ -28,10 +28,10 @@
  * rollback N starts the copy over as configuration N, as it was saved
  * (ROLLBACK), and then nothing other sessions change shows through.
  *
- * What each top-level statement the journal changes was before it
- * first did is kept, so a commit that finds another commit changed it
- * since is refused (cand_conflicts()); committing again keeps this
- * session's changes over the other's.
+ * Each top-level statement the journal changes is kept as it was before
+ * the journal first changed it, so a commit that finds another commit
+ * changed it since is refused (cand_conflicts()); committing again keeps
+ * this session's changes over the other's.
  *
  * nshd's configure is a candidate sessions share, struct cand_shared,
  * which a session takes as its own while it runs (session.c), and
@@ -88,7 +88,7 @@ struct cand_was {
 static struct cand_was *cand_was;
 static size_t cand_nwas;
 
-/* what of this file's a session keeps (session.c) */
+/* what a session keeps of this file (session.c) */
 struct sglobal candidate_sglobals[] = {
 	SGLOBAL(candidate), SGLOBAL(cand_rtable), SGLOBAL(cand),
 	SGLOBAL(cand_journal), SGLOBAL(cand_base), SGLOBAL(cand_was),
@@ -1145,10 +1145,10 @@ cand_image(struct cnode *t, char *top, int whole)
 }
 
 /*
- * The statements the candidate changes that now, the running
- * configuration, has changed since, each said: how many, or -1, said
- * why. With rebase, what each was becomes what it is now, so the next
- * commit keeps the candidate's changes over it
+ * The statements the candidate changes that the running configuration,
+ * now, has changed since, each said: how many, or -1, said why. With
+ * rebase, what each was becomes what it is now, so the next commit
+ * keeps the candidate's changes over it
  */
 int
 cand_conflicts(struct cnode *now, int rebase)

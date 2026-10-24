@@ -59,8 +59,8 @@
  * APPLY take, as chunks, then BEGIN, which makes the commit record,
  * APPLY, which runs the script, SAVE, which saves what runs and takes
  * the record away, and RECORD, when the commit went back to how it was,
- * or a commit confirmed is kept, or configure terminal's, applied, is
- * kept, not saved, which BEGIN refuses while a commit confirmed is not
+ * or a commit confirmed is kept, or configure terminal's commit, applied,
+ * is kept, not saved; BEGIN refuses that while a commit confirmed is not
  * confirmed, as it would go back with it; and before them TEST, a
  * daemon's test
  * of its rules. An apply, a save and a test each run in a child of
@@ -70,13 +70,13 @@
  * staged in a directory of their own, its own, but for the daemons
  * root_tests names, each an exception that keeps root, its rules
  * root's. SAVE saves what runs as SAVED, whole and on disk.
- * While a job runs, config's requests wait for it, but what a stream's
- * client read and a session gone.
+ * While a job runs, config's requests wait for it, except what a
+ * stream's client read and a session gone.
  *
  * The record, in NSHDB, outlives the commit that made it, which leaves
  * it if it does not finish: applying, if it did not save or go back, or
  * applied and not saved, if the save failed. The next commit says what
- * one applying left, by what runs now; one not saved refuses it, but
+ * one applying left, by what runs now; one not saved refuses it, except
  * saving what runs, or going back to how it was before that commit.
  *
  * A commit confirmed begins with its minutes: BEGIN makes the record of
@@ -94,8 +94,8 @@
  * JOB_RECOVER, makes what runs read as what the commit goes back to,
  * and carp is promoted again; CONFIRM_RETRY later if it fails,
  * CONFIRM_ATTEMPTS times, and then the record says it failed, and carp
- * stays demoted. What runs reading so already, after a reboot or a
- * commit that never ran, takes the record away alone. As system
+ * stays demoted. If what runs reads so already, after a reboot or a
+ * commit that never ran, the record is taken away alone. As system
  * starts, it takes back what a system before it did not. A BEGIN is
  * refused if what runs is not what the commit was planned from, as a
  * commit taken back meanwhile makes it.
@@ -118,11 +118,11 @@
  * or a load's part, by whom, and whether the session is the web
  * configurator's, before config hears of it; and when config answers
  * it, and when a session goes. BEGIN, and TEST and SAVE before one,
- * name the session, and are refused but while it has a request that is
- * not answered, or, its session gone, was not; BEGIN takes that
+ * name the session, and are refused except while it has a request that
+ * is not answered, or, its session gone, was not; BEGIN takes that
  * request, whose uid the commit record says. TEST of no session's, and
- * APPLY of no commit begun, are the boot's, and refused but while it
- * runs; BOOT is answered as done already once parent says nshd does not
+ * APPLY of no commit begun, are the boot's, and refused except while
+ * it runs; BOOT is answered as done already once parent says nshd does not
  * boot, or BOOTED has. So a config that a client compromised can begin
  * a commit only for a request it was asked, and cannot say whose it is.
  *
@@ -585,7 +585,7 @@ system_dispatch_config(int fd, short event, void *arg)
 		}
 		/*
 		 * what a stream's client read, a session gone, and a new
-		 * session's permissions, wait not
+		 * session's permissions do not wait
 		 */
 		if (type == IMSG_SYS_READ || type == IMSG_SYS_STOP ||
 		    type == IMSG_SYS_PERMS ||
@@ -1730,7 +1730,7 @@ system_parts_free(void)
 
 /*
  * A commit begins, uid's, from what runs to what is wanted, the parts
- * sent: the record made, unless one a commit left refuses it
+ * sent: the record made, unless one that a commit left refuses it
  */
 static void
 system_begin(uint32_t id, struct nshd_begin *bg)
@@ -2126,7 +2126,7 @@ system_save(uint32_t id, struct nshd_save *sv)
 	}
 	j = system_job_new(id, JOB_SAVE);
 
-	/* a commit not confirmed is, first */
+	/* a commit not confirmed is confirmed, first */
 	if (system_unconfirm())
 		printf("%% Commit confirmed\n");
 
@@ -2261,11 +2261,11 @@ system_ended(void)
 }
 
 /*
- * The commit went back to how it was, or, kept, a commit confirmed is
- * kept until its deadline, or configure terminal's, applied, is kept,
- * not saved: the record it made gone, but one not saved,
- * which it went back from, kept; or the commit ended without either,
- * left, and the records with it
+ * The commit went back to how it was; or, with kept, a commit confirmed
+ * is kept until its deadline, or configure terminal's commit, applied,
+ * is kept, not saved: the record it made gone, but one not saved, which
+ * it went back from, kept; or, with left, the commit ended without
+ * either, and the records stay
  */
 static void
 system_back(uint32_t id, int how)
@@ -2304,7 +2304,7 @@ system_boot(uint32_t id)
 	struct boot	 b;
 	int		 status = 1;
 
-	/* a boot but while nshd boots is config's word alone */
+	/* a boot, except while nshd boots, is config's word alone */
 	if (boot_over) {
 		status = NSHD_DONE;
 		goto done;
@@ -2319,7 +2319,7 @@ system_boot(uint32_t id)
 	if (b.state == BOOT_NONE) {
 		b.state = BOOT_RUNS;
 		b.when = boot_time();
-		/* recorded first: carp demoted, and not recorded, stays so */
+		/* recorded first: carp demoted without a record stays so */
 		if (boot_write(&b) == -1)
 			goto done;
 		if (carplock(128) == 1) {

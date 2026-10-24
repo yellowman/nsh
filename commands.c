@@ -88,7 +88,7 @@ static int rc_head;		/* and its line is a block's head */
 static int oneline;		/* cmdline() runs it: its mode stays */
 static struct cnode *snapshot;	/* config's running configuration */
 
-/* what of this file's a session keeps (session.c) */
+/* what a session keeps of this file (session.c) */
 struct sglobal commands_sglobals[] = {
 	SGLOBAL(hname), SGLOBAL(ifname), SGLOBAL(next_ifname),
 	SGLOBAL(whichlist), SGLOBAL(in_rc), SGLOBAL(rc_head),

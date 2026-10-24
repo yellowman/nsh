@@ -19,18 +19,17 @@
  * sends goes to config, on their pipe, under the session's id, and what
  * config answers for that id goes back to it, with the notices config
  * sends unasked, and config learns each time the client has read all
- * of it. frontend checks only that a
- * message is one a client may send, or config, and is whole; it reads
- * no configuration.
+ * of it. frontend checks only that a message is one a client may send,
+ * or config, and is whole; it reads no configuration.
  *
- * And it tells system, on their pipe, before config hears of it, of
- * each request that may begin a commit, a line, a commit or a load's
- * part, or that system checks itself, an operation, a login, a
- * terminal or a watch, whose it is, and whether the session is the web
- * configurator's, a client of NSHD_WEB_USER's uid; and when config
- * answers it, and when a session goes. system begins config's commits only for a request
- * not answered, so a config a client compromised cannot say whose they
- * are.
+ * And it tells system, on their pipe, whose each request is, and whether
+ * the session is the web configurator's, a client of NSHD_WEB_USER's
+ * uid, before config hears of it: each request that may begin a commit,
+ * a line, a commit or a load's part, or that system checks itself, an
+ * operation, a login, a terminal or a watch; and when config answers
+ * it, and when a session goes. system begins config's commits only for
+ * a request not answered, so a config a client compromised cannot say
+ * whose they are.
  */
 
 #include <sys/types.h>

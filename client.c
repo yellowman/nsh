@@ -316,13 +316,14 @@ done:
 }
 
 /*
- * A request of type, with len bytes of data, on a connection of its own,
- * to nshd's read-write socket if rw, else to its read-only one: facts read into in as they come, and text
- * printed, and how it ended, *status, or 1 if it was not answered, as
- * when ^C ends it, which closes the connection, so nshd stops what it
- * runs. A watch nshd takes goes on after its answer, each log's text
- * printed as it comes, until ^C or nshd says the log ended. -1 if there
- * is no nshd to ask, or none this user may, else 0.
+ * A request of type, with len bytes of data, on a connection of its
+ * own, to nshd's read-write socket if rw, else to its read-only one:
+ * facts read into in as they come, and text printed, and how it ended,
+ * *status, or 1 if it was not answered, as when ^C ends it, which
+ * closes the connection, so nshd stops what it runs. A watch nshd takes
+ * goes on after its answer, each log's text printed as it comes, until
+ * ^C or nshd says the log ended. -1 if there is no nshd to ask, or none
+ * this user may, else 0.
  */
 static int
 nshd_ask(int rw, uint32_t type, const void *data, size_t len,

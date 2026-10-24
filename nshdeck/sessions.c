@@ -28,7 +28,7 @@
  * session writes and never reads: the records of a show as it comes,
  * then what nshd printed, and how it ended. While front has not written
  * DECK_WINDOW messages of an answer, session stops reading nshd's. A
- * show nshd's system says it does not answer is asked again of nshd's
+ * show that nshd's system says it does not answer is asked again of nshd's
  * shows, as nsh asks them, on a connection of its own, which parent
  * makes, and which closes when it is answered.
  *
@@ -941,8 +941,9 @@ kept(struct user *u, const void *data, size_t len)
 }
 
 /*
- * facts from, for u's request, as JSON to front, from not read while
- * front has not written DECK_WINDOW messages: -1 if they cannot be read
+ * facts from from, for u's request, as JSON to front, from not read
+ * while front has not written DECK_WINDOW messages: -1 if they cannot be
+ * read
  */
 static int
 facts(struct user *u, struct deck_pipe *from, struct imsg *imsg)

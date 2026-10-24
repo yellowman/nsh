@@ -73,7 +73,7 @@ static const char *admin_in(int);
 static FILE *rulesfile;
 static char tmpfile_cur[PATH_MAX];
 
-/* what of this file's a session keeps (session.c) */
+/* what a session keeps of this file (session.c) */
 struct sglobal ctl_sglobals[] = {
 	SGLOBAL(rulesfile), SGLOBAL(tmpfile_cur),
 	{ NULL }
@@ -1696,10 +1696,10 @@ admin_test(char *name, char *text, size_t len)
  * Does line, of daemon d's rules in rtable, or any with -1, need admin
  * that the commit running lacks? Any line of a daemon whose rules need
  * admin does, and so does a line with a word that needs admin, unless
- * the rules had it before. A line a backslash goes on from, and the
+ * the rules had it before. A line that ends in a backslash, and the
  * line after it, have every word of their daemon's, as one word can go
  * on over the two. cont says if the line before went on, and is set to
- * if this one does. 1 if it does, said, else 0
+ * say if this one does. 1 if it does, said, else 0
  */
 static int
 admin_kept(struct daemons *d, int rtable, char *line, int *cont)

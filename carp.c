@@ -76,8 +76,8 @@ carp_setvh(int ifs, struct ifreq *ifr)
 }
 
 /*
- * SIOCGVH in configure private: the carpreq the candidate's lines are
- * what conf_carp() prints of, the vhids in order as SIOCGVH has them
+ * SIOCGVH in configure private: the carpreq that conf_carp() prints as
+ * the candidate's lines, the vhids in order as SIOCGVH has them
  */
 static int
 cand_getvh(char *ifname, struct carpreq *creq)

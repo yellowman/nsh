@@ -50,8 +50,8 @@
  * to check, as it runs a program: config only tells it at hello.
  * A session without admin sees no password hash: config takes each
  * out of what it sends such a session of the configuration.
- * An operation a session may ask, system checks and runs, and config
- * passes on. A session of the web configurator's has no permissions
+ * system checks and runs an operation a session may ask, and config
+ * passes it on. A session of the web configurator's has no permissions
  * until it logs in, as system checks it; then it has the class of the
  * user it logged in as. Its terminal, which system starts, comes back
  * as a pty, which config passes on.
@@ -107,8 +107,8 @@
  * Told at its start that the boot is not done, config boots, as nsh -i
  * does, once there is a pipe to system: system says whether this boot
  * of the host's is done already (BOOT), and if not, gives the saved
- * configuration, which a commit of no session's makes what runs, all
- * of it that takes, as nothing it checks or tests refuses it; then
+ * configuration; a commit of no session's makes it what runs, all of
+ * it that takes, as nothing it checks or tests refuses it; then
  * system records how it went (BOOTED), and parent is told. What nsh's
  * code and system print for it is logged. If system could not record
  * the boot, it runs, and did not go well.
@@ -1141,8 +1141,8 @@ config_hides(struct session *sp)
 
 /*
  * Whether session may ask type: hello and going, always; else what its
- * permissions allow, once they are in. One with no hello, its handler
- * says
+ * permissions allow, once they are in. Its handler answers one with no
+ * hello
  */
 static int
 config_may(uint32_t session, uint32_t type)
@@ -1300,9 +1300,9 @@ config_op(uint32_t session, struct nshd_op *op)
 }
 
 /*
- * What the session watches, from now on. Each log it adds system
- * follows, or refuses to, before the watch is answered; each it drops
- * is stopped
+ * What the session watches, from now on. system follows each log it
+ * adds, or refuses to, before the watch is answered; each it drops is
+ * stopped
  */
 static void
 config_watch(uint32_t session, struct nshd_watch *w)
@@ -1763,8 +1763,8 @@ shared_done(struct session *sp)
 }
 
 /*
- * what, by the users but uid who changed the shared candidate, said if
- * there are any: how many
+ * Say what, by the users other than uid who changed the shared
+ * candidate, if there are any: how many
  */
 static size_t
 editors_say(uid_t uid, const char *what)
@@ -1787,8 +1787,8 @@ editors_say(uid_t uid, const char *what)
 
 /*
  * The shared candidate changed: it, and who changed it, to archive to
- * keep, the next keeping, which is its number, or 0 if archive is down
- * or it could not be sent, said
+ * keep as the next keeping: its number, or 0, said why, if archive is
+ * down or it could not be sent
  */
 static uint32_t
 shared_keep(void)
@@ -1872,7 +1872,7 @@ shared_kept(uint32_t seq, const char *warn)
 
 /*
  * What archive kept, taken as the shared candidate and who changed it,
- * if it is one; then the sessions that wait to enter configure may
+ * if it is one; then the sessions that wait may enter configure
  */
 static void
 shared_load(void)
@@ -1982,7 +1982,7 @@ config_snapshot(struct request *r, uint32_t type, struct ibuf *b)
 	snap->len += ibuf_size(b);
 }
 
-/* the snapshot is in, or not: what each session waits on it for runs */
+/* the snapshot is in, or not: run what each session waits on it for */
 static void
 config_snapshot_done(int32_t status)
 {
@@ -2371,7 +2371,7 @@ commit_save(void)
 	commit_request(COMMIT_SAVE, IMSG_SYS_SAVE, &sv, sizeof(sv));
 }
 
-/* the record of the commit begun gone, as it ended, how */
+/* the record of the commit begun gone, as how says it ended */
 static void
 commit_record(int how)
 {
