@@ -50,7 +50,9 @@ enum deck_kind {
 	DECK_COMPLETE,
 	DECK_TERMINAL,
 	DECK_TYPE,
-	DECK_EVENTS
+	DECK_EVENTS,
+	DECK_RULES,
+	DECK_SETRULES
 };
 
 /*
@@ -66,10 +68,11 @@ struct deck_request {
 						/* what a terminal was typed */
 	char		password[NSHD_PASSWORD];
 	char		comment[NSHD_COMMENT];
+	char		daemon[NSHD_DAEMON];	/* whose rules */
 	int32_t		n;		/* rollback's n, an operation's */
-					/* rtable, which configure, 1 for */
-					/* a completion's help, or a */
-					/* terminal's number */
+					/* or rules' rtable, which */
+					/* configure, 1 for a completion's */
+					/* help, or a terminal's number */
 	int32_t		minutes;	/* commit confirmed's */
 	int32_t		check;		/* commit check */
 	int32_t		logs;		/* the logs events follow, as */
@@ -96,7 +99,9 @@ enum deck_imsg {
 	DECK_GONE,	/* front to session: the client is gone */
 	DECK_CONNECT,	/* session to parent: a connection to nshd, please, */
 			/* to its shows if the int32_t is 1 */
-	DECK_CONNECTED	/* parent to session: it, or no fd and errno */
+	DECK_CONNECTED,	/* parent to session: it, or no fd and errno */
+	DECK_TEXT	/* front to session: a part of a request's rules, */
+			/* before it */
 };
 
 /* a pipe to a peer, read and written by its handler */

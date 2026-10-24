@@ -210,6 +210,32 @@ an operation such as
 .Ql flush routes ,
 and its
 .Ar rtable .
+.It Cm rules
+GET, with
+.Ar daemon ,
+named as
+.Xr nsh 8
+names it, such as pf or bgp, and its
+.Ar rtable .
+The daemon's rules in the candidate of
+.Cm configure private ,
+in
+.Ar output .
+.It Cm setrules
+POST, with
+.Ar daemon ,
+.Ar rtable
+and
+.Ar text ,
+up to 1 MB.
+Sets the daemon's rules in the candidate, as the daemon's
+.Cm edit
+in
+.Xr nsh 8
+does; with no
+.Ar text ,
+the rules go.
+Its body may be 3 MB, and 4 such bodies may arrive at once.
 .It Cm complete
 GET, with
 .Ar line ,
@@ -304,11 +330,12 @@ Other answers have an
 and an HTTP status that says why: 400 for a field that cannot be taken,
 401 when the user is not logged in or the login failed, 403 for a POST
 without the header, 404 for an unknown request, 405 for the wrong
-method, 413 for a body over 8192 bytes, 415 for a POST that is not a
-form, and 503 when
+method, 413 for a body over 8192 bytes, or 3 MB for
+.Cm setrules ,
+415 for a POST that is not a form, and 503 when
 .Nm nshd
-does not answer, or too many users are logged in or a user has too
-many requests waiting or terminals.
+does not answer, or too many users are logged in, a user has too many
+requests waiting or terminals, or too many rules are arriving.
 .Pp
 A user's requests go to
 .Nm nshd
@@ -335,6 +362,7 @@ with the page at
 .Bd -literal -offset indent
 server "router" {
 	listen on * tls port 443
+	connection max request body 3146752
 	location "/nshdeck/api/*" {
 		fastcgi socket "/run/nshdeck.sock"
 	}

@@ -22,7 +22,10 @@
  * process of DECK_GROUP's can write to the socket. It takes the
  * request's endpoint, the last part of its path; its fields, from the
  * query of a GET or the form body of a POST, each named, once, with a
- * bound; and the cookie's token. A request must say it is the page's,
+ * bound; and the cookie's token. A body is BODY_MAX bytes at most;
+ * setrules', which carries a daemon's rules, may be RULES_BODY, and no
+ * more than DECK_BIGS of those arrive at once. The rules go to session
+ * in parts, before the request. A request must say it is the page's,
  * by an X-Nshdeck header, which a page of another site cannot send
  * without asking first; except a stream, events or a terminal's, which
  * the browser's EventSource asks for, and which cannot send it. The
@@ -69,6 +72,8 @@
 #define DROPPED		"event: dropped\ndata: {}\n\n"
 #define PARAMS_MAX	16384		/* a request's parameters, at most */
 #define BODY_MAX	8192		/* a request's body, at most */
+#define RULES_BODY	(3 * NSHD_RULES + 1024)	/* setrules', encoded */
+#define DECK_BIGS	4		/* setrules' bodies at once, at most */
 
 #define FCGI_HEADER	8
 #define FCGI_CONTENT	65535
@@ -99,8 +104,9 @@ struct conn {
 	size_t			 inlen;
 	char			 params[PARAMS_MAX];
 	size_t			 paramslen;
-	char			 body[BODY_MAX + 1];
+	char			*body;		/* bodymax bytes, and a NUL */
 	size_t			 bodylen;
+	size_t			 bodymax;
 	char			*out;		/* to write */
 	size_t			 outlen;
 	size_t			 outoff;
@@ -138,6 +144,8 @@ struct params {
 #define F_ROWS		0x4000
 #define F_COLS		0x8000
 #define F_TERMINAL	0x10000
+#define F_DAEMON	0x20000
+#define F_TEXT		0x40000
 static const struct endpoint {
 	const char	*name;
 	int		 kind;
@@ -160,10 +168,13 @@ static const struct endpoint {
 	{ "type",	DECK_TYPE,	1, F_TERMINAL | F_KEYS | F_ROWS |
 	    F_COLS },
 	{ "events",	DECK_EVENTS,	0, F_LOGS },
+	{ "rules",	DECK_RULES,	0, F_DAEMON | F_RTABLE },
+	{ "setrules",	DECK_SETRULES,	1, F_DAEMON | F_RTABLE | F_TEXT },
 };
 
 static TAILQ_HEAD(, conn)	 conns = TAILQ_HEAD_INITIALIZER(conns);
 static int			 nconns;
+static int			 nbigs;		/* setrules' bodies */
 static uint32_t			 conn_id;
 static struct event		 ev_accept, ev_pause;
 static struct deck_pipe		 parent, session;
@@ -176,8 +187,12 @@ static void	 front_timer(int, short, void *);
 static int	 front_record(struct conn *, int, const unsigned char *,
 		    size_t);
 static int	 front_params(struct conn *, struct params *);
+static const struct endpoint *front_endpoint(const char *);
+static void	 front_body(struct conn *);
+static void	 front_unbody(struct conn *);
 static int	 front_request(struct conn *);
-static int	 front_fields(const char *, int, struct deck_request *);
+static int	 front_fields(const char *, int, struct deck_request *,
+		    char **);
 static int	 front_field(int, const char *, struct deck_request *);
 static int	 front_token(const char *, char *);
 static int	 decode(char *, size_t, const char *, size_t);
@@ -407,6 +422,7 @@ front_record(struct conn *c, int type, const unsigned char *data,
 			return (-1);
 		if (len == 0) {
 			c->state = C_STDIN;
+			front_body(c);
 			return (0);
 		}
 		if (len > sizeof(c->params) - c->paramslen) {
@@ -422,7 +438,7 @@ front_record(struct conn *c, int type, const unsigned char *data,
 			return (-1);
 		if (len == 0)
 			return (front_request(c));
-		if (len > BODY_MAX - c->bodylen) {
+		if (len > c->bodymax - c->bodylen) {
 			front_error(c, 413, "body too long");
 			return (0);
 		}
@@ -439,11 +455,12 @@ front_record(struct conn *c, int type, const unsigned char *data,
 static int
 front_request(struct conn *c)
 {
-	const struct endpoint	*e = NULL;
+	const struct endpoint	*e;
 	struct deck_request	 r;
 	struct params		 p;
-	const char		*errstr, *name;
-	size_t			 i;
+	const char		*errstr;
+	char			*text = NULL;
+	size_t			 i, n;
 	long long		 clen;
 
 	c->state = C_ANSWER;
@@ -452,11 +469,7 @@ front_request(struct conn *c)
 		front_error(c, 400, "parameters front cannot read");
 		return (0);
 	}
-	name = (name = strrchr(p.uri, '/')) != NULL ? name + 1 : p.uri;
-	for (i = 0; i < sizeof(endpoints) / sizeof(endpoints[0]); i++)
-		if (strcmp(name, endpoints[i].name) == 0)
-			e = &endpoints[i];
-	if (e == NULL) {
+	if ((e = front_endpoint(p.uri)) == NULL) {
 		front_error(c, 404, "no such request");
 		return (0);
 	}
@@ -470,7 +483,7 @@ front_request(struct conn *c)
 		front_error(c, 403, "not the page's");
 		return (0);
 	}
-	clen = strtonum(p.clen[0] == '\0' ? "0" : p.clen, 0, BODY_MAX,
+	clen = strtonum(p.clen[0] == '\0' ? "0" : p.clen, 0, c->bodymax,
 	    &errstr);
 	if (errstr != NULL || (size_t)clen != c->bodylen) {
 		front_error(c, 400, "a body not as long as it says");
@@ -485,17 +498,75 @@ front_request(struct conn *c)
 	memset(&r, 0, sizeof(r));
 	r.kind = e->kind;
 	if (front_token(p.cookie, r.token) == -1 ||
-	    front_fields(e->post ? c->body : p.query, e->fields, &r) == -1) {
+	    front_fields(e->post ? c->body : p.query, e->fields, &r,
+	    &text) == -1) {
 		explicit_bzero(&r, sizeof(r));
-		explicit_bzero(c->body, sizeof(c->body));
+		front_unbody(c);
+		free(text);
 		front_error(c, 400, "fields front cannot take");
 		return (0);
 	}
-	explicit_bzero(c->body, sizeof(c->body));
+	front_unbody(c);
+	for (i = 0; text != NULL && text[i] != '\0'; i += n) {
+		n = strnlen(text + i, NSHD_TEXT);
+		pipe_compose(&session, DECK_TEXT, c->id, -1, text + i, n);
+	}
+	free(text);
 	c->asked = 1;
 	pipe_compose(&session, DECK_REQUEST, c->id, -1, &r, sizeof(r));
 	explicit_bzero(&r, sizeof(r));
 	return (0);
+}
+
+/* the endpoint the last part of uri names, or NULL */
+static const struct endpoint *
+front_endpoint(const char *uri)
+{
+	const char	*name;
+	size_t		 i;
+
+	name = (name = strrchr(uri, '/')) != NULL ? name + 1 : uri;
+	for (i = 0; i < sizeof(endpoints) / sizeof(endpoints[0]); i++)
+		if (strcmp(name, endpoints[i].name) == 0)
+			return (&endpoints[i]);
+	return (NULL);
+}
+
+/*
+ * Room for c's body, of BODY_MAX, or RULES_BODY for setrules, unless
+ * DECK_BIGS of those are arriving
+ */
+static void
+front_body(struct conn *c)
+{
+	const struct endpoint	*e;
+	struct params		 p;
+
+	c->bodymax = BODY_MAX;
+	if (front_params(c, &p) == 0 && (e = front_endpoint(p.uri)) != NULL &&
+	    e->kind == DECK_SETRULES) {
+		if (nbigs == DECK_BIGS) {
+			front_error(c, 503, "too many rules arriving");
+			return;
+		}
+		nbigs++;
+		c->bodymax = RULES_BODY;
+	}
+	if ((c->body = malloc(c->bodymax + 1)) == NULL)
+		fatal("%s", __func__);
+}
+
+/* c's body, gone */
+static void
+front_unbody(struct conn *c)
+{
+	if (c->body == NULL)
+		return;
+	explicit_bzero(c->body, c->bodylen);
+	free(c->body);
+	c->body = NULL;
+	if (c->bodymax > BODY_MAX)
+		nbigs--;
 }
 
 /*
@@ -560,10 +631,12 @@ front_params(struct conn *c, struct params *p)
 
 /*
  * The fields of form, key=value pairs joined by &, each that fields
- * names, once, into r: -1 if one is not, is twice, or is not right
+ * names, once, into r, and the text into *text: -1 if one is not, is
+ * twice, or is not right
  */
 static int
-front_fields(const char *form, int fields, struct deck_request *r)
+front_fields(const char *form, int fields, struct deck_request *r,
+    char **text)
 {
 	static const struct {
 		const char	*name;
@@ -576,6 +649,7 @@ front_fields(const char *form, int fields, struct deck_request *r)
 		{ "comment", F_COMMENT }, { "logs", F_LOGS },
 		{ "help", F_HELP }, { "keys", F_KEYS }, { "rows", F_ROWS },
 		{ "cols", F_COLS }, { "terminal", F_TERMINAL },
+		{ "daemon", F_DAEMON }, { "text", F_TEXT },
 	};
 	char		 key[16], value[NSHD_LINE];
 	const char	*p, *eq, *end;
@@ -585,18 +659,28 @@ front_fields(const char *form, int fields, struct deck_request *r)
 	for (p = form; *p != '\0'; p = *end == '&' ? end + 1 : end) {
 		end = p + strcspn(p, "&");
 		if ((eq = memchr(p, '=', end - p)) == NULL ||
-		    decode(key, sizeof(key), p, eq - p) == -1 ||
-		    decode(value, sizeof(value), eq + 1, end - eq - 1) == -1)
+		    decode(key, sizeof(key), p, eq - p) == -1)
 			return (-1);
 		for (i = 0, f = 0; i < sizeof(names) / sizeof(names[0]); i++)
 			if (strcmp(key, names[i].name) == 0)
 				f = names[i].field;
-		if ((f & fields) == 0 || (f & seen) != 0 ||
+		if ((f & fields) == 0 || (f & seen) != 0)
+			return (-1);
+		seen |= f;
+		/* a daemon's rules, NSHD_RULES bytes at most */
+		if (f == F_TEXT) {
+			if ((*text = malloc(end - eq)) == NULL)
+				fatal("%s", __func__);
+			if (decode(*text, end - eq, eq + 1, end - eq - 1) == -1 ||
+			    strlen(*text) > NSHD_RULES)
+				return (-1);
+			continue;
+		}
+		if (decode(value, sizeof(value), eq + 1, end - eq - 1) == -1 ||
 		    front_field(f, value, r) == -1) {
 			explicit_bzero(value, sizeof(value));
 			return (-1);
 		}
-		seen |= f;
 		explicit_bzero(value, sizeof(value));
 	}
 	/* a configuration's what, if none was named */
@@ -650,6 +734,14 @@ front_field(int f, const char *v, struct deck_request *r)
 	case F_COMMENT:
 		return (strlcpy(r->comment, v, sizeof(r->comment)) >=
 		    sizeof(r->comment) ? -1 : 0);
+	case F_DAEMON:
+		/* what nsh's daemons are named */
+		if (v[0] == '\0' || strlen(v) >= sizeof(r->daemon) ||
+		    strspn(v, "abcdefghijklmnopqrstuvwxyz0123456789-") !=
+		    strlen(v))
+			return (-1);
+		strlcpy(r->daemon, v, sizeof(r->daemon));
+		return (0);
 	case F_WHAT:
 		for (i = 0; i < sizeof(whats) / sizeof(whats[0]); i++)
 			if (strcmp(v, whats[i]) == 0) {
@@ -975,6 +1067,7 @@ front_close(struct conn *c)
 {
 	if (c->asked)
 		pipe_compose(&session, DECK_GONE, c->id, -1, NULL, 0);
+	front_unbody(c);
 	event_del(&c->ev);
 	evtimer_del(&c->tm);
 	close(c->fd);

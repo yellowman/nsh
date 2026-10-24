@@ -30,7 +30,8 @@
  * DECK_WINDOW messages of an answer, session stops reading nshd's. A
  * show that nshd's system says it does not answer is asked again of nshd's
  * shows, as nsh asks them, on a connection of its own, which parent
- * makes, and which closes when it is answered.
+ * makes, and which closes when it is answered. A daemon's rules go to
+ * nshd in parts, as nsh sends them, and are set with the last.
  *
  * A user's event streams have nshd watch commits, interfaces and routes,
  * and the logs any of them follows, and each notice nshd sends goes to each
@@ -109,6 +110,9 @@ struct pending {
 	uint32_t		 id;		/* front's, or 0: a watch */
 	int			 gone;		/* front's client is gone */
 	struct deck_request	 r;
+	char			*text;		/* setrules' rules */
+	size_t			 textlen;
+	size_t			 textoff;	/* sent nshd */
 };
 
 /* an event stream of a user's */
@@ -156,6 +160,7 @@ struct user {
 	struct jbuf		 j;		/* its answer's, to send front */
 	char			*out;		/* what nshd printed */
 	size_t			 outlen;
+	int			 lost;		/* some was not kept */
 	struct nshd_context	 ctx;
 	int			 hasctx;
 	struct deck_cmplt	*cmplt;		/* what a completion has read */
@@ -171,6 +176,11 @@ struct user {
 static TAILQ_HEAD(, user)	 users = TAILQ_HEAD_INITIALIZER(users);
 static int			 nusers;
 static struct deck_pipe		 toparent, tofront;
+static struct {
+	uint32_t		 id;
+	char			*p;
+	size_t			 len;
+} incoming;			/* a setrules' rules, before it */
 static struct event		 ev_idle;
 static struct {
 	char			 name[NSHD_NAME];
@@ -188,6 +198,7 @@ static void	 connected(uint32_t, int, int);
 static void	 logged(struct user *, int32_t);
 static void	 next(struct user *);
 static void	 ask(struct user *, uint32_t, const void *, size_t);
+static void	 rules(struct user *);
 static void	 answered(struct user *, int32_t);
 static void	 kept(struct user *, const void *, size_t);
 static int	 facts(struct user *, struct deck_pipe *, struct imsg *);
@@ -272,7 +283,9 @@ sessions_front(int fd, short event, void *arg)
 	struct deck_pipe	*from;
 	struct terminal		*t;
 	struct imsg		 imsg;
+	struct ibuf		 b;
 	struct user		*u;
+	char			*q;
 	uint32_t		 id;
 	int			 n;
 
@@ -288,12 +301,15 @@ sessions_front(int fd, short event, void *arg)
 		case DECK_REQUEST:
 			/* n: rollback's, an rtable or a configure */
 			if (imsg_get_data(&imsg, &r, sizeof(r)) == -1 ||
-			    r.kind < DECK_LOGIN || r.kind > DECK_EVENTS ||
+			    r.kind < DECK_LOGIN || r.kind > DECK_SETRULES ||
+			    (incoming.len > 0 && (incoming.id != id ||
+			    r.kind != DECK_SETRULES)) ||
 			    memchr(r.token, '\0', sizeof(r.token)) == NULL ||
 			    memchr(r.text, '\0', sizeof(r.text)) == NULL ||
 			    memchr(r.password, '\0', sizeof(r.password)) ==
 			    NULL ||
 			    memchr(r.comment, '\0', sizeof(r.comment)) ==
+			    NULL || memchr(r.daemon, '\0', sizeof(r.daemon)) ==
 			    NULL || r.n < 0 || r.n > 255 ||
 			    r.minutes < 0 || r.minutes > NSHD_CONFIRMMAX ||
 			    (r.check != 0 && r.check != 1) ||
@@ -303,6 +319,24 @@ sessions_front(int fd, short event, void *arg)
 				fatalx("front sent a request not whole");
 			request(id, &r);
 			explicit_bzero(&r, sizeof(r));
+			free(incoming.p);
+			memset(&incoming, 0, sizeof(incoming));
+			break;
+		case DECK_TEXT:
+			if (imsg_get_ibuf(&imsg, &b) == -1)
+				fatal("%s", __func__);
+			if ((incoming.len > 0 && incoming.id != id) ||
+			    ibuf_size(&b) == 0 ||
+			    ibuf_size(&b) > NSHD_RULES - incoming.len ||
+			    memchr(ibuf_data(&b), '\0', ibuf_size(&b)) != NULL)
+				fatalx("front sent rules not a request's");
+			if ((q = realloc(incoming.p, incoming.len +
+			    ibuf_size(&b))) == NULL)
+				fatal(NULL);
+			memcpy(q + incoming.len, ibuf_data(&b), ibuf_size(&b));
+			incoming.p = q;
+			incoming.len += ibuf_size(&b);
+			incoming.id = id;
 			break;
 		case DECK_READ:
 			/* an answer front has written: nshd's read again */
@@ -391,6 +425,11 @@ request(uint32_t id, struct deck_request *r)
 		fatal(NULL);
 	p->id = id;
 	p->r = *r;
+	if (r->kind == DECK_SETRULES) {
+		p->text = incoming.p;
+		p->textlen = incoming.len;
+		memset(&incoming, 0, sizeof(incoming));
+	}
 	TAILQ_INSERT_TAIL(&u->queue, p, entry);
 	u->nqueue++;
 	next(u);
@@ -768,7 +807,7 @@ next(struct user *u)
 	TAILQ_REMOVE(&u->queue, p, entry);
 	u->nqueue--;
 	u->cur = p;
-	u->headed = u->nrecords = u->hasctx = u->sent = 0;
+	u->headed = u->nrecords = u->hasctx = u->sent = u->lost = 0;
 	if (p->r.kind == DECK_COMPLETE) {
 		u->cmplt = deck_cmplt_new();
 		facts_in_init(&u->in, deck_cmplt_record, u->cmplt);
@@ -823,6 +862,10 @@ next(struct user *u)
 		tm.cols = p->r.cols > 0 ? p->r.cols : 80;
 		ask(u, IMSG_CTL_TERMINAL, &tm, sizeof(tm));
 		break;
+	case DECK_RULES:
+	case DECK_SETRULES:
+		rules(u);
+		break;
 	default:
 		/* session's own: the watch its streams want */
 		memset(&w, 0, sizeof(w));
@@ -836,6 +879,28 @@ static void
 ask(struct user *u, uint32_t type, const void *data, size_t len)
 {
 	pipe_compose(&u->nshd, type, 0, -1, data, len);
+}
+
+/* u's rules request to nshd: the rules asked for, or the next part */
+static void
+rules(struct user *u)
+{
+	struct nshd_rules	 rl;
+	struct pending		*p = u->cur;
+	size_t			 n;
+
+	memset(&rl, 0, sizeof(rl));
+	rl.set = p->r.kind == DECK_SETRULES;
+	rl.rtable = p->r.n;
+	strlcpy(rl.daemon, p->r.daemon, sizeof(rl.daemon));
+	if ((n = p->textlen - p->textoff) > sizeof(rl.text))
+		n = sizeof(rl.text);
+	if (n > 0)
+		memcpy(rl.text, p->text + p->textoff, n);
+	rl.len = n;
+	p->textoff += n;
+	rl.last = p->textoff == p->textlen;
+	ask(u, IMSG_CTL_RULES, &rl, sizeof(rl));
 }
 
 /*
@@ -854,6 +919,18 @@ answered(struct user *u, int32_t status)
 	if (p == NULL)
 		return;
 	u->nshd.paused = 0;
+	if (p->r.kind == DECK_SETRULES && status == 0 &&
+	    p->textoff < p->textlen) {
+		rules(u);
+		return;
+	}
+	if (p->r.kind == DECK_RULES && u->lost) {
+		/* rules cut short are not the rules */
+		u->outlen = 0;
+		why = "% nshdeck: the rules are longer than it keeps\n";
+		kept(u, why, strlen(why));
+		status = 1;
+	}
 	if (p->r.kind == DECK_COMPLETE && !u->naming && status == 0 &&
 	    !p->gone) {
 		/* the tables are here: build them, then ask for the names */
@@ -918,6 +995,7 @@ answered(struct user *u, int32_t status)
 	free(u->out);
 	u->out = NULL;
 	u->outlen = 0;
+	free(p->text);
 	free(p);
 	u->cur = NULL;
 	u->toro = RO_NONE;
@@ -931,8 +1009,10 @@ kept(struct user *u, const void *data, size_t len)
 {
 	char	*q;
 
-	if (u->outlen + len > DECK_OUTPUT)
+	if (u->outlen + len > DECK_OUTPUT) {
+		u->lost = 1;
 		return;
+	}
 	if ((q = realloc(u->out, u->outlen + len)) == NULL)
 		fatal(NULL);
 	u->out = q;
@@ -1304,6 +1384,7 @@ gone(uint32_t id)
 			if (p->id == id) {
 				TAILQ_REMOVE(&u->queue, p, entry);
 				u->nqueue--;
+				free(p->text);
 				free(p);
 				break;
 			}
@@ -1666,6 +1747,7 @@ user_free(struct user *u)
 		} else if (u->cur->id != 0 && !u->cur->gone)
 			reply(u->cur->id, 503, "{\"error\":\"nshd ended the "
 			    "session\"}");
+		free(u->cur->text);
 		explicit_bzero(u->cur, sizeof(*u->cur));
 		free(u->cur);
 	}
@@ -1673,6 +1755,7 @@ user_free(struct user *u)
 		TAILQ_REMOVE(&u->queue, p, entry);
 		if (p->id != 0)
 			reply(p->id, 503, "{\"error\":\"logged out\"}");
+		free(p->text);
 		free(p);
 	}
 	while ((s = TAILQ_FIRST(&u->streams)) != NULL) {
