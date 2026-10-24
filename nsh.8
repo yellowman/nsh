@@ -2246,7 +2246,7 @@ nsh>no verbose
 .Op hostname | interface | autoconf | ip | inet | inet6 | route | route6\
  | sadb | arp | ndp | vlan | kernel | bgp | ospf | ospf6 | pf | eigrp | rip\
  | ldp | ike | ipsec | dvmrp | relay | dhcp | smtp | ldap | monitor\
- | version | users | crontab | running-config | startup-config\
+ | log | version | users | crontab | running-config | startup-config\
  | system-stats |\&? | help
 .Pp
 The main diagnostic and informational command is 'show'.
@@ -2288,6 +2288,7 @@ nsh>show
   smtp            SMTP server
   ldap            LDAP server
   monitor         Monitor routing/arp table changes
+  log             Follow daemon, messages, authlog or pflog, until ^C
   system-stats    System, firewall and kernel statistics
   version         Software information
   users           System users
@@ -3075,6 +3076,27 @@ Start an interactive console monitor mode for the system's routing socket.
 The monitor displays raw descriptions of the data passing into the kernel's
 routing socket and dumps of the kernel's routing messages to the machine.
 Press enter or control-C to exit this mode.
+.Pp
+.Tg log
+.Ic show log
+.Cm daemon | messages | authlog | pflog
+.Pp
+Follow a log, from its last lines, as lines are added to it, until
+control-C:
+.Pa /var/log/daemon ,
+.Pa /var/log/messages ,
+.Pa /var/log/authlog ,
+or the packets pf logs, as
+.Xr tcpdump 8
+prints them from
+.Xr pflog 4 .
+.Xr nshd 8 Ns 's
+system process reads them, so the log is followed after
+.Xr newsyslog 8
+turns it over.
+It needs the view permission, and authlog the admin permission too
+(see
+.Cm login class ) .
 .Pp
 .Tg show
 .Tg stat

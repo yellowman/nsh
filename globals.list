@@ -39,6 +39,7 @@ carp.c		scratch	carp_facts.carpdev
 carp.c		table	carp_bal_modes carp_facts_init.carp_states
 			carp_fields intcs kind_carp
 client.c	process	nshd_config nshd_intr nshd_rtable sfd sib
+client.c	table	show_log.logs
 commands.c	session	hname ifname in_rc next_ifname rc_head whichlist
 commands.c	process	child snapshot
 commands.c	scratch	hbuf oneline

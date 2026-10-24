@@ -25,7 +25,8 @@
  *
  * And it tells system, on their pipe, before config hears of it, of
  * each request that may begin a commit, a line, a commit or a load's
- * part, whose it is, and whether the session is the web configurator's,
+ * part, or that system checks itself, an operation, a login or a watch,
+ * whose it is, and whether the session is the web configurator's,
  * a client of NSHD_WEB_USER's uid; and when config answers it, and when
  * a session goes. system begins config's commits only for a request
  * not answered, so a config a client compromised cannot say whose they
@@ -304,7 +305,8 @@ frontend_client(struct ctl_conn *c, struct imsg *imsg)
 		    imsg_get_type(imsg) == IMSG_CTL_COMMIT ||
 		    imsg_get_type(imsg) == IMSG_CTL_OP ||
 		    imsg_get_type(imsg) == IMSG_CTL_LOAD ||
-		    imsg_get_type(imsg) == IMSG_CTL_LOGIN) {
+		    imsg_get_type(imsg) == IMSG_CTL_LOGIN ||
+		    imsg_get_type(imsg) == IMSG_CTL_WATCH) {
 			c->asked = 1;
 			frontend_asked(c, IMSG_FRONT_ASKED);
 		}

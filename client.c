@@ -273,13 +273,16 @@ done:
  * to nshd's read-write socket if rw, else to its read-only one: facts read into in as they come, and text
  * printed, and how it ended, *status, or 1 if it was not answered, as
  * when ^C ends it, which closes the connection, so nshd stops what it
- * runs. -1 if there is no nshd to ask, or none this user may, else 0.
+ * runs. A watch nshd takes goes on after its answer, each log's text
+ * printed as it comes, until ^C or nshd says the log ended. -1 if there
+ * is no nshd to ask, or none this user may, else 0.
  */
 static int
 nshd_ask(int rw, uint32_t type, const void *data, size_t len,
     struct facts_in *in, int32_t *status)
 {
 	struct nshd_result	 r = { 1 };
+	struct nshd_notice	 nt;
 	struct imsgbuf		 ib;
 	struct imsg		 imsg;
 	struct ibuf		 b;
@@ -330,7 +333,7 @@ nshd_ask(int rw, uint32_t type, const void *data, size_t len,
 			fwrite(ibuf_data(&b), 1, ibuf_size(&b), stdout);
 			break;
 		case IMSG_CTL_FACTS:
-			if (imsg_get_ibuf(&imsg, &b) == -1 ||
+			if (in == NULL || imsg_get_ibuf(&imsg, &b) == -1 ||
 			    facts_read(in, ibuf_data(&b), ibuf_size(&b)) ==
 			    -1) {
 				printf("%% nshd: facts nsh cannot read\n");
@@ -344,7 +347,22 @@ nshd_ask(int rw, uint32_t type, const void *data, size_t len,
 				imsg_free(&imsg);
 				goto done;
 			}
-			done = 1;
+			*status = r.status;
+			/* a watch taken goes on */
+			done = type != IMSG_CTL_WATCH || r.status != 0;
+			break;
+		case IMSG_CTL_NOTICE:
+			if (imsg_get_ibuf(&imsg, &b) == -1 ||
+			    ibuf_get(&b, &nt, sizeof(nt)) == -1) {
+				printf("%% nshd: a notice nsh cannot read\n");
+				imsg_free(&imsg);
+				goto done;
+			}
+			if (nt.kind == NSHD_NOTICE_LOG) {
+				fwrite(ibuf_data(&b), 1, ibuf_size(&b), stdout);
+				fflush(stdout);
+			} else if (nt.kind == NSHD_NOTICE_LOGEND)
+				done = 1;
 			break;
 		default:
 			printf("%% nshd: a message nsh does not know\n");
@@ -353,7 +371,6 @@ nshd_ask(int rw, uint32_t type, const void *data, size_t len,
 		}
 		imsg_free(&imsg);
 	}
-	*status = r.status;
 done:
 	imsgbuf_clear(&ib);
 	close(fd);
@@ -385,6 +402,42 @@ nshd_facts(int rw, char *words, struct facts_in *in)
 	    &status) == -1)
 		return (-1);
 	return (status == 0);
+}
+
+/*
+ * show log name: the log nshd's system follows, printed as it comes,
+ * from its last lines, until ^C, as nshd_ask() asks
+ */
+int
+show_log(int argc, char **argv, ...)
+{
+	static const struct {
+		const char	*name;
+		int32_t		 log;
+	} logs[] = {
+		{ "daemon",	NSHD_WATCH_DAEMON },
+		{ "messages",	NSHD_WATCH_MESSAGES },
+		{ "authlog",	NSHD_WATCH_AUTHLOG },
+		{ "pflog",	NSHD_WATCH_PFLOG },
+	};
+	struct nshd_watch	 w = { 0 };
+	int32_t			 status;
+	size_t			 i;
+
+	for (i = 0; i < sizeof(logs) / sizeof(logs[0]); i++)
+		if (strcmp(argv[2], logs[i].name) == 0)
+			w.what = logs[i].log;
+	if (w.what == 0) {
+		printf("%% show log: daemon, messages, authlog or pflog\n");
+		return (-1);
+	}
+	printf("%% Following %s, until ^C\n", argv[2]);
+	if (nshd_ask(1, IMSG_CTL_WATCH, &w, sizeof(w), NULL, &status) ==
+	    -1) {
+		nshd_why();
+		return (-1);
+	}
+	return (status == 0 ? 0 : -1);
 }
 
 /*

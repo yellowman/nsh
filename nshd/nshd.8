@@ -136,6 +136,9 @@ taken or left, each with the user's uid; and interfaces or addresses
 changed, and the routing tables whose routes changed, from a
 .Xr route 4
 socket parent opens for it, said once a second at most.
+It may watch logs too, which system follows, and config sends the
+session what system reads of each as notices, until the session's
+watch drops it.
 config is
 .Xr pledge 2 Ns d
 to stdio: it reads no kernel, opens no file and runs no program of its
@@ -178,6 +181,21 @@ socket,
 .Pa /dev/pf
 and PF_KEY are root's.
 The child that prints the leases opens them, then becomes _nshcheck.
+A log a session watches is followed the same way: the child opens
+.Pa /var/log/daemon ,
+.Pa /var/log/messages
+or
+.Pa /var/log/authlog
+as root, then becomes _nshcheck, prints its last lines and each line
+as it comes, and a new child follows the new file once
+.Xr newsyslog 8
+turns it over; pf's log is
+.Xr tcpdump 8
+on
+.Xr pflog 4 ,
+which keeps root to open it and gives it up itself.
+system checks that the session's class has view, and admin for
+authlog, as it checks an operation.
 A commit's script, its save, and each test of a daemon's rules run in a
 child of system's; one that runs past its time, 900 seconds for a
 script, 300 for a save and 120 for a test, is sent SIGTERM, with its

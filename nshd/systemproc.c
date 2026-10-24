@@ -24,6 +24,14 @@
  * A show's answer is made whole, as it is small, its units as many to a
  * message as fit.
  *
+ * A log a session watches is a stream too, which goes on until config
+ * stops it. A log file is opened as root and followed as
+ * NSHD_CHECK_USER, from its last lines, and followed again from the new
+ * file once newsyslog turns it over; pf's, tcpdump on pflog0, keeps
+ * root, as tcpdump drops it itself. A log needs the view permission,
+ * and authlog admin too, which system checks itself, as it checks an
+ * operation; no request names a path.
+ *
  * But a show of text, what a program prints or the leases, may be long,
  * or go on until it is stopped: a child of system's prints it, and
  * system streams it as messages, as many as SYS_WINDOW before the
@@ -182,8 +190,16 @@
 #define SYS_WINDOW	16	/* messages a stream sends its client unread */
 #define SYS_OPWORDS	32	/* an operation's words, at most */
 
-/* what a stream's child streams: a show's, FACTS_*, or an operation's */
+/*
+ * what a stream's child streams: a show's, FACTS_*, an operation's, or a
+ * log file, followed, or followed again once it turned over
+ */
 #define SYS_OPERATION	3
+#define SYS_LOG		4
+#define SYS_LOG_AGAIN	5
+#define LOG_TAIL	2048	/* a log's last bytes, followed first */
+#define LOG_TURNED	4	/* its child's exit: the log turned over */
+#define LOG_WAIT	10	/* the new log waited for, half seconds */
 #define COMMIT_RECORD	NSHDB "/commit"
 #define RECORD_HEAD	128	/* the record's first line, at most */
 #define BOOT_RECORD	NSHDB "/boot"
@@ -233,7 +249,19 @@ static const char *root_tests[] = {
  */
 static const char *root_programs[] = {
 	BGPCTL, DVMRPCTL, EIGRPCTL, IKECTL, LDAPCTL, LDPCTL, OSPF6CTL,
-	OSPFCTL, RELAYCTL, RIPCTL, SMTPCTL, PFCTL, IPSECCTL
+	OSPFCTL, RELAYCTL, RIPCTL, SMTPCTL, PFCTL, IPSECCTL,
+	TCPDUMP		/* opens bpf as root, then drops it itself */
+};
+
+/* the logs a session may watch, each by its watch's bit */
+static const struct {
+	int		 log;
+	char		*path;		/* a file, or NULL: pf's */
+} logs[] = {
+	{ NSHD_WATCH_DAEMON,	DAEMON_LOG },
+	{ NSHD_WATCH_MESSAGES,	MESSAGES_LOG },
+	{ NSHD_WATCH_AUTHLOG,	AUTH_LOG },
+	{ NSHD_WATCH_PFLOG,	NULL },
 };
 
 /* a show's text, which a child prints, as messages to its client */
@@ -245,6 +273,8 @@ struct stream {
 	int			 window;	/* messages it may still send */
 	int			 stopped;
 	int			 op;		/* an operation's, SYS_OPERATION */
+	char			*log;		/* a log file's, followed, */
+	int			 text;		/* or pf's: text, not facts */
 	int			 status;	/* how its child ended */
 	struct event		 ev;
 	struct facts_out	 o;
@@ -373,7 +403,10 @@ static void	system_end(uint32_t, int32_t, const char *, ...)
 		    __attribute__((__format__ (printf, 3, 4)));
 static void	system_emit(void *, const void *, size_t);
 static void	system_flush(uint32_t);
-static void	system_stream(uint32_t, int, char **, int);
+static int	system_stream(uint32_t, int, char **, int);
+static int	system_stream_child(struct stream *, int, char **, int);
+static void	system_follow(uint32_t, struct nshd_follow *);
+static int	system_tail(int, const char *);
 static __dead void system_child(int, int, char **, int);
 static int	system_root(const char *);
 static void	system_drop(void);
@@ -719,6 +752,7 @@ system_whole(uint32_t type, const void *data, size_t len)
 	struct nshd_test	 t;
 	struct nshd_sysop	 so;
 	struct nshd_syslogin	 sl;
+	struct nshd_follow	 f;
 	int			 i, r;
 
 	switch (type) {
@@ -737,6 +771,14 @@ system_whole(uint32_t type, const void *data, size_t len)
 		return (len == 0 ? 0 : -1);
 	case IMSG_SYS_PERMS:
 		return (len == sizeof(struct nshd_perms) ? 0 : -1);
+	case IMSG_SYS_FOLLOW:
+		if (len != sizeof(f))
+			return (-1);
+		memcpy(&f, data, len);
+		for (i = 0; i < (int)(sizeof(logs) / sizeof(logs[0])); i++)
+			if (f.log == logs[i].log)
+				return (0);
+		return (-1);
 	case IMSG_SYS_LOGIN:
 		if (len != sizeof(sl))
 			return (-1);
@@ -821,6 +863,7 @@ system_request(uint32_t type, uint32_t id, const void *data, size_t len)
 	struct nshd_test	 t;
 	struct nshd_result	 res;
 	struct nshd_sysop	 so;
+	struct nshd_follow	 f;
 	struct stream		*s;
 
 	switch (type) {
@@ -890,6 +933,10 @@ system_request(uint32_t type, uint32_t id, const void *data, size_t len)
 	case IMSG_SYS_OP:
 		memcpy(&so, data, sizeof(so));
 		system_op(id, &so);
+		break;
+	case IMSG_SYS_FOLLOW:
+		memcpy(&f, data, sizeof(f));
+		system_follow(id, &f);
 		break;
 	case IMSG_SYS_TEST:
 		memcpy(&t, data, sizeof(t));
@@ -1054,6 +1101,47 @@ system_op(uint32_t id, struct nshd_sysop *so)
 	system_stream(id, SYS_OPERATION, argv, so->op.rtable);
 }
 
+/*
+ * A log, followed for a session whose class may read it, as a stream:
+ * FOLLOWING once it begins, then what is read of it, as text, until it
+ * is stopped; or refused, said why
+ */
+static void
+system_follow(uint32_t id, struct nshd_follow *f)
+{
+	char		*argv[] = { TCPDUMP, "-l", "-n", "-e", "-ttt", "-i",
+			    "pflog0", NULL };
+	struct asked	*k;
+	size_t		 i;
+	int		 perms, r;
+
+	printed(NULL);
+	if ((k = asked_whose(&f->whose)) == NULL) {
+		system_end(id, 1, "%% nshd: frontend told system of no request "
+		    "this log is for\n");
+		return;
+	}
+	/* kept: a watch may follow several */
+	perms = system_whom(k, NULL);
+	if (!system_may(perms, LOGIN_VIEW, "view") ||
+	    (f->log == NSHD_WATCH_AUTHLOG &&
+	    !system_may(perms, LOGIN_ADMIN, "admin"))) {
+		system_printed(id, 1);
+		return;
+	}
+	for (i = 0; logs[i].log != f->log; i++)
+		;
+	if (logs[i].path != NULL) {
+		argv[0] = logs[i].path;
+		argv[1] = NULL;
+		r = system_stream(id, SYS_LOG, argv, 0);
+	} else
+		r = system_stream(id, FACTS_PROGRAM, argv, 0);
+	if (r == 0 && link_compose(&links[CONFIG], IMSG_SYS_FOLLOWING, id,
+	    NULL, 0) == -1)
+		fatal("%s", __func__);
+}
+
 /* Has perms, a login class's, need, named name? 1 if so, else 0, said */
 static int
 system_may(int perms, int need, const char *name)
@@ -1145,46 +1233,66 @@ system_flush(uint32_t id)
 	nunits = 0;
 }
 
-/* op's text, which a child prints, streamed to request id's client */
-static void
+/*
+ * op's text, which a child prints, streamed to request id's client: 0,
+ * or -1 if it could not begin, which system says
+ */
+static int
 system_stream(uint32_t id, int op, char **argv, int table)
 {
 	struct stream	*s;
-	int		 fds[2];
 
 	if (nstreams == SYS_STREAMS) {
 		system_end(id, 1, "%% nshd: %d shows already stream\n",
 		    SYS_STREAMS);
-		return;
-	}
-	if (pipe2(fds, O_CLOEXEC) == -1) {
-		system_end(id, 1, "%% nshd: pipe: %s\n", strerror(errno));
-		return;
+		return (-1);
 	}
 	if ((s = calloc(1, sizeof(*s))) == NULL)
 		fatal(NULL);
+	s->id = id;
+	s->op = op == SYS_OPERATION;
+	s->text = op == SYS_LOG || (op == FACTS_PROGRAM &&
+	    strcmp(argv[0], TCPDUMP) == 0);
+	if (op == SYS_LOG)
+		s->log = argv[0];
+	s->window = SYS_WINDOW;
+	facts_out_init(&s->o, system_emit, &s->id);
+	if (system_stream_child(s, op, argv, table) == -1) {
+		free(s);
+		return (-1);
+	}
+	TAILQ_INSERT_TAIL(&streams, s, entry);
+	nstreams++;
+	return (0);
+}
+
+/* s's child, which prints op's text: 0, or -1, said, if it could not */
+static int
+system_stream_child(struct stream *s, int op, char **argv, int table)
+{
+	int	 fds[2];
+
+	if (pipe2(fds, O_CLOEXEC) == -1) {
+		system_end(s->id, 1, "%% nshd: pipe: %s\n", strerror(errno));
+		return (-1);
+	}
 	switch (s->pid = fork()) {
 	case -1:
-		system_end(id, 1, "%% nshd: fork: %s\n", strerror(errno));
+		system_end(s->id, 1, "%% nshd: fork: %s\n", strerror(errno));
 		close(fds[0]);
 		close(fds[1]);
-		free(s);
-		return;
+		return (-1);
 	case 0:
 		system_child(fds[1], op, argv, table);
 	}
 	/* as the child does, so neither waits on the other */
 	setpgid(s->pid, s->pid);
 	close(fds[1]);
-	s->id = id;
-	s->op = op == SYS_OPERATION;
 	s->fd = fds[0];
-	s->window = SYS_WINDOW;
-	facts_out_init(&s->o, system_emit, &s->id);
 	event_set(&s->ev, s->fd, EV_READ | EV_PERSIST, system_stream_read, s);
-	event_add(&s->ev, NULL);
-	TAILQ_INSERT_TAIL(&streams, s, entry);
-	nstreams++;
+	if (s->window > 0)
+		event_add(&s->ev, NULL);
+	return (0);
 }
 
 /* the child: op's text, to fd, with nothing else of system's */
@@ -1194,7 +1302,7 @@ system_child(int fd, int op, char **argv, int table)
 	char	 buf[8192];
 	size_t	 n;
 	FILE	*f;
-	int	 null, argc, r;
+	int	 null, argc, r, lfd, tries;
 
 	setpgid(0, 0);
 	/* as a program expects them, and as system's are not */
@@ -1243,9 +1351,75 @@ system_child(int fd, int op, char **argv, int table)
 			fwrite(buf, 1, n, stdout);
 		fclose(f);
 		break;
+	case SYS_LOG:
+	case SYS_LOG_AGAIN:
+		/* root's, read as NSHD_CHECK_USER; a new one, waited for */
+		for (tries = 0; (lfd = open(argv[0], O_RDONLY)) == -1 &&
+		    errno == ENOENT && op == SYS_LOG_AGAIN && tries < LOG_WAIT;
+		    tries++)
+			nanosleep(&(struct timespec){ 0, 500000000 }, NULL);
+		if (lfd == -1) {
+			printf("%% %s: %s\n", argv[0], strerror(errno));
+			break;
+		}
+		system_drop();
+		r = system_tail(lfd, argv[0]);
+		fflush(stdout);
+		_exit(r);
 	}
 	fflush(stdout);
 	_exit(0);
+}
+
+/*
+ * fd, the log at path: its last lines, then each as it comes, until the
+ * file at path is another, as newsyslog leaves it: LOG_TURNED then, once
+ * what fd still had is read; or 1 if fd cannot be read or written on
+ */
+static int
+system_tail(int fd, const char *path)
+{
+	struct timespec	 nap = { 0, 500000000 };
+	struct stat	 st, now;
+	char		 buf[8192], *p;
+	off_t		 off;
+	ssize_t		 n;
+	int		 skip, turned = 0;
+
+	if (fstat(fd, &st) == -1)
+		return (1);
+	off = st.st_size > LOG_TAIL ? st.st_size - LOG_TAIL : 0;
+	if (lseek(fd, off, SEEK_SET) == -1)
+		return (1);
+	/* from the first whole line */
+	skip = off > 0;
+	for (;;) {
+		while ((n = read(fd, buf, sizeof(buf))) > 0) {
+			p = buf;
+			if (skip) {
+				if ((p = memchr(buf, '\n', n)) == NULL)
+					continue;
+				p++;
+				skip = 0;
+			}
+			if (fwrite(p, 1, buf + n - p, stdout) !=
+			    (size_t)(buf + n - p) || fflush(stdout) == EOF)
+				return (1);
+		}
+		if (n == -1)
+			return (1);
+		if (turned)
+			return (LOG_TURNED);
+		if (stat(path, &now) == -1 || now.st_dev != st.st_dev ||
+		    now.st_ino != st.st_ino)
+			turned = 1;
+		else if (fstat(fd, &now) == 0 &&
+		    now.st_size < lseek(fd, 0, SEEK_CUR))
+			/* emptied in its place: from its start */
+			lseek(fd, 0, SEEK_SET);
+		else
+			nanosleep(&nap, NULL);
+	}
 }
 
 /* whether program keeps root, an exception root_programs names */
@@ -1283,7 +1457,11 @@ system_stream_read(int fd, short event, void *arg)
 			return;
 		log_warn("%s: read", __func__);
 	}
-	if (n > 0 && facts_text(&s->o, buf, n) == -1) {
+	if (n > 0 && s->text) {
+		if (imsg_text(links[CONFIG].iev, IMSG_SYS_TEXT, s->id, buf,
+		    n) == -1)
+			fatal("%s", __func__);
+	} else if (n > 0 && facts_text(&s->o, buf, n) == -1) {
 		log_warnx("%s: a message of %zd bytes", __func__, n);
 		n = -1;
 	}
@@ -1336,8 +1514,23 @@ system_stream_stop(struct stream *s)
 static void
 system_stream_done(struct stream *s)
 {
+	char	*argv[2];
+
 	if (s->fd != -1 || s->pid != 0)
 		return;
+	/* a log newsyslog turned over, followed again, from the new file */
+	if (s->log != NULL && !s->stopped && WIFEXITED(s->status) &&
+	    WEXITSTATUS(s->status) == LOG_TURNED) {
+		argv[0] = s->log;
+		argv[1] = NULL;
+		if (system_stream_child(s, SYS_LOG_AGAIN, argv, 0) == 0)
+			return;
+		/* said why, and ended */
+		TAILQ_REMOVE(&streams, s, entry);
+		nstreams--;
+		free(s);
+		return;
+	}
 	/* an operation's, as its child ended */
 	system_end(s->id, s->stopped ? 1 : !s->op ? 0 :
 	    WIFEXITED(s->status) ? WEXITSTATUS(s->status) : 1, NULL);

@@ -45,6 +45,12 @@
 #define DHCPLEASES      "/var/db/dhcpd.leases"
 #endif
 
+/* the logs nshd follows, and how it follows pf's */
+#define DAEMON_LOG      "/var/log/daemon"
+#define MESSAGES_LOG    "/var/log/messages"
+#define AUTH_LOG        "/var/log/authlog"
+#define TCPDUMP         "/usr/sbin/tcpdump"
+
 /* control programs */   
 #define PFCTL           "/sbin/pfctl"
 #define OSPFCTL         "/usr/sbin/ospfctl"

@@ -150,7 +150,12 @@ struct nshd_watch {
 };
 #define NSHD_WATCH_COMMITS	0x1	/* commits and configure exclusive */
 #define NSHD_WATCH_KERNEL	0x2	/* interfaces, addresses and routes */
-#define NSHD_WATCH_ALL		0x3
+#define NSHD_WATCH_DAEMON	0x4	/* /var/log/daemon, followed */
+#define NSHD_WATCH_MESSAGES	0x8	/* /var/log/messages */
+#define NSHD_WATCH_AUTHLOG	0x10	/* /var/log/authlog, with admin */
+#define NSHD_WATCH_PFLOG	0x20	/* pf's logged packets, as tcpdump */
+#define NSHD_WATCH_LOGS		0x3c
+#define NSHD_WATCH_ALL		0x3f
 
 /* a notice, then its text, if it has one, of NSHD_TEXT at most */
 struct nshd_notice {
@@ -169,6 +174,9 @@ struct nshd_notice {
 #define NSHD_NOTICE_UNLOCK	6	/* and left it */
 #define NSHD_NOTICE_LINKS	7	/* interfaces or addresses changed */
 #define NSHD_NOTICE_ROUTES	8	/* routes in rtable n changed */
+#define NSHD_NOTICE_LOG		9	/* the log n, its watch's bit, as it */
+					/* comes: what was read of it */
+#define NSHD_NOTICE_LOGEND	10	/* the log n is no longer followed */
 
 /* rollback n, or show rollback n */
 struct nshd_rollback {
@@ -201,6 +209,12 @@ struct nshd_asked {
  */
 struct nshd_whose {
 	uint32_t	session;
+};
+
+/* config to system: a log, its watch's bit, followed for a session */
+struct nshd_follow {
+	struct nshd_whose whose;
+	int32_t		log;
 };
 
 /* config to system: an operation, and the session that asked it */
@@ -362,7 +376,9 @@ enum nshd_imsg {
 	/* with clients, on the read-write socket, and system to config */
 	IMSG_CTL_WATCH,		/* nshd_watch: a result */
 	IMSG_CTL_NOTICE,	/* nshd_notice, and text: unasked */
-	IMSG_SYS_NOTICE		/* nshd_notice: system's, unasked */
+	IMSG_SYS_NOTICE,	/* nshd_notice: system's, unasked */
+	IMSG_SYS_FOLLOW,	/* nshd_follow: FOLLOWING, then text */
+	IMSG_SYS_FOLLOWING	/* system to config: the log is followed */
 };
 
 struct imsgev {

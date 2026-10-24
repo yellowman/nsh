@@ -90,7 +90,11 @@
  * ends; a commit not confirmed gone back, as system says; configure
  * exclusive taken or left; and, from the routing socket parent opened
  * for it, fd 5, interfaces or addresses changed, and the rtables whose
- * routes did, each said once a second at most.
+ * routes did, each said once a second at most. It may watch logs too:
+ * system follows each, as a stream, whose text config sends as notices
+ * until the watch drops the log or the stream ends, which config says.
+ * A watch is answered once system has followed each log it adds, or
+ * refused to.
  *
  * Told at its start that the boot is not done, config boots, as nsh -i
  * does, once there is a pipe to system: system says whether this boot
@@ -158,6 +162,8 @@ struct session {
 	int			 heldr;		/* and how it ended */
 	int			 perms;		/* NSHD_*, -1 until known */
 	int			 watch;		/* NSHD_WATCH_* */
+	int			 starting;	/* the follows its watch waits */
+	int			 watchr;	/* on, and how they went */
 };
 
 /* a request system has not finished, and the session that asked it */
@@ -170,10 +176,13 @@ struct request {
 	char			*text;		/* and its text, as it comes */
 	size_t			 len;
 	int			 bad;		/* past NSHD_PART */
+	int			 started;	/* a follow system said it began */
+	int			 stopped;	/* and one config stopped */
 };
 
 /* what a request's end does: answer the session, or what follows */
-enum { REQ_ANSWER, REQ_COMMIT, REQ_ROLLBACK, REQ_PERMS, REQ_TEXT, REQ_LOGIN };
+enum { REQ_ANSWER, REQ_COMMIT, REQ_ROLLBACK, REQ_PERMS, REQ_TEXT, REQ_LOGIN,
+    REQ_FOLLOW };
 
 /* the commit, and what it waits on */
 enum {
@@ -277,6 +286,10 @@ static int		 config_may(uint32_t, uint32_t);
 static void		 config_op(uint32_t, struct nshd_op *);
 static void		 config_watch(uint32_t, struct nshd_watch *);
 static void		 config_notice(int, int, uid_t, int, const char *);
+static void		 config_notice_to(uint32_t, int, uid_t, int,
+			    const char *, size_t);
+static struct request	*config_followed(struct session *, int);
+static void		 config_follow_end(struct request *, int32_t);
 static void		 config_route(int, short, void *);
 static void		 config_routed(int, short, void *);
 static struct session	*config_private(uint32_t);
@@ -531,6 +544,7 @@ config_dispatch_system(int fd, short event, void *arg)
 	struct nshd_result	 res;
 	struct nshd_notice	 nt;
 	struct request		*r;
+	struct session		*sp;
 	uint32_t		 type;
 	int			 n;
 	char			*p;
@@ -558,6 +572,23 @@ config_dispatch_system(int fd, short event, void *arg)
 				fatal("%s", __func__);
 			if (snap != NULL && r->id == snap->id) {
 				config_snapshot(r, type, &b);
+				break;
+			}
+			/* a log, as it comes, or why it is not followed */
+			if (r->kind == REQ_FOLLOW) {
+				if (type != IMSG_SYS_TEXT)
+					goto bad;
+				if (r->stopped || session_find(r->session) ==
+				    NULL)
+					break;
+				if (r->started)
+					config_notice_to(r->session,
+					    NSHD_NOTICE_LOG, 0, r->n,
+					    ibuf_data(&b), ibuf_size(&b));
+				else if (link_compose(&links[FRONTEND],
+				    IMSG_CTL_OUTPUT, r->session, ibuf_data(&b),
+				    ibuf_size(&b)) == -1)
+					fatal("%s", __func__);
 				break;
 			}
 			if (r->kind == REQ_COMMIT && commit != NULL &&
@@ -608,6 +639,8 @@ config_dispatch_system(int fd, short event, void *arg)
 				config_logged(r, res.status);
 			else if (r->kind == REQ_TEXT)
 				config_text(r, res.status);
+			else if (r->kind == REQ_FOLLOW)
+				config_follow_end(r, res.status);
 			else if (session_find(r->session) != NULL)
 				config_answer(r->session, res.status, NULL);
 			request_free(r);
@@ -620,6 +653,16 @@ config_dispatch_system(int fd, short event, void *arg)
 				goto bad;
 			config_notice(NSHD_WATCH_COMMITS, NSHD_NOTICE_BACK, 0,
 			    nt.n, NULL);
+			break;
+		case IMSG_SYS_FOLLOWING:
+			/* a follow begun, once */
+			if (imsg_get_len(&imsg) != 0 || r == NULL ||
+			    r->kind != REQ_FOLLOW || r->started)
+				goto bad;
+			r->started = 1;
+			if ((sp = session_find(r->session)) != NULL &&
+			    --sp->starting == 0)
+				config_answer(sp->id, sp->watchr, NULL);
 			break;
 		default:
 			goto bad;
@@ -1063,11 +1106,18 @@ config_op(uint32_t session, struct nshd_op *op)
 		fatal("%s", __func__);
 }
 
-/* what the session watches, from now on */
+/*
+ * What the session watches, from now on. Each log it adds system
+ * follows, or refuses to, before the watch is answered; each it drops
+ * is stopped
+ */
 static void
 config_watch(uint32_t session, struct nshd_watch *w)
 {
-	struct session	*sp;
+	struct nshd_follow	 f;
+	struct session		*sp;
+	struct request		*r;
+	int			 log;
 
 	if ((sp = session_find(session)) == NULL) {
 		config_answer(session, 1, "%% nshd: hello first\n");
@@ -1078,8 +1128,70 @@ config_watch(uint32_t session, struct nshd_watch *w)
 		    w->what & ~NSHD_WATCH_ALL);
 		return;
 	}
+	sp->watchr = 0;
+	for (log = NSHD_WATCH_DAEMON; log & NSHD_WATCH_LOGS; log <<= 1) {
+		r = config_followed(sp, log);
+		if (r != NULL && (w->what & log) == 0) {
+			r->stopped = 1;
+			if (link_compose(&links[SYSTEM], IMSG_SYS_STOP, r->id,
+			    NULL, 0) == -1)
+				fatal("%s", __func__);
+		} else if (r == NULL && (w->what & log) != 0) {
+			if ((r = config_request(session, REQ_FOLLOW)) ==
+			    NULL) {
+				if (imsg_text(links[FRONTEND].iev,
+				    IMSG_CTL_OUTPUT, session, IDS_GONE,
+				    strlen(IDS_GONE)) == -1)
+					fatal("%s", __func__);
+				sp->watchr = 1;
+				continue;
+			}
+			r->n = log;
+			memset(&f, 0, sizeof(f));
+			f.whose.session = session;
+			f.log = log;
+			if (link_compose(&links[SYSTEM], IMSG_SYS_FOLLOW, r->id,
+			    &f, sizeof(f)) == -1)
+				fatal("%s", __func__);
+			sp->starting++;
+		}
+	}
 	sp->watch = w->what;
-	config_answer(session, 0, NULL);
+	if (sp->starting == 0)
+		config_answer(session, sp->watchr, NULL);
+}
+
+/* the follow of log, for sp, not stopped, or NULL */
+static struct request *
+config_followed(struct session *sp, int log)
+{
+	struct request	*r;
+
+	TAILQ_FOREACH(r, &requests, entry)
+		if (r->session == sp->id && r->kind == REQ_FOLLOW &&
+		    r->n == log && !r->stopped)
+			return (r);
+	return (NULL);
+}
+
+/*
+ * A follow ended: refused, before it began, which the watch's answer
+ * says; or, unless the watch dropped it, ended, which a notice says
+ */
+static void
+config_follow_end(struct request *r, int32_t status)
+{
+	struct session	*sp;
+
+	if ((sp = session_find(r->session)) == NULL || r->stopped)
+		return;
+	if (r->started) {
+		config_notice_to(sp->id, NSHD_NOTICE_LOGEND, 0, r->n, NULL, 0);
+		return;
+	}
+	sp->watchr = 1;
+	if (--sp->starting == 0)
+		config_answer(sp->id, sp->watchr, NULL);
 }
 
 /*
@@ -1090,23 +1202,33 @@ static void
 config_notice(int what, int kind, uid_t uid, int n, const char *text)
 {
 	struct session		*sp;
+
+	TAILQ_FOREACH(sp, &sessions, entry)
+		if ((sp->watch & what) != 0)
+			config_notice_to(sp->id, kind, uid, n, text,
+			    text == NULL ? 0 : strnlen(text, NSHD_COMMENT - 1));
+}
+
+/* a notice of kind, about uid and n, with len of text, to session */
+static void
+config_notice_to(uint32_t session, int kind, uid_t uid, int n,
+    const char *text, size_t len)
+{
 	struct nshd_notice	 nt;
-	char			 buf[sizeof(nt) + NSHD_COMMENT];
-	size_t			 len = 0;
+	char			 buf[sizeof(nt) + NSHD_TEXT];
 
 	memset(&nt, 0, sizeof(nt));
 	nt.kind = kind;
 	nt.uid = uid;
 	nt.n = n;
 	memcpy(buf, &nt, sizeof(nt));
-	if (text != NULL) {
-		len = strnlen(text, NSHD_COMMENT - 1);
+	if (len > NSHD_TEXT)
+		len = NSHD_TEXT;
+	if (len > 0)
 		memcpy(buf + sizeof(nt), text, len);
-	}
-	TAILQ_FOREACH(sp, &sessions, entry)
-		if ((sp->watch & what) != 0 && link_compose(&links[FRONTEND],
-		    IMSG_CTL_NOTICE, sp->id, buf, sizeof(nt) + len) == -1)
-			fatal("%s", __func__);
+	if (link_compose(&links[FRONTEND], IMSG_CTL_NOTICE, session, buf,
+	    sizeof(nt) + len) == -1)
+		fatal("%s", __func__);
 }
 
 /*

@@ -527,6 +527,7 @@ Menu showlist[] = {
 	{ "smtp",	"SMTP server",		CMPL(ta) (char **)smcs, sizeof(struct prot1), 0, 1, pr_prot1 },
 	{ "ldap",	"LDAP server",		CMPL(ta) (char **)ldcs, sizeof(struct prot1), 0, 1, pr_prot1 },
 	{ "monitor",	"Monitor routing/arp table changes", CMPL0 0, 0, 0, 0, monitor },
+	{ "log",	"Follow daemon, messages, authlog or pflog, until ^C", CMPL0 0, 0, 1, 1, show_log },
 	{ "system-stats",	"System, firewall and kernel statistics", CMPL(ta) (char **)systatcs, sizeof(struct prot1), 0, 3, pr_prot1 },
 	{ "version",	"Software information",	CMPL0 0, 0, 0, 0, version },
 	{ "users",	"System users",		CMPL0 0, 0, 0, 0, who },
