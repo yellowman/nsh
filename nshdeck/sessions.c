@@ -32,8 +32,8 @@
  * shows, as nsh asks them, on a connection of its own, which parent
  * makes, and which closes when it is answered.
  *
- * A user's event streams have nshd watch commits, the kernel, and the
- * logs any of them follows, and each notice nshd sends goes to each
+ * A user's event streams have nshd watch commits, interfaces and routes,
+ * and the logs any of them follows, and each notice nshd sends goes to each
  * stream as an event, a log's only to those that follow it. A user with
  * no stream and nothing asked for DECK_IDLE seconds is logged out, as a
  * logout does, which closes the connection: nshd forgets the login, and
@@ -920,7 +920,7 @@ rewatch(struct user *u)
 	int		 want = 0;
 
 	TAILQ_FOREACH(s, &u->streams, entry)
-		want |= NSHD_WATCH_COMMITS | NSHD_WATCH_KERNEL | s->logs;
+		want |= NSHD_WATCH_COMMITS | NSHD_WATCH_ROUTING | s->logs;
 	if (want == u->watch || u->watching || u->state != U_READY)
 		return;
 	if ((p = calloc(1, sizeof(*p))) == NULL)

@@ -7,7 +7,7 @@
 "use strict";
 
 var stream = null;		/* the event stream, while one is open */
-var again = null;		/* the show to ask again on a kernel change */
+var again = null;		/* the show to ask again when the network changes */
 var againTimer = null;
 var LOGLINES = 2000;		/* log lines kept on the page, at most */
 
@@ -204,7 +204,7 @@ function noticed(d) {
 	list.insertBefore(li, list.firstChild);
 	while (list.children.length > 200)
 		list.removeChild(list.lastChild);
-	/* a show of the kernel's, asked again once it settles */
+	/* interfaces or routes changed: the show, asked again once they settle */
 	if ((d.kind === "links" || d.kind === "routes") && again &&
 	    $("show-again").checked && !document.hidden) {
 		clearTimeout(againTimer);

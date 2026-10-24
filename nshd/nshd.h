@@ -152,7 +152,7 @@ struct nshd_watch {
 	int32_t		what;
 };
 #define NSHD_WATCH_COMMITS	0x1	/* commits and configure exclusive */
-#define NSHD_WATCH_KERNEL	0x2	/* interfaces, addresses and routes */
+#define NSHD_WATCH_ROUTING	0x2	/* interfaces, addresses and routes */
 #define NSHD_WATCH_DAEMON	0x4	/* /var/log/daemon, followed */
 #define NSHD_WATCH_MESSAGES	0x8	/* /var/log/messages */
 #define NSHD_WATCH_AUTHLOG	0x10	/* /var/log/authlog, with admin */

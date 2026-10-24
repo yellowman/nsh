@@ -84,16 +84,16 @@
  * a session of its own, in place of what runs, which is committed, all
  * of it or none; then the candidate goes.
  *
- * A session may watch commits, configure exclusive, and the kernel's
- * interfaces, addresses and routes, and config sends it a notice,
- * unasked, as each changes: a commit saved, confirmed or applied, as it
- * ends; a commit not confirmed gone back, as system says; configure
- * exclusive taken or left; and, from the routing socket parent opened
- * for it, fd 5, interfaces or addresses changed, and the rtables whose
- * routes did, each said once a second at most. It may watch logs too:
- * system follows each, as a stream, whose text config sends as notices
- * until the watch drops the log or the stream ends, which config says.
- * A watch is answered once system has followed each log it adds, or
+ * A session may watch commits, configure exclusive, and interfaces,
+ * addresses and routes, and config sends it a notice, unasked, as each
+ * changes: a commit saved, confirmed or applied, as it ends; a commit
+ * not confirmed gone back, as system says; configure exclusive taken or
+ * left; and, from the routing socket parent opened for it, fd 5,
+ * interfaces or addresses changed, and the rtables whose routes did,
+ * each said once a second at most. It may watch logs too: system
+ * follows each, as a stream, whose text config sends as notices until
+ * the watch drops the log or the stream ends, which config says. A
+ * watch is answered once system has followed each log it adds, or
  * refused to.
  *
  * Told at its start that the boot is not done, config boots, as nsh -i
@@ -1303,15 +1303,15 @@ config_routed(int fd, short event, void *arg)
 	int	 i;
 
 	if (rt_links)
-		config_notice(NSHD_WATCH_KERNEL, NSHD_NOTICE_LINKS, 0, 0,
+		config_notice(NSHD_WATCH_ROUTING, NSHD_NOTICE_LINKS, 0, 0,
 		    NULL);
 	if (rt_all)
-		config_notice(NSHD_WATCH_KERNEL, NSHD_NOTICE_ROUTES, 0, -1,
+		config_notice(NSHD_WATCH_ROUTING, NSHD_NOTICE_ROUTES, 0, -1,
 		    NULL);
 	else
 		for (i = 0; i <= RT_TABLEID_MAX; i++)
 			if (rt_tables[i])
-				config_notice(NSHD_WATCH_KERNEL,
+				config_notice(NSHD_WATCH_ROUTING,
 				    NSHD_NOTICE_ROUTES, 0, i, NULL);
 	rt_links = rt_all = 0;
 	memset(rt_tables, 0, sizeof(rt_tables));
