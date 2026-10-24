@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; form-action 'none'; base-uri 'none'">
+<title>nshdeck</title>
+<link rel="stylesheet" href="style.css">
+<script src="app.js" defer></script>
+</head>
+<body>
+
+<form id="login" hidden>
+<h1>nshdeck</h1>
+<label>User <input name="user" autocomplete="username" required></label>
+<label>Password <input name="password" type="password" autocomplete="current-password" required></label>
+<button>Log in</button>
+<p class="error" id="login-error"></p>
+</form>
+
+<div id="deck" hidden>
+<header>
+<strong>nshdeck</strong>
+<span id="who"></span>
+<span id="where"></span>
+<span id="stream-state"></span>
+<button id="logout" type="button">Log out</button>
+</header>
+
+<nav>
+<button type="button" data-page="show" class="on">Show</button>
+<button type="button" data-page="config">Configuration</button>
+<button type="button" data-page="configure">Configure</button>
+<button type="button" data-page="op">Operation</button>
+<button type="button" data-page="events">Events</button>
+</nav>
+
+<section id="show">
+<form id="show-form">
+<input name="words" value="interface" aria-label="Show what" list="shows">
+<datalist id="shows">
+<option value="interface"><option value="route inet 0"><option value="route inet6 0">
+<option value="arp 0"><option value="ndp 0"><option value="ip"><option value="vlan">
+<option value="bridge"><option value="sadb"><option value="version"><option value="users">
+<option value="hostname"><option value="autoconf"><option value="dhcp leases">
+</datalist>
+<button>Show</button>
+<label><input type="checkbox" id="show-again"> again when the kernel changes</label>
+</form>
+<div id="show-out"></div>
+</section>
+
+<section id="config" hidden>
+<form id="config-form">
+<select name="what" aria-label="Which configuration">
+<option value="running">running</option>
+<option value="startup">startup</option>
+<option value="candidate">candidate</option>
+<option value="diff">diff</option>
+<option value="rollback">rollback</option>
+</select>
+<input name="n" type="number" min="0" max="49" value="0" aria-label="Rollback number">
+<button>Show</button>
+</form>
+<pre id="config-out"></pre>
+</section>
+
+<section id="configure" hidden>
+<form id="configure-form">
+<select name="mode" aria-label="Configure mode">
+<option value="private">private</option>
+<option value="shared">shared</option>
+<option value="exclusive">exclusive</option>
+<option value="terminal">terminal</option>
+</select>
+<button>Configure</button>
+<button type="button" id="exit">Exit</button>
+</form>
+<form id="line-form">
+<span id="prompt">nsh&gt;</span>
+<input name="line" aria-label="A line of configuration" autocomplete="off" spellcheck="false">
+<button>Enter</button>
+</form>
+<form id="commit-form">
+<input name="comment" placeholder="comment" aria-label="Commit comment">
+<input name="minutes" type="number" min="0" max="60" placeholder="minutes" aria-label="Minutes to confirm">
+<button>Commit</button>
+<button type="button" id="check">Commit check</button>
+<button type="button" id="diff">Diff</button>
+</form>
+<form id="rollback-form">
+<input name="n" type="number" min="0" max="49" value="0" aria-label="Rollback number">
+<button>Rollback</button>
+</form>
+<pre id="transcript"></pre>
+</section>
+
+<section id="op" hidden>
+<form id="op-form">
+<input name="line" placeholder="flush routes" aria-label="Operation" autocomplete="off">
+<input name="rtable" type="number" min="0" max="255" value="0" aria-label="Routing table">
+<button>Run</button>
+</form>
+<pre id="op-out"></pre>
+</section>
+
+<section id="events" hidden>
+<form id="events-form">
+<label><input type="checkbox" name="logs" value="daemon"> daemon</label>
+<label><input type="checkbox" name="logs" value="messages"> messages</label>
+<label><input type="checkbox" name="logs" value="pflog"> pflog</label>
+<button>Follow</button>
+</form>
+<ul id="notices"></ul>
+<pre id="log"></pre>
+</section>
+</div>
+
+</body>
+</html>

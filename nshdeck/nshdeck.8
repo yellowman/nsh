@@ -29,6 +29,13 @@ answers the requests of a web page, which
 passes it over FastCGI, with what
 .Xr nshd 8
 answers.
+The page shows each show as tables, the configuration as text, and
+takes lines of configuration, commits, rollbacks and operations, as
+.Xr nsh 8
+does; it follows
+.Nm nshd Ns 's
+notices and logs as they come, and shows a show again when the kernel
+changes, if asked.
 Each user logs in with a name and password, as
 .Nm nshd
 checks them, and has the permissions of the user's login class, without
@@ -219,12 +226,17 @@ uid, and the group www, which
 runs as.
 The socket is root's, mode 0660, group www.
 In
-.Xr httpd.conf 5 :
+.Xr httpd.conf 5 ,
+with the page at
+.Pa https://router/nshdeck/ :
 .Bd -literal -offset indent
 server "router" {
 	listen on * tls port 443
 	location "/nshdeck/api/*" {
 		fastcgi socket "/run/nshdeck.sock"
+	}
+	location "/nshdeck/*" {
+		root "/htdocs"
 	}
 }
 .Ed
@@ -245,6 +257,8 @@ Produce more verbose output.
 the socket
 .Xr httpd 8
 connects to
+.It Pa /var/www/htdocs/nshdeck
+the page
 .El
 .Sh SEE ALSO
 .Xr httpd.conf 5 ,

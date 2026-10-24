@@ -26,4 +26,13 @@ SRCS+=	log.c facts.c
 LDADD=	-levent -lutil
 DPADD=	${LIBEVENT} ${LIBUTIL}
 
+# the page, which httpd serves from its chroot
+HTDOCS?=/var/www/htdocs/nshdeck
+
+afterinstall:
+	${INSTALL} -d -o root -g wheel -m 755 ${DESTDIR}${HTDOCS}
+	${INSTALL} -c -o root -g wheel -m 444 ${.CURDIR}/htdocs/index.html \
+	    ${.CURDIR}/htdocs/app.js ${.CURDIR}/htdocs/style.css \
+	    ${DESTDIR}${HTDOCS}
+
 .include <bsd.prog.mk>

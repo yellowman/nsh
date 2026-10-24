@@ -194,7 +194,7 @@ show_facts(struct ctl_conn *c, char *words)
 		if (asprintf(&out, "%% show %s: not answered by nshd\n",
 		    words) == -1)
 			fatal("%s", __func__);
-		ret = show_answer(c->id, 1, out);
+		ret = show_answer(c->id, NSHD_ELSEWHERE, out);
 		free(out);
 		return (ret);
 	}

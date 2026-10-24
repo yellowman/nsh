@@ -68,6 +68,9 @@ struct nshd_result {
 	int32_t		status;
 };
 
+/* a show's status, from the process that does not answer it */
+#define NSHD_ELSEWHERE	2
+
 /*
  * an operation, nsh's words for it, which system runs as root, in the
  * rtable, the client's, and streams what it prints; its status how the

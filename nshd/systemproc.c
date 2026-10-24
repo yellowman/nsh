@@ -1036,7 +1036,8 @@ system_show(uint32_t id, char *words)
 
 	printed(NULL);
 	if ((a = facts_answer(words)) == NULL) {
-		system_end(id, 1, "%% show %s: not answered by nshd\n", words);
+		system_end(id, NSHD_ELSEWHERE,
+		    "%% show %s: not answered by nshd\n", words);
 		return;
 	}
 	facts_out_init(&o, system_emit, &id);

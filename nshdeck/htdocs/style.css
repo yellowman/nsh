@@ -1,0 +1,160 @@
+/* nshdeck's page: plain, readable, light or dark as the system is */
+:root {
+	--bg: #fdfdfc;
+	--fg: #1c1c1a;
+	--muted: #6b6b66;
+	--line: #d9d9d4;
+	--accent: #1f5fa8;
+	--error: #b3261e;
+	--code: #f2f2ee;
+	color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+	:root {
+		--bg: #161615;
+		--fg: #e6e6e1;
+		--muted: #9a9a93;
+		--line: #34342f;
+		--accent: #7fb0e8;
+		--error: #f2b8b5;
+		--code: #1f1f1d;
+	}
+}
+
+body {
+	margin: 0;
+	background: var(--bg);
+	color: var(--fg);
+	font: 15px/1.45 system-ui, sans-serif;
+}
+
+#login {
+	max-width: 20rem;
+	margin: 15vh auto;
+	padding: 0 1rem;
+	display: grid;
+	gap: 0.75rem;
+}
+
+#login label {
+	display: grid;
+	gap: 0.25rem;
+}
+
+header, nav, section {
+	padding: 0.5rem 1rem;
+}
+
+header {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 1rem;
+	align-items: center;
+	border-bottom: 1px solid var(--line);
+}
+
+header #logout {
+	margin-left: auto;
+}
+
+#who, #where, #stream-state {
+	color: var(--muted);
+}
+
+nav {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.25rem;
+	border-bottom: 1px solid var(--line);
+}
+
+nav button.on {
+	border-color: var(--accent);
+	color: var(--accent);
+}
+
+form {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.5rem;
+	align-items: center;
+	margin: 0.5rem 0;
+}
+
+input, select, button {
+	font: inherit;
+	color: inherit;
+	background: var(--bg);
+	border: 1px solid var(--line);
+	border-radius: 4px;
+	padding: 0.3rem 0.5rem;
+}
+
+input[name="words"], input[name="line"] {
+	flex: 1;
+	min-width: 12rem;
+	font-family: ui-monospace, monospace;
+}
+
+input[type="number"] {
+	width: 5rem;
+}
+
+button {
+	cursor: pointer;
+}
+
+pre {
+	background: var(--code);
+	padding: 0.5rem;
+	overflow: auto;
+	max-height: 60vh;
+	font: 13px/1.4 ui-monospace, monospace;
+	white-space: pre-wrap;
+}
+
+pre:empty {
+	display: none;
+}
+
+h2 {
+	font-size: 1rem;
+	margin: 1rem 0 0.25rem;
+}
+
+table {
+	border-collapse: collapse;
+	font: 13px/1.4 ui-monospace, monospace;
+	display: block;
+	overflow-x: auto;
+}
+
+th, td {
+	border-bottom: 1px solid var(--line);
+	padding: 0.2rem 0.75rem 0.2rem 0;
+	text-align: left;
+	vertical-align: top;
+}
+
+th {
+	color: var(--muted);
+	font-weight: normal;
+}
+
+#prompt {
+	font-family: ui-monospace, monospace;
+	color: var(--muted);
+}
+
+#notices {
+	list-style: none;
+	padding: 0;
+	font: 13px/1.4 ui-monospace, monospace;
+	max-height: 30vh;
+	overflow: auto;
+}
+
+.error {
+	color: var(--error);
+}

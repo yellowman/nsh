@@ -1,7 +1,7 @@
 #
 PROG= nsh
 
-SUBDIR += bgpnsh nshd
+SUBDIR += bgpnsh nshd nshdeck
 
 .PHONY: release dist
 
