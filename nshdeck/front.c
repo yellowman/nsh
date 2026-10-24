@@ -22,9 +22,10 @@
  * process of DECK_GROUP's can write to the socket. It takes the
  * request's endpoint, the last part of its path; its fields, from the
  * query of a GET or the form body of a POST, each named, once, with a
- * bound; and the cookie's token. A POST must say it is the page's, by
- * an X-Nshdeck header, which a page of another site cannot send without
- * asking first. The request goes to session as one message, zeroed
+ * bound; and the cookie's token. A request must say it is the page's,
+ * by an X-Nshdeck header, which a page of another site cannot send
+ * without asking first; but a stream, events or a terminal's, which
+ * the browser's EventSource asks for, and which cannot send it. The request goes to session as one message, zeroed
  * first; session's answer comes back to the connection as FastCGI
  * records, and the connection closes. front sends session nothing of
  * an answer's until the client has written what it was sent, when it
@@ -33,9 +34,11 @@
  * An event stream stays open, a comment written to it each
  * DECK_KEEPALIVE seconds so httpd does not time it out. Its events wait
  * in front until the client has written what it was sent, then go to it
- * together; past DECK_UNREAD bytes waiting, the oldest go, and the
- * client is sent a dropped event in their place, so it knows to ask
- * again for what it shows. front takes no more than DECK_CONNS
+ * together, and session hears so, as it does of an answer; past
+ * DECK_UNREAD bytes waiting, the oldest go, and the client is sent a
+ * dropped event in their place, so it knows to ask again for what it
+ * shows. A terminal's stream never comes to that: session sends it
+ * only DECK_WINDOW messages front has not written. front takes no more than DECK_CONNS
  * connections, and a request that does not arrive whole within
  * DECK_ARRIVE seconds is closed.
  */
@@ -130,6 +133,10 @@ struct params {
 #define F_COMMENT	0x400
 #define F_LOGS		0x800
 #define F_HELP		0x1000
+#define F_KEYS		0x2000
+#define F_ROWS		0x4000
+#define F_COLS		0x8000
+#define F_TERMINAL	0x10000
 static const struct endpoint {
 	const char	*name;
 	int		 kind;
@@ -148,6 +155,9 @@ static const struct endpoint {
 	{ "rollback",	DECK_ROLLBACK,	1, F_N },
 	{ "op",		DECK_OP,	1, F_LINE | F_RTABLE },
 	{ "complete",	DECK_COMPLETE,	0, F_LINE | F_HELP },
+	{ "terminal",	DECK_TERMINAL,	0, F_ROWS | F_COLS },
+	{ "type",	DECK_TYPE,	1, F_TERMINAL | F_KEYS | F_ROWS |
+	    F_COLS },
 	{ "events",	DECK_EVENTS,	0, F_LOGS },
 };
 
@@ -338,7 +348,7 @@ front_io(int fd, short event, void *arg)
 			/* session may send more of the answer */
 			if (c->events)
 				front_events(c, 0);
-			else if (c->asked)
+			if (c->asked && c->outoff == c->outlen)
 				pipe_compose(&session, DECK_READ, c->id, -1,
 				    NULL, 0);
 		}
@@ -454,7 +464,8 @@ front_request(struct conn *c)
 		return (0);
 	}
 	/* a page of another site cannot set this without asking */
-	if (e->kind != DECK_EVENTS && strcmp(p.xdeck, "1") != 0) {
+	if (e->kind != DECK_EVENTS && e->kind != DECK_TERMINAL &&
+	    strcmp(p.xdeck, "1") != 0) {
 		front_error(c, 403, "not the page's");
 		return (0);
 	}
@@ -562,7 +573,8 @@ front_fields(const char *form, int fields, struct deck_request *r)
 		{ "mode", F_MODE }, { "line", F_LINE }, { "rtable", F_RTABLE },
 		{ "check", F_CHECK }, { "minutes", F_MINUTES },
 		{ "comment", F_COMMENT }, { "logs", F_LOGS },
-		{ "help", F_HELP },
+		{ "help", F_HELP }, { "keys", F_KEYS }, { "rows", F_ROWS },
+		{ "cols", F_COLS }, { "terminal", F_TERMINAL },
 	};
 	char		 key[16], value[NSHD_LINE];
 	const char	*p, *eq, *end;
@@ -627,6 +639,7 @@ front_field(int f, const char *v, struct deck_request *r)
 	case F_WORDS:
 		return (strlcpy(r->text, v, NSHD_WORDS) >= NSHD_WORDS ? -1 : 0);
 	case F_LINE:
+	case F_KEYS:
 		return (strlcpy(r->text, v, sizeof(r->text)) >=
 		    sizeof(r->text) ? -1 : 0);
 	case F_COMMENT:
@@ -658,6 +671,15 @@ front_field(int f, const char *v, struct deck_request *r)
 		return (errstr == NULL ? 0 : -1);
 	case F_HELP:
 		r->n = strtonum(v, 0, 1, &errstr);
+		return (errstr == NULL ? 0 : -1);
+	case F_TERMINAL:
+		r->n = strtonum(v, 1, DECK_TERMINALS, &errstr);
+		return (errstr == NULL ? 0 : -1);
+	case F_ROWS:
+		r->rows = strtonum(v, 1, NSHD_TERMSIZE, &errstr);
+		return (errstr == NULL ? 0 : -1);
+	case F_COLS:
+		r->cols = strtonum(v, 1, NSHD_TERMSIZE, &errstr);
 		return (errstr == NULL ? 0 : -1);
 	case F_MINUTES:
 		r->minutes = strtonum(v, 0, NSHD_CONFIRMMAX, &errstr);

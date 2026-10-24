@@ -84,6 +84,13 @@ code: it asks
 .Nm nshd
 for the command tables once, and for the names of interfaces, groups,
 bridges and routing tables on each completion.
+It asks
+.Nm nshd
+for each terminal a user opens;
+.Nm nshd
+starts
+.Xr nsh 8
+as the user and passes back its pseudo-terminal.
 .El
 .Pp
 If one of them ends,
@@ -93,8 +100,10 @@ ends.
 The last part of a request's path names it.
 A GET has its fields in its query, and a POST in a form body, of type
 application/x-www-form-urlencoded; a field may be given once.
-Every request but
+Every request but a stream,
 .Cm events
+or
+.Cm terminal ,
 must have the header
 .Ql X-Nshdeck: 1 ,
 which a page of another site cannot send without asking the browser
@@ -206,6 +215,46 @@ does not close it.
 If the browser falls more than 1 MB behind, the oldest events it has
 not been sent are dropped, and it is sent a dropped event in their
 place, so that it asks again for what it shows.
+.It Cm terminal
+GET, with
+.Ar rows
+and
+.Ar cols ,
+each from 1 to 1000, 24 and 80 if not given.
+A terminal:
+.Xr nsh 8
+on a pseudo-terminal, as the user, as
+.Nm nshd
+starts it.
+A stream of events, as
+.Cm events
+is: first a terminal event, with
+.Ar n ,
+the terminal's number, from 1 to 4; then an out event for what
+.Xr nsh 8
+writes, as it comes, in base64; and at the end an end event, with
+.Ar text ,
+which says why it ended.
+The stream is sent only as fast as the browser reads it, and nothing
+of it is dropped.
+The terminal ends when its stream does,
+.Xr nsh 8
+ends, or the user logs out.
+A user may have 4 terminals.
+.It Cm type
+POST, with
+.Ar terminal ,
+its number,
+.Ar keys ,
+what was typed in it, up to 1023 bytes, and
+.Ar rows
+and
+.Ar cols ,
+for its new size.
+What was typed goes to
+.Xr nsh 8
+as it takes it; past 64 KB that it has not taken, the request is
+refused, with 503.
 .El
 .Pp
 Each answer but an event stream's is a JSON object.
@@ -234,7 +283,7 @@ method, 413 for a body over 8192 bytes, 415 for a POST that is not a
 form, and 503 when
 .Nm nshd
 does not answer, or too many users are logged in or a user has too
-many requests waiting.
+many requests waiting or terminals.
 .Pp
 A user's requests go to
 .Nm nshd
@@ -242,8 +291,8 @@ one at a time, and at most 16 wait.
 A long answer is read from
 .Nm nshd
 only as fast as the client reads it.
-A user with no event stream open and no request for 30 minutes is
-logged out.
+A user with no event stream or terminal open and no request for 30
+minutes is logged out.
 At most 64 users may be logged in, and
 .Nm
 takes at most 128 connections.

@@ -32,6 +32,7 @@
 #define DECK_IDLE	(30 * 60)	/* seconds a session lasts unused */
 #define DECK_WINDOW	16		/* an answer's messages front has */
 					/* not written, at most */
+#define DECK_TERMINALS	4		/* a user's terminals, at most */
 
 /* what a request asks */
 enum deck_kind {
@@ -47,6 +48,8 @@ enum deck_kind {
 	DECK_ROLLBACK,
 	DECK_OP,
 	DECK_COMPLETE,
+	DECK_TERMINAL,
+	DECK_TYPE,
 	DECK_EVENTS
 };
 
@@ -59,16 +62,20 @@ struct deck_request {
 	char		token[DECK_TOKEN + 1];	/* the cookie's, or "" */
 	char		text[NSHD_LINE];	/* a user's name, a show's */
 						/* words, a line, an */
-						/* operation, a configuration */
+						/* operation, a configuration, */
+						/* what a terminal was typed */
 	char		password[NSHD_PASSWORD];
 	char		comment[NSHD_COMMENT];
 	int32_t		n;		/* rollback's n, an operation's */
-					/* rtable, which configure, or */
-					/* 1 for a completion's help */
+					/* rtable, which configure, 1 for */
+					/* a completion's help, or a */
+					/* terminal's number */
 	int32_t		minutes;	/* commit confirmed's */
 	int32_t		check;		/* commit check */
 	int32_t		logs;		/* the logs events follow, as */
 					/* NSHD_WATCH_* */
+	int32_t		rows;		/* a terminal's size, or 0 */
+	int32_t		cols;
 };
 
 /* session to front: how an answer begins */
