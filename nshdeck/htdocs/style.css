@@ -11,8 +11,6 @@
 	--dim: #cbcbce;
 	--faint: #98989d;
 	--select: #ffffff12;
-	--track: #ffffff1c;
-	--segment: #48484a;
 	--accent: #0a84ff;
 	--soft: #193356;
 	--soft-ink: #a9cdff;
@@ -20,8 +18,6 @@
 	--warn: #ffb340;
 	--bad: #ff8f80;
 	--ring: inset 0 0 0 .5px #ffffff24, 0 .5px 1px #000;
-	--card: inset 0 0 0 .5px #ffffff1f, 0 1px 4px #0006;
-	--pop: 0 0 0 .5px #ffffff24, 0 12px 36px #000000b3;
 	--focus: 0 0 0 3px color-mix(in srgb, var(--accent) 45%, transparent);
 	--mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono",
 	    monospace;
@@ -42,16 +38,12 @@
 		--dim: #55555a;
 		--faint: #8e8e93;
 		--select: #0000000d;
-		--track: #00000014;
-		--segment: #ffffff;
 		--soft: #dae9fe;
 		--soft-ink: #1e579f;
 		--on: #248a3d;
 		--warn: #c93400;
 		--bad: #d70015;
 		--ring: inset 0 0 0 .5px #00000029, 0 .5px 1.5px #0000001a;
-		--card: inset 0 0 0 .5px #00000029, 0 1px 3px #00000014;
-		--pop: 0 0 0 .5px #00000029, 0 12px 36px #00000029;
 		color-scheme: light;
 	}
 }
@@ -168,8 +160,7 @@ input.nope {
 	margin: 14vh auto 0;
 	padding: 28px;
 	background: var(--raise);
-	border-radius: 12px;
-	box-shadow: var(--pop);
+	border: 1px solid var(--line);
 	display: grid;
 	gap: 12px;
 }
@@ -357,10 +348,7 @@ main {
 /* a segmented control: radio buttons on a track, the one chosen raised */
 .seg {
 	display: inline-flex;
-	gap: 2px;
-	padding: 2px;
-	border-radius: 7px;
-	background: var(--track);
+	border: 1px solid var(--line);
 }
 
 .seg > label {
@@ -380,8 +368,12 @@ main {
 .seg span {
 	display: block;
 	padding: 2px 11px;
-	border-radius: 5px;
 	line-height: 20px;
+	color: var(--dim);
+}
+
+.seg > label + label span {
+	border-left: 1px solid var(--line);
 }
 
 .seg > label:hover input:not(:checked) + span {
@@ -389,12 +381,12 @@ main {
 }
 
 .seg input:checked + span {
-	background: var(--segment);
-	box-shadow: var(--ring);
+	color: var(--text);
+	box-shadow: inset 0 -2px 0 var(--accent);
 }
 
 .seg input:focus-visible + span {
-	box-shadow: var(--ring), var(--focus);
+	box-shadow: inset 0 0 0 1px var(--accent);
 }
 
 /* status dots; on the box's face, LEDs that glow */
@@ -694,8 +686,7 @@ main {
 
 .group {
 	background: var(--panel);
-	border-radius: 10px;
-	box-shadow: var(--card);
+	border: 1px solid var(--line);
 	padding: 6px;
 }
 
@@ -747,9 +738,7 @@ table.grid {
 	width: 100%;
 	border-collapse: collapse;
 	background: var(--panel);
-	border-radius: 10px;
-	box-shadow: var(--card);
-	overflow: hidden;
+	border: 1px solid var(--line);
 }
 
 .grid th {
@@ -844,9 +833,8 @@ table.grid {
 }
 
 .igroup {
-	border-radius: 8px;
 	background: var(--panel);
-	box-shadow: var(--card);
+	border: 1px solid var(--line);
 }
 
 .igroup summary {
@@ -999,20 +987,18 @@ textarea.rules {
 	font: 12px/1.45 var(--mono);
 	color: var(--text);
 	background: var(--field);
-	border: 0;
-	border-radius: 6px;
-	box-shadow: var(--ring);
+	border: 1px solid var(--line);
 	white-space: pre;
 	overflow: auto;
 }
 
 textarea.rules:focus {
 	outline: none;
-	box-shadow: var(--ring), var(--focus);
+	border-color: var(--accent);
 }
 
 textarea.rules.edited {
-	box-shadow: inset 2px 0 0 var(--warn), var(--ring);
+	box-shadow: inset 2px 0 0 var(--warn);
 }
 
 .igroup > .help, .igroup > .bar, .igroup > .cliline, .igroup > pre.term {
@@ -1103,8 +1089,8 @@ button.preset {
 pre.term {
 	margin: 0;
 	padding: 10px 12px;
-	background: color-mix(in srgb, var(--text) 4%, var(--field));
-	border-radius: 6px;
+	background: var(--field);
+	border: 1px solid var(--line);
 	max-height: 340px;
 	min-height: 60px;
 	overflow: auto;
@@ -1128,8 +1114,7 @@ pre.term {
 	display: none;
 	margin: 0;
 	padding: 10px 12px;
-	border-radius: 6px;
-	background: color-mix(in srgb, var(--text) 3%, transparent);
+	border: 1px solid var(--line);
 	color: var(--dim);
 }
 
@@ -1232,14 +1217,12 @@ button.twisty[aria-expanded=true]::before {
 	padding: 8px;
 	overflow: hidden;
 	background: #0b0d10;
-	border-radius: 10px;
-	box-shadow: var(--card);
+	border: 1px solid var(--line);
 }
 
 .panel {
 	background: var(--panel);
-	border-radius: 10px;
-	box-shadow: var(--card);
+	border: 1px solid var(--line);
 	padding: 12px;
 }
 
@@ -1267,8 +1250,7 @@ button.twisty[aria-expanded=true]::before {
 	max-width: 640px;
 	overflow: auto;
 	background: var(--raise);
-	border-radius: 8px;
-	box-shadow: var(--pop);
+	border: 1px solid var(--line);
 	padding: 4px;
 }
 
@@ -1277,7 +1259,6 @@ button.twisty[aria-expanded=true]::before {
 	grid-template-columns: minmax(90px, auto) 1fr;
 	gap: 14px;
 	padding: 3px 8px;
-	border-radius: 5px;
 	cursor: pointer;
 	font-size: 12px;
 }
@@ -1313,11 +1294,9 @@ button.twisty[aria-expanded=true]::before {
 dialog {
 	background: var(--raise);
 	color: var(--text);
-	border: 0;
-	border-radius: 12px;
+	border: 1px solid var(--line);
 	padding: 20px;
 	width: 400px;
-	box-shadow: var(--pop);
 }
 
 dialog::backdrop {
