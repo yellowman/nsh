@@ -2444,8 +2444,8 @@ commit_apply(int step)
 		a.clears[i].rtable = p->clears[i].rtable;
 		a.clears[i].keep = p->clears[i].keep;
 	}
-	if (commit_part(NSHD_SCRIPT, p->text[PLAN_SCRIPT],
-	    p->len[PLAN_SCRIPT]) == -1)
+	if (commit_part(NSHD_SCRIPT, p->text[PLAN_EDITS],
+	    p->len[PLAN_EDITS]) == -1)
 		return;
 	commit_request(step, IMSG_SYS_APPLY, &a, sizeof(a));
 }

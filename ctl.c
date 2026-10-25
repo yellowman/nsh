@@ -61,6 +61,8 @@ static int ctl_exec(char *, char **);
 static int ctl_cand(struct daemons *, struct ctl *, char **);
 static int ctl_cand_takes(struct ctl *);
 static int ctl_isedit(struct ctl *);
+static int ctl_run(struct daemons *, struct ctl *, char **, char *);
+static struct ctl *ctl_actrow(struct daemons *, int);
 static int ctl_cand_edit(struct daemons *, char *, char **);
 static int ctl_cand_test(struct daemons *, char *, char **);
 static int ctl_cand_stage(struct daemons *, char *, char *, char *,
@@ -705,10 +707,9 @@ ctlhandler(int argc, char **argv, ...)
 	struct ctl *x;
 	char tmpfile[PATH_MAX];
 	char *step_args[NOPTFILL] = { NULL, NULL, NULL, NULL, NULL, NULL };
-	char *tmp_args[NOPTFILL] = { NULL, NULL, NULL, NULL, NULL, NULL };
 	char **fillargs;
 	int rv = 0;
-	int nargs, r;
+	int r;
 	va_list ap;
 	char *modhvar;
 
@@ -813,6 +814,21 @@ ctlhandler(int argc, char **argv, ...)
 		goto done;
 	}
 
+	rv = ctl_run(daemons, x, fillargs, tmpfile);
+done:
+	return rv;
+}
+
+/*
+ * x, of daemon d's table, run with fillargs, its file tmpfile, and the
+ * state x leaves d in kept: as x's handler or program returns
+ */
+static int
+ctl_run(struct daemons *d, struct ctl *x, char **fillargs, char *tmpfile)
+{
+	char *tmp_args[NOPTFILL] = { NULL, NULL, NULL, NULL, NULL, NULL };
+	int nargs, rv = 0;
+
 	switch(x->type) {
 		/* fill_tmpfile will return 0 if tmpfile or args are NULL */
 	case T_HANDLER:
@@ -823,7 +839,7 @@ ctlhandler(int argc, char **argv, ...)
 			rv = (*x->handler)(nargs, tmp_args);
 		} else {
 			printf("%% handler %s %s requires too many "
-			    "arguments: %d\n", hname, argv[1], nargs);
+			    "arguments: %d\n", d->name, x->name, nargs);
 			rv = -1;
 		}
 	break;
@@ -844,9 +860,176 @@ ctlhandler(int argc, char **argv, ...)
 	}
 
 	if (rv == 0 && x->flag_x != 0)
-		rv = flag_x("ctl", daemons->name, x->flag_x, NULL);
-done:
+		rv = flag_x("ctl", d->name, x->flag_x, NULL);
 	return rv;
+}
+
+/* The place in ctl_daemons of the daemon called name, or -1 */
+int
+ctl_daemon(char *name)
+{
+	int d;
+
+	for (d = 0; ctl_daemons[d].name != NULL; d++)
+		if (strcmp(ctl_daemons[d].name, name) == 0)
+			return d;
+	return -1;
+}
+
+/*
+ * What a configuration has daemon d do that word names in its table, as
+ * a commit's edits name it: the state it is left in, the flag of its
+ * first row with that flag, or CTL_ACT_FOLLOW, what follows its rules.
+ * -1 if word names neither: an operation, or no row
+ */
+int
+ctl_act(int d, char *word)
+{
+	struct daemons *dm = &ctl_daemons[d];
+	struct ctl *x;
+
+	x = (struct ctl *)genget(word, (char **)dm->table, sizeof(struct ctl));
+	if (x == NULL || Ambiguous(x))
+		return -1;
+	if (x == ctl_actrow(dm, CTL_ACT_FOLLOW))
+		return CTL_ACT_FOLLOW;
+	if (x->flag_x != 0 && x == ctl_actrow(dm, x->flag_x))
+		return x->flag_x;
+	return -1;
+}
+
+/*
+ * d's row that act names (ctl_act()): the reload that follows pf's or
+ * ipsec's rules, crontab's install, or the first with the flag of a
+ * state; or NULL. No act names any other row
+ */
+static struct ctl *
+ctl_actrow(struct daemons *d, int act)
+{
+	struct ctl *x;
+	char *follow = NULL;
+
+	switch (act) {
+	case CTL_ACT_FOLLOW:
+		if (d->doreload)
+			follow = "reload";
+		else if (d->table == ctl_crontab)
+			follow = "install";
+		for (x = d->table; follow != NULL && x->name != NULL; x++)
+			if (strcmp(x->name, follow) == 0)
+				return x;
+		return NULL;
+	case DB_X_ENABLE:
+	case DB_X_ENABLE_DEFAULT:
+	case DB_X_DISABLE:
+	case DB_X_DISABLE_ALWAYS:
+		for (x = d->table; x->name != NULL; x++)
+			if (x->flag_x == act)
+				return x;
+	}
+	return NULL;
+}
+
+/*
+ * Is d a daemon, and act what a configuration has it do (ctl_act()), or
+ * CTL_ACT_RULES, and d has rules?
+ */
+int
+ctl_takes(int d, int act)
+{
+	int n;
+
+	for (n = 0; ctl_daemons[n].name != NULL; n++)
+		;
+	if (d < 0 || d >= n)
+		return 0;
+	if (act == CTL_ACT_RULES)
+		return ctl_daemons[d].tmpfile != NULL;
+	return ctl_actrow(&ctl_daemons[d], act) != NULL;
+}
+
+/*
+ * Daemon d does act (ctl_takes()), in cli_rtable, as ctlhandler() runs
+ * its line: as it returns
+ */
+int
+ctl_do(int d, int act)
+{
+	struct daemons *dm = &ctl_daemons[d];
+	struct ctl *x = ctl_actrow(dm, act);
+	char tmpfile[PATH_MAX] = "", *argv[] = { dm->name, x->name, NULL };
+	char *step_args[NOPTFILL] = { NULL, NULL, NULL, NULL, NULL, NULL };
+	char **fillargs;
+
+	if (cli_rtable > dm->rtablemax) {
+		printf("%% Command %s not available via rtable %d\n",
+		    dm->name, cli_rtable);
+		return -1;
+	}
+	snprintf(table, sizeof(table), "-T%d", cli_rtable);
+	if (dm->tmpfile)
+		snprintf(tmpfile, sizeof(tmpfile), "%s.%d", dm->tmpfile,
+		    cli_rtable);
+	if ((fillargs = step_optreq(x->args, step_args, 2, argv, 2)) == NULL)
+		return -1;
+	return ctl_run(dm, x, fillargs, tmpfile);
+}
+
+/*
+ * Daemon d's rules in cli_rtable made text, len bytes, its lines, each
+ * ending in a newline, as the lines of a script's rules block were
+ * written: -1 if they could not be, said, else 0. A commit without
+ * admin writes no line from the first that needs it, and a file it
+ * wrote no line of stays as it was
+ */
+int
+ctl_setrules(int d, char *text, size_t len)
+{
+	struct daemons *dm = &ctl_daemons[d];
+	char path[PATH_MAX], *t, *p, *l;
+	FILE *f = NULL;
+	int r = 0;
+
+	if (cli_rtable > dm->rtablemax) {
+		printf("%% Command %s not available via rtable %d\n",
+		    dm->name, cli_rtable);
+		return -1;
+	}
+	if (dm->tmpfile == NULL) {
+		printf("%% %s has no rules\n", dm->name);
+		return -1;
+	}
+	snprintf(path, sizeof(path), "%s.%d", dm->tmpfile, cli_rtable);
+	if ((t = p = strndup(text, len)) == NULL) {
+		printf("%% ctl_setrules: %s\n", strerror(errno));
+		return -1;
+	}
+	admin_cont = 0;
+	while ((l = strsep(&p, "\n")) != NULL && (p != NULL || *l != '\0')) {
+		if (admin_limited && (admin_refused ||
+		    admin_kept(dm, cli_rtable, l, &admin_cont))) {
+			admin_refused = 1;
+			r = -1;
+			break;
+		}
+		/* the file, made at its first line, as the rc file's was */
+		if (f == NULL) {
+			if ((f = fopen(path, "w")) == NULL) {
+				printf("%% error opening %s for writing: %s\n",
+				    path, strerror(errno));
+				r = -1;
+				break;
+			}
+			fchmod(fileno(f), dm->mode);
+		}
+		fprintf(f, "%s\n", l);
+	}
+	if (f != NULL && fclose(f) == EOF) {
+		printf("%% %s: %s\n", path, strerror(errno));
+		r = -1;
+	}
+	free(t);
+	return r;
 }
 
 /*

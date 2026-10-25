@@ -2531,8 +2531,8 @@ system_job_child(int fd, struct job *j)
 	switch (j->kind) {
 	case JOB_APPLY:
 		memset(&sc, 0, sizeof(sc));
-		sc.text = parts[NSHD_SCRIPT];
-		sc.len = partlen[NSHD_SCRIPT];
+		sc.edits = parts[NSHD_SCRIPT];
+		sc.elen = partlen[NSHD_SCRIPT];
 		for (i = 0; i < j->apply->nclears; i++) {
 			strlcpy(sc.clears[i].name, j->apply->clears[i].name,
 			    sizeof(sc.clears[i].name));

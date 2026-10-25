@@ -207,6 +207,23 @@ int conf_save(void);
 int conf_mode(char *);
 int conf_ordered(char *);
 
+/* A command a configuration has (conf_cmd()) */
+struct confcmd {
+	char	*name;
+	int	(*handler)(int, char **, ...);
+	int	 flags;
+};
+#define CF_NO		0x1	/* a top-level one takes no */
+#define CF_IF		0x2	/* it heads an interface's block */
+#define CF_BRIDGE	0x4	/* a bridge's */
+#define CF_RTABLE	0x8	/* an rtable's */
+const struct confcmd *conf_cmd(int, int);
+int conf_find(int, char *, char **);
+int conf_run(int, int, int, char **, char *);
+void conf_reading(int);
+void conf_block_end(int);
+void conf_settle(void);
+
 /* prompt.c */
 char *iprompt(void);
 char *cprompt(void);
@@ -219,6 +236,7 @@ extern char saved_prompt[sizeof(prompt)];
 int group (int, char **, ...);
 void gen_help(char **, char *, char *, int);
 int makeargv(void);
+int argsplit(char *, char **, size_t);
 extern size_t cursor_argc;
 extern size_t cursor_argo;
 
@@ -700,8 +718,10 @@ int cand_write(FILE *);
 #define COMMENTMAX	256	/* a commit's comment, with its NUL */
 /* What makes one configuration read as another */
 struct script {
-	char *text;			/* lines, as cmdrc() reads them */
+	char *text;			/* lines, as conf() prints them */
 	size_t len;
+	char *edits;			/* what system runs (script_run()) */
+	size_t elen;
 	struct {
 		char name[32];
 		int rtable;
@@ -737,7 +757,6 @@ int commit_recover(char *, size_t);
 int rollback_text(int, FILE *);
 int rollback_diff(int, FILE *);
 void rollback_list(FILE *);
-int script_make(struct cnode *, struct cnode *, struct script *);
+int script_make(struct cnode *, struct cnode *, struct script *, int);
 int script_run(struct script *);
 void script_free(struct script *);
-extern int in_script;

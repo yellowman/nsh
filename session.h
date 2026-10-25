@@ -32,7 +32,7 @@ struct session_state;
 struct cnode;
 
 /* What a commit runs, from session_plan(), in the parts nshd sends */
-#define PLAN_SCRIPT	0	/* the script, then the one back */
+#define PLAN_EDITS	0	/* the script's edits, then the way back's */
 #define PLAN_BEFORE	1	/* the running configuration, as text */
 #define PLAN_WANT	2	/* the candidate, as text */
 #define PLAN_PARTS	3
@@ -60,6 +60,8 @@ struct plan {
 	int		 ntests;
 	int		 bad;		/* the problems found, but theirs */
 	int		 checking;	/* commit check */
+	int		 boot;		/* the boot's: a line not configuration
+					   is left out (script_make()) */
 	struct cnode	*was, *want;
 };
 

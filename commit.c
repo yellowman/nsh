@@ -18,8 +18,7 @@
  * commit: make the candidate the running configuration, and save it.
  *
  * What differs between the running configuration and the candidate
- * becomes a script in the form cmdrc() reads, and cmdrc() runs it
- * through the commands that run nshrc at boot. First what goes, in
+ * becomes a script, lines as conf() prints them. First what goes, in
  * the reverse of the order conf() prints it, then what comes, in that
  * order:
  *
@@ -34,8 +33,14 @@
  *  * a daemon's rules come whole, and what conf() prints after them,
  *    its reload or install, comes when they are new or it starts.
  *
- * script_make() makes the script from the two trees alone, and
- * script_run() runs it, so one process may make what another runs.
+ * script_make() makes the script from the two trees alone, and its
+ * edits from the script: each line a record that names its command by
+ * its place among the commands a configuration has (conf_cmd(),
+ * ctl_act()), and nothing else, with its words. script_run() runs the
+ * edits, so one process may make what another runs, and what runs them
+ * reads no command's name: it runs the command an edit's place names,
+ * and a record that names no such place, or one where it does not
+ * belong, stops all of them before any runs.
  *
  * Then the running configuration must read as the candidate does, but
  * for a physical interface the candidate has no block for, which keeps
@@ -79,6 +84,7 @@
 #include <pwd.h>
 #include <signal.h>
 #include <stdarg.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -124,8 +130,24 @@ struct claims {
 	size_t n;
 };
 
-/* script_run() runs a script, which takes configuration alone */
-int in_script;
+/*
+ * A script's edits: records, each this head and len bytes after it. A
+ * line's are its words, each ending in a NUL, after its command's name
+ * and its no; a daemon's rules are their lines, each ending in a newline
+ */
+struct edit {
+	uint8_t		kind;		/* EDIT_* */
+	uint8_t		no;		/* the line's no */
+	uint16_t	row;		/* its command's place, or its daemon's */
+	int32_t		act;		/* what the daemon does (ctl_act()) */
+	uint32_t	len;
+};
+#define EDIT_TOP	1	/* a top-level statement, CTX_TOP's */
+#define EDIT_IF		2	/* a line of an interface's block, CTX_IF's */
+#define EDIT_BRIDGE	3	/* of a bridge's, CTX_BRIDGE's */
+#define EDIT_END	4	/* a block's end */
+#define EDIT_RULES	5	/* a daemon's rules */
+#define EDIT_DAEMON	6	/* a daemon's state, or what follows its rules */
 
 /* in nshd's config, the tests of rules check() keeps for system */
 static struct plan_test *deferred;
@@ -142,6 +164,12 @@ static const struct {
 
 static int take(struct cnode *, struct cnode *);
 static int check(struct cnode *, struct cnode *);
+static int edits_make(struct script *, int);
+static int edits_line(FILE *, int, char *, int *, int *, char *);
+static int edit_put(FILE *, struct edit *, char **, int, char *, size_t);
+static int edits_check(char *, size_t);
+static int edit_words(char *, size_t, char **, int);
+static int edits_apply(char *, size_t);
 static int check_if(struct cnode *, char *, char *, struct claims *);
 static int check_ports(struct cnode *, char *, char *, char *,
     struct claims *);
@@ -1014,7 +1042,7 @@ apply(struct cnode *from, struct cnode *to)
 	struct script s;
 	int ret;
 
-	if (script_make(from, to, &s) == -1)
+	if (script_make(from, to, &s, 0) == -1)
 		return -1;
 	ret = script_run(&s);
 	script_free(&s);
@@ -1022,11 +1050,13 @@ apply(struct cnode *from, struct cnode *to)
 }
 
 /*
- * The script that makes from read as to, into s, from the trees alone;
- * -1 if it could not be made, said why
+ * The script that makes from read as to, into s, from the trees alone,
+ * and its edits; -1 if it could not be made, said why. A line that is
+ * not configuration has no edit: with skip, as at boot, it is said and
+ * left out, else none are made
  */
 int
-script_make(struct cnode *from, struct cnode *to, struct script *s)
+script_make(struct cnode *from, struct cnode *to, struct script *s, int skip)
 {
 	struct commit c;
 	int ret = -1;
@@ -1046,45 +1076,28 @@ script_make(struct cnode *from, struct cnode *to, struct script *s)
 		printf("%% commit: %s\n", strerror(errno));
 		ret = -1;
 	}
+	if (ret == 0)
+		ret = edits_make(s, skip);
 	if (ret == -1)
 		script_free(s);
 	return ret;
 }
 
 /*
- * Run s, as cmdrc() runs nshrc at boot: -1 if it could not run, 1 if a
- * line of it failed, or rules it clears stay, else 0
+ * Run s's edits: -1 if they could not run, and none did, said, 1 if one
+ * failed, or rules it clears stay, else 0
  */
 int
 script_run(struct script *s)
 {
-	char path[] = "/tmp/nshcommit.XXXXXXXX";
-	FILE *f;
-	int fd, i, save, rt, failed, cleared = 0, ret = -1;
+	int i, save, rt, failed, cleared = 0;
 
-	if ((fd = mkstemp(path)) == -1) {
-		printf("%% mkstemp %s: %s\n", path, strerror(errno));
+	if (edits_check(s->edits, s->elen) == -1)
 		return -1;
-	}
-	if ((f = fdopen(fd, "w")) == NULL) {
-		printf("%% commit: %s\n", strerror(errno));
-		close(fd);
-		goto done;
-	}
-	if (s->len > 0 && fwrite(s->text, s->len, 1, f) != 1) {
-		printf("%% %s: %s\n", path, strerror(errno));
-		fclose(f);
-		goto done;
-	}
-	if (fclose(f) == EOF) {
-		printf("%% %s: %s\n", path, strerror(errno));
-		goto done;
-	}
-
 	/* from table 0, as nshrc at boot, whatever the session's table */
 	if ((rt = cli_rtable) != 0) {
 		if (nsh_setrtable(0) != 0)
-			goto done;
+			return -1;
 		cli_rtable = 0;
 	}
 	/* empty rules before the script starts a daemon on them */
@@ -1094,9 +1107,7 @@ script_run(struct script *s)
 			cleared = -1;
 	save = candidate;
 	candidate = 0;
-	in_script = 1;
-	failed = cmdrc(path) == -1;
-	in_script = 0;
+	failed = edits_apply(s->edits, s->elen);
 	candidate = save;
 	/* and none once it stopped the daemon */
 	for (i = 0; i < s->nclears; i++)
@@ -1105,10 +1116,7 @@ script_run(struct script *s)
 			cleared = -1;
 	if (cli_rtable != rt && nsh_setrtable(rt) == 0)
 		cli_rtable = rt;
-	ret = failed || cleared == -1;
-done:
-	unlink(path);
-	return ret;
+	return failed || cleared == -1;
 }
 
 void
@@ -1117,6 +1125,381 @@ script_free(struct script *s)
 	free(s->text);
 	s->text = NULL;
 	s->len = 0;
+	free(s->edits);
+	s->edits = NULL;
+	s->elen = 0;
+}
+
+/*
+ * s's edits, from its lines (script_make()): a line becomes a record
+ * that names its command's place among those a configuration has, found
+ * as nsh reads the line, with its words; a daemon's rules block becomes
+ * one; a block's "!", its end. A line that names no such command is
+ * said; with skip it is left out, else -1, once each is said. 0 if made
+ */
+static int
+edits_make(struct script *s, int skip)
+{
+	struct edit e;
+	FILE *f, *rf = NULL;
+	char *t, *p, *l, *rules = NULL, head[1024] = "";
+	size_t rlen = 0;
+	int block = 0, rd = -1, in, k, bad = 0, r = -1;
+
+	s->edits = NULL;
+	s->elen = 0;
+	if ((f = open_memstream(&s->edits, &s->elen)) == NULL) {
+		printf("%% commit: %s\n", strerror(errno));
+		return -1;
+	}
+	if ((t = p = strndup(s->text != NULL ? s->text : "", s->len)) ==
+	    NULL) {
+		printf("%% commit: %s\n", strerror(errno));
+		goto done;
+	}
+	while ((l = strsep(&p, "\n")) != NULL && (p != NULL || *l != '\0')) {
+		/* how far in a statement is: one, in an rtable's block */
+		in = block == CF_RTABLE;
+		/* a daemon's rules: one further in, to a "!" as far in */
+		if (rd != -1) {
+			if (strncmp(l, "  ", in) == 0 && strcmp(l + in, "!") == 0) {
+				memset(&e, 0, sizeof(e));
+				e.kind = EDIT_RULES;
+				e.row = rd;
+				rd = -1;
+				if (fclose(rf) == EOF ||
+				    edit_put(f, &e, NULL, 0, rules, rlen) == -1) {
+					rf = NULL;
+					goto done;
+				}
+				rf = NULL;
+				free(rules);
+				rules = NULL;
+			} else if (strncmp(l, "  ", in + 1) == 0)
+				fprintf(rf, "%s\n", l + in + 1);
+			else
+				break;
+			continue;
+		}
+		if (strcmp(l, "!") == 0) {
+			memset(&e, 0, sizeof(e));
+			e.kind = EDIT_END;
+			if (block != 0 && edit_put(f, &e, NULL, 0, NULL, 0) == -1)
+				goto done;
+			block = 0;
+			continue;
+		}
+		if (l[0] != ' ' && block != 0) {
+			printf("%% %s: a block without its end\n", head);
+			goto done;
+		}
+		if (l[0] != ' ')
+			k = edits_line(f, CTX_TOP, l, &block, &rd, head);
+		else if (block == CF_IF || block == CF_BRIDGE)
+			k = edits_line(f, block == CF_IF ? CTX_IF : CTX_BRIDGE,
+			    l, &block, &rd, head);
+		else if (block == CF_RTABLE && l[1] != ' ')
+			k = strcmp(l, " !") == 0 ? 0 :
+			    edits_line(f, CTX_TOP, l + 1, &block, &rd, head);
+		else {
+			printf("%% %s is not configuration\n", l + strspn(l, " "));
+			k = -1;
+		}
+		if (k == -1)
+			bad++;
+		if (rd != -1 && (rf = open_memstream(&rules, &rlen)) == NULL) {
+			printf("%% commit: %s\n", strerror(errno));
+			goto done;
+		}
+	}
+	/* rules that end at the end, or at a line not as far in */
+	if (rd != -1) {
+		printf("%% %s%s%s rules without their end\n",
+		    block == CF_RTABLE ? head : "", block == CF_RTABLE ? ": " : "",
+		    ctl_daemons[rd].name);
+		goto done;
+	}
+	if (bad > 0 && skip)
+		printf("%% Left out %d line%s that %s not configuration\n",
+		    bad, bad == 1 ? "" : "s", bad == 1 ? "is" : "are");
+	if (bad == 0 || skip)
+		r = 0;
+done:
+	if (rf != NULL)
+		fclose(rf);
+	free(rules);
+	free(t);
+	if (fclose(f) == EOF && r == 0) {
+		printf("%% commit: %s\n", strerror(errno));
+		r = -1;
+	}
+	if (r == -1) {
+		free(s->edits);
+		s->edits = NULL;
+		s->elen = 0;
+	}
+	return r;
+}
+
+/*
+ * Line l of a script, in ctx, as an edit to f, or with skip none: a
+ * statement at the top level, or in an rtable's block, *block CF_RTABLE,
+ * which may begin a block, *block then its kind and head its line, or a
+ * daemon's rules, *rd then the daemon's; or a line of head's block. 0 if
+ * it is one, else -1, said
+ */
+static int
+edits_line(FILE *f, int ctx, char *l, int *block, int *rd, char *head)
+{
+	const struct confcmd *c = NULL;
+	struct edit e;
+	char *t, *w[NARGS], *daemon;
+	int n, i, d, row, act;
+
+	memset(&e, 0, sizeof(e));
+	if ((t = strdup(l)) == NULL) {
+		printf("%% commit: %s\n", strerror(errno));
+		return -1;
+	}
+	if ((n = argsplit(t, w, nitems(w))) == 0) {
+		free(t);
+		return 0;
+	}
+	e.no = n > 0 && NO_ARG(w[0]);
+	i = e.no;
+	if (n <= i)
+		goto refused;
+	row = conf_find(ctx, w[i], &daemon);
+	if (row == -2) {
+		/* a daemon's rules, or what a configuration has it do */
+		d = ctl_daemon(daemon);
+		if (e.no || n != i + 2 || d == -1)
+			goto refused;
+		if (isprefix(w[i + 1], "rules")) {
+			*rd = d;
+			free(t);
+			return 0;
+		}
+		if ((act = ctl_act(d, w[i + 1])) == -1)
+			goto refused;
+		e.kind = EDIT_DAEMON;
+		e.row = d;
+		e.act = act;
+		free(t);
+		return edit_put(f, &e, NULL, 0, NULL, 0);
+	}
+	if (row == -1)
+		goto refused;
+	c = conf_cmd(ctx, row);
+	if (ctx == CTX_TOP && ((e.no && (c->flags & CF_NO) == 0) ||
+	    (*block == CF_RTABLE && (c->flags & (CF_IF | CF_BRIDGE |
+	    CF_RTABLE)) != 0)))
+		goto refused;
+	e.kind = ctx == CTX_TOP ? EDIT_TOP : ctx == CTX_IF ? EDIT_IF :
+	    EDIT_BRIDGE;
+	e.row = row;
+	if (edit_put(f, &e, w + i + 1, n - i - 1, NULL, 0) == -1) {
+		free(t);
+		return -1;
+	}
+	if (ctx == CTX_TOP && !e.no && (c->flags & (CF_IF | CF_BRIDGE |
+	    CF_RTABLE)) != 0) {
+		*block = c->flags & (CF_IF | CF_BRIDGE | CF_RTABLE);
+		strlcpy(head, l, 1024);
+	}
+	free(t);
+	return 0;
+refused:
+	l += strspn(l, " ");
+	if (ctx == CTX_TOP && *block != CF_RTABLE)
+		printf("%% %s is not configuration\n", l);
+	else
+		printf("%% %s: %s is not configuration\n", head, l);
+	free(t);
+	return -1;
+}
+
+/* e, and after it words, n of them, each with its NUL, or text, to f */
+static int
+edit_put(FILE *f, struct edit *e, char **words, int n, char *text,
+    size_t len)
+{
+	int i;
+
+	if (words != NULL)
+		for (i = 0, len = 0; i < n; i++)
+			len += strlen(words[i]) + 1;
+	if (len > UINT32_MAX - sizeof(*e)) {
+		printf("%% commit: an edit too long\n");
+		return -1;
+	}
+	e->len = len;
+	if (fwrite(e, sizeof(*e), 1, f) != 1)
+		goto fail;
+	for (i = 0; words != NULL && i < n; i++)
+		if (fwrite(words[i], strlen(words[i]) + 1, 1, f) != 1)
+			goto fail;
+	if (text != NULL && len > 0 && fwrite(text, len, 1, f) != 1)
+		goto fail;
+	return 0;
+fail:
+	printf("%% commit: %s\n", strerror(errno));
+	return -1;
+}
+
+/*
+ * Are buf's len bytes edits that may run: each record whole, of a kind
+ * there is, naming a command a configuration has in the block it belongs
+ * in, or what one has a daemon do, its words or rules whole? 0 if so,
+ * else -1, said
+ */
+static int
+edits_check(char *buf, size_t len)
+{
+	const struct confcmd *c;
+	struct edit e;
+	char *p, *w[NARGS];
+	size_t off;
+	int block = 0, n;
+
+	for (off = 0; off < len; off += sizeof(e) + e.len) {
+		if (len - off < sizeof(e)) {
+			printf("%% edits: a record cut short\n");
+			return -1;
+		}
+		memcpy(&e, buf + off, sizeof(e));
+		p = buf + off + sizeof(e);
+		if (e.len > len - off - sizeof(e)) {
+			printf("%% edits: a record cut short\n");
+			return -1;
+		}
+		if (e.no > 1)
+			goto bad;
+		switch (e.kind) {
+		case EDIT_TOP:
+			if ((c = conf_cmd(CTX_TOP, e.row)) == NULL ||
+			    (block != 0 && (block != CF_RTABLE ||
+			    (c->flags & (CF_IF | CF_BRIDGE | CF_RTABLE)))) ||
+			    (e.no && (c->flags & CF_NO) == 0) ||
+			    (n = edit_words(p, e.len, w, NARGS - 2)) == -1 ||
+			    ((c->flags & (CF_IF | CF_BRIDGE | CF_RTABLE)) &&
+			    n == 0))
+				goto bad;
+			if (!e.no && (c->flags & (CF_IF | CF_BRIDGE |
+			    CF_RTABLE)))
+				block = c->flags & (CF_IF | CF_BRIDGE |
+				    CF_RTABLE);
+			break;
+		case EDIT_IF:
+		case EDIT_BRIDGE:
+			if (block != (e.kind == EDIT_IF ? CF_IF : CF_BRIDGE) ||
+			    conf_cmd(e.kind == EDIT_IF ? CTX_IF : CTX_BRIDGE,
+			    e.row) == NULL ||
+			    edit_words(p, e.len, w, NARGS - 2) == -1)
+				goto bad;
+			break;
+		case EDIT_END:
+			if (block == 0 || e.len != 0)
+				goto bad;
+			block = 0;
+			break;
+		case EDIT_RULES:
+			if ((block != 0 && block != CF_RTABLE) ||
+			    !ctl_takes(e.row, CTL_ACT_RULES) ||
+			    memchr(p, '\0', e.len) != NULL)
+				goto bad;
+			break;
+		case EDIT_DAEMON:
+			if ((block != 0 && block != CF_RTABLE) ||
+			    !ctl_takes(e.row, e.act) || e.len != 0)
+				goto bad;
+			break;
+		default:
+			goto bad;
+		}
+	}
+	return 0;
+bad:
+	printf("%% edits: the record at byte %zu is not one that may "
+	    "run\n", off);
+	return -1;
+}
+
+/*
+ * The words of an edit, p's len bytes, each with its NUL, in argv, which
+ * has room for max of them and a NULL: how many, or -1 if they are not
+ * words, or would not fit
+ */
+static int
+edit_words(char *p, size_t len, char **argv, int max)
+{
+	size_t off = 0, l;
+	int n = 0;
+
+	while (off < len) {
+		if ((l = strnlen(p + off, len - off)) == len - off || n >= max)
+			return -1;
+		argv[n++] = p + off;
+		off += l + 1;
+	}
+	argv[n] = NULL;
+	return n;
+}
+
+/*
+ * Run buf's len bytes of edits (edits_check()), as cmdrc() ran a file's
+ * lines: each record's command, the place it names, with its words; a
+ * daemon's rules written; what a configuration has a daemon do done. 1
+ * if one failed, else 0
+ */
+static int
+edits_apply(char *buf, size_t len)
+{
+	const struct confcmd *c;
+	struct edit e;
+	char *argv[NARGS + 1], *p, name[IFNAMSIZ] = "";
+	size_t off;
+	int ctx, n, rt = cli_rtable, failed = 0, r = 0;
+
+	conf_reading(1);
+	for (off = 0; off < len; off += sizeof(e) + e.len) {
+		memcpy(&e, buf + off, sizeof(e));
+		p = buf + off + sizeof(e);
+		switch (e.kind) {
+		case EDIT_TOP:
+		case EDIT_IF:
+		case EDIT_BRIDGE:
+			ctx = e.kind == EDIT_TOP ? CTX_TOP : e.kind == EDIT_IF ?
+			    CTX_IF : CTX_BRIDGE;
+			c = conf_cmd(ctx, e.row);
+			n = 0;
+			if (e.no)
+				argv[n++] = "no";
+			argv[n++] = c->name;
+			n += edit_words(p, e.len, argv + n, NARGS - n);
+			r = conf_run(ctx, e.row, n, argv, name);
+			/* a block's head: the interface its lines are for */
+			if (ctx == CTX_TOP && !e.no &&
+			    (c->flags & (CF_IF | CF_BRIDGE)))
+				strlcpy(name, argv[1], sizeof(name));
+			break;
+		case EDIT_END:
+			conf_block_end(rt);
+			r = 0;
+			break;
+		case EDIT_RULES:
+			r = ctl_setrules(e.row, p, e.len);
+			break;
+		case EDIT_DAEMON:
+			r = ctl_do(e.row, e.act);
+			break;
+		}
+		if (r == -1)
+			failed = 1;
+		conf_settle();
+	}
+	conf_reading(0);
+	return failed;
 }
 
 /*

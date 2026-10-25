@@ -83,6 +83,22 @@ makeargv(void)
 }
 
 /*
+ * s in words, as makeargv() reads a line, into argv, which has room for
+ * max of them, the NULL after them included: how many, or -1 if they
+ * would not fit, with none. s is changed, and the words are in it
+ */
+int
+argsplit(char *s, char **argv, size_t max)
+{
+	size_t	 argc = 0, argo = 0;
+	int	 n;
+
+	if ((n = split(s, argv, 0, max, &argc, &argo)) == -1)
+		argv[0] = NULL;
+	return n;
+}
+
+/*
  * cp in words, after the n in argv already, and a NULL after them, in
  * argv's max: how many there are then, or -1 if they would not fit.
  * argc and argo say where cp ends: in which word, and how far into it

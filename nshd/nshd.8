@@ -225,13 +225,23 @@ child of system's; one that runs past its time, 900 seconds for a
 script, 300 for a save and 120 for a test, is sent SIGTERM, with its
 process group, and SIGKILL 10 seconds later, 5 for a test, and fails.
 A script and a save run as root.
-A script takes configuration alone, the commands
-.Ic configure
-takes: a line of any other command, such as
-.Ic reboot
+config makes a commit's script into edits, and system runs the edits
+and never the script's text.
+Each edit names one of the commands a configuration has, by its place
+among them, with its words: a statement, an interface's or a bridge's
+line, the end of a block, a daemon's rules, the state a daemon is left
+in, or what follows its rules.
+A line of any other command, such as
+.Ic reboot ,
+.Ic ping
 or
-.Ic ping ,
-fails.
+.Ic \&! ,
+or of a daemon's operation, such as smtp's
+.Cm remove ,
+has no edit: config refuses the commit and says each such line, and
+the boot leaves each out and says so.
+system checks every edit before it runs any, and runs none if one names
+no such command, or one where it does not belong.
 A commit of a session without admin may not change what needs admin
 (see
 .Cm login class

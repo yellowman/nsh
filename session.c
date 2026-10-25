@@ -426,16 +426,16 @@ session_plan(struct session_state *s, int checking, int confirmed,
 	p->bad = commit_problems(p->was, p->want);
 	p->ntests = commit_deferred(&p->tests);
 	p->checking = checking;
+	p->same = conftree_compare(NULL, p->was, p->want) == 0;
+	/* lines that are not configuration have no edits: a problem */
+	if ((!p->same || confirmed) && plan_script(p, p->was, p->want) == -1)
+		p->bad++;
 	if (p->ntests == 0 && commit_verdict(p->bad, checking) == -1)
 		goto done;
-	if (!checking) {
-		p->same = conftree_compare(NULL, p->was, p->want) == 0;
-		if ((!p->same || confirmed) &&
-		    (plan_text(p, PLAN_BEFORE, p->was) == -1 ||
-		    plan_text(p, PLAN_WANT, p->want) == -1 ||
-		    plan_script(p, p->was, p->want) == -1))
-			goto done;
-	}
+	if (!checking && (!p->same || confirmed) &&
+	    (plan_text(p, PLAN_BEFORE, p->was) == -1 ||
+	    plan_text(p, PLAN_WANT, p->want) == -1))
+		goto done;
 	if (!checking || p->ntests > 0) {
 		*pp = p;
 		p = NULL;
@@ -534,6 +534,7 @@ session_boot_plan(char *text, size_t len, struct plan **pp)
 	p->bad = commit_problems(p->was, p->want);
 	p->ntests = commit_deferred(&p->tests);
 	p->same = conftree_compare(NULL, p->was, p->want) == 0;
+	p->boot = 1;
 	if (!p->same && plan_script(p, p->was, p->want) == -1) {
 		plan_free(p);
 		return -1;
@@ -598,20 +599,21 @@ plan_text(struct plan *p, int part, struct cnode *t)
 	return r;
 }
 
-/* The script that makes from read as to, as p's */
+/* The edits of the script that makes from read as to, as p's */
 static int
 plan_script(struct plan *p, struct cnode *from, struct cnode *to)
 {
 	struct script sc;
 	int i;
 
-	free(p->text[PLAN_SCRIPT]);
-	p->text[PLAN_SCRIPT] = NULL;
-	p->len[PLAN_SCRIPT] = 0;
-	if (script_make(from, to, &sc) == -1)
+	free(p->text[PLAN_EDITS]);
+	p->text[PLAN_EDITS] = NULL;
+	p->len[PLAN_EDITS] = 0;
+	if (script_make(from, to, &sc, p->boot) == -1)
 		return -1;
-	p->text[PLAN_SCRIPT] = sc.text;
-	p->len[PLAN_SCRIPT] = sc.len;
+	free(sc.text);
+	p->text[PLAN_EDITS] = sc.edits;
+	p->len[PLAN_EDITS] = sc.elen;
 	for (i = 0; i < sc.nclears; i++) {
 		strlcpy(p->clears[i].name, sc.clears[i].name,
 		    sizeof(p->clears[i].name));

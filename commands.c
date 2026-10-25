@@ -117,6 +117,8 @@ static int	pr_s_conf(int, char **, ...);
 static int	pr_a_conf(int, char **, ...);
 static int	pr_conf_diff(int, char **, ...);
 static int	cand_refused(char *, int);
+static int	conf_run_if(int, const struct confcmd *, int, char **,
+		    char *);
 static int	cand_leave(void);
 static int	cmdline_if(void);
 static int	pr_environment(int, char **, ...);
@@ -2319,6 +2321,129 @@ Command cmdtab[] = {
 size_t cmdtab_nitems = nitems(cmdtab);
 
 /*
+ * The commands a configuration has, and nothing else: a commit's edits
+ * name them by their place here (commit.c), so a commit runs no command
+ * that is not one of them. The top level's but its daemons', which ctl.c
+ * has (ctl_act()); an interface's; and a bridge's. A top-level command
+ * takes no if CF_NO says so, as cmdrc() had it; an interface's, any
+ */
+static const struct confcmd conf_top[] = {
+	{ "hostname",	hostname,	0 },
+	{ "login",	loginset,	CF_NO },
+	{ "interface",	interface,	CF_NO | CF_IF },
+	{ "rtable",	rtable,		CF_NO | CF_RTABLE },
+	{ "arp",	arpset,		CF_NO },
+	{ "ndp",	ndpset,		CF_NO },
+	{ "nameserver",	nameserverset,	CF_NO },
+	{ "bridge",	interface,	CF_NO | CF_BRIDGE },
+	{ "ip",		ipcmd,		CF_NO },
+	{ "ip6",	ipcmd,		CF_NO },
+	{ "mpls",	ipcmd,		CF_NO },
+	{ "ddb",	ipcmd,		CF_NO },
+	{ "pipex",	ipcmd,		CF_NO },
+	{ "route",	route,		CF_NO },
+};
+
+static const struct confcmd conf_if[] = {
+	{ "inet",	intip },
+	{ "ip",		intip },
+	{ "alias",	intip },
+	{ "autoconf4",	intxflags },
+	{ "description",	intdesc },
+	{ "group",	intgroup },
+	{ "rdomain",	intrdomain },
+	{ "rtlabel",	intrtlabel },
+	{ "priority",	intmetric },
+	{ "llpriority",	intllprio },
+	{ "mtu",	intmtu },
+	{ "metric",	intmetric },
+	{ "link",	intlink },
+	{ "arp",	intflags },
+	{ "staticarp",	intflags },
+	{ "lladdr",	intlladdr },
+	{ "nwid",	intnwid },
+	{ "nwkey",	intnwkey },
+	{ "powersave",	intpowersave },
+	{ "txpower",	inttxpower },
+	{ "media",	intmedia },
+	{ "mediaopt",	intmediaopt },
+	{ "auth",	intsppp },
+	{ "peer",	intsppp },
+	{ "pppoe",	intpppoe },
+	{ "tunnel",	inttunnel },
+	{ "tunneldomain",	intmpls },
+	{ "txprio",	intmpls },
+	{ "rxprio",	intmpls },
+	{ "vnetid",	intvnetid },
+	{ "vnetflowid",	intvnetflowid },
+	{ "parent",	intparent },
+	{ "patch",	intpatch },
+	{ "keepalive",	intkeepalive },
+	{ "mplslabel",	intmpls },
+	{ "pwe",	intpwe3 },
+	{ "syncdev",	intsyncdev },
+	{ "syncpeer",	intsyncpeer },
+	{ "maxupd",	intmaxupd },
+	{ "vhid",	intcarp },
+	{ "advbase",	intcarp },
+	{ "advskew",	intcarp },
+	{ "carppass",	intcpass },
+	{ "carpdev",	intcdev },
+	{ "carpnode",	intcnode },
+	{ "carppeer",	intcarp },
+	{ "balancing",	intcarp },
+	{ "pflow",	intpflow },
+	{ "debug",	intflags },
+	{ "dhcrelay",	intdhcrelay },
+	{ "wol",	intxflags },
+	{ "mpls",	intxflags },
+	{ "inet6",	intip },
+	{ "autoconf6",	intxflags },
+	{ "autoconfprivacy",	intxflags },
+	{ "temporary",	intxflags },
+	{ "monitor",	intxflags },
+	{ "wgpeer",	intwgpeer },
+	{ "wgport",	intwg },
+	{ "wgkey",	intwg },
+	{ "wgrtable",	intwg },
+	{ "trunkport",	inttrunkport },
+	{ "trunkproto",	inttrunkproto },
+	{ "apn",	intumb },
+	{ "setpin",	intumb },
+	{ "class",	intumb },
+	{ "roaming",	intumb },
+	{ "shutdown",	intflags },
+};
+
+static const struct confcmd conf_bridge[] = {
+	{ "description",	intdesc },
+	{ "member",	brport },
+	{ "span",	brport },
+	{ "blocknonip",	brport },
+	{ "discover",	brport },
+	{ "learning",	brport },
+	{ "stp",	brport },
+	{ "maxaddr",	brval },
+	{ "timeout",	brval },
+	{ "maxage",	brval },
+	{ "fwddelay",	brval },
+	{ "hellotime",	brval },
+	{ "priority",	brval },
+	{ "rule",	brrule },
+	{ "static",	brstatic },
+	{ "ifpriority",	brpri },
+	{ "ifcost",	brpri },
+	{ "link",	intlink },
+	{ "txprio",	intmpls },
+	{ "rxprio",	intmpls },
+	{ "vnetid",	intvnetid },
+	{ "parent",	intparent },
+	{ "tunneldomain",	intmpls },
+	{ "protect",	brprotect },
+	{ "shutdown",	intflags },
+};
+
+/*
  * These commands escape ambiguous check and help listings
  */
 
@@ -3791,13 +3916,6 @@ cmdrc(char rcname[FILENAME_MAX])
 			status = -1;
 			continue;
 		}
-		/* a commit's script runs configuration commands only */
-		if (in_script && c->cand != CAND_EDIT) {
-			printf("%% %s is not configuration (line %u)\n",
-			    c->name, lnum);
-			status = -1;
-			continue;
-		}
 		if (verbose) {
 			printf("%% %4s: %*s%10s (line %u) margv ",
 			    savec && savec->modh ? "mode" : "cmd", z,
@@ -4102,6 +4220,169 @@ conf_ordered(char *line)
 	c = getcmd(word[0]);
 	return (c != NULL && !Ambiguous(c) && c->handler == ctlhandler &&
 	    isprefix(word[1], "rules"));
+}
+
+/*
+ * Row n of the commands a configuration has in ctx, CTX_TOP, CTX_IF or
+ * CTX_BRIDGE, or NULL if there is no such row
+ */
+const struct confcmd *
+conf_cmd(int ctx, int n)
+{
+	const struct confcmd *t;
+	size_t len;
+
+	switch (ctx) {
+	case CTX_TOP:
+		t = conf_top;
+		len = nitems(conf_top);
+		break;
+	case CTX_IF:
+		t = conf_if;
+		len = nitems(conf_if);
+		break;
+	case CTX_BRIDGE:
+		t = conf_bridge;
+		len = nitems(conf_bridge);
+		break;
+	default:
+		return NULL;
+	}
+	return n >= 0 && (size_t)n < len ? &t[n] : NULL;
+}
+
+/*
+ * The row (conf_cmd()) of the command word names in ctx, as nsh reads
+ * it at the top level, or in an interface's or a bridge's mode: -1 if
+ * word names none, or a command a configuration does not have, and at
+ * the top level -2 if a daemon, whose name is then in *daemon
+ */
+int
+conf_find(int ctx, char *word, char **daemon)
+{
+	const struct confcmd *c;
+	struct intlist *i;
+	Command *t;
+	char *name;
+	int n;
+
+	if (ctx == CTX_TOP) {
+		if ((t = getcmd(word)) == NULL || Ambiguous(t))
+			return -1;
+		if (t->handler == ctlhandler) {
+			*daemon = t->name;
+			return -2;
+		}
+		name = t->name;
+	} else if (ctx == CTX_IF || ctx == CTX_BRIDGE) {
+		i = (struct intlist *)genget(word, (char **)(ctx == CTX_IF ?
+		    Intlist : Bridgelist), sizeof(struct intlist));
+		if (i == NULL || Ambiguous(i))
+			return -1;
+		name = i->name;
+	} else
+		return -1;
+	/* a table's names are its own, each once */
+	for (n = 0; (c = conf_cmd(ctx, n)) != NULL; n++)
+		if (strcmp(c->name, name) == 0)
+			return n;
+	return -1;
+}
+
+/*
+ * Run row n of ctx's commands (conf_cmd()) with argv, as a commit runs a
+ * line of its edits: at the top level a statement, a block's head
+ * included, and in an interface's or a bridge's mode a line of name's
+ * block. As the command returns
+ */
+int
+conf_run(int ctx, int n, int argc, char **argv, char *name)
+{
+	const struct confcmd *c = conf_cmd(ctx, n);
+	int r;
+
+	if (ctx != CTX_TOP)
+		return conf_run_if(ctx == CTX_BRIDGE, c, argc, argv, name);
+	if ((c->flags & (CF_IF | CF_BRIDGE)) == 0)
+		return (*c->handler)(argc, argv, 0);
+	/* a block's head, which makes a clone, or its no */
+	rc_head = 1;
+	r = (*c->handler)(argc, argv, NO_ARG(argv[0]) ? NULL : argv[1]);
+	rc_head = 0;
+	return r;
+}
+
+/*
+ * c, a command of an interface's or with bridgeline a bridge's, run with
+ * argv on name in rtable 0, as cmdrc() ran a line of name's block: name
+ * must be there, and a bridge, or not, as c's. As c returns, or -1 if it
+ * did not run, said
+ */
+static int
+conf_run_if(int bridgeline, const struct confcmd *c, int argc, char **argv,
+    char *name)
+{
+	int ifs, r = -1, rt = cli_rtable;
+
+	if (strlcpy(ifname, name, sizeof(ifname)) >= sizeof(ifname)) {
+		printf("%% interface name too long\n");
+		ifname[0] = '\0';
+		return -1;
+	}
+	if ((ifs = socket(AF_INET, SOCK_DGRAM, 0)) == -1) {
+		printf("%% socket failed: %s\n", strerror(errno));
+		ifname[0] = '\0';
+		return -1;
+	}
+	/* its block's head made it, if it could */
+	if (!is_valid_ifname(ifname)) {
+		printf("%% interface %s not found\n", ifname);
+		goto done;
+	}
+	if ((bridge = is_bridge(ifs, ifname)) != bridgeline) {
+		printf("%% %s is %sa bridge\n", ifname, bridge ? "" : "not ");
+		goto done;
+	}
+	whichlist = bridge ? Bridgelist : Intlist;
+	imr_init(ifname);
+	if (getrtable() != 0 && !priv) {
+		printf("%% Privilege required\n");
+		goto done;
+	}
+	if (cli_rtable != 0 && nsh_setrtable(0) == 0)
+		cli_rtable = 0;
+	r = (*c->handler)(argc, argv, ifname, ifs) == -1 ? -1 : 0;
+	if (rt != cli_rtable && nsh_setrtable(rt) == 0)
+		cli_rtable = rt;
+done:
+	ifname[0] = '\0';
+	close(ifs);
+	return r;
+}
+
+/* A commit's edits run, with on, as cmdrc() read a file, or have run */
+void
+conf_reading(int on)
+{
+	in_rc = on;
+	if (on)
+		init_bgpd_socket_path(cli_rtable);
+}
+
+/* A block of a commit's edits ended: their table, rt, again */
+void
+conf_block_end(int rt)
+{
+	if (cli_rtable != rt && nsh_setrtable(rt) == 0)
+		cli_rtable = rt;
+}
+
+/* An edit ran: the process in the table it left, as cmdrc() kept it */
+void
+conf_settle(void)
+{
+	if (cli_rtable != getrtable() && setrtable(cli_rtable) == 0)
+		init_bgpd_socket_path(cli_rtable);
 }
 
 /*

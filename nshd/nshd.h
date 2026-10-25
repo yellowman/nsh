@@ -213,7 +213,7 @@ struct nshd_rollback {
 struct nshd_chunk {
 	int32_t		part;
 };
-#define NSHD_SCRIPT	0	/* what APPLY runs, or the rules TEST tests */
+#define NSHD_SCRIPT	0	/* the edits APPLY runs, or the rules TEST tests */
 #define NSHD_BEFORE	1	/* what BEGIN records: what runs */
 #define NSHD_WANT	2	/* and what is wanted */
 #define NSHD_PARTS	3

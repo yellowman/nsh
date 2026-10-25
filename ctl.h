@@ -100,6 +100,13 @@ int ctl_rules_args(char *, char *, char *, size_t, char **);
 void ctl_rules_done(void);
 int ctl_cand_rules(char *, int, int, char *, size_t);
 int ctl_edits(char *, char *);
+#define CTL_ACT_FOLLOW	0x100	/* what follows a daemon's rules (ctl_act()) */
+#define CTL_ACT_RULES	0x200	/* its rules (ctl_takes()) */
+int ctl_daemon(char *);
+int ctl_act(int, char *);
+int ctl_takes(int, int);
+int ctl_do(int, int);
+int ctl_setrules(int, char *, size_t);
 int ctl_nshd_edit(char *);
 
 #define T_HANDLER       1

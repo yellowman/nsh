@@ -116,13 +116,19 @@ takes the file as a candidate of its own, as
 takes a saved configuration, and commits it, all of it or none, if the
 user's login class has the configure permission.
 If a line fails, nothing is committed.
+A line that is not configuration, such as
+.Ic reboot
+or smtp's
+.Cm remove ,
+is refused, and nothing is committed.
 An empty file changes nothing.
 This is typically used to implement scripted changes to configuration.
 .El
 .Pp
 At boot,
 .Xr nshd 8
-makes the running configuration the one saved.
+makes the running configuration the one saved; a line of it that is
+not configuration is left out, and said.
 .Ss INTERACTIVE FEATURES
 When run without any command line arguments,
 .Nm
