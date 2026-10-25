@@ -97,7 +97,6 @@ int ctl_line(char *, char *, size_t);
 int ctl_rules_clear(char *, int, int);
 int ctl_rules_test(char *, char **, size_t);
 int ctl_rules_args(char *, char *, char *, size_t, char **);
-void ctl_rules_done(void);
 int ctl_cand_rules(char *, int, int, char *, size_t);
 int ctl_edits(char *, char *);
 #define CTL_ACT_FOLLOW	0x100	/* what follows a daemon's rules (ctl_act()) */

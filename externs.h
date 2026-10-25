@@ -197,7 +197,6 @@ int quit(int, char **, ...);
 void sigalarm(int);
 void command(void);
 int argvtostring(int, char **, char *, int);
-int cmdrc(char rcname[FILENAME_MAX]);
 int cmdline(char *);
 int cmdexit(void);
 int cmdline_nshd(char *);
@@ -254,7 +253,7 @@ typedef struct cmd {
 	int needpriv;		/* Do we need privilege to execute? */
 	int needconfig;		/* Do we need config mode to execute? */
 	int nocmd;		/* Can we specify 'no ...command...'? */
-	int modh;		/* Is it a mode handler for cmdrc()? */
+	int modh;		/* Does it head a block? 2, an rtable's */
 	int cand;		/* What it does in configure private (CAND_*) */
 } Command;
 

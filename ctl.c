@@ -54,7 +54,6 @@ int restart_dhcpd(int, char **, ...);
 /* subroutines */
 int fill_tmpfile(char **, char *, char **);
 int edit_file(char *, mode_t, char *, char **);
-int rule_writeline(FILE *, char *, int);
 int acq_lock(char *);
 void rls_lock(int);
 static int ctl_exec(char *, char **);
@@ -69,30 +68,16 @@ static int ctl_cand_stage(struct daemons *, char *, char *, char *,
     size_t);
 static void ctl_cand_unstage(char *, char *);
 static int ctl_cand_follow(struct daemons *, char *, int);
-static char *rule_text(char *, int);
-static int admin_rules(struct daemons *, char *);
 static int admin_kept(struct daemons *, int, char *, int *);
 static int admin_had(struct daemons *, int, char *);
 static const char *admin_in(int);
 
-/* the rules file an rc file is writing, and its name */
-static FILE *rulesfile;
-static char tmpfile_cur[PATH_MAX];
-
-/* what a session keeps of this file (session.c) */
-struct sglobal ctl_sglobals[] = {
-	SGLOBAL(rulesfile), SGLOBAL(tmpfile_cur),
-	{ NULL }
-};
-
 /*
  * While a commit runs (admin_begin()): whether its session lacks the
- * admin permission, what ran before it, whether the rules line before
- * went on with a backslash, and whether a line was refused
+ * admin permission, what ran before it, and whether a line was refused
  */
 static int admin_limited;
 static struct cnode *admin_tree;
-static int admin_cont;
 static int admin_refused;
 
 /*
@@ -710,12 +695,6 @@ ctlhandler(int argc, char **argv, ...)
 	char **fillargs;
 	int rv = 0;
 	int r;
-	va_list ap;
-	char *modhvar;
-
-	va_start(ap, argv);
-	modhvar = va_arg(ap, char *);
-	va_end(ap);
 
 	/* loop daemon list to find table pointer */
 	daemons = (struct daemons *) genget(hname, (char **)ctl_daemons,
@@ -734,58 +713,10 @@ ctlhandler(int argc, char **argv, ...)
 	}
 
 	snprintf(table, sizeof(table), "-T%d", cli_rtable);
-	if (daemons->tmpfile) {
+	if (daemons->tmpfile)
 		snprintf(tmpfile, sizeof(tmpfile), "%s.%d", daemons->tmpfile,
 		    cli_rtable);
-		if (tmpfile_cur[0] != '\0' && rulesfile &&
-		    strcmp(tmpfile_cur, tmpfile) != 0) {
-			fclose(rulesfile);
-			rulesfile = NULL;
-		}
-	} else if (rulesfile) {
-		fclose(rulesfile);
-		rulesfile = NULL;
-	}
 
-	if (modhvar) {
-		/* action specified or indented command specified */
-		if (argc == 2 && isprefix(argv[1], "rules")) {
-			/* skip 'X rules' line */
-			admin_cont = 0;
-			goto done;
-		}
-		if (isprefix(modhvar, "rules")) {
-			if (!daemons->tmpfile) {
-				printf("%% writeline without tmpfile\n");
-				rv = -1;
-				goto done;
-			}
-			if (admin_limited &&
-			    admin_rules(daemons, saveline) == -1) {
-				rv = -1;
-				goto done;
-			}
-			if (rulesfile == NULL) {
-				rulesfile = fopen(tmpfile, "w");
-				if (rulesfile == NULL) {
-					printf("%% error opening %s for "
-					    "writing: %s\n", tmpfile,
-					    strerror(errno));
-					rv = -1;
-					goto done;
-				}
-				fchmod(fileno(rulesfile), daemons->mode);
-				strlcpy(tmpfile_cur, tmpfile,
-				    sizeof(tmpfile_cur));
-			}
-			/* write indented line to tmp config file */
-			rule_writeline(rulesfile, saveline, cli_rtable);
-			goto done;
-		} else if (rulesfile) {
-			fclose(rulesfile);
-			rulesfile = NULL;
-		}
-	}
 	if (argc < 2 || argv[1][0] == '?') {
 		gen_help((char **)daemons->table, "", "", sizeof(struct ctl));
 		goto done;
@@ -988,7 +919,7 @@ ctl_setrules(int d, char *text, size_t len)
 	struct daemons *dm = &ctl_daemons[d];
 	char path[PATH_MAX], *t, *p, *l;
 	FILE *f = NULL;
-	int r = 0;
+	int cont = 0, r = 0;
 
 	if (cli_rtable > dm->rtablemax) {
 		printf("%% Command %s not available via rtable %d\n",
@@ -1004,15 +935,14 @@ ctl_setrules(int d, char *text, size_t len)
 		printf("%% ctl_setrules: %s\n", strerror(errno));
 		return -1;
 	}
-	admin_cont = 0;
 	while ((l = strsep(&p, "\n")) != NULL && (p != NULL || *l != '\0')) {
 		if (admin_limited && (admin_refused ||
-		    admin_kept(dm, cli_rtable, l, &admin_cont))) {
+		    admin_kept(dm, cli_rtable, l, &cont))) {
 			admin_refused = 1;
 			r = -1;
 			break;
 		}
-		/* the file, made at its first line, as the rc file's was */
+		/* the file, made at its first line */
 		if (f == NULL) {
 			if ((f = fopen(path, "w")) == NULL) {
 				printf("%% error opening %s for writing: %s\n",
@@ -1375,17 +1305,6 @@ ctl_cand_unstage(char *dir, char *path)
 	rmdir(dir);
 }
 
-/* An rc file is done: close the rules file it was writing */
-void
-ctl_rules_done(void)
-{
-	if (rulesfile != NULL) {
-		fclose(rulesfile);
-		rulesfile = NULL;
-	}
-	tmpfile_cur[0] = '\0';
-}
-
 /*
  * Is line one of a daemon's, as conf() prints it: CTL_RULES, CTL_STATE
  * or CTL_FOLLOW, with the daemon's name in name, or 0
@@ -1417,8 +1336,8 @@ ctl_line(char *line, char *name, size_t len)
 }
 
 /*
- * Daemon name's rules in rtableid, which an rc file cannot write empty
- * or take away: with keep, an empty file, else none
+ * Daemon name's rules in rtableid, which a commit's rules edit cannot
+ * write empty or take away: with keep, an empty file, else none
  */
 int
 ctl_rules_clear(char *name, int rtableid, int keep)
@@ -1893,27 +1812,6 @@ edit_file(char *tmpfile, mode_t mode, char *propername, char **args)
 	return ret == 0 ? 0 : -1;
 }
 
-int
-rule_writeline(FILE *rulesfile, char *writeline, int rdomain)
-{
-	fprintf(rulesfile, "%s", rule_text(writeline, rdomain));
-	fflush(rulesfile);
-	return 0;
-}
-
-/* A line of an rc file's, as its daemon's rules file has it */
-static char *
-rule_text(char *line, int rdomain)
-{
-	if (line[0] == ' ') {
-		line++;
-		/* Lines for rdomain-specific daemons are indented twice. */
-		if (rdomain > 0 && line[0] == ' ')
-			line++;
-	}
-	return line;
-}
-
 /*
  * A commit runs, until admin_end(). If limited, its session lacks the
  * admin permission, so it may change what needs admin only as it ran
@@ -1954,28 +1852,6 @@ admin_may(char *line, int no, int keylen)
 	if (no)
 		return !conftree_haskey(admin_tree, NULL, line, keylen);
 	return conftree_has(admin_tree, line);
-}
-
-/*
- * May the commit running, without admin, write line, of daemon d's
- * rules in cli_rtable, an rc file's? 0 if it may, else -1, said. Once a
- * line is refused, none after it is written, so none goes on from a
- * line before it
- */
-static int
-admin_rules(struct daemons *d, char *line)
-{
-	char text[sizeof(saveline)];
-
-	if (admin_refused)
-		return -1;
-	strlcpy(text, rule_text(line, cli_rtable), sizeof(text));
-	text[strcspn(text, "\n")] = '\0';
-	if (admin_kept(d, cli_rtable, text, &admin_cont)) {
-		admin_refused = 1;
-		return -1;
-	}
-	return 0;
 }
 
 /*

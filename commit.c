@@ -50,7 +50,7 @@
  *
  * Each configuration saved is kept, the last ROLLBACKS of them, for
  * rollback N and show rollback, with who saved it and the comment they
- * gave, on a line of its own that cmdrc() and conftree_read() skip.
+ * gave, on a line of its own that conftree_read() skips.
  *
  * commit check shows what would keep the candidate from being the
  * running configuration that it can see before then: an interface a
@@ -1447,10 +1447,9 @@ edit_words(char *p, size_t len, char **argv, int max)
 }
 
 /*
- * Run buf's len bytes of edits (edits_check()), as cmdrc() ran a file's
- * lines: each record's command, the place it names, with its words; a
- * daemon's rules written; what a configuration has a daemon do done. 1
- * if one failed, else 0
+ * Run buf's len bytes of edits (edits_check()): each record's command,
+ * the place it names, with its words; a daemon's rules written; what a
+ * configuration has a daemon do done. 1 if one failed, else 0
  */
 static int
 edits_apply(char *buf, size_t len)

@@ -47,7 +47,7 @@ int in_config;		/* nshd's config: no kernel, file or program its own */
 #endif
 
 extern struct sglobal candidate_sglobals[], commands_sglobals[];
-extern struct sglobal ctl_sglobals[], if_sglobals[];
+extern struct sglobal if_sglobals[];
 
 /* main.c's, makeargv.c's, prompt.c's and bgpcommands.c's */
 static struct sglobal session_sglobals[] = {
@@ -65,7 +65,7 @@ static int plan_script(struct plan *, struct cnode *, struct cnode *);
 
 static struct sglobal *sglobals[] = {
 	session_sglobals, candidate_sglobals, commands_sglobals,
-	ctl_sglobals, if_sglobals
+	if_sglobals
 };
 
 struct session_state {
@@ -129,7 +129,6 @@ session_free(struct session_state *s)
 	if (cand_sharing)
 		cand_detach();
 	cand_end();
-	ctl_rules_done();
 	session_leave(s);
 	free(s->mem);
 	free(s);

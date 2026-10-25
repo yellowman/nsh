@@ -83,8 +83,8 @@ char next_ifname[IFNAMSIZ];	/* switch interfaces in interface context */
 struct intlist *whichlist;
 
 pid_t	child;
-static int in_rc;		/* cmdrc() is reading a file */
-static int rc_head;		/* and its line is a block's head */
+static int in_rc;		/* a commit's edits run */
+static int rc_head;		/* and this one is a block's head */
 static int oneline;		/* cmdline() runs it: its mode stays */
 static struct cnode *snapshot;	/* config's running configuration */
 
@@ -174,7 +174,6 @@ static int	traceroute(int, char**, ...);
 static int	traceroute6(int, char**, ...);
 static int	ssh(int, char**, ...);
 static int	telnet(int, char**, ...);
-       void	p_argv(int, char **);
 static int 	nreboot(int, char **, ...);
 static int 	halt(int, char **, ...);
 static int 	powerdown(int, char **, ...);
@@ -1594,8 +1593,8 @@ read_command_line(EditLine *el, History *hist)
 /*
  * command handler for interface and bridge modes
  *
- * acts as a loop for human keyboard user, and as a one time command
- * lookup for rcfile -c or -i usage
+ * acts as a loop for human keyboard user, and with rc_head makes a
+ * commit's block's interface, or takes it away
  *
  * if a function returns to interface() with a 1, interface() will break
  * the user back to command() mode.
@@ -1614,34 +1613,23 @@ interface(int argc, char **argv, ...)
 	char *ifunit = NULL;
 	struct intlist *i;	/* pointer to current command */
 	struct ifreq ifr;
-	va_list ap;
-	char *modhvar;
 
-	va_start(ap, argv);
-	modhvar = va_arg(ap, char *);
-	va_end(ap);
-
-	if (!modhvar) {
-		if (NO_ARG(argv[0])) {
-			argv++;
-			argc--;
-			set = 0;
-		}
-		if (argc == 3) {
-			/*
-			 * Allow "interface-name interface-number" as some
-			 * network switches do: interface em 0
-			 */
-			ifunit = argv[2];
-		} else if (argc != 2) {
-			printf("%% [no] interface <interface name>\n");
-			return -1;
-		}
-		tmp = argv[1];
-	} else {
-		/* called from cmdrc(), processing config file rules only */
-		tmp = modhvar;
+	if (NO_ARG(argv[0])) {
+		argv++;
+		argc--;
+		set = 0;
 	}
+	if (argc == 3) {
+		/*
+		 * Allow "interface-name interface-number" as some
+		 * network switches do: interface em 0
+		 */
+		ifunit = argv[2];
+	} else if (argc != 2) {
+		printf("%% [no] interface <interface name>\n");
+		return -1;
+	}
+	tmp = argv[1];
 
 	if (strlen(tmp) > IFNAMSIZ-1) {
 		printf("%% interface name too long\n");
@@ -1735,65 +1723,9 @@ interface(int argc, char **argv, ...)
 	imr_init(ifname);
 
 	/* a line at a time (cmdline()): the mode is entered, and stays */
-	if (oneline && !modhvar) {
+	if (oneline) {
 		close(ifs);
 		return 0;
-	}
-
-	if (modhvar) {
-		/* direct rcfile -i or -c initialization */
-		char *argp;
-
-		if (argc - 1 > NARGS)
-			argc = NARGS;
-		if (argv[0] == 0) {
-			ifname[0] = '\0';
-			close(ifs);
-			return 0;
-		}
-		if (NO_ARG(argv[0]))
-			argp = argv[1];
-		else
-			argp = argv[0];
-		i = (struct intlist *) genget(argp, (char **)
-		    whichlist, sizeof(struct intlist));
-		r = -1;
-		if (Ambiguous(i)) {
-			printf("%% Ambiguous command\n");
-		} else if (i == 0) {
-			printf("%% Invalid command\n");
-		} else if (cand_refused(i->name, i->cand)) {
-			/* cand_refused() said why */
-		} else {
-			int save_cli_rtable = cli_rtable;
-
-			/*
-			 * Run the handler in the default routing domain.
-			 * This requires privileged mode if we are not
-			 * already in rdomain 0.
-			 */
-			if (getrtable() != 0 && !priv) {
-				printf("%% Privilege required\n");
-				ifname[0] = '\0';
-				close(ifs);
-				return -1;
-			}
-
-			if (cli_rtable != 0 && nsh_setrtable(0) == 0)
-				cli_rtable = 0;
-	
-			/* a line leaves no mode */
-			r = (*i->handler)(argc, argv, ifname, ifs) == -1 ? -1 :
-			    0;
-
-			if (save_cli_rtable != cli_rtable &&
-			    nsh_setrtable(save_cli_rtable) == 0)
-				cli_rtable = save_cli_rtable;
-		}
-
-		ifname[0] = '\0';
-		close(ifs);
-		return r;
 	}
 
 	/* human at the keyboard or commands on stdin */
@@ -2325,7 +2257,8 @@ size_t cmdtab_nitems = nitems(cmdtab);
  * name them by their place here (commit.c), so a commit runs no command
  * that is not one of them. The top level's but its daemons', which ctl.c
  * has (ctl_act()); an interface's; and a bridge's. A top-level command
- * takes no if CF_NO says so, as cmdrc() had it; an interface's, any
+ * takes no if CF_NO says so, as its row in cmdtab does; an interface's,
+ * any
  */
 static const struct confcmd conf_top[] = {
 	{ "hostname",	hostname,	0 },
@@ -3411,7 +3344,8 @@ argvtostring(int argc, char **argv, char *string, int strlen)
 /*
  * Move to table.  Reading a file, a table the kernel does not have yet
  * takes its block's lines all the same: a route among them makes the
- * table (RTM_ADD does), and cmdrc() moves into it then
+ * table (RTM_ADD does), and the process moves into it then
+ * (conf_settle())
  */
 static int
 rtable_enter(int table)
@@ -3781,179 +3715,6 @@ flush_pf(int argc, char **argv, ...)
 	}
 }
 
-/*
- * read a text file and execute commands
- * take into account that we may have mode handlers int cmdtab that
- * execute indented commands from the rc file
- * -1 if a line failed, the rest run all the same, else 0
- */
-int
-cmdrc(char rcname[FILENAME_MAX])
-{
-	Command	*c = NULL, *savec = NULL;
-	FILE	*rcfile;
-	char	modhvar[128];	/* required variable in mode handler cmd */
-	unsigned int lnum;	/* line number */
-	u_int	z = 0;		/* max length of cmdtab argument */
-	int	rc_rtable = cli_rtable;	/* where a block's lines go back to */
-	int	status = 0;	/* -1 once a line has failed */
-
-	init_bgpd_socket_path(cli_rtable);
-
-	if ((rcfile = fopen(rcname, "r")) == 0) {
-		printf("%% Unable to open %s: %s\n", rcname, strerror(errno));
-		return -1;
-	}
-
-	for (c = cmdtab; c->name; c++)
-		if (strlen(c->name) > z)
-			z = strlen(c->name);
-	c = NULL;
-	in_rc = 1;
-
-	for (lnum = 1; ; lnum++) {
-		if (fgets(line, sizeof(line), rcfile) == NULL)
-			break;
-		if (line[0] == 0)
-			break;
-		if (candidate) {
-			printf("%% configure private is not supported in rc"
-			    " files (line %u)\n", lnum);
-			status = -1;
-			break;
-		}
-		if (line[0] == '#')
-			continue;
-		if (line[0] == '!') {
-			savec = NULL;
-			/* an rtable block ends here, and so does its rtable */
-			if (cli_rtable != rc_rtable &&
-			    nsh_setrtable(rc_rtable) == 0)
-				cli_rtable = rc_rtable;
-			continue;
-		}
-		/*
-		 * Don't ignore indented comments with pound sign, otherwise
-		 * comments won't be saved into daemon/ctl config files.
-		 */
-		if (line[0] == ' ' && line[1] == '!' && savec && savec->modh == 2)
-			continue;
-		if (line[0] == ' ')
-			strlcpy(saveline, line, sizeof(saveline));
-		if (makeargv() == -1) {
-			printf("%% Too many words (line %u)\n", lnum);
-			status = -1;
-			continue;
-		}
-		if (margv[0] == 0 && !savec)
-			continue;
-		if (line[0] == ' ' && (!savec || savec->modh < 1)) {
-			printf("%% No mode handler specified before"
-			    " indented command? (line %u) ", lnum);
-			p_argv(margc, margv);
-			printf("\n");
-			status = -1;
-			continue;
-		}
-		if (line[0] != ' ' || (line[0] == ' ' && line[1] != ' '
-		    && savec && savec->modh == 2)) {
-			/*
-			 * command was not indented, or indented for a mode 2
-			 * handler. process normally.
-			 */
-			if (margv[0] && NO_ARG(margv[0])) {
-				c = getcmd(margv[1]);
-				if (line[0] != ' ')
-					savec = c;
-				if (savec && (savec->nocmd == 0)) {
-					printf("%% Invalid rc command (line %u) ",
-					    lnum);
-					p_argv(margc, margv);
-					printf("\n");
-					status = -1;
-					continue;
-				}
-			} else if (margv[0]) {
-				c = getcmd(margv[0]);
-				if (line[0] != ' ')
-					savec = c;
-				if(savec && savec->modh) {
-					/*
-					 * any mode handler should have
-					 * one value stored, passed on
-					 */
-					if (margv[1]) {
-						strlcpy(hname, c->name,
-							    HSIZE);
-						strlcpy(modhvar, margv[1],
-						    sizeof(modhvar));
-					} else {
-						printf("%% No argument after"
-						    " mode handler (line %u) ",
-						    lnum);
-						p_argv(margc, margv);
-						printf("\n");
-						status = -1;
-						continue;
-					}
-				}
-			} else {
-				/* margv[0] is NULL, skip*/
-				continue;
-			}
-		}
-		if (Ambiguous(c)) {
-			printf("%% Ambiguous rc command (line %u) ", lnum);
-			p_argv(margc, margv);
-			printf("\n");
-			status = -1;
-			continue;
-		}
-		if (c == 0) {
-			printf("%% Invalid rc command (line %u) ", lnum);
-			p_argv(margc, margv);
-			printf("\n");
-			status = -1;
-			continue;
-		}
-		if (verbose) {
-			printf("%% %4s: %*s%10s (line %u) margv ",
-			    savec && savec->modh ? "mode" : "cmd", z,
-			    savec && savec->name ? savec->name : "",
-			    c != savec ? "(sub-cmd)" : "", lnum);
-			p_argv(margc, margv);
-			printf("\n");
-		}
-		if (c->modh == 1) {
-			/* a statement's no, "no interface vlan5", has no block */
-			rc_head = line[0] != ' ';
-			if ((*c->handler) (margc, margv, rc_head &&
-			    NO_ARG(margv[0]) ? NULL : modhvar) == -1)
-				status = -1;
-			rc_head = 0;
-		} else if ((*c->handler) (margc, margv, 0) == -1)
-			status = -1;
-		/* a table the line made can be entered now */
-		if (cli_rtable != getrtable() && setrtable(cli_rtable) == 0)
-			init_bgpd_socket_path(cli_rtable);
-	}
-	in_rc = 0;
-	ctl_rules_done();
-	fclose(rcfile);
-	return status;
-}
-
-void
-p_argv(int argc, char **argv)
-{
-	int z;
-
-	for (z = 0; z < argc; z++)
-		printf("%s%s", z ? " " : "[", argv[z]);
-	printf("]");
-	return;
-}
-
 /* Save the running configuration where nshd saves it, SAVED */
 int
 conf_save(void)
@@ -4166,7 +3927,7 @@ pr_a_conf(int argc, char **argv, ...)
 }
 
 /*
- * the command a configuration line runs (as cmdrc() finds it)
+ * the command a configuration line names, as the prompt reads it
  */
 static Command *
 conf_command(char *line)
@@ -4307,16 +4068,16 @@ conf_run(int ctx, int n, int argc, char **argv, char *name)
 		return (*c->handler)(argc, argv, 0);
 	/* a block's head, which makes a clone, or its no */
 	rc_head = 1;
-	r = (*c->handler)(argc, argv, NO_ARG(argv[0]) ? NULL : argv[1]);
+	r = (*c->handler)(argc, argv, 0);
 	rc_head = 0;
 	return r;
 }
 
 /*
  * c, a command of an interface's or with bridgeline a bridge's, run with
- * argv on name in rtable 0, as cmdrc() ran a line of name's block: name
- * must be there, and a bridge, or not, as c's. As c returns, or -1 if it
- * did not run, said
+ * argv on name in rtable 0, as interface mode runs a line: name must be
+ * there, and a bridge, or not, as c's. As c returns, or -1 if it did not
+ * run, said
  */
 static int
 conf_run_if(int bridgeline, const struct confcmd *c, int argc, char **argv,
@@ -4343,7 +4104,6 @@ conf_run_if(int bridgeline, const struct confcmd *c, int argc, char **argv,
 		printf("%% %s is %sa bridge\n", ifname, bridge ? "" : "not ");
 		goto done;
 	}
-	whichlist = bridge ? Bridgelist : Intlist;
 	imr_init(ifname);
 	if (getrtable() != 0 && !priv) {
 		printf("%% Privilege required\n");
@@ -4360,7 +4120,7 @@ done:
 	return r;
 }
 
-/* A commit's edits run, with on, as cmdrc() read a file, or have run */
+/* A commit's edits run, with on, or have run */
 void
 conf_reading(int on)
 {
@@ -4377,7 +4137,7 @@ conf_block_end(int rt)
 		cli_rtable = rt;
 }
 
-/* An edit ran: the process in the table it left, as cmdrc() kept it */
+/* An edit ran: the process goes in the table it left */
 void
 conf_settle(void)
 {

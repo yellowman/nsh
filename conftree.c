@@ -18,7 +18,7 @@
  * A configuration file as a tree of lines, and the differences between
  * two of them.
  *
- * The tree follows the grammar cmdrc() reads:
+ * The tree follows the grammar conf() writes:
  *
  *  * A line in column 0 is a statement.  A '!' in column 0 ends its
  *    block, a '#' in column 0 is a comment, and blank lines are skipped.
@@ -28,7 +28,7 @@
  *    statement of its own, and the lines indented by two spaces after
  *    it are its children, with two spaces removed.  " !" is skipped.
  *  * An indented line with no block to belong to is skipped, with a
- *    warning, as cmdrc() skips it.
+ *    warning.
  *
  * The children of an ordered statement (a daemon's rules) are compared
  * as a sequence.  All other children are compared as a set, so the

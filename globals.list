@@ -92,15 +92,14 @@ complete.c	process	cmplt_remote complete_nocmd.nocmdtab
 			complete_noint.nointtab
 conf.c		table	confrows confwords defllpriority defmtus
 			defprios intconf_rows rtflags
-ctl.c		session	rulesfile tmpfile_cur
-ctl.c		scratch	admin_cont admin_in.in admin_limited admin_refused
+ctl.c		scratch	admin_in.in admin_limited admin_refused
 			admin_tree table
 ctl.c		table	ctl_bgp ctl_crontab ctl_daemons ctl_dhcp
 			ctl_dvmrp ctl_eigrp ctl_ftpproxy ctl_ifstate
 			ctl_ike ctl_inet ctl_ipsec ctl_ldap ctl_ldp
 			ctl_motd ctl_nppp ctl_ntp ctl_ospf ctl_ospf6
 			ctl_pf ctl_rad ctl_relay ctl_resolv ctl_rip
-			ctl_sasync ctl_sglobals ctl_smtp ctl_snmp
+			ctl_sasync ctl_smtp ctl_snmp
 			ctl_sshd ctl_tftp ctl_tftpproxy admin_words
 			daemon_fields kind_daemon
 editing.c	process	complete.word
