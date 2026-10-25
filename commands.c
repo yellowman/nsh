@@ -1236,10 +1236,12 @@ op_allowed(int argc, char **argv)
 
 /*
  * An operation op_allowed() takes, run: as a handler returns, but
- * OP_DIFFERS from diff-config if the configurations differ
+ * OP_DIFFERS from diff-config if the configurations differ. With hide,
+ * for a session that sees no password hash, diff-config shows each one
+ * taken out
  */
 int
-op_run(int argc, char **argv)
+op_run(int argc, char **argv, int hide)
 {
 	struct daemons *d;
 	struct intlist *i;
@@ -1257,7 +1259,7 @@ op_run(int argc, char **argv)
 		return cmdargs(ht[0], ht) == 0 ? 0 : -1;
 	}
 	if (strcmp(argv[0], "diff-config") == 0)
-		return (r = saved_diff()) == 1 ? OP_DIFFERS : r;
+		return (r = saved_diff(hide)) == 1 ? OP_DIFFERS : r;
 	if (strcmp(argv[0], "crontab") == 0) {
 		printf("%% To view crontab syntax documentation in NSH, "
 		    "run: !man 5 crontab\n\n");

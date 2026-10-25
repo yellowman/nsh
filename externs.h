@@ -734,11 +734,11 @@ int commit_expire(void);
 int commit_boot(char *);
 int rollback_keep(const char *, const char *, const char *);
 int saved_write(void);
-int saved_diff(void);
+int saved_diff(int);
 /* operations, which nshd's system runs */
 #define OP_DIFFERS	3	/* an operation's status: what it compared differs */
 int op_allowed(int, char **);
-int op_run(int, char **);
+int op_run(int, char **, int);
 int saved_text(FILE *);
 int saved_first(void);
 int commit_checks(struct cnode *, struct cnode *, int);

@@ -1410,17 +1410,26 @@ config_follow_end(struct request *r, int32_t status)
 
 /*
  * A notice of kind, about uid and n, with text, if not NULL, to each
- * session that watches what
+ * session that watches what; to a session that sees no password hash,
+ * with each taken out, as configure terminal's line may hold one
  */
 static void
 config_notice(int what, int kind, uid_t uid, int n, const char *text)
 {
 	struct session		*sp;
+	char			 hidden[NSHD_COMMENT];
+	size_t			 len, hlen = 0;
 
+	len = text == NULL ? 0 : strnlen(text, NSHD_COMMENT - 1);
+	if (text != NULL) {
+		memcpy(hidden, text, len);
+		hlen = login_hide(hidden, len);
+	}
 	TAILQ_FOREACH(sp, &sessions, entry)
 		if ((sp->watch & what) != 0)
-			config_notice_to(sp->id, kind, uid, n, text,
-			    text == NULL ? 0 : strnlen(text, NSHD_COMMENT - 1));
+			config_notice_to(sp->id, kind, uid, n,
+			    config_hides(sp) ? hidden : text,
+			    config_hides(sp) ? hlen : len);
 }
 
 /* a notice of kind, about uid and n, with len of text, to session */

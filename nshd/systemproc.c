@@ -200,11 +200,14 @@
 
 /*
  * what a stream's child streams: a show's, FACTS_*, an operation's, or a
- * log file, followed, or followed again once it turned over
+ * log file, followed, or followed again once it turned over; and an
+ * operation's for a session that sees no password hash, with each one
+ * it prints taken out
  */
 #define SYS_OPERATION	3
 #define SYS_LOG		4
 #define SYS_LOG_AGAIN	5
+#define SYS_OPERATION_HIDDEN 6
 #define LOG_TAIL	2048	/* a log's last bytes, followed first */
 #define LOG_TURNED	4	/* its child's exit: the log turned over */
 #define LOG_WAIT	10	/* the new log waited for, half seconds */
@@ -280,7 +283,7 @@ struct stream {
 	int			 fd;		/* its output, or -1 at its end */
 	int			 window;	/* messages it may still send */
 	int			 stopped;
-	int			 op;		/* an operation's, SYS_OPERATION */
+	int			 op;		/* an operation's, either kind */
 	char			*log;		/* a log file's, followed, */
 	int			 text;		/* or pf's: text, not facts */
 	int			 status;	/* how its child ended */
@@ -1126,7 +1129,8 @@ system_op(uint32_t id, struct nshd_sysop *so)
 		system_printed(id, 1);
 		return;
 	}
-	system_stream(id, SYS_OPERATION, argv, so->op.rtable);
+	system_stream(id, (perms & LOGIN_ADMIN) != 0 ? SYS_OPERATION :
+	    SYS_OPERATION_HIDDEN, argv, so->op.rtable);
 }
 
 /*
@@ -1381,7 +1385,7 @@ system_stream(uint32_t id, int op, char **argv, int table)
 	if ((s = calloc(1, sizeof(*s))) == NULL)
 		fatal(NULL);
 	s->id = id;
-	s->op = op == SYS_OPERATION;
+	s->op = op == SYS_OPERATION || op == SYS_OPERATION_HIDDEN;
 	s->text = op == SYS_LOG || (op == FACTS_PROGRAM &&
 	    strcmp(argv[0], TCPDUMP) == 0);
 	if (op == SYS_LOG)
@@ -1457,6 +1461,7 @@ system_child(int fd, int op, char **argv, int table)
 		printf("%% exec '%s' failed: %s\n", argv[0], strerror(errno));
 		break;
 	case SYS_OPERATION:
+	case SYS_OPERATION_HIDDEN:
 		if (nsh_setrtable(table) != 0) {
 			fflush(stdout);
 			_exit(1);
@@ -1464,7 +1469,7 @@ system_child(int fd, int op, char **argv, int table)
 		cli_rtable = table;
 		for (argc = 0; argv[argc] != NULL; argc++)
 			;
-		r = op_run(argc, argv);
+		r = op_run(argc, argv, op == SYS_OPERATION_HIDDEN);
 		fflush(stdout);
 		_exit(r == -1 ? 1 : r);
 	case FACTS_LEASES:

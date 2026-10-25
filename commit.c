@@ -2198,13 +2198,16 @@ saved_text(FILE *out)
 /*
  * show diff-config outside configure, as nshd's system shows it: the
  * saved configuration, SAVED, or none, against what runs, block by
- * block, to stdout, if they differ: 1 if they do, 0 if not, -1 if either
- * cannot be read, said why
+ * block, to stdout, if they differ, and with hide, each password hash
+ * taken out: 1 if they do, 0 if not, -1 if either cannot be read, said why
  */
 int
-saved_diff(void)
+saved_diff(int hide)
 {
 	struct cnode *saved, *now = NULL;
+	char *buf = NULL;
+	size_t len = 0;
+	FILE *out = stdout;
 	int n = -1;
 
 	if (access(SAVED, R_OK) == -1 && errno == ENOENT)
@@ -2213,8 +2216,22 @@ saved_diff(void)
 		saved = conftree_read(SAVED, conf_mode, conf_ordered);
 	if (saved != NULL && (now = running_tree()) != NULL &&
 	    (n = conftree_compare(NULL, saved, now)) > 0) {
-		printf("--- startup-config\n+++ running-config\n");
-		n = conftree_compare(stdout, saved, now);
+		/* had whole, to take the hashes out */
+		if (hide && (out = open_memstream(&buf, &len)) == NULL) {
+			printf("%% saved_diff: %s\n", strerror(errno));
+			n = -1;
+		} else {
+			fprintf(out, "--- startup-config\n+++ running-config\n");
+			n = conftree_compare(out, saved, now);
+		}
+		if (out != NULL && out != stdout) {
+			if (fclose(out) == EOF) {
+				printf("%% saved_diff: %s\n", strerror(errno));
+				n = -1;
+			} else
+				fwrite(buf, 1, login_hide(buf, len), stdout);
+			free(buf);
+		}
 	}
 	conftree_free(saved);
 	conftree_free(now);
