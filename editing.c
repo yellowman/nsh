@@ -53,6 +53,11 @@
 static unsigned char complete(EditLine *, char **, size_t);
 static void list_vertical(StringList *);
 static void cmplt_print(struct cmplt *);
+static char *el_said(EditLine *, const char **);
+static int el_runs(const char *);
+static int el_off(EditLine *, int, const char *);
+static int el_offesc(EditLine *);
+static int el_noeditor(EditLine *);
 
 unsigned char complt_c(EditLine *, int);
 unsigned char complt_i(EditLine *, int);
@@ -210,6 +215,162 @@ endhist()
 	}
 }
 
+/*
+ * What bind argv, a list ending in NULL, prints on el, in a string to
+ * free, or NULL
+ */
+static char *
+el_said(EditLine *el, const char **argv)
+{
+	FILE *out, *err, *f;
+	char *s = NULL;
+	size_t len;
+	int argc;
+
+	for (argc = 0; argv[argc] != NULL; argc++)
+		;
+	if (el_get(el, EL_GETFP, 1, &out) == -1 ||
+	    el_get(el, EL_GETFP, 2, &err) == -1 ||
+	    (f = open_memstream(&s, &len)) == NULL)
+		return (NULL);
+	el_set(el, EL_SETFP, 1, f);
+	el_set(el, EL_SETFP, 2, f);
+	el_parse(el, argc, argv);
+	el_set(el, EL_SETFP, 1, out);
+	el_set(el, EL_SETFP, 2, err);
+	if (fclose(f) == EOF) {
+		free(s);
+		return (NULL);
+	}
+	return (s);
+}
+
+/*
+ * Does a line bind printed bind a key to vi-histedit, which runs vi, or
+ * to ed-command, which runs a bind nsh does not see?  bind prints a key's
+ * function last on its line, and a string a key types in quotes.
+ */
+static int
+el_runs(const char *said)
+{
+	static const char *const funcs[] = { "vi-histedit", "ed-command" };
+	const char *p, *e;
+	size_t i, n;
+
+	for (p = said; *p != '\0'; p = *e == '\0' ? e : e + 1) {
+		if ((e = strchr(p, '\n')) == NULL)
+			e = p + strlen(p);
+		for (i = 0; i < nitems(funcs); i++) {
+			n = strlen(funcs[i]);
+			if ((size_t)(e - p) >= n &&
+			    strncmp(e - n, funcs[i], n) == 0)
+				return (1);
+		}
+	}
+	return (0);
+}
+
+/*
+ * Unbind key, in el's alternative map if alt, if it runs vi-histedit or
+ * ed-command, or a sequence of keys that starts with it does: -1 if bind
+ * cannot be asked, 1 if it was unbound, else 0
+ */
+static int
+el_off(EditLine *el, int alt, const char *key)
+{
+	const char *ask[2][4] = {
+		{ "bind", key, NULL },
+		{ "bind", "-a", key, NULL } };
+	const char *off[2][5] = {
+		{ "bind", "-r", key, NULL },
+		{ "bind", "-a", "-r", key, NULL } };
+	char *s;
+	int runs;
+
+	if ((s = el_said(el, ask[alt])) == NULL)
+		return (-1);
+	runs = el_runs(s);
+	free(s);
+	if (runs)
+		el_parse(el, 3 + alt, off[alt]);
+	return (runs);
+}
+
+/*
+ * el_off() ESC and each key after it, where the editor puts each meta
+ * key's function
+ */
+static int
+el_offesc(EditLine *el)
+{
+	char key[9];
+	int c, r, unbound = 0;
+
+	for (c = 1; c < 0200; c++) {
+		(void)snprintf(key, sizeof(key), "\\033\\%03o", c);
+		if ((r = el_off(el, 0, key)) == -1)
+			return (-1);
+		unbound |= r;
+	}
+	return (unbound);
+}
+
+/*
+ * For a user without the exec permission: unbind every key of el's that
+ * runs vi-histedit or ed-command.  -1 if that cannot be shown done, said
+ * why, 1 if a key was unbound, else 0
+ */
+static int
+el_noeditor(EditLine *el)
+{
+	const char *all[] = { "bind", NULL };
+	const char *vi[] = { "bind", "-v", NULL };
+	const char *emacs[] = { "bind", "-e", NULL };
+	const char *ed;
+	char key[5], *s, *p;
+	int c, r, unbound;
+
+	if ((s = el_said(el, all)) == NULL)
+		goto fail;
+	r = el_runs(s);
+	free(s);
+	if (!r)
+		return (0);
+
+	/*
+	 * The editor binds a function to no sequence of keys but ESC and a
+	 * key, where it puts each meta key's.  bind prints a sequence in a
+	 * form it cannot always read back, so if another runs one, the
+	 * editor's defaults are taken.
+	 */
+	if ((unbound = el_offesc(el)) == -1 || (s = el_said(el, all)) == NULL)
+		goto fail;
+	r = (p = strstr(s, "Multi-character bindings")) == NULL || el_runs(p);
+	free(s);
+	if (r && (el_get(el, EL_EDITOR, &ed) == -1 ||
+	    el_parse(el, 2, strcmp(ed, "vi") == 0 ? vi : emacs) != 0 ||
+	    el_offesc(el) == -1))
+		goto fail;
+
+	for (c = 0; c < 2 * 256; c++) {
+		(void)snprintf(key, sizeof(key), "\\%03o", c % 256);
+		if ((r = el_off(el, c / 256, key)) == -1)
+			goto fail;
+		unbound |= r;
+	}
+
+	if ((s = el_said(el, all)) == NULL)
+		goto fail;
+	r = el_runs(s);
+	free(s);
+	if (!r)
+		return (unbound);
+fail:
+	printf("%% Command line editing off: its keys could not be kept from "
+	    "running vi-histedit or ed-command\n");
+	return (-1);
+}
+
 void
 initedit()
 {
@@ -260,6 +421,9 @@ initedit()
 		el_source(elp, NULL);	/* read ~/.editrc */
 		el_set(elp, EL_SIGNAL, 1);
 	}
+	if (!nshd_execs() && (el_noeditor(elc) == -1 ||
+	    el_noeditor(eli) == -1 || el_noeditor(elp) == -1))
+		endedit();
 }
 
 void
@@ -305,6 +469,18 @@ el_burrito(EditLine *el, int argc, char **argv)
 		return 1;
 
 	val = el_parse(el, argc, (const char **)argv);
+
+	if (!nshd_execs())
+		switch (el_noeditor(el)) {
+		case -1:
+			endedit();
+			break;
+		case 1:
+			printf("%% Keys for vi-histedit and ed-command "
+			    "unbound: your login class does not have the exec "
+			    "permission\n");
+			break;
+		}
 
 	if (val == 0)
 		return 0;

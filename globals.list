@@ -103,6 +103,7 @@ ctl.c		table	ctl_bgp ctl_crontab ctl_daemons ctl_dhcp
 			ctl_sshd ctl_tftp ctl_tftpproxy admin_words
 			daemon_fields kind_daemon
 editing.c	process	complete.word
+editing.c	table	el_runs.funcs
 genget.c	process	ambiguous
 if.c		session	imrif imrsave
 if.c		scratch	get_linkstate.buf if_facts.ifdescr

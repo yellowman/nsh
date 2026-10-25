@@ -93,6 +93,12 @@ nshd_runs(const char *cmd)
 }
 
 int
+nshd_execs(void)
+{
+	return 1;
+}
+
+int
 nshd_configure(int how)
 {
 	return -1;

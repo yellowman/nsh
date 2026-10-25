@@ -22,6 +22,7 @@ int kf_names(int, StringList *);
 int prot1_run(char *, char *, int, char **, char **);
 int cmdargs(char *, char **);
 int nshd_runs(const char *);
+int nshd_execs(void);
 
 int candidate;		/* bgpnsh has no configure private */
 int cand_rtable;
@@ -46,6 +47,12 @@ prot1_run(char *prot, char *sub, int argc, char **argv, char **args)
 /* bgpnsh has no nshd: what it runs runs as its user */
 int
 nshd_runs(const char *cmd)
+{
+	return 1;
+}
+
+int
+nshd_execs(void)
 {
 	return 1;
 }

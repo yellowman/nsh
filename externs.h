@@ -574,6 +574,7 @@ extern int nshd_config;
 extern int nshd_rtable;
 int nshd_show(char *);
 int nshd_runs(const char *);
+int nshd_execs(void);
 int nshd_priv(int);
 int nshd_configure(int);
 const char *nshd_cname(void);

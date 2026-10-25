@@ -354,6 +354,19 @@ which needs nothing.
 .Nm
 checks exec itself, so it holds only for a user whose login shell is
 .Nm .
+Without exec, no key of the line editor runs
+.Cm vi-histedit ,
+which runs vi, or
+.Cm ed-command ,
+which runs a bind
+.Nm
+does not see:
+.Nm
+unbinds each such key as the editor starts, after
+.Pa ~/.editrc ,
+and after each bind.
+For a sequence of keys bound to either, other than ESC and a key, the
+editor takes its own bindings back.
 .El
 .Pp
 Root is always super-user.

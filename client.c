@@ -73,6 +73,7 @@ static struct imsgbuf	sib;
 static int	nshd_next(struct imsgbuf *, struct imsg *, const sigset_t *);
 static int	nshd_open(char *, struct imsgbuf *, int32_t *);
 static void	nshd_why(void);
+static int	nshd_has(int, int);
 static int	nshd_ask(int, uint32_t, const void *, size_t, struct facts_in *,
 		    int32_t *);
 static void	nshd_sigint(int);
@@ -184,6 +185,34 @@ nshd_why(void)
 }
 
 /*
+ * Does the user's login class have the permission need?  1 if it does,
+ * or the user is root, else 0, said why if why
+ */
+static int
+nshd_has(int need, int why)
+{
+	struct imsgbuf	 ib;
+	int32_t		 perms;
+	int		 fd;
+
+	if (getuid() == 0)
+		return (1);
+	if ((fd = nshd_open(NSHD_SOCKET, &ib, &perms)) == -1) {
+		if (why)
+			nshd_why();
+		return (0);
+	}
+	imsgbuf_clear(&ib);
+	close(fd);
+	if (perms != -1 && (perms & need) != 0)
+		return (1);
+	if (why)
+		printf("%% Not allowed: your login class does not have the %s "
+		    "permission\n", need == NSHD_EXEC ? "exec" : "operate");
+	return (0);
+}
+
+/*
  * May nsh run the program cmd, as the user's login class says: ping and
  * traceroute need operate, clear nothing, and any other exec. root may
  * run any. 1 if it may, else 0, said why
@@ -201,29 +230,25 @@ nshd_runs(const char *cmd)
 		{ TRACERT6,	NSHD_OPERATE },
 		{ CLEAR,	0 },
 	};
-	struct imsgbuf	 ib;
 	size_t		 i;
-	int32_t		 perms;
-	int		 fd, need = NSHD_EXEC;
+	int		 need = NSHD_EXEC;
 
-	if (getuid() == 0)
-		return (1);
 	for (i = 0; i < nitems(progs); i++)
 		if (strcmp(cmd, progs[i].path) == 0)
 			need = progs[i].need;
 	if (need == 0)
 		return (1);
-	if ((fd = nshd_open(NSHD_SOCKET, &ib, &perms)) == -1) {
-		nshd_why();
-		return (0);
-	}
-	imsgbuf_clear(&ib);
-	close(fd);
-	if (perms != -1 && (perms & need) != 0)
-		return (1);
-	printf("%% Not allowed: your login class does not have the %s "
-	    "permission\n", need == NSHD_EXEC ? "exec" : "operate");
-	return (0);
+	return (nshd_has(need, 1));
+}
+
+/*
+ * May the user run programs, as the line editor's vi-histedit runs vi?
+ * Said nothing
+ */
+int
+nshd_execs(void)
+{
+	return (nshd_has(NSHD_EXEC, 0));
 }
 
 /*
