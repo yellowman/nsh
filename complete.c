@@ -442,7 +442,9 @@ complete_line(const char *buf, size_t len, size_t cursor, char *word,
 	if (strlen(word) > len) /* user has erased part of previous line */
 		word[len] = '\0';
 	cursor_pos = line + cursor;
-	makeargv();			/* build argc/argv of current line */
+	/* build argc/argv of current line */
+	if (makeargv() == -1)
+		return (CC_ERROR);
 
 	if (cursor_argo >= CMPLT_WORD)
 		return (CC_ERROR);

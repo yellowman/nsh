@@ -173,7 +173,10 @@ command(void)
 
 		if (line[0] == 0)
 			break;
-		makeargv();
+		if (makeargv() == -1) {
+			printf("%% Too many words\n");
+			continue;
+		}
 		if (margv[0] == 0) {
 			break;
 		}

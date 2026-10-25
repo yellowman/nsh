@@ -218,7 +218,7 @@ extern char saved_prompt[sizeof(prompt)];
 
 int group (int, char **, ...);
 void gen_help(char **, char *, char *, int);
-void makeargv(void);
+int makeargv(void);
 extern size_t cursor_argc;
 extern size_t cursor_argo;
 

@@ -32,7 +32,7 @@ extern struct prot prots[];
 int show_help(int, char **, ...);
 Command *getcmd(char *);
 extern Menu showlist[];
-void makeargv(void);
+int makeargv(void);
 extern pid_t child;
 extern int	nsh_setrtable(int);
 extern void	sigalarm(int);

@@ -44,35 +44,69 @@ char	*margv[NARGS];			/* argv storage */
 size_t	cursor_argc;			/* location of cursor in margv */
 size_t	cursor_argo;			/* offset of cursor margv[cursor_argc] */
 
-void
+static int split(char *, char **, int, size_t, size_t *, size_t *);
+
+/*
+ * line in words, in margv, and how many in margc. A line that starts with
+ * ! is the shell's, its first word !. cursor_argc and cursor_argo say
+ * where cursor_pos is in them. -1 if they would not fit, with none
+ */
+int
 makeargv(void)
 {
-	char	*cp, *cp2, *base, c;
-	char	**argp = margv;
+	char	*cp = line;
+	int	 n = 0;
 
 	margc = 0;
-	cp = line;
 	if (*cp == '!') {	/* Special case shell escape */
 		/* save for shell command */
 		strlcpy(saveline, line, sizeof(saveline));
 
-		*argp++ = "!";	/* No room in string to get this */
-		margc++;
+		margv[n++] = "!";	/* No room in string to get this */
 		cp++;
 		cursor_argc = 0;
 		cursor_argo = 0;
 	}
+	if ((n = split(cp, margv, n, NARGS, &cursor_argc,
+	    &cursor_argo)) == -1) {
+		margv[0] = NULL;
+		cursor_argc = 0;
+		cursor_argo = 0;
+		return -1;
+	}
+	margc = n;
+	if (cursor_pos == line) {
+		cursor_argc = 0;
+		cursor_argo = 0;
+	}
+	return 0;
+}
+
+/*
+ * cp in words, after the n in argv already, and a NULL after them, in
+ * argv's max: how many there are then, or -1 if they would not fit.
+ * argc and argo say where cp ends: in which word, and how far into it
+ */
+static int
+split(char *cp, char **argv, int n, size_t max, size_t *argc,
+    size_t *argo)
+{
+	char	*cp2, *base, c;
+
 	while ((c = *cp)) {
 		int inquote = 0;
 		while (isspace((unsigned char)c))
 			c = *++cp;
 		if (c == '\0')
 			break;
-		*argp++ = cp;
-		cursor_argc = margc += 1;
+		/* this word, and the NULL after it */
+		if ((size_t)n + 2 > max)
+			return -1;
+		argv[n++] = cp;
+		*argc = n;
 		base = cp;
-		for (cursor_argo = 0, cp2 = cp; c != '\0';
-		    cursor_argo = (cp + 1) - base, c = *++cp) {
+		for (*argo = 0, cp2 = cp; c != '\0';
+		    *argo = (cp + 1) - base, c = *++cp) {
 			if (inquote) {
 				if (c == inquote) {
 					inquote = 0;
@@ -89,7 +123,7 @@ makeargv(void)
 					inquote = '\'';
 					continue;
 				} else if (isspace((unsigned char)c)) {
-					cursor_argo = 0;
+					*argo = 0;
 					break;
 				}
 			}
@@ -97,14 +131,11 @@ makeargv(void)
 		}
 		*cp2 = '\0';
 		if (c == '\0') {
-			cursor_argc--;
+			(*argc)--;
 			break;
 		}
 		cp++;
 	}
-	*argp++ = 0;
-	if (cursor_pos == line) {
-		cursor_argc = 0;
-		cursor_argo = 0;
-	}
+	argv[n] = NULL;
+	return n;
 }

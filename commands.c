@@ -1832,7 +1832,10 @@ interface(int argc, char **argv, ...)
 			}
 		}
 
-		makeargv();
+		if (makeargv() == -1) {
+			printf("%% Too many words\n");
+			continue;
+		}
 		if (margv[0] == 0)
 			break;
 		if (NO_ARG(margv[0]))
@@ -2394,7 +2397,10 @@ command()
 			cmdline_nshd(line);
 			continue;
 		}
-		makeargv();
+		if (makeargv() == -1) {
+			printf("%% Too many words\n");
+			continue;
+		}
 		if (margv[0] == 0) {
 			break;
 		}
@@ -2460,7 +2466,10 @@ cmdline(char *text)
 		printf("%% Input exceeds permitted length\n");
 		return -1;
 	}
-	makeargv();
+	if (makeargv() == -1) {
+		printf("%% Too many words\n");
+		return -1;
+	}
 	if (margv[0] == NULL)
 		return 0;
 	if (ifname[0] != '\0')
@@ -2562,7 +2571,10 @@ cmdline_nshd(char *text)
 		printf("%% Input exceeds permitted length\n");
 		return -1;
 	}
-	makeargv();
+	if (makeargv() == -1) {
+		printf("%% Too many words\n");
+		return -1;
+	}
 	if (margv[0] == NULL)
 		return 0;
 	p = NO_ARG(margv[0]) ? margv[1] : margv[0];
@@ -3703,7 +3715,11 @@ cmdrc(char rcname[FILENAME_MAX])
 			continue;
 		if (line[0] == ' ')
 			strlcpy(saveline, line, sizeof(saveline));
-		makeargv();
+		if (makeargv() == -1) {
+			printf("%% Too many words (line %u)\n", lnum);
+			status = -1;
+			continue;
+		}
 		if (margv[0] == 0 && !savec)
 			continue;
 		if (line[0] == ' ' && (!savec || savec->modh < 1)) {
