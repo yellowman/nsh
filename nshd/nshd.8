@@ -175,8 +175,11 @@ when its session went; the uid it records is frontend's.
 system checks the permissions of that uid's login class itself, as
 config does: an operation needs operate, and a commit, its test and a
 save need configure.
-It checks a login of the web configurator's itself too, with
-.Xr auth_userokay 3 ,
+It checks a login of the web configurator's itself too, the password
+with
+.Xr auth_usercheck 3
+and the account with
+.Xr auth_approval 3 ,
 for a user that a
 .Cm login user
 line names, and never root; the session then acts as that user, whose

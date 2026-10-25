@@ -638,23 +638,32 @@ login_perms(uid_t uid)
 
 /*
  * The uid of name, a user a login user line names, but never root, if
- * password is its own, as auth_userokay(3) checks it; else -1, said
+ * password is its own, as auth_usercheck(3) checks it, and the account
+ * may log in, as auth_approval(3) says, which login(1) asks too: not
+ * expired, nor refused by its class; else -1, said
  */
 int
 login_auth(char *name, char *password)
 {
+	auth_session_t *as = NULL;
 	struct passwd *pw;
 	char class[64];
-	int made;
+	int made, uid = -1;
 
-	if (strcmp(name, "root") == 0 ||
-	    login_user_find(name, class, sizeof(class), &made) != 1 ||
-	    (pw = getpwnam(name)) == NULL ||
-	    !auth_userokay(name, NULL, NULL, password)) {
-		printf("%% Login incorrect\n");
-		return -1;
+	if (strcmp(name, "root") != 0 &&
+	    login_user_find(name, class, sizeof(class), &made) == 1 &&
+	    (pw = getpwnam(name)) != NULL) {
+		/* taken before auth_*() read the password database again */
+		uid = pw->pw_uid;
+		if ((as = auth_usercheck(name, NULL, NULL, password)) == NULL ||
+		    auth_approval(as, NULL, name, NULL) <= 0)
+			uid = -1;
+		if (as != NULL)
+			auth_close(as);
 	}
-	return pw->pw_uid;
+	if (uid == -1)
+		printf("%% Login incorrect\n");
+	return uid;
 }
 
 /*
