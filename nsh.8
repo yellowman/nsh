@@ -329,8 +329,9 @@ rules with mda, proc, a pipe, a table or a macro; of
 rules with a trap handle or a macro; of
 .Cm pf
 rules with file or load; and of any daemon's rules with include.
-A line continued with a backslash, and the line after it, count as
-having every such word of their daemon.
+The check reads each line as the daemon's parser does, so a backslash
+that hides part of a word, or a word spread over a line continued with a
+backslash, is still found, and a word in a comment is not.
 A commit without admin may keep such a line as it ran before.
 A user with admin can gain root through these lines, so give admin
 only to a user who may have root.

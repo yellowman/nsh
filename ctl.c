@@ -20,6 +20,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <errno.h>
+#include <ctype.h>
 #include <libgen.h>
 #include <histedit.h>
 #include <stdarg.h>
@@ -68,7 +69,7 @@ static int ctl_cand_stage(struct daemons *, char *, char *, char *,
     size_t);
 static void ctl_cand_unstage(char *, char *);
 static int ctl_cand_follow(struct daemons *, char *, int);
-static int admin_kept(struct daemons *, int, char *, int *);
+static int admin_scan(struct daemons *, const char *, size_t, char **);
 static int admin_had(struct daemons *, int, char *);
 static const char *admin_in(int);
 
@@ -918,8 +919,9 @@ ctl_setrules(int d, char *text, size_t len)
 {
 	struct daemons *dm = &ctl_daemons[d];
 	char path[PATH_MAX], *t, *p, *l;
+	char *need = NULL;
 	FILE *f = NULL;
-	int cont = 0, r = 0;
+	int r = 0, line = 0;
 
 	if (cli_rtable > dm->rtablemax) {
 		printf("%% Command %s not available via rtable %d\n",
@@ -930,18 +932,37 @@ ctl_setrules(int d, char *text, size_t len)
 		printf("%% %s has no rules\n", dm->name);
 		return -1;
 	}
+	if (admin_limited && len > 0 && ADMIN_WHOLE(dm)) {
+		printf("%% Commit refused: changing %s's rules%s needs the admin "
+		    "permission\n", dm->name, admin_in(cli_rtable));
+		admin_refused = 1;
+		return -1;
+	}
+	if (admin_limited && !admin_refused &&
+	    admin_scan(dm, text, len, &need) == -1) {
+		printf("%% ctl_setrules: %s\n", strerror(errno));
+		admin_refused = 1;
+		return -1;
+	}
 	snprintf(path, sizeof(path), "%s.%d", dm->tmpfile, cli_rtable);
 	if ((t = p = strndup(text, len)) == NULL) {
 		printf("%% ctl_setrules: %s\n", strerror(errno));
+		free(need);
 		return -1;
 	}
 	while ((l = strsep(&p, "\n")) != NULL && (p != NULL || *l != '\0')) {
 		if (admin_limited && (admin_refused ||
-		    admin_kept(dm, cli_rtable, l, &cont))) {
+		    (need != NULL && need[line] &&
+		    !admin_had(dm, cli_rtable, l)))) {
+			if (!admin_refused)
+				printf("%% Commit refused: this line of %s's "
+				    "rules%s needs the admin permission: %s\n",
+				    dm->name, admin_in(cli_rtable), l);
 			admin_refused = 1;
 			r = -1;
 			break;
 		}
+		line++;
 		/* the file, made at its first line */
 		if (f == NULL) {
 			if ((f = fopen(path, "w")) == NULL) {
@@ -959,6 +980,7 @@ ctl_setrules(int d, char *text, size_t len)
 		r = -1;
 	}
 	free(t);
+	free(need);
 	return r;
 }
 
@@ -1863,8 +1885,8 @@ int
 admin_test(char *name, char *text, size_t len)
 {
 	struct daemons *d;
-	char *t, *p, *l;
-	int cont = 0, r = 0;
+	char *t, *p, *l, *need = NULL;
+	int r = 0, line = 0;
 
 	if (!admin_limited)
 		return 0;
@@ -1873,53 +1895,231 @@ admin_test(char *name, char *text, size_t len)
 			break;
 	if (d->name == NULL)
 		return 0;
-	if ((t = p = strndup(text, len)) == NULL) {
+	if (len > 0 && ADMIN_WHOLE(d)) {
+		printf("%% Commit refused: changing %s's rules needs the admin "
+		    "permission\n", d->name);
+		return -1;
+	}
+	if (admin_scan(d, text, len, &need) == -1) {
 		printf("%% admin_test: %s\n", strerror(errno));
 		return -1;
 	}
-	while (r == 0 && (l = strsep(&p, "\n")) != NULL)
-		if (admin_kept(d, -1, l, &cont))
+	if ((t = p = strndup(text, len)) == NULL) {
+		printf("%% admin_test: %s\n", strerror(errno));
+		free(need);
+		return -1;
+	}
+	while (r == 0 && (l = strsep(&p, "\n")) != NULL) {
+		if (need[line] && !admin_had(d, -1, l)) {
+			printf("%% Commit refused: this line of %s's rules "
+			    "needs the admin permission: %s\n", d->name, l);
 			r = -1;
+		}
+		line++;
+	}
 	free(t);
+	free(need);
 	return r;
 }
 
 /*
- * Does line, of daemon d's rules in rtable, or any with -1, need admin
- * that the commit running lacks? Any line of a daemon whose rules need
- * admin does, and so does a line with a word that needs admin, unless
- * the rules had it before. A line that ends in a backslash, and the
- * line after it, have every word of their daemon's, as one word can go
- * on over the two. cont says if the line before went on, and is set to
- * say if this one does. 1 if it does, said, else 0
+ * Read daemon d's rules, text of len bytes, the way the parse.y family
+ * of daemons reads them, and mark in *needp (one byte per physical
+ * line, line 1 at index 0) every line of a statement that has a word
+ * that needs admin. The lexer drops a backslash before a character, so
+ * ha\ndle reads as handle; a backslash before a newline joins the two
+ * lines; a quoted string may hold either; a # begins a comment; and a
+ * statement may run over several lines, each of which is marked. A
+ * reserved word is read on the word the lexer builds, not the raw text,
+ * so an escape within it no longer hides it. Macros are not expanded: a
+ * $ or an = is itself a word that needs admin for the daemons that have
+ * one, so a macro that could hide a word needs admin to define or use.
+ * Returns the number of physical lines, *needp a new array of that many
+ * bytes, or -1 if it could not, with errno set
  */
-static int
-admin_kept(struct daemons *d, int rtable, char *line, int *cont)
-{
-	size_t i, n;
-	int hit = 0, went = *cont;
+struct lexin {
+	const char	*s;
+	size_t		 pos, len;
+	int		 line;
+	int		 ung[4];
+	int		 ungn;
+};
 
-	n = strlen(line);
-	*cont = n > 0 && line[n - 1] == '\\';
-	if (ADMIN_WHOLE(d)) {
-		printf("%% Commit refused: changing %s's rules%s needs the admin "
-		    "permission\n", d->name, admin_in(rtable));
-		return 1;
+static int
+lx_raw(struct lexin *x)
+{
+	if (x->ungn > 0)
+		return x->ung[--x->ungn];
+	if (x->pos >= x->len)
+		return EOF;
+	return (unsigned char)x->s[x->pos++];
+}
+
+static void
+lx_unget(struct lexin *x, int c)
+{
+	if (c == EOF)
+		return;
+	if (x->ungn < (int)(sizeof(x->ung) / sizeof(x->ung[0])))
+		x->ung[x->ungn++] = c;
+}
+
+/* A character the daemon's lexer reads, outside a quoted string */
+static int
+lx_getc(struct lexin *x)
+{
+	int c, next;
+
+	while ((c = lx_raw(x)) == '\\') {
+		next = lx_raw(x);
+		if (next != '\n') {
+			c = next;
+			break;
+		}
+		x->line++;		/* a backslash joins this line to the next */
 	}
+	if (c == '\t' || c == ' ') {
+		do {
+			c = lx_raw(x);
+		} while (c == '\t' || c == ' ');
+		lx_unget(x, c);
+		c = ' ';
+	}
+	return c;
+}
+
+/* every word of the token the lexer built that needs admin for d */
+static int
+lx_word(struct daemons *d, const char *tok)
+{
+	size_t i;
+
 	for (i = 0; i < sizeof(admin_words) / sizeof(admin_words[0]); i++) {
 		if (admin_words[i].table != NULL &&
 		    admin_words[i].table != d->table)
 			continue;
 		/* every daemon has a word, include */
-		if (went || *cont ||
-		    strcasestr(line, admin_words[i].word) != NULL)
+		if (strcasestr(tok, admin_words[i].word) != NULL)
+			return 1;
+	}
+	return 0;
+}
+
+#define LX_INSTR(c) \
+	(isalnum(c) || (ispunct(c) && (c) != '(' && (c) != ')' && \
+	(c) != '{' && (c) != '}' && (c) != '!' && (c) != '=' && \
+	(c) != '#' && (c) != ','))
+
+static int
+admin_scan(struct daemons *d, const char *text, size_t len, char **needp)
+{
+	struct lexin x = { .s = text, .len = len, .line = 1 };
+	char buf[8192], *need;
+	size_t i, nlines = 1;
+	int c, next, quotec, first = 0, hit = 0;
+
+	for (i = 0; i < len; i++)
+		if (text[i] == '\n')
+			nlines++;
+	if ((need = calloc(nlines + 1, 1)) == NULL)
+		return -1;
+
+	for (;;) {
+		char *p = buf;
+		int tokline;
+
+		while ((c = lx_getc(&x)) == ' ')
+			;			/* skip leading blanks */
+		tokline = x.line;
+		if (c == '#')			/* a comment to the newline */
+			while ((c = lx_getc(&x)) != '\n' && c != EOF)
+				;
+		if (c == '$') {			/* a macro: the $ is a word */
+			if (!first)
+				first = tokline;
+			if (lx_word(d, "$"))
+				hit = 1;
+			while ((c = lx_getc(&x)) != EOF &&
+			    (isalnum(c) || c == '_'))
+				;		/* read the macro's name */
+			lx_unget(&x, c);
+			continue;
+		}
+		if (c == '\'' || c == '"') {	/* a quoted string */
+			quotec = c;
+			for (;;) {
+				if ((c = lx_raw(&x)) == EOF)
+					break;
+				if (c == '\n') {
+					x.line++;
+					continue;
+				} else if (c == '\\') {
+					if ((next = lx_raw(&x)) == EOF)
+						break;
+					if (next == quotec || next == ' ' ||
+					    next == '\t')
+						c = next;
+					else if (next == '\n') {
+						x.line++;
+						continue;
+					} else
+						lx_unget(&x, next);
+				} else if (c == quotec)
+					break;
+				if (p + 1 < buf + sizeof(buf))
+					*p++ = c;
+			}
+			*p = '\0';
+			if (!first)
+				first = tokline;
+			if (lx_word(d, buf))	/* catches | inside a string */
+				hit = 1;
+			continue;
+		}
+		if (c == '-' || isdigit(c)) {	/* a number, never a word */
+			while ((c = lx_getc(&x)) != EOF && isdigit(c))
+				;
+			lx_unget(&x, c);
+			if (!first)
+				first = tokline;
+			continue;
+		}
+		if (isalnum(c) || c == ':' || c == '_') {	/* a word */
+			do {
+				if (p + 1 < buf + sizeof(buf))
+					*p++ = c;
+			} while ((c = lx_getc(&x)) != EOF && LX_INSTR(c));
+			lx_unget(&x, c);
+			*p = '\0';
+			if (!first)
+				first = tokline;
+			if (lx_word(d, buf))
+				hit = 1;
+			continue;
+		}
+		if (c == '\n' || c == EOF) {	/* end of the statement */
+			if (hit && first > 0)
+				for (i = (size_t)first - 1;
+				    i < (size_t)x.line && i < nlines; i++)
+					need[i] = 1;
+			first = 0;
+			hit = 0;
+			if (c == EOF)
+				break;
+			x.line++;
+			continue;
+		}
+		/* a single punctuation character, such as = */
+		if (!first)
+			first = tokline;
+		buf[0] = c;
+		buf[1] = '\0';
+		if (lx_word(d, buf))
 			hit = 1;
 	}
-	if (!hit || admin_had(d, rtable, line))
-		return 0;
-	printf("%% Commit refused: this line of %s's rules%s needs the admin "
-	    "permission: %s\n", d->name, admin_in(rtable), line);
-	return 1;
+
+	*needp = need;
+	return (int)nlines;
 }
 
 /* " in rtable N", for an rtable but 0, or "" */
