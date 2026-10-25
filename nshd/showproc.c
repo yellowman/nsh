@@ -133,7 +133,7 @@ show_dispatch_parent(int fd, short event, void *arg)
 static void
 show_listen(void)
 {
-	if (control_listen(4, show_client, show_gone, show_more) == -1)
+	if (control_listen(4, NULL, show_client, show_gone, show_more) == -1)
 		fatalx("cannot listen on %s", NSHD_RO_SOCKET);
 }
 

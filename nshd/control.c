@@ -46,6 +46,7 @@ static struct {
 	struct event	 ev;
 	struct event	 evt;
 	int		 fd;
+	int		(*opened)(struct ctl_conn *);
 	int		(*handler)(struct ctl_conn *, struct imsg *);
 	void		(*closed)(struct ctl_conn *);
 	int		(*written)(struct ctl_conn *);
@@ -139,18 +140,21 @@ control_route(void)
 }
 
 /*
- * accept on fd; each client's messages go to handler, closed when it
- * goes, and written each time some of what it was sent is written; -1
- * from handler or written closes the client
+ * accept on fd; each client goes to opened, if not NULL, as it comes,
+ * its messages to handler, to closed when it goes, and to written each
+ * time some of what it was sent is written; -1 from opened, handler or
+ * written closes the client
  */
 int
-control_listen(int fd, int (*handler)(struct ctl_conn *, struct imsg *),
+control_listen(int fd, int (*opened)(struct ctl_conn *),
+    int (*handler)(struct ctl_conn *, struct imsg *),
     void (*closed)(struct ctl_conn *), int (*written)(struct ctl_conn *))
 {
 	if (control_state.fd != -1)
 		fatalx("%s: a second socket", __func__);
 
 	control_state.fd = fd;
+	control_state.opened = opened;
 	control_state.handler = handler;
 	control_state.closed = closed;
 	control_state.written = written;
@@ -219,6 +223,12 @@ control_accept(int listenfd, short event, void *arg)
 	c->id = ++control_nextid;
 	c->uid = uid;
 	c->gid = gid;
+	if (control_state.opened != NULL && control_state.opened(c) == -1) {
+		imsgbuf_clear(&c->iev.ibuf);
+		close(connfd);
+		free(c);
+		return;
+	}
 	c->iev.handler = control_dispatch;
 	c->iev.events = EV_READ;
 	event_set(&c->iev.ev, connfd, c->iev.events, c->iev.handler, &c->iev);

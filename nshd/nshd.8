@@ -53,8 +53,9 @@ Runs as _nshfront in a
 .Xr chroot 2
 and answers the read-write socket.
 Each client is a session, which asks one thing at a time.
-frontend tells system, before config, of each request that may begin
-a commit, and of each operation: whose it is, and when it is answered;
+frontend passes system each client's socket as the client comes, and
+tells system, before config, of each request that may begin a commit,
+and of each operation, and when it is answered;
 a client of _nshweb's uid is the web configurator's session, which
 alone may log in, as a user, with that user's password, and ask for
 the user's terminal.
@@ -171,7 +172,13 @@ is not; nsh's
 asks for it.
 It answers config and no one else, and begins a commit only for a
 request that frontend told it of and that is not answered, or was not
-when its session went; the uid it records is frontend's.
+when its session went.
+The uid it records, and whether a session is the web configurator's,
+it reads itself, with
+.Xr getpeereid 2 ,
+from the socket of the session's client, and it takes a request only
+while that client is connected, so a frontend taken over cannot say
+who a client is.
 system checks the permissions of that uid's login class itself, as
 config does: an operation needs operate, and a commit, its test and a
 save need configure.

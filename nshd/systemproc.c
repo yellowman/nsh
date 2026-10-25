@@ -113,18 +113,22 @@
  * commit not confirmed goes; if not, it says the boot failed, and carp
  * stays demoted until a commit saves.
  *
- * A commit is a session's, and frontend says whose: it tells system,
- * on their pipe, of each request that may begin one, a line, a commit
- * or a load's part, by whom, and whether the session is the web
- * configurator's, before config hears of it; and when config answers
- * it, and when a session goes. BEGIN, and TEST and SAVE before one,
+ * A commit is a session's, and system reads whose from the session's
+ * client: frontend passes it each client's socket as the client comes,
+ * and system asks the kernel who is at its other end, and whether that
+ * is the web configurator. frontend tells system, on their pipe, of
+ * each request that may begin a commit, a line, a commit or a load's
+ * part, before config hears of it; and when config answers it, and when
+ * a session goes. system takes a request only while its client is
+ * connected, as the socket says. BEGIN, and TEST and SAVE before one,
  * name the session, and are refused except while it has a request that
  * is not answered, or, its session gone, was not; BEGIN takes that
  * request, whose uid the commit record says. TEST of no session's, and
  * APPLY of no commit begun, are the boot's, and refused except while
- * it runs; BOOT is answered as done already once parent says nshd does not
- * boot, or BOOTED has. So a config that a client compromised can begin
- * a commit only for a request it was asked, and cannot say whose it is.
+ * it runs; BOOT is answered as done already once parent says nshd does
+ * not boot, or BOOTED has. So a config that a client compromised can
+ * begin a commit only for a request it was asked, and cannot say whose
+ * it is, and a frontend compromised cannot say who a client is.
  *
  * system checks the permissions of the login class of that request's
  * uid itself, as config does: an operation, which frontend tells it of
@@ -335,8 +339,9 @@ struct record {
 
 /*
  * What frontend told system: a session's request that may begin a
- * commit, not answered; once the session is gone, kept for a commit it
- * asked, ASKED_GONE of them at most
+ * commit, not answered, with who the session's client is; once the
+ * session is gone, kept for a commit it asked, ASKED_GONE of them at
+ * most
  */
 struct asked {
 	TAILQ_ENTRY(asked)	 entry;
@@ -346,6 +351,19 @@ struct asked {
 	int			 gone;
 };
 #define ASKED_GONE	64
+
+/*
+ * A session's client, as system reads it from the client's socket, which
+ * frontend passes it: the uid the kernel says it is, if it is the web
+ * configurator's, and the socket, kept to see whether it is still there
+ */
+struct client {
+	TAILQ_ENTRY(client)	 entry;
+	uint32_t		 session;
+	uid_t			 uid;
+	int			 web;
+	int			 fd;
+};
 
 /* a session of the web configurator's, and the uid it logged in as */
 struct login {
@@ -369,6 +387,8 @@ static size_t		 nunits;
 static TAILQ_HEAD(, stream) streams = TAILQ_HEAD_INITIALIZER(streams);
 static int		 nstreams;
 static uid_t		 check_uid;	/* NSHD_CHECK_USER's */
+static uid_t		 web_uid;	/* NSHD_WEB_USER's, */
+static int		 web_user;	/* if there is one */
 static gid_t		 check_gid;
 static struct job	*job;
 static pid_t		 terminals[SYS_TERMINALS];	/* their nsh, or 0 */
@@ -389,6 +409,7 @@ static int		 booting;	/* BOOT run, until BOOTED */
 static int		 boot_over;	/* parent said nshd booted, or BOOTED */
 static TAILQ_HEAD(, asked) askeds = TAILQ_HEAD_INITIALIZER(askeds);
 static TAILQ_HEAD(, login) logins = TAILQ_HEAD_INITIALIZER(logins);
+static TAILQ_HEAD(, client) clients = TAILQ_HEAD_INITIALIZER(clients);
 static int		 nagone;	/* of them, of sessions gone */
 static struct event	 confirm_tm;	/* the deadline, or the next attempt */
 static time_t		 confirm_next;	/* the next attempt, no sooner */
@@ -400,6 +421,9 @@ static struct asked *asked_find(uint32_t);
 static struct asked *asked_whose(struct nshd_whose *);
 static void	asked_free(struct asked *);
 static void	asked_trim(void);
+static void	client_new(uint32_t, int);
+static struct client *client_find(uint32_t);
+static int	client_there(struct client *);
 static struct login *login_find(uint32_t);
 static int	system_whom(struct asked *, uid_t *);
 static void	system_login(uint32_t, struct nshd_syslogin *);
@@ -490,6 +514,10 @@ systemproc(int debug, int v)
 	child_start("system", debug, v);
 	if (setsid() == -1)
 		fatal("setsid");
+	if ((pw = getpwnam(NSHD_WEB_USER)) != NULL) {
+		web_uid = pw->pw_uid;
+		web_user = 1;
+	}
 	if ((pw = getpwnam(NSHD_CHECK_USER)) == NULL)
 		fatalx("unknown user %s", NSHD_CHECK_USER);
 	check_uid = pw->pw_uid;
@@ -505,8 +533,9 @@ systemproc(int debug, int v)
 		fatal(NULL);
 	evtimer_set(&confirm_tm, system_confirm, NULL);
 	links_init(links, sizeof(links) / sizeof(links[0]));
-	/* a terminal's pty goes to config */
+	/* a terminal's pty goes to config; each client's socket comes */
 	imsgbuf_allow_fdpass(&links[CONFIG].iev->ibuf);
+	imsgbuf_allow_fdpass(&links[FRONTEND].iev->ibuf);
 	/* a commit not confirmed that an nshd before this one left */
 	system_confirm(-1, 0, NULL);
 	signal_set(&ev_sigchld, SIGCHLD, system_sigchld, NULL);
@@ -606,7 +635,10 @@ system_dispatch_config(int fd, short event, void *arg)
 	imsg_event_add(iev);
 }
 
-/* frontend's word of the requests that may begin a commit */
+/*
+ * frontend's word of the requests that may begin a commit, and each
+ * client's socket
+ */
 static void
 system_dispatch_frontend(int fd, short event, void *arg)
 {
@@ -614,6 +646,7 @@ system_dispatch_frontend(int fd, short event, void *arg)
 	struct imsg		 imsg;
 	struct nshd_asked	 a;
 	struct asked		*k;
+	struct client		*cl;
 	struct login		*l;
 	uint32_t		 type;
 	int			 n;
@@ -632,28 +665,39 @@ system_dispatch_frontend(int fd, short event, void *arg)
 		if (n == 0)
 			break;
 		type = imsg_get_type(&imsg);
-		if ((type != IMSG_FRONT_ASKED && type != IMSG_FRONT_ANSWERED &&
-		    type != IMSG_FRONT_GONE) ||
+		if ((type != IMSG_FRONT_SESSION && type != IMSG_FRONT_ASKED &&
+		    type != IMSG_FRONT_ANSWERED && type != IMSG_FRONT_GONE) ||
 		    imsg_get_data(&imsg, &a, sizeof(a)) == -1) {
 			imsg_free(&imsg);
 			link_broken(&links[FRONTEND], "sent imsg %u, which it "
 			    "may not, or not whole", type);
 			return;
 		}
+		if (type == IMSG_FRONT_SESSION)
+			client_new(a.session, imsg_get_fd(&imsg));
 		imsg_free(&imsg);
 		k = asked_find(a.session);
+		cl = client_find(a.session);
 		if (type == IMSG_FRONT_ASKED) {
 			if (k != NULL)
 				asked_free(k);
+			/* a request of a client gone, or not known, is refused */
+			if (cl == NULL || !client_there(cl))
+				continue;
 			if ((k = calloc(1, sizeof(*k))) == NULL)
 				fatal(NULL);
 			k->session = a.session;
-			k->uid = a.uid;
-			k->web = a.web != 0;
+			k->uid = cl->uid;
+			k->web = cl->web;
 			TAILQ_INSERT_TAIL(&askeds, k, entry);
 		} else if (k != NULL && type == IMSG_FRONT_ANSWERED)
 			asked_free(k);
 		else if (type == IMSG_FRONT_GONE) {
+			if (cl != NULL) {
+				TAILQ_REMOVE(&clients, cl, entry);
+				close(cl->fd);
+				free(cl);
+			}
 			if ((l = login_find(a.session)) != NULL) {
 				TAILQ_REMOVE(&logins, l, entry);
 				free(l);
@@ -705,6 +749,64 @@ asked_free(struct asked *k)
 		nagone--;
 	TAILQ_REMOVE(&askeds, k, entry);
 	free(k);
+}
+
+/*
+ * A session's client, from its socket fd, as the kernel says it is;
+ * none if fd is -1, as when system had no descriptor free for it, or is
+ * no client's socket, and a request of the session is then refused
+ */
+static void
+client_new(uint32_t session, int fd)
+{
+	struct client	*cl;
+	gid_t		 gid;
+
+	if (client_find(session) != NULL)
+		link_broken(&links[FRONTEND], "passed session %u's client "
+		    "twice", session);
+	if (fd == -1) {
+		log_warnx("%s: session %u: no socket", __func__, session);
+		return;
+	}
+	if ((cl = calloc(1, sizeof(*cl))) == NULL)
+		fatal(NULL);
+	if (getpeereid(fd, &cl->uid, &gid) == -1) {
+		log_warn("%s: session %u: getpeereid", __func__, session);
+		close(fd);
+		free(cl);
+		return;
+	}
+	cl->session = session;
+	cl->web = web_user && cl->uid == web_uid;
+	cl->fd = fd;
+	TAILQ_INSERT_TAIL(&clients, cl, entry);
+}
+
+static struct client *
+client_find(uint32_t session)
+{
+	struct client	*cl;
+
+	TAILQ_FOREACH(cl, &clients, entry)
+		if (cl->session == session)
+			return (cl);
+	return (NULL);
+}
+
+/*
+ * Is the client still connected? Its socket says, whatever frontend
+ * has read of it
+ */
+static int
+client_there(struct client *cl)
+{
+	struct pollfd	 pfd;
+
+	pfd.fd = cl->fd;
+	pfd.events = POLLIN;
+	return (poll(&pfd, 1, 0) != -1 &&
+	    (pfd.revents & (POLLHUP | POLLERR | POLLNVAL)) == 0);
 }
 
 /* the login of session, the web configurator's, or NULL */

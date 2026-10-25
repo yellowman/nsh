@@ -22,14 +22,15 @@
  * of it. frontend checks only that a message is one a client may send,
  * or config, and is whole; it reads no configuration.
  *
- * And it tells system, on their pipe, whose each request is, and whether
- * the session is the web configurator's, a client of NSHD_WEB_USER's
- * uid, before config hears of it: each request that may begin a commit,
- * a line, a commit or a load's part, or that system checks itself, an
- * operation, a login, a terminal or a watch; and when config answers
- * it, and when a session goes. system begins config's commits only for
- * a request not answered, so a config a client compromised cannot say
- * whose they are.
+ * And it passes system, on their pipe, each client's socket as the
+ * client comes, from which system reads who the session is itself; and
+ * it tells system of each request before config hears of it: each
+ * request that may begin a commit, a line, a commit or a load's part,
+ * or that system checks itself, an operation, a login, a terminal or a
+ * watch; and when config answers it, and when a session goes. system
+ * begins config's commits only for a request not answered, so a config
+ * a client compromised cannot say whose they are, and frontend cannot
+ * say whose a session is.
  */
 
 #include <sys/types.h>
@@ -72,6 +73,7 @@ static void	frontend_listen(void);
 static void	frontend_dispatch_config(int, short, void *);
 static void	frontend_dispatch_system(int, short, void *);
 static void	frontend_asked(struct ctl_conn *, uint32_t);
+static int	frontend_opened(struct ctl_conn *);
 static int	frontend_client(struct ctl_conn *, struct imsg *);
 static void	frontend_gone(struct ctl_conn *);
 static int	frontend_written(struct ctl_conn *);
@@ -102,8 +104,12 @@ frontend(int debug, int verbose)
 	if ((iev_parent = imsgev_new(3, frontend_dispatch_parent, 0)) == NULL)
 		fatal(NULL);
 	links_init(links, sizeof(links) / sizeof(links[0]));
-	/* its peers' pipes are here; a terminal's pty comes from config */
+	/*
+	 * its peers' pipes are here; a terminal's pty comes from config,
+	 * and each client's socket goes to system
+	 */
 	imsgbuf_allow_fdpass(&links[CONFIG].iev->ibuf);
+	imsgbuf_allow_fdpass(&links[SYSTEM].iev->ibuf);
 	event_dispatch();
 	exit(0);
 }
@@ -146,7 +152,7 @@ frontend_dispatch_parent(int fd, short event, void *arg)
 static void
 frontend_listen(void)
 {
-	if (control_listen(5, frontend_client, frontend_gone,
+	if (control_listen(5, frontend_opened, frontend_client, frontend_gone,
 	    frontend_written) == -1)
 		fatalx("cannot listen on %s", NSHD_SOCKET);
 }
@@ -258,10 +264,27 @@ frontend_asked(struct ctl_conn *c, uint32_t type)
 
 	memset(&a, 0, sizeof(a));
 	a.session = c->id;
-	a.uid = c->uid;
-	a.web = web_user && c->uid == web_uid;
 	if (link_compose(&links[SYSTEM], type, 0, &a, sizeof(a)) == -1)
 		fatal("%s", __func__);
+}
+
+/* a client come: its socket to system, which reads who it is; -1 if not */
+static int
+frontend_opened(struct ctl_conn *c)
+{
+	struct nshd_asked	 a;
+	int			 fd;
+
+	if ((fd = dup(c->iev.ibuf.fd)) == -1) {
+		log_warn("%s: dup", __func__);
+		return (-1);
+	}
+	memset(&a, 0, sizeof(a));
+	a.session = c->id;
+	if (imsg_compose_event(links[SYSTEM].iev, IMSG_FRONT_SESSION, 0, 0,
+	    fd, &a, sizeof(a)) == -1)
+		fatal("%s", __func__);
+	return (0);
 }
 
 /*

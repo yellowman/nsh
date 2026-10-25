@@ -219,14 +219,12 @@ struct nshd_chunk {
 #define NSHD_PARTS	3
 
 /*
- * frontend to system: a session asked what may begin a commit (a line,
- * a commit, a load's part), an operation or a login, by uid, and if it
- * is the web configurator's
+ * frontend to system: a session's client come, with its socket, or the
+ * session asked what may begin a commit (a line, a commit, a load's
+ * part), an operation or a login
  */
 struct nshd_asked {
 	uint32_t	session;
-	uint32_t	uid;
-	int32_t		web;
 };
 
 /*
@@ -422,7 +420,10 @@ enum nshd_imsg {
 	IMSG_CTL_NAMES,		/* names for completion, as facts */
 	IMSG_CTL_TERMINAL,	/* nshd_terminal; the pty, then a result */
 	IMSG_SYS_TERMINAL,	/* nshd_systerm; the pty, then the end */
-	IMSG_CTL_RULES		/* nshd_rules: the rules asked for, a result */
+	IMSG_CTL_RULES,		/* nshd_rules: the rules asked for, a result */
+
+	/* frontend to system: who a session is, as system reads it */
+	IMSG_FRONT_SESSION	/* nshd_asked, and the client's socket */
 };
 
 struct imsgev {
