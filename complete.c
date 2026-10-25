@@ -548,8 +548,8 @@ complete_nocmd(struct ghs *nocmd, char *word, int dolist, struct cmplt *cp,
 		memset(&nocmdtab[nocmdtab_nitems - 1], 0, sizeof(*nocmdtab));
 	}
 
-	if (margc == 1) {
-		/* Complete "no " using the list of known no-commands. */
+	if (cursor_argc < 2) {
+		/* Complete "no " and its command's word, as it stands */
 		return (complete_command(word, dolist, cp, (char **)nocmdtab,
 		    sizeof(Command)));
 	}
@@ -602,8 +602,8 @@ complete_docmd(struct ghs *docmd, char *word, int dolist, struct cmplt *cp,
 	Command *c, *dc;
 	int i;
 
-	if (margc == 1) {
-		/* Complete "do " using the list of known commands. */
+	if (cursor_argc < 2) {
+		/* Complete "do " and its command's word, as it stands */
 		return (complete_command(word, dolist, cp, (char **)cmdtab,
 		    sizeof(Command)));
 	}
@@ -657,8 +657,8 @@ complete_doint(char *word, int dolist, struct cmplt *cp,
 	struct intlist *table = (struct intlist *)whichlist;
 	struct intlist *c, *dc;
 
-	if (margc == 1) {
-		/* Complete "do " using the list of known commands. */
+	if (cursor_argc < 2) {
+		/* Complete "do " and its command's word, as it stands */
 		return (complete_command(word, dolist, cp, (char **)table,
 		    stlen));
 	}
@@ -793,6 +793,10 @@ complete_args(struct ghs *c, char *word, int dolist, struct cmplt *cp,
     char **table, int stlen, int level)
 {
 	int help_vertical = 0;
+
+	/* a word before or past what the command completes completes nothing */
+	if ((size_t)level >= strlen(c->complete))
+		return (CC_ERROR);
 
 #ifdef CMPLDEBUG
 	printf("[%s]",&c->complete[level]);
