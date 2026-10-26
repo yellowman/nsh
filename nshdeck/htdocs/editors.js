@@ -16,69 +16,42 @@ var PF_SHOW = [["all", "All"], ["filter", "Filtering"],
     ["translate", "NAT & redirects"], ["tables", "Tables & macros"],
     ["options", "Options"], ["anchors", "Anchors"]];
 
-/* the rule fields the form shows: key, label, control and help */
+/* the rule fields the form shows: key, label, control and hint */
 var PF_FIELDS = [
-	["action", "Action", ["pass", "block", "match"], "pass lets a " +
-	    "packet through and block drops it; match decides nothing, and " +
-	    "sets options, such as a translation, for whatever decides."],
-	["ret", "Blocked, it gets", "text", "Nothing, the default (drop); " +
-	    "or return, a TCP reset or an ICMP unreachable; return-rst or " +
-	    "return-icmp for one of them."],
-	["dir", "Direction", ["", "in", "out"], "in: packets arriving on " +
-	    "the interface; out: packets leaving it; neither: both."],
-	["quick", "Stop on match (quick)", "check", "If this rule matches, " +
-	    "it decides, and the rules after it are not read. Without it, a " +
-	    "later rule that matches decides."],
-	["log", "Log", "check", "Each packet it matches is logged to " +
-	    "pflog0, which on a busy rule is many."],
-	["on", "On", "text", "An interface, a group such as egress, a list " +
-	    "{ em0 em1 }, or ! before one for all but it; none: every one."],
-	["af", "Address family", ["", "inet", "inet6"], "inet is IPv4 and " +
-	    "inet6 IPv6; neither matches both."],
-	["proto", "Protocol", "text", "tcp, udp, icmp, a number, or a list " +
-	    "{ tcp udp }; none: every protocol."],
-	["from", "From", "text", "An address or network, a table <name>, a " +
-	    "macro $name, an interface's addresses (em0), any, self, or a " +
-	    "list; ! before one for all but it."],
-	["fromport", "From port", "text", "A port or its name, a range " +
-	    "1024:65535, > 1023, or a list { 80 443 }; tcp and udp only."],
-	["to", "To", "text", "As From, for where the packet goes."],
-	["toport", "To port", "text", "As From port, for where it goes."],
+	["action", "Action", ["pass", "block", "match"], "match only sets " +
+	    "options"],
+	["ret", "Return", "text", "return, return-rst or return-icmp; " +
+	    "none drops"],
+	["dir", "Direction", ["", "in", "out"], "none: both"],
+	["quick", "Quick", "check", "the first rule that matches decides"],
+	["log", "Log", "check", "to pflog0"],
+	["on", "On", "text", "em0, a group, { em0 em1 } or !em0"],
+	["af", "Family", ["", "inet", "inet6"], "none: both"],
+	["proto", "Protocol", "text", "tcp, udp, icmp or { tcp udp }"],
+	["from", "From", "text", "10.0.0.0/8, <table>, $macro, (em0), any " +
+	    "or self"],
+	["fromport", "From port", "text", "80, 1024:65535, > 1023 or " +
+	    "{ 80 443 }"],
+	["to", "To", "text", "as From"],
+	["toport", "To port", "text", "as From port"],
 	["state", "State", ["", "keep state", "no state", "modulate state",
-	    "synproxy state"], "keep state follows a connection, so its " +
-	    "later packets pass without the rules being read; a pass rule " +
-	    "keeps state unless it says no state."],
-	["natto", "Translate source to (nat-to)", "text", "The address " +
-	    "matching packets leave with, such as (egress), the outgoing " +
-	    "interface's own; with port, the ports too."],
-	["rdrto", "Redirect to (rdr-to)", "text", "The address, and port, " +
-	    "matching packets are sent on to as they arrive, such as " +
-	    "10.0.0.5 port 8080."],
-	["label", "Label", "text", "A name for the rule's counters, as " +
-	    "pfctl -s labels shows them; in quotes if it has spaces."],
-	["other", "Other options", "text", "The rule's other options, as " +
-	    "written, such as flags S/SA or tag; each as pf.conf(5) has it."]
+	    "synproxy state"], "pass keeps state unless no state"],
+	["natto", "nat-to", "text", "(egress)"],
+	["rdrto", "rdr-to", "text", "10.0.0.5 port 8080"],
+	["label", "Label", "text", "for pfctl -s labels"],
+	["other", "Other options", "text", "flags S/SA, tag, …"]
 ];
 
-/* the neighbor settings the form shows: key, label, control and help */
+/* the neighbor settings the form shows: key, label, control and hint */
 var BGP_FIELDS = [
-	["remote-as", "Remote AS", "text", "The AS number the peer must " +
-	    "say it is; the session is refused if it says another."],
-	["descr", "Description", "text", "A name for the peer, which " +
-	    "bgpctl shows in its place."],
-	["local-address", "Local address", "lines", "The address the " +
-	    "session comes from, one for IPv4 and one for IPv6, a line each."],
-	["multihop", "Multihop", "text", "For a peer not on a shared " +
-	    "network: how many hops away it may be."],
-	["max-prefix", "Max prefixes", "text", "The most prefixes the peer " +
-	    "may send before the session is closed, and restart N to open " +
-	    "it again after N minutes; a guard against a peer gone wrong."],
-	["announce", "Families", "lines", "The address families the " +
-	    "session carries, such as IPv4 unicast, a line each."],
-	["passive", "Passive", "check", "Wait for the peer to open the " +
-	    "session; never open it from here."],
-	["down", "Shut down", "check", "Keep the session down, as " +
-	    "configured; the peer stays in the configuration."]
+	["remote-as", "Remote AS", "text", ""],
+	["descr", "Description", "text", ""],
+	["local-address", "Local address", "lines", "a line each"],
+	["multihop", "Multihop", "text", "hops"],
+	["max-prefix", "Max prefixes", "text", "900000 restart 15"],
+	["announce", "Families", "lines", "IPv4 unicast, a line each"],
+	["passive", "Passive", "check", ""],
+	["down", "Shut down", "check", ""]
 ];
 
 /* the inspector's Rules text box, or null if it is not drawn */
@@ -197,14 +170,16 @@ function edControl(key, kind, value, change) {
 	return c;
 }
 
-/* a form field: label, control and help */
-function edField(into, label, c, help) {
+/* a form field: label, control and an optional hint */
+function edField(into, label, c, hint) {
 	var row = el("div", null, "field"), info = el("div", null, "info");
 
 	row.appendChild(el("label", label));
 	row.appendChild(c);
-	info.appendChild(el("span", help));
-	row.appendChild(info);
+	if (hint) {
+		info.appendChild(el("span", hint));
+		row.appendChild(info);
+	}
 	into.appendChild(row);
 	return row;
 }
@@ -291,17 +266,12 @@ function pfEditor(box) {
 			pfDone();
 		}));
 	box.appendChild(bar);
-	help = el("p", "pf reads the rules in order. Of the pass and block " +
-	    "rules a packet matches, the last decides, unless one marked " +
-	    "quick matches first; match rules only set options, such as a " +
-	    "translation, for the rule that decides. Tables and macros name " +
-	    "the addresses and words the rules use. A statement this page " +
-	    "cannot read is shown as it is written, and stays so; the Rules " +
-	    "box holds the whole of it. ", "help");
+	help = el("p", "The last rule that matches decides, unless one is " +
+	    "quick. ", "help");
 	help.appendChild(edManual("pf.conf(5)"));
 	box.appendChild(help);
-	["#", "Action", "Dir", "On", "AF", "Proto", "From", "To", "Options",
-	    "Decides"].forEach(function (h) {
+	["#", "Action", "Dir", "On", "AF", "Proto", "From", "To",
+	    "Options"].forEach(function (h) {
 		head.appendChild(el("th", h));
 	});
 	t.appendChild(head);
@@ -350,7 +320,6 @@ function pfRow(s, n, cls) {
 		    function (v) {
 			tr.appendChild(el("td", v || "", "mono"));
 		});
-		tr.appendChild(el("td", pfDecides(r), "dim"));
 		return tr;
 	}
 	tr.appendChild(el("td"));
@@ -401,23 +370,17 @@ function pfForm(s, i) {
 		});
 	else if (s.kind === "macro")
 		edField(grid, s.name, edControl("value", "text", s.value,
-		    set("value")), "The macro's value, which $" + s.name +
-		    " stands for in the rules after it; in quotes if it has " +
-		    "spaces.");
+		    set("value")), "in quotes if it has spaces");
 	else if (s.kind === "table")
-		edField(grid, "Addresses of " + s.name, edControl("addrs", "text",
-		    s.addrs || "", set("addrs")), "The table's addresses and " +
-		    "networks, separated by spaces or commas" + (s.flags.indexOf(
-		    "const") !== -1 ? "; const, so pfctl cannot change them." :
-		    "; pfctl may add to them as pf runs") +
-		    (s.files.length ? ", and more from its files." : "."));
+		edField(grid, s.name, edControl("addrs", "text", s.addrs || "",
+		    set("addrs")), "addresses and networks" + (s.files.length ?
+		    ", and its files'" : ""));
 	else if (s.kind === "option")
 		edField(grid, "set " + s.name, edControl("value", "text", s.value,
-		    set("value")), "The option's value, as pf.conf(5) has " +
-		    "it.");
+		    set("value")), "");
 	else
-		grid.appendChild(el("p", "This page does not read this " +
-		    "statement; change it in the text.", "help"));
+		grid.appendChild(el("p", "Edit this statement as text.",
+		    "help"));
 	td.appendChild(grid);
 	td.appendChild(el("h3", "As written"));
 	td.appendChild(pre);
@@ -539,7 +502,7 @@ function bgpPeersTab(box, doc, localAS) {
 		bgpState();
 	bar.appendChild(el("span", ed.summary === null ? "Asking bgpd" :
 	    ed.summary.error ? "State: " + ed.summary.error :
-	    "State, as bgpctl show summary says it", "dim"));
+	    "State from bgpctl", "dim"));
 	bar.appendChild(el("span", null, "fill"));
 	bar.appendChild(edButton("Ask again", bgpState));
 	addr.placeholder = "Address";
@@ -619,18 +582,10 @@ function bgpPeerForm(box, doc, p, localAS, macros) {
 		edField(grid, f[1], c, f[3]);
 	});
 	panel.appendChild(grid);
-	[["from", "Inbound policy", "Routes the peer sends pass through " +
-	    "the filters from it, in order: received, then filtered, then " +
-	    "accepted, or not."], ["to", "Outbound policy", "Routes this " +
-	    "router has pass through the filters to the peer, in order: " +
-	    "eligible, then filtered, then advertised, or not."]].forEach(
-	    function (w) {
+	[["from", "Inbound"], ["to", "Outbound"]].forEach(function (w) {
 		var col = el("div", null, "flow"), list = el("ol");
 
 		col.appendChild(el("h3", w[1]));
-		col.appendChild(el("p", w[2] + " The last filter that " +
-		    "matches decides, unless one marked quick matches first.",
-		    "help"));
 		fs.forEach(function (n) {
 			var f = bgpFilter(n), a = bgpApplies(f, p, localAS, macros);
 			var li;
@@ -639,11 +594,10 @@ function bgpPeerForm(box, doc, p, localAS, macros) {
 				return;
 			li = list.appendChild(el("li", n.code, "mono"));
 			if (a === "maybe")
-				li.appendChild(el("span", " maybe: it names " +
-				    "what this page cannot tell", "dim"));
+				li.appendChild(el("span", " (maybe)", "dim"));
 		});
 		col.appendChild(list.children.length ? list :
-		    el("p", "No filter names this peer.", "empty"));
+		    el("p", "None", "empty"));
 		flows.appendChild(col);
 	});
 	panel.appendChild(flows);
@@ -666,9 +620,6 @@ function bgpPeerForm(box, doc, p, localAS, macros) {
 function bgpNetworks(box, doc) {
 	var t = el("table", null, "grid"), bar = el("div", null, "bar");
 
-	bar.appendChild(el("p", "The prefixes bgpd may announce, each " +
-	    "still subject to the filters to each peer; inet static or " +
-	    "connected for the routes the kernel has.", "help"));
 	bar.appendChild(el("span", null, "fill"));
 	bar.appendChild(edButton("Add network", function () {
 		bgpDone(bgpAdd(doc, "network 192.0.2.0/24\n", ["network"]));
@@ -705,10 +656,9 @@ function bgpFilters(box, doc) {
 	var t = el("table", null, "grid pick srules"), head = el("tr");
 	var bar = el("div", null, "bar");
 
-	bar.appendChild(el("p", "bgpd reads the filters in order for each " +
-	    "route: the last that matches decides, unless one marked quick " +
-	    "matches first; match changes what it sets and decides " +
-	    "nothing. ", "help")).appendChild(edManual("bgpd.conf(5)"));
+	bar.appendChild(el("p", "The last filter that matches decides, " +
+	    "unless one is quick. ", "help")).appendChild(
+	    edManual("bgpd.conf(5)"));
 	bar.appendChild(el("span", null, "fill"));
 	bar.appendChild(edButton("Add filter", function () {
 		var after = ed.sel >= 0 && fs[ed.sel] ? fs[ed.sel].end :
@@ -768,28 +718,22 @@ function bgpFilterForm(doc, n, f, i) {
 	td.colSpan = 6;
 	if (f !== null) {
 		edField(grid, "Action", edControl("faction", ["allow", "deny",
-		    "match"], f.action, set("action")), "allow takes the " +
-		    "route, deny drops it, match changes what set says and " +
-		    "decides nothing.");
-		edField(grid, "Stop on match (quick)", edControl("fquick", "check",
-		    f.quick, set("quick")), "If this filter matches, it " +
-		    "decides, and the filters after it are not read.");
+		    "match"], f.action, set("action")), "match only sets");
+		edField(grid, "Quick", edControl("fquick", "check", f.quick,
+		    set("quick")), "the first filter that matches decides");
 		edField(grid, "Direction", edControl("fdir", ["from", "to"],
-		    f.dir, set("dir")), "from: routes a peer sends; to: " +
-		    "routes sent to a peer.");
+		    f.dir, set("dir")), "from: received; to: sent");
 		edField(grid, "Peer", edControl("fpeer", "text", f.peer,
 		    set("peer")), "any, ebgp, ibgp, an address, group " +
-		    "\"name\" or AS number.");
+		    "\"name\" or AS 64496");
 		edField(grid, "Matches", edControl("fmatch", "text", f.match,
-		    set("match")), "What the route must be, such as prefix " +
-		    "10.0.0.0/8 prefixlen > 24, prefix-set name, community " +
-		    "65001:100 or AS 64496; nothing: every route.");
+		    set("match")), "prefix 10.0.0.0/8, prefix-set name, " +
+		    "community 65001:100; none: every route");
 		edField(grid, "Sets", edControl("fset", "text", f.set,
-		    set("set")), "What it changes, such as localpref 200 or " +
-		    "{ localpref 200 community 65001:100 }.");
+		    set("set")), "localpref 200");
 	} else
-		grid.appendChild(el("p", "This page does not read this " +
-		    "filter; change it in the text.", "help"));
+		grid.appendChild(el("p", "Edit this statement as text.",
+		    "help"));
 	td.appendChild(grid);
 	td.appendChild(el("h3", "As written"));
 	td.appendChild(el("pre", doc.lines.slice(n.start, n.end).join("").

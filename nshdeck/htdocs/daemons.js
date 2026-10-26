@@ -95,8 +95,7 @@ function daemonsBox(div) {
 	main.appendChild(el("div", null, "structured"));
 	split.appendChild(main);
 	aside.setAttribute("aria-label", "The daemon's settings");
-	aside.appendChild(el("p", "Choose a daemon to see and change its " +
-	    "rules and settings.", "dim"));
+	aside.appendChild(el("p", "Choose a daemon.", "dim"));
 	split.appendChild(aside);
 	div.appendChild(bar);
 	div.appendChild(split);
@@ -239,8 +238,8 @@ function dtable(ws) {
 			n++;
 		});
 	});
-	box.querySelector(".count").textContent = "configured as " +
-	    (candidate() ? "the candidate has it" : "it runs");
+	box.querySelector(".count").textContent = candidate() ?
+	    "candidate" : "running";
 }
 
 /*
@@ -259,7 +258,7 @@ function dinspect(ws, name, rt) {
 
 		dinsp = { ws: ws, def: d, rt: rt, was: was,
 		    now: { enabled: was.enabled, rules: was.rules },
-		    from: candidate() ? "the candidate" : "what runs",
+		    from: candidate() ? "candidate" : "running",
 		    results: j.ok ? [] : [{ line: name + " rules", ok: false,
 		    out: said(j) }], open: dinsp && dinsp.def === d ?
 		    dinsp.open : {} };
@@ -334,16 +333,14 @@ function dinspector() {
 	head.appendChild(el("span", d.label + (d.rt ? " · rtable " +
 	    dinsp.rt : ""), "dim"));
 	box.appendChild(head);
-	box.appendChild(el("p", "Settings of " + dinsp.from + ".", "dim from"));
+	box.appendChild(el("p", dinsp.from, "dim from"));
 
 	det = dgroup(box, "Essentials", true);
 	if (d.enable) {
 		input = el("input");
 		input.type = "checkbox";
 		input.checked = dinsp.now.enabled;
-		row = dfield(det, "Enabled", input, "Runs " + d.name + " once " +
-		    "committed, and as the system starts; unchecked, it stops. " +
-		    "nsh's line: " + d.name + " enable");
+		row = dfield(det, "Enabled", input, "nsh: " + d.name + " enable");
 		row.classList.toggle("edited", dinsp.now.enabled !==
 		    dinsp.was.enabled);
 		input.addEventListener("change", function () {
@@ -357,9 +354,7 @@ function dinspector() {
 		input.min = 0;
 		input.max = 255;
 		input.value = dinsp.rt;
-		dfield(det, "Routing table", input, "Which routing table's " +
-		    d.name + " this is: each has its own rules, and is " +
-		    "enabled on its own.");
+		dfield(det, "Routing table", input, "Each has its own rules.");
 		input.addEventListener("change", function () {
 			var rt = Number(input.value);
 
@@ -371,8 +366,7 @@ function dinspector() {
 		});
 	}
 	dfield(det, "Observed", el("span", ob[0] || "not known", "mono"),
-	    "What runs now, as show daemons says, whatever the " +
-	    "configuration says.");
+	    "From show daemons.");
 
 	if (d.rules) {
 		det = dgroup(box, "Rules", true);
@@ -384,10 +378,8 @@ function dinspector() {
 		area.classList.toggle("edited", dinsp.now.rules !==
 		    dinsp.was.rules);
 		det.appendChild(area);
-		det.appendChild(el("p", d.name + "'s configuration file, as " +
-		    "nsh keeps it. Stage sets it in the candidate, as " +
-		    d.name + " edit does in nsh, and the commit tests it; " +
-		    "Validate tests it now.", "help"));
+		det.appendChild(el("p", "Stage puts them in the candidate; " +
+		    "Validate tests them.", "help"));
 		area.addEventListener("input", function () {
 			dinsp.now.rules = area.value;
 			area.classList.toggle("edited", area.value !==
@@ -396,8 +388,7 @@ function dinspector() {
 			structuredLater();
 		});
 	} else if (d.enable)
-		box.appendChild(el("p", "nsh keeps no rules for " + d.name +
-		    ": only whether it runs.", "help"));
+		box.appendChild(el("p", "This daemon has no rules.", "help"));
 
 	if (d.ops.length) {
 		det = dgroup(box, "Live operations", false);
@@ -414,10 +405,8 @@ function dinspector() {
 			row.appendChild(b);
 		});
 		det.appendChild(row);
-		det.appendChild(el("p", "Each acts on " + d.name + " as it " +
-		    "runs now, in routing table " + dinsp.rt + ", and not on " +
-		    "the candidate; each is confirmed first, and needs the " +
-		    "operate permission.", "help"));
+		det.appendChild(el("p", "On the running " + d.name + ", not " +
+		    "the candidate. Needs operate.", "help"));
 		form = el("form", null, "cliline");
 		form.appendChild(el("span", "op>"));
 		line = el("input", null, "cli");

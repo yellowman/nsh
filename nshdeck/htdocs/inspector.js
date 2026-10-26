@@ -132,7 +132,7 @@ function inspect(name) {
 		insp = { name: name, bridge: bridge, defs: defs, was: was,
 		    now: JSON.parse(JSON.stringify(was)),
 		    every: insp && insp.every, from: inConfigure ?
-		    "the candidate" : "what runs", results: [] };
+		    "candidate" : "running", results: [] };
 		inspector();
 	});
 }
@@ -289,7 +289,7 @@ function inspector(key) {
 	});
 	every.appendChild(check);
 	every.appendChild(document.createTextNode(" every setting"));
-	box.appendChild(el("p", "Settings of " + insp.from + ".", "dim from"));
+	box.appendChild(el("p", insp.from, "dim from"));
 	box.appendChild(every);
 
 	insp.defs.forEach(function (d) {

@@ -528,16 +528,3 @@ function pfRemove(doc, i) {
 
 	doc.stmts.splice(a, i - a + 1);
 }
-
-/*
- * What a rule decides, per pf.conf(5): a match rule decides nothing, a
- * quick rule decides when it matches, and any other rule decides unless a
- * later rule also matches.
- */
-function pfDecides(r) {
-	if (r.action === "match")
-		return "sets options";
-	if (r.quick)
-		return "decides at once";
-	return "unless a later rule matches";
-}
