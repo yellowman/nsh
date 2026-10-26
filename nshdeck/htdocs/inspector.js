@@ -317,18 +317,10 @@ function inspector(key) {
 		insp.counts[g] = sum.appendChild(el("span", null, "dim count"));
 		det.appendChild(sum);
 		groups[g].forEach(function (d) {
-			var row = el("div", null, "field"), lab = el("label",
-			    d.label), c = control(d);
-			var info = el("div", null, "info");
+			var c = control(d);
 
-			insp.rows[d.key] = row;
-			lab.title = d.syntax;
-			row.appendChild(lab);
-			row.appendChild(c);
-			info.appendChild(el("span", d.help));
-			info.appendChild(el("code", d.syntax));
-			row.appendChild(info);
-			det.appendChild(row);
+			insp.rows[d.key] = regField(det, (insp.bridge ?
+			    "bridge." : "if.") + d.key, c);
 			if (d.key === key)
 				focus = c.querySelector ? c.querySelector(
 				    "input.add") : null;

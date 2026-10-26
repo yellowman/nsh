@@ -894,8 +894,9 @@ table.grid {
 
 .field .info {
 	grid-column: 2;
-	display: grid;
-	gap: 2px;
+	display: flex;
+	gap: 8px;
+	align-items: baseline;
 	font-size: 12px;
 	line-height: 1.4;
 	color: var(--dim);
@@ -904,6 +905,65 @@ table.grid {
 .field .info code {
 	font: 11.5px var(--mono);
 	color: var(--text);
+}
+
+/* a field's ? button and its definition (registry.js) */
+button.what {
+	flex: none;
+	margin-left: auto;
+	width: 18px;
+	height: 18px;
+	padding: 0;
+	font: 600 11px var(--mono);
+	color: var(--dim);
+	background: none;
+	border: 1px solid var(--line);
+	border-radius: 0;
+	box-shadow: none;
+}
+
+button.what[aria-expanded=true] {
+	color: var(--text);
+	border-color: var(--accent);
+}
+
+.field .def {
+	grid-column: 1 / -1;
+	padding: 8px 10px;
+	font-size: 12px;
+	line-height: 1.45;
+	background: var(--side);
+	border-left: 1px solid var(--accent);
+}
+
+.field .def p {
+	margin: 0 0 6px;
+}
+
+.field .def dl {
+	display: grid;
+	grid-template-columns: max-content minmax(0, 1fr);
+	gap: 2px 12px;
+	margin: 0;
+}
+
+.field .def dt {
+	color: var(--dim);
+}
+
+.field .def dd {
+	margin: 0;
+	overflow-wrap: anywhere;
+}
+
+/* a field's input with a button beside it */
+.addline {
+	display: flex;
+	gap: 6px;
+}
+
+.rows > button {
+	align-self: start;
 }
 
 .chips, .rows {
@@ -1017,14 +1077,6 @@ textarea.rules.edited {
 
 .structured:empty {
 	display: none;
-}
-
-.structured > .bar label.dim {
-	font-size: 12px;
-}
-
-.structured > .bar > input:not(.narrow) {
-	width: 150px;
 }
 
 .structured .bar .help {

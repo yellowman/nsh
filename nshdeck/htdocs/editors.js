@@ -16,42 +16,38 @@ var PF_SHOW = [["all", "All"], ["filter", "Filtering"],
     ["translate", "NAT & redirects"], ["tables", "Tables & macros"],
     ["options", "Options"], ["anchors", "Anchors"]];
 
-/* the rule fields the form shows: key, label, control and hint */
+/* the rule fields the form shows: key and control (labels in registry.js) */
 var PF_FIELDS = [
-	["action", "Action", ["pass", "block", "match"], "match only sets " +
-	    "options"],
-	["ret", "Return", "text", "return, return-rst or return-icmp; " +
-	    "none drops"],
-	["dir", "Direction", ["", "in", "out"], "none: both"],
-	["quick", "Quick", "check", "the first rule that matches decides"],
-	["log", "Log", "check", "to pflog0"],
-	["on", "On", "text", "em0, a group, { em0 em1 } or !em0"],
-	["af", "Family", ["", "inet", "inet6"], "none: both"],
-	["proto", "Protocol", "text", "tcp, udp, icmp or { tcp udp }"],
-	["from", "From", "text", "10.0.0.0/8, <table>, $macro, (em0), any " +
-	    "or self"],
-	["fromport", "From port", "text", "80, 1024:65535, > 1023 or " +
-	    "{ 80 443 }"],
-	["to", "To", "text", "as From"],
-	["toport", "To port", "text", "as From port"],
-	["state", "State", ["", "keep state", "no state", "modulate state",
-	    "synproxy state"], "pass keeps state unless no state"],
-	["natto", "nat-to", "text", "(egress)"],
-	["rdrto", "rdr-to", "text", "10.0.0.5 port 8080"],
-	["label", "Label", "text", "for pfctl -s labels"],
-	["other", "Other options", "text", "flags S/SA, tag, …"]
+	["action", ["pass", "block", "match"]],
+	["ret", "text"],
+	["dir", ["", "in", "out"]],
+	["quick", "check"],
+	["log", "check"],
+	["on", "text"],
+	["af", ["", "inet", "inet6"]],
+	["proto", "text"],
+	["from", "text"],
+	["fromport", "text"],
+	["to", "text"],
+	["toport", "text"],
+	["state", ["", "keep state", "no state", "modulate state",
+	    "synproxy state"]],
+	["natto", "text"],
+	["rdrto", "text"],
+	["label", "text"],
+	["other", "text"]
 ];
 
-/* the neighbor settings the form shows: key, label, control and hint */
+/* the neighbor settings the form shows: key and control */
 var BGP_FIELDS = [
-	["remote-as", "Remote AS", "text", ""],
-	["descr", "Description", "text", ""],
-	["local-address", "Local address", "lines", "a line each"],
-	["multihop", "Multihop", "text", "hops"],
-	["max-prefix", "Max prefixes", "text", "900000 restart 15"],
-	["announce", "Families", "lines", "IPv4 unicast, a line each"],
-	["passive", "Passive", "check", ""],
-	["down", "Shut down", "check", ""]
+	["remote-as", "text"],
+	["descr", "text"],
+	["local-address", "lines"],
+	["multihop", "text"],
+	["max-prefix", "text"],
+	["announce", "lines"],
+	["passive", "check"],
+	["down", "check"]
 ];
 
 /* the inspector's Rules text box, or null if it is not drawn */
@@ -168,20 +164,6 @@ function edControl(key, kind, value, change) {
 		change(kind === "check" ? c.checked : c.value);
 	});
 	return c;
-}
-
-/* a form field: label, control and an optional hint */
-function edField(into, label, c, hint) {
-	var row = el("div", null, "field"), info = el("div", null, "info");
-
-	row.appendChild(el("label", label));
-	row.appendChild(c);
-	if (hint) {
-		info.appendChild(el("span", hint));
-		row.appendChild(info);
-	}
-	into.appendChild(row);
-	return row;
 }
 
 /* a link to an OpenBSD manual page, such as pf.conf(5), in a new tab */
@@ -365,19 +347,19 @@ function pfForm(s, i) {
 
 			if (f[0] === "ret" && s.rule.action !== "block")
 				return;
-			edField(grid, f[1], edControl(f[0], f[2], f[2] === "check" ?
-			    !!v : v || "", set(f[0])), f[3]);
+			regField(grid, "pf." + f[0], edControl(f[0], f[1],
+			    f[1] === "check" ? !!v : v || "", set(f[0])));
 		});
 	else if (s.kind === "macro")
-		edField(grid, s.name, edControl("value", "text", s.value,
-		    set("value")), "in quotes if it has spaces");
+		regField(grid, "pf.macro", edControl("value", "text", s.value,
+		    set("value")), null, s.name);
 	else if (s.kind === "table")
-		edField(grid, s.name, edControl("addrs", "text", s.addrs || "",
-		    set("addrs")), "addresses and networks" + (s.files.length ?
-		    ", and its files'" : ""));
+		regField(grid, "pf.table", edControl("addrs", "text",
+		    s.addrs || "", set("addrs")), s.files.length ?
+		    "addresses and networks, and its files'" : null, s.name);
 	else if (s.kind === "option")
-		edField(grid, "set " + s.name, edControl("value", "text", s.value,
-		    set("value")), "");
+		regField(grid, "pf.option", edControl("value", "text", s.value,
+		    set("value")), null, "set " + s.name);
 	else
 		grid.appendChild(el("p", "Edit this statement as text.",
 		    "help"));
@@ -435,6 +417,7 @@ function bgpState() {
 /* draw bgpd's editor: AS and router ID, then peers, networks or filters */
 function bgpEditor(box) {
 	var doc = bgpParse(dinsp.now.rules), bar = el("div", null, "bar");
+	var grid = el("div", null, "sfields");
 	var as = doc.nodes.find(function (n) {
 		return n.kind === "as";
 	});
@@ -458,12 +441,6 @@ function bgpEditor(box) {
 
 	ed.doc = doc;
 	bar.appendChild(el("h2", "bgpd"));
-	bar.appendChild(el("label", "Local AS", "dim"));
-	bar.appendChild(edControl("as", "text", as ? bgpRest(as) : "",
-	    top("as", "AS"))).classList.add("narrow");
-	bar.appendChild(el("label", "Router ID", "dim"));
-	bar.appendChild(edControl("rid", "text", rid ? bgpRest(rid) : "",
-	    top("routerid", "router-id")));
 	bar.appendChild(edSegs("bgptab", [["peers", "Peers"], ["networks",
 	    "Networks"], ["filters", "Filters"]], ed.tab, function (v) {
 		ed.tab = v;
@@ -472,6 +449,11 @@ function bgpEditor(box) {
 	}));
 	bar.appendChild(el("span", null, "fill"));
 	box.appendChild(bar);
+	regField(grid, "bgp.as", edControl("as", "text", as ? bgpRest(as) :
+	    "", top("as", "AS")));
+	regField(grid, "bgp.router-id", edControl("rid", "text", rid ?
+	    bgpRest(rid) : "", top("routerid", "router-id")));
+	box.appendChild(grid);
 	if (ed.tab === "networks")
 		bgpNetworks(box, doc);
 	else if (ed.tab === "filters")
@@ -497,6 +479,8 @@ function bgpPeersTab(box, doc, localAS) {
 	var peers = bgpPeers(doc), macros = bgpMacros(doc);
 	var t = el("table", null, "grid pick"), head = el("tr");
 	var bar = el("div", null, "bar"), addr = el("input", null, "mono");
+	var grid = el("div", null, "sfields"), line = el("div", null,
+	    "addline");
 
 	if (ed.summary === null)
 		bgpState();
@@ -505,11 +489,12 @@ function bgpPeersTab(box, doc, localAS) {
 	    "State from bgpctl", "dim"));
 	bar.appendChild(el("span", null, "fill"));
 	bar.appendChild(edButton("Ask again", bgpState));
+	box.appendChild(bar);
 	addr.placeholder = "Address";
 	addr.setAttribute("aria-label", "The new peer's address");
 	addr.dataset.key = "newpeer";
-	bar.appendChild(addr);
-	bar.appendChild(edButton("Add peer", function () {
+	line.appendChild(addr);
+	line.appendChild(edButton("Add peer", function () {
 		var a = addr.value.trim();
 
 		/* one word, with no quote, brace, comment or escape */
@@ -521,7 +506,6 @@ function bgpPeersTab(box, doc, localAS) {
 		bgpDone(bgpAdd(doc, "neighbor " + a + " {\n}\n",
 		    ["neighbor", "group"]));
 	}));
-	box.appendChild(bar);
 	["", "Peer", "Description", "Remote AS", "Group", "State", "Up/Down",
 	    "Prefixes"].forEach(function (h) {
 		head.appendChild(el("th", h));
@@ -551,6 +535,8 @@ function bgpPeersTab(box, doc, localAS) {
 		t.appendChild(tr);
 	});
 	box.appendChild(t);
+	regField(grid, "bgp.neighbor", line);
+	box.appendChild(grid);
 	peers.forEach(function (p) {
 		if (p.address === ed.peer)
 			bgpPeerForm(box, doc, p, localAS, macros);
@@ -570,16 +556,16 @@ function bgpPeerForm(box, doc, p, localAS, macros) {
 
 	panel.appendChild(el("h3", "Session with " + p.address));
 	BGP_FIELDS.forEach(function (f) {
-		var c = edControl(f[0], f[2], f[2] === "check" ? !!p[f[0]] :
+		var c = edControl(f[0], f[1], f[1] === "check" ? !!p[f[0]] :
 		    f[0] === "descr" ? bgpUnquote(p[f[0]]) : p[f[0]],
 		    function (v) {
 			bgpDone(bgpSet(doc, p.node, f[0], v));
 		});
 
-		if (p["group-" + f[0]] && f[2] !== "check")
+		if (p["group-" + f[0]] && f[1] !== "check")
 			c.placeholder = p["group-" + f[0]] + ", from group " +
 			    p.group;
-		edField(grid, f[1], c, f[3]);
+		regField(grid, "bgp." + f[0], c);
 	});
 	panel.appendChild(grid);
 	[["from", "Inbound"], ["to", "Outbound"]].forEach(function (w) {
@@ -618,34 +604,29 @@ function bgpPeerForm(box, doc, p, localAS, macros) {
 
 /* the networks bgpd announces, one per line */
 function bgpNetworks(box, doc) {
-	var t = el("table", null, "grid"), bar = el("div", null, "bar");
+	var grid = el("div", null, "sfields"), rows = el("div", null, "rows");
 
-	bar.appendChild(el("span", null, "fill"));
-	bar.appendChild(edButton("Add network", function () {
-		bgpDone(bgpAdd(doc, "network 192.0.2.0/24\n", ["network"]));
-	}));
-	box.appendChild(bar);
 	doc.nodes.filter(function (n) {
 		return n.kind === "network";
 	}).forEach(function (n, i) {
-		var tr = el("tr"), td = el("td");
+		var line = el("div", null, "addline");
 
-		td.appendChild(el("span", "network ", "dim mono"));
-		td.appendChild(edControl("net" + i, "text", bgpRest(n),
+		line.appendChild(edControl("net" + i, "text", bgpRest(n),
 		    function (v) {
 			bgpDone(v.trim() === "" ? bgpRemove(doc, n) :
 			    bgpSplice(doc, n.start, n.end, [bgpLineOf(doc, n,
 			    "network " + v.trim())]));
 		}));
-		tr.appendChild(td);
-		td = el("td");
-		td.appendChild(edButton("Delete", function () {
+		line.appendChild(edButton("Delete", function () {
 			bgpDone(bgpRemove(doc, n));
 		}));
-		tr.appendChild(td);
-		t.appendChild(tr);
+		rows.appendChild(line);
 	});
-	box.appendChild(t);
+	rows.appendChild(edButton("Add network", function () {
+		bgpDone(bgpAdd(doc, "network 192.0.2.0/24\n", ["network"]));
+	}));
+	regField(grid, "bgp.network", rows);
+	box.appendChild(grid);
 }
 
 /* the filters in order, one row each, and a form for the selected one */
@@ -717,20 +698,18 @@ function bgpFilterForm(doc, n, f, i) {
 
 	td.colSpan = 6;
 	if (f !== null) {
-		edField(grid, "Action", edControl("faction", ["allow", "deny",
-		    "match"], f.action, set("action")), "match only sets");
-		edField(grid, "Quick", edControl("fquick", "check", f.quick,
-		    set("quick")), "the first filter that matches decides");
-		edField(grid, "Direction", edControl("fdir", ["from", "to"],
-		    f.dir, set("dir")), "from: received; to: sent");
-		edField(grid, "Peer", edControl("fpeer", "text", f.peer,
-		    set("peer")), "any, ebgp, ibgp, an address, group " +
-		    "\"name\" or AS 64496");
-		edField(grid, "Matches", edControl("fmatch", "text", f.match,
-		    set("match")), "prefix 10.0.0.0/8, prefix-set name, " +
-		    "community 65001:100; none: every route");
-		edField(grid, "Sets", edControl("fset", "text", f.set,
-		    set("set")), "localpref 200");
+		regField(grid, "bgp.filter.action", edControl("faction",
+		    ["allow", "deny", "match"], f.action, set("action")));
+		regField(grid, "bgp.filter.quick", edControl("fquick", "check",
+		    f.quick, set("quick")));
+		regField(grid, "bgp.filter.dir", edControl("fdir", ["from",
+		    "to"], f.dir, set("dir")));
+		regField(grid, "bgp.filter.peer", edControl("fpeer", "text",
+		    f.peer, set("peer")));
+		regField(grid, "bgp.filter.match", edControl("fmatch", "text",
+		    f.match, set("match")));
+		regField(grid, "bgp.filter.set", edControl("fset", "text",
+		    f.set, set("set")));
 	} else
 		grid.appendChild(el("p", "Edit this statement as text.",
 		    "help"));

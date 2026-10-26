@@ -35,7 +35,7 @@ afterinstall:
 	${INSTALL} -d -o root -g wheel -m 755 ${DESTDIR}${HTDOCS} \
 	    ${DESTDIR}${HTDOCS}/xterm
 	${INSTALL} -c -o root -g wheel -m 444 ${.CURDIR}/htdocs/index.html \
-	    ${.CURDIR}/htdocs/app.js ${.CURDIR}/htdocs/ifdefs.js \
+	    ${.CURDIR}/htdocs/app.js ${.CURDIR}/htdocs/registry.js \
 	    ${.CURDIR}/htdocs/inspector.js ${.CURDIR}/htdocs/daemons.js \
 	    ${.CURDIR}/htdocs/pfconf.js ${.CURDIR}/htdocs/bgpdconf.js \
 	    ${.CURDIR}/htdocs/editors.js \

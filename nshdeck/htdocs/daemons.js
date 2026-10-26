@@ -306,18 +306,6 @@ function dgroup(box, name, open) {
 	return det;
 }
 
-/* a row of a group's: its label, its control, and what it is */
-function dfield(det, label, control, help) {
-	var row = el("div", null, "field"), info = el("div", null, "info");
-
-	row.appendChild(el("label", label));
-	row.appendChild(control);
-	info.appendChild(el("span", help));
-	row.appendChild(info);
-	det.appendChild(row);
-	return row;
-}
-
 /* the inspector of the daemon chosen, drawn again */
 function dinspector() {
 	var d = dinsp.def, box = document.querySelector(".daemons[data-ws=" +
@@ -330,8 +318,8 @@ function dinspector() {
 	box.textContent = "";
 	head.appendChild(el("i", null, "led " + ob[1]));
 	head.appendChild(el("h2", d.name, "iname"));
-	head.appendChild(el("span", d.label + (d.rt ? " · rtable " +
-	    dinsp.rt : ""), "dim"));
+	head.appendChild(el("span", [d.label, d.rt ? "rtable " + dinsp.rt :
+	    "", ob[0]].filter(Boolean).join(" · "), "dim"));
 	box.appendChild(head);
 	box.appendChild(el("p", dinsp.from, "dim from"));
 
@@ -340,7 +328,7 @@ function dinspector() {
 		input = el("input");
 		input.type = "checkbox";
 		input.checked = dinsp.now.enabled;
-		row = dfield(det, "Enabled", input, "nsh: " + d.name + " enable");
+		row = regField(det, "daemon.enable", input, d.name + " enable");
 		row.classList.toggle("edited", dinsp.now.enabled !==
 		    dinsp.was.enabled);
 		input.addEventListener("change", function () {
@@ -354,7 +342,7 @@ function dinspector() {
 		input.min = 0;
 		input.max = 255;
 		input.value = dinsp.rt;
-		dfield(det, "Routing table", input, "Each has its own rules.");
+		regField(det, "daemon.rtable", input);
 		input.addEventListener("change", function () {
 			var rt = Number(input.value);
 
@@ -365,8 +353,6 @@ function dinspector() {
 			}
 		});
 	}
-	dfield(det, "Observed", el("span", ob[0] || "not known", "mono"),
-	    "From show daemons.");
 
 	if (d.rules) {
 		det = dgroup(box, "Rules", true);
