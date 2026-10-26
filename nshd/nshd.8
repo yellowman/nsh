@@ -179,6 +179,9 @@ it reads itself, with
 from the socket of the session's client, and it takes a request only
 while that client is connected, so a frontend taken over cannot say
 who a client is.
+It keeps a client's socket only while enough descriptors stay free for
+its own work: commits and the streams it runs.
+When it cannot keep a socket, it refuses that client's requests.
 system checks the permissions of that uid's login class itself, as
 config does: an operation needs operate, and a commit, its test and a
 save need configure.

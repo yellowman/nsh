@@ -201,6 +201,8 @@
 #define SYS_WINDOW	16	/* messages a stream sends its client unread */
 #define SYS_OPWORDS	32	/* an operation's words, at most */
 #define SYS_TERMINALS	64	/* web logins' terminals at once, at most */
+/* descriptors kept free of clients' sockets: streams, commits, files */
+#define SYS_RESERVE	(SYS_STREAMS + 16)
 
 /*
  * what a stream's child streams: a show's, FACTS_*, an operation's, or a
@@ -752,9 +754,11 @@ asked_free(struct asked *k)
 }
 
 /*
- * A session's client, from its socket fd, as the kernel says it is;
- * none if fd is -1, as when system had no descriptor free for it, or is
- * no client's socket, and a request of the session is then refused
+ * Record a session's client from its socket, fd, with the uid
+ * getpeereid() reports. The session gets no client, and its requests are
+ * refused, if fd is -1 because system had no descriptor free for it, if
+ * keeping fd would leave fewer than SYS_RESERVE descriptors free, or if
+ * fd is not a client's socket.
  */
 static void
 client_new(uint32_t session, int fd)
@@ -767,6 +771,12 @@ client_new(uint32_t session, int fd)
 		    "twice", session);
 	if (fd == -1) {
 		log_warnx("%s: session %u: no socket", __func__, session);
+		return;
+	}
+	if (getdtablesize() - getdtablecount() < SYS_RESERVE) {
+		log_warnx("%s: session %u: too many clients", __func__,
+		    session);
+		close(fd);
 		return;
 	}
 	if ((cl = calloc(1, sizeof(*cl))) == NULL)
