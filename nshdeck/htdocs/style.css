@@ -1001,6 +1001,184 @@ textarea.rules.edited {
 	box-shadow: inset 2px 0 0 var(--warn);
 }
 
+/* the pf and bgpd editors under the daemons (editors.js) */
+.dmain {
+	display: grid;
+	gap: 16px;
+	align-content: start;
+	min-width: 0;
+}
+
+.structured {
+	display: grid;
+	gap: 10px;
+	min-width: 0;
+}
+
+.structured:empty {
+	display: none;
+}
+
+.structured > .bar label.dim {
+	font-size: 12px;
+}
+
+.structured > .bar > input:not(.narrow) {
+	width: 150px;
+}
+
+.structured .bar .help {
+	flex: 1 1 40ch;
+}
+
+/* a rule's number, and the kind of a row that is not a rule */
+.srules td.num {
+	width: 1%;
+	color: var(--faint);
+}
+
+.srules td.kind {
+	font: 11.5px var(--mono);
+	color: var(--faint);
+}
+
+.srules td.cmt {
+	font: 12px var(--mono);
+	color: var(--faint);
+}
+
+/* an anchor's rules, listed under it; they cannot be selected */
+.srules tr.inner td {
+	color: var(--dim);
+	cursor: default;
+}
+
+.pick tr.inner:hover td {
+	background: none;
+}
+
+.srules tr.inner td:nth-child(2) {
+	padding-left: 26px;
+}
+
+/* a rule's or a filter's action */
+.act {
+	font: 600 12px var(--mono);
+}
+
+.act-pass {
+	color: var(--on);
+}
+
+.act-block {
+	color: var(--bad);
+}
+
+.act-match {
+	color: var(--soft-ink);
+}
+
+/* the selected statement's form, in its own row below it */
+.pick tr.sform td, .pick tr.sform:hover td {
+	padding: 12px;
+	white-space: normal;
+	cursor: default;
+	background: var(--side);
+}
+
+.pick tr.sform td:first-child {
+	box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.sform h3, .speer h3, .flow h3 {
+	margin: 0 0 6px;
+}
+
+.sform h3 {
+	margin-top: 12px;
+}
+
+.sform > td > .bar {
+	margin-top: 10px;
+	justify-content: flex-end;
+}
+
+/* a form's fields in hairline cells, two per row where they fit */
+.sfields {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr));
+	background: var(--panel);
+	border-top: 1px solid var(--line);
+	border-left: 1px solid var(--line);
+}
+
+.sfields > .field, .sfields > .field:last-child {
+	border-bottom: 1px solid var(--line);
+	border-right: 1px solid var(--line);
+}
+
+.sfields > .help {
+	padding: 10px;
+	border-bottom: 1px solid var(--line);
+	border-right: 1px solid var(--line);
+}
+
+.field textarea.lines {
+	width: 100%;
+	min-width: 0;
+	padding: 4px 9px;
+	resize: vertical;
+	color: var(--text);
+	background: var(--field);
+	border: 1px solid var(--line);
+}
+
+.field textarea.lines:focus {
+	outline: none;
+	border-color: var(--accent);
+}
+
+/* a peer's form: its session, and its inbound and outbound filters */
+.speer {
+	display: grid;
+	gap: 12px;
+	padding: 12px;
+	background: var(--panel);
+	border: 1px solid var(--line);
+}
+
+.speer > .bar {
+	justify-content: flex-end;
+}
+
+.flows {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
+	gap: 10px;
+}
+
+.flow {
+	display: grid;
+	gap: 6px;
+	align-content: start;
+	padding: 10px;
+	border: 1px solid var(--line);
+}
+
+.flow ol {
+	margin: 0;
+	padding-left: 24px;
+	font: 12px var(--mono);
+}
+
+.flow li + li {
+	margin-top: 3px;
+}
+
+.flow > .empty {
+	display: block;
+}
+
 .igroup > .help, .igroup > .bar, .igroup > .cliline, .igroup > pre.term {
 	margin: 0 10px 10px;
 }

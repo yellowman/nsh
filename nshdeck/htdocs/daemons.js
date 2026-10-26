@@ -80,14 +80,20 @@ var dfacts = [];	/* show daemons' records, the last */
 var dchosen = {};	/* each workspace's daemon chosen: its name and rtable */
 var dinsp = null;	/* the daemon inspected, its settings, and edits */
 
-/* a workspace's daemons: a table, and an inspector beside it */
+/*
+ * a workspace's daemons: a table, the pf or bgpd editor under it
+ * (editors.js), and an inspector beside them
+ */
 function daemonsBox(div) {
 	var bar = el("div", null, "bar"), split = el("div", null, "netsplit");
+	var main = el("div", null, "dmain");
 	var aside = el("aside", null, "panel dinsp");
 
 	bar.appendChild(el("h2", "Daemons"));
 	bar.appendChild(el("span", null, "dim count"));
-	split.appendChild(el("table", null, "grid pick"));
+	main.appendChild(el("table", null, "grid pick"));
+	main.appendChild(el("div", null, "structured"));
+	split.appendChild(main);
 	aside.setAttribute("aria-label", "The daemon's settings");
 	aside.appendChild(el("p", "Choose a daemon to see and change its " +
 	    "rules and settings.", "dim"));
@@ -387,6 +393,7 @@ function dinspector() {
 			area.classList.toggle("edited", area.value !==
 			    dinsp.was.rules);
 			drefresh();
+			structuredLater();
 		});
 	} else if (d.enable)
 		box.appendChild(el("p", "nsh keeps no rules for " + d.name +
@@ -458,6 +465,7 @@ function dinspector() {
 	dinsp.revert = revert;
 	dinsp.stage = stage;
 	drefresh();
+	structured();
 }
 
 /* what follows from the edits: the count of lines, and the buttons */

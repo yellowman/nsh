@@ -41,7 +41,13 @@ each is in, with whether the configuration enables it and whether it
 runs, and the one chosen with its rules as text, which can be changed
 and staged into the candidate as its edit in
 .Xr nsh 8
-does, and its live operations; the system
+does, and its live operations; for pf and bgpd, an editor under the
+table that reads the rules' text and writes changes back into it: pf's
+statements in order, with a form for each rule, and bgpd's peers, with
+their state from
+.Xr bgpctl 8
+and the filters that apply to them, its networks and its filters;
+the system
 and its changes, in four topics: changes, where configure is entered
 and lines of configuration are typed, as
 .Xr nsh 8

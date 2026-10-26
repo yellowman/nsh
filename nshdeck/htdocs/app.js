@@ -1001,6 +1001,7 @@ function loggedOut() {
 	tgone("logged out");
 	insp = null;
 	dinsp = null;
+	structured();
 	dchosen = {};
 	selected = "";
 	cur = null;
