@@ -73,6 +73,8 @@ and
 While the overview is shown, it asks for the interfaces every 5 seconds:
 a port's activity light is on if the port counted packets since the
 last time.
+When the user logs out, or nshdeck reports the login gone, the page
+reloads, so nothing the last user saw remains.
 Each user logs in with a name and password, as
 .Nm nshd
 checks them, and has the permissions of the user's login class (see

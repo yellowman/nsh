@@ -989,24 +989,15 @@ function loggedIn(j) {
 	workspace("overview");
 }
 
+/*
+ * Show the login form. Once someone has logged in, reload the page
+ * instead, so that nothing the last user saw remains.
+ */
 function loggedOut() {
-	if (stream) {
-		stream.close();
-		stream = null;
-	}
-	clearInterval(looker);
-	looker = null;
-	chosen = -1;
-	closeChoices();
-	tgone("logged out");
-	insp = null;
-	dinsp = null;
-	structured();
-	dchosen = {};
-	selected = "";
-	cur = null;
-	$("deck").hidden = true;
-	$("login").hidden = false;
+	if (!$("deck").hidden)
+		location.reload();
+	else
+		$("login").hidden = false;
 }
 
 /* a form's submit, as fn of its fields, without leaving the page */
