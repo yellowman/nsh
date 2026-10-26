@@ -498,11 +498,60 @@ function port(name) {
 	p.appendChild(jack);
 	p.appendChild(el("span", name, "label"));
 	p.appendChild(el("span", null, "rate"));
+	p.setAttribute("aria-expanded", "false");
 	p.addEventListener("click", function () {
-		selected = name;
-		workspace("network");
+		tray(name);
 	});
 	return p;
+}
+
+/*
+ * Open or close a port's tray under the ports. It lists the interfaces on
+ * the port and what the port belongs to, from the running configuration
+ * and show interface. Choosing the open port again closes it.
+ */
+function tray(name) {
+	var box = $("tray");
+
+	Object.keys(jacks).forEach(function (n) {
+		jacks[n].setAttribute("aria-expanded", String(n === name &&
+		    box.dataset.port !== name));
+	});
+	if (box.dataset.port === name) {
+		box.dataset.port = "";
+		box.hidden = true;
+		return Promise.resolve();
+	}
+	box.dataset.port = name;
+	return ask("GET", "config", { what: "running" }).then(function (j) {
+		var all = relEdges(said(j)), head = el("div", null, "bar");
+		var go = function (n) {
+			selected = n;
+			workspace("network");
+		};
+		var on = relOf(all, name).filter(function (e) {
+			return e.to === name && (e.type === "parent-link" ||
+			    e.type === "carp-underlay");
+		});
+
+		if (box.dataset.port !== name)
+			return;
+		box.textContent = "";
+		head.appendChild(el("h3", name));
+		head.appendChild(el("span", null, "fill"));
+		head.appendChild(el("button", "Inspect")).addEventListener(
+		    "click", function () {
+			go(name);
+		});
+		box.appendChild(head);
+		box.appendChild(el("h4", "On this port"));
+		relRows(box, name, on, all, go);
+		box.appendChild(el("h4", "Linked to"));
+		relRows(box, name, relOf(all, name).filter(function (e) {
+			return on.indexOf(e) === -1;
+		}), all, go);
+		box.hidden = false;
+	});
 }
 
 /*

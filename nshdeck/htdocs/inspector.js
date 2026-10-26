@@ -130,7 +130,7 @@ function inspect(name) {
 		var was = settings(lines, defs);
 
 		insp = { name: name, bridge: bridge, defs: defs, was: was,
-		    now: JSON.parse(JSON.stringify(was)),
+		    now: JSON.parse(JSON.stringify(was)), conf: said(j),
 		    every: insp && insp.every, from: inConfigure ?
 		    "candidate" : "running", results: [] };
 		inspector();
@@ -229,6 +229,41 @@ function control(d) {
 	return input;
 }
 
+/*
+ * Draw the inspected interface's relations and its parents above its
+ * name, from the configuration with the current edit applied and from
+ * show interface.
+ */
+function related() {
+	var over = { name: insp.name, bridge: insp.bridge, v: insp.now };
+	var all = relEdges(insp.conf, over), on = [];
+	var rel = relEdited(relOf(relEdges(insp.conf), insp.name),
+	    relOf(all, insp.name));
+	var go = function (n) {
+		selected = n;
+		iftable();
+		inspect(n);
+	};
+
+	insp.relrows.textContent = "";
+	insp.relcount.textContent = rel.length ? String(rel.length) : "";
+	relRows(insp.relrows, insp.name, rel, all, go);
+	rel.forEach(function (e) {
+		if (e.from === insp.name && (e.type === "parent-link" ||
+		    e.type === "carp-underlay") && on.indexOf(e.to) === -1 &&
+		    e.said.join() !== "removed by the edit")
+			on.push(e.to);
+	});
+	insp.crumb.textContent = "";
+	insp.crumb.hidden = on.length === 0;
+	on.forEach(function (n, i) {
+		if (i)
+			insp.crumb.appendChild(document.createTextNode(" / "));
+		relLink(insp.crumb, n, go);
+	});
+	insp.crumb.appendChild(document.createTextNode(" › " + insp.name));
+}
+
 /* what follows from the settings as they are now: marks, counts, lines */
 function refresh() {
 	var lines = edits(insp.defs, insp.was, insp.now);
@@ -255,6 +290,23 @@ function refresh() {
 	}), ["exit"]).join("\n") : "no changes";
 	insp.revert.disabled = insp.stage.disabled = lines.length === 0;
 	insp.lines = lines;
+	related();
+}
+
+/* the Related group, after Essentials; open unless the user closed it */
+function relGroup(box) {
+	var det = el("details", null, "igroup related"), sum = el("summary");
+
+	det.open = !insp.open || insp.open.Related !== false;
+	det.addEventListener("toggle", function () {
+		insp.open = insp.open || {};
+		insp.open.Related = det.open;
+	});
+	sum.appendChild(el("span", "Related"));
+	insp.relcount = sum.appendChild(el("span", null, "dim count"));
+	det.appendChild(sum);
+	insp.relrows = det.appendChild(el("div", null, "rels"));
+	box.appendChild(det);
 }
 
 /* the inspector drawn again; focus kept on key's control, if given */
@@ -281,6 +333,7 @@ function inspector(key) {
 	head.appendChild(el("span", [r.type, r.link, rate(r)].filter(
 	    Boolean).join(" · "), "dim"));
 	box.appendChild(head);
+	insp.crumb = box.appendChild(el("p", null, "crumb"));
 	check.type = "checkbox";
 	check.checked = insp.every;
 	check.addEventListener("change", function () {
@@ -301,7 +354,7 @@ function inspector(key) {
 		}
 		groups[d.group].push(d);
 	});
-	order.forEach(function (g) {
+	order.forEach(function (g, i) {
 		var det = el("details", null, "igroup"), sum = el("summary");
 		var edited = groups[g].some(function (d) {
 			return !same(insp.now[d.key], insp.was[d.key]);
@@ -326,6 +379,8 @@ function inspector(key) {
 				    "input.add") : null;
 		});
 		box.appendChild(det);
+		if (i === 0)
+			relGroup(box);
 	});
 
 	box.appendChild(el("h3", "nsh's lines"));
