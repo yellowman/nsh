@@ -1,10 +1,13 @@
 /*
- * editors.js: editors for pf's and bgpd's rules, under the daemons'
- * table. pf's rules are listed as statements in order, and bgpd's as
- * peers, networks and filters. Both are read from the rules' text with
- * pfconf.js and bgpdconf.js, and each change is written back into that
- * text, which the inspector's Rules box shows and Stage stages. The text
- * is the only source: anything typed in it is read again here.
+ * editors.js: editors for the rules of pf, bgpd and the other routing
+ * daemons, under the daemons' table. pf's rules are listed as statements
+ * in order, bgpd's as peers, networks and filters, and a routing
+ * daemon's as its interfaces and global settings, beside its live
+ * neighbors and routes. Each is read from the rules' text with
+ * pfconf.js, bgpdconf.js or routeconf.js, and each change is written
+ * back into that text, which the inspector's Rules box shows and Stage
+ * stages. The text is the only source: anything typed in it is read
+ * again here.
  */
 "use strict";
 
@@ -75,7 +78,8 @@ function structured() {
 	document.querySelectorAll(".structured").forEach(function (b) {
 		b.textContent = "";
 	});
-	if (!dinsp || (dinsp.def.name !== "pf" && dinsp.def.name !== "bgp")) {
+	if (!dinsp || (dinsp.def.name !== "pf" && dinsp.def.name !== "bgp" &&
+	    !RT_DAEMONS[dinsp.def.name])) {
 		ed = null;
 		return;
 	}
@@ -83,11 +87,14 @@ function structured() {
 	    "] .structured");
 	if (!ed || ed.daemon !== dinsp.def.name || ed.rt !== dinsp.rt)
 		ed = { daemon: dinsp.def.name, rt: dinsp.rt, sel: -1,
-		    show: "all", tab: "peers", peer: "", summary: null };
+		    show: "all", tab: dinsp.def.name === "bgp" ? "peers" :
+		    "interfaces", peer: "", summary: null, live: null };
 	if (ed.daemon === "pf")
 		pfEditor(box);
-	else
+	else if (ed.daemon === "bgp")
 		bgpEditor(box);
+	else
+		rtEditor(box);
 }
 
 /* redraw the editor once the text has not changed for a moment */
@@ -142,7 +149,7 @@ function edControl(key, kind, value, change) {
 		c = el("select");
 		kind.concat(kind.indexOf(value) === -1 ? [value] : []).forEach(
 		    function (v) {
-			o = el("option", v === "" ? "(none)" : v);
+			o = el("option", v === "" ? "(not set)" : v);
 			o.value = v;
 			c.appendChild(o);
 		});
@@ -734,4 +741,248 @@ function bgpFilterForm(doc, n, f, i) {
 	td.appendChild(bar);
 	tr.appendChild(td);
 	return tr;
+}
+
+/* a ctl program's show, as text, and whether it answered */
+function rtShow(words) {
+	return ask("GET", "show", { words: words }).then(function (j) {
+		return { ok: j.ok, error: said(j).trim(), text: of(j,
+		    "message").map(function (m) {
+			return m.text;
+		}).join("") + (j.output || "") };
+	});
+}
+
+/* read the daemon's interface, neighbor and route shows, and redraw */
+function rtState() {
+	var e = ed, d = RT_DAEMONS[e.daemon];
+
+	ed.live = { asking: true };
+	return Promise.all([rtShow(e.daemon + " interfaces"),
+	    rtShow(e.daemon + " neighbor"), rtShow(e.daemon + " " +
+	    d.routes)]).then(function (a) {
+		var bad = a.find(function (x) {
+			return !x.ok;
+		});
+
+		if (ed !== e)
+			return;
+		ed.live = { ifaces: rtTable(a[0].text, d.ifaces),
+		    nbrs: rtTable(a[1].text, d.nbrs), routes: a[2].text,
+		    error: !bad ? "" : bad.error || d.prog +
+		    " does not answer" };
+		structured();
+	});
+}
+
+/*
+ * draw a routing daemon's editor: its interfaces, live neighbors, live
+ * routes or labels, or global settings
+ */
+function rtEditor(box) {
+	var d = RT_DAEMONS[ed.daemon], doc = bgpParse(dinsp.now.rules,
+	    d.blocks), bar = el("div", null, "bar"), live = ed.live;
+
+	ed.doc = doc;
+	bar.appendChild(el("h2", d.prog));
+	bar.appendChild(edSegs("rttab", [["interfaces", "Interfaces"],
+	    ["neighbors", "Neighbors"], ["routes", d.routes === "lib" ?
+	    "Labels" : "Routes"], ["global", "Global"]], ed.tab, function (v) {
+		ed.tab = v;
+		ed.sel = -1;
+		structured();
+	}));
+	bar.appendChild(el("span", null, "fill"));
+	if (dinsp.rt !== 0)
+		bar.appendChild(el("span", "Live state is shown for rtable 0 " +
+		    "only", "dim"));
+	else {
+		if (live === null)
+			rtState();
+		bar.appendChild(el("span", !live || live.asking ? "Asking " +
+		    d.prog : live.error ? "State: " + live.error :
+		    "State from " + d.ctl, "dim"));
+		bar.appendChild(edButton("Ask again", rtState));
+	}
+	box.appendChild(bar);
+	if (ed.tab === "neighbors")
+		rtLiveTable(box, d.nbrs, live && live.nbrs, "No neighbors");
+	else if (ed.tab === "routes")
+		box.appendChild(el("pre", live && live.routes || "", "term"));
+	else if (ed.tab === "global")
+		rtGlobalTab(box, doc, d);
+	else
+		rtInterfacesTab(box, doc, d);
+}
+
+/* a table of rows a ctl program printed, with its columns */
+function rtLiveTable(box, cols, rows, none) {
+	var t = el("table", null, "grid"), head = el("tr");
+
+	cols.forEach(function (c) {
+		head.appendChild(el("th", c));
+	});
+	t.appendChild(head);
+	(rows || []).forEach(function (r) {
+		var tr = el("tr");
+
+		cols.forEach(function (c) {
+			tr.appendChild(el("td", r[c], "mono"));
+		});
+		t.appendChild(tr);
+	});
+	box.appendChild(t);
+	if (rows && !rows.length)
+		box.appendChild(el("p", none, "nothing"));
+}
+
+/* the row of the interface table for name, if the daemon listed it */
+function rtLiveIface(name) {
+	var live = ed.live;
+
+	return live && live.ifaces ? live.ifaces.find(function (r) {
+		return r.Interface === name;
+	}) || null : null;
+}
+
+/*
+ * the interfaces, one row each with their place, chosen settings, live
+ * state and neighbor count; the selected one's form; and a field to add
+ * one
+ */
+function rtInterfacesTab(box, doc, d) {
+	var list = rtInterfaces(doc, d), places = rtPlaces(doc, d);
+	var t = el("table", null, "grid pick"), head = el("tr");
+	var grid = el("div", null, "sfields"), line = el("div", null,
+	    "addline"), name = el("input", null, "mono"), where;
+	var prefix = ed.daemon + ".";
+
+	["", "Interface", "In"].concat(d.cols.map(function (k) {
+		return reg(prefix + k).label;
+	}), ["State", "Neighbors"]).forEach(function (h) {
+		head.appendChild(el("th", h));
+	});
+	t.appendChild(head);
+	list.forEach(function (f) {
+		var key = f.place.name + " " + f.name, tr = el("tr", null,
+		    key === ed.sel ? "sel" : ""), led = el("td");
+		var bare = f.name.split(":")[0], r = rtLiveIface(bare);
+		var state = r ? r.State || r.Linkstate : "";
+		var nbrs = ed.live && ed.live.nbrs ? ed.live.nbrs.filter(
+		    function (x) {
+			return (x.Iface || x.Interface) === bare;
+		}).length : "";
+
+		led.appendChild(el("i", null, "led " + (!r ? "" :
+		    /^(DOWN|down|no carrier)$/.test(state) ? "warn" : "on")));
+		tr.appendChild(led);
+		tr.appendChild(el("td", f.name, "mono"));
+		tr.appendChild(el("td", f.place.name));
+		d.cols.forEach(function (k) {
+			var v = f[k], i = rtInherited(doc, d, f, k);
+
+			tr.appendChild(el("td", v === true ? "yes" : v !==
+			    undefined ? v : i ? i.value : "", v === undefined &&
+			    i ? "dim" : "mono"));
+		});
+		tr.appendChild(el("td", state));
+		tr.appendChild(el("td", String(nbrs), "num"));
+		tr.addEventListener("click", function () {
+			ed.sel = ed.sel === key ? -1 : key;
+			structured();
+		});
+		t.appendChild(tr);
+		if (key === ed.sel)
+			t.appendChild(rtIfaceForm(doc, d, f));
+	});
+	box.appendChild(t);
+	if (!list.length)
+		box.appendChild(el("p", "No interfaces", "nothing"));
+	if (places.length) {
+		where = edControl("rtplace", places.map(function (p, i) {
+			return String(i);
+		}), "0", function () {});
+		Array.prototype.forEach.call(where.options, function (o) {
+			o.textContent = places[o.value].name || "top level";
+		});
+		if (places.length > 1)
+			line.appendChild(where);
+		name.placeholder = "Interface";
+		name.dataset.key = "newiface";
+		name.setAttribute("aria-label", "The new interface's name");
+		line.appendChild(name);
+		line.appendChild(edButton("Add interface", function () {
+			var n = name.value.trim(), p = places[where.value];
+
+			/* one word, with no quote, brace, comment or escape */
+			if (!/^[^\s{}"#\\]+$/.test(n)) {
+				name.focus();
+				return;
+			}
+			ed.sel = p.name + " " + n;
+			bgpDone(rtAddIface(doc, p.chain, n));
+		}));
+	} else
+		line.appendChild(el("span", "Add " + {
+		    area: "an area", "address-family": d.under[0].length > 1 ?
+		    "an address family and AS" : "an address family"
+		    }[d.under[0][0]] + " in the text first.", "dim"));
+	regField(grid, prefix + "interface", line);
+	box.appendChild(grid);
+}
+
+/* an interface's form: its settings, its other statements, Delete */
+function rtIfaceForm(doc, d, f) {
+	var tr = el("tr", null, "sform"), td = el("td"), grid = el("div", null,
+	    "sfields"), bar = el("div", null, "bar");
+
+	td.colSpan = 5 + d.cols.length;
+	td.appendChild(el("h3", f.name + (f.place.name ? " in " +
+	    f.place.name : "")));
+	d.iface.forEach(function (k) {
+		var v = f[k[0]], i = rtInherited(doc, d, f, k[0]);
+		var c = edControl("rt" + k[0], k[1], k[1] === "check" ? !!v :
+		    v || "", function (x) {
+			bgpDone(rtSetIface(doc, f.node, k[0], k[1] === "check" ?
+			    x : x.trim()));
+		});
+
+		if (i)
+			c.placeholder = i.value + ", from " + i.from;
+		regField(grid, ed.daemon + "." + k[0], c);
+	});
+	td.appendChild(grid);
+	if (f.other.length) {
+		td.appendChild(el("h3", "Other settings"));
+		td.appendChild(el("pre", f.other.map(function (o) {
+			return o.code;
+		}).join("\n"), "term"));
+	}
+	bar.appendChild(edButton("Delete", function () {
+		ed.sel = -1;
+		bgpDone(bgpRemove(doc, f.node));
+	}));
+	td.appendChild(bar);
+	tr.appendChild(td);
+	return tr;
+}
+
+/* the global settings as fields, and the other top-level statements */
+function rtGlobalTab(box, doc, d) {
+	var grid = el("div", null, "sfields"), g = rtGlobal(doc, d);
+	var other = rtOther(doc, d);
+
+	d.global.forEach(function (k) {
+		regField(grid, ed.daemon + "." + k[0], edControl("rt" + k[0],
+		    k[1], g[k[0]], function (v) {
+			bgpDone(rtSetGlobal(doc, k[0], v.trim()));
+		}));
+	});
+	box.appendChild(grid);
+	if (other.length) {
+		box.appendChild(el("h3", "Other settings"));
+		box.appendChild(el("pre", other.map(function (o) {
+			return o.code;
+		}).join("\n"), "term"));
+	}
 }

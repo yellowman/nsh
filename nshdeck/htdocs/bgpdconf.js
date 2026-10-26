@@ -3,8 +3,10 @@
  * kept as lines. The reader finds statements and the neighbor, group and
  * rdomain blocks that hold them, and an edit adds, changes or removes the
  * lines of one statement and nothing else. Statements this code cannot
- * read are kept as written. Nothing here uses the page, so the kit runs
- * it in node.
+ * read are kept as written. The other routing daemons' configurations
+ * share bgpd.conf's grammar, so routeconf.js reads them with this code,
+ * giving its own block names. Nothing here uses the page, so the kit
+ * runs it in node.
  */
 "use strict";
 
@@ -68,10 +70,10 @@ function bgpWords(code) {
 /*
  * Parse statements from line i up to the line that closes the enclosing
  * block, or the end. Each statement records its first line, the line
- * after its last, and its words; a block also records its statements and
- * its closing line.
+ * after its last, and its words; a block named in blocks also records
+ * its statements and its closing line.
  */
-function bgpNodes(lines, i, inner) {
+function bgpNodes(lines, i, inner, blocks) {
 	var out = [], n, l, depth, code, w, j;
 
 	while (i < lines.length) {
@@ -93,7 +95,7 @@ function bgpNodes(lines, i, inner) {
 			depth += l.depth;
 			w = bgpWords(code);
 			/* a block opens; its statements follow */
-			if (j === i && BGP_BLOCKS.indexOf(w[0]) !== -1 &&
+			if (j === i && blocks.indexOf(w[0]) !== -1 &&
 			    w[w.length - 1] === "{" && depth === 1)
 				break;
 			if (!l.cont && depth <= 0)
@@ -101,14 +103,14 @@ function bgpNodes(lines, i, inner) {
 		}
 		n.code = code.trim();
 		n.words = bgpWords(n.code);
-		if (j === n.start && BGP_BLOCKS.indexOf(n.words[0]) !== -1 &&
+		if (j === n.start && blocks.indexOf(n.words[0]) !== -1 &&
 		    n.words[n.words.length - 1] === "{" && depth === 1) {
-			l = bgpNodes(lines, j + 1, true);
+			l = bgpNodes(lines, j + 1, true, blocks);
 			n.children = l.nodes;
 			n.close = l.end;
 			n.end = Math.min(l.end + 1, lines.length);
-		} else if (j === n.start && BGP_BLOCKS.indexOf(n.words[0]) !==
-		    -1 && n.words.slice(-2).join(" ") === "{ }") {
+		} else if (j === n.start && blocks.indexOf(n.words[0]) !== -1 &&
+		    n.words.slice(-2).join(" ") === "{ }") {
 			/* an empty block on one line */
 			n.children = [];
 			n.close = n.start;
@@ -143,12 +145,14 @@ function bgpKind(n) {
 	return "other";
 }
 
-/* parse text into lines and statements */
-function bgpParse(text) {
+/* parse text into lines and statements; blocks defaults to bgpd's */
+function bgpParse(text, blocks) {
 	var lines = text.match(/[^\n]*\n|[^\n]+$/g) || [];
 	var ls = bgpLines(lines);
 
-	return { lines: lines, read: ls, nodes: bgpNodes(ls, 0, false).nodes };
+	blocks = blocks || BGP_BLOCKS;
+	return { lines: lines, read: ls, blocks: blocks,
+	    nodes: bgpNodes(ls, 0, false, blocks).nodes };
 }
 
 function bgpText(doc) {
@@ -253,7 +257,7 @@ function bgpSplice(doc, a, b, lines) {
 	if (a > 0 && !/\n$/.test(doc.lines[a - 1]))
 		doc.lines[a - 1] += "\n";
 	Array.prototype.splice.apply(doc.lines, [a, b - a].concat(lines));
-	return bgpParse(bgpText(doc));
+	return bgpParse(bgpText(doc), doc.blocks);
 }
 
 /* code as one line, with n's indent and n's comments after it */

@@ -35,7 +35,19 @@ var REGISTRY_MODULES = {
 	pf: { scope: "pf's rules", man: "pf.conf.5",
 	    check: "pfctl -n, at Validate and at commit" },
 	bgp: { scope: "bgpd's configuration", man: "bgpd.conf.5",
-	    check: "bgpd -n, at Validate and at commit" }
+	    check: "bgpd -n, at Validate and at commit" },
+	ospf: { scope: "ospfd's configuration", man: "ospfd.conf.5",
+	    check: "ospfd -n, at Validate and at commit" },
+	ospf6: { scope: "ospf6d's configuration", man: "ospf6d.conf.5",
+	    check: "ospf6d -n, at Validate and at commit" },
+	eigrp: { scope: "eigrpd's configuration", man: "eigrpd.conf.5",
+	    check: "eigrpd -n, at Validate and at commit" },
+	rip: { scope: "ripd's configuration", man: "ripd.conf.5",
+	    check: "ripd -n, at Validate and at commit" },
+	ldp: { scope: "ldpd's configuration", man: "ldpd.conf.5",
+	    check: "ldpd -n, at Validate and at commit" },
+	dvmrp: { scope: "dvmrpd's configuration", man: "dvmrpd.conf.5",
+	    check: "dvmrpd -n, at Validate and at commit" }
 };
 
 /* drivers, as interfaces' names begin */
@@ -559,7 +571,7 @@ var REGISTRY = {
 	"pf.dir": { label: "Direction", keyword: "in | out", hint: "none: both",
 	    definition: "Whether the rule matches packets coming in, going " +
 	    "out, or both.", values: "in, out or neither", default: "both",
-	    undo: "choose (none)" },
+	    undo: "choose (not set)" },
 	"pf.quick": { label: "Quick", keyword: "quick", hint: "the first " +
 	    "rule that matches decides", definition: "If the rule matches, " +
 	    "pf stops and this rule decides; later rules are not evaluated. " +
@@ -615,7 +627,7 @@ var REGISTRY = {
 	    "handshake itself first; no state checks every packet against " +
 	    "the rules.", values: "keep state, no state, modulate state or " +
 	    "synproxy state", default: "keep state, for pass rules",
-	    needs: "action pass", undo: "choose (none)" },
+	    needs: "action pass", undo: "choose (not set)" },
 	"pf.natto": { label: "nat-to", keyword: "nat-to address",
 	    hint: "(egress)", definition: "The source address of packets " +
 	    "going out is rewritten to this one, such as (egress), the " +
@@ -760,7 +772,268 @@ var REGISTRY = {
 	    "on the routes it applies to, such as localpref, med, community " +
 	    "or prepend-self.", values: "as bgpd.conf(5) gives them",
 	    default: "none", undo: "clear the field", applies: "filters, in " +
-	    "their order" }
+	    "their order" },
+
+	/* ospfd's configuration */
+	"ospf.router-id": { label: "Router ID", keyword: "router-id address",
+	    definition: "The 32-bit identifier, written as an IPv4 address, " +
+	    "that names this router to its neighbors. It need not be one of " +
+	    "its addresses.", values: "an IPv4 address", default: "the " +
+	    "numerically lowest IP address of the router", undo: "clear the " +
+	    "field" },
+	"ospf.fib-update": { label: "Update the FIB", keyword: "fib-update " +
+	    "yes | no", definition: "Whether ospfd installs its routes in " +
+	    "the kernel's routing table. With no, it also acts as a stub " +
+	    "router, so no traffic is routed through it.", values: "yes or no",
+	    default: "yes", risk: "high: with no, this router forwards " +
+	    "nothing by OSPF", undo: "choose (not set)" },
+	"ospf.redistribute": { label: "Redistribute", keyword: "[no] " +
+	    "redistribute static | connected | default | prefix | rtlabel " +
+	    "label [set ...]", definition: "Routes from outside OSPF that " +
+	    "ospfd announces, such as connected networks or static routes. " +
+	    "The first rule that matches a route decides.", values: "one " +
+	    "rule per line, as ospfd.conf(5) gives them", default: "none: " +
+	    "only OSPF's own routes", undo: "clear the lines" },
+	"ospf.interface": { label: "New interface", keyword: "interface name",
+	    definition: "Adds an interface to an area. ospfd sends hellos " +
+	    "and forms adjacencies on it, unless it is passive, and " +
+	    "announces its network.", values: "an interface's name, in an area",
+	    default: "none", undo: "Delete" },
+	"ospf.metric": { label: "Metric", keyword: "metric cost",
+	    definition: "The interface's cost. OSPF prefers the path with " +
+	    "the lowest total cost.", values: "1 to 65535", default: "10, " +
+	    "unless the area or the top level sets it", undo: "clear the field",
+	    applies: "an interface; set in an area or at the top level, it " +
+	    "applies to the interfaces after it" },
+	"ospf.passive": { label: "Passive", keyword: "passive",
+	    definition: "ospfd sends and accepts no OSPF packets on the " +
+	    "interface, but still announces its network as a stub.",
+	    values: "on or off", default: "off", undo: "clear the box",
+	    applies: "an interface" },
+	"ospf.hello-interval": { label: "Hello interval",
+	    keyword: "hello-interval seconds", definition: "Seconds between " +
+	    "hello packets. Neighbors on a network must use the same value.",
+	    values: "1 to 65535 seconds", default: "10", undo: "clear the " +
+	    "field", applies: "an interface; set in an area or at the top " +
+	    "level, it applies to the interfaces after it" },
+	"ospf.router-dead-time": { label: "Dead time",
+	    keyword: "router-dead-time seconds | minimal",
+	    definition: "Seconds without a hello before a neighbor is " +
+	    "declared down. Neighbors on a network must use the same value. " +
+	    "minimal sets 1 second, with fast hellos.", values: "2 to " +
+	    "2147483647 seconds, or minimal", default: "40", undo: "clear " +
+	    "the field", applies: "an interface; set in an area or at the " +
+	    "top level, it applies to the interfaces after it" },
+	"ospf.router-priority": { label: "Priority",
+	    keyword: "router-priority priority", definition: "The " +
+	    "interface's priority in electing the designated router; with 0 " +
+	    "it is never elected.", values: "0 to 255", default: "1",
+	    undo: "clear the field", applies: "an interface; set in an area " +
+	    "or at the top level, it applies to the interfaces after it" },
+
+	/* ospf6d's configuration */
+	"ospf6.router-id": { label: "Router ID", keyword: "router-id address",
+	    definition: "The 32-bit identifier, written as an IPv4 address, " +
+	    "that names this router to its neighbors. It need not be one of " +
+	    "its addresses.", values: "an IPv4 address", default: "the " +
+	    "lowest IPv4 address of the router", undo: "clear the field" },
+	"ospf6.fib-update": { label: "Update the FIB", keyword: "fib-update " +
+	    "yes | no", definition: "Whether ospf6d installs its routes in " +
+	    "the kernel's routing table. With no, it also acts as a stub " +
+	    "router, so no traffic is routed through it.", values: "yes or no",
+	    default: "yes", risk: "high: with no, this router forwards " +
+	    "nothing by OSPF", undo: "choose (not set)" },
+	"ospf6.redistribute": { label: "Redistribute", keyword: "[no] " +
+	    "redistribute static | connected | default | prefix | rtlabel " +
+	    "label [set ...]", definition: "Routes from outside OSPF that " +
+	    "ospf6d announces, such as connected networks or static routes. " +
+	    "The first rule that matches a route decides.", values: "one " +
+	    "rule per line, as ospf6d.conf(5) gives them", default: "none: " +
+	    "only OSPF's own routes", undo: "clear the lines" },
+	"ospf6.interface": { label: "New interface", keyword: "interface name",
+	    definition: "Adds an IPv6 interface to an area. ospf6d sends " +
+	    "hellos and forms adjacencies on it, unless it is passive, and " +
+	    "announces its network.", values: "an interface's name, in an area",
+	    default: "none", undo: "Delete" },
+	"ospf6.metric": { label: "Metric", keyword: "metric cost",
+	    definition: "The interface's cost. OSPF prefers the path with " +
+	    "the lowest total cost.", values: "1 to 65535", default: "10, " +
+	    "unless the area or the top level sets it", undo: "clear the field",
+	    applies: "an interface; set in an area or at the top level, it " +
+	    "applies to the interfaces after it" },
+	"ospf6.passive": { label: "Passive", keyword: "passive",
+	    definition: "ospf6d sends and accepts no OSPF packets on the " +
+	    "interface, but still announces its network as a stub.",
+	    values: "on or off", default: "off", undo: "clear the box",
+	    applies: "an interface" },
+	"ospf6.hello-interval": { label: "Hello interval",
+	    keyword: "hello-interval seconds", definition: "Seconds between " +
+	    "hello packets. Neighbors on a network must use the same value.",
+	    values: "1 to 65535 seconds", default: "10", undo: "clear the " +
+	    "field", applies: "an interface; set in an area or at the top " +
+	    "level, it applies to the interfaces after it" },
+	"ospf6.router-dead-time": { label: "Dead time",
+	    keyword: "router-dead-time seconds", definition: "Seconds " +
+	    "without a hello before a neighbor is declared down. Neighbors " +
+	    "on a network must use the same value.", values: "2 to 65535 " +
+	    "seconds", default: "40", undo: "clear the field", applies: "an " +
+	    "interface; set in an area or at the top level, it applies to " +
+	    "the interfaces after it" },
+	"ospf6.router-priority": { label: "Priority",
+	    keyword: "router-priority priority", definition: "The " +
+	    "interface's priority in electing the designated router; with 0 " +
+	    "it is never elected.", values: "0 to 255", default: "1",
+	    undo: "clear the field", applies: "an interface; set in an area " +
+	    "or at the top level, it applies to the interfaces after it" },
+
+	/* eigrpd's configuration */
+	"eigrp.router-id": { label: "Router ID", keyword: "router-id address",
+	    definition: "The 32-bit identifier, written as an IPv4 address, " +
+	    "that names this router to its neighbors.", values: "an IPv4 " +
+	    "address", default: "the numerically lowest IP address of the " +
+	    "router", undo: "clear the field" },
+	"eigrp.fib-update": { label: "Update the FIB", keyword: "fib-update " +
+	    "yes | no", definition: "Whether eigrpd installs its routes in " +
+	    "the kernel's routing table.", values: "yes or no", default: "yes",
+	    risk: "high: with no, this router forwards nothing by EIGRP",
+	    undo: "choose (not set)" },
+	"eigrp.interface": { label: "New interface", keyword: "interface name",
+	    definition: "Adds an interface to an address family and " +
+	    "autonomous system. eigrpd forms adjacencies on it, unless it is " +
+	    "passive, and announces its networks.", values: "an interface's " +
+	    "name, in an address family and AS", default: "none",
+	    undo: "Delete" },
+	"eigrp.bandwidth": { label: "Bandwidth", keyword: "bandwidth kbit/s",
+	    definition: "The bandwidth used in the composite metric, in " +
+	    "kilobits per second. It does not change the link's speed.",
+	    values: "1 to 10000000 kbit/s", default: "100000", undo: "clear " +
+	    "the field", applies: "an interface; set at the top level, in an " +
+	    "address family or in an AS, it applies to the interfaces after " +
+	    "it" },
+	"eigrp.delay": { label: "Delay", keyword: "delay tens-of-microseconds",
+	    definition: "The delay used in the composite metric, in tens of " +
+	    "microseconds.", values: "1 to 16777215", default: "10",
+	    undo: "clear the field", applies: "an interface; set at the top " +
+	    "level, in an address family or in an AS, it applies to the " +
+	    "interfaces after it" },
+	"eigrp.hello-interval": { label: "Hello interval",
+	    keyword: "hello-interval seconds", definition: "Seconds between " +
+	    "hello packets.", values: "1 to 65535 seconds", default: "5",
+	    undo: "clear the field", applies: "an interface; set at the top " +
+	    "level, in an address family or in an AS, it applies to the " +
+	    "interfaces after it" },
+	"eigrp.holdtime": { label: "Hold time", keyword: "holdtime seconds",
+	    definition: "Seconds a neighbor waits without a hello from this " +
+	    "router before it declares this router down.", values: "1 to " +
+	    "65535 seconds", default: "15", undo: "clear the field",
+	    applies: "an interface; set at the top level, in an address " +
+	    "family or in an AS, it applies to the interfaces after it" },
+	"eigrp.passive": { label: "Passive", keyword: "passive",
+	    definition: "eigrpd sends and accepts no EIGRP packets on the " +
+	    "interface, but still announces its networks.", values: "on or off",
+	    default: "off", undo: "clear the box", applies: "an interface" },
+
+	/* ripd's configuration */
+	"rip.fib-update": { label: "Update the FIB", keyword: "fib-update " +
+	    "yes | no", definition: "Whether ripd installs its routes in the " +
+	    "kernel's routing table.", values: "yes or no", default: "yes",
+	    risk: "high: with no, this router forwards nothing by RIP",
+	    undo: "choose (not set)" },
+	"rip.split-horizon": { label: "Split horizon",
+	    keyword: "split-horizon simple | poisoned | none",
+	    definition: "How routes go back out the interface they were " +
+	    "learned on: simple does not send them, and poisoned sends them " +
+	    "with an infinite metric. Both prevent routing loops when a " +
+	    "router goes down.", values: "simple, poisoned or none",
+	    default: "poisoned", undo: "choose (not set)" },
+	"rip.triggered-updates": { label: "Triggered updates",
+	    keyword: "triggered-updates yes | no", definition: "ripd sends " +
+	    "an update as soon as a route changes, rather than waiting for " +
+	    "the next regular update.", values: "yes or no", default: "no",
+	    undo: "choose (not set)" },
+	"rip.redistribute": { label: "Redistribute", keyword: "[no] " +
+	    "redistribute static | connected | default | prefix | rtlabel " +
+	    "label", definition: "Routes from outside RIP that ripd " +
+	    "announces, such as connected networks or static routes. The " +
+	    "first rule that matches a route decides.", values: "one rule " +
+	    "per line, as ripd.conf(5) gives them", default: "none: only " +
+	    "RIP's own routes", undo: "clear the lines" },
+	"rip.interface": { label: "New interface", keyword: "interface name",
+	    definition: "Adds an interface. ripd sends and receives RIP on " +
+	    "it, unless it is passive.", values: "an interface's name",
+	    default: "none", undo: "Delete" },
+	"rip.cost": { label: "Cost", keyword: "cost number",
+	    definition: "The cost of the interface's network, added to the " +
+	    "routes learned through it. 16 means unreachable.", values: "1 " +
+	    "to 16", default: "1", undo: "clear the field", applies: "an " +
+	    "interface; set at the top level, it applies to the interfaces " +
+	    "after it" },
+	"rip.passive": { label: "Passive", keyword: "passive",
+	    definition: "ripd sends and accepts no RIP packets on the " +
+	    "interface.", values: "on or off", default: "off", undo: "clear " +
+	    "the box", applies: "an interface" },
+
+	/* ldpd's configuration */
+	"ldp.router-id": { label: "Router ID", keyword: "router-id address",
+	    definition: "The router ID, written as an IPv4 address. With the " +
+	    "label space it forms the LSR-ID that neighbors know this router " +
+	    "by.", values: "an IPv4 address", default: "the numerically " +
+	    "lowest IP address of the router", undo: "clear the field" },
+	"ldp.fib-update": { label: "Update the FIB", keyword: "fib-update " +
+	    "yes | no", definition: "Whether ldpd installs its labels in the " +
+	    "kernel's label forwarding table.", values: "yes or no",
+	    default: "yes", risk: "high: with no, this router's labels are " +
+	    "not installed", undo: "choose (not set)" },
+	"ldp.interface": { label: "New interface", keyword: "interface name",
+	    definition: "Adds an interface to an address family. ldpd " +
+	    "discovers neighbors on it with link hellos.", values: "an " +
+	    "interface's name, in an address family", default: "none",
+	    undo: "Delete" },
+	"ldp.link-hello-holdtime": { label: "Hello hold time",
+	    keyword: "link-hello-holdtime seconds", definition: "Seconds " +
+	    "ldpd waits between two hellos from a neighbor before it marks " +
+	    "the neighbor down.", values: "3 to 65535 seconds", default: "15",
+	    undo: "clear the field", applies: "an interface; set in its " +
+	    "address family or at the top level, it applies to the " +
+	    "interfaces after it" },
+	"ldp.link-hello-interval": { label: "Hello interval",
+	    keyword: "link-hello-interval seconds", definition: "Seconds " +
+	    "between the link hellos ldpd sends on the interface.",
+	    values: "1 to 65535 seconds", default: "5", undo: "clear the field",
+	    applies: "an interface; set in its address family or at the top " +
+	    "level, it applies to the interfaces after it" },
+
+	/* dvmrpd's configuration */
+	"dvmrp.fib-update": { label: "Update the MFC", keyword: "fib-update " +
+	    "yes | no", definition: "Whether dvmrpd installs its state in " +
+	    "the kernel's multicast forwarding cache.", values: "yes or no",
+	    default: "yes", risk: "high: with no, this router forwards no " +
+	    "multicast", undo: "choose (not set)" },
+	"dvmrp.interface": { label: "New interface", keyword: "interface name",
+	    definition: "Adds an interface. dvmrpd runs IGMP and DVMRP on " +
+	    "it, unless it is passive.", values: "an interface's name",
+	    default: "none", undo: "Delete" },
+	"dvmrp.metric": { label: "Metric", keyword: "metric cost",
+	    definition: "The interface's cost in DVMRP's route calculation.",
+	    values: "1 to 31", default: "1", undo: "clear the field",
+	    applies: "an interface; set in a group or at the top level, it " +
+	    "applies to the interfaces after it" },
+	"dvmrp.passive": { label: "Passive", keyword: "passive",
+	    definition: "dvmrpd sends and accepts no IGMP or DVMRP packets " +
+	    "on the interface.", values: "on or off", default: "off",
+	    undo: "clear the box", applies: "an interface" },
+	"dvmrp.igmp-version": { label: "IGMP version",
+	    keyword: "igmp-version number", definition: "The newest IGMP " +
+	    "version dvmrpd uses on the interface.", values: "1 or 2",
+	    default: "2", undo: "clear the field", applies: "an interface; " +
+	    "set in a group or at the top level, it applies to the " +
+	    "interfaces after it" },
+	"dvmrp.query-interval": { label: "Query interval",
+	    keyword: "query-interval seconds", definition: "Seconds between " +
+	    "the IGMP queries that look for group members.", values: "1 to " +
+	    "65535 seconds", default: "125", undo: "clear the field",
+	    applies: "an interface; set in a group or at the top level, it " +
+	    "applies to the interfaces after it" }
 };
 
 var regOpen = {};	/* ids of the fields whose definitions are open */
