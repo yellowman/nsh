@@ -73,7 +73,9 @@ var REGISTRY_MODULES = {
 	dhcp: { scope: "dhcpd's configuration", man: "dhcpd.conf.5",
 	    check: "dhcpd -n, at Validate and at commit" },
 	sshd: { scope: "sshd's configuration", man: "sshd_config.5",
-	    check: "sshd -t, at Validate and at commit" }
+	    check: "sshd -t, at Validate and at commit" },
+	route: { scope: "static routes", man: "nsh.8",
+	    check: "nsh, as each line is staged" }
 };
 
 /* drivers, as interfaces' names begin */
@@ -3054,7 +3056,34 @@ var REGISTRY = {
 	    "settings, to connections that meet all its criteria, such as " +
 	    "User sftp or Address 192.0.2.0/24. It runs to the next Match " +
 	    "line.", values: "criteria with their patterns, or All",
-	    default: "none", undo: "Delete" }
+	    default: "none", undo: "Delete" },
+
+	/* Network's static routes */
+	"route.rtable": { label: "Routing table", kind: "number", min: 0,
+	    max: 255, keyword: "rtable table-id", definition: "The routing " +
+	    "table the route is in. Table 0 is the default, and its routes " +
+	    "are at the top level; another table's are under its rtable line.",
+	    default: "0", undo: "Delete" },
+	"route.destination": { label: "Destination", keyword: "route " +
+	    "destination[/prefixlen | /netmask] gateway [flags]",
+	    definition: "The network or host the route is for. Without a " +
+	    "prefix length or netmask, it is one host.", values: "an IPv4 " +
+	    "address with /prefixlen or /netmask, or an IPv6 address with " +
+	    "/prefixlen", default: "none", undo: "Delete" },
+	"route.gateway": { label: "Gateway", keyword: "route " +
+	    "destination[/prefixlen | /netmask] gateway [flags]",
+	    definition: "The address packets for the destination are sent " +
+	    "to. A route is not added without one.", values: "an address of " +
+	    "the destination's family", default: "none", undo: "Delete" },
+	"route.flags": { label: "Flags", keyword: "route " +
+	    "destination[/prefixlen | /netmask] gateway [flags]",
+	    definition: "blackhole discards packets for the route, and " +
+	    "reject rejects them with an ICMP unreachable; iface makes the " +
+	    "destination directly reachable; nompath allows no other gateway " +
+	    "for it; mtu sets its MTU.", values: "blackhole, cloning, iface, " +
+	    "llinfo, nompath, nostatic, proto1, proto2 or reject, separated " +
+	    "by spaces, and mtu 64 to 65536", default: "none", undo: "clear " +
+	    "the field" }
 };
 
 var regOpen = {};	/* ids of the fields whose definitions are open */

@@ -129,6 +129,7 @@ function inspect(name) {
 		    name);
 		var was = settings(lines, defs);
 
+		netRoute = null;
 		insp = { name: name, bridge: bridge, defs: defs, was: was,
 		    now: JSON.parse(JSON.stringify(was)), conf: said(j),
 		    every: insp && insp.every, from: inConfigure ?
