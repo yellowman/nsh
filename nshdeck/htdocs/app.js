@@ -11,6 +11,7 @@ var stream = null;		/* the event stream, while one is open */
 var LOGLINES = 2000;		/* log lines kept on the page, at most */
 var ifs = [];			/* show interface's interfaces, the last */
 var addrs = [];			/* and their addresses */
+var vhids = [];			/* and their CARP vhids */
 var selected = "";		/* the interface Network shows chosen */
 var reask = null;		/* interfaces asked again, once they settle */
 var deadline = 0;		/* when a confirmed commit goes back, or 0 */
@@ -470,10 +471,12 @@ function interfaces() {
 	return ask("GET", "show", { words: "interface" }).then(function (j) {
 		ifs = of(j, "interface");
 		addrs = of(j, "address");
+		vhids = of(j, "carp-vhid");
 		faceplate();
 		readout();
 		logical();
 		iftable();
+		netDraw();
 		if (!$("ws-network").hidden && selected !== "" &&
 		    (!insp || insp.name !== selected))
 			inspect(selected);

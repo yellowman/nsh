@@ -134,6 +134,11 @@ function inspect(name) {
 		    every: insp && insp.every, from: inConfigure ?
 		    "candidate" : "running", results: [] };
 		inspector();
+		/* Network's other sections, drawn from the same text */
+		if (netTopic !== "ports") {
+			netConf = said(j);
+			netDraw();
+		}
 	});
 }
 
