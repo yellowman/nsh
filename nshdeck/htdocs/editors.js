@@ -1,13 +1,14 @@
 /*
- * editors.js: editors for the rules of pf, bgpd and the other routing
- * daemons, under the daemons' table. pf's rules are listed as statements
- * in order, bgpd's as peers, networks and filters, and a routing
- * daemon's as its interfaces and global settings, beside its live
- * neighbors and routes. Each is read from the rules' text with
- * pfconf.js, bgpdconf.js or routeconf.js, and each change is written
- * back into that text, which the inspector's Rules box shows and Stage
- * stages. The text is the only source: anything typed in it is read
- * again here.
+ * editors.js: editors for the rules of pf, bgpd, the other routing
+ * daemons and the Security and Services daemons, under the daemons'
+ * table. pf's rules are listed as statements in order, bgpd's as peers,
+ * networks and filters, a routing daemon's as its interfaces and global
+ * settings, beside its live neighbors and routes, and another daemon's
+ * as the statements of each of its tabs. Each is read from the rules'
+ * text with pfconf.js, bgpdconf.js, routeconf.js or stmtconf.js, and
+ * each change is written back into that text, which the inspector's
+ * Rules box shows and Stage stages. The text is the only source:
+ * anything typed in it is read again here.
  */
 "use strict";
 
@@ -79,7 +80,7 @@ function structured() {
 		b.textContent = "";
 	});
 	if (!dinsp || (dinsp.def.name !== "pf" && dinsp.def.name !== "bgp" &&
-	    !RT_DAEMONS[dinsp.def.name])) {
+	    !RT_DAEMONS[dinsp.def.name] && !SV_DAEMONS[dinsp.def.name])) {
 		ed = null;
 		return;
 	}
@@ -88,13 +89,18 @@ function structured() {
 	if (!ed || ed.daemon !== dinsp.def.name || ed.rt !== dinsp.rt)
 		ed = { daemon: dinsp.def.name, rt: dinsp.rt, sel: -1,
 		    show: "all", tab: dinsp.def.name === "bgp" ? "peers" :
-		    "interfaces", peer: "", summary: null, live: null };
+		    RT_DAEMONS[dinsp.def.name] ? "interfaces" :
+		    SV_DAEMONS[dinsp.def.name] ?
+		    SV_DAEMONS[dinsp.def.name].tabs[0].id : "", peer: "",
+		    summary: null, live: null, add: "" };
 	if (ed.daemon === "pf")
 		pfEditor(box);
 	else if (ed.daemon === "bgp")
 		bgpEditor(box);
-	else
+	else if (RT_DAEMONS[ed.daemon])
 		rtEditor(box);
+	else
+		svEditor(box);
 }
 
 /* redraw the editor once the text has not changed for a moment */
@@ -985,4 +991,223 @@ function rtGlobalTab(box, doc, d) {
 			return o.code;
 		}).join("\n"), "term"));
 	}
+}
+
+/* draw a Security or Services daemon's editor: the tab chosen */
+function svEditor(box) {
+	var d = SV_DAEMONS[ed.daemon], doc = bgpParse(dinsp.now.rules,
+	    d.blocks), bar = el("div", null, "bar");
+	var t = d.tabs.find(function (x) {
+		return x.id === ed.tab;
+	}) || d.tabs[0];
+
+	ed.doc = doc;
+	bar.appendChild(el("h2", d.prog));
+	bar.appendChild(edSegs("svtab", d.tabs.map(function (x) {
+		return [x.id, x.label];
+	}), t.id, function (v) {
+		ed.tab = v;
+		ed.sel = -1;
+		ed.add = "";
+		structured();
+	}));
+	bar.appendChild(el("span", null, "fill"));
+	box.appendChild(bar);
+	if (t.show)
+		svShowTab(box, t);
+	else if (t.single)
+		svSingleTab(box, doc, d, t);
+	else
+		svListTab(box, doc, d, t.kinds, t.cols || [], null, "");
+}
+
+/* field f's control, of the kind its spec gives, with value v */
+function svControl(f, v, change) {
+	return edControl("sv" + f.key, f.flag ? "check" : f.choices ?
+	    [""].concat(f.choices) : f.lines ? "lines" : "text", f.flag ?
+	    !!v : Array.isArray(v) ? v.join("\n") : v === undefined ? "" : v,
+	    change);
+}
+
+/*
+ * The statements of the given kinds in block p, or at the top level, a
+ * row each: its kind, its first value and the fields in cols; under the
+ * one selected, its form; and a line to add one. path keeps a nested
+ * table's selection apart from its block's.
+ */
+function svListTab(box, doc, d, ids, cols, p, path) {
+	var kinds = svKinds(d, ids), name = ed.daemon;
+	var list = stList(p ? p.children : doc.nodes, kinds);
+	var t = el("table", null, "grid pick"), head = el("tr");
+	var grid = el("div", null, "sfields"), line = el("div", null,
+	    "addline"), val = el("input", null, "mono"), pick;
+	var k = kinds.find(function (x) {
+		return path + x.id === ed.add;
+	}) || kinds[0];
+
+	["Statement", "Value"].concat(cols.map(function (c) {
+		return reg(name + "." + c).label;
+	})).forEach(function (h) {
+		head.appendChild(el("th", h));
+	});
+	t.appendChild(head);
+	list.forEach(function (s, i) {
+		var key = path + i, tr = el("tr", null, key === ed.sel ? "sel" :
+		    ""), first = (s.kind.args || [])[0];
+
+		tr.appendChild(el("td", s.kind.kw.join(" ")));
+		tr.appendChild(el("td", first ? s.v[first.key] || "" : "",
+		    "mono"));
+		cols.forEach(function (c) {
+			var v = s.v[c];
+
+			tr.appendChild(el("td", v === true ? "yes" :
+			    Array.isArray(v) ? v.join(", ") : v || "", "mono"));
+		});
+		tr.addEventListener("click", function (e) {
+			e.stopPropagation();
+			ed.sel = ed.sel === key ? -1 : key;
+			structured();
+		});
+		t.appendChild(tr);
+		if (key === ed.sel || String(ed.sel).indexOf(key + "/") === 0)
+			t.appendChild(svForm(doc, d, s, cols.length + 2, key));
+	});
+	box.appendChild(t);
+	if (!list.length)
+		box.appendChild(el("p", "None", "nothing"));
+	if (kinds.length > 1) {
+		pick = edControl("svkind", kinds.map(function (x) {
+			return x.id;
+		}), k.id, function (v) {
+			ed.add = path + v;
+			structured();
+		});
+		Array.prototype.forEach.call(pick.options, function (o) {
+			o.textContent = svKinds(d, [o.value])[0].kw.join(" ");
+		});
+		line.appendChild(pick);
+	}
+	val.dataset.key = "svnew";
+	val.placeholder = k.args && k.args.length ? reg(svReg(name, k)).label :
+	    "";
+	val.setAttribute("aria-label", "The new statement's value");
+	if (k.args && k.args.length)
+		line.appendChild(val);
+	line.appendChild(edButton("Add", function () {
+		var v = val.value.trim();
+
+		if (k.args && k.args.length && (v === "" || /\n/.test(v))) {
+			val.focus();
+			return;
+		}
+		ed.sel = path + svAfter(doc, p, kinds, k);
+		bgpDone(stAdd(doc, p, k, v === "" ? [] : [v], kinds));
+	}));
+	regField(grid, svReg(name, k), line, null, "New " +
+	    reg(svReg(name, k)).label.toLowerCase());
+	box.appendChild(grid);
+}
+
+/* where the next statement of kind k goes among those of kinds in p */
+function svAfter(doc, p, kinds, k) {
+	var list = stList(p ? p.children : doc.nodes, kinds), i;
+
+	for (i = list.length - 1; i >= 0; i--)
+		if (list[i].kind === k)
+			return i + 1;
+	return list.length;
+}
+
+/*
+ * statement s's form, in a row of width columns: a field for each of its
+ * values, its other words as written, the statements of its block, and
+ * Delete
+ */
+function svForm(doc, d, s, width, key) {
+	var tr = el("tr", null, "sform"), td = el("td"), grid = el("div", null,
+	    "sfields"), bar = el("div", null, "bar"), k = s.kind;
+
+	td.colSpan = width;
+	td.addEventListener("click", function (e) {
+		e.stopPropagation();
+	});
+	(k.args || []).concat(k.opts || [], k.list ? [k.list] :
+	    []).forEach(function (f) {
+		regField(grid, svReg(ed.daemon, k, f.key), svControl(f ===
+		    k.list ? Object.assign({ lines: true }, f) : f, s.v[f.key],
+		    function (v) {
+			bgpDone(stSet(doc, s, f.key, typeof v === "string" ?
+			    v.trim() : v));
+		}));
+	});
+	td.appendChild(grid);
+	if (s.other.length) {
+		td.appendChild(el("h3", "Other words"));
+		td.appendChild(el("pre", s.other.join(" "), "term"));
+	}
+	if (k.inner) {
+		td.appendChild(el("h3", "In it"));
+		svListTab(td, doc, d, k.inner, k.innerCols || [], s.node,
+		    key + "/");
+	}
+	bar.appendChild(edButton("Delete", function () {
+		ed.sel = -1;
+		bgpDone(bgpRemove(doc, s.node));
+	}));
+	td.appendChild(bar);
+	tr.appendChild(td);
+	return tr;
+}
+
+/* settings that appear once: a field each, its first value or presence */
+function svSingleTab(box, doc, d, t) {
+	var grid = el("div", null, "sfields");
+
+	svKinds(d, t.single).forEach(function (k) {
+		var s = stList(doc.nodes, [k])[0], a = (k.args || [])[0];
+
+		regField(grid, svReg(ed.daemon, k), svControl(a || { key: k.id,
+		    flag: true }, a ? s && s.v[a.key] : !!s, function (v) {
+			if (a)
+				bgpDone(stSingle(doc, null, k, v));
+			else if (v && !s)
+				bgpDone(stAdd(doc, null, k, [], []));
+			else if (!v && s)
+				bgpDone(bgpRemove(doc, s.node));
+		}));
+	});
+	box.appendChild(grid);
+}
+
+/* what a show prints, asked for when the tab is drawn, and again on Ask */
+function svShowTab(box, t) {
+	var bar = el("div", null, "bar"), live = ed.live;
+	var ask = function () {
+		var e = ed;
+
+		ed.live = { tab: t.id, asking: true };
+		return rtShow(t.show).then(function (r) {
+			if (ed !== e)
+				return;
+			ed.live = { tab: t.id, text: r.text, error: r.ok ? "" :
+			    r.error || "no answer" };
+			structured();
+		});
+	};
+
+	if (dinsp.rt !== 0) {
+		box.appendChild(el("p", "Shown for rtable 0 only", "nothing"));
+		return;
+	}
+	if (!live || live.tab !== t.id) {
+		ask();
+		live = null;
+	}
+	bar.appendChild(el("span", !live || live.asking ? "Asking" :
+	    live.error ? "State: " + live.error : "show " + t.show, "dim"));
+	bar.appendChild(el("span", null, "fill"));
+	bar.appendChild(edButton("Ask again", ask));
+	box.appendChild(bar);
+	box.appendChild(el("pre", live && live.text || "", "term"));
 }

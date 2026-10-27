@@ -19,9 +19,10 @@ var BGP_PEER = ["remote-as", "descr", "local-address", "multihop",
 
 /*
  * Split a line into code and comment, and count its braces outside quotes
- * and comments. Report whether a backslash continues the line or its
- * comment. If cmt is set, the previous line ended in a continued comment,
- * so the whole line is comment.
+ * and comments. A string is in double or single quotes, as the lexers
+ * of these daemons read it. Report whether a backslash continues the line
+ * or its comment. If cmt is set, the previous line ended in a continued
+ * comment, so the whole line is comment.
  */
 function bgpLine(line, cmt) {
 	var code = "", depth = 0, q = false, i, c, rest, more;
@@ -32,10 +33,10 @@ function bgpLine(line, cmt) {
 			if (c === "\\" && i + 1 < line.length) {
 				code += c;
 				c = line[++i];
-			} else if (c === '"')
+			} else if (c === q)
 				q = false;
-		} else if (c === '"')
-			q = true;
+		} else if (c === '"' || c === "'")
+			q = c;
 		else if (c === "#")
 			break;
 		else if (c === "{")
@@ -62,9 +63,12 @@ function bgpLines(lines) {
 	return out;
 }
 
+/* a word: a quoted string, a brace, or what runs up to a space or one */
+var BGP_WORD = /"(?:[^"\\]|\\.)*"?|'(?:[^'\\]|\\.)*'?|[{}]|[^\s{}"']+/g;
+
 /* split code into words: a quoted string is one word, and so is each brace */
 function bgpWords(code) {
-	return code.match(/"(?:[^"\\]|\\.)*"?|[{}]|[^\s{}"]+/g) || [];
+	return code.match(BGP_WORD) || [];
 }
 
 /*
@@ -181,7 +185,8 @@ function bgpRest(n, k) {
 
 /* a string without its quotes; other words unchanged */
 function bgpUnquote(s) {
-	return /^".*"$/.test(s) ? s.slice(1, -1).replace(/\\"/g, '"') : s;
+	return /^(".*"|'.*')$/.test(s) ? s.slice(1, -1).replace(/\\(["'\\])/g,
+	    "$1") : s;
 }
 
 /* a block's name: the words between its keyword and the brace */

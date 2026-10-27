@@ -1041,7 +1041,13 @@ button.what[aria-expanded=true] {
 /* a field's input with a button beside it */
 .addline {
 	display: flex;
+	flex-wrap: wrap;
 	gap: 6px;
+}
+
+/* a choice of what to add, wide enough to read */
+.addline select {
+	min-width: 9em;
 }
 
 .rows > button {

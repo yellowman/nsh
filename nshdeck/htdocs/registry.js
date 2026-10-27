@@ -47,7 +47,9 @@ var REGISTRY_MODULES = {
 	ldp: { scope: "ldpd's configuration", man: "ldpd.conf.5",
 	    check: "ldpd -n, at Validate and at commit" },
 	dvmrp: { scope: "dvmrpd's configuration", man: "dvmrpd.conf.5",
-	    check: "dvmrpd -n, at Validate and at commit" }
+	    check: "dvmrpd -n, at Validate and at commit" },
+	ntp: { scope: "ntpd's configuration", man: "ntpd.conf.5",
+	    check: "ntpd -n, at Validate and at commit" }
 };
 
 /* drivers, as interfaces' names begin */
@@ -1033,7 +1035,76 @@ var REGISTRY = {
 	    "the IGMP queries that look for group members.", values: "1 to " +
 	    "65535 seconds", default: "125", undo: "clear the field",
 	    applies: "an interface; set in a group or at the top level, it " +
-	    "applies to the interfaces after it" }
+	    "applies to the interfaces after it" },
+
+	/* ntpd's configuration */
+	"ntp.server": { label: "Server", keyword: "server address [trusted] " +
+	    "[weight weight]", definition: "An NTP server to synchronize to. " +
+	    "If its name has several addresses, ntpd uses the first that " +
+	    "answers.", values: "a host name or an IP address", default: "none",
+	    undo: "Delete" },
+	"ntp.servers": { label: "Servers", keyword: "servers address " +
+	    "[trusted] [weight weight]", definition: "A name whose every " +
+	    "address is an NTP server to synchronize to, such as a pool.",
+	    values: "a host name or an IP address", default: "none",
+	    undo: "Delete" },
+	"ntp.sensor": { label: "Sensor", keyword: "sensor device [correction " +
+	    "microseconds] [refid ID] [stratum stratum] [trusted] [weight " +
+	    "weight]", definition: "A timedelta sensor used as a time " +
+	    "source, such as a GPS receiver. * uses every sensor found; one " +
+	    "that does not exist is ignored.", values: "a sensor's name, " +
+	    "such as nmea0, or *", default: "none", undo: "Delete" },
+	"ntp.constraint": { label: "Constraint", keyword: "constraint from " +
+	    "url [address ...]", definition: "An HTTPS server whose Date " +
+	    "ntpd checks NTP's time against. Replies outside a range near " +
+	    "the constraints are discarded.", values: "a URL, host name or " +
+	    "IP address", default: "none", undo: "Delete" },
+	"ntp.constraints": { label: "Constraints", keyword: "constraints " +
+	    "from url", definition: "An HTTPS server name whose every " +
+	    "address is a constraint; ntpd uses their median.", values: "a " +
+	    "URL, host name or IP address", default: "none", undo: "Delete" },
+	"ntp.listen": { label: "Listen on", keyword: "listen on address " +
+	    "[rtable table-id]", definition: "An address ntpd answers NTP " +
+	    "queries on. * listens on every local address.", values: "an IP " +
+	    "address, a host name, or *", default: "none: ntpd answers no one",
+	    undo: "Delete" },
+	"ntp.query": { label: "Query from", keyword: "query from sourceaddr",
+	    definition: "The local address ntpd sends its queries from, for " +
+	    "the servers listed after it.", values: "a local IP address",
+	    default: "the address the route gives", undo: "Delete" },
+	"ntp.trusted": { label: "Trusted", keyword: "trusted",
+	    definition: "Time from this source skips the constraint check. " +
+	    "Useful at boot, where no constraint can be reached.",
+	    values: "on or off", default: "off", risk: "high: a forged reply " +
+	    "from this source is believed", undo: "clear the box",
+	    applies: "server, servers and sensor lines" },
+	"ntp.weight": { label: "Weight", keyword: "weight weight-value",
+	    definition: "This source's influence on the offset, relative to " +
+	    "the others: 5 counts five times as much as 1.", values: "1 to 10",
+	    default: "1", undo: "clear the field", applies: "server, servers " +
+	    "and sensor lines" },
+	"ntp.correction": { label: "Correction", keyword: "correction " +
+	    "microseconds", definition: "Microseconds added to the sensor's " +
+	    "offset, to make up for a known lag.", values: "-127000000 to " +
+	    "127000000 microseconds", default: "0", undo: "clear the field",
+	    applies: "sensor lines" },
+	"ntp.refid": { label: "Reference ID", keyword: "refid ID-string",
+	    definition: "The reference ID ntpd gives its clients for this " +
+	    "sensor, such as GPS.", values: "1 to 4 characters", default: "a " +
+	    "generic ID", undo: "clear the field", applies: "sensor lines" },
+	"ntp.stratum": { label: "Stratum", keyword: "stratum stratum-value",
+	    definition: "The stratum ntpd gives this sensor's time.",
+	    values: "1 to 15", default: "1", undo: "clear the field",
+	    applies: "sensor lines" },
+	"ntp.addresses": { label: "Addresses", keyword: "constraint from url " +
+	    "address ...", definition: "Addresses to try for the URL, in " +
+	    "turn. The path and the certificate's name still come from the " +
+	    "URL.", values: "IP addresses, one a line", default: "the URL's " +
+	    "own", undo: "clear the lines", applies: "constraint from lines" },
+	"ntp.rtable": { label: "Routing table", keyword: "rtable table-id",
+	    definition: "The routing table ntpd listens in.", values: "0 to " +
+	    "255", default: "the table ntpd runs in", undo: "clear the field",
+	    applies: "listen on lines" }
 };
 
 var regOpen = {};	/* ids of the fields whose definitions are open */
