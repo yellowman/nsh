@@ -39,7 +39,7 @@ afterinstall:
 	    ${.CURDIR}/htdocs/inspector.js ${.CURDIR}/htdocs/daemons.js \
 	    ${.CURDIR}/htdocs/pfconf.js ${.CURDIR}/htdocs/bgpdconf.js \
 	    ${.CURDIR}/htdocs/routeconf.js ${.CURDIR}/htdocs/stmtconf.js \
-	    ${.CURDIR}/htdocs/services.js \
+	    ${.CURDIR}/htdocs/services.js ${.CURDIR}/htdocs/sshconf.js \
 	    ${.CURDIR}/htdocs/editors.js ${.CURDIR}/htdocs/relations.js \
 	    ${.CURDIR}/htdocs/sheets.js ${.CURDIR}/htdocs/term.js \
 	    ${.CURDIR}/htdocs/style.css ${DESTDIR}${HTDOCS}

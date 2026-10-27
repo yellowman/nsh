@@ -3,12 +3,13 @@
  * daemons and the Security and Services daemons, under the daemons'
  * table. pf's rules are listed as statements in order, bgpd's as peers,
  * networks and filters, a routing daemon's as its interfaces and global
- * settings, beside its live neighbors and routes, and another daemon's
- * as the statements of each of its tabs. Each is read from the rules'
- * text with pfconf.js, bgpdconf.js, routeconf.js or stmtconf.js, and
- * each change is written back into that text, which the inspector's
- * Rules box shows and Stage stages. The text is the only source:
- * anything typed in it is read again here.
+ * settings, beside its live neighbors and routes, sshd's as its settings
+ * and Match sections, and another daemon's as the statements of each of
+ * its tabs. Each is read from the rules' text with pfconf.js,
+ * bgpdconf.js, routeconf.js, sshconf.js or stmtconf.js, and each change
+ * is written back into that text, which the inspector's Rules box shows
+ * and Stage stages. The text is the only source: anything typed in it
+ * is read again here.
  */
 "use strict";
 
@@ -80,7 +81,8 @@ function structured() {
 		b.textContent = "";
 	});
 	if (!dinsp || (dinsp.def.name !== "pf" && dinsp.def.name !== "bgp" &&
-	    !RT_DAEMONS[dinsp.def.name] && !SV_DAEMONS[dinsp.def.name])) {
+	    dinsp.def.name !== "sshd" && !RT_DAEMONS[dinsp.def.name] &&
+	    !SV_DAEMONS[dinsp.def.name])) {
 		ed = null;
 		return;
 	}
@@ -89,6 +91,7 @@ function structured() {
 	if (!ed || ed.daemon !== dinsp.def.name || ed.rt !== dinsp.rt)
 		ed = { daemon: dinsp.def.name, rt: dinsp.rt, sel: -1,
 		    show: "all", tab: dinsp.def.name === "bgp" ? "peers" :
+		    dinsp.def.name === "sshd" ? SSH_TABS[0].id :
 		    RT_DAEMONS[dinsp.def.name] ? "interfaces" :
 		    SV_DAEMONS[dinsp.def.name] ?
 		    SV_DAEMONS[dinsp.def.name].tabs[0].id : "", peer: "",
@@ -97,6 +100,8 @@ function structured() {
 		pfEditor(box);
 	else if (ed.daemon === "bgp")
 		bgpEditor(box);
+	else if (ed.daemon === "sshd")
+		sshEditor(box);
 	else if (RT_DAEMONS[ed.daemon])
 		rtEditor(box);
 	else
@@ -1243,4 +1248,240 @@ function svShowTab(box, t) {
 	bar.appendChild(edButton("Ask again", ask));
 	box.appendChild(bar);
 	box.appendChild(el("pre", live && live.text || "", "term"));
+}
+
+/* the rules set to doc's text, and the editor drawn again */
+function sshDone(doc) {
+	rulesNow(sshText(doc));
+	edRedraw();
+}
+
+/* draw sshd's editor: the tab chosen */
+function sshEditor(box) {
+	var doc = sshParse(dinsp.now.rules), bar = el("div", null, "bar");
+	var t = SSH_TABS.find(function (x) {
+		return x.id === ed.tab;
+	}) || SSH_TABS[0];
+
+	bar.appendChild(el("h2", "sshd"));
+	bar.appendChild(edSegs("sshtab", SSH_TABS.map(function (x) {
+		return [x.id, x.label];
+	}), t.id, function (v) {
+		ed.tab = v;
+		ed.sel = -1;
+		structured();
+	}));
+	bar.appendChild(el("span", null, "fill"));
+	box.appendChild(bar);
+	if (t.keys)
+		sshKeys(box, doc, t.keys);
+	if (t.lines)
+		sshRows(box, doc, 0, t.lines, function (s) {
+			return s.kw === t.lines.toLowerCase();
+		}, "");
+	if (t.other)
+		sshRows(box, doc, 0, null, function (s) {
+			return !sshShown(s.kw);
+		}, "");
+	if (t.match)
+		sshMatches(box, doc);
+}
+
+/*
+ * a field for each of keys in section 0: a line each for one marked
+ * many, else the first value, with what it risks, or that it is set
+ * more than once
+ */
+function sshKeys(box, doc, keys) {
+	var grid = el("div", null, "sfields");
+
+	keys.forEach(function (k) {
+		var list = sshFind(doc, 0, k.kw), id = k.kw.toLowerCase(), row;
+		var w = k.many ? "" : list.length > 1 ? "set " + list.length +
+		    " times; sshd takes the first" : list.length ?
+		    sshWarn(doc, list[0]) : "";
+
+		row = regField(grid, "sshd." + id, edControl("ssh" + id,
+		    k.many ? "lines" : k.choices ? [""].concat(k.choices) :
+		    "text", list.slice(0, k.many ? list.length : 1).map(
+		    function (s) {
+			return s.value;
+		}).join("\n"), function (v) {
+			sshDone(sshSet(doc, 0, k.kw, k.many ? v.split("\n") :
+			    v));
+		}));
+		if (w)
+			row.querySelector(".info").appendChild(el("span", w,
+			    "tag warn"));
+	});
+	box.appendChild(grid);
+}
+
+/*
+ * the lines of section sec that which takes, a row each: its keyword,
+ * with what it risks, and value; under the one selected, its value and
+ * Delete; and a line to add one, of keyword kw if given. path keeps a
+ * Match section's selection apart.
+ */
+function sshRows(box, doc, sec, kw, which, path) {
+	var list = doc.st.filter(function (s) {
+		return s.sec === sec && s.kw !== "match" && which(s);
+	}), t = el("table", null, "grid pick"), head = el("tr");
+	var grid = el("div", null, "sfields"), line = el("div", null,
+	    "addline"), key = el("input", null, "mono");
+	var val = el("input", null, "mono"), id = kw ? "sshd." +
+	    kw.toLowerCase() : "sshd.value";
+
+	["Keyword", "Value"].forEach(function (h) {
+		head.appendChild(el("th", h));
+	});
+	t.appendChild(head);
+	list.forEach(function (s, i) {
+		var k = path + i, tr = el("tr", null, k === ed.sel ? "sel" :
+		    "");
+		var w = sshWarn(doc, s), td = el("td", s.key);
+
+		if (w)
+			td.appendChild(el("span", w, "tag warn"));
+		tr.appendChild(td);
+		tr.appendChild(el("td", s.value, "mono"));
+		tr.addEventListener("click", function (e) {
+			e.stopPropagation();
+			ed.sel = ed.sel === k ? -1 : k;
+			structured();
+		});
+		t.appendChild(tr);
+		if (k === ed.sel)
+			t.appendChild(sshLineForm(doc, s, id));
+	});
+	box.appendChild(t);
+	if (!list.length)
+		box.appendChild(el("p", "None", "nothing"));
+	key.dataset.key = "sshkw";
+	key.setAttribute("aria-label", "The new line's keyword");
+	val.dataset.key = "sshnew";
+	val.setAttribute("aria-label", "The new line's value");
+	if (!kw)
+		line.appendChild(key);
+	line.appendChild(val);
+	line.appendChild(edButton("Add", function () {
+		var k = kw || key.value.trim(), v = val.value.trim();
+
+		if (!/^[A-Za-z0-9]+$/.test(k) || v === "") {
+			(k === "" ? key : val).focus();
+			return;
+		}
+		ed.sel = -1;
+		sshDone(sshAdd(doc, sec, k, v));
+	}));
+	regField(grid, kw ? id : "sshd.keyword", line, null, "New line");
+	box.appendChild(grid);
+}
+
+/* line s's form, as a row: its value, and Delete */
+function sshLineForm(doc, s, id) {
+	var tr = el("tr", null, "sform"), td = el("td"), grid = el("div", null,
+	    "sfields"), bar = el("div", null, "bar");
+
+	td.colSpan = 2;
+	td.addEventListener("click", function (e) {
+		e.stopPropagation();
+	});
+	regField(grid, id, edControl("sshvalue", "text", s.value, function (v) {
+		if (v.trim() !== "")
+			sshDone(sshSetLine(doc, s, v));
+	}), null, s.key);
+	td.appendChild(grid);
+	bar.appendChild(edButton("Delete", function () {
+		ed.sel = -1;
+		sshDone(sshSetLine(doc, s, ""));
+	}));
+	td.appendChild(bar);
+	tr.appendChild(td);
+	return tr;
+}
+
+/*
+ * the Match sections, a row each: its criteria and how many lines it
+ * has; under the one selected, its criteria, its lines and Delete; and a
+ * line to add one at the end
+ */
+function sshMatches(box, doc) {
+	var t = el("table", null, "grid pick"), head = el("tr");
+	var grid = el("div", null, "sfields"), line = el("div", null,
+	    "addline"), val = el("input", null, "mono");
+
+	box.appendChild(el("h3", "Match sections"));
+	["Match", "Lines"].forEach(function (h) {
+		head.appendChild(el("th", h));
+	});
+	t.appendChild(head);
+	doc.secs.forEach(function (m, sec) {
+		var k = "m" + sec, open = k === ed.sel ||
+		    String(ed.sel).indexOf(k + "/") === 0, tr;
+
+		if (sec === 0)
+			return;
+		tr = el("tr", null, open ? "sel" : "");
+		tr.appendChild(el("td", m.st.value, "mono"));
+		tr.appendChild(el("td", String(doc.st.filter(function (s) {
+			return s.sec === sec && s.kw !== "match";
+		}).length)));
+		tr.addEventListener("click", function (e) {
+			e.stopPropagation();
+			ed.sel = ed.sel === k ? -1 : k;
+			structured();
+		});
+		t.appendChild(tr);
+		if (open)
+			t.appendChild(sshMatchForm(doc, sec, k));
+	});
+	box.appendChild(t);
+	if (doc.secs.length < 2)
+		box.appendChild(el("p", "None", "nothing"));
+	val.dataset.key = "sshmatch";
+	val.setAttribute("aria-label", "The new section's criteria");
+	line.appendChild(val);
+	line.appendChild(edButton("Add", function () {
+		var v = val.value.trim();
+
+		if (v === "") {
+			val.focus();
+			return;
+		}
+		ed.sel = "m" + doc.secs.length;
+		sshDone(sshAddMatch(doc, v));
+	}));
+	regField(grid, "sshd.match", line, null, "New Match section");
+	box.appendChild(grid);
+}
+
+/* Match section sec's form, as a row: its criteria, lines and Delete */
+function sshMatchForm(doc, sec, key) {
+	var tr = el("tr", null, "sform"), td = el("td"), grid = el("div", null,
+	    "sfields"), bar = el("div", null, "bar"), m = doc.secs[sec].st;
+
+	td.colSpan = 2;
+	td.addEventListener("click", function (e) {
+		e.stopPropagation();
+	});
+	regField(grid, "sshd.match", edControl("sshcrit", "text", m.value,
+	    function (v) {
+		if (v.trim() !== "")
+			sshDone(sshSetLine(doc, m, v));
+		else
+			structured();
+	}), null, "Criteria");
+	td.appendChild(grid);
+	td.appendChild(el("h3", "In it"));
+	sshRows(td, doc, sec, null, function () {
+		return true;
+	}, key + "/");
+	bar.appendChild(edButton("Delete", function () {
+		ed.sel = -1;
+		sshDone(sshRemoveMatch(doc, sec));
+	}));
+	td.appendChild(bar);
+	tr.appendChild(td);
+	return tr;
 }

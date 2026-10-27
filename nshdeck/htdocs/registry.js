@@ -71,7 +71,9 @@ var REGISTRY_MODULES = {
 	ike: { scope: "iked's configuration", man: "iked.conf.5",
 	    check: "iked -n, at Validate and at commit" },
 	dhcp: { scope: "dhcpd's configuration", man: "dhcpd.conf.5",
-	    check: "dhcpd -n, at Validate and at commit" }
+	    check: "dhcpd -n, at Validate and at commit" },
+	sshd: { scope: "sshd's configuration", man: "sshd_config.5",
+	    check: "sshd -t, at Validate and at commit" }
 };
 
 /* drivers, as interfaces' names begin */
@@ -2810,7 +2812,249 @@ var REGISTRY = {
 	    "asking for an address that does not belong on its network with " +
 	    "a refusal, so the client starts again. It is what dhcpd does " +
 	    "unless a scope says not authoritative.", values: "present or " +
-	    "absent", default: "authoritative", undo: "clear the check box" }
+	    "absent", default: "authoritative", undo: "clear the check box" },
+
+	/* sshd's configuration */
+	"sshd.port": { label: "Port", keyword: "Port port", definition: "A " +
+	    "port sshd listens on, at each address it listens on without a " +
+	    "port of its own.", values: "a port number, a line each",
+	    default: "22", undo: "clear the field", applies: "the global " +
+	    "settings" },
+	"sshd.listenaddress": { label: "Listen address",
+	    keyword: "ListenAddress address[:port] [rdomain domain]",
+	    definition: "A local address sshd listens on, with a port and " +
+	    "routing domain if given.", values: "an address or host name, a " +
+	    "line each", default: "every local address in the default " +
+	    "routing domain", undo: "clear the field", applies: "the global " +
+	    "settings" },
+	"sshd.addressfamily": { label: "Address family",
+	    keyword: "AddressFamily family", definition: "The address " +
+	    "families sshd uses.", values: "any, inet or inet6", default: "any",
+	    undo: "choose (not set)", applies: "the global settings" },
+	"sshd.hostkey": { label: "Host keys", keyword: "HostKey file",
+	    definition: "A file holding a private host key.", values: "a " +
+	    "path, a line each", default: "/etc/ssh/ssh_host_ecdsa_key, " +
+	    "ssh_host_ed25519_key, ssh_host_mldsa44_ed25519_key and " +
+	    "ssh_host_rsa_key", undo: "clear the field", applies: "the " +
+	    "global settings" },
+	"sshd.hostcertificate": { label: "Host certificates",
+	    keyword: "HostCertificate file", definition: "A file holding a " +
+	    "host certificate, which must match one of the host keys.",
+	    values: "a path, a line each", default: "none", undo: "clear the " +
+	    "field", applies: "the global settings" },
+	"sshd.permitrootlogin": { label: "Root login",
+	    keyword: "PermitRootLogin yes | prohibit-password | " +
+	    "forced-commands-only | no", definition: "Whether root may log " +
+	    "in, and how: prohibit-password allows keys only, and " +
+	    "forced-commands-only allows keys with a forced command only.",
+	    values: "yes, prohibit-password, forced-commands-only or no",
+	    default: "prohibit-password", risk: "high: yes lets root log in " +
+	    "with a password", undo: "choose (not set)", applies: "the " +
+	    "global settings and Match sections" },
+	"sshd.passwordauthentication": { label: "Passwords",
+	    keyword: "PasswordAuthentication yes | no", definition: "Whether " +
+	    "a password may be used to log in.", values: "yes or no",
+	    default: "yes", undo: "choose (not set)", applies: "the global " +
+	    "settings and Match sections" },
+	"sshd.kbdinteractiveauthentication": { label: "Keyboard-interactive",
+	    keyword: "KbdInteractiveAuthentication yes | no",
+	    definition: "Whether keyboard-interactive login is allowed, with " +
+	    "the styles of login.conf(5).", values: "yes or no", default: "yes",
+	    undo: "choose (not set)", applies: "the global settings and " +
+	    "Match sections" },
+	"sshd.pubkeyauthentication": { label: "Public keys",
+	    keyword: "PubkeyAuthentication yes | no", definition: "Whether a " +
+	    "public key may be used to log in.", values: "yes or no",
+	    default: "yes", undo: "choose (not set)", applies: "the global " +
+	    "settings and Match sections" },
+	"sshd.permitemptypasswords": { label: "Empty passwords",
+	    keyword: "PermitEmptyPasswords yes | no", definition: "Whether " +
+	    "an account with an empty password may log in, when passwords " +
+	    "are allowed.", values: "yes or no", default: "no", risk: "high: " +
+	    "yes lets an account with no password log in", undo: "choose " +
+	    "(not set)", applies: "the global settings and Match sections" },
+	"sshd.authenticationmethods": { label: "Methods required",
+	    keyword: "AuthenticationMethods list ...", definition: "The " +
+	    "methods a user must complete to log in: lists of methods " +
+	    "separated by commas, any one list being enough.",
+	    values: "lists such as publickey,password, separated by spaces, " +
+	    "or any", default: "any: one method is enough", undo: "clear the " +
+	    "field", applies: "the global settings and Match sections" },
+	"sshd.maxauthtries": { label: "Login attempts",
+	    keyword: "MaxAuthTries number", definition: "How many attempts " +
+	    "to log in one connection may make.", values: "a number",
+	    default: "6", undo: "clear the field", applies: "the global " +
+	    "settings and Match sections" },
+	"sshd.logingracetime": { label: "Time to log in",
+	    keyword: "LoginGraceTime time", definition: "How long a " +
+	    "connection may take to log in before sshd ends it; 0 for no " +
+	    "limit.", values: "seconds, or a time such as 2m", default: "120 " +
+	    "seconds", undo: "clear the field", applies: "the global " +
+	    "settings" },
+	"sshd.authorizedkeysfile": { label: "Authorized keys files",
+	    keyword: "AuthorizedKeysFile file ...", definition: "The files " +
+	    "holding a user's public keys, under the home directory unless a " +
+	    "path is absolute; none for no file.", values: "paths separated " +
+	    "by spaces, or none", default: ".ssh/authorized_keys " +
+	    ".ssh/authorized_keys2", undo: "clear the field", applies: "the " +
+	    "global settings and Match sections" },
+	"sshd.trustedusercakeys": { label: "User CA keys",
+	    keyword: "TrustedUserCAKeys file", definition: "A file of the " +
+	    "keys of certificate authorities trusted to sign user " +
+	    "certificates.", values: "a path, or none", default: "none",
+	    undo: "clear the field", applies: "the global settings and Match " +
+	    "sections" },
+	"sshd.allowusers": { label: "Allowed users", keyword: "AllowUsers " +
+	    "pattern ...", definition: "If set, only users that match one of " +
+	    "these patterns may log in. Each line adds to the list.",
+	    values: "user name patterns, or USER@HOST, separated by spaces",
+	    default: "every user may log in", risk: "high: a user who is not " +
+	    "listed can no longer log in over ssh", undo: "clear the field",
+	    applies: "the global settings and Match sections" },
+	"sshd.allowgroups": { label: "Allowed groups", keyword: "AllowGroups " +
+	    "pattern ...", definition: "If set, only users in a group that " +
+	    "matches one of these patterns may log in. Each line adds to the " +
+	    "list.", values: "group name patterns, separated by spaces",
+	    default: "users of every group may log in", risk: "high: a user " +
+	    "in no listed group can no longer log in over ssh", undo: "clear " +
+	    "the field", applies: "the global settings and Match sections" },
+	"sshd.denyusers": { label: "Denied users", keyword: "DenyUsers " +
+	    "pattern ...", definition: "Users that match one of these " +
+	    "patterns may not log in. Each line adds to the list.",
+	    values: "user name patterns, or USER@HOST, separated by spaces",
+	    default: "none", undo: "clear the field", applies: "the global " +
+	    "settings and Match sections" },
+	"sshd.denygroups": { label: "Denied groups", keyword: "DenyGroups " +
+	    "pattern ...", definition: "Users in a group that matches one of " +
+	    "these patterns may not log in. Each line adds to the list.",
+	    values: "group name patterns, separated by spaces", default: "none",
+	    undo: "clear the field", applies: "the global settings and Match " +
+	    "sections" },
+	"sshd.allowtcpforwarding": { label: "TCP forwarding",
+	    keyword: "AllowTcpForwarding yes | all | no | local | remote",
+	    definition: "Whether TCP ports may be forwarded: yes or all for " +
+	    "both ways, or local or remote only.", values: "yes, all, no, " +
+	    "local or remote", default: "yes", undo: "choose (not set)",
+	    applies: "the global settings and Match sections" },
+	"sshd.allowagentforwarding": { label: "Agent forwarding",
+	    keyword: "AllowAgentForwarding yes | no", definition: "Whether " +
+	    "ssh-agent(1) may be forwarded.", values: "yes or no",
+	    default: "yes", undo: "choose (not set)", applies: "the global " +
+	    "settings and Match sections" },
+	"sshd.allowstreamlocalforwarding": { label: "Socket forwarding",
+	    keyword: "AllowStreamLocalForwarding yes | all | no | local | " +
+	    "remote", definition: "Whether Unix-domain sockets may be " +
+	    "forwarded: yes or all for both ways, or local or remote only.",
+	    values: "yes, all, no, local or remote", default: "yes",
+	    undo: "choose (not set)", applies: "the global settings and " +
+	    "Match sections" },
+	"sshd.x11forwarding": { label: "X11 forwarding",
+	    keyword: "X11Forwarding yes | no", definition: "Whether X11 may " +
+	    "be forwarded.", values: "yes or no", default: "no",
+	    undo: "choose (not set)", applies: "the global settings and " +
+	    "Match sections" },
+	"sshd.permittunnel": { label: "Tunnels", keyword: "PermitTunnel yes " +
+	    "| point-to-point | ethernet | no", definition: "Whether tun(4) " +
+	    "devices may be forwarded: point-to-point at layer 3, ethernet " +
+	    "at layer 2, yes for both.", values: "yes, point-to-point, " +
+	    "ethernet or no", default: "no", undo: "choose (not set)",
+	    applies: "the global settings and Match sections" },
+	"sshd.gatewayports": { label: "Gateway ports",
+	    keyword: "GatewayPorts no | yes | clientspecified",
+	    definition: "Where a port a client forwards from this side " +
+	    "listens: no on the loopback address only, yes on every address, " +
+	    "clientspecified where the client says.", values: "no, yes or " +
+	    "clientspecified", default: "no", undo: "choose (not set)",
+	    applies: "the global settings and Match sections" },
+	"sshd.disableforwarding": { label: "No forwarding",
+	    keyword: "DisableForwarding yes | no", definition: "Turns off " +
+	    "every kind of forwarding, whatever the other settings say.",
+	    values: "yes or no", default: "no", undo: "choose (not set)",
+	    applies: "the global settings and Match sections" },
+	"sshd.permitopen": { label: "Forwarding destinations",
+	    keyword: "PermitOpen host:port ...", definition: "Where TCP " +
+	    "forwarding may connect to.", values: "host:port entries " +
+	    "separated by spaces, or any or none", default: "any",
+	    undo: "clear the field", applies: "the global settings and Match " +
+	    "sections" },
+	"sshd.permitlisten": { label: "Forwarding listeners",
+	    keyword: "PermitListen [host:]port ...", definition: "Where a " +
+	    "remote forwarding may listen.", values: "port or host:port " +
+	    "entries separated by spaces, or any or none", default: "any",
+	    undo: "clear the field", applies: "the global settings and Match " +
+	    "sections" },
+	"sshd.maxstartups": { label: "Connections logging in",
+	    keyword: "MaxStartups number | start:rate:full",
+	    definition: "How many connections may be logging in at once. " +
+	    "With start:rate:full, sshd refuses rate percent of new ones at " +
+	    "start, more as the count nears full, and all at full.",
+	    values: "a number, or start:rate:full", default: "10:30:100",
+	    undo: "clear the field", applies: "the global settings" },
+	"sshd.maxsessions": { label: "Sessions a connection",
+	    keyword: "MaxSessions number", definition: "How many shell, " +
+	    "login or subsystem sessions one connection may open.",
+	    values: "a number", default: "10", undo: "clear the field",
+	    applies: "the global settings and Match sections" },
+	"sshd.clientaliveinterval": { label: "Client alive interval",
+	    keyword: "ClientAliveInterval time", definition: "How long the " +
+	    "client may be silent before sshd asks it to answer; 0 for never.",
+	    values: "seconds, or a time such as 5m", default: "0",
+	    undo: "clear the field", applies: "the global settings and Match " +
+	    "sections" },
+	"sshd.clientalivecountmax": { label: "Client alive count",
+	    keyword: "ClientAliveCountMax number", definition: "How many of " +
+	    "those requests may go unanswered before sshd ends the connection.",
+	    values: "a number", default: "3", undo: "clear the field",
+	    applies: "the global settings and Match sections" },
+	"sshd.ciphers": { label: "Ciphers", keyword: "Ciphers list",
+	    definition: "The ciphers sshd allows.", values: "names separated " +
+	    "by commas; +, - or ^ first adds them to, takes them from or " +
+	    "puts them first in sshd's own list", default: "sshd's own list, " +
+	    "in sshd_config(5)", undo: "clear the field", applies: "the " +
+	    "global settings" },
+	"sshd.macs": { label: "MACs", keyword: "MACs list", definition: "The " +
+	    "message authentication codes sshd allows.", values: "names " +
+	    "separated by commas; +, - or ^ first adds them to, takes them " +
+	    "from or puts them first in sshd's own list", default: "sshd's " +
+	    "own list, in sshd_config(5)", undo: "clear the field",
+	    applies: "the global settings" },
+	"sshd.kexalgorithms": { label: "Key exchange",
+	    keyword: "KexAlgorithms list", definition: "The key exchange " +
+	    "methods sshd offers.", values: "names separated by commas; +, - " +
+	    "or ^ first adds them to, takes them from or puts them first in " +
+	    "sshd's own list", default: "sshd's own list, in sshd_config(5)",
+	    undo: "clear the field", applies: "the global settings" },
+	"sshd.hostkeyalgorithms": { label: "Host key algorithms",
+	    keyword: "HostKeyAlgorithms list", definition: "The host key " +
+	    "signature methods sshd offers.", values: "names separated by " +
+	    "commas", default: "sshd's own list, in sshd_config(5)",
+	    undo: "clear the field", applies: "the global settings" },
+	"sshd.pubkeyacceptedalgorithms": { label: "Public key algorithms",
+	    keyword: "PubkeyAcceptedAlgorithms list", definition: "The " +
+	    "signature methods sshd accepts for public keys.",
+	    values: "names separated by commas; +, - or ^ first adds them " +
+	    "to, takes them from or puts them first in sshd's own list",
+	    default: "sshd's own list, in sshd_config(5)", undo: "clear the " +
+	    "field", applies: "the global settings and Match sections" },
+	"sshd.subsystem": { label: "Subsystem", keyword: "Subsystem name " +
+	    "command", definition: "A subsystem a client may ask for, such " +
+	    "as sftp, and the command that serves it.", values: "a name and " +
+	    "a command, such as sftp /usr/libexec/sftp-server", default: "none",
+	    undo: "Delete", applies: "the global settings" },
+	"sshd.keyword": { label: "Keyword", keyword: "Keyword value",
+	    definition: "A line whose keyword no tab shows, as written.",
+	    values: "a keyword from sshd_config(5)", default: "none",
+	    undo: "Delete" },
+	"sshd.value": { label: "Value", keyword: "Keyword value",
+	    definition: "What follows the line's keyword, as written.",
+	    values: "what sshd_config(5) says for the keyword", default: "none",
+	    undo: "Delete" },
+	"sshd.match": { label: "Match", keyword: "Match criteria",
+	    definition: "A section whose lines apply, in place of the global " +
+	    "settings, to connections that meet all its criteria, such as " +
+	    "User sftp or Address 192.0.2.0/24. It runs to the next Match " +
+	    "line.", values: "criteria with their patterns, or All",
+	    default: "none", undo: "Delete" }
 };
 
 var regOpen = {};	/* ids of the fields whose definitions are open */
