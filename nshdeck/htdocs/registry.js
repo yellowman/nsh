@@ -69,7 +69,9 @@ var REGISTRY_MODULES = {
 	ipsec: { scope: "isakmpd's configuration", man: "ipsec.conf.5",
 	    check: "ipsecctl -n, at Validate and at commit" },
 	ike: { scope: "iked's configuration", man: "iked.conf.5",
-	    check: "iked -n, at Validate and at commit" }
+	    check: "iked -n, at Validate and at commit" },
+	dhcp: { scope: "dhcpd's configuration", man: "dhcpd.conf.5",
+	    check: "dhcpd -n, at Validate and at commit" }
 };
 
 /* drivers, as interfaces' names begin */
@@ -2711,7 +2713,104 @@ var REGISTRY = {
 	    "name of letters, digits and _", default: "none", undo: "Delete" },
 	"ike.value": { label: "Value", keyword: "value", definition: "What " +
 	    "$name stands for.", values: "text, quoted if it has spaces",
-	    default: "none", undo: "clear the field", applies: "macros" }
+	    default: "none", undo: "clear the field", applies: "macros" },
+
+	/* dhcpd's configuration */
+	"dhcp.subnet": { label: "Subnet", keyword: "subnet network netmask " +
+	    "mask { ... }", definition: "A network dhcpd serves. Each " +
+	    "network dhcpd listens on needs one, with addresses to give or " +
+	    "not.", values: "a network address", default: "none",
+	    undo: "Delete" },
+	"dhcp.netmask": { label: "Netmask", keyword: "netmask mask",
+	    definition: "The subnet's mask.", values: "a dotted mask, such " +
+	    "as 255.255.255.0", default: "none: it needs one", undo: "clear " +
+	    "the field", applies: "subnets" },
+	"dhcp.host": { label: "Host", keyword: "host name { ... }",
+	    definition: "A client known by its hardware address, which may " +
+	    "have a fixed address and settings of its own.", values: "a name",
+	    default: "none", undo: "Delete" },
+	"dhcp.hardware": { label: "Hardware address", keyword: "hardware " +
+	    "ethernet address", definition: "The client's Ethernet address.",
+	    values: "six hexadecimal octets, separated by colons",
+	    default: "none", undo: "Delete", applies: "hosts" },
+	"dhcp.fixedaddr": { label: "Fixed address", keyword: "fixed-address " +
+	    "address [, address ...]", definition: "The address the client " +
+	    "is always given; with several, the one on the network it boots " +
+	    "on.", values: "addresses or host names, separated by commas",
+	    default: "one from a range", undo: "Delete", applies: "hosts" },
+	"dhcp.range": { label: "Range", keyword: "range [dynamic-bootp] low " +
+	    "[high]", definition: "Addresses dhcpd gives clients, from low " +
+	    "to high.", values: "two addresses in the subnet, or one",
+	    default: "none: no addresses are given", undo: "Delete",
+	    applies: "subnets" },
+	"dhcp.routers": { label: "Routers", keyword: "option routers address " +
+	    "[, address ...]", definition: "The default routers clients are " +
+	    "given, in order of preference.", values: "addresses, separated " +
+	    "by commas", default: "none", undo: "Delete", applies: "the " +
+	    "global settings, subnets, shared networks, groups and hosts" },
+	"dhcp.dns": { label: "Name servers", keyword: "option " +
+	    "domain-name-servers address [, address ...]", definition: "The " +
+	    "name servers clients are given, in order of preference.",
+	    values: "addresses or host names, separated by commas",
+	    default: "none", undo: "clear the field", applies: "the global " +
+	    "settings, subnets, shared networks, groups and hosts" },
+	"dhcp.domain": { label: "Domain name", keyword: "option domain-name " +
+	    "\"name\"", definition: "The domain name clients are given.",
+	    values: "a domain name", default: "none", undo: "clear the field",
+	    applies: "the global settings, subnets, shared networks, groups " +
+	    "and hosts" },
+	"dhcp.ntp": { label: "NTP servers", keyword: "option ntp-servers " +
+	    "address [, address ...]", definition: "The NTP servers clients " +
+	    "are given.", values: "addresses, separated by commas",
+	    default: "none", undo: "Delete", applies: "the global settings, " +
+	    "subnets, shared networks, groups and hosts" },
+	"dhcp.lease": { label: "Lease time", keyword: "default-lease-time " +
+	    "seconds", definition: "How long a lease lasts when the client " +
+	    "asks for no time.", values: "seconds", default: "43200",
+	    undo: "clear the field", applies: "the global settings, subnets, " +
+	    "shared networks, groups and hosts" },
+	"dhcp.maxlease": { label: "Longest lease", keyword: "max-lease-time " +
+	    "seconds", definition: "The longest lease a client may ask for.",
+	    values: "seconds", default: "86400", undo: "clear the field",
+	    applies: "the global settings, subnets, shared networks, groups " +
+	    "and hosts" },
+	"dhcp.filename": { label: "Boot file", keyword: "filename \"file\"",
+	    definition: "The file a client boots from.", values: "a file name",
+	    default: "none", undo: "Delete", applies: "the global settings, " +
+	    "subnets, shared networks, groups and hosts" },
+	"dhcp.nextserver": { label: "Boot server", keyword: "next-server " +
+	    "server", definition: "The server the boot file is loaded from.",
+	    values: "an address or a host name", default: "this server",
+	    undo: "Delete", applies: "the global settings, subnets, shared " +
+	    "networks, groups and hosts" },
+	"dhcp.option": { label: "Option", keyword: "option name value",
+	    definition: "A DHCP option this form has no field for, which " +
+	    "dhcp-options(5) lists.", values: "the option's name",
+	    default: "none", undo: "Delete", applies: "the global settings, " +
+	    "subnets, shared networks, groups and hosts" },
+	"dhcp.value": { label: "Value", keyword: "value", definition: "The " +
+	    "option's value, as dhcpd.conf writes it.", values: "as " +
+	    "dhcp-options(5) says for the option", default: "none",
+	    undo: "clear the field", applies: "options" },
+	"dhcp.other": { label: "Other", keyword: "statement", definition: "A " +
+	    "statement this form has no field for, as written, such as " +
+	    "allow, deny or server-name.", values: "the statement as " +
+	    "dhcpd.conf writes it", default: "none", undo: "Delete",
+	    applies: "the global settings, subnets, shared networks, groups " +
+	    "and hosts" },
+	"dhcp.sharednet": { label: "Shared network",
+	    keyword: "shared-network name { ... }", definition: "Subnets on " +
+	    "one physical network.", values: "a name", default: "none",
+	    undo: "Delete" },
+	"dhcp.group": { label: "Group", keyword: "group { ... }",
+	    definition: "Hosts or subnets that share settings.", values: "a " +
+	    "block", default: "none", undo: "Delete" },
+	"dhcp.authoritative": { label: "Authoritative",
+	    keyword: "authoritative", definition: "dhcpd answers a client " +
+	    "asking for an address that does not belong on its network with " +
+	    "a refusal, so the client starts again. It is what dhcpd does " +
+	    "unless a scope says not authoritative.", values: "present or " +
+	    "absent", default: "authoritative", undo: "clear the check box" }
 };
 
 var regOpen = {};	/* ids of the fields whose definitions are open */

@@ -13,29 +13,54 @@
  * of times, { key }; opts, each { key, kw (the key if not given), n
  * (value words, 1 if not given), flag (no value), words (no keyword: the
  * option is one of these words), upto (its value is the words up to the
- * next other option), brace (no keyword: the option is a list in braces),
- * follows (the key of the option it comes right after, and goes with) };
- * fixed, if its grammar takes the options only in the order listed;
- * block, true if it opens a block, or "maybe" if it may; of, the words
- * one of which must follow kw. An argument
- * marked rest takes every word after it. A field marked raw is written
- * as typed, word by word: an address with a prefix length is one, as the
- * grammars read the slash as a word of its own; so is a rest or upto
- * field. A field marked angle is a name in angle brackets, read and
- * shown without them. A field marked group may be a list in braces, and
- * is read as an array; with joins, each of its entries is a word and
- * the words that follow it from joins, each with its value, such as a
- * host and its options. A kind marked macro is a macro's definition,
- * whose fields are its name and its value as written.
+ * next other option), brace (no keyword: the option is a list in
+ * braces), follows (the key of the option it comes right after, and goes
+ * with) }; fixed, if its grammar takes the options only in the order
+ * listed; block, true if it opens a block, over lines or on its one
+ * line, or "maybe" if it may; of, the words one of which must follow kw;
+ * semi, if it ends with a semicolon. An argument marked rest takes every
+ * word after it. A field marked raw is written as typed, word by word:
+ * an address with a prefix length is one, as the grammars read the slash
+ * as a word of its own; so is a rest or upto field. A field marked angle
+ * is a name in angle brackets, read and shown without them; one marked
+ * quote is always written in quotes. A field marked group may be a list
+ * in braces, and is read as an array; with joins, each of its entries is
+ * a word and the words that follow it from joins, each with its value,
+ * such as a host and its options. A kind marked macro is a macro's
+ * definition, whose fields are its name and its value as written.
  */
 "use strict";
 
+/* statement n's words, as kind k has them: a semicolon a word of its own */
+function stSplit(n, k) {
+	var w = n.words.slice(), last = w[w.length - 1] || "";
+
+	if (k.semi && last !== ";" && /;$/.test(last))
+		w.splice(-1, 1, last.slice(0, -1), ";");
+	return w;
+}
+
+/* whether statement n holds a block on its one line */
+function stInline(n) {
+	return !n.children && n.words.indexOf("{") !== -1 &&
+	    n.words[n.words.length - 1] === "}";
+}
+
+/*
+ * where the words of statement n of kind k end: at its block, or its
+ * semicolon
+ */
+function stEnd(w, n, k) {
+	return n.children || k.block && stInline(n) ? w.indexOf("{") :
+	    k.semi && w[w.length - 1] === ";" ? w.length - 1 : w.length;
+}
+
 /* the words after kind k's own, up to n's block, and where they start */
 function stBody(n, k) {
-	var end = n.children ? n.words.indexOf("{") : -1;
+	var w = stSplit(n, k);
 
-	return { at: k.kw.length, words: n.words.slice(k.kw.length,
-	    end === -1 ? n.words.length : end) };
+	return { at: k.kw.length, words: w.slice(k.kw.length, stEnd(w, n,
+	    k)) };
 }
 
 /* the keyword words of option o: none if it is one of its words or a list */
@@ -65,11 +90,14 @@ function stKind(n, kinds) {
 			return k.macro;
 		}) || null;
 	kinds.forEach(function (k) {
+		var w = stSplit(n, k);
+
 		if (!k.macro && (k.block === "maybe" ||
-		    !!k.block === !!n.children) && (!k.of ||
-		    k.of.indexOf(n.words[k.kw.length]) !== -1) &&
+		    !!k.block === !!(n.children || k.block &&
+		    stInline(n))) && (!k.of ||
+		    k.of.indexOf(w[k.kw.length]) !== -1) &&
 		    k.kw.every(function (x, i) {
-			return n.words[i] === x;
+			return w[i] === x;
 		}) && (!best || k.kw.length > best.kw.length))
 			best = k;
 	});
@@ -192,10 +220,13 @@ function stQuote(v) {
 	    '"' + v.replace(/["\\]/g, "\\$&") + '"';
 }
 
-/* x as one value of field f: in angle brackets, as typed, or quoted */
+/*
+ * x as one value of field f: in angle brackets, as typed, quoted if f
+ * must be, or quoted if a lexer needs it
+ */
 function stOne(f, x) {
 	return f.angle ? "<" + x.replace(/^<|>$/g, "") + ">" : f.raw ? x :
-	    stQuote(x);
+	    f.quote ? '"' + x.replace(/["\\]/g, "\\$&") + '"' : stQuote(x);
 }
 
 /* field key of kind k: its argument, option or list */
@@ -235,7 +266,7 @@ function stWords(f, value) {
  * or value replaced
  */
 function stSet(doc, s, key, value) {
-	var k = s.kind, n = s.node, w = n.words.slice(), at = s.at[key];
+	var k = s.kind, n = s.node, w = stSplit(n, k), at = s.at[key];
 	var f = stField(k, key), o = (k.opts || []).indexOf(f) !== -1 ? f :
 	    null, vals = o && o.flag ? (value ? [] : null) : stWords(f, value);
 	var end, pos, later, m = Object.assign({}, s.v);
@@ -275,7 +306,7 @@ function stSet(doc, s, key, value) {
 		});
 		if (vals !== null) {
 			vals = stKw(o).concat(vals);
-			end = n.children ? w.indexOf("{") : -1;
+			end = stEnd(w, n, k);
 			/* in a fixed order, before the first option after it */
 			later = k.fixed ? k.opts.slice(k.opts.indexOf(o) +
 			    1).map(function (x) {
@@ -285,11 +316,13 @@ function stSet(doc, s, key, value) {
 			}) : [];
 			pos = at ? at[0] : o.follows && s.at[o.follows] ?
 			    s.at[o.follows][0] + s.at[o.follows][1] :
-			    later.length ? Math.min.apply(null, later) : end ===
-			    -1 ? w.length : end;
+			    later.length ? Math.min.apply(null, later) : end;
 			Array.prototype.splice.apply(w, [pos, 0].concat(vals));
 		}
 	}
+	/* a semicolon goes with the word before it */
+	if (w.length > 1 && w[w.length - 1] === ";")
+		w.splice(-2, 2, w[w.length - 2] + ";");
 	return bgpSplice(doc, n.start, n.children ? n.start + 1 : n.end,
 	    stLines(doc, n, w));
 }
@@ -332,16 +365,35 @@ function stNew(k, args) {
 		return stOne(a, String(args[i]).trim());
 	}).filter(function (x, i) {
 		return args[i] !== undefined && args[i] !== "";
-	})).join(" ") + (k.block === true ? " {" : "");
+	})).join(" ") + (k.block === true ? " {" : k.semi ? ";" : "");
 }
 
-/* statement n, which may open a block and does not, given an empty one */
+/*
+ * Statement n, which may open a block and does not, given one over
+ * lines: an empty one, or if n holds its block on one line, that block
+ * with a line for each of its statements, which end at a semicolon
+ */
 function stOpen(doc, n) {
-	var ind = /^\s*/.exec(doc.lines[n.start])[0];
+	var ind = /^\s*/.exec(doc.lines[n.start])[0], w = n.words;
+	var open = w.indexOf("{"), lines = [], cur = [];
 
-	return bgpSplice(doc, n.start, n.end, [ind + n.code + " {" +
-	    (n.comments.length ? " " + n.comments.join(" ") : "") + "\n",
-	    ind + "}\n"]);
+	if (open === -1 || w[w.length - 1] !== "}")
+		return bgpSplice(doc, n.start, n.end, [ind + n.code + " {" +
+		    (n.comments.length ? " " + n.comments.join(" ") : "") +
+		    "\n", ind + "}\n"]);
+	w.slice(open + 1, -1).forEach(function (x) {
+		cur.push(x);
+		if (/;$/.test(x)) {
+			lines.push(ind + "\t" + cur.join(" ").replace(/ ;$/,
+			    ";") + "\n");
+			cur = [];
+		}
+	});
+	if (cur.length)
+		lines.push(ind + "\t" + cur.join(" ") + "\n");
+	return bgpSplice(doc, n.start, n.end, [ind + w.slice(0,
+	    open + 1).join(" ") + (n.comments.length ? " " +
+	    n.comments.join(" ") : "") + "\n"].concat(lines, [ind + "}\n"]));
 }
 
 /*
@@ -413,7 +465,7 @@ function stSingle(doc, p, k, value, kinds, after) {
 		return bgpRemove(doc, s.node);
 	if (s)
 		return bgpSplice(doc, s.node.start, s.node.end, [bgpLineOf(doc,
-		    s.node, k.kw.concat(stOne(k.args[0], value)).join(" "))]);
+		    s.node, stNew(k, [value]))]);
 	if (value === "")
 		return doc;
 	return stAdd(doc, p, k, [value], after, !!after);

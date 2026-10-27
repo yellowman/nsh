@@ -136,6 +136,20 @@ function svIkeSet(id, words) {
 	    choices: words }] };
 }
 
+/*
+ * a dhcpd.conf parameter: its words, then one value, quoted if a string
+ * or the rest of the line, as how says
+ */
+function svDhcp(id, kw, key, how) {
+	return { id: id, kw: kw, semi: true, args: key ? [{ key: key,
+	    rest: how === "rest", raw: how === "rest",
+	    quote: how === "string" }] : [] };
+}
+
+/* what a dhcpd.conf scope may hold */
+var SV_DHCP_SCOPE = ["range", "routers", "dns", "domain", "ntp", "lease",
+    "maxlease", "filename", "nextserver", "option", "other"];
+
 /* what ifstated.conf's actions may be */
 var SV_IFSTATE_DO = ["if", "run", "setstate"];
 
@@ -786,6 +800,48 @@ var SV_DAEMONS = {
 		    cols: ["value"] },
 		{ id: "flows", label: "Kernel flows", show: "ipsec flows" },
 		{ id: "sas", label: "SAs", show: "ipsec sadb" }
+	    ] },
+	dhcp: { prog: "dhcpd", blocks: ["subnet", "shared-network", "group",
+	    "host"],
+	    kinds: [
+		{ id: "subnet", kw: ["subnet"], args: [{ key: "network" }],
+		    opts: [{ key: "netmask" }], block: true,
+		    inner: ["host"].concat(SV_DHCP_SCOPE),
+		    innerCols: ["value"] },
+		{ id: "sharednet", kw: ["shared-network"],
+		    args: [{ key: "name" }], block: true,
+		    inner: ["subnet"].concat(SV_DHCP_SCOPE) },
+		{ id: "group", kw: ["group"], block: true, inner: ["host",
+		    "subnet"].concat(SV_DHCP_SCOPE) },
+		{ id: "host", kw: ["host"], args: [{ key: "name" }],
+		    block: true, inner: ["hardware",
+		    "fixedaddr"].concat(SV_DHCP_SCOPE) },
+		svDhcp("range", ["range"], "range", "rest"),
+		svDhcp("routers", ["option", "routers"], "routers", "rest"),
+		svDhcp("dns", ["option", "domain-name-servers"], "servers",
+		    "rest"),
+		svDhcp("domain", ["option", "domain-name"], "name", "string"),
+		svDhcp("ntp", ["option", "ntp-servers"], "servers", "rest"),
+		svDhcp("lease", ["default-lease-time"], "seconds"),
+		svDhcp("maxlease", ["max-lease-time"], "seconds"),
+		svDhcp("filename", ["filename"], "file", "string"),
+		svDhcp("nextserver", ["next-server"], "server"),
+		svDhcp("hardware", ["hardware", "ethernet"], "address"),
+		svDhcp("fixedaddr", ["fixed-address"], "addresses", "rest"),
+		svDhcp("authoritative", ["authoritative"]),
+		{ id: "option", kw: ["option"], semi: true,
+		    args: [{ key: "option" }, { key: "value", rest: true,
+		    raw: true }] },
+		Object.assign({}, SV_OTHER, { semi: true })
+	    ],
+	    tabs: [
+		{ id: "subnets", label: "Subnets", kinds: ["subnet",
+		    "sharednet"], cols: ["netmask"] },
+		{ id: "hosts", label: "Hosts", kinds: ["host", "group"] },
+		{ id: "global", label: "Global", single: ["domain", "dns",
+		    "lease", "maxlease", "authoritative"], kinds: ["option",
+		    "other"], cols: ["value"] },
+		{ id: "leases", label: "Leases", show: "dhcp leases" }
 	    ] }
 };
 
