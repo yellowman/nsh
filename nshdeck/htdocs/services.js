@@ -63,6 +63,28 @@ function svSnmpCommunity(id, kw, warn) {
 /* an address only this host reaches, or a Unix socket's path */
 var SV_LOCAL = /^(lo[0-9]*|127\.0\.0\.1|::1|localhost|\/.*)$/;
 
+/*
+ * a statement no other kind of its block matches, shown as written: a
+ * kind with no words of its own matches any statement, the least well
+ */
+var SV_OTHER = { id: "other", kw: [], args: [{ key: "line", rest: true,
+    raw: true }] };
+
+/* an npppd.conf setting of yes or no */
+function svYesNo(id, kw) {
+	return { id: id, kw: [kw], args: [{ key: "value",
+	    choices: SV_YESNO }] };
+}
+
+/* an npppd.conf setting of one value */
+function svOne(id, kw, key) {
+	return { id: id, kw: [kw], args: [{ key: key }] };
+}
+
+/* the statements of an npppd.conf RADIUS server */
+var SV_NPPP_RADIUS = ["radaddress", "radtimeout", "radtries",
+    "radfailovers"];
+
 /* the statements a namespace or the top of ldapd.conf share */
 var SV_LDAP_ACI = ["allow", "deny"];
 
@@ -391,6 +413,103 @@ var SV_DAEMONS = {
 		{ id: "schemas", label: "Schemas", kinds: ["schema",
 		    "referral"] },
 		{ id: "stats", label: "Statistics", show: "ldap stats" }
+	    ] },
+	nppp: { prog: "npppd", blocks: ["tunnel", "ipcp", "authentication",
+	    "authentication-server", "accounting-server"],
+	    kinds: [
+		{ id: "tunnel", kw: ["tunnel"], args: [{ key: "name" }],
+		    opts: [{ key: "protocol", choices: ["l2tp", "pptp",
+		    "pppoe"] }], block: "maybe", inner: ["listen", "listenif",
+		    "mru", "lcpkeepalive", "authmethod", "chapname", "mppe",
+		    "idletimeout", "tcpmss", "ingress", "pipex", "l2tpipsec",
+		    "pppoeservice", "pppoeac", "other"],
+		    innerCols: ["port"] },
+		{ id: "listen", kw: ["listen", "on"],
+		    args: [{ key: "address" }], opts: [{ key: "port" }] },
+		{ id: "listenif", kw: ["listen", "on", "interface"],
+		    args: [{ key: "interface" }] },
+		svOne("mru", "mru", "bytes"),
+		svYesNo("lcpkeepalive", "lcp-keepalive"),
+		{ id: "authmethod", kw: ["authentication-method"],
+		    args: [{ key: "methods", rest: true, raw: true }],
+		    warn: function (s) {
+			return /(^| )pap( |$)/.test(s.v.methods) ? "PAP " +
+			    "sends passwords in the clear" : "";
+		} },
+		svOne("chapname", "chap-name", "name"),
+		{ id: "mppe", kw: ["mppe"], args: [{ key: "value",
+		    choices: ["yes", "no", "required"] }] },
+		svOne("idletimeout", "idle-timeout", "seconds"),
+		svYesNo("tcpmss", "tcp-mss-adjust"),
+		svYesNo("ingress", "ingress-filter"),
+		svYesNo("pipex", "pipex"),
+		svYesNo("l2tpipsec", "l2tp-require-ipsec"),
+		svOne("pppoeservice", "pppoe-service-name", "name"),
+		svOne("pppoeac", "pppoe-ac-name", "name"),
+		SV_OTHER,
+		{ id: "ipcp", kw: ["ipcp"], args: [{ key: "name" }],
+		    block: true, inner: ["pool", "dns", "nbns", "userselected",
+		    "ipcpmax"] },
+		{ id: "pool", kw: ["pool-address"], args: [{ key: "range",
+		    raw: true }], opts: [{ key: "pooltype", kw: ["for"],
+		    choices: ["dynamic", "static"] }] },
+		{ id: "dns", kw: ["dns-servers"], args: [{ key: "servers",
+		    rest: true, raw: true }] },
+		{ id: "nbns", kw: ["nbns-servers"], args: [{ key: "servers",
+		    rest: true, raw: true }] },
+		svYesNo("userselected", "allow-user-selected-address"),
+		svOne("ipcpmax", "max-session", "sessions"),
+		{ id: "interface", kw: ["interface"], args: [{ key: "name" }],
+		    fixed: true, opts: [{ key: "address" }, { key: "useipcp",
+		    kw: ["ipcp"] }] },
+		{ id: "authentication", kw: ["authentication"],
+		    args: [{ key: "name" }], opts: [{ key: "type",
+		    choices: ["local", "radius"] }], block: true,
+		    inner: ["suffix", "stripnt", "stripat", "usersfile",
+		    "usermax", "authserver", "acctserver"] },
+		svOne("suffix", "username-suffix", "suffix"),
+		svYesNo("stripnt", "strip-nt-domain"),
+		svYesNo("stripat", "strip-atmark-realm"),
+		svOne("usersfile", "users-file", "path"),
+		svOne("usermax", "user-max-session", "sessions"),
+		{ id: "authserver", kw: ["authentication-server"], block: true,
+		    inner: SV_NPPP_RADIUS },
+		{ id: "acctserver", kw: ["accounting-server"], block: true,
+		    inner: SV_NPPP_RADIUS },
+		{ id: "radaddress", kw: ["address"], args: [{ key: "address" }],
+		    fixed: true, opts: [{ key: "port" }, { key: "secret",
+		    secret: true }] },
+		svOne("radtimeout", "timeout", "seconds"),
+		svOne("radtries", "max-tries", "tries"),
+		svOne("radfailovers", "max-failovers", "failovers"),
+		{ id: "bind", kw: ["bind", "tunnel", "from"],
+		    args: [{ key: "tunnel" }], fixed: true,
+		    opts: [{ key: "auth", kw: ["authenticated", "by"] },
+		    { key: "to" }] },
+		{ id: "nasid", kw: ["radius", "nas-id"],
+		    args: [{ key: "id" }] },
+		{ id: "daelisten", kw: ["radius", "dae", "listen", "on"],
+		    args: [{ key: "address" }], opts: [{ key: "port" }] },
+		{ id: "daeclient", kw: ["radius", "dae", "client"],
+		    args: [{ key: "address" }], opts: [{ key: "secret",
+		    secret: true }] },
+		{ id: "maxsession", kw: ["set", "max-session"],
+		    args: [{ key: "sessions" }] },
+		{ id: "usermaxsession", kw: ["set", "user-max-session"],
+		    args: [{ key: "sessions" }] }
+	    ],
+	    tabs: [
+		{ id: "tunnels", label: "Tunnels", kinds: ["tunnel"],
+		    cols: ["protocol"] },
+		{ id: "addresses", label: "Addresses", kinds: ["ipcp",
+		    "interface"], cols: ["address", "useipcp"] },
+		{ id: "auth", label: "Authentication", kinds: ["authentication",
+		    "bind"], cols: ["type", "auth", "to"] },
+		{ id: "radius", label: "RADIUS", single: ["nasid"],
+		    kinds: ["daelisten", "daeclient"], cols: ["port",
+		    "secret"] },
+		{ id: "global", label: "Global", single: ["maxsession",
+		    "usermaxsession"] }
 	    ] }
 };
 

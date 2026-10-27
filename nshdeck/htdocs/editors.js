@@ -1065,7 +1065,7 @@ function svListTab(box, doc, d, ids, cols, p, path) {
 		var key = path + i, tr = el("tr", null, key === ed.sel ? "sel" :
 		    ""), first = (s.kind.args || [])[0];
 
-		tr.appendChild(svWarned(el("td", s.kind.kw.join(" ")), s));
+		tr.appendChild(svWarned(el("td", svWords(name, s.kind)), s));
 		tr.appendChild(el("td", first ? svCell(first, s.v[first.key]) :
 		    "", "mono"));
 		cols.forEach(function (c) {
@@ -1092,7 +1092,7 @@ function svListTab(box, doc, d, ids, cols, p, path) {
 			structured();
 		});
 		Array.prototype.forEach.call(pick.options, function (o) {
-			o.textContent = svKinds(d, [o.value])[0].kw.join(" ");
+			o.textContent = svWords(name, svKinds(d, [o.value])[0]);
 		});
 		line.appendChild(pick);
 	}
@@ -1115,6 +1115,11 @@ function svListTab(box, doc, d, ids, cols, p, path) {
 	regField(grid, svReg(name, k), line, null, "New " +
 	    reg(svReg(name, k)).label.toLowerCase());
 	box.appendChild(grid);
+}
+
+/* the words kind k begins with, or its label if it has none */
+function svWords(name, k) {
+	return k.kw.length ? k.kw.join(" ") : reg(svReg(name, k)).label;
 }
 
 /* field f's value v in a table's cell: a secret's is hidden */

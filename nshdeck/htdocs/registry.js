@@ -59,7 +59,9 @@ var REGISTRY_MODULES = {
 	snmp: { scope: "snmpd's configuration", man: "snmpd.conf.5",
 	    check: "snmpd -n, at Validate and at commit" },
 	ldap: { scope: "ldapd's configuration", man: "ldapd.conf.5",
-	    check: "ldapd -n, at Validate and at commit" }
+	    check: "ldapd -n, at Validate and at commit" },
+	nppp: { scope: "npppd's configuration", man: "npppd.conf.5",
+	    check: "npppd -n, at Validate and at commit" }
 };
 
 /* drivers, as interfaces' names begin */
@@ -1843,7 +1845,232 @@ var REGISTRY = {
 	    "and namespaces" },
 	"ldap.schema": { label: "Schema", keyword: "schema filename",
 	    definition: "A file of attribute types and object classes to add.",
-	    values: "a path", default: "ldapd's core schemas", undo: "Delete" }
+	    values: "a path", default: "ldapd's core schemas", undo: "Delete" },
+
+	/* npppd's configuration */
+	"nppp.tunnel": { label: "Tunnel", keyword: "tunnel name protocol " +
+	    "protocol [{ ... }]", definition: "A tunnel npppd takes PPP " +
+	    "sessions over, with its PPP settings.", values: "a name",
+	    default: "none", undo: "Delete" },
+	"nppp.protocol": { label: "Protocol", keyword: "protocol l2tp | pptp " +
+	    "| pppoe", definition: "The tunnel's protocol: L2TP, PPTP or PPP " +
+	    "over Ethernet.", values: "l2tp, pptp or pppoe", default: "none: " +
+	    "a tunnel needs one", undo: "choose (not set)",
+	    applies: "tunnels" },
+	"nppp.listen": { label: "Listen on", keyword: "listen on address " +
+	    "[port port]", definition: "An address an L2TP or PPTP tunnel " +
+	    "listens on; PPTP takes only IPv4.", values: "an IPv4 or IPv6 " +
+	    "address", default: "0.0.0.0", undo: "Delete", applies: "tunnels" },
+	"nppp.port": { label: "Port", keyword: "port port", definition: "The " +
+	    "port of the address.", values: "a port number", default: "1701 " +
+	    "for L2TP, 1723 for PPTP, 3799 for DAE", undo: "clear the field",
+	    applies: "listen on lines and radius dae listen on" },
+	"nppp.listenif": { label: "Listen on interface", keyword: "listen on " +
+	    "interface name", definition: "The Ethernet interface a PPPoE " +
+	    "tunnel listens on.", values: "an interface's name",
+	    default: "none", undo: "Delete", applies: "tunnels" },
+	"nppp.mru": { label: "MRU", keyword: "mru number", definition: "The " +
+	    "largest packet npppd asks the peer to send it.", values: "bytes",
+	    default: "1360 for L2TP, 1400 for PPTP, 1492 for PPPoE",
+	    undo: "Delete", applies: "tunnels" },
+	"nppp.lcpkeepalive": { label: "LCP keepalive",
+	    keyword: "lcp-keepalive yes | no", definition: "Whether npppd " +
+	    "sends LCP echo requests, and closes a link that does not answer.",
+	    values: "yes or no", default: "no for L2TP, yes for PPTP and PPPoE",
+	    undo: "Delete", applies: "tunnels" },
+	"nppp.authmethod": { label: "Authentication methods",
+	    keyword: "authentication-method method ...", definition: "The " +
+	    "ways npppd lets a user prove who they are. PAP sends the " +
+	    "password in the clear.", values: "pap, chap and mschapv2, " +
+	    "separated by spaces", default: "mschapv2 for PPTP, pap chap " +
+	    "mschapv2 for the others", undo: "Delete", applies: "tunnels" },
+	"nppp.chapname": { label: "CHAP name", keyword: "chap-name name",
+	    definition: "The name npppd gives in CHAP.", values: "a name",
+	    default: "none", undo: "Delete", applies: "tunnels" },
+	"nppp.mppe": { label: "MPPE", keyword: "mppe yes | no | required",
+	    definition: "Microsoft Point-to-Point Encryption: yes uses it if " +
+	    "the peer agrees, required ends the session if not, no refuses it.",
+	    values: "yes, no or required", default: "required for PPTP, yes " +
+	    "for L2TP and PPPoE", undo: "Delete", applies: "tunnels" },
+	"nppp.idletimeout": { label: "Idle timeout", keyword: "idle-timeout " +
+	    "seconds", definition: "A link that sends and receives no data " +
+	    "this long is closed. It must be 0 for pppx(4).",
+	    values: "seconds; 0 for none", default: "0", undo: "Delete",
+	    applies: "tunnels" },
+	"nppp.tcpmss": { label: "Adjust TCP MSS", keyword: "tcp-mss-adjust " +
+	    "yes | no", definition: "yes lowers the MSS in TCP SYN packets " +
+	    "to fit the link's MTU.", values: "yes or no", default: "no",
+	    undo: "Delete", applies: "tunnels" },
+	"nppp.ingress": { label: "Ingress filter", keyword: "ingress-filter " +
+	    "yes | no", definition: "yes drops packets whose source is not " +
+	    "the address npppd gave the link.", values: "yes or no",
+	    default: "no", undo: "Delete", applies: "tunnels" },
+	"nppp.pipex": { label: "pipex", keyword: "pipex yes | no",
+	    definition: "Whether the kernel's pipex(4) carries the sessions' " +
+	    "packets; the sysctl net.pipex.enable must be on too.",
+	    values: "yes or no", default: "yes", undo: "Delete",
+	    applies: "tunnels" },
+	"nppp.l2tpipsec": { label: "Require IPsec",
+	    keyword: "l2tp-require-ipsec yes | no", definition: "yes refuses " +
+	    "L2TP connections that are not in IPsec.", values: "yes or no",
+	    default: "no", undo: "Delete", applies: "tunnels" },
+	"nppp.pppoeservice": { label: "PPPoE service name",
+	    keyword: "pppoe-service-name name", definition: "The service " +
+	    "name a PPPoE tunnel offers.", values: "a name", default: "empty",
+	    undo: "Delete", applies: "tunnels" },
+	"nppp.pppoeac": { label: "PPPoE AC name", keyword: "pppoe-ac-name name",
+	    definition: "The access concentrator name a PPPoE tunnel gives.",
+	    values: "a name", default: "made from the interface's MAC address",
+	    undo: "Delete", applies: "tunnels" },
+	"nppp.other": { label: "Other", keyword: "option value",
+	    definition: "A tunnel setting this form has no field for, as " +
+	    "written: LCP, IPCP and CCP timers and counts, the L2TP, PPTP " +
+	    "and PPPoE settings, MPPE keys and packet dumps. npppd.conf(5) " +
+	    "lists them.", values: "the setting as npppd.conf writes it",
+	    default: "none", undo: "Delete", applies: "tunnels" },
+	"nppp.ipcp": { label: "IPCP", keyword: "ipcp name { ... }",
+	    definition: "Addresses and name servers a session is given. " +
+	    "There may be up to 8.", values: "a name", default: "none",
+	    undo: "Delete" },
+	"nppp.pool": { label: "Pool", keyword: "pool-address range | prefix " +
+	    "[for dynamic | static]", definition: "Addresses sessions are " +
+	    "given.", values: "a range such as 10.0.0.2-10.0.0.254, or a " +
+	    "prefix such as 10.0.0.0/24", default: "none", undo: "Delete",
+	    applies: "IPCP settings" },
+	"nppp.pooltype": { label: "Allocation", keyword: "for dynamic | static",
+	    definition: "dynamic gives the addresses to any session; static " +
+	    "keeps them for addresses set for a user.", values: "dynamic or " +
+	    "static", default: "dynamic", undo: "choose (not set)",
+	    applies: "pool-address lines" },
+	"nppp.dns": { label: "DNS servers", keyword: "dns-servers primary " +
+	    "[secondary] | resolver", definition: "The name servers a " +
+	    "session is given. Without this line, the RADIUS server's are " +
+	    "given; 0.0.0.0 gives none.", values: "one or two IPv4 " +
+	    "addresses, or resolver", default: "the RADIUS server's",
+	    undo: "Delete", applies: "IPCP settings" },
+	"nppp.nbns": { label: "NetBIOS name servers", keyword: "nbns-servers " +
+	    "primary [secondary]", definition: "The NetBIOS name servers a " +
+	    "session is given.", values: "one or two IPv4 addresses",
+	    default: "the RADIUS server's", undo: "Delete", applies: "IPCP " +
+	    "settings" },
+	"nppp.userselected": { label: "User's own address",
+	    keyword: "allow-user-selected-address yes | no",
+	    definition: "Whether a session may be given the address its user " +
+	    "asks for.", values: "yes or no", default: "yes", undo: "Delete",
+	    applies: "IPCP settings" },
+	"nppp.ipcpmax": { label: "Sessions", keyword: "max-session number",
+	    definition: "The most sessions this IPCP setting serves.",
+	    values: "a number; 0 for no limit", default: "0", undo: "Delete",
+	    applies: "IPCP settings" },
+	"nppp.interface": { label: "Interface", keyword: "interface name " +
+	    "address address ipcp ipcp", definition: "A pppac(4) or pppx(4) " +
+	    "interface the sessions use. There may be up to 8.", values: "an " +
+	    "interface's name", default: "none", undo: "Delete" },
+	"nppp.address": { label: "Address", keyword: "address address",
+	    definition: "The interface's address, which the peers see as the " +
+	    "tunnel's.", values: "an IPv4 address", default: "none",
+	    undo: "clear the field", applies: "interface lines" },
+	"nppp.useipcp": { label: "IPCP", keyword: "ipcp name",
+	    definition: "The IPCP setting the interface's sessions use.",
+	    values: "an IPCP setting's name", default: "none", undo: "clear " +
+	    "the field", applies: "interface lines" },
+	"nppp.authentication": { label: "Authentication",
+	    keyword: "authentication name type local | radius { ... }",
+	    definition: "Where users are checked: a file of users, or RADIUS " +
+	    "servers.", values: "a name", default: "none", undo: "Delete" },
+	"nppp.type": { label: "Type", keyword: "type local | radius",
+	    definition: "local checks users-file; radius asks the " +
+	    "authentication servers.", values: "local or radius",
+	    default: "none: it needs one", undo: "choose (not set)",
+	    applies: "authentication settings" },
+	"nppp.suffix": { label: "Username suffix", keyword: "username-suffix " +
+	    "string", definition: "Users whose names end with this use this " +
+	    "setting.", values: "a string", default: "any user", undo: "Delete",
+	    applies: "authentication settings" },
+	"nppp.stripnt": { label: "Strip NT domain",
+	    keyword: "strip-nt-domain yes | no", definition: "yes takes an " +
+	    "NT domain, such as \\\\DOMAIN\\, off the user's name before it " +
+	    "is checked.", values: "yes or no", default: "yes", undo: "Delete",
+	    applies: "authentication settings" },
+	"nppp.stripat": { label: "Strip realm", keyword: "strip-atmark-realm " +
+	    "yes | no", definition: "yes takes the part from @ off the " +
+	    "user's name before it is checked.", values: "yes or no",
+	    default: "no", undo: "Delete", applies: "authentication settings" },
+	"nppp.usersfile": { label: "Users file", keyword: "users-file path",
+	    definition: "The npppd-users(5) file of a local setting. It must " +
+	    "be under /etc/npppd/.", values: "a path", default: "none",
+	    undo: "Delete", applies: "authentication settings" },
+	"nppp.usermax": { label: "Sessions a user",
+	    keyword: "user-max-session number", definition: "The most " +
+	    "sessions one user may have through this setting.", values: "a " +
+	    "number", default: "the global limit", undo: "Delete",
+	    applies: "authentication settings" },
+	"nppp.authserver": { label: "Authentication servers",
+	    keyword: "authentication-server { ... }", definition: "The " +
+	    "RADIUS servers that check users.", values: "a block",
+	    default: "none", undo: "Delete", applies: "authentication " +
+	    "settings" },
+	"nppp.radaddress": { label: "Server", keyword: "address address " +
+	    "[port port] secret secret", definition: "A RADIUS server. There " +
+	    "may be up to 16.", values: "an address", default: "none",
+	    undo: "Delete", applies: "RADIUS servers of authentication " +
+	    "settings" },
+	"nppp.secret": { label: "Secret", keyword: "secret secret",
+	    definition: "The secret shared with the RADIUS server or DAE " +
+	    "client.", values: "up to 126 characters", default: "none",
+	    secret: true, undo: "clear the field", applies: "RADIUS servers " +
+	    "and DAE clients" },
+	"nppp.radtimeout": { label: "Timeout", keyword: "timeout seconds",
+	    definition: "How long npppd waits for the server's answer.",
+	    values: "seconds", default: "9", undo: "Delete",
+	    applies: "RADIUS servers of authentication settings" },
+	"nppp.radtries": { label: "Tries", keyword: "max-tries number",
+	    definition: "How many times a request is sent again.",
+	    values: "a number", default: "3", undo: "Delete",
+	    applies: "RADIUS servers of authentication settings" },
+	"nppp.radfailovers": { label: "Failovers", keyword: "max-failovers " +
+	    "number", definition: "How many times npppd moves to another " +
+	    "server.", values: "a number", default: "1", undo: "Delete",
+	    applies: "RADIUS servers of authentication settings" },
+	"nppp.acctserver": { label: "Accounting servers",
+	    keyword: "accounting-server { ... }", definition: "The RADIUS " +
+	    "servers that npppd tells of each session.", values: "a block",
+	    default: "none", undo: "Delete", applies: "authentication " +
+	    "settings" },
+	"nppp.bind": { label: "Bind", keyword: "bind tunnel from tunnel " +
+	    "authenticated by authentication to interface",
+	    definition: "Which tunnel's users are checked where, and which " +
+	    "interface their sessions use.", values: "a tunnel's name",
+	    default: "none", undo: "Delete" },
+	"nppp.auth": { label: "Authenticated by", keyword: "authenticated by " +
+	    "name", definition: "The authentication setting the tunnel's " +
+	    "users are checked by.", values: "an authentication setting's name",
+	    default: "none", undo: "clear the field", applies: "bind lines" },
+	"nppp.to": { label: "To", keyword: "to interface", definition: "The " +
+	    "interface the sessions use.", values: "an interface's name",
+	    default: "none", undo: "clear the field", applies: "bind lines" },
+	"nppp.nasid": { label: "NAS identifier", keyword: "radius nas-id " +
+	    "identifier", definition: "The NAS-Identifier npppd gives RADIUS " +
+	    "servers.", values: "a string", default: "none", undo: "clear " +
+	    "the field" },
+	"nppp.daelisten": { label: "DAE listener", keyword: "radius dae " +
+	    "listen on address [port port]", definition: "An address npppd " +
+	    "takes RADIUS dynamic authorization requests on, such as to end " +
+	    "a session.", values: "an address", default: "none",
+	    undo: "Delete" },
+	"nppp.daeclient": { label: "DAE client", keyword: "radius dae client " +
+	    "address secret secret", definition: "A host allowed to send " +
+	    "dynamic authorization requests.", values: "an address",
+	    default: "none", risk: "high: it can end sessions",
+	    undo: "Delete" },
+	"nppp.maxsession": { label: "Sessions", keyword: "set max-session " +
+	    "number", definition: "The most sessions npppd serves.",
+	    values: "a number; 0 for no limit", default: "0", undo: "clear " +
+	    "the field" },
+	"nppp.usermaxsession": { label: "Sessions a user", keyword: "set " +
+	    "user-max-session number", definition: "The most sessions one " +
+	    "user may have.", values: "a number; 0 for no limit", default: "0",
+	    undo: "clear the field" }
 };
 
 var regOpen = {};	/* ids of the fields whose definitions are open */
