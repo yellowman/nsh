@@ -73,10 +73,14 @@ function rulesNow(text) {
 	drefresh();
 }
 
-/* redraw the editor of the inspected daemon from its rules */
+/*
+ * redraw the editor of the inspected daemon from its rules, and not
+ * again once typing in the text stops
+ */
 function structured() {
 	var box;
 
+	clearTimeout(edLater);
 	document.querySelectorAll(".structured").forEach(function (b) {
 		b.textContent = "";
 	});
