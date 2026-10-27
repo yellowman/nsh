@@ -61,7 +61,9 @@ var REGISTRY_MODULES = {
 	ldap: { scope: "ldapd's configuration", man: "ldapd.conf.5",
 	    check: "ldapd -n, at Validate and at commit" },
 	nppp: { scope: "npppd's configuration", man: "npppd.conf.5",
-	    check: "npppd -n, at Validate and at commit" }
+	    check: "npppd -n, at Validate and at commit" },
+	smtp: { scope: "smtpd's configuration", man: "smtpd.conf.5",
+	    check: "smtpd -n, at Validate and at commit" }
 };
 
 /* drivers, as interfaces' names begin */
@@ -2070,7 +2072,220 @@ var REGISTRY = {
 	"nppp.usermaxsession": { label: "Sessions a user", keyword: "set " +
 	    "user-max-session number", definition: "The most sessions one " +
 	    "user may have.", values: "a number; 0 for no limit", default: "0",
-	    undo: "clear the field" }
+	    undo: "clear the field" },
+
+	/* smtpd's configuration */
+	"smtp.listen": { label: "Listen on", keyword: "listen on interface " +
+	    "[family] [options]", definition: "An interface, group, address " +
+	    "or name smtpd takes mail on.", values: "an interface's or " +
+	    "group's name, an address or a domain name", default: "the Unix " +
+	    "socket only", undo: "Delete" },
+	"smtp.family": { label: "Family", keyword: "inet4 | inet6",
+	    definition: "Listens with one address family only.",
+	    values: "inet4 or inet6", default: "both", undo: "choose (not set)",
+	    applies: "listen on lines" },
+	"smtp.port": { label: "Port", keyword: "port port", definition: "The " +
+	    "port the listener takes mail on.", values: "a port number or a " +
+	    "service's name, such as submission", default: "25; 465 for smtps",
+	    undo: "clear the field", applies: "listen on lines" },
+	"smtp.tlsmode": { label: "TLS", keyword: "tls | tls-require | smtps",
+	    definition: "tls offers STARTTLS; tls-require refuses mail until " +
+	    "the client starts TLS; smtps takes TLS from the start.",
+	    values: "tls, tls-require or smtps", default: "no TLS",
+	    undo: "choose (not set)", applies: "listen on lines" },
+	"smtp.verify": { label: "Verify clients", keyword: "verify",
+	    definition: "With tls-require or smtps, a client must show a " +
+	    "valid certificate.", values: "on or off", default: "off",
+	    undo: "clear the check box", applies: "listen on lines" },
+	"smtp.pki": { label: "PKI", keyword: "pki name cert | key | dhe ...",
+	    definition: "A certificate and key smtpd proves its name with. A " +
+	    "listener or relay names one; a listener may name several, for " +
+	    "SNI.", values: "a name", default: "none", undo: "Delete",
+	    applies: "pki lines and listen on lines" },
+	"smtp.ca": { label: "CA", keyword: "ca name cert file",
+	    definition: "A CA certificate that client or server certificates " +
+	    "are checked against.", values: "a name", default: "the system's",
+	    undo: "Delete", applies: "ca lines and listen on lines" },
+	"smtp.authmode": { label: "Authentication", keyword: "auth | " +
+	    "auth-optional [<table>]", definition: "auth: clients must log " +
+	    "in before they send mail; auth-optional: they may. Without a " +
+	    "table, they log in with their system accounts.", values: "auth " +
+	    "or auth-optional", default: "none", undo: "choose (not set)",
+	    applies: "listen on lines" },
+	"smtp.hostname": { label: "Host name", keyword: "hostname name",
+	    definition: "The name in the listener's greeting.", values: "a " +
+	    "host name", default: "the server's name", undo: "clear the field",
+	    applies: "listen on lines" },
+	"smtp.hostnames": { label: "Host names", keyword: "hostnames <table>",
+	    definition: "A table of the name to greet with on each address.",
+	    values: "a table, in angle brackets", default: "none",
+	    undo: "clear the field", applies: "listen on lines" },
+	"smtp.tag": { label: "Tag", keyword: "tag tag", definition: "Tags " +
+	    "the listener's sessions, for match tag.", values: "a tag",
+	    default: "none", undo: "clear the field", applies: "listen on " +
+	    "lines, and listen on socket for some" },
+	"smtp.filter": { label: "Filter", keyword: "filter name ...",
+	    definition: "A filter: built in, with a phase, conditions and a " +
+	    "decision; a filter process; or a chain of filters. A listener " +
+	    "names the one its sessions go through.", values: "a name",
+	    default: "none", undo: "Delete", applies: "filter lines, and " +
+	    "listeners" },
+	"smtp.senders": { label: "Senders", keyword: "senders <table> " +
+	    "[masquerade]", definition: "A table of the addresses each " +
+	    "logged-in user may send as; masquerade rewrites From to match.",
+	    values: "a table, in angle brackets, then masquerade or not",
+	    default: "any address", undo: "clear the field",
+	    applies: "listen on lines" },
+	"smtp.masksrc": { label: "Mask source", keyword: "mask-src",
+	    definition: "Received headers leave out where the mail came from.",
+	    values: "on or off", default: "off", undo: "clear the check box",
+	    applies: "listen on lines, and listen on socket for some" },
+	"smtp.receivedauth": { label: "Received auth", keyword: "received-auth",
+	    definition: "Received headers say whether the session logged in, " +
+	    "and as whom.", values: "on or off", default: "off",
+	    undo: "clear the check box", applies: "listen on lines" },
+	"smtp.nodsn": { label: "No DSN", keyword: "no-dsn",
+	    definition: "Turns off delivery status notifications.",
+	    values: "on or off", default: "off", undo: "clear the check box",
+	    applies: "listen on lines, and listen on socket for some" },
+	"smtp.proxyv2": { label: "PROXY protocol", keyword: "proxy-v2",
+	    definition: "Takes the client's address from a PROXY protocol v2 " +
+	    "header.", values: "on or off", default: "off", undo: "clear the " +
+	    "check box", applies: "listen on lines" },
+	"smtp.ciphers": { label: "Ciphers", keyword: "ciphers ciphers",
+	    definition: "The ciphers the listener's TLS allows.",
+	    values: "as tls_config_set_ciphers(3) takes them",
+	    default: "libtls's", undo: "clear the field", applies: "listen " +
+	    "on lines" },
+	"smtp.protocols": { label: "TLS protocols", keyword: "protocols " +
+	    "protocols", definition: "The TLS versions the listener allows.",
+	    values: "as tls_config_parse_protocols(3) takes them",
+	    default: "libtls's", undo: "clear the field", applies: "listen " +
+	    "on lines" },
+	"smtp.socket": { label: "Listen on socket", keyword: "listen on " +
+	    "socket [options]", definition: "Options for the local Unix " +
+	    "socket /var/run/smtpd.sock, which smtpd listens on anyway.",
+	    values: "present or absent", default: "absent", undo: "Delete" },
+	"smtp.match": { label: "Rule", keyword: "match options action name | " +
+	    "reject", definition: "Mail that matches is given to the action, " +
+	    "or rejected. The first rule that matches decides. from any with " +
+	    "for any accepts mail from anyone for any domain.", values: "[!] " +
+	    "from ..., [!] for ..., and other options, then action name or " +
+	    "reject", default: "none", risk: "high: a rule that relays from " +
+	    "any for any is an open relay", undo: "Delete" },
+	"smtp.action": { label: "Action", keyword: "action name method " +
+	    "[options]", definition: "How mail a rule gives it is delivered.",
+	    values: "a name", default: "none", undo: "Delete" },
+	"smtp.method": { label: "Method", keyword: "method [options]",
+	    definition: "mbox, maildir [path] [junk], lmtp destination, mda " +
+	    "command, relay, forward-only or expand-only, then their " +
+	    "options. mda runs a command for each message.", values: "the " +
+	    "method and options as smtpd.conf writes them", default: "none",
+	    undo: "clear the field", applies: "action lines" },
+	"smtp.mdawrapper": { label: "MDA wrapper", keyword: "mda wrapper " +
+	    "name command", definition: "A command that local deliveries " +
+	    "naming the wrapper run in place of their own.", values: "a name",
+	    default: "none", risk: "high: it runs a command for each delivery",
+	    undo: "Delete" },
+	"smtp.command": { label: "Command", keyword: "\"command\"",
+	    definition: "The command line, which may hold format specifiers.",
+	    values: "a command and its arguments", default: "none",
+	    undo: "clear the field", applies: "mda wrapper and proc lines" },
+	"smtp.table": { label: "Table", keyword: "table name [type:]path | { " +
+	    "value, ... }", definition: "A list or mapping that other lines " +
+	    "name in angle brackets.", values: "a name", default: "none",
+	    undo: "Delete" },
+	"smtp.source": { label: "File", keyword: "[type:]path",
+	    definition: "Where the table is kept: a text file, or db: and a " +
+	    "file made with makemap(8).", values: "an absolute path, with " +
+	    "file: or db: before it", default: "none", undo: "clear the field",
+	    applies: "table lines" },
+	"smtp.values": { label: "Values", keyword: "{ value, ... }",
+	    definition: "The table's values, or its key = value pairs, in " +
+	    "the line itself.", values: "one value, or key = value, a line",
+	    default: "none", undo: "clear the lines", applies: "table lines" },
+	"smtp.cert": { label: "Certificate", keyword: "cert file",
+	    definition: "The certificate file, which may hold its chain.",
+	    values: "a path", default: "none", undo: "clear the field",
+	    applies: "pki and ca lines" },
+	"smtp.key": { label: "Key", keyword: "key file", definition: "The " +
+	    "certificate's private key file.", values: "a path",
+	    default: "none", undo: "clear the field", applies: "pki lines" },
+	"smtp.dhe": { label: "DHE", keyword: "dhe none | legacy | auto",
+	    definition: "The DHE parameters, for DHE cipher suites.",
+	    values: "none, legacy or auto", default: "none", undo: "clear " +
+	    "the field", applies: "pki lines" },
+	"smtp.def": { label: "Filter", keyword: "phase ... | proc name | " +
+	    "proc-exec command | chain { ... }", definition: "What the " +
+	    "filter is. proc-exec runs a command.", values: "as smtpd.conf " +
+	    "writes it", default: "none", undo: "clear the field",
+	    applies: "filter lines" },
+	"smtp.proc": { label: "Process", keyword: "proc name command [options]",
+	    definition: "A filter process smtpd runs, which filters share.",
+	    values: "a name", default: "none", risk: "high: it runs a command",
+	    undo: "Delete" },
+	"smtp.maxsize": { label: "Largest message", keyword: "smtp " +
+	    "max-message-size size", definition: "Larger messages are refused.",
+	    values: "bytes, or with K, M or G", default: "35M", undo: "clear " +
+	    "the field" },
+	"smtp.smtpciphers": { label: "Ciphers", keyword: "smtp ciphers control",
+	    definition: "The ciphers for TLS, as SSL_CTX_set_cipher_list(3) " +
+	    "takes them.", values: "a control string",
+	    default: "HIGH:!aNULL:!MD5", undo: "clear the field" },
+	"smtp.subaddr": { label: "Sub-address delimiter", keyword: "smtp " +
+	    "sub-addr-delim character", definition: "In a local address, " +
+	    "this character and what follows it are ignored.", values: "one " +
+	    "character", default: "+", undo: "clear the field" },
+	"smtp.queuecompression": { label: "Compress the queue",
+	    keyword: "queue compression", definition: "Queue files are " +
+	    "stored compressed.", values: "on or off", default: "off",
+	    undo: "clear the check box" },
+	"smtp.queueencryption": { label: "Queue key", keyword: "queue " +
+	    "encryption key", definition: "Queue files are encrypted with " +
+	    "this key; stdin or - reads it from smtpd's input.", values: "a " +
+	    "key", default: "not encrypted", secret: true, undo: "clear the " +
+	    "field" },
+	"smtp.queuettl": { label: "Queue lifetime", keyword: "queue ttl delay",
+	    definition: "How long a message that cannot yet be delivered " +
+	    "stays in the queue.", values: "a number then s, m, h or d",
+	    default: "4d", undo: "clear the field" },
+	"smtp.bounce": { label: "Warnings", keyword: "bounce warn-interval " +
+	    "delay [, delay ...]", definition: "When the sender is warned " +
+	    "that a message is still in the queue.", values: "up to four " +
+	    "delays, a number then s, m, h or d", default: "4h",
+	    undo: "clear the field" },
+	"smtp.maxdeferred": { label: "Deferred messages", keyword: "mta " +
+	    "max-deferred number", definition: "How many messages are held " +
+	    "for a host that failed for now, to send when it answers.",
+	    values: "a number", default: "100", undo: "clear the field" },
+	"smtp.srskey": { label: "SRS key", keyword: "srs key [backup] secret",
+	    definition: "The key of the Sender Rewriting Scheme.",
+	    values: "a secret", default: "none", secret: true, undo: "clear " +
+	    "the field" },
+	"smtp.srsttl": { label: "SRS lifetime", keyword: "srs ttl delay",
+	    definition: "After this, a bounce to an SRS address is dropped.",
+	    values: "a number then s, m, h or d", default: "4d",
+	    undo: "clear the field" },
+	"smtp.admd": { label: "ADMD", keyword: "admd authservid",
+	    definition: "The domain this server belongs to, which filters " +
+	    "write in Authentication-Results headers.", values: "a name",
+	    default: "the server's name", undo: "clear the field" },
+	"smtp.smtplimit": { label: "SMTP limits", keyword: "smtp limit " +
+	    "max-mails | max-rcpt count", definition: "max-mails is the most " +
+	    "messages a session; max-rcpt the most recipients a message.",
+	    values: "the limit's name and a count", default: "100 and 1000",
+	    undo: "Delete" },
+	"smtp.mtalimit": { label: "MTA limits", keyword: "mta limit [for " +
+	    "domain name] limit value", definition: "Limits on delivering to " +
+	    "other servers, for every domain or one.", values: "as " +
+	    "smtpd.conf writes them", default: "smtpd's", undo: "Delete" },
+	"smtp.mdalimit": { label: "MDA limits", keyword: "mda limit limit " +
+	    "value", definition: "Limits on local deliveries.", values: "as " +
+	    "smtpd.conf writes them", default: "smtpd's", undo: "Delete" },
+	"smtp.schedlimit": { label: "Scheduler limits", keyword: "scheduler " +
+	    "limit limit value", definition: "Limits on the queue's scheduler.",
+	    values: "as smtpd.conf writes them", default: "smtpd's",
+	    undo: "Delete" }
 };
 
 var regOpen = {};	/* ids of the fields whose definitions are open */

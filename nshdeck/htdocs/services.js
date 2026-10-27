@@ -81,6 +81,17 @@ function svOne(id, kw, key) {
 	return { id: id, kw: [kw], args: [{ key: key }] };
 }
 
+/* an smtpd.conf statement whose words after its own are one value */
+function svSmtpRest(id, kw, key, warn) {
+	return { id: id, kw: kw, args: [{ key: key, rest: true, raw: true }],
+	    warn: warn };
+}
+
+/* "runs a command", for a statement that names one */
+function svRuns() {
+	return "runs a command";
+}
+
 /* the statements of an npppd.conf RADIUS server */
 var SV_NPPP_RADIUS = ["radaddress", "radtimeout", "radtries",
     "radfailovers"];
@@ -510,6 +521,96 @@ var SV_DAEMONS = {
 		    "secret"] },
 		{ id: "global", label: "Global", single: ["maxsession",
 		    "usermaxsession"] }
+	    ] },
+	smtp: { prog: "smtpd", blocks: [],
+	    kinds: [
+		{ id: "listen", kw: ["listen", "on"],
+		    args: [{ key: "interface" }], opts: [{ key: "family",
+		    words: ["inet4", "inet6"] }, { key: "port" },
+		    { key: "tlsmode", words: ["tls", "tls-require", "smtps"] },
+		    { key: "verify", flag: true, follows: "tlsmode" },
+		    { key: "pki" }, { key: "ca" }, { key: "authmode",
+		    words: ["auth", "auth-optional"] }, { key: "hostname" },
+		    { key: "hostnames", upto: true, raw: true }, { key: "tag" },
+		    { key: "filter" }, { key: "senders", upto: true,
+		    raw: true }, { key: "masksrc", kw: ["mask-src"],
+		    flag: true }, { key: "receivedauth", kw: ["received-auth"],
+		    flag: true }, { key: "nodsn", kw: ["no-dsn"], flag: true },
+		    { key: "proxyv2", kw: ["proxy-v2"], flag: true },
+		    { key: "ciphers" }, { key: "protocols" }] },
+		{ id: "socket", kw: ["listen", "on", "socket"],
+		    opts: [{ key: "filter" }, { key: "masksrc",
+		    kw: ["mask-src"], flag: true }, { key: "nodsn",
+		    kw: ["no-dsn"], flag: true }, { key: "tag" }] },
+		svSmtpRest("match", ["match"], "rule", function (s) {
+			var r = " " + s.v.rule + " ";
+
+			return / from any /.test(r) && / for any /.test(r) &&
+			    !/ reject $/.test(r) ? "from anyone, for any " +
+			    "domain" : "";
+		}),
+		{ id: "action", kw: ["action"], args: [{ key: "name" },
+		    { key: "method", rest: true, raw: true }],
+		    warn: function (s) {
+			return /^mda /.test(s.v.method) ? svRuns() : "";
+		} },
+		{ id: "mdawrapper", kw: ["mda", "wrapper"],
+		    args: [{ key: "name" }, { key: "command" }], warn: svRuns },
+		{ id: "table", kw: ["table"], args: [{ key: "name" },
+		    { key: "source", raw: true }], opts: [{ key: "values",
+		    brace: true, group: true, raw: true, joins: ["=",
+		    "=>"] }] },
+		{ id: "pki", kw: ["pki"], args: [{ key: "name" }],
+		    opts: [{ key: "cert" }, { key: "key" }, { key: "dhe" }] },
+		{ id: "ca", kw: ["ca"], args: [{ key: "name" }],
+		    opts: [{ key: "cert" }] },
+		{ id: "filter", kw: ["filter"], args: [{ key: "name" },
+		    { key: "def", rest: true, raw: true }], warn: function (s) {
+			return /^proc-exec /.test(s.v.def) ? svRuns() : "";
+		} },
+		{ id: "proc", kw: ["proc"], args: [{ key: "name" },
+		    { key: "command" }], warn: svRuns },
+		{ id: "queuecompression", kw: ["queue", "compression"] },
+		{ id: "queueencryption", kw: ["queue", "encryption"],
+		    args: [{ key: "key", secret: true }] },
+		{ id: "queuettl", kw: ["queue", "ttl"],
+		    args: [{ key: "ttl" }] },
+		{ id: "maxsize", kw: ["smtp", "max-message-size"],
+		    args: [{ key: "size" }] },
+		{ id: "smtpciphers", kw: ["smtp", "ciphers"],
+		    args: [{ key: "ciphers" }] },
+		{ id: "subaddr", kw: ["smtp", "sub-addr-delim"],
+		    args: [{ key: "delimiter" }] },
+		svSmtpRest("bounce", ["bounce", "warn-interval"], "delays"),
+		{ id: "maxdeferred", kw: ["mta", "max-deferred"],
+		    args: [{ key: "messages" }] },
+		{ id: "srskey", kw: ["srs", "key"], args: [{ key: "key",
+		    secret: true }] },
+		{ id: "srsttl", kw: ["srs", "ttl"], args: [{ key: "ttl" }] },
+		{ id: "admd", kw: ["admd"], args: [{ key: "authserv" }] },
+		svSmtpRest("smtplimit", ["smtp", "limit"], "limits"),
+		svSmtpRest("mtalimit", ["mta", "limit"], "limits"),
+		svSmtpRest("mdalimit", ["mda", "limit"], "limits"),
+		svSmtpRest("schedlimit", ["scheduler", "limit"], "limits")
+	    ],
+	    tabs: [
+		{ id: "listeners", label: "Listeners", kinds: ["listen",
+		    "socket"], cols: ["port", "tlsmode", "authmode"] },
+		{ id: "rules", label: "Rules", kinds: ["match"] },
+		{ id: "actions", label: "Actions", kinds: ["action",
+		    "mdawrapper"], cols: ["method"] },
+		{ id: "tables", label: "Tables", kinds: ["table"],
+		    cols: ["source", "values"] },
+		{ id: "tls", label: "TLS", kinds: ["pki", "ca"],
+		    cols: ["cert", "key"] },
+		{ id: "filters", label: "Filters", kinds: ["filter", "proc"] },
+		{ id: "global", label: "Global", single: ["maxsize",
+		    "smtpciphers", "subaddr", "queuecompression",
+		    "queueencryption", "queuettl", "bounce", "maxdeferred",
+		    "srskey", "srsttl", "admd"], kinds: ["smtplimit",
+		    "mtalimit", "mdalimit", "schedlimit"] },
+		{ id: "queue", label: "Queue", show: "smtp queue" },
+		{ id: "stats", label: "Statistics", show: "smtp stats" }
 	    ] }
 };
 

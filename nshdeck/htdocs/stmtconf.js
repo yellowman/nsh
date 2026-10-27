@@ -13,7 +13,8 @@
  * of times, { key }; opts, each { key, kw (the key if not given), n
  * (value words, 1 if not given), flag (no value), words (no keyword: the
  * option is one of these words), upto (its value is the words up to the
- * next option), brace (no keyword: the option is a list in braces) };
+ * next option), brace (no keyword: the option is a list in braces),
+ * follows (the key of the option it comes right after, and goes with) };
  * fixed, if its grammar takes the options only in the order listed;
  * block, true if it opens a block, or "maybe" if it may. An argument
  * marked rest takes every word after it. A field marked raw is written
@@ -212,8 +213,9 @@ function stWords(f, value) {
 
 /*
  * Set field key of statement s to value: an argument's words replaced; an
- * option's words replaced, or removed if value is "" or false, or added
- * after the options before it, if the kind's grammar fixes their order,
+ * option's words replaced, or removed with the options that follow it if
+ * value is "" or false, or added right after the option it follows, or
+ * after the options before it if the kind's grammar fixes their order,
  * else last; the list's words replaced by value's lines
  */
 function stSet(doc, s, key, value) {
@@ -239,8 +241,17 @@ function stSet(doc, s, key, value) {
 			return doc;
 		Array.prototype.splice.apply(w, [at[0], at[1]].concat(vals));
 	} else {
-		if (at)
-			w.splice(at[0], at[1]);
+		/* it, and if it goes, the options that follow it */
+		(at ? [at] : []).concat(vals !== null ? [] : k.opts.filter(
+		    function (x) {
+			return x.follows === key && s.at[x.key];
+		}).map(function (x) {
+			return s.at[x.key];
+		})).sort(function (a, b) {
+			return b[0] - a[0];
+		}).forEach(function (a) {
+			w.splice(a[0], a[1]);
+		});
 		if (vals !== null) {
 			vals = stKw(o).concat(vals);
 			end = n.children ? w.indexOf("{") : -1;
@@ -251,8 +262,10 @@ function stSet(doc, s, key, value) {
 			}).filter(Boolean).map(function (a) {
 				return a[0];
 			}) : [];
-			pos = at ? at[0] : later.length ? Math.min.apply(null,
-			    later) : end === -1 ? w.length : end;
+			pos = at ? at[0] : o.follows && s.at[o.follows] ?
+			    s.at[o.follows][0] + s.at[o.follows][1] :
+			    later.length ? Math.min.apply(null, later) : end ===
+			    -1 ? w.length : end;
 			Array.prototype.splice.apply(w, [pos, 0].concat(vals));
 		}
 	}
