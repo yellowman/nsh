@@ -25,6 +25,7 @@ var packets = {};		/* each port's packets, at the last look */
 var chosen = -1;		/* the saved configuration History shows */
 var pending = null;		/* the operation that waits to be confirmed */
 var pendingOut = null;		/* where what it prints goes */
+var errs = [];			/* what nshd refused, the newest first */
 
 /* what each configure mode is */
 var MODES = {
@@ -205,7 +206,7 @@ function context(j) {
 /* System's topic, shown */
 function topic(name) {
 	$("topics").querySelector("[value=" + name + "]").checked = true;
-	["changes", "history", "jobs", "live"].forEach(function (t) {
+	["changes", "history", "jobs", "live", "errors"].forEach(function (t) {
 		$("topic-" + t).hidden = t !== name;
 	});
 	if (name === "changes")
@@ -971,6 +972,61 @@ function transcript(asked, j) {
 	t.textContent += asked + "\n" + said(j);
 	t.scrollTop = t.scrollHeight;
 	context(j);
+	refused(asked, j);
+}
+
+/*
+ * request asked, answered j, kept for the Errors topic if nshd refused
+ * it, with when and in which workspace; the same request succeeding
+ * takes its error away, and a commit or rollback that succeeds takes
+ * them all, as the candidate they were about is gone
+ */
+function refused(asked, j) {
+	var on = document.querySelector("#rail button.on");
+
+	errs = errs.filter(function (e) {
+		return e.what !== asked;
+	});
+	if (j.ok && /^(commit|rollback)\b/.test(asked) &&
+	    asked !== "commit check")
+		errs = [];
+	else if (!j.ok)
+		errs.unshift({ when: new Date().toTimeString().slice(0, 8),
+		    ws: on ? on.dataset.ws : "", where: on ? on.title : "",
+		    what: asked, said: said(j).trim() });
+	errs = errs.slice(0, 100);
+	errors();
+}
+
+/* the errors, in the strip and the Errors topic */
+function errors() {
+	var t = $("errors-table"), head = el("tr");
+
+	$("errors").hidden = !errs.length;
+	$("errors").textContent = errs.length === 1 ? "1 error" :
+	    errs.length ? errs.length + " errors" : "";
+	$("errors-count").textContent = errs.length ? String(errs.length) :
+	    "";
+	t.textContent = "";
+	if (!errs.length)
+		return;
+	["When", "Where", "Request", "What nshd said"].forEach(function (h) {
+		head.appendChild(el("th", h));
+	});
+	t.appendChild(head);
+	errs.forEach(function (e) {
+		var tr = el("tr");
+
+		tr.appendChild(el("td", e.when, "mono"));
+		tr.appendChild(el("td", e.where));
+		tr.appendChild(el("td", e.what, "mono"));
+		tr.appendChild(el("td", e.said, "descr"));
+		tr.addEventListener("click", function () {
+			if (e.ws)
+				workspace(e.ws);
+		});
+		t.appendChild(tr);
+	});
 }
 
 function configure(name, fields, asked) {
@@ -1203,6 +1259,14 @@ document.addEventListener("DOMContentLoaded", function () {
 	on("configure-form", function (f) {
 		configure("configure", { mode: f.mode.value },
 		    "configure " + f.mode.value);
+	});
+	$("errors").addEventListener("click", function () {
+		workspace("system");
+		topic("errors");
+	});
+	$("errors-clear").addEventListener("click", function () {
+		errs = [];
+		errors();
 	});
 	$("discard").addEventListener("click", function () {
 		configure("rollback", { n: "0" }, "rollback");

@@ -307,6 +307,16 @@ input.nope {
 	color: var(--warn);
 }
 
+/* a tag that is a button: the strip's errors */
+button.tag {
+	height: auto;
+	box-shadow: none;
+}
+
+button.tag.warn:hover {
+	background: color-mix(in srgb, var(--warn) 24%, transparent);
+}
+
 /* what an editor's statement or setting warns of, beside it */
 .structured .tag.warn {
 	margin-left: 8px;

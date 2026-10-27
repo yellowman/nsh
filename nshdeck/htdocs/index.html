@@ -81,6 +81,7 @@
 <div class="cand">
 <span class="tag" id="where">not in configure</span>
 <span class="tag" id="changes" hidden></span>
+<button type="button" class="tag warn" id="errors" hidden></button>
 <span class="tag warn" id="deadline" hidden></span>
 </div>
 <div class="actions">
@@ -162,6 +163,7 @@
 <label><input type="radio" name="topic" value="history"><span>History</span></label>
 <label><input type="radio" name="topic" value="jobs"><span>Jobs &amp; MOTD</span></label>
 <label><input type="radio" name="topic" value="live"><span>Live operations</span></label>
+<label><input type="radio" name="topic" value="errors"><span>Errors</span></label>
 </div>
 </div>
 
@@ -250,6 +252,15 @@
 
 <div class="topic" id="topic-jobs" hidden>
 <div class="daemons" data-ws="system"></div>
+</div>
+
+<div class="topic" id="topic-errors" hidden>
+<div class="panel">
+<div class="bar"><h2>Errors</h2><span class="dim count" id="errors-count"></span><span class="fill"></span><button type="button" id="errors-clear">Clear</button></div>
+<p class="help">What nshd refused, newest first, until the same request succeeds, or a commit or rollback does. Choose one to go where it was made.</p>
+<table class="grid pick" id="errors-table"></table>
+<p class="empty">No errors.</p>
+</div>
 </div>
 
 <div class="topic" id="topic-live" hidden>
