@@ -538,10 +538,11 @@ systemproc(int debug, int v)
 	/* a terminal's pty goes to config; each client's socket comes */
 	imsgbuf_allow_fdpass(&links[CONFIG].iev->ibuf);
 	imsgbuf_allow_fdpass(&links[FRONTEND].iev->ibuf);
-	/* a commit not confirmed that an nshd before this one left */
-	system_confirm(-1, 0, NULL);
+	/* before any child: one that ends unwatched is never reaped */
 	signal_set(&ev_sigchld, SIGCHLD, system_sigchld, NULL);
 	signal_add(&ev_sigchld, NULL);
+	/* a commit not confirmed that an nshd before this one left */
+	system_confirm(-1, 0, NULL);
 	event_dispatch();
 	system_exit();
 }
