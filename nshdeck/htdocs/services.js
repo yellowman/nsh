@@ -20,6 +20,29 @@ var SV_YESNO = ["yes", "no"];
 var SV_RAD_RA = ["defrouter", "managed", "otherconf", "rtlifetime",
     "rtpref", "hoplimit", "mtu", "lladdr", "reachable", "retrans"];
 
+/* the options of relayd.conf's forward and route lines, in their order */
+var SV_RELAY_FWD = [{ key: "port" }, { key: "mode", upto: true, raw: true },
+    { key: "check", upto: true, raw: true }, { key: "timeout" },
+    { key: "interval" }, { key: "demote" }, { key: "retry" },
+    { key: "inet", flag: true }, { key: "inet6", raw: true },
+    { key: "proxy", kw: ["proxy-protocol"], choices: ["v1", "v2"] },
+    { key: "interface" }];
+
+/* a relayd.conf line that forwards, from its words */
+function svRelayFwd(id, kw) {
+	return { id: id, kw: kw, args: [{ key: "to", raw: true }],
+	    opts: SV_RELAY_FWD, fixed: true };
+}
+
+/* a relayd.conf line whose words after its own are one value */
+function svRelayRest(id, kw) {
+	return { id: id, kw: kw, args: [{ key: id, rest: true, raw: true }] };
+}
+
+/* the statements in a relayd.conf protocol */
+var SV_RELAY_RULES = ["tlsopts", "tcpopts", "httpopts", "returnerror",
+    "pass", "block", "match"];
+
 var SV_DAEMONS = {
 	ntp: { prog: "ntpd", blocks: [],
 	    kinds: [
@@ -130,6 +153,93 @@ var SV_DAEMONS = {
 		{ id: "global", label: "Global", single: SV_RAD_RA },
 		{ id: "dns", label: "DNS", kinds: ["dns"] },
 		{ id: "nat64", label: "NAT64", kinds: ["nat64"] }
+	    ] },
+	relay: { prog: "relayd", blocks: ["relay", "redirect", "protocol",
+	    "http", "tcp", "dns", "router"],
+	    kinds: [
+		{ id: "relay", kw: ["relay"], args: [{ key: "name" }],
+		    block: true, inner: ["listen", "forward", "forwardtls",
+		    "transparent", "transparenttls", "useproto", "session"],
+		    innerCols: ["port", "check"] },
+		{ id: "redirect", kw: ["redirect"], args: [{ key: "name" }],
+		    block: true, inner: ["listen", "forward", "routeto",
+		    "disable", "sticky", "pftag", "matchpftag", "session"],
+		    innerCols: ["port", "check"] },
+		{ id: "listen", kw: ["listen", "on"],
+		    args: [{ key: "address" }], fixed: true,
+		    opts: [{ key: "transport", words: ["tcp", "udp"] },
+		    { key: "port" }, { key: "tls", flag: true },
+		    { key: "interface" }, { key: "pflog", flag: true }] },
+		svRelayFwd("forward", ["forward", "to"]),
+		svRelayFwd("forwardtls", ["forward", "with", "tls", "to"]),
+		svRelayFwd("transparent", ["transparent", "forward", "to"]),
+		svRelayFwd("transparenttls", ["transparent", "forward", "with",
+		    "tls", "to"]),
+		svRelayFwd("routeto", ["route", "to"]),
+		{ id: "useproto", kw: ["protocol"],
+		    args: [{ key: "protocol" }] },
+		{ id: "session", kw: ["session", "timeout"],
+		    args: [{ key: "seconds" }] },
+		{ id: "disable", kw: ["disable"] },
+		{ id: "sticky", kw: ["sticky-address"] },
+		{ id: "pftag", kw: ["pftag"], args: [{ key: "tag" }] },
+		{ id: "matchpftag", kw: ["match", "pftag"],
+		    args: [{ key: "tag" }] },
+		{ id: "table", kw: ["table"], args: [{ key: "name",
+		    angle: true }], opts: [{ key: "disable", flag: true },
+		    { key: "hosts", brace: true, group: true, raw: true,
+		    joins: ["retry", "parent", "priority", "ip", "ttl"] }] },
+		{ id: "proto", kw: ["protocol"], args: [{ key: "name" }],
+		    block: "maybe", inner: SV_RELAY_RULES },
+		{ id: "httpproto", kw: ["http", "protocol"],
+		    args: [{ key: "name" }], block: "maybe",
+		    inner: SV_RELAY_RULES },
+		{ id: "tcpproto", kw: ["tcp", "protocol"],
+		    args: [{ key: "name" }], block: "maybe",
+		    inner: SV_RELAY_RULES },
+		{ id: "dnsproto", kw: ["dns", "protocol"],
+		    args: [{ key: "name" }], block: "maybe",
+		    inner: SV_RELAY_RULES },
+		svRelayRest("tlsopts", ["tls"]),
+		svRelayRest("tcpopts", ["tcp"]),
+		svRelayRest("httpopts", ["http"]),
+		svRelayRest("returnerror", ["return", "error"]),
+		svRelayRest("pass", ["pass"]),
+		svRelayRest("block", ["block"]),
+		svRelayRest("match", ["match"]),
+		{ id: "router", kw: ["router"], args: [{ key: "name" }],
+		    block: true, inner: ["route", "forward", "rtable",
+		    "rtlabel", "disable"], innerCols: ["port", "check"] },
+		{ id: "route", kw: ["route"], args: [{ key: "prefix",
+		    raw: true }] },
+		{ id: "rtable", kw: ["rtable"], args: [{ key: "id" }] },
+		{ id: "rtlabel", kw: ["rtlabel"], args: [{ key: "label" }] },
+		{ id: "interval", kw: ["interval"],
+		    args: [{ key: "seconds" }] },
+		{ id: "timeout", kw: ["timeout"], args: [{ key: "ms" }] },
+		{ id: "prefork", kw: ["prefork"],
+		    args: [{ key: "processes" }] },
+		{ id: "loglevel", kw: ["log", "level"], args: [{ key: "level",
+		    choices: ["brief", "verbose"] }] },
+		{ id: "logstate", kw: ["log", "state", "changes"] },
+		{ id: "logchecks", kw: ["log", "host", "checks"] },
+		{ id: "logconn", kw: ["log", "connection"] },
+		{ id: "logerrors", kw: ["log", "connection", "errors"] },
+		{ id: "agentx", kw: ["agentx"] },
+		{ id: "socket", kw: ["socket"], args: [{ key: "path" }] }
+	    ],
+	    tabs: [
+		{ id: "relays", label: "Relays", kinds: ["relay"] },
+		{ id: "redirects", label: "Redirections", kinds: ["redirect"] },
+		{ id: "tables", label: "Tables", kinds: ["table"],
+		    cols: ["hosts"] },
+		{ id: "protocols", label: "Protocols", kinds: ["proto",
+		    "httpproto", "tcpproto", "dnsproto"] },
+		{ id: "routers", label: "Routers", kinds: ["router"] },
+		{ id: "global", label: "Global", single: ["interval", "timeout",
+		    "prefork", "loglevel", "logstate", "logchecks", "logconn",
+		    "logerrors", "agentx", "socket"] },
+		{ id: "hosts", label: "Hosts", show: "relay hosts" }
 	    ] }
 };
 
@@ -139,6 +249,24 @@ function svKinds(d, ids) {
 		return d.kinds.find(function (k) {
 			return k.id === id;
 		});
+	});
+}
+
+/* daemon d's kinds at the top level: those of its tabs */
+function svTop(d) {
+	return svKinds(d, [].concat.apply([], d.tabs.map(function (t) {
+		return t.kinds || t.single || [];
+	})));
+}
+
+/*
+ * The statements of the given kinds in block p, or at the top level,
+ * each read as the kind that matches it best among all those there
+ */
+function svList(doc, d, p, kinds) {
+	return stList(p ? p.children || [] : doc.nodes, p ? kinds :
+	    svTop(d)).filter(function (s) {
+		return kinds.indexOf(s.kind) !== -1;
 	});
 }
 

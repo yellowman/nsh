@@ -12,12 +12,18 @@
  * position, each { key }; list, a value that may follow them any number
  * of times, { key }; opts, each { key, kw (the key if not given), n
  * (value words, 1 if not given), flag (no value), words (no keyword: the
- * option is one of these words) }; fixed, if its grammar takes the
- * options only in the order listed; block, true if it opens a block, or
- * "maybe" if it may. A field marked raw is written as typed, word by
- * word: an address with a prefix length is one, as the grammars read
- * the slash as a word of its own. A field marked group may be a list in
- * braces, and is read as an array.
+ * option is one of these words), upto (its value is the words up to the
+ * next option), brace (no keyword: the option is a list in braces) };
+ * fixed, if its grammar takes the options only in the order listed;
+ * block, true if it opens a block, or "maybe" if it may. An argument
+ * marked rest takes every word after it. A field marked raw is written
+ * as typed, word by word: an address with a prefix length is one, as the
+ * grammars read the slash as a word of its own; so is a rest or upto
+ * field. A field marked angle is a name in angle brackets, read and
+ * shown without them. A field marked group may be a list in braces, and
+ * is read as an array; with joins, each of its entries is a word and
+ * the words that follow it from joins, each with its value, such as a
+ * host and its options.
  */
 "use strict";
 
@@ -29,16 +35,16 @@ function stBody(n, k) {
 	    end === -1 ? n.words.length : end) };
 }
 
-/* the keyword words of option o: none if it is one of its words */
+/* the keyword words of option o: none if it is one of its words or a list */
 function stKw(o) {
-	return o.words ? [] : o.kw || [o.key];
+	return o.words || o.brace ? [] : o.kw || [o.key];
 }
 
 /* the option of kind k that the words from i begin, or null */
 function stOptAt(k, w, i) {
 	return (k.opts || []).find(function (o) {
-		return o.words ? o.words.indexOf(w[i]) !== -1 :
-		    stKw(o).every(function (x, j) {
+		return o.words ? o.words.indexOf(w[i]) !== -1 : o.brace ?
+		    w[i] === "{" : stKw(o).every(function (x, j) {
 			return w[i + j] === x;
 		});
 	}) || null;
@@ -60,21 +66,57 @@ function stKind(n, kinds) {
 	return best;
 }
 
+/* word x as field f's value: unquoted, or without its angle brackets */
+function stValue(f, x) {
+	return f.angle ? x.replace(/^<(.*)>$/, "$1") : bgpUnquote(x);
+}
+
 /*
  * the value of field f at word i of w: one word, or for a group a list
- * in braces, its commas dropped; and how many words it takes
+ * in braces, its commas dropped, each entry with the words its joins
+ * take as written; and how many words it takes
  */
 function stTake(f, w, i) {
-	var j = i + 1, vals = [];
+	var j = i + 1, vals = [], prev = null;
 
 	if (!f.group || w[i] !== "{")
-		return { vals: [bgpUnquote(w[i])], count: 1 };
+		return { vals: [stValue(f, w[i])], count: 1 };
 	for (; j < w.length && w[j] !== "}"; j++)
-		w[j].split(",").forEach(function (x) {
-			if (x !== "")
-				vals.push(bgpUnquote(x));
+		w[j].split(/(,)/).forEach(function (x) {
+			if (x === ",")
+				prev = null;
+			else if (x !== "" && prev !== null && f.joins &&
+			    (f.joins.indexOf(x) !== -1 ||
+			    f.joins.indexOf(prev) !== -1)) {
+				vals[vals.length - 1] += " " + x;
+				prev = x;
+			} else if (x !== "") {
+				vals.push(f.joins ? x : stValue(f, x));
+				prev = x;
+			}
 		});
 	return { vals: vals, count: j + 1 - i };
+}
+
+/*
+ * the value of option o of kind k at word i of w, after its keyword:
+ * none for a flag, a list, the words up to the next option, or its n
+ * words; and how many words it takes
+ */
+function stOptTake(k, o, w, i) {
+	var j = i;
+
+	if (o.flag)
+		return { vals: [], count: 0 };
+	if (o.group)
+		return stTake(o, w, i);
+	if (o.upto) {
+		while (j < w.length && !stOptAt(k, w, j))
+			j++;
+		return { vals: [w.slice(i, j).join(" ")], count: j - i };
+	}
+	return { vals: w.slice(i, i + (o.n || 1)).map(bgpUnquote),
+	    count: o.n || 1 };
 }
 
 /*
@@ -88,7 +130,8 @@ function stRead(n, k) {
 
 	(k.args || []).forEach(function (a) {
 		if (i < w.length && !stOptAt(k, w, i)) {
-			t = stTake(a, w, i);
+			t = a.rest ? { vals: [w.slice(i).join(" ")], count:
+			    w.length - i } : stTake(a, w, i);
 			s.v[a.key] = a.group ? t.vals : t.vals[0];
 			s.at[a.key] = [b.at + i, t.count];
 			i += t.count;
@@ -97,9 +140,7 @@ function stRead(n, k) {
 	while (i < w.length) {
 		if ((o = stOptAt(k, w, i)) !== null) {
 			kw = stKw(o).length;
-			t = o.flag ? { vals: [], count: 0 } : o.group ?
-			    stTake(o, w, i + kw) : { vals: w.slice(i + kw, i +
-			    kw + (o.n || 1)).map(bgpUnquote), count: o.n || 1 };
+			t = stOptTake(k, o, w, i + kw);
 			s.v[o.key] = o.flag ? true : o.group ? t.vals :
 			    t.vals.join(" ");
 			s.at[o.key] = [b.at + i, kw + t.count];
@@ -126,12 +167,19 @@ function stList(nodes, kinds) {
 
 /*
  * a value as one word: as it is if every one of these lexers reads it as
- * one word, else quoted
+ * one word, or it is a macro, which they expand only outside quotes;
+ * else quoted
  */
 function stQuote(v) {
 	v = String(v);
-	return /^[A-Za-z0-9_][A-Za-z0-9_.:-]*$/.test(v) ? v : '"' +
-	    v.replace(/["\\]/g, "\\$&") + '"';
+	return /^([A-Za-z0-9_][A-Za-z0-9_.:-]*|\$[A-Za-z0-9_]+)$/.test(v) ? v :
+	    '"' + v.replace(/["\\]/g, "\\$&") + '"';
+}
+
+/* x as one value of field f: in angle brackets, as typed, or quoted */
+function stOne(f, x) {
+	return f.angle ? "<" + x.replace(/^<|>$/g, "") + ">" : f.raw ? x :
+	    stQuote(x);
 }
 
 /* field key of kind k: its argument, option or list */
@@ -144,20 +192,22 @@ function stField(k, key) {
 
 /*
  * the words field f's value takes: none if it is empty; a group's lines
- * in braces if there are several; else each line, or each word if f is
- * written as typed or takes several words
+ * in braces if there are several or it is a list option, with commas
+ * between entries; else each line, or each word if f is written as typed
+ * or takes several words
  */
 function stWords(f, value) {
-	var vals = String(value).trim().split(f.raw || (f.n || 1) > 1 ?
-	    /\s+/ : /\n/).map(function (x) {
+	var vals = String(value).trim().split(f.raw && !f.joins ||
+	    (f.n || 1) > 1 ? /\s+/ : /\n/).map(function (x) {
 		return x.trim();
-	}).filter(Boolean).map(function (x) {
-		return f.raw ? x : stQuote(x);
+	}).filter(Boolean).map(function (x, i, all) {
+		return stOne(f, x) + (f.joins && i < all.length - 1 ? "," : "");
 	});
 
 	if (value === "" || value === false || value === undefined)
 		return null;
-	return f.group && vals.length > 1 ? ["{"].concat(vals, ["}"]) : vals;
+	return f.group && (vals.length > 1 || f.brace) ? ["{"].concat(vals,
+	    ["}"]) : vals;
 }
 
 /*
@@ -213,7 +263,7 @@ function stSet(doc, s, key, value) {
 /* a new statement of kind k with its arguments, as a line of code */
 function stNew(k, args) {
 	return k.kw.concat((k.args || []).map(function (a, i) {
-		return a.raw ? String(args[i]).trim() : stQuote(args[i]);
+		return stOne(a, String(args[i]).trim());
 	}).filter(function (x, i) {
 		return args[i] !== undefined && args[i] !== "";
 	})).join(" ") + (k.block === true ? " {" : "");
@@ -231,11 +281,13 @@ function stOpen(doc, n) {
 /*
  * Add a statement of kind k with its arguments to block p, or the top
  * level if p is null: after the last statement of the same kind there,
- * else after the last of the kinds after, else at the end. A statement p
- * that may open a block and does not is given one first.
+ * else after the last of the kinds after, else at the end, or if early
+ * before the first statement at the top level that is not a macro, with
+ * the comment lines just before it. A statement p that may open a block
+ * and does not is given one first.
  */
-function stAdd(doc, p, k, args, after) {
-	var nodes, ind, at, code = stNew(k, args), start;
+function stAdd(doc, p, k, args, after, early) {
+	var nodes, ind, at, code = stNew(k, args), start, first;
 	var last = function (kinds) {
 		return nodes.filter(function (n) {
 			return stKind(n, kinds) !== null;
@@ -256,6 +308,10 @@ function stAdd(doc, p, k, args, after) {
 		at = last.end;
 	else if (p)
 		at = p.close === p.start ? -1 : p.close;
+	else if (early && (first = doc.nodes.find(function (n) {
+		return n.kind !== "macro";
+	})))
+		at = bgpLead(doc, first);
 	else
 		at = doc.lines.length;
 	if (at === -1) {
@@ -272,20 +328,24 @@ function stAdd(doc, p, k, args, after) {
 }
 
 /*
- * The one statement of kind k in block p, or the top level: set to
- * value, the text of its arguments, added if there is none, and removed
- * if value is empty
+ * The one statement of kind k in block p, or the top level, where the
+ * statements are of kinds: set to value, the text of its arguments,
+ * removed if value is empty, and added if there is none: if after is
+ * given, after the last of its kinds or early, as stAdd() says
  */
-function stSingle(doc, p, k, value) {
-	var nodes = p ? p.children : doc.nodes, s = stList(nodes, [k])[0];
+function stSingle(doc, p, k, value, kinds, after) {
+	var nodes = p ? p.children : doc.nodes, s = stList(nodes, kinds ||
+	    [k]).filter(function (x) {
+		return x.kind === k;
+	})[0];
 
 	value = String(value).trim();
 	if (s && value === "")
 		return bgpRemove(doc, s.node);
 	if (s)
 		return bgpSplice(doc, s.node.start, s.node.end, [bgpLineOf(doc,
-		    s.node, k.kw.concat(stQuote(value)).join(" "))]);
+		    s.node, k.kw.concat(stOne(k.args[0], value)).join(" "))]);
 	if (value === "")
 		return doc;
-	return stAdd(doc, p, k, [value]);
+	return stAdd(doc, p, k, [value], after, !!after);
 }

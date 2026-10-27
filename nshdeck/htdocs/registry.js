@@ -53,7 +53,9 @@ var REGISTRY_MODULES = {
 	sasync: { scope: "sasyncd's configuration", man: "sasyncd.conf.5",
 	    check: "sasyncd -n, at Validate and at commit" },
 	rad: { scope: "rad's configuration", man: "rad.conf.5",
-	    check: "rad -n, at Validate and at commit" }
+	    check: "rad -n, at Validate and at commit" },
+	relay: { scope: "relayd's configuration", man: "relayd.conf.5",
+	    check: "relayd -n, at Validate and at commit" }
 };
 
 /* drivers, as interfaces' names begin */
@@ -1273,7 +1275,256 @@ var REGISTRY = {
 	    "solicitations. OpenBSD hosts ignore it.",
 	    values: "milliseconds; 0 leaves it to the hosts", default: "0",
 	    undo: "clear the field", applies: "in the global settings, or in " +
-	    "an interface, where it overrides them" }
+	    "an interface, where it overrides them" },
+
+	/* relayd's configuration */
+	"relay.relay": { label: "Relay", keyword: "relay name { ... }",
+	    definition: "A relay: relayd accepts each connection itself and " +
+	    "opens another to a host it forwards to, so a protocol can " +
+	    "filter or change what passes, and TLS can end here.",
+	    values: "a name", default: "none", undo: "Delete" },
+	"relay.listen": { label: "Listen on", keyword: "listen on address " +
+	    "[tcp | udp] port port [tls] [interface name] [pflog]",
+	    definition: "The address clients connect to. An interface or a " +
+	    "host name gives each of its local addresses.", values: "an " +
+	    "address, a host name or an interface's name", default: "none: a " +
+	    "relay or redirection needs one", undo: "Delete" },
+	"relay.transport": { label: "IP protocol", keyword: "tcp | udp",
+	    definition: "For a redirection, the IP protocol it redirects.",
+	    values: "tcp or udp", default: "tcp", undo: "choose (not set)",
+	    applies: "listen on lines" },
+	"relay.port": { label: "Port", keyword: "port port", definition: "On " +
+	    "a listen on line, the port clients connect to; a redirection " +
+	    "takes a range, min:max. On a forward line, the port of the hosts.",
+	    values: "a port number or a service's name", default: "on a " +
+	    "forward line, the listen on line's port", undo: "clear the field",
+	    applies: "listen on, forward to and route to lines" },
+	"relay.tls": { label: "TLS", keyword: "tls", definition: "The relay " +
+	    "accepts TLS connections, with the keypair its protocol names.",
+	    values: "on or off", default: "off", undo: "clear the check box",
+	    applies: "listen on lines" },
+	"relay.interface": { label: "Interface", keyword: "interface name",
+	    definition: "On a redirection's listen on line, the one " +
+	    "interface its rule applies to. On a route to line, the " +
+	    "interface toward the hosts, which it needs.", values: "an " +
+	    "interface's name", default: "any interface", undo: "clear the " +
+	    "field", applies: "redirections' listen on and route to lines" },
+	"relay.pflog": { label: "Log to pflog", keyword: "pflog",
+	    definition: "Logs the packets the redirection's rule matches to " +
+	    "pflog(4).", values: "on or off", default: "off", undo: "clear " +
+	    "the check box", applies: "listen on lines" },
+	"relay.forward": { label: "Forward to", keyword: "forward to target " +
+	    "[options]", definition: "Where connections go: a table of " +
+	    "hosts, or for a relay one address, destination or nat lookup. " +
+	    "Each line may name a table; the first is the main one, the next " +
+	    "its backup.", values: "a table's name in angle brackets, such " +
+	    "as <web>, or for a relay an address", default: "none: one is " +
+	    "needed", undo: "Delete" },
+	"relay.mode": { label: "Mode", keyword: "mode mode [key]",
+	    definition: "How a host of the table is chosen for each " +
+	    "connection. hash and loadbalance are for relays, least-states " +
+	    "for redirections.", values: "roundrobin, random, source-hash, " +
+	    "hash, loadbalance or least-states, then a key for the hashes",
+	    default: "roundrobin", undo: "clear the field",
+	    applies: "forward to and route to lines" },
+	"relay.check": { label: "Check", keyword: "check method ...",
+	    definition: "How relayd tests each host of the table. A " +
+	    "redirection needs one. A script runs as _relayd for each host.",
+	    values: "icmp; tcp; tls; http or https path [host name] code N " +
+	    "or digest D; send data expect pattern [tls]; binary send hex " +
+	    "expect hex [tls]; script path", default: "none", undo: "clear " +
+	    "the field", applies: "forward to and route to lines" },
+	"relay.timeout": { label: "Timeout", keyword: "timeout milliseconds",
+	    definition: "How long a check of a host may take. On a forward " +
+	    "line, it overrides the global one. It must not be more than the " +
+	    "interval.", values: "milliseconds", default: "200",
+	    undo: "clear the field", applies: "the global settings and " +
+	    "forward to lines" },
+	"relay.interval": { label: "Interval", keyword: "interval seconds",
+	    definition: "How often each host is checked. On a forward line, " +
+	    "it overrides the global one, and must be a multiple of it.",
+	    values: "seconds", default: "10", undo: "clear the field",
+	    applies: "the global settings and forward to lines" },
+	"relay.demote": { label: "Demote group", keyword: "demote group",
+	    definition: "The interface group whose carp demotion counter " +
+	    "rises while every host of the table is down.", values: "an " +
+	    "interface group's name", default: "none", undo: "clear the field",
+	    applies: "forward to and route to lines" },
+	"relay.retry": { label: "Retries", keyword: "retry number",
+	    definition: "How many more times a failed check, or a relay's " +
+	    "failed connection, is tried before the host is down.",
+	    values: "a number", default: "0", undo: "clear the field",
+	    applies: "forward to and route to lines, and a table's hosts" },
+	"relay.inet": { label: "To IPv4", keyword: "inet", definition: "A " +
+	    "relay forwards a connection made to an IPv6 address to the IPv4 " +
+	    "address in its last 4 bytes.", values: "on or off", default: "off",
+	    undo: "clear the check box", applies: "relays' forward lines" },
+	"relay.inet6": { label: "To IPv6 prefix", keyword: "inet6 prefix",
+	    definition: "A relay forwards a connection made to an IPv4 " +
+	    "address to this IPv6 prefix with the IPv4 address as its last 4 " +
+	    "bytes.", values: "an IPv6 address", default: "none",
+	    undo: "clear the field", applies: "relays' forward lines" },
+	"relay.proxy": { label: "PROXY protocol", keyword: "proxy-protocol " +
+	    "v1 | v2", definition: "A relay sends a PROXY protocol header " +
+	    "with the client's address and port before the data.",
+	    values: "v1 or v2", default: "none", undo: "choose (not set)",
+	    applies: "relays' forward lines" },
+	"relay.forwardtls": { label: "Forward with TLS to",
+	    keyword: "forward with tls to target [options]", definition: "As " +
+	    "forward to, but the relay connects to the hosts with TLS; its " +
+	    "protocol's ca file checks their certificates.", values: "a " +
+	    "table's name in angle brackets, such as <web>, or for a relay " +
+	    "an address", default: "none", undo: "Delete" },
+	"relay.transparent": { label: "Transparent forward to",
+	    keyword: "transparent forward to target [options]",
+	    definition: "As a relay's forward to, but the connection to the " +
+	    "host keeps the client's address as its source.", values: "a " +
+	    "table's name in angle brackets, such as <web>, or for a relay " +
+	    "an address", default: "none", undo: "Delete" },
+	"relay.transparenttls": { label: "Transparent forward with TLS to",
+	    keyword: "transparent forward with tls to target [options]",
+	    definition: "Transparent forward to, with TLS to the hosts.",
+	    values: "a table's name in angle brackets, such as <web>, or for " +
+	    "a relay an address", default: "none", undo: "Delete" },
+	"relay.useproto": { label: "Protocol", keyword: "protocol name",
+	    definition: "The protocol whose settings and rules the relay uses.",
+	    values: "a protocol's name", default: "plain TCP", undo: "Delete" },
+	"relay.session": { label: "Session timeout", keyword: "session " +
+	    "timeout seconds", definition: "How long an idle session lasts.",
+	    values: "seconds, up to 2147483647", default: "600",
+	    undo: "Delete" },
+	"relay.redirect": { label: "Redirection", keyword: "redirect name { " +
+	    "... }", definition: "A redirection: pf rewrites the destination " +
+	    "of each connection to a host of the table, with an rdr-to rule.",
+	    values: "a name", default: "none", undo: "Delete" },
+	"relay.routeto": { label: "Route to", keyword: "route to <table> " +
+	    "[options] [interface name]", definition: "As forward to, but pf " +
+	    "routes the packets to the host without changing their " +
+	    "destination, for direct server return.", values: "a table's " +
+	    "name in angle brackets", default: "none", undo: "Delete" },
+	"relay.disable": { label: "Disabled", keyword: "disable",
+	    definition: "The table, redirection or router starts disabled; " +
+	    "relayctl enables it.", values: "present or absent",
+	    default: "absent", undo: "Delete" },
+	"relay.sticky": { label: "Sticky address", keyword: "sticky-address",
+	    definition: "Connections from one source go to the same host.",
+	    values: "present or absent", default: "absent", undo: "Delete" },
+	"relay.pftag": { label: "pf tag", keyword: "pftag name",
+	    definition: "The redirection's rule tags the packets it passes, " +
+	    "for pf rules to match.", values: "a tag name", default: "none",
+	    undo: "Delete" },
+	"relay.matchpftag": { label: "Match pf tag", keyword: "match pftag " +
+	    "name", definition: "As pftag, but the rule is match in rather " +
+	    "than pass in quick, so pf's later rules decide.", values: "a " +
+	    "tag name", default: "none", undo: "Delete" },
+	"relay.table": { label: "Table", keyword: "table <name> [disable] { " +
+	    "host ... }", definition: "A set of hosts that redirections, " +
+	    "relays and routers forward to. A redirection's table becomes a " +
+	    "pf table.", values: "a name, written in angle brackets",
+	    default: "none", undo: "Delete" },
+	"relay.hosts": { label: "Hosts", keyword: "{ host [retry N] [parent " +
+	    "N] [priority N] [ip ttl N], ... }", definition: "The table's " +
+	    "hosts, each with its options. parent takes the state of the " +
+	    "host with that number; priority is a router's route priority.",
+	    values: "one host a line: an address or a host name, then its " +
+	    "options", default: "none: a table needs one", undo: "clear the " +
+	    "lines" },
+	"relay.proto": { label: "TCP protocol", keyword: "protocol name { " +
+	    "... }", definition: "Settings and rules a relay can use: TCP " +
+	    "and TLS options, and rules that pass, block or change " +
+	    "connections.", values: "a name", default: "none", undo: "Delete" },
+	"relay.tlsopts": { label: "TLS options", keyword: "tls option | { " +
+	    "option, ... }", definition: "The TLS settings: ciphers, " +
+	    "keypair, ca file for checking hosts, ca key and certificate for " +
+	    "inspection, protocols and session tickets.", values: "the " +
+	    "options as relayd.conf writes them", default: "relayd's defaults",
+	    undo: "Delete" },
+	"relay.tcpopts": { label: "TCP options", keyword: "tcp option | { " +
+	    "option, ... }", definition: "The TCP settings: nodelay, sack, " +
+	    "splice, backlog, socket buffer and ip ttl or minttl.",
+	    values: "the options as relayd.conf writes them",
+	    default: "splice, backlog 10", undo: "Delete" },
+	"relay.httpopts": { label: "HTTP options", keyword: "http option | { " +
+	    "option, ... }", definition: "The HTTP settings: headerlen and " +
+	    "websockets.", values: "the options as relayd.conf writes them",
+	    default: "headerlen 8192, no websockets", undo: "Delete" },
+	"relay.returnerror": { label: "Return error", keyword: "return error " +
+	    "[style string]", definition: "A blocked connection gets an " +
+	    "error page rather than being closed.", values: "nothing, or " +
+	    "style and a CSS string", default: "closed", undo: "Delete" },
+	"relay.pass": { label: "Pass", keyword: "pass [request | response] " +
+	    "[quick] [from addr] [to addr] [options]", definition: "A rule " +
+	    "that lets the matching connections, requests or responses " +
+	    "through, and may change them.", values: "the rule as " +
+	    "relayd.conf writes it", default: "pass", undo: "Delete" },
+	"relay.block": { label: "Block", keyword: "block [request | " +
+	    "response] [quick] [from addr] [to addr] [options]",
+	    definition: "A rule that stops the matching connections, " +
+	    "requests or responses.", values: "the rule as relayd.conf " +
+	    "writes it", default: "none", undo: "Delete" },
+	"relay.match": { label: "Match", keyword: "match [request | " +
+	    "response] [quick] [from addr] [to addr] [options]",
+	    definition: "A rule that changes or tags what it matches and " +
+	    "leaves the decision to the other rules.", values: "the rule as " +
+	    "relayd.conf writes it", default: "none", undo: "Delete" },
+	"relay.httpproto": { label: "HTTP protocol", keyword: "http protocol " +
+	    "name { ... }", definition: "A protocol for HTTP, or HTTPS " +
+	    "through TLS: its rules can match headers, cookies, paths, " +
+	    "queries and URLs.", values: "a name", default: "none",
+	    undo: "Delete" },
+	"relay.tcpproto": { label: "TCP protocol", keyword: "tcp protocol " +
+	    "name { ... }", definition: "A protocol for any TCP service, the " +
+	    "same as protocol alone.", values: "a name", default: "none",
+	    undo: "Delete" },
+	"relay.dnsproto": { label: "DNS protocol", keyword: "dns protocol " +
+	    "name { ... }", definition: "A protocol for DNS over UDP: relayd " +
+	    "replaces each query's ID with a random one.", values: "a name",
+	    default: "none", undo: "Delete" },
+	"relay.router": { label: "Router", keyword: "router name { ... }",
+	    definition: "Routes relayd adds through the gateways of a table " +
+	    "that pass their checks, and takes away when they fail.",
+	    values: "a name", default: "none", undo: "Delete" },
+	"relay.route": { label: "Route", keyword: "route address/prefix",
+	    definition: "A destination the router's gateways reach.",
+	    values: "an address with a prefix length", default: "none: a " +
+	    "router needs one", undo: "Delete" },
+	"relay.rtable": { label: "Routing table", keyword: "rtable id",
+	    definition: "The routing table the router's routes go in.",
+	    values: "a routing table's number", default: "0", undo: "Delete" },
+	"relay.rtlabel": { label: "Route label", keyword: "rtlabel label",
+	    definition: "A label the router's routes carry.", values: "a label",
+	    default: "none", undo: "Delete" },
+	"relay.prefork": { label: "Relay processes", keyword: "prefork number",
+	    definition: "How many processes handle the relays' connections; " +
+	    "each handles every relay.", values: "a number, 1 or more",
+	    default: "3", undo: "clear the field" },
+	"relay.loglevel": { label: "Log level", keyword: "log level brief | " +
+	    "verbose", definition: "verbose logs what relayd -v would.",
+	    values: "brief or verbose", default: "brief", undo: "choose (not " +
+	    "set)" },
+	"relay.logstate": { label: "Log host state changes", keyword: "log " +
+	    "state changes", definition: "Logs each change of a host's " +
+	    "state: up, down or unknown.", values: "on or off", default: "off",
+	    undo: "clear the check box" },
+	"relay.logchecks": { label: "Log every host check", keyword: "log " +
+	    "host checks", definition: "Logs every check of every host, its " +
+	    "state changed or not.", values: "on or off", default: "off",
+	    undo: "clear the check box" },
+	"relay.logconn": { label: "Log connections", keyword: "log connection",
+	    definition: "Logs every connection through the relays.",
+	    values: "on or off", default: "off", undo: "clear the check box" },
+	"relay.logerrors": { label: "Log connection errors", keyword: "log " +
+	    "connection errors", definition: "Logs only the relays' " +
+	    "connections that fail.", values: "on or off", default: "off",
+	    undo: "clear the check box" },
+	"relay.agentx": { label: "AgentX", keyword: "agentx [context name] " +
+	    "[path path]", definition: "Gives relayd's numbers to an AgentX " +
+	    "daemon such as snmpd.", values: "on or off", default: "off",
+	    undo: "clear the check box" },
+	"relay.socket": { label: "Control socket", keyword: "socket path",
+	    definition: "Where relayctl reaches relayd. nsh's shows use the " +
+	    "default.", values: "a path", default: "/var/run/relayd.sock",
+	    undo: "clear the field" }
 };
 
 var regOpen = {};	/* ids of the fields whose definitions are open */

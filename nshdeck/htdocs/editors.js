@@ -1047,7 +1047,7 @@ function svControl(f, v, change) {
  */
 function svListTab(box, doc, d, ids, cols, p, path) {
 	var kinds = svKinds(d, ids), name = ed.daemon;
-	var list = stList(p ? p.children || [] : doc.nodes, kinds);
+	var list = svList(doc, d, p, kinds);
 	var t = el("table", null, "grid pick"), head = el("tr");
 	var grid = el("div", null, "sfields"), line = el("div", null,
 	    "addline"), val = el("input", null, "mono"), pick;
@@ -1111,7 +1111,7 @@ function svListTab(box, doc, d, ids, cols, p, path) {
 			val.focus();
 			return;
 		}
-		ed.sel = path + svAfter(doc, p, kinds, k);
+		ed.sel = path + svAfter(doc, d, p, kinds, k);
 		bgpDone(stAdd(doc, p, k, v === "" ? [] : [v], kinds));
 	}));
 	regField(grid, svReg(name, k), line, null, "New " +
@@ -1120,8 +1120,8 @@ function svListTab(box, doc, d, ids, cols, p, path) {
 }
 
 /* where the next statement of kind k goes among those of kinds in p */
-function svAfter(doc, p, kinds, k) {
-	var list = stList(p ? p.children || [] : doc.nodes, kinds), i;
+function svAfter(doc, d, p, kinds, k) {
+	var list = svList(doc, d, p, kinds), i;
 
 	for (i = list.length - 1; i >= 0; i--)
 		if (list[i].kind === k)
@@ -1170,19 +1170,23 @@ function svForm(doc, d, s, width, key) {
 	return tr;
 }
 
-/* settings that appear once: a field each, its first value or presence */
+/*
+ * settings that appear once: a field each, its first value or presence;
+ * one added goes after the others, or before the first statement
+ */
 function svSingleTab(box, doc, d, t) {
-	var grid = el("div", null, "sfields");
+	var grid = el("div", null, "sfields"), kinds = svKinds(d, t.single);
 
-	svKinds(d, t.single).forEach(function (k) {
-		var s = stList(doc.nodes, [k])[0], a = (k.args || [])[0];
+	kinds.forEach(function (k) {
+		var s = svList(doc, d, null, [k])[0], a = (k.args || [])[0];
 
 		regField(grid, svReg(ed.daemon, k), svControl(a || { key: k.id,
 		    flag: true }, a ? s && s.v[a.key] : !!s, function (v) {
 			if (a)
-				bgpDone(stSingle(doc, null, k, v));
+				bgpDone(stSingle(doc, null, k, v, svTop(d),
+				    kinds));
 			else if (v && !s)
-				bgpDone(stAdd(doc, null, k, [], []));
+				bgpDone(stAdd(doc, null, k, [], kinds, true));
 			else if (!v && s)
 				bgpDone(bgpRemove(doc, s.node));
 		}));
