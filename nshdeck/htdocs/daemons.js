@@ -92,6 +92,7 @@ var dfacts = [];	/* show daemons' records, the last */
 var dchosen = {};	/* each workspace's daemon chosen: its name and rtable */
 var DHISTORY = 10;	/* how many saves a daemon's history looks back */
 var dinsp = null;	/* the daemon inspected, its settings, and edits */
+var dasked = 0;		/* inspections asked; the last is drawn */
 
 /*
  * a workspace's daemons: a table, the pf or bgpd editor under it
@@ -259,10 +260,13 @@ function dtable(ws) {
 
 /*
  * name's rules and state in rt, inspected: the candidate's rules, asked
- * of nshd, in configure; else what runs has
+ * of nshd, in configure; else what runs has. Edits not yet staged to
+ * the same daemon in the same rtable stay. An answer to an inspection
+ * asked for before another is not drawn.
  */
 function dinspect(ws, name, rt) {
 	var d = daemonDef(name), cf = dconf[name + " " + rt] || {};
+	var n = ++dasked;
 	var p = Promise.resolve({ ok: true, output: cf.rules && cf.rules.length ?
 	    cf.rules.join("\n") + "\n" : "" }), q = Promise.resolve(null);
 
@@ -273,9 +277,13 @@ function dinspect(ws, name, rt) {
 	return Promise.all([p, q]).then(function (a) {
 		var j = a[0], was = { enabled: !!cf.enabled, rules: j.ok ?
 		    said(j) : "" };
+		var o = dinsp && dinsp.def === d && dinsp.rt === rt ?
+		    dinsp : null;
 
+		if (n !== dasked)
+			return;
 		dinsp = { ws: ws, def: d, rt: rt, was: was,
-		    now: { enabled: was.enabled, rules: was.rules },
+		    now: dkept(o, was),
 		    from: candidate() ? "candidate" : "running",
 		    running: a[1] && a[1].ok ? daemonState(said(a[1]), name,
 		    rt) : null, history: null,
@@ -284,6 +292,17 @@ function dinspect(ws, name, rt) {
 		    dinsp.open : {} };
 		dinspector();
 	});
+}
+
+/* was, with the edits not yet staged of o, the inspection before */
+function dkept(o, was) {
+	var now = { enabled: was.enabled, rules: was.rules };
+
+	if (o && o.now.enabled !== o.was.enabled)
+		now.enabled = o.now.enabled;
+	if (o && o.now.rules !== o.was.rules)
+		now.rules = o.now.rules;
+	return now;
 }
 
 /* what text, a configuration, has of daemon name in rt: enabled, rules */
@@ -675,10 +694,10 @@ function drefresh() {
 function dstage() {
 	var d = dinsp.def, rt = dinsp.rt, ws = dinsp.ws, results = [];
 	var lines = [], text = dinsp.now.rules, p = Promise.resolve();
+	var s = dinsp, on = dinsp.now.enabled;
 
-	if (dinsp.now.enabled !== dinsp.was.enabled)
-		lines.push(d.name + (dinsp.now.enabled ? " enable" :
-		    " disable"));
+	if (on !== dinsp.was.enabled)
+		lines.push(d.name + (on ? " enable" : " disable"));
 	if (!cur || cur.mode === 0)
 		p = configure("configure", { mode: "private" },
 		    "configure private");
@@ -690,8 +709,12 @@ function dstage() {
 			return configure("line", { line: l },
 			    $("prompt").textContent + " " + l);
 		}).then(function (j) {
-			if (!/^(rtable \d+|exit)$/.test(l))
-				results.push({ line: l, ok: j.ok, out: said(j) });
+			if (/^(rtable \d+|exit)$/.test(l))
+				return;
+			results.push({ line: l, ok: j.ok, out: said(j) });
+			/* staged, it is no longer an edit */
+			if (j.ok)
+				s.was.enabled = on;
 		});
 	});
 	if (text !== dinsp.was.rules)
@@ -704,12 +727,16 @@ function dstage() {
 
 			transcript("! " + what, j);
 			results.push({ line: what, ok: j.ok, out: said(j) });
+			if (j.ok)
+				s.was.rules = text;
 		});
 	return p.then(function () {
 		changes(cur && cur.mode !== 0);
 		return daemons(ws);
 	}).then(function () {
-		dinsp.results = results;
+		/* unless another daemon was chosen meanwhile */
+		if (dinsp.def === d && dinsp.rt === rt)
+			dinsp.results = results;
 		dinspector();
 	});
 }
