@@ -49,7 +49,11 @@ var REGISTRY_MODULES = {
 	dvmrp: { scope: "dvmrpd's configuration", man: "dvmrpd.conf.5",
 	    check: "dvmrpd -n, at Validate and at commit" },
 	ntp: { scope: "ntpd's configuration", man: "ntpd.conf.5",
-	    check: "ntpd -n, at Validate and at commit" }
+	    check: "ntpd -n, at Validate and at commit" },
+	sasync: { scope: "sasyncd's configuration", man: "sasyncd.conf.5",
+	    check: "sasyncd -n, at Validate and at commit" },
+	rad: { scope: "rad's configuration", man: "rad.conf.5",
+	    check: "rad -n, at Validate and at commit" }
 };
 
 /* drivers, as interfaces' names begin */
@@ -1104,7 +1108,172 @@ var REGISTRY = {
 	"ntp.rtable": { label: "Routing table", keyword: "rtable table-id",
 	    definition: "The routing table ntpd listens in.", values: "0 to " +
 	    "255", default: "the table ntpd runs in", undo: "clear the field",
-	    applies: "listen on lines" }
+	    applies: "listen on lines" },
+
+	/* sasyncd's configuration */
+	"sasync.interface": { label: "CARP interface", keyword: "interface " +
+	    "interface", definition: "The carp(4) interface whose master or " +
+	    "backup state sasyncd follows.", values: "a carp interface's name",
+	    default: "none", undo: "clear the field" },
+	"sasync.group": { label: "Demotion group", keyword: "group group",
+	    definition: "The interface group whose demotion counter sasyncd " +
+	    "raises until its first synchronization, so carp does not " +
+	    "preempt before then.", values: "an interface group's name",
+	    default: "carp", undo: "clear the field" },
+	"sasync.mode": { label: "Forced mode", keyword: "mode master | slave " +
+	    "| skipslave", definition: "master or slave forces sasyncd's " +
+	    "role, for debugging. skipslave does not synchronize SAs or " +
+	    "flows whose source or destination is a peer.", values: "master, " +
+	    "slave or skipslave", default: "follow the carp interface's state",
+	    undo: "choose (not set)" },
+	"sasync.peer": { label: "Peer", keyword: "peer address",
+	    definition: "Another sasyncd host to synchronize with.",
+	    values: "a host name or an IP address", default: "none",
+	    undo: "Delete" },
+	"sasync.listen": { label: "Listen on", keyword: "listen on address " +
+	    "[inet | inet6] [port port]", definition: "The local address, " +
+	    "host name or interface sasyncd listens on for its peers.",
+	    values: "an address, a host name or an interface's name",
+	    default: "every local address", undo: "Delete" },
+	"sasync.family": { label: "Address family", keyword: "inet | inet6",
+	    definition: "For an interface, the address family to listen with.",
+	    values: "inet or inet6", default: "both", undo: "choose (not set)",
+	    applies: "listen on lines" },
+	"sasync.port": { label: "Port", keyword: "port port",
+	    definition: "The TCP port sasyncd listens on. A port out of " +
+	    "range is taken as 500.", values: "1 to 65535", default: "500",
+	    undo: "clear the field", applies: "listen on lines" },
+	"sasync.sharedkey": { label: "Shared key", keyword: "sharedkey key",
+	    definition: "The AES key that encrypts what the peers send each " +
+	    "other. Every peer needs the same key; sasyncd needs one to start.",
+	    values: "16, 24 or 32 bytes: text, or 0x and hexadecimal digits",
+	    default: "none", secret: true, undo: "clear the field" },
+	"sasync.flushmode": { label: "Flush mode", keyword: "flushmode sync " +
+	    "| startup | never", definition: "When the master passes SADB " +
+	    "flushes to its slaves: sync passes each one; startup also " +
+	    "flushes each slave as it connects; never passes none.",
+	    values: "sync, startup or never", default: "startup",
+	    undo: "choose (not set)" },
+	"sasync.control": { label: "Controls", keyword: "control isakmpd | " +
+	    "iked | all | none", definition: "The IKE daemon sasyncd makes " +
+	    "active or passive as its role changes; none only synchronizes " +
+	    "SAs.", values: "isakmpd, iked, all or none", default: "isakmpd",
+	    undo: "choose (not set)" },
+
+	/* rad's configuration */
+	"rad.interface": { label: "Interface", keyword: "interface name [{ " +
+	    "... }]", definition: "An interface or interface group rad sends " +
+	    "router advertisements on. Settings inside it override the " +
+	    "global ones.", values: "an interface's or group's name",
+	    default: "none: rad needs at least one", undo: "Delete" },
+	"rad.prefix": { label: "Prefix", keyword: "prefix prefix [{ ... }]",
+	    definition: "A prefix to advertise on the interface.",
+	    values: "an IPv6 prefix; /64 if no length is given",
+	    default: "the interface's own prefixes, unless no auto prefix",
+	    undo: "Delete" },
+	"rad.autoprefix": { label: "Auto prefix", keyword: "auto prefix [{ " +
+	    "... }]", definition: "Options for the prefixes rad finds on the " +
+	    "interface's own addresses.", values: "a block of prefix options",
+	    default: "on, with default options", undo: "Delete" },
+	"rad.noautoprefix": { label: "No auto prefix", keyword: "no auto " +
+	    "prefix", definition: "Advertise only the prefixes listed, and " +
+	    "none from the interface's addresses.", values: "present or absent",
+	    default: "absent", undo: "Delete" },
+	"rad.autonomous": { label: "SLAAC", keyword: "autonomous " +
+	    "address-configuration yes | no", definition: "Whether hosts may " +
+	    "make their own addresses from this prefix.", values: "yes or no",
+	    default: "yes", undo: "choose (not set)" },
+	"rad.onlink": { label: "On link", keyword: "on-link yes | no",
+	    definition: "Whether the prefix is on this link.", values: "yes " +
+	    "or no", default: "yes", undo: "choose (not set)" },
+	"rad.pltime": { label: "Preferred lifetime", keyword: "preferred " +
+	    "lifetime seconds", definition: "How long addresses made from " +
+	    "the prefix stay preferred. A shorter lifetime of the " +
+	    "interface's own address wins.", values: "seconds", default: "2700",
+	    undo: "clear the field" },
+	"rad.vltime": { label: "Valid lifetime", keyword: "valid lifetime " +
+	    "seconds", definition: "How long addresses made from the prefix " +
+	    "stay valid. A shorter lifetime of the interface's own address " +
+	    "wins.", values: "seconds", default: "3600", undo: "clear the " +
+	    "field" },
+	"rad.dns": { label: "DNS", keyword: "dns { ... }", definition: "Name " +
+	    "servers and search domains to advertise. It needs a nameserver " +
+	    "or a search line.", values: "a block", default: "none",
+	    undo: "Delete" },
+	"rad.nameserver": { label: "Name servers", keyword: "nameserver " +
+	    "address | { address ... }", definition: "IPv6 name servers " +
+	    "hosts may use.", values: "IPv6 addresses, one a line",
+	    default: "none", undo: "clear the lines" },
+	"rad.search": { label: "Search domains", keyword: "search domain | { " +
+	    "domain ... }", definition: "Domains hosts add to names they " +
+	    "look up.", values: "domain names, one a line", default: "none",
+	    undo: "clear the lines" },
+	"rad.lifetime": { label: "Lifetime", keyword: "lifetime seconds",
+	    definition: "How long hosts may use the DNS or NAT64 option " +
+	    "after an advertisement. For NAT64, 0 says to stop using the " +
+	    "prefix.", values: "seconds; at most 65528 for NAT64",
+	    default: "3600", undo: "clear the field" },
+	"rad.nat64": { label: "NAT64 prefix", keyword: "nat64 prefix prefix " +
+	    "[{ lifetime seconds }]", definition: "A prefix whose IPv6 " +
+	    "addresses stand for IPv4 ones, through a NAT64 translator.",
+	    values: "an IPv6 prefix of length 32, 40, 48, 56, 64 or 96; 96 " +
+	    "if no length is given", default: "none", undo: "Delete" },
+	"rad.defrouter": { label: "Default router", keyword: "default router " +
+	    "yes | no", definition: "Whether hosts may use this router as " +
+	    "their default route.", values: "yes or no", default: "yes",
+	    undo: "choose (not set)", applies: "in the global settings, or " +
+	    "in an interface, where it overrides them" },
+	"rad.managed": { label: "Managed (DHCPv6)", keyword: "managed " +
+	    "address configuration yes | no", definition: "Tells hosts to " +
+	    "get addresses from DHCPv6.", values: "yes or no", default: "no",
+	    undo: "choose (not set)", applies: "in the global settings, or " +
+	    "in an interface, where it overrides them" },
+	"rad.otherconf": { label: "Other (DHCPv6)", keyword: "other " +
+	    "configuration yes | no", definition: "Tells hosts to get other " +
+	    "settings, such as NTP or DNS servers, from DHCPv6.",
+	    values: "yes or no", default: "no", undo: "choose (not set)",
+	    applies: "in the global settings, or in an interface, where it " +
+	    "overrides them" },
+	"rad.rtlifetime": { label: "Router lifetime", keyword: "router " +
+	    "lifetime seconds", definition: "How long hosts may use this " +
+	    "router as a default router after an advertisement.",
+	    values: "seconds", default: "3600", undo: "clear the field",
+	    applies: "in the global settings, or in an interface, where it " +
+	    "overrides them" },
+	"rad.rtpref": { label: "Router preference", keyword: "router " +
+	    "preference high | medium | low", definition: "Whether hosts " +
+	    "should prefer this router over other default routers.",
+	    values: "high, medium or low", default: "medium", undo: "choose " +
+	    "(not set)", applies: "in the global settings, or in an " +
+	    "interface, where it overrides them" },
+	"rad.hoplimit": { label: "Hop limit", keyword: "hop limit hops",
+	    definition: "The hop limit hosts put on the packets they send.",
+	    values: "a number of hops; 0 leaves it to the hosts", default: "0",
+	    undo: "clear the field", applies: "in the global settings, or in " +
+	    "an interface, where it overrides them" },
+	"rad.mtu": { label: "MTU", keyword: "mtu bytes", definition: "The " +
+	    "link MTU to advertise, where it is not well known.",
+	    values: "bytes; 0 advertises none", default: "0", undo: "clear " +
+	    "the field", applies: "in the global settings, or in an " +
+	    "interface, where it overrides them" },
+	"rad.lladdr": { label: "Source link-layer address", keyword: "source " +
+	    "link-layer address yes | no", definition: "Whether " +
+	    "advertisements carry the sending interface's link-layer address.",
+	    values: "yes or no", default: "yes", undo: "choose (not set)",
+	    applies: "in the global settings, or in an interface, where it " +
+	    "overrides them" },
+	"rad.reachable": { label: "Reachable time", keyword: "reachable time " +
+	    "number", definition: "Milliseconds a host takes a neighbor to " +
+	    "be reachable. OpenBSD hosts ignore it.", values: "milliseconds; " +
+	    "0 leaves it to the hosts", default: "0", undo: "clear the field",
+	    applies: "in the global settings, or in an interface, where it " +
+	    "overrides them" },
+	"rad.retrans": { label: "Retransmit timer", keyword: "retrans timer " +
+	    "number", definition: "Milliseconds between neighbor " +
+	    "solicitations. OpenBSD hosts ignore it.",
+	    values: "milliseconds; 0 leaves it to the hosts", default: "0",
+	    undo: "clear the field", applies: "in the global settings, or in " +
+	    "an interface, where it overrides them" }
 };
 
 var regOpen = {};	/* ids of the fields whose definitions are open */

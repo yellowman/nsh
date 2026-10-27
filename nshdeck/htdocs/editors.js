@@ -147,7 +147,10 @@ function edSegs(name, list, chosen, change) {
 	return seg;
 }
 
-/* a field's control: a select, a check box, a text area or a text input */
+/*
+ * a field's control: a select, a check box, a text area, a text input or
+ * one for a secret
+ */
 function edControl(key, kind, value, change) {
 	var c, o;
 
@@ -167,6 +170,12 @@ function edControl(key, kind, value, change) {
 	} else if (kind === "lines") {
 		c = el("textarea", null, "lines mono");
 		c.rows = 2;
+		c.value = value;
+	} else if (kind === "secret") {
+		/* shown as dots: the Rules box still holds it */
+		c = el("input", null, "mono");
+		c.type = "password";
+		c.autocomplete = "off";
 		c.value = value;
 	} else {
 		c = el("input", null, "mono");
@@ -1023,8 +1032,9 @@ function svEditor(box) {
 
 /* field f's control, of the kind its spec gives, with value v */
 function svControl(f, v, change) {
-	return edControl("sv" + f.key, f.flag ? "check" : f.choices ?
-	    [""].concat(f.choices) : f.lines ? "lines" : "text", f.flag ?
+	return edControl("sv" + f.key, f.flag ? "check" : f.choices ||
+	    f.words ? [""].concat(f.choices || f.words) : f.lines || f.group ?
+	    "lines" : f.secret ? "secret" : "text", f.flag ?
 	    !!v : Array.isArray(v) ? v.join("\n") : v === undefined ? "" : v,
 	    change);
 }
@@ -1037,7 +1047,7 @@ function svControl(f, v, change) {
  */
 function svListTab(box, doc, d, ids, cols, p, path) {
 	var kinds = svKinds(d, ids), name = ed.daemon;
-	var list = stList(p ? p.children : doc.nodes, kinds);
+	var list = stList(p ? p.children || [] : doc.nodes, kinds);
 	var t = el("table", null, "grid pick"), head = el("tr");
 	var grid = el("div", null, "sfields"), line = el("div", null,
 	    "addline"), val = el("input", null, "mono"), pick;
@@ -1111,7 +1121,7 @@ function svListTab(box, doc, d, ids, cols, p, path) {
 
 /* where the next statement of kind k goes among those of kinds in p */
 function svAfter(doc, p, kinds, k) {
-	var list = stList(p ? p.children : doc.nodes, kinds), i;
+	var list = stList(p ? p.children || [] : doc.nodes, kinds), i;
 
 	for (i = list.length - 1; i >= 0; i--)
 		if (list[i].kind === k)
