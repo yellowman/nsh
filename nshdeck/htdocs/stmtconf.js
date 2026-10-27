@@ -24,7 +24,8 @@
  * shown without them. A field marked group may be a list in braces, and
  * is read as an array; with joins, each of its entries is a word and
  * the words that follow it from joins, each with its value, such as a
- * host and its options.
+ * host and its options. A kind marked macro is a macro's definition,
+ * whose fields are its name and its value as written.
  */
 "use strict";
 
@@ -51,14 +52,20 @@ function stOptAt(k, w, i) {
 	}) || null;
 }
 
-/* the kind of statement n, the one among kinds that matches most words */
+/*
+ * the kind of statement n, the one among kinds that matches most words,
+ * or for a macro the macro kind
+ */
 function stKind(n, kinds) {
 	var best = null;
 
 	if (n.kind === "macro")
-		return null;
+		return kinds.find(function (k) {
+			return k.macro;
+		}) || null;
 	kinds.forEach(function (k) {
-		if ((k.block === "maybe" || !!k.block === !!n.children) &&
+		if (!k.macro && (k.block === "maybe" ||
+		    !!k.block === !!n.children) &&
 		    k.kw.every(function (x, i) {
 			return n.words[i] === x;
 		}) && (!best || k.kw.length > best.kw.length))
@@ -129,6 +136,11 @@ function stRead(n, k) {
 	var b = stBody(n, k), w = b.words, s = { node: n, kind: k, v: {},
 	    at: {}, other: [] }, i = 0, o, kw, t;
 
+	if (k.macro) {
+		t = /^([A-Za-z0-9_]+)\s*=\s*(.*)$/.exec(n.code);
+		s.v = { name: t[1], value: t[2] };
+		return s;
+	}
 	(k.args || []).forEach(function (a) {
 		if (i < w.length && !stOptAt(k, w, i)) {
 			t = a.rest ? { vals: [w.slice(i).join(" ")], count:
@@ -216,14 +228,20 @@ function stWords(f, value) {
  * option's words replaced, or removed with the options that follow it if
  * value is "" or false, or added right after the option it follows, or
  * after the options before it if the kind's grammar fixes their order,
- * else last; the list's words replaced by value's lines
+ * else last; the list's words replaced by value's lines; a macro's name
+ * or value replaced
  */
 function stSet(doc, s, key, value) {
 	var k = s.kind, n = s.node, w = n.words.slice(), at = s.at[key];
 	var f = stField(k, key), o = (k.opts || []).indexOf(f) !== -1 ? f :
 	    null, vals = o && o.flag ? (value ? [] : null) : stWords(f, value);
-	var end, pos, later;
+	var end, pos, later, m = Object.assign({}, s.v);
 
+	if (k.macro) {
+		m[key] = String(value).trim();
+		return bgpSplice(doc, n.start, n.end, [bgpLineOf(doc, n,
+		    stMacro(m.name, m.value))]);
+	}
 	if (k.list && key === k.list.key) {
 		vals = vals || [];
 		at = (at || []).slice().sort(function (a, b) {
@@ -273,8 +291,16 @@ function stSet(doc, s, key, value) {
 	    [bgpLineOf(doc, n, w.join(" "))]);
 }
 
+/* a macro's definition: its value as written if quoted, else quoted */
+function stMacro(name, value) {
+	value = String(value || "");
+	return name + " = " + (/^["']/.test(value) ? value : stQuote(value));
+}
+
 /* a new statement of kind k with its arguments, as a line of code */
 function stNew(k, args) {
+	if (k.macro)
+		return stMacro(args[0], args[1]);
 	return k.kw.concat((k.args || []).map(function (a, i) {
 		return stOne(a, String(args[i]).trim());
 	}).filter(function (x, i) {

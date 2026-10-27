@@ -92,6 +92,14 @@ function svRuns() {
 	return "runs a command";
 }
 
+/* "runs a test command", for an ifstated.conf test run every so often */
+function svTests(text) {
+	return / every [0-9]/.test(" " + text) ? "runs a test command" : "";
+}
+
+/* what ifstated.conf's actions may be */
+var SV_IFSTATE_DO = ["if", "run", "setstate"];
+
 /* the statements of an npppd.conf RADIUS server */
 var SV_NPPP_RADIUS = ["radaddress", "radtimeout", "radtries",
     "radfailovers"];
@@ -611,6 +619,35 @@ var SV_DAEMONS = {
 		    "mtalimit", "mdalimit", "schedlimit"] },
 		{ id: "queue", label: "Queue", show: "smtp queue" },
 		{ id: "stats", label: "Statistics", show: "smtp stats" }
+	    ] },
+	ifstate: { prog: "ifstated", blocks: ["state", "init", "if"],
+	    kinds: [
+		{ id: "macro", kw: [], macro: true, args: [{ key: "name" },
+		    { key: "value", raw: true }], warn: function (s) {
+			return svTests(s.v.value);
+		} },
+		{ id: "state", kw: ["state"], args: [{ key: "name" }],
+		    block: true, inner: ["init"].concat(SV_IFSTATE_DO) },
+		{ id: "init", kw: ["init"], args: [{ key: "action", rest: true,
+		    raw: true }], block: "maybe", inner: SV_IFSTATE_DO },
+		{ id: "if", kw: ["if"], args: [{ key: "condition", rest: true,
+		    raw: true }], block: "maybe", inner: SV_IFSTATE_DO,
+		    warn: function (s) {
+			return svTests(s.v.condition);
+		} },
+		{ id: "run", kw: ["run"], args: [{ key: "command" }],
+		    warn: function () {
+			return "runs a command as root";
+		} },
+		{ id: "setstate", kw: ["set-state"], args: [{ key: "state" }] },
+		{ id: "initstate", kw: ["init-state"],
+		    args: [{ key: "state" }] }
+	    ],
+	    tabs: [
+		{ id: "conditions", label: "Conditions", kinds: ["macro"],
+		    cols: ["value"] },
+		{ id: "states", label: "States", kinds: ["state"] },
+		{ id: "global", label: "Global", single: ["initstate"] }
 	    ] }
 };
 

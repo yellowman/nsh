@@ -63,7 +63,9 @@ var REGISTRY_MODULES = {
 	nppp: { scope: "npppd's configuration", man: "npppd.conf.5",
 	    check: "npppd -n, at Validate and at commit" },
 	smtp: { scope: "smtpd's configuration", man: "smtpd.conf.5",
-	    check: "smtpd -n, at Validate and at commit" }
+	    check: "smtpd -n, at Validate and at commit" },
+	ifstate: { scope: "ifstated's configuration", man: "ifstated.conf.5",
+	    check: "ifstated -n, at Validate and at commit" }
 };
 
 /* drivers, as interfaces' names begin */
@@ -2285,7 +2287,47 @@ var REGISTRY = {
 	"smtp.schedlimit": { label: "Scheduler limits", keyword: "scheduler " +
 	    "limit limit value", definition: "Limits on the queue's scheduler.",
 	    values: "as smtpd.conf writes them", default: "smtpd's",
-	    undo: "Delete" }
+	    undo: "Delete" },
+
+	/* ifstated's configuration */
+	"ifstate.macro": { label: "Condition", keyword: "name = \"test\"",
+	    definition: "A named condition, which if lines write as $name. A " +
+	    "test is an interface's link state, such as em0.link.up, or a " +
+	    "command and every N, which ifstated runs each N seconds; tests " +
+	    "join with &&, || and !.", values: "a name of letters, digits " +
+	    "and _", default: "none", undo: "Delete" },
+	"ifstate.value": { label: "Test", keyword: "\"test\"",
+	    definition: "The condition's test, as ifstated.conf writes it.",
+	    values: "if.link.up, .down or .unknown; \"command\" every " +
+	    "seconds; joined with &&, || and !", default: "none",
+	    risk: "high: a test with every runs its command each time",
+	    undo: "clear the field", applies: "conditions" },
+	"ifstate.state": { label: "State", keyword: "state name { ... }",
+	    definition: "A state: its init block runs when ifstated enters " +
+	    "it, and its other lines each time a test it names changes.",
+	    values: "a name", default: "none", undo: "Delete" },
+	"ifstate.init": { label: "Init", keyword: "init { ... } | init action",
+	    definition: "What ifstated does each time it enters the state.",
+	    values: "actions", default: "nothing", undo: "Delete",
+	    applies: "states" },
+	"ifstate.if": { label: "If", keyword: "if test { ... } | if test " +
+	    "action", definition: "Actions done when the test is true.",
+	    values: "a test: $name, if.link.up and the like, or \"command\" " +
+	    "every seconds, joined with &&, || and !", default: "none",
+	    undo: "Delete", applies: "states, init blocks and if blocks" },
+	"ifstate.run": { label: "Run", keyword: "run \"command\"",
+	    definition: "A shell command ifstated runs, as root.",
+	    values: "a command line", default: "none", risk: "high: it runs " +
+	    "as root each time its block is done", undo: "Delete",
+	    applies: "states, init blocks and if blocks" },
+	"ifstate.setstate": { label: "Set state", keyword: "set-state name",
+	    definition: "Moves to another state, whose init block then runs.",
+	    values: "a state's name", default: "none", undo: "Delete",
+	    applies: "states, init blocks and if blocks" },
+	"ifstate.initstate": { label: "Initial state", keyword: "init-state " +
+	    "name", definition: "The state ifstated starts in.", values: "a " +
+	    "state's name", default: "the first state", undo: "clear the " +
+	    "field" }
 };
 
 var regOpen = {};	/* ids of the fields whose definitions are open */
