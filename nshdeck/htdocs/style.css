@@ -1340,6 +1340,25 @@ textarea.rules.edited {
 	margin: 0 10px 10px;
 }
 
+/* a save in a daemon's history, opened for its changes */
+details.dsave {
+	margin: 0 10px 6px;
+	border-top: 1px solid var(--line);
+}
+
+details.dsave summary {
+	display: flex;
+	justify-content: space-between;
+	gap: 8px;
+	padding: 4px 0;
+	font-size: 12px;
+	cursor: pointer;
+}
+
+details.dsave pre.term {
+	margin: 0 0 6px;
+}
+
 /* the command nsh starts a daemon with, and what its arguments do */
 pre.cmd {
 	padding: 6px 8px;

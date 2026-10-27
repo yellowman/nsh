@@ -90,6 +90,7 @@ var DAEMONS = [
 var dconf = {};		/* each daemon's rules and state, by "name rtable" */
 var dfacts = [];	/* show daemons' records, the last */
 var dchosen = {};	/* each workspace's daemon chosen: its name and rtable */
+var DHISTORY = 10;	/* how many saves a daemon's history looks back */
 var dinsp = null;	/* the daemon inspected, its settings, and edits */
 
 /*
@@ -263,21 +264,82 @@ function dtable(ws) {
 function dinspect(ws, name, rt) {
 	var d = daemonDef(name), cf = dconf[name + " " + rt] || {};
 	var p = Promise.resolve({ ok: true, output: cf.rules && cf.rules.length ?
-	    cf.rules.join("\n") + "\n" : "" });
+	    cf.rules.join("\n") + "\n" : "" }), q = Promise.resolve(null);
 
 	if (d.rules && candidate())
 		p = ask("GET", "rules", { daemon: name, rtable: rt });
-	return p.then(function (j) {
-		var was = { enabled: !!cf.enabled, rules: j.ok ? said(j) : "" };
+	if (candidate())
+		q = ask("GET", "config", { what: "running" });
+	return Promise.all([p, q]).then(function (a) {
+		var j = a[0], was = { enabled: !!cf.enabled, rules: j.ok ?
+		    said(j) : "" };
 
 		dinsp = { ws: ws, def: d, rt: rt, was: was,
 		    now: { enabled: was.enabled, rules: was.rules },
 		    from: candidate() ? "candidate" : "running",
+		    running: a[1] && a[1].ok ? daemonState(said(a[1]), name,
+		    rt) : null, history: null,
 		    results: j.ok ? [] : [{ line: name + " rules", ok: false,
 		    out: said(j) }], open: dinsp && dinsp.def === d ?
 		    dinsp.open : {} };
 		dinspector();
 	});
+}
+
+/* what text, a configuration, has of daemon name in rt: enabled, rules */
+function daemonState(text, name, rt) {
+	var cf = daemonConf(text)[name + " " + rt] || {};
+
+	return { enabled: !!cf.enabled, rules: cf.rules ? cf.rules.join("\n") +
+	    (cf.rules.length ? "\n" : "") : "" };
+}
+
+/* a daemon's state st as a configuration's lines: its rules, its enable */
+function daemonLines(name, st) {
+	var r = textLines(st.rules);
+
+	return (r.length ? [name + " rules"].concat(r.map(function (l) {
+		return " " + l;
+	})) : []).concat(st.enabled ? [name + " enable"] : []);
+}
+
+/*
+ * the lines of b set against those of a, in order, each marked " " if
+ * both have it, "-" if a alone does or "+" if b alone does; only the
+ * marked lines and the two each side of them, with " …" for the lines
+ * left out between; none if a and b are the same
+ */
+function lineDiff(a, b) {
+	var l = [], out = [], shown = [], keep, i, j;
+
+	for (i = a.length; i >= 0; i--) {
+		l[i] = [];
+		for (j = b.length; j >= 0; j--)
+			l[i][j] = i === a.length || j === b.length ? 0 :
+			    a[i] === b[j] ? l[i + 1][j + 1] + 1 :
+			    Math.max(l[i + 1][j], l[i][j + 1]);
+	}
+	for (i = j = 0; i < a.length || j < b.length; )
+		if (i < a.length && j < b.length && a[i] === b[j]) {
+			out.push(" " + a[i++]);
+			j++;
+		} else if (i < a.length && (j === b.length ||
+		    l[i + 1][j] >= l[i][j + 1]))
+			out.push("-" + a[i++]);
+		else
+			out.push("+" + b[j++]);
+	keep = out.map(function (x, k) {
+		return out.slice(Math.max(0, k - 2), k + 3).some(function (y) {
+			return y[0] !== " ";
+		});
+	});
+	out.forEach(function (x, k) {
+		if (keep[k])
+			shown.push(x);
+		else if (k === 0 || keep[k - 1])
+			shown.push(" …");
+	});
+	return keep.indexOf(true) === -1 ? [] : shown;
 }
 
 /* text's lines, its last newline or not */
@@ -402,6 +464,9 @@ function dinspector() {
 		    d.note : ""), "help"));
 	}
 
+	if (d.rules || d.enable)
+		dchanges(box);
+
 	if (d.ops.length) {
 		det = dgroup(box, "Live operations", false);
 		row = el("div", null, "bar");
@@ -467,6 +532,126 @@ function dinspector() {
 	dinsp.stage = stage;
 	drefresh();
 	structured();
+}
+
+/*
+ * the daemon's Changes, in configure: what the candidate changes in it
+ * from what runs; and its History: how it changed in each of the last
+ * DHISTORY configurations saved, from the one saved before
+ */
+function dchanges(box) {
+	var d = dinsp, det, diff, pre, h = d.history;
+
+	if (candidate() && d.running) {
+		det = dgroup(box, "Changes", true);
+		diff = lineDiff(daemonLines(d.def.name, d.running),
+		    daemonLines(d.def.name, d.was));
+		det.querySelector(".count").textContent = dcount(diff);
+		if (diff.length) {
+			pre = det.appendChild(el("pre", null, "term"));
+			diffInto(pre, diff.join("\n"));
+		}
+		det.appendChild(el("p", diff.length ? "What the candidate " +
+		    "changes from what runs. Edits above count once staged." :
+		    "The candidate changes nothing of it.", "help"));
+	}
+	det = dgroup(box, "History", false);
+	det.addEventListener("toggle", function () {
+		if (det.open && d.history === null)
+			dhistory();
+	});
+	if (det.open && h === null)
+		dhistory();
+	if (h === null || h.rows === undefined) {
+		det.appendChild(el("p", h && h.error ? h.error : "Asking nshd",
+		    "help"));
+		return;
+	}
+	det.querySelector(".count").textContent = h.rows.length ?
+	    String(h.rows.length) : "";
+	h.rows.forEach(function (r) {
+		var one = el("details", null, "dsave"), sum = el("summary");
+
+		sum.appendChild(el("span", "Saved " + r.n + " · " + r.when +
+		    (r.by ? " · " + r.by : "")));
+		sum.appendChild(el("span", dcount(r.diff), "dim count"));
+		one.appendChild(sum);
+		diffInto(one.appendChild(el("pre", null, "term")),
+		    r.diff.join("\n"));
+		det.appendChild(one);
+	});
+	det.appendChild(el("p", h.rows.length ? "Each save that changed it, " +
+	    "against the one before." : "No change in the last " + h.of +
+	    (h.of === 1 ? " save." : " saves."), "help"));
+}
+
+/* the lines a diff adds and takes away */
+function dcount(diff) {
+	var add = 0, del = 0;
+
+	diff.forEach(function (l) {
+		if (l[0] === "+")
+			add++;
+		else if (l[0] === "-")
+			del++;
+	});
+	return add + del ? "+" + add + " −" + del : "";
+}
+
+/*
+ * the daemon's history: the last DHISTORY + 1 configurations saved,
+ * each but the oldest set against the one saved before it
+ */
+function dhistory() {
+	var d = dinsp, name = d.def.name, rt = d.rt, saves = [];
+
+	d.history = { error: "" };
+	ask("GET", "config", { what: "rollback" }).then(function (j) {
+		if (!j.ok)
+			return [j];
+		said(j).split("\n").forEach(function (l) {
+			var m = /^ *(\d+)  (.*)$/.exec(l), f;
+
+			if (m === null)
+				return;
+			f = m[2].split(/ {2,}/);
+			if (/^generation \d+$/.test(f[0]))
+				f.shift();
+			saves.push({ n: Number(m[1]), when: f[0].slice(0, 16),
+			    by: f[1] || "" });
+		});
+		saves = saves.slice(0, DHISTORY + 1);
+		return Promise.all(saves.map(function (s) {
+			return ask("GET", "config",
+			    { what: "rollback", n: s.n });
+		}));
+	}).then(function (a) {
+		var rows = [], i, diff, st;
+
+		if (dinsp !== d)
+			return;
+		if (a.some(function (j) {
+			return !j.ok;
+		})) {
+			d.history = { error: said(a.find(function (j) {
+				return !j.ok;
+			})).trim() };
+			dinspector();
+			return;
+		}
+		st = a.map(function (j) {
+			return daemonLines(name,
+			    daemonState(said(j), name, rt));
+		});
+		for (i = 0; i + 1 < a.length; i++) {
+			diff = lineDiff(st[i + 1], st[i]);
+			if (diff.length)
+				rows.push({ n: saves[i].n, when: saves[i].when,
+				    by: saves[i].by, diff: diff });
+		}
+		d.history = { rows: rows, of: Math.max(0, a.length - 1) };
+		dinspector();
+	});
 }
 
 /* what follows from the edits: the count of lines, and the buttons */
