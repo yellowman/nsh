@@ -1325,8 +1325,31 @@ textarea.rules.edited {
 	display: block;
 }
 
-.igroup > .help, .igroup > .bar, .igroup > .cliline, .igroup > pre.term {
+.igroup > .help, .igroup > .bar, .igroup > .cliline, .igroup > pre.term,
+.igroup > pre.cmd, .igroup > dl.args {
 	margin: 0 10px 10px;
+}
+
+/* the command nsh starts a daemon with, and what its arguments do */
+pre.cmd {
+	padding: 6px 8px;
+	font-family: var(--mono);
+	font-size: 12px;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	background: var(--side);
+	border: 1px solid var(--line);
+}
+
+dl.args {
+	display: grid;
+	grid-template-columns: max-content minmax(0, 1fr);
+	gap: 2px 12px;
+	font-size: 12px;
+}
+
+dl.args dd {
+	margin: 0;
 }
 
 button:disabled {

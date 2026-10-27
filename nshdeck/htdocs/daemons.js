@@ -11,7 +11,9 @@
 /*
  * Each daemon: its workspace, what it is, whether it runs in other
  * routing tables, whether it has rules and an enable, and the actions
- * that act on it as it runs, as nsh's tables have them
+ * that act on it as it runs, as nsh's tables have them; and for one
+ * with no rules, the command nsh starts it with and what each of its
+ * arguments does
  */
 var DAEMONS = [
 	{ name: "pf", ws: "security", label: "PF firewall", rules: 1,
@@ -44,7 +46,7 @@ var DAEMONS = [
 	{ name: "rad", ws: "services", label: "IPv6 router advertisements " +
 	    "(rad)", rules: 1, enable: 1, ops: [] },
 	{ name: "resolv", ws: "services", label: "DNS resolution (resolvd)",
-	    enable: 1, ops: [] },
+	    enable: 1, ops: [], runs: "/sbin/resolvd", args: [] },
 	{ name: "ntp", ws: "services", label: "Time (ntpd)", rules: 1,
 	    enable: 1, ops: [] },
 	{ name: "snmp", ws: "services", label: "SNMP agent (snmpd)", rt: 1,
@@ -55,11 +57,21 @@ var DAEMONS = [
 	{ name: "nppp", ws: "services", label: "PPP concentrator (npppd)",
 	    rt: 1, rules: 1, enable: 1, ops: ["clear", "session", "monitor"] },
 	{ name: "ftp-proxy", ws: "services", label: "FTP proxy", rt: 1,
-	    enable: 1, ops: [] },
+	    enable: 1, ops: [], runs: "/usr/sbin/ftp-proxy -D 2", args: [
+	    ["-D 2", "Logs only messages of syslog level 2 (critical) or " +
+	    "more severe. The default is 5."]], note: "It listens on " +
+	    "127.0.0.1, port 8021, where a pf divert-to rule must send FTP." },
 	{ name: "tftp-proxy", ws: "services", label: "TFTP proxy", rt: 1,
-	    enable: 1, ops: [] },
+	    enable: 1, ops: [], runs: "/usr/sbin/tftp-proxy -v -l 127.0.0.1",
+	    args: [["-v", "Logs each connection and request."],
+	    ["-l 127.0.0.1", "Listens on the loopback address only."]],
+	    note: "It listens on port 6969, where a pf divert-to rule must " +
+	    "send TFTP." },
 	{ name: "tftp", ws: "services", label: "TFTP server (tftpd)", rt: 1,
-	    enable: 1, ops: [] },
+	    enable: 1, ops: [], runs: "/usr/sbin/tftpd -l 127.0.0.1 /tftpboot",
+	    args: [["-l 127.0.0.1", "Listens on the loopback address only, " +
+	    "so other hosts reach it only through pf."], ["/tftpboot",
+	    "The directory it serves, which it makes its root."]] },
 	{ name: "inet", ws: "services", label: "Internet super-server " +
 	    "(inetd)", rt: 1, rules: 1, enable: 1, ops: [] },
 	{ name: "smtp", ws: "services", label: "Mail transfer (smtpd)", rt: 1,
@@ -226,8 +238,10 @@ function dtable(ws) {
 			tr.appendChild(el("td", d.label, "descr"));
 			tr.appendChild(el("td", String(rt), "num"));
 			tr.appendChild(el("td", cf.enabled ? "enabled" : ""));
-			tr.appendChild(el("td", cf.rules ? cf.rules.length +
-			    (cf.rules.length === 1 ? " line" : " lines") : ""));
+			tr.appendChild(cf.rules ? el("td", cf.rules.length +
+			    (cf.rules.length === 1 ? " line" : " lines")) :
+			    el("td", d.runs ? d.runs.split(" ").slice(1).join(
+			    " ") : "", "mono dim"));
 			tr.appendChild(el("td", ob[0]));
 			tr.addEventListener("click", function () {
 				dchosen[ws] = { name: d.name, rt: rt };
@@ -373,8 +387,20 @@ function dinspector() {
 			drefresh();
 			structuredLater();
 		});
-	} else if (d.enable)
-		box.appendChild(el("p", "This daemon has no rules.", "help"));
+	} else if (d.runs) {
+		det = dgroup(box, "Command", true);
+		det.appendChild(el("pre", d.runs, "cmd"));
+		row = el("dl", null, "args");
+		d.args.forEach(function (a) {
+			row.appendChild(el("dt", a[0], "mono"));
+			row.appendChild(el("dd", a[1]));
+		});
+		if (d.args.length)
+			det.appendChild(row);
+		det.appendChild(el("p", "No rules. nsh starts it with this " +
+		    "command, which cannot be changed." + (d.note ? " " +
+		    d.note : ""), "help"));
+	}
 
 	if (d.ops.length) {
 		det = dgroup(box, "Live operations", false);
