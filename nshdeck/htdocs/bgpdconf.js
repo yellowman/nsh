@@ -15,7 +15,53 @@ var BGP_BLOCKS = ["neighbor", "group", "rdomain"];
 
 /* the one-line neighbor settings this file reads */
 var BGP_PEER = ["remote-as", "descr", "local-address", "multihop",
-    "passive", "down", "max-prefix", "announce", "holdtime"];
+    "passive", "down", "max-prefix", "announce"];
+
+/*
+ * A peer's other settings, in groups: the words each begins with, as
+ * bgpd.conf(5) gives them, its registry entry, and whether its value is
+ * a secret
+ */
+var BGP_ADVANCED = [
+	{ name: "Timers", keys: [["holdtime min", "holdtime-min"],
+	    ["holdtime", "holdtime"], ["staletime", "staletime"]] },
+	{ name: "Authentication", keys: [["tcp md5sig password",
+	    "md5-password", 1], ["tcp md5sig key", "md5-key", 1],
+	    ["ipsec", "ipsec", 1], ["ttl-security", "ttl-security"]] },
+	{ name: "Route attributes", keys: [["set", "set"],
+	    ["local-as", "local-as"], ["enforce local-as", "enforce-local-as"],
+	    ["enforce neighbor-as", "enforce-neighbor-as"],
+	    ["as-override", "as-override"],
+	    ["transparent-as", "transparent-as"],
+	    ["reject as-set", "reject-as-set"], ["export", "export"],
+	    ["rde evaluate", "rde-evaluate"], ["role", "role"],
+	    ["route-reflector", "route-reflector"], ["rib", "rib"]] },
+	{ name: "Session and logging", keys: [["port", "port"],
+	    ["depend on", "depend-on"], ["demote", "demote"], ["log", "log"],
+	    ["dump", "dump"]] }
+];
+
+/* the registry entries of BGP_ADVANCED's settings, and of Other's */
+function bgpAdvFields() {
+	var out = ["bgp.other"];
+
+	BGP_ADVANCED.forEach(function (g) {
+		g.keys.forEach(function (k) {
+			out.push("bgp." + k[1]);
+		});
+	});
+	return out;
+}
+
+/* what a setting risks, by its registry entry, given its value */
+var BGP_ADV_WARN = {
+	"local-as": function () {
+		return "AS paths are not checked for loops";
+	},
+	"enforce-local-as": function (v) {
+		return v === "no" ? "AS paths are not checked for loops" : "";
+	}
+};
 
 /*
  * Split a line into code and comment, and count its braces outside quotes
@@ -249,6 +295,62 @@ function bgpSettings(n, other) {
 	return s;
 }
 
+/*
+ * Peer p's other settings by group, each statement with its group's
+ * key, registry entry, whether it is secret, and its value, the text
+ * after the key; a statement no group has is in Other, its value its
+ * whole text
+ */
+function bgpAdvanced(p) {
+	var out = { Other: [] };
+
+	BGP_ADVANCED.forEach(function (g) {
+		out[g.name] = [];
+	});
+	p.other.forEach(function (n) {
+		var best = null;
+
+		BGP_ADVANCED.forEach(function (g) {
+			g.keys.forEach(function (k) {
+				var kw = k[0].split(" ");
+
+				if (kw.every(function (w, i) {
+					return n.words[i] === w;
+				}) && (best === null || kw.length >
+				    best.key.split(" ").length))
+					best = { group: g.name, key: k[0],
+					    id: k[1], secret: !!k[2] };
+			});
+		});
+		if (best === null)
+			out.Other.push({ node: n, key: "", value: n.code });
+		else
+			out[best.group].push({ node: n, key: best.key,
+			    id: best.id, secret: best.secret, value: bgpRest(n,
+			    best.key.split(" ").length) });
+	});
+	return out;
+}
+
+/* what setting s, one of bgpAdvanced()'s, risks, if anything */
+function bgpAdvWarn(s) {
+	return s.id && BGP_ADV_WARN[s.id] ? BGP_ADV_WARN[s.id](s.value) : "";
+}
+
+/* lines added before block n's closing brace */
+function bgpAppend(doc, n, lines) {
+	var at;
+
+	if (n.close === n.start) {
+		/* a one-line block, split over lines */
+		at = /^\s*/.exec(doc.lines[n.start])[0];
+		return bgpSplice(doc, n.start, n.start + 1, [at +
+		    n.words.slice(0, -2).join(" ") + " {\n"].concat(lines,
+		    [at + "}\n"]));
+	}
+	return bgpSplice(doc, n.close, n.close, lines);
+}
+
 /* the indent of block n's statements, or n's indent plus a tab */
 function bgpIndent(doc, n) {
 	var c = n.children && n.children.length ? n.children[0] : null;
@@ -303,16 +405,7 @@ function bgpSet(doc, n, k, value) {
 			    old[0].comments.join(" ") + "\n");
 		return bgpSplice(doc, at, old[0].end, lines);
 	}
-	if (lines.length === 0)
-		return doc;
-	if (n.close === n.start) {
-		/* a one-line block, split over lines */
-		at = /^\s*/.exec(doc.lines[n.start])[0];
-		return bgpSplice(doc, n.start, n.start + 1, [at +
-		    n.words.slice(0, -2).join(" ") + " {\n"].concat(lines,
-		    [at + "}\n"]));
-	}
-	return bgpSplice(doc, n.close, n.close, lines);
+	return lines.length === 0 ? doc : bgpAppend(doc, n, lines);
 }
 
 /*
@@ -449,6 +542,31 @@ function bgpApplies(f, p, localAS, macros) {
 	if (/^[$({]/.test(val(f.peer)) || /^[$({]/.test(val(p.address)))
 		return "maybe";
 	return bgpUnquote(f.peer) === bgpUnquote(p.descr) ? "yes" : "no";
+}
+
+/*
+ * Parse bgpctl's show neighbor: the prefixes sent to the peer and those
+ * received from it, and the last error sent, the last received and the
+ * last shutdown reason received, each "" if there is none
+ */
+function bgpNeighbor(text) {
+	var d = { advertised: null, accepted: null, sent: "", received: "",
+	    reason: "" };
+
+	text.split("\n").forEach(function (l) {
+		var m = /^\s+Prefixes\s+(\d+)\s+(\d+)\s*$/.exec(l);
+
+		if (m !== null) {
+			d.advertised = Number(m[1]);
+			d.accepted = Number(m[2]);
+		} else if ((m = /^\s+Last error (sent|received): (.*)$/.exec(
+		    l)) !== null)
+			d[m[1]] = m[2];
+		else if ((m = /^\s+Last received shutdown reason: "(.*)"$/.exec(
+		    l)) !== null)
+			d.reason = m[1];
+	});
+	return d;
 }
 
 /*

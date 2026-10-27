@@ -1341,15 +1341,24 @@ pre.cmd {
 	border: 1px solid var(--line);
 }
 
-dl.args {
+dl.args, dl.observed {
 	display: grid;
 	grid-template-columns: max-content minmax(0, 1fr);
 	gap: 2px 12px;
 	font-size: 12px;
 }
 
-dl.args dd {
+dl.args dd, dl.observed dd {
 	margin: 0;
+}
+
+/* what bgpctl observed of a peer, apart from its settings */
+dl.observed {
+	margin: 0 0 10px;
+}
+
+dl.observed dt {
+	color: var(--dim);
 }
 
 button:disabled {

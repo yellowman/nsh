@@ -763,6 +763,142 @@ var REGISTRY = {
 	    "routes are withdrawn.", values: "on or off", default: "off",
 	    risk: "high: the peer's routes go", undo: "clear the box",
 	    applies: "neighbors and groups" },
+	"bgp.holdtime": { label: "Hold time", keyword: "holdtime seconds",
+	    definition: "How long bgpd waits to hear from the peer before it " +
+	    "ends the session.", values: "seconds", default: "the global " +
+	    "holdtime", undo: "clear the field", applies: "neighbors and " +
+	    "groups" },
+	"bgp.holdtime-min": { label: "Least hold time", keyword: "holdtime " +
+	    "min seconds", definition: "The shortest hold time bgpd accepts " +
+	    "from the peer.", values: "seconds", default: "the global " +
+	    "holdtime min", undo: "clear the field", applies: "neighbors and " +
+	    "groups" },
+	"bgp.staletime": { label: "Stale time", keyword: "staletime seconds",
+	    definition: "How long, at most, bgpd keeps the peer's routes " +
+	    "after a graceful restart.", values: "seconds", default: "the " +
+	    "global staletime", undo: "clear the field", applies: "neighbors " +
+	    "and groups" },
+	"bgp.md5-password": { label: "TCP MD5 password", keyword: "tcp " +
+	    "md5sig password secret", definition: "Signs the session's TCP " +
+	    "segments with a shared secret, as RFC 2385 describes. After a " +
+	    "change, the session must be reset to use the new secret.",
+	    values: "text", default: "none", secret: true, undo: "clear the " +
+	    "field", applies: "neighbors and groups" },
+	"bgp.md5-key": { label: "TCP MD5 key", keyword: "tcp md5sig key secret",
+	    definition: "As the TCP MD5 password, with the secret given in " +
+	    "hexadecimal.", values: "hexadecimal digits", default: "none",
+	    secret: true, undo: "clear the field", applies: "neighbors and " +
+	    "groups" },
+	"bgp.ipsec": { label: "IPsec", keyword: "ipsec (ah|esp) (in|out) spi " +
+	    "spi-number authspec [encspec], or ipsec (ah|esp) ike",
+	    definition: "Protects the session with IPsec, keyed by hand or " +
+	    "by isakmpd. Keyed by hand, there must be one line for each " +
+	    "direction.", values: "as the keyword shows, a line each",
+	    default: "none", secret: true, undo: "clear the field",
+	    applies: "neighbors and groups" },
+	"bgp.ttl-security": { label: "TTL security", keyword: "ttl-security " +
+	    "(yes|no)", definition: "Sends with a TTL of 255 and accepts " +
+	    "only packets that have not been routed further than multihop " +
+	    "allows.", values: "yes or no", default: "no", undo: "clear the " +
+	    "field", applies: "neighbors and groups" },
+	"bgp.set": { label: "Attributes set", keyword: "set attribute ...",
+	    definition: "Sets attributes, such as localpref, on the routes " +
+	    "received from the peer. bgpd makes filter rules of them.",
+	    values: "what ATTRIBUTE SET in bgpd.conf(5) lists, a line each",
+	    default: "none", undo: "clear the field", applies: "neighbors " +
+	    "and groups" },
+	"bgp.local-as": { label: "Local AS", keyword: "local-as as-number " +
+	    "[as-number]", definition: "The AS number sent to the peer in " +
+	    "place of the global one, for moving to another AS. bgpd then " +
+	    "does not check AS paths for loops.", values: "an AS number, and " +
+	    "a 2-byte one", default: "the global AS", risk: "high: with no " +
+	    "loop check, filters must stop the peer sending your own routes " +
+	    "back", undo: "clear the field", applies: "neighbors and groups" },
+	"bgp.enforce-local-as": { label: "Check for loops",
+	    keyword: "enforce local-as (yes|no)", definition: "No turns off " +
+	    "the check that refuses AS paths that hold the local AS.",
+	    values: "yes or no", default: "yes", risk: "high: with no loop " +
+	    "check, filters must stop the peer sending your own routes back",
+	    undo: "clear the field", applies: "neighbors and groups" },
+	"bgp.enforce-neighbor-as": { label: "Check the peer's AS",
+	    keyword: "enforce neighbor-as (yes|no)", definition: "Yes " +
+	    "refuses AS paths whose first AS is not the peer's.",
+	    values: "yes or no", default: "yes, or no for IBGP peers",
+	    undo: "clear the field", applies: "neighbors and groups" },
+	"bgp.as-override": { label: "AS override", keyword: "as-override " +
+	    "(yes|no)", definition: "Replaces the peer's AS in the AS paths " +
+	    "it sends with the local AS, before the filters run.",
+	    values: "yes or no", default: "no", undo: "clear the field",
+	    applies: "neighbors and groups" },
+	"bgp.transparent-as": { label: "Transparent AS",
+	    keyword: "transparent-as (yes|no)", definition: "Yes leaves the " +
+	    "local AS off the AS paths sent to EBGP peers, and passes MED " +
+	    "and the well-known communities on unchanged.", values: "yes or no",
+	    default: "the global transparent-as", undo: "clear the field",
+	    applies: "neighbors and groups" },
+	"bgp.reject-as-set": { label: "Reject AS sets", keyword: "reject " +
+	    "as-set (yes|no)", definition: "Yes treats routes whose AS path " +
+	    "holds an AS_SET as withdrawn.", values: "yes or no",
+	    default: "the global reject as-set", undo: "clear the field",
+	    applies: "neighbors and groups" },
+	"bgp.export": { label: "Export", keyword: "export (none|default-route)",
+	    definition: "None sends the peer no updates; default-route sends " +
+	    "it only the default route.", values: "none or default-route",
+	    default: "every route the filters allow", undo: "clear the field",
+	    applies: "neighbors and groups" },
+	"bgp.rde-evaluate": { label: "Evaluate", keyword: "rde evaluate " +
+	    "(default|all)", definition: "All sends the next best route when " +
+	    "the output filters refuse the best one.", values: "default or all",
+	    default: "the global rde evaluate", undo: "clear the field",
+	    applies: "neighbors and groups" },
+	"bgp.role": { label: "Role", keyword: "role role", definition: "The " +
+	    "local role for an EBGP session, which ASPA checks and RFC " +
+	    "9234's open policy need.", values: "none, provider, customer, " +
+	    "rs, rs-client or peer", default: "none", undo: "clear the field",
+	    applies: "neighbors and groups" },
+	"bgp.route-reflector": { label: "Route reflector",
+	    keyword: "route-reflector [address]", definition: "Acts as an " +
+	    "RFC 4456 route reflector for the peer, with the address as " +
+	    "cluster ID if given.", values: "nothing, or an address",
+	    default: "off", undo: "delete the line", applies: "neighbors and " +
+	    "groups" },
+	"bgp.rib": { label: "RIB", keyword: "rib name", definition: "The RIB " +
+	    "the peer's routes go into.", values: "a RIB's name",
+	    default: "Loc-RIB", undo: "clear the field", applies: "neighbors " +
+	    "and groups" },
+	"bgp.port": { label: "Port", keyword: "port port", definition: "The " +
+	    "port bgpd connects to.", values: "a port number", default: "179",
+	    undo: "clear the field", applies: "neighbors and groups" },
+	"bgp.depend-on": { label: "Depends on", keyword: "depend on interface",
+	    definition: "Keeps the session idle while the interface has no " +
+	    "link; for carp, while it is backup.", values: "an interface",
+	    default: "none", undo: "clear the field", applies: "neighbors " +
+	    "and groups" },
+	"bgp.demote": { label: "Demote", keyword: "demote group",
+	    definition: "Raises the carp demotion counter of the interface " +
+	    "group while the session is not established.", values: "an " +
+	    "interface group, usually carp", default: "none", undo: "clear " +
+	    "the field", applies: "neighbors and groups" },
+	"bgp.log": { label: "Logging", keyword: "log (no|updates)",
+	    definition: "No turns off the peer's own logging; updates logs " +
+	    "the updates sent and received.", values: "no or updates",
+	    default: "the peer's own logging on", undo: "clear the field",
+	    applies: "neighbors and groups" },
+	"bgp.dump": { label: "Dump", keyword: "dump (all|updates) (in|out) " +
+	    "file [interval]", definition: "Writes the session's BGP " +
+	    "messages to a file.", values: "as the keyword shows",
+	    default: "none", undo: "clear the field", applies: "neighbors " +
+	    "and groups" },
+	"bgp.other": { label: "Setting", keyword: "any neighbor setting",
+	    definition: "A setting in a group of its own, as written.",
+	    values: "what NEIGHBORS AND GROUPS in bgpd.conf(5) lists",
+	    default: "none", undo: "delete the line", applies: "neighbors " +
+	    "and groups" },
+	"bgp.advanced-new": { label: "New setting", keyword: "a setting " +
+	    "and its value", definition: "Adds a line of the chosen " +
+	    "setting to the peer's block.", values: "the setting's value",
+	    default: "none", undo: "delete the line",
+	    applies: "neighbors and groups" },
 	"bgp.filter.action": { label: "Action", keyword: "allow | deny | match",
 	    hint: "match only sets", definition: "allow accepts the route, " +
 	    "deny drops it, and match sets attributes without deciding.",

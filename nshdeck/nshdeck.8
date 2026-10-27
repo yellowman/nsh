@@ -46,8 +46,10 @@ and its live operations; for pf and bgpd, an editor under the
 table that reads the rules' text and writes changes back into it: pf's
 statements in order, with a form for each rule, and bgpd's peers, with
 their state from
-.Xr bgpctl 8
-and the filters that apply to them, its networks and its filters;
+.Xr bgpctl 8 ,
+the prefixes each accepts and advertises and its last errors, the
+filters that apply to them, and their other settings in groups, its
+networks and its filters;
 for ospfd, ospf6d, eigrpd, ripd, ldpd and dvmrpd, an editor of their
 interfaces, with the settings each sets and those it takes from the
 blocks around it, and of their global settings, beside the neighbors

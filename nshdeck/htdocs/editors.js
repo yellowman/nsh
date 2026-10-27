@@ -95,7 +95,8 @@ function structured() {
 		    RT_DAEMONS[dinsp.def.name] ? "interfaces" :
 		    SV_DAEMONS[dinsp.def.name] ?
 		    SV_DAEMONS[dinsp.def.name].tabs[0].id : "", peer: "",
-		    summary: null, live: null, add: "" };
+		    summary: null, detail: {}, asked: {}, open: {}, live: null,
+		    add: "" };
 	if (ed.daemon === "pf")
 		pfEditor(box);
 	else if (ed.daemon === "bgp")
@@ -423,21 +424,46 @@ function bgpDone(doc) {
 	edRedraw();
 }
 
+/* what a show answered, as text */
+function bgpOutput(j) {
+	return of(j, "message").map(function (m) {
+		return m.text;
+	}).join("") + (j.output || "");
+}
+
 /* read show bgp summary into ed and redraw the editor */
 function bgpState() {
 	var e = ed;
 
 	ed.summary = { rows: [], error: "" };
+	ed.detail = {};
+	ed.asked = {};
 	return ask("GET", "show", { words: "bgp summary" }).then(function (j) {
-		var text = of(j, "message").map(function (m) {
-			return m.text;
-		}).join("") + (j.output || "");
-
 		if (ed !== e)
 			return;
-		ed.summary = { rows: bgpSummary(text), error: j.ok ? "" :
-		    said(j).trim() || "bgpd does not answer" };
+		ed.summary = { rows: bgpSummary(bgpOutput(j)), error: j.ok ?
+		    "" : said(j).trim() || "bgpd does not answer" };
 		structured();
+	});
+}
+
+/*
+ * read show bgp neighbor for the peer at address a into ed, once, and
+ * redraw the editor; only once bgpd has answered show bgp summary, and
+ * only for an address, not a name or a range
+ */
+function bgpDetail(a) {
+	var e = ed;
+
+	if (!ed.summary || !ed.summary.rows.length || ed.asked[a] ||
+	    !/^[0-9A-Fa-f.:]+$/.test(a || ""))
+		return;
+	ed.asked[a] = true;
+	ask("GET", "show", { words: "bgp neighbor " + a }).then(function (j) {
+		if (ed === e && j.ok) {
+			ed.detail[a] = bgpNeighbor(bgpOutput(j));
+			structured();
+		}
 	});
 }
 
@@ -489,10 +515,20 @@ function bgpEditor(box) {
 		bgpPeersTab(box, doc, as ? bgpRest(as) : "");
 }
 
+/* a peer's address, its macro's value if it names one */
+function bgpAddress(p, macros) {
+	return /^\$/.test(p.address) ? macros[p.address.slice(1)] : p.address;
+}
+
+/* the last error a peer's show neighbor gave: received, else sent */
+function bgpLastError(d) {
+	return d.received ? "received: " + d.received : d.sent ? "sent: " +
+	    d.sent : "";
+}
+
 /* find a peer's row in show bgp summary by description or address */
 function bgpSeen(p, macros) {
-	var a = /^\$/.test(p.address) ? macros[p.address.slice(1)] :
-	    p.address;
+	var a = bgpAddress(p, macros);
 
 	if (!ed.summary)
 		return null;
@@ -534,13 +570,16 @@ function bgpPeersTab(box, doc, localAS) {
 		    ["neighbor", "group"]));
 	}));
 	["", "Peer", "Description", "Remote AS", "Group", "State", "Up/Down",
-	    "Prefixes"].forEach(function (h) {
+	    "Accepted", "Advertised", "Last error"].forEach(function (h) {
 		head.appendChild(el("th", h));
 	});
 	t.appendChild(head);
 	peers.forEach(function (p) {
 		var s = bgpSeen(p, macros), tr = el("tr", null,
 		    p.address === ed.peer ? "sel" : ""), led = el("td");
+		var d = ed.detail[bgpAddress(p, macros)];
+
+		bgpDetail(bgpAddress(p, macros));
 
 		led.appendChild(el("i", null, "led " + (!s ? "" :
 		    s.state === "Established" ? "on" : p.down ? "" : "warn")));
@@ -553,8 +592,12 @@ function bgpPeersTab(box, doc, localAS) {
 		tr.appendChild(el("td", p.down ? "down, as configured" :
 		    s ? s.state : ""));
 		tr.appendChild(el("td", s ? s.updown : "", "mono"));
-		tr.appendChild(el("td", s && s.prefixes !== null ?
+		tr.appendChild(el("td", d && d.accepted !== null ?
+		    String(d.accepted) : s && s.prefixes !== null ?
 		    String(s.prefixes) : "", "num"));
+		tr.appendChild(el("td", d && d.advertised !== null ?
+		    String(d.advertised) : "", "num"));
+		tr.appendChild(el("td", d ? bgpLastError(d) : "", "descr"));
 		tr.addEventListener("click", function () {
 			ed.peer = ed.peer === p.address ? "" : p.address;
 			structured();
@@ -582,6 +625,8 @@ function bgpPeerForm(box, doc, p, localAS, macros) {
 	}), bar = el("div", null, "bar");
 
 	panel.appendChild(el("h3", "Session with " + p.address));
+	bgpObserved(panel, bgpSeen(p, macros), ed.detail[bgpAddress(p,
+	    macros)]);
 	BGP_FIELDS.forEach(function (f) {
 		var c = edControl(f[0], f[1], f[1] === "check" ? !!p[f[0]] :
 		    f[0] === "descr" ? bgpUnquote(p[f[0]]) : p[f[0]],
@@ -614,19 +659,131 @@ function bgpPeerForm(box, doc, p, localAS, macros) {
 		flows.appendChild(col);
 	});
 	panel.appendChild(flows);
-	if (p.other.length) {
-		panel.appendChild(el("h3", "Other settings"));
-		panel.appendChild(el("pre", p.other.map(function (o) {
-			return o.code.replace(/\b(password|key)\s+\S+/g,
-			    "$1 ••••••");
-		}).join("\n"), "term"));
-	}
+	bgpAdvancedForm(panel, doc, p);
 	bar.appendChild(edButton("Delete peer", function () {
 		ed.peer = "";
 		bgpDone(bgpRemove(doc, p.node));
 	}));
 	panel.appendChild(bar);
 	box.appendChild(panel);
+}
+
+/* what bgpctl shows of a peer: its summary row s and its detail d */
+function bgpObserved(panel, s, d) {
+	var dl = el("dl", null, "observed");
+
+	[["State", s ? s.state : ""], ["Up or down for", s &&
+	    s.updown !== "Never" ? s.updown : ""], ["Accepted", d &&
+	    d.accepted !== null ? String(d.accepted) : s && s.prefixes !==
+	    null ? String(s.prefixes) : ""], ["Advertised", d &&
+	    d.advertised !== null ? String(d.advertised) : ""],
+	    ["Last error sent", d ? d.sent : ""], ["Last error received",
+	    d ? d.received : ""], ["Shutdown reason received", d ? d.reason :
+	    ""]].forEach(function (x) {
+		if (x[1]) {
+			dl.appendChild(el("dt", x[0]));
+			dl.appendChild(el("dd", x[1]));
+		}
+	});
+	if (!dl.children.length)
+		return;
+	panel.appendChild(el("p", "Observed, from bgpctl", "help"));
+	panel.appendChild(dl);
+}
+
+/* a setting's value: one line, with no brace, comment or escape */
+function bgpAdvOk(v) {
+	return !/[{}#\\\n]/.test(v);
+}
+
+/* a setting the peer has: its value, with Delete */
+function bgpAdvRow(det, doc, r, i) {
+	var line = el("div", null, "addline"), id = r.id || "other", c, row;
+	var key = r.key ? r.key + " " : "";
+
+	c = edControl("adv-" + id + "-" + i, r.secret ? "secret" : "text",
+	    r.value, function (v) {
+		v = v.trim();
+		if (!bgpAdvOk(v)) {
+			c.focus();
+			return;
+		}
+		bgpDone(v === "" ? bgpRemove(doc, r.node) :
+		    bgpSplice(doc, r.node.start, r.node.end,
+		    [bgpLineOf(doc, r.node, key + v)]));
+	});
+	line.appendChild(c);
+	line.appendChild(edButton("Delete", function () {
+		bgpDone(bgpRemove(doc, r.node));
+	}));
+	row = regField(det, "bgp." + id, line, null,
+	    r.key ? null : r.node.words[0]);
+	if (bgpAdvWarn(r))
+		row.appendChild(el("span", bgpAdvWarn(r), "tag warn"));
+}
+
+/* a setting to add to the peer, from those the group lists */
+function bgpAdvAdd(det, doc, p, g) {
+	var add = el("div", null, "addline"), kw, val;
+
+	kw = edControl("adv-key-" + g.name, g.keys.map(function (k) {
+		return k[0];
+	}), g.keys[0][0], function () {});
+	val = edControl("adv-value-" + g.name, "text", "", function () {});
+	val.placeholder = "Value";
+	add.appendChild(kw);
+	add.appendChild(val);
+	add.appendChild(edButton("Add", function () {
+		var v = val.value.trim();
+
+		if (!bgpAdvOk(v)) {
+			val.focus();
+			return;
+		}
+		ed.open[g.name] = true;
+		bgpDone(bgpAppend(doc, p.node, [bgpIndent(doc, p.node) +
+		    kw.value + (v ? " " + v : "") + "\n"]));
+	}));
+	regField(det, "bgp.advanced-new", add);
+}
+
+/*
+ * a peer's other settings, a group each, open if it was or if it has
+ * any; a group's summary counts its settings and says if one is risky
+ */
+function bgpAdvancedForm(panel, doc, p) {
+	var adv = bgpAdvanced(p);
+
+	BGP_ADVANCED.concat([{ name: "Other", keys: [] }]).forEach(
+	    function (g) {
+		var rows = adv[g.name], det, sum, warn, tag;
+
+		if (g.name === "Other" && !rows.length)
+			return;
+		det = el("details", null, "igroup");
+		det.open = ed.open[g.name] !== undefined ? ed.open[g.name] :
+		    rows.length > 0;
+		det.addEventListener("toggle", function () {
+			ed.open[g.name] = det.open;
+		});
+		sum = el("summary");
+		sum.appendChild(el("span", g.name));
+		sum.appendChild(el("span", rows.length ? rows.length + " set" :
+		    "", "dim count"));
+		warn = rows.map(bgpAdvWarn).filter(Boolean);
+		if (warn.length) {
+			tag = el("span", "warning", "tag warn");
+			tag.title = warn.join("; ");
+			sum.appendChild(tag);
+		}
+		det.appendChild(sum);
+		rows.forEach(function (r, i) {
+			bgpAdvRow(det, doc, r, i);
+		});
+		if (g.keys.length)
+			bgpAdvAdd(det, doc, p, g);
+		panel.appendChild(det);
+	});
 }
 
 /* the networks bgpd announces, one per line */
