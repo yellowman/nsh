@@ -2161,11 +2161,11 @@ The last 50 configurations saved are kept, for
 .Cm rollback
 and
 .Cm show rollback ,
-each with who saved it and the
+each with who saved it, the
 .Ar text
 of
 .Cm comment ,
-if given;
+if given, and its generation, one more than the last saved's;
 one the same as the last saved is not kept again.
 .Cm check
 and
@@ -3980,10 +3980,14 @@ display the candidate configuration.
 .Pp
 Display when each configuration kept by
 .Cm commit
-was saved, who saved it and their comment, numbered from 0, the last
-saved, or display configuration
+was saved, its generation, who saved it and their comment, numbered
+from 0, the last saved, or display configuration
 .Ar N ,
-which begins with a comment line saying who saved it and why.
+which begins with comment lines saying who saved it and why, and its
+generation.
+Before the list, say whether what runs differs from the saved
+configuration, whether a commit did not finish or what it changed is
+not saved, and whether the boot failed.
 With
 .Cm diff ,
 display what configuration

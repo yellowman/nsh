@@ -169,6 +169,7 @@ extern pid_t child;
 #define ROLLBACKS	50		/* how many, rollback 0 the last */
 #define ROLLBACK	NSHDB "/nshrc.%d"
 #define ROLLBACK_HEAD	"# saved by "	/* who saved it, and why */
+#define ROLLBACK_GEN	"# generation "	/* then which save it was */
 #define CONFIRM		"/var/run/nshconfirm"	/* a commit to confirm */
 #define CLEAR		"/usr/bin/clear"
 #define LOGGER		"/usr/bin/logger"
@@ -736,6 +737,7 @@ int commit_boot(char *);
 int rollback_keep(const char *, const char *, const char *);
 int saved_write(void);
 int saved_diff(int);
+int saved_differs(void);
 /* operations, which nshd's system runs */
 #define OP_DIFFERS	3	/* an operation's status: what it compared differs */
 int op_allowed(int, char **);

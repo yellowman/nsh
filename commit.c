@@ -212,6 +212,8 @@ static int ifblock(char *, char *, size_t);
 static int clear(struct commit *, char *, int, int);
 static const char *committer(void);
 static int samefile(const char *, char *);
+static unsigned long long rollback_gen(int);
+static struct cnode *saved_tree(void);
 static int copyfile(const char *, char *, char *);
 static int syncdir(const char *);
 static int sub_begin(struct commit *, struct sub *);
@@ -2041,19 +2043,22 @@ committer(void)
 
 /*
  * Keep the configuration just saved, in file, as rollback 0, with who
- * saved it and their comment, if not empty; each kept before it one
- * further on, and the oldest no more; unless rollback 0 is the same. -1
- * if it could not, said why
+ * saved it and their comment, if not empty, and its generation, one
+ * more than rollback 0's; each kept before it one further on, and the
+ * oldest no more; unless rollback 0 is the same. -1 if it could not,
+ * said why
  */
 int
 rollback_keep(const char *file, const char *who, const char *comment)
 {
-	char from[PATH_MAX], to[PATH_MAX], head[64 + COMMENTMAX], *p;
+	char from[PATH_MAX], to[PATH_MAX], head[96 + COMMENTMAX], *p;
+	unsigned long long gen;
 	int i;
 
 	snprintf(to, sizeof(to), ROLLBACK, 0);
 	if (samefile(file, to))
 		return 0;
+	gen = rollback_gen(0) + 1;
 	if (mkdir(NSHDB, 0700) == -1 && errno != EEXIST) {
 		printf("%% mkdir %s: %s\n", NSHDB, strerror(errno));
 		return -1;
@@ -2072,9 +2077,37 @@ rollback_keep(const char *file, const char *who, const char *comment)
 	for (p = head; *p != '\0'; p++)
 		if (iscntrl((unsigned char)*p))
 			*p = ' ';
-	strlcat(head, "\n", sizeof(head));
+	snprintf(head + strlen(head), sizeof(head) - strlen(head),
+	    "\n%s%llu\n", ROLLBACK_GEN, gen);
 	snprintf(to, sizeof(to), ROLLBACK, 0);
 	return copyfile(file, to, head);
+}
+
+/*
+ * Rollback n's generation, as its line after who saved it says: 0 if
+ * it has none, or it is not kept
+ */
+static unsigned long long
+rollback_gen(int n)
+{
+	char path[PATH_MAX], line[BUFSIZ];
+	unsigned long long gen = 0;
+	const char *errstr;
+	FILE *f;
+
+	snprintf(path, sizeof(path), ROLLBACK, n);
+	if ((f = fopen(path, "r")) == NULL)
+		return 0;
+	if (fgets(line, sizeof(line), f) != NULL &&
+	    strncmp(line, ROLLBACK_HEAD, strlen(ROLLBACK_HEAD)) == 0 &&
+	    fgets(line, sizeof(line), f) != NULL &&
+	    strncmp(line, ROLLBACK_GEN, strlen(ROLLBACK_GEN)) == 0) {
+		line[strcspn(line, "\n")] = '\0';
+		gen = strtonum(line + strlen(ROLLBACK_GEN), 1, LLONG_MAX,
+		    &errstr);
+	}
+	fclose(f);
+	return gen;
 }
 
 /*
@@ -2210,10 +2243,7 @@ saved_diff(int hide)
 	FILE *out = stdout;
 	int n = -1;
 
-	if (access(SAVED, R_OK) == -1 && errno == ENOENT)
-		saved = conftree_read("/dev/null", conf_mode, conf_ordered);
-	else
-		saved = conftree_read(SAVED, conf_mode, conf_ordered);
+	saved = saved_tree();
 	if (saved != NULL && (now = running_tree()) != NULL &&
 	    (n = conftree_compare(NULL, saved, now)) > 0) {
 		/* had whole, to take the hashes out */
@@ -2238,6 +2268,33 @@ saved_diff(int hide)
 	return n == -1 ? -1 : n > 0;
 }
 
+/*
+ * Does what runs differ from the saved configuration, as saved_diff()
+ * compares them? 1 if it does, 0 if not, -1 if either cannot be read,
+ * said why
+ */
+int
+saved_differs(void)
+{
+	struct cnode *saved, *now = NULL;
+	int n = -1;
+
+	if ((saved = saved_tree()) != NULL && (now = running_tree()) != NULL)
+		n = conftree_compare(NULL, saved, now);
+	conftree_free(saved);
+	conftree_free(now);
+	return n == -1 ? -1 : n > 0;
+}
+
+/* the saved configuration, SAVED, or an empty one if none, or NULL */
+static struct cnode *
+saved_tree(void)
+{
+	if (access(SAVED, R_OK) == -1 && errno == ENOENT)
+		return conftree_read("/dev/null", conf_mode, conf_ordered);
+	return conftree_read(SAVED, conf_mode, conf_ordered);
+}
+
 /* dir's entries, as they now are, kept: -1, said, if not */
 static int
 syncdir(const char *dir)
@@ -2254,13 +2311,17 @@ syncdir(const char *dir)
 	return r;
 }
 
-/* Do the files a and b hold the same, but for b's line of who saved it? */
+/*
+ * Do the files a and b hold the same, but for b's lines of who saved it
+ * and its generation?
+ */
 static int
 samefile(const char *a, char *b)
 {
 	char x[BUFSIZ], y[BUFSIZ];
 	FILE *fa, *fb;
 	size_t n;
+	long at;
 	int same = 0;
 
 	if ((fa = fopen(a, "r")) == NULL)
@@ -2272,6 +2333,11 @@ samefile(const char *a, char *b)
 	if (fgets(y, sizeof(y), fb) == NULL ||
 	    strncmp(y, ROLLBACK_HEAD, strlen(ROLLBACK_HEAD)) != 0)
 		rewind(fb);
+	else if ((at = ftell(fb)) == -1)
+		goto done;
+	else if (fgets(y, sizeof(y), fb) == NULL ||
+	    strncmp(y, ROLLBACK_GEN, strlen(ROLLBACK_GEN)) != 0)
+		fseek(fb, at, SEEK_SET);
 	do {
 		n = fread(x, 1, sizeof(x), fa);
 		if (fread(y, 1, sizeof(y), fb) != n || memcmp(x, y, n) != 0)
@@ -2413,11 +2479,15 @@ rollback_diff(int n, FILE *out)
 	return r == -1 ? -1 : 0;
 }
 
-/* When each configuration kept was saved, who saved it and why, to out */
+/*
+ * When each configuration kept was saved, its generation, who saved it
+ * and why, to out
+ */
 void
 rollback_list(FILE *out)
 {
-	char path[PATH_MAX], when[64], line[BUFSIZ], *who, *why;
+	char path[PATH_MAX], when[64], line[BUFSIZ], gen[40], *who, *why;
+	unsigned long long g;
 	struct stat sb;
 	FILE *f;
 	int i;
@@ -2442,8 +2512,12 @@ rollback_list(FILE *out)
 			}
 			fclose(f);
 		}
-		fprintf(out, "%2d  %s%s%s%s%s\n", i, when, who ? "  " : "",
-		    who ? who : "", why ? "  " : "", why ? why : "");
+		gen[0] = '\0';
+		if ((g = rollback_gen(i)) > 0)
+			snprintf(gen, sizeof(gen), "generation %llu  ", g);
+		fprintf(out, "%2d  %s%s%s%s%s%s\n", i, gen, when,
+		    who ? "  " : "", who ? who : "", why ? "  " : "",
+		    why ? why : "");
 	}
 }
 

@@ -262,7 +262,7 @@ function changed(tr, n) {
 	}
 	next = el("tr", null, "changes");
 	next.appendChild(el("td"));
-	next.firstChild.colSpan = 5;
+	next.firstChild.colSpan = 6;
 	pre = next.firstChild.appendChild(el("pre", null, "term"));
 	tr.after(next);
 	b.setAttribute("aria-expanded", "true");
@@ -272,21 +272,25 @@ function changed(tr, n) {
 	});
 }
 
-/* the saved configurations, as rows: N, when, who, why */
+/* the saved configurations, as rows: N, generation, when, who, why */
 function saved() {
 	ask("GET", "config", { what: "rollback" }).then(function (j) {
 		var t = $("saved-table"), head = el("tr"), n = 0;
 
 		t.textContent = "";
-		["", "", "Saved", "By", "Comment"].forEach(function (h) {
+		["", "", "Generation", "Saved", "By", "Comment"].forEach(
+		    function (h) {
 			head.appendChild(el("th", h));
 		});
 		said(j).split("\n").forEach(function (l) {
-			var m = /^ *(\d+)  (.*)$/.exec(l), tr, f, b;
+			var m = /^ *(\d+)  (.*)$/.exec(l), tr, f, g, b;
 
 			if (m === null)
 				return;
 			f = m[2].split(/ {2,}/);
+			g = /^generation (\d+)$/.exec(f[0]);
+			if (g !== null)
+				f.shift();
 			tr = el("tr", null, Number(m[1]) === chosen ?
 			    "sel" : "");
 			tr.dataset.n = m[1];
@@ -300,6 +304,7 @@ function saved() {
 			});
 			tr.appendChild(el("td")).appendChild(b);
 			tr.appendChild(el("td", m[1], "num"));
+			tr.appendChild(el("td", g !== null ? g[1] : "", "num"));
 			tr.appendChild(el("td", f[0], "mono"));
 			tr.appendChild(el("td", f[1] || ""));
 			tr.appendChild(el("td", f.slice(2).join("  "),
@@ -373,6 +378,39 @@ function operate(line, rtable, out) {
 	$("op-dialog").showModal();
 }
 
+/*
+ * how many top-level statements a diff changes: each one added or
+ * removed, and each one with a line added or removed under it, where a
+ * statement removed and one added just after it with the same first
+ * word count once, as one statement changed
+ */
+function objects(diff) {
+	var seen = Object.create(null), n = 0, head = "", last = "";
+
+	diff.split("\n").forEach(function (l) {
+		var m = /^([-+ ])(\S.*)$/.exec(l), key;
+
+		if (/^(---|\+\+\+) /.test(l) ||
+		    (m === null && !/^[-+] /.test(l)))
+			return;
+		if (m !== null && m[1] === " ") {
+			head = m[2];
+			return;
+		}
+		key = m !== null ? m[2] : head;
+		if (m !== null && m[1] === "+" && last !== "" &&
+		    last.split(" ")[0] === key.split(" ")[0])
+			key = last;
+		if (m !== null)
+			head = key;
+		last = m !== null && m[1] === "-" ? key : "";
+		if (!seen[key])
+			n++;
+		seen[key] = true;
+	});
+	return n;
+}
+
 /* how the candidate differs from what runs, in the strip */
 function changes(inConfigure) {
 	var tag = $("changes");
@@ -383,19 +421,52 @@ function changes(inConfigure) {
 		return;
 	}
 	ask("GET", "config", { what: "diff" }).then(function (j) {
-		var add = 0, del = 0;
+		var n = objects(said(j));
 
-		said(j).split("\n").forEach(function (l) {
-			if (/^\+(?!\+\+)/.test(l))
-				add++;
-			else if (/^-(?!--)/.test(l))
-				del++;
-		});
-		tag.textContent = add + del === 0 ? "no changes" :
-		    "+" + add + " −" + del;
-		tag.classList.toggle("on", add + del > 0);
+		tag.textContent = n === 0 ? "no changes" : n === 1 ?
+		    "1 object changed" : n + " objects changed";
+		tag.classList.toggle("on", n > 0);
 		tag.hidden = false;
-		$("led-cfg").className = add + del > 0 ? "led warn" : "led on";
+		$("led-cfg").className = n > 0 ? "led warn" : "led on";
+	});
+}
+
+/* a short label for one of system's warnings, the warning its title */
+function healthTag(text) {
+	var t = el("span", /^The boot failed/.test(text) ? "boot failed" :
+	    /did not finish$/.test(text) ? "commit unfinished" :
+	    /not saved$|not the saved/.test(text) ? "not saved" : "warning",
+	    "tag warn");
+
+	t.title = text;
+	return t;
+}
+
+/*
+ * what runs, on the strip: its generation, when it was last saved and
+ * by whom, and system's warnings, all from the list of what is kept
+ */
+function runState() {
+	ask("GET", "config", { what: "rollback" }).then(function (j) {
+		var h = $("health"), f = null;
+
+		h.textContent = "";
+		$("run").hidden = j.error !== undefined;
+		if (j.error !== undefined)
+			return;
+		said(j).split("\n").forEach(function (l) {
+			var m;
+
+			if ((m = /^% (.*)$/.exec(l)) !== null)
+				h.appendChild(healthTag(m[1]));
+			else if ((m = /^ *0  (.*)$/.exec(l)) !== null)
+				f = m[1].split(/ {2,}/);
+		});
+		$("gen").hidden = f === null || !/^generation \d+$/.test(f[0]);
+		if (!$("gen").hidden)
+			$("gen").textContent = f.shift();
+		$("last-save").textContent = f === null ? "never saved" :
+		    "saved " + f[0].slice(0, 16) + (f[1] ? " by " + f[1] : "");
 	});
 }
 
@@ -993,6 +1064,8 @@ function noticed(d) {
 	if ((d.kind === "commit" || d.kind === "back") &&
 	    !$("topic-history").hidden)
 		saved();
+	if (["commit", "confirmed", "applied", "back"].indexOf(d.kind) !== -1)
+		runState();
 	if (whose.indexOf(d.kind) !== -1 && d.kind !== "lock" &&
 	    d.kind !== "unlock") {
 		$("r-last").textContent = d.kind + " " + when + ", uid " +
@@ -1030,6 +1103,7 @@ function loggedIn(j) {
 	$("deck").hidden = false;
 	follow();
 	host();
+	runState();
 	workspace("overview");
 }
 

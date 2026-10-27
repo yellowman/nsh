@@ -262,7 +262,8 @@ input.nope {
 	min-width: 0;
 }
 
-#strip .host, #strip .cand, #strip .actions {
+#strip .host, #strip .run, #strip .cand, #strip .actions,
+#strip .health {
 	display: flex;
 	align-items: center;
 	gap: 8px;
@@ -278,7 +279,7 @@ input.nope {
 	font-size: 13px;
 }
 
-#who {
+#who, #last-save {
 	font-size: 12px;
 	white-space: nowrap;
 	overflow: hidden;
@@ -1668,7 +1669,7 @@ dialog .actions {
 	#deck {
 		grid-template-columns: 44px 1fr;
 	}
-	#strip .actions button:not(.primary), #who {
+	#strip .actions button:not(.primary), #who, #last-save {
 		display: none;
 	}
 	.chassis {

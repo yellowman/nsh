@@ -69,7 +69,9 @@
  * SIGKILL, and it fails. A test runs as NSHD_CHECK_USER, its rules
  * staged in a directory of their own, its own, but for the daemons
  * root_tests names, each an exception that keeps root, its rules
- * root's. SAVE saves what runs as SAVED, whole and on disk.
+ * root's. SAVE saves what runs as SAVED, whole and on disk, and keeps
+ * it as rollback 0, one generation past the rollback 0 before, unless
+ * it is the same.
  * While a job runs, config's requests wait for it, except what a
  * stream's client read and a session gone.
  *
@@ -481,6 +483,7 @@ static void	system_failed(struct confirm *);
 static void	system_went(int);
 static char	*system_running(size_t *);
 static void	system_rollback(uint32_t, int, int);
+static void	system_health(void);
 static void	system_test(uint32_t, struct nshd_whose *, char *);
 static int	system_admin_test(char *);
 static void	system_printed(uint32_t, int32_t);
@@ -2522,8 +2525,10 @@ system_rollback(uint32_t id, int n, int diff)
 
 	if ((f = open_memstream(&buf, &len)) == NULL)
 		fatal("%s", __func__);
-	if (n == -1)
+	if (n == -1) {
+		system_health();
 		rollback_list(f);
+	}
 	else if (n == -2)
 		r = saved_text(f);
 	else if (diff)
@@ -2539,6 +2544,33 @@ system_rollback(uint32_t id, int n, int diff)
 		fatal("%s", __func__);
 	free(buf);
 	system_end(id, r != 0, NULL);
+}
+
+/*
+ * What is wrong with what runs, said before the list of what is kept:
+ * that it is not the saved configuration, a commit that did not finish
+ * or is not saved, and a boot that failed
+ */
+static void
+system_health(void)
+{
+	struct record	 rec;
+	struct boot	 b;
+
+	if (saved_differs() == 1)
+		printf("%% What runs is not the saved configuration\n");
+	if (!committing && record_read(&rec) == 0) {
+		if (rec.state == RECORD_APPLYING)
+			printf("%% The commit %s did not finish\n",
+			    record_by(&rec));
+		else if (rec.state == RECORD_UNSAVED)
+			printf("%% What the commit %s changed is not saved\n",
+			    record_by(&rec));
+		record_free(&rec);
+	}
+	if (boot_read(&b) == 0 && b.state == BOOT_FAILED)
+		printf("%% The boot failed%s\n", b.demoted ? ", and carp is "
+		    "demoted until a commit saves" : "");
 }
 
 /*
