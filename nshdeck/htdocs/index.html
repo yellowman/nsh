@@ -164,7 +164,7 @@
 </div>
 <p class="help" id="mode-help"></p>
 <pre id="transcript" class="term"></pre>
-<p class="empty">Type a line as at nsh's configure prompt, such as <code>hostname gw1</code>, or <code>interface em0</code> and then <code>description uplink</code>. Tab completes a word, and <code>?</code> lists what can come next.</p>
+<p class="empty">Type a line as at nsh's configure prompt, such as <code>hostname gw1</code>, or <code>interface em0</code> and then <code>description uplink</code>. Tab completes a word; <code>?</code> lists what can come next.</p>
 <form id="line-form" class="cliline">
 <span id="prompt">nsh&gt;</span>
 <input name="line" class="cli" aria-label="A line of configuration" autocomplete="off" spellcheck="false">
@@ -192,7 +192,7 @@
 <div class="split">
 <div class="panel">
 <div class="bar"><h2>Saved configurations</h2><span class="dim" id="saved-count"></span></div>
-<p class="help">Each commit saves the configuration it made, newest first. A row's arrow opens what that commit changed from the one saved before it. Choose a row to see the configuration whole; loaded into a candidate, it is reviewed under Changes and then committed, or discarded.</p>
+<p class="help">Newest first. The arrow shows what a commit changed; choose a row to see or load it.</p>
 <table class="grid pick" id="saved-table"></table>
 <p class="empty">No configuration has been saved yet.</p>
 </div>
@@ -201,7 +201,7 @@
 <span class="fill"></span>
 <button type="button" id="load" disabled>Load into the candidate</button>
 </div>
-<p class="help" id="load-help">Loading needs configure private, shared or exclusive; enter one under Changes.</p>
+<p class="help" id="load-help">To load one, enter configure under Changes.</p>
 <pre id="saved-out" class="term tall"></pre>
 <p class="empty">Choose a saved configuration to see it here.</p>
 </div>
@@ -209,7 +209,7 @@
 <div class="split">
 <div class="panel">
 <div class="bar"><h2>Activity</h2></div>
-<p class="help">What nshd reports as it happens: commits and who made them, confirmed commits and their deadlines, configure exclusive taken and left, and interfaces and routes that change.</p>
+<p class="help">Commits, confirmed commits, configure exclusive, and interface and route changes, as they happen.</p>
 <ul id="notices"></ul>
 <p class="empty">Nothing yet since this page opened.</p>
 </div>
@@ -222,7 +222,7 @@
 <button>Follow</button>
 </form>
 </div>
-<p class="help">Check the logs to follow, then Follow: their lines show here as the system writes them.</p>
+<p class="help">Check logs, then Follow.</p>
 <pre id="log" class="term"></pre>
 <p class="empty">No log followed.</p>
 </div>
@@ -236,7 +236,7 @@
 <div class="topic" id="topic-live" hidden>
 <div class="panel">
 <div class="bar"><h2>Live operations</h2><span class="tag warn">Live operation</span></div>
-<p class="help">An operation acts on the running system at once. It is not part of a candidate, and neither Discard nor a rollback undoes it. Each asks to be confirmed, and needs the operate permission. Choose one to start its line; the number beside Run is the routing table it runs in.</p>
+<p class="help">These act on the running system at once; Discard and rollbacks do not undo them. Each needs the operate permission. The number beside Run is the routing table.</p>
 <table class="grid pick" id="op-kinds"></table>
 <form id="op-form" class="cliline">
 <span>op&gt;</span>
@@ -274,7 +274,7 @@
 <label>Comment <input name="comment" maxlength="255"></label>
 <label class="row"><input type="checkbox" name="confirmed"> confirmed, within
 <input name="minutes" type="number" min="1" max="1440" value="5" class="narrow"> minutes</label>
-<p class="dim">A confirmed commit goes back by itself unless a commit saves it in time.</p>
+<p class="dim">It rolls back unless you commit again before then.</p>
 <div class="actions">
 <button type="button" id="commit-cancel">Cancel</button>
 <button class="primary">Commit</button>
@@ -286,7 +286,7 @@
 <form id="op-confirm">
 <h2>Run a live operation</h2>
 <pre class="term" id="op-line"></pre>
-<p class="dim">It acts on the running system now. A candidate, Discard and rollbacks do not undo it.</p>
+<p class="dim">This acts on the running system now. Discard and rollbacks do not undo it.</p>
 <div class="actions">
 <button type="button" id="op-cancel">Cancel</button>
 <button class="primary">Run</button>

@@ -27,29 +27,24 @@ var pendingOut = null;		/* where what it prints goes */
 
 /* what each configure mode is */
 var MODES = {
-	private: "A candidate of your own. It starts as what runs, other " +
-	    "sessions' commits show through it, and your changes stay on " +
-	    "top until you commit or discard them.",
-	shared: "One candidate for every session in shared mode: each sees " +
-	    "what the others change, Commit commits all of it, and Exit " +
-	    "leaves your changes there for the others.",
-	exclusive: "The shared candidate, while no other session changes it " +
-	    "or commits. Exit discards what was not committed.",
-	terminal: "No candidate: each line changes the running system as it " +
-	    "is typed, and is undone if it does not take. Commit saves what " +
-	    "runs."
+	private: "Your own candidate. Other sessions' commits show " +
+	    "through it.",
+	shared: "One candidate for all shared sessions. Commit commits " +
+	    "every session's changes.",
+	exclusive: "The shared candidate, locked to you. Exit discards what " +
+	    "was not committed.",
+	terminal: "No candidate: each line changes the running system at " +
+	    "once. Commit saves it."
 };
 
 /* what each view shows, and what it says when it has nothing */
 var VIEWS = {
-	diff: ["What Commit would change: lines added to what runs (+), and " +
-	    "lines taken away (−).", "No changes: the candidate is what runs."],
-	candidate: ["The candidate whole: what runs, with the changes made " +
-	    "in configure.", "The candidate is empty."],
-	running: ["What the system runs now, as nsh would save it.",
-	    "Nothing runs."],
-	startup: ["The configuration saved last, which the system starts " +
-	    "with.", "No configuration is saved."]
+	diff: ["What Commit would change: + added, − removed.",
+	    "No changes: the candidate is what runs."],
+	candidate: ["The whole candidate.", "The candidate is empty."],
+	running: ["What runs now.", "Nothing runs."],
+	startup: ["What was saved last. The system boots with it.",
+	    "No configuration is saved."]
 };
 
 /* the operations nshd runs, each a line to start from, and what it does */
@@ -61,13 +56,11 @@ var OPS = [
 	    "lists which."],
 	["flush bridge-dyn ", "Removes the addresses a bridge learned; name " +
 	    "the bridge."],
-	["bgp reload", "A daemon's action, such as bgp reload; ? after a " +
-	    "daemon's name lists its actions."],
+	["bgp reload", "A daemon's action, such as bgp reload."],
 	["interface ", "An interface's bssid, setpuk or chgpin, after its " +
 	    "name."],
-	["diff-config", "Compares the saved configuration with what runs, " +
-	    "and changes nothing."],
-	["crontab", "Lists root's scheduled jobs, and changes nothing."],
+	["diff-config", "Compares the saved configuration with what runs."],
+	["crontab", "Lists root's scheduled jobs."],
 	["reboot", "Restarts the system; halt stops it, and powerdown turns " +
 	    "it off."]
 ];
@@ -344,14 +337,13 @@ function loadable() {
 
 	$("load").disabled = chosen < 1 || mode === 0 || mode === 4;
 	if (chosen === 0)
-		help.textContent = "This is what was saved last. Discard " +
-		    "changes, under Changes, makes the candidate what runs.";
+		help.textContent = "This is what was saved last.";
 	else if (mode === 0 || mode === 4)
-		help.textContent = "Loading needs configure private, shared " +
-		    "or exclusive; enter one under Changes.";
+		help.textContent = "To load one, enter configure " +
+		    "under Changes.";
 	else
-		help.textContent = "Loading makes it the candidate, to review " +
-		    "under Changes and commit, or discard.";
+		help.textContent = "Load makes it the candidate. Review it " +
+		    "under Changes.";
 }
 
 /* the operations, as rows that start the line */
