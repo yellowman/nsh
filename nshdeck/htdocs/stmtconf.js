@@ -13,10 +13,11 @@
  * of times, { key }; opts, each { key, kw (the key if not given), n
  * (value words, 1 if not given), flag (no value), words (no keyword: the
  * option is one of these words), upto (its value is the words up to the
- * next option), brace (no keyword: the option is a list in braces),
+ * next other option), brace (no keyword: the option is a list in braces),
  * follows (the key of the option it comes right after, and goes with) };
  * fixed, if its grammar takes the options only in the order listed;
- * block, true if it opens a block, or "maybe" if it may. An argument
+ * block, true if it opens a block, or "maybe" if it may; of, the words
+ * one of which must follow kw. An argument
  * marked rest takes every word after it. A field marked raw is written
  * as typed, word by word: an address with a prefix length is one, as the
  * grammars read the slash as a word of its own; so is a rest or upto
@@ -65,7 +66,8 @@ function stKind(n, kinds) {
 		}) || null;
 	kinds.forEach(function (k) {
 		if (!k.macro && (k.block === "maybe" ||
-		    !!k.block === !!n.children) &&
+		    !!k.block === !!n.children) && (!k.of ||
+		    k.of.indexOf(n.words[k.kw.length]) !== -1) &&
 		    k.kw.every(function (x, i) {
 			return n.words[i] === x;
 		}) && (!best || k.kw.length > best.kw.length))
@@ -108,18 +110,19 @@ function stTake(f, w, i) {
 
 /*
  * the value of option o of kind k at word i of w, after its keyword:
- * none for a flag, a list, the words up to the next option, or its n
- * words; and how many words it takes
+ * none for a flag, a list, the words up to the next other option, or its
+ * n words; and how many words it takes
  */
 function stOptTake(k, o, w, i) {
-	var j = i;
+	var j = i, at;
 
 	if (o.flag)
 		return { vals: [], count: 0 };
 	if (o.group)
 		return stTake(o, w, i);
 	if (o.upto) {
-		while (j < w.length && !stOptAt(k, w, j))
+		while (j < w.length && ((at = stOptAt(k, w, j)) === null ||
+		    at === o))
 			j++;
 		return { vals: [w.slice(i, j).join(" ")], count: j - i };
 	}
@@ -288,7 +291,31 @@ function stSet(doc, s, key, value) {
 		}
 	}
 	return bgpSplice(doc, n.start, n.children ? n.start + 1 : n.end,
-	    [bgpLineOf(doc, n, w.join(" "))]);
+	    stLines(doc, n, w));
+}
+
+/*
+ * Statement n's new words w as lines: one line, or if n was written over
+ * several and opens no block, as many as fit 72 columns, each but the
+ * last ended with a backslash, with n's comments after the last
+ */
+function stLines(doc, n, w) {
+	var ind = /^\s*/.exec(doc.lines[n.start])[0], out = [], cur = ind;
+	var cols = function (x) {
+		return x.replace(/\t/g, "        ").length;
+	};
+
+	if (n.children || n.end - n.start < 2)
+		return [bgpLineOf(doc, n, w.join(" "))];
+	w.forEach(function (x, i) {
+		if (i && cols(cur + " " + x + " \\") > 72) {
+			out.push(cur + " \\\n");
+			cur = ind + "\t" + x;
+		} else
+			cur += (i ? " " : "") + x;
+	});
+	return out.concat([cur + (n.comments.length ? " " +
+	    n.comments.join(" ") : "") + "\n"]);
 }
 
 /* a macro's definition: its value as written if quoted, else quoted */

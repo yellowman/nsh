@@ -65,7 +65,11 @@ var REGISTRY_MODULES = {
 	smtp: { scope: "smtpd's configuration", man: "smtpd.conf.5",
 	    check: "smtpd -n, at Validate and at commit" },
 	ifstate: { scope: "ifstated's configuration", man: "ifstated.conf.5",
-	    check: "ifstated -n, at Validate and at commit" }
+	    check: "ifstated -n, at Validate and at commit" },
+	ipsec: { scope: "isakmpd's configuration", man: "ipsec.conf.5",
+	    check: "ipsecctl -n, at Validate and at commit" },
+	ike: { scope: "iked's configuration", man: "iked.conf.5",
+	    check: "iked -n, at Validate and at commit" }
 };
 
 /* drivers, as interfaces' names begin */
@@ -2327,7 +2331,387 @@ var REGISTRY = {
 	"ifstate.initstate": { label: "Initial state", keyword: "init-state " +
 	    "name", definition: "The state ifstated starts in.", values: "a " +
 	    "state's name", default: "the first state", undo: "clear the " +
-	    "field" }
+	    "field" },
+
+	/* isakmpd's configuration */
+	"ipsec.ike": { label: "IKE policy", keyword: "ike [mode] [encap] " +
+	    "[tmode] [proto p] from src to dst [local a] [peer b] [main ...] " +
+	    "[quick ...] [srcid id] [dstid id] [psk key] [tag t]",
+	    definition: "Traffic isakmpd protects with IKEv1: it negotiates " +
+	    "SAs with the peer and sets up the flows.", values: "the " +
+	    "policy's options", default: "none", undo: "Delete" },
+	"ipsec.mode": { label: "Mode", keyword: "passive | dynamic | active",
+	    definition: "active starts the negotiation; passive waits for " +
+	    "the peer; dynamic starts it, checks that the peer is alive, and " +
+	    "uses the host's name as the local identity, for hosts whose " +
+	    "address changes.", values: "passive, dynamic or active",
+	    default: "active", undo: "choose (not set)", applies: "ike lines" },
+	"ipsec.satype": { label: "Protocol", keyword: "esp | ah | ipcomp | " +
+	    "ipip", definition: "How the traffic is protected: esp encrypts " +
+	    "and authenticates, ah only authenticates.", values: "esp, ah, " +
+	    "ipcomp or ipip", default: "esp", undo: "choose (not set)",
+	    applies: "ike and flow lines" },
+	"ipsec.tmode": { label: "Encapsulation", keyword: "tunnel | transport",
+	    definition: "tunnel carries whole packets between networks; " +
+	    "transport protects traffic between the two hosts themselves.",
+	    values: "tunnel or transport", default: "tunnel", undo: "choose " +
+	    "(not set)", applies: "ike, flow and key lines" },
+	"ipsec.interface": { label: "Interface", keyword: "interface sec",
+	    definition: "A sec(4) interface the policy's traffic goes " +
+	    "through, in place of from and to.", values: "a sec interface's " +
+	    "name", default: "none", undo: "clear the field", applies: "ike " +
+	    "lines" },
+	"ipsec.proto": { label: "IP protocol", keyword: "proto protocol",
+	    definition: "Protects only this IP protocol.", values: "a " +
+	    "protocol's name or number, such as tcp", default: "all",
+	    undo: "clear the field", applies: "ike and flow lines" },
+	"ipsec.from": { label: "From", keyword: "from src [port p] [(srcnat)]",
+	    definition: "The traffic's source.", values: "an address, a " +
+	    "network, any, or a list in braces, then port if any",
+	    default: "none: it needs one", undo: "clear the field",
+	    applies: "ike, flow and key lines" },
+	"ipsec.to": { label: "To", keyword: "to dst [port p]",
+	    definition: "The traffic's destination.", values: "an address, a " +
+	    "network, any, or a list in braces, then port if any",
+	    default: "none: it needs one", undo: "clear the field",
+	    applies: "ike, flow and key lines" },
+	"ipsec.local": { label: "Local", keyword: "local address",
+	    definition: "The address of this end of the IKE exchange.",
+	    values: "an address or a host name", default: "chosen by the " +
+	    "routing table", undo: "clear the field", applies: "ike and flow " +
+	    "lines" },
+	"ipsec.peer": { label: "Peer", keyword: "peer address",
+	    definition: "The other end of the IKE exchange.", values: "an " +
+	    "address, a host name or any", default: "the destination, for " +
+	    "one host", undo: "clear the field", applies: "ike and flow " +
+	    "lines" },
+	"ipsec.main": { label: "Phase 1", keyword: "main [auth a] [enc e] " +
+	    "[group g] [lifetime t]", definition: "Main mode, and the " +
+	    "transforms that protect the IKE exchange.", values: "auth, enc, " +
+	    "group and lifetime with their values", default: "hmac-sha1, " +
+	    "aes, modp3072, 3600", undo: "clear the field", applies: "ike " +
+	    "lines" },
+	"ipsec.aggressive": { label: "Phase 1, aggressive",
+	    keyword: "aggressive [auth a] [enc e] [group g] [lifetime t]",
+	    definition: "Aggressive mode, in place of main. With a " +
+	    "pre-shared key it lets an eavesdropper try to guess the key.",
+	    values: "as for main", default: "main mode", risk: "high: with a " +
+	    "pre-shared key, the key can be guessed offline", undo: "clear " +
+	    "the field", applies: "ike lines" },
+	"ipsec.quick": { label: "Phase 2", keyword: "quick [auth a] [enc e] " +
+	    "[group g] [lifetime t]", definition: "The transforms of the SAs " +
+	    "that carry the traffic. A group other than none turns on " +
+	    "perfect forward secrecy.", values: "auth, enc, group and " +
+	    "lifetime with their values", default: "hmac-sha2-256, aes, 1200",
+	    undo: "clear the field", applies: "ike lines" },
+	"ipsec.srcid": { label: "Local ID", keyword: "srcid id",
+	    definition: "The identity this end gives: a host name, or an " +
+	    "email address.", values: "a host name or an email address",
+	    default: "this end's address", undo: "clear the field",
+	    applies: "ike and flow lines" },
+	"ipsec.dstid": { label: "Peer ID", keyword: "dstid id",
+	    definition: "The identity the peer must give.", values: "a host " +
+	    "name or an email address", default: "the peer's address",
+	    undo: "clear the field", applies: "ike and flow lines" },
+	"ipsec.rsa": { label: "RSA", keyword: "rsa", definition: "The ends " +
+	    "authenticate with their keys and certificates, which isakmpd(8) " +
+	    "describes. It is what happens without psk.", values: "on or off",
+	    default: "on", undo: "clear the check box", applies: "ike lines" },
+	"ipsec.psk": { label: "Pre-shared key", keyword: "psk key",
+	    definition: "A key both ends know, in place of certificates.",
+	    values: "a string", default: "none", secret: true, undo: "clear " +
+	    "the field", applies: "ike lines" },
+	"ipsec.tag": { label: "pf tag", keyword: "tag tag", definition: "pf " +
+	    "tags the packets of the policy's SAs; $id and $domain stand for " +
+	    "the peer's identity.", values: "a tag, quoted if it holds $",
+	    default: "none", undo: "clear the field", applies: "ike lines" },
+	"ipsec.flow": { label: "Flow", keyword: "flow [satype] [in | out] " +
+	    "from src to dst [peer p] [type t]", definition: "A flow set up " +
+	    "without IKE, for SAs with keys set by hand or another daemon.",
+	    values: "the flow's options", default: "none", undo: "Delete" },
+	"ipsec.dir": { label: "Direction", keyword: "in | out",
+	    definition: "The flow's direction.", values: "in or out",
+	    default: "both", undo: "choose (not set)", applies: "flow lines" },
+	"ipsec.type": { label: "Type", keyword: "type use | acquire | " +
+	    "require | deny | bypass | dontacq", definition: "What the " +
+	    "kernel does with the flow's packets when there is no SA: " +
+	    "require drops them; use and acquire send them in the clear; " +
+	    "deny drops; bypass skips IPsec.", values: "use, acquire, " +
+	    "require, deny, bypass or dontacq", default: "require",
+	    undo: "choose (not set)", applies: "flow lines" },
+	"ipsec.esp": { label: "ESP by hand", keyword: "esp [tmode] from src " +
+	    "to dst spi in:out ... authkey k enckey k", definition: "An ESP " +
+	    "SA whose keys are written here rather than negotiated.",
+	    values: "the SA's options", default: "none", undo: "Delete" },
+	"ipsec.spi": { label: "SPI", keyword: "spi in[:out]",
+	    definition: "The SA's security parameter index, each way.",
+	    values: "hexadecimal numbers", default: "none", undo: "clear the " +
+	    "field", applies: "lines with keys set by hand" },
+	"ipsec.udpencap": { label: "UDP encapsulation", keyword: "udpencap",
+	    definition: "The SA's packets go in UDP, through NAT.",
+	    values: "on or off", default: "off", undo: "clear the check box",
+	    applies: "lines with keys set by hand" },
+	"ipsec.auth": { label: "Authentication", keyword: "auth algorithm",
+	    definition: "The SA's authentication algorithm.",
+	    values: "hmac-sha1, hmac-sha2-256 and others ipsec.conf(5) lists",
+	    default: "hmac-sha2-256", undo: "clear the field",
+	    applies: "lines with keys set by hand" },
+	"ipsec.enc": { label: "Encryption", keyword: "enc algorithm",
+	    definition: "The SA's cipher.", values: "aes, aes-256-gcm and " +
+	    "others ipsec.conf(5) lists", default: "aes", undo: "clear the " +
+	    "field", applies: "lines with keys set by hand" },
+	"ipsec.comp": { label: "Compression", keyword: "comp algorithm",
+	    definition: "An IPcomp SA's compression.", values: "deflate",
+	    default: "deflate", undo: "clear the field", applies: "lines " +
+	    "with keys set by hand" },
+	"ipsec.authkey": { label: "Authentication key", keyword: "authkey " +
+	    "key | file path", definition: "The authentication keys, each way.",
+	    values: "hexadecimal keys, or file and a path", default: "none",
+	    secret: true, undo: "clear the field", applies: "lines with keys " +
+	    "set by hand" },
+	"ipsec.enckey": { label: "Encryption key", keyword: "enckey key | " +
+	    "file path", definition: "The encryption keys, each way.",
+	    values: "hexadecimal keys, or file and a path", default: "none",
+	    secret: true, undo: "clear the field", applies: "lines with keys " +
+	    "set by hand" },
+	"ipsec.bundle": { label: "Bundle", keyword: "bundle name",
+	    definition: "Groups SAs that apply together.", values: "a name",
+	    default: "none", undo: "clear the field", applies: "lines with " +
+	    "keys set by hand" },
+	"ipsec.ah": { label: "AH by hand", keyword: "ah [tmode] from src to " +
+	    "dst spi in:out ... authkey k", definition: "An AH SA whose keys " +
+	    "are written here.", values: "the SA's options", default: "none",
+	    undo: "Delete" },
+	"ipsec.ipcomp": { label: "IPcomp by hand", keyword: "ipcomp [tmode] " +
+	    "from src to dst spi in:out", definition: "An IPcomp SA written " +
+	    "here.", values: "the SA's options", default: "none",
+	    undo: "Delete" },
+	"ipsec.ipip": { label: "IP-in-IP by hand", keyword: "ipip [tmode] " +
+	    "from src to dst spi in:out", definition: "An IP-in-IP SA " +
+	    "written here.", values: "the SA's options", default: "none",
+	    undo: "Delete" },
+	"ipsec.tcpmd5": { label: "TCP MD5", keyword: "tcpmd5 from src to dst " +
+	    "spi in:out authkey k", definition: "TCP MD5 signatures between " +
+	    "two hosts, as BGP uses them.", values: "the SA's options",
+	    default: "none", undo: "Delete" },
+	"ipsec.macro": { label: "Macro", keyword: "name = value",
+	    definition: "A name other lines write as $name.", values: "a " +
+	    "name of letters, digits and _", default: "none", undo: "Delete" },
+	"ipsec.value": { label: "Value", keyword: "value", definition: "What " +
+	    "$name stands for.", values: "text, quoted if it has spaces",
+	    default: "none", undo: "clear the field", applies: "macros" },
+
+	/* iked's configuration */
+	"ike.ikev2": { label: "Policy", keyword: "ikev2 [name] [options]",
+	    definition: "Traffic iked protects with IKEv2.", values: "a " +
+	    "name, quoted, or none", default: "none", undo: "Delete" },
+	"ike.match": { label: "Match", keyword: "quick | skip | default",
+	    definition: "quick: a peer that matches stops the search; skip: " +
+	    "the policy is only for starting; default: the policy for peers " +
+	    "no other matches.", values: "quick, skip or default",
+	    default: "none", undo: "choose (not set)", applies: "policies" },
+	"ike.mode": { label: "Mode", keyword: "passive | active",
+	    definition: "active starts the exchange; passive waits for the " +
+	    "peer.", values: "passive or active", default: "passive",
+	    undo: "choose (not set)", applies: "policies" },
+	"ike.ipcomp": { label: "IPcomp", keyword: "ipcomp", definition: "The " +
+	    "traffic is compressed.", values: "on or off", default: "off",
+	    undo: "clear the check box", applies: "policies" },
+	"ike.tmode": { label: "Encapsulation", keyword: "tunnel | transport",
+	    definition: "tunnel carries whole packets between networks; " +
+	    "transport protects traffic between the two hosts.",
+	    values: "tunnel or transport", default: "tunnel", undo: "choose " +
+	    "(not set)", applies: "policies" },
+	"ike.natt": { label: "Force NAT-T", keyword: "natt",
+	    definition: "Uses UDP encapsulation even when there is no NAT.",
+	    values: "on or off", default: "off", undo: "clear the check box",
+	    applies: "policies" },
+	"ike.satype": { label: "Protocol", keyword: "esp | ah",
+	    definition: "esp encrypts and authenticates; ah only " +
+	    "authenticates.", values: "esp or ah", default: "esp",
+	    undo: "choose (not set)", applies: "policies" },
+	"ike.af": { label: "Family", keyword: "inet | inet6",
+	    definition: "The address family of the peers.", values: "inet or " +
+	    "inet6", default: "either", undo: "choose (not set)",
+	    applies: "policies" },
+	"ike.rdomain": { label: "Routing domain", keyword: "rdomain number",
+	    definition: "The routing domain the decrypted traffic goes in.",
+	    values: "a routing domain's number", default: "iked's own",
+	    undo: "clear the field", applies: "policies" },
+	"ike.proto": { label: "IP protocol", keyword: "proto protocol | { " +
+	    "protocol, ... }", definition: "Protects only these IP protocols.",
+	    values: "names or numbers", default: "all", undo: "clear the field",
+	    applies: "policies" },
+	"ike.from": { label: "From", keyword: "from src [port p]",
+	    definition: "The traffic's source. Several from ... to pairs may " +
+	    "be given, separated by commas.", values: "an address, a " +
+	    "network, any or dynamic, then port if any", default: "any",
+	    undo: "clear the field", applies: "policies" },
+	"ike.to": { label: "To", keyword: "to dst [port p]",
+	    definition: "The traffic's destination.", values: "an address, a " +
+	    "network, any or dynamic, then port if any", default: "any",
+	    undo: "clear the field", applies: "policies" },
+	"ike.local": { label: "Local", keyword: "local address",
+	    definition: "The address of this end.", values: "an address, a " +
+	    "host name or any", default: "any", undo: "clear the field",
+	    applies: "policies" },
+	"ike.peer": { label: "Peer", keyword: "peer address",
+	    definition: "The other end.", values: "an address, a network, a " +
+	    "host name or any", default: "any", undo: "clear the field",
+	    applies: "policies" },
+	"ike.ikesa": { label: "IKE SA", keyword: "ikesa [auth a] [enc e] " +
+	    "[prf p] [group g]", definition: "The transforms that protect " +
+	    "the IKE exchange. Several ikesa may be given.", values: "auth, " +
+	    "enc, prf and group with their values", default: "iked's list",
+	    undo: "clear the field", applies: "policies" },
+	"ike.childsa": { label: "Child SA", keyword: "childsa [auth a] [enc " +
+	    "e] [group g] [esn | noesn]", definition: "The transforms of the " +
+	    "SAs that carry the traffic. A group turns on perfect forward " +
+	    "secrecy.", values: "auth, enc, group and esn with their values",
+	    default: "iked's list", undo: "clear the field",
+	    applies: "policies" },
+	"ike.srcid": { label: "Local ID", keyword: "srcid id",
+	    definition: "The identity this end gives.", values: "a host " +
+	    "name, an email address, an address or a certificate's subject",
+	    default: "the host's name", undo: "clear the field",
+	    applies: "policies" },
+	"ike.dstid": { label: "Peer ID", keyword: "dstid id",
+	    definition: "The identity the peer must give.", values: "as for " +
+	    "the local ID", default: "any", undo: "clear the field",
+	    applies: "policies" },
+	"ike.ikelifetime": { label: "IKE SA lifetime", keyword: "ikelifetime " +
+	    "time", definition: "How long the IKE SA lasts before it is " +
+	    "renewed.", values: "seconds, or with m or h; 0 for none",
+	    default: "0: not renewed", undo: "clear the field",
+	    applies: "policies" },
+	"ike.lifetime": { label: "Child SA lifetime", keyword: "lifetime " +
+	    "time [bytes bytes]", definition: "How long, or how many bytes, " +
+	    "a child SA lasts before it is renewed.", values: "a time, then " +
+	    "bytes and a size if any", default: "3h, 4G", undo: "clear the " +
+	    "field", applies: "policies" },
+	"ike.psk": { label: "Pre-shared key", keyword: "psk key | file path",
+	    definition: "A key both ends know, in place of certificates.",
+	    values: "a string, 0x and hexadecimal, or file and a path",
+	    default: "none", secret: true, undo: "clear the field",
+	    applies: "policies" },
+	"ike.eap": { label: "EAP", keyword: "eap mschap-v2 | radius",
+	    definition: "Remote users log in with EAP: against the users " +
+	    "here, or a RADIUS server.", values: "mschap-v2 or radius",
+	    default: "none", undo: "clear the field", applies: "policies" },
+	"ike.auth": { label: "Authentication", keyword: "rsa | ecdsa256 | " +
+	    "ecdsa384 | ecdsa521 | rfc7427", definition: "The kind of key " +
+	    "the ends prove themselves with.", values: "rsa, ecdsa256, " +
+	    "ecdsa384, ecdsa521 or rfc7427", default: "any kind of signature",
+	    undo: "choose (not set)", applies: "policies" },
+	"ike.config": { label: "Configuration", keyword: "config option " +
+	    "value ...", definition: "What iked gives the peer: an address " +
+	    "from a pool, a name server, and others iked.conf(5) lists. " +
+	    "Several may be given.", values: "option and value pairs, each " +
+	    "after config", default: "none", undo: "clear the field",
+	    applies: "policies" },
+	"ike.request": { label: "Request", keyword: "request option value",
+	    definition: "What iked asks the peer to give it, such as an " +
+	    "address.", values: "option and value pairs", default: "none",
+	    undo: "clear the field", applies: "policies" },
+	"ike.iface": { label: "Interface", keyword: "iface interface",
+	    definition: "An interface the peer's assigned address goes on.",
+	    values: "an interface's name", default: "none", undo: "clear the " +
+	    "field", applies: "policies" },
+	"ike.tag": { label: "pf tag", keyword: "tag tag", definition: "pf " +
+	    "tags the packets of the policy's SAs.", values: "a tag",
+	    default: "none", undo: "clear the field", applies: "policies" },
+	"ike.tap": { label: "enc interface", keyword: "tap interface",
+	    definition: "The enc(4) interface the policy's traffic shows on.",
+	    values: "an enc interface's name", default: "enc0", undo: "clear " +
+	    "the field", applies: "policies" },
+	"ike.user": { label: "User", keyword: "user name password",
+	    definition: "A remote user who logs in with EAP MSCHAPv2.",
+	    values: "a name", default: "none", undo: "Delete" },
+	"ike.password": { label: "Password", keyword: "password",
+	    definition: "The user's password.", values: "a string",
+	    default: "none", secret: true, undo: "clear the field",
+	    applies: "users" },
+	"ike.radserver": { label: "RADIUS server", keyword: "radius server " +
+	    "address [port p] secret s", definition: "A RADIUS server EAP " +
+	    "logins are checked against.", values: "an address",
+	    default: "none", undo: "Delete" },
+	"ike.port": { label: "Port", keyword: "port port", definition: "The " +
+	    "RADIUS server's port, or the DAE listener's.", values: "a port " +
+	    "number", default: "1812, 1813 for accounting, 3799 for DAE",
+	    undo: "clear the field", applies: "RADIUS servers and the DAE " +
+	    "listener" },
+	"ike.secret": { label: "Secret", keyword: "secret secret",
+	    definition: "The secret shared with the RADIUS server or DAE " +
+	    "client.", values: "a string", default: "none", secret: true,
+	    undo: "clear the field", applies: "RADIUS servers and DAE " +
+	    "clients" },
+	"ike.radacct": { label: "RADIUS accounting server", keyword: "radius " +
+	    "accounting server address [port p] secret s", definition: "A " +
+	    "RADIUS server told of each session.", values: "an address",
+	    default: "none", undo: "Delete" },
+	"ike.radconfig": { label: "RADIUS attribute", keyword: "radius " +
+	    "config [af] option attribute", definition: "A RADIUS attribute " +
+	    "whose value iked gives the peer as a configuration option.",
+	    values: "as iked.conf writes it", default: "none", undo: "Delete" },
+	"ike.daelisten": { label: "DAE listener", keyword: "radius dae " +
+	    "listen on address [port p]", definition: "An address iked takes " +
+	    "RADIUS dynamic authorization requests on, such as to end a " +
+	    "session.", values: "an address", default: "none", undo: "Delete" },
+	"ike.daeclient": { label: "DAE client", keyword: "radius dae client " +
+	    "address secret s", definition: "A host allowed to send dynamic " +
+	    "authorization requests.", values: "an address", default: "none",
+	    risk: "high: it can end sessions", undo: "Delete" },
+	"ike.setmode": { label: "Mode", keyword: "set active | passive",
+	    definition: "Whether iked starts exchanges for active policies, " +
+	    "or only answers.", values: "active or passive", default: "active",
+	    undo: "choose (not set)" },
+	"ike.setcouple": { label: "Flows", keyword: "set couple | decouple",
+	    definition: "couple loads the policies' flows into the kernel; " +
+	    "decouple leaves them out, as ikectl decouple does.",
+	    values: "couple or decouple", default: "couple", undo: "choose " +
+	    "(not set)" },
+	"ike.setfrag": { label: "Fragmentation", keyword: "set fragmentation " +
+	    "| nofragmentation", definition: "IKEv2 message fragmentation, " +
+	    "for paths that drop IP fragments.", values: "fragmentation or " +
+	    "nofragmentation", default: "nofragmentation", undo: "choose " +
+	    "(not set)" },
+	"ike.setmobike": { label: "MOBIKE", keyword: "set mobike | nomobike",
+	    definition: "Lets a peer whose address changes keep its SAs.",
+	    values: "mobike or nomobike", default: "mobike", undo: "choose " +
+	    "(not set)" },
+	"ike.setvendorid": { label: "Vendor ID", keyword: "set vendorid | " +
+	    "novendorid", definition: "Whether iked sends its vendor ID.",
+	    values: "vendorid or novendorid", default: "vendorid",
+	    undo: "choose (not set)" },
+	"ike.setsingle": { label: "One IKE SA a peer", keyword: "set " +
+	    "enforcesingleikesa | noenforcesingleikesa",
+	    definition: "Whether a peer may have only one IKE SA, an older " +
+	    "one being closed.", values: "enforcesingleikesa or " +
+	    "noenforcesingleikesa", default: "noenforcesingleikesa",
+	    undo: "choose (not set)" },
+	"ike.setsticky": { label: "Sticky addresses", keyword: "set " +
+	    "stickyaddress | nostickyaddress", definition: "Whether a peer " +
+	    "that comes back gets the address it had.",
+	    values: "stickyaddress or nostickyaddress",
+	    default: "nostickyaddress", undo: "choose (not set)" },
+	"ike.setocsp": { label: "OCSP", keyword: "set ocsp url [tolerate t " +
+	    "[maxage t]]", definition: "Where iked checks whether " +
+	    "certificates are revoked.", values: "a URL, then its times if any",
+	    default: "none", undo: "clear the field" },
+	"ike.setpartial": { label: "Partial chains", keyword: "set " +
+	    "cert_partial_chain", definition: "Accepts a partial certificate " +
+	    "chain if one of its certificates is a CA in /etc/iked/ca/.",
+	    values: "on or off", default: "off", undo: "clear the check box" },
+	"ike.setdpd": { label: "Liveness checks", keyword: "set " +
+	    "dpd_check_interval seconds", definition: "How often iked checks " +
+	    "that each peer is still there.", values: "seconds", default: "60",
+	    undo: "clear the field" },
+	"ike.macro": { label: "Macro", keyword: "name = value",
+	    definition: "A name other lines write as $name.", values: "a " +
+	    "name of letters, digits and _", default: "none", undo: "Delete" },
+	"ike.value": { label: "Value", keyword: "value", definition: "What " +
+	    "$name stands for.", values: "text, quoted if it has spaces",
+	    default: "none", undo: "clear the field", applies: "macros" }
 };
 
 var regOpen = {};	/* ids of the fields whose definitions are open */

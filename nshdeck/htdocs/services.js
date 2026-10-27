@@ -97,6 +97,45 @@ function svTests(text) {
 	return / every [0-9]/.test(" " + text) ? "runs a test command" : "";
 }
 
+/* a macro's definition, with its name and its value as written */
+var SV_MACRO = { id: "macro", kw: [], macro: true, args: [{ key: "name" },
+    { key: "value", raw: true }] };
+
+/* the addresses of an ipsec.conf or iked.conf rule, in their order */
+var SV_IPSEC_HOSTS = [{ key: "proto", upto: true, raw: true },
+    { key: "from", upto: true, raw: true },
+    { key: "to", upto: true, raw: true }, { key: "local" },
+    { key: "peer" }];
+
+/* an ipsec.conf rule's options from its addresses on, in their order */
+var SV_IPSEC_IKE = [{ key: "mode", words: ["passive", "dynamic",
+    "active"] }, { key: "satype", words: ["esp", "ah", "ipcomp",
+    "ipip"] }, { key: "tmode", words: ["tunnel", "transport"] },
+    { key: "interface" }].concat(SV_IPSEC_HOSTS, [{ key: "main",
+    upto: true, raw: true }, { key: "aggressive", upto: true, raw: true },
+    { key: "quick", upto: true, raw: true }, { key: "srcid" },
+    { key: "dstid" }, { key: "rsa", flag: true }, { key: "psk",
+    secret: true }, { key: "tag" }]);
+
+/* the options of an ipsec.conf rule with keys set by hand */
+var SV_IPSEC_SA = [{ key: "tmode", words: ["tunnel", "transport"] },
+    { key: "from", upto: true, raw: true }, { key: "to", upto: true,
+    raw: true }, { key: "spi" }, { key: "udpencap", flag: true },
+    { key: "auth" }, { key: "enc" }, { key: "comp" }, { key: "authkey",
+    upto: true, raw: true, secret: true }, { key: "enckey", upto: true,
+    raw: true, secret: true }, { key: "bundle" }];
+
+/* an ipsec.conf rule with keys set by hand, from its first word */
+function svIpsecSa(id) {
+	return { id: id, kw: [id], opts: SV_IPSEC_SA, fixed: true };
+}
+
+/* an iked.conf setting of one of two words, which appears once */
+function svIkeSet(id, words) {
+	return { id: id, kw: ["set"], of: words, args: [{ key: "value",
+	    choices: words }] };
+}
+
 /* what ifstated.conf's actions may be */
 var SV_IFSTATE_DO = ["if", "run", "setstate"];
 
@@ -648,6 +687,105 @@ var SV_DAEMONS = {
 		    cols: ["value"] },
 		{ id: "states", label: "States", kinds: ["state"] },
 		{ id: "global", label: "Global", single: ["initstate"] }
+	    ] },
+	ipsec: { prog: "isakmpd", blocks: [],
+	    kinds: [
+		{ id: "ike", kw: ["ike"], opts: SV_IPSEC_IKE, fixed: true,
+		    warn: function (s) {
+			return s.at.aggressive && s.v.psk ? "aggressive " +
+			    "mode lets an eavesdropper guess the key" : "";
+		} },
+		{ id: "flow", kw: ["flow"], opts: [{ key: "satype",
+		    words: ["esp", "ah", "ipcomp", "ipip"] }, { key: "dir",
+		    words: ["in", "out"] }].concat(SV_IPSEC_HOSTS,
+		    [{ key: "srcid" }, { key: "dstid" }, { key: "type",
+		    choices: ["use", "acquire", "require", "deny", "bypass",
+		    "dontacq"] }]), fixed: true },
+		svIpsecSa("esp"),
+		svIpsecSa("ah"),
+		svIpsecSa("ipcomp"),
+		svIpsecSa("ipip"),
+		{ id: "tcpmd5", kw: ["tcpmd5"], opts: SV_IPSEC_SA,
+		    fixed: true },
+		SV_MACRO
+	    ],
+	    tabs: [
+		{ id: "policies", label: "Policies", kinds: ["ike"],
+		    cols: ["from", "to", "peer"] },
+		{ id: "flows", label: "Flows", kinds: ["flow"],
+		    cols: ["from", "to", "peer"] },
+		{ id: "keys", label: "Keys by hand", kinds: ["esp", "ah",
+		    "ipcomp", "ipip", "tcpmd5"], cols: ["from", "to", "spi"] },
+		{ id: "macros", label: "Macros", kinds: ["macro"],
+		    cols: ["value"] },
+		{ id: "flowstate", label: "Kernel flows", show: "ipsec flows" },
+		{ id: "sas", label: "SAs", show: "ipsec sadb" }
+	    ] },
+	ike: { prog: "iked", blocks: [],
+	    kinds: [
+		{ id: "ikev2", kw: ["ikev2"], args: [{ key: "name" }],
+		    opts: [{ key: "match", words: ["quick", "skip",
+		    "default"] }, { key: "mode", words: ["passive",
+		    "active"] }, { key: "ipcomp", flag: true },
+		    { key: "tmode", words: ["tunnel", "transport"] },
+		    { key: "natt", flag: true }, { key: "satype",
+		    words: ["esp", "ah"] }, { key: "af", words: ["inet",
+		    "inet6"] }, { key: "rdomain" }].concat(SV_IPSEC_HOSTS,
+		    [{ key: "ikesa", upto: true, raw: true },
+		    { key: "childsa", upto: true, raw: true },
+		    { key: "srcid" }, { key: "dstid" },
+		    { key: "ikelifetime" }, { key: "lifetime", upto: true,
+		    raw: true }, { key: "psk", secret: true }, { key: "eap" },
+		    { key: "auth",
+		    words: ["rsa", "ecdsa256", "ecdsa384", "ecdsa521",
+		    "rfc7427"] }, { key: "config", upto: true, raw: true },
+		    { key: "request", upto: true, raw: true }, { key: "iface" },
+		    { key: "tag" }, { key: "tap" }]), fixed: true },
+		{ id: "user", kw: ["user"], args: [{ key: "name" },
+		    { key: "password", secret: true }] },
+		{ id: "radserver", kw: ["radius", "server"],
+		    args: [{ key: "address" }], fixed: true,
+		    opts: [{ key: "port" }, { key: "secret", secret: true }] },
+		{ id: "radacct", kw: ["radius", "accounting", "server"],
+		    args: [{ key: "address" }], fixed: true,
+		    opts: [{ key: "port" }, { key: "secret", secret: true }] },
+		{ id: "radconfig", kw: ["radius", "config"],
+		    args: [{ key: "attribute", rest: true, raw: true }] },
+		{ id: "daelisten", kw: ["radius", "dae", "listen", "on"],
+		    args: [{ key: "address" }], opts: [{ key: "port" }] },
+		{ id: "daeclient", kw: ["radius", "dae", "client"],
+		    args: [{ key: "address" }], opts: [{ key: "secret",
+		    secret: true }] },
+		svIkeSet("setmode", ["active", "passive"]),
+		svIkeSet("setcouple", ["couple", "decouple"]),
+		svIkeSet("setfrag", ["fragmentation", "nofragmentation"]),
+		svIkeSet("setmobike", ["mobike", "nomobike"]),
+		svIkeSet("setvendorid", ["vendorid", "novendorid"]),
+		svIkeSet("setsingle", ["enforcesingleikesa",
+		    "noenforcesingleikesa"]),
+		svIkeSet("setsticky", ["stickyaddress", "nostickyaddress"]),
+		{ id: "setocsp", kw: ["set", "ocsp"], args: [{ key: "url",
+		    rest: true, raw: true }] },
+		{ id: "setpartial", kw: ["set", "cert_partial_chain"] },
+		{ id: "setdpd", kw: ["set", "dpd_check_interval"],
+		    args: [{ key: "seconds" }] },
+		SV_MACRO
+	    ],
+	    tabs: [
+		{ id: "policies", label: "Policies", kinds: ["ikev2"],
+		    cols: ["mode", "from", "to", "peer"] },
+		{ id: "users", label: "Users", kinds: ["user"] },
+		{ id: "radius", label: "RADIUS", kinds: ["radserver", "radacct",
+		    "radconfig", "daelisten", "daeclient"], cols: ["port",
+		    "secret"] },
+		{ id: "global", label: "Global", single: ["setmode",
+		    "setcouple", "setfrag", "setmobike", "setvendorid",
+		    "setsingle", "setsticky", "setocsp", "setpartial",
+		    "setdpd"] },
+		{ id: "macros", label: "Macros", kinds: ["macro"],
+		    cols: ["value"] },
+		{ id: "flows", label: "Kernel flows", show: "ipsec flows" },
+		{ id: "sas", label: "SAs", show: "ipsec sadb" }
 	    ] }
 };
 
