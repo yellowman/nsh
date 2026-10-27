@@ -306,6 +306,11 @@ input.nope {
 	color: var(--warn);
 }
 
+/* what an editor's statement or setting warns of, beside it */
+.structured .tag.warn {
+	margin-left: 8px;
+}
+
 main {
 	overflow: auto;
 	min-width: 0;

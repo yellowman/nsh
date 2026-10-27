@@ -283,8 +283,8 @@ function stOpen(doc, n) {
  * level if p is null: after the last statement of the same kind there,
  * else after the last of the kinds after, else at the end, or if early
  * before the first statement at the top level that is not a macro, with
- * the comment lines just before it. A statement p that may open a block
- * and does not is given one first.
+ * the comment lines just before it unless they begin the file. A
+ * statement p that may open a block and does not is given one first.
  */
 function stAdd(doc, p, k, args, after, early) {
 	var nodes, ind, at, code = stNew(k, args), start, first;
@@ -310,9 +310,12 @@ function stAdd(doc, p, k, args, after, early) {
 		at = p.close === p.start ? -1 : p.close;
 	else if (early && (first = doc.nodes.find(function (n) {
 		return n.kind !== "macro";
-	})))
+	}))) {
 		at = bgpLead(doc, first);
-	else
+		/* comment lines that begin the file are the file's own */
+		if (at === 0)
+			at = first.start;
+	} else
 		at = doc.lines.length;
 	if (at === -1) {
 		/* a one-line block, split over lines */

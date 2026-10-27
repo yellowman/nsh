@@ -1024,9 +1024,9 @@ function svEditor(box) {
 	box.appendChild(bar);
 	if (t.show)
 		svShowTab(box, t);
-	else if (t.single)
+	if (t.single)
 		svSingleTab(box, doc, d, t);
-	else
+	if (t.kinds)
 		svListTab(box, doc, d, t.kinds, t.cols || [], null, "");
 }
 
@@ -1065,14 +1065,12 @@ function svListTab(box, doc, d, ids, cols, p, path) {
 		var key = path + i, tr = el("tr", null, key === ed.sel ? "sel" :
 		    ""), first = (s.kind.args || [])[0];
 
-		tr.appendChild(el("td", s.kind.kw.join(" ")));
-		tr.appendChild(el("td", first ? s.v[first.key] || "" : "",
-		    "mono"));
+		tr.appendChild(svWarned(el("td", s.kind.kw.join(" ")), s));
+		tr.appendChild(el("td", first ? svCell(first, s.v[first.key]) :
+		    "", "mono"));
 		cols.forEach(function (c) {
-			var v = s.v[c];
-
-			tr.appendChild(el("td", v === true ? "yes" :
-			    Array.isArray(v) ? v.join(", ") : v || "", "mono"));
+			tr.appendChild(el("td", svCell(stField(s.kind, c),
+			    s.v[c]), "mono"));
 		});
 		tr.addEventListener("click", function (e) {
 			e.stopPropagation();
@@ -1117,6 +1115,21 @@ function svListTab(box, doc, d, ids, cols, p, path) {
 	regField(grid, svReg(name, k), line, null, "New " +
 	    reg(svReg(name, k)).label.toLowerCase());
 	box.appendChild(grid);
+}
+
+/* field f's value v in a table's cell: a secret's is hidden */
+function svCell(f, v) {
+	return f.secret && v ? "hidden" : v === true ? "yes" :
+	    Array.isArray(v) ? v.join(", ") : v || "";
+}
+
+/* e, with what makes statement s risky, if its kind says anything */
+function svWarned(e, s) {
+	var w = s && s.kind.warn ? s.kind.warn(s) : "";
+
+	if (w)
+		e.appendChild(el("span", w, "tag warn"));
+	return e;
 }
 
 /* where the next statement of kind k goes among those of kinds in p */
@@ -1180,8 +1193,9 @@ function svSingleTab(box, doc, d, t) {
 	kinds.forEach(function (k) {
 		var s = svList(doc, d, null, [k])[0], a = (k.args || [])[0];
 
-		regField(grid, svReg(ed.daemon, k), svControl(a || { key: k.id,
-		    flag: true }, a ? s && s.v[a.key] : !!s, function (v) {
+		svWarned(regField(grid, svReg(ed.daemon, k), svControl(a ||
+		    { key: k.id, flag: true }, a ? s && s.v[a.key] : !!s,
+		    function (v) {
 			if (a)
 				bgpDone(stSingle(doc, null, k, v, svTop(d),
 				    kinds));
@@ -1189,7 +1203,7 @@ function svSingleTab(box, doc, d, t) {
 				bgpDone(stAdd(doc, null, k, [], kinds, true));
 			else if (!v && s)
 				bgpDone(bgpRemove(doc, s.node));
-		}));
+		})).querySelector(".info"), s);
 	});
 	box.appendChild(grid);
 }

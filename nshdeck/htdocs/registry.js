@@ -55,7 +55,11 @@ var REGISTRY_MODULES = {
 	rad: { scope: "rad's configuration", man: "rad.conf.5",
 	    check: "rad -n, at Validate and at commit" },
 	relay: { scope: "relayd's configuration", man: "relayd.conf.5",
-	    check: "relayd -n, at Validate and at commit" }
+	    check: "relayd -n, at Validate and at commit" },
+	snmp: { scope: "snmpd's configuration", man: "snmpd.conf.5",
+	    check: "snmpd -n, at Validate and at commit" },
+	ldap: { scope: "ldapd's configuration", man: "ldapd.conf.5",
+	    check: "ldapd -n, at Validate and at commit" }
 };
 
 /* drivers, as interfaces' names begin */
@@ -1524,7 +1528,322 @@ var REGISTRY = {
 	"relay.socket": { label: "Control socket", keyword: "socket path",
 	    definition: "Where relayctl reaches relayd. nsh's shows use the " +
 	    "default.", values: "a path", default: "/var/run/relayd.sock",
-	    undo: "clear the field" }
+	    undo: "clear the field" },
+
+	/* snmpd's configuration */
+	"snmp.listen": { label: "Listen on", keyword: "listen on [tcp | udp] " +
+	    "address [port port] [flags]", definition: "An address snmpd " +
+	    "takes requests or traps on, over UDP. Without any, snmpd " +
+	    "listens on any address.", values: "an address, or any for every " +
+	    "local address", default: "listen on any", undo: "Delete" },
+	"snmp.port": { label: "Port", keyword: "port port", definition: "The " +
+	    "port of the listen on line.", values: "a port number or a " +
+	    "service's name", default: "161, or 162 when notify is its only " +
+	    "permission", undo: "clear the field", applies: "listen on lines" },
+	"snmp.read": { label: "Read", keyword: "read", definition: "Takes " +
+	    "get, getnext and bulkget requests. If a listen on line has none " +
+	    "of read, write and notify, it takes read and write, or notify " +
+	    "on port 162.", values: "on or off", default: "see the definition",
+	    undo: "clear the check box", applies: "listen on lines" },
+	"snmp.write": { label: "Write", keyword: "write", definition: "Takes " +
+	    "set requests, which change what the agent lets them change. If " +
+	    "a listen on line has none of read, write and notify, it takes " +
+	    "read and write, or notify on port 162.", values: "on or off",
+	    default: "see the definition", risk: "high: whoever passes the " +
+	    "security checks can change values", undo: "clear the check box",
+	    applies: "listen on lines" },
+	"snmp.notify": { label: "Notify", keyword: "notify",
+	    definition: "Takes traps, which trap handle lines act on. If a " +
+	    "listen on line has none of read, write and notify, it takes " +
+	    "read and write, or notify on port 162.", values: "on or off",
+	    default: "see the definition", undo: "clear the check box",
+	    applies: "listen on lines" },
+	"snmp.snmpv1": { label: "SNMPv1", keyword: "snmpv1",
+	    definition: "Takes SNMPv1, whose only security is the community. " +
+	    "If a listen on line has none of snmpv1, snmpv2c and snmpv3, it " +
+	    "takes snmpv3.", values: "on or off", default: "off",
+	    undo: "clear the check box", applies: "listen on lines" },
+	"snmp.snmpv2c": { label: "SNMPv2c", keyword: "snmpv2c",
+	    definition: "Takes SNMPv2c, whose only security is the " +
+	    "community. If a listen on line has none of snmpv1, snmpv2c and " +
+	    "snmpv3, it takes snmpv3.", values: "on or off", default: "off",
+	    undo: "clear the check box", applies: "listen on lines" },
+	"snmp.snmpv3": { label: "SNMPv3", keyword: "snmpv3",
+	    definition: "Takes SNMPv3, with its users and security level. If " +
+	    "a listen on line has none of snmpv1, snmpv2c and snmpv3, it " +
+	    "takes snmpv3.", values: "on or off", default: "on, if none of " +
+	    "the three is set", undo: "clear the check box",
+	    applies: "listen on lines" },
+	"snmp.listenudp": { label: "Listen on UDP", keyword: "listen on udp " +
+	    "address [port port] [flags]", definition: "As listen on, said " +
+	    "explicitly.", values: "an address, or any", default: "none",
+	    undo: "Delete" },
+	"snmp.listentcp": { label: "Listen on TCP", keyword: "listen on tcp " +
+	    "address [port port] [flags]", definition: "As listen on, over " +
+	    "TCP.", values: "an address, or any", default: "none",
+	    undo: "Delete" },
+	"snmp.rocommunity": { label: "Read-only community",
+	    keyword: "read-only community string", definition: "The " +
+	    "community that lets SNMPv1 and SNMPv2c requests read. It is a " +
+	    "password sent in the clear.", values: "a string; not public, " +
+	    "which everyone tries", default: "none", secret: true,
+	    undo: "clear the field" },
+	"snmp.rwcommunity": { label: "Read-write community",
+	    keyword: "read-write community string", definition: "The " +
+	    "community that lets SNMPv1 and SNMPv2c requests read and write. " +
+	    "It is a password sent in the clear.", values: "a string",
+	    default: "none", risk: "high: anyone who sees it on the network " +
+	    "can change values", secret: true, undo: "clear the field" },
+	"snmp.seclevel": { label: "Security level", keyword: "seclevel none " +
+	    "| auth | enc", definition: "The least SNMPv3 security snmpd " +
+	    "accepts: none, messages signed or not; auth, signed; enc, " +
+	    "signed and encrypted. On a trap receiver line, the level the " +
+	    "traps are sent with.", values: "none, auth or enc", default: "enc",
+	    undo: "choose (not set)", applies: "the global settings and trap " +
+	    "receiver lines" },
+	"snmp.user": { label: "User", keyword: "user name [auth hmac] " +
+	    "[authkey key] [enc cipher] [enckey key]", definition: "An " +
+	    "SNMPv3 user. On a trap receiver line, the user the traps are " +
+	    "sent as.", values: "a name", default: "none", undo: "Delete",
+	    applies: "the users and trap receiver lines" },
+	"snmp.auth": { label: "Authentication", keyword: "auth hmac",
+	    definition: "The HMAC that signs the user's messages.",
+	    values: "hmac-md5, hmac-sha1, hmac-sha224, hmac-sha256, " +
+	    "hmac-sha384 or hmac-sha512", default: "hmac-sha1",
+	    undo: "choose (not set)", applies: "users" },
+	"snmp.authkey": { label: "Authentication key", keyword: "authkey key",
+	    definition: "The user's key for signing. Without it, the user's " +
+	    "messages are not signed.", values: "a string", default: "none",
+	    secret: true, undo: "clear the field", applies: "users" },
+	"snmp.enc": { label: "Encryption", keyword: "enc cipher",
+	    definition: "The cipher of the user's messages. It needs an " +
+	    "authentication key too.", values: "des or aes", default: "aes",
+	    undo: "choose (not set)", applies: "users" },
+	"snmp.enckey": { label: "Encryption key", keyword: "enckey key",
+	    definition: "The user's key for encryption. Without it, the " +
+	    "user's messages are not encrypted.", values: "a string",
+	    default: "none", secret: true, undo: "clear the field",
+	    applies: "users" },
+	"snmp.trapcommunity": { label: "Trap community", keyword: "trap " +
+	    "community string", definition: "The community of the SNMPv2c " +
+	    "traps snmpd sends, unless a receiver gives its own.",
+	    values: "a string", default: "none", secret: true, undo: "clear " +
+	    "the field" },
+	"snmp.trapreceiver": { label: "Trap receiver", keyword: "trap " +
+	    "receiver address [oid oid] [snmpv2c [community string] | " +
+	    "[snmpv3] user name [seclevel level]] [source-address address]",
+	    definition: "A host snmpd sends its traps to.", values: "an " +
+	    "address or a host name", default: "none", undo: "Delete" },
+	"snmp.oid": { label: "OID", keyword: "oid oid", definition: "The OID " +
+	    "of the traps sent to the receiver.", values: "an OID",
+	    default: "snmpd's own", undo: "clear the field", applies: "trap " +
+	    "receiver lines" },
+	"snmp.version": { label: "Version", keyword: "snmpv2c | snmpv3",
+	    definition: "The SNMP version of the traps sent to the receiver.",
+	    values: "snmpv2c or snmpv3", default: "snmpv3 if a user is given",
+	    undo: "choose (not set)", applies: "trap receiver lines" },
+	"snmp.community": { label: "Community", keyword: "community string",
+	    definition: "The community of the SNMPv2c traps sent to the " +
+	    "receiver.", values: "a string", default: "the trap community",
+	    secret: true, undo: "clear the field", applies: "trap receiver " +
+	    "lines" },
+	"snmp.srcaddr": { label: "Source address", keyword: "source-address " +
+	    "address", definition: "The address the traps to the receiver " +
+	    "are sent from.", values: "an IPv4 or IPv6 address",
+	    default: "chosen by the routing table", undo: "clear the field",
+	    applies: "trap receiver lines" },
+	"snmp.traphandle": { label: "Trap handler", keyword: "trap handle " +
+	    "oid \"command\"", definition: "A command snmpd runs for each " +
+	    "trap it takes whose OID begins with this one, or with 1.3 for " +
+	    "default. The command reads the sender and the trap's values on " +
+	    "its input. It needs a listen on line with notify.", values: "an " +
+	    "OID or default", default: "none", risk: "high: it runs a " +
+	    "command each time a trap arrives", undo: "Delete" },
+	"snmp.command": { label: "Command", keyword: "\"command\"",
+	    definition: "The command line a trap handler runs.", values: "a " +
+	    "command and its arguments", default: "none", undo: "Delete",
+	    applies: "trap handle lines" },
+	"snmp.syscontact": { label: "Contact", keyword: "system contact string",
+	    definition: "Who to contact about this system.", values: "a name " +
+	    "or an email address", default: "root@ this host's name",
+	    undo: "clear the field" },
+	"snmp.sysdescr": { label: "Description", keyword: "system " +
+	    "description string", definition: "A description of this system.",
+	    values: "text", default: "what uname -a prints", undo: "clear " +
+	    "the field" },
+	"snmp.syslocation": { label: "Location", keyword: "system location " +
+	    "string", definition: "Where this system is.", values: "text",
+	    default: "empty", undo: "clear the field" },
+	"snmp.sysname": { label: "Name", keyword: "system name string",
+	    definition: "This system's name.", values: "a host name",
+	    default: "this host's name", undo: "clear the field" },
+	"snmp.sysoid": { label: "System OID", keyword: "system oid oid",
+	    definition: "The OID that identifies this kind of system.",
+	    values: "an OID", default: "1.3.6.1.4.1.30155.23.1",
+	    undo: "clear the field" },
+	"snmp.sysservices": { label: "Services", keyword: "system services " +
+	    "number", definition: "The sum that says which layers this " +
+	    "system serves, as sysServices in the SNMP MIB defines it.",
+	    values: "a decimal number", default: "snmpd's own", undo: "clear " +
+	    "the field" },
+	"snmp.engineid": { label: "Engine ID", keyword: "engineid [pen " +
+	    "enterprise] format", definition: "This agent's SNMPv3 engine " +
+	    "ID, which the users' keys are derived with.", values: "ipv4, " +
+	    "ipv6, mac, text, octets, hosthash, agentid or a number, then " +
+	    "its value", default: "hosthash of this host's name",
+	    undo: "clear the field" },
+	"snmp.filterroutes": { label: "Filter routes",
+	    keyword: "filter-routes yes | no", definition: "yes asks the " +
+	    "kernel to filter route updates on the routing socket: less CPU " +
+	    "during large updates, and no routing table in the MIB.",
+	    values: "yes or no", default: "no", undo: "choose (not set)" },
+	"snmp.object": { label: "Object", keyword: "oid oid name name " +
+	    "[read-only | read-write] [integer | string] value",
+	    definition: "An OID of this configuration's own, with its value.",
+	    values: "an OID", default: "none", undo: "Delete" },
+	"snmp.name": { label: "Name", keyword: "name name", definition: "The " +
+	    "object's name.", values: "a name", default: "none",
+	    undo: "clear the field", applies: "oid lines" },
+	"snmp.access": { label: "Access", keyword: "read-only | read-write",
+	    definition: "read-write lets a set request change the object's " +
+	    "value.", values: "read-only or read-write", default: "read-only",
+	    undo: "choose (not set)", applies: "oid lines" },
+	"snmp.integer": { label: "Integer value", keyword: "integer number",
+	    definition: "The object's value, if it is a number.", values: "a " +
+	    "number", default: "none", undo: "clear the field",
+	    applies: "oid lines" },
+	"snmp.string": { label: "String value", keyword: "string string",
+	    definition: "The object's value, if it is text.", values: "text",
+	    default: "none", undo: "clear the field", applies: "oid lines" },
+	"snmp.blocklist": { label: "Blocked subtree", keyword: "blocklist oid",
+	    definition: "A subtree of OIDs snmpd hides.", values: "an OID",
+	    default: "none", undo: "Delete" },
+	"snmp.mibdir": { label: "MIB directory", keyword: "mib directory path",
+	    definition: "A directory snmpd searches for MIB files.",
+	    values: "a path", default: "/usr/share/snmp/mibs", undo: "Delete" },
+	"snmp.agentx": { label: "AgentX socket", keyword: "agentx [path " +
+	    "path] [owner owner] [group group] [mode mode]", definition: "A " +
+	    "socket where other daemons, such as relayd, give snmpd their " +
+	    "values.", values: "present or absent", default: "absent",
+	    undo: "Delete" },
+	"snmp.path": { label: "Path", keyword: "path path", definition: "The " +
+	    "AgentX socket's path.", values: "a path",
+	    default: "/var/agentx/master", undo: "clear the field",
+	    applies: "agentx lines" },
+	"snmp.owner": { label: "Owner", keyword: "owner owner",
+	    definition: "The AgentX socket's owner.", values: "a user's name " +
+	    "or number", default: "root", undo: "clear the field",
+	    applies: "agentx lines" },
+	"snmp.group": { label: "Group", keyword: "group group",
+	    definition: "The AgentX socket's group.", values: "a group's " +
+	    "name or number", default: "_agentx", undo: "clear the field",
+	    applies: "agentx lines" },
+	"snmp.mode": { label: "Mode", keyword: "mode mode", definition: "The " +
+	    "AgentX socket's permissions.", values: "an octal mode",
+	    default: "660", undo: "clear the field", applies: "agentx lines" },
+
+	/* ldapd's configuration */
+	"ldap.listen": { label: "Listen on", keyword: "listen on interface " +
+	    "[port port] [legacy] [tls | ldaps | secure] [certificate name]",
+	    definition: "An interface, address, host name or Unix socket " +
+	    "path ldapd listens on. Only TLS, LDAPS, Unix socket and secure " +
+	    "connections take passwords.", values: "an interface's name, an " +
+	    "address, a host name or an absolute path", default: "none",
+	    undo: "Delete" },
+	"ldap.port": { label: "Port", keyword: "port port", definition: "The " +
+	    "listener's port.", values: "a port number or a service's name",
+	    default: "389, or 636 for ldaps", undo: "clear the field",
+	    applies: "listen on lines" },
+	"ldap.legacy": { label: "Legacy TLS", keyword: "legacy",
+	    definition: "Allows TLS 1.0 and 1.1 and their ciphers, which are " +
+	    "insecure.", values: "on or off", default: "off", undo: "clear " +
+	    "the check box", applies: "listen on lines" },
+	"ldap.tls": { label: "Security", keyword: "tls | ldaps | secure",
+	    definition: "tls takes STARTTLS; ldaps takes TLS from the start; " +
+	    "secure treats a plain connection as secure, for example under " +
+	    "IPsec.", values: "tls, ldaps or secure", default: "plain",
+	    undo: "choose (not set)", applies: "listen on lines" },
+	"ldap.certificate": { label: "Certificate", keyword: "certificate name",
+	    definition: "The certificate for TLS: a name in /etc/ldap/certs, " +
+	    "or a path without .crt and .key.", values: "a name or an " +
+	    "absolute path", default: "the interface's name, in " +
+	    "/etc/ldap/certs", undo: "clear the field", applies: "listen on " +
+	    "lines" },
+	"ldap.namespace": { label: "Namespace", keyword: "namespace suffix { " +
+	    "... }", definition: "A subtree of the directory ldapd keeps, in " +
+	    "a database of its own. Requests go to the namespace whose " +
+	    "suffix matches most.", values: "a DN suffix, such as " +
+	    "dc=example,dc=com", default: "none", undo: "Delete" },
+	"ldap.rootdn": { label: "Root DN", keyword: "rootdn dn",
+	    definition: "The root user, which may read and write everything: " +
+	    "in every namespace globally, or in one namespace, whose suffix " +
+	    "it must end with.", values: "a DN", default: "none",
+	    undo: "clear the field", applies: "the global settings and " +
+	    "namespaces" },
+	"ldap.rootpw": { label: "Root password", keyword: "rootpw password",
+	    definition: "The root user's password, as text or hashed, as " +
+	    "ldapd(8) describes.", values: "a password or a hash",
+	    default: "none", secret: true, undo: "clear the field",
+	    applies: "the global settings and namespaces" },
+	"ldap.index": { label: "Index", keyword: "index attribute",
+	    definition: "An attribute ldapd keeps an index of. An index " +
+	    "added to a namespace with entries needs ldapctl's index.",
+	    values: "an attribute's name", default: "none", undo: "Delete",
+	    applies: "namespaces" },
+	"ldap.cachesize": { label: "Cache size", keyword: "cache-size size",
+	    definition: "How many pages of entries are cached.",
+	    values: "pages", default: "1024", undo: "Delete",
+	    applies: "namespaces" },
+	"ldap.indexcachesize": { label: "Index cache size",
+	    keyword: "index-cache-size size", definition: "How many pages of " +
+	    "the index database are cached.", values: "pages", default: "512",
+	    undo: "Delete", applies: "namespaces" },
+	"ldap.fsync": { label: "fsync", keyword: "fsync on | off",
+	    definition: "off does not force each commit to disk: faster " +
+	    "writes, and data can be lost.", values: "on or off", default: "on",
+	    undo: "Delete", applies: "namespaces" },
+	"ldap.relax": { label: "Relax schema", keyword: "relax schema",
+	    definition: "Entries are not checked against the schema, and " +
+	    "every attribute may have several values.", values: "present or " +
+	    "absent", default: "absent", undo: "Delete",
+	    applies: "namespaces" },
+	"ldap.strict": { label: "Strict schema", keyword: "strict schema",
+	    definition: "Entries are checked against the schema.",
+	    values: "present or absent", default: "checked", undo: "Delete",
+	    applies: "namespaces" },
+	"ldap.compression": { label: "Compression", keyword: "use " +
+	    "compression [level level]", definition: "Entries are stored " +
+	    "compressed.", values: "present or absent", default: "absent",
+	    undo: "Delete", applies: "namespaces" },
+	"ldap.level": { label: "Level", keyword: "level level",
+	    definition: "How hard entries are compressed.", values: "0 to 9",
+	    default: "6", undo: "clear the field", applies: "use compression " +
+	    "lines" },
+	"ldap.referral": { label: "Referral", keyword: "referral URL",
+	    definition: "Another LDAP server to send requests to: globally, " +
+	    "those no namespace matches; in a namespace, those that match it.",
+	    values: "an ldap:// or ldaps:// URL", default: "none",
+	    undo: "Delete", applies: "the global settings and namespaces" },
+	"ldap.allow": { label: "Allow", keyword: "allow [access] [to target] " +
+	    "[attribute name] [by who]", definition: "A rule that allows " +
+	    "what it matches. The last rule that matches decides, and a " +
+	    "request no rule matches is allowed; the root DN may do anything.",
+	    values: "A rule: [read | write | bind | their list] access, then " +
+	    "to any, to root, to DN, to subtree DN or to children of DN, " +
+	    "then attribute name, then by any, by self or by DN",
+	    default: "allowed", undo: "Delete", applies: "the global " +
+	    "settings and namespaces" },
+	"ldap.deny": { label: "Deny", keyword: "deny [access] [to target] " +
+	    "[attribute name] [by who]", definition: "A rule that denies " +
+	    "what it matches. The last rule that matches decides.",
+	    values: "A rule: [read | write | bind | their list] access, then " +
+	    "to any, to root, to DN, to subtree DN or to children of DN, " +
+	    "then attribute name, then by any, by self or by DN",
+	    default: "none", undo: "Delete", applies: "the global settings " +
+	    "and namespaces" },
+	"ldap.schema": { label: "Schema", keyword: "schema filename",
+	    definition: "A file of attribute types and object classes to add.",
+	    values: "a path", default: "ldapd's core schemas", undo: "Delete" }
 };
 
 var regOpen = {};	/* ids of the fields whose definitions are open */

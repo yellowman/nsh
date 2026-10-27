@@ -2,11 +2,12 @@
  * services.js: the Security and Services daemons whose configurations
  * share bgpd.conf's grammar, as editors.js shows them: each daemon's
  * statement kinds, which stmtconf.js reads and edits, and its tabs. A
- * tab lists statements of some kinds, one row each; or holds settings
- * that appear once; or shows what a show prints. A block's kind names
- * the kinds of the statements in it. Each field's help is the registry
- * entry svReg() names. Nothing here uses the page, so the kit runs it in
- * node.
+ * tab holds settings that appear once, or lists statements of some
+ * kinds, one row each, or both; or shows what a show prints. A block's
+ * kind names the kinds of the statements in it. A kind's warn, given a
+ * statement read, says what makes it risky, if anything. Each field's
+ * help is the registry entry svReg() names. Nothing here uses the page,
+ * so the kit runs it in node.
  */
 "use strict";
 
@@ -38,6 +39,32 @@ function svRelayFwd(id, kw) {
 function svRelayRest(id, kw) {
 	return { id: id, kw: kw, args: [{ key: id, rest: true, raw: true }] };
 }
+
+/* the options of an snmpd.conf listen on line, in their order */
+var SV_SNMP_LISTEN = [{ key: "port" }, { key: "read", flag: true },
+    { key: "write", flag: true }, { key: "notify", flag: true },
+    { key: "snmpv1", flag: true }, { key: "snmpv2c", flag: true },
+    { key: "snmpv3", flag: true }];
+
+/* an snmpd.conf listen on line, from its words */
+function svSnmpListen(id, kw) {
+	return { id: id, kw: kw, args: [{ key: "address" }],
+	    opts: SV_SNMP_LISTEN, fixed: true, warn: function (s) {
+		return s.v.write ? "accepts writes" : "";
+	} };
+}
+
+/* an snmpd.conf community, which appears once */
+function svSnmpCommunity(id, kw, warn) {
+	return { id: id, kw: kw, args: [{ key: "community", secret: true }],
+	    warn: warn };
+}
+
+/* an address only this host reaches, or a Unix socket's path */
+var SV_LOCAL = /^(lo[0-9]*|127\.0\.0\.1|::1|localhost|\/.*)$/;
+
+/* the statements a namespace or the top of ldapd.conf share */
+var SV_LDAP_ACI = ["allow", "deny"];
 
 /* the statements in a relayd.conf protocol */
 var SV_RELAY_RULES = ["tlsopts", "tcpopts", "httpopts", "returnerror",
@@ -240,6 +267,130 @@ var SV_DAEMONS = {
 		    "prefork", "loglevel", "logstate", "logchecks", "logconn",
 		    "logerrors", "agentx", "socket"] },
 		{ id: "hosts", label: "Hosts", show: "relay hosts" }
+	    ] },
+	snmp: { prog: "snmpd", blocks: [],
+	    kinds: [
+		svSnmpListen("listen", ["listen", "on"]),
+		svSnmpListen("listenudp", ["listen", "on", "udp"]),
+		svSnmpListen("listentcp", ["listen", "on", "tcp"]),
+		svSnmpCommunity("rocommunity", ["read-only", "community"],
+		    function (s) {
+			return s.v.community === "public" ? "well known" : "";
+		}),
+		svSnmpCommunity("rwcommunity", ["read-write", "community"],
+		    function () {
+			return "anyone who knows it can write";
+		}),
+		svSnmpCommunity("trapcommunity", ["trap", "community"]),
+		{ id: "seclevel", kw: ["seclevel"], args: [{ key: "level",
+		    choices: ["none", "auth", "enc"] }], warn: function (s) {
+			return s.v.level === "none" ? "accepts unsigned " +
+			    "messages" : "";
+		} },
+		{ id: "user", kw: ["user"], args: [{ key: "name" }],
+		    opts: [{ key: "auth", choices: ["hmac-md5", "hmac-sha1",
+		    "hmac-sha224", "hmac-sha256", "hmac-sha384",
+		    "hmac-sha512"] }, { key: "authkey", secret: true },
+		    { key: "enc", choices: ["des", "aes"] },
+		    { key: "enckey", secret: true }], warn: function (s) {
+			return s.v.authkey ? "" : "no authentication";
+		} },
+		{ id: "trapreceiver", kw: ["trap", "receiver"],
+		    args: [{ key: "address" }], fixed: true,
+		    opts: [{ key: "oid" }, { key: "version", words: ["snmpv2c",
+		    "snmpv3"] }, { key: "community", secret: true },
+		    { key: "user" }, { key: "seclevel" },
+		    { key: "srcaddr", kw: ["source-address"] }] },
+		{ id: "traphandle", kw: ["trap", "handle"],
+		    args: [{ key: "oid" }, { key: "command" }],
+		    warn: function () {
+			return "runs a command";
+		} },
+		{ id: "syscontact", kw: ["system", "contact"],
+		    args: [{ key: "contact" }] },
+		{ id: "sysdescr", kw: ["system", "description"],
+		    args: [{ key: "description" }] },
+		{ id: "syslocation", kw: ["system", "location"],
+		    args: [{ key: "location" }] },
+		{ id: "sysname", kw: ["system", "name"],
+		    args: [{ key: "name" }] },
+		{ id: "sysoid", kw: ["system", "oid"], args: [{ key: "oid" }] },
+		{ id: "sysservices", kw: ["system", "services"],
+		    args: [{ key: "services" }] },
+		{ id: "engineid", kw: ["engineid"], args: [{ key: "format",
+		    rest: true, raw: true }] },
+		{ id: "filterroutes", kw: ["filter-routes"],
+		    args: [{ key: "value", choices: ["yes", "no"] }] },
+		{ id: "object", kw: ["oid"], args: [{ key: "oid" }],
+		    fixed: true, opts: [{ key: "name" }, { key: "access",
+		    words: ["read-only", "read-write"] }, { key: "integer" },
+		    { key: "string" }] },
+		{ id: "blocklist", kw: ["blocklist"], args: [{ key: "oid" }] },
+		{ id: "mibdir", kw: ["mib", "directory"],
+		    args: [{ key: "path" }] },
+		{ id: "agentx", kw: ["agentx"], opts: [{ key: "path" },
+		    { key: "owner" }, { key: "group" }, { key: "mode" }] }
+	    ],
+	    tabs: [
+		{ id: "listeners", label: "Listeners", kinds: ["listen",
+		    "listenudp", "listentcp"], cols: ["port", "read", "write",
+		    "notify"] },
+		{ id: "access", label: "Access", single: ["rocommunity",
+		    "rwcommunity", "seclevel"], kinds: ["user"],
+		    cols: ["auth", "enc"] },
+		{ id: "traps", label: "Traps", single: ["trapcommunity"],
+		    kinds: ["trapreceiver", "traphandle"], cols: ["version",
+		    "community"] },
+		{ id: "system", label: "System", single: ["syscontact",
+		    "sysdescr", "syslocation", "sysname", "sysoid",
+		    "sysservices", "engineid", "filterroutes"] },
+		{ id: "advanced", label: "Advanced", kinds: ["object",
+		    "blocklist", "mibdir", "agentx"] }
+	    ] },
+	ldap: { prog: "ldapd", blocks: ["namespace"],
+	    kinds: [
+		{ id: "listen", kw: ["listen", "on"],
+		    args: [{ key: "address" }], fixed: true,
+		    opts: [{ key: "port" }, { key: "legacy",
+		    flag: true }, { key: "tls", words: ["tls", "ldaps",
+		    "secure"] }, { key: "certificate" }], warn: function (s) {
+			return s.v.tls || SV_LOCAL.test(s.v.address) ? "" :
+			    "not encrypted";
+		} },
+		{ id: "namespace", kw: ["namespace"], args: [{ key: "suffix" }],
+		    block: true, inner: ["rootdn", "rootpw", "index",
+		    "cachesize", "indexcachesize", "fsync", "relax", "strict",
+		    "compression", "referral"].concat(SV_LDAP_ACI) },
+		{ id: "rootdn", kw: ["rootdn"], args: [{ key: "dn" }] },
+		{ id: "rootpw", kw: ["rootpw"], args: [{ key: "password",
+		    secret: true }] },
+		{ id: "referral", kw: ["referral"], args: [{ key: "url" }] },
+		{ id: "index", kw: ["index"], args: [{ key: "attribute" }] },
+		{ id: "cachesize", kw: ["cache-size"],
+		    args: [{ key: "bytes" }] },
+		{ id: "indexcachesize", kw: ["index-cache-size"],
+		    args: [{ key: "bytes" }] },
+		{ id: "fsync", kw: ["fsync"], args: [{ key: "value",
+		    choices: ["on", "off"] }] },
+		{ id: "relax", kw: ["relax", "schema"] },
+		{ id: "strict", kw: ["strict", "schema"] },
+		{ id: "compression", kw: ["use", "compression"],
+		    opts: [{ key: "level" }] },
+		{ id: "allow", kw: ["allow"], args: [{ key: "allow", rest: true,
+		    raw: true }] },
+		{ id: "deny", kw: ["deny"], args: [{ key: "deny", rest: true,
+		    raw: true }] },
+		{ id: "schema", kw: ["schema"], args: [{ key: "path" }] }
+	    ],
+	    tabs: [
+		{ id: "listeners", label: "Listeners", kinds: ["listen"],
+		    cols: ["port", "tls"] },
+		{ id: "namespaces", label: "Namespaces", kinds: ["namespace"] },
+		{ id: "access", label: "Access", single: ["rootdn", "rootpw"],
+		    kinds: SV_LDAP_ACI },
+		{ id: "schemas", label: "Schemas", kinds: ["schema",
+		    "referral"] },
+		{ id: "stats", label: "Statistics", show: "ldap stats" }
 	    ] }
 };
 
@@ -252,11 +403,14 @@ function svKinds(d, ids) {
 	});
 }
 
+/* the ids of the kinds of tab t: its settings, then its list */
+function svTab(t) {
+	return (t.single || []).concat(t.kinds || []);
+}
+
 /* daemon d's kinds at the top level: those of its tabs */
 function svTop(d) {
-	return svKinds(d, [].concat.apply([], d.tabs.map(function (t) {
-		return t.kinds || t.single || [];
-	})));
+	return svKinds(d, [].concat.apply([], d.tabs.map(svTab)));
 }
 
 /*
@@ -306,7 +460,7 @@ function svFields(name) {
 	};
 
 	d.tabs.forEach(function (t) {
-		walk(svKinds(d, t.kinds || t.single || []));
+		walk(svKinds(d, svTab(t)));
 	});
 	return out;
 }
