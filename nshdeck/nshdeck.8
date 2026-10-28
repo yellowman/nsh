@@ -167,6 +167,17 @@ and
 Logs the user in, and sets the cookie nshdeck, HttpOnly, Secure and
 SameSite=Strict, to a token of 32 random bytes.
 Answers the user's name and permissions.
+After 5 failed logins in a row for a name, or from an address, the
+name or address waits before its next: a login for it is refused, its
+password not checked, for a second, then twice as long after each
+failure, to 60 seconds; the answer's
+.Ar wait
+is the seconds left.
+The address is the client's, as
+.Xr httpd 8
+gives it in REMOTE_ADDR, and an IPv6 address counts as its /64.
+A login that succeeds starts its name's row again, and a row with no
+failure for 15 minutes starts again.
 .It Cm logout
 POST.
 Logs the user out.
@@ -362,7 +373,8 @@ and an HTTP status that says why: 400 for a field that cannot be taken,
 without the header, 404 for an unknown request, 405 for the wrong
 method, 413 for a body over 8192 bytes, or 3 MB for
 .Cm setrules ,
-415 for a POST that is not a form, and 503 when
+415 for a POST that is not a form, 429 for a login while its name waits,
+and 503 when
 .Nm nshd
 does not answer, or too many users are logged in, a user has too many
 requests waiting or terminals, or too many rules are arriving.
@@ -378,6 +390,10 @@ minutes is logged out.
 At most 64 users may be logged in, and
 .Nm
 takes at most 128 connections.
+It keeps the failed logins of 512 names and addresses, and logs a
+login that fails or is refused once each 10 seconds at most for its name
+and address, each line with how many it did not log.
+Behind a proxy, every client has the proxy's address.
 .Pp
 .Nm
 needs the users _nshweb and _nshdeck, which may not be root or share a

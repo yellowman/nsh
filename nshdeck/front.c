@@ -19,7 +19,9 @@
  * Each connection is one request: front reads its records, then its
  * parameters, then its body, each under a limit of its own, and
  * believes nothing httpd's parameters say about the client, as any
- * process of DECK_GROUP's can write to the socket. It takes the
+ * process of DECK_GROUP's can write to the socket. It uses the client
+ * address httpd passes, REMOTE_ADDR, only to count failed logins, so a
+ * false address can delay a login but never allow one. It takes the
  * request's endpoint, the last part of its path; its fields, from the
  * query of a GET or the form body of a POST, each named, once, with a
  * bound; and the cookie's token. A body is BODY_MAX bytes at most;
@@ -124,6 +126,7 @@ struct params {
 	char	clen[16];
 	char	cookie[1024];
 	char	xdeck[8];
+	char	addr[DECK_ADDR];
 };
 
 /* what each endpoint is, and the fields it takes */
@@ -497,6 +500,7 @@ front_request(struct conn *c)
 	}
 	memset(&r, 0, sizeof(r));
 	r.kind = e->kind;
+	strlcpy(r.addr, p.addr, sizeof(r.addr));
 	if (front_token(p.cookie, r.token) == -1 ||
 	    front_fields(e->post ? c->body : p.query, e->fields, &r,
 	    &text) == -1) {
@@ -571,7 +575,8 @@ front_unbody(struct conn *c)
 
 /*
  * The parameters front reads, out of c's, each its length and its
- * bytes as FastCGI says: -1 if one is not whole or past its bound
+ * bytes as FastCGI says; if a parameter comes twice, the last one
+ * counts: -1 if one is not whole or past its bound
  */
 static int
 front_params(struct conn *c, struct params *p)
@@ -589,6 +594,7 @@ front_params(struct conn *c, struct params *p)
 		P("CONTENT_LENGTH", clen),
 		P("HTTP_COOKIE", cookie),
 		P("HTTP_X_NSHDECK", xdeck),
+		P("REMOTE_ADDR", addr),
 #undef P
 	};
 	const unsigned char	*s = (unsigned char *)c->params;
@@ -622,6 +628,7 @@ front_params(struct conn *c, struct params *p)
 			    memchr(s + len[0], '\0', len[1]) != NULL)
 				return (-1);
 			memcpy((char *)p + want[i].off, s + len[0], len[1]);
+			((char *)p + want[i].off)[len[1]] = '\0';
 		}
 		s += len[0] + len[1];
 		left -= len[0] + len[1];
@@ -899,6 +906,7 @@ front_head(struct conn *c, struct deck_head *h)
 		{ 404, "Not Found" }, { 405, "Method Not Allowed" },
 		{ 413, "Payload Too Large" },
 		{ 415, "Unsupported Media Type" },
+		{ 429, "Too Many Requests" },
 		{ 431, "Request Header Fields Too Large" },
 		{ 503, "Service Unavailable" },
 	};

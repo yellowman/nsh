@@ -28,6 +28,7 @@
 #define DECK_SOCKET	"/var/www/run/nshdeck.sock"
 
 #define DECK_TOKEN	64		/* a session's token, in hex */
+#define DECK_ADDR	64		/* a client's address, from httpd */
 #define DECK_SESSIONS	64		/* web users logged in, at most */
 #define DECK_IDLE	(30 * 60)	/* seconds a session lasts unused */
 #define DECK_WINDOW	16		/* an answer's messages front has */
@@ -62,6 +63,8 @@ enum deck_kind {
 struct deck_request {
 	int32_t		kind;
 	char		token[DECK_TOKEN + 1];	/* the cookie's, or "" */
+	char		addr[DECK_ADDR];	/* the client's address from */
+						/* httpd, or "" */
 	char		text[NSHD_LINE];	/* a user's name, a show's */
 						/* words, a line, an */
 						/* operation, a configuration, */

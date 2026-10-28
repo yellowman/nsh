@@ -33,6 +33,16 @@
  * makes, and which closes when it is answered. A daemon's rules go to
  * nshd in parts, as nsh sends them, and are set with the last.
  *
+ * Failed logins are counted for each user name and for each client
+ * address, the one httpd passes; an IPv6 address is counted by its /64.
+ * After DECK_TRIES failures in a row, logins for that name or from that
+ * address are refused, without asking nshd, for one second, and each
+ * further failure doubles the wait, up to DECK_WAIT seconds. A
+ * successful login resets the count for its name. A count with no
+ * failure for DECK_FORGET seconds starts over. Failed and refused
+ * logins are logged at most once every DECK_QUIET seconds for each name
+ * and address, and each log line says how many were not logged.
+ *
  * A user's event streams have nshd watch commits, interfaces and routes,
  * and the logs any of them follows, and each notice nshd sends goes to each
  * stream as an event, a log's only to those that follow it. A user with
@@ -81,8 +91,11 @@
 #define DECK_QUEUE	16		/* a user's requests waiting, at most */
 #define DECK_OUTPUT	(1024 * 1024)	/* what nshd printed, kept, at most */
 #define DECK_CHUNK	8192		/* JSON sent front at once, about */
-#define DECK_FAILS	32		/* failed logins remembered, by user */
-#define DECK_QUIET	10		/* seconds between a user's logged fails */
+#define DECK_FAILS	512		/* names and addresses counted */
+#define DECK_QUIET	10		/* seconds between log lines, at least */
+#define DECK_TRIES	5		/* failed logins in a row before a wait */
+#define DECK_WAIT	60		/* longest wait, in seconds */
+#define DECK_FORGET	(15 * 60)	/* idle seconds before a count resets */
 #define DECK_PTY	3072		/* what nsh writes, read at once, at */
 					/* most: 4096 bytes in base64 */
 #define DECK_TYPED	(64 * 1024)	/* what a terminal was typed, not */
@@ -143,6 +156,7 @@ struct user {
 	TAILQ_ENTRY(user)	 entry;
 	char			 token[DECK_TOKEN + 1];
 	char			 name[NSHD_NAME];
+	char			 addr[DECK_ADDR];	/* from httpd */
 	int			 state;
 	int			 perms;
 	uint32_t		 connect;	/* the id parent connects for */
@@ -182,9 +196,19 @@ static struct {
 	size_t			 len;
 } incoming;			/* a setrules' rules, before it */
 static struct event		 ev_idle;
-static struct {
-	char			 name[NSHD_NAME];
-	time_t			 when;
+/* what a count is for, and how a login ended */
+enum { FAIL_NAME = 1, FAIL_ADDR };
+enum { EV_FAILED, EV_REFUSED, EV_SUCCEEDED };
+
+static struct fail {
+	int			 kind;		/* FAIL_*, or 0: none */
+	char			 key[DECK_ADDR];	/* its name or address */
+	int64_t			 last;		/* the last failure, in ms */
+	int64_t			 until;		/* refused until, in ms */
+	int64_t			 logged;	/* last logged, in ms */
+	unsigned int		 row;		/* failed in a row */
+	unsigned int		 failed;	/* failed, not logged */
+	unsigned int		 refused;	/* refused, not logged */
 } fails[DECK_FAILS];
 
 static void	 sessions_parent(int, short, void *);
@@ -229,7 +253,13 @@ static void	 j_fmt(struct jbuf *, const char *, ...)
 static void	 j_who(struct jbuf *, struct user *);
 static int	 j_flush(struct jbuf *, uint32_t);
 static void	 j_answer(struct user *);
-static void	 failed(const char *);
+static void	 failed(const char *, const char *);
+static void	 fail_key(const char *, char *, size_t);
+static struct fail *fail_find(int, const char *);
+static struct fail *fail_add(int, const char *, struct fail *, int64_t);
+static void	 fail_log(int, struct fail *[2], const char *, const char *,
+		    int64_t);
+static int64_t	 msnow(void);
 static struct user *user_token(const char *);
 static void	 user_free(struct user *);
 
@@ -305,6 +335,7 @@ sessions_front(int fd, short event, void *arg)
 			    (incoming.len > 0 && (incoming.id != id ||
 			    r.kind != DECK_SETRULES)) ||
 			    memchr(r.token, '\0', sizeof(r.token)) == NULL ||
+			    memchr(r.addr, '\0', sizeof(r.addr)) == NULL ||
 			    memchr(r.text, '\0', sizeof(r.text)) == NULL ||
 			    memchr(r.password, '\0', sizeof(r.password)) ==
 			    NULL ||
@@ -441,8 +472,26 @@ login(uint32_t id, struct deck_request *r)
 {
 	struct user	*u;
 	struct pending	*p;
+	struct fail	*f[2];
+	const char	*addr = r->addr[0] != '\0' ? r->addr : "?";
+	char		 key[DECK_ADDR];
+	int64_t		 now = msnow(), wait = 0;
 	int32_t		 ro = 0;
+	size_t		 i;
 
+	fail_key(addr, key, sizeof(key));
+	f[0] = fail_find(FAIL_NAME, r->text);
+	f[1] = fail_find(FAIL_ADDR, key);
+	for (i = 0; i < 2; i++)
+		if (f[i] != NULL && f[i]->until - now > wait)
+			wait = f[i]->until - now;
+	if (wait > 0) {
+		fail_log(EV_REFUSED, f, r->text, addr, now);
+		wait = (wait + 999) / 1000;
+		reply(id, 429, "{\"error\":\"too many failed logins, wait "
+		    "%lld s\",\"wait\":%lld}", (long long)wait, (long long)wait);
+		return;
+	}
 	if (nusers == DECK_SESSIONS) {
 		reply(id, 503, "{\"error\":\"too many logged in\"}");
 		return;
@@ -454,6 +503,7 @@ login(uint32_t id, struct deck_request *r)
 	TAILQ_INIT(&u->streams);
 	TAILQ_INIT(&u->terms);
 	strlcpy(u->name, r->text, sizeof(u->name));
+	strlcpy(u->addr, addr, sizeof(u->addr));
 	u->state = U_CONNECT;
 	u->connect = id;
 	u->used = time(NULL);
@@ -729,19 +779,22 @@ sessions_ro(int fd, short event, void *arg)
 }
 
 /*
- * u's login, as nshd answered it: u ready, with its token, or gone; a
- * failure logged, but not more than one a user each DECK_QUIET seconds
+ * nshd's answer to u's login. On success, give u its token and reset
+ * the failure count for its name. On failure, count it for the name
+ * and the address, answer 401, and free u.
  */
 static void
 logged(struct user *u, int32_t status)
 {
 	struct jbuf	 j = { NULL, 0, 0 };
+	struct fail	*f[2];
+	char		 key[DECK_ADDR];
 	unsigned char	 rnd[DECK_TOKEN / 2];
 	uint32_t	 id = u->cur->id;
 	size_t		 i;
 
 	if (status != 0) {
-		failed(u->name);
+		failed(u->name, u->addr);
 		reply(id, 401, "{\"error\":\"Login incorrect\"}");
 		user_free(u);
 		return;
@@ -750,6 +803,14 @@ logged(struct user *u, int32_t status)
 	for (i = 0; i < sizeof(rnd); i++)
 		snprintf(u->token + 2 * i, 3, "%02x", rnd[i]);
 	explicit_bzero(rnd, sizeof(rnd));
+	fail_key(u->addr, key, sizeof(key));
+	f[0] = fail_find(FAIL_NAME, u->name);
+	f[1] = fail_find(FAIL_ADDR, key);
+	if (f[0] != NULL) {
+		if (f[0]->failed > 0 || f[0]->refused > 0)
+			fail_log(EV_SUCCEEDED, f, u->name, u->addr, msnow());
+		memset(f[0], 0, sizeof(*f[0]));
+	}
 	u->state = U_READY;
 	head(id, 200, 0, u->token, 0);
 	j_who(&j, u);
@@ -764,27 +825,153 @@ logged(struct user *u, int32_t status)
 	next(u);
 }
 
-/* a failed login of name's, logged, unless one was just now */
+/*
+ * Count a failed login for name from addr. Once either has DECK_TRIES
+ * failures in a row, each failure makes it wait longer. Log the failure
+ * unless both logged a line in the last DECK_QUIET seconds.
+ */
 static void
-failed(const char *name)
+failed(const char *name, const char *addr)
 {
-	time_t	 now = time(NULL);
-	size_t	 i, old = 0;
+	struct fail	*f[2];
+	char		 key[DECK_ADDR];
+	int64_t		 now = msnow(), wait;
+	size_t		 i, k;
 
-	for (i = 0; i < DECK_FAILS; i++) {
-		if (strcmp(fails[i].name, name) == 0) {
-			if (now - fails[i].when < DECK_QUIET)
-				return;
-			break;
-		}
-		if (fails[i].when < fails[old].when)
-			old = i;
+	fail_key(addr, key, sizeof(key));
+	f[0] = fail_add(FAIL_NAME, name, NULL, now);
+	f[1] = fail_add(FAIL_ADDR, key, f[0], now);
+	for (k = 0; k < 2; k++) {
+		if (now - f[k]->last >= DECK_FORGET * 1000)
+			f[k]->row = 0;
+		f[k]->last = now;
+		f[k]->row++;
+		wait = 0;
+		if (f[k]->row >= DECK_TRIES)
+			for (wait = 1, i = DECK_TRIES; i < f[k]->row &&
+			    wait < DECK_WAIT; i++)
+				wait *= 2;
+		if (wait > DECK_WAIT)
+			wait = DECK_WAIT;
+		f[k]->until = now + wait * 1000;
 	}
-	if (i == DECK_FAILS)
-		i = old;
-	strlcpy(fails[i].name, name, sizeof(fails[i].name));
-	fails[i].when = now;
-	log_warnx("login failed for %s", name);
+	fail_log(EV_FAILED, f, name, addr, now);
+}
+
+/*
+ * The key that failures from addr are counted under: for an IPv6
+ * address, its /64, since one host may hold all of it; else addr.
+ */
+static void
+fail_key(const char *addr, char *key, size_t len)
+{
+	struct in6_addr	 in6;
+	char		 a[DECK_ADDR], *p;
+
+	strlcpy(a, addr, sizeof(a));
+	if ((p = strchr(a, '%')) != NULL)
+		*p = '\0';
+	if (inet_pton(AF_INET6, a, &in6) == 1 &&
+	    !IN6_IS_ADDR_V4MAPPED(&in6)) {
+		memset(&in6.s6_addr[8], 0, 8);
+		inet_ntop(AF_INET6, &in6, a, sizeof(a));
+		snprintf(key, len, "%s/64", a);
+	} else
+		strlcpy(key, addr, len);
+}
+
+/* the count of kind for key, or NULL if there is none */
+static struct fail *
+fail_find(int kind, const char *key)
+{
+	size_t	 i;
+
+	for (i = 0; i < DECK_FAILS; i++)
+		if (fails[i].kind == kind && strcmp(fails[i].key, key) == 0)
+			return (&fails[i]);
+	return (NULL);
+}
+
+/*
+ * The count of kind for key, made if there is none. A new count takes
+ * the place of the one whose wait ended longest ago, but never keep's.
+ */
+static struct fail *
+fail_add(int kind, const char *key, struct fail *keep, int64_t now)
+{
+	struct fail	*f;
+	size_t		 i;
+
+	if ((f = fail_find(kind, key)) != NULL)
+		return (f);
+	for (i = 0; i < DECK_FAILS; i++)
+		if (&fails[i] != keep && (f == NULL ||
+		    fails[i].until < f->until))
+			f = &fails[i];
+	memset(f, 0, sizeof(*f));
+	f->kind = kind;
+	strlcpy(f->key, key, sizeof(f->key));
+	f->logged = now - DECK_QUIET * 1000;
+	return (f);
+}
+
+/*
+ * Log a login for name from addr that failed, was refused or succeeded,
+ * as ev says. f holds the counts for the name and the address; either
+ * may be NULL. Each line says how many were not logged before it. If
+ * both counts logged a line in the last DECK_QUIET seconds, count the
+ * login instead of logging it. A success is always logged.
+ */
+static void
+fail_log(int ev, struct fail *f[2], const char *name, const char *addr,
+    int64_t now)
+{
+	static const char	*verb[] = { "failed", "refused", "succeeded" };
+	char			 line[512];
+	size_t			 i, len;
+	int			 due = ev == EV_SUCCEEDED;
+
+	for (i = 0; i < 2; i++)
+		if (f[i] != NULL && now - f[i]->logged >= DECK_QUIET * 1000)
+			due = 1;
+	for (i = 0; !due && i < 2; i++) {
+		if (f[i] == NULL)
+			continue;
+		if (ev == EV_FAILED)
+			f[i]->failed++;
+		else
+			f[i]->refused++;
+	}
+	if (!due)
+		return;
+	snprintf(line, sizeof(line), "login %s for %s from %s", verb[ev],
+	    name, addr);
+	for (i = 0; i < 2; i++) {
+		if (f[i] == NULL)
+			continue;
+		len = strlen(line);
+		snprintf(line + len, sizeof(line) - len, "; %s: %u in a row",
+		    f[i]->key, f[i]->row);
+		if (f[i]->failed > 0 || f[i]->refused > 0) {
+			len = strlen(line);
+			snprintf(line + len, sizeof(line) - len, ", not logged "
+			    "%u failed and %u refused", f[i]->failed,
+			    f[i]->refused);
+		}
+		f[i]->failed = f[i]->refused = 0;
+		f[i]->logged = now;
+	}
+	log_warnx("%s", line);
+}
+
+/* the monotonic clock, in ms */
+static int64_t
+msnow(void)
+{
+	struct timespec	 ts;
+
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	return ((int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
 }
 
 /* the next of u's requests, to nshd, if none is asked */
