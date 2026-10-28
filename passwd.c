@@ -521,6 +521,10 @@ login_user(int set, int argc, char **argv)
 		if (login_make(name, hash) == -1)
 			return -1;
 		made = 1;
+	} else if (pw->pw_uid == 0) {
+		printf("%% login user %s: an account with uid 0 is always "
+		    "super-user\n", name);
+		return -1;
 	} else if (found && made) {
 		if (hash == NULL) {
 			printf("%% login user %s: nshd made this account, so "
@@ -637,10 +641,11 @@ login_perms(uid_t uid)
 }
 
 /*
- * The uid of name, a user a login user line names, but never root, if
- * password is its own, as auth_usercheck(3) checks it, and the account
- * may log in, as auth_approval(3) says, which login(1) asks too: not
- * expired, nor refused by its class; else -1, said
+ * Check a web login. name must be named by a login user line and must
+ * not have uid 0. auth_usercheck(3) checks the password, and
+ * auth_approval(3) must allow the account to log in, as login(1)
+ * requires: not expired, and not refused by its class. Returns the
+ * uid, or -1 after printing "Login incorrect".
  */
 int
 login_auth(char *name, char *password)
@@ -650,9 +655,8 @@ login_auth(char *name, char *password)
 	char class[64];
 	int made, uid = -1;
 
-	if (strcmp(name, "root") != 0 &&
-	    login_user_find(name, class, sizeof(class), &made) == 1 &&
-	    (pw = getpwnam(name)) != NULL) {
+	if (login_user_find(name, class, sizeof(class), &made) == 1 &&
+	    (pw = getpwnam(name)) != NULL && pw->pw_uid != 0) {
 		/* taken before auth_*() read the password database again */
 		uid = pw->pw_uid;
 		if ((as = auth_usercheck(name, NULL, NULL, password)) == NULL ||

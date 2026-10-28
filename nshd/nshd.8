@@ -192,8 +192,9 @@ and the account with
 .Xr auth_approval 3 ,
 for a user that a
 .Cm login user
-line names, and never root; the session then acts as that user, whose
-uid its commits record, until it goes.
+line names, never an account with uid 0.
+The session then acts as that user until it ends, and its commits
+record that user's uid.
 system starts such a session's terminal as
 .Xr login 1
 starts a shell: it opens a pty, and runs

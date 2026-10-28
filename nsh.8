@@ -375,9 +375,10 @@ A member of nshadmin that no
 line names is read-only.
 The web configurator logs in as a user that a
 .Cm login user
-line names, but never root, with that user's password, and has the
+line names, with that user's password, and has the
 permissions of the user's class, as when the user logs in with
 .Xr ssh 1 .
+It never logs in as root, or as any other account with uid 0.
 nshd refuses what a session's class does not allow.
 Where nshd does not run, or the user may not use its socket,
 .Nm
@@ -731,8 +732,9 @@ home directory.
 An account that nshd did not make, such as one an administrator made by
 hand, gets its class and nothing else: its line takes no password, and
 taking the line away leaves the account alone.
-No line names root, which is always super-user, or an account whose name
-begins with an underscore, as those belong to daemons.
+No line may name root or any other account with uid 0, which is always
+super-user, or an account whose name begins with an underscore, since
+those belong to daemons.
 .Bl -dash
 .It
 e.g. Let alice, who has no account, operate and configure the system:
