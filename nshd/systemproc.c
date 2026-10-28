@@ -2040,23 +2040,36 @@ system_kept(void)
  * The commit not confirmed, past its deadline, or its next attempt:
  * taken back, if no commit begun or job is in the way; if one is, the
  * record says how long it may be, and this comes again as it ends;
- * before then, the timer set for then
+ * before then, the timer set for then. If the record cannot be read,
+ * try again CONFIRM_RETRY seconds later, and log the error only once.
+ * Do not try again if the file is not a record at all, since reading
+ * it again will not help.
  */
 static void
 system_confirm(int fd, short event, void *arg)
 {
+	static int	 unread;
 	struct confirm	 cf;
 	struct timeval	 tv = { 0, 0 };
 	time_t		 now = time(NULL), due;
+	int		 serrno;
 
 	evtimer_del(&confirm_tm);
 	if (job != NULL && job->kind == JOB_RECOVER)
 		return;
 	if (confirm_read(&cf, 1) == -1) {
-		logit(LOG_CRIT, "the record of a commit not confirmed: %s",
-		    strerror(errno));
+		serrno = errno;
+		if (serrno != unread)
+			logit(LOG_CRIT, "the record of a commit not "
+			    "confirmed: %s", strerror(serrno));
+		unread = serrno;
+		if (serrno != EFTYPE) {
+			tv.tv_sec = CONFIRM_RETRY;
+			evtimer_add(&confirm_tm, &tv);
+		}
 		return;
 	}
+	unread = 0;
 	due = cf.deadline > confirm_next ? cf.deadline : confirm_next;
 	if (cf.state == CONFIRM_WAITING && now < due) {
 		tv.tv_sec = due - now;
@@ -2551,13 +2564,15 @@ system_rollback(uint32_t id, int n, int diff)
 /*
  * What is wrong with what runs, said before the list of what is kept:
  * that it is not the saved configuration, a commit that did not finish
- * or is not saved, and a boot that failed
+ * or is not saved, a boot that failed, a commit that was not confirmed
+ * and could not be rolled back, and a commit record that cannot be read
  */
 static void
 system_health(void)
 {
 	struct record	 rec;
 	struct boot	 b;
+	struct confirm	 cf;
 
 	if (saved_differs() == 1)
 		printf("%% What runs is not the saved configuration\n");
@@ -2573,6 +2588,13 @@ system_health(void)
 	if (boot_read(&b) == 0 && b.state == BOOT_FAILED)
 		printf("%% The boot failed%s\n", b.demoted ? ", and carp is "
 		    "demoted until a commit saves" : "");
+	if (confirm_read(&cf, 0) == -1)
+		printf("%% The record of a commit not confirmed cannot be "
+		    "read: %s\n", strerror(errno));
+	else if (cf.state == CONFIRM_FAILED)
+		printf("%% A commit not confirmed was not rolled back%s\n",
+		    cf.demoted ? ", and carp is demoted until a commit saves" :
+		    "");
 }
 
 /*

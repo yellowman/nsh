@@ -436,7 +436,8 @@ function changes(inConfigure) {
 function healthTag(text) {
 	var t = el("span", /^The boot failed/.test(text) ? "boot failed" :
 	    /did not finish$/.test(text) ? "commit unfinished" :
-	    /not saved$|not the saved/.test(text) ? "not saved" : "warning",
+	    /not saved$|not the saved/.test(text) ? "not saved" :
+	    /not rolled back/.test(text) ? "not rolled back" : "warning",
 	    "tag warn");
 
 	t.title = text;
