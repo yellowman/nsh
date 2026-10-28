@@ -120,9 +120,19 @@ make install
 
 12. secure the /etc/nshrc file so that world cannot read, write or execute it . 
 
-13. configure the system to start nshd at boot: install nshd/nshd.rc as /etc/rc.d/nshd and run rcctl enable nshd. nshd boots /etc/nshrc the first time, and the configuration it saves after. Root and the group nshadmin may use nshd's read-write socket, each with the permissions of their login class.
+13. configure the system to start nshd at boot: create its users and the group nshadmin, install nshd/nshd.rc as /etc/rc.d/nshd and run rcctl enable nshd. nshd boots /etc/nshrc the first time, and the configuration it saves after. Root and the group nshadmin may use nshd's read-write socket, each with the permissions of their login class.
+```shell
+groupadd nshadmin
+for u in _nshshow _nshfront _nshconf _nsharc _nshcheck; do
+	useradd -L daemon -d /var/empty -s /sbin/nologin $u
+done
+```
 
-14. optionally, to configure the system from a web browser, install nshdeck/nshdeck.rc as /etc/rc.d/nshdeck, run rcctl enable nshdeck, and add the location nshdeck(8) shows to httpd.conf(5).
+14. optionally, to configure the system from a web browser, create nshdeck's users, install nshdeck/nshdeck.rc as /etc/rc.d/nshdeck, run rcctl enable nshdeck, and add the location nshdeck(8) shows to httpd.conf(5).
+```shell
+useradd -L daemon -d /var/empty -s /sbin/nologin -G nshadmin _nshweb
+useradd -L daemon -d /var/empty -s /sbin/nologin _nshdeck
+```
 
   For the users convenience, the above steps (9-13) can be largely automated by running  the **rc.local-nsh-openbsd-integrate.sh** script  in your system shell
   and following on screen instructions.
