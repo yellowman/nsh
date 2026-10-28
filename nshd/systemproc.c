@@ -2067,10 +2067,12 @@ system_confirm(int fd, short event, void *arg)
 }
 
 /*
- * cf taken back: carp demoted, if no one did, and the attempt recorded,
- * then a job makes what runs read as cf's way back; unless it does,
- * already, or the attempts are done, as a system before this died in
- * its last
+ * Roll back the commit cf describes. If what runs already matches cf's
+ * rollback configuration, as when the previous system process stopped
+ * after its last attempt succeeded, only clear the record. If every
+ * attempt is used, mark the rollback failed. Otherwise demote carp
+ * unless that was done already, record the attempt, and start a job
+ * that applies the rollback configuration.
  */
 static void
 system_recover(struct confirm *cf)
@@ -2080,15 +2082,15 @@ system_recover(struct confirm *cf)
 	size_t		 len;
 	int		 r = -1;
 
-	if (cf->attempts >= CONFIRM_ATTEMPTS) {
-		system_failed(cf);
-		return;
-	}
 	if ((runs = system_running(&len)) != NULL)
 		r = commit_reads(runs, len, cf->back, cf->backlen);
 	free(runs);
 	if (r == 1) {
 		system_taken(cf, "what runs is what it goes back to");
+		return;
+	}
+	if (cf->attempts >= CONFIRM_ATTEMPTS) {
+		system_failed(cf);
 		return;
 	}
 	if (!cf->demoted && carplock(128) == 1)
