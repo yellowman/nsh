@@ -91,6 +91,7 @@ var dconf = {};		/* each daemon's rules and state, by "name rtable" */
 var dfacts = [];	/* show daemons' records, the last */
 var dchosen = {};	/* each workspace's daemon chosen: its name and rtable */
 var DHISTORY = 10;	/* how many saves a daemon's history looks back */
+var DIFFPAIRS = 1000000;	/* line pairs a diff compares, at most */
 var dinsp = null;	/* the daemon inspected, its settings, and edits */
 var dasked = 0;		/* inspections asked; the last is drawn */
 
@@ -326,11 +327,52 @@ function daemonLines(name, st) {
  * the lines of b set against those of a, in order, each marked " " if
  * both have it, "-" if a alone does or "+" if b alone does; only the
  * marked lines and the two each side of them, with " …" for the lines
- * left out between; none if a and b are the same
+ * left out between; none if a and b are the same. Lines that match at
+ * the start and the end are skipped before the rest is compared
  */
 function lineDiff(a, b) {
-	var l = [], out = [], shown = [], keep, i, j;
+	var s = 0, e = 0, out, shown = [], keep;
 
+	while (s < a.length && s < b.length && a[s] === b[s])
+		s++;
+	while (e < a.length - s && e < b.length - s &&
+	    a[a.length - 1 - e] === b[b.length - 1 - e])
+		e++;
+	out = a.slice(0, s).map(function (x) {
+		return " " + x;
+	}).concat(lineMiddle(a.slice(s, a.length - e),
+	    b.slice(s, b.length - e)), a.slice(a.length - e).map(function (x) {
+		return " " + x;
+	}));
+	keep = out.map(function (x, k) {
+		return out.slice(Math.max(0, k - 2), k + 3).some(function (y) {
+			return y[0] !== " ";
+		});
+	});
+	out.forEach(function (x, k) {
+		if (keep[k])
+			shown.push(x);
+		else if (k === 0 || keep[k - 1])
+			shown.push(" …");
+	});
+	return keep.indexOf(true) === -1 ? [] : shown;
+}
+
+/*
+ * the lines of a and b, marked as lineDiff() marks them, by the longest
+ * sequence of lines they share; if that means comparing more than
+ * DIFFPAIRS pairs of lines, all of a's marked removed and all of b's
+ * added instead
+ */
+function lineMiddle(a, b) {
+	var l = [], out = [], i, j;
+
+	if (a.length * b.length > DIFFPAIRS)
+		return a.map(function (x) {
+			return "-" + x;
+		}).concat(b.map(function (x) {
+			return "+" + x;
+		}));
 	for (i = a.length; i >= 0; i--) {
 		l[i] = [];
 		for (j = b.length; j >= 0; j--)
@@ -347,18 +389,7 @@ function lineDiff(a, b) {
 			out.push("-" + a[i++]);
 		else
 			out.push("+" + b[j++]);
-	keep = out.map(function (x, k) {
-		return out.slice(Math.max(0, k - 2), k + 3).some(function (y) {
-			return y[0] !== " ";
-		});
-	});
-	out.forEach(function (x, k) {
-		if (keep[k])
-			shown.push(x);
-		else if (k === 0 || keep[k - 1])
-			shown.push(" …");
-	});
-	return keep.indexOf(true) === -1 ? [] : shown;
+	return out;
 }
 
 /* text's lines, its last newline or not */
