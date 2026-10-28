@@ -356,6 +356,9 @@ frontend_client(struct ctl_conn *c, struct imsg *imsg)
 		    imsg_get_type(imsg) == IMSG_CTL_WATCH) {
 			c->asked = 1;
 			frontend_asked(c, IMSG_FRONT_ASKED);
+			/* sent now, so system has it before config's request */
+			if (imsgbuf_flush(&links[SYSTEM].iev->ibuf) == -1)
+				link_broken(&links[SYSTEM], "closed its pipe");
 		}
 		if (link_compose(&links[CONFIG], imsg_get_type(imsg), c->id,
 		    len > 0 ? &r : NULL, len) == -1)
