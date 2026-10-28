@@ -7,6 +7,7 @@
 "use strict";
 
 var insp = null;	/* the interface inspected, its settings, and edits */
+var iasked = 0;		/* inspections asked; the last is drawn */
 
 function isBridge(name) {
 	return ["bridge", "veb", "tpmr"].indexOf(driver(name)) !== -1;
@@ -117,10 +118,15 @@ function applies(d, r) {
 	return !d.on || d.on.indexOf(driver(r.name)) !== -1;
 }
 
-/* name's settings, as the configuration has them, inspected */
+/*
+ * name's settings, as the configuration has them, inspected; resolves
+ * to whether they were drawn, which they are not if another inspection
+ * was asked for since
+ */
 function inspect(name) {
 	var inConfigure = cur && cur.mode !== 0;
 	var bridge = isBridge(name);
+	var n = ++iasked;
 
 	return ask("GET", "config", { what: inConfigure ? "candidate" :
 	    "running" }).then(function (j) {
@@ -129,6 +135,8 @@ function inspect(name) {
 		    name);
 		var was = settings(lines, defs);
 
+		if (n !== iasked)
+			return false;
 		netRoute = null;
 		insp = { name: name, bridge: bridge, defs: defs, was: was,
 		    now: JSON.parse(JSON.stringify(was)), conf: said(j),
@@ -140,6 +148,7 @@ function inspect(name) {
 			netConf = said(j);
 			netDraw();
 		}
+		return true;
 	});
 }
 
@@ -415,7 +424,9 @@ function inspector(key) {
 
 /*
  * lines into the candidate, one at a time, in the interface's mode,
- * entering configure private if not in configure; then the settings again
+ * entering configure private if not in configure; then the settings
+ * inspected again and the lines' results shown, unless another
+ * inspection was asked for meanwhile
  */
 function staged(lines) {
 	var head = (insp.bridge ? "bridge " : "interface ") + insp.name;
@@ -437,7 +448,9 @@ function staged(lines) {
 	});
 	return p.then(function () {
 		return inspect(insp.name);
-	}).then(function () {
+	}).then(function (drawn) {
+		if (!drawn)
+			return;
 		insp.results = results;
 		inspector();
 	});
