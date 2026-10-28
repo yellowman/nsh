@@ -540,7 +540,7 @@ Menu showlist[] = {
 	{ "startup-config", "Startup configuration", CMPL0 0, 0, 0, 0, pr_s_conf },
 	{ "active-config", "Configuration of active context", CMPL0 0, 0, 0, 0, pr_a_conf },
 	{ "diff-config", "Show differences between startup and running config, or running and candidate", CMPL0 0, 0, 0, 0, pr_conf_diff },
-	{ "candidate-config", "Candidate configuration of configure private", CMPL0 0, 0, 0, 0, pr_cand_conf },
+	{ "candidate-config", "Candidate configuration", CMPL0 0, 0, 0, 0, pr_cand_conf },
 	{ "rollback",	"Configurations saved, one of them, or what it changed", CMPL0 0, 0, 0, 2, pr_rollback },
 	{ "environment", "Show environment variables",	CMPL(e) 0, 0, 0, 1, pr_environment },
 	{ "?",		"Options",		CMPL0 0, 0, 0, 0, show_help },
@@ -3715,13 +3715,6 @@ flush_pf(int argc, char **argv, ...)
 		char *argv[] = { x->cmd, x->arg, NULL };
 		return cmdargs(x->cmd, argv) == 0 ? 0 : -1;
 	}
-}
-
-/* Save the running configuration where nshd saves it, SAVED */
-int
-conf_save(void)
-{
-	return saved_write();
 }
 
 /*

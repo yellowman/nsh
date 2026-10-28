@@ -112,9 +112,9 @@
  * says. A watch is answered once system has followed each log it adds, or
  * refused to.
  *
- * If parent says at startup that the boot is not done, config boots, as
- * nsh -i does: system says whether this boot of the host is done already
- * (BOOT), and if not, gives the saved configuration (SAVED). A commit of
+ * If parent says at startup that the boot is not done, config boots:
+ * system says whether this boot of the host is done already (BOOT), and
+ * if not, gives the saved configuration (SAVED). A commit of
  * no session's then makes it the running configuration, all of it that
  * takes, as nothing it checks or tests refuses it. system then records
  * how the boot went (BOOTED), and parent is told. What nsh's code and

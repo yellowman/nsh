@@ -1398,43 +1398,6 @@ ctl_rules_clear(char *name, int rtableid, int keep)
 }
 
 /*
- * Test daemon name's rules, its n lines, as its edit tests them: -1 if
- * the test fails, else 0, as for a daemon whose edit tests nothing
- */
-int
-ctl_rules_test(char *name, char **lines, size_t n)
-{
-	char dir[] = "/tmp/nsh.XXXXXXXXXX", path[PATH_MAX];
-	char *args[NOPTFILL] = { NULL };
-	size_t i;
-	FILE *f;
-	int ret;
-
-	if (!ctl_rules_args(name, NULL, NULL, 0, NULL))
-		return 0;
-	if (mkdtemp(dir) == NULL) {
-		printf("%% mkdtemp %s: %s\n", dir, strerror(errno));
-		return -1;
-	}
-	ctl_rules_args(name, dir, path, sizeof(path), args);
-	if ((f = fopen(path, "w")) == NULL) {
-		printf("%% %s: %s\n", path, strerror(errno));
-		rmdir(dir);
-		return -1;
-	}
-	for (i = 0; i < n; i++)
-		fprintf(f, "%s\n", lines[i]);
-	if (fclose(f) == EOF) {
-		printf("%% %s: %s\n", path, strerror(errno));
-		ctl_cand_unstage(dir, path);
-		return -1;
-	}
-	ret = cmdargs(args[0], args) == 0 ? 0 : -1;
-	ctl_cand_unstage(dir, path);
-	return ret;
-}
-
-/*
  * Does daemon name's edit test its rules? If so, 1, and with dir, the
  * path in dir to stage its rules at goes into path, and the test's
  * arguments, which name that path, into args, NOPTFILL of them

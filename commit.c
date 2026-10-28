@@ -62,36 +62,30 @@
  * makes, and daemon rules their test refuses. commit refuses a
  * candidate with any of them.
  *
- * nsh -i applies its file to the running configuration as commit
- * applies the candidate, and keeps every line that succeeds; nothing is
- * undone (commit_boot()).
+ * nshd's boot applies the saved configuration to the running one as
+ * commit applies the candidate, and keeps every line that succeeds;
+ * nothing is undone (session_boot_plan()).
  *
- * commit confirmed does all that but save, and a process waits; unless
- * a commit confirms it first, at the deadline the running configuration
- * is rolled back to how it was before the first unconfirmed commit
- * (commit_expire()). The rollback configuration and the deadline are in
- * CONFIRM, as the configuration itself is not saved until confirmed.
+ * commit confirmed does all that but save; unless a commit confirms it
+ * first, at the deadline nshd's system rolls the running configuration
+ * back to how it was before the first unconfirmed commit
+ * (commit_recover()).
  */
 
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
-#include <sys/wait.h>
 #include <net/if.h>
 #include <netinet/in.h>
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
-#include <paths.h>
-#include <pwd.h>
-#include <signal.h>
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <syslog.h>
 #include <time.h>
 #include <unistd.h>
 #include "externs.h"
@@ -166,7 +160,6 @@ static const struct {
 	{ "pppoe dev", 1 }, { "trunkport", 0 },
 };
 
-static int take(struct cnode *, struct cnode *);
 static int check(struct cnode *, struct cnode *);
 static int edits_make(struct script *, int);
 static int edits_line(FILE *, int, char *, int *, int *, char *);
@@ -186,12 +179,6 @@ static int inwords(char *, char *);
 static char *claim(struct claims *, char *, char *);
 static int problem(const char *, ...);
 static int apply(struct cnode *, struct cnode *);
-static int waiter(time_t);
-static int unconfirm(struct cnode *, time_t);
-static struct cnode *unconfirmed(void);
-static time_t deadline(void);
-static void confirmed(void);
-static void report(const char *);
 static int removals(struct commit *, char *, char *, int, const char *);
 static int additions(struct commit *, char *, char *, int, const char *);
 static int unset(struct commit *, char *, int, int, const char *, char *);
@@ -214,7 +201,6 @@ static int context(char *);
 static int rtableid(char *);
 static int ifblock(char *, char *, size_t);
 static int clear(struct commit *, char *, int, int);
-static const char *committer(void);
 static int samefile(const char *, char *);
 static unsigned long long rollback_gen(int);
 static struct cnode *saved_tree(void);
@@ -225,21 +211,19 @@ static void sub_end(struct commit *, struct sub *, const char *, char *,
     int);
 
 /*
- * commit [confirmed [minutes]] [comment text]: in configure private,
- * make the candidate the running configuration, all of it or none, then
- * save the running configuration; or with confirmed, do not save it,
- * and roll it back unless a commit confirms it in time. In nshd's
- * configure, nshd commits; outside configure, nshd saves the running
- * configuration. The comment is kept with what is saved.
+ * commit [confirmed [minutes]] [comment text]: in configure, nshd makes
+ * the candidate the running configuration, all of it or none, then
+ * saves the running configuration; or with confirmed, does not save it,
+ * and rolls it back unless a commit confirms it in time. Outside
+ * configure, nshd saves the running configuration. The comment is kept
+ * with what is saved.
  */
 int
 commit(int argc, char **argv, ...)
 {
-	struct cnode *want, *was, *now, *back = NULL;
 	char comment[COMMENTMAX] = "";
 	const char *errstr;
-	time_t when = 0;
-	int minutes = 0, checking = 0, bad, ret = -1, i, j, said = 1;
+	int minutes = 0, checking = 0, i, j, said = 1;
 
 	/* comment, at least "com" of it, and the words after it */
 	for (i = 1; i < argc && (strlen(argv[i]) < 3 ||
@@ -283,71 +267,8 @@ commit(int argc, char **argv, ...)
 			return -1;
 		}
 	}
-	/* nshd commits its own candidate, or saves the running configuration */
-	if (nshd_config || !candidate)
-		return nshd_commit(checking, minutes, comment);
-	/* first roll back an unconfirmed commit past its deadline */
-	commit_expire();
-	if ((want = cand_tree()) == NULL)
-		return -1;
-	if ((was = running_tree()) == NULL)
-		return -1;
-	if ((bad = commit_checks(was, want, checking)) == -1 || checking) {
-		ret = bad;
-		goto done;
-	}
-	if (minutes > 0) {
-		/* back to before the first unconfirmed commit */
-		if ((back = unconfirmed()) == NULL &&
-		    (back = conftree_copy(was)) == NULL) {
-			printf("%% commit: %s\n", strerror(errno));
-			goto done;
-		}
-		when = time(NULL) + minutes * 60;
-		if (waiter(when) == -1)
-			goto done;
-	}
-	if (conftree_compare(NULL, was, want) != 0 && take(was, want) == -1)
-		goto done;
-	/* committed: report any later failure, and start the candidate over */
-	ret = 0;
-	if (minutes > 0) {
-		if (unconfirm(back, when) == -1) {
-			printf("%% Nothing can roll this commit back: undone\n");
-			if ((now = running_tree()) != NULL)
-				apply(now, was);
-			conftree_free(now);
-			ret = -1;
-			goto done;
-		}
-		printf("%% Commit within %d minute%s to keep this, or it is "
-		    "rolled back\n", minutes, minutes == 1 ? "" : "s");
-	} else {
-		confirmed();
-		if (conf_save())
-			rollback_keep(SAVED, committer(), comment);
-		else
-			ret = -1;
-	}
-	/* a new candidate, from the new running configuration */
-	cand_end();
-	if (cand_begin() == -1)
-		ret = -1;
-done:
-	conftree_free(back);
-	conftree_free(was);
-	return ret;
-}
-
-/*
- * check() of want against was, reported as commit reports it: 0 if want
- * may become the running configuration, else -1; with checking, the
- * verdict is printed either way
- */
-int
-commit_checks(struct cnode *was, struct cnode *want, int checking)
-{
-	return commit_verdict(check(was, want), checking);
+	/* nshd commits its candidate, or saves the running configuration */
+	return nshd_commit(checking, minutes, comment);
 }
 
 /* The problems check() finds with want, each reported, and how many */
@@ -357,7 +278,7 @@ commit_problems(struct cnode *was, struct cnode *want)
 	return check(was, want);
 }
 
-/* The verdict on bad problems, said as commit_checks() says it */
+/* The verdict on bad problems: said unless none and not checking */
 int
 commit_verdict(int bad, int checking)
 {
@@ -441,8 +362,8 @@ commit_reads(char *now, size_t nowlen, char *want, size_t wantlen)
 
 /*
  * Roll back an unconfirmed commit, as nshd's system does: make the
- * running configuration read as back's text, as commit_expire() does.
- * 0 if so, else -1 after saying why
+ * running configuration read as back's text. 0 if so, else -1 after
+ * saying why
  */
 int
 commit_recover(char *back, size_t backlen)
@@ -684,9 +605,9 @@ check_rules(struct cnode *was, struct cnode *want, char *block)
 }
 
 /*
- * Test daemon name's rules, its n lines, which label names: -1 if the
- * test refuses them, else 0. nshd's config runs no test: it keeps them
- * for system, which gets them from commit_deferred()
+ * Keep daemon name's rules, its n lines, which label names, for its
+ * test: nshd's config runs no test, and system gets them from
+ * commit_deferred(). -1 if they could not be kept, else 0
  */
 static int
 rules_test(char *name, char **lines, size_t n, char *label)
@@ -695,8 +616,6 @@ rules_test(char *name, char **lines, size_t n, char *label)
 	FILE *f;
 	size_t i;
 
-	if (!in_config)
-		return ctl_rules_test(name, lines, n);
 	if (!ctl_rules_args(name, NULL, NULL, 0, NULL))
 		return 0;
 	if ((nt = reallocarray(deferred, ndeferred + 1,
@@ -812,233 +731,6 @@ problem(const char *fmt, ...)
 	va_end(ap);
 	printf("\n");
 	return 1;
-}
-
-/*
- * Make the running configuration, was, read as want, or undo that; -1
- * if it does not read as want
- */
-static int
-take(struct cnode *was, struct cnode *want)
-{
-	struct cnode *now = NULL, *back = NULL;
-	int ret = -1, failed;
-
-	if ((failed = apply(was, want)) == -1 ||
-	    (now = running_tree()) == NULL)
-		goto done;
-	if (!failed && commit_took(now, want)) {
-		ret = 0;
-		goto done;
-	}
-	commit_untaken(now, want, failed);
-	conftree_free(now);
-	if ((now = running_tree()) == NULL || apply(now, was) == -1 ||
-	    (back = running_tree()) == NULL)
-		goto done;
-	commit_back(back, was);
-done:
-	conftree_free(back);
-	conftree_free(now);
-	return ret;
-}
-
-/*
- * nsh -i: make the running configuration the one in path, as commit
- * makes it the candidate, but never undone: what check finds is shown,
- * every line that succeeds stays, and what failed is shown. Returns 1 if
- * a line failed or the running configuration then differs from it,
- * else 0.
- */
-int
-commit_boot(char *path)
-{
-	struct cnode *want, *was = NULL, *now = NULL;
-	int ret = 1, failed = 0;
-
-	if ((want = conftree_read(path, conf_mode, conf_ordered)) == NULL)
-		return 1;
-	if ((was = running_tree()) == NULL)
-		goto done;
-	/* print problems, but boot with whatever succeeds */
-	check(was, want);
-	if (conftree_compare(NULL, was, want) != 0 &&
-	    (failed = apply(was, want)) == -1)
-		goto done;
-	if ((now = running_tree()) == NULL)
-		goto done;
-	if (differ(NULL, now, want) == 0)
-		ret = failed;
-	else {
-		printf("%% The running configuration differs from %s\n", path);
-		differ(stdout, now, want);
-		syslog(LOG_WARNING, "the running configuration differs from %s",
-		    path);
-	}
-done:
-	conftree_free(now);
-	conftree_free(was);
-	conftree_free(want);
-	return ret;
-}
-
-/*
- * An unconfirmed commit past its deadline is rolled back: the running
- * configuration is made the one before the first unconfirmed commit.
- * Returns 1 if one was rolled back, else 0.
- */
-int
-commit_expire(void)
-{
-	struct cnode *back, *now = NULL, *after = NULL;
-	time_t when;
-
-	if ((when = deadline()) == 0 || time(NULL) < when ||
-	    (back = unconfirmed()) == NULL)
-		return 0;
-	if ((now = running_tree()) != NULL &&
-	    (conftree_compare(NULL, now, back) == 0 ||
-	    apply(now, back) != -1) &&
-	    (after = running_tree()) != NULL &&
-	    differ(NULL, after, back) == 0)
-		report("Commit not confirmed: rolled back");
-	else {
-		report("Commit not confirmed: rolled back, but the running "
-		    "configuration differs from how it was");
-		if (after != NULL)
-			differ(stdout, after, back);
-	}
-	/* unless another commit confirmed has come since */
-	if (deadline() == when && unlink(CONFIRM) == -1)
-		printf("%% unlink %s: %s\n", CONFIRM, strerror(errno));
-	conftree_free(after);
-	conftree_free(now);
-	conftree_free(back);
-	return 1;
-}
-
-/*
- * A process of its own, apart from the session, to wait for when and
- * then roll back an unconfirmed commit: -1 if there cannot be one
- */
-static int
-waiter(time_t when)
-{
-	time_t left;
-	pid_t pid;
-	int fd, status;
-
-	fflush(stdout);
-	switch (pid = fork()) {
-	case -1:
-		printf("%% commit confirmed: fork: %s\n", strerror(errno));
-		return -1;
-	case 0:
-		break;
-	default:
-		if (waitpid(pid, &status, 0) == -1 || !WIFEXITED(status) ||
-		    WEXITSTATUS(status) != 0) {
-			printf("%% commit confirmed: no process to wait\n");
-			return -1;
-		}
-		return 0;
-	}
-	/* its child, so init and not the session waits for it */
-	switch (fork()) {
-	case -1:
-		_exit(1);
-	case 0:
-		break;
-	default:
-		_exit(0);
-	}
-	setsid();
-	signal(SIGHUP, SIG_IGN);
-	signal(SIGINT, SIG_IGN);
-	signal(SIGQUIT, SIG_IGN);
-	signal(SIGTSTP, SIG_IGN);
-	if ((fd = open(_PATH_DEVNULL, O_RDWR)) != -1) {
-		dup2(fd, STDIN_FILENO);
-		dup2(fd, STDOUT_FILENO);
-		dup2(fd, STDERR_FILENO);
-		if (fd > STDERR_FILENO)
-			close(fd);
-	}
-	while ((left = when - time(NULL)) > 0)
-		sleep(left > INT_MAX ? INT_MAX : left);
-	commit_expire();
-	_exit(0);
-}
-
-/* Record in CONFIRM a rollback to back at when: -1 if it could not */
-static int
-unconfirm(struct cnode *back, time_t when)
-{
-	char path[PATH_MAX];
-	FILE *f;
-	int fd;
-
-	snprintf(path, sizeof(path), "%s.new", CONFIRM);
-	if ((fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0600)) == -1) {
-		printf("%% %s: %s\n", path, strerror(errno));
-		return -1;
-	}
-	if ((f = fdopen(fd, "w")) == NULL) {
-		printf("%% %s: %s\n", path, strerror(errno));
-		close(fd);
-		unlink(path);
-		return -1;
-	}
-	fprintf(f, "# deadline %lld\n", (long long)when);
-	if (conftree_write(f, back) == -1 || fclose(f) == EOF ||
-	    rename(path, CONFIRM) == -1) {
-		printf("%% %s: %s\n", path, strerror(errno));
-		unlink(path);
-		return -1;
-	}
-	return 0;
-}
-
-/* The rollback configuration of an unconfirmed commit, or NULL if none */
-static struct cnode *
-unconfirmed(void)
-{
-	if (access(CONFIRM, F_OK) == -1)
-		return NULL;
-	return conftree_read(CONFIRM, conf_mode, conf_ordered);
-}
-
-/* The deadline of an unconfirmed commit, or 0 if there is none */
-static time_t
-deadline(void)
-{
-	long long when;
-	FILE *f;
-
-	if ((f = fopen(CONFIRM, "r")) == NULL)
-		return 0;
-	if (fscanf(f, "# deadline %lld", &when) != 1)
-		when = 0;
-	fclose(f);
-	return when;
-}
-
-/* Confirm the unconfirmed commit, so nothing rolls it back */
-static void
-confirmed(void)
-{
-	if (unlink(CONFIRM) == 0)
-		printf("%% Commit confirmed\n");
-	else if (errno != ENOENT)
-		printf("%% unlink %s: %s\n", CONFIRM, strerror(errno));
-}
-
-/* What a rollback did, to the session if there is one, and the log */
-static void
-report(const char *msg)
-{
-	printf("%% %s\n", msg);
-	syslog(LOG_WARNING, "%s", msg);
 }
 
 /*
@@ -2034,18 +1726,6 @@ clear(struct commit *c, char *stmt, int rtable, int keep)
 	c->s->clears[c->s->nclears].rtable = rtable;
 	c->s->clears[c->s->nclears++].keep = keep;
 	return 0;
-}
-
-/* Who commits: the session's login name, or else the user's */
-static const char *
-committer(void)
-{
-	struct passwd *pw;
-	char *l;
-
-	if ((l = getlogin()) != NULL)
-		return l;
-	return (pw = getpwuid(getuid())) != NULL ? pw->pw_name : "?";
 }
 
 /*

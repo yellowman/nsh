@@ -95,7 +95,6 @@ struct ctl {
 
 int ctl_line(char *, char *, size_t);
 int ctl_rules_clear(char *, int, int);
-int ctl_rules_test(char *, char **, size_t);
 int ctl_rules_args(char *, char *, char *, size_t, char **);
 int ctl_cand_rules(char *, int, int, char *, size_t);
 int ctl_edits(char *, char *);

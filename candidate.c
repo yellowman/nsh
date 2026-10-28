@@ -57,7 +57,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 #include <errno.h>
 #include "stringlist.h"
 #include "externs.h"
@@ -866,7 +865,7 @@ cand_write(FILE *f)
 	struct cnode *t;
 
 	if (!candidate) {
-		printf("%% Not in configure private\n");
+		printf("%% Not in configure\n");
 		return -1;
 	}
 	if ((t = cand_tree()) == NULL)
@@ -878,37 +877,15 @@ cand_write(FILE *f)
 	return 0;
 }
 
-/* show candidate-config */
+/* show candidate-config: nshd has the candidate */
 int
 pr_cand_conf(int argc, char **argv, ...)
 {
-	char path[PATH_MAX];
-	FILE *f;
-	int fd, ret = 0;
-
-	/* an nshd configure mode: nshd has the candidate */
-	if (nshd_config)
-		return nshd_cshow("candidate-config");
-	if (!candidate) {
-		printf("%% Not in configure private\n");
+	if (!candidate && !nshd_config) {
+		printf("%% Not in configure\n");
 		return -1;
 	}
-	strlcpy(path, "/tmp/nshrc.cand.XXXXXXXX", sizeof(path));
-	if ((fd = mkstemp(path)) == -1) {
-		printf("%% mkstemp %s: %s\n", path, strerror(errno));
-		return -1;
-	}
-	if ((f = fdopen(fd, "w")) == NULL) {
-		printf("%% fdopen %s: %s\n", path, strerror(errno));
-		unlink(path);
-		close(fd);
-		return -1;
-	}
-	if (cand_write(f) == -1 || !more(path))
-		ret = -1;
-	unlink(path);
-	fclose(f);
-	return ret;
+	return nshd_cshow("candidate-config");
 }
 
 /*
@@ -918,13 +895,11 @@ pr_cand_conf(int argc, char **argv, ...)
 int
 cand_rollback(int argc, char **argv, ...)
 {
-	char path[PATH_MAX];
-	struct cnode *base = NULL;
 	const char *errstr;
 	int n = 0;
 
 	if (!candidate && !nshd_config) {
-		printf("%% rollback requires configure private\n");
+		printf("%% rollback requires configure\n");
 		return -1;
 	}
 	if (argc > 2) {
@@ -938,20 +913,8 @@ cand_rollback(int argc, char **argv, ...)
 			return -1;
 		}
 	}
-	/* an nshd configure mode: nshd has the candidate */
-	if (nshd_config)
-		return nshd_rollback(n);
-	if (n > 0) {
-		snprintf(path, sizeof(path), ROLLBACK, n);
-		if (access(path, R_OK) == -1) {
-			printf("%% rollback %d: %s\n", n, strerror(errno));
-			return -1;
-		}
-		if ((base = conftree_read(path, conf_mode, conf_ordered)) ==
-		    NULL)
-			return -1;
-	}
-	return cand_restart(base, n);
+	/* nshd has the candidate */
+	return nshd_rollback(n);
 }
 
 /*

@@ -349,7 +349,7 @@ session_diff(struct session_state *s)
 
 	session_enter(s);
 	if (!candidate) {
-		printf("%% Not in configure private\n");
+		printf("%% Not in configure\n");
 		goto done;
 	}
 	if ((f = open_memstream(&buf, &len)) == NULL) {
@@ -457,7 +457,7 @@ session_tested(struct plan *p, int n, int failed)
 		    p->tests[n].name);
 }
 
-/* The verdict on p, its tests run, as commit_checks() says it */
+/* The verdict on p, its tests run, as commit_verdict() says it */
 int
 session_verdict(struct plan *p)
 {
@@ -510,11 +510,11 @@ session_verify_back(struct plan *p)
 }
 
 /*
- * The boot's plan, as nsh -i's commit_boot() makes it: the running
- * configuration, the last snapshot's, made to read as text, the saved
- * configuration, as far as it succeeds. What check finds is printed, and
- * the daemons' tests of rules are the plan's, but neither keeps it from
- * running: -1 if it could not be made, after saying why
+ * The boot's plan: the running configuration, the last snapshot's, made
+ * to read as text, the saved configuration, as far as it succeeds. What
+ * check finds is printed, and the daemons' tests of rules are the
+ * plan's, but neither keeps it from running: -1 if it could not be
+ * made, after saying why
  */
 int
 session_boot_plan(char *text, size_t len, struct plan **pp)

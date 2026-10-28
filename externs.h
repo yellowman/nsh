@@ -170,7 +170,6 @@ extern pid_t child;
 #define ROLLBACK	NSHDB "/nshrc.%d"
 #define ROLLBACK_HEAD	"# saved by "	/* who saved it, and why */
 #define ROLLBACK_GEN	"# generation "	/* then which save it was */
-#define CONFIRM		"/var/run/nshconfirm"	/* a commit to confirm */
 #define CLEAR		"/usr/bin/clear"
 #define LOGGER		"/usr/bin/logger"
 #define PING		"/sbin/ping"
@@ -203,7 +202,6 @@ int cmdexit(void);
 int cmdline_nshd(char *);
 void nshd_mode(int, char *, int);
 extern int in_config;
-int conf_save(void);
 int conf_mode(char *);
 int conf_ordered(char *);
 
@@ -732,8 +730,6 @@ struct script {
 };
 int commit(int, char **, ...);
 int pr_rollback(int, char **, ...);
-int commit_expire(void);
-int commit_boot(char *);
 int rollback_keep(const char *, const char *, const char *);
 int saved_write(void);
 int saved_diff(int);
@@ -744,7 +740,6 @@ int op_allowed(int, char **);
 int op_run(int, char **, int);
 int saved_text(FILE *);
 int saved_first(void);
-int commit_checks(struct cnode *, struct cnode *, int);
 int commit_problems(struct cnode *, struct cnode *);
 int commit_verdict(int, int);
 struct plan_test;
