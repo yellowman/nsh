@@ -18,25 +18,26 @@
  * nshdeck: nshd's web configurator, a FastCGI daemon behind httpd(8).
  *
  * parent, started as root, binds the socket httpd connects to, and
- * starts the children, each this program again, by the path
+ * starts the children. Each runs this program again, from the path
  * getexecpath(3) gives, with a flag for its part:
  *
  *	front (-F)	DECK_FRONT, chroot: httpd's connections, all of what
  *			they send read and checked, each request passed to
  *			session as a typed message
- *	session (-S)	DECK_USER, chroot: a connection of nshd's for each
+ *	session (-S)	DECK_USER, chroot: a connection to nshd for each
  *			web user logged in, known by its cookie's token,
- *			and each answer, as JSON
+ *			and each answer, written as JSON
  *
  * Each child has a pipe to parent as fd 3, front and session a pipe to
  * each other as fd 4, and front the socket as fd 5; none is passed
  * later. Then parent becomes DECK_USER, with that user's groups, so
  * nshd's read-write socket takes it, and does one thing: when session
- * asks, it connects to nshd, which takes a client of DECK_USER's uid
- * for the web configurator's, or to nshd's read-only socket, for a show
- * only nshd's shows answer, and passes the connection on. A child
- * that ends, or that sends parent anything else, ends nshdeck, as each
- * child ends once its pipe to parent closes; nothing is started again.
+ * asks, it connects to nshd and passes the connection on. nshd takes a
+ * client with DECK_USER's uid as the web configurator. For a show that
+ * only nshd's shows process answers, parent connects to nshd's
+ * read-only socket instead. If a child ends, or sends parent anything
+ * else, nshdeck ends, as each child ends once its pipe to parent
+ * closes. Nothing is started again.
  */
 
 #include <sys/types.h>
@@ -220,7 +221,7 @@ users(void)
 		errx(1, "%s and %s are one uid", DECK_USER, DECK_FRONT);
 }
 
-/* the socket at path, root's and gid's, 0660: its descriptor, or -1 */
+/* the socket at path, owned by root and gid, 0660; its descriptor, or -1 */
 static int
 deck_socket(const char *path, gid_t gid)
 {
@@ -280,7 +281,7 @@ start_child(struct child *c, int pipefd, int peerfd, int sockfd)
 	default:
 		return (pid);
 	}
-	/* above 5 first, so none lands on another's place */
+	/* each above fd 5 first, so no dup2() overwrites another */
 	for (i = 0; i < 3; i++)
 		if (fds[i] != -1 &&
 		    (fds[i] = fcntl(fds[i], F_DUPFD_CLOEXEC, 6)) == -1)
@@ -316,8 +317,8 @@ parent_sig(int sig, short event, void *arg)
 }
 
 /*
- * A child's word: session's asking for a connection to nshd, and no
- * other. Anything else, or a pipe closed, ends nshdeck
+ * A child's message: session's request for a connection to nshd, and
+ * no other. Anything else, or a pipe closed, ends nshdeck
  */
 static void
 parent_dispatch(int fd, short event, void *arg)
@@ -353,8 +354,8 @@ parent_dispatch(int fd, short event, void *arg)
 }
 
 /*
- * to session, for id: a connection to nshd, to its shows if ro, or why
- * there is none
+ * a connection to nshd, or to its shows if ro, sent to session for id,
+ * or why there is none
  */
 static void
 parent_connect(uint32_t id, int32_t ro)
@@ -454,7 +455,7 @@ pipe_event(struct deck_pipe *p)
 	event_add(&p->ev, NULL);
 }
 
-/* what event says p may do, done: -1 if p is closed, or broken */
+/* p read or written, as event says; -1 if p is closed or broken */
 int
 pipe_io(struct deck_pipe *p, short event)
 {
@@ -482,7 +483,7 @@ pipe_close(struct deck_pipe *p)
 	close(p->ibuf.fd);
 }
 
-/* to p's peer: type, for id, with fd, if not -1, and data */
+/* a message of type, for id, to p's peer, with data, and fd if not -1 */
 void
 pipe_compose(struct deck_pipe *p, uint32_t type, uint32_t id, int fd,
     const void *data, size_t len)

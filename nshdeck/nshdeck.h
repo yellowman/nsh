@@ -15,7 +15,7 @@
  */
 
 /*
- * nshdeck's messages between its processes, which include this after
+ * Messages between nshdeck's processes. Include this file after
  * <event.h>, <imsg.h> and nshd.h.
  */
 
@@ -24,7 +24,7 @@
 
 #define DECK_USER	"_nshweb"	/* parent, once started, and session */
 #define DECK_FRONT	"_nshdeck"	/* front */
-#define DECK_GROUP	"www"		/* httpd's, which uses the socket */
+#define DECK_GROUP	"www"		/* httpd's group; it uses the socket */
 #define DECK_SOCKET	"/var/www/run/nshdeck.sock"
 
 #define DECK_TOKEN	64		/* a session's token, in hex */
@@ -62,21 +62,21 @@ enum deck_kind {
  */
 struct deck_request {
 	int32_t		kind;
-	char		token[DECK_TOKEN + 1];	/* the cookie's, or "" */
+	char		token[DECK_TOKEN + 1];	/* cookie's token, or "" */
 	char		addr[DECK_ADDR];	/* the client's address from */
 						/* httpd, or "" */
 	char		text[NSHD_LINE];	/* a user's name, a show's */
 						/* words, a line, an */
 						/* operation, a configuration, */
-						/* what a terminal was typed */
+						/* keys typed in a terminal */
 	char		password[NSHD_PASSWORD];
 	char		comment[NSHD_COMMENT];
 	char		daemon[NSHD_DAEMON];	/* whose rules */
 	int32_t		n;		/* rollback's n, an operation's */
-					/* or rules' rtable, which */
-					/* configure, 1 for a completion's */
+					/* or rules' rtable, configure */
+					/* mode, 1 for a completion's */
 					/* help, or a terminal's number */
-	int32_t		minutes;	/* commit confirmed's */
+	int32_t		minutes;	/* minutes for commit confirmed */
 	int32_t		check;		/* commit check */
 	int32_t		logs;		/* the logs events follow, as */
 					/* NSHD_WATCH_* */
@@ -86,7 +86,7 @@ struct deck_request {
 
 /* session to front: how an answer begins */
 struct deck_head {
-	int32_t		status;		/* HTTP's */
+	int32_t		status;		/* HTTP status */
 	int32_t		events;		/* text/event-stream, not JSON */
 	char		cookie[DECK_TOKEN + 1];	/* to set, or "" */
 	int32_t		clear;		/* the cookie cleared */
@@ -98,11 +98,11 @@ enum deck_imsg {
 	DECK_HEAD,	/* session to front: deck_head */
 	DECK_BODY,	/* session to front: what follows the head */
 	DECK_END,	/* session to front: the answer ends */
-	DECK_READ,	/* front to session: the client wrote all it was sent */
+	DECK_READ,	/* front to session: front wrote all it was sent */
 	DECK_GONE,	/* front to session: the client is gone */
 	DECK_CONNECT,	/* session to parent: a connection to nshd, please, */
 			/* to its shows if the int32_t is 1 */
-	DECK_CONNECTED,	/* parent to session: it, or no fd and errno */
+	DECK_CONNECTED,	/* parent to session: the fd, or -1 and errno */
 	DECK_TEXT	/* front to session: a part of a request's rules, */
 			/* before it */
 };

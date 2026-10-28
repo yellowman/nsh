@@ -39,7 +39,7 @@ static int pfsync_get(int, struct ifreq *);
 static int cand_getpfsync(char *, struct pfsyncreq *);
 static int cand_setpfsync(char *, struct pfsyncreq *);
 
-/* SIOCGETPFSYNC, or in configure private the candidate's */
+/* Do SIOCGETPFSYNC, or in configure private, read the candidate */
 static int
 pfsync_get(int ifs, struct ifreq *ifr)
 {
@@ -126,8 +126,8 @@ cand_setpfsync(char *ifname, struct pfsyncreq *preq)
 
 /*
  * SIOCSETPFSYNC. pfsync refuses a new syncdev or syncpeer while it runs
- * (EBUSY), so then it goes down for the change, and comes back up if it
- * still has a syncdev.
+ * (EBUSY), so then it goes down for the change, and comes back up if the
+ * change failed or it still has a syncdev.
  */
 static int
 pfsync_set(int ifs, struct ifreq *ifr)

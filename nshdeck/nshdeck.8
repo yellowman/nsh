@@ -24,75 +24,93 @@
 .Op Fl s Ar socket
 .Sh DESCRIPTION
 .Nm
-answers the requests of a web page, which
-.Xr httpd 8
-passes it over FastCGI, with what
+answers the requests of a web page with what
 .Xr nshd 8
 answers.
-The page has seven workspaces: an overview, with the box's ports drawn
-as its face shows them, each with a link light and an activity light,
-a readout of how many ports are up, the interfaces and addresses, and
-the last change, and the logical interfaces grouped by what they are on;
-network, routing, security and services, each with its shows,
-as tables; in network an interface's settings, which can be changed
-and staged into the candidate as lines of configuration; in routing,
-security and services the daemons there, a row for each routing table
-each is in, with whether the configuration enables it and whether it
-runs, and the one chosen with its rules as text, which can be changed
-and staged into the candidate as its edit in
+.Xr httpd 8
+passes it the requests over FastCGI.
+The page has seven workspaces.
+The overview draws the device's ports as they appear on its front, each
+with a link light and an activity light.
+It also shows a readout of how many ports are up, the numbers of
+interfaces and addresses, and the last change.
+The logical interfaces appear in groups by kind, each with what it is on.
+Network, routing, security and services each run show commands and draw
+their output as tables.
+In network, an interface's settings can be changed and staged into the
+candidate as lines of configuration.
+Routing, security and services list their daemons, with a row for each
+routing table a daemon is in.
+Each row shows whether the configuration enables the daemon and whether
+it runs.
+For the chosen daemon, the workspace shows its rules as text, which can
+be changed and staged into the candidate as the daemon's edit command in
 .Xr nsh 8
-does (changes not yet staged stay until another daemon is chosen),
-or, for a daemon with no rules, the command nsh starts it with;
-in configure, what the candidate changes in it; how each of the last
-ten saved configurations that changed it changed it; and its live
-operations; for pf and bgpd, an editor under the
-table that reads the rules' text and writes changes back into it: pf's
-statements in order, with a form for each rule, and bgpd's peers, with
-their state from
+does.
+Changes not yet staged remain until another daemon or routing table is
+chosen.
+For a daemon with no rules, it shows the command nsh starts the daemon
+with.
+In configure, except configure terminal, it shows what the candidate
+changes in the daemon.
+It also lists each of the last ten saved configurations that changed
+the daemon, with what each changed, and shows the daemon's live
+operations.
+For pf and bgpd, an editor under the table reads the rules' text and
+writes changes back into it.
+pf's editor shows its statements in order, with a form for each rule.
+bgpd's editor shows its peers, its networks and its filters.
+For each peer, it shows the peer's state from
 .Xr bgpctl 8 ,
-the prefixes each accepts and advertises and its last errors, the
-filters that apply to them, and their other settings in groups, its
-networks and its filters;
-for ospfd, ospf6d, eigrpd, ripd, ldpd and dvmrpd, an editor of their
-interfaces, with the settings each sets and those it takes from the
-blocks around it, and of their global settings, beside the neighbors
-and routes their control programs show in routing table 0;
-the system
-and its changes, in five topics: changes, where configure is entered
-and lines of configuration are typed, as
+the prefixes the peer accepts and advertises, its last errors, the
+filters that apply to it, and its other settings in groups.
+For ospfd, ospf6d, eigrpd, ripd, ldpd and dvmrpd, an editor shows their
+interfaces and their global settings.
+For each interface, it shows the settings the interface sets and those
+it inherits from the blocks around it.
+Beside the editor are the neighbors and routes that their control
+programs show in routing table 0.
+The system and changes workspace has five topics.
+Changes is where configure is entered and lines of configuration are
+typed, as
 .Xr nsh 8
-takes them, beside a view of the changes, the candidate, the running
-or the saved configuration; history, the saved configurations as rows,
-any of which can be shown or loaded into the candidate, nshd's notices,
-and the logs followed; jobs and MOTD, root's scheduled jobs and the
-message of the day, as the daemons are; live operations, each
-confirmed before it runs; and errors, what nshd refused, which the
-strip counts; and a terminal, where
+accepts them, beside a view of the changes, the candidate, the running
+configuration or the saved configuration.
+History lists the saved configurations, any of which can be shown or
+loaded into the candidate.
+It also shows nshd's notices and the logs that are followed.
+Jobs and MOTD shows root's scheduled jobs and the message of the day, in
+the same way as the daemons.
+Live operations runs operations, and each is confirmed before it runs.
+Errors lists what nshd refused, and the strip shows how many.
+The terminal runs
 .Xr nsh 8
-runs as the user, which xterm.js draws.
+as the user, and xterm.js draws it.
 Tab completes a line as in
 .Xr nsh 8 ,
 and ? lists what may come next.
 The page follows
 .Nm nshd Ns 's
-notices and logs as they come, counts down a commit waiting to be
-confirmed, and draws the interfaces again when they change.
-Its strip has Compare, Validate and Commit: the changes,
+notices and logs as they arrive, counts down the time left to confirm
+an unconfirmed commit, and draws the interfaces again when they change.
+Its strip has Compare, Validate and Commit, which show the changes, run
 .Cm commit check ,
-and
+and run
 .Cm commit .
-The strip also shows the running generation, when it was saved and by
-whom, and the warnings that
+The strip also shows the generation of the running configuration, when
+and by whom it was saved, and the warnings that
 .Cm show rollback
-gives, and, in configure, how many objects the candidate changes.
-While the overview is shown, it asks for the interfaces every 5 seconds:
-a port's activity light is on if the port counted packets since the
-last time.
-When the user logs out, or nshdeck reports the login gone, the page
-reloads, so nothing the last user saw remains.
-Each user logs in with a name and password, as
+prints.
+In configure, it also shows how many objects the candidate changes.
+While the overview is shown, the page requests the interfaces every 5
+seconds.
+A port's activity light is on if the port counted packets since the
+last request.
+When the user logs out, or nshdeck reports that the login has ended,
+the page reloads, so that nothing the last user saw remains.
+Each user logs in with a name and password, which
 .Nm nshd
-checks them, and has the permissions of the user's login class (see
+checks, and has the permissions of the user's login class (see
 .Cm login class
 in
 .Xr nsh 8 ) .
@@ -104,25 +122,26 @@ is privilege separated:
 .It parent
 Starts as root, binds the socket, and starts the other two.
 Then it runs as _nshweb, a member of the group nshadmin, and does one
-thing: when session asks, it connects to
-.Nm nshd ,
+thing: when session requests a connection, it connects to
+.Nm nshd
 and passes the connection on.
 .Nm nshd
-takes a client of _nshweb's uid as the web configurator's, which has
+treats a client with _nshweb's uid as the web configurator, which has
 no permissions until it logs in.
 .It front
 Runs as _nshdeck in a
 .Xr chroot 2 .
 It reads the requests
 .Xr httpd 8
-sends, and checks each one whole before session sees it.
+sends, and checks each complete request before session sees it.
 .It session
 Runs as _nshweb in a
 .Xr chroot 2 .
 It has a connection to
 .Nm nshd
-for each user logged in, known by the token in the user's cookie, and
-writes each answer as JSON.
+for each user logged in, and knows each user by the token in the user's
+cookie.
+It writes each answer as JSON.
 It completes lines itself, with
 .Xr nsh 8 Ns 's
 code: it asks
@@ -131,7 +150,7 @@ for the command tables once, and for the names of interfaces, groups,
 bridges and routing tables on each completion.
 It asks
 .Nm nshd
-for each terminal a user opens;
+for each terminal a user opens.
 .Nm nshd
 starts
 .Xr nsh 8
@@ -143,8 +162,9 @@ If one of them ends,
 ends.
 .Pp
 The last part of a request's path names it.
-A GET has its fields in its query, and a POST in a form body, of type
-application/x-www-form-urlencoded; a field may be given once.
+A GET has its fields in its query, and a POST has them in a form body,
+of type application/x-www-form-urlencoded.
+Each field may be given only once.
 Every request except a stream,
 .Cm events
 or
@@ -166,55 +186,61 @@ and
 .Ar password .
 Logs the user in, and sets the cookie nshdeck, HttpOnly, Secure and
 SameSite=Strict, to a token of 32 random bytes.
-Answers the user's name and permissions.
-After 5 failed logins in a row for a name, or from an address, the
-name or address waits before its next: a login for it is refused, its
-password not checked, for a second, then twice as long after each
-failure, to 60 seconds; the answer's
+The answer has the user's name and permissions.
+After 5 failed logins in a row for a name, or from an address, logins
+for that name or from that address are refused for a second, without
+checking the password.
+Each further failure doubles the wait, up to 60 seconds.
+The answer's
 .Ar wait
-is the seconds left.
-The address is the client's, as
+is the number of seconds left.
+The address is the client's address, as
 .Xr httpd 8
-gives it in REMOTE_ADDR, and an IPv6 address counts as its /64.
-A login that succeeds starts its name's row again, and a row with no
-failure for 15 minutes starts again.
+gives it in REMOTE_ADDR.
+An IPv6 address counts as its /64.
+A login that succeeds resets the count for its name, and a count with
+no failure for 15 minutes starts again from zero.
 .It Cm logout
 POST.
 Logs the user out.
 .Nm nshd
-forgets the login, and the candidate of
-.Cm configure private
-with it.
+forgets the login and the user's candidate of
+.Cm configure private .
 .It Cm whoami
 GET.
-The user's name and permissions.
+Answers with the user's name and permissions.
 .It Cm show
 GET, with
 .Ar words ,
-as
-.Xr nsh 8
-shows them, such as
+the words of a show command in
+.Xr nsh 8 ,
+such as
 .Ql interface
 or
 .Ql route inet 0 .
-They are asked of
+session sends the show to
 .Nm nshd Ns 's
-system and, if it does not answer them, of its shows, as
+system process.
+If the system process does not answer it, session sends it to
+.Nm nshd Ns 's
+show processes, as
 .Xr nsh 8
-asks them.
+does.
 The answer has the records
 .Nm nshd
 sent, each an object with its kind and fields.
 .It Cm config
 GET, with
 .Ar what :
-running, startup, candidate, diff, or rollback, with
-.Ar n
-or not; or changes, with
+running, startup, candidate, diff, or rollback, with or without
+.Ar n ;
+or changes, with
 .Ar n .
-The configuration, as text: rollback without
+The answer is the configuration, as text.
+rollback without
 .Ar n
-lists those saved, and changes is what configuration
+lists the saved configurations.
+changes is what saved configuration
 .Ar n
 changed from the one saved before it, as
 .Cm show rollback Ar n Cm diff
@@ -258,10 +284,11 @@ named as
 .Xr nsh 8
 names it, such as pf or bgp, and its
 .Ar rtable .
-The daemon's rules in the candidate of
-.Cm configure private ,
-in
-.Ar output .
+The answer's
+.Ar output
+has the daemon's rules in the candidate.
+The user must be in configure, but not in
+.Cm configure terminal .
 .It Cm setrules
 POST, with
 .Ar daemon ,
@@ -273,10 +300,12 @@ Sets the daemon's rules in the candidate, as the daemon's
 .Cm edit
 in
 .Xr nsh 8
-does; with no
+does.
+With no
 .Ar text ,
-the rules go.
-Its body may be 3 MB, and 4 such bodies may arrive at once.
+the rules are removed.
+Its body may be up to 3 MB, and at most 4 such bodies may arrive at
+once.
 .It Cm complete
 GET, with
 .Ar line ,
@@ -294,45 +323,49 @@ With
 GET, with
 .Ar logs ,
 names joined by commas: daemon, messages, authlog or pflog.
-A stream of events, of type text/event-stream:
+The answer is a stream of events, of type text/event-stream.
+The events are
 .Nm nshd Ns 's
-notices, of commits, commits confirmed, commits gone back,
+notices and the lines of each log named, starting from its last lines.
+The notices report commits, lines committed in configure terminal,
+unconfirmed commits and their rollbacks,
 .Cm configure exclusive
-taken and left, and interfaces and routes changed; and the lines of
-each log named, from its last lines.
+entered and left, and changes to interfaces and routes.
 authlog needs the admin permission.
 A comment is written to the stream every 30 seconds, so that
 .Xr httpd 8
 does not close it.
-If the browser falls more than 1 MB behind, the oldest events it has
-not been sent are dropped, and it is sent a dropped event in their
-place, so that it asks again for what it shows.
+If the browser falls more than 1 MB behind, the oldest events not yet
+sent to it are dropped, and a dropped event is sent in their place, so
+that the page requests again what it shows.
 .It Cm terminal
 GET, with
 .Ar rows
 and
 .Ar cols ,
-each from 1 to 1000, 24 and 80 if not given.
-A terminal:
-.Xr nsh 8
-on a pseudo-terminal, as the user, as
+each from 1 to 1000; they are 24 and 80 if not given.
+Opens a terminal:
 .Nm nshd
-starts it.
-A stream of events, as
-.Cm events
-is: first a terminal event, with
+starts
+.Xr nsh 8
+on a pseudo-terminal, as the user.
+The answer is a stream of events, like that of
+.Cm events .
+First comes a terminal event, with
 .Ar n ,
-the terminal's number, from 1 to 4; then an out event for what
+the terminal's number, from 1 to 4.
+Then out events carry what
 .Xr nsh 8
-writes, as it comes, in base64; and at the end an end event, with
+writes, in base64, as it arrives.
+At the end, an end event has
 .Ar text ,
-which says why it ended.
+which says why the terminal ended.
 The stream is sent only as fast as the browser reads it, and nothing
-of it is dropped.
-The terminal ends when its stream does,
+in it is dropped.
+The terminal ends when its stream ends, when
 .Xr nsh 8
-ends, or the user logs out.
-A user may have 4 terminals.
+ends, or when the user logs out.
+A user may have at most 4 terminals.
 .It Cm type
 POST, with
 .Ar terminal ,
@@ -343,41 +376,42 @@ what was typed in it, up to 1023 bytes, and
 and
 .Ar cols ,
 for its new size.
-What was typed goes to
+What was typed is written to
 .Xr nsh 8
-as it takes it; past 64 KB that it has not taken, the request is
-refused, with 503.
+as nsh reads it.
+If more than 64 KB would then wait for nsh to read it, the request is
+refused with 503.
 .El
 .Pp
 Each answer except an event stream's is a JSON object.
-One that
+An answer from
 .Nm nshd
-answered has
-.Ar records ,
+has
+.Ar records ;
 .Ar output ,
 what
 .Nm nshd
-printed,
+printed;
 .Ar context ,
-where the user is in configure,
-.Ar status
+where the user is in configure;
+.Ar status ;
 and
-.Ar ok ;
-it is sent with HTTP status 200, even when
+.Ar ok .
+It is sent with HTTP status 200, even when
 .Nm nshd
 refused the request.
 Other answers have an
 .Ar error
-and an HTTP status that says why: 400 for a field that cannot be taken,
-401 when the user is not logged in or the login failed, 403 for a POST
-without the header, 404 for an unknown request, 405 for the wrong
-method, 413 for a body over 8192 bytes, or 3 MB for
+and an HTTP status that says why: 400 for a field that is not accepted,
+401 when the user is not logged in or the login failed, 403 for a
+request without the header, 404 for an unknown request, 405 for the
+wrong method, 413 for a body over 8192 bytes, or over 3 MB for
 .Cm setrules ,
-415 for a POST that is not a form, 429 for a login while its name waits,
-and 503 when
+415 for a POST that is not a form, 429 for a login while its name or
+address must wait, and 503 when
 .Nm nshd
-does not answer, or too many users are logged in, a user has too many
-requests waiting or terminals, or too many rules are arriving.
+does not answer, too many users are logged in, a user has too many
+requests waiting or too many terminals, or too many rules are arriving.
 .Pp
 A user's requests go to
 .Nm nshd
@@ -389,10 +423,11 @@ A user with no event stream or terminal open and no request for 30
 minutes is logged out.
 At most 64 users may be logged in, and
 .Nm
-takes at most 128 connections.
-It keeps the failed logins of 512 names and addresses, and logs a
-login that fails or is refused once each 10 seconds at most for its name
-and address, each line with how many it did not log.
+accepts at most 128 connections.
+It counts the failed logins of at most 512 names and addresses.
+It logs a login that fails or is refused at most once every 10 seconds
+for its name and address, and each log line says how many logins it did
+not log.
 Behind a proxy, every client has the proxy's address.
 .Pp
 .Nm
@@ -400,7 +435,7 @@ needs the users _nshweb and _nshdeck, which may not be root or share a
 uid, and the group www, which
 .Xr httpd 8
 runs as.
-The socket is root's, mode 0660, group www.
+The socket is owned by root and the group www, with mode 0660.
 In
 .Xr httpd.conf 5 ,
 with the page at

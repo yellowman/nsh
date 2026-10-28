@@ -14,7 +14,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* What nsh's main.c has for nsh's code, and nshd does not use */
+/* Stand-ins for what nsh's main.c and client.c define; nshd builds neither */
 
 #include <sys/types.h>
 #include <sys/socket.h>

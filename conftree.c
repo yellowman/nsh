@@ -65,7 +65,7 @@ struct cnode {
 
 #define CT_MAXDEPTH	2	/* statement, nested statement */
 
-/* the LCS table for an ordered block, in cells */
+/* largest LCS table for an ordered block, in cells */
 #ifndef CT_LCSMAX
 #define CT_LCSMAX	(4 * 1024 * 1024)
 #endif
@@ -140,7 +140,7 @@ conftree_read(char *path, int (*mode)(char *), int (*ordered)(char *))
 	return t;
 }
 
-/* conftree_read() of len bytes of text, which path names in what it says */
+/* conftree_read() of len bytes of text, named path in its messages */
 struct cnode *
 conftree_mem(char *text, size_t len, char *path, int (*mode)(char *),
     int (*ordered)(char *))
@@ -159,7 +159,7 @@ conftree_mem(char *text, size_t len, char *path, int (*mode)(char *),
 	return t;
 }
 
-/* conftree_read() of f, which path names in what it says */
+/* conftree_read() of f, named path in its messages */
 struct cnode *
 conftree_fread(FILE *f, char *path, int (*mode)(char *),
     int (*ordered)(char *))
@@ -511,7 +511,7 @@ compare_seq(struct cmpctx *c, struct cnode *a, struct cnode *b)
 		m--;
 	}
 
-	/* l[i * w + j] is the LCS of x[i..n) and y[j..m) */
+	/* l[i * w + j] is the length of the LCS of x[i..n) and y[j..m) */
 	w = m + 1;
 	if (n > 0 && m > 0 && n + 1 <= CT_LCSMAX / w) {
 		if ((l = calloc((n + 1) * w, sizeof(*l))) == NULL) {
@@ -743,9 +743,9 @@ conftree_stmt(struct cnode *root, size_t n)
 }
 
 /*
- * The n'th line named name, or of any name if name is NULL, from 0, in
- * block, as conftree_edit() takes it, or at the top level if block is
- * NULL, or NULL if there are not that many
+ * The n'th line, from 0, named name, or of any name if name is NULL, or
+ * NULL if there are not that many. block is as conftree_edit() takes
+ * it, or NULL for the top level
  */
 char *
 conftree_line(struct cnode *root, char *block, char *name, size_t n)
@@ -903,8 +903,8 @@ find_kid(struct cnode *p, char *text)
 
 /*
  * The statement name names, as conftree_edit() takes a block, or NULL;
- * with make, it and any it is under are made if they are not there,
- * it ordered if ordered is not 0
+ * with make, it and any it is under are made if they are not there, and
+ * it is made ordered if ordered is not 0
  */
 static struct cnode *
 find_stmt(struct cnode *p, char *name, int make, int ordered)

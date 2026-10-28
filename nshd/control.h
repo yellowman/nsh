@@ -22,7 +22,7 @@ struct ctl_conn {
 	uid_t			 uid;
 	gid_t			 gid;
 	int			 pending;	/* a request not answered */
-	int			 asked;	/* a request that may begin a commit */
+	int			 asked;	/* system was told of the request */
 	void			*arg;		/* what its handler keeps */
 };
 

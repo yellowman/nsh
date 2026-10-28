@@ -22,7 +22,7 @@ function tstate(text, led) {
 	$("term-end").disabled = tstream === null;
 }
 
-/* what was typed, sent, 300 characters at most: 1023 bytes of UTF-8 */
+/* what was typed, sent 300 characters at most, to fit 1023 bytes of UTF-8 */
 function tsend() {
 	var n = Math.min(typing.length, 300), keys;
 

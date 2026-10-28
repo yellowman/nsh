@@ -134,7 +134,7 @@ users_render(struct frec *r, int n)
 	output(&up);
 }
 
-/* after n logins */
+/* what who() printed after n logins */
 void
 users_end(int n)
 {

@@ -21,7 +21,7 @@
 /*
  * nshd: the configuration, and the only thing that changes the kernel.
  *
- * parent binds the two sockets and starts the children, each this
+ * parent binds the two sockets and starts the children, each running this
  * program again, by the path getexecpath(3) gives, with a flag for its
  * part:
  *
@@ -33,28 +33,27 @@
  *			kernel, the daemons and the saved configuration
  *	archive (-A)	_nsharc, chroot: what config keeps past its end
  *
- * Each user is a role's alone, so no child may signal another of
+ * Each role has a user of its own, so no child may signal a child of
  * another role, or reach its files; the group nshadmin may use the
  * read-write socket. system's helpers that need not be root run as
  * NSHD_CHECK_USER, whose uid is theirs alone too.
  *
- * Two children that talk, frontend and config, config and system,
- * config and archive, and frontend and system, do so on a pipe of their
- * own, which parent makes, so each knows who sent what it reads. Each
- * child has a pipe to parent, as fd 3, which tells it when it may
- * start; one with peers has a pipe from parent, as fd 4, which gives it
- * each peer's pipe before it starts, and is closed then; frontend and
- * each show have their socket after these, and no other child has it,
- * and config a routing socket, which tells it what the kernel changes.
- * No pipe is made or passed once the children start. parent reads, of
- * what children send, config's word that the boot is done, and nothing
- * else.
+ * Each pair of children that talk (frontend and config, config and
+ * system, config and archive, frontend and system) has a pipe of its own,
+ * which parent makes, so each knows who sent what it reads. Each child
+ * has a pipe to parent, as fd 3, which tells it when it may start. One
+ * with peers also has a pipe from parent, as fd 4, which gives it each
+ * peer's pipe before it starts, and is closed then. After these come the
+ * socket of frontend or of a show, which no other child has, and config's
+ * routing socket, which tells it what the kernel changes. No pipe is made
+ * or passed once the children start. Of what the children send, parent
+ * reads only config's word that the boot is done.
  *
  * A child that ends, or that breaks a rule, ends nshd: its peers find
- * their pipes to it closed and end too, and parent ends the rest, and
- * system's helpers with them, as they run beyond system. Nothing is
- * started again. A commit not confirmed whose nshd ends goes back when
- * nshd starts again, and system finds its record.
+ * their pipes to it closed and end too, and parent ends the rest, with
+ * system's helpers, which can outlive system. Nothing is started again.
+ * If nshd ends while a commit is unconfirmed, the commit is rolled back
+ * when nshd starts again and system finds its record.
  *
  * With -b, as rc starts it, nshd boots: config has system make the
  * running configuration the saved one, while frontend and the shows
@@ -110,7 +109,7 @@ static struct child {
 	struct imsgbuf	 out;		/* its peers' pipes, fd 4 */
 	int		 hasout;
 } children[] = {
-	/* SHOWS of them */
+	/* SHOWS show processes */
 	{ PROC_SHOW,	 0, "show0",	"-S0",	"_nshshow" },
 	{ PROC_SHOW,	 1, "show1",	"-S1",	"_nshshow" },
 	{ PROC_SHOW,	 2, "show2",	"-S2",	"_nshshow" },
@@ -122,7 +121,7 @@ static struct child {
 };
 #define NPROC	(sizeof(children) / sizeof(children[0]))
 
-/* the children that talk, each two on a pipe of their own */
+/* the children that talk, each pair on a pipe of its own */
 static const struct pair {
 	enum nshd_proc	 a, b;
 } pairs[] = {
@@ -158,7 +157,7 @@ static char		 execpath[PATH_MAX];	/* this program, which children run */
 static int		 opt_debug, opt_verbose, rwfd, rofd, rtfd;
 static int		 booting;	/* -b, until config says it is done */
 static int		 boot_fd = -1;	/* to the process rc started, or -1 */
-static uid_t		 check_uid;	/* NSHD_CHECK_USER's */
+static uid_t		 check_uid;	/* NSHD_CHECK_USER's uid */
 
 static __dead void
 usage(void)
@@ -245,12 +244,12 @@ main(int argc, char *argv[])
 	else if (!opt_debug && daemon(0, 0) == -1)
 		err(1, "daemon");
 
-	/* frontend's and the shows', once they start */
+	/* sockets for frontend and the shows, passed when they start */
 	if ((rwfd = control_init(NSHD_SOCKET, 0660, gr->gr_gid)) == -1)
 		fatalx("cannot open %s", NSHD_SOCKET);
 	if ((rofd = control_init(NSHD_RO_SOCKET, 0666, gr->gr_gid)) == -1)
 		fatalx("cannot open %s", NSHD_RO_SOCKET);
-	/* config's */
+	/* for config */
 	if ((rtfd = control_route()) == -1)
 		fatal("routing socket");
 
@@ -295,7 +294,7 @@ child(enum nshd_proc proc, int instance)
 }
 
 /*
- * each child's user, and system's helpers', which is not root, nor any
+ * each child's user, and that of system's helpers: none is root, nor any
  * other role's uid
  */
 static void
@@ -326,7 +325,7 @@ users(void)
 		if (children[i].user != NULL && uid[i] == check_uid)
 			errx(1, "%s and %s are one uid", children[i].user,
 			    NSHD_CHECK_USER);
-	/* the web configurator's, if there is one, which is no role's */
+	/* the web configurator's user, if there is one, which is no role's */
 	if ((pw = getpwnam(NSHD_WEB_USER)) == NULL)
 		return;
 	if (pw->pw_uid == 0)
@@ -341,8 +340,8 @@ users(void)
 }
 
 /*
- * each child, with its pipe to parent, and the pipes to its peers there
- * before it starts; then each told it may
+ * start each child, with its pipe to parent and its peers' pipes there
+ * before it starts; then tell each it may
  */
 static void
 spawn_all(void)
@@ -366,7 +365,7 @@ spawn_all(void)
 			fatal("%s: startup", children[i].name);
 }
 
-/* c, with its pipe to parent, and its peers' pipes, given and closed */
+/* start c with its pipe to parent, after giving it its peers' pipes */
 static void
 start(struct child *c, int out)
 {
@@ -508,7 +507,7 @@ out_open(struct child *c)
 	return (sp[1]);
 }
 
-/* c ended, or broke a rule, as why says: nshd ends with it */
+/* c ended, or broke a rule, as fmt says: nshd ends with it */
 static __dead void
 ended(struct child *c, const char *fmt, ...)
 {
@@ -525,11 +524,11 @@ ended(struct child *c, const char *fmt, ...)
 }
 
 /*
- * system gone, or to go, and its helpers with it: each process of its
- * session, which system made as it started, and of NSHD_CHECK_USER's,
- * killed until none is left. system is reaped last, so its session is
- * no other's while its helpers are found by it. -1, said, if one
- * outlives CLEAR_TRIES
+ * system gone, or to go, and its helpers with it: each process of the
+ * session system made as it started, and each of NSHD_CHECK_USER, is
+ * killed until none is left. system is reaped last, so its session is not
+ * reused while its helpers are found by it. -1, logged, if one outlives
+ * CLEAR_TRIES
  */
 static int
 system_clear(struct child *k)
@@ -649,8 +648,8 @@ parent_sig_handler(int sig, short event, void *arg)
 }
 
 /*
- * c's word on its pipe to parent: config's that the boot is done, once,
- * and no other. Anything else, or the pipe closed, ends nshd
+ * c's word on its pipe to parent: only config's word, once, that the boot
+ * is done. Anything else, or the pipe closed, ends nshd
  */
 static void
 parent_dispatch(int fd, short event, void *arg)
@@ -727,8 +726,8 @@ daemon_boot(void)
 }
 
 /*
- * the boot done, as status says it went: rc told, and frontend and the
- * shows to take clients
+ * the boot is done, as status says it went: tell rc, and tell frontend
+ * and the shows to take clients
  */
 static void
 booted(int32_t status)
@@ -837,9 +836,9 @@ static size_t		 nlinks;
 static void		 link_take(struct imsg *);
 
 /*
- * A child's n peers, in l, each with its pipe from parent, on fd 4, all
- * of them written before the child started: fd 4 is closed once they
- * are taken, and then each link's ready() is called
+ * A child's n peers, in l, each with its pipe from parent on fd 4, where
+ * parent wrote them all before the child started. fd 4 is closed once
+ * they are taken, and then each link's ready() is called
  */
 void
 links_init(struct link *l, size_t n)
@@ -880,7 +879,7 @@ links_init(struct link *l, size_t n)
 			l[have].ready();
 }
 
-/* a peer's pipe, once */
+/* a peer's pipe, taken once: a second is fatal */
 static void
 link_take(struct imsg *imsg)
 {
@@ -1015,10 +1014,10 @@ printed(struct facts_out *o)
 }
 
 /*
- * What nsh's code printed since, as text messages of type for id on
- * iev, as imsg_text() sends them, and with hide, with each password hash
- * taken out (login_hide()); -1 if a message could not be made, or what
- * was printed could not all be kept
+ * What nsh's code printed since, as text messages of type for id on iev,
+ * as imsg_text() sends them; with hide, each password hash is taken out
+ * first (login_hide()). -1 if a message could not be made, or what was
+ * printed could not all be kept
  */
 int
 printed_text(struct imsgev *iev, uint32_t type, uint32_t id, int hide)
@@ -1097,8 +1096,8 @@ printed_log(void)
 }
 
 /*
- * text as messages of type, NSHD_TEXT bytes at most each; on no pipe,
- * lost, as link_compose() loses it
+ * text as messages of type, NSHD_TEXT bytes at most each; if iev is NULL,
+ * the text is dropped
  */
 int
 imsg_text(struct imsgev *iev, uint32_t type, uint32_t id, const char *text,

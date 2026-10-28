@@ -600,7 +600,7 @@ lookup_facts(struct facts_out *o, char *query, int table)
 	verbose = 0;	/* the request rtmsg() echoes is nsh's, not a fact */
 	ip_route(&dest, NULL, RTM_GET, RTF_UP, table, metrics, 0);
 	verbose = v;
-	/* and only now, as nsh may render it as it goes */
+	/* record it now that verbose is back, as nsh may render it at once */
 	if (lookup_kept)
 		return (facts_record(o, &kind_lookup, lookup_v));
 	return (0);

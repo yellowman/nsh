@@ -507,7 +507,7 @@ settunnelecn(int ifs, char *ifname, int ecn)
 	return 0;
 }
 
-/* A vnetid into *vnetid, any as -1; -1 after saying why not */
+/* Parse a vnetid into *vnetid, "any" as -1; -1 after saying why not */
 static int
 vnetid_arg(char *vnetida, int64_t *vnetid)
 {

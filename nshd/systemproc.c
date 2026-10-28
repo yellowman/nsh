@@ -15,146 +15,167 @@
  */
 
 /*
- * system: root, and nsh's own code, which reads and changes the kernel.
- * It answers config, on their pipe, one request at a time, in order:
- * the running configuration as text, and what configure private reads
- * of the kernel as facts, and the shows only root may make as facts,
- * with what nsh's code prints as it makes them, as messages; and the
- * permissions of a uid's login class, which config gives its session.
- * A show's answer is made whole, as it is small, its units as many to a
- * message as fit.
+ * The system process runs as root and uses nsh's own code to read and
+ * change kernel state. It answers config's requests on their pipe, one
+ * at a time and in order. It sends the running configuration as text;
+ * the kernel state that configure private reads, as facts; the shows
+ * that only root may run, as facts, with any text nsh's code prints
+ * while running them; and the permissions of a uid's login class, which
+ * config gives to that uid's session. A show's answer is small, so
+ * system builds it whole and packs as many units into each message as
+ * fit.
  *
- * A log a session watches is a stream too, which goes on until config
- * stops it. A log file is opened as root and followed as
- * NSHD_CHECK_USER, from its last lines, and followed again from the new
- * file once newsyslog turns it over; pf's, tcpdump on pflog0, keeps
- * root, as tcpdump drops it itself. A log needs the view permission,
- * and authlog admin too, which system checks itself, as it checks an
- * operation; no request names a path.
+ * A show of text, such as a program's output or the DHCP leases, may be
+ * long, or may continue until it is stopped. A child of system prints
+ * it, and system streams it to the client as messages, with at most
+ * SYS_WINDOW messages the client has not read, while it answers other
+ * requests. A stream ends when its child's output ends and the child is
+ * reaped; when config reports that its session is gone, which kills the
+ * child; or when system exits. If config sends a request it may not
+ * send, or a malformed one, system exits, and so does nshd.
  *
- * But a show of text, what a program prints or the leases, may be long,
- * or go on until it is stopped: a child of system's prints it, and
- * system streams it as messages, as many as SYS_WINDOW before the
- * client has read them, while it answers other requests. A stream ends
- * when its child's output does and its child is reaped, or when config
- * says its session is gone, which kills the child; or when system
- * ends. config sending what it may not, or sending it wrong, ends
- * system, and nshd with it.
+ * A log that a session watches is also a stream, and it continues until
+ * config stops it. system opens a log file as root, reads it as
+ * NSHD_CHECK_USER starting from its last lines, and follows the new
+ * file when newsyslog rotates it. The pf log comes from tcpdump on
+ * pflog0, which system starts as root, because tcpdump drops root
+ * itself. A log needs the view permission, and authlog also needs
+ * admin; system checks these itself, as it does for an operation. No
+ * request names a path.
  *
- * system is a session of its own, which parent clears when system goes,
- * and each stream's child leads a process group of its own, which is
- * killed when the stream stops. What a child runs is an operation, and
- * the operation says who the child is: a show's program runs as
- * NSHD_CHECK_USER, but for the programs root_programs names, each an
- * exception that keeps root; dhcpd's leases are opened as root and
- * copied as NSHD_CHECK_USER. The program, and its arguments, are nsh's
- * table's for the show's words; no request names a path.
+ * system runs in a session of its own, which parent kills when system
+ * exits. Each stream's child leads its own process group, which is
+ * killed when the stream stops. The kind of stream decides which user
+ * the child runs as. A show's program runs as NSHD_CHECK_USER, except
+ * the programs listed in root_programs, which keep root. dhcpd's leases
+ * file is opened as root and copied as NSHD_CHECK_USER. The program and
+ * its arguments come from nsh's table for the show's words; no request
+ * names a path.
  *
- * An operation, which a privileged session asks, is nsh's words for it,
- * which op_allowed() takes or refuses, said why; a stream's child, as
- * root, in the client's rtable, runs it with nsh's own code, op_run(),
- * and the operation's status is how the child exits.
+ * An operation, which a privileged session requests, is given as nsh's
+ * words for it. op_allowed() accepts or refuses the words, and prints
+ * why it refuses. A stream's child runs the operation as root, in the
+ * client's rtable, with nsh's own code, op_run(), and exits with the
+ * operation's status.
  *
- * A commit's requests come from config in order: the parts BEGIN and
- * APPLY take, as chunks, then BEGIN, which makes the commit record,
- * APPLY, which runs the script, SAVE, which saves what runs and takes
- * the record away, and RECORD, when the commit went back to how it was,
- * or a commit confirmed is kept, or configure terminal's commit, applied,
- * is kept, not saved; BEGIN refuses that while a commit confirmed is not
- * confirmed, as it would go back with it; and before them TEST, a
- * daemon's test
- * of its rules. An apply, a save and a test each run in a child of
- * system's, a job, in a process group of its own, its output sent as
- * it comes; past its time the group is sent SIGTERM, and a grace later
- * SIGKILL, and it fails. A test runs as NSHD_CHECK_USER, its rules
- * staged in a directory of their own, its own, but for the daemons
- * root_tests names, each an exception that keeps root, its rules
- * root's. SAVE saves what runs as SAVED, whole and on disk, and keeps
- * it as rollback 0, one generation past the rollback 0 before, unless
- * it is the same.
- * While a job runs, config's requests wait for it, except what a
- * stream's client read and a session gone.
+ * config sends a commit's requests in order. First come the parts that
+ * BEGIN, APPLY and TEST use, sent in chunks. BEGIN writes the commit record,
+ * APPLY runs the script, and SAVE saves the running configuration and
+ * removes the commit record. RECORD reports how the commit ended: rolled
+ * back to how it was, an unconfirmed commit kept until its deadline, or
+ * a configure terminal commit applied and kept without being saved.
+ * BEGIN refuses such a configure terminal commit while an unconfirmed
+ * commit exists, because rolling back the unconfirmed commit would roll
+ * it back too. TEST, which runs a daemon's test of its rules, comes
+ * before BEGIN.
  *
- * The record, in NSHDB, outlives the commit that made it, which leaves
- * it if it does not finish: applying, if it did not save or go back, or
- * applied and not saved, if the save failed. The next commit says what
- * one applying left, by what runs now; one not saved refuses it, except
- * saving what runs, or going back to how it was before that commit.
+ * An apply, a save and a test each run as a job: a child of system in
+ * its own process group, whose output is sent as it arrives. If a job
+ * runs past its time limit, its group gets SIGTERM, then SIGKILL after a
+ * grace period, and the job fails. A test runs as NSHD_CHECK_USER, with
+ * its rules staged in a directory of its own. The daemons listed in
+ * root_tests are exceptions: their tests keep root, and their rules are
+ * root's. SAVE writes the running configuration to SAVED, whole and on
+ * disk, and keeps it as rollback 0, one generation after the previous
+ * rollback 0, unless it is the same as that one. While a job runs,
+ * config's requests wait for it, except reports that a stream's client
+ * read its messages, requests to stop a stream, and requests for a new
+ * session's permissions.
  *
- * A commit confirmed begins with its minutes: BEGIN makes the record of
- * a commit not confirmed too (confirm.c), which goes back to what ran
- * before the first commit not confirmed. RECORD, as
- * kept, leaves it; as gone back, it puts back the one before; as left,
- * the commit ended without either, and both records stay. A SAVE
- * confirms it, which takes it away first.
+ * The commit record, in NSHDB, outlives the commit that wrote it, and a
+ * commit that does not finish leaves it behind. Its state is applying
+ * if the commit neither saved nor rolled back, or unsaved if the commit
+ * applied but the save failed. The next commit compares an applying
+ * record with the running configuration and reports what the earlier
+ * commit left. An unsaved record refuses the next commit, unless that
+ * commit only saves the running configuration, or rolls back to the
+ * configuration before the earlier commit.
  *
- * Its deadline is its minutes from when it is kept, and from its BEGIN
- * until then. Past its deadline, system takes it back, but not while a
- * commit it began has not ended, or a job runs, as what that commit
- * undoes could bring back what was taken back. carp is demoted, and the
- * attempt recorded, then a job,
- * JOB_RECOVER, makes what runs read as what the commit goes back to,
- * and carp is promoted again; CONFIRM_RETRY later if it fails,
- * CONFIRM_ATTEMPTS times, and then the record says it failed, and carp
- * stays demoted. If what runs reads so already, after a reboot or a
- * commit that never ran, the record is taken away alone. As system
- * starts, it takes back what a system before it did not. A BEGIN is
- * refused if what runs is not what the commit was planned from, as a
- * commit taken back meanwhile makes it.
+ * A commit with a confirmation deadline sends its minutes with BEGIN,
+ * and BEGIN then also writes an unconfirmed commit record (confirm.c).
+ * Its rollback configuration is what ran before the first unconfirmed
+ * commit. RECORD with NSHD_KEPT leaves that record in place; with
+ * NSHD_BACK it restores the record that existed before BEGIN; with
+ * NSHD_LEFT the commit ended neither way, and both records stay. A
+ * successful SAVE confirms the commit by removing its record.
  *
- * The boot, which config runs as nshd -b starts, begins with BOOT: the
- * first time, nsh's own NSHRC is taken as the saved configuration; then
- * the boot record, in NSHDB, says the boot of the host it is for, by
- * kern.boottime, and that it runs, and carp is demoted, and the record
- * says so. A system started in the boot finds the record, and demotes
- * carp no more; a boot of the host done already is said, and is not run
- * again. config has the saved configuration (SAVED), a snapshot, the
- * tests, the script run (APPLY) and a snapshot, then BOOTED says if what
- * runs is the saved configuration: if it is, the record says the boot is
- * done, carp is promoted if it was demoted for it, and a record of a
- * commit not confirmed goes; if not, it says the boot failed, and carp
- * stays demoted until a commit saves.
+ * The deadline is the given number of minutes after BEGIN, and is reset
+ * to that many minutes after RECORD reports the commit kept. After the
+ * deadline, system rolls the commit back, but not while a begun commit
+ * has not ended or a job runs, because that commit's undo could restore
+ * what the rollback removed. system demotes carp, records the attempt,
+ * and starts a JOB_RECOVER job, which makes the running configuration
+ * match the rollback configuration; then it promotes carp again. If the
+ * job fails, system tries again CONFIRM_RETRY seconds later, up to
+ * CONFIRM_ATTEMPTS attempts in all; then the record is marked failed,
+ * and carp stays demoted. If the running configuration already matches
+ * the rollback configuration, as after a reboot or a commit that never
+ * ran, system only removes the record. When system starts, it takes
+ * over an unconfirmed commit that a previous system process left, and
+ * rolls it back at its deadline. BEGIN is refused if the running
+ * configuration is not the one the commit was planned from, as when an
+ * unconfirmed commit was rolled back in the meantime.
  *
- * A commit is a session's, and system reads whose from the session's
- * client: frontend passes it each client's socket as the client comes,
- * and system asks the kernel who is at its other end, and whether that
- * is the web configurator. frontend tells system, on their pipe, of
- * each request that may begin a commit, a line, a commit or a load's
- * part, before config hears of it; and when config answers it, and when
- * a session goes. system takes a request only while its client is
- * connected, as the socket says. BEGIN, and TEST and SAVE before one,
- * name the session, and are refused except while it has a request that
- * is not answered, or, its session gone, was not; BEGIN takes that
- * request, whose uid the commit record says. TEST of no session's, and
- * APPLY of no commit begun, are the boot's, and refused except while
- * it runs; BOOT is answered as done already once parent says nshd does
- * not boot, or BOOTED has. So a config that a client compromised can
- * begin a commit only for a request it was asked, and cannot say whose
- * it is, and a frontend compromised cannot say who a client is.
+ * The boot, which config runs when nshd starts with -b, begins with
+ * BOOT. The first time, system copies nsh's own NSHRC to the saved
+ * configuration. It then writes the boot record, in NSHDB, which names
+ * the host boot it is for by kern.boottime and says the boot is
+ * running; then it demotes carp and records that too. A system process
+ * restarted during the boot finds the record and does not demote carp
+ * again. If this host boot is already done, system reports that, and
+ * the boot does not run again. config then requests the saved
+ * configuration (SAVED) and a snapshot, runs the tests, runs the script
+ * (APPLY), and requests another snapshot. Then BOOTED reports whether
+ * the running configuration is the saved configuration. If it is, the
+ * record says the boot is done, carp is promoted if it was demoted for
+ * the boot, and any unconfirmed commit record is removed. If not, the
+ * record says the boot failed, and carp stays demoted until a commit
+ * saves.
+ *
+ * Each commit belongs to a session, and system learns whose it is from
+ * the session's client. frontend passes system each client's socket when
+ * the client connects, and system asks the kernel who is at the other
+ * end, and whether that is the web configurator. frontend reports to
+ * system, on their pipe, each request that may begin a commit (a line,
+ * a commit or part of a load) before config receives it; it also
+ * reports when config answers it and when a session is gone. system
+ * accepts such a report only while the client is still connected, as
+ * the socket shows. BEGIN and TEST, and SAVE outside a commit, name the
+ * session, and are refused unless the session has a request not yet
+ * answered, or had one when the session went away. BEGIN uses up that
+ * request, and the commit record stores its uid. TEST for no session
+ * and APPLY outside a commit belong to the boot, and are refused unless
+ * the boot is running. BOOT is answered as already done once parent
+ * says nshd is not booting, or once BOOTED has been received. So a
+ * config process that a client has compromised can begin a commit only
+ * for a request that a client made, and cannot choose whose commit it
+ * is; and a compromised frontend cannot choose who a client is.
  *
  * system checks the permissions of the login class of that request's
- * uid itself, as config does: an operation, which frontend tells it of
- * too, needs operate; BEGIN, TEST and SAVE need configure. A commit of
- * a session without admin may change what needs admin only as it ran
- * before: system keeps what runs when BEGIN takes it, and the commit's
- * script runs with it (ctl.c's admin_begin()). Login classes and users,
- * root's crontab, and the rules of inetd, ifstated and sshd need admin;
- * so does a line of smtpd's rules with mda, proc, a pipe, a table or a
- * macro, of snmpd's with a trap handle or a macro, of pf's with file or
- * load, and of any daemon's with include. Each of these runs a command
- * as root, reads a file as root, or decides who may log in. A TEST of
- * such a session's is refused those lines too, judged by what runs.
+ * uid itself, as config does. An operation, which frontend also
+ * reports, needs operate; BEGIN, TEST and SAVE need configure. A commit
+ * by a session without admin may not change settings that need admin:
+ * system keeps the running configuration when BEGIN accepts the commit,
+ * and the commit's script checks its changes against it (ctl.c's
+ * admin_begin()). Login classes and users, root's crontab, and the
+ * rules of inetd, ifstated and sshd need admin. So does a line in
+ * smtpd's rules with mda, proc, a pipe, a table or a macro; in snmpd's
+ * with a trap handle or a macro; in pf's with file or load; and in any
+ * daemon's with include. Each of these runs a command as root, reads a
+ * file as root, or decides who may log in. A TEST for such a session is
+ * refused those lines too, judged against the running configuration.
  *
- * A session of the web configurator's has no permissions until it logs
- * in, which only it may: system checks the user's password itself
- * (passwd.c's login_auth()), for a user a login user line names, never
- * root, and keeps the uid it logged in as until frontend says the
- * session is gone. Such a session then has the permissions of that
- * user's class, and its commits are that user's.
+ * A web configurator session has no permissions until it logs in, and
+ * only such a session may log in. system checks the user's password
+ * itself (passwd.c's login_auth()), for a user that a login user line
+ * names, never root. It keeps the uid the session logged in as until
+ * frontend reports that the session is gone. The session then has the
+ * permissions of that user's login class, and its commits are that
+ * user's.
  *
- * Such a session's terminal is nsh, which system starts as the user it
- * logged in as, on a pty, as login(1) would; the pty goes to config,
- * and on to the session. nsh ends when its pty is closed.
+ * A web session's terminal is nsh, which system starts on a pty as the
+ * logged-in user, as login(1) would. system sends the pty to config,
+ * which passes it on to the session. nsh exits when its pty is closed.
  */
 
 #include <sys/types.h>
@@ -207,18 +228,18 @@
 #define SYS_RESERVE	(SYS_STREAMS + 16)
 
 /*
- * what a stream's child streams: a show's, FACTS_*, an operation's, or a
- * log file, followed, or followed again once it turned over; and an
- * operation's for a session that sees no password hash, with each one
- * it prints taken out
+ * kinds of stream, besides a show's (FACTS_*): an operation's output, a
+ * log file, or a log file followed again after it was rotated; and an
+ * operation's output for a session that may not see password hashes,
+ * with any hash it prints removed
  */
 #define SYS_OPERATION	3
 #define SYS_LOG		4
 #define SYS_LOG_AGAIN	5
 #define SYS_OPERATION_HIDDEN 6
-#define LOG_TAIL	2048	/* a log's last bytes, followed first */
-#define LOG_TURNED	4	/* its child's exit: the log turned over */
-#define LOG_WAIT	10	/* the new log waited for, half seconds */
+#define LOG_TAIL	2048	/* a log's last bytes, printed first */
+#define LOG_TURNED	4	/* child's exit status: the log was rotated */
+#define LOG_WAIT	10	/* half seconds to wait for a rotated log */
 #define COMMIT_RECORD	NSHDB "/commit"
 #define RECORD_HEAD	128	/* the record's first line, at most */
 #define BOOT_RECORD	NSHDB "/boot"
@@ -228,9 +249,9 @@
 #endif
 
 /*
- * A job: an apply, a save or a test, and how long it may run, then the
- * grace between SIGTERM and SIGKILL. Each to measure on OpenBSD, on a
- * full table: these are not measured
+ * A job: an apply, a save, a test or a recover, and how long it may run,
+ * then the grace between SIGTERM and SIGKILL. These are not measured;
+ * each should be measured on OpenBSD with a full table
  */
 #define JOB_APPLY	0
 #define JOB_SAVE	1
@@ -244,10 +265,10 @@ static const struct {
 	{ "apply",	900,	10 },	/* a script that starts every daemon */
 	{ "save",	300,	10 },	/* conf(), and the save script */
 	{ "test",	120,	5 },	/* a validation: bgpd -n on a full table */
-	{ "recover",	900,	10 },	/* a commit not confirmed's way back */
+	{ "recover",	900,	10 },	/* rollback of an unconfirmed commit */
 };
 
-/* a commit not confirmed's way back, tried this often, this far apart */
+/* rollback attempts for an unconfirmed commit, and seconds between them */
 #define CONFIRM_ATTEMPTS 3
 #define CONFIRM_RETRY	5
 
@@ -263,8 +284,8 @@ static const char *root_tests[] = {
 /*
  * The programs a show runs that keep root, each an exception: a
  * daemon's control socket is 0660 root:wheel, smtpd answers its shows
- * only to euid 0, /dev/pf is 0600 and PF_KEY root's. Any other runs as
- * NSHD_CHECK_USER
+ * only to euid 0, /dev/pf is 0600 and PF_KEY needs root. Any other runs
+ * as NSHD_CHECK_USER
  */
 static const char *root_programs[] = {
 	BGPCTL, DVMRPCTL, EIGRPCTL, IKECTL, LDAPCTL, LDPCTL, OSPF6CTL,
@@ -275,7 +296,7 @@ static const char *root_programs[] = {
 /* the logs a session may watch, each by its watch's bit */
 static const struct {
 	int		 log;
-	char		*path;		/* a file, or NULL: pf's */
+	char		*path;		/* a file, or NULL for the pf log */
 } logs[] = {
 	{ NSHD_WATCH_DAEMON,	DAEMON_LOG },
 	{ NSHD_WATCH_MESSAGES,	MESSAGES_LOG },
@@ -283,17 +304,17 @@ static const struct {
 	{ NSHD_WATCH_PFLOG,	NULL },
 };
 
-/* a show's text, which a child prints, as messages to its client */
+/* a stream: text a child prints, sent to its client as messages */
 struct stream {
 	TAILQ_ENTRY(stream)	 entry;
 	uint32_t		 id;		/* the request */
-	pid_t			 pid;		/* the child, or 0, reaped */
+	pid_t			 pid;		/* the child, or 0 if reaped */
 	int			 fd;		/* its output, or -1 at its end */
 	int			 window;	/* messages it may still send */
 	int			 stopped;
-	int			 op;		/* an operation's, either kind */
-	char			*log;		/* a log file's, followed, */
-	int			 text;		/* or pf's: text, not facts */
+	int			 op;		/* an operation (either kind) */
+	char			*log;		/* log file followed, or NULL */
+	int			 text;		/* text, not facts: a log's */
 	int			 status;	/* how its child ended */
 	struct event		 ev;
 	struct facts_out	 o;
@@ -303,20 +324,20 @@ struct stream {
 struct job {
 	uint32_t		 id;		/* the request */
 	int			 kind;
-	pid_t			 pid;		/* the child, or 0, reaped */
+	pid_t			 pid;		/* the child, or 0 if reaped */
 	pid_t			 pgid;
 	int			 status;	/* how it ended, once reaped */
 	int			 fd;		/* its output, or -1 at its end */
 	int			 killed;	/* the signal its group got last */
 	struct event		 ev, tm;
 	struct nshd_apply	*apply;
-	char			*back;		/* a recover's, and its length */
+	char			*back;		/* rollback configuration */
 	size_t			 backlen;
-	char			 who[64];	/* a save's */
+	char			 who[64];	/* a save's user and comment */
 	char			 comment[NSHD_COMMENT];
 	char			*args[NOPTFILL];	/* a test's */
 	int			 root;
-	char			 dir[PATH_MAX];	/* and its rules', removed after */
+	char			 dir[PATH_MAX];	/* its rules, removed after */
 	char			 path[PATH_MAX];
 };
 
@@ -342,10 +363,9 @@ struct record {
 };
 
 /*
- * What frontend told system: a session's request that may begin a
- * commit, not answered, with who the session's client is; once the
- * session is gone, kept for a commit it asked, ASKED_GONE of them at
- * most
+ * What frontend told system: a session's request, not yet answered,
+ * with who the session's client is. Once the session is gone, it is
+ * kept for a commit it asked, ASKED_GONE of them at most
  */
 struct asked {
 	TAILQ_ENTRY(asked)	 entry;
@@ -395,28 +415,28 @@ static uid_t		 web_uid;	/* NSHD_WEB_USER's, */
 static int		 web_user;	/* if there is one */
 static gid_t		 check_gid;
 static struct job	*job;
-static pid_t		 terminals[SYS_TERMINALS];	/* their nsh, or 0 */
+static pid_t		 terminals[SYS_TERMINALS];	/* nsh's pid, or 0 */
 static TAILQ_HEAD(, queued) queue = TAILQ_HEAD_INITIALIZER(queue);
-static char		*parts[NSHD_PARTS];	/* chunks, until taken */
+static char		*parts[NSHD_PARTS];	/* sent in chunks, until used */
 static size_t		 partlen[NSHD_PARTS];
-/* a commit confirmed begun: the record of one not confirmed before it */
+/* a commit confirmed begun: the unconfirmed commit record before it */
 static struct confirm	 confirm_prev;
 static int		 confirm_begun;
 static int		 confirm_minutes;
-static int		 committing;	/* a commit begun, not ended, */
-static uid_t		 commit_uid;	/* whose, */
-static int		 commit_web;	/* and if the web configurator's, */
-static int		 commit_admin;	/* if its class has admin, */
-static char		*commit_before;	/* else what ran before it */
+static int		 committing;	/* a commit is begun and not ended */
+static uid_t		 commit_uid;	/* its uid */
+static int		 commit_web;	/* it is the web configurator's */
+static int		 commit_admin;	/* its login class has admin */
+static char		*commit_before;	/* if not, what ran before it */
 static size_t		 commit_beforelen;
-static int		 booting;	/* BOOT run, until BOOTED */
-static int		 boot_over;	/* parent said nshd booted, or BOOTED */
+static int		 booting;	/* from BOOT until BOOTED */
+static int		 boot_over;	/* not booting, or BOOTED came */
 static TAILQ_HEAD(, asked) askeds = TAILQ_HEAD_INITIALIZER(askeds);
 static TAILQ_HEAD(, login) logins = TAILQ_HEAD_INITIALIZER(logins);
 static TAILQ_HEAD(, client) clients = TAILQ_HEAD_INITIALIZER(clients);
-static int		 nagone;	/* of them, of sessions gone */
+static int		 nagone;	/* askeds of sessions that are gone */
 static struct event	 confirm_tm;	/* the deadline, or the next attempt */
-static time_t		 confirm_next;	/* the next attempt, no sooner */
+static time_t		 confirm_next;	/* earliest next rollback attempt */
 
 static void	system_dispatch_parent(int, short, void *);
 static void	system_dispatch_config(int, short, void *);
@@ -529,7 +549,7 @@ systemproc(int debug, int v)
 	check_gid = pw->pw_gid;
 	capture_stdout();
 
-	/* nsh's code here is nsh's as root */
+	/* nsh's code runs here privileged, as it does for root */
 	priv = 1;
 	facts_from = FACTS_SYSTEM;
 	db_create();
@@ -538,13 +558,13 @@ systemproc(int debug, int v)
 		fatal(NULL);
 	evtimer_set(&confirm_tm, system_confirm, NULL);
 	links_init(links, sizeof(links) / sizeof(links[0]));
-	/* a terminal's pty goes to config; each client's socket comes */
+	/* terminal ptys go to config; clients' sockets come from frontend */
 	imsgbuf_allow_fdpass(&links[CONFIG].iev->ibuf);
 	imsgbuf_allow_fdpass(&links[FRONTEND].iev->ibuf);
 	/* before any child: one that ends unwatched is never reaped */
 	signal_set(&ev_sigchld, SIGCHLD, system_sigchld, NULL);
 	signal_add(&ev_sigchld, NULL);
-	/* a commit not confirmed that an nshd before this one left */
+	/* an unconfirmed commit that an earlier nshd left */
 	system_confirm(-1, 0, NULL);
 	event_dispatch();
 	system_exit();
@@ -579,7 +599,7 @@ system_dispatch_parent(int fd, short event, void *arg)
 	imsg_event_add(iev);
 }
 
-/* config's requests, in order, but that they wait while a job runs */
+/* config's requests, in order; most wait while a job runs */
 static void
 system_dispatch_config(int fd, short event, void *arg)
 {
@@ -622,7 +642,7 @@ system_dispatch_config(int fd, short event, void *arg)
 			return;
 		}
 		/*
-		 * what a stream's client read, a session gone, and a new
+		 * what a stream's client read, stopping a stream, and a new
 		 * session's permissions do not wait
 		 */
 		if (type == IMSG_SYS_READ || type == IMSG_SYS_STOP ||
@@ -642,8 +662,8 @@ system_dispatch_config(int fd, short event, void *arg)
 }
 
 /*
- * frontend's word of the requests that may begin a commit, and each
- * client's socket
+ * frontend's word of the requests sessions make, and each client's
+ * socket
  */
 static void
 system_dispatch_frontend(int fd, short event, void *arg)
@@ -730,9 +750,9 @@ asked_find(uint32_t session)
 }
 
 /*
- * The request a commit is for, which frontend told system of before
- * config heard of it, or NULL: what frontend sent is read first, as
- * system may not have read it yet
+ * The request of the session w names, which frontend told system of
+ * before config heard of it, or NULL. What frontend sent is read first,
+ * as system may not have read it yet
  */
 static struct asked *
 asked_whose(struct nshd_whose *w)
@@ -823,7 +843,7 @@ client_there(struct client *cl)
 	    (pfd.revents & (POLLHUP | POLLERR | POLLNVAL)) == 0);
 }
 
-/* the login of session, the web configurator's, or NULL */
+/* the login of a web configurator session, or NULL */
 static struct login *
 login_find(uint32_t session)
 {
@@ -836,9 +856,9 @@ login_find(uint32_t session)
 }
 
 /*
- * The permissions of the request k says of, as its login class has
- * them, and its uid, if uid: a session of the web configurator's has
- * those of the user it logged in as, or none before
+ * The login class permissions of k's request, and its uid in *uid if
+ * uid is not NULL. A session of the web configurator's has those of the
+ * user it logged in as, or none before
  */
 static int
 system_whom(struct asked *k, uid_t *uid)
@@ -856,7 +876,7 @@ system_whom(struct asked *k, uid_t *uid)
 	return (login_perms(l->uid));
 }
 
-/* of sessions gone, the oldest past ASKED_GONE forgotten */
+/* forget the oldest requests of sessions gone, past ASKED_GONE */
 static void
 asked_trim(void)
 {
@@ -987,7 +1007,7 @@ system_whole(uint32_t type, const void *data, size_t len)
 	return (-1);
 }
 
-/* a whole request, run: -1 if config sent a part past NSHD_PART */
+/* run a whole request: -1 if config sent a part past NSHD_PART */
 static int
 system_request(uint32_t type, uint32_t id, const void *data, size_t len)
 {
@@ -1064,7 +1084,7 @@ system_request(uint32_t type, uint32_t id, const void *data, size_t len)
 		break;
 	case IMSG_SYS_PERMS:
 		memcpy(&pm, data, sizeof(pm));
-		/* the web configurator's, none until it logs in */
+		/* the web configurator has none until it logs in */
 		system_end(id, pm.web ? 0 : login_perms(pm.uid), NULL);
 		break;
 	case IMSG_SYS_LOGIN:
@@ -1128,8 +1148,8 @@ system_drain(void)
 }
 
 /*
- * the running configuration, as conf() writes it, with facts what
- * configure private reads of the kernel, then how it went
+ * the running configuration, as conf() writes it, and if facts is set,
+ * what configure private reads of the kernel; then how it went
  */
 static void
 system_snapshot(uint32_t id, int facts)
@@ -1171,7 +1191,7 @@ system_snapshot(uint32_t id, int facts)
 		fatal("%s", __func__);
 }
 
-/* the facts words ask, all of them, then how it went; or a stream */
+/* all the facts words ask for, then how it went; or a stream */
 static void
 system_show(uint32_t id, char *words)
 {
@@ -1188,7 +1208,7 @@ system_show(uint32_t id, char *words)
 	}
 	facts_out_init(&o, system_emit, &id);
 	if ((op = facts_streams(a, &argv, &table)) != 0) {
-		/* -1: the words do not fill the program's, said why */
+		/* -1: words cannot fill the program's arguments; send why */
 		if (op == -1) {
 			printed(&o);
 			system_flush(id);
@@ -1209,8 +1229,8 @@ system_show(uint32_t id, char *words)
 }
 
 /*
- * An operation, if op_allowed() takes its words, run by a stream's
- * child; or refused, said why
+ * An operation, run by a stream's child if op_allowed() takes its words,
+ * or refused, saying why
  */
 static void
 system_op(uint32_t id, struct nshd_sysop *so)
@@ -1250,9 +1270,9 @@ system_op(uint32_t id, struct nshd_sysop *so)
 }
 
 /*
- * A log, followed for a session whose class may read it, as a stream:
- * FOLLOWING once it begins, then what is read of it, as text, until it
- * is stopped; or refused, said why
+ * A log, followed as a stream for a session whose class may read it:
+ * FOLLOWING once it begins, then its text until it is stopped; or
+ * refused, saying why
  */
 static void
 system_follow(uint32_t id, struct nshd_follow *f)
@@ -1269,7 +1289,7 @@ system_follow(uint32_t id, struct nshd_follow *f)
 		    "this log is for\n");
 		return;
 	}
-	/* kept: a watch may follow several */
+	/* the request is kept: a watch may follow several logs */
 	perms = system_whom(k, NULL);
 	if (!system_may(perms, LOGIN_VIEW, "view") ||
 	    (f->log == NSHD_WATCH_AUTHLOG &&
@@ -1290,7 +1310,7 @@ system_follow(uint32_t id, struct nshd_follow *f)
 		fatal("%s", __func__);
 }
 
-/* Has perms, a login class's, need, named name? 1 if so, else 0, said */
+/* Does perms have need? 1 if so, else 0, after saying name is missing */
 static int
 system_may(int perms, int need, const char *name)
 {
@@ -1304,9 +1324,9 @@ system_may(int perms, int need, const char *name)
 /*
  * The web configurator's session logs in as a user a login user line
  * names, never root, if the password is the user's (login_auth()); the
- * session acts as that user after, and config takes the user's uid for
- * the session's. The answer is the permissions of the user's login
- * class, or -1, said why
+ * session then acts as that user, and config takes the user's uid as the
+ * session's. The answer is the permissions of the user's login class,
+ * or -1, saying why
  */
 static void
 system_login(uint32_t id, struct nshd_syslogin *sl)
@@ -1342,9 +1362,9 @@ system_login(uint32_t id, struct nshd_syslogin *sl)
 }
 
 /*
- * A terminal for the web login of whose session: nsh as the login's
- * user, on a pty of its size, which goes to config before the end; or
- * -1, said why
+ * A terminal for a web login session: nsh as the login's user, on a pty
+ * of the size asked, which goes to config before the answer; or -1,
+ * saying why
  */
 static void
 system_terminal(uint32_t id, struct nshd_systerm *st)
@@ -1413,7 +1433,7 @@ system_term_child(int tty, struct passwd *pw)
 	char		*argv[] = { "-nsh", NULL };
 	sigset_t	 none;
 
-	/* as a program expects them, and as system's are not */
+	/* restore the default signal handling, which a program expects */
 	signal(SIGINT, SIG_DFL);
 	signal(SIGTERM, SIG_DFL);
 	signal(SIGCHLD, SIG_DFL);
@@ -1486,7 +1506,7 @@ system_flush(uint32_t id)
 
 /*
  * op's text, which a child prints, streamed to request id's client: 0,
- * or -1 if it could not begin, which system says
+ * or -1, after saying why, if it could not begin
  */
 static int
 system_stream(uint32_t id, int op, char **argv, int table)
@@ -1517,7 +1537,7 @@ system_stream(uint32_t id, int op, char **argv, int table)
 	return (0);
 }
 
-/* s's child, which prints op's text: 0, or -1, said, if it could not */
+/* s's child, which prints op's text: 0, or -1 after saying why */
 static int
 system_stream_child(struct stream *s, int op, char **argv, int table)
 {
@@ -1556,7 +1576,7 @@ system_child(int fd, int op, char **argv, int table)
 	int	 null, argc, r, lfd, tries;
 
 	setpgid(0, 0);
-	/* as a program expects them, and as system's are not */
+	/* restore the default signal handling, which a program expects */
 	signal(SIGINT, SIG_DFL);
 	signal(SIGTERM, SIG_DFL);
 	signal(SIGCHLD, SIG_DFL);
@@ -1589,7 +1609,7 @@ system_child(int fd, int op, char **argv, int table)
 		fflush(stdout);
 		_exit(r == -1 ? 1 : r);
 	case FACTS_LEASES:
-		/* dhcpd's, 0640 */
+		/* dhcpd's leases file, mode 0640 */
 		if ((f = fopen(DHCPLEASES, "r")) == NULL) {
 			if (errno == ENOENT)
 				printf("%% File %s not found\n", DHCPLEASES);
@@ -1605,7 +1625,7 @@ system_child(int fd, int op, char **argv, int table)
 		break;
 	case SYS_LOG:
 	case SYS_LOG_AGAIN:
-		/* root's, read as NSHD_CHECK_USER; a new one, waited for */
+		/* open as root, read as NSHD_CHECK_USER; wait for a new log */
 		for (tries = 0; (lfd = open(argv[0], O_RDONLY)) == -1 &&
 		    errno == ENOENT && op == SYS_LOG_AGAIN && tries < LOG_WAIT;
 		    tries++)
@@ -1624,9 +1644,9 @@ system_child(int fd, int op, char **argv, int table)
 }
 
 /*
- * fd, the log at path: its last lines, then each as it comes, until the
- * file at path is another, as newsyslog leaves it: LOG_TURNED then, once
- * what fd still had is read; or 1 if fd cannot be read or written on
+ * fd, the log at path: its last lines, then each as it comes, until path
+ * names another file, as newsyslog leaves it; then LOG_TURNED, once the
+ * rest of fd is read; or 1 if fd cannot be read or the output written
  */
 static int
 system_tail(int fd, const char *path)
@@ -1667,7 +1687,7 @@ system_tail(int fd, const char *path)
 			turned = 1;
 		else if (fstat(fd, &now) == 0 &&
 		    now.st_size < lseek(fd, 0, SEEK_CUR))
-			/* emptied in its place: from its start */
+			/* truncated in place: read it from its start */
 			lseek(fd, 0, SEEK_SET);
 		else
 			nanosleep(&nap, NULL);
@@ -1686,7 +1706,7 @@ system_root(const char *program)
 	return (0);
 }
 
-/* a stream's child, once it holds what it needed root for */
+/* make a child NSHD_CHECK_USER, once it holds what it needed root for */
 static void
 system_drop(void)
 {
@@ -1745,7 +1765,7 @@ system_stream_more(uint32_t id)
 }
 
 /*
- * s, and the process group its child leads, killed: it ends once the
+ * stop s, and kill the process group its child leads: it ends once the
  * child is reaped
  */
 static void
@@ -1762,7 +1782,7 @@ system_stream_stop(struct stream *s)
 	system_stream_done(s);
 }
 
-/* s, if its output has ended and its child is reaped: how it went */
+/* end s, with how it went, once its output ends and its child is reaped */
 static void
 system_stream_done(struct stream *s)
 {
@@ -1770,20 +1790,20 @@ system_stream_done(struct stream *s)
 
 	if (s->fd != -1 || s->pid != 0)
 		return;
-	/* a log newsyslog turned over, followed again, from the new file */
+	/* a log newsyslog rotated: follow the new file */
 	if (s->log != NULL && !s->stopped && WIFEXITED(s->status) &&
 	    WEXITSTATUS(s->status) == LOG_TURNED) {
 		argv[0] = s->log;
 		argv[1] = NULL;
 		if (system_stream_child(s, SYS_LOG_AGAIN, argv, 0) == 0)
 			return;
-		/* said why, and ended */
+		/* it said why, and ended the request */
 		TAILQ_REMOVE(&streams, s, entry);
 		nstreams--;
 		free(s);
 		return;
 	}
-	/* an operation's, as its child ended */
+	/* an operation's status is how its child ended */
 	system_end(s->id, s->stopped ? 1 : !s->op ? 0 :
 	    WIFEXITED(s->status) ? WEXITSTATUS(s->status) : 1, NULL);
 	TAILQ_REMOVE(&streams, s, entry);
@@ -1791,7 +1811,7 @@ system_stream_done(struct stream *s)
 	free(s);
 }
 
-/* the streams' children and the job's that are gone; no other is reaped */
+/* reap the exited children of streams, the job and terminals; no others */
 static void
 system_sigchld(int sig, short event, void *arg)
 {
@@ -1815,7 +1835,7 @@ system_sigchld(int sig, short event, void *arg)
 			terminals[i] = 0;
 }
 
-/* text of a part the next BEGIN or APPLY takes: -1 if past NSHD_PART */
+/* text of a part the next BEGIN, APPLY or TEST takes: -1 if past NSHD_PART */
 static int
 system_chunk(const unsigned char *data, size_t len)
 {
@@ -1850,8 +1870,9 @@ system_parts_free(void)
 }
 
 /*
- * A commit begins, uid's, from what runs to what is wanted, the parts
- * sent: the record made, unless one that a commit left refuses it
+ * A commit begins, from the running configuration to the wanted one in
+ * the parts sent: the record is made, unless one that a commit left
+ * refuses it
  */
 static void
 system_begin(uint32_t id, struct nshd_begin *bg)
@@ -1877,7 +1898,7 @@ system_begin(uint32_t id, struct nshd_begin *bg)
 	commit_admin = (perms & LOGIN_ADMIN) != 0;
 	if (record_read(&rec) == -1)
 		goto done;
-	/* configure terminal's, unsaved, would go back with one not confirmed */
+	/* an unsaved commit would be rolled back with an unconfirmed one */
 	if (bg->unsaved) {
 		if (confirm_read(&cf, 0) == -1) {
 			printf("%% nshd: the record of a commit not confirmed: "
@@ -1890,11 +1911,11 @@ system_begin(uint32_t id, struct nshd_begin *bg)
 			goto done;
 		}
 	}
-	/* what runs, as the commit was planned from */
+	/* the running configuration, which the commit must be planned from */
 	if ((runs = system_running(&len)) == NULL)
 		goto done;
 	r = commit_reads(runs, len, parts[NSHD_BEFORE], partlen[NSHD_BEFORE]);
-	/* without admin, what runs is kept, for the commit's script */
+	/* without admin, keep the running configuration for the script */
 	free(commit_before);
 	commit_before = NULL;
 	if (r == 1 && !commit_admin) {
@@ -1910,7 +1931,7 @@ system_begin(uint32_t id, struct nshd_begin *bg)
 		goto done;
 	}
 	if (rec.state == RECORD_APPLYING) {
-		/* what it left, by what runs */
+		/* report what it left, judged by the running configuration */
 		if ((r = commit_reads(parts[NSHD_BEFORE],
 		    partlen[NSHD_BEFORE], rec.before, rec.beforelen)) == -1)
 			goto done;
@@ -1931,7 +1952,7 @@ system_begin(uint32_t id, struct nshd_begin *bg)
 		}
 	}
 	if (rec.state == RECORD_UNSAVED) {
-		/* the commit goes back to how it was before that one */
+		/* allowed only if it rolls back to before that commit */
 		if ((r = commit_reads(rec.before, rec.beforelen,
 		    parts[NSHD_WANT], partlen[NSHD_WANT])) == -1)
 			goto done;
@@ -1968,10 +1989,11 @@ system_begin(uint32_t id, struct nshd_begin *bg)
 }
 
 /*
- * The record of a commit not confirmed, for the commit begun, its
- * deadline minutes from now: it goes back to what ran before the first
- * commit not confirmed, or else this one; the record before it kept, to
- * put back if this one goes back. -1, said, if not
+ * Write the unconfirmed commit record for the commit begun, with its
+ * deadline minutes from now. Its rollback configuration is what ran
+ * before the first unconfirmed commit that still waits, or else before
+ * this one. Keep the previous record, to restore if this commit is
+ * rolled back. Returns -1 on error, after printing why.
  */
 static int
 system_arm(int minutes)
@@ -2007,7 +2029,7 @@ system_arm(int minutes)
 	return (0);
 }
 
-/* the record of a commit not confirmed put back as it was before */
+/* put back the unconfirmed commit record as it was before BEGIN */
 static void
 system_unarm(void)
 {
@@ -2037,13 +2059,13 @@ system_kept(void)
 }
 
 /*
- * The commit not confirmed, past its deadline, or its next attempt:
- * taken back, if no commit begun or job is in the way; if one is, the
- * record says how long it may be, and this comes again as it ends;
- * before then, the timer set for then. If the record cannot be read,
- * try again CONFIRM_RETRY seconds later, and log the error only once.
- * Do not try again if the file is not a record at all, since reading
- * it again will not help.
+ * Roll back the unconfirmed commit once its deadline or next attempt is
+ * due, unless a commit is begun or a job is running, in which case this
+ * function runs again when that commit or job ends. Before then, set the
+ * timer for when it is due. If the record cannot be read, try again
+ * CONFIRM_RETRY seconds later, and log the error only once. Do not try
+ * again if the file is not a record at all, since reading it again will
+ * not help.
  */
 static void
 system_confirm(int fd, short event, void *arg)
@@ -2080,12 +2102,12 @@ system_confirm(int fd, short event, void *arg)
 }
 
 /*
- * Roll back the commit cf describes. If what runs already matches cf's
- * rollback configuration, as when the previous system process stopped
- * after its last attempt succeeded, only clear the record. If every
- * attempt is used, mark the rollback failed. Otherwise demote carp
- * unless that was done already, record the attempt, and start a job
- * that applies the rollback configuration.
+ * Roll back the commit cf describes. If the running configuration
+ * already matches cf's rollback configuration, as when the previous
+ * system process stopped after its last attempt succeeded, only clear
+ * the record. If every attempt is used, mark the rollback failed.
+ * Otherwise demote carp unless that was done already, record the
+ * attempt, and start a job that applies the rollback configuration.
  */
 static void
 system_recover(struct confirm *cf)
@@ -2120,9 +2142,9 @@ system_recover(struct confirm *cf)
 }
 
 /*
- * An attempt to take back the commit not confirmed ended: the record
- * gone, if it took; if not, another CONFIRM_RETRY later, or, its
- * attempts done, the record failed
+ * An attempt to roll back the unconfirmed commit ended. If it succeeded,
+ * remove the record. If not, try again CONFIRM_RETRY seconds later, or
+ * mark the record failed if no attempts are left.
  */
 static void
 system_attempted(int ok)
@@ -2149,7 +2171,7 @@ system_attempted(int ok)
 	confirm_free(&cf);
 }
 
-/* cf taken back, how: its record gone, and the demotion it made */
+/* cf was rolled back, as how says: remove its record and carp demotion */
 static void
 system_taken(struct confirm *cf, const char *how)
 {
@@ -2165,7 +2187,7 @@ system_taken(struct confirm *cf, const char *how)
 	system_went(0);
 }
 
-/* to config, for the sessions that watch: the commit went back, or not */
+/* to config, for the sessions that watch: the rollback worked, or not */
 static void
 system_went(int failed)
 {
@@ -2179,7 +2201,7 @@ system_went(int failed)
 		fatal("%s", __func__);
 }
 
-/* cf not taken back, and its attempts done: carp stays demoted */
+/* cf not rolled back, and its attempts done: carp stays demoted */
 static void
 system_failed(struct confirm *cf)
 {
@@ -2193,7 +2215,7 @@ system_failed(struct confirm *cf)
 	system_went(1);
 }
 
-/* the running configuration, as conf() writes it: NULL, said, if not */
+/* the running configuration, as conf() writes it, or NULL after saying why */
 static char *
 system_running(size_t *len)
 {
@@ -2235,7 +2257,7 @@ system_apply(uint32_t id, struct nshd_apply *a)
 	system_parts_free();
 }
 
-/* what runs, saved by uid with a comment, in a job */
+/* the running configuration, saved by uid with a comment, in a job */
 static void
 system_save(uint32_t id, struct nshd_save *sv)
 {
@@ -2244,7 +2266,7 @@ system_save(uint32_t id, struct nshd_save *sv)
 	uid_t		 uid;
 	int		 perms;
 
-	/* the commit begun's, or one that changes nothing, a request's */
+	/* the commit's uid, or for a commit with no changes, the request's */
 	if (committing)
 		uid = commit_uid;
 	else if ((k = asked_whose(&sv->whose)) == NULL) {
@@ -2267,8 +2289,9 @@ system_save(uint32_t id, struct nshd_save *sv)
 }
 
 /*
- * The record of a commit not confirmed gone, or one that is not one,
- * and carp promoted if it was demoted for it: 1 if one went
+ * Remove the unconfirmed commit record, or a file there that is not a
+ * record, and promote carp if it was demoted for that commit. Returns 1
+ * if a file was removed, else 0.
  */
 static int
 system_unconfirm(void)
@@ -2386,7 +2409,7 @@ system_saved(int ok)
 	}
 }
 
-/* The commit begun ended, and what ran before it with it */
+/* End the commit begun, and free what ran before it */
 static void
 system_ended(void)
 {
@@ -2397,11 +2420,11 @@ system_ended(void)
 }
 
 /*
- * The commit went back to how it was; or, with kept, a commit confirmed
- * is kept until its deadline, or configure terminal's commit, applied,
- * is kept, not saved: the record it made gone, but one not saved, which
- * it went back from, kept; or, with left, the commit ended without
- * either, and the records stay
+ * The commit begun ended as how says: NSHD_BACK, rolled back to how it
+ * was; NSHD_KEPT, a commit confirmed kept until its deadline; or
+ * NSHD_APPLIED, configure terminal's commit applied, not saved. Then the
+ * record it made goes, but an unsaved one from an earlier commit stays.
+ * With NSHD_LEFT the commit ended neither way, and the records stay
  */
 static void
 system_back(uint32_t id, int how)
@@ -2416,7 +2439,7 @@ system_back(uint32_t id, int how)
 			status = 0;
 		record_free(&rec);
 	}
-	/* a commit confirmed kept until its deadline, or gone back */
+	/* a commit confirmed kept until its deadline, or rolled back */
 	if (confirm_begun && how == NSHD_BACK)
 		system_unarm();
 	else if (confirm_begun && how == NSHD_KEPT)
@@ -2432,7 +2455,7 @@ system_back(uint32_t id, int how)
  * The boot: the first time, nsh's own NSHRC taken as the saved
  * configuration; then the boot record made, and carp demoted for it,
  * unless a system before this did. The answer 0, to boot, NSHD_DONE if
- * this boot of the host is done already, else 1
+ * nshd is not booting or this boot of the host is done already, else 1
  */
 static void
 system_boot(uint32_t id)
@@ -2471,11 +2494,11 @@ system_boot(uint32_t id)
 }
 
 /*
- * The boot ran, ok if what runs is the saved configuration: then the
- * record says it is done, carp is promoted if it was demoted for it,
- * and a record of a commit not confirmed goes, as what it would go back
- * to runs; if not, the record says it failed, and carp stays demoted
- * until a commit saves
+ * The boot ran; ok is set if the running configuration is the saved
+ * configuration. If so, mark the boot done, promote carp if it was
+ * demoted for the boot, and remove any unconfirmed commit record, since
+ * the configuration it would roll back to is running. If not, mark the
+ * boot failed; carp stays demoted until a commit saves.
  */
 static void
 system_booted(uint32_t id, int ok)
@@ -2510,7 +2533,7 @@ system_booted(uint32_t id, int ok)
 	system_printed(id, status);
 }
 
-/* a boot that failed done, as a commit saved, carp promoted if it demoted */
+/* after a save: a failed boot done, carp promoted if the boot demoted it */
 static void
 boot_saved(void)
 {
@@ -2552,7 +2575,7 @@ system_rollback(uint32_t id, int n, int diff)
 		r = rollback_text(n, f);
 	if (fclose(f) == EOF)
 		fatal("%s", __func__);
-	/* why it could not, then it */
+	/* first what nsh's code printed, then the text */
 	if (printed_text(links[CONFIG].iev, IMSG_SYS_TEXT, id, 0) == -1)
 		r = -1;
 	if (imsg_text(links[CONFIG].iev, IMSG_SYS_TEXT, id, buf, len) == -1)
@@ -2562,10 +2585,11 @@ system_rollback(uint32_t id, int n, int diff)
 }
 
 /*
- * What is wrong with what runs, said before the list of what is kept:
- * that it is not the saved configuration, a commit that did not finish
- * or is not saved, a boot that failed, a commit that was not confirmed
- * and could not be rolled back, and a commit record that cannot be read
+ * What is wrong with the running configuration, said before the list of
+ * rollbacks: that it is not the saved configuration, a commit that did
+ * not finish or is not saved, a boot that failed, a commit that was not
+ * confirmed and could not be rolled back, and a commit record that
+ * cannot be read
  */
 static void
 system_health(void)
@@ -2599,7 +2623,8 @@ system_health(void)
 
 /*
  * A test of daemon name's rules, the part sent, for a session without
- * admin: -1, said, if it has a line that needs admin and did not run
+ * admin: -1, after saying why, if it has a line that needs admin and did
+ * not run
  */
 static int
 system_admin_test(char *name)
@@ -2641,7 +2666,7 @@ system_job_new(uint32_t id, int kind)
 	return (j);
 }
 
-/* j, which a child of system's runs, now the job running */
+/* start j, in a child of system's, as the running job */
 static void
 system_job(struct job *j)
 {
@@ -2691,7 +2716,7 @@ system_job_child(int fd, struct job *j)
 	int		 i, null, r;
 
 	setpgid(0, 0);
-	/* as nsh's code, and the programs it runs, expect them */
+	/* the default signal handling nsh's code and its programs expect */
 	signal(SIGINT, SIG_DFL);
 	signal(SIGTERM, SIG_DFL);
 	signal(SIGCHLD, SIG_DFL);
@@ -2714,7 +2739,7 @@ system_job_child(int fd, struct job *j)
 			sc.clears[i].keep = j->apply->clears[i].keep;
 		}
 		sc.nclears = j->apply->nclears;
-		/* without admin, what needs it only as it ran before */
+		/* without admin, what needs admin stays as it was running */
 		admin_begin(committing && !commit_admin, commit_before,
 		    commit_beforelen);
 		/* -1, it could not run; 1, a line of it failed */
@@ -2741,7 +2766,7 @@ system_job_child(int fd, struct job *j)
 	_exit(r == -1 ? 2 : r);
 }
 
-/* what the job's child printed, to config as it comes */
+/* what the job's child printed, to config as it comes; a recover's is logged */
 static void
 system_job_read(int fd, short event, void *arg)
 {
@@ -2768,8 +2793,8 @@ system_job_read(int fd, short event, void *arg)
 }
 
 /*
- * The job past its time: its group sent SIGTERM, then a grace later
- * SIGKILL, and what it prints no longer waited for
+ * The job past its time: its group is sent SIGTERM, then SIGKILL a grace
+ * later, and its output is no longer waited for
  */
 static void
 system_job_late(int fd, short event, void *arg)
@@ -2820,12 +2845,12 @@ system_job_done(void)
 		system_printed(j->id, status);
 	}
 	system_job_free(j);
-	/* a commit not confirmed taken back first */
+	/* first roll back an unconfirmed commit that is due */
 	system_confirm(-1, 0, NULL);
 	system_drain();
 }
 
-/* j, and its test's rules, gone */
+/* free j, and remove its test's rules */
 static void
 system_job_free(struct job *j)
 {
@@ -2836,7 +2861,7 @@ system_job_free(struct job *j)
 	free(j);
 }
 
-/* the commit record into rec, state RECORD_NONE if none: -1, said, if not */
+/* the commit record into rec, RECORD_NONE if none: -1, saying why, if not */
 static int
 record_read(struct record *rec)
 {
@@ -2903,7 +2928,7 @@ record_read(struct record *rec)
 	return (-1);
 }
 
-/* rec as the commit record, whole or not at all: -1, said, if not */
+/* rec as the commit record, whole or not at all: -1, saying why, if not */
 static int
 record_write(struct record *rec)
 {
@@ -2944,7 +2969,7 @@ record_write(struct record *rec)
 	return (db_sync());
 }
 
-/* no commit record: -1, said, if it could not be taken away */
+/* no commit record: -1, saying why, if it could not be removed */
 static int
 record_clear(void)
 {
@@ -2964,9 +2989,9 @@ record_free(struct record *rec)
 }
 
 /*
- * The boot record, as b: none if there is none, or it is one of another
- * boot of the host, whose demotion went with it, or it is not one,
- * said; -1, said, if it could not be read
+ * The boot record, as b: none if there is none, if it is one of another
+ * boot of the host, whose demotion went with it, or if it is not one,
+ * saying so; -1, saying why, if it could not be opened
  */
 static int
 boot_read(struct boot *b)
@@ -2997,7 +3022,7 @@ boot_read(struct boot *b)
 	return (0);
 }
 
-/* b as the boot record, whole or not at all: -1, said, if not */
+/* b as the boot record, whole or not at all: -1, saying why, if not */
 static int
 boot_write(struct boot *b)
 {
@@ -3069,7 +3094,7 @@ user_name(uid_t uid, char *buf, size_t len)
 		snprintf(buf, len, "uid %u", (unsigned int)uid);
 }
 
-/* NSHDB's entries, as they now are, kept: -1, said, if not */
+/* sync NSHDB's entries to disk: -1, after saying why, on failure */
 static int
 db_sync(void)
 {

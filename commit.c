@@ -18,56 +18,59 @@
  * commit: make the candidate the running configuration, and save it.
  *
  * What differs between the running configuration and the candidate
- * becomes a script, lines as conf() prints them. First what goes, in
- * the reverse of the order conf() prints it, then what comes, in that
- * order:
+ * becomes a script, lines as conf() prints them. First it removes
+ * lines, in the reverse of the order conf() prints them, then it adds
+ * lines, in that order:
  *
- *  * a line goes as its no, or "no x" as x, unless the candidate sets
- *    the same setting another way, which its own line does;
- *  * a list goes as the values the candidate's line has not;
- *  * an interface's addresses come again after a new rdomain, which
- *    took them away;
- *  * a cloned interface goes whole, and a physical one line by line;
- *  * a daemon's state goes as its disable, and its rules as no file;
- *  * a block's new lines come under it, and a list's new values;
- *  * a daemon's rules come whole, and what conf() prints after them,
- *    its reload or install, comes when they are new or it starts.
+ *  * a line is removed with its "no" form, and "no x" with x, unless the
+ *    candidate sets the same setting another way, with its own line;
+ *  * a list loses the values the candidate's line does not have;
+ *  * an interface's addresses are added again after a new rdomain,
+ *    which removed them;
+ *  * a cloned interface is removed whole, and a physical one line by
+ *    line;
+ *  * a daemon's state is removed with its disable, and its rules by
+ *    removing the rules file;
+ *  * a block's new lines are added under it, and a list's new values;
+ *  * a daemon's rules are added whole, and what conf() prints after
+ *    them, its reload or install, when they are new or it starts.
  *
  * script_make() makes the script from the two trees alone, and its
- * edits from the script: each line a record that names its command by
- * its place among the commands a configuration has (conf_cmd(),
- * ctl_act()), and nothing else, with its words. script_run() runs the
- * edits, so one process may make what another runs, and what runs them
- * reads no command's name: it runs the command an edit's place names,
- * and a record that names no such place, or one where it does not
+ * edits from the script: each line becomes a record, with its words,
+ * that names its command only by its place among the commands a
+ * configuration has (conf_cmd(), ctl_act()). script_run() runs the
+ * edits, so one process may make what another runs, and the code that
+ * runs them reads no command's name: it runs the command at an edit's
+ * place. A record that names no such place, or is where it does not
  * belong, stops all of them before any runs.
  *
  * Then the running configuration must read as the candidate does, but
  * for a physical interface the candidate has no block for, which keeps
- * what its hardware has. If it does not, a script back to the
- * configuration as it was undoes the commit, and what did not take is
+ * what its hardware has. If it does not, a script that restores the
+ * configuration as it was undoes the commit, and the differences are
  * shown.
  *
- * Each configuration saved is kept, the last ROLLBACKS of them, for
- * rollback N and show rollback, with who saved it and the comment they
- * gave, on a line of its own that conftree_read() skips.
+ * The last ROLLBACKS saved configurations are kept, for rollback N and
+ * show rollback. Each records who saved it and the comment they gave,
+ * on a line of its own that conftree_read() skips.
  *
- * commit check shows what would keep the candidate from being the
- * running configuration that it can see before then: an interface a
+ * commit check shows what it can find in advance that would keep the
+ * candidate from being the running configuration: an interface a
  * line names that is not there, one in two trunks or bridges, a bridge
  * option for one not its member, an address twice in one rdomain, a
  * vlan or carp id twice on one interface, a daemon in an rtable nothing
  * makes, and daemon rules their test refuses. commit refuses a
  * candidate with any of them.
  *
- * nsh -i makes the running configuration its file as commit does the
- * candidate, all of it that takes; nothing is undone (commit_boot()).
+ * nsh -i applies its file to the running configuration as commit
+ * applies the candidate, and keeps every line that succeeds; nothing is
+ * undone (commit_boot()).
  *
  * commit confirmed does all that but save, and a process waits; unless
  * a commit confirms it first, at the deadline the running configuration
- * goes back to how it was before the first commit not confirmed
- * (commit_expire()). What it goes back to and when are in CONFIRM, as
- * the configuration itself is not saved until confirmed.
+ * is rolled back to how it was before the first unconfirmed commit
+ * (commit_expire()). The rollback configuration and the deadline are in
+ * CONFIRM, as the configuration itself is not saved until confirmed.
  */
 
 #include <sys/types.h>
@@ -114,7 +117,7 @@ struct sub {
 	size_t len;
 };
 
-/* A line, where conf() prints it among its block's */
+/* A line, ranked by where conf() prints it within its block */
 struct ranked {
 	char *line;
 	int rank;
@@ -131,29 +134,30 @@ struct claims {
 };
 
 /*
- * A script's edits: records, each this head and len bytes after it. A
- * line's are its words, each ending in a NUL, after its command's name
- * and its no; a daemon's rules are their lines, each ending in a newline
+ * A script's edits: records, each this head and len bytes after it. For
+ * a line, the bytes are its words after its command's name and any "no",
+ * each ending in a NUL; for a daemon's rules, their lines, each ending in
+ * a newline
  */
 struct edit {
 	uint8_t		kind;		/* EDIT_* */
-	uint8_t		no;		/* the line's no */
-	uint16_t	row;		/* its command's place, or its daemon's */
+	uint8_t		no;		/* 1 if the line starts with "no" */
+	uint16_t	row;		/* command row, or daemon index */
 	int32_t		act;		/* what the daemon does (ctl_act()) */
 	uint32_t	len;
 };
 #define EDIT_TOP	1	/* a top-level statement, CTX_TOP's */
 #define EDIT_IF		2	/* a line of an interface's block, CTX_IF's */
-#define EDIT_BRIDGE	3	/* of a bridge's, CTX_BRIDGE's */
+#define EDIT_BRIDGE	3	/* a line of a bridge's block, CTX_BRIDGE's */
 #define EDIT_END	4	/* a block's end */
 #define EDIT_RULES	5	/* a daemon's rules */
 #define EDIT_DAEMON	6	/* a daemon's state, or what follows its rules */
 
-/* in nshd's config, the tests of rules check() keeps for system */
+/* in nshd's config, the rule tests check() saves for the system process */
 static struct plan_test *deferred;
 static int ndeferred;
 
-/* An interface's lines that name other interfaces: the word, or 0 all */
+/* An interface's lines that name other interfaces: the word, or 0 for all */
 static const struct {
 	char *name;
 	int word;
@@ -224,8 +228,9 @@ static void sub_end(struct commit *, struct sub *, const char *, char *,
  * commit [confirmed [minutes]] [comment text]: in configure private,
  * make the candidate the running configuration, all of it or none, then
  * save the running configuration; or with confirmed, do not save it,
- * and roll it back unless a commit confirms it in time. Elsewhere, nshd
- * saves it. The comment is kept with what is saved.
+ * and roll it back unless a commit confirms it in time. In nshd's
+ * configure, nshd commits; outside configure, nshd saves the running
+ * configuration. The comment is kept with what is saved.
  */
 int
 commit(int argc, char **argv, ...)
@@ -278,10 +283,10 @@ commit(int argc, char **argv, ...)
 			return -1;
 		}
 	}
-	/* configure's, nshd's; outside it, what runs, which nshd saves */
+	/* nshd commits its own candidate, or saves the running configuration */
 	if (nshd_config || !candidate)
 		return nshd_commit(checking, minutes, comment);
-	/* one not confirmed in time goes back first */
+	/* first roll back an unconfirmed commit past its deadline */
 	commit_expire();
 	if ((want = cand_tree()) == NULL)
 		return -1;
@@ -292,7 +297,7 @@ commit(int argc, char **argv, ...)
 		goto done;
 	}
 	if (minutes > 0) {
-		/* back to before the first commit not confirmed */
+		/* back to before the first unconfirmed commit */
 		if ((back = unconfirmed()) == NULL &&
 		    (back = conftree_copy(was)) == NULL) {
 			printf("%% commit: %s\n", strerror(errno));
@@ -304,7 +309,7 @@ commit(int argc, char **argv, ...)
 	}
 	if (conftree_compare(NULL, was, want) != 0 && take(was, want) == -1)
 		goto done;
-	/* taken: what fails after is said, and the candidate starts again */
+	/* committed: report any later failure, and start the candidate over */
 	ret = 0;
 	if (minutes > 0) {
 		if (unconfirm(back, when) == -1) {
@@ -335,8 +340,9 @@ done:
 }
 
 /*
- * check() of want against was, as commit says it: 0 if want may become
- * the running configuration, else -1; with checking, said either way
+ * check() of want against was, reported as commit reports it: 0 if want
+ * may become the running configuration, else -1; with checking, the
+ * verdict is printed either way
  */
 int
 commit_checks(struct cnode *was, struct cnode *want, int checking)
@@ -344,7 +350,7 @@ commit_checks(struct cnode *was, struct cnode *want, int checking)
 	return commit_verdict(check(was, want), checking);
 }
 
-/* The problems check() finds with want, each said, and how many */
+/* The problems check() finds with want, each reported, and how many */
 int
 commit_problems(struct cnode *was, struct cnode *want)
 {
@@ -373,7 +379,7 @@ commit_took(struct cnode *now, struct cnode *want)
 	return differ(NULL, now, want) == 0;
 }
 
-/* What did not take, now against want, and failed if a line failed */
+/* Report a failed commit, and how now differs from want */
 void
 commit_untaken(struct cnode *now, struct cnode *want, int failed)
 {
@@ -385,7 +391,7 @@ commit_untaken(struct cnode *now, struct cnode *want, int failed)
 	differ(stdout, now, want);
 }
 
-/* Whether the way back, back, is how it was, was: 0 if so, said */
+/* Report whether back, the rolled-back configuration, matches was: 0 if so */
 int
 commit_back(struct cnode *back, struct cnode *was)
 {
@@ -400,7 +406,7 @@ commit_back(struct cnode *back, struct cnode *was)
 
 /*
  * Does the running configuration, now, read as the saved one, want, as
- * nshd's boot makes it? 0 if so, else -1, what differs said
+ * nshd's boot makes it? 0 if so, else -1 after printing what differs
  */
 int
 commit_booted(struct cnode *now, struct cnode *want)
@@ -415,7 +421,8 @@ commit_booted(struct cnode *now, struct cnode *want)
 
 /*
  * Does configuration text now read as text want, as commit_took() reads
- * them? 1 if it does, 0 if not, -1 if either could not be read, said why
+ * them? 1 if it does, 0 if not, -1 if either could not be read, after
+ * saying why
  */
 int
 commit_reads(char *now, size_t nowlen, char *want, size_t wantlen)
@@ -433,9 +440,9 @@ commit_reads(char *now, size_t nowlen, char *want, size_t wantlen)
 }
 
 /*
- * A commit not confirmed goes back, as nshd's system takes it back: the
- * running configuration made to read as back's text, as commit_expire()
- * makes it. 0 if it does, else -1, said why
+ * Roll back an unconfirmed commit, as nshd's system does: make the
+ * running configuration read as back's text, as commit_expire() does.
+ * 0 if so, else -1 after saying why
  */
 int
 commit_recover(char *back, size_t backlen)
@@ -465,8 +472,8 @@ commit_recover(char *back, size_t backlen)
 }
 
 /*
- * What would keep want from becoming the running configuration, was,
- * that can be seen before it does: each problem shown, and how many
+ * What would keep want from replacing was, the running configuration,
+ * that can be found in advance: each problem shown, and how many
  */
 static int
 check(struct cnode *was, struct cnode *want)
@@ -553,7 +560,7 @@ check_ports(struct cnode *want, char *block, char *name, char *l,
 	char *p, *who, *m, *word, *last, what[128], list[32], buf[1024];
 	int bad = 0;
 
-	/* its name, "no learning" one of them, and then its ports */
+	/* its name, which may be "no learning", and then its ports */
 	p = l + (strncmp(l, "no ", 3) == 0 ? 3 : 0);
 	snprintf(list, sizeof(list), "%.*s", (int)(strcspn(p, " ") +
 	    (p - l)), l);
@@ -634,7 +641,7 @@ check_rtable(struct cnode *want, char *block)
 	return 0;
 }
 
-/* Daemon rules under block, or the top level, new or changed: tested */
+/* Test new or changed daemon rules under block, or at the top level */
 static int
 check_rules(struct cnode *was, struct cnode *want, char *block)
 {
@@ -679,7 +686,7 @@ check_rules(struct cnode *was, struct cnode *want, char *block)
 /*
  * Test daemon name's rules, its n lines, which label names: -1 if the
  * test refuses them, else 0. nshd's config runs no test: it keeps them
- * for system, as commit_deferred() gives them
+ * for system, which gets them from commit_deferred()
  */
 static int
 rules_test(char *name, char **lines, size_t n, char *label)
@@ -719,7 +726,7 @@ rules_test(char *name, char **lines, size_t n, char *label)
 	return 0;
 }
 
-/* The tests rules_test() kept for system, into *tp, now the caller's */
+/* The tests rules_test() kept for system, given to the caller in *tp */
 int
 commit_deferred(struct plan_test **tp)
 {
@@ -731,7 +738,7 @@ commit_deferred(struct plan_test **tp)
 	return n;
 }
 
-/* A daemon's test refuses its rules, which label names: a problem */
+/* Report that name's test refuses the rules label names, as one problem */
 int
 commit_refused_by(char *label, char *name)
 {
@@ -771,8 +778,8 @@ inwords(char *list, char *w)
 }
 
 /*
- * The interface that claimed what before, if not who, or NULL, and
- * then what is who's
+ * Claim what for who: the interface that claimed it before, if not who,
+ * or NULL
  */
 static char *
 claim(struct claims *c, char *what, char *who)
@@ -839,7 +846,7 @@ done:
 /*
  * nsh -i: make the running configuration the one in path, as commit
  * makes it the candidate, but never undone: what check finds is shown,
- * all that takes stays, and what did not take is shown. Returns 1 if
+ * every line that succeeds stays, and what failed is shown. Returns 1 if
  * a line failed or the running configuration then differs from it,
  * else 0.
  */
@@ -853,7 +860,7 @@ commit_boot(char *path)
 		return 1;
 	if ((was = running_tree()) == NULL)
 		goto done;
-	/* shown, but a system starts with what takes */
+	/* print problems, but boot with whatever succeeds */
 	check(was, want);
 	if (conftree_compare(NULL, was, want) != 0 &&
 	    (failed = apply(was, want)) == -1)
@@ -876,9 +883,9 @@ done:
 }
 
 /*
- * A commit not confirmed by its deadline goes back: the running
- * configuration is made the one before the first commit not confirmed.
- * Returns 1 if one went back, else 0.
+ * An unconfirmed commit past its deadline is rolled back: the running
+ * configuration is made the one before the first unconfirmed commit.
+ * Returns 1 if one was rolled back, else 0.
  */
 int
 commit_expire(void)
@@ -912,7 +919,7 @@ commit_expire(void)
 
 /*
  * A process of its own, apart from the session, to wait for when and
- * then roll back a commit not confirmed: -1 if there cannot be one
+ * then roll back an unconfirmed commit: -1 if there cannot be one
  */
 static int
 waiter(time_t when)
@@ -963,7 +970,7 @@ waiter(time_t when)
 	_exit(0);
 }
 
-/* Roll back to back at when, unless confirmed: CONFIRM, or -1 */
+/* Record in CONFIRM a rollback to back at when: -1 if it could not */
 static int
 unconfirm(struct cnode *back, time_t when)
 {
@@ -992,7 +999,7 @@ unconfirm(struct cnode *back, time_t when)
 	return 0;
 }
 
-/* What a commit not confirmed goes back to, or NULL if there is none */
+/* The rollback configuration of an unconfirmed commit, or NULL if none */
 static struct cnode *
 unconfirmed(void)
 {
@@ -1001,7 +1008,7 @@ unconfirmed(void)
 	return conftree_read(CONFIRM, conf_mode, conf_ordered);
 }
 
-/* When a commit not confirmed goes back, or 0 if there is none */
+/* The deadline of an unconfirmed commit, or 0 if there is none */
 static time_t
 deadline(void)
 {
@@ -1016,7 +1023,7 @@ deadline(void)
 	return when;
 }
 
-/* The commit not confirmed is: nothing rolls it back */
+/* Confirm the unconfirmed commit, so nothing rolls it back */
 static void
 confirmed(void)
 {
@@ -1053,9 +1060,9 @@ apply(struct cnode *from, struct cnode *to)
 
 /*
  * The script that makes from read as to, into s, from the trees alone,
- * and its edits; -1 if it could not be made, said why. A line that is
- * not configuration has no edit: with skip, as at boot, it is said and
- * left out, else none are made
+ * and its edits; -1 if it could not be made, after saying why. A line
+ * that is not configuration has no edit: with skip, as at boot, it is
+ * reported and left out, else no edits are made
  */
 int
 script_make(struct cnode *from, struct cnode *to, struct script *s, int skip)
@@ -1086,8 +1093,8 @@ script_make(struct cnode *from, struct cnode *to, struct script *s, int skip)
 }
 
 /*
- * Run s's edits: -1 if they could not run, and none did, said, 1 if one
- * failed, or rules it clears stay, else 0
+ * Run s's edits: -1 if they could not run and none did, after saying
+ * why; 1 if one failed or rules could not be cleared; else 0
  */
 int
 script_run(struct script *s)
@@ -1111,7 +1118,7 @@ script_run(struct script *s)
 	candidate = 0;
 	failed = edits_apply(s->edits, s->elen);
 	candidate = save;
-	/* and none once it stopped the daemon */
+	/* remove rules once the script has stopped the daemon */
 	for (i = 0; i < s->nclears; i++)
 		if (!s->clears[i].keep && ctl_rules_clear(s->clears[i].name,
 		    s->clears[i].rtable, 0) == -1)
@@ -1133,11 +1140,12 @@ script_free(struct script *s)
 }
 
 /*
- * s's edits, from its lines (script_make()): a line becomes a record
- * that names its command's place among those a configuration has, found
- * as nsh reads the line, with its words; a daemon's rules block becomes
- * one; a block's "!", its end. A line that names no such command is
- * said; with skip it is left out, else -1, once each is said. 0 if made
+ * s's edits, from its lines (script_make()). A line becomes a record
+ * with its words and its command's place among the commands a
+ * configuration has, found as nsh reads the line. A daemon's rules block
+ * becomes one record, and a block's "!" its end. A line that names no
+ * such command is reported; with skip it is left out, else -1 once all
+ * are reported. 0 if made
  */
 static int
 edits_make(struct script *s, int skip)
@@ -1214,7 +1222,7 @@ edits_make(struct script *s, int skip)
 			goto done;
 		}
 	}
-	/* rules that end at the end, or at a line not as far in */
+	/* rules cut off by the end of the script, or by a less indented line */
 	if (rd != -1) {
 		printf("%% %s%s%s rules without their end\n",
 		    block == CF_RTABLE ? head : "", block == CF_RTABLE ? ": " : "",
@@ -1244,11 +1252,11 @@ done:
 }
 
 /*
- * Line l of a script, in ctx, as an edit to f, or with skip none: a
- * statement at the top level, or in an rtable's block, *block CF_RTABLE,
- * which may begin a block, *block then its kind and head its line, or a
- * daemon's rules, *rd then the daemon's; or a line of head's block. 0 if
- * it is one, else -1, said
+ * Line l of a script, in ctx, as an edit to f: a statement at the top
+ * level or in an rtable's block (*block CF_RTABLE), or a line of head's
+ * block. A statement that begins a block sets *block to its kind and
+ * head to l; a daemon's rules statement writes no edit and sets *rd to
+ * the daemon. 0, or -1 after saying why
  */
 static int
 edits_line(FILE *f, int ctx, char *l, int *block, int *rd, char *head)
@@ -1321,7 +1329,7 @@ refused:
 	return -1;
 }
 
-/* e, and after it words, n of them, each with its NUL, or text, to f */
+/* e, written to f, then n words, each with its NUL, or len bytes of text */
 static int
 edit_put(FILE *f, struct edit *e, char **words, int n, char *text,
     size_t len)
@@ -1350,10 +1358,10 @@ fail:
 }
 
 /*
- * Are buf's len bytes edits that may run: each record whole, of a kind
- * there is, naming a command a configuration has in the block it belongs
- * in, or what one has a daemon do, its words or rules whole? 0 if so,
- * else -1, said
+ * Are buf's len bytes edits that may run? Each record must be whole, of
+ * a known kind, and name a command a configuration has, in the block
+ * where it belongs, or a daemon action a configuration can have, with
+ * its words or rules whole. 0 if so, else -1 after saying why
  */
 static int
 edits_check(char *buf, size_t len)
@@ -1449,9 +1457,9 @@ edit_words(char *p, size_t len, char **argv, int max)
 }
 
 /*
- * Run buf's len bytes of edits (edits_check()): each record's command,
- * the place it names, with its words; a daemon's rules written; what a
- * configuration has a daemon do done. 1 if one failed, else 0
+ * Run buf's len bytes of edits (edits_check()): run the command at the
+ * place each record names, with its words, write a daemon's rules, or
+ * do a daemon action. 1 if one failed, else 0
  */
 static int
 edits_apply(char *buf, size_t len)
@@ -1504,8 +1512,8 @@ edits_apply(char *buf, size_t len)
 }
 
 /*
- * What goes from under fblock, in the reverse of conf()'s order. The
- * candidate has the block as tblock, if there.
+ * What is removed from under fblock, in the reverse of conf()'s order.
+ * The candidate has the block as tblock, if there.
  */
 static int
 removals(struct commit *c, char *fblock, char *tblock, int there,
@@ -1530,7 +1538,7 @@ removals(struct commit *c, char *fblock, char *tblock, int there,
 			goto done;
 
 		if (conf_ordered(l)) {
-			/* a daemon's rules: changed, they come whole */
+			/* a daemon's rules: changed ones are added whole */
 			if (t == NULL && clear(c, l, rtableid(fblock), 0) == -1)
 				goto done;
 		} else if (fblock == NULL && strncmp(l, "rtable ", 7) == 0) {
@@ -1547,7 +1555,7 @@ removals(struct commit *c, char *fblock, char *tblock, int there,
 		    ifblock(l, name, sizeof(name)) && cand_cloneable(name))
 			fprintf(c->f, "no %s\n", l);
 		else if (conftree_line(c->from, fp, NULL, 0) != NULL) {
-			/* a block's lines go, in reverse */
+			/* a block's lines are removed, in reverse */
 			if (sub_begin(c, &s) == -1)
 				goto done;
 			for (j = 0; (k = conftree_line(c->from, fp, NULL, j)) !=
@@ -1561,7 +1569,7 @@ removals(struct commit *c, char *fblock, char *tblock, int there,
 			}
 			sub_end(c, &s, in, l, 0);
 		} else if (fblock == NULL && ifblock(l, name, sizeof(name)))
-			/* a physical interface stays, with nothing on it */
+			/* an interface with no lines: nothing to remove */
 			;
 		else if (t == NULL && unset(c, tblock, there,
 		    context(fblock), in, l) == -1)
@@ -1576,7 +1584,7 @@ done:
 }
 
 /*
- * What comes under tblock, in conf()'s order. The running
+ * What is added under tblock, in conf()'s order. The running
  * configuration has the block as fblock, if there.
  */
 static int
@@ -1621,13 +1629,13 @@ additions(struct commit *c, char *fblock, char *tblock, int there,
 				sub_end(c, &s, in, l, 0);
 				goto done;
 			}
-			/* a new or renamed rtable comes, lines or not */
+			/* a new or renamed rtable is added, lines or not */
 			sub_end(c, &s, in, l, f == NULL || strcmp(f, l) != 0);
 		} else if (conftree_line(c->to, tp, NULL, 0) != NULL ||
 		    (tblock == NULL && ifblock(l, name, sizeof(name)))) {
 			if (sub_begin(c, &s) == -1)
 				goto done;
-			/* a new rdomain took the addresses, so they come again */
+			/* a new rdomain removed the addresses, so add them */
 			moved = f != NULL && context(tp) == CTX_IF &&
 			    !sameline(c->from, fp, c->to, tp, "rdomain");
 			for (j = 0; (k = conftree_line(c->to, tp, NULL, j)) !=
@@ -1637,7 +1645,7 @@ additions(struct commit *c, char *fblock, char *tblock, int there,
 					set(c, fp, f != NULL, context(tp), k);
 			sub_end(c, &s, in, l, f == NULL);
 		} else if (ctl_line(l, dname, sizeof(dname)) == CTL_FOLLOW) {
-			/* new, as everything in a new rtable is, or taken again */
+			/* if new (as in a new rtable), or if renewed() */
 			if (f == NULL || renewed(c, fblock, tblock, dname))
 				fprintf(c->f, "%s%s\n", in, l);
 		} else if (f == NULL)
@@ -1652,7 +1660,7 @@ done:
 }
 
 /*
- * What takes away line, under the block the candidate has as tblock if
+ * What removes line, under the block the candidate has as tblock if
  * there, in context ctx. Nothing if the candidate sets the same
  * setting another way, as its own line will.
  */
@@ -1697,9 +1705,9 @@ unset(struct commit *c, char *tblock, int there, int ctx, const char *in,
 }
 
 /*
- * What brings line in, under the block the running configuration has
- * as fblock if there, in context ctx: line, or the values of a list
- * its line lacks
+ * What adds line, under the block the running configuration has as
+ * fblock if there, in context ctx: line, or the values of a list its
+ * line lacks
  */
 static void
 set(struct commit *c, char *fblock, int there, int ctx, char *line)
@@ -1725,7 +1733,7 @@ islist(int ctx, char *line)
 	    setting_edit(ctx, ST_ON, line, &e) == 0 && e.op == CE_LISTADD;
 }
 
-/* The list line under block in t with list line's name, and its no */
+/* The list line under block in t with the same name and "no" as line */
 static char *
 listline(struct cnode *t, char *block, char *line)
 {
@@ -1739,7 +1747,7 @@ listline(struct cnode *t, char *block, char *line)
 	return NULL;
 }
 
-/* Where a list line's values start, after its no and its name */
+/* Where a list line's values start, after any "no" and its name */
 static char *
 listvalues(char *line)
 {
@@ -1749,9 +1757,9 @@ listvalues(char *line)
 }
 
 /*
- * The values of list line that list other has not, under line's name,
- * or with gone, under the name that takes them away: its no, or itself
- * without its no. Nothing if there are none.
+ * The values of list line that list other lacks, under line's name, or
+ * with gone, under the name that removes them: line's name with "no"
+ * added, or with its "no" removed. Nothing if there are none.
  */
 static void
 values(FILE *f, const char *in, char *line, char *other, int gone)
@@ -1784,9 +1792,8 @@ values(FILE *f, const char *in, char *line, char *other, int gone)
 }
 
 /*
- * Does daemon name take its rules again, the candidate's under tblock:
- * are they new, or does it start? The running configuration has the
- * block as fblock.
+ * Does daemon name load its rules under tblock again: are they new, or
+ * does it start? The running configuration has the block as fblock.
  */
 static int
 renewed(struct commit *c, char *fblock, char *tblock, char *name)
@@ -2010,7 +2017,7 @@ ifblock(char *line, char *name, size_t len)
 	    strncmp(line, "bridge ", 7) == 0) && sscanf(line, fmt, name) == 1;
 }
 
-/* Daemon rules no script writes: none, or with keep, an empty file */
+/* Daemon rules script_run() clears: to no file, or with keep, an empty one */
 static int
 clear(struct commit *c, char *stmt, int rtable, int keep)
 {
@@ -2043,10 +2050,10 @@ committer(void)
 
 /*
  * Keep the configuration just saved, in file, as rollback 0, with who
- * saved it and their comment, if not empty, and its generation, one
- * more than rollback 0's; each kept before it one further on, and the
- * oldest no more; unless rollback 0 is the same. -1 if it could not,
- * said why
+ * saved it, their comment if not empty, and its generation, one more
+ * than rollback 0's. Each older rollback N becomes N + 1, and the oldest
+ * is dropped. Nothing is done if rollback 0 is the same. -1 if it could
+ * not, after saying why
  */
 int
 rollback_keep(const char *file, const char *who, const char *comment)
@@ -2071,7 +2078,7 @@ rollback_keep(const char *file, const char *who, const char *comment)
 			return -1;
 		}
 	}
-	/* one line, of words alone */
+	/* the head on one line, with no control characters */
 	snprintf(head, sizeof(head) - 1, "%s%s%s%s", ROLLBACK_HEAD, who,
 	    comment[0] != '\0' ? ": " : "", comment);
 	for (p = head; *p != '\0'; p++)
@@ -2111,9 +2118,9 @@ rollback_gen(int n)
 }
 
 /*
- * nshd's save: the running configuration, as conf() writes it, made
- * SAVED, root's alone, whole and on disk, or not at all: 1 if it was,
- * else 0, said why
+ * nshd's save: the running configuration, as conf() writes it, written
+ * to SAVED, readable by root alone, whole and on disk, or not at all: 1
+ * if it was, else 0 after saying why
  */
 int
 saved_write(void)
@@ -2153,9 +2160,9 @@ saved_write(void)
 }
 
 /*
- * The first time nshd boots, with no SAVED, nsh's own NSHRC made it, as
- * saved_write() makes one, so nothing in it is lost: -1 if it could not
- * be, said why
+ * The first time nshd boots, with no SAVED, make it from nsh's own
+ * NSHRC, as saved_write() makes one, so nothing in NSHRC is lost: -1 if
+ * it could not be, after saying why
  */
 int
 saved_first(void)
@@ -2208,7 +2215,7 @@ saved_first(void)
 	return 0;
 }
 
-/* nshd's saved configuration, SAVED, to out: -1 if none, said why */
+/* nshd's saved configuration, SAVED, to out: -1 if none, after saying why */
 int
 saved_text(FILE *out)
 {
@@ -2229,10 +2236,11 @@ saved_text(FILE *out)
 }
 
 /*
- * show diff-config outside configure, as nshd's system shows it: the
- * saved configuration, SAVED, or none, against what runs, block by
- * block, to stdout, if they differ, and with hide, each password hash
- * taken out: 1 if they do, 0 if not, -1 if either cannot be read, said why
+ * show diff-config outside configure, as nshd's system shows it: how the
+ * running configuration differs from SAVED, or from an empty one if there
+ * is none, printed block by block to stdout, with each password hash
+ * removed if hide. 1 if they differ, 0 if not, -1 if either cannot be
+ * read, after saying why
  */
 int
 saved_diff(int hide)
@@ -2246,7 +2254,7 @@ saved_diff(int hide)
 	saved = saved_tree();
 	if (saved != NULL && (now = running_tree()) != NULL &&
 	    (n = conftree_compare(NULL, saved, now)) > 0) {
-		/* had whole, to take the hashes out */
+		/* buffer the whole diff, to remove the hashes */
 		if (hide && (out = open_memstream(&buf, &len)) == NULL) {
 			printf("%% saved_diff: %s\n", strerror(errno));
 			n = -1;
@@ -2269,9 +2277,9 @@ saved_diff(int hide)
 }
 
 /*
- * Does what runs differ from the saved configuration, as saved_diff()
- * compares them? 1 if it does, 0 if not, -1 if either cannot be read,
- * said why
+ * Does the running configuration differ from the saved one, as
+ * saved_diff() compares them? 1 if it does, 0 if not, -1 if either
+ * cannot be read, after saying why
  */
 int
 saved_differs(void)
@@ -2295,7 +2303,7 @@ saved_tree(void)
 	return conftree_read(SAVED, conf_mode, conf_ordered);
 }
 
-/* dir's entries, as they now are, kept: -1, said, if not */
+/* dir's entries, synced to disk: -1 if not, after saying why */
 static int
 syncdir(const char *dir)
 {
@@ -2417,7 +2425,7 @@ pr_rollback(int argc, char **argv, ...)
 			return -1;
 		}
 	}
-	/* nshd's */
+	/* nshd shows it */
 	if (argc >= 3)
 		snprintf(words, sizeof(words), "rollback %d%s", n,
 		    argc == 4 ? " diff" : "");
@@ -2426,7 +2434,7 @@ pr_rollback(int argc, char **argv, ...)
 	return nshd_show(words) ? 0 : -1;
 }
 
-/* Configuration n as it was saved, to out: -1 if it could not be, said why */
+/* Configuration n as it was saved, to out: -1 on error, after saying why */
 int
 rollback_text(int n, FILE *out)
 {
@@ -2447,8 +2455,8 @@ rollback_text(int n, FILE *out)
 /*
  * What configuration n changed from the one saved before it, n + 1,
  * block by block as show diff-config shows it, to out, or nothing if
- * it changed nothing; said, if n + 1 is not kept. -1 if either cannot
- * be read, said why
+ * it changed nothing; a note is printed if n + 1 is not kept. -1 if
+ * either cannot be read, after saying why
  */
 int
 rollback_diff(int n, FILE *out)
@@ -2498,7 +2506,7 @@ rollback_list(FILE *out)
 			continue;
 		strftime(when, sizeof(when), "%Y-%m-%d %H:%M:%S %Z",
 		    localtime(&sb.st_mtime));
-		/* one saved without a head line says when alone */
+		/* one saved without a head line says only when */
 		who = why = NULL;
 		if ((f = fopen(path, "r")) != NULL) {
 			if (fgets(line, sizeof(line), f) != NULL &&

@@ -109,7 +109,7 @@ function bgpLines(lines) {
 	return out;
 }
 
-/* a word: a quoted string, a brace, or what runs up to a space or one */
+/* a word: a quoted string, a brace, or text up to a space or a brace */
 var BGP_WORD = /"(?:[^"\\]|\\.)*"?|'(?:[^'\\]|\\.)*'?|[{}]|[^\s{}"']+/g;
 
 /* split code into words: a quoted string is one word, and so is each brace */
@@ -259,7 +259,7 @@ function bgpPeers(doc) {
 	return out;
 }
 
-/* a neighbor's settings, falling back to its group's */
+/* a neighbor's settings, and its group's as group-<setting> */
 function bgpPeer(n, group) {
 	var p = { node: n, address: bgpName(n), group: group ?
 	    bgpUnquote(bgpName(group)) : "", groupNode: group, other: [] };
@@ -298,8 +298,8 @@ function bgpSettings(n, other) {
 /*
  * Peer p's other settings by group, each statement with its group's
  * key, registry entry, whether it is secret, and its value, the text
- * after the key; a statement no group has is in Other, its value its
- * whole text
+ * after the key. A statement no group has goes in Other, with its whole
+ * text as its value
  */
 function bgpAdvanced(p) {
 	var out = { Other: [] };
@@ -332,7 +332,7 @@ function bgpAdvanced(p) {
 	return out;
 }
 
-/* what setting s, one of bgpAdvanced()'s, risks, if anything */
+/* the risk of setting s from bgpAdvanced(), or "" if none */
 function bgpAdvWarn(s) {
 	return s.id && BGP_ADV_WARN[s.id] ? BGP_ADV_WARN[s.id](s.value) : "";
 }

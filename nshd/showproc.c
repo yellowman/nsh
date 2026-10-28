@@ -20,14 +20,15 @@
  * nothing a client sends here reaches the processes that change
  * anything.
  *
- * A show of state answers with facts, made a batch at a time, as the
- * client reads them, by nsh's own code. What that code prints, as it
+ * A show of state answers with facts, which nsh's own code makes a batch
+ * at a time, as the client reads them. What that code prints, as it
  * always has, goes to an unlinked file on fd 1, and from there to the
  * client, as messages.
  *
- * show is not pledged: no promise has the ioctls show interface asks,
- * for tunnels, carp, wg, trunk, umb, 802.11, bridges and more. It runs
- * as _nshshow, chrooted, with no peer, and keeps utmp open from before.
+ * show is not pledged: no promise allows the ioctls that show interface
+ * uses, for tunnels, carp, wg, trunk, umb, 802.11, bridges and more. It
+ * runs as _nshshow, chrooted, with no peer, and keeps utmp open from
+ * before its chroot.
  */
 
 #include <sys/types.h>
@@ -51,8 +52,8 @@
 #include "facts.h"
 #include "showfacts.h"
 
-#define SHOW_LOW	32	/* messages a client has unread, when more are made */
-#define SHOW_BATCH	256	/* records made at a time, about */
+#define SHOW_LOW	32	/* make more when fewer than this are unread */
+#define SHOW_BATCH	256	/* about how many records to make at a time */
 
 /* an answer of facts, as its client reads it */
 struct answer {
@@ -110,7 +111,7 @@ show_dispatch_parent(int fd, short event, void *arg)
 		if (n == 0)
 			break;
 		switch (imsg_get_type(&imsg)) {
-		/* clients taken at once, or once the boot is done */
+		/* take clients at once, or once the boot is done */
 		case IMSG_STARTUP:
 			if (imsg_get_data(&imsg, &st, sizeof(st)) == -1)
 				fatalx("parent sent a startup show cannot read");
@@ -129,7 +130,7 @@ show_dispatch_parent(int fd, short event, void *arg)
 	imsg_event_add(iev);
 }
 
-/* clients taken, on its socket, fd 4, from parent */
+/* take clients on its socket, fd 4, from parent */
 static void
 show_listen(void)
 {
@@ -179,7 +180,7 @@ show_answer(uint32_t id, int32_t status, const char *text)
 	return (control_reply(id, IMSG_CTL_RESULT, &r, sizeof(r)));
 }
 
-/* the facts words ask, begun; or that nshd does not answer them */
+/* begin the facts words ask for, or say that nshd does not answer them */
 static int
 show_facts(struct ctl_conn *c, char *words)
 {

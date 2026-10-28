@@ -46,7 +46,7 @@ cprompt(void)
 
 	gethostname(hbuf, sizeof(hbuf));
 	pr = rt | config_mode;
-	/* as Junos's: '>' outside configure, '#' in it */
+	/* as in Junos: '>' outside configure, '#' in it */
 	snprintf(prompt, sizeof(prompt), "%s%s%s%s%s%s%s%s", hbuf,
 	    pr ? "(" : "",
 	    config_mode ? (candidate || nshd_config == NSHD_CPRIVATE ?

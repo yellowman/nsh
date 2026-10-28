@@ -37,7 +37,7 @@
 /* The edit that puts a setting into a state (setting_edit()) */
 struct sedit {
 	int op;			/* CE_* */
-	int keylen;		/* the line's key, for CE_SET and CE_UNSET */
+	int keylen;		/* key length, for CE_SET and CE_UNSET */
 	int strict;		/* if it changes nothing, say so */
 	char line[1024];
 };

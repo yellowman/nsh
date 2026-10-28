@@ -85,10 +85,10 @@ struct intlist *whichlist;
 pid_t	child;
 static int in_rc;		/* a commit's edits run */
 static int rc_head;		/* and this one is a block's head */
-static int oneline;		/* cmdline() runs it: its mode stays */
+static int oneline;		/* run by cmdline(); a mode stays entered */
 static struct cnode *snapshot;	/* config's running configuration */
 
-/* what a session keeps of this file (session.c) */
+/* globals of this file each session has a copy of (session.c) */
 struct sglobal commands_sglobals[] = {
 	SGLOBAL(hname), SGLOBAL(ifname), SGLOBAL(next_ifname),
 	SGLOBAL(whichlist), SGLOBAL(in_rc), SGLOBAL(rc_head),
@@ -207,7 +207,7 @@ static struct fpf {
 	{ 0, 0, 0, 0 }
 };
 
-/* statistics without a handler are facts, of their name */
+/* kernel statistics, each shown from the facts "statistics <name>" */
 static struct stt {
 	char *name;
 	char *help;
@@ -1105,7 +1105,7 @@ Menu flushlist[] = {
 	{ 0, 0, 0, 0, 0 }
 };
 
-/* flush, but help and history, as an operation nshd's system runs */
+/* flush: nshd's system runs it as an operation, except help and history */
 static int
 flushcmd(int argc, char **argv, ...)
 {
@@ -1127,7 +1127,7 @@ flush_find(char *word)
 	return f == 0 || Ambiguous(f) ? NULL : f;
 }
 
-/* flush, run */
+/* run a flush command */
 static int
 flush_run(int argc, char **argv)
 {
@@ -1175,14 +1175,14 @@ flush_line(int argc, char **argv, ...)
 	va_end(ap);
 
 	args[3] = line;
-	/* 1: nothing ran on the line */
+	/* pkill exits 1 if no process ran on the line */
 	r = cmdargs(PKILL, args);
 	return r == -1 || r > 1 ? -1 : 0;
 }
 
 /*
- * name, and argv's words after the first, as an operation nshd's system
- * runs in rtable: as a handler returns
+ * Ask nshd's system to run name, with argv's words after the first, as
+ * an operation in rtable. Returns 0, or -1 on error
  */
 static int
 op_ask(char *name, int argc, char **argv, int rtable)
@@ -1202,13 +1202,13 @@ op_ask(char *name, int argc, char **argv, int rtable)
 
 /*
  * The operations nshd's system runs, as root, for a privileged session:
- * flush's, but help's and history's; reboot, halt and powerdown, which
- * nsh has the user confirm first; diff-config, the saved configuration
- * against what runs; crontab, root's; a daemon's action, what its table
- * runs that is not its configuration; and an interface's bssid, setpuk
- * and chgpin. Each
- * is its first word, as nsh names it, and the words after it as typed.
- * Whether argv is one: 1, or 0 having said not.
+ * flush, except help and history; reboot, halt and powerdown, which nsh
+ * has the user confirm first; diff-config, of the saved configuration
+ * against the running one; crontab, root's crontab; a daemon's action
+ * that runs a program and does not change its configuration; and an
+ * interface's bssid, setpuk and chgpin. Each is its first word, as nsh
+ * names it, and the words after it as typed. 1 if argv is one, or 0
+ * after saying it is not.
  */
 int
 op_allowed(int argc, char **argv)
@@ -1235,10 +1235,9 @@ op_allowed(int argc, char **argv)
 }
 
 /*
- * An operation op_allowed() takes, run: as a handler returns, but
+ * Run an operation op_allowed() takes; return as a handler does, but
  * OP_DIFFERS from diff-config if the configurations differ. With hide,
- * for a session that sees no password hash, diff-config shows each one
- * taken out
+ * for a session that sees no password hash, diff-config hides each one
  */
 int
 op_run(int argc, char **argv, int hide)
@@ -1595,8 +1594,9 @@ read_command_line(EditLine *el, History *hist)
 /*
  * command handler for interface and bridge modes
  *
- * acts as a loop for human keyboard user, and with rc_head makes a
- * commit's block's interface, or takes it away
+ * acts as a loop for human keyboard user. With rc_head, for the head of
+ * a block in a commit's edits, it only creates the interface, or with
+ * no, destroys it.
  *
  * if a function returns to interface() with a 1, interface() will break
  * the user back to command() mode.
@@ -1704,7 +1704,7 @@ interface(int argc, char **argv, ...)
 		return r;
 	}
 
-	/* a block's head, which makes a cloned interface as its lines do */
+	/* a block's head in a commit only creates a cloned interface */
 	if (rc_head) {
 		ifname[0] = '\0';
 		close(ifs);
@@ -1876,7 +1876,7 @@ int_interface(int argc, char **argv, ...)
 			return -1;
 		if (r == 0)
 			strlcpy(next_ifname, new_ifname, sizeof(next_ifname));
-		/* the one this mode is in was taken out: leave it */
+		/* if this mode's interface was removed, leave the mode */
 		return !set && strcmp(old_ifname, new_ifname) == 0;
 	}
 	if (!is_valid_ifname(new_ifname)) {
@@ -2257,10 +2257,10 @@ size_t cmdtab_nitems = nitems(cmdtab);
 /*
  * The commands a configuration has, and nothing else: a commit's edits
  * name them by their place here (commit.c), so a commit runs no command
- * that is not one of them. The top level's but its daemons', which ctl.c
- * has (ctl_act()); an interface's; and a bridge's. A top-level command
- * takes no if CF_NO says so, as its row in cmdtab does; an interface's,
- * any
+ * that is not one of them. The tables cover the top level, except
+ * daemons, which ctl.c handles (ctl_act()); interface mode; and bridge
+ * mode. A top-level command takes no if CF_NO says so, as its row in
+ * cmdtab does; any interface command can take no
  */
 static const struct confcmd conf_top[] = {
 	{ "hostname",	hostname,	0 },
@@ -2452,7 +2452,7 @@ command()
 
 		if (line[0] == 0)
 			break;
-		/* configure private, nshd's */
+		/* a configure session that nshd holds */
 		if (nshd_config) {
 			cmdline_nshd(line);
 			continue;
@@ -2488,7 +2488,7 @@ command()
 		}
 		if (c->needpriv != 0 && !nshd_priv(0))
 			continue;
-		/* a daemon's action, nshd's system's, outside configure too */
+		/* nshd's system runs daemon operations outside configure too */
 		if (c->handler == ctlhandler && margc > 1 &&
 		    ctl_op(c->name, margv[1], 0)) {
 			op_ask(c->name, margc, margv, cli_rtable);
@@ -2508,12 +2508,12 @@ command()
 }
 
 /*
- * One line, as a terminal gives it, in configure private: in an
- * interface's mode, the interface's command, int_exit() leaving the
- * mode; else a command, interface or bridge entering its mode, which
- * stays for the lines after it. In nshd's config, only what edits the
- * candidate, and leaving a mode. What the handler returns, or -1 if
- * none ran, said why.
+ * Run one line, as a terminal gives it, in configure private. In an
+ * interface's mode, run the interface command; int_exit() leaves the
+ * mode. Otherwise run the command; interface or bridge enters its mode,
+ * which stays for the following lines. In nshd's config process, allow
+ * only commands that edit the candidate, and leaving a mode. Returns
+ * what the handler returns, or -1 after printing why if none ran.
  */
 int
 cmdline(char *text)
@@ -2549,7 +2549,7 @@ cmdline(char *text)
 	}
 	if (c->needpriv != 0 && !nshd_priv(0))
 		return -1;
-	/* a daemon's action, nshd's system's, outside configure too */
+	/* nshd's system runs daemon operations outside configure too */
 	if (!in_config && c->handler == ctlhandler && margc > 1 &&
 	    ctl_op(c->name, margv[1], 0))
 		return op_ask(c->name, margc, margv, cli_rtable);
@@ -2612,12 +2612,12 @@ cmdline_if(void)
 }
 
 /*
- * A line of a configure nshd has (nshd_config): what edits the
- * candidate, and leaving a mode or configure, to nshd, as text; what
- * runs as it does outside a candidate, here, commit, rollback and show
- * candidate-config asking nshd as they run; and what a candidate
- * refuses, refused. What the handler returns, or -1 if none ran, said
- * why
+ * Run a line of a configure session that nshd holds (nshd_config).
+ * Commands that edit the candidate, and leaving a mode or configure, go
+ * to nshd as text. Commands that run as they do outside a candidate run
+ * here; commit, rollback and show candidate-config send their requests
+ * to nshd as they run. Commands a candidate refuses are refused. Returns
+ * what the handler returns, or -1 after printing why if none ran
  */
 int
 cmdline_nshd(char *text)
@@ -2670,11 +2670,11 @@ cmdline_nshd(char *text)
 		printf("%% Invalid command: %s %s\n", margv[0], margv[1]);
 		return -1;
 	}
-	/* a daemon's action, but what the candidate takes, nshd's system's */
+	/* nshd's system runs daemon operations not applied to the candidate */
 	if (c->handler == ctlhandler && margc > 1 &&
 	    ctl_op(c->name, margv[1], 1))
 		return op_ask(c->name, margc, margv, nshd_rtable);
-	/* a daemon's edit, of its rules there, here as the user */
+	/* edit a daemon's rules from nshd's candidate here, as the user */
 	if (c->handler == ctlhandler && margc > 1 &&
 	    ctl_edits(c->name, margv[1]))
 		return ctl_nshd_edit(c->name);
@@ -2695,8 +2695,8 @@ cmdline_nshd(char *text)
 }
 
 /*
- * The mode nshd gives configure private's session, nsh's: whether in
- * configure private, and the interface or bridge whose mode it is in
+ * Set nsh's mode as nshd reports it: whether in configure, and the
+ * interface or bridge whose mode it is in
  */
 void
 nshd_mode(int private, char *ifn, int isbridge)
@@ -2707,7 +2707,7 @@ nshd_mode(int private, char *ifn, int isbridge)
 	whichlist = bridge ? Bridgelist : Intlist;
 }
 
-/* Leave configure private, from any mode, as exit does at the top */
+/* Leave configure, from any mode, as exit does at the top */
 int
 cmdexit(void)
 {
@@ -3344,9 +3344,9 @@ argvtostring(int argc, char **argv, char *string, int strlen)
 }
 
 /*
- * Move to table.  Reading a file, a table the kernel does not have yet
- * takes its block's lines all the same: a route among them makes the
- * table (RTM_ADD does), and the process moves into it then
+ * Move to table.  While a commit's edits run, a table the kernel does
+ * not have yet takes its block's lines all the same: a route among them
+ * makes the table (RTM_ADD does), and the process moves into it then
  * (conf_settle())
  */
 static int
@@ -3769,7 +3769,7 @@ do_reboot(int how)
 		return -1;
 	}
 
-	/* nshd's system compares what runs with what it saved */
+	/* nshd's system compares the running and saved configurations */
 	have_changes = facts_op("diff-config", cli_rtable, 1);
 	if (have_changes != 0 && have_changes != OP_DIFFERS)
 		return -1;
@@ -3899,7 +3899,7 @@ pr_conf(int argc, char **argv, ...)
 }
 
 /*
- * Show startup config: nshd's
+ * Show startup config, as nshd reports it
  */
 static int
 pr_s_conf(int argc, char **argv, ...)
@@ -4016,9 +4016,9 @@ conf_cmd(int ctx, int n)
 
 /*
  * The row (conf_cmd()) of the command word names in ctx, as nsh reads
- * it at the top level, or in an interface's or a bridge's mode: -1 if
- * word names none, or a command a configuration does not have, and at
- * the top level -2 if a daemon, whose name is then in *daemon
+ * it at the top level, or in an interface's or a bridge's mode. -1 if
+ * word names none, or a command a configuration does not have; at the
+ * top level, -2 for a daemon, with its name in *daemon
  */
 int
 conf_find(int ctx, char *word, char **daemon)
@@ -4045,7 +4045,7 @@ conf_find(int ctx, char *word, char **daemon)
 		name = i->name;
 	} else
 		return -1;
-	/* a table's names are its own, each once */
+	/* each name appears only once in its table */
 	for (n = 0; (c = conf_cmd(ctx, n)) != NULL; n++)
 		if (strcmp(c->name, name) == 0)
 			return n;
@@ -4056,7 +4056,7 @@ conf_find(int ctx, char *word, char **daemon)
  * Run row n of ctx's commands (conf_cmd()) with argv, as a commit runs a
  * line of its edits: at the top level a statement, a block's head
  * included, and in an interface's or a bridge's mode a line of name's
- * block. As the command returns
+ * block. Returns what the command returns
  */
 int
 conf_run(int ctx, int n, int argc, char **argv, char *name)
@@ -4068,7 +4068,7 @@ conf_run(int ctx, int n, int argc, char **argv, char *name)
 		return conf_run_if(ctx == CTX_BRIDGE, c, argc, argv, name);
 	if ((c->flags & (CF_IF | CF_BRIDGE)) == 0)
 		return (*c->handler)(argc, argv, 0);
-	/* a block's head, which makes a clone, or its no */
+	/* a block's head creates a cloned interface, or with no, destroys it */
 	rc_head = 1;
 	r = (*c->handler)(argc, argv, 0);
 	rc_head = 0;
@@ -4076,10 +4076,10 @@ conf_run(int ctx, int n, int argc, char **argv, char *name)
 }
 
 /*
- * c, a command of an interface's or with bridgeline a bridge's, run with
- * argv on name in rtable 0, as interface mode runs a line: name must be
- * there, and a bridge, or not, as c's. As c returns, or -1 if it did not
- * run, said
+ * Run c, an interface command or, with bridgeline, a bridge command,
+ * with argv on name in rtable 0, as interface mode runs a line. name
+ * must exist, and must be a bridge only if c is a bridge command.
+ * Returns 0, or -1 if c failed or did not run, after printing why
  */
 static int
 conf_run_if(int bridgeline, const struct confcmd *c, int argc, char **argv,
@@ -4122,7 +4122,7 @@ done:
 	return r;
 }
 
-/* A commit's edits run, with on, or have run */
+/* Mark that a commit's edits are running (on) or have finished */
 void
 conf_reading(int on)
 {
@@ -4131,7 +4131,7 @@ conf_reading(int on)
 		init_bgpd_socket_path(cli_rtable);
 }
 
-/* A block of a commit's edits ended: their table, rt, again */
+/* A block of a commit's edits ended: return to routing table rt */
 void
 conf_block_end(int rt)
 {
@@ -4148,7 +4148,7 @@ conf_settle(void)
 }
 
 /*
- * The running configuration, read into a tree
+ * The running configuration as a tree: running_set() and running_tree()
  */
 /*
  * nshd's config: the running configuration as system's last snapshot
@@ -4207,7 +4207,7 @@ pr_conf_diff(int argc, char **argv, ...)
 		return -1;
 	}
 
-	/* configure's, nshd's */
+	/* in a configure session that nshd holds */
 	if (nshd_config)
 		return nshd_cshow("diff-config");
 

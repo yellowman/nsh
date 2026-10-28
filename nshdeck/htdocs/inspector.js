@@ -1,8 +1,8 @@
 /*
- * inspector.js: an interface's settings, in Network: each as the
- * configuration nshd has it, the candidate's in configure, else what
- * runs; and what was changed, as nsh's lines, staged into the candidate,
- * entering configure private first if not in configure
+ * inspector.js: an interface's settings, in Network, as nshd's
+ * configuration has them: the candidate's in configure, else the running
+ * configuration's. What was changed is staged into the candidate as
+ * nsh's lines, entering configure private first if not in configure
  */
 "use strict";
 
@@ -24,7 +24,7 @@ function unset(d) {
 	return "";
 }
 
-/* the lines of name's block in text, a configuration, each trimmed */
+/* the lines of the block that line head starts in text, each trimmed */
 function block(text, head) {
 	var out = [], inside = false;
 
@@ -71,7 +71,7 @@ function settings(lines, defs) {
 	return v;
 }
 
-/* nsh's lines that make was now; a routing domain's first, as it clears */
+/* nsh's lines that turn was into now; rdomain first, as it clears addresses */
 function edits(defs, was, now) {
 	var out = [];
 
@@ -107,7 +107,7 @@ function same(a, b) {
 	return JSON.stringify(a) === JSON.stringify(b);
 }
 
-/* is d one for r, the interface: unless every setting is asked for */
+/* is d shown for interface r: yes if all are asked for or d is set */
 function applies(d, r) {
 	if (insp.every || !same(insp.was[d.key], unset(d)))
 		return true;
@@ -209,7 +209,7 @@ function control(d) {
 
 			if (t === "")
 				return;
-			/* emptied, as drawing again takes it away, which is a change */
+			/* emptied: removing it on redraw fires a change */
 			input.value = "";
 			more = d.kind === "words" ? t.split(/\s+/) : [t];
 			insp.now[d.key] = v.concat(more.filter(function (x) {

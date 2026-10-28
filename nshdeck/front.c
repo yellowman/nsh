@@ -17,36 +17,38 @@
 /*
  * front: httpd's FastCGI connections, on the socket parent bound, fd 5.
  * Each connection is one request: front reads its records, then its
- * parameters, then its body, each under a limit of its own, and
- * believes nothing httpd's parameters say about the client, as any
- * process of DECK_GROUP's can write to the socket. It uses the client
- * address httpd passes, REMOTE_ADDR, only to count failed logins, so a
- * false address can delay a login but never allow one. It takes the
- * request's endpoint, the last part of its path; its fields, from the
- * query of a GET or the form body of a POST, each named, once, with a
- * bound; and the cookie's token. A body is BODY_MAX bytes at most;
- * setrules', which carries a daemon's rules, may be RULES_BODY, and no
- * more than DECK_BIGS of those arrive at once. The rules go to session
- * in parts, before the request. A request must say it is the page's,
- * by an X-Nshdeck header, which a page of another site cannot send
- * without asking first; except a stream, events or a terminal's, which
- * the browser's EventSource asks for, and which cannot send it. The
- * request goes to session as one message, zeroed first; session's
- * answer comes back to the connection as FastCGI
- * records, and the connection closes. front sends session nothing of
- * an answer's until the client has written what it was sent, when it
- * says so (DECK_READ), so a slow client holds up only its own answer.
+ * parameters, then its body, each under a limit of its own. It trusts
+ * nothing httpd's parameters say about the client, since any process in
+ * DECK_GROUP can write to the socket. It uses the client address httpd
+ * passes, REMOTE_ADDR, only to count failed logins, so a false address
+ * can delay a login but never allow one. It takes the request's
+ * endpoint, the last part of its path; its fields, from the query of a
+ * GET or the form body of a POST; and the cookie's token. Each field
+ * must be one the endpoint takes, appear at most once, and be within its
+ * bounds. A body is BODY_MAX bytes at most; a setrules body, which
+ * carries a daemon's rules, may be RULES_BODY, and no more than
+ * DECK_BIGS of those arrive at once. The rules go to session in parts,
+ * before the request. A request must carry an X-Nshdeck header, to show
+ * that it comes from nshdeck's page; a page of another site cannot send
+ * it without asking first. Streams, of events or a terminal, need no
+ * header, because the browser's EventSource asks for them and cannot
+ * send it. The request goes to session as one message, zeroed first;
+ * session's answer comes back to the connection as FastCGI records, and
+ * the connection closes. Each time front has written to the client all
+ * it was sent, it tells session (DECK_READ). session stops reading
+ * nshd's answer while DECK_WINDOW of its messages are not yet written,
+ * so a slow client delays only its own answer.
  *
  * An event stream stays open, a comment written to it each
  * DECK_KEEPALIVE seconds so httpd does not time it out. Its events wait
- * in front until the client has written what it was sent, then go to it
- * together, and session hears so, as it does of an answer; past
- * DECK_UNREAD bytes waiting, the oldest go, and the client is sent a
- * dropped event in their place, so it knows to ask again for what it
- * shows. A terminal's stream never comes to that: session sends it
- * only DECK_WINDOW messages front has not written. front takes no more
- * than DECK_CONNS connections, and a request that does not arrive whole
- * within DECK_ARRIVE seconds is closed.
+ * in front until all earlier data is written to the client, and then go
+ * out together. front sends DECK_READ for a stream, as for an answer.
+ * If more than DECK_UNREAD bytes wait, front drops the oldest events and
+ * sends a "dropped" event in their place, so the page knows to ask again
+ * for what it shows. A terminal's stream never comes to that: session
+ * sends it only DECK_WINDOW messages front has not written. front takes
+ * no more than DECK_CONNS connections, and a request that does not
+ * arrive whole within DECK_ARRIVE seconds is closed.
  */
 
 #include <sys/types.h>
@@ -74,7 +76,7 @@
 #define DROPPED		"event: dropped\ndata: {}\n\n"
 #define PARAMS_MAX	16384		/* a request's parameters, at most */
 #define BODY_MAX	8192		/* a request's body, at most */
-#define RULES_BODY	(3 * NSHD_RULES + 1024)	/* setrules', encoded */
+#define RULES_BODY	(3 * NSHD_RULES + 1024)	/* setrules body, encoded */
 #define DECK_BIGS	4		/* setrules' bodies at once, at most */
 
 #define FCGI_HEADER	8
@@ -94,7 +96,7 @@ enum { C_BEGIN, C_PARAMS, C_STDIN, C_ANSWER, C_DONE };
 
 struct conn {
 	TAILQ_ENTRY(conn)	 entry;
-	uint32_t		 id;		/* session's for it */
+	uint32_t		 id;		/* id used with session */
 	int			 fd;
 	int			 state;
 	int			 asked;		/* session has the request */
@@ -114,10 +116,10 @@ struct conn {
 	size_t			 outoff;
 	char			*pend;		/* a stream's events, waiting */
 	size_t			 pendlen;
-	int			 dropped;	/* some went since the last sent */
+	int			 dropped;	/* some events were dropped */
 };
 
-/* the parameters front reads, of a request's */
+/* the request parameters front reads */
 struct params {
 	char	method[8];
 	char	uri[256];
@@ -326,7 +328,7 @@ front_accept(int fd, short event, void *arg)
 		event_del(&ev_accept);
 }
 
-/* the request's time, gone; or a stream's comment, due */
+/* a request's time is up, or a stream's comment is due */
 static void
 front_timer(int fd, short event, void *arg)
 {
@@ -341,7 +343,7 @@ front_timer(int fd, short event, void *arg)
 	evtimer_add(&c->tm, &tv);
 }
 
-/* what c's client sent, read, and what it was sent, written */
+/* read what c's client sent, and write what waits to go to it */
 static void
 front_io(int fd, short event, void *arg)
 {
@@ -408,7 +410,7 @@ static int
 front_record(struct conn *c, int type, const unsigned char *data,
     size_t len)
 {
-	/* once the request is in, what httpd sends is not read */
+	/* once the request is in, only an abort is read */
 	if (c->state >= C_ANSWER)
 		return (type == FCGI_ABORT ? -1 : 0);
 	switch (type) {
@@ -449,12 +451,12 @@ front_record(struct conn *c, int type, const unsigned char *data,
 		c->bodylen += len;
 		return (0);
 	default:
-		/* an abort too: the connection goes */
+		/* any other type, an abort too, closes the connection */
 		return (-1);
 	}
 }
 
-/* the request, whole, to session, or answered with why it is not one */
+/* the whole request to session, or an answer with why it is refused */
 static int
 front_request(struct conn *c)
 {
@@ -560,7 +562,7 @@ front_body(struct conn *c)
 		fatal("%s", __func__);
 }
 
-/* c's body, gone */
+/* c's body, freed */
 static void
 front_unbody(struct conn *c)
 {
@@ -574,9 +576,9 @@ front_unbody(struct conn *c)
 }
 
 /*
- * The parameters front reads, out of c's, each its length and its
- * bytes as FastCGI says; if a parameter comes twice, the last one
- * counts: -1 if one is not whole or past its bound
+ * The parameters front reads, from c's FastCGI parameters (each a name
+ * and value after their lengths); if one comes twice, the last counts;
+ * -1 if one is not whole, is past its bound, or holds a NUL
  */
 static int
 front_params(struct conn *c, struct params *p)
@@ -637,9 +639,9 @@ front_params(struct conn *c, struct params *p)
 }
 
 /*
- * The fields of form, key=value pairs joined by &, each that fields
- * names, once, into r, and the text into *text: -1 if one is not, is
- * twice, or is not right
+ * The fields of form, key=value pairs joined by &, into r, and the text
+ * into *text; -1 if one is not in fields, is given twice, or has a bad
+ * value
  */
 static int
 front_fields(const char *form, int fields, struct deck_request *r,
@@ -690,10 +692,10 @@ front_fields(const char *form, int fields, struct deck_request *r,
 		}
 		explicit_bzero(value, sizeof(value));
 	}
-	/* a configuration's what, if none was named */
+	/* the running configuration, if what was not given */
 	if ((fields & F_WHAT) && (seen & F_WHAT) == 0)
 		strlcpy(r->text, "running-config", sizeof(r->text));
-	/* n is rollback's, and changes', which needs it: what n changed */
+	/* n goes only with rollback, and with changes, which needs it */
 	if ((fields & F_WHAT) && strcmp(r->text, "changes") == 0) {
 		if ((seen & F_N) == 0)
 			return (-1);
@@ -807,7 +809,7 @@ front_field(int f, const char *v, struct deck_request *r)
 
 /*
  * The token of the cookie nshdeck=, of DECK_TOKEN hex digits, into
- * token, or "" if there is none: -1 if there is one, not right
+ * token, or "" if there is none; -1 if the cookie is malformed
  */
 static int
 front_token(const char *cookies, char *token)
@@ -847,8 +849,9 @@ hexval(int c)
 }
 
 /*
- * s, len bytes of a form's, decoded into buf of size: '+' as a space,
- * %XX as its byte: -1 if it does not fit, or holds a NUL
+ * s, len bytes of form data, decoded into buf of size: '+' as a space,
+ * %XX as its byte; -1 if it does not fit, has a bad escape, or holds a
+ * NUL
  */
 static int
 decode(char *buf, size_t size, const char *s, size_t len)
@@ -998,8 +1001,9 @@ front_event(struct conn *c, const char *data, size_t len)
 }
 
 /*
- * A stream's whole events, to write, after a dropped event if some
- * went: once c has written all it was sent, or now
+ * A stream's whole events, to write, after a "dropped" event if some
+ * were dropped; once c has written all it was sent, or at once if now
+ * is set
  */
 static void
 front_events(struct conn *c, int now)

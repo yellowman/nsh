@@ -111,10 +111,11 @@ The file must be written as
 .Ic show running-config
 writes the configuration.
 .Xr nshd 8
-takes the file as a candidate of its own, as
+loads the file into a candidate of its own, as
 .Cm rollback Ar N
-takes a saved configuration, and commits it, all of it or none, if the
-user's login class has the configure permission.
+loads a saved configuration.
+If the user's login class has the configure permission, nshd commits
+the candidate, all of it or none.
 If a line fails, nothing is committed.
 A line that is not configuration, such as
 .Ic reboot
@@ -127,13 +128,14 @@ This is typically used to implement scripted changes to configuration.
 .Pp
 At boot,
 .Xr nshd 8
-makes the running configuration the one saved; a line of it that is
-not configuration is left out, and said.
+makes the saved configuration the running configuration.
+A line of the saved configuration that is not configuration is left
+out, and reported.
 .Ss INTERACTIVE FEATURES
 When run without any command line arguments,
 .Nm
 presents an interactive shell to the user.
-What the user may do in it is what the user's login class allows (see
+The user's login class decides what the user may do in it (see
 .Sx Prompts, login classes and permissions ) .
 .Pp
 All
@@ -231,12 +233,13 @@ nsh(config)#pf disable
 .Tg prompt
 .Tg privileged
 .Ic Prompts
-The prompt is the machine's name, then, in parentheses, the mode and
-routing table if there are any, then
+The prompt is the machine's name, then the mode and routing table in
+parentheses, if there are any.
+It ends with
 .Ql >
 outside configure and
 .Ql #
-in it.
+in configure.
 .Bl -dash
 .It
 e.g. the prompt outside configure, in configure private, and in an
@@ -256,14 +259,14 @@ When
 runs and the user may use its socket, as root and the group nshadmin
 may,
 .Nm
-holds a session of nshd's, and nshd gives the session the permissions
-of the user's login class (see
+holds a session with nshd.
+nshd gives the session the permissions of the user's login class (see
 .Cm login class
 and
 .Cm login user ) :
 .Bl -tag -width configure
 .It Cm view
-Every show, the configuration's included.
+Every show, including shows of the configuration.
 .It Cm operate
 Operations, which change no configuration, and run in
 .Xr nshd 8 Ns 's
@@ -275,22 +278,22 @@ except
 .Cm halt
 and
 .Cm powerdown ,
-once confirmed;
+once the user confirms them;
 .Cm show diff-config
 outside configure;
 .Cm show crontab ;
-a daemon's actions, what its commands run that are not its
-configuration, such as
+a daemon's actions, in configure and outside it, which are its
+commands that run a program and do not change its configuration, such as
 .Cm bgp fib couple
 or
-.Cm pf reload ,
-outside configure too; and in an interface's mode,
+.Cm pf reload ;
+and in an interface's mode,
 .Cm bssid ,
 .Cm setpuk
 and
 .Cm chgpin .
-What they print is not paged, and Control-C stops it.
-Also
+Their output is not paged, and Control-C stops it.
+Operate also allows
 .Ic ping ,
 .Ic traceroute
 and their IPv6 forms, which
@@ -307,12 +310,13 @@ and loading a configuration with
 .Cm configure
 and
 .Cm configure exclusive ,
-whose candidate every session in them shares; the password hashes of
+whose candidate every session in them shares.
+nshd shows the password hashes of
 .Cm login user
-lines, which nshd shows no session without admin, in a configuration,
-a diff or a commit's notice; and committing a
-change to what runs a command as root, reads a file as root, or decides
-who may log in:
+lines, in a configuration, a diff or a commit notice, only to a session
+with admin.
+Admin is also needed to commit a change to what runs a command as root,
+reads a file as root, or decides who may log in:
 .Cm login class
 and
 .Cm login user
@@ -325,15 +329,17 @@ and
 .Cm sshd ;
 a line of
 .Cm smtp
-rules with mda, proc, a pipe, a table or a macro; of
+rules with mda, proc, a pipe, a table or a macro; a line of
 .Cm snmp
-rules with a trap handle or a macro; of
+rules with a trap handle or a macro; a line of
 .Cm pf
-rules with file or load; and of any daemon's rules with include.
-The check reads each line as the daemon's parser does, so a backslash
-that hides part of a word, or a word spread over a line continued with a
-backslash, is still found, and a word in a comment is not.
-A commit without admin may keep such a line as it ran before.
+rules with file or load; and a line of any daemon's rules with include.
+The check reads each line as the daemon's parser does.
+So it finds a word that a backslash hides in part, or a word spread
+over a line continued with a backslash, and it ignores a word in a
+comment.
+A commit without admin may keep such a line as it is in the running
+configuration.
 A user with admin can gain root through these lines, so give admin
 only to a user who may have root.
 .It Cm exec
@@ -352,21 +358,21 @@ which need operate, and
 .Ic clear ,
 which needs nothing.
 .Nm
-checks exec itself, so it holds only for a user whose login shell is
+checks exec itself, so exec limits only a user whose login shell is
 .Nm .
 Without exec, no key of the line editor runs
 .Cm vi-histedit ,
 which runs vi, or
 .Cm ed-command ,
-which runs a bind
+which can run a bind command that
 .Nm
-does not see:
+does not see.
 .Nm
-unbinds each such key as the editor starts, after
+unbinds each such key when the editor starts, after it reads
 .Pa ~/.editrc ,
 and after each bind.
-For a sequence of keys bound to either, other than ESC and a key, the
-editor takes its own bindings back.
+If a sequence of keys other than ESC and one key is bound to either,
+the editor gets its default bindings back.
 .El
 .Pp
 Root is always super-user.
@@ -382,7 +388,7 @@ It never logs in as root, or as any other account with uid 0.
 nshd refuses what a session's class does not allow.
 Where nshd does not run, or the user may not use its socket,
 .Nm
-runs only the shows anyone may see, and no program except for root.
+runs only the shows anyone may see, and runs a program only for root.
 .Pp
 .Tg configure
 .Tg config
@@ -407,25 +413,27 @@ hostname.nsh.org(config-private)#
 enters configuration mode with a candidate configuration that belongs
 to this session.
 The candidate starts as the running configuration, and supported
-commands change the candidate instead of the system; the prompt shows
+commands change the candidate instead of the system.
+The prompt shows
 .Ql (config-private)# .
 Commands that do not support a candidate yet are refused with a message.
 Supported commands refuse what the kernel would refuse, and settings
-the configuration cannot hold together, such as an IPv4 address and
+that cannot exist together in the configuration, such as an IPv4
+address and
 .Cm autoconf4
-on one interface;
+on one interface.
 .Cm commit check
 checks the candidate as a whole.
-Changes that other sessions make to the running configuration show
-through in the candidate, with this session's changes on top.
+Changes that other sessions make to the running configuration also
+appear in the candidate, and this session's changes apply over them.
 .Pp
 .Cm show candidate-config
 displays the candidate,
 .Cm show diff-config
 displays how it differs from the running configuration, and
 .Cm rollback
-discards this session's changes to it, or makes it a configuration
-saved before.
+discards this session's changes to it, or replaces it with a saved
+configuration.
 .Cm commit
 makes the candidate the running configuration, all of it or none, and
 saves it.
@@ -434,11 +442,12 @@ Configuration mode cannot be left while the candidate has changes.
 .Cm configure private
 is part of
 .Nm Ns 's
-session of
-.Xr nshd 8 Ns 's :
-the candidate is nshd's, and the lines that change it, or leave a
-mode, go to nshd, which answers with what they did and the mode the
-session is in.
+session with
+.Xr nshd 8 .
+nshd holds the candidate.
+.Nm
+sends nshd the lines that change the candidate or leave a mode, and
+nshd replies with their result and the mode the session is in.
 Commands that run as they do outside configure private, such as
 .Cm show
 and
@@ -447,9 +456,10 @@ run in
 .Nm .
 A daemon's edit, such as
 .Cm pf edit ,
-asks nshd for the daemon's rules in the candidate, edits them in
+gets the daemon's rules in the candidate from nshd, edits them in
 .Nm
-as the user, and sends them back; the daemon's test runs at
+as the user, and sends them back.
+The daemon's test runs at
 .Cm commit
 and
 .Cm commit check ,
@@ -459,55 +469,63 @@ not as the editor exits.
 .Cm show candidate-config
 and
 .Cm show diff-config
-ask nshd, which commits one session's candidate at a time, and keeps
-the deadline of a
+send requests to nshd.
+nshd commits one session's candidate at a time.
+It keeps the deadline of a
 .Cm commit confirmed
 itself, whether or not
 .Nm
 still runs.
-An interrupt while nshd answers closes the session, and leaves configure
-private and its candidate with it; nshd finishes what it was asked, and
+An interrupt while nshd replies closes the session, so the session
+leaves configure private, and its candidate is lost.
+nshd finishes the request, and
 .Nm
-opens a session again when a command needs one.
+opens a new session when a command needs one.
 .Pp
 .Tg exclusive
 .Cm configure
-is a session of nshd's too, whose candidate the sessions in
+is also a session with nshd, but all sessions in
 .Cm configure
-share: each sees what the others change, leaving configure leaves the
-changes for the others, and
+share one candidate.
+Each session sees what the others change.
+A session that leaves configure leaves its changes for the others, and
 .Cm commit
-commits what all of them changed; the prompt shows
+commits what all of them changed.
+The prompt shows
 .Ql (config)# .
 nshd keeps the shared candidate on disk, so it survives nshd stopping
 and starting again.
 .Cm configure exclusive
 is
 .Cm configure
-while no other session changes the shared candidate or commits; the
-prompt shows
+in which no other session may change the shared candidate or commit.
+The prompt shows
 .Ql (config-exclusive)# .
-It is refused while another session has it, or while another user's
-changes to the shared candidate are not committed, naming those users
-by uid.
-Leaving it discards what was not committed.
+It is refused while another session has it, or while another user has
+uncommitted changes to the shared candidate.
+The refusal names those users by uid.
+Leaving it discards the uncommitted changes.
 .Pp
 .Tg terminal
 .Cm configure terminal
-is a session of nshd's whose lines change the system as they are
-typed: nshd commits each line that changes the configuration at once,
-on what runs then: applied, checked and, if it does not take, undone,
-but not saved; the prompt shows
+is a session with nshd whose lines change the system as they are
+typed.
+nshd commits each line that changes the configuration at once, to the
+running configuration of that moment.
+The line is applied, checked, and undone if it does not take effect,
+but it is not saved.
+The prompt shows
 .Ql (config-terminal)# .
+There,
 .Cm commit
-there saves what runs, and there is nothing to
+saves the running configuration, and there is nothing to
 .Cm rollback .
 A line is refused while another session commits or has
 .Cm configure exclusive ,
 and while a
 .Cm commit confirmed
-is not confirmed.
-A session in one configure leaves it before it enters another.
+waits to be confirmed.
+A session in one configure mode leaves it before it enters another.
 .Pp
 For the purposes of this manual, any examples the machine is called
 .Nm
@@ -726,12 +744,13 @@ as its shell, and the group nshadmin, so that it can use nshd.
 The hash is a bcrypt hash, as
 .Xr encrypt 1
 makes.
-Taking the line away deletes an account that nshd made, but keeps its
+Removing the line deletes an account that nshd made, but keeps its
 home directory.
 .Pp
 An account that nshd did not make, such as one an administrator made by
-hand, gets its class and nothing else: its line takes no password, and
-taking the line away leaves the account alone.
+hand, gets its class and nothing else.
+Its line accepts no password, and removing the line leaves the account
+unchanged.
 No line may name root or any other account with uid 0, which is always
 super-user, or an account whose name begins with an underscore, since
 those belong to daemons.
@@ -2141,17 +2160,21 @@ configuration to the permanent configuration space, which the next
 startup of the system uses.
 The differences between the running configuration and the candidate
 are applied through the commands that read the saved configuration at
-startup: what the candidate takes away first, in the reverse of the
-order the configuration is shown in, then what it adds, in that order.
+startup.
+First the lines that the candidate removes are deleted, in the reverse
+of the order the configuration is shown in.
+Then the lines that it adds are applied, in that order.
 A cloned interface the candidate has no block for is destroyed, and a
-physical one has its lines taken away.
+physical one has its lines removed.
 If the running configuration then differs from the candidate, the
 differences are shown as
 .Cm show diff-config
 shows them, and the commit is undone.
-A commit is refused once if another commit changed a top-level
-statement after the candidate first changed it, saying each such
-statement; committing again keeps the candidate's changes over the other's.
+If another commit changed a top-level statement after the candidate
+first changed it, the commit is refused once, with a message that names
+each such statement.
+Committing again keeps the candidate's changes in place of the other
+commit's.
 After a commit, the candidate starts again from the new running
 configuration.
 Outside configure,
@@ -2159,31 +2182,34 @@ Outside configure,
 has
 .Xr nshd 8
 save the running configuration.
-The last 50 configurations saved are kept, for
+The last 50 saved configurations are stored for
 .Cm rollback
 and
-.Cm show rollback ,
-each with who saved it, the
+.Cm show rollback .
+Each is stored with who saved it, the
 .Ar text
 of
 .Cm comment ,
-if given, and its generation, one more than the last saved's;
-one the same as the last saved is not kept again.
+if given, and its generation, which is one more than the generation of
+the one saved before it.
+A configuration that is the same as the last saved one is not stored
+again.
 .Cm check
 and
 .Cm confirmed
-save nothing, and take no
+save nothing, and accept no
 .Cm comment .
 .Pp
 With
 .Cm check ,
 show what would keep the candidate from becoming the running
-configuration, as far as can be seen before it does, and change nothing:
+configuration, as far as it can be found in advance, and change
+nothing:
 .Bl -dash -compact
 .It
-an interface a line names, as a parent, carpdev, syncdev, patch, trunk
-port, pppoe dev or bridge port, that the candidate does not have and
-that is not hardware that is there;
+an interface that a line names as a parent, carpdev, syncdev, patch,
+trunk port, pppoe dev or bridge port, if the candidate does not have it
+and it is not hardware that is present;
 .It
 a port in two trunks, a member of two bridges, or a bridge option,
 such as stp, for an interface that is not a member;
@@ -2193,37 +2219,37 @@ an address on two interfaces in one rdomain;
 a vlan's vnetid twice on one parent, or a carp vhid twice on one
 carpdev;
 .It
-a daemon in an rtable whose table is not there and that nothing
-makes, a route in it or an interface in its rdomain;
+a daemon in an rtable whose table does not exist, if neither a route
+in the table nor an interface in its rdomain creates it;
 .It
 daemon rules, new or changed, that the daemon's own test refuses, as
-its edit tests them.
+the daemon's edit command tests them.
 .El
 .Cm commit
 checks the same first, and refuses a candidate with any of them.
 .Pp
 With
 .Cm confirmed ,
-the candidate becomes the running configuration but is not saved, and
-unless
+the candidate becomes the running configuration but is not saved.
+Unless
 .Cm commit
-comes again within
+is run again within
 .Ar minutes ,
-10 if not given and at most 1440, the running configuration goes back
-to how it was before the first commit not confirmed, which is logged
-with
-.Xr syslog 3 ;
-where
+10 if not given and at most 1440, the running configuration is rolled
+back to how it was before the first unconfirmed commit.
+The rollback is logged with
+.Xr syslog 3 .
+Where
 .Xr nshd 8
-runs, it does so, and demotes carp while it does.
-A commit before then saves the configuration and, once the save
+runs, nshd performs the rollback, and demotes carp while it does.
+A commit before the deadline saves the configuration and, once the save
 succeeds, confirms it; so does
 .Cm commit
 outside configure.
 If the save fails, the commit is not confirmed and the deadline still
 applies.
-A system started again before then starts with the configuration saved
-before it.
+A system that is restarted before the deadline starts with the
+configuration saved before the unconfirmed commit.
 .Bl -dash
 .It
 e.g. save the configuration on the system
@@ -2232,7 +2258,7 @@ nsh>commit
 % Saving configuration
 .Ed
 .It
-e.g. commit, and say why
+e.g. commit, with a comment that says why
 .Bd -literal -offset indent
 nsh(config-private)#commit comment vlan 20 for the lab
 % Saving configuration
@@ -2245,7 +2271,7 @@ nsh(config-private)#commit check
 % Configuration check fails: 1 problem
 .Ed
 .It
-e.g. commit, and go back unless it is confirmed within 5 minutes
+e.g. commit, and roll back unless it is confirmed within 5 minutes
 .Bd -literal -offset indent
 nsh(config-private)#commit confirmed 5
 % Commit within 5 minutes to keep this, or it is rolled back
@@ -2261,23 +2287,24 @@ nsh(config-private)#commit
 .Pp
 In
 .Cm configure private ,
-discard this session's changes to the candidate, which is the running
-configuration again.
+discard this session's changes to the candidate, which is then the
+running configuration again.
 With
 .Ar N
-from 1 to 49, the candidate is the configuration saved
+from 1 to 49, make the candidate the configuration saved
 .Ar N
 saves before the last, as
 .Cm show rollback
-lists them, instead; then what other sessions change does not show
-through in it.
+numbers them, instead.
+Changes that other sessions make after that do not appear in the
+candidate.
 .Cm show diff-config
 displays what
 .Cm commit
 would change.
 .Bl -dash
 .It
-e.g. go back to the configuration saved before the last
+e.g. roll back to the configuration saved before the last
 .Bd -literal -offset indent
 nsh(config-private)#rollback 1
 % Candidate loaded from rollback 1
@@ -2371,11 +2398,11 @@ nsh>
 .Pp
 Where
 .Nm
-has a session of
-.Xr nshd 8 Ns 's ,
+has a session with
+.Xr nshd 8 ,
 nshd's system process runs a daemon's control program for a show,
-except systat for system-stats, and reads the DHCP leases; what they print is
-not paged, and Control-C stops it.
+except systat for system-stats, and reads the DHCP leases.
+Their output is not paged, and Control-C stops it.
 .Pp
 .Ic show hostname
 .Pp
@@ -2577,9 +2604,9 @@ ppp
 link-local
 .El
 .Pp
-Only a session of
-.Xr nshd 8 Ns 's ,
-which may ask nshd's system process, sees what configured an IPv4
+Only a session with
+.Xr nshd 8 ,
+which can ask nshd's system process, sees what configured an IPv4
 address.
 .Pp
 E.g show all ipv4 and IPv6 adddresses on the system
@@ -3160,11 +3187,11 @@ or the packets pf logs, as
 prints them from
 .Xr pflog 4 .
 .Xr nshd 8 Ns 's
-system process reads them, so the log is followed after
+system process reads the logs, so it keeps following a log after
 .Xr newsyslog 8
-turns it over.
-It needs the view permission, and authlog the admin permission too
-(see
+rotates it.
+It needs the view permission, and authlog also needs the admin
+permission (see
 .Cm login class ) .
 .Pp
 .Tg show
@@ -3908,12 +3935,12 @@ kernel: OpenBSD 7.1 (GENERIC.MP) #459: Mon Apr  4 18:16:13 MDT 2022
 .Pp
 Display each daemon
 .Nm
-starts, its program, and whether it runs: in routing table 0, and in
-each other routing table its program runs in, with how many of its
-processes run there.
-pf runs when it is enabled, which only root, or
+starts, its program, and whether it runs, in routing table 0 and in
+each other routing table its program runs in.
+For a daemon that runs, show how many of its processes run there.
+pf runs when it is enabled, and only root, or
 .Xr nshd 8 ,
-can see.
+can see whether it is.
 .Bd -literal -offset indent
 nsh>show daemons
 Daemon       Program      Rtable  State
@@ -3983,18 +4010,21 @@ display the candidate configuration.
 .Pp
 .Ic show rollback Op Ar N Op Cm diff
 .Pp
-Display when each configuration kept by
+List the configurations that
 .Cm commit
-was saved, its generation, who saved it and their comment, numbered
-from 0, the last saved, or display configuration
+saved, numbered from 0, the last saved, with when each was saved, its
+generation, who saved it and their comment.
+With
 .Ar N ,
-which begins with comment lines saying who saved it and why, and its
+display configuration
+.Ar N ,
+which begins with comment lines that say who saved it, why, and its
 generation.
-Before the list, say whether what runs differs from the saved
-configuration, whether a commit did not finish or what it changed is
-not saved, whether the boot failed, whether a commit that was not
-confirmed could not be rolled back, and whether its record cannot be
-read.
+Before the list, report whether the running configuration differs from
+the saved configuration, whether a commit did not finish or its changes
+are not saved, whether the boot failed, whether an unconfirmed commit
+could not be rolled back, and whether the record of an unconfirmed
+commit cannot be read.
 With
 .Cm diff ,
 display what configuration
@@ -4310,10 +4340,10 @@ nsh>no editing
 .Op argument-1
 .Op Ar argument-n
 .Pp
-Invoke a shell or run an entered executable with arguments if required,
-as the user, where the user may use
+Invoke a shell or run an entered executable with arguments if required.
+Where the user may use
 .Xr nshd 8 Ns 's
-socket.
+socket, the shell or executable runs as the user.
 The active users login shell is the shell that is invoked by this feature.
 It needs the exec permission (see
 .Cm login class ) .
@@ -5090,8 +5120,8 @@ nsh(interface-iwn0)#bssid 12:34:56:78:90:12
 .Op instance
 .Op Cm mediaopt Ar options
 .Pp
-Set the media type of the interface, and its options with it.
-A driver takes some media only with an option, such as 1000baseT only
+Set the media type of the interface, and its media options.
+A driver accepts some media only with an option, such as 1000baseT only
 with full-duplex.
 Entering media without an argument diplays help for the media settings
 available for the interface.
@@ -5436,8 +5466,8 @@ The default value is 128.
 The transmission a pfsync update packet shall be delayed by a maximum of 1
 second.
 The defer flag defers the first packet of each connection from being
-delivered until the state is active on pfsync peer; without it, there is
-no defer.
+delivered until the state is active on pfsync peer; without the flag,
+no packet is deferred.
 This command is valid only for
 .Xr pfsync 4
 interfaces.
@@ -5635,7 +5665,7 @@ To set a up a pflow export the sender-ip and receiver-ip:port must be specified.
 The specified pflow sender-ip address must exist on an interface on the
 system already.
 The receiver-ip:port is the address of the flow collector in your network.
-An IPv6 address goes in brackets, as in [2001:db8::2]:4739.
+Write an IPv6 address in brackets, as in [2001:db8::2]:4739.
 version specifies the export flow prtocol i.e. netflow version 5 or
 the standardised IPFIX (10).
 .Pp
@@ -5748,15 +5778,18 @@ ID of the interface's link-local address.
 The configuration shows the address that results.
 .It Cm vltime Ar seconds
 How long the address is valid.
-The address is removed when it runs out.
+The address is removed when that time ends.
 .It Cm pltime Ar seconds
-How long the address is preferred, no longer than
+How long the address is preferred.
+It may be no longer than
 .Cm vltime ,
-which it is if not given.
+and is
+.Cm vltime
+if not given.
 .El
 .Pp
 Both lifetimes count from when the address is set, and the configuration
-keeps them as given.
+shows them as they were given.
 Without them, the address does not expire.
 .Bd -literal -offset indent
 nsh(interface-em0)#inet6 2001:db8::/64 eui64
@@ -5988,17 +6021,17 @@ The design of
 .Ox
 requires root privileges to administer the network stack.
 .Nm
-runs as the user who starts it, root too, and has no privileges of its
-own:
+runs as the user who starts it, including root, and has no privileges
+of its own.
 .Xr nshd 8
-administers the system, and gives each user what the user's login
-class allows.
+administers the system, and gives each user the permissions of the
+user's login class.
 .Pp
 The simplest way to add a user is a
 .Cm login user
-line, which makes the account, with
+line, which makes the account when it is committed, with
 .Nm
-as its shell and the group nshadmin, when it is committed:
+as its shell and the group nshadmin:
 .Bd -literal -offset indent
 nsh(config-private)#login user nshuser class operator password $2b$10$...
 nsh(config-private)#commit
@@ -6016,8 +6049,8 @@ Users with regular shell access can also start
 .Nm
 from another shell.
 .Pp
-Any user may run the shows of what anyone may see, which nshd answers
-on its read-only socket.
+Any user may run the shows that anyone may see; nshd answers them on
+its read-only socket.
 .Pp
 The
 .Cm \&!
@@ -6257,22 +6290,23 @@ Defaults to
 .Sh FILES
 .Bl -tag -width /etc/suid_profile -compact
 .It Pa /etc/nshrc
-the configuration
+the configuration that
 .Xr nshd 8
-boots the first time
+loads at its first boot
 .It Pa /var/db/nsh/nshrc
 the saved configuration, which
 .Xr nshd 8
-boots
+loads at boot
 .It Pa /var/db/nsh/nshrc.N
-configurations saved before, for
+earlier saved configurations, for
 .Cm rollback
-.It Pa /var/run/nshconfirm
-what a
-.Cm commit confirmed
-goes back to, and when
+.It Pa /var/db/nsh/confirm
+the rollback configuration of a
+.Cm commit confirmed ,
+and its deadline
 .It Pa /var/db/nsh/login
-the login classes and users that run, and which accounts
+the login classes and users in the running configuration, and the
+accounts that
 .Xr nshd 8
 made
 .It Pa ~/.profile

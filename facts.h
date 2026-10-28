@@ -19,14 +19,14 @@
  * A record's kind is described once, by a template: the kind's name,
  * and each field's name and type, with names for the bits of a flags
  * field or the values of an enum. A record is its template's id and
- * its values, in the template's order, any of them absent.
+ * its values, in the template's order; any may be absent.
  *
  * Each template and each record is one unit, which fits in one imsg;
- * an imsg of facts is one or more whole units. Templates are a reply's
- * own: each reply sends a kind's template before its first record of
- * that kind, with ids from 0, and a reader reads one reply, so what
- * passes units on keeps nothing between replies. Integers go in network
- * byte order. A unit:
+ * an imsg of facts is one or more whole units. Templates belong to one
+ * reply: a reply sends a kind's template before its first record of
+ * that kind, numbering templates from 0, and each reader reads only one
+ * reply. So a process that forwards units keeps no state between
+ * replies. Integers go in network byte order. A unit:
  *
  *	u8 FACTS_TEMPLATE, u16 id, string kind, u16 fields, and per field:
  *	    string name, u8 type, u8 naming, u16 names, and per name:
@@ -63,7 +63,7 @@
 #define FACT_INET6	2
 #define FACT_LINK	3
 
-#define FACTS_UNIT	16000	/* a unit, at most: one imsg */
+#define FACTS_UNIT	16000	/* bytes in a unit, at most: one imsg */
 #define FACTS_KINDS	32	/* templates in one answer, at most */
 #define FACTS_FIELDS	256	/* fields of a kind, at most */
 #define FACTS_ADDRLEN	32	/* bytes of an address, at most */

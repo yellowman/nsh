@@ -560,7 +560,7 @@ cand_nwkey(char *ifname, struct ieee80211_nwkey *nwkey, char *key)
 	return cand_setting(ST_ON, "nwkey %s", str);
 }
 
-/* txpower in configure private: conf prints none for the most */
+/* txpower in configure private: conf prints none for the maximum */
 static int
 cand_txpower(char *ifname, int dbm)
 {

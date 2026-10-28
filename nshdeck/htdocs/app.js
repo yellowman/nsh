@@ -9,14 +9,14 @@
 
 var stream = null;		/* the event stream, while one is open */
 var LOGLINES = 2000;		/* log lines kept on the page, at most */
-var ifs = [];			/* show interface's interfaces, the last */
+var ifs = [];			/* interfaces from the last show interface */
 var addrs = [];			/* and their addresses */
 var vhids = [];			/* and their CARP vhids */
-var selected = "";		/* the interface Network shows chosen */
+var selected = "";		/* interface selected in Network */
 var reask = null;		/* interfaces asked again, once they settle */
-var deadline = 0;		/* when a confirmed commit goes back, or 0 */
+var deadline = 0;		/* unconfirmed commit's rollback time, or 0 */
 var ticker = null;
-var comp = null;		/* the input its choices are for */
+var comp = null;		/* input whose choices are shown, or null */
 var cur = null;			/* the user's context, as nshd last gave it */
 var LOOK = 5000;		/* how often the Overview looks at traffic, ms */
 var looker = null;
@@ -24,7 +24,7 @@ var jacks = {};			/* each port's button, by its name */
 var packets = {};		/* each port's packets, at the last look */
 var chosen = -1;		/* the saved configuration History shows */
 var pending = null;		/* the operation that waits to be confirmed */
-var pendingOut = null;		/* where what it prints goes */
+var pendingOut = null;		/* where its output goes */
 var errs = [];			/* what nshd refused, the newest first */
 
 /* what each configure mode is */
@@ -49,7 +49,7 @@ var VIEWS = {
 	    "No configuration is saved."]
 };
 
-/* the operations nshd runs, each a line to start from, and what it does */
+/* operations nshd runs: the start of a line, and a description */
 var OPS = [
 	["flush arp", "Empties the ARP cache."],
 	["flush ndp", "Empties the NDP cache."],
@@ -252,7 +252,7 @@ function diffInto(pre, text) {
 	});
 }
 
-/* what saved configuration n changed, under its row, or not again */
+/* what saved configuration n changed, shown under its row or hidden */
 function changed(tr, n) {
 	var b = tr.querySelector(".twisty"), next = tr.nextSibling, pre;
 
@@ -353,7 +353,7 @@ function loadable() {
 		    "under Changes.";
 }
 
-/* the operations, as rows that start the line */
+/* the operations, as rows a click puts in the operation line */
 function ops() {
 	var t = $("op-kinds");
 
@@ -370,7 +370,7 @@ function ops() {
 	});
 }
 
-/* an operation, run once it is confirmed, what it prints into out */
+/* an operation to confirm, which then runs and prints into out */
 function operate(line, rtable, out) {
 	pending = { line: line, rtable: rtable };
 	pendingOut = out;
@@ -381,9 +381,8 @@ function operate(line, rtable, out) {
 
 /*
  * how many top-level statements a diff changes: each one added or
- * removed, and each one with a line added or removed under it, where a
- * statement removed and one added just after it with the same first
- * word count once, as one statement changed
+ * removed, or with a line added or removed under it; a statement removed
+ * and one added just after it with the same first word count as one
  */
 function objects(diff) {
 	var seen = Object.create(null), n = 0, head = "", last = "";
@@ -412,7 +411,7 @@ function objects(diff) {
 	return n;
 }
 
-/* how the candidate differs from what runs, in the strip */
+/* how the candidate differs from the running configuration, in the strip */
 function changes(inConfigure) {
 	var tag = $("changes");
 
@@ -432,7 +431,7 @@ function changes(inConfigure) {
 	});
 }
 
-/* a short label for one of system's warnings, the warning its title */
+/* a short label for one of system's warnings, with the warning as its title */
 function healthTag(text) {
 	var t = el("span", /^The boot failed/.test(text) ? "boot failed" :
 	    /did not finish$/.test(text) ? "commit unfinished" :
@@ -445,8 +444,9 @@ function healthTag(text) {
 }
 
 /*
- * what runs, on the strip: its generation, when it was last saved and
- * by whom, and system's warnings, all from the list of what is kept
+ * the running configuration, on the strip: its generation, when it was
+ * last saved and by whom, and system's warnings, all from the list of
+ * saved configurations
  */
 function runState() {
 	ask("GET", "config", { what: "rollback" }).then(function (j) {
@@ -624,7 +624,7 @@ function tray(name) {
 
 /*
  * the ports, as a box's face shows them, in the kernel's order, a block
- * for each driver; made again only when they are not the same ports, so
+ * for each driver. They are made again only when the ports change, so
  * that a look changes their lights and nothing else. A port's link light
  * is its state; its activity light is on if it counted packets, in or
  * out, since the last look
@@ -761,7 +761,7 @@ function iftable() {
 		    "num"));
 		tr.appendChild(el("td", r.rdomain !== undefined ? r.rdomain :
 		    "", "num"));
-		/* short: the whole of it in its title */
+		/* the type may be cut short: its title shows it all */
 		type.title = r.type || "";
 		tr.appendChild(type);
 		tr.addEventListener("click", function () {
@@ -978,9 +978,9 @@ function transcript(asked, j) {
 
 /*
  * request asked, answered j, kept for the Errors topic if nshd refused
- * it, with when and in which workspace; the same request succeeding
- * takes its error away, and a commit or rollback that succeeds takes
- * them all, as the candidate they were about is gone
+ * it, with when and in which workspace. The same request succeeding
+ * takes its error away, and a commit or rollback that succeeds (not
+ * commit check) takes them all, as the candidate they were about is gone
  */
 function refused(asked, j) {
 	var on = document.querySelector("#rail button.on");
@@ -1037,7 +1037,7 @@ function configure(name, fields, asked) {
 	});
 }
 
-/* a confirmed commit's deadline, counted down in the strip */
+/* an unconfirmed commit's deadline, counted down in the strip */
 function confirmBy(minutes) {
 	var tag = $("deadline");
 
@@ -1081,7 +1081,7 @@ function follow() {
 	stream.addEventListener("refused", function (e) {
 		noticed({ kind: "refused", text: JSON.parse(e.data).text });
 	});
-	/* this page fell behind, and some events went: what it shows, again */
+	/* this page fell behind and lost events: interfaces asked again */
 	stream.addEventListener("dropped", function () {
 		$("log").textContent += "[some lines were dropped]\n";
 		noticed({ kind: "dropped", text: "some events were dropped" });
@@ -1175,7 +1175,7 @@ function loggedOut() {
 		$("login").hidden = false;
 }
 
-/* a form's submit, as fn of its fields, without leaving the page */
+/* a form's submit, handled by fn, without leaving the page */
 function on(id, fn) {
 	$(id).addEventListener("submit", function (e) {
 		e.preventDefault();

@@ -552,7 +552,7 @@ wgif_addaip(struct wgifpeer *p, struct wg_aip_io *a)
 
 /*
  * wg_aip_add(): a prefix is one peer's aip, and given to another peer
- * it moves there, as it was first given
+ * it moves there, in the form it was first given
  */
 static int
 wgif_aip(struct wgif *w, struct wgifpeer *p, struct wg_aip_io *a)
@@ -910,8 +910,9 @@ wgif_get(int ifs, char *ifname, struct wgif *w)
 }
 
 /*
- * The aips of the request's peer: those it has but drop's.  The kernel
- * takes a peer's aips away only all at once, and no wgpeer names some.
+ * The aips of the request's peer: those it has, less those in drop.  The
+ * kernel takes a peer's aips away only all at once, and a wgpeer request
+ * cannot name some to remove.
  */
 static int
 wgpeer_keepaips(int ifs, char *ifname, struct wg_aip_io *drop, size_t ndrop)
@@ -1216,7 +1217,7 @@ intwgpeer(int argc, char **argv, ...)
 		goto wgerr;
 	}
 
-	/* no wgpeer takes what wgpeer does, and takes those away */
+	/* "no wgpeer" takes what wgpeer does, and removes those */
 	if (ndrop > 0 && wgpeer_keepaips(ifs, ifname, drop, ndrop) == -1)
 		goto wgerr;
 

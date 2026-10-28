@@ -418,12 +418,12 @@ complete_environment(char *word, int dolist, struct cmplt *cp, int set)
 }
 
 /*
- * Complete the word at the cursor, byte cursor of the len bytes of buf,
- * as table's commands take it. Into cp: text to insert at the cursor,
- * with CC_REFRESH, or the choices, with CC_REDISPLAY; or CC_ERROR.
- * word is the caller's, CMPLT_WORD bytes, the word it completed last:
- * completing the same one again lists the choices. With help, it
- * inserts nothing and lists every choice, each with its help.
+ * Complete the word at byte cursor of the len bytes of buf, from the
+ * commands in table. Returns CC_REFRESH with the text to insert in cp,
+ * CC_REDISPLAY with the choices in cp, or CC_ERROR. word is the caller's
+ * CMPLT_WORD-byte buffer with the last word completed; completing the
+ * same word again lists the choices. With help, it inserts nothing and
+ * lists every choice, each with its help.
  */
 unsigned char
 complete_line(const char *buf, size_t len, size_t cursor, char *word,
@@ -549,7 +549,7 @@ complete_nocmd(struct ghs *nocmd, char *word, int dolist, struct cmplt *cp,
 	}
 
 	if (cursor_argc < 2) {
-		/* Complete "no " and its command's word, as it stands */
+		/* Complete the command name after "no " at the cursor */
 		return (complete_command(word, dolist, cp, (char **)nocmdtab,
 		    sizeof(Command)));
 	}
@@ -603,7 +603,7 @@ complete_docmd(struct ghs *docmd, char *word, int dolist, struct cmplt *cp,
 	int i;
 
 	if (cursor_argc < 2) {
-		/* Complete "do " and its command's word, as it stands */
+		/* Complete the command name after "do " at the cursor */
 		return (complete_command(word, dolist, cp, (char **)cmdtab,
 		    sizeof(Command)));
 	}
@@ -658,7 +658,7 @@ complete_doint(char *word, int dolist, struct cmplt *cp,
 	struct intlist *c, *dc;
 
 	if (cursor_argc < 2) {
-		/* Complete "do " and its command's word, as it stands */
+		/* Complete the command name after "do " at the cursor */
 		return (complete_command(word, dolist, cp, (char **)table,
 		    stlen));
 	}
@@ -794,7 +794,7 @@ complete_args(struct ghs *c, char *word, int dolist, struct cmplt *cp,
 {
 	int help_vertical = 0;
 
-	/* a word before or past what the command completes completes nothing */
+	/* complete nothing for a word that c->complete has no entry for */
 	if ((size_t)level >= strlen(c->complete))
 		return (CC_ERROR);
 
@@ -842,7 +842,7 @@ complete_args(struct ghs *c, char *word, int dolist, struct cmplt *cp,
 	return (CC_ERROR);
 }
 
-/* words, and if helps is not NULL each one's help, as cp's choices */
+/* put words in cp's choices, with their helps if helps is not NULL */
 static void
 cmplt_list(struct cmplt *cp, StringList *words, StringList *helps)
 {

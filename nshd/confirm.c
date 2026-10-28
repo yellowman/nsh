@@ -15,16 +15,17 @@
  */
 
 /*
- * The record of a commit not confirmed, which system makes: a head
- * line, then the configuration it goes back to.
+ * The record of an unconfirmed commit, which system makes: a head line,
+ * then the rollback configuration.
  *
  *	STATE ID DEADLINE ATTEMPTS DEMOTED LENGTH
  *
- * STATE is waiting, until it is confirmed or goes back, or failed, if
- * it could not go back. ID, 16 hex digits and not 0, names the commit.
- * DEADLINE is when it goes back, by the wall clock. ATTEMPTS to go back
- * were begun, and DEMOTED is 1 while carp is demoted for it. LENGTH is
- * the configuration's. Each is as written here, or it is not a record.
+ * STATE is waiting, until it is confirmed or rolled back, or failed, if
+ * it could not be rolled back. ID, 16 hex digits and not 0, names the
+ * commit. DEADLINE is when it is rolled back, by the wall clock. ATTEMPTS
+ * is how many rollbacks were begun, and DEMOTED is 1 while carp is
+ * demoted for it. LENGTH is the configuration's length. Each is as
+ * written here, or it is not a record.
  */
 
 #include <sys/types.h>
@@ -86,7 +87,7 @@ confirm_read(struct confirm *cf, int whole)
 	if (sscanf(head, "%15s %llx %lld %d %d %zu", state, &id, &deadline,
 	    &cf->attempts, &cf->demoted, &cf->backlen) != 6)
 		goto bad;
-	/* as written, and no other way */
+	/* exactly as HEAD_FORMAT writes it */
 	snprintf(canon, sizeof(canon), HEAD_FORMAT, state, id, deadline,
 	    cf->attempts, cf->demoted, cf->backlen);
 	if (strcmp(canon, head) != 0 || id == 0 || deadline <= 0 ||
@@ -120,7 +121,7 @@ confirm_read(struct confirm *cf, int whole)
 	return (-1);
 }
 
-/* cf as the record, whole or not at all, and kept: -1 if not */
+/* cf written as the record, whole or not at all, and synced: -1 if not */
 int
 confirm_write(struct confirm *cf)
 {
@@ -154,7 +155,7 @@ confirm_write(struct confirm *cf)
 	return (-1);
 }
 
-/* no record, and kept so: -1 if not */
+/* the record removed, and the removal synced: -1 if not */
 int
 confirm_clear(void)
 {
@@ -206,7 +207,7 @@ writeall(int fd, const char *buf, size_t len)
 	return (0);
 }
 
-/* NSHDB's entries, as they now are, kept: -1 if not */
+/* NSHDB's entries, as they now are, synced: -1 if not */
 static int
 dirsync(void)
 {

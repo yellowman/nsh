@@ -79,7 +79,7 @@ int show_vlan(int, int);
 static struct ifmpwreq imrsave;
 static char imrif[IFNAMSIZ];
 
-/* what a session keeps of this file (session.c) */
+/* globals of this file each session has a copy of (session.c) */
 struct sglobal if_sglobals[] = {
 	SGLOBAL(imrsave), SGLOBAL(imrif),
 	{ NULL }
@@ -403,7 +403,7 @@ if_facts(struct facts_out *o, char *ifname, int detail)
 		facts_string(&v[IF_PARENT], parent);
 	}
 
-	/* the key nsh.db keeps for a network is for no one here */
+	/* do not report the network key stored in nsh.db */
 	if (get_nwinfo(ifname, ssid, sizeof(ssid), NWID) != 0) {
 		facts_string(&v[IF_SSID], ssid);
 		if (get_nwinfo(ifname, ps, sizeof(ps), POWERSAVE) != 0) {
@@ -1436,7 +1436,7 @@ ip6_eui64(char *name, struct in6_addr *a)
 
 /*
  * What conf_ifaddrs() prints after an IPv6 address for its options. A
- * pltime the same as the vltime goes without saying.
+ * pltime equal to the vltime is not printed.
  */
 void
 ip6_optstr(char *buf, size_t len, int anycast, u_int32_t vltime,
@@ -1533,7 +1533,7 @@ cand_upline(char *ifname, int bringup)
 	return cand_setting(ST_OFF, "shutdown");
 }
 
-/* no inet, no inet6 in configure private: each address of family af goes */
+/* no inet, no inet6 in configure private: remove every address of af */
 static int
 cand_noaf(char *ifname, int af)
 {
@@ -1550,7 +1550,7 @@ cand_noaf(char *ifname, int af)
 		if (cand_setting(ST_OFF, "%s", line) == -1)
 			r = -1;
 		if ((l = cand_line("inet", n)) != NULL && strcmp(l, line) == 0)
-			n++;		/* it did not go */
+			n++;		/* it was not removed */
 	}
 	if (cand_upline(ifname, 0) == -1)
 		r = -1;
@@ -1743,7 +1743,7 @@ intip(int argc, char **argv, ...)
 		msg = NULL;
 	}
 
-	/* after the address and a destination or broadcast address, options */
+	/* options follow the address and a destination or broadcast address */
 	for (i = 1; i < argc; i++)
 		if (genget(argv[i], (char **)ip6optlist,
 		    sizeof(struct nopts)) != 0)
@@ -2101,8 +2101,8 @@ ipv6ll_db_store(struct sockaddr_in6 *sin6, struct sockaddr_in6 *sin6mask,
 
 /*
  * pflow in configure private. The line has the addresses as
- * pflow_status() prints them and the version; one the command leaves
- * out is the candidate's, or the kernel's default.
+ * pflow_status() prints them and the version; a version the command
+ * leaves out is the candidate's, or the kernel's default.
  */
 static int
 cand_pflow(char *ifname, int set, struct pflowreq *preq)
@@ -2968,7 +2968,7 @@ intdhcrelay(int argc, char **argv, ...)
 		    cmd[2], server);
 		killcmd[2] = argue;
 
-		/* 1: no dhcrelay ran */
+		/* pkill exits 1 if no dhcrelay was running */
 		r = cmdargs(PKILL, killcmd);
 		if (r == -1 || r > 1)
 			return -1;
@@ -4260,7 +4260,7 @@ vlan_facts(struct facts_out *o, int start_vnetid, int end_vnetid)
 	return (r);
 }
 
-/* a VLAN, as show_vlan() printed it, the headers before the first */
+/* a VLAN, as show_vlan() printed it, and the headers before the first */
 void
 vlan_render(struct frec *r, int n)
 {

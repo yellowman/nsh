@@ -127,7 +127,7 @@ typedef int bool;
 struct statfield {
 	const char	*name;
 	size_t		 off;
-	size_t		 size;		/* of one */
+	size_t		 size;		/* size of one element */
 	size_t		 n;
 	int		 string;	/* a string, not a number */
 };
@@ -143,7 +143,7 @@ struct statfield {
 /* a group of statistics: where it comes from, and how it prints */
 struct statgroup {
 	const char		*word;
-	const char		*fn;		/* who says what failed */
+	const char		*fn;		/* name in error messages */
 	int			 mib[6];
 	u_int			 miblen;
 	int			 none;		/* the errno of no such group */
@@ -154,7 +154,7 @@ struct statgroup {
 	void			(*print)(void *);
 	int			 root;		/* only root may get it */
 	struct facts_kind	 kind;
-	size_t			*off, *sz;	/* each field's member */
+	size_t			*off, *sz;	/* field offsets and sizes */
 };
 
 static int	stats_sysctl(struct statgroup *, void *);
@@ -744,7 +744,7 @@ static struct mbtypes {
 	{ 0, 0 }
 };
 
-/* what mbpr() prints */
+/* what mb_print() prints */
 struct mbinfo {
 	struct mbstat		 mbstat;
 	struct kinfo_pool	 mbpool, mclpool;
@@ -916,7 +916,7 @@ pf_get(struct statgroup *g, void *p)
 	return (r);
 }
 
-/* Is pf enabled: 1 or 0, or -1, said why, as only root may ask */
+/* Is pf enabled: 1 or 0, or -1 after printing why, as only root may ask */
 int
 pf_enabled(void)
 {

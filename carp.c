@@ -56,7 +56,7 @@ static int cand_getvh(char *, struct carpreq *);
 static int cand_setvh(int, char *, struct carpreq *);
 static void sort_vhids(struct carpreq *);
 
-/* SIOCGVH, or in configure private the candidate's */
+/* Do SIOCGVH, or in configure private, read the candidate */
 static int
 carp_getvh(int ifs, struct ifreq *ifr)
 {
@@ -65,7 +65,7 @@ carp_getvh(int ifs, struct ifreq *ifr)
 	return ioctl(ifs, SIOCGVH, (caddr_t)ifr);
 }
 
-/* SIOCSVH, or in configure private the candidate's */
+/* Do SIOCSVH, or in configure private, change the candidate */
 static int
 carp_setvh(int ifs, struct ifreq *ifr)
 {
@@ -76,8 +76,8 @@ carp_setvh(int ifs, struct ifreq *ifr)
 }
 
 /*
- * SIOCGVH in configure private: the carpreq that conf_carp() prints as
- * the candidate's lines, the vhids in order as SIOCGVH has them
+ * SIOCGVH in configure private: fill creq from the candidate's lines, as
+ * conf_carp() prints them, with the vhids in order as SIOCGVH has them
  */
 static int
 cand_getvh(char *ifname, struct carpreq *creq)
@@ -219,8 +219,8 @@ cand_setvh(int ifs, char *ifname, struct carpreq *r)
 	else if (r->carpr_advbase >= 0)
 		ret |= cand_setting(ST_DEFAULT, "advbase");
 	/*
-	 * One vhid is a vhid line, more are carpnode lines. A carpnode
-	 * line for a vhid the result does not have goes.
+	 * One vhid is a vhid line, more are carpnode lines. Remove each
+	 * carpnode line whose vhid is not in the result.
 	 */
 	many = cur.carpr_vhids[1] != 0;
 	for (k = 0, tries = 0; tries <= CARP_MAXNODES &&
@@ -509,7 +509,7 @@ intcnode(int argc, char **argv, ...)
 	argc--;
 	argv++;
 
-	/* no carpnode takes what carpnode does, and removes the vhid */
+	/* "no carpnode" takes what carpnode does, and removes the vhid */
 	if (argc < 1 || argc > 3) {
 		printf("%% carpnode <vhid> [advskew] [state]\n");
 		printf("%% no carpnode <vhid> [advskew] [state]\n");
@@ -634,7 +634,7 @@ static struct facts_field carp_fields[] = {
 };
 struct facts_kind kind_carp = { "carp-vhid", carp_fields, CARPV_NFIELDS };
 
-/* names for values from a table of strings, for f */
+/* names for the values of f, from a table of strings */
 static void
 carp_names(struct facts_field *f, const char **names, size_t n)
 {
@@ -667,7 +667,7 @@ carp_facts_init(void)
 	    nitems(carp_states));
 }
 
-/* ifname's carp: in ifv its balancing, peer, device and advbase */
+/* ifname's vhids, and in ifv its balancing, peer, device and advbase */
 void
 carp_facts(struct facts_out *o, int s, char *ifname, struct facts_value *ifv)
 {

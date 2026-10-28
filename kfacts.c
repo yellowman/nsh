@@ -15,14 +15,14 @@
  */
 
 /*
- * What configure private reads of the kernel, each read here, from the
- * kernel, or from the facts kfacts_set() gave, as nshd's config has
- * them from system's last snapshot. Measured, the reads its handlers
- * make are these and no other: an interface's index, flags, type and
- * capabilities, whether it is 802.11, the link-level address it came
- * with, its link-local address, its media and the media its driver
- * lists; the cloners, the routing tables there, and whether dhcpleased
- * answers. kfacts_scan() reads all of them, for system to send.
+ * What configure private reads of the kernel. Each is read here from the
+ * kernel or, in nshd's config, from the facts of system's last snapshot
+ * (kfacts_set()). Its handlers were checked to make these reads and no
+ * other: an interface's index, flags, type and capabilities, whether it
+ * is 802.11, the link-level address it came with, its link-local
+ * address, its media and the media its driver lists; the cloners, the
+ * routing tables that exist, and whether dhcpleased answers.
+ * kfacts_scan() reads all of them, for system to send.
  */
 
 #include <sys/types.h>
@@ -52,7 +52,7 @@
 #include "facts.h"
 #include "kfacts.h"
 
-static struct kfacts *kf;	/* the snapshot's, or NULL: the kernel's */
+static struct kfacts *kf;	/* snapshot facts, or NULL to read the kernel */
 
 static struct kif *kif(char *);
 static int k_media(int, char *, uint64_t *, uint64_t **, size_t *);
@@ -92,7 +92,7 @@ kf_index(char *name)
 	return (k = kif(name)) != NULL ? k->index : 0;
 }
 
-/* is_valid_ifname(): one interface of that name, in any case */
+/* is_valid_ifname(): one interface of that name, ignoring case */
 int
 kf_valid(char *name)
 {
@@ -222,7 +222,8 @@ kf_ll6(char *name, struct in6_addr *a)
 /*
  * SIOCGIFMEDIA, on s for the kernel: name's current media word in
  * *cur, and if list is not NULL, the words its driver lists, allocated,
- * in *list and their number in *n; -1 if it has none, errno set
+ * in *list and their number in *n; -1, errno set, if it has none or on
+ * error
  */
 int
 kf_media(int s, char *name, uint64_t *cur, uint64_t **list, size_t *n)
@@ -257,7 +258,7 @@ k_media(int s, char *name, uint64_t *cur, uint64_t **list, size_t *n)
 
 	memset(&ifmr, 0, sizeof(ifmr));
 	strlcpy(ifmr.ifm_name, name, sizeof(ifmr.ifm_name));
-	/* E2BIG: there are more than the none asked for */
+	/* E2BIG only means the list did not fit, and none was asked for */
 	if (ioctl(s, SIOCGIFMEDIA, (caddr_t)&ifmr) == -1 &&
 	    (list != NULL || errno != E2BIG))
 		return -1;
@@ -335,11 +336,11 @@ kf_dhcpleased(void)
 
 /*
  * Add the names of one kind (KF_*) that completion lists to sl, each in
- * its own allocation.  Return 0, or -1 after printing why the kernel or
- * the database could not be read.  From a snapshot, the bridges are the
- * interfaces of type IFT_BRIDGE, and the routing tables are those the
- * snapshot has.  Without one, nsh asks the kernel, uses is_bridge() for
- * the bridges, and reads the routing tables from its database.
+ * its own allocation.  Return 0, or -1 on error; most errors are
+ * printed.  From a snapshot, the bridges are the interfaces of type
+ * IFT_BRIDGE, and the routing tables are those the snapshot has.
+ * Without one, nsh asks the kernel, uses is_bridge() for the bridges,
+ * and reads the routing tables from its database.
  */
 int
 kf_names(int kind, StringList *sl)
@@ -431,8 +432,8 @@ k_names(int kind, StringList *sl)
 }
 
 /*
- * All of it, from the kernel, as system sends it; NULL if it could not
- * be read, errno set
+ * All the facts, read from the kernel for system to send; NULL, errno
+ * set, if they could not be read
  */
 struct kfacts *
 kfacts_scan(void)
@@ -481,7 +482,7 @@ kfacts_scan(void)
 	return NULL;
 }
 
-/* One interface's facts, which has its name; -1 if memory ran out */
+/* The facts of interface ki, whose name is set; -1 if memory ran out */
 static int
 scan_if(int s, struct kif *ki, struct ifaddrs *ifap)
 {
@@ -520,7 +521,7 @@ scan_if(int s, struct kif *ki, struct ifaddrs *ifap)
 		}
 		if (ifa->ifa_addr->sa_family != AF_LINK)
 			continue;
-		/* as get_hwdaddr(): Ethernet's or 802.11's, but zero */
+		/* as get_hwdaddr(): an Ethernet or 802.11 address, not zero */
 		sdl = (struct sockaddr_dl *)ifa->ifa_addr;
 		if (sdl->sdl_alen != ETHER_ADDR_LEN ||
 		    (sdl->sdl_type != IFT_ETHER &&
@@ -730,7 +731,7 @@ kfacts_emit(struct facts_out *o, struct kfacts *k)
 	return facts_record(o, &kind_daemons, v);
 }
 
-/* A string value into buf, as long as it fits; -1 if it does not */
+/* A string value into buf; -1 if it is absent, holds a NUL or does not fit */
 static int
 kf_str(const struct facts_value *v, char *buf, size_t len)
 {
@@ -743,8 +744,9 @@ kf_str(const struct facts_value *v, char *buf, size_t len)
 }
 
 /*
- * A record of k's, for facts_in_init(): into the struct kfacts arg,
- * whose failed says one could not be kept, or was not one of these
+ * The record callback for facts_in_init(): the record goes into the
+ * struct kfacts arg, whose failed is set if it could not be kept or is
+ * not one of these kinds
  */
 void
 kfacts_record(void *arg, const struct facts_template *t,
@@ -799,7 +801,7 @@ kfacts_record(void *arg, const struct facts_template *t,
 		    sizeof(name)) == -1 ||
 		    (f = facts_get(v, map, 1, FACT_U64)) == NULL)
 			goto bad;
-		/* its interface's, which came before it */
+		/* its interface, whose record came before it */
 		for (i = 0; i < k->nifs; i++)
 			if (strcmp(k->ifs[i].name, name) == 0)
 				break;

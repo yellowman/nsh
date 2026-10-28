@@ -246,9 +246,9 @@ el_said(EditLine *el, const char **argv)
 }
 
 /*
- * Does a line bind printed bind a key to vi-histedit, which runs vi, or
- * to ed-command, which runs a bind nsh does not see?  bind prints a key's
- * function last on its line, and a string a key types in quotes.
+ * Does a line of bind's output bind a key to vi-histedit, which runs vi,
+ * or to ed-command, which runs a bind nsh does not see?  bind prints a
+ * key's function last on its line, and a string a key types in quotes.
  */
 static int
 el_runs(const char *said)
@@ -271,9 +271,9 @@ el_runs(const char *said)
 }
 
 /*
- * Unbind key, in el's alternative map if alt, if it runs vi-histedit or
- * ed-command, or a sequence of keys that starts with it does: -1 if bind
- * cannot be asked, 1 if it was unbound, else 0
+ * Unbind key in el (in the alternative map if alt) if it, or a sequence
+ * of keys that starts with it, runs vi-histedit or ed-command: -1 if
+ * bind cannot be asked, 1 if it was unbound, else 0
  */
 static int
 el_off(EditLine *el, int alt, const char *key)
@@ -317,8 +317,8 @@ el_offesc(EditLine *el)
 
 /*
  * For a user without the exec permission: unbind every key of el's that
- * runs vi-histedit or ed-command.  -1 if that cannot be shown done, said
- * why, 1 if a key was unbound, else 0
+ * runs vi-histedit or ed-command.  -1, after printing why, if that
+ * cannot be verified, 1 if a key was unbound, else 0
  */
 static int
 el_noeditor(EditLine *el)
@@ -339,9 +339,9 @@ el_noeditor(EditLine *el)
 
 	/*
 	 * The editor binds a function to no sequence of keys but ESC and a
-	 * key, where it puts each meta key's.  bind prints a sequence in a
-	 * form it cannot always read back, so if another runs one, the
-	 * editor's defaults are taken.
+	 * key, where it puts each meta key's function.  bind prints a
+	 * sequence in a form it cannot always read back, so if another
+	 * sequence runs one, the editor's defaults are restored.
 	 */
 	if ((unbound = el_offesc(el)) == -1 || (s = el_said(el, all)) == NULL)
 		goto fail;

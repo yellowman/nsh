@@ -29,7 +29,7 @@
 #include "facts.h"
 #include "showfacts.h"
 
-/* what runs, and where, as facts */
+/* the nsh build and the system it runs on, as facts */
 static struct facts_field version_fields[] = {
 	[VER_NSH] =		{ "nsh-version",	FACT_STRING },
 	[VER_COMPILED] =	{ "compiled",		FACT_STRING },

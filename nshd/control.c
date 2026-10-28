@@ -140,10 +140,10 @@ control_route(void)
 }
 
 /*
- * accept on fd; each client goes to opened, if not NULL, as it comes,
- * its messages to handler, to closed when it goes, and to written each
- * time some of what it was sent is written; -1 from opened, handler or
- * written closes the client
+ * accept on fd: call opened, if not NULL, for each new client, handler
+ * for each message it sends, closed when it goes, and written each time
+ * some of what it was sent is written; -1 from opened, handler or written
+ * closes the client
  */
 int
 control_listen(int fd, int (*opened)(struct ctl_conn *),
@@ -325,9 +325,9 @@ control_dispatch(int fd, short event, void *arg)
 }
 
 /*
- * a message to the client id, if it is still there: -1 if it leaves
- * too much unread to take it, and whoever asked closes it, so a handler
- * does not close the client it is handling
+ * a message to the client id, if it is still there: -1 if it has too much
+ * unread to take it, and the caller then closes it, so a handler does not
+ * close the client it is handling
  */
 int
 control_reply(uint32_t id, uint32_t type, const void *data, size_t len)

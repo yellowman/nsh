@@ -19,17 +19,17 @@
  * read-write socket, which root and the group nshadmin may use; nshd
  * gives the session the permissions of its user's login class, and
  * refuses what they do not allow. nsh opens the session as it starts,
- * and again when a command needs it after it was lost: an interrupt
- * while nshd answers closes it, and so does nshd going. nsh's other
- * connections there, as shows of what only nshd's system reads, are
- * sessions of their own, with the same permissions. Where nshd does not
- * run, or the user may not use its socket, nsh is not privileged. nsh
- * checks the permissions a program needs itself (nshd_runs()), and runs
- * none for anyone but root without nshd's answer.
+ * and again when a command needs it after it was lost. An interrupt
+ * while nshd answers closes it, and so does nshd exiting. nsh's other
+ * connections to nshd, such as shows of what only nshd's system reads,
+ * are sessions of their own, with the same permissions. Where nshd does
+ * not run, or the user may not use its socket, nsh is not privileged.
+ * nsh checks the permissions a program needs itself (nshd_runs()), and
+ * runs none for anyone but root without nshd's answer.
  *
- * configure private, configure and configure exclusive are that
- * session's: what edits the candidate, and leaving a mode, go to nshd
- * as lines, and the mode nshd gives back is nsh's, for its prompt, its
+ * configure private, configure and configure exclusive run in that
+ * session. Commands that edit the candidate or leave a mode go to nshd
+ * as lines, and nsh takes the mode nshd gives back for its prompt, its
  * completion and the lines after (cmdline_nshd()). A daemon's edit
  * asks nshd for its rules, edits them here, as the user, and sends them
  * back whole.
@@ -82,8 +82,9 @@ static void	nshd_context(struct nshd_context *);
 static void	nshd_close(void);
 
 /*
- * The next message, read as it comes; -1 if nshd is gone. With
- * waiting, the signal mask to wait with, -1 too if SIGINT ends a wait.
+ * The next message, read as it comes; -1 if nshd is gone. If waiting is
+ * not NULL, wait with that signal mask, and return -1 too if SIGINT ends
+ * the wait.
  */
 static int
 nshd_next(struct imsgbuf *ib, struct imsg *imsg, const sigset_t *waiting)
@@ -115,8 +116,9 @@ nshd_sigint(int sig)
 }
 
 /*
- * A session on nshd's socket at path, and its permissions, if perms: its
- * descriptor, or -1, with EPROTO for an nshd that said something else.
+ * A session on nshd's socket at path, with its permissions in *perms if
+ * perms is not NULL: its descriptor, or -1 with errno set, EPROTO if
+ * nshd answered something else.
  */
 static int
 nshd_open(char *path, struct imsgbuf *ib, int32_t *perms)
@@ -169,7 +171,7 @@ nshd_open(char *path, struct imsgbuf *ib, int32_t *perms)
 	return (fd);
 }
 
-/* Why nshd_open() could not */
+/* Why nshd_open() failed */
 static void
 nshd_why(void)
 {
@@ -186,7 +188,7 @@ nshd_why(void)
 
 /*
  * Does the user's login class have the permission need?  1 if it does,
- * or the user is root, else 0, said why if why
+ * or the user is root, else 0, after saying why if why is set
  */
 static int
 nshd_has(int need, int why)
@@ -215,7 +217,7 @@ nshd_has(int need, int why)
 /*
  * May nsh run the program cmd, as the user's login class says: ping and
  * traceroute need operate, clear nothing, and any other exec. root may
- * run any. 1 if it may, else 0, said why
+ * run any. 1 if it may, else 0 after saying why
  */
 int
 nshd_runs(const char *cmd)
@@ -243,7 +245,7 @@ nshd_runs(const char *cmd)
 
 /*
  * May the user run programs, as the line editor's vi-histedit runs vi?
- * Said nothing
+ * Prints nothing
  */
 int
 nshd_execs(void)
@@ -253,7 +255,7 @@ nshd_execs(void)
 
 /*
  * show words, as nshd answers them on its read-write socket, paged: 1 if
- * the show was answered, else 0, said why
+ * the show was answered, else 0 after saying why
  */
 int
 nshd_show(char *words)
@@ -344,13 +346,13 @@ done:
 
 /*
  * A request of type, with len bytes of data, on a connection of its
- * own, to nshd's read-write socket if rw, else to its read-only one:
- * facts read into in as they come, and text printed, and how it ended,
- * *status, or 1 if it was not answered, as when ^C ends it, which
- * closes the connection, so nshd stops what it runs. A watch nshd takes
- * goes on after its answer, each log's text printed as it comes, until
- * ^C or nshd says the log ended. -1 if there is no nshd to ask, or none
- * this user may, else 0.
+ * own, to nshd's read-write socket if rw, else to its read-only one.
+ * Facts are read into in and text printed as they come, and how it
+ * ended goes in *status, or 1 if it was not answered, as when ^C ends
+ * it; ^C closes the connection, so nshd stops what it runs. A watch nshd
+ * takes goes on after its answer, each log's text printed as it comes,
+ * until ^C or nshd says the log ended. -1 if nsh could not connect to
+ * nshd, else 0.
  */
 static int
 nshd_ask(int rw, uint32_t type, const void *data, size_t len,
@@ -424,7 +426,7 @@ nshd_ask(int rw, uint32_t type, const void *data, size_t len,
 				goto done;
 			}
 			*status = r.status;
-			/* a watch taken goes on */
+			/* an accepted watch continues */
 			done = type != IMSG_CTL_WATCH || r.status != 0;
 			break;
 		case IMSG_CTL_NOTICE:
@@ -457,10 +459,10 @@ done:
 }
 
 /*
- * show words, as nshd answers them, on the read-write socket if rw, its
- * system's, else as its show processes do, as
- * nshd_ask() asks: -1 if there is no nshd to ask, or none this user
- * may, else 1 if the show was answered and 0 if not.
+ * show words, as nshd answers them through nshd_ask(): on the read-write
+ * socket, where its system answers, if rw, else on the read-only socket,
+ * where its show processes do. -1 if nsh could not connect to nshd,
+ * else 1 if the show was answered and 0 if not.
  */
 int
 nshd_facts(int rw, char *words, struct facts_in *in)
@@ -481,8 +483,8 @@ nshd_facts(int rw, char *words, struct facts_in *in)
 }
 
 /*
- * show log name: the log nshd's system follows, printed as it comes,
- * from its last lines, until ^C, as nshd_ask() asks
+ * show log name: the log nshd's system follows, printed from its last
+ * lines as it comes, until ^C, through nshd_ask()
  */
 int
 show_log(int argc, char **argv, ...)
@@ -517,9 +519,9 @@ show_log(int argc, char **argv, ...)
 }
 
 /*
- * The operation text, in rtable, which nshd's system runs, as nshd_ask()
- * asks: facts read into in, and how it ended, its status, or 1 if it was
- * not, said why
+ * The operation text, in rtable, which nshd's system runs through
+ * nshd_ask(), with facts read into in: its status, or 1 if it was not
+ * answered, after saying why
  */
 int
 nshd_op(const char *text, int rtable, struct facts_in *in)
@@ -541,8 +543,8 @@ nshd_op(const char *text, int rtable, struct facts_in *in)
 }
 
 /*
- * nsh's session, opened if it is not, quietly if quiet: 1 if nsh has
- * one, and so is privileged, else 0, said why unless quiet
+ * nsh's session, opened if it is not: 1 if nsh has one, and so is
+ * privileged, else 0, after saying why unless quiet
  */
 int
 nshd_priv(int quiet)
@@ -558,7 +560,7 @@ nshd_priv(int quiet)
 	return (1);
 }
 
-/* configure, of how, in nsh's session; as a handler returns */
+/* enter configure mode how in nsh's session; returns as a handler does */
 int
 nshd_configure(int how)
 {
@@ -568,7 +570,7 @@ nshd_configure(int how)
 	return (nshd_request(IMSG_CTL_CONFIGURE, &cf, sizeof(cf), NULL));
 }
 
-/* A line of configure private's, in the session's mode */
+/* A configuration line, sent to nshd in the session's mode */
 int
 nshd_line(char *text)
 {
@@ -582,7 +584,7 @@ nshd_line(char *text)
 	return (nshd_request(IMSG_CTL_LINE, &l, sizeof(l), NULL));
 }
 
-/* Leave configure private, and the session, from any mode */
+/* Leave configure, from any of its modes */
 int
 nshd_exit(void)
 {
@@ -603,8 +605,9 @@ nshd_commit(int check, int minutes, char *comment)
 }
 
 /*
- * path's configuration, nsh -c's, which nshd loads into a candidate of
- * its own, in place of what runs, and commits: as a handler returns
+ * nsh -c: path's configuration, which nshd loads into a candidate of its
+ * own, in place of the running configuration, and commits; as a handler
+ * returns
  */
 int
 nshd_load(const char *path)
@@ -643,7 +646,7 @@ nshd_rollback(int n)
 	return (nshd_request(IMSG_CTL_ROLLBACK, &rb, sizeof(rb), NULL));
 }
 
-/* configure, as the session has it, by name */
+/* the name of the session's configure mode */
 const char *
 nshd_cname(void)
 {
@@ -653,7 +656,7 @@ nshd_cname(void)
 	    "configure");
 }
 
-/* show words of a configure's, candidate-config or diff-config, paged */
+/* show words in configure, candidate-config or diff-config, paged */
 int
 nshd_cshow(char *words)
 {
@@ -675,16 +678,16 @@ nshd_cshow(char *words)
 	r = nshd_request(IMSG_CTL_SHOW, &show, sizeof(show), f);
 	if (fclose(f) == EOF)
 		printf("%% %s: %s\n", path, strerror(errno));
-	else if (sfd != -1)	/* not a session gone */
+	else if (sfd != -1)	/* unless the session was lost */
 		more(path);
 	unlink(path);
 	return (r);
 }
 
 /*
- * daemon's rules in the session's candidate, in rtable: asked for, into
- * path; or, with set, path's text sent as them, a part at a time. As a
- * handler returns
+ * daemon's rules for rtable in the session's candidate, read into path;
+ * or, with set, path's text sent as the new rules, a part at a time. As
+ * a handler returns
  */
 int
 nshd_rules(char *daemon, int rtable, int set, char *path)
@@ -727,10 +730,10 @@ nshd_rules(char *daemon, int rtable, int set, char *path)
 }
 
 /*
- * type, with len bytes of data, on nsh's session, opened if it is not:
- * what nshd prints, to out or stdout, and the mode it gives taken; as a
- * handler returns. ^C closes the session, as nshd finishes what it was
- * asked.
+ * A request of type, with len bytes of data, on nsh's session, opened if
+ * it is not: what nshd prints goes to out or stdout, nsh takes the mode
+ * nshd gives, and it returns as a handler does. ^C closes the session,
+ * while nshd finishes what it was asked.
  */
 static int
 nshd_request(uint32_t type, const void *data, size_t len, FILE *out)
@@ -757,7 +760,7 @@ nshd_request(uint32_t type, const void *data, size_t len, FILE *out)
 	sa.sa_handler = nshd_sigint;
 	sigemptyset(&sa.sa_mask);
 	sigaction(SIGINT, &sa, &osa);
-	/* a session whose nshd is gone is said to be, not a SIGPIPE */
+	/* report a lost session instead of dying of SIGPIPE */
 	sa.sa_handler = SIG_IGN;
 	sigaction(SIGPIPE, &sa, &opipe);
 	nshd_intr = 0;
@@ -825,7 +828,7 @@ done:
 	return (gone || r.status != 0 ? -1 : 0);
 }
 
-/* The session's mode, as nshd gives it, nsh's */
+/* Set nsh's mode to the session's, as nshd gives it */
 static void
 nshd_context(struct nshd_context *c)
 {

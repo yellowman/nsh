@@ -59,7 +59,7 @@ int		 bridge;
 char		*cursor_pos;		/* read by makeargv() */
 
 static int		 built;		/* the tables are built */
-static StringList	**names;	/* kf_names()'s, while completing */
+static StringList	**names;	/* names for kf_names(), or NULL */
 
 /* the records nshd sends, as session.c and configproc.c define them */
 static const struct facts_field rowfields[] = {

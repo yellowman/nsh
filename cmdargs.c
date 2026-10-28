@@ -36,10 +36,10 @@
 /*
  * cmd, multiple args
  *
- * If no error occurs then return the program's exit code (>= 0), or
- * 127 if the child could not run it, as ksh(1) does, having said why.
- * Return -1 if no child could be made, which is said, or if the program
- * was terminated in an abnormal way, such as being killed by a signal.
+ * If no error occurs then return the program's exit code (>= 0).
+ * Return 127, as ksh(1) does, if the program could not be run, after
+ * printing why. Return -1 if fork fails, after printing why, or if the
+ * program was terminated in an abnormal way, such as by a signal.
  */
 int
 cmdargs(char *cmd, char *arg[])

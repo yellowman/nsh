@@ -289,8 +289,8 @@ overwrite:
 }
 
 /*
- * ndp in configure private: the line conf_ndp_entry() prints for host's
- * entry, or with sdl NULL, no line for host
+ * ndp in configure private: set the line conf_ndp_entry() prints for
+ * host's entry, or with sdl NULL, remove host's line
  */
 static int
 ndp_cand(const char *host, struct sockaddr_dl *sdl)
@@ -510,8 +510,8 @@ ndp_facts_init(void)
 }
 
 /*
- * The neighbors of rt, from *cur, or only addr: budget at most. 1 if
- * there are more, 0 if not, -1 if a record failed.
+ * The neighbors of rt, from *cur, or only addr, at most budget of them.
+ * 1 if there are more, 0 if not, -1 if a record failed.
  */
 int
 ndp_facts(struct facts_out *o, struct rtdump *rt, char **cur,
@@ -677,7 +677,7 @@ ndp_render(struct frec *r, char *failed, size_t len)
 	printf("\n");
 }
 
-/* after the neighbors: the last one's missing state, or none at all */
+/* after the neighbors, the messages for failed and nohost, if set */
 void
 ndp_end(const char *failed, const char *nohost)
 {

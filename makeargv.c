@@ -47,9 +47,10 @@ size_t	cursor_argo;			/* offset of cursor margv[cursor_argc] */
 static int split(char *, char **, int, size_t, size_t *, size_t *);
 
 /*
- * line in words, in margv, and how many in margc. A line that starts with
- * ! is the shell's, its first word !. cursor_argc and cursor_argo say
- * where cursor_pos is in them. -1 if they would not fit, with none
+ * Split line into words in margv, and put their count in margc. A line
+ * that starts with ! is a shell escape, and its first word is "!".
+ * cursor_argc and cursor_argo say where cursor_pos is in them. -1, with
+ * margv empty, if the words do not fit
  */
 int
 makeargv(void)
@@ -83,9 +84,10 @@ makeargv(void)
 }
 
 /*
- * s in words, as makeargv() reads a line, into argv, which has room for
- * max of them, the NULL after them included: how many, or -1 if they
- * would not fit, with none. s is changed, and the words are in it
+ * Split s into words in argv, as makeargv() splits a line. argv has room
+ * for max entries, including the NULL after the words. Returns the number
+ * of words, or -1, with argv empty, if they do not fit. s is changed, and
+ * the words are in it
  */
 int
 argsplit(char *s, char **argv, size_t max)
@@ -99,9 +101,10 @@ argsplit(char *s, char **argv, size_t max)
 }
 
 /*
- * cp in words, after the n in argv already, and a NULL after them, in
- * argv's max: how many there are then, or -1 if they would not fit.
- * argc and argo say where cp ends: in which word, and how far into it
+ * Split cp into words in argv, after the n words already there, and put
+ * a NULL after them. argv has room for max entries. Returns the total
+ * number of words, or -1 if they do not fit. argc and argo say where cp
+ * ends: in which word, and how far into it
  */
 static int
 split(char *cp, char **argv, int n, size_t max, size_t *argc,

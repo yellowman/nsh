@@ -162,7 +162,7 @@ function sshText(doc) {
 	return doc.lines.join("");
 }
 
-/* doc with its lines from at to end replaced, each ending a line */
+/* doc with its lines from at to end replaced by lines, each with a newline */
 function sshSplice(doc, at, end, lines) {
 	var all = doc.lines.slice(0, at).concat(lines, doc.lines.slice(end));
 
@@ -214,7 +214,7 @@ function sshWarn(doc, s) {
  * where a new line of keyword kw goes in section sec, and its indent:
  * after the last of kw there, else after the section's last line, else
  * after its Match line; or in section 0, before the first Match line
- * and the comment lines just above it
+ * and the comment lines just above it, or at the end if there is none
  */
 function sshWhere(doc, sec, kw) {
 	var mine = doc.st.filter(function (s) {

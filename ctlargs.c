@@ -76,8 +76,8 @@ pr_prot1(int argc, char **argv, ...)
 
 /*
  * The show of prot that sub names, as pr_prot1() names them, whose
- * program nshd's system may run: NULL if there is none, as systat's
- * is not, which draws on nsh's terminal
+ * program nshd's system may run: NULL if there is none, as for systat,
+ * which draws on nsh's terminal
  */
 struct prot1 *
 prot1_find(char *prot, char *sub)
@@ -100,9 +100,10 @@ prot1_find(char *prot, char *sub)
 }
 
 /*
- * x's program and its arguments, in args, with those x leaves to fill
- * taken from argc words of argv, and bgpctl's socket the one of table:
- * NULL if they do not fill them, said why
+ * Put x's program and its arguments in args, filling the arguments x
+ * leaves open from the argc words of argv, with bgpctl's socket for
+ * rtable table. Returns NULL, after printing why, if the words do not
+ * fit
  */
 char **
 prot1_args(struct prot1 *x, char **args, int argc, char **argv, int table)

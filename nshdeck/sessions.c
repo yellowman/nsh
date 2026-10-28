@@ -15,23 +15,25 @@
  */
 
 /*
- * session: the web users logged in, each with a connection of nshd's,
+ * session: the web users logged in, each with a connection to nshd,
  * which parent makes, and a token, which the user's cookie carries.
- * session reads what front sends as a stranger's: each message whole,
- * each string with its NUL, each number in its range.
+ * session does not trust what front sends: it checks that each message
+ * is whole, each string ends with a NUL, and each number is in its
+ * range.
  *
- * A login asks parent for a connection, says hello, and logs in, as
- * nshd's system checks; then hello again, for the permissions the
- * user's class gives, and the user's token, 32 random bytes in hex.
- * Each request of a user's goes to nshd on that user's connection, one
- * at a time, the rest waiting; nshd's answer comes back as JSON, which
- * session writes and never reads: the records of a show as it comes,
- * then what nshd printed, and how it ended. While front has not written
- * DECK_WINDOW messages of an answer, session stops reading nshd's. A
- * show that nshd's system says it does not answer is asked again of nshd's
- * shows, as nsh asks them, on a connection of its own, which parent
- * makes, and which closes when it is answered. A daemon's rules go to
- * nshd in parts, as nsh sends them, and are set with the last.
+ * For a login, session asks parent for a connection, sends nshd a hello,
+ * and logs in; nshd's system process checks the login. Then session
+ * sends a second hello to learn the permissions of the user's class,
+ * and gives the user a token of 32 random bytes in hex. Each request of
+ * a user's goes to nshd on that user's connection, one at a time, the
+ * rest waiting. session writes the answer as JSON, and never parses
+ * JSON: the records of a show as they come, then what nshd printed, and
+ * how it ended. While front has DECK_WINDOW messages of an answer not
+ * yet written, session stops reading from nshd. When nshd's system
+ * process says it does not answer a show, session asks nshd's shows
+ * process instead, as nsh does, on a separate connection that parent
+ * makes and that closes after the answer. A daemon's rules go to nshd
+ * in parts, as nsh sends them, and are set with the last.
  *
  * Failed logins are counted for each user name and for each client
  * address, the one httpd passes; an IPv6 address is counted by its /64.
@@ -44,11 +46,12 @@
  * and address, and each log line says how many were not logged.
  *
  * A user's event streams have nshd watch commits, interfaces and routes,
- * and the logs any of them follows, and each notice nshd sends goes to each
- * stream as an event, a log's only to those that follow it. A user with
- * no stream and nothing asked for DECK_IDLE seconds is logged out, as a
- * logout does, which closes the connection: nshd forgets the login, and
- * the candidate, with it. If nshd closes it, the user is logged out.
+ * and the logs any of them follows. Each notice nshd sends goes to each
+ * stream as an event, but a log's notices go only to the streams that
+ * follow it. A user with no stream and no request for DECK_IDLE seconds
+ * is logged out, as by a logout request. That closes the connection, so
+ * nshd forgets the login and the user's candidate. If nshd closes the
+ * connection, the user is logged out.
  *
  * session completes lines itself, in the user's mode, with nsh's code
  * (tables.c), as nsh's Tab does.  It asks nshd for nsh's command tables
@@ -90,16 +93,16 @@
 
 #define DECK_QUEUE	16		/* a user's requests waiting, at most */
 #define DECK_OUTPUT	(1024 * 1024)	/* what nshd printed, kept, at most */
-#define DECK_CHUNK	8192		/* JSON sent front at once, about */
+#define DECK_CHUNK	8192		/* JSON bytes per message to front */
 #define DECK_FAILS	512		/* names and addresses counted */
 #define DECK_QUIET	10		/* seconds between log lines, at least */
 #define DECK_TRIES	5		/* failed logins in a row before a wait */
 #define DECK_WAIT	60		/* longest wait, in seconds */
 #define DECK_FORGET	(15 * 60)	/* idle seconds before a count resets */
-#define DECK_PTY	3072		/* what nsh writes, read at once, at */
-					/* most: 4096 bytes in base64 */
-#define DECK_TYPED	(64 * 1024)	/* what a terminal was typed, not */
-					/* yet written to it, at most */
+#define DECK_PTY	3072		/* maximum nsh output read at once, */
+					/* which is 4096 bytes in base64 */
+#define DECK_TYPED	(64 * 1024)	/* what was typed to a terminal, */
+					/* not yet written to it, at most */
 
 /* a literal, to JSON j */
 #define J(j, s)		j_raw((j), (s), sizeof(s) - 1)
@@ -108,24 +111,24 @@
 struct jbuf {
 	char			*p;
 	size_t			 len;
-	size_t			 size;		/* p's */
+	size_t			 size;		/* allocated size of p */
 };
 
 /* how far a user's login is */
 enum { U_CONNECT, U_HELLO, U_LOGIN, U_WHO, U_READY };
 
-/* how far a show asked of nshd's shows is, or that it was */
+/* how far a show asked of nshd's shows is; RO_DONE once it ended */
 enum { RO_NONE, RO_CONNECT, RO_HELLO, RO_SHOW, RO_DONE };
 
 /* a request of a user's, waiting or answered, or session's own watch */
 struct pending {
 	TAILQ_ENTRY(pending)	 entry;
-	uint32_t		 id;		/* front's, or 0: a watch */
+	uint32_t		 id;		/* front's id; 0 for a watch */
 	int			 gone;		/* front's client is gone */
 	struct deck_request	 r;
 	char			*text;		/* setrules' rules */
 	size_t			 textlen;
-	size_t			 textoff;	/* sent nshd */
+	size_t			 textoff;	/* bytes sent to nshd */
 };
 
 /* an event stream of a user's */
@@ -141,7 +144,7 @@ enum { TS_ASKED, TS_RUNS };
 /* a terminal of a user's, and its stream */
 struct terminal {
 	TAILQ_ENTRY(terminal)	 entry;
-	uint32_t		 id;		/* its stream's */
+	uint32_t		 id;		/* id of its stream */
 	int			 n;		/* the page's name for it */
 	int			 state;
 	int			 pty;		/* or -1 */
@@ -171,7 +174,7 @@ struct user {
 	int			 headed;	/* its head sent */
 	int			 nrecords;
 	struct facts_in		 in;
-	struct jbuf		 j;		/* its answer's, to send front */
+	struct jbuf		 j;		/* answer JSON for front */
 	char			*out;		/* what nshd printed */
 	size_t			 outlen;
 	int			 lost;		/* some was not kept */
@@ -194,7 +197,7 @@ static struct {
 	uint32_t		 id;
 	char			*p;
 	size_t			 len;
-} incoming;			/* a setrules' rules, before it */
+} incoming;			/* rules for the next setrules request */
 static struct event		 ev_idle;
 /* what a count is for, and how a login ended */
 enum { FAIL_NAME = 1, FAIL_ADDR };
@@ -280,7 +283,7 @@ sessions(int debug, int verbose)
 	exit(0);
 }
 
-/* parent's connections to nshd, each for the login that asked */
+/* parent's connections to nshd, each for the request that asked */
 static void
 sessions_parent(int fd, short event, void *arg)
 {
@@ -329,7 +332,7 @@ sessions_front(int fd, short event, void *arg)
 		id = imsg_get_id(&imsg);
 		switch (imsg_get_type(&imsg)) {
 		case DECK_REQUEST:
-			/* n: rollback's, an rtable or a configure */
+			/* every use of n fits in 0 to 255 */
 			if (imsg_get_data(&imsg, &r, sizeof(r)) == -1 ||
 			    r.kind < DECK_LOGIN || r.kind > DECK_SETRULES ||
 			    (incoming.len > 0 && (incoming.id != id ||
@@ -370,7 +373,7 @@ sessions_front(int fd, short event, void *arg)
 			incoming.id = id;
 			break;
 		case DECK_READ:
-			/* an answer front has written: nshd's read again */
+			/* an answer front has written: read nshd again */
 			TAILQ_FOREACH(u, &users, entry)
 				if (u->cur != NULL && u->cur->id == id &&
 				    (from = answering(u)) != NULL) {
@@ -378,7 +381,7 @@ sessions_front(int fd, short event, void *arg)
 					from->paused = 0;
 					pipe_event(from);
 				}
-			/* or a terminal's stream: nsh's */
+			/* or a terminal's stream: read nsh again */
 			if ((t = term_find(id, &u)) != NULL) {
 				t->sent = 0;
 				term_event(t);
@@ -396,7 +399,7 @@ sessions_front(int fd, short event, void *arg)
 	pipe_event(&tofront);
 }
 
-/* a request, of a user's, by the token, or a login */
+/* a login, or a request of the user the token names */
 static void
 request(uint32_t id, struct deck_request *r)
 {
@@ -466,7 +469,7 @@ request(uint32_t id, struct deck_request *r)
 	next(u);
 }
 
-/* a login: a user, of no token yet, whose connection parent makes */
+/* a login: a user with no token yet, whose connection parent makes */
 static void
 login(uint32_t id, struct deck_request *r)
 {
@@ -974,7 +977,7 @@ msnow(void)
 	return ((int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
 }
 
-/* the next of u's requests, to nshd, if none is asked */
+/* u's next request, to nshd, unless one is waiting for an answer */
 static void
 next(struct user *u)
 {
@@ -1054,7 +1057,7 @@ next(struct user *u)
 		rules(u);
 		break;
 	default:
-		/* session's own: the watch its streams want */
+		/* session's own request: the watch its streams want */
 		memset(&w, 0, sizeof(w));
 		w.what = p->r.logs;
 		ask(u, IMSG_CTL_WATCH, &w, sizeof(w));
@@ -1134,7 +1137,7 @@ answered(struct user *u, int32_t status)
 	}
 	if (p->id != 0 && !p->gone && p->r.kind == DECK_SHOW &&
 	    status == NSHD_ELSEWHERE && u->toro == RO_NONE) {
-		/* not the system's to answer: nshd's shows', as nsh asks */
+		/* not the system's to answer: ask nshd's shows, as nsh does */
 		free(u->out);
 		u->out = NULL;
 		u->outlen = 0;
@@ -1190,7 +1193,7 @@ answered(struct user *u, int32_t status)
 	next(u);
 }
 
-/* what nshd printed for u's request, kept, but past DECK_OUTPUT bytes */
+/* what nshd printed for u's request, kept up to DECK_OUTPUT bytes */
 static void
 kept(struct user *u, const void *data, size_t len)
 {
@@ -1208,8 +1211,8 @@ kept(struct user *u, const void *data, size_t len)
 }
 
 /*
- * facts from from, for u's request, as JSON to front, from not read
- * while front has not written DECK_WINDOW messages: -1 if they cannot be
+ * facts from from, for u's request, as JSON to front, from paused once
+ * front has DECK_WINDOW messages not yet written: -1 if they cannot be
  * read
  */
 static int
@@ -1251,7 +1254,7 @@ ro_close(struct user *u)
 	u->toro = RO_DONE;
 }
 
-/* what answers u's request: its connection, or nshd's shows', or none */
+/* the pipe that answers u's request: to nshd, to nshd's shows, or NULL */
 static struct deck_pipe *
 answering(struct user *u)
 {
@@ -1302,8 +1305,9 @@ noticed(struct user *u, struct ibuf *b)
 }
 
 /*
- * What u's streams want nshd to watch, asked, once nothing else is: all
- * but logs while any stream is open, and the logs any of them follows
+ * What u's streams want nshd to watch, if that changed, asked ahead of
+ * u's other requests: commits and routes while any stream is open, and
+ * the logs any of them follows
  */
 static void
 rewatch(struct user *u)
@@ -1327,8 +1331,8 @@ rewatch(struct user *u)
 }
 
 /*
- * A terminal of u's, for stream id: its stream begun, and nshd asked
- * for it, as u's next request
+ * A terminal of u's, for stream id, and its stream begun; the caller
+ * asks nshd for it
  */
 static void
 terminal(uint32_t id, struct user *u)
@@ -1338,7 +1342,7 @@ terminal(uint32_t id, struct user *u)
 
 	if ((t = calloc(1, sizeof(*t))) == NULL)
 		fatal(NULL);
-	/* the lowest number none of u's has */
+	/* the lowest number none of u's terminals has */
 	for (n = 1; n <= DECK_TERMINALS; n++) {
 		TAILQ_FOREACH(o, &u->terms, entry)
 			if (o->n == n)
@@ -1355,7 +1359,7 @@ terminal(uint32_t id, struct user *u)
 	head(id, 200, 1, NULL, 0);
 }
 
-/* the terminal whose stream id is, and its user, or NULL */
+/* the terminal with stream id, and its user, or NULL */
 static struct terminal *
 term_find(uint32_t id, struct user **up)
 {
@@ -1372,9 +1376,9 @@ term_find(uint32_t id, struct user **up)
 }
 
 /*
- * nshd's answer to the terminal of stream id: its pty, which came
- * before, read and written, if status is 0; else the terminal ended, as
- * nshd said why
+ * nshd's answer to the terminal of stream id: if status is 0, its pty,
+ * which came before, is read and written; else the terminal ends, with
+ * the reason nshd printed
  */
 static void
 term_started(struct user *u, uint32_t id, int32_t status)
@@ -1404,9 +1408,8 @@ term_started(struct user *u, uint32_t id, int32_t status)
 }
 
 /*
- * What nsh writes, read, and to the terminal's stream, as an event of
- * it in base64, while front has not DECK_WINDOW messages of it to
- * write; and what was typed, written to nsh. When nsh ends, so does
+ * What nsh writes, read and sent to the terminal's stream as an event
+ * in base64, and what was typed, written to nsh. When nsh ends, so does
  * the terminal
  */
 static void
@@ -1587,7 +1590,7 @@ gone(uint32_t id)
 
 /*
  * u logged out, its connection closed, and its requests and streams
- * ended: with why, logged, if nshd ended it
+ * ended; if nshd ended it, why is logged
  */
 static void
 logout(struct user *u, const char *why)
@@ -1864,7 +1867,7 @@ j_who(struct jbuf *j, struct user *u)
 	J(j, "]}\n");
 }
 
-/* u's answer, begun, if it is not: its head, and its records' start */
+/* u's answer begun, if it is not: its head, and the start of its records */
 static void
 j_answer(struct user *u)
 {
@@ -1875,7 +1878,7 @@ j_answer(struct user *u)
 	J(&u->j, "{\"records\":[");
 }
 
-/* j, to front, for id, in messages that fit, and emptied: how many */
+/* j sent to front for id, in messages that fit, and emptied; their number */
 static int
 j_flush(struct jbuf *j, uint32_t id)
 {
@@ -1925,7 +1928,7 @@ user_free(struct user *u)
 	while (!TAILQ_EMPTY(&u->terms))
 		term_end(u, TAILQ_FIRST(&u->terms), "logged out");
 	if (u->cur != NULL) {
-		/* an answer begun ends as JSON still */
+		/* an answer begun still ends as valid JSON */
 		if (u->cur->id != 0 && !u->cur->gone && u->headed) {
 			J(&u->j, "],\"error\":\"nshd ended the session\","
 			    "\"ok\":false}\n");

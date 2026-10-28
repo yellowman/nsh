@@ -1781,10 +1781,10 @@ brprotect(int argc, char **argv, ...)
 }
 
 /*
- * A bridge as conf_brcfg() prints it.  In configure private the bridge
- * ioctls nsh sends change the one the candidate's lines describe, as
- * the driver would change the kernel's (net/if_bridge.c, bridgectl.c,
- * bridgestp.c and if_veb.c).
+ * A bridge as conf_brcfg() prints it.  In configure private, the bridge
+ * ioctls nsh sends change the bridge the candidate's lines describe, as
+ * the driver would change the bridge in the kernel (net/if_bridge.c,
+ * bridgectl.c, bridgestp.c and if_veb.c).
  */
 struct brport {
 	char name[IFNAMSIZ];
@@ -1794,7 +1794,7 @@ struct brport {
 	u_int32_t prot;		/* protected domains, a bit each */
 };
 
-/* A static address or a rule, as conf_brcfg() prints it after its name */
+/* A static address or a rule, as conf_brcfg() prints it after the keyword */
 struct brline {
 	char ifs[IFNAMSIZ];	/* the member it is for */
 	char *text;
@@ -1820,7 +1820,7 @@ static const struct {
 	{ "timeout",	DEFAULT_TIMEOUT },
 };
 
-/* The port lists: the members with flag set and without, or the spans */
+/* Port lists: members that have flag and lack without, or span ports */
 static const struct {
 	char *name;
 	u_int32_t flag, without;
@@ -1841,7 +1841,7 @@ static char *brnames[] = { "priority", "hellotime", "fwddelay", "maxage",
     "maxaddr", "timeout", "member", "stp", "span", "learning", "discover",
     "blocknonip", "ifpriority", "ifcost", "protect", "static", "rule" };
 
-/* Is line a port list, whose ports its command takes one by one? */
+/* Is line a port list, whose command takes one port at a time? */
 int
 brport_list(char *line)
 {
@@ -1856,7 +1856,7 @@ brport_list(char *line)
 	return 0;
 }
 
-/* Is line one of a member's own, whose first value is the member? */
+/* Is line a per-member line, whose first value is the member? */
 int
 brport_one(char *line)
 {
@@ -1870,7 +1870,7 @@ brport_one(char *line)
 	return 0;
 }
 
-/* By name, as bridge(4) lists the last member added first and veb(4) last */
+/* By name: bridge(4) lists the newest member first, veb(4) last */
 static int
 brport_cmp(const void *a, const void *b)
 {
@@ -1893,7 +1893,7 @@ brcfg_free(struct brcfg *b)
 	free(b->ports);
 }
 
-/* The port called name, or with add a new one, if it has none; or NULL */
+/* The port called name or NULL; with add, a new one, or NULL if it exists */
 static struct brport *
 brcfg_port(struct brcfg *b, const char *name, int add)
 {
@@ -1923,8 +1923,8 @@ brcfg_member(struct brcfg *b, const char *name)
 }
 
 /*
- * Add a static address, or with rule a rule, from its line after its
- * name: "00:1b:21:0a:0b:01 em2", "block in on em0"
+ * Add a static address, or with rule a rule, from its line after the
+ * keyword: "00:1b:21:0a:0b:01 em2", "block in on em0"
  */
 static int
 brcfg_line(struct brcfg *b, int rule, const char *text)
@@ -1973,7 +1973,7 @@ brcfg_static(struct brcfg *b, struct ether_addr *ea)
 	return -1;
 }
 
-/* bridge_ifremove(): the member's static addresses and rules go with it */
+/* remove p and its static addresses and rules, as bridge_ifremove() does */
 static void
 brcfg_del(struct brcfg *b, struct brport *p)
 {
@@ -2185,7 +2185,7 @@ brcfg_add(struct brcfg *b, char *brdg, char *name, int span)
 	return 0;
 }
 
-/* A time bstp_ioctl() keeps in ticks: secs, if from min to max ticks */
+/* Set time i to secs, if from min to max ticks, as bstp_ioctl() checks */
 static int
 brcfg_time(struct brcfg *b, int i, int secs, int min, int max)
 {
@@ -2195,7 +2195,7 @@ brcfg_time(struct brcfg *b, int i, int secs, int min, int max)
 	return 0;
 }
 
-/* bridge_findbif(): name, a member of the candidate's bridge */
+/* find member name of the candidate's bridge, as bridge_findbif() does */
 static int
 brcfg_findbif(struct brcfg *b, char *name, struct brport **p)
 {
@@ -2204,7 +2204,7 @@ brcfg_findbif(struct brcfg *b, char *name, struct brport **p)
 	return (*p = brcfg_member(b, name)) == NULL ? ESRCH : 0;
 }
 
-/* A rule, as the kernel keeps it: one for each way it goes */
+/* A rule, as the kernel keeps it: one for each direction */
 static int
 brcfg_rule(struct brcfg *b, struct ifbrlreq *req)
 {
@@ -2238,9 +2238,9 @@ brcfg_rule(struct brcfg *b, struct ifbrlreq *req)
 }
 
 /*
- * A bridge ioctl in configure private: the driver's answer, as
- * bridge_ioctl() gives it, for the bridge the candidate's lines describe,
- * whose lines then become the bridge it leaves
+ * A bridge ioctl in configure private: apply it to the bridge the
+ * candidate's lines describe and answer as bridge_ioctl() would, then
+ * write the resulting bridge back to the candidate's lines
  */
 static int
 cand_bridge(u_long cmd, void *data)
@@ -2411,7 +2411,7 @@ done:
 	return 0;
 }
 
-/* The kernel's bridge ioctls, or in configure private the candidate's */
+/* Send a bridge ioctl to the kernel, or in configure private, the candidate */
 static int
 br_ioctl(int s, u_long cmd, void *data)
 {
@@ -2491,7 +2491,7 @@ bridge_show_facts(struct facts_out *o, char *ifname)
 }
 
 /*
- * A bridge, b, its members in rs, as show_bridge() printed it, the
+ * Bridge b and its members in rs, as show_bridge() printed them, and the
  * headers before the first
  */
 void

@@ -252,7 +252,7 @@ ipsysctl(int set, char **cmd, ...)
 	if (candidate) {
 		char line[128];
 
-		/* the line conf() would print, in place of the sysctl's */
+		/* the line conf() would print; the sysctl is not set */
 		sysctl_line(line, sizeof(line), stab->name, x, larg);
 		if (line[0] == '\0')
 			return cand_setting(ST_DEFAULT, "%s %s", stab->name,
@@ -283,7 +283,7 @@ conf_sysctl(FILE *output, char *prefix, struct ipsysctl *x)
 	int v;
 
 	for (; x != NULL && x->name != NULL; x++) {
-		/* -1: this kernel has no such sysctl */
+		/* -1: this kernel has no such sysctl, or it cannot be read */
 		if ((v = sysctl_int(x->mib, 0, 1)) == -1)
 			continue;
 		sysctl_line(line, sizeof(line), prefix, x, v);

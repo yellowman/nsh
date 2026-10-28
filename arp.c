@@ -292,8 +292,8 @@ overwrite:
 }
 
 /*
- * arp in configure private: the line conf_arp_entry() prints for host's
- * entry, or with ea NULL, no line for host
+ * arp in configure private: set the line conf_arp_entry() prints for
+ * host's entry, or with ea NULL, remove host's line
  */
 static int
 arp_cand(const char *host, struct ether_addr *ea, int flags)
@@ -500,8 +500,8 @@ arp_facts_init(void)
 }
 
 /*
- * The entries of rt, from *cur, or only addr's: budget at most. 1 if
- * there are more, 0 if not, -1 if a record failed.
+ * The entries of rt, from *cur, or only addr's entry, at most budget of
+ * them. 1 if there are more, 0 if not, -1 if a record failed.
  */
 int
 arp_facts(struct facts_out *o, struct rtdump *rt, char **cur,

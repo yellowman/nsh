@@ -1,10 +1,10 @@
 /*
  * daemons.js: the daemons nsh starts, each in its workspace, a row for
  * each routing table it is in: whether the configuration enables it,
- * its rules, and whether it runs. The one chosen is inspected: its rules
- * as text, staged into the candidate as its edit in nsh sets them, and
- * whether it is enabled, as nsh's line; and its actions, each a live
- * operation
+ * its rules, and whether it runs. The inspector shows the chosen
+ * daemon's rules as text, staged into the candidate as its edit in nsh
+ * sets them, whether it is enabled, as nsh's line, and its actions, each
+ * a live operation
  */
 "use strict";
 
@@ -88,7 +88,7 @@ var DAEMONS = [
 ];
 
 var dconf = {};		/* each daemon's rules and state, by "name rtable" */
-var dfacts = [];	/* show daemons' records, the last */
+var dfacts = [];	/* records from the last show daemons */
 var dchosen = {};	/* each workspace's daemon chosen: its name and rtable */
 var DHISTORY = 10;	/* how many saves a daemon's history looks back */
 var DIFFPAIRS = 1000000;	/* line pairs a diff compares, at most */
@@ -96,8 +96,8 @@ var dinsp = null;	/* the daemon inspected, its settings, and edits */
 var dasked = 0;		/* inspections asked; the last is drawn */
 
 /*
- * a workspace's daemons: a table, the pf or bgpd editor under it
- * (editors.js), and an inspector beside them
+ * a workspace's daemons: a table, the rules editor under it (editors.js),
+ * and an inspector beside them
  */
 function daemonsBox(div) {
 	var bar = el("div", null, "bar"), split = el("div", null, "netsplit");
@@ -129,9 +129,9 @@ function daemonDef(name) {
 
 /*
  * each daemon's rules and whether it is enabled, by "name rtable", as
- * text, a configuration, has them: at the top for rtable 0, and in an
- * rtable's block, a space in, for the rest; a rules block's lines a
- * space further in, to its "!"
+ * the configuration text has them: rtable 0's at the top level, the
+ * others' in their rtable's block, a space in; a rules block's lines
+ * are a space further in, up to its "!"
  */
 function daemonConf(text) {
 	var out = {}, rt = 0, rules = null;
@@ -165,7 +165,7 @@ function daemonConf(text) {
 	return out;
 }
 
-/* name's records in rtable rt, of show daemons */
+/* show daemons' record of name in rtable rt */
 function observed(name, rt) {
 	return dfacts.find(function (r) {
 		return r.daemon === name && r.rtable === rt;
@@ -186,7 +186,7 @@ function running(name, rt) {
 	    " process" : " processes"), "on"];
 }
 
-/* the configuration, and show daemons: ws's daemons, drawn */
+/* ws's daemons, drawn from the configuration and show daemons */
 function daemons(ws) {
 	return Promise.all([ask("GET", "config", { what: candidate() ?
 	    "candidate" : "running" }), ask("GET", "show",
@@ -260,10 +260,10 @@ function dtable(ws) {
 }
 
 /*
- * name's rules and state in rt, inspected: the candidate's rules, asked
- * of nshd, in configure; else what runs has. Edits not yet staged to
- * the same daemon in the same rtable stay. An answer to an inspection
- * asked for before another is not drawn.
+ * name's rules and state in rt, inspected: in configure, the candidate's
+ * rules, asked of nshd; else the running configuration's. Edits not yet
+ * staged to the same daemon in the same rtable stay. An answer to an
+ * inspection asked for before another is not drawn.
  */
 function dinspect(ws, name, rt) {
 	var d = daemonDef(name), cf = dconf[name + " " + rt] || {};
@@ -295,7 +295,7 @@ function dinspect(ws, name, rt) {
 	});
 }
 
-/* was, with the edits not yet staged of o, the inspection before */
+/* was, with o's unstaged edits; o is the inspection before */
 function dkept(o, was) {
 	var now = { enabled: was.enabled, rules: was.rules };
 
@@ -306,7 +306,7 @@ function dkept(o, was) {
 	return now;
 }
 
-/* what text, a configuration, has of daemon name in rt: enabled, rules */
+/* what configuration text has of daemon name in rt: enabled, rules */
 function daemonState(text, name, rt) {
 	var cf = daemonConf(text)[name + " " + rt] || {};
 
@@ -325,10 +325,10 @@ function daemonLines(name, st) {
 
 /*
  * the lines of b set against those of a, in order, each marked " " if
- * both have it, "-" if a alone does or "+" if b alone does; only the
- * marked lines and the two each side of them, with " …" for the lines
- * left out between; none if a and b are the same. Lines that match at
- * the start and the end are skipped before the rest is compared
+ * both have it, "-" if a alone does or "+" if b alone does. Only the
+ * changed lines and the two each side of them are kept, with " …" for
+ * the lines left out between; none if a and b are the same. Lines that
+ * match at the start and the end are skipped before the rest is compared
  */
 function lineDiff(a, b) {
 	var s = 0, e = 0, out, shown = [], keep;
@@ -392,12 +392,12 @@ function lineMiddle(a, b) {
 	return out;
 }
 
-/* text's lines, its last newline or not */
+/* t's lines, whether or not it ends in a newline */
 function textLines(t) {
 	return t === "" ? [] : t.replace(/\n$/, "").split("\n");
 }
 
-/* lines of text, as a count of those added and taken away */
+/* the counts of lines added and taken away from was to now */
 function linesChanged(was, now) {
 	var a = textLines(was), b = textLines(now), add = 0, del = 0;
 	var left = {};
@@ -417,7 +417,7 @@ function linesChanged(was, now) {
 	return [add, del];
 }
 
-/* a group of the inspector's, open if it was, or if open */
+/* inspector group name, open as the user left it, else as open says */
 function dgroup(box, name, open) {
 	var det = el("details", null, "igroup"), sum = el("summary");
 
@@ -586,8 +586,9 @@ function dinspector() {
 
 /*
  * the daemon's Changes, in configure: what the candidate changes in it
- * from what runs; and its History: how it changed in each of the last
- * DHISTORY configurations saved, from the one saved before
+ * from the running configuration; and its History: how it changed in
+ * each of the last DHISTORY configurations saved, from the one saved
+ * before
  */
 function dchanges(box) {
 	var d = dinsp, det, diff, pre, h = d.history;
@@ -719,8 +720,8 @@ function drefresh() {
 /*
  * the edits, into the candidate, entering configure private if not in
  * configure: whether it is enabled, as nsh's line, in its rtable's mode;
- * its rules, as its edit in nsh sets them; then it again, with how each
- * went
+ * its rules, as its edit in nsh sets them; then the daemon is drawn
+ * again, with how each went
  */
 function dstage() {
 	var d = dinsp.def, rt = dinsp.rt, ws = dinsp.ws, results = [];

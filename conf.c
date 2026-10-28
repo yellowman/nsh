@@ -485,7 +485,7 @@ get_argnames(int flag_x, char *name, int *defenable, char **fenablenm,
 		*defenable = 1;
 		/* FALLTHROUGH */
 	case DB_X_ENABLE:
-		/* the first, as dhcp's restart enables it too */
+		/* the first, as dhcp's restart is DB_X_ENABLE too */
 		if (*fenablenm == NULL)
 			*fenablenm = name;
 		break;
@@ -1392,7 +1392,7 @@ conf_ifaddrs(FILE *output, char *ifname, int flags, int af)
 				    IN6_IFF_ANYCAST) != 0;
 			}
 
-			/* and lifetimes, as they were given */
+			/* the lifetimes too, to print them as given */
 			lt.ia6t_vltime = lt.ia6t_pltime = ND6_INFINITE_LIFETIME;
 			memset(&ifr6, 0, sizeof(ifr6));
 			strlcpy(ifr6.ifr_name, ifname, sizeof(ifr6.ifr_name));

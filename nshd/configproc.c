@@ -15,78 +15,80 @@
  */
 
 /*
- * config: the sessions, from frontend, and what they ask of system,
- * each on its own pipe. Each request to system has an id of its own;
- * system's answers for it go to the session that asked, if that
- * session is still there, its facts passed on unread. system learns
- * when a session's client has read all it was sent, and when the
- * session is gone, so it stops what it streams the session. A peer that
- * sends what it may not, or sends it wrong, ends config, and nshd with
- * it.
+ * config: the sessions, from frontend, and what they ask of system, each
+ * on its own pipe. Each request to system has an id of its own; system's
+ * answers for it go to the session that asked, if that session is still
+ * there, its facts passed on unread. system learns when a session's
+ * client has read all it was sent, so it may stream more, and when the
+ * session is gone, so it stops streaming to it. A peer that sends what it
+ * may not, or sends it wrong, ends config, and nshd with it.
  *
  * A session in configure has nsh's state of its own (session.c), and
- * config runs its lines through nsh's code in candidate mode, which
- * reads no kernel, no file and no program here: the running
- * configuration and what the lines read of the kernel are a snapshot's,
- * system's, taken when a session enters configure or shows its
- * candidate, and kept for every session until the next.
+ * config runs its lines through nsh's code in candidate mode, which here
+ * asks no kernel, opens no file and runs no program. The running
+ * configuration and what the lines read of the kernel come from a
+ * snapshot system takes when a session enters configure or shows its
+ * candidate, kept for every session until the next.
  *
- * configure private's candidate is the session's own; configure's is
- * one the sessions in configure share, and a commit of it commits what
- * each changed. configure exclusive is configure, while no other
- * session changes or commits a candidate, and it is refused while
- * another has it, or while another's changes to the shared candidate
- * are not committed. Leaving configure exclusive discards what was not
+ * configure private's candidate is the session's own; configure's is one
+ * the sessions in configure share, and a commit of it commits what each
+ * changed. configure exclusive is configure while no other session may
+ * change the shared candidate or commit. While another session has it,
+ * every mode but configure private is refused; configure exclusive is
+ * also refused while another user's changes to the shared candidate are
+ * not committed. Leaving configure exclusive discards what was not
  * committed. A commit of the shared candidate holds it, while it runs,
  * from the others' changes.
  *
  * A session has the permissions of its user's login class, which config
  * asks system for at the session's hello, by the uid frontend gives;
- * until they are in, the session may only say hello and go. A show,
- * the tables and names for completion, and a terminal need view; an
- * operation needs operate; configure private, configure terminal, a commit, a
- * rollback, a load and a daemon's rules need configure. configure and
- * configure exclusive need admin, as their candidate is everyone's.
- * exec is nsh's to check, as it runs a program: config only tells it
- * at hello.
- * A session without admin sees no password hash: config takes each
- * out of what it sends such a session of the configuration.
- * system checks and runs an operation a session may ask, and config
- * passes it on. A session of the web configurator's has no permissions
- * until it logs in, as system checks it; then it has the class of the
- * user it logged in as. Its terminal, which system starts, comes back
- * as a pty, which config passes on.
+ * until they are in, the session may only say hello, log in and go. A
+ * show, a watch, the tables and names for completion, and a terminal need
+ * view; an operation needs operate; configure private, configure
+ * terminal, a commit, a rollback, a load and a daemon's rules need
+ * configure. configure and configure exclusive need admin, as their
+ * candidate is everyone's. exec is nsh's to check, as it runs a program:
+ * config only tells it at hello. A session without admin sees no password
+ * hash: config takes each out of the configuration it sends such a
+ * session. system checks and runs an operation a session may ask, and
+ * config passes it on. A session of the web configurator's has no
+ * permissions until it logs in, as system checks it; then it has the
+ * class of the user it logged in as. Its terminal, which system starts,
+ * comes back as a pty, which config passes on.
  *
  * archive keeps the shared candidate, and who changed it, past config's
- * end: config sends it each time it changes, and answers the session
- * that changed it once archive says it kept it, or that it did not; a
- * config that starts takes what archive kept before a session enters
- * configure. If archive is down, a change is said not to be kept.
+ * end. config sends it each time it changes, and answers the session that
+ * changed it once archive says whether it kept it. A config that starts
+ * takes what archive kept before a session enters configure. If the
+ * candidate cannot be sent, or archive does not keep it, the session is
+ * told.
  *
- * A commit is one at a time, of all sessions': config plans it from a
- * snapshot, system tests the daemons' rules it changes (TEST), then
+ * Commits run one at a time, for all sessions: config plans a commit from
+ * a snapshot, system tests the daemons' rules it changes (TEST), then
  * records it (BEGIN), runs its script (APPLY) and, if a snapshot after
- * reads as the candidate, saves what runs (SAVE); if not, it runs the
- * script back, and the record goes (RECORD). It runs to its end if its
- * session goes. commit check stops after the tests. commit confirmed
- * begins with its minutes, which has system keep the record of a commit
- * not confirmed, and runs its script even if it is empty; then, if a
- * snapshot reads as the candidate, the commit's record goes, and what
- * runs is kept until the deadline, not saved. A commit that saves
- * confirms it. A commit outside configure only saves what runs, as one
- * that changes nothing does; check and confirmed are configure's.
+ * matches the candidate, saves the running configuration (SAVE); if not,
+ * it runs the rollback script, and the record goes (RECORD). It runs to
+ * its end if its session goes. commit check stops after the tests. commit
+ * confirmed passes its minutes to BEGIN, so system also keeps an
+ * unconfirmed commit record, and runs its script even if it is empty;
+ * then, if a snapshot matches the candidate, the commit's record goes,
+ * and the running configuration stays until the deadline, not saved. A
+ * commit that saves confirms it. A commit outside configure only saves
+ * the running configuration, as one that changes nothing does; check and
+ * confirmed are configure's.
  *
- * configure terminal is a candidate of the session's own, as what runs
- * on a snapshot taken for each line: a line that changes it is
- * committed, and not saved, the commit's record gone once a snapshot
- * after reads as the candidate (RECORD, as applied), and answered once
- * its commit ends, after which the candidate is what runs again. commit
- * there saves what runs; rollback has nothing to roll back.
+ * configure terminal gives the session its own candidate, reset to the
+ * running configuration from a new snapshot before each line. A line that
+ * changes the candidate is committed but not saved, and the commit record
+ * goes once a later snapshot matches the candidate (RECORD, as
+ * NSHD_APPLIED). The line is answered when its commit ends, and the
+ * candidate is then the running configuration again. commit there saves
+ * the running configuration; rollback has nothing to roll back.
  *
- * A daemon's rules come to a session in configure a part at a time,
- * and become its candidate's, in the rtable asked for, as the daemon's
- * edit makes them; the session may ask for them too. configure
- * terminal takes none.
+ * A daemon's rules come to a session in configure a part at a time, and
+ * become its candidate's rules, in the rtable asked for, as the daemon's
+ * edit makes them; the session may ask for them too. configure terminal
+ * takes none.
  *
  * A client that completes lines itself, as nsh's Tab does, asks config
  * for two things, sent as facts: nsh's command tables, and the names of
@@ -94,30 +96,30 @@
  * the last snapshot; if there is none yet, config takes one first.
  *
  * nsh -c's configuration comes a part at a time, each answered, outside
- * configure. After the last, on a snapshot, it becomes the candidate of
- * a session of its own, in place of what runs, which is committed, all
- * of it or none; then the candidate goes.
+ * configure. After the last, on a new snapshot, it becomes the session's
+ * own candidate, in place of the running configuration, and is committed,
+ * all of it or none; then the candidate goes.
  *
  * A session may watch commits, configure exclusive, and interfaces,
  * addresses and routes, and config sends it a notice, unasked, as each
- * changes: a commit saved, confirmed or applied, as it ends; a commit
- * not confirmed gone back, as system says; configure exclusive taken or
- * left; and, from the routing socket parent opened for it, fd 5,
- * interfaces or addresses changed, and the rtables whose routes did,
- * each said once a second at most. It may watch logs too: system
- * follows each, as a stream, whose text config sends as notices until
- * the watch drops the log or the stream ends, which config says. A
- * watch is answered once system has followed each log it adds, or
+ * changes: a commit saved, confirmed or applied, as it ends; an
+ * unconfirmed commit rolled back, as system says; configure exclusive
+ * taken or left; and interfaces or addresses changed, and the rtables
+ * whose routes did, which config reads from the routing socket parent
+ * opened for it, fd 5, and says once a second at most. It may watch logs
+ * too: system follows each, as a stream, whose text config sends as
+ * notices until the watch drops the log or the stream ends, which config
+ * says. A watch is answered once system has followed each log it adds, or
  * refused to.
  *
- * Told at its start that the boot is not done, config boots, as nsh -i
- * does, once there is a pipe to system: system says whether this boot
- * of the host's is done already (BOOT), and if not, gives the saved
- * configuration; a commit of no session's makes it what runs, all of
- * it that takes, as nothing it checks or tests refuses it; then
- * system records how it went (BOOTED), and parent is told. What nsh's
- * code and system print for it is logged. If system could not record
- * the boot, it runs, and did not go well.
+ * If parent says at startup that the boot is not done, config boots, as
+ * nsh -i does: system says whether this boot of the host is done already
+ * (BOOT), and if not, gives the saved configuration (SAVED). A commit of
+ * no session's then makes it the running configuration, all of it that
+ * takes, as nothing it checks or tests refuses it. system then records
+ * how the boot went (BOOTED), and parent is told. What nsh's code and
+ * system print for it is logged. If system could not record that the boot
+ * began, the boot still runs, but is reported as failed.
  */
 
 #include <sys/types.h>
@@ -145,7 +147,7 @@
 #include "kfacts.h"
 #include "session.h"
 
-#define SNAPSHOT_TEXT	(16 * 1024 * 1024)	/* a snapshot's, at most */
+#define SNAPSHOT_TEXT	(16 * 1024 * 1024)	/* most text in a snapshot */
 
 #define IDS_GONE	"% nshd: request ids exhausted\n"
 
@@ -162,65 +164,65 @@ struct session {
 	uint32_t		 id;
 	uid_t			 uid;
 	gid_t			 gid;
-	int			 web;	/* the web configurator's */
-	struct session_state	*st;	/* nsh's, once in configure */
+	int			 web;	/* a web configurator session */
+	struct session_state	*st;	/* nsh's state, once in configure */
 	int			 want;	/* the configure it asked for */
 	int			 how;	/* the configure it is in, or 0 */
 	int			 waits;
 	char			 line[NSHD_LINE];	/* configure terminal's */
-	char			*load;	/* nsh -c's, as it comes */
+	char			*load;	/* nsh -c's text, as it comes */
 	size_t			 loadlen;
 	char			 loaded[NSHD_COMMENT];	/* its comment */
-	char			*rules;	/* a daemon's, as they come, */
+	char			*rules;	/* a daemon's rules, as they come */
 	size_t			 ruleslen;
-	char			 rulesof[NSHD_DAEMON];	/* whose, or "", */
-	int			 rulesrt;	/* and the rtable's */
-	uint32_t		 keep;	/* the keeping its answer waits on */
+	char			 rulesof[NSHD_DAEMON];	/* the daemon, or "" */
+	int			 rulesrt;	/* their rtable */
+	uint32_t		 keep;	/* the KEEP its answer waits for */
 	struct nshd_context	 held;	/* that answer: its context, */
-	int			 heldmode;	/* if it gives one, */
+	int			 heldmode;	/* whether to send it, */
 	int			 heldr;		/* and how it ended */
 	int			 perms;		/* NSHD_*, -1 until known */
 	int			 watch;		/* NSHD_WATCH_* */
-	int			 starting;	/* the follows its watch waits */
-	int			 watchr;	/* on, and how they went */
+	int			 starting;	/* log follows not yet begun */
+	int			 watchr;	/* the watch's result status */
 };
 
 /* a request system has not finished, and the session that asked it */
 struct request {
 	TAILQ_ENTRY(request)	 entry;
 	uint32_t		 id;
-	uint32_t		 session;	/* or 0, a snapshot config keeps */
+	uint32_t		 session;	/* or 0 if no session made it */
 	int			 kind;
-	int			 n;		/* rollback n's */
-	char			*text;		/* and its text, as it comes */
+	int			 n;		/* rollback n, or the log bit */
+	char			*text;		/* its text, as it comes */
 	size_t			 len;
 	int			 bad;		/* past NSHD_PART */
-	int			 started;	/* a follow system said it began */
-	int			 stopped;	/* and one config stopped */
+	int			 started;	/* system began the follow */
+	int			 stopped;	/* config stopped the follow */
 };
 
-/* what a request's end does: answer the session, or what follows */
+/* kinds of request, by what config does when one ends */
 enum { REQ_ANSWER, REQ_COMMIT, REQ_ROLLBACK, REQ_PERMS, REQ_TEXT, REQ_LOGIN,
     REQ_FOLLOW };
 
-/* the commit, and what it waits on */
+/* the commit's steps, by what it waits on */
 enum {
 	COMMIT_PLAN,		/* a snapshot, to plan from */
 	COMMIT_TEST,		/* a daemon's test of its rules */
 	COMMIT_BEGIN,		/* the record made */
 	COMMIT_APPLY,		/* the script run */
 	COMMIT_VERIFY,		/* a snapshot, to verify */
-	COMMIT_SAVE,		/* what runs saved */
-	COMMIT_UNDO,		/* the script back run */
+	COMMIT_SAVE,		/* the running configuration, to save */
+	COMMIT_UNDO,		/* the rollback script run */
 	COMMIT_BACK,		/* a snapshot, to verify that */
-	COMMIT_RECORD,		/* the record gone, kept or back */
+	COMMIT_RECORD,		/* the record removed, as how says */
 	BOOT_BEGIN,		/* the boot begun, or done already */
 	BOOT_SAVED,		/* the saved configuration, to boot to */
 	BOOT_END		/* how the boot went, recorded */
 };
 
 struct commit {
-	uint32_t		 session;	/* or 0, gone */
+	uint32_t		 session;	/* or 0 if gone */
 	struct nshd_whose	 whose;		/* as system knows it */
 	uid_t			 uid;
 	int			 step;
@@ -228,18 +230,18 @@ struct commit {
 	int			 check;		/* commit check */
 	int			 test;		/* the plan's test running */
 	int			 failed;	/* a line of the script failed */
-	int			 minutes;	/* commit confirmed's, or 0 */
+	int			 minutes;	/* for commit confirmed, or 0 */
 	int			 save;		/* outside configure: a save */
 	int			 terminal;	/* configure terminal's line, */
 	int			 line;		/* and how the line ended */
-	int			 load;		/* nsh -c's */
-	int			 how;		/* it ended, NSHD_BACK or KEPT */
-	int			 begun;		/* and not ended, to system */
+	int			 load;		/* nsh -c's configuration */
+	int			 how;		/* the NSHD_* sent in RECORD */
+	int			 begun;		/* BEGIN done, not yet ended */
 	int			 shared;	/* of the shared candidate */
-	int			 boot;		/* the boot's */
-	int			 unrecorded;	/* and system could not record it */
-	int			 ok;		/* and it went well */
-	char			*saved;		/* what it boots to, as it comes */
+	int			 boot;		/* this is the boot */
+	int			 unrecorded;	/* system could not record it */
+	int			 ok;		/* the boot went well */
+	char			*saved;		/* saved text, as it comes */
 	size_t			 savedlen;
 	int			 savedbad;	/* past NSHD_PART */
 	char			 comment[NSHD_COMMENT];
@@ -260,22 +262,22 @@ static TAILQ_HEAD(, session)	sessions = TAILQ_HEAD_INITIALIZER(sessions);
 static TAILQ_HEAD(, request)	requests = TAILQ_HEAD_INITIALIZER(requests);
 static uint32_t			request_id;
 static struct snapshot		*snap;
-static struct kfacts		*kf_now;	/* the last snapshot's */
+static struct kfacts		*kf_now;	/* facts of the last snapshot */
 static struct commit		*commit;	/* the one running, or NULL */
 static struct cand_shared	*shared;	/* configure's candidate */
 static struct session		*exclusive;	/* in configure exclusive */
 static uid_t			*editors;	/* who changed shared since */
 static size_t			 neditors;
-static unsigned int		 shared_edits;	/* its edits, before a request */
-static char			 held[64];	/* cand_held's, if it is */
-static uint32_t			 keep_sent;	/* shared, sent archive */
-static uint32_t			 keep_done;	/* the last kept, or not */
-static int			 keep_loaded;	/* what archive kept, taken */
-static char			*loading;	/* that, as it comes */
+static unsigned int		 shared_edits;	/* its edits before a request */
+static char			 held[64];	/* cand_held's text, if held */
+static uint32_t			 keep_sent;	/* last KEEP sent to archive */
+static uint32_t			 keep_done;	/* last KEEP archive answered */
+static int			 keep_loaded;	/* archive's text was loaded */
+static char			*loading;	/* that text, as it comes */
 static size_t			 loading_len;
-static int			 loading_past;	/* past NSHD_KEEPMAX */
+static int			 loading_past;	/* too big, or archive failed */
 static struct event		 rt_ev;		/* the routing socket, */
-static struct event		 rt_tm;		/* its notices' second, */
+static struct event		 rt_tm;		/* a timer for its notices, */
 static int			 rt_links;	/* and what it saw change */
 static int			 rt_all;
 static uint8_t			 rt_tables[RT_TABLEID_MAX + 1];
@@ -623,7 +625,7 @@ config_dispatch_system(int fd, short event, void *arg)
 		switch (type = imsg_get_type(&imsg)) {
 		case IMSG_SYS_TEXT:
 		case IMSG_SYS_FACTS:
-			/* for a config before this one, or a request failed */
+			/* a request config no longer knows of: ignore it */
 			if (r == NULL)
 				break;
 			if (imsg_get_ibuf(&imsg, &b) == -1)
@@ -704,7 +706,7 @@ config_dispatch_system(int fd, short event, void *arg)
 			request_free(r);
 			break;
 		case IMSG_SYS_NOTICE:
-			/* a commit not confirmed gone back, or not */
+			/* an unconfirmed commit rolled back, or failed to */
 			if (imsg_get_data(&imsg, &nt, sizeof(nt)) == -1 ||
 			    nt.kind != NSHD_NOTICE_BACK ||
 			    (nt.n != 0 && nt.n != 1))
@@ -814,7 +816,7 @@ config_show(uint32_t session, struct nshd_show *show)
 		len = sizeof(rb);
 		kind = REQ_TEXT;
 	}
-	/* a configuration's text is had whole, to take its hashes out */
+	/* the whole text is collected only to take its hashes out */
 	if (kind == REQ_TEXT && !config_hides(sp))
 		kind = REQ_ANSWER;
 	if ((r = config_request(session, kind)) == NULL) {
@@ -826,7 +828,7 @@ config_show(uint32_t session, struct nshd_show *show)
 		fatal("%s", __func__);
 }
 
-/* configure, of its mode: the session's candidate, once a snapshot is in */
+/* enter configure in the mode asked for, once a snapshot is in */
 static void
 config_configure(uint32_t session, struct nshd_configure *cf)
 {
@@ -872,7 +874,7 @@ config_line(uint32_t session, struct nshd_line *line)
 
 	if ((sp = config_private(session)) == NULL)
 		return;
-	/* configure terminal's, once a snapshot is in */
+	/* in configure terminal, run it once a snapshot is in */
 	if (sp->how == NSHD_TERMINAL) {
 		strlcpy(sp->line, line->line, sizeof(sp->line));
 		config_wait(sp, WAIT_TERMINAL);
@@ -899,7 +901,7 @@ config_exit(uint32_t session)
 
 /*
  * commit, or commit check, of the session's candidate; or outside
- * configure, what runs saved
+ * configure, a save of the running configuration
  */
 static void
 config_commit(uint32_t session, struct nshd_commit *c)
@@ -911,7 +913,7 @@ config_commit(uint32_t session, struct nshd_commit *c)
 		config_answer(session, 1, "%% nshd: hello first\n");
 		return;
 	}
-	/* configure terminal's too, whose lines are committed already */
+	/* a save in configure terminal too, as its lines are committed */
 	if ((save = !config_in(sp) || sp->how == NSHD_TERMINAL) &&
 	    (c->check || c->minutes != 0)) {
 		config_answer(session, 1, "%% commit %s requires a "
@@ -948,8 +950,8 @@ config_commit(uint32_t session, struct nshd_commit *c)
 }
 
 /*
- * rollback n: the session's candidate starts over as configuration n
- * as it was saved, which system reads, or as what runs if n is 0
+ * rollback n: the session's candidate starts over as saved configuration
+ * n, which system reads, or as the running configuration if n is 0
  */
 static void
 config_rollback(uint32_t session, struct nshd_rollback *rb)
@@ -1094,8 +1096,8 @@ config_login(uint32_t session, struct nshd_login *lg)
 }
 
 /*
- * system's answer: the permissions of the user the session logged in
- * as, or, if it did not, -1, and the session as it was
+ * system's answer: the permissions of the user the session logged in as,
+ * or -1 if it did not, which leaves the session as it was
  */
 static void
 config_logged(struct request *r, int32_t status)
@@ -1161,9 +1163,9 @@ config_hides(struct session *sp)
 }
 
 /*
- * Whether session may ask type: hello and going, always; else what its
- * permissions allow, once they are in. Its handler answers one with no
- * hello
+ * Whether session may ask type: hello, close, read and login always; else
+ * what its permissions allow, once they are in. A request before hello
+ * passes, for its handler to refuse
  */
 static int
 config_may(uint32_t session, uint32_t type)
@@ -1389,8 +1391,9 @@ config_followed(struct session *sp, int log)
 }
 
 /*
- * A follow ended: refused, before it began, which the watch's answer
- * says; or, unless the watch dropped it, ended, which a notice says
+ * A follow ended: if system refused it before it began, the watch's
+ * answer says so; if it ended later, and the watch did not drop it, a
+ * notice says so
  */
 static void
 config_follow_end(struct request *r, int32_t status)
@@ -1410,8 +1413,8 @@ config_follow_end(struct request *r, int32_t status)
 
 /*
  * A notice of kind, about uid and n, with text, if not NULL, to each
- * session that watches what; to a session that sees no password hash,
- * with each taken out, as configure terminal's line may hold one
+ * session that watches what. A session that sees no password hash gets
+ * the text with each taken out, as a configure terminal line may hold one
  */
 static void
 config_notice(int what, int kind, uid_t uid, int n, const char *text)
@@ -1531,7 +1534,7 @@ config_routed(int fd, short event, void *arg)
 	memset(rt_tables, 0, sizeof(rt_tables));
 }
 
-/* session's, if in configure; or NULL, said why */
+/* the session, if in configure; or NULL, after saying why */
 static struct session *
 config_private(uint32_t session)
 {
@@ -1549,9 +1552,10 @@ config_private(uint32_t session)
 }
 
 /*
- * configure terminal's line, on a candidate as what runs now: committed,
- * not saved, if it changed it, and answered once the commit ends; 1 if
- * it is committed, else as a handler returns
+ * configure terminal's line, run on a candidate reset to the running
+ * configuration. If the line changes the candidate, it is committed, not
+ * saved, and answered once the commit ends. 1 if it is committed, else as
+ * a handler returns
  */
 static int
 config_terminal(struct session *sp)
@@ -1585,8 +1589,8 @@ config_terminal(struct session *sp)
 }
 
 /*
- * nsh -c's configuration, a part, kept, answered; the last, once a
- * snapshot is in, loaded and committed
+ * a part of nsh -c's configuration, kept and answered; after the last,
+ * once a snapshot is in, the configuration is loaded and committed
  */
 static void
 config_load(uint32_t session, struct nshd_load *l)
@@ -1627,9 +1631,9 @@ config_load(uint32_t session, struct nshd_load *l)
 }
 
 /*
- * A daemon's rules in the session's candidate, in an rtable: asked for,
- * printed; or a part of them, kept, answered, and with the last, set,
- * as the daemon's edit sets them
+ * A daemon's rules in the session's candidate, in an rtable: printed when
+ * asked for; or kept and answered a part at a time, and set with the last
+ * part, as the daemon's edit sets them
  */
 static void
 config_rules(uint32_t session, struct nshd_rules *rl)
@@ -1686,7 +1690,7 @@ config_rules(uint32_t session, struct nshd_rules *rl)
 	config_ran(sp, r, 0);
 }
 
-/* the parts of a daemon's rules the session sent, gone */
+/* the parts of a daemon's rules the session sent, dropped */
 static void
 rules_drop(struct session *sp)
 {
@@ -1697,9 +1701,10 @@ rules_drop(struct session *sp)
 }
 
 /*
- * nsh -c's configuration, as a candidate of its own in place of what
- * runs: committed, if it differs, all of it or none, and answered once
- * the commit ends; 1 if it is committed, else as a handler returns
+ * nsh -c's configuration, as a candidate of its own in place of the
+ * running configuration. If it differs, it is committed, all of it or
+ * none, and answered once the commit ends. 1 if it is committed, else as
+ * a handler returns
  */
 static int
 config_loaded(struct session *sp)
@@ -1752,10 +1757,10 @@ config_in(struct session *sp)
 }
 
 /*
- * sp into the configure it asked for, if it may: configure and configure
- * exclusive are refused while another has configure exclusive, and
- * configure exclusive while another's changes to the shared candidate
- * are not committed. As a handler returns
+ * sp into the configure it asked for, if it may: each but configure
+ * private is refused while another has configure exclusive, and configure
+ * exclusive while another user's changes to the shared candidate are not
+ * committed. As a handler returns
  */
 static int
 config_enter(struct session *sp)
@@ -1786,8 +1791,8 @@ config_enter(struct session *sp)
 }
 
 /*
- * sp left configure: if it had configure exclusive, what the shared
- * candidate has not committed is discarded
+ * sp left configure: if it had configure exclusive, the shared
+ * candidate's uncommitted changes are discarded
  */
 static void
 config_left(struct session *sp)
@@ -1831,8 +1836,8 @@ shared_hold(struct session *sp)
 }
 
 /*
- * After: if sp changed the shared candidate, sp among who did, and it
- * kept before sp is answered
+ * After: if sp changed the shared candidate, sp's user is added to who
+ * did, and the candidate is kept before sp is answered
  */
 static void
 shared_done(struct session *sp)
@@ -1864,8 +1869,8 @@ shared_done(struct session *sp)
 }
 
 /*
- * Say what, by the users other than uid who changed the shared
- * candidate, if there are any: how many
+ * Say what, followed by the users other than uid who changed the shared
+ * candidate, if there are any; returns how many
  */
 static size_t
 editors_say(uid_t uid, const char *what)
@@ -1887,9 +1892,9 @@ editors_say(uid_t uid, const char *what)
 }
 
 /*
- * The shared candidate changed: it, and who changed it, to archive to
- * keep as the next keeping: its number, or 0, said why, if archive is
- * down or it could not be sent
+ * The shared candidate changed: send it, and who changed it, to archive
+ * to keep. Returns its KEEP's number, or 0 after saying why it could not
+ * be sent
  */
 static uint32_t
 shared_keep(void)
@@ -1907,9 +1912,9 @@ shared_keep(void)
 }
 
 /*
- * The shared candidate as it is, and who changed it, as "editors" and a
- * uid for each, to archive, to keep as keeping seq: -1, logged, if it
- * could not be sent
+ * Send archive the shared candidate to keep as KEEP seq, after a line of
+ * "editors" and the uid of each user who changed it. Returns -1, and logs
+ * why, if it could not be sent
  */
 static int
 shared_send(uint32_t seq)
@@ -1951,8 +1956,8 @@ shared_send(uint32_t seq)
 }
 
 /*
- * The shared candidate's keepings to seq are done, with warn, if they
- * were not kept: the sessions that waited on them answered
+ * archive answered each KEEP up to seq, with warn if it did not keep
+ * them: each session that waited on one is answered, after warn
  */
 static void
 shared_kept(uint32_t seq, const char *warn)
@@ -2012,7 +2017,7 @@ shared_load(void)
 	log_warnx("what archive kept is not a shared candidate");
 	neditors = 0;
  done:
-	/* nsh's code may have said why, to no session */
+	/* discard what nsh's code printed, such as why the text was bad */
 	printed_text(NULL, 0, 0, 0);
 	free(loading);
 	loading = NULL;
@@ -2111,7 +2116,7 @@ config_snapshot_done(int32_t status)
 	TAILQ_FOREACH(sp, &sessions, entry) {
 		switch (sp->waits) {
 		case WAIT_CONFIGURE:
-			/* the shared candidate, once what archive kept is */
+			/* the shared candidate, once what archive kept is in */
 			if (sp->want != NSHD_PRIVATE && !keep_loaded)
 				continue;
 			r = config_enter(sp);
@@ -2132,7 +2137,7 @@ config_snapshot_done(int32_t status)
 			mode = 1;
 			break;
 		case WAIT_TERMINAL:
-			/* or answered once its commit ends */
+			/* if a commit started, answer when it ends */
 			if ((r = config_terminal(sp)) == 1) {
 				sp->waits = WAIT_NONE;
 				continue;
@@ -2176,7 +2181,7 @@ config_snapshot_lost(const char *msg)
 }
 
 /*
- * What nsh's code printed for sp, with mode its mode, and r, as a
+ * What nsh's code printed for sp, its context if mode is set, and r, as a
  * handler returns it: 0, or -1 when it failed
  */
 static void
@@ -2296,7 +2301,7 @@ commit_ended(int32_t status)
 		break;
 	case BOOT_SAVED:
 		if (status != 0) {
-			/* what it got is why */
+			/* the text received says why */
 			log_text(commit->saved, commit->savedlen);
 			boot_ran(0);
 		} else if (commit->savedbad) {
@@ -2338,7 +2343,7 @@ commit_ended(int32_t status)
 		commit_wait(COMMIT_BACK);
 		break;
 	case COMMIT_SAVE:
-		/* taken: the candidate starts again, saved or not */
+		/* the change is in effect: reset the candidate, saved or not */
 		r = status == 0 ? 0 : -1;
 		if (r == 0)
 			config_notice(NSHD_WATCH_COMMITS, NSHD_NOTICE_COMMIT,
@@ -2386,7 +2391,7 @@ commit_test(int n)
 	commit_request(COMMIT_TEST, IMSG_SYS_TEST, &nt, sizeof(nt));
 }
 
-/* the plan checked: what runs saved, if it is the candidate, or begun */
+/* the plan checked: save if nothing changes, else begin the commit */
 static void
 commit_go(void)
 {
@@ -2411,7 +2416,7 @@ commit_go(void)
 	commit_request(COMMIT_BEGIN, IMSG_SYS_BEGIN, &b, sizeof(b));
 }
 
-/* a part of the commit's, to system, as chunks: -1 if too long, said */
+/* a commit part, to system in chunks; -1 if too long, and the commit ends */
 static int
 commit_part(int32_t part, const char *text, size_t len)
 {
@@ -2459,7 +2464,7 @@ commit_apply(int step)
 	commit_request(step, IMSG_SYS_APPLY, &a, sizeof(a));
 }
 
-/* what runs, saved by system, with who commits and their comment */
+/* the running configuration, saved by system with the commit's comment */
 static void
 commit_save(void)
 {
@@ -2472,7 +2477,7 @@ commit_save(void)
 	commit_request(COMMIT_SAVE, IMSG_SYS_SAVE, &sv, sizeof(sv));
 }
 
-/* the record of the commit begun gone, as how says it ended */
+/* system told how the commit ended, so it removes the record */
 static void
 commit_record(int how)
 {
@@ -2485,8 +2490,8 @@ commit_record(int how)
 }
 
 /*
- * The commit, of session sp's, which system begins only while the
- * request frontend told it of is not answered
+ * The commit of session sp, which system begins only while the request
+ * frontend told it of is not answered
  */
 static void
 commit_new(struct session *sp)
@@ -2499,8 +2504,8 @@ commit_new(struct session *sp)
 }
 
 /*
- * A request of the commit's, to system, whose end it waits on at step,
- * after what nsh's code printed for it
+ * A request for the commit, sent to system after what nsh's code printed
+ * for it; the commit waits at step for it to end
  */
 static void
 commit_request(int step, uint32_t type, const void *data, size_t len)
@@ -2523,8 +2528,8 @@ commit_request(int step, uint32_t type, const void *data, size_t len)
 }
 
 /*
- * The commit ends, r as a handler returns it, or with msg said after
- * what nsh's code printed for it
+ * The commit ends, with r as a handler returns it, or with msg, said
+ * after what nsh's code printed for it
  */
 static void
 commit_end(int r, const char *msg)
@@ -2533,7 +2538,7 @@ commit_end(int r, const char *msg)
 	struct nshd_record	 rc = { NSHD_LEFT };
 	struct session		*sp;
 
-	/* the boot's did not go well, and it ends once that is recorded */
+	/* the boot did not go well, and it ends once that is recorded */
 	if (c->boot) {
 		if (msg != NULL)
 			log_text(msg, strlen(msg));
@@ -2544,12 +2549,12 @@ commit_end(int r, const char *msg)
 		return;
 	}
 	commit = NULL;
-	/* system told a commit begun ended, if it did not say so itself */
+	/* tell system that a begun commit ended without RECORD or SAVE */
 	if (c->begun && link_compose(&links[SYSTEM], IMSG_SYS_RECORD, 0, &rc,
 	    sizeof(rc)) == -1)
 		fatal("%s", __func__);
 	sp = session_find(c->session);
-	/* configure terminal's candidate is what runs again */
+	/* configure terminal's candidate is the running configuration again */
 	if (c->terminal && sp != NULL && session_renew(sp->st) == -1)
 		r = -1;
 	if (c->terminal && c->line == -1)
@@ -2571,7 +2576,7 @@ commit_end(int r, const char *msg)
 	free(c);
 }
 
-/* the commit's candidate starts again: -1, said why, if it could not */
+/* the commit's candidate starts again: -1, after saying why, if not */
 static int
 commit_renew(void)
 {
@@ -2592,7 +2597,7 @@ commit_renew(void)
 	return (0);
 }
 
-/* the boot, a commit of no session's, begun */
+/* begin the boot, a commit of no session's */
 static void
 boot_start(void)
 {
@@ -2624,7 +2629,7 @@ boot_text(struct ibuf *b)
 	commit->savedlen += ibuf_size(b);
 }
 
-/* the boot's plan, from the snapshot: what is not the saved, applied */
+/* the boot's plan, from the snapshot, to apply what differs from the saved */
 static void
 boot_plan(void)
 {
@@ -2651,14 +2656,14 @@ boot_ran(int ok)
 		boot_end(1);
 		return;
 	}
-	/* first, as a request that cannot be made ends the boot */
+	/* set first, as a request that cannot be made ends the boot */
 	commit->step = BOOT_END;
 	commit->ok = ok;
 	res.status = !ok;
 	commit_request(BOOT_END, IMSG_SYS_BOOTED, &res, sizeof(res));
 }
 
-/* the boot's commit, if any, gone, and what nsh's code printed logged */
+/* free the boot's commit, if any, and log what nsh's code printed */
 static void
 boot_drop(void)
 {
@@ -2671,7 +2676,7 @@ boot_drop(void)
 	printed_log();
 }
 
-/* the boot done, 0 if it went well: parent told */
+/* the boot is done: parent is told status, 0 if it went well */
 static void
 boot_end(int32_t status)
 {
@@ -2710,7 +2715,7 @@ config_answer(uint32_t session, int32_t status, const char *fmt, ...)
 		fatal("%s", __func__);
 }
 
-/* archive's answers: what it kept, for config to take, or that it kept */
+/* archive's answers: what it kept, for config to take, or whether it kept */
 static void
 config_dispatch_archive(int fd, short event, void *arg)
 {
@@ -2780,7 +2785,7 @@ config_dispatch_archive(int fd, short event, void *arg)
 	link_broken(l, "sent imsg %u, which it may not, or not whole", type);
 }
 
-/* archive's pipe here: what it kept, asked for */
+/* archive's pipe is here: ask for what it kept */
 static void
 config_ready_archive(void)
 {
@@ -2801,7 +2806,7 @@ config_tell(uint32_t session, uint32_t type)
 }
 
 /*
- * A request of session's, or config's own if 0, of kind, with an id of
+ * A request of kind for session, or for config itself if 0, with an id of
  * its own; NULL when the ids are exhausted
  */
 static struct request *
@@ -2821,8 +2826,8 @@ config_request(uint32_t session, int kind)
 }
 
 /*
- * sp is gone, and the candidate it had, or, from configure exclusive,
- * what it did not commit; a commit of its runs on
+ * sp is gone, with the candidate it had and, if it had configure
+ * exclusive, its uncommitted changes; a commit it began runs on
  */
 static void
 session_gone(struct session *sp)
@@ -2862,7 +2867,7 @@ request_find(uint32_t id)
 	return (r);
 }
 
-/* r, taken from requests, freed */
+/* free r, already taken from requests */
 static void
 request_free(struct request *r)
 {

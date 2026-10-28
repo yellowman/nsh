@@ -113,7 +113,7 @@ pflow_addr(const char *val, struct sockaddr_storage *ss)
 /*
  * An address as pflow_addr() reads it back, in result, PFLOW_ADDRSTRLEN
  * long: an IPv6 address in [], and ":port" if it has one.
- * Returns 1 if the address is not set.
+ * Returns 1 if the address is not set or cannot be converted.
  */
 int
 pflow_addrstr(struct sockaddr_storage *ss, char *result)

@@ -15,9 +15,9 @@
  */
 
 /*
- * What configure private reads of the kernel, and nothing else: nsh
- * asks the kernel; nshd's config, which has no kernel to ask, reads what
- * system's last snapshot found (kfacts_set()), as facts (kfacts.c).
+ * What configure private reads of the kernel, and nothing else. nsh
+ * asks the kernel. nshd's config cannot, so it reads what system's last
+ * snapshot found, as facts (kfacts.c, kfacts_set()).
  */
 
 #ifndef KFACTS_H
@@ -36,7 +36,7 @@ struct kif {
 	char		 lladdr[KF_LLADDR];	/* the one it came with, or "" */
 	int		 hasll6;
 	struct in6_addr	 ll6;		/* its link-local address */
-	uint64_t	 media;		/* SIOCGIFMEDIA's current, or 0 */
+	uint64_t	 media;		/* SIOCGIFMEDIA's current word, or 0 */
 	uint64_t	*medias;	/* and the words its driver lists */
 	size_t		 nmedias;
 };
@@ -48,7 +48,7 @@ struct kfacts {
 	size_t		 ncloners;
 	char		(*groups)[IFNAMSIZ];	/* the interface groups */
 	size_t		 ngroups;
-	unsigned char	 rtables[256];	/* 1 where the table is there */
+	unsigned char	 rtables[256];	/* 1 for each table that exists */
 	int		 dhcpleased;	/* its control socket answers */
 	int		 failed;	/* kfacts_record() could not keep one */
 };

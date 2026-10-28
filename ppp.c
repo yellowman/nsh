@@ -597,7 +597,8 @@ pppoe_cand(struct pppoediscparms *parms)
 
 /*
  * Take away ifname's pppoe dev: PPPOESETPARMS drops it before it
- * refuses a dev that is no Ethernet interface, and no interface is "-"
+ * refuses a dev that is no Ethernet interface, so ask for "-", which is
+ * never an interface
  */
 static int
 pppoe_nodev(int ifs, char *ifname)
@@ -636,8 +637,8 @@ is_pppoe(char *ifname, int ifs)
 }
 
 /*
- * ifname's IP address mode, as nsh.db has it; one it does not have is
- * ipcp, and init records it so
+ * ifname's IP address mode, as nsh.db has it; if it has none, ipcp,
+ * which init records there
  */
 static int
 pppoe_ipaddrmode(char *ifname, int init)

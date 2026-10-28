@@ -29,17 +29,17 @@
  * (ROLLBACK), and then nothing other sessions change shows through.
  *
  * Each top-level statement the journal changes is kept as it was before
- * the journal first changed it, so a commit that finds another commit
- * changed it since is refused (cand_conflicts()); committing again keeps
- * this session's changes over the other's.
+ * the journal first changed it.  A commit is refused if another commit
+ * changed one since (cand_conflicts()); committing again keeps this
+ * session's changes over the other's.
  *
- * nshd's configure is a candidate sessions share, struct cand_shared,
- * which a session takes as its own while it runs (session.c), and
- * leaves to the others when it leaves configure (cand_detach()). While
- * another session holds it, nshd's config sets cand_held, and no edit
- * or rollback changes it.
+ * nshd's configure uses a candidate that sessions share, struct
+ * cand_shared.  A session takes it as its own while it runs a command
+ * (session.c), and leaves it to the others when it leaves configure
+ * (cand_detach()).  While another session holds it, nshd's config sets
+ * cand_held, and no edit or rollback changes it.
  *
- * A command takes part only as its table row says (cand): a CAND_EDIT
+ * A command's table row (cand) says how it takes part.  A CAND_EDIT
  * handler checks 'candidate' and calls cand_setting() where it would
  * have changed the kernel, a CAND_RUN command runs as it always does,
  * and any other command is refused until its handler is converted.
@@ -70,19 +70,19 @@
 #include "session.h"
 
 int candidate;				/* configure private is on */
-int cand_rtable;			/* the rtable its lines are for */
+int cand_rtable;			/* rtable for rtable settings, or 0 */
 int cand_sharing;			/* the candidate is a shared one */
 const char *cand_held;			/* why it may not change now, or NULL */
 
 static struct cnode *cand;		/* this session's view of it */
 static struct cjournal *cand_journal;	/* the changes it made */
 static struct cnode *cand_base;		/* what rollback N loaded, or NULL */
-static unsigned int cand_nedits;	/* the edits that changed it */
+static unsigned int cand_nedits;	/* number of edits and rollbacks */
 
-/* a top-level statement the journal changes, as it was before it did */
+/* a top-level statement the journal changes, as it was before the change */
 struct cand_was {
 	char	*top;		/* the statement, or its lines' name */
-	int	 whole;		/* the statement, else the lines of that name */
+	int	 whole;		/* top is a statement, not a line name */
 	char	*image;		/* as conftree_write_stmt() wrote it */
 };
 static struct cand_was *cand_was;
@@ -96,7 +96,7 @@ struct sglobal candidate_sglobals[] = {
 	{ NULL }
 };
 
-/* a candidate sessions share, as each takes it as its own */
+/* a shared candidate, which each session loads into its globals */
 struct cand_shared {
 	struct cnode	*cand, *base;
 	struct cjournal	*journal;
@@ -142,14 +142,14 @@ cand_begin(void)
 	return 0;
 }
 
-/* A candidate for sessions to share, not begun: NULL, errno set */
+/* A new shared candidate, not begun, or NULL with errno set */
 struct cand_shared *
 cand_shared_new(void)
 {
 	return calloc(1, sizeof(struct cand_shared));
 }
 
-/* The shared candidate sh in as this session's if in, else out to sh */
+/* If in, load sh as this session's candidate; else save it back to sh */
 void
 cand_share(struct cand_shared *sh, int in)
 {
@@ -186,8 +186,8 @@ cand_detach(void)
 }
 
 /*
- * The shared candidate sh starts again from the running configuration:
- * -1, said why, and sh as it was, if it could not
+ * The shared candidate sh starts again from the running configuration.
+ * -1 if it could not, after saying why, with sh as it was
  */
 int
 cand_shared_renew(struct cand_shared *sh)
@@ -219,7 +219,7 @@ cand_shared_changed(struct cand_shared *sh)
 	    (cjournal_len(sh->journal) > 0 || sh->base != NULL);
 }
 
-/* The edits that changed sh, since it began, counted */
+/* The number of edits and rollbacks made to sh since it began */
 unsigned int
 cand_shared_edits(struct cand_shared *sh)
 {
@@ -227,12 +227,12 @@ cand_shared_edits(struct cand_shared *sh)
 }
 
 /*
- * The shared candidate sh, to f, as cand_shared_read() reads it: what
- * rollback N loaded, if it did, as "base LENGTH" and its text, each
- * edit of its journal as "edit OP KEYLEN BLOCKLENGTH LINELENGTH" and
- * its block, or -1 for none, and line, and each statement as it was
- * before an edit first changed it as "was WHOLE TOPLENGTH IMAGELENGTH"
- * and its name and text. -1 if it could not be written
+ * The shared candidate sh, written to f as cand_shared_read() reads it:
+ * what rollback N loaded, if it did, as "base LENGTH" and its text; each
+ * edit of its journal as "edit OP KEYLEN BLOCKLENGTH LINELENGTH", its
+ * block (BLOCKLENGTH -1 for none) and its line; and each statement as it
+ * was before an edit first changed it, as "was WHOLE TOPLENGTH
+ * IMAGELENGTH", its name and its text. -1 if it could not be written
  */
 int
 cand_shared_write(struct cand_shared *sh, FILE *f)
@@ -270,7 +270,7 @@ cand_shared_write(struct cand_shared *sh, FILE *f)
 	return 0;
 }
 
-/* len bytes of text at *p, before end, as a string: NULL if not */
+/* the len bytes at *p, before end, as a new string, or NULL */
 static char *
 cand_field(char **p, char *end, size_t len)
 {
@@ -285,9 +285,9 @@ cand_field(char **p, char *end, size_t len)
 }
 
 /*
- * The shared candidate sh, which no session has begun, as
- * cand_shared_write() wrote it in the len bytes of text: -1, said why,
- * and sh as it was, if they are not one
+ * The shared candidate sh, which no session has begun, read from the len
+ * bytes of text that cand_shared_write() wrote.  -1 on error, after
+ * saying why, with sh as it was
  */
 int
 cand_shared_read(struct cand_shared *sh, char *text, size_t len)
@@ -407,8 +407,8 @@ cand_changed(void)
  * A command in configure private: put the setting that line names into
  * state (ST_*), as the command would have in the kernel. In interface
  * or bridge mode the line goes into that interface's block.  line is
- * canonical, as conf() prints it, without "no". -1 if it could not,
- * said why, else 0, as a handler returns.
+ * canonical, as conf() prints it, without "no". 0, or -1 after
+ * saying why if it could not, as a handler returns.
  */
 int
 cand_setting(int state, const char *fmt, ...)
@@ -439,8 +439,9 @@ cand_ifsetting(char *name, int state, const char *fmt, ...)
 
 /*
  * The n'th line named name, from 0, in the candidate's block for the
- * current interface, or at the top level outside one, or in the current
- * rtable's block if it is a line of an rtable's, or NULL
+ * current interface, or NULL.  Outside an interface, the line is looked
+ * for in the current rtable's block if name is an rtable setting, else
+ * at the top level
  */
 char *
 cand_line(char *name, size_t n)
@@ -470,10 +471,10 @@ cand_ifline(char *ifn, char *name, size_t n)
 }
 
 /*
- * Make the current interface's lines called one of names[] the lines in
- * buf, which a conf() printer wrote: each in place of the lines of its
- * key, and none it did not write.  A line with "no" turns its setting
- * off.  buf is changed.
+ * Replace the current interface's lines named in names[] with the lines
+ * in buf, which a conf() printer wrote.  Each line in buf replaces the
+ * lines with its key, and lines that buf does not have are removed.  A
+ * line with "no" turns its setting off.  buf is changed.
  */
 int
 cand_putlines(char **names, size_t nnames, char *buf)
@@ -643,8 +644,8 @@ cand_rule(char *stmt, size_t n)
 }
 
 /*
- * Make the n lines in lines the lines of a daemon's rules stmt, an
- * ordered statement, in order; with none, stmt goes
+ * Make the n lines in lines, in that order, the lines of a daemon's
+ * rules stmt, an ordered statement; if n is 0, stmt is removed
  */
 int
 cand_setrules(char *stmt, char **lines, size_t n)
@@ -684,10 +685,10 @@ cand_setrules(char *stmt, char **lines, size_t n)
 }
 
 /*
- * rtable in configure private: with set, the lines of an rtable's that
- * follow are table's, in its block, called name if name is not NULL,
- * which is made if the candidate has none; without, the block goes.
- * Table 0's are the top level's.
+ * rtable in configure private: with set, the rtable settings that
+ * follow go into table's block, which is made if the candidate has none
+ * and named name if name is not NULL.  Without set, the block is
+ * removed.  Table 0's settings are at the top level.
  */
 int
 cand_rtable_set(int set, int table, char *name)
@@ -760,7 +761,7 @@ cand_hasrtable(int table)
 	return table == 0 || cand_rtblock(block, sizeof(block), table) == 0;
 }
 
-/* The current rtable's block, in buf, or NULL for table 0 */
+/* The current rtable's block, in buf, or NULL if there is none */
 static char *
 cand_rtcur(char *buf, size_t len)
 {
@@ -802,7 +803,7 @@ cand_isbridge(char *name)
  * interface's block in the candidate, or remove it with "no".  Sets
  * *isbridge to whether it takes the Bridgelist commands.  Returns 0 to
  * go on into interface mode, 1 when there is nothing more to do, and
- * -1 when it could not, said why.
+ * -1 when it could not, after saying why.
  */
 int
 cand_interface(int set, char *name, int *isbridge)
@@ -858,7 +859,7 @@ cand_tree(void)
 	return cand;
 }
 
-/* The candidate, written to f: -1 if it could not be, said why */
+/* The candidate, written to f: -1 on error, after saying why */
 int
 cand_write(FILE *f)
 {
@@ -885,7 +886,7 @@ pr_cand_conf(int argc, char **argv, ...)
 	FILE *f;
 	int fd, ret = 0;
 
-	/* configure private, nshd's */
+	/* an nshd configure mode: nshd has the candidate */
 	if (nshd_config)
 		return nshd_cshow("candidate-config");
 	if (!candidate) {
@@ -937,7 +938,7 @@ cand_rollback(int argc, char **argv, ...)
 			return -1;
 		}
 	}
-	/* configure private, nshd's */
+	/* an nshd configure mode: nshd has the candidate */
 	if (nshd_config)
 		return nshd_rollback(n);
 	if (n > 0) {
@@ -954,9 +955,10 @@ cand_rollback(int argc, char **argv, ...)
 }
 
 /*
- * The candidate starts over as base, which it keeps: configuration n as
- * it was saved, or with n -1 one loaded, which says nothing; or as the
- * running configuration if NULL: -1 if it could not, said why
+ * The candidate starts over as base, which it keeps: saved configuration
+ * n, or with n -1 a loaded one, for which nothing is printed; or as the
+ * running configuration if base is NULL.  -1 if it could not, after
+ * saying why
  */
 int
 cand_restart(struct cnode *base, int n)
@@ -1007,7 +1009,8 @@ cand_block(char *buf, size_t len, char *name, int isbridge)
 
 /*
  * Put the setting fmt names into state, in name's block, a bridge block
- * if isbridge, or at the top level if name is empty
+ * if isbridge.  If name is empty, it goes at the top level, or in the
+ * current rtable's block if it is an rtable setting
  */
 static int
 cand_vsetting(char *name, int isbridge, int state, const char *fmt,
@@ -1064,7 +1067,7 @@ cand_record(char *block, struct sedit *e)
 	errno = 0;
 	if ((r = conftree_edit(cand, e->op, block, e->line, e->keylen)) ==
 	    -1) {
-		/* conftree_edit() says why, but when memory ran out */
+		/* conftree_edit() prints why, except when memory ran out */
 		if (errno == ENOMEM)
 			printf("%% cand_record: %s\n", strerror(errno));
 		return -1;
@@ -1084,9 +1087,8 @@ cand_record(char *block, struct sedit *e)
 }
 
 /*
- * Before an edit first changes a top-level statement, what it was, but
- * on a rollback N's configuration: -1, said why, if it could not be
- * kept
+ * Before an edit first changes a top-level statement, keep a copy of it,
+ * except after rollback N.  -1 if it could not be kept, after saying why
  */
 static int
 cand_remember(char *block, struct sedit *e)
@@ -1131,7 +1133,7 @@ cand_remember(char *block, struct sedit *e)
 	return 0;
 }
 
-/* What t has of top, whole or its lines, as text: NULL, said why, if not */
+/* The text t has for top, whole or its lines, or NULL after saying why */
 static char *
 cand_image(struct cnode *t, char *top, int whole)
 {
@@ -1154,10 +1156,10 @@ cand_image(struct cnode *t, char *top, int whole)
 }
 
 /*
- * The statements the candidate changes that the running configuration,
- * now, has changed since, each said: how many, or -1, said why. With
- * rebase, what each was becomes what it is now, so the next commit
- * keeps the candidate's changes over it
+ * Report each statement the candidate changes that the running
+ * configuration, now, has changed since.  Returns how many, or -1 after
+ * saying why.  With rebase, what each was becomes what it is now, so the
+ * next commit keeps the candidate's changes over it
  */
 int
 cand_conflicts(struct cnode *now, int rebase)
@@ -1186,7 +1188,7 @@ cand_conflicts(struct cnode *now, int rebase)
 	return n;
 }
 
-/* No statement's before */
+/* Free the saved copies of statements (cand_was) */
 static void
 cand_forget(void)
 {

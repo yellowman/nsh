@@ -6,8 +6,8 @@
  * opens the interface's inspector. Routing tables & routes lists the
  * routing tables and the static routes; a route opens a form in the
  * inspector's place, which stages nsh's route lines. The configuration
- * is the candidate's in configure, else what runs, as the inspector's
- * is.
+ * is the candidate's in configure, else the running configuration, as
+ * the inspector's is.
  */
 "use strict";
 
@@ -37,7 +37,7 @@ function netAddresses(v, r, name) {
 	return addresses(name).join(" ");
 }
 
-/* name's CARP vhids, as show interface reports them, field f of each */
+/* field f of each of name's CARP vhids, as show interface reports them */
 function netVhids(f) {
 	return function (v, r, name) {
 		return vhids.filter(function (x) {
@@ -252,7 +252,7 @@ function netGrid(head, rows, sel, pick) {
 /*
  * the routing tables, with how many interfaces each has, as show
  * interface reports their routing domains, and how many static routes;
- * then the static routes, each opening its form; and a route added
+ * then the static routes, each opening its form; and a New route button
  */
 function netRoutesDraw(box) {
 	var routes = netRoutes(netConf);

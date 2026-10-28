@@ -678,8 +678,8 @@ media_record(struct facts_out *o, char *ifname, uint64_t role, uint64_t word)
 }
 
 /*
- * ifname's media: current and active, and those it supports if
- * supported, and in its record, ifv, how many and their status
+ * ifname's current and active media, and with supported, those it
+ * supports; in ifv, its record, their count and status
  */
 void
 media_facts(struct facts_out *o, int s, char *ifname, struct facts_value *ifv,

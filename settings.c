@@ -22,7 +22,7 @@
  * A command in configure private says what it did to a setting (set it
  * or turned it on, turned it off, or left it at its default) and gives
  * the canonical line; the setting's kind turns that into the edit to
- * the candidate.  Commit will use the same kinds to take lines out.
+ * the candidate.  Commit uses the same kinds to take lines out.
  */
 
 #include <sys/types.h>
@@ -35,7 +35,7 @@
 struct setting {
 	char *name;		/* the line's first word, without "no" */
 	int kind;		/* S_* */
-	int keylen;		/* its key, if not its name (conftree.h) */
+	int keylen;		/* key length, if not 1 (conftree.h) */
 };
 
 static const struct setting top_settings[] = {
@@ -187,7 +187,7 @@ static const struct setting bridge_settings[] = {
 	{ NULL,			0 }
 };
 
-/* an rtable's, which are the top level's for its table */
+/* settings in an rtable block: top-level settings for that table */
 static const struct setting rtable_settings[] = {
 	{ "arp",		S_ENTRY,	2 },
 	{ "ndp",		S_ENTRY,	2 },

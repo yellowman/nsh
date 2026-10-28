@@ -132,7 +132,7 @@ function rtHeld(doc, chain) {
 
 /*
  * the interfaces, in order, each with its node, name, place and the
- * settings it sets itself; others lists its other statements
+ * settings it sets itself; other lists its other statements
  */
 function rtInterfaces(doc, d) {
 	var out = [];
@@ -202,7 +202,10 @@ function rtGlobal(doc, d) {
 	return s;
 }
 
-/* top-level statements that are not global settings, places or macros */
+/*
+ * top-level statements that are not global settings, blocks, interfaces
+ * or macros
+ */
 function rtOther(doc, d) {
 	return doc.nodes.filter(function (n) {
 		return !n.children && n.kind !== "macro" && n.words[0] !==
@@ -214,7 +217,8 @@ function rtOther(doc, d) {
 
 /*
  * Set global setting k to value: in place of its statements, or before
- * the first block or interface, after any macros; none if value is empty
+ * the first block or interface and the comment lines above it, or at the
+ * end; none if value is empty
  */
 function rtSetGlobal(doc, k, value) {
 	var first = doc.nodes.find(function (n) {
@@ -254,7 +258,8 @@ function rtSetIface(doc, n, k, value) {
 
 /*
  * Add interface name to the place chain ends at: before the block's
- * closing brace, or at the top level after the last interface
+ * closing brace, or at the top level after the last interface or at the
+ * end
  */
 function rtAddIface(doc, chain, name) {
 	var n = chain[chain.length - 1], at, ind, last;

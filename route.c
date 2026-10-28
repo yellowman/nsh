@@ -270,7 +270,8 @@ route(int argc, char **argv, ...)
  * A routing message in configure private: RTM_ADD or RTM_DELETE as
  * rtm_output() and rtable_insert() take it, on the routes the
  * candidate's lines describe, each the line conf_print_rtm() prints for
- * it.  Returns the message's length, or -1 with errno the kernel's.
+ * it.  Returns the message's length, or -1 with errno as the kernel
+ * sets it.
  */
 int
 route_cand(struct rt_msghdr *rtm)
@@ -309,7 +310,7 @@ route_cand(struct rt_msghdr *rtm)
 			errno = EINVAL;
 			return -1;
 		}
-		/* no two routes alike, and a second only if both may be */
+		/* refuse a duplicate, or a second route to d without MPATH */
 		for (n = 0; (l = cand_line("route", n)) != NULL; n++)
 			if (isword(l, 1, d) && (!(rtm->rtm_flags & RTF_MPATH) ||
 			    isword(l, 2, g))) {

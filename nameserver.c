@@ -132,7 +132,7 @@ nameserverset(int argc, char *argv[], ...)
 	}
 
 	argv[0] = "lo0";
-	/* no nameserver proposes none, whatever addresses it was given */
+	/* "no nameserver" proposes none, whatever addresses it was given */
 	if (rtnameserver(set ? argc : 1, argv, 0 /* always use rtable 0 */))
 		return (-1);
 	return (0);

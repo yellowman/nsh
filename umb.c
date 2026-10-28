@@ -751,7 +751,7 @@ intumb(int argc, char **argv, ...)
 		return -1;
 	}
 
-	/* setpuk and chgpin act on the SIM, outside configure private too */
+	/* setpuk and chgpin act on the SIM, even in configure private */
 	if (candidate && x->type != UMB_PUK && x->type != UMB_CHGPIN)
 		return cand_umb(ifname, set, x->type, argv[0]);
 

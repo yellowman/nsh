@@ -27,7 +27,7 @@
  *	vlan [tag [tag]]		VLANs: all, one tag, or a range
  *	bridge [name]			bridges, or one
  *	statistics group		a group of kernel statistics
- *	version				what runs, and since when
+ *	version				nsh and system versions, boot time
  *	users				who is logged in
  *	daemons				the daemons nsh starts, and which
  *					run, in which routing tables
@@ -227,7 +227,7 @@ facts_sockaddr(struct facts_value *v, struct sockaddr *sa)
 		return;
 	switch (sa->sa_family) {
 	case AF_INET:
-		/* a mask the kernel cut short reads as the zeros it left */
+		/* the kernel may shorten a mask; the missing bytes are zeros */
 		memset(bytes, 0, sizeof(bytes));
 		n = sa->sa_len > offsetof(struct sockaddr_in, sin_addr) ?
 		    sa->sa_len - offsetof(struct sockaddr_in, sin_addr) : 0;
@@ -542,7 +542,7 @@ facts_more(struct facts_answer *a, struct facts_out *o, int budget)
 	case ANS_SADB:
 		if (a->rt == NULL) {
 			if (a->type == ANS_SADB) {
-				/* said why, unless there is no IPsec */
+				/* sadb_dump() prints why, unless no IPsec */
 				if ((a->rt = sadb_dump()) == NULL) {
 					r = -1;
 					break;
@@ -588,14 +588,14 @@ facts_more(struct facts_answer *a, struct facts_out *o, int budget)
 		r = users_facts(o);
 		break;
 	case ANS_DAEMONS:
-		/* whether pf runs, only where system's are */
+		/* whether pf runs, only with FACTS_SYSTEM */
 		r = daemons_facts(o, (facts_from & FACTS_SYSTEM) != 0);
 		break;
 	case ANS_HOSTNAME:
 		r = hostname_facts(o);
 		break;
 	case ANS_IP:
-		/* what configured an address, only where system's are */
+		/* what configured each address, only with FACTS_SYSTEM */
 		r = ip_facts(o, a->af, (facts_from & FACTS_SYSTEM) != 0);
 		break;
 	case ANS_AUTOCONF:
@@ -617,11 +617,11 @@ facts_more(struct facts_answer *a, struct facts_out *o, int budget)
 }
 
 /*
- * Whether a's show is text nshd's system streams, from a child, and
- * what: FACTS_PROGRAM, the program and its arguments in *argv, which
- * are a's, and the routing table it runs in in *table; or
- * FACTS_LEASES. 0 if it is not, or -1 if a's words do not fill the
- * program's arguments, said why
+ * Whether a's show is text nshd's system streams from a child, and
+ * which: FACTS_PROGRAM, with the program and its arguments (a's) in
+ * *argv and its routing table in *table, or FACTS_LEASES. 0 if it is
+ * not, or -1, after printing why, if a's words do not fill the
+ * program's arguments
  */
 int
 facts_streams(struct facts_answer *a, char ***argv, int *table)
@@ -762,8 +762,8 @@ render_emit(void *arg, const void *buf, size_t len)
 }
 
 /*
- * show prot sub, a daemon's, with the argc words of argv: nshd's system
- * runs its program, or nsh where nshd does not run; as a handler returns.
+ * show prot sub of a daemon, with the argc words of argv: nshd's system
+ * runs its program, or nsh where nshd does not run; 0, or -1 on error.
  * bgpnsh runs it itself, with args.
  */
 int
@@ -786,7 +786,7 @@ prot1_run(char *prot, char *sub, int argc, char **argv, char **args)
 	    sub, words));
 }
 
-/* a record of an operation's, which says nothing */
+/* a record of a quiet operation: nothing is printed */
 static void
 ignore_record(void *arg, const struct facts_template *t,
     const struct facts_value *v)
@@ -794,9 +794,9 @@ ignore_record(void *arg, const struct facts_template *t,
 }
 
 /*
- * The operation text, in rtable, which nshd's system runs, what it
- * prints shown, but if quiet: its status, 0, OP_DIFFERS, or another
- * if it failed, said why
+ * The operation text, run in rtable by nshd's system, and what it
+ * prints shown unless quiet: its status, 0, OP_DIFFERS, or another,
+ * after printing why, if it failed
  */
 int
 facts_op(const char *text, int rtable, int quiet)
@@ -816,11 +816,11 @@ facts_op(const char *text, int rtable, int quiet)
 }
 
 /*
- * The words fmt makes, asked of nshd, its system where they may be and
- * this user may ask it, else its shows, or of nsh itself where nshd
- * does not run, and rendered to out; "interface status" renders
- * interfaces as show interface status does: 0, or -1 if the show
- * failed, having said why, as a handler returns
+ * The words fmt makes, asked of nshd's system where it may answer and
+ * this user may ask it, else of nshd's shows, or of nsh itself where
+ * nshd does not run, and rendered to out. "interface status" renders
+ * interfaces as show interface status does. 0, or -1 after printing
+ * why the show failed
  */
 int
 facts_show(FILE *out, const char *fmt, ...)

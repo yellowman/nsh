@@ -89,7 +89,7 @@ facts_out_init(struct facts_out *o, void (*emit)(void *, const void *,
 	o->arg = arg;
 }
 
-/* k's template, as id, the first time o sends a record of k */
+/* the id of k's template, sent the first time o sends a record of k */
 static int
 template(struct facts_out *o, const struct facts_kind *k, uint16_t *id)
 {
@@ -416,9 +416,9 @@ facts_in_init(struct facts_in *in, void (*record)(void *,
 }
 
 /*
- * A message's units, each template kept and each record given to
- * in->record; -1 at one that is not one, or names a template not sent,
- * or one sent twice
+ * A message's units: each template is kept and each record given to
+ * in->record; -1 at a malformed unit, a record whose template was not
+ * sent, or a template sent twice
  */
 int
 facts_read(struct facts_in *in, const void *buf, size_t len)
@@ -493,7 +493,7 @@ facts_get(const struct facts_value *v, const int *map, size_t i,
 	return (&v[map[i]]);
 }
 
-/* v, kept past the record: its strings copied */
+/* a copy of v and its strings, to keep past the record */
 struct facts_value *
 facts_copy(const struct facts_template *t, const struct facts_value *v)
 {

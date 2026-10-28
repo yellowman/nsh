@@ -1356,7 +1356,8 @@ function svForm(doc, d, s, width, key) {
 
 /*
  * settings that appear once: a field each, its first value or presence;
- * one added goes after the others, or before the first statement
+ * one added goes after the others, or before the first statement that
+ * is not a macro
  */
 function svSingleTab(box, doc, d, t) {
 	var grid = el("div", null, "sfields"), kinds = svKinds(d, t.single);
@@ -1449,9 +1450,9 @@ function sshEditor(box) {
 }
 
 /*
- * a field for each of keys in section 0: a line each for one marked
- * many, else the first value, with what it risks, or that it is set
- * more than once
+ * a field for each of keys in section 0: a key marked many shows a line
+ * per value, any other its first value, with what it risks, or that it
+ * is set more than once
  */
 function sshKeys(box, doc, keys) {
 	var grid = el("div", null, "sfields");
@@ -1479,7 +1480,7 @@ function sshKeys(box, doc, keys) {
 }
 
 /*
- * the lines of section sec that which takes, a row each: its keyword,
+ * the lines of section sec that which() selects, a row each: its keyword,
  * with what it risks, and value; under the one selected, its value and
  * Delete; and a line to add one, of keyword kw if given. path keeps a
  * Match section's selection apart.

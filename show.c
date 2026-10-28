@@ -112,8 +112,8 @@ pr_flags(int af)
 }
 
 /*
- * The SPD's flows, as the kernel dumps them: NULL if it cannot, said
- * why, but for a kernel without IPsec
+ * The SPD's flows, as the kernel dumps them; NULL if it cannot, after
+ * printing why, unless the kernel has no IPsec
  */
 struct rtdump *
 sadb_dump(void)
@@ -239,8 +239,8 @@ facts_sdl(struct facts_value *type, struct facts_value *name, char *buf,
 }
 
 /*
- * The routes of rt, from *cur, that are of af, as facts: budget at
- * most. 1 if there are more, 0 if not, -1 if a record failed.
+ * The routes of rt, from *cur, that are of af, as facts, at most budget
+ * of them. 1 if there are more, 0 if not, -1 if a record failed.
  */
 int
 route_facts(struct facts_out *o, struct rtdump *rt, char **cur, int af,
@@ -363,7 +363,7 @@ static struct facts_field flow_fields[] = {
 };
 struct facts_kind kind_flow = { "ipsec-flow", flow_fields, FLOW_NFIELDS };
 
-/* the address an extension of msg holds, or NULL */
+/* the address the message's extension ext holds, or NULL */
 static struct sockaddr *
 flow_sa(void **headers, int ext)
 {
@@ -385,8 +385,8 @@ flow_port(struct sockaddr *sa)
 }
 
 /*
- * The flows of spd, from *cur, as facts: budget at most. 1 if there
- * are more, 0 if not, -1 if a record failed.
+ * The flows of spd, from *cur, as facts, at most budget of them. 1 if
+ * there are more, 0 if not, -1 if a record failed.
  */
 int
 sadb_facts(struct facts_out *o, struct rtdump *spd, char **cur, int budget)

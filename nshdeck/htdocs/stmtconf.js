@@ -31,7 +31,7 @@
  */
 "use strict";
 
-/* statement n's words, as kind k has them: a semicolon a word of its own */
+/* statement n's words, with a final semicolon split off if k ends with one */
 function stSplit(n, k) {
 	var w = n.words.slice(), last = w[w.length - 1] || "";
 
@@ -240,8 +240,8 @@ function stField(k, key) {
 /*
  * the words field f's value takes: none if it is empty; a group's lines
  * in braces if there are several or it is a list option, with commas
- * between entries; else each line, or each word if f is written as typed
- * or takes several words
+ * between entries if it has joins; else each line, or each word if f is
+ * written as typed or takes several words
  */
 function stWords(f, value) {
 	var vals = String(value).trim().split(f.raw && !f.joins ||
@@ -293,7 +293,7 @@ function stSet(doc, s, key, value) {
 			return doc;
 		Array.prototype.splice.apply(w, [at[0], at[1]].concat(vals));
 	} else {
-		/* it, and if it goes, the options that follow it */
+		/* its words, and if it goes, the options that follow it */
 		(at ? [at] : []).concat(vals !== null ? [] : k.opts.filter(
 		    function (x) {
 			return x.follows === key && s.at[x.key];
@@ -369,7 +369,7 @@ function stNew(k, args) {
 }
 
 /*
- * Statement n, which may open a block and does not, given one over
+ * Give statement n, which may open a block and does not, a block over
  * lines: an empty one, or if n holds its block on one line, that block
  * with a line for each of its statements, which end at a semicolon
  */
@@ -399,9 +399,9 @@ function stOpen(doc, n) {
 /*
  * Add a statement of kind k with its arguments to block p, or the top
  * level if p is null: after the last statement of the same kind there,
- * else after the last of the kinds after, else at the end, or if early
- * before the first statement at the top level that is not a macro, with
- * the comment lines just before it unless they begin the file. A
+ * else after the last of the kinds in after, else at the end, or if
+ * early, before the first top-level statement that is not a macro and
+ * the comment lines just before it, unless they begin the file. A
  * statement p that may open a block and does not is given one first.
  */
 function stAdd(doc, p, k, args, after, early) {
@@ -449,10 +449,11 @@ function stAdd(doc, p, k, args, after, early) {
 }
 
 /*
- * The one statement of kind k in block p, or the top level, where the
- * statements are of kinds: set to value, the text of its arguments,
- * removed if value is empty, and added if there is none: if after is
- * given, after the last of its kinds or early, as stAdd() says
+ * Set the one statement of kind k in block p, or at the top level, to
+ * value, the text of its arguments; kinds, if given, are the kinds of
+ * the statements there. Remove it if value is empty, and add it if there
+ * is none: if after is given, after the last statement of the kinds in
+ * after, or early, as stAdd() says
  */
 function stSingle(doc, p, k, value, kinds, after) {
 	var nodes = p ? p.children : doc.nodes, s = stList(nodes, kinds ||

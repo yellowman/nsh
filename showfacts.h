@@ -16,8 +16,8 @@
 
 /*
  * The shows that answer with facts: the kinds of record each makes,
- * what collects them, where nshd's show processes run, or nsh where
- * nshd does not, and what renders them as nsh's text
+ * what collects them, in nshd's show processes or in nsh where nshd
+ * does not run, and what renders them as nsh's text
  */
 
 #ifndef SHOWFACTS_H
@@ -70,7 +70,7 @@ int		 facts_op(const char *, int, int);
 #define FACTS_LEASES	2
 int		 facts_streams(struct facts_answer *, char ***, int *);
 
-/* each kind, for the record it is and the renderer that knows it */
+/* each kind of record, shared by what makes it and what renders it */
 void		 facts_init(void);
 void		 facts_bitnames(struct facts_field *, const char *);
 int		 facts_message(struct facts_out *, const char *, ...)

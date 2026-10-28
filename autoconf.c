@@ -19,13 +19,15 @@
  */
 
 /*
- * What dhcpleased(8) and slaacd(8) know of each interface they
- * configure, asked of their control sockets, which only root may use,
- * as facts; and rendered as dhcpleasectl(8) and slaacctl(8) print it.
- * The control messages are theirs, from dhcpleased.h and slaacd.h.
+ * Ask dhcpleased(8) and slaacd(8), on their control sockets, which only
+ * root may use, what they know about each interface they configure, and
+ * report it as facts. Render the facts as dhcpleasectl(8) and
+ * slaacctl(8) print them. The control messages are theirs, from
+ * dhcpleased.h and slaacd.h.
  *
- * Their times are a monotonic clock's; each is sent as the time of day
- * it was when answered ("seen"), and a duration after it as seconds.
+ * The daemons give times on a monotonic clock. Each is sent as the time
+ * of day it was ("seen" is when the daemon answered), and a duration
+ * after it as seconds.
  */
 
 #include <sys/types.h>
@@ -59,7 +61,7 @@
 
 #define CTL_WAIT	5000	/* ms a daemon has to answer */
 
-/* dhcpleased's, from dhcpleased.h */
+/* from dhcpleased.h */
 #define DL_SHOW_INTERFACE_INFO	2
 #define DL_END			5
 #define DL_ROUTES		256
@@ -89,7 +91,7 @@ struct dl_info {
 	uint32_t		rebinding_time;
 };
 
-/* slaacd's, from slaacd.h */
+/* from slaacd.h */
 #define SL_SHOW_INTERFACE_INFO	2
 #define SL_RA			3
 #define SL_RA_PREFIX		4
@@ -204,7 +206,7 @@ static struct facts_field dhcpns_fields[] = {
 struct facts_kind kind_dhcpns = { "dhcp-name-server", dhcpns_fields,
     DHCPNS_NFIELDS };
 
-/* an interface slaacd knows, after what it knows of it */
+/* an interface slaacd knows, after its other records */
 static struct facts_field slaac_fields[] = {
 	[SLAAC_IF] =		{ "interface",		FACT_STRING },
 	[SLAAC_INDEX] =		{ "index",		FACT_U64 },
@@ -340,7 +342,7 @@ ctl_ask(struct imsgbuf *ib, uint32_t type, uint32_t if_index)
 	return (0);
 }
 
-/* the next message, read as it comes; -1 if none came in time */
+/* the next message; -1 if none came in time or it cannot be read */
 static int
 ctl_next(int fd, struct imsgbuf *ib, struct imsg *imsg, const char *who)
 {
@@ -404,7 +406,7 @@ dhcp_info(int fd, struct imsgbuf *ib, uint32_t if_index,
 	return (r);
 }
 
-/* whether dhcpleased leased ifname the address addr, of mask */
+/* whether dhcpleased leased addr, with mask, to ifname */
 int
 dhcpleased_has_lease(char *ifname, struct in_addr *addr,
     struct in_addr *mask)
@@ -617,7 +619,7 @@ slaac_facts(struct facts_out *o, int *fd, struct imsgbuf *ib, char *ifname,
 		ctl_close(fd, ib);
 		return (0);
 	}
-	/* the interface comes first, and ends what is shown of it */
+	/* slaacd sends the interface first; its record is sent last */
 	for (;;) {
 		if (ctl_next(*fd, ib, &imsg, "slaacd") == -1) {
 			ctl_close(fd, ib);
@@ -663,7 +665,7 @@ slaac_facts(struct facts_out *o, int *fd, struct imsgbuf *ib, char *ifname,
 
 /*
  * What dhcpleased and slaacd know of each interface they configure,
- * or only ifname; -1 if a record failed
+ * or only ifname; -1 on error
  */
 int
 autoconf_facts(struct facts_out *o, char *ifname)
@@ -681,7 +683,7 @@ autoconf_facts(struct facts_out *o, char *ifname)
 		close(ifs);
 		return (-1);
 	}
-	/* each daemon is asked from when it is first needed */
+	/* connect to each daemon only when it is first needed */
 	for (ifnp = ifn_list; ifnp->if_name != NULL && r != -1; ifnp++) {
 		if (ifname && strcmp(ifname, ifnp->if_name) != 0)
 			continue;
@@ -879,7 +881,7 @@ updated(struct frec *r, int timeout_first)
 }
 
 /*
- * An interface slaacd knows, after what it knows of it, as slaacctl
+ * An interface slaacd knows, after its other records, as slaacctl
  * show interface prints it
  */
 static void
@@ -986,7 +988,7 @@ slaac_render(struct frecs *rs, struct frec *o)
 	}
 }
 
-/* what dhcpleased or slaacd knows of an interface, o, after the rest */
+/* what dhcpleased or slaacd knows of interface o, after its other records */
 void
 autoconf_render(struct frecs *rs, struct frec *o)
 {

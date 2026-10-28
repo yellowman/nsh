@@ -15,12 +15,12 @@
  */
 
 /*
- * archive: what config keeps past its end, the candidate configure's
- * sessions share, as config's text, in a directory of archive's own,
- * NSHDB/archive, which it opens before chroot(2), so no other file is
- * in its reach. What config sends is kept whole, fsynced, or not at
- * all, and archive says which; what is kept is what config is sent when
- * it asks.
+ * archive keeps, past config's end, the candidate that configure's
+ * sessions share, as config's text. It keeps it in a directory of its
+ * own, NSHDB/archive, which it opens before chroot(2), so no other file
+ * is in its reach. What config sends is kept whole, fsynced, or not at
+ * all, and archive says which; when config asks, archive sends it what is
+ * kept.
  */
 
 #include <sys/types.h>
@@ -81,7 +81,7 @@ archive(int d, int v)
 	exit(0);
 }
 
-/* ARC_DIR, as root, made archive's user's alone */
+/* ARC_DIR, made and opened as root, for archive's user alone */
 static void
 archive_open(void)
 {
@@ -127,7 +127,7 @@ archive_dispatch_parent(int fd, short event, void *arg)
 	imsg_event_add(iev);
 }
 
-/* config's text, to keep when it says, and its asking for what is kept */
+/* config's text, its requests to keep it, and to load what is kept */
 static void
 archive_dispatch_config(int fd, short event, void *arg)
 {
@@ -203,7 +203,7 @@ archive_clear(void)
 	past = 0;
 }
 
-/* the text config sent, kept in place of what was: 0, or -1, logged */
+/* keep the text config sent in place of the old: 0, or -1, logged */
 static int
 archive_keep(void)
 {
@@ -242,7 +242,7 @@ archive_keep(void)
 	return (-1);
 }
 
-/* what is kept, to config, then that it is all: none if nothing is */
+/* what is kept, to config, then LOADED; no text if nothing is kept */
 static void
 archive_load(void)
 {

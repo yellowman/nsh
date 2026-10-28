@@ -15,20 +15,20 @@
  */
 
 /*
- * nshd's messages, with its clients, which include this after
- * <event.h> and <imsg.h>, and between its processes.
+ * Messages between nshd and its clients, and between nshd's processes.
+ * Clients include this file after <event.h> and <imsg.h>.
  */
 
 #ifndef NSHD_H
 #define NSHD_H
 
 #define NSHD_GROUP	"nshadmin"	/* who may use the read-write socket */
-#define NSHD_CHECK_USER	"_nshcheck"	/* system's helpers, but root's */
+#define NSHD_CHECK_USER	"_nshcheck"	/* system's non-root helpers */
 #define NSHD_WEB_USER	"_nshweb"	/* the web configurator's sessions */
 #define NSHD_SOCKET	"/var/run/nshd.sock"	/* 0660, group nshadmin */
 #define NSHD_RO_SOCKET	"/var/run/nshd.ro.sock"	/* 0666 */
 
-#define NSHD_VERSION	5	/* of what a client and nshd say */
+#define NSHD_VERSION	5	/* protocol version of clients and nshd */
 #define NSHD_TEXT	8192	/* text in one message, at most */
 #define NSHD_WORDS	256	/* a show's words, at most */
 #define NSHD_LINE	1024	/* a line of configuration, with its NUL */
@@ -43,11 +43,11 @@
 
 /* the permissions a session's login class gives it */
 #define NSHD_VIEW	0x1	/* every show */
-#define NSHD_OPERATE	0x2	/* operations: clear, reboot, a daemon's */
+#define NSHD_OPERATE	0x2	/* operations: clear, reboot, daemon actions */
 #define NSHD_CONFIGURE	0x4	/* configure private and terminal, commit */
 #define NSHD_ADMIN	0x8	/* configure and configure exclusive, and */
 				/* the password hashes */
-#define NSHD_EXEC	0x10	/* programs nsh runs, which nsh checks */
+#define NSHD_EXEC	0x10	/* running programs; nsh checks this */
 
 /* a client's first message */
 struct nshd_hello {
@@ -66,7 +66,7 @@ struct nshd_show {
 	char		words[NSHD_WORDS];
 };
 
-/* how a request ended: 0, or not */
+/* how a request ended: 0 on success */
 struct nshd_result {
 	int32_t		status;
 };
@@ -75,9 +75,8 @@ struct nshd_result {
 #define NSHD_ELSEWHERE	2
 
 /*
- * an operation, nsh's words for it, which system runs as root, in the
- * rtable, the client's, and streams what it prints; its status how the
- * operation ended
+ * an operation, in nsh's words; system runs it as root in the client's
+ * rtable and streams what it prints, and its status is how it ended
  */
 struct nshd_op {
 	int32_t		rtable;
@@ -97,7 +96,7 @@ struct nshd_load {
  * or set a part at a time, as the daemon's edit sets them
  */
 struct nshd_rules {
-	int32_t		set;		/* or 0, to ask for them */
+	int32_t		set;		/* 1 to set, 0 to request */
 	int32_t		last;
 	int32_t		rtable;
 	int32_t		len;		/* of text */
@@ -119,29 +118,29 @@ struct nshd_line {
 	char		line[NSHD_LINE];
 };
 
-/* a session's mode, after what may change it */
+/* the session's mode, sent after a request that may change it */
 struct nshd_context {
 	int32_t		mode;		/* 0, or which configure */
 	int32_t		rtable;		/* the rtable its lines are for */
 	int32_t		bridge;		/* the interface is a bridge */
-	char		ifname[NSHD_IFNAME];	/* whose mode, or "" */
+	char		ifname[NSHD_IFNAME];	/* interface, or "" if none */
 };
 
-/* config to system: the running configuration, and with facts, kfacts.h's */
+/* config to system: running configuration; kernel facts if facts is set */
 struct nshd_snapshot {
 	int32_t		facts;
 };
 
 /*
- * config to system: whose permissions, NSHD_*, are asked; a session of
- * the web configurator's has none until it logs in
+ * config to system: ask a uid's permissions, NSHD_*; a session of the
+ * web configurator's has none until it logs in
  */
 struct nshd_perms {
 	uint32_t	uid;
 	int32_t		web;
 };
 
-/* the web configurator's session logs in as name, a login user's */
+/* the web configurator's session logs in as name, a login user */
 #define NSHD_NAME	32
 #define NSHD_PASSWORD	128
 struct nshd_login {
@@ -157,8 +156,8 @@ struct nshd_terminal {
 };
 
 /*
- * commit, of the session's candidate, or with check, commit check, or
- * with minutes, commit confirmed
+ * commit of the session's candidate; check asks for commit check, and
+ * minutes for commit confirmed
  */
 struct nshd_commit {
 	int32_t		check;
@@ -186,22 +185,23 @@ struct nshd_watch {
 /* a notice, then its text, if it has one, of NSHD_TEXT at most */
 struct nshd_notice {
 	int32_t		kind;
-	uint32_t	uid;		/* whose, if a user's */
+	uint32_t	uid;		/* the user it is about, if any */
 	int32_t		n;		/* as the kind says */
 };
 #define NSHD_NOTICE_COMMIT	1	/* uid's commit saved; its comment */
-#define NSHD_NOTICE_CONFIRMED	2	/* uid's commit confirmed: it goes */
-					/* back in n minutes, unless saved */
+#define NSHD_NOTICE_CONFIRMED	2	/* uid's unconfirmed commit: rolled */
+					/* back in n minutes unless saved */
 #define NSHD_NOTICE_APPLIED	3	/* uid's line of configure terminal */
 					/* committed, not saved; the line */
-#define NSHD_NOTICE_BACK	4	/* the commit not confirmed went */
-					/* back, or with n 1, could not */
+#define NSHD_NOTICE_BACK	4	/* unconfirmed commit rolled back; */
+					/* n is 1 if the rollback failed */
 #define NSHD_NOTICE_LOCK	5	/* uid has configure exclusive */
-#define NSHD_NOTICE_UNLOCK	6	/* and left it */
+#define NSHD_NOTICE_UNLOCK	6	/* uid left configure exclusive */
 #define NSHD_NOTICE_LINKS	7	/* interfaces or addresses changed */
-#define NSHD_NOTICE_ROUTES	8	/* routes in rtable n changed */
-#define NSHD_NOTICE_LOG		9	/* the log n, its watch's bit, as it */
-					/* comes: what was read of it */
+#define NSHD_NOTICE_ROUTES	8	/* routes in rtable n changed, or */
+					/* in every rtable if n is -1 */
+#define NSHD_NOTICE_LOG		9	/* text read from log n, where n is */
+					/* the log's watch bit */
 #define NSHD_NOTICE_LOGEND	10	/* the log n is no longer followed */
 
 /* rollback n, or show rollback n */
@@ -209,33 +209,33 @@ struct nshd_rollback {
 	int32_t		n;
 };
 
-/* config to system: text after this, of a part BEGIN or APPLY takes */
+/* config to system: which part the text after this belongs to */
 struct nshd_chunk {
 	int32_t		part;
 };
 #define NSHD_SCRIPT	0	/* the edits APPLY runs, or the rules TEST tests */
-#define NSHD_BEFORE	1	/* what BEGIN records: what runs */
-#define NSHD_WANT	2	/* and what is wanted */
+#define NSHD_BEFORE	1	/* for BEGIN: the running configuration */
+#define NSHD_WANT	2	/* for BEGIN: the candidate */
 #define NSHD_PARTS	3
 
 /*
- * frontend to system: a session's client come, with its socket, or the
- * session asked what may begin a commit (a line, a commit, a load's
- * part), an operation or a login
+ * frontend to system: a new session's client, with its socket; or a
+ * session's request that may begin a commit (a line, a commit or a part
+ * of a load), an operation, a login, a terminal or a watch
  */
 struct nshd_asked {
 	uint32_t	session;
 };
 
 /*
- * config to system: the session a commit is for, which asked what
- * system was told of; or session 0, the boot's
+ * config to system: the session a request is for, as frontend reported
+ * it; or session 0, for the boot
  */
 struct nshd_whose {
 	uint32_t	session;
 };
 
-/* config to system: a log, its watch's bit, followed for a session */
+/* config to system: follow a log, named by its watch bit, for a session */
 struct nshd_follow {
 	struct nshd_whose whose;
 	int32_t		log;
@@ -264,21 +264,21 @@ struct nshd_logged {
 	uint32_t	uid;
 };
 
-/* config to system: whose commit begins, and if confirmed, its minutes */
+/* config to system: begin a session's commit; minutes for commit confirmed */
 struct nshd_begin {
 	struct nshd_whose whose;
 	int32_t		minutes;
-	int32_t		unsaved;	/* configure terminal's, not saved */
+	int32_t		unsaved;	/* for configure terminal: not saved */
 };
 
-/* config to system: how the commit begun ended */
+/* config to system: how the begun commit ended */
 struct nshd_record {
 	int32_t		how;
 };
-#define NSHD_BACK	0	/* gone back to how it was */
-#define NSHD_KEPT	1	/* confirmed, kept until its deadline */
+#define NSHD_BACK	0	/* rolled back to how it was */
+#define NSHD_KEPT	1	/* unconfirmed, applied until its deadline */
 #define NSHD_LEFT	2	/* the records left as they are */
-#define NSHD_APPLIED	3	/* configure terminal's, kept, not saved */
+#define NSHD_APPLIED	3	/* configure terminal: applied, not saved */
 
 /* config to system: run the script, and empty these daemons' rules */
 struct nshd_apply {
@@ -286,17 +286,17 @@ struct nshd_apply {
 	struct {
 		char	name[32];
 		int32_t	rtable;
-		int32_t	keep;	/* before the script, else after */
+		int32_t	keep;	/* empty before the script, else remove after */
 	}		clears[NSHD_CLEARS];
 };
 
-/* config to system: save what runs, for whose commit, with the comment */
+/* config to system: save the running configuration, with the comment */
 struct nshd_save {
 	struct nshd_whose whose;
 	char		comment[NSHD_COMMENT];
 };
 
-/* config to system: test daemon name's rules, the part sent, for whose */
+/* config to system: test daemon name's rules, sent as the script part */
 struct nshd_test {
 	struct nshd_whose whose;
 	char		name[32];
@@ -309,22 +309,22 @@ struct nshd_child {
 };
 
 /*
- * parent to a child, once it may start: whether the boot is not done,
- * until which frontend and the shows wait for LISTEN
+ * parent to a child, once it may start: whether the boot is not done;
+ * until it is, frontend and the shows wait for LISTEN
  */
 struct nshd_startup {
 	int32_t			boot;
 };
 
-/* system's answer to SYS_BOOT, but 0 to boot, or 1, it could not */
-#define NSHD_DONE	2	/* this boot of the host's is done already */
+/* system's answer to SYS_BOOT: 0 to boot, or 1 if it could not record it */
+#define NSHD_DONE	2	/* not booting, or this host boot is done */
 
 /* a client's hello, with who it is, from frontend to config */
 struct nshd_peer {
 	struct nshd_hello	hello;
 	uint32_t		uid;
 	uint32_t		gid;
-	int32_t			web;	/* NSHD_WEB_USER's */
+	int32_t			web;	/* the client is NSHD_WEB_USER */
 };
 
 enum nshd_proc {
@@ -357,9 +357,9 @@ enum nshd_imsg {
 	IMSG_SYS_END,		/* system to config: nshd_result */
 	IMSG_SYS_SHOW,		/* config to system: nshd_show, facts back */
 	IMSG_SYS_FACTS,		/* system to config: units of facts */
-	IMSG_CTL_READ,		/* frontend to config: a client read all */
-	IMSG_SYS_READ,		/* config to system: a request's client did */
-	IMSG_SYS_STOP,		/* config to system: a request's session is gone */
+	IMSG_CTL_READ,		/* frontend to config: client read all output */
+	IMSG_SYS_READ,		/* config to system: CTL_READ, per request */
+	IMSG_SYS_STOP,		/* config to system: stop a request */
 
 	/* with clients, on the read-write socket */
 	IMSG_CTL_CONFIGURE,	/* nshd_configure; a context, then a result */
@@ -371,55 +371,55 @@ enum nshd_imsg {
 
 	/* config to system, for commits: each is answered as SYS_SHOW is */
 	IMSG_SYS_SCRIPT,	/* nshd_chunk, and text; no answer */
-	IMSG_SYS_BEGIN,		/* nshd_begin: the commit record made */
-	IMSG_SYS_APPLY,		/* nshd_apply: the script run, its status */
-	IMSG_SYS_SAVE,		/* nshd_save: what runs saved, the record gone */
-	IMSG_SYS_RECORD,	/* nshd_record: the commit begun ended */
+	IMSG_SYS_BEGIN,		/* nshd_begin: make the commit record */
+	IMSG_SYS_APPLY,		/* nshd_apply: run the script, report status */
+	IMSG_SYS_SAVE,		/* nshd_save: save, and remove the record */
+	IMSG_SYS_RECORD,	/* nshd_record: how the commit ended */
 	IMSG_SYS_ROLLBACK_READ,	/* nshd_rollback: configuration n */
 	IMSG_SYS_ROLLBACK_LIST,	/* show rollback's list */
 	IMSG_SYS_ROLLBACK_DIFF,	/* nshd_rollback: what configuration n changed */
-	IMSG_SYS_TEST,		/* nshd_test: the test run, its status */
+	IMSG_SYS_TEST,		/* nshd_test: run the test, report status */
 
 	/* config and archive: the shared candidate, as text */
-	IMSG_ARC_TEXT,		/* text of it, either way */
-	IMSG_ARC_KEEP,		/* config: nshd_keep; keep the text sent since */
+	IMSG_ARC_TEXT,		/* its text, in either direction */
+	IMSG_ARC_KEEP,		/* config: nshd_keep; keep the text sent */
 	IMSG_ARC_KEPT,		/* archive: nshd_keep, and if it was kept */
 	IMSG_ARC_LOAD,		/* config: what was kept, as text, then LOADED */
 	IMSG_ARC_LOADED,	/* archive: nshd_result */
 
 	/* config to system, answered as SYS_SHOW is */
 	IMSG_SYS_SAVED,		/* the saved configuration, as text */
-	IMSG_SYS_BOOT,		/* the boot begun, or done already */
-	IMSG_SYS_BOOTED,	/* nshd_result: the boot ran, and how */
+	IMSG_SYS_BOOT,		/* begin the boot, or report it done */
+	IMSG_SYS_BOOTED,	/* nshd_result: how the boot went */
 
-	/* the boot's end, config to parent, and after */
-	IMSG_BOOTED,		/* nshd_result: how it went */
+	/* the end of the boot, and what follows it */
+	IMSG_BOOTED,		/* config to parent: nshd_result of the boot */
 	IMSG_LISTEN,		/* parent to frontend and each show: take clients */
 
 	/* with clients, on the read-write socket, and config to system */
-	IMSG_SYS_PERMS,		/* nshd_perms: the uid's, as the result */
+	IMSG_SYS_PERMS,		/* nshd_perms: result is the permissions */
 	IMSG_CTL_OP,		/* nshd_op: what it prints, a result */
 	IMSG_SYS_OP,		/* nshd_sysop: a stream, a result */
 	IMSG_CTL_LOAD,		/* nshd_load: a result; the last, as commit */
-	IMSG_CTL_LOGIN,		/* nshd_login: the web configurator's; a result */
+	IMSG_CTL_LOGIN,		/* nshd_login (web configurator): a result */
 	IMSG_SYS_LOGIN,		/* nshd_syslogin: the permissions, as the result */
 
-	/* frontend to system: what config's commits must be for */
-	IMSG_FRONT_ASKED,	/* nshd_asked: until it is answered */
+	/* frontend to system: which sessions have unanswered requests */
+	IMSG_FRONT_ASKED,	/* nshd_asked: a session sent a request */
 	IMSG_FRONT_ANSWERED,	/* nshd_asked: config answered it */
 	IMSG_FRONT_GONE,	/* nshd_asked: its session is gone */
 
 	/* with clients, on the read-write socket, and system to config */
 	IMSG_CTL_WATCH,		/* nshd_watch: a result */
 	IMSG_CTL_NOTICE,	/* nshd_notice, and text: unasked */
-	IMSG_SYS_NOTICE,	/* nshd_notice: system's, unasked */
+	IMSG_SYS_NOTICE,	/* nshd_notice from system; unrequested */
 	IMSG_SYS_FOLLOW,	/* nshd_follow: FOLLOWING, then text */
 	IMSG_SYS_FOLLOWING,	/* system to config: the log is followed */
 	IMSG_SYS_LOGGED,	/* nshd_logged: before a login's result */
 	IMSG_CTL_COMMANDS,	/* nsh's command tables, as facts */
 	IMSG_CTL_NAMES,		/* names for completion, as facts */
 	IMSG_CTL_TERMINAL,	/* nshd_terminal; the pty, then a result */
-	IMSG_SYS_TERMINAL,	/* nshd_systerm; the pty, then the end */
+	IMSG_SYS_TERMINAL,	/* nshd_systerm; the pty, then SYS_END */
 	IMSG_CTL_RULES,		/* nshd_rules: the rules asked for, a result */
 
 	/* frontend to system: who a session is, as system reads it */
@@ -433,7 +433,7 @@ struct imsgev {
 	short		 events;
 };
 
-/* config and archive: the shared candidate's nth keeping, and its status */
+/* config and archive: the sequence number of a KEEP, and its status */
 struct nshd_keep {
 	uint32_t	seq;
 	int32_t		status;
@@ -444,7 +444,7 @@ struct nshd_keep {
 struct link {
 	enum nshd_proc	 proc;
 	void		(*handler)(int, short, void *);
-	void		(*ready)(void);	/* or NULL: once every pipe is here */
+	void		(*ready)(void);	/* or NULL: run once all pipes are in */
 	struct imsgev	*iev;
 };
 
@@ -473,15 +473,15 @@ int		 link_compose(struct link *, uint32_t, uint32_t, const void *,
 void		 link_broken(struct link *, const char *, ...)
 		    __attribute__((__format__ (printf, 2, 3)));
 
-/* confirm.c: the record of a commit not confirmed */
+/* confirm.c: the record of an unconfirmed commit */
 enum { CONFIRM_NONE, CONFIRM_WAITING, CONFIRM_FAILED };
 struct confirm {
 	int		 state;
 	uint64_t	 id;
-	time_t		 deadline;	/* when it goes back, by the wall clock */
-	int		 attempts;	/* to go back, begun */
+	time_t		 deadline;	/* wall-clock time of the rollback */
+	int		 attempts;	/* rollback attempts begun */
 	int		 demoted;	/* carp demoted, for it */
-	char		*back;		/* the configuration it goes back to */
+	char		*back;		/* the rollback configuration */
 	size_t		 backlen;
 };
 int		 confirm_read(struct confirm *, int);

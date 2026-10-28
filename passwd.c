@@ -117,9 +117,9 @@ validate_cpass(char *cipher, char *cpass)
  * by hand, gets its class and nothing else: its line may not give a
  * password, and taking the line away leaves the account alone. root is
  * always super-user, so no line names it, and no line names an account
- * whose name begins with '_', as those are daemons'.
+ * whose name begins with '_', because those belong to daemons.
  *
- * NSHLOGIN keeps the classes and users that run, one a line, as
+ * NSHLOGIN holds the running classes and users, one per line, as
  * "class NAME PERMISSION..." and "user NAME CLASS made|found". It
  * outlives a reboot, as the accounts do.
  */
@@ -144,7 +144,7 @@ static const struct {
 	{ "super-user",	LOGIN_ALL },
 };
 
-#define LOGIN_LINES	1024	/* NSHLOGIN's, at most */
+#define LOGIN_LINES	1024	/* NSHLOGIN holds at most this many lines */
 
 static int
 login_usage(void)
@@ -157,7 +157,7 @@ login_usage(void)
 	return -1;
 }
 
-/* Is name a class's or a user's, as nsh takes them? Said why, if not */
+/* Is name a valid class or user name? If not, say why */
 static int
 login_name_ok(const char *what, const char *name)
 {
@@ -215,7 +215,7 @@ login_perms_words(int perms, char *buf, size_t len)
 		}
 }
 
-/* NSHLOGIN's lines, into lines[], each allocated: how many, or -1 */
+/* Read NSHLOGIN's lines into lines[], each allocated: the count, or -1 */
 static int
 login_load(char **lines, int max)
 {
@@ -259,7 +259,7 @@ login_unload(char **lines, int n)
 		free(lines[--n]);
 }
 
-/* The line of NSHLOGIN's lines that is kind's and name's, or -1 */
+/* The index in lines of the kind line for name, or -1 */
 static int
 login_index(char **lines, int n, const char *kind, const char *name)
 {
@@ -276,9 +276,10 @@ login_index(char **lines, int n, const char *kind, const char *name)
 }
 
 /*
- * NSHLOGIN with kind's line for name made rec, or taken away if rec is
- * NULL: written whole, and put in place, so a reader sees one or the
- * other. -1, said why, if it could not be
+ * Set the kind line for name in NSHLOGIN to rec, or remove it if rec is
+ * NULL. The file is written whole and renamed into place, so a reader
+ * sees either the old file or the new one. Returns 0, or -1 on error
+ * after printing why
  */
 static int
 login_store(const char *kind, const char *name, const char *rec)
@@ -331,7 +332,7 @@ login_store(const char *kind, const char *name, const char *rec)
 	return r;
 }
 
-/* A class's permissions, the built-in ones' or NSHLOGIN's, or -1 */
+/* A class's permissions, built in or from NSHLOGIN, or -1 */
 int
 login_class_perms(const char *class)
 {
@@ -380,7 +381,7 @@ login_user_find(const char *name, char *class, size_t len, int *made)
 	return r;
 }
 
-/* Is class a built-in one, or one the candidate has? Said, if not */
+/* Is class a built-in one, or one the candidate has? If not, say so */
 static int
 login_cand_class(const char *class)
 {
@@ -439,7 +440,7 @@ login_run(char *name, char *cmd, char **args)
 	return 0;
 }
 
-/* The account nshd makes for name, with hash: 0, or -1, said why */
+/* The account nshd makes for name, with hash: 0, or -1 after saying why */
 static int
 login_make(char *name, char *hash)
 {
@@ -548,7 +549,7 @@ login_user(int set, int argc, char **argv)
 	return login_store("user", name, rec);
 }
 
-/* login class, login user, or their no */
+/* login class, login user, or their no forms */
 int
 loginset(int argc, char **argv, ...)
 {
@@ -562,7 +563,7 @@ loginset(int argc, char **argv, ...)
 	}
 	if (argc < 3)
 		return login_usage();
-	/* in a commit's script, of a session without admin (ctl.c's) */
+	/* a commit by a session without admin is limited (admin_may()) */
 	if (!candidate) {
 		line[0] = '\0';
 		for (i = 0; i < (set ? argc : 3); i++) {
@@ -590,7 +591,7 @@ login_cmp(const void *a, const void *b)
 }
 
 /*
- * The login lines that run, sorted, so the classes come before the
+ * The running login lines, sorted, so the classes come before the
  * users; a user whose account nshd made with its password, as the
  * account has it now
  */
@@ -657,7 +658,7 @@ login_auth(char *name, char *password)
 
 	if (login_user_find(name, class, sizeof(class), &made) == 1 &&
 	    (pw = getpwnam(name)) != NULL && pw->pw_uid != 0) {
-		/* taken before auth_*() read the password database again */
+		/* copy it before auth_*() read the password database again */
 		uid = pw->pw_uid;
 		if ((as = auth_usercheck(name, NULL, NULL, password)) == NULL ||
 		    auth_approval(as, NULL, name, NULL) <= 0)
@@ -671,9 +672,10 @@ login_auth(char *name, char *password)
 }
 
 /*
- * text, len bytes, with the password hash of each login user line made
- * "********", as conf() prints the line and a diff marks it: the hash is
- * the line's last word. The new length, as the text only gets shorter
+ * In text, len bytes, replace the password hash of each login user line
+ * with "********". Lines are as conf() prints them, with or without a
+ * diff's mark, and the hash is the line's last word. Returns the new
+ * length; the text only gets shorter
  */
 size_t
 login_hide(char *text, size_t len)

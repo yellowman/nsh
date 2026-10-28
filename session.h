@@ -17,9 +17,9 @@
 
 /*
  * A session's state: each global a handler reads or writes and keeps
- * from one request to the next (globals.list's session class), named in
- * an SGLOBAL table of the file that has it, and held by the session
- * while it is not running (session.c)
+ * from one request to the next (globals.list's session class). Each is
+ * named in an SGLOBAL table of the file that has it, and held by the
+ * session while it is not running (session.c)
  */
 struct sglobal {
 	const char	*name;
@@ -32,7 +32,7 @@ struct session_state;
 struct cnode;
 
 /* What a commit runs, from session_plan(), in the parts nshd sends */
-#define PLAN_EDITS	0	/* the script's edits, then the way back's */
+#define PLAN_EDITS	0	/* the script's edits, later the rollback's */
 #define PLAN_BEFORE	1	/* the running configuration, as text */
 #define PLAN_WANT	2	/* the candidate, as text */
 #define PLAN_PARTS	3
@@ -47,21 +47,21 @@ struct plan_test {
 };
 
 struct plan {
-	int		 same;		/* the candidate is what runs */
+	int		 same;		/* the candidate is the running one */
 	char		*text[PLAN_PARTS];
 	size_t		 len[PLAN_PARTS];
 	struct {
 		char	 name[32];
 		int	 rtable;
 		int	 keep;
-	}		 clears[PLAN_CLEARS];	/* the script's */
+	}		 clears[PLAN_CLEARS];	/* from the script */
 	int		 nclears;
 	struct plan_test *tests;	/* to run before the verdict */
 	int		 ntests;
-	int		 bad;		/* the problems found, but theirs */
+	int		 bad;		/* problems found, but not the tests' */
 	int		 checking;	/* commit check */
-	int		 boot;		/* the boot's: a line not configuration
-					   is left out (script_make()) */
+	int		 boot;		/* boot plan: skip lines that are not
+					   configuration (script_make()) */
 	struct cnode	*was, *want;
 };
 

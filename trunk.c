@@ -374,7 +374,7 @@ trunk_facts_init(void)
 	facts_bitnames(&trunkport_fields[TPORT_FLAGS], TRUNK_PORT_BITS);
 }
 
-/* ifname's trunk ports, and in ifv its trunk, as a port, and protocol */
+/* ifname's trunk ports, and in ifv its parent trunk and protocol */
 void
 trunk_facts(struct facts_out *o, int ifs, char *ifname, struct facts_value *ifv)
 {

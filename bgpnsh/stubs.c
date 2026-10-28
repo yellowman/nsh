@@ -44,7 +44,7 @@ prot1_run(char *prot, char *sub, int argc, char **argv, char **args)
 	return cmdargs(args[0], args) == 0 ? 0 : -1;
 }
 
-/* bgpnsh has no nshd: what it runs runs as its user */
+/* bgpnsh has no nshd: it runs every program as its user */
 int
 nshd_runs(const char *cmd)
 {

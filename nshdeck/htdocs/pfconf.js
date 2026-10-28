@@ -262,7 +262,7 @@ function pfRule(code) {
 	return r;
 }
 
-/* r's option whose first word is in words, or null */
+/* r's option, not negated, whose first word is in words, or null */
 function pfOpt(r, words) {
 	return r.opts.find(function (o) {
 		return words.indexOf(o.word) !== -1 && !/^!/.test(o.text);
@@ -482,8 +482,8 @@ function pfWrite(s) {
 }
 
 /*
- * the statements that move with statement i: it and the comment lines
- * directly before it
+ * the index of the first statement that moves with statement i: it, or
+ * the first of the comment lines directly before it
  */
 function pfLead(doc, i) {
 	var a = i;
@@ -493,7 +493,7 @@ function pfLead(doc, i) {
 	return a;
 }
 
-/* move statement i and its comments up or down past the next rule */
+/* move statement i and its comments up or down past the next rule or anchor */
 function pfMove(doc, i, d) {
 	var kinds = ["rule", "anchor"], a = pfLead(doc, i), j, b, moving;
 

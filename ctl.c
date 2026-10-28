@@ -75,7 +75,8 @@ static const char *admin_in(int);
 
 /*
  * While a commit runs (admin_begin()): whether its session lacks the
- * admin permission, what ran before it, and whether a line was refused
+ * admin permission, the running configuration before it, and whether a
+ * line was refused
  */
 static int admin_limited;
 static struct cnode *admin_tree;
@@ -91,9 +92,9 @@ static int admin_refused;
 			    (d)->table == ctl_ifstate || (d)->table == ctl_sshd)
 
 /*
- * The words that make a line of a daemon's rules need admin, in any
- * case: the daemon's, or with NULL any daemon's. Each runs a command as
- * root, or reads a file it names
+ * The words that make a line of a daemon's rules need admin, matched in
+ * any case: for the daemon's table, or with NULL for any daemon. Each
+ * runs a command as root, or reads a file it names
  */
 static const struct {
 	struct ctl	*table;
@@ -102,7 +103,7 @@ static const struct {
 	{ ctl_smtp,	"mda" },	/* runs a command */
 	{ ctl_smtp,	"proc" },	/* proc, proc-exec */
 	{ ctl_smtp,	"|" },		/* mail to a command */
-	{ ctl_smtp,	"table" },	/* aliases, so a | */
+	{ ctl_smtp,	"table" },	/* aliases can hold a | */
 	{ ctl_smtp,	"$" },		/* a macro, which can */
 	{ ctl_smtp,	"=" },		/* hide any of them */
 	{ ctl_snmp,	"handle" },	/* runs a command */
@@ -752,8 +753,8 @@ done:
 }
 
 /*
- * x, of daemon d's table, run with fillargs, its file tmpfile, and the
- * state x leaves d in kept: as x's handler or program returns
+ * Run x, of daemon d's table, with fillargs and its file tmpfile, and
+ * keep the state x leaves d in: as x's handler or program returns
  */
 static int
 ctl_run(struct daemons *d, struct ctl *x, char **fillargs, char *tmpfile)
@@ -779,7 +780,7 @@ ctl_run(struct daemons *d, struct ctl *x, char **fillargs, char *tmpfile)
 		/* pointer to handler with a test command, fill test args */
 		if (fill_tmpfile(x->test_args, tmpfile, tmp_args))
 			rv = (*x->handler)(1, &fillargs[0], tmp_args);
-		else	/* no test: inet */
+		else	/* no test, as for inet */
 			rv = (*x->handler)(1, &fillargs[0], (char **)NULL);
 	break;
 	case T_EXEC:
@@ -809,10 +810,10 @@ ctl_daemon(char *name)
 }
 
 /*
- * What a configuration has daemon d do that word names in its table, as
- * a commit's edits name it: the state it is left in, the flag of its
- * first row with that flag, or CTL_ACT_FOLLOW, what follows its rules.
- * -1 if word names neither: an operation, or no row
+ * The action a commit's edits use for word in daemon d's table: the
+ * flag of the state it leaves d in, if it is the first row with that
+ * flag, or CTL_ACT_FOLLOW for what follows d's rules. -1 for any other
+ * row, such as an operation, or for no row
  */
 int
 ctl_act(int d, char *word)
@@ -863,8 +864,8 @@ ctl_actrow(struct daemons *d, int act)
 }
 
 /*
- * Is d a daemon, and act what a configuration has it do (ctl_act()), or
- * CTL_ACT_RULES, and d has rules?
+ * Is d a daemon, and act an action it has (ctl_act()), or CTL_ACT_RULES
+ * and d has rules?
  */
 int
 ctl_takes(int d, int act)
@@ -881,8 +882,8 @@ ctl_takes(int d, int act)
 }
 
 /*
- * Daemon d does act (ctl_takes()), in cli_rtable, as ctlhandler() runs
- * its line: as it returns
+ * Have daemon d do act (ctl_takes()), in cli_rtable, as ctlhandler()
+ * runs its line, and return what that returns
  */
 int
 ctl_do(int d, int act)
@@ -908,11 +909,10 @@ ctl_do(int d, int act)
 }
 
 /*
- * Daemon d's rules in cli_rtable made text, len bytes, its lines, each
- * ending in a newline, as the lines of a script's rules block were
- * written: -1 if they could not be, said, else 0. A commit without
- * admin writes no line from the first that needs it, and a file it
- * wrote no line of stays as it was
+ * Write text, len bytes, as daemon d's rules in cli_rtable: the lines of
+ * a script's rules block, each written with a newline. 0, or -1 after
+ * saying why. A commit without admin writes no line from the first that
+ * needs it, and a file it wrote no line of stays as it was
  */
 int
 ctl_setrules(int d, char *text, size_t len)
@@ -985,9 +985,10 @@ ctl_setrules(int d, char *text, size_t len)
 }
 
 /*
- * Whether daemon's action is an operation, which nshd's system runs: what
- * its table runs that is not its configuration, enable or disable, nor
- * in configure, what configure private takes. 1 if so, else 0
+ * Whether daemon's action is an operation, which nshd's system runs: a
+ * program in its table that does not set its state, enable or disable,
+ * nor, in configure, one configure private applies to the candidate. 1
+ * if so, else 0
  */
 int
 ctl_op(char *daemon, char *action, int configuring)
@@ -1010,9 +1011,9 @@ ctl_op(char *daemon, char *action, int configuring)
  * A daemon's command in configure private: enable and disable leave the
  * line conf prints for its state, edit edits its rules in the
  * candidate, and its configuration test tests those, all in the
- * candidate's rtable: 1 when done, -1 when it failed, said why. Returns
- * 0 for the rest, which act on the running daemon as outside configure
- * private.
+ * candidate's rtable: 1 when done, -1 when it failed, after saying why.
+ * Returns 0 for the rest, which act on the running daemon as outside
+ * configure private.
  */
 static int
 ctl_cand(struct daemons *d, struct ctl *x, char **fillargs)
@@ -1113,9 +1114,9 @@ ctl_edits(char *daemon, char *action)
 }
 
 /*
- * edit in a configure nshd has: daemon's rules in the session's
- * candidate, in its rtable, asked of nshd, edited here as the user, and
- * sent back; as a handler returns. Its test runs at commit check
+ * edit in a configure nshd has: ask nshd for daemon's rules in the
+ * session's candidate and rtable, edit them here as the user, and send
+ * them back; as a handler returns. Its test runs at commit check
  */
 int
 ctl_nshd_edit(char *daemon)
@@ -1144,8 +1145,8 @@ ctl_nshd_edit(char *daemon)
 
 /*
  * edit in configure private: its rules for d, called name, which the
- * candidate takes even when its test fails, as outside configure
- * private: 1, or -1 when it failed
+ * candidate takes even when their test fails, as outside configure
+ * private: 1, or -1 when the edit or the test failed
  */
 static int
 ctl_cand_edit(struct daemons *d, char *name, char **test)
@@ -1162,7 +1163,7 @@ ctl_cand_edit(struct daemons *d, char *name, char **test)
 	if (ctl_cand_stage(d, stmt, dir, path, sizeof(path)) == -1)
 		return -1;
 	if (test != NULL && fill_tmpfile(test, path, args) == 0)
-		test = NULL;	/* no test: inet */
+		test = NULL;	/* no test, as for inet */
 	ret = edit_file(path, d->mode, d->propername,
 	    test != NULL ? args : NULL);
 	if ((f = fopen(path, "r")) == NULL) {
@@ -1187,9 +1188,9 @@ ctl_cand_edit(struct daemons *d, char *name, char **test)
 }
 
 /*
- * A daemon's rules in rtable's block of the candidate, through nshd's
- * config: printed; or, with set, made the lines of text, as its edit
- * makes them. 0, or -1, said why
+ * For nshd's config, a daemon's rules in rtable's block of the
+ * candidate: printed, or with set, replaced by the lines of text, as its
+ * edit does. 0, or -1 after saying why
  */
 int
 ctl_cand_rules(char *name, int rtable, int set, char *text, size_t len)
@@ -1279,8 +1280,9 @@ ctl_cand_test(struct daemons *d, char *name, char **fillargs)
 }
 
 /*
- * The candidate's lines of stmt in a file in a directory of its own,
- * dir, a mkdtemp() template, named as d's staged file is, in path
+ * The candidate's lines of stmt, written to a file named as d's staged
+ * file is, in a new directory made from dir, a mkdtemp() template; the
+ * file's path goes in path
  */
 static int
 ctl_cand_stage(struct daemons *d, char *stmt, char *dir, char *path,
@@ -1358,8 +1360,8 @@ ctl_line(char *line, char *name, size_t len)
 }
 
 /*
- * Daemon name's rules in rtableid, which a commit's rules edit cannot
- * write empty or take away: with keep, an empty file, else none
+ * Clear daemon name's rules in rtableid, which a commit's rules edit
+ * cannot write empty or remove: with keep, to an empty file, else to none
  */
 int
 ctl_rules_clear(char *name, int rtableid, int keep)
@@ -1434,8 +1436,8 @@ ctl_rules_test(char *name, char **lines, size_t n)
 
 /*
  * Does daemon name's edit test its rules? If so, 1, and with dir, the
- * path in dir its rules are staged at, into path, and the test's
- * arguments, which name it, into args, NOPTFILL of them
+ * path in dir to stage its rules at goes into path, and the test's
+ * arguments, which name that path, into args, NOPTFILL of them
  */
 int
 ctl_rules_args(char *name, char *dir, char *path, size_t len, char **args)
@@ -1836,7 +1838,7 @@ edit_file(char *tmpfile, mode_t mode, char *propername, char **args)
 
 /*
  * A commit runs, until admin_end(). If limited, its session lacks the
- * admin permission, so it may change what needs admin only as it ran
+ * admin permission, so it may set what needs admin only as it was
  * before: before, len bytes, the running configuration as it began
  */
 void
@@ -1860,9 +1862,9 @@ admin_end(void)
 
 /*
  * May the commit running set line, a top-level statement that needs
- * admin, or with no, take away what has line's key, its first keylen
- * words? A commit without admin may set only a line that ran before it,
- * and take away only what did not run: 1 if it may, else 0
+ * admin, or with no, remove what has line's key, its first keylen words?
+ * A commit without admin may set only a line that was running before it,
+ * and remove only what was not: 1 if it may, else 0
  */
 int
 admin_may(char *line, int no, int keylen)
@@ -1877,9 +1879,10 @@ admin_may(char *line, int no, int keylen)
 }
 
 /*
- * The test of daemon name's rules, their text, for a session without
- * admin: has it a line that needs admin and did not run before, in any
- * rtable, as its commit's script would? -1 if it has, said, else 0
+ * Test daemon name's rules, their text, for a session without admin, as
+ * its commit's script would: does it have a line that needs admin and
+ * was not running before, in any rtable? -1 if it has, after saying
+ * which, else 0
  */
 int
 admin_test(char *name, char *text, size_t len)
@@ -1988,7 +1991,7 @@ lx_getc(struct lexin *x)
 	return c;
 }
 
-/* every word of the token the lexer built that needs admin for d */
+/* 1 if tok, the token the lexer built, has a word that needs admin for d */
 static int
 lx_word(struct daemons *d, const char *tok)
 {
@@ -1998,7 +2001,7 @@ lx_word(struct daemons *d, const char *tok)
 		if (admin_words[i].table != NULL &&
 		    admin_words[i].table != d->table)
 			continue;
-		/* every daemon has a word, include */
+		/* a NULL table, as for include, means every daemon */
 		if (strcasestr(tok, admin_words[i].word) != NULL)
 			return 1;
 	}
@@ -2134,7 +2137,7 @@ admin_in(int rtable)
 	return in;
 }
 
-/* Had daemon d's rules in rtable, or any with -1, line before? */
+/* Was line in daemon d's rules in rtable, or any with -1, before the commit? */
 static int
 admin_had(struct daemons *d, int rtable, char *line)
 {
@@ -2291,8 +2294,8 @@ done:
 /*
  * Each daemon nsh starts, as facts: in table 0, and in each other
  * routing table its program runs in, whether it runs, and how many
- * processes of its program do. pf runs when it is enabled, which only
- * with pf is asked
+ * processes of its program do. pf runs when it is enabled, which is
+ * asked only with pf
  */
 int
 daemons_facts(struct facts_out *o, int pf)
@@ -2330,7 +2333,7 @@ daemons_facts(struct facts_out *o, int pf)
 	}
 	n = len / sizeof(*kp);
 	for (d = ctl_daemons; r == 0 && d->name != NULL; d++) {
-		/* what enables it runs its program, but for pf's */
+		/* the enable row runs the daemon's program, except for pf */
 		for (x = d->table; x->name != NULL &&
 		    x->flag_x != DB_X_ENABLE && x->flag_x != DB_X_ENABLE_DEFAULT;
 		    x++)
@@ -2367,7 +2370,7 @@ daemons_facts(struct facts_out *o, int pf)
 	return r;
 }
 
-/* a daemon, as show daemons prints it, the labels before the first */
+/* a daemon, as show daemons prints it, with the headings before the first */
 void
 daemons_render(struct frec *r, int n)
 {

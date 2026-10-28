@@ -62,7 +62,7 @@ function relOwner(addr) {
 	return a ? a.interface : addr;
 }
 
-/* the edges an interface's or bridge's settings, v, give */
+/* the edges given by v, the settings of interface or bridge name */
 function relSettings(edges, name, bridge, v) {
 	var say = function (type, from, to) {
 		relAdd(edges, type, from, to, "configured");
@@ -219,7 +219,7 @@ function relEdited(was, now) {
 /*
  * Draw a row for each edge of name's in list: the relation, the other end
  * and the sources. go(other) runs when the other interface is chosen.
- * all, every edge, lists a routing domain's other members.
+ * all holds every edge, and gives a routing domain's other members.
  */
 function relRows(into, name, list, all, go) {
 	list.forEach(function (e) {

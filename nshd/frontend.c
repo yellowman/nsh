@@ -15,22 +15,22 @@
  */
 
 /*
- * frontend: the read-write socket. Each client is a session; what it
- * sends goes to config, on their pipe, under the session's id, and what
- * config answers for that id goes back to it, with the notices config
- * sends unasked, and config learns each time the client has read all
- * of it. frontend checks only that a message is one a client may send,
- * or config, and is whole; it reads no configuration.
+ * frontend: the read-write socket. Each client is a session. What a
+ * client sends goes to config, on their pipe, under the session's id;
+ * config's answers for that id go back to the client, with the notices
+ * config sends unasked, and config learns each time the client has read
+ * all it was sent. frontend checks only that a message is one a client
+ * (or config) may send, and is whole; it reads no configuration.
  *
- * And it passes system, on their pipe, each client's socket as the
- * client comes, from which system reads who the session is itself; and
- * it tells system of each request before config hears of it: each
- * request that may begin a commit, a line, a commit or a load's part,
- * or that system checks itself, an operation, a login, a terminal or a
- * watch; and when config answers it, and when a session goes. system
- * begins config's commits only for a request not answered, so a config
- * a client compromised cannot say whose they are, and frontend cannot
- * say whose a session is.
+ * frontend also passes system, on their pipe, each client's socket as the
+ * client comes, so system reads for itself who the session is. Before
+ * config hears of a request, frontend tells system of it if it may begin
+ * a commit (a line, a commit or a part of a load) or if system checks it
+ * itself (an operation, a login, a terminal or a watch); it also tells
+ * system when config answers it, and when a session goes. system begins a
+ * commit for config only for a request not answered, so a config
+ * compromised by a client cannot say whose commit it is, and frontend
+ * cannot say whose a session is.
  */
 
 #include <sys/types.h>
@@ -50,8 +50,8 @@
 #include "control.h"
 
 static struct imsgev	*iev_parent;
-static uid_t		 web_uid;	/* NSHD_WEB_USER's, */
-static int		 web_user;	/* if there is one */
+static uid_t		 web_uid;	/* NSHD_WEB_USER's uid */
+static int		 web_user;	/* NSHD_WEB_USER exists */
 
 /* a client's request, as config takes it */
 union frontend_request {
@@ -148,7 +148,7 @@ frontend_dispatch_parent(int fd, short event, void *arg)
 	imsg_event_add(iev);
 }
 
-/* clients taken, on its socket, fd 5, from parent */
+/* take clients on its socket, fd 5, from parent */
 static void
 frontend_listen(void)
 {
@@ -254,8 +254,7 @@ frontend_dispatch_system(int fd, short event, void *arg)
 }
 
 /*
- * to system: the session's request that may begin a commit, its answer,
- * or the session gone
+ * to system: the session's request, its answer, or the session gone
  */
 static void
 frontend_asked(struct ctl_conn *c, uint32_t type)
@@ -268,7 +267,7 @@ frontend_asked(struct ctl_conn *c, uint32_t type)
 		fatal("%s", __func__);
 }
 
-/* a client come: its socket to system, which reads who it is; -1 if not */
+/* a new client: its socket to system, which reads who it is; -1 if not */
 static int
 frontend_opened(struct ctl_conn *c)
 {
@@ -288,8 +287,8 @@ frontend_opened(struct ctl_conn *c)
 }
 
 /*
- * What a client sends, to config as its session's; -1 closes it. A
- * client asks one thing at a time, and waits for its answer.
+ * What a client sends, to config under its session's id; -1 closes it.
+ * A client asks one thing at a time, and waits for its answer.
  */
 static int
 frontend_client(struct ctl_conn *c, struct imsg *imsg)
@@ -332,7 +331,7 @@ frontend_client(struct ctl_conn *c, struct imsg *imsg)
 		return (0);
 	case IMSG_CTL_LOGIN:
 	case IMSG_CTL_TERMINAL:
-		/* the web configurator's alone */
+		/* only the web configurator may send these */
 		if (!web_user || c->uid != web_uid)
 			return (-1);
 		/* FALLTHROUGH */
@@ -347,7 +346,7 @@ frontend_client(struct ctl_conn *c, struct imsg *imsg)
 	case IMSG_CTL_WATCH:
 		if ((len = frontend_whole(imsg, &r)) == -1)
 			return (-1);
-		/* system first, so it knows of what config may begin */
+		/* tell system first, before config sees the request */
 		if (imsg_get_type(imsg) == IMSG_CTL_LINE ||
 		    imsg_get_type(imsg) == IMSG_CTL_COMMIT ||
 		    imsg_get_type(imsg) == IMSG_CTL_OP ||
@@ -388,8 +387,8 @@ frontend_written(struct ctl_conn *c)
 }
 
 /*
- * A client's request but hello, into r, if it is whole, as config takes
- * it: its length, or -1
+ * A client's request other than hello, if it is whole, into r as config
+ * takes it: its length, or -1
  */
 static ssize_t
 frontend_whole(struct imsg *imsg, union frontend_request *r)

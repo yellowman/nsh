@@ -11,7 +11,7 @@
  */
 "use strict";
 
-/* a weight or trusted, as ntpd.conf's sources share them */
+/* the weight and trusted options that all ntpd.conf sources take */
 var SV_NTP_SOURCE = [{ key: "trusted", flag: true }, { key: "weight" }];
 
 /* a value of yes or no */
@@ -107,7 +107,7 @@ var SV_IPSEC_HOSTS = [{ key: "proto", upto: true, raw: true },
     { key: "to", upto: true, raw: true }, { key: "local" },
     { key: "peer" }];
 
-/* an ipsec.conf rule's options from its addresses on, in their order */
+/* the options of an ipsec.conf ike rule, in their order */
 var SV_IPSEC_IKE = [{ key: "mode", words: ["passive", "dynamic",
     "active"] }, { key: "satype", words: ["esp", "ah", "ipcomp",
     "ipip"] }, { key: "tmode", words: ["tunnel", "transport"] },
@@ -866,7 +866,8 @@ function svTop(d) {
 
 /*
  * The statements of the given kinds in block p, or at the top level,
- * each read as the kind that matches it best among all those there
+ * each read as the kind that matches it best among the given kinds, or
+ * at the top level among all those there
  */
 function svList(doc, d, p, kinds) {
 	return stList(p ? p.children || [] : doc.nodes, p ? kinds :

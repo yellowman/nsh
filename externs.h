@@ -165,8 +165,8 @@ extern pid_t child;
 #define DEFAULT_EDITOR	"/usr/bin/vi"
 #define NSHRC		"/etc/nshrc"
 #define NSHDB		"/var/db/nsh"	/* the configurations saved */
-#define SAVED		NSHDB "/nshrc"	/* nshd's, where nshd saves */
-#define ROLLBACKS	50		/* how many, rollback 0 the last */
+#define SAVED		NSHDB "/nshrc"	/* nshd's saved configuration */
+#define ROLLBACKS	50		/* number saved; 0 is the newest */
 #define ROLLBACK	NSHDB "/nshrc.%d"
 #define ROLLBACK_HEAD	"# saved by "	/* who saved it, and why */
 #define ROLLBACK_GEN	"# generation "	/* then which save it was */
@@ -187,7 +187,7 @@ extern pid_t child;
 #define USERADD		"/usr/sbin/useradd"
 #define USERMOD		"/usr/sbin/usermod"
 #define USERDEL		"/usr/sbin/userdel"
-#define NSH_SHELL	"/usr/local/bin/nsh"	/* an account nshd makes runs it */
+#define NSH_SHELL	"/usr/local/bin/nsh"	/* shell of nshd's accounts */
 #define NSH_GROUP	"nshadmin"	/* nshd.h's NSHD_GROUP */
 #define NSHLOGIN	NSHDB "/login"	/* the login classes and users */
 #define DOAS		"/usr/bin/doas"
@@ -215,8 +215,8 @@ struct confcmd {
 };
 #define CF_NO		0x1	/* a top-level one takes no */
 #define CF_IF		0x2	/* it heads an interface's block */
-#define CF_BRIDGE	0x4	/* a bridge's */
-#define CF_RTABLE	0x8	/* an rtable's */
+#define CF_BRIDGE	0x4	/* a bridge's block */
+#define CF_RTABLE	0x8	/* an rtable's block */
 const struct confcmd *conf_cmd(int, int);
 int conf_find(int, char *, char **);
 int conf_run(int, int, int, char **, char *);
@@ -254,7 +254,7 @@ typedef struct cmd {
 	int needpriv;		/* Do we need privilege to execute? */
 	int needconfig;		/* Do we need config mode to execute? */
 	int nocmd;		/* Can we specify 'no ...command...'? */
-	int modh;		/* Does it head a block? 2, an rtable's */
+	int modh;		/* Does it start a block? 2 for an rtable */
 	int cand;		/* What it does in configure private (CAND_*) */
 } Command;
 
@@ -717,17 +717,17 @@ int cand_write(FILE *);
 /* commit.c */
 #define MAXCLEARS	64
 #define COMMENTMAX	256	/* a commit's comment, with its NUL */
-/* What makes one configuration read as another */
+/* Edits that change one configuration into another */
 struct script {
 	char *text;			/* lines, as conf() prints them */
 	size_t len;
-	char *edits;			/* what system runs (script_run()) */
+	char *edits;			/* edits, run by script_run() */
 	size_t elen;
 	struct {
 		char name[32];
 		int rtable;
 		int keep;
-	} clears[MAXCLEARS];		/* daemon rules no script can write */
+	} clears[MAXCLEARS];		/* daemon rules to empty or remove */
 	int nclears;
 };
 int commit(int, char **, ...);

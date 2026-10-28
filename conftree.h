@@ -26,9 +26,9 @@
 #define CE_DEL		4	/* the line goes */
 #define CE_LISTADD	5	/* the values join the line with their name */
 #define CE_LISTDEL	6	/* the values leave it, and an empty line goes */
-#define CE_BLOCK	7	/* the statement is there, at the top level */
+#define CE_BLOCK	7	/* the statement is added, once */
 #define CE_NOBLOCK	8	/* the statement and its lines go */
-#define CE_RENAME	9	/* the statement reads line, with its lines */
+#define CE_RENAME	9	/* the statement becomes line, with its lines */
 #define CE_SEQ		10	/* the line follows the ordered block's lines */
 
 /*
@@ -39,7 +39,7 @@
 #define CK_ADDR		0x100
 
 /* What conftree_edit() returns, besides -1 */
-#define CE_NOOP		0	/* the tree already said so */
+#define CE_NOOP		0	/* the tree already had the change */
 #define CE_CHANGED	1
 
 struct cnode;

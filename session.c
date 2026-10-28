@@ -18,11 +18,11 @@
 /*
  * Sessions, each running with its own state: session_enter() puts a
  * session's globals in place, and session_leave() keeps them and puts
- * back the process's, as they were before any session, so nothing of
- * one session is seen by another, but a candidate that sessions share. nshd's
- * config runs configure private, and configure, whose candidate its
- * sessions share, through the rest, a request at a time, and plans
- * their commits, which system runs.
+ * back the process's, as they were before any session. So no session
+ * sees another's state, except a candidate that sessions share. nshd's
+ * config uses the rest of this file to run configure private, and
+ * configure, whose sessions share one candidate, a request at a time,
+ * and plans their commits, which system runs.
  */
 #include <sys/param.h>	/* MAXHOSTNAMELEN */
 #include <sys/socket.h>
@@ -40,7 +40,7 @@
 #include "facts.h"
 #include "session.h"
 
-int in_config;		/* nshd's config: no kernel, file or program its own */
+int in_config;		/* nshd's config: uses no kernel, files or programs */
 
 #if PLAN_CLEARS != MAXCLEARS
 #error "PLAN_CLEARS is not MAXCLEARS"
@@ -49,7 +49,7 @@ int in_config;		/* nshd's config: no kernel, file or program its own */
 extern struct sglobal candidate_sglobals[], commands_sglobals[];
 extern struct sglobal if_sglobals[];
 
-/* main.c's, makeargv.c's, prompt.c's and bgpcommands.c's */
+/* globals of main.c, makeargv.c, prompt.c and bgpcommands.c */
 static struct sglobal session_sglobals[] = {
 	SGLOBAL(priv), SGLOBAL(cli_rtable), SGLOBAL(config_mode),
 	SGLOBAL(bridge), SGLOBAL(verbose),
@@ -94,7 +94,7 @@ copy(unsigned char *mem, int out)
 		}
 }
 
-/* A new session, as the process was before the first: NULL, errno set */
+/* A new session, as the process was before the first, or NULL with errno set */
 struct session_state *
 session_new(void)
 {
@@ -119,7 +119,7 @@ session_new(void)
 	return s;
 }
 
-/* Drop s, and what its candidate, if its own, and rules file hold */
+/* Free s, and its candidate if it is its own */
 void
 session_free(struct session_state *s)
 {
@@ -142,7 +142,7 @@ session_enter(struct session_state *s)
 		cand_share(s->shared, 1);
 }
 
-/* s's globals kept, the shared candidate left as s left it, if it shares */
+/* save s's globals, and the shared candidate as s left it, if it shares */
 void
 session_leave(struct session_state *s)
 {
@@ -155,8 +155,9 @@ session_leave(struct session_state *s)
 }
 
 /*
- * The running configuration, text as system's snapshot has it, which
- * running_tree() gives from now on: -1 if it could not be read, said why
+ * The running configuration that running_tree() gives from now on: text,
+ * as system's snapshot has it. -1 if it could not be read, after saying
+ * why
  */
 int
 session_running(char *text, size_t len)
@@ -171,8 +172,8 @@ session_running(char *text, size_t len)
 }
 
 /*
- * configure private, in s, privileged, or with sh, configure, whose
- * candidate sessions share: as a handler returns
+ * configure private in s, privileged, or with sh, configure, on sh, the
+ * candidate that sessions share: as a handler returns
  */
 int
 session_configure(struct session_state *s, struct cand_shared *sh)
@@ -192,7 +193,7 @@ session_configure(struct session_state *s, struct cand_shared *sh)
 	return r;
 }
 
-/* A line of configure private's, in s, as cmdline() runs it */
+/* A configuration line, in s, as cmdline() runs it */
 int
 session_line(struct session_state *s, char *line)
 {
@@ -206,7 +207,7 @@ session_line(struct session_state *s, char *line)
 
 /*
  * A daemon's rules in rtable, in s's candidate: printed, or with set,
- * made the lines of text, as ctl_cand_rules() does
+ * replaced by the lines of text, as ctl_cand_rules() does
  */
 int
 session_rules(struct session_state *s, char *daemon, int rtable, int set,
@@ -303,7 +304,7 @@ cmplt_facts(struct facts_out *o)
 	return r;
 }
 
-/* Leave configure private, in s, from any mode */
+/* Leave configure, in s, from any of its modes */
 int
 session_exit(struct session_state *s)
 {
@@ -318,8 +319,8 @@ session_exit(struct session_state *s)
 
 /*
  * s's mode: whether in configure, private or not, the rtable its lines
- * are for, and the interface whose mode it is in, or "", and whether a
- * bridge
+ * are for, the interface whose mode it is in, or "", and whether that
+ * is a bridge
  */
 void
 session_mode(struct session_state *s, int *in, int *rtable,
@@ -383,14 +384,15 @@ session_candidate(struct session_state *s)
 }
 
 /*
- * A commit of s's candidate, into *pp, checked, as commit check says it
- * when checking, which plans nothing: as a handler returns, -1 when the
- * candidate may not become the running configuration or no plan could
- * be made, said why. Daemons' tests of rules are the plan's, and the
- * verdict waits on them (session_verdict()); with them, a plan is made
- * when checking too. A commit confirmed records what runs and what is
- * wanted even if they are the same. A commit is refused once if another
- * commit changed what its candidate changes since (cand_conflicts())
+ * Check s's candidate as commit check does and, unless checking, plan
+ * its commit into *pp: as a handler returns, -1 when the candidate may
+ * not become the running configuration or no plan could be made, after
+ * saying why. Daemons' tests of rules are the plan's, and the verdict
+ * waits on them (session_verdict()); with them, a plan is made when
+ * checking too. A commit confirmed records the running configuration
+ * and the candidate even if they are the same. A commit is refused once
+ * if another commit has since changed what its candidate changes
+ * (cand_conflicts())
  */
 int
 session_plan(struct session_state *s, int checking, int confirmed,
@@ -446,7 +448,7 @@ done:
 	return r;
 }
 
-/* p's nth test refused its rules, if failed, a problem said */
+/* p's nth test, if failed, refused its rules: report it as a problem */
 void
 session_tested(struct plan *p, int n, int failed)
 {
@@ -465,8 +467,8 @@ session_verdict(struct plan *p)
 /*
  * Does the running configuration, the last snapshot's, read as p's
  * candidate, and no line of the script failed? 0 if so; else what did
- * not take is said, and p's script is the one back to how it was: 1, or
- * -1 if it could not be made, said why
+ * not take is printed, and p's script becomes one that rolls back to how
+ * it was: 1, or -1 if it could not be made, after saying why
  */
 int
 session_verify(struct plan *p, int failed)
@@ -482,7 +484,7 @@ session_verify(struct plan *p, int failed)
 	}
 	commit_untaken(now, p->want, failed);
 	conftree_free(now);
-	/* differ() took from now: the script is from all of it */
+	/* differ() changed now, so make the script from a fresh copy */
 	if ((now = running_tree()) != NULL &&
 	    plan_script(p, now, p->was) == 0)
 		r = 1;
@@ -492,7 +494,7 @@ session_verify(struct plan *p, int failed)
 
 /*
  * Whether the running configuration, the last snapshot's, is as it was
- * before p ran: 0 if so, said
+ * before p ran, said either way: 0 if so, else -1
  */
 int
 session_verify_back(struct plan *p)
@@ -510,9 +512,9 @@ session_verify_back(struct plan *p)
 /*
  * The boot's plan, as nsh -i's commit_boot() makes it: the running
  * configuration, the last snapshot's, made to read as text, the saved
- * configuration, all of it that takes. What check finds is said, and
+ * configuration, as far as it succeeds. What check finds is printed, and
  * the daemons' tests of rules are the plan's, but neither keeps it from
- * running: -1 if it could not be made, said why
+ * running: -1 if it could not be made, after saying why
  */
 int
 session_boot_plan(char *text, size_t len, struct plan **pp)
@@ -544,8 +546,8 @@ session_boot_plan(char *text, size_t len, struct plan **pp)
 
 /*
  * Does the running configuration, the last snapshot's, read as the
- * boot's, and no line of its script failed? 0 if so, else 1, what
- * differs said, or -1 if it could not be read
+ * boot's, and no line of its script failed? 0 if so, else 1 after
+ * printing what differs, or -1 if it could not be read
  */
 int
 session_boot_verify(struct plan *p, int failed)
@@ -638,8 +640,8 @@ session_renew(struct session_state *s)
 
 /*
  * text, nsh -c's configuration, as s's candidate in place of what it
- * was, as rollback N takes a saved one; an empty one changes nothing:
- * -1 if it could not, said why, else 0
+ * was, as rollback N takes a saved one; an empty one changes nothing.
+ * -1 if it could not, after saying why, else 0
  */
 int
 session_load(struct session_state *s, char *text, size_t len)
