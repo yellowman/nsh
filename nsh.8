@@ -2214,9 +2214,12 @@ with
 where
 .Xr nshd 8
 runs, it does so, and demotes carp while it does.
-A commit before then confirms it, and saves it; so does
+A commit before then saves the configuration and, once the save
+succeeds, confirms it; so does
 .Cm commit
 outside configure.
+If the save fails, the commit is not confirmed and the deadline still
+applies.
 A system started again before then starts with the configuration saved
 before it.
 .Bl -dash

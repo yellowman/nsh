@@ -2246,11 +2246,6 @@ system_save(uint32_t id, struct nshd_save *sv)
 		}
 	}
 	j = system_job_new(id, JOB_SAVE);
-
-	/* a commit not confirmed is confirmed, first */
-	if (system_unconfirm())
-		printf("%% Commit confirmed\n");
-
 	user_name(uid, j->who, sizeof(j->who));
 	strlcpy(j->comment, sv->comment, sizeof(j->comment));
 	system_job(j);
@@ -2350,8 +2345,11 @@ system_test(uint32_t id, struct nshd_whose *whose, char *name)
 }
 
 /*
- * After a save: the record gone, or if it failed, a commit applying
- * applied and not saved
+ * After a save. If it succeeded, clear the commit record and confirm a
+ * commit that waits for confirmation. If it failed, mark a commit that
+ * was applying as applied but not saved; a commit that waits for
+ * confirmation keeps its record, and is still rolled back at its
+ * deadline.
  */
 static void
 system_saved(int ok)
@@ -2362,6 +2360,8 @@ system_saved(int ok)
 	if (ok) {
 		record_clear();
 		boot_saved();
+		if (system_unconfirm())
+			printf("%% Commit confirmed\n");
 	} else if (record_read(&rec) == 0) {
 		if (rec.state == RECORD_APPLYING) {
 			rec.state = RECORD_UNSAVED;
