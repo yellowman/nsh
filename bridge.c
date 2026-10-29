@@ -2381,15 +2381,3 @@ bridge_show_facts(struct facts_out *o, char *ifname)
 	close(ifs);
 	return (r);
 }
-
-int
-show_bridges(int argc, char **argv, ...)
-{
-	switch (argc) {
-	case 2:
-		return facts_show(stdout, "bridge");
-	case 3:
-		return facts_show(stdout, "bridge %s", argv[2]);
-	}
-	return 0;
-}

@@ -877,46 +877,6 @@ cand_write(FILE *f)
 	return 0;
 }
 
-/* show candidate-config: nshd has the candidate */
-int
-pr_cand_conf(int argc, char **argv, ...)
-{
-	if (!candidate && !nshd_config) {
-		printf("%% Not in configure\n");
-		return -1;
-	}
-	return nshd_cshow("candidate-config");
-}
-
-/*
- * rollback [N]: drop this session's changes to the candidate, which is
- * the running configuration again, or configuration N as it was saved
- */
-int
-cand_rollback(int argc, char **argv, ...)
-{
-	const char *errstr;
-	int n = 0;
-
-	if (!candidate && !nshd_config) {
-		printf("%% rollback requires configure\n");
-		return -1;
-	}
-	if (argc > 2) {
-		printf("%% rollback [0-%d]\n", ROLLBACKS - 1);
-		return -1;
-	}
-	if (argc == 2) {
-		n = strtonum(argv[1], 0, ROLLBACKS - 1, &errstr);
-		if (errstr != NULL) {
-			printf("%% rollback %s is %s\n", argv[1], errstr);
-			return -1;
-		}
-	}
-	/* nshd has the candidate */
-	return nshd_rollback(n);
-}
-
 /*
  * The candidate starts over as base, which it keeps: saved configuration
  * n, or with n -1 a loaded one, for which nothing is printed; or as the

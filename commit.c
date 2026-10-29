@@ -95,8 +95,6 @@
 #include "kfacts.h"
 #include "session.h"
 
-#define CONFIRMMIN	10	/* commit confirmed's minutes, if not given */
-#define CONFIRMMAX	1440
 
 struct commit {
 	FILE *f;			/* the script's lines */
@@ -209,67 +207,6 @@ static int syncdir(const char *);
 static int sub_begin(struct commit *, struct sub *);
 static void sub_end(struct commit *, struct sub *, const char *, char *,
     int);
-
-/*
- * commit [confirmed [minutes]] [comment text]: in configure, nshd makes
- * the candidate the running configuration, all of it or none, then
- * saves the running configuration; or with confirmed, does not save it,
- * and rolls it back unless a commit confirms it in time. Outside
- * configure, nshd saves the running configuration. The comment is kept
- * with what is saved.
- */
-int
-commit(int argc, char **argv, ...)
-{
-	char comment[COMMENTMAX] = "";
-	const char *errstr;
-	int minutes = 0, checking = 0, i, j, said = 1;
-
-	/* comment, at least "com" of it, and the words after it */
-	for (i = 1; i < argc && (strlen(argv[i]) < 3 ||
-	    !isprefix(argv[i], "comment")); i++)
-		;
-	if (i < argc) {
-		said = i + 1 < argc;
-		for (j = i + 1; j < argc; j++)
-			if ((j > i + 1 && strlcat(comment, " ",
-			    sizeof(comment)) >= sizeof(comment)) ||
-			    strlcat(comment, argv[j], sizeof(comment)) >=
-			    sizeof(comment)) {
-				printf("%% comment is longer than %d\n",
-				    COMMENTMAX - 1);
-				return -1;
-			}
-		argc = i;
-	}
-	if (argc > 1) {
-		checking = isprefix(argv[1], "check") != 0;
-		/* c alone could be either */
-		if (checking == (isprefix(argv[1], "confirmed") != 0) ||
-		    (checking && argc > 2))
-			argc = 4;
-	}
-	if (argc > 3 || !said) {
-		printf("%% commit [check | confirmed [minutes]] "
-		    "[comment text]\n");
-		return -1;
-	}
-	if (comment[0] != '\0' && argc > 1) {
-		printf("%% commit %s saves nothing to comment\n",
-		    checking ? "check" : "confirmed");
-		return -1;
-	}
-	if (argc > 1 && !checking) {
-		minutes = CONFIRMMIN;
-		if (argc == 3 && (minutes = strtonum(argv[2], 1, CONFIRMMAX,
-		    &errstr)) == 0) {
-			printf("%% minutes %s is %s\n", argv[2], errstr);
-			return -1;
-		}
-	}
-	/* nshd commits its candidate, or saves the running configuration */
-	return nshd_commit(checking, minutes, comment);
-}
 
 /* The problems check() finds with want, each reported, and how many */
 int
@@ -2080,38 +2017,6 @@ done:
 		unlink(to);
 	fclose(in);
 	return ret;
-}
-
-/*
- * show rollback [N [diff]]: when each configuration kept was saved, who
- * saved it and their comment, or configuration N, or what it changed
- */
-int
-pr_rollback(int argc, char **argv, ...)
-{
-	char words[sizeof("rollback 99 diff")];
-	const char *errstr;
-	int n;
-
-	if (argc == 4 && !isprefix(argv[3], "diff")) {
-		printf("%% show rollback N takes diff after N, not %s\n",
-		    argv[3]);
-		return -1;
-	}
-	if (argc >= 3) {
-		n = strtonum(argv[2], 0, ROLLBACKS - 1, &errstr);
-		if (errstr != NULL) {
-			printf("%% rollback %s is %s\n", argv[2], errstr);
-			return -1;
-		}
-	}
-	/* nshd shows it */
-	if (argc >= 3)
-		snprintf(words, sizeof(words), "rollback %d%s", n,
-		    argc == 4 ? " diff" : "");
-	else
-		strlcpy(words, "rollback", sizeof(words));
-	return nshd_show(words) ? 0 : -1;
 }
 
 /* Configuration n as it was saved, to out: -1 on error, after saying why */

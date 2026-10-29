@@ -1306,3 +1306,101 @@ ndp_end(const char *failed, const char *nohost)
 	if (nohost != NULL)
 		printf("%s -- no entry\n", nohost);
 }
+
+char *msgtypes[] = {
+	"",
+	"RTM_ADD: Add Route",
+	"RTM_DELETE: Delete Route",
+	"RTM_CHANGE: Change Metrics or flags",
+	"RTM_GET: Report Metrics",
+	"RTM_LOSING: Kernel Suspects Partitioning",
+	"RTM_REDIRECT: Told to use different route",
+	"RTM_MISS: Lookup failed on this address",
+	"RTM_LOCK: fix specified metrics",
+	"RTM_OLDADD: caused by SIOCADDRT",
+	"RTM_OLDDEL: caused by SIOCDELRT",
+	"RTM_RESOLVE: Route created by cloning",
+	"RTM_NEWADDR: address being added to iface",
+	"RTM_DELADDR: address being removed from iface",
+	"RTM_IFINFO: iface status change",
+	0,
+};
+
+void
+print_rtmsg(struct rt_msghdr *rtm)
+{
+	struct if_msghdr *ifm;
+	struct ifa_msghdr *ifam;
+
+	if (verbose == 0)
+		return;
+	if (rtm->rtm_version != RTM_VERSION) {
+		(void) printf("%% routing message version %d not understood\n",
+		    rtm->rtm_version);
+		return;
+	}
+	(void)printf("%% %s: len %d, table %d, ", msgtypes[rtm->rtm_type], rtm->rtm_msglen,
+	    rtm->rtm_tableid);
+	switch (rtm->rtm_type) {
+	case RTM_IFINFO:
+		ifm = (struct if_msghdr *)rtm;
+		(void) printf("if# %d\n", ifm->ifm_index);
+		bprintf(stdout, ifm->ifm_flags, ifnetflags);
+		pmsg_addrs((char *)ifm + ifm->ifm_hdrlen, ifm->ifm_addrs);
+		break;
+	case RTM_NEWADDR:
+	case RTM_DELADDR:
+		ifam = (struct ifa_msghdr *)rtm;
+		(void) printf("metric %d\n", ifam->ifam_metric);
+		bprintf(stdout, ifam->ifam_flags, routeflags);
+		pmsg_addrs((char *)ifam + ifam->ifam_hdrlen, ifam->ifam_addrs);
+		break;
+	default:
+		(void) printf("pid: %d, seq %d, errno %d, flags:",
+			rtm->rtm_pid, rtm->rtm_seq, rtm->rtm_errno);
+		bprintf(stdout, rtm->rtm_flags, routeflags);
+		printf("\n");
+		pmsg_common(rtm);
+	}
+}
+
+void
+pmsg_common(struct rt_msghdr *rtm)
+{
+	(void) printf("%% locks: ");
+	bprintf(stdout, rtm->rtm_rmx.rmx_locks, metricnames);
+	(void) printf(" inits: ");
+	bprintf(stdout, rtm->rtm_inits, metricnames);
+	printf("\n");
+	pmsg_addrs(((char *)rtm + rtm->rtm_hdrlen), rtm->rtm_addrs);
+}
+
+void
+pmsg_addrs(char	*cp, int addrs)
+{
+	if (addrs == 0)
+		return;
+	(void) printf("%% sockaddrs: ");
+	bprintf(stdout, addrs, addrnames);
+	(void) putchar('\n');
+	print_addrs(cp, addrs);
+	(void) putchar('\n');
+	(void) fflush(stdout);
+}
+
+void
+print_addrs(char *cp, int addrs)
+{
+	struct sockaddr *sa;
+	int i;
+
+	if (addrs == 0)
+		return;
+
+	for (i = 1; i; i <<= 1)
+		if (i & addrs) {
+			sa = (struct sockaddr *)cp;
+			(void) printf(" %s", routename(sa));
+			ADVANCE(cp, sa);
+		}
+}

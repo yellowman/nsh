@@ -26,6 +26,210 @@
 #include "commands.h"
 #include "ctl.h"
 
+struct prot1 oscs[] = {
+	{ "fib",	"Forward Information Base",
+	    { OSPFCTL, "show", "fib", OPT, OPT, NULL } },
+	{ "database",	"Link State Database",
+	    { OSPFCTL, "show", "database", OPT, OPT, NULL } },
+	{ "interfaces",	"Interface",
+	    { OSPFCTL, "show", "interfaces", OPT, NULL } },
+	{ "neighbor",	"Neighbor",
+	    { OSPFCTL, "show", "neighbor", OPT, NULL } },
+	{ "rib",	"Routing Information Base",
+	    { OSPFCTL, "show", "rib", OPT, NULL } },
+	{ "summary",	"Summary",
+	    { OSPFCTL, "show", "summary", NULL } },
+	{ 0, 0, { 0 } }
+};
+
+struct prot1 os6cs[] = {
+	{ "fib",        "Forward Information Base",
+	    { OSPF6CTL, "show", "fib", OPT, OPT, NULL } },
+	{ "database",   "Link State Database",
+	    { OSPF6CTL, "show", "database", OPT, OPT, NULL } },
+	{ "interfaces", "Interface",
+	    { OSPF6CTL, "show", "interfaces", OPT, NULL } },
+	{ "neighbor",   "Neighbor",
+	    { OSPF6CTL, "show", "neighbor", OPT, NULL } },
+	{ "rib",        "Routing Information Base",
+	    { OSPF6CTL, "show", "rib", OPT, NULL } },
+	{ "summary",    "Summary",
+	    { OSPF6CTL, "show", "summary", NULL } },
+	{ 0, 0, { 0 } }
+};
+
+struct prot1 pfcs[] = {
+	{ "all",           "all pf info except fingerprints and interfaces", 
+            { PFCTL, "-sall", NULL, NULL, NULL, NULL } },
+	{ "anchors",       "currently loaded anchors in main pf ruleset", 
+            { PFCTL, "-sAnchors", NULL, NULL, NULL } },	
+        { "info ",         "pf filter statistics, counters and tracking",
+            { PFCTL, "-sinfo", "-v", NULL, NULL, NULL } },
+        { "labels",        "per rule stats (bytes, packets and states)",        
+            { PFCTL, "-slabels", NULL, NULL, NULL, NULL } },
+        { "memory",        "current pf pool memory hard limit",
+            { PFCTL, "-smemory", NULL, NULL, NULL, NULL } },
+	{ "queues",        "currently loaded pf queue definition", 
+            { PFCTL, "-squeue", "-v", NULL, NULL, NULL } },
+	{ "rules",         "active pf firewall rule",
+            { PFCTL, "-srules", NULL, NULL, NULL, NULL } },
+	{ "sources",       "contents of the pf source tracking table", 
+            { PFCTL, "-sSources", NULL, NULL, NULL, NULL } },
+	{ "states",        "contents of the pf state table",
+            { PFCTL, "-sstates", NULL, NULL, NULL, NULL } },
+        { "tables",        "pf table",
+            { PFCTL, "-sTables", NULL, NULL, NULL, NULL } },
+	{ "timeouts",      "current pf global timeout", 
+            { PFCTL, "-stimeouts", NULL, NULL, NULL, NULL } },
+	{ "osfingerprint", "pf Operating System fingerprint", 
+            { PFCTL, "-sosfp", NULL, NULL, NULL, NULL } },
+	{ "interfaces",    "pf usable interfaces/ interface group", 
+            { PFCTL, "-sInterfaces", NULL, NULL, NULL, NULL } },
+	{ 0, 0, { 0 } }                                                         
+};
+struct prot1 eics[] = {
+	{ "interfaces",	"Interface",
+	    { EIGRPCTL, "show", "interfaces", OPT, OPT, NULL } },
+	{ "neighbor",	"Neighbor",
+	    { EIGRPCTL, "show", "neighbor", OPT, OPT, NULL } },
+	{ "topology",	"Topology",
+	    { EIGRPCTL, "show", "topology", OPT, OPT, NULL } },
+	{ "traffic",	"Traffic",
+	    { EIGRPCTL, "show", "traffic", OPT, OPT, NULL } },
+	{ 0, 0, { 0 } }
+};
+
+struct prot1 rics[] = {
+	{ "fib",        "Forward Information Base",
+	    { RIPCTL, "show", "fib", OPT, NULL } },
+	{ "interfaces", "Interfaces",
+	    { RIPCTL, "show", "interfaces", NULL } },
+	{ "neighbor",   "Neighbor",
+	    { RIPCTL, "show", "neighbor", NULL } },
+	{ "rib",        "Routing Information Base",
+	    { RIPCTL, "show", "rib", NULL } },
+	{ 0, 0, { 0 } }
+};
+
+struct prot1 lics[] = {
+	{ "fib",        "Forward Information Base",
+	    { LDPCTL, "show", "fib", OPT, NULL } },
+	{ "interfaces", "Interfaces",
+	    { LDPCTL, "show", "interfaces", NULL } },
+	{ "neighbor",   "Neighbors",
+	    { LDPCTL, "show", "neighbor", NULL } },
+	{ "lib",        "Label Information Base",
+	    { LDPCTL, "show", "lib", NULL } },
+	{ "discovery",	"Adjacencies",
+	    { LDPCTL, "show", "discovery", NULL } },
+	{ "l2vpn",	"Pseudowire",
+	    { LDPCTL, "show", "l2vpn", OPT, NULL } },
+	{ 0, 0, { 0 } }
+};
+
+struct prot1 iscs[] = {
+	{ "flows",	"Display IPsec flows",
+	    { IPSECCTL, "-sf", NULL } },
+	{ "sadb",	"Display SADB",
+	    { IPSECCTL, "-ss", NULL } },
+	{ 0, 0, { 0 } }
+};
+
+struct prot1 ikcs[] = {
+	{ "monitor",	"Monitor internal iked messages",
+	    { IKECTL, "monitor", NULL } },
+	{ 0, 0, { 0 } }
+};
+
+struct prot1 dvcs[] = {
+	{ "igmp",       "Internet Group Message Protocol",
+	    { DVMRPCTL, "show", "igmp", NULL } },
+	{ "interfaces", "Interfaces",
+	    { DVMRPCTL, "show", "interfaces", OPT, NULL } },
+	{ "mfc",        "Multicast Forwarding Cache",
+	    { DVMRPCTL, "show", "mfc", OPT, NULL } },
+	{ "neighbor",   "Neighbor",
+	    { DVMRPCTL, "show", "neighbor", OPT, NULL } },
+	{ "rib",        "Routing Information Base",
+	    { DVMRPCTL, "show", "rib", OPT, NULL } },
+	{ "summary",    "Summary",
+	    { DVMRPCTL, "show", "summary", NULL } },
+        { 0, 0, { 0 } }
+};
+
+struct prot1 rlcs[] = {
+	{ "hosts",      "hosts",
+	    { RELAYCTL, "show", "hosts", NULL } },
+	{ "redirects",  "redirects",
+	    { RELAYCTL, "show", "redirects", NULL } },
+	{ "status",     "status",
+	    { RELAYCTL, "show", "relays", NULL } },
+	{ "sessions",   "sessions",
+	    { RELAYCTL, "show", "sessions", NULL } },
+	{ "summary",    "summary",
+	    { RELAYCTL, "show", "summary", NULL } },
+	{ 0, 0, { 0 } }
+};
+
+struct prot1 smcs[] = {
+	{ "queue",	"envelopes in queue",
+	    { SMTPCTL, "show", "queue", NULL } },
+	{ "runqueue",	"envelopes scheduled for delivery",
+	    { SMTPCTL, "show", "runqueue", NULL } },
+	{ "stats",	"runtime statistics",
+	    { SMTPCTL, "show", "stats", NULL } },
+	{ 0, 0, { 0 } }
+};
+
+struct prot1 dhcs[] = {
+	{ "leases",	"leases", { 0 } },
+	{ 0, 0, { 0 } }
+};
+
+struct prot1 ldcs[] = {
+	{ "stats",	"statistics counters",
+	    { LDAPCTL, "stats", NULL } },
+	{ 0, 0, { 0 } }
+};
+
+struct prot1 systatcs[] = {
+	{ "interface",		"Interface",
+		{ SYSTAT,  "-d 3", "ifstat", NULL, NULL, NULL }  },
+	{ "net",		"Network connection", 
+		{ SYSTAT,  "-d 3", "netstat", NULL, NULL, NULL }  },
+	{ "mbuf",		"Network data memory buffer",
+		{ SYSTAT,  "-d 3", "mbuf", NULL, NULL, NULL }  }, 
+	{ "queues",		"Active Packet Filter queue",
+		{ SYSTAT,  "-d 3", "queues", NULL, NULL, NULL }  },
+	{ "rules",		"Active Packet Filter rule",
+		{ SYSTAT,  "-d 3", "rules", NULL, NULL, NULL }  },
+	{ "states",		"Packet Filter connection state",
+		{ SYSTAT,  "-d 3", "state", NULL, NULL, NULL }  },
+	{ "packet-filter",	"Packet Filter ",
+		{ SYSTAT,  "-d 3", "pf", NULL, NULL, NULL }  },
+	{ "sensors",		"Supported hardware sensor reading",
+		{ SYSTAT,  "-d 3", "sensors", NULL, NULL, NULL }  },
+	{ "pigs",		"CPU resource hog program",
+		{ SYSTAT,  "-d 3", "pigs", NULL, NULL, NULL }  },
+	{ "virtual-memory",	"Virtual memory usage",
+		{ SYSTAT,  "-d 3", "vmstat", NULL, NULL, NULL }  },
+	{ "cpu",		"CPU usage",
+		{ SYSTAT,  "-d 3", "cpu", NULL, NULL, NULL }  },
+	{ "uvm",		"UVM subsystem",
+		{ SYSTAT,  "-d 3", "uvm", NULL, NULL, NULL }  },
+	{ "swap",		"Swap space usage",
+		{ SYSTAT,  "-d 3", "swap", NULL, NULL, NULL }  },
+	{ "pool",		"Kernel pool usage",
+		{ SYSTAT,  "-d 3", "pool", NULL, NULL, NULL }  },
+	{ "pcache",		"Kernel pool per CPU cache",
+		{ SYSTAT,  "-d 3", "pcache", NULL, NULL, NULL }  },
+	{ "malloc",		"Kernel memory allocation type",
+		{ SYSTAT,  "-d 3", "malloc", NULL, NULL, NULL }  },
+	{ "bucket",             "Kernel malloc bucket",
+		{ SYSTAT,  "-d 3", "bucket", NULL, NULL, NULL }  },
+	{ 0, 0, { 0 } }
+};
+
 int
 pr_prot1(int argc, char **argv, ...)
 {

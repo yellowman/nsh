@@ -50,17 +50,6 @@
 int utmpfd = -1;	/* nshd's show opens it before it chroots */
 
 int
-who(int argc, char **argv, ...)
-{
-	if (argc == 2 && !isprefix(argv[1], "users")) {
-		printf("%% Too many arguments\n");
-		return -1;
-	}
-
-	return facts_show(stdout, "users");
-}
-
-int
 users_facts(struct facts_out *o)
 {
 	struct facts_value v[LOGIN_NFIELDS];

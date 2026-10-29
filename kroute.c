@@ -59,8 +59,6 @@
 #include "externs.h"
 #include "facts.h"
 #include "showfacts.h"
-
-int 	sigflag = 0;
 static struct	rt_metrics	rt_metrics;
 
 /* declared in externs.h */
@@ -72,10 +70,6 @@ u_long	rtm_inits;
 
 char	*mylink_ntoa(const struct sockaddr_dl *);
 
-void	 print_rtmsg(struct rt_msghdr *);
-void	 pmsg_common(struct rt_msghdr *);
-void	 pmsg_addrs(char *, int);
-void	 print_addrs(char *, int);
 
 /*
  * caller must freertdump() if rtdump not NULL
@@ -325,133 +319,6 @@ prefixlen(int len, struct sockaddr_in6 *sin6)
 	return len;
 }
 
-static void
-_monitor_sig(int signo)
-{
-	sigflag = signo;
-	return;
-}
-
-int
-monitor(int argc, char **argv, ...)
-{
-	int s, m, n, saveverbose;
-	fd_set fds; 
-	struct timeval to;
-	char msg[2048];
-
-	s = socket(PF_ROUTE, SOCK_RAW, 0);
-	if (s < 0) {
-		printf("%% Unable to open routing socket: %s\n",
-		    strerror(errno));
-		return -1;
-	}
-	saveverbose = verbose;
-	verbose = 1;
-
-	/* set up signal handler */
-	if (signal (SIGINT, _monitor_sig) == SIG_ERR) {
-		perror (strerror(errno));
-		verbose = saveverbose;
-		close (s);
-		return (-1);
-	}
-
-	printf("%% Entering monitor mode ... press ENTER or ^C to leave ...\n");
-
-	for(; sigflag != SIGINT ;) {
-		time_t now;
-
-		FD_ZERO (&fds);
-		FD_SET (s, &fds);
-		FD_SET (0, &fds);
-		to.tv_sec = 1;
-		to.tv_usec = 0;
-
-		m = select (s + 1, &fds, NULL, NULL, &to);
-
-		if (m < 0) {
-			printf ("%% select: %s\n", strerror(errno));
-			break;
-		}
-
-		if (m > 0) {
-			if (FD_ISSET (s, &fds)) {
-				ioctl (s, FIONBIO, 1); 	/* non-blocking io */
-				n = read (s, msg, 2048);
-				now = time(NULL);
-				printf("%% Message of size %d on %s", n, ctime(&now));
-				print_rtmsg((struct rt_msghdr *)msg);
-			}
-			if (FD_ISSET (0, &fds)) 
-				break; 
-		}
-	}
-
-	sigflag = -1;
-	verbose = saveverbose;
-	(void)signal(SIGINT, (sig_t)intr);
-	close(s);
-	return 0;
-}
-
-char *msgtypes[] = {
-	"",
-	"RTM_ADD: Add Route",
-	"RTM_DELETE: Delete Route",
-	"RTM_CHANGE: Change Metrics or flags",
-	"RTM_GET: Report Metrics",
-	"RTM_LOSING: Kernel Suspects Partitioning",
-	"RTM_REDIRECT: Told to use different route",
-	"RTM_MISS: Lookup failed on this address",
-	"RTM_LOCK: fix specified metrics",
-	"RTM_OLDADD: caused by SIOCADDRT",
-	"RTM_OLDDEL: caused by SIOCDELRT",
-	"RTM_RESOLVE: Route created by cloning",
-	"RTM_NEWADDR: address being added to iface",
-	"RTM_DELADDR: address being removed from iface",
-	"RTM_IFINFO: iface status change",
-	0,
-};
-
-void
-print_rtmsg(struct rt_msghdr *rtm)
-{
-	struct if_msghdr *ifm;
-	struct ifa_msghdr *ifam;
-
-	if (verbose == 0)
-		return;
-	if (rtm->rtm_version != RTM_VERSION) {
-		(void) printf("%% routing message version %d not understood\n",
-		    rtm->rtm_version);
-		return;
-	}
-	(void)printf("%% %s: len %d, table %d, ", msgtypes[rtm->rtm_type], rtm->rtm_msglen,
-	    rtm->rtm_tableid);
-	switch (rtm->rtm_type) {
-	case RTM_IFINFO:
-		ifm = (struct if_msghdr *)rtm;
-		(void) printf("if# %d\n", ifm->ifm_index);
-		bprintf(stdout, ifm->ifm_flags, ifnetflags);
-		pmsg_addrs((char *)ifm + ifm->ifm_hdrlen, ifm->ifm_addrs);
-		break;
-	case RTM_NEWADDR:
-	case RTM_DELADDR:
-		ifam = (struct ifa_msghdr *)rtm;
-		(void) printf("metric %d\n", ifam->ifam_metric);
-		bprintf(stdout, ifam->ifam_flags, routeflags);
-		pmsg_addrs((char *)ifam + ifam->ifam_hdrlen, ifam->ifam_addrs);
-		break;
-	default:
-		(void) printf("pid: %d, seq %d, errno %d, flags:",
-			rtm->rtm_pid, rtm->rtm_seq, rtm->rtm_errno);
-		bprintf(stdout, rtm->rtm_flags, routeflags);
-		printf("\n");
-		pmsg_common(rtm);
-	}
-}
-
 /* what an RTM_GET found, kept until the request is done */
 static struct facts_value lookup_v[LK_NFIELDS];
 static int		 lookup_kept;
@@ -552,47 +419,6 @@ lookup_facts(struct facts_out *o, char *query, int table)
 	if (lookup_kept)
 		return (facts_record(o, &kind_lookup, lookup_v));
 	return (0);
-}
-
-void
-pmsg_common(struct rt_msghdr *rtm)
-{
-	(void) printf("%% locks: ");
-	bprintf(stdout, rtm->rtm_rmx.rmx_locks, metricnames);
-	(void) printf(" inits: ");
-	bprintf(stdout, rtm->rtm_inits, metricnames);
-	printf("\n");
-	pmsg_addrs(((char *)rtm + rtm->rtm_hdrlen), rtm->rtm_addrs);
-}
-
-void
-pmsg_addrs(char	*cp, int addrs)
-{
-	if (addrs == 0)
-		return;
-	(void) printf("%% sockaddrs: ");
-	bprintf(stdout, addrs, addrnames);
-	(void) putchar('\n');
-	print_addrs(cp, addrs);
-	(void) putchar('\n');
-	(void) fflush(stdout);
-}
-
-void
-print_addrs(char *cp, int addrs)
-{
-	struct sockaddr *sa;
-	int i;
-
-	if (addrs == 0)
-		return;
-
-	for (i = 1; i; i <<= 1)
-		if (i & addrs) {
-			sa = (struct sockaddr *)cp;
-			(void) printf(" %s", routename(sa));
-			ADVANCE(cp, sa);
-		}
 }
 
 /*

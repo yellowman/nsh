@@ -200,6 +200,7 @@ int argvtostring(int, char **, char *, int);
 int cmdline(char *);
 int cmdexit(void);
 int cmdline_nshd(char *);
+int cand_refused(char *, int);
 void nshd_mode(int, char *, int);
 /* how a command runs, as nshd's CTL_COMMANDS rows say (row_runs()) */
 #define RUN_NSH		1	/* nsh runs it */
@@ -229,6 +230,7 @@ int conf_run(int, int, int, char **, char *);
 void conf_reading(int);
 void conf_block_end(int);
 void conf_settle(void);
+
 
 /* prompt.c */
 char *iprompt(void);

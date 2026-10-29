@@ -26,6 +26,7 @@
 #include <sys/queue.h>
 
 struct rtdump;
+struct rt_msghdr;
 struct statgroup;
 struct sockaddr;
 struct sockaddr_storage;
@@ -224,6 +225,10 @@ int	 route_facts(struct facts_out *, struct rtdump *, char **, int, int);
 void	 route_render(struct frec *, int *);
 int	 lookup_facts(struct facts_out *, char *, int);
 void	 lookup_render(struct frec *);
+void	 print_rtmsg(struct rt_msghdr *);
+void	 pmsg_common(struct rt_msghdr *);
+void	 pmsg_addrs(char *, int);
+void	 print_addrs(char *, int);
 int	 if_facts(struct facts_out *, char *, int);
 void	 if_render(struct frecs *, FILE *);
 void	 if_render_status(struct frecs *, FILE *);

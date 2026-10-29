@@ -25,6 +25,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <net/if.h>
 #include <err.h>
 #include <stdio.h>
 #include <string.h>
@@ -139,4 +142,30 @@ format_k(uint64_t amt)
 	}
 	snprintf(ret, sizeof(retarray[0]), "%llu%c", amt, tag);
 	return (ret);
+}
+
+/*
+ * returns 1 if one valid, matching interface name is found
+ * returns 0 for no valid or failure
+ */
+int
+is_valid_ifname(char *ifname)
+{
+	struct if_nameindex *ifn_list, *ifnp;
+	int count = 0;
+
+	if ((ifn_list = if_nameindex()) == NULL) {
+		printf("%% is_valid_ifname: if_nameindex failed\n");
+		return 0;
+	}
+	for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++) {
+		if (strcasecmp(ifname, ifnp->if_name) == 0)
+			count++;
+	}
+	if_freenameindex(ifn_list);
+
+	if (count == 1)
+		return 1;
+	else
+		return 0;
 }

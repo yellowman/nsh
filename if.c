@@ -284,73 +284,6 @@ if_facts(struct facts_out *o, char *ifname, int detail)
 	return (r);
 }
 
-/* show interface [status|name]: asked of nshd, and rendered here */
-int
-show_int(int argc, char **argv, ...)
-{
-	FILE		*outfile;
-	va_list		 ap;
-	char		 ifname[IFNAMSIZ];
-
-	memset(ifname, 0, sizeof(ifname));
-
-	va_start(ap, argv);
-	outfile = va_arg(ap, FILE *);
-	va_end(ap);
-
-	if (argc == 4) {
-		/*
-		 * Allow "interface-name interface-number" as some
-		 * network switches do: interface em 0
-		 */
-		const char *errstr;
-		size_t len2 = strlen(argv[2]);
-		strlcpy(ifname, argv[2], sizeof(ifname));
-		strtonum(argv[3], 0, INT_MAX, &errstr);
-		if (errstr) {
-			printf("%% interface unit %s is %s\n", argv[3], errstr);
-			return -1;
-		}
-		if (len2 > 0 && isdigit((unsigned char)(argv[2][len2 - 1]))) {
-			printf("%% interface unit %s is redundant\n", argv[3]);
-			return -1;
-		}
-		strlcat(ifname, argv[3], sizeof(ifname));
-		printf("%% Interface name is %s not \"%s %s\"\n",
-		    ifname, argv[2], argv[3]);
-	} if (argc == 3)
-		strlcpy(ifname, argv[2], sizeof(ifname));
-
-	if (ifname[0] == '\0')
-		return (facts_show(outfile, "interface%s",
-		    verbose ? " detail" : ""));
-	if (isprefix(ifname, "status"))
-		return (facts_show(outfile, "interface status"));
-	if (!is_valid_ifname(ifname)) {
-		printf("%% interface %s not found\n", ifname);
-		return -1;
-	}
-	return (facts_show(outfile, "interface %s%s", ifname,
-	    verbose ? " detail" : ""));
-}
-
-/* show autoconf: asked of nshd, and rendered here */
-int
-show_autoconf(int argc, char **argv, ...)
-{
-	char *ifname = NULL;
-
-	if (argc == 3) {
-		ifname = argv[2];
-		if (!is_valid_ifname(ifname)) {
-			printf("%% interface %s not found\n", ifname);
-			return -1;
-		}
-	}
-	return (facts_show(stdout, "autoconf%s%s", ifname ? " " : "",
-	    ifname ? ifname : ""));
-}
-
 /* what configured ifa's IPv4 address; dhcpleased leases on autoconf4 */
 static int
 ip_source(struct ifaddrs *ifa, int s)
@@ -430,17 +363,6 @@ ip_facts(struct facts_out *o, int af, int source)
 	return (r);
 }
 
-/* show ip, show inet and show inet6: asked of nshd, and rendered here */
-int
-show_ip(int argc, char **argv, ...)
-{
-	if (strcmp(argv[1], "inet") == 0)
-		return facts_show(stdout, "ip inet");
-	if (strcmp(argv[1], "inet6") == 0)
-		return facts_show(stdout, "ip inet6");
-	return facts_show(stdout, "ip");
-}
-
 char *
 get_hwdaddr(char *ifname)
 {
@@ -515,32 +437,6 @@ get_ifdata(char *ifname, int type)
 	}
 	close(ifs);
 	return (value);
-}
-
-/*
- * returns 1 if one valid, matching interface name is found
- * returns 0 for no valid or failure
- */
-int
-is_valid_ifname(char *ifname)
-{
-	struct if_nameindex *ifn_list, *ifnp;
-	int count = 0;
-
-	if ((ifn_list = if_nameindex()) == NULL) {
-		printf("%% is_valid_ifname: if_nameindex failed\n");
-		return 0;
-	}
-	for (ifnp = ifn_list; ifnp->if_name != NULL; ifnp++) {
-		if (strcasecmp(ifname, ifnp->if_name) == 0)
-			count++;
-	}
-	if_freenameindex(ifn_list);
-
-	if (count == 1)
-		return 1;
-	else
-		return 0;
 }
 
 int
@@ -3615,45 +3511,4 @@ vlan_facts(struct facts_out *o, int start_vnetid, int end_vnetid)
 	if_freenameindex(ifn_list);
 	close(ifs);
 	return (r);
-}
-
-int
-show_vlans(int argc, char **argv, ...)
-{
-	long long start_vnetid = -1, end_vnetid = -1;
-	const char *errstr;
-
-	switch (argc) {
-	case 2:
-		return facts_show(stdout, "vlan");
-	case 3:
-		start_vnetid = strtonum(argv[2], EVL_VLID_NULL,
-		    EVL_VLID_MAX, &errstr);
-		if (errstr) {
-			printf("%% VLAN tag %s is %s\n", argv[2], errstr);
-			return -1;
-		}
-		return facts_show(stdout, "vlan %lld", start_vnetid);
-	case 4:
-		start_vnetid = strtonum(argv[2], EVL_VLID_NULL,
-		    EVL_VLID_MAX, &errstr);
-		if (errstr) {
-			printf("%% VLAN tag %s is %s\n", argv[2], errstr);
-			return -1;
-		}
-		end_vnetid = strtonum(argv[3], EVL_VLID_NULL,
-		    EVL_VLID_MAX, &errstr);
-		if (errstr) {
-			printf("%% VLAN tag %s is %s\n", argv[3], errstr);
-			return -1;
-		}
-		if (start_vnetid >= end_vnetid) {
-			printf("%% VLAN Start Tag must be smaller "
-			    "than VLAN End Tag\n");
-			return -1;
-		}
-		return facts_show(stdout, "vlan %lld %lld", start_vnetid,
-		    end_vnetid);
-	}
-	return 0;
 }

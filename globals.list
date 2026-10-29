@@ -35,37 +35,36 @@ commands.c	table	Bridgelist Bridgelist_nitems Intlist
 			cmdtab_nitems commands_sglobals commithelp
 			conf_bridge conf_if conf_top
 			confighelp crontabhelp ddbhelp ddbtab
-			defaultttltab demotecountertab dhcphelp dhcs
-			directedbroadcaststab dohelp dvcs
-			dvmrphelp editinghelp eics eigrphelp
+			defaultttltab demotecountertab dhcphelp
+			directedbroadcaststab dohelp
+			dvmrphelp editinghelp eigrphelp
 			encdebugtab esptab espudpencapporttab
 			espudpencaptab etheriptab exithelp flushhelp
 			flushlist flushtab forwardingtab fpfs
 			ftpproxyhelp gretab grouphelp grouptab halthelp
 			helphelp hostnamehelp
-			ifstatehelp ikcs ikehelp inethelp interfacehelp
+			ifstatehelp ikehelp inethelp interfacehelp
 			ip6help ip6tab ipcomptab iphelp ipiptab
 			ipsecallocstab ipsecbytestab
 			ipsecexpireacquiretab ipsecfirstusetab ipsechelp
 			ipsecinvalidlifetab ipsecpfstab
 			ipsecsoftallocstab ipsecsoftbytestab
 			ipsecsoftfirstusetab ipsecsofttimeouttab
-			ipsectimeouttab iptab iscs
-			ldaphelp ldcs ldphelp lics loggerhelp loginhelp
+			ipsectimeouttab iptab
+			ldaphelp ldphelp loggerhelp loginhelp
 			manhelp maxqueuetab mforwardingtab motdhelp
 			mplshelp mplstab mtudisctab mtudisctimeouttab
 			multipathtab nameserverhelp ndphelp nppphelp
-			nreboothelp ntphelp os6cs oscs ospf6help
-			ospfhelp pfcs pfhelp ping6help pinghelp
+			nreboothelp ntphelp ospf6help
+			ospfhelp pfhelp ping6help pinghelp
 			pipexhelp pipextab portfirsttab porthifirsttab
-			porthilasttab portlasttab powerdownhelp prots
-			quithelp radhelp relayhelp resolvhelp rics
-			riphelp rlcs rollbackhelp routehelp rtablehelp
+			porthilasttab portlasttab powerdownhelp
+			quithelp radhelp relayhelp resolvhelp
+			riphelp rollbackhelp routehelp rtablehelp
 			rtabletab sasynchelp saveenvhelp
-			sendredirectstab setenvhelp shellhelp showarptab
-			showhelp showlist showndptab showroutetab
-			showvlantab smcs smtphelp snmphelp
-			sourceroutetab sshdhelp sshhelp stts systatcs
+			sendredirectstab setenvhelp shellhelp
+			showhelp smtphelp snmphelp
+			sourceroutetab sshdhelp sshhelp
 			telnethelp tftphelp tftpproxyhelp tracert6help
 			tracerthelp unsetenvhelp verbosehelp wccptab
 			whohelp
@@ -86,6 +85,8 @@ ctl.c		table	ctl_bgp ctl_crontab ctl_daemons ctl_dhcp
 			ctl_pf ctl_rad ctl_relay ctl_resolv ctl_rip
 			ctl_sasync ctl_smtp ctl_snmp
 			ctl_sshd ctl_tftp ctl_tftpproxy admin_words
+ctlargs.c	table	dhcs dvcs eics ikcs iscs ldcs lics os6cs oscs
+			pfcs rics rlcs smcs systatcs
 editing.c	process	complete.word
 editing.c	table	el_runs.funcs
 genget.c	process	ambiguous
@@ -101,13 +102,13 @@ kfacts.c	table	kcfields kdfields kiffields kind_cloner
 			kind_daemons kind_group kind_if kind_media
 			kind_rtable
 			kmfields krfields
-kroute.c	process	rtmsg.seq sigflag
+kroute.c	process	rtmsg.seq
 kroute.c	scratch	ip_route.line_kroute lookup_kept
 			lookup_record.gwname lookup_record.ifpname
 			lookup_record.label lookup_v m_rtmsg
 			mylink_ntoa.obuf rt_metrics rtm_addrs rtm_inits
 			so_dst so_gate so_ifp so_mask
-kroute.c	table	hexlist msgtypes
+kroute.c	table	hexlist
 main.c		session	bridge cli_rtable config_mode priv verbose
 main.c		process	caught_sigwinch cursor_pos editing elc eli elp
 			ev histc histi interactive_mode nsh_env pid
@@ -123,6 +124,9 @@ ndp.c		scratch	conf_ndp_entry.nbi expire_time flags
 			sin_m
 ndp.c		table	blank_sdl blank_sin ifp_m
 nopt.c		scratch	nopterr noptind
+nshcmds.c	process	sigflag
+nshcmds.c	table	prots showarptab showlist showndptab
+			showroutetab showvlantab stts
 passwd.c		table	login_builtin login_permtab
 ppp.c		table	intpppoe.authopts intsppp.authopts
 			intsppp.peeropts spppproto
@@ -157,8 +161,8 @@ renderrt.c	scratch	any_ntoa.obuf ether_str.hbuf line_show
 renderrt.c	table	addrnames arp_fields flow_directions flow_fields
 			flow_satypes flow_types ifnetflags kind_arp
 			kind_flow kind_lookup kind_ndp kind_route
-			lookup_fields metricnames ndp_fields ndp_states
-			route_fields routeflags
+			lookup_fields metricnames msgtypes ndp_fields
+			ndp_states route_fields routeflags
 rendersys.c	scratch	output.now
 rendersys.c	table	ah_fields carp_fields daemon_fields esp_fields
 			facilitynames groups hostname_fields icmp_fields
