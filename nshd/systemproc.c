@@ -44,12 +44,14 @@
  * request names a path.
  *
  * system runs in a session of its own, which parent kills when system
- * exits. Each stream's child leads its own process group, which is
- * killed when the stream stops. The kind of stream decides which user
- * the child runs as. A show's program runs as NSHD_CHECK_USER, except
- * the programs listed in root_programs, which keep root. dhcpd's leases
- * file is opened as root and copied as NSHD_CHECK_USER. The program and
- * its arguments come from nsh's table for the show's words; no request
+ * exits. It sets the environment, umask and cwd that rc gives, so the
+ * programs it runs get none of these from whoever started nshd. Each
+ * stream's child leads its own process group, which is killed when the
+ * stream stops. The kind of stream decides which user the child runs
+ * as. A show's program runs as NSHD_CHECK_USER, except the programs
+ * listed in root_programs, which keep root. dhcpd's leases file is
+ * opened as root and copied as NSHD_CHECK_USER. The program and its
+ * arguments come from nsh's table for the show's words; no request
  * names a path.
  *
  * An operation, which a privileged session requests, is given as nsh's
@@ -219,6 +221,7 @@
 #include "kfacts.h"
 #include "showfacts.h"
 
+#define SYS_PATH	"/sbin:/bin:/usr/sbin:/usr/bin"	/* rc's */
 #define SYS_BATCH	256	/* records made before what is printed is sent */
 #define SYS_STREAMS	16	/* streams at once, at most */
 #define SYS_WINDOW	16	/* messages a stream sends its client unread */
@@ -533,12 +536,21 @@ static struct link	 links[] = {
 void
 systemproc(int debug, int v)
 {
+	extern char		**environ;
+	static char		*empty[] = { NULL };
 	static struct event	 ev_sigchld;
 	struct passwd		*pw;
 
 	child_start("system", debug, v);
 	if (setsid() == -1)
 		fatal("setsid");
+	/* rc's environment, umask and cwd, whoever started nshd */
+	environ = empty;
+	if (setenv("PATH", SYS_PATH, 1) == -1 || setenv("HOME", "/", 1) == -1)
+		fatal("setenv");
+	umask(022);
+	if (chdir("/") == -1)
+		fatal("chdir /");
 	if ((pw = getpwnam(NSHD_WEB_USER)) != NULL) {
 		web_uid = pw->pw_uid;
 		web_user = 1;

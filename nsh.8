@@ -2154,7 +2154,10 @@ nsh>powerdown
 .Op Cm comment Ar text
 .Pp
 In
-.Cm configure private ,
+.Cm configure ,
+.Cm configure private
+or
+.Cm configure exclusive ,
 make the candidate the running configuration, then save the running
 configuration to the permanent configuration space, which the next
 startup of the system uses.
@@ -2177,7 +2180,9 @@ Committing again keeps the candidate's changes in place of the other
 commit's.
 After a commit, the candidate starts again from the new running
 configuration.
-Outside configure,
+In
+.Cm configure terminal
+and outside configure,
 .Cm commit
 has
 .Xr nshd 8
@@ -2199,6 +2204,9 @@ and
 .Cm confirmed
 save nothing, and accept no
 .Cm comment .
+They need a candidate, so they are refused in
+.Cm configure terminal
+and outside configure.
 .Pp
 With
 .Cm check ,
@@ -2239,9 +2247,8 @@ is run again within
 back to how it was before the first unconfirmed commit.
 The rollback is logged with
 .Xr syslog 3 .
-Where
 .Xr nshd 8
-runs, nshd performs the rollback, and demotes carp while it does.
+performs the rollback, and demotes carp while it does.
 A commit before the deadline saves the configuration and, once the save
 succeeds, confirms it; so does
 .Cm commit
@@ -2286,9 +2293,17 @@ nsh(config-private)#commit
 .Op Ar N
 .Pp
 In
-.Cm configure private ,
-discard this session's changes to the candidate, which is then the
-running configuration again.
+.Cm configure ,
+.Cm configure private
+or
+.Cm configure exclusive ,
+start the candidate over as the running configuration, which discards
+its changes.
+In
+.Cm configure
+and
+.Cm configure exclusive ,
+the candidate is shared, so every session's changes are discarded.
 With
 .Ar N
 from 1 to 49, make the candidate the configuration saved
@@ -2298,6 +2313,9 @@ saves before the last, as
 numbers them, instead.
 Changes that other sessions make after that do not appear in the
 candidate.
+.Cm configure terminal
+has no candidate, and refuses
+.Cm rollback .
 .Cm show diff-config
 displays what
 .Cm commit
@@ -3987,7 +4005,10 @@ firewall rules, and other information compiled by
 Display differences between the startup configuration and the running
 configuration, block by block.
 In
-.Cm configure private ,
+.Cm configure ,
+.Cm configure private
+or
+.Cm configure exclusive ,
 display differences between the running configuration and the
 candidate instead.
 Each line that only the startup configuration has is marked with
@@ -4000,12 +4021,15 @@ The lines within a block are compared regardless of their order,
 except for the rules of a daemon, such as
 .Cm pf rules ,
 whose order matters.
-This command requires root user privileges.
+Outside configure, this command needs the operate permission.
 .Pp
 .Ic show candidate-config
 .Pp
 In
-.Cm configure private ,
+.Cm configure ,
+.Cm configure private
+or
+.Cm configure exclusive ,
 display the candidate configuration.
 .Pp
 .Ic show rollback Op Ar N Op Cm diff

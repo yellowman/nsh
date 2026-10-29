@@ -70,6 +70,10 @@ For each interface, it shows the settings the interface sets and those
 it inherits from the blocks around it.
 Beside the editor are the neighbors and routes that their control
 programs show in routing table 0.
+For sshd, ntpd, sasyncd, rad, relayd, snmpd, ldapd, npppd, smtpd,
+ifstated, iked, dhcpd and the IPsec rules, an editor shows the
+statements of the rules as fields.
+A change rewrites only the words of the field it changes.
 The system and changes workspace has five topics.
 Changes is where configure is entered and lines of configuration are
 typed, as
@@ -403,12 +407,15 @@ refused the request.
 Other answers have an
 .Ar error
 and an HTTP status that says why: 400 for a field that is not accepted,
-401 when the user is not logged in or the login failed, 403 for a
-request without the header, 404 for an unknown request, 405 for the
-wrong method, 413 for a body over 8192 bytes, or over 3 MB for
-.Cm setrules ,
-415 for a POST that is not a form, 429 for a login while its name or
-address must wait, and 503 when
+parameters that cannot be read, or a body whose length is not its
+Content-Length; 401 when the user is not logged in or the login failed;
+403 for a request without the header; 404 for an unknown request, or a
+.Cm type
+to a terminal that does not exist; 405 for the wrong method; 413 for a
+body over 8192 bytes, or over 3 MB for
+.Cm setrules ;
+415 for a POST that is not a form; 429 for a login while its name or
+address must wait; 431 for parameters over 16384 bytes; and 503 when
 .Nm nshd
 does not answer, too many users are logged in, a user has too many
 requests waiting or too many terminals, or too many rules are arriving.

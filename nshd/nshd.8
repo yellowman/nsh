@@ -35,9 +35,11 @@ signal a child of another role or reach its files:
 Four show processes, each as _nshshow in a
 .Xr chroot 2 ,
 answer the read-only socket.
-They answer only with what anyone may see: interfaces, routes, the ARP
-and neighbor tables, VLANs, bridges, kernel statistics, the IPsec
-flows, the version, who is logged in and the hostname.
+They answer only with what anyone may see: interfaces and their
+addresses, routes and route lookups, the ARP and neighbor tables,
+VLANs, bridges, the kernel statistics that need no root, the IPsec
+flows, the daemons that run, the version, who is logged in and the
+hostname.
 They send these as facts, which the client renders.
 A long answer delays only the show that makes it, and the show makes it
 only as the client reads it.
@@ -184,6 +186,19 @@ and refuses a line that would.
 .It system
 Runs as root, and reads the configuration from the kernel, the
 daemons and the saved configuration.
+Whoever started
+.Nm ,
+system has only the environment that
+.Xr rc 8
+gives,
+.Ev PATH
+.Pa /sbin:/bin:/usr/sbin:/usr/bin
+and
+.Ev HOME
+.Pa / ,
+with umask 022 and working directory
+.Pa / ,
+and the programs it runs have the same.
 Only system writes the saved configuration, which is in
 .Pa /var/db/nsh ,
 not in
