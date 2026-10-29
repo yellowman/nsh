@@ -26,11 +26,12 @@
  * client comes, so system reads for itself who the session is. Before
  * config hears of a request, frontend tells system of it if it may begin
  * a commit (a line, a commit or a part of a load) or if system checks it
- * itself (an operation, a login, a terminal or a watch); it also tells
- * system when config answers it, and when a session goes. system begins a
- * commit for config only for a request not answered, so a config
- * compromised by a client cannot say whose commit it is, and frontend
- * cannot say whose a session is.
+ * itself (an operation, a login, a terminal or a watch). frontend sends
+ * config such a request only after that message is written to system's
+ * pipe. frontend also tells system when config answers a request, and
+ * when a session goes. system begins a commit for config only for a
+ * request not answered, so a config compromised by a client cannot say
+ * whose commit it is, and frontend cannot say whose a session is.
  */
 
 #include <sys/types.h>
@@ -68,11 +69,24 @@ union frontend_request {
 	struct nshd_terminal	 terminal;
 };
 
+/* a request, kept until frontend has written its message to system */
+struct held {
+	TAILQ_ENTRY(held)	 entry;
+	uint32_t		 session;
+	uint32_t		 type;
+	ssize_t			 len;
+	union frontend_request	 r;
+};
+static TAILQ_HEAD(, held)	 helds = TAILQ_HEAD_INITIALIZER(helds);
+
 static void	frontend_dispatch_parent(int, short, void *);
 static void	frontend_listen(void);
 static void	frontend_dispatch_config(int, short, void *);
 static void	frontend_dispatch_system(int, short, void *);
 static void	frontend_asked(struct ctl_conn *, uint32_t);
+static void	frontend_hold(struct ctl_conn *, uint32_t,
+		    union frontend_request *, ssize_t);
+static void	frontend_release(void);
 static int	frontend_opened(struct ctl_conn *);
 static int	frontend_client(struct ctl_conn *, struct imsg *);
 static void	frontend_gone(struct ctl_conn *);
@@ -239,6 +253,7 @@ frontend_dispatch_system(int fd, short event, void *arg)
 		link_broken(&links[SYSTEM], "closed its pipe");
 		return;
 	}
+	frontend_release();
 	if ((n = imsgbuf_get(&iev->ibuf, &imsg)) == -1) {
 		link_broken(&links[SYSTEM], "sent what imsg cannot read");
 		return;
@@ -265,6 +280,44 @@ frontend_asked(struct ctl_conn *c, uint32_t type)
 	a.session = c->id;
 	if (link_compose(&links[SYSTEM], type, 0, &a, sizeof(a)) == -1)
 		fatal("%s", __func__);
+}
+
+/* keep c's request until it can go to config */
+static void
+frontend_hold(struct ctl_conn *c, uint32_t type, union frontend_request *r,
+    ssize_t len)
+{
+	struct held	*h;
+
+	if ((h = malloc(sizeof(*h))) == NULL)
+		fatal(NULL);
+	h->session = c->id;
+	h->type = type;
+	h->len = len;
+	memcpy(&h->r, r, sizeof(h->r));
+	TAILQ_INSERT_TAIL(&helds, h, entry);
+}
+
+/*
+ * Send the kept requests to config, in the order they came, once all
+ * that frontend queued for system is written to its pipe. system reads
+ * that pipe before it acts on config's word of a request (asked_whose()).
+ */
+static void
+frontend_release(void)
+{
+	struct held	*h;
+
+	if (imsgbuf_queuelen(&links[SYSTEM].iev->ibuf) > 0)
+		return;
+	while ((h = TAILQ_FIRST(&helds)) != NULL) {
+		TAILQ_REMOVE(&helds, h, entry);
+		if (link_compose(&links[CONFIG], h->type, h->session,
+		    h->len > 0 ? &h->r : NULL, h->len) == -1)
+			fatal("%s", __func__);
+		explicit_bzero(h, sizeof(*h));
+		free(h);
+	}
 }
 
 /* a new client: its socket to system, which reads who it is; -1 if not */
@@ -356,12 +409,9 @@ frontend_client(struct ctl_conn *c, struct imsg *imsg)
 		    imsg_get_type(imsg) == IMSG_CTL_WATCH) {
 			c->asked = 1;
 			frontend_asked(c, IMSG_FRONT_ASKED);
-			/* sent now, so system has it before config's request */
-			if (imsgbuf_flush(&links[SYSTEM].iev->ibuf) == -1)
-				link_broken(&links[SYSTEM], "closed its pipe");
-		}
-		if (link_compose(&links[CONFIG], imsg_get_type(imsg), c->id,
-		    len > 0 ? &r : NULL, len) == -1)
+			frontend_hold(c, imsg_get_type(imsg), &r, len);
+		} else if (link_compose(&links[CONFIG], imsg_get_type(imsg),
+		    c->id, len > 0 ? &r : NULL, len) == -1)
 			fatal("%s", __func__);
 		explicit_bzero(&r, sizeof(r));
 		return (0);
