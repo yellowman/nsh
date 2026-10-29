@@ -485,7 +485,7 @@ static void	system_parts_free(void);
 static void	system_begin(uint32_t, struct nshd_begin *);
 static void	system_apply(uint32_t, struct nshd_apply *);
 static void	system_save(uint32_t, struct nshd_save *);
-static void	system_saved(int);
+static int	system_saved(int);
 static void	system_ended(void);
 static int	system_unconfirm(void);
 static void	system_back(uint32_t, int);
@@ -2303,7 +2303,8 @@ system_save(uint32_t id, struct nshd_save *sv)
 /*
  * Remove the unconfirmed commit record, or a file there that is not a
  * record, and promote carp if it was demoted for that commit. Returns 1
- * if a file was removed, else 0.
+ * if a file was removed, 0 if there was none, or -1, after saying why,
+ * if it could not be read or removed.
  */
 static int
 system_unconfirm(void)
@@ -2311,18 +2312,20 @@ system_unconfirm(void)
 	struct confirm	 cf;
 	int		 r;
 
-	if ((r = confirm_read(&cf, 0)) == -1 && errno != EFTYPE)
+	if ((r = confirm_read(&cf, 0)) == -1 && errno != EFTYPE) {
 		printf("%% nshd: the record of a commit not confirmed: %s\n",
 		    strerror(errno));
-	else if (r == -1 || cf.state != CONFIRM_NONE) {
-		if (confirm_clear() == -1)
+		return (-1);
+	}
+	if (r == -1 || cf.state != CONFIRM_NONE) {
+		if (confirm_clear() == -1) {
 			printf("%% nshd: the record of a commit not confirmed: "
 			    "%s\n", strerror(errno));
-		else {
-			if (r == 0 && cf.demoted)
-				carplock(-128);
-			return (1);
+			return (-1);
 		}
+		if (r == 0 && cf.demoted)
+			carplock(-128);
+		return (1);
 	}
 	return (0);
 }
@@ -2399,19 +2402,26 @@ system_test(uint32_t id, struct nshd_whose *whose, char *name)
  * commit that waits for confirmation. If it failed, mark a commit that
  * was applying as applied but not saved; a commit that waits for
  * confirmation keeps its record, and is still rolled back at its
- * deadline.
+ * deadline. Returns -1 if the save succeeded but the commit that waits
+ * could not be confirmed, else 0.
  */
-static void
+static int
 system_saved(int ok)
 {
 	struct record	 rec;
+	int		 r;
 
 	system_ended();
 	if (ok) {
 		record_clear();
 		boot_saved();
-		if (system_unconfirm())
+		if ((r = system_unconfirm()) == 1)
 			printf("%% Commit confirmed\n");
+		else if (r == -1) {
+			printf("%% Saved, but the commit that waits for "
+			    "confirmation is not confirmed\n");
+			return (-1);
+		}
 	} else if (record_read(&rec) == 0) {
 		if (rec.state == RECORD_APPLYING) {
 			rec.state = RECORD_UNSAVED;
@@ -2419,6 +2429,7 @@ system_saved(int ok)
 		}
 		record_free(&rec);
 	}
+	return (0);
 }
 
 /* End the commit begun, and free what ran before it */
@@ -2536,7 +2547,7 @@ system_booted(uint32_t id, int ok)
 		goto done;
 	if (ok && demoted)
 		carplock(-128);
-	if (ok && system_unconfirm()) {
+	if (ok && system_unconfirm() == 1) {
 		printf("%% nshd: the commit not confirmed went with the boot\n");
 		system_confirm(-1, 0, NULL);
 	}
@@ -2852,8 +2863,8 @@ system_job_done(void)
 		printed_log();
 		system_attempted(status == 0);
 	} else {
-		if (j->kind == JOB_SAVE)
-			system_saved(status == 0);
+		if (j->kind == JOB_SAVE && system_saved(status == 0) == -1)
+			status = -1;
 		system_printed(j->id, status);
 	}
 	system_job_free(j);

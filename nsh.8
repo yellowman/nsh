@@ -2255,6 +2255,10 @@ succeeds, confirms it; so does
 outside configure.
 If the save fails, the commit is not confirmed and the deadline still
 applies.
+If the save succeeds but
+.Xr nshd 8
+cannot read or remove the record of the unconfirmed commit, the commit
+fails and says so, and the deadline still applies.
 A system that is restarted before the deadline starts with the
 configuration saved before the unconfirmed commit.
 .Bl -dash
