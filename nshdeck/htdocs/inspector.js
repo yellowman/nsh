@@ -424,12 +424,13 @@ function inspector(key) {
 
 /*
  * lines into the candidate, one at a time, in the interface's mode,
- * entering configure private if not in configure; then the settings
- * inspected again and the lines' results shown, unless another
- * inspection was asked for meanwhile
+ * entering configure private if not in configure. Then, if no other
+ * inspection was asked for meanwhile, the interface is inspected again
+ * and the lines' results are shown with it
  */
 function staged(lines) {
-	var head = (insp.bridge ? "bridge " : "interface ") + insp.name;
+	var name = insp.name, n = iasked;
+	var head = (insp.bridge ? "bridge " : "interface ") + name;
 	var all = [head].concat(lines, ["exit"]), results = [];
 	var p = Promise.resolve();
 
@@ -447,7 +448,9 @@ function staged(lines) {
 		});
 	});
 	return p.then(function () {
-		return inspect(insp.name);
+		if (n !== iasked)
+			return false;
+		return inspect(name);
 	}).then(function (drawn) {
 		if (!drawn)
 			return;
