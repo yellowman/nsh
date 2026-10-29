@@ -15,11 +15,12 @@
  */
 
 /*
- * Completion in session: nsh's own complete_line() (complete.c), run on
- * nsh's command tables as nshd sends them.  session asks for the tables
- * once and keeps them, and asks for the names of interfaces, groups,
- * bridges and routing tables on each completion.  This file also
- * defines the globals of nsh's that complete.c reads.
+ * nsh's command tables as nshd sends them, for a client that completes
+ * lines itself with nsh's complete_line() (complete.c): nshdeck's
+ * session.  The client asks nshd for the tables once and keeps them,
+ * and asks for the names of interfaces, groups, bridges and routing
+ * tables on each completion.  This file also defines the globals of
+ * nsh's that complete.c reads.
  */
 
 #include <sys/types.h>
@@ -28,30 +29,27 @@
 #include <net/if.h>
 #include <netinet/in.h>
 
-#include <event.h>
-#include <imsg.h>
+#include <err.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "log.h"
-#include "nshd.h"
 #include "facts.h"
-#include "nshdeck.h"
 #include "editing.h"
 #include "stringlist.h"
 #include "externs.h"
 #include "kfacts.h"
+#include "tables.h"
 
-#define DECK_ROWS	512	/* most rows in cmdtab, Intlist or Bridgelist */
-#define DECK_TABLES	1024	/* most tables */
+#define TABLE_ROWS	512	/* most rows in cmdtab, Intlist or Bridgelist */
+#define TABLES		1024	/* most tables */
 
 /* nsh's tables, filled from what nshd sends */
-Command		 cmdtab[DECK_ROWS];
+Command		 cmdtab[TABLE_ROWS];
 size_t		 cmdtab_nitems;
-struct intlist	 Intlist[DECK_ROWS];
-struct intlist	 Bridgelist[DECK_ROWS];
+struct intlist	 Intlist[TABLE_ROWS];
+struct intlist	 Bridgelist[TABLE_ROWS];
 size_t		 Intlist_nitems;
 size_t		 Bridgelist_nitems;
 struct intlist	*whichlist;
@@ -81,7 +79,7 @@ static const struct facts_kind kind_name = { "name", namefields,
 static const char	*of[] = { "interface", "group", "bridge", "rtable" };
 
 /* the rows and names nshd sent for a completion */
-struct deck_cmplt {
+struct rows {
 	struct row {
 		uint64_t	 table;
 		char		*name;
@@ -94,22 +92,22 @@ struct deck_cmplt {
 	StringList	*names[4];		/* KF_* */
 };
 
-struct deck_cmplt *
-deck_cmplt_new(void)
+struct rows *
+rows_new(void)
 {
-	struct deck_cmplt	*c;
-	int			 i;
+	struct rows	*c;
+	int		 i;
 
 	if ((c = calloc(1, sizeof(*c))) == NULL)
-		fatal("%s", __func__);
+		err(1, "%s", __func__);
 	for (i = 0; i < 4; i++)
 		if ((c->names[i] = sl_init()) == NULL)
-			fatal("%s", __func__);
+			err(1, "%s", __func__);
 	return (c);
 }
 
 void
-deck_cmplt_free(struct deck_cmplt *c)
+rows_free(struct rows *c)
 {
 	size_t	i;
 
@@ -135,16 +133,16 @@ copy(const struct facts_value *v)
 	if (v == NULL)
 		return (NULL);
 	if ((s = facts_strdup(v)) == NULL)
-		fatal("%s", __func__);
+		err(1, "%s", __func__);
 	return (s);
 }
 
-/* Keep a row or a name nshd sent, in the deck_cmplt arg. */
+/* Keep a row or a name nshd sent, in the rows arg. */
 void
-deck_cmplt_record(void *arg, const struct facts_template *t,
+rows_record(void *arg, const struct facts_template *t,
     const struct facts_value *v)
 {
-	struct deck_cmplt		*c = arg;
+	struct rows			*c = arg;
 	struct row			*r;
 	const struct facts_value	*f;
 	int				 idx[6], i;
@@ -153,12 +151,12 @@ deck_cmplt_record(void *arg, const struct facts_template *t,
 		facts_bind(t, &kind_row, idx);
 		if ((r = reallocarray(c->rows, c->nrows + 1,
 		    sizeof(*r))) == NULL)
-			fatal("%s", __func__);
+			err(1, "%s", __func__);
 		c->rows = r;
 		r = &c->rows[c->nrows++];
 		memset(r, 0, sizeof(*r));
 		f = facts_get(v, idx, 0, FACT_U64);
-		r->table = f != NULL ? f->v.u : DECK_TABLES;
+		r->table = f != NULL ? f->v.u : TABLES;
 		r->name = copy(facts_get(v, idx, 1, FACT_STRING));
 		r->help = copy(facts_get(v, idx, 2, FACT_STRING));
 		r->complete = copy(facts_get(v, idx, 3, FACT_STRING));
@@ -180,7 +178,7 @@ deck_cmplt_record(void *arg, const struct facts_template *t,
 }
 
 int
-deck_tables_ready(void)
+tables_ready(void)
 {
 	return (built);
 }
@@ -192,7 +190,7 @@ deck_tables_ready(void)
  * 0, or -1 if the rows do not form tables.
  */
 int
-deck_tables(struct deck_cmplt *c)
+tables_build(struct rows *c)
 {
 	struct ghs	**subs, *g;
 	size_t		 ntables = 3, *n, i, t;
@@ -202,8 +200,8 @@ deck_tables(struct deck_cmplt *c)
 	if (built)
 		return (0);
 	for (i = 0; i < c->nrows; i++) {
-		if (c->rows[i].table >= DECK_TABLES ||
-		    c->rows[i].sub >= DECK_TABLES || c->rows[i].name == NULL)
+		if (c->rows[i].table >= TABLES ||
+		    c->rows[i].sub >= TABLES || c->rows[i].name == NULL)
 			return (-1);
 		if (c->rows[i].table >= ntables)
 			ntables = c->rows[i].table + 1;
@@ -212,17 +210,17 @@ deck_tables(struct deck_cmplt *c)
 	}
 	if ((n = calloc(ntables, sizeof(*n))) == NULL ||
 	    (subs = calloc(ntables, sizeof(*subs))) == NULL)
-		fatal("%s", __func__);
+		err(1, "%s", __func__);
 	for (i = 0; i < c->nrows; i++)
 		n[c->rows[i].table]++;
-	if (n[0] >= DECK_ROWS || n[1] >= DECK_ROWS || n[2] >= DECK_ROWS) {
+	if (n[0] >= TABLE_ROWS || n[1] >= TABLE_ROWS || n[2] >= TABLE_ROWS) {
 		free(n);
 		free(subs);
 		return (-1);
 	}
 	for (t = 3; t < ntables; t++)
 		if ((subs[t] = calloc(n[t] + 1, sizeof(struct ghs))) == NULL)
-			fatal("%s", __func__);
+			err(1, "%s", __func__);
 	cmdtab_nitems = n[0] + 1;
 	Intlist_nitems = n[1] + 1;
 	Bridgelist_nitems = n[2] + 1;
@@ -255,7 +253,7 @@ deck_tables(struct deck_cmplt *c)
 		g->complete = c->rows[i].complete != NULL ?
 		    c->rows[i].complete : strdup("");
 		if (g->complete == NULL)
-			fatal("%s", __func__);
+			err(1, "%s", __func__);
 		g->table = table;
 		g->stlen = stlen;
 		if (t == 0)
@@ -273,15 +271,15 @@ deck_tables(struct deck_cmplt *c)
 }
 
 /*
- * Complete text at its end, in the mode ctx gives, with c's names, as
- * Tab does in nsh; with help, list every choice instead.  Pass each
- * result to found: text to insert (insert 1), or a choice and its help,
- * if it has one.
+ * Complete text at its end, with c's names, as Tab does in nsh: in an
+ * interface's mode if inif, a bridge's if isbridge too.  With help, list
+ * every choice instead.  Pass each result to found: text to insert
+ * (insert 1), or a choice and its help, if it has one.
  */
 void
-deck_complete(struct deck_cmplt *c, const char *text, int help,
-    const struct nshd_context *ctx,
-    void (*found)(void *, int, const char *, const char *), void *arg)
+tables_complete(struct rows *c, const char *text, int help, int inif,
+    int isbridge, void (*found)(void *, int, const char *, const char *),
+    void *arg)
 {
 	char		 word[CMPLT_WORD] = "", *w;
 	struct cmplt	 cp;
@@ -290,9 +288,9 @@ deck_complete(struct deck_cmplt *c, const char *text, int help,
 
 	names = c->names;
 	cmplt_remote = 1;
-	bridge = ctx->bridge;
+	bridge = isbridge;
 	whichlist = bridge ? Bridgelist : Intlist;
-	if (ctx->ifname[0] != '\0')
+	if (inif)
 		complete_line(text, len, len, word, (char **)whichlist,
 		    sizeof(struct intlist), help, &cp);
 	else

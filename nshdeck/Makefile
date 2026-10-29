@@ -2,7 +2,7 @@
 PROG=	nshdeck
 MAN=	nshdeck.8
 
-.PATH:	${.CURDIR}/.. ${.CURDIR}/../nshd
+.PATH:	${.CURDIR}/.. ${.CURDIR}/../nshd ${.CURDIR}/../lib
 
 .include "../nsh-version.mk"
 
@@ -17,13 +17,14 @@ MANDIR?=${PREFIX}/man/man
 .endif
 
 CFLAGS+=-Wmissing-prototypes -Wformat -Wall -Wbad-function-cast
-CFLAGS+=-I${.CURDIR} -I${.CURDIR}/.. -I${.CURDIR}/../nshd
+CFLAGS+=-I${.CURDIR} -I${.CURDIR}/.. -I${.CURDIR}/../nshd -I${.CURDIR}/../lib
+CPPFLAGS+=-DNSH_VERSION=${NSH_VERSION}
 
-SRCS=	nshdeck.c front.c sessions.c tables.c
+SRCS=	nshdeck.c front.c sessions.c
 # nshd's log, and nsh's facts, which session reads
 SRCS+=	log.c facts.c
 # nsh's completion, which session runs on nshd's tables
-SRCS+=	complete.c makeargv.c genget.c stringlist.c
+SRCS+=	tables.c complete.c makeargv.c genget.c stringlist.c
 
 LDADD=	-levent -lutil
 DPADD=	${LIBEVENT} ${LIBUTIL}

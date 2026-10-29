@@ -131,18 +131,4 @@ void		 pipe_compose(struct deck_pipe *, uint32_t, uint32_t, int,
 __dead void	 front(int, int);
 __dead void	 sessions(int, int);
 
-/* tables.c: completion, in session */
-struct deck_cmplt;
-struct facts_template;
-struct facts_value;
-struct deck_cmplt *deck_cmplt_new(void);
-void		 deck_cmplt_free(struct deck_cmplt *);
-void		 deck_cmplt_record(void *, const struct facts_template *,
-		    const struct facts_value *);
-int		 deck_tables_ready(void);
-int		 deck_tables(struct deck_cmplt *);
-void		 deck_complete(struct deck_cmplt *, const char *, int,
-		    const struct nshd_context *,
-		    void (*)(void *, int, const char *, const char *), void *);
-
 #endif /* NSHDECK_H */

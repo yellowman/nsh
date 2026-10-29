@@ -92,6 +92,7 @@
 #include "nshd.h"
 #include "facts.h"
 #include "nshdeck.h"
+#include "tables.h"
 
 #define DECK_QUEUE	16		/* a user's requests waiting, at most */
 #define DECK_OUTPUT	(1024 * 1024)	/* what nshd printed, kept, at most */
@@ -182,7 +183,7 @@ struct user {
 	int			 lost;		/* some was not kept */
 	struct nshd_context	 ctx;
 	int			 hasctx;
-	struct deck_cmplt	*cmplt;		/* what a completion has read */
+	struct rows		*cmplt;		/* what a completion has read */
 	int			 naming;	/* its names were asked for */
 	TAILQ_HEAD(, stream)	 streams;
 	TAILQ_HEAD(, terminal)	 terms;
@@ -1015,8 +1016,8 @@ next(struct user *u)
 	u->cur = p;
 	u->headed = u->nrecords = u->hasctx = u->sent = u->lost = 0;
 	if (p->r.kind == DECK_COMPLETE) {
-		u->cmplt = deck_cmplt_new();
-		facts_in_init(&u->in, deck_cmplt_record, u->cmplt);
+		u->cmplt = rows_new();
+		facts_in_init(&u->in, rows_record, u->cmplt);
 	} else
 		facts_in_init(&u->in, record, u);
 	switch (p->r.kind) {
@@ -1059,7 +1060,7 @@ next(struct user *u)
 		break;
 	case DECK_COMPLETE:
 		/* the tables if we have none, else the names */
-		u->naming = deck_tables_ready();
+		u->naming = tables_ready();
 		ask(u, u->naming ? IMSG_CTL_NAMES : IMSG_CTL_COMMANDS, NULL, 0);
 		break;
 	case DECK_TERMINAL:
@@ -1141,8 +1142,8 @@ answered(struct user *u, int32_t status)
 	    !p->gone) {
 		/* the tables are here: build them, then ask for the names */
 		facts_in_free(&u->in);
-		facts_in_init(&u->in, deck_cmplt_record, u->cmplt);
-		if (deck_tables(u->cmplt) == 0) {
+		facts_in_init(&u->in, rows_record, u->cmplt);
+		if (tables_build(u->cmplt) == 0) {
 			u->naming = 1;
 			ask(u, IMSG_CTL_NAMES, NULL, 0);
 			return;
@@ -1177,7 +1178,8 @@ answered(struct user *u, int32_t status)
 	} else if (!p->gone) {
 		j_answer(u);
 		if (p->r.kind == DECK_COMPLETE && status == 0)
-			deck_complete(u->cmplt, p->r.text, p->r.n, &u->ctx,
+			tables_complete(u->cmplt, p->r.text, p->r.n,
+			    u->ctx.ifname[0] != '\0', u->ctx.bridge,
 			    completed, u);
 		J(&u->j, "],\"output\":");
 		j_str(&u->j, u->out, u->outlen);
@@ -1194,7 +1196,7 @@ answered(struct user *u, int32_t status)
 		pipe_compose(&tofront, DECK_END, p->id, -1, NULL, 0);
 	}
 	facts_in_free(&u->in);
-	deck_cmplt_free(u->cmplt);
+	rows_free(u->cmplt);
 	u->cmplt = NULL;
 	free(u->j.p);
 	memset(&u->j, 0, sizeof(u->j));
@@ -1973,7 +1975,7 @@ user_free(struct user *u)
 		pipe_close(&u->nshd);
 	ro_close(u);
 	facts_in_free(&u->in);
-	deck_cmplt_free(u->cmplt);
+	rows_free(u->cmplt);
 	free(u->j.p);
 	free(u->out);
 	TAILQ_REMOVE(&users, u, entry);
