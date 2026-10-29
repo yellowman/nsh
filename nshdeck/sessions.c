@@ -39,7 +39,9 @@
  * address, the one httpd passes; an IPv6 address is counted by its /64.
  * After DECK_TRIES failures in a row, logins for that name or from that
  * address are refused, without asking nshd, for one second, and each
- * further failure doubles the wait, up to DECK_WAIT seconds. A
+ * further failure doubles the wait, up to DECK_WAIT seconds. While nshd
+ * checks a login, another for the same name or from the same address is
+ * refused, so each failure is counted before the next login. A
  * successful login resets the count for its name. A count with no
  * failure for DECK_FORGET seconds starts over. Failed and refused
  * logins are logged at most once every DECK_QUIET seconds for each name
@@ -473,11 +475,11 @@ request(uint32_t id, struct deck_request *r)
 static void
 login(uint32_t id, struct deck_request *r)
 {
-	struct user	*u;
+	struct user	*u, *v;
 	struct pending	*p;
 	struct fail	*f[2];
 	const char	*addr = r->addr[0] != '\0' ? r->addr : "?";
-	char		 key[DECK_ADDR];
+	char		 key[DECK_ADDR], vkey[DECK_ADDR], name[NSHD_NAME];
 	int64_t		 now = msnow(), wait = 0;
 	int32_t		 ro = 0;
 	size_t		 i;
@@ -494,6 +496,20 @@ login(uint32_t id, struct deck_request *r)
 		reply(id, 429, "{\"error\":\"too many failed logins, wait "
 		    "%lld s\",\"wait\":%lld}", (long long)wait, (long long)wait);
 		return;
+	}
+	/* one login at a time for a name, and for an address */
+	strlcpy(name, r->text, sizeof(name));
+	TAILQ_FOREACH(v, &users, entry) {
+		if (v->state == U_READY)
+			continue;
+		fail_key(v->addr, vkey, sizeof(vkey));
+		if (strcmp(v->name, name) == 0 || strcmp(vkey, key) == 0) {
+			fail_log(EV_REFUSED, f, r->text, addr, now);
+			reply(id, 429, "{\"error\":\"another login for this "
+			    "name or address is being checked, try again\","
+			    "\"wait\":1}");
+			return;
+		}
 	}
 	if (nusers == DECK_SESSIONS) {
 		reply(id, 503, "{\"error\":\"too many logged in\"}");

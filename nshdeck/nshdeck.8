@@ -195,6 +195,11 @@ After 5 failed logins in a row for a name, or from an address, logins
 for that name or from that address are refused for a second, without
 checking the password.
 Each further failure doubles the wait, up to 60 seconds.
+While
+.Nm nshd
+checks a login, another login for the same name or from the same
+address is refused, with a wait of 1 second, so each failure is counted
+before the next login is checked.
 The answer's
 .Ar wait
 is the number of seconds left.
