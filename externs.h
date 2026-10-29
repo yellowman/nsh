@@ -587,6 +587,7 @@ char *format_k(uint64_t amt);
 extern int nshd_config;
 extern int nshd_rtable;
 int nshd_show(char *);
+void nshd_why(void);
 int nshd_runs(const char *);
 int nshd_execs(void);
 int nshd_priv(int);

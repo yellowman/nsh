@@ -51,13 +51,14 @@
 #include "control.h"
 #include "facts.h"
 #include "showfacts.h"
+#include "answer.h"
 
 #define SHOW_LOW	32	/* make more when fewer than this are unread */
 #define SHOW_BATCH	256	/* about how many records to make at a time */
 
 /* an answer of facts, as its client reads it */
 struct answer {
-	struct facts_answer	*a;
+	struct collection	*a;
 	struct facts_out	 o;
 	struct ctl_conn		*c;
 	int			 failed;
@@ -190,7 +191,7 @@ show_facts(struct ctl_conn *c, char *words)
 
 	if ((an = calloc(1, sizeof(*an))) == NULL)
 		fatal("%s", __func__);
-	if ((an->a = facts_answer(words)) == NULL) {
+	if ((an->a = facts_answer_begin(words)) == NULL) {
 		free(an);
 		if (asprintf(&out, "%% show %s: not answered by nshd\n",
 		    words) == -1)
@@ -248,7 +249,7 @@ show_gone(struct ctl_conn *c)
 
 	if (an == NULL)
 		return;
-	facts_answer_free(an->a);
+	facts_answer_end(an->a);
 	free(an);
 	c->arg = NULL;
 }

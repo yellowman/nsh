@@ -68,6 +68,11 @@ nshd_op(const char *text, int rtable, struct facts_in *in)
 	return 1;
 }
 
+void
+nshd_why(void)
+{
+}
+
 /* a log is followed by system, for a client */
 int
 show_log(int argc, char **argv, ...)

@@ -72,7 +72,6 @@ static struct imsgbuf	sib;
 
 static int	nshd_next(struct imsgbuf *, struct imsg *, const sigset_t *);
 static int	nshd_open(char *, struct imsgbuf *, int32_t *);
-static void	nshd_why(void);
 static int	nshd_has(int, int);
 static int	nshd_ask(int, uint32_t, const void *, size_t, struct facts_in *,
 		    int32_t *);
@@ -172,7 +171,7 @@ nshd_open(char *path, struct imsgbuf *ib, int32_t *perms)
 }
 
 /* Why nshd_open() failed */
-static void
+void
 nshd_why(void)
 {
 	if (errno == ENOENT || errno == ECONNREFUSED)

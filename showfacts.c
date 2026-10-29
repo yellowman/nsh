@@ -46,13 +46,12 @@
  * runs a program, or reads the leases, in a child of its own, and
  * streams what it prints as messages, as the client reads them.
  *
- * nshd's show processes answer them a batch at a time, as the client
- * reads; nsh asks nshd, or, where nshd does not run, answers them
- * itself. Either way nsh renders the records as the text it printed
- * before. An interface's or a bridge's records come before its own
- * record, which ends them. What a collector prints, as nsh's helpers
- * always have, reaches the terminal here, and nshd sends it as a
- * message.
+ * nshd's show processes and its system answer them a batch at a time,
+ * as the client reads (nshd/answer.c). nsh asks nshd, and renders the
+ * records as the text it printed before; where nshd does not run, nsh
+ * answers only version itself. An interface's or a bridge's records come
+ * before its own record, which ends them. What a collector prints, as
+ * nsh's helpers always have, nshd sends as a message.
  */
 
 #include <sys/types.h>
@@ -80,6 +79,7 @@
 #include "externs.h"
 #include "facts.h"
 #include "showfacts.h"
+#include "showwords.h"
 
 static struct facts_field message_fields[] = {
 	{ "text",	FACT_STRING },
@@ -97,37 +97,7 @@ static struct facts_kind *kinds[] = {
 	&kind_slaacdns, &kind_flow, &kind_daemon
 };
 
-enum answer_type {
-	ANS_INTERFACE, ANS_ROUTE, ANS_LOOKUP, ANS_ARP, ANS_NDP, ANS_VLAN,
-	ANS_BRIDGE, ANS_STATISTICS, ANS_VERSION, ANS_USERS, ANS_HOSTNAME,
-	ANS_IP, ANS_AUTOCONF, ANS_SADB, ANS_PROGRAM, ANS_LEASES, ANS_DAEMONS
-};
-
 int	facts_from = FACTS_SHOW | FACTS_SYSTEM;
-
-struct facts_answer {
-	enum answer_type	 type;
-	int			 where;		/* who answers */
-	char			*copy;		/* the words, split */
-	char			*w[4 + NOPTFILL - 1];
-	int			 n;
-	struct prot1		*prog;		/* the show a program makes */
-	char			*args[NOPTFILL];	/* and its arguments */
-	char			 name[IFNAMSIZ];	/* one interface */
-	int			 detail;	/* interface detail */
-	int			 af;
-	int			 table;
-	int			 one;		/* arp, ndp: one address */
-	struct in_addr		 in;
-	struct sockaddr_in6	 sin6;
-	int			 start, end;	/* vlan tags, or -1 */
-	struct statgroup	*stats;
-	struct if_nameindex	*ifn;		/* every interface */
-	size_t			 next;
-	struct rtdump		*rt;
-	char			*cur;
-	int			 done;
-};
 
 /* names for the bits that s names (a string for bprintf()), in f */
 void
@@ -513,142 +483,12 @@ bad:
 	return (NULL);
 }
 
-/*
- * Some of a's records, about budget of them, into o: 1 if there are
- * more, 0 if a is done, -1 if it failed
- */
-int
-facts_more(struct facts_answer *a, struct facts_out *o, int budget)
-{
-	char	**args;
-	int	  r = 0;
-
-	if (a->done)
-		return (0);
-	switch (a->type) {
-	case ANS_INTERFACE:
-		if (a->name[0] != '\0')
-			r = if_facts(o, a->name, a->detail);
-		else if (a->ifn == NULL && (a->ifn = if_nameindex()) == NULL) {
-			printf("%% if_nameindex: %s\n", strerror(errno));
-			r = -1;
-		} else if (a->ifn[a->next].if_name != NULL)
-			return (if_facts(o, a->ifn[a->next++].if_name,
-			    a->detail) == -1 ? -1 : 1);
-		break;
-	case ANS_ROUTE:
-	case ANS_ARP:
-	case ANS_NDP:
-	case ANS_SADB:
-		if (a->rt == NULL) {
-			if (a->type == ANS_SADB) {
-				/* sadb_dump() prints why, unless no IPsec */
-				if ((a->rt = sadb_dump()) == NULL) {
-					r = -1;
-					break;
-				}
-			} else if (a->type == ANS_ROUTE)
-				a->rt = getrtdump(a->af, 0, a->table);
-			else
-				a->rt = getrtdump(a->type == ANS_ARP ?
-				    AF_INET : AF_INET6, RTF_LLINFO, a->table);
-			if (a->rt == NULL)
-				break;
-			a->cur = a->rt->buf;
-		}
-		if (a->type == ANS_SADB)
-			r = sadb_facts(o, a->rt, &a->cur, budget);
-		else if (a->type == ANS_ROUTE)
-			r = route_facts(o, a->rt, &a->cur, a->af, budget);
-		else if (a->type == ANS_ARP)
-			r = arp_facts(o, a->rt, &a->cur, a->one ? &a->in :
-			    NULL, budget);
-		else
-			r = ndp_facts(o, a->rt, &a->cur, a->one ? &a->sin6 :
-			    NULL, budget);
-		if (r == 1)
-			return (1);
-		break;
-	case ANS_LOOKUP:
-		r = lookup_facts(o, a->w[1], a->table);
-		break;
-	case ANS_VLAN:
-		r = vlan_facts(o, a->start, a->end);
-		break;
-	case ANS_BRIDGE:
-		r = bridge_show_facts(o, a->n == 2 ? a->w[1] : NULL);
-		break;
-	case ANS_STATISTICS:
-		r = stats_facts(o, a->stats);
-		break;
-	case ANS_VERSION:
-		r = version_facts(o);
-		break;
-	case ANS_USERS:
-		r = users_facts(o);
-		break;
-	case ANS_DAEMONS:
-		/* whether pf runs, only with FACTS_SYSTEM */
-		r = daemons_facts(o, (facts_from & FACTS_SYSTEM) != 0);
-		break;
-	case ANS_HOSTNAME:
-		r = hostname_facts(o);
-		break;
-	case ANS_IP:
-		/* what configured each address, only with FACTS_SYSTEM */
-		r = ip_facts(o, a->af, (facts_from & FACTS_SYSTEM) != 0);
-		break;
-	case ANS_AUTOCONF:
-		r = autoconf_facts(o, a->name[0] != '\0' ? a->name : NULL);
-		break;
-	case ANS_PROGRAM:
-		/* as nsh runs a program, and as it pages a file */
-		if ((args = prot1_args(a->prog, a->args, a->n - 4, a->w + 4,
-		    a->table)) == NULL || cmdargs(args[0], args) != 0)
-			r = -1;
-		break;
-	case ANS_LEASES:
-		if (!more(DHCPLEASES))
-			r = -1;
-		break;
-	}
-	a->done = 1;
-	return (r == -1 ? -1 : 0);
-}
-
-/*
- * Whether a's show is text nshd's system streams from a child, and
- * which: FACTS_PROGRAM, with the program and its arguments (a's) in
- * *argv and its routing table in *table, or FACTS_LEASES. 0 if it is
- * not, or -1, after printing why, if a's words do not fill the
- * program's arguments
- */
-int
-facts_streams(struct facts_answer *a, char ***argv, int *table)
-{
-	switch (a->type) {
-	case ANS_PROGRAM:
-		if ((*argv = prot1_args(a->prog, a->args, a->n - 4, a->w + 4,
-		    a->table)) == NULL)
-			return (-1);
-		*table = a->table;
-		return (FACTS_PROGRAM);
-	case ANS_LEASES:
-		return (FACTS_LEASES);
-	default:
-		return (0);
-	}
-}
-
+/* what facts_answer() made */
 void
 facts_answer_free(struct facts_answer *a)
 {
 	if (a == NULL)
 		return;
-	if (a->ifn != NULL)
-		if_freenameindex(a->ifn);
-	if (a->rt != NULL)
-		freertdump(a->rt);
 	free(a->copy);
 	free(a);
 }
@@ -656,6 +496,8 @@ facts_answer_free(struct facts_answer *a)
 /* how nsh renders an answer, as the records come */
 struct render {
 	int			 status;	/* show interface status */
+	int			 head;		/* its header, still to print */
+	enum answer_type	 type;
 	FILE			*out;
 	int			 count;		/* records rendered */
 	char			 failed[NI_MAXHOST];	/* ndp: no info */
@@ -676,6 +518,22 @@ block_free(struct frecs *rs)
 	}
 }
 
+/* the show's header, once: before its first record, or for none */
+static void
+render_head(struct render *rd)
+{
+	if (!rd->head)
+		return;
+	rd->head = 0;
+	if (rd->status)
+		fputs("% Name    Status  Link        Routing-Domain  Media\n",
+		    rd->out);
+	else if (rd->type == ANS_ARP)
+		arp_header();
+	else if (rd->type == ANS_NDP)
+		ndp_header();
+}
+
 static void
 render_record(void *arg, const struct facts_template *t,
     const struct facts_value *v)
@@ -685,6 +543,7 @@ render_record(void *arg, const struct facts_template *t,
 	struct frec		*r;
 	size_t			 i;
 
+	render_head(rd);
 	/* bound once, to the kind nsh knows by its name, if any */
 	if (rd->kind[t->id] == NULL) {
 		for (i = 0; i < sizeof(kinds) / sizeof(kinds[0]); i++)
@@ -763,8 +622,8 @@ render_emit(void *arg, const void *buf, size_t len)
 
 /*
  * show prot sub of a daemon, with the argc words of argv: nshd's system
- * runs its program, or nsh where nshd does not run; 0, or -1 on error.
- * bgpnsh runs it itself, with args.
+ * runs its program; 0, or -1 on error. bgpnsh runs it itself, with
+ * args.
  */
 int
 prot1_run(char *prot, char *sub, int argc, char **argv, char **args)
@@ -817,10 +676,10 @@ facts_op(const char *text, int rtable, int quiet)
 
 /*
  * The words fmt makes, asked of nshd's system where it may answer and
- * this user may ask it, else of nshd's shows, or of nsh itself where
- * nshd does not run, and rendered to out. "interface status" renders
- * interfaces as show interface status does. 0, or -1 after printing
- * why the show failed
+ * this user may ask it, else of nshd's shows, and rendered to out.
+ * Where nshd does not run, nsh answers version itself, and says why for
+ * the rest. "interface status" renders interfaces as show interface
+ * status does. 0, or -1 after printing why the show failed
  */
 int
 facts_show(FILE *out, const char *fmt, ...)
@@ -855,24 +714,25 @@ facts_show(FILE *out, const char *fmt, ...)
 		return (-1);
 	}
 	facts_in_init(&in, render_record, &rd);
-	if (rd.status)
-		fputs("% Name    Status  Link        Routing-Domain  Media\n",
-		    out);
-	else if (a->type == ANS_ARP)
-		arp_header();
-	else if (a->type == ANS_NDP)
-		ndp_header();
+	rd.head = 1;
+	rd.type = a->type;
 	r = -1;
 	if (a->where & FACTS_SYSTEM)
 		r = nshd_facts(1, w, &in);
 	if (r == -1 && (a->where & FACTS_SHOW))
 		r = nshd_facts(0, w, &in);
-	if (r == -1) {
+	if (r == -1 && a->type == ANS_VERSION) {
+		/* where nshd does not run, nsh tells its own version */
 		facts_out_init(&o, render_emit, &in);
-		while ((r = facts_more(a, &o, 1024)) == 1)
-			;
-		r = r == 0;
+		r = version_facts(&o) == 0;
+	} else if (r == -1) {
+		/* nshd does not run: no header, and nothing after it */
+		nshd_why();
+		r = 0;
+		goto done;
 	}
+	if (r == 1)
+		render_head(&rd);
 
 	/* what a show prints after its records, or for none */
 	switch (a->type) {
@@ -902,6 +762,7 @@ facts_show(FILE *out, const char *fmt, ...)
 	default:
 		break;
 	}
+done:
 	block_free(&rd.block);
 	facts_answer_free(a);
 	facts_in_free(&in);

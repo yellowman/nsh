@@ -16,8 +16,8 @@
 
 /*
  * The shows that answer with facts: the kinds of record each makes,
- * what collects them, in nshd's show processes or in nsh where nshd
- * does not run, and what renders them as nsh's text
+ * what collects them, in nshd's show processes and its system, and what
+ * renders them as nsh's text
  */
 
 #ifndef SHOWFACTS_H
@@ -52,24 +52,18 @@ int		 fhas(struct frec *, int);
 
 /*
  * Who answers: nshd's show processes, for anyone, or its system, for
- * root and nshadmin; nsh, where nshd does not run, answers all of them
+ * root and nshadmin. nsh asks either for any words
  */
 #define FACTS_SHOW	0x1
 #define FACTS_SYSTEM	0x2
 extern int	 facts_from;	/* what this process answers */
 
-/* what to answer: words, a request from a client, as nshd takes them */
+/* what to answer: a show's words (showwords.h), as nsh and nshd read them */
 struct facts_answer *facts_answer(char *);
-int		 facts_more(struct facts_answer *, struct facts_out *, int);
 void		 facts_answer_free(struct facts_answer *);
 int		 facts_show(FILE *, const char *, ...)
 		    __attribute__((__format__ (printf, 2, 3)));
 int		 facts_op(const char *, int, int);
-
-/* what nshd's system streams, from a child: a program, or dhcpd's leases */
-#define FACTS_PROGRAM	1
-#define FACTS_LEASES	2
-int		 facts_streams(struct facts_answer *, char ***, int *);
 
 /* each kind of record, shared by what makes it and what renders it */
 void		 facts_init(void);

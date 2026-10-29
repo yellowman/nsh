@@ -220,6 +220,7 @@
 #include "facts.h"
 #include "kfacts.h"
 #include "showfacts.h"
+#include "answer.h"
 
 #define SYS_PATH	"/sbin:/bin:/usr/sbin:/usr/bin"	/* rc's */
 #define SYS_BATCH	256	/* records made before what is printed is sent */
@@ -1207,13 +1208,13 @@ system_snapshot(uint32_t id, int facts)
 static void
 system_show(uint32_t id, char *words)
 {
-	struct facts_answer	*a;
+	struct collection	*a;
 	struct facts_out	 o;
 	char			**argv;
 	int			 more = 1, op, table;
 
 	printed(NULL);
-	if ((a = facts_answer(words)) == NULL) {
+	if ((a = facts_answer_begin(words)) == NULL) {
 		system_end(id, NSHD_ELSEWHERE,
 		    "%% show %s: not answered by nshd\n", words);
 		return;
@@ -1227,7 +1228,7 @@ system_show(uint32_t id, char *words)
 			system_end(id, 1, NULL);
 		} else
 			system_stream(id, op, argv, table);
-		facts_answer_free(a);
+		facts_answer_end(a);
 		return;
 	}
 	while (more == 1) {
@@ -1235,7 +1236,7 @@ system_show(uint32_t id, char *words)
 		if (printed(&o) == -1)
 			more = -1;
 	}
-	facts_answer_free(a);
+	facts_answer_end(a);
 	system_flush(id);
 	system_end(id, more != 0, NULL);
 }
