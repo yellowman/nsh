@@ -201,6 +201,14 @@ int cmdline(char *);
 int cmdexit(void);
 int cmdline_nshd(char *);
 void nshd_mode(int, char *, int);
+/* how a command runs, as nshd's CTL_COMMANDS rows say (row_runs()) */
+#define RUN_NSH		1	/* nsh runs it */
+#define RUN_LINE	2	/* a line to nshd's session */
+#define RUN_OP		3	/* an operation nshd's system runs */
+#define RUN_RULES	4	/* nsh edits a daemon's rules */
+#define RUN_CONFIGURE	5	/* refused: it needs configure */
+#define RUN_UNSUPPORTED	6	/* refused: nshd's configure cannot run it */
+void row_runs(char **, int, char *, int *, int *);
 extern int in_config;
 int conf_mode(char *);
 int conf_ordered(char *);

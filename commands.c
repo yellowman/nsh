@@ -1205,8 +1205,9 @@ op_ask(char *name, int argc, char **argv, int rtable)
  * flush, except help and history; reboot, halt and powerdown, which nsh
  * has the user confirm first; diff-config, of the saved configuration
  * against the running one; crontab, root's crontab; a daemon's action
- * that runs a program and does not change its configuration; and an
- * interface's bssid, setpuk and chgpin. Each is its first word, as nsh
+ * that runs a program and does not change its configuration; an
+ * interface's bssid, setpuk and chgpin; and a group's carp demotion
+ * counter, as group or no group sets it. Each is its first word, as nsh
  * names it, and the words after it as typed. 1 if argv is one, or 0
  * after saying it is not.
  */
@@ -1229,6 +1230,9 @@ op_allowed(int argc, char **argv)
 	    strlen(argv[1]) < IFNAMSIZ && int_op_find(argc - 2, argv + 2))
 		return 1;
 	if (argc >= 2 && ctl_op(argv[0], argv[1], 0))
+		return 1;
+	if (strcmp(argv[0], "group") == 0 || (argc >= 2 &&
+	    strcmp(argv[0], "no") == 0 && strcmp(argv[1], "group") == 0))
 		return 1;
 	printf("%% %s: not an operation nshd runs\n", argv[0]);
 	return 0;
@@ -1281,6 +1285,8 @@ op_run(int argc, char **argv, int hide)
 		close(ifs);
 		return r;
 	}
+	if (strcmp(argv[0], "group") == 0 || strcmp(argv[0], "no") == 0)
+		return group(argc, argv);
 	d = (struct daemons *)genget(argv[0], (char **)ctl_daemons,
 	    sizeof(struct daemons));
 	strlcpy(hname, d->name, sizeof(hname));
@@ -2705,6 +2711,52 @@ nshd_mode(int private, char *ifn, int isbridge)
 	strlcpy(ifname, ifn, sizeof(ifname));
 	bridge = isbridge;
 	whichlist = bridge ? Bridgelist : Intlist;
+}
+
+/*
+ * How row, of table, whose rows are stlen bytes, runs outside configure
+ * (*out) and in configure (*conf), as nshd's CTL_COMMANDS rows say. Each
+ * is RUN_*, or 0 where the row of the command above it says how it
+ * runs. A command, and a command in an interface's or a bridge's mode,
+ * always says; a row under a command says only where it runs otherwise:
+ * a daemon's action (ctl_runs()) and flush's operations.
+ */
+void
+row_runs(char **table, int stlen, char *row, int *out, int *conf)
+{
+	Command *c;
+	struct intlist *i;
+	Menu *f;
+
+	*out = *conf = 0;
+	if (table == (char **)cmdtab) {
+		c = (Command *)row;
+		*out = c->needconfig ? RUN_CONFIGURE : RUN_NSH;
+		if (c->handler == group)
+			*conf = RUN_OP;
+		else if (c->cand == CAND_EDIT)
+			*conf = RUN_LINE;
+		else if (c->needconfig && c->cand != CAND_RUN)
+			*conf = RUN_UNSUPPORTED;
+		else
+			*conf = RUN_NSH;
+	} else if (table == (char **)Intlist || table == (char **)Bridgelist) {
+		/* an interface's mode is only in configure */
+		i = (struct intlist *)row;
+		if (i->cand == CAND_EDIT || i->handler == int_exit)
+			*conf = RUN_LINE;
+		else if (i->handler == int_op)
+			*conf = RUN_OP;
+		else if (i->cand == CAND_RUN)
+			*conf = RUN_NSH;
+		else
+			*conf = RUN_UNSUPPORTED;
+	} else if (table == (char **)flushlist) {
+		f = (Menu *)row;
+		if (f->handler != flush_help && f->handler != flush_history)
+			*out = *conf = RUN_OP;
+	} else if (stlen == sizeof(struct ctl))
+		ctl_runs((struct ctl *)row, out, conf);
 }
 
 /* Leave configure, from any mode, as exit does at the top */

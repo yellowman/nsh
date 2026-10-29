@@ -287,11 +287,13 @@ commands that run a program and do not change its configuration, such as
 .Cm bgp fib couple
 or
 .Cm pf reload ;
-and in an interface's mode,
+in an interface's mode,
 .Cm bssid ,
 .Cm setpuk
 and
-.Cm chgpin .
+.Cm chgpin ;
+and, in configure,
+.Cm group Ar group-name Cm carpdemote .
 Their output is not paged, and Control-C stops it.
 Operate also allows
 .Ic ping ,

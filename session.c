@@ -226,8 +226,9 @@ session_rules(struct session_state *s, char *daemon, int rtable, int set,
  * lines itself.  Each row of cmdtab (table 0), Intlist (1), Bridgelist
  * (2) and of every table a row points to becomes one record.  Tables are
  * numbered in the order they are found.  A record holds the row's name,
- * help, completion hints, the number of the table under it and, in the
- * first three tables, nocmd.  Some tables do not start with the fields
+ * help, completion hints, the number of the table under it, in the
+ * first three tables nocmd, and how the row runs outside configure and
+ * in it, where row_runs() says.  Some tables do not start with the fields
  * of struct ghs, as their row size shows; their rows get only a name and
  * help, because completion does not look further into them.
  */
@@ -238,6 +239,8 @@ static const struct facts_field rowfields[] = {
 	{ "complete",	FACT_STRING },
 	{ "sub",	FACT_U64 },
 	{ "nocmd",	FACT_U64 },
+	{ "out",	FACT_U64 },
+	{ "conf",	FACT_U64 },
 };
 static const struct facts_kind kind_row = { "row", rowfields,
 	nitems(rowfields) };
@@ -250,7 +253,7 @@ cmplt_facts(struct facts_out *o)
 	struct ghs *g;
 	char **c;
 	size_t i, j, n = 3, max = 16;
-	int r = 0;
+	int r = 0, out, conf;
 
 	if ((t = calloc(max, sizeof(*t))) == NULL)
 		return -1;
@@ -272,6 +275,11 @@ cmplt_facts(struct facts_out *o)
 				facts_u64(&v[5], ((Command *)c)->nocmd);
 			else if (i < 3)
 				facts_u64(&v[5], ((struct intlist *)c)->nocmd);
+			row_runs(t[i].rows, t[i].stlen, (char *)c, &out, &conf);
+			if (out != 0)
+				facts_u64(&v[6], out);
+			if (conf != 0)
+				facts_u64(&v[7], conf);
 			if (t[i].stlen != sizeof(struct ghs) &&
 			    t[i].stlen != sizeof(Menu) &&
 			    t[i].stlen != sizeof(Command) &&

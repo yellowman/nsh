@@ -1104,6 +1104,26 @@ ctl_edits(char *daemon, char *action)
 }
 
 /*
+ * How x, an action of a daemon's, runs outside configure (*out) and in
+ * configure (*conf): RUN_*, or 0 where the daemon's row says. An action
+ * that runs a program and changes no configuration is an operation. In
+ * configure, it is an operation only if the candidate does not take it,
+ * and an edit of the daemon's rules is RUN_RULES.
+ */
+void
+ctl_runs(struct ctl *x, int *out, int *conf)
+{
+	*out = *conf = 0;
+	if (x->type == T_EXEC && x->flag_x == 0) {
+		*out = RUN_OP;
+		if (!ctl_cand_takes(x))
+			*conf = RUN_OP;
+	}
+	if (ctl_isedit(x))
+		*conf = RUN_RULES;
+}
+
+/*
  * edit in a configure nshd has: ask nshd for daemon's rules in the
  * session's candidate and rtable, edit them here as the user, and send
  * them back; as a handler returns. Its test runs at commit check
