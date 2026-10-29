@@ -76,7 +76,6 @@ void	 print_rtmsg(struct rt_msghdr *);
 void	 pmsg_common(struct rt_msghdr *);
 void	 pmsg_addrs(char *, int);
 void	 print_addrs(char *, int);
-void	 bprintf(FILE *, int, u_char *);
 
 /*
  * caller must freertdump() if rtdump not NULL
@@ -415,18 +414,6 @@ char *msgtypes[] = {
 	0,
 };
 
-char metricnames[] =
-"\011pksent\010rttvar\7rtt\6ssthresh\5sendpipe\4recvpipe\3expire\2hopcount\1mtu";
-
-char routeflags[] =
-"\1UP\2GATEWAY\3HOST\4REJECT\5DYNAMIC\6MODIFIED\7DONE\010MASK_PRESENT\011CLONING\013LLINFO\014STATIC\017PROTO2\020PROTO1";
-
-char ifnetflags[] =
-"\1UP\2BROADCAST\3DEBUG\4LOOPBACK\5PTP\6NOTRAILERS\7RUNNING\010NOARP\011PROMISC\012ALLMULTI\013OACTIVE\014SIMPLEX\015LINK0\016LINK1\017LINK2\020MULTICAST";
-
-char addrnames[] =
-"\1DST\2GATEWAY\3NETMASK\4GENMASK\5IFP\6IFA\7AUTHOR\010BRD";
-
 void
 print_rtmsg(struct rt_msghdr *rtm)
 {
@@ -465,48 +452,9 @@ print_rtmsg(struct rt_msghdr *rtm)
 	}
 }
 
-/* the route the kernel would use, as facts */
-static struct facts_field lookup_fields[] = {
-	[LK_QUERY] =	{ "query",		FACT_ADDRESS },
-	[LK_ERRNO] =	{ "errno",		FACT_U64 },
-	[LK_RTERRNO] =	{ "reply-errno",	FACT_U64 },
-	[LK_DST] =	{ "destination",	FACT_ADDRESS },
-	[LK_MASK] =	{ "netmask",		FACT_ADDRESS },
-	[LK_GATEWAY] =	{ "gateway",		FACT_ADDRESS },
-	[LK_GWTYPE] =	{ "gateway-type",	FACT_U64 },
-	[LK_GWNAME] =	{ "gateway-name",	FACT_STRING },
-	[LK_GENMASK] =	{ "genmask",		FACT_ADDRESS },
-	[LK_IFP] =	{ "link",		FACT_ADDRESS },
-	[LK_IFPTYPE] =	{ "link-type",		FACT_U64 },
-	[LK_IFPNAME] =	{ "interface",		FACT_STRING },
-	[LK_IFA] =	{ "interface-address",	FACT_ADDRESS },
-	[LK_BRD] =	{ "broadcast",		FACT_ADDRESS },
-	[LK_LABEL] =	{ "label",		FACT_STRING },
-	[LK_FLAGS] =	{ "flags",		FACT_U64 },
-	[LK_ADDRS] =	{ "addresses",		FACT_U64 },
-	[LK_MTU] =	{ "mtu",		FACT_U64 },
-	[LK_HOPCOUNT] =	{ "hopcount",		FACT_U64 },
-	[LK_EXPIRE] =	{ "expires",		FACT_I64 },
-	[LK_LOCKS] =	{ "locks",		FACT_U64 },
-	[LK_INITS] =	{ "inits",		FACT_U64 },
-};
-struct facts_kind kind_lookup = { "route-lookup", lookup_fields,
-    LK_NFIELDS };
-
 /* what an RTM_GET found, kept until the request is done */
 static struct facts_value lookup_v[LK_NFIELDS];
 static int		 lookup_kept;
-
-void
-lookup_facts_init(void)
-{
-	facts_bitnames(&lookup_fields[LK_FLAGS], routeflags);
-	facts_bitnames(&lookup_fields[LK_ADDRS], addrnames);
-	facts_bitnames(&lookup_fields[LK_LOCKS], metricnames);
-	facts_bitnames(&lookup_fields[LK_INITS], metricnames);
-	if_typenames(&lookup_fields[LK_GWTYPE]);
-	if_typenames(&lookup_fields[LK_IFPTYPE]);
-}
 
 /* what an RTM_GET found, or err if the kernel took no request */
 static void
@@ -606,121 +554,6 @@ lookup_facts(struct facts_out *o, char *query, int table)
 	return (0);
 }
 
-/* a lookup, as print_getmsg() printed it */
-void
-lookup_render(struct frec *r)
-{
-	struct sockaddr_storage	 q, sa;
-	struct sockaddr		*s = (struct sockaddr *)&sa;
-	const struct facts_value *qv;
-	char			 buf[INET6_ADDRSTRLEN];
-	int			 e, flags, addrs, i;
-
-	if (fhas(r, LK_ERRNO)) {
-		e = fu(r, LK_ERRNO, 0);
-		buf[0] = '\0';
-		if ((qv = FV(r, LK_QUERY, FACT_ADDRESS)) != NULL)
-			inet_ntop(qv->v.a.family == FACT_INET6 ? AF_INET6 :
-			    AF_INET, qv->v.a.bytes, buf, sizeof(buf));
-		if (e == ESRCH || e == ENETUNREACH)
-			printf("%% Unable to find route: %s\n", buf);
-		else
-			printf("%% ip_route: rtmsg: %s\n", strerror(e));
-		return;
-	}
-	fsockaddr(r, LK_QUERY, &q);
-	printf("%% route lookup for:\t%s\n", routename((struct sockaddr *)&q));
-	if (fhas(r, LK_RTERRNO)) {
-		e = fu(r, LK_RTERRNO, 0);
-		printf("%% print_getmsg: RTM_GET: %s (errno %d)\n",
-		    strerror(e), e);
-		return;
-	}
-	flags = fu(r, LK_FLAGS, 0);
-	addrs = fu(r, LK_ADDRS, 0);
-	if (fsockaddr(r, LK_DST, &sa))
-		printf("\tdestination:\t%s\n", routename(s));
-	if (fsockaddr(r, LK_MASK, &sa))
-		printf("\tnetmask:\t%s\n", routename(s));
-	if ((sdl_build(r, LK_GATEWAY, LK_GWTYPE, LK_GWNAME, &sa) ||
-	    fsockaddr(r, LK_GATEWAY, &sa)) && flags & RTF_GATEWAY)
-		printf("\tgateway:\t%s\n", routename(s));
-	if (fs(r, LK_IFPNAME) != NULL)
-		printf("\tinterface:\t%s\n", fs(r, LK_IFPNAME));
-	if (verbose) {
-		printf("\tflags:\t");
-		bprintf(stdout, flags, routeflags);
-		printf("\n");
-	}
-	if (fs(r, LK_LABEL) != NULL)
-		printf("\tlabel:\t\t%s\n", fs(r, LK_LABEL));
-	if (fu(r, LK_MTU, 0))
-		printf("\tmtu:\t\t%u\n", (u_int)fu(r, LK_MTU, 0));
-	if (fu(r, LK_HOPCOUNT, 0))
-		printf("\thopcount:\t%u\n", (u_int)fu(r, LK_HOPCOUNT, 0));
-	if (FV(r, LK_EXPIRE, FACT_I64) != NULL)
-		printf("\texpires:\t%lld sec\n",
-		    (long long)FV(r, LK_EXPIRE, FACT_I64)->v.i);
-
-#define RTA_IGN (RTA_DST|RTA_GATEWAY|RTA_NETMASK|RTA_IFP|RTA_IFA|RTA_BRD)
-	if (verbose) {
-		printf("%% locks: ");
-		bprintf(stdout, fu(r, LK_LOCKS, 0), metricnames);
-		printf(" inits: ");
-		bprintf(stdout, fu(r, LK_INITS, 0), metricnames);
-		printf("\n");
-		if (addrs == 0)
-			return;
-		printf("%% sockaddrs: ");
-		bprintf(stdout, addrs, addrnames);
-		putchar('\n');
-		/* each address, in the order of the bits that name it */
-		for (i = 1; i; i <<= 1) {
-			if ((i & addrs) == 0)
-				continue;
-			switch (i) {
-			case RTA_DST:
-				fsockaddr(r, LK_DST, &sa);
-				break;
-			case RTA_GATEWAY:
-				if (!sdl_build(r, LK_GATEWAY, LK_GWTYPE,
-				    LK_GWNAME, &sa))
-					fsockaddr(r, LK_GATEWAY, &sa);
-				break;
-			case RTA_NETMASK:
-				fsockaddr(r, LK_MASK, &sa);
-				break;
-			case RTA_GENMASK:
-				fsockaddr(r, LK_GENMASK, &sa);
-				break;
-			case RTA_IFP:
-				sdl_build(r, LK_IFP, LK_IFPTYPE, LK_IFPNAME,
-				    &sa);
-				break;
-			case RTA_IFA:
-				fsockaddr(r, LK_IFA, &sa);
-				break;
-			case RTA_BRD:
-				fsockaddr(r, LK_BRD, &sa);
-				break;
-			case RTA_LABEL:
-				printf(" %s", fs(r, LK_LABEL) ?
-				    fs(r, LK_LABEL) : "");
-				continue;
-			default:
-				continue;
-			}
-			printf(" %s", sa.ss_family ? routename(s) : "");
-		}
-		putchar('\n');
-	} else if (addrs & ~RTA_IGN) {
-		printf("\tsockaddrs:\t");
-		bprintf(stdout, addrs, addrnames);
-		putchar('\n');
-	}
-#undef RTA_IGN
-}
-
 void
 pmsg_common(struct rt_msghdr *rtm)
 {
@@ -760,32 +593,6 @@ print_addrs(char *cp, int addrs)
 			(void) printf(" %s", routename(sa));
 			ADVANCE(cp, sa);
 		}
-}
-
-void
-bprintf(FILE *fp, int b, u_char *s)
-{
-	int i;
-	int gotsome = 0;
-
-	if (b == 0)
-		return;
-	while ((i = *s++)) {
-		if ((b & (1 << (i-1)))) {
-			if (gotsome == 0)
-				i = '<';
-			else
-				i = ',';
-			(void) putc(i, fp);
-			gotsome = 1;
-			for (; (i = *s) > 32; s++)
-				(void) putc(i, fp);
-		} else
-			while (*s > 32)
-				s++;
-	}
-	if (gotsome)
-		(void) putc('>', fp);
 }
 
 /*

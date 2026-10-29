@@ -334,26 +334,6 @@ arp_cand(const char *host, struct ether_addr *ea, int flags)
 	return r;
 }
 
-#define W_ADDR	36
-#define W_LL	17
-#define W_IF	6
-
-/* the table's headers */
-void
-arp_header(void)
-{
-	printf("%-*.*s %-*.*s %*.*s %-10.10s %5s\n",
-	    W_ADDR, W_ADDR, "Host", W_LL, W_LL, "Ethernet Address",
-	    W_IF, W_IF, "Netif", "Expire", "Flags");
-}
-
-/* an address the table does not have */
-void
-arp_noentry(const char *host)
-{
-	printf("%% %-*.*s no entry\n", W_ADDR, W_ADDR, host);
-}
-
 /*
  * Delete an arp entry
  */
@@ -482,23 +462,6 @@ conf_arp_entry(FILE *output, char *delim, struct sockaddr_dl *sdl,
 	fputs("\n", output);
 }
 
-/* an entry, as facts */
-static struct facts_field arp_fields[] = {
-	[ARP_ADDRESS] =	{ "address",		FACT_ADDRESS },
-	[ARP_LLADDR] =	{ "link-address",	FACT_ADDRESS },
-	[ARP_IF] =	{ "interface",		FACT_STRING },
-	[ARP_FLAGS] =	{ "flags",		FACT_U64 },
-	[ARP_PROXY] =	{ "proxy",		FACT_U64 },
-	[ARP_EXPIRE] =	{ "expire",		FACT_TIME },
-};
-struct facts_kind kind_arp = { "arp-entry", arp_fields, ARP_NFIELDS };
-
-void
-arp_facts_init(void)
-{
-	facts_bitnames(&arp_fields[ARP_FLAGS], routeflags);
-}
-
 /*
  * The entries of rt, from *cur, or only addr's entry, at most budget of
  * them. 1 if there are more, 0 if not, -1 if a record failed.
@@ -541,61 +504,6 @@ arp_facts(struct facts_out *o, struct rtdump *rt, char **cur,
 }
 
 /*
- * Display an arp entry
- */
-void
-arp_render(struct frec *r)
-{
-	const struct facts_value *e;
-	struct sockaddr_storage sa, ll;
-	const char *ifname;
-	char *host;
-	int addrwidth, llwidth, ifwidth ;
-	uint64_t flags;
-	struct timeval now;
-
-	gettimeofday(&now, 0);
-
-	fsockaddr(r, ARP_ADDRESS, &sa);
-	fsockaddr(r, ARP_LLADDR, &ll);
-	host = inet_ntoa(((struct sockaddr_in *)&sa)->sin_addr);
-
-	addrwidth = strlen(host);
-	if (addrwidth < W_ADDR)
-		addrwidth = W_ADDR;
-	llwidth = strlen(ether_str((struct sockaddr_dl *)&ll));
-	if (W_ADDR + W_LL - addrwidth > llwidth)
-		llwidth = W_ADDR + W_LL - addrwidth;
-	ifname = fs(r, ARP_IF);
-	if (!ifname)
-		ifname = "?";
-	ifwidth = strlen(ifname);
-	if (W_ADDR + W_LL + W_IF - addrwidth - llwidth > ifwidth)
-		ifwidth = W_ADDR + W_LL + W_IF - addrwidth - llwidth;
-
-	printf("%-*.*s %-*.*s %*.*s", addrwidth, addrwidth, host,
-	    llwidth, llwidth, ether_str((struct sockaddr_dl *)&ll), ifwidth,
-	    ifwidth, ifname);
-
-	flags = fu(r, ARP_FLAGS, 0);
-	e = FV(r, ARP_EXPIRE, FACT_TIME);
-	if (flags & (RTF_PERMANENT_ARP|RTF_LOCAL))
-		printf(" %-10.10s", "permanent");
-	else if (e == NULL)
-		printf(" %-10.10s", "static");
-	else if (e->v.t.sec > now.tv_sec)
-		printf(" %-10.10s",
-		    sec2str(e->v.t.sec - now.tv_sec));
-	else
-		printf(" %-10.10s", "expired");
-
-	printf(" %s%s%s\n",
-	    (flags & RTF_LOCAL) ? "l" : "",
-	    fu(r, ARP_PROXY, 0) ? "P" : "",
-	    (flags & RTF_ANNOUNCE) ? "p" : "");
-}
-
-/*
  * Nuke an arp entry
  */
 void
@@ -606,22 +514,6 @@ nuke_entry(struct sockaddr_dl *sdl, struct sockaddr_inarp *sin,
 
 	strlcpy(ip, inet_ntoa(sin->sin_addr), sizeof(ip));
 	arpdelete(ip, NULL);
-}
-
-char *
-ether_str(struct sockaddr_dl *sdl)
-{
-	static char hbuf[NI_MAXHOST];
-	u_char *cp;
-
-	if (sdl->sdl_alen) {
-		cp = (u_char *)LLADDR(sdl);
-		snprintf(hbuf, sizeof(hbuf), "%02x:%02x:%02x:%02x:%02x:%02x",
-		    cp[0], cp[1], cp[2], cp[3], cp[4], cp[5]);
-	} else
-		snprintf(hbuf, sizeof(hbuf), "(incomplete)");
-
-	return hbuf;
 }
 
 /* -1 error */
@@ -717,44 +609,4 @@ getinetaddr(const char *host, struct in_addr *inap)
 	}
 	memcpy(inap, hp->h_addr, sizeof(*inap));
 	return (0);
-}
-
-char *
-sec2str(time_t total)
-{
-	static char result[256];
-	int days, hours, mins, secs;
-	int first = 1;
-	char *p = result;
-	char *ep = &result[sizeof(result)];
-	int n;
-
-	days = total / 3600 / 24;
-	hours = (total / 3600) % 24;
-	mins = (total / 60) % 60;
-	secs = total % 60;
-
-	if (days) {
-		first = 0;
-		n = snprintf(p, ep - p, "%dd", days);
-		if (n < 0 || n >= ep - p)
-			return "?";
-		p += n;
-	}
-	if (!first || hours) {
-		first = 0;
-		n = snprintf(p, ep - p, "%dh", hours);
-		if (n < 0 || n >= ep - p)
-			return "?";
-		p += n;
-	}
-	if (!first || mins) {
-		n = snprintf(p, ep - p, "%dm", mins);
-		if (n < 0 || n >= ep - p)
-			return "?";
-		p += n;
-	}
-	snprintf(p, ep - p, "%ds", secs);
-
-	return result;
 }

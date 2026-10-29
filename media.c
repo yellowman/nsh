@@ -54,31 +54,19 @@
 
 uint64_t init_current_media(int, char *);
 int process_media_commands(int, char *, uint64_t);
-const char *get_media_type_string(uint64_t);
-const char *get_media_subtype_string(uint64_t);
 uint64_t get_media_subtype(uint64_t, const char *);
 uint64_t get_media_options(uint64_t, const char *);
 uint64_t lookup_media_word(const struct ifmedia_description *, uint64_t, const char *);
-void print_media_word(uint64_t, int, int, FILE *);
 void conf_print_media_word(FILE *, uint64_t);
 static int media_set(uint64_t);
 static void media_line(char *, size_t, uint64_t);
 static uint64_t cand_media(char *, uint64_t);
 static int cand_setmedia(int, char *, uint64_t);
 
-const uint64_t ifm_status_valid_list[] =
-    IFM_STATUS_VALID_LIST;
-
-const struct ifmedia_status_description ifm_status_descriptions[] =
-    IFM_STATUS_DESCRIPTIONS;
-
-const struct ifmedia_description ifm_type_descriptions[] =
-    IFM_TYPE_DESCRIPTIONS;
-
-const struct ifmedia_description ifm_subtype_descriptions[] =
+static const struct ifmedia_description ifm_subtype_descriptions[] =
     IFM_SUBTYPE_DESCRIPTIONS;
 
-const struct ifmedia_description ifm_option_descriptions[] =
+static const struct ifmedia_description ifm_option_descriptions[] =
     IFM_OPTION_DESCRIPTIONS;
 
 int
@@ -319,106 +307,6 @@ cand_setmedia(int s, char *ifname, uint64_t word)
 	return cand_setting(ST_ON, "%s", line);
 }
 
-const char *
-get_ifm_linkstate_str(struct ifmediareq *ifmr)
-{
-	const uint64_t ifm_status_valid_list[] = IFM_STATUS_VALID_LIST;
-	const struct ifmedia_status_description *ifms;
-	int bitno;
-
-	if ((ifmr->ifm_status & IFM_AVALID) == 0)
-		return NULL;
-
-	for (bitno = 0; ifm_status_valid_list[bitno] != 0; bitno++) {
-		for (ifms = ifm_status_descriptions;
-		    ifms->ifms_valid != 0; ifms++) {
-			if (ifms->ifms_type != IFM_TYPE(ifmr->ifm_current) ||
-			    ifms->ifms_valid != ifm_status_valid_list[bitno])
-				continue;
-			return IFM_STATUS_DESC(ifms, ifmr->ifm_status);
-		}
-	}
-
-	return NULL;
-}
-
-const char *
-get_ifm_options_str(char *buf, size_t size, uint64_t ifmw,
-    uint64_t *seen_options)
-{
-	const struct ifmedia_description *desc;
-
-	buf[0] = '\0';
-
-	/* Find options. */
-	for (desc = ifm_option_descriptions; desc->ifmt_string != NULL;
-	     desc++) {
-		if (IFM_TYPE_MATCH(desc->ifmt_word, ifmw) &&
-		  (IFM_OPTIONS(ifmw) & IFM_OPTIONS(desc->ifmt_word)) != 0 &&
-		    (*seen_options & IFM_OPTIONS(desc->ifmt_word)) == 0) {
-			if (buf[0] != '\0')
-				strlcat(buf, " ", size);
-			strlcat(buf, desc->ifmt_string, size);
-			*seen_options |= IFM_OPTIONS(desc->ifmt_word);
-		}
-	}
-
-	return buf;
-}
-
-const char *
-get_ifm_type_str(uint64_t mword)
-{
-	const struct ifmedia_description *desc;
-
-	for (desc = ifm_type_descriptions; desc->ifmt_string != NULL;
-	     desc++) {
-		if (IFM_TYPE(mword) == desc->ifmt_word)
-			return (desc->ifmt_string);
-	}
-
-	return NULL;
-}
-
-const char     *
-get_ifm_subtype_str(uint64_t mword)
-{
-	const struct ifmedia_description *desc;
-
-	for (desc = ifm_subtype_descriptions; desc->ifmt_string != NULL;
-	     desc++) {
-		if (IFM_TYPE_MATCH(desc->ifmt_word, mword) &&
-		    IFM_SUBTYPE(desc->ifmt_word) == IFM_SUBTYPE(mword))
-			return (desc->ifmt_string);
-	}
-
-	return NULL;
-}
-
-const char     *
-get_media_type_string(uint64_t mword)
-{
-	const char *s;
-
-	s = get_ifm_type_str(mword);
-	if (s != NULL)
-		return (s);
-
-	return ("<unknown type>");
-}
-
-const char     *
-get_media_subtype_string(uint64_t mword)
-{
-	const char *s;
-
-	s = get_ifm_subtype_str(mword);
-	if (s != NULL)
-		return (s);
-
-	return ("<unknown subtype>");
-}
-
 uint64_t
 get_media_subtype(uint64_t type, const char *val)
 {
@@ -474,35 +362,6 @@ lookup_media_word(const struct ifmedia_description *desc, uint64_t type, const c
 			return (desc->ifmt_word);
 	}
 	return (-1);
-}
-
-void
-print_media_word(uint64_t ifmw, int print_type, int as_syntax, FILE *outfile)
-{
-	const struct ifmedia_description *desc;
-	uint64_t	seen_option = 0;
-
-	if (print_type)
-		fprintf(outfile, "%s ", get_media_type_string(ifmw));
-	fprintf(outfile, "%s%s", as_syntax ? "media " : "",
-	       get_media_subtype_string(ifmw));
-	if (IFM_INST(ifmw) != 0)
-		fprintf(outfile, " %lld", IFM_INST(ifmw));
-
-	/* Find options. */
-	for (desc = ifm_option_descriptions; desc->ifmt_string != NULL;
-	     desc++) {
-		if (IFM_TYPE_MATCH(desc->ifmt_word, ifmw) &&
-		  (IFM_OPTIONS(ifmw) & IFM_OPTIONS(desc->ifmt_word)) != 0 &&
-		    (seen_option & IFM_OPTIONS(desc->ifmt_word)) == 0) {
-			if (seen_option == 0)
-				fprintf(outfile, "%s",
-				    as_syntax ? ", mediaopt " : " ");
-			fprintf(outfile, "%s%s", seen_option ? "," : "",
-			       desc->ifmt_string);
-			seen_option |= IFM_OPTIONS(desc->ifmt_word);
-		}
-	}
 }
 
 /* Does conf_media_status() print ifmw, as set rather than the default? */
@@ -631,29 +490,6 @@ conf_media_status(FILE *output, int s, char *ifname)
 	return rval;
 }
 
-/* a media word, current, active or supported, as facts */
-static struct facts_name media_roles[] = {
-	{ MEDIA_CURRENT, "current" },
-	{ MEDIA_ACTIVE, "active" },
-	{ MEDIA_SUPPORTED, "supported" },
-};
-static struct facts_field media_fields[] = {
-	[MEDIA_ROLE] =		{ "role",	FACT_U64, FACT_VALUES,
-				    media_roles, 3 },
-	[MEDIA_WORD] =		{ "word",	FACT_U64 },
-	[MEDIA_TYPE] =		{ "type",	FACT_STRING },
-	[MEDIA_SUBTYPE] =	{ "subtype",	FACT_STRING },
-	[MEDIA_INSTANCE] =	{ "instance",	FACT_U64 },
-	[MEDIA_OPTIONS] =	{ "options",	FACT_STRING },
-	[MEDIA_IF] =		{ "interface",	FACT_STRING },
-};
-struct facts_kind kind_media = { "media", media_fields, MEDIA_NFIELDS };
-
-void
-media_facts_init(void)
-{
-}
-
 static void
 media_record(struct facts_out *o, char *ifname, uint64_t role, uint64_t word)
 {
@@ -719,119 +555,6 @@ media_facts(struct facts_out *o, int s, char *ifname, struct facts_value *ifv,
 	for (i = 0; supported && media_list != NULL && i < ifmr.ifm_count; i++)
 		media_record(o, ifname, MEDIA_SUPPORTED, media_list[i]);
 	free(media_list);
-}
-
-/* the word of rs's media record of role, or 0 */
-static uint64_t
-media_word(struct frecs *rs, uint64_t role, int *found)
-{
-	struct frec	*r;
-
-	for (r = NULL; (r = frec_next(rs, r, &kind_media)) != NULL; )
-		if (fu(r, MEDIA_ROLE, -1) == role) {
-			if (found)
-				*found = 1;
-			return (fu(r, MEDIA_WORD, 0));
-		}
-	return (0);
-}
-
-void
-media_status_words(struct frecs *rs, uint64_t *current, uint64_t *active)
-{
-	*current = media_word(rs, MEDIA_CURRENT, NULL);
-	*active = media_word(rs, MEDIA_ACTIVE, NULL);
-}
-
-/* the link state media says, as get_ifm_linkstate_str() did */
-const char *
-media_linkstate(struct frecs *rs, struct frec *ifr)
-{
-	struct ifmediareq	 ifmr;
-
-	memset(&ifmr, 0, sizeof(ifmr));
-	ifmr.ifm_current = media_word(rs, MEDIA_CURRENT, NULL);
-	ifmr.ifm_status = fu(ifr, IF_MEDIASTATUS, 0);
-	return (get_ifm_linkstate_str(&ifmr));
-}
-
-/* media, as media_status() printed it */
-void
-media_render(struct frecs *rs, struct frec *ifr, FILE *outfile)
-{
-	uint64_t	 current, active, status;
-	int		 found = 0;
-
-	current = media_word(rs, MEDIA_CURRENT, &found);
-	if (!found)
-		return;
-	if (fu(ifr, IF_MEDIACOUNT, 0) == 0) {
-		if (verbose)
-			printf("%% %s: No media types?\n", fs(ifr, IF_NAME));
-		return;
-	}
-	active = media_word(rs, MEDIA_ACTIVE, NULL);
-	status = fu(ifr, IF_MEDIASTATUS, 0);
-
-	fprintf(outfile, "  Media type ");
-	print_media_word(current, 0, 0, outfile);
-	if (active != current) {
-		fprintf(outfile, " (");
-		print_media_word(active, 0, 0, outfile);
-		fputc(')', outfile);
-	}
-
-	if (status & IFM_AVALID) {
-		const struct ifmedia_status_description *ifms;
-		int bitno, printed = 0;
-
-		fprintf(outfile, ", status ");
-		for (bitno = 0; ifm_status_valid_list[bitno] != 0; bitno++) {
-			for (ifms = ifm_status_descriptions;
-			     ifms->ifms_valid != 0; ifms++) {
-				if (ifms->ifms_type != IFM_TYPE(current) ||
-				    ifms->ifms_valid !=
-				      ifm_status_valid_list[bitno])
-					continue;
-				fprintf(outfile, "%s%s", printed ? ", " : "",
-				    IFM_STATUS_DESC(ifms, status));
-				printed = 1;
-				break;
-			}
-		}
-		if (printed == 0)
-			fprintf(outfile, "unknown");
-	}
-	fputc('\n', outfile);
-}
-
-/* what media an interface supports, as media_supported() printed it */
-void
-media_render_supported(struct frecs *rs, struct frec *ifr, FILE *outfile)
-{
-	struct frec	*r;
-	uint64_t	 word;
-	int		 type, printed_type;
-
-	for (type = IFM_NMIN; type <= IFM_NMAX; type += IFM_NMIN) {
-		printed_type = 0;
-		for (r = NULL; (r = frec_next(rs, r, &kind_media)) != NULL; ) {
-			if (fu(r, MEDIA_ROLE, -1) != MEDIA_SUPPORTED)
-				continue;
-			word = fu(r, MEDIA_WORD, 0);
-			if (IFM_TYPE(word) != type)
-				continue;
-			if (printed_type == 0) {
-				fprintf(outfile,
-				    "  Supported media types on %s:\n",
-				    fs(ifr, IF_NAME));
-				printed_type = 1;
-			}
-			fprintf(outfile, "    ");
-			print_media_word(word, 0, 1, outfile);
-			fputc('\n', outfile);
-		}
-	}
 }
 
 void

@@ -2849,11 +2849,6 @@ show_hostname(int argc, char **argv, ...)
 	return facts_show(stdout, "hostname");
 }
 
-static struct facts_field hostname_fields[] = {
-	[HOST_NAME] =	{ "name",	FACT_STRING },
-};
-struct facts_kind kind_hostname = { "hostname", hostname_fields, 1 };
-
 int
 hostname_facts(struct facts_out *o)
 {
@@ -2867,12 +2862,6 @@ hostname_facts(struct facts_out *o)
 	memset(v, 0, sizeof(v));
 	facts_string(&v[HOST_NAME], host);
 	return (facts_record(o, &kind_hostname, v));
-}
-
-void
-hostname_render(struct frec *r)
-{
-	printf("%s\n", fs(r, HOST_NAME) != NULL ? fs(r, HOST_NAME) : "");
 }
 
 /* logger command */

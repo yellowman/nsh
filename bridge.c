@@ -84,14 +84,6 @@ int	show_bridge(char *);
 static int br_ioctl(int, u_long, void *);
 static int br_portname(int, char *);
 
-char *stpstates[] = {
-	"disabled",
-	"listening",
-	"learning",
-	"forwarding",
-	"blocking",
-};
-
 #define BRPORT_MEMBER 0
 #define BRPORT_SPAN 1
 #define BRPORT_BLOCKNONIP 2
@@ -1184,52 +1176,6 @@ bridge_addaddr(int s, char *brdg, char *ifname, char *addr)
 	return (0);
 }
 
-/* a bridge's members, and the addresses it learned, as facts */
-static struct facts_field bridgemember_fields[] = {
-	[BRM_NAME] =		{ "name",	FACT_STRING },
-	[BRM_FLAGS] =		{ "flags",	FACT_U64 },
-	[BRM_STATE] =		{ "stp-state",	FACT_U64 },
-	[BRM_IF] =		{ "interface",	FACT_STRING },
-};
-struct facts_kind kind_bridgemember = { "bridge-member", bridgemember_fields,
-    BRM_NFIELDS };
-
-static struct facts_field bridgeaddr_fields[] = {
-	[BRA_ADDRESS] =		{ "address",	FACT_ADDRESS },
-	[BRA_MEMBER] =		{ "member",	FACT_STRING },
-	[BRA_AGE] =		{ "age",	FACT_U64 },
-	[BRA_FLAGS] =		{ "flags",	FACT_U64 },
-	[BRA_IF] =		{ "interface",	FACT_STRING },
-};
-struct facts_kind kind_bridgeaddr = { "bridge-address", bridgeaddr_fields,
-    BRA_NFIELDS };
-
-/* a bridge, after its members, as show bridge shows it */
-static struct facts_field bridge_fields[] = {
-	[BR_NAME] =		{ "name",		FACT_STRING },
-	[BR_FLAGS] =		{ "flags",		FACT_U64 },
-	[BR_DESCR] =		{ "description",	FACT_STRING },
-};
-struct facts_kind kind_bridge = { "bridge", bridge_fields, BR_NFIELDS };
-
-void
-bridge_facts_init(void)
-{
-	static struct facts_name	 states[nitems(stpstates)];
-	size_t				 i;
-
-	facts_bitnames(&bridgemember_fields[BRM_FLAGS], IFBIFBITS);
-	for (i = 0; i < nitems(stpstates); i++) {
-		states[i].value = i;
-		states[i].name = stpstates[i];
-	}
-	bridgemember_fields[BRM_STATE].naming = FACT_VALUES;
-	bridgemember_fields[BRM_STATE].names = states;
-	bridgemember_fields[BRM_STATE].nnames = nitems(stpstates);
-	facts_bitnames(&bridgeaddr_fields[BRA_FLAGS], IFBAFBITS);
-	facts_bitnames(&bridge_fields[BR_FLAGS], ifnetflags);
-}
-
 /* brdg's members; -1 if a record failed */
 static int
 bridge_members(struct facts_out *o, int s, char *brdg)
@@ -1307,60 +1253,6 @@ bridge_facts(struct facts_out *o, int s, char *brdg)
 		facts_record(o, &kind_bridgeaddr, v);
 	}
 	free(inbuf);
-}
-
-/* r's string i, or "" */
-static const char *
-bridge_s(struct frec *r, int i)
-{
-	const char	*s = fs(r, i);
-
-	return (s != NULL ? s : "");
-}
-
-/* a bridge's STP members and learned addresses, as show_int() printed */
-void
-bridge_render(struct frecs *rs, FILE *outfile)
-{
-	const struct facts_value *a;
-	struct ether_addr ea;
-	struct frec *r;
-	uint64_t state;
-	int n;
-
-	for (n = 0, r = NULL; (r = frec_next(rs, r, &kind_bridgemember)); )
-		if (fu(r, BRM_FLAGS, 0) & IFBIF_STP)
-			n++;
-	if (n) {
-		fprintf(outfile, "  STP member state%s:\n", n > 1 ?  "s" : "");
-		for (r = NULL; (r = frec_next(rs, r, &kind_bridgemember)); ) {
-			if (!(fu(r, BRM_FLAGS, 0) & IFBIF_STP))
-				continue;
-			state = fu(r, BRM_STATE, 0);
-			if (state < nitems(stpstates))
-				fprintf(outfile, "    %s: %s\n",
-				    bridge_s(r, BRM_NAME), stpstates[state]);
-			else
-				fprintf(outfile, "    %s: %llu\n",
-				    bridge_s(r, BRM_NAME),
-				    (unsigned long long)state);
-		}
-	}
-
-	if (frec_next(rs, NULL, &kind_bridgeaddr) != NULL) {
-		fprintf(outfile, "  Learned addresses:\n");
-		fprintf(outfile, "    address           member age\n");
-	}
-	for (r = NULL; (r = frec_next(rs, r, &kind_bridgeaddr)); ) {
-		memset(&ea, 0, sizeof(ea));
-		if ((a = FV(r, BRA_ADDRESS, FACT_ADDRESS)) != NULL &&
-		    a->v.a.len == sizeof(ea))
-			memcpy(&ea, a->v.a.bytes, sizeof(ea));
-		fprintf(outfile, "    %s %-6s %u ", ether_ntoa(&ea),
-		    bridge_s(r, BRA_MEMBER), (u_int)fu(r, BRA_AGE, 0));
-		bprintf(outfile, fu(r, BRA_FLAGS, 0), IFBAFBITS);
-		fputc('\n', outfile);
-	}
 }
 
 int
@@ -2488,62 +2380,6 @@ bridge_show_facts(struct facts_out *o, char *ifname)
 	if_freenameindex(ifn_list);
 	close(ifs);
 	return (r);
-}
-
-/*
- * Bridge b and its members in rs, as show_bridge() printed them, and the
- * headers before the first
- */
-void
-bridge_show_render(struct frecs *rs, struct frec *b, int n)
-{
-	struct frec *r;
-	const char *name;
-	int totlen, len;
-	char buf[1024], tmp[256], *p, *member;
-
-	if (n == 0)
-		puts("% Bridge    Status  Member Interfaces");
-
-	/* as bridge_list() lists them */
-	buf[0] = '\0';
-	for (r = NULL; (r = frec_next(rs, r, &kind_bridgemember)); ) {
-		if ((name = fs(r, BRM_NAME)) == NULL || name[0] == '\0' ||
-		    (fu(r, BRM_FLAGS, 0) & IFBIF_SPAN))
-			continue;
-		snprintf(tmp, sizeof(tmp), "%s%s", buf[0] ? " " : "", name);
-		strlcat(buf, tmp, sizeof(buf));
-	}
-
-	len = printf("  %-9s %-7s", bridge_s(b, BR_NAME),
-	    (fu(b, BR_FLAGS, 0) & IFF_UP) ? "up" : "down");
-	if (len < 0) {
-		printf("\n%% show_bridge: printf failed: %s\n",
-		    strerror(errno));
-		return;
-	}
-	totlen = len;
-
-	p = buf;
-	while ((member = strsep(&p, " ")) != NULL) {
-		if (totlen + strlen(member) >= 80) {
-			printf("\n                   ");
-			len = 19;
-			totlen = len;
-		}
-
-		len = printf(" %s", member);
-		if (len < 0) {
-			printf("\n%% show_bridge: printf failed: %s\n",
-			    strerror(errno));
-			return;
-		}
-		totlen += len;
-	}
-	printf("\n");
-
-	printf("            Description: %s\n", fs(b, BR_DESCR) != NULL ?
-	    fs(b, BR_DESCR) : "-");
 }
 
 int

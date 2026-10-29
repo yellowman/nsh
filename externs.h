@@ -452,10 +452,15 @@ int intmedia(int, char **, ...);
 int intmediaopt(int, char **, ...);
 int conf_media_status(FILE *, int, char *);
 struct ifmediareq;
+
+/* renderif.c */
 const char *get_ifm_linkstate_str(struct ifmediareq *);
 const char *get_ifm_options_str(char *, size_t, uint64_t, uint64_t *);
 const char *get_ifm_type_str(uint64_t);
 const char *get_ifm_subtype_str(uint64_t);
+const char *get_media_type_string(uint64_t);
+const char *get_media_subtype_string(uint64_t);
+void print_media_word(uint64_t, int, int, FILE *);
 
 /* passwd.c */
 #define LOGIN_VIEW	0x1	/* a login class's permissions */

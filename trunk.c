@@ -43,7 +43,7 @@
 #include "facts.h"
 #include "showfacts.h"
 
-struct trunk_protos tpr[] = TRUNK_PROTOS;
+static struct trunk_protos tpr[] = TRUNK_PROTOS;
 
 static int in_list(char *, char *);
 static int cand_trunkport(char *, int, int, char **);
@@ -340,40 +340,6 @@ conf_trunk(FILE *output, int ifs, char *ifname)
 	return (0);
 }
 
-/* a trunk's ports, as facts */
-static struct facts_field trunkport_fields[] = {
-	[TPORT_NAME] =		{ "name",	FACT_STRING },
-	[TPORT_FLAGS] =		{ "flags",	FACT_U64 },
-	[TPORT_IF] =		{ "interface",	FACT_STRING },
-};
-struct facts_kind kind_trunkport = { "trunk-port", trunkport_fields,
-    TPORT_NFIELDS };
-
-/* names for a trunk protocol field and a trunk port flags field */
-void
-trunk_names(struct facts_field *proto, struct facts_field *flags)
-{
-	struct facts_name	*fn;
-	size_t			 i;
-
-	facts_bitnames(flags, TRUNK_PORT_BITS);
-	if ((fn = calloc(nitems(tpr), sizeof(*fn))) == NULL)
-		return;
-	for (i = 0; i < nitems(tpr); i++) {
-		fn[i].value = tpr[i].tpr_proto;
-		fn[i].name = tpr[i].tpr_name;
-	}
-	proto->naming = FACT_VALUES;
-	proto->names = fn;
-	proto->nnames = nitems(tpr);
-}
-
-void
-trunk_facts_init(void)
-{
-	facts_bitnames(&trunkport_fields[TPORT_FLAGS], TRUNK_PORT_BITS);
-}
-
 /* ifname's trunk ports, and in ifv its parent trunk and protocol */
 void
 trunk_facts(struct facts_out *o, int ifs, char *ifname, struct facts_value *ifv)
@@ -414,37 +380,4 @@ trunk_facts(struct facts_out *o, int ifs, char *ifname, struct facts_value *ifv)
 			facts_record(o, &kind_trunkport, v);
 		}
 	}
-}
-
-/* trunk, as show_trunk() printed it */
-void
-trunk_render(struct frecs *rs, struct frec *ifr, FILE *outfile)
-{
-	struct frec *r;
-	int i, pntd = 0;
-
-	if (fs(ifr, IF_TRUNKPARENT) != NULL) {
-		fprintf(outfile, "  Trunk parent %s ", fs(ifr, IF_TRUNKPARENT));
-		bprintf(outfile, fu(ifr, IF_TRUNKFLAGS, 0), TRUNK_PORT_BITS);
-		fputc('\n', outfile);
-	}
-
-	if (!fhas(ifr, IF_TRUNKPROTO))
-		return;
-	for (i = 0; i < TRUNK_PROTO_MAX; i++)
-		if (fu(ifr, IF_TRUNKPROTO, 0) == tpr[i].tpr_proto) {
-			fprintf(outfile, "  Trunkproto %s", tpr[i].tpr_name);
-			pntd = 1;
-			break;
-		}
-	for (r = NULL; (r = frec_next(rs, r, &kind_trunkport)) != NULL; ) {
-		if (fs(r, TPORT_NAME) == NULL)
-			continue;
-		fprintf(outfile, " (%s ", fs(r, TPORT_NAME));
-		bprintf(outfile, fu(r, TPORT_FLAGS, 0), TRUNK_PORT_BITS);
-		putc(')', outfile);
-		pntd = 1;
-	}
-	if (pntd)
-		fputc('\n', outfile);
 }

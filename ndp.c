@@ -373,13 +373,6 @@ delete:
 }
 
 /*
- * strlen("2001:0db8:3333:4444:5555:6666:7777:8888") == 39
- */
-#define W_ADDR	39
-#define W_LL	17
-#define W_IF	7
-
-/*
  * Flush the neighbor cache of what the kernel cloned
  */
 void
@@ -477,38 +470,6 @@ ndpflush(void)
 	free(buf);
 }
 
-/* a neighbor, as facts; with no state, the kernel would not say */
-static struct facts_field ndp_fields[] = {
-	[NDP_ADDRESS] =	{ "address",		FACT_ADDRESS },
-	[NDP_LLADDR] =	{ "link-address",	FACT_ADDRESS },
-	[NDP_IF] =	{ "interface",		FACT_STRING },
-	[NDP_FLAGS] =	{ "flags",		FACT_U64 },
-	[NDP_EXPIRE] =	{ "expire",		FACT_TIME },
-	[NDP_STATE] =	{ "state",		FACT_I64 },
-	[NDP_ROUTER] =	{ "router",		FACT_U64 },
-	[NDP_PROBES] =	{ "probes",		FACT_U64 },
-	[NDP_ERRNO] =	{ "info-errno",		FACT_U64 },
-};
-struct facts_kind kind_ndp = { "ndp-entry", ndp_fields, NDP_NFIELDS };
-
-static const struct facts_name ndp_states[] = {
-	{ (uint64_t)ND6_LLINFO_NOSTATE,	"nostate" },
-	{ ND6_LLINFO_INCOMPLETE,	"incomplete" },
-	{ ND6_LLINFO_REACHABLE,		"reachable" },
-	{ ND6_LLINFO_STALE,		"stale" },
-	{ ND6_LLINFO_DELAY,		"delay" },
-	{ ND6_LLINFO_PROBE,		"probe" },
-};
-
-void
-ndp_facts_init(void)
-{
-	facts_bitnames(&ndp_fields[NDP_FLAGS], routeflags);
-	ndp_fields[NDP_STATE].naming = FACT_VALUES;
-	ndp_fields[NDP_STATE].names = ndp_states;
-	ndp_fields[NDP_STATE].nnames = nitems(ndp_states);
-}
-
 /*
  * The neighbors of rt, from *cur, or only addr, at most budget of them.
  * 1 if there are more, 0 if not, -1 if a record failed.
@@ -566,126 +527,6 @@ ndp_facts(struct facts_out *o, struct rtdump *rt, char **cur,
 		n++;
 	}
 	return (0);
-}
-
-/* the cache's headers */
-void
-ndp_header(void)
-{
-	printf("%-*.*s %-*.*s %*.*s %-9.9s %1s %5s\n",
-	    W_ADDR, W_ADDR, "Neighbor", W_LL, W_LL, "Linklayer Address",
-	    W_IF, W_IF, "Netif", "Expire", "S", "Flags");
-}
-
-/*
- * A neighbor, as ndpdump() printed it; failed is its address if the
- * kernel would say no more of it, else empty
- */
-void
-ndp_render(struct frec *r, char *failed, size_t len)
-{
-	const struct facts_value *e, *st;
-	struct sockaddr_storage sa, ll;
-	struct sockaddr_in6 *sin = (struct sockaddr_in6 *)&sa;
-	struct timeval now;
-	const char *ifname;
-	char host[NI_MAXHOST];
-	int addrwidth, llwidth, ifwidth, isrouter = 0, prbs = 0;
-	int64_t expire;
-	uint64_t flags;
-
-	fsockaddr(r, NDP_ADDRESS, &sa);
-	fsockaddr(r, NDP_LLADDR, &ll);
-	if (getnameinfo((struct sockaddr *)sin, sin->sin6_len, host,
-	    sizeof(host), NULL, 0, NI_NUMERICHOST) != 0)
-		host[0] = '\0';
-	gettimeofday(&now, 0);
-
-	addrwidth = strlen(host);
-	if (addrwidth < W_ADDR)
-		addrwidth = W_ADDR;
-	llwidth = strlen(ether_str((struct sockaddr_dl *)&ll));
-	if (W_ADDR + W_LL - addrwidth > llwidth)
-		llwidth = W_ADDR + W_LL - addrwidth;
-	ifname = fs(r, NDP_IF);
-	if (!ifname)
-		ifname = "?";
-	ifwidth = strlen(ifname);
-	if (W_ADDR + W_LL + W_IF - addrwidth - llwidth > ifwidth)
-		ifwidth = W_ADDR + W_LL + W_IF - addrwidth - llwidth;
-
-	printf("%-*.*s %-*.*s %*.*s", addrwidth, addrwidth, host,
-	    llwidth, llwidth, ether_str((struct sockaddr_dl *)&ll), ifwidth,
-	    ifwidth, ifname);
-
-	/* Print neighbor discovery specific information */
-	if (fhas(r, NDP_ERRNO))
-		printf("%% getnbrinfo: ioctl(SIOCGNBRINFO_IN6): %s\n",
-		    strerror(fu(r, NDP_ERRNO, 0)));
-	if ((st = FV(r, NDP_STATE, FACT_I64)) != NULL) {
-		e = FV(r, NDP_EXPIRE, FACT_TIME);
-		expire = e != NULL ? e->v.t.sec : 0;
-		if (expire > now.tv_sec) {
-			printf(" %-9.9s",
-			    sec2str(expire - now.tv_sec));
-		} else if (expire == 0)
-			printf(" %-9.9s", "permanent");
-		else
-			printf(" %-9.9s", "expired");
-
-		switch (st->v.i) {
-		case ND6_LLINFO_NOSTATE:
-			 printf(" N");
-			 break;
-		case ND6_LLINFO_INCOMPLETE:
-			 printf(" I");
-			 break;
-		case ND6_LLINFO_REACHABLE:
-			 printf(" R");
-			 break;
-		case ND6_LLINFO_STALE:
-			 printf(" S");
-			 break;
-		case ND6_LLINFO_DELAY:
-			 printf(" D");
-			 break;
-		case ND6_LLINFO_PROBE:
-			 printf(" P");
-			 break;
-		default:
-			 printf(" ?");
-			 break;
-		}
-
-		isrouter = fu(r, NDP_ROUTER, 0);
-		prbs = fu(r, NDP_PROBES, 0);
-		failed[0] = '\0';
-	} else {
-		printf("  ");
-		strlcpy(failed, routename6(sin), len);
-	}
-
-	flags = fu(r, NDP_FLAGS, 0);
-	printf(" %s%s%s",
-	    (flags & RTF_LOCAL) ? "l" : "",
-	    isrouter ? "R" : "",
-	    (flags & RTF_ANNOUNCE) ? "p" : "");
-
-	if (prbs)
-		printf(" %d", prbs);
-
-	printf("\n");
-}
-
-/* after the neighbors, the messages for failed and nohost, if set */
-void
-ndp_end(const char *failed, const char *nohost)
-{
-	if (failed[0] != '\0')
-		printf("\n%% %s: failed to get neighbor information\n",
-		    failed);
-	if (nohost != NULL)
-		printf("%s -- no entry\n", nohost);
 }
 
 /* what the kernel knows of addr; NULL, with errno, if nothing */

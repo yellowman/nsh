@@ -30,6 +30,7 @@ SRCS+=	trunk.c who.c more.c stringlist.c utils.c sqlite3.c ppp.c prompt.c
 SRCS+=	nopt.c pflow.c wg.c nameserver.c ndp.c umb.c utf8.c cmdargs.c ctlargs.c
 SRCS+=	helpcommands.c makeargv.c hashtable.c conftree.c candidate.c settings.c
 SRCS+=	kernel.c commit.c facts.c showfacts.c autoconf.c session.c kfacts.c
+SRCS+=	renderif.c renderrt.c rendersys.c
 CLEANFILES+=compile.c
 
 LDADD=	-levent -lutil -ledit -ltermcap

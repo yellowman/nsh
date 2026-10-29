@@ -12,32 +12,17 @@
 #
 # file		class	names
 arp.c		process	rtmsg_arp.seq s
-arp.c		scratch	ether_str.hbuf expire_time sdl_m sec2str.result
-			sin_m
-arp.c		table	arp_fields blank_sdl blank_sin ifp_m kind_arp
-			so_1mask
-autoconf.c	table	dhcp_fields dhcpns_fields dhcproute_fields
-			kind_dhcplease kind_dhcpns kind_dhcproute
-			kind_slaacaddr kind_slaacdfr kind_slaacdns
-			kind_slaacif kind_slaacprefix kind_slaacra
-			kind_slaacrdns slaac_fields slaacaddr_fields
-			slaacdfr_fields slaacdns_fields
-			slaacprefix_fields slaacra_fields
-			slaacrdns_fields
+arp.c		scratch	expire_time sdl_m sin_m
+arp.c		table	blank_sdl blank_sin ifp_m so_1mask
 bgpcommands.c	session	bgpd_socket_path
 bgpcommands.c	table	bgcs
-bridge.c	process	bridge_facts_init.states
-bridge.c	table	brds bridge_fields bridgeaddr_fields
-			bridgemember_fields brlists brnames brper brps
-			brvals brvs kind_bridge kind_bridgeaddr
-			kind_bridgemember stpstates
+bridge.c	table	brds brlists brnames brper brps brvals brvs
 candidate.c	session	cand cand_base cand_journal cand_nedits cand_nwas
 			cand_rtable cand_sharing cand_was candidate
 candidate.c	scratch	cand_held cand_listowner.owner
 candidate.c	table	candidate_sglobals
 carp.c		scratch	carp_facts.carpdev
-carp.c		table	carp_bal_modes carp_facts_init.carp_states
-			carp_fields intcs kind_carp
+carp.c		table	carp_bal_modes intcs
 client.c	process	nshd_config nshd_intr nshd_rtable sfd sib
 client.c	table	nshd_runs.progs show_log.logs
 commands.c	session	hname ifname in_rc next_ifname rc_head whichlist
@@ -57,7 +42,7 @@ commands.c	table	Bridgelist Bridgelist_nitems Intlist
 			espudpencaptab etheriptab exithelp flushhelp
 			flushlist flushtab forwardingtab fpfs
 			ftpproxyhelp gretab grouphelp grouptab halthelp
-			helphelp hostname_fields hostnamehelp
+			helphelp hostnamehelp
 			ifstatehelp ikcs ikehelp inethelp interfacehelp
 			ip6help ip6tab ipcomptab iphelp ipiptab
 			ipsecallocstab ipsecbytestab
@@ -65,7 +50,7 @@ commands.c	table	Bridgelist Bridgelist_nitems Intlist
 			ipsecinvalidlifetab ipsecpfstab
 			ipsecsoftallocstab ipsecsoftbytestab
 			ipsecsoftfirstusetab ipsecsofttimeouttab
-			ipsectimeouttab iptab iscs kind_hostname
+			ipsectimeouttab iptab iscs
 			ldaphelp ldcs ldphelp lics loggerhelp loginhelp
 			manhelp maxqueuetab mforwardingtab motdhelp
 			mplshelp mplstab mtudisctab mtudisctimeouttab
@@ -101,18 +86,14 @@ ctl.c		table	ctl_bgp ctl_crontab ctl_daemons ctl_dhcp
 			ctl_pf ctl_rad ctl_relay ctl_resolv ctl_rip
 			ctl_sasync ctl_smtp ctl_snmp
 			ctl_sshd ctl_tftp ctl_tftpproxy admin_words
-			daemon_fields kind_daemon
 editing.c	process	complete.word
 editing.c	table	el_runs.funcs
 genget.c	process	ambiguous
 if.c		session	imrif imrsave
 if.c		scratch	get_linkstate.buf if_facts.ifdescr
 			if_facts.parent if_facts.ps if_facts.ssid
-if.c		table	address_fields if_sglobals iftypes
-			interface_fields intip6help intiphelp
-			intpwe3.pwe3opts ip6optlist ip_fields ip_flags6
-			ip_sources kind_address kind_interface kind_ip
-			kind_vlan mplscs vlan_fields
+if.c		table	if_sglobals intip6help intiphelp
+			intpwe3.pwe3opts ip6optlist mplscs
 kernel.c	table	kcloners
 kfacts.c	process	kf
 kfacts.c	scratch	kf_lladdr.buf
@@ -126,8 +107,7 @@ kroute.c	scratch	ip_route.line_kroute lookup_kept
 			lookup_record.label lookup_v m_rtmsg
 			mylink_ntoa.obuf rt_metrics rtm_addrs rtm_inits
 			so_dst so_gate so_ifp so_mask
-kroute.c	table	addrnames hexlist ifnetflags kind_lookup
-			lookup_fields metricnames msgtypes routeflags
+kroute.c	table	hexlist msgtypes
 main.c		session	bridge cli_rtable config_mode priv verbose
 main.c		process	caught_sigwinch cursor_pos editing elc eli elp
 			ev histc histi interactive_mode nsh_env pid
@@ -135,56 +115,76 @@ main.c		process	caught_sigwinch cursor_pos editing elc eli elp
 main.c		table	vers
 makeargv.c	session	cursor_argc cursor_argo line margc margv
 			saveline
-media.c		table	ifm_option_descriptions ifm_status_descriptions
-			ifm_subtype_descriptions ifm_type_descriptions
-			kind_media media_fields media_roles
+media.c		table	ifm_option_descriptions ifm_subtype_descriptions
 more.c		process	oldtty winsize
 ndp.c		process	rtmsg_ndp.seq rtsock
 ndp.c		scratch	conf_ndp_entry.nbi expire_time flags
 			getnbrinfo.nbi host_buf rtget_ndp.ksin sdl_m
 			sin_m
-ndp.c		table	blank_sdl blank_sin ifp_m kind_ndp ndp_fields
-			ndp_states
+ndp.c		table	blank_sdl blank_sin ifp_m
 nopt.c		scratch	nopterr noptind
 passwd.c		table	login_builtin login_permtab
 ppp.c		table	intpppoe.authopts intsppp.authopts
 			intsppp.peeropts spppproto
 prompt.c	session	prompt saved_prompt
+renderif.c	process	bridge_facts_init.states
+renderif.c	scratch	umb_val2descr.sval
+renderif.c	table	address_fields bridge_fields bridgeaddr_fields
+			bridgemember_fields carp_bal_modes
+			carp_facts_init.carp_states carp_fields
+			dhcp_fields dhcpns_fields dhcproute_fields
+			ifm_option_descriptions ifm_status_descriptions
+			ifm_subtype_descriptions ifm_type_descriptions
+			iftypes interface_fields ip_fields ip_flags6
+			ip_sources kind_address kind_bridge
+			kind_bridgeaddr kind_bridgemember kind_carp
+			kind_dhcplease kind_dhcpns kind_dhcproute
+			kind_interface kind_ip kind_media kind_slaacaddr
+			kind_slaacdfr kind_slaacdns kind_slaacif
+			kind_slaacprefix kind_slaacra kind_slaacrdns
+			kind_trunkport kind_umb kind_umbdns kind_vlan
+			kind_wgpeer media_fields media_roles
+			slaac_fields slaacaddr_fields slaacdfr_fields
+			slaacdns_fields slaacprefix_fields
+			slaacra_fields slaacrdns_fields stpstates tpr
+			trunkport_fields umb_cellclasses umb_dataclass
+			umb_fields umb_istate umb_nwerrors umb_pinstates
+			umb_regstate umb_simstate umbdns_fields
+			vlan_fields wgpeer_fields
+renderrt.c	process	domain routename.first
+renderrt.c	scratch	any_ntoa.obuf ether_str.hbuf line_show
+			routename.name sec2str.result
+renderrt.c	table	addrnames arp_fields flow_directions flow_fields
+			flow_satypes flow_types ifnetflags kind_arp
+			kind_flow kind_lookup kind_ndp kind_route
+			lookup_fields metricnames ndp_fields ndp_states
+			route_fields routeflags
+rendersys.c	scratch	output.now
+rendersys.c	table	ah_fields carp_fields daemon_fields esp_fields
+			facilitynames groups hostname_fields icmp_fields
+			icmpnames igmp_fields ip_fields ipcomp_fields
+			ipip_fields kind_daemon kind_hostname kind_login
+			login_fields mb_fields mbtypes pf_fcounters
+			pf_fields pf_reasons pfsync_fields prioritynames
+			rt_fields sflag tcp_fields tcpstates udp_fields
 route.c		table	route.routeflags
 session.c	process	fresh in_config total
 session.c	table	kind_row rowfields session_sglobals sglobals
 settings.c	table	bridge_settings contexts if_settings
 			rtable_settings top_settings
-show.c		process	domain routename.first
-show.c		scratch	any_ntoa.obuf line_show routename.name
-show.c		table	flow_directions flow_fields flow_satypes
-			flow_types kind_flow kind_route route_fields
 showfacts.c	process	facts_from facts_init.done
 showfacts.c	table	kind_message kinds message_fields
-stats.c		table	ah_fields carp_fields esp_fields facilitynames
-			groups icmp_fields icmpnames igmp_fields
-			ip_fields ipcomp_fields ipip_fields mb_fields
-			mbtypes pf_fcounters pf_fields pf_reasons
-			pfsync_fields prioritynames rt_fields sflag
-			tcp_fields tcpstates udp_fields
 sysctl.c	table	ddbsysctls ip6sysctls ipsysctls mplssysctls
 			pipexsysctls sysctls
 trunk.c		scratch	trunk_facts.parent
-trunk.c		table	kind_trunkport tpr trunkport_fields
+trunk.c		table	tpr
 tunnel.c	table	tunnelopts
-umb.c		scratch	umb_val2descr.sval
-umb.c		table	cand_umb.fn kind_umb kind_umbdns umb_actstate
-			umb_cellclasses umb_classalias umb_dataclass
-			umb_fields umb_istate umb_nwerrors umb_pinstates
-			umb_pktstate umb_regstate umb_simstate umbcs
-			umbdns_fields
+umb.c		table	cand_umb.fn umb_actstate umb_classalias
+			umb_dataclass umb_pktstate umbcs
 utils.c		scratch	format_k.idx format_k.retarray
 			format_time.result
 version.c	table	kind_version version_fields
 wg.c		scratch	wg_aip wg_facts.public wg_interface wg_peer
 			wgdata
-wg.c		table	intwgpeer.wgpeeropts kind_wgpeer wg_names wgcs
-			wgpeer_fields
+wg.c		table	intwgpeer.wgpeeropts wg_names wgcs
 who.c		process	utmpfd
-who.c		scratch	output.now
-who.c		table	kind_login login_fields

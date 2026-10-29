@@ -148,16 +148,6 @@ struct daemons ctl_daemons[] = {
 { NULL, NULL, NULL, NULL, 0, 0, 0 }
 };
 
-/* a daemon nsh starts, and whether it runs, in a routing table */
-static struct facts_field daemon_fields[] = {
-	[DAEMON_NAME] =		{ "daemon",	FACT_STRING },
-	[DAEMON_PROGRAM] =	{ "program",	FACT_STRING },
-	[DAEMON_RTABLE] =	{ "rtable",	FACT_U64 },
-	[DAEMON_RUNNING] =	{ "running",	FACT_U64 },
-	[DAEMON_PROCS] =	{ "processes",	FACT_U64 },
-};
-struct facts_kind kind_daemon = { "daemon", daemon_fields, DAEMON_NFIELDS };
-
 /* per-daemon commands, and their C or executable functions */ 
 
 /* CRONTAB */
@@ -2331,34 +2321,4 @@ daemons_facts(struct facts_out *o, int pf)
 	}
 	free(kp);
 	return r;
-}
-
-/* a daemon, as show daemons prints it, with the headings before the first */
-void
-daemons_render(struct frec *r, int n)
-{
-	const struct facts_value *rt, *on, *procs;
-	const char *name, *prog;
-
-	if (n == 0)
-		printf("%-12s %-12s %6s  %s\n", "Daemon", "Program", "Rtable",
-		    "State");
-	name = fs(r, DAEMON_NAME);
-	prog = fs(r, DAEMON_PROGRAM);
-	rt = FV(r, DAEMON_RTABLE, FACT_U64);
-	on = FV(r, DAEMON_RUNNING, FACT_U64);
-	procs = FV(r, DAEMON_PROCS, FACT_U64);
-	printf("%-12s %-12s %6llu  ", name != NULL ? name : "?",
-	    prog != NULL ? prog : "?", rt != NULL ?
-	    (unsigned long long)rt->v.u : 0ULL);
-	if (on == NULL)
-		printf("-\n");
-	else if (procs == NULL)
-		printf("%s\n", on->v.u ? "enabled" : "disabled");
-	else if (on->v.u)
-		printf("running, %llu process%s\n",
-		    (unsigned long long)procs->v.u, procs->v.u == 1 ? "" :
-		    "es");
-	else
-		printf("not running\n");
 }

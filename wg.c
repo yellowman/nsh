@@ -370,15 +370,6 @@ getwg(int ifs)
 	return 0;
 }
 
-/* a wg interface's peers, as facts */
-static struct facts_field wgpeer_fields[] = {
-	[WGP_PUBLIC] =		{ "public-key",		FACT_STRING },
-	[WGP_DESCR] =		{ "description",	FACT_STRING },
-	[WGP_HANDSHAKE] =	{ "last-handshake",	FACT_TIME },
-	[WGP_IF] =		{ "interface",		FACT_STRING },
-};
-struct facts_kind kind_wgpeer = { "wg-peer", wgpeer_fields, WGP_NFIELDS };
-
 /* ifname's wg peers, and in ifv its public key */
 void
 wg_facts(struct facts_out *o, int ifs, char *ifname, struct facts_value *ifv)
@@ -421,33 +412,6 @@ wg_facts(struct facts_out *o, int ifs, char *ifname, struct facts_value *ifv)
 	}
 	free(wgdata.wgd_interface);
 	wgdata.wgd_interface = NULL;
-}
-
-/* wg, as show_wg() printed it */
-void
-wg_render(struct frecs *rs, struct frec *ifr, FILE *outfile)
-{
-	const struct facts_value	*t;
-	struct frec			*r;
-	struct timespec			 now;
-	const char			*s;
-
-	if ((s = fs(ifr, IF_WGPUBLIC)) != NULL)
-		fprintf(outfile, "  Wireguard publickey %s\n", s);
-
-	for (r = NULL; (r = frec_next(rs, r, &kind_wgpeer)) != NULL; ) {
-		s = fs(r, WGP_PUBLIC);
-		fprintf(outfile, "  Wireguard peer %s", s != NULL ? s : "");
-		if ((s = fs(r, WGP_DESCR)) != NULL && s[0] != '\0')
-			fprintf(outfile, " (%s)\n", s);
-		if ((t = FV(r, WGP_HANDSHAKE, FACT_TIME)) != NULL &&
-		    t->v.t.sec != 0) {
-			timespec_get(&now, TIME_UTC);
-			fprintf(outfile, " last handshake: %lld seconds ago\n",
-			    (long long)(now.tv_sec - t->v.t.sec));
-		}
-		putc('\n', outfile);
-	}
 }
 
 /* A description, quoted as makeargv() reads it back */

@@ -625,48 +625,6 @@ conf_carp(FILE *output, int s, char *ifname)
 	return (0);
 }
 
-/* a carp interface's vhids, as facts */
-static struct facts_field carp_fields[] = {
-	[CARPV_VHID] =		{ "vhid",	FACT_U64 },
-	[CARPV_STATE] =		{ "state",	FACT_U64 },
-	[CARPV_ADVSKEW] =	{ "advskew",	FACT_U64 },
-	[CARPV_IF] =		{ "interface",	FACT_STRING },
-};
-struct facts_kind kind_carp = { "carp-vhid", carp_fields, CARPV_NFIELDS };
-
-/* names for the values of f, from a table of strings */
-static void
-carp_names(struct facts_field *f, const char **names, size_t n)
-{
-	struct facts_name	*fn;
-	size_t			 i;
-
-	if ((fn = calloc(n, sizeof(*fn))) == NULL)
-		return;
-	for (i = 0; i < n; i++) {
-		fn[i].value = i;
-		fn[i].name = names[i];
-	}
-	f->naming = FACT_VALUES;
-	f->names = fn;
-	f->nnames = n;
-}
-
-void
-carp_balnames(struct facts_field *f)
-{
-	carp_names(f, carp_bal_modes, nitems(carp_bal_modes));
-}
-
-void
-carp_facts_init(void)
-{
-	static const char *carp_states[] = { CARP_STATES };
-
-	carp_names(&carp_fields[CARPV_STATE], carp_states,
-	    nitems(carp_states));
-}
-
 /* ifname's vhids, and in ifv its balancing, peer, device and advbase */
 void
 carp_facts(struct facts_out *o, int s, char *ifname, struct facts_value *ifv)
@@ -699,65 +657,6 @@ carp_facts(struct facts_out *o, int s, char *ifname, struct facts_value *ifv)
 		facts_u64(&v[CARPV_ADVSKEW], creq.carpr_advskews[i]);
 		facts_string(&v[CARPV_IF], ifname);
 		facts_record(o, &kind_carp, v);
-	}
-}
-
-/* carp, as carp_state() printed it */
-void
-carp_render(struct frecs *rs, struct frec *ifr, FILE *outfile)
-{
-	const char	*carp_states[] = { CARP_STATES };
-	const char	*state = NULL, *carpdev;
-	struct frec	*r, *first;
-	struct in_addr	 peer;
-	const struct facts_value *pv;
-	uint64_t	 bal;
-	int		 i, pntd = 0;
-
-	if (!fhas(ifr, IF_CARPBALANCING))
-		return;
-
-	bal = fu(ifr, IF_CARPBALANCING, 0);
-	if (bal <= CARP_BAL_MAXID) {
-		fprintf(outfile, "  CARP balancing mode %s",
-		    carp_bal_modes[bal]);
-		pntd = 1;
-	}
-
-	if ((pv = FV(ifr, IF_CARPPEER, FACT_ADDRESS)) != NULL) {
-		memcpy(&peer, pv->v.a.bytes, sizeof(peer));
-		fprintf(outfile, " peer %s", inet_ntoa(peer));
-		pntd = 1;
-	}
-	if (pntd)
-		fputc('\n', outfile);
-
-	if ((first = frec_next(rs, NULL, &kind_carp)) == NULL)
-		return;
-	carpdev = fs(ifr, IF_CARPDEV);
-	if (carpdev == NULL || carpdev[0] == '\0')
-		carpdev = "none";
-
-	for (i = 0, r = first; r != NULL; i++,
-	    r = frec_next(rs, r, &kind_carp)) {
-		if (fu(r, CARPV_STATE, 0) <= CARP_MAXSTATE)
-			state = carp_states[fu(r, CARPV_STATE, 0)];
-		if (frec_next(rs, first, &kind_carp) == NULL) {
-			fprintf(outfile, "  CARP state %s, "
-			    "device %s vhid %u advbase %d advskew %u\n", state,
-			    carpdev, (u_int)fu(r, CARPV_VHID, 0),
-			    (int)fu(ifr, IF_CARPADVBASE, 0),
-			    (u_int)fu(r, CARPV_ADVSKEW, 0));
-		} else {
-			if (i == 0) {
-				fprintf(outfile,
-				    "  CARP device %s advbase %d\n", carpdev,
-				    (int)fu(ifr, IF_CARPADVBASE, 0));
-			}
-			fprintf(outfile, "  CARP state %s vhid %u advskew %u\n",
-			    state, (u_int)fu(r, CARPV_VHID, 0),
-			    (u_int)fu(r, CARPV_ADVSKEW, 0));
-		}
 	}
 }
 
