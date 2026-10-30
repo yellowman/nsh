@@ -88,12 +88,10 @@ help(int argc, char **argv, ...)
 		printf("%% Commands are:\n\n");
 
 		for (c = cmdtab; c->name; c++)
-			if (((c->needpriv && priv) || !c->needpriv)
-			    && strlen(c->name) > z)
+			if (strlen(c->name) > z)
 				z = strlen(c->name);
 		for (c = cmdtab; c->name; c++) {
 			if (c->help &&
-			    ((c->needpriv && priv) || !c->needpriv) &&
 			    ((c->needconfig && config_mode) || !c->needconfig))
 				printf("  %-*s  %s\n", z, c->name, c->help);
 		}

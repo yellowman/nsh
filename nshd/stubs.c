@@ -14,7 +14,10 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Stand-ins for what nsh's main.c and client.c define; nshd builds neither */
+/*
+ * Stand-ins for what nsh's main.c, loop.c and client.c define; nshd
+ * builds none of them
+ */
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -27,7 +30,7 @@
 #include "showfacts.h"
 
 char *vers = NSH_VERSION_STR;
-int bridge, verbose, priv, cli_rtable;
+int bridge, verbose, cli_rtable;
 int editing, interactive_mode, config_mode;
 pid_t pid;
 
@@ -47,6 +50,13 @@ struct ghs mantab[] = {
 void
 intr(void)
 {
+}
+
+/* nsh's loop runs the rest of a do line */
+int
+cmd_rest(int argc, char **argv)
+{
+	return -1;
 }
 
 /* nshd does not ask itself, and is not a session of its own */
@@ -82,13 +92,6 @@ show_log(int argc, char **argv, ...)
 
 /* configure here is config's own, never nshd's session */
 int nshd_config, nshd_rtable;
-
-/* config's sessions are privileged by session.c, as nsh's by nshd */
-int
-nshd_priv(int quiet)
-{
-	return priv;
-}
 
 /* system runs what nsh's code names, as root; config runs none */
 int
@@ -141,6 +144,12 @@ nshd_rollback(int n)
 
 int
 nshd_cshow(char *words)
+{
+	return -1;
+}
+
+int
+nshd_show_if(const char *name)
 {
 	return -1;
 }

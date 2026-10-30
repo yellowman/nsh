@@ -164,6 +164,16 @@ nsh>show i
 has double <Tab> command line completion for user convenience if the command
 is not ambiguous double <Tab> completes the command.
 .Pp
+.Nm
+completes from the command tables that
+.Xr nshd 8
+sends, which also say where each command runs, and from the names of
+interfaces, groups, bridges and routing tables that nshd sends for each
+completion.
+Until nshd sends its tables,
+.Nm
+completes only the commands it runs itself, and no names.
+.Pp
 E.g show all available valid commands  with double tab key sequence <tab><tab>
 .Bd -literal -offset indent
 nsh(config)#
@@ -390,7 +400,9 @@ It never logs in as root, or as any other account with uid 0.
 nshd refuses what a session's class does not allow.
 Where nshd does not run, or the user may not use its socket,
 .Nm
-runs only the shows anyone may see, and runs a program only for root.
+has only the commands it runs itself, except those that need nshd's
+session or configure; runs only the shows anyone may see; and runs a
+program only for root.
 Where nshd does not run,
 .Ic show version
 is the only show that works.
@@ -451,8 +463,9 @@ session with
 .Xr nshd 8 .
 nshd holds the candidate.
 .Nm
-sends nshd the lines that change the candidate or leave a mode, and
-nshd replies with their result and the mode the session is in.
+sends nshd the lines that change the candidate or leave a mode, as
+nshd's command tables say, and nshd replies with their result and the
+mode the session is in.
 Commands that run as they do outside configure private, such as
 .Cm show
 and

@@ -31,7 +31,6 @@ extern int editing;		/* is command line editing mode on? */
 extern int interactive_mode;	/* are we in interactive mode? */
 extern int config_mode;		/* are we in comfig mode? */
 extern int bridge;		/* are we in bridge mode (or interface mode?) */
-extern int priv;		/* privileged mode or not? */
 extern pid_t pid;		/* process id of nsh */
 extern int cli_rtable;		/* environment rtable */
 struct hashtable;
@@ -196,10 +195,10 @@ extern pid_t child;
 int quit(int, char **, ...);
 void sigalarm(int);
 void command(void);
+int cmd_rest(int, char **);
 int argvtostring(int, char **, char *, int);
 int cmdline(char *);
 int cmdexit(void);
-int cmdline_nshd(char *);
 int cand_refused(char *, int);
 void nshd_mode(int, char *, int);
 /* how a command runs, as nshd's CTL_COMMANDS rows say (row_runs()) */
@@ -259,7 +258,7 @@ typedef struct cmd {
 	char **table;		/* next table for context completion */
 	int stlen;		/* struct length (for rows in next table) */
 	int (*handler) (int, char **, ...); /* routine which executes command */
-	int needpriv;		/* Do we need privilege to execute? */
+	int needsession;	/* Do we need nshd's session to execute? */
 	int needconfig;		/* Do we need config mode to execute? */
 	int nocmd;		/* Can we specify 'no ...command...'? */
 	int modh;		/* Does it start a block? 2 for an rtable */
@@ -590,7 +589,7 @@ int nshd_show(char *);
 void nshd_why(void);
 int nshd_runs(const char *);
 int nshd_execs(void);
-int nshd_priv(int);
+int nshd_connect(int);
 int nshd_configure(int);
 const char *nshd_cname(void);
 int nshd_line(char *);
@@ -600,6 +599,9 @@ int nshd_load(const char *);
 int nshd_rollback(int);
 int nshd_cshow(char *);
 int nshd_rules(char *, int, int, char *);
+struct facts_in;
+int nshd_tables(int, struct facts_in *);
+int nshd_show_if(const char *);
 int show_log(int, char **, ...);
 
 /* sqlite3.c */

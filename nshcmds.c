@@ -166,9 +166,6 @@ static struct stt {
 int
 quit(int argc, char **argv, ...)
 {
-	if (cand_changed())
-		printf("%% Uncommitted changes in the candidate were"
-		    " discarded\n");
 	if (interactive_mode)
 		printf("%% Session terminated.\n");
 	exit(0);
@@ -717,76 +714,11 @@ docmd(int argc, char **argv, ...)
 		printf("%% command name not provided\n");
 		return -1;
 	}
-
-	argv++;
-	argc--;
-
-	if (NO_ARG(argv[0])) {
+	if (NO_ARG(argv[1])) {
 		printf("%% 'no' commands are not supported with 'do'\n");
 		return -1;
 	}
-
-	if (ifname[0] != '\0') { /* Interface or Bridge context */
-		struct intlist *i;
-		int ifs;
-
-		ifs = socket(AF_INET, SOCK_DGRAM, 0);
-		if (ifs < 0) {
-			printf("%% socket failed: %s\n", strerror(errno));
-			return -1;
-		}
-		i = (struct intlist *) genget(argv[0], (char **)whichlist,
-		    sizeof(struct intlist));
-		if (Ambiguous(i)) {
-			printf("%% Ambiguous command\n");
-		} else if (i == 0) {
-			printf("%% Invalid command\n");
-		} else if (cand_refused(i->name, i->cand)) {
-			/* cand_refused() said why */
-		} else {
-			int save_cli_rtable = cli_rtable;
-
-			/*
-			 * Run the handler in the default routing domain.
-			 * This requires privileged mode if we are not
-			 * already in rdomain 0.
-			 */
-			if (getrtable() != 0 && !priv) {
-				printf("%% Privilege required\n");
-				return -1;
-			}
-
-			if (cli_rtable != 0 && nsh_setrtable(0) == 0)
-				cli_rtable = 0;
-
-			(*i->handler)(argc, argv, ifname, ifs);
-
-			if (save_cli_rtable != cli_rtable &&
-			    nsh_setrtable(save_cli_rtable) == 0)
-				cli_rtable = save_cli_rtable;
-		}
-		close(ifs);
-	} else {
-		Command *c;
-
-		c = getcmd(argv[0]);
-		if (Ambiguous(c))
-			printf("%% Ambiguous command %s\n", argv[0]);
-		else if (c == NULL)
-			printf("%% Invalid command %s\n", argv[0]);
-		else if (c->needpriv != 0 && !nshd_priv(0))
-			return -1;
-		else if (c->needconfig != 0 && config_mode != 1) {
-			printf("%% Command requires configure mode\n");
-			return -1;
-		} else if ((c->needconfig || c->modh) &&
-		    cand_refused(c->name, c->cand))
-			return 0;
-		else
-			return (*c->handler)(argc, argv, 0);
-	}
-
-	return 0;
+	return cmd_rest(argc - 1, argv + 1);
 }
 
 static void
@@ -1150,6 +1082,55 @@ doediting(int argc, char **argv, ...)
 	return 0;
 }
 
+/*
+ * flush history, and flush's help: nsh runs these, and nshd's system
+ * the other flushes, as nshd's rows say
+ */
+int
+flushcmd(int argc, char **argv, ...)
+{
+	Command *c = getcmd("flush");
+	struct ghs *g;
+	char *p;
+	u_int z = 0;
+
+	if (argc >= 2) {
+		g = (struct ghs *)genget(argv[1], c->table, c->stlen);
+		if (g == 0) {
+			printf("%% Invalid argument %s\n", argv[1]);
+			return -1;
+		} else if (Ambiguous(g)) {
+			printf("%% Ambiguous argument %s\n", argv[1]);
+			return -1;
+		}
+		if (strcmp(g->name, "history") == 0) {
+			if (argc > 2) {
+				printf("%% Wrong arguments to 'flush history'"
+				    " command.\n");
+				return -1;
+			}
+			return flush_history(argc, argv);
+		}
+		if (strcmp(g->name, "?") != 0 && strcmp(g->name, "help") != 0) {
+			printf("%% flush %s is not one of nsh's own commands\n",
+			    g->name);
+			return -1;
+		}
+	}
+
+	printf("%% Commands may be abbreviated.\n");
+	printf("%% 'flush' commands are:\n\n");
+	for (p = (char *)c->table; (g = (struct ghs *)p)->name;
+	    p += c->stlen)
+		if (strlen(g->name) > z)
+			z = strlen(g->name);
+	for (p = (char *)c->table; (g = (struct ghs *)p)->name;
+	    p += c->stlen)
+		if (g->help)
+			printf("  %-*s  %s\n", z, g->name, g->help);
+	return 0;
+}
+
 int
 flush_history(int argc, char **argv, ...)
 {
@@ -1300,18 +1281,12 @@ pr_s_conf(int argc, char **argv, ...)
 static int
 pr_a_conf(int argc, char **argv, ...)
 {
-	if (priv != 1) {
-		printf ("%% Privilege required\n");
-		return -1;
-	}
-
 	if (ifname[0] == '\0') {
 		printf ("%% Interface or Bridge context required\n");
 		return -1;
 	}
 
-	conf_interfaces(stdout, ifname, 1);
-	return 0;
+	return nshd_show_if(ifname);
 }
 
 /*
@@ -1326,11 +1301,6 @@ static int
 pr_conf_diff(int argc, char **argv, ...)
 {
 	int r;
-
-	if (priv != 1) {
-		printf("%% Privilege required\n");
-		return -1;
-	}
 
 	/* in a configure session that nshd holds */
 	if (nshd_config)
@@ -1351,10 +1321,6 @@ pr_daemons(int argc, char **argv, ...)
 static int
 pr_crontab(int argc, char **argv, ...)
 {
-	if (priv != 1) {
-		printf("%% Privilege required\n");
-		return -1;
-	}
 	return facts_op("crontab", cli_rtable, 0) == 0 ? 0 : -1;
 }
 
@@ -1724,11 +1690,46 @@ pr_rollback(int argc, char **argv, ...)
 int
 pr_cand_conf(int argc, char **argv, ...)
 {
-	if (!candidate && !nshd_config) {
+	if (!nshd_config) {
 		printf("%% Not in configure\n");
 		return -1;
 	}
 	return nshd_cshow("candidate-config");
+}
+
+/*
+ * configure [terminal | private | exclusive]: enter one of nshd's
+ * configure modes, in nsh's session.  no configure leaves it
+ */
+int
+doconfig(int argc, char **argv, ...)
+{
+	if (NO_ARG(argv[0])) {
+		if (nshd_config)
+			return nshd_exit();
+		printf("%% Configuration mode is already disabled\n");
+		return -1;
+	}
+	if (nshd_config) {
+		printf("%% configure is not supported in %s yet\n",
+		    nshd_cname());
+		return -1;
+	}
+	if (argc > 1) {
+		if (isprefix(argv[1], "terminal")) {
+			/* each line committed by nshd, not saved */
+			return nshd_configure(NSHD_CTERMINAL);
+		} else if (isprefix(argv[1], "private")) {
+			return nshd_configure(NSHD_CPRIVATE);
+		} else if (isprefix(argv[1], "exclusive")) {
+			return nshd_configure(NSHD_CEXCLUSIVE);
+		} else {
+			printf ("%% Invalid argument\n");
+			return -1;
+		}
+	}
+	/* the candidate nshd's sessions share */
+	return nshd_configure(NSHD_CSHARED);
 }
 
 /*
@@ -1802,7 +1803,7 @@ cand_rollback(int argc, char **argv, ...)
 	const char *errstr;
 	int n = 0;
 
-	if (!candidate && !nshd_config) {
+	if (!nshd_config) {
 		printf("%% rollback requires configure\n");
 		return -1;
 	}

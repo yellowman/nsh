@@ -21,6 +21,7 @@ int doverbose(int, char **, ...);
 int doediting(int, char **, ...);
 int show_hostname(int, char **, ...);
 int showcmd(int, char **, ...);
+int flushcmd(int, char **, ...);
 int flush_history(int, char **, ...);
 int op_ask(char *, int, char **, int);
 int int_logger(int, char **, ...);
@@ -59,6 +60,7 @@ int telnet(int, char **, ...);
 int nreboot(int, char **, ...);
 int halt(int, char **, ...);
 int powerdown(int, char **, ...);
+int doconfig(int, char **, ...);
 
 /* and their help */
 extern char rtablehelp[], clearhelp[], showhelp[], flushhelp[];

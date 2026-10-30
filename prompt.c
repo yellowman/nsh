@@ -35,8 +35,7 @@ char ifname[IFNAMSIZ];		/* interface name */
 char *
 cprompt(void)
 {
-	int pr, rt = candidate ? cand_rtable : nshd_config ? nshd_rtable :
-	    cli_rtable;
+	int pr, rt = nshd_config ? nshd_rtable : cli_rtable;
 	char tmp[4];
 
 	/* in nshd's configure, nsh's loop reads an interface mode's lines */
@@ -51,7 +50,7 @@ cprompt(void)
 	/* as in Junos: '>' outside configure, '#' in it */
 	snprintf(prompt, sizeof(prompt), "%s%s%s%s%s%s%s%s", hbuf,
 	    pr ? "(" : "",
-	    config_mode ? (candidate || nshd_config == NSHD_CPRIVATE ?
+	    config_mode ? (nshd_config == NSHD_CPRIVATE ?
 	    "config-private" : nshd_config == NSHD_CEXCLUSIVE ?
 	    "config-exclusive" : nshd_config == NSHD_CTERMINAL ?
 	    "config-terminal" : "config") : "",

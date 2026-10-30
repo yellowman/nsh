@@ -16,10 +16,11 @@
 
 /*
  * nsh's command tables as nshd sends them, for a client that completes
- * lines itself with nsh's complete_line() (complete.c): nshdeck's
- * session.  The client asks nshd for the tables once and keeps them,
- * with how each row runs (row_runs()), and asks for the names of
- * interfaces, groups, bridges and routing tables on each completion.
+ * lines itself with nsh's complete_line() (complete.c): nsh, and
+ * nshdeck's session.  The client asks nshd for the tables once and
+ * keeps them, with how each row runs (row_runs()), and asks for the
+ * names of interfaces, groups, bridges and routing tables on each
+ * completion.
  * This file also defines the globals of nsh's that complete.c reads.
  */
 

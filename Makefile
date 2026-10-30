@@ -3,6 +3,8 @@ PROG= nsh
 
 SUBDIR += bgpnsh nshd nshdeck
 
+.PATH:	${.CURDIR}/lib
+
 .PHONY: release dist
 
 .include "nsh-version.mk"
@@ -22,26 +24,16 @@ MANDIR?=${PREFIX}/man/man
 #CFLAGS=-O -DDHCPLEASES=\"/flash/dhcpd.leases\" -Wmissing-prototypes -Wformat -Wall -Wpointer-arith -Wbad-function-cast #-W
 CFLAGS?=-O
 CFLAGS+=-Wmissing-prototypes -Wformat -Wall -Wbad-function-cast -I/usr/local/include #-W -Wpointer-arith
+CFLAGS+=-I${.CURDIR} -I${.CURDIR}/lib
 CPPFLAGS+=-DNSH_VERSION=${NSH_VERSION}
 
-SRCS=arp.c compile.c main.c genget.c commands.c bgpcommands.c stats.c kroute.c
-SRCS+=ctl.c show.c if.c version.c route.c conf.c complete.c editing.c ieee80211.c
-SRCS+=bridge.c tunnel.c media.c sysctl.c passwd.c pfsync.c carp.c
-SRCS+=trunk.c who.c more.c stringlist.c utils.c sqlite3.c ppp.c prompt.c
-SRCS+=nopt.c pflow.c wg.c nameserver.c ndp.c umb.c utf8.c cmdargs.c ctlargs.c
-SRCS+=helpcommands.c makeargv.c hashtable.c mantab.c conftree.c candidate.c settings.c
-SRCS+=kernel.c commit.c client.c facts.c showfacts.c autoconf.c session.c kfacts.c
-SRCS+=renderif.c renderrt.c rendersys.c nshcmds.c
+SRCS=main.c loop.c compile.c mantab.c client.c nshcmds.c tables.c complete.c
+SRCS+=editing.c makeargv.c genget.c stringlist.c prompt.c more.c facts.c
+SRCS+=showfacts.c renderif.c renderrt.c rendersys.c version.c cmdargs.c
+SRCS+=ctlargs.c bgpcommands.c helpcommands.c utils.c hashtable.c utf8.c
 CLEANFILES+=compile.c mantab.c
 
 LDADD=-lutil -ledit -ltermcap
-
-.if make(static)
-NSH_SQLITE_LIBS!=/usr/bin/pkg-config --libs --static sqlite3
-.else
-NSH_SQLITE_LIBS!=/usr/bin/pkg-config --libs sqlite3
-.endif
-LDADD+=${NSH_SQLITE_LIBS}
 
 .if make(static)
 LDADD+=-static

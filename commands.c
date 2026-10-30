@@ -94,9 +94,6 @@ struct sglobal commands_sglobals[] = {
 	{ NULL }
 };
 
-extern volatile sig_atomic_t caught_sigwinch;
-
-static int	doconfig(int, char**, ...);
 static int	exitconfig(int, char **, ...);
 static int	rtable(int, char**, ...);
 static int	conf_run_if(int, const struct confcmd *, int, char **,
@@ -592,18 +589,6 @@ Menu flushlist[] = {
 	{ 0, 0, 0, 0, 0 }
 };
 
-/* flush: nshd's system runs it as an operation, except help and history */
-static int
-flushcmd(int argc, char **argv, ...)
-{
-	Menu *f;
-
-	if (argc >= 2 && (f = flush_find(argv[1])) != NULL &&
-	    f->handler != flush_help && f->handler != flush_history)
-		return op_ask("flush", argc, argv, cli_rtable);
-	return flush_run(argc, argv);
-}
-
 /* flush's entry for word, or NULL */
 static Menu *
 flush_find(char *word)
@@ -696,7 +681,7 @@ op_allowed(int argc, char **argv)
 	if (argc >= 3 && strcmp(argv[0], "interface") == 0 &&
 	    strlen(argv[1]) < IFNAMSIZ && int_op_find(argc - 2, argv + 2))
 		return 1;
-	if (argc >= 2 && ctl_op(argv[0], argv[1], 0))
+	if (argc >= 2 && ctl_op(argv[0], argv[1]))
 		return 1;
 	if (strcmp(argv[0], "group") == 0 || (argc >= 2 &&
 	    strcmp(argv[0], "no") == 0 && strcmp(argv[1], "group") == 0))
@@ -762,28 +747,14 @@ op_run(int argc, char **argv, int hide)
 
 /*
  * In an interface's mode, bssid, setpuk and chgpin, as operations nshd's
- * system runs
+ * system runs.  This handler marks their rows (row_runs()); nsh asks
+ * nshd's system for them itself, so nothing runs here
  */
 static int
 int_op(int argc, char **argv, ...)
 {
-	char *ifn, *words[NARGS + 2];
-	va_list ap;
-	int i;
-
-	va_start(ap, argv);
-	ifn = va_arg(ap, char *);
-	va_end(ap);
-
-	if (argc > NARGS) {
-		printf("%% Too many arguments\n");
-		return -1;
-	}
-	words[0] = "interface";
-	words[1] = ifn;
-	for (i = 0; i < argc; i++)
-		words[i + 2] = argv[i];
-	return op_ask("interface", argc + 2, words, 0);
+	printf("%% %s is an operation of nshd's system\n", argv[0]);
+	return -1;
 }
 
 /* The interface operation argv names, or NULL */
@@ -1250,18 +1221,7 @@ interface(int argc, char **argv, ...)
 			int save_cli_rtable = cli_rtable;
 			int ret;
 
-			/*
-			 * Run the handler in the default routing domain.
-			 * This requires privileged mode if we are not
-			 * already in rdomain 0.
-			 */
-			if (getrtable() != 0 && !priv) {
-				printf("%% Privilege required\n");
-				ifname[0] = '\0';
-				close(ifs);
-				return -1;
-			}
-
+			/* Run the handler in the default routing domain. */
 			if (cli_rtable != 0 && nsh_setrtable(0) == 0)
 				cli_rtable = 0;
 
@@ -1669,116 +1629,6 @@ getcmd(char *name)
 	return (Command *) genget(name, (char **) cmdtab2, sizeof(Command));
 }
 
-void
-command()
-{
-	Command  *c;
-	u_int num;
-
-	init_bgpd_socket_path(cli_rtable);
-
-	if (editing) {
-		inithist();
-		initedit();
-	}
-
-	for (;;) {
-		if (caught_sigwinch) {
-			(void)setwinsize(caught_sigwinch);
-			caught_sigwinch = 0;
-		}
-		if (editing && !isatty(STDIN_FILENO))
-			endedit();
-		if (!editing) {
-			if (interactive_mode)
-				printf("%s", cprompt());
-			if (fgets(line, sizeof(line), stdin) == NULL) {
-				if (feof(stdin) || ferror(stdin)) {
-					if (interactive_mode)
-						printf("\n");
-					(void) quit(0, NULL);
-					/* NOTREACHED */
-				}
-				break;
-			}
-		} else {
-			const char *buf;
-			cursor_pos = NULL;
- 			line[0] = '\0';
-			
-			if ((buf = el_gets(elc, &num)) == NULL || num == 0)
-				break;
-
-			if (buf[--num]  == '\n') {
-				if (num == 0)
-					break;
-			}
-			if (num >= sizeof(line)) {
-				printf("%% Input exceeds permitted length\n");
-				break;
-			}
-			memcpy(line, buf, (size_t)num);
-			line[num] = '\0';
-			history(histc, &ev, H_ENTER, buf);
-		}
-
-		if (line[0] == 0)
-			break;
-		/* a configure session that nshd holds */
-		if (nshd_config) {
-			cmdline_nshd(line);
-			continue;
-		}
-		if (makeargv() == -1) {
-			printf("%% Too many words\n");
-			continue;
-		}
-		if (margv[0] == 0) {
-			break;
-		}
-		if (NO_ARG(margv[0]))
-			c = getcmd(margv[1]);
-		else
-			c = getcmd(margv[0]);
-		if (Ambiguous(c)) {
-			printf("%% Ambiguous command\n");
-			continue;
-		}
-		if (c == 0) {
-			int val = 1;
-
-			if (editing)
-				val = el_burrito(elc, margc, margv);
-			if (val)
-				printf("%% Invalid command\n");
-			continue;
-		}
-		if (NO_ARG(margv[0]) && ! c->nocmd) {
-			printf("%% Invalid command: %s %s\n", margv[0],
-			    margv[1]);
-			continue;
-		}
-		if (c->needpriv != 0 && !nshd_priv(0))
-			continue;
-		/* nshd's system runs daemon operations outside configure too */
-		if (c->handler == ctlhandler && margc > 1 &&
-		    ctl_op(c->name, margv[1], 0)) {
-			op_ask(c->name, margc, margv, cli_rtable);
-			continue;
-		}
-		if (c->needconfig != 0 && config_mode != 1) {
-			printf("%% Command requires configure mode\n");
-			continue;
-		}
-		if ((c->needconfig || c->modh) && cand_refused(c->name, c->cand))
-			continue;
-		if (c->modh)
-			strlcpy(hname, c->name, HSIZE);
-		if ((*c->handler) (margc, margv, 0) == 1)
-			break;
-	}
-}
-
 /*
  * Run one line, as a terminal gives it, in configure private. In an
  * interface's mode, run the interface command; int_exit() leaves the
@@ -1819,12 +1669,6 @@ cmdline(char *text)
 		printf("%% Invalid command: %s %s\n", margv[0], margv[1]);
 		return -1;
 	}
-	if (c->needpriv != 0 && !nshd_priv(0))
-		return -1;
-	/* nshd's system runs daemon operations outside configure too */
-	if (!in_config && c->handler == ctlhandler && margc > 1 &&
-	    ctl_op(c->name, margv[1], 0))
-		return op_ask(c->name, margc, margv, cli_rtable);
 	if (c->needconfig != 0 && config_mode != 1) {
 		printf("%% Command requires configure mode\n");
 		return -1;
@@ -1881,102 +1725,6 @@ cmdline_if(void)
 		whichlist = bridge ? Bridgelist : Intlist;
 	}
 	return r;
-}
-
-/*
- * Run a line of a configure session that nshd holds (nshd_config).
- * Commands that edit the candidate, and leaving a mode or configure, go
- * to nshd as text. Commands that run as they do outside a candidate run
- * here; commit, rollback and show candidate-config send their requests
- * to nshd as they run. Commands a candidate refuses are refused. Returns
- * what the handler returns, or -1 after printing why if none ran
- */
-int
-cmdline_nshd(char *text)
-{
-	struct intlist *i = NULL;
-	char buf[sizeof(line)], *p;
-	Command *c;
-
-	if (strlcpy(buf, text, sizeof(buf)) >= sizeof(buf) ||
-	    strlcpy(line, buf, sizeof(line)) >= sizeof(line)) {
-		printf("%% Input exceeds permitted length\n");
-		return -1;
-	}
-	if (makeargv() == -1) {
-		printf("%% Too many words\n");
-		return -1;
-	}
-	if (margv[0] == NULL)
-		return 0;
-	p = NO_ARG(margv[0]) ? margv[1] : margv[0];
-	if (ifname[0] != '\0') {
-		if (p != NULL)
-			i = (struct intlist *)genget(p, (char **)whichlist,
-			    sizeof(struct intlist));
-		if (Ambiguous(i)) {
-			printf("%% Ambiguous command\n");
-			return -1;
-		}
-		if (i == 0) {
-			printf("%% Invalid command\n");
-			return -1;
-		}
-		if (i->cand == CAND_EDIT || i->handler == int_exit)
-			return nshd_line(buf);
-		if (i->cand == CAND_RUN)
-			return (*i->handler)(margc, margv, ifname, -1);
-		printf("%% %s is not supported in %s yet\n", i->name,
-		    nshd_cname());
-		return -1;
-	}
-	if (p == NULL || (c = getcmd(p)) == 0) {
-		printf("%% Invalid command\n");
-		return -1;
-	}
-	if (Ambiguous(c)) {
-		printf("%% Ambiguous command\n");
-		return -1;
-	}
-	if (NO_ARG(margv[0]) && ! c->nocmd) {
-		printf("%% Invalid command: %s %s\n", margv[0], margv[1]);
-		return -1;
-	}
-	/* nshd's system runs daemon operations not applied to the candidate */
-	if (c->handler == ctlhandler && margc > 1 &&
-	    ctl_op(c->name, margv[1], 1))
-		return op_ask(c->name, margc, margv, nshd_rtable);
-	/* edit a daemon's rules from nshd's candidate here, as the user */
-	if (c->handler == ctlhandler && margc > 1 &&
-	    ctl_edits(c->name, margv[1]))
-		return ctl_nshd_edit(c->name);
-	if (c->cand == CAND_EDIT)
-		return nshd_line(buf);
-	if (c->handler == exitconfig ||
-	    (c->handler == doconfig && NO_ARG(margv[0])))
-		return nshd_exit();
-	if (c->handler == doconfig || (c->needconfig &&
-	    c->cand != CAND_RUN)) {
-		printf("%% %s is not supported in %s yet\n", c->name,
-		    nshd_cname());
-		return -1;
-	}
-	if (c->modh)
-		strlcpy(hname, c->name, HSIZE);
-	return (*c->handler)(margc, margv, 0);
-}
-
-/*
- * Set nsh's mode as nshd reports it: whether in configure, and the
- * interface or bridge whose mode it is in
- */
-void
-nshd_mode(int private, char *ifn, int isbridge)
-{
-	config_mode = private;
-	strlcpy(ifname, ifn, sizeof(ifname));
-	bridge = isbridge;
-	whichlist = bridge ? Bridgelist : Intlist;
 }
 
 /*
@@ -2136,11 +1884,6 @@ rtable(int argc, char **argv, ...)
 		argv++;
 		argc--;
 		set = 0;
-		/* Disallow unprivileged users from removing an rtable */
-		if (!priv) {
-			printf("%% Privilege required\n");
-			return -1;
-		}
 	} else {
 		set = 1;
 	}
@@ -2170,15 +1913,6 @@ rtable(int argc, char **argv, ...)
 		    cli_rtable, curtable);
 	}
 
-	/*
-	 * The kernel will prevent unprivileged users from switching
-	 * away from rdomains other than 0.
-	 */
-	if (set && !priv && cli_rtable != 0 && cli_rtable != table) {
-		printf("%% Privilege required\n");
-		return -1;
-	}
-
 	argc -= 2;
 	argv += 2;
 
@@ -2191,21 +1925,7 @@ rtable(int argc, char **argv, ...)
 	found = resp->sl_cur;
 	sl_free(resp, 1);
 
-	/*
-	 * Disallow unprivileged users from adding a new
-	 * rtable to the database or specifying a name
-	 * (thus changing the database).
-	 */
-	if ((!found || pos) && !priv) {
-		printf("%% Privilege required\n");
-		return -1;
-	}
-
 	if (set && (found && !pos)) {
-		if (!priv && cli_rtable != 0) {
-			printf("%% Privilege required\n");
-			return -1;
-		}
 		/* Table found, skip database action */
 		return rtable_enter(table) ? -1 : 0;
 	}
@@ -2302,31 +2022,6 @@ group(int argc, char **argv, ...)
 	close(ifs);
 
 	return ret;
-}
-
-static int
-doconfig(int argc, char **argv, ...)
-{
-	if (argc > 1) {
-		if (NO_ARG(argv[0])) {
-			return exitconfig(argc, argv);
-		} else if (isprefix(argv[1], "terminal")) {
-			/* each line committed by nshd, not saved */
-			return nshd_configure(NSHD_CTERMINAL);
-		} else if (isprefix(argv[1], "private")) {
-			return nshd_configure(NSHD_CPRIVATE);
-		} else if (isprefix(argv[1], "exclusive")) {
-			return nshd_configure(NSHD_CEXCLUSIVE);
-		} else {
-			printf ("%% Invalid argument\n");
-			return -1;
-		}
-	} else {
-		/* the candidate nshd's sessions share */
-		return nshd_configure(NSHD_CSHARED);
-	}
-
-	return 0;
 }
 
 static int
@@ -2643,10 +2338,6 @@ conf_run_if(int bridgeline, const struct confcmd *c, int argc, char **argv,
 		goto done;
 	}
 	imr_init(ifname);
-	if (getrtable() != 0 && !priv) {
-		printf("%% Privilege required\n");
-		goto done;
-	}
 	if (cli_rtable != 0 && nsh_setrtable(0) == 0)
 		cli_rtable = 0;
 	r = (*c->handler)(argc, argv, ifname, ifs) == -1 ? -1 : 0;

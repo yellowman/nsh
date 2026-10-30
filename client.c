@@ -23,14 +23,14 @@
  * while nshd answers closes it, and so does nshd exiting. nsh's other
  * connections to nshd, such as shows of what only nshd's system reads,
  * are sessions of their own, with the same permissions. Where nshd does
- * not run, or the user may not use its socket, nsh is not privileged.
+ * not run, or the user may not use its socket, nsh has no session.
  * nsh checks the permissions a program needs itself (nshd_runs()), and
  * runs none for anyone but root without nshd's answer.
  *
  * configure private, configure and configure exclusive run in that
  * session. Commands that edit the candidate or leave a mode go to nshd
  * as lines, and nsh takes the mode nshd gives back for its prompt, its
- * completion and the lines after (cmdline_nshd()). A daemon's edit
+ * completion and the lines after (loop.c). A daemon's edit
  * asks nshd for its rules, edits them here, as the user, and sends them
  * back whole.
  */
@@ -76,6 +76,8 @@ static int	nshd_has(int, int);
 static int	nshd_ask(int, uint32_t, const void *, size_t, struct facts_in *,
 		    int32_t *);
 static void	nshd_sigint(int);
+static int	nshd_session(uint32_t, const void *, size_t, FILE *,
+		    struct facts_in *);
 static int	nshd_request(uint32_t, const void *, size_t, FILE *);
 static void	nshd_context(struct nshd_context *);
 static void	nshd_close(void);
@@ -542,11 +544,11 @@ nshd_op(const char *text, int rtable, struct facts_in *in)
 }
 
 /*
- * nsh's session, opened if it is not: 1 if nsh has one, and so is
- * privileged, else 0, after saying why unless quiet
+ * nsh's session, opened if it is not: 1 if nsh has one, else 0, after
+ * saying why unless quiet
  */
 int
-nshd_priv(int quiet)
+nshd_connect(int quiet)
 {
 	if (sfd != -1)
 		return (1);
@@ -555,7 +557,6 @@ nshd_priv(int quiet)
 			nshd_why();
 		return (0);
 	}
-	priv = 1;
 	return (1);
 }
 
@@ -730,12 +731,14 @@ nshd_rules(char *daemon, int rtable, int set, char *path)
 
 /*
  * A request of type, with len bytes of data, on nsh's session, opened if
- * it is not: what nshd prints goes to out or stdout, nsh takes the mode
- * nshd gives, and it returns as a handler does. ^C closes the session,
- * while nshd finishes what it was asked.
+ * it is not: what nshd prints goes to out, or nowhere if out is NULL,
+ * facts go into in, nsh takes the mode nshd gives, and it returns as a
+ * handler does. ^C closes the session, while nshd finishes what it was
+ * asked.
  */
 static int
-nshd_request(uint32_t type, const void *data, size_t len, FILE *out)
+nshd_session(uint32_t type, const void *data, size_t len, FILE *out,
+    struct facts_in *in)
 {
 	struct nshd_context	 c;
 	struct nshd_result	 r = { -1 };
@@ -743,10 +746,9 @@ nshd_request(uint32_t type, const void *data, size_t len, FILE *out)
 	struct ibuf		 b;
 	struct sigaction	 sa, osa, opipe;
 	sigset_t		 block, saved, waiting;
-	FILE			*f = out != NULL ? out : stdout;
 	int			 done = 0, gone = 1;
 
-	if (!nshd_priv(0))
+	if (!nshd_connect(0))
 		return (-1);
 
 	/* ^C is taken only while waiting for nshd, so none is missed */
@@ -789,7 +791,17 @@ nshd_request(uint32_t type, const void *data, size_t len, FILE *out)
 				imsg_free(&imsg);
 				goto done;
 			}
-			fwrite(ibuf_data(&b), 1, ibuf_size(&b), f);
+			if (out != NULL)
+				fwrite(ibuf_data(&b), 1, ibuf_size(&b), out);
+			break;
+		case IMSG_CTL_FACTS:
+			if (in == NULL || imsg_get_ibuf(&imsg, &b) == -1 ||
+			    facts_read(in, ibuf_data(&b), ibuf_size(&b)) ==
+			    -1) {
+				printf("%% nshd: facts nsh cannot read\n");
+				imsg_free(&imsg);
+				goto done;
+			}
 			break;
 		case IMSG_CTL_CONTEXT:
 			if (imsg_get_data(&imsg, &c, sizeof(c)) == -1 ||
@@ -827,6 +839,67 @@ done:
 	return (gone || r.status != 0 ? -1 : 0);
 }
 
+/* nshd_session(), with what nshd prints going to out or stdout */
+static int
+nshd_request(uint32_t type, const void *data, size_t len, FILE *out)
+{
+	return (nshd_session(type, data, len, out != NULL ? out : stdout,
+	    NULL));
+}
+
+/*
+ * nshd's command rows, or with names, the names it completes, read into
+ * in through nsh's session: 0, or -1 if nshd did not send them.  Where
+ * nsh has no session, and nshd lets it open none, it says nothing
+ */
+int
+nshd_tables(int names, struct facts_in *in)
+{
+	if (!nshd_connect(1))
+		return (-1);
+	return (nshd_session(names ? IMSG_CTL_NAMES : IMSG_CTL_COMMANDS,
+	    NULL, 0, NULL, in));
+}
+
+/*
+ * The block of the running configuration for the interface or bridge
+ * name, from its first line through the "!" that ends it. Returns as a
+ * handler does
+ */
+int
+nshd_show_if(const char *name)
+{
+	struct nshd_show	 show;
+	char			 head[2][64], *text = NULL;
+	size_t			 size = 0;
+	FILE			*f;
+	int			 in = 0, r;
+
+	if ((f = tmpfile()) == NULL) {
+		printf("%% tmpfile: %s\n", strerror(errno));
+		return (-1);
+	}
+	memset(&show, 0, sizeof(show));
+	strlcpy(show.words, "running-config", sizeof(show.words));
+	r = nshd_request(IMSG_CTL_SHOW, &show, sizeof(show), f);
+	snprintf(head[0], sizeof(head[0]), "interface %s\n", name);
+	snprintf(head[1], sizeof(head[1]), "bridge %s\n", name);
+	rewind(f);
+	while (getline(&text, &size, f) != -1) {
+		/* what nshd said, not the configuration, if it failed */
+		if (r == -1)
+			fputs(text, stdout);
+		else if (in || strcmp(text, head[0]) == 0 ||
+		    strcmp(text, head[1]) == 0) {
+			fputs(text, stdout);
+			in = strcmp(text, "!\n") != 0;
+		}
+	}
+	free(text);
+	fclose(f);
+	return (r);
+}
+
 /* Set nsh's mode to the session's, as nshd gives it */
 static void
 nshd_context(struct nshd_context *c)
@@ -849,5 +922,4 @@ nshd_close(void)
 	imsgbuf_clear(&sib);
 	close(sfd);
 	sfd = -1;
-	priv = 0;
 }

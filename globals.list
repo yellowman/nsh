@@ -109,8 +109,10 @@ kroute.c	scratch	ip_route.line_kroute lookup_kept
 			mylink_ntoa.obuf rt_metrics rtm_addrs rtm_inits
 			so_dst so_gate so_ifp so_mask
 kroute.c	table	hexlist
-main.c		session	bridge cli_rtable config_mode priv verbose
-main.c		process	caught_sigwinch cursor_pos editing elc eli elp
+loop.c		scratch	said
+loop.c		table	flushown ownif owntab
+main.c		session	cli_rtable config_mode verbose
+main.c		process	caught_sigwinch editing elc eli elp
 			ev histc histi interactive_mode nsh_env pid
 			toplevel
 main.c		table	vers
@@ -188,8 +190,9 @@ showfacts.c	process	facts_from facts_init.done
 showfacts.c	table	kind_message kinds message_fields
 sysctl.c	table	ddbsysctls ip6sysctls ipsysctls mplssysctls
 			pipexsysctls sysctls
+tables.c	session	bridge whichlist
 tables.c	process	built
-tables.c	scratch	bridge cursor_pos whichlist
+tables.c	scratch	cursor_pos
 tables.c	table	Bridgelist Bridgelist_nitems Intlist
 			Intlist_nitems cmdtab cmdtab_nitems kind_name
 			kind_row namefields nruns of rowfields runs

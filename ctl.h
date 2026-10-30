@@ -76,7 +76,7 @@
 #define REQTEMP (void *)4                                                       
 #define SIZE_CONF_TEMP 64
 int ctlhandler(int, char **, ...);
-int ctl_op(char *, char *, int);
+int ctl_op(char *, char *);
 void rmtemp(char *);
 struct ctl {
         char *name;
@@ -97,7 +97,6 @@ int ctl_line(char *, char *, size_t);
 int ctl_rules_clear(char *, int, int);
 int ctl_rules_args(char *, char *, char *, size_t, char **);
 int ctl_cand_rules(char *, int, int, char *, size_t);
-int ctl_edits(char *, char *);
 void ctl_runs(struct ctl *, int *, int *);
 #define CTL_ACT_FOLLOW	0x100	/* what follows a daemon's rules (ctl_act()) */
 #define CTL_ACT_RULES	0x200	/* its rules (ctl_takes()) */
@@ -106,7 +105,6 @@ int ctl_act(int, char *);
 int ctl_takes(int, int);
 int ctl_do(int, int);
 int ctl_setrules(int, char *, size_t);
-int ctl_nshd_edit(char *);
 
 #define T_HANDLER       1
 #define T_HANDLER_TEST  2

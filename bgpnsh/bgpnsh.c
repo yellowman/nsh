@@ -45,7 +45,6 @@ int editing = 1, config_mode = 0, interactive_mode = 1;
 int cli_rtable;
 int bridge;
 size_t Intlist_nitems = 0, Bridgelist_nitems = 0;
-int priv;
 
 struct intlist *whichlist;
 

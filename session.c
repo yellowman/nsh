@@ -49,7 +49,7 @@ extern struct sglobal if_sglobals[];
 
 /* globals of main.c, makeargv.c, prompt.c and bgpcommands.c */
 static struct sglobal session_sglobals[] = {
-	SGLOBAL(priv), SGLOBAL(cli_rtable), SGLOBAL(config_mode),
+	SGLOBAL(cli_rtable), SGLOBAL(config_mode),
 	SGLOBAL(bridge), SGLOBAL(verbose),
 	SGLOBAL(line), SGLOBAL(saveline), SGLOBAL(margc), SGLOBAL(margv),
 	SGLOBAL(cursor_argc), SGLOBAL(cursor_argo),
@@ -170,8 +170,8 @@ session_running(char *text, size_t len)
 }
 
 /*
- * configure private in s, privileged, or with sh, configure, on sh, the
- * candidate that sessions share: as a handler returns
+ * configure private in s, or with sh, configure, on sh, the candidate
+ * that sessions share: as a handler returns
  */
 int
 session_configure(struct session_state *s, struct cand_shared *sh)
@@ -184,7 +184,6 @@ session_configure(struct session_state *s, struct cand_shared *sh)
 		cand_share(sh, 1);
 		cand_sharing = 1;
 	}
-	priv = 1;
 	if ((r = cand_begin()) == 0)
 		config_mode = 1;
 	session_leave(s);

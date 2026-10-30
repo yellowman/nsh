@@ -38,9 +38,8 @@ void usage(void);
 jmp_buf toplevel;
 
 char *vers = NSH_VERSION_STR;
-int bridge = 0;		/* bridge mode for interface() */
 int verbose = 0;	/* verbose mode */
-int priv = 0, cli_rtable = 0;
+int cli_rtable = 0;
 int editing = 0, interactive_mode = 0, config_mode = 0;;
 pid_t pid;
 
@@ -50,7 +49,6 @@ HistEvent ev;
 EditLine *elc = NULL;
 EditLine *eli = NULL;
 EditLine *elp = NULL;
-char *cursor_pos = NULL;
 
 struct hashtable *nsh_env;	/* per-user session environment variables */
 
@@ -204,8 +202,8 @@ main(int argc, char *argv[])
 	}
 
 	load_userenv();
-	/* nshd's session, which is what privileged means, if nshd lets us */
-	nshd_priv(1);
+	/* nshd's session, if nshd lets us have one */
+	nshd_connect(1);
 
 	top = setjmp(toplevel) == 0;
 	if (top) {

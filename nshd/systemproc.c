@@ -562,8 +562,6 @@ systemproc(int debug, int v)
 	check_gid = pw->pw_gid;
 	capture_stdout();
 
-	/* nsh's code runs here privileged, as it does for root */
-	priv = 1;
 	facts_from = FACTS_SYSTEM;
 	db_create();
 

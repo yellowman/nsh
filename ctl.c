@@ -976,12 +976,11 @@ ctl_setrules(int d, char *text, size_t len)
 
 /*
  * Whether daemon's action is an operation, which nshd's system runs: a
- * program in its table that does not set its state, enable or disable,
- * nor, in configure, one configure private applies to the candidate. 1
- * if so, else 0
+ * program in its table that does not set its state, enable or disable.
+ * 1 if so, else 0
  */
 int
-ctl_op(char *daemon, char *action, int configuring)
+ctl_op(char *daemon, char *action)
 {
 	struct daemons *d;
 	struct ctl *x;
@@ -993,8 +992,7 @@ ctl_op(char *daemon, char *action, int configuring)
 	x = (struct ctl *)genget(action, (char **)d->table, sizeof(struct ctl));
 	if (x == NULL || Ambiguous(x))
 		return 0;
-	return x->type == T_EXEC && x->flag_x == 0 &&
-	    !(configuring && ctl_cand_takes(x));
+	return x->type == T_EXEC && x->flag_x == 0;
 }
 
 /*
@@ -1088,21 +1086,6 @@ ctl_isedit(struct ctl *x)
 	    x->handler == edit_crontab;
 }
 
-/* Is action daemon's edit of its rules? */
-int
-ctl_edits(char *daemon, char *action)
-{
-	struct daemons *d;
-	struct ctl *x;
-
-	d = (struct daemons *)genget(daemon, (char **)ctl_daemons,
-	    sizeof(struct daemons));
-	if (d == NULL || Ambiguous(d))
-		return 0;
-	x = (struct ctl *)genget(action, (char **)d->table, sizeof(struct ctl));
-	return x != NULL && !Ambiguous(x) && ctl_isedit(x);
-}
-
 /*
  * How x, an action of a daemon's, runs outside configure (*out) and in
  * configure (*conf): RUN_*, or 0 where the daemon's row says. An action
@@ -1121,36 +1104,6 @@ ctl_runs(struct ctl *x, int *out, int *conf)
 	}
 	if (ctl_isedit(x))
 		*conf = RUN_RULES;
-}
-
-/*
- * edit in a configure nshd has: ask nshd for daemon's rules in the
- * session's candidate and rtable, edit them here as the user, and send
- * them back; as a handler returns. Its test runs at commit check
- */
-int
-ctl_nshd_edit(char *daemon)
-{
-	struct daemons *d;
-	char dir[] = "/tmp/nsh.XXXXXXXXXX", path[PATH_MAX];
-	int ret;
-
-	d = (struct daemons *)genget(daemon, (char **)ctl_daemons,
-	    sizeof(struct daemons));
-	if (d == NULL || Ambiguous(d) || d->tmpfile == NULL) {
-		printf("%% %s: no rules to edit\n", daemon);
-		return -1;
-	}
-	if (mkdtemp(dir) == NULL) {
-		printf("%% mkdtemp %s: %s\n", dir, strerror(errno));
-		return -1;
-	}
-	snprintf(path, sizeof(path), "%s/%s", dir, basename(d->tmpfile));
-	if ((ret = nshd_rules(d->name, nshd_rtable, 0, path)) == 0 &&
-	    (ret = edit_file(path, d->mode, d->propername, NULL)) == 0)
-		ret = nshd_rules(d->name, nshd_rtable, 1, path);
-	ctl_cand_unstage(dir, path);
-	return ret;
 }
 
 /*
