@@ -261,20 +261,6 @@ sadb_facts(struct facts_out *o, struct rtdump *spd, char **cur, int budget)
 }
 
 void
-in6_clearscopeid(struct sockaddr_in6 *sin6)
-{
-	if ((IN6_IS_ADDR_LINKLOCAL(&sin6->sin6_addr) ||
-	    IN6_IS_ADDR_MC_LINKLOCAL(&sin6->sin6_addr) ||
-	    IN6_IS_ADDR_MC_INTFACELOCAL(&sin6->sin6_addr)) &&
-	    *(u_int16_t *)&sin6->sin6_addr.s6_addr[2] == 0 &&
-	    sin6->sin6_scope_id) {
-		*(u_int16_t *)&sin6->sin6_addr.s6_addr[2] =
-		    htons(sin6->sin6_scope_id & 0xffff);
-		sin6->sin6_scope_id = 0;
-	}
-}
-
-void
 index_pfk(struct sadb_msg *msg, void **headers)
 {
 	struct sadb_ext	*ext;

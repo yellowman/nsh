@@ -76,6 +76,7 @@
 #include <pwd.h>
 #include "editing.h"
 #include "stringlist.h"
+#include "ip.h"
 #include "externs.h"
 #include "sysctl.h"
 #include "ctl.h"
@@ -104,6 +105,38 @@ static int	pr_s_conf(int, char **, ...);
 static int	pr_a_conf(int, char **, ...);
 static int	pr_conf_diff(int, char **, ...);
 static int	pr_environment(int, char **, ...);
+
+/* the help of nsh's own commands, which nshd's tables show too */
+char
+	rtablehelp[] = 	"Routing table switch",
+	clearhelp[]=	"Clear the terminal screen",
+	showhelp[] =	"Show system information",
+	flushhelp[] =	"Flush system tables",
+	pinghelp[] = 	"Send IPv4 ICMP echo request",
+	ping6help[] =   "Send IPv6 ICMP echo request",
+	tracerthelp[] =	"Print the route to IPv4 host",
+	tracert6help[] ="Print the route to IPv6 host",
+	sshhelp[] =	"SSH connection to remote host",
+	telnethelp[] =	"Telnet connection to remote host",
+	quithelp[] =	"Close current connection",
+	exithelp[] =	"Leave configuration mode",
+	verbosehelp[] =	"Set verbose diagnostics",
+	editinghelp[] = "Set command line editing",
+	confighelp[] =	"Set configuration mode",
+	rollbackhelp[] = "Discard the candidate's changes, or load a saved configuration",
+	loggerhelp[] =  "Write a message to syslog on the system",
+	whohelp[] =	"Display system users",
+	dohelp[] =	"Superfluous, do is ignored and its arguments executed",
+	setenvhelp[] =	"Set an environment variable",
+	unsetenvhelp[] ="Delete an environment variable",
+	saveenvhelp[] =	"Save environment variables set by setenv to ~/.nshenv",
+	shellhelp[] =	"Invoke a subshell or run an executable",
+	commithelp[] =	"Make the candidate the running configuration, and save it",
+	nreboothelp[] =	"Reboot the system",
+	halthelp[] =	"Halt the system",
+	powerdownhelp[] ="Power the system down",
+	helphelp[] =	"Print help information",
+	manhelp[] =	"Display the NSH manual";
 
 /* kernel statistics, each shown from the facts "statistics <name>" */
 static struct stt {
@@ -1858,4 +1891,17 @@ monitor(int argc, char **argv, ...)
 	(void)signal(SIGINT, (sig_t)intr);
 	close(s);
 	return 0;
+}
+
+/* show route address: asked of nshd, and rendered here */
+int
+show_route(char *arg, int tableid)
+{
+	ip_t dest;
+
+	memset(&dest, 0, sizeof(ip_t));
+	parse_ip_pfx(arg, NO_NETMASK, &dest);
+	if (dest.family == 0)
+		return -1;
+	return facts_show(stdout, "lookup %s %d", arg, tableid);
 }

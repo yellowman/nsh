@@ -595,18 +595,3 @@ doit:
 	}
 	return (0);
 }
-
-int
-getinetaddr(const char *host, struct in_addr *inap)
-{
-	struct hostent *hp;
-
-	if (inet_aton(host, inap) == 1)
-		return (0);
-	if ((hp = gethostbyname(host)) == NULL) {
-		printf("%% getinetaddr: %s: %s\n", host, hstrerror(h_errno));
-		return (-1);
-	}
-	memcpy(inap, hp->h_addr, sizeof(*inap));
-	return (0);
-}

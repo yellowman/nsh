@@ -28,11 +28,16 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <net/if.h>
+#include <net/route.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 #include <err.h>
+#include <netdb.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include "ip.h"
 #include "externs.h"
 
 /*
@@ -168,4 +173,160 @@ is_valid_ifname(char *ifname)
 		return 1;
 	else
 		return 0;
+}
+
+int
+getinetaddr(const char *host, struct in_addr *inap)
+{
+	struct hostent *hp;
+
+	if (inet_aton(host, inap) == 1)
+		return (0);
+	if ((hp = gethostbyname(host)) == NULL) {
+		printf("%% getinetaddr: %s: %s\n", host, hstrerror(h_errno));
+		return (-1);
+	}
+	memcpy(inap, hp->h_addr, sizeof(*inap));
+	return (0);
+}
+
+int
+parse_host(const char *host, struct sockaddr_in6 *sin6)
+{
+	struct addrinfo hints, *res;
+	int gai_error;
+
+	bzero(&hints, sizeof(hints));
+	hints.ai_family = AF_INET6;
+	hints.ai_flags = AI_NUMERICHOST;
+
+	gai_error = getaddrinfo(host, NULL, &hints, &res);
+	if (gai_error) {
+		printf("%% %s: %s\n", host, gai_strerror(gai_error));
+		return 1;
+	}
+	*sin6 = *(struct sockaddr_in6 *)res->ai_addr;
+	freeaddrinfo(res);
+	return 0;
+}
+
+void
+in6_clearscopeid(struct sockaddr_in6 *sin6)
+{
+	if ((IN6_IS_ADDR_LINKLOCAL(&sin6->sin6_addr) ||
+	    IN6_IS_ADDR_MC_LINKLOCAL(&sin6->sin6_addr) ||
+	    IN6_IS_ADDR_MC_INTFACELOCAL(&sin6->sin6_addr)) &&
+	    *(u_int16_t *)&sin6->sin6_addr.s6_addr[2] == 0 &&
+	    sin6->sin6_scope_id) {
+		*(u_int16_t *)&sin6->sin6_addr.s6_addr[2] =
+		    htons(sin6->sin6_scope_id & 0xffff);
+		sin6->sin6_scope_id = 0;
+	}
+}
+
+int
+parse_ipv6(char *arg, struct in6_addr *addr)
+{
+	struct addrinfo hints, *res;
+	int error;
+
+	memset(&hints, 0, sizeof(hints));
+	hints.ai_family = AF_INET6;
+	hints.ai_flags = AI_NUMERICHOST;
+	hints.ai_socktype = SOCK_STREAM; 
+	if ((error = getaddrinfo(arg, "0", &hints, &res)) != 0) {
+		return error;
+	}
+	if (sizeof(struct sockaddr_in6) != res->ai_addrlen) {
+		freeaddrinfo(res);
+		return EAI_ADDRFAMILY;
+	}
+	if (res->ai_next) {
+		/* not gonna happen with ai_flags = AI_NUMERICHOST */
+		printf("%% parse_ipv6: %s resolved to multiple values\n", arg);
+		freeaddrinfo(res);
+		return EAI_OVERFLOW;
+	}
+	in6_clearscopeid((struct sockaddr_in6 *)res->ai_addr);
+	memcpy(addr, &((struct sockaddr_in6 *)res->ai_addr)->sin6_addr,
+	    sizeof(struct in6_addr));
+	freeaddrinfo(res);
+
+	return 0;
+}
+
+
+/*
+ * A return value with ip_t.family == 0 means failure
+ * (and fail message was displayed to user) otherwise argument was parsed
+ * into ip_t
+ *
+ * 'int type' is used if the user does not specify a netmask in the argument.
+ *
+ * The type can be ASSUME_NETMASK in which case we assume a host netmask
+ * (all ones) or NO_NETMASK in which case ip_t.bitlen = -1
+ * 
+ * If ip_route() sees that the destination ip_t.bitlen == -1, it does not
+ * setup a netmask sockaddr in the routing message
+ */
+void
+parse_ip_pfx(char *arg, int type, ip_t *argip)
+{
+	struct in_addr mask;
+	char *q, *s;
+
+	q = strchr(arg, '/');
+	if (q)
+		*q = '\0';
+	if (inet_pton(AF_INET, arg, &argip->addr.in)) {
+		argip->family = AF_INET;
+	} else if (parse_ipv6(arg, &argip->addr.in6) == 0) {
+		argip->family = AF_INET6;
+	} else {
+		argip->family = 0;
+		printf("%% %s is not an IPv4 or IPv6 address\n", arg);
+		return;
+	}
+	if (q) {
+		s = q + 1;
+		if (argip->family == AF_INET && inet_pton(AF_INET, s, &mask)) {
+			mask.s_addr = ntohl(mask.s_addr);
+			argip->bitlen = mask.s_addr ? 33 - ffs(mask.s_addr) : 0;
+		} else {
+			if(strspn(s, "0123456789") == strlen(s)) {
+				/* assume bits after slash */
+				argip->bitlen = strtoul(s, 0, 0);
+				if ((argip->family == AF_INET6 &&
+				    argip->bitlen > 128) ||
+				    (argip->family == AF_INET &&
+				    argip->bitlen > 32)) {
+					printf("%% Invalid bit length\n");
+					argip->family = 0;
+					return;
+				}
+			} else {
+				printf("%% Invalid mask specified\n");
+				argip->family = 0;
+				return;
+			}
+		}
+	} else {
+		/*
+		 * If no netmask was specified, we assume the user refers to
+		 * a host and not a network.  Or not.
+		 */
+		switch (type) {
+		case NO_NETMASK:
+			argip->bitlen = -1;
+			break;
+		case ASSUME_NETMASK:
+			argip->bitlen = argip->family == AF_INET ? 32 : 128;
+			break;
+		default:
+			printf("%% parse_ip: Internal error\n");
+			argip->family = 0;
+			break;
+		}
+	}
+	return;
 }

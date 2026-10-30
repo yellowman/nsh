@@ -29,6 +29,8 @@
 
 char prompt[128];
 char saved_prompt[sizeof(prompt)];
+char hbuf[MAXHOSTNAMELEN];	/* host name */
+char ifname[IFNAMSIZ];		/* interface name */
 
 char *
 cprompt(void)

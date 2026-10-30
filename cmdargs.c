@@ -33,6 +33,17 @@
 #include "externs.h"
 #include "commands.h"
 
+pid_t	child;
+int in_config;		/* nshd's config: uses no kernel, files or programs */
+
+void
+sigalarm(int blahfart)
+{
+	if (child != -1) {
+		kill(child, SIGKILL);
+	}
+}
+
 /*
  * cmd, multiple args
  *

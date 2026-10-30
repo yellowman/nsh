@@ -25,24 +25,25 @@ carp.c		scratch	carp_facts.carpdev
 carp.c		table	carp_bal_modes intcs
 client.c	process	nshd_config nshd_intr nshd_rtable sfd sib
 client.c	table	nshd_runs.progs show_log.logs
-commands.c	session	hname ifname in_rc next_ifname rc_head whichlist
-commands.c	process	child snapshot
-commands.c	scratch	hbuf oneline
+cmdargs.c	process	child in_config
+commands.c	session	hname in_rc next_ifname rc_head whichlist
+commands.c	process	snapshot
+commands.c	scratch	oneline
 commands.c	table	Bridgelist Bridgelist_nitems Intlist
 			Intlist_nitems ahtab arpdowntab arphelp
 			arptimeouttab bgphelp bridgehelp carploggingtab
-			carppreempttab carptab clearhelp cmdtab cmdtab2
-			cmdtab_nitems commands_sglobals commithelp
+			carppreempttab carptab cmdtab cmdtab2
+			cmdtab_nitems commands_sglobals
 			conf_bridge conf_if conf_top
-			confighelp crontabhelp ddbhelp ddbtab
+			crontabhelp ddbhelp ddbtab
 			defaultttltab demotecountertab dhcphelp
-			directedbroadcaststab dohelp
-			dvmrphelp editinghelp eigrphelp
+			directedbroadcaststab
+			dvmrphelp eigrphelp
 			encdebugtab esptab espudpencapporttab
-			espudpencaptab etheriptab exithelp flushhelp
+			espudpencaptab etheriptab
 			flushlist flushtab forwardingtab fpfs
-			ftpproxyhelp gretab grouphelp grouptab halthelp
-			helphelp hostnamehelp
+			ftpproxyhelp gretab grouphelp grouptab
+			hostnamehelp
 			ifstatehelp ikehelp inethelp interfacehelp
 			ip6help ip6tab ipcomptab iphelp ipiptab
 			ipsecallocstab ipsecbytestab
@@ -51,23 +52,22 @@ commands.c	table	Bridgelist Bridgelist_nitems Intlist
 			ipsecsoftallocstab ipsecsoftbytestab
 			ipsecsoftfirstusetab ipsecsofttimeouttab
 			ipsectimeouttab iptab
-			ldaphelp ldphelp loggerhelp loginhelp
-			manhelp maxqueuetab mforwardingtab motdhelp
+			ldaphelp ldphelp loginhelp
+			maxqueuetab mforwardingtab motdhelp
 			mplshelp mplstab mtudisctab mtudisctimeouttab
 			multipathtab nameserverhelp ndphelp nppphelp
-			nreboothelp ntphelp ospf6help
-			ospfhelp pfhelp ping6help pinghelp
+			ntphelp ospf6help
+			ospfhelp pfhelp
 			pipexhelp pipextab portfirsttab porthifirsttab
-			porthilasttab portlasttab powerdownhelp
-			quithelp radhelp relayhelp resolvhelp
-			riphelp rollbackhelp routehelp rtablehelp
-			rtabletab sasynchelp saveenvhelp
-			sendredirectstab setenvhelp shellhelp
-			showhelp smtphelp snmphelp
-			sourceroutetab sshdhelp sshhelp
-			telnethelp tftphelp tftpproxyhelp tracert6help
-			tracerthelp unsetenvhelp verbosehelp wccptab
-			whohelp
+			porthilasttab portlasttab
+			radhelp relayhelp resolvhelp
+			riphelp routehelp
+			rtabletab sasynchelp
+			sendredirectstab
+			smtphelp snmphelp
+			sourceroutetab sshdhelp
+			tftphelp tftpproxyhelp
+			wccptab
 commit.c	scratch	deferred ndeferred
 commit.c	table	ifrefs
 complete.c	process	cmplt_remote complete_nocmd.nocmdtab
@@ -125,12 +125,20 @@ ndp.c		scratch	conf_ndp_entry.nbi expire_time flags
 ndp.c		table	blank_sdl blank_sin ifp_m
 nopt.c		scratch	nopterr noptind
 nshcmds.c	process	sigflag
-nshcmds.c	table	prots showarptab showlist showndptab
-			showroutetab showvlantab stts
+nshcmds.c	table	clearhelp commithelp confighelp dohelp
+			editinghelp exithelp flushhelp halthelp helphelp
+			loggerhelp manhelp nreboothelp ping6help
+			pinghelp powerdownhelp prots quithelp
+			rollbackhelp rtablehelp saveenvhelp setenvhelp
+			shellhelp showarptab showhelp showlist
+			showndptab showroutetab showvlantab sshhelp stts
+			telnethelp tracert6help tracerthelp unsetenvhelp
+			verbosehelp whohelp
 passwd.c		table	login_builtin login_permtab
 ppp.c		table	intpppoe.authopts intsppp.authopts
 			intsppp.peeropts spppproto
-prompt.c	session	prompt saved_prompt
+prompt.c	session	ifname prompt saved_prompt
+prompt.c	scratch	hbuf
 renderif.c	process	bridge_facts_init.states
 renderif.c	scratch	umb_val2descr.sval
 renderif.c	table	address_fields bridge_fields bridgeaddr_fields
@@ -172,7 +180,7 @@ rendersys.c	table	ah_fields carp_fields daemon_fields esp_fields
 			pf_fields pf_reasons pfsync_fields prioritynames
 			rt_fields sflag tcp_fields tcpstates udp_fields
 route.c		table	route.routeflags
-session.c	process	fresh in_config total
+session.c	process	fresh total
 session.c	table	kind_row rowfields session_sglobals sglobals
 settings.c	table	bridge_settings contexts if_settings
 			rtable_settings top_settings

@@ -75,14 +75,13 @@
 #include "facts.h"
 #include "showfacts.h"
 #include "session.h"
+#include "commands.h"
+#include "nshcmds.h"
 
 char hname[HSIZE];
-char hbuf[MAXHOSTNAMELEN];	/* host name */
-char ifname[IFNAMSIZ];		/* interface name */
 char next_ifname[IFNAMSIZ];	/* switch interfaces in interface context */
 struct intlist *whichlist;
 
-pid_t	child;
 static int in_rc;		/* a commit's edits run */
 static int rc_head;		/* and this one is a block's head */
 static int oneline;		/* run by cmdline(); a mode stays entered */
@@ -122,17 +121,6 @@ static int	int_exit(int, char **, ...);
 static int	hostname(int, char **, ...);
 static int	interface(int, char **, ...);
 static int	int_interface(int, char **, ...);
-
-#include "commands.h"
-#include "nshcmds.h"
-
-void
-sigalarm(int blahfart)
-{
-	if (child != -1) {
-		kill(child, SIGKILL);
-	}
-}
 
 static struct fpf {
 	char *name;
@@ -837,25 +825,7 @@ flush_help(int argc, char **argv, ...)
  * Data structures and routines for the interface configuration mode
  */
 
-static char pinghelp[];
-static char loggerhelp[];
-static char ping6help[];
-static char tracerthelp[];
-static char tracert6help[];
-static char sshhelp[];
-static char telnethelp[];
 static char crontabhelp[];
-static char showhelp[];
-static char whohelp[];
-static char dohelp[];
-static char setenvhelp[];
-static char unsetenvhelp[];
-static char saveenvhelp[];
-static char verbosehelp[];
-static char editinghelp[];
-static char clearhelp[];
-static char shellhelp[];
-static char manhelp[];
 static char interfacehelp[];
 extern struct ghs mantab[];
 
@@ -1412,10 +1382,8 @@ static char
 	hostnamehelp[] = "Set system hostname",
 	loginhelp[] =	"Login classes and users",
 	interfacehelp[] = "Modify interface parameters",
-	rtablehelp[] = 	"Routing table switch",
 	grouphelp[] =	"Modify group attributes",
 	arphelp[] = 	"Static ARP set",
-	clearhelp[]=	"Clear the terminal screen",
 #ifdef notyet
 	parphelp[] =	"Proxy ARP set",
 #endif
@@ -1449,40 +1417,13 @@ static char
         motdhelp[] =    "Message of-the-day",
 	inethelp[] =	"Inet super-server control",
 	bridgehelp[] =	"Modify bridge parameters",
-	showhelp[] =	"Show system information",
 	iphelp[] =	"Set IP networking parameters",
 	ip6help[] =	"Set IPv6 networking parameters",
 	mplshelp[] =	"Set MPLS network parameters",
 	ddbhelp[] =	"Set DDB parameters",
 	pipexhelp[] =	"Set PIPEX parameters",
-	flushhelp[] =	"Flush system tables",
 	routehelp[] =	"Add a host or network route",
-	pinghelp[] = 	"Send IPv4 ICMP echo request",
-	ping6help[] =   "Send IPv6 ICMP echo request",
-	tracerthelp[] =	"Print the route to IPv4 host",
-	tracert6help[] ="Print the route to IPv6 host",
-	sshhelp[] =	"SSH connection to remote host",
-	telnethelp[] =	"Telnet connection to remote host",
-	crontabhelp[] =	"Configure scheduled background jobs",
-	quithelp[] =	"Close current connection",
-	exithelp[] =	"Leave configuration mode",
-	verbosehelp[] =	"Set verbose diagnostics",
-	editinghelp[] = "Set command line editing",
-	confighelp[] =	"Set configuration mode",
-	rollbackhelp[] = "Discard the candidate's changes, or load a saved configuration",
-	loggerhelp[] =  "Write a message to syslog on the system",
-	whohelp[] =	"Display system users",
-	dohelp[] =	"Superfluous, do is ignored and its arguments executed",
-	setenvhelp[] =	"Set an environment variable",
-	unsetenvhelp[] ="Delete an environment variable",
-	saveenvhelp[] =	"Save environment variables set by setenv to ~/.nshenv",
-	shellhelp[] =	"Invoke a subshell or run an executable",
-	commithelp[] =	"Make the candidate the running configuration, and save it",
-	nreboothelp[] =	"Reboot the system",
-	halthelp[] =	"Halt the system",
-	powerdownhelp[] ="Power the system down",
-	helphelp[] =	"Print help information",
-	manhelp[] =	"Display the NSH manual";
+	crontabhelp[] =	"Configure scheduled background jobs";
 
 struct ghs rtabletab[] = {
 	{ "<table id>", "Switch to the given rtable", CMPL0 NULL, 0 },

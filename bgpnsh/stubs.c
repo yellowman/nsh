@@ -26,7 +26,6 @@ int nshd_execs(void);
 
 int candidate;		/* bgpnsh has no configure private */
 int cand_rtable;
-int in_config;		/* nor is it nshd's config */
 int nshd_config;	/* nor configure in nshd */
 int nshd_rtable;
 

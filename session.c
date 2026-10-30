@@ -40,8 +40,6 @@
 #include "facts.h"
 #include "session.h"
 
-int in_config;		/* nshd's config: uses no kernel, files or programs */
-
 #if PLAN_CLEARS != MAXCLEARS
 #error "PLAN_CLEARS is not MAXCLEARS"
 #endif

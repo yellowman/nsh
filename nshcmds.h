@@ -59,3 +59,13 @@ int telnet(int, char **, ...);
 int nreboot(int, char **, ...);
 int halt(int, char **, ...);
 int powerdown(int, char **, ...);
+
+/* and their help */
+extern char rtablehelp[], clearhelp[], showhelp[], flushhelp[];
+extern char pinghelp[], ping6help[], tracerthelp[], tracert6help[];
+extern char sshhelp[], telnethelp[], quithelp[], exithelp[];
+extern char verbosehelp[], editinghelp[], confighelp[], rollbackhelp[];
+extern char loggerhelp[], whohelp[], dohelp[], setenvhelp[];
+extern char unsetenvhelp[], saveenvhelp[], shellhelp[], commithelp[];
+extern char nreboothelp[], halthelp[], powerdownhelp[], helphelp[];
+extern char manhelp[];

@@ -154,26 +154,6 @@ getsocket(void)
 	return rtsock;
 }
 
-int
-parse_host(const char *host, struct sockaddr_in6 *sin6)
-{
-	struct addrinfo hints, *res;
-	int gai_error;
-
-	bzero(&hints, sizeof(hints));
-	hints.ai_family = AF_INET6;
-	hints.ai_flags = AI_NUMERICHOST;
-
-	gai_error = getaddrinfo(host, NULL, &hints, &res);
-	if (gai_error) {
-		printf("%% %s: %s\n", host, gai_strerror(gai_error));
-		return 1;
-	}
-	*sin6 = *(struct sockaddr_in6 *)res->ai_addr;
-	freeaddrinfo(res);
-	return 0;
-}
-
 #if 0	/* we don't support ipv6addr/128 type proxying. */
 static struct	sockaddr_in6 so_mask = {sizeof(so_mask), AF_INET6 };
 #endif
