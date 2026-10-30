@@ -17,7 +17,7 @@
 # kernscan.pl: write kernel.c, the table of what the kernel's interface
 # cloners make and which driver ioctls they take, from the kernel source
 #
-#	perl scripts/kernscan.pl /usr/src "OpenBSD 7.8" > kernel.c
+#	perl scripts/kernscan.pl /usr/src "OpenBSD 7.8" > nshd/kernel.c
 #
 # For each cloner (IF_CLONE_INITIALIZER), the create function and the
 # functions it calls in the same file are read for the if_flags and

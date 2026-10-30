@@ -54,7 +54,7 @@
 #include "externs.h"
 #include "facts.h"
 #include "showfacts.h"
-#include "nshd/nshd.h"
+#include "nshd.h"
 
 #if NSHD_CPRIVATE != NSHD_PRIVATE || NSHD_CSHARED != NSHD_SHARED || \
     NSHD_CEXCLUSIVE != NSHD_EXCLUSIVE || NSHD_CTERMINAL != NSHD_TERMINAL

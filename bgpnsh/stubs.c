@@ -16,7 +16,7 @@
 
 /* These functions are stubbed out in bgpnsh but required for linking. */
 
-#include "../stringlist.h"
+#include "stringlist.h"
 
 int kf_names(int, StringList *);
 int prot1_run(char *, char *, int, char **, char **);

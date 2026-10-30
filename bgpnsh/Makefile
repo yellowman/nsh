@@ -1,7 +1,7 @@
 #
 PROG= bgpnsh
 
-.PATH:${.CURDIR}/..
+.PATH:${.CURDIR}/../lib
 
 .include "../nsh-version.mk"
 
@@ -16,6 +16,7 @@ MANDIR?=${PREFIX}/man/man
 .endif
 
 CFLAGS+=-Wmissing-prototypes -Wformat -Wall -Wbad-function-cast
+CFLAGS+=-I${.CURDIR}/../lib
 CPPFLAGS+=-DNSH_VERSION=${NSH_VERSION}
 
 SRCS=bgpnsh.c compile.c bgpcommands.c complete.c editing.c genget.c more.c \
@@ -33,6 +34,6 @@ static: all
 MAN=bgpnsh.8
 
 compile.c: compile.sh
-	sh ${.CURDIR}/../compile.sh
+	sh ${.CURDIR}/../lib/compile.sh
 
 .include <bsd.prog.mk>

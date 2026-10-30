@@ -9,7 +9,7 @@ bgpnsh/compile.c
 bgpnsh/bgpnsh
 compile.c
 mantab.c
-nsh
+nsh/nsh
 nshd/*.orig
 nshd/.gitignore
 nshd/*.d

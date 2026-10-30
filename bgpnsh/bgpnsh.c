@@ -26,10 +26,10 @@
 #include <limits.h>
 #include <unistd.h>
 
-#include "../externs.h"
-#include "../editing.h"
-#include "../commands.h"
-#include "../ctl.h"
+#include "externs.h"
+#include "editing.h"
+#include "commands.h"
+#include "ctl.h"
 
 #define BGPNSH_SOCKET "/var/www/run/bgpd.rsock" /* restricted socket */
 

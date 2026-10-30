@@ -2,7 +2,7 @@
 PROG=	nshdeck
 MAN=	nshdeck.8
 
-.PATH:	${.CURDIR}/.. ${.CURDIR}/../nshd ${.CURDIR}/../lib
+.PATH:	${.CURDIR}/../lib
 
 .include "../nsh-version.mk"
 
@@ -17,7 +17,7 @@ MANDIR?=${PREFIX}/man/man
 .endif
 
 CFLAGS+=-Wmissing-prototypes -Wformat -Wall -Wbad-function-cast
-CFLAGS+=-I${.CURDIR} -I${.CURDIR}/.. -I${.CURDIR}/../nshd -I${.CURDIR}/../lib
+CFLAGS+=-I${.CURDIR} -I${.CURDIR}/../lib
 CPPFLAGS+=-DNSH_VERSION=${NSH_VERSION}
 
 SRCS=	nshdeck.c front.c sessions.c

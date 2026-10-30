@@ -2,7 +2,7 @@
 PROG=	nshd
 MAN=	nshd.8
 
-.PATH:	${.CURDIR}/..
+.PATH:	${.CURDIR}/../lib
 
 .include "../nsh-version.mk"
 
@@ -17,7 +17,7 @@ MANDIR?=${PREFIX}/man/man
 .endif
 
 CFLAGS+=-Wmissing-prototypes -Wformat -Wall -Wbad-function-cast
-CFLAGS+=-I${.CURDIR} -I${.CURDIR}/.. -I/usr/local/include
+CFLAGS+=-I${.CURDIR} -I${.CURDIR}/../lib -I/usr/local/include
 CPPFLAGS+=-DNSH_VERSION=${NSH_VERSION}
 
 SRCS=	nshd.c control.c log.c showproc.c frontend.c configproc.c
@@ -50,6 +50,6 @@ LDADD+=-static
 static: all
 
 compile.c: compile.sh
-	sh ${.CURDIR}/../compile.sh
+	sh ${.CURDIR}/../lib/compile.sh
 
 .include <bsd.prog.mk>
