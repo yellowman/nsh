@@ -7,6 +7,10 @@
 #locations.
 #this script assumes a basic openBSD installation with all daemons running
 #in a single rdomain.
+#Then it sets up nshd, which holds nsh's configuration: it makes nshd's
+#users and the group nshadmin, starts nshd once without booting, has nsh
+#save the running configuration with commit, and has rc start nshd at
+#each boot.
 
 dflt='No'
 
@@ -27,8 +31,8 @@ else
         if [ -z "${input}" ]; then input="${dflt}"; fi
         if [ "${input}" = 'Yes' ] || [ "${input}" = 'yes' ];
         then
-                test -f /var/nsh/backup/pre-nsh-config && echo pre-nsh-config exists already && exit
-                test -f /etc/nshrc && echo etc-nshrc exists already && exit
+                test -d /var/nsh/backup/pre-nsh-config && echo pre-nsh-config exists already && exit
+                test -f /var/db/nsh/nshrc && echo nsh-saved-config exists already && exit
 
                 mkdir -p /var/nsh/backup/pre-nsh-config
 
@@ -255,30 +259,45 @@ else
                         echo etc-dvmrpd does not exist, not importing!
                 fi
 
-                sasync='/etc/sasync.conf'
+                sasync='/etc/sasyncd.conf'
                 if [ -f $sasync ]; then
-                        cp /etc/sasync.conf /var/nsh/backup/pre-nsh-config/
-                        cp /etc/sasync.conf /var/run/sasync.conf.0
-                        chown root /var/run/sasync.conf.0
-                        chgrp wheel /var/run/sasync.conf.0
-                        chmod 660 /var/run/sasync.conf.0
+                        cp /etc/sasyncd.conf /var/nsh/backup/pre-nsh-config/
+                        cp /etc/sasyncd.conf /var/run/sasyncd.conf.0
+                        chown root /var/run/sasyncd.conf.0
+                        chgrp wheel /var/run/sasyncd.conf.0
+                        chmod 660 /var/run/sasyncd.conf.0
                 else
                         echo etc-sasyncd does not exist, not importing!
                 fi
 
-                #setup and secure nshlog
-                touch /var/log/nsh.log
-                chown root /var/log/nsh.log
-                chgrp wheel /var/log/nsh.log
-                chmod 660 /var/log/nsh.log
-                #import running Openbsd kernel configuration
-                /usr/local/bin/nsh -c ../nshrc/write-config.nshrc
-                #secure nshrc config file
-                chmod 660 /etc/nshrc
-                #nshd boots /etc/nshrc, the first time, and its own after
+                #nshd's users, and the group nshadmin
+                groupinfo -e nshadmin || groupadd nshadmin
+                for u in _nshshow _nshfront _nshconf _nsharc _nshcheck; do
+                        userinfo -e $u || useradd -L daemon -d /var/empty \
+                            -s /sbin/nologin $u
+                done
+                #start nshd without -b, so that it applies no configuration
+                /usr/local/sbin/nshd
+                i=0
+                while [ ! -S /var/run/nshd.sock ] && [ $i -lt 10 ]; do
+                        sleep 1
+                        i=$((i + 1))
+                done
+                #save the running configuration as /var/db/nsh/nshrc
+                echo commit | /usr/local/bin/nsh
+                #stop nshd's parent; its other processes end with it
+                pkill -xf /usr/local/sbin/nshd
+                if [ ! -f /var/db/nsh/nshrc ]; then
+                        echo nsh could not save the running configuration!
+                        exit 1
+                fi
+                #rc starts nshd at each boot, and nshd then applies the
+                #saved configuration
                 cp ../../nshd/nshd.rc /etc/rc.d/nshd
                 chmod 555 /etc/rc.d/nshd
                 rcctl enable nshd
+                echo Restart the system, and check that nsh shows the
+                echo configuration you expect.
         else
                 exit
         fi
