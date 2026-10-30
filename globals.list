@@ -181,10 +181,10 @@ showfacts.c	table	kind_message kinds message_fields
 sysctl.c	table	ddbsysctls ip6sysctls ipsysctls mplssysctls
 			pipexsysctls sysctls
 tables.c	process	built
-tables.c	scratch	bridge cursor_pos names whichlist
+tables.c	scratch	bridge cursor_pos whichlist
 tables.c	table	Bridgelist Bridgelist_nitems Intlist
 			Intlist_nitems cmdtab cmdtab_nitems kind_name
-			kind_row namefields of rowfields
+			kind_row namefields nruns of rowfields runs
 trunk.c		scratch	trunk_facts.parent
 trunk.c		table	tpr
 tunnel.c	table	tunnelopts

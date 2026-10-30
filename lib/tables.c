@@ -18,9 +18,9 @@
  * nsh's command tables as nshd sends them, for a client that completes
  * lines itself with nsh's complete_line() (complete.c): nshdeck's
  * session.  The client asks nshd for the tables once and keeps them,
- * and asks for the names of interfaces, groups, bridges and routing
- * tables on each completion.  This file also defines the globals of
- * nsh's that complete.c reads.
+ * with how each row runs (row_runs()), and asks for the names of
+ * interfaces, groups, bridges and routing tables on each completion.
+ * This file also defines the globals of nsh's that complete.c reads.
  */
 
 #include <sys/types.h>
@@ -57,7 +57,16 @@ int		 bridge;
 char		*cursor_pos;		/* read by makeargv() */
 
 static int		 built;		/* the tables are built */
-static StringList	**names;	/* names for kf_names(), or NULL */
+
+/* how each row of each table built runs, as nshd sent it */
+static struct runs {
+	char		**table;
+	size_t		 stlen;
+	size_t		 nrows;
+	int		*out;
+	int		*conf;
+}			*runs;
+static size_t		 nruns;
 
 /* the records nshd sends, as session.c and configproc.c define them */
 static const struct facts_field rowfields[] = {
@@ -67,6 +76,8 @@ static const struct facts_field rowfields[] = {
 	{ "complete",	FACT_STRING },
 	{ "sub",	FACT_U64 },
 	{ "nocmd",	FACT_U64 },
+	{ "out",	FACT_U64 },
+	{ "conf",	FACT_U64 },
 };
 static const struct facts_kind kind_row = { "row", rowfields,
 	sizeof(rowfields) / sizeof(rowfields[0]) };
@@ -87,6 +98,8 @@ struct rows {
 		char		*complete;
 		int64_t		 sub;		/* the table under it, or -1 */
 		int		 nocmd;
+		int		 out;		/* RUN_*, outside configure */
+		int		 conf;		/* RUN_*, in configure */
 	}		*rows;
 	size_t		 nrows;
 	StringList	*names[4];		/* KF_* */
@@ -145,7 +158,7 @@ rows_record(void *arg, const struct facts_template *t,
 	struct rows			*c = arg;
 	struct row			*r;
 	const struct facts_value	*f;
-	int				 idx[6], i;
+	int				 idx[8], i;
 
 	if (strcmp(t->kind, kind_row.name) == 0) {
 		facts_bind(t, &kind_row, idx);
@@ -164,6 +177,10 @@ rows_record(void *arg, const struct facts_template *t,
 		r->sub = f != NULL ? (int64_t)f->v.u : -1;
 		f = facts_get(v, idx, 5, FACT_U64);
 		r->nocmd = f != NULL && f->v.u != 0;
+		f = facts_get(v, idx, 6, FACT_U64);
+		r->out = f != NULL && f->v.u <= RUN_UNSUPPORTED ? f->v.u : 0;
+		f = facts_get(v, idx, 7, FACT_U64);
+		r->conf = f != NULL && f->v.u <= RUN_UNSUPPORTED ? f->v.u : 0;
 	} else if (strcmp(t->kind, kind_name.name) == 0) {
 		facts_bind(t, &kind_name, idx);
 		if ((f = facts_get(v, idx, 0, FACT_STRING)) == NULL)
@@ -221,6 +238,26 @@ tables_build(struct rows *c)
 	for (t = 3; t < ntables; t++)
 		if ((subs[t] = calloc(n[t] + 1, sizeof(struct ghs))) == NULL)
 			err(1, "%s", __func__);
+	if ((runs = calloc(ntables, sizeof(*runs))) == NULL)
+		err(1, "%s", __func__);
+	for (t = 0; t < ntables; t++) {
+		if (t == 0) {
+			runs[t].table = (char **)cmdtab;
+			runs[t].stlen = sizeof(Command);
+		} else if (t < 3) {
+			runs[t].table = (char **)(t == 1 ? Intlist :
+			    Bridgelist);
+			runs[t].stlen = sizeof(struct intlist);
+		} else {
+			runs[t].table = (char **)subs[t];
+			runs[t].stlen = sizeof(struct ghs);
+		}
+		runs[t].nrows = n[t];
+		if ((runs[t].out = calloc(n[t] + 1, sizeof(int))) == NULL ||
+		    (runs[t].conf = calloc(n[t] + 1, sizeof(int))) == NULL)
+			err(1, "%s", __func__);
+	}
+	nruns = ntables;
 	cmdtab_nitems = n[0] + 1;
 	Intlist_nitems = n[1] + 1;
 	Bridgelist_nitems = n[2] + 1;
@@ -256,11 +293,15 @@ tables_build(struct rows *c)
 			err(1, "%s", __func__);
 		g->table = table;
 		g->stlen = stlen;
-		if (t == 0)
+		if (t == 0) {
 			cmdtab[n[t] - 1].nocmd = c->rows[i].nocmd;
-		else if (t < 3)
+			cmdtab[n[t] - 1].needconfig =
+			    c->rows[i].out == RUN_CONFIGURE;
+		} else if (t < 3)
 			(t == 1 ? Intlist : Bridgelist)[n[t] - 1].nocmd =
 			    c->rows[i].nocmd;
+		runs[t].out[n[t] - 1] = c->rows[i].out;
+		runs[t].conf[n[t] - 1] = c->rows[i].conf;
 		c->rows[i].name = c->rows[i].help = NULL;
 		c->rows[i].complete = NULL;
 	}
@@ -271,22 +312,43 @@ tables_build(struct rows *c)
 }
 
 /*
- * Complete text at its end, with c's names, as Tab does in nsh: in an
- * interface's mode if inif, a bridge's if isbridge too.  With help, list
- * every choice instead.  Pass each result to found: text to insert
- * (insert 1), or a choice and its help, if it has one.
+ * How row, of table, whose rows are stlen bytes, runs outside configure
+ * (*out) and in configure (*conf), as nshd sent it: RUN_*, or 0 where
+ * the row of the command above it says how it runs
  */
 void
-tables_complete(struct rows *c, const char *text, int help, int inif,
-    int isbridge, void (*found)(void *, int, const char *, const char *),
-    void *arg)
+row_runs(char **table, int stlen, char *row, int *out, int *conf)
+{
+	size_t	t, i;
+
+	*out = *conf = 0;
+	for (t = 0; t < nruns; t++) {
+		if (runs[t].table != table)
+			continue;
+		i = (row - (char *)table) / runs[t].stlen;
+		if (i < runs[t].nrows) {
+			*out = runs[t].out[i];
+			*conf = runs[t].conf[i];
+		}
+		return;
+	}
+}
+
+/*
+ * Complete text at its end, as Tab does in nsh: in an interface's mode
+ * if inif, a bridge's if isbridge too.  With help, list every choice
+ * instead.  Pass each result to found: text to insert (insert 1), or a
+ * choice and its help, if it has one.
+ */
+void
+tables_complete(const char *text, int help, int inif, int isbridge,
+    void (*found)(void *, int, const char *, const char *), void *arg)
 {
 	char		 word[CMPLT_WORD] = "", *w;
 	struct cmplt	 cp;
 	size_t		 len = strlen(text);
 	int		 i;
 
-	names = c->names;
 	cmplt_remote = 1;
 	bridge = isbridge;
 	whichlist = bridge ? Bridgelist : Intlist;
@@ -296,7 +358,6 @@ tables_complete(struct rows *c, const char *text, int help, int inif,
 	else
 		complete_line(text, len, len, word, (char **)cmdtab,
 		    sizeof(Command), help, &cp);
-	names = NULL;
 	if (cp.insert[0] != '\0')
 		found(arg, 1, cp.insert, NULL);
 	for (i = 0; i < (int)cp.words->sl_cur; i++) {
@@ -309,17 +370,20 @@ tables_complete(struct rows *c, const char *text, int help, int inif,
 	cmplt_free(&cp);
 }
 
-/* kf_names() for complete.c: the names nshd sent for this completion */
+/*
+ * Add to sl copies of c's names of kind (KF_* in kfacts.h), as
+ * kf_names() does: 0, or -1
+ */
 int
-kf_names(int kind, StringList *sl)
+rows_names(struct rows *c, int kind, StringList *sl)
 {
 	char	*s;
 	size_t	 i;
 
-	if (names == NULL || kind < 0 || kind >= 4)
+	if (kind < 0 || kind >= 4)
 		return (-1);
-	for (i = 0; i < names[kind]->sl_cur; i++) {
-		if ((s = strdup(names[kind]->sl_str[i])) == NULL)
+	for (i = 0; i < c->names[kind]->sl_cur; i++) {
+		if ((s = strdup(c->names[kind]->sl_str[i])) == NULL)
 			return (-1);
 		sl_add(sl, s);
 	}

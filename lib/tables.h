@@ -17,6 +17,8 @@
 #ifndef TABLES_H
 #define TABLES_H
 
+#include "stringlist.h"
+
 /* tables.c: nsh's command tables as nshd sends them */
 struct rows;
 struct facts_template;
@@ -25,9 +27,10 @@ struct rows	*rows_new(void);
 void		 rows_free(struct rows *);
 void		 rows_record(void *, const struct facts_template *,
 		    const struct facts_value *);
+int		 rows_names(struct rows *, int, StringList *);
 int		 tables_ready(void);
 int		 tables_build(struct rows *);
-void		 tables_complete(struct rows *, const char *, int, int, int,
+void		 tables_complete(const char *, int, int, int,
 		    void (*)(void *, int, const char *, const char *), void *);
 
 #endif /* TABLES_H */

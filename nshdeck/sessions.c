@@ -72,6 +72,7 @@
 #include <sys/ioctl.h>
 #include <sys/queue.h>
 #include <sys/socket.h>
+#include <net/if.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
@@ -92,6 +93,8 @@
 #include "nshd.h"
 #include "facts.h"
 #include "nshdeck.h"
+#include "stringlist.h"
+#include "kfacts.h"
 #include "tables.h"
 
 #define DECK_QUEUE	16		/* a user's requests waiting, at most */
@@ -202,6 +205,7 @@ static struct {
 	size_t			 len;
 } incoming;			/* rules for the next setrules request */
 static struct event		 ev_idle;
+static struct rows		*completing;	/* what kf_names() reads */
 /* what a count is for, and how a login ended */
 enum { FAIL_NAME = 1, FAIL_ADDR };
 enum { EV_FAILED, EV_REFUSED, EV_SUCCEEDED };
@@ -1177,10 +1181,13 @@ answered(struct user *u, int32_t status)
 			}
 	} else if (!p->gone) {
 		j_answer(u);
-		if (p->r.kind == DECK_COMPLETE && status == 0)
-			tables_complete(u->cmplt, p->r.text, p->r.n,
+		if (p->r.kind == DECK_COMPLETE && status == 0) {
+			completing = u->cmplt;
+			tables_complete(p->r.text, p->r.n,
 			    u->ctx.ifname[0] != '\0', u->ctx.bridge,
 			    completed, u);
+			completing = NULL;
+		}
 		J(&u->j, "],\"output\":");
 		j_str(&u->j, u->out, u->outlen);
 		if (u->hasctx) {
@@ -1739,6 +1746,15 @@ completed(void *arg, int insert, const char *s, const char *help)
 		j_str(&u->j, help, strlen(help));
 	}
 	J(&u->j, "}");
+}
+
+/* kf_names() for complete.c: the names nshd sent for this completion */
+int
+kf_names(int kind, StringList *sl)
+{
+	if (completing == NULL)
+		return (-1);
+	return (rows_names(completing, kind, sl));
 }
 
 /* an answer's head, to front */
