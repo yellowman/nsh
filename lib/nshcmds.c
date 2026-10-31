@@ -899,12 +899,13 @@ shell(int argc, char **argv, ...)
 	/* a command needs the exec permission */
 	if (argc > 1 && !nshd_runs("/bin/sh"))
 		return 1;
-	sigint = signal(SIGINT, SIG_IGN);
-	sigquit = signal(SIGQUIT, SIG_IGN);
-	sigchld = signal(SIGCHLD, SIG_DFL);
         if (argc <= 1) /* only fork if you have a command or shell to execute*/
 		return 1;
 	else {
+		/* set only here, so that a bare ! leaves them as they are */
+		sigint = signal(SIGINT, SIG_IGN);
+		sigquit = signal(SIGQUIT, SIG_IGN);
+		sigchld = signal(SIGCHLD, SIG_DFL);
 		switch(child = fork()) {
 		case -1:
 			printf("%% fork failed: %s\n", strerror(errno));
