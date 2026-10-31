@@ -1,166 +1,323 @@
-# nsh 
+# nsh
 
 ## network shell
 
 ---
-Author and Founder of the project: Chris Cappuccio <chris@nmedia.net>
+Chris Cappuccio <chris@nmedia.net>
 
-NSH is a CLI intended for OpenBSD-based network appliances. It replaces
-ifconfig, sysctl and route with its own simple command language, and
-encapsulates configuration for other daemons into one place, effectively
-replacing /etc/netstart and parts of /etc/rc for appliance-style usage.
+nsh is a command line interface for network appliances built on OpenBSD.
+It replaces ifconfig, sysctl and route with a simple command language of
+its own, and it keeps the configuration of the other daemons in the same
+place. On an appliance, it takes the place of /etc/netstart and parts of
+/etc/rc. With the OpenBSD kernel and the daemons you want to control, it
+makes a complete network appliance.
 
-## Daemons and services encapsulated by nsh:
+## Components
 
-bgpd, dhcpd, dhcpleased, dhcrelay, dvmrpd, eigrpd, ftp-proxy, ifstated, inetd, 
-iked, ipsecctl, ldapd, ldpd, npppd, ntpd, ospfd, ospf6d, pf, rad, relayd, 
-resolvd, ripd, sasyncd, slaacd, smtpd, snmpd, sshd, tftpd, tftp-proxy.
+- **nsh** is the shell. It is a client of nshd: it sends each command to
+  nshd, and shows what nshd answers. When nshd does not run, nsh can
+  only show its version, and it cannot change the configuration.
+- **nshd** holds the configuration and changes the system. At boot it
+  makes the saved configuration the running configuration. It runs each
+  commit, and it gives each user the permissions of the user's login
+  class. nshd is privilege separated: its parent and its system process
+  run as root, and each of its other processes runs as a user of its own
+  in a chroot(2).
+- **nshdeck** is a web configurator for nshd. It runs behind httpd(8),
+  and it is optional.
+- **bgpnsh** is a BGP looking glass shell for routers that run bgpd(8),
+  with the same user interface as nsh. It is an alternative to
+  bgplgsh(8).
+
+Root and the members of the group nshadmin may use nshd's read-write
+socket, with the permissions of their login class. Any other user may
+use its read-only socket, which answers only the shows that anyone may
+see.
+
+## Managed services
+
+bgpd, cron (root's crontab), dhcpd, dhcpleased, dhcrelay, dvmrpd,
+eigrpd, ftp-proxy, ifstated, inetd, iked, ipsecctl and isakmpd, ldapd,
+ldpd, npppd, ntpd, ospfd, ospf6d, pf, rad, relayd, resolvd, ripd,
+sasyncd, slaacd, smtpd, snmpd, sshd, tftpd and tftp-proxy. nsh also
+keeps the message of the day, /etc/motd.
 
 ---
 
-## License 
+## License
 
-NSH is freely licensed, in the BSD style.
-
-In conjunction with the OpenBSD kernel and the daemons you wish to control,
-you have a fully functioning network appliance type of system.
+nsh is free software, under BSD-style licenses. The COPYRIGHT file has
+the copyright notice of each part.
 
 ---
 
-## NSH Manual
+## Documentation
 
-See [https://github.com/yellowman/nsh/wiki/NSH-Manual-page](https://github.com/yellowman/nsh/wiki/NSH-1.2.x-Manual-Page) 
-or nsh.8 manual for detailed installation instructions and command set.
-
-nsh manual is available on your system shell by simply typing the command:
+`make install` installs the manual pages nsh(8), nshd(8), nshdeck(8)
+and bgpnsh(8). To read nsh's manual page from the system shell:
 
 ```shell
- man nsh
+man nsh
 ```
 
----
+The manual page is also on the project's wiki:
+[https://github.com/yellowman/nsh/wiki/NSH-1.2.x-Manual-Page](https://github.com/yellowman/nsh/wiki/NSH-1.2.x-Manual-Page)
 
-## Manual pages from within NSH
+### Manual pages from within nsh
 
-For your convenience we have included handy manual page search  for commonly 
-used network functionality. 
-
-this feature is available in nsh by simply typing the command:
+nsh's `manual` command shows nsh's manual page. With a term, such as a
+command or a kind of interface, it shows the manual page at that term:
 
 ```shell
 manual [searchterm]
 ```
-E.g. searching vlan functionality 
+
+For example, to read about VLANs:
 
 ```shell
 manual vlan
 ```
 
-The system also gives a list of searchable terms through double tab completion.
+To list the terms, type `manual` and a space, and press Tab twice.
 
 ---
 
-## Other Relevant NSH Documentation
-See the to-do list on https://github.com/users/yellowman/projects/1 for 
-details on implementation status and future ideas.
+## Other documentation
 
-See http://github.com/yellowman/nsh/ for current source code repository.
-See http://www.nmedia.net/nsh/ for example configurations and mailing
-list.
-
-See https://www.youtube.com/watch?v=9T9-v5NLjXk for a BSDCAN 2024 
-Presentation on Supporting Business IT and network needs with OpenBSD and NSH By: Tom Smyth
-
-See https://www.youtube.com/watch?v=WMKxIHaWaG0 for an EurobsdCon 2022 
-Presentation on NSH for network administrators By: Tom Smyth 
+- The source code is at https://github.com/yellowman/nsh/.
+- The to-do list, with what is done and what is planned, is at
+  https://github.com/users/yellowman/projects/1.
+- Example configurations, and the mailing list, are at
+  https://www.nmedia.net/nsh/.
+- Tom Smyth's talk at BSDCan 2024, Supporting Business IT and network
+  needs with OpenBSD and NSH: https://www.youtube.com/watch?v=9T9-v5NLjXk
+- Tom Smyth's talk at EuroBSDCon 2022, NSH for network administrators:
+  https://www.youtube.com/watch?v=WMKxIHaWaG0
 
 ---
 
-## Quickstart Guide for installing and building **nsh** on an OpenBSD system
+## Installing nsh
 
-1. Install OpenBSD on your system  by running the following commands in your system shell
+First install OpenBSD. Then install nsh either from the OpenBSD package
+or from the source code. Run the commands below as root.
 
-2. Install the OpenBSD port of nsh on your system (this will install the latest nsh release version)
+### From the package
+
+The package installs the latest release of nsh:
+
 ```shell
-pkg_add nsh  
+pkg_add nsh
 ```
 
-3. Install git on your system to allow fetching more recent versions of nsh from github
-```shell
-pkg_add git
-```
+### From the source code
 
-4. To download the latest development of nsh use git to download the latest nsh repository
+The source code has the newest development version. nshd needs the
+sqlite3 package, and git fetches the source code:
+
 ```shell
+pkg_add git sqlite3
 git clone https://github.com/yellowman/nsh
-```
-
-5. Change directory to the downloaded nsh directory
-```shell
 cd nsh
-```
-
-6. Run make to build / compile the sources
-```shell
 make
-```
-
-7. Install the compiled nsh binaries and supporting files (you will need root privileges to do this).
-```shell
 make install
 ```
 
-8. To have nsh take over the configuration of a system a number of steps that need to be carried out such as
+`make` builds nsh, nshd, nshdeck and bgpnsh. `make install` installs nsh
+and bgpnsh in /usr/local/bin, nshd and nshdeck in /usr/local/sbin, their
+manual pages in /usr/local/man, and nshdeck's web page in
+/var/www/htdocs/nshdeck. `make static` builds nsh, nshd and bgpnsh
+statically linked.
 
-9. Backup configuration of system, daemons and network in /etc 
+The source code is in these directories:
 
-10. Copy the configuration files to /var/run/example-configfilename.0  (the .0 file extension) implies running in the default rdomain / rtable (rdomain 0)
+- nsh/: the files that only nsh builds
+- nshd/: the files that only nshd builds
+- nshdeck/: nshdeck's files, and its web page in nshdeck/htdocs
+- bgpnsh/: the files that only bgpnsh builds
+- lib/: the files that more than one of the programs builds or includes
+- scripts/: scripts that help to set up a system for nsh
 
-11. save the running config to /etc/nshrc
+---
 
-12. secure the /etc/nshrc file so that world cannot read, write or execute it . 
+## Setting up nshd
 
-13. configure the system to start nshd at boot: create its users and the group nshadmin, install nshd/nshd.rc as /etc/rc.d/nshd and run rcctl enable nshd. nshd boots /etc/nshrc the first time, and the configuration it saves after. Root and the group nshadmin may use nshd's read-write socket, each with the permissions of their login class.
+nshd must run for nsh to configure the system. Run these steps as root.
+
+1. Create nshd's users and the group nshadmin. nshd runs its show,
+   frontend, config and archive processes as users of their own, and
+   runs the programs that need no root as _nshcheck.
+
+   ```shell
+   groupadd nshadmin
+   for u in _nshshow _nshfront _nshconf _nsharc _nshcheck; do
+       useradd -L daemon -d /var/empty -s /sbin/nologin $u
+   done
+   ```
+
+2. Back up the files in /etc that configure the system, the network and
+   the daemons.
+
+3. For each daemon that you use, copy its configuration file to
+   /var/run, where nshd reads it. The copy's name ends in the number of
+   the routing table: .0 for the default routing table. For example:
+
+   ```shell
+   cp /etc/pf.conf /var/run/pf.conf.0
+   cp /etc/ssh/sshd_config /var/run/sshd.conf.0
+   cp /etc/mail/smtpd.conf /var/run/smtpd.conf.0
+   chmod 600 /var/run/pf.conf.0 /var/run/sshd.conf.0 /var/run/smtpd.conf.0
+   ```
+
+   A daemon without a copy in /var/run has no rules in nsh's
+   configuration.
+
+4. Start nshd once by hand, without `-b`, so that it applies no
+   configuration:
+
+   ```shell
+   /usr/local/sbin/nshd
+   ```
+
+5. Run nsh. Check that `show running-config` shows the configuration you
+   expect: the interfaces, the routes and each daemon's rules. Then type
+   `commit`. Outside configure mode, `commit` saves the running
+   configuration as /var/db/nsh/nshrc, the saved configuration.
+
+6. Stop nshd, and have rc(8) start it at each boot. At boot, nshd makes
+   the saved configuration the running configuration.
+
+   ```shell
+   pkill -x nshd
+   cp nshd/nshd.rc /etc/rc.d/nshd
+   chmod 555 /etc/rc.d/nshd
+   rcctl enable nshd
+   rcctl start nshd
+   ```
+
+   nshd.rc is in the nshd directory of the source code.
+
+7. Restart the system, and check that the running configuration is what
+   you expect.
+
+The script scripts/shell/rc.local-nsh-openbsd-integrate.sh does steps 1
+to 6 for you. It backs up each daemon's configuration file in
+/var/nsh/backup/pre-nsh-config and copies it to /var/run, makes nshd's
+users, saves the running configuration, and enables nshd. It asks you
+to confirm before it changes anything. Run it as root, in the
+scripts/shell directory of the source code, then restart the system:
+
 ```shell
-groupadd nshadmin
-for u in _nshshow _nshfront _nshconf _nsharc _nshcheck; do
-	useradd -L daemon -d /var/empty -s /sbin/nologin $u
-done
-```
-
-14. optionally, to configure the system from a web browser, create nshdeck's users, install nshdeck/nshdeck.rc as /etc/rc.d/nshdeck, run rcctl enable nshdeck, and add the location nshdeck(8) shows to httpd.conf(5).
-```shell
-useradd -L daemon -d /var/empty -s /sbin/nologin -G nshadmin _nshweb
-useradd -L daemon -d /var/empty -s /sbin/nologin _nshdeck
-```
-
-  For the users convenience, the above steps (9-13) can be largely automated by running  the **rc.local-nsh-openbsd-integrate.sh** script  in your system shell
-  and following on screen instructions.
-
-- If you have downloaded nsh via git you can run the integration script as follows 
-```shell
-cd nsh
 cd scripts/shell
 sh ./rc.local-nsh-openbsd-integrate.sh
 ```
 
-- If you have installed nsh via the OpenBSD ports package you can run the integration script as follows
+nshd can also take its first saved configuration from /etc/nshrc. When
+nshd boots and there is no saved configuration, it copies /etc/nshrc to
+/var/db/nsh/nshrc. Write the file as `show running-config` shows the
+configuration, and make it readable by root alone:
+
 ```shell
-cd /usr/local/share/exampes/nsh
-cd scripts/shell
-sh ./rc.local-nsh-openbsd-integrate.sh
+chmod 600 /etc/nshrc
 ```
 
-14. once configuration has been imported, restart the system and verify nsh config is running as expected.
+---
 
-15. Setting NSH as the default shell for a user
+## Adding users
 
-- Login as the user
-- locate nsh binary, it is usually in /usr/local/bin/nsh
-- at the command prompt run chsh -s command to set the shell to path to the nsh binary
-by running the following command in your system shell
+Root may do anything in nsh. To let another user use nsh, add a
+`login user` line for the user, with a login class, in configure mode,
+and commit it. nshd then makes the account, with nsh as its shell and
+the group nshadmin.
+
+The line gives the account's password. The simplest way is the word
+`plain-text-password`: nsh asks for the password twice, without showing
+it, and sends nshd the password's bcrypt hash in place of the word.
+
+```shell
+nsh(config-private)#login user nshuser class operator password plain-text-password
+New password:
+Retype new password:
+nsh(config-private)#commit
+```
+
+The line can also give a bcrypt hash that you make yourself, with
+encrypt(1). A file that `nsh -c` loads must give the hash, because nsh
+asks for a password only at a terminal.
+
+```shell
+nsh(config-private)#login user nshuser class operator password $2b$10$...
+```
+
+An account that you make by hand needs the group nshadmin to use nshd,
+and a `login user` line to have a class other than read-only. To add
+such an account to nshadmin, and to make nsh its login shell:
+
+```shell
+usermod -G nshadmin nshuser
+usermod -s /usr/local/bin/nsh nshuser
+```
+
+A user can also make nsh their own login shell with chsh(1), if
+/usr/local/bin/nsh is listed in /etc/shells:
+
 ```shell
 chsh -s /usr/local/bin/nsh
 ```
 
-16. please provide feedback , bug repots and suggestions to the developers on	our mailing list  <nsh@lists.deschutesdigital.com> .
+---
+
+## Setting up nshdeck
+
+nshdeck is optional. To configure the system from a web browser:
+
+1. Create nshdeck's users. _nshweb must be a member of the group
+   nshadmin.
+
+   ```shell
+   useradd -L daemon -d /var/empty -s /sbin/nologin -G nshadmin _nshweb
+   useradd -L daemon -d /var/empty -s /sbin/nologin _nshdeck
+   ```
+
+2. Have rc(8) start nshdeck at each boot. nshdeck.rc is in the nshdeck
+   directory of the source code.
+
+   ```shell
+   cp nshdeck/nshdeck.rc /etc/rc.d/nshdeck
+   chmod 555 /etc/rc.d/nshdeck
+   rcctl enable nshdeck
+   rcctl start nshdeck
+   ```
+
+3. Add nshdeck's locations to httpd.conf(5). This example from
+   nshdeck(8) serves the page at https://router/nshdeck/; use your own
+   server name and TLS certificate:
+
+   ```
+   server "router" {
+       listen on * tls port 443
+       connection max request body 3146752
+       location "/nshdeck/api/*" {
+           fastcgi socket "/run/nshdeck.sock"
+       }
+       location "/nshdeck/*" {
+           root "/htdocs"
+       }
+   }
+   ```
+
+4. Start httpd(8), and have rc(8) start it at each boot:
+
+   ```shell
+   rcctl enable httpd
+   rcctl start httpd
+   ```
+
+Users log in to nshdeck with the name and password of a `login user`
+line. Root may not log in to nshdeck.
+
+---
+
+## Feedback
+
+Please send feedback, bug reports and suggestions to the developers on
+the mailing list: <nsh@lists.deschutesdigital.com>.
