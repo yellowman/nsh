@@ -49,15 +49,11 @@
 /route.c
 /scripts
 /scripts/nshrc
-/scripts/nshrc/enable-sshd.nshrc
-/scripts/nshrc/initial-config.nshrc
 /scripts/nshrc/mg-env-settings
 /scripts/nshrc/test
 /scripts/nshrc/test/basic-show-run.nshrc
 /scripts/nshrc/test/broken-commands.nshrc
-/scripts/nshrc/write-config.nshrc
 /scripts/shell
-/scripts/shell/extensive-nsh-openbsd-integrate.sh
 /scripts/shell/scripts/shell/rc.local-nsh-openbsd-integrate.sh
 /show.c
 /sqlite3.c

@@ -1,3 +1,0 @@
-#!/usr/local/bin/nsh
-enable
-write-config

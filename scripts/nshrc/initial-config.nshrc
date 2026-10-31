@@ -1,5 +1,0 @@
-#!/usr/local/bin/nsh -
-enable
-pf enable
-sshd enable
-write-config
