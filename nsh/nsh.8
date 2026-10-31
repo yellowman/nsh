@@ -2568,7 +2568,7 @@ addresses the bridge has learned.
 nsh> show int bridge0
 % bridge0
   Bridge is up (last change 00:00:21), protocol is up
-  Interface type Ethernet Bridge
+  Interface type Transparent bridge
   0 packets input, 0 bytes, 0 errors, 0 drops
   0 packets output, 0 bytes, 0 errors, 0 unsupported
   Flags:
@@ -4322,8 +4322,8 @@ or
 nsh(config)# route ::/96 ::1 reject
 .Ed
 .El
-.Ss Route Flags
-Flags:
+.Pp
+Route flags:
 .Ic blackhole | cloning | iface | llinfo | nompath\
  | nostatic | proto1 | proto2 | reject
 .Op mtu Ar mtu-bytes
@@ -4384,10 +4384,9 @@ nsh> no editing
 .Tg ksh
 .Tg sh
 .Tg csh
-.Ic nsh>!
-.Ar Cm shell-command
-.Op argument-1
-.Op Ar argument-n
+.Ic \&!
+.Ar command
+.Op Ar argument ...
 .Pp
 Run a command, with its arguments, as the user.
 .Nm
@@ -5959,10 +5958,13 @@ nsh(interface-em0)# monitor
 .Tg wg
 .Op no
 .Cm wgpeer Op Ar public-key
-.Op Cm endpoint Ar endpoint-ip:port | Cm aip Ar allowed-ip/prefix | Cm psk Ar pre-shared-key | Cm pka Ar interval-sec
+.Op Cm endpoint Ar endpoint-ip:port | Cm aip Ar allowed-ip/prefix | Cm psk Ar pre-shared-key | Cm pka Ar interval-sec | Cm description Ar text
 .Pp
 Configure or remove a wireguard peer with the peers publickey.
 The public-key is 32 bytes and base64-encoded.
+.Pp
+.Ic description Ar text
+sets a description of the peer.
 .Pp
 .Ic pka Ar interval-sec
 The persistent keep alive (pka) option sets the interval of keepalive packets
@@ -6126,11 +6128,16 @@ The
 shell escape runs a command as the user, not as root, and needs the
 exec permission.
 .Sh Common interface types
+The
+.Ic show interface
+command names each interface's type.
+These are the common types.
+.Pp
 Packet Filter Logging: This interface is used to pass traffic logged by
 the firewall to software which can record it.
 These interface names start with 'pflog'.
 .Pp
-IPsec Loopback: This interface is used internally in the system to
+IPsec Encapsulation: This interface is used internally in the system to
 pass decapsulated IPsec traffic.
 All traffic from this interface has already been authenticated and
 unencrypted from the IPsec subsystem.
@@ -6142,7 +6149,7 @@ another host or router.
 It follows the RFC1933 tunnelling standard.
 These interface names start with 'gif'.
 .Pp
-Ethernet Bridge: This interface is used to configure layer 2 bridging
+Transparent bridge: This interface is used to configure layer 2 bridging
 between physical and virtual network ports on a system.
 These interface names start with 'bridge'.
 .Pp
@@ -6151,7 +6158,7 @@ Ethernet: This is a physical Ethernet interface, running at 10, 100, or
 These interface names are based on the name of the driver, and vary with
 different Ethernet chip types.
 .Pp
-IEEE 802.1Q Virtual: This is a virtual Ethernet, Token Ring, or FDDI
+IEEE 802.1Q: This is a virtual Ethernet, Token Ring, or FDDI
 interface.
 It uses the IEEE 802.1Q protocol to segment real Ethernet interfaces into
 multiple layer 2 networks.
@@ -6171,7 +6178,7 @@ These interface names start with 'ppp' when referring to a version which
 supports serial and modem connections.
 Other interface types may also implement the Point to Point Protocol.
 .Pp
-IEEE 802.11 Wireless: This interface implements the IEEE 802.11 wireless
+IEEE 802.11: This interface implements the IEEE 802.11 wireless
 LAN protocol.
 Many implementations of this network have little or no security unless used
 with proper encryption such as IPsec.
@@ -6286,11 +6293,7 @@ All traffic out of enc0 is already decrypted and authenticated via IPsec.
 Thus, it is helpful when writing firewall rulesets.
 .Ss ppp (Point to Point Protocol)
 The serial line Point-to-Point protocol uses this interface.
-.Ss sl (Serial Line Interface Protocol)
-The Serial Line Internet Protocol uses this interface.
-.Pp
-tun (Tunnel Interface)
-.Pp
+.Ss tun (Tunnel Interface)
 This is another software loopback mechanism.
 It allows user processes to create their own virtual network interfaces.
 It is used by the PPPoE implementation.
