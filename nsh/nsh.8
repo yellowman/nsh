@@ -398,12 +398,12 @@ permissions of the user's class, as when the user logs in with
 .Xr ssh 1 .
 It never logs in as root, or as any other account with uid 0.
 nshd refuses what a session's class does not allow.
-Where nshd does not run, or the user may not use its socket,
+Where nshd does not run, or the user may not use its read-write socket,
 .Nm
 has only the commands it runs itself, except those that need nshd's
-session or configure; runs only the shows anyone may see; and runs a
-program only for root.
-Where nshd does not run,
+session or configure, and runs a program only for root.
+Of the shows, it runs those that anyone may see, which nshd's read-only
+socket answers; where nshd does not run,
 .Ic show version
 is the only show that works.
 .Pp
@@ -718,7 +718,9 @@ hostname with an argument will set hostname to the argument's value.
 e.g. set hostname to the myfirewallname.com .
 .Bd -literal -offset indent
 nsh(config)#hostname myfirewallname.com
-myfirewallname.com>
+nsh(config)#commit
+% Saving configuration
+myfirewallname.com(config)#
 .Ed
 .El
 .Pp
@@ -849,18 +851,19 @@ Once the rdomain has been initialized (by creating a loopback inside the
  rdomain) the administrator can add routes to the rtable.
 .Bd -literal -offset indent
 nsh(config)#rtable 3 customer label network3
-nsh(rtable 3)>route 0.0.0.0/0 10.255.0.1
+nsh(config-rtable 3)#route 0.0.0.0/0 10.255.0.1
 .Ed
 .It
-One can configure any service or daemon inside that routing domain e.g.
-to setup ssh in rdomain 3
+Most daemons can also run in that routing domain; pf, bgp, ldp, rad,
+ntp, resolv, motd and crontab run only in routing table 0.
+E.g. to set up ssh in rdomain 3:
 .Bd -literal -offset indent
-nsh(rtable 3)>sshd edit
-nsh(rtable 3)>sshd enable
+nsh(config-rtable 3)#sshd edit
+nsh(config-rtable 3)#sshd enable
 .Ed
 .It
-The rtable command also lets any user run diagnostic commands in the
-respective route domain / VRF.
+The rtable command also lets a user whose login class has operate run
+ping and traceroute in the respective route domain / VRF.
 .Bd -literal -offset indent
 nsh>rtable 3
 nsh(rtable 3)>ping 10.255.0.10
@@ -879,12 +882,20 @@ nsh>
 .Tg group
 .Op no
 .Ic group
-.Op Ar group-name
-.Op Cm carpdemote
-.Op demotion-counter
+.Ar group-name
+.Cm carpdemote
+.Op Ar demotion-counter
 .Pp
-Modify group attributes for the group-name named group.
-TBC
+Add
+.Ar demotion-counter ,
+from 0 to 128, or 1 if it is left out, to the carp demotion counter of
+the interface group
+.Ar group-name .
+With
+.Cm no ,
+subtract it.
+This is an operation, which needs operate: it changes the counter at
+once, and it is not part of the configuration.
 .Pp
 .Tg arp
 .Op no
@@ -1300,85 +1311,55 @@ nsh(config)#
 .Pp
 .Ic pf edit
 .Pp
-Open the default editor for the user and allow the user modify and stage
-the firewall configuration.
-The edited ruleset is automatically validated by
+Edit the candidate's firewall rules.
 .Nm
-with
-.Xr pfctl 8
-on exiting the editor.
-If the user entered pf configuration is incorrect on exiting the editor,
-.Nm
-will display a syntax error warning with each line number that fails the
-syntax check.
-.Pp
-E.g. warning displayed by
-.Cm pf edit
-when the incorrect syntax is used.
-.Bd -literal -offset indent
-nsh(config)#pf edit
-/var/run/pf.conf.0:15: syntax error
-/var/run/pf.conf.0:17: syntax error
-.Ed
-Note! firewall configuration changes DO NOT take effect until the
+gets the rules from
+.Xr nshd 8 ,
+opens them in the editor that VISUAL or EDITOR names, and sends them
+back.
+The edit also adds
 .Cm pf reload
-command is excecuted.
-The editor used by
-.Nm
-can be customised to your preferred editor using the
-EDITOR or VISUAL environment variables.
+to the candidate.
+.Xr pfctl 8
+tests the rules at
+.Cm commit
+and
+.Cm commit check ,
+not as the editor exits, and the rules take effect when
+.Cm commit
+succeeds.
 For packet filter configuration syntax, refer to
 .Xr pf.conf 5 .
 .Bd -literal -offset indent
 nsh>!man pf.conf
 nsh(config)#pf edit
+nsh(config)#commit
 .Ed
 .Pp
 .Ic pf check-config
 .Pp
-The
-.Cm pf check-config
-command uses
-.Ox
-.Xr pfctl 8
-to validate the syntax of the staged pf configuration.
-If the staged pf configuration passes the syntax checker, the rules
-will be displayed in order with their rule number.
-If the staged pf configuration fails the syntax checker, the line
-numbers with the syntax errors will be listed.
+Test, with
+.Xr pfctl 8 ,
+the firewall rules that the last
+.Cm commit
+wrote, and display them in order with their rule numbers.
+If the rules fail the test, the numbers of the lines with errors are
+listed.
 .Pp
 .Ic pf reload
 .Pp
-The
+Load, with
+.Xr pfctl 8 ,
+the firewall rules that the last
+.Cm commit
+wrote.
+It does not load the candidate's rules;
+.Cm commit
+does that.
+.Cm pf check-config
+and
 .Cm pf reload
-command uses
-.Ox
-.Xr pfctl 8
-to validate the syntax of the staged pf configuration.
-If the
-.Cm pf edit
-config passes,
-.Nm
-commits the new configuration atomically.
-In other words
-.Cm pf reload
-checks firewall configuration using
-.Ox
-.Xr pfctl 8
-and if the pf configuration passes
-.Nm
-commits the configuration so that it is active in the kernel.
-If the user entered pf configuration is not correct.
-.Nm
-will issue warning listing the line numbers where the syntax is incorrect.
-E.g. Example syntax warning issued by pf reload warning that there is an error
-in lines 15 and 17 of the user entered pf configuration.
-.Bd -literal -offset indent
-nsh(config)#pf reload
-/var/run/pf.conf.0:15: syntax error
-/var/run/pf.conf.0:17: syntax error
-pfctl: Syntax error in config file: pf rules not loaded
-.Ed
+are operations, which need the operate permission.
 .Pp
 .Tg ospf
 .Ic ospf
@@ -1391,11 +1372,17 @@ nsh(config)#ospf enable
 .Ed
 .Pp
 .Ic ospf edit
-Edit the configuration of the OSPF daemon.
-The edited ruleset is automatically validated on saving and exiting the
-editor.
-Note ospfd configuration changes DO NOT take effect until the "ospf reload"
-command is entered.
+Edit the candidate's OSPF configuration, as
+.Cm pf edit
+does.
+.Xr ospfd 8
+tests it at
+.Cm commit
+and
+.Cm commit check .
+.Cm commit
+writes it, and a running ospfd reads it at the next
+.Cm ospf reload .
 The editor used by
 .Nm
 can be customised to your preferred editor using the
@@ -1419,8 +1406,7 @@ nsh(config)#ospf reload
 Configure whether or not
 .Xr ospfd 8
 updates the forwarding information base (the active kernel routing tables).
-this is an active control not a persistent configuration setting.
-.\" TODO rewording attempted
+This is an operation, not a configuration setting.
 See "fib-update" in
 .Xr ospfd.conf 5
 for more information.
@@ -1670,9 +1656,9 @@ nsh(config)#sasync
 .Tg dhcpd
 .Tg dhcp
 .Ic dhcp
-.Op Cm  \&? | enable | disable | edit | restart
+.Op Cm  \&? | enable | disable | edit | config-test | restart
 .Pp
-Enable, disable, configure, or restart the
+Enable, disable or configure the
 .Xr dhcpd 8
 Dynamic Host Configuration Protocol daemon.
 This daemon acts as a DHCP server.
@@ -1684,9 +1670,18 @@ command, the configuration syntax of
 .Ic dhcp
 daemon is documented in
 .Xr dhcpd.conf 5 .
-Configuration file changes will not take effect until
-.Xr dhcpd 8
-is restarted.
+.Cm config-test
+tests the rules that the last
+.Cm commit
+wrote.
+In configure,
+.Cm dhcp restart
+is the same as
+.Cm dhcp enable .
+A running dhcpd does not read changed rules: to restart it, commit
+.Cm dhcp disable ,
+then commit
+.Cm dhcp enable .
 .Pp
 .Tg snmpd
 .Tg snmp
@@ -2052,21 +2047,19 @@ See the
 .Xr crontab 5
 man page for information about configuration file syntax.
 .Pp
-.Nm
-stores a private copy of the root user's crontab in
-.Pa /var/run/crontab.0 .
-The
 .Cm crontab edit
-command edits this file and then installs it to the system by running the
-.Xr crontab 1
-command.
-.Pp
-The
+edits the candidate's crontab, and adds
 .Cm crontab install
-command skips editing but otherwise has the same effect.
-This command can be used to overwrite the system crontab in case it has
-become out of sync with the copy managed by
-.Nm .
+to the candidate.
+.Cm commit
+writes the crontab to
+.Pa /var/run/crontab.0
+and installs it with
+.Xr crontab 1 .
+Changing root's crontab needs the admin permission.
+.Cm crontab install
+alone changes nothing: in configure, it only checks that the candidate
+has a crontab.
 .Pp
 .Tg scheduler
 .Ic scheduler Op Cm edit | install
@@ -2111,14 +2104,16 @@ Sep  8 15:05:37 tobsd tom: interface drops due to unprotected devices
 .Pp
 .Tg reboot
 .Tg restart
-.Tg reload
 .Ic reboot
 .Pp
 Restart the system.
 .Nm
 when processing the command will warn the user if there are
 unsaved changes to the running-config.
-The user will be prompted to confirm the reboot in any case.
+In an interactive session, the user is asked to confirm the reboot.
+Otherwise,
+.Nm
+refuses to reboot while there are unsaved changes.
 The command needs the operate permission (see
 .Sx Prompts, login classes and permissions ) .
 .Bl -dash
@@ -2133,41 +2128,21 @@ Proceed with reboot? [yes/no]
 .Ed
 .El
 .Pp
-.Tg reboot
-.Tg restart
-.Tg reload
-.Ic reload
-.Pp
-an alias for the reboot command above.
-.Nm
-when processing the command will warn the user if there are
-unsaved changes to the running-config.
-The user will be prompted to confirm the reboot in any case.
-The command needs the operate permission (see
-.Sx Prompts, login classes and permissions ) .
-.Bl -dash
-.It
-E.g. restart the system
-.Bd -literal -offset indent
-nsh(config)#reload
-% WARNING: The running configuration contains unsaved changes!
-% The 'show diff-config' command will display unsaved changes.
-% The 'commit' command will save changes to /var/db/nsh/nshrc.
-Proceed with reboot? [yes/no]
-.Ed
-.El
-.Pp
 .Tg halt
 .Ic halt
 Shut down the system.
 The system will halt and then wait for a key to be pressed on the
 console before rebooting.
+As with
+.Ic reboot ,
+the user is asked to confirm.
 It needs the operate permission.
 .Bl -dash
 .It
 e.g. shutdown the system
 .Bd -literal -offset indent
 nsh>halt
+Proceed with shutdown? [yes/no] yes
 % Shutdown initiated
 .Ed
 .El
@@ -2176,12 +2151,16 @@ nsh>halt
 .Ic powerdown
 Shut down the system and then turn off power.
 Restarting the system will require access to the power-on button.
+As with
+.Ic reboot ,
+the user is asked to confirm.
 It needs the operate permission.
 .Bl -dash
 .It
 e.g. power the system down
 .Bd -literal -offset indent
 nsh>powerdown
+Proceed with powerdown? [yes/no] yes
 % Shutdown initiated
 .Ed
 .El
@@ -2325,8 +2304,8 @@ e.g. commit, and roll back unless it is confirmed within 5 minutes
 nsh(config-private)#commit confirmed 5
 % Commit within 5 minutes to keep this, or it is rolled back
 nsh(config-private)#commit
-% Commit confirmed
 % Saving configuration
+% Commit confirmed
 .Ed
 .El
 .Pp
@@ -2460,9 +2439,22 @@ Where
 .Nm
 has a session with
 .Xr nshd 8 ,
-nshd's system process runs a daemon's control program for a show,
-except systat for system-stats, and reads the DHCP leases.
+nshd's system process runs a daemon's control program for a show, such
+as
+.Cm show bgp
+or
+.Cm show pf ,
+and reads the DHCP leases.
 Their output is not paged, and Control-C stops it.
+Without a session,
+.Nm
+refuses these shows.
+For
+.Cm show system-stats ,
+.Nm
+runs
+.Xr systat 1
+itself, which needs the exec permission.
 .Pp
 .Ic show hostname
 .Pp
@@ -2667,7 +2659,7 @@ link-local
 Only a session with
 .Xr nshd 8 ,
 which can ask nshd's system process, sees what configured an IPv4
-address.
+address; for anyone else, the address's type is empty.
 .Pp
 E.g show all ipv4 and IPv6 adddresses on the system
 .Bd -literal -offset indent
@@ -3066,9 +3058,10 @@ Display the status of
 .Xr pf 4
 .Ox
 Packet Filter firewall.
-.Nm uses
+.Xr nshd 8 Ns 's
+system process runs
 .Xr pfctl 8
-with the -s (show) command with modifier arguments to display various aspects
+with the -s (show) option, and a modifier, to display each aspect of
 the current pf status on the system.
 .Bd -literal -offset indent
 nsh>show pf
@@ -3998,9 +3991,11 @@ Display each daemon
 starts, its program, and whether it runs, in routing table 0 and in
 each other routing table its program runs in.
 For a daemon that runs, show how many of its processes run there.
-pf runs when it is enabled, and only root, or
+pf runs when it is enabled.
+Whether it is enabled is shown only to a session with
 .Xr nshd 8 ,
-can see whether it is.
+which can ask nshd's system process; for anyone else, pf's State is
+.Sq - .
 .Bd -literal -offset indent
 nsh>show daemons
 Daemon       Program      Rtable  State
@@ -4018,6 +4013,7 @@ managed by
 See the
 .Xr crontab 5
 manual page for information about scheduling rules syntax.
+It needs the operate permission.
 .Pp
 .Ic show scheduler
 .Pp
@@ -4027,20 +4023,20 @@ command described above.
 .Pp
 .Ic show running-config
 .Pp
-Display the current running configuration on the system, including
-interface and bridge configurations, routes, the system hostname, firewall
-rules, and other information compiled by
-.Nm ,
-as
+Display the running configuration, as
 .Xr nshd 8
-reads it.
+builds it from the system: interface and bridge configuration, routes,
+the hostname, firewall rules and the rest.
 .Pp
 .Ic show startup-config
 .Pp
-Display the startup configuration on the system, read from nshrc,
-including interface and bridge configuration, routes, the system hostname,
-firewall rules, and other information compiled by
-.Nm .
+Display the saved configuration,
+.Pa /var/db/nsh/nshrc ,
+which
+.Cm commit
+writes and
+.Xr nshd 8
+applies at boot.
 .Pp
 .Ic show diff-config
 .Pp
@@ -4406,20 +4402,18 @@ nsh>no editing
 .Op argument-1
 .Op Ar argument-n
 .Pp
-Invoke a shell or run an entered executable with arguments if required.
-Where the user may use
-.Xr nshd 8 Ns 's
-socket, the shell or executable runs as the user.
-The active users login shell is the shell that is invoked by this feature.
+Run a command, with its arguments, as the user.
+.Nm
+runs the rest of the line with
+.Pa /bin/sh Fl c ,
+in the routing table that
+.Nm
+uses; to start an interactive shell, name it, as in
+.Ic \&!ksh .
 It needs the exec permission (see
 .Cm login class ) .
-If ! is entered without arguments in privilaged mode or global config mode,
-no operation will be carried out and the user will be returned to the same
-.Nm
-command prompt.
-If ! is entered without arguments in interface or bridge config mode the,
-no operation will be carried out but the user will be returned to the global
-configuration mode.
+If ! is entered without a command, nothing is run, and the prompt does
+not change.
 This is to facilitate users interactively copying and pasting
 .Nm
 configurations between devices which would contain the "!" spacing character.
@@ -4446,7 +4440,7 @@ kshprompt#
  |\&?
 .Pp
 Modify system kernel ip processing parameters or features.
-(requires privileged mode).
+This command is configuration, so it needs the configure permission.
 .Pp
 All commands in this category allow the 'no' modifier to disable the option.
 .Bd -literal -offset indent
@@ -5171,9 +5165,12 @@ nsh(interface-iwn0)#txpower 10
 .Ic bssid
 .Ar mac-address
 .Pp
-Set or remove the configured BSSID of a radio interface to a specific
-MAC address, the mac-address should be entered in semi colon format
-e.g. 12:34:56:78:9a:bc.
+Set the BSSID of a radio interface at once.
+This is an operation, which needs operate; it is not part of the
+configuration.
+.Cm no bssid
+returns to automatic selection.
+Enter the address with colons, e.g. 12:34:56:78:9a:bc.
 .Pp
 E.g. set the bssid of radio interface iwn0
 .Bd -literal -offset indent
@@ -5867,16 +5864,10 @@ The command
 without futher arguments removes all IPv6 addresses from the interface,
 including link-local addresses.
 .Pp
-The command
+In configure,
 .Cm inet6
-without further arguments enables link-local addresses on the interface.
-.Pp
-E.g. to enable ipv6 link local address on em0
-.Bd -literal -offset indent
-nsh(config)#interface em0
-
-nsh(interface-em0)#inet6
-.Ed
+without an address is refused, because it is not saved in the
+configuration.
 .Pp
 .Op no
 .Ic inet6
