@@ -1,7 +1,6 @@
 #!/bin/sh -
-#This script is less invasive and allows integration of nsh
-#with OpenBSD, config files are copied as opposed to moved
-#to import configuration.
+#This script integrates nsh with OpenBSD. To import the daemons'
+#configuration, it copies their files; it does not move them.
 #With current nsh setup it is possible that a user would be confused
 #between default locations of daemon config files and the nsh config file
 #locations.
@@ -22,10 +21,11 @@ then
 else
         #ask user do they want to continue
         #default is No
-        echo "This script is built to suit a typical OpenBSD network setup"
-        echo "If you have an unusual config, e.g. multiple routing domains"
-        echo "The import script will require user verification"
-        echo "This script is designed to assist a user with using nsh on"
+        echo "This script copies the daemons' configuration files from /etc"
+        echo "to /var/run, where nshd reads them, and sets up nshd. It suits a"
+        echo "typical OpenBSD system with one routing domain. With an unusual"
+        echo "configuration, such as several routing domains, read the script"
+        echo "before you continue."
         read input?"Do you want to continue? (Yes/No) [${dflt}] "
 
         if [ -z "${input}" ]; then input="${dflt}"; fi
@@ -229,7 +229,7 @@ else
                         echo daemons that are started using rcctl openBSD will continue to use >>/var/run/motd.0
                         echo the config files located in \/etc\/ >>/var/run/motd.0
                         echo daemons started and managed by nsh will >>/var/run/motd.0
-                        echo use the files located in \var/\run\/ >>/var/run/motd.0
+                        echo use the files located in \/var\/run\/ >>/var/run/motd.0
                         chown root /var/run/motd.0
                         chgrp wheel /var/run/motd.0
                         chmod 664 /var/run/motd.0
