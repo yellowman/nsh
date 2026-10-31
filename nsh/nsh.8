@@ -6070,18 +6070,13 @@ interface.
 nsh(interface-de0)#shutdown
 nsh(interface-de0)#no shutdown
 .Ed
-.Sh Section 5 > Bridge mode commands
+.Sh Bridge mode commands
 see the following man pages for information
 .Pp
 !man bridge
 .Pp
 !man ifconfig
-.Sh Section 6 > PF mode commands
-see the following man pages for information
-.Pp
-!man pfctl
-!man pf.conf
-.Sh Section 7 Allowing users to run NSH
+.Sh Allowing users to run NSH
 The design of
 .Ox
 requires root privileges to administer the network stack.
@@ -6109,6 +6104,15 @@ line to have a class other than read-only:
 usermod -G nshadmin nshuser
 usermod -s /usr/local/bin/nsh nshuser
 .Ed
+.Pp
+A user can make
+.Nm
+their own login shell with
+.Xr chsh 1 ,
+if
+.Pa /usr/local/bin/nsh
+is listed in
+.Pa /etc/shells .
 .Pp
 Users with regular shell access can also start
 .Nm
@@ -6261,8 +6265,6 @@ different wireless chip types.
 .Ic MULTICAST
 		This interface supports multicast
 .El
-.Sh ALTQ notes
-TODO
 .Sh Interface-specific notes
 There are several special interfaces.
 .Ss gre
@@ -6327,21 +6329,16 @@ This product includes software developed by Jason L. Wright
 This product includes software developed by the
 .Nx
 Foundation Incorporated and its contributors.
-.Pp
-.Ev EDITOR
-was used to specify the name of an (old-style) line editor, such as
-.Xr ed 1 ,
-and
-.Ev VISUAL
-was used to specify a (new-style) screen editor, such as
-.Xr vi 1 .
-Hence if
-.Ev VISUAL
-is set, it overrides
-.Ev EDITOR .
-TODO
 .Sh ENVIRONMENT
 .Bl -tag -width NSH_MANUAL_PAGE
+.It Ev EDITOR , VISUAL
+The editor for a daemon's
+.Cm edit :
+VISUAL if it is set, else EDITOR, else
+.Pa /usr/bin/vi .
+.It Ev HOME
+The directory that holds
+.Pa ~/.nshenv .
 .It Ev NSH_MANUAL_PAGE
 The manual page displayed by the built-in
 .Cm manual
@@ -6353,7 +6350,7 @@ Defaults to
 .Pa /usr/local/man/man8/nsh.8
 .El
 .Sh FILES
-.Bl -tag -width /etc/suid_profile -compact
+.Bl -tag -width /var/run/nshd.ro.sock -compact
 .It Pa /etc/nshrc
 the configuration that
 .Xr nshd 8
@@ -6374,12 +6371,17 @@ the login classes and users in the running configuration, and the
 accounts that
 .Xr nshd 8
 made
-.It Pa ~/.profile
-user's login profile
+.It Pa /var/run/nshd.sock
+nshd's read-write socket, for root and the group nshadmin
+.It Pa /var/run/nshd.ro.sock
+nshd's read-only socket, for anyone
 .It Pa /etc/shells
-shell database
-.It Pa /etc/suid_profile
-privileged shell profile
+must list
+.Pa /usr/local/bin/nsh
+for a user to make
+.Nm
+their login shell with
+.Xr chsh 1
 .It Pa ~/.nshenv
 If this file exists and is owned by the invoking user then
 .Nm
@@ -6395,6 +6397,7 @@ option is used.
 .El
 .Sh SEE ALSO
 .Bd -ragged -offset indent
+.Xr chsh 1 ,
 .Xr ed 1 ,
 .Xr mg 1 ,
 .Xr stty 1 ,
@@ -6415,16 +6418,16 @@ option is used.
 .Xr dhcpleased 8 ,
 .Xr dvmrpd 8 ,
 .Xr eigrpd 8 ,
-.Xr ftpd 8 ,
 .Xr ftp-proxy 8 ,
 .Xr ifstated 8 ,
 .Xr iked 8 ,
 .Xr inetd 8 ,
 .Xr ipsecctl 8 ,
-.Xr ldapd 8
+.Xr ldapd 8 ,
 .Xr ldpd 8 ,
 .Xr npppd 8 ,
 .Xr nshd 8 ,
+.Xr nshdeck 8 ,
 .Xr ntpd 8 ,
 .Xr ospf6d 8 ,
 .Xr ospfd 8 ,
@@ -6440,6 +6443,7 @@ option is used.
 .Xr sshd 8 ,
 .Xr tftp-proxy 8 ,
 .Xr tftpd 8 ,
+.Xr usermod 8
 .Ed
 .Pp
 .Rs
