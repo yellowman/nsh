@@ -124,8 +124,9 @@ make install
 
 `make` builds nsh, nshd, nshdeck and bgpnsh. `make install` installs nsh
 and bgpnsh in /usr/local/bin, nshd and nshdeck in /usr/local/sbin, their
-manual pages in /usr/local/man, and nshdeck's web page in
-/var/www/htdocs/nshdeck. `make static` builds nsh, nshd and bgpnsh
+manual pages in /usr/local/man, nshdeck's web page in
+/var/www/htdocs/nshdeck, and the rc.d(8) scripts that start nshd and
+nshdeck in /etc/rc.d. `make static` builds nsh, nshd and bgpnsh
 statically linked.
 
 The source code is in these directories:
@@ -135,6 +136,7 @@ The source code is in these directories:
 - nshdeck/: nshdeck's files, and its web page in nshdeck/htdocs
 - bgpnsh/: the files that only bgpnsh builds
 - lib/: the files that more than one of the programs builds or includes
+- rc.d/: the rc.d(8) scripts that start nshd and nshdeck
 - scripts/: scripts that help to set up a system for nsh
 
 ---
@@ -188,13 +190,9 @@ nshd must run for nsh to configure the system. Run these steps as root.
 
    ```shell
    pkill -x nshd
-   cp nshd/nshd.rc /etc/rc.d/nshd
-   chmod 555 /etc/rc.d/nshd
    rcctl enable nshd
    rcctl start nshd
    ```
-
-   nshd.rc is in the nshd directory of the source code.
 
 7. Restart the system, and check that the running configuration is what
    you expect.
@@ -278,12 +276,9 @@ nshdeck is optional. To configure the system from a web browser:
    useradd -L daemon -d /var/empty -s /sbin/nologin _nshdeck
    ```
 
-2. Have rc(8) start nshdeck at each boot. nshdeck.rc is in the nshdeck
-   directory of the source code.
+2. Have rc(8) start nshdeck at each boot:
 
    ```shell
-   cp nshdeck/nshdeck.rc /etc/rc.d/nshdeck
-   chmod 555 /etc/rc.d/nshdeck
    rcctl enable nshdeck
    rcctl start nshdeck
    ```

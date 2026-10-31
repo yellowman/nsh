@@ -1,0 +1,27 @@
+#!/bin/ksh
+#
+# rc.d(8) script for nshd(8). make install installs it as /etc/rc.d/nshd.
+# To start nshd now and at each boot:
+#   rcctl enable nshd
+#   rcctl start nshd
+#
+# With -b, nshd makes the saved configuration the running configuration,
+# and returns when that is done: 0 if it worked, else 1. Started again
+# during the same boot of the system, it does this again only if the
+# first time did not finish or failed.
+#
+# nshd starts as root and does its own privilege separation, so there is
+# no daemon_user. It forks into the background itself, so rc_bg stays
+# off. Its parent process renames itself "nshd: parent", so pexp names
+# that, and rcctl check, stop and restart can find it.
+
+daemon="/usr/local/sbin/nshd"
+daemon_flags="-b"
+
+. /etc/rc.d/rc.subr
+
+# rc.subr sets pexp from daemon and daemon_flags, so set it after
+pexp="nshd: parent"
+rc_reload=NO
+
+rc_cmd $1

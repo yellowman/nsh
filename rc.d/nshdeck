@@ -1,0 +1,25 @@
+#!/bin/ksh
+#
+# rc.d(8) script for nshdeck(8). make install installs it as
+# /etc/rc.d/nshdeck. To start nshdeck now and at each boot:
+#   rcctl enable nshdeck
+#   rcctl start nshdeck
+#
+# nshdeck needs the users _nshweb, in the group nshadmin, and _nshdeck.
+# httpd(8) connects to it on /var/www/run/nshdeck.sock. nshdeck connects
+# to nshd for each user who logs in, so nshd must run too.
+#
+# nshdeck starts as root and does its own privilege separation, so there
+# is no daemon_user. It forks into the background itself, so rc_bg stays
+# off. Its parent process renames itself "nshdeck: parent", so pexp names
+# that, and rcctl check, stop and restart can find it.
+
+daemon="/usr/local/sbin/nshdeck"
+
+. /etc/rc.d/rc.subr
+
+# rc.subr sets pexp from daemon and daemon_flags, so set it after
+pexp="nshdeck: parent"
+rc_reload=NO
+
+rc_cmd $1

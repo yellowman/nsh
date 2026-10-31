@@ -94,7 +94,6 @@
 /nshd/nopt.c
 /nshd/nshd.8
 /nshd/nshd.c
-/nshd/nshd.rc
 /nshd/passwd.c
 /nshd/pflow.c
 /nshd/pfsync.c
@@ -146,8 +145,10 @@
 /nshdeck/nshdeck.8
 /nshdeck/nshdeck.c
 /nshdeck/nshdeck.h
-/nshdeck/nshdeck.rc
 /nshdeck/sessions.c
+/rc.d
+/rc.d/nshd
+/rc.d/nshdeck
 /scripts
 /scripts/kernscan.pl
 /scripts/nshrc

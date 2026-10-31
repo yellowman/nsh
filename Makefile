@@ -29,4 +29,12 @@ dist: clean
 	diff -u ${.CURDIR}/nsh-dist.txt ${.CURDIR}/nsh-dist.txt.new
 	rm ${.CURDIR}/nsh-dist.txt.new
 
+# the rc.d(8) scripts that start nshd and nshdeck
+RCDIR?=/etc/rc.d
+
+afterinstall:
+	${INSTALL} -d -o root -g wheel -m 755 ${DESTDIR}${RCDIR}
+	${INSTALL} -c -o root -g wheel -m 555 ${.CURDIR}/rc.d/nshd \
+	    ${.CURDIR}/rc.d/nshdeck ${DESTDIR}${RCDIR}
+
 .include <bsd.subdir.mk>

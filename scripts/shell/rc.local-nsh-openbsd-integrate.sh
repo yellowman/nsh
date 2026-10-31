@@ -293,7 +293,7 @@ else
                 fi
                 #rc starts nshd at each boot, and nshd then applies the
                 #saved configuration
-                cp ../../nshd/nshd.rc /etc/rc.d/nshd
+                cp ../../rc.d/nshd /etc/rc.d/nshd
                 chmod 555 /etc/rc.d/nshd
                 rcctl enable nshd
                 echo Restart the system, and check that nsh shows the
