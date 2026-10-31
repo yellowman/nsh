@@ -5187,6 +5187,71 @@ nsh(interface-iwn0)# bssid 12:34:56:78:90:12
 .Ed
 .Pp
 .Op no
+.Ic apn
+.Ar access-point-name
+.Pp
+Set or remove the Access Point Name of a
+.Xr umb 4
+mobile broadband interface.
+.Bd -literal -offset indent
+nsh(interface-umb0)# apn internet
+.Ed
+.Pp
+.Op no
+.Ic setpin
+.Ar pin
+.Pp
+Set or remove the PIN that unlocks the SIM card of a
+.Xr umb 4
+interface.
+The PIN is kept in the configuration, as typed.
+.Pp
+.Ic setpuk
+.Ar puk new-pin
+.Pp
+Unlock the blocked SIM card of a
+.Xr umb 4
+interface with its PUK, and give the card a new PIN.
+.Pp
+.Ic chgpin
+.Ar old-pin new-pin
+.Pp
+Change the PIN of the SIM card of a
+.Xr umb 4
+interface for good.
+.Cm setpuk
+and
+.Cm chgpin
+change the SIM card at once: they are operations, which need operate,
+and they are not part of the configuration.
+.Pp
+.Op no
+.Ic class
+.Ar class Ns Op , Ns Ar class ...
+.Pp
+Set the preferred cell classes of a
+.Xr umb 4
+interface, as a list separated by commas: the classes that
+.Xr ifconfig 8
+names, 2g, 3g, 4g, or none.
+With
+.Cm no ,
+no class is preferred.
+.Bd -literal -offset indent
+nsh(interface-umb0)# class 4g,3g
+.Ed
+.Pp
+.Op no
+.Ic roaming
+.Pp
+Allow a
+.Xr umb 4
+interface to send data while it roams on another provider's network, or
+with
+.Cm no ,
+refuse it.
+.Pp
+.Op no
 .Ic media
 .Op type
 .Op instance
@@ -5254,6 +5319,24 @@ e.g to set vr0 interface to full-duplex mode:
 nsh(interface-vr0)# mediaopt full-duplex
 
 nsh(interface-vr0)# no mediaopt full-duplex
+.Ed
+.Pp
+.Op no
+.Ic pppoe
+.Op Cm dev Ar ethernet-interface
+.Op Cm ac Ar access-concentrator
+.Op Cm svc Ar service
+.Pp
+Set the parameters of a
+.Xr pppoe 4
+interface: the Ethernet interface that carries the PPPoE session, and,
+where they must be named, the access concentrator and the service.
+At least one is needed.
+.Cm no pppoe
+removes them.
+.Bd -literal -offset indent
+nsh(config)# interface pppoe0
+nsh(interface-pppoe0)# pppoe dev em0
 .Ed
 .Pp
 .Op no
@@ -5397,6 +5480,32 @@ E.g. To connect pair1 and pair2 interfaces with a virtual patch cable.
 nsh(config)# interface pair1
 
 nsh(interface-pair1)# patch pair2
+.Ed
+.Pp
+.Op no
+.Ic trunkport
+.Ar interface-name ...
+.Pp
+Add the named interfaces to a
+.Xr trunk 4
+interface as its ports, or with
+.Cm no ,
+remove them.
+.Pp
+.Op no
+.Ic trunkproto
+.Ar protocol
+.Pp
+Set the protocol of a
+.Xr trunk 4
+interface: roundrobin, failover, lacp, loadbalance, broadcast or none.
+With
+.Cm no ,
+the protocol is roundrobin, the default.
+.Bd -literal -offset indent
+nsh(config)# interface trunk0
+nsh(interface-trunk0)# trunkport em0 em1
+nsh(interface-trunk0)# trunkproto lacp
 .Ed
 .Pp
 .Op no
