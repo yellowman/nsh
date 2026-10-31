@@ -60,6 +60,8 @@
 
 #include <errno.h>
 #include <limits.h>
+#include <pwd.h>
+#include <readpassphrase.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -81,6 +83,7 @@ static int	run_code(char **, int, struct ghs *, int, char **, int);
 static int	run_own(char *, int, int, char **);
 static int	run_op(char *, int, int, char **, int);
 static int	rules_edit(char *);
+static int	login_line(int, char **, char *);
 static void	rows_ask(void);
 static int	nsh_exit(int, char **, ...);
 static int	nsh_rtable(int, char **, ...);
@@ -315,6 +318,8 @@ run(int argc, char **argv, char *text)
 	case RUN_NSH:
 		return run_own(g->name, inif, argc, argv);
 	case RUN_LINE:
+		if (strcmp(g->name, "login") == 0)
+			return login_line(argc, argv, text);
 		return nshd_line(text);
 	case RUN_OP:
 		return run_op(g->name, inif, argc, argv, no);
@@ -450,6 +455,58 @@ rules_edit(char *daemon)
 	unlink(path);
 	rmdir(dir);
 	return ret;
+}
+
+/*
+ * A login line, sent to nshd as text.  If it is a login user line whose
+ * password is plain-text-password, as Junos takes one, nsh asks for the
+ * password twice, without echo, and sends its bcrypt hash in place of
+ * plain-text-password
+ */
+static int
+login_line(int argc, char **argv, char *text)
+{
+	char pw[_PASSWORD_LEN], again[_PASSWORD_LEN];
+	char hash[_PASSWORD_LEN], buf[sizeof(line)];
+	int i, r = -1;
+
+	if (argc != 7 || !isprefix(argv[1], "user") ||
+	    !isprefix(argv[5], "password") ||
+	    !isprefix(argv[6], "plain-text-password"))
+		return nshd_line(text);
+	if (readpassphrase("New password: ", pw, sizeof(pw),
+	    RPP_REQUIRE_TTY) == NULL ||
+	    readpassphrase("Retype new password: ", again, sizeof(again),
+	    RPP_REQUIRE_TTY) == NULL) {
+		if (errno == ENOTTY)
+			printf("%% login user %s: nsh asks for a "
+			    "plain-text-password only at a terminal\n",
+			    argv[2]);
+		else
+			printf("%% login user %s: %s\n", argv[2],
+			    strerror(errno));
+	} else if (strcmp(pw, again) != 0)
+		printf("%% login user %s: the passwords do not match\n",
+		    argv[2]);
+	else if (pw[0] == '\0')
+		printf("%% login user %s: the password is empty\n", argv[2]);
+	else if (crypt_newhash(pw, "bcrypt,a", hash, sizeof(hash)) == -1)
+		printf("%% login user %s: crypt_newhash: %s\n", argv[2],
+		    strerror(errno));
+	else {
+		buf[0] = '\0';
+		for (i = 0; i < 6; i++) {
+			strlcat(buf, argv[i], sizeof(buf));
+			strlcat(buf, " ", sizeof(buf));
+		}
+		if (strlcat(buf, hash, sizeof(buf)) >= sizeof(buf))
+			printf("%% Input exceeds permitted length\n");
+		else
+			r = nshd_line(buf);
+	}
+	explicit_bzero(pw, sizeof(pw));
+	explicit_bzero(again, sizeof(again));
+	return r;
 }
 
 /* exit: leave nshd's configure */

@@ -746,7 +746,7 @@ has all five.
 .Pp
 .Op no
 .Ic login user Ar name Cm class Ar class
-.Op Cm password Ar hash
+.Op Cm password Ar hash | Cm plain-text-password
 .Pp
 Give the account
 .Ar name
@@ -762,6 +762,16 @@ as its shell, and the group nshadmin, so that it can use nshd.
 The hash is a bcrypt hash, as
 .Xr encrypt 1
 makes.
+In place of the hash, the word
+.Cm plain-text-password
+has
+.Nm
+ask for the password twice, without showing it, and send the
+password's bcrypt hash in place of the word, as Junos does.
+Only a line typed in
+.Nm
+at a terminal may say
+.Cm plain-text-password .
 Removing the line deletes an account that nshd made, but keeps its
 home directory.
 .Pp
@@ -778,6 +788,16 @@ e.g. Let alice, who has no account, operate and configure the system:
 .Bd -literal -offset indent
 nsh(config)#login class netops view operate configure
 nsh(config)#login user alice class netops password $2b$10$kKSJFDd....
+.Ed
+.It
+e.g. Let bob, who has no account, operate the system, with a password
+that
+.Nm
+asks for:
+.Bd -literal -offset indent
+nsh(config)#login user bob class operator password plain-text-password
+New password:
+Retype new password:
 .Ed
 .El
 .Pp

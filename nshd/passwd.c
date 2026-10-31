@@ -152,6 +152,8 @@ login_usage(void)
 	printf("%% login class <name> [view] [operate] [configure] [admin] "
 	    "[exec]\n");
 	printf("%% login user <name> class <class> [password <hash>]\n");
+	printf("%% login user <name> class <class> password "
+	    "plain-text-password\n");
 	printf("%% no login class <name>\n");
 	printf("%% no login user <name>\n");
 	return -1;
@@ -500,6 +502,13 @@ login_user(int set, int argc, char **argv)
 		return -1;
 	if (argc == 7) {
 		hash = argv[6];
+		/* nsh asks for it, and sends its hash in its place */
+		if (isprefix(hash, "plain-text-password")) {
+			printf("%% login user %s: give the password's "
+			    "hash; only a line typed in nsh may say "
+			    "plain-text-password\n", name);
+			return -1;
+		}
 		if (!validate_cpass("blowfish", hash))
 			return -1;
 	}
