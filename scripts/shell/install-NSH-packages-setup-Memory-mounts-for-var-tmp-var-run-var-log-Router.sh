@@ -10,7 +10,8 @@
 # 5. runs the nsh integration script so that the OpenBSD box is
 #    fully managed using nsh.
 # 6. turns off sndiod as it is not used on a router typically
-# 7. sets nsh as the default shell for the user "fireman" Change to suit your needs
+# 7. lets the user "fireman" configure the system with nsh. Change the
+#    user to suit your needs
  
 
 dflt='No'
@@ -41,13 +42,14 @@ else
 			#on packages that are useful to include
 			#update existing / installed packages
 			pkg_add -u	
-			#network shell
-			pkg_add nsh-1.2.3-static
+			#nshd, which is built below, needs sqlite3
+			pkg_add sqlite3
 			#install game of trees git software 
 			pkg_add got			
 			#install git 
 			pkg_add git
-			#install active network diagnostic tools 				pkg_add mtr-0.95v0	
+			#install active network diagnostic tools
+			pkg_add mtr-0.95v0
 			pkg_add tcptraceroute
 			pkg_add fping
 			pkg_add hping
@@ -122,15 +124,43 @@ else
 			sed -i 's/ffs rw,nodev,nosuid 1 2/ffs rw,nodev,nosuid,sync,noatime 1 2/' /etc/fstab
 			#mount as memory filesystems directories with regularly written / updated files
 			echo swap \/tmp mfs rw,nosuid,noexec,nodev,\-s\=262144 0 0 >>/etc/fstab
-			echo swap \/var\/log mfs rw,nosuid,noexec,nodev,\-s\=524288,\-P\=\/persist\-fs\/var\/log 0 0 >>/etc/fstab				echo swap \/var\/run mfs rw,nosuid,noexec,nodev,\-s\=262144,\-P=\/persist\-fs\/var\/run 0 0 >>/etc/fstab
+			echo swap \/var\/log mfs rw,nosuid,noexec,nodev,\-s\=524288,\-P\=\/persist\-fs\/var\/log 0 0 >>/etc/fstab
+			echo swap \/var\/run mfs rw,nosuid,noexec,nodev,\-s\=262144,\-P=\/persist\-fs\/var\/run 0 0 >>/etc/fstab
 			echo swap \/dev mfs rw,nosuid,noexec,\-P=\/persist\-fs\/dev,\-i\=2048,\-s\=32768 0 0 >>/etc/fstab
-			#change default shell for user fireman 
-			chsh -s /usr/local/bin/nsh fireman
-			#call these next two commands to integrate NSHell with openBSD   
-			cd /usr/local/share/examples/nsh/shell
-			#call this to integrate NSHell with openBSD 
-			sh  rc.local-nsh-openbsd-integrate.sh  				
+			#integrate NSHell with openBSD; the script runs in
+			#the scripts/shell directory of nsh's source code
+			cd /root/nsh/scripts/shell
+			sh rc.local-nsh-openbsd-integrate.sh
+			#if nsh is set up, let fireman configure the system.
+			#fireman needs the group nshadmin, nsh as its shell,
+			#and a login user line that gives it a class
+			if [ -f /var/db/nsh/nshrc ]; then
+				usermod -G nshadmin fireman
+				chsh -s /usr/local/bin/nsh fireman
+				#nsh commits the line through nshd.  Start nshd,
+				#without -b, only if it does not run, because a
+				#second nshd would take the first one's socket,
+				#and remove the socket a stopped nshd left
+				started=No
+				if ! pgrep -qx nshd; then
+					rm -f /var/run/nshd.sock
+					/usr/local/sbin/nshd
+					started=Yes
+					i=0
+					while [ ! -S /var/run/nshd.sock ] &&
+					    [ $i -lt 10 ]; do
+						sleep 1
+						i=$((i + 1))
+					done
+				fi
+				printf '%s\n' 'configure private' \
+				    'login user fireman class super-user' \
+				    commit | /usr/local/bin/nsh
+				if [ "$started" = Yes ]; then
+					pkill -xf /usr/local/sbin/nshd
+				fi
+			fi
         else
             exit
         fi
-		
+fi
