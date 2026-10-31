@@ -232,10 +232,10 @@ The line gives the account's password. The simplest way is the word
 it, and sends nshd the password's bcrypt hash in place of the word.
 
 ```shell
-nsh(config-private)#login user nshuser class operator password plain-text-password
+nsh(config-private)# login user nshuser class operator password plain-text-password
 New password:
 Retype new password:
-nsh(config-private)#commit
+nsh(config-private)# commit
 ```
 
 The line can also give a bcrypt hash that you make yourself, with
@@ -243,7 +243,7 @@ encrypt(1). A file that `nsh -c` loads must give the hash, because nsh
 asks for a password only at a terminal.
 
 ```shell
-nsh(config-private)#login user nshuser class operator password $2b$10$...
+nsh(config-private)# login user nshuser class operator password $2b$10$...
 ```
 
 An account that you make by hand needs the group nshadmin to use nshd,

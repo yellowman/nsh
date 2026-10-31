@@ -47,7 +47,7 @@ cprompt(void)
 
 	gethostname(hbuf, sizeof(hbuf));
 	pr = rt | config_mode;
-	/* as in Junos: '>' outside configure, '#' in it */
+	/* as in Junos: '> ' outside configure, '# ' in it */
 	snprintf(prompt, sizeof(prompt), "%s%s%s%s%s%s%s%s", hbuf,
 	    pr ? "(" : "",
 	    config_mode ? (nshd_config == NSHD_CPRIVATE ?
@@ -57,7 +57,7 @@ cprompt(void)
 	    config_mode && rt ? "-" : "",
 	    rt ? "rtable " : "", rt ? tmp : "",
 	    pr ? ")" : "",
-	    config_mode ? "#" : ">");
+	    config_mode ? "# " : "> ");
 
 	return prompt;
 }
@@ -66,7 +66,7 @@ char *
 iprompt(void)
 {
 	gethostname(hbuf, sizeof(hbuf));
-	snprintf(prompt, sizeof(prompt), "%s(%s-%s)#", hbuf,
+	snprintf(prompt, sizeof(prompt), "%s(%s-%s)# ", hbuf,
 	    bridge ? "bridge" : "interface", ifname);
 
 	return prompt;
