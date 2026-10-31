@@ -477,6 +477,11 @@ Produce more verbose output.
 .El
 .Sh FILES
 .Bl -tag -width "/var/www/run/nshdeck.sockXX" -compact
+.It Pa /etc/rc.d/nshdeck
+the
+.Xr rc.d 8
+script, which starts
+.Nm
 .It Pa /var/www/run/nshdeck.sock
 the socket
 .Xr httpd 8
@@ -488,4 +493,5 @@ the page
 .Xr httpd.conf 5 ,
 .Xr httpd 8 ,
 .Xr nsh 8 ,
-.Xr nshd 8
+.Xr nshd 8 ,
+.Xr rc.d 8

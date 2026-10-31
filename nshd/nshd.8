@@ -201,12 +201,8 @@ and
 with umask 022 and working directory
 .Pa / ,
 and the programs it runs have the same.
-Only system writes the saved configuration, which is in
-.Pa /var/db/nsh ,
-not in
-.Xr nsh 8 Ns 's
-own
-.Pa /etc/nshrc ;
+Only system writes the saved configuration,
+.Pa /var/db/nsh/nshrc ;
 nsh's
 .Cm show startup-config
 requests it.
@@ -466,6 +462,16 @@ Produce more verbose output.
 .El
 .Sh FILES
 .Bl -tag -width "/var/run/nshd.ro.sockXX" -compact
+.It Pa /etc/nshrc
+a first configuration, which system saves when there is no saved
+configuration
+.It Pa /etc/rc.d/nshd
+the
+.Xr rc.d 8
+script, which starts
+.Nm
+with
+.Fl b
 .It Pa /var/run/nshd.sock
 the read-write socket, mode 0660, group nshadmin
 .It Pa /var/run/nshd.ro.sock
@@ -475,6 +481,10 @@ the saved configuration, root's
 .It Pa /var/db/nsh/nshrc.N
 copies of the saved configurations, for rollback; rollback 0 is the
 newest
+.It Pa /var/db/nsh/login
+the running login classes and users, and which accounts
+.Nm
+made
 .It Pa /var/db/nsh/commit
 the commit record
 .It Pa /var/db/nsh/confirm
@@ -485,4 +495,6 @@ the record of the boot
 the shared candidate, as archive stores it
 .El
 .Sh SEE ALSO
-.Xr nsh 8
+.Xr nsh 8 ,
+.Xr nshdeck 8 ,
+.Xr rc.d 8
