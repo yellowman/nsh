@@ -5362,7 +5362,7 @@ Set or remove configured peer PPP authentication parameters for the interface.
 .Ic tunnel
 .Ar source-ip Ns Op : Ns Ar port
 .Ar destination-ip
-.Op Cm ttl Ar 1-255
+.Op Cm ttl Ar 1-255 | copy
 .Op df
 .Op ecn
 .Pp
@@ -5374,6 +5374,9 @@ without one, vxlan uses 4789.
 sets the TTL of the packets that carry the tunnel.
 Without it, the tunnel keeps its TTL; a new tunnel's TTL is 64, or 1 on
 nvgre and vxlan.
+On gif, gre and mgre, which carry IP packets,
+.Cm ttl copy
+gives each packet the TTL of the packet it carries.
 .Cm df
 sets the don't-fragment bit on those packets, and on gif, gre and mgre,
 .Cm ecn
@@ -5386,7 +5389,7 @@ nsh(interface-gre0)# tunnel 12.3.3.3 12.6.6.6
 .Op no
 .Ic tunneladdr
 .Ar source-ip Ns Op : Ns Ar port
-.Op Cm ttl Ar 1-255
+.Op Cm ttl Ar 1-255 | copy
 .Op df
 .Op ecn
 .Pp

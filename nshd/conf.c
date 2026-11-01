@@ -1185,6 +1185,8 @@ conf_tunnel(FILE *output, int ifs, char *ifname)
 			fprintf(output, " %s", tmpb);
 		if ((physttl = get_physttl(ifs, ifname)) > 0)
 			fprintf(output, " ttl %i", physttl);
+		else if (physttl == -1)
+			fprintf(output, " ttl copy");
 		if ((get_physecn(ifs, ifname)) > 0)
 			fprintf(output, " ecn");
 		if ((get_physdf(ifs, ifname)) > 0)

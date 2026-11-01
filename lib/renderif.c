@@ -484,7 +484,10 @@ if_render(struct frecs *rs, FILE *outfile)
 			if (fu(ifr, IF_TUNRDOMAIN, 0) != 0)
 				fprintf(outfile, " destination rdomain %i",
 				    (int)fu(ifr, IF_TUNRDOMAIN, 0));
-			if (fu(ifr, IF_TUNTTL, 0) != 0)
+			/* -1: the ttl of the packets the tunnel carries */
+			if ((int)fu(ifr, IF_TUNTTL, 0) == -1)
+				fprintf(outfile, " ttl copy");
+			else if (fu(ifr, IF_TUNTTL, 0) != 0)
 				fprintf(outfile, " ttl %i",
 				    (int)fu(ifr, IF_TUNTTL, 0));
 			fputc('\n', outfile);

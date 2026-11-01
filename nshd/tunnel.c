@@ -15,6 +15,7 @@
 #include <net/if_dl.h>
 #include <netinet/in.h>
 #include <netinet/ip.h>
+#include <net/if_types.h>
 #include <netdb.h>
 
 #include "externs.h"
@@ -31,7 +32,7 @@ int deletetunnel(int, char *);
 void tunnelusage(int);
 static int vnetid_arg(char *, int64_t *);
 static int cand_vnetid(char *, int, char *);
-static int tunnel_ttl(char *);
+static int tunnel_ttl(char *, char *);
 static int tunnel_startttl(char *);
 static int tunnel_rdomain(char *);
 static int tunnel_addr(char *, char *, char *, char *, int *);
@@ -266,7 +267,7 @@ cand_tunnel(char *ifname, int set, int addr, char *src, char *srcport,
     char *dstip, char *rdomain, char *ttla, int df, int ecn)
 {
 	char s[NI_MAXHOST], d[NI_MAXHOST], line[1024], port[sizeof(":65535")];
-	char ttls[sizeof(" ttl 255")], *l, *w, *p;
+	char ttls[sizeof(" ttl copy")], *l, *w, *p;
 	const char *errmsg;
 	int af, daf, sport, ttl = 0, rdomainid = 0, r;
 
@@ -298,7 +299,7 @@ cand_tunnel(char *ifname, int set, int addr, char *src, char *srcport,
 			printf("%% tunnel ttl not supported on %s\n", ifname);
 			return -1;
 		}
-		if ((ttl = tunnel_ttl(ttla)) == -1)
+		if ((ttl = tunnel_ttl(ifname, ttla)) == 0)
 			return -1;
 	}
 	if (df && !cand_takes(ifname, SIOCSLIFPHYDF)) {
@@ -330,7 +331,8 @@ cand_tunnel(char *ifname, int set, int addr, char *src, char *srcport,
 		    w = strtok_r(NULL, " ", &p))
 			if (strcmp(w, "ttl") == 0 &&
 			    (w = strtok_r(NULL, " ", &p)) != NULL)
-				ttl = strtonum(w, 1, 0xff, &errmsg);
+				ttl = strcmp(w, "copy") == 0 ? -1 :
+				    strtonum(w, 1, 0xff, &errmsg);
 	}
 	if (ttl == 0)
 		ttl = tunnel_startttl(ifname);
@@ -338,7 +340,9 @@ cand_tunnel(char *ifname, int set, int addr, char *src, char *srcport,
 	port[0] = ttls[0] = '\0';
 	if (sport > 0 && sport != VXLAN_PORT)
 		snprintf(port, sizeof(port), ":%d", sport);
-	if (ttl > 0)
+	if (ttl == -1)
+		strlcpy(ttls, " ttl copy", sizeof(ttls));
+	else
 		snprintf(ttls, sizeof(ttls), " ttl %d", ttl);
 	if (cand_setting(ST_DEFAULT, addr ? "tunnel" : "tunneladdr") == -1)
 		return -1;
@@ -526,17 +530,28 @@ tunnel_startttl(char *ifname)
 	return IPDEFTTL;
 }
 
-/* A tunnel's ttl, 1 to 255 as the kernel takes it, or -1 */
+/*
+ * A tunnel's ttl, 1 to 255 as the kernel takes it, or -1 for copy, which
+ * copies the ttl of the IP packets a gif, gre or mgre tunnel carries. 0
+ * after saying why not: a tunnel of Ethernet frames has no ttl to copy.
+ */
 static int
-tunnel_ttl(char *ttla)
+tunnel_ttl(char *ifname, char *ttla)
 {
 	const char *errmsg = NULL;
 	int ttl;
 
+	if (strcmp(ttla, "copy") == 0) {
+		if (cand_gettype(ifname) == IFT_ETHER) {
+			printf("%% ttl copy not supported on %s\n", ifname);
+			return 0;
+		}
+		return -1;
+	}
 	ttl = strtonum(ttla, 1, 0xff, &errmsg);
 	if (errmsg) {
 		printf("%% Invalid ttl %s: %s\n", ttla, errmsg);
-		return -1;
+		return 0;
 	}
 	return ttl;
 }
@@ -547,7 +562,7 @@ settunnelttl(int ifs, char *ifname, char *ttla)
 	int ttl;
 	struct ifreq ifr;
 
-	if (ttla == NULL || (ttl = tunnel_ttl(ttla)) == -1)
+	if (ttla == NULL || (ttl = tunnel_ttl(ifname, ttla)) == 0)
 		return -1;
 
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
