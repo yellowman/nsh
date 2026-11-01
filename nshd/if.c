@@ -239,18 +239,21 @@ if_facts(struct facts_out *o, char *ifname, int detail)
 			r = -1;
 	}
 
-	/* a tunnel's endpoints */
+	/*
+	 * a tunnel's endpoints: its source, with vxlan's port, and its
+	 * destination, which mgre and vxlan in endpoint mode do not have
+	 */
 	memset(&req, 0, sizeof(req));
 	strlcpy(req.iflr_name, ifname, sizeof(req.iflr_name));
 	if (ioctl(ifs, SIOCGLIFPHYADDR, (caddr_t)&req) == 0) {
 		facts_sockaddr(&v[IF_TUNSRC], (struct sockaddr *)&req.addr);
 		facts_sockaddr(&v[IF_TUNDST], (struct sockaddr *)&req.dstaddr);
-		if (req.dstaddr.ss_family == AF_INET)
+		if (req.addr.ss_family == AF_INET)
 			facts_u64(&v[IF_TUNPORT], ntohs(((struct sockaddr_in *)
-			    &req.dstaddr)->sin_port));
-		else if (req.dstaddr.ss_family == AF_INET6)
+			    &req.addr)->sin_port));
+		else if (req.addr.ss_family == AF_INET6)
 			facts_u64(&v[IF_TUNPORT], ntohs(((struct sockaddr_in6 *)
-			    &req.dstaddr)->sin6_port));
+			    &req.addr)->sin6_port));
 		facts_u64(&v[IF_TUNRDOMAIN], get_physrtable(ifs, ifname));
 		facts_u64(&v[IF_TUNTTL], get_physttl(ifs, ifname));
 	}

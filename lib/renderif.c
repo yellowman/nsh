@@ -469,16 +469,18 @@ if_render(struct frecs *rs, FILE *outfile)
 		fputc('\n', outfile);
 
 	if (!br) {
-		/* a tunnel with a destination port, as phys_status() said */
-		if (fu(ifr, IF_TUNPORT, 0) > 0 &&
-		    fsockaddr(ifr, IF_TUNSRC, &ss) &&
-		    fsockaddr(ifr, IF_TUNDST, &ds) &&
+		/* a tunnel: its source, then its port and destination */
+		if (fsockaddr(ifr, IF_TUNSRC, &ss) &&
 		    getnameinfo((struct sockaddr *)&ss, ss.ss_len, src,
-		    sizeof(src), 0, 0, NI_NUMERICHOST) == 0 &&
-		    getnameinfo((struct sockaddr *)&ds, ds.ss_len, dst,
-		    sizeof(dst), 0, 0, NI_NUMERICHOST) == 0) {
-			fprintf(outfile, "  Tunnel source %s destination %s",
-			    src, dst);
+		    sizeof(src), 0, 0, NI_NUMERICHOST) == 0) {
+			fprintf(outfile, "  Tunnel source %s", src);
+			if (fu(ifr, IF_TUNPORT, 0) != 0)
+				fprintf(outfile, " port %u",
+				    (u_int)fu(ifr, IF_TUNPORT, 0));
+			if (fsockaddr(ifr, IF_TUNDST, &ds) &&
+			    getnameinfo((struct sockaddr *)&ds, ds.ss_len, dst,
+			    sizeof(dst), 0, 0, NI_NUMERICHOST) == 0)
+				fprintf(outfile, " destination %s", dst);
 			if (fu(ifr, IF_TUNRDOMAIN, 0) != 0)
 				fprintf(outfile, " destination rdomain %i",
 				    (int)fu(ifr, IF_TUNRDOMAIN, 0));
