@@ -638,10 +638,11 @@ struct ctl ctl_inet[] = {
 	{ NULL, NULL, { NULL }, { NULL }, NULL, 0, 0 }
 };
 
-/* ldapd, ldapctl */
+/* ldapd, ldapctl; ldapd takes its file only after -f */
 struct ctl ctl_ldap[] = {
 	{ "enable",         "enable LDAPd daemon",
-	    { LDAPD, REQTEMP, NULL }, { NULL }, NULL, DB_X_ENABLE, T_EXEC },
+	    { LDAPD, "-f", REQTEMP, NULL }, { NULL }, NULL, DB_X_ENABLE,
+	    T_EXEC },
 	{ "disable",        "disable LDAPd daemon",
 	    { PKILL, table, "ldapd", NULL }, { NULL }, NULL, DB_X_DISABLE,
 	    T_EXEC },
