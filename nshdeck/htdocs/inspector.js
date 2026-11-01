@@ -440,7 +440,7 @@ function staged(lines) {
 	all.forEach(function (l) {
 		p = p.then(function () {
 			return configure("line", { line: l },
-			    $("prompt").textContent + " " + l);
+			    $("prompt").textContent + l);
 		}).then(function (j) {
 			if (l !== head && l !== "exit")
 				results.push({ line: l, ok: j.ok,

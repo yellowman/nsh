@@ -18,6 +18,7 @@ var deadline = 0;		/* unconfirmed commit's rollback time, or 0 */
 var ticker = null;
 var comp = null;		/* input whose choices are shown, or null */
 var cur = null;			/* the user's context, as nshd last gave it */
+var hostname = "nsh";		/* the host's name, for the prompt */
 var LOOK = 5000;		/* how often the Overview looks at traffic, ms */
 var looker = null;
 var jacks = {};			/* each port's button, by its name */
@@ -161,7 +162,7 @@ function of(j, kind) {
 	});
 }
 
-/* where the user is in configure, as nsh's prompt says it */
+/* where the user is in configure, in words */
 function where(ctx) {
 	var modes = ["", "private", "shared", "exclusive", "terminal"];
 	var s;
@@ -177,6 +178,21 @@ function where(ctx) {
 	return s;
 }
 
+/* nsh's prompt for the context, as cprompt() and iprompt() make it */
+function nshprompt(ctx) {
+	var modes = ["", "config-private", "config", "config-exclusive",
+	    "config-terminal"];
+	var conf = ctx && ctx.mode !== 0, m;
+
+	if (conf && ctx.interface)
+		return hostname + "(" + (ctx.bridge ? "bridge-" :
+		    "interface-") + ctx.interface + ")# ";
+	m = conf ? modes[ctx.mode] || "config" : "";
+	if (ctx && ctx.rtable)
+		m += (m ? "-" : "") + "rtable " + ctx.rtable;
+	return hostname + (m ? "(" + m + ")" : "") + (conf ? "# " : "> ");
+}
+
 function context(j) {
 	var w, f = $("configure-form");
 
@@ -186,7 +202,7 @@ function context(j) {
 	w = where(j.context);
 	$("where").textContent = w || "not in configure";
 	$("where").classList.toggle("on", w !== "");
-	$("prompt").textContent = w ? "nsh(" + w + ")>" : "nsh>";
+	$("prompt").textContent = nshprompt(cur);
 	changes(j.context.mode !== 0);
 	/* the Changes topic, as the session is now */
 	if (cur.mode !== 0)
@@ -1144,6 +1160,8 @@ function host() {
 		if (h.length) {
 			$("hostname").textContent = h[0].name;
 			$("plate-host").textContent = h[0].name;
+			hostname = h[0].name;
+			$("prompt").textContent = nshprompt(cur);
 		}
 	});
 	ask("GET", "show", { words: "version" }).then(function (j) {
@@ -1279,7 +1297,7 @@ document.addEventListener("DOMContentLoaded", function () {
 		var line = f.line.value;
 
 		configure("line", { line: line }, $("prompt").textContent +
-		    " " + line).then(function (j) {
+		    line).then(function (j) {
 			if (j.ok)
 				f.line.value = "";
 		});

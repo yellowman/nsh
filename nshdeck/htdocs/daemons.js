@@ -739,7 +739,7 @@ function dstage() {
 	lines.forEach(function (l) {
 		p = p.then(function () {
 			return configure("line", { line: l },
-			    $("prompt").textContent + " " + l);
+			    $("prompt").textContent + l);
 		}).then(function (j) {
 			if (/^(rtable \d+|exit)$/.test(l))
 				return;
