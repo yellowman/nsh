@@ -230,7 +230,8 @@ var REGISTRY = {
 	    definition: "Part of the virtual network identifier is used as a " +
 	    "flow identifier, to spread traffic over links.", needs: "vnetid" },
 	"if.tunnel": { label: "Tunnel", group: "VLAN and tunnel", kind: "text",
-	    placeholder: "192.0.2.1 198.51.100.1", on: TUNNELS,
+	    placeholder: "192.0.2.1 198.51.100.1",
+	    on: TUNNELS.filter(function (d) { return d !== "mgre"; }),
 	    keyword: "tunnel source-ip[:port] destination-ip [ttl 1-255] " +
 	    "[df] [ecn]", definition: "The tunnel's two ends, and the TTL, " +
 	    "don't-fragment and ECN of the packets that carry it. df and ecn " +
@@ -238,6 +239,14 @@ var REGISTRY = {
 	    "have the UDP port, 4789 if not.", values: "two addresses of one " +
 	    "family, the source with vxlan's port, then ttl 1 to 255, df and " +
 	    "ecn", default: "none" },
+	"if.tunneladdr": { label: "Tunnel source", group: "VLAN and tunnel",
+	    kind: "text", placeholder: "192.0.2.1", on: ["mgre", "vxlan"],
+	    keyword: "tunneladdr source-ip[:port] [ttl 1-255] [df] [ecn]",
+	    definition: "The source of a tunnel with no one destination: " +
+	    "mgre, which sends to the gateways of its routes, and vxlan in " +
+	    "endpoint mode, which sends to its endpoints. It takes the " +
+	    "place of Tunnel.", values: "an address, with vxlan's port, then " +
+	    "ttl 1 to 255, df and ecn", default: "none" },
 	"if.tunneldomain": { label: "Tunnel routing domain", group: "VLAN " +
 	    "and tunnel", kind: "number", min: 0, max: 255,
 	    on: TUNNELS.concat(MPLSIFS), keyword: "tunneldomain rdomain",

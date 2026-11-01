@@ -437,6 +437,11 @@ int buf_len, int buf2_len)
 		return (-1);
 	}
 
+	/* a tunnel made with tunneladdr has no destination */
+	if (req.dstaddr.ss_family == AF_UNSPEC) {
+		tmp_buf2[0] = '\0';
+		return ntohs(port);
+	}
 	if (req.dstaddr.ss_family == AF_INET6)
 		in6_fillscopeid((struct sockaddr_in6 *) & req.dstaddr);
 	if (getnameinfo((struct sockaddr *)&req.dstaddr, req.dstaddr.ss_len,

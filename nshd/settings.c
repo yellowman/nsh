@@ -109,6 +109,7 @@ static const struct setting if_settings[] = {
 	{ "carppeer",		S_VALUE },
 	{ "balancing",		S_VALUE },
 	{ "tunnel",		S_VALUE },
+	{ "tunneladdr",		S_VALUE },
 	{ "tunneldomain",	S_VALUE },
 	{ "mtu",		S_VALUE },
 	{ "metric",		S_VALUE },

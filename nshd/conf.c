@@ -1173,11 +1173,16 @@ conf_tunnel(FILE *output, int ifs, char *ifname)
 	    phys_status(ifs, ifname, tmpa, tmpb, IPSIZ, IPSIZ)) >= 0) {
 		int physttl;
 
-		/* vxlan's port, on the source, unless it is VXLAN_PORT */
-		fprintf(output, " tunnel %s", tmpa);
+		/*
+		 * a tunnel with no destination is a tunneladdr line; vxlan's
+		 * port is on the source, unless it is VXLAN_PORT
+		 */
+		fprintf(output, " %s %s", tmpb[0] == '\0' ? "tunneladdr" :
+		    "tunnel", tmpa);
 		if (port > 0 && port != VXLAN_PORT)
 			fprintf(output, ":%i", port);
-		fprintf(output, " %s", tmpb);
+		if (tmpb[0] != '\0')
+			fprintf(output, " %s", tmpb);
 		if ((physttl = get_physttl(ifs, ifname)) > 0)
 			fprintf(output, " ttl %i", physttl);
 		if ((get_physecn(ifs, ifname)) > 0)

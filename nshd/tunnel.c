@@ -28,7 +28,7 @@ int settunnelecn(int, char *, int);
 int setvnetid(int, char *, char *);
 int delvnetid(int, char *);
 int deletetunnel(int, char *);
-void tunnelusage(void);
+void tunnelusage(int);
 static int vnetid_arg(char *, int64_t *);
 static int cand_vnetid(char *, int, char *);
 static int tunnel_ttl(char *);
@@ -36,8 +36,11 @@ static int tunnel_startttl(char *);
 static int tunnel_rdomain(char *);
 static int tunnel_addr(char *, char *, char *, char *, int *);
 static int tunnel_arg(char *, char *, size_t, char **);
-static int cand_tunnel(char *, int, char *, char *, char *, char *, char *,
-    int, int);
+static int cand_tunnel(char *, int, int, char *, char *, char *, char *,
+    char *, int, int);
+
+/* tunnel, and tunneladdr, a tunnel's source with no destination */
+static char *tunnelcmds[] = { "tunnel", "tunneladdr", NULL };
 
 static struct nopts tunnelopts[] = {
 	{ "rdomain",	req_arg,	'r' },
@@ -112,8 +115,14 @@ cand_vnetid(char *ifname, int set, char *vnetida)
 }
 
 void
-tunnelusage(void)
+tunnelusage(int addr)
 {
+	if (addr) {
+		printf("%% tunneladdr <src ip>[:port] [ttl <ttl>] [df]"
+		    " [ecn]\n");
+		printf("%% no tunneladdr [src ip] [ttl <ttl>] [df] [ecn]\n");
+		return;
+	}
 	printf("%% tunnel <src ip>[:port] <dest ip> [ttl <ttl>] [df] [ecn]\n");
 	printf("%% no tunnel [src ip] [dest ip] [ttl <ttl>] [df] [ecn]\n");
 }
@@ -121,8 +130,8 @@ tunnelusage(void)
 int
 inttunnel(int argc, char **argv, ...)
 {
-	int set, ch, df = 0, ecn = 0, r;
-	char *src = NULL, *rdomain = NULL, *ttl = NULL;
+	int set, addr, ch, df = 0, ecn = 0, r;
+	char **c, *src = NULL, *rdomain = NULL, *ttl = NULL;
 	char *srcport = NULL, *dstip = NULL, *dstport = NULL;
 	char sbuf[NI_MAXHOST + sizeof(":65535")];
 	char dbuf[NI_MAXHOST + sizeof(":65535")];
@@ -142,11 +151,18 @@ inttunnel(int argc, char **argv, ...)
 	} else
 		set = 1;
 
+	c = (char **)genget(argv[0], tunnelcmds, sizeof(char *));
+	if (c == 0 || Ambiguous(c)) {
+		printf("%% Internal error - Invalid argument %s\n", argv[0]);
+		return -1;
+	}
+	addr = c == &tunnelcmds[1];
+
 	argc--;
 	argv++;
 
-	if (set && argc < 2) {
-		tunnelusage();
+	if (set && argc < (addr ? 1 : 2)) {
+		tunnelusage(addr);
 		return -1;
 	}
 
@@ -155,7 +171,8 @@ inttunnel(int argc, char **argv, ...)
 		argc--;
 		argv++;
 	}
-	if (argc > 0 && tunnel_arg(argv[0], dbuf, sizeof(dbuf), &dstport)) {
+	if (!addr && argc > 0 &&
+	    tunnel_arg(argv[0], dbuf, sizeof(dbuf), &dstport)) {
 		dstip = dbuf;
 		argc--;
 		argv++;
@@ -170,6 +187,16 @@ inttunnel(int argc, char **argv, ...)
 	}
 	if (srcport != NULL && !isprefix("vxlan", ifname)) {
 		printf("%% only vxlan takes a port\n");
+		return -1;
+	}
+	/* mgre's tunnel has no destination, and only vxlan's may have both */
+	if (set && addr && !isprefix("mgre", ifname) &&
+	    !isprefix("vxlan", ifname)) {
+		printf("%% tunneladdr not supported on %s\n", ifname);
+		return -1;
+	}
+	if (set && !addr && isprefix("mgre", ifname)) {
+		printf("%% %s has no destination: use tunneladdr\n", ifname);
 		return -1;
 	}
 
@@ -196,13 +223,13 @@ inttunnel(int argc, char **argv, ...)
 		if (argv[noptind])
 			printf(": %s", argv[noptind]);
 		printf("\n");
-		tunnelusage();
+		tunnelusage(addr);
 		return -1;
 	}
 
 	if (candidate)
-		return cand_tunnel(ifname, set, src, srcport, dstip, rdomain,
-		    ttl, df, ecn);
+		return cand_tunnel(ifname, set, addr, src, srcport, dstip,
+		    rdomain, ttl, df, ecn);
 
 	if (set) {
 		/* without its addresses, the tunnel gets nothing else */
@@ -225,31 +252,36 @@ inttunnel(int argc, char **argv, ...)
 }
 
 /*
- * tunnel in configure private. The line has the addresses as
- * conf_tunnel() prints them, the source with vxlan's port unless it is
- * VXLAN_PORT, then the ttl, and ecn and df if they are
- * on. The kernel keeps the ttl a tunnel command leaves out, so it comes
- * from the candidate's line, or for a new line, it is the ttl the
- * tunnel starts with. ecn and df are off unless the command gives them.
- * rdomain is the tunneldomain line.
+ * tunnel, or with addr tunneladdr, in configure private. The line has
+ * the addresses as conf_tunnel() prints them, the source with vxlan's
+ * port unless it is VXLAN_PORT, then the ttl, and ecn and df if they
+ * are on. The kernel keeps the ttl a command leaves out, so it comes
+ * from the candidate's tunnel or tunneladdr line, or for a new line, it
+ * is the ttl the tunnel starts with. ecn and df are off unless the
+ * command gives them. rdomain is the tunneldomain line. An interface
+ * has one tunnel, so either line takes the other's place.
  */
 static int
-cand_tunnel(char *ifname, int set, char *src, char *srcport, char *dstip,
-    char *rdomain, char *ttla, int df, int ecn)
+cand_tunnel(char *ifname, int set, int addr, char *src, char *srcport,
+    char *dstip, char *rdomain, char *ttla, int df, int ecn)
 {
 	char s[NI_MAXHOST], d[NI_MAXHOST], line[1024], port[sizeof(":65535")];
 	char ttls[sizeof(" ttl 255")], *l, *w, *p;
 	const char *errmsg;
-	int af, daf, sport, ttl = 0, rdomainid = 0;
+	int af, daf, sport, ttl = 0, rdomainid = 0, r;
 
 	if (!cand_takes(ifname, set ? SIOCSLIFPHYADDR : SIOCDIFPHYADDR)) {
 		printf("%% tunnel not supported on %s\n", ifname);
 		return -1;
 	}
-	if (!set)
+	if (!set) {
+		/* the kernel's tunnel goes, whichever line made it */
+		if (cand_setting(ST_DEFAULT, "tunneladdr") == -1)
+			return -1;
 		return cand_setting(ST_DEFAULT, "tunnel");
-	if (src == NULL || dstip == NULL) {
-		tunnelusage();
+	}
+	if (src == NULL || (!addr && dstip == NULL)) {
+		tunnelusage(addr);
 		return -1;
 	}
 	if (rdomain != NULL) {
@@ -277,22 +309,25 @@ cand_tunnel(char *ifname, int set, char *src, char *srcport, char *dstip,
 		printf("%% tunnel ecn not supported on %s\n", ifname);
 		return -1;
 	}
-	if ((af = tunnel_addr("source", src, srcport, s, &sport)) == 0 ||
-	    (daf = tunnel_addr("destination", dstip, NULL, d, NULL)) == 0)
+	if ((af = tunnel_addr("source", src, srcport, s, &sport)) == 0)
 		return -1;
-	if (af != daf) {
-		printf("%% source and destination address families do not"
-		    " match\n");
-		return -1;
+	if (!addr) {
+		if ((daf = tunnel_addr("destination", dstip, NULL, d,
+		    NULL)) == 0)
+			return -1;
+		if (af != daf) {
+			printf("%% source and destination address families"
+			    " do not match\n");
+			return -1;
+		}
 	}
 
-	if (ttl == 0 && (l = cand_line("tunnel", 0)) != NULL) {
-		/* tunnel src dst, then the ttl the kernel keeps */
+	if (ttl == 0 && ((l = cand_line("tunnel", 0)) != NULL ||
+	    (l = cand_line("tunneladdr", 0)) != NULL)) {
+		/* the ttl the kernel keeps */
 		strlcpy(line, l, sizeof(line));
-		strtok_r(line, " ", &p);
-		strtok_r(NULL, " ", &p);
-		strtok_r(NULL, " ", &p);
-		while ((w = strtok_r(NULL, " ", &p)) != NULL)
+		for (w = strtok_r(line, " ", &p); w != NULL;
+		    w = strtok_r(NULL, " ", &p))
 			if (strcmp(w, "ttl") == 0 &&
 			    (w = strtok_r(NULL, " ", &p)) != NULL)
 				ttl = strtonum(w, 1, 0xff, &errmsg);
@@ -305,8 +340,15 @@ cand_tunnel(char *ifname, int set, char *src, char *srcport, char *dstip,
 		snprintf(port, sizeof(port), ":%d", sport);
 	if (ttl > 0)
 		snprintf(ttls, sizeof(ttls), " ttl %d", ttl);
-	if (cand_setting(ST_ON, "tunnel %s%s %s%s%s%s", s, port, d, ttls,
-	    ecn ? " ecn" : "", df ? " df" : "") == -1)
+	if (cand_setting(ST_DEFAULT, addr ? "tunnel" : "tunneladdr") == -1)
+		return -1;
+	if (addr)
+		r = cand_setting(ST_ON, "tunneladdr %s%s%s%s%s", s, port, ttls,
+		    ecn ? " ecn" : "", df ? " df" : "");
+	else
+		r = cand_setting(ST_ON, "tunnel %s%s %s%s%s%s", s, port, d,
+		    ttls, ecn ? " ecn" : "", df ? " df" : "");
+	if (r == -1)
 		return -1;
 	if (rdomain == NULL)
 		return 0;
@@ -368,7 +410,7 @@ tunnel_addr(char *what, char *ip, char *port, char *buf, int *portp)
 int
 settunnel(int s, char *ifname, char *src, char *srcport, char *dstip)
 {
-	struct addrinfo *srcres, *dstres;
+	struct addrinfo *srcres, *dstres = NULL;
 	int ecode, r = -1;
 	struct if_laddrreq req;
 
@@ -378,21 +420,24 @@ settunnel(int s, char *ifname, char *src, char *srcport, char *dstip)
 		return -1;
 	}
 
-	if ((ecode = getaddrinfo(dstip, NULL, NULL, &dstres)) != 0) {
+	/* tunneladdr gives no destination */
+	if (dstip != NULL &&
+	    (ecode = getaddrinfo(dstip, NULL, NULL, &dstres)) != 0) {
 		printf("%% unable to parse destination address string: %s\n",
 		     gai_strerror(ecode));
 		freeaddrinfo(srcres);
 		return -1;
 	}
 
-	if (srcres->ai_addr->sa_family != dstres->ai_addr->sa_family) {
+	if (dstres != NULL &&
+	    srcres->ai_addr->sa_family != dstres->ai_addr->sa_family) {
 		printf(
 		    "%% source and destination address families do not match\n");
 		goto end;
 	}
 
 	if (srcres->ai_addrlen > sizeof(req.addr) ||
-	    dstres->ai_addrlen > sizeof(req.dstaddr)) {
+	    (dstres != NULL && dstres->ai_addrlen > sizeof(req.dstaddr))) {
 		printf("%% invalid sockaddr\n");
 		goto end;
 	}
@@ -400,7 +445,13 @@ settunnel(int s, char *ifname, char *src, char *srcport, char *dstip)
 	bzero(&req, sizeof(req));
 	(void) strlcpy(req.iflr_name, ifname, sizeof(req.iflr_name));
 	memcpy(&req.addr, srcres->ai_addr, srcres->ai_addrlen);
-	memcpy(&req.dstaddr, dstres->ai_addr, dstres->ai_addrlen);
+	if (dstres != NULL)
+		memcpy(&req.dstaddr, dstres->ai_addr, dstres->ai_addrlen);
+	else {
+		/* no destination, as the kernel gives it */
+		req.dstaddr.ss_len = 2;
+		req.dstaddr.ss_family = AF_UNSPEC;
+	}
 	if (ioctl(s, SIOCSLIFPHYADDR, &req) < 0) {
 		if (errno == EINVAL)
 			printf("%% tunnel cannot be used on %s interface\n",
@@ -413,7 +464,8 @@ settunnel(int s, char *ifname, char *src, char *srcport, char *dstip)
 
  end:
 	freeaddrinfo(srcres);
-	freeaddrinfo(dstres);
+	if (dstres != NULL)
+		freeaddrinfo(dstres);
 	return r;
 }
 

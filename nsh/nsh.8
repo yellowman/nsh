@@ -4742,7 +4742,7 @@ nsh(config)# ip ?
 .Op  inet | ip | autoconf4 | description | group | rdomain | \
  | rtlabel | priority| llpriority | mtu | metric | link | arp | lladdr | nwid\
  | nwkey | powersave | txpower | bssid | media | mediaopt | auth | peer\
- | pppoe | tunnel | tunneldomain | txprio | rxprio | vnetid\
+ | pppoe | tunnel | tunneladdr | tunneldomain | txprio | rxprio | vnetid\
  | vnetflowid | parent | patch | keepalive | mplslabel | pwe\
  | syncdev | syncpeer | maxupd | vhid | advbase | advskew | carppass\
  | carpdev | carpnode | carppeer | balancing | pflow |  debug\
@@ -4784,6 +4784,7 @@ nsh(interface-em0)# ?
   peer             PPP peer authentication
   pppoe            PPPoE settings
   tunnel           Tunnel parameters
+  tunneladdr       Tunnel source, with no destination
   tunneldomain     Tunnel routing domain for transit
   txprio           Priority in tunnel protocol headers
   rxprio           Source used for packet priority
@@ -5380,6 +5381,36 @@ lets them carry explicit congestion notification.
 Each is off unless the command gives it.
 .Bd -literal -offset indent
 nsh(interface-gre0)# tunnel 12.3.3.3 12.6.6.6
+.Ed
+.Pp
+.Op no
+.Ic tunneladdr
+.Ar source-ip Ns Op : Ns Ar port
+.Op Cm ttl Ar 1-255
+.Op df
+.Op ecn
+.Pp
+Set or remove the source address of a tunnel with no one destination:
+mgre, which sends to the gateways of its routes, and vxlan in endpoint
+mode, which sends to its endpoints.
+An interface has one tunnel, so a
+.Ic tunneladdr
+line takes the place of a
+.Ic tunnel
+line, and a
+.Ic tunnel
+line the place of a
+.Ic tunneladdr
+line.
+The port,
+.Cm ttl ,
+.Cm df
+and
+.Cm ecn
+are as for
+.Ic tunnel .
+.Bd -literal -offset indent
+nsh(interface-mgre0)# tunneladdr 192.0.2.1
 .Ed
 .Pp
 .Op no
