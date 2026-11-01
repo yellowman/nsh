@@ -319,7 +319,7 @@ struct ctl ctl_ldp[] = {
 	{ NULL, NULL, { NULL }, { NULL }, NULL, 0, 0 }
 };
 
-/* isakmpd, ipsecctl */
+/* isakmpd, ipsecctl; show takes ipsecctl -s's flow, sa or all */
 struct ctl ctl_ipsec[] = {
 	{ "enable",         "enable isakmpd IKEv1 daemon",
 	    { ISAKMPD, "-Kv", NULL }, { NULL }, NULL, DB_X_ENABLE, T_EXEC },
@@ -334,7 +334,7 @@ struct ctl ctl_ipsec[] = {
 	{ "reload",         "test and apply staged isakmpd config",
 	    { IPSECCTL, "-f", REQTEMP, NULL }, { NULL }, NULL, 0, T_EXEC },
 	{ "show",           "show isakmpd flow/sa/all",
-            { IPSECCTL, "-s", REQTEMP, NULL }, { NULL }, NULL, 0, T_EXEC },
+            { IPSECCTL, "-s", REQ, NULL }, { NULL }, NULL, 0, T_EXEC },
 	{ NULL, NULL, { NULL }, { NULL }, NULL, 0, 0 }
 };
 
