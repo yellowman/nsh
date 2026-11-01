@@ -101,6 +101,7 @@ static struct cnode *cnode_add(struct cnode *, char *, int);
 static int blank(char *);
 static int storable(char *);
 static int storable_stmt(char *);
+static int was_bridge(char *);
 static int match(struct cnode *, struct cnode *, size_t *, size_t *);
 static int ckeycmp(const void *, const void *);
 static int compare_block(struct cmpctx *, struct cnode *, struct cnode *);
@@ -166,7 +167,7 @@ conftree_fread(FILE *f, char *path, int (*mode)(char *),
 {
 	struct cnode *root, *top = NULL, *stmt = NULL;
 	int topmode = CT_LEAF;
-	char *line = NULL;
+	char *line = NULL, *s, head[64];
 	size_t linesize = 0;
 	ssize_t linelen;
 	unsigned int lnum = 0;
@@ -188,9 +189,14 @@ conftree_fread(FILE *f, char *path, int (*mode)(char *),
 		if (line[0] != ' ') {
 			if (blank(line))
 				continue;
-			if ((top = cnode_add(root, line, ordered(line))) == NULL)
+			s = line;
+			if (strncmp(line, "bridge ", 7) == 0 &&
+			    was_bridge(line + 7) && snprintf(head, sizeof(head),
+			    "interface %s", line + 7) < (int)sizeof(head))
+				s = head;
+			if ((top = cnode_add(root, s, ordered(s))) == NULL)
 				goto fail;
-			topmode = mode(line);
+			topmode = mode(s);
 			stmt = NULL;
 			continue;
 		}
@@ -357,6 +363,23 @@ blank(char *s)
 		if (*s != ' ' && *s != '\t')
 			return 0;
 	return 1;
+}
+
+/*
+ * Is name a bpe, nvgre or vxlan, whose block conf() wrote as a bridge's
+ * while is_bridge() called them bridges?  Such a block is read as the
+ * interface's block it is now.
+ */
+static int
+was_bridge(char *name)
+{
+	static const char *was[] = { "bpe", "nvgre", "vxlan" };
+	size_t i;
+
+	for (i = 0; i < sizeof(was) / sizeof(was[0]); i++)
+		if (strncmp(name, was[i], strlen(was[i])) == 0)
+			return 1;
+	return 0;
 }
 
 /* Compare the children of a and b, two statements with the same text */

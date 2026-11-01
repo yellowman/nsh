@@ -433,6 +433,7 @@ int brport_one(char *);
 int set_ifflag(int, char *, short);
 int clr_ifflag(int, char *, short);
 int is_bridge(int, char *);
+int bridge_learns(int, char *);
 int brport(int, char **, ...);
 int brval(int, char **, ...);
 int brrule(int, char **, ...);

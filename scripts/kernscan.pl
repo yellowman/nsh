@@ -21,11 +21,11 @@
 #
 # For each cloner (IF_CLONE_INITIALIZER), the create function and the
 # functions it calls in the same file are read for the if_flags and
-# if_type they set, and the if_ioctl handler they install is read for
-# SIOCBRDGRTS, which is_bridge() asks, and for the ioctls in @drv. The
-# scanner stops rather than guess: a cloner whose create path sets
-# if_flags or if_type more than one way must be listed in %choose, and a
-# choice must still be one of the ways the source has.
+# if_type they set, which says whether is_bridge() calls it a bridge
+# (IFT_BRIDGE), and the if_ioctl handler they install is read for the
+# ioctls in @drv. The scanner stops rather than guess: a cloner whose
+# create path sets if_flags or if_type more than one way must be listed
+# in %choose, and a choice must still be one of the ways the source has.
 #
 # The ioctls in @drv are nsh's commands that only some drivers take.
 # ifioctl() hands them to the driver, and a driver without a case for
@@ -194,8 +194,7 @@ foreach my $c (sort { $a->[0] cmp $b->[0] } @cloners) {
 	    scalar(keys %ioctls), " ways\n";
 	my ($ioctl) = keys %ioctls;
 	defined $fns->{$ioctl} or die "$name: no $ioctl in $f\n";
-	my $bridge = ($type eq 'IFT_BRIDGE' ||
-	    $fns->{$ioctl} =~ /\bcase\s+SIOCBRDGRTS\s*:/) ? 1 : 0;
+	my $bridge = $type eq 'IFT_BRIDGE' ? 1 : 0;
 
 	# the driver ioctls its handler, or what that calls, has a case for
 	my %takes;

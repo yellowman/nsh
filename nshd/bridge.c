@@ -521,7 +521,7 @@ flush_bridgedyn(int argc, char **argv, ...)
 		return -1;
 	}
 
-	if (!is_bridge(ifs, brdg)) {
+	if (!bridge_learns(ifs, brdg)) {
 		printf("%% %s is not a bridge\n", brdg);
 		close(ifs);
 		return -1;
@@ -550,7 +550,7 @@ flush_bridgeall(int argc, char **argv, ...)
 		return -1;
 	}
 
-	if (!is_bridge(ifs, brdg)) {
+	if (!bridge_learns(ifs, brdg)) {
 		printf("%% %s is not a bridge\n", brdg);
 		close(ifs);
 		return -1;
@@ -1299,13 +1299,13 @@ bridge_confaddrs(int s, char *brdg, char *delim, FILE *output)
 }
 
 /*
- * Check to make sure 'brdg' is really a bridge interface.
+ * Is brdg a bridge, with members: bridge, veb or tpmr, which are
+ * IFT_BRIDGE?  It has a bridge's mode, and is not a member.
  */
 int
 is_bridge(int s, char *brdg)
 {
 	struct ifreq ifr;
-	struct ifbaconf ifbac;
 	struct if_data if_data;
 
 	strlcpy(ifr.ifr_name, brdg, sizeof(ifr.ifr_name));
@@ -1315,10 +1315,21 @@ is_bridge(int s, char *brdg)
 		/* bail out */
 		return 0;
 	}
-	if (if_data.ifi_type == IFT_BRIDGE) {
-		/* surely a bridge! */
+	return if_data.ifi_type == IFT_BRIDGE;
+}
+
+/*
+ * Does brdg learn addresses, as a bridge does: a bridge, or bpe, nvgre
+ * or vxlan, which answer SIOCBRDGRTS but are interfaces, with an
+ * interface's mode?  Its learned addresses can be flushed.
+ */
+int
+bridge_learns(int s, char *brdg)
+{
+	struct ifbaconf ifbac;
+
+	if (is_bridge(s, brdg))
 		return 1;
-	}
 
 	/* ok, maybe still a bridge, let's ask for SIOCBRDGRTS */
 	ifbac.ifbac_len = 0;
