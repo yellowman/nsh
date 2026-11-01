@@ -14,6 +14,7 @@
 #include <net/if.h>
 #include <net/if_dl.h>
 #include <netinet/in.h>
+#include <netinet/ip.h>
 #include <netdb.h>
 
 #include "externs.h"
@@ -31,6 +32,7 @@ void tunnelusage(void);
 static int vnetid_arg(char *, int64_t *);
 static int cand_vnetid(char *, int, char *);
 static int tunnel_ttl(char *);
+static int tunnel_startttl(char *);
 static int tunnel_rdomain(char *);
 static int tunnel_addr(char *, char *, char *, char *, int *);
 static int cand_tunnel(char *, int, char *, char *, char *, char *, char *,
@@ -209,30 +211,32 @@ inttunnel(int argc, char **argv, ...)
 		    ttl, df, ecn);
 
 	if (set) {
-		r = settunnel(ifs, ifname, src, dstip, dstport);
+		/* without its addresses, the tunnel gets nothing else */
+		if ((r = settunnel(ifs, ifname, src, dstip, dstport)) == -1)
+			return -1;
 		if (rdomain && settunnelrdomain(ifs, ifname, rdomain) == -1)
 			r = -1;
 		if (ttl && settunnelttl(ifs, ifname, ttl) == -1)
 			r = -1;
-		if (df && settunneldf(ifs, ifname, 1) == -1)
+		/* df and ecn are off unless the command gives them */
+		if ((df || cand_takes(ifname, SIOCSLIFPHYDF)) &&
+		    settunneldf(ifs, ifname, df) == -1)
 			r = -1;
-		if (ecn && settunnelecn(ifs, ifname, 1) == -1)
+		if ((ecn || cand_takes(ifname, SIOCSLIFPHYECN)) &&
+		    settunnelecn(ifs, ifname, ecn) == -1)
 			r = -1;
-	} else {
+	} else
 		r = deletetunnel(ifs, ifname);
-		if (settunneldf(ifs, ifname, 0) == -1)
-			r = -1;
-		if (settunnelecn(ifs, ifname, 0) == -1)
-			r = -1;
-	}
 	return r;
 }
 
 /*
  * tunnel in configure private. The line has the addresses as
- * conf_tunnel() prints them, then ttl, ecn and df. The kernel keeps the
- * ttl, ecn and df a tunnel command leaves out, so they come from the
- * candidate's line. rdomain is the tunneldomain line.
+ * conf_tunnel() prints them, then the ttl, and ecn and df if they are
+ * on. The kernel keeps the ttl a tunnel command leaves out, so it comes
+ * from the candidate's line, or for a new line, it is the ttl the
+ * tunnel starts with. ecn and df are off unless the command gives them.
+ * rdomain is the tunneldomain line.
  */
 static int
 cand_tunnel(char *ifname, int set, char *src, char *dstip, char *dstport,
@@ -287,23 +291,19 @@ cand_tunnel(char *ifname, int set, char *src, char *dstip, char *dstport,
 		return -1;
 	}
 
-	if ((l = cand_line("tunnel", 0)) != NULL) {
-		/* tunnel src dst, then what the kernel keeps */
+	if (ttl == 0 && (l = cand_line("tunnel", 0)) != NULL) {
+		/* tunnel src dst, then the ttl the kernel keeps */
 		strlcpy(line, l, sizeof(line));
 		strtok_r(line, " ", &p);
 		strtok_r(NULL, " ", &p);
 		strtok_r(NULL, " ", &p);
-		while ((w = strtok_r(NULL, " ", &p)) != NULL) {
-			if (strcmp(w, "ttl") == 0) {
-				w = strtok_r(NULL, " ", &p);
-				if (ttl == 0 && w != NULL)
-					ttl = strtonum(w, 1, 0xff, &errmsg);
-			} else if (strcmp(w, "ecn") == 0)
-				ecn = 1;
-			else if (strcmp(w, "df") == 0)
-				df = 1;
-		}
+		while ((w = strtok_r(NULL, " ", &p)) != NULL)
+			if (strcmp(w, "ttl") == 0 &&
+			    (w = strtok_r(NULL, " ", &p)) != NULL)
+				ttl = strtonum(w, 1, 0xff, &errmsg);
 	}
+	if (ttl == 0)
+		ttl = tunnel_startttl(ifname);
 
 	port[0] = ttls[0] = '\0';
 	if (dport > 0)
@@ -444,6 +444,19 @@ settunnelrdomain(int ifs, char *ifname, char *rdomain)
 		return -1;
 	}
 	return 0;
+}
+
+/*
+ * The ttl a new tunnel line gets: 1 for nvgre and vxlan, which send to
+ * multicast groups, as the kernel starts them, and the kernel's default
+ * IP ttl, IPDEFTTL, for the others
+ */
+static int
+tunnel_startttl(char *ifname)
+{
+	if (isprefix("nvgre", ifname) || isprefix("vxlan", ifname))
+		return 1;
+	return IPDEFTTL;
 }
 
 /* A tunnel's ttl, 1 to 255 as the kernel takes it, or -1 */

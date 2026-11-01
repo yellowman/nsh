@@ -5366,6 +5366,15 @@ Set or remove configured peer PPP authentication parameters for the interface.
 .Pp
 Set or remove tunnel endpoints with this command, on an interface that
 takes them, such as gif, gre, egre, eoip, etherip, nvgre or vxlan.
+.Cm ttl
+sets the TTL of the packets that carry the tunnel.
+Without it, the tunnel keeps its TTL; a new tunnel's TTL is 64, or 1 on
+nvgre and vxlan.
+.Cm df
+sets the don't-fragment bit on those packets, and on gif, gre and mgre,
+.Cm ecn
+lets them carry explicit congestion notification.
+Each is off unless the command gives it.
 .Bd -literal -offset indent
 nsh(interface-gre0)# tunnel 12.3.3.3 12.6.6.6
 .Ed

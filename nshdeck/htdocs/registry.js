@@ -233,8 +233,9 @@ var REGISTRY = {
 	    placeholder: "192.0.2.1 198.51.100.1", on: TUNNELS,
 	    keyword: "tunnel source-ip destination-ip [ttl 1-255] [df] [ecn]",
 	    definition: "The tunnel's two ends, and the TTL, don't-fragment " +
-	    "and ECN of the packets that carry it.", values: "two addresses " +
-	    "of one family, then ttl 1 to 255, df and ecn", default: "none" },
+	    "and ECN of the packets that carry it. df and ecn are off " +
+	    "unless the line gives them.", values: "two addresses of one " +
+	    "family, then ttl 1 to 255, df and ecn", default: "none" },
 	"if.tunneldomain": { label: "Tunnel routing domain", group: "VLAN " +
 	    "and tunnel", kind: "number", min: 0, max: 255,
 	    on: TUNNELS.concat(MPLSIFS), keyword: "tunneldomain rdomain",
