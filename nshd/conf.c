@@ -1166,16 +1166,18 @@ conf_pwe3(FILE *output, int ifs, char *ifname)
 void
 conf_tunnel(FILE *output, int ifs, char *ifname)
 {
-	int dstport, physrtable;
+	int port, physrtable;
 	char tmpa[IPSIZ], tmpb[IPSIZ];
 
-	if ((dstport=
+	if ((port =
 	    phys_status(ifs, ifname, tmpa, tmpb, IPSIZ, IPSIZ)) >= 0) {
 		int physttl;
 
-		fprintf(output, " tunnel %s %s", tmpa, tmpb);
-		if (dstport > 0)
-			fprintf(output, ":%i", dstport);
+		/* vxlan's port, on the source, unless it is VXLAN_PORT */
+		fprintf(output, " tunnel %s", tmpa);
+		if (port > 0 && port != VXLAN_PORT)
+			fprintf(output, ":%i", port);
+		fprintf(output, " %s", tmpb);
 		if ((physttl = get_physttl(ifs, ifname)) > 0)
 			fprintf(output, " ttl %i", physttl);
 		if ((get_physecn(ifs, ifname)) > 0)

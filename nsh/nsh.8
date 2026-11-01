@@ -5359,13 +5359,16 @@ Set or remove configured peer PPP authentication parameters for the interface.
 .Pp
 .Op no
 .Ic tunnel
-.Ar source-ip  destination-ip
+.Ar source-ip Ns Op : Ns Ar port
+.Ar destination-ip
 .Op Cm ttl Ar 1-255
 .Op df
 .Op ecn
 .Pp
 Set or remove tunnel endpoints with this command, on an interface that
 takes them, such as gif, gre, egre, eoip, etherip, nvgre or vxlan.
+On vxlan, the source may have a UDP port, which vxlan uses at both ends;
+without one, vxlan uses 4789.
 .Cm ttl
 sets the TTL of the packets that carry the tunnel.
 Without it, the tunnel keeps its TTL; a new tunnel's TTL is 64, or 1 on

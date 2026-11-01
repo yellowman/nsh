@@ -446,6 +446,7 @@ int brprotect(int, char **, ...);
 int show_bridges(int, char **, ...);
 
 /* tunnel.c */
+#define VXLAN_PORT	4789	/* vxlan's UDP port, unless given another */
 int inttunnel(int, char **, ...);
 int intvnetid(int, char **, ...);
 int get_physrtable(int, char *);

@@ -418,32 +418,33 @@ int buf_len, int buf2_len)
 	const int       niflag = NI_NUMERICHOST;
 #endif
 	struct if_laddrreq req;
-	int dstport = 0;
+	int port = 0;
 
 	bzero(&req, sizeof(req));
 	(void) strlcpy(req.iflr_name, ifname, sizeof(req.iflr_name));
 	if (ioctl(s, SIOCGLIFPHYADDR, (caddr_t) &req) < 0)
 		return -1;
-	if (req.addr.ss_family == AF_INET6)
+	/* the kernel gives vxlan's port on the source */
+	if (req.addr.ss_family == AF_INET)
+		port = ((struct sockaddr_in *)&req.addr)->sin_port;
+	else if (req.addr.ss_family == AF_INET6) {
 		in6_fillscopeid((struct sockaddr_in6 *)&req.addr);
+		port = ((struct sockaddr_in6 *)&req.addr)->sin6_port;
+	}
 	if (getnameinfo((struct sockaddr *)&req.addr, req.addr.ss_len,
 	    tmp_buf, buf_len, 0, 0, niflag) != 0) {
 		printf("%% phys_status: 0/getnameinfo failure\n");
 		return (-1);
 	}
 
-	if (req.dstaddr.ss_family == AF_INET) {
-		dstport = ((struct sockaddr_in *)&req.dstaddr)->sin_port;
-	} else if (req.dstaddr.ss_family == AF_INET6) {
+	if (req.dstaddr.ss_family == AF_INET6)
 		in6_fillscopeid((struct sockaddr_in6 *) & req.dstaddr);
-		dstport = ((struct sockaddr_in6 *)&req.dstaddr)->sin6_port;
-	}
 	if (getnameinfo((struct sockaddr *)&req.dstaddr, req.dstaddr.ss_len,
 	    tmp_buf2, buf2_len, 0, 0, niflag) != 0) {
 		printf("%% phys_status: 1/getnameinfo failure\n");
 		return -1;
 	}
-	return ntohs(dstport);
+	return ntohs(port);
 }
 
 int

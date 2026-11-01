@@ -35,6 +35,7 @@ static int tunnel_ttl(char *);
 static int tunnel_startttl(char *);
 static int tunnel_rdomain(char *);
 static int tunnel_addr(char *, char *, char *, char *, int *);
+static int tunnel_arg(char *, char *, size_t, char **);
 static int cand_tunnel(char *, int, char *, char *, char *, char *, char *,
     int, int);
 
@@ -113,7 +114,7 @@ cand_vnetid(char *ifname, int set, char *vnetida)
 void
 tunnelusage(void)
 {
-	printf("%% tunnel <src ip> <dest ip> [ttl <ttl>] [df] [ecn]\n");
+	printf("%% tunnel <src ip>[:port] <dest ip> [ttl <ttl>] [df] [ecn]\n");
 	printf("%% no tunnel [src ip] [dest ip] [ttl <ttl>] [df] [ecn]\n");
 }
 
@@ -121,9 +122,10 @@ int
 inttunnel(int argc, char **argv, ...)
 {
 	int set, ch, df = 0, ecn = 0, r;
-	char *src = NULL, *dst = NULL, *rdomain = NULL, *ttl = NULL;
-	char *dstip = NULL, *dstport = NULL;
-	char buf[MAXHOSTNAMELEN+sizeof (":65535")];
+	char *src = NULL, *rdomain = NULL, *ttl = NULL;
+	char *srcport = NULL, *dstip = NULL, *dstport = NULL;
+	char sbuf[NI_MAXHOST + sizeof(":65535")];
+	char dbuf[NI_MAXHOST + sizeof(":65535")];
 	va_list ap;
 	char *ifname;
 	int ifs;
@@ -148,35 +150,27 @@ inttunnel(int argc, char **argv, ...)
 		return -1;
 	}
 
-	if (argc > 0 && is_ip_addr(argv[0])) {
-		src = argv[0];
+	if (argc > 0 && tunnel_arg(argv[0], sbuf, sizeof(sbuf), &srcport)) {
+		src = sbuf;
 		argc--;
 		argv++;
 	}
-	if (argc > 0) {
-		dst = argv[0];
-
-		if (strchr(dst, ':') == NULL || strchr(dst, ':') !=
-		    strrchr(dst, ':')) {
-			/* no port or IPv6 */
-			dstip = dst;
-			dstport = NULL;
-		} else {
-			if (strlcpy(buf, dst, sizeof(buf)) >= sizeof(buf)) {
-				printf("%% inttunnel: destination overflow\n");
-				return -1;
-			}
-			dstport = strchr(buf, ':');
-			*dstport++ = '\0';
-			dstip = buf;
+	if (argc > 0 && tunnel_arg(argv[0], dbuf, sizeof(dbuf), &dstport)) {
+		dstip = dbuf;
+		argc--;
+		argv++;
+	}
+	/* older versions of nsh wrote vxlan's port on the destination */
+	if (dstport != NULL) {
+		if (srcport != NULL) {
+			printf("%% a tunnel has one port, on its source\n");
+			return -1;
 		}
-		if (is_ip_addr(dstip)) {
-			argc--;
-			argv++;
-		} else {
-			dstip = NULL;
-			dstport = NULL;
-		}
+		srcport = dstport;
+	}
+	if (srcport != NULL && !isprefix("vxlan", ifname)) {
+		printf("%% only vxlan takes a port\n");
+		return -1;
 	}
 
 	noptind = 0;
@@ -207,12 +201,12 @@ inttunnel(int argc, char **argv, ...)
 	}
 
 	if (candidate)
-		return cand_tunnel(ifname, set, src, dstip, dstport, rdomain,
+		return cand_tunnel(ifname, set, src, srcport, dstip, rdomain,
 		    ttl, df, ecn);
 
 	if (set) {
 		/* without its addresses, the tunnel gets nothing else */
-		if ((r = settunnel(ifs, ifname, src, dstip, dstport)) == -1)
+		if ((r = settunnel(ifs, ifname, src, srcport, dstip)) == -1)
 			return -1;
 		if (rdomain && settunnelrdomain(ifs, ifname, rdomain) == -1)
 			r = -1;
@@ -232,20 +226,21 @@ inttunnel(int argc, char **argv, ...)
 
 /*
  * tunnel in configure private. The line has the addresses as
- * conf_tunnel() prints them, then the ttl, and ecn and df if they are
+ * conf_tunnel() prints them, the source with vxlan's port unless it is
+ * VXLAN_PORT, then the ttl, and ecn and df if they are
  * on. The kernel keeps the ttl a tunnel command leaves out, so it comes
  * from the candidate's line, or for a new line, it is the ttl the
  * tunnel starts with. ecn and df are off unless the command gives them.
  * rdomain is the tunneldomain line.
  */
 static int
-cand_tunnel(char *ifname, int set, char *src, char *dstip, char *dstport,
+cand_tunnel(char *ifname, int set, char *src, char *srcport, char *dstip,
     char *rdomain, char *ttla, int df, int ecn)
 {
 	char s[NI_MAXHOST], d[NI_MAXHOST], line[1024], port[sizeof(":65535")];
 	char ttls[sizeof(" ttl 255")], *l, *w, *p;
 	const char *errmsg;
-	int af, daf, dport, ttl = 0, rdomainid = 0;
+	int af, daf, sport, ttl = 0, rdomainid = 0;
 
 	if (!cand_takes(ifname, set ? SIOCSLIFPHYADDR : SIOCDIFPHYADDR)) {
 		printf("%% tunnel not supported on %s\n", ifname);
@@ -282,8 +277,8 @@ cand_tunnel(char *ifname, int set, char *src, char *dstip, char *dstport,
 		printf("%% tunnel ecn not supported on %s\n", ifname);
 		return -1;
 	}
-	if ((af = tunnel_addr("source", src, NULL, s, NULL)) == 0 ||
-	    (daf = tunnel_addr("destination", dstip, dstport, d, &dport)) == 0)
+	if ((af = tunnel_addr("source", src, srcport, s, &sport)) == 0 ||
+	    (daf = tunnel_addr("destination", dstip, NULL, d, NULL)) == 0)
 		return -1;
 	if (af != daf) {
 		printf("%% source and destination address families do not"
@@ -306,11 +301,11 @@ cand_tunnel(char *ifname, int set, char *src, char *dstip, char *dstport,
 		ttl = tunnel_startttl(ifname);
 
 	port[0] = ttls[0] = '\0';
-	if (dport > 0)
-		snprintf(port, sizeof(port), ":%d", dport);
+	if (sport > 0 && sport != VXLAN_PORT)
+		snprintf(port, sizeof(port), ":%d", sport);
 	if (ttl > 0)
 		snprintf(ttls, sizeof(ttls), " ttl %d", ttl);
-	if (cand_setting(ST_ON, "tunnel %s %s%s%s%s%s", s, d, port, ttls,
+	if (cand_setting(ST_ON, "tunnel %s%s %s%s%s%s", s, port, d, ttls,
 	    ecn ? " ecn" : "", df ? " df" : "") == -1)
 		return -1;
 	if (rdomain == NULL)
@@ -318,6 +313,26 @@ cand_tunnel(char *ifname, int set, char *src, char *dstip, char *dstport,
 	if (rdomainid != 0)
 		return cand_setting(ST_ON, "tunneldomain %d", rdomainid);
 	return cand_setting(ST_DEFAULT, "tunneldomain");
+}
+
+/*
+ * A tunnel address as a command gives it, ip or ip:port, split into buf
+ * (len bytes) and *port; an IPv6 address has no port. 1 if it is an
+ * address, else 0.
+ */
+static int
+tunnel_arg(char *arg, char *buf, size_t len, char **port)
+{
+	char *p;
+
+	*port = NULL;
+	if (strlcpy(buf, arg, len) >= len)
+		return 0;
+	if ((p = strchr(buf, ':')) != NULL && p == strrchr(buf, ':')) {
+		*p++ = '\0';
+		*port = p;
+	}
+	return is_ip_addr(buf);
 }
 
 /*
@@ -351,19 +366,19 @@ tunnel_addr(char *what, char *ip, char *port, char *buf, int *portp)
 }
 
 int
-settunnel(int s, char *ifname, char *src, char *dstip, char *dstport)
+settunnel(int s, char *ifname, char *src, char *srcport, char *dstip)
 {
 	struct addrinfo *srcres, *dstres;
 	int ecode, r = -1;
 	struct if_laddrreq req;
 
-	if ((ecode = getaddrinfo(src, NULL, NULL, &srcres)) != 0) {
+	if ((ecode = getaddrinfo(src, srcport, NULL, &srcres)) != 0) {
 		printf("%% unable to parse source address string: %s\n",
 		     gai_strerror(ecode));
 		return -1;
 	}
 
-	if ((ecode = getaddrinfo(dstip, dstport, NULL, &dstres)) != 0) {
+	if ((ecode = getaddrinfo(dstip, NULL, NULL, &dstres)) != 0) {
 		printf("%% unable to parse destination address string: %s\n",
 		     gai_strerror(ecode));
 		freeaddrinfo(srcres);
