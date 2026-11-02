@@ -1186,6 +1186,28 @@ nsh(bridge-veb101)# member em2
 nsh(bridge-veb101)# untagged em2 101
 nsh(bridge-veb101)# exit
 .Ed
+.Tg static
+.Op no
+.Ic static
+.Ar mac-address Ns Op @ Ns Ar vlan-id
+.Ar interface-name
+.Pp
+Add an address that the bridge always sends to a member.
+On a veb, an address is in a VLAN: the one after the
+.Sq @ ,
+or the member's untagged VLAN, and conf prints it with its VLAN.
+A veb has an address once in a VLAN, or once in all the VLANs of a
+private VLAN, and does not replace it.
+.Cm no static
+removes an address; on a veb without a VLAN, the one in the VLAN of the
+veb's vnetid.
+.Pp
+E.g. on veb101, send 00:1b:21:0a:0b:01 in VLAN 10 to em1.
+.Bd -literal -offset indent
+nsh(config)# bridge veb101
+nsh(bridge-veb101)# static 00:1b:21:0a:0b:01@10 em1
+nsh(bridge-veb101)# exit
+.Ed
 .Tg ip6
 .Op no
 .Ic ip6

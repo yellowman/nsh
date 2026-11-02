@@ -85,6 +85,8 @@ int	show_bridge(char *);
 static int br_ioctl(int, u_long, void *);
 static int br_portname(int, char *);
 static int brvlan_parse(char *, u_int8_t *);
+static int bridge_addrvlan(char *, struct ether_addr *, u_int16_t *);
+static int bridge_confvaddrs(int, char *, char *, FILE *);
 static void brvlan_print(FILE *, const u_int8_t *);
 
 #define BRPORT_MEMBER 0
@@ -413,8 +415,14 @@ brstatic(int argc, char **argv, ...)
 	argc--;
 
 	if ((set && argc != 2) || ((!set && argc < 1) || (!set && argc > 2))) {
-		printf("%% static <mac address> <member>\n");
-		printf("%% no static <mac address> [member]\n");
+		printf("%% static <mac address>[@vlan] <member>\n");
+		printf("%% no static <mac address>[@vlan] [member]\n");
+		return -1;
+	}
+	/* a veb's addresses are each in a VLAN */
+	if (strchr(argv[0], '@') != NULL &&
+	    !cand_takes(ifname, SIOCBRDGSVADDR)) {
+		printf("%% static with a VLAN not supported on %s\n", ifname);
 		return -1;
 	}
 
@@ -1110,18 +1118,27 @@ bridge_maxaddr(int s, char *brdg, u_int32_t val)
 int
 bridge_deladdr(int s, char *brdg, char *addr)
 {
+	struct ifbvareq ifbva;
 	struct ifbareq ifba;
-	struct ether_addr *ea;
+	struct ether_addr ea;
+	u_int16_t vlan;
+	int r;
 
-	strlcpy(ifba.ifba_name, brdg, sizeof(ifba.ifba_name));
-	ea = ether_aton(addr);
-	if (ea == NULL) {
-		printf("%% Invalid address: %s\n", addr);
+	if (bridge_addrvlan(addr, &ea, &vlan) == -1)
 		return (EX_USAGE);
+	if (vlan != EVL_VLID_NULL) {
+		memset(&ifbva, 0, sizeof(ifbva));
+		strlcpy(ifbva.ifbva_name, brdg, sizeof(ifbva.ifbva_name));
+		ifbva.ifbva_dst = ea;
+		ifbva.ifbva_vid = vlan;
+		r = br_ioctl(s, SIOCBRDGDVADDR, &ifbva);
+	} else {
+		memset(&ifba, 0, sizeof(ifba));
+		strlcpy(ifba.ifba_name, brdg, sizeof(ifba.ifba_name));
+		ifba.ifba_dst = ea;
+		r = br_ioctl(s, SIOCBRDGDADDR, &ifba);
 	}
-	bcopy(ea, &ifba.ifba_dst, sizeof(struct ether_addr));
-
-	if (br_ioctl(s, SIOCBRDGDADDR, &ifba) < 0) {
+	if (r < 0) {
 		printf("%% unable to delete %s from %s\n", addr, brdg);
 		return (EX_IOERR);
 	}
@@ -1168,30 +1185,73 @@ bridge_ifcost(int s, char *brdg, char *ifname, int val)
 int
 bridge_addaddr(int s, char *brdg, char *ifname, char *addr)
 {
+	struct ifbvareq ifbva;
 	struct ifbareq ifba;
-	struct ether_addr *ea;
+	struct ether_addr ea;
+	u_int16_t vlan;
+	int r;
 
-	strlcpy(ifba.ifba_name, brdg, sizeof(ifba.ifba_name));
-	strlcpy(ifba.ifba_ifsname, ifname, sizeof(ifba.ifba_ifsname));
-
-	ea = ether_aton(addr);
-	if (ea == NULL) {
-		printf("%% Invalid address: %s\n", addr);
+	if (bridge_addrvlan(addr, &ea, &vlan) == -1)
 		return (EX_USAGE);
+	/* a veb takes no endpoint, which ifba_dstsa would be */
+	if (vlan != EVL_VLID_NULL) {
+		memset(&ifbva, 0, sizeof(ifbva));
+		strlcpy(ifbva.ifbva_name, brdg, sizeof(ifbva.ifbva_name));
+		strlcpy(ifbva.ifbva_ifsname, ifname,
+		    sizeof(ifbva.ifbva_ifsname));
+		ifbva.ifbva_dst = ea;
+		ifbva.ifbva_vid = vlan;
+		ifbva.ifbva_flags = IFBAF_STATIC;
+		r = br_ioctl(s, SIOCBRDGSVADDR, &ifbva);
+	} else {
+		memset(&ifba, 0, sizeof(ifba));
+		strlcpy(ifba.ifba_name, brdg, sizeof(ifba.ifba_name));
+		strlcpy(ifba.ifba_ifsname, ifname, sizeof(ifba.ifba_ifsname));
+		ifba.ifba_dst = ea;
+		ifba.ifba_flags = IFBAF_STATIC;
+		r = br_ioctl(s, SIOCBRDGSADDR, &ifba);
 	}
-	bcopy(ea, &ifba.ifba_dst, sizeof(struct ether_addr));
-	ifba.ifba_flags = IFBAF_STATIC;
-
-	if (br_ioctl(s, SIOCBRDGSADDR, &ifba) < 0) {
+	if (r < 0) {
 		char tmp[128];
 
 		snprintf(tmp, sizeof(tmp), "%% unable to add %s to %s: %s\n",
-		    addr, brdg, strerror(errno));
+		    addr, brdg, errno == ESRCH ? "no such member" :
+		    strerror(errno));
 		printf("%s", tmp);
 		return (EX_IOERR);
 	}
 
 	return (0);
+}
+
+/*
+ * A static line's address, "00:1b:21:0a:0b:01", or on a veb, with the
+ * VLAN it is in, "00:1b:21:0a:0b:01@20", into ea and vlan, which is
+ * EVL_VLID_NULL without one.  -1 after saying why not
+ */
+static int
+bridge_addrvlan(char *addr, struct ether_addr *ea, u_int16_t *vlan)
+{
+	struct ether_addr *e;
+	const char *errmsg = NULL;
+	char buf[64], *v;
+
+	strlcpy(buf, addr, sizeof(buf));
+	*vlan = EVL_VLID_NULL;
+	if ((v = strchr(buf, '@')) != NULL) {
+		*v++ = '\0';
+		*vlan = strtonum(v, EVL_VLID_MIN, EVL_VLID_MAX, &errmsg);
+		if (errmsg) {
+			printf("%% Invalid VLAN %s: %s\n", v, errmsg);
+			return -1;
+		}
+	}
+	if ((e = ether_aton(buf)) == NULL) {
+		printf("%% Invalid address: %s\n", addr);
+		return -1;
+	}
+	*ea = *e;
+	return 0;
 }
 
 /* brdg's members; -1 if a record failed */
@@ -1314,6 +1374,49 @@ bridge_confaddrs(int s, char *brdg, char *delim, FILE *output)
 		if (ifba->ifba_flags & IFBAF_STATIC)
 			fprintf(output, "%s%s %s\n", delim,
 			    ether_ntoa(&ifba->ifba_dst), buf);
+	}
+	free(inbuf);
+	return (0);
+}
+
+/* A veb's static addresses, as static lines have them, "mac@vlan member" */
+static int
+bridge_confvaddrs(int s, char *brdg, char *delim, FILE *output)
+{
+	struct ifbaconf ifbac;
+	struct ifbvareq *ifbva;
+	char buf[sizeof(ifbva->ifbva_ifsname) + 1], *inbuf = NULL, *inb;
+	u_int i, len = 8192;
+
+	while (1) {
+		ifbac.ifbac_len = len;
+		if ((inb = realloc(inbuf, len)) == NULL) {
+			free(inbuf);
+			printf("%% bridge_confvaddrs: malloc: %s\n",
+			    strerror(errno));
+			return 0;
+		}
+		ifbac.ifbac_buf = inbuf = inb;
+		strlcpy(ifbac.ifbac_name, brdg, sizeof(ifbac.ifbac_name));
+		if (ioctl(s, SIOCBRDGVRTS, &ifbac) < 0) {
+			if (errno != ENETDOWN)
+				printf("%% bridge_confvaddrs: SIOCBRDGVRTS: "
+				    "%s\n", strerror(errno));
+			free(inbuf);
+			return 0;
+		}
+		if (ifbac.ifbac_len + sizeof(*ifbva) < len)
+			break;
+		len *= 2;
+	}
+
+	for (i = 0; i < ifbac.ifbac_len / sizeof(*ifbva); i++) {
+		ifbva = ifbac.ifbac_vreq + i;
+		strlcpy(buf, ifbva->ifbva_ifsname, sizeof(buf));
+		if ((ifbva->ifbva_flags & IFBAF_TYPEMASK) == IFBAF_STATIC)
+			fprintf(output, "%s%s@%u %s\n", delim,
+			    ether_ntoa(&ifbva->ifbva_dst), ifbva->ifbva_vid,
+			    buf);
 	}
 	free(inbuf);
 	return (0);
@@ -2306,6 +2409,66 @@ brcfg_static(struct brcfg *b, struct ether_addr *ea)
 	return -1;
 }
 
+static int brcfg_findbif(struct brcfg *, char *, struct brport **);
+
+/* The VLAN a veb keeps an address in: a secondary VLAN's primary's */
+static u_int
+brcfg_vp(struct brcfg *b, u_int vlan)
+{
+	size_t i;
+
+	for (i = 0; i < b->npvlans; i++)
+		if (b->pvlans[i].ifbrpv_type != IFBRPV_T_PRIMARY &&
+		    b->pvlans[i].ifbrpv_secondary == vlan)
+			return b->pvlans[i].ifbrpv_primary;
+	return vlan;
+}
+
+/* The index of a veb's static entry for ea in vlan, by vlan's primary */
+static int
+brcfg_vstatic(struct brcfg *b, struct ether_addr *ea, u_int vlan)
+{
+	char *mac = ether_ntoa(ea), *v;
+	size_t i, len = strlen(mac);
+
+	for (i = 0; i < b->nstatics; i++) {
+		v = b->statics[i].text + len;
+		if (strncmp(b->statics[i].text, mac, len) == 0 &&
+		    *v == '@' && brcfg_vp(b, strtoul(v + 1, NULL, 10)) ==
+		    brcfg_vp(b, vlan))
+			return i;
+	}
+	return -1;
+}
+
+/*
+ * A veb's static entry for ea in vlan, or with none, member's untagged
+ * VLAN: veb_add_addr(), veb_add_vid_addr() and etherbridge_add_addr()
+ */
+static int
+brcfg_vaddr(struct brcfg *b, struct ether_addr *ea, u_int vlan, char *member)
+{
+	static const struct ether_addr any;
+	struct brport *p;
+	char text[64];
+	int e;
+
+	if ((e = brcfg_findbif(b, member, &p)) != 0)
+		return e;
+	if (vlan == EVL_VLID_NULL)
+		vlan = p->pvid;
+	if (vlan < EVL_VLID_MIN || vlan > EVL_VLID_MAX)
+		return EADDRNOTAVAIL;
+	if (ETHER_IS_MULTICAST(ea->ether_addr_octet) ||
+	    memcmp(ea, &any, sizeof(*ea)) == 0)
+		return EADDRNOTAVAIL;
+	/* an address is in a VLAN once: the kernel does not replace it */
+	if (brcfg_vstatic(b, ea, vlan) != -1)
+		return EADDRINUSE;
+	snprintf(text, sizeof(text), "%s@%u %s", ether_ntoa(ea), vlan, member);
+	return brcfg_line(b, 0, text) == -1 ? ENOMEM : 0;
+}
+
 /* remove p and its static addresses and rules, as bridge_ifremove() does */
 static void
 brcfg_del(struct brcfg *b, struct brport *p)
@@ -2391,7 +2554,10 @@ brcfg_kernel(int s, char *brdg, struct brcfg *b)
 	/* the static addresses, then the members' rules, as they print */
 	if ((f = open_memstream(&buf, &len)) == NULL)
 		goto done;
-	bridge_confaddrs(s, brdg, "s", f);
+	if (b->vlans)
+		bridge_confvaddrs(s, brdg, "s", f);
+	else
+		bridge_confaddrs(s, brdg, "s", f);
 	for (i = 0; i < b->nports; i++)
 		if (!(b->ports[i].flags & IFBIF_SPAN))
 			bridge_rules(s, brdg, b->ports[i].name, "r", f);
@@ -2710,6 +2876,7 @@ cand_bridge(u_long cmd, void *data)
 	struct ifbrlreq *rl = data;
 	struct ifbrvidmap *vm = data;
 	struct ifbrpvlan *pv = data, *v;
+	struct ifbvareq *bva = data;
 	struct brcfg b;
 	struct brport *p;
 	char *buf = NULL, text[64];
@@ -2866,7 +3033,34 @@ cand_bridge(u_long cmd, void *data)
 			else
 				p->tagged[i] &= ~vm->ifbrvm_map[i];
 		break;
+	case SIOCBRDGSVADDR:
+		/* veb_add_vid_addr() */
+		if (bva->ifbva_vid != EVL_VLID_NULL &&
+		    (bva->ifbva_vid < EVL_VLID_MIN ||
+		    bva->ifbva_vid > EVL_VLID_MAX))
+			e = EINVAL;
+		else
+			e = brcfg_vaddr(&b, &bva->ifbva_dst, bva->ifbva_vid,
+			    bva->ifbva_ifsname);
+		break;
+	case SIOCBRDGDVADDR:
+		/* veb_del_vid_addr() */
+		if (bva->ifbva_vid < EVL_VLID_MIN ||
+		    bva->ifbva_vid > EVL_VLID_MAX)
+			e = EINVAL;
+		else if ((i = brcfg_vstatic(&b, &bva->ifbva_dst,
+		    bva->ifbva_vid)) == -1)
+			e = ESRCH;
+		else
+			brcfg_delline(b.statics, &b.nstatics, i);
+		break;
 	case SIOCBRDGSADDR:
+		/* a veb's address is in the member's untagged VLAN */
+		if (b.vlans) {
+			e = brcfg_vaddr(&b, &ba->ifba_dst, EVL_VLID_NULL,
+			    ba->ifba_ifsname);
+			break;
+		}
 		if ((e = brcfg_findbif(&b, ba->ifba_ifsname, &p)) != 0)
 			break;
 		if ((i = brcfg_static(&b, &ba->ifba_dst)) != -1)
@@ -2877,7 +3071,13 @@ cand_bridge(u_long cmd, void *data)
 			e = ENOMEM;
 		break;
 	case SIOCBRDGDADDR:
-		if ((i = brcfg_static(&b, &ba->ifba_dst)) == -1)
+		/* a veb's address in its vnetid's VLAN: veb_del_addr() */
+		if (b.vlans && (b.dflt == IFBR_PVID_NONE ||
+		    (i = brcfg_vstatic(&b, &ba->ifba_dst, b.dflt)) == -1))
+			e = ESRCH;
+		else if (b.vlans)
+			brcfg_delline(b.statics, &b.nstatics, i);
+		else if ((i = brcfg_static(&b, &ba->ifba_dst)) == -1)
 			e = ENOENT;
 		else
 			brcfg_delline(b.statics, &b.nstatics, i);

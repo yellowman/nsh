@@ -532,9 +532,10 @@ var REGISTRY = {
 	    default: "240" },
 	"bridge.static": { label: "Static addresses", group: "Forwarding",
 	    kind: "lines", placeholder: "00:11:22:33:44:55 vlan101",
-	    keyword: "static mac-address member", definition: "Addresses the " +
-	    "bridge always sends to one member.", values: "an address, then " +
-	    "a member, a line each", default: "none", needs: "member" },
+	    keyword: "static mac-address[@vlan] member", definition:
+	    "Addresses the bridge always sends to one member; on a veb, each " +
+	    "in a VLAN.", values: "an address, on a veb with @ and its VLAN, " +
+	    "then a member, a line each", default: "none", needs: "member" },
 	"bridge.rule": { label: "Rules", group: "Forwarding", kind: "lines",
 	    keyword: "rule block | pass in | out | in/out on member [src " +
 	    "mac] [dst mac]", definition: "Layer 2 filtering of frames by " +

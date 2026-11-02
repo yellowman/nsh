@@ -188,7 +188,8 @@ static const struct setting bridge_settings[] = {
 	{ "ifpriority",		S_ENTRY,	2 },
 	{ "ifcost",		S_ENTRY,	2 },
 	{ "protect",		S_ENTRY,	2 },
-	{ "static",		S_ENTRY,	2 },
+	/* keyed by the whole line: veb does not replace an address */
+	{ "static",		S_ENTRY,	3 },
 	{ "rule",		S_ENTRY,	11 },
 	/* the flags, last, as conf() prints them */
 	{ "link",		S_VALUE },
