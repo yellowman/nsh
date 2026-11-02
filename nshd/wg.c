@@ -85,6 +85,7 @@ static int cand_setwg(char *, struct wg_interface_io *);
 static int cand_wgif(struct wgif *);
 static int wgif_get(int, char *, struct wgif *);
 static int wgpeer_keepaips(int, char *, struct wg_aip_io *, size_t);
+static int wgpeer_exists(int, char *);
 
 /*
  * WireGuard configuration
@@ -253,6 +254,13 @@ setwgpeerep(const char *hostport)
 
 	if (pflow_addr(hostport, &ss) < 0)
 		return -1;
+	/* udp_output() sends nothing to port 0 (EADDRNOTAVAIL) */
+	if ((ss.ss_family == AF_INET6 ?
+	    ((struct sockaddr_in6 *)&ss)->sin6_port :
+	    ((struct sockaddr_in *)&ss)->sin_port) == 0) {
+		printf("%% endpoint needs a port\n");
+		return -1;
+	}
 
 	wg_peer->p_flags |= WG_PEER_HAS_ENDPOINT;
 	memcpy(&wg_peer->p_sa, &ss, ss.ss_len);
@@ -911,6 +919,23 @@ wgpeer_keepaips(int ifs, char *ifname, struct wg_aip_io *drop, size_t ndrop)
 	return ret;
 }
 
+/*
+ * 1 if ifname has the peer whose public key wg_peer holds, 0 if not, or
+ * -1 on error
+ */
+static int
+wgpeer_exists(int ifs, char *ifname)
+{
+	struct wgif w;
+	int r;
+
+	if (wgif_get(ifs, ifname, &w) == -1)
+		return -1;
+	r = wgif_peer(&w, wg_peer->p_public, 0) != NULL;
+	wgif_free(&w);
+	return r;
+}
+
 /* SIOCSWG, or in configure private its change to the candidate */
 static int
 wg_set(int ifs, struct wg_data_io *wgd)
@@ -1055,7 +1080,7 @@ intwgpeer(int argc, char **argv, ...)
 {
 	struct wg_aip_io *drop = NULL, *d;
 	size_t ndrop = 0;
-	int set, ch, r = -1;
+	int set, ch, k, r = -1;
 	va_list ap;
 	char *ifname;
 	int ifs;
@@ -1114,6 +1139,13 @@ intwgpeer(int argc, char **argv, ...)
 		else if (!set)
 			/* change a peer, never add one */
 			wg_peer->p_flags |= WG_PEER_UPDATE;
+		/* the kernel ignores a change to a peer it does not have */
+		if (!set && (k = wgpeer_exists(ifs, ifname)) != 1) {
+			if (k == 0)
+				printf("%% %s has no wgpeer %s\n", ifname,
+				    argv[0]);
+			goto wgerr;
+		}
 
 		/* hide public key from nopt */
 		argc--;
