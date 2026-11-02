@@ -41,6 +41,7 @@
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
 #include <net/if_bridge.h>
+#include <ctype.h>
 #include <errno.h>
 #include <string.h>
 #include <err.h>
@@ -92,6 +93,7 @@ static void brvlan_print(FILE *, const u_int8_t *);
 #define BRPORT_DISCOVER 3
 #define BRPORT_LEARN 4
 #define BRPORT_STP 5
+#define BRPORT_PVPTAGS 6
 
 struct brc {
 	char *name;
@@ -111,6 +113,7 @@ static struct brc brps[] = {
 	{ "discover",	BRPORT_DISCOVER },
 	{ "learning",	BRPORT_LEARN },
 	{ "stp",	BRPORT_STP },
+	{ "pvptags",	BRPORT_PVPTAGS },
 	{ 0,		0 }
 };
 
@@ -150,6 +153,11 @@ brport(int argc, char **argv, ...)
 	if (argc == 0) {
 		printf("%% %s <if> [if]...\n", x->name);
 		printf("%% no %s <if> [if]...\n", x->name);
+		return -1;
+	}
+	/* a veb's private VLANs */
+	if (x->type == BRPORT_PVPTAGS && !cand_takes(ifname, SIOCBRDGADDPV)) {
+		printf("%% %s not supported on %s\n", x->name, ifname);
 		return -1;
 	}
 
@@ -209,6 +217,14 @@ brport(int argc, char **argv, ...)
 			else
 				e = bridge_ifclrflag(ifs, ifname, argv[i],
 				    IFBIF_STP);
+			break;
+		case BRPORT_PVPTAGS:
+			if (set)
+				e = bridge_ifsetflag(ifs, ifname, argv[i],
+				    IFBIF_PVLAN_PTAGS);
+			else
+				e = bridge_ifclrflag(ifs, ifname, argv[i],
+				    IFBIF_PVLAN_PTAGS);
 			break;
 		}
 		if (e != 0)
@@ -1844,9 +1860,10 @@ brvlan_print(FILE *output, const u_int8_t *map)
 }
 
 /*
- * For commit: if other is the tagged line of line's member, write what
- * removes the VLANs that line has and other lacks, after in, to output,
- * and return 1; else return 0
+ * For commit: if other is the untagged or tagged line of line's member,
+ * write what takes the member out of the VLANs that line has and other
+ * lacks, after in, to output, and return 1; else return 0.  A private
+ * VLAN can go only once no member has it.
  */
 int
 brvlan_gone(FILE *output, const char *in, char *line, char *other)
@@ -1854,15 +1871,24 @@ brvlan_gone(FILE *output, const char *in, char *line, char *other)
 	u_int8_t was[sizeof(((struct ifbrvidmap *)0)->ifbrvm_map)];
 	u_int8_t now[sizeof(was)];
 	char *v, *ov;
-	size_t i, len;
+	size_t i, len, klen;
 	int any = 0;
 
-	/* "tagged em1 10,20-30": the member, then its VLANs */
-	v = line + strlen("tagged ");
-	ov = other + strlen("tagged ");
+	/* "tagged em1 10,20-30", "untagged em1 5": the member, its VLANs */
+	klen = strcspn(line, " ");
+	if (strncmp(line, other, klen + 1) != 0)
+		return 0;
+	v = line + klen + 1;
+	ov = other + klen + 1;
 	len = strcspn(v, " ");
 	if (strncmp(v, ov, len) != 0 || ov[len] != ' ' || v[len] != ' ')
 		return 0;
+	if (strncmp(line, "untagged ", 9) == 0) {
+		if (isdigit((unsigned char)v[len + 1]))
+			fprintf(output, "%sno untagged %.*s\n", in,
+			    (int)len, v);
+		return 1;
+	}
 	memset(was, 0, sizeof(was));
 	memset(now, 0, sizeof(now));
 	if (brvlan_parse(v + len + 1, was) == -1 ||
@@ -1876,6 +1902,106 @@ brvlan_gone(FILE *output, const char *in, char *line, char *other)
 		fprintf(output, "\n");
 	}
 	return 1;
+}
+
+static struct brc brpvs[] = {
+	{ "pvlan",		IFBRPV_T_PRIMARY },
+	{ "pvlan-isolated",	IFBRPV_T_ISOLATED },
+	{ "pvlan-community",	IFBRPV_T_COMMUNITY },
+	{ 0,			0 }
+};
+
+/*
+ * On a veb, pvlan makes a VLAN a private VLAN's primary VLAN, and
+ * pvlan-isolated and pvlan-community add a secondary VLAN to it: its one
+ * isolated VLAN, whose members reach only the primary VLAN's, and any
+ * number of community VLANs, whose members reach each other's too.
+ * if_veb.c
+ */
+int
+brpvlan(int argc, char **argv, ...)
+{
+	struct ifbrpvlan pv;
+	struct brc *x;
+	const char *errmsg = NULL;
+	va_list ap;
+	char *ifname;
+	int ifs, set;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
+
+	if (NO_ARG(argv[0])) {
+		set = 0;
+		argv++;
+		argc--;
+	} else
+		set = 1;
+
+	x = (struct brc *) genget(argv[0], (char **)brpvs, sizeof(struct brc));
+	if (x == 0 || Ambiguous(x)) {
+		printf("%% Internal error - Invalid argument %s\n", argv[0]);
+		return -1;
+	}
+
+	argv++;
+	argc--;
+
+	if (argc != (x->type == IFBRPV_T_PRIMARY ? 1 : 2)) {
+		if (x->type == IFBRPV_T_PRIMARY)
+			printf("%% [no] pvlan <primary-vlan>\n");
+		else
+			printf("%% [no] %s <primary-vlan> <vlan>\n", x->name);
+		return -1;
+	}
+	if (!cand_takes(ifname, SIOCBRDGADDPV)) {
+		printf("%% %s not supported on %s\n", x->name, ifname);
+		return -1;
+	}
+
+	memset(&pv, 0, sizeof(pv));
+	strlcpy(pv.ifbrpv_name, ifname, sizeof(pv.ifbrpv_name));
+	pv.ifbrpv_type = x->type;
+	pv.ifbrpv_primary = strtonum(argv[0], EVL_VLID_MIN, EVL_VLID_MAX,
+	    &errmsg);
+	if (errmsg == NULL && argc == 2)
+		pv.ifbrpv_secondary = strtonum(argv[1], EVL_VLID_MIN,
+		    EVL_VLID_MAX, &errmsg);
+	if (errmsg) {
+		printf("%% invalid VLAN: %s\n", errmsg);
+		return -1;
+	}
+	if (br_ioctl(ifs, set ? SIOCBRDGADDPV : SIOCBRDGDELPV, &pv) == 0)
+		return 0;
+	switch (errno) {
+	case EBUSY:
+		if (set)
+			printf("%% %s: VLAN %s is a private VLAN already\n",
+			    x->name, argv[argc - 1]);
+		else if (x->type == IFBRPV_T_PRIMARY)
+			printf("%% pvlan: %s has secondary VLANs\n", argv[0]);
+		else
+			printf("%% %s: a member has VLAN %s\n", x->name,
+			    argv[1]);
+		break;
+	case ENETUNREACH:
+		printf("%% %s: %s is no primary VLAN\n", x->name, argv[0]);
+		break;
+	case EADDRINUSE:
+		printf("%% %s: a member has VLAN %s\n", x->name, argv[1]);
+		break;
+	case EADDRNOTAVAIL:
+		printf("%% %s: %s has an isolated VLAN\n", x->name, argv[0]);
+		break;
+	case ESRCH:
+		printf("%% %s: no such private VLAN\n", x->name);
+		break;
+	default:
+		printf("%% %s: %s\n", x->name, strerror(errno));
+	}
+	return -1;
 }
 
 /*
@@ -1908,6 +2034,8 @@ struct brcfg {
 	size_t nstatics, nrules;
 	int vlans;		/* a veb's members have VLANs */
 	u_int16_t dflt;		/* a new member's untagged VLAN: vnetid's */
+	struct ifbrpvlan *pvlans;	/* a veb's private VLANs */
+	size_t npvlans;
 };
 
 static const struct {
@@ -1933,7 +2061,12 @@ static const struct {
 	{ "no learning", 0,			IFBIF_LEARNING },
 	{ "no discover", 0,			IFBIF_DISCOVER },
 	{ "blocknonip",	 IFBIF_BLOCKNONIP,	0 },
+	{ "pvptags",	 IFBIF_PVLAN_PTAGS,	0 },
 };
+
+/* A veb's private VLANs' lines, by IFBRPV_T_* */
+static const char *brpvnames[] = { "pvlan", NULL, "pvlan-isolated",
+    "pvlan-community" };
 
 /* The lines for a member's STP priority, STP cost and protected domains */
 static char *brper[] = { "ifpriority", "ifcost", "protect" };
@@ -1942,9 +2075,10 @@ static char *brper[] = { "ifpriority", "ifcost", "protect" };
 static char *brvper[] = { "untagged", "tagged" };
 
 /* The candidate lines a struct brcfg makes */
-static char *brnames[] = { "priority", "hellotime", "fwddelay", "maxage",
-    "maxaddr", "timeout", "member", "stp", "span", "learning", "discover",
-    "blocknonip", "untagged", "tagged", "ifpriority", "ifcost", "protect",
+static char *brnames[] = { "pvlan", "pvlan-isolated", "pvlan-community",
+    "priority", "hellotime", "fwddelay", "maxage", "maxaddr", "timeout",
+    "member", "stp", "span", "learning", "discover", "blocknonip",
+    "pvptags", "untagged", "tagged", "ifpriority", "ifcost", "protect",
     "static", "rule" };
 
 /* Is line a port list, whose command takes one port at a time? */
@@ -2002,6 +2136,94 @@ brcfg_free(struct brcfg *b)
 	free(b->statics);
 	free(b->rules);
 	free(b->ports);
+	free(b->pvlans);
+}
+
+/* Add a private VLAN to b's */
+static int
+brcfg_pvlan(struct brcfg *b, u_int primary, u_int secondary, u_int type)
+{
+	struct ifbrpvlan *v;
+
+	if ((v = reallocarray(b->pvlans, b->npvlans + 1, sizeof(*v))) == NULL)
+		return -1;
+	b->pvlans = v;
+	v += b->npvlans++;
+	memset(v, 0, sizeof(*v));
+	v->ifbrpv_primary = primary;
+	v->ifbrpv_secondary = secondary;
+	v->ifbrpv_type = type;
+	return 0;
+}
+
+/* The private VLAN with vlan as its primary, or with type, its secondary */
+static struct ifbrpvlan *
+brcfg_findpv(struct brcfg *b, u_int vlan, u_int type)
+{
+	size_t i;
+
+	for (i = 0; i < b->npvlans; i++)
+		if ((type == IFBRPV_T_PRIMARY ?
+		    b->pvlans[i].ifbrpv_primary :
+		    b->pvlans[i].ifbrpv_secondary) == vlan &&
+		    b->pvlans[i].ifbrpv_type == type)
+			return &b->pvlans[i];
+	return NULL;
+}
+
+/* Is vlan a private VLAN's, primary or secondary?  sc_pvlans[] */
+static int
+brcfg_inpv(struct brcfg *b, u_int vlan)
+{
+	size_t i;
+
+	for (i = 0; i < b->npvlans; i++)
+		if ((b->pvlans[i].ifbrpv_type == IFBRPV_T_PRIMARY ?
+		    b->pvlans[i].ifbrpv_primary :
+		    b->pvlans[i].ifbrpv_secondary) == vlan)
+			return 1;
+	return 0;
+}
+
+/* The isolated VLAN of primary's private VLAN, or NULL */
+static struct ifbrpvlan *
+brcfg_isolated(struct brcfg *b, u_int primary)
+{
+	size_t i;
+
+	for (i = 0; i < b->npvlans; i++)
+		if (b->pvlans[i].ifbrpv_type == IFBRPV_T_ISOLATED &&
+		    b->pvlans[i].ifbrpv_primary == primary)
+			return &b->pvlans[i];
+	return NULL;
+}
+
+/* Has a member of b vlan, untagged or tagged?  veb_vid_inuse() */
+static int
+brcfg_vlaninuse(struct brcfg *b, u_int vlan)
+{
+	size_t i;
+
+	for (i = 0; i < b->nports; i++)
+		if (!(b->ports[i].flags & IFBIF_SPAN) &&
+		    (b->ports[i].pvid == vlan ||
+		    (b->ports[i].tagged[vlan / 8] & (1 << (vlan % 8)))))
+			return 1;
+	return 0;
+}
+
+/* By type, then primary VLAN, then secondary, as conf_brcfg() prints */
+static int
+brpvlan_cmp(const void *a, const void *b)
+{
+	const struct ifbrpvlan *x = a, *y = b;
+
+	if (x->ifbrpv_type != y->ifbrpv_type)
+		return x->ifbrpv_type < y->ifbrpv_type ? -1 : 1;
+	if (x->ifbrpv_primary != y->ifbrpv_primary)
+		return x->ifbrpv_primary < y->ifbrpv_primary ? -1 : 1;
+	return x->ifbrpv_secondary < y->ifbrpv_secondary ? -1 :
+	    x->ifbrpv_secondary > y->ifbrpv_secondary;
 }
 
 /* The port called name or NULL; with add, a new one, or NULL if it exists */
@@ -2106,14 +2328,17 @@ static int
 brcfg_kernel(int s, char *brdg, struct brcfg *b)
 {
 	struct ifbrvidmap vm;
+	struct ifbrpvlan pv;
 	struct ifbreq *reqs;
 	struct brport *p;
+	u_int vp, vs;
 	char *buf = NULL, *l, *t;
 	size_t i, n, len;
 	FILE *f;
 	int ret = -1;
 
 	memset(b, 0, sizeof(*b));
+	b->vlans = cand_takes(brdg, SIOCBRDGSPVID);
 	for (i = 0; i <= TIMEOUT; i++)
 		b->val[i] = bridge_cfg(s, brdg, i);
 	if ((reqs = bridge_ports(s, brdg, &n)) == NULL)
@@ -2127,8 +2352,7 @@ brcfg_kernel(int s, char *brdg, struct brcfg *b)
 			p->cost = reqs[i].ifbr_path_cost;
 		p->prot = reqs[i].ifbr_protected;
 		/* a veb's member's VLANs */
-		if ((b->vlans = cand_takes(brdg, SIOCBRDGSPVID)) == 0 ||
-		    (p->flags & IFBIF_SPAN))
+		if (!b->vlans || (p->flags & IFBIF_SPAN))
 			continue;
 		p->pvid = reqs[i].ifbr_pvid;
 		memset(&vm, 0, sizeof(vm));
@@ -2136,6 +2360,32 @@ brcfg_kernel(int s, char *brdg, struct brcfg *b)
 		strlcpy(vm.ifbrvm_ifsname, p->name, sizeof(vm.ifbrvm_ifsname));
 		if (ioctl(s, SIOCBRDGGVMAP, &vm) == 0)
 			memcpy(p->tagged, vm.ifbrvm_map, sizeof(p->tagged));
+	}
+
+	/* a veb's private VLANs: each primary, with its isolated VLAN */
+	for (vp = 0; b->vlans; ) {
+		memset(&pv, 0, sizeof(pv));
+		strlcpy(pv.ifbrpv_name, brdg, sizeof(pv.ifbrpv_name));
+		pv.ifbrpv_primary = vp + 1;
+		pv.ifbrpv_type = IFBRPV_T_PRIMARY;
+		if (ioctl(s, SIOCBRDGNFINDPV, &pv) == -1)
+			break;
+		vp = pv.ifbrpv_primary;
+		if (brcfg_pvlan(b, vp, 0, IFBRPV_T_PRIMARY) == -1 ||
+		    (pv.ifbrpv_secondary != 0 && brcfg_pvlan(b, vp,
+		    pv.ifbrpv_secondary, IFBRPV_T_ISOLATED) == -1))
+			goto done;
+		/* and its community VLANs */
+		for (vs = 0; ; vs = pv.ifbrpv_secondary) {
+			pv.ifbrpv_primary = vp;
+			pv.ifbrpv_secondary = vs + 1;
+			pv.ifbrpv_type = IFBRPV_T_COMMUNITY;
+			if (ioctl(s, SIOCBRDGNFINDPV, &pv) == -1)
+				break;
+			if (brcfg_pvlan(b, vp, pv.ifbrpv_secondary,
+			    IFBRPV_T_COMMUNITY) == -1)
+				goto done;
+		}
 	}
 
 	/* the static addresses, then the members' rules, as they print */
@@ -2229,6 +2479,21 @@ brcfg_cand(struct brcfg *b, char *brdg)
 			if (e != NULL)
 				goto bad;
 		}
+	/* "pvlan 100", "pvlan-isolated 100 101", "pvlan-community 100 102" */
+	for (i = 0; i < nitems(brpvnames); i++)
+		for (n = 0; brpvnames[i] != NULL &&
+		    (l = cand_line((char *)brpvnames[i], n)) != NULL; n++) {
+			strlcpy(line, l + strlen(brpvnames[i]) + 1,
+			    sizeof(line));
+			ws = line;
+			v = strtonum(strsep(&ws, " "), EVL_VLID_MIN,
+			    EVL_VLID_MAX, &e);
+			if (e != NULL || (ws == NULL) != (i == 0) ||
+			    brcfg_pvlan(b, v, ws == NULL ? 0 : strtonum(ws,
+			    EVL_VLID_MIN, EVL_VLID_MAX, &e), i) == -1 ||
+			    e != NULL)
+				goto bad;
+		}
 	/* "untagged em0 5", "tagged em0 10,20-30" */
 	for (n = 0; (l = cand_line("untagged", n)) != NULL; n++) {
 		strlcpy(line, l + strlen("untagged "), sizeof(line));
@@ -2272,6 +2537,15 @@ brcfg_print(FILE *output, struct brcfg *b)
 	int n, v;
 
 	qsort(b->ports, b->nports, sizeof(*b->ports), brport_cmp);
+	if (b->npvlans > 0)
+		qsort(b->pvlans, b->npvlans, sizeof(*b->pvlans), brpvlan_cmp);
+	for (j = 0; j < b->npvlans; j++) {
+		fprintf(output, " %s %u", brpvnames[b->pvlans[j].ifbrpv_type],
+		    b->pvlans[j].ifbrpv_primary);
+		if (b->pvlans[j].ifbrpv_type != IFBRPV_T_PRIMARY)
+			fprintf(output, " %u", b->pvlans[j].ifbrpv_secondary);
+		fprintf(output, "\n");
+	}
 	for (i = 0; i <= TIMEOUT; i++)
 		if (b->val[i] != -1 && b->val[i] != brvals[i].def)
 			fprintf(output, " %s %ld\n", brvals[i].name, b->val[i]);
@@ -2435,6 +2709,7 @@ cand_bridge(u_long cmd, void *data)
 	struct ifbareq *ba = data;
 	struct ifbrlreq *rl = data;
 	struct ifbrvidmap *vm = data;
+	struct ifbrpvlan *pv = data, *v;
 	struct brcfg b;
 	struct brport *p;
 	char *buf = NULL, text[64];
@@ -2516,6 +2791,63 @@ cand_bridge(u_long cmd, void *data)
 			e = EOPNOTSUPP;
 		else
 			p->pvid = pvid;
+		break;
+	case SIOCBRDGADDPV:
+	case SIOCBRDGDELPV:
+		/* veb_add_pvlan(), veb_del_pvlan() */
+		if (pv->ifbrpv_primary < EVL_VLID_MIN ||
+		    pv->ifbrpv_primary > EVL_VLID_MAX ||
+		    (pv->ifbrpv_type == IFBRPV_T_PRIMARY ?
+		    pv->ifbrpv_secondary != 0 :
+		    (pv->ifbrpv_type != IFBRPV_T_ISOLATED &&
+		    pv->ifbrpv_type != IFBRPV_T_COMMUNITY) ||
+		    pv->ifbrpv_secondary < EVL_VLID_MIN ||
+		    pv->ifbrpv_secondary > EVL_VLID_MAX)) {
+			e = EINVAL;
+			break;
+		}
+		v = brcfg_findpv(&b, pv->ifbrpv_primary, IFBRPV_T_PRIMARY);
+		if (cmd == SIOCBRDGDELPV) {
+			if (v == NULL)
+				e = ESRCH;
+			else if (pv->ifbrpv_type != IFBRPV_T_PRIMARY &&
+			    ((v = brcfg_findpv(&b, pv->ifbrpv_secondary,
+			    pv->ifbrpv_type)) == NULL ||
+			    v->ifbrpv_primary != pv->ifbrpv_primary))
+				e = ESRCH;
+			else if (pv->ifbrpv_type != IFBRPV_T_PRIMARY &&
+			    brcfg_vlaninuse(&b, pv->ifbrpv_secondary))
+				e = EBUSY;
+			else if (pv->ifbrpv_type == IFBRPV_T_PRIMARY) {
+				/* a primary goes once it has no secondary */
+				for (i = 0; i < (int)b.npvlans; i++)
+					if (b.pvlans[i].ifbrpv_type !=
+					    IFBRPV_T_PRIMARY &&
+					    b.pvlans[i].ifbrpv_primary ==
+					    pv->ifbrpv_primary)
+						e = EBUSY;
+			}
+			if (e == 0)
+				memmove(v, v + 1, (b.npvlans-- -
+				    (v - b.pvlans) - 1) * sizeof(*v));
+			break;
+		}
+		/* a VLAN is one private VLAN's, primary or secondary */
+		if (pv->ifbrpv_type == IFBRPV_T_PRIMARY ? brcfg_inpv(&b,
+		    pv->ifbrpv_primary) : brcfg_inpv(&b, pv->ifbrpv_secondary))
+			e = EBUSY;
+		else if (pv->ifbrpv_type == IFBRPV_T_PRIMARY)
+			;
+		else if (v == NULL)
+			e = ENETUNREACH;
+		else if (brcfg_vlaninuse(&b, pv->ifbrpv_secondary))
+			e = EADDRINUSE;
+		else if (pv->ifbrpv_type == IFBRPV_T_ISOLATED &&
+		    (v = brcfg_isolated(&b, pv->ifbrpv_primary)) != NULL)
+			e = EADDRNOTAVAIL;
+		if (e == 0 && brcfg_pvlan(&b, pv->ifbrpv_primary,
+		    pv->ifbrpv_secondary, pv->ifbrpv_type) == -1)
+			e = ENOMEM;
 		break;
 	case SIOCBRDGSVMAP:
 		/* veb_set_vid_map(): VLANs 0 and 4095 are no tags */

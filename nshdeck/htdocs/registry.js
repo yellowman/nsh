@@ -592,6 +592,31 @@ var REGISTRY = {
 	    "member carries with an 802.1Q tag.", values: "a member, then " +
 	    "VLAN IDs and ranges, separated by commas, a line each",
 	    default: "none", needs: "member" },
+	"bridge.pvlan": { label: "Private VLANs", group: "Encapsulation",
+	    kind: "lines", placeholder: "100", on: ["veb"],
+	    keyword: "pvlan primary-vlan-id", definition: "The primary " +
+	    "VLAN of each private VLAN, whose secondary VLANs' members reach " +
+	    "its members.", values: "1 to 4094, a line each",
+	    default: "none" },
+	"bridge.pvlan-isolated": { label: "Isolated VLANs",
+	    group: "Encapsulation", kind: "lines", placeholder: "100 101",
+	    on: ["veb"], keyword: "pvlan-isolated primary-vlan-id vlan-id",
+	    definition: "A private VLAN's one isolated VLAN, whose members " +
+	    "reach only the primary VLAN's.", values: "a primary VLAN, then " +
+	    "a VLAN no member has, a line each", default: "none",
+	    needs: "pvlan" },
+	"bridge.pvlan-community": { label: "Community VLANs",
+	    group: "Encapsulation", kind: "lines", placeholder: "100 102",
+	    on: ["veb"], keyword: "pvlan-community primary-vlan-id vlan-id",
+	    definition: "A private VLAN's community VLANs, whose members " +
+	    "reach each other's and the primary VLAN's.", values: "a primary " +
+	    "VLAN, then a VLAN no member has, a line each", default: "none",
+	    needs: "pvlan" },
+	"bridge.pvptags": { label: "Primary VLAN tags",
+	    group: "Encapsulation", kind: "words", on: ["veb"],
+	    keyword: "pvptags member", definition: "Members that tag a " +
+	    "private VLAN's frames with its primary VLAN.",
+	    values: "members' names", default: "none", needs: "member" },
 	"bridge.txprio": { label: "Transmit priority", group: "Encapsulation",
 	    kind: "text", on: ["veb"], keyword: "txprio 0-7 | packet",
 	    definition: "The priority written in the 802.1Q headers the veb " +

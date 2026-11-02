@@ -167,6 +167,9 @@ static const struct setting bridge_settings[] = {
 	{ "txprio",		S_VALUE },
 	{ "rxprio",		S_VALUE },
 	/* bridge.c's model writes these lines whole */
+	{ "pvlan",		S_ENTRY,	2 },
+	{ "pvlan-isolated",	S_ENTRY,	3 },
+	{ "pvlan-community",	S_ENTRY,	3 },
 	{ "priority",		S_VALUE },
 	{ "hellotime",		S_VALUE },
 	{ "fwddelay",		S_VALUE },
@@ -179,6 +182,7 @@ static const struct setting bridge_settings[] = {
 	{ "learning",		S_STATE },
 	{ "discover",		S_STATE },
 	{ "blocknonip",		S_VALUE },
+	{ "pvptags",		S_VALUE },
 	{ "untagged",		S_ENTRY,	2 },
 	{ "tagged",		S_ENTRY,	2 },
 	{ "ifpriority",		S_ENTRY,	2 },

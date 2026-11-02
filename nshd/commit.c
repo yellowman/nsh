@@ -1338,9 +1338,13 @@ unset(struct commit *c, char *tblock, int there, int ctx, const char *in,
 		return 0;
 	}
 	base = strncmp(line, "no ", 3) == 0 ? line + 3 : line;
-	/* a veb member's tagged VLANs lose those the candidate's lacks */
-	if (there && ctx == CTX_BRIDGE && strncmp(base, "tagged ", 7) == 0)
-		for (n = 0; (l = conftree_line(c->to, tblock, "tagged", n)) !=
+	/*
+	 * a veb member's VLANs that the candidate's lines lack go first,
+	 * so that a private VLAN can go
+	 */
+	if (there && ctx == CTX_BRIDGE && (strncmp(base, "tagged ", 7) == 0 ||
+	    strncmp(base, "untagged ", 9) == 0))
+		for (n = 0; (l = conftree_line(c->to, tblock, base, n)) !=
 		    NULL; n++)
 			if (brvlan_gone(c->f, in, base, l))
 				return 0;

@@ -446,6 +446,7 @@ int flush_bridgeall(int, char **, ...);
 int flush_bridgerule(int, char **, ...);
 int brprotect(int, char **, ...);
 int brvlan(int, char **, ...);
+int brpvlan(int, char **, ...);
 int brvlan_gone(FILE *, const char *, char *, char *);
 int show_bridges(int, char **, ...);
 

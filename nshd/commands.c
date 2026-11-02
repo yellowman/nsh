@@ -943,6 +943,10 @@ struct intlist Bridgelist[] = {
 	{ "protect",	"Configure protected bridge domains",	CMPL0 0, 0, brprotect, 1, CAND_EDIT },
 	{ "untagged",	"VLAN of a member's untagged frames (veb)",	CMPL0 0, 0, brvlan, 1, CAND_EDIT },
 	{ "tagged",	"VLANs a member carries tagged (veb)",	CMPL0 0, 0, brvlan, 1, CAND_EDIT },
+	{ "pvlan",	"Primary VLAN of a private VLAN (veb)",	CMPL0 0, 0, brpvlan, 1, CAND_EDIT },
+	{ "pvlan-isolated", "Isolated VLAN of a private VLAN (veb)", CMPL0 0, 0, brpvlan, 1, CAND_EDIT },
+	{ "pvlan-community", "Community VLAN of a private VLAN (veb)", CMPL0 0, 0, brpvlan, 1, CAND_EDIT },
+	{ "pvptags",	"Tag private VLANs with their primary (veb)",	CMPL0 0, 0, brport, 1, CAND_EDIT },
 	{ "interface",  interfacehelp,				CMPL(i) 0, 0, int_interface, 1, CAND_EDIT },
 	{ "shutdown",	"Shutdown bridge",			CMPL0 0, 0, intflags, 1, CAND_EDIT },
 	{ "show",	showhelp,				CMPL(ta) (char **)showlist, sizeof(Menu), int_show, 0, CAND_RUN },
@@ -1615,6 +1619,10 @@ static const struct confcmd conf_bridge[] = {
 	{ "protect",	brprotect },
 	{ "untagged",	brvlan },
 	{ "tagged",	brvlan },
+	{ "pvlan",	brpvlan },
+	{ "pvlan-isolated", brpvlan },
+	{ "pvlan-community", brpvlan },
+	{ "pvptags",	brport },
 	{ "shutdown",	intflags },
 };
 

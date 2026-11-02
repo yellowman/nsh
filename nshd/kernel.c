@@ -337,6 +337,8 @@ static const u_long veb_ioctls[] = {
 	SIOCBRDGSIFPROT,
 	SIOCBRDGSPVID,
 	SIOCBRDGSVMAP,
+	SIOCBRDGADDPV,
+	SIOCBRDGDELPV,
 	0
 };
 

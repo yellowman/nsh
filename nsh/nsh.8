@@ -965,52 +965,56 @@ nsh(bridge-bridge100)# ?
 % Type 'exit' at a prompt to leave bridge configuration mode.
 % Bridge configuration commands are:
 
-  description   Bridge description
-  member        Bridge member(s)
-  span          Bridge spanning port(s)
-  blocknonip    Block non-IP traffic forwarding on member(s)
-  discover      Mark member(s) as discovery port(s)
-  learning      Mark member(s) as learning port(s)
-  stp           Enable 802.1D spanning tree protocol on member(s)
-  maxaddr       Maximum address cache size
-  timeout       Address cache timeout
-  maxage        Time for 802.1D configuration to remain valid
-  fwddelay      Time before bridge begins forwarding packets
-  hellotime     802.1D configuration packet broadcast interval
-  priority      Spanning priority for all members on an 802.1D bridge
-  ping          Send IPv4 ICMP echo request
-  ping6         Send IPv6 ICMP echo request
-  traceroute    Print the route to IPv4 host
-  traceroute6   Print the route to IPv6 host
-  ssh           SSH connection to remote host
-  telnet        Telnet connection to remote host
-  logger        Write a message to syslog on the system
-  do            Superfluous, do is ignored and its arguments executed
-  setenv        Set an environment variable
-  unsetenv      Delete an environment variable
-  saveenv       Save environment variables set by setenv to ~/.nshenv
-  rule          Bridge layer 2 filtering rules
-  static        Static bridge address entry
-  ifpriority    Spanning priority of a member on an 802.1D bridge
-  ifcost        Spanning tree path cost of a member on 802.1D bridge
-  link          Link level options
-  txprio        Priority in 802.1Q headers (veb)
-  rxprio        Source used for packet priority (veb)
-  vnetid        Untagged VLAN of members added (veb)
-  protect       Configure protected bridge domains
-  untagged      VLAN of a member's untagged frames (veb)
-  tagged        VLANs a member carries tagged (veb)
-  interface     Modify interface parameters
-  shutdown      Shutdown bridge
-  show          Show system information
-  who           Display system users
-  verbose       Set verbose diagnostics
-  editing       Set command line editing
-  clear         Clear the terminal screen
-  !             Invoke a subshell or run an executable
-  ?             Options
-  manual        Display the NSH manual
-  exit          Leave bridge config mode and return to global config mode
+  description      Bridge description
+  member           Bridge member(s)
+  span             Bridge spanning port(s)
+  blocknonip       Block non-IP traffic forwarding on member(s)
+  discover         Mark member(s) as discovery port(s)
+  learning         Mark member(s) as learning port(s)
+  stp              Enable 802.1D spanning tree protocol on member(s)
+  maxaddr          Maximum address cache size
+  timeout          Address cache timeout
+  maxage           Time for 802.1D configuration to remain valid
+  fwddelay         Time before bridge begins forwarding packets
+  hellotime        802.1D configuration packet broadcast interval
+  priority         Spanning priority for all members on an 802.1D bridge
+  ping             Send IPv4 ICMP echo request
+  ping6            Send IPv6 ICMP echo request
+  traceroute       Print the route to IPv4 host
+  traceroute6      Print the route to IPv6 host
+  ssh              SSH connection to remote host
+  telnet           Telnet connection to remote host
+  logger           Write a message to syslog on the system
+  do               Superfluous, do is ignored and its arguments executed
+  setenv           Set an environment variable
+  unsetenv         Delete an environment variable
+  saveenv          Save environment variables set by setenv to ~/.nshenv
+  rule             Bridge layer 2 filtering rules
+  static           Static bridge address entry
+  ifpriority       Spanning priority of a member on an 802.1D bridge
+  ifcost           Spanning tree path cost of a member on 802.1D bridge
+  link             Link level options
+  txprio           Priority in 802.1Q headers (veb)
+  rxprio           Source used for packet priority (veb)
+  vnetid           Untagged VLAN of members added (veb)
+  protect          Configure protected bridge domains
+  untagged         VLAN of a member's untagged frames (veb)
+  tagged           VLANs a member carries tagged (veb)
+  pvlan            Primary VLAN of a private VLAN (veb)
+  pvlan-isolated   Isolated VLAN of a private VLAN (veb)
+  pvlan-community  Community VLAN of a private VLAN (veb)
+  pvptags          Tag private VLANs with their primary (veb)
+  interface        Modify interface parameters
+  shutdown         Shutdown bridge
+  show             Show system information
+  who              Display system users
+  verbose          Set verbose diagnostics
+  editing          Set command line editing
+  clear            Clear the terminal screen
+  !                Invoke a subshell or run an executable
+  ?                Options
+  manual           Display the NSH manual
+  exit             Leave bridge config mode and return to global config mode
 nsh(bridge-bridge100)#
 .Ed
 .Tg port
@@ -1129,6 +1133,57 @@ nsh(config)# bridge veb101
 nsh(bridge-veb101)# member em1
 nsh(bridge-veb101)# untagged em1 5
 nsh(bridge-veb101)# tagged em1 10,20-30
+nsh(bridge-veb101)# exit
+.Ed
+.Tg pvlan
+.Op no
+.Ic pvlan
+.Ar primary-vlan-id
+.Pp
+On a veb, make a VLAN the primary VLAN of a private VLAN.
+A private VLAN's secondary VLANs share the primary VLAN, and their
+members reach the primary VLAN's members, but not each other's, unless
+the secondary VLAN is a community VLAN.
+A VLAN can be in one private VLAN, as its primary or a secondary VLAN.
+.Cm no pvlan
+removes it, once it has no secondary VLAN.
+.Pp
+.Op no
+.Ic pvlan-isolated
+.Ar primary-vlan-id vlan-id
+.Pp
+Add an isolated VLAN to the private VLAN of a primary VLAN.
+A member in an isolated VLAN reaches the members of the primary VLAN
+only.
+A private VLAN has one isolated VLAN.
+.Pp
+.Op no
+.Ic pvlan-community
+.Ar primary-vlan-id vlan-id
+.Pp
+Add a community VLAN to the private VLAN of a primary VLAN.
+A member in a community VLAN reaches the members of the primary VLAN
+and of its own community VLAN.
+A private VLAN has any number of community VLANs.
+.Pp
+A secondary VLAN can be added or removed only while no member has it,
+untagged or tagged.
+.Pp
+.Op no
+.Ic pvptags
+.Ar interface-name ...
+.Pp
+On a veb, tag the frames of a private VLAN a member sends with the
+private VLAN's primary VLAN, and not with its secondary VLAN.
+.Pp
+E.g. on veb101, make VLAN 100 a private VLAN, with 101 its isolated VLAN,
+and put em2 in it.
+.Bd -literal -offset indent
+nsh(config)# bridge veb101
+nsh(bridge-veb101)# pvlan 100
+nsh(bridge-veb101)# pvlan-isolated 100 101
+nsh(bridge-veb101)# member em2
+nsh(bridge-veb101)# untagged em2 101
 nsh(bridge-veb101)# exit
 .Ed
 .Tg ip6
