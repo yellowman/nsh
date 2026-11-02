@@ -376,6 +376,7 @@ int get_rdomain(int, char *);
 int get_ifdata(char *, int);
 int get_ifflags(char *, int);
 int set_ifflags(char *, int, int);
+int ioctl_down(int, char *, u_long, void *);
 int get_ifxflags(char *, int);
 int set_ifxflags(char *, int, int);
 u_int32_t in4_netaddr(u_int32_t, u_int32_t);

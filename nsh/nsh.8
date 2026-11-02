@@ -5389,6 +5389,9 @@ sets the don't-fragment bit on those packets, and on gif, gre and mgre,
 .Cm ecn
 lets them carry explicit congestion notification.
 Each is off unless the command gives it.
+vxlan, the gre family, bpe and vlan refuse a new tunnel, tunneldomain,
+vnetid, parent or keepalive while the interface runs; nsh then takes
+the interface down for the change and brings it up again.
 .Bd -literal -offset indent
 nsh(interface-gre0)# tunnel 12.3.3.3 12.6.6.6
 .Ed

@@ -475,7 +475,7 @@ settunnel(int s, char *ifname, char *src, char *srcport, char *dstip)
 		req.dstaddr.ss_len = 2;
 		req.dstaddr.ss_family = AF_UNSPEC;
 	}
-	if (ioctl(s, SIOCSLIFPHYADDR, &req) < 0) {
+	if (ioctl_down(s, ifname, SIOCSLIFPHYADDR, &req) < 0) {
 		if (errno == EINVAL)
 			printf("%% tunnel cannot be used on %s interface\n",
 			    ifname);
@@ -832,7 +832,7 @@ settunnelrdomain(int ifs, char *ifname, char *rdomain)
 	bzero(&ifr, sizeof(ifr));
 	ifr.ifr_rdomainid = rdomainid;
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
-	if (ioctl(ifs, SIOCSLIFPHYRTABLE, (caddr_t)&ifr) < 0) {
+	if (ioctl_down(ifs, ifname, SIOCSLIFPHYRTABLE, (caddr_t)&ifr) < 0) {
 		switch(errno) {
 		case EINVAL:
 			printf("%% tunnel rdomain %i not initialized\n", rdomainid);
@@ -963,7 +963,7 @@ setvnetid(int ifs, char *ifname, char *vnetida)
 		return -1;
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 	ifr.ifr_vnetid = vnetid;
-	if (ioctl(ifs, SIOCSVNETID, (caddr_t)&ifr) < 0) {
+	if (ioctl_down(ifs, ifname, SIOCSVNETID, (caddr_t)&ifr) < 0) {
 		if (errno == EINVAL) {
 			printf("%% vnetid %lld out of range for %s\n",
 			    vnetid, ifname);
@@ -982,7 +982,7 @@ delvnetid(int ifs, char *ifname)
 	struct ifreq ifr;
 
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
-	if (ioctl(ifs, SIOCDVNETID, &ifr) < 0) {
+	if (ioctl_down(ifs, ifname, SIOCDVNETID, &ifr) < 0) {
 		printf("%% delvnetid SIOCDVNETID: %s\n", strerror(errno));
 		return -1;
 	}
@@ -997,7 +997,7 @@ deletetunnel(int s, char *ifname)
 	bzero(&ifr, sizeof(ifr));
 	strlcpy(ifr.ifr_name, ifname, IFNAMSIZ);
 
-	if (ioctl(s, SIOCDIFPHYADDR, &ifr) < 0) {
+	if (ioctl_down(s, ifname, SIOCDIFPHYADDR, &ifr) < 0) {
 		printf("%% deletetunnel: SIOCDIFPHYADDR: %s\n",
 		    strerror(errno));
 		return -1;

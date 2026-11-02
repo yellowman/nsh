@@ -483,6 +483,32 @@ set_ifflags(char *ifname, int ifs, int flags)
 	return 0;
 }
 
+/*
+ * ioctl(s, cmd, data) for a change to ifname. vxlan, the gre family, bpe
+ * and vlan refuse some changes with EBUSY while the interface runs: then
+ * the interface is taken down for the change, and brought up again.
+ */
+int
+ioctl_down(int s, char *ifname, u_long cmd, void *data)
+{
+	int flags, r, e;
+
+	if ((r = ioctl(s, cmd, data)) != -1 || errno != EBUSY)
+		return r;
+	if (!((flags = get_ifflags(ifname, s)) & IFF_UP)) {
+		errno = EBUSY;
+		return -1;
+	}
+	if (set_ifflags(ifname, s, flags & ~IFF_UP) == -1)
+		return -1;
+	r = ioctl(s, cmd, data);
+	e = errno;
+	if (set_ifflags(ifname, s, flags) == -1)
+		return -1;
+	errno = e;
+	return r;
+}
+
 int
 get_ifxflags(char *ifname, int ifs)
 {
@@ -1708,7 +1734,7 @@ intkeepalive(int argc, char **argv, ...)
 	}
 
 	strlcpy(ikar.ikar_name, ifname, sizeof(ikar.ikar_name));
-	if (ioctl(ifs, SIOCSETKALIVE, (caddr_t)&ikar) < 0) {
+	if (ioctl_down(ifs, ifname, SIOCSETKALIVE, (caddr_t)&ikar) < 0) {
 		if (errno == ENOTTY)
 			printf("%% Keepalive not available on %s\n", ifname);
 		else
@@ -1917,7 +1943,7 @@ intmpls(int argc, char **argv, ...)
 		return cand_mpls(ifname, x->type, set, &ifr, &shim);
 	}
 
-	if (ioctl(ifs, cmd, (caddr_t)&ifr) < 0) {
+	if (ioctl_down(ifs, ifname, cmd, (caddr_t)&ifr) < 0) {
 		if (errno == ENOTTY)
 			printf("%% MPLS not supported on %s\n", ifname);
 		else
@@ -2520,7 +2546,7 @@ intrtlabel(int argc, char **argv, ...)
 int
 intparent(int argc, char **argv, ...)
 {
-	int set, ret;
+	int set;
 	unsigned long cmd;
 	struct if_parent ifp;
 	va_list ap;
@@ -2576,28 +2602,10 @@ intparent(int argc, char **argv, ...)
 		}
 		return cand_setting(ST_ON, "parent %s", argv[0]);
 	}
-	ret = ioctl(ifs, cmd, &ifp);
-	if (ret == -1) {
-		int cmd_errno = errno;
-		if (errno == EBUSY) {
-			int flags = get_ifflags(ifname, ifs);
-			if (flags & IFF_UP) {
-				/* Put interface down, retry, and put it up. */
-				if (set_ifflags(ifname, ifs, flags & ~IFF_UP)
-				    == -1)
-					return -1;
-				ret = ioctl(ifs, cmd, &ifp);
-				if (ret == -1)
-					cmd_errno = errno;
-				if (set_ifflags(ifname, ifs, flags) == -1)
-					return -1;
-			}
-		}
-		if (ret == -1) {
-			printf("%% intparent: SIOC%sIFPARENT: %s\n",
-			    set ? "S" : "D", strerror(cmd_errno));
-			return -1;
-		}
+	if (ioctl_down(ifs, ifname, cmd, &ifp) == -1) {
+		printf("%% intparent: SIOC%sIFPARENT: %s\n",
+		    set ? "S" : "D", strerror(errno));
+		return -1;
 	}
 
 	return 0;
@@ -3413,7 +3421,7 @@ intvnetflowid(int argc, char **argv, ...)
 	else
 		ifr.ifr_vnetid = 0;
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
-	if (ioctl(ifs, SIOCSVNETFLOWID, &ifr) < 0) {
+	if (ioctl_down(ifs, ifname, SIOCSVNETFLOWID, &ifr) < 0) {
 		printf("%% intvnetflowid: SIOCSVNETFLOWID: %s\n", strerror(errno));
 		return -1;
 	}
