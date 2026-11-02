@@ -1662,8 +1662,14 @@ intmtu(int argc, char **argv, ...)
 		return -1;
 	}
 
+	/* nor has a default to go back to */
+	if (default_mtu(ifname) == MTU_IGNORE) {
+		printf("%% The configuration does not manage the mtu of %s\n",
+		    ifname);
+		return -1;
+	}
 	if (set) {
-		ifr.ifr_mtu = strtonum(argv[0], 0, INT_MAX, &errmsg);
+		ifr.ifr_mtu = strtonum(argv[0], 1, INT_MAX, &errmsg);
 		if (errmsg) {
 			printf("%% Invalid MTU %s: %s\n", argv[0], errmsg);
 			return -1;
@@ -1672,11 +1678,6 @@ intmtu(int argc, char **argv, ...)
 		ifr.ifr_mtu = default_mtu(ifname);
 
 	if (candidate) {
-		if (set && default_mtu(ifname) == MTU_IGNORE) {
-			printf("%% The configuration does not keep the mtu"
-			    " of %s\n", ifname);
-			return -1;
-		}
 		if (conf_mtu_shown(ifname, ifr.ifr_mtu))
 			return cand_setting(ST_ON, "mtu %d", ifr.ifr_mtu);
 		return cand_setting(ST_DEFAULT, "mtu");

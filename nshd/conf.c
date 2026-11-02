@@ -94,9 +94,13 @@ static const struct {
 	u_long mtu;
 } defmtus[] = {
 	{ "gre",	1476 },
+	{ "mgre",	1476 },
 	{ "wg",		1420 },
 	{ "gif",	1280 },
+	{ "sec",	1280 },
 	{ "enc",	1536 },
+	{ "pppoe",	1492 },
+	{ "rport",	32768 },
 	{ "pflow",	MTU_IGNORE },
 	{ "pflog",	MTU_IGNORE },
 	{ "pfsync",	MTU_IGNORE },
