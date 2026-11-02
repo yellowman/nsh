@@ -2018,6 +2018,23 @@ intmpls(int argc, char **argv, ...)
 	return (0);
 }
 
+/*
+ * 1 if ss is a unicast address, else 0. mpw_set_neighbor() refuses any
+ * other neighbor (EINVAL).
+ */
+static int
+pwe3_unicast(struct sockaddr_storage *ss)
+{
+	struct sockaddr_in *sin = (struct sockaddr_in *)ss;
+	struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)ss;
+
+	if (ss->ss_family == AF_INET)
+		return sin->sin_addr.s_addr != INADDR_ANY &&
+		    !IN_MULTICAST(ntohl(sin->sin_addr.s_addr));
+	return !IN6_IS_ADDR_UNSPECIFIED(&sin6->sin6_addr) &&
+	    !IN6_IS_ADDR_MULTICAST(&sin6->sin6_addr);
+}
+
 void
 pwe3usage(void)
 {
@@ -2193,6 +2210,11 @@ intpwe3(int argc, char **argv, ...)
 			}
 			memcpy(&req.addr, res->ai_addr, res->ai_addrlen);
 			freeaddrinfo(res);
+			if (!pwe3_unicast(&req.addr)) {
+				printf("%% neighbor %s is not a unicast"
+				    " address\n", argv[noptind - 1]);
+				return -1;
+			}
 			break;
 		}
 
