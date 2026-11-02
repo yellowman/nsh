@@ -415,6 +415,7 @@ static struct umbc {
 int
 intumb(int argc, char **argv, ...)
 {
+	size_t i;
 	int set, r;
 	struct umbc *x;
 	va_list ap;
@@ -465,6 +466,28 @@ intumb(int argc, char **argv, ...)
 		printf("%% no %s [%s]\n", x->name, x->descr);
 		return -1;
 	}
+
+	/* setpuk and chgpin are operations, which no cannot undo */
+	if (!set && (x->type == UMB_CHGPIN || x->type == UMB_PUK)) {
+		printf("%% %s has no no form\n", x->name);
+		return -1;
+	}
+	/*
+	 * Words conf() can print and read back, and an APN in ASCII, as
+	 * 3GPP's are. The kernel ignores an empty PIN or PUK.
+	 */
+	if (set && x->type != UMB_ROAMING && x->type != UMB_CLASS &&
+	    !plainword(x->descr, argv[0]))
+		return -1;
+	if (set && (x->type == UMB_CHGPIN || x->type == UMB_PUK) &&
+	    !plainword(x->descr2, argv[1]))
+		return -1;
+	if (set && x->type == UMB_APN)
+		for (i = 0; argv[0][i] != '\0'; i++)
+			if (!isascii((unsigned char)argv[0][i])) {
+				printf("%% apn must be in ASCII\n");
+				return -1;
+			}
 
 	/* setpuk and chgpin act on the SIM, even in configure private */
 	if (candidate && x->type != UMB_PUK && x->type != UMB_CHGPIN)
@@ -551,12 +574,7 @@ cand_umb(char *ifname, int set, int type, char *arg)
 			printf("%% APN too long\n");
 			return -1;
 		}
-		/* utf16_to_char() prints a character outside ASCII as '?' */
-		strlcpy(buf, arg, sizeof(buf));
-		for (i = 0; buf[i] != '\0'; i++)
-			if (!isascii((unsigned char)buf[i]))
-				buf[i] = '?';
-		return cand_setting(ST_ON, "apn %s", buf);
+		return cand_setting(ST_ON, "apn %s", arg);
 	case UMB_PIN:
 		if (!set)
 			return cand_setting(ST_DEFAULT, "setpin");

@@ -163,6 +163,8 @@ intsppp(int argc, char **argv, ...)
 #define	__proto 1<<0
 		case 'p':	/* proto */
 			cmd |= __proto;
+			if (!plainword("proto", argv[noptind - 1]))
+				return -1;
 			for (i = 0; i < nitems(spppproto); i++) {
 				if (isprefix(argv[noptind - 1],
 				    spppproto[i].name))
@@ -177,6 +179,8 @@ intsppp(int argc, char **argv, ...)
 #define	__name	1<<1
 		case 'n':	/* name */
 			cmd |= __name;
+			if (!plainword("name", argv[noptind - 1]))
+				return -1;
 			if (strlcpy(spa.name, argv[noptind - 1],
 			    sizeof(spa.name)) >= sizeof(spa.name)) {
 				printf("%% Name too long (> %zu): %s\n",
@@ -187,6 +191,9 @@ intsppp(int argc, char **argv, ...)
 #define	__key	1<<2
 		case 'k':	/* key */
 			cmd |= __key;
+			/* sppp_set_params() keeps the old secret for "" */
+			if (!plainword("key", argv[noptind - 1]))
+				return -1;
 			if (strlcpy(spa.secret, argv[noptind - 1],
 			    sizeof(spa.secret)) >= sizeof(spa.secret)) {
 				printf("%% Key too long (> %zu): %s\n",
@@ -197,6 +204,8 @@ intsppp(int argc, char **argv, ...)
 #define	__flag	1<<3
 		case 'f':	/* flag */
 			cmd |= __flag;
+			if (!plainword("flag", argv[noptind - 1]))
+				return -1;
 			if (isprefix(argv[noptind - 1], "callin")) {
 				spa.flags |= AUTHFLAG_NOCALLOUT;
 			} else if (isprefix(argv[noptind - 1],
@@ -228,8 +237,15 @@ intsppp(int argc, char **argv, ...)
 		(*isc->usage)();
 		return -1;
 	}
+	/* only CHAP challenges again */
+	if (set && (spa.flags & AUTHFLAG_NORECHALLENGE) &&
+	    spa.proto != PPP_CHAP) {
+		printf("%% flag norechallenge is for proto chap\n");
+		return -1;
+	}
 
-	if (argc < 1)
+	/* and with no, the key goes too, whatever words follow */
+	if (argc < 1 || !set)
 		cmd = __proto | __name | __key | __flag;
 
 	if (!set) {
@@ -448,6 +464,8 @@ intpppoe(int argc, char **argv, ...)
 	while ((ch = nopt(argc, argv, authopts)) != -1)
 		switch (ch) {
 		case 'a':	/* ac */
+			if (!plainword("ac", argv[noptind - 1]))
+				return -1;
 			if (strlcpy(parms.ac_name, argv[noptind - 1],
 			    sizeof(parms.ac_name)) >=
 			    sizeof(parms.ac_name)) {
@@ -469,6 +487,8 @@ intpppoe(int argc, char **argv, ...)
 			}
 			break;
 		case 's':	/* svc */
+			if (!plainword("svc", argv[noptind - 1]))
+				return -1;
 			if (strlcpy(parms.service_name,
 			    argv[noptind - 1],
 			    sizeof(parms.service_name)) >=

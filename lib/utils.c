@@ -330,3 +330,17 @@ parse_ip_pfx(char *arg, int type, ip_t *argip)
 	}
 	return;
 }
+
+/*
+ * Is word one conf() can print and read back: not empty, and with no
+ * blank or quote in it? If not, say so, for what.
+ */
+int
+plainword(const char *what, const char *word)
+{
+	if (*word == '\0' || word[strcspn(word, " \t\"")] != '\0') {
+		printf("%% %s must be a word with no blanks or quotes\n", what);
+		return 0;
+	}
+	return 1;
+}
