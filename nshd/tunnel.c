@@ -121,7 +121,9 @@ cand_vnetid(char *ifname, int set, char *vnetida)
 			    ifname);
 			return -1;
 		}
-		return cand_setting(ST_DEFAULT, "vnetid");
+		/* a veb keeps a line that says it has none */
+		return cand_setting(default_vnetid(ifname) != 0 ? ST_OFF :
+		    ST_DEFAULT, "vnetid");
 	}
 	if (vnetid_arg(vnetida, &vnetid) == -1)
 		return -1;

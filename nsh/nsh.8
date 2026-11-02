@@ -5518,6 +5518,16 @@ interface, set or remove the VLAN ID in IEEE 802.1Q vlan tag
 If vnetid invoked inside a vlan interface the acceptable range is the
 standard 12-bit vlan id 1-4094.
 .Pp
+On a
+.Xr veb 4 ,
+in bridge mode, set the VLAN of a member's untagged frames, from 1 to
+4094.
+A member takes it when it is added.
+A new veb has vnetid 1.
+.Cm no vnetid
+removes it, and a member added after that drops the untagged frames it
+receives.
+.Pp
 E.g. set vxlan100 vnetid to 8192.
 .Bd -literal -offset indent
 nsh(interface-vxlan100)# vnetid 8192

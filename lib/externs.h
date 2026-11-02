@@ -82,6 +82,7 @@ u_long default_mtu(char *);
 int default_llpriority(char *);
 int default_txprio(char *);
 int default_rxprio(char *);
+int64_t default_vnetid(char *);
 int conf_mtu_shown(char *, u_long);
 int conf_routes(FILE *, char *, int, int, int);
 struct rt_msghdr;

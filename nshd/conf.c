@@ -122,6 +122,7 @@ static const struct {
 	{ "svlan",	IF_HDRPRIO_OUTER,	IF_HDRPRIO_PACKET },
 	{ "gif",	IF_HDRPRIO_PAYLOAD,	IF_HDRPRIO_PAYLOAD },
 	{ "eoip",	IF_HDRPRIO_PACKET,	0 },
+	{ "veb",	IF_HDRPRIO_OUTER,	IF_HDRPRIO_PACKET },
 };
 
 static const struct {
@@ -920,6 +921,9 @@ conf_vnetid(FILE *output, int ifs, char *ifname)
 			fprintf(output, " vnetid any\n");
 		else
 			fprintf(output, " vnetid %lld\n", vnetid);
+	} else if (default_vnetid(ifname) != 0) {
+		/* a veb has one unless no vnetid took it away */
+		fprintf(output, " no vnetid\n");
 	}
 }
 
@@ -1461,6 +1465,13 @@ default_txprio(char *ifname)
 			return defprios[i].txprio;
 
 	return 0;	/* default txprio */
+}
+
+/* the vnetid a driver starts with, veb's 1, or 0 for none */
+int64_t
+default_vnetid(char *ifname)
+{
+	return isprefix("veb", ifname) ? 1 : 0;
 }
 
 int

@@ -163,7 +163,7 @@ static const struct setting if_settings[] = {
 
 static const struct setting bridge_settings[] = {
 	{ "description",	S_VALUE },
-	{ "vnetid",		S_VALUE },
+	{ "vnetid",		S_STATE },	/* veb's, or "no vnetid" */
 	{ "txprio",		S_VALUE },
 	{ "rxprio",		S_VALUE },
 	/* bridge.c's model writes these lines whole */

@@ -808,6 +808,7 @@ int
 cand_interface(int set, char *name, int *isbridge)
 {
 	char head[sizeof("interface ") + IFNAMSIZ];
+	int new;
 
 	*isbridge = cand_isbridge(name);
 	snprintf(head, sizeof(head), "%s %s",
@@ -824,12 +825,18 @@ cand_interface(int set, char *name, int *isbridge)
 		}
 		return cand_set(CTX_TOP, ST_OFF, NULL, head) == -1 ? -1 : 1;
 	}
-	if (!conftree_has(cand, head) && !kf_valid(name) &&
+	if ((new = !conftree_has(cand, head)) && !kf_valid(name) &&
 	    !cand_cloneable(name)) {
 		printf("%% interface %s not found\n", name);
 		return -1;
 	}
-	return cand_set(CTX_TOP, ST_ON, NULL, head) == -1 ? -1 : 0;
+	if (cand_set(CTX_TOP, ST_ON, NULL, head) == -1)
+		return -1;
+	/* a new veb has vnetid 1, as the kernel makes it */
+	if (new && default_vnetid(name) != 0 && cand_ifsetting(name, ST_ON,
+	    "vnetid %lld", default_vnetid(name)) == -1)
+		return -1;
+	return 0;
 }
 
 /*

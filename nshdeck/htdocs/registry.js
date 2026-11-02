@@ -572,8 +572,9 @@ var REGISTRY = {
 	    default: "worked out from the link's speed", needs: "stp" },
 	"bridge.vnetid": { label: "Untagged VLAN", group: "Encapsulation",
 	    kind: "number", min: 1, max: 4094, on: ["veb"],
-	    keyword: "vnetid id", definition: "The VLAN of the frames the " +
-	    "veb's untagged ports carry.", default: "1" },
+	    keyword: "vnetid 1-4094", definition: "The VLAN of a member's " +
+	    "untagged frames, which a member takes when it is added. With " +
+	    "no vnetid, a member added after that drops them.", default: "1" },
 	"bridge.txprio": { label: "Transmit priority", group: "Encapsulation",
 	    kind: "text", on: ["veb"], keyword: "txprio 0-7 | packet",
 	    definition: "The priority written in the 802.1Q headers the veb " +
