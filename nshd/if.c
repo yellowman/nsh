@@ -3420,7 +3420,8 @@ intrdomain(int argc, char **argv, ...)
 int
 intdesc(int argc, char **argv, ...)
 {
-	int set;
+	int set, i;
+	size_t len;
 	char desc[IFDESCRSIZE];
 	struct ifreq ifr;
 	va_list ap;
@@ -3448,6 +3449,14 @@ intdesc(int argc, char **argv, ...)
 		return -1;
 	}
 
+	/* SIOCSIFDESCR refuses a longer description (ENAMETOOLONG) */
+	for (i = 0, len = 0; set && i < argc; i++)
+		len += strlen(argv[i]) + (i > 0);
+	if (len >= sizeof(desc)) {
+		printf("%% description can be at most %zu bytes\n",
+		    sizeof(desc) - 1);
+		return -1;
+	}
 	argvtostring(argc, argv, desc, sizeof(desc));
 
 	if (candidate) {

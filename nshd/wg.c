@@ -187,6 +187,12 @@ setwgpeerdesc(const char *descr)
 		printf("%% setwgpeerdesc: wgpeer not set\n");
 		return -1;
 	}
+	/* the kernel would cut a longer description short */
+	if (strlen(descr) >= IFDESCRSIZE) {
+		printf("%% description can be at most %d bytes\n",
+		    IFDESCRSIZE - 1);
+		return -1;
+	}
 	wg_peer->p_flags |= WG_PEER_SET_DESCRIPTION;
 	strlcpy(wg_peer->p_description, descr, IFDESCRSIZE);
 #endif
