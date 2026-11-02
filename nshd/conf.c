@@ -762,6 +762,7 @@ static const struct {
 	{ INTCONF_ALL,		conf_intgroup,		NULL },
 	{ INTCONF_ALL,		NULL,			intconf_carp },
 	{ INTCONF_ALL,		conf_tunnel,		NULL },
+	{ INTCONF_NOTBRIDGE,	conf_cache,		NULL },
 	{ INTCONF_ALL,		NULL,			intconf_ifmetrics },
 	{ INTCONF_ALL,		NULL,			intconf_ifaddr },
 	{ INTCONF_BRIDGE,	conf_brcfg,		NULL },

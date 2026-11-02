@@ -247,6 +247,16 @@ var REGISTRY = {
 	    "endpoint mode, which sends to its endpoints. It takes the " +
 	    "place of Tunnel.", values: "an address, with vxlan's port, then " +
 	    "ttl 1 to 255 or copy, df and ecn", default: "none" },
+	"if.maxaddr": { label: "Address cache", group: "VLAN and tunnel",
+	    kind: "number", min: 1, max: 4096, units: "addresses",
+	    on: ["bpe", "nvgre", "vxlan"], keyword: "maxaddr size",
+	    definition: "The most addresses the interface learns, each " +
+	    "with the tunnel endpoint it was seen through.", default: "100" },
+	"if.timeout": { label: "Cache timeout", group: "VLAN and tunnel",
+	    kind: "number", min: 8, max: 3600, units: "seconds",
+	    on: ["bpe", "nvgre", "vxlan"], keyword: "timeout seconds",
+	    definition: "Seconds a learned address is kept after it was " +
+	    "last seen.", default: "240" },
 	"if.tunneldomain": { label: "Tunnel routing domain", group: "VLAN " +
 	    "and tunnel", kind: "number", min: 0, max: 255,
 	    on: TUNNELS.concat(MPLSIFS), keyword: "tunneldomain rdomain",

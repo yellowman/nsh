@@ -199,7 +199,7 @@ tables.c	table	Bridgelist Bridgelist_nitems Intlist
 			kind_row namefields nruns of rowfields runs
 trunk.c		scratch	trunk_facts.parent
 trunk.c		table	tpr
-tunnel.c	table	tunnelcmds tunnelopts
+tunnel.c	table	cachecs tunnelcmds tunnelopts
 umb.c		table	cand_umb.fn umb_actstate umb_classalias
 			umb_dataclass umb_pktstate umbcs
 utils.c		scratch	format_k.idx format_k.retarray

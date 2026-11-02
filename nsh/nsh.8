@@ -4742,7 +4742,8 @@ nsh(config)# ip ?
 .Op  inet | ip | autoconf4 | description | group | rdomain | \
  | rtlabel | priority| llpriority | mtu | metric | link | arp | lladdr | nwid\
  | nwkey | powersave | txpower | bssid | media | mediaopt | auth | peer\
- | pppoe | tunnel | tunneladdr | tunneldomain | txprio | rxprio | vnetid\
+ | pppoe | tunnel | tunneladdr | tunneldomain | maxaddr | timeout\
+ | txprio | rxprio | vnetid\
  | vnetflowid | parent | patch | keepalive | mplslabel | pwe\
  | syncdev | syncpeer | maxupd | vhid | advbase | advskew | carppass\
  | carpdev | carpnode | carppeer | balancing | pflow |  debug\
@@ -4786,6 +4787,8 @@ nsh(interface-em0)# ?
   tunnel           Tunnel parameters
   tunneladdr       Tunnel source, with no destination
   tunneldomain     Tunnel routing domain for transit
+  maxaddr          Maximum address cache size
+  timeout          Address cache timeout
   txprio           Priority in tunnel protocol headers
   rxprio           Source used for packet priority
   vnetid           Virtual interface network identifier
@@ -5422,6 +5425,22 @@ nsh(interface-mgre0)# tunneladdr 192.0.2.1
 .Pp
 Set or remove tunnel routing domain over which tunnel encapsulated packets
 are to be exchanged between tunnel ip endpoints.
+.Pp
+.Op no
+.Ic maxaddr
+.Ar 1-4096
+.Pp
+On bpe, nvgre and vxlan, set the most addresses the interface learns,
+each with the tunnel endpoint it was seen through.
+Without it, the interface learns 100.
+.Pp
+.Op no
+.Ic timeout
+.Ar 8-3600
+.Pp
+On bpe, nvgre and vxlan, set the seconds a learned address is kept after
+it was last seen.
+Without it, the interface keeps them 240 seconds.
 .Pp
 .Op no
 .Cm txprio Op Ar 0-7 | packet | payload

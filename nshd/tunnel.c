@@ -15,7 +15,9 @@
 #include <net/if_dl.h>
 #include <netinet/in.h>
 #include <netinet/ip.h>
+#include <netinet/if_ether.h>
 #include <net/if_types.h>
+#include <net/if_bridge.h>
 #include <netdb.h>
 
 #include "externs.h"
@@ -42,6 +44,21 @@ static int cand_tunnel(char *, int, int, char *, char *, char *, char *,
 
 /* tunnel, and tunneladdr, a tunnel's source with no destination */
 static char *tunnelcmds[] = { "tunnel", "tunneladdr", NULL };
+
+/*
+ * maxaddr and timeout: how many addresses bpe, nvgre and vxlan learn,
+ * and for how many seconds. The kernel's etherbridge takes 1 to 4096
+ * addresses and 8 to 3600 seconds, and starts with 100 and 240.
+ */
+static const struct cachec {
+	char *name;
+	u_long set, get;
+	long long min, max, start;
+} cachecs[] = {
+	{ "maxaddr",	SIOCBRDGSCACHE,	SIOCBRDGGCACHE,	1,	4096,	100 },
+	{ "timeout",	SIOCBRDGSTO,	SIOCBRDGGTO,	8,	3600,	240 },
+	{ NULL,		0,		0,		0,	0,	0 }
+};
 
 static struct nopts tunnelopts[] = {
 	{ "rdomain",	req_arg,	'r' },
@@ -471,6 +488,98 @@ settunnel(int s, char *ifname, char *src, char *srcport, char *dstip)
 	if (dstres != NULL)
 		freeaddrinfo(dstres);
 	return r;
+}
+
+/* maxaddr and timeout, on bpe, nvgre and vxlan */
+int
+intcache(int argc, char **argv, ...)
+{
+	const struct cachec *x;
+	struct ifbrparam bp;
+	const char *errmsg = NULL;
+	long long val;
+	va_list ap;
+	char *ifname;
+	int ifs, set;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
+
+	if (NO_ARG(argv[0])) {
+		set = 0;
+		argc--;
+		argv++;
+	} else
+		set = 1;
+
+	x = (const struct cachec *)genget(argv[0], (char **)cachecs,
+	    sizeof(struct cachec));
+	if (x == 0 || Ambiguous((void *)x)) {
+		printf("%% Internal error - Invalid argument %s\n", argv[0]);
+		return -1;
+	}
+
+	argc--;
+	argv++;
+
+	if ((set && argc != 1) || (!set && argc > 1)) {
+		printf("%% %s <%lld-%lld>\n", x->name, x->min, x->max);
+		printf("%% no %s [%lld-%lld]\n", x->name, x->min, x->max);
+		return -1;
+	}
+	if (!cand_takes(ifname, x->set)) {
+		printf("%% %s not supported on %s\n", x->name, ifname);
+		return -1;
+	}
+	val = x->start;
+	if (set) {
+		val = strtonum(argv[0], x->min, x->max, &errmsg);
+		if (errmsg) {
+			printf("%% %s %s: %s\n", x->name, argv[0], errmsg);
+			return -1;
+		}
+	}
+
+	if (candidate) {
+		/* conf_cache() leaves out what the kernel starts with */
+		if (val == x->start)
+			return cand_setting(ST_DEFAULT, "%s", x->name);
+		return cand_setting(ST_ON, "%s %lld", x->name, val);
+	}
+
+	memset(&bp, 0, sizeof(bp));
+	strlcpy(bp.ifbrp_name, ifname, sizeof(bp.ifbrp_name));
+	if (x->set == SIOCBRDGSCACHE)
+		bp.ifbrp_csize = val;
+	else
+		bp.ifbrp_ctime = val;
+	if (ioctl(ifs, x->set, &bp) == -1) {
+		printf("%% %s %lld: %s\n", x->name, val, strerror(errno));
+		return -1;
+	}
+	return 0;
+}
+
+/* maxaddr and timeout, each unless it is what the kernel starts with */
+void
+conf_cache(FILE *output, int ifs, char *ifname)
+{
+	const struct cachec *x;
+	struct ifbrparam bp;
+	long long val;
+
+	for (x = cachecs; x->name != NULL; x++) {
+		memset(&bp, 0, sizeof(bp));
+		strlcpy(bp.ifbrp_name, ifname, sizeof(bp.ifbrp_name));
+		if (ioctl(ifs, x->get, &bp) == -1)
+			continue;
+		val = x->get == SIOCBRDGGCACHE ? bp.ifbrp_csize :
+		    bp.ifbrp_ctime;
+		if (val != x->start)
+			fprintf(output, " %s %lld\n", x->name, val);
+	}
 }
 
 /* A tunnel's rdomain, or -1 after saying why not */
