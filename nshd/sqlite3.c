@@ -14,6 +14,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 #include <errno.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -24,8 +25,7 @@
 #include "externs.h"
 
 int sq3simple(char *, StringList *);
-
-#define QSZ 1024 /* maximum query text size */
+static int sq3query(StringList *, const char *, ...);
 
 void
 db_create(void)
@@ -43,6 +43,8 @@ db_create(void)
 		printf("%% database lladdr creation failed\n");
 	if (db_create_table_flag_x("authkey") < 0)
 		printf("%% database authkey creation failed\n");
+	if (db_create_table_flag_x("nwkey") < 0)
+		printf("%% database nwkey creation failed\n");
 	if (db_create_table_flag_x("peerkey") < 0)
 		printf("%% database peerkey creation failed\n");
 	if (db_create_table_nameservers() < 0)
@@ -72,94 +74,70 @@ db_create_table_nameservers(void)
 int
 db_create_table_flag_x(char *name)
 {
-	char		query[QSZ];
-
-	snprintf(query, QSZ, "CREATE TABLE IF NOT EXISTS %s (ctl TEXT, rtable INTEGER, flag INTEGER,"
-	    "data TEXT)", name);
-	return sq3simple(query, NULL);
+	return sq3query(NULL, "CREATE TABLE IF NOT EXISTS '%q' (ctl TEXT, "
+	    "rtable INTEGER, flag INTEGER, data TEXT)", name);
 }
 
 int
 db_insert_flag_x(char *name, char *ctl, int rtableid, int flag, char *data)
 {
-	char		query[QSZ];
-
-	snprintf(query, QSZ, "INSERT INTO '%s' VALUES('%s', %d, %d, '%s')",
+	return sq3query(NULL, "INSERT INTO '%q' VALUES('%q', %d, %d, '%q')",
 	    name, ctl, rtableid, flag, data ? data : "");
-	return sq3simple(query, NULL);
 }
 
 int
 db_insert_rtables(int rtableid, char *name)
 {
-	char		query[QSZ];
-
-	snprintf(query, QSZ, "INSERT INTO 'rtables' VALUES(%d, '%s')", rtableid, name);
-	return sq3simple(query, NULL);
+	return sq3query(NULL, "INSERT INTO 'rtables' VALUES(%d, '%q')",
+	    rtableid, name);
 }
 
 int
 db_delete_rtables_rtable(int rtableid)
 {
-	char		query[QSZ];
-
-	snprintf(query, QSZ, "DELETE FROM 'rtables' WHERE rtable=%d", rtableid);
-	return sq3simple(query, NULL);
+	return sq3query(NULL, "DELETE FROM 'rtables' WHERE rtable=%d",
+	    rtableid);
 }
 
 int
 db_insert_nameserver(char *nameserver)
 {
-	char		query[QSZ];
-
-	snprintf(query, QSZ, "INSERT OR REPLACE INTO 'nameservers' VALUES('%s')",
-	    nameserver);
-	return sq3simple(query, NULL);
+	return sq3query(NULL, "INSERT OR REPLACE INTO 'nameservers' "
+	    "VALUES('%q')", nameserver);
 }
 
 int
 db_delete_flag_x_ctl(char *name, char *ctl, int rtable)
 {
-	char		query[QSZ];
-
-	snprintf(query, QSZ, "DELETE FROM '%s' WHERE ctl='%s' AND rtable=%d", name, ctl, rtable);
-	return sq3simple(query, NULL);
+	return sq3query(NULL, "DELETE FROM '%q' WHERE ctl='%q' AND rtable=%d",
+	    name, ctl, rtable);
 }
 
 int
 db_delete_flag_x_ctl_data(char *name, char *ctl, char *data)
 {
-	char		query[QSZ];
-
-	snprintf(query, QSZ, "DELETE FROM '%s' WHERE ctl='%s' AND data='%s'", name, ctl, data);
-	return sq3simple(query, NULL);
+	return sq3query(NULL, "DELETE FROM '%q' WHERE ctl='%q' AND data='%q'",
+	    name, ctl, data);
 }
 
 int
 db_delete_nameservers(void)
 {
-	char		query[QSZ];
-
-	snprintf(query, QSZ, "DELETE FROM 'nameservers'");
-	return sq3simple(query, NULL);
+	return sq3query(NULL, "DELETE FROM 'nameservers'");
 }
 
 int
 db_select_flag_x_ctl_data(StringList *words, char *name, char *ctl, char *data)
 {
-	char		query[QSZ];
-
-	snprintf(query, QSZ, "SELECT data FROM '%s' WHERE ctl='%s' AND data='%s'", name, ctl, data);
-	return sq3simple(query, words);
+	return sq3query(words, "SELECT data FROM '%q' WHERE ctl='%q' AND "
+	    "data='%q'", name, ctl, data);
 }
 
 int
 db_select_flag_x_ctl(StringList *words, char *name, char *ctl)
 {
-	char		query [QSZ];
-
-	snprintf(query, QSZ, "SELECT data FROM '%s' WHERE ctl='%s'", name, ctl);
-	return sq3simple(query, words);
+	return sq3query(words, "SELECT data FROM '%q' WHERE ctl='%q'", name,
+	    ctl);
 }
 
 int
@@ -172,34 +150,27 @@ db_select_rtable_rtables(StringList *words)
 int
 db_select_rtables_rtable(StringList *words, int rtableid)
 {
-	char		query[QSZ];
-
-	snprintf(query, QSZ, "SELECT name FROM rtables WHERE rtable=%d", rtableid);
-	return sq3simple(query, words);
+	return sq3query(words, "SELECT name FROM rtables WHERE rtable=%d",
+	    rtableid);
 }
 
 int
 db_select_flag_x_data_ctl_rtable(StringList *words, char *name, char *ctl, int rtableid)
 {
-	char		query[QSZ];
-
-	snprintf(query, QSZ, "SELECT data FROM %s WHERE ctl='%s' AND rtable=%d",
-	    name, ctl, rtableid);
-	return sq3simple(query, words);
+	return sq3query(words, "SELECT data FROM '%q' WHERE ctl='%q' AND "
+	    "rtable=%d", name, ctl, rtableid);
 }
 
 int
 db_select_flag_x_dbflag_rtable(char *name, char *ctl, int rtableid)
 {
 	StringList	*words;
-	char		query[QSZ];
 	int		rv;
 	const char	*errmsg = NULL;
 
-	snprintf(query, QSZ, "SELECT flag FROM %s WHERE ctl='%s' AND rtable=%d",
-	    name, ctl, rtableid);
 	words = sl_init();
-	if((rv = sq3simple(query, words)) > 0) {
+	if ((rv = sq3query(words, "SELECT flag FROM '%q' WHERE ctl='%q' AND "
+	    "rtable=%d", name, ctl, rtableid)) > 0) {
 		rv = strtonum(words->sl_str[0], INT_MIN, INT_MAX, &errmsg);
 		if (errmsg) {
 			printf("%% db_select_flag_x_dbflag_rtable %s: %s\n", 
@@ -223,10 +194,8 @@ db_select_nameservers(StringList *words)
 int
 db_select_name_rtable(StringList *words, int rtableid)
 {
-	char		query[QSZ];
-
-	snprintf(query, QSZ, "SELECT name FROM rtables WHERE rtable='%d'", rtableid);
-	return sq3simple(query, words);
+	return sq3query(words, "SELECT name FROM rtables WHERE rtable='%d'",
+	    rtableid);
 }
 
 /* simple query execution, dump results straight into words */
@@ -279,4 +248,27 @@ done:
 		sqlite3_close(db);
 
 	return tlen;
+}
+
+/*
+ * sq3simple() for a query sqlite3_vmprintf() makes from fmt, so that %q
+ * puts text in quotes, a quote in it doubled
+ */
+static int
+sq3query(StringList *words, const char *fmt, ...)
+{
+	va_list		ap;
+	char		*sql;
+	int		rv;
+
+	va_start(ap, fmt);
+	sql = sqlite3_vmprintf(fmt, ap);
+	va_end(ap);
+	if (sql == NULL) {
+		printf("%% sq3query: %s\n", strerror(ENOMEM));
+		return -1;
+	}
+	rv = sq3simple(sql, words);
+	sqlite3_free(sql);
+	return rv;
 }
