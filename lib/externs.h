@@ -459,6 +459,7 @@ int get_physttl(int, char *);
 int get_physecn(int, char *);
 int get_physdf(int, char *);
 int64_t get_vnetid(int, char *);
+int cand_vnetflowid(void);
 
 /* media.c */
 #define DEFAULT_MEDIA_TYPE	"autoselect"

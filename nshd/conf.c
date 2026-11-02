@@ -917,10 +917,7 @@ conf_vnetid(FILE *output, int ifs, char *ifname)
 	int64_t vnetid;
 
 	if (((vnetid = get_vnetid(ifs, ifname)) != 0)) {
-		if (vnetid < 0)
-			fprintf(output, " vnetid any\n");
-		else
-			fprintf(output, " vnetid %lld\n", vnetid);
+		fprintf(output, " vnetid %lld\n", vnetid);
 	} else if (default_vnetid(ifname) != 0) {
 		/* a veb has one unless no vnetid took it away */
 		fprintf(output, " no vnetid\n");

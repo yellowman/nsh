@@ -3413,6 +3413,8 @@ intvnetflowid(int argc, char **argv, ...)
 			printf("%% vnetflowid not supported on %s\n", ifname);
 			return -1;
 		}
+		if (set && cand_vnetflowid() == -1)
+			return -1;
 		return cand_setting(set ? ST_ON : ST_OFF, "vnetflowid");
 	}
 

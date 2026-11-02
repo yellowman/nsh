@@ -219,16 +219,19 @@ var REGISTRY = {
 	    values: "an interface's name", default: "none", needs: "vnetid, " +
 	    "for a VLAN" },
 	"if.vnetid": { label: "VNI or VLAN ID", group: "VLAN and tunnel",
-	    kind: "number", min: 0, max: 16777215,
-	    on: VLANS.concat(TUNNELS, ["bpe"]), keyword: "vnetid 1-4094 | " +
-	    "0-16777215", definition: "A VLAN's 802.1Q ID, or a tunnel's " +
-	    "virtual network identifier, which the other end must match.",
-	    values: "1 to 4094 for a VLAN; 0 to 16777215 for a tunnel",
+	    kind: "number", min: 0, max: 4294967295,
+	    on: VLANS.concat(["gre", "egre", "mgre", "nvgre", "eoip", "vxlan",
+	    "bpe"]), keyword: "vnetid id", definition: "A VLAN's " +
+	    "802.1Q ID, or a tunnel's virtual network identifier, which the " +
+	    "other end must match.", values: "1 to 4094 for a VLAN; 0 to " +
+	    "16777215 on bpe, nvgre and vxlan; 0 to 4294967295 on gre, egre " +
+	    "and mgre, or 0 to 16777215 with vnetflowid; 0 to 65535 on eoip",
 	    default: "none" },
 	"if.vnetflowid": { label: "Flow ID from VNI", group: "VLAN and tunnel",
-	    kind: "flag", on: TUNNELS, keyword: "[no] vnetflowid",
-	    definition: "Part of the virtual network identifier is used as a " +
-	    "flow identifier, to spread traffic over links.", needs: "vnetid" },
+	    kind: "flag", on: ["gre", "egre", "mgre"],
+	    keyword: "[no] vnetflowid", definition: "Part of the virtual " +
+	    "network identifier is used as a flow identifier, to spread " +
+	    "traffic over links.", needs: "vnetid, from 0 to 16777215" },
 	"if.tunnel": { label: "Tunnel", group: "VLAN and tunnel", kind: "text",
 	    placeholder: "192.0.2.1 198.51.100.1",
 	    on: TUNNELS.filter(function (d) { return d !== "mgre"; }),

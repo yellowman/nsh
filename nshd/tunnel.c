@@ -33,6 +33,7 @@ int delvnetid(int, char *);
 int deletetunnel(int, char *);
 void tunnelusage(int);
 static int vnetid_arg(char *, int64_t *);
+static int vnetid_range(char *, int64_t);
 static int cand_vnetid(char *, int, char *);
 static int tunnel_ttl(char *, char *);
 static int tunnel_startttl(char *);
@@ -62,6 +63,29 @@ static const struct cachec {
 	{ "timeout",	SIOCBRDGSTO,	SIOCBRDGGTO,	8,	3600,	240 },
 	{ NULL,		0,		0,		0,	0,	0 }
 };
+
+/*
+ * The vnetids each driver takes, as the kernel checks them. With
+ * vnetflowid, gre, egre and mgre take 0 to FLOWID_MAX.
+ */
+static const struct vnetidr {
+	char *name;
+	long long min, max;
+} vnetidrs[] = {
+	{ "vlan",	1,	4094 },
+	{ "svlan",	1,	4094 },
+	{ "veb",	1,	4094 },
+	{ "bpe",	0,	16777215 },
+	{ "nvgre",	0,	16777215 },
+	{ "vxlan",	0,	16777215 },
+	{ "gre",	0,	4294967295LL },
+	{ "egre",	0,	4294967295LL },
+	{ "mgre",	0,	4294967295LL },
+	{ "eoip",	0,	65535 },
+	{ "erspan",	0,	1023 },
+	{ NULL,		0,	0 }
+};
+#define FLOWID_MAX	16777215
 
 static struct nopts tunnelopts[] = {
 	{ "rdomain",	req_arg,	'r' },
@@ -122,6 +146,10 @@ cand_vnetid(char *ifname, int set, char *vnetida)
 			    ifname);
 			return -1;
 		}
+		/* the kernel's vnetflowid goes with the vnetid */
+		if (cand_takes(ifname, SIOCSVNETFLOWID) &&
+		    cand_setting(ST_DEFAULT, "vnetflowid") == -1)
+			return -1;
 		/* a veb keeps a line that says it has none */
 		return cand_setting(default_vnetid(ifname) != 0 ? ST_OFF :
 		    ST_DEFAULT, "vnetid");
@@ -132,9 +160,53 @@ cand_vnetid(char *ifname, int set, char *vnetida)
 		printf("%% The configuration does not keep vnetid 0\n");
 		return -1;
 	}
-	if (vnetid < 0)
-		return cand_setting(ST_ON, "vnetid any");
+	if (vnetid_range(ifname, vnetid) == -1)
+		return -1;
 	return cand_setting(ST_ON, "vnetid %lld", vnetid);
+}
+
+/* Does ifname's driver take vnetid? 0, or -1 after saying why not */
+static int
+vnetid_range(char *ifname, int64_t vnetid)
+{
+	const struct vnetidr *v;
+	long long max;
+
+	for (v = vnetidrs; v->name != NULL; v++)
+		if (isprefix(v->name, ifname))
+			break;
+	if (v->name == NULL)
+		return 0;
+	max = v->max;
+	if (max > FLOWID_MAX && cand_line("vnetflowid", 0) != NULL)
+		max = FLOWID_MAX;
+	if (vnetid < v->min || vnetid > max) {
+		printf("%% vnetid %lld out of range for %s: %lld to %lld\n",
+		    vnetid, ifname, v->min, max);
+		return -1;
+	}
+	return 0;
+}
+
+/*
+ * Can the candidate's interface have vnetflowid? Only with a vnetid
+ * from 0 to FLOWID_MAX: the kernel uses the rest of the key as the flow
+ * ID. 0, or -1 after saying why not.
+ */
+int
+cand_vnetflowid(void)
+{
+	const char *errmsg = NULL;
+	char *l;
+
+	if ((l = cand_line("vnetid", 0)) != NULL)
+		strtonum(l + strlen("vnetid "), 0, FLOWID_MAX, &errmsg);
+	if (l == NULL || errmsg != NULL) {
+		printf("%% vnetflowid needs a vnetid from 0 to %d\n",
+		    FLOWID_MAX);
+		return -1;
+	}
+	return 0;
 }
 
 void
@@ -970,16 +1042,12 @@ settunnelecn(int ifs, char *ifname, int ecn)
 	return 0;
 }
 
-/* Parse a vnetid into *vnetid, "any" as -1; -1 after saying why not */
+/* Parse a vnetid into *vnetid; -1 after saying why not */
 static int
 vnetid_arg(char *vnetida, int64_t *vnetid)
 {
 	const char *errmsg = NULL;
 
-	if (isprefix("any", vnetida)) {
-		*vnetid = -1;
-		return 0;
-	}
 	*vnetid = strtonum(vnetida, 0, INT64_MAX, &errmsg);
 	if (errmsg) {
 		printf("%% vnetid %s out of range: %s\n", vnetida, errmsg);

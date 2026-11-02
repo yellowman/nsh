@@ -5521,6 +5521,14 @@ interface, set or remove the VLAN ID in IEEE 802.1Q vlan tag
 If vnetid invoked inside a vlan interface the acceptable range is the
 standard 12-bit vlan id 1-4094.
 .Pp
+The other drivers take these ranges:
+1 to 4094 on svlan;
+0 to 16777215 on bpe and nvgre;
+0 to 4294967295 on gre, egre and mgre, or 0 to 16777215 with
+.Cm vnetflowid ;
+0 to 65535 on eoip;
+and 0 to 1023 on erspan.
+.Pp
 On a
 .Xr veb 4 ,
 in bridge mode, set the VLAN of a member's untagged frames, from 1 to
@@ -5542,6 +5550,9 @@ nsh(interface-vxlan100)# vnetid 8192
 Allow or disallow the interface to use a portion of the virtual network
 identifier space as a flow identifier.
 This allows loadbalancing of the encapsulated traffic over multiple links.
+gre, egre and mgre take it, with a vnetid from 0 to 16777215, and
+.Cm no vnetid
+removes it.
 .Pp
 E.g. enable vnetflowid load balancing for gre1.
 .Bd -literal -offset indent
