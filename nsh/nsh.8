@@ -4949,7 +4949,8 @@ nsh(config)# ip ?
 .Op  inet | ip | autoconf4 | description | group | rdomain | \
  | rtlabel | priority| llpriority | mtu | metric | link | arp | lladdr | nwid\
  | nwkey | wpakey | wpa | wpaprotos | wpaakms | wpaciphers | wpagroupcipher\
- | powersave | txpower | bssid | media | mediaopt | auth | peer\
+ | powersave | txpower | chan | nwflag | bssid | media | mediaopt | auth\
+ | peer\
  | pppoe | tunnel | tunneladdr | tunneldomain | maxaddr | timeout\
  | endpoint | txprio | rxprio | vnetid\
  | vnetflowid | parent | patch | keepalive | mplslabel | pwe\
@@ -4993,6 +4994,8 @@ nsh(interface-em0)# ?
   wpagroupcipher   802.11 WPA group cipher
   powersave        802.11 powersaving mode
   txpower          802.11 transmit power
+  chan             802.11 channel
+  nwflag           802.11 flags
   bssid            802.11 bss id
   media            Media type
   mediaopt         Media options
@@ -5455,6 +5458,30 @@ E.g to set the tx power of iwn0  to 10dBm simply enter the command below:
 .Bd -literal -offset indent
 nsh(interface-iwn0)# txpower 10
 .Ed
+.Pp
+.Op no
+.Ic chan
+.Ar channel
+.Pp
+Set the channel of an 802.11 interface, 1 to 255, which the hardware
+must have, or with
+.Ic no ,
+let it use any channel.
+The kernel shows the channel in use rather than the one set, so
+.Nm
+keeps the one set.
+.Pp
+.Op no
+.Ic nwflag
+.Ar flag ...
+.Pp
+Set 802.11 flags, or with
+.Ic no ,
+clear them: hidenwid, which hides the network ID, and nobridge, which
+stops the access point from forwarding between its stations, both for
+.Cm mediaopt hostap ;
+stayauth, which ignores deauthentication; nomimo, which turns MIMO off;
+and uapsd, which turns on U-APSD power saving.
 .Pp
 .Op no
 .Ic bssid

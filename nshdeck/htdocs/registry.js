@@ -464,6 +464,15 @@ var REGISTRY = {
 	    kind: "number", min: -100, max: 100, units: "dBm", wireless: true,
 	    keyword: "txpower dBm", definition: "The transmit power, where " +
 	    "the driver lets it be set.", default: "automatic" },
+	"if.chan": { label: "Channel", group: "Wireless", kind: "number",
+	    min: 1, max: 255, wireless: true, keyword: "chan channel",
+	    definition: "The channel the interface uses; it must be one the " +
+	    "hardware has.", default: "any" },
+	"if.nwflag": { label: "802.11 flags", group: "Wireless",
+	    kind: "words", wireless: true, keyword: "nwflag flag",
+	    definition: "hidenwid and nobridge, for hostap mode; stayauth, " +
+	    "nomimo and uapsd.", values: "hidenwid, nobridge, stayauth, " +
+	    "nomimo, uapsd", default: "none" },
 
 	/* Mobile broadband */
 	"if.apn": { label: "Access point name", group: "Mobile broadband",

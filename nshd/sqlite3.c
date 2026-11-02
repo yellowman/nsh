@@ -55,6 +55,8 @@ db_create(void)
 		printf("%% database pin creation failed\n");
 	if (db_create_table_flag_x("wpakey") < 0)
 		printf("%% database wpakey creation failed\n");
+	if (db_create_table_flag_x("chan") < 0)
+		printf("%% database chan creation failed\n");
 }
 
 int

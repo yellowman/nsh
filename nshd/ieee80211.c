@@ -70,6 +70,7 @@
 #include <sys/ioctl.h>
 #include <sys/param.h>
 #include <net/if.h>
+#include <net/if_media.h>
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
 #include <net80211/ieee80211.h>
@@ -117,6 +118,9 @@ static const struct wpaname wpaprotos[] = {
 	{ "wep104",	IEEE80211_WPA_CIPHER_WEP104 },
 	{ NULL,		0 }
 };
+
+/* nwflag's flags, by the names ifconfig gives them */
+static const struct ieee80211_flags nwflags[] = IEEE80211_FLAGS;
 
 /* The commands that set them, by WPA_* */
 #define WPA_PROTOS	0
@@ -607,6 +611,184 @@ conf_wpa(FILE *output, int ifs, char *ifname)
 			wpa_names(str, sizeof(str), i, bits[i]);
 			fprintf(output, " %s %s\n", wpalists[i].cmd, str);
 		}
+}
+
+/* chan: the channel an 802.11 interface uses, or with no, any */
+int
+intchan(int argc, char **argv, ...)
+{
+	struct ieee80211chanreq chan;
+	const char *errstr;
+	char num[8];
+	va_list ap;
+	char *ifname;
+	int ifs, set;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
+
+	if (NO_ARG(argv[0])) {
+		set = 0;
+		argc--;
+		argv++;
+	} else
+		set = 1;
+	argc--;
+	argv++;
+
+	if ((set && argc != 1) || (!set && argc > 1)) {
+		printf("%% chan <1-%d>\n", kern_chan_max);
+		printf("%% no chan\n");
+		return -1;
+	}
+	memset(&chan, 0, sizeof(chan));
+	strlcpy(chan.i_name, ifname, sizeof(chan.i_name));
+	chan.i_channel = IEEE80211_CHAN_ANY;
+	if (set) {
+		chan.i_channel = strtonum(argv[0], 1, kern_chan_max, &errstr);
+		if (errstr) {
+			printf("%% chan %s is %s: 1 to %d\n", argv[0], errstr,
+			    kern_chan_max);
+			return -1;
+		}
+	}
+
+	if (candidate) {
+		if (!cand_80211(ifname, "intchan: SIOCS80211CHANNEL"))
+			return -1;
+		if (!set)
+			return cand_setting(ST_DEFAULT, "chan");
+		return cand_setting(ST_ON, "chan %u", chan.i_channel);
+	}
+
+	if (ioctl(ifs, SIOCS80211CHANNEL, &chan) == -1) {
+		printf("%% intchan: SIOCS80211CHANNEL: %s\n",
+		    strerror(errno));
+		return -1;
+	}
+	/* the kernel shows the channel in use, so nsh keeps the one set */
+	db_delete_flag_x_ctl("chan", ifname, 0);
+	if (set) {
+		snprintf(num, sizeof(num), "%u", chan.i_channel);
+		db_insert_flag_x("chan", ifname, 0, DB_X_ENABLE, num);
+	}
+	return 0;
+}
+
+/* Is the interface in hostap mode, as its media options say? */
+static int
+hostap(int ifs, char *ifname)
+{
+	uint64_t media = init_current_media(ifs, ifname);
+
+	return media != (uint64_t)-1 &&
+	    (IFM_OPTIONS(media) & IFM_IEEE80211_HOSTAP) != 0;
+}
+
+/*
+ * nwflag: 802.11 flags. hidenwid and nobridge are for hostap mode, and
+ * the kernel refuses them otherwise.
+ */
+int
+intnwflag(int argc, char **argv, ...)
+{
+	struct ifreq ifr;
+	char flags[256];
+	va_list ap;
+	char *ifname;
+	u_int bits = 0;
+	size_t i;
+	int ifs, set, n;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
+
+	if (NO_ARG(argv[0])) {
+		set = 0;
+		argc--;
+		argv++;
+	} else
+		set = 1;
+	argc--;
+	argv++;
+
+	for (n = 0; n < argc; n++) {
+		for (i = 0; i < nitems(nwflags); i++)
+			if (strcmp(argv[n], nwflags[i].f_name) == 0)
+				break;
+		if (i == nitems(nwflags))
+			break;
+		bits |= nwflags[i].f_flag;
+	}
+	if (argc < 1 || n < argc) {
+		printf("%% nwflag <flag> [flag ...]\n");
+		printf("%% no nwflag <flag> [flag ...]\n");
+		printf("%% flags:");
+		for (i = 0; i < nitems(nwflags); i++)
+			printf(" %s", nwflags[i].f_name);
+		printf("\n");
+		return -1;
+	}
+	if (set && (bits & IEEE80211_F_HOSTAPMASK) && !hostap(ifs, ifname)) {
+		printf("%% nwflag: hidenwid and nobridge need mediaopt "
+		    "hostap\n");
+		return -1;
+	}
+
+	if (candidate) {
+		if (!cand_80211(ifname, "intnwflag: SIOCS80211FLAGS"))
+			return -1;
+		argvtostring(argc, argv, flags, sizeof(flags));
+		return cand_setting(set ? ST_ON : ST_OFF, "nwflag %s", flags);
+	}
+
+	memset(&ifr, 0, sizeof(ifr));
+	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
+	if (ioctl(ifs, SIOCG80211FLAGS, &ifr) == -1) {
+		printf("%% intnwflag: SIOCG80211FLAGS: %s\n",
+		    strerror(errno));
+		return -1;
+	}
+	if (set)
+		ifr.ifr_flags |= bits;
+	else
+		ifr.ifr_flags &= ~bits;
+	if (ioctl(ifs, SIOCS80211FLAGS, &ifr) == -1) {
+		printf("%% intnwflag: SIOCS80211FLAGS: %s\n",
+		    strerror(errno));
+		return -1;
+	}
+	return 0;
+}
+
+/* An 802.11 interface's chan, which nsh kept, and its nwflags */
+void
+conf_80211(FILE *output, int ifs, char *ifname)
+{
+	struct ifreq ifr;
+	StringList *chan;
+	size_t i;
+	int n = 0;
+
+	memset(&ifr, 0, sizeof(ifr));
+	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
+	if (ioctl(ifs, SIOCG80211FLAGS, &ifr) == -1)
+		return;
+	chan = sl_init();
+	if (db_select_flag_x_ctl(chan, "chan", ifname) >= 0 &&
+	    chan->sl_cur > 0)
+		fprintf(output, " chan %s\n", chan->sl_str[0]);
+	sl_free(chan, 1);
+	for (i = 0; i < nitems(nwflags); i++)
+		if (ifr.ifr_flags & nwflags[i].f_flag)
+			fprintf(output, "%s %s", n++ ? "" : " nwflag",
+			    nwflags[i].f_name);
+	if (n > 0)
+		fprintf(output, "\n");
 }
 
 /*

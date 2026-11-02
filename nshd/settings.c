@@ -133,6 +133,9 @@ static const struct setting if_settings[] = {
 	{ "autoconf4",		S_STATE },
 	{ "inet",		S_ENTRY,	2 | CK_ADDR },
 	{ "media",		S_VALUE },
+	/* after media, which can turn hostap mode on */
+	{ "chan",		S_VALUE },
+	{ "nwflag",		S_LIST },
 	{ "keepalive",		S_VALUE },
 	{ "syncdev",		S_VALUE },
 	{ "syncpeer",		S_VALUE },

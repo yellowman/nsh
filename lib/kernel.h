@@ -31,7 +31,7 @@ struct kcloner {
 extern const char kernel_source[];	/* the source it was read from */
 
 /* values the kernel checks or reports that no userland header defines */
-extern const int kern_txpower_min, kern_txpower_max;
+extern const int kern_txpower_min, kern_txpower_max, kern_chan_max;
 extern const int kern_bstp_port_admcost, kern_bstp_max_path_cost;
 extern const int kern_bstp_max_priority, kern_bstp_max_port_priority;
 extern const int kern_bstp_tick_val, kern_bstp_min_hello_time;

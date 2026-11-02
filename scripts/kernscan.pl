@@ -83,6 +83,8 @@ my @limits = (
 	    'IEEE80211_TXPOWER_MIN' ],
 	[ 'kern_txpower_max', 'net80211/ieee80211_var.h',
 	    'IEEE80211_TXPOWER_MAX' ],
+	[ 'kern_chan_max', 'net80211/ieee80211_var.h',
+	    'IEEE80211_CHAN_MAX' ],
 	[ 'kern_bstp_port_admcost', 'net/if_bridge.h', 'BSTP_PORT_ADMCOST' ],
 	[ 'kern_bstp_max_path_cost', 'net/bridgestp.c', 'BSTP_MAX_PATH_COST' ],
 	[ 'kern_bstp_max_priority', 'net/bridgestp.c', 'BSTP_MAX_PRIORITY' ],

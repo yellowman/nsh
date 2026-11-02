@@ -768,6 +768,7 @@ static const struct {
 	{ INTCONF_ALL,		NULL,			intconf_ifaddr },
 	{ INTCONF_BRIDGE,	conf_brcfg,		NULL },
 	{ INTCONF_NOTBRIDGE,	NULL,			intconf_media_status },
+	{ INTCONF_NOTBRIDGE,	conf_80211,		NULL },
 	{ INTCONF_NOTBRIDGE,	conf_keepalive,		NULL },
 	{ INTCONF_NOTBRIDGE,	NULL,			intconf_pfsync },
 	{ INTCONF_NOTBRIDGE,	NULL,			intconf_trunk },

@@ -52,7 +52,6 @@
 #include "showfacts.h"
 #include "kfacts.h"
 
-uint64_t init_current_media(int, char *);
 int process_media_commands(int, char *, uint64_t);
 uint64_t get_media_subtype(uint64_t, const char *);
 uint64_t get_media_options(uint64_t, const char *);
@@ -301,6 +300,11 @@ cand_setmedia(int s, char *ifname, uint64_t word)
 		    strerror(EINVAL));
 		return -1;
 	}
+	/* the kernel shows hidenwid and nobridge only in hostap mode */
+	if (IFM_TYPE(word) == IFM_IEEE80211 &&
+	    !(IFM_OPTIONS(word) & IFM_IEEE80211_HOSTAP) &&
+	    cand_setting(ST_OFF, "nwflag hidenwid nobridge") == -1)
+		return -1;
 	if (!media_set(word))
 		return cand_setting(ST_DEFAULT, "media");
 	media_line(line, sizeof(line), word);
