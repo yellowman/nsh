@@ -3389,9 +3389,10 @@ intlladdr(int argc, char **argv, ...)
 int
 intrdomain(int argc, char **argv, ...)
 {
-	int set, rdomain;
+	int set, rdomain, unit, cur;
 	const char *errmsg = NULL;
-	struct ifreq ifr;
+	struct ifreq ifr, cur_ifr;
+	char *l;
 	va_list ap;
 	char *ifname;
 	int ifs; 
@@ -3426,6 +3427,29 @@ intrdomain(int argc, char **argv, ...)
 	}
 	else
 		ifr.ifr_rdomainid = 0;
+	/*
+	 * Each rdomain has its own loopback, lo<rdomain>, which
+	 * if_setrdomain() keeps in it (EPERM)
+	 */
+	unit = strncmp(ifname, "lo", 2) == 0 ?
+	    strtonum(ifname + 2, 0, RT_TABLEID_MAX, &errmsg) : -1;
+	if (unit != -1 && errmsg == NULL) {
+		if (candidate)
+			cur = (l = cand_line("rdomain", 0)) != NULL ?
+			    atoi(l + strlen("rdomain ")) : 0;
+		else {
+			bzero(&cur_ifr, sizeof(cur_ifr));
+			strlcpy(cur_ifr.ifr_name, ifname,
+			    sizeof(cur_ifr.ifr_name));
+			cur = ioctl(ifs, SIOCGIFRDOMAIN, &cur_ifr) == 0 ?
+			    cur_ifr.ifr_rdomainid : -1;
+		}
+		if (cur == unit && ifr.ifr_rdomainid != unit) {
+			printf("%% %s is the loopback of rdomain %d, and stays"
+			    " in it\n", ifname, unit);
+			return -1;
+		}
+	}
 	if (candidate) {
 		if (ifr.ifr_rdomainid > 0)
 			return cand_setting(ST_ON, "rdomain %d",
