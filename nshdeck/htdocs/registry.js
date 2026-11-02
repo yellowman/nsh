@@ -290,7 +290,7 @@ var REGISTRY = {
 	    values: "0 to 7, packet, outer or payload, as the driver takes",
 	    default: "packet" },
 	"if.keepalive": { label: "Keepalive", group: "VLAN and tunnel",
-	    kind: "text", placeholder: "1 3", on: ["gre", "egre", "eoip"],
+	    kind: "text", placeholder: "1 3", on: ["gre", "eoip"],
 	    keyword: "keepalive period count", definition: "A keepalive is " +
 	    "sent every period seconds, and the link is down after count of " +
 	    "them go unanswered.", values: "seconds, then a count",

@@ -5630,7 +5630,7 @@ nsh(interface-trunk0)# trunkproto lacp
 .Ic keepalive
 .Ar period count
 .Pp
-Enable or disable gre / gre based interfaces sending keepalive packets sent
+Enable or disable keepalive packets on a gre or eoip interface, sent
 every period seconds.
 A second timer is run with a timeout of count * period.
 If no keepalive response is received during that time, the link is considered
