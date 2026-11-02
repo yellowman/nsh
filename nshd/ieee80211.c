@@ -1116,10 +1116,12 @@ inttxpower(int argc, char **argv, ...)
 		txpower.i_val = 100;
 		txpower.i_mode = IEEE80211_TXPOWER_MODE_AUTO;
 	} else {
-		dbm = strtonum(argv[0], SHRT_MIN, SHRT_MAX, &errmsg);
+		/* SIOCS80211TXPOWER refuses any other (EINVAL) */
+		dbm = strtonum(argv[0], kern_txpower_min, kern_txpower_max,
+		    &errmsg);
 		if (errmsg) {
-			printf("%% inttxpower: txpower %sdBm: %s\n", argv[0],
-			    errmsg);
+			printf("%% txpower %s is %s: %d to %d dBm\n", argv[0],
+			    errmsg, kern_txpower_min, kern_txpower_max);
 			return -1;
 		}
 		txpower.i_val = (int16_t)dbm;
@@ -1259,11 +1261,6 @@ cand_txpower(char *ifname, int dbm)
 {
 	if (!cand_80211(ifname, "inttxpower: SIOCS80211TXPOWER failed"))
 		return -1;
-	if (dbm < kern_txpower_min || dbm > kern_txpower_max) {
-		printf("%% inttxpower: SIOCS80211TXPOWER failed: %s\n",
-		    strerror(EINVAL));
-		return -1;
-	}
 	if (dbm == kern_txpower_max)
 		return cand_setting(ST_DEFAULT, "txpower");
 	return cand_setting(ST_ON, "txpower %d", dbm);

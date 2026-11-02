@@ -463,12 +463,12 @@ var REGISTRY = {
 	    definition: "The cipher for broadcast and multicast traffic.",
 	    default: "ccmp, or tkip with wpa1" },
 	"if.powersave": { label: "Power saving", group: "Wireless",
-	    kind: "number", min: 0, max: 100000, units: "milliseconds",
+	    kind: "number", min: 0, max: 1000, units: "milliseconds",
 	    wireless: true, keyword: "powersave ms", definition: "802.11 " +
 	    "power saving, with the time to sleep. Modern drivers save power " +
 	    "without it.", default: "off" },
 	"if.txpower": { label: "Transmit power", group: "Wireless",
-	    kind: "number", min: -100, max: 100, units: "dBm", wireless: true,
+	    kind: "number", min: -50, max: 100, units: "dBm", wireless: true,
 	    keyword: "txpower dBm", definition: "The transmit power, where " +
 	    "the driver lets it be set.", default: "automatic" },
 	"if.chan": { label: "Channel", group: "Wireless", kind: "number",
