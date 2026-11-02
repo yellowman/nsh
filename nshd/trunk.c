@@ -301,10 +301,88 @@ inttrunkproto(int argc, char **argv, ...)
 	return 0;
 }
 
+/*
+ * lacpmode and lacptimeout. Only aggr uses LACP: trunk refuses
+ * SIOCSTRUNKOPTS (EPROTONOSUPPORT).
+ */
+int
+intlacp(int argc, char **argv, ...)
+{
+	static const char *modes[] = { "passive", "active" };
+	static const char *timeouts[] = { "slow", "fast" };
+	struct trunk_opts to;
+	const char **vals;
+	va_list ap;
+	char *ifname, *name;
+	int ifs, set, opt, dflt, value;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
+
+	if (NO_ARG(argv[0])) {
+		set = 0;
+		argc--;
+		argv++;
+	} else
+		set = 1;
+
+	if (isprefix(argv[0], "lacpmode")) {
+		name = "lacpmode";
+		vals = modes;
+		opt = TRUNK_OPT_LACP_MODE;
+		dflt = 1;
+	} else {
+		name = "lacptimeout";
+		vals = timeouts;
+		opt = TRUNK_OPT_LACP_TIMEOUT;
+		dflt = 0;
+	}
+	argc--;
+	argv++;
+
+	value = dflt;
+	if (set && argc == 1)
+		for (value = 0; value < 2; value++)
+			if (isprefix(argv[0], (char *)vals[value]))
+				break;
+	if ((set && argc != 1) || (!set && argc > 1) || value == 2) {
+		printf("%% %s %s|%s\n", name, vals[1], vals[0]);
+		printf("%% no %s\n", name);
+		return -1;
+	}
+	if (strncmp(ifname, "aggr", strlen("aggr")) != 0) {
+		printf("%% %s is not an aggr interface\n", ifname);
+		return -1;
+	}
+
+	if (candidate) {
+		if (value == dflt)
+			return cand_setting(ST_DEFAULT, "%s", name);
+		return cand_setting(ST_ON, "%s %s", name, vals[value]);
+	}
+
+	memset(&to, 0, sizeof(to));
+	strlcpy(to.to_ifname, ifname, sizeof(to.to_ifname));
+	to.to_proto = TRUNK_PROTO_LACP;
+	to.to_opts = opt;
+	if (opt == TRUNK_OPT_LACP_MODE)
+		to.to_lacpopts.lacp_mode = value;
+	else
+		to.to_lacpopts.lacp_timeout = value;
+	if (ioctl(ifs, SIOCSTRUNKOPTS, &to) == -1) {
+		printf("%% %s: SIOCSTRUNKOPTS: %s\n", name, strerror(errno));
+		return -1;
+	}
+	return 0;
+}
+
 int
 conf_trunk(FILE *output, int ifs, char *ifname)
 {
 	struct trunk_reqport rpbuf[TRUNK_MAX_PORTS];
+	struct trunk_opts to;
         struct trunk_reqall ra;
         int i;
 
@@ -336,6 +414,17 @@ conf_trunk(FILE *output, int ifs, char *ifname)
 			fprintf(output, "\n");
 		}
         } else return (1);
+
+	/* aggr's LACP options, where they are not the defaults */
+	memset(&to, 0, sizeof(to));
+	strlcpy(to.to_ifname, ifname, sizeof(to.to_ifname));
+	to.to_proto = TRUNK_PROTO_LACP;
+	if (ioctl(ifs, SIOCGTRUNKOPTS, &to) == 0) {
+		if (to.to_lacpopts.lacp_mode == 0)
+			fprintf(output, " lacpmode passive\n");
+		if (to.to_lacpopts.lacp_timeout == 1)
+			fprintf(output, " lacptimeout fast\n");
+	}
 
 	return (0);
 }

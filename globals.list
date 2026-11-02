@@ -198,7 +198,7 @@ tables.c	table	Bridgelist Bridgelist_nitems Intlist
 			Intlist_nitems cmdtab cmdtab_nitems kind_name
 			kind_row namefields nruns of rowfields runs
 trunk.c		scratch	trunk_facts.parent
-trunk.c		table	tpr
+trunk.c		table	intlacp.modes intlacp.timeouts tpr
 tunnel.c	table	cachecs tunnelcmds tunnelopts vnetidrs
 umb.c		table	cand_umb.fn umb_actstate umb_classalias
 			umb_dataclass umb_pktstate umbcs

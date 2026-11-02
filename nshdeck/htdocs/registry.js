@@ -384,6 +384,17 @@ var REGISTRY = {
 	    "receives on.", values: "interfaces' names", default: "none",
 	    risk: "high: a port added stops working on its own, with its " +
 	    "addresses" },
+	"if.lacpmode": { label: "LACP mode", group: "Aggregation",
+	    kind: "choice", choices: ["active", "passive"], on: ["aggr"],
+	    keyword: "lacpmode active|passive", definition: "active sends " +
+	    "LACP packets on its own; passive only answers the switch's.",
+	    default: "active" },
+	"if.lacptimeout": { label: "LACP timeout", group: "Aggregation",
+	    kind: "choice", choices: ["slow", "fast"], on: ["aggr"],
+	    keyword: "lacptimeout fast|slow", definition: "fast asks the " +
+	    "switch to send LACP packets every second, not every 30 " +
+	    "seconds, so that a failed port is found sooner.",
+	    default: "slow" },
 
 	/* WireGuard */
 	"if.wgkey": { label: "Private key", group: "WireGuard", kind: "text",

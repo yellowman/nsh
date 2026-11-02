@@ -4872,7 +4872,8 @@ nsh(config)# ip ?
  | carpdev | carpnode | carppeer | balancing | pflow |  debug\
  | dhcrelay | wol |  mpls | inet6 | autoconf6\
  | autoconfprivacy | temporary | monitor | soii | tcplro | wgpeer | wgport\
- | wgkey |  wgrtable | trunkport | trunkproto | shutdown | show | |\&?\
+ | wgkey |  wgrtable | trunkport | trunkproto | lacpmode | lacptimeout\
+ | shutdown | show | |\&?\
  | manual | exit
 interface mode commands, are commands that can be applied to a specific
 named interface.
@@ -4962,6 +4963,8 @@ nsh(interface-em0)# ?
   wgrtable         Wireguard routing table
   trunkport        Add child interface(s) to trunk
   trunkproto       Define trunkproto
+  lacpmode         LACP mode of an aggr interface
+  lacptimeout      LACP timeout of an aggr interface
   apn              Access Point Name
   setpin           Set SIM card PIN
   setpuk           Set new SIM card PIN using PUK for validation
@@ -5748,6 +5751,38 @@ the protocol is roundrobin, the default.
 nsh(config)# interface trunk0
 nsh(interface-trunk0)# trunkport em0 em1
 nsh(interface-trunk0)# trunkproto lacp
+.Ed
+.Pp
+.Op no
+.Ic lacpmode
+.Cm active | passive
+.Pp
+Set the LACP mode of an
+.Xr aggr 4
+interface.
+With
+.Cm active ,
+the default, it sends LACP packets on its own; with
+.Cm passive ,
+it only answers the switch's.
+.Pp
+.Op no
+.Ic lacptimeout
+.Cm fast | slow
+.Pp
+Set the LACP timeout of an
+.Xr aggr 4
+interface.
+With
+.Cm fast ,
+it asks the switch to send LACP packets every second rather than every
+30 seconds, so that a failed port is found sooner.
+The default is
+.Cm slow .
+.Bd -literal -offset indent
+nsh(config)# interface aggr0
+nsh(interface-aggr0)# trunkport em0 em1
+nsh(interface-aggr0)# lacptimeout fast
 .Ed
 .Pp
 .Op no

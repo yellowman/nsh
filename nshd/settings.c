@@ -133,6 +133,8 @@ static const struct setting if_settings[] = {
 	{ "maxupd",		S_VALUE },
 	{ "trunkproto",		S_VALUE },
 	{ "trunkport",		S_LIST },
+	{ "lacpmode",		S_VALUE },
+	{ "lacptimeout",	S_VALUE },
 	{ "pflow",		S_VALUE },
 	{ "mplslabel",		S_VALUE },
 	{ "pwe",		S_VALUE },

@@ -524,6 +524,7 @@ int carplock(int);
 /* trunk.c */
 int inttrunkport(int, char **, ...);
 int inttrunkproto(int, char **, ...);
+int intlacp(int, char **, ...);
 int conf_trunk(FILE *output, int ifs, char *ifname);
 
 /* who.c */
