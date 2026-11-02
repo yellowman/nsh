@@ -51,6 +51,8 @@ db_create(void)
 		printf("%% database pppoeipaddrmode creation failed\n");
 	if (db_create_table_flag_x("pin") < 0)
 		printf("%% database pin creation failed\n");
+	if (db_create_table_flag_x("wpakey") < 0)
+		printf("%% database wpakey creation failed\n");
 }
 
 int

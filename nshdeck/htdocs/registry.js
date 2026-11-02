@@ -427,6 +427,34 @@ var REGISTRY = {
 	    "WEP is weak, so use it only where nothing better is offered.",
 	    values: "5 or 13 characters, or 0x and 10 or 26 hex digits",
 	    default: "none: WEP off", secret: true },
+	"if.wpakey": { label: "WPA key", group: "Wireless", kind: "text",
+	    wireless: true, keyword: "wpakey passphrase", definition: "The " +
+	    "WPA pre-shared key, hashed with the nwid. It turns WEP off and " +
+	    "WPA on.", values: "8 to 63 characters, or 0x and 64 hex digits",
+	    default: "none: WPA off", secret: true, needs: "nwid" },
+	"if.wpa": { label: "WPA", group: "Wireless", kind: "flag",
+	    wireless: true, keyword: "[no] wpa", definition: "WPA without " +
+	    "a pre-shared key, as for 802.1x; no wpa turns WPA off.",
+	    default: "with wpakey" },
+	"if.wpaprotos": { label: "WPA protocols", group: "Wireless",
+	    kind: "text", wireless: true, keyword: "wpaprotos wpa1,wpa2",
+	    definition: "The WPA versions the interface uses.",
+	    values: "wpa1, wpa2, separated by commas", default: "wpa2" },
+	"if.wpaakms": { label: "WPA key management", group: "Wireless",
+	    kind: "text", wireless: true, keyword: "wpaakms " +
+	    "psk,sha256-psk,802.1x", definition: "How WPA's keys are " +
+	    "agreed: a pre-shared key, or 802.1x.", values: "psk, " +
+	    "sha256-psk, 802.1x, separated by commas", default: "psk" },
+	"if.wpaciphers": { label: "WPA ciphers", group: "Wireless",
+	    kind: "text", wireless: true, keyword: "wpaciphers tkip,ccmp",
+	    definition: "The ciphers for traffic to one station; usegroup " +
+	    "uses the group cipher.", values: "usegroup, or tkip, ccmp, " +
+	    "separated by commas", default: "ccmp, and tkip with wpa1" },
+	"if.wpagroupcipher": { label: "WPA group cipher", group: "Wireless",
+	    kind: "choice", choices: ["wep40", "tkip", "ccmp", "wep104"],
+	    wireless: true, keyword: "wpagroupcipher cipher",
+	    definition: "The cipher for broadcast and multicast traffic.",
+	    default: "ccmp, or tkip with wpa1" },
 	"if.powersave": { label: "Power saving", group: "Wireless",
 	    kind: "number", min: 0, max: 100000, units: "milliseconds",
 	    wireless: true, keyword: "powersave ms", definition: "802.11 " +

@@ -74,6 +74,7 @@
 #include <netinet/if_ether.h>
 #include <net80211/ieee80211.h>
 #include <net80211/ieee80211_ioctl.h>
+#include <util.h>
 #include "stringlist.h"
 #include "externs.h"
 #include "settings.h"
@@ -84,6 +85,53 @@ static int cand_80211(char *, char *);
 static void nwkey_str(char *, size_t, char *);
 static int cand_nwkey(char *, struct ieee80211_nwkey *, char *);
 static int cand_txpower(char *, int);
+static int cand_nowpa(int);
+static int cand_wpaon(void);
+static u_int wpa_bits(int, char *);
+static void wpa_names(char *, size_t, int, u_int);
+static int wpa_default(int, u_int, u_int);
+
+/* WPA's lists, by the names ifconfig gives them, in the order conf() prints */
+struct wpaname {
+	const char *name;
+	u_int bit;
+};
+static const struct wpaname wpaprotos[] = {
+	{ "wpa1",	IEEE80211_WPA_PROTO_WPA1 },
+	{ "wpa2",	IEEE80211_WPA_PROTO_WPA2 },
+	{ NULL,		0 }
+}, wpaakms[] = {
+	{ "psk",	IEEE80211_WPA_AKM_PSK },
+	{ "sha256-psk",	IEEE80211_WPA_AKM_SHA256_PSK },
+	{ "802.1x",	IEEE80211_WPA_AKM_8021X },
+	{ NULL,		0 }
+}, wpaciphers[] = {	/* the ones ieee80211_ioctl_setwpaparms() takes */
+	{ "usegroup",	IEEE80211_WPA_CIPHER_USEGROUP },
+	{ "tkip",	IEEE80211_WPA_CIPHER_TKIP },
+	{ "ccmp",	IEEE80211_WPA_CIPHER_CCMP },
+	{ NULL,		0 }
+}, wpagroupciphers[] = {
+	{ "wep40",	IEEE80211_WPA_CIPHER_WEP40 },
+	{ "tkip",	IEEE80211_WPA_CIPHER_TKIP },
+	{ "ccmp",	IEEE80211_WPA_CIPHER_CCMP },
+	{ "wep104",	IEEE80211_WPA_CIPHER_WEP104 },
+	{ NULL,		0 }
+};
+
+/* The commands that set them, by WPA_* */
+#define WPA_PROTOS	0
+#define WPA_AKMS	1
+#define WPA_CIPHERS	2
+#define WPA_GROUPCIPHER	3
+static const struct {
+	const char *cmd;
+	const struct wpaname *names;
+} wpalists[] = {
+	{ "wpaprotos",		wpaprotos },
+	{ "wpaakms",		wpaakms },
+	{ "wpaciphers",		wpaciphers },
+	{ "wpagroupcipher",	wpagroupciphers },
+};
 
 const char *
 get_string(const char *val, const char *sep, u_int8_t *buf, int *lenp)
@@ -273,6 +321,292 @@ set_nwkey:
 	if (set)
 		db_insert_flag_x("nwkey", ifname, 0, DB_X_ENABLE, argv[0]);
 	return 0;
+}
+
+/*
+ * wpakey: a passphrase, which the kernel takes hashed with the nwid, or
+ * the hashed key. It turns WEP off and WPA on, and no wpakey turns WPA
+ * off. The kernel never shows the key, so nsh keeps it, as for nwkey.
+ */
+int
+intwpakey(int argc, char **argv, ...)
+{
+	struct ieee80211_wpaparams wpa;
+	struct ieee80211_wpapsk psk;
+	struct ieee80211_nwid nwid;
+	struct ifreq ifr;
+	va_list ap;
+	char *ifname;
+	int ifs, set, len = 0, hex = 0;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
+
+	if (NO_ARG(argv[0])) {
+		set = 0;
+		argc--;
+		argv++;
+	} else
+		set = 1;
+	argc--;
+	argv++;
+
+	if ((set && argc != 1) || (!set && argc > 1)) {
+		printf("%% wpakey <passphrase>|<0x and 64 hex digits>\n");
+		printf("%% no wpakey\n");
+		return -1;
+	}
+
+	memset(&psk, 0, sizeof(psk));
+	if (set) {
+		len = strlen(argv[0]);
+		hex = len == 2 + 2 * sizeof(psk.i_psk) &&
+		    argv[0][0] == '0' && argv[0][1] == 'x';
+		if (hex) {
+			len = sizeof(psk.i_psk);
+			if (get_string(argv[0], NULL, psk.i_psk, &len) ==
+			    NULL || len != sizeof(psk.i_psk)) {
+				printf("%% wpakey: invalid pre-shared key\n");
+				return -1;
+			}
+		} else if (len < 8 || len > 63) {
+			printf("%% wpakey: a passphrase is 8 to 63 "
+			    "characters\n");
+			return -1;
+		}
+	}
+
+	if (candidate)
+		return cand_wpakey(ifname, set ? argv[0] : NULL, hex);
+
+	if (set && !hex) {
+		memset(&nwid, 0, sizeof(nwid));
+		memset(&ifr, 0, sizeof(ifr));
+		ifr.ifr_data = (caddr_t)&nwid;
+		strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
+		if (ioctl(ifs, SIOCG80211NWID, &ifr) == -1) {
+			printf("%% intwpakey: SIOCG80211NWID: %s\n",
+			    strerror(errno));
+			return -1;
+		}
+		if (nwid.i_len == 0) {
+			printf("%% wpakey: nwid not set\n");
+			return -1;
+		}
+		if (pkcs5_pbkdf2(argv[0], len, nwid.i_nwid, nwid.i_len,
+		    psk.i_psk, sizeof(psk.i_psk), 4096) != 0) {
+			printf("%% wpakey: passphrase hashing failed\n");
+			return -1;
+		}
+	}
+	psk.i_enabled = set;
+	strlcpy(psk.i_name, ifname, sizeof(psk.i_name));
+	if (ioctl(ifs, SIOCS80211WPAPSK, &psk) == -1) {
+		printf("%% intwpakey: SIOCS80211WPAPSK: %s\n",
+		    strerror(errno));
+		explicit_bzero(&psk, sizeof(psk));
+		return -1;
+	}
+	explicit_bzero(&psk, sizeof(psk));
+
+	/* WPA comes on or goes off with the key, as ifconfig does */
+	memset(&wpa, 0, sizeof(wpa));
+	strlcpy(wpa.i_name, ifname, sizeof(wpa.i_name));
+	if (ioctl(ifs, SIOCG80211WPAPARMS, &wpa) == -1) {
+		printf("%% intwpakey: SIOCG80211WPAPARMS: %s\n",
+		    strerror(errno));
+		return -1;
+	}
+	wpa.i_enabled = set;
+	if (ioctl(ifs, SIOCS80211WPAPARMS, &wpa) == -1) {
+		printf("%% intwpakey: SIOCS80211WPAPARMS: %s\n",
+		    strerror(errno));
+		return -1;
+	}
+
+	db_delete_flag_x_ctl("wpakey", ifname, 0);
+	if (set)
+		db_insert_flag_x("wpakey", ifname, 0, DB_X_ENABLE, argv[0]);
+	return 0;
+}
+
+/* wpa: WPA on, as without a key for 802.1x, or off */
+int
+intwpa(int argc, char **argv, ...)
+{
+	struct ieee80211_wpaparams wpa;
+	va_list ap;
+	char *ifname;
+	int ifs, set;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
+
+	if (NO_ARG(argv[0])) {
+		set = 0;
+		argc--;
+		argv++;
+	} else
+		set = 1;
+
+	if (argc != 1) {
+		printf("%% wpa\n");
+		printf("%% no wpa\n");
+		return -1;
+	}
+	if (candidate)
+		return cand_wpa(ifname, set);
+
+	memset(&wpa, 0, sizeof(wpa));
+	strlcpy(wpa.i_name, ifname, sizeof(wpa.i_name));
+	if (ioctl(ifs, SIOCG80211WPAPARMS, &wpa) == -1) {
+		printf("%% intwpa: SIOCG80211WPAPARMS: %s\n",
+		    strerror(errno));
+		return -1;
+	}
+	wpa.i_enabled = set;
+	if (ioctl(ifs, SIOCS80211WPAPARMS, &wpa) == -1) {
+		printf("%% intwpa: SIOCS80211WPAPARMS: %s\n",
+		    strerror(errno));
+		return -1;
+	}
+	return 0;
+}
+
+/*
+ * wpaprotos, wpaakms, wpaciphers and wpagroupcipher, which only take
+ * effect while WPA is on. A new wpaprotos sets the ciphers back to
+ * their defaults, as ifconfig does.
+ */
+int
+intwpalist(int argc, char **argv, ...)
+{
+	struct ieee80211_wpaparams wpa;
+	const struct wpaname *wn;
+	va_list ap;
+	char *ifname;
+	u_int bits = 0;
+	int ifs, set, which;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
+
+	if (NO_ARG(argv[0])) {
+		set = 0;
+		argc--;
+		argv++;
+	} else
+		set = 1;
+
+	for (which = 0; which < (int)nitems(wpalists) - 1; which++)
+		if (isprefix(argv[0], (char *)wpalists[which].cmd))
+			break;
+	argc--;
+	argv++;
+
+	if (set && argc == 1)
+		bits = wpa_bits(which, argv[0]);
+	if ((set && (argc != 1 || bits == 0)) || (!set && argc > 1)) {
+		printf("%% %s ", wpalists[which].cmd);
+		for (wn = wpalists[which].names; wn->name != NULL; wn++)
+			printf("%s%s", wn == wpalists[which].names ? "" :
+			    which == WPA_GROUPCIPHER ? "|" : ",", wn->name);
+		printf("\n");
+		printf("%% no %s\n", wpalists[which].cmd);
+		return -1;
+	}
+
+	if (candidate)
+		return cand_wpalist(ifname, which, bits);
+
+	memset(&wpa, 0, sizeof(wpa));
+	strlcpy(wpa.i_name, ifname, sizeof(wpa.i_name));
+	if (ioctl(ifs, SIOCG80211WPAPARMS, &wpa) == -1) {
+		printf("%% intwpalist: SIOCG80211WPAPARMS: %s\n",
+		    strerror(errno));
+		return -1;
+	}
+	if (!wpa.i_enabled) {
+		printf("%% wpa is off on %s: set wpakey or wpa first\n",
+		    ifname);
+		return -1;
+	}
+	switch (which) {
+	case WPA_PROTOS:
+		wpa.i_protos = bits;
+		wpa.i_ciphers = 0;
+		wpa.i_groupcipher = 0;
+		break;
+	case WPA_AKMS:
+		wpa.i_akms = bits;
+		break;
+	case WPA_CIPHERS:
+		wpa.i_ciphers = bits;
+		break;
+	case WPA_GROUPCIPHER:
+		wpa.i_groupcipher = bits;
+		break;
+	}
+	if (ioctl(ifs, SIOCS80211WPAPARMS, &wpa) == -1) {
+		printf("%% intwpalist: SIOCS80211WPAPARMS: %s\n",
+		    strerror(errno));
+		return -1;
+	}
+	return 0;
+}
+
+/*
+ * An 802.11 interface's WPA lines: the key nsh kept while the kernel
+ * says there is one, wpa or no wpa where the key does not say it, and
+ * the lists that are not the defaults while WPA is on
+ */
+void
+conf_wpa(FILE *output, int ifs, char *ifname)
+{
+	struct ieee80211_wpaparams wpa;
+	struct ieee80211_wpapsk psk;
+	StringList *key;
+	char str[256];
+	u_int bits[nitems(wpalists)];
+	size_t i;
+	int haskey = 0;
+
+	memset(&psk, 0, sizeof(psk));
+	strlcpy(psk.i_name, ifname, sizeof(psk.i_name));
+	memset(&wpa, 0, sizeof(wpa));
+	strlcpy(wpa.i_name, ifname, sizeof(wpa.i_name));
+	if (ioctl(ifs, SIOCG80211WPAPSK, &psk) == -1 ||
+	    ioctl(ifs, SIOCG80211WPAPARMS, &wpa) == -1)
+		return;
+	if (psk.i_enabled) {
+		key = sl_init();
+		if (db_select_flag_x_ctl(key, "wpakey", ifname) >= 0 &&
+		    key->sl_cur > 0) {
+			nwkey_str(str, sizeof(str), key->sl_str[0]);
+			fprintf(output, " wpakey %s\n", str);
+			haskey = 1;
+		}
+		sl_free(key, 1);
+	}
+	if (wpa.i_enabled != haskey)
+		fprintf(output, " %swpa\n", wpa.i_enabled ? "" : "no ");
+	if (!wpa.i_enabled)
+		return;
+	bits[WPA_PROTOS] = wpa.i_protos;
+	bits[WPA_AKMS] = wpa.i_akms;
+	bits[WPA_CIPHERS] = wpa.i_ciphers;
+	bits[WPA_GROUPCIPHER] = wpa.i_groupcipher;
+	for (i = 0; i < nitems(wpalists); i++)
+		if (!wpa_default(i, bits[i], wpa.i_protos)) {
+			wpa_names(str, sizeof(str), i, bits[i]);
+			fprintf(output, " %s %s\n", wpalists[i].cmd, str);
+		}
 }
 
 /*
@@ -515,7 +849,7 @@ cand_80211(char *name, char *what)
 	return 0;
 }
 
-/* A WEP key as intnwkey() kept it, quoted as makeargv() reads it back */
+/* A key as intnwkey() or intwpakey() kept it, quoted as makeargv() reads it */
 static void
 nwkey_str(char *buf, size_t len, char *key)
 {
@@ -526,8 +860,8 @@ nwkey_str(char *buf, size_t len, char *key)
 }
 
 /*
- * nwid in configure private. SIOCS80211NWID turns WEP off, so the nwkey
- * line goes too.
+ * nwid in configure private. SIOCS80211NWID turns WEP and WPA off, so
+ * their lines go too.
  */
 int
 cand_nwid(char *ifname, u_int8_t *nwid, int len)
@@ -537,9 +871,10 @@ cand_nwid(char *ifname, u_int8_t *nwid, int len)
 	if (!cand_80211(ifname, "intnwid: SIOCS80211NWID"))
 		return -1;
 	make_string(str, sizeof(str), nwid, len);
-	if (cand_setting(ST_ON, "nwid %s", str) == -1)
+	if (cand_setting(ST_ON, "nwid %s", str) == -1 ||
+	    cand_setting(ST_DEFAULT, "nwkey") == -1)
 		return -1;
-	return cand_setting(ST_DEFAULT, "nwkey");
+	return cand_nowpa(1);
 }
 
 /* nwkey in configure private, as ieee80211_ioctl_setnwkeys() takes it */
@@ -556,6 +891,9 @@ cand_nwkey(char *ifname, struct ieee80211_nwkey *nwkey, char *key)
 		printf("%% intnwkey: SIOCS80211NWKEY: %s\n", strerror(EINVAL));
 		return -1;
 	}
+	/* WEP turns WPA off */
+	if (cand_nowpa(1) == -1)
+		return -1;
 	nwkey_str(str, sizeof(str), key);
 	return cand_setting(ST_ON, "nwkey %s", str);
 }
@@ -585,4 +923,174 @@ cand_powersave(char *ifname, int set, int maxsleep)
 	if (!set)
 		return cand_setting(ST_DEFAULT, "powersave");
 	return cand_setting(ST_ON, "powersave %d", maxsleep);
+}
+
+/*
+ * The WPA lines go when WPA goes off: the lists, and with key, wpakey
+ * and wpa too
+ */
+static int
+cand_nowpa(int key)
+{
+	size_t i;
+
+	if (key && (cand_setting(ST_DEFAULT, "wpakey") == -1 ||
+	    cand_setting(ST_DEFAULT, "wpa") == -1))
+		return -1;
+	for (i = 0; i < nitems(wpalists); i++)
+		if (cand_setting(ST_DEFAULT, "%s", wpalists[i].cmd) == -1)
+			return -1;
+	return 0;
+}
+
+/* Is WPA on, as the candidate's wpakey and wpa lines say? */
+static int
+cand_wpaon(void)
+{
+	char *l;
+
+	if ((l = cand_line("wpa", 0)) != NULL)
+		return strcmp(l, "wpa") == 0;
+	return cand_line("wpakey", 0) != NULL;
+}
+
+/*
+ * wpakey in configure private. A passphrase needs the nwid it is hashed
+ * with. A key turns WEP off and WPA on; no key turns WPA off.
+ */
+int
+cand_wpakey(char *ifname, char *key, int hex)
+{
+	char str[256], *l;
+
+	if (!cand_80211(ifname, "intwpakey: SIOCS80211WPAPSK"))
+		return -1;
+	if (key == NULL)
+		return cand_nowpa(1);
+	if (!hex && ((l = cand_line("nwid", 0)) == NULL ||
+	    strcmp(l, "nwid \"\"") == 0)) {
+		printf("%% wpakey: nwid not set\n");
+		return -1;
+	}
+	if (cand_setting(ST_DEFAULT, "nwkey") == -1 ||
+	    cand_setting(ST_DEFAULT, "wpa") == -1)
+		return -1;
+	nwkey_str(str, sizeof(str), key);
+	return cand_setting(ST_ON, "wpakey %s", str);
+}
+
+/*
+ * wpa in configure private: a line where wpakey does not say it. No wpa
+ * takes the lists away.
+ */
+int
+cand_wpa(char *ifname, int set)
+{
+	int key = cand_line("wpakey", 0) != NULL;
+
+	if (!cand_80211(ifname, "intwpa: SIOCS80211WPAPARMS"))
+		return -1;
+	if (set)
+		return cand_setting(key ? ST_DEFAULT : ST_ON, "wpa");
+	if (cand_nowpa(0) == -1)
+		return -1;
+	return cand_setting(key ? ST_OFF : ST_DEFAULT, "wpa");
+}
+
+/*
+ * One of WPA's lists in configure private, while WPA is on: a line
+ * unless the kernel's default. A new wpaprotos takes the ciphers away.
+ */
+int
+cand_wpalist(char *ifname, int which, u_int bits)
+{
+	char str[128], *l;
+	u_int protos = 0;
+
+	if (!cand_80211(ifname, "intwpalist: SIOCS80211WPAPARMS"))
+		return -1;
+	if (!cand_wpaon()) {
+		printf("%% wpa is off on %s: set wpakey or wpa first\n",
+		    ifname);
+		return -1;
+	}
+	if (which == WPA_PROTOS) {
+		protos = bits;
+		if (cand_setting(ST_DEFAULT, "wpaciphers") == -1 ||
+		    cand_setting(ST_DEFAULT, "wpagroupcipher") == -1)
+			return -1;
+	} else if ((l = cand_line("wpaprotos", 0)) != NULL)
+		protos = wpa_bits(WPA_PROTOS, l + strlen("wpaprotos "));
+	if (bits == 0 || wpa_default(which, bits, protos))
+		return cand_setting(ST_DEFAULT, "%s", wpalists[which].cmd);
+	wpa_names(str, sizeof(str), which, bits);
+	return cand_setting(ST_ON, "%s %s", wpalists[which].cmd, str);
+}
+
+/*
+ * The bits of a WPA list that words names, separated by commas, or 0:
+ * one name for the group cipher, and usegroup alone
+ */
+static u_int
+wpa_bits(int which, char *words)
+{
+	const struct wpaname *wn;
+	char buf[128], *w, *p;
+	u_int bits = 0;
+	int n;
+
+	strlcpy(buf, words, sizeof(buf));
+	for (n = 0, p = buf; (w = strsep(&p, ",")) != NULL; n++) {
+		for (wn = wpalists[which].names; wn->name != NULL; wn++)
+			if (strcasecmp(w, wn->name) == 0)
+				break;
+		if (wn->name == NULL || (which == WPA_GROUPCIPHER && n > 0))
+			return 0;
+		bits |= wn->bit;
+	}
+	if ((bits & IEEE80211_WPA_CIPHER_USEGROUP) &&
+	    bits != IEEE80211_WPA_CIPHER_USEGROUP && which == WPA_CIPHERS)
+		return 0;
+	return bits;
+}
+
+/* A WPA list's bits by their names, separated by commas */
+static void
+wpa_names(char *buf, size_t len, int which, u_int bits)
+{
+	const struct wpaname *wn;
+
+	buf[0] = '\0';
+	for (wn = wpalists[which].names; wn->name != NULL; wn++)
+		if (bits & wn->bit) {
+			if (buf[0] != '\0')
+				strlcat(buf, ",", len);
+			strlcat(buf, wn->name, len);
+		}
+}
+
+/*
+ * Are a WPA list's bits what the kernel sets when it gets none, with
+ * protocols protos (ieee80211_ioctl_setwpaparms())? With management
+ * frame protection, its default key management has SHA256 PSK too.
+ */
+static int
+wpa_default(int which, u_int bits, u_int protos)
+{
+	int wpa1 = (protos & IEEE80211_WPA_PROTO_WPA1) != 0;
+
+	switch (which) {
+	case WPA_PROTOS:
+		return bits == IEEE80211_WPA_PROTO_WPA2;
+	case WPA_AKMS:
+		return bits == IEEE80211_WPA_AKM_PSK ||
+		    bits == (IEEE80211_WPA_AKM_PSK |
+		    IEEE80211_WPA_AKM_SHA256_PSK);
+	case WPA_CIPHERS:
+		return bits == (IEEE80211_WPA_CIPHER_CCMP |
+		    (wpa1 ? IEEE80211_WPA_CIPHER_TKIP : 0));
+	default:
+		return bits == (wpa1 ? IEEE80211_WPA_CIPHER_TKIP :
+		    IEEE80211_WPA_CIPHER_CCMP);
+	}
 }

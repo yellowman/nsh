@@ -27,8 +27,9 @@
  *    candidate sets the same setting another way, with its own line;
  *  * a list loses the values the candidate's line does not have;
  *  * an interface's addresses are added again after a new rdomain,
- *    which removed them, and its endpoints after a new tunnel,
- *    tunneladdr, tunneldomain, vnetid or parent, which removed them;
+ *    which removed them, its endpoints after a new tunnel,
+ *    tunneladdr, tunneldomain, vnetid or parent, which removed them,
+ *    and its WEP and WPA lines after a new nwid, which turned them off;
  *  * a cloned interface is removed whole, and a physical one line by
  *    line;
  *  * a daemon's state is removed with its disable, and its rules by
@@ -198,6 +199,7 @@ static int samelines(struct cnode *, char *, struct cnode *, char *);
 static int sameline(struct cnode *, char *, struct cnode *, char *, char *);
 static int address(char *);
 static int endpoint(char *);
+static int wifikey(char *);
 static int context(char *);
 static int rtableid(char *);
 static int ifblock(char *, char *, size_t);
@@ -1227,7 +1229,7 @@ additions(struct commit *c, char *fblock, char *tblock, int there,
 	struct sub s;
 	char *l, *f, *fp = NULL, *tp = NULL, *k, name[IFNAMSIZ], dname[32];
 	size_t n, i, j, kn;
-	int moved, flushed, ret = -1;
+	int moved, flushed, rekeyed, ret = -1;
 
 	if (ranked(c->to, tblock, &r, &n) == -1)
 		return -1;
@@ -1280,6 +1282,9 @@ additions(struct commit *c, char *fblock, char *tblock, int there,
 			    !sameline(c->from, fp, c->to, tp, "tunneldomain") ||
 			    !sameline(c->from, fp, c->to, tp, "vnetid") ||
 			    !sameline(c->from, fp, c->to, tp, "parent"));
+			/* a new nwid turned WEP and WPA off, so add them */
+			rekeyed = f != NULL && context(tp) == CTX_IF &&
+			    !sameline(c->from, fp, c->to, tp, "nwid");
 			/* in the order conf() prints them */
 			if (ranked(c->to, tp, &kr, &kn) == -1) {
 				sub_end(c, &s, in, l, 0);
@@ -1289,7 +1294,8 @@ additions(struct commit *c, char *fblock, char *tblock, int there,
 				k = kr[j].line;
 				if (f == NULL || !has(c->from, fp, k) ||
 				    (moved && address(k)) ||
-				    (flushed && endpoint(k)))
+				    (flushed && endpoint(k)) ||
+				    (rekeyed && wifikey(k)))
 					set(c, fp, f != NULL, context(tp), k);
 			}
 			free(kr);
@@ -1648,6 +1654,19 @@ static int
 endpoint(char *line)
 {
 	return strncmp(line, "endpoint ", 9) == 0;
+}
+
+/* Is line an interface's WEP or WPA line, which a new nwid turns off? */
+static int
+wifikey(char *line)
+{
+	size_t len;
+
+	if (strncmp(line, "no ", 3) == 0)
+		line += 3;
+	len = strcspn(line, " ");
+	return (len == 5 && strncmp(line, "nwkey", len) == 0) ||
+	    (len >= 3 && strncmp(line, "wpa", 3) == 0);
 }
 
 /* The settings table's context for the lines under block, or -1 */

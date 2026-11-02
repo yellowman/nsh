@@ -4948,7 +4948,8 @@ nsh(config)# ip ?
 .Ic interface
 .Op  inet | ip | autoconf4 | description | group | rdomain | \
  | rtlabel | priority| llpriority | mtu | metric | link | arp | lladdr | nwid\
- | nwkey | powersave | txpower | bssid | media | mediaopt | auth | peer\
+ | nwkey | wpakey | wpa | wpaprotos | wpaakms | wpaciphers | wpagroupcipher\
+ | powersave | txpower | bssid | media | mediaopt | auth | peer\
  | pppoe | tunnel | tunneladdr | tunneldomain | maxaddr | timeout\
  | endpoint | txprio | rxprio | vnetid\
  | vnetflowid | parent | patch | keepalive | mplslabel | pwe\
@@ -4984,6 +4985,12 @@ nsh(interface-em0)# ?
   lladdr           Link Level (MAC) Address
   nwid             802.11 network ID
   nwkey            802.11 network key
+  wpakey           802.11 WPA passphrase or key
+  wpa              802.11 WPA, as for 802.1x
+  wpaprotos        802.11 WPA protocols
+  wpaakms          802.11 WPA key management
+  wpaciphers       802.11 WPA pairwise ciphers
+  wpagroupcipher   802.11 WPA group cipher
   powersave        802.11 powersaving mode
   txpower          802.11 transmit power
   bssid            802.11 bss id
@@ -5358,6 +5365,68 @@ Set the WEP network key for an 802.11 capable interface.
 Use the
 .Ic no
 keyword before nwkey to turn off WEP.
+.Pp
+.Op no
+.Ic wpakey
+.Ar passphrase | 0x and 64 hex digits
+.Pp
+Set the WPA pre-shared key of an 802.11 interface: a passphrase of 8 to
+63 characters, which the system hashes with the nwid, so set the nwid
+first; or the 256-bit key itself, as 0x and 64 hexadecimal digits.
+It turns WEP off and WPA on.
+The kernel does not show the key, so
+.Nm
+keeps it, as it does the WEP key.
+A new
+.Cm nwid
+or
+.Cm nwkey
+turns WPA off.
+Use the
+.Ic no
+keyword before wpakey to turn WPA off.
+.Bd -literal -offset indent
+nsh(interface-iwm0)# nwid home
+nsh(interface-iwm0)# wpakey "my wpa passphrase"
+.Ed
+.Pp
+.Op no
+.Ic wpa
+.Pp
+Turn WPA on without a pre-shared key, as for
+.Cm wpaakms 802.1x ,
+or with
+.Ic no ,
+off.
+.Pp
+.Op no
+.Ic wpaprotos
+.Ar wpa1,wpa2
+.Pp
+.Op no
+.Ic wpaakms
+.Ar psk,sha256-psk,802.1x
+.Pp
+.Op no
+.Ic wpaciphers
+.Ar usegroup | tkip,ccmp
+.Pp
+.Op no
+.Ic wpagroupcipher
+.Ar wep40 | tkip | ccmp | wep104
+.Pp
+Set the protocols, the key management, the pairwise ciphers and the
+group cipher of WPA, which must be on.
+Each but the group cipher is a list separated by commas.
+By default, WPA uses wpa2; psk, and sha256-psk too where the hardware
+protects management frames; the ccmp cipher, and tkip too with wpa1;
+and the ccmp group cipher, or tkip with wpa1.
+A new
+.Cm wpaprotos
+sets the ciphers back to their defaults.
+Use the
+.Ic no
+keyword to set the default.
 .Pp
 .Op no
 .Ic powersave

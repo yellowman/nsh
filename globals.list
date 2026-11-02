@@ -91,6 +91,8 @@ ctlargs.c	table	dhcs dvcs eics ikcs iscs ldcs lics os6cs oscs
 editing.c	process	complete.word
 editing.c	table	el_runs.funcs
 genget.c	process	ambiguous
+ieee80211.c	table	wpaakms wpaciphers wpagroupciphers wpalists
+			wpaprotos
 if.c		session	imrif imrsave
 if.c		scratch	get_linkstate.buf if_facts.ifdescr
 			if_facts.parent if_facts.ps if_facts.ssid

@@ -317,8 +317,15 @@ void make_string(char *str, int, const u_int8_t *buf, int);
 int get_nwinfo(char *, char *, int, int);
 int get_nwpowersave(int, char *);
 int intnwkey(int, char **, ...);
+int intwpakey(int, char **, ...);
+int intwpa(int, char **, ...);
+int intwpalist(int, char **, ...);
+void conf_wpa(FILE *, int, char *);
 int inttxpower(int, char **, ...);
 int cand_nwid(char *, u_int8_t *, int);
+int cand_wpakey(char *, char *, int);
+int cand_wpa(char *, int);
+int cand_wpalist(char *, int, u_int);
 int cand_powersave(char *, int, int);
 int intbssid(int, char **, ...);
 
