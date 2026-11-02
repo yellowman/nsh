@@ -2176,6 +2176,7 @@ intdhcrelay(int argc, char **argv, ...)
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	va_end(ap);
+	cmd[2] = ifname;
 
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -2220,9 +2221,10 @@ intdhcrelay(int argc, char **argv, ...)
 	}
 
 	if (set) {
-		if (flag_x("dhcrelay", ifname, DB_X_ENABLE, argv[0]) == -1)
-			return -1;
+		/* kept only once it runs */
 		if (cmdargs(DHCRELAY, cmd) != 0)
+			return -1;
+		if (flag_x("dhcrelay", ifname, DB_X_ENABLE, argv[0]) == -1)
 			return -1;
 	} else {
 		char server[24], argue[SIZE_CONF_TEMP];
