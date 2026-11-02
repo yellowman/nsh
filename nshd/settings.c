@@ -168,7 +168,6 @@ static const struct setting bridge_settings[] = {
 	{ "tunneldomain",	S_VALUE },
 	{ "txprio",		S_VALUE },
 	{ "rxprio",		S_VALUE },
-	{ "link",		S_VALUE },
 	/* bridge.c's model writes these lines whole */
 	{ "priority",		S_VALUE },
 	{ "hellotime",		S_VALUE },
@@ -187,6 +186,8 @@ static const struct setting bridge_settings[] = {
 	{ "protect",		S_ENTRY,	2 },
 	{ "static",		S_ENTRY,	2 },
 	{ "rule",		S_ENTRY,	11 },
+	/* the flags, last, as conf() prints them */
+	{ "link",		S_VALUE },
 	{ "shutdown",		S_STATE },
 	{ NULL,			0 }
 };
@@ -279,6 +280,24 @@ setting_edit(int ctx, int state, const char *line, struct sedit *e)
 		return -1;
 	e->op = op;
 	return 0;
+}
+
+/*
+ * Where the setting of line, which may start with "no", comes among
+ * context ctx's, in the order conf() prints them; after all of them if
+ * ctx has no setting of that name
+ */
+int
+setting_rank(int ctx, const char *line)
+{
+	const struct setting *s;
+
+	if (strncmp(line, "no ", 3) == 0)
+		line += 3;
+	if ((s = setting_find(ctx, line)) == NULL)
+		for (s = contexts[ctx]; s->name != NULL; s++)
+			;
+	return s - contexts[ctx];
 }
 
 /* Has context ctx a setting named by line's first word? */

@@ -20,7 +20,8 @@
  * What differs between the running configuration and the candidate
  * becomes a script, lines as conf() prints them. First it removes
  * lines, in the reverse of the order conf() prints them, then it adds
- * lines, in that order:
+ * lines, in that order, whatever order an interface's or a bridge's
+ * lines were typed in (setting_rank()):
  *
  *  * a line is removed with its "no" form, and "no x" with x, unless the
  *    candidate sets the same setting another way, with its own line;
@@ -1222,10 +1223,10 @@ static int
 additions(struct commit *c, char *fblock, char *tblock, int there,
     const char *in)
 {
-	struct ranked *r;
+	struct ranked *r, *kr;
 	struct sub s;
 	char *l, *f, *fp = NULL, *tp = NULL, *k, name[IFNAMSIZ], dname[32];
-	size_t n, i, j;
+	size_t n, i, j, kn;
 	int moved, flushed, ret = -1;
 
 	if (ranked(c->to, tblock, &r, &n) == -1)
@@ -1279,12 +1280,19 @@ additions(struct commit *c, char *fblock, char *tblock, int there,
 			    !sameline(c->from, fp, c->to, tp, "tunneldomain") ||
 			    !sameline(c->from, fp, c->to, tp, "vnetid") ||
 			    !sameline(c->from, fp, c->to, tp, "parent"));
-			for (j = 0; (k = conftree_line(c->to, tp, NULL, j)) !=
-			    NULL; j++)
+			/* in the order conf() prints them */
+			if (ranked(c->to, tp, &kr, &kn) == -1) {
+				sub_end(c, &s, in, l, 0);
+				goto done;
+			}
+			for (j = 0; j < kn; j++) {
+				k = kr[j].line;
 				if (f == NULL || !has(c->from, fp, k) ||
 				    (moved && address(k)) ||
 				    (flushed && endpoint(k)))
 					set(c, fp, f != NULL, context(tp), k);
+			}
+			free(kr);
 			sub_end(c, &s, in, l, f == NULL);
 		} else if (ctl_line(l, dname, sizeof(dname)) == CTL_FOLLOW) {
 			/* if new (as in a new rtable), or if renewed() */
@@ -1510,6 +1518,9 @@ ranked(struct cnode *t, char *block, struct ranked **rp, size_t *np)
 			rank = conf_rank(l);
 		else if (context(block) == CTX_RTABLE)
 			rank = conf_rank_rtable(l);
+		else if (context(block) == CTX_IF ||
+		    context(block) == CTX_BRIDGE)
+			rank = setting_rank(context(block), l);
 		else
 			rank = 0;
 		/* a daemon's rules, then its state, then its reload */

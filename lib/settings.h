@@ -44,3 +44,4 @@ struct sedit {
 
 int setting_edit(int, int, const char *, struct sedit *);
 int setting_has(int, const char *);
+int setting_rank(int, const char *);
