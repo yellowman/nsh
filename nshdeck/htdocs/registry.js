@@ -573,11 +573,25 @@ var REGISTRY = {
 	    "cost", definition: "Each member's path cost; lower is preferred.",
 	    values: "a member, then 1 to 200000000, a line each",
 	    default: "worked out from the link's speed", needs: "stp" },
-	"bridge.vnetid": { label: "Untagged VLAN", group: "Encapsulation",
+	"bridge.vnetid": { label: "Default VLAN", group: "Encapsulation",
 	    kind: "number", min: 1, max: 4094, on: ["veb"],
 	    keyword: "vnetid 1-4094", definition: "The VLAN of a member's " +
 	    "untagged frames, which a member takes when it is added. With " +
 	    "no vnetid, a member added after that drops them.", default: "1" },
+	"bridge.untagged": { label: "Untagged VLANs", group: "Encapsulation",
+	    kind: "lines", placeholder: "em1 5", on: ["veb"],
+	    keyword: "untagged member vlan-id | passthrough | none | default",
+	    definition: "The VLAN of the frames each member sends and " +
+	    "receives without a tag; passthrough hands them to the system, " +
+	    "and none drops them.", values: "a member, then 1 to 4094, " +
+	    "passthrough or none, a line each", default: "the veb's vnetid " +
+	    "when the member is added", needs: "member" },
+	"bridge.tagged": { label: "Tagged VLANs", group: "Encapsulation",
+	    kind: "lines", placeholder: "em1 10,20-30", on: ["veb"],
+	    keyword: "tagged member vlan-ids", definition: "The VLANs each " +
+	    "member carries with an 802.1Q tag.", values: "a member, then " +
+	    "VLAN IDs and ranges, separated by commas, a line each",
+	    default: "none", needs: "member" },
 	"bridge.txprio": { label: "Transmit priority", group: "Encapsulation",
 	    kind: "text", on: ["veb"], keyword: "txprio 0-7 | packet",
 	    definition: "The priority written in the 802.1Q headers the veb " +

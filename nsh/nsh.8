@@ -996,8 +996,10 @@ nsh(bridge-bridge100)# ?
   link          Link level options
   txprio        Priority in 802.1Q headers (veb)
   rxprio        Source used for packet priority (veb)
-  vnetid        VLAN ID of untagged ports (veb)
+  vnetid        Untagged VLAN of members added (veb)
   protect       Configure protected bridge domains
+  untagged      VLAN of a member's untagged frames (veb)
+  tagged        VLANs a member carries tagged (veb)
   interface     Modify interface parameters
   shutdown      Shutdown bridge
   show          Show system information
@@ -1084,6 +1086,49 @@ member ports of the bridge veb101.
 nsh(config)# bridge veb101
 nsh(bridge-veb101)# protect vether101 20
 nsh(bridge-veb101)# protect vlan101 20
+nsh(bridge-veb101)# exit
+.Ed
+.Tg untagged
+.Op no
+.Ic untagged
+.Ar interface-name vlan-id | Cm passthrough | none | default
+.Pp
+On a
+.Xr veb 4 ,
+set the VLAN of the frames a member sends and receives without a VLAN
+tag, from 1 to 4094.
+.Cm passthrough
+hands those frames to the system instead of the bridge, and
+.Cm none ,
+or
+.Cm no untagged ,
+drops them.
+.Cm default
+sets the veb's vnetid.
+A member takes the veb's vnetid when it is added, and a later change of
+the vnetid does not change it.
+.Pp
+.Tg tagged
+.Tg trunk
+.Op no
+.Ic tagged
+.Ar interface-name vlan-ids
+.Pp
+On a veb, add VLANs that a member carries with an IEEE 802.1Q tag: a
+VLAN ID from 1 to 4094, a range of them such as 20-30, a list of those
+separated by commas, or
+.Cm all .
+.Cm no tagged
+removes them, or without VLAN IDs, all of them.
+A member carries no tagged VLAN until it is given one.
+.Pp
+E.g. make em1 a trunk of VLANs 10 and 20 to 30 on veb101, whose untagged
+frames are in VLAN 5.
+.Bd -literal -offset indent
+nsh(config)# bridge veb101
+nsh(bridge-veb101)# member em1
+nsh(bridge-veb101)# untagged em1 5
+nsh(bridge-veb101)# tagged em1 10,20-30
 nsh(bridge-veb101)# exit
 .Ed
 .Tg ip6

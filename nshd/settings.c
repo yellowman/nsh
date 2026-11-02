@@ -179,6 +179,8 @@ static const struct setting bridge_settings[] = {
 	{ "learning",		S_STATE },
 	{ "discover",		S_STATE },
 	{ "blocknonip",		S_VALUE },
+	{ "untagged",		S_ENTRY,	2 },
+	{ "tagged",		S_ENTRY,	2 },
 	{ "ifpriority",		S_ENTRY,	2 },
 	{ "ifcost",		S_ENTRY,	2 },
 	{ "protect",		S_ENTRY,	2 },

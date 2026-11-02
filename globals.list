@@ -16,7 +16,7 @@ arp.c		scratch	expire_time sdl_m sin_m
 arp.c		table	blank_sdl blank_sin ifp_m so_1mask
 bgpcommands.c	session	bgpd_socket_path
 bgpcommands.c	table	bgcs
-bridge.c	table	brds brlists brnames brper brps brvals brvs
+bridge.c	table	brds brlists brnames brper brps brvals brvls brvper brvs
 candidate.c	session	cand cand_base cand_journal cand_nedits cand_nwas
 			cand_rtable cand_sharing cand_was candidate
 candidate.c	scratch	cand_held cand_listowner.owner

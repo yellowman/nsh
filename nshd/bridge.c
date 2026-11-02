@@ -83,6 +83,8 @@ void	brprotect_usage(void);
 int	show_bridge(char *);
 static int br_ioctl(int, u_long, void *);
 static int br_portname(int, char *);
+static int brvlan_parse(char *, u_int8_t *);
+static void brvlan_print(FILE *, const u_int8_t *);
 
 #define BRPORT_MEMBER 0
 #define BRPORT_SPAN 1
@@ -1686,6 +1688,196 @@ brprotect(int argc, char **argv, ...)
 	return e == 0 ? 0 : -1;
 }
 
+static struct brc brvls[] = {
+	{ "untagged",	0 },
+	{ "tagged",	1 },
+	{ 0,		0 }
+};
+
+/*
+ * On a veb, untagged sets the VLAN of the frames a member sends and
+ * receives without a tag: a VLAN ID, passthrough, which hands them to
+ * the system instead, none, which drops them, or default, the veb's
+ * vnetid.  tagged adds the VLANs a member carries with a tag, and no
+ * tagged removes them, or with no VLANs, all of them.  if_veb.c
+ */
+int
+brvlan(int argc, char **argv, ...)
+{
+	struct ifbrvidmap vm;
+	struct ifbreq breq;
+	struct brc *x;
+	const char *errmsg = NULL;
+	va_list ap;
+	char *ifname;
+	int ifs, set, r;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
+
+	if (NO_ARG(argv[0])) {
+		set = 0;
+		argv++;
+		argc--;
+	} else
+		set = 1;
+
+	x = (struct brc *) genget(argv[0], (char **)brvls, sizeof(struct brc));
+	if (x == 0 || Ambiguous(x)) {
+		printf("%% Internal error - Invalid argument %s\n", argv[0]);
+		return -1;
+	}
+
+	argv++;
+	argc--;
+
+	if ((set && argc != 2) || (!set && (argc < 1 || argc > 2))) {
+		if (x->type == 0) {
+			printf("%% untagged <member> <vlan|passthrough|none|"
+			    "default>\n");
+			printf("%% no untagged <member>\n");
+		} else {
+			printf("%% tagged <member> <vlans>\n");
+			printf("%% no tagged <member> [vlans]\n");
+		}
+		return -1;
+	}
+	if (!cand_takes(ifname, SIOCBRDGSPVID)) {
+		printf("%% %s not supported on %s\n", x->name, ifname);
+		return -1;
+	}
+	if (!br_portname(ifs, argv[0])) {
+		printf("%% invalid member name: %s\n", argv[0]);
+		return -1;
+	}
+
+	if (x->type == 0) {
+		memset(&breq, 0, sizeof(breq));
+		strlcpy(breq.ifbr_name, ifname, sizeof(breq.ifbr_name));
+		strlcpy(breq.ifbr_ifsname, argv[0], sizeof(breq.ifbr_ifsname));
+		if (!set || strcmp(argv[1], "none") == 0)
+			breq.ifbr_pvid = IFBR_PVID_NONE;
+		else if (strcmp(argv[1], "passthrough") == 0)
+			breq.ifbr_pvid = IFBR_PVID_DECLINE;
+		else if (strcmp(argv[1], "default") == 0)
+			breq.ifbr_pvid = EVL_VLID_NULL;
+		else {
+			breq.ifbr_pvid = strtonum(argv[1], EVL_VLID_MIN,
+			    EVL_VLID_MAX, &errmsg);
+			if (errmsg) {
+				printf("%% invalid VLAN %s: %s\n", argv[1],
+				    errmsg);
+				return -1;
+			}
+		}
+		r = br_ioctl(ifs, SIOCBRDGSPVID, &breq);
+	} else {
+		memset(&vm, 0, sizeof(vm));
+		strlcpy(vm.ifbrvm_name, ifname, sizeof(vm.ifbrvm_name));
+		strlcpy(vm.ifbrvm_ifsname, argv[0],
+		    sizeof(vm.ifbrvm_ifsname));
+		if (argc == 2 && brvlan_parse(argv[1], vm.ifbrvm_map) == -1)
+			return -1;
+		/* no tagged with no VLANs leaves none */
+		vm.ifbrvm_op = set ? IFBRVM_OP_OR : argc == 2 ?
+		    IFBRVM_OP_ANDNOT : IFBRVM_OP_SET;
+		r = br_ioctl(ifs, SIOCBRDGSVMAP, &vm);
+	}
+	if (r < 0) {
+		printf("%% %s %s: %s\n", x->name, argv[0],
+		    errno == ESRCH ? "not a member" : strerror(errno));
+		return -1;
+	}
+	return 0;
+}
+
+/* Parse VLANs, "10,20-30" or "all", into map, a bit each */
+static int
+brvlan_parse(char *vlans, u_int8_t *map)
+{
+	char *buf, *p, *w, *to;
+	const char *errmsg = NULL;
+	int from, last, v;
+
+	if (strcmp(vlans, "all") == 0)
+		vlans = "1-4094";
+	if ((buf = strdup(vlans)) == NULL) {
+		printf("%% brvlan_parse: %s\n", strerror(errno));
+		return -1;
+	}
+	for (p = buf; (w = strsep(&p, ",")) != NULL && errmsg == NULL; ) {
+		if ((to = strchr(w, '-')) != NULL)
+			*to++ = '\0';
+		from = strtonum(w, EVL_VLID_MIN, EVL_VLID_MAX, &errmsg);
+		last = from;
+		if (errmsg == NULL && to != NULL)
+			last = strtonum(to, from, EVL_VLID_MAX, &errmsg);
+		for (v = from; errmsg == NULL && v <= last; v++)
+			map[v / 8] |= 1 << (v % 8);
+	}
+	free(buf);
+	if (errmsg) {
+		printf("%% invalid VLANs %s: %s\n", vlans, errmsg);
+		return -1;
+	}
+	return 0;
+}
+
+/* Print map's VLANs as brvlan_parse() reads them, "10,20-30" */
+static void
+brvlan_print(FILE *output, const u_int8_t *map)
+{
+	int v, from, n = 0;
+
+	for (v = EVL_VLID_MIN; v <= EVL_VLID_MAX; v++) {
+		if (!(map[v / 8] & (1 << (v % 8))))
+			continue;
+		for (from = v; v < EVL_VLID_MAX &&
+		    (map[(v + 1) / 8] & (1 << ((v + 1) % 8))); v++)
+			;
+		fprintf(output, n++ ? ",%d" : "%d", from);
+		if (v > from)
+			fprintf(output, "-%d", v);
+	}
+}
+
+/*
+ * For commit: if other is the tagged line of line's member, write what
+ * removes the VLANs that line has and other lacks, after in, to output,
+ * and return 1; else return 0
+ */
+int
+brvlan_gone(FILE *output, const char *in, char *line, char *other)
+{
+	u_int8_t was[sizeof(((struct ifbrvidmap *)0)->ifbrvm_map)];
+	u_int8_t now[sizeof(was)];
+	char *v, *ov;
+	size_t i, len;
+	int any = 0;
+
+	/* "tagged em1 10,20-30": the member, then its VLANs */
+	v = line + strlen("tagged ");
+	ov = other + strlen("tagged ");
+	len = strcspn(v, " ");
+	if (strncmp(v, ov, len) != 0 || ov[len] != ' ' || v[len] != ' ')
+		return 0;
+	memset(was, 0, sizeof(was));
+	memset(now, 0, sizeof(now));
+	if (brvlan_parse(v + len + 1, was) == -1 ||
+	    brvlan_parse(ov + len + 1, now) == -1)
+		return 1;
+	for (i = 0; i < sizeof(was); i++)
+		any |= was[i] &= ~now[i];
+	if (any) {
+		fprintf(output, "%sno tagged %.*s ", in, (int)len, v);
+		brvlan_print(output, was);
+		fprintf(output, "\n");
+	}
+	return 1;
+}
+
 /*
  * A bridge as conf_brcfg() prints it.  In configure private, the bridge
  * ioctls nsh sends change the bridge the candidate's lines describe, as
@@ -1698,6 +1890,8 @@ struct brport {
 	u_int8_t prio;		/* with IFBIF_STP */
 	u_int32_t cost;		/* with IFBIF_STP, if set by hand, or 0 */
 	u_int32_t prot;		/* protected domains, a bit each */
+	u_int16_t pvid;		/* veb's: untagged's VLAN, IFBR_PVID_* */
+	u_int8_t tagged[sizeof(((struct ifbrvidmap *)0)->ifbrvm_map)];
 };
 
 /* A static address or a rule, as conf_brcfg() prints it after the keyword */
@@ -1712,6 +1906,8 @@ struct brcfg {
 	size_t nports;
 	struct brline *statics, *rules;
 	size_t nstatics, nrules;
+	int vlans;		/* a veb's members have VLANs */
+	u_int16_t dflt;		/* a new member's untagged VLAN: vnetid's */
 };
 
 static const struct {
@@ -1742,10 +1938,14 @@ static const struct {
 /* The lines for a member's STP priority, STP cost and protected domains */
 static char *brper[] = { "ifpriority", "ifcost", "protect" };
 
+/* And for a veb member's VLANs */
+static char *brvper[] = { "untagged", "tagged" };
+
 /* The candidate lines a struct brcfg makes */
 static char *brnames[] = { "priority", "hellotime", "fwddelay", "maxage",
     "maxaddr", "timeout", "member", "stp", "span", "learning", "discover",
-    "blocknonip", "ifpriority", "ifcost", "protect", "static", "rule" };
+    "blocknonip", "untagged", "tagged", "ifpriority", "ifcost", "protect",
+    "static", "rule" };
 
 /* Is line a port list, whose command takes one port at a time? */
 int
@@ -1771,6 +1971,11 @@ brport_one(char *line)
 	for (i = 0; i < nitems(brper); i++) {
 		len = strlen(brper[i]);
 		if (strncmp(line, brper[i], len) == 0 && line[len] == ' ')
+			return 1;
+	}
+	for (i = 0; i < nitems(brvper); i++) {
+		len = strlen(brvper[i]);
+		if (strncmp(line, brvper[i], len) == 0 && line[len] == ' ')
 			return 1;
 	}
 	return 0;
@@ -1900,6 +2105,7 @@ brcfg_del(struct brcfg *b, struct brport *p)
 static int
 brcfg_kernel(int s, char *brdg, struct brcfg *b)
 {
+	struct ifbrvidmap vm;
 	struct ifbreq *reqs;
 	struct brport *p;
 	char *buf = NULL, *l, *t;
@@ -1920,6 +2126,16 @@ brcfg_kernel(int s, char *brdg, struct brcfg *b)
 		if (reqs[i].ifbr_stpflags & kern_bstp_port_admcost)
 			p->cost = reqs[i].ifbr_path_cost;
 		p->prot = reqs[i].ifbr_protected;
+		/* a veb's member's VLANs */
+		if ((b->vlans = cand_takes(brdg, SIOCBRDGSPVID)) == 0 ||
+		    (p->flags & IFBIF_SPAN))
+			continue;
+		p->pvid = reqs[i].ifbr_pvid;
+		memset(&vm, 0, sizeof(vm));
+		strlcpy(vm.ifbrvm_name, brdg, sizeof(vm.ifbrvm_name));
+		strlcpy(vm.ifbrvm_ifsname, p->name, sizeof(vm.ifbrvm_ifsname));
+		if (ioctl(s, SIOCBRDGGVMAP, &vm) == 0)
+			memcpy(p->tagged, vm.ifbrvm_map, sizeof(p->tagged));
 	}
 
 	/* the static addresses, then the members' rules, as they print */
@@ -1941,17 +2157,29 @@ done:
 	return ret;
 }
 
-/* The bridge the candidate's lines describe */
+/* The bridge brdg as the candidate's lines describe it */
 static int
-brcfg_cand(struct brcfg *b)
+brcfg_cand(struct brcfg *b, char *brdg)
 {
 	struct brport *p;
 	char line[1024], *l, *w, *ws;
-	const char *e;
+	const char *e = NULL;
 	size_t i, n, no;
 	u_int v;
 
 	memset(b, 0, sizeof(*b));
+	/* a veb's new member takes its vnetid's VLAN, or none */
+	if ((b->vlans = cand_takes(brdg, SIOCBRDGSPVID)) != 0) {
+		b->dflt = default_vnetid(brdg);
+		if ((l = cand_line("vnetid", 0)) != NULL &&
+		    strncmp(l, "no ", 3) == 0)
+			b->dflt = IFBR_PVID_NONE;
+		else if (l != NULL)
+			b->dflt = strtonum(l + strlen("vnetid "), EVL_VLID_MIN,
+			    EVL_VLID_MAX, &e);
+		if (e != NULL)
+			goto bad;
+	}
 	for (i = 0; i <= TIMEOUT; i++)
 		b->val[i] = (l = cand_line(brvals[i].name, 0)) == NULL ?
 		    brvals[i].def :
@@ -1969,6 +2197,8 @@ brcfg_cand(struct brcfg *b)
 					goto bad;
 				p->flags = i == 0 ? IFBIF_LEARNING |
 				    IFBIF_DISCOVER : IFBIF_SPAN;
+				if (i == 0 && b->vlans)
+					p->pvid = b->dflt;
 			} else if ((p = brcfg_member(b, w)) == NULL)
 				goto bad;
 			if (brlists[i].flag == IFBIF_STP)
@@ -1999,6 +2229,29 @@ brcfg_cand(struct brcfg *b)
 			if (e != NULL)
 				goto bad;
 		}
+	/* "untagged em0 5", "tagged em0 10,20-30" */
+	for (n = 0; (l = cand_line("untagged", n)) != NULL; n++) {
+		strlcpy(line, l + strlen("untagged "), sizeof(line));
+		ws = line;
+		if ((p = brcfg_member(b, strsep(&ws, " "))) == NULL ||
+		    ws == NULL)
+			goto bad;
+		if (strcmp(ws, "none") == 0)
+			p->pvid = IFBR_PVID_NONE;
+		else if (strcmp(ws, "passthrough") == 0)
+			p->pvid = IFBR_PVID_DECLINE;
+		else
+			p->pvid = strtonum(ws, EVL_VLID_MIN, EVL_VLID_MAX, &e);
+		if (e != NULL)
+			goto bad;
+	}
+	for (n = 0; (l = cand_line("tagged", n)) != NULL; n++) {
+		strlcpy(line, l + strlen("tagged "), sizeof(line));
+		ws = line;
+		if ((p = brcfg_member(b, strsep(&ws, " "))) == NULL ||
+		    ws == NULL || brvlan_parse(ws, p->tagged) == -1)
+			goto bad;
+	}
 	for (n = 0; (l = cand_line("static", n)) != NULL; n++)
 		if (brcfg_line(b, 0, l + strlen("static ")) == -1)
 			goto bad;
@@ -2036,6 +2289,28 @@ brcfg_print(FILE *output, struct brcfg *b)
 		}
 		if (n)
 			fprintf(output, "\n");
+	}
+	/* a veb's members' VLANs */
+	for (j = 0; b->vlans && j < b->nports; j++) {
+		p = &b->ports[j];
+		if (p->flags & IFBIF_SPAN)
+			continue;
+		if (p->pvid == IFBR_PVID_NONE)
+			fprintf(output, " untagged %s none\n", p->name);
+		else if (p->pvid == IFBR_PVID_DECLINE)
+			fprintf(output, " untagged %s passthrough\n", p->name);
+		else if (p->pvid != EVL_VLID_NULL)
+			fprintf(output, " untagged %s %u\n", p->name, p->pvid);
+	}
+	for (j = 0; b->vlans && j < b->nports; j++) {
+		p = &b->ports[j];
+		for (i = 0; i < sizeof(p->tagged) && p->tagged[i] == 0; i++)
+			;
+		if (i == sizeof(p->tagged))
+			continue;
+		fprintf(output, " tagged %s ", p->name);
+		brvlan_print(output, p->tagged);
+		fprintf(output, "\n");
 	}
 	for (j = 0; j < b->nports; j++)
 		if ((b->ports[j].flags & IFBIF_STP) &&
@@ -2088,6 +2363,9 @@ brcfg_add(struct brcfg *b, char *brdg, char *name, int span)
 	if ((p = brcfg_port(b, name, 1)) == NULL)
 		return ENOMEM;
 	p->flags = span ? IFBIF_SPAN : IFBIF_LEARNING | IFBIF_DISCOVER;
+	/* veb_add_port() */
+	if (!span && b->vlans)
+		p->pvid = b->dflt;
 	return 0;
 }
 
@@ -2156,18 +2434,20 @@ cand_bridge(u_long cmd, void *data)
 	struct ifbrparam *bp = data;
 	struct ifbareq *ba = data;
 	struct ifbrlreq *rl = data;
+	struct ifbrvidmap *vm = data;
 	struct brcfg b;
 	struct brport *p;
 	char *buf = NULL, text[64];
 	size_t len;
 	FILE *f;
 	int e = 0, i;
+	u_int16_t pvid;
 
 	if (!cand_takes(brdg, cmd)) {
 		errno = ENOTTY;
 		return -1;
 	}
-	if (brcfg_cand(&b) == -1) {
+	if (brcfg_cand(&b, brdg) == -1) {
 		e = EINVAL;
 		goto done;
 	}
@@ -2220,6 +2500,39 @@ cand_bridge(u_long cmd, void *data)
 	case SIOCBRDGSIFPROT:
 		if ((e = brcfg_findbif(&b, req->ifbr_ifsname, &p)) == 0)
 			p->prot = req->ifbr_protected;
+		break;
+	case SIOCBRDGSPVID:
+		/* veb_port_set_pvid(): no VLAN is the veb's vnetid's */
+		pvid = req->ifbr_pvid == EVL_VLID_NULL ? b.dflt :
+		    req->ifbr_pvid;
+		if (pvid != IFBR_PVID_NONE && pvid != IFBR_PVID_DECLINE &&
+		    (pvid < EVL_VLID_MIN || pvid > EVL_VLID_MAX))
+			e = EINVAL;
+		else if ((e = brcfg_findbif(&b, req->ifbr_ifsname, &p)) != 0)
+			break;
+		/* a vport has a VLAN */
+		else if ((pvid == IFBR_PVID_NONE ||
+		    pvid == IFBR_PVID_DECLINE) && isprefix("vport", p->name))
+			e = EOPNOTSUPP;
+		else
+			p->pvid = pvid;
+		break;
+	case SIOCBRDGSVMAP:
+		/* veb_set_vid_map(): VLANs 0 and 4095 are no tags */
+		if (vm->ifbrvm_op > IFBRVM_OP_ANDNOT ||
+		    (vm->ifbrvm_map[0] & 1) || (vm->ifbrvm_map[511] & 0x80)) {
+			e = EINVAL;
+			break;
+		}
+		if ((e = brcfg_findbif(&b, vm->ifbrvm_ifsname, &p)) != 0)
+			break;
+		for (i = 0; i < (int)sizeof(p->tagged); i++)
+			if (vm->ifbrvm_op == IFBRVM_OP_SET)
+				p->tagged[i] = vm->ifbrvm_map[i];
+			else if (vm->ifbrvm_op == IFBRVM_OP_OR)
+				p->tagged[i] |= vm->ifbrvm_map[i];
+			else
+				p->tagged[i] &= ~vm->ifbrvm_map[i];
 		break;
 	case SIOCBRDGSADDR:
 		if ((e = brcfg_findbif(&b, ba->ifba_ifsname, &p)) != 0)

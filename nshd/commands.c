@@ -939,8 +939,10 @@ struct intlist Bridgelist[] = {
 	{ "link",	"Link level options",			CMPL0 0, 0, intlink, 1, CAND_EDIT },
 	{ "txprio",     "Priority in 802.1Q headers (veb)",	CMPL0 0, 0, intmpls, 1, CAND_EDIT },
 	{ "rxprio",     "Source used for packet priority (veb)", CMPL0 0, 0, intmpls, 1, CAND_EDIT },
-	{ "vnetid",	"VLAN ID of untagged ports (veb)",	CMPL0 0, 0, intvnetid, 1, CAND_EDIT },
+	{ "vnetid",	"Untagged VLAN of members added (veb)",	CMPL0 0, 0, intvnetid, 1, CAND_EDIT },
 	{ "protect",	"Configure protected bridge domains",	CMPL0 0, 0, brprotect, 1, CAND_EDIT },
+	{ "untagged",	"VLAN of a member's untagged frames (veb)",	CMPL0 0, 0, brvlan, 1, CAND_EDIT },
+	{ "tagged",	"VLANs a member carries tagged (veb)",	CMPL0 0, 0, brvlan, 1, CAND_EDIT },
 	{ "interface",  interfacehelp,				CMPL(i) 0, 0, int_interface, 1, CAND_EDIT },
 	{ "shutdown",	"Shutdown bridge",			CMPL0 0, 0, intflags, 1, CAND_EDIT },
 	{ "show",	showhelp,				CMPL(ta) (char **)showlist, sizeof(Menu), int_show, 0, CAND_RUN },
@@ -1611,6 +1613,8 @@ static const struct confcmd conf_bridge[] = {
 	{ "rxprio",	intmpls },
 	{ "vnetid",	intvnetid },
 	{ "protect",	brprotect },
+	{ "untagged",	brvlan },
+	{ "tagged",	brvlan },
 	{ "shutdown",	intflags },
 };
 
