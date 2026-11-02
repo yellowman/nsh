@@ -1938,6 +1938,9 @@ intmpls(int argc, char **argv, ...)
 				    errstr);
 				return -1;
 			}
+			/* SIOCSLIFPHYRTABLE needs the table (EINVAL) */
+			if (!rtable_there(ifr.ifr_rdomainid))
+				return -1;
 		} else {
 			ifr.ifr_rdomainid = 0;
 		}

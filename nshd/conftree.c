@@ -787,6 +787,31 @@ conftree_line(struct cnode *root, char *block, char *name, size_t n)
 }
 
 /*
+ * 1 if root makes routing table id, else 0. The kernel makes a table
+ * for an interface in rdomain id, and for a route added to it, which is
+ * a route line in the table's block.
+ */
+int
+conftree_makes_rtable(struct cnode *root, int id)
+{
+	char key[32], rd[32], *s, *v;
+	size_t i;
+	int n;
+
+	n = snprintf(key, sizeof(key), "rtable %d", id);
+	snprintf(rd, sizeof(rd), "rdomain %d", id);
+	for (i = 0; (s = conftree_stmt(root, i)) != NULL; i++) {
+		if (strncmp(s, key, n) == 0 && (s[n] == '\0' || s[n] == ' ') &&
+		    conftree_line(root, s, "route", 0) != NULL)
+			return 1;
+		if ((v = conftree_line(root, s, "rdomain", 0)) != NULL &&
+		    strcmp(v, rd) == 0)
+			return 1;
+	}
+	return 0;
+}
+
+/*
  * Has block, as conftree_line() takes it, a line with line's key, its
  * first keylen words, as samekey() compares them?
  */

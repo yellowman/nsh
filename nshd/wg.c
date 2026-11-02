@@ -335,6 +335,9 @@ setwgrtable(const char *id)
 		printf("%% setwgrtable: wgrtable %s: %s\n", id, errmsg);
 		return -1;
 	}
+	/* wg's socket needs the table to bind in (EINVAL) */
+	if (!rtable_there(wg_interface->i_rtable))
+		return -1;
 	return 0;
 }
 

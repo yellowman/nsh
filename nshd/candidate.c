@@ -775,6 +775,22 @@ cand_rtblock(char *buf, size_t len, int table)
 	return -1;
 }
 
+/*
+ * 1 if routing table id is there, or in configure private if it will be
+ * once the candidate is committed. A table the kernel has stays, as the
+ * kernel never destroys one. Else 0, after saying what makes one.
+ */
+int
+rtable_there(int id)
+{
+	if (id == 0 || kf_rtable(id) ||
+	    (candidate && conftree_makes_rtable(cand, id)))
+		return 1;
+	printf("%% There is no rtable %d: an interface in rdomain %d, or a"
+	    " route in rtable %d, makes it\n", id, id, id);
+	return 0;
+}
+
 /* Has the candidate a block for rtable table? Table 0's is the top level */
 int
 cand_hasrtable(int table)

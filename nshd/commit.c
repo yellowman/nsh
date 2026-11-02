@@ -485,17 +485,12 @@ check_ids(struct cnode *want, char *block, char *name, struct claims *c)
 static int
 check_rtable(struct cnode *want, char *block)
 {
-	char *l, *s, *v, name[32], rd[32];
-	size_t i, n;
+	char *l, name[32];
+	size_t n;
 	int id = rtableid(block);
 
-	if (kf_rtable(id) || conftree_line(want, block, "route", 0) != NULL)
+	if (kf_rtable(id) || conftree_makes_rtable(want, id))
 		return 0;
-	snprintf(rd, sizeof(rd), "rdomain %d", id);
-	for (i = 0; (s = conftree_stmt(want, i)) != NULL; i++)
-		if ((v = conftree_line(want, s, "rdomain", 0)) != NULL &&
-		    strcmp(v, rd) == 0)
-			return 0;
 	for (n = 0; (l = conftree_line(want, block, NULL, n)) != NULL; n++)
 		if (ctl_line(l, name, sizeof(name)) == CTL_STATE)
 			return problem("%s: %s, but nothing makes table %d: a "

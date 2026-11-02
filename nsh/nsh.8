@@ -5782,6 +5782,9 @@ nsh(interface-mgre0)# tunneladdr 192.0.2.1
 .Pp
 Set or remove tunnel routing domain over which tunnel encapsulated packets
 are to be exchanged between tunnel ip endpoints.
+The routing table must exist: an interface in its rdomain, or a route
+in it, makes it.
+In configure private, the candidate may make it.
 .Pp
 .Op no
 .Ic maxaddr
@@ -6677,6 +6680,9 @@ The routing table choice is made using rtable-id which would be a value
 between 0 and 255 on a default
 .Ox
 kernel.
+The routing table must exist: an interface in its rdomain, or a route
+in it, makes it.
+In configure private, the candidate may make it.
 The routing domain of the wgrtable does not need be in the same routing domain
 to which the interface is attached.
 wgrtable configures which

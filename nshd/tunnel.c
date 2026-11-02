@@ -925,6 +925,9 @@ tunnel_rdomain(char *rdomain)
 		printf("%% invalid routing domain id %s: %s\n", rdomain, errmsg);
 		return -1;
 	}
+	/* SIOCSLIFPHYRTABLE needs the table (EINVAL) */
+	if (!rtable_there(rdomainid))
+		return -1;
 	return rdomainid;
 }
 

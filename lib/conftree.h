@@ -57,6 +57,7 @@ int conftree_has(struct cnode *, char *);
 char *conftree_stmt(struct cnode *, size_t);
 char *conftree_line(struct cnode *, char *, char *, size_t);
 int conftree_haskey(struct cnode *, char *, char *, int);
+int conftree_makes_rtable(struct cnode *, int);
 int conftree_write(FILE *, struct cnode *);
 int conftree_write_stmt(FILE *, struct cnode *, char *, int);
 
