@@ -470,6 +470,20 @@ cand_ifline(char *ifn, char *name, size_t n)
 	return conftree_line(cand, block, name, n);
 }
 
+/* The name of the n'th interface, from 0, in the candidate, or NULL */
+char *
+cand_ifname(size_t n)
+{
+	char *s;
+	size_t i;
+
+	for (i = 0; (s = conftree_stmt(cand, i)) != NULL; i++)
+		if (strncmp(s, "interface ", strlen("interface ")) == 0 &&
+		    n-- == 0)
+			return s + strlen("interface ");
+	return NULL;
+}
+
 /*
  * Replace the current interface's lines named in names[] with the lines
  * in buf, which a conf() printer wrote.  Each line in buf replaces the

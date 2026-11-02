@@ -735,6 +735,7 @@ int cand_putlines(char **, size_t, char *);
 int cand_ifsetting(char *, int, const char *, ...)
     __attribute__((__format__ (printf, 3, 4)));
 char *cand_ifline(char *, char *, size_t);
+char *cand_ifname(size_t);
 int cand_state(char *);
 int cand_getflags(char *, int);
 int cand_gettype(char *);

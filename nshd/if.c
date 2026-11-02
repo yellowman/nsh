@@ -877,6 +877,11 @@ cand_ip(char *ifname, int set, int flags, ip_t *ip, int argc, char **argv,
 		    pppoe ? "" : "IPv4 ", pppoe ? "IPCP" : "DHCP");
 		return -1;
 	}
+	/* carpioctl() takes an address only once there is a carpdev (EINVAL) */
+	if (cand_takes(ifname, SIOCSVH) && cand_line("carpdev", 0) == NULL) {
+		printf("%% %s needs a carpdev before an address\n", ifname);
+		return -1;
+	}
 	dest[0] = '\0';
 
 	switch (ip->family) {

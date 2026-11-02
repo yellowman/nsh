@@ -55,6 +55,7 @@ static int carp_setvh(int, struct ifreq *);
 static int cand_getvh(char *, struct carpreq *);
 static int cand_setvh(int, char *, struct carpreq *);
 static void sort_vhids(struct carpreq *);
+static int cand_dupvhid(char *, struct carpreq *);
 
 /* Do SIOCGVH, or in configure private, read the candidate */
 static int
@@ -76,8 +77,9 @@ carp_setvh(int ifs, struct ifreq *ifr)
 }
 
 /*
- * SIOCGVH in configure private: fill creq from the candidate's lines, as
- * conf_carp() prints them, with the vhids in order as SIOCGVH has them
+ * SIOCGVH in configure private: fill creq from the lines of ifname's
+ * block, as conf_carp() prints them, with the vhids in order as SIOCGVH
+ * has them
  */
 static int
 cand_getvh(char *ifname, struct carpreq *creq)
@@ -94,23 +96,23 @@ cand_getvh(char *ifname, struct carpreq *creq)
 	memset(creq, 0, sizeof(*creq));
 	creq->carpr_advbase = CARP_DFLTINTV;
 	creq->carpr_peer.s_addr = htonl(INADDR_CARP_GROUP);
-	if ((l = cand_line("carpdev", 0)) != NULL)
+	if ((l = cand_ifline(ifname, "carpdev", 0)) != NULL)
 		strlcpy(creq->carpr_carpdev, l + strlen("carpdev "),
 		    sizeof(creq->carpr_carpdev));
-	if ((l = cand_line("carppass", 0)) != NULL)
+	if ((l = cand_ifline(ifname, "carppass", 0)) != NULL)
 		strlcpy((char *)creq->carpr_key, l + strlen("carppass "),
 		    sizeof(creq->carpr_key));
-	if ((l = cand_line("advbase", 0)) != NULL)
+	if ((l = cand_ifline(ifname, "advbase", 0)) != NULL)
 		creq->carpr_advbase = strtonum(l + strlen("advbase "), 0, 255,
 		    &errmsg);
-	if ((l = cand_line("vhid", 0)) != NULL)
+	if ((l = cand_ifline(ifname, "vhid", 0)) != NULL)
 		creq->carpr_vhids[0] = strtonum(l + strlen("vhid "), 1, 255,
 		    &errmsg);
-	if ((l = cand_line("advskew", 0)) != NULL)
+	if ((l = cand_ifline(ifname, "advskew", 0)) != NULL)
 		creq->carpr_advskews[0] = strtonum(l + strlen("advskew "), 0,
 		    254, &errmsg);
 	for (n = 0, i = 0; i < CARP_MAXNODES &&
-	    (l = cand_line("carpnode", n)) != NULL; n++, i++) {
+	    (l = cand_ifline(ifname, "carpnode", n)) != NULL; n++, i++) {
 		/* carpnode vhid advskew */
 		strlcpy(line, l, sizeof(line));
 		strtok_r(line, " ", &p);
@@ -120,9 +122,9 @@ cand_getvh(char *ifname, struct carpreq *creq)
 			creq->carpr_advskews[i] = strtonum(w, 0, 254, &errmsg);
 	}
 	sort_vhids(creq);
-	if ((l = cand_line("carppeer", 0)) != NULL)
+	if ((l = cand_ifline(ifname, "carppeer", 0)) != NULL)
 		inet_pton(AF_INET, l + strlen("carppeer "), &creq->carpr_peer);
-	if ((l = cand_line("balancing", 0)) != NULL)
+	if ((l = cand_ifline(ifname, "balancing", 0)) != NULL)
 		for (i = 0; i <= CARP_BAL_MAXID; i++)
 			if (strcmp(l + strlen("balancing "),
 			    carp_bal_modes[i]) == 0)
@@ -147,6 +149,32 @@ sort_vhids(struct carpreq *creq)
 			creq->carpr_vhids[j - 1] = v;
 			creq->carpr_advskews[j - 1] = a;
 		}
+}
+
+/*
+ * 1 if another carp interface on r's carpdev has one of r's vhids,
+ * which carp_check_dup_vhids() refuses (EINVAL), else 0
+ */
+static int
+cand_dupvhid(char *ifname, struct carpreq *r)
+{
+	struct carpreq o;
+	char *ifn;
+	size_t n;
+	int i, j;
+
+	if (r->carpr_carpdev[0] == '\0')
+		return 0;
+	for (n = 0; (ifn = cand_ifname(n)) != NULL; n++) {
+		if (strcmp(ifn, ifname) == 0 || cand_getvh(ifn, &o) == -1 ||
+		    strcmp(o.carpr_carpdev, r->carpr_carpdev) != 0)
+			continue;
+		for (i = 0; i < CARP_MAXNODES && r->carpr_vhids[i]; i++)
+			for (j = 0; j < CARP_MAXNODES && o.carpr_vhids[j]; j++)
+				if (r->carpr_vhids[i] == o.carpr_vhids[j])
+					return 1;
+	}
+	return 0;
 }
 
 /*
@@ -202,7 +230,8 @@ cand_setvh(int ifs, char *ifname, struct carpreq *r)
 	} else
 		for (i = 0; i < CARP_MAXNODES && cur.carpr_vhids[i]; i++)
 			cur.carpr_advskews[i] = r->carpr_advskews[i];
-	if (r->carpr_advbase > 255 || r->carpr_balancing > CARP_BAL_MAXID) {
+	if (r->carpr_advbase > 255 || r->carpr_balancing > CARP_BAL_MAXID ||
+	    cand_dupvhid(ifname, &cur)) {
 		errno = EINVAL;
 		return -1;
 	}
@@ -416,7 +445,10 @@ intcarp(int argc, char **argv, ...)
 	}
 
 	if (carp_setvh(ifs, &ifr) == -1) {
-		if (errno == EINVAL)
+		/* a carpnode, or another carp on the carpdev, has the vhid */
+		if (errno == EINVAL && x->type == CARP_VHID)
+			printf("%% vhid %d is already in use\n", (int)val);
+		else if (errno == EINVAL)
 			printf("%% value out of range\n");
 		else
 			printf("%% intcarp: SIOCSVH: %s\n", strerror(errno));
@@ -583,7 +615,11 @@ intcnode(int argc, char **argv, ...)
 	}
 
 	if (carp_setvh(ifs, &ifr) == -1) {
-		printf("%% intcnode: SIOCSVH: %s\n", strerror(errno));
+		/* another carp interface on the carpdev has the vhid */
+		if (errno == EINVAL)
+			printf("%% vhid %u is already in use\n", vhid);
+		else
+			printf("%% intcnode: SIOCSVH: %s\n", strerror(errno));
 		return -1;
 	}
         return (0);
