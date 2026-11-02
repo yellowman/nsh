@@ -127,6 +127,7 @@ static const struct {
 	{ "gif",	IF_HDRPRIO_PAYLOAD,	IF_HDRPRIO_PAYLOAD },
 	{ "eoip",	IF_HDRPRIO_PACKET,	0 },
 	{ "veb",	IF_HDRPRIO_OUTER,	IF_HDRPRIO_PACKET },
+	{ "erspan",	IF_HDRPRIO_PAYLOAD,	IF_HDRPRIO_PACKET },
 };
 
 static const struct {

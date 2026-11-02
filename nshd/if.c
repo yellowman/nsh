@@ -1807,6 +1807,16 @@ static struct mplsc {
 	{ 0,		0,			0		}
 };
 
+/*
+ * The drivers whose SIOCSTXHPRIO and SIOCSRXHPRIO refuse payload
+ * (if_txhprio_l2_check(), if_rxhprio_l2_check()). They carry Ethernet,
+ * which has no IP header to take a priority from or to give one to.
+ */
+static const char *l2hprios[] = {
+	"bpe", "egre", "eoip", "etherip", "mpw", "nvgre", "svlan", "veb",
+	"vlan", "vxlan"
+};
+
 /* A txprio or rxprio line, as conf_ifmetrics() prints it */
 static int
 cand_hdrprio(char *name, int prio, int def)
@@ -1856,6 +1866,7 @@ int
 intmpls(int argc, char **argv, ...)
 {
 	int set;
+	size_t i;
 	unsigned long cmd;
 	struct ifreq ifr;
 	struct shim_hdr shim;
@@ -1978,6 +1989,14 @@ intmpls(int argc, char **argv, ...)
 		printf("%% intmpls: Internal error\n");
 		return -1;
 	}
+	if ((cmd == SIOCSTXHPRIO || cmd == SIOCSRXHPRIO) &&
+	    ifr.ifr_hdrprio == IF_HDRPRIO_PAYLOAD)
+		for (i = 0; i < nitems(l2hprios); i++)
+			if (isprefix((char *)l2hprios[i], ifname)) {
+				printf("%% %s takes no %s payload\n", ifname,
+				    x->name);
+				return -1;
+			}
 
 	if (candidate) {
 		if (!cand_takes(ifname, cmd)) {
