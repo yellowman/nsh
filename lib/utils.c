@@ -291,9 +291,15 @@ parse_ip_pfx(char *arg, int type, ip_t *argip)
 		s = q + 1;
 		if (argip->family == AF_INET && inet_pton(AF_INET, s, &mask)) {
 			mask.s_addr = ntohl(mask.s_addr);
+			/* a mask's ones come first */
+			if ((~mask.s_addr & (~mask.s_addr + 1)) != 0) {
+				printf("%% Invalid mask specified\n");
+				argip->family = 0;
+				return;
+			}
 			argip->bitlen = mask.s_addr ? 33 - ffs(mask.s_addr) : 0;
 		} else {
-			if(strspn(s, "0123456789") == strlen(s)) {
+			if (*s != '\0' && strspn(s, "0123456789") == strlen(s)) {
 				/* assume bits after slash */
 				argip->bitlen = strtoul(s, 0, 0);
 				if ((argip->family == AF_INET6 &&

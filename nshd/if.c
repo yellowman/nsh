@@ -664,8 +664,11 @@ ip6_opts(int argc, char **argv, struct ip6opts *o)
 			break;
 		case 'v':
 		case 'p':
-			/* a vltime of 0 adds no address */
-			t = strtonum(argv[noptind - 1], 1,
+			/*
+			 * a vltime of 0 adds no address, and a pltime of 0
+			 * adds a deprecated one
+			 */
+			t = strtonum(argv[noptind - 1], ch == 'v' ? 1 : 0,
 			    ND6_INFINITE_LIFETIME - 1, &errstr);
 			if (errstr) {
 				printf("%% %s %s: %s\n", ch == 'v' ? "vltime" :
@@ -857,7 +860,6 @@ cand_ip(char *ifname, int set, int flags, ip_t *ip, int argc, char **argv,
 	char opts[sizeof(" anycast vltime 4294967295 pltime 4294967295")];
 	struct in_addr in4dest;
 	struct in6_addr in6dest;
-	in_addr_t mask;
 	int pppoe = cand_ispppoe(ifname), bitlen;
 
 	if (ip->family == AF_INET6 && cand_otherscope(&ip->addr.in6, ifname))
@@ -894,14 +896,8 @@ cand_ip(char *ifname, int set, int flags, ip_t *ip, int argc, char **argv,
 				return -1;
 			break;
 		}
-		/* nor the broadcast address the kernel would choose */
-		mask = htonl(0xffffffffULL << (32 - ip->bitlen));
-		if (in4dest.s_addr != INADDR_ANY && ntohl(in4dest.s_addr) !=
-		    in4_brdaddr(ip->addr.in.s_addr, mask))
-			cand_addrstr(AF_INET, &in4dest, ifname, dest,
-			    sizeof(dest));
-		if (cand_setting(ST_ON, "inet %s/%d%s%s", addr, ip->bitlen,
-		    dest[0] ? " " : "", dest) == -1)
+		/* nor the broadcast address, which intip() checked */
+		if (cand_setting(ST_ON, "inet %s/%d", addr, ip->bitlen) == -1)
 			return -1;
 		break;
 	case AF_INET6:
@@ -1138,7 +1134,7 @@ intip(int argc, char **argv, ...)
 
 	if (ip.family == 0)
 		/* bad IP specified */
-		return 0;
+		return -1;
 
 	/* The inet6 command is IPv6-only. */
 	if (strcmp(cmdname, "inet6") == 0 && ip.family != AF_INET6) {
@@ -1149,6 +1145,26 @@ intip(int argc, char **argv, ...)
 	if (set && !(flags & IFF_POINTOPOINT) && ip.bitlen == -1) {
 		printf("%% Netmask not specified\n");
 		return -1;
+	}
+	/*
+	 * The kernel takes an IPv4 prefix length of 0 as the address
+	 * class's, and sets the broadcast address the mask makes,
+	 * whatever is given (in_ifinit())
+	 */
+	if (set && ip.family == AF_INET && !(flags & IFF_POINTOPOINT)) {
+		struct in_addr brd;
+
+		if (ip.bitlen == 0) {
+			printf("%% An IPv4 prefix length must be 1 or more\n");
+			return -1;
+		}
+		if (argc == 2 && inet_pton(AF_INET, argv[1], &brd) == 1 &&
+		    ntohl(brd.s_addr) != in4_brdaddr(ip.addr.in.s_addr,
+		    htonl(0xffffffffULL << (32 - ip.bitlen)))) {
+			printf("%% %s is not the broadcast address of %s/%d\n",
+			    argv[1], argv[0], ip.bitlen);
+			return -1;
+		}
 	}
 
 	/* no takes them as well, and an eui64 address is one to delete */
@@ -2377,7 +2393,7 @@ intllprio(int argc, char **argv, ...)
 	if (set) {
 		int num;
 
-		num = strtonum(argv[1], 0, 15, &errmsg);
+		num = strtonum(argv[1], IFQ_MINPRIO, IFQ_MAXPRIO, &errmsg);
 		if (errmsg) {
 			printf("%% Invalid llpriority %s: %s\n", argv[1],
 			    errmsg);
@@ -2441,6 +2457,16 @@ intgroup(int argc, char **argv, ...)
 
 	for (i = 0; i < argc; i++) {
 		/* Validate supplied argument(s) before applying them */
+		if (argv[i][0] == '\0') {
+			printf("%% A group name may not be empty\n");
+			return -1;
+		}
+		/* the kernel keeps every interface in all, and egress */
+		if (set && (strcmp(argv[i], "all") == 0 ||
+		    strcmp(argv[i], "egress") == 0)) {
+			printf("%% The kernel keeps group %s\n", argv[i]);
+			return -1;
+		}
 		if (isdigit((unsigned char)argv[i][strlen(argv[i]) - 1])) {
 			printf("%% Group names may not end with a digit\n");
 			return -1;
