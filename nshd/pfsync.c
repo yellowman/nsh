@@ -125,6 +125,26 @@ cand_setpfsync(char *ifname, struct pfsyncreq *preq)
 }
 
 /*
+ * pfsync_up() refuses a syncdev that does not do multicast when the
+ * syncpeer is a multicast address (ENODEV). A syncpeer of 0.0.0.0 means
+ * the pfsync group, which is one. Returns 1 if dev can be the syncdev.
+ */
+static int
+pfsync_mcast(int ifs, char *dev, struct in_addr peer)
+{
+	in_addr_t p = peer.s_addr == INADDR_ANY ?
+	    htonl(INADDR_PFSYNC_GROUP) : peer.s_addr;
+
+	if (dev[0] == '\0' || !IN_MULTICAST(ntohl(p)) ||
+	    ((candidate ? cand_getflags(dev, ifs) : get_ifflags(dev, ifs)) &
+	    IFF_MULTICAST))
+		return 1;
+	printf("%% %s does not do multicast, which syncpeer %s needs\n", dev,
+	    inet_ntoa(*(struct in_addr *)&p));
+	return 0;
+}
+
+/*
  * SIOCSETPFSYNC. pfsync refuses a new syncdev or syncpeer while it runs
  * (EBUSY), so then it goes down for the change, and comes back up if the
  * change failed or it still has a syncdev.
@@ -213,6 +233,8 @@ intsyncdev(int argc, char **argv, ...)
 	else
 		bzero((char *) &preq.pfsyncr_syncdev,
 		      sizeof(preq.pfsyncr_syncdev));
+	if (!pfsync_mcast(ifs, preq.pfsyncr_syncdev, preq.pfsyncr_syncpeer))
+		return -1;
 
 	if (pfsync_set(ifs, &ifr) == -1) {
 		if (errno == ENOBUFS)
@@ -301,18 +323,23 @@ intsyncpeer(int argc, char **argv, ...)
 		}
 		preq.pfsyncr_syncpeer.s_addr = ((struct sockaddr_in *)
 		    peerres->ai_addr)->sin_addr.s_addr;
+		freeaddrinfo(peerres);
 	} else {
 		preq.pfsyncr_syncpeer.s_addr = 0;
 	}
+	/* pfsync_up() refuses it (EDESTADDRREQ) */
+	if (preq.pfsyncr_syncpeer.s_addr == INADDR_BROADCAST) {
+		printf("%% syncpeer cannot be the broadcast address\n");
+		return -1;
+	}
+	if (!pfsync_mcast(ifs, preq.pfsyncr_syncdev, preq.pfsyncr_syncpeer))
+		return -1;
 
 	if (pfsync_set(ifs, &ifr) == -1) {
 			printf("%% intsyncpeer: SIOCSETPFSYNC: %s\n",
 			    strerror(errno));
 		r = -1;
 	}
-
-	if (set)
-		freeaddrinfo(peerres);
 
 	return r;
 }

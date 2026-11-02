@@ -1401,6 +1401,24 @@ ipv6ll_db_store(struct sockaddr_in6 *sin6, struct sockaddr_in6 *sin6mask,
 	}
 }
 
+/* 1 if ss holds an address, and a port when port is 1 (pflowvalidsockaddr()) */
+static int
+pflow_valid(struct sockaddr_storage *ss, int port)
+{
+	struct sockaddr_in *sin = (struct sockaddr_in *)ss;
+	struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)ss;
+
+	switch (ss->ss_family) {
+	case AF_INET:
+		return sin->sin_addr.s_addr != INADDR_ANY &&
+		    (!port || sin->sin_port != 0);
+	case AF_INET6:
+		return !IN6_IS_ADDR_UNSPECIFIED(&sin6->sin6_addr) &&
+		    (!port || sin6->sin6_port != 0);
+	}
+	return 0;
+}
+
 /*
  * pflow in configure private. The line has the addresses as
  * pflow_status() prints them and the version; a version the command
@@ -1419,16 +1437,9 @@ cand_pflow(char *ifname, int set, struct pflowreq *preq)
 	}
 	if (!set)
 		return cand_setting(ST_DEFAULT, "pflow");
-	if (pflow_addrstr(&preq->flowsrc, src) ||
-	    pflow_addrstr(&preq->flowdst, dst)) {
-		printf("%% pflow needs a sender and a receiver address\n");
-		return -1;
-	}
-	if (preq->flowsrc.ss_family != preq->flowdst.ss_family) {
-		printf("%% sender and receiver address families do not"
-		    " match\n");
-		return -1;
-	}
+	/* intpflow() has checked both addresses */
+	pflow_addrstr(&preq->flowsrc, src);
+	pflow_addrstr(&preq->flowdst, dst);
 	if (preq->addrmask & PFLOW_MASK_VERSION)
 		version = preq->version;
 	else if ((l = cand_line("pflow", 0)) != NULL &&
@@ -1480,13 +1491,6 @@ intpflow(int argc, char **argv, ...)
 		return -1;
 	}
 
-	if (set) {
-	        if (strchr(argv[3], ':') == NULL) {
-			printf("%% Receiver has no port specified\n");
-			return -1;
-		}
-	}
-
 	bzero(&ifr, sizeof(ifr));
 	strlcpy(ifr.ifr_name, ifname, IFNAMSIZ);
 
@@ -1499,6 +1503,24 @@ intpflow(int argc, char **argv, ...)
 			return -1;
 		if (pflow_addr(argv[3], &preq.flowdst) < 0)
 			return -1;
+		/*
+		 * pflow_set() opens no socket without a receiver address
+		 * and port, and sobind() refuses a sender of another
+		 * family. conf_pflow() prints no line without a sender.
+		 */
+		if (!pflow_valid(&preq.flowsrc, 0)) {
+			printf("%% pflow needs a sender address\n");
+			return -1;
+		}
+		if (!pflow_valid(&preq.flowdst, 1)) {
+			printf("%% pflow needs a receiver address and port\n");
+			return -1;
+		}
+		if (preq.flowsrc.ss_family != preq.flowdst.ss_family) {
+			printf("%% sender and receiver address families do not"
+			    " match\n");
+			return -1;
+		}
 		if (argc == 6) {
 			preq.version = strtonum(argv[5], 5, PFLOW_PROTO_MAX,
 			    &errmsg);
@@ -2670,6 +2692,12 @@ cand_ifflags(char *ifname, int value, int set)
 	case -IFF_UP:
 		if (set)
 			return cand_setting(ST_ON, "shutdown");
+		/* pfsync_up() needs a syncdev (ENXIO) */
+		if (cand_takes(ifname, SIOCSETPFSYNC) &&
+		    cand_line("syncdev", 0) == NULL) {
+			printf("%% %s needs a syncdev to come up\n", ifname);
+			return -1;
+		}
 		return cand_upline(ifname, 1);
 	}
 	printf("%% cand_ifflags: value internal error\n");

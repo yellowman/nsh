@@ -510,9 +510,9 @@ intcnode(int argc, char **argv, ...)
 	argv++;
 
 	/* "no carpnode" takes what carpnode does, and removes the vhid */
-	if (argc < 1 || argc > 3) {
-		printf("%% carpnode <vhid> [advskew] [state]\n");
-		printf("%% no carpnode <vhid> [advskew] [state]\n");
+	if (argc < 1 || argc > 2) {
+		printf("%% carpnode <vhid> [advskew]\n");
+		printf("%% no carpnode <vhid> [advskew]\n");
 		return -1;
 	}
 	bzero((char *) &creq, sizeof(struct carpreq));
@@ -557,6 +557,12 @@ intcnode(int argc, char **argv, ...)
 	if (!set && (i == CARP_MAXNODES || !creq.carpr_vhids[i])) {
 		printf("%% unable to delete vhid %u, does not exist on %s\n",
 		    vhid, ifname);
+		return -1;
+	}
+	/* SIOCSVH ignores a list without vhids, so the last one stays */
+	if (!set && last == 0) {
+		printf("%% vhid %u is the only one on %s, and cannot be"
+		    " removed\n", vhid, ifname);
 		return -1;
 	}
 
