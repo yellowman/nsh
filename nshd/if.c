@@ -1662,7 +1662,7 @@ int
 intmtu(int argc, char **argv, ...)
 {
 	struct ifreq ifr;
-	int set;
+	int set, max;
 	const char *errmsg = NULL;
 	va_list ap;
 	char *ifname;
@@ -1703,6 +1703,15 @@ intmtu(int argc, char **argv, ...)
 		}
 	} else
 		ifr.ifr_mtu = default_mtu(ifname);
+	/* sppp takes 128 or more, and pppoe no more than its dev allows */
+	if (strncmp(ifname, "pppoe", strlen("pppoe")) == 0) {
+		max = pppoe_maxmtu(ifs, ifname);
+		if (ifr.ifr_mtu < 128 || ifr.ifr_mtu > max) {
+			printf("%% %s takes an mtu of 128 to %d\n", ifname,
+			    max);
+			return -1;
+		}
+	}
 
 	if (candidate) {
 		if (conf_mtu_shown(ifname, ifr.ifr_mtu))

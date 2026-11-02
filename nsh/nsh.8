@@ -5246,6 +5246,12 @@ maximum mtu value supported by the hardware and driver currently installed.
 The mtu command fails gracefully if the specified mtu exceeds the hardmtu
 value of the interface.
 .Pp
+A
+.Xr pppoe 4
+interface takes an mtu of 128 to 2048, and no more than the hardmtu of
+its dev less 8, the PPPoE overhead.
+Setting a dev lowers the mtu to that, as the kernel does.
+.Pp
 A larger MTU is particularly useful for underlay interfaces which
 encapsulated tunneled traffic traverses or for features which stack tags,
 such as

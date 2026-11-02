@@ -36,8 +36,13 @@
 #include "stringlist.h"
 #include "externs.h"
 #include "settings.h"
+#include "kfacts.h"
 
 #define TYPESZ 16
+/* if_pppoe.c's PPPOE_OVERHEAD, the PPPoE header and PPP's protocol */
+#define PPPOE_OVERHEAD	8
+/* and its PPPOE_MAXMTU, which is the kernel's PP_MAX_MRU */
+#define PPPOE_MAXMTU	2048
 
 void authusage(void);
 void peerusage(void);
@@ -547,6 +552,25 @@ pppoe_line(char *buf, size_t len, struct pppoediscparms *parms)
 	    parms->service_name[0] ? " svc " : "", parms->service_name);
 }
 
+/*
+ * The most mtu that pppoe interface ifname takes. if_pppoe.c refuses
+ * more than PPPOE_MAXMTU, or than its dev's hard mtu less PPPOE_OVERHEAD.
+ */
+int
+pppoe_maxmtu(int ifs, char *ifname)
+{
+	struct pppoediscparms parms;
+	int hard, max = PPPOE_MAXMTU;
+
+	memset(&parms, 0, sizeof(parms));
+	strlcpy(parms.ifname, ifname, sizeof(parms.ifname));
+	if (pppoe_get(ifs, &parms) == 0 && parms.eth_ifname[0] != '\0' &&
+	    (hard = kf_hardmtu(parms.eth_ifname)) != 0 &&
+	    hard - PPPOE_OVERHEAD < max)
+		max = hard - PPPOE_OVERHEAD;
+	return max;
+}
+
 /* PPPOEGETPARMS, or in configure private the candidate's pppoe line */
 static int
 pppoe_get(int ifs, struct pppoediscparms *parms)
@@ -584,6 +608,8 @@ static int
 pppoe_set(int ifs, struct pppoediscparms *parms)
 {
 	struct pppoediscparms cur;
+	char *l;
+	int max;
 
 	if (!candidate)
 		return ioctl(ifs, PPPOESETPARMS, parms);
@@ -600,7 +626,19 @@ pppoe_set(int ifs, struct pppoediscparms *parms)
 		errno = ENXIO;
 		return -1;
 	}
-	return pppoe_cand(parms);
+	if (pppoe_cand(parms) == -1)
+		return -1;
+	/* if_pppoe.c lowers the mtu to what the new dev allows */
+	max = pppoe_maxmtu(ifs, parms->ifname);
+	if ((l = cand_line("mtu", 0)) != NULL &&
+	    atoi(l + strlen("mtu ")) > max) {
+		printf("%% The mtu of %s is now %d, the most %s allows\n",
+		    parms->ifname, max, parms->eth_ifname);
+		if (conf_mtu_shown(parms->ifname, max))
+			return cand_setting(ST_ON, "mtu %d", max);
+		return cand_setting(ST_DEFAULT, "mtu");
+	}
+	return 0;
 }
 
 /* The candidate's pppoe line for parms, or none */

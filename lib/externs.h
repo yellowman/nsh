@@ -737,6 +737,7 @@ int cand_ifsetting(char *, int, const char *, ...)
 char *cand_ifline(char *, char *, size_t);
 char *cand_ifname(size_t);
 int rtable_there(int);
+int pppoe_maxmtu(int, char *);
 int cand_state(char *);
 int cand_getflags(char *, int);
 int cand_gettype(char *);

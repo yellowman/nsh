@@ -37,6 +37,7 @@ struct kif {
 	int		 hasll6;
 	struct in6_addr	 ll6;		/* its link-local address */
 	uint64_t	 media;		/* SIOCGIFMEDIA's current word, or 0 */
+	int		 hardmtu;	/* SIOCGIFHARDMTU's, or 0 */
 	uint64_t	*medias;	/* and the words its driver lists */
 	size_t		 nmedias;
 };
@@ -63,6 +64,7 @@ int		 kf_flags(char *, int);
 int		 kf_type(char *);
 int		 kf_caps(char *);
 int		 kf_wifi(char *);
+int		 kf_hardmtu(char *);
 char		*kf_lladdr(char *);
 int		 kf_ll6(char *, struct in6_addr *);
 int		 kf_media(int, char *, uint64_t *, uint64_t **, size_t *);

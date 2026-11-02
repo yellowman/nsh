@@ -156,6 +156,26 @@ kf_wifi(char *name)
 	return (k = kif(name)) != NULL && k->wifi;
 }
 
+/* name's SIOCGIFHARDMTU, the most its driver takes for its mtu, or 0 */
+int
+kf_hardmtu(char *name)
+{
+	struct ifreq ifr;
+	struct kif *k;
+	int s, mtu = 0;
+
+	if (kf != NULL)
+		return (k = kif(name)) != NULL ? k->hardmtu : 0;
+	if ((s = socket(AF_INET, SOCK_DGRAM, 0)) == -1)
+		return 0;
+	memset(&ifr, 0, sizeof(ifr));
+	strlcpy(ifr.ifr_name, name, sizeof(ifr.ifr_name));
+	if (ioctl(s, SIOCGIFHARDMTU, (caddr_t)&ifr) == 0)
+		mtu = ifr.ifr_hardmtu;
+	close(s);
+	return mtu;
+}
+
 /*
  * The link-level address name came with: the one the database kept when
  * lladdr first changed it, or else the one it has; NULL if none
@@ -501,6 +521,8 @@ scan_if(int s, struct kif *ki, struct ifaddrs *ifap)
 	strlcpy(ifr.ifr_name, ki->name, sizeof(ifr.ifr_name));
 	if (ioctl(s, SIOCGIFFLAGS, (caddr_t)&ifr) == 0)
 		ki->flags = ifr.ifr_flags;
+	if (ioctl(s, SIOCGIFHARDMTU, (caddr_t)&ifr) == 0)
+		ki->hardmtu = ifr.ifr_hardmtu;
 	ifr.ifr_data = (caddr_t)&ifd;
 	if (ioctl(s, SIOCGIFDATA, (caddr_t)&ifr) == 0) {
 		ki->type = ifd.ifi_type;
@@ -632,11 +654,12 @@ static const struct facts_field kiffields[] = {
 	{ "lladdr",	FACT_STRING },
 	{ "linklocal",	FACT_ADDRESS },
 	{ "media",	FACT_U64 },
+	{ "hardmtu",	FACT_U64 },
 };
 static const struct facts_kind kind_if = { "kinterface", kiffields,
 	nitems(kiffields) };
 enum { KIF_NAME, KIF_INDEX, KIF_FLAGS, KIF_TYPE, KIF_CAPS, KIF_WIFI,
-	KIF_LLADDR, KIF_LL6, KIF_MEDIA };
+	KIF_LLADDR, KIF_LL6, KIF_MEDIA, KIF_HARDMTU };
 
 static const struct facts_field kmfields[] = {
 	{ "interface",	FACT_STRING },
@@ -690,6 +713,8 @@ kfacts_emit(struct facts_out *o, struct kfacts *k)
 			    sizeof(ki->ll6), 0);
 		if (ki->media != 0)
 			facts_u64(&v[KIF_MEDIA], ki->media);
+		if (ki->hardmtu != 0)
+			facts_u64(&v[KIF_HARDMTU], ki->hardmtu);
 		if (facts_record(o, &kind_if, v) == -1)
 			return -1;
 		for (j = 0; j < ki->nmedias; j++) {
@@ -795,6 +820,8 @@ kfacts_record(void *arg, const struct facts_template *t,
 		}
 		if ((f = facts_get(v, map, KIF_MEDIA, FACT_U64)) != NULL)
 			ki->media = f->v.u;
+		if ((f = facts_get(v, map, KIF_HARDMTU, FACT_U64)) != NULL)
+			ki->hardmtu = f->v.u;
 	} else if (strcmp(t->kind, kind_media.name) == 0) {
 		facts_bind(t, &kind_media, map);
 		if (kf_str(facts_get(v, map, 0, FACT_STRING), name,
