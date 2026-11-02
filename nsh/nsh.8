@@ -5541,10 +5541,13 @@ nsh(interface-umb0)# apn internet
 .Ic setpin
 .Ar pin
 .Pp
-Set or remove the PIN that unlocks the SIM card of a
+Enter the PIN that unlocks the SIM card of a
 .Xr umb 4
-interface.
-The PIN is kept in the configuration, as typed.
+interface, or remove the kept PIN.
+Once the card unlocks with the PIN, the PIN is kept in the
+configuration, as typed, and boot enters it.
+A PIN is not kept if the card does not unlock with it within five
+seconds, or if the card is unlocked already.
 .Pp
 .Ic setpuk
 .Ar puk new-pin
@@ -5552,6 +5555,12 @@ The PIN is kept in the configuration, as typed.
 Unlock the blocked SIM card of a
 .Xr umb 4
 interface with its PUK, and give the card a new PIN.
+The kept PIN is removed, and once the card unlocks, the new PIN is kept
+in its place.
+In configure private the new PIN is not kept, as commit would enter it
+again; enter it with
+.Ic setpin
+when the card next asks for it.
 .Pp
 .Ic chgpin
 .Ar old-pin new-pin
@@ -5559,6 +5568,12 @@ interface with its PUK, and give the card a new PIN.
 Change the PIN of the SIM card of a
 .Xr umb 4
 interface for good.
+The kept PIN is removed, as the card's answer does not show whether the
+change was made; enter the new PIN with
+.Ic setpin
+when the card next asks for it.
+Save the configuration afterwards, or the saved configuration keeps the
+old PIN for boot to enter.
 .Cm setpuk
 and
 .Cm chgpin

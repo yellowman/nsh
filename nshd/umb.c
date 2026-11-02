@@ -17,6 +17,7 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 #include <util.h>
 
@@ -41,6 +42,13 @@ void	conf_umb_pin(FILE *, char *);
 void	utf16_to_char(uint16_t *, int, char *, size_t);
 int	char_to_utf16(const char *, uint16_t *, size_t);
 static int cand_umb(char *, int, int, char *);
+static int umb_pinstate(int, char *);
+static int umb_unlocked(int, char *);
+static void umb_forgetpin(char *);
+static void umb_keeppin(char *, const char *);
+
+/* how long setpin and setpuk wait for the SIM to unlock, in seconds */
+#define UMB_PIN_WAIT	5
 static const struct umb_valdescr umb_dataclass[] = MBIM_DATACLASS_DESCRIPTIONS;
 const struct umb_valdescr umb_pktstate[] = MBIM_PKTSRV_STATE_DESCRIPTIONS;
 const struct umb_valdescr umb_actstate[] = MBIM_ACTIVATION_STATE_DESCRIPTIONS;
@@ -204,27 +212,159 @@ umb_parse_classes(const char *spec)
 	return c;
 }
 
+/*
+ * setpin: enter the PIN, and store it once the SIM unlocks with it, so
+ * that boot enters only a PIN the SIM has taken. no setpin forgets the
+ * stored PIN.
+ */
 int
 umb_setpin(int ifs, char *ifname, const char *pin)
 {
+	if (pin != NULL) {
+		switch (umb_pinstate(ifs, ifname)) {
+		case -1:
+			printf("%% umb_setpin: SIOCGUMBINFO: %s\n",
+			    strerror(errno));
+			return -1;
+		case UMB_PIN_UNLOCKED:
+			printf("%% The SIM of %s is unlocked already, so the"
+			    " PIN cannot be checked, and is not stored\n",
+			    ifname);
+			return -1;
+		case UMB_PUK_REQUIRED:
+			printf("%% The SIM of %s needs its PUK:"
+			    " setpuk <puk> <newpin>\n", ifname);
+			return -1;
+		}
+	}
 	if (umb_pinop(ifs, ifname, MBIM_PIN_OP_ENTER, 0, pin, NULL) == -1)
 		return -1;
-	db_delete_flag_x_ctl("pin", ifname, 0);
-	if (pin != NULL)
-		db_insert_flag_x("pin", ifname, 0, 0, (char *)pin);
+	if (pin == NULL) {
+		db_delete_flag_x_ctl("pin", ifname, 0);
+		return 0;
+	}
+	if (!umb_unlocked(ifs, ifname)) {
+		printf("%% The SIM of %s did not unlock within %d seconds, so"
+		    " the PIN is not stored\n", ifname, UMB_PIN_WAIT);
+		return -1;
+	}
+	umb_keeppin(ifname, pin);
 	return 0;
 }
 
+/*
+ * chgpin: the SIM answers after the kernel returns, and its answer
+ * does not show whether the change was made, so the stored PIN goes
+ */
 int
 umb_chgpin(int ifs, char *ifname, const char *pin, const char *newpin)
 {
-	return umb_pinop(ifs, ifname, MBIM_PIN_OP_CHANGE, 0, pin, newpin);
+	if (umb_pinop(ifs, ifname, MBIM_PIN_OP_CHANGE, 0, pin, newpin) == -1)
+		return -1;
+	umb_forgetpin(ifname);
+	return 0;
 }
 
+/*
+ * setpuk: the stored PIN goes, and the new PIN is stored once the SIM
+ * unlocks with it. In configure private, commit would enter it again,
+ * so it is not stored there.
+ */
 int
 umb_puk(int ifs, char *ifname, const char *pin, const char *newpin)
 {
-	return umb_pinop(ifs, ifname, MBIM_PIN_OP_ENTER, 1, pin, newpin);
+	switch (umb_pinstate(ifs, ifname)) {
+	case -1:
+		printf("%% umb_puk: SIOCGUMBINFO: %s\n", strerror(errno));
+		return -1;
+	case UMB_PIN_UNLOCKED:
+	case UMB_PIN_REQUIRED:
+		printf("%% The SIM of %s does not need its PUK\n", ifname);
+		return -1;
+	}
+	if (umb_pinop(ifs, ifname, MBIM_PIN_OP_ENTER, 1, pin, newpin) == -1)
+		return -1;
+	umb_forgetpin(ifname);
+	if (!umb_unlocked(ifs, ifname))
+		printf("%% The SIM of %s did not unlock within %d seconds;"
+		    " once it does, setpin stores the new PIN\n", ifname,
+		    UMB_PIN_WAIT);
+	else if (candidate)
+		printf("%% The SIM of %s is unlocked. Configure private does"
+		    " not store the new PIN; enter it with setpin when the"
+		    " SIM next asks for it\n", ifname);
+	else
+		umb_keeppin(ifname, newpin);
+	return 0;
+}
+
+/* The SIM's PIN state from SIOCGUMBINFO, or -1 with errno set */
+static int
+umb_pinstate(int ifs, char *ifname)
+{
+	struct umb_info mi;
+	struct ifreq ifr;
+
+	memset(&mi, 0, sizeof(mi));
+	ifr.ifr_data = (caddr_t)&mi;
+	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
+	if (ioctl(ifs, SIOCGUMBINFO, (caddr_t)&ifr) == -1)
+		return -1;
+	return mi.pin_state;
+}
+
+/*
+ * The kernel passes a PIN or PUK on to the SIM and returns before the
+ * SIM answers. 1 if the SIM unlocks within UMB_PIN_WAIT seconds, else 0.
+ */
+static int
+umb_unlocked(int ifs, char *ifname)
+{
+	struct timespec ts = { 0, 100000000 };
+	int i;
+
+	for (i = 0; i < UMB_PIN_WAIT * 10; i++) {
+		if (umb_pinstate(ifs, ifname) == UMB_PIN_UNLOCKED)
+			return 1;
+		nanosleep(&ts, NULL);
+	}
+	return 0;
+}
+
+/*
+ * After chgpin or setpuk the stored PIN may be the old one, which boot
+ * would enter. It goes from the running configuration, or in configure
+ * private from the candidate.
+ */
+static void
+umb_forgetpin(char *ifname)
+{
+	StringList *pin;
+
+	if (candidate) {
+		if (cand_line("setpin", 0) != NULL) {
+			cand_setting(ST_DEFAULT, "setpin");
+			printf("%% The candidate's setpin line of %s is removed;"
+			    " commit and save, or boot enters the old PIN\n",
+			    ifname);
+		}
+		return;
+	}
+	pin = sl_init();
+	if (db_select_flag_x_ctl(pin, "pin", ifname) >= 0 && pin->sl_cur > 0) {
+		db_delete_flag_x_ctl("pin", ifname, 0);
+		printf("%% The stored PIN of %s is removed; save the"
+		    " configuration, or the saved one keeps it\n", ifname);
+	}
+	sl_free(pin, 1);
+}
+
+/* Store pin, which the SIM has taken, in the running configuration */
+static void
+umb_keeppin(char *ifname, const char *pin)
+{
+	db_delete_flag_x_ctl("pin", ifname, 0);
+	db_insert_flag_x("pin", ifname, 0, 0, (char *)pin);
 }
 
 int
