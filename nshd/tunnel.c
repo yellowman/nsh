@@ -39,6 +39,7 @@ static int tunnel_startttl(char *);
 static int tunnel_rdomain(char *);
 static int tunnel_addr(char *, char *, char *, char *, int *);
 static int tunnel_arg(char *, char *, size_t, char **);
+static int tunnel_mcast(char *);
 static int endpoint_arg(char *, char *, struct sockaddr_storage *, char *);
 static int cand_endpoint(char *, int);
 static int cand_tunnel(char *, int, int, char *, char *, char *, char *,
@@ -221,6 +222,26 @@ inttunnel(int argc, char **argv, ...)
 		printf("%% %s has no destination: use tunneladdr\n", ifname);
 		return -1;
 	}
+	/*
+	 * A source is one host. A destination is a multicast group on
+	 * nvgre, either on vxlan, and one host on the others.
+	 */
+	if (set && src != NULL && tunnel_mcast(src) == 1) {
+		printf("%% a tunnel's source cannot be a multicast group\n");
+		return -1;
+	}
+	if (set && dstip != NULL && isprefix("nvgre", ifname) &&
+	    tunnel_mcast(dstip) == 0) {
+		printf("%% %s's destination must be a multicast group\n",
+		    ifname);
+		return -1;
+	}
+	if (set && dstip != NULL && !isprefix("nvgre", ifname) &&
+	    !isprefix("vxlan", ifname) && tunnel_mcast(dstip) == 1) {
+		printf("%% %s's destination cannot be a multicast group\n",
+		    ifname);
+		return -1;
+	}
 
 	noptind = 0;
 	while ((ch = nopt(argc, argv, tunnelopts)) != -1)
@@ -400,6 +421,25 @@ tunnel_arg(char *arg, char *buf, size_t len, char **port)
 		*port = p;
 	}
 	return is_ip_addr(buf);
+}
+
+/* Is address ip a multicast group? 1 if it is, 0 if not, -1 if no address */
+static int
+tunnel_mcast(char *ip)
+{
+	struct addrinfo *res;
+	int mcast;
+
+	if (getaddrinfo(ip, NULL, NULL, &res) != 0)
+		return -1;
+	if (res->ai_family == AF_INET)
+		mcast = IN_MULTICAST(ntohl(((struct sockaddr_in *)
+		    res->ai_addr)->sin_addr.s_addr));
+	else
+		mcast = IN6_IS_ADDR_MULTICAST(&((struct sockaddr_in6 *)
+		    res->ai_addr)->sin6_addr);
+	freeaddrinfo(res);
+	return mcast != 0;
 }
 
 /*
@@ -764,7 +804,7 @@ cand_endpoint(char *ifname, int af)
 	char line[1024], sbuf[NI_MAXHOST + sizeof(":65535")], *l, *p, *port;
 	char *src, *dst = NULL;
 	struct addrinfo *res;
-	int saf, mcast = 0;
+	int saf, mcast;
 
 	if (af == AF_LINK)
 		return 0;
@@ -791,15 +831,8 @@ cand_endpoint(char *ifname, int af)
 	}
 	if (dst == NULL || !isprefix("vxlan", ifname))
 		return 0;
-	if (getaddrinfo(dst, NULL, NULL, &res) != 0)
+	if ((mcast = tunnel_mcast(dst)) == -1)
 		return -1;
-	if (res->ai_family == AF_INET)
-		mcast = IN_MULTICAST(ntohl(((struct sockaddr_in *)
-		    res->ai_addr)->sin_addr.s_addr));
-	else
-		mcast = IN6_IS_ADDR_MULTICAST(&((struct sockaddr_in6 *)
-		    res->ai_addr)->sin6_addr);
-	freeaddrinfo(res);
 	if (!mcast) {
 		printf("%% %s has one destination: an endpoint needs"
 		    " tunneladdr or a multicast destination\n", ifname);

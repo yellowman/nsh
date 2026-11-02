@@ -5375,6 +5375,9 @@ Set or remove tunnel endpoints with this command, on an interface that
 takes them, such as gif, gre, egre, eoip, etherip, nvgre or vxlan.
 On vxlan, the source may have a UDP port, which vxlan uses at both ends;
 without one, vxlan uses 4789.
+The source is one host, never a multicast group.
+The destination is a multicast group on nvgre, either on vxlan, and one
+host on the others.
 .Cm ttl
 sets the TTL of the packets that carry the tunnel.
 Without it, the tunnel keeps its TTL; a new tunnel's TTL is 64, or 1 on
