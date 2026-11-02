@@ -50,6 +50,7 @@
 #include <limits.h>
 #include "externs.h"
 #include "bridge.h"
+#include "settings.h"
 #include "kernel.h"
 #include "facts.h"
 #include "showfacts.h"
@@ -2898,6 +2899,10 @@ cand_bridge(u_long cmd, void *data)
 	case SIOCBRDGADDS:
 		e = brcfg_add(&b, brdg, req->ifbr_ifsname,
 		    cmd == SIOCBRDGADDS);
+		/* a port's TCP large receive offload goes off */
+		if (e == 0 && cand_ifsetting(req->ifbr_ifsname, ST_DEFAULT,
+		    "tcplro") == -1)
+			e = EINVAL;
 		break;
 	case SIOCBRDGDEL:
 		if ((e = brcfg_findbif(&b, req->ifbr_ifsname, &p)) == 0)

@@ -1059,10 +1059,14 @@ conf_ifxflags(FILE *output, int ifs, char *ifname)
 			fprintf(output, " autoconf6\n");
 		if (ifr.ifr_flags & IFXF_AUTOCONF6TEMP)
 			fprintf(output, " temporary\n");
+		if (ifr.ifr_flags & IFXF_INET6_NOSOII)
+			fprintf(output, " no soii\n");
 		if (ifr.ifr_flags & IFXF_MONITOR)
 			fprintf(output, " monitor\n");
 		if (ifr.ifr_flags & IFXF_WOL)
 			fprintf(output, " wol\n");
+		if (ifr.ifr_flags & IFXF_LRO)
+			fprintf(output, " tcplro\n");
 	}
 }
 

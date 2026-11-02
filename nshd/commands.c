@@ -875,6 +875,8 @@ struct intlist Intlist[] = {
 	{ "autoconfprivacy", "Privacy addresses for IPv6 autoconf", CMPL0 0, 0, intxflags, 1, CAND_EDIT }, /* XXX bkcompat */
 	{ "temporary",	"Temporary addresses for IPv6 autoconf", CMPL0 0, 0, intxflags, 1, CAND_EDIT },
 	{ "monitor",	"Monitor mode for incoming traffic",	CMPL0 0, 0, intxflags, 1, CAND_EDIT },
+	{ "soii",	"Stable IPv6 autoconf addresses (RFC 7217)",	CMPL0 0, 0, intxflags, 1, CAND_EDIT },
+	{ "tcplro",	"TCP large receive offload",		CMPL0 0, 0, intxflags, 1, CAND_EDIT },
 	{ "wgpeer",	"Wireguard peer config",		CMPL0 0, 0, intwgpeer, 1, CAND_EDIT },
 	{ "wgport",	"Wireguard UDP port",			CMPL0 0, 0, intwg, 1, CAND_EDIT },
 	{ "wgkey",	"Wireguard private key",		CMPL0 0, 0, intwg, 1, CAND_EDIT },
@@ -1581,6 +1583,8 @@ static const struct confcmd conf_if[] = {
 	{ "autoconfprivacy",	intxflags },
 	{ "temporary",	intxflags },
 	{ "monitor",	intxflags },
+	{ "soii",	intxflags },
+	{ "tcplro",	intxflags },
 	{ "wgpeer",	intwgpeer },
 	{ "wgport",	intwg },
 	{ "wgkey",	intwg },

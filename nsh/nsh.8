@@ -4871,7 +4871,7 @@ nsh(config)# ip ?
  | syncdev | syncpeer | maxupd | vhid | advbase | advskew | carppass\
  | carpdev | carpnode | carppeer | balancing | pflow |  debug\
  | dhcrelay | wol |  mpls | inet6 | autoconf6\
- | autoconfprivacy | temporary | monitor |  wgpeer | wgport\
+ | autoconfprivacy | temporary | monitor | soii | tcplro | wgpeer | wgport\
  | wgkey |  wgrtable | trunkport | trunkproto | shutdown | show | |\&?\
  | manual | exit
 interface mode commands, are commands that can be applied to a specific
@@ -4954,6 +4954,8 @@ nsh(interface-em0)# ?
   autoconfprivacy  Privacy addresses for IPv6 autoconf
   temporary        Temporary addresses for IPv6 autoconf
   monitor          Monitor mode for incoming traffic
+  soii             Stable IPv6 autoconf addresses (RFC 7217)
+  tcplro           TCP large receive offload
   wgpeer           Wireguard peer config
   wgport           Wireguard UDP port
   wgkey            Wireguard private key
@@ -6285,6 +6287,17 @@ nsh(interface-em0)# autoconf6
 nsh(interface-em0)# autoconfprivacy
 .Ed
 .Pp
+.Tg soii
+.Op no
+.Ic soii
+.Pp
+Make the IPv6 address that autoconf6 forms from a router's prefix stable
+and opaque, as RFC 7217 describes, rather than built from the interface's
+hardware address.
+It is on unless
+.Cm no soii
+turns it off.
+.Pp
 .Tg sensor
 .Tg monitor
 .Tg sniff
@@ -6302,6 +6315,16 @@ nsh(config)# interface em0
 
 nsh(interface-em0)# monitor
 .Ed
+.Pp
+.Tg tcplro
+.Tg lro
+.Op no
+.Ic tcplro
+.Pp
+Turn on TCP large receive offload, which has the hardware join received
+TCP segments into larger packets, on an interface whose hardware has it.
+A bridge's port, or the parent of a vlan, vxlan, bpe or nvgre interface,
+has it turned off, and a bridge's port cannot have it turned on again.
 .Pp
 .Tg wireguard
 .Tg wg

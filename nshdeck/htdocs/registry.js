@@ -202,6 +202,14 @@ var REGISTRY = {
 	    kind: "flag", keyword: "[no] monitor", definition: "Packets " +
 	    "coming in are not processed by the network stack, only seen by " +
 	    "BPF: for sniffing and intrusion detection." },
+	"if.soii": { label: "Stable IPv6 addresses", group: "Link layer",
+	    kind: "noflag", keyword: "[no] soii", definition: "The IPv6 " +
+	    "address autoconf6 forms is stable and opaque (RFC 7217), not " +
+	    "built from the hardware address.", needs: "autoconf6" },
+	"if.tcplro": { label: "TCP LRO", group: "Link layer", kind: "flag",
+	    physical: true, keyword: "[no] tcplro", definition: "The " +
+	    "hardware joins received TCP segments into larger packets; a " +
+	    "bridge's port has it off." },
 	"if.temporary": { label: "IPv6 temporary addresses", group: "Link " +
 	    "layer", kind: "flag", keyword: "[no] temporary",
 	    definition: "Random IPv6 addresses, made beside the " +

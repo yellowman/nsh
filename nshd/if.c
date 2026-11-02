@@ -2600,6 +2600,9 @@ intparent(int argc, char **argv, ...)
 			printf("%% interface %s not found\n", argv[0]);
 			return -1;
 		}
+		/* a parent's TCP large receive offload goes off */
+		if (cand_ifsetting(argv[0], ST_DEFAULT, "tcplro") == -1)
+			return -1;
 		return cand_setting(ST_ON, "parent %s", argv[0]);
 	}
 	if (ioctl_down(ifs, ifname, cmd, &ifp) == -1) {
@@ -2787,7 +2790,7 @@ cand_autoconf4(char *ifname, int set)
 static int
 cand_ifxflags(char *ifname, int value, int set)
 {
-	char *name;
+	char *name, *owner;
 	int was;
 
 	switch (value) {
@@ -2800,8 +2803,28 @@ cand_ifxflags(char *ifname, int value, int set)
 	case IFXF_AUTOCONF6TEMP:
 		name = "temporary";
 		break;
+	case -IFXF_INET6_NOSOII:
+		name = "soii";
+		break;
 	case IFXF_MONITOR:
 		name = "monitor";
+		break;
+	case IFXF_LRO:
+		/* SIOCSIFXFLAGS: ENOTSUP without IFCAP_LRO, EBUSY on a port */
+		if (set && (kf_index(ifname) == 0 ||
+		    !(kf_caps(ifname) & IFCAP_LRO))) {
+			printf("%% %s does not support TCP large receive "
+			    "offload\n", ifname);
+			return -1;
+		}
+		if (set && ((owner = cand_listowner(ifname, "member",
+		    ifname)) != NULL || (owner = cand_listowner(ifname, "span",
+		    ifname)) != NULL)) {
+			printf("%% %s is a port of %s, which turns its TCP "
+			    "large receive offload off\n", ifname, owner);
+			return -1;
+		}
+		name = "tcplro";
 		break;
 	case IFXF_WOL:
 		/* SIOCSIFXFLAGS: ENOTSUP without IFCAP_WOL */
@@ -2851,6 +2874,11 @@ intxflags(int argc, char **argv, ...)
 		value = IFXF_AUTOCONF6TEMP;
 	} else if (isprefix(argv[0], "monitor")) {
 		value = IFXF_MONITOR;
+	} else if (isprefix(argv[0], "soii")) {
+		/* soii is on unless IFXF_INET6_NOSOII is */
+		value = -IFXF_INET6_NOSOII;
+	} else if (isprefix(argv[0], "tcplro")) {
+		value = IFXF_LRO;
 	} else if (isprefix(argv[0], "autoconf4")) {
 		if (candidate)
 			return cand_autoconf4(ifname, set);
@@ -2874,6 +2902,12 @@ intxflags(int argc, char **argv, ...)
 		return cand_ifxflags(ifname, value, set);
 
 	flags = get_ifxflags(ifname, ifs);
+	/* a pseudo interface would turn its parent's on: set that one */
+	if (value == IFXF_LRO && set && (flags & IFXF_CLONED)) {
+		printf("%% %s does not support TCP large receive offload\n",
+		    ifname);
+		return -1;
+	}
 	if (value < 0) {
 		if (set) {
 			value = -value;
