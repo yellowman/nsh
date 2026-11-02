@@ -39,6 +39,8 @@ static int tunnel_startttl(char *);
 static int tunnel_rdomain(char *);
 static int tunnel_addr(char *, char *, char *, char *, int *);
 static int tunnel_arg(char *, char *, size_t, char **);
+static int endpoint_arg(char *, char *, struct sockaddr_storage *, char *);
+static int cand_endpoint(char *, int);
 static int cand_tunnel(char *, int, int, char *, char *, char *, char *,
     char *, int, int);
 
@@ -562,12 +564,20 @@ intcache(int argc, char **argv, ...)
 	return 0;
 }
 
-/* maxaddr and timeout, each unless it is what the kernel starts with */
+/*
+ * maxaddr and timeout, each unless it is what the kernel starts with,
+ * then each endpoint
+ */
 void
 conf_cache(FILE *output, int ifs, char *ifname)
 {
 	const struct cachec *x;
 	struct ifbrparam bp;
+	struct ifbaconf ifbac;
+	struct ifbareq *ifba;
+	struct sockaddr_dl *sdl;
+	char *buf = NULL, *nb, ep[NI_MAXHOST];
+	size_t i, len = 8192;
 	long long val;
 
 	for (x = cachecs; x->name != NULL; x++) {
@@ -580,6 +590,220 @@ conf_cache(FILE *output, int ifs, char *ifname)
 		if (val != x->start)
 			fprintf(output, " %s %lld\n", x->name, val);
 	}
+
+	/* the addresses learned, as many as the kernel has */
+	for (;;) {
+		if ((nb = realloc(buf, len)) == NULL) {
+			printf("%% conf_cache: %s\n", strerror(errno));
+			free(buf);
+			return;
+		}
+		buf = nb;
+		memset(&ifbac, 0, sizeof(ifbac));
+		strlcpy(ifbac.ifbac_name, ifname, sizeof(ifbac.ifbac_name));
+		ifbac.ifbac_len = len;
+		ifbac.ifbac_buf = buf;
+		if (ioctl(ifs, SIOCBRDGRTS, &ifbac) == -1) {
+			free(buf);
+			return;
+		}
+		if (ifbac.ifbac_len + sizeof(*ifba) < len)
+			break;
+		len *= 2;
+	}
+	/* the static ones are endpoint lines */
+	for (i = 0; i < ifbac.ifbac_len / sizeof(*ifba); i++) {
+		ifba = ifbac.ifbac_req + i;
+		if (!(ifba->ifba_flags & IFBAF_STATIC))
+			continue;
+		if (ifba->ifba_dstsa.ss_family == AF_LINK) {
+			/* bpe's: a backbone bridge's MAC address */
+			sdl = (struct sockaddr_dl *)&ifba->ifba_dstsa;
+			strlcpy(ep, ether_ntoa((struct ether_addr *)
+			    LLADDR(sdl)), sizeof(ep));
+		} else if (getnameinfo((struct sockaddr *)&ifba->ifba_dstsa,
+		    ifba->ifba_dstsa.ss_len, ep, sizeof(ep), NULL, 0,
+		    NI_NUMERICHOST) != 0)
+			continue;
+		fprintf(output, " endpoint %s", ether_ntoa(&ifba->ifba_dst));
+		fprintf(output, " %s\n", ep);
+	}
+	free(buf);
+}
+
+/*
+ * endpoint: a static entry of the addresses bpe, nvgre and vxlan learn,
+ * the tunnel endpoint where a MAC address is. nvgre's and vxlan's are
+ * hosts of the tunnel's family, and bpe's are the MAC addresses of
+ * backbone bridges.
+ */
+int
+intendpoint(int argc, char **argv, ...)
+{
+	struct ifbareq ifba;
+	struct ether_addr *ea;
+	char mac[sizeof("00:00:00:00:00:00")], ep[NI_MAXHOST];
+	va_list ap;
+	char *ifname;
+	int ifs, set;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
+
+	if (NO_ARG(argv[0])) {
+		set = 0;
+		argc--;
+		argv++;
+	} else
+		set = 1;
+
+	argc--;
+	argv++;
+
+	if ((set && argc != 2) || (!set && (argc < 1 || argc > 2))) {
+		printf("%% endpoint <mac address> <endpoint>\n");
+		printf("%% no endpoint <mac address> [endpoint]\n");
+		return -1;
+	}
+	if (!cand_takes(ifname, SIOCBRDGSADDR)) {
+		printf("%% endpoint not supported on %s\n", ifname);
+		return -1;
+	}
+	if ((ea = ether_aton(argv[0])) == NULL) {
+		printf("%% Invalid MAC address %s\n", argv[0]);
+		return -1;
+	}
+	strlcpy(mac, ether_ntoa(ea), sizeof(mac));
+	memset(&ifba, 0, sizeof(ifba));
+	strlcpy(ifba.ifba_name, ifname, sizeof(ifba.ifba_name));
+	memcpy(&ifba.ifba_dst, ea, sizeof(ifba.ifba_dst));
+	if (set && endpoint_arg(ifname, argv[1], &ifba.ifba_dstsa, ep) == -1)
+		return -1;
+
+	if (candidate) {
+		if (!set)
+			return cand_setting(ST_OFF, "endpoint %s", mac);
+		if (cand_endpoint(ifname, ifba.ifba_dstsa.ss_family) == -1)
+			return -1;
+		return cand_setting(ST_ON, "endpoint %s %s", mac, ep);
+	}
+
+	ifba.ifba_flags = IFBAF_STATIC;
+	if (ioctl(ifs, set ? SIOCBRDGSADDR : SIOCBRDGDADDR, &ifba) == -1) {
+		printf("%% endpoint %s: %s\n", mac, strerror(errno));
+		return -1;
+	}
+	return 0;
+}
+
+/*
+ * An endpoint as a command gives it: on bpe, a MAC address, else one
+ * host's address. Fills in ss, and buf (NI_MAXHOST) as conf_cache()
+ * prints it. -1 after saying why not.
+ */
+static int
+endpoint_arg(char *ifname, char *arg, struct sockaddr_storage *ss, char *buf)
+{
+	struct sockaddr_dl *sdl = (struct sockaddr_dl *)ss;
+	struct sockaddr_in *sin = (struct sockaddr_in *)ss;
+	struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)ss;
+	struct ether_addr *ea;
+	struct addrinfo *res;
+	int ecode;
+
+	memset(ss, 0, sizeof(*ss));
+	if (isprefix("bpe", ifname)) {
+		if ((ea = ether_aton(arg)) == NULL) {
+			printf("%% Invalid MAC address %s\n", arg);
+			return -1;
+		}
+		sdl->sdl_len = sizeof(*sdl);
+		sdl->sdl_family = AF_LINK;
+		sdl->sdl_type = IFT_ETHER;
+		sdl->sdl_alen = ETHER_ADDR_LEN;
+		memcpy(LLADDR(sdl), ea, ETHER_ADDR_LEN);
+		strlcpy(buf, ether_ntoa(ea), NI_MAXHOST);
+		return 0;
+	}
+	if ((ecode = getaddrinfo(arg, NULL, NULL, &res)) != 0) {
+		printf("%% unable to parse endpoint %s: %s\n", arg,
+		    gai_strerror(ecode));
+		return -1;
+	}
+	memcpy(ss, res->ai_addr, MIN(res->ai_addrlen, sizeof(*ss)));
+	freeaddrinfo(res);
+	if ((ss->ss_family == AF_INET &&
+	    (sin->sin_addr.s_addr == INADDR_ANY ||
+	    IN_MULTICAST(ntohl(sin->sin_addr.s_addr)))) ||
+	    (ss->ss_family == AF_INET6 &&
+	    (IN6_IS_ADDR_UNSPECIFIED(&sin6->sin6_addr) ||
+	    IN6_IS_ADDR_MULTICAST(&sin6->sin6_addr)))) {
+		printf("%% endpoint %s is not one host\n", arg);
+		return -1;
+	}
+	if (getnameinfo((struct sockaddr *)ss, ss->ss_len, buf, NI_MAXHOST,
+	    NULL, 0, NI_NUMERICHOST) != 0) {
+		printf("%% endpoint %s: getnameinfo failure\n", arg);
+		return -1;
+	}
+	return 0;
+}
+
+/*
+ * Does the candidate's tunnel take an endpoint of family af? nvgre's and
+ * vxlan's tunnel must be of af, and vxlan's must have no destination, or
+ * a multicast group as one. 0, or -1 after saying why not.
+ */
+static int
+cand_endpoint(char *ifname, int af)
+{
+	char line[1024], sbuf[NI_MAXHOST + sizeof(":65535")], *l, *p, *port;
+	char *src, *dst = NULL;
+	struct addrinfo *res;
+	int saf, mcast = 0;
+
+	if (af == AF_LINK)
+		return 0;
+	if ((l = cand_line("tunneladdr", 0)) == NULL &&
+	    (l = cand_line("tunnel", 0)) == NULL) {
+		printf("%% %s has no tunnel for an endpoint\n", ifname);
+		return -1;
+	}
+	strlcpy(line, l, sizeof(line));
+	if (strcmp(strtok_r(line, " ", &p), "tunnel") == 0) {
+		src = strtok_r(NULL, " ", &p);
+		dst = strtok_r(NULL, " ", &p);
+	} else
+		src = strtok_r(NULL, " ", &p);
+	if (src == NULL || !tunnel_arg(src, sbuf, sizeof(sbuf), &port) ||
+	    getaddrinfo(sbuf, NULL, NULL, &res) != 0)
+		return -1;
+	saf = res->ai_family;
+	freeaddrinfo(res);
+	if (af != saf) {
+		printf("%% endpoint and tunnel address families do not"
+		    " match\n");
+		return -1;
+	}
+	if (dst == NULL || !isprefix("vxlan", ifname))
+		return 0;
+	if (getaddrinfo(dst, NULL, NULL, &res) != 0)
+		return -1;
+	if (res->ai_family == AF_INET)
+		mcast = IN_MULTICAST(ntohl(((struct sockaddr_in *)
+		    res->ai_addr)->sin_addr.s_addr));
+	else
+		mcast = IN6_IS_ADDR_MULTICAST(&((struct sockaddr_in6 *)
+		    res->ai_addr)->sin6_addr);
+	freeaddrinfo(res);
+	if (!mcast) {
+		printf("%% %s has one destination: an endpoint needs"
+		    " tunneladdr or a multicast destination\n", ifname);
+		return -1;
+	}
+	return 0;
 }
 
 /* A tunnel's rdomain, or -1 after saying why not */

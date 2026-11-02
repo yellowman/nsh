@@ -26,7 +26,8 @@
  *    candidate sets the same setting another way, with its own line;
  *  * a list loses the values the candidate's line does not have;
  *  * an interface's addresses are added again after a new rdomain,
- *    which removed them;
+ *    which removed them, and its endpoints after a new tunnel,
+ *    tunneladdr, tunneldomain, vnetid or parent, which removed them;
  *  * a cloned interface is removed whole, and a physical one line by
  *    line;
  *  * a daemon's state is removed with its disable, and its rules by
@@ -195,6 +196,7 @@ static int has(struct cnode *, char *, char *);
 static int samelines(struct cnode *, char *, struct cnode *, char *);
 static int sameline(struct cnode *, char *, struct cnode *, char *, char *);
 static int address(char *);
+static int endpoint(char *);
 static int context(char *);
 static int rtableid(char *);
 static int ifblock(char *, char *, size_t);
@@ -1224,7 +1226,7 @@ additions(struct commit *c, char *fblock, char *tblock, int there,
 	struct sub s;
 	char *l, *f, *fp = NULL, *tp = NULL, *k, name[IFNAMSIZ], dname[32];
 	size_t n, i, j;
-	int moved, ret = -1;
+	int moved, flushed, ret = -1;
 
 	if (ranked(c->to, tblock, &r, &n) == -1)
 		return -1;
@@ -1267,10 +1269,21 @@ additions(struct commit *c, char *fblock, char *tblock, int there,
 			/* a new rdomain removed the addresses, so add them */
 			moved = f != NULL && context(tp) == CTX_IF &&
 			    !sameline(c->from, fp, c->to, tp, "rdomain");
+			/*
+			 * a new tunnel, tunneldomain, vnetid or parent removed
+			 * the endpoints, so add them
+			 */
+			flushed = f != NULL && context(tp) == CTX_IF &&
+			    (!sameline(c->from, fp, c->to, tp, "tunnel") ||
+			    !sameline(c->from, fp, c->to, tp, "tunneladdr") ||
+			    !sameline(c->from, fp, c->to, tp, "tunneldomain") ||
+			    !sameline(c->from, fp, c->to, tp, "vnetid") ||
+			    !sameline(c->from, fp, c->to, tp, "parent"));
 			for (j = 0; (k = conftree_line(c->to, tp, NULL, j)) !=
 			    NULL; j++)
 				if (f == NULL || !has(c->from, fp, k) ||
-				    (moved && address(k)))
+				    (moved && address(k)) ||
+				    (flushed && endpoint(k)))
 					set(c, fp, f != NULL, context(tp), k);
 			sub_end(c, &s, in, l, f == NULL);
 		} else if (ctl_line(l, dname, sizeof(dname)) == CTL_FOLLOW) {
@@ -1607,6 +1620,13 @@ static int
 address(char *line)
 {
 	return strncmp(line, "inet ", 5) == 0;
+}
+
+/* Is line an interface's endpoint? */
+static int
+endpoint(char *line)
+{
+	return strncmp(line, "endpoint ", 9) == 0;
 }
 
 /* The settings table's context for the lines under block, or -1 */

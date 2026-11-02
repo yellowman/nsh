@@ -257,6 +257,15 @@ var REGISTRY = {
 	    on: ["bpe", "nvgre", "vxlan"], keyword: "timeout seconds",
 	    definition: "Seconds a learned address is kept after it was " +
 	    "last seen.", default: "240" },
+	"if.endpoint": { label: "Endpoints", group: "VLAN and tunnel",
+	    kind: "lines", placeholder: "00:11:22:33:44:55 198.51.100.7",
+	    on: ["bpe", "nvgre", "vxlan"], keyword: "endpoint mac-address " +
+	    "endpoint", definition: "The tunnel endpoint where a MAC address " +
+	    "is, kept beside the addresses the interface learns: on nvgre " +
+	    "and vxlan a host of the tunnel's family, and on bpe a backbone " +
+	    "bridge's MAC address.", values: "a MAC address, then its " +
+	    "endpoint, a line each", default: "none", needs: "tunnel or " +
+	    "tunneladdr, on nvgre and vxlan" },
 	"if.tunneldomain": { label: "Tunnel routing domain", group: "VLAN " +
 	    "and tunnel", kind: "number", min: 0, max: 255,
 	    on: TUNNELS.concat(MPLSIFS), keyword: "tunneldomain rdomain",

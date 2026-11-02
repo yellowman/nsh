@@ -450,6 +450,7 @@ int show_bridges(int, char **, ...);
 int inttunnel(int, char **, ...);
 int intvnetid(int, char **, ...);
 int intcache(int, char **, ...);
+int intendpoint(int, char **, ...);
 void conf_cache(FILE *, int, char *);
 int get_physrtable(int, char *);
 int get_physttl(int, char *);

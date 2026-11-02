@@ -113,6 +113,7 @@ static const struct setting if_settings[] = {
 	{ "tunneldomain",	S_VALUE },
 	{ "maxaddr",		S_VALUE },
 	{ "timeout",		S_VALUE },
+	{ "endpoint",		S_ENTRY,	2 },
 	{ "mtu",		S_VALUE },
 	{ "metric",		S_VALUE },
 	{ "priority",		S_VALUE },

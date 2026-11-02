@@ -4743,7 +4743,7 @@ nsh(config)# ip ?
  | rtlabel | priority| llpriority | mtu | metric | link | arp | lladdr | nwid\
  | nwkey | powersave | txpower | bssid | media | mediaopt | auth | peer\
  | pppoe | tunnel | tunneladdr | tunneldomain | maxaddr | timeout\
- | txprio | rxprio | vnetid\
+ | endpoint | txprio | rxprio | vnetid\
  | vnetflowid | parent | patch | keepalive | mplslabel | pwe\
  | syncdev | syncpeer | maxupd | vhid | advbase | advskew | carppass\
  | carpdev | carpnode | carppeer | balancing | pflow |  debug\
@@ -4789,6 +4789,7 @@ nsh(interface-em0)# ?
   tunneldomain     Tunnel routing domain for transit
   maxaddr          Maximum address cache size
   timeout          Address cache timeout
+  endpoint         Tunnel endpoint of a MAC address
   txprio           Priority in tunnel protocol headers
   rxprio           Source used for packet priority
   vnetid           Virtual interface network identifier
@@ -5441,6 +5442,31 @@ Without it, the interface learns 100.
 On bpe, nvgre and vxlan, set the seconds a learned address is kept after
 it was last seen.
 Without it, the interface keeps them 240 seconds.
+.Pp
+.Op no
+.Ic endpoint
+.Ar mac-address endpoint
+.Pp
+On bpe, nvgre and vxlan, set or remove the tunnel endpoint where
+.Ar mac-address
+is, which the interface keeps beside the addresses it learns.
+On nvgre and vxlan, the endpoint is a host's address of the tunnel's
+family; on vxlan, the tunnel needs no destination
+.Pq Ic tunneladdr
+or a multicast group as its destination.
+On bpe, the endpoint is the MAC address of a backbone bridge.
+A new
+.Ic tunnel ,
+.Ic tunneladdr ,
+.Ic tunneldomain ,
+.Ic vnetid
+or
+.Ic parent
+removes the endpoints from the kernel, and commit adds them again.
+.Bd -literal -offset indent
+nsh(interface-vxlan0)# tunneladdr 192.0.2.1
+nsh(interface-vxlan0)# endpoint 00:11:22:33:44:55 198.51.100.7
+.Ed
 .Pp
 .Op no
 .Cm txprio Op Ar 0-7 | packet | payload
