@@ -74,7 +74,7 @@ static int
 cand_trunkport(char *ifname, int set, int argc, char **argv)
 {
 	char ports[1024], *l, *w, *p;
-	int i, n = 0, aggr = strncmp(ifname, "aggr", strlen("aggr")) == 0;
+	int i, busy, n = 0, aggr = strncmp(ifname, "aggr", strlen("aggr")) == 0;
 
 	if (!cand_takes(ifname, SIOCSTRUNKPORT)) {
 		printf("%% %s not trunk\n", ifname);
@@ -100,15 +100,17 @@ cand_trunkport(char *ifname, int set, int argc, char **argv)
 			    strerror(EINVAL));
 			return -1;
 		}
-		if (cand_gettype(argv[i]) != IFT_ETHER) {
+		/* a port of any trunk, and for aggr of a bridge (EBUSY) */
+		busy = in_list(cand_line("trunkport", 0), argv[i]) ||
+		    cand_listowner(ifname, "trunkport", argv[i]) != NULL ||
+		    (aggr && cand_listowner(ifname, "member", argv[i]));
+		/* trunk_port_create() checks the type after EBUSY */
+		if ((aggr || !busy) && cand_gettype(argv[i]) != IFT_ETHER) {
 			printf("%% inttrunkport: SIOCSTRUNKPORT: %s\n",
 			    strerror(EPROTONOSUPPORT));
 			return -1;
 		}
-		/* a port of any trunk, and for aggr of a bridge (EBUSY) */
-		if (in_list(cand_line("trunkport", 0), argv[i]) ||
-		    cand_listowner(ifname, "trunkport", argv[i]) != NULL ||
-		    (aggr && cand_listowner(ifname, "member", argv[i]))) {
+		if (busy) {
 			printf("%% Failed (port %s already assigned to a trunk"
 			    " group)\n", argv[i]);
 			return -1;

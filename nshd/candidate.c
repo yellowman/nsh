@@ -51,6 +51,7 @@
 #include <sys/param.h>
 #include <sys/socket.h>
 #include <net/if.h>
+#include <net/if_types.h>
 #include <netinet/in.h>
 #include <limits.h>
 #include <stdarg.h>
@@ -557,8 +558,17 @@ cand_gettype(char *name)
 {
 	const struct kcloner *kc;
 
-	if (kf_index(name) != 0)
+	if (kf_index(name) != 0) {
+		/*
+		 * A trunk port is IFT_IEEE8023ADLAG while it is in its trunk,
+		 * and IFT_ETHER again once it leaves. Commit takes ports out
+		 * of trunks before it adds them anywhere.
+		 */
+		if (kf_type(name) == IFT_IEEE8023ADLAG &&
+		    cand_listowner(name, "trunkport", name) == NULL)
+			return IFT_ETHER;
 		return kf_type(name);
+	}
 	return (kc = cand_cloner(name)) != NULL ? kc->type : 0;
 }
 
