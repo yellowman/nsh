@@ -72,7 +72,7 @@ my @drv = qw(SIOCSLIFPHYADDR SIOCDIFPHYADDR SIOCSLIFPHYRTABLE
     SIOCBRDGSPRI SIOCBRDGSHT SIOCBRDGSFD SIOCBRDGSMA SIOCBRDGSIFPRIO
     SIOCBRDGSIFCOST SIOCBRDGSADDR SIOCBRDGDADDR SIOCBRDGARL SIOCBRDGSIFPROT
     SIOCBRDGSPVID SIOCBRDGSVMAP SIOCBRDGADDPV SIOCBRDGDELPV
-    SIOCBRDGSVADDR SIOCBRDGDVADDR);
+    SIOCBRDGSVADDR SIOCBRDGDVADDR SIOCBRDGSTXHC SIOCBRDGSPROTO);
 my %drv = map { $_ => 1 } @drv;
 
 # Values the kernel checks or reports that no header userland includes
@@ -99,6 +99,10 @@ my @limits = (
 	    'BSTP_MAX_FORWARD_DELAY' ],
 	[ 'kern_bstp_min_max_age', 'net/bridgestp.c', 'BSTP_MIN_MAX_AGE' ],
 	[ 'kern_bstp_max_max_age', 'net/bridgestp.c', 'BSTP_MAX_MAX_AGE' ],
+	[ 'kern_bstp_min_hold_count', 'net/bridgestp.c',
+	    'BSTP_MIN_HOLD_COUNT' ],
+	[ 'kern_bstp_max_hold_count', 'net/bridgestp.c',
+	    'BSTP_MAX_HOLD_COUNT' ],
 	[ 'kern_bstp_priority_step', 'net/bridgestp.c',
 	    case_finds('SIOCBRDGSPRI', 'val -= val % (\d+);'),
 	    'what SIOCBRDGSPRI rounds down to' ],

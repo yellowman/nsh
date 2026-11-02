@@ -438,6 +438,7 @@ int is_bridge(int, char *);
 int bridge_learns(int, char *);
 int brport(int, char **, ...);
 int brval(int, char **, ...);
+int brproto(int, char **, ...);
 int brrule(int, char **, ...);
 int brstatic(int, char **, ...);
 int brpri(int, char **, ...);

@@ -65,6 +65,7 @@ int 	bridge_maxage(int, char *, u_int32_t);
 int 	bridge_priority(int, char *, u_int32_t);
 int 	bridge_fwddelay(int, char *, u_int32_t);
 int 	bridge_hellotime(int, char *, u_int32_t);
+int 	bridge_holdcnt(int, char *, u_int32_t);
 int 	bridge_ifprio(int, char *, char *, int);
 int 	bridge_ifcost(int, char *, char *, int);
 int 	bridge_timeout(int, char *, int);
@@ -97,10 +98,16 @@ static void brvlan_print(FILE *, const u_int8_t *);
 #define BRPORT_LEARN 4
 #define BRPORT_STP 5
 #define BRPORT_PVPTAGS 6
+#define BRPORT_FLAG 7
+
+/* the spanning tree's flags of a member */
+#define BSTP_FLAGS (IFBIF_BSTP_EDGE | IFBIF_BSTP_AUTOEDGE | IFBIF_BSTP_PTP | \
+    IFBIF_BSTP_AUTOPTP)
 
 struct brc {
 	char *name;
 	int type;
+	u_int32_t flag;		/* BRPORT_FLAG's */
 };
 
 struct brd {
@@ -117,6 +124,11 @@ static struct brc brps[] = {
 	{ "learning",	BRPORT_LEARN },
 	{ "stp",	BRPORT_STP },
 	{ "pvptags",	BRPORT_PVPTAGS },
+	{ "locked",	BRPORT_FLAG,	IFBIF_LOCKED },
+	{ "edge",	BRPORT_FLAG,	IFBIF_BSTP_EDGE },
+	{ "autoedge",	BRPORT_FLAG,	IFBIF_BSTP_AUTOEDGE },
+	{ "ptp",	BRPORT_FLAG,	IFBIF_BSTP_PTP },
+	{ "autoptp",	BRPORT_FLAG,	IFBIF_BSTP_AUTOPTP },
 	{ 0,		0 }
 };
 
@@ -158,8 +170,15 @@ brport(int argc, char **argv, ...)
 		printf("%% no %s <if> [if]...\n", x->name);
 		return -1;
 	}
-	/* a veb's private VLANs */
-	if (x->type == BRPORT_PVPTAGS && !cand_takes(ifname, SIOCBRDGADDPV)) {
+	/* a veb's private VLANs, and locked */
+	if ((x->type == BRPORT_PVPTAGS || x->flag == IFBIF_LOCKED) &&
+	    !cand_takes(ifname, SIOCBRDGADDPV)) {
+		printf("%% %s not supported on %s\n", x->name, ifname);
+		return -1;
+	}
+	/* bridge's spanning tree */
+	if ((x->type == BRPORT_STP || (x->flag & BSTP_FLAGS)) &&
+	    !cand_takes(ifname, SIOCBRDGSIFPRIO)) {
 		printf("%% %s not supported on %s\n", x->name, ifname);
 		return -1;
 	}
@@ -229,6 +248,14 @@ brport(int argc, char **argv, ...)
 				e = bridge_ifclrflag(ifs, ifname, argv[i],
 				    IFBIF_PVLAN_PTAGS);
 			break;
+		case BRPORT_FLAG:
+			if (set)
+				e = bridge_ifsetflag(ifs, ifname, argv[i],
+				    x->flag);
+			else
+				e = bridge_ifclrflag(ifs, ifname, argv[i],
+				    x->flag);
+			break;
 		}
 		if (e != 0)
 			r = -1;
@@ -243,6 +270,7 @@ brport(int argc, char **argv, ...)
 #define BRVAL_FWDDELAY 3
 #define BRVAL_HELLOTIME 4
 #define BRVAL_PRIORITY 5
+#define BRVAL_HOLDCNT 6
 
 static struct brc brvs[] = {
 	{ "maxaddr",	BRVAL_MAXADDR },
@@ -251,6 +279,7 @@ static struct brc brvs[] = {
 	{ "fwddelay",	BRVAL_FWDDELAY },
 	{ "hellotime",	BRVAL_HELLOTIME },
 	{ "priority",	BRVAL_PRIORITY },
+	{ "holdcnt",	BRVAL_HOLDCNT },
         { 0,            0 }
 };
 
@@ -358,9 +387,70 @@ brval(int argc, char **argv, ...)
 		else
 			e = bridge_priority(ifs, ifname, DEFAULT_PRIORITY);
 		break;
+	case BRVAL_HOLDCNT:
+		if (!cand_takes(ifname, SIOCBRDGSTXHC)) {
+			printf("%% holdcnt not supported on %s\n", ifname);
+			return -1;
+		}
+		if (set && (val < kern_bstp_min_hold_count ||
+		    val > kern_bstp_max_hold_count)) {
+			printf("%% holdcnt must be %d to %d\n",
+			    kern_bstp_min_hold_count, kern_bstp_max_hold_count);
+			return -1;
+		}
+		e = bridge_holdcnt(ifs, ifname, set ? val : DEFAULT_HOLDCNT);
+		break;
 	}
 
 	return e == 0 ? 0 : -1;
+}
+
+/* proto stp|rstp: the protocol of a bridge's spanning tree */
+int
+brproto(int argc, char **argv, ...)
+{
+	struct ifbrparam bp;
+	va_list ap;
+	char *ifname;
+	int ifs, set;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
+
+	if (NO_ARG(argv[0])) {
+		set = 0;
+		argv++;
+		argc--;
+	} else
+		set = 1;
+	argv++;
+	argc--;
+
+	memset(&bp, 0, sizeof(bp));
+	strlcpy(bp.ifbrp_name, ifname, sizeof(bp.ifbrp_name));
+	if (!set && argc <= 1)
+		bp.ifbrp_proto = kern_bstp_protover;
+	else if (argc == 1 && isprefix(argv[0], "stp"))
+		bp.ifbrp_proto = BSTP_PROTO_STP;
+	else if (argc == 1 && isprefix(argv[0], "rstp"))
+		bp.ifbrp_proto = BSTP_PROTO_RSTP;
+	else {
+		printf("%% proto stp|rstp\n");
+		printf("%% no proto\n");
+		return -1;
+	}
+	if (!cand_takes(ifname, SIOCBRDGSPROTO)) {
+		printf("%% proto not supported on %s\n", ifname);
+		return -1;
+	}
+	if (br_ioctl(ifs, SIOCBRDGSPROTO, &bp) < 0) {
+		printf("%% unable to set proto: SIOCBRDGSPROTO: %s\n",
+		    strerror(errno));
+		return -1;
+	}
+	return 0;
 }
 
 int
@@ -643,7 +733,18 @@ bridge_ifsetflag(int s, char *brdg, char *ifsname, u_int32_t flag)
 		return (EX_IOERR);
 	}
 
+	if ((flag & BSTP_FLAGS) && !(req.ifbr_ifsflags & IFBIF_STP)) {
+		printf("%% %s does not have stp on %s\n", ifsname, brdg);
+		return (EX_IOERR);
+	}
 	req.ifbr_ifsflags |= flag;
+	/* veb refuses a locked port that learns or discovers */
+	if ((req.ifbr_ifsflags & IFBIF_LOCKED) &&
+	    (req.ifbr_ifsflags & (IFBIF_LEARNING | IFBIF_DISCOVER))) {
+		printf("%% %s cannot be locked and also learn or discover "
+		    "on %s\n", ifsname, brdg);
+		return (EX_IOERR);
+	}
 
 	if (br_ioctl(s, SIOCBRDGSIFFLGS, (caddr_t)&req) < 0) {
 		printf("%% cannot set flags for %s on %s: %s\n", ifsname, brdg,
@@ -670,6 +771,10 @@ bridge_ifclrflag(int s, char *brdg, char *ifsname, u_int32_t flag)
 		return (EX_IOERR);
 	}
 
+	if ((flag & BSTP_FLAGS) && !(req.ifbr_ifsflags & IFBIF_STP)) {
+		printf("%% %s does not have stp on %s\n", ifsname, brdg);
+		return (EX_IOERR);
+	}
 	req.ifbr_ifsflags &= ~flag;
 
 	if (br_ioctl(s, SIOCBRDGSIFFLGS, (caddr_t)&req) < 0) {
@@ -772,6 +877,7 @@ bridge_flush(int s, char *brdg)
 long
 bridge_cfg(int s, char *brdg, int type)
 {
+	struct ifbropreq ifbop;
 	struct ifbrparam ifbp;
 	long val = 0;
 
@@ -836,6 +942,19 @@ bridge_cfg(int s, char *brdg, int type)
 			return (-1);
 		}
 		val = ifbp.ifbrp_ctime;
+		break;
+
+	case HOLDCNT:
+	case PROTO:
+		strlcpy(ifbop.ifbop_name, brdg, sizeof(ifbop.ifbop_name));
+		if (ioctl(s, SIOCBRDGGPARAM, (caddr_t)&ifbop) < 0) {
+			if (errno != ENOTTY)
+				printf("%% bridge_cfg: SIOCBRDGGPARAM: %s\n",
+				    strerror(errno));
+			return (-1);
+		}
+		val = type == HOLDCNT ? ifbop.ifbop_holdcount :
+		    ifbop.ifbop_protocol;
 		break;
 	}
 
@@ -1099,6 +1218,21 @@ bridge_hellotime(int s, char *brdg, u_int32_t val)
 	}
 	return (0);
 
+}
+
+int
+bridge_holdcnt(int s, char *brdg, u_int32_t val)
+{
+	struct ifbrparam bp;
+
+	strlcpy(bp.ifbrp_name, brdg, sizeof(bp.ifbrp_name));
+	bp.ifbrp_txhc = val;
+	if (br_ioctl(s, SIOCBRDGSTXHC, (caddr_t)&bp) < 0) {
+		printf("%% unable to set holdcnt: SIOCBRDGSTXHC: %s\n",
+		    strerror(errno));
+		return (EX_IOERR);
+	}
+	return (0);
 }
 
 int
@@ -2131,7 +2265,8 @@ struct brline {
 };
 
 struct brcfg {
-	long val[TIMEOUT + 1];	/* by PRIORITY to TIMEOUT, -1 for none */
+	long val[HOLDCNT + 1];	/* by PRIORITY to HOLDCNT, -1 for none */
+	long proto;		/* BSTP_PROTO_*, or -1 for none */
 	struct brport *ports;
 	size_t nports;
 	struct brline *statics, *rules;
@@ -2145,13 +2280,14 @@ struct brcfg {
 static const struct {
 	char *name;
 	long def;
-} brvals[] = {		/* by PRIORITY to TIMEOUT */
+} brvals[] = {		/* by PRIORITY to HOLDCNT */
 	{ "priority",	DEFAULT_PRIORITY },
 	{ "hellotime",	DEFAULT_HELLOTIME },
 	{ "fwddelay",	DEFAULT_FWDDELAY },
 	{ "maxage",	DEFAULT_MAXAGE },
 	{ "maxaddr",	DEFAULT_MAXADDR },
 	{ "timeout",	DEFAULT_TIMEOUT },
+	{ "holdcnt",	DEFAULT_HOLDCNT },
 };
 
 /* Port lists: members that have flag and lack without, or span ports */
@@ -2166,6 +2302,12 @@ static const struct {
 	{ "no discover", 0,			IFBIF_DISCOVER },
 	{ "blocknonip",	 IFBIF_BLOCKNONIP,	0 },
 	{ "pvptags",	 IFBIF_PVLAN_PTAGS,	0 },
+	{ "locked",	 IFBIF_LOCKED,		0 },
+	/* with autoedge or autoptp on, the bridge sets edge or ptp itself */
+	{ "no autoedge", IFBIF_STP,		IFBIF_BSTP_AUTOEDGE },
+	{ "edge",	 IFBIF_STP | IFBIF_BSTP_EDGE, IFBIF_BSTP_AUTOEDGE },
+	{ "no autoptp",	 IFBIF_STP,		IFBIF_BSTP_AUTOPTP },
+	{ "ptp",	 IFBIF_STP | IFBIF_BSTP_PTP, IFBIF_BSTP_AUTOPTP },
 };
 
 /* A veb's private VLANs' lines, by IFBRPV_T_* */
@@ -2180,10 +2322,11 @@ static char *brvper[] = { "untagged", "tagged" };
 
 /* The candidate lines a struct brcfg makes */
 static char *brnames[] = { "pvlan", "pvlan-isolated", "pvlan-community",
-    "priority", "hellotime", "fwddelay", "maxage", "maxaddr", "timeout",
-    "member", "stp", "span", "learning", "discover", "blocknonip",
-    "pvptags", "untagged", "tagged", "ifpriority", "ifcost", "protect",
-    "static", "rule" };
+    "proto", "priority", "hellotime", "fwddelay", "maxage", "maxaddr",
+    "timeout", "holdcnt", "member", "stp", "span", "learning", "discover",
+    "blocknonip", "pvptags", "locked", "autoedge", "edge", "autoptp", "ptp",
+    "untagged", "tagged", "ifpriority", "ifcost", "protect", "static",
+    "rule" };
 
 /* Is line a port list, whose command takes one port at a time? */
 int
@@ -2503,8 +2646,9 @@ brcfg_kernel(int s, char *brdg, struct brcfg *b)
 
 	memset(b, 0, sizeof(*b));
 	b->vlans = cand_takes(brdg, SIOCBRDGSPVID);
-	for (i = 0; i <= TIMEOUT; i++)
+	for (i = 0; i <= HOLDCNT; i++)
 		b->val[i] = bridge_cfg(s, brdg, i);
+	b->proto = bridge_cfg(s, brdg, PROTO);
 	if ((reqs = bridge_ports(s, brdg, &n)) == NULL)
 		n = 0;
 	for (i = 0; i < n; i++) {
@@ -2597,10 +2741,14 @@ brcfg_cand(struct brcfg *b, char *brdg)
 		if (e != NULL)
 			goto bad;
 	}
-	for (i = 0; i <= TIMEOUT; i++)
+	for (i = 0; i <= HOLDCNT; i++)
 		b->val[i] = (l = cand_line(brvals[i].name, 0)) == NULL ?
 		    brvals[i].def :
 		    strtol(l + strlen(brvals[i].name) + 1, NULL, 10);
+	b->proto = kern_bstp_protover;
+	if ((l = cand_line("proto", 0)) != NULL)
+		b->proto = strcmp(l, "proto stp") == 0 ? BSTP_PROTO_STP :
+		    BSTP_PROTO_RSTP;
 
 	for (i = 0; i < nitems(brlists); i++) {
 		/* "no learning" is a learning line */
@@ -2618,8 +2766,13 @@ brcfg_cand(struct brcfg *b, char *brdg)
 					p->pvid = b->dflt;
 			} else if ((p = brcfg_member(b, w)) == NULL)
 				goto bad;
-			if (brlists[i].flag == IFBIF_STP)
+			/* bstp_add(), which turns autoedge and autoptp on */
+			if (brlists[i].flag == IFBIF_STP &&
+			    brlists[i].without == 0) {
 				p->prio = DEFAULT_IFPRIORITY;
+				p->flags |= IFBIF_BSTP_AUTOEDGE |
+				    IFBIF_BSTP_AUTOPTP;
+			}
 			if (i != 0 && brlists[i].flag != IFBIF_SPAN)
 				p->flags = (p->flags | brlists[i].flag) &
 				    ~brlists[i].without;
@@ -2713,7 +2866,11 @@ brcfg_print(FILE *output, struct brcfg *b)
 			fprintf(output, " %u", b->pvlans[j].ifbrpv_secondary);
 		fprintf(output, "\n");
 	}
-	for (i = 0; i <= TIMEOUT; i++)
+	/* before hellotime, which only stp takes */
+	if (b->proto != -1 && b->proto != kern_bstp_protover)
+		fprintf(output, " proto %s\n", b->proto == BSTP_PROTO_STP ?
+		    "stp" : "rstp");
+	for (i = 0; i <= HOLDCNT; i++)
 		if (b->val[i] != -1 && b->val[i] != brvals[i].def)
 			fprintf(output, " %s %ld\n", brvals[i].name, b->val[i]);
 	for (i = 0; i < nitems(brlists); i++) {
@@ -2936,13 +3093,15 @@ cand_bridge(u_long cmd, void *data)
 			e = EINVAL;
 			break;
 		}
-		/* bstp_add() */
+		/* bstp_add(), which turns autoedge and autoptp on */
 		if ((req->ifbr_ifsflags & IFBIF_STP) &&
 		    !(p->flags & IFBIF_STP)) {
 			p->prio = DEFAULT_IFPRIORITY;
 			p->cost = 0;
-		}
-		p->flags = req->ifbr_ifsflags;
+			p->flags = req->ifbr_ifsflags | IFBIF_BSTP_AUTOEDGE |
+			    IFBIF_BSTP_AUTOPTP;
+		} else
+			p->flags = req->ifbr_ifsflags;
 		break;
 	case SIOCBRDGSIFPROT:
 		if ((e = brcfg_findbif(&b, req->ifbr_ifsname, &p)) == 0)
@@ -3103,8 +3262,7 @@ cand_bridge(u_long cmd, void *data)
 			    bp->ifbrp_prio % kern_bstp_priority_step;
 		break;
 	case SIOCBRDGSHT:
-		/* bstp_create()'s protocol, which nsh never changes */
-		if (kern_bstp_protover != kern_bstp_ht_protover)
+		if (b.proto != kern_bstp_ht_protover)
 			e = EPERM;
 		else
 			e = brcfg_time(&b, HELLOTIME, bp->ifbrp_hellotime,
@@ -3126,6 +3284,23 @@ cand_bridge(u_long cmd, void *data)
 			e = EINVAL;
 		else
 			b.val[TIMEOUT] = bp->ifbrp_ctime;
+		break;
+	case SIOCBRDGSTXHC:
+		if (bp->ifbrp_txhc < kern_bstp_min_hold_count ||
+		    bp->ifbrp_txhc > kern_bstp_max_hold_count)
+			e = EINVAL;
+		else
+			b.val[HOLDCNT] = bp->ifbrp_txhc;
+		break;
+	case SIOCBRDGSPROTO:
+		/* a new protocol takes the default hellotime */
+		if (bp->ifbrp_proto != BSTP_PROTO_STP &&
+		    bp->ifbrp_proto != BSTP_PROTO_RSTP)
+			e = EINVAL;
+		else {
+			b.proto = bp->ifbrp_proto;
+			b.val[HELLOTIME] = DEFAULT_HELLOTIME;
+		}
 		break;
 	case SIOCBRDGSIFPRIO:
 	case SIOCBRDGSIFCOST:

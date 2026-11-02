@@ -39,5 +39,6 @@ extern const int kern_bstp_max_hello_time, kern_bstp_min_fwd_delay;
 extern const int kern_bstp_max_fwd_delay, kern_bstp_min_max_age;
 extern const int kern_bstp_max_max_age, kern_bstp_priority_step;
 extern const int kern_bstp_port_priority_step, kern_bstp_protover;
-extern const int kern_bstp_ht_protover;
+extern const int kern_bstp_ht_protover, kern_bstp_min_hold_count;
+extern const int kern_bstp_max_hold_count;
 extern const struct kcloner kcloners[];

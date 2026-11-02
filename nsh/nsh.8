@@ -972,12 +972,19 @@ nsh(bridge-bridge100)# ?
   discover         Mark member(s) as discovery port(s)
   learning         Mark member(s) as learning port(s)
   stp              Enable 802.1D spanning tree protocol on member(s)
+  edge             Mark STP member(s) as edge ports
+  autoedge         Detect whether STP member(s) are edge ports
+  ptp              Mark STP member(s) as point-to-point links
+  autoptp          Detect whether STP member(s) are point-to-point
+  locked           Accept only cached source addresses on member(s) (veb)
   maxaddr          Maximum address cache size
   timeout          Address cache timeout
   maxage           Time for 802.1D configuration to remain valid
   fwddelay         Time before bridge begins forwarding packets
   hellotime        802.1D configuration packet broadcast interval
   priority         Spanning priority for all members on an 802.1D bridge
+  holdcnt          Spanning tree packets sent before rate limiting
+  proto            Spanning tree protocol, stp or rstp
   ping             Send IPv4 ICMP echo request
   ping6            Send IPv6 ICMP echo request
   traceroute       Print the route to IPv4 host
@@ -1207,6 +1214,83 @@ E.g. on veb101, send 00:1b:21:0a:0b:01 in VLAN 10 to em1.
 nsh(config)# bridge veb101
 nsh(bridge-veb101)# static 00:1b:21:0a:0b:01@10 em1
 nsh(bridge-veb101)# exit
+.Ed
+.Tg locked
+.Op no
+.Ic locked
+.Ar interface-name ...
+.Pp
+On a veb, accept a frame on a member only when its source address is
+one the veb has for that member, such as a static address.
+A locked member cannot learn or discover addresses, so turn
+.Cm learning
+and
+.Cm discover
+off for it first.
+.Pp
+E.g. on veb101, accept on em1 only frames from 00:1b:21:0a:0b:01.
+.Bd -literal -offset indent
+nsh(config)# bridge veb101
+nsh(bridge-veb101)# no learning em1
+nsh(bridge-veb101)# no discover em1
+nsh(bridge-veb101)# static 00:1b:21:0a:0b:01 em1
+nsh(bridge-veb101)# locked em1
+nsh(bridge-veb101)# exit
+.Ed
+.Tg edge
+.Op no
+.Ic edge
+.Ar interface-name ...
+.Pp
+.Op no
+.Ic autoedge
+.Ar interface-name ...
+.Pp
+On a bridge, mark a member that runs spanning tree as an edge port: one
+that connects only to end stations and cannot make a loop, so it
+forwards at once.
+With autoedge on, which it is when stp is turned on for a member, the
+bridge decides this itself; turn autoedge off to set edge by hand.
+.Pp
+.Op no
+.Ic ptp
+.Ar interface-name ...
+.Pp
+.Op no
+.Ic autoptp
+.Ar interface-name ...
+.Pp
+On a bridge, mark a member that runs spanning tree as a point-to-point
+link, which can move to forwarding at once.
+With autoptp on, which it is when stp is turned on for a member, the
+bridge takes a full-duplex link as point-to-point; turn autoptp off to
+set ptp by hand.
+.Pp
+.Op no
+.Ic proto
+.Cm stp | rstp
+.Pp
+Set the spanning tree protocol of a bridge: rstp, rapid spanning tree,
+which is the default, or stp, the older spanning tree.
+Only stp takes
+.Cm hellotime ,
+and a new protocol sets hellotime back to its default.
+.Pp
+.Op no
+.Ic holdcnt
+.Ar count
+.Pp
+Set how many spanning tree packets a bridge sends on a port before it
+limits their rate: 1 to 10, and 6 by default.
+.Pp
+E.g. on bridge101, run the older spanning tree, with em1 an edge port.
+.Bd -literal -offset indent
+nsh(config)# bridge bridge101
+nsh(bridge-bridge101)# proto stp
+nsh(bridge-bridge101)# stp em1
+nsh(bridge-bridge101)# no autoedge em1
+nsh(bridge-bridge101)# edge em1
+nsh(bridge-bridge101)# exit
 .Ed
 .Tg ip6
 .Op no

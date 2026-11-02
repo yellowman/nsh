@@ -533,6 +533,12 @@ var REGISTRY = {
 	    kind: "words", keyword: "blocknonip member",
 	    definition: "Members that forward only IPv4, IPv6, ARP and RARP.",
 	    values: "members' names", default: "none", needs: "member" },
+	"bridge.locked": { label: "Locked", group: "Forwarding",
+	    kind: "words", on: ["veb"], keyword: "locked member",
+	    definition: "Members that accept a frame only from a source " +
+	    "address the veb has for them, such as a static address. They " +
+	    "do not learn or discover.", values: "members' names",
+	    default: "none", needs: "member" },
 	"bridge.protect": { label: "Protected domains", group: "Forwarding",
 	    kind: "lines", placeholder: "vlan101 20", keyword: "protect " +
 	    "member domain-ids", definition: "Members in a protected domain " +
@@ -565,6 +571,35 @@ var REGISTRY = {
 	    kind: "words", keyword: "stp member", definition: "Members that " +
 	    "take part in spanning tree, which blocks ports to break loops.",
 	    values: "members' names", default: "none", needs: "member" },
+	"bridge.autoedge": { label: "Detect edge ports", group: "Spanning " +
+	    "tree", kind: "words", on: ["bridge"], keyword: "autoedge member",
+	    definition: "STP members whose edge status the bridge decides " +
+	    "itself.", values: "members' names",
+	    default: "every member, as stp is turned on", needs: "stp" },
+	"bridge.edge": { label: "Edge ports", group: "Spanning tree",
+	    kind: "words", on: ["bridge"], keyword: "edge member",
+	    definition: "STP members that connect only to end stations, " +
+	    "which forward at once; with autoedge off.",
+	    values: "members' names", default: "none", needs: "stp" },
+	"bridge.autoptp": { label: "Detect point-to-point", group: "Spanning " +
+	    "tree", kind: "words", on: ["bridge"], keyword: "autoptp member",
+	    definition: "STP members that are point-to-point when their " +
+	    "link is full duplex.", values: "members' names",
+	    default: "every member, as stp is turned on", needs: "stp" },
+	"bridge.ptp": { label: "Point-to-point", group: "Spanning tree",
+	    kind: "words", on: ["bridge"], keyword: "ptp member",
+	    definition: "STP members on a point-to-point link, which move " +
+	    "to forwarding at once; with autoptp off.",
+	    values: "members' names", default: "none", needs: "stp" },
+	"bridge.proto": { label: "Protocol", group: "Spanning tree",
+	    kind: "choice", choices: ["rstp", "stp"], on: ["bridge"],
+	    keyword: "proto stp | rstp", definition: "Rapid spanning tree, " +
+	    "or the older spanning tree, which hellotime needs.",
+	    default: "rstp" },
+	"bridge.holdcnt": { label: "Hold count", group: "Spanning tree",
+	    kind: "number", min: 1, max: 10, on: ["bridge"],
+	    keyword: "holdcnt count", definition: "Spanning tree packets a " +
+	    "port sends before their rate is limited.", default: "6" },
 	"bridge.priority": { label: "Bridge priority", group: "Spanning tree",
 	    kind: "number", min: 0, max: 61440, keyword: "priority value",
 	    definition: "Lower becomes the root bridge, which every other " +
@@ -572,7 +607,8 @@ var REGISTRY = {
 	"bridge.hellotime": { label: "Hello time", group: "Spanning tree",
 	    kind: "number", min: 1, max: 2, units: "seconds",
 	    keyword: "hellotime seconds", definition: "Seconds between the " +
-	    "root bridge's configuration messages.", default: "2" },
+	    "root bridge's configuration messages; with proto stp.",
+	    default: "2", needs: "proto" },
 	"bridge.fwddelay": { label: "Forward delay", group: "Spanning tree",
 	    kind: "number", min: 4, max: 30, units: "seconds",
 	    keyword: "fwddelay seconds", definition: "Seconds a port listens " +

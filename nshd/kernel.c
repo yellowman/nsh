@@ -37,6 +37,8 @@ const int kern_bstp_min_fwd_delay = 1024;	/* BSTP_MIN_FORWARD_DELAY */
 const int kern_bstp_max_fwd_delay = 7680;	/* BSTP_MAX_FORWARD_DELAY */
 const int kern_bstp_min_max_age = 1536;	/* BSTP_MIN_MAX_AGE */
 const int kern_bstp_max_max_age = 10240;	/* BSTP_MAX_MAX_AGE */
+const int kern_bstp_min_hold_count = 1;	/* BSTP_MIN_HOLD_COUNT */
+const int kern_bstp_max_hold_count = 10;	/* BSTP_MAX_HOLD_COUNT */
 const int kern_bstp_priority_step = 4096;	/* what SIOCBRDGSPRI rounds down to */
 const int kern_bstp_port_priority_step = 16;	/* what SIOCBRDGSIFPRIO rounds down to */
 const int kern_bstp_protover = BSTP_PROTO_RSTP;	/* the protocol bstp_create() sets */
@@ -81,6 +83,8 @@ static const u_long bridge_ioctls[] = {
 	SIOCBRDGDADDR,
 	SIOCBRDGARL,
 	SIOCBRDGSIFPROT,
+	SIOCBRDGSTXHC,
+	SIOCBRDGSPROTO,
 	0
 };
 
