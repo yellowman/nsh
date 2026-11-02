@@ -585,7 +585,7 @@ if_render(struct frecs *rs, FILE *outfile)
 		fprintf(outfile, "  Hardware features:\n    ");
 		bprintf(outfile, fu(ifr, IF_CAPABILITIES, 0), HWFEATURESBITS);
 		fputc('\n', outfile);
-		if (br)
+		if (br || frec_next(rs, NULL, &kind_bridgeaddr) != NULL)
 			bridge_render(rs, outfile);
 		media_render_supported(rs, ifr, outfile);
 	}
@@ -1696,6 +1696,7 @@ static struct facts_field bridgeaddr_fields[] = {
 	[BRA_AGE] =		{ "age",	FACT_U64 },
 	[BRA_FLAGS] =		{ "flags",	FACT_U64 },
 	[BRA_IF] =		{ "interface",	FACT_STRING },
+	[BRA_ENDPOINT] =	{ "endpoint",	FACT_ADDRESS },
 };
 struct facts_kind kind_bridgeaddr = { "bridge-address", bridgeaddr_fields,
     BRA_NFIELDS };
@@ -1735,7 +1736,28 @@ bridge_s(struct frec *r, int i)
 	return (s != NULL ? s : "");
 }
 
-/* a bridge's STP members and learned addresses, as show_int() printed */
+/* r's endpoint: a host's address, or on bpe a backbone bridge's MAC */
+static const char *
+bridge_endpoint(struct frec *r)
+{
+	static char buf[NI_MAXHOST];
+	struct sockaddr_storage ss;
+
+	if (!fsockaddr(r, BRA_ENDPOINT, &ss))
+		return "";
+	if (ss.ss_family == AF_LINK)
+		strlcpy(buf, ether_ntoa((struct ether_addr *)
+		    LLADDR((struct sockaddr_dl *)&ss)), sizeof(buf));
+	else if (getnameinfo((struct sockaddr *)&ss, ss.ss_len, buf,
+	    sizeof(buf), NULL, 0, NI_NUMERICHOST) != 0)
+		return "";
+	return buf;
+}
+
+/*
+ * a bridge's STP members and learned addresses, as show_int() printed,
+ * or bpe's, nvgre's or vxlan's learned addresses, each with its endpoint
+ */
 void
 bridge_render(struct frecs *rs, FILE *outfile)
 {
@@ -1764,17 +1786,21 @@ bridge_render(struct frecs *rs, FILE *outfile)
 		}
 	}
 
-	if (frec_next(rs, NULL, &kind_bridgeaddr) != NULL) {
+	if ((r = frec_next(rs, NULL, &kind_bridgeaddr)) != NULL) {
 		fprintf(outfile, "  Learned addresses:\n");
-		fprintf(outfile, "    address           member age\n");
+		fprintf(outfile, "    address           %s age\n",
+		    fhas(r, BRA_ENDPOINT) ? "endpoint" : "member");
 	}
 	for (r = NULL; (r = frec_next(rs, r, &kind_bridgeaddr)); ) {
 		memset(&ea, 0, sizeof(ea));
 		if ((a = FV(r, BRA_ADDRESS, FACT_ADDRESS)) != NULL &&
 		    a->v.a.len == sizeof(ea))
 			memcpy(&ea, a->v.a.bytes, sizeof(ea));
-		fprintf(outfile, "    %s %-6s %u ", ether_ntoa(&ea),
-		    bridge_s(r, BRA_MEMBER), (u_int)fu(r, BRA_AGE, 0));
+		/* apart, as both use ether_ntoa()'s one buffer */
+		fprintf(outfile, "    %s ", ether_ntoa(&ea));
+		fprintf(outfile, "%-6s %u ", fhas(r, BRA_ENDPOINT) ?
+		    bridge_endpoint(r) : bridge_s(r, BRA_MEMBER),
+		    (u_int)fu(r, BRA_AGE, 0));
 		bprintf(outfile, fu(r, BRA_FLAGS, 0), IFBAFBITS);
 		fputc('\n', outfile);
 	}

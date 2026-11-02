@@ -2564,6 +2564,8 @@ nsh> show interface lo0
 .It
 With a bridge, verbose mode displays spanning tree member states and the
 addresses the bridge has learned.
+With bpe, nvgre and vxlan, it displays the addresses the interface has
+learned, each with the tunnel endpoint it is behind.
 .Bd -literal -offset indent
 nsh> show int bridge0
 % bridge0
@@ -4215,7 +4217,8 @@ Clear the system NDP cache and static NDP table.
 .Ic flush bridge-dyn
 .Ar bridge-name
 .Pp
-Clear the dynamically learned addresses from the named bridge.
+Clear the dynamically learned addresses from the named bridge, or bpe,
+nvgre or vxlan interface.
 .Bd -literal -offset indent
 nsh> flush bridge-dyn bridge0
 .Ed
@@ -4228,7 +4231,7 @@ Note! static addresses are not removed by this command.
 .Ar bridge-name
 .Pp
 Clear the dynamically learned and the static addresses from the named
-bridge.
+bridge, or bpe, nvgre or vxlan interface.
 .Bd -literal -offset indent
 nsh> flush bridge-all bridge0
 .Ed

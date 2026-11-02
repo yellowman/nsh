@@ -143,7 +143,7 @@ ppp.c		table	intpppoe.authopts intsppp.authopts
 prompt.c	session	ifname prompt saved_prompt
 prompt.c	scratch	hbuf
 renderif.c	process	bridge_facts_init.states
-renderif.c	scratch	umb_val2descr.sval
+renderif.c	scratch	bridge_endpoint.buf umb_val2descr.sval
 renderif.c	table	address_fields bridge_fields bridgeaddr_fields
 			bridgemember_fields carp_bal_modes
 			carp_facts_init.carp_states carp_fields

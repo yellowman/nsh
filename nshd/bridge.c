@@ -1250,6 +1250,9 @@ bridge_facts(struct facts_out *o, int s, char *brdg)
 		facts_u64(&v[BRA_AGE], ifba->ifba_age);
 		facts_u64(&v[BRA_FLAGS], ifba->ifba_flags);
 		facts_string(&v[BRA_IF], brdg);
+		/* bpe's, nvgre's and vxlan's: the endpoint it is behind */
+		facts_sockaddr(&v[BRA_ENDPOINT],
+		    (struct sockaddr *)&ifba->ifba_dstsa);
 		facts_record(o, &kind_bridgeaddr, v);
 	}
 	free(inbuf);

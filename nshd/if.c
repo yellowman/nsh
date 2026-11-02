@@ -277,7 +277,11 @@ if_facts(struct facts_out *o, char *ifname, int detail)
 		}
 	}
 
-	if (detail && v[IF_BRIDGE].v.u)
+	/*
+	 * a bridge's members and learned addresses, or bpe's, nvgre's or
+	 * vxlan's learned addresses
+	 */
+	if (detail && (v[IF_BRIDGE].v.u || bridge_learns(ifs, ifname)))
 		bridge_facts(o, ifs, ifname);
 
 	freeifaddrs(ifap);
