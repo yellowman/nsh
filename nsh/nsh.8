@@ -994,11 +994,9 @@ nsh(bridge-bridge100)# ?
   ifpriority    Spanning priority of a member on an 802.1D bridge
   ifcost        Spanning tree path cost of a member on 802.1D bridge
   link          Link level options
-  txprio        Priority in tunnel protocol headers
-  rxprio        Source used for packet priority
-  vnetid        Virtual interface network identifier
-  parent        Parent interface
-  tunneldomain  Tunnel parameters
+  txprio        Priority in 802.1Q headers (veb)
+  rxprio        Source used for packet priority (veb)
+  vnetid        VLAN ID of untagged ports (veb)
   protect       Configure protected bridge domains
   interface     Modify interface parameters
   shutdown      Shutdown bridge

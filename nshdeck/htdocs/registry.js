@@ -570,27 +570,20 @@ var REGISTRY = {
 	    "cost", definition: "Each member's path cost; lower is preferred.",
 	    values: "a member, then 1 to 200000000, a line each",
 	    default: "worked out from the link's speed", needs: "stp" },
-	"bridge.vnetid": { label: "VNI", group: "Encapsulation", kind: "number",
-	    min: 0, max: 16777215, keyword: "vnetid id", definition: "The " +
-	    "virtual network identifier, where the bridge has one.",
-	    default: "none" },
-	"bridge.parent": { label: "Parent", group: "Encapsulation",
-	    kind: "text", keyword: "parent interface", definition: "The " +
-	    "interface the bridge sends and receives on, where it has one.",
-	    values: "an interface's name", default: "none" },
-	"bridge.tunneldomain": { label: "Tunnel routing domain",
-	    group: "Encapsulation", kind: "number", min: 0, max: 255,
-	    keyword: "tunneldomain rdomain", definition: "The routing domain " +
-	    "its encapsulated packets travel in.", default: "0" },
+	"bridge.vnetid": { label: "Untagged VLAN", group: "Encapsulation",
+	    kind: "number", min: 1, max: 4094, on: ["veb"],
+	    keyword: "vnetid id", definition: "The VLAN of the frames the " +
+	    "veb's untagged ports carry.", default: "1" },
 	"bridge.txprio": { label: "Transmit priority", group: "Encapsulation",
-	    kind: "text", keyword: "txprio 0-7 | packet | payload",
-	    definition: "The priority written in the headers it adds.",
-	    values: "0 to 7, packet or payload", default: "the driver's" },
+	    kind: "text", on: ["veb"], keyword: "txprio 0-7 | packet",
+	    definition: "The priority written in the 802.1Q headers the veb " +
+	    "adds: a fixed value, or the packet's.", values: "0 to 7 or " +
+	    "packet", default: "packet" },
 	"bridge.rxprio": { label: "Receive priority", group: "Encapsulation",
-	    kind: "text", keyword: "rxprio 0-7 | packet | payload | outer",
-	    definition: "Where a received packet's priority comes from.",
-	    values: "0 to 7, packet, outer or payload, as the driver takes",
-	    default: "packet" },
+	    kind: "text", on: ["veb"], keyword: "rxprio 0-7 | packet | outer",
+	    definition: "Where the priority of a frame the veb receives " +
+	    "comes from: a fixed value, the packet, or its 802.1Q header.",
+	    values: "0 to 7, packet or outer", default: "outer" },
 	"bridge.link": { label: "Link flags", group: "Encapsulation",
 	    kind: "words", keyword: "link 0 | 1 | 2", definition: "Link " +
 	    "flags, whose meaning each driver gives in its own manual.",
