@@ -1264,6 +1264,7 @@ conf_ifmetrics(FILE *output, int ifs, struct if_data if_data,
 		if (get_nwinfo(ifname, tmp, TMPSIZ, NWKEY) != 0)
 			fprintf(output, " nwkey %s\n", tmp);
 		conf_wpa(output, ifs, ifname);
+		conf_join(output, ifs, ifname);
 		if (get_nwinfo(ifname, tmp, TMPSIZ, TXPOWER) != 0)
 			fprintf(output, " txpower %s\n", tmp);
 		if (get_nwinfo(ifname, tmp, TMPSIZ, POWERSAVE) != 0)

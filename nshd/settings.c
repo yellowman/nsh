@@ -128,6 +128,7 @@ static const struct setting if_settings[] = {
 	{ "wpaakms",		S_VALUE },
 	{ "wpaciphers",		S_VALUE },
 	{ "wpagroupcipher",	S_VALUE },
+	{ "join",		S_ENTRY,	2 },
 	{ "txpower",		S_VALUE },
 	{ "powersave",		S_VALUE },
 	{ "autoconf4",		S_STATE },

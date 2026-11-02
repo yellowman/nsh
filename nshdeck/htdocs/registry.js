@@ -450,6 +450,13 @@ var REGISTRY = {
 	    definition: "The ciphers for traffic to one station; usegroup " +
 	    "uses the group cipher.", values: "usegroup, or tkip, ccmp, " +
 	    "separated by commas", default: "ccmp, and tkip with wpa1" },
+	"if.join": { label: "Networks to join", group: "Wireless",
+	    kind: "lines", placeholder: "cafe", wireless: true,
+	    keyword: "join network-id [wpakey key | nwkey key]",
+	    definition: "Networks the interface joins when it finds one, " +
+	    "in station mode: open, or with a WPA or WEP key.",
+	    values: "a network ID, then a key, a line each",
+	    default: "none", secret: true },
 	"if.wpagroupcipher": { label: "WPA group cipher", group: "Wireless",
 	    kind: "choice", choices: ["wep40", "tkip", "ccmp", "wep104"],
 	    wireless: true, keyword: "wpagroupcipher cipher",

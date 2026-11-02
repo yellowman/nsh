@@ -91,6 +91,10 @@ static int cand_wpaon(void);
 static u_int wpa_bits(int, char *);
 static void wpa_names(char *, size_t, int, u_int);
 static int wpa_default(int, u_int, u_int);
+static int wpa_keykind(char *);
+static int wpa_keypsk(char *, int, const u_int8_t *, size_t, u_int8_t *);
+static int station(int, char *);
+static int joinrow(char *, char *);
 
 /* WPA's lists, by the names ifconfig gives them, in the order conf() prints */
 struct wpaname {
@@ -118,6 +122,9 @@ static const struct wpaname wpaprotos[] = {
 	{ "wep104",	IEEE80211_WPA_CIPHER_WEP104 },
 	{ NULL,		0 }
 };
+
+/* A WPA pre-shared key's length */
+#define WPA_PSKLEN	sizeof(((struct ieee80211_wpapsk *)0)->i_psk)
 
 /* nwflag's flags, by the names ifconfig gives them */
 static const struct ieee80211_flags nwflags[] = IEEE80211_FLAGS;
@@ -341,7 +348,7 @@ intwpakey(int argc, char **argv, ...)
 	struct ifreq ifr;
 	va_list ap;
 	char *ifname;
-	int ifs, set, len = 0, hex = 0;
+	int ifs, set, hex = 0;
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
@@ -363,47 +370,26 @@ intwpakey(int argc, char **argv, ...)
 		return -1;
 	}
 
-	memset(&psk, 0, sizeof(psk));
-	if (set) {
-		len = strlen(argv[0]);
-		hex = len == 2 + 2 * sizeof(psk.i_psk) &&
-		    argv[0][0] == '0' && argv[0][1] == 'x';
-		if (hex) {
-			len = sizeof(psk.i_psk);
-			if (get_string(argv[0], NULL, psk.i_psk, &len) ==
-			    NULL || len != sizeof(psk.i_psk)) {
-				printf("%% wpakey: invalid pre-shared key\n");
-				return -1;
-			}
-		} else if (len < 8 || len > 63) {
-			printf("%% wpakey: a passphrase is 8 to 63 "
-			    "characters\n");
-			return -1;
-		}
-	}
+	if (set && (hex = wpa_keykind(argv[0])) == -1)
+		return -1;
 
 	if (candidate)
 		return cand_wpakey(ifname, set ? argv[0] : NULL, hex);
 
-	if (set && !hex) {
+	memset(&psk, 0, sizeof(psk));
+	if (set) {
 		memset(&nwid, 0, sizeof(nwid));
 		memset(&ifr, 0, sizeof(ifr));
 		ifr.ifr_data = (caddr_t)&nwid;
 		strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
-		if (ioctl(ifs, SIOCG80211NWID, &ifr) == -1) {
+		if (!hex && ioctl(ifs, SIOCG80211NWID, &ifr) == -1) {
 			printf("%% intwpakey: SIOCG80211NWID: %s\n",
 			    strerror(errno));
 			return -1;
 		}
-		if (nwid.i_len == 0) {
-			printf("%% wpakey: nwid not set\n");
+		if (wpa_keypsk(argv[0], hex, nwid.i_nwid, nwid.i_len,
+		    psk.i_psk) == -1)
 			return -1;
-		}
-		if (pkcs5_pbkdf2(argv[0], len, nwid.i_nwid, nwid.i_len,
-		    psk.i_psk, sizeof(psk.i_psk), 4096) != 0) {
-			printf("%% wpakey: passphrase hashing failed\n");
-			return -1;
-		}
 	}
 	psk.i_enabled = set;
 	strlcpy(psk.i_name, ifname, sizeof(psk.i_name));
@@ -611,6 +597,193 @@ conf_wpa(FILE *output, int ifs, char *ifname)
 			wpa_names(str, sizeof(str), i, bits[i]);
 			fprintf(output, " %s %s\n", wpalists[i].cmd, str);
 		}
+}
+
+/*
+ * join: a network the interface joins when it finds it, open, with a
+ * WPA key, or with a WEP key. The kernel never shows the keys, so nsh
+ * keeps each one with its network ID, as for wpakey.
+ */
+int
+intjoin(int argc, char **argv, ...)
+{
+	struct ieee80211_join join;
+	u_int8_t wepkey[16];
+	struct ifreq ifr;
+	char nwid[IEEE80211_NWID_LEN * 2 + 8], *kind = NULL;
+	StringList *rows;
+	va_list ap;
+	char *ifname;
+	size_t i;
+	int ifs, set, len, hex = 0;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
+
+	if (NO_ARG(argv[0])) {
+		set = 0;
+		argc--;
+		argv++;
+	} else
+		set = 1;
+	argc--;
+	argv++;
+
+	if (set && argc == 3 && isprefix(argv[1], "wpakey"))
+		kind = "wpakey";
+	else if (set && argc == 3 && isprefix(argv[1], "nwkey"))
+		kind = "nwkey";
+	if (argc < 1 || (set && argc != 1 && kind == NULL)) {
+		printf("%% join <nwid> [wpakey <key> | nwkey <key>]\n");
+		printf("%% no join <nwid>\n");
+		return -1;
+	}
+
+	memset(&join, 0, sizeof(join));
+	len = sizeof(join.i_nwid);
+	if (get_string(argv[0], NULL, join.i_nwid, &len) == NULL)
+		return -1;
+	join.i_len = len;
+	/* an empty network ID joins any open network */
+	if (len == 0)
+		join.i_flags |= IEEE80211_JOIN_ANY;
+	make_string(nwid, sizeof(nwid), join.i_nwid, len);
+	if (!set)
+		join.i_flags |= IEEE80211_JOIN_DEL;
+	else if (kind != NULL && strcmp(kind, "wpakey") == 0) {
+		if ((hex = wpa_keykind(argv[2])) == -1)
+			return -1;
+		/* a passphrase is hashed with the network ID */
+		if (!hex && join.i_len == 0) {
+			printf("%% join: a passphrase needs a network ID\n");
+			return -1;
+		}
+		join.i_flags |= IEEE80211_JOIN_WPA | IEEE80211_JOIN_WPAPSK;
+		join.i_wpaparams.i_enabled = 1;
+		join.i_wpapsk.i_enabled = 1;
+	} else if (kind != NULL) {
+		len = sizeof(wepkey);
+		if (get_string(argv[2], NULL, wepkey, &len) == NULL)
+			return -1;
+		join.i_flags |= IEEE80211_JOIN_NWKEY;
+		join.i_nwkey.i_wepon = IEEE80211_NWKEY_WEP;
+		join.i_nwkey.i_defkid = 1;
+		join.i_nwkey.i_key[0].i_keylen = len;
+		join.i_nwkey.i_key[0].i_keydat = wepkey;
+	}
+	/* the kernel ignores join outside station mode */
+	if (set && !station(ifs, ifname)) {
+		printf("%% join: %s is not in station mode\n", ifname);
+		return -1;
+	}
+
+	if (candidate)
+		return cand_join(ifname, set, nwid, kind, kind ? argv[2] :
+		    NULL);
+
+	if (kind != NULL && strcmp(kind, "wpakey") == 0 &&
+	    wpa_keypsk(argv[2], hex, join.i_nwid, join.i_len,
+	    join.i_wpapsk.i_psk) == -1)
+		return -1;
+	memset(&ifr, 0, sizeof(ifr));
+	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
+	ifr.ifr_data = (caddr_t)&join;
+	if (ioctl(ifs, SIOCS80211JOIN, &ifr) == -1) {
+		printf("%% intjoin: SIOCS80211JOIN: %s\n", strerror(errno));
+		explicit_bzero(&join, sizeof(join));
+		return -1;
+	}
+	explicit_bzero(&join, sizeof(join));
+
+	/* a row for the network ID: it and the rest of the join line */
+	rows = sl_init();
+	if (db_select_flag_x_ctl(rows, "joinkey", ifname) >= 0)
+		for (i = 0; i < rows->sl_cur; i++)
+			if (joinrow(rows->sl_str[i], nwid))
+				db_delete_flag_x_ctl_data("joinkey", ifname,
+				    rows->sl_str[i]);
+	sl_free(rows, 1);
+	if (kind != NULL) {
+		char key[256], row[512];
+
+		nwkey_str(key, sizeof(key), argv[2]);
+		snprintf(row, sizeof(row), "%s %s %s", nwid, kind, key);
+		db_insert_flag_x("joinkey", ifname, 0, DB_X_ENABLE, row);
+	}
+	return 0;
+}
+
+/* Is row, a join line's after "join ", for the network ID nwid? */
+static int
+joinrow(char *row, char *nwid)
+{
+	size_t len = strlen(nwid);
+
+	return strncmp(row, nwid, len) == 0 && row[len] == ' ';
+}
+
+/* Is the interface in station mode, as its media options say? */
+static int
+station(int ifs, char *ifname)
+{
+	uint64_t media = init_current_media(ifs, ifname);
+
+	return media != (uint64_t)-1 && (IFM_OPTIONS(media) &
+	    (IFM_IEEE80211_HOSTAP | IFM_IEEE80211_IBSS |
+	    IFM_IEEE80211_MONITOR)) == 0;
+}
+
+/*
+ * An 802.11 interface's join lines, from the kernel's list: an open
+ * network's, and one with a key nsh kept
+ */
+void
+conf_join(FILE *output, int ifs, char *ifname)
+{
+	struct ieee80211_joinreq_all ja;
+	struct ieee80211_join *jn = NULL, *p;
+	char nwid[IEEE80211_NWID_LEN * 2 + 8];
+	StringList *rows;
+	size_t i, n = 100;
+	int j;
+
+	memset(&ja, 0, sizeof(ja));
+	strlcpy(ja.ja_ifname, ifname, sizeof(ja.ja_ifname));
+	for (;;) {
+		if ((p = reallocarray(jn, n, sizeof(*jn))) == NULL) {
+			free(jn);
+			return;
+		}
+		jn = p;
+		ja.ja_node = jn;
+		ja.ja_size = n * sizeof(*jn);
+		if (ioctl(ifs, SIOCG80211JOINALL, &ja) == 0)
+			break;
+		if (errno != E2BIG) {
+			free(jn);
+			return;
+		}
+		n += 100;
+	}
+	rows = sl_init();
+	db_select_flag_x_ctl(rows, "joinkey", ifname);
+	for (j = 0; j < ja.ja_nodes; j++) {
+		make_string(nwid, sizeof(nwid), jn[j].i_nwid, jn[j].i_len);
+		if (jn[j].i_flags & (IEEE80211_JOIN_WPAPSK |
+		    IEEE80211_JOIN_NWKEY)) {
+			for (i = 0; i < rows->sl_cur; i++)
+				if (joinrow(rows->sl_str[i], nwid))
+					break;
+			if (i < rows->sl_cur)
+				fprintf(output, " join %s\n",
+				    rows->sl_str[i]);
+		} else if (!(jn[j].i_flags & IEEE80211_JOIN_WPA))
+			fprintf(output, " join %s\n", nwid);
+	}
+	sl_free(rows, 1);
+	free(jn);
 }
 
 /* chan: the channel an 802.11 interface uses, or with no, any */
@@ -1275,4 +1448,72 @@ wpa_default(int which, u_int bits, u_int protos)
 		return bits == (wpa1 ? IEEE80211_WPA_CIPHER_TKIP :
 		    IEEE80211_WPA_CIPHER_CCMP);
 	}
+}
+
+/*
+ * A WPA key as ifconfig takes it: 1 for 0x and 64 hex digits, 0 for a
+ * passphrase of 8 to 63 characters, or -1 after saying why
+ */
+static int
+wpa_keykind(char *key)
+{
+	size_t len = strlen(key);
+
+	if (len == 2 + 2 * WPA_PSKLEN && key[0] == '0' &&
+	    key[1] == 'x')
+		return 1;
+	if (len < 8 || len > 63) {
+		printf("%% wpakey: a passphrase is 8 to 63 characters\n");
+		return -1;
+	}
+	return 0;
+}
+
+/*
+ * The pre-shared key a WPA key gives: its hex digits, or the passphrase
+ * hashed with the network ID. 0, or -1 after saying why.
+ */
+static int
+wpa_keypsk(char *key, int hex, const u_int8_t *nwid, size_t nwidlen,
+    u_int8_t *psk)
+{
+	int len = WPA_PSKLEN;
+
+	if (hex) {
+		if (get_string(key, NULL, psk, &len) == NULL ||
+		    (size_t)len != WPA_PSKLEN) {
+			printf("%% wpakey: invalid pre-shared key\n");
+			return -1;
+		}
+		return 0;
+	}
+	if (nwidlen == 0) {
+		printf("%% wpakey: nwid not set\n");
+		return -1;
+	}
+	if (pkcs5_pbkdf2(key, strlen(key), nwid, nwidlen, psk, WPA_PSKLEN,
+	    4096) != 0) {
+		printf("%% wpakey: passphrase hashing failed\n");
+		return -1;
+	}
+	return 0;
+}
+
+/*
+ * join in configure private: a line for each network ID, with its key
+ * as it was typed
+ */
+int
+cand_join(char *ifname, int set, char *nwid, char *kind, char *key)
+{
+	char str[256];
+
+	if (!cand_80211(ifname, "intjoin: SIOCS80211JOIN"))
+		return -1;
+	if (!set)
+		return cand_setting(ST_DEFAULT, "join %s", nwid);
+	if (kind == NULL)
+		return cand_setting(ST_ON, "join %s", nwid);
+	nwkey_str(str, sizeof(str), key);
+	return cand_setting(ST_ON, "join %s %s %s", nwid, kind, str);
 }

@@ -4949,6 +4949,7 @@ nsh(config)# ip ?
 .Op  inet | ip | autoconf4 | description | group | rdomain | \
  | rtlabel | priority| llpriority | mtu | metric | link | arp | lladdr | nwid\
  | nwkey | wpakey | wpa | wpaprotos | wpaakms | wpaciphers | wpagroupcipher\
+ | join\
  | powersave | txpower | chan | nwflag | bssid | media | mediaopt | auth\
  | peer\
  | pppoe | tunnel | tunneladdr | tunneldomain | maxaddr | timeout\
@@ -4992,6 +4993,7 @@ nsh(interface-em0)# ?
   wpaakms          802.11 WPA key management
   wpaciphers       802.11 WPA pairwise ciphers
   wpagroupcipher   802.11 WPA group cipher
+  join             802.11 network to join when found
   powersave        802.11 powersaving mode
   txpower          802.11 transmit power
   chan             802.11 channel
@@ -5430,6 +5432,31 @@ sets the ciphers back to their defaults.
 Use the
 .Ic no
 keyword to set the default.
+.Pp
+.Op no
+.Ic join
+.Ar network-id
+.Op Cm wpakey Ar key | Cm nwkey Ar key
+.Pp
+Add a network to the list of networks an 802.11 interface in station
+mode joins when it finds one: an open network, or one with a WPA key,
+as for
+.Cm wpakey ,
+or a WEP key.
+A passphrase is hashed with the network's own ID.
+An empty network ID,
+.Qq ,
+joins any open network.
+The kernel does not show the keys, so
+.Nm
+keeps each one with its network ID.
+Use the
+.Ic no
+keyword before join to take a network out of the list.
+.Bd -literal -offset indent
+nsh(interface-iwm0)# join "my home" wpakey "my wpa passphrase"
+nsh(interface-iwm0)# join cafe
+.Ed
 .Pp
 .Op no
 .Ic powersave

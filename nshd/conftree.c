@@ -116,6 +116,7 @@ static int set_text(struct cnode *, char *);
 static char *skipno(char *);
 static int samename(char *, char *);
 static int samekey(char *, char *, int);
+static size_t keyword(char *);
 static int hasword(char *, char *, size_t);
 static int list_add(struct cnode *, char *);
 static int list_del(struct cnode *, size_t, char *);
@@ -987,6 +988,17 @@ skipno(char *s)
 	return strncmp(s, "no ", 3) == 0 ? s + 3 : s;
 }
 
+/* The length of the word at p: to a blank, or to the quote that ends it */
+static size_t
+keyword(char *p)
+{
+	char *q;
+
+	if (*p == '"' && (q = strchr(p + 1, '"')) != NULL)
+		return q - p + 1;
+	return strcspn(p, " ");
+}
+
 /* Do two lines have the same name: their first word, after "no"? */
 static int
 samename(char *a, char *b)
@@ -998,7 +1010,8 @@ samename(char *a, char *b)
  * Do two lines have the same key, the same first k words after "no"?
  * With CK_ADDR in k, the last word is an address and its "/prefixlen"
  * is not part of the key, so "inet 192.0.2.1/24" and "inet 192.0.2.1/25"
- * have the same key, 2 | CK_ADDR.
+ * have the same key, 2 | CK_ADDR. A word in quotes, such as a network
+ * ID, is one word, blanks and all.
  */
 static int
 samekey(char *a, char *b, int k)
@@ -1013,8 +1026,8 @@ samekey(char *a, char *b, int k)
 			la = strcspn(a, " /");
 			lb = strcspn(b, " /");
 		} else {
-			la = strcspn(a, " ");
-			lb = strcspn(b, " ");
+			la = keyword(a);
+			lb = keyword(b);
 		}
 		if (la != lb || strncmp(a, b, la) != 0)
 			return 0;

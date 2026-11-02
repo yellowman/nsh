@@ -57,6 +57,8 @@ db_create(void)
 		printf("%% database wpakey creation failed\n");
 	if (db_create_table_flag_x("chan") < 0)
 		printf("%% database chan creation failed\n");
+	if (db_create_table_flag_x("joinkey") < 0)
+		printf("%% database joinkey creation failed\n");
 }
 
 int
