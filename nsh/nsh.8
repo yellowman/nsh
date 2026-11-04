@@ -5011,7 +5011,7 @@ nsh(config)# ip ?
  | vnetflowid | parent | patch | keepalive | mplslabel | pwe\
  | syncdev | syncpeer | maxupd | vhid | advbase | advskew | carppass\
  | carpdev | carpnode | carppeer | balancing | pflow |  debug\
- | dhcrelay | wol |  mpls | inet6 | autoconf6\
+ | dhcrelay | dhcrelay6 | wol |  mpls | inet6 | autoconf6\
  | autoconfprivacy | temporary | monitor | soii | tcplro | wgpeer | wgport\
  | wgkey |  wgrtable | trunkport | trunkproto | lacpmode | lacptimeout\
  | shutdown | show | |\&?\
@@ -5098,6 +5098,7 @@ nsh(interface-em0)# ?
   pflow            pflow data export
   debug            Driver dependent debugging
   dhcrelay         DHCP Relay Agent
+  dhcrelay6        DHCPv6 Relay Agent
   wol              Wake On LAN
   mpls             MPLS
   inet6            IPv6 addresses
@@ -6465,6 +6466,33 @@ E.g. set up dhcprelay on em0 and send requests to DHCP server 10.1.1.2
 nsh(interface-em0)# dhcrelay 10.1.1.2
 .Ed
 .Pp
+.Tg dhcrelay6
+.Op no
+.Ic dhcrelay6
+.Ar destination ...
+.Pp
+Set or remove a DHCPv6 relay agent on the selected interface.
+The
+.Xr dhcrelay6 8
+service listens on the selected interface for DHCPv6 requests, and
+relays them to each
+.Ar destination ,
+at most 8.
+A destination is an interface, which gets the requests by multicast,
+or an IPv6 address, a %, and the interface to send them on.
+.Pp
+dhcrelay6 does not handle rdomains itself, so nsh starts it in the
+routing table of the interface's rdomain.
+Each destination's interface must be in that rdomain too.
+After a commit changes the interface's rdomain, nsh starts dhcrelay6
+again in the new routing table.
+.Pp
+E.g. relay the requests that em0 hears to the DHCPv6 server
+2001:db8::1000, which em1 reaches
+.Bd -literal -offset indent
+nsh(interface-em0)# dhcrelay6 2001:db8::1000%em1
+.Ed
+.Pp
 .Tg wake
 .Tg wol
 .Op no
@@ -7117,6 +7145,7 @@ option is used.
 .Xr dhcp6leased 8 ,
 .Xr dhcpd 8 ,
 .Xr dhcpleased 8 ,
+.Xr dhcrelay6 8 ,
 .Xr dvmrpd 8 ,
 .Xr eigrpd 8 ,
 .Xr ftp-proxy 8 ,

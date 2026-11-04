@@ -88,6 +88,7 @@ int conf_routes(FILE *, char *, int, int, int);
 struct rt_msghdr;
 void conf_print_rtm(FILE *, struct rt_msghdr *, char *, int);
 int conf_dhcrelay(char *, char *, int);
+int conf_dhcrelay6(char *, char *, int);
 
 /* show.c */
 #ifdef _NETINET_IN_H_
@@ -369,6 +370,9 @@ int parse_ipv6(char *, struct in6_addr *);
 
 /* if.c */
 #define DHCRELAY	"/usr/sbin/dhcrelay"
+#define DHCRELAY6	"/usr/sbin/dhcrelay6"
+#define DHCRELAY6_DESTS	8	/* the destinations nsh gives dhcrelay6 */
+#define ROUTE		"/sbin/route"
 #define RAD		"/usr/sbin/rad"
 #define DHCPLEASED_SOCK	"/dev/dhcpleased.sock"
 #define SLAACD_SOCK	"/dev/slaacd.sock"
@@ -405,6 +409,7 @@ int intmtu(int, char **, ...);
 int intkeepalive(int, char **, ...);
 int intrdomain(int, char **, ...);
 int intdhcrelay(int, char **, ...);
+int intdhcrelay6(int, char **, ...);
 int intmetric(int, char **, ...);
 int intllprio(int, char **, ...);
 int intflags(int, char **, ...);

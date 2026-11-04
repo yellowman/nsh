@@ -158,6 +158,7 @@ static const struct setting if_settings[] = {
 	{ "wol",		S_FLAG },
 	{ "tcplro",		S_FLAG },
 	{ "dhcrelay",		S_VALUE },
+	{ "dhcrelay6",		S_VALUE },
 	{ "peer",		S_VALUE },
 	{ "auth",		S_VALUE },
 	{ "pppoe",		S_VALUE },

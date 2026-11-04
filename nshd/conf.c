@@ -739,6 +739,15 @@ intconf_dhcrelay(struct intconf *ic)
 }
 
 static void
+intconf_dhcrelay6(struct intconf *ic)
+{
+	char tmp[DHCRELAY6_DESTS * 64];
+
+	if (conf_dhcrelay6(ic->ifname, tmp, sizeof(tmp)) > 0)
+		fprintf(ic->output, " dhcrelay6 %s\n", tmp);
+}
+
+static void
 intconf_ifflags(struct intconf *ic)
 {
 	conf_ifflags(ic->output, ic->flags, ic->ifname, ic->ippntd,
@@ -783,6 +792,7 @@ static const struct {
 	{ INTCONF_NOTBRIDGE,	conf_pwe3,		NULL },
 	{ INTCONF_NOTBRIDGE,	conf_ifxflags,		NULL },
 	{ INTCONF_NOTBRIDGE,	NULL,			intconf_dhcrelay },
+	{ INTCONF_NOTBRIDGE,	NULL,			intconf_dhcrelay6 },
 	{ INTCONF_NOTBRIDGE,	conf_sppp,		NULL },
 	{ INTCONF_NOTBRIDGE,	conf_pppoe,		NULL },
 	{ INTCONF_NOTBRIDGE,	conf_wg,		NULL },
@@ -1024,6 +1034,24 @@ conf_dhcrelay(char *ifname, char *server, int serverlen)
 	if ((alen = db_select_flag_x_data_ctl_rtable(data, "dhcrelay", ifname, 0))
 	    > 0) {
 		strlcpy(server, data->sl_str[0], serverlen);
+		alen = strlen(data->sl_str[0]);
+	}
+	sl_free(data, 1);
+
+	return alen;
+}
+
+/* The destinations dhcrelay6 relays to from ifname, as one line */
+int
+conf_dhcrelay6(char *ifname, char *dests, int destslen)
+{
+	StringList *data;
+	int alen;
+
+	data = sl_init();
+	if ((alen = db_select_flag_x_data_ctl_rtable(data, "dhcrelay6", ifname,
+	    0)) > 0) {
+		strlcpy(dests, data->sl_str[0], destslen);
 		alen = strlen(data->sl_str[0]);
 	}
 	sl_free(data, 1);

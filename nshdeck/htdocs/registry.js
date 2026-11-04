@@ -158,6 +158,15 @@ var REGISTRY = {
 	    "server, through dhcrelay(8), and its answers come back.",
 	    values: "the server's IPv4 address", default: "none",
 	    man: "dhcrelay.8" },
+	"if.dhcrelay6": { label: "DHCPv6 relay to", group: "Routing",
+	    kind: "text", placeholder: "2001:db8::1000%em1",
+	    keyword: "dhcrelay6 destination ...",
+	    definition: "DHCPv6 requests heard on the interface go to " +
+	    "each destination, through dhcrelay6(8), in the routing table " +
+	    "of the interface's rdomain.",
+	    values: "up to 8 destinations: an interface, or an IPv6 " +
+	    "address, a % and an interface", default: "none",
+	    man: "dhcrelay6.8" },
 
 	/* Link layer */
 	"if.lladdr": { label: "MAC address", group: "Link layer", kind: "text",

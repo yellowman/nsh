@@ -27,7 +27,8 @@
  *    candidate sets the same setting another way, with its own line;
  *  * a list loses the values the candidate's line does not have;
  *  * an interface's addresses are added again after a new rdomain,
- *    which removed them, its endpoints after a new tunnel,
+ *    which removed them, and its dhcrelay6, which still runs in the
+ *    old rdomain's routing table; its endpoints after a new tunnel,
  *    tunneladdr, tunneldomain, vnetid or parent, which removed them,
  *    and its WEP and WPA lines after a new nwid, which turned them off;
  *  * a cloned interface is removed whole, and a physical one line by
@@ -207,6 +208,7 @@ static int has(struct cnode *, char *, char *);
 static int samelines(struct cnode *, char *, struct cnode *, char *);
 static int sameline(struct cnode *, char *, struct cnode *, char *, char *);
 static int address(char *);
+static int relay6(char *);
 static int endpoint(char *);
 static int wifikey(char *);
 static int context(char *);
@@ -1357,7 +1359,10 @@ additions(struct commit *c, char *fblock, char *tblock, int there,
 		    (tblock == NULL && ifblock(l, name, sizeof(name)))) {
 			if (sub_begin(c, &s) == -1)
 				goto done;
-			/* a new rdomain removed the addresses, so add them */
+			/*
+			 * a new rdomain removed the addresses, and left
+			 * dhcrelay6 in the old routing table, so add them
+			 */
 			moved = f != NULL && context(tp) == CTX_IF &&
 			    !sameline(c->from, fp, c->to, tp, "rdomain");
 			/*
@@ -1381,7 +1386,7 @@ additions(struct commit *c, char *fblock, char *tblock, int there,
 			for (j = 0; j < kn; j++) {
 				k = kr[j].line;
 				if (f == NULL || !has(c->from, fp, k) ||
-				    (moved && address(k)) ||
+				    (moved && (address(k) || relay6(k))) ||
 				    (flushed && endpoint(k)) ||
 				    (rekeyed && wifikey(k)))
 					set(c, fp, f != NULL, context(tp), k);
@@ -1735,6 +1740,13 @@ static int
 address(char *line)
 {
 	return strncmp(line, "inet ", 5) == 0;
+}
+
+/* Is line an interface's dhcrelay6, which runs in its rdomain? */
+static int
+relay6(char *line)
+{
+	return strncmp(line, "dhcrelay6 ", 10) == 0;
 }
 
 /* Is line an interface's endpoint? */

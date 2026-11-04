@@ -2361,6 +2361,169 @@ intdhcrelay(int argc, char **argv, ...)
 	return 0;
 }
 
+/*
+ * Refuse a dhcrelay6 destination that dhcrelay6 would refuse: one that
+ * is not an interface, or an IPv6 address, a % and an interface. Also
+ * refuse an interface in another rdomain than ifname's, because the
+ * relay's routing table cannot reach it.
+ */
+static int
+dhcrelay6_dest(char *ifname, int ifs, char *dest)
+{
+	char addr[INET6_ADDRSTRLEN], *dev, *l;
+	struct in6_addr in6;
+	size_t len;
+	int rd, devrd;
+
+	dev = dest;
+	if ((l = strchr(dest, '%')) != NULL) {
+		/* the address before the %, and the interface after it */
+		len = l - dest;
+		if (len < sizeof(addr)) {
+			memcpy(addr, dest, len);
+			addr[len] = '\0';
+		}
+		if (len >= sizeof(addr) || inet_pton(AF_INET6, addr,
+		    &in6) != 1) {
+			printf("%% %s: not an IPv6 address, a %% and an "
+			    "interface\n", dest);
+			return -1;
+		}
+		dev = l + 1;
+	} else if (inet_pton(AF_INET6, dest, &in6) == 1) {
+		printf("%% %s: an address needs a %% and the interface to "
+		    "send on\n", dest);
+		return -1;
+	}
+	if (candidate) {
+		if (!cand_hasif(dev)) {
+			printf("%% %s: no interface %s\n", dest, dev);
+			return -1;
+		}
+		l = cand_line("rdomain", 0);
+		rd = l != NULL ? atoi(l + strlen("rdomain ")) : 0;
+		l = cand_ifline(dev, "rdomain", 0);
+		devrd = l != NULL ? atoi(l + strlen("rdomain ")) : 0;
+	} else {
+		if (!is_valid_ifname(dev)) {
+			printf("%% %s: no interface %s\n", dest, dev);
+			return -1;
+		}
+		rd = get_rdomain(ifs, ifname);
+		devrd = get_rdomain(ifs, dev);
+	}
+	if (rd != devrd) {
+		printf("%% %s: %s is in rdomain %d, and %s in rdomain %d\n",
+		    dest, dev, devrd, ifname, rd);
+		return -1;
+	}
+	return 0;
+}
+
+/*
+ * dhcrelay6 relays the DHCPv6 requests that ifname hears. Each
+ * destination is an interface, or an IPv6 address, a %, and the
+ * interface to send on. dhcrelay6 has no rdomain code of its own, so
+ * nsh starts it in the routing table of ifname's rdomain, and each
+ * destination's interface must be in that rdomain too. Setting
+ * dhcrelay6 again stops the relay that runs before it starts the new
+ * one, so a commit can start it again after a new rdomain.
+ */
+int
+intdhcrelay6(int argc, char **argv, ...)
+{
+	char *cmd[7 + DHCRELAY6_DESTS + 1] = { ROUTE, "-T", NULL, "exec",
+	    DHCRELAY6, "-i", NULL };
+	char *killcmd[] = { PKILL, "-xf", NULL, NULL };
+	char dests[DHCRELAY6_DESTS * 64], was[sizeof(dests)];
+	char argue[sizeof(dests) + 64], rd[16], *ifname, *l;
+	int set, ifs, i, r, rdomain;
+	va_list ap;
+
+	va_start(ap, argv);
+	ifname = va_arg(ap, char *);
+	ifs = va_arg(ap, int);
+	va_end(ap);
+
+	if (NO_ARG(argv[0])) {
+		set = 0;
+		argc--;
+		argv++;
+	} else
+		set = 1;
+	argc--;
+	argv++;
+
+	if ((set && argc < 1) || argc > DHCRELAY6_DESTS) {
+		printf("%% dhcrelay6 <destination> [destination ...]\n");
+		printf("%% no dhcrelay6 [destination ...]\n");
+		printf("%% at most %d destinations\n", DHCRELAY6_DESTS);
+		return -1;
+	}
+	dests[0] = '\0';
+	for (i = 0; i < argc; i++) {
+		if (dhcrelay6_dest(ifname, ifs, argv[i]) == -1)
+			return -1;
+		if (i > 0)
+			strlcat(dests, " ", sizeof(dests));
+		strlcat(dests, argv[i], sizeof(dests));
+	}
+
+	if (candidate) {
+		if (set)
+			return cand_setting(ST_ON, "dhcrelay6 %s", dests);
+		if ((l = cand_line("dhcrelay6", 0)) == NULL) {
+			printf("%% No DHCPv6 relay configured for %s\n", ifname);
+			return -1;
+		}
+		l += strlen("dhcrelay6 ");
+		if (argc && strcmp(l, dests) != 0) {
+			printf("%% Destinations expected: %s (not %s)\n", l,
+			    dests);
+			return -1;
+		}
+		return cand_setting(ST_DEFAULT, "dhcrelay6");
+	}
+
+	/* stop the relay that runs, if any */
+	if (conf_dhcrelay6(ifname, was, sizeof(was)) > 0) {
+		if (!set && argc && strcmp(was, dests) != 0) {
+			printf("%% Destinations expected: %s (not %s)\n", was,
+			    dests);
+			return -1;
+		}
+		/* as one argument for pkill -xf */
+		snprintf(argue, sizeof(argue), "%s -i %s %s", DHCRELAY6,
+		    ifname, was);
+		killcmd[2] = argue;
+		/* pkill exits 1 if no dhcrelay6 was running */
+		r = cmdargs(PKILL, killcmd);
+		if (r == -1 || r > 1)
+			return -1;
+		if (flag_x("dhcrelay6", ifname, DB_X_REMOVE, NULL) == -1)
+			return -1;
+	} else if (!set) {
+		printf("%% No DHCPv6 relay configured for %s\n", ifname);
+		return -1;
+	}
+	if (!set)
+		return 0;
+
+	if ((rdomain = get_rdomain(ifs, ifname)) == -1) {
+		printf("%% %s: rdomain: %s\n", ifname, strerror(errno));
+		return -1;
+	}
+	snprintf(rd, sizeof(rd), "%d", rdomain);
+	cmd[2] = rd;
+	cmd[6] = ifname;
+	for (i = 0; i < argc; i++)
+		cmd[7 + i] = argv[i];
+	/* kept only once it runs */
+	if (cmdargs(ROUTE, cmd) != 0)
+		return -1;
+	return flag_x("dhcrelay6", ifname, DB_X_ENABLE, dests);
+}
+
 int
 intmetric(int argc, char **argv, ...)
 {
