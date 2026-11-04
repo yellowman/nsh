@@ -15,13 +15,16 @@
  */
 
 /*
- * config: the sessions, from frontend, and what they ask of system, each
- * on its own pipe. Each request to system has an id of its own; system's
- * answers for it go to the session that asked, if that session is still
- * there, its facts passed on unread. system learns when a session's
- * client has read all it was sent, so it may stream more, and when the
- * session is gone, so it stops streaming to it. A peer that sends what it
- * may not, or sends it wrong, ends config, and nshd with it.
+ * config: the sessions, and what they ask of system. Each session comes
+ * from parent, with its number, the uid and gid of its client, and a pipe
+ * to its frontend; config knows the session by that pipe alone. Each
+ * request to system has an id of its own; system's answers for it go to
+ * the session that asked, if that session is still there, its facts
+ * passed on unread. system learns when a session's client has read all
+ * it was sent, so it may stream more, and when the session is gone, so it
+ * stops streaming to it. A frontend that closes its pipe, sends what it
+ * may not, or sends it wrong, ends its session. Another peer that sends
+ * what it may not, or sends it wrong, ends config, and nshd with it.
  *
  * A session in configure has nsh's state of its own (session.c), and
  * config runs its lines through nsh's code in candidate mode, which here
@@ -41,8 +44,9 @@
  * from the others' changes.
  *
  * A session has the permissions of its user's login class, which config
- * asks system for at the session's hello, by the uid frontend gives;
- * until they are in, the session may only say hello, log in and go. A
+ * asks system for at the session's hello, by the session; system answers
+ * for the uid of the session's client. Until they are in, the session may
+ * only say hello, log in and go. A
  * show, a watch, the tables and names for completion, and a terminal need
  * view; an operation needs operate; configure private, configure
  * terminal, a commit, a rollback, a load and a daemon's rules need
@@ -187,6 +191,20 @@ struct session {
 	int			 watchr;	/* the watch's result status */
 };
 
+/*
+ * A session's frontend: the pipe parent gave config for it, and who its
+ * client is, as parent read it
+ */
+struct front {
+	TAILQ_ENTRY(front)	 entry;
+	uint32_t		 session;
+	uid_t			 uid;
+	gid_t			 gid;
+	int			 dropped;	/* to go, as front_sweep() runs */
+	struct imsgev		*iev;
+};
+#define FRONT_QUEUE	4096	/* messages to all frontends, unwritten */
+
 /* a request system has not finished, and the session that asked it */
 struct request {
 	TAILQ_ENTRY(request)	 entry;
@@ -285,9 +303,19 @@ static uint8_t			 units[FACTS_UNIT];	/* facts to send */
 static size_t			 nunits;		/* bytes in units */
 
 static struct imsgev	*iev_parent;
+static TAILQ_HEAD(, front)	 fronts = TAILQ_HEAD_INITIALIZER(fronts);
+static struct event		 front_tm;	/* runs front_sweep() */
 
 static void		 config_dispatch_parent(int, short, void *);
-static void		 config_dispatch_frontend(int, short, void *);
+static void		 config_dispatch_front(int, short, void *);
+static void		 front_new(struct nshd_newsession *, int);
+static struct front	*front_find(uint32_t);
+static struct imsgev	*front_iev(uint32_t);
+static int		 front_compose(uint32_t, uint32_t, const void *,
+			    size_t);
+static void		 front_check(void);
+static void		 front_sweep(int, short, void *);
+static void		 front_drop(struct front *);
 static void		 config_dispatch_system(int, short, void *);
 static void		 config_dispatch_archive(int, short, void *);
 static void		 config_ready_archive(void);
@@ -298,7 +326,7 @@ static void		 config_exit(uint32_t);
 static void		 config_commit(uint32_t, struct nshd_commit *);
 static void		 config_rollback(uint32_t, struct nshd_rollback *);
 static void		 config_rolled(struct request *, int32_t);
-static void		 config_hello(uint32_t, struct nshd_peer *);
+static void		 config_hello(uint32_t);
 static void		 config_hello_answer(struct session *);
 static void		 config_perms(struct request *, int32_t);
 static void		 config_login(uint32_t, struct nshd_login *);
@@ -375,11 +403,9 @@ static struct request	*request_find(uint32_t);
 static void		 request_free(struct request *);
 
 static struct link	 links[] = {
-#define FRONTEND	0
-	{ PROC_FRONTEND, config_dispatch_frontend },
-#define SYSTEM		1
+#define SYSTEM		0
 	{ PROC_SYSTEM,	 config_dispatch_system },
-#define ARCHIVE		2
+#define ARCHIVE		1
 	{ PROC_ARCHIVE,	 config_dispatch_archive, config_ready_archive },
 };
 
@@ -398,12 +424,13 @@ configproc(int debug, int verbose)
 	if ((shared = cand_shared_new()) == NULL)
 		fatal(NULL);
 
-	if ((iev_parent = imsgev_new(3, config_dispatch_parent, 0)) == NULL)
+	/* each session's pipe to its frontend comes from parent */
+	if ((iev_parent = imsgev_new(3, config_dispatch_parent, 1)) == NULL)
 		fatal(NULL);
 	links_init(links, sizeof(links) / sizeof(links[0]));
 	/* its peers' pipes are here; a terminal's pty passes through */
 	imsgbuf_allow_fdpass(&links[SYSTEM].iev->ibuf);
-	imsgbuf_allow_fdpass(&links[FRONTEND].iev->ibuf);
+	evtimer_set(&front_tm, front_sweep, NULL);
 	event_set(&rt_ev, 5, EV_READ | EV_PERSIST, config_route, NULL);
 	event_add(&rt_ev, NULL);
 	evtimer_set(&rt_tm, config_routed, NULL);
@@ -411,14 +438,18 @@ configproc(int debug, int verbose)
 	exit(0);
 }
 
-/* parent's word that config may start, and whether to boot */
+/*
+ * parent's word that config may start, and whether to boot; and each new
+ * session, with its pipe to its frontend
+ */
 static void
 config_dispatch_parent(int fd, short event, void *arg)
 {
 	struct imsgev		*iev = arg;
 	struct imsg		 imsg;
 	struct nshd_startup	 st;
-	int			 n;
+	struct nshd_newsession	 ns;
+	int			 n, pfd;
 
 	if (imsgev_io(iev, event) == -1)
 		exit(0);
@@ -428,6 +459,13 @@ config_dispatch_parent(int fd, short event, void *arg)
 			fatal("imsgbuf_get");
 		if (n == 0)
 			break;
+		if (imsg_get_type(&imsg) == IMSG_SESSION &&
+		    imsg_get_data(&imsg, &ns, sizeof(ns)) == 0 &&
+		    (pfd = imsg_get_fd(&imsg)) != -1) {
+			front_new(&ns, pfd);
+			imsg_free(&imsg);
+			continue;
+		}
 		if (imsg_get_type(&imsg) != IMSG_STARTUP ||
 		    imsg_get_data(&imsg, &st, sizeof(st)) == -1)
 			fatalx("parent sent imsg %u, which it may not",
@@ -439,14 +477,146 @@ config_dispatch_parent(int fd, short event, void *arg)
 	imsg_event_add(iev);
 }
 
-/* frontend's requests, each for a session */
+/*
+ * A new session from parent, and fd, the pipe to its frontend: parent is
+ * told config took it, or did not
+ */
 static void
-config_dispatch_frontend(int fd, short event, void *arg)
+front_new(struct nshd_newsession *ns, int fd)
+{
+	struct nshd_taken	 t;
+	struct front		*f;
+
+	memset(&t, 0, sizeof(t));
+	t.session = ns->session;
+	if (ns->session == 0 || front_find(ns->session) != NULL ||
+	    (f = calloc(1, sizeof(*f))) == NULL) {
+		close(fd);
+		t.status = 1;
+	} else if ((f->iev = imsgev_new(fd, config_dispatch_front, 1)) ==
+	    NULL) {	/* a terminal's pty passes on to the frontend */
+		close(fd);
+		free(f);
+		t.status = 1;
+	} else {
+		f->session = ns->session;
+		f->uid = ns->uid;
+		f->gid = ns->gid;
+		TAILQ_INSERT_TAIL(&fronts, f, entry);
+	}
+	if (imsg_compose_event(iev_parent, IMSG_SESSION_TAKEN, 0, 0, -1, &t,
+	    sizeof(t)) == -1)
+		fatal("%s", __func__);
+}
+
+static struct front *
+front_find(uint32_t session)
+{
+	struct front	*f;
+
+	TAILQ_FOREACH(f, &fronts, entry)
+		if (f->session == session)
+			return (f);
+	return (NULL);
+}
+
+/*
+ * The pipe to session's frontend, or NULL if the session is gone, or is
+ * to go: what is sent there is dropped
+ */
+static struct imsgev *
+front_iev(uint32_t session)
+{
+	struct front	*f;
+
+	front_check();
+	if ((f = front_find(session)) == NULL || f->dropped)
+		return (NULL);
+	return (f->iev);
+}
+
+/* a message to session's frontend, as link_compose() sends one */
+static int
+front_compose(uint32_t session, uint32_t type, const void *data,
+    size_t len)
+{
+	struct imsgev	*iev;
+
+	if ((iev = front_iev(session)) == NULL)
+		return (0);
+	return (imsg_compose_event(iev, type, session, 0, -1, data, len));
+}
+
+/*
+ * If config holds more than FRONT_QUEUE messages for the frontends, not
+ * yet written, the session whose frontend has most of them goes, once
+ * config is back in its event loop. A frontend that does not read cannot
+ * make config hold more than that, and one answer more
+ */
+static void
+front_check(void)
+{
+	struct front	*f, *most = NULL;
+	struct timeval	 now = { 0, 0 };
+	uint32_t	 all = 0, n;
+
+	TAILQ_FOREACH(f, &fronts, entry) {
+		if (f->dropped)
+			continue;
+		n = imsgbuf_queuelen(&f->iev->ibuf);
+		all += n;
+		if (most == NULL || n > imsgbuf_queuelen(&most->iev->ibuf))
+			most = f;
+	}
+	if (all <= FRONT_QUEUE)
+		return;
+	log_warnx("session %u: its frontend reads too little", most->session);
+	most->dropped = 1;
+	evtimer_add(&front_tm, &now);
+}
+
+/* the sessions whose frontends front_check() found read too little go */
+static void
+front_sweep(int fd, short event, void *arg)
+{
+	struct front	*f, *next;
+
+	TAILQ_FOREACH_SAFE(f, &fronts, entry, next)
+		if (f->dropped)
+			front_drop(f);
+}
+
+/*
+ * f's session goes: system stops what it streams to it, and f's pipe is
+ * closed, so its frontend ends
+ */
+static void
+front_drop(struct front *f)
+{
+	struct session	*sp;
+
+	if ((sp = session_find(f->session)) != NULL)
+		session_gone(sp);
+	config_tell(f->session, IMSG_SYS_STOP);
+	TAILQ_REMOVE(&fronts, f, entry);
+	event_del(&f->iev->ev);
+	imsgbuf_clear(&f->iev->ibuf);
+	close(f->iev->ibuf.fd);
+	free(f->iev);
+	free(f);
+}
+
+/*
+ * A frontend's requests, for its session: the session is the pipe's, as
+ * parent gave it, whatever the frontend sends
+ */
+static void
+config_dispatch_front(int fd, short event, void *arg)
 {
 	struct imsgev		*iev = arg;
-	struct link		*l = &links[FRONTEND];
+	struct front		*f;
 	struct imsg		 imsg;
-	struct nshd_peer	 peer;
+	struct nshd_hello	 hello;
 	struct nshd_show	 show;
 	struct nshd_configure	 cf;
 	struct nshd_line	 line;
@@ -458,32 +628,40 @@ config_dispatch_frontend(int fd, short event, void *arg)
 	struct nshd_login	 lg;
 	struct nshd_watch	 w;
 	struct nshd_terminal	 tm;
-	struct session		*sp;
 	uint32_t		 id, type;
 	int			 n;
 
+	TAILQ_FOREACH(f, &fronts, entry)
+		if (f->iev == iev)
+			break;
+	if (f == NULL)
+		fatalx("%s: from no session", __func__);
+	if (f->dropped)
+		return;
 	if (imsgev_io(iev, event) == -1) {
-		link_broken(l, "closed its pipe");
+		front_drop(f);
 		return;
 	}
 
+	id = f->session;
 	for (;;) {
 		if ((n = imsgbuf_get(&iev->ibuf, &imsg)) == -1) {
-			link_broken(l, "sent what imsg cannot read");
+			log_warnx("session %u: its frontend sent what imsg "
+			    "cannot read", id);
+			front_drop(f);
 			return;
 		}
 		if (n == 0)
 			break;
-		id = imsg_get_id(&imsg);
 		if (!config_may(id, type = imsg_get_type(&imsg))) {
 			imsg_free(&imsg);
 			continue;
 		}
 		switch (type) {
 		case IMSG_CTL_HELLO:
-			if (imsg_get_data(&imsg, &peer, sizeof(peer)) == -1)
+			if (imsg_get_data(&imsg, &hello, sizeof(hello)) == -1)
 				goto bad;
-			config_hello(id, &peer);
+			config_hello(id);
 			break;
 		case IMSG_CTL_SHOW:
 			if (imsg_get_data(&imsg, &show, sizeof(show)) == -1 ||
@@ -572,11 +750,6 @@ config_dispatch_frontend(int fd, short event, void *arg)
 			else
 				config_names(id);
 			break;
-		case IMSG_CTL_CLOSE:
-			if ((sp = session_find(id)) != NULL)
-				session_gone(sp);
-			config_tell(id, IMSG_SYS_STOP);
-			break;
 		case IMSG_CTL_READ:
 			config_tell(id, IMSG_SYS_READ);
 			break;
@@ -584,12 +757,17 @@ config_dispatch_frontend(int fd, short event, void *arg)
 			goto bad;
 		}
 		imsg_free(&imsg);
+		/* a request may have made config drop the session */
+		if (f->dropped)
+			return;
 	}
 	imsg_event_add(iev);
 	return;
  bad:
 	imsg_free(&imsg);
-	link_broken(l, "sent imsg %u, which it may not, or not whole", type);
+	log_warnx("session %u: its frontend sent imsg %u, which it may not, "
+	    "or not whole", id, type);
+	front_drop(f);
 }
 
 /* system's answers, each for a request */
@@ -605,6 +783,7 @@ config_dispatch_system(int fd, short event, void *arg)
 	struct nshd_logged	 lg;
 	struct request		*r;
 	struct session		*sp;
+	struct imsgev		*fiev;
 	uint32_t		 type;
 	int			 n, pty;
 	char			*p;
@@ -645,8 +824,8 @@ config_dispatch_system(int fd, short event, void *arg)
 					config_notice_to(r->session,
 					    NSHD_NOTICE_LOG, 0, r->n,
 					    ibuf_data(&b), ibuf_size(&b));
-				else if (link_compose(&links[FRONTEND],
-				    IMSG_CTL_OUTPUT, r->session, ibuf_data(&b),
+				else if (front_compose(r->session,
+				    IMSG_CTL_OUTPUT, ibuf_data(&b),
 				    ibuf_size(&b)) == -1)
 					fatal("%s", __func__);
 				break;
@@ -674,9 +853,9 @@ config_dispatch_system(int fd, short event, void *arg)
 				break;
 			}
 			if (session_find(r->session) != NULL &&
-			    link_compose(&links[FRONTEND],
+			    front_compose(r->session,
 			    type == IMSG_SYS_TEXT ? IMSG_CTL_OUTPUT :
-			    IMSG_CTL_FACTS, r->session, ibuf_data(&b),
+			    IMSG_CTL_FACTS, ibuf_data(&b),
 			    ibuf_size(&b)) == -1)
 				fatal("%s", __func__);
 			break;
@@ -727,11 +906,11 @@ config_dispatch_system(int fd, short event, void *arg)
 			if ((pty = imsg_get_fd(&imsg)) == -1 ||
 			    imsg_get_len(&imsg) != 0)
 				goto bad;
-			if (r == NULL || session_find(r->session) == NULL)
+			if (r == NULL || session_find(r->session) == NULL ||
+			    (fiev = front_iev(r->session)) == NULL)
 				close(pty);
-			else if (imsg_compose_event(links[FRONTEND].iev,
-			    IMSG_CTL_TERMINAL, r->session, 0, pty, NULL, 0) ==
-			    -1)
+			else if (imsg_compose_event(fiev, IMSG_CTL_TERMINAL,
+			    r->session, 0, pty, NULL, 0) == -1)
 				fatal("%s", __func__);
 			break;
 		case IMSG_SYS_FOLLOWING:
@@ -1000,7 +1179,7 @@ config_rolled(struct request *r, int32_t status)
 		return;
 	}
 	if (status != 0) {
-		if (imsg_text(links[FRONTEND].iev, IMSG_CTL_OUTPUT, sp->id,
+		if (imsg_text(front_iev(sp->id), IMSG_CTL_OUTPUT, sp->id,
 		    r->text, r->len) == -1)
 			fatal("%s", __func__);
 		config_answer(sp->id, 1, NULL);
@@ -1012,23 +1191,29 @@ config_rolled(struct request *r, int32_t status)
 	config_ran(sp, n, 1);
 }
 
-/* hello: the session, made once, and its permissions asked of system */
+/*
+ * hello: the session, made once, with the uid and gid parent read from
+ * its client's socket, and its permissions asked of system
+ */
 static void
-config_hello(uint32_t session, struct nshd_peer *peer)
+config_hello(uint32_t session)
 {
 	struct nshd_perms	 p;
 	struct session		*sp;
 	struct request		*r;
+	struct front		*f;
 
 	if ((sp = session_find(session)) != NULL) {
 		config_hello_answer(sp);
 		return;
 	}
+	if ((f = front_find(session)) == NULL)
+		return;
 	if ((sp = calloc(1, sizeof(*sp))) == NULL)
 		fatal(NULL);
 	sp->id = session;
-	sp->uid = peer->uid;
-	sp->gid = peer->gid;
+	sp->uid = f->uid;
+	sp->gid = f->gid;
 	sp->perms = -1;
 	TAILQ_INSERT_TAIL(&sessions, sp, entry);
 	if ((r = config_request(session, REQ_PERMS)) == NULL) {
@@ -1051,7 +1236,7 @@ config_hello_answer(struct session *sp)
 	s.version = NSHD_VERSION;
 	s.id = sp->id;
 	s.perms = sp->perms;
-	if (link_compose(&links[FRONTEND], IMSG_CTL_HELLO, sp->id, &s,
+	if (front_compose(sp->id, IMSG_CTL_HELLO, &s,
 	    sizeof(s)) == -1)
 		fatal("%s", __func__);
 }
@@ -1147,7 +1332,7 @@ config_text(struct request *r, int32_t status)
 		return;
 	}
 	r->len = login_hide(r->text, r->len);
-	if (imsg_text(links[FRONTEND].iev, IMSG_CTL_OUTPUT, r->session,
+	if (imsg_text(front_iev(r->session), IMSG_CTL_OUTPUT, r->session,
 	    r->text, r->len) == -1)
 		fatal("%s", __func__);
 	config_answer(r->session, status, NULL);
@@ -1172,7 +1357,7 @@ config_may(uint32_t session, uint32_t type)
 	const char	*name = "configure";
 	int		 need = NSHD_CONFIGURE;
 
-	if (type == IMSG_CTL_HELLO || type == IMSG_CTL_CLOSE ||
+	if (type == IMSG_CTL_HELLO ||
 	    type == IMSG_CTL_READ || type == IMSG_CTL_LOGIN ||
 	    (sp = session_find(session)) == NULL)
 		return (1);
@@ -1291,7 +1476,7 @@ config_flush(struct session *sp)
 {
 	if (nunits == 0)
 		return;
-	if (link_compose(&links[FRONTEND], IMSG_CTL_FACTS, sp->id, units,
+	if (front_compose(sp->id, IMSG_CTL_FACTS, units,
 	    nunits) == -1)
 		fatal("%s", __func__);
 	nunits = 0;
@@ -1353,7 +1538,7 @@ config_watch(uint32_t session, struct nshd_watch *w)
 		} else if (r == NULL && (w->what & log) != 0) {
 			if ((r = config_request(session, REQ_FOLLOW)) ==
 			    NULL) {
-				if (imsg_text(links[FRONTEND].iev,
+				if (imsg_text(front_iev(session),
 				    IMSG_CTL_OUTPUT, session, IDS_GONE,
 				    strlen(IDS_GONE)) == -1)
 					fatal("%s", __func__);
@@ -1450,7 +1635,7 @@ config_notice_to(uint32_t session, int kind, uid_t uid, int n,
 		len = NSHD_TEXT;
 	if (len > 0)
 		memcpy(buf + sizeof(nt), text, len);
-	if (link_compose(&links[FRONTEND], IMSG_CTL_NOTICE, session, buf,
+	if (front_compose(session, IMSG_CTL_NOTICE, buf,
 	    sizeof(nt) + len) == -1)
 		fatal("%s", __func__);
 }
@@ -1967,7 +2152,7 @@ shared_kept(uint32_t seq, const char *warn)
 		if (sp->keep == 0 || (int32_t)(sp->keep - seq) > 0)
 			continue;
 		sp->keep = 0;
-		if (warn != NULL && imsg_text(links[FRONTEND].iev,
+		if (warn != NULL && imsg_text(front_iev(sp->id),
 		    IMSG_CTL_OUTPUT, sp->id, warn, strlen(warn)) == -1)
 			fatal("%s", __func__);
 		config_reply(sp, &sp->held, sp->heldr, sp->heldmode);
@@ -2198,7 +2383,7 @@ config_ran(struct session *sp, int r, int mode)
 		c.rtable = rtable;
 		c.bridge = bridge;
 	}
-	if (printed_text(links[FRONTEND].iev, IMSG_CTL_OUTPUT, sp->id,
+	if (printed_text(front_iev(sp->id), IMSG_CTL_OUTPUT, sp->id,
 	    config_hides(sp)) == -1)
 		r = -1;
 	/* a change to the shared candidate is answered once it is kept */
@@ -2216,8 +2401,8 @@ config_ran(struct session *sp, int r, int mode)
 static void
 config_reply(struct session *sp, struct nshd_context *c, int r, int mode)
 {
-	if (mode && link_compose(&links[FRONTEND], IMSG_CTL_CONTEXT, sp->id,
-	    c, sizeof(*c)) == -1)
+	if (mode && front_compose(sp->id, IMSG_CTL_CONTEXT, c,
+	    sizeof(*c)) == -1)
 		fatal("%s", __func__);
 	config_answer(sp->id, r == -1 ? -1 : 0, NULL);
 }
@@ -2514,7 +2699,7 @@ commit_request(int step, uint32_t type, const void *data, size_t len)
 	if (commit->boot)
 		printed_log();
 	else
-		printed_text(sp != NULL ? links[FRONTEND].iev : NULL,
+		printed_text(sp != NULL ? front_iev(commit->session) : NULL,
 		    IMSG_CTL_OUTPUT, commit->session, config_hides(sp));
 	if ((r = config_request(commit->session, REQ_COMMIT)) == NULL) {
 		commit_end(-1, IDS_GONE);
@@ -2565,7 +2750,7 @@ commit_end(int r, const char *msg)
 	if (sp == NULL)
 		printed_text(NULL, 0, 0, 0);
 	else if (msg != NULL) {
-		printed_text(links[FRONTEND].iev, IMSG_CTL_OUTPUT, sp->id,
+		printed_text(front_iev(sp->id), IMSG_CTL_OUTPUT, sp->id,
 		    config_hides(sp));
 		config_answer(sp->id, 1, "%s", msg);
 	} else
@@ -2702,13 +2887,13 @@ config_answer(uint32_t session, int32_t status, const char *fmt, ...)
 		va_end(ap);
 		if (len == -1)
 			fatal("%s", __func__);
-		if (imsg_text(links[FRONTEND].iev, IMSG_CTL_OUTPUT, session,
+		if (imsg_text(front_iev(session), IMSG_CTL_OUTPUT, session,
 		    s, len) == -1)
 			fatal("%s", __func__);
 		free(s);
 	}
 	r.status = status;
-	if (link_compose(&links[FRONTEND], IMSG_CTL_RESULT, session, &r,
+	if (front_compose(session, IMSG_CTL_RESULT, &r,
 	    sizeof(r)) == -1)
 		fatal("%s", __func__);
 }

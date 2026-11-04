@@ -27,7 +27,8 @@ reads the system's configuration for
 .Xr nsh 8 ,
 which requests it over a socket.
 It is privilege separated.
-The parent process, as root, binds the sockets and starts the children.
+The parent process, as root, binds the sockets, starts the children,
+and accepts each client of the read-write socket.
 Each child except system runs as a user of its own, so that no child can
 signal a child of another role or reach its files:
 .Bl -tag -width "frontend"
@@ -52,16 +53,31 @@ Each opens
 before its
 .Xr chroot 2 .
 .It frontend
-Runs as _nshfront in a
-.Xr chroot 2
-and answers the read-write socket.
+One for each client of the read-write socket, each as _nshfront in a
+.Xr chroot 2 ,
+in a process group of its own.
 Each client is a session, which sends one request at a time.
-frontend passes each client's socket to system when the client
-connects.
+The parent accepts the client, reads its uid and gid from its socket,
+and gives the session a number that it never uses again.
+It gives config and system each a pipe to the session's frontend, and
+gives system a copy of the client's socket.
+Once both have taken the session, the parent starts the frontend with
+those pipes and the client's socket, and no other descriptor.
+config and system know which session a message is for by the pipe it
+comes on, so a frontend can speak only for its own session.
 Before config sees a request, frontend tells system of it if the request
 may begin a commit, or if it is an operation, a login, a terminal or a
 watch.
 frontend also tells system when the request is answered.
+A frontend is
+.Xr pledge 2 Ns d
+to use only the descriptors it has and to pass on a terminal's pty, so
+it can signal no process outside its own process group.
+When the client goes, its frontend ends, and config and system drop the
+session.
+A frontend that ends, or sends what it may not, ends only its session.
+The parent takes at most 64 sessions at once, and closes a client past
+that.
 A client with _nshweb's uid is the web configurator's session.
 Only that session may log in, as a user, with that user's password, and
 request the user's terminal.
@@ -216,30 +232,25 @@ that is not answered, and whose client is still connected.
 system reads the uid it records, and whether a session is the web
 configurator's, itself: it calls
 .Xr getpeereid 2
-on the socket of the session's client.
+on the socket of the session's client, which the parent passes it.
 It answers config's request for a session's permissions from that uid
-too, and a session whose client's socket it does not have has none.
-It takes that socket only if it was accepted on the read-write socket:
-its address is that socket's path, and it is not listening.
-Both stay true after the client closes its end.
-For a pipe between nshd's processes, which parent made as root,
-.Xr getpeereid 2
-reports root, so a frontend that passes one in place of a client's
-socket ends
-.Nm .
-This check shows which user a session's connection belongs to.
-It does not show what that user asked for: frontend reads each client's
-requests and tells system of each one, and system trusts frontend's word
-of them.
+too.
+A session whose client has closed its connection, or whose client's
+socket system does not have, has none.
+This shows which user a session's connection belongs to.
+It does not show what that user asked for: the session's frontend reads
+the client's requests and tells system of each one, and system trusts
+that frontend's word of them.
 Once system finds that a session's client has closed its connection, it
-refuses frontend's word of a new request from that session, and drops
-each request of that session that it has not begun to act on.
+refuses a new request from that session, and drops each request of that
+session that it has not begun to act on, whether or not the session's
+frontend is still there.
 An operation or a commit that system has begun can go on.
-So a compromised frontend cannot choose who a client is, but it can make
-requests in the name of any client that is connected.
-It keeps a client's socket only while enough descriptors stay free for
-its own work: commits and the streams it runs.
-When it cannot keep a socket, it refuses that client's requests.
+So system acts on a compromised frontend's requests only in the name of
+its own client, and only while that client is connected.
+system takes a session only while enough descriptors stay free for its
+own work: commits and the streams it runs.
+When it cannot, the session ends before it begins.
 system checks the permissions of that uid's login class itself, as
 config does: an operation needs operate, and a commit, its test and a
 save need configure.
@@ -393,17 +404,17 @@ starts, config loads what archive stored before any session enters
 .Cm configure .
 .El
 .Pp
-frontend and config, config and system, config and archive, and
-frontend and system each talk on a pipe of their own.
+config and system, and config and archive, each talk on a pipe of
+their own.
 The parent makes the pipes before the children start, so each child
 knows who sent what it reads.
 Each child also has a pipe to the parent, which tells it when to
-start.
-The only message the parent accepts from a child is config's message
-that the boot is done.
+start, and on which config and system get each new session's pipes.
+The parent accepts only config's and system's word that they took a
+session, and config's message that the boot is done.
 .Pp
-If any child exits, or sends the parent or a peer a message that it may
-not send,
+If any child but a frontend exits, or sends the parent or a peer a
+message that it may not send,
 .Nm
 ends: the child's peers find their pipes closed and exit, and the parent
 kills the rest with
@@ -421,7 +432,7 @@ With
 as rc starts it,
 .Nm
 boots.
-Before frontend and the shows accept clients, config has system make
+Before the parent and the shows accept clients, config has system make
 the running configuration the saved one, as much of it as takes effect,
 as
 .Xr nsh 8

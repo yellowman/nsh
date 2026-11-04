@@ -15,9 +15,10 @@
  */
 
 /*
- * A socket's clients: parent binds the socket, and frontend or show
- * listens on it, each with its own handler for what a client sends.
- * And config's routing socket, which parent opens.
+ * A socket's clients: parent binds the socket, and a show listens on it,
+ * with its own handler for what a client sends; or a frontend takes the
+ * one client parent accepted for it. And config's routing socket, which
+ * parent opens.
  */
 
 #include <sys/types.h>
@@ -56,6 +57,7 @@ static TAILQ_HEAD(, ctl_conn) ctl_conns = TAILQ_HEAD_INITIALIZER(ctl_conns);
 static uint32_t control_nextid;
 
 static void		 control_accept(int, short, void *);
+static int		 control_conn(int);
 static void		 control_dispatch(int, short, void *);
 static void		 control_close(struct ctl_conn *);
 static struct ctl_conn	*control_connbyfd(int);
@@ -173,9 +175,6 @@ control_listen(int fd, int (*opened)(struct ctl_conn *),
 static void
 control_accept(int listenfd, short event, void *arg)
 {
-	struct ctl_conn	*c;
-	uid_t		 uid;
-	gid_t		 gid;
 	int		 connfd;
 
 	event_add(&control_state.ev, NULL);
@@ -196,38 +195,61 @@ control_accept(int listenfd, short event, void *arg)
 		return;
 	}
 
+	if (control_conn(connfd) == -1)
+		close(connfd);
+}
+
+/*
+ * The client one frontend takes on fd, which parent accepted for it, as
+ * control_listen() says, without opened: its id, or 0, logged, if not
+ */
+uint32_t
+control_one(int fd, int (*handler)(struct ctl_conn *, struct imsg *),
+    void (*closed)(struct ctl_conn *), int (*written)(struct ctl_conn *))
+{
+	control_state.handler = handler;
+	control_state.closed = closed;
+	control_state.written = written;
+	if (control_conn(fd) == -1)
+		return (0);
+	return (control_nextid);
+}
+
+/* a client on connfd, who it is, and its events; -1, logged, if not */
+static int
+control_conn(int connfd)
+{
+	struct ctl_conn	*c;
+	uid_t		 uid;
+	gid_t		 gid;
+
 	if (getpeereid(connfd, &uid, &gid) == -1) {
 		log_warn("%s: getpeereid", __func__);
-		close(connfd);
-		return;
+		return (-1);
 	}
 
 	/* an id is never used again, as answers for it can come late */
 	if (control_nextid == UINT32_MAX) {
 		log_warnx("%s: connection ids exhausted", __func__);
-		close(connfd);
-		return;
+		return (-1);
 	}
 
 	if ((c = calloc(1, sizeof(*c))) == NULL) {
 		log_warn("%s: calloc", __func__);
-		close(connfd);
-		return;
+		return (-1);
 	}
 	if (imsgbuf_init(&c->iev.ibuf, connfd) == -1) {
 		log_warn("%s: imsgbuf_init", __func__);
-		close(connfd);
 		free(c);
-		return;
+		return (-1);
 	}
 	c->id = ++control_nextid;
 	c->uid = uid;
 	c->gid = gid;
 	if (control_state.opened != NULL && control_state.opened(c) == -1) {
 		imsgbuf_clear(&c->iev.ibuf);
-		close(connfd);
 		free(c);
-		return;
+		return (-1);
 	}
 	c->iev.handler = control_dispatch;
 	c->iev.events = EV_READ;
@@ -235,6 +257,7 @@ control_accept(int listenfd, short event, void *arg)
 	event_add(&c->iev.ev, NULL);
 
 	TAILQ_INSERT_TAIL(&ctl_conns, c, entry);
+	return (0);
 }
 
 static struct ctl_conn *

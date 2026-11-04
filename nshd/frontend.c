@@ -15,26 +15,28 @@
  */
 
 /*
- * frontend: the read-write socket. Each client is a session. What a
- * client sends goes to config, on their pipe, under the session's id;
- * config's answers for that id go back to the client, with the notices
+ * frontend: one client of the read-write socket, its session. parent
+ * accepts the client, and starts a frontend for it with the client's
+ * socket as fd 5, and its pipes to config and to system as fd 3 and 4,
+ * which only this frontend has. What the client sends goes to config, on
+ * their pipe; config's answers go back to the client, with the notices
  * config sends unasked, and config learns each time the client has read
  * all it was sent. frontend checks only that a message is one a client
  * (or config) may send, and is whole; it reads no configuration.
  *
- * frontend also passes system, on their pipe, each client's socket as the
- * client comes, so system reads for itself who the session is. frontend
- * sends config the client's hello only after that socket is written to
- * system's pipe, since system answers config's request for the session's
- * permissions from it. Before
- * config hears of a request, frontend tells system of it if it may begin
- * a commit (a line, a commit or a part of a load) or if system checks it
- * itself (an operation, a login, a terminal or a watch). frontend sends
- * config such a request only after that message is written to system's
- * pipe. frontend also tells system when config answers a request, and
- * when a session goes. system begins a commit for config only for a
+ * Before config hears of a request, frontend tells system of it if it may
+ * begin a commit (a line, a commit or a part of a load) or if system
+ * checks it itself (an operation, a login, a terminal or a watch).
+ * frontend sends config such a request only after that message is
+ * written to system's pipe. frontend also tells system when config
+ * answers a request. system begins a commit for config only for a
  * request not answered, so a config compromised by a client cannot say
- * whose commit it is, and frontend cannot say whose a session is.
+ * whose commit it is. config and system know whose session this is by
+ * the pipe it comes on, so frontend cannot speak for another session.
+ *
+ * When the client goes, frontend ends, and config and system find their
+ * pipes to it closed. When config or system closes its pipe, frontend
+ * ends too.
  */
 
 #include <sys/types.h>
@@ -53,7 +55,7 @@
 #include "nshd.h"
 #include "control.h"
 
-static struct imsgev	*iev_parent;
+static uint32_t		 client;	/* the client's id, in control.c */
 static uid_t		 web_uid;	/* NSHD_WEB_USER's uid */
 static int		 web_user;	/* NSHD_WEB_USER exists */
 
@@ -70,28 +72,22 @@ union frontend_request {
 	struct nshd_login	 login;
 	struct nshd_watch	 watch;
 	struct nshd_terminal	 terminal;
-	struct nshd_peer	 peer;
 };
 
 /* a request, kept until frontend has written its message to system */
 struct held {
 	TAILQ_ENTRY(held)	 entry;
-	uint32_t		 session;
 	uint32_t		 type;
 	ssize_t			 len;
 	union frontend_request	 r;
 };
 static TAILQ_HEAD(, held)	 helds = TAILQ_HEAD_INITIALIZER(helds);
 
-static void	frontend_dispatch_parent(int, short, void *);
-static void	frontend_listen(void);
 static void	frontend_dispatch_config(int, short, void *);
 static void	frontend_dispatch_system(int, short, void *);
-static void	frontend_asked(struct ctl_conn *, uint32_t);
-static void	frontend_hold(struct ctl_conn *, uint32_t,
-		    union frontend_request *, ssize_t);
+static void	frontend_asked(uint32_t);
+static void	frontend_hold(uint32_t, union frontend_request *, ssize_t);
 static void	frontend_release(void);
-static int	frontend_opened(struct ctl_conn *);
 static int	frontend_client(struct ctl_conn *, struct imsg *);
 static void	frontend_gone(struct ctl_conn *);
 static int	frontend_written(struct ctl_conn *);
@@ -115,67 +111,27 @@ frontend(int debug, int verbose)
 		web_user = 1;
 	}
 	privdrop(PROC_FRONTEND);
-	/* a later pledge cannot add a promise */
-	if (pledge("stdio unix recvfd sendfd", NULL) == -1)
-		fatal("pledge");
 
-	if ((iev_parent = imsgev_new(3, frontend_dispatch_parent, 0)) == NULL)
+	/* a terminal's pty comes from config, to go to the client */
+	if ((links[CONFIG].iev = imsgev_new(3, frontend_dispatch_config,
+	    1)) == NULL || (links[SYSTEM].iev = imsgev_new(4,
+	    frontend_dispatch_system, 0)) == NULL)
 		fatal(NULL);
-	links_init(links, sizeof(links) / sizeof(links[0]));
+	if ((client = control_one(5, frontend_client, frontend_gone,
+	    frontend_written)) == 0)
+		exit(1);
 	/*
-	 * its peers' pipes are here; a terminal's pty comes from config,
-	 * and each client's socket goes to system
+	 * Before the client's first message: only what it has, and the
+	 * ptys it passes on. It may signal only its own process group,
+	 * which parent made its own
 	 */
-	imsgbuf_allow_fdpass(&links[CONFIG].iev->ibuf);
-	imsgbuf_allow_fdpass(&links[SYSTEM].iev->ibuf);
+	if (pledge("stdio recvfd sendfd", NULL) == -1)
+		fatal("pledge");
 	event_dispatch();
 	exit(0);
 }
 
-/*
- * parent's word that frontend may start, and take clients, at once, or
- * once the boot is done
- */
-static void
-frontend_dispatch_parent(int fd, short event, void *arg)
-{
-	struct imsgev		*iev = arg;
-	struct imsg		 imsg;
-	struct nshd_startup	 st;
-	int			 n;
-
-	if (imsgev_io(iev, event) == -1)
-		exit(0);
-
-	for (;;) {
-		if ((n = imsgbuf_get(&iev->ibuf, &imsg)) == -1)
-			fatal("imsgbuf_get");
-		if (n == 0)
-			break;
-		if (imsg_get_type(&imsg) == IMSG_STARTUP &&
-		    imsg_get_data(&imsg, &st, sizeof(st)) == 0) {
-			if (!st.boot)
-				frontend_listen();
-		} else if (imsg_get_type(&imsg) == IMSG_LISTEN)
-			frontend_listen();
-		else
-			fatalx("parent sent imsg %u, which it may not",
-			    imsg_get_type(&imsg));
-		imsg_free(&imsg);
-	}
-	imsg_event_add(iev);
-}
-
-/* take clients on its socket, fd 5, from parent */
-static void
-frontend_listen(void)
-{
-	if (control_listen(5, frontend_opened, frontend_client, frontend_gone,
-	    frontend_written) == -1)
-		fatalx("cannot listen on %s", NSHD_SOCKET);
-}
-
-/* config's answers, to the session each names, if there */
+/* config's answers, to the client */
 static void
 frontend_dispatch_config(int fd, short event, void *arg)
 {
@@ -202,12 +158,11 @@ frontend_dispatch_config(int fd, short event, void *arg)
 		case IMSG_CTL_HELLO:
 		case IMSG_CTL_RESULT:
 			/* the request's end */
-			if ((c = control_connbyid(imsg_get_id(&imsg))) !=
-			    NULL) {
+			if ((c = control_connbyid(client)) != NULL) {
 				c->pending = 0;
 				if (c->asked) {
 					c->asked = 0;
-					frontend_asked(c, IMSG_FRONT_ANSWERED);
+					frontend_asked(IMSG_FRONT_ANSWERED);
 				}
 			}
 			/* FALLTHROUGH */
@@ -217,9 +172,9 @@ frontend_dispatch_config(int fd, short event, void *arg)
 		case IMSG_CTL_NOTICE:
 			if (imsg_get_ibuf(&imsg, &b) == -1)
 				fatal("%s", __func__);
-			if (control_reply(imsg_get_id(&imsg), type,
-			    ibuf_data(&b), ibuf_size(&b)) == -1)
-				control_drop(imsg_get_id(&imsg));
+			if (control_reply(client, type, ibuf_data(&b),
+			    ibuf_size(&b)) == -1)
+				control_drop(client);
 			break;
 		case IMSG_CTL_TERMINAL:
 			/* a terminal's pty, before the request's end */
@@ -230,8 +185,8 @@ frontend_dispatch_config(int fd, short event, void *arg)
 				    "not whole");
 				return;
 			}
-			if (control_pass(imsg_get_id(&imsg), type, pty) == -1)
-				control_drop(imsg_get_id(&imsg));
+			if (control_pass(client, type, pty) == -1)
+				control_drop(client);
 			break;
 		default:
 			imsg_free(&imsg);
@@ -272,30 +227,22 @@ frontend_dispatch_system(int fd, short event, void *arg)
 	imsg_event_add(iev);
 }
 
-/*
- * to system: the session's request, its answer, or the session gone
- */
+/* to system: the session's request, or its answer */
 static void
-frontend_asked(struct ctl_conn *c, uint32_t type)
+frontend_asked(uint32_t type)
 {
-	struct nshd_asked	 a;
-
-	memset(&a, 0, sizeof(a));
-	a.session = c->id;
-	if (link_compose(&links[SYSTEM], type, 0, &a, sizeof(a)) == -1)
+	if (link_compose(&links[SYSTEM], type, 0, NULL, 0) == -1)
 		fatal("%s", __func__);
 }
 
-/* keep c's request until it can go to config */
+/* keep the client's request until it can go to config */
 static void
-frontend_hold(struct ctl_conn *c, uint32_t type, union frontend_request *r,
-    ssize_t len)
+frontend_hold(uint32_t type, union frontend_request *r, ssize_t len)
 {
 	struct held	*h;
 
 	if ((h = malloc(sizeof(*h))) == NULL)
 		fatal(NULL);
-	h->session = c->id;
 	h->type = type;
 	h->len = len;
 	memcpy(&h->r, r, sizeof(h->r));
@@ -316,7 +263,7 @@ frontend_release(void)
 		return;
 	while ((h = TAILQ_FIRST(&helds)) != NULL) {
 		TAILQ_REMOVE(&helds, h, entry);
-		if (link_compose(&links[CONFIG], h->type, h->session,
+		if (link_compose(&links[CONFIG], h->type, 0,
 		    h->len > 0 ? &h->r : NULL, h->len) == -1)
 			fatal("%s", __func__);
 		explicit_bzero(h, sizeof(*h));
@@ -324,32 +271,14 @@ frontend_release(void)
 	}
 }
 
-/* a new client: its socket to system, which reads who it is; -1 if not */
-static int
-frontend_opened(struct ctl_conn *c)
-{
-	struct nshd_asked	 a;
-	int			 fd;
-
-	if ((fd = dup(c->iev.ibuf.fd)) == -1) {
-		log_warn("%s: dup", __func__);
-		return (-1);
-	}
-	memset(&a, 0, sizeof(a));
-	a.session = c->id;
-	if (imsg_compose_event(links[SYSTEM].iev, IMSG_FRONT_SESSION, 0, 0,
-	    fd, &a, sizeof(a)) == -1)
-		fatal("%s", __func__);
-	return (0);
-}
-
 /*
- * What a client sends, to config under its session's id; -1 closes it.
- * A client asks one thing at a time, and waits for its answer.
+ * What the client sends, to config; -1 closes it. A client asks one
+ * thing at a time, and waits for its answer.
  */
 static int
 frontend_client(struct ctl_conn *c, struct imsg *imsg)
 {
+	struct nshd_hello	 hello;
 	struct nshd_show	 show;
 	union frontend_request	 r;
 	ssize_t			 len;
@@ -359,18 +288,11 @@ frontend_client(struct ctl_conn *c, struct imsg *imsg)
 	c->pending = 1;
 	switch (imsg_get_type(imsg)) {
 	case IMSG_CTL_HELLO:
-		if (imsg_get_data(imsg, &r.peer.hello,
-		    sizeof(r.peer.hello)) == -1)
+		if (imsg_get_data(imsg, &hello, sizeof(hello)) == -1)
 			return (-1);
-		r.peer.uid = c->uid;
-		r.peer.gid = c->gid;
-		/*
-		 * config asks system for the session's permissions, and
-		 * system reads them from the client's socket, so the hello
-		 * waits until that socket is written to system
-		 */
-		frontend_hold(c, IMSG_CTL_HELLO, &r, sizeof(r.peer));
-		frontend_release();
+		if (link_compose(&links[CONFIG], IMSG_CTL_HELLO, c->id, &hello,
+		    sizeof(hello)) == -1)
+			fatal("%s", __func__);
 		return (0);
 	case IMSG_CTL_SHOW:
 		if (imsg_get_data(imsg, &show, sizeof(show)) == -1 ||
@@ -415,8 +337,8 @@ frontend_client(struct ctl_conn *c, struct imsg *imsg)
 		    imsg_get_type(imsg) == IMSG_CTL_TERMINAL ||
 		    imsg_get_type(imsg) == IMSG_CTL_WATCH) {
 			c->asked = 1;
-			frontend_asked(c, IMSG_FRONT_ASKED);
-			frontend_hold(c, imsg_get_type(imsg), &r, len);
+			frontend_asked(IMSG_FRONT_ASKED);
+			frontend_hold(imsg_get_type(imsg), &r, len);
 		} else if (link_compose(&links[CONFIG], imsg_get_type(imsg),
 		    c->id, len > 0 ? &r : NULL, len) == -1)
 			fatal("%s", __func__);
@@ -427,13 +349,11 @@ frontend_client(struct ctl_conn *c, struct imsg *imsg)
 	}
 }
 
+/* the client gone: frontend ends, and config and system drop the session */
 static void
 frontend_gone(struct ctl_conn *c)
 {
-	frontend_asked(c, IMSG_FRONT_GONE);
-	if (link_compose(&links[CONFIG], IMSG_CTL_CLOSE, c->id, NULL, 0) ==
-	    -1)
-		fatal("%s", __func__);
+	exit(0);
 }
 
 /* the client has read all it was sent, so system may stream it more */

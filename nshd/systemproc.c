@@ -135,12 +135,15 @@
  * saves.
  *
  * Each commit belongs to a session, and system learns whose it is from
- * the session's client. frontend passes system each client's socket when
- * the client connects, and system asks the kernel who is at the other
- * end, and whether that is the web configurator. frontend reports to
- * system, on their pipe, each request that may begin a commit (a line,
- * a commit or part of a load) before config receives it; it also
- * reports when config answers it and when a session is gone. system
+ * the session's client. parent passes system each client's socket when
+ * the client connects, with a pipe to the session's frontend, which only
+ * that frontend has, and system asks the kernel who is at the other end
+ * of the socket, and whether that is the web configurator. frontend
+ * reports to system, on that pipe, each request that may begin a commit
+ * (a line, a commit or part of a load) before config receives it; it
+ * also reports when config answers it. The session is the pipe's, so a
+ * frontend reports only for its own session. The session is gone when
+ * that pipe closes, or when its frontend sends what it may not. system
  * accepts such a report only while the client is still connected, as
  * the socket shows. BEGIN and TEST, and SAVE outside a commit, name the
  * session, and are refused unless the session has a request not yet
@@ -154,9 +157,9 @@
  * says nshd is not booting, or once BOOTED has been received. So a
  * config process that a client has compromised can begin a commit only
  * for a request that a client made, and cannot choose whose commit it
- * is. A compromised frontend cannot choose who a client is, but it can
- * make requests in the name of any client that is connected, since
- * system trusts frontend's word of what a client asked.
+ * is. system acts on a compromised frontend's requests only in the name
+ * of its own client, and only while that client is connected, though it
+ * trusts a frontend's word of what its client asked.
  *
  * system checks the permissions of the login class of that request's
  * uid itself, as config does. An operation, which frontend also
@@ -176,7 +179,7 @@
  * only such a session may log in. system checks the user's password
  * itself (passwd.c's login_auth()), for a user that a login user line
  * names, never root. It keeps the uid the session logged in as until
- * frontend reports that the session is gone. The session then has the
+ * the session is gone. The session then has the
  * permissions of that user's login class, and its commits are that
  * user's.
  *
@@ -234,7 +237,7 @@
 #define SYS_WINDOW	16	/* messages a stream sends its client unread */
 #define SYS_OPWORDS	32	/* an operation's words, at most */
 #define SYS_TERMINALS	64	/* web logins' terminals at once, at most */
-/* descriptors kept free of clients' sockets: streams, commits, files */
+/* descriptors kept free of sessions: streams, commits, files */
 #define SYS_RESERVE	(SYS_STREAMS + 16)
 
 /*
@@ -384,13 +387,15 @@ struct asked {
 };
 
 /*
- * A session's client, as system reads it from the client's socket, which
- * frontend passes it: the uid the kernel says it is, if it is the web
- * configurator's, and the socket, kept to see whether it is still there
+ * A session, from parent: the pipe to its frontend, and its client, as
+ * system reads it from the client's socket: the uid the kernel says it
+ * is, if it is the web configurator's, and the socket, kept to see
+ * whether it is still there
  */
 struct client {
 	TAILQ_ENTRY(client)	 entry;
 	uint32_t		 session;
+	struct imsgev		*iev;
 	uid_t			 uid;
 	int			 web;
 	int			 fd;
@@ -446,18 +451,19 @@ static time_t		 confirm_next;	/* earliest next rollback attempt */
 
 static void	system_dispatch_parent(int, short, void *);
 static void	system_dispatch_config(int, short, void *);
-static void	system_dispatch_frontend(int, short, void *);
+static void	system_dispatch_front(int, short, void *);
 static struct asked *asked_find(uint32_t);
 static struct asked *asked_whose(struct nshd_whose *);
 static void	asked_free(struct asked *);
-static int	client_socket(int);
 static void	client_new(uint32_t, int);
+static int	client_socket(uint32_t, int);
+static void	client_drop(struct client *);
 static struct client *client_find(uint32_t);
 static int	client_there(struct client *);
 static struct login *login_find(uint32_t);
 static int	system_whom(struct asked *, uid_t *);
 static int	system_perms(uint32_t);
-static void	system_read_frontend(void);
+static void	system_read_front(uint32_t);
 static void	system_login(uint32_t, struct nshd_syslogin *);
 static void	system_terminal(uint32_t, struct nshd_systerm *);
 static __dead void system_term_child(int, struct passwd *);
@@ -534,8 +540,6 @@ static __dead void system_exit(void);
 static struct link	 links[] = {
 #define CONFIG		0
 	{ PROC_CONFIG,	 system_dispatch_config },
-#define FRONTEND	1
-	{ PROC_FRONTEND, system_dispatch_frontend },
 };
 
 void
@@ -569,13 +573,13 @@ systemproc(int debug, int v)
 	facts_from = FACTS_SYSTEM;
 	db_create();
 
-	if ((iev_parent = imsgev_new(3, system_dispatch_parent, 0)) == NULL)
+	/* each session's pipe and its client's socket come from parent */
+	if ((iev_parent = imsgev_new(3, system_dispatch_parent, 1)) == NULL)
 		fatal(NULL);
 	evtimer_set(&confirm_tm, system_confirm, NULL);
 	links_init(links, sizeof(links) / sizeof(links[0]));
-	/* terminal ptys go to config; clients' sockets come from frontend */
+	/* terminal ptys go to config */
 	imsgbuf_allow_fdpass(&links[CONFIG].iev->ibuf);
-	imsgbuf_allow_fdpass(&links[FRONTEND].iev->ibuf);
 	/* before any child: one that ends unwatched is never reaped */
 	signal_set(&ev_sigchld, SIGCHLD, system_sigchld, NULL);
 	signal_add(&ev_sigchld, NULL);
@@ -585,14 +589,20 @@ systemproc(int debug, int v)
 	system_exit();
 }
 
-/* parent's word that system may start, and whether nshd boots */
+/*
+ * parent's word that system may start, and whether nshd boots; and each
+ * new session, with the pipe to its frontend, then its client's socket
+ */
 static void
 system_dispatch_parent(int fd, short event, void *arg)
 {
 	struct imsgev		*iev = arg;
 	struct imsg		 imsg;
 	struct nshd_startup	 st;
-	int			 n;
+	struct nshd_newsession	 ns;
+	struct nshd_taken	 t;
+	uint32_t		 type;
+	int			 n, sfd;
 
 	if (imsgev_io(iev, event) == -1)
 		system_exit();
@@ -602,7 +612,24 @@ system_dispatch_parent(int fd, short event, void *arg)
 			fatal("imsgbuf_get");
 		if (n == 0)
 			break;
-		if (imsg_get_type(&imsg) != IMSG_STARTUP ||
+		type = imsg_get_type(&imsg);
+		if ((type == IMSG_SESSION || type == IMSG_SESSION_CLIENT) &&
+		    imsg_get_data(&imsg, &ns, sizeof(ns)) == 0 &&
+		    (sfd = imsg_get_fd(&imsg)) != -1) {
+			imsg_free(&imsg);
+			if (type == IMSG_SESSION) {
+				client_new(ns.session, sfd);
+				continue;
+			}
+			memset(&t, 0, sizeof(t));
+			t.session = ns.session;
+			t.status = client_socket(ns.session, sfd);
+			if (imsg_compose_event(iev, IMSG_SESSION_TAKEN, 0, 0,
+			    -1, &t, sizeof(t)) == -1)
+				fatal("%s", __func__);
+			continue;
+		}
+		if (type != IMSG_STARTUP ||
 		    imsg_get_data(&imsg, &st, sizeof(st)) == -1) {
 			log_warnx("parent sent imsg %u, which it may not",
 			    imsg_get_type(&imsg));
@@ -677,75 +704,60 @@ system_dispatch_config(int fd, short event, void *arg)
 }
 
 /*
- * frontend's word of the requests sessions make, and each client's
- * socket
+ * A frontend's word of its session's requests: the session is the pipe's,
+ * as parent gave it. A frontend that sends what it may not, or closes its
+ * pipe, ends its session
  */
 static void
-system_dispatch_frontend(int fd, short event, void *arg)
+system_dispatch_front(int fd, short event, void *arg)
 {
 	struct imsgev		*iev = arg;
 	struct imsg		 imsg;
-	struct nshd_asked	 a;
 	struct asked		*k;
 	struct client		*cl;
-	struct login		*l;
 	uint32_t		 type;
 	int			 n;
 
+	TAILQ_FOREACH(cl, &clients, entry)
+		if (cl->iev == iev)
+			break;
+	if (cl == NULL)
+		fatalx("%s: from no session", __func__);
 	if (imsgev_io(iev, event) == -1) {
-		link_broken(&links[FRONTEND], "closed its pipe");
+		client_drop(cl);
 		return;
 	}
 
 	for (;;) {
 		if ((n = imsgbuf_get(&iev->ibuf, &imsg)) == -1) {
-			link_broken(&links[FRONTEND],
-			    "sent what imsg cannot read");
+			log_warnx("session %u: its frontend sent what imsg "
+			    "cannot read", cl->session);
+			client_drop(cl);
 			return;
 		}
 		if (n == 0)
 			break;
 		type = imsg_get_type(&imsg);
-		if ((type != IMSG_FRONT_SESSION && type != IMSG_FRONT_ASKED &&
-		    type != IMSG_FRONT_ANSWERED && type != IMSG_FRONT_GONE) ||
-		    imsg_get_data(&imsg, &a, sizeof(a)) == -1) {
+		if ((type != IMSG_FRONT_ASKED && type != IMSG_FRONT_ANSWERED) ||
+		    imsg_get_len(&imsg) != 0) {
 			imsg_free(&imsg);
-			link_broken(&links[FRONTEND], "sent imsg %u, which it "
-			    "may not, or not whole", type);
+			log_warnx("session %u: its frontend sent imsg %u, which "
+			    "it may not, or not whole", cl->session, type);
+			client_drop(cl);
 			return;
 		}
-		if (type == IMSG_FRONT_SESSION)
-			client_new(a.session, imsg_get_fd(&imsg));
 		imsg_free(&imsg);
-		k = asked_find(a.session);
-		cl = client_find(a.session);
-		if (type == IMSG_FRONT_ASKED) {
-			if (k != NULL)
-				asked_free(k);
-			/* a request of a client gone, or not known, is refused */
-			if (cl == NULL || !client_there(cl))
-				continue;
-			if ((k = calloc(1, sizeof(*k))) == NULL)
-				fatal(NULL);
-			k->session = a.session;
-			k->uid = cl->uid;
-			k->web = cl->web;
-			TAILQ_INSERT_TAIL(&askeds, k, entry);
-		} else if (k != NULL && type == IMSG_FRONT_ANSWERED)
+		if ((k = asked_find(cl->session)) != NULL)
 			asked_free(k);
-		else if (type == IMSG_FRONT_GONE) {
-			if (cl != NULL) {
-				TAILQ_REMOVE(&clients, cl, entry);
-				close(cl->fd);
-				free(cl);
-			}
-			if ((l = login_find(a.session)) != NULL) {
-				TAILQ_REMOVE(&logins, l, entry);
-				free(l);
-			}
-			if (k != NULL)
-				asked_free(k);
-		}
+		/* a request of a client gone, or not known, is refused */
+		if (type != IMSG_FRONT_ASKED || !client_there(cl))
+			continue;
+		if ((k = calloc(1, sizeof(*k))) == NULL)
+			fatal(NULL);
+		k->session = cl->session;
+		k->uid = cl->uid;
+		k->web = cl->web;
+		TAILQ_INSERT_TAIL(&askeds, k, entry);
 	}
 	imsg_event_add(iev);
 }
@@ -775,7 +787,7 @@ asked_whose(struct nshd_whose *w)
 
 	if (w->session == 0)
 		return (NULL);
-	system_read_frontend();
+	system_read_front(w->session);
 	if ((k = asked_find(w->session)) == NULL)
 		return (NULL);
 	if ((cl = client_find(w->session)) == NULL || !client_there(cl)) {
@@ -785,16 +797,19 @@ asked_whose(struct nshd_whose *w)
 	return (k);
 }
 
-/* read what frontend has sent, if it has sent anything */
+/* read what session's frontend has sent, if it has sent anything */
 static void
-system_read_frontend(void)
+system_read_front(uint32_t session)
 {
+	struct client	*cl;
 	struct pollfd	 pfd;
 
-	pfd.fd = links[FRONTEND].iev->ibuf.fd;
+	if ((cl = client_find(session)) == NULL)
+		return;
+	pfd.fd = cl->iev->ibuf.fd;
 	pfd.events = POLLIN;
 	if (poll(&pfd, 1, 0) == 1)
-		system_dispatch_frontend(pfd.fd, EV_READ, links[FRONTEND].iev);
+		system_dispatch_front(pfd.fd, EV_READ, cl->iev);
 }
 
 static void
@@ -805,72 +820,87 @@ asked_free(struct asked *k)
 }
 
 /*
- * Return 1 if fd is a client's socket, one accepted on NSHD_SOCKET.
- * Such a socket has NSHD_SOCKET's path as its own address and is not
- * listening, and both stay true after the client closes its end. A pipe
- * between nshd's processes has no address, and getpeereid() reports root
- * for one that parent made. The listening socket is listening.
- */
-static int
-client_socket(int fd)
-{
-	struct sockaddr_un	 sun;
-	socklen_t		 len;
-	int			 acc;
-
-	memset(&sun, 0, sizeof(sun));
-	len = sizeof(sun);
-	if (getsockname(fd, (struct sockaddr *)&sun, &len) == -1 ||
-	    sun.sun_family != AF_UNIX ||
-	    strncmp(sun.sun_path, NSHD_SOCKET, sizeof(sun.sun_path)) != 0)
-		return (0);
-	len = sizeof(acc);
-	return (getsockopt(fd, SOL_SOCKET, SO_ACCEPTCONN, &acc, &len) == 0 &&
-	    acc == 0);
-}
-
-/*
- * Record a session's client from its socket, fd, with the uid
- * getpeereid() reports. The session gets no client, and its requests are
- * refused, if fd is -1 because system had no descriptor free for it, or
- * if keeping fd would leave fewer than SYS_RESERVE descriptors free.
- * frontend passes only clients' sockets, so another is frontend gone
- * wrong.
+ * A new session from parent, and fd, the pipe to its frontend. Its
+ * client's socket comes next (client_socket())
  */
 static void
 client_new(uint32_t session, int fd)
 {
 	struct client	*cl;
-	gid_t		 gid;
 
-	if (client_find(session) != NULL)
-		link_broken(&links[FRONTEND], "passed session %u's client "
-		    "twice", session);
-	if (fd == -1) {
-		log_warnx("%s: session %u: no socket", __func__, session);
-		return;
-	}
-	if (!client_socket(fd))
-		link_broken(&links[FRONTEND], "passed session %u a socket "
-		    "that is not a client's", session);
-	if (getdtablesize() - getdtablecount() < SYS_RESERVE) {
-		log_warnx("%s: session %u: too many clients", __func__,
-		    session);
+	if (session == 0 || client_find(session) != NULL ||
+	    (cl = calloc(1, sizeof(*cl))) == NULL) {
 		close(fd);
 		return;
 	}
-	if ((cl = calloc(1, sizeof(*cl))) == NULL)
-		fatal(NULL);
-	if (getpeereid(fd, &cl->uid, &gid) == -1) {
-		log_warn("%s: session %u: getpeereid", __func__, session);
+	if ((cl->iev = imsgev_new(fd, system_dispatch_front, 0)) == NULL) {
 		close(fd);
 		free(cl);
 		return;
 	}
 	cl->session = session;
+	cl->fd = -1;
+	TAILQ_INSERT_TAIL(&clients, cl, entry);
+}
+
+/*
+ * The client's socket, fd, of the new session from parent, with the uid
+ * getpeereid() reports: 0 if system takes the session, else 1, and the
+ * session is gone. It is not taken if keeping its pipe and socket would
+ * leave fewer than SYS_RESERVE descriptors free
+ */
+static int
+client_socket(uint32_t session, int fd)
+{
+	struct client	*cl;
+	gid_t		 gid;
+
+	if ((cl = client_find(session)) == NULL || cl->fd != -1) {
+		close(fd);
+		return (1);
+	}
+	if (getdtablesize() - getdtablecount() < SYS_RESERVE) {
+		log_warnx("%s: session %u: too many clients", __func__,
+		    session);
+		close(fd);
+		client_drop(cl);
+		return (1);
+	}
+	if (getpeereid(fd, &cl->uid, &gid) == -1) {
+		log_warn("%s: session %u: getpeereid", __func__, session);
+		close(fd);
+		client_drop(cl);
+		return (1);
+	}
 	cl->web = web_user && cl->uid == web_uid;
 	cl->fd = fd;
-	TAILQ_INSERT_TAIL(&clients, cl, entry);
+	return (0);
+}
+
+/*
+ * cl's session gone: its pipe and its client's socket closed, and its
+ * login and its request forgotten
+ */
+static void
+client_drop(struct client *cl)
+{
+	struct asked	*k;
+	struct login	*l;
+
+	if ((l = login_find(cl->session)) != NULL) {
+		TAILQ_REMOVE(&logins, l, entry);
+		free(l);
+	}
+	if ((k = asked_find(cl->session)) != NULL)
+		asked_free(k);
+	TAILQ_REMOVE(&clients, cl, entry);
+	event_del(&cl->iev->ev);
+	imsgbuf_clear(&cl->iev->ibuf);
+	close(cl->iev->ibuf.fd);
+	free(cl->iev);
+	if (cl->fd != -1)
+		close(cl->fd);
+	free(cl);
 }
 
 static struct client *
@@ -886,13 +916,15 @@ client_find(uint32_t session)
 
 /*
  * Is the client still connected? Its socket says, whatever frontend
- * has read of it
+ * has read of it. A session whose socket system does not have has none
  */
 static int
 client_there(struct client *cl)
 {
 	struct pollfd	 pfd;
 
+	if (cl->fd == -1)
+		return (0);
 	pfd.fd = cl->fd;
 	pfd.events = POLLIN;
 	return (poll(&pfd, 1, 0) != -1 &&
@@ -934,18 +966,18 @@ system_whom(struct asked *k, uid_t *uid)
 
 /*
  * The login class permissions of a session, for the uid of its client.
- * frontend passes system the client's socket before config hears the
- * client's hello, so what frontend sent is read first. A session with no
- * client has none. A session of the web configurator's has none until it
- * logs in
+ * system has the client's socket before the session's frontend starts,
+ * so before config hears the client's hello. A session whose client is
+ * gone, or not known, has none. A session of the web configurator's has
+ * none until it logs in
  */
 static int
 system_perms(uint32_t session)
 {
 	struct client	*cl;
 
-	system_read_frontend();
-	if ((cl = client_find(session)) == NULL || cl->web)
+	if ((cl = client_find(session)) == NULL || !client_there(cl) ||
+	    cl->web)
 		return (0);
 	return (login_perms(cl->uid));
 }

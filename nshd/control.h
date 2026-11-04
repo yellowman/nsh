@@ -31,6 +31,8 @@ int	control_route(void);
 int	control_listen(int, int (*)(struct ctl_conn *),
 	    int (*)(struct ctl_conn *, struct imsg *),
 	    void (*)(struct ctl_conn *), int (*)(struct ctl_conn *));
+uint32_t control_one(int, int (*)(struct ctl_conn *, struct imsg *),
+	    void (*)(struct ctl_conn *), int (*)(struct ctl_conn *));
 int	control_reply(uint32_t, uint32_t, const void *, size_t);
 int	control_pass(uint32_t, uint32_t, int);
 void	control_drop(uint32_t);

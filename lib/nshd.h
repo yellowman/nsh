@@ -220,15 +220,6 @@ struct nshd_chunk {
 #define NSHD_PARTS	3
 
 /*
- * frontend to system: a new session's client, with its socket; or a
- * session's request that may begin a commit (a line, a commit or a part
- * of a load), an operation, a login, a terminal or a watch
- */
-struct nshd_asked {
-	uint32_t	session;
-};
-
-/*
  * config to system: the session a request is for, as frontend reported
  * it; or session 0, for the boot
  */
@@ -311,21 +302,31 @@ struct nshd_child {
 
 /*
  * parent to a child, once it may start: whether the boot is not done;
- * until it is, frontend and the shows wait for LISTEN
+ * until it is, the shows wait for LISTEN
  */
 struct nshd_startup {
 	int32_t			boot;
 };
 
-/* system's answer to SYS_BOOT: 0 to boot, or 1 if it could not record it */
-#define NSHD_DONE	2	/* not booting, or this host boot is done */
-
-/* a client's hello, with who it is, from frontend to config */
-struct nshd_peer {
-	struct nshd_hello	hello;
+/*
+ * parent to config and system: a new session, with the pipe to its
+ * frontend; to config, with the uid and gid of its client, which parent
+ * read from the client's socket
+ */
+struct nshd_newsession {
+	uint32_t		session;
 	uint32_t		uid;
 	uint32_t		gid;
 };
+
+/* config or system to parent: whether it took a new session */
+struct nshd_taken {
+	uint32_t		session;
+	int32_t			status;		/* 0 if it did */
+};
+
+/* system's answer to SYS_BOOT: 0 to boot, or 1 if it could not record it */
+#define NSHD_DONE	2	/* not booting, or this host boot is done */
 
 enum nshd_proc {
 	PROC_PARENT,
@@ -349,7 +350,7 @@ enum nshd_imsg {
 	IMSG_CTL_FACTS,		/* units of facts, as facts.h has them */
 
 	/* between nshd's processes */
-	IMSG_CTL_CLOSE,		/* frontend to config: a session is gone */
+	IMSG_SESSION,		/* parent: nshd_newsession, its frontend's pipe */
 	IMSG_STARTUP,		/* parent to a child: nshd_startup */
 	IMSG_PEER,		/* parent to a child: nshd_child, its pipe */
 	IMSG_SYS_SNAPSHOT,	/* config to system: the running configuration */
@@ -394,7 +395,7 @@ enum nshd_imsg {
 
 	/* the end of the boot, and what follows it */
 	IMSG_BOOTED,		/* config to parent: nshd_result of the boot */
-	IMSG_LISTEN,		/* parent to frontend and each show: take clients */
+	IMSG_LISTEN,		/* parent to each show: take clients */
 
 	/* with clients, on the read-write socket, and config to system */
 	IMSG_SYS_PERMS,		/* nshd_perms: result is the permissions */
@@ -404,10 +405,10 @@ enum nshd_imsg {
 	IMSG_CTL_LOGIN,		/* nshd_login (web configurator): a result */
 	IMSG_SYS_LOGIN,		/* nshd_syslogin: the permissions, as the result */
 
-	/* frontend to system: which sessions have unanswered requests */
-	IMSG_FRONT_ASKED,	/* nshd_asked: a session sent a request */
-	IMSG_FRONT_ANSWERED,	/* nshd_asked: config answered it */
-	IMSG_FRONT_GONE,	/* nshd_asked: its session is gone */
+	/* frontend to system: whether its session has a request unanswered */
+	IMSG_FRONT_ASKED,	/* the session sent a request */
+	IMSG_FRONT_ANSWERED,	/* config answered it */
+	IMSG_SESSION_TAKEN,	/* config or system to parent: nshd_taken */
 
 	/* with clients, on the read-write socket, and system to config */
 	IMSG_CTL_WATCH,		/* nshd_watch: a result */
@@ -422,8 +423,8 @@ enum nshd_imsg {
 	IMSG_SYS_TERMINAL,	/* nshd_systerm; the pty, then SYS_END */
 	IMSG_CTL_RULES,		/* nshd_rules: the rules asked for, a result */
 
-	/* frontend to system: who a session is, as system reads it */
-	IMSG_FRONT_SESSION	/* nshd_asked, and the client's socket */
+	/* parent to system: who a new session is, as system reads it */
+	IMSG_SESSION_CLIENT	/* nshd_newsession, and the client's socket */
 };
 
 struct imsgev {
