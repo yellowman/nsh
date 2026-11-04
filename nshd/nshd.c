@@ -45,8 +45,9 @@
  * with peers also has a pipe from parent, as fd 4, which gives it each
  * peer's pipe before it starts, and is closed then. After these come the
  * socket of frontend or of a show, which no other child has, and config's
- * routing socket, which tells it what the kernel changes. No pipe is made
- * or passed once the children start. Of what the children send, parent
+ * routing socket, which tells it what the kernel changes. A child has no
+ * other descriptor of parent's. No pipe is made or passed once the
+ * children start. Of what the children send, parent
  * reads only config's word that the boot is done.
  *
  * A child that ends, or that breaks a rule, ends nshd: its peers find
@@ -424,6 +425,8 @@ start_child(struct child *c, int pipefd, int outfd, int sockfd)
 	for (i = 0; i < 3; i++)
 		if (fds[i] != -1 && dup2(fds[i], n++) == -1)
 			fatal("%s: its descriptors", c->name);
+	/* and none of parent's others, whether or not they close on exec */
+	closefrom(n);
 
 	argv[argc++] = execpath;
 	argv[argc++] = c->flag;
