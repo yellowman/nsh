@@ -214,14 +214,22 @@ configurator's, itself: it calls
 .Xr getpeereid 2
 on the socket of the session's client.
 It takes that socket only if it was accepted on the read-write socket:
-its address is that socket's path, and it has a peer.
+its address is that socket's path, and it is not listening.
+Both stay true after the client closes its end.
 For a pipe between nshd's processes, which parent made as root,
 .Xr getpeereid 2
 reports root, so a frontend that passes one in place of a client's
 socket ends
 .Nm .
-It accepts a request only while that client is connected.
-So a compromised frontend cannot choose who a client is.
+This check shows which user a session's connection belongs to.
+It does not show what that user asked for: frontend reads each client's
+requests and tells system of each one, and system trusts frontend's word
+of them.
+Once system finds that a session's client has closed its connection, it
+refuses frontend's word of a new request from that session.
+A request it accepted before then, and a commit it has begun, can go on.
+So a compromised frontend cannot choose who a client is, but it can make
+requests in the name of any client that is connected.
 It keeps a client's socket only while enough descriptors stay free for
 its own work: commits and the streams it runs.
 When it cannot keep a socket, it refuses that client's requests.

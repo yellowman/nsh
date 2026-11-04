@@ -151,7 +151,9 @@
  * says nshd is not booting, or once BOOTED has been received. So a
  * config process that a client has compromised can begin a commit only
  * for a request that a client made, and cannot choose whose commit it
- * is; and a compromised frontend cannot choose who a client is.
+ * is. A compromised frontend cannot choose who a client is, but it can
+ * make requests in the name of any client that is connected, since
+ * system trusts frontend's word of what a client asked.
  *
  * system checks the permissions of the login class of that request's
  * uid itself, as config does. An operation, which frontend also
@@ -791,17 +793,18 @@ asked_free(struct asked *k)
 }
 
 /*
- * Is fd a client's socket, one accepted on NSHD_SOCKET? Such a socket
- * has NSHD_SOCKET's path as its own address, and has a peer. A pipe
+ * Return 1 if fd is a client's socket, one accepted on NSHD_SOCKET.
+ * Such a socket has NSHD_SOCKET's path as its own address and is not
+ * listening, and both stay true after the client closes its end. A pipe
  * between nshd's processes has no address, and getpeereid() reports root
- * for one that parent made. The listening socket has no peer.
+ * for one that parent made. The listening socket is listening.
  */
 static int
 client_socket(int fd)
 {
 	struct sockaddr_un	 sun;
-	struct sockaddr_storage	 peer;
 	socklen_t		 len;
+	int			 acc;
 
 	memset(&sun, 0, sizeof(sun));
 	len = sizeof(sun);
@@ -809,8 +812,9 @@ client_socket(int fd)
 	    sun.sun_family != AF_UNIX ||
 	    strncmp(sun.sun_path, NSHD_SOCKET, sizeof(sun.sun_path)) != 0)
 		return (0);
-	len = sizeof(peer);
-	return (getpeername(fd, (struct sockaddr *)&peer, &len) == 0);
+	len = sizeof(acc);
+	return (getsockopt(fd, SOL_SOCKET, SO_ACCEPTCONN, &acc, &len) == 0 &&
+	    acc == 0);
 }
 
 /*
