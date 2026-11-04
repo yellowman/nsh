@@ -3,8 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; form-action 'none'; base-uri 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; form-action 'none'; base-uri 'none'">
 <title>nshdeck</title>
+<link rel="icon" href="favicon.png" type="image/png" sizes="64x64">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="xterm/xterm.css">
 <link rel="stylesheet" href="style.css">
 <script src="app.js" defer></script>
@@ -28,18 +30,28 @@
 <body>
 
 <form id="login" hidden>
-<div class="badge">nsh</div>
+<div class="titlebar">
+<span class="iconify" aria-hidden="true"></span>
 <h1>nshdeck</h1>
-<label>User <input name="user" autocomplete="username" required></label>
-<label>Password <input name="password" type="password" autocomplete="current-password" required></label>
-<button class="primary">Log in</button>
+<span class="stipple" aria-hidden="true"></span>
+<span class="resize" aria-hidden="true"></span>
+</div>
+<div class="screen">
+<span class="scrollbar" aria-hidden="true"></span>
+<div class="tty">
+<p class="prompt">nsh&gt;<span class="cursor" aria-hidden="true"></span></p>
+<label><span class="ask">login:</span><input name="user" autocomplete="username" autocapitalize="none" spellcheck="false" required></label>
+<label><span class="ask">Password:</span><input name="password" type="password" autocomplete="current-password" required></label>
 <p class="error" id="login-error"></p>
+<button class="enter">Log in</button>
+</div>
+</div>
 </form>
 
 <div id="deck" hidden>
 
 <nav id="rail" aria-label="Workspaces">
-<div class="badge" aria-hidden="true">nsh</div>
+<img class="mark" src="favicon.svg" alt="">
 <button type="button" data-ws="overview" title="Overview" aria-label="Overview" class="on">
 <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
 </button>

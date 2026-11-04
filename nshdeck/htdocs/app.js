@@ -1189,8 +1189,10 @@ function loggedIn(j) {
 function loggedOut() {
 	if (!$("deck").hidden)
 		location.reload();
-	else
+	else {
 		$("login").hidden = false;
+		$("login").user.focus();
+	}
 }
 
 /* a form's submit, handled by fn, without leaving the page */
@@ -1203,6 +1205,13 @@ function on(id, fn) {
 }
 
 document.addEventListener("DOMContentLoaded", function () {
+	/* as login(1) does, Enter after the name asks for the password */
+	$("login").user.addEventListener("keydown", function (e) {
+		if (e.key === "Enter") {
+			e.preventDefault();
+			$("login").password.focus();
+		}
+	});
 	on("login", function (f) {
 		ask("POST", "login", { user: f.user.value,
 		    password: f.password.value }).then(function (j) {
