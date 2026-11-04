@@ -186,6 +186,7 @@
 #include <sys/stat.h>
 #include <sys/sysctl.h>
 #include <sys/time.h>
+#include <sys/un.h>
 #include <sys/wait.h>
 #include <net/if.h>
 #include <netinet/in.h>
@@ -449,6 +450,7 @@ static struct asked *asked_find(uint32_t);
 static struct asked *asked_whose(struct nshd_whose *);
 static void	asked_free(struct asked *);
 static void	asked_trim(void);
+static int	client_socket(int);
 static void	client_new(uint32_t, int);
 static struct client *client_find(uint32_t);
 static int	client_there(struct client *);
@@ -789,11 +791,35 @@ asked_free(struct asked *k)
 }
 
 /*
+ * Is fd a client's socket, one accepted on NSHD_SOCKET? Such a socket
+ * has NSHD_SOCKET's path as its own address, and has a peer. A pipe
+ * between nshd's processes has no address, and getpeereid() reports root
+ * for one that parent made. The listening socket has no peer.
+ */
+static int
+client_socket(int fd)
+{
+	struct sockaddr_un	 sun;
+	struct sockaddr_storage	 peer;
+	socklen_t		 len;
+
+	memset(&sun, 0, sizeof(sun));
+	len = sizeof(sun);
+	if (getsockname(fd, (struct sockaddr *)&sun, &len) == -1 ||
+	    sun.sun_family != AF_UNIX ||
+	    strncmp(sun.sun_path, NSHD_SOCKET, sizeof(sun.sun_path)) != 0)
+		return (0);
+	len = sizeof(peer);
+	return (getpeername(fd, (struct sockaddr *)&peer, &len) == 0);
+}
+
+/*
  * Record a session's client from its socket, fd, with the uid
  * getpeereid() reports. The session gets no client, and its requests are
- * refused, if fd is -1 because system had no descriptor free for it, if
- * keeping fd would leave fewer than SYS_RESERVE descriptors free, or if
- * fd is not a client's socket.
+ * refused, if fd is -1 because system had no descriptor free for it, or
+ * if keeping fd would leave fewer than SYS_RESERVE descriptors free.
+ * frontend passes only clients' sockets, so another is frontend gone
+ * wrong.
  */
 static void
 client_new(uint32_t session, int fd)
@@ -808,6 +834,9 @@ client_new(uint32_t session, int fd)
 		log_warnx("%s: session %u: no socket", __func__, session);
 		return;
 	}
+	if (!client_socket(fd))
+		link_broken(&links[FRONTEND], "passed session %u a socket "
+		    "that is not a client's", session);
 	if (getdtablesize() - getdtablecount() < SYS_RESERVE) {
 		log_warnx("%s: session %u: too many clients", __func__,
 		    session);

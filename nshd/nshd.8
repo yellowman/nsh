@@ -213,6 +213,13 @@ system reads the uid it records, and whether a session is the web
 configurator's, itself: it calls
 .Xr getpeereid 2
 on the socket of the session's client.
+It takes that socket only if it was accepted on the read-write socket:
+its address is that socket's path, and it has a peer.
+For a pipe between nshd's processes, which parent made as root,
+.Xr getpeereid 2
+reports root, so a frontend that passes one in place of a client's
+socket ends
+.Nm .
 It accepts a request only while that client is connected.
 So a compromised frontend cannot choose who a client is.
 It keeps a client's socket only while enough descriptors stay free for
