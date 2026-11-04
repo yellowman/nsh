@@ -144,8 +144,11 @@
  * accepts such a report only while the client is still connected, as
  * the socket shows. BEGIN and TEST, and SAVE outside a commit, name the
  * session, and are refused unless the session has a request not yet
- * answered, or had one when the session went away. BEGIN uses up that
- * request, and the commit record stores its uid. TEST for no session
+ * answered and its client is still connected. A session's request goes
+ * when the session does, and when a step would use it and system finds
+ * its client gone. BEGIN uses up that request, and the commit record
+ * stores its uid; from then on the commit runs to its end, as its APPLY,
+ * SAVE and RECORD name no session. TEST for no session
  * and APPLY outside a commit belong to the boot, and are refused unless
  * the boot is running. BOOT is answered as already done once parent
  * says nshd is not booting, or once BOOTED has been received. So a
@@ -371,17 +374,14 @@ struct record {
 
 /*
  * What frontend told system: a session's request, not yet answered,
- * with who the session's client is. Once the session is gone, it is
- * kept for a commit it asked, ASKED_GONE of them at most
+ * with who the session's client is. It goes when its session goes
  */
 struct asked {
 	TAILQ_ENTRY(asked)	 entry;
 	uint32_t		 session;
 	uid_t			 uid;
 	int			 web;
-	int			 gone;
 };
-#define ASKED_GONE	64
 
 /*
  * A session's client, as system reads it from the client's socket, which
@@ -441,7 +441,6 @@ static int		 boot_over;	/* not booting, or BOOTED came */
 static TAILQ_HEAD(, asked) askeds = TAILQ_HEAD_INITIALIZER(askeds);
 static TAILQ_HEAD(, login) logins = TAILQ_HEAD_INITIALIZER(logins);
 static TAILQ_HEAD(, client) clients = TAILQ_HEAD_INITIALIZER(clients);
-static int		 nagone;	/* askeds of sessions that are gone */
 static struct event	 confirm_tm;	/* the deadline, or the next attempt */
 static time_t		 confirm_next;	/* earliest next rollback attempt */
 
@@ -451,7 +450,6 @@ static void	system_dispatch_frontend(int, short, void *);
 static struct asked *asked_find(uint32_t);
 static struct asked *asked_whose(struct nshd_whose *);
 static void	asked_free(struct asked *);
-static void	asked_trim(void);
 static int	client_socket(int);
 static void	client_new(uint32_t, int);
 static struct client *client_find(uint32_t);
@@ -745,11 +743,8 @@ system_dispatch_frontend(int fd, short event, void *arg)
 				TAILQ_REMOVE(&logins, l, entry);
 				free(l);
 			}
-			if (k != NULL && !k->gone) {
-				k->gone = 1;
-				nagone++;
-				asked_trim();
-			}
+			if (k != NULL)
+				asked_free(k);
 		}
 	}
 	imsg_event_add(iev);
@@ -769,15 +764,25 @@ asked_find(uint32_t session)
 /*
  * The request of the session w names, which frontend told system of
  * before config heard of it, or NULL. What frontend sent is read first,
- * as system may not have read it yet
+ * as system may not have read it yet. A request whose client is gone is
+ * dropped
  */
 static struct asked *
 asked_whose(struct nshd_whose *w)
 {
+	struct asked	*k;
+	struct client	*cl;
+
 	if (w->session == 0)
 		return (NULL);
 	system_read_frontend();
-	return (asked_find(w->session));
+	if ((k = asked_find(w->session)) == NULL)
+		return (NULL);
+	if ((cl = client_find(w->session)) == NULL || !client_there(cl)) {
+		asked_free(k);
+		return (NULL);
+	}
+	return (k);
 }
 
 /* read what frontend has sent, if it has sent anything */
@@ -795,8 +800,6 @@ system_read_frontend(void)
 static void
 asked_free(struct asked *k)
 {
-	if (k->gone)
-		nagone--;
 	TAILQ_REMOVE(&askeds, k, entry);
 	free(k);
 }
@@ -945,20 +948,6 @@ system_perms(uint32_t session)
 	if ((cl = client_find(session)) == NULL || cl->web)
 		return (0);
 	return (login_perms(cl->uid));
-}
-
-/* forget the oldest requests of sessions gone, past ASKED_GONE */
-static void
-asked_trim(void)
-{
-	struct asked	*k, *next;
-
-	TAILQ_FOREACH_SAFE(k, &askeds, entry, next) {
-		if (nagone <= ASKED_GONE)
-			break;
-		if (k->gone)
-			asked_free(k);
-	}
 }
 
 /* Is a request one config may send, and whole? 0 if so, else -1 */

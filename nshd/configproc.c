@@ -67,15 +67,16 @@
  * a snapshot, system tests the daemons' rules it changes (TEST), then
  * records it (BEGIN), runs its script (APPLY) and, if a snapshot after
  * matches the candidate, saves the running configuration (SAVE); if not,
- * it runs the rollback script, and the record goes (RECORD). It runs to
- * its end if its session goes. commit check stops after the tests. commit
- * confirmed passes its minutes to BEGIN, so system also keeps an
- * unconfirmed commit record, and runs its script even if it is empty;
- * then, if a snapshot matches the candidate, the commit's record goes,
- * and the running configuration stays until the deadline, not saved. A
- * commit that saves confirms it. A commit outside configure only saves
- * the running configuration, as one that changes nothing does; check and
- * confirmed are configure's.
+ * it runs the rollback script, and the record goes (RECORD). Once system
+ * has begun it, it runs to its end if its session goes; system does not
+ * begin it once the session's client has gone. commit check stops after
+ * the tests. commit confirmed passes its minutes to BEGIN, so system also
+ * keeps an unconfirmed commit record, and runs its script even if it is
+ * empty; then, if a snapshot matches the candidate, the commit's record
+ * goes, and the running configuration stays until the deadline, not
+ * saved. A commit that saves confirms it. A commit outside configure only
+ * saves the running configuration, as one that changes nothing does;
+ * check and confirmed are configure's.
  *
  * configure terminal gives the session its own candidate, reset to the
  * running configuration from a new snapshot before each line. A line that

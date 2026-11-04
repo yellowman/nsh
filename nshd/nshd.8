@@ -153,7 +153,10 @@ loads configuration
 .Ar N ,
 which system reads, into the candidate; rollback 0 loads the running
 configuration.
-A commit runs to its end even if its session ends.
+Once system has begun a commit, the commit runs to its end even if its
+session ends.
+If the session's client closes its connection before then, system does
+not begin the commit.
 A session with view may watch commits, and interfaces and routes.
 config then sends it unrequested notices between its replies to the
 session's requests.
@@ -208,8 +211,8 @@ nsh's
 .Cm show startup-config
 requests it.
 It answers config and no one else.
-It begins a commit only for a request that frontend reported to it and
-that is not answered, or was not answered when its session ended.
+It begins a commit only for a request that frontend reported to it,
+that is not answered, and whose client is still connected.
 system reads the uid it records, and whether a session is the web
 configurator's, itself: it calls
 .Xr getpeereid 2
@@ -229,8 +232,9 @@ It does not show what that user asked for: frontend reads each client's
 requests and tells system of each one, and system trusts frontend's word
 of them.
 Once system finds that a session's client has closed its connection, it
-refuses frontend's word of a new request from that session.
-A request it accepted before then, and a commit it has begun, can go on.
+refuses frontend's word of a new request from that session, and drops
+each request of that session that it has not begun to act on.
+An operation or a commit that system has begun can go on.
 So a compromised frontend cannot choose who a client is, but it can make
 requests in the name of any client that is connected.
 It keeps a client's socket only while enough descriptors stay free for
