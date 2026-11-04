@@ -293,7 +293,7 @@ static const char *root_tests[] = {
  */
 static const char *root_programs[] = {
 	BGPCTL, DVMRPCTL, EIGRPCTL, IKECTL, LDAPCTL, LDPCTL, OSPF6CTL,
-	OSPFCTL, RELAYCTL, RIPCTL, SMTPCTL, PFCTL, IPSECCTL,
+	OSPFCTL, RELAYCTL, RIPCTL, SMTPCTL, PFCTL, IPSECCTL, LLDP,
 	TCPDUMP		/* opens bpf as root, then drops it itself */
 };
 

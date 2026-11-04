@@ -73,6 +73,7 @@ static const struct setting top_settings[] = {
 	{ "ike",		S_ENTRY,	2 },
 	{ "rad",		S_ENTRY,	2 },
 	{ "dhcp6lease",	S_ENTRY,	2 },
+	{ "lldp",		S_ENTRY,	2 },
 	{ "dvmrp",		S_ENTRY,	2 },
 	{ "relay",		S_ENTRY,	2 },
 	{ "sasync",		S_ENTRY,	2 },

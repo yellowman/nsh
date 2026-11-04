@@ -5,6 +5,8 @@
 #define DHCRELAY        "/usr/sbin/dhcrelay"
 #define RAD             "/usr/sbin/rad"
 #define DHCP6LEASED     "/sbin/dhcp6leased"
+#define LLDPD           "/usr/sbin/lldpd"
+#define LLDP            "/usr/sbin/lldp"
 #define DHCPLEASED_SOCK "/dev/dhcpleased.sock"
 #define SLAACD_SOCK     "/dev/slaacd.sock"
 #define IFDATA_MTU 1            /* request for if_data.ifi_mtu */
@@ -202,6 +204,7 @@ extern struct ctl ctl_ike[];
 extern struct ctl ctl_dvmrp[];
 extern struct ctl ctl_rad[];
 extern struct ctl ctl_dhcp6lease[];
+extern struct ctl ctl_lldp[];
 extern struct ctl ctl_sasync[];
 extern struct ctl ctl_dhcp[];
 extern struct ctl ctl_snmp[];

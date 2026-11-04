@@ -130,6 +130,7 @@ struct daemons ctl_daemons[] = {
 { "ike",	"IPsec IKEv2",ctl_ike,	IKECONF_TEMP,	0600, 0, RT_TABLEID_MAX },
 { "rad",	"rad",	ctl_rad,	RADCONF_TEMP,	0600, 0, 0 },
 { "dhcp6lease",	"dhcp6leased",ctl_dhcp6lease,	DHCP6LEASED_TEMP,0600, 0, 0 },
+{ "lldp",	"lldpd",	ctl_lldp,	NULL,		0, 0, 0 },
 { "dvmrp",	"DVMRP",ctl_dvmrp,	DVMRPCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
 { "sasync",	"SAsync",ctl_sasync,	SASYNCCONF_TEMP,0600, 0, RT_TABLEID_MAX },
 { "snmp",	"SNMP",	ctl_snmp,	SNMPCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
@@ -424,6 +425,20 @@ struct ctl ctl_dhcp6lease[] = {
 	    call_editor, 0, T_HANDLER_TEST },
 	{ "check-config", "test staged dhcp6leased config",
 	    { DHCP6LEASED, "-nvvf", REQTEMP, NULL }, { NULL }, NULL, 0, T_EXEC },
+	{ NULL, NULL, { NULL }, { NULL }, NULL, 0, 0 }
+};
+
+/*
+ * lldpd, which has no configuration. It runs in routing table 0 only,
+ * and hears LLDP on the Ethernet interfaces of every rdomain.
+ */
+struct ctl ctl_lldp[] = {
+	{ "enable",	"enable LLDP daemon",
+	    { LLDPD, NULL }, { NULL }, NULL, DB_X_ENABLE, T_EXEC },
+	{ "disable",	"disable LLDP daemon",
+	    { PKILL, "lldpd", NULL }, { NULL }, NULL, DB_X_DISABLE, T_EXEC },
+	{ "show",	"show LLDP neighbors",
+	    { LLDP, NULL }, { NULL }, NULL, 0, T_EXEC },
 	{ NULL, NULL, { NULL }, { NULL }, NULL, 0, 0 }
 };
 

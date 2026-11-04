@@ -47,6 +47,8 @@ var DAEMONS = [
 	    "(rad)", rules: 1, enable: 1, ops: [] },
 	{ name: "dhcp6lease", ws: "services", label: "DHCPv6 prefix " +
 	    "delegation (dhcp6leased)", rules: 1, enable: 1, ops: [] },
+	{ name: "lldp", ws: "services", label: "LLDP neighbors (lldpd)",
+	    enable: 1, ops: ["show"], runs: "/usr/sbin/lldpd", args: [] },
 	{ name: "resolv", ws: "services", label: "DNS resolution (resolvd)",
 	    enable: 1, ops: [], runs: "/sbin/resolvd", args: [] },
 	{ name: "unbound", ws: "services", label: "DNS resolver (unbound)",

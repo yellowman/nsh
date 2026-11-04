@@ -234,6 +234,7 @@ static const struct {
 	{ CONF_CTL,	"ike",		NULL },
 	{ CONF_CTL,	"rad",		NULL },
 	{ CONF_CTL,	"dhcp6lease",	NULL },
+	{ CONF_CTL,	"lldp",		NULL },
 	{ CONF_CTL,	"dvmrp",	NULL },
 	{ CONF_CTL,	"relay",	NULL },
 	{ CONF_CTL,	"sasync",	NULL },

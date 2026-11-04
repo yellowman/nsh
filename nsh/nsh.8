@@ -177,22 +177,22 @@ completes only the commands it runs itself, and no names.
 E.g show all available valid commands  with double tab key sequence <tab><tab>
 .Bd -literal -offset indent
 nsh(config)#
-!		exit		logger		powerdown	snmp
-?		flush		login		quit		ssh
-arp		ftp-proxy	manual		rad		sshd
-bgp		group		motd		reboot		telnet
-bridge		halt		mpls		relay		tftp
-clear		help		nameserver	resolv		tftp-proxy
-commit		hostname	ndp		rip		traceroute
-configure	ifstate		no		rollback	traceroute6
-crontab		ike		nppp		route		unbound
-ddb		inet		ntp		rtable		unsetenv
-dhcp		interface	ospf		sasync		verbose
-dhcp6lease	ip		ospf6		saveenv		who
-do		ip6		pf		scheduler
-dvmrp		ipsec		ping		setenv
-editing		ldap		ping6		show
-eigrp		ldp		pipex		smtp
+!		exit		lldp		pipex		smtp
+?		flush		logger		powerdown	snmp
+arp		ftp-proxy	login		quit		ssh
+bgp		group		manual		rad		sshd
+bridge		halt		motd		reboot		telnet
+clear		help		mpls		relay		tftp
+commit		hostname	nameserver	resolv		tftp-proxy
+configure	ifstate		ndp		rip		traceroute
+crontab		ike		no		rollback	traceroute6
+ddb		inet		nppp		route		unbound
+dhcp		interface	ntp		rtable		unsetenv
+dhcp6lease	ip		ospf		sasync		verbose
+do		ip6		ospf6		saveenv		who
+dvmrp		ipsec		pf		scheduler
+editing		ldap		ping		setenv
+eigrp		ldp		ping6		show
 nsh(config)#
 .Ed
 If what is typed is ambiguous double tab presents the administrator
@@ -651,6 +651,7 @@ nsh(config)# ?
   dvmrp         DVMRP control
   rad           Router advertisement control
   dhcp6lease    DHCPv6 prefix delegation control
+  lldp          LLDP control
   sasync        SA synchronization control
   dhcp          DHCP server control
   snmp          SNMP server control
@@ -1861,6 +1862,21 @@ also shows which prefix each interface would get.
 dhcp6leased runs in routing table 0 only.
 It sends its requests on each upstream interface in that interface's
 routing table.
+.Pp
+.Tg lldp
+.Ic lldp
+.Op Cm \&? | enable | disable | show
+.Pp
+Enable or disable the
+.Xr lldpd 8
+Link Layer Discovery Protocol daemon, which records the LLDP messages
+it hears on Ethernet interfaces.
+.Cm show
+lists them, through
+.Xr lldp 8 .
+lldpd has no configuration.
+It runs in routing table 0 only, and hears the interfaces of every
+rdomain.
 .Pp
 .Tg sasyncd
 .Tg sasync
@@ -7155,6 +7171,8 @@ option is used.
 .Xr ipsecctl 8 ,
 .Xr ldapd 8 ,
 .Xr ldpd 8 ,
+.Xr lldp 8 ,
+.Xr lldpd 8 ,
 .Xr npppd 8 ,
 .Xr nshd 8 ,
 .Xr nshdeck 8 ,
