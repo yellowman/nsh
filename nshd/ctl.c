@@ -51,6 +51,8 @@ int edit_motd(int, char **, ...);
 int call_editor(int, char **, ...);
 int start_dhcpd(int, char **, ...);
 int restart_dhcpd(int, char **, ...);
+int start_unbound(int, char **, ...);
+static void unbound_anchor(char *);
 
 /* subroutines */
 int fill_tmpfile(char **, char *, char **);
@@ -138,6 +140,7 @@ struct daemons ctl_daemons[] = {
 { "tftp",	"TFTP",	ctl_tftp,	TFTP_TEMP,	0600, 0, RT_TABLEID_MAX },
 { "nppp",	"PPP",	ctl_nppp,	NPPPCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
 { "resolv",	"resolvd",ctl_resolv,	NULL,		0, 0, 0 },
+{ "unbound",	"unbound",ctl_unbound,	UNBOUND_TEMP,0644, 0, RT_TABLEID_MAX },
 { "inet",	"Inet",	ctl_inet,	INETCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
 { "smtp",	"SMTP",	ctl_smtp,	SMTPCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
 { "ldap",	"LDAP",	ctl_ldap,	LDAPCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
@@ -623,6 +626,25 @@ struct ctl ctl_resolv[] = {
 	{ "disable",    "disable resolvd daemon",
 	   { PKILL, "resolvd", NULL }, { NULL }, NULL, DB_X_DISABLE_ALWAYS,
 	   T_EXEC },
+	{ NULL, NULL, { NULL }, { NULL }, NULL, 0, 0 }
+};
+
+/* unbound, unbound-control */
+struct ctl ctl_unbound[] = {
+	{ "enable",	"enable unbound DNS resolver",
+	    { UNBOUND, "-c", REQTEMP, NULL }, { NULL }, start_unbound,
+	    DB_X_ENABLE, T_HANDLER },
+	{ "disable",	"disable unbound DNS resolver",
+	    { PKILL, table, "unbound", NULL }, { NULL }, NULL, DB_X_DISABLE,
+	    T_EXEC },
+	{ "edit",	"edit, test and stage unbound config",
+	    { "unbound", NULL }, { UNBOUNDCHECK, REQTEMP, NULL },
+	    call_editor, 0, T_HANDLER_TEST },
+	{ "check-config", "test staged unbound config",
+	    { UNBOUNDCHECK, REQTEMP, NULL }, { NULL }, NULL, 0, T_EXEC },
+	{ "reload",	"reload staged unbound config",
+	    { UNBOUNDCTL, "-c", REQTEMP, "reload", NULL }, { NULL }, NULL, 0,
+	    T_EXEC },
 	{ NULL, NULL, { NULL }, { NULL }, NULL, 0, 0 }
 };
 
@@ -1412,6 +1434,7 @@ ctl_exec(char *cmd, char **args)
 {
 	int r;
 
+	ctl_test_prepare(args);
 	r = cmdargs(cmd, args);
 	return r == -1 || r == 127 ? -1 : 0;
 }
@@ -1750,8 +1773,10 @@ edit_file(char *tmpfile, mode_t mode, char *propername, char **args)
 			    mode, tmpfile, strerror(errno));
 			ret = -1;
 		}
-		if (ret == 0 && args != NULL)
+		if (ret == 0 && args != NULL) {
+			ctl_test_prepare(args);
 			ret = cmdargs(args[0], args);
+		}
 		rls_lock(fd);
 		signal(SIGINT, sigint); /* Restore SIGINT handler. */
 	} else {
@@ -2295,4 +2320,62 @@ daemons_facts(struct facts_out *o, int pf)
 	}
 	free(kp);
 	return r;
+}
+
+/*
+ * unbound's enable: make the root key its rules name, if it is not
+ * there yet, then start unbound
+ */
+int
+start_unbound(int argc, char **argv, ...)
+{
+	unbound_anchor(argv[2]);
+	return ctl_exec(argv[0], argv);
+}
+
+/*
+ * Before a daemon's test, which runs args. unbound-checkconf refuses
+ * rules whose root key file is not there yet, so it is made first.
+ */
+void
+ctl_test_prepare(char **args)
+{
+	if (args[0] != NULL && strcmp(args[0], UNBOUNDCHECK) == 0 &&
+	    args[1] != NULL)
+		unbound_anchor(args[1]);
+}
+
+/*
+ * Make the root key file that the unbound rules at conf name in
+ * auto-trust-anchor-file, if it is not there, as rc.d's unbound does.
+ * unbound starts, and unbound-checkconf passes the rules, only once the
+ * file is there. A relative path is relative to unbound's directory, so
+ * nsh makes the file only when the rules give its full path.
+ */
+static void
+unbound_anchor(char *conf)
+{
+	char *check[] = { UNBOUNDCHECK, "-o", "auto-trust-anchor-file", conf,
+	    NULL };
+	char *anchor[] = { UNBOUNDANCHOR, "-v", "-a", NULL, NULL };
+	char path[PATH_MAX];
+	ssize_t n;
+	int fds[2], r;
+
+	if (pipe(fds) == -1) {
+		printf("%% unbound_anchor: pipe: %s\n", strerror(errno));
+		return;
+	}
+	r = cmdargs_output(check[0], check, fds[1], -1);
+	close(fds[1]);
+	n = read(fds[0], path, sizeof(path) - 1);
+	close(fds[0]);
+	if (r != 0 || n <= 0)
+		return;
+	path[n] = '\0';
+	path[strcspn(path, "\n")] = '\0';
+	if (path[0] != '/' || access(path, F_OK) == 0)
+		return;
+	anchor[3] = path;
+	cmdargs(anchor[0], anchor);
 }

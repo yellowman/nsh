@@ -128,6 +128,12 @@ struct claims {
 	size_t n;
 };
 
+/* A Unix control socket unbound's rules name, and the table they are in */
+struct unsock {
+	char path[PATH_MAX];
+	char block[64];
+};
+
 /*
  * A script's edits: records, each this head and len bytes after it. For
  * a line, the bytes are its words after its command's name and any "no",
@@ -174,6 +180,9 @@ static int check_ports(struct cnode *, char *, char *, char *,
 static int check_ids(struct cnode *, char *, char *, struct claims *);
 static int check_rtable(struct cnode *, char *);
 static int check_rules(struct cnode *, struct cnode *, char *);
+static int check_unbound(struct cnode *);
+static int unbound_socks(struct cnode *, char *, struct unsock **,
+    size_t *);
 static int rules_test(char *, char **, size_t, char *);
 static int ifthere(struct cnode *, char *);
 static int inwords(char *, char *);
@@ -352,10 +361,94 @@ check(struct cnode *was, struct cnode *want)
 			bad += check_if(want, s, name, &c);
 		else if (strncmp(s, "rtable ", 7) == 0)
 			bad += check_rtable(want, s) + check_rules(was, want, s);
+	bad += check_unbound(want);
 	for (i = 0; i < c.n; i++)
 		free(c.v[i].what);
 	free(c.v);
 	return bad;
+}
+
+/*
+ * unbound in two routing tables cannot share a Unix control socket. The
+ * second unbound takes it, and unbound-control for the first reaches the
+ * second. A TCP address is one per routing table already.
+ */
+static int
+check_unbound(struct cnode *want)
+{
+	struct unsock *v = NULL;
+	char *s;
+	size_t i, j, n = 0;
+	int bad = 0;
+
+	if (unbound_socks(want, NULL, &v, &n) == -1)
+		bad++;
+	for (i = 0; (s = conftree_stmt(want, i)) != NULL; i++)
+		if (strncmp(s, "rtable ", 7) == 0 &&
+		    unbound_socks(want, s, &v, &n) == -1)
+			bad++;
+	/* each socket another table named first, once */
+	for (j = 1; j < n; j++)
+		for (i = 0; i < j; i++)
+			if (strcmp(v[i].path, v[j].path) == 0 &&
+			    strcmp(v[i].block, v[j].block) != 0) {
+				bad += problem("%s and %s: unbound's "
+				    "control-interface %s is one Unix socket; "
+				    "give each routing table its own",
+				    v[i].block, v[j].block, v[i].path);
+				break;
+			}
+	free(v);
+	return bad;
+}
+
+/* Add the Unix control sockets that unbound's rules under block name */
+static int
+unbound_socks(struct cnode *want, char *block, struct unsock **v,
+    size_t *n)
+{
+	struct unsock *nv;
+	char *l, *k, *tp, name[32];
+	size_t i, j, len;
+
+	for (i = 0; (l = conftree_line(want, block, NULL, i)) != NULL; i++) {
+		if (ctl_line(l, name, sizeof(name)) != CTL_RULES ||
+		    strcmp(name, "unbound") != 0)
+			continue;
+		if ((tp = under(block, l)) == NULL)
+			return -1;
+		for (j = 0; (k = conftree_line(want, tp, NULL, j)) != NULL;
+		    j++) {
+			k += strspn(k, " \t");
+			if (strncmp(k, "control-interface:", 18) != 0)
+				continue;
+			k += 18;
+			k += strspn(k, " \t\"");
+			if (*k != '/')
+				continue;
+			len = strcspn(k, " \t\"#");
+			if ((nv = reallocarray(*v, *n + 1, sizeof(**v))) ==
+			    NULL) {
+				printf("%% commit: %s\n", strerror(errno));
+				free(tp);
+				return -1;
+			}
+			*v = nv;
+			snprintf(nv[*n].path, sizeof(nv[*n].path), "%.*s",
+			    (int)len, k);
+			/* "rtable N", without the table's description */
+			if (block == NULL)
+				strlcpy(nv[*n].block, "rtable 0",
+				    sizeof(nv[*n].block));
+			else
+				snprintf(nv[*n].block, sizeof(nv[*n].block),
+				    "%.*s", (int)(7 + strcspn(block + 7, " ")),
+				    block);
+			(*n)++;
+		}
+		free(tp);
+	}
+	return 0;
 }
 
 /* An interface's block, block, for interface name */

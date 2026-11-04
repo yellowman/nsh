@@ -66,7 +66,7 @@ commands.c	table	Bridgelist Bridgelist_nitems Intlist
 			sendredirectstab
 			smtphelp snmphelp
 			sourceroutetab sshdhelp
-			tftphelp tftpproxyhelp
+			tftphelp tftpproxyhelp unboundhelp
 			wccptab
 commit.c	scratch	deferred ndeferred
 commit.c	table	ifrefs
@@ -85,7 +85,8 @@ ctl.c		table	ctl_bgp ctl_crontab ctl_daemons ctl_dhcp
 			ctl_motd ctl_nppp ctl_ntp ctl_ospf ctl_ospf6
 			ctl_pf ctl_rad ctl_relay ctl_resolv ctl_rip
 			ctl_sasync ctl_smtp ctl_snmp
-			ctl_sshd ctl_tftp ctl_tftpproxy admin_words
+			ctl_sshd ctl_tftp ctl_tftpproxy ctl_unbound
+			admin_words
 ctlargs.c	table	dhcs dvcs eics ikcs iscs ldcs lics os6cs oscs
 			pfcs rics rlcs smcs systatcs
 editing.c	process	complete.word

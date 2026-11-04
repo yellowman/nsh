@@ -222,6 +222,7 @@ static const struct {
 	{ CONF_IFS,	"pflow",	NULL },
 	{ CONF_CTL,	"snmp",		NULL },
 	{ CONF_CTL,	"resolv",	NULL },
+	{ CONF_CTL,	"unbound",	NULL },
 	{ CONF_CTL,	"ldp",		NULL },
 	{ CONF_CTL,	"rip",		NULL },
 	{ CONF_CTL,	"ospf",		NULL },
