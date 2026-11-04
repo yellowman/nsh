@@ -45,6 +45,8 @@ var DAEMONS = [
 	    rules: 1, enable: 1, ops: ["restart"] },
 	{ name: "rad", ws: "services", label: "IPv6 router advertisements " +
 	    "(rad)", rules: 1, enable: 1, ops: [] },
+	{ name: "dhcp6lease", ws: "services", label: "DHCPv6 prefix " +
+	    "delegation (dhcp6leased)", rules: 1, enable: 1, ops: [] },
 	{ name: "resolv", ws: "services", label: "DNS resolution (resolvd)",
 	    enable: 1, ops: [], runs: "/sbin/resolvd", args: [] },
 	{ name: "unbound", ws: "services", label: "DNS resolver (unbound)",

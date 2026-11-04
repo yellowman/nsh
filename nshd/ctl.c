@@ -129,6 +129,7 @@ struct daemons ctl_daemons[] = {
 { "ipsec",	"IPsec IKEv1",ctl_ipsec,IPSECCONF_TEMP,	0600, 1, RT_TABLEID_MAX },
 { "ike",	"IPsec IKEv2",ctl_ike,	IKECONF_TEMP,	0600, 0, RT_TABLEID_MAX },
 { "rad",	"rad",	ctl_rad,	RADCONF_TEMP,	0600, 0, 0 },
+{ "dhcp6lease",	"dhcp6leased",ctl_dhcp6lease,	DHCP6LEASED_TEMP,0600, 0, 0 },
 { "dvmrp",	"DVMRP",ctl_dvmrp,	DVMRPCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
 { "sasync",	"SAsync",ctl_sasync,	SASYNCCONF_TEMP,0600, 0, RT_TABLEID_MAX },
 { "snmp",	"SNMP",	ctl_snmp,	SNMPCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
@@ -402,6 +403,27 @@ struct ctl ctl_rad[] = {
 	    call_editor, 0, T_HANDLER_TEST },
 	{ "check-config",   "test staged RAD config",                                   
             { RAD, "-nvf", REQTEMP, NULL }, { NULL }, NULL, 0, T_EXEC },
+	{ NULL, NULL, { NULL }, { NULL }, NULL, 0, 0 }
+};
+
+/*
+ * dhcp6leased runs in routing table 0 only. It watches every routing
+ * table, and requests prefixes for each interface in that interface's
+ * routing table. check-config's -vv shows which prefix goes to which
+ * interface.
+ */
+struct ctl ctl_dhcp6lease[] = {
+	{ "enable",	"enable DHCPv6 prefix delegation client",
+	    { DHCP6LEASED, "-f", REQTEMP, NULL }, { NULL }, NULL, DB_X_ENABLE,
+	    T_EXEC },
+	{ "disable",	"disable DHCPv6 prefix delegation client",
+	    { PKILL, "dhcp6leased", NULL }, { NULL }, NULL, DB_X_DISABLE,
+	    T_EXEC },
+	{ "edit",	"edit, test and stage dhcp6leased config",
+	    { "dhcp6lease", NULL }, { DHCP6LEASED, "-nf", REQTEMP, NULL },
+	    call_editor, 0, T_HANDLER_TEST },
+	{ "check-config", "test staged dhcp6leased config",
+	    { DHCP6LEASED, "-nvvf", REQTEMP, NULL }, { NULL }, NULL, 0, T_EXEC },
 	{ NULL, NULL, { NULL }, { NULL }, NULL, 0, 0 }
 };
 

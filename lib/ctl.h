@@ -4,6 +4,7 @@
 /* if.c related */
 #define DHCRELAY        "/usr/sbin/dhcrelay"
 #define RAD             "/usr/sbin/rad"
+#define DHCP6LEASED     "/sbin/dhcp6leased"
 #define DHCPLEASED_SOCK "/dev/dhcpleased.sock"
 #define SLAACD_SOCK     "/dev/slaacd.sock"
 #define IFDATA_MTU 1            /* request for if_data.ifi_mtu */
@@ -136,6 +137,7 @@ struct daemons {
 #define IKECONF_TEMP    "/var/run/iked.conf"
 #define DVMRPCONF_TEMP  "/var/run/dvmrpd.conf"
 #define RADCONF_TEMP    "/var/run/rad.conf"
+#define DHCP6LEASED_TEMP "/var/run/dhcp6leased.conf"
 #define RELAYCONF_TEMP  "/var/run/relayd.conf"
 #define SASYNCCONF_TEMP "/var/run/sasyncd.conf"
 #define DHCPCONF_TEMP   "/var/run/dhcpd.conf"
@@ -199,6 +201,7 @@ extern struct ctl ctl_ifstate[];
 extern struct ctl ctl_ike[];
 extern struct ctl ctl_dvmrp[];
 extern struct ctl ctl_rad[];
+extern struct ctl ctl_dhcp6lease[];
 extern struct ctl ctl_sasync[];
 extern struct ctl ctl_dhcp[];
 extern struct ctl ctl_snmp[];

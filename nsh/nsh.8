@@ -177,21 +177,22 @@ completes only the commands it runs itself, and no names.
 E.g show all available valid commands  with double tab key sequence <tab><tab>
 .Bd -literal -offset indent
 nsh(config)#
-!		exit		ldp		ping6		setenv
-?		flush		logger		pipex		show
-arp		ftp-proxy	login		powerdown	smtp
-bgp		group		manual		quit		snmp
-bridge		halt		motd		rad		ssh
-clear		help		mpls		reboot		sshd
-commit		hostname	nameserver	relay		telnet
-configure	ifstate		ndp		resolv		tftp
-crontab		ike		no		rip		tftp-proxy
-ddb		inet		nppp		rollback	traceroute
-dhcp		interface	ntp		route		traceroute6
-do		ip		ospf		rtable		unbound
-dvmrp		ip6		ospf6		sasync		unsetenv
-editing		ipsec		pf		saveenv		verbose
-eigrp		ldap		ping		scheduler	who
+!		exit		logger		powerdown	snmp
+?		flush		login		quit		ssh
+arp		ftp-proxy	manual		rad		sshd
+bgp		group		motd		reboot		telnet
+bridge		halt		mpls		relay		tftp
+clear		help		nameserver	resolv		tftp-proxy
+commit		hostname	ndp		rip		traceroute
+configure	ifstate		no		rollback	traceroute6
+crontab		ike		nppp		route		unbound
+ddb		inet		ntp		rtable		unsetenv
+dhcp		interface	ospf		sasync		verbose
+dhcp6lease	ip		ospf6		saveenv		who
+do		ip6		pf		scheduler
+dvmrp		ipsec		ping		setenv
+editing		ldap		ping6		show
+eigrp		ldp		pipex		smtp
 nsh(config)#
 .Ed
 If what is typed is ambiguous double tab presents the administrator
@@ -649,6 +650,7 @@ nsh(config)# ?
   ike           IPsec IKEv2 control
   dvmrp         DVMRP control
   rad           Router advertisement control
+  dhcp6lease    DHCPv6 prefix delegation control
   sasync        SA synchronization control
   dhcp          DHCP server control
   snmp          SNMP server control
@@ -1841,6 +1843,24 @@ daemon can be edited with
 .Cm edit
 command, the syntax is documented in
 .Xr rad.conf 5 .
+.Pp
+.Tg dhcp6lease
+.Ic dhcp6lease
+.Op Cm \&? | enable | disable | edit | check-config
+.Pp
+Enable, disable or configure the
+.Xr dhcp6leased 8
+DHCPv6 client.
+It requests IPv6 prefix delegation from an upstream DHCPv6 server, and
+assigns the prefixes to downstream interfaces.
+The syntax of its configuration is documented in
+.Xr dhcp6leased.conf 5 .
+.Cm check-config
+also shows which prefix each interface would get.
+.Pp
+dhcp6leased runs in routing table 0 only.
+It sends its requests on each upstream interface in that interface's
+routing table.
 .Pp
 .Tg sasyncd
 .Tg sasync
@@ -7082,6 +7102,7 @@ option is used.
 .Xr vi 1 ,
 .Xr pf 4 ,
 .Xr bgpd.conf 5 ,
+.Xr dhcp6leased.conf 5 ,
 .Xr dhcpd.conf 5 ,
 .Xr ospf6d.conf 5 ,
 .Xr ospfd.conf 5 ,
@@ -7093,6 +7114,7 @@ option is used.
 .Xr environ 7 ,
 .Xr script 7 ,
 .Xr bgpd 8 ,
+.Xr dhcp6leased 8 ,
 .Xr dhcpd 8 ,
 .Xr dhcpleased 8 ,
 .Xr dvmrpd 8 ,
