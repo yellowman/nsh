@@ -285,10 +285,14 @@ function netRoutesDraw(box) {
 	}));
 }
 
-/* route r in the form, or a new one if r is null */
+/*
+ * route r in the form, or a new one if r is null. An interface's
+ * inspection asked before is not drawn over it
+ */
 function netRouteOpen(r) {
 	selected = "";
 	insp = null;
+	iasked++;
 	iftable();
 	netRoute = { was: r, now: Object.assign({ rt: 0, dest: "",
 	    gate: "", flags: "" }, r), results: [] };
@@ -379,11 +383,12 @@ function netRouteForm() {
 
 /*
  * the route's lines into the candidate, entering configure private if
- * not in configure; then the routes again, and the route as it now is
+ * not in configure; then the routes again, and, if the form is still
+ * open, the route as it now is, with the edits made while the lines ran
  */
 function netRouteStage() {
 	var lines = netRouteLines(), results = [], p = Promise.resolve();
-	var now = netRoute.now;
+	var mine = netRoute, sent = JSON.parse(JSON.stringify(netRoute.now));
 
 	if (!lines.length)
 		return p;
@@ -402,14 +407,18 @@ function netRouteStage() {
 	});
 	return p.then(netLoad).then(function () {
 		var r = netRoutes(netConf).find(function (x) {
-			return x.rt === now.rt && x.dest === now.dest &&
-			    x.gate === now.gate;
+			return x.rt === sent.rt && x.dest === sent.dest &&
+			    x.gate === sent.gate;
 		}) || null;
 
+		/* an interface, or another route, was opened meanwhile */
+		if (netRoute !== mine)
+			return;
 		/* a route deleted leaves an empty form */
 		netRoute = { was: r, now: Object.assign({ rt: 0, dest: "",
-		    gate: "", flags: "" }, r || (now.dest === "" ? {} : now)),
+		    gate: "", flags: "" }, r || (sent.dest === "" ? {} : sent)),
 		    results: results };
+		keepEdits(netRoute.now, sent, mine.now);
 		netDraw();
 		netRouteForm();
 	});

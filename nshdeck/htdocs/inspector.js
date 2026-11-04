@@ -423,13 +423,26 @@ function inspector(key) {
 }
 
 /*
+ * the edits made to edited since sent was taken, into into: each key
+ * whose value changed after Stage was pressed keeps the changed value
+ */
+function keepEdits(into, sent, edited) {
+	Object.keys(edited).forEach(function (k) {
+		if (JSON.stringify(edited[k]) !== JSON.stringify(sent[k]))
+			into[k] = edited[k];
+	});
+}
+
+/*
  * lines into the candidate, one at a time, in the interface's mode,
  * entering configure private if not in configure. Then, if no other
- * inspection was asked for meanwhile, the interface is inspected again
- * and the lines' results are shown with it
+ * inspection was asked for and no route opened meanwhile, the
+ * interface is inspected again, keeping the edits made while the lines
+ * ran, and the lines' results are shown with it
  */
 function staged(lines) {
-	var name = insp.name, n = iasked;
+	var mine = insp, name = insp.name, n = iasked;
+	var sent = JSON.parse(JSON.stringify(insp.now));
 	var head = (insp.bridge ? "bridge " : "interface ") + name;
 	var all = [head].concat(lines, ["exit"]), results = [];
 	var p = Promise.resolve();
@@ -448,12 +461,14 @@ function staged(lines) {
 		});
 	});
 	return p.then(function () {
+		/* another interface, or a route, was opened meanwhile */
 		if (n !== iasked)
 			return false;
 		return inspect(name);
 	}).then(function (drawn) {
 		if (!drawn)
 			return;
+		keepEdits(insp.now, sent, mine.now);
 		insp.results = results;
 		inspector();
 	});
