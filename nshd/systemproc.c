@@ -458,6 +458,8 @@ static struct client *client_find(uint32_t);
 static int	client_there(struct client *);
 static struct login *login_find(uint32_t);
 static int	system_whom(struct asked *, uid_t *);
+static int	system_perms(uint32_t);
+static void	system_read_frontend(void);
 static void	system_login(uint32_t, struct nshd_syslogin *);
 static void	system_terminal(uint32_t, struct nshd_systerm *);
 static __dead void system_term_child(int, struct passwd *);
@@ -772,15 +774,22 @@ asked_find(uint32_t session)
 static struct asked *
 asked_whose(struct nshd_whose *w)
 {
-	struct pollfd	 pfd;
-
 	if (w->session == 0)
 		return (NULL);
+	system_read_frontend();
+	return (asked_find(w->session));
+}
+
+/* read what frontend has sent, if it has sent anything */
+static void
+system_read_frontend(void)
+{
+	struct pollfd	 pfd;
+
 	pfd.fd = links[FRONTEND].iev->ibuf.fd;
 	pfd.events = POLLIN;
 	if (poll(&pfd, 1, 0) == 1)
 		system_dispatch_frontend(pfd.fd, EV_READ, links[FRONTEND].iev);
-	return (asked_find(w->session));
 }
 
 static void
@@ -918,6 +927,24 @@ system_whom(struct asked *k, uid_t *uid)
 	if (uid != NULL)
 		*uid = l->uid;
 	return (login_perms(l->uid));
+}
+
+/*
+ * The login class permissions of a session, for the uid of its client.
+ * frontend passes system the client's socket before config hears the
+ * client's hello, so what frontend sent is read first. A session with no
+ * client has none. A session of the web configurator's has none until it
+ * logs in
+ */
+static int
+system_perms(uint32_t session)
+{
+	struct client	*cl;
+
+	system_read_frontend();
+	if ((cl = client_find(session)) == NULL || cl->web)
+		return (0);
+	return (login_perms(cl->uid));
 }
 
 /* forget the oldest requests of sessions gone, past ASKED_GONE */
@@ -1128,8 +1155,7 @@ system_request(uint32_t type, uint32_t id, const void *data, size_t len)
 		break;
 	case IMSG_SYS_PERMS:
 		memcpy(&pm, data, sizeof(pm));
-		/* the web configurator has none until it logs in */
-		system_end(id, pm.web ? 0 : login_perms(pm.uid), NULL);
+		system_end(id, system_perms(pm.session), NULL);
 		break;
 	case IMSG_SYS_LOGIN:
 		memcpy(&sl, data, sizeof(sl));

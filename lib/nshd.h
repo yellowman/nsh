@@ -132,12 +132,13 @@ struct nshd_snapshot {
 };
 
 /*
- * config to system: ask a uid's permissions, NSHD_*; a session of the
- * web configurator's has none until it logs in
+ * config to system: ask a session's permissions, NSHD_*. system answers
+ * for the uid of the session's client, which it reads from the client's
+ * socket. A session of the web configurator's has none until it logs
+ * in.
  */
 struct nshd_perms {
-	uint32_t	uid;
-	int32_t		web;
+	uint32_t	session;
 };
 
 /* the web configurator's session logs in as name, a login user */
@@ -324,7 +325,6 @@ struct nshd_peer {
 	struct nshd_hello	hello;
 	uint32_t		uid;
 	uint32_t		gid;
-	int32_t			web;	/* the client is NSHD_WEB_USER */
 };
 
 enum nshd_proc {

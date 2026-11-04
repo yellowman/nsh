@@ -73,8 +73,9 @@ A session has the permissions of its user's login class (see
 .Cm login class
 in
 .Xr nsh 8 ) .
-config requests them from system at the session's hello, for the uid
-that frontend reports.
+config requests them from system at the session's hello.
+system answers for the uid of the session's client, which it reads from
+the client's socket (see system, below).
 config refuses what the permissions do not allow: a show without view,
 an operation without operate, and configure, a commit, a rollback, a
 load or a daemon's rules without configure.
@@ -213,6 +214,8 @@ system reads the uid it records, and whether a session is the web
 configurator's, itself: it calls
 .Xr getpeereid 2
 on the socket of the session's client.
+It answers config's request for a session's permissions from that uid
+too, and a session whose client's socket it does not have has none.
 It takes that socket only if it was accepted on the read-write socket:
 its address is that socket's path, and it is not listening.
 Both stay true after the client closes its end.

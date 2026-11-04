@@ -164,7 +164,6 @@ struct session {
 	uint32_t		 id;
 	uid_t			 uid;
 	gid_t			 gid;
-	int			 web;	/* a web configurator session */
 	struct session_state	*st;	/* nsh's state, once in configure */
 	int			 want;	/* the configure it asked for */
 	int			 how;	/* the configure it is in, or 0 */
@@ -1029,7 +1028,6 @@ config_hello(uint32_t session, struct nshd_peer *peer)
 	sp->id = session;
 	sp->uid = peer->uid;
 	sp->gid = peer->gid;
-	sp->web = peer->web;
 	sp->perms = -1;
 	TAILQ_INSERT_TAIL(&sessions, sp, entry);
 	if ((r = config_request(session, REQ_PERMS)) == NULL) {
@@ -1038,8 +1036,7 @@ config_hello(uint32_t session, struct nshd_peer *peer)
 		return;
 	}
 	memset(&p, 0, sizeof(p));
-	p.uid = peer->uid;
-	p.web = peer->web;
+	p.session = session;
 	if (link_compose(&links[SYSTEM], IMSG_SYS_PERMS, r->id, &p,
 	    sizeof(p)) == -1)
 		fatal("%s", __func__);

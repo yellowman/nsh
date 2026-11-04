@@ -23,7 +23,10 @@
  * (or config) may send, and is whole; it reads no configuration.
  *
  * frontend also passes system, on their pipe, each client's socket as the
- * client comes, so system reads for itself who the session is. Before
+ * client comes, so system reads for itself who the session is. frontend
+ * sends config the client's hello only after that socket is written to
+ * system's pipe, since system answers config's request for the session's
+ * permissions from it. Before
  * config hears of a request, frontend tells system of it if it may begin
  * a commit (a line, a commit or a part of a load) or if system checks it
  * itself (an operation, a login, a terminal or a watch). frontend sends
@@ -67,6 +70,7 @@ union frontend_request {
 	struct nshd_login	 login;
 	struct nshd_watch	 watch;
 	struct nshd_terminal	 terminal;
+	struct nshd_peer	 peer;
 };
 
 /* a request, kept until frontend has written its message to system */
@@ -346,7 +350,6 @@ frontend_opened(struct ctl_conn *c)
 static int
 frontend_client(struct ctl_conn *c, struct imsg *imsg)
 {
-	struct nshd_peer	 peer;
 	struct nshd_show	 show;
 	union frontend_request	 r;
 	ssize_t			 len;
@@ -356,14 +359,18 @@ frontend_client(struct ctl_conn *c, struct imsg *imsg)
 	c->pending = 1;
 	switch (imsg_get_type(imsg)) {
 	case IMSG_CTL_HELLO:
-		if (imsg_get_data(imsg, &peer.hello, sizeof(peer.hello)) == -1)
+		if (imsg_get_data(imsg, &r.peer.hello,
+		    sizeof(r.peer.hello)) == -1)
 			return (-1);
-		peer.uid = c->uid;
-		peer.gid = c->gid;
-		peer.web = web_user && c->uid == web_uid;
-		if (link_compose(&links[CONFIG], IMSG_CTL_HELLO, c->id, &peer,
-		    sizeof(peer)) == -1)
-			fatal("%s", __func__);
+		r.peer.uid = c->uid;
+		r.peer.gid = c->gid;
+		/*
+		 * config asks system for the session's permissions, and
+		 * system reads them from the client's socket, so the hello
+		 * waits until that socket is written to system
+		 */
+		frontend_hold(c, IMSG_CTL_HELLO, &r, sizeof(r.peer));
+		frontend_release();
 		return (0);
 	case IMSG_CTL_SHOW:
 		if (imsg_get_data(imsg, &show, sizeof(show)) == -1 ||
