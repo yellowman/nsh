@@ -109,9 +109,11 @@
  * what the rollback removed. system demotes carp, records the attempt,
  * and starts a JOB_RECOVER job, which makes the running configuration
  * match the rollback configuration; then it promotes carp again. If the
- * job fails, system tries again CONFIRM_RETRY seconds later, up to
- * CONFIRM_ATTEMPTS attempts in all; then the record is marked failed,
- * and carp stays demoted. If the running configuration already matches
+ * job fails or cannot start, system's timer tries again CONFIRM_RETRY
+ * seconds later, up to CONFIRM_ATTEMPTS attempts in all; then the record
+ * is marked failed, and carp stays demoted. If the record cannot be read
+ * or removed, the timer tries again too, and that is not an attempt.
+ * If the running configuration already matches
  * the rollback configuration, as after a reboot or a commit that never
  * ran, system only removes the record. When system starts, it takes
  * over an unconfirmed commit that a previous system process left, and
@@ -521,6 +523,7 @@ static void	system_kept(void);
 static void	system_confirm(int, short, void *);
 static void	system_recover(struct confirm *);
 static void	system_attempted(int);
+static void	confirm_retry(void);
 static void	system_taken(struct confirm *, const char *);
 static void	system_failed(struct confirm *);
 static void	system_went(int);
@@ -2233,10 +2236,8 @@ system_confirm(int fd, short event, void *arg)
 			logit(LOG_CRIT, "the record of a commit not "
 			    "confirmed: %s", strerror(serrno));
 		unread = serrno;
-		if (serrno != EFTYPE) {
-			tv.tv_sec = CONFIRM_RETRY;
-			evtimer_add(&confirm_tm, &tv);
-		}
+		if (serrno != EFTYPE)
+			confirm_retry();
 		return;
 	}
 	unread = 0;
@@ -2290,18 +2291,24 @@ system_recover(struct confirm *cf)
 }
 
 /*
- * An attempt to roll back the unconfirmed commit ended. If it succeeded,
- * remove the record. If not, try again CONFIRM_RETRY seconds later, or
- * mark the record failed if no attempts are left.
+ * An attempt to roll back the unconfirmed commit ended, or its job could
+ * not start. If it succeeded, remove the record. If not, try again
+ * CONFIRM_RETRY seconds later, or mark the record failed if no attempts
+ * are left. If the record cannot be read, try again later too, unless
+ * the file is not a record at all.
  */
 static void
 system_attempted(int ok)
 {
 	struct confirm	 cf;
+	int		 serrno;
 
 	if (confirm_read(&cf, 1) == -1) {
+		serrno = errno;
 		logit(LOG_CRIT, "the record of a commit not confirmed: %s",
-		    strerror(errno));
+		    strerror(serrno));
+		if (serrno != EFTYPE)
+			confirm_retry();
 		return;
 	}
 	if (cf.state != CONFIRM_WAITING) {
@@ -2313,19 +2320,37 @@ system_attempted(int ok)
 	else if (cf.attempts < CONFIRM_ATTEMPTS) {
 		log_warnx("commit not confirmed: attempt %d of %d to roll "
 		    "back failed", cf.attempts, CONFIRM_ATTEMPTS);
-		confirm_next = time(NULL) + CONFIRM_RETRY;
+		confirm_retry();
 	} else
 		system_failed(&cf);
 	confirm_free(&cf);
 }
 
-/* cf was rolled back, as how says: remove its record and carp demotion */
+/*
+ * Try the rollback again CONFIRM_RETRY seconds from now: set the time of
+ * the next attempt, and the timer that runs system_confirm() then. Only
+ * the timer starts the attempt, never this function.
+ */
+static void
+confirm_retry(void)
+{
+	struct timeval	 tv = { CONFIRM_RETRY, 0 };
+
+	confirm_next = time(NULL) + CONFIRM_RETRY;
+	evtimer_add(&confirm_tm, &tv);
+}
+
+/*
+ * cf was rolled back, as how says: remove its record and carp demotion.
+ * If the record cannot be removed, try again later.
+ */
 static void
 system_taken(struct confirm *cf, const char *how)
 {
 	if (confirm_clear() == -1) {
 		logit(LOG_CRIT, "the record of a commit not confirmed: %s",
 		    strerror(errno));
+		confirm_retry();
 		return;
 	}
 	if (cf->demoted)

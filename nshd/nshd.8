@@ -392,8 +392,8 @@ began is still open and no script, save or test runs.
 It demotes carp by 128, runs a script that rolls the changes back, and
 promotes carp again once the running configuration matches the rollback
 configuration.
-If the rollback fails, system tries again 5 seconds later, up to three
-attempts in all.
+If the rollback fails, or its script cannot start, system tries again
+5 seconds later, up to three attempts in all.
 Then the record says the rollback failed, and carp stays demoted
 until a commit saves.
 When
