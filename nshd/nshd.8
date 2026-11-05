@@ -75,6 +75,13 @@ to use only the descriptors it has and to pass on a terminal's pty, so
 it can signal no process outside its own process group.
 When the client goes, its frontend ends, and config and system drop the
 session.
+system also checks each second that each session's client is still
+connected.
+When it finds one gone, or drops a session for another reason, the
+parent kills the session's frontend if it still runs, and config drops
+the session too.
+So a frontend that stays after its client has gone keeps the session
+for about a second at most.
 A frontend that ends, or sends what it may not, ends only its session.
 The parent takes at most 64 sessions at once, and closes a client past
 that.

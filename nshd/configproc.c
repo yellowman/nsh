@@ -439,8 +439,8 @@ configproc(int debug, int verbose)
 }
 
 /*
- * parent's word that config may start, and whether to boot; and each new
- * session, with its pipe to its frontend
+ * parent's word that config may start, and whether to boot; each new
+ * session, with its pipe to its frontend; and that a session ends
  */
 static void
 config_dispatch_parent(int fd, short event, void *arg)
@@ -449,6 +449,7 @@ config_dispatch_parent(int fd, short event, void *arg)
 	struct imsg		 imsg;
 	struct nshd_startup	 st;
 	struct nshd_newsession	 ns;
+	struct front		*f;
 	int			 n, pfd;
 
 	if (imsgev_io(iev, event) == -1)
@@ -463,6 +464,13 @@ config_dispatch_parent(int fd, short event, void *arg)
 		    imsg_get_data(&imsg, &ns, sizeof(ns)) == 0 &&
 		    (pfd = imsg_get_fd(&imsg)) != -1) {
 			front_new(&ns, pfd);
+			imsg_free(&imsg);
+			continue;
+		}
+		if (imsg_get_type(&imsg) == IMSG_SESSION_GONE &&
+		    imsg_get_len(&imsg) == 0) {
+			if ((f = front_find(imsg_get_id(&imsg))) != NULL)
+				front_drop(f);
 			imsg_free(&imsg);
 			continue;
 		}

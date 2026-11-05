@@ -61,14 +61,17 @@
  * system each know a session by the pipe its word comes on, which only
  * that session's frontend has, and system watches the client's socket
  * itself. Of what the children send, parent reads only that they have
- * taken a session, and config's word that the boot is done.
+ * taken a session, system's word that a session ends, and config's word
+ * that the boot is done.
  *
  * A child that ends, or that breaks a rule, ends nshd: its peers find
  * their pipes to it closed and end too, and parent ends the rest, with
  * system's helpers, which can outlive system. Nothing is started again.
  * A frontend is not such a child: when one ends, or breaks a rule, only
  * its session ends. config and system find its pipes closed, or close
- * them, and drop the session.
+ * them, and drop the session. When system finds a session's client
+ * gone, or drops a session itself, parent kills the session's frontend,
+ * and has config drop the session too.
  * If nshd ends while a commit is unconfirmed, the commit is rolled back
  * when nshd starts again and system finds its record.
  *
@@ -175,6 +178,7 @@ static void		 parent_accept(int, short, void *);
 static void		 front_taken(struct child *, struct nshd_taken *);
 static void		 front_start(struct front *);
 static void		 front_free(struct front *);
+static void		 front_gone(uint32_t);
 static int		 talks(enum nshd_proc);
 static void		 pair(struct child *, struct child *);
 static void		 tell(struct child *, struct child *, int);
@@ -600,6 +604,23 @@ front_start(struct front *f)
 	}
 }
 
+/*
+ * system's word that a session ends: its frontend is killed, if it runs,
+ * and config is told to drop the session
+ */
+static void
+front_gone(uint32_t session)
+{
+	size_t	 i;
+
+	for (i = 0; i < SESSIONS; i++)
+		if (fronts[i].session == session && fronts[i].pid > 0)
+			kill(fronts[i].pid, SIGKILL);
+	if (imsg_compose_event(child(PROC_CONFIG, 0)->iev, IMSG_SESSION_GONE,
+	    session, 0, -1, NULL, 0) == -1)
+		fatal("%s", __func__);
+}
+
 /* f's slot free again: what parent holds of it closed */
 static void
 front_free(struct front *f)
@@ -896,8 +917,9 @@ parent_sig_handler(int sig, short event, void *arg)
 
 /*
  * c's word on its pipe to parent: config's or system's that it took a
- * session, or did not, and config's word, once, that the boot is done.
- * Anything else, or the pipe closed, ends nshd
+ * session, or did not, system's that a session ends, and config's word,
+ * once, that the boot is done. Anything else, or the pipe closed, ends
+ * nshd
  */
 static void
 parent_dispatch(int fd, short event, void *arg)
@@ -907,6 +929,7 @@ parent_dispatch(int fd, short event, void *arg)
 	struct nshd_result	 res;
 	struct nshd_taken	 t;
 	struct child		*c = NULL;
+	uint32_t		 session;
 	size_t			 i;
 	int			 n;
 
@@ -928,6 +951,13 @@ parent_dispatch(int fd, short event, void *arg)
 		    imsg_get_data(&imsg, &t, sizeof(t)) == 0) {
 			imsg_free(&imsg);
 			front_taken(c, &t);
+			continue;
+		}
+		if (imsg_get_type(&imsg) == IMSG_SESSION_GONE &&
+		    c->proc == PROC_SYSTEM && imsg_get_len(&imsg) == 0) {
+			session = imsg_get_id(&imsg);
+			imsg_free(&imsg);
+			front_gone(session);
 			continue;
 		}
 		if (imsg_get_type(&imsg) != IMSG_BOOTED ||

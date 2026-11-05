@@ -424,7 +424,10 @@ enum nshd_imsg {
 	IMSG_CTL_RULES,		/* nshd_rules: the rules asked for, a result */
 
 	/* parent to system: who a new session is, as system reads it */
-	IMSG_SESSION_CLIENT	/* nshd_newsession, and the client's socket */
+	IMSG_SESSION_CLIENT,	/* nshd_newsession, and the client's socket */
+
+	/* system to parent, then parent to config: a session ends */
+	IMSG_SESSION_GONE	/* the session is the imsg's id */
 };
 
 struct imsgev {

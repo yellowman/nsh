@@ -143,7 +143,11 @@
  * (a line, a commit or part of a load) before config receives it; it
  * also reports when config answers it. The session is the pipe's, so a
  * frontend reports only for its own session. The session is gone when
- * that pipe closes, or when its frontend sends what it may not. system
+ * that pipe closes, when its frontend sends what it may not, or when
+ * system finds that its client has closed its connection, which system
+ * checks each second. system then tells parent, which kills the
+ * session's frontend if it still runs and tells config to drop the
+ * session too. system
  * accepts such a report only while the client is still connected, as
  * the socket shows. BEGIN and TEST, and SAVE outside a commit, name the
  * session, and are refused unless the session has a request not yet
@@ -239,6 +243,7 @@
 #define SYS_TERMINALS	64	/* web logins' terminals at once, at most */
 /* descriptors kept free of sessions: streams, commits, files */
 #define SYS_RESERVE	(SYS_STREAMS + 16)
+#define CLIENT_LOOK	1	/* seconds between looks at the clients */
 
 /*
  * kinds of stream, besides a show's (FACTS_*): an operation's output, a
@@ -447,6 +452,7 @@ static TAILQ_HEAD(, asked) askeds = TAILQ_HEAD_INITIALIZER(askeds);
 static TAILQ_HEAD(, login) logins = TAILQ_HEAD_INITIALIZER(logins);
 static TAILQ_HEAD(, client) clients = TAILQ_HEAD_INITIALIZER(clients);
 static struct event	 confirm_tm;	/* the deadline, or the next attempt */
+static struct event	 look_tm;	/* the next look at the clients */
 static time_t		 confirm_next;	/* earliest next rollback attempt */
 
 static void	system_dispatch_parent(int, short, void *);
@@ -458,6 +464,7 @@ static void	asked_free(struct asked *);
 static void	client_new(uint32_t, int);
 static int	client_socket(uint32_t, int);
 static void	client_drop(struct client *);
+static void	client_look(int, short, void *);
 static struct client *client_find(uint32_t);
 static int	client_there(struct client *);
 static struct login *login_find(uint32_t);
@@ -577,6 +584,8 @@ systemproc(int debug, int v)
 	if ((iev_parent = imsgev_new(3, system_dispatch_parent, 1)) == NULL)
 		fatal(NULL);
 	evtimer_set(&confirm_tm, system_confirm, NULL);
+	evtimer_set(&look_tm, client_look, NULL);
+	client_look(-1, 0, NULL);
 	links_init(links, sizeof(links) / sizeof(links[0]));
 	/* terminal ptys go to config */
 	imsgbuf_allow_fdpass(&links[CONFIG].iev->ibuf);
@@ -879,7 +888,8 @@ client_socket(uint32_t session, int fd)
 
 /*
  * cl's session gone: its pipe and its client's socket closed, and its
- * login and its request forgotten
+ * login and its request forgotten. parent ends its frontend, and has
+ * config drop it too
  */
 static void
 client_drop(struct client *cl)
@@ -887,6 +897,9 @@ client_drop(struct client *cl)
 	struct asked	*k;
 	struct login	*l;
 
+	if (imsg_compose_event(iev_parent, IMSG_SESSION_GONE, cl->session, 0,
+	    -1, NULL, 0) == -1)
+		fatal("%s", __func__);
 	if ((l = login_find(cl->session)) != NULL) {
 		TAILQ_REMOVE(&logins, l, entry);
 		free(l);
@@ -901,6 +914,25 @@ client_drop(struct client *cl)
 	if (cl->fd != -1)
 		close(cl->fd);
 	free(cl);
+}
+
+/*
+ * Each CLIENT_LOOK seconds, a session whose client has closed its
+ * connection ends, though its frontend may still be there
+ */
+static void
+client_look(int fd, short event, void *arg)
+{
+	struct timeval	 tv = { CLIENT_LOOK, 0 };
+	struct client	*cl, *next;
+
+	TAILQ_FOREACH_SAFE(cl, &clients, entry, next)
+		if (cl->fd != -1 && !client_there(cl)) {
+			log_debug("session %u: its client is gone",
+			    cl->session);
+			client_drop(cl);
+		}
+	evtimer_add(&look_tm, &tv);
 }
 
 static struct client *
