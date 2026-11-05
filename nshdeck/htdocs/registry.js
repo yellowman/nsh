@@ -382,10 +382,10 @@ var REGISTRY = {
 
 	/* Aggregation */
 	"if.trunkproto": { label: "Protocol", group: "Aggregation",
-	    kind: "choice", choices: ["roundrobin", "failover", "lacp",
-	    "loadbalance", "broadcast", "none"], on: ["trunk", "aggr"],
+	    kind: "choice", choices: ["roundrobin", "failover",
+	    "loadbalance", "broadcast", "none"], on: ["trunk"],
 	    keyword: "trunkproto protocol", definition: "How the ports share " +
-	    "traffic, and how they agree with the switch.",
+	    "traffic. An aggr interface has only LACP.",
 	    default: "roundrobin" },
 	"if.trunkport": { label: "Ports", group: "Aggregation", kind: "words",
 	    placeholder: "em2", on: ["trunk", "aggr"], keyword: "trunkport " +

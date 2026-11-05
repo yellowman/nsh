@@ -6045,14 +6045,17 @@ remove them.
 .Pp
 Set the protocol of a
 .Xr trunk 4
-interface: roundrobin, failover, lacp, loadbalance, broadcast or none.
+interface: roundrobin, failover, loadbalance, broadcast or none.
 With
 .Cm no ,
 the protocol is roundrobin, the default.
+An
+.Xr aggr 4
+interface has only lacp.
 .Bd -literal -offset indent
 nsh(config)# interface trunk0
 nsh(interface-trunk0)# trunkport em0 em1
-nsh(interface-trunk0)# trunkproto lacp
+nsh(interface-trunk0)# trunkproto failover
 .Ed
 .Pp
 .Op no

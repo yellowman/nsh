@@ -126,8 +126,8 @@ cand_trunkport(char *ifname, int set, int argc, char **argv)
 }
 
 /*
- * trunkproto in configure private. aggr takes only lacp
- * (EPROTONOSUPPORT), and conf_trunk() prints any other than the default.
+ * trunkproto in configure private: conf_trunk() prints any but the
+ * driver's default, and aggr's only protocol, lacp, is its default
  */
 static int
 cand_trunkproto(char *ifname, int proto)
@@ -138,13 +138,7 @@ cand_trunkproto(char *ifname, int proto)
 		printf("%% %s not trunk\n", ifname);
 		return -1;
 	}
-	if (strncmp(ifname, "aggr", strlen("aggr")) == 0 &&
-	    proto != TRUNK_PROTO_LACP) {
-		printf("%% inttrunkproto: SIOCSTRUNK: %s\n",
-		    strerror(EPROTONOSUPPORT));
-		return -1;
-	}
-	if (proto == TRUNK_PROTO_DEFAULT)
+	if (proto == TRUNK_PROTO_DEFAULT || proto == TRUNK_PROTO_LACP)
 		return cand_setting(ST_DEFAULT, "trunkproto");
 	for (i = 0; tpr[i].tpr_proto != proto; i++)
 		;
@@ -243,12 +237,13 @@ inttrunkproto(int argc, char **argv, ...)
 	struct trunk_reqall ra;
 	va_list ap;
 	char *ifname;
-	int ifs;
+	int ifs, aggr;
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
 	va_end(ap);
+	aggr = strncmp(ifname, "aggr", strlen("aggr")) == 0;
 
 	if (NO_ARG(argv[0])) {
 		set = 0;
@@ -284,7 +279,18 @@ inttrunkproto(int argc, char **argv, ...)
 			return -1;
 		}
 	} else
-		ra.ra_proto = TRUNK_PROTO_DEFAULT;
+		ra.ra_proto = aggr ? TRUNK_PROTO_LACP : TRUNK_PROTO_DEFAULT;
+
+	/*
+	 * aggr takes only lacp, and trunk takes any other
+	 * (EPROTONOSUPPORT: if_aggr.c, and if_trunk.c's trunk_protos[])
+	 */
+	if (cand_takes(ifname, SIOCSTRUNK) &&
+	    (ra.ra_proto == TRUNK_PROTO_LACP) != aggr) {
+		printf("%% %s takes %s\n", ifname, aggr ? "only lacp" :
+		    "roundrobin, failover, loadbalance, broadcast or none");
+		return -1;
+	}
 
 	if (candidate)
 		return cand_trunkproto(ifname, ra.ra_proto);
@@ -402,7 +408,9 @@ conf_trunk(FILE *output, int ifs, char *ifname)
 		for (i = 0; i < nitems(tpr); i++)
 			if (ra.ra_proto == tpr[i].tpr_proto)
 				break;
-		if (tpr[i].tpr_proto != TRUNK_PROTO_DEFAULT)
+		/* aggr has only lacp, its default */
+		if (tpr[i].tpr_proto != TRUNK_PROTO_DEFAULT &&
+		    tpr[i].tpr_proto != TRUNK_PROTO_LACP)
 			fprintf(output," trunkproto %s\n", tpr[i].tpr_name);
 
                 for (i = 0; i < ra.ra_ports; ++i)
