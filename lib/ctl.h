@@ -89,7 +89,12 @@ struct ctl {
         int (*handler)(int, char **, ...);
         int flag_x;
         int type;
+        int ok;		/* which exit statuses succeed (CTL_EXIT0) */
 };
+
+/* a row's ok: its program succeeds if it exits 0, or as ok also says */
+#define CTL_EXIT0	0	/* 0 only */
+#define CTL_NOMATCH	1	/* also pkill's 1: no process matched */
 
 /* What a daemon's line is, as conf() prints it (ctl_line()) */
 #define CTL_RULES	1	/* "pf rules", its file in the lines under it */

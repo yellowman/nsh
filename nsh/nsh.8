@@ -1525,6 +1525,12 @@ nsh(config)# pf ?
 nsh(config)#
 .Ed
 .Pp
+.Cm enable
+and
+.Cm disable
+turn pf on and off, as pfctl -e and pfctl -d do, and succeed when pf is
+then on or off, even if it already was.
+.Pp
 .Ic pf edit
 .Pp
 Edit the candidate's firewall rules.

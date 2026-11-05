@@ -26,11 +26,14 @@
 #include <stdarg.h>
 #include <sys/signal.h>
 #include <sys/types.h>
+#include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <sys/socket.h>
 #include <sys/syslimits.h>
 #include <sys/sysctl.h>
 #include <net/if.h>
+#include <netinet/in.h>
+#include <net/pfvar.h>
 #include "externs.h"
 #include "facts.h"
 #include "showfacts.h"
@@ -51,13 +54,16 @@ int edit_motd(int, char **, ...);
 int call_editor(int, char **, ...);
 int start_dhcpd(int, char **, ...);
 int restart_dhcpd(int, char **, ...);
+int pf_enable(int, char **, ...);
+int pf_disable(int, char **, ...);
+static int pf_set(int);
 
 /* subroutines */
 int fill_tmpfile(char **, char *, char **);
 int edit_file(char *, mode_t, char *, char **);
 int acq_lock(char *);
 void rls_lock(int);
-static int ctl_exec(char *, char **);
+static int ctl_exec(char *, char **, int);
 static int ctl_cand(struct daemons *, struct ctl *, char **);
 static int ctl_cand_takes(struct ctl *);
 static int ctl_isedit(struct ctl *);
@@ -172,9 +178,9 @@ struct ctl ctl_motd[] = {
 /* PF, pfctl */
 struct ctl ctl_pf[] = {
 	{ "enable",	"enable pf firewall",
-	    { PFCTL, "-e", NULL }, { NULL }, NULL, DB_X_ENABLE, T_EXEC },
+	    { NULL }, { NULL }, pf_enable, DB_X_ENABLE, T_HANDLER },
 	{ "disable",	"disable pf firewall",
-	    { PFCTL, "-d", NULL }, { NULL }, NULL, DB_X_DISABLE, T_EXEC },
+	    { NULL }, { NULL }, pf_disable, DB_X_DISABLE, T_HANDLER },
 	{ "edit",	"edit, test and stage firewall rules",
 	    { "pf",  NULL },
 	    { PFCTL, "-nf", REQTEMP, NULL }, call_editor, 0, T_HANDLER_TEST },
@@ -192,7 +198,7 @@ struct ctl ctl_ospf[] = {
 	    T_EXEC },
 	{ "disable",       "disable OSPFd daemon",
 	    { PKILL, table, "ospfd", NULL }, { NULL }, NULL, DB_X_DISABLE,
-	    T_EXEC },
+	    T_EXEC, CTL_NOMATCH },
 	{ "edit",          "edit, test and stage OSPFd config",
 	    { "ospf", NULL },
 	    { OSPFD, "-nf", REQTEMP, NULL }, call_editor, 0, T_HANDLER_TEST },
@@ -216,7 +222,7 @@ struct ctl ctl_ospf6[] = {
 	    T_EXEC },
 	{ "disable",        "disable OSPF6d OSPFv3 daemon",
 	    { PKILL, table, "ospf6d", NULL }, { NULL }, NULL, DB_X_DISABLE,
-	    T_EXEC },
+	    T_EXEC, CTL_NOMATCH },
 	{ "edit",           "edit, test and stage OSPF6d config",
 	    { "ospf6", NULL }, { OSPF6D, "-nf", REQTEMP, NULL },
 	    call_editor, 0, T_HANDLER_TEST },
@@ -238,7 +244,7 @@ struct ctl ctl_eigrp[] = {
 	    T_EXEC },
 	{ "disable",        "disable EIGRPd daemon",
 	    { PKILL, table, "eigrpd", NULL }, { NULL }, NULL, DB_X_DISABLE,
-	    T_EXEC },
+	    T_EXEC, CTL_NOMATCH },
 	{ "edit",           "edit, test and stage EIGRPd config",
 	    { "eigrp", NULL }, { EIGRPD, "-nf", REQTEMP, NULL },
 	    call_editor, 0, T_HANDLER_TEST },
@@ -261,7 +267,8 @@ struct ctl ctl_bgp[] = {
 	    { BGPD, "-f", REQTEMP, NULL }, { NULL }, NULL, DB_X_ENABLE,
 	    T_EXEC },
 	{ "disable",         "disable OpenBGPD daemon",
-	    { PKILL, "bgpd", NULL }, { NULL }, NULL, DB_X_DISABLE, T_EXEC },
+	    { PKILL, "bgpd", NULL }, { NULL }, NULL, DB_X_DISABLE,
+	    T_EXEC, CTL_NOMATCH },
 	{ "edit",            "edit, test and stage OpenBGPD config",
 	    { "bgp", NULL }, { BGPD, "-nf", REQTEMP, NULL, NULL },
 	    call_editor, 0, T_HANDLER_TEST },
@@ -284,7 +291,8 @@ struct ctl ctl_rip[] = {
 	    { RIPD, "-f", REQTEMP, NULL }, { NULL }, NULL, DB_X_ENABLE,
 	    T_EXEC },
 	{ "disable",         "disable RIPd daemon",
-	    { PKILL, table, "ripd", NULL }, { NULL }, NULL, DB_X_DISABLE, T_EXEC },
+	    { PKILL, table, "ripd", NULL }, { NULL }, NULL, DB_X_DISABLE,
+	    T_EXEC, CTL_NOMATCH },
 	{ "edit",            "edit, test and stage RIPd config",
 	    { "rip", NULL }, { RIPD, "-nf", REQTEMP, NULL },
 	    call_editor, 0, T_HANDLER_TEST },
@@ -304,7 +312,8 @@ struct ctl ctl_ldp[] = {
 	{ "enable",        "enable Label Distribution Protocol Daemon",
 	   { LDPD, "-f", REQTEMP, NULL }, { NULL }, NULL, DB_X_ENABLE, T_EXEC },
 	{ "disable",       "disable LDPd ",
-	   { PKILL, "ldpd", NULL }, { NULL }, NULL, DB_X_DISABLE, T_EXEC },
+	   { PKILL, "ldpd", NULL }, { NULL }, NULL, DB_X_DISABLE,
+	    T_EXEC, CTL_NOMATCH },
 	{ "edit",          "edit, test and stage LDPd config",
 	   { "ldp", NULL }, { LDPD, "-nf", REQTEMP, NULL },
 	   call_editor, 0, T_HANDLER_TEST },
@@ -327,7 +336,7 @@ struct ctl ctl_ipsec[] = {
 	    { ISAKMPD, "-Kv", NULL }, { NULL }, NULL, DB_X_ENABLE, T_EXEC },
 	{ "disable",        "disable isakmpd IKEv1 daemon",
 	    { PKILL, table, "isakmpd", NULL }, { NULL }, NULL, DB_X_DISABLE,
-	    T_EXEC },
+	    T_EXEC, CTL_NOMATCH },
 	{ "edit",           "edit, test and stage isakmpd config",   
 	    { "ipsec", NULL }, { IPSECCTL, "-nf", REQTEMP, NULL },
 	    call_editor, 0, T_HANDLER_TEST },
@@ -347,7 +356,7 @@ struct ctl ctl_ike[] = {
 	    T_EXEC },
 	{ "disable",        "disable IKEv2 daemon",
 	    { PKILL, table, "iked", NULL }, { NULL }, NULL, DB_X_DISABLE,
-	    T_EXEC },
+	    T_EXEC, CTL_NOMATCH },
 	{ "active",         "force IKE active mode",
 	    { IKECTL, "active", NULL }, { NULL }, NULL, 0, T_EXEC },
 	{ "passive",        "force IKE passive mode",
@@ -377,7 +386,7 @@ struct ctl ctl_dvmrp[] = {
 	    T_EXEC },
 	{ "disable",       "disable DVMRPd daemon",   
 	    { PKILL, table, "dvmrpd", NULL }, { NULL }, NULL, DB_X_DISABLE,
-	    T_EXEC },
+	    T_EXEC, CTL_NOMATCH },
 	{ "edit",          "edit,test and stage DVMRPd config",
 	    { "dvmrp",  NULL }, { DVMRPD, "-nf", REQTEMP, NULL },
 	    call_editor, 0, T_HANDLER_TEST },
@@ -395,7 +404,8 @@ struct ctl ctl_rad[] = {
 	{ "enable",	    "enable RAD Router Advertisement daemon",
 	    { RAD, "-f", REQTEMP, NULL }, { NULL }, NULL, DB_X_ENABLE, T_EXEC },
 	{ "disable",	    "disable RAD daemon",
-	    { PKILL, "rad", NULL }, { NULL }, NULL, DB_X_DISABLE, T_EXEC },
+	    { PKILL, "rad", NULL }, { NULL }, NULL, DB_X_DISABLE,
+	    T_EXEC, CTL_NOMATCH },
 	{ "edit",           "edit,test and stage RAD config",
 	    { "rad", NULL}, { RAD, "-nf", REQTEMP, NULL },
 	    call_editor, 0, T_HANDLER_TEST },
@@ -416,7 +426,7 @@ struct ctl ctl_dhcp6lease[] = {
 	    T_EXEC },
 	{ "disable",	"disable DHCPv6 prefix delegation client",
 	    { PKILL, "dhcp6leased", NULL }, { NULL }, NULL, DB_X_DISABLE,
-	    T_EXEC },
+	    T_EXEC, CTL_NOMATCH },
 	{ "edit",	"edit, test and stage dhcp6leased config",
 	    { "dhcp6lease", NULL }, { DHCP6LEASED, "-nf", REQTEMP, NULL },
 	    call_editor, 0, T_HANDLER_TEST },
@@ -433,7 +443,8 @@ struct ctl ctl_lldp[] = {
 	{ "enable",	"enable LLDP daemon",
 	    { LLDPD, NULL }, { NULL }, NULL, DB_X_ENABLE, T_EXEC },
 	{ "disable",	"disable LLDP daemon",
-	    { PKILL, "lldpd", NULL }, { NULL }, NULL, DB_X_DISABLE, T_EXEC },
+	    { PKILL, "lldpd", NULL }, { NULL }, NULL, DB_X_DISABLE,
+	    T_EXEC, CTL_NOMATCH },
 	{ "show",	"show LLDP neighbors",
 	    { LLDP, NULL }, { NULL }, NULL, 0, T_EXEC },
 	{ NULL, NULL, { NULL }, { NULL }, NULL, 0, 0 }
@@ -446,7 +457,7 @@ struct ctl ctl_ifstate[] = {
 	    T_EXEC },
 	{ "disable",        "disable ifstated daemon",
 	    { PKILL, table, "ifstated", NULL }, { NULL }, NULL, DB_X_DISABLE,
-	    T_EXEC },
+	    T_EXEC, CTL_NOMATCH },
 	{ "edit",           "edit, test and stage ifstated config",
 	    { "ifstate", NULL }, { IFSTATED, "-nf", REQTEMP, NULL },
 	    call_editor, 0, T_HANDLER_TEST },
@@ -462,7 +473,7 @@ struct ctl ctl_sasync[] = {
 	    T_EXEC },
 	{ "disable",      "disable SAsyncd daemon",
 	    { PKILL, table, "sasyncd", NULL }, { NULL }, NULL, DB_X_DISABLE,
-	    T_EXEC },
+	    T_EXEC, CTL_NOMATCH },
 	{ "edit",         "edit, test and stage SAsyncd config",
 	    { "sasync", NULL }, { SASYNCD, "-nvvc", REQTEMP, NULL },
 	    call_editor, 0, T_HANDLER_TEST },
@@ -478,7 +489,7 @@ struct ctl ctl_nppp[] = {
 	    T_EXEC },
 	{ "disable",	    "disable nNPPPd daemon",
 	    { PKILL, table, "npppd", NULL }, { NULL }, NULL, DB_X_DISABLE,
-	    T_EXEC },
+	    T_EXEC, CTL_NOMATCH },
 	{ "clear",	    "disconnect nPPPd sessions",
 	    { NPPPCTL, "clear", REQ, OPT, OPT, NULL }, { NULL }, NULL, 0,
 	    T_EXEC },
@@ -503,7 +514,7 @@ struct ctl ctl_dhcp[] = {
 	    start_dhcpd, DB_X_ENABLE, T_HANDLER },
 	{ "disable",       "disable DHCPd daemon",
 	    { PKILL, table, "dhcpd", NULL }, { NULL }, NULL,
-	    DB_X_DISABLE, T_EXEC },
+	    DB_X_DISABLE, T_EXEC, CTL_NOMATCH },
 	{ "edit",          "edit,test and stage DHCPd config",
 	    { "dhcp", NULL }, { DHCPD, "-nc", REQTEMP, NULL }, call_editor, 0,
 	    T_HANDLER_TEST },
@@ -523,7 +534,7 @@ struct ctl ctl_snmp[] = {
 	    T_EXEC },
 	{ "disable",       "disable OpenSNMPD daemon",
 	    { PKILL, table, "snmpd", NULL }, { NULL }, NULL, DB_X_DISABLE,
-	    T_EXEC },
+	    T_EXEC, CTL_NOMATCH },
 	{ "edit",          "edit,test and stage OpenSNMPD config",
 	    { "snmp", NULL }, { SNMPD, "-nf", REQTEMP, NULL },
 	    call_editor, 0, T_HANDLER_TEST },
@@ -539,7 +550,7 @@ struct ctl ctl_sshd[] = {
 	    T_EXEC },
 	{ "disable",         "disable OpenSSHD daemon",
 	    { PKILL, table, "-f", SSHD, "-f", REQTEMP, NULL }, { NULL }, NULL,
-	    DB_X_DISABLE, T_EXEC },
+	    DB_X_DISABLE, T_EXEC, CTL_NOMATCH },
 	{ "edit",            "edit, test and stage OpenSSHD config",
 	    { "sshd", NULL }, { SSHD, "-tf", REQTEMP, NULL }, call_editor, 0,
 	    T_HANDLER_TEST },
@@ -554,7 +565,8 @@ struct ctl ctl_ntp[] = {
 	    { NTPD, "-f", REQTEMP, NULL }, { NULL }, NULL, DB_X_ENABLE,
 	    T_EXEC },
 	{ "disable",          "disable OpenNTPD daemon",
-	    { PKILL, "ntpd", NULL }, { NULL }, NULL, DB_X_DISABLE, T_EXEC },
+	    { PKILL, "ntpd", NULL }, { NULL }, NULL, DB_X_DISABLE,
+	    T_EXEC, CTL_NOMATCH },
 	{ "edit",             "edit, test and stage OpenNTPD config",
 	    { "ntp", NULL }, { NTPD, "-nf", REQTEMP, NULL },
 	    call_editor, 0, T_HANDLER_TEST },
@@ -570,7 +582,7 @@ struct ctl ctl_relay[] = {
 	    T_EXEC },
         { "disable",	      "disable load balancing relayd daemon",
 	    { PKILL, table, "relayd", NULL }, { NULL }, NULL, DB_X_DISABLE,
-	    T_EXEC },
+	    T_EXEC, CTL_NOMATCH },
         { "edit",             "edit, test and stage relayd config",
 	    { "relay", NULL }, { RELAYD, "-nf", REQTEMP, NULL },
 	    call_editor, 0, T_HANDLER_TEST },
@@ -601,7 +613,7 @@ struct ctl ctl_smtp[] = {
 	    T_EXEC },
 	{ "disable",       "disable OpenSMTPD daemon",
 	    { PKILL, table, "smtpd", NULL }, { NULL }, NULL, DB_X_DISABLE,
-	    T_EXEC },
+	    T_EXEC, CTL_NOMATCH },
 	{ "edit",          "edit,test and stage OpenSMTPD config",
 	    { "smtp", NULL }, { SMTPD, "-nf", REQTEMP, NULL },
 	    call_editor, 0, T_HANDLER_TEST },
@@ -627,7 +639,7 @@ struct ctl ctl_ftpproxy[] = {
 	    T_EXEC },
 	{ "disable",	"disable ftp proxy daemon",
 	    { PKILL, table, "ftp-proxy", NULL }, { NULL }, NULL, DB_X_DISABLE,
-	    T_EXEC },
+	    T_EXEC, CTL_NOMATCH },
 	{ NULL, NULL, { NULL }, { NULL }, NULL, 0, 0 }
 };
 
@@ -638,7 +650,7 @@ struct ctl ctl_tftpproxy[] = {
 	    DB_X_ENABLE, T_EXEC },
 	{ "disable",    "disable TFTP proxy daemon",
 	    { PKILL, table, "tftp-proxy", NULL }, { NULL }, NULL,
-	    DB_X_DISABLE, T_EXEC },
+	    DB_X_DISABLE, T_EXEC, CTL_NOMATCH },
 	{ NULL, NULL, { NULL }, { NULL }, NULL, 0, 0 }
 };
 
@@ -649,7 +661,7 @@ struct ctl ctl_tftp[] = {
 	   DB_X_ENABLE, T_EXEC },
 	{ "disable",	"disable TFTPd daemon",
 	   { PKILL, table, "tftpd", NULL }, { NULL }, NULL, DB_X_DISABLE,
-	   T_EXEC },
+	   T_EXEC, CTL_NOMATCH },
 	{ NULL, NULL, { NULL }, { NULL }, NULL, 0, 0 }
 };
 
@@ -659,7 +671,7 @@ struct ctl ctl_resolv[] = {
 	   { RESOLVD, NULL }, { NULL }, NULL, DB_X_ENABLE_DEFAULT, T_EXEC },
 	{ "disable",    "disable resolvd daemon",
 	   { PKILL, "resolvd", NULL }, { NULL }, NULL, DB_X_DISABLE_ALWAYS,
-	   T_EXEC },
+	   T_EXEC, CTL_NOMATCH },
 	{ NULL, NULL, { NULL }, { NULL }, NULL, 0, 0 }
 };
 
@@ -669,7 +681,7 @@ struct ctl ctl_inet[] = {
 	    { INETD, REQTEMP, NULL }, { NULL }, NULL, DB_X_ENABLE, T_EXEC },
 	{ "disable",    "disable inetd daemon",
 	    { PKILL, table, "inetd", NULL }, { NULL }, NULL, DB_X_DISABLE,
-	    T_EXEC },
+	    T_EXEC, CTL_NOMATCH },
 	{ "edit",       "edit inetd superserver config",
 	    { "inet", NULL, NULL }, { NULL }, call_editor, 0, T_HANDLER_TEST },
 	{ NULL, NULL, { NULL }, { NULL }, NULL, 0, 0 }
@@ -682,7 +694,7 @@ struct ctl ctl_ldap[] = {
 	    T_EXEC },
 	{ "disable",        "disable LDAPd daemon",
 	    { PKILL, table, "ldapd", NULL }, { NULL }, NULL, DB_X_DISABLE,
-	    T_EXEC },
+	    T_EXEC, CTL_NOMATCH },
 	{ "edit",           "edit, test and stage LDAPd config",
 	    { "ldap", NULL }, { LDAPD, "-nf", REQTEMP, NULL },
 	    call_editor, 0, T_HANDLER_TEST },
@@ -814,9 +826,9 @@ ctl_run(struct daemons *d, struct ctl *x, char **fillargs, char *tmpfile)
 	case T_EXEC:
 		/* command to execute via execv syscall, fill main args */
 		if (fill_tmpfile(fillargs, tmpfile, tmp_args))
-			rv = ctl_exec(tmp_args[0], tmp_args);
+			rv = ctl_exec(tmp_args[0], tmp_args, x->ok);
 		else
-			rv = ctl_exec(fillargs[0], fillargs);
+			rv = ctl_exec(fillargs[0], fillargs, x->ok);
 	break;
 	}
 
@@ -1275,7 +1287,7 @@ ctl_cand_test(struct daemons *d, char *name, char **fillargs)
 	if (ctl_cand_stage(d, stmt, dir, path, sizeof(path)) == -1)
 		return -1;
 	fill_tmpfile(fillargs, path, args);
-	ret = ctl_exec(args[0], args);
+	ret = ctl_exec(args[0], args, CTL_EXIT0);
 	ctl_cand_unstage(dir, path);
 	return ret == -1 ? -1 : 1;
 }
@@ -1440,17 +1452,21 @@ ctl_cand_follow(struct daemons *d, char *name, int rules)
 }
 
 /*
- * Run a daemon's program: -1 if it could not run, which cmdargs() said.
- * Its exit status is its own to report: pfctl -e fails when pf is
- * enabled, pkill when nothing matched.
+ * Run a daemon's program: 0 if it exits 0, or exits 1 when ok is
+ * CTL_NOMATCH; else -1. cmdargs() says why a program could not run,
+ * and this says the status of one that exited otherwise.
  */
 static int
-ctl_exec(char *cmd, char **args)
+ctl_exec(char *cmd, char **args, int ok)
 {
 	int r;
 
 	r = cmdargs(cmd, args);
-	return r == -1 || r == 127 ? -1 : 0;
+	if (r == 0 || (r == 1 && ok == CTL_NOMATCH))
+		return 0;
+	if (r != -1 && r != 127)
+		printf("%% %s exited with status %d\n", cmd, r);
+	return -1;
 }
 
 int
@@ -1458,7 +1474,7 @@ restart_dhcpd(int argc, char **argv, ...)
 {
 	char *argv_pkill[] = { PKILL, table, "dhcpd", NULL };
 
-	if (ctl_exec(argv_pkill[0], argv_pkill) == -1)
+	if (ctl_exec(argv_pkill[0], argv_pkill, CTL_NOMATCH) == -1)
 		return -1;
 	sleep(1);
 	return start_dhcpd(argc, argv);
@@ -2246,7 +2262,7 @@ start_dhcpd(int argc, char **argv, ...)
 	}
 	dhcpd_args[i] = NULL;
 
-	ret = ctl_exec(argv[0], dhcpd_args);
+	ret = ctl_exec(argv[0], dhcpd_args, CTL_EXIT0);
 done:
 	if (ifs != -1)
 		close(ifs);
@@ -2297,12 +2313,16 @@ daemons_facts(struct facts_out *o, int pf)
 	}
 	n = len / sizeof(*kp);
 	for (d = ctl_daemons; r == 0 && d->name != NULL; d++) {
-		/* the enable row runs the daemon's program, except for pf */
+		/*
+		 * the enable row runs the daemon's program, except for pf,
+		 * whose enable is pf's ioctl
+		 */
 		for (x = d->table; x->name != NULL &&
 		    x->flag_x != DB_X_ENABLE && x->flag_x != DB_X_ENABLE_DEFAULT;
 		    x++)
 			;
-		if (x->name == NULL || x->args[0] == NULL)
+		if (x->name == NULL ||
+		    (x->args[0] == NULL && d->table != ctl_pf))
 			continue;
 		memset(v, 0, sizeof(v));
 		facts_string(&v[DAEMON_NAME], d->name);
@@ -2331,5 +2351,49 @@ daemons_facts(struct facts_out *o, int pf)
 		}
 	}
 	free(kp);
+	return r;
+}
+
+/* pf's enable */
+int
+pf_enable(int argc, char **argv, ...)
+{
+	return pf_set(1);
+}
+
+/* pf's disable */
+int
+pf_disable(int argc, char **argv, ...)
+{
+	return pf_set(0);
+}
+
+/*
+ * Turn pf on or off, as pfctl -e and -d do: 0 if pf is then as asked,
+ * else -1 after saying why. pfctl exits 1 both when pf is already so
+ * and when its ioctl fails, so its status cannot say which; here only
+ * the ioctl's error for already so, EEXIST or ENOENT, is passed over.
+ */
+static int
+pf_set(int on)
+{
+	struct pf_status st;
+	int dev, r = -1;
+
+	if ((dev = open("/dev/pf", O_RDWR)) == -1) {
+		printf("%% /dev/pf: %s\n", strerror(errno));
+		return -1;
+	}
+	if (ioctl(dev, on ? DIOCSTART : DIOCSTOP) == -1 &&
+	    errno != (on ? EEXIST : ENOENT))
+		printf("%% pf: %s: %s\n", on ? "DIOCSTART" : "DIOCSTOP",
+		    strerror(errno));
+	else if (ioctl(dev, DIOCGETSTATUS, &st) == -1)
+		printf("%% pf: DIOCGETSTATUS: %s\n", strerror(errno));
+	else if (st.running != on)
+		printf("%% pf is still %s\n", on ? "disabled" : "enabled");
+	else
+		r = 0;
+	close(dev);
 	return r;
 }
