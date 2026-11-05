@@ -186,10 +186,10 @@ clear		help		mpls		relay		tftp
 commit		hostname	nameserver	resolv		tftp-proxy
 configure	ifstate		ndp		rip		traceroute
 crontab		ike		no		rollback	traceroute6
-ddb		inet		nppp		route		unbound
-dhcp		interface	ntp		rtable		unsetenv
-dhcp6lease	ip		ospf		sasync		verbose
-do		ip6		ospf6		saveenv		who
+ddb		inet		nppp		route		unsetenv
+dhcp		interface	ntp		rtable		verbose
+dhcp6lease	ip		ospf		sasync		who
+do		ip6		ospf6		saveenv
 dvmrp		ipsec		pf		scheduler
 editing		ldap		ping		setenv
 eigrp		ldp		ping6		show
@@ -665,7 +665,6 @@ nsh(config)# ?
   tftp-proxy    tftp-proxy server control
   tftp          TFTP server control
   resolv        Resolver configuration control
-  unbound       DNS resolver control
   motd          Message of-the-day
   crontab       Configure scheduled background jobs
   scheduler     Configure scheduled background jobs
@@ -2147,39 +2146,6 @@ If
 is disabled then the
 .Xr resolv.conf 5
 file must be maintained manually.
-.Pp
-.Tg unbound
-.Ic unbound
-.Op Cm enable | disable | edit | check-config | reload
-.Pp
-Enable, disable or configure the
-.Xr unbound 8
-DNS resolver.
-The syntax of its configuration is documented in
-.Xr unbound.conf 5 .
-.Cm reload
-makes the running unbound read its configuration again, through
-.Xr unbound-control 8 .
-.Pp
-unbound can run in each routing table.
-Commit refuses two routing tables whose unbound configurations name the
-same Unix socket in control-interface:
-the second unbound would take the socket, and unbound-control for the
-first would reach the second.
-A TCP address, such as 127.0.0.1@8953, is separate in each routing
-table.
-.Pp
-.Nm
-keeps the configuration in unbound's chroot, /var/unbound/etc, so that a
-reload can read it again.
-If auto-trust-anchor-file in the configuration gives the full path of a
-file that is not there yet,
-.Nm
-makes the file with
-.Xr unbound-anchor 8
-before it tests the configuration and before it starts unbound, as
-.Xr rc.d 8
-does.
 .Pp
 .Tg nameserver
 .Tg resolv.conf
@@ -7157,7 +7123,6 @@ option is used.
 .Xr relayd.conf 5 ,
 .Xr resolv.conf 5 ,
 .Xr shells 5 ,
-.Xr unbound.conf 5 ,
 .Xr environ 7 ,
 .Xr script 7 ,
 .Xr bgpd 8 ,
@@ -7194,9 +7159,6 @@ option is used.
 .Xr sshd 8 ,
 .Xr tftp-proxy 8 ,
 .Xr tftpd 8 ,
-.Xr unbound 8 ,
-.Xr unbound-anchor 8 ,
-.Xr unbound-control 8 ,
 .Xr usermod 8
 .Ed
 .Pp

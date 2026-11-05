@@ -39,9 +39,8 @@ see.
 bgpd, cron (root's crontab), dhcp6leased, dhcpd, dhcpleased, dhcrelay,
 dhcrelay6, dvmrpd, eigrpd, ftp-proxy, ifstated, inetd, iked, ipsecctl
 and isakmpd, ldapd, ldpd, lldpd, npppd, ntpd, ospfd, ospf6d, pf, rad,
-relayd, resolvd, ripd, sasyncd, slaacd, smtpd, snmpd, sshd, tftpd,
-tftp-proxy and unbound. nsh also keeps the message of the day,
-/etc/motd.
+relayd, resolvd, ripd, sasyncd, slaacd, smtpd, snmpd, sshd, tftpd and
+tftp-proxy. nsh also keeps the message of the day, /etc/motd.
 
 ---
 

@@ -51,8 +51,6 @@ var DAEMONS = [
 	    enable: 1, ops: ["show"], runs: "/usr/sbin/lldpd", args: [] },
 	{ name: "resolv", ws: "services", label: "DNS resolution (resolvd)",
 	    enable: 1, ops: [], runs: "/sbin/resolvd", args: [] },
-	{ name: "unbound", ws: "services", label: "DNS resolver (unbound)",
-	    rt: 1, rules: 1, enable: 1, ops: ["reload"] },
 	{ name: "ntp", ws: "services", label: "Time (ntpd)", rules: 1,
 	    enable: 1, ops: [] },
 	{ name: "snmp", ws: "services", label: "SNMP agent (snmpd)", rt: 1,

@@ -44,9 +44,6 @@
 #define NPPPD           "/usr/sbin/npppd"
 #define NPPPCTL         "/usr/sbin/npppctl"
 #define RESOLVD         "/sbin/resolvd"
-#define UNBOUND         "/usr/sbin/unbound"
-#define UNBOUNDCHECK    "/usr/sbin/unbound-checkconf"
-#define UNBOUNDANCHOR   "/usr/sbin/unbound-anchor"
 #ifndef DHCPLEASES
 #define DHCPLEASES      "/var/db/dhcpd.leases"
 #endif
@@ -71,7 +68,6 @@
 #define RELAYCTL        "/usr/sbin/relayctl"
 #define SMTPCTL         "/usr/sbin/smtpctl"
 #define LDAPCTL         "/usr/sbin/ldapctl"
-#define UNBOUNDCTL      "/usr/sbin/unbound-control"
 /* other binaries */
 #define SYSTAT		"/usr/bin/systat"
 
@@ -103,7 +99,6 @@ struct ctl {
 int ctl_line(char *, char *, size_t);
 int ctl_rules_clear(char *, int, int);
 int ctl_rules_args(char *, char *, char *, size_t, char **);
-void ctl_test_prepare(char **);
 int ctl_cand_rules(char *, int, int, char *, size_t);
 void ctl_runs(struct ctl *, int *, int *);
 #define CTL_ACT_FOLLOW	0x100	/* what follows a daemon's rules (ctl_act()) */
@@ -154,8 +149,6 @@ struct daemons {
 #define SSHDCONF_TEMP   "/var/run/sshd.conf"
 #define SMTPCONF_TEMP   "/var/run/smtpd.conf"
 #define LDAPCONF_TEMP   "/var/run/ldapd.conf"
-/* inside unbound's chroot, where its reload reads the file again */
-#define UNBOUND_TEMP    "/var/unbound/etc/unbound.conf"
 #define IFSTATECONF_TEMP "/var/run/ifstated.conf"
 #define MOTD_TEMP "/var/run/motd"
 #define CRONTAB_TEMP     "/var/run/crontab"
@@ -220,5 +213,4 @@ extern struct ctl ctl_ldap[];
 extern struct ctl ctl_motd[];
 extern struct ctl ctl_crontab[];
 extern struct ctl ctl_resolv[];
-extern struct ctl ctl_unbound[];
 int flag_x(char *, char *, int, char *);

@@ -364,9 +364,6 @@ _nshcheck owns both.
 The tests of relayd, ldapd, npppd, sasyncd and sshd are the exceptions:
 they keep root, because these daemons read keys or secrets that their
 rules name.
-unbound-checkconf refuses rules whose root key file is not there yet.
-So if the file that the rules name in auto-trust-anchor-file is not
-there, unbound's test makes it before the test gives up root.
 While a test, a script or a save runs, other requests wait, but streams
 go on.
 system keeps a record of a commit that has begun.

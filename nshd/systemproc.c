@@ -2913,9 +2913,6 @@ system_job_child(int fd, struct job *j)
 		r = commit_recover(j->back, j->backlen) == 0 ? 0 : 1;
 		break;
 	default:
-		/* while it has root: unbound's root key */
-		if (j->kind == JOB_TEST)
-			ctl_test_prepare(j->args);
 		if (!j->root)
 			system_drop();
 		execv(j->args[0], j->args);
