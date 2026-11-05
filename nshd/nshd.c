@@ -118,7 +118,7 @@
 
 #define CLEAR_TRIES	200	/* system's helpers killed, 10 ms apart */
 #define FRONT_USER	"_nshfront"	/* each frontend's user */
-#define SESSIONS	64	/* sessions on the read-write socket, at most */
+#define SESSIONS	NSHD_SESSIONS
 
 static struct child {
 	enum nshd_proc	 proc;

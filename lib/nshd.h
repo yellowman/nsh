@@ -338,6 +338,7 @@ enum nshd_proc {
 };
 
 #define SHOWS		4	/* shows, which share the read-only socket */
+#define NSHD_SESSIONS	64	/* sessions on the read-write socket, at most */
 
 enum nshd_imsg {
 	IMSG_NONE,

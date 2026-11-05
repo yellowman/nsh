@@ -31,8 +31,9 @@
  * SYS_WINDOW messages the client has not read, while it answers other
  * requests. A stream ends when its child's output ends and the child is
  * reaped; when config reports that its session is gone, which kills the
- * child; or when system exits. If config sends a request it may not
- * send, or a malformed one, system exits, and so does nshd.
+ * child; or when system exits. A request that waits for a job to end, and
+ * that config stops, ends without beginning. If config sends a request it
+ * may not send, or a malformed one, system exits, and so does nshd.
  *
  * A log that a session watches is also a stream, and it continues until
  * config stops it. system opens a log file as root, reads it as
@@ -477,6 +478,7 @@ static __dead void system_term_child(int, struct passwd *);
 static int	system_whole(uint32_t, const void *, size_t);
 static int	system_request(uint32_t, uint32_t, const void *, size_t);
 static void	system_queue(uint32_t, uint32_t, const void *, size_t);
+static int	system_unqueue(uint32_t);
 static void	system_drain(void);
 static void	system_snapshot(uint32_t, int);
 static void	system_show(uint32_t, char *);
@@ -1164,6 +1166,8 @@ system_request(uint32_t type, uint32_t id, const void *data, size_t len)
 		system_stream_more(id);
 		break;
 	case IMSG_SYS_STOP:
+		if (system_unqueue(id))
+			break;
 		TAILQ_FOREACH(s, &streams, entry)
 			if (s->id == id) {
 				system_stream_stop(s);
@@ -1249,6 +1253,27 @@ system_queue(uint32_t type, uint32_t id, const void *data, size_t len)
 	if (len > 0)
 		memcpy(q->data, data, len);
 	TAILQ_INSERT_TAIL(&queue, q, entry);
+}
+
+/*
+ * A request that waits, and has not begun, ends now, as config stopped
+ * it: 1 if one did, else 0
+ */
+static int
+system_unqueue(uint32_t id)
+{
+	struct queued	*q, *next;
+	int		 found = 0;
+
+	TAILQ_FOREACH_SAFE(q, &queue, entry, next)
+		if (q->id == id) {
+			TAILQ_REMOVE(&queue, q, entry);
+			free(q);
+			found = 1;
+		}
+	if (found)
+		system_end(id, 1, NULL);
+	return (found);
 }
 
 /* the requests that waited, in order, until one starts a job */

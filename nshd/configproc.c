@@ -20,11 +20,15 @@
  * to its frontend; config knows the session by that pipe alone. Each
  * request to system has an id of its own; system's answers for it go to
  * the session that asked, if that session is still there, its facts
- * passed on unread. system learns when a session's client has read all
- * it was sent, so it may stream more, and when the session is gone, so it
- * stops streaming to it. A frontend that closes its pipe, sends what it
- * may not, or sends it wrong, ends its session. Another peer that sends
- * what it may not, or sends it wrong, ends config, and nshd with it.
+ * passed on unread. system learns, for each request it has sent output
+ * for, when the session's client has read it all, so it may stream more;
+ * and when the session is gone, so it stops streaming to it. A frontend
+ * that closes its pipe, sends what it may not, or sends it wrong, ends
+ * its session, and so does one whose session has FRONT_REQUESTS requests
+ * unfinished and asks another. So system has at most that many of each
+ * session's requests at once, and one step of a commit. Another peer
+ * that sends what it may not, or sends it wrong, ends config, and nshd
+ * with it.
  *
  * A session in configure has nsh's state of its own (session.c), and
  * config runs its lines through nsh's code in candidate mode, which here
@@ -154,7 +158,7 @@
 
 #define SNAPSHOT_TEXT	(16 * 1024 * 1024)	/* most text in a snapshot */
 
-#define IDS_GONE	"% nshd: request ids exhausted\n"
+#define REQ_REFUSED	"% nshd: cannot take another request now\n"
 
 #if NSHD_CLEARS != PLAN_CLEARS
 #error "NSHD_CLEARS is not PLAN_CLEARS"
@@ -204,6 +208,9 @@ struct front {
 	struct imsgev		*iev;
 };
 #define FRONT_QUEUE	4096	/* messages to all frontends, unwritten */
+#define FRONT_REQUESTS	16	/* a session's requests unfinished, at most */
+/* all sessions' requests unfinished, at most, whether or not they are gone */
+#define ALL_REQUESTS	(NSHD_SESSIONS * FRONT_REQUESTS)
 
 /* a request system has not finished, and the session that asked it */
 struct request {
@@ -217,6 +224,7 @@ struct request {
 	int			 bad;		/* past NSHD_PART */
 	int			 started;	/* system began the follow */
 	int			 stopped;	/* config stopped the follow */
+	int			 unread;	/* output since its last READ */
 };
 
 /* kinds of request, by what config does when one ends */
@@ -377,6 +385,7 @@ static void		 config_reply(struct session *, struct nshd_context *,
 static void		 config_answer(uint32_t, int32_t, const char *, ...)
 			    __attribute__((__format__ (printf, 3, 4)));
 static void		 config_tell(uint32_t, uint32_t);
+static void		 config_read(uint32_t);
 static struct request	*config_request(uint32_t, int);
 static void		 commit_wait(int);
 static void		 commit_snapshot(void);
@@ -759,7 +768,7 @@ config_dispatch_front(int fd, short event, void *arg)
 				config_names(id);
 			break;
 		case IMSG_CTL_READ:
-			config_tell(id, IMSG_SYS_READ);
+			config_read(id);
 			break;
 		default:
 			goto bad;
@@ -815,6 +824,7 @@ config_dispatch_system(int fd, short event, void *arg)
 			/* a request config no longer knows of: ignore it */
 			if (r == NULL)
 				break;
+			r->unread = 1;
 			if (imsg_get_ibuf(&imsg, &b) == -1)
 				fatal("%s", __func__);
 			if (snap != NULL && r->id == snap->id) {
@@ -1007,7 +1017,7 @@ config_show(uint32_t session, struct nshd_show *show)
 	if (kind == REQ_TEXT && !config_hides(sp))
 		kind = REQ_ANSWER;
 	if ((r = config_request(session, kind)) == NULL) {
-		config_answer(session, 1, "%s", IDS_GONE);
+		config_answer(session, 1, "%s", REQ_REFUSED);
 		return;
 	}
 	/* system answers the rest with facts, or says it does not */
@@ -1163,7 +1173,7 @@ config_rollback(uint32_t session, struct nshd_rollback *rb)
 		return;
 	}
 	if ((r = config_request(session, REQ_ROLLBACK)) == NULL) {
-		config_answer(session, 1, "%s", IDS_GONE);
+		config_answer(session, 1, "%s", REQ_REFUSED);
 		return;
 	}
 	r->n = rb->n;
@@ -1274,7 +1284,7 @@ config_login(uint32_t session, struct nshd_login *lg)
 		return;
 	}
 	if ((r = config_request(session, REQ_LOGIN)) == NULL) {
-		config_answer(session, 1, "%s", IDS_GONE);
+		config_answer(session, 1, "%s", REQ_REFUSED);
 		return;
 	}
 	memset(&sl, 0, sizeof(sl));
@@ -1314,7 +1324,7 @@ config_pty(uint32_t session, struct nshd_terminal *tm)
 		return;
 	}
 	if ((r = config_request(session, REQ_ANSWER)) == NULL) {
-		config_answer(session, 1, "%s", IDS_GONE);
+		config_answer(session, 1, "%s", REQ_REFUSED);
 		return;
 	}
 	memset(&st, 0, sizeof(st));
@@ -1502,7 +1512,7 @@ config_op(uint32_t session, struct nshd_op *op)
 		return;
 	}
 	if ((r = config_request(session, REQ_ANSWER)) == NULL) {
-		config_answer(session, 1, "%s", IDS_GONE);
+		config_answer(session, 1, "%s", REQ_REFUSED);
 		return;
 	}
 	memset(&so, 0, sizeof(so));
@@ -1547,8 +1557,8 @@ config_watch(uint32_t session, struct nshd_watch *w)
 			if ((r = config_request(session, REQ_FOLLOW)) ==
 			    NULL) {
 				if (imsg_text(front_iev(session),
-				    IMSG_CTL_OUTPUT, session, IDS_GONE,
-				    strlen(IDS_GONE)) == -1)
+				    IMSG_CTL_OUTPUT, session, REQ_REFUSED,
+				    strlen(REQ_REFUSED)) == -1)
 					fatal("%s", __func__);
 				sp->watchr = 1;
 				continue;
@@ -1583,21 +1593,26 @@ config_followed(struct session *sp, int log)
 
 /*
  * A follow ended: if system refused it before it began, the watch's
- * answer says so; if it ended later, and the watch did not drop it, a
- * notice says so
+ * answer says so, and if a later watch dropped it before it began, the
+ * watch is answered all the same; if it ended later, and the watch did
+ * not drop it, a notice says so
  */
 static void
 config_follow_end(struct request *r, int32_t status)
 {
 	struct session	*sp;
 
-	if ((sp = session_find(r->session)) == NULL || r->stopped)
+	if ((sp = session_find(r->session)) == NULL)
 		return;
 	if (r->started) {
-		config_notice_to(sp->id, NSHD_NOTICE_LOGEND, 0, r->n, NULL, 0);
+		if (!r->stopped)
+			config_notice_to(sp->id, NSHD_NOTICE_LOGEND, 0, r->n,
+			    NULL, 0);
 		return;
 	}
-	sp->watchr = 1;
+	/* refused, or stopped before system began it */
+	if (!r->stopped)
+		sp->watchr = 1;
 	if (--sp->starting == 0)
 		config_answer(sp->id, sp->watchr, NULL);
 }
@@ -2242,7 +2257,7 @@ snapshot_take(void)
 	if (snap != NULL)
 		return;
 	if ((r = config_request(0, REQ_ANSWER)) == NULL) {
-		config_snapshot_lost(IDS_GONE);
+		config_snapshot_lost(REQ_REFUSED);
 		return;
 	}
 	if ((snap = calloc(1, sizeof(*snap))) == NULL ||
@@ -2710,7 +2725,7 @@ commit_request(int step, uint32_t type, const void *data, size_t len)
 		printed_text(sp != NULL ? front_iev(commit->session) : NULL,
 		    IMSG_CTL_OUTPUT, commit->session, config_hides(sp));
 	if ((r = config_request(commit->session, REQ_COMMIT)) == NULL) {
-		commit_end(-1, IDS_GONE);
+		commit_end(-1, REQ_REFUSED);
 		return;
 	}
 	commit->step = step;
@@ -2984,29 +2999,87 @@ config_ready_archive(void)
 		fatal("%s", __func__);
 }
 
-/* to system: type, for each request of session not finished */
+/*
+ * to system: type, for each request of session not finished, but a
+ * commit's: once system has begun a commit, it runs to its end
+ */
 static void
 config_tell(uint32_t session, uint32_t type)
 {
 	struct request	*r;
 
 	TAILQ_FOREACH(r, &requests, entry)
-		if (r->session == session && link_compose(&links[SYSTEM],
-		    type, r->id, NULL, 0) == -1)
+		if (r->session == session && r->kind != REQ_COMMIT &&
+		    link_compose(&links[SYSTEM], type, r->id, NULL, 0) == -1)
 			fatal("%s", __func__);
 }
 
 /*
+ * to system: READ, for each request of session that system has sent
+ * output for since the last, so a frontend's READs cannot multiply
+ */
+static void
+config_read(uint32_t session)
+{
+	struct request	*r;
+
+	TAILQ_FOREACH(r, &requests, entry)
+		if (r->session == session && r->unread) {
+			r->unread = 0;
+			if (link_compose(&links[SYSTEM], IMSG_SYS_READ, r->id,
+			    NULL, 0) == -1)
+				fatal("%s", __func__);
+		}
+}
+
+/*
  * A request of kind for session, or for config itself if 0, with an id of
- * its own; NULL when the ids are exhausted
+ * its own; NULL when the ids are exhausted, when the session has
+ * FRONT_REQUESTS requests unfinished, or when all sessions have
+ * ALL_REQUESTS. A request counts until system ends it, even once its
+ * session is gone, so a new session does not make room for more. A
+ * client asks one request at a time, and watches four logs at most, so a
+ * frontend that asks FRONT_REQUESTS speaks for no client, and its session
+ * goes. A commit's steps are config's, so they are neither counted nor
+ * refused. A session's permissions are not refused either: a session asks
+ * them once, at its hello, and system answers at once
  */
 static struct request *
 config_request(uint32_t session, int kind)
 {
+	static int	 full;
 	struct request	*r;
+	struct front	*f;
+	struct timeval	 now = { 0, 0 };
+	int		 n = 0, all = 0;
 
 	if (request_id == UINT32_MAX)
 		return (NULL);
+	if (session != 0 && kind != REQ_COMMIT && kind != REQ_PERMS) {
+		TAILQ_FOREACH(r, &requests, entry)
+			if (r->session != 0 && r->kind != REQ_COMMIT) {
+				all++;
+				if (r->session == session)
+					n++;
+			}
+		if (n >= FRONT_REQUESTS) {
+			if ((f = front_find(session)) != NULL && !f->dropped) {
+				log_warnx("session %u: its frontend asks too "
+				    "much at once", session);
+				f->dropped = 1;
+				evtimer_add(&front_tm, &now);
+			}
+			return (NULL);
+		}
+		if (all >= ALL_REQUESTS) {
+			if (!full)
+				log_warnx("%d requests unfinished: others "
+				    "refused until system ends some", all);
+			full = 1;
+			return (NULL);
+		}
+		full = 0;
+	}
 	if ((r = calloc(1, sizeof(*r))) == NULL)
 		fatal(NULL);
 	r->id = ++request_id;

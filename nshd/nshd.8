@@ -83,8 +83,17 @@ the session too.
 So a frontend that stays after its client has gone keeps the session
 for about a second at most.
 A frontend that ends, or sends what it may not, ends only its session.
+config also drops a session that has 16 requests unfinished and makes
+another, since a client makes one request at a time and watches at most
+four logs.
 The parent takes at most 64 sessions at once, and closes a client past
 that.
+config takes at most 1024 requests unfinished from all sessions, and
+refuses a request past that.
+A request counts until system ends it, even after its session has
+ended.
+When a session ends, system ends each of its requests that waits for a
+commit and has not begun.
 A client with _nshweb's uid is the web configurator's session.
 Only that session may log in, as a user, with that user's password, and
 request the user's terminal.
