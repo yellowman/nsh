@@ -26,8 +26,9 @@
  * GET or the form body of a POST; and the cookie's token. Each field
  * must be one the endpoint takes, appear at most once, and be within its
  * bounds. A body is BODY_MAX bytes at most; a setrules body, which
- * carries a daemon's rules, may be RULES_BODY, and no more than
- * DECK_BIGS of those arrive at once. The rules go to session in parts,
+ * carries a daemon's rules, may be RULES_BODY, and a stage's body, which
+ * carries the lines to run, STAGE_BODY; no more than DECK_BIGS of those
+ * two arrive at once. The rules or the lines go to session in parts,
  * before the request. A request must carry an X-Nshdeck header, to show
  * that it comes from nshdeck's page; a page of another site cannot send
  * it without asking first. Streams, of events or a terminal, need no
@@ -77,7 +78,9 @@
 #define PARAMS_MAX	16384		/* a request's parameters, at most */
 #define BODY_MAX	8192		/* a request's body, at most */
 #define RULES_BODY	(3 * NSHD_RULES + 1024)	/* setrules body, encoded */
-#define DECK_BIGS	4		/* setrules' bodies at once, at most */
+#define STAGE_TEXT	NSHD_TEXT	/* a stage's lines, at most */
+#define STAGE_BODY	(3 * STAGE_TEXT + 1024)	/* stage body, encoded */
+#define DECK_BIGS	4		/* those bodies at once, at most */
 
 #define FCGI_HEADER	8
 #define FCGI_CONTENT	65535
@@ -151,6 +154,8 @@ struct params {
 #define F_TERMINAL	0x10000
 #define F_DAEMON	0x20000
 #define F_TEXT		0x40000
+#define F_IFNAME	0x80000
+#define F_BRIDGE	0x100000
 static const struct endpoint {
 	const char	*name;
 	int		 kind;
@@ -175,11 +180,12 @@ static const struct endpoint {
 	{ "events",	DECK_EVENTS,	0, F_LOGS },
 	{ "rules",	DECK_RULES,	0, F_DAEMON | F_RTABLE },
 	{ "setrules",	DECK_SETRULES,	1, F_DAEMON | F_RTABLE | F_TEXT },
+	{ "stage",	DECK_STAGE,	1, F_IFNAME | F_BRIDGE | F_TEXT },
 };
 
 static TAILQ_HEAD(, conn)	 conns = TAILQ_HEAD_INITIALIZER(conns);
 static int			 nconns;
-static int			 nbigs;		/* setrules' bodies */
+static int			 nbigs;		/* setrules' and stages' */
 static uint32_t			 conn_id;
 static struct event		 ev_accept, ev_pause;
 static struct deck_pipe		 parent, session;
@@ -539,8 +545,8 @@ front_endpoint(const char *uri)
 }
 
 /*
- * Room for c's body, of BODY_MAX, or RULES_BODY for setrules, unless
- * DECK_BIGS of those are arriving
+ * Room for c's body, of BODY_MAX, or RULES_BODY for setrules and
+ * STAGE_BODY for stage, unless DECK_BIGS of those are arriving
  */
 static void
 front_body(struct conn *c)
@@ -550,13 +556,15 @@ front_body(struct conn *c)
 
 	c->bodymax = BODY_MAX;
 	if (front_params(c, &p) == 0 && (e = front_endpoint(p.uri)) != NULL &&
-	    e->kind == DECK_SETRULES) {
+	    (e->kind == DECK_SETRULES || e->kind == DECK_STAGE)) {
 		if (nbigs == DECK_BIGS) {
-			front_error(c, 503, "too many rules arriving");
+			front_error(c, 503,
+			    "too many rules or stages arriving");
 			return;
 		}
 		nbigs++;
-		c->bodymax = RULES_BODY;
+		c->bodymax = e->kind == DECK_SETRULES ? RULES_BODY :
+		    STAGE_BODY;
 	}
 	if ((c->body = malloc(c->bodymax + 1)) == NULL)
 		fatal("%s", __func__);
@@ -659,6 +667,7 @@ front_fields(const char *form, int fields, struct deck_request *r,
 		{ "help", F_HELP }, { "keys", F_KEYS }, { "rows", F_ROWS },
 		{ "cols", F_COLS }, { "terminal", F_TERMINAL },
 		{ "daemon", F_DAEMON }, { "text", F_TEXT },
+		{ "interface", F_IFNAME }, { "bridge", F_BRIDGE },
 	};
 	char		 key[16], value[NSHD_LINE];
 	const char	*p, *eq, *end;
@@ -676,12 +685,13 @@ front_fields(const char *form, int fields, struct deck_request *r,
 		if ((f & fields) == 0 || (f & seen) != 0)
 			return (-1);
 		seen |= f;
-		/* a daemon's rules, NSHD_RULES bytes at most */
+		/* rules or lines: NSHD_RULES or STAGE_TEXT bytes at most */
 		if (f == F_TEXT) {
 			if ((*text = malloc(end - eq)) == NULL)
 				fatal("%s", __func__);
 			if (decode(*text, end - eq, eq + 1, end - eq - 1) == -1 ||
-			    strlen(*text) > NSHD_RULES)
+			    strlen(*text) > (r->kind == DECK_STAGE ?
+			    STAGE_TEXT : NSHD_RULES))
 				return (-1);
 			continue;
 		}
@@ -740,6 +750,9 @@ front_field(int f, const char *v, struct deck_request *r)
 	case F_KEYS:
 		return (strlcpy(r->text, v, sizeof(r->text)) >=
 		    sizeof(r->text) ? -1 : 0);
+	case F_IFNAME:
+		return (v[0] == '\0' || strlcpy(r->text, v, NSHD_IFNAME) >=
+		    NSHD_IFNAME ? -1 : 0);
 	case F_COMMENT:
 		return (strlcpy(r->comment, v, sizeof(r->comment)) >=
 		    sizeof(r->comment) ? -1 : 0);
@@ -774,6 +787,9 @@ front_field(int f, const char *v, struct deck_request *r)
 		return (errstr == NULL ? 0 : -1);
 	case F_CHECK:
 		r->check = strtonum(v, 0, 1, &errstr);
+		return (errstr == NULL ? 0 : -1);
+	case F_BRIDGE:
+		r->n = strtonum(v, 0, 1, &errstr);
 		return (errstr == NULL ? 0 : -1);
 	case F_HELP:
 		r->n = strtonum(v, 0, 1, &errstr);

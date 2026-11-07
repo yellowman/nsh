@@ -53,7 +53,8 @@ enum deck_kind {
 	DECK_TYPE,
 	DECK_EVENTS,
 	DECK_RULES,
-	DECK_SETRULES
+	DECK_SETRULES,
+	DECK_STAGE
 };
 
 /*
@@ -75,7 +76,8 @@ struct deck_request {
 	int32_t		n;		/* rollback's n, an operation's */
 					/* or rules' rtable, configure */
 					/* mode, 1 for a completion's */
-					/* help, or a terminal's number */
+					/* help or a stage's bridge, or */
+					/* a terminal's number */
 	int32_t		minutes;	/* minutes for commit confirmed */
 	int32_t		check;		/* commit check */
 	int32_t		logs;		/* the logs events follow, as */

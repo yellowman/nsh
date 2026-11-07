@@ -118,6 +118,20 @@ struct nshd_line {
 	char		line[NSHD_LINE];
 };
 
+/* A stage: lines of text, one to a line, to run in an interface's mode */
+struct nshd_stage {
+	int32_t		bridge;		/* 1 if the interface is a bridge */
+	char		ifname[NSHD_IFNAME];
+	int32_t		len;		/* of text */
+	char		text[NSHD_TEXT];
+};
+
+/* how a line of a stage went: 0 if it succeeded */
+struct nshd_staged {
+	int32_t		status;
+	char		line[NSHD_LINE];
+};
+
 /* the session's mode, sent after a request that may change it */
 struct nshd_context {
 	int32_t		mode;		/* 0, or which configure */
@@ -428,7 +442,11 @@ enum nshd_imsg {
 	IMSG_SESSION_CLIENT,	/* nshd_newsession, and the client's socket */
 
 	/* system to parent, then parent to config: a session ends */
-	IMSG_SESSION_GONE	/* the session is the imsg's id */
+	IMSG_SESSION_GONE,	/* the session is the imsg's id */
+
+	/* a stage, as one request */
+	IMSG_CTL_STAGE,		/* nshd_stage; output and STAGED, each line */
+	IMSG_CTL_STAGED		/* nshd_staged, after the line's output */
 };
 
 struct imsgev {

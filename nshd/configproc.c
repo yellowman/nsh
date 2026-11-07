@@ -333,6 +333,9 @@ static void		 config_ready_archive(void);
 static void		 config_show(uint32_t, struct nshd_show *);
 static void		 config_configure(uint32_t, struct nshd_configure *);
 static void		 config_line(uint32_t, struct nshd_line *);
+static void		 config_stage(uint32_t, struct nshd_stage *);
+static int		 config_staged(struct session *, const char *);
+static int		 config_staging(struct session *, const char *);
 static void		 config_exit(uint32_t);
 static void		 config_commit(uint32_t, struct nshd_commit *);
 static void		 config_rollback(uint32_t, struct nshd_rollback *);
@@ -676,6 +679,7 @@ config_dispatch_front(int fd, short event, void *arg)
 	struct nshd_show	 show;
 	struct nshd_configure	 cf;
 	struct nshd_line	 line;
+	struct nshd_stage	 sg;
 	struct nshd_commit	 cm;
 	struct nshd_rollback	 rb;
 	struct nshd_op		 op;
@@ -736,6 +740,16 @@ config_dispatch_front(int fd, short event, void *arg)
 			    memchr(line.line, '\0', sizeof(line.line)) == NULL)
 				goto bad;
 			config_line(id, &line);
+			break;
+		case IMSG_CTL_STAGE:
+			if (imsg_get_data(&imsg, &sg, sizeof(sg)) == -1 ||
+			    (sg.bridge != 0 && sg.bridge != 1) ||
+			    sg.ifname[0] == '\0' || memchr(sg.ifname, '\0',
+			    sizeof(sg.ifname)) == NULL ||
+			    sg.len < 0 || sg.len > NSHD_TEXT ||
+			    memchr(sg.text, '\0', sg.len) != NULL)
+				goto bad;
+			config_stage(id, &sg);
 			break;
 		case IMSG_CTL_EXIT:
 			if (imsg_get_len(&imsg) != 0)
@@ -1118,6 +1132,86 @@ config_line(uint32_t session, struct nshd_line *line)
 	r = session_line(sp->st, line->line);
 	shared_done(sp);
 	config_ran(sp, r, 1);
+}
+
+/*
+ * A stage, into the session's candidate: the lines of its text, run in
+ * the mode of the interface or bridge it names until one fails, then
+ * out of that mode. A line may leave the mode itself; then no more
+ * lines run, nor the exit, and the stage fails if any line was left.
+ * Each line's output is followed by STAGED, which says how it went. The
+ * stage changes the shared candidate as one edit, and is answered as a
+ * line is
+ */
+static void
+config_stage(uint32_t session, struct nshd_stage *sg)
+{
+	struct session	*sp;
+	char		 head[NSHD_LINE], text[NSHD_TEXT + 1], *line, *next;
+	int		 r;
+
+	if ((sp = config_private(session)) == NULL)
+		return;
+	if (sp->how == NSHD_TERMINAL) {
+		config_answer(session, 1, "%% configure terminal has no "
+		    "candidate to stage into; each line is committed\n");
+		return;
+	}
+	snprintf(head, sizeof(head), "%s %s", sg->bridge ? "bridge" :
+	    "interface", sg->ifname);
+	memcpy(text, sg->text, sg->len);
+	text[sg->len] = '\0';
+	shared_hold(sp);
+	if ((r = config_staged(sp, head)) == 0) {
+		for (line = text; r == 0 && line != NULL &&
+		    config_staging(sp, sg->ifname); line = next) {
+			if ((next = strchr(line, '\n')) != NULL)
+				*next++ = '\0';
+			if (*line != '\0')
+				r = config_staged(sp, line);
+		}
+		if (config_staging(sp, sg->ifname)) {
+			if (config_staged(sp, "exit") == -1)
+				r = -1;
+		} else if (line != NULL)
+			r = -1;
+	}
+	shared_done(sp);
+	config_ran(sp, r, 1);
+}
+
+/* a line of a stage, run in the session's mode: its output, then STAGED */
+static int
+config_staged(struct session *sp, const char *line)
+{
+	struct nshd_staged	 sd;
+	char			 buf[NSHD_LINE];
+	int			 r = -1;
+
+	memset(&sd, 0, sizeof(sd));
+	strlcpy(sd.line, line, sizeof(sd.line));
+	if (strlcpy(buf, line, sizeof(buf)) >= sizeof(buf))
+		printf("%% nshd: a line is longer than %d bytes\n",
+		    NSHD_LINE - 1);
+	else
+		r = session_line(sp->st, buf);
+	if (front_printed(sp->id) == -1)
+		r = -1;
+	sd.status = r == -1 ? -1 : 0;
+	if (front_compose(sp->id, IMSG_CTL_STAGED, &sd, sizeof(sd)) == -1)
+		fatal("%s", __func__);
+	return (sd.status);
+}
+
+/* whether the session is in the mode of interface ifname */
+static int
+config_staging(struct session *sp, const char *ifname)
+{
+	char	 ifn[NSHD_IFNAME];
+	int	 in, rtable, bridge;
+
+	session_mode(sp->st, &in, &rtable, ifn, sizeof(ifn), &bridge);
+	return (strcmp(ifn, ifname) == 0);
 }
 
 /* leave configure, from any of its modes, if in it */

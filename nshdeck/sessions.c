@@ -132,9 +132,10 @@ struct pending {
 	uint32_t		 id;		/* front's id; 0 for a watch */
 	int			 gone;		/* front's client is gone */
 	struct deck_request	 r;
-	char			*text;		/* setrules' rules */
-	size_t			 textlen;
+	char			*text;		/* setrules' rules, a stage's */
+	size_t			 textlen;	/* lines */
 	size_t			 textoff;	/* bytes sent to nshd */
+	struct jbuf		 lines;		/* how a stage's lines went */
 };
 
 /* an event stream of a user's */
@@ -233,6 +234,8 @@ static void	 logged(struct user *, int32_t);
 static void	 next(struct user *);
 static void	 ask(struct user *, uint32_t, const void *, size_t);
 static void	 rules(struct user *);
+static void	 stage(struct user *);
+static int	 staged(struct user *, struct imsg *);
 static void	 answered(struct user *, int32_t);
 static void	 kept(struct user *, const void *, size_t);
 static int	 facts(struct user *, struct deck_pipe *, struct imsg *);
@@ -272,6 +275,7 @@ static void	 fail_log(int, struct fail *[2], const char *, const char *,
 static int64_t	 msnow(void);
 static struct user *user_token(const char *);
 static void	 user_free(struct user *);
+static void	 pending_free(struct pending *);
 
 __dead void
 sessions(int debug, int verbose)
@@ -341,9 +345,10 @@ sessions_front(int fd, short event, void *arg)
 		case DECK_REQUEST:
 			/* every use of n fits in 0 to 255 */
 			if (imsg_get_data(&imsg, &r, sizeof(r)) == -1 ||
-			    r.kind < DECK_LOGIN || r.kind > DECK_SETRULES ||
+			    r.kind < DECK_LOGIN || r.kind > DECK_STAGE ||
 			    (incoming.len > 0 && (incoming.id != id ||
-			    r.kind != DECK_SETRULES)) ||
+			    (r.kind != DECK_SETRULES &&
+			    r.kind != DECK_STAGE))) ||
 			    memchr(r.token, '\0', sizeof(r.token)) == NULL ||
 			    memchr(r.addr, '\0', sizeof(r.addr)) == NULL ||
 			    memchr(r.text, '\0', sizeof(r.text)) == NULL ||
@@ -466,7 +471,7 @@ request(uint32_t id, struct deck_request *r)
 		fatal(NULL);
 	p->id = id;
 	p->r = *r;
-	if (r->kind == DECK_SETRULES) {
+	if (r->kind == DECK_SETRULES || r->kind == DECK_STAGE) {
 		p->text = incoming.p;
 		p->textlen = incoming.len;
 		memset(&incoming, 0, sizeof(incoming));
@@ -682,6 +687,14 @@ sessions_nshd(int fd, short event, void *arg)
 				break;
 			}
 			answered(u, res.status);
+			break;
+		case IMSG_CTL_STAGED:
+			if (staged(u, &imsg) == -1) {
+				imsg_free(&imsg);
+				logout(u, "nshd sent a stage's line not asked "
+				    "for");
+				return;
+			}
 			break;
 		case IMSG_CTL_TERMINAL:
 			/* a terminal's pty, before its result */
@@ -1077,6 +1090,9 @@ next(struct user *u)
 	case DECK_SETRULES:
 		rules(u);
 		break;
+	case DECK_STAGE:
+		stage(u);
+		break;
 	default:
 		/* session's own request: the watch its streams want */
 		memset(&w, 0, sizeof(w));
@@ -1112,6 +1128,59 @@ rules(struct user *u)
 	p->textoff += n;
 	rl.last = p->textoff == p->textlen;
 	ask(u, IMSG_CTL_RULES, &rl, sizeof(rl));
+}
+
+/*
+ * u's stage, to nshd: the lines of its text, to run in the mode of the
+ * interface it names, which is a bridge if n is 1
+ */
+static void
+stage(struct user *u)
+{
+	static const char	 toolong[] = "% nshdeck: a stage longer than "
+				    "nshd takes\n";
+	struct nshd_stage	 sg;
+	struct pending		*p = u->cur;
+
+	memset(&sg, 0, sizeof(sg));
+	sg.bridge = p->r.n;
+	if (strlcpy(sg.ifname, p->r.text, sizeof(sg.ifname)) >=
+	    sizeof(sg.ifname) || p->textlen > sizeof(sg.text)) {
+		kept(u, toolong, sizeof(toolong) - 1);
+		answered(u, 1);
+		return;
+	}
+	memcpy(sg.text, p->text, p->textlen);
+	sg.len = p->textlen;
+	ask(u, IMSG_CTL_STAGE, &sg, sizeof(sg));
+}
+
+/*
+ * How a line of u's stage went, as imsg says, kept with what nshd
+ * printed for it: -1 if it is not whole, or u has no stage
+ */
+static int
+staged(struct user *u, struct imsg *imsg)
+{
+	struct nshd_staged	 sd;
+	struct pending		*p = u->cur;
+
+	if (imsg_get_data(imsg, &sd, sizeof(sd)) == -1 ||
+	    memchr(sd.line, '\0', sizeof(sd.line)) == NULL ||
+	    p == NULL || p->r.kind != DECK_STAGE)
+		return (-1);
+	if (p->lines.len > 0)
+		J(&p->lines, ",");
+	J(&p->lines, "{\"line\":");
+	j_str(&p->lines, sd.line, strlen(sd.line));
+	J(&p->lines, ",\"output\":");
+	j_str(&p->lines, u->out, u->outlen);
+	j_fmt(&p->lines, ",\"ok\":%s}", sd.status == 0 ? "true" : "false");
+	free(u->out);
+	u->out = NULL;
+	u->outlen = 0;
+	u->lost = 0;
+	return (0);
 }
 
 /*
@@ -1188,6 +1257,11 @@ answered(struct user *u, int32_t status)
 			    completed, u);
 			completing = NULL;
 		}
+		if (p->r.kind == DECK_STAGE) {
+			J(&u->j, "],\"results\":[");
+			if (p->lines.len > 0)
+				j_raw(&u->j, p->lines.p, p->lines.len);
+		}
 		J(&u->j, "],\"output\":");
 		j_str(&u->j, u->out, u->outlen);
 		if (u->hasctx) {
@@ -1210,8 +1284,7 @@ answered(struct user *u, int32_t status)
 	free(u->out);
 	u->out = NULL;
 	u->outlen = 0;
-	free(p->text);
-	free(p);
+	pending_free(p);
 	u->cur = NULL;
 	u->toro = RO_NONE;
 	rewatch(u);
@@ -1599,8 +1672,7 @@ gone(uint32_t id)
 			if (p->id == id) {
 				TAILQ_REMOVE(&u->queue, p, entry);
 				u->nqueue--;
-				free(p->text);
-				free(p);
+				pending_free(p);
 				break;
 			}
 		TAILQ_FOREACH(s, &u->streams, entry)
@@ -1971,16 +2043,13 @@ user_free(struct user *u)
 		} else if (u->cur->id != 0 && !u->cur->gone)
 			reply(u->cur->id, 503, "{\"error\":\"nshd ended the "
 			    "session\"}");
-		free(u->cur->text);
-		explicit_bzero(u->cur, sizeof(*u->cur));
-		free(u->cur);
+		pending_free(u->cur);
 	}
 	while ((p = TAILQ_FIRST(&u->queue)) != NULL) {
 		TAILQ_REMOVE(&u->queue, p, entry);
 		if (p->id != 0)
 			reply(p->id, 503, "{\"error\":\"logged out\"}");
-		free(p->text);
-		free(p);
+		pending_free(p);
 	}
 	while ((s = TAILQ_FIRST(&u->streams)) != NULL) {
 		TAILQ_REMOVE(&u->streams, s, entry);
@@ -1998,4 +2067,14 @@ user_free(struct user *u)
 	nusers--;
 	explicit_bzero(u, sizeof(*u));
 	free(u);
+}
+
+/* p, a request of a user's, freed with what it holds */
+static void
+pending_free(struct pending *p)
+{
+	free(p->text);
+	free(p->lines.p);
+	explicit_bzero(p, sizeof(*p));
+	free(p);
 }

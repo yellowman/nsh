@@ -64,6 +64,7 @@ union frontend_request {
 	struct nshd_show	 show;
 	struct nshd_configure	 cf;
 	struct nshd_line	 line;
+	struct nshd_stage	 stage;
 	struct nshd_commit	 commit;
 	struct nshd_rollback	 rollback;
 	struct nshd_op		 op;
@@ -170,6 +171,7 @@ frontend_dispatch_config(int fd, short event, void *arg)
 		case IMSG_CTL_FACTS:
 		case IMSG_CTL_CONTEXT:
 		case IMSG_CTL_NOTICE:
+		case IMSG_CTL_STAGED:
 			if (imsg_get_ibuf(&imsg, &b) == -1)
 				fatal("%s", __func__);
 			if (control_reply(client, type, ibuf_data(&b),
@@ -319,6 +321,7 @@ frontend_client(struct ctl_conn *c, struct imsg *imsg)
 		/* FALLTHROUGH */
 	case IMSG_CTL_CONFIGURE:
 	case IMSG_CTL_LINE:
+	case IMSG_CTL_STAGE:
 	case IMSG_CTL_EXIT:
 	case IMSG_CTL_COMMIT:
 	case IMSG_CTL_ROLLBACK:
@@ -388,6 +391,14 @@ frontend_whole(struct imsg *imsg, union frontend_request *r)
 		    memchr(r->line.line, '\0', sizeof(r->line.line)) == NULL)
 			return (-1);
 		return (sizeof(r->line));
+	case IMSG_CTL_STAGE:
+		if (imsg_get_data(imsg, &r->stage, sizeof(r->stage)) == -1 ||
+		    (r->stage.bridge != 0 && r->stage.bridge != 1) ||
+		    memchr(r->stage.ifname, '\0',
+		    sizeof(r->stage.ifname)) == NULL ||
+		    r->stage.len < 0 || r->stage.len > NSHD_TEXT)
+			return (-1);
+		return (sizeof(r->stage));
 	case IMSG_CTL_EXIT:
 		return (imsg_get_len(imsg) == 0 ? 0 : -1);
 	case IMSG_CTL_COMMIT:

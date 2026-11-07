@@ -313,8 +313,28 @@ does.
 With no
 .Ar text ,
 the rules are removed.
-Its body may be up to 3 MB, and at most 4 such bodies may arrive at
-once.
+Its body may be up to 3 MB.
+At most 4 bodies of
+.Cm setrules
+and
+.Cm stage
+may arrive at once.
+.It Cm stage
+POST, with
+.Ar interface ,
+an interface's name;
+.Ar bridge ,
+1 if the interface is a bridge, else 0; and
+.Ar text ,
+up to 8 KB, the lines to run in the interface's mode, one to a line.
+nshd enters the mode, runs each line until one fails, then leaves the
+mode.
+It runs no other request of the user's between them, from any page.
+The answer's
+.Ar results
+says what nshd printed for each line that ran, entering and leaving
+the mode included, and whether it succeeded.
+Its body may be up to 25 KB.
 .It Cm complete
 GET, with
 .Ar line ,

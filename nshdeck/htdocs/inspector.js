@@ -434,30 +434,48 @@ function keepEdits(into, sent, edited) {
 }
 
 /*
- * lines into the candidate, one at a time, in the interface's mode,
- * entering configure private if not in configure. Then, if no other
- * inspection was asked for and no route opened meanwhile, the
- * interface is inspected again, keeping the edits made while the lines
- * ran, and the lines' results are shown with it
+ * lines into the candidate, in the interface's mode, as one stage
+ * request, entering configure private first if not in configure. Then,
+ * if no other inspection was asked for and no route opened meanwhile,
+ * the interface is inspected again, keeping the edits made while the
+ * lines ran, and the lines' results are shown with it
  */
 function staged(lines) {
 	var mine = insp, name = insp.name, n = iasked;
 	var sent = JSON.parse(JSON.stringify(insp.now));
 	var head = (insp.bridge ? "bridge " : "interface ") + name;
-	var all = [head].concat(lines, ["exit"]), results = [];
+	var results = [];
 	var p = Promise.resolve();
 
 	if (!cur || cur.mode === 0)
 		p = configure("configure", { mode: "private" },
 		    "configure private");
-	all.forEach(function (l) {
-		p = p.then(function () {
-			return configure("line", { line: l },
-			    $("prompt").textContent + l);
-		}).then(function (j) {
-			if (l !== head && l !== "exit")
-				results.push({ line: l, ok: j.ok,
-				    out: said(j) });
+	/*
+	 * the lines, as one request: nshd runs them in the interface's
+	 * mode, stops at the first that fails, and runs nothing else of
+	 * this session's between them
+	 */
+	p = p.then(function () {
+		return ask("POST", "stage", { interface: name,
+		    bridge: mine.bridge ? 1 : 0, text: lines.join("\n") });
+	}).then(function (j) {
+		var ran = {};
+
+		(j.results || []).forEach(function (r) {
+			transcript($("prompt").textContent + r.line, r);
+			ran[r.line] = true;
+			if (r.line !== head && r.line !== "exit")
+				results.push({ line: r.line, ok: r.ok,
+				    out: said(r) });
+		});
+		/* refused before any line ran: why */
+		if (!j.results || j.results.length === 0)
+			transcript(head, j);
+		context(j);
+		lines.forEach(function (l) {
+			if (!ran[l])
+				results.push({ line: l, ok: false, out:
+				    "% not run: a line before it failed\n" });
 		});
 	});
 	return p.then(function () {
