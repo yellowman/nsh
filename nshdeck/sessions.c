@@ -22,9 +22,10 @@
  * range.
  *
  * For a login, session asks parent for a connection, sends nshd a hello,
- * and logs in; nshd's system process checks the login. Then session
- * sends a second hello to learn the permissions of the user's class,
- * and gives the user a token of 32 random bytes in hex. Each request of
+ * and logs in; nshd's system process checks the login. nshd answers a
+ * login that succeeds as it answers a hello, with the permissions of
+ * the user's class, and session gives the user a token of 32 random
+ * bytes in hex. Each request of
  * a user's goes to nshd on that user's connection, one at a time, the
  * rest waiting. session writes the answer as JSON, and never parses
  * JSON: the records of a show as they come, then what nshd printed, and
@@ -121,7 +122,7 @@ struct jbuf {
 };
 
 /* how far a user's login is */
-enum { U_CONNECT, U_HELLO, U_LOGIN, U_WHO, U_READY };
+enum { U_CONNECT, U_HELLO, U_LOGIN, U_READY };
 
 /* how far a show asked of nshd's shows is; RO_DONE once it ended */
 enum { RO_NONE, RO_CONNECT, RO_HELLO, RO_SHOW, RO_DONE };
@@ -597,7 +598,6 @@ sessions_nshd(int fd, short event, void *arg)
 	struct nshd_session	 s;
 	struct nshd_result	 res;
 	struct nshd_login	 lg;
-	struct nshd_hello	 h = { NSHD_VERSION };
 	struct imsg		 imsg;
 	struct ibuf		 b;
 	int			 n, pty;
@@ -623,13 +623,14 @@ sessions_nshd(int fd, short event, void *arg)
 		case IMSG_CTL_HELLO:
 			if (imsg_get_data(&imsg, &s, sizeof(s)) == -1 ||
 			    s.version != NSHD_VERSION ||
-			    (u->state != U_HELLO && u->state != U_WHO)) {
+			    (u->state != U_HELLO && u->state != U_LOGIN)) {
 				imsg_free(&imsg);
 				logout(u, "nshd's hello is not one nshdeck "
 				    "knows");
 				return;
 			}
-			if (u->state == U_WHO) {
+			/* a login that succeeds is answered as a hello is */
+			if (u->state == U_LOGIN) {
 				u->perms = s.perms;
 				logged(u, 0);
 				break;
@@ -675,16 +676,11 @@ sessions_nshd(int fd, short event, void *arg)
 				logout(u, "nshd sent a result not whole");
 				return;
 			}
+			/* and one that fails, with a result */
 			if (u->state == U_LOGIN) {
-				if (res.status != 0) {
-					imsg_free(&imsg);
-					logged(u, res.status);
-					return;
-				}
-				u->state = U_WHO;
-				pipe_compose(&u->nshd, IMSG_CTL_HELLO, 0, -1,
-				    &h, sizeof(h));
-				break;
+				imsg_free(&imsg);
+				logged(u, res.status != 0 ? res.status : 1);
+				return;
 			}
 			answered(u, res.status);
 			break;

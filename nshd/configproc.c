@@ -1462,7 +1462,8 @@ config_login(uint32_t session, struct nshd_login *lg)
 
 /*
  * system's answer: the permissions of the user the session logged in as,
- * or -1 if it did not, which leaves the session as it was
+ * or -1 if it did not, which leaves the session as it was. A login that
+ * succeeds is answered as a hello is, with the session's permissions
  */
 static void
 config_logged(struct request *r, int32_t status)
@@ -1471,9 +1472,12 @@ config_logged(struct request *r, int32_t status)
 
 	if ((sp = session_find(r->session)) == NULL)
 		return;
-	if (status >= 0)
-		sp->perms = status;
-	config_answer(sp->id, status >= 0 ? 0 : 1, NULL);
+	if (status < 0) {
+		config_answer(sp->id, 1, NULL);
+		return;
+	}
+	sp->perms = status;
+	config_hello_answer(sp);
 }
 
 /* a terminal for the session's web login, as system starts it */

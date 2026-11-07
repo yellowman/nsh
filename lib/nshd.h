@@ -28,7 +28,7 @@
 #define NSHD_SOCKET	"/var/run/nshd.sock"	/* 0660, group nshadmin */
 #define NSHD_RO_SOCKET	"/var/run/nshd.ro.sock"	/* 0666 */
 
-#define NSHD_VERSION	6	/* protocol version of clients and nshd */
+#define NSHD_VERSION	7	/* protocol version of clients and nshd */
 #define NSHD_TEXT	8192	/* text in one message, at most */
 #define NSHD_WORDS	256	/* a show's words, at most */
 #define NSHD_LINE	1024	/* a line of configuration, with its NUL */
@@ -417,7 +417,7 @@ enum nshd_imsg {
 	IMSG_CTL_OP,		/* nshd_op: what it prints, a result */
 	IMSG_SYS_OP,		/* nshd_sysop: a stream, a result */
 	IMSG_CTL_LOAD,		/* nshd_load: a result; the last, as commit */
-	IMSG_CTL_LOGIN,		/* nshd_login (web configurator): a result */
+	IMSG_CTL_LOGIN,		/* nshd_login: as HELLO's answer, or a result */
 	IMSG_SYS_LOGIN,		/* nshd_syslogin: the permissions, as the result */
 
 	IMSG_SESSION_TAKEN,	/* config or system to parent: nshd_taken */
