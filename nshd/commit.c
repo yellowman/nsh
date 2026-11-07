@@ -72,8 +72,8 @@
  *
  * commit confirmed does all that but save; unless a commit confirms it
  * first, at the deadline nshd's system rolls the running configuration
- * back to how it was before the first unconfirmed commit
- * (commit_recover()).
+ * back to how it was before the first unconfirmed commit, as it undoes
+ * a commit that did not take (commit_undo()).
  */
 
 #include <sys/types.h>
@@ -285,6 +285,60 @@ commit_booted(struct cnode *now, struct cnode *want)
 }
 
 /*
+ * After a commit's script ran, failed if a line of it failed: 0 if the
+ * running configuration reads as want's text and no line failed; else
+ * 1, after saying what did not take; or -1, after saying why, if either
+ * could not be read. With boot, as nshd's boot judges it
+ */
+int
+commit_verify(char *want, size_t wantlen, int failed, int boot)
+{
+	struct cnode *w, *now = NULL;
+	int ret = -1;
+
+	if ((w = conftree_mem(want, wantlen, "the configuration wanted",
+	    conf_mode, conf_ordered)) != NULL &&
+	    (now = running_tree()) != NULL) {
+		if (boot)
+			ret = commit_booted(now, w) == -1 || failed;
+		else if (!failed && commit_took(now, w))
+			ret = 0;
+		else {
+			commit_untaken(now, w, failed);
+			ret = 1;
+		}
+	}
+	conftree_free(now);
+	conftree_free(w);
+	return ret;
+}
+
+/*
+ * Undo a commit that did not take, or roll back an unconfirmed one: make
+ * the running configuration read as was's text again. Whether it does
+ * decides, not how the script went: 0 if so, after saying so; else -1,
+ * after saying how it differs or why it could not be read
+ */
+int
+commit_undo(char *was, size_t waslen)
+{
+	struct cnode *w, *now = NULL, *after = NULL;
+	int ret = -1;
+
+	if ((w = conftree_mem(was, waslen, "the configuration before",
+	    conf_mode, conf_ordered)) != NULL &&
+	    (now = running_tree()) != NULL) {
+		apply(now, w);
+		if ((after = running_tree()) != NULL)
+			ret = commit_back(after, w);
+	}
+	conftree_free(after);
+	conftree_free(now);
+	conftree_free(w);
+	return ret;
+}
+
+/*
  * Does configuration text now read as text want, as commit_took() reads
  * them? 1 if it does, 0 if not, -1 if either could not be read, after
  * saying why
@@ -301,38 +355,6 @@ commit_reads(char *now, size_t nowlen, char *want, size_t wantlen)
 		ret = commit_took(n, w);
 	conftree_free(n);
 	conftree_free(w);
-	return ret;
-}
-
-/*
- * Roll back an unconfirmed commit, as nshd's system does: make the
- * running configuration read as back's text. 0 if so, else -1 after
- * saying why
- */
-int
-commit_recover(char *back, size_t backlen)
-{
-	struct cnode *b, *now = NULL, *after = NULL;
-	int ret = -1;
-
-	if ((b = conftree_mem(back, backlen, "the configuration before",
-	    conf_mode, conf_ordered)) == NULL)
-		return -1;
-	if ((now = running_tree()) != NULL &&
-	    (conftree_compare(NULL, now, b) == 0 || apply(now, b) != -1) &&
-	    (after = running_tree()) != NULL) {
-		if (commit_took(after, b)) {
-			printf("%% Commit not confirmed: rolled back\n");
-			ret = 0;
-		} else {
-			printf("%% Commit not confirmed: rolled back, but the "
-			    "running configuration differs from how it was\n");
-			differ(stdout, after, b);
-		}
-	}
-	conftree_free(after);
-	conftree_free(now);
-	conftree_free(b);
 	return ret;
 }
 

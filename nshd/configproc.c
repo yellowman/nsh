@@ -73,24 +73,26 @@
  *
  * Commits run one at a time, for all sessions: config plans a commit from
  * a snapshot, system tests the daemons' rules it changes (TEST), then
- * records it (BEGIN), runs its script (APPLY) and, if a snapshot after
- * matches the candidate, saves the running configuration (SAVE); if not,
- * it runs the rollback script, and the record goes (RECORD). Once system
- * has begun it, it runs to its end if its session goes; system does not
- * begin it once the session's client has gone. commit check stops after
- * the tests. commit confirmed passes its minutes to BEGIN, so system also
- * keeps an unconfirmed commit record, and runs its script even if it is
- * empty; then, if a snapshot matches the candidate, the commit's record
- * goes, and the running configuration stays until the deadline, not
- * saved. A commit that saves confirms it. A commit outside configure only
- * saves the running configuration, as one that changes nothing does;
- * check and confirmed are configure's.
+ * records it (BEGIN) and runs its script (APPLY). As part of APPLY,
+ * system checks that what runs is then the candidate, and undoes the
+ * script if it is not. config takes a snapshot after APPLY, for the
+ * candidate to start again from. If what runs is the candidate, system
+ * saves the running configuration (SAVE); if not, the record goes
+ * (RECORD). Once system has begun a commit, it runs to its end if its
+ * session goes; system does not begin it once the session's client has
+ * gone. commit check stops after the tests. commit confirmed passes its
+ * minutes to BEGIN, so system also keeps an unconfirmed commit record,
+ * and runs its script even if it is empty; then, if what runs is the
+ * candidate, the commit's record goes, and the running configuration
+ * stays until the deadline, not saved. A commit that saves confirms it.
+ * A commit outside configure only saves the running configuration, as
+ * one that changes nothing does; check and confirmed are configure's.
  *
  * configure terminal gives the session its own candidate, reset to the
  * running configuration from a new snapshot before each line. A line that
  * changes the candidate is committed but not saved, and the commit record
- * goes once a later snapshot matches the candidate (RECORD, as
- * NSHD_APPLIED). The line is answered when its commit ends, and the
+ * goes once what runs is the candidate (RECORD, as NSHD_APPLIED). The
+ * line is answered when its commit ends, and the
  * candidate is then the running configuration again. commit there saves
  * the running configuration; rollback has nothing to roll back.
  *
@@ -236,11 +238,9 @@ enum {
 	COMMIT_PLAN,		/* a snapshot, to plan from */
 	COMMIT_TEST,		/* a daemon's test of its rules */
 	COMMIT_BEGIN,		/* the record made */
-	COMMIT_APPLY,		/* the script run */
-	COMMIT_VERIFY,		/* a snapshot, to verify */
+	COMMIT_APPLY,		/* the script run, undone if it did not take */
+	COMMIT_RAN,		/* a snapshot of what runs then */
 	COMMIT_SAVE,		/* the running configuration, to save */
-	COMMIT_UNDO,		/* the rollback script run */
-	COMMIT_BACK,		/* a snapshot, to verify that */
 	COMMIT_RECORD,		/* the record removed, as how says */
 	BOOT_BEGIN,		/* the boot begun, or done already */
 	BOOT_SAVED,		/* the saved configuration, to boot to */
@@ -255,7 +255,7 @@ struct commit {
 	int			 waits;		/* on a snapshot */
 	int			 check;		/* commit check */
 	int			 test;		/* the plan's test running */
-	int			 failed;	/* a line of the script failed */
+	int			 ran;		/* how APPLY ended */
 	int			 minutes;	/* for commit confirmed, or 0 */
 	int			 save;		/* outside configure: a save */
 	int			 terminal;	/* configure terminal's line, */
@@ -402,7 +402,7 @@ static void		 commit_ended(int32_t);
 static void		 commit_test(int);
 static void		 commit_go(void);
 static int		 commit_part(int32_t, const char *, size_t);
-static void		 commit_apply(int);
+static void		 commit_apply(void);
 static void		 commit_save(void);
 static void		 commit_record(int);
 static void		 commit_new(struct session *);
@@ -2609,7 +2609,6 @@ static void
 commit_snapshot(void)
 {
 	struct session		*sp;
-	int			 r;
 
 	commit->waits = 0;
 	switch (commit->step) {
@@ -2627,26 +2626,16 @@ commit_snapshot(void)
 		else
 			commit_go();
 		break;
-	case COMMIT_VERIFY:
-		if (commit->boot)
-			boot_ran(session_boot_verify(commit->plan,
-			    commit->failed) == 0);
-		else if ((r = session_verify(commit->plan,
-		    commit->failed)) == 0) {
+	case COMMIT_RAN:
+		/* how system's APPLY ended; if neither, the record says so */
+		if (commit->ran == 0) {
 			if (commit->minutes > 0)
 				commit_record(NSHD_KEPT);
 			else if (commit->terminal)
 				commit_record(NSHD_APPLIED);
 			else
 				commit_save();
-		} else if (r == 1)
-			commit_apply(COMMIT_UNDO);
-		else
-			commit_end(-1, NULL);
-		break;
-	case COMMIT_BACK:
-		/* if not, the record says it did not finish */
-		if (session_verify_back(commit->plan) == 0)
+		} else if (commit->ran == NSHD_UNDONE)
 			commit_record(NSHD_BACK);
 		else
 			commit_end(-1, NULL);
@@ -2690,7 +2679,7 @@ commit_ended(int32_t status)
 		if (commit->test + 1 < commit->plan->ntests)
 			commit_test(commit->test + 1);
 		else if (commit->boot)
-			commit_apply(COMMIT_APPLY);
+			commit_apply();
 		else if (session_verdict(commit->plan) == -1)
 			commit_end(-1, NULL);
 		else if (commit->check)
@@ -2705,15 +2694,17 @@ commit_ended(int32_t status)
 			commit->begun = 1;
 			if (commit->logins)
 				front_end_all();
-			commit_apply(COMMIT_APPLY);
+			commit_apply();
 		}
 		break;
 	case COMMIT_APPLY:
-		commit->failed = status != 0;
-		commit_wait(COMMIT_VERIFY);
-		break;
-	case COMMIT_UNDO:
-		commit_wait(COMMIT_BACK);
+		/* a commit's candidate starts again from the snapshot */
+		if (commit->boot)
+			boot_ran(status == 0);
+		else {
+			commit->ran = status;
+			commit_wait(COMMIT_RAN);
+		}
 		break;
 	case COMMIT_SAVE:
 		/* the change is in effect: reset the candidate, saved or not */
@@ -2837,13 +2828,16 @@ commit_part(int32_t part, const char *text, size_t len)
 	return (0);
 }
 
-/* the plan's script, run by system, at step */
+/*
+ * the plan's script, run by system, with the configuration it wants and,
+ * for a commit, the one before, to undo it to if it does not take
+ */
 static void
-commit_apply(int step)
+commit_apply(void)
 {
 	struct nshd_apply	 a;
 	struct plan		*p = commit->plan;
-	int			 i;
+	int			 i, r;
 
 	memset(&a, 0, sizeof(a));
 	a.nclears = p->nclears;
@@ -2856,7 +2850,15 @@ commit_apply(int step)
 	if (commit_part(NSHD_SCRIPT, p->text[PLAN_EDITS],
 	    p->len[PLAN_EDITS]) == -1)
 		return;
-	commit_request(step, IMSG_SYS_APPLY, &a, sizeof(a));
+	if (commit->boot)
+		r = commit_part(NSHD_WANT, commit->saved, commit->savedlen);
+	else if ((r = commit_part(NSHD_WANT, p->text[PLAN_WANT],
+	    p->len[PLAN_WANT])) == 0)
+		r = commit_part(NSHD_BEFORE, p->text[PLAN_BEFORE],
+		    p->len[PLAN_BEFORE]);
+	if (r == -1)
+		return;
+	commit_request(COMMIT_APPLY, IMSG_SYS_APPLY, &a, sizeof(a));
 }
 
 /* the running configuration, saved by system with the commit's comment */
@@ -3035,7 +3037,7 @@ boot_plan(void)
 	else if (p->ntests > 0)
 		commit_test(0);
 	else
-		commit_apply(COMMIT_APPLY);
+		commit_apply();
 }
 
 /* the boot ran, ok if it went well: system records how */

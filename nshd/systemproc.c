@@ -63,8 +63,11 @@
  *
  * config sends a commit's requests in order. First come the parts that
  * BEGIN, APPLY and TEST use, sent in chunks. BEGIN writes the commit record,
- * APPLY runs the script, and SAVE saves the running configuration and
- * removes the commit record. RECORD reports how the commit ended: rolled
+ * APPLY runs the script and then checks that what runs is the
+ * configuration wanted; in a commit, if it is not, APPLY undoes the
+ * script, to the configuration before, in a job of its own. SAVE saves
+ * the running configuration and removes the commit record. RECORD
+ * reports how the commit ended: rolled
  * back to how it was, an unconfirmed commit kept until its deadline, or
  * a configure terminal commit applied and kept without being saved.
  * BEGIN refuses such a configure terminal commit while an unconfirmed
@@ -72,10 +75,11 @@
  * it back too. TEST, which runs a daemon's test of its rules, comes
  * before BEGIN.
  *
- * An apply, a save and a test each run as a job: a child of system in
- * its own process group, whose output is sent as it arrives. If a job
- * runs past its time limit, its group gets SIGTERM, then SIGKILL after a
- * grace period, and the job fails. A test runs as NSHD_CHECK_USER, with
+ * An apply, an undo, a save and a test each run as a job: a child of
+ * system in its own process group, whose output is sent as it arrives.
+ * If a job runs past its time limit, its group gets SIGTERM, then
+ * SIGKILL after a grace period, and the job fails. A test runs as
+ * NSHD_CHECK_USER, with
  * its rules staged in a directory of its own. The daemons listed in
  * root_tests are exceptions: their tests keep root, and their rules are
  * root's. SAVE writes the running configuration to SAVED, whole and on
@@ -129,9 +133,9 @@
  * restarted during the boot finds the record and does not demote carp
  * again. If this host boot is already done, system reports that, and
  * the boot does not run again. config then requests the saved
- * configuration (SAVED) and a snapshot, runs the tests, runs the script
- * (APPLY), and requests another snapshot. Then BOOTED reports whether
- * the running configuration is the saved configuration. If it is, the
+ * configuration (SAVED) and a snapshot, runs the tests, and runs the
+ * script (APPLY), which says whether the running configuration is then
+ * the saved configuration. BOOTED reports that. If it is, the
  * record says the boot is done, carp is promoted if it was demoted for
  * the boot, and any unconfirmed commit record is removed. If not, the
  * record says the boot failed, and carp stays demoted until a commit
@@ -263,14 +267,15 @@
 #endif
 
 /*
- * A job: an apply, a save, a test or a recover, and how long it may run,
- * then the grace between SIGTERM and SIGKILL. These are not measured;
+ * A job: an apply, a save, a test, a recover or an undo, and how long it
+ * may run, then the grace between SIGTERM and SIGKILL. These are not measured;
  * each should be measured on OpenBSD with a full table
  */
 #define JOB_APPLY	0
 #define JOB_SAVE	1
 #define JOB_TEST	2
 #define JOB_RECOVER	3
+#define JOB_UNDO	4
 static const struct {
 	const char	*what;
 	int		 secs;
@@ -280,6 +285,7 @@ static const struct {
 	{ "save",	300,	10 },	/* conf(), and the save script */
 	{ "test",	120,	5 },	/* a validation: bgpd -n on a full table */
 	{ "recover",	900,	10 },	/* rollback of an unconfirmed commit */
+	{ "undo",	900,	10 },	/* rollback of a commit not taken */
 };
 
 /* rollback attempts for an unconfirmed commit, and seconds between them */
@@ -347,6 +353,10 @@ struct job {
 	struct nshd_apply	*apply;
 	char			*back;		/* rollback configuration */
 	size_t			 backlen;
+	char			*want;		/* what an apply wants, */
+	size_t			 wantlen;
+	char			*was;		/* and what ran before it */
+	size_t			 waslen;
 	char			 who[64];	/* a save's user and comment */
 	char			 comment[NSHD_COMMENT];
 	char			*args[NOPTFILL];	/* a test's */
@@ -2497,7 +2507,13 @@ system_running(size_t *len)
 	return (buf);
 }
 
-/* the script, the part sent, in a job */
+/*
+ * The script, the part sent, in a job, which then says whether what runs
+ * is the configuration wanted, the part sent too. A commit's that is not
+ * is undone, to the configuration before, in a job of its own
+ * (system_job_done()): the answer is 0 if what runs is what was wanted,
+ * NSHD_UNDONE if it is as it was again, else -1
+ */
 static void
 system_apply(uint32_t id, struct nshd_apply *a)
 {
@@ -2511,6 +2527,11 @@ system_apply(uint32_t id, struct nshd_apply *a)
 	}
 	j = system_job_new(id, JOB_APPLY);
 	j->apply = a;
+	j->want = parts[NSHD_WANT];
+	j->wantlen = partlen[NSHD_WANT];
+	j->was = parts[NSHD_BEFORE];
+	j->waslen = partlen[NSHD_BEFORE];
+	parts[NSHD_WANT] = parts[NSHD_BEFORE] = NULL;
 	system_job(j);
 	system_parts_free();
 }
@@ -3011,6 +3032,12 @@ system_job_child(int fd, struct job *j)
 		    commit_beforelen);
 		/* -1, it could not run; 1, a line of it failed */
 		r = script_run(&sc);
+		/* then whether what runs is what was wanted; the boot's too */
+		r = commit_verify(j->want, j->wantlen, r != 0, !committing);
+		break;
+	case JOB_UNDO:
+		admin_begin(!commit_admin, commit_before, commit_beforelen);
+		r = commit_undo(j->was, j->waslen) == 0 ? 0 : 1;
 		break;
 	case JOB_SAVE:
 		if ((r = saved_write()))
@@ -3018,7 +3045,10 @@ system_job_child(int fd, struct job *j)
 		r = !r;
 		break;
 	case JOB_RECOVER:
-		r = commit_recover(j->back, j->backlen) == 0 ? 0 : 1;
+		/* a rollback is an undo, to the rollback configuration */
+		r = commit_undo(j->back, j->backlen) == 0 ? 0 : 1;
+		if (r == 0)
+			printf("%% Commit not confirmed: rolled back\n");
 		break;
 	default:
 		if (!j->root)
@@ -3091,7 +3121,7 @@ system_job_late(int fd, short event, void *arg)
 static void
 system_job_done(void)
 {
-	struct job	*j = job;
+	struct job	*j = job, *u;
 	int32_t		 status = -1;
 
 	if (j->fd != -1 || j->pid != 0)
@@ -3106,7 +3136,17 @@ system_job_done(void)
 	if (j->kind == JOB_RECOVER) {
 		printed_log();
 		system_attempted(status == 0);
+	} else if (j->kind == JOB_APPLY && committing && status != 0) {
+		/* what was printed goes to config before the undo's */
+		printed_text(links[CONFIG].iev, IMSG_SYS_TEXT, j->id, 0);
+		u = system_job_new(j->id, JOB_UNDO);
+		u->was = j->was;
+		u->waslen = j->waslen;
+		j->was = NULL;
+		system_job(u);
 	} else {
+		if (j->kind == JOB_UNDO)
+			status = status == 0 ? NSHD_UNDONE : -1;
 		if (j->kind == JOB_SAVE && system_saved(status == 0) == -1)
 			status = -1;
 		system_printed(j->id, status);
@@ -3125,6 +3165,8 @@ system_job_free(struct job *j)
 		unlink(j->path);
 	if (j->dir[0] != '\0')
 		rmdir(j->dir);
+	free(j->want);
+	free(j->was);
 	free(j);
 }
 

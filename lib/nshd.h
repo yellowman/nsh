@@ -229,8 +229,8 @@ struct nshd_chunk {
 	int32_t		part;
 };
 #define NSHD_SCRIPT	0	/* the edits APPLY runs, or the rules TEST tests */
-#define NSHD_BEFORE	1	/* for BEGIN: the running configuration */
-#define NSHD_WANT	2	/* for BEGIN: the candidate */
+#define NSHD_BEFORE	1	/* BEGIN, APPLY: what runs before */
+#define NSHD_WANT	2	/* BEGIN, APPLY: the candidate */
 #define NSHD_PARTS	3
 
 /*
@@ -286,7 +286,11 @@ struct nshd_record {
 #define NSHD_LEFT	2	/* the records left as they are */
 #define NSHD_APPLIED	3	/* configure terminal: applied, not saved */
 
-/* config to system: run the script, and empty these daemons' rules */
+/*
+ * config to system: run the script, and empty these daemons' rules; then
+ * see that what runs is the configuration wanted, and in a commit undo
+ * the script if it is not
+ */
 struct nshd_apply {
 	int32_t		nclears;
 	struct {
@@ -295,6 +299,8 @@ struct nshd_apply {
 		int32_t	keep;	/* empty before the script, else remove after */
 	}		clears[NSHD_CLEARS];
 };
+/* APPLY's answer, if not 0: what runs was not wanted, and is as it was */
+#define NSHD_UNDONE	2
 
 /* config to system: save the running configuration, with the comment */
 struct nshd_save {

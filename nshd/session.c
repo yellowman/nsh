@@ -490,51 +490,6 @@ session_logins(struct plan *p)
 }
 
 /*
- * Does the running configuration, the last snapshot's, read as p's
- * candidate, and no line of the script failed? 0 if so; else what did
- * not take is printed, and p's script becomes one that rolls back to how
- * it was: 1, or -1 if it could not be made, after saying why
- */
-int
-session_verify(struct plan *p, int failed)
-{
-	struct cnode *now;
-	int r = -1;
-
-	if ((now = running_tree()) == NULL)
-		return -1;
-	if (!failed && commit_took(now, p->want)) {
-		conftree_free(now);
-		return 0;
-	}
-	commit_untaken(now, p->want, failed);
-	conftree_free(now);
-	/* differ() changed now, so make the script from a fresh copy */
-	if ((now = running_tree()) != NULL &&
-	    plan_script(p, now, p->was) == 0)
-		r = 1;
-	conftree_free(now);
-	return r;
-}
-
-/*
- * Whether the running configuration, the last snapshot's, is as it was
- * before p ran, said either way: 0 if so, else -1
- */
-int
-session_verify_back(struct plan *p)
-{
-	struct cnode *back;
-	int r;
-
-	if ((back = running_tree()) == NULL)
-		return -1;
-	r = commit_back(back, p->was);
-	conftree_free(back);
-	return r;
-}
-
-/*
  * The boot's plan: the running configuration, the last snapshot's, made
  * to read as text, the saved configuration, as far as it succeeds. What
  * check finds is printed, and the daemons' tests of rules are the
@@ -567,24 +522,6 @@ session_boot_plan(char *text, size_t len, struct plan **pp)
 	}
 	*pp = p;
 	return 0;
-}
-
-/*
- * Does the running configuration, the last snapshot's, read as the
- * boot's, and no line of its script failed? 0 if so, else 1 after
- * printing what differs, or -1 if it could not be read
- */
-int
-session_boot_verify(struct plan *p, int failed)
-{
-	struct cnode *now;
-	int r;
-
-	if ((now = running_tree()) == NULL)
-		return -1;
-	r = commit_booted(now, p->want) == -1 || failed;
-	conftree_free(now);
-	return r;
 }
 
 void

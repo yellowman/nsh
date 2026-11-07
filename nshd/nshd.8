@@ -158,16 +158,17 @@ Commits run one at a time, across all the sessions.
 config plans a commit from a snapshot and checks it.
 Then config has system test the daemons' rules that the commit changes,
 record the commit, and run its script.
-If a snapshot taken afterwards matches the candidate, system saves the
-running configuration; if not, system runs a script that rolls the
-changes back.
+system then checks that the running configuration is the candidate, and
+that no line of the script failed.
+If so, system saves the running configuration; if not, system runs a
+script that rolls the changes back, in a job of its own, and checks
+that the running configuration is again what it was.
 .Cm commit check
 stops after the tests.
 .Cm commit confirmed
 runs its script even if the candidate is the running configuration.
-If a snapshot taken afterwards matches the candidate, the running
-configuration stays in place, not saved, until the deadline; a commit
-that saves confirms it.
+If the running configuration is then the candidate, it stays in place,
+not saved, until the deadline; a commit that saves confirms it.
 A commit outside configure only has system save the running
 configuration.
 In
