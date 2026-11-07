@@ -98,6 +98,7 @@ int			 session_plan(struct session_state *, int, int,
 			    struct plan **);
 void			 session_tested(struct plan *, int, int);
 int			 session_verdict(struct plan *);
+int			 session_logins(struct plan *);
 int			 session_verify(struct plan *, int);
 int			 session_verify_back(struct plan *);
 void			 plan_free(struct plan *);

@@ -469,6 +469,26 @@ session_verdict(struct plan *p)
 	return commit_verdict(p->bad, p->checking);
 }
 
+/* Whether a login statement of a, a class or a user, is not in b */
+static int
+logins_in(struct cnode *a, struct cnode *b)
+{
+	char	*s;
+	size_t	 i;
+
+	for (i = 0; (s = conftree_stmt(a, i)) != NULL; i++)
+		if (strncmp(s, "login ", 6) == 0 && !conftree_has(b, s))
+			return 1;
+	return 0;
+}
+
+/* Whether p changes login users or classes */
+int
+session_logins(struct plan *p)
+{
+	return logins_in(p->want, p->was) || logins_in(p->was, p->want);
+}
+
 /*
  * Does the running configuration, the last snapshot's, read as p's
  * candidate, and no line of the script failed? 0 if so; else what did

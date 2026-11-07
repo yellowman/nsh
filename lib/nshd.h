@@ -446,7 +446,10 @@ enum nshd_imsg {
 
 	/* a stage, as one request */
 	IMSG_CTL_STAGE,		/* nshd_stage; output and STAGED, each line */
-	IMSG_CTL_STAGED		/* nshd_staged, after the line's output */
+	IMSG_CTL_STAGED,	/* nshd_staged, after the line's output */
+
+	/* system to config: a rollback of an unconfirmed commit runs */
+	IMSG_SYS_ROLLING	/* nshd_result: 1 as it begins, 0 as it ends */
 };
 
 struct imsgev {

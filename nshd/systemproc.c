@@ -560,6 +560,7 @@ static void	confirm_retry(void);
 static void	system_taken(struct confirm *, const char *);
 static void	system_failed(struct confirm *);
 static void	system_went(int);
+static void	system_rolling(int);
 static char	*system_running(size_t *);
 static void	system_rollback(uint32_t, int, int);
 static void	system_health(void);
@@ -2547,6 +2548,7 @@ system_recover(struct confirm *cf)
 		logit(LOG_CRIT, "the record of a commit not confirmed: %s",
 		    strerror(errno));
 	printed_log();
+	system_rolling(1);
 	j = system_job_new(0, JOB_RECOVER);
 	j->back = cf->back;
 	j->backlen = cf->backlen;
@@ -2566,6 +2568,7 @@ system_attempted(int ok)
 	struct confirm	 cf;
 	int		 serrno;
 
+	system_rolling(0);
 	if (confirm_read(&cf, 1) == -1) {
 		serrno = errno;
 		logit(LOG_CRIT, "the record of a commit not confirmed: %s",
@@ -2634,6 +2637,21 @@ system_went(int failed)
 	nt.n = failed;
 	if (links[CONFIG].iev != NULL && link_compose(&links[CONFIG],
 	    IMSG_SYS_NOTICE, 0, &nt, sizeof(nt)) == -1)
+		fatal("%s", __func__);
+}
+
+/*
+ * To config: a rollback begins, so every session ends and none is taken,
+ * since it may change login users or classes; or it has ended
+ */
+static void
+system_rolling(int on)
+{
+	struct nshd_result	 res;
+
+	res.status = on;
+	if (links[CONFIG].iev != NULL && link_compose(&links[CONFIG],
+	    IMSG_SYS_ROLLING, 0, &res, sizeof(res)) == -1)
 		fatal("%s", __func__);
 }
 

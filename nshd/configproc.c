@@ -263,6 +263,7 @@ struct commit {
 	int			 load;		/* nsh -c's configuration */
 	int			 how;		/* the NSHD_* sent in RECORD */
 	int			 begun;		/* BEGIN done, not yet ended */
+	int			 logins;	/* changes login lines */
 	int			 shared;	/* of the shared candidate */
 	int			 boot;		/* this is the boot */
 	int			 unrecorded;	/* system could not record it */
@@ -290,6 +291,7 @@ static uint32_t			request_id;
 static struct snapshot		*snap;
 static struct kfacts		*kf_now;	/* facts of the last snapshot */
 static struct commit		*commit;	/* the one running, or NULL */
+static int			 rolling;	/* system rolls a commit back */
 static struct cand_shared	*shared;	/* configure's candidate */
 static struct session		*exclusive;	/* in configure exclusive */
 static uid_t			*editors;	/* who changed shared since */
@@ -327,6 +329,7 @@ static int		 front_fd(uint32_t, uint32_t, int);
 static void		 front_check(void);
 static void		 front_sweep(int, short, void *);
 static void		 front_drop(struct front *);
+static void		 front_end_all(void);
 static void		 config_dispatch_system(int, short, void *);
 static void		 config_dispatch_archive(int, short, void *);
 static void		 config_ready_archive(void);
@@ -502,7 +505,8 @@ config_dispatch_parent(int fd, short event, void *arg)
 
 /*
  * A new session from parent, and fd, the pipe to its frontend: parent is
- * told config took it, or did not
+ * told config took it, or did not. None is taken while login users or
+ * classes may change (front_end_all())
  */
 static void
 front_new(struct nshd_newsession *ns, int fd)
@@ -512,7 +516,8 @@ front_new(struct nshd_newsession *ns, int fd)
 
 	memset(&t, 0, sizeof(t));
 	t.session = ns->session;
-	if (ns->session == 0 || front_find(ns->session) != NULL ||
+	if (ns->session == 0 || front_find(ns->session) != NULL || rolling ||
+	    (commit != NULL && commit->logins) ||
 	    (f = calloc(1, sizeof(*f))) == NULL) {
 		close(fd);
 		t.status = 1;
@@ -663,6 +668,26 @@ front_drop(struct front *f)
 	close(f->iev->ibuf.fd);
 	free(f->iev);
 	free(f);
+}
+
+/*
+ * Every session ends, as login users or classes may change: a commit
+ * that changes them is about to run its script, or system rolls back an
+ * unconfirmed commit. A session keeps the permissions it began with, so
+ * none goes on with permissions its class may no longer have. Its
+ * frontend's pipe is closed, so nothing more reaches it, and a commit it
+ * began runs on. No session is taken until the change is done
+ */
+static void
+front_end_all(void)
+{
+	struct front	*f;
+
+	if (!TAILQ_EMPTY(&fronts))
+		log_info("every session ends: login users or classes may "
+		    "change");
+	while ((f = TAILQ_FIRST(&fronts)) != NULL)
+		front_drop(f);
 }
 
 /*
@@ -962,6 +987,15 @@ config_dispatch_system(int fd, short event, void *arg)
 				goto bad;
 			config_notice(NSHD_WATCH_COMMITS, NSHD_NOTICE_BACK, 0,
 			    nt.n, NULL);
+			break;
+		case IMSG_SYS_ROLLING:
+			/* a rollback begins, or has ended */
+			if (imsg_get_data(&imsg, &res, sizeof(res)) == -1 ||
+			    (res.status != 0 && res.status != 1))
+				goto bad;
+			rolling = res.status;
+			if (rolling)
+				front_end_all();
 			break;
 		case IMSG_SYS_LOGGED:
 			/* whom a web session logged in as: it is that uid */
@@ -2665,6 +2699,8 @@ commit_ended(int32_t status)
 			commit_end(-1, NULL);
 		else {
 			commit->begun = 1;
+			if (commit->logins)
+				front_end_all();
 			commit_apply(COMMIT_APPLY);
 		}
 		break;
@@ -2730,12 +2766,34 @@ commit_go(void)
 {
 	struct plan		*p = commit->plan;
 	struct nshd_begin	 b;
+	struct session		*sp;
 
+	/*
+	 * A commit whose session is gone is not begun, as nothing is left
+	 * to judge its permissions by
+	 */
+	if ((sp = session_find(commit->session)) == NULL) {
+		commit_end(-1, NULL);
+		return;
+	}
 	if (p->same && commit->minutes == 0) {
 		if (commit->terminal)
 			commit_end(0, NULL);
 		else
 			commit_save();
+		return;
+	}
+	/*
+	 * Before its script, a commit that changes login users or classes
+	 * ends every session (front_end_all()). system refuses the change
+	 * from a session without admin as the script runs, so refuse it
+	 * now, before system has any part of it, or such a session could
+	 * end every other one
+	 */
+	commit->logins = session_logins(p);
+	if (commit->logins && (sp->perms & NSHD_ADMIN) == 0) {
+		commit_end(-1, "% Commit refused: changing login classes and "
+		    "users needs the admin permission\n");
 		return;
 	}
 	if (commit_part(NSHD_BEFORE, p->text[PLAN_BEFORE],

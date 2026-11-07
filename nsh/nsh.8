@@ -788,6 +788,20 @@ unchanged.
 No line may name root or any other account with uid 0, which is always
 super-user, or an account whose name begins with an underscore, since
 those belong to daemons.
+.Pp
+A commit that changes
+.Cm login class
+or
+.Cm login user
+lines ends every nshd session once it begins, the committing session
+included, and nshd takes no session until the commit ends.
+A rollback of an unconfirmed commit ends every session the same way.
+Each user's session then has the permissions of the user's class as it
+is after the change.
+.Nm
+connects again for its next command, outside configure;
+.Ic show rollback
+says how the commit went.
 .Bl -dash
 .It
 e.g. Let alice, who has no account, operate and configure the system:

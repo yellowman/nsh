@@ -124,6 +124,17 @@ line.
 The web configurator's session has no permissions until it logs in.
 It then becomes the session of the user it logged in as, with that
 user's uid and the permissions of the user's class.
+A session keeps the permissions it has after its hello, or its login,
+until it ends.
+A commit that changes login users or classes ends every session before
+its script runs, its own included, and nshd takes no session until the
+commit ends.
+The commit runs to its end, and
+.Cm show rollback
+says how it went.
+A rollback of an unconfirmed commit ends every session the same way,
+whatever lines it changes.
+A client then connects again, with the permissions its class has then.
 A session in
 .Cm configure private
 has a candidate of its own; the sessions in
