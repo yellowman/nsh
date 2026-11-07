@@ -244,8 +244,11 @@
 #define SYS_WINDOW	16	/* messages a stream sends its client unread */
 #define SYS_OPWORDS	32	/* an operation's words, at most */
 #define SYS_TERMINALS	64	/* web logins' terminals at once, at most */
-/* descriptors kept free of sessions: streams, commits, files */
-#define SYS_RESERVE	(SYS_STREAMS + 16)
+#define SYS_AUTHS	4	/* web logins checked at once, at most */
+#define AUTH_SECS	30	/* a web login's check, at most */
+#define AUTH_GRACE	2	/* after SIGTERM, before SIGKILL */
+/* descriptors kept free of sessions: streams, logins, commits, files */
+#define SYS_RESERVE	(SYS_STREAMS + SYS_AUTHS + 16)
 #define CLIENT_LOOK	1	/* seconds between looks at the clients */
 
 /*
@@ -416,6 +419,28 @@ struct login {
 	uid_t			 uid;
 };
 
+/*
+ * A web login being checked, in a child of its own (system_login()). It
+ * counts until its child is reaped and its pipe is read to its end,
+ * even once it is answered
+ */
+struct attempt {
+	TAILQ_ENTRY(attempt)	 entry;
+	uint32_t		 id;		/* its request */
+	uint32_t		 session;
+	char			 name[NSHD_NAME];	/* the user's */
+	pid_t			 pid;		/* its child's, 0 once reaped */
+	pid_t			 pgid;		/* the child's process group */
+	int			 status;	/* the child's, once reaped */
+	int			 fd;		/* its result; -1 at its end */
+	int32_t			 uid;		/* the result: a uid, or -1 */
+	size_t			 got;		/* bytes of it read */
+	int			 answered;
+	int			 killed;	/* its group's last signal */
+	struct event		 ev;
+	struct event		 tm;		/* its time, then the grace */
+};
+
 /* the boot record: the boot of the host it is for, how it went, carp */
 enum { BOOT_NONE, BOOT_RUNS, BOOT_FAILED, BOOT_DONE };
 static const char *boot_states[] = { "none", "runs", "failed", "done" };
@@ -453,6 +478,7 @@ static int		 booting;	/* from BOOT until BOOTED */
 static int		 boot_over;	/* not booting, or BOOTED came */
 static TAILQ_HEAD(, asked) askeds = TAILQ_HEAD_INITIALIZER(askeds);
 static TAILQ_HEAD(, login) logins = TAILQ_HEAD_INITIALIZER(logins);
+static TAILQ_HEAD(, attempt) attempts = TAILQ_HEAD_INITIALIZER(attempts);
 static TAILQ_HEAD(, client) clients = TAILQ_HEAD_INITIALIZER(clients);
 static struct event	 confirm_tm;	/* the deadline, or the next attempt */
 static struct event	 look_tm;	/* the next look at the clients */
@@ -475,6 +501,13 @@ static int	system_whom(struct asked *, uid_t *);
 static int	system_perms(uint32_t);
 static void	system_read_front(uint32_t);
 static void	system_login(uint32_t, struct nshd_syslogin *);
+static __dead void system_auth_child(int, struct nshd_syslogin *);
+static void	system_auth_read(int, short, void *);
+static void	system_auth_late(int, short, void *);
+static void	system_auth_stop(struct attempt *, const char *);
+static void	system_auth_reap(struct attempt *);
+static void	system_auth_done(struct attempt *);
+static void	system_auth_answer(struct attempt *);
 static void	system_terminal(uint32_t, struct nshd_systerm *);
 static __dead void system_term_child(int, struct passwd *);
 static int	system_whole(uint32_t, const void *, size_t);
@@ -698,15 +731,18 @@ system_dispatch_config(int fd, short event, void *arg)
 			return;
 		}
 		/*
-		 * what a stream's client read, stopping a stream, and a new
-		 * session's permissions do not wait
+		 * what a stream's client read, stopping a stream, a new
+		 * session's permissions and a login do not wait
 		 */
 		if (type == IMSG_SYS_READ || type == IMSG_SYS_STOP ||
-		    type == IMSG_SYS_PERMS ||
+		    type == IMSG_SYS_PERMS || type == IMSG_SYS_LOGIN ||
 		    (job == NULL && TAILQ_EMPTY(&queue)))
 			r = system_request(type, id, data, len);
 		else
 			system_queue(type, id, data, len);
+		/* a login's password is kept nowhere */
+		if (type == IMSG_SYS_LOGIN && data != NULL)
+			explicit_bzero(ibuf_data(&b), ibuf_size(&b));
 		imsg_free(&imsg);
 		if (r == -1) {
 			link_broken(&links[CONFIG], "sent a part past %d bytes",
@@ -901,6 +937,7 @@ client_drop(struct client *cl)
 {
 	struct asked	*k;
 	struct login	*l;
+	struct attempt	*a;
 
 	if (imsg_compose_event(iev_parent, IMSG_SESSION_GONE, cl->session, 0,
 	    -1, NULL, 0) == -1)
@@ -909,6 +946,12 @@ client_drop(struct client *cl)
 		TAILQ_REMOVE(&logins, l, entry);
 		free(l);
 	}
+	/* a login it began is not checked on */
+	TAILQ_FOREACH(a, &attempts, entry)
+		if (a->session == cl->session) {
+			system_auth_stop(a, "");
+			break;
+		}
 	if ((k = asked_find(cl->session)) != NULL)
 		asked_free(k);
 	TAILQ_REMOVE(&clients, cl, entry);
@@ -1155,6 +1198,7 @@ system_request(uint32_t type, uint32_t id, const void *data, size_t len)
 	struct nshd_follow	 f;
 	struct nshd_systerm	 st;
 	struct stream		*s;
+	struct attempt		*at;
 
 	switch (type) {
 	case IMSG_SYS_SNAPSHOT:
@@ -1174,6 +1218,11 @@ system_request(uint32_t type, uint32_t id, const void *data, size_t len)
 		TAILQ_FOREACH(s, &streams, entry)
 			if (s->id == id) {
 				system_stream_stop(s);
+				break;
+			}
+		TAILQ_FOREACH(at, &attempts, entry)
+			if (at->id == id) {
+				system_auth_stop(at, "");
 				break;
 			}
 		break;
@@ -1477,15 +1526,18 @@ system_may(int perms, int need, const char *name)
  * names, never root, if the password is the user's (login_auth()); the
  * session then acts as that user, and config takes the user's uid as the
  * session's. The answer is the permissions of the user's login class,
- * or -1, saying why
+ * or -1, saying why. BSD auth may run programs that take their time, so
+ * the check runs in a child of its own, at most AUTH_SECS seconds, and
+ * is answered once it ends (system_auth_answer()). At most SYS_AUTHS
+ * run at once, one for each session, and none waits for another
  */
 static void
 system_login(uint32_t id, struct nshd_syslogin *sl)
 {
-	struct nshd_logged	 lg;
+	struct timeval		 tv = { AUTH_SECS, 0 };
 	struct asked		*k;
-	struct login		*l;
-	int			 uid;
+	struct attempt		*a;
+	int			 fds[2], n = 0;
 
 	printed(NULL);
 	if ((k = asked_whose(&sl->whose)) == NULL || !k->web) {
@@ -1494,22 +1546,225 @@ system_login(uint32_t id, struct nshd_syslogin *sl)
 		return;
 	}
 	asked_free(k);
-	if ((uid = login_auth(sl->login.name, sl->login.password)) == -1) {
-		system_printed(id, -1);
+	TAILQ_FOREACH(a, &attempts, entry) {
+		if (a->session == sl->whose.session) {
+			system_end(id, -1, "%% nshd: this session's last login "
+			    "is still being checked\n");
+			return;
+		}
+		n++;
+	}
+	if (n >= SYS_AUTHS) {
+		system_end(id, -1, "%% nshd: %d logins are being checked; "
+		    "try again soon\n", SYS_AUTHS);
 		return;
 	}
-	if ((l = login_find(sl->whose.session)) == NULL) {
+	if (pipe2(fds, O_CLOEXEC | O_NONBLOCK) == -1) {
+		system_end(id, -1, "%% nshd: pipe: %s\n", strerror(errno));
+		return;
+	}
+	if ((a = calloc(1, sizeof(*a))) == NULL)
+		fatal(NULL);
+	switch (a->pid = fork()) {
+	case -1:
+		system_end(id, -1, "%% nshd: fork: %s\n", strerror(errno));
+		close(fds[0]);
+		close(fds[1]);
+		free(a);
+		return;
+	case 0:
+		close(fds[0]);
+		system_auth_child(fds[1], sl);
+	}
+	/* as the child does, so neither waits on the other */
+	setpgid(a->pid, a->pid);
+	close(fds[1]);
+	a->pgid = a->pid;
+	a->id = id;
+	a->session = sl->whose.session;
+	strlcpy(a->name, sl->login.name, sizeof(a->name));
+	a->fd = fds[0];
+	a->uid = -1;
+	TAILQ_INSERT_TAIL(&attempts, a, entry);
+	event_set(&a->ev, a->fd, EV_READ | EV_PERSIST, system_auth_read, a);
+	event_add(&a->ev, NULL);
+	evtimer_set(&a->tm, system_auth_late, a);
+	evtimer_add(&a->tm, &tv);
+}
+
+/*
+ * The check of a web login, in its own process group, with nothing of
+ * system's but fd, the pipe its result goes to: the login user line's
+ * and the account's checks, and BSD auth's (login_auth()). The result is
+ * the uid, or -1. BSD auth's programs inherit neither fd nor a signal
+ * mask or handler of system's
+ */
+static __dead void
+system_auth_child(int fd, struct nshd_syslogin *sl)
+{
+	sigset_t	 none;
+	int32_t		 uid;
+	int		 null;
+
+	setpgid(0, 0);
+	signal(SIGINT, SIG_DFL);
+	signal(SIGTERM, SIG_DFL);
+	signal(SIGCHLD, SIG_DFL);
+	signal(SIGPIPE, SIG_DFL);
+	signal(SIGHUP, SIG_DFL);
+	sigemptyset(&none);
+	sigprocmask(SIG_SETMASK, &none, NULL);
+	/* the result's pipe is 3; what login_auth() prints goes nowhere */
+	if ((fd != 3 && dup2(fd, 3) == -1) ||
+	    fcntl(3, F_SETFD, FD_CLOEXEC) == -1)
+		_exit(1);
+	closefrom(4);
+	if ((null = open(_PATH_DEVNULL, O_RDWR)) == -1 ||
+	    dup2(null, STDIN_FILENO) == -1 || dup2(null, STDOUT_FILENO) == -1)
+		_exit(1);
+	close(null);
+	uid = login_auth(sl->login.name, sl->login.password);
+	explicit_bzero(sl, sizeof(*sl));
+	if (write(3, &uid, sizeof(uid)) != sizeof(uid))
+		_exit(1);
+	_exit(0);
+}
+
+/* the attempt's result, as its child writes it, then the pipe's end */
+static void
+system_auth_read(int fd, short event, void *arg)
+{
+	struct attempt	*a = arg;
+	char		 buf[sizeof(a->uid) + 1];
+	ssize_t		 n;
+
+	if ((n = read(a->fd, buf, sizeof(buf))) == -1 &&
+	    (errno == EINTR || errno == EAGAIN))
+		return;
+	if (n > 0 && a->got + n <= sizeof(a->uid)) {
+		memcpy((char *)&a->uid + a->got, buf, n);
+		a->got += n;
+		return;
+	}
+	/* its end, an error, or more than a result: no more is read */
+	if (n > 0)
+		system_auth_stop(a, "% Login incorrect\n");
+	event_del(&a->ev);
+	close(a->fd);
+	a->fd = -1;
+	system_auth_reap(a);
+	system_auth_done(a);
+}
+
+/*
+ * The attempt past its time: it fails, whatever its child says later,
+ * and its group is sent SIGTERM, then SIGKILL a grace later
+ */
+static void
+system_auth_late(int fd, short event, void *arg)
+{
+	struct attempt	*a = arg;
+
+	if (!a->killed) {
+		system_auth_stop(a, "% nshd: the login took too long to "
+		    "check\n");
+		return;
+	}
+	/* the child may be gone, and a program it started not */
+	killpg(a->pgid, SIGKILL);
+	a->killed = SIGKILL;
+	if (a->fd != -1) {
+		event_del(&a->ev);
+		close(a->fd);
+		a->fd = -1;
+	}
+	system_auth_reap(a);
+	system_auth_done(a);
+}
+
+/*
+ * The attempt ends now, failed, as msg says, if it is not answered yet:
+ * its group is sent SIGTERM, and SIGKILL a grace later. It counts until
+ * then, and until its child is reaped
+ */
+static void
+system_auth_stop(struct attempt *a, const char *msg)
+{
+	struct timeval	 tv = { AUTH_GRACE, 0 };
+
+	if (!a->answered) {
+		a->answered = 1;
+		system_end(a->id, -1, "%s", msg);
+	}
+	if (a->killed)
+		return;
+	a->killed = SIGTERM;
+	killpg(a->pgid, SIGTERM);
+	evtimer_del(&a->tm);
+	evtimer_add(&a->tm, &tv);
+}
+
+/*
+ * The attempt's child, reaped once its pipe is read to its end, and once
+ * its group has had SIGKILL if it had SIGTERM. Until it is reaped, no
+ * other process can have its pid, so no other group can have the
+ * group's id, and the SIGKILL reaches only what the child started
+ */
+static void
+system_auth_reap(struct attempt *a)
+{
+	if (a->pid == 0 || a->fd != -1 || a->killed == SIGTERM)
+		return;
+	if (waitpid(a->pid, &a->status, WNOHANG) == a->pid)
+		a->pid = 0;
+}
+
+/* once its child is reaped and its pipe read to its end */
+static void
+system_auth_done(struct attempt *a)
+{
+	if (a->pid != 0 || a->fd != -1)
+		return;
+	if (!a->answered)
+		system_auth_answer(a);
+	evtimer_del(&a->tm);
+	TAILQ_REMOVE(&attempts, a, entry);
+	free(a);
+}
+
+/*
+ * A login succeeds only if its child wrote a whole result, a uid, and
+ * exited 0, and if then its session's client is still there and the
+ * user may still log in as that uid. Its permissions are those of the
+ * user's class now
+ */
+static void
+system_auth_answer(struct attempt *a)
+{
+	struct nshd_logged	 lg;
+	struct client		*cl;
+	struct login		*l;
+
+	a->answered = 1;
+	if (a->got != sizeof(a->uid) || a->uid <= 0 ||
+	    !WIFEXITED(a->status) || WEXITSTATUS(a->status) != 0 ||
+	    (cl = client_find(a->session)) == NULL || !client_there(cl) ||
+	    !cl->web || !login_may(a->name, a->uid)) {
+		system_end(a->id, -1, "%% Login incorrect\n");
+		return;
+	}
+	if ((l = login_find(a->session)) == NULL) {
 		if ((l = calloc(1, sizeof(*l))) == NULL)
 			fatal(NULL);
-		l->session = sl->whose.session;
+		l->session = a->session;
 		TAILQ_INSERT_TAIL(&logins, l, entry);
 	}
-	l->uid = uid;
-	lg.uid = uid;
-	if (link_compose(&links[CONFIG], IMSG_SYS_LOGGED, id, &lg,
+	l->uid = a->uid;
+	lg.uid = a->uid;
+	if (link_compose(&links[CONFIG], IMSG_SYS_LOGGED, a->id, &lg,
 	    sizeof(lg)) == -1)
 		fatal("%s", __func__);
-	system_end(id, login_perms(uid), NULL);
+	system_end(a->id, login_perms(a->uid), NULL);
 }
 
 /*
@@ -1962,11 +2217,15 @@ system_stream_done(struct stream *s)
 	free(s);
 }
 
-/* reap the exited children of streams, the job and terminals; no others */
+/*
+ * reap the exited children of streams, the job, terminals and logins'
+ * checks; no others
+ */
 static void
 system_sigchld(int sig, short event, void *arg)
 {
 	struct stream	*s, *next;
+	struct attempt	*a, *anext;
 	int		 i;
 
 	TAILQ_FOREACH_SAFE(s, &streams, entry, next)
@@ -1984,6 +2243,10 @@ system_sigchld(int sig, short event, void *arg)
 		if (terminals[i] != 0 &&
 		    waitpid(terminals[i], NULL, WNOHANG) == terminals[i])
 			terminals[i] = 0;
+	TAILQ_FOREACH_SAFE(a, &attempts, entry, anext) {
+		system_auth_reap(a);
+		system_auth_done(a);
+	}
 }
 
 /* text of a part the next BEGIN, APPLY or TEST takes: -1 if past NSHD_PART */
@@ -3294,15 +3557,21 @@ db_sync(void)
 	return (r);
 }
 
-/* system ends, and with it what its streams' children and its job run */
+/*
+ * system ends, and with it what its streams' children, its logins'
+ * checks and its job run
+ */
 static __dead void
 system_exit(void)
 {
 	struct stream	*s;
+	struct attempt	*a;
 
 	TAILQ_FOREACH(s, &streams, entry)
 		if (s->pid != 0)
 			killpg(s->pid, SIGKILL);
+	TAILQ_FOREACH(a, &attempts, entry)
+		killpg(a->pgid, SIGKILL);
 	if (job != NULL && job->pid != 0)
 		killpg(job->pgid, SIGKILL);
 	exit(0);

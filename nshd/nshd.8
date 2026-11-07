@@ -278,6 +278,16 @@ line and must not have uid 0.
 checks the password, and
 .Xr auth_approval 3
 checks the account.
+These run in a child process of system's, in a process group of its
+own, so a slow authentication program delays nothing else that system
+does.
+At most four logins are checked at once, one for each session; another
+is refused until one ends.
+A check that takes more than 30 seconds fails, and system kills its
+process group; the check counts against the four until then.
+Once the check ends, system makes sure again that the session's client
+is still connected and that the user may still log in, and takes the
+permissions of the user's class as they are then.
 The session then acts as that user until it ends, and its commits
 record that user's uid.
 system starts such a session's terminal as

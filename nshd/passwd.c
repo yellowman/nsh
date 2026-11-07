@@ -681,6 +681,21 @@ login_auth(char *name, char *password)
 }
 
 /*
+ * 1 if name may still log in to the web configurator as uid: a login
+ * user line names it, and its account has that uid, which is not 0
+ */
+int
+login_may(const char *name, uid_t uid)
+{
+	struct passwd *pw;
+	char class[64];
+	int made;
+
+	return (login_user_find(name, class, sizeof(class), &made) == 1 &&
+	    (pw = getpwnam(name)) != NULL && pw->pw_uid == uid && uid != 0);
+}
+
+/*
  * In text, len bytes, replace the password hash of each login user line
  * with "********". Lines are as conf() prints them, with or without a
  * diff's mark, and the hash is the line's last word. Returns the new
