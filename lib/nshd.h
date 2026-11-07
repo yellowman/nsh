@@ -28,7 +28,7 @@
 #define NSHD_SOCKET	"/var/run/nshd.sock"	/* 0660, group nshadmin */
 #define NSHD_RO_SOCKET	"/var/run/nshd.ro.sock"	/* 0666 */
 
-#define NSHD_VERSION	5	/* protocol version of clients and nshd */
+#define NSHD_VERSION	6	/* protocol version of clients and nshd */
 #define NSHD_TEXT	8192	/* text in one message, at most */
 #define NSHD_WORDS	256	/* a show's words, at most */
 #define NSHD_LINE	1024	/* a line of configuration, with its NUL */
@@ -365,7 +365,7 @@ enum nshd_imsg {
 	IMSG_CTL_FACTS,		/* units of facts, as facts.h has them */
 
 	/* between nshd's processes */
-	IMSG_SESSION,		/* parent: nshd_newsession, its frontend's pipe */
+	IMSG_SESSION,		/* parent to config: nshd_newsession, a pipe */
 	IMSG_STARTUP,		/* parent to a child: nshd_startup */
 	IMSG_PEER,		/* parent to a child: nshd_child, its pipe */
 	IMSG_SYS_SNAPSHOT,	/* config to system: the running configuration */
@@ -420,9 +420,6 @@ enum nshd_imsg {
 	IMSG_CTL_LOGIN,		/* nshd_login (web configurator): a result */
 	IMSG_SYS_LOGIN,		/* nshd_syslogin: the permissions, as the result */
 
-	/* frontend to system: whether its session has a request unanswered */
-	IMSG_FRONT_ASKED,	/* the session sent a request */
-	IMSG_FRONT_ANSWERED,	/* config answered it */
 	IMSG_SESSION_TAKEN,	/* config or system to parent: nshd_taken */
 
 	/* with clients, on the read-write socket, and system to config */
@@ -441,7 +438,10 @@ enum nshd_imsg {
 	/* parent to system: who a new session is, as system reads it */
 	IMSG_SESSION_CLIENT,	/* nshd_newsession, and the client's socket */
 
-	/* system to parent, then parent to config: a session ends */
+	/*
+	 * a session ends: system to parent, then parent to config; parent
+	 * to system, as its frontend ends
+	 */
 	IMSG_SESSION_GONE,	/* the session is the imsg's id */
 
 	/* a stage, as one request */

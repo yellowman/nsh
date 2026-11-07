@@ -16,27 +16,19 @@
 
 /*
  * frontend: one client of the read-write socket, its session. parent
- * accepts the client, and starts a frontend for it with the client's
- * socket as fd 5, and its pipes to config and to system as fd 3 and 4,
- * which only this frontend has. What the client sends goes to config, on
- * their pipe; config's answers go back to the client, with the notices
- * config sends unasked, and config learns each time the client has read
- * all it was sent. frontend checks only that a message is one a client
- * (or config) may send, and is whole; it reads no configuration.
+ * accepts the client, and starts a frontend for it with its pipe to
+ * config as fd 3 and the client's socket as fd 4, which only this
+ * frontend has. What the client sends goes to config, on their pipe;
+ * config's answers go back to the client, with the notices config sends
+ * unasked, and config learns each time the client has read all it was
+ * sent. frontend checks only that a message is one a client (or config)
+ * may send, and is whole; it reads no configuration. config knows whose
+ * session this is by the pipe it comes on, so frontend cannot speak for
+ * another session.
  *
- * Before config hears of a request, frontend tells system of it if it may
- * begin a commit (a line, a commit or a part of a load) or if system
- * checks it itself (an operation, a login, a terminal or a watch).
- * frontend sends config such a request only after that message is
- * written to system's pipe. frontend also tells system when config
- * answers a request. system begins a commit for config only for a
- * request not answered, so a config compromised by a client cannot say
- * whose commit it is. config and system know whose session this is by
- * the pipe it comes on, so frontend cannot speak for another session.
- *
- * When the client goes, frontend ends, and config and system find their
- * pipes to it closed. When config or system closes its pipe, frontend
- * ends too.
+ * When the client goes, frontend ends; config finds its pipe closed,
+ * and parent tells system. When config closes its pipe, frontend ends
+ * too.
  */
 
 #include <sys/types.h>
@@ -75,20 +67,7 @@ union frontend_request {
 	struct nshd_terminal	 terminal;
 };
 
-/* a request, kept until frontend has written its message to system */
-struct held {
-	TAILQ_ENTRY(held)	 entry;
-	uint32_t		 type;
-	ssize_t			 len;
-	union frontend_request	 r;
-};
-static TAILQ_HEAD(, held)	 helds = TAILQ_HEAD_INITIALIZER(helds);
-
 static void	frontend_dispatch_config(int, short, void *);
-static void	frontend_dispatch_system(int, short, void *);
-static void	frontend_asked(uint32_t);
-static void	frontend_hold(uint32_t, union frontend_request *, ssize_t);
-static void	frontend_release(void);
 static int	frontend_client(struct ctl_conn *, struct imsg *);
 static void	frontend_gone(struct ctl_conn *);
 static int	frontend_written(struct ctl_conn *);
@@ -97,8 +76,6 @@ static ssize_t	frontend_whole(struct imsg *, union frontend_request *);
 static struct link	 links[] = {
 #define CONFIG		0
 	{ PROC_CONFIG,	 frontend_dispatch_config },
-#define SYSTEM		1
-	{ PROC_SYSTEM,	 frontend_dispatch_system },
 };
 
 void
@@ -115,10 +92,9 @@ frontend(int debug, int verbose)
 
 	/* a terminal's pty comes from config, to go to the client */
 	if ((links[CONFIG].iev = imsgev_new(3, frontend_dispatch_config,
-	    1)) == NULL || (links[SYSTEM].iev = imsgev_new(4,
-	    frontend_dispatch_system, 0)) == NULL)
+	    1)) == NULL)
 		fatal(NULL);
-	if ((client = control_one(5, frontend_client, frontend_gone,
+	if ((client = control_one(4, frontend_client, frontend_gone,
 	    frontend_written)) == 0)
 		exit(1);
 	/*
@@ -159,13 +135,8 @@ frontend_dispatch_config(int fd, short event, void *arg)
 		case IMSG_CTL_HELLO:
 		case IMSG_CTL_RESULT:
 			/* the request's end */
-			if ((c = control_connbyid(client)) != NULL) {
+			if ((c = control_connbyid(client)) != NULL)
 				c->pending = 0;
-				if (c->asked) {
-					c->asked = 0;
-					frontend_asked(IMSG_FRONT_ANSWERED);
-				}
-			}
 			/* FALLTHROUGH */
 		case IMSG_CTL_OUTPUT:
 		case IMSG_CTL_FACTS:
@@ -199,78 +170,6 @@ frontend_dispatch_config(int fd, short event, void *arg)
 		imsg_free(&imsg);
 	}
 	imsg_event_add(iev);
-}
-
-/* system sends frontend nothing */
-static void
-frontend_dispatch_system(int fd, short event, void *arg)
-{
-	struct imsgev		*iev = arg;
-	struct imsg		 imsg;
-	uint32_t		 type;
-	int			 n;
-
-	if (imsgev_io(iev, event) == -1) {
-		link_broken(&links[SYSTEM], "closed its pipe");
-		return;
-	}
-	frontend_release();
-	if ((n = imsgbuf_get(&iev->ibuf, &imsg)) == -1) {
-		link_broken(&links[SYSTEM], "sent what imsg cannot read");
-		return;
-	}
-	if (n > 0) {
-		type = imsg_get_type(&imsg);
-		imsg_free(&imsg);
-		link_broken(&links[SYSTEM], "sent imsg %u, which it may not",
-		    type);
-		return;
-	}
-	imsg_event_add(iev);
-}
-
-/* to system: the session's request, or its answer */
-static void
-frontend_asked(uint32_t type)
-{
-	if (link_compose(&links[SYSTEM], type, 0, NULL, 0) == -1)
-		fatal("%s", __func__);
-}
-
-/* keep the client's request until it can go to config */
-static void
-frontend_hold(uint32_t type, union frontend_request *r, ssize_t len)
-{
-	struct held	*h;
-
-	if ((h = malloc(sizeof(*h))) == NULL)
-		fatal(NULL);
-	h->type = type;
-	h->len = len;
-	memcpy(&h->r, r, sizeof(h->r));
-	TAILQ_INSERT_TAIL(&helds, h, entry);
-}
-
-/*
- * Send the kept requests to config, in the order they came, once all
- * that frontend queued for system is written to its pipe. system reads
- * that pipe before it acts on config's word of a request (asked_whose()).
- */
-static void
-frontend_release(void)
-{
-	struct held	*h;
-
-	if (imsgbuf_queuelen(&links[SYSTEM].iev->ibuf) > 0)
-		return;
-	while ((h = TAILQ_FIRST(&helds)) != NULL) {
-		TAILQ_REMOVE(&helds, h, entry);
-		if (link_compose(&links[CONFIG], h->type, 0,
-		    h->len > 0 ? &h->r : NULL, h->len) == -1)
-			fatal("%s", __func__);
-		explicit_bzero(h, sizeof(*h));
-		free(h);
-	}
 }
 
 /*
@@ -331,19 +230,8 @@ frontend_client(struct ctl_conn *c, struct imsg *imsg)
 	case IMSG_CTL_WATCH:
 		if ((len = frontend_whole(imsg, &r)) == -1)
 			return (-1);
-		/* tell system first, before config sees the request */
-		if (imsg_get_type(imsg) == IMSG_CTL_LINE ||
-		    imsg_get_type(imsg) == IMSG_CTL_COMMIT ||
-		    imsg_get_type(imsg) == IMSG_CTL_OP ||
-		    imsg_get_type(imsg) == IMSG_CTL_LOAD ||
-		    imsg_get_type(imsg) == IMSG_CTL_LOGIN ||
-		    imsg_get_type(imsg) == IMSG_CTL_TERMINAL ||
-		    imsg_get_type(imsg) == IMSG_CTL_WATCH) {
-			c->asked = 1;
-			frontend_asked(IMSG_FRONT_ASKED);
-			frontend_hold(imsg_get_type(imsg), &r, len);
-		} else if (link_compose(&links[CONFIG], imsg_get_type(imsg),
-		    c->id, len > 0 ? &r : NULL, len) == -1)
+		if (link_compose(&links[CONFIG], imsg_get_type(imsg), c->id,
+		    len > 0 ? &r : NULL, len) == -1)
 			fatal("%s", __func__);
 		explicit_bzero(&r, sizeof(r));
 		return (0);

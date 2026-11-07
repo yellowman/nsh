@@ -54,23 +54,22 @@
  * from the client's socket who the client is. The client's session gets
  * a number of its own, never used again, and a frontend: parent gives
  * config a pipe to that frontend, with the session's number and the
- * client's uid and gid, and gives system another pipe to it, and a copy
- * of the client's socket. Once both say they have taken the session,
- * parent starts the frontend, with its pipes to config and to system and
- * the client's socket as fd 3, 4 and 5, and nothing else. So config and
- * system each know a session by the pipe its word comes on, which only
- * that session's frontend has, and system watches the client's socket
- * itself. Of what the children send, parent reads only that they have
- * taken a session, system's word that a session ends, and config's word
- * that the boot is done.
+ * client's uid and gid, and gives system a copy of the client's socket.
+ * Once both say they have taken the session, parent starts the frontend,
+ * with its pipe to config and the client's socket as fd 3 and 4, and
+ * nothing else. So config knows a session by the pipe its word comes
+ * on, which only that session's frontend has, and system watches the
+ * client's socket itself. Of what the children send, parent reads only
+ * that they have taken a session, system's word that a session ends,
+ * and config's word that the boot is done.
  *
  * A child that ends, or that breaks a rule, ends nshd: its peers find
  * their pipes to it closed and end too, and parent ends the rest, with
  * system's helpers, which can outlive system. Nothing is started again.
  * A frontend is not such a child: when one ends, or breaks a rule, only
- * its session ends. config and system find its pipes closed, or close
- * them, and drop the session. When system finds a session's client
- * gone, or drops a session itself, parent kills the session's frontend,
+ * its session ends. config finds its pipe closed, or closes it, and
+ * drops the session, and parent tells system to drop it too. When system
+ * finds a session's client gone, parent kills the session's frontend,
  * and has config drop the session too.
  * If nshd ends while a commit is unconfirmed, the commit is rolled back
  * when nshd starts again and system finds its record.
@@ -152,13 +151,13 @@ static const struct pair {
 
 /*
  * A session on the read-write socket: until config and system have both
- * taken it, the pipes from its frontend to each, and its client's
+ * taken it, the pipe from its frontend to config, and its client's
  * socket; then its frontend
  */
 static struct front {
 	uint32_t	 session;	/* 0 if the slot is free */
 	int		 taken;		/* who has taken it: TAKEN_* */
-	int		 fds[3];
+	int		 fds[2];
 	pid_t		 pid;		/* its frontend, once started */
 } fronts[SESSIONS];
 #define TAKEN_CONFIG	0x1
@@ -470,10 +469,10 @@ parent_listen(void)
 }
 
 /*
- * A client of the read-write socket, and its session: config and system
- * each get a pipe to the session's frontend, which parent starts once
- * both have taken the session (front_taken()). Past SESSIONS sessions,
- * the client is closed
+ * A client of the read-write socket, and its session: config gets a pipe
+ * to the session's frontend, and system the client's socket. parent
+ * starts the frontend once both have taken the session (front_taken()).
+ * Past SESSIONS sessions, the client is closed
  */
 static void
 parent_accept(int fd, short event, void *arg)
@@ -484,7 +483,7 @@ parent_accept(int fd, short event, void *arg)
 	uid_t			 uid;
 	gid_t			 gid;
 	size_t			 i;
-	int			 conn, cp[2], sp[2], dup;
+	int			 conn, cp[2], dup;
 
 	event_add(&ev_accept, NULL);
 	if (event & EV_TIMEOUT)
@@ -520,28 +519,17 @@ parent_accept(int fd, short event, void *arg)
 		close(conn);
 		return;
 	}
-	if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK,
-	    PF_UNSPEC, sp) == -1) {
-		log_warn("%s: socketpair", __func__);
-		close(cp[0]);
-		close(cp[1]);
-		close(conn);
-		return;
-	}
 	if ((dup = fcntl(conn, F_DUPFD_CLOEXEC, 0)) == -1) {
 		log_warn("%s: dup", __func__);
 		close(cp[0]);
 		close(cp[1]);
-		close(sp[0]);
-		close(sp[1]);
 		close(conn);
 		return;
 	}
 	f->session = ++session_last;
 	f->taken = 0;
 	f->fds[0] = cp[1];
-	f->fds[1] = sp[1];
-	f->fds[2] = conn;
+	f->fds[1] = conn;
 	f->pid = 0;
 	memset(&ns, 0, sizeof(ns));
 	ns.session = f->session;
@@ -549,8 +537,6 @@ parent_accept(int fd, short event, void *arg)
 	ns.gid = gid;
 	if (imsg_compose_event(child(PROC_CONFIG, 0)->iev, IMSG_SESSION, 0,
 	    0, cp[0], &ns, sizeof(ns)) == -1 ||
-	    imsg_compose_event(child(PROC_SYSTEM, 0)->iev, IMSG_SESSION, 0,
-	    0, sp[0], &ns, sizeof(ns)) == -1 ||
 	    imsg_compose_event(child(PROC_SYSTEM, 0)->iev,
 	    IMSG_SESSION_CLIENT, 0, 0, dup, &ns, sizeof(ns)) == -1)
 		fatal("%s", __func__);
@@ -558,8 +544,7 @@ parent_accept(int fd, short event, void *arg)
 
 /*
  * c's word that it took a session, or did not: once config and system
- * both have, its frontend starts; if either did not, the session ends,
- * and the other finds its pipe to the frontend closed
+ * both have, its frontend starts; if either did not, the session ends
  */
 static void
 front_taken(struct child *c, struct nshd_taken *t)
@@ -584,8 +569,8 @@ front_taken(struct child *c, struct nshd_taken *t)
 }
 
 /*
- * f's frontend, with its pipes to config and system and its client's
- * socket as fd 3, 4 and 5, in a process group of its own
+ * f's frontend, with its pipe to config and its client's socket as fd 3
+ * and 4, in a process group of its own
  */
 static void
 front_start(struct front *f)
@@ -593,12 +578,12 @@ front_start(struct front *f)
 	size_t	 i;
 
 	if ((f->pid = start_child("frontend", "-F", f->fds[0], f->fds[1],
-	    f->fds[2], 1)) == -1) {
+	    -1, 1)) == -1) {
 		log_warn("session %u: fork", f->session);
 		front_free(f);
 		return;
 	}
-	for (i = 0; i < 3; i++) {
+	for (i = 0; i < 2; i++) {
 		close(f->fds[i]);
 		f->fds[i] = -1;
 	}
@@ -621,7 +606,10 @@ front_gone(uint32_t session)
 		fatal("%s", __func__);
 }
 
-/* f's slot free again: what parent holds of it closed */
+/*
+ * f's slot free again: what parent holds of it closed, and system told
+ * the session is gone, so it closes its client's socket too
+ */
 static void
 front_free(struct front *f)
 {
@@ -629,8 +617,11 @@ front_free(struct front *f)
 
 	/* no frontend runs: parent still holds the session's descriptors */
 	if (f->pid <= 0)
-		for (i = 0; i < 3; i++)
+		for (i = 0; i < 2; i++)
 			close(f->fds[i]);
+	if (imsg_compose_event(child(PROC_SYSTEM, 0)->iev, IMSG_SESSION_GONE,
+	    f->session, 0, -1, NULL, 0) == -1)
+		fatal("%s", __func__);
 	memset(f, 0, sizeof(*f));
 }
 
