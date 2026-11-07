@@ -321,6 +321,9 @@ static struct front	*front_find(uint32_t);
 static struct imsgev	*front_iev(uint32_t);
 static int		 front_compose(uint32_t, uint32_t, const void *,
 			    size_t);
+static int		 front_text(uint32_t, const char *, size_t);
+static int		 front_printed(uint32_t);
+static int		 front_fd(uint32_t, uint32_t, int);
 static void		 front_check(void);
 static void		 front_sweep(int, short, void *);
 static void		 front_drop(struct front *);
@@ -539,7 +542,9 @@ front_find(uint32_t session)
 
 /*
  * The pipe to session's frontend, or NULL if the session is gone, or is
- * to go: what is sent there is dropped
+ * to go: what is sent there is dropped. A session's output goes only
+ * through front_compose(), front_text(), front_printed() and front_fd(),
+ * which take the session, not the pipe, and which alone call this
  */
 static struct imsgev *
 front_iev(uint32_t session)
@@ -562,6 +567,40 @@ front_compose(uint32_t session, uint32_t type, const void *data,
 	if ((iev = front_iev(session)) == NULL)
 		return (0);
 	return (imsg_compose_event(iev, type, session, 0, -1, data, len));
+}
+
+/* text to session's frontend, as output, in as many messages as it takes */
+static int
+front_text(uint32_t session, const char *text, size_t len)
+{
+	return (imsg_text(front_iev(session), IMSG_CTL_OUTPUT, session, text,
+	    len));
+}
+
+/*
+ * What nsh's code printed, to session's frontend, with each password
+ * hash taken out if the session sees none; dropped if the session is gone
+ */
+static int
+front_printed(uint32_t session)
+{
+	struct session	*sp = session_find(session);
+
+	return (printed_text(sp == NULL ? NULL : front_iev(session),
+	    IMSG_CTL_OUTPUT, session, config_hides(sp)));
+}
+
+/* fd, as a message of type, to session's frontend; closed if it is gone */
+static int
+front_fd(uint32_t session, uint32_t type, int fd)
+{
+	struct imsgev	*iev;
+
+	if ((iev = front_iev(session)) == NULL) {
+		close(fd);
+		return (0);
+	}
+	return (imsg_compose_event(iev, type, session, 0, fd, NULL, 0));
 }
 
 /*
@@ -800,7 +839,6 @@ config_dispatch_system(int fd, short event, void *arg)
 	struct nshd_logged	 lg;
 	struct request		*r;
 	struct session		*sp;
-	struct imsgev		*fiev;
 	uint32_t		 type;
 	int			 n, pty;
 	char			*p;
@@ -924,11 +962,10 @@ config_dispatch_system(int fd, short event, void *arg)
 			if ((pty = imsg_get_fd(&imsg)) == -1 ||
 			    imsg_get_len(&imsg) != 0)
 				goto bad;
-			if (r == NULL || session_find(r->session) == NULL ||
-			    (fiev = front_iev(r->session)) == NULL)
+			if (r == NULL || session_find(r->session) == NULL)
 				close(pty);
-			else if (imsg_compose_event(fiev, IMSG_CTL_TERMINAL,
-			    r->session, 0, pty, NULL, 0) == -1)
+			else if (front_fd(r->session, IMSG_CTL_TERMINAL,
+			    pty) == -1)
 				fatal("%s", __func__);
 			break;
 		case IMSG_SYS_FOLLOWING:
@@ -1197,8 +1234,7 @@ config_rolled(struct request *r, int32_t status)
 		return;
 	}
 	if (status != 0) {
-		if (imsg_text(front_iev(sp->id), IMSG_CTL_OUTPUT, sp->id,
-		    r->text, r->len) == -1)
+		if (front_text(sp->id, r->text, r->len) == -1)
 			fatal("%s", __func__);
 		config_answer(sp->id, 1, NULL);
 		return;
@@ -1350,8 +1386,7 @@ config_text(struct request *r, int32_t status)
 		return;
 	}
 	r->len = login_hide(r->text, r->len);
-	if (imsg_text(front_iev(r->session), IMSG_CTL_OUTPUT, r->session,
-	    r->text, r->len) == -1)
+	if (front_text(r->session, r->text, r->len) == -1)
 		fatal("%s", __func__);
 	config_answer(r->session, status, NULL);
 }
@@ -1556,8 +1591,7 @@ config_watch(uint32_t session, struct nshd_watch *w)
 		} else if (r == NULL && (w->what & log) != 0) {
 			if ((r = config_request(session, REQ_FOLLOW)) ==
 			    NULL) {
-				if (imsg_text(front_iev(session),
-				    IMSG_CTL_OUTPUT, session, REQ_REFUSED,
+				if (front_text(session, REQ_REFUSED,
 				    strlen(REQ_REFUSED)) == -1)
 					fatal("%s", __func__);
 				sp->watchr = 1;
@@ -2175,8 +2209,8 @@ shared_kept(uint32_t seq, const char *warn)
 		if (sp->keep == 0 || (int32_t)(sp->keep - seq) > 0)
 			continue;
 		sp->keep = 0;
-		if (warn != NULL && imsg_text(front_iev(sp->id),
-		    IMSG_CTL_OUTPUT, sp->id, warn, strlen(warn)) == -1)
+		if (warn != NULL && front_text(sp->id, warn,
+		    strlen(warn)) == -1)
 			fatal("%s", __func__);
 		config_reply(sp, &sp->held, sp->heldr, sp->heldmode);
 	}
@@ -2406,8 +2440,7 @@ config_ran(struct session *sp, int r, int mode)
 		c.rtable = rtable;
 		c.bridge = bridge;
 	}
-	if (printed_text(front_iev(sp->id), IMSG_CTL_OUTPUT, sp->id,
-	    config_hides(sp)) == -1)
+	if (front_printed(sp->id) == -1)
 		r = -1;
 	/* a change to the shared candidate is answered once it is kept */
 	if (sp->keep != 0 && (int32_t)(sp->keep - keep_done) > 0) {
@@ -2716,14 +2749,12 @@ commit_new(struct session *sp)
 static void
 commit_request(int step, uint32_t type, const void *data, size_t len)
 {
-	struct session	*sp = session_find(commit->session);
 	struct request	*r;
 
 	if (commit->boot)
 		printed_log();
 	else
-		printed_text(sp != NULL ? front_iev(commit->session) : NULL,
-		    IMSG_CTL_OUTPUT, commit->session, config_hides(sp));
+		front_printed(commit->session);
 	if ((r = config_request(commit->session, REQ_COMMIT)) == NULL) {
 		commit_end(-1, REQ_REFUSED);
 		return;
@@ -2773,8 +2804,7 @@ commit_end(int r, const char *msg)
 	if (sp == NULL)
 		printed_text(NULL, 0, 0, 0);
 	else if (msg != NULL) {
-		printed_text(front_iev(sp->id), IMSG_CTL_OUTPUT, sp->id,
-		    config_hides(sp));
+		front_printed(sp->id);
 		config_answer(sp->id, 1, "%s", msg);
 	} else
 		config_ran(sp, r, 1);
@@ -2910,8 +2940,7 @@ config_answer(uint32_t session, int32_t status, const char *fmt, ...)
 		va_end(ap);
 		if (len == -1)
 			fatal("%s", __func__);
-		if (imsg_text(front_iev(session), IMSG_CTL_OUTPUT, session,
-		    s, len) == -1)
+		if (front_text(session, s, len) == -1)
 			fatal("%s", __func__);
 		free(s);
 	}
