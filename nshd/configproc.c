@@ -129,15 +129,6 @@
  * notices until the watch drops the log or the stream ends, which config
  * says. A watch is answered once system has followed each log it adds, or
  * refused to.
- *
- * If parent says at startup that the boot is not done, config boots:
- * system says whether this boot of the host is done already (BOOT), and
- * if not, gives the saved configuration (SAVED). A commit of
- * no session's then makes it the running configuration, all of it that
- * takes, as nothing it checks or tests refuses it. system then records
- * how the boot went (BOOTED), and parent is told. What nsh's code and
- * system print for it is logged. If system could not record that the boot
- * began, the boot still runs, but is reported as failed.
  */
 
 #include <sys/types.h>
@@ -244,12 +235,8 @@ enum { REQ_ANSWER, REQ_COMMIT, REQ_ROLLBACK, REQ_PERMS, REQ_TEXT, REQ_LOGIN,
 enum {
 	COMMIT_PLAN,		/* a snapshot, to plan from */
 	COMMIT_BEGIN,		/* how system ended the commit */
-	COMMIT_APPLY,		/* the boot's script run */
 	COMMIT_RAN,		/* a snapshot of what runs then */
-	COMMIT_SAVE,		/* the running configuration, to save */
-	BOOT_BEGIN,		/* the boot begun, or done already */
-	BOOT_SAVED,		/* the saved configuration, to boot to */
-	BOOT_END		/* how the boot went, recorded */
+	COMMIT_SAVE		/* the running configuration, to save */
 };
 
 struct commit {
@@ -269,12 +256,6 @@ struct commit {
 	int			 begun;		/* system said BEGUN */
 	int			 logins;	/* changes login lines */
 	int			 shared;	/* of the shared candidate */
-	int			 boot;		/* this is the boot */
-	int			 unrecorded;	/* system could not record it */
-	int			 ok;		/* the boot went well */
-	char			*saved;		/* saved text, as it comes */
-	size_t			 savedlen;
-	int			 savedbad;	/* past NSHD_PART */
 	char			 comment[NSHD_COMMENT];
 	struct plan		*plan;
 };
@@ -405,22 +386,13 @@ static void		 commit_snapshot(void);
 static void		 commit_ended(int32_t);
 static void		 commit_go(void);
 static int		 commit_part(int32_t, const char *, size_t);
-static void		 commit_clears(struct nshd_apply *);
-static void		 commit_apply(void);
 static void		 commit_saved(int);
 static void		 commit_save(void);
 static void		 commit_new(struct session *);
 static void		 commit_request(int, uint32_t, const void *, size_t);
 static void		 commit_tests(uint32_t);
-static void		 commit_printed(void);
 static void		 commit_end(int, const char *);
 static int		 commit_renew(void);
-static void		 boot_start(void);
-static void		 boot_text(struct ibuf *);
-static void		 boot_plan(void);
-static void		 boot_ran(int);
-static void		 boot_drop(void);
-static void		 boot_end(int32_t);
 static void		 session_gone(struct session *);
 static struct session	*session_find(uint32_t);
 static struct request	*request_find(uint32_t);
@@ -463,8 +435,8 @@ configproc(int debug, int verbose)
 }
 
 /*
- * parent's word that config may start, and whether to boot; each new
- * session, with its pipe to its frontend; and that a session ends
+ * parent's word that config may start; each new session, with its pipe
+ * to its frontend; and that a session ends
  */
 static void
 config_dispatch_parent(int fd, short event, void *arg)
@@ -502,8 +474,6 @@ config_dispatch_parent(int fd, short event, void *arg)
 		    imsg_get_data(&imsg, &st, sizeof(st)) == -1)
 			fatalx("parent sent imsg %u, which it may not",
 			    imsg_get_type(&imsg));
-		if (st.boot)
-			boot_start();
 		imsg_free(&imsg);
 	}
 	imsg_event_add(iev);
@@ -942,12 +912,6 @@ config_dispatch_system(int fd, short event, void *arg)
 					fatal("%s", __func__);
 				break;
 			}
-			if (r->kind == REQ_COMMIT && commit != NULL &&
-			    commit->boot) {
-				if (type == IMSG_SYS_TEXT)
-					boot_text(&b);
-				break;
-			}
 			if (r->kind == REQ_ROLLBACK || r->kind == REQ_TEXT) {
 				if (type != IMSG_SYS_TEXT)
 					goto bad;
@@ -1043,7 +1007,7 @@ config_dispatch_system(int fd, short event, void *arg)
 				goto bad;
 			session_tested(commit->plan, commit->test++,
 			    res.status != 0);
-			commit_printed();
+			front_printed(commit->session);
 			break;
 		case IMSG_SYS_BEGUN:
 			/* the commit is begun: BEGIN's answer is how it ends */
@@ -2670,9 +2634,7 @@ commit_snapshot(void)
 	commit->waits = 0;
 	switch (commit->step) {
 	case COMMIT_PLAN:
-		if (commit->boot)
-			boot_plan();
-		else if ((sp = session_find(commit->session)) == NULL ||
+		if ((sp = session_find(commit->session)) == NULL ||
 		    session_plan(sp->st, commit->check, commit->minutes > 0,
 		    &commit->plan) == -1)
 			commit_end(-1, NULL);
@@ -2708,30 +2670,6 @@ static void
 commit_ended(int32_t status)
 {
 	switch (commit->step) {
-	case BOOT_BEGIN:
-		/* if it could not be recorded, it runs */
-		if (status == NSHD_DONE)
-			boot_end(0);
-		else {
-			commit->unrecorded = status != 0;
-			commit_request(BOOT_SAVED, IMSG_SYS_SAVED, NULL, 0);
-		}
-		break;
-	case BOOT_SAVED:
-		if (status != 0) {
-			/* the text received says why */
-			log_text(commit->saved, commit->savedlen);
-			boot_ran(0);
-		} else if (commit->savedbad) {
-			log_warnx("the saved configuration is past %d bytes",
-			    NSHD_PART);
-			boot_ran(0);
-		} else
-			commit_wait(COMMIT_PLAN);
-		break;
-	case BOOT_END:
-		boot_end(commit->ok && status == 0 ? 0 : 1);
-		break;
 	case COMMIT_BEGIN:
 		/*
 		 * One not begun was refused, or only tested, and system said
@@ -2744,9 +2682,6 @@ commit_ended(int32_t status)
 			commit->ran = status;
 			commit_wait(COMMIT_RAN);
 		}
-		break;
-	case COMMIT_APPLY:
-		boot_ran(status == 0);
 		break;
 	case COMMIT_SAVE:
 		commit_saved(status == 0);
@@ -2812,7 +2747,7 @@ commit_go(void)
 	b.minutes = commit->minutes;
 	b.unsaved = commit->terminal;
 	strlcpy(b.comment, commit->comment, sizeof(b.comment));
-	commit_clears(&b.apply);
+	plan_clears(commit->plan, &b.apply);
 	commit_request(COMMIT_BEGIN, IMSG_SYS_BEGIN, &b, sizeof(b));
 }
 
@@ -2840,38 +2775,6 @@ commit_part(int32_t part, const char *text, size_t len)
 		len -= n;
 	}
 	return (0);
-}
-
-/* the daemons whose rules the plan's script empties, in a */
-static void
-commit_clears(struct nshd_apply *a)
-{
-	struct plan	*p = commit->plan;
-	int		 i;
-
-	memset(a, 0, sizeof(*a));
-	a->nclears = p->nclears;
-	for (i = 0; i < p->nclears; i++) {
-		strlcpy(a->clears[i].name, p->clears[i].name,
-		    sizeof(a->clears[i].name));
-		a->clears[i].rtable = p->clears[i].rtable;
-		a->clears[i].keep = p->clears[i].keep;
-	}
-}
-
-/* the boot's script, run by system, with the saved configuration */
-static void
-commit_apply(void)
-{
-	struct nshd_apply	 a;
-	struct plan		*p = commit->plan;
-
-	commit_clears(&a);
-	if (commit_part(NSHD_SCRIPT, p->text[PLAN_EDITS],
-	    p->len[PLAN_EDITS]) == -1 || commit_part(NSHD_WANT,
-	    commit->saved, commit->savedlen) == -1)
-		return;
-	commit_request(COMMIT_APPLY, IMSG_SYS_APPLY, &a, sizeof(a));
 }
 
 /* the running configuration, saved by system with the commit's comment */
@@ -2926,14 +2829,14 @@ commit_request(int step, uint32_t type, const void *data, size_t len)
 {
 	struct request	*r;
 
-	commit_printed();
+	front_printed(commit->session);
 	if ((r = config_request(commit->session, REQ_COMMIT)) == NULL) {
 		commit_end(-1, REQ_REFUSED);
 		return;
 	}
 	commit->step = step;
-	/* BEGIN and APPLY run the plan's tests first */
-	if (type == IMSG_SYS_BEGIN || type == IMSG_SYS_APPLY)
+	/* BEGIN runs the plan's tests first */
+	if (type == IMSG_SYS_BEGIN)
 		commit_tests(r->id);
 	if (link_compose(&links[SYSTEM], type, r->id, data, len) == -1)
 		fatal("%s", __func__);
@@ -2963,16 +2866,6 @@ commit_tests(uint32_t id)
 	}
 }
 
-/* what nsh's code printed for the commit, to its session or the log */
-static void
-commit_printed(void)
-{
-	if (commit->boot)
-		printed_log();
-	else
-		front_printed(commit->session);
-}
-
 /*
  * The commit ends, with r as a handler returns it, or with msg, said
  * after what nsh's code printed for it
@@ -2983,16 +2876,6 @@ commit_end(int r, const char *msg)
 	struct commit		*c = commit;
 	struct session		*sp;
 
-	/* the boot did not go well, and it ends once that is recorded */
-	if (c->boot) {
-		if (msg != NULL)
-			log_text(msg, strlen(msg));
-		if (c->step == BOOT_END)
-			boot_end(1);
-		else
-			boot_ran(0);
-		return;
-	}
 	commit = NULL;
 	sp = session_find(c->session);
 	/* configure terminal's candidate is the running configuration again */
@@ -3035,96 +2918,6 @@ commit_renew(void)
 	if ((sp = session_find(commit->session)) != NULL)
 		return (session_renew(sp->st));
 	return (0);
-}
-
-/* begin the boot, a commit of no session's */
-static void
-boot_start(void)
-{
-	if ((commit = calloc(1, sizeof(*commit))) == NULL)
-		fatal(NULL);
-	commit->boot = 1;
-	commit_request(BOOT_BEGIN, IMSG_SYS_BOOT, NULL, 0);
-}
-
-/* system's text for the boot: the saved configuration, or logged */
-static void
-boot_text(struct ibuf *b)
-{
-	char	*p;
-
-	if (commit->step != BOOT_SAVED) {
-		log_text(ibuf_data(b), ibuf_size(b));
-		return;
-	}
-	if (ibuf_size(b) > NSHD_PART - commit->savedlen) {
-		commit->savedbad = 1;
-		return;
-	}
-	if ((p = realloc(commit->saved, commit->savedlen +
-	    ibuf_size(b))) == NULL)
-		fatal("%s", __func__);
-	commit->saved = p;
-	memcpy(commit->saved + commit->savedlen, ibuf_data(b), ibuf_size(b));
-	commit->savedlen += ibuf_size(b);
-}
-
-/* the boot's plan, from the snapshot, to apply what differs from the saved */
-static void
-boot_plan(void)
-{
-	struct plan	*p;
-
-	if (session_boot_plan(commit->saved, commit->savedlen,
-	    &commit->plan) == -1)
-		boot_ran(0);
-	else if ((p = commit->plan)->same)
-		boot_ran(1);
-	else
-		commit_apply();
-}
-
-/* the boot ran, ok if it went well: system records how */
-static void
-boot_ran(int ok)
-{
-	struct nshd_result	res;
-
-	if (commit->unrecorded) {
-		boot_end(1);
-		return;
-	}
-	/* set first, as a request that cannot be made ends the boot */
-	commit->step = BOOT_END;
-	commit->ok = ok;
-	res.status = !ok;
-	commit_request(BOOT_END, IMSG_SYS_BOOTED, &res, sizeof(res));
-}
-
-/* free the boot's commit, if any, and log what nsh's code printed */
-static void
-boot_drop(void)
-{
-	if (commit != NULL) {
-		plan_free(commit->plan);
-		free(commit->saved);
-		free(commit);
-		commit = NULL;
-	}
-	printed_log();
-}
-
-/* the boot is done: parent is told status, 0 if it went well */
-static void
-boot_end(int32_t status)
-{
-	struct nshd_result	res;
-
-	boot_drop();
-	res.status = status;
-	if (imsg_compose_event(iev_parent, IMSG_BOOTED, 0, 0, -1, &res,
-	    sizeof(res)) == -1)
-		fatal("%s", __func__);
 }
 
 /* to session, a line of output if fmt, and the result status */

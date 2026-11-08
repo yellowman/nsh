@@ -482,7 +482,7 @@ Each child also has a pipe to the parent, which tells it when to
 start, and on which config gets each new session's pipe and system the
 session's client's socket.
 The parent accepts only config's and system's word that they took a
-session, and config's message that the boot is done.
+session, and system's message that the boot is done.
 .Pp
 If any child but a frontend exits, or sends the parent or a peer a
 message that it may not send,
@@ -503,15 +503,17 @@ With
 as rc starts it,
 .Nm
 boots.
-Before the parent and the shows accept clients, config has system make
-the running configuration the saved one, as much of it as takes effect,
-as
+Before the parent and the shows accept clients, system makes the
+running configuration the saved one, as much of it as takes effect, as
 .Xr nsh 8
 .Fl i
 does.
 What the checks find is reported, and each daemon's rules are tested,
 but neither stops the boot.
-What config and system print for the boot is logged.
+What system prints for the boot is logged.
+If a rollback of an unconfirmed commit runs as
+.Nm
+starts, the boot waits for it to end.
 .Nm
 returns once the boot is done, with 0 if the running configuration is
 then the saved configuration, else 1.

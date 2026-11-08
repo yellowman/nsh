@@ -62,30 +62,29 @@
  * operation's status.
  *
  * config sends a commit's requests in order. First come the parts that
- * BEGIN, APPLY and TEST use, sent in chunks. Each TEST runs a daemon's
- * test of its rules, in a job, and then tells config how it went. The
- * TESTs come before the BEGIN or APPLY they are for, with its request
- * id, and BEGIN and APPLY wait for them, as config's requests wait while
- * a job runs. A commit that a test refused is not begun, nor is one that
- * BEGIN asks only to test, as commit check does, nor one with problems
- * config found. system then says the verdict, which counts those
- * problems and the tests that refused the commit, and BEGIN's answer is
- * 0 if it passes. Otherwise BEGIN runs the commit to its end. It writes
- * the commit record and tells config that the commit is begun (BEGUN).
- * If the commit changes login users or classes, system has config lower
- * the permissions of each session that would lose one, end each that
- * would lose its login (REVOKING), and take no new one, and waits until
- * config says it has (GO). Then system runs the script, and checks that
- * what runs is then the configuration wanted. If it is not, system
- * undoes the script, to the configuration before, and removes the
- * record. If it is, system saves the running configuration and removes
- * the record. An unconfirmed commit is kept until its deadline instead,
- * and a configure terminal commit is kept without being saved; their
- * records go too. BEGIN's answer is how the commit ended. BEGIN refuses
- * such a configure terminal commit while an unconfirmed commit exists,
- * because rolling back the unconfirmed commit would roll it back too.
- * Outside a commit, SAVE saves the running configuration, and APPLY runs
- * the boot's script.
+ * BEGIN and TEST use, sent in chunks. Each TEST runs a daemon's test of
+ * its rules, in a job, and then tells config how it went. The TESTs come
+ * before the BEGIN they are for, with its request id, and BEGIN waits
+ * for them, as config's requests wait while a job runs. A commit that a
+ * test refused is not begun, nor is one that BEGIN asks only to test, as
+ * commit check does, nor one with problems config found. system then
+ * says the verdict, which counts those problems and the tests that
+ * refused the commit, and BEGIN's answer is 0 if it passes. Otherwise
+ * BEGIN runs the commit to its end. It writes the commit record and
+ * tells config that the commit is begun (BEGUN). If the commit changes
+ * login users or classes, system has config lower the permissions of
+ * each session that would lose one, end each that would lose its login
+ * (REVOKING), and take no new one, and waits until config says it has
+ * (GO). Then system runs the script, and checks that what runs is then
+ * the configuration wanted. If it is not, system undoes the script, to
+ * the configuration before, and removes the record. If it is, system
+ * saves the running configuration and removes the record. An unconfirmed
+ * commit is kept until its deadline instead, and a configure terminal
+ * commit is kept without being saved; their records go too. BEGIN's
+ * answer is how the commit ended. BEGIN refuses such a configure
+ * terminal commit while an unconfirmed commit exists, because rolling
+ * back the unconfirmed commit would roll it back too. Outside a commit,
+ * SAVE saves the running configuration.
  *
  * An apply, an undo, a save and a test each run as a job: a child of
  * system in its own process group, whose output is sent as it arrives.
@@ -140,21 +139,23 @@
  * configuration is not the one the commit was planned from, as when an
  * unconfirmed commit was rolled back in the meantime.
  *
- * The boot, which config runs when nshd starts with -b, begins with
- * BOOT. The first time, system copies nsh's own NSHRC to the saved
+ * When parent says that nshd starts with -b, system boots. The boot
+ * begins once no job runs, so that a rollback of an unconfirmed commit
+ * that runs as system starts ends first; no rollback begins while the
+ * boot runs. The first time, system copies nsh's own NSHRC to the saved
  * configuration. It then writes the boot record, in NSHDB, which names
  * the host boot it is for by kern.boottime and says the boot is
  * running; then it demotes carp and records that too. A system process
  * restarted during the boot finds the record and does not demote carp
- * again. If this host boot is already done, system reports that, and
- * the boot does not run again. config then requests the saved
- * configuration (SAVED) and a snapshot, runs the tests, and runs the
- * script (APPLY), which says whether the running configuration is then
- * the saved configuration. BOOTED reports that. If it is, the
- * record says the boot is done, carp is promoted if it was demoted for
- * the boot, and any unconfirmed commit record is removed. If not, the
+ * again. If this host boot is already done, system tells parent so, and
+ * the boot does not run again. Otherwise system plans the boot from the
+ * saved configuration and what runs, runs its tests and then its
+ * script, each in a job, and the script says whether the running
+ * configuration is then the saved configuration. If it is, the record
+ * says the boot is done, carp is promoted if it was demoted for the
+ * boot, and any unconfirmed commit record is removed. If not, the
  * record says the boot failed, and carp stays demoted until a commit
- * saves.
+ * saves. Then system tells parent that the boot is done (BOOTED).
  *
  * Each commit belongs to a session, and system learns whose it is from
  * the session's client. parent passes system each client's socket when
@@ -168,11 +169,9 @@
  * parent, which kills the session's frontend if it still runs and tells
  * config to drop the session too. BEGIN, TEST and SAVE name the
  * session. The commit record stores the uid of BEGIN's session; from
- * then on the commit runs to its end, with no request from config. TEST
- * for no session and APPLY belong to the boot, and are refused unless
- * the boot is running.
- * BOOT is answered as already done once parent says nshd is not
- * booting, or once BOOTED has been received. system trusts config to
+ * then on the commit runs to its end, with no request from config. A
+ * TEST for no session belongs to the boot, and is refused unless the
+ * boot is running. system trusts config to
  * name the session a request came from: a compromised config could act
  * in the name of any connected client, but only as that client's login
  * class allows.
@@ -246,6 +245,7 @@
 #include "kfacts.h"
 #include "showfacts.h"
 #include "answer.h"
+#include "session.h"
 
 #define SYS_PATH	"/sbin:/bin:/usr/sbin:/usr/bin"	/* rc's */
 #define SYS_BATCH	256	/* records made before what is printed is sent */
@@ -489,8 +489,11 @@ static struct begun	*begun;		/* the commit begun, or NULL */
 static uint32_t		 test_refused;	/* the request a test refused, */
 static int		 test_refusals;	/* and how many of its tests did */
 static int		 revoking;	/* login lines change: no sessions */
-static int		 booting;	/* from BOOT until BOOTED */
-static int		 boot_over;	/* not booting, or BOOTED came */
+static int		 booting;	/* the boot runs, or waits for a job */
+static struct plan	*boot_plan;	/* the boot's, once it is made */
+static int		 boot_test;	/* the next of its tests */
+static int		 boot_unrecorded; /* its record could not be made */
+static struct nshd_apply boot_apply;	/* its script's clears */
 static TAILQ_HEAD(, attempt) attempts = TAILQ_HEAD_INITIALIZER(attempts);
 static TAILQ_HEAD(, client) clients = TAILQ_HEAD_INITIALIZER(clients);
 static struct event	 confirm_tm;	/* the deadline, or the next attempt */
@@ -547,7 +550,6 @@ static int	system_chunk(const unsigned char *, size_t);
 static void	system_part_free(int);
 static void	system_parts_free(void);
 static void	system_begin(uint32_t, struct nshd_begin *);
-static void	system_apply(uint32_t, struct nshd_apply *);
 static void	system_script(uint32_t, struct nshd_apply *, int);
 static void	system_go(uint32_t);
 static void	system_took(uint32_t);
@@ -556,8 +558,12 @@ static void	system_save(uint32_t, struct nshd_save *);
 static int	system_saved(int);
 static void	system_ended(void);
 static int	system_unconfirm(void);
-static void	system_boot(uint32_t);
-static void	system_booted(uint32_t, int);
+static int	system_boot(void);
+static void	boot_start(void);
+static void	boot_next(void);
+static void	boot_end(int);
+static void	boot_told(int32_t);
+static int	system_booted(int);
 static void	boot_saved(void);
 static int	boot_read(struct boot *);
 static int	boot_write(struct boot *);
@@ -703,8 +709,11 @@ system_dispatch_parent(int fd, short event, void *arg)
 			    imsg_get_type(&imsg));
 			system_exit();
 		}
-		boot_over = !st.boot;
 		imsg_free(&imsg);
+		/* the boot waits for a rollback that runs */
+		booting = st.boot;
+		if (booting && job == NULL)
+			boot_start();
 	}
 	imsg_event_add(iev);
 }
@@ -955,7 +964,6 @@ system_whole(uint32_t type, const void *data, size_t len)
 	struct nshd_begin	 bg;
 	struct nshd_show	 show;
 	struct nshd_chunk	 c;
-	struct nshd_apply	 a;
 	struct nshd_save	 sv;
 	struct nshd_rollback	 rb;
 	struct nshd_test	 t;
@@ -978,7 +986,6 @@ system_whole(uint32_t type, const void *data, size_t len)
 		    -1 : 0);
 	case IMSG_SYS_ROLLBACK_LIST:
 	case IMSG_SYS_SAVED:
-	case IMSG_SYS_BOOT:
 		return (len == 0 ? 0 : -1);
 	case IMSG_SYS_PERMS:
 		return (len == sizeof(struct nshd_perms) ? 0 : -1);
@@ -1005,8 +1012,6 @@ system_whole(uint32_t type, const void *data, size_t len)
 		memcpy(&st, data, len);
 		return (st.size.rows < 1 || st.size.rows > NSHD_TERMSIZE ||
 		    st.size.cols < 1 || st.size.cols > NSHD_TERMSIZE ? -1 : 0);
-	case IMSG_SYS_BOOTED:
-		return (len == sizeof(struct nshd_result) ? 0 : -1);
 	case IMSG_SYS_SNAPSHOT:
 		return (len == sizeof(struct nshd_snapshot) ? 0 : -1);
 	case IMSG_SYS_BEGIN:
@@ -1029,11 +1034,6 @@ system_whole(uint32_t type, const void *data, size_t len)
 			return (-1);
 		memcpy(&c, data, sizeof(c));
 		return (c.part < 0 || c.part >= NSHD_PARTS ? -1 : 0);
-	case IMSG_SYS_APPLY:
-		if (len != sizeof(a))
-			return (-1);
-		memcpy(&a, data, len);
-		return (apply_whole(&a));
 	case IMSG_SYS_SAVE:
 		if (len != sizeof(sv))
 			return (-1);
@@ -1064,11 +1064,9 @@ system_request(uint32_t type, uint32_t id, const void *data, size_t len)
 	struct nshd_syslogin	 sl;
 	struct nshd_show	 show;
 	struct nshd_begin	 bg;
-	struct nshd_apply	 a;
 	struct nshd_save	 sv;
 	struct nshd_rollback	 rb;
 	struct nshd_test	 t;
-	struct nshd_result	 res;
 	struct nshd_sysop	 so;
 	struct nshd_follow	 f;
 	struct nshd_systerm	 st;
@@ -1110,10 +1108,6 @@ system_request(uint32_t type, uint32_t id, const void *data, size_t len)
 		memcpy(&bg, data, sizeof(bg));
 		system_begin(id, &bg);
 		break;
-	case IMSG_SYS_APPLY:
-		memcpy(&a, data, sizeof(a));
-		system_apply(id, &a);
-		break;
 	case IMSG_SYS_SAVE:
 		memcpy(&sv, data, sizeof(sv));
 		system_save(id, &sv);
@@ -1128,13 +1122,6 @@ system_request(uint32_t type, uint32_t id, const void *data, size_t len)
 		break;
 	case IMSG_SYS_SAVED:
 		system_rollback(id, -2, 0);
-		break;
-	case IMSG_SYS_BOOT:
-		system_boot(id);
-		break;
-	case IMSG_SYS_BOOTED:
-		memcpy(&res, data, sizeof(res));
-		system_booted(id, res.status == 0);
 		break;
 	case IMSG_SYS_PERMS:
 		memcpy(&pm, data, sizeof(pm));
@@ -2628,19 +2615,6 @@ system_running(size_t *len)
 	return (buf);
 }
 
-/* the boot's script, and whether what runs is then the saved one */
-static void
-system_apply(uint32_t id, struct nshd_apply *a)
-{
-	if (!booting || begun != NULL) {
-		printf("%% nshd: no commit is begun\n");
-		system_printed(id, 1);
-		system_parts_free();
-		return;
-	}
-	system_script(id, a, 0);
-}
-
 /*
  * The script, the part sent, in a job, which then says whether what runs
  * is the configuration wanted, the part sent too. A commit's that is not
@@ -2825,6 +2799,12 @@ system_tested(uint32_t id, int32_t status)
 {
 	struct nshd_result	 r;
 
+	if (id == 0 && boot_plan != NULL) {
+		session_tested(boot_plan, boot_test++, status != 0);
+		printed_log();
+		boot_next();
+		return;
+	}
 	if (status != 0) {
 		if (test_refused != id)
 			test_refusals = 0;
@@ -2941,45 +2921,130 @@ system_finish(uint32_t id, int how)
 }
 
 /*
- * The boot: the first time, nsh's own NSHRC taken as the saved
+ * The boot's record: the first time, nsh's own NSHRC taken as the saved
  * configuration; then the boot record made, and carp demoted for it,
- * unless a system before this did. The answer 0, to boot, NSHD_DONE if
- * nshd is not booting or this boot of the host is done already, else 1
+ * unless a system before this did. 0 to boot, 1 if this boot of the
+ * host is done already, or -1 if the record could not be made
  */
-static void
-system_boot(uint32_t id)
+static int
+system_boot(void)
 {
 	struct boot	 b;
-	int		 status = 1;
 
-	/* a boot, except while nshd boots, is config's word alone */
-	if (boot_over) {
-		status = NSHD_DONE;
-		goto done;
-	}
 	saved_first();
 	if (boot_read(&b) == -1)
-		goto done;
-	if (b.state == BOOT_DONE) {
-		status = NSHD_DONE;
-		goto done;
-	}
+		return (-1);
+	if (b.state == BOOT_DONE)
+		return (1);
 	if (b.state == BOOT_NONE) {
 		b.state = BOOT_RUNS;
 		b.when = boot_time();
 		/* recorded first: carp demoted without a record stays so */
 		if (boot_write(&b) == -1)
-			goto done;
+			return (-1);
 		if (carplock(128) == 1) {
 			b.demoted = 1;
 			boot_write(&b);
 		}
 	}
-	status = 0;
- done:
-	/* unrecorded, it runs all the same */
-	booting = status != NSHD_DONE;
-	system_printed(id, status);
+	return (0);
+}
+
+/*
+ * The boot, once parent says nshd boots and no job runs. Its record is
+ * made; if it cannot be, the boot runs all the same, and is reported as
+ * failed. The boot is planned here, from the saved configuration and
+ * what runs, and what checks find is said. Then its tests run, each in
+ * a job of its own, and then its script, in a job (boot_next()). What
+ * checks and tests find does not stop it. What nsh's code and the jobs
+ * print is logged
+ */
+static void
+boot_start(void)
+{
+	FILE	*f;
+	char	*saved = NULL;
+	size_t	 len = 0;
+	int	 r;
+
+	if ((r = system_boot()) == 1) {
+		booting = 0;
+		boot_told(0);
+		return;
+	}
+	boot_unrecorded = r == -1;
+	if ((f = open_memstream(&saved, &len)) == NULL)
+		fatal("%s", __func__);
+	r = saved_text(f);
+	if (fclose(f) == EOF)
+		fatal("%s", __func__);
+	if (r == 0 && session_boot_plan(saved, len, &boot_plan) == 0 &&
+	    !boot_plan->same) {
+		printed_log();
+		system_parts_free();
+		parts[NSHD_WANT] = saved;
+		partlen[NSHD_WANT] = len;
+		boot_next();
+		return;
+	}
+	free(saved);
+	boot_end(r == 0 && boot_plan != NULL);
+}
+
+/* the boot's next test, in a job, or once its tests have run, its script */
+static void
+boot_next(void)
+{
+	struct plan_test	*t;
+	struct nshd_whose	 w;
+	struct plan		*p = boot_plan;
+
+	if (boot_test < p->ntests) {
+		t = &p->tests[boot_test];
+		memset(&w, 0, sizeof(w));
+		parts[NSHD_TEST] = t->text;
+		partlen[NSHD_TEST] = t->len;
+		t->text = NULL;
+		system_test(0, &w, t->name);
+		return;
+	}
+	plan_clears(p, &boot_apply);
+	parts[NSHD_SCRIPT] = p->text[PLAN_EDITS];
+	partlen[NSHD_SCRIPT] = p->len[PLAN_EDITS];
+	p->text[PLAN_EDITS] = NULL;
+	/* no session is there to end, as none is taken until it is done */
+	system_script(0, &boot_apply, 0);
+}
+
+/*
+ * The boot ended, ok if what runs is the saved configuration: its record
+ * says how (system_booted()), and parent is told, 0 if it went well. A
+ * boot whose record could not be made leaves the record as it is, and
+ * is told as failed
+ */
+static void
+boot_end(int ok)
+{
+	plan_free(boot_plan);
+	boot_plan = NULL;
+	booting = 0;
+	if (boot_unrecorded)
+		boot_told(1);
+	else
+		boot_told(system_booted(ok) == 0 && ok ? 0 : 1);
+}
+
+/* parent told the boot is over, status 0 if it went well */
+static void
+boot_told(int32_t status)
+{
+	struct nshd_result	 res;
+
+	printed_log();
+	res.status = status;
+	if (imsg_compose_event(iev_parent, IMSG_BOOTED, 0, 0, -1, &res,
+	    sizeof(res)) == -1)
+		fatal("%s", __func__);
 }
 
 /*
@@ -2987,16 +3052,15 @@ system_boot(uint32_t id)
  * configuration. If so, mark the boot done, promote carp if it was
  * demoted for the boot, and remove any unconfirmed commit record, since
  * the configuration it would roll back to is running. If not, mark the
- * boot failed; carp stays demoted until a commit saves.
+ * boot failed; carp stays demoted until a commit saves. 0 if the record
+ * says so, else 1
  */
-static void
-system_booted(uint32_t id, int ok)
+static int
+system_booted(int ok)
 {
 	struct boot	 b;
 	int		 demoted, status = 1;
 
-	booting = 0;
-	boot_over = 1;
 	if (boot_read(&b) == -1)
 		goto done;
 	if (b.state != BOOT_RUNS && b.state != BOOT_FAILED) {
@@ -3019,7 +3083,7 @@ system_booted(uint32_t id, int ok)
 	}
 	status = 0;
  done:
-	system_printed(id, status);
+	return (status);
 }
 
 /* after a save: a failed boot done, carp promoted if the boot demoted it */
@@ -3272,7 +3336,8 @@ system_job_read(int fd, short event, void *arg)
 		log_warn("%s: read", __func__);
 	}
 	if (n > 0) {
-		if (job->kind == JOB_RECOVER)
+		/* a job of no request's, the boot's or a rollback's */
+		if (job->id == 0)
 			log_text(buf, n);
 		else if (imsg_text(links[CONFIG].iev, IMSG_SYS_TEXT, job->id, buf,
 		    n) == -1)
@@ -3354,6 +3419,9 @@ system_job_done(void)
 	else if (WIFEXITED(j->status) && WEXITSTATUS(j->status) <= 1)
 		status = WEXITSTATUS(j->status);
 	system_job_end(j, status);
+	/* the boot that waited on a rollback */
+	if (booting && boot_plan == NULL && job == NULL)
+		boot_start();
 	/* first roll back an unconfirmed commit that is due */
 	system_confirm(-1, 0, NULL);
 	system_drain();
@@ -3390,6 +3458,8 @@ system_job_end(struct job *j, int32_t status)
 		    status == 0 ? NSHD_SAVED : NSHD_UNSAVED);
 	else if (j->kind == JOB_TEST)
 		system_tested(j->id, status);
+	else if (j->kind == JOB_APPLY)
+		boot_end(status == 0);
 	else {
 		if (j->kind == JOB_SAVE && system_saved(status == 0) == -1)
 			status = -1;

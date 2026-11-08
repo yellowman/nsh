@@ -28,7 +28,7 @@
 #define NSHD_SOCKET	"/var/run/nshd.sock"	/* 0660, group nshadmin */
 #define NSHD_RO_SOCKET	"/var/run/nshd.ro.sock"	/* 0666 */
 
-#define NSHD_VERSION	7	/* protocol version of clients and nshd */
+#define NSHD_VERSION	8	/* protocol version of clients and nshd */
 #define NSHD_TEXT	8192	/* text in one message, at most */
 #define NSHD_WORDS	256	/* a show's words, at most */
 #define NSHD_LINE	1024	/* a line of configuration, with its NUL */
@@ -228,9 +228,9 @@ struct nshd_rollback {
 struct nshd_chunk {
 	int32_t		part;
 };
-#define NSHD_SCRIPT	0	/* the edits BEGIN or APPLY runs */
+#define NSHD_SCRIPT	0	/* the edits BEGIN runs */
 #define NSHD_BEFORE	1	/* BEGIN's: what runs before */
-#define NSHD_WANT	2	/* BEGIN's, APPLY's: the configuration wanted */
+#define NSHD_WANT	2	/* BEGIN's: the configuration wanted */
 #define NSHD_TEST	3	/* TEST's: the rules it tests */
 #define NSHD_PARTS	4
 
@@ -271,10 +271,7 @@ struct nshd_logged {
 	uint32_t	uid;
 };
 
-/*
- * config to system: run the script, and empty these daemons' rules; then
- * see that what runs is the configuration wanted
- */
+/* a commit's script empties these daemons' rules */
 struct nshd_apply {
 	int32_t		nclears;
 	struct {
@@ -328,8 +325,8 @@ struct nshd_child {
 };
 
 /*
- * parent to a child, once it may start: whether the boot is not done;
- * until it is, the shows wait for LISTEN
+ * parent to a child, once it may start: whether nshd boots, which system
+ * does; until it is done, the shows wait for LISTEN
  */
 struct nshd_startup {
 	int32_t			boot;
@@ -351,9 +348,6 @@ struct nshd_taken {
 	uint32_t		session;
 	int32_t			status;		/* 0 if it did */
 };
-
-/* system's answer to SYS_BOOT: 0 to boot, or 1 if it could not record it */
-#define NSHD_DONE	2	/* not booting, or this host boot is done */
 
 enum nshd_proc {
 	PROC_PARENT,
@@ -414,7 +408,6 @@ enum nshd_imsg {
 	/* config to system, for commits: each is answered as SYS_SHOW is */
 	IMSG_SYS_SCRIPT,	/* nshd_chunk, and text; no answer */
 	IMSG_SYS_BEGIN,		/* nshd_begin: a commit; how it ended */
-	IMSG_SYS_APPLY,		/* nshd_apply: the boot's script, its status */
 	IMSG_SYS_SAVE,		/* nshd_save: save, and remove the record */
 	IMSG_SYS_BEGUN,		/* system to config: BEGIN's commit is begun */
 	IMSG_SYS_GO,		/* config to system: REVOKING is done */
@@ -432,11 +425,9 @@ enum nshd_imsg {
 
 	/* config to system, answered as SYS_SHOW is */
 	IMSG_SYS_SAVED,		/* the saved configuration, as text */
-	IMSG_SYS_BOOT,		/* begin the boot, or report it done */
-	IMSG_SYS_BOOTED,	/* nshd_result: how the boot went */
 
 	/* the end of the boot, and what follows it */
-	IMSG_BOOTED,		/* config to parent: nshd_result of the boot */
+	IMSG_BOOTED,		/* system to parent: nshd_result of the boot */
 	IMSG_LISTEN,		/* parent to each show: take clients */
 
 	/* with clients, on the read-write socket, and config to system */
@@ -530,6 +521,8 @@ int		 link_compose(struct link *, uint32_t, uint32_t, const void *,
 		    size_t);
 void		 link_broken(struct link *, const char *, ...)
 		    __attribute__((__format__ (printf, 2, 3)));
+struct plan;
+void		 plan_clears(struct plan *, struct nshd_apply *);
 
 /* confirm.c: the record of an unconfirmed commit */
 enum { CONFIRM_NONE, CONFIRM_WAITING, CONFIRM_FAILED };

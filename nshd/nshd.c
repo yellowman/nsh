@@ -61,7 +61,7 @@
  * on, which only that session's frontend has, and system watches the
  * client's socket itself. Of what the children send, parent reads only
  * that they have taken a session, system's word that a session ends,
- * and config's word that the boot is done.
+ * and system's word that the boot is done.
  *
  * A child that ends, or that breaks a rule, ends nshd: its peers find
  * their pipes to it closed and end too, and parent ends the rest, with
@@ -74,10 +74,10 @@
  * If nshd ends while a commit is unconfirmed, the commit is rolled back
  * when nshd starts again and system finds its record.
  *
- * With -b, as rc starts it, nshd boots: config has system make the
- * running configuration the saved one, while parent and the shows hold
- * their sockets, and they take clients once config says the boot is
- * done. rc waits for it: the process rc started exits
+ * With -b, as rc starts it, nshd boots: system makes the running
+ * configuration the saved one, while parent and the shows hold their
+ * sockets, and they take clients once system says the boot is done. rc
+ * waits for it: the process rc started exits
  * then, 0 if the boot went well, else 1, as it does if nshd ends before.
  */
 
@@ -114,6 +114,7 @@
 #include "control.h"
 #include "facts.h"
 #include "showfacts.h"
+#include "session.h"
 
 #define CLEAR_TRIES	200	/* system's helpers killed, 10 ms apart */
 #define FRONT_USER	"_nshfront"	/* each frontend's user */
@@ -197,7 +198,7 @@ static __dead void	 usage(void);
 
 static char		 execpath[PATH_MAX];	/* this program, which children run */
 static int		 opt_debug, opt_verbose, rwfd, rofd, rtfd;
-static int		 booting;	/* -b, until config says it is done */
+static int		 booting;	/* -b, until system says it is done */
 static int		 boot_fd = -1;	/* to the process rc started, or -1 */
 static uid_t		 check_uid;	/* NSHD_CHECK_USER's uid */
 
@@ -908,7 +909,7 @@ parent_sig_handler(int sig, short event, void *arg)
 
 /*
  * c's word on its pipe to parent: config's or system's that it took a
- * session, or did not, system's that a session ends, and config's word,
+ * session, or did not, system's that a session ends, and system's word,
  * once, that the boot is done. Anything else, or the pipe closed, ends
  * nshd
  */
@@ -952,7 +953,7 @@ parent_dispatch(int fd, short event, void *arg)
 			continue;
 		}
 		if (imsg_get_type(&imsg) != IMSG_BOOTED ||
-		    c->proc != PROC_CONFIG || !booting ||
+		    c->proc != PROC_SYSTEM || !booting ||
 		    imsg_get_data(&imsg, &res, sizeof(res)) == -1)
 			ended(c, "sent imsg %u, which it may not",
 			    imsg_get_type(&imsg));
@@ -1187,6 +1188,22 @@ link_compose(struct link *l, uint32_t type, uint32_t id, const void *data,
     size_t len)
 {
 	return (imsg_compose_event(l->iev, type, id, 0, -1, data, len));
+}
+
+/* the daemons whose rules p's script empties, in a, for system */
+void
+plan_clears(struct plan *p, struct nshd_apply *a)
+{
+	int	 i;
+
+	memset(a, 0, sizeof(*a));
+	a->nclears = p->nclears;
+	for (i = 0; i < p->nclears; i++) {
+		strlcpy(a->clears[i].name, p->clears[i].name,
+		    sizeof(a->clears[i].name));
+		a->clears[i].rtable = p->clears[i].rtable;
+		a->clears[i].keep = p->clears[i].keep;
+	}
 }
 
 /* l's peer gone wrong: this child ends, and nshd with it */
