@@ -72,27 +72,28 @@
  * told.
  *
  * Commits run one at a time, for all sessions: config plans a commit from
- * a snapshot, and system tests the daemons' rules it changes (TEST).
- * config then sends the whole commit (BEGIN), and system runs it to its
- * end: it records it, says it is begun (BEGUN), runs its script and
- * checks that what runs is then the candidate. If it is, system saves
- * the running configuration; if not, it undoes the script. Before the
- * script of a commit that changes login users or classes, as before a
- * rollback that does, config lowers the permissions of the sessions
- * that system says would lose one (REVOKING), and says so (GO). BEGIN's
- * answer is
- * how the commit ended, and config then takes a snapshot, for the
- * candidate to start again from. Once system has
- * begun a commit, it runs to its end if its session goes; system does
- * not begin it once the session's client has gone. commit check stops
- * after the tests. commit
+ * a snapshot, then sends the whole commit (BEGIN), with the tests of the
+ * daemons' rules it changes (TEST). system runs the tests first, and
+ * says how each went. Then it runs the commit to its end: it records
+ * it, says it is begun (BEGUN), runs its script and checks that what
+ * runs is then the candidate. If it is, system saves the running
+ * configuration; if not, it undoes the script. Before the script of a
+ * commit that changes login users or classes, as before a rollback that
+ * does, config lowers the permissions of the sessions that system says
+ * would lose one, ends those that would lose their login (REVOKING),
+ * and says so (GO). BEGIN's answer is how the commit ended, and config
+ * then takes a snapshot, for the candidate to start again from. Once
+ * system has begun a commit, it runs to its end if its session goes;
+ * system does not begin it once the session's client has gone, nor once
+ * a test refuses it. For commit check, and for a commit with problems
+ * already, system only runs the tests, and says the verdict. commit
  * confirmed passes its minutes to BEGIN, so system also keeps an
  * unconfirmed commit record, and runs its script even if it is empty;
  * then, if what runs is the candidate, the commit's record goes, and the
  * running configuration stays until the deadline, not saved. A commit
- * that saves confirms it. A commit outside configure only saves the
- * running configuration (SAVE), as one that changes nothing does; check
- * and confirmed are configure's.
+ * that saves confirms it. A commit outside configure only saves the running
+ * configuration (SAVE), as one that changes nothing does; check and
+ * confirmed are configure's.
  *
  * configure terminal gives the session its own candidate, reset to the
  * running configuration from a new snapshot before each line. A line that
@@ -242,7 +243,6 @@ enum { REQ_ANSWER, REQ_COMMIT, REQ_ROLLBACK, REQ_PERMS, REQ_TEXT, REQ_LOGIN,
 /* the commit's steps, by what it waits on */
 enum {
 	COMMIT_PLAN,		/* a snapshot, to plan from */
-	COMMIT_TEST,		/* a daemon's test of its rules */
 	COMMIT_BEGIN,		/* how system ended the commit */
 	COMMIT_APPLY,		/* the boot's script run */
 	COMMIT_RAN,		/* a snapshot of what runs then */
@@ -259,7 +259,7 @@ struct commit {
 	int			 step;
 	int			 waits;		/* on a snapshot */
 	int			 check;		/* commit check */
-	int			 test;		/* the plan's test running */
+	int			 test;		/* the plan's tests run */
 	int			 ran;		/* how BEGIN ended */
 	int			 minutes;	/* for commit confirmed, or 0 */
 	int			 save;		/* outside configure: a save */
@@ -403,7 +403,6 @@ static struct request	*config_request(uint32_t, int);
 static void		 commit_wait(int);
 static void		 commit_snapshot(void);
 static void		 commit_ended(int32_t);
-static void		 commit_test(int);
 static void		 commit_go(void);
 static int		 commit_part(int32_t, const char *, size_t);
 static void		 commit_clears(struct nshd_apply *);
@@ -412,6 +411,8 @@ static void		 commit_saved(int);
 static void		 commit_save(void);
 static void		 commit_new(struct session *);
 static void		 commit_request(int, uint32_t, const void *, size_t);
+static void		 commit_tests(uint32_t);
+static void		 commit_printed(void);
 static void		 commit_end(int, const char *);
 static int		 commit_renew(void);
 static void		 boot_start(void);
@@ -1032,6 +1033,17 @@ config_dispatch_system(int fd, short event, void *arg)
 				goto bad;
 			if ((sp = session_find(r->session)) != NULL)
 				sp->uid = lg.uid;
+			break;
+		case IMSG_SYS_TEST:
+			/* how a test of the commit's went, before it begins */
+			if (imsg_get_data(&imsg, &res, sizeof(res)) == -1 ||
+			    r == NULL || r->kind != REQ_COMMIT ||
+			    commit == NULL || commit->plan == NULL ||
+			    commit->test >= commit->plan->ntests)
+				goto bad;
+			session_tested(commit->plan, commit->test++,
+			    res.status != 0);
+			commit_printed();
 			break;
 		case IMSG_SYS_BEGUN:
 			/* the commit is begun: BEGIN's answer is how it ends */
@@ -2666,8 +2678,6 @@ commit_snapshot(void)
 			commit_end(-1, NULL);
 		else if (commit->plan == NULL)
 			commit_end(0, NULL);
-		else if (commit->plan->ntests > 0)
-			commit_test(0);
 		else
 			commit_go();
 		break;
@@ -2722,23 +2732,14 @@ commit_ended(int32_t status)
 	case BOOT_END:
 		boot_end(commit->ok && status == 0 ? 0 : 1);
 		break;
-	case COMMIT_TEST:
-		session_tested(commit->plan, commit->test, status != 0);
-		if (commit->test + 1 < commit->plan->ntests)
-			commit_test(commit->test + 1);
-		else if (commit->boot)
-			commit_apply();
-		else if (session_verdict(commit->plan) == -1)
-			commit_end(-1, NULL);
-		else if (commit->check)
-			commit_end(0, NULL);
-		else
-			commit_go();
-		break;
 	case COMMIT_BEGIN:
-		/* a commit begun has its candidate start from the snapshot */
+		/*
+		 * One not begun was refused, or only tested, and system said
+		 * the verdict; one begun has its candidate start from the
+		 * snapshot
+		 */
 		if (!commit->begun)
-			commit_end(-1, NULL);
+			commit_end(status == 0 ? 0 : -1, NULL);
 		else {
 			commit->ran = status;
 			commit_wait(COMMIT_RAN);
@@ -2753,23 +2754,11 @@ commit_ended(int32_t status)
 	}
 }
 
-/* the plan's nth test of a daemon's rules, which system runs */
-static void
-commit_test(int n)
-{
-	struct plan_test	*t = &commit->plan->tests[n];
-	struct nshd_test	 nt;
-
-	commit->test = n;
-	memset(&nt, 0, sizeof(nt));
-	nt.whose = commit->whose;
-	strlcpy(nt.name, t->name, sizeof(nt.name));
-	if (commit_part(NSHD_SCRIPT, t->text, t->len) == -1)
-		return;
-	commit_request(COMMIT_TEST, IMSG_SYS_TEST, &nt, sizeof(nt));
-}
-
-/* the plan checked: save if nothing changes, else begin the commit */
+/*
+ * The plan checked. For commit check, and for a commit with problems
+ * already, system only runs the tests. Otherwise, save if nothing
+ * changes, else begin the commit
+ */
 static void
 commit_go(void)
 {
@@ -2783,6 +2772,14 @@ commit_go(void)
 	 */
 	if ((sp = session_find(commit->session)) == NULL) {
 		commit_end(-1, NULL);
+		return;
+	}
+	memset(&b, 0, sizeof(b));
+	b.whose = commit->whose;
+	b.checking = p->checking;
+	b.bad = p->bad;
+	if (p->checking || p->bad > 0) {
+		commit_request(COMMIT_BEGIN, IMSG_SYS_BEGIN, &b, sizeof(b));
 		return;
 	}
 	if (p->same && commit->minutes == 0) {
@@ -2812,8 +2809,6 @@ commit_go(void)
 	    commit_part(NSHD_WANT, p->text[PLAN_WANT],
 	    p->len[PLAN_WANT]) == -1)
 		return;
-	memset(&b, 0, sizeof(b));
-	b.whose = commit->whose;
 	b.minutes = commit->minutes;
 	b.unsaved = commit->terminal;
 	strlcpy(b.comment, commit->comment, sizeof(b.comment));
@@ -2931,17 +2926,51 @@ commit_request(int step, uint32_t type, const void *data, size_t len)
 {
 	struct request	*r;
 
-	if (commit->boot)
-		printed_log();
-	else
-		front_printed(commit->session);
+	commit_printed();
 	if ((r = config_request(commit->session, REQ_COMMIT)) == NULL) {
 		commit_end(-1, REQ_REFUSED);
 		return;
 	}
 	commit->step = step;
+	/* BEGIN and APPLY run the plan's tests first */
+	if (type == IMSG_SYS_BEGIN || type == IMSG_SYS_APPLY)
+		commit_tests(r->id);
 	if (link_compose(&links[SYSTEM], type, r->id, data, len) == -1)
 		fatal("%s", __func__);
+}
+
+/*
+ * The plan's tests of daemons' rules, for request id, each its rules
+ * and TEST, which system runs in turn. Rules are at most NSHD_RULES
+ * bytes, so each fits in a part
+ */
+static void
+commit_tests(uint32_t id)
+{
+	struct plan_test	*t;
+	struct nshd_test	 nt;
+	int			 i;
+
+	for (i = 0; i < commit->plan->ntests; i++) {
+		t = &commit->plan->tests[i];
+		memset(&nt, 0, sizeof(nt));
+		nt.whose = commit->whose;
+		strlcpy(nt.name, t->name, sizeof(nt.name));
+		commit_part(NSHD_TEST, t->text, t->len);
+		if (link_compose(&links[SYSTEM], IMSG_SYS_TEST, id, &nt,
+		    sizeof(nt)) == -1)
+			fatal("%s", __func__);
+	}
+}
+
+/* what nsh's code printed for the commit, to its session or the log */
+static void
+commit_printed(void)
+{
+	if (commit->boot)
+		printed_log();
+	else
+		front_printed(commit->session);
 }
 
 /*
@@ -3051,8 +3080,6 @@ boot_plan(void)
 		boot_ran(0);
 	else if ((p = commit->plan)->same)
 		boot_ran(1);
-	else if (p->ntests > 0)
-		commit_test(0);
 	else
 		commit_apply();
 }

@@ -228,10 +228,11 @@ struct nshd_rollback {
 struct nshd_chunk {
 	int32_t		part;
 };
-#define NSHD_SCRIPT	0	/* BEGIN's or APPLY's edits, or TEST's rules */
+#define NSHD_SCRIPT	0	/* the edits BEGIN or APPLY runs */
 #define NSHD_BEFORE	1	/* BEGIN's: what runs before */
 #define NSHD_WANT	2	/* BEGIN's, APPLY's: the configuration wanted */
-#define NSHD_PARTS	3
+#define NSHD_TEST	3	/* TEST's: the rules it tests */
+#define NSHD_PARTS	4
 
 /*
  * config to system: the session a request is for, as frontend reported
@@ -287,10 +288,14 @@ struct nshd_apply {
  * config to system: a session's commit, which system records, applies
  * and ends: minutes for commit confirmed, unsaved for configure
  * terminal, the comment it is saved with, and its script, which the
- * parts carry with the configuration before and the one wanted
+ * parts carry with the configuration before and the one wanted. For
+ * commit check, or with problems config found, bad of them, system runs
+ * the commit's tests and no more, and says the verdict
  */
 struct nshd_begin {
 	struct nshd_whose whose;
+	int32_t		checking;
+	int32_t		bad;
 	int32_t		minutes;
 	int32_t		unsaved;
 	char		comment[NSHD_COMMENT];
@@ -310,7 +315,7 @@ struct nshd_save {
 	char		comment[NSHD_COMMENT];
 };
 
-/* config to system: test daemon name's rules, sent as the script part */
+/* config to system: test daemon name's rules, sent as the test part */
 struct nshd_test {
 	struct nshd_whose whose;
 	char		name[32];
@@ -416,7 +421,7 @@ enum nshd_imsg {
 	IMSG_SYS_ROLLBACK_READ,	/* nshd_rollback: configuration n */
 	IMSG_SYS_ROLLBACK_LIST,	/* show rollback's list */
 	IMSG_SYS_ROLLBACK_DIFF,	/* nshd_rollback: what configuration n changed */
-	IMSG_SYS_TEST,		/* nshd_test: run the test, report status */
+	IMSG_SYS_TEST,		/* nshd_test; back, nshd_result: how it went */
 
 	/* config and archive: the shared candidate, as text */
 	IMSG_ARC_TEXT,		/* its text, in either direction */

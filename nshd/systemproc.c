@@ -62,24 +62,30 @@
  * operation's status.
  *
  * config sends a commit's requests in order. First come the parts that
- * BEGIN, APPLY and TEST use, sent in chunks. TEST runs a daemon's test
- * of its rules, before BEGIN. BEGIN carries the whole commit, and system
- * runs it to its end. It writes the commit record and tells config that
- * the commit is begun (BEGUN). If the commit changes login users or
- * classes, system has config lower the permissions of each session that
- * would lose one, end each that would lose its login (REVOKING), and take
- * no new one, and waits until config says it has (GO). Then system runs
- * the script, and checks that what runs is then the configuration
- * wanted. If it is not, system undoes the script, to the configuration
- * before, and removes the record. If it is, system saves the running
- * configuration and removes the record.
- * An unconfirmed commit is kept until its deadline instead, and a
- * configure terminal commit is kept without being saved; their records
- * go too. BEGIN's answer is how the commit ended. BEGIN refuses such a
- * configure terminal commit while an unconfirmed commit exists, because
- * rolling back the unconfirmed commit would roll it back too. Outside a
- * commit, SAVE saves the running configuration, and APPLY runs the
- * boot's script.
+ * BEGIN, APPLY and TEST use, sent in chunks. Each TEST runs a daemon's
+ * test of its rules, in a job, and then tells config how it went. The
+ * TESTs come before the BEGIN or APPLY they are for, with its request
+ * id, and BEGIN and APPLY wait for them, as config's requests wait while
+ * a job runs. A commit that a test refused is not begun, nor is one that
+ * BEGIN asks only to test, as commit check does, nor one with problems
+ * config found. system then says the verdict, which counts those
+ * problems and the tests that refused the commit, and BEGIN's answer is
+ * 0 if it passes. Otherwise BEGIN runs the commit to its end. It writes
+ * the commit record and tells config that the commit is begun (BEGUN).
+ * If the commit changes login users or classes, system has config lower
+ * the permissions of each session that would lose one, end each that
+ * would lose its login (REVOKING), and take no new one, and waits until
+ * config says it has (GO). Then system runs the script, and checks that
+ * what runs is then the configuration wanted. If it is not, system
+ * undoes the script, to the configuration before, and removes the
+ * record. If it is, system saves the running configuration and removes
+ * the record. An unconfirmed commit is kept until its deadline instead,
+ * and a configure terminal commit is kept without being saved; their
+ * records go too. BEGIN's answer is how the commit ended. BEGIN refuses
+ * such a configure terminal commit while an unconfirmed commit exists,
+ * because rolling back the unconfirmed commit would roll it back too.
+ * Outside a commit, SAVE saves the running configuration, and APPLY runs
+ * the boot's script.
  *
  * An apply, an undo, a save and a test each run as a job: a child of
  * system in its own process group, whose output is sent as it arrives.
@@ -480,6 +486,8 @@ static TAILQ_HEAD(, queued) queue = TAILQ_HEAD_INITIALIZER(queue);
 static char		*parts[NSHD_PARTS];	/* sent in chunks, until used */
 static size_t		 partlen[NSHD_PARTS];
 static struct begun	*begun;		/* the commit begun, or NULL */
+static uint32_t		 test_refused;	/* the request a test refused, */
+static int		 test_refusals;	/* and how many of its tests did */
 static int		 revoking;	/* login lines change: no sessions */
 static int		 booting;	/* from BOOT until BOOTED */
 static int		 boot_over;	/* not booting, or BOOTED came */
@@ -536,6 +544,7 @@ static void	system_stream_stop(struct stream *);
 static void	system_stream_done(struct stream *);
 static void	system_sigchld(int, short, void *);
 static int	system_chunk(const unsigned char *, size_t);
+static void	system_part_free(int);
 static void	system_parts_free(void);
 static void	system_begin(uint32_t, struct nshd_begin *);
 static void	system_apply(uint32_t, struct nshd_apply *);
@@ -568,6 +577,7 @@ static char	*system_running(size_t *);
 static void	system_rollback(uint32_t, int, int);
 static void	system_health(void);
 static void	system_test(uint32_t, struct nshd_whose *, char *);
+static void	system_tested(uint32_t, int32_t);
 static int	system_admin_test(char *);
 static void	system_printed(uint32_t, int32_t);
 static struct job *system_job_new(uint32_t, int);
@@ -1003,7 +1013,8 @@ system_whole(uint32_t type, const void *data, size_t len)
 		if (len != sizeof(bg))
 			return (-1);
 		memcpy(&bg, data, len);
-		return (bg.minutes < 0 || bg.minutes > NSHD_CONFIRMMAX ||
+		return ((bg.checking != 0 && bg.checking != 1) || bg.bad < 0 ||
+		    bg.minutes < 0 || bg.minutes > NSHD_CONFIRMMAX ||
 		    (bg.unsaved != 0 && (bg.unsaved != 1 || bg.minutes != 0)) ||
 		    memchr(bg.comment, '\0', sizeof(bg.comment)) == NULL ?
 		    -1 : apply_whole(&bg.apply));
@@ -2131,22 +2142,30 @@ system_chunk(const unsigned char *data, size_t len)
 }
 
 static void
+system_part_free(int n)
+{
+	free(parts[n]);
+	parts[n] = NULL;
+	partlen[n] = 0;
+}
+
+static void
 system_parts_free(void)
 {
 	int	 i;
 
-	for (i = 0; i < NSHD_PARTS; i++) {
-		free(parts[i]);
-		parts[i] = NULL;
-		partlen[i] = 0;
-	}
+	for (i = 0; i < NSHD_PARTS; i++)
+		system_part_free(i);
 }
 
 /*
  * A commit begins, from the running configuration to the wanted one in
  * the parts sent: the record is made, unless one that a commit left
  * refuses it. config is told it is begun, and its script runs; then it
- * ends as BEGIN asked (system_job_end()). The answer is how it ended
+ * ends as BEGIN asked (system_job_end()). The answer is how it ended.
+ * The commit's tests have run before this (system_test()). If one
+ * refused, or BEGIN asks for only the tests, the answer is 0 and the
+ * commit is not begun
  */
 static void
 system_begin(uint32_t id, struct nshd_begin *bg)
@@ -2159,6 +2178,13 @@ system_begin(uint32_t id, struct nshd_begin *bg)
 	size_t		 len;
 	int		 r, perms, logins = 0, wrote = 0, status = 1;
 
+	/* not begun: the verdict counts the tests that refused it too */
+	if (bg->checking || bg->bad > 0 || test_refused == id) {
+		system_parts_free();
+		system_printed(id, commit_verdict(bg->bad +
+		    (test_refused == id ? test_refusals : 0), bg->checking));
+		return;
+	}
 	memset(&rec, 0, sizeof(rec));
 	if ((b = begun = calloc(1, sizeof(*b))) == NULL)
 		fatal(NULL);
@@ -2724,7 +2750,8 @@ system_unconfirm(void)
 
 /*
  * daemon name's test of its rules, the part sent, staged in a directory
- * of their own, in a job
+ * of their own, in a job. It is the commit's or the boot's of request
+ * id, and runs before its BEGIN or APPLY, which waits while a job runs
  */
 static void
 system_test(uint32_t id, struct nshd_whose *whose, char *name)
@@ -2737,22 +2764,22 @@ system_test(uint32_t id, struct nshd_whose *whose, char *name)
 	if (whose->session == 0 ? !booting :
 	    (cl = client_whose(whose)) == NULL) {
 		printf("%% Commit refused: its client is gone\n");
-		system_printed(id, 1);
-		system_parts_free();
+		system_part_free(NSHD_TEST);
+		system_tested(id, 1);
 		return;
 	}
 	if (cl != NULL)
 		perms = system_whom(cl, NULL);
 	if (!system_may(perms, LOGIN_CONFIGURE, "configure") ||
 	    ((perms & LOGIN_ADMIN) == 0 && system_admin_test(name) == -1)) {
-		system_printed(id, 1);
-		system_parts_free();
+		system_part_free(NSHD_TEST);
+		system_tested(id, 1);
 		return;
 	}
 	if (!ctl_rules_args(name, NULL, NULL, 0, NULL)) {
 		printf("%% nshd: %s's rules have no test\n", name);
-		system_printed(id, 1);
-		system_parts_free();
+		system_part_free(NSHD_TEST);
+		system_tested(id, 1);
 		return;
 	}
 	j = system_job_new(id, JOB_TEST);
@@ -2773,20 +2800,42 @@ system_test(uint32_t id, struct nshd_whose *whose, char *name)
 	}
 	if ((!j->root && (fchown(fd, check_uid, check_gid) == -1 ||
 	    chown(j->dir, check_uid, check_gid) == -1)) ||
-	    (partlen[NSHD_SCRIPT] > 0 && write(fd, parts[NSHD_SCRIPT],
-	    partlen[NSHD_SCRIPT]) != (ssize_t)partlen[NSHD_SCRIPT])) {
+	    (partlen[NSHD_TEST] > 0 && write(fd, parts[NSHD_TEST],
+	    partlen[NSHD_TEST]) != (ssize_t)partlen[NSHD_TEST])) {
 		printf("%% nshd: %s: %s\n", j->path, strerror(errno));
 		close(fd);
 		goto fail;
 	}
 	close(fd);
 	system_job(j);
-	system_parts_free();
+	system_part_free(NSHD_TEST);
 	return;
  fail:
-	system_printed(id, -1);
 	system_job_free(j);
-	system_parts_free();
+	system_part_free(NSHD_TEST);
+	system_tested(id, -1);
+}
+
+/*
+ * request id's test ended as status says, which config is told; one that
+ * did not pass refuses the commit
+ */
+static void
+system_tested(uint32_t id, int32_t status)
+{
+	struct nshd_result	 r;
+
+	if (status != 0) {
+		if (test_refused != id)
+			test_refusals = 0;
+		test_refused = id;
+		test_refusals++;
+	}
+	printed_text(links[CONFIG].iev, IMSG_SYS_TEXT, id, 0);
+	r.status = status;
+	if (link_compose(&links[CONFIG], IMSG_SYS_TEST, id, &r,
+	    sizeof(r)) == -1)
+		fatal("%s", __func__);
 }
 
 /*
@@ -3076,7 +3125,7 @@ system_admin_test(char *name)
 	if ((runs = system_running(&len)) == NULL)
 		return (-1);
 	admin_begin(1, runs, len);
-	r = admin_test(name, parts[NSHD_SCRIPT], partlen[NSHD_SCRIPT]);
+	r = admin_test(name, parts[NSHD_TEST], partlen[NSHD_TEST]);
 	admin_end();
 	free(runs);
 	return (r);
@@ -3339,6 +3388,8 @@ system_job_end(struct job *j, int32_t status)
 	else if (j->kind == JOB_SAVE && begun != NULL)
 		system_finish(j->id, system_saved(status == 0) == 0 &&
 		    status == 0 ? NSHD_SAVED : NSHD_UNSAVED);
+	else if (j->kind == JOB_TEST)
+		system_tested(j->id, status);
 	else {
 		if (j->kind == JOB_SAVE && system_saved(status == 0) == -1)
 			status = -1;

@@ -186,9 +186,12 @@ While a commit of the shared candidate runs, no other session changes
 it.
 Commits run one at a time, across all the sessions.
 config plans a commit from a snapshot and checks it.
-Then config has system test the daemons' rules that the commit changes.
-config then hands the commit to system, which runs it to its end:
-system records the commit and runs its script.
+config then hands the commit to system, with the daemons' rules that it
+changes.
+system first tests the rules; if a test refuses them, system does not
+begin the commit.
+Otherwise system runs the commit to its end: it records the commit and
+runs its script.
 system then checks that the running configuration is the candidate, and
 that no line of the script failed.
 If so, system saves the running configuration; if not, system runs a

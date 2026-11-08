@@ -392,8 +392,8 @@ session_candidate(struct session_state *s)
  * Check s's candidate as commit check does and, unless checking, plan
  * its commit into *pp: as a handler returns, -1 when the candidate may
  * not become the running configuration or no plan could be made, after
- * saying why. Daemons' tests of rules are the plan's, and the verdict
- * waits on them (session_verdict()); with them, a plan is made when
+ * saying why. Daemons' tests of rules are the plan's, which system
+ * runs, and the verdict waits on them; with them, a plan is made when
  * checking too. A commit confirmed records the running configuration
  * and the candidate even if they are the same. A commit is refused once
  * if another commit has since changed what its candidate changes
@@ -453,20 +453,12 @@ done:
 	return r;
 }
 
-/* p's nth test, if failed, refused its rules: report it as a problem */
+/* p's nth test, if failed, refused its rules: say so */
 void
 session_tested(struct plan *p, int n, int failed)
 {
 	if (failed)
-		p->bad += commit_refused_by(p->tests[n].label,
-		    p->tests[n].name);
-}
-
-/* The verdict on p, its tests run, as commit_verdict() says it */
-int
-session_verdict(struct plan *p)
-{
-	return commit_verdict(p->bad, p->checking);
+		commit_refused_by(p->tests[n].label, p->tests[n].name);
 }
 
 /* Whether p changes login users or classes */
