@@ -105,9 +105,9 @@ in
 config requests them from system at the session's hello.
 system answers for the uid of the session's client, which it reads from
 the client's socket (see system, below).
-config refuses what the permissions do not allow: a show without view,
-an operation without operate, and configure, a commit, a rollback, a
-load or a daemon's rules without configure.
+config allows each request only with its permission: a show needs
+view, an operation operate, and configure, a commit, a rollback, a load
+or a daemon's rules configure.
 nsh checks exec, the permission to run programs, itself; config only
 reports whether the class has it.
 .Cm configure
@@ -124,12 +124,12 @@ user's uid and the permissions of the user's class.
 config checks a session's requests against the permissions the session
 has after its hello, or its login; system checks those it runs against
 the permissions of the user's class as it is then.
-A commit that changes login users or classes ends no session but a
-web configurator's session whose user could no longer log in, or a
-session whose hello config has not yet answered.
+A commit that changes login users or classes ends only a web
+configurator's session whose user can no longer log in, and a session
+whose hello config has not yet answered.
 Before its script runs, config lowers the permissions of each session
 that would lose one by it to those the session would have after, and
-nshd takes no session until the commit ends.
+nshd takes new sessions again once the commit ends.
 A session in
 .Cm configure
 or
@@ -144,7 +144,8 @@ The commit runs to its end, and
 .Cm show rollback
 says how it went.
 A rollback of an unconfirmed commit that changes login users or
-classes ends no session, as it takes back a commit: a permission it
+classes leaves every session running, as it takes back a commit: a
+permission it
 takes away counts at once in system's checks, and in config's once the
 session connects again.
 system decides which commits and rollbacks change them, by comparing
@@ -187,9 +188,9 @@ Commits run one at a time, across all the sessions.
 config plans a commit from a snapshot and checks it.
 config then hands the commit to system, with the daemons' rules that it
 changes.
-system first tests the rules; if a test refuses them, system does not
-begin the commit.
-Otherwise system runs the commit to its end: it records the commit and
+system first tests the rules, and begins the commit only if every test
+passes.
+Then system runs the commit to its end: it records the commit and
 runs its script.
 system then checks that the running configuration is the candidate, and
 that no line of the script failed.
@@ -229,8 +230,7 @@ which system reads, into the candidate; rollback 0 loads the running
 configuration.
 Once system has begun a commit, the commit runs to its end even if its
 session ends.
-If the session's client closes its connection before then, system does
-not begin the commit.
+system begins it only while the session's client is still connected.
 A session with view may watch commits, and interfaces and routes.
 config then sends it unrequested notices between its replies to the
 session's requests.
@@ -398,20 +398,20 @@ or of a daemon's operation, such as smtp's
 has no edit.
 config refuses a commit with such a line and reports each one; the boot
 leaves each one out and reports it.
-system checks every edit before it runs any, and runs none if an edit
-names no such command, or names one where it does not belong.
+system checks every edit before it runs any, and runs the script only
+if each edit names a command that exists, where it belongs.
 An edit that runs a daemon's program fails unless the program exits 0,
 and then leaves the daemon's state as it was.
 A disable's pkill may also exit 1, which says no such daemon runs.
-pf's enable and disable turn pf on and off with pf's ioctls, and fail
-unless pf is then on or off.
+pf's enable and disable turn pf on and off with pf's ioctls, and
+succeed only if pf is then on or off.
 An edit that fails makes the script fail.
-A commit by a session without admin may not change what needs admin
+A commit by a session without admin may keep a line that needs admin
 (see
 .Cm login class
 in
-.Xr nsh 8 ) ,
-unless the same line was running before the commit.
+.Xr nsh 8 )
+only as it was running before the commit.
 The script fails at such a change, and the commit is rolled back.
 For such a session, a test of a daemon's rules refuses the same lines,
 judged against the running configuration.
@@ -426,9 +426,9 @@ system keeps a record of a commit that has begun.
 The commit removes the record when it saves or is rolled back.
 A commit that does neither leaves the record, and the next commit
 reports what it left.
-While the record says a commit's changes were not saved, a commit is
-refused unless it only saves the running configuration or restores
-the configuration from before that commit.
+While the record says a commit's changes were not saved, a commit may
+only save the running configuration or restore the configuration from
+before that commit.
 An unconfirmed commit also writes a record of its own.
 Its rollback configuration is what ran before the first unconfirmed
 commit.
@@ -437,8 +437,8 @@ before the commit.
 A commit that saves removes that record after the save succeeds.
 The deadline is the commit's minutes, counted from when the commit
 ends.
-After the deadline, system rolls the commit back, once no commit it
-began is still open and no script, save or test runs.
+After the deadline, system rolls the commit back, once every commit it
+began has ended and no script, save or test runs.
 It demotes carp by 128, runs a script that rolls the changes back, and
 promotes carp again once the running configuration matches the rollback
 configuration.
@@ -502,14 +502,13 @@ What system finishes is a commit that it has begun, with its undo or
 its save, a rollback of an unconfirmed commit, or the boot, each within
 its own time limit.
 A commit that changes login users or classes, and still waits for
-config to lower or end sessions, does not run.
+config to lower or end sessions, ends as one undone, without running.
 A rollback that still waits so runs once the parent has reaped each
 child it killed, and says so.
 Until then
 .Nm
 takes no clients, and system takes no requests.
-A commit that system has not begun, such as one whose tests run, is not
-begun.
+system drops a commit it has not begun, such as one whose tests run.
 A signal to end
 .Nm
 still ends it at once.
@@ -533,7 +532,7 @@ running configuration the saved one, as much of it as takes effect, as
 .Fl i
 does.
 What the checks find is reported, and each daemon's rules are tested,
-but neither stops the boot.
+and the boot goes on whatever they find.
 What system prints for the boot is logged.
 If a rollback of an unconfirmed commit runs as
 .Nm
@@ -564,10 +563,9 @@ Each child's
 .Xr chroot 2
 is its user's home directory.
 .Nm
-does not start unless each user, and _nshcheck, exists, is not root,
-and has a uid no other has.
-Nor does it start if _nshweb, the web configurator's user, exists and is
-root or has another user's uid.
+starts only if each user, and _nshcheck, exists, is not root, and has a
+uid of its own, and only if _nshweb, the web configurator's user, when
+it exists, is not root and has a uid of its own.
 .Pp
 Only root and the members of the group nshadmin may connect to the
 read-write socket.

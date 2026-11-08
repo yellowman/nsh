@@ -481,8 +481,8 @@ config_dispatch_parent(int fd, short event, void *arg)
 
 /*
  * A new session from parent, and fd, the pipe to its frontend: parent is
- * told config took it, or did not. None is taken while login users or
- * classes may change (front_revoke())
+ * told whether config took it. While login users or classes change,
+ * config refuses it (front_revoke())
  */
 static void
 front_new(struct nshd_newsession *ns, int fd)
@@ -972,11 +972,11 @@ config_dispatch_system(int fd, short event, void *arg)
 		case IMSG_SYS_REVOKING:
 			/*
 			 * login users or classes are about to change, by a
-			 * commit or a rollback: the sessions that would lose
-			 * a permission have it no more, or end, and then
-			 * system is told so, after the stops of the requests
-			 * of those that end (front_drop()); or they have
-			 * changed
+			 * commit or a rollback: config lowers the permissions
+			 * of the sessions that would lose one, or ends them,
+			 * and then tells system (GO), after the stops of the
+			 * requests of those that end (front_drop()); or they
+			 * have changed
 			 */
 			if (imsg_get_data(&imsg, &rv, sizeof(rv)) == -1 ||
 			    (rv.on != 0 && rv.on != 1) ||
@@ -2702,8 +2702,8 @@ commit_go(void)
 	struct session		*sp;
 
 	/*
-	 * A commit whose session is gone is not begun, as nothing is left
-	 * to judge its permissions by
+	 * A commit is begun only while its session is there, as its
+	 * permissions are the session's
 	 */
 	if ((sp = session_find(commit->session)) == NULL) {
 		commit_end(-1, NULL);

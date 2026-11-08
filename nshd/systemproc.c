@@ -502,7 +502,7 @@ static size_t		 partlen[NSHD_PARTS];
 static struct begun	*begun;		/* the commit begun, or NULL */
 static uint32_t		 test_refused;	/* the request a test refused, */
 static int		 test_refusals;	/* and how many of its tests did */
-static int		 revoking;	/* login lines change: no sessions */
+static int		 revoking;	/* login lines change: logins refused */
 static int		 booting;	/* the boot runs, or waits for a job */
 static struct plan	*boot_plan;	/* the boot's, once it is made */
 static int		 boot_test;	/* the next of its tests */
@@ -3131,7 +3131,7 @@ boot_next(void)
 	parts[NSHD_SCRIPT] = p->text[PLAN_EDITS];
 	partlen[NSHD_SCRIPT] = p->len[PLAN_EDITS];
 	p->text[PLAN_EDITS] = NULL;
-	/* no session is there to end, as none is taken until it is done */
+	/* no session runs during the boot, so none can lose a permission */
 	system_script(0, &boot_apply, 0);
 }
 
@@ -3485,11 +3485,11 @@ system_job_wait(struct job *j)
 	evtimer_add(&j->tm, &tv);
 }
 
-/* config has not ended its sessions in time: it has failed */
+/* config has not said GO in time: it has failed */
 static void
 system_go_late(int fd, short event, void *arg)
 {
-	config_gone("did not end its sessions in %d seconds", GO_SECS);
+	config_gone("did not lower or end its sessions in %d seconds", GO_SECS);
 }
 
 /*

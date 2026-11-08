@@ -174,9 +174,12 @@ Every request except a stream,
 or
 .Cm terminal ,
 must have the header
-.Ql X-Nshdeck: 1 ,
-which a page of another site cannot send without asking the browser
-first.
+.Ql X-Nshdeck: 1 .
+Only
+.Nm Ns 's
+own page can add it, because
+.Nm
+gives no other site permission to.
 Every request except
 .Cm login
 needs the cookie that

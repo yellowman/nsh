@@ -90,8 +90,7 @@ files are encapsulated within the
 .Nm
 configuration framework.
 .Nm
-does not in any way obfuscate the configuration syntax that is utilised or
-provided by these ctl.c based programs.
+uses the configuration syntax of these ctl.c based programs unchanged.
 .Nm
 allows the administrator to view and edit all configuration in one place.
 .Ss COMMAND LINE ARGUMENTS
@@ -369,19 +368,20 @@ and
 .Ic traceroute ,
 which need operate, and
 .Ic clear ,
-which needs nothing.
+which anyone may run.
 .Nm
 checks exec itself, so exec limits only a user whose login shell is
 .Nm .
-Without exec, no key of the line editor runs
+Without exec,
+.Nm
+unbinds each key of the line editor that runs
 .Cm vi-histedit ,
 which runs vi, or
 .Cm ed-command ,
-which can run a bind command that
-.Nm
-does not see.
-.Nm
-unbinds each such key when the editor starts, after it reads
+which can run a bind command outside
+.Nm Ns 's
+checks.
+It does so when the editor starts, after it reads
 .Pa ~/.editrc ,
 and after each bind.
 If a sequence of keys other than ESC and one key is bound to either,
@@ -398,7 +398,7 @@ line names, with that user's password, and has the
 permissions of the user's class, as when the user logs in with
 .Xr ssh 1 .
 It never logs in as root, or as any other account with uid 0.
-nshd refuses what a session's class does not allow.
+nshd allows a session only what its class allows.
 Where nshd does not run, or the user may not use its read-write socket,
 .Nm
 has only the commands it runs itself, except those that need nshd's
@@ -455,7 +455,9 @@ configuration.
 .Cm commit
 makes the candidate the running configuration, all of it or none, and
 saves it.
-Configuration mode cannot be left while the candidate has changes.
+To leave configuration mode, first commit the candidate's changes or
+discard them with
+.Cm rollback .
 .Pp
 .Cm configure private
 is part of
@@ -781,10 +783,10 @@ at a terminal may say
 Removing the line deletes an account that nshd made, but keeps its
 home directory.
 .Pp
-An account that nshd did not make, such as one an administrator made by
-hand, gets its class and nothing else.
-Its line accepts no password, and removing the line leaves the account
-unchanged.
+nshd changes only the class of an account it did not make, such as one
+an administrator made by hand.
+Its line takes no password, and removing the line leaves the account as
+it is.
 No line may name root or any other account with uid 0, which is always
 super-user, or an account whose name begins with an underscore, since
 those belong to daemons.
@@ -793,10 +795,10 @@ A commit that changes
 .Cm login class
 or
 .Cm login user
-lines ends no nshd session but a web configurator's session whose user
-could no longer log in.
-Once it begins, each session that would lose a permission by it has it
-no more, and nshd takes no session until the commit ends.
+lines ends only the nshd session of a web configurator whose user can
+no longer log in.
+Once it begins, each session that would lose a permission by it loses
+it at once, and nshd takes new sessions again once the commit ends.
 A session in
 .Cm configure
 or
@@ -805,7 +807,8 @@ that loses admin may then only leave it, and
 .Nm
 allows the exec permission, which it checks itself, until it connects
 again.
-A rollback of an unconfirmed commit that changes them ends no session:
+A rollback of an unconfirmed commit that changes them leaves every
+session running:
 a permission it takes away is refused at once where nshd checks the
 class as it runs a command, and everywhere once
 .Nm
@@ -815,7 +818,8 @@ as it runs a command, as for the admin lines of a commit, and everywhere
 once
 .Nm
 connects again.
-A change to a user's password alone ends no session, and a web login
+A change to a user's password alone leaves every session running, and a
+web login
 is refused until the commit ends.
 A web configurator's session that ended logs in again with the
 permissions of the user's class as it is after the change.
@@ -1102,8 +1106,7 @@ Note that
 is a layer 2 relay: it learns no MAC addresses, and it forwards packets
 between two interfaces, and only two, with as little processing as
 possible.
-So the system does not accept every bridge configuration command for a
-tpmr interface.
+So a tpmr interface takes only some bridge configuration commands.
 If an unsupported command is issued to a tpmr interface the system will
 display the following when rejecting the configuration command
 .Bd -literal -offset indent
@@ -1120,8 +1123,6 @@ of the layer 2 bridge device.
 Add the named interface to a protected domain.
 Any member ports in the same bridge in the same protected domain are
 isolated from each other.
-No layer 2 communication is possible between memers ports in the same
-port protection group.
 Protected domains allow for selective port isolation and or private
 vlan functionality.
 .Pp
@@ -1606,9 +1607,8 @@ Load, with
 the firewall rules that the last
 .Cm commit
 wrote.
-It does not load the candidate's rules;
 .Cm commit
-does that.
+loads the candidate's rules.
 .Cm pf check-config
 and
 .Cm pf reload
@@ -2344,9 +2344,11 @@ writes the crontab to
 and installs it with
 .Xr crontab 1 .
 Changing root's crontab needs the admin permission.
+In configure,
 .Cm crontab install
-alone changes nothing: in configure, it only checks that the candidate
-has a crontab.
+only checks that the candidate has a crontab;
+.Cm commit
+installs it.
 .Pp
 .Tg scheduler
 .Ic scheduler Op Cm edit | install
@@ -5624,10 +5626,9 @@ nsh(interface-umb0)# apn internet
 Enter the PIN that unlocks the SIM card of a
 .Xr umb 4
 interface, or remove the kept PIN.
-Once the card unlocks with the PIN, the PIN is kept in the
-configuration, as typed, and boot enters it.
-A PIN is not kept if the card does not unlock with it within five
-seconds, or if the card is unlocked already.
+If the card unlocks with the PIN within five seconds, the PIN is kept
+in the configuration, as typed, and boot enters it.
+If the card is unlocked already, the PIN is not kept.
 .Pp
 .Ic setpuk
 .Ar puk new-pin
@@ -6021,9 +6022,9 @@ by one
 interface is recived by the other
 .Xr pair 4
 interface and vice versa.
-Patch can only connect two
+Patch connects two
 .Xr pair 4
-interfaces, no other interface types are supported.
+interfaces only.
 .Pp
 E.g. To connect pair1 and pair2 interfaces with a virtual patch cable.
 .Bd -literal -offset indent -compact

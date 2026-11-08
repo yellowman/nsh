@@ -753,7 +753,7 @@ out_open(struct child *c)
 /*
  * c ended, or broke a rule, as fmt says: nshd ends with it. But when
  * config ends, system first finishes what it began (parent_drain()), and
- * nshd ends once system has; until then, the others' ends do not matter.
+ * nshd ends once system has; until then, parent ignores the others' ends.
  * archive's end ends config, which has a pipe to it, so it is config's
  * end that counts. system's end always ends nshd
  */
@@ -1024,7 +1024,7 @@ parent_dispatch(int fd, short event, void *arg)
 			parent_ended();
 			continue;
 		}
-		/* once config has ended, what children say does not matter */
+		/* once config has ended, parent ignores what children say */
 		if (draining) {
 			imsg_free(&imsg);
 			continue;
