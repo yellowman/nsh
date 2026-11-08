@@ -556,6 +556,9 @@ int who(int, char **, ...);
 /* arp.c */
 int arpset(int, char **, ...);
 struct in_addr;
+struct addrinfo;
+int numeric_addrinfo(const char *, const char *, int, int,
+    struct addrinfo **);
 int getinetaddr(const char *, struct in_addr *);
 void conf_arp(FILE *, char *, int);
 char *sec2str(time_t);

@@ -385,6 +385,9 @@ config makes a commit's script into edits, and system runs the edits and
 never the script's text.
 Each edit names one of the commands a configuration has, by its place
 among them, with the line's words.
+A line takes an address in numeric form only, so
+.Nm
+sends no DNS query and reads no DNS answer.
 The command is a statement, an interface's or a bridge's line, the end
 of a block, a daemon's rules, the state a daemon is left in, or what
 follows its rules.

@@ -57,7 +57,7 @@
 int
 pflow_addr(const char *val, struct sockaddr_storage *ss)
 {
-	struct addrinfo hints, *res0;
+	struct addrinfo *res0;
 	int error, flag;
 	char *cp, *ip, *port, buf[HOST_NAME_MAX + 1 + sizeof(":65535")];
 
@@ -95,12 +95,8 @@ pflow_addr(const char *val, struct sockaddr_storage *ss)
 	if (flag)
 		ip++;
 
-	bzero(&hints, sizeof(hints));
-	hints.ai_family = AF_UNSPEC;
-	hints.ai_socktype = SOCK_DGRAM;	/* dummy */
-	hints.ai_flags = AI_NUMERICHOST;
-
-	if ((error = getaddrinfo(ip, port, &hints, &res0)) != 0) {
+	if ((error = numeric_addrinfo(ip, port, AF_UNSPEC, SOCK_DGRAM,
+	    &res0)) != 0) {
 		printf("%% pflow_addr: error in address string: %s\n",
 		       gai_strerror(error));
 		return -1;

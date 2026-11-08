@@ -262,8 +262,8 @@ intsyncpeer(int argc, char **argv, ...)
 {
 	struct ifreq ifr;
 	struct pfsyncreq preq;
-	struct addrinfo hints, *peerres;
-	int set, ecode, r = 0;
+	struct addrinfo *peerres;
+	int set, r = 0;
 	va_list ap;
 	char *ifname;
 	int ifs;
@@ -305,14 +305,10 @@ intsyncpeer(int argc, char **argv, ...)
 	}
 
 	if (set) {
-		bzero(&hints, sizeof(hints));
-		hints.ai_family = AF_INET;
-		hints.ai_socktype = SOCK_DGRAM;
-
-		if ((ecode = getaddrinfo(argv[0], NULL, &hints, &peerres)) != 0)
-		{
-			printf("%% error in parsing address string: %s\n",
-			    gai_strerror(ecode));
+		if (numeric_addrinfo(argv[0], NULL, AF_INET, SOCK_DGRAM,
+		    &peerres) != 0) {
+			printf("%% syncpeer %s is not an IPv4 address\n",
+			    argv[0]);
 			return -1;
 		}
 

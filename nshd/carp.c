@@ -411,16 +411,12 @@ intcarp(int argc, char **argv, ...)
 		break;
 	case CARP_PEER:
 		if(set) {
-			struct addrinfo hints, *peerres;
-			int ecode;
+			struct addrinfo *peerres;
 
-			bzero(&hints, sizeof(hints));
-			hints.ai_family = AF_INET;
-			hints.ai_socktype = SOCK_DGRAM;
-
-			if ((ecode = getaddrinfo(argv[0], NULL, &hints, &peerres)) != 0) {
-				printf("%% error in parsing address string: %s\n",
-				    gai_strerror(ecode));
+			if (numeric_addrinfo(argv[0], NULL, AF_INET,
+			    SOCK_DGRAM, &peerres) != 0) {
+				printf("%% %s %s is not an IPv4 address\n",
+				    x->name, argv[0]);
 				return -1;
 			}
 

@@ -1366,11 +1366,8 @@ pr_arp(int argc, char **argv, ...)
 		return facts_show(stdout, "arp %d", cli_rtable);
 	case 3:
 		/* specific address */
-		if (getinetaddr(argv[2], &in) == -1) {
-			printf("%% arpget: getinetaddr: failure %s\n",
-			    strerror(errno));
+		if (getinetaddr(argv[2], &in) == -1)
 			return -1;
-		}
 		return facts_show(stdout, "arp %d %s", cli_rtable,
 		    inet_ntoa(in));
 	}

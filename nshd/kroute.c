@@ -619,7 +619,7 @@ rtnameserver(int argc, char *argv[], int tableid)
 	struct rt_msghdr         rtm;
 	struct sockaddr_rtdns    rtdns;
 	struct iovec             iov[3];
-	struct addrinfo	 hints, *res;
+	struct addrinfo	*res;
 	struct in_addr           ns4[5];
 	struct in6_addr          ns6[5];
 	size_t			 ns4_count = 0, ns6_count = 0;
@@ -642,17 +642,13 @@ rtnameserver(int argc, char *argv[], int tableid)
 		return (1);
 	}
 
-	memset(&hints, 0, sizeof(hints));
-	hints.ai_family = AF_UNSPEC;
-	hints.ai_socktype = SOCK_STREAM;
-	hints.ai_flags = AI_NUMERICHOST | AI_NUMERICSERV;
-
 #ifndef nitems
 #define nitems(_a)      (sizeof((_a)) / sizeof((_a)[0]))
 #endif
 
 	for (; argc > 0 && ns4_count + ns6_count < 5; argc--, argv++) {
-		error = getaddrinfo(*argv, NULL, &hints, &res);
+		error = numeric_addrinfo(*argv, NULL, AF_UNSPEC, SOCK_STREAM,
+		    &res);
 		if (error) {
 			printf("%% rtnameserver: %s\n", gai_strerror(error));
 			continue;

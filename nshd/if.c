@@ -2134,11 +2134,11 @@ pwe3_ioctl(int ifs, char *ifname, unsigned long cmd, caddr_t arg)
 int
 intpwe3(int argc, char **argv, ...)
 {
-	int set, ch, error, cw = -1, fat = -1, nei = 0;
+	int set, ch, cw = -1, fat = -1, nei = 0;
 	const char *errstr;
 	struct ifreq ifr;
 	struct if_laddrreq req;
-	struct addrinfo hints, *res;
+	struct addrinfo *res;
 	struct sockaddr_mpls *smpls = (struct sockaddr_mpls *)&req.dstaddr;
 	va_list ap;
 	char *ifname;
@@ -2151,7 +2151,6 @@ intpwe3(int argc, char **argv, ...)
 
 	bzero(&ifr, sizeof(ifr));
 	bzero(&req, sizeof(req));
-	bzero(&hints, sizeof(hints));
 
 	/* command options for 'pwe' */
 	static struct nopts pwe3opts[] = {
@@ -2194,13 +2193,10 @@ intpwe3(int argc, char **argv, ...)
 			nei = 1;
 			if (!set)
 				break;
-			hints.ai_family = AF_UNSPEC;
-			hints.ai_socktype = SOCK_DGRAM;
-			error = getaddrinfo(argv[noptind - 1], NULL, &hints,
-			    &res);
-			if (error != 0) {
-				printf("%% intpwe3: neighbor %s: %s\n",
-				    argv[noptind - 1], gai_strerror(error));
+			if (numeric_addrinfo(argv[noptind - 1], NULL,
+			    AF_UNSPEC, SOCK_DGRAM, &res) != 0) {
+				printf("%% neighbor %s is not an address\n",
+				    argv[noptind - 1]);
 				return -1;
 			}
 			smpls->smpls_len = sizeof(*smpls);

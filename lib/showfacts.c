@@ -357,7 +357,7 @@ struct facts_answer *
 facts_answer(char *words)
 {
 	struct facts_answer	*a;
-	struct addrinfo		 hints, *res;
+	struct addrinfo		*res;
 	char			*p, *last, **w;
 	int			 n;
 
@@ -414,10 +414,7 @@ facts_answer(char *words)
 		if (answer_table(a, w[1]) == -1)
 			goto bad;
 		if (n == 3) {
-			memset(&hints, 0, sizeof(hints));
-			hints.ai_family = AF_INET6;
-			hints.ai_flags = AI_NUMERICHOST;
-			if (getaddrinfo(w[2], NULL, &hints, &res) != 0)
+			if (numeric_addrinfo(w[2], NULL, AF_INET6, 0, &res) != 0)
 				goto bad;
 			memcpy(&a->sin6, res->ai_addr, sizeof(a->sin6));
 			freeaddrinfo(res);

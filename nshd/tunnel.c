@@ -502,7 +502,7 @@ tunnel_mcast(char *ip)
 	struct addrinfo *res;
 	int mcast;
 
-	if (getaddrinfo(ip, NULL, NULL, &res) != 0)
+	if (numeric_addrinfo(ip, NULL, AF_UNSPEC, 0, &res) != 0)
 		return -1;
 	if (res->ai_family == AF_INET)
 		mcast = IN_MULTICAST(ntohl(((struct sockaddr_in *)
@@ -524,7 +524,7 @@ tunnel_addr(char *what, char *ip, char *port, char *buf, int *portp)
 	struct addrinfo *res;
 	int ecode, af;
 
-	if ((ecode = getaddrinfo(ip, port, NULL, &res)) != 0) {
+	if ((ecode = numeric_addrinfo(ip, port, AF_UNSPEC, 0, &res)) != 0) {
 		printf("%% unable to parse %s address string: %s\n", what,
 		    gai_strerror(ecode));
 		return 0;
@@ -551,7 +551,8 @@ settunnel(int s, char *ifname, char *src, char *srcport, char *dstip)
 	int ecode, r = -1;
 	struct if_laddrreq req;
 
-	if ((ecode = getaddrinfo(src, srcport, NULL, &srcres)) != 0) {
+	if ((ecode = numeric_addrinfo(src, srcport, AF_UNSPEC, 0,
+	    &srcres)) != 0) {
 		printf("%% unable to parse source address string: %s\n",
 		     gai_strerror(ecode));
 		return -1;
@@ -559,7 +560,8 @@ settunnel(int s, char *ifname, char *src, char *srcport, char *dstip)
 
 	/* tunneladdr gives no destination */
 	if (dstip != NULL &&
-	    (ecode = getaddrinfo(dstip, NULL, NULL, &dstres)) != 0) {
+	    (ecode = numeric_addrinfo(dstip, NULL, AF_UNSPEC, 0,
+	    &dstres)) != 0) {
 		printf("%% unable to parse destination address string: %s\n",
 		     gai_strerror(ecode));
 		freeaddrinfo(srcres);
@@ -825,7 +827,6 @@ endpoint_arg(char *ifname, char *arg, struct sockaddr_storage *ss, char *buf)
 	struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)ss;
 	struct ether_addr *ea;
 	struct addrinfo *res;
-	int ecode;
 
 	memset(ss, 0, sizeof(*ss));
 	if (isprefix("bpe", ifname)) {
@@ -841,9 +842,8 @@ endpoint_arg(char *ifname, char *arg, struct sockaddr_storage *ss, char *buf)
 		strlcpy(buf, ether_ntoa(ea), NI_MAXHOST);
 		return 0;
 	}
-	if ((ecode = getaddrinfo(arg, NULL, NULL, &res)) != 0) {
-		printf("%% unable to parse endpoint %s: %s\n", arg,
-		    gai_strerror(ecode));
+	if (numeric_addrinfo(arg, NULL, AF_UNSPEC, 0, &res) != 0) {
+		printf("%% endpoint %s is not an address\n", arg);
 		return -1;
 	}
 	memcpy(ss, res->ai_addr, MIN(res->ai_addrlen, sizeof(*ss)));
@@ -892,7 +892,7 @@ cand_endpoint(char *ifname, int af)
 	} else
 		src = strtok_r(NULL, " ", &p);
 	if (src == NULL || !tunnel_arg(src, sbuf, sizeof(sbuf), &port) ||
-	    getaddrinfo(sbuf, NULL, NULL, &res) != 0)
+	    numeric_addrinfo(sbuf, NULL, AF_UNSPEC, 0, &res) != 0)
 		return -1;
 	saf = res->ai_family;
 	freeaddrinfo(res);

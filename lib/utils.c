@@ -175,32 +175,41 @@ is_valid_ifname(char *ifname)
 		return 0;
 }
 
+/*
+ * getaddrinfo(3) of a numeric address and port, of family af, or
+ * AF_UNSPEC, and socket type type, or 0. A name is refused, so nsh and
+ * nshd send no DNS query and read no answer. Returns getaddrinfo's
+ * error, or 0
+ */
+int
+numeric_addrinfo(const char *host, const char *serv, int af, int type,
+    struct addrinfo **res)
+{
+	struct addrinfo hints;
+
+	memset(&hints, 0, sizeof(hints));
+	hints.ai_family = af;
+	hints.ai_socktype = type;
+	hints.ai_flags = AI_NUMERICHOST | AI_NUMERICSERV;
+	return getaddrinfo(host, serv, &hints, res);
+}
+
 int
 getinetaddr(const char *host, struct in_addr *inap)
 {
-	struct hostent *hp;
-
 	if (inet_aton(host, inap) == 1)
 		return (0);
-	if ((hp = gethostbyname(host)) == NULL) {
-		printf("%% getinetaddr: %s: %s\n", host, hstrerror(h_errno));
-		return (-1);
-	}
-	memcpy(inap, hp->h_addr, sizeof(*inap));
-	return (0);
+	printf("%% %s is not an IPv4 address\n", host);
+	return (-1);
 }
 
 int
 parse_host(const char *host, struct sockaddr_in6 *sin6)
 {
-	struct addrinfo hints, *res;
+	struct addrinfo *res;
 	int gai_error;
 
-	bzero(&hints, sizeof(hints));
-	hints.ai_family = AF_INET6;
-	hints.ai_flags = AI_NUMERICHOST;
-
-	gai_error = getaddrinfo(host, NULL, &hints, &res);
+	gai_error = numeric_addrinfo(host, NULL, AF_INET6, 0, &res);
 	if (gai_error) {
 		printf("%% %s: %s\n", host, gai_strerror(gai_error));
 		return 1;
@@ -227,14 +236,11 @@ in6_clearscopeid(struct sockaddr_in6 *sin6)
 int
 parse_ipv6(char *arg, struct in6_addr *addr)
 {
-	struct addrinfo hints, *res;
+	struct addrinfo *res;
 	int error;
 
-	memset(&hints, 0, sizeof(hints));
-	hints.ai_family = AF_INET6;
-	hints.ai_flags = AI_NUMERICHOST;
-	hints.ai_socktype = SOCK_STREAM; 
-	if ((error = getaddrinfo(arg, "0", &hints, &res)) != 0) {
+	if ((error = numeric_addrinfo(arg, "0", AF_INET6, SOCK_STREAM,
+	    &res)) != 0) {
 		return error;
 	}
 	if (sizeof(struct sockaddr_in6) != res->ai_addrlen) {
