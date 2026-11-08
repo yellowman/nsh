@@ -100,6 +100,20 @@
  * read its messages, requests to stop a stream, and requests for a new
  * session's permissions.
  *
+ * When config goes, or breaks a rule, or has not ended the sessions
+ * system named GO_SECS seconds after system asked it to, system takes no
+ * more of its requests and ends those that have not begun: the requests
+ * that wait, streams, logins, and the tests of a commit not begun. What
+ * it began goes on to its end, within each job's time limit: a commit,
+ * with its undo or save, a rollback of an unconfirmed commit, or the
+ * boot. A commit whose script waits for config to lower or end sessions
+ * does not run, and ends as one undone. system asks parent to end config,
+ * and a rollback that waits so runs once parent says that config and
+ * every session have ended. It begins no rollback then, and logs what the
+ * jobs print. Then system exits, and parent ends nshd. A commit kept
+ * until its deadline leaves its unconfirmed commit record, which the
+ * next system takes over.
+ *
  * The commit record, in NSHDB, outlives the commit that wrote it, and a
  * commit that does not finish leaves it behind. Its state is applying
  * if the commit neither saved nor rolled back, or unsaved if the commit
@@ -526,6 +540,11 @@ static int	system_request(uint32_t, uint32_t, const void *, size_t);
 static void	system_queue(uint32_t, uint32_t, const void *, size_t);
 static int	system_unqueue(uint32_t);
 static void	system_drain(void);
+static void	config_gone(const char *, ...)
+		    __attribute__((__format__ (printf, 1, 2)));
+static void	system_drained(void);
+static int	system_said(uint32_t);
+static void	system_tell(uint32_t, uint32_t, const void *, size_t);
 static void	system_snapshot(uint32_t, int);
 static void	system_show(uint32_t, char *);
 static void	system_op(uint32_t, struct nshd_sysop *);
@@ -661,8 +680,9 @@ systemproc(int debug, int v)
 
 /*
  * parent's word that system may start, and whether nshd boots; each new
- * session, with its client's socket; and each session whose frontend
- * has ended
+ * session, with its client's socket; each session whose frontend has
+ * ended; and, once config is gone, that config and every session have
+ * ended, which starts a rollback that waits for that
  */
 static void
 system_dispatch_parent(int fd, short event, void *arg)
@@ -685,6 +705,14 @@ system_dispatch_parent(int fd, short event, void *arg)
 		if (n == 0)
 			break;
 		type = imsg_get_type(&imsg);
+		if (type == IMSG_CONFIG_END && imsg_get_len(&imsg) == 0 &&
+		    links[CONFIG].iev == NULL) {
+			imsg_free(&imsg);
+			system_go(0);
+			/* system exits if the rollback could not start */
+			system_drained();
+			continue;
+		}
 		if (type == IMSG_SESSION_GONE && imsg_get_len(&imsg) == 0) {
 			if ((cl = client_find(imsg_get_id(&imsg))) != NULL)
 				client_drop(cl);
@@ -747,13 +775,13 @@ system_dispatch_config(int fd, short event, void *arg)
 	int			 r = 0;
 
 	if (imsgev_io(iev, event) == -1) {
-		link_broken(&links[CONFIG], "closed its pipe");
+		config_gone("closed its pipe");
 		return;
 	}
 
 	for (;;) {
 		if ((n = imsgbuf_get(&iev->ibuf, &imsg)) == -1) {
-			link_broken(&links[CONFIG], "sent what imsg cannot read");
+			config_gone("sent what imsg cannot read");
 			return;
 		}
 		if (n == 0)
@@ -771,8 +799,8 @@ system_dispatch_config(int fd, short event, void *arg)
 		}
 		if (system_whole(type, data, len) == -1) {
 			imsg_free(&imsg);
-			link_broken(&links[CONFIG], "sent imsg %u, which it may not, "
-			    "or not whole", type);
+			config_gone("sent imsg %u, which it may not, or not "
+			    "whole", type);
 			return;
 		}
 		/*
@@ -792,8 +820,7 @@ system_dispatch_config(int fd, short event, void *arg)
 			explicit_bzero(ibuf_data(&b), ibuf_size(&b));
 		imsg_free(&imsg);
 		if (r == -1) {
-			link_broken(&links[CONFIG], "sent a part past %d bytes",
-			    NSHD_PART);
+			config_gone("sent a part past %d bytes", NSHD_PART);
 			return;
 		}
 	}
@@ -1201,11 +1228,112 @@ system_drain(void)
 		r = system_request(q->type, q->id, q->data, q->len);
 		free(q);
 		if (r == -1) {
-			link_broken(&links[CONFIG], "sent a part past %d bytes",
-			    NSHD_PART);
+			config_gone("sent a part past %d bytes", NSHD_PART);
 			return;
 		}
 	}
+}
+
+/*
+ * config is gone, or broke a rule, as fmt says, and system takes no more
+ * of its requests. It ends what it has not begun: the requests that
+ * wait, streams, logins, and a test of a commit that is not begun. What
+ * it has begun goes on to its end, within the time each job has: a
+ * commit, with its undo or its save, a rollback of an unconfirmed
+ * commit, or the boot. What these print is logged. Then system exits
+ * (system_drained()). A commit whose script waits for config to end
+ * sessions does not run, and ends as one undone. system asks
+ * parent to end config: a config that is silent may still run. A
+ * rollback that waits so waits on, until parent says that config and
+ * every session have ended (system_dispatch_parent())
+ */
+static void
+config_gone(const char *fmt, ...)
+{
+	struct imsgev	*iev = links[CONFIG].iev;
+	struct job	*j;
+	struct queued	*q;
+	struct stream	*s;
+	struct attempt	*a;
+	va_list		 ap;
+	char		*why;
+
+	va_start(ap, fmt);
+	if (vasprintf(&why, fmt, ap) == -1)
+		fatal("%s", __func__);
+	va_end(ap);
+	log_warnx("config %s: system finishes what it began", why);
+	free(why);
+	event_del(&iev->ev);
+	close(iev->ibuf.fd);
+	imsgbuf_clear(&iev->ibuf);
+	free(iev);
+	links[CONFIG].iev = NULL;
+	while ((q = TAILQ_FIRST(&queue)) != NULL) {
+		TAILQ_REMOVE(&queue, q, entry);
+		free(q);
+	}
+	TAILQ_FOREACH(s, &streams, entry)
+		if (s->pid != 0)
+			killpg(s->pid, SIGKILL);
+	TAILQ_FOREACH(a, &attempts, entry)
+		killpg(a->pgid, SIGKILL);
+	if (job != NULL && job->kind == JOB_TEST && job->id != 0)
+		killpg(job->pgid, SIGKILL);
+	if (job != NULL && job->waits && job->kind == JOB_RECOVER)
+		evtimer_del(&job->tm);
+	else if (job != NULL && job->waits) {
+		j = job;
+		job = NULL;
+		evtimer_del(&j->tm);
+		printf("%% The commit did not run: config ended while it "
+		    "waited\n");
+		system_parts_free();
+		system_finish(j->id, NSHD_UNDONE);
+		system_job_free(j);
+	}
+	if (imsg_compose_event(iev_parent, IMSG_CONFIG_END, 0, 0, -1, NULL,
+	    0) == -1)
+		fatal("%s", __func__);
+	system_drained();
+}
+
+/*
+ * once config is gone, system exits when no job runs: what it began, a
+ * commit, a rollback or the boot, runs in a job until it ends
+ */
+static void
+system_drained(void)
+{
+	if (links[CONFIG].iev == NULL && job == NULL)
+		system_exit();
+}
+
+/*
+ * what nsh's code printed for request id, to config, or to the log once
+ * config is gone; -1 if it could not be sent
+ */
+static int
+system_said(uint32_t id)
+{
+	if (links[CONFIG].iev == NULL) {
+		printed_log();
+		return (0);
+	}
+	return (printed_text(links[CONFIG].iev, IMSG_SYS_TEXT, id, 0));
+}
+
+/*
+ * To config, of request id, or of none, 0: how it goes, how it ended, or
+ * a notice. Once config is gone, nothing is sent, as what system began
+ * finishes without it (config_gone())
+ */
+static void
+system_tell(uint32_t type, uint32_t id, const void *data, size_t len)
+{
+	if (links[CONFIG].iev != NULL &&
+	    link_compose(&links[CONFIG], type, id, data, len) == -1)
+		fatal("%s", __func__);
 }
 
 /*
@@ -1620,9 +1748,7 @@ system_auth_answer(struct attempt *a)
 	cl->logged = 1;
 	cl->login = a->uid;
 	lg.uid = a->uid;
-	if (link_compose(&links[CONFIG], IMSG_SYS_LOGGED, a->id, &lg,
-	    sizeof(lg)) == -1)
-		fatal("%s", __func__);
+	system_tell(IMSG_SYS_LOGGED, a->id, &lg, sizeof(lg));
 	system_end(a->id, login_perms(a->uid), NULL);
 }
 
@@ -1740,8 +1866,7 @@ system_end(uint32_t id, int32_t status, const char *fmt, ...)
 		free(s);
 	}
 	r.status = status;
-	if (link_compose(&links[CONFIG], IMSG_SYS_END, id, &r, sizeof(r)) == -1)
-		fatal("%s", __func__);
+	system_tell(IMSG_SYS_END, id, &r, sizeof(r));
 }
 
 /* a unit of facts, for request *arg, kept until a message is full */
@@ -2280,7 +2405,7 @@ system_begin(uint32_t id, struct nshd_begin *bg)
 		system_printed(id, status);
 		return;
 	}
-	printed_text(links[CONFIG].iev, IMSG_SYS_TEXT, id, 0);
+	system_said(id);
 	if (link_compose(&links[CONFIG], IMSG_SYS_BEGUN, id, NULL, 0) == -1)
 		fatal("%s", __func__);
 	b->apply = bg->apply;
@@ -2526,9 +2651,7 @@ system_went(int failed)
 	memset(&nt, 0, sizeof(nt));
 	nt.kind = NSHD_NOTICE_BACK;
 	nt.n = failed;
-	if (links[CONFIG].iev != NULL && link_compose(&links[CONFIG],
-	    IMSG_SYS_NOTICE, 0, &nt, sizeof(nt)) == -1)
-		fatal("%s", __func__);
+	system_tell(IMSG_SYS_NOTICE, 0, &nt, sizeof(nt));
 }
 
 /*
@@ -2572,9 +2695,7 @@ system_revoking(uint32_t id, const char *after, size_t len)
 			rv.perms[rv.n++] = then;
 		}
 	}
-	if (links[CONFIG].iev != NULL && link_compose(&links[CONFIG],
-	    IMSG_SYS_REVOKING, id, &rv, sizeof(rv)) == -1)
-		fatal("%s", __func__);
+	system_tell(IMSG_SYS_REVOKING, id, &rv, sizeof(rv));
 }
 
 /* cf not rolled back, and its attempts done: carp stays demoted */
@@ -2811,11 +2932,9 @@ system_tested(uint32_t id, int32_t status)
 		test_refused = id;
 		test_refusals++;
 	}
-	printed_text(links[CONFIG].iev, IMSG_SYS_TEXT, id, 0);
+	system_said(id);
 	r.status = status;
-	if (link_compose(&links[CONFIG], IMSG_SYS_TEST, id, &r,
-	    sizeof(r)) == -1)
-		fatal("%s", __func__);
+	system_tell(IMSG_SYS_TEST, id, &r, sizeof(r));
 }
 
 /*
@@ -2916,7 +3035,7 @@ system_finish(uint32_t id, int how)
 	else if (begun->minutes > 0 && how == NSHD_KEPT)
 		system_kept();
 	system_ended();
-	printed_text(links[CONFIG].iev, IMSG_SYS_TEXT, id, 0);
+	system_said(id);
 	system_end(id, answer, NULL);
 }
 
@@ -3129,7 +3248,7 @@ system_rollback(uint32_t id, int n, int diff)
 	if (fclose(f) == EOF)
 		fatal("%s", __func__);
 	/* first what nsh's code printed, then the text */
-	if (printed_text(links[CONFIG].iev, IMSG_SYS_TEXT, id, 0) == -1)
+	if (system_said(id) == -1)
 		r = -1;
 	if (imsg_text(links[CONFIG].iev, IMSG_SYS_TEXT, id, buf, len) == -1)
 		fatal("%s", __func__);
@@ -3199,8 +3318,7 @@ system_admin_test(char *name)
 static void
 system_printed(uint32_t id, int32_t status)
 {
-	if (printed_text(links[CONFIG].iev, IMSG_SYS_TEXT, id, 0) == -1 &&
-	    status == 0)
+	if (system_said(id) == -1 && status == 0)
 		status = 1;
 	system_end(id, status, NULL);
 }
@@ -3336,8 +3454,8 @@ system_job_read(int fd, short event, void *arg)
 		log_warn("%s: read", __func__);
 	}
 	if (n > 0) {
-		/* a job of no request's, the boot's or a rollback's */
-		if (job->id == 0)
+		/* a job of no request's, or once config is gone */
+		if (job->id == 0 || links[CONFIG].iev == NULL)
 			log_text(buf, n);
 		else if (imsg_text(links[CONFIG].iev, IMSG_SYS_TEXT, job->id, buf,
 		    n) == -1)
@@ -3367,11 +3485,11 @@ system_job_wait(struct job *j)
 	evtimer_add(&j->tm, &tv);
 }
 
-/* config has not ended its sessions in time, so nshd ends */
+/* config has not ended its sessions in time: it has failed */
 static void
 system_go_late(int fd, short event, void *arg)
 {
-	fatalx("config did not end its sessions in %d seconds", GO_SECS);
+	config_gone("did not end its sessions in %d seconds", GO_SECS);
 }
 
 /*
@@ -3422,9 +3540,14 @@ system_job_done(void)
 	/* the boot that waited on a rollback */
 	if (booting && boot_plan == NULL && job == NULL)
 		boot_start();
-	/* first roll back an unconfirmed commit that is due */
-	system_confirm(-1, 0, NULL);
+	/*
+	 * first roll back an unconfirmed commit that is due; once config
+	 * is gone, system only finishes what it began
+	 */
+	if (links[CONFIG].iev != NULL)
+		system_confirm(-1, 0, NULL);
 	system_drain();
+	system_drained();
 }
 
 /*
@@ -3443,7 +3566,7 @@ system_job_end(struct job *j, int32_t status)
 		system_attempted(status == 0);
 	} else if (j->kind == JOB_APPLY && begun != NULL && status != 0) {
 		/* what was printed goes to config before the undo's */
-		printed_text(links[CONFIG].iev, IMSG_SYS_TEXT, j->id, 0);
+		system_said(j->id);
 		u = system_job_new(j->id, JOB_UNDO);
 		u->was = j->was;
 		u->waslen = j->waslen;

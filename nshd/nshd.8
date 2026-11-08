@@ -155,9 +155,8 @@ permissions each session has now with those its user would have by the
 login lines after.
 Such a commit runs once config has lowered those sessions' permissions,
 and a rollback once config says it takes no new session.
-If config has not done so within 10 seconds,
-.Nm
-ends.
+If config has not done so within 10 seconds, system acts as it does
+when config exits, as below.
 Until the commit or rollback ends, a web login is refused, and the web
 configurator logs in again.
 A client whose session ended connects again, with the permissions its
@@ -482,7 +481,8 @@ Each child also has a pipe to the parent, which tells it when to
 start, and on which config gets each new session's pipe and system the
 session's client's socket.
 The parent accepts only config's and system's word that they took a
-session, and system's message that the boot is done.
+session, system's word that config is to end, and system's message that
+the boot is done.
 .Pp
 If any child but a frontend exits, or sends the parent or a peer a
 message that it may not send,
@@ -491,12 +491,36 @@ ends: the child's peers find their pipes closed and exit, and the parent
 kills the rest with
 .Dv SIGKILL .
 No child is started again.
+config is the exception: when config exits, or sends what it may not,
+system first finishes what it began, and then
+.Nm
+ends.
+First, system asks the parent to end config, which may still run, and
+the parent kills config, the frontends and every child but system with
+.Dv SIGKILL .
+What system finishes is a commit that it has begun, with its undo or
+its save, a rollback of an unconfirmed commit, or the boot, each within
+its own time limit.
+A commit that changes login users or classes, and still waits for
+config to lower or end sessions, does not run.
+A rollback that still waits so runs once the parent has reaped each
+child it killed, and says so.
+Until then
+.Nm
+takes no clients, and system takes no requests.
+A commit that system has not begun, such as one whose tests run, is not
+begun.
+A signal to end
+.Nm
+still ends it at once.
 If
 .Nm
 ends while an unconfirmed commit waits, nothing rolls the commit back
 until
 .Nm
 is started again.
+This holds for an unconfirmed commit that system kept after config
+exited too.
 .Pp
 With
 .Fl b ,

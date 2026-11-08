@@ -66,6 +66,9 @@
  * A child that ends, or that breaks a rule, ends nshd: its peers find
  * their pipes to it closed and end too, and parent ends the rest, with
  * system's helpers, which can outlive system. Nothing is started again.
+ * config is the exception: when it ends, nshd takes no more clients,
+ * parent kills every child but system, and system finishes what it
+ * began; nshd ends when system exits.
  * A frontend is not such a child: when one ends, or breaks a rule, only
  * its session ends. config finds its pipe closed, or closes it, and
  * drops the session, and parent tells system to drop it too. When system
@@ -183,12 +186,14 @@ static int		 talks(enum nshd_proc);
 static void		 pair(struct child *, struct child *);
 static void		 tell(struct child *, struct child *, int);
 static int		 out_open(struct child *);
-static __dead void	 ended(struct child *, const char *, ...)
+static void		 ended(struct child *, const char *, ...)
 			    __attribute__((__format__ (printf, 2, 3)));
+static void		 parent_drain(void);
 static int		 system_clear(struct child *);
 static struct kinfo_proc *procs(int, int, size_t *);
 static const char	*how(int);
 static void		 reaped(pid_t, int);
+static void		 parent_ended(void);
 static struct child	*child(enum nshd_proc, int);
 static void		 users(void);
 static void		 daemon_boot(void);
@@ -199,6 +204,8 @@ static __dead void	 usage(void);
 static char		 execpath[PATH_MAX];	/* this program, which children run */
 static int		 opt_debug, opt_verbose, rwfd, rofd, rtfd;
 static int		 booting;	/* -b, until system says it is done */
+static int		 draining;	/* config ended: system finishes */
+static int		 ending;	/* system waits for config's end */
 static int		 boot_fd = -1;	/* to the process rc started, or -1 */
 static uid_t		 check_uid;	/* NSHD_CHECK_USER's uid */
 
@@ -743,8 +750,14 @@ out_open(struct child *c)
 	return (sp[1]);
 }
 
-/* c ended, or broke a rule, as fmt says: nshd ends with it */
-static __dead void
+/*
+ * c ended, or broke a rule, as fmt says: nshd ends with it. But when
+ * config ends, system first finishes what it began (parent_drain()), and
+ * nshd ends once system has; until then, the others' ends do not matter.
+ * archive's end ends config, which has a pipe to it, so it is config's
+ * end that counts. system's end always ends nshd
+ */
+static void
 ended(struct child *c, const char *fmt, ...)
 {
 	va_list	 ap;
@@ -756,7 +769,41 @@ ended(struct child *c, const char *fmt, ...)
 	va_end(ap);
 	log_warnx("%s %s", c->name, why);
 	free(why);
-	parent_shutdown(1, "nshd ends with it");
+	if (c->proc == PROC_SYSTEM)
+		parent_shutdown(1, "nshd ends with it");
+	if (draining || c->proc == PROC_ARCHIVE)
+		return;
+	if (c->proc == PROC_CONFIG)
+		parent_drain();
+	else
+		parent_shutdown(1, "nshd ends with it");
+}
+
+/*
+ * config ended, or system says it is to: nshd takes no more clients, and
+ * every child but system is killed. system finishes what it began, within
+ * the time each of its jobs has, and exits; its pipe closed then ends
+ * nshd (ended()). A signal to end still ends nshd at once
+ */
+static void
+parent_drain(void)
+{
+	size_t	 i;
+
+	draining = 1;
+	log_warnx("system finishes what it began, and then nshd ends");
+	if (!booting) {
+		event_del(&ev_accept);
+		evtimer_del(&ev_pause);
+	}
+	close(rwfd);
+	rwfd = -1;
+	for (i = 0; i < NPROC; i++)
+		if (children[i].pid > 0 && children[i].proc != PROC_SYSTEM)
+			kill(children[i].pid, SIGKILL);
+	for (i = 0; i < SESSIONS; i++)
+		if (fronts[i].pid > 0)
+			kill(fronts[i].pid, SIGKILL);
 }
 
 /*
@@ -902,16 +949,41 @@ parent_sig_handler(int sig, short event, void *arg)
 			if (fronts[i].pid > 0 && waitpid(fronts[i].pid,
 			    &status, WNOHANG) == fronts[i].pid)
 				reaped(fronts[i].pid, status);
+		parent_ended();
 		break;
 	}
 	errno = serrno;
 }
 
 /*
+ * system, once config's end has been asked for, hears that config and
+ * every session have ended: config, the shows, the archive and every
+ * frontend have been reaped
+ */
+static void
+parent_ended(void)
+{
+	size_t	 i;
+
+	if (!ending)
+		return;
+	for (i = 0; i < NPROC; i++)
+		if (children[i].pid > 0 && children[i].proc != PROC_SYSTEM)
+			return;
+	for (i = 0; i < SESSIONS; i++)
+		if (fronts[i].pid > 0)
+			return;
+	ending = 0;
+	if (imsg_compose_event(child(PROC_SYSTEM, 0)->iev, IMSG_CONFIG_END, 0,
+	    0, -1, NULL, 0) == -1)
+		fatal("%s", __func__);
+}
+
+/*
  * c's word on its pipe to parent: config's or system's that it took a
- * session, or did not, system's that a session ends, and system's word,
- * once, that the boot is done. Anything else, or the pipe closed, ends
- * nshd
+ * session, or did not, system's that a session ends, system's that
+ * config is to end, and system's word, once, that the boot is done.
+ * Anything else, or the pipe closed, ends nshd
  */
 static void
 parent_dispatch(int fd, short event, void *arg)
@@ -930,14 +1002,33 @@ parent_dispatch(int fd, short event, void *arg)
 			c = &children[i];
 	if (c == NULL)
 		fatalx("%s: from no child", __func__);
-	if (imsgev_io(iev, event) == -1)
+	if (imsgev_io(iev, event) == -1) {
 		ended(c, "closed its pipe");
+		return;
+	}
 
 	for (;;) {
-		if ((n = imsgbuf_get(&iev->ibuf, &imsg)) == -1)
+		if ((n = imsgbuf_get(&iev->ibuf, &imsg)) == -1) {
 			ended(c, "sent what imsg cannot read");
+			return;
+		}
 		if (n == 0)
 			break;
+		/* config is gone, or has gone wrong, as system finds */
+		if (imsg_get_type(&imsg) == IMSG_CONFIG_END &&
+		    c->proc == PROC_SYSTEM && imsg_get_len(&imsg) == 0) {
+			imsg_free(&imsg);
+			if (!draining)
+				parent_drain();
+			ending = 1;
+			parent_ended();
+			continue;
+		}
+		/* once config has ended, what children say does not matter */
+		if (draining) {
+			imsg_free(&imsg);
+			continue;
+		}
 		if (imsg_get_type(&imsg) == IMSG_SESSION_TAKEN &&
 		    (c->proc == PROC_CONFIG || c->proc == PROC_SYSTEM) &&
 		    imsg_get_data(&imsg, &t, sizeof(t)) == 0) {
@@ -954,9 +1045,12 @@ parent_dispatch(int fd, short event, void *arg)
 		}
 		if (imsg_get_type(&imsg) != IMSG_BOOTED ||
 		    c->proc != PROC_SYSTEM || !booting ||
-		    imsg_get_data(&imsg, &res, sizeof(res)) == -1)
+		    imsg_get_data(&imsg, &res, sizeof(res)) == -1) {
 			ended(c, "sent imsg %u, which it may not",
 			    imsg_get_type(&imsg));
+			imsg_free(&imsg);
+			return;
+		}
 		imsg_free(&imsg);
 		booted(res.status);
 	}

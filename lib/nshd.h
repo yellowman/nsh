@@ -472,7 +472,14 @@ enum nshd_imsg {
 	 * sessions that would lose one, ends those that would lose their
 	 * login, and says so (GO)
 	 */
-	IMSG_SYS_REVOKING	/* nshd_revoking */
+	IMSG_SYS_REVOKING,	/* nshd_revoking */
+
+	/*
+	 * system to parent: config is gone, or has gone wrong, and is to
+	 * end; parent to system, once it has: config and every session
+	 * have ended
+	 */
+	IMSG_CONFIG_END
 };
 
 struct imsgev {
