@@ -651,6 +651,60 @@ login_perms(uid_t uid)
 }
 
 /*
+ * The permissions uid would have by the login lines of configuration
+ * text conf, len bytes, as login_perms() gives those of the running
+ * lines. -1 if conf cannot be read, or if no line names the user of a
+ * session of the web configurator's, web, which could not log in, so
+ * that a class with no permissions is not taken for no login
+ */
+int
+login_perms_in(uid_t uid, int web, const char *conf, size_t len)
+{
+	struct passwd *pw;
+	char *text, *end, *p, *next, *q, *s, *w[nitems(login_permtab) + 3];
+	char user[32], class[32], c[32];
+	size_t j;
+	int nw, perms = -1;
+
+	if (uid == 0)
+		return LOGIN_ALL;
+	if ((pw = getpwuid(uid)) == NULL)
+		return web ? -1 : LOGIN_VIEW;
+	if ((text = malloc(len + 1)) == NULL)
+		return -1;
+	memcpy(text, conf, len);
+	text[len] = '\0';
+	end = text + len;
+	for (p = text; p < end; p++)
+		if (*p == '\n')
+			*p = '\0';
+	class[0] = '\0';
+	for (p = text; p < end; p += strlen(p) + 1)
+		if (sscanf(p, "login user %31s class %31s", user, c) == 2 &&
+		    strcmp(user, pw->pw_name) == 0)
+			strlcpy(class, c, sizeof(class));
+	for (j = 0; j < nitems(login_builtin); j++)
+		if (strcmp(class, login_builtin[j].name) == 0)
+			perms = login_builtin[j].perms;
+	for (p = text; class[0] != '\0' && perms == -1 && p < end;
+	    p = next) {
+		next = p + strlen(p) + 1;
+		if (strncmp(p, "login class ", 12) != 0)
+			continue;
+		nw = 0;
+		for (q = p + 12; nw < (int)nitems(w) &&
+		    (s = strsep(&q, " ")) != NULL; )
+			w[nw++] = s;
+		if (nw >= 1 && q == NULL && strcmp(w[0], class) == 0)
+			perms = login_words_perms(nw - 1, w + 1);
+	}
+	free(text);
+	if (class[0] == '\0' && web)
+		return -1;
+	return perms == -1 ? LOGIN_VIEW : perms;
+}
+
+/*
  * Check a web login. name must be named by a login user line and must
  * not have uid 0. auth_usercheck(3) checks the password, and
  * auth_approval(3) must allow the account to log in, as login(1)

@@ -121,17 +121,47 @@ line.
 The web configurator's session has no permissions until it logs in.
 It then becomes the session of the user it logged in as, with that
 user's uid and the permissions of the user's class.
-A session keeps the permissions it has after its hello, or its login,
-until it ends.
-A commit that changes login users or classes ends every session before
-its script runs, its own included, and nshd takes no session until the
-commit ends.
+config checks a session's requests against the permissions the session
+has after its hello, or its login; system checks those it runs against
+the permissions of the user's class as it is then.
+A commit that changes login users or classes ends no session but a
+web configurator's session whose user could no longer log in, or a
+session whose hello config has not yet answered.
+Before its script runs, config lowers the permissions of each session
+that would lose one by it to those the session would have after, and
+nshd takes no session until the commit ends.
+A session in
+.Cm configure
+or
+.Cm configure exclusive
+that loses admin may then only leave it.
+nsh checks the exec permission itself, from the permissions the session
+had after its hello, until it connects again.
+A permission its class gains counts at once in system's checks, as for
+the admin lines of a commit, and in config's once the session connects
+again.
 The commit runs to its end, and
 .Cm show rollback
 says how it went.
-A rollback of an unconfirmed commit ends every session the same way,
-whatever lines it changes.
-A client then connects again, with the permissions its class has then.
+A rollback of an unconfirmed commit that changes login users or
+classes ends no session, as it takes back a commit: a permission it
+takes away counts at once in system's checks, and in config's once the
+session connects again.
+system decides which commits and rollbacks change them, by comparing
+the login lines of the configuration before with those of the
+configuration after.
+It decides which sessions would lose a permission by comparing the
+permissions each session has now with those its user would have by the
+login lines after.
+Such a commit runs once config has lowered those sessions' permissions,
+and a rollback once config says it takes no new session.
+If config has not done so within 10 seconds,
+.Nm
+ends.
+Until the commit or rollback ends, a web login is refused, and the web
+configurator logs in again.
+A client whose session ended connects again, with the permissions its
+class has then.
 A session in
 .Cm configure private
 has a candidate of its own; the sessions in
@@ -156,8 +186,9 @@ While a commit of the shared candidate runs, no other session changes
 it.
 Commits run one at a time, across all the sessions.
 config plans a commit from a snapshot and checks it.
-Then config has system test the daemons' rules that the commit changes,
-record the commit, and run its script.
+Then config has system test the daemons' rules that the commit changes.
+config then hands the commit to system, which runs it to its end:
+system records the commit and runs its script.
 system then checks that the running configuration is the candidate, and
 that no line of the script failed.
 If so, system saves the running configuration; if not, system runs a

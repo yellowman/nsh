@@ -72,29 +72,35 @@
  * told.
  *
  * Commits run one at a time, for all sessions: config plans a commit from
- * a snapshot, system tests the daemons' rules it changes (TEST), then
- * records it (BEGIN) and runs its script (APPLY). As part of APPLY,
- * system checks that what runs is then the candidate, and undoes the
- * script if it is not. config takes a snapshot after APPLY, for the
- * candidate to start again from. If what runs is the candidate, system
- * saves the running configuration (SAVE); if not, the record goes
- * (RECORD). Once system has begun a commit, it runs to its end if its
- * session goes; system does not begin it once the session's client has
- * gone. commit check stops after the tests. commit confirmed passes its
- * minutes to BEGIN, so system also keeps an unconfirmed commit record,
- * and runs its script even if it is empty; then, if what runs is the
- * candidate, the commit's record goes, and the running configuration
- * stays until the deadline, not saved. A commit that saves confirms it.
- * A commit outside configure only saves the running configuration, as
- * one that changes nothing does; check and confirmed are configure's.
+ * a snapshot, and system tests the daemons' rules it changes (TEST).
+ * config then sends the whole commit (BEGIN), and system runs it to its
+ * end: it records it, says it is begun (BEGUN), runs its script and
+ * checks that what runs is then the candidate. If it is, system saves
+ * the running configuration; if not, it undoes the script. Before the
+ * script of a commit that changes login users or classes, as before a
+ * rollback that does, config lowers the permissions of the sessions
+ * that system says would lose one (REVOKING), and says so (GO). BEGIN's
+ * answer is
+ * how the commit ended, and config then takes a snapshot, for the
+ * candidate to start again from. Once system has
+ * begun a commit, it runs to its end if its session goes; system does
+ * not begin it once the session's client has gone. commit check stops
+ * after the tests. commit
+ * confirmed passes its minutes to BEGIN, so system also keeps an
+ * unconfirmed commit record, and runs its script even if it is empty;
+ * then, if what runs is the candidate, the commit's record goes, and the
+ * running configuration stays until the deadline, not saved. A commit
+ * that saves confirms it. A commit outside configure only saves the
+ * running configuration (SAVE), as one that changes nothing does; check
+ * and confirmed are configure's.
  *
  * configure terminal gives the session its own candidate, reset to the
  * running configuration from a new snapshot before each line. A line that
- * changes the candidate is committed but not saved, and the commit record
- * goes once what runs is the candidate (RECORD, as NSHD_APPLIED). The
- * line is answered when its commit ends, and the
- * candidate is then the running configuration again. commit there saves
- * the running configuration; rollback has nothing to roll back.
+ * changes the candidate is committed but not saved, as BEGIN says, and
+ * the commit record goes once what runs is the candidate. The line is
+ * answered when its commit ends, and the candidate is then the running
+ * configuration again. commit there saves the running configuration;
+ * rollback has nothing to roll back.
  *
  * A daemon's rules come to a session in configure a part at a time, and
  * become its candidate's rules, in the rtable asked for, as the daemon's
@@ -237,11 +243,10 @@ enum { REQ_ANSWER, REQ_COMMIT, REQ_ROLLBACK, REQ_PERMS, REQ_TEXT, REQ_LOGIN,
 enum {
 	COMMIT_PLAN,		/* a snapshot, to plan from */
 	COMMIT_TEST,		/* a daemon's test of its rules */
-	COMMIT_BEGIN,		/* the record made */
-	COMMIT_APPLY,		/* the script run, undone if it did not take */
+	COMMIT_BEGIN,		/* how system ended the commit */
+	COMMIT_APPLY,		/* the boot's script run */
 	COMMIT_RAN,		/* a snapshot of what runs then */
 	COMMIT_SAVE,		/* the running configuration, to save */
-	COMMIT_RECORD,		/* the record removed, as how says */
 	BOOT_BEGIN,		/* the boot begun, or done already */
 	BOOT_SAVED,		/* the saved configuration, to boot to */
 	BOOT_END		/* how the boot went, recorded */
@@ -255,14 +260,13 @@ struct commit {
 	int			 waits;		/* on a snapshot */
 	int			 check;		/* commit check */
 	int			 test;		/* the plan's test running */
-	int			 ran;		/* how APPLY ended */
+	int			 ran;		/* how BEGIN ended */
 	int			 minutes;	/* for commit confirmed, or 0 */
 	int			 save;		/* outside configure: a save */
 	int			 terminal;	/* configure terminal's line, */
 	int			 line;		/* and how the line ended */
 	int			 load;		/* nsh -c's configuration */
-	int			 how;		/* the NSHD_* sent in RECORD */
-	int			 begun;		/* BEGIN done, not yet ended */
+	int			 begun;		/* system said BEGUN */
 	int			 logins;	/* changes login lines */
 	int			 shared;	/* of the shared candidate */
 	int			 boot;		/* this is the boot */
@@ -291,7 +295,7 @@ static uint32_t			request_id;
 static struct snapshot		*snap;
 static struct kfacts		*kf_now;	/* facts of the last snapshot */
 static struct commit		*commit;	/* the one running, or NULL */
-static int			 rolling;	/* system rolls a commit back */
+static int			 revoking;	/* login lines change */
 static struct cand_shared	*shared;	/* configure's candidate */
 static struct session		*exclusive;	/* in configure exclusive */
 static uid_t			*editors;	/* who changed shared since */
@@ -329,7 +333,7 @@ static int		 front_fd(uint32_t, uint32_t, int);
 static void		 front_check(void);
 static void		 front_sweep(int, short, void *);
 static void		 front_drop(struct front *);
-static void		 front_end_all(void);
+static void		 front_revoke(struct nshd_revoking *);
 static void		 config_dispatch_system(int, short, void *);
 static void		 config_dispatch_archive(int, short, void *);
 static void		 config_ready_archive(void);
@@ -402,9 +406,10 @@ static void		 commit_ended(int32_t);
 static void		 commit_test(int);
 static void		 commit_go(void);
 static int		 commit_part(int32_t, const char *, size_t);
+static void		 commit_clears(struct nshd_apply *);
 static void		 commit_apply(void);
+static void		 commit_saved(int);
 static void		 commit_save(void);
-static void		 commit_record(int);
 static void		 commit_new(struct session *);
 static void		 commit_request(int, uint32_t, const void *, size_t);
 static void		 commit_end(int, const char *);
@@ -506,7 +511,7 @@ config_dispatch_parent(int fd, short event, void *arg)
 /*
  * A new session from parent, and fd, the pipe to its frontend: parent is
  * told config took it, or did not. None is taken while login users or
- * classes may change (front_end_all())
+ * classes may change (front_revoke())
  */
 static void
 front_new(struct nshd_newsession *ns, int fd)
@@ -516,8 +521,7 @@ front_new(struct nshd_newsession *ns, int fd)
 
 	memset(&t, 0, sizeof(t));
 	t.session = ns->session;
-	if (ns->session == 0 || front_find(ns->session) != NULL || rolling ||
-	    (commit != NULL && commit->logins) ||
+	if (ns->session == 0 || front_find(ns->session) != NULL || revoking ||
 	    (f = calloc(1, sizeof(*f))) == NULL) {
 		close(fd);
 		t.status = 1;
@@ -671,23 +675,34 @@ front_drop(struct front *f)
 }
 
 /*
- * Every session ends, as login users or classes may change: a commit
- * that changes them is about to run its script, or system rolls back an
- * unconfirmed commit. A session keeps the permissions it began with, so
- * none goes on with permissions its class may no longer have. Its
- * frontend's pipe is closed, so nothing more reaches it, and a commit it
- * began runs on. No session is taken until the change is done
+ * Login users or classes are about to change, by a commit's script or a
+ * rollback (REVOKING): system names each session that would lose a
+ * permission, with those it would have, and config lowers its own to
+ * them, so none goes on with permissions its class may no longer have;
+ * one it gains it has once it connects again. A session that would lose
+ * its login, or whose permissions are not in yet, ends: its frontend's
+ * pipe is closed, so nothing more reaches it, and a commit it began runs
+ * on. No session is taken until the change is done
  */
 static void
-front_end_all(void)
+front_revoke(struct nshd_revoking *rv)
 {
 	struct front	*f;
+	struct session	*sp;
+	uint32_t	 i;
 
-	if (!TAILQ_EMPTY(&fronts))
-		log_info("every session ends: login users or classes may "
-		    "change");
-	while ((f = TAILQ_FIRST(&fronts)) != NULL)
-		front_drop(f);
+	for (i = 0; i < rv->n; i++) {
+		sp = session_find(rv->sessions[i]);
+		if (rv->perms[i] != -1 && sp != NULL && sp->perms != -1) {
+			log_info("session %u: its permissions lowered as login "
+			    "users or classes change", sp->id);
+			sp->perms &= rv->perms[i];
+		} else if ((f = front_find(rv->sessions[i])) != NULL) {
+			log_info("session %u ends: it would lose its login as "
+			    "login users or classes change", f->session);
+			front_drop(f);
+		}
+	}
 }
 
 /*
@@ -876,6 +891,7 @@ config_dispatch_system(int fd, short event, void *arg)
 	struct nshd_result	 res;
 	struct nshd_notice	 nt;
 	struct nshd_logged	 lg;
+	struct nshd_revoking	 rv;
 	struct request		*r;
 	struct session		*sp;
 	uint32_t		 type;
@@ -988,14 +1004,26 @@ config_dispatch_system(int fd, short event, void *arg)
 			config_notice(NSHD_WATCH_COMMITS, NSHD_NOTICE_BACK, 0,
 			    nt.n, NULL);
 			break;
-		case IMSG_SYS_ROLLING:
-			/* a rollback begins, or has ended */
-			if (imsg_get_data(&imsg, &res, sizeof(res)) == -1 ||
-			    (res.status != 0 && res.status != 1))
+		case IMSG_SYS_REVOKING:
+			/*
+			 * login users or classes are about to change, by a
+			 * commit or a rollback: the sessions that would lose
+			 * a permission have it no more, or end, and then
+			 * system is told so, after the stops of the requests
+			 * of those that end (front_drop()); or they have
+			 * changed
+			 */
+			if (imsg_get_data(&imsg, &rv, sizeof(rv)) == -1 ||
+			    (rv.on != 0 && rv.on != 1) ||
+			    rv.n > NSHD_SESSIONS)
 				goto bad;
-			rolling = res.status;
-			if (rolling)
-				front_end_all();
+			revoking = rv.on;
+			if (revoking) {
+				front_revoke(&rv);
+				if (link_compose(&links[SYSTEM], IMSG_SYS_GO,
+				    imsg_get_id(&imsg), NULL, 0) == -1)
+					fatal("%s", __func__);
+			}
 			break;
 		case IMSG_SYS_LOGGED:
 			/* whom a web session logged in as: it is that uid */
@@ -1004,6 +1032,13 @@ config_dispatch_system(int fd, short event, void *arg)
 				goto bad;
 			if ((sp = session_find(r->session)) != NULL)
 				sp->uid = lg.uid;
+			break;
+		case IMSG_SYS_BEGUN:
+			/* the commit is begun: BEGIN's answer is how it ends */
+			if (imsg_get_len(&imsg) != 0 || r == NULL ||
+			    r->kind != REQ_COMMIT || commit == NULL)
+				goto bad;
+			commit->begun = 1;
 			break;
 		case IMSG_SYS_TERMINAL:
 			/* a terminal's pty, before its request's end */
@@ -1531,9 +1566,10 @@ config_hides(struct session *sp)
 }
 
 /*
- * Whether session may ask type: hello, close, read and login always; else
- * what its permissions allow, once they are in. A request before hello
- * passes, for its handler to refuse
+ * Whether session may ask type: hello, exit, read and login always; else
+ * what its permissions allow, once they are in, and in configure shared
+ * or exclusive, admin. A request before hello passes, for its handler to
+ * refuse
  */
 static int
 config_may(uint32_t session, uint32_t type)
@@ -1542,7 +1578,7 @@ config_may(uint32_t session, uint32_t type)
 	const char	*name = "configure";
 	int		 need = NSHD_CONFIGURE;
 
-	if (type == IMSG_CTL_HELLO ||
+	if (type == IMSG_CTL_HELLO || type == IMSG_CTL_EXIT ||
 	    type == IMSG_CTL_READ || type == IMSG_CTL_LOGIN ||
 	    (sp = session_find(session)) == NULL)
 		return (1);
@@ -1555,11 +1591,20 @@ config_may(uint32_t session, uint32_t type)
 		need = NSHD_OPERATE;
 		name = "operate";
 	}
-	if (sp->perms != -1 && (sp->perms & need) != 0)
-		return (1);
-	config_answer(session, 1, "%% Not allowed: your login class does not "
-	    "have the %s permission\n", name);
-	return (0);
+	if (sp->perms == -1 || (sp->perms & need) == 0) {
+		config_answer(session, 1, "%% Not allowed: your login class "
+		    "does not have the %s permission\n", name);
+		return (0);
+	}
+	/* the shared candidate is admin's, and a session can lose admin */
+	if ((sp->how == NSHD_SHARED || sp->how == NSHD_EXCLUSIVE) &&
+	    need == NSHD_CONFIGURE && (sp->perms & NSHD_ADMIN) == 0) {
+		config_answer(session, 1, "%% Not allowed: your login class no "
+		    "longer has the admin permission the shared candidate "
+		    "needs; exit configure\n");
+		return (0);
+	}
+	return (1);
 }
 
 /* Send nsh's command tables to the session as facts, then a result. */
@@ -2627,17 +2672,22 @@ commit_snapshot(void)
 			commit_go();
 		break;
 	case COMMIT_RAN:
-		/* how system's APPLY ended; if neither, the record says so */
-		if (commit->ran == 0) {
-			if (commit->minutes > 0)
-				commit_record(NSHD_KEPT);
-			else if (commit->terminal)
-				commit_record(NSHD_APPLIED);
-			else
-				commit_save();
-		} else if (commit->ran == NSHD_UNDONE)
-			commit_record(NSHD_BACK);
-		else
+		/* how system ended the commit */
+		if (commit->ran == NSHD_SAVED || commit->ran == NSHD_UNSAVED)
+			commit_saved(commit->ran == NSHD_SAVED);
+		else if (commit->ran == NSHD_KEPT) {
+			config_notice(NSHD_WATCH_COMMITS,
+			    NSHD_NOTICE_CONFIRMED, commit->uid,
+			    commit->minutes, NULL);
+			printf("%% Commit within %d minute%s to keep this, or "
+			    "it is rolled back\n", commit->minutes,
+			    commit->minutes == 1 ? "" : "s");
+			commit_end(commit_renew(), NULL);
+		} else if (commit->ran == NSHD_APPLIED) {
+			config_notice(NSHD_WATCH_COMMITS, NSHD_NOTICE_APPLIED,
+			    commit->uid, 0, commit->comment);
+			commit_end(0, NULL);
+		} else
 			commit_end(-1, NULL);
 		break;
 	}
@@ -2647,8 +2697,6 @@ commit_snapshot(void)
 static void
 commit_ended(int32_t status)
 {
-	int		 r;
-
 	switch (commit->step) {
 	case BOOT_BEGIN:
 		/* if it could not be recorded, it runs */
@@ -2688,53 +2736,19 @@ commit_ended(int32_t status)
 			commit_go();
 		break;
 	case COMMIT_BEGIN:
-		if (status != 0)
+		/* a commit begun has its candidate start from the snapshot */
+		if (!commit->begun)
 			commit_end(-1, NULL);
-		else {
-			commit->begun = 1;
-			if (commit->logins)
-				front_end_all();
-			commit_apply();
-		}
-		break;
-	case COMMIT_APPLY:
-		/* a commit's candidate starts again from the snapshot */
-		if (commit->boot)
-			boot_ran(status == 0);
 		else {
 			commit->ran = status;
 			commit_wait(COMMIT_RAN);
 		}
 		break;
-	case COMMIT_SAVE:
-		/* the change is in effect: reset the candidate, saved or not */
-		r = status == 0 ? 0 : -1;
-		if (r == 0)
-			config_notice(NSHD_WATCH_COMMITS, NSHD_NOTICE_COMMIT,
-			    commit->uid, 0, commit->comment);
-		if (!commit->save && !commit->load && commit_renew() == -1)
-			r = -1;
-		commit_end(r, NULL);
+	case COMMIT_APPLY:
+		boot_ran(status == 0);
 		break;
-	case COMMIT_RECORD:
-		if (commit->how == NSHD_APPLIED) {
-			if (status == 0)
-				config_notice(NSHD_WATCH_COMMITS,
-				    NSHD_NOTICE_APPLIED, commit->uid, 0,
-				    commit->comment);
-			commit_end(status == 0 ? 0 : -1, NULL);
-			break;
-		}
-		if (commit->how != NSHD_KEPT || status != 0) {
-			commit_end(-1, NULL);
-			break;
-		}
-		config_notice(NSHD_WATCH_COMMITS, NSHD_NOTICE_CONFIRMED,
-		    commit->uid, commit->minutes, NULL);
-		printf("%% Commit within %d minute%s to keep this, or it is "
-		    "rolled back\n", commit->minutes,
-		    commit->minutes == 1 ? "" : "s");
-		commit_end(commit_renew(), NULL);
+	case COMMIT_SAVE:
+		commit_saved(status == 0);
 		break;
 	}
 }
@@ -2780,10 +2794,11 @@ commit_go(void)
 	}
 	/*
 	 * Before its script, a commit that changes login users or classes
-	 * ends every session (front_end_all()). system refuses the change
-	 * from a session without admin as the script runs, so refuse it
-	 * now, before system has any part of it, or such a session could
-	 * end every other one
+	 * lowers the permissions of the sessions that would lose one
+	 * (front_revoke()).
+	 * system refuses the change from a session without admin as the
+	 * script runs, so refuse it now, before system has any part of it,
+	 * or such a session could lower others'
 	 */
 	commit->logins = session_logins(p);
 	if (commit->logins && (sp->perms & NSHD_ADMIN) == 0) {
@@ -2791,14 +2806,18 @@ commit_go(void)
 		    "users needs the admin permission\n");
 		return;
 	}
-	if (commit_part(NSHD_BEFORE, p->text[PLAN_BEFORE],
-	    p->len[PLAN_BEFORE]) == -1 || commit_part(NSHD_WANT,
-	    p->text[PLAN_WANT], p->len[PLAN_WANT]) == -1)
+	if (commit_part(NSHD_SCRIPT, p->text[PLAN_EDITS],
+	    p->len[PLAN_EDITS]) == -1 || commit_part(NSHD_BEFORE,
+	    p->text[PLAN_BEFORE], p->len[PLAN_BEFORE]) == -1 ||
+	    commit_part(NSHD_WANT, p->text[PLAN_WANT],
+	    p->len[PLAN_WANT]) == -1)
 		return;
 	memset(&b, 0, sizeof(b));
 	b.whose = commit->whose;
 	b.minutes = commit->minutes;
 	b.unsaved = commit->terminal;
+	strlcpy(b.comment, commit->comment, sizeof(b.comment));
+	commit_clears(&b.apply);
 	commit_request(COMMIT_BEGIN, IMSG_SYS_BEGIN, &b, sizeof(b));
 }
 
@@ -2828,35 +2847,34 @@ commit_part(int32_t part, const char *text, size_t len)
 	return (0);
 }
 
-/*
- * the plan's script, run by system, with the configuration it wants and,
- * for a commit, the one before, to undo it to if it does not take
- */
+/* the daemons whose rules the plan's script empties, in a */
+static void
+commit_clears(struct nshd_apply *a)
+{
+	struct plan	*p = commit->plan;
+	int		 i;
+
+	memset(a, 0, sizeof(*a));
+	a->nclears = p->nclears;
+	for (i = 0; i < p->nclears; i++) {
+		strlcpy(a->clears[i].name, p->clears[i].name,
+		    sizeof(a->clears[i].name));
+		a->clears[i].rtable = p->clears[i].rtable;
+		a->clears[i].keep = p->clears[i].keep;
+	}
+}
+
+/* the boot's script, run by system, with the saved configuration */
 static void
 commit_apply(void)
 {
 	struct nshd_apply	 a;
 	struct plan		*p = commit->plan;
-	int			 i, r;
 
-	memset(&a, 0, sizeof(a));
-	a.nclears = p->nclears;
-	for (i = 0; i < p->nclears; i++) {
-		strlcpy(a.clears[i].name, p->clears[i].name,
-		    sizeof(a.clears[i].name));
-		a.clears[i].rtable = p->clears[i].rtable;
-		a.clears[i].keep = p->clears[i].keep;
-	}
+	commit_clears(&a);
 	if (commit_part(NSHD_SCRIPT, p->text[PLAN_EDITS],
-	    p->len[PLAN_EDITS]) == -1)
-		return;
-	if (commit->boot)
-		r = commit_part(NSHD_WANT, commit->saved, commit->savedlen);
-	else if ((r = commit_part(NSHD_WANT, p->text[PLAN_WANT],
-	    p->len[PLAN_WANT])) == 0)
-		r = commit_part(NSHD_BEFORE, p->text[PLAN_BEFORE],
-		    p->len[PLAN_BEFORE]);
-	if (r == -1)
+	    p->len[PLAN_EDITS]) == -1 || commit_part(NSHD_WANT,
+	    commit->saved, commit->savedlen) == -1)
 		return;
 	commit_request(COMMIT_APPLY, IMSG_SYS_APPLY, &a, sizeof(a));
 }
@@ -2868,22 +2886,26 @@ commit_save(void)
 	struct nshd_save	 sv;
 
 	memset(&sv, 0, sizeof(sv));
-	commit->begun = 0;
 	sv.whose = commit->whose;
 	strlcpy(sv.comment, commit->comment, sizeof(sv.comment));
 	commit_request(COMMIT_SAVE, IMSG_SYS_SAVE, &sv, sizeof(sv));
 }
 
-/* system told how the commit ended, so it removes the record */
+/*
+ * The commit saved the running configuration, if ok: its candidate
+ * starts again either way
+ */
 static void
-commit_record(int how)
+commit_saved(int ok)
 {
-	struct nshd_record	 rc;
+	int	 r = ok ? 0 : -1;
 
-	rc.how = how;
-	commit->how = how;
-	commit->begun = 0;
-	commit_request(COMMIT_RECORD, IMSG_SYS_RECORD, &rc, sizeof(rc));
+	if (ok)
+		config_notice(NSHD_WATCH_COMMITS, NSHD_NOTICE_COMMIT,
+		    commit->uid, 0, commit->comment);
+	if (!commit->save && !commit->load && commit_renew() == -1)
+		r = -1;
+	commit_end(r, NULL);
 }
 
 /*
@@ -2930,7 +2952,6 @@ static void
 commit_end(int r, const char *msg)
 {
 	struct commit		*c = commit;
-	struct nshd_record	 rc = { NSHD_LEFT };
 	struct session		*sp;
 
 	/* the boot did not go well, and it ends once that is recorded */
@@ -2944,10 +2965,6 @@ commit_end(int r, const char *msg)
 		return;
 	}
 	commit = NULL;
-	/* tell system that a begun commit ended without RECORD or SAVE */
-	if (c->begun && link_compose(&links[SYSTEM], IMSG_SYS_RECORD, 0, &rc,
-	    sizeof(rc)) == -1)
-		fatal("%s", __func__);
 	sp = session_find(c->session);
 	/* configure terminal's candidate is the running configuration again */
 	if (c->terminal && sp != NULL && session_renew(sp->st) == -1)

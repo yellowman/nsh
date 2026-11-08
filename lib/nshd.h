@@ -228,9 +228,9 @@ struct nshd_rollback {
 struct nshd_chunk {
 	int32_t		part;
 };
-#define NSHD_SCRIPT	0	/* the edits APPLY runs, or the rules TEST tests */
-#define NSHD_BEFORE	1	/* BEGIN, APPLY: what runs before */
-#define NSHD_WANT	2	/* BEGIN, APPLY: the candidate */
+#define NSHD_SCRIPT	0	/* BEGIN's or APPLY's edits, or TEST's rules */
+#define NSHD_BEFORE	1	/* BEGIN's: what runs before */
+#define NSHD_WANT	2	/* BEGIN's, APPLY's: the configuration wanted */
 #define NSHD_PARTS	3
 
 /*
@@ -270,26 +270,9 @@ struct nshd_logged {
 	uint32_t	uid;
 };
 
-/* config to system: begin a session's commit; minutes for commit confirmed */
-struct nshd_begin {
-	struct nshd_whose whose;
-	int32_t		minutes;
-	int32_t		unsaved;	/* for configure terminal: not saved */
-};
-
-/* config to system: how the begun commit ended */
-struct nshd_record {
-	int32_t		how;
-};
-#define NSHD_BACK	0	/* rolled back to how it was */
-#define NSHD_KEPT	1	/* unconfirmed, applied until its deadline */
-#define NSHD_LEFT	2	/* the records left as they are */
-#define NSHD_APPLIED	3	/* configure terminal: applied, not saved */
-
 /*
  * config to system: run the script, and empty these daemons' rules; then
- * see that what runs is the configuration wanted, and in a commit undo
- * the script if it is not
+ * see that what runs is the configuration wanted
  */
 struct nshd_apply {
 	int32_t		nclears;
@@ -299,8 +282,27 @@ struct nshd_apply {
 		int32_t	keep;	/* empty before the script, else remove after */
 	}		clears[NSHD_CLEARS];
 };
-/* APPLY's answer, if not 0: what runs was not wanted, and is as it was */
-#define NSHD_UNDONE	2
+
+/*
+ * config to system: a session's commit, which system records, applies
+ * and ends: minutes for commit confirmed, unsaved for configure
+ * terminal, the comment it is saved with, and its script, which the
+ * parts carry with the configuration before and the one wanted
+ */
+struct nshd_begin {
+	struct nshd_whose whose;
+	int32_t		minutes;
+	int32_t		unsaved;
+	char		comment[NSHD_COMMENT];
+	struct nshd_apply apply;
+};
+/* how a commit ended: BEGIN's answer, once BEGUN said it was begun */
+#define NSHD_SAVED	0	/* the candidate runs, saved */
+#define NSHD_KEPT	1	/* the candidate runs until its deadline */
+#define NSHD_LEFT	2	/* neither it nor what ran before runs */
+#define NSHD_APPLIED	3	/* configure terminal: it runs, not saved */
+#define NSHD_UNDONE	4	/* it did not take; what ran before runs */
+#define NSHD_UNSAVED	5	/* the candidate runs, but the save failed */
 
 /* config to system: save the running configuration, with the comment */
 struct nshd_save {
@@ -360,6 +362,19 @@ enum nshd_proc {
 #define SHOWS		4	/* shows, which share the read-only socket */
 #define NSHD_SESSIONS	64	/* sessions on the read-write socket, at most */
 
+/*
+ * REVOKING's: 1, as login users or classes are about to change, and the
+ * n sessions that would lose a permission or their login, each with the
+ * permissions it would have, which config lowers its own to, or -1 for
+ * no login, which config ends; or 0, once they have changed
+ */
+struct nshd_revoking {
+	int32_t		on;
+	uint32_t	n;
+	uint32_t	sessions[NSHD_SESSIONS];
+	int32_t		perms[NSHD_SESSIONS];
+};
+
 enum nshd_imsg {
 	IMSG_NONE,
 
@@ -393,10 +408,11 @@ enum nshd_imsg {
 
 	/* config to system, for commits: each is answered as SYS_SHOW is */
 	IMSG_SYS_SCRIPT,	/* nshd_chunk, and text; no answer */
-	IMSG_SYS_BEGIN,		/* nshd_begin: make the commit record */
-	IMSG_SYS_APPLY,		/* nshd_apply: run the script, report status */
+	IMSG_SYS_BEGIN,		/* nshd_begin: a commit; how it ended */
+	IMSG_SYS_APPLY,		/* nshd_apply: the boot's script, its status */
 	IMSG_SYS_SAVE,		/* nshd_save: save, and remove the record */
-	IMSG_SYS_RECORD,	/* nshd_record: how the commit ended */
+	IMSG_SYS_BEGUN,		/* system to config: BEGIN's commit is begun */
+	IMSG_SYS_GO,		/* config to system: REVOKING is done */
 	IMSG_SYS_ROLLBACK_READ,	/* nshd_rollback: configuration n */
 	IMSG_SYS_ROLLBACK_LIST,	/* show rollback's list */
 	IMSG_SYS_ROLLBACK_DIFF,	/* nshd_rollback: what configuration n changed */
@@ -454,8 +470,13 @@ enum nshd_imsg {
 	IMSG_CTL_STAGE,		/* nshd_stage; output and STAGED, each line */
 	IMSG_CTL_STAGED,	/* nshd_staged, after the line's output */
 
-	/* system to config: a rollback of an unconfirmed commit runs */
-	IMSG_SYS_ROLLING	/* nshd_result: 1 as it begins, 0 as it ends */
+	/*
+	 * system to config: login users or classes are about to change, by
+	 * a commit or a rollback; config lowers the permissions of the
+	 * sessions that would lose one, ends those that would lose their
+	 * login, and says so (GO)
+	 */
+	IMSG_SYS_REVOKING	/* nshd_revoking */
 };
 
 struct imsgev {

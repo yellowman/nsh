@@ -62,18 +62,24 @@
  * operation's status.
  *
  * config sends a commit's requests in order. First come the parts that
- * BEGIN, APPLY and TEST use, sent in chunks. BEGIN writes the commit record,
- * APPLY runs the script and then checks that what runs is the
- * configuration wanted; in a commit, if it is not, APPLY undoes the
- * script, to the configuration before, in a job of its own. SAVE saves
- * the running configuration and removes the commit record. RECORD
- * reports how the commit ended: rolled
- * back to how it was, an unconfirmed commit kept until its deadline, or
- * a configure terminal commit applied and kept without being saved.
- * BEGIN refuses such a configure terminal commit while an unconfirmed
- * commit exists, because rolling back the unconfirmed commit would roll
- * it back too. TEST, which runs a daemon's test of its rules, comes
- * before BEGIN.
+ * BEGIN, APPLY and TEST use, sent in chunks. TEST runs a daemon's test
+ * of its rules, before BEGIN. BEGIN carries the whole commit, and system
+ * runs it to its end. It writes the commit record and tells config that
+ * the commit is begun (BEGUN). If the commit changes login users or
+ * classes, system has config lower the permissions of each session that
+ * would lose one, end each that would lose its login (REVOKING), and take
+ * no new one, and waits until config says it has (GO). Then system runs
+ * the script, and checks that what runs is then the configuration
+ * wanted. If it is not, system undoes the script, to the configuration
+ * before, and removes the record. If it is, system saves the running
+ * configuration and removes the record.
+ * An unconfirmed commit is kept until its deadline instead, and a
+ * configure terminal commit is kept without being saved; their records
+ * go too. BEGIN's answer is how the commit ended. BEGIN refuses such a
+ * configure terminal commit while an unconfirmed commit exists, because
+ * rolling back the unconfirmed commit would roll it back too. Outside a
+ * commit, SAVE saves the running configuration, and APPLY runs the
+ * boot's script.
  *
  * An apply, an undo, a save and a test each run as a job: a child of
  * system in its own process group, whose output is sent as it arrives.
@@ -101,22 +107,25 @@
  * A commit with a confirmation deadline sends its minutes with BEGIN,
  * and BEGIN then also writes an unconfirmed commit record (confirm.c).
  * Its rollback configuration is what ran before the first unconfirmed
- * commit. RECORD with NSHD_KEPT leaves that record in place; with
- * NSHD_BACK it restores the record that existed before BEGIN; with
- * NSHD_LEFT the commit ended neither way, and both records stay. A
- * successful SAVE confirms the commit by removing its record.
+ * commit. A commit kept until its deadline leaves that record in place;
+ * one undone restores the record that existed before BEGIN; one whose
+ * undo failed leaves both records. A successful save confirms the
+ * commit by removing its record.
  *
  * The deadline is the given number of minutes after BEGIN, and is reset
- * to that many minutes after RECORD reports the commit kept. After the
+ * to that many minutes once the commit is kept. After the
  * deadline, system rolls the commit back, but not while a begun commit
  * has not ended or a job runs, because that commit's undo could restore
  * what the rollback removed. system demotes carp, records the attempt,
  * and starts a JOB_RECOVER job, which makes the running configuration
- * match the rollback configuration; then it promotes carp again. If the
- * job fails or cannot start, system's timer tries again CONFIRM_RETRY
- * seconds later, up to CONFIRM_ATTEMPTS attempts in all; then the record
- * is marked failed, and carp stays demoted. If the record cannot be read
- * or removed, the timer tries again too, and that is not an attempt.
+ * match the rollback configuration; then it promotes carp again. A
+ * rollback that changes login users or classes first waits for config
+ * to take no new session, as such a commit's script does, but ends
+ * none. If the job fails or cannot start, system's timer tries again
+ * CONFIRM_RETRY seconds later, up to CONFIRM_ATTEMPTS attempts in all;
+ * then the record is marked failed, and carp stays demoted. If the
+ * record cannot be read or removed, the timer tries again too, and that
+ * is not an attempt.
  * If the running configuration already matches
  * the rollback configuration, as after a reboot or a commit that never
  * ran, system only removes the record. When system starts, it takes
@@ -151,11 +160,11 @@
  * connection, which system checks each second, or when parent says its
  * frontend has ended. When system finds the client gone, it tells
  * parent, which kills the session's frontend if it still runs and tells
- * config to drop the session too. BEGIN and TEST, and SAVE outside a
- * commit, name the session. The commit record stores the uid of BEGIN's
- * session; from then on the commit runs to its end, as its APPLY, SAVE
- * and RECORD name no session. TEST for no session and APPLY outside a
- * commit belong to the boot, and are refused unless the boot is running.
+ * config to drop the session too. BEGIN, TEST and SAVE name the
+ * session. The commit record stores the uid of BEGIN's session; from
+ * then on the commit runs to its end, with no request from config. TEST
+ * for no session and APPLY belong to the boot, and are refused unless
+ * the boot is running.
  * BOOT is answered as already done once parent says nshd is not
  * booting, or once BOOTED has been received. system trusts config to
  * name the session a request came from: a compromised config could act
@@ -240,7 +249,11 @@
 #define SYS_TERMINALS	64	/* web logins' terminals at once, at most */
 #define SYS_AUTHS	4	/* web logins checked at once, at most */
 #define AUTH_SECS	30	/* a web login's check, at most */
+#define GO_SECS		10	/* config's GO, for the job that waits */
 #define AUTH_GRACE	2	/* after SIGTERM, before SIGKILL */
+/* a web login's answer as login users or classes change */
+#define LOGIN_CHANGING	"% Login refused: login users or classes are " \
+			"changing. Log in again\n"
 /* descriptors kept free of sessions: streams, logins, commits, files */
 #define SYS_RESERVE	(SYS_STREAMS + SYS_AUTHS + 16)
 #define CLIENT_LOOK	1	/* seconds between looks at the clients */
@@ -341,6 +354,23 @@ struct stream {
 };
 
 /* the job running, which a child of system's runs, and what it takes */
+/*
+ * The commit begun, from BEGIN until it ends (system_ended()): whose it
+ * is, how BEGIN asked it to end, and, for commit confirmed, its minutes
+ * and the unconfirmed commit record it replaced
+ */
+struct begun {
+	uid_t			 uid;		/* its user's */
+	int			 admin;		/* its login class has admin */
+	int			 unsaved;	/* configure terminal's */
+	char			 comment[NSHD_COMMENT];	/* its save's */
+	struct nshd_apply	 apply;		/* its script's clears */
+	char			*before;	/* without admin, what ran */
+	size_t			 beforelen;
+	int			 minutes;	/* commit confirmed's, else 0 */
+	struct confirm		 prev;		/* the record before, if so */
+};
+
 struct job {
 	uint32_t		 id;		/* the request */
 	int			 kind;
@@ -349,6 +379,7 @@ struct job {
 	int			 status;	/* how it ended, once reaped */
 	int			 fd;		/* its output, or -1 at its end */
 	int			 killed;	/* the signal its group got last */
+	int			 waits;		/* to start (system_go()) */
 	struct event		 ev, tm;
 	struct nshd_apply	*apply;
 	char			*back;		/* rollback configuration */
@@ -448,16 +479,8 @@ static pid_t		 terminals[SYS_TERMINALS];	/* nsh's pid, or 0 */
 static TAILQ_HEAD(, queued) queue = TAILQ_HEAD_INITIALIZER(queue);
 static char		*parts[NSHD_PARTS];	/* sent in chunks, until used */
 static size_t		 partlen[NSHD_PARTS];
-/* a commit confirmed begun: the unconfirmed commit record before it */
-static struct confirm	 confirm_prev;
-static int		 confirm_begun;
-static int		 confirm_minutes;
-static int		 committing;	/* a commit is begun and not ended */
-static uid_t		 commit_uid;	/* its uid */
-static int		 commit_web;	/* it is the web configurator's */
-static int		 commit_admin;	/* its login class has admin */
-static char		*commit_before;	/* if not, what ran before it */
-static size_t		 commit_beforelen;
+static struct begun	*begun;		/* the commit begun, or NULL */
+static int		 revoking;	/* login lines change: no sessions */
 static int		 booting;	/* from BOOT until BOOTED */
 static int		 boot_over;	/* not booting, or BOOTED came */
 static TAILQ_HEAD(, attempt) attempts = TAILQ_HEAD_INITIALIZER(attempts);
@@ -487,6 +510,7 @@ static void	system_auth_answer(struct attempt *);
 static void	system_terminal(uint32_t, struct nshd_systerm *);
 static __dead void system_term_child(int, struct passwd *);
 static int	system_whole(uint32_t, const void *, size_t);
+static int	apply_whole(struct nshd_apply *);
 static int	system_request(uint32_t, uint32_t, const void *, size_t);
 static void	system_queue(uint32_t, uint32_t, const void *, size_t);
 static int	system_unqueue(uint32_t);
@@ -515,11 +539,14 @@ static int	system_chunk(const unsigned char *, size_t);
 static void	system_parts_free(void);
 static void	system_begin(uint32_t, struct nshd_begin *);
 static void	system_apply(uint32_t, struct nshd_apply *);
+static void	system_script(uint32_t, struct nshd_apply *, int);
+static void	system_go(uint32_t);
+static void	system_took(uint32_t);
+static void	system_finish(uint32_t, int);
 static void	system_save(uint32_t, struct nshd_save *);
 static int	system_saved(int);
 static void	system_ended(void);
 static int	system_unconfirm(void);
-static void	system_back(uint32_t, int);
 static void	system_boot(uint32_t);
 static void	system_booted(uint32_t, int);
 static void	boot_saved(void);
@@ -536,7 +563,7 @@ static void	confirm_retry(void);
 static void	system_taken(struct confirm *, const char *);
 static void	system_failed(struct confirm *);
 static void	system_went(int);
-static void	system_rolling(int);
+static void	system_revoking(uint32_t, const char *, size_t);
 static char	*system_running(size_t *);
 static void	system_rollback(uint32_t, int, int);
 static void	system_health(void);
@@ -549,7 +576,10 @@ static __dead void system_job_child(int, struct job *);
 static void	system_job_free(struct job *);
 static void	system_job_read(int, short, void *);
 static void	system_job_late(int, short, void *);
+static void	system_job_wait(struct job *);
+static void	system_go_late(int, short, void *);
 static void	system_job_done(void);
+static void	system_job_end(struct job *, int32_t);
 static int	record_read(struct record *);
 static int	record_write(struct record *);
 static int	record_clear(void);
@@ -669,6 +699,21 @@ system_dispatch_parent(int fd, short event, void *arg)
 	imsg_event_add(iev);
 }
 
+/* a's clears, each named whole: -1 if not */
+static int
+apply_whole(struct nshd_apply *a)
+{
+	int	 i;
+
+	if (a->nclears < 0 || a->nclears > NSHD_CLEARS)
+		return (-1);
+	for (i = 0; i < a->nclears; i++)
+		if (memchr(a->clears[i].name, '\0',
+		    sizeof(a->clears[i].name)) == NULL)
+			return (-1);
+	return (0);
+}
+
 /* config's requests, in order; most wait while a job runs */
 static void
 system_dispatch_config(int fd, short event, void *arg)
@@ -713,10 +758,12 @@ system_dispatch_config(int fd, short event, void *arg)
 		}
 		/*
 		 * what a stream's client read, stopping a stream, a new
-		 * session's permissions and a login do not wait
+		 * session's permissions, a login, and GO for the job that
+		 * waits do not wait
 		 */
 		if (type == IMSG_SYS_READ || type == IMSG_SYS_STOP ||
 		    type == IMSG_SYS_PERMS || type == IMSG_SYS_LOGIN ||
+		    type == IMSG_SYS_GO ||
 		    (job == NULL && TAILQ_EMPTY(&queue)))
 			r = system_request(type, id, data, len);
 		else
@@ -896,7 +943,6 @@ static int
 system_whole(uint32_t type, const void *data, size_t len)
 {
 	struct nshd_begin	 bg;
-	struct nshd_record	 rc;
 	struct nshd_show	 show;
 	struct nshd_chunk	 c;
 	struct nshd_apply	 a;
@@ -912,6 +958,7 @@ system_whole(uint32_t type, const void *data, size_t len)
 	switch (type) {
 	case IMSG_SYS_READ:
 	case IMSG_SYS_STOP:
+	case IMSG_SYS_GO:
 		return (0);
 	case IMSG_SYS_OP:
 		if (len != sizeof(so))
@@ -950,12 +997,6 @@ system_whole(uint32_t type, const void *data, size_t len)
 		    st.size.cols < 1 || st.size.cols > NSHD_TERMSIZE ? -1 : 0);
 	case IMSG_SYS_BOOTED:
 		return (len == sizeof(struct nshd_result) ? 0 : -1);
-	case IMSG_SYS_RECORD:
-		if (len != sizeof(rc))
-			return (-1);
-		memcpy(&rc, data, len);
-		return (rc.how != NSHD_BACK && rc.how != NSHD_KEPT &&
-		    rc.how != NSHD_LEFT && rc.how != NSHD_APPLIED ? -1 : 0);
 	case IMSG_SYS_SNAPSHOT:
 		return (len == sizeof(struct nshd_snapshot) ? 0 : -1);
 	case IMSG_SYS_BEGIN:
@@ -963,8 +1004,9 @@ system_whole(uint32_t type, const void *data, size_t len)
 			return (-1);
 		memcpy(&bg, data, len);
 		return (bg.minutes < 0 || bg.minutes > NSHD_CONFIRMMAX ||
-		    (bg.unsaved != 0 && (bg.unsaved != 1 || bg.minutes != 0)) ?
-		    -1 : 0);
+		    (bg.unsaved != 0 && (bg.unsaved != 1 || bg.minutes != 0)) ||
+		    memchr(bg.comment, '\0', sizeof(bg.comment)) == NULL ?
+		    -1 : apply_whole(&bg.apply));
 	case IMSG_SYS_SHOW:
 		if (len != sizeof(show))
 			return (-1);
@@ -980,13 +1022,7 @@ system_whole(uint32_t type, const void *data, size_t len)
 		if (len != sizeof(a))
 			return (-1);
 		memcpy(&a, data, len);
-		if (a.nclears < 0 || a.nclears > NSHD_CLEARS)
-			return (-1);
-		for (i = 0; i < a.nclears; i++)
-			if (memchr(a.clears[i].name, '\0',
-			    sizeof(a.clears[i].name)) == NULL)
-				return (-1);
-		return (0);
+		return (apply_whole(&a));
 	case IMSG_SYS_SAVE:
 		if (len != sizeof(sv))
 			return (-1);
@@ -1017,7 +1053,6 @@ system_request(uint32_t type, uint32_t id, const void *data, size_t len)
 	struct nshd_syslogin	 sl;
 	struct nshd_show	 show;
 	struct nshd_begin	 bg;
-	struct nshd_record	 rc;
 	struct nshd_apply	 a;
 	struct nshd_save	 sv;
 	struct nshd_rollback	 rb;
@@ -1040,6 +1075,9 @@ system_request(uint32_t type, uint32_t id, const void *data, size_t len)
 		break;
 	case IMSG_SYS_READ:
 		system_stream_more(id);
+		break;
+	case IMSG_SYS_GO:
+		system_go(id);
 		break;
 	case IMSG_SYS_STOP:
 		if (system_unqueue(id))
@@ -1068,10 +1106,6 @@ system_request(uint32_t type, uint32_t id, const void *data, size_t len)
 	case IMSG_SYS_SAVE:
 		memcpy(&sv, data, sizeof(sv));
 		system_save(id, &sv);
-		break;
-	case IMSG_SYS_RECORD:
-		memcpy(&rc, data, sizeof(rc));
-		system_back(id, rc.how);
 		break;
 	case IMSG_SYS_ROLLBACK_READ:
 	case IMSG_SYS_ROLLBACK_DIFF:
@@ -1355,7 +1389,11 @@ system_may(int perms, int need, const char *name)
  * or -1, saying why. BSD auth may run programs that take their time, so
  * the check runs in a child of its own, at most AUTH_SECS seconds, and
  * is answered once it ends (system_auth_answer()). At most SYS_AUTHS
- * run at once, one for each session, and none waits for another
+ * run at once, one for each session, and none waits for another. While
+ * login users or classes change, a login is refused, as the session
+ * would take its permissions from the login lines before the change;
+ * those being checked as the change begins are stopped then
+ * (system_revoking())
  */
 static void
 system_login(uint32_t id, struct nshd_syslogin *sl)
@@ -1369,6 +1407,10 @@ system_login(uint32_t id, struct nshd_syslogin *sl)
 	if ((cl = client_whose(&sl->whose)) == NULL || !cl->web) {
 		system_end(id, -1, "%% nshd: only the web configurator logs "
 		    "in\n");
+		return;
+	}
+	if (revoking) {
+		system_end(id, -1, "%s", LOGIN_CHANGING);
 		return;
 	}
 	TAILQ_FOREACH(a, &attempts, entry) {
@@ -2103,7 +2145,8 @@ system_parts_free(void)
 /*
  * A commit begins, from the running configuration to the wanted one in
  * the parts sent: the record is made, unless one that a commit left
- * refuses it
+ * refuses it. config is told it is begun, and its script runs; then it
+ * ends as BEGIN asked (system_job_end()). The answer is how it ended
  */
 static void
 system_begin(uint32_t id, struct nshd_begin *bg)
@@ -2111,20 +2154,22 @@ system_begin(uint32_t id, struct nshd_begin *bg)
 	struct record	 rec, now;
 	struct confirm	 cf;
 	struct client	*cl;
+	struct begun	*b;
 	char		*runs;
 	size_t		 len;
-	int		 r, perms, wrote = 0, status = 1;
+	int		 r, perms, logins = 0, wrote = 0, status = 1;
 
 	memset(&rec, 0, sizeof(rec));
+	if ((b = begun = calloc(1, sizeof(*b))) == NULL)
+		fatal(NULL);
 	if ((cl = client_whose(&bg->whose)) == NULL) {
 		printf("%% Commit refused: its client is gone\n");
 		goto done;
 	}
-	perms = system_whom(cl, &commit_uid);
-	commit_web = cl->web;
+	perms = system_whom(cl, &b->uid);
 	if (!system_may(perms, LOGIN_CONFIGURE, "configure"))
 		goto done;
-	commit_admin = (perms & LOGIN_ADMIN) != 0;
+	b->admin = (perms & LOGIN_ADMIN) != 0;
 	if (record_read(&rec) == -1)
 		goto done;
 	/* an unsaved commit would be rolled back with an unconfirmed one */
@@ -2145,11 +2190,9 @@ system_begin(uint32_t id, struct nshd_begin *bg)
 		goto done;
 	r = commit_reads(runs, len, parts[NSHD_BEFORE], partlen[NSHD_BEFORE]);
 	/* without admin, keep the running configuration for the script */
-	free(commit_before);
-	commit_before = NULL;
-	if (r == 1 && !commit_admin) {
-		commit_before = runs;
-		commit_beforelen = len;
+	if (r == 1 && !b->admin) {
+		b->before = runs;
+		b->beforelen = len;
 	} else
 		free(runs);
 	if (r == -1)
@@ -2159,6 +2202,10 @@ system_begin(uint32_t id, struct nshd_begin *bg)
 		    "was planned. Commit again\n");
 		goto done;
 	}
+	/* one that changes login users or classes waits for config */
+	if ((logins = commit_logins(parts[NSHD_BEFORE], partlen[NSHD_BEFORE],
+	    parts[NSHD_WANT], partlen[NSHD_WANT])) == -1)
+		goto done;
 	if (rec.state == RECORD_APPLYING) {
 		/* report what it left, judged by the running configuration */
 		if ((r = commit_reads(parts[NSHD_BEFORE],
@@ -2194,7 +2241,7 @@ system_begin(uint32_t id, struct nshd_begin *bg)
 		}
 	} else {
 		now.state = RECORD_APPLYING;
-		now.uid = commit_uid;
+		now.uid = b->uid;
 		now.when = time(NULL);
 		now.before = parts[NSHD_BEFORE];
 		now.beforelen = partlen[NSHD_BEFORE];
@@ -2209,12 +2256,22 @@ system_begin(uint32_t id, struct nshd_begin *bg)
 			record_clear();
 		goto done;
 	}
-	committing = 1;
+	b->unsaved = bg->unsaved;
+	strlcpy(b->comment, bg->comment, sizeof(b->comment));
 	status = 0;
  done:
 	record_free(&rec);
-	system_parts_free();
-	system_printed(id, status);
+	if (status != 0) {
+		system_ended();
+		system_parts_free();
+		system_printed(id, status);
+		return;
+	}
+	printed_text(links[CONFIG].iev, IMSG_SYS_TEXT, id, 0);
+	if (link_compose(&links[CONFIG], IMSG_SYS_BEGUN, id, NULL, 0) == -1)
+		fatal("%s", __func__);
+	b->apply = bg->apply;
+	system_script(id, &b->apply, logins);
 }
 
 /*
@@ -2229,14 +2286,12 @@ system_arm(int minutes)
 {
 	struct confirm		 cf;
 
-	confirm_free(&confirm_prev);
-	confirm_begun = 0;
-	if (confirm_read(&confirm_prev, 1) == -1) {
+	if (confirm_read(&begun->prev, 1) == -1) {
 		printf("%% nshd: the record of a commit not confirmed: %s\n",
 		    strerror(errno));
 		return (-1);
 	}
-	cf = confirm_prev;
+	cf = begun->prev;
 	if (cf.state != CONFIRM_WAITING) {
 		cf.back = parts[NSHD_BEFORE];
 		cf.backlen = partlen[NSHD_BEFORE];
@@ -2247,14 +2302,12 @@ system_arm(int minutes)
 		arc4random_buf(&cf.id, sizeof(cf.id));
 	while (cf.id == 0);
 	cf.deadline = time(NULL) + minutes * 60;
-	confirm_minutes = minutes;
 	if (confirm_write(&cf) == -1) {
 		printf("%% nshd: the record of a commit not confirmed: %s\n",
 		    strerror(errno));
-		confirm_free(&confirm_prev);
 		return (-1);
 	}
-	confirm_begun = 1;
+	begun->minutes = minutes;
 	return (0);
 }
 
@@ -2262,12 +2315,10 @@ system_arm(int minutes)
 static void
 system_unarm(void)
 {
-	if ((confirm_prev.state == CONFIRM_NONE ? confirm_clear() :
-	    confirm_write(&confirm_prev)) == -1)
+	if ((begun->prev.state == CONFIRM_NONE ? confirm_clear() :
+	    confirm_write(&begun->prev)) == -1)
 		printf("%% nshd: the record of a commit not confirmed: %s\n",
 		    strerror(errno));
-	confirm_free(&confirm_prev);
-	confirm_begun = 0;
 }
 
 /* the commit confirmed kept: its minutes from now, not from its BEGIN */
@@ -2280,7 +2331,7 @@ system_kept(void)
 		confirm_free(&cf);
 		return;
 	}
-	cf.deadline = time(NULL) + confirm_minutes * 60;
+	cf.deadline = time(NULL) + begun->minutes * 60;
 	if (confirm_write(&cf) == -1)
 		printf("%% nshd: the record of a commit not confirmed: %s\n",
 		    strerror(errno));
@@ -2323,7 +2374,7 @@ system_confirm(int fd, short event, void *arg)
 	if (cf.state == CONFIRM_WAITING && now < due) {
 		tv.tv_sec = due - now;
 		evtimer_add(&confirm_tm, &tv);
-	} else if (cf.state == CONFIRM_WAITING && !committing && job == NULL)
+	} else if (cf.state == CONFIRM_WAITING && begun == NULL && job == NULL)
 		system_recover(&cf);
 	confirm_free(&cf);
 }
@@ -2342,10 +2393,12 @@ system_recover(struct confirm *cf)
 	struct job	*j;
 	char		*runs;
 	size_t		 len;
-	int		 r = -1;
+	int		 r = -1, logins = 1;
 
-	if ((runs = system_running(&len)) != NULL)
+	if ((runs = system_running(&len)) != NULL) {
 		r = commit_reads(runs, len, cf->back, cf->backlen);
+		logins = commit_logins(runs, len, cf->back, cf->backlen);
+	}
 	free(runs);
 	if (r == 1) {
 		system_taken(cf, "what runs is what it goes back to");
@@ -2362,11 +2415,21 @@ system_recover(struct confirm *cf)
 		logit(LOG_CRIT, "the record of a commit not confirmed: %s",
 		    strerror(errno));
 	printed_log();
-	system_rolling(1);
+	/* the job keeps the rollback configuration */
 	j = system_job_new(0, JOB_RECOVER);
 	j->back = cf->back;
 	j->backlen = cf->backlen;
-	system_job(j);
+	cf->back = NULL;
+	/*
+	 * one that changes login users or classes, or may, waits for config
+	 * to take no new session, if config is there; it ends none
+	 */
+	if (logins == 0 || links[CONFIG].iev == NULL) {
+		system_job(j);
+		return;
+	}
+	system_job_wait(j);
+	system_revoking(0, j->back, j->backlen);
 }
 
 /*
@@ -2382,7 +2445,8 @@ system_attempted(int ok)
 	struct confirm	 cf;
 	int		 serrno;
 
-	system_rolling(0);
+	if (revoking)
+		system_revoking(0, NULL, 0);
 	if (confirm_read(&cf, 1) == -1) {
 		serrno = errno;
 		logit(LOG_CRIT, "the record of a commit not confirmed: %s",
@@ -2455,17 +2519,48 @@ system_went(int failed)
 }
 
 /*
- * To config: a rollback begins, so every session ends and none is taken,
- * since it may change login users or classes; or it has ended
+ * To config: login users or classes are about to change to those of
+ * after, len bytes, by request id's commit, or by a rollback, 0. config
+ * lowers the permissions of each session that would lose one, as its
+ * permissions now and those after differ, to those after, ends each that
+ * would lose its login, takes no new one, and says so
+ * (system_go()). A session not logged in has none to lose, so each login
+ * being checked is stopped, refused, and none begins until the change
+ * ends (system_login()). Or, with after NULL, they have changed
  */
 static void
-system_rolling(int on)
+system_revoking(uint32_t id, const char *after, size_t len)
 {
-	struct nshd_result	 res;
+	struct nshd_revoking	 rv;
+	struct client		*cl;
+	struct attempt		*a;
+	uid_t			 uid;
+	int			 now, then;
 
-	res.status = on;
+	memset(&rv, 0, sizeof(rv));
+	revoking = rv.on = after != NULL;
+	if (after != NULL)
+		TAILQ_FOREACH(a, &attempts, entry)
+			system_auth_stop(a, LOGIN_CHANGING);
+	/*
+	 * a rollback, id 0, ends no session: it takes back a commit, and
+	 * system's own checks read the class as it is then
+	 */
+	TAILQ_FOREACH(cl, &clients, entry) {
+		if (after == NULL || id == 0 || rv.n == NSHD_SESSIONS)
+			break;
+		/* a web session not logged in has no login to lose */
+		if (cl->web && !cl->logged)
+			continue;
+		now = system_whom(cl, &uid);
+		then = login_perms_in(uid, cl->web, after, len);
+		if (then == -1 || (now & ~then) != 0) {
+			rv.sessions[rv.n] = cl->session;
+			rv.perms[rv.n++] = then;
+		}
+	}
 	if (links[CONFIG].iev != NULL && link_compose(&links[CONFIG],
-	    IMSG_SYS_ROLLING, 0, &res, sizeof(res)) == -1)
+	    IMSG_SYS_REVOKING, id, &rv, sizeof(rv)) == -1)
 		fatal("%s", __func__);
 }
 
@@ -2507,24 +2602,32 @@ system_running(size_t *len)
 	return (buf);
 }
 
-/*
- * The script, the part sent, in a job, which then says whether what runs
- * is the configuration wanted, the part sent too. A commit's that is not
- * is undone, to the configuration before, in a job of its own
- * (system_job_done()): the answer is 0 if what runs is what was wanted,
- * NSHD_UNDONE if it is as it was again, else -1
- */
+/* the boot's script, and whether what runs is then the saved one */
 static void
 system_apply(uint32_t id, struct nshd_apply *a)
 {
-	struct job	*j;
-
-	if (!committing && !booting) {
+	if (!booting || begun != NULL) {
 		printf("%% nshd: no commit is begun\n");
 		system_printed(id, 1);
 		system_parts_free();
 		return;
 	}
+	system_script(id, a, 0);
+}
+
+/*
+ * The script, the part sent, in a job, which then says whether what runs
+ * is the configuration wanted, the part sent too. A commit's that is not
+ * is undone, to the configuration before, the part sent too, in a job
+ * of its own (system_job_end()). One that changes login users or
+ * classes, revoke, starts once config has lowered the permissions of the
+ * sessions that would lose one (system_go())
+ */
+static void
+system_script(uint32_t id, struct nshd_apply *a, int revoke)
+{
+	struct job	*j;
+
 	j = system_job_new(id, JOB_APPLY);
 	j->apply = a;
 	j->want = parts[NSHD_WANT];
@@ -2532,8 +2635,36 @@ system_apply(uint32_t id, struct nshd_apply *a)
 	j->was = parts[NSHD_BEFORE];
 	j->waslen = partlen[NSHD_BEFORE];
 	parts[NSHD_WANT] = parts[NSHD_BEFORE] = NULL;
+	if (revoke) {
+		system_job_wait(j);
+		system_revoking(id, j->want, j->wantlen);
+		return;
+	}
 	system_job(j);
 	system_parts_free();
+}
+
+/*
+ * The job that waits, a commit's script or a rollback, starts: config
+ * has lowered the permissions of the sessions that would lose one, and
+ * system has stopped the requests of those that ended already
+ */
+static void
+system_go(uint32_t id)
+{
+	struct job	*j = job;
+	int		 apply;
+
+	if (j == NULL || !j->waits || j->id != id)
+		return;
+	job = NULL;
+	j->waits = 0;
+	evtimer_del(&j->tm);
+	apply = j->kind == JOB_APPLY;
+	system_job(j);
+	/* the script's part is the child's now */
+	if (apply)
+		system_parts_free();
 }
 
 /* the running configuration, saved by uid with a comment, in a job */
@@ -2545,19 +2676,15 @@ system_save(uint32_t id, struct nshd_save *sv)
 	uid_t		 uid;
 	int		 perms;
 
-	/* the commit's uid, or for a commit with no changes, the request's */
-	if (committing)
-		uid = commit_uid;
-	else if ((cl = client_whose(&sv->whose)) == NULL) {
+	if ((cl = client_whose(&sv->whose)) == NULL) {
 		printf("%% Commit refused: its client is gone\n");
 		system_printed(id, 1);
 		return;
-	} else {
-		perms = system_whom(cl, &uid);
-		if (!system_may(perms, LOGIN_CONFIGURE, "configure")) {
-			system_printed(id, 1);
-			return;
-		}
+	}
+	perms = system_whom(cl, &uid);
+	if (!system_may(perms, LOGIN_CONFIGURE, "configure")) {
+		system_printed(id, 1);
+		return;
 	}
 	j = system_job_new(id, JOB_SAVE);
 	user_name(uid, j->who, sizeof(j->who));
@@ -2676,7 +2803,6 @@ system_saved(int ok)
 	struct record	 rec;
 	int		 r;
 
-	system_ended();
 	if (ok) {
 		record_clear();
 		boot_saved();
@@ -2697,46 +2823,72 @@ system_saved(int ok)
 	return (0);
 }
 
-/* End the commit begun, and free what ran before it */
+/*
+ * End the commit begun, and free it. If it changed login users or
+ * classes, config takes sessions again
+ */
 static void
 system_ended(void)
 {
-	committing = 0;
-	free(commit_before);
-	commit_before = NULL;
-	commit_beforelen = 0;
+	if (revoking)
+		system_revoking(0, NULL, 0);
+	confirm_free(&begun->prev);
+	free(begun->before);
+	free(begun);
+	begun = NULL;
 }
 
 /*
- * The commit begun ended as how says: NSHD_BACK, rolled back to how it
- * was; NSHD_KEPT, a commit confirmed kept until its deadline; or
- * NSHD_APPLIED, configure terminal's commit applied, not saved. Then the
- * record it made goes, but an unsaved one from an earlier commit stays.
- * With NSHD_LEFT the commit ended neither way, and the records stay
+ * The commit begun took: what runs is the candidate. It ends as BEGIN
+ * asked: kept until its deadline, left applied for configure terminal,
+ * or saved, in a job (system_job_end())
  */
 static void
-system_back(uint32_t id, int how)
+system_took(uint32_t id)
+{
+	struct job	*j;
+
+	if (begun->minutes > 0)
+		system_finish(id, NSHD_KEPT);
+	else if (begun->unsaved)
+		system_finish(id, NSHD_APPLIED);
+	else {
+		j = system_job_new(id, JOB_SAVE);
+		user_name(begun->uid, j->who, sizeof(j->who));
+		strlcpy(j->comment, begun->comment, sizeof(j->comment));
+		system_job(j);
+	}
+}
+
+/*
+ * The commit begun ended as how says, which is its answer. A commit kept
+ * until its deadline, applied and not saved, or undone removes its
+ * record, but an unsaved one from an earlier commit stays; if the record
+ * cannot be read or removed, the answer is -1. A commit whose undo
+ * failed leaves both records. A commit kept has its deadline from now,
+ * and one undone puts back the unconfirmed commit record that BEGIN
+ * replaced. A commit saved has had its records seen to already
+ * (system_saved())
+ */
+static void
+system_finish(uint32_t id, int how)
 {
 	struct record	 rec;
-	int		 status = 1;
+	int		 answer = how;
 
-	if (how == NSHD_LEFT)
-		status = 0;
-	else if (record_read(&rec) == 0) {
-		if (rec.state != RECORD_APPLYING || record_clear() == 0)
-			status = 0;
+	if (how == NSHD_KEPT || how == NSHD_APPLIED || how == NSHD_UNDONE) {
+		if (record_read(&rec) == -1 ||
+		    (rec.state == RECORD_APPLYING && record_clear() == -1))
+			answer = -1;
 		record_free(&rec);
 	}
-	/* a commit confirmed kept until its deadline, or rolled back */
-	if (confirm_begun && how == NSHD_BACK)
+	if (begun->minutes > 0 && how == NSHD_UNDONE)
 		system_unarm();
-	else if (confirm_begun && how == NSHD_KEPT)
+	else if (begun->minutes > 0 && how == NSHD_KEPT)
 		system_kept();
-	confirm_free(&confirm_prev);
-	confirm_begun = 0;
 	system_ended();
-	system_printed(id, status);
-	system_confirm(-1, 0, NULL);
+	printed_text(links[CONFIG].iev, IMSG_SYS_TEXT, id, 0);
+	system_end(id, answer, NULL);
 }
 
 /*
@@ -2888,7 +3040,7 @@ system_health(void)
 
 	if (saved_differs() == 1)
 		printf("%% What runs is not the saved configuration\n");
-	if (!committing && record_read(&rec) == 0) {
+	if (begun == NULL && record_read(&rec) == 0) {
 		if (rec.state == RECORD_APPLYING)
 			printf("%% The commit %s did not finish\n",
 			    record_by(&rec));
@@ -2988,12 +3140,7 @@ system_job(struct job *j)
 	evtimer_add(&job->tm, &tv);
 	return;
  fail:
-	if (j->kind == JOB_RECOVER) {
-		printed_log();
-		system_attempted(0);
-	} else
-		system_printed(j->id, -1);
-	system_job_free(j);
+	system_job_end(j, -1);
 }
 
 /* the job's child: what it prints, to fd, with nothing else of system's */
@@ -3028,15 +3175,15 @@ system_job_child(int fd, struct job *j)
 		}
 		sc.nclears = j->apply->nclears;
 		/* without admin, what needs admin stays as it was running */
-		admin_begin(committing && !commit_admin, commit_before,
-		    commit_beforelen);
+		admin_begin(begun != NULL && !begun->admin, begun != NULL ?
+		    begun->before : NULL, begun != NULL ? begun->beforelen : 0);
 		/* -1, it could not run; 1, a line of it failed */
 		r = script_run(&sc);
 		/* then whether what runs is what was wanted; the boot's too */
-		r = commit_verify(j->want, j->wantlen, r != 0, !committing);
+		r = commit_verify(j->want, j->wantlen, r != 0, begun == NULL);
 		break;
 	case JOB_UNDO:
-		admin_begin(!commit_admin, commit_before, commit_beforelen);
+		admin_begin(!begun->admin, begun->before, begun->beforelen);
 		r = commit_undo(j->was, j->waslen) == 0 ? 0 : 1;
 		break;
 	case JOB_SAVE:
@@ -3090,6 +3237,30 @@ system_job_read(int fd, short event, void *arg)
 }
 
 /*
+ * j, a commit's script or a rollback, is the job, but does not start
+ * until config has lowered the permissions of the sessions that would
+ * lose one (system_go()). Requests wait for it meanwhile. A config that
+ * has not said so in GO_SECS seconds has failed
+ */
+static void
+system_job_wait(struct job *j)
+{
+	struct timeval	 tv = { GO_SECS, 0 };
+
+	j->waits = 1;
+	job = j;
+	evtimer_set(&j->tm, system_go_late, NULL);
+	evtimer_add(&j->tm, &tv);
+}
+
+/* config has not ended its sessions in time, so nshd ends */
+static void
+system_go_late(int fd, short event, void *arg)
+{
+	fatalx("config did not end its sessions in %d seconds", GO_SECS);
+}
+
+/*
  * The job past its time: its group is sent SIGTERM, then SIGKILL a grace
  * later, and its output is no longer waited for
  */
@@ -3121,7 +3292,7 @@ system_job_late(int fd, short event, void *arg)
 static void
 system_job_done(void)
 {
-	struct job	*j = job, *u;
+	struct job	*j = job;
 	int32_t		 status = -1;
 
 	if (j->fd != -1 || j->pid != 0)
@@ -3133,10 +3304,27 @@ system_job_done(void)
 		    jobs[j->kind].what, jobs[j->kind].secs);
 	else if (WIFEXITED(j->status) && WEXITSTATUS(j->status) <= 1)
 		status = WEXITSTATUS(j->status);
+	system_job_end(j, status);
+	/* first roll back an unconfirmed commit that is due */
+	system_confirm(-1, 0, NULL);
+	system_drain();
+}
+
+/*
+ * j ended, or could not start, as status says: 0, 1 if a line of a
+ * script failed or what runs is not what was wanted, or -1. A commit's
+ * apply that took ends the commit as BEGIN asked; one that did not is
+ * undone in a job of its own. The commit's undo or save ends it too
+ */
+static void
+system_job_end(struct job *j, int32_t status)
+{
+	struct job	*u;
+
 	if (j->kind == JOB_RECOVER) {
 		printed_log();
 		system_attempted(status == 0);
-	} else if (j->kind == JOB_APPLY && committing && status != 0) {
+	} else if (j->kind == JOB_APPLY && begun != NULL && status != 0) {
 		/* what was printed goes to config before the undo's */
 		printed_text(links[CONFIG].iev, IMSG_SYS_TEXT, j->id, 0);
 		u = system_job_new(j->id, JOB_UNDO);
@@ -3144,17 +3332,19 @@ system_job_done(void)
 		u->waslen = j->waslen;
 		j->was = NULL;
 		system_job(u);
-	} else {
-		if (j->kind == JOB_UNDO)
-			status = status == 0 ? NSHD_UNDONE : -1;
+	} else if (j->kind == JOB_APPLY && begun != NULL)
+		system_took(j->id);
+	else if (j->kind == JOB_UNDO)
+		system_finish(j->id, status == 0 ? NSHD_UNDONE : NSHD_LEFT);
+	else if (j->kind == JOB_SAVE && begun != NULL)
+		system_finish(j->id, system_saved(status == 0) == 0 &&
+		    status == 0 ? NSHD_SAVED : NSHD_UNSAVED);
+	else {
 		if (j->kind == JOB_SAVE && system_saved(status == 0) == -1)
 			status = -1;
 		system_printed(j->id, status);
 	}
 	system_job_free(j);
-	/* first roll back an unconfirmed commit that is due */
-	system_confirm(-1, 0, NULL);
-	system_drain();
 }
 
 /* free j, and remove its test's rules */
@@ -3167,6 +3357,7 @@ system_job_free(struct job *j)
 		rmdir(j->dir);
 	free(j->want);
 	free(j->was);
+	free(j->back);
 	free(j);
 }
 

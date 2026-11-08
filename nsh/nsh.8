@@ -793,15 +793,32 @@ A commit that changes
 .Cm login class
 or
 .Cm login user
-lines ends every nshd session once it begins, the committing session
-included, and nshd takes no session until the commit ends.
-A rollback of an unconfirmed commit ends every session the same way.
-Each user's session then has the permissions of the user's class as it
-is after the change.
+lines ends no nshd session but a web configurator's session whose user
+could no longer log in.
+Once it begins, each session that would lose a permission by it has it
+no more, and nshd takes no session until the commit ends.
+A session in
+.Cm configure
+or
+.Cm configure exclusive
+that loses admin may then only leave it, and
 .Nm
-connects again for its next command, outside configure;
-.Ic show rollback
-says how the commit went.
+allows the exec permission, which it checks itself, until it connects
+again.
+A rollback of an unconfirmed commit that changes them ends no session:
+a permission it takes away is refused at once where nshd checks the
+class as it runs a command, and everywhere once
+.Nm
+connects again.
+A permission its class gains counts at once where nshd checks the class
+as it runs a command, as for the admin lines of a commit, and everywhere
+once
+.Nm
+connects again.
+A change to a user's password alone ends no session, and a web login
+is refused until the commit ends.
+A web configurator's session that ended logs in again with the
+permissions of the user's class as it is after the change.
 .Bl -dash
 .It
 e.g. Let alice, who has no account, operate and configure the system:

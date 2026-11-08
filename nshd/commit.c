@@ -358,6 +358,45 @@ commit_reads(char *now, size_t nowlen, char *want, size_t wantlen)
 	return ret;
 }
 
+/* Whether a login statement of a, a class or a user, is not in b */
+static int
+logins_in(struct cnode *a, struct cnode *b)
+{
+	char	*s;
+	size_t	 i;
+
+	for (i = 0; (s = conftree_stmt(a, i)) != NULL; i++)
+		if (strncmp(s, "login ", 6) == 0 && !conftree_has(b, s))
+			return 1;
+	return 0;
+}
+
+/* Whether a and b have different login users or classes */
+int
+logins_differ(struct cnode *a, struct cnode *b)
+{
+	return logins_in(a, b) || logins_in(b, a);
+}
+
+/*
+ * Do configuration texts a and b have different login users or classes?
+ * 1 if so, 0 if not, -1 if either could not be read, after saying why
+ */
+int
+commit_logins(char *a, size_t alen, char *b, size_t blen)
+{
+	struct cnode *x, *y = NULL;
+	int ret = -1;
+
+	if ((x = conftree_mem(a, alen, "a configuration", conf_mode,
+	    conf_ordered)) != NULL && (y = conftree_mem(b, blen,
+	    "a configuration", conf_mode, conf_ordered)) != NULL)
+		ret = logins_differ(x, y);
+	conftree_free(x);
+	conftree_free(y);
+	return ret;
+}
+
 /*
  * What would keep want from replacing was, the running configuration,
  * that can be found in advance: each problem shown, and how many
