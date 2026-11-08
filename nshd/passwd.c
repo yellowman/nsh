@@ -705,11 +705,12 @@ login_perms_in(uid_t uid, int web, const char *conf, size_t len)
 }
 
 /*
- * Check a web login. name must be named by a login user line and must
- * not have uid 0. auth_usercheck(3) checks the password, and
- * auth_approval(3) must allow the account to log in, as login(1)
- * requires: not expired, and not refused by its class. Returns the
- * uid, or -1 after printing "Login incorrect".
+ * Check a web login. A login user line must name the user, and the
+ * account must not have uid 0. auth_usercheck(3) returns a session
+ * whether or not the password is right; its state says which. Then
+ * auth_approval(3), which resets that state, must approve the account,
+ * as login(1) requires: not expired, and not refused by its class.
+ * Returns the uid, or -1 after printing "Login incorrect".
  */
 int
 login_auth(char *name, char *password)
@@ -724,6 +725,7 @@ login_auth(char *name, char *password)
 		/* copy it before auth_*() read the password database again */
 		uid = pw->pw_uid;
 		if ((as = auth_usercheck(name, NULL, NULL, password)) == NULL ||
+		    (auth_getstate(as) & AUTH_ALLOW) == 0 ||
 		    auth_approval(as, NULL, name, NULL) <= 0)
 			uid = -1;
 		if (as != NULL)
