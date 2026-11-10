@@ -347,7 +347,7 @@ inttunnel(int argc, char **argv, ...)
 		    rdomain, ttl, df, ecn);
 
 	if (set) {
-		/* without its addresses, the tunnel gets nothing else */
+		/* if the addresses cannot be set, set nothing else */
 		if ((r = settunnel(ifs, ifname, src, srcport, dstip)) == -1)
 			return -1;
 		if (rdomain && settunnelrdomain(ifs, ifname, rdomain) == -1)

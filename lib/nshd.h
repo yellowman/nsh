@@ -229,7 +229,7 @@ struct nshd_chunk {
 	int32_t		part;
 };
 #define NSHD_SCRIPT	0	/* the edits BEGIN runs */
-#define NSHD_BEFORE	1	/* BEGIN's: what runs before */
+#define NSHD_BEFORE	1	/* BEGIN: the config the commit is based on */
 #define NSHD_WANT	2	/* BEGIN's: the configuration wanted */
 #define NSHD_TEST	3	/* TEST's: the rules it tests */
 #define NSHD_PARTS	4
@@ -282,12 +282,13 @@ struct nshd_apply {
 };
 
 /*
- * config to system: a session's commit, which system records, applies
- * and ends: minutes for commit confirmed, unsaved for configure
- * terminal, the comment it is saved with, and its script, which the
- * parts carry with the configuration before and the one wanted. For
- * commit check, or with problems config found, bad of them, system runs
- * the commit's tests and no more, and says the verdict
+ * config to system: run a session's commit, which system records,
+ * applies and ends. minutes is for commit confirmed, unsaved for
+ * configure terminal, and comment is saved with the commit. The parts
+ * carry the commit's script, the configuration it is based on and the
+ * configuration wanted. For commit check (checking), or if config
+ * found problems (bad of them), system only runs the commit's tests
+ * and reports the verdict
  */
 struct nshd_begin {
 	struct nshd_whose whose;

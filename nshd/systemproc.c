@@ -76,15 +76,15 @@
  * each session that would lose one, end each that would lose its login
  * (REVOKING), and take no new one, and waits until config says it has
  * (GO). Then system runs the script, and checks that what runs is then
- * the configuration wanted. If it is not, system undoes the script, to
- * the configuration before, and removes the record. If it is, system
- * saves the running configuration and removes the record. An unconfirmed
- * commit is kept until its deadline instead, and a configure terminal
- * commit is kept without being saved; their records go too. BEGIN's
- * answer is how the commit ended. BEGIN refuses such a configure
- * terminal commit while an unconfirmed commit exists, because rolling
- * back the unconfirmed commit would roll it back too. Outside a commit,
- * SAVE saves the running configuration.
+ * the configuration wanted. If it is not, system undoes the script,
+ * back to the running configuration it read at BEGIN, and removes the
+ * record. If it is, system saves the running configuration and removes
+ * the record. An unconfirmed commit is kept until its deadline instead,
+ * and a configure terminal commit is kept without being saved; their
+ * records go too. BEGIN's answer is how the commit ended. BEGIN refuses
+ * such a configure terminal commit while an unconfirmed commit exists,
+ * because rolling back the unconfirmed commit would roll it back too.
+ * Outside a commit, SAVE saves the running configuration.
  *
  * An apply, an undo, a save and a test each run as a job: a child of
  * system in its own process group, whose output is sent as it arrives.
@@ -385,7 +385,7 @@ struct begun {
 	int			 unsaved;	/* configure terminal's */
 	char			 comment[NSHD_COMMENT];	/* its save's */
 	struct nshd_apply	 apply;		/* its script's clears */
-	char			*before;	/* without admin, what ran */
+	char			*before;	/* running config at BEGIN */
 	size_t			 beforelen;
 	int			 minutes;	/* commit confirmed's, else 0 */
 	struct confirm		 prev;		/* the record before, if so */
@@ -404,10 +404,8 @@ struct job {
 	struct nshd_apply	*apply;
 	char			*back;		/* rollback configuration */
 	size_t			 backlen;
-	char			*want;		/* what an apply wants, */
+	char			*want;		/* what an apply wants */
 	size_t			 wantlen;
-	char			*was;		/* and what ran before it */
-	size_t			 waslen;
 	char			 who[64];	/* a save's user and comment */
 	char			 comment[NSHD_COMMENT];
 	char			*args[NOPTFILL];	/* a test's */
@@ -2327,12 +2325,13 @@ system_begin(uint32_t id, struct nshd_begin *bg)
 	if ((runs = system_running(&len)) == NULL)
 		goto done;
 	r = commit_reads(runs, len, parts[NSHD_BEFORE], partlen[NSHD_BEFORE]);
-	/* without admin, keep the running configuration for the script */
-	if (r == 1 && !b->admin) {
-		b->before = runs;
-		b->beforelen = len;
-	} else
-		free(runs);
+	/*
+	 * Keep the running configuration as read here. The records store
+	 * it, an undo or rollback restores it, and for a session without
+	 * admin, the script checks admin settings against it.
+	 */
+	b->before = runs;
+	b->beforelen = len;
 	if (r == -1)
 		goto done;
 	if (r == 0) {
@@ -2341,20 +2340,20 @@ system_begin(uint32_t id, struct nshd_begin *bg)
 		goto done;
 	}
 	/* one that changes login users or classes waits for config */
-	if ((logins = commit_logins(parts[NSHD_BEFORE], partlen[NSHD_BEFORE],
+	if ((logins = commit_logins(b->before, b->beforelen,
 	    parts[NSHD_WANT], partlen[NSHD_WANT])) == -1)
 		goto done;
 	if (rec.state == RECORD_APPLYING) {
 		/* report what it left, judged by the running configuration */
-		if ((r = commit_reads(parts[NSHD_BEFORE],
-		    partlen[NSHD_BEFORE], rec.before, rec.beforelen)) == -1)
+		if ((r = commit_reads(b->before, b->beforelen, rec.before,
+		    rec.beforelen)) == -1)
 			goto done;
 		if (r) {
 			printf("%% The commit %s did not finish, and changed "
 			    "nothing\n", record_by(&rec));
 		} else {
-			if ((r = commit_reads(parts[NSHD_BEFORE],
-			    partlen[NSHD_BEFORE], rec.want, rec.wantlen)) == -1)
+			if ((r = commit_reads(b->before, b->beforelen,
+			    rec.want, rec.wantlen)) == -1)
 				goto done;
 			printf("%% The commit %s did not finish: what runs is "
 			    "%s, and is not saved\n", record_by(&rec), r ?
@@ -2381,8 +2380,8 @@ system_begin(uint32_t id, struct nshd_begin *bg)
 		now.state = RECORD_APPLYING;
 		now.uid = b->uid;
 		now.when = time(NULL);
-		now.before = parts[NSHD_BEFORE];
-		now.beforelen = partlen[NSHD_BEFORE];
+		now.before = b->before;
+		now.beforelen = b->beforelen;
 		now.want = parts[NSHD_WANT];
 		now.wantlen = partlen[NSHD_WANT];
 		if (record_write(&now) == -1)
@@ -2431,8 +2430,8 @@ system_arm(int minutes)
 	}
 	cf = begun->prev;
 	if (cf.state != CONFIRM_WAITING) {
-		cf.back = parts[NSHD_BEFORE];
-		cf.backlen = partlen[NSHD_BEFORE];
+		cf.back = begun->before;
+		cf.backlen = begun->beforelen;
 	}
 	cf.state = CONFIRM_WAITING;
 	cf.attempts = 0;
@@ -2737,12 +2736,12 @@ system_running(size_t *len)
 }
 
 /*
- * The script, the part sent, in a job, which then says whether what runs
- * is the configuration wanted, the part sent too. A commit's that is not
- * is undone, to the configuration before, the part sent too, in a job
- * of its own (system_job_end()). One that changes login users or
- * classes, revoke, starts once config has lowered the permissions of the
- * sessions that would lose one (system_go())
+ * Start a job that runs the commit's script, then checks that the
+ * running configuration is the one wanted. If it is not, an undo job
+ * restores the configuration read at BEGIN (system_job_end()). If
+ * revoke is set, the commit changes login users or classes, and the job
+ * waits until config has lowered the permissions of the sessions that
+ * lose some (system_go()).
  */
 static void
 system_script(uint32_t id, struct nshd_apply *a, int revoke)
@@ -2753,9 +2752,8 @@ system_script(uint32_t id, struct nshd_apply *a, int revoke)
 	j->apply = a;
 	j->want = parts[NSHD_WANT];
 	j->wantlen = partlen[NSHD_WANT];
-	j->was = parts[NSHD_BEFORE];
-	j->waslen = partlen[NSHD_BEFORE];
-	parts[NSHD_WANT] = parts[NSHD_BEFORE] = NULL;
+	parts[NSHD_WANT] = NULL;
+	system_part_free(NSHD_BEFORE);
 	if (revoke) {
 		system_job_wait(j);
 		system_revoking(id, j->want, j->wantlen);
@@ -3415,7 +3413,7 @@ system_job_child(int fd, struct job *j)
 		break;
 	case JOB_UNDO:
 		admin_begin(!begun->admin, begun->before, begun->beforelen);
-		r = commit_undo(j->was, j->waslen) == 0 ? 0 : 1;
+		r = commit_undo(begun->before, begun->beforelen) == 0 ? 0 : 1;
 		break;
 	case JOB_SAVE:
 		if ((r = saved_write()))
@@ -3568,9 +3566,6 @@ system_job_end(struct job *j, int32_t status)
 		/* what was printed goes to config before the undo's */
 		system_said(j->id);
 		u = system_job_new(j->id, JOB_UNDO);
-		u->was = j->was;
-		u->waslen = j->waslen;
-		j->was = NULL;
 		system_job(u);
 	} else if (j->kind == JOB_APPLY && begun != NULL)
 		system_took(j->id);
@@ -3600,7 +3595,6 @@ system_job_free(struct job *j)
 	if (j->dir[0] != '\0')
 		rmdir(j->dir);
 	free(j->want);
-	free(j->was);
 	free(j->back);
 	free(j);
 }

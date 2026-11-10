@@ -455,6 +455,9 @@ starts, system finds any unconfirmed commit that an earlier run left,
 and rolls it back once its deadline has passed.
 A commit is refused if the running configuration is not the one it was
 planned from.
+system reads the running configuration itself as the commit begins,
+and an undo, or a rollback of an unconfirmed commit, goes back to what
+it read.
 system runs in a session of its own: when
 .Nm
 ends, the parent kills every process left in that session, and every
