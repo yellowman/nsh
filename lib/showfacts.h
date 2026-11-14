@@ -263,6 +263,8 @@ void	 vlan_none(int, int);
 void	 stats_facts_init(void);
 struct statgroup *stats_group(const char *);
 int	 stats_where(struct statgroup *);
+int	 stats_place(struct statgroup *);
+struct statgroup *stats_at(int);
 const struct facts_kind *stats_kind(const char *);
 int	 stats_facts(struct facts_out *, struct statgroup *);
 void	 stats_render(struct frec *);

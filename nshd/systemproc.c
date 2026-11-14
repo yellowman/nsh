@@ -51,9 +51,11 @@
  * stream stops. The kind of stream decides which user the child runs
  * as. A show's program runs as NSHD_CHECK_USER, except the programs
  * listed in root_programs, which keep root. dhcpd's leases file is
- * opened as root and copied as NSHD_CHECK_USER. The program and its
- * arguments come from nsh's table for the show's words; no request
- * names a path.
+ * opened as root and copied as NSHD_CHECK_USER. A show comes as the
+ * values config parsed from its words: its kind, and for a program,
+ * its places in nsh's table, its routing table and the words for its
+ * arguments. The program comes from the table; no request names a
+ * path.
  *
  * An operation, which a privileged session requests, comes as its row of
  * ops[] and the values config parsed for the row's arguments. system
@@ -579,7 +581,7 @@ static void	system_drained(void);
 static int	system_said(uint32_t);
 static void	system_tell(uint32_t, uint32_t, const void *, size_t);
 static void	system_snapshot(uint32_t, int);
-static void	system_show(uint32_t, char *);
+static void	system_show(uint32_t, struct nshd_sysshow *);
 static void	system_op(uint32_t, struct nshd_sysop *);
 static int	system_may(int, int, const char *);
 static void	system_end(uint32_t, int32_t, const char *, ...)
@@ -1039,7 +1041,7 @@ static int
 system_whole(uint32_t type, const void *data, size_t len)
 {
 	struct nshd_begin	 bg;
-	struct nshd_show	 show;
+	struct nshd_sysshow	 show;
 	struct nshd_chunk	 c;
 	struct nshd_save	 sv;
 	struct nshd_rollback	 rb;
@@ -1108,8 +1110,14 @@ system_whole(uint32_t type, const void *data, size_t len)
 		if (len != sizeof(show))
 			return (-1);
 		memcpy(&show, data, len);
-		return (memchr(show.words, '\0', sizeof(show.words)) ==
-		    NULL ? -1 : 0);
+		if (show.nargs < 0 || show.nargs > NSHD_SHOWARGS)
+			return (-1);
+		for (i = 0; i < NSHD_SHOWARGS; i++)
+			if (memchr(show.args[i], '\0', sizeof(show.args[i])) ==
+			    NULL)
+				return (-1);
+		return (memchr(show.name, '\0', sizeof(show.name)) == NULL ?
+		    -1 : 0);
 	case IMSG_SYS_SCRIPT:
 		if (len < sizeof(c) || len - sizeof(c) > NSHD_TEXT)
 			return (-1);
@@ -1143,7 +1151,7 @@ system_request(uint32_t type, uint32_t id, const void *data, size_t len)
 	struct nshd_snapshot	 snap;
 	struct nshd_perms	 pm;
 	struct nshd_syslogin	 sl;
-	struct nshd_show	 show;
+	struct nshd_sysshow	 show;
 	struct nshd_begin	 bg;
 	struct nshd_save	 sv;
 	struct nshd_rollback	 rb;
@@ -1161,7 +1169,7 @@ system_request(uint32_t type, uint32_t id, const void *data, size_t len)
 		break;
 	case IMSG_SYS_SHOW:
 		memcpy(&show, data, sizeof(show));
-		system_show(id, show.words);
+		system_show(id, &show);
 		break;
 	case IMSG_SYS_READ:
 		system_stream_more(id);
@@ -1436,9 +1444,9 @@ system_snapshot(uint32_t id, int facts)
 		fatal("%s", __func__);
 }
 
-/* all the facts words ask for, then how it went; or a stream */
+/* all the facts a show's values ask for, then how it went; or a stream */
 static void
-system_show(uint32_t id, char *words)
+system_show(uint32_t id, struct nshd_sysshow *ss)
 {
 	struct collection	*a;
 	struct facts_out	 o;
@@ -1446,9 +1454,9 @@ system_show(uint32_t id, char *words)
 	int			 more = 1, op, table;
 
 	printed(NULL);
-	if ((a = facts_answer_begin(words)) == NULL) {
-		system_end(id, NSHD_ELSEWHERE,
-		    "%% show %s: not answered by nshd\n", words);
+	if ((a = facts_answer_take(ss)) == NULL) {
+		system_end(id, 1, "%% nshd: a show system does not "
+		    "answer\n");
 		return;
 	}
 	units.arg = &id;

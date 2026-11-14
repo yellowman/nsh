@@ -304,6 +304,41 @@ prot1_find(char *prot, char *sub)
 }
 
 /*
+ * The places of x, a show prot1_find() finds: its protocol's in prots,
+ * and in *sub, its own in the protocol's table; or -1 if it has none
+ */
+int
+prot1_place(struct prot1 *x, int *sub)
+{
+	struct prot *p;
+	struct prot1 *y;
+
+	for (p = prots; p->name != NULL; p++)
+		for (y = p->table; y->name != NULL; y++)
+			if (y == x) {
+				*sub = y - p->table;
+				return p - prots;
+			}
+	return -1;
+}
+
+/* the show at places prot and sub, as prot1_find() finds one, or NULL */
+struct prot1 *
+prot1_at(int prot, int sub)
+{
+	int n;
+
+	for (n = 0; prots[n].name != NULL; n++)
+		;
+	if (prot < 0 || prot >= n ||
+	    strcmp(prots[prot].name, "system-stats") == 0)
+		return NULL;
+	for (n = 0; prots[prot].table[n].name != NULL; n++)
+		;
+	return sub < 0 || sub >= n ? NULL : &prots[prot].table[sub];
+}
+
+/*
  * Put x's program and its arguments in args, filling the arguments x
  * leaves open from the argc words of argv, with bgpctl's socket for
  * rtable table. Returns NULL, after printing why, if the words do not

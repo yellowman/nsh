@@ -1205,6 +1205,22 @@ stats_where(struct statgroup *g)
 	return (g->root ? FACTS_SYSTEM : FACTS_SHOW);
 }
 
+/* g's place, which stats_at() finds it by */
+int
+stats_place(struct statgroup *g)
+{
+	return (g - groups);
+}
+
+/* the group at place n, as stats_group() finds one, or NULL */
+struct statgroup *
+stats_at(int n)
+{
+	if (n < 0 || n >= (int)nitems(groups) || groups[n].kind.name == NULL)
+		return (NULL);
+	return (&groups[n]);
+}
+
 const struct facts_kind *
 stats_kind(const char *name)
 {

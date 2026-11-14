@@ -156,6 +156,7 @@
 #include "stringlist.h"
 #include "kfacts.h"
 #include "session.h"
+#include "answer.h"
 
 #define SNAPSHOT_TEXT	(16 * 1024 * 1024)	/* most text in a snapshot */
 
@@ -1052,13 +1053,14 @@ config_show(uint32_t session, struct nshd_show *show)
 {
 	struct nshd_snapshot	 ns = { 0 };
 	struct nshd_rollback	 rb = { -1 };
+	struct nshd_sysshow	 ss;
 	struct session		*sp;
 	struct request		*r;
 	const char		*errstr;
 	char			 num[16], *p;
 	uint32_t		 type = IMSG_SYS_SHOW;
-	const void		*data = show;
-	size_t			 len = sizeof(*show);
+	const void		*data = &ss;
+	size_t			 len = sizeof(ss);
 	int			 kind = REQ_ANSWER;
 
 	if ((sp = session_find(session)) == NULL) {
@@ -1106,6 +1108,10 @@ config_show(uint32_t session, struct nshd_show *show)
 		data = &rb;
 		len = sizeof(rb);
 		kind = REQ_TEXT;
+	} else if (facts_answer_pack(show->words, &ss) != 0) {
+		config_answer(session, NSHD_ELSEWHERE,
+		    "%% show %s: not answered by nshd\n", show->words);
+		return;
 	}
 	/* the whole text is collected only to take its hashes out */
 	if (kind == REQ_TEXT && !config_hides(sp))
@@ -1114,7 +1120,7 @@ config_show(uint32_t session, struct nshd_show *show)
 		config_answer(session, 1, "%s", REQ_REFUSED);
 		return;
 	}
-	/* system answers the rest with facts, or says it does not */
+	/* system answers the rest; a show comes as the values it asks */
 	if (link_compose(&links[SYSTEM], type, r->id, data, len) == -1)
 		fatal("%s", __func__);
 }

@@ -661,6 +661,8 @@ struct prot1;
 int pr_prot1(int, char **, ...);
 char **step_optreq(char **, char **, int, char **, int);
 struct prot1 *prot1_find(char *, char *);
+int prot1_place(struct prot1 *, int *);
+struct prot1 *prot1_at(int, int);
 int prot1_run(char *, char *, int, char **, char **);
 char **prot1_args(struct prot1 *, char **, int, char **, int);
 

@@ -67,6 +67,23 @@ struct nshd_show {
 	char		words[NSHD_WORDS];
 };
 
+/*
+ * config to system: a show that system answers, as config parsed its
+ * words (facts_answer_pack()): what it asks, and the values it asks
+ * with, where its kind has them
+ */
+#define NSHD_SHOWARGS	6	/* a program's words, at most */
+struct nshd_sysshow {
+	int32_t		type;		/* enum answer_type */
+	int32_t		af;		/* ip: a family, or AF_UNSPEC */
+	int32_t		stats;		/* statistics: the group's place */
+	int32_t		table;		/* a program: its routing table, */
+	int32_t		prot, sub;	/* the show's places (prot1_at()), */
+	int32_t		nargs;		/* and its words */
+	char		args[NSHD_SHOWARGS][NSHD_WORDS];
+	char		name[NSHD_IFNAME];	/* autoconf: one interface */
+};
+
 /* how a request ended: 0 on success */
 struct nshd_result {
 	int32_t		status;
@@ -482,7 +499,7 @@ enum nshd_imsg {
 	IMSG_SYS_SNAPSHOT,	/* config to system: the running configuration */
 	IMSG_SYS_TEXT,		/* system to config: text */
 	IMSG_SYS_END,		/* system to config: nshd_result */
-	IMSG_SYS_SHOW,		/* config to system: nshd_show, facts back */
+	IMSG_SYS_SHOW,		/* config to system: nshd_sysshow, facts back */
 	IMSG_SYS_FACTS,		/* system to config: units of facts */
 	IMSG_CTL_READ,		/* frontend to config: client read all output */
 	IMSG_SYS_READ,		/* config to system: CTL_READ, per request */

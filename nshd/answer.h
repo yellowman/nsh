@@ -24,8 +24,11 @@
 #define ANSWER_H
 
 struct collection;
+struct nshd_sysshow;
 
 struct collection *facts_answer_begin(char *);
+int		 facts_answer_pack(char *, struct nshd_sysshow *);
+struct collection *facts_answer_take(const struct nshd_sysshow *);
 int		 facts_more(struct collection *, struct facts_out *, int);
 void		 facts_answer_end(struct collection *);
 

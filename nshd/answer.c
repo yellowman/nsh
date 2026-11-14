@@ -30,6 +30,8 @@
 #include <netinet/in.h>
 
 #include <errno.h>
+#include <event.h>
+#include <imsg.h>
 #include <limits.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -37,6 +39,7 @@
 #include <string.h>
 
 #include "externs.h"
+#include "nshd.h"
 #include "facts.h"
 #include "showfacts.h"
 #include "showwords.h"
@@ -65,6 +68,98 @@ facts_answer_begin(char *words)
 		return (NULL);
 	}
 	return (c);
+}
+
+/*
+ * For config, the show words ask of nshd's system, as values in ss: 0,
+ * or NSHD_ELSEWHERE if system does not answer it
+ */
+int
+facts_answer_pack(char *words, struct nshd_sysshow *ss)
+{
+	struct facts_answer	*a;
+	int			 i, r = NSHD_ELSEWHERE;
+
+	memset(ss, 0, sizeof(*ss));
+	if ((a = facts_answer(words)) == NULL ||
+	    (a->where & FACTS_SYSTEM) == 0)
+		goto done;
+	ss->type = a->type;
+	ss->af = a->af;
+	if (a->type == ANS_STATISTICS)
+		ss->stats = stats_place(a->stats);
+	if (a->type == ANS_PROGRAM) {
+		ss->table = a->table;
+		ss->prot = prot1_place(a->prog, &ss->sub);
+		ss->nargs = a->n - 4;
+		for (i = 0; i < ss->nargs; i++)
+			strlcpy(ss->args[i], a->w[4 + i], sizeof(ss->args[i]));
+	}
+	strlcpy(ss->name, a->name, sizeof(ss->name));
+	r = 0;
+done:
+	facts_answer_free(a);
+	return (r);
+}
+
+/*
+ * Begin, for nshd's system, the show values ss ask, which config parsed
+ * (facts_answer_pack()), or NULL if they ask none system answers
+ */
+struct collection *
+facts_answer_take(const struct nshd_sysshow *ss)
+{
+	struct facts_answer	*a;
+	struct collection	*c;
+	int			 i;
+
+	/* the kinds of facts, as facts_answer() makes them first */
+	facts_init();
+	if ((a = calloc(1, sizeof(*a))) == NULL)
+		return (NULL);
+	a->type = ss->type;
+	switch (ss->type) {
+	case ANS_IP:
+		if (ss->af != AF_UNSPEC && ss->af != AF_INET &&
+		    ss->af != AF_INET6)
+			goto bad;
+		a->af = ss->af;
+		break;
+	case ANS_AUTOCONF:
+		strlcpy(a->name, ss->name, sizeof(a->name));
+		break;
+	case ANS_STATISTICS:
+		if ((a->stats = stats_at(ss->stats)) == NULL ||
+		    (stats_where(a->stats) & FACTS_SYSTEM) == 0)
+			goto bad;
+		break;
+	case ANS_PROGRAM:
+		/* the words the program's arguments take, in a's copy */
+		/* system's message check bounds nargs */
+		if (ss->table < 0 || ss->table > RT_TABLEID_MAX ||
+		    (a->prog = prot1_at(ss->prot, ss->sub)) == NULL ||
+		    (a->copy = malloc(sizeof(ss->args))) == NULL)
+			goto bad;
+		memcpy(a->copy, ss->args, sizeof(ss->args));
+		a->table = ss->table;
+		a->n = 4 + ss->nargs;
+		for (i = 0; i < ss->nargs; i++)
+			if (*(a->w[4 + i] = a->copy + i * NSHD_WORDS) == '\0')
+				goto bad;
+		break;
+	case ANS_LEASES:
+	case ANS_DAEMONS:
+		break;
+	default:
+		goto bad;
+	}
+	if ((c = calloc(1, sizeof(*c))) == NULL)
+		goto bad;
+	c->a = a;
+	return (c);
+bad:
+	facts_answer_free(a);
+	return (NULL);
 }
 
 /*
