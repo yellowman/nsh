@@ -2641,7 +2641,7 @@ static void
 system_unarm(void)
 {
 	if ((begun->prev.state == CONFIRM_NONE ? confirm_clear() :
-	    confirm_write(&begun->prev)) == -1)
+	    confirm_write(&begun->prev)) != 0)
 		printf("%% nshd: the record of a commit not confirmed: %s\n",
 		    strerror(errno));
 }
@@ -2834,17 +2834,23 @@ confirm_retry(void)
 
 /*
  * cf was rolled back, as how says: remove its record and carp demotion.
- * If the record cannot be removed, try again later.
+ * If the record cannot be removed, try again later. One removed whose
+ * removal is not synced is gone all the same, so its demotion goes too
  */
 static void
 system_taken(struct confirm *cf, const char *how)
 {
-	if (confirm_clear() == -1) {
+	int	 r;
+
+	if ((r = confirm_clear()) == -1) {
 		logit(LOG_CRIT, "the record of a commit not confirmed: %s",
 		    strerror(errno));
 		confirm_retry();
 		return;
 	}
+	if (r == 1)
+		logit(LOG_CRIT, "the record of a commit not confirmed is "
+		    "removed, but not synced: %s", strerror(errno));
 	if (cf->demoted)
 		carplock(-128);
 	log_warnx("commit not confirmed: %s", how);
@@ -3204,7 +3210,7 @@ static int
 system_unconfirm(void)
 {
 	struct confirm	 cf;
-	int		 r;
+	int		 r, c;
 
 	if ((r = confirm_read(&cf, 0)) == -1 && errno != EFTYPE) {
 		printf("%% nshd: the record of a commit not confirmed: %s\n",
@@ -3212,11 +3218,15 @@ system_unconfirm(void)
 		return (-1);
 	}
 	if (r == -1 || cf.state != CONFIRM_NONE) {
-		if (confirm_clear() == -1) {
+		if ((c = confirm_clear()) == -1) {
 			printf("%% nshd: the record of a commit not confirmed: "
 			    "%s\n", strerror(errno));
 			return (-1);
 		}
+		if (c == 1)
+			printf("%% nshd: the record of a commit not confirmed "
+			    "is removed, but not synced: %s\n",
+			    strerror(errno));
 		if (r == 0 && cf.demoted)
 			carplock(-128);
 		return (1);

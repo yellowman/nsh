@@ -170,7 +170,11 @@ confirm_write(struct confirm *cf)
 	return (-1);
 }
 
-/* the record removed, and the removal synced: -1 if not */
+/*
+ * The record removed: 0 if its removal is synced, 1 if it is removed but
+ * the directory could not be synced, or -1 if it is not removed; errno
+ * says why
+ */
 int
 confirm_clear(void)
 {
@@ -181,7 +185,9 @@ confirm_clear(void)
 		return (-1);
 	memset(&none, 0, sizeof(none));
 	confirm_kept(&none, 0, 0);
-	return (r == -1 ? 0 : dirsync());
+	if (r == 0 && dirsync() == -1)
+		return (1);
+	return (0);
 }
 
 void
