@@ -1251,6 +1251,24 @@ function loginCursor(input) {
 	    input.scrollLeft);
 }
 
+/*
+ * How far above the middle of its line the login form's font draws a
+ * star, in ems: the stars are put down by that (style.css). A canvas
+ * says where the star's ink is, and where the font's line is
+ */
+function starDrop(echo) {
+	var cs = getComputedStyle(echo), m;
+	var ctx = document.createElement("canvas").getContext("2d");
+
+	ctx.font = cs.fontWeight + " 100px " + cs.fontFamily;
+	m = ctx.measureText("*");
+	if (m.fontBoundingBoxAscent === undefined)
+		return;
+	echo.style.setProperty("--drop", (m.actualBoundingBoxAscent -
+	    m.actualBoundingBoxDescent - m.fontBoundingBoxAscent +
+	    m.fontBoundingBoxDescent) / 200 + "em");
+}
+
 /* a form's submit, handled by fn, without leaving the page */
 function on(id, fn) {
 	$(id).addEventListener("submit", function (e) {
@@ -1303,6 +1321,7 @@ document.addEventListener("DOMContentLoaded", function () {
 			$("login").password.focus();
 		}
 	});
+	starDrop($("login").querySelector(".echo"));
 	[$("login").user, $("login").password].forEach(function (i) {
 		["input", "focus", "keyup", "mouseup", "scroll"].forEach(
 		    function (ev) {

@@ -310,12 +310,14 @@ input.nope {
 
 /*
  * a password echoes as stars, a cell each, since a browser's own dots
- * are of no known width, and the cursor could not follow them
+ * are of no known width, and the cursor could not follow them. A font
+ * draws its star high in the line, so the stars are put down by as much
+ * as this one does (app.js), level with the cursor's middle
  */
 #login .echo {
 	position: absolute;
 	left: 0;
-	top: 0;
+	top: var(--drop, 0);
 	white-space: pre;
 	pointer-events: none;
 }
