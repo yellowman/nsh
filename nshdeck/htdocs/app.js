@@ -1218,6 +1218,21 @@ function loggedOut() {
 	}
 }
 
+/*
+ * The login form's cursor, put where input's caret is, in cells; and a
+ * password's stars, as many as it has characters (style.css)
+ */
+function loginCursor(input) {
+	var field = input.parentNode, echo = field.querySelector(".echo");
+
+	if (echo !== null)
+		echo.textContent = "*".repeat(input.value.length);
+	field.style.setProperty("--at", input.selectionDirection ===
+	    "backward" ? input.selectionStart : input.selectionEnd);
+	field.style.setProperty("--scrolled", echo !== null ? 0 :
+	    input.scrollLeft);
+}
+
 /* a form's submit, handled by fn, without leaving the page */
 function on(id, fn) {
 	$(id).addEventListener("submit", function (e) {
@@ -1269,10 +1284,26 @@ document.addEventListener("DOMContentLoaded", function () {
 			$("login").password.focus();
 		}
 	});
+	[$("login").user, $("login").password].forEach(function (i) {
+		["input", "focus", "keyup", "mouseup", "scroll"].forEach(
+		    function (ev) {
+			i.addEventListener(ev, function () {
+				loginCursor(i);
+			});
+		});
+	});
+	/* the caret moved, by a key held or the mouse */
+	document.addEventListener("selectionchange", function () {
+		var i = document.activeElement;
+
+		if (i !== null && i.form === $("login"))
+			loginCursor(i);
+	});
 	on("login", function (f) {
 		ask("POST", "login", { user: f.user.value,
 		    password: f.password.value }).then(function (j) {
 			f.password.value = "";
+			loginCursor(f.password);
 			if (j.httpStatus !== 200) {
 				$("login-error").textContent = j.error;
 				return;

@@ -277,14 +277,51 @@ input.nope {
 	font-weight: 700;
 }
 
-/* the block cursor after it, a cell wide, as in nsh's logo */
+/* a field, and over it its cursor, and what a password echoes */
+#login .entry {
+	position: relative;
+	flex: 1;
+	display: flex;
+	overflow: hidden;
+}
+
+/*
+ * the block cursor, a cell wide, as in nsh's logo: the caret of the
+ * field in use, --at cells along it (app.js), and never past its end.
+ * What it covers shows through it in its own colours' reverse
+ */
 #login .cursor {
-	display: inline-block;
+	display: none;
+	position: absolute;
+	left: min(calc(var(--at, 0) * 1ch - var(--scrolled, 0) * 1px),
+	    calc(100% - 1ch));
+	top: .2em;
 	width: 1ch;
-	height: .8em;
-	vertical-align: -.1em;
+	height: 1.2em;
 	background: linear-gradient(#d9f99d, #84cc16);
+	mix-blend-mode: difference;
+	pointer-events: none;
 	animation: blink 1.1s steps(2, start) infinite;
+}
+
+#login .entry:focus-within .cursor {
+	display: block;
+}
+
+/*
+ * a password echoes as stars, a cell each, since a browser's own dots
+ * are of no known width, and the cursor could not follow them
+ */
+#login .echo {
+	position: absolute;
+	left: 0;
+	top: 0;
+	white-space: pre;
+	pointer-events: none;
+}
+
+#login input[type=password] {
+	-webkit-text-fill-color: transparent;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -306,7 +343,8 @@ input.nope {
 	background: transparent;
 	box-shadow: none;
 	color: inherit;
-	caret-color: #a3e635;
+	caret-color: transparent;
+	min-width: 0;
 }
 
 #login .error {
