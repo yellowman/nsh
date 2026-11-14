@@ -363,7 +363,10 @@ struct nshd_parse {
 #define NSHD_PARSE_DIFF	9	/* a, b, a head: 1 if b differs from a */
 #define NSHD_PARSE_RECORDS 10	/* the first bytes of the commit, confirm
 				   and boot records, each there as the
-				   flags say: struct nshd_records */
+				   flags say, and of each configuration
+				   kept (rollback_slots()): struct
+				   nshd_records, then ROLLBACKS of struct
+				   rollback_head */
 
 #define NSHD_PARSE_ADMIN 0x1	/* BEGIN: check the script's admin lines */
 #define NSHD_PARSE_FAILED 0x2	/* VERIFY: a line of the script failed */

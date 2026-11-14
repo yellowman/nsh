@@ -56,7 +56,9 @@
  *
  * The last ROLLBACKS saved configurations are kept, for rollback N and
  * show rollback. Each records who saved it and the comment they gave,
- * on a line of its own that conftree_read() skips.
+ * on a line of its own that conftree_read() skips, and its generation
+ * on the next. system keeps what those lines say: the parser reads them
+ * as nshd starts (rollback_heads()), and system keeps those it writes.
  *
  * commit check shows what it can find in advance that would keep the
  * candidate from being the running configuration: an interface a
@@ -107,6 +109,9 @@ struct commit {
 	struct cnode *from, *to;	/* the configurations it goes between */
 	struct script *s;
 };
+
+/* each kept configuration's head lines, as system keeps them */
+static struct rollback_head heads[ROLLBACKS];
 
 /* A buffer for a block's lines, whose head waits on them */
 struct sub {
@@ -212,8 +217,7 @@ static int context(char *);
 static int rtableid(char *);
 static int ifblock(char *, char *, size_t);
 static int clear(struct commit *, char *, int, int);
-static int samefile(const char *, char *);
-static unsigned long long rollback_gen(int);
+static int samefile(const char *);
 static char *file_text(const char *, size_t *);
 static int copyfile(const char *, char *, char *);
 static int syncdir(const char *);
@@ -1965,14 +1969,14 @@ clear(struct commit *c, char *stmt, int rtable, int keep)
 int
 rollback_keep(const char *file, const char *who, const char *comment)
 {
+	struct rollback_head h;
 	char from[PATH_MAX], to[PATH_MAX], head[96 + COMMENTMAX], *p;
-	unsigned long long gen;
 	int i;
 
-	snprintf(to, sizeof(to), ROLLBACK, 0);
-	if (samefile(file, to))
+	if (samefile(file))
 		return 0;
-	gen = rollback_gen(0) + 1;
+	memset(&h, 0, sizeof(h));
+	h.gen = heads[0].gen + 1;
 	if (mkdir(NSHDB, 0700) == -1 && errno != EEXIST) {
 		printf("%% mkdir %s: %s\n", NSHDB, strerror(errno));
 		return -1;
@@ -1980,48 +1984,116 @@ rollback_keep(const char *file, const char *who, const char *comment)
 	for (i = ROLLBACKS - 1; i > 0; i--) {
 		snprintf(from, sizeof(from), ROLLBACK, i - 1);
 		snprintf(to, sizeof(to), ROLLBACK, i);
-		if (rename(from, to) == -1 && errno != ENOENT) {
+		if (rename(from, to) == 0) {
+			heads[i] = heads[i - 1];
+			continue;
+		}
+		/* the oldest stays if there is none to take its place */
+		if (i < ROLLBACKS - 1)
+			memset(&heads[i], 0, sizeof(heads[i]));
+		if (errno != ENOENT) {
 			printf("%% rename %s: %s\n", from, strerror(errno));
 			return -1;
 		}
 	}
+	memset(&heads[0], 0, sizeof(heads[0]));
 	/* the head on one line, with no control characters */
 	snprintf(head, sizeof(head) - 1, "%s%s%s%s", ROLLBACK_HEAD, who,
 	    comment[0] != '\0' ? ": " : "", comment);
 	for (p = head; *p != '\0'; p++)
 		if (iscntrl((unsigned char)*p))
 			*p = ' ';
+	/* as the parser would read it */
+	h.saved = 1;
+	p = head + strlen(ROLLBACK_HEAD);
+	strlcpy(h.who, p, sizeof(h.who));
+	h.who[strcspn(h.who, ":")] = '\0';
+	if ((p = strchr(p, ':')) != NULL)
+		strlcpy(h.why, p + 1 + strspn(p + 1, " "), sizeof(h.why));
 	snprintf(head + strlen(head), sizeof(head) - strlen(head),
-	    "\n%s%llu\n", ROLLBACK_GEN, gen);
+	    "\n%s%llu\n", ROLLBACK_GEN, (unsigned long long)h.gen);
+	h.len = strlen(head);
 	snprintf(to, sizeof(to), ROLLBACK, 0);
-	return copyfile(file, to, head);
+	if (copyfile(file, to, head) == -1)
+		return -1;
+	heads[0] = h;
+	return 0;
 }
 
 /*
- * Rollback n's generation, as its line after who saved it says: 0 if
- * it has none, or it is not kept
+ * The first ROLLBACK_SLOT bytes of each configuration kept, for the
+ * parser, each in a slot of slots, ROLLBACKS of them, or none
  */
-static unsigned long long
-rollback_gen(int n)
+void
+rollback_slots(char *slots)
 {
-	char path[PATH_MAX], line[BUFSIZ];
-	unsigned long long gen = 0;
-	const char *errstr;
+	char path[PATH_MAX];
 	FILE *f;
+	int i;
 
-	snprintf(path, sizeof(path), ROLLBACK, n);
-	if ((f = fopen(path, "r")) == NULL)
-		return 0;
-	if (fgets(line, sizeof(line), f) != NULL &&
-	    strncmp(line, ROLLBACK_HEAD, strlen(ROLLBACK_HEAD)) == 0 &&
-	    fgets(line, sizeof(line), f) != NULL &&
-	    strncmp(line, ROLLBACK_GEN, strlen(ROLLBACK_GEN)) == 0) {
-		line[strcspn(line, "\n")] = '\0';
-		gen = strtonum(line + strlen(ROLLBACK_GEN), 1, LLONG_MAX,
+	memset(slots, 0, ROLLBACKS * ROLLBACK_SLOT);
+	for (i = 0; i < ROLLBACKS; i++) {
+		snprintf(path, sizeof(path), ROLLBACK, i);
+		if ((f = fopen(path, "r")) == NULL)
+			continue;
+		fread(slots + i * ROLLBACK_SLOT, 1, ROLLBACK_SLOT, f);
+		fclose(f);
+	}
+}
+
+/*
+ * The parser's reading of the head lines in slots (rollback_slots())
+ * into h, ROLLBACKS of them: who saved each and their comment, as its
+ * first line says, its generation, as the next says, and their length
+ */
+void
+rollback_heads(char *slots, struct rollback_head *h)
+{
+	char *p, *end, *nl, *why;
+	const char *errstr;
+	int i;
+
+	memset(h, 0, ROLLBACKS * sizeof(*h));
+	for (i = 0; i < ROLLBACKS; i++) {
+		p = slots + i * ROLLBACK_SLOT;
+		end = p + ROLLBACK_SLOT;
+		if (strncmp(p, ROLLBACK_HEAD, strlen(ROLLBACK_HEAD)) != 0 ||
+		    (nl = memchr(p, '\n', end - p)) == NULL)
+			continue;
+		*nl = '\0';
+		h[i].saved = 1;
+		h[i].len = nl - p + 1;
+		why = p + strlen(ROLLBACK_HEAD);
+		strlcpy(h[i].who, strsep(&why, ":"), sizeof(h[i].who));
+		if (why != NULL)
+			strlcpy(h[i].why, why + strspn(why, " "),
+			    sizeof(h[i].why));
+		p = nl + 1;
+		if ((size_t)(end - p) < strlen(ROLLBACK_GEN) ||
+		    strncmp(p, ROLLBACK_GEN, strlen(ROLLBACK_GEN)) != 0 ||
+		    (nl = memchr(p, '\n', end - p)) == NULL)
+			continue;
+		*nl = '\0';
+		h[i].len += nl - p + 1;
+		h[i].gen = strtonum(p + strlen(ROLLBACK_GEN), 1, LLONG_MAX,
 		    &errstr);
 	}
-	fclose(f);
-	return gen;
+}
+
+/* h, the parser's reading of the head lines, kept: -1 if it is not one */
+int
+rollback_heads_kept(struct rollback_head *h)
+{
+	int i;
+
+	for (i = 0; i < ROLLBACKS; i++)
+		if (h[i].len > ROLLBACK_SLOT ||
+		    (h[i].saved != 0 && h[i].saved != 1) ||
+		    memchr(h[i].who, '\0', sizeof(h[i].who)) == NULL ||
+		    memchr(h[i].why, '\0', sizeof(h[i].why)) == NULL)
+			return -1;
+	memcpy(heads, h, sizeof(heads));
+	return 0;
 }
 
 /*
@@ -2285,33 +2357,24 @@ syncdir(const char *dir)
 	return r;
 }
 
-/*
- * Do the files a and b hold the same, but for b's lines of who saved it
- * and its generation?
- */
+/* Does file a hold the same as rollback 0, after its head lines? */
 static int
-samefile(const char *a, char *b)
+samefile(const char *a)
 {
 	char x[BUFSIZ], y[BUFSIZ];
 	FILE *fa, *fb;
 	size_t n;
-	long at;
 	int same = 0;
 
 	if ((fa = fopen(a, "r")) == NULL)
 		return 0;
-	if ((fb = fopen(b, "r")) == NULL) {
+	snprintf(y, sizeof(y), ROLLBACK, 0);
+	if ((fb = fopen(y, "r")) == NULL) {
 		fclose(fa);
 		return 0;
 	}
-	if (fgets(y, sizeof(y), fb) == NULL ||
-	    strncmp(y, ROLLBACK_HEAD, strlen(ROLLBACK_HEAD)) != 0)
-		rewind(fb);
-	else if ((at = ftell(fb)) == -1)
+	if (fseek(fb, heads[0].len, SEEK_SET) == -1)
 		goto done;
-	else if (fgets(y, sizeof(y), fb) == NULL ||
-	    strncmp(y, ROLLBACK_GEN, strlen(ROLLBACK_GEN)) != 0)
-		fseek(fb, at, SEEK_SET);
 	do {
 		n = fread(x, 1, sizeof(x), fa);
 		if (fread(y, 1, sizeof(y), fb) != n || memcmp(x, y, n) != 0)
@@ -2425,10 +2488,9 @@ rollback_texts(int n, char **old, size_t *oldlen, char **new,
 void
 rollback_list(FILE *out)
 {
-	char path[PATH_MAX], when[64], line[BUFSIZ], gen[40], *who, *why;
-	unsigned long long g;
+	char path[PATH_MAX], when[64], gen[40];
+	struct rollback_head *h;
 	struct stat sb;
-	FILE *f;
 	int i;
 
 	for (i = 0; i < ROLLBACKS; i++) {
@@ -2438,25 +2500,14 @@ rollback_list(FILE *out)
 		strftime(when, sizeof(when), "%Y-%m-%d %H:%M:%S %Z",
 		    localtime(&sb.st_mtime));
 		/* one saved without a head line says only when */
-		who = why = NULL;
-		if ((f = fopen(path, "r")) != NULL) {
-			if (fgets(line, sizeof(line), f) != NULL &&
-			    strncmp(line, ROLLBACK_HEAD,
-			    strlen(ROLLBACK_HEAD)) == 0) {
-				line[strcspn(line, "\n")] = '\0';
-				why = line + strlen(ROLLBACK_HEAD);
-				who = strsep(&why, ":");
-				if (why != NULL)
-					why += strspn(why, " ");
-			}
-			fclose(f);
-		}
+		h = &heads[i];
 		gen[0] = '\0';
-		if ((g = rollback_gen(i)) > 0)
-			snprintf(gen, sizeof(gen), "generation %llu  ", g);
+		if (h->gen > 0)
+			snprintf(gen, sizeof(gen), "generation %llu  ",
+			    (unsigned long long)h->gen);
 		fprintf(out, "%2d  %s%s%s%s%s%s\n", i, gen, when,
-		    who ? "  " : "", who ? who : "", why ? "  " : "",
-		    why ? why : "");
+		    h->saved ? "  " : "", h->who, h->why[0] != '\0' ? "  " : "",
+		    h->why);
 	}
 }
 

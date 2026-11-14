@@ -770,6 +770,18 @@ int commit_diff(char *, size_t, char *, size_t, char *, int, int);
 int rollback_text(int, FILE *);
 int rollback_texts(int, char **, size_t *, char **, size_t *);
 void rollback_list(FILE *);
+/* a kept configuration's head lines, as the parser reads them */
+#define ROLLBACK_SLOT	512	/* the first bytes of each, which it reads */
+struct rollback_head {
+	uint64_t gen;			/* its generation, 0 if it has none */
+	uint32_t len;			/* the head lines' length */
+	int32_t saved;			/* its first line says who saved it */
+	char who[64];
+	char why[COMMENTMAX];
+};
+void rollback_slots(char *);
+void rollback_heads(char *, struct rollback_head *);
+int rollback_heads_kept(struct rollback_head *);
 int script_make(struct cnode *, struct cnode *, struct script *, int);
 int script_run(struct script *);
 void script_free(struct script *);

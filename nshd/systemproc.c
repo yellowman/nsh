@@ -561,6 +561,8 @@ static int		 kept_boot_error;
 /* their first bytes as read, or why not */
 static char		 heads[3][RECORD_HEAD + 1];
 static int		 errors[3];
+/* and those of each configuration kept */
+static char		 slots[ROLLBACKS * ROLLBACK_SLOT];
 
 static void	system_dispatch_parent(int, short, void *);
 static void	system_dispatch_config(int, short, void *);
@@ -4095,9 +4097,8 @@ system_job_child(int fd, struct job *j)
 		r = system_undo(begun->before, begun->beforelen) == 0 ? 0 : 1;
 		break;
 	case JOB_SAVE:
-		if ((r = saved_write()))
-			rollback_keep(SAVED, j->who, j->comment);
-		r = !r;
+		/* then system keeps it, as it keeps their heads */
+		r = !saved_write();
 		break;
 	case JOB_RECOVER:
 		/* a rollback is an undo, to the rollback configuration */
@@ -4240,6 +4241,8 @@ system_job_end(struct job *j, int32_t status)
 {
 	struct job	*u;
 
+	if (j->kind == JOB_SAVE && status == 0)
+		rollback_keep(SAVED, j->who, j->comment);
 	if (j->kind == JOB_RECOVER) {
 		printed_log();
 		system_attempted(status == 0);
@@ -4290,9 +4293,9 @@ system_job_free(struct job *j)
 
 /*
  * The first bytes of the commit, confirm and boot records an earlier
- * nshd left, which the parser reads in a job, as nshd starts. Requests
- * but a session's permissions and a login wait for it, and so does the
- * boot
+ * nshd left, and of each configuration kept, which the parser reads in
+ * a job, as nshd starts. Requests but a session's permissions and a
+ * login wait for it, and so does the boot
  */
 static void
 records_start(void)
@@ -4332,25 +4335,28 @@ records_start(void)
 		close(fd);
 		system_parse_text(j, i, heads[i], got);
 	}
+	rollback_slots(slots);
+	system_parse_text(j, 3, slots, sizeof(slots));
 	system_parse(j);
 }
 
 /*
- * The parser read the records' head lines, as status says: system keeps
- * what each says, as it does what it writes. Then a commit not
- * confirmed is due
+ * The parser read the records' head lines, and the configurations', as
+ * status says: system keeps what each says, as it does what it writes.
+ * Then a commit not confirmed is due
  */
 static void
 records_read(struct job *j, int32_t status)
 {
 	struct nshd_records	 r;
+	struct rollback_head	 h[ROLLBACKS];
 	struct confirm		 cf;
 	char			*a = NULL;
 	size_t			 len;
 
 	memset(&r, 0, sizeof(r));
-	if (status != 0 || parser_answer(j->answer, sizeof(r), &a, &len) ==
-	    -1 || len != sizeof(r)) {
+	if (status != 0 || parser_answer(j->answer, sizeof(r) + sizeof(h),
+	    &a, &len) == -1 || len != sizeof(r) + sizeof(h)) {
 		printf("%% nshd: the parser did not read the records\n");
 		/* each one there is not read */
 		if ((j->parse.flags & NSHD_PARSE_HAS_COMMIT) && !errors[0])
@@ -4359,8 +4365,14 @@ records_read(struct job *j, int32_t status)
 			errors[1] = EIO;
 		if ((j->parse.flags & NSHD_PARSE_HAS_BOOT) && !errors[2])
 			errors[2] = EIO;
-	} else
+	} else {
 		memcpy(&r, a, sizeof(r));
+		memcpy(h, a + sizeof(r), sizeof(h));
+		/* one configuration kept without its head lines is none */
+		if (rollback_heads_kept(h) == -1)
+			printf("%% nshd: the parser's reading of the "
+			    "configurations kept is not one\n");
+	}
 	free(a);
 	printed_log();
 

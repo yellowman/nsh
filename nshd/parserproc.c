@@ -318,21 +318,28 @@ parse_clears(struct nshd_apply *a, struct script *s)
  * confirm_write()): t[0] the commit record's first bytes, t[1] the
  * confirm record's and t[2] the boot record's, each there as p's flags
  * say. struct nshd_records, the numbers as each line says them: system
- * judges whether they are a record's
+ * judges whether they are a record's. Then those of each configuration
+ * kept, in t[3] (commit.c's rollback_heads())
  */
 static int
 parse_records(struct nshd_parse *p, char **t)
 {
 	struct nshd_records	 r;
+	struct rollback_head	 h[ROLLBACKS];
 
 	memset(&r, 0, sizeof(r));
+	memset(h, 0, sizeof(h));
 	if (p->flags & NSHD_PARSE_HAS_COMMIT)
 		parse_commit(t[0], p->len[0], &r);
 	if (p->flags & NSHD_PARSE_HAS_CONFIRM)
 		parse_confirm(t[1], p->len[1], &r);
 	if (p->flags & NSHD_PARSE_HAS_BOOT)
 		parse_bootrecord(t[2], &r);
-	return (parser_write(&r, sizeof(r)));
+	if (p->len[3] == ROLLBACKS * ROLLBACK_SLOT)
+		rollback_heads(t[3], h);
+	if (parser_write(&r, sizeof(r)) == -1)
+		return (-1);
+	return (parser_write(h, sizeof(h)));
 }
 
 /* STATE UID WHEN BEFORELEN WANTLEN, the commit record's, in text */

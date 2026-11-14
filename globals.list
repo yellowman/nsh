@@ -83,6 +83,7 @@ commands.c	table	Bridgelist Bridgelist_nitems Intlist
 			ttl_keys txprio_args
 			txprio_keys unsetenvhelp
 			verbosehelp ops whohelp
+commit.c	process	heads
 commit.c	scratch	deferred ndeferred
 commit.c	table	ifrefs
 complete.c	process	cmplt_remote complete_nocmd.nocmdtab
