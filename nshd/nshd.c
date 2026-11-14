@@ -45,25 +45,29 @@
  *
  * Each pair of children that talk (config and system, config and
  * archive) has a pipe of its own, which parent makes, so each knows who
- * sent what it reads. Each child starts with its descriptors in place:
- * its pipe to parent as fd 3, which closes when parent ends, and then
- * the pipe to each of its peers. After these come the socket of a show,
- * which no other child has, and config's routing socket, which tells it
- * what the kernel changes. A child has no other descriptor of parent's,
- * and a show and archive hear nothing from parent.
+ * sent what it reads. Each child starts with its descriptors in place,
+ * from fd 3: for system and each show, a pipe to parent, which closes
+ * when parent ends, and the child ends with it; then the pipe to each
+ * of its peers. After these come the socket of a show, which no other
+ * child has, and config's routing socket, which tells it what the
+ * kernel changes. config and archive have no pipe to parent: when
+ * parent ends, system does, config finds system's pipe closed, and
+ * archive config's. parent learns of a child's end as it reaps it.
+ * A child has no other descriptor of parent's, and only system hears
+ * anything from parent.
  *
- * parent itself accepts each client of the read-write socket, and reads
- * from the client's socket who the client is. The client's session gets
- * a number of its own, never used again, and a frontend: parent gives
- * config a pipe to that frontend, with the session's number and the
- * client's uid and gid, and gives system a copy of the client's socket.
- * Once both say they have taken the session, parent starts the frontend,
- * with its pipe to config and the client's socket as fd 3 and 4, and
- * nothing else. So config knows a session by the pipe its word comes
- * on, which only that session's frontend has, and system watches the
- * client's socket itself. Of what the children send, parent reads only
- * that they have taken a session, system's word that a session ends,
- * and system's word that it has started.
+ * parent itself accepts each client of the read-write socket. The
+ * client's session gets a number of its own, never used again, and a
+ * frontend: parent gives system a copy of the client's socket, and then
+ * a pipe to that frontend, and starts the frontend, with the pipe's
+ * other end and the client's socket as fd 3 and 4, and nothing else.
+ * system reads from the client's socket who the client is, and passes
+ * the pipe on to config, with the session's number and the client's
+ * uid. So config hears of a session only once system has it, knows it
+ * by the pipe its word comes on, which only that session's frontend has,
+ * and system watches the client's socket itself. Of what the children
+ * send, parent reads only system's word: that a session ends, that
+ * config is to end, and that it has started.
  *
  * A child that ends, or that breaks a rule, ends nshd: its peers find
  * their pipes to it closed and end too, and parent ends the rest, with
@@ -135,7 +139,7 @@ static struct child {
 	char		*flag;
 	char		*user;		/* chrooted to its home, or root */
 	pid_t		 pid;
-	struct imsgev	*iev;		/* its pipe to parent, fd 3 */
+	struct imsgev	*iev;		/* its pipe to parent, if any */
 } children[] = {
 	/* SHOWS show processes */
 	{ PROC_SHOW,	 0, "show0",	"-S0",	"_nshshow" },
@@ -150,19 +154,11 @@ static struct child {
 
 #define CHILD_FDS	4	/* a child's descriptors from parent, at most */
 
-/*
- * A session on the read-write socket: until config and system have both
- * taken it, the pipe from its frontend to config, and its client's
- * socket; then its frontend
- */
+/* a session on the read-write socket, and its frontend */
 static struct front {
 	uint32_t	 session;	/* 0 if the slot is free */
-	int		 taken;		/* who has taken it: TAKEN_* */
-	int		 fds[2];
-	pid_t		 pid;		/* its frontend, once started */
+	pid_t		 pid;
 } fronts[SESSIONS];
-#define TAKEN_CONFIG	0x1
-#define TAKEN_SYSTEM	0x2
 static uint32_t		 session_last;	/* the last session's number */
 static struct event	 ev_accept, ev_pause;
 
@@ -175,8 +171,6 @@ static pid_t		 start_child(const char *, char *, int, const int *,
 			    int);
 static void		 parent_listen(void);
 static void		 parent_accept(int, short, void *);
-static void		 front_taken(struct child *, struct nshd_taken *);
-static void		 front_start(struct front *);
 static void		 front_free(struct front *);
 static void		 front_gone(uint32_t);
 static void		 ended(struct child *, const char *, ...)
@@ -321,9 +315,9 @@ main(int argc, char *argv[])
 	spawn_system();
 
 	/*
-	 * clients, their sessions' pipes passed to config and system, and
-	 * their frontends started; and what ends system's helpers, as nshd
-	 * ends
+	 * clients, their sockets and their sessions' pipes passed to
+	 * system, and their frontends started; and what ends system's
+	 * helpers, as nshd ends
 	 */
 	if (pledge("stdio unix sendfd proc exec ps", NULL) == -1)
 		fatal("pledge");
@@ -419,8 +413,9 @@ users(void)
 }
 
 /*
- * start system, alone, with its pipe to config as fd 4: config's end
- * waits for config, which starts once system has (spawn_rest())
+ * start system, alone, with its pipe to config after its pipe to
+ * parent, as fd 4: config's end waits for config, which starts once
+ * system has (spawn_rest())
  */
 static void
 spawn_system(void)
@@ -437,11 +432,11 @@ spawn_system(void)
 
 /*
  * start the other children, once system has started. archive has its
- * pipe to config as fd 4; config has its pipes to system and to archive
- * as fd 4 and 5, and its routing socket after them. Each show has the
- * read-only socket as fd 4, and takes clients on it at once; the socket
- * listens first, so a client that comes before a show is ready waits
- * for one
+ * pipe to config as fd 3; config has its pipes to system and to archive
+ * as fd 3 and 4, and its routing socket after them. Each show has the
+ * read-only socket after its pipe to parent, as fd 4, and takes clients
+ * on it at once; the socket listens first, so a client that comes
+ * before a show is ready waits for one
  */
 static void
 spawn_rest(void)
@@ -467,25 +462,31 @@ spawn_rest(void)
 }
 
 /*
- * start c with its pipe to parent as fd 3, and a, b and d, each if not
- * -1, as the descriptors after it
+ * start c with a, b and d, each if not -1, as its descriptors from fd 3.
+ * Before them comes its pipe to parent, unless c is config or archive,
+ * which each have a peer's pipe to end by
  */
 static void
 start(struct child *c, int a, int b, int d)
 {
 	int	 sp[2], fds[CHILD_FDS] = { -1, a, b, d };
+	int	 piped = c->proc != PROC_CONFIG && c->proc != PROC_ARCHIVE;
 
-	if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK,
-	    PF_UNSPEC, sp) == -1)
-		fatal("socketpair");
-	fds[0] = sp[1];
+	if (piped) {
+		if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC |
+		    SOCK_NONBLOCK, PF_UNSPEC, sp) == -1)
+			fatal("socketpair");
+		fds[0] = sp[1];
+	}
 	if ((c->pid = start_child(c->name, c->flag,
 	    c->proc == PROC_SYSTEM && booting, fds, 0)) == -1)
 		fatal("cannot fork");
+	if (!piped)
+		return;
 	close(sp[1]);
-	/* config and system get each session's pipes on theirs */
+	/* system gets each client's socket and session's pipe on its own */
 	if ((c->iev = imsgev_new(sp[0], parent_dispatch,
-	    c->proc == PROC_CONFIG || c->proc == PROC_SYSTEM)) == NULL)
+	    c->proc == PROC_SYSTEM)) == NULL)
 		fatal(NULL);
 }
 
@@ -501,21 +502,23 @@ parent_listen(void)
 }
 
 /*
- * A client of the read-write socket, and its session: config gets a pipe
- * to the session's frontend, and system the client's socket. parent
- * starts the frontend once both have taken the session (front_taken()).
- * Past SESSIONS sessions, the client is closed
+ * A client of the read-write socket, and its session: its frontend
+ * starts, and system gets a copy of the client's socket, and then the
+ * pipe to the frontend, which it passes on to config. A session system
+ * or config does not take has that pipe closed, and its frontend ends.
+ * Past SESSIONS sessions, or where the frontend cannot start, the client
+ * is closed
  */
 static void
 parent_accept(int fd, short event, void *arg)
 {
-	struct nshd_newsession	 ns;
+	struct imsgev		*sys = child(PROC_SYSTEM, 0)->iev;
 	struct front		*f = NULL;
 	struct timeval		 pause = { 1, 0 };
-	uid_t			 uid;
-	gid_t			 gid;
 	size_t			 i;
+	pid_t			 pid;
 	int			 conn, cp[2], dup;
+	int			 fds[CHILD_FDS] = { -1, -1, -1, -1 };
 
 	event_add(&ev_accept, NULL);
 	if (event & EV_TIMEOUT)
@@ -540,11 +543,6 @@ parent_accept(int fd, short event, void *arg)
 		close(conn);
 		return;
 	}
-	if (getpeereid(conn, &uid, &gid) == -1) {
-		log_warn("%s: getpeereid", __func__);
-		close(conn);
-		return;
-	}
 	if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK,
 	    PF_UNSPEC, cp) == -1) {
 		log_warn("%s: socketpair", __func__);
@@ -558,72 +556,31 @@ parent_accept(int fd, short event, void *arg)
 		close(conn);
 		return;
 	}
+	/* its frontend, with these as fd 3 and 4, in its own process group */
+	fds[0] = cp[1];
+	fds[1] = conn;
+	if ((pid = start_child("frontend", "-F", 0, fds, 1)) == -1)
+		log_warn("%s: fork", __func__);
+	close(cp[1]);
+	close(conn);
+	if (pid == -1) {
+		close(cp[0]);
+		close(dup);
+		return;
+	}
 	f->session = ++session_last;
-	f->taken = 0;
-	f->fds[0] = cp[1];
-	f->fds[1] = conn;
-	f->pid = 0;
-	memset(&ns, 0, sizeof(ns));
-	ns.session = f->session;
-	ns.uid = uid;
-	ns.gid = gid;
-	if (imsg_compose_event(child(PROC_CONFIG, 0)->iev, IMSG_SESSION, 0,
-	    0, cp[0], &ns, sizeof(ns)) == -1 ||
-	    imsg_compose_event(child(PROC_SYSTEM, 0)->iev,
-	    IMSG_SESSION_CLIENT, 0, 0, dup, &ns, sizeof(ns)) == -1)
+	f->pid = pid;
+	/* the client first, so system knows whose the pipe is */
+	if (imsg_compose_event(sys, IMSG_SESSION_CLIENT, f->session, 0, dup,
+	    NULL, 0) == -1 ||
+	    imsg_compose_event(sys, IMSG_SESSION, f->session, 0, cp[0], NULL,
+	    0) == -1)
 		fatal("%s", __func__);
 }
 
 /*
- * c's word that it took a session, or did not: once config and system
- * both have, its frontend starts; if either did not, the session ends
- */
-static void
-front_taken(struct child *c, struct nshd_taken *t)
-{
-	struct front	*f = NULL;
-	size_t		 i;
-
-	for (i = 0; i < SESSIONS; i++)
-		if (fronts[i].session == t->session && fronts[i].pid == 0)
-			f = &fronts[i];
-	/* a session already ended, as the other did not take it */
-	if (f == NULL)
-		return;
-	if (t->status != 0) {
-		log_warnx("%s did not take session %u", c->name, t->session);
-		front_free(f);
-		return;
-	}
-	f->taken |= c->proc == PROC_CONFIG ? TAKEN_CONFIG : TAKEN_SYSTEM;
-	if (f->taken == (TAKEN_CONFIG | TAKEN_SYSTEM))
-		front_start(f);
-}
-
-/*
- * f's frontend, with its pipe to config and its client's socket as fd 3
- * and 4, in a process group of its own
- */
-static void
-front_start(struct front *f)
-{
-	int	 fds[CHILD_FDS] = { f->fds[0], f->fds[1], -1, -1 };
-	size_t	 i;
-
-	if ((f->pid = start_child("frontend", "-F", 0, fds, 1)) == -1) {
-		log_warn("session %u: fork", f->session);
-		front_free(f);
-		return;
-	}
-	for (i = 0; i < 2; i++) {
-		close(f->fds[i]);
-		f->fds[i] = -1;
-	}
-}
-
-/*
- * system's word that a session ends: its frontend is killed, if it runs,
- * and config is told to drop the session
+ * system's word that a session ends: its frontend is killed, if it runs.
+ * system tells config to drop the session itself
  */
 static void
 front_gone(uint32_t session)
@@ -633,24 +590,15 @@ front_gone(uint32_t session)
 	for (i = 0; i < SESSIONS; i++)
 		if (fronts[i].session == session && fronts[i].pid > 0)
 			kill(fronts[i].pid, SIGKILL);
-	if (imsg_compose_event(child(PROC_CONFIG, 0)->iev, IMSG_SESSION_GONE,
-	    session, 0, -1, NULL, 0) == -1)
-		fatal("%s", __func__);
 }
 
 /*
- * f's slot free again: what parent holds of it closed, and system told
- * the session is gone, so it closes its client's socket too
+ * f's slot free again: system is told the session is gone, so it closes
+ * its client's socket, and has config drop the session too
  */
 static void
 front_free(struct front *f)
 {
-	size_t	 i;
-
-	/* no frontend runs: parent still holds the session's descriptors */
-	if (f->pid <= 0)
-		for (i = 0; i < 2; i++)
-			close(f->fds[i]);
 	if (imsg_compose_event(child(PROC_SYSTEM, 0)->iev, IMSG_SESSION_GONE,
 	    f->session, 0, -1, NULL, 0) == -1)
 		fatal("%s", __func__);
@@ -937,10 +885,9 @@ parent_ended(void)
 }
 
 /*
- * c's word on its pipe to parent: config's or system's that it took a
- * session, or did not, system's that a session ends, system's that
- * config is to end, and system's word, once, that it has started.
- * Anything else, or the pipe closed, ends nshd
+ * c's word on its pipe to parent: system's that a session ends, that
+ * config is to end, and, once, that it has started. Anything else, or
+ * the pipe closed, ends nshd
  */
 static void
 parent_dispatch(int fd, short event, void *arg)
@@ -948,7 +895,6 @@ parent_dispatch(int fd, short event, void *arg)
 	struct imsgev		*iev = arg;
 	struct imsg		 imsg;
 	struct nshd_result	 res;
-	struct nshd_taken	 t;
 	struct child		*c = NULL;
 	uint32_t		 session;
 	size_t			 i;
@@ -984,13 +930,6 @@ parent_dispatch(int fd, short event, void *arg)
 		/* once config has ended, parent ignores what children say */
 		if (draining) {
 			imsg_free(&imsg);
-			continue;
-		}
-		if (imsg_get_type(&imsg) == IMSG_SESSION_TAKEN &&
-		    (c->proc == PROC_CONFIG || c->proc == PROC_SYSTEM) &&
-		    imsg_get_data(&imsg, &t, sizeof(t)) == 0) {
-			imsg_free(&imsg);
-			front_taken(c, &t);
 			continue;
 		}
 		if (imsg_get_type(&imsg) == IMSG_SESSION_GONE &&
@@ -1167,16 +1106,17 @@ static void		 parent_gone(int, short, void *);
 
 /*
  * A child's n peers, in l: the pipe to each is there as the child
- * starts, in l's order, as fd 4 and the next. Then each link's ready()
- * is called
+ * starts, in l's order, as fd first and the next. Then each link's
+ * ready() is called
  */
 void
-links_init(struct link *l, size_t n)
+links_init(struct link *l, size_t n, int first)
 {
 	size_t	 i;
 
 	for (i = 0; i < n; i++)
-		if ((l[i].iev = imsgev_new(4 + i, l[i].handler, 0)) == NULL)
+		if ((l[i].iev = imsgev_new(first + i, l[i].handler, 0)) ==
+		    NULL)
 			fatal(NULL);
 	for (i = 0; i < n; i++)
 		if (l[i].ready != NULL)
@@ -1184,8 +1124,8 @@ links_init(struct link *l, size_t n)
 }
 
 /*
- * For a child that hears nothing from parent: its pipe to parent, fd 3,
- * closes when parent ends, and the child ends with it
+ * For a show, which hears nothing from parent: its pipe to parent, fd 3,
+ * closes when parent ends, and the show ends with it
  */
 void
 parent_watch(void)

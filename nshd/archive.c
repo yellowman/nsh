@@ -66,12 +66,11 @@ archive(int d, int v)
 	child_start("archive", d, v);
 	archive_open();
 	privdrop(PROC_ARCHIVE);
-	/* its pipe to config is fd 4, and no descriptor comes after it */
+	/* its pipe to config is fd 3, and no descriptor comes after it */
 	if (pledge("stdio rpath wpath cpath", NULL) == -1)
 		fatal("pledge");
 
-	parent_watch();
-	links_init(&config, 1);
+	links_init(&config, 1, 3);
 	event_dispatch();
 	exit(0);
 }

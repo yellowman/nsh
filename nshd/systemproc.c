@@ -197,9 +197,12 @@
  * refuses the request unless that session's client is still connected.
  * The session is gone when system finds that its client has closed its
  * connection, which system checks each second, or when parent says its
- * frontend has ended. When system finds the client gone, it tells
- * parent, which kills the session's frontend if it still runs and tells
- * config to drop the session too. BEGIN, TEST and SAVE name the
+ * frontend has ended. Then system tells config, which drops the
+ * session, and parent, which kills the session's frontend if it still
+ * runs. A new session's pipe to its frontend comes to system after its
+ * client's socket, and system passes it on to config, with the client's
+ * uid, so config hears of a session only once system has its client.
+ * BEGIN, TEST and SAVE name the
  * session. The commit record stores the uid of BEGIN's session; from
  * then on the commit runs to its end, with no request from config. A
  * TEST for no session belongs to the boot, and is refused unless the
@@ -578,7 +581,8 @@ static int		 logins_lost;
 
 static void	system_dispatch_parent(int, short, void *);
 static void	system_dispatch_config(int, short, void *);
-static int	client_socket(uint32_t, int);
+static void	client_socket(uint32_t, int);
+static void	client_pipe(uint32_t, int);
 static void	client_drop(struct client *);
 static void	client_look(int, short, void *);
 static struct client *client_find(uint32_t);
@@ -754,7 +758,7 @@ systemproc(int debug, int v, int boot)
 	evtimer_set(&confirm_tm, system_confirm, NULL);
 	evtimer_set(&look_tm, client_look, NULL);
 	client_look(-1, 0, NULL);
-	links_init(links, sizeof(links) / sizeof(links[0]));
+	links_init(links, sizeof(links) / sizeof(links[0]), 4);
 	/* terminal ptys go to config */
 	imsgbuf_allow_fdpass(&links[CONFIG].iev->ibuf);
 	/* before any child: one that ends unwatched is never reaped */
@@ -773,18 +777,16 @@ systemproc(int debug, int v, int boot)
 }
 
 /*
- * parent's word of each new session, with its client's socket; of each
- * session whose frontend has ended; and, once config is gone, that
- * config and every session have ended, which starts a rollback that
- * waits for that
+ * parent's word of each new session: its client's socket, and then the
+ * pipe to its frontend, which config gets; of each session whose
+ * frontend has ended; and, once config is gone, that config and every
+ * session have ended, which starts a rollback that waits for that
  */
 static void
 system_dispatch_parent(int fd, short event, void *arg)
 {
 	struct imsgev		*iev = arg;
 	struct imsg		 imsg;
-	struct nshd_newsession	 ns;
-	struct nshd_taken	 t;
 	struct client		*cl;
 	uint32_t		 type;
 	int			 n, sfd;
@@ -812,16 +814,16 @@ system_dispatch_parent(int fd, short event, void *arg)
 			imsg_free(&imsg);
 			continue;
 		}
-		if (type == IMSG_SESSION_CLIENT &&
-		    imsg_get_data(&imsg, &ns, sizeof(ns)) == 0 &&
+		if (type == IMSG_SESSION_CLIENT && imsg_get_len(&imsg) == 0 &&
 		    (sfd = imsg_get_fd(&imsg)) != -1) {
+			client_socket(imsg_get_id(&imsg), sfd);
 			imsg_free(&imsg);
-			memset(&t, 0, sizeof(t));
-			t.session = ns.session;
-			t.status = client_socket(ns.session, sfd);
-			if (imsg_compose_event(iev, IMSG_SESSION_TAKEN, 0, 0,
-			    -1, &t, sizeof(t)) == -1)
-				fatal("%s", __func__);
+			continue;
+		}
+		if (type == IMSG_SESSION && imsg_get_len(&imsg) == 0 &&
+		    (sfd = imsg_get_fd(&imsg)) != -1) {
+			client_pipe(imsg_get_id(&imsg), sfd);
+			imsg_free(&imsg);
 			continue;
 		}
 		log_warnx("parent sent imsg %u, which it may not",
@@ -914,11 +916,11 @@ system_dispatch_config(int fd, short event, void *arg)
 
 /*
  * The client's socket, fd, of a new session from parent, with the uid
- * getpeereid() reports: 0 if system takes the session, else 1, and the
- * session is gone. It is not taken if keeping its socket would leave
- * fewer than SYS_RESERVE descriptors free
+ * getpeereid() reports. System does not take the session if
+ * keeping its socket would leave fewer than SYS_RESERVE descriptors
+ * free; config then does not hear of it (client_pipe())
  */
-static int
+static void
 client_socket(uint32_t session, int fd)
 {
 	struct client	*cl;
@@ -927,18 +929,18 @@ client_socket(uint32_t session, int fd)
 
 	if (session == 0 || client_find(session) != NULL) {
 		close(fd);
-		return (1);
+		return;
 	}
 	if (getdtablesize() - getdtablecount() < SYS_RESERVE) {
 		log_warnx("%s: session %u: too many clients", __func__,
 		    session);
 		close(fd);
-		return (1);
+		return;
 	}
 	if (getpeereid(fd, &uid, &gid) == -1) {
 		log_warn("%s: session %u: getpeereid", __func__, session);
 		close(fd);
-		return (1);
+		return;
 	}
 	if ((cl = calloc(1, sizeof(*cl))) == NULL)
 		fatal(NULL);
@@ -947,18 +949,45 @@ client_socket(uint32_t session, int fd)
 	cl->web = web_user && uid == web_uid;
 	cl->fd = fd;
 	TAILQ_INSERT_TAIL(&clients, cl, entry);
-	return (0);
+}
+
+/*
+ * The pipe, fd, to the frontend of a new session from parent: config
+ * gets it, with the session's number and who its client is, as system
+ * read it. If system did not take the session's client, or config is
+ * gone, the pipe is closed, and the frontend ends
+ */
+static void
+client_pipe(uint32_t session, int fd)
+{
+	struct nshd_newsession	 ns;
+	struct client		*cl;
+
+	if ((cl = client_find(session)) == NULL ||
+	    links[CONFIG].iev == NULL) {
+		close(fd);
+		return;
+	}
+	memset(&ns, 0, sizeof(ns));
+	ns.session = session;
+	ns.uid = cl->uid;
+	if (imsg_compose_event(links[CONFIG].iev, IMSG_SESSION, 0, 0, fd,
+	    &ns, sizeof(ns)) == -1)
+		fatal("%s", __func__);
 }
 
 /*
  * cl's session gone: its client's socket closed, and its login
- * forgotten. parent ends its frontend, and has config drop it too
+ * forgotten. config drops the session, and parent ends its frontend
  */
 static void
 client_drop(struct client *cl)
 {
 	struct attempt	*a;
 
+	if (links[CONFIG].iev != NULL && link_compose(&links[CONFIG],
+	    IMSG_SESSION_GONE, cl->session, NULL, 0) == -1)
+		fatal("%s", __func__);
 	if (imsg_compose_event(iev_parent, IMSG_SESSION_GONE, cl->session, 0,
 	    -1, NULL, 0) == -1)
 		fatal("%s", __func__);

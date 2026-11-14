@@ -511,12 +511,16 @@ config and system, and config and archive, each talk on a pipe of
 their own.
 The parent makes the pipes before the children start, so each child
 knows who sent what it reads.
-Each child also has a pipe to the parent, which tells it when to
-start, and on which config gets each new session's pipe and system the
-session's client's socket.
-The parent accepts only config's and system's word that they took a
-session, system's word that config is to end, and system's message that
-the boot is done.
+system and each show also have a pipe to the parent.
+On system's, the parent sends each new session's client's socket and the
+pipe to its frontend, and accepts only system's word that a session
+ends, that config is to end, and that it has started.
+A show's pipe carries nothing: it closes when the parent or the show
+ends, and the other sees that.
+config and archive have no pipe to the parent.
+When the parent ends, system exits, config finds system's pipe closed
+and exits, and archive finds config's closed.
+The parent learns that a child has ended when it reaps it.
 .Pp
 If any child but a frontend exits, or sends the parent or a peer a
 message that it may not send,

@@ -29,7 +29,7 @@
 #define NSHD_SOCKET	"/var/run/nshd.sock"	/* 0660, group nshadmin */
 #define NSHD_RO_SOCKET	"/var/run/nshd.ro.sock"	/* 0666 */
 
-#define NSHD_VERSION	9	/* protocol version of clients and nshd */
+#define NSHD_VERSION	10	/* protocol version of clients and nshd */
 #define NSHD_TEXT	8192	/* text in one message, at most */
 #define NSHD_WORDS	256	/* a show's words, at most */
 #define NSHD_LINE	1024	/* a line of configuration, with its NUL */
@@ -478,20 +478,12 @@ struct nshd_test {
 };
 
 /*
- * parent to config and system: a new session, with the pipe to its
- * frontend; to config, with the uid and gid of its client, which parent
- * read from the client's socket
+ * system to config: a new session, with the pipe to its frontend, and
+ * the uid of its client, which system read from the client's socket
  */
 struct nshd_newsession {
 	uint32_t		session;
 	uint32_t		uid;
-	uint32_t		gid;
-};
-
-/* config or system to parent: whether it took a new session */
-struct nshd_taken {
-	uint32_t		session;
-	int32_t			status;		/* 0 if it did */
 };
 
 enum nshd_proc {
@@ -529,7 +521,11 @@ enum nshd_imsg {
 	IMSG_CTL_FACTS,		/* units of facts, as facts.h has them */
 
 	/* between nshd's processes */
-	IMSG_SESSION,		/* parent to config: nshd_newsession, a pipe */
+	/*
+	 * a session's pipe to its frontend: parent to system, the session
+	 * the imsg's id; then system to config, with nshd_newsession
+	 */
+	IMSG_SESSION,
 	IMSG_SYS_SNAPSHOT,	/* config to system: the running configuration */
 	IMSG_SYS_TEXT,		/* system to config: text */
 	IMSG_SYS_END,		/* system to config: nshd_result */
@@ -582,8 +578,6 @@ enum nshd_imsg {
 	IMSG_CTL_LOGIN,		/* nshd_login: as HELLO's answer, or a result */
 	IMSG_SYS_LOGIN,		/* nshd_syslogin: the permissions, as the result */
 
-	IMSG_SESSION_TAKEN,	/* config or system to parent: nshd_taken */
-
 	/* with clients, on the read-write socket, and system to config */
 	IMSG_CTL_WATCH,		/* nshd_watch: a result */
 	IMSG_CTL_NOTICE,	/* nshd_notice, and text: unasked */
@@ -597,12 +591,15 @@ enum nshd_imsg {
 	IMSG_SYS_TERMINAL,	/* nshd_systerm; the pty, then SYS_END */
 	IMSG_CTL_RULES,		/* nshd_rules: the rules asked for, a result */
 
-	/* parent to system: who a new session is, as system reads it */
-	IMSG_SESSION_CLIENT,	/* nshd_newsession, and the client's socket */
+	/*
+	 * parent to system, before SESSION: the client's socket of the
+	 * session the imsg's id names, where system reads who it is
+	 */
+	IMSG_SESSION_CLIENT,
 
 	/*
-	 * a session ends: system to parent, then parent to config; parent
-	 * to system, as its frontend ends
+	 * a session ends: system to config and to parent; parent to
+	 * system, as its frontend ends
 	 */
 	IMSG_SESSION_GONE,	/* the session is the imsg's id */
 
@@ -679,7 +676,7 @@ void		 units_flush(struct units *);
 void		 child_start(const char *, int, int);
 void		 privdrop(enum nshd_proc);
 int		 proc_user(enum nshd_proc, uid_t *, gid_t *);
-void		 links_init(struct link *, size_t);
+void		 links_init(struct link *, size_t, int);
 void		 parent_watch(void);
 int		 link_compose(struct link *, uint32_t, uint32_t, const void *,
 		    size_t);
