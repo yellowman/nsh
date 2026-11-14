@@ -158,6 +158,14 @@ args_named_no(const struct argcmd *c)
 	return 0;
 }
 
+/* may f take several words (a list, or keywords without ARG_COMMAS)? */
+static int
+arg_many(const struct arg *f)
+{
+	return (f->type == ARG_BITS && !(f->flags & ARG_COMMAS)) ||
+	    f->many > 1;
+}
+
 /* Print f's part of a usage line; ignored is set if "no" ignores f */
 static void
 arg_usage(const struct arg *f, int set, int ignored)
@@ -174,13 +182,11 @@ arg_usage(const struct arg *f, int set, int ignored)
 	}
 	if (ignored) {
 		if (f->type != ARG_REST)
-			printf(" [%s%s]", args_called(f), f->type == ARG_BITS ||
-			    f->many > 1 ? " ..." : "");
+			printf(" [%s%s]", args_called(f), arg_many(f) ? " ..." : "");
 		return;
 	}
 	if (arg_opt(f, set)) {
-		printf(" [%s%s]", args_called(f), f->type == ARG_BITS ||
-		    f->many > 1 ? " ..." : "");
+		printf(" [%s%s]", args_called(f), arg_many(f) ? " ..." : "");
 		return;
 	}
 	if (f->keys != NULL && f->type == ARG_NUM && f->min > f->max) {
@@ -190,7 +196,7 @@ arg_usage(const struct arg *f, int set, int ignored)
 		printf(">");
 	} else
 		printf(" <%s>", args_called(f));
-	if (f->type == ARG_BITS || f->many > 1)
+	if (arg_many(f))
 		printf(" [%s ...]", args_called(f));
 }
 
@@ -398,13 +404,40 @@ args_ignored(const struct argcmd *c, size_t i)
 			n++;
 		else if (arg_named(f))
 			n += 2 * arg_words(f);
-		else if (f->type == ARG_BITS)
+		else if (f->type == ARG_BITS && !(f->flags & ARG_COMMAS))
 			for (k = f->keys; k->word != NULL; k++)
 				n++;
 		else
 			n += arg_words(f);
 	}
 	return n;
+}
+
+/*
+ * OR into bits the values of the keywords in word w: one keyword, or
+ * with ARG_COMMAS, a comma-separated list. Returns 0, or -1 after
+ * printing an error.
+ */
+static int
+arg_keys(const struct argcmd *c, const struct arg *f, const char *w,
+    long long *bits)
+{
+	const struct argkey	*key;
+	char			 buf[ARGS_REST], *p = buf, *s;
+
+	if (strlcpy(buf, w, sizeof(buf)) >= sizeof(buf)) {
+		printf("%% %s can be at most %zu bytes\n", arg_label(c, f),
+		    sizeof(buf) - 1);
+		return -1;
+	}
+	while ((s = strsep(&p, (f->flags & ARG_COMMAS) ? "," : "")) != NULL) {
+		if ((key = arg_key(f, s)) == NULL) {
+			printf("%% Invalid %s %s\n", arg_label(c, f), s);
+			return args_usage(c);
+		}
+		*bits |= key->value;
+	}
+	return 0;
 }
 
 /*
@@ -417,7 +450,6 @@ static int
 arg_take(const struct argcmd *c, const struct arg *f, int set, int argc,
     char **argv, int *k, struct facts_value *v, struct argvals *a)
 {
-	const struct argkey	*key;
 	char			*rest = a->rest;
 	size_t			 j, len, per = arg_vals(f) / arg_words(f);
 	long long		 bits = 0;
@@ -445,15 +477,12 @@ arg_take(const struct argcmd *c, const struct arg *f, int set, int argc,
 		*k = argc;
 		return 0;
 	case ARG_BITS:
-		for (; *k < argc && arg_name(c, argv[*k]) == NULL; (*k)++) {
-			if ((key = arg_key(f, argv[*k])) == NULL) {
-				printf("%% Invalid %s %s\n", arg_label(c, f),
-				    argv[*k]);
-				return args_usage(c);
-			}
-			bits |= key->value;
-		}
-		if (bits == 0)
+		/* with ARG_COMMAS, all the keywords are in one word */
+		for (i = *k; *k < argc && arg_name(c, argv[*k]) == NULL &&
+		    (*k == i || !(f->flags & ARG_COMMAS)); (*k)++)
+			if (arg_keys(c, f, argv[*k], &bits) == -1)
+				return -1;
+		if (*k == i)
 			return arg_opt(f, set) ? 0 : args_usage(c);
 		facts_i64(v, bits);
 		return 0;
@@ -640,6 +669,7 @@ arg_value(const struct argcmd *c, const struct arg *f,
 	const struct argkey	*k;
 	long long		 bits = 0;
 	size_t			 j;
+	int			 none = 0;
 
 	switch (f->type) {
 	case ARG_NUM:
@@ -650,9 +680,12 @@ arg_value(const struct argcmd *c, const struct arg *f,
 	case ARG_FLAG:
 		return v->v.i == 1;
 	case ARG_BITS:
-		for (k = f->keys; k->word != NULL; k++)
+		/* a key of 0 stands for no bits */
+		for (k = f->keys; k->word != NULL; k++) {
 			bits |= k->value;
-		return v->v.i != 0 && (v->v.i & ~bits) == 0;
+			none |= k->value == 0;
+		}
+		return (v->v.i != 0 || none) && (v->v.i & ~bits) == 0;
 	case ARG_B64:
 		return v->v.str.len == (size_t)f->max;
 	case ARG_ADDR:

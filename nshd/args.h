@@ -70,6 +70,7 @@
 				   second value, FACT_I64 */
 #define ARG_BLANKS	0x200	/* the word may contain blanks, as a quoted
 				   word can */
+#define ARG_COMMAS	0x400	/* a set's keys in one word, between commas */
 
 #define ARGS_MAX	FACTS_FIELDS	/* values of a command, at most */
 #define ARGS_REST	1024	/* bytes of an ARG_REST field, at most */
@@ -141,6 +142,8 @@ struct argvals {
 enum { MPLSLABEL = 1, TUNNELDOMAIN, TXPRIO, RXPRIO };	/* intmpls_apply() */
 enum { IFMETRIC, IFPRIORITY };				/* intmetric_apply() */
 enum { TUNNEL_BOTH, TUNNEL_ADDR };			/* inttunnel_apply() */
+enum { UMBCMD_APN = 1, UMBCMD_PIN, UMBCMD_PUK, UMBCMD_CHGPIN, UMBCMD_CLASS,
+    UMBCMD_ROAMING };					/* intumb_apply() */
 enum { WG_PORT, WG_KEY, WG_RTABLE };			/* intwg_apply() */
 
 /* limits the rows share with their files */
@@ -160,6 +163,7 @@ args_applyfn	intsyncdev_apply, intsyncpeer_apply, intmaxupd_apply;
 args_applyfn	inttrunkport_apply, inttrunkproto_apply, intlacp_apply;
 args_applyfn	intvnetid_apply, inttunnel_apply, intcache_apply,
 		intendpoint_apply;
+args_applyfn	intumb_apply;
 args_applyfn	intwg_apply, intwgpeer_apply;
 const struct argcmd *conf_cmd(int, int, struct argcmd *);
 size_t	args_n(const struct argcmd *);

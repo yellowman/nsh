@@ -28,20 +28,20 @@
 #include "externs.h"
 #include "settings.h"
 #include "facts.h"
+#include "args.h"
 #include "showfacts.h"
 void	umb_classes(char *, size_t, uint32_t);
-int	umb_parse_classes(const char *);
 int	umb_setpin(int, char *, const char *);
 int	umb_chgpin(int, char *, const char *, const char *, struct cand *);
 int	umb_puk(int, char *, const char *, const char *, struct cand *);
 int	umb_pinop(int, char *, int, int, const char *, const char *);
 int	umb_apn(int, char *, const char *);
-int	umb_setclass(int, char *, const char *);
+int	umb_setclass(int, char *, int);
 int	umb_roaming(int, char *, int);
 void	conf_umb_pin(FILE *, char *);
 void	utf16_to_char(uint16_t *, int, char *, size_t);
 int	char_to_utf16(const char *, uint16_t *, size_t);
-static int cand_umb(struct cand *, char *, int, int, char *);
+static int cand_umb(struct cand *, char *, int, int, const char *, int);
 static int umb_pinstate(int, char *);
 static int umb_unlocked(int, char *);
 static void umb_forgetpin(char *, struct cand *);
@@ -52,25 +52,6 @@ static void umb_keeppin(char *, const char *);
 static const struct umb_valdescr umb_dataclass[] = MBIM_DATACLASS_DESCRIPTIONS;
 const struct umb_valdescr umb_pktstate[] = MBIM_PKTSRV_STATE_DESCRIPTIONS;
 const struct umb_valdescr umb_actstate[] = MBIM_ACTIVATION_STATE_DESCRIPTIONS;
-
-const struct umb_valdescr umb_classalias[] = {
-	{ MBIM_DATACLASS_GPRS | MBIM_DATACLASS_EDGE, "2g" },
-	{ MBIM_DATACLASS_UMTS | MBIM_DATACLASS_HSDPA | MBIM_DATACLASS_HSUPA,
-	    "3g" },
-	{ MBIM_DATACLASS_LTE, "4g" },
-	{ 0, NULL }
-};
-
-static int
-umb_descr2val(const struct umb_valdescr *vdp, char *str)
-{
-	while (vdp->descr != NULL) {
-		if (!strcasecmp(vdp->descr, str))
-			return vdp->val;
-		vdp++;
-	}
-	return 0;
-}
 
 /* a string of the kernel's, if it has one */
 static void
@@ -168,7 +149,7 @@ umb_facts(struct facts_out *o, int ifs, char *ifname)
 	}
 }
 
-/* The classes in c, one name for each, as umb_parse_classes() reads them */
+/* Write the data classes in c to buf, as "class" takes them */
 void
 umb_classes(char *buf, size_t len, uint32_t c)
 {
@@ -184,32 +165,6 @@ umb_classes(char *buf, size_t len, uint32_t c)
 			strlcat(buf, ",", len);
 		strlcat(buf, umb_dataclass[i].descr, len);
 	}
-}
-
-int
-umb_parse_classes(const char *spec)
-{
-	char	*optlist, *str;
-	int	 c = 0, v;
-
-	if ((optlist = strdup(spec)) == NULL) {
-		printf("%% umb_parse_classes: strdup: %s\n", strerror(errno));
-		return -1;
-	}
-	str = strtok(optlist, ",");
-	while (str != NULL) {
-		if ((v = umb_descr2val(umb_dataclass, str)) != 0 ||
-		    (v = umb_descr2val(umb_classalias, str)) != 0)
-			c |= v;
-		else if (strcasecmp(str, "none") != 0) {
-			printf("%% Unknown class %s\n", str);
-			free(optlist);
-			return -1;
-		}
-		str = strtok(NULL, ",");
-	}
-	free(optlist);
-	return c;
 }
 
 /*
@@ -442,7 +397,7 @@ umb_apn(int ifs, char *ifname, const char *apn)
 }
 
 int
-umb_setclass(int ifs, char *ifname, const char *val)
+umb_setclass(int ifs, char *ifname, int classes)
 {
 	struct umb_parameter mp;
 	struct ifreq ifr;
@@ -454,12 +409,7 @@ umb_setclass(int ifs, char *ifname, const char *val)
 		printf("%% umb_setclass: SIOCGUMBPARAM: %s\n", strerror(errno));
 		return -1;
 	}
-	if (val)
-		mp.preferredclasses = umb_parse_classes(val);
-	else
-		mp.preferredclasses = MBIM_DATACLASS_NONE;
-	if (mp.preferredclasses == -1)
-		return -1;
+	mp.preferredclasses = classes;
 	if (ioctl(ifs, SIOCSUMBPARAM, (caddr_t)&ifr) == -1) {
 		printf("%% umb_setclass: SIOCSUMBPARAM: %s\n", strerror(errno));
 		return -1;
@@ -532,37 +482,92 @@ char_to_utf16(const char *in, uint16_t *out, size_t outlen)
 	}
 }
 
-#define UMB_APN 1
-#define UMB_PIN 2
-#define UMB_PUK 3
-#define UMB_CHGPIN 4
-#define UMB_CLASS 5
-#define UMB_ROAMING 6
+int
+intumb_apply(const struct argcmd *c, int set,
+    const struct facts_value *v, char *ifname, int ifs, struct cand *cand)
+{
+	char w0[UMB_APN_MAXLEN + 1] = "", w1[MBIM_PIN_MAXLEN / 2 + 1] = "";
+	size_t i;
+	int r, type, classes = MBIM_DATACLASS_NONE;
 
-static struct umbc {
-	char *name;
-	char *descr;
-	char *descr2;
-	int type;
-} umbcs[] = {
-	{ "apn",	"access point name",	"",		UMB_APN },
-	{ "setpin",	"sim card pin",		"",		UMB_PIN },
-	{ "setpuk",	"puk",			"newpin",	UMB_PUK },
-	{ "chgpin",	"oldpin",		"newpin",	UMB_CHGPIN },
-	{ "class",	"preferred cell class",	"",		UMB_CLASS },
-	{ "roaming",	"data roaming",		"",		UMB_ROAMING },
-	{ 0,		0,			0,		0 }
+	type = c->code;
+
+	/* setpuk and chgpin are operations, which no cannot undo */
+	if (!set && (type == UMBCMD_CHGPIN || type == UMBCMD_PUK)) {
+		printf("%% %s has no no form\n", c->name);
+		return -1;
+	}
+	if (set && type == UMBCMD_CLASS)
+		classes = v[0].v.i;
+	else if (set && args_n(c) > 0)
+		args_string(&v[0], w0, sizeof(w0));
+	if (set && args_n(c) > 1)
+		args_string(&v[1], w1, sizeof(w1));
+	/*
+	 * Accept only words that conf() can print and read back, and an
+	 * ASCII APN, as 3GPP's are.
+	 */
+	if (set && type != UMBCMD_CLASS && args_n(c) > 0 &&
+	    !plainword(args_called(&c->args[0]), w0))
+		return -1;
+	if (set && args_n(c) > 1 && !plainword(args_called(&c->args[1]), w1))
+		return -1;
+	if (set && type == UMBCMD_APN)
+		for (i = 0; w0[i] != '\0'; i++)
+			if (!isascii((unsigned char)w0[i])) {
+				printf("%% apn must be in ASCII\n");
+				return -1;
+			}
+
+	/* setpuk and chgpin act on the SIM, even in configure private */
+	if (cand != NULL && type != UMBCMD_PUK && type != UMBCMD_CHGPIN)
+		return cand_umb(cand, ifname, set, type, w0, classes);
+
+	switch(type) {
+	case UMBCMD_APN:
+		r = umb_apn(ifs, ifname, set ? w0 : NULL);
+		break;
+	case UMBCMD_PIN:
+		r = umb_setpin(ifs, ifname, set ? w0 : NULL);
+		break;
+	case UMBCMD_PUK:
+		r = umb_puk(ifs, ifname, w0, w1, cand);
+		break;
+	case UMBCMD_CHGPIN:
+		r = umb_chgpin(ifs, ifname, w0, w1, cand);
+		break;
+	case UMBCMD_CLASS:
+		r = umb_setclass(ifs, ifname, classes);
+		break;
+	default:
+		r = umb_roaming(ifs, ifname, set);
+	}
+	return r;
+}
+
+/*
+ * setpuk and chgpin, as operations nshd's system runs: it has their
+ * words, which their arguments here say how to read
+ */
+static const struct argcmd umb_ops[] = {
+	{ "setpuk", .apply = intumb_apply, .code = UMBCMD_PUK,
+	  .args = ARGS{
+		{ "puk",	ARG_WORD, 1, MBIM_PIN_MAXLEN / 2 },
+		{ "newpin",	ARG_WORD, 1, MBIM_PIN_MAXLEN / 2 },
+		{ NULL } } },
+	{ "chgpin", .apply = intumb_apply, .code = UMBCMD_CHGPIN,
+	  .args = ARGS{
+		{ "oldpin",	ARG_WORD, 1, MBIM_PIN_MAXLEN / 2 },
+		{ "newpin",	ARG_WORD, 1, MBIM_PIN_MAXLEN / 2 },
+		{ NULL } } },
 };
 
 int
 intumb(int argc, char **argv, ...)
 {
-	size_t i;
-	int set, r;
-	struct umbc *x;
+	char *ifname, *w = argv[NO_ARG(argv[0]) && argc > 1];
 	va_list ap;
 	struct cand *cand;
-	char *ifname;
 	int ifs;
 
 	va_start(ap, argv);
@@ -570,127 +575,8 @@ intumb(int argc, char **argv, ...)
 	ifs = va_arg(ap, int);
 	cand = va_arg(ap, struct cand *);
 	va_end(ap);
-
-	if (NO_ARG(argv[0])) {
-		set = 0;
-		argc--;
-		argv++;
-	} else
-		set = 1;
-
-	x=(struct umbc *) genget(argv[0], (char **)umbcs, sizeof(struct umbc));
-	if (x == 0) {
-		printf("%% intumb: Internal error - Invalid argument %s\n", argv[0]);
-		return -1;
-	} else if (Ambiguous(x)) {
-		printf("%% intumb: Internal error - Ambiguous argument %s\n", argv[0]);
-		return -1;
-	}
-
-	argc--;
-	argv++;
-
-	if ((x->type == UMB_ROAMING) &&
-	    ((!set && argc > 0) || (set && argc != 0))) {
-		printf("%% %s\n", x->name);
-		printf("%% no %s\n", x->name);
-		return -1;
-	}
-
-	if (((x->type == UMB_CHGPIN) || (x->type == UMB_PUK)) &&
-	    (set && argc != 2)) {
-		printf("%% %s <%s> <%s>\n", x->name, x->descr, x->descr2);
-		return -1;
-	}
-
-	if ((x->type == UMB_APN || x->type == UMB_PIN || x->type ==
-	    UMB_CLASS) &&
-	    ((!set && argc > 1) || (set && argc != 1))) {
-		printf("%% %s <%s>\n", x->name, x->descr);
-		printf("%% no %s [%s]\n", x->name, x->descr);
-		return -1;
-	}
-
-	/* setpuk and chgpin are operations, which no cannot undo */
-	if (!set && (x->type == UMB_CHGPIN || x->type == UMB_PUK)) {
-		printf("%% %s has no no form\n", x->name);
-		return -1;
-	}
-	/*
-	 * Words conf() can print and read back, and an APN in ASCII, as
-	 * 3GPP's are. The kernel ignores an empty PIN or PUK.
-	 */
-	if (set && x->type != UMB_ROAMING && x->type != UMB_CLASS &&
-	    !plainword(x->descr, argv[0]))
-		return -1;
-	if (set && (x->type == UMB_CHGPIN || x->type == UMB_PUK) &&
-	    !plainword(x->descr2, argv[1]))
-		return -1;
-	if (set && x->type == UMB_APN)
-		for (i = 0; argv[0][i] != '\0'; i++)
-			if (!isascii((unsigned char)argv[0][i])) {
-				printf("%% apn must be in ASCII\n");
-				return -1;
-			}
-
-	/* setpuk and chgpin act on the SIM, even in configure private */
-	if (cand != NULL && x->type != UMB_PUK && x->type != UMB_CHGPIN)
-		return cand_umb(cand, ifname, set, x->type, argv[0]);
-
-	switch(x->type) {
-	case UMB_APN:
-		if (!set) {
-			r = umb_apn(ifs, ifname, NULL);
-		} else {
-			r = umb_apn(ifs, ifname, argv[0]);
-		}
-		break;
-
-	case UMB_PIN:
-		if (!set) {
-			r = umb_setpin(ifs, ifname, NULL);
-		} else {
-			r = umb_setpin(ifs, ifname, argv[0]);
-		}
-		break;
-
-	case UMB_PUK:
-		if (!set) {
-			r = umb_puk(ifs, ifname, NULL, NULL, cand);
-		} else {
-			r = umb_puk(ifs, ifname, argv[0], argv[1], cand);
-		}
-		break;
-
-	case UMB_CHGPIN:
-		if (!set) {
-			r = umb_chgpin(ifs, ifname, NULL, NULL, cand);
-		} else {
-			r = umb_chgpin(ifs, ifname, argv[0], argv[1], cand);
-		}
-		break;
-
-	case UMB_CLASS:
-		if (!set) {
-			r = umb_setclass(ifs, ifname, NULL);
-		} else {
-			r = umb_setclass(ifs, ifname, argv[0]);
-		}
-		break;
-
-	case UMB_ROAMING:
-		if (!set) {
-			r = umb_roaming(ifs, ifname, 0);
-		} else {
-			r = umb_roaming(ifs, ifname, 1);
-		}
-		break;
-
-	default:
-		printf("%% intumb: internal error\n");
-		r = -1;
-	}
-	return r;
+	return args_run(&umb_ops[isprefix(w, "chgpin") != 0], argc, argv,
+	    ifname, ifs, cand);
 }
 
 /*
@@ -698,41 +584,31 @@ intumb(int argc, char **argv, ...)
  * would print them once umb took them
  */
 static int
-cand_umb(struct cand *cand, char *ifname, int set, int type, char *arg)
+cand_umb(struct cand *cand, char *ifname, int set, int type, const char *arg,
+    int classes)
 {
 	static char *fn[] = { NULL, "umb_apn", "umb_pinop", NULL, NULL,
 	    "umb_setclass", "umb_roaming" };
 	char buf[256];
 	size_t i;
-	int c;
 
 	if (cand_gettype(cand, ifname) != IFT_MBIM) {
 		printf("%% %s: SIOCGUMBPARAM: %s\n", fn[type], strerror(ENOTTY));
 		return -1;
 	}
 	switch (type) {
-	case UMB_APN:
+	case UMBCMD_APN:
 		if (!set)
 			return cand_setting(cand, ST_DEFAULT, "apn");
-		if (strlen(arg) > UMB_APN_MAXLEN) {
-			printf("%% APN too long\n");
-			return -1;
-		}
 		return cand_setting(cand, ST_ON, "apn %s", arg);
-	case UMB_PIN:
+	case UMBCMD_PIN:
 		if (!set)
 			return cand_setting(cand, ST_DEFAULT, "setpin");
-		if (strlen(arg) > MBIM_PIN_MAXLEN / 2) {
-			printf("%% PIN too long\n");
-			return -1;
-		}
 		return cand_setting(cand, ST_ON, "setpin %s", arg);
-	case UMB_CLASS:
-		if ((c = set ? umb_parse_classes(arg) : MBIM_DATACLASS_NONE) == -1)
-			return -1;
-		umb_classes(buf, sizeof(buf), c);
+	case UMBCMD_CLASS:
+		umb_classes(buf, sizeof(buf), classes);
 		return cand_setting(cand, ST_ON, "class %s", buf);
-	case UMB_ROAMING:
+	case UMBCMD_ROAMING:
 		return cand_setting(cand, set ? ST_ON : ST_DEFAULT, "roaming");
 	}
 	return 0;

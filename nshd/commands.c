@@ -66,6 +66,8 @@
 #include <net/if_trunk.h>
 #include <net/if_wg.h>
 #include <netmpls/mpls.h>
+#include <dev/usb/mbim.h>
+#include <dev/usb/if_umb.h>
 #include <arpa/inet.h>
 #include <limits.h>
 #include <util.h>
@@ -815,6 +817,19 @@ static const struct argkey balancing_keys[] = {
 	{ "ip-stealth", CARP_BAL_IPSTEALTH },
 	{ "ip-unicast", CARP_BAL_IPUNICAST }, { NULL }
 };
+/* data class names, as umb_classes() prints them, plus 2g, 3g and 4g */
+static const struct argkey class_keys[] = {
+	{ "none", MBIM_DATACLASS_NONE }, { "GPRS", MBIM_DATACLASS_GPRS },
+	{ "EDGE", MBIM_DATACLASS_EDGE }, { "UMTS", MBIM_DATACLASS_UMTS },
+	{ "HSDPA", MBIM_DATACLASS_HSDPA }, { "HSUPA", MBIM_DATACLASS_HSUPA },
+	{ "HSPA", MBIM_DATACLASS_HSDPA | MBIM_DATACLASS_HSUPA },
+	{ "LTE", MBIM_DATACLASS_LTE }, { "CDMA2000", MBIM_DATACLASS_1XRTT },
+	{ "custom", MBIM_DATACLASS_CUSTOM },
+	{ "2g", MBIM_DATACLASS_GPRS | MBIM_DATACLASS_EDGE },
+	{ "3g", MBIM_DATACLASS_UMTS | MBIM_DATACLASS_HSDPA |
+	    MBIM_DATACLASS_HSUPA },
+	{ "4g", MBIM_DATACLASS_LTE }, { NULL }
+};
 static const struct argkey defer_keys[] = { { "defer", 1 }, { NULL } };
 /* the protocols that the kernel's TRUNK_PROTOS names, except its default */
 static const struct argkey trunkproto_keys[] = {
@@ -1236,12 +1251,33 @@ struct intlist Intlist[] = {
 	  .args = ARGS{
 		{ "timeout",	ARG_NUM, 1, 0, 0, lacptimeout_keys },
 		{ NULL } } },
-	{ "apn",	"Access Point Name",			CMPL0 0, 0, intumb, 1, CAND_EDIT },
-	{ "setpin",	"Set SIM card PIN",			CMPL0 0, 0, intumb, 1, CAND_EDIT },
+	{ "apn", "Access Point Name", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intumb_apply, .code = UMBCMD_APN,
+	  .args = ARGS{
+		/* the kernel holds an APN and a PIN as UTF-16 */
+		{ "apn",	ARG_WORD, 1, UMB_APN_MAXLEN,
+		  .help = "access point name" },
+		{ NULL } } },
+	{ "setpin", "Set SIM card PIN", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intumb_apply, .code = UMBCMD_PIN,
+	  .args = ARGS{
+		{ "pin",	ARG_WORD, 1, MBIM_PIN_MAXLEN / 2,
+		  .help = "sim card pin" },
+		{ NULL } } },
 	{ "setpuk",	"Set new SIM card PIN using PUK for validation", CMPL0 0, 0, int_op, 0, CAND_RUN },
 	{ "chgpin",	"Permanently change SIM PIN",		CMPL0 0, 0, int_op, 0, CAND_RUN },
-	{ "class",	"Preferred cell classes",		CMPL0 0, 0, intumb, 1, CAND_EDIT },
-	{ "roaming",	"Enable data roaming",			CMPL0 0, 0, intumb, 1, CAND_EDIT },
+	{ "class", "Preferred cell classes", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intumb_apply, .code = UMBCMD_CLASS,
+	  .args = ARGS{
+		{ "class",	ARG_BITS, 0, 0, ARG_COMMAS, class_keys,
+		  .help = "preferred cell class" },
+		{ NULL } } },
+	{ "roaming", "Enable data roaming", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intumb_apply, .code = UMBCMD_ROAMING },
 	{ "interface",  interfacehelp,				CMPL(i) 0, 0, int_interface, 1, CAND_EDIT },
 	{ "shutdown", "Shutdown interface", CMPL0
 	  .nocmd = 1, .cand = CAND_EDIT,
@@ -1737,10 +1773,6 @@ static const struct confcmd conf_if[] = {
 	{ "dhcrelay",	intdhcrelay },
 	{ "dhcrelay6",	intdhcrelay6 },
 	{ "inet6",	intip },
-	{ "apn",	intumb },
-	{ "setpin",	intumb },
-	{ "class",	intumb },
-	{ "roaming",	intumb },
 };
 
 static const struct confcmd conf_bridge[] = {

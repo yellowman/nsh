@@ -342,6 +342,7 @@ int cand_wpa(struct cand *, char *, int);
 int cand_wpalist(struct cand *, char *, int, u_int);
 int cand_powersave(struct cand *, char *, int, int);
 int intbssid(int, char **, ...);
+int intumb(int, char **, ...);
 
 /* stats.c */
 char *plural(int);
@@ -663,7 +664,6 @@ int pflow_status(int, int, char *, char *);
 void conf_wg(FILE *, int, char *);
 
 /* umb.c */
-int intumb(int, char **, ...);
 void conf_umb(FILE *, int, char *);
 
 /* utf8.c */
