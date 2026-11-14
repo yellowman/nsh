@@ -1063,32 +1063,32 @@ edit_emit(void *f, const void *p, size_t len)
 	fwrite(p, len, 1, f);
 }
 
-/*
- * Parse line w (n words) with a's arguments (args_parse()) and write it
- * to f as edit e, carrying the parsed values. Returns 0, or -1 after
- * printing an error.
- */
+/* where edit_args_one() writes, and the edit it writes */
+struct edit_dest {
+	FILE		*f;
+	struct edit	*e;
+};
+
+/* Write one record of a's parsed values v as an edit */
 static int
-edit_args(FILE *f, struct edit *e, const struct argcmd *a, int n, char **w)
+edit_args_one(const struct argcmd *a, struct argvals *v, void *arg)
 {
+	struct edit_dest	*d = arg;
 	struct facts_field	 fl[ARGS_MAX];
 	struct facts_kind	 k;
 	struct facts_out	 o;
-	struct argvals		 v;
 	FILE			*m;
 	char			*buf = NULL;
 	size_t			 len = 0;
 	int			 r = -1;
 
-	if (args_parse(a, n, w, &v) == -1)
-		return -1;
 	if ((m = open_memstream(&buf, &len)) == NULL) {
 		printf("%% commit: %s\n", strerror(errno));
 		return -1;
 	}
 	args_kind(a, &k, fl);
 	facts_out_init(&o, edit_emit, m);
-	if (facts_record(&o, &k, v.v) == -1)
+	if (facts_record(&o, &k, v->v) == -1)
 		printf("%% commit: %s: its values do not fit\n", a->name);
 	else
 		r = 0;
@@ -1096,12 +1096,26 @@ edit_args(FILE *f, struct edit *e, const struct argcmd *a, int n, char **w)
 		printf("%% commit: %s\n", strerror(errno));
 		r = -1;
 	}
-	e->typed = 1;
-	e->no = !v.set;
+	d->e->typed = 1;
+	d->e->no = !v->set;
 	if (r == 0)
-		r = edit_put(f, e, NULL, 0, buf, len);
+		r = edit_put(d->f, d->e, NULL, 0, buf, len);
 	free(buf);
 	return r;
+}
+
+/*
+ * Parse line w (n words) with a's arguments and write it to f as edit
+ * e, carrying the parsed values. A list longer than one record holds
+ * goes as several edits (args_each()). Returns 0, or -1 after printing
+ * an error.
+ */
+static int
+edit_args(FILE *f, struct edit *e, const struct argcmd *a, int n, char **w)
+{
+	struct edit_dest	 d = { f, e };
+
+	return args_each(a, n, w, edit_args_one, &d) == -1 ? -1 : 0;
 }
 
 /* state for edit_record(): check a typed edit, and maybe run it */

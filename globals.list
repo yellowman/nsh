@@ -47,7 +47,7 @@ commands.c	table	Bridgelist Bridgelist_nitems Intlist
 			ipsecsoftallocstab ipsecsoftbytestab
 			ipsecsoftfirstusetab ipsecsofttimeouttab
 			ipsectimeouttab iptab
-			ldaphelp ldphelp lldphelp loginhelp
+			ldaphelp ldphelp link_args link_keys lldphelp loginhelp
 			maxqueuetab mforwardingtab motdhelp
 			mplshelp mplstab mtudisctab mtudisctimeouttab
 			multipathtab nameserverhelp ndphelp nppphelp
@@ -57,7 +57,7 @@ commands.c	table	Bridgelist Bridgelist_nitems Intlist
 			porthilasttab portlasttab
 			radhelp relayhelp resolvhelp
 			riphelp routehelp
-			rtabletab sasynchelp
+			rtabletab rxprio_args rxprio_keys sasynchelp
 			sendredirectstab
 			smtphelp snmphelp
 			sourceroutetab sshdhelp
@@ -68,7 +68,8 @@ commands.c	table	Bridgelist Bridgelist_nitems Intlist
 			powerdownhelp prots quithelp rollbackhelp rtablehelp
 			saveenvhelp setenvhelp shellhelp showarptab showhelp
 			showlist showndptab showroutetab showvlantab sshhelp
-			stts telnethelp tracert6help tracerthelp unsetenvhelp
+			stts telnethelp tracert6help tracerthelp txprio_args
+			txprio_keys unsetenvhelp
 			verbosehelp whohelp
 commit.c	scratch	deferred ndeferred
 commit.c	table	ifrefs
@@ -100,7 +101,7 @@ ieee80211.c	table	nwflags wpaakms wpaciphers wpagroupciphers
 if.c		scratch	get_linkstate.buf if_facts.ifdescr
 			if_facts.parent if_facts.ps if_facts.ssid
 if.c		table	intip6help intiphelp
-			intpwe3.pwe3opts ip6optlist l2hprios mplscs
+			intpwe3.pwe3opts ip6optlist l2hprios
 kernel.c	table	kcloners
 kfacts.c	process	kf
 kfacts.c	scratch	kf_lladdr.buf

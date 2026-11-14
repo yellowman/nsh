@@ -61,6 +61,7 @@
 #include <net/if.h>
 #include <net/route.h>
 #include <netinet/in.h>
+#include <netmpls/mpls.h>
 #include <arpa/inet.h>
 #include <limits.h>
 #include <util.h>
@@ -804,6 +805,19 @@ static char crontabhelp[];
 static char interfacehelp[];
 extern struct ghs mantab[];
 
+/* the words arguments take, by the table of each */
+static const struct argkey txprio_keys[] = {
+	{ "packet", IF_HDRPRIO_PACKET }, { "payload", IF_HDRPRIO_PAYLOAD },
+	{ NULL }
+};
+static const struct argkey rxprio_keys[] = {
+	{ "packet", IF_HDRPRIO_PACKET }, { "payload", IF_HDRPRIO_PAYLOAD },
+	{ "outer", IF_HDRPRIO_OUTER }, { NULL }
+};
+static const struct argkey link_keys[] = {
+	{ "0", IFF_LINK0 }, { "1", IFF_LINK1 }, { "2", IFF_LINK2 }, { NULL }
+};
+
 /* the arguments that several rows have */
 static const struct arg description_args[] = {
 	/* SIOCSIFDESCR refuses a longer one (ENAMETOOLONG) */
@@ -812,17 +826,51 @@ static const struct arg description_args[] = {
 	{ NULL }
 };
 
+static const struct arg link_args[] = {
+	{ "link",	ARG_BITS, 0, 0, ARG_NO | ARG_NOOPT, link_keys,
+	  .help = "012" },
+	{ NULL }
+};
+
+static const struct arg txprio_args[] = {
+	{ "priority",	ARG_NUM, IF_HDRPRIO_MIN, IF_HDRPRIO_MAX, 0,
+	    txprio_keys,
+	  .help = "priority or packet|payload" },
+	{ NULL }
+};
+
+static const struct arg rxprio_args[] = {
+	{ "priority",	ARG_NUM, IF_HDRPRIO_MIN, IF_HDRPRIO_MAX, 0,
+	    rxprio_keys,
+	  .help = "priority or packet|payload|outer" },
+	{ NULL }
+};
+
 struct intlist Intlist[] = {
 /* Interface mode commands */
 	{ "inet",	"IPv4/IPv6 addresses",			CMPL(h) (char **)intiphelp, sizeof(struct ghs), intip, 1, CAND_EDIT },
 	{ "ip",		"Alias for \"inet\" command",		CMPL(h) (char **)intiphelp, sizeof(struct ghs), intip, 1, CAND_EDIT },
 	{ "alias",	NULL, /* backwards compatibilty */	CMPL(h) (char **)intiphelp, sizeof(struct ghs), intip, 1, CAND_EDIT },
-	{ "autoconf4",  "IPv4 Autoconfigurable address (DHCP)",	CMPL0 0, 0, intxflags, 1, CAND_EDIT },
+	{ "autoconf4", "IPv4 Autoconfigurable address (DHCP)", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intxflags_apply, .code = IFXF_AUTOCONF4 },
 	{ "description", "Interface description", CMPL0
 	  .nocmd = 1, .cand = CAND_EDIT,
 	  .apply = intdesc_apply, .args = description_args },
-	{ "group",	"Interface group",			CMPL0 0, 0, intgroup, 1, CAND_EDIT },
-	{ "rdomain",	"Interface routing domain",		CMPL0 0, 0, intrdomain, 1, CAND_EDIT },
+	{ "group", "Interface group", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intgroup_apply,
+	  .args = ARGS{
+		{ "group-name",	ARG_WORD, 1, IFNAMSIZ - 1, ARG_NO, NULL,
+		    GROUP_NAMES },
+		{ NULL } } },
+	{ "rdomain", "Interface routing domain", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intrdomain_apply,
+	  .args = ARGS{
+		{ "rdomain",	ARG_NUM, 0, RT_TABLEID_MAX,
+		  .help = "routing domain number" },
+		{ NULL } } },
 	{ "rtlabel", "Interface route labels", CMPL0
 	  .nocmd = 1, .cand = CAND_EDIT,
 	  .apply = intrtlabel_apply,
@@ -853,9 +901,15 @@ struct intlist Intlist[] = {
 	  .args = ARGS{
 		{ "metric",	ARG_NUM, 0, INT_MAX },
 		{ NULL } } },
-	{ "link",	"Link level options",			CMPL0 0, 0, intlink, 1, CAND_EDIT },
-	{ "arp",	"Address Resolution Protocol",		CMPL0 0, 0, intflags, 1, CAND_EDIT },
-	{ "staticarp",	"Always use static ARP to find other hosts",CMPL0 0, 0, intflags, 1, CAND_EDIT },
+	{ "link", "Link level options", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intlink_apply, .args = link_args },
+	{ "arp", "Address Resolution Protocol", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intflags_apply, .code = -IFF_NOARP },
+	{ "staticarp", "Always use static ARP to find other hosts", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intflags_apply, .code = IFF_STATICARP },
 	{ "lladdr",	"Link Level (MAC) Address",		CMPL0 0, 0, intlladdr, 1, CAND_EDIT },
 	{ "nwid",	"802.11 network ID",			CMPL0 0, 0, intnwid, 1, CAND_EDIT },
 	{ "nwkey",	"802.11 network key",			CMPL0 0, 0, intnwkey, 1, CAND_EDIT },
@@ -866,7 +920,12 @@ struct intlist Intlist[] = {
 	{ "wpaciphers",	"802.11 WPA pairwise ciphers",		CMPL0 0, 0, intwpalist, 1, CAND_EDIT },
 	{ "wpagroupcipher", "802.11 WPA group cipher",		CMPL0 0, 0, intwpalist, 1, CAND_EDIT },
 	{ "join",	"802.11 network to join when found",	CMPL0 0, 0, intjoin, 1, CAND_EDIT },
-	{ "powersave",	"802.11 powersaving mode",		CMPL0 0, 0, intpowersave, 1, CAND_EDIT },
+	{ "powersave", "802.11 powersaving mode", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intpowersave_apply,
+	  .args = ARGS{
+		{ "milisec",	ARG_NUM, 0, 1000, ARG_OPT },
+		{ NULL } } },
 	{ "txpower",	"802.11 transmit power",		CMPL0 0, 0, inttxpower, 1, CAND_EDIT },
 	{ "chan",	"802.11 channel",			CMPL0 0, 0, intchan, 1, CAND_EDIT },
 	{ "nwflag",	"802.11 flags",				CMPL0 0, 0, intnwflag, 1, CAND_EDIT },
@@ -878,16 +937,39 @@ struct intlist Intlist[] = {
 	{ "pppoe",	"PPPoE settings",			CMPL0 0, 0, intpppoe, 1, CAND_EDIT },
 	{ "tunnel",	"Tunnel parameters",			CMPL0 0, 0, inttunnel, 1, CAND_EDIT },
 	{ "tunneladdr",	"Tunnel source, with no destination",	CMPL0 0, 0, inttunnel, 1, CAND_EDIT },
-	{ "tunneldomain", "Tunnel routing domain for transit",	CMPL0 0, 0, intmpls, 1, CAND_EDIT },
+	{ "tunneldomain", "Tunnel routing domain for transit", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intmpls_apply, .code = TUNNELDOMAIN,
+	  .args = ARGS{
+		{ "rdomain",	ARG_NUM, 0, RT_TABLEID_MAX },
+		{ NULL } } },
 	{ "maxaddr",	"Maximum address cache size",		CMPL0 0, 0, intcache, 1, CAND_EDIT },
 	{ "timeout",	"Address cache timeout",		CMPL0 0, 0, intcache, 1, CAND_EDIT },
 	{ "endpoint",	"Tunnel endpoint of a MAC address",	CMPL0 0, 0, intendpoint, 1, CAND_EDIT },
-	{ "txprio",	"Priority in tunnel protocol headers",	CMPL0 0, 0, intmpls, 1, CAND_EDIT },
-	{ "rxprio",	"Source used for packet priority",	CMPL0 0, 0, intmpls, 1, CAND_EDIT },
+	{ "txprio", "Priority in tunnel protocol headers", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intmpls_apply, .code = TXPRIO, .args = txprio_args },
+	{ "rxprio", "Source used for packet priority", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intmpls_apply, .code = RXPRIO, .args = rxprio_args },
 	{ "vnetid",	"Virtual interface network identifier",	CMPL0 0, 0, intvnetid, 1, CAND_EDIT },
-	{ "vnetflowid",	"Use part of vnetid as flowid",		CMPL0 0, 0, intvnetflowid, 1, CAND_EDIT },
-	{ "parent",	"Parent interface",			CMPL(i) 0, 0, intparent, 1, CAND_EDIT },
-	{ "patch",	"Pair interface",			CMPL(i) 0, 0, intpatch, 1, CAND_EDIT },
+	{ "vnetflowid", "Use part of vnetid as flowid", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intvnetflowid_apply },
+	{ "parent", "Parent interface", CMPL(i)
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intparent_apply,
+	  .args = ARGS{
+		{ "parent",	ARG_WORD, 0, IFNAMSIZ - 1,
+		  .help = "parent interface" },
+		{ NULL } } },
+	{ "patch", "Pair interface", CMPL(i)
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intpatch_apply,
+	  .args = ARGS{
+		{ "pair",	ARG_WORD, 0, IFNAMSIZ - 1,
+		  .help = "pair interface" },
+		{ NULL } } },
 	{ "ping",	pinghelp,				CMPL0 0, 0, 0, 0, CAND_RUN },
 	{ "ping6",	ping6help,				CMPL0 0, 0, 0, 0, CAND_RUN },
 	{ "traceroute", tracerthelp,				CMPL0 0, 0, 0, 0, CAND_RUN },
@@ -899,8 +981,22 @@ struct intlist Intlist[] = {
 	{ "setenv",	setenvhelp,				CMPL(e) 0, 0, 0, 0, CAND_RUN },
 	{ "unsetenv",	unsetenvhelp,				CMPL(e) 0, 0, 0, 0, CAND_RUN },
 	{ "saveenv",	saveenvhelp,				CMPL0 0, 0, 0, 0, CAND_RUN },
-	{ "keepalive",	"GRE tunnel keepalive",			CMPL0 0, 0, intkeepalive, 1, CAND_EDIT },
-	{ "mplslabel",	"MPLS local label",			CMPL0 0, 0, intmpls, 1, CAND_EDIT },
+	{ "keepalive", "GRE tunnel keepalive", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intkeepalive_apply,
+	  .args = ARGS{
+		{ "period",	ARG_NUM, 1, 3600 },
+		/* the kernel takes a count of at most 256 */
+		{ "count",	ARG_NUM, 2, 256 },
+		{ NULL } } },
+	{ "mplslabel", "MPLS local label", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intmpls_apply, .code = MPLSLABEL,
+	  .args = ARGS{
+		/* the kernel keeps labels 0 to 15 for itself */
+		{ "label",	ARG_NUM, MPLS_LABEL_RESERVED_MAX + 1,
+		    MPLS_LABEL_MAX, .help = "local mpls label" },
+		{ NULL } } },
 	{ "pwe",	"MPLS PWE3",				CMPL0 0, 0, intpwe3, 1, CAND_EDIT },
 	{ "syncdev",	"PFsync control message interface",	CMPL(i) 0, 0, intsyncdev, 1, CAND_EDIT },
 	{ "syncpeer",	"PFsync peer address",			CMPL0 0, 0, intsyncpeer, 1, CAND_EDIT },
@@ -914,18 +1010,37 @@ struct intlist Intlist[] = {
 	{ "carppeer",	"CARP peer",				CMPL0 0, 0, intcarp, 1, CAND_EDIT },
 	{ "balancing",	"CARP balancing mode",			CMPL0 0, 0, intcarp, 1, CAND_EDIT },
 	{ "pflow",	"pflow data export",			CMPL0 0, 0, intpflow, 1, CAND_EDIT },
-	{ "debug",	"Driver dependent debugging",		CMPL0 0, 0, intflags, 1, CAND_EDIT },
+	{ "debug", "Driver dependent debugging", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intflags_apply, .code = IFF_DEBUG },
 	{ "dhcrelay",	"DHCP Relay Agent",			CMPL0 0, 0, intdhcrelay, 1, CAND_EDIT },
 	{ "dhcrelay6",	"DHCPv6 Relay Agent",			CMPL0 0, 0, intdhcrelay6, 1, CAND_EDIT },
-	{ "wol",	"Wake On LAN",				CMPL0 0, 0, intxflags, 1, CAND_EDIT },
-	{ "mpls",	"MPLS",					CMPL0 0, 0, intxflags, 1, CAND_EDIT },
+	{ "wol", "Wake On LAN", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intxflags_apply, .code = IFXF_WOL },
+	{ "mpls", "MPLS", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intxflags_apply, .code = IFXF_MPLS },
 	{ "inet6",	"IPv6 addresses",			CMPL(h) (char **)intip6help, sizeof(struct ghs), intip, 1, CAND_EDIT },
-	{ "autoconf6",  "IPv6 Autoconfigurable address",	CMPL0 0, 0, intxflags, 1, CAND_EDIT },
-	{ "autoconfprivacy", "Privacy addresses for IPv6 autoconf", CMPL0 0, 0, intxflags, 1, CAND_EDIT }, /* XXX bkcompat */
-	{ "temporary",	"Temporary addresses for IPv6 autoconf", CMPL0 0, 0, intxflags, 1, CAND_EDIT },
-	{ "monitor",	"Monitor mode for incoming traffic",	CMPL0 0, 0, intxflags, 1, CAND_EDIT },
-	{ "soii",	"Stable IPv6 autoconf addresses (RFC 7217)",	CMPL0 0, 0, intxflags, 1, CAND_EDIT },
-	{ "tcplro",	"TCP large receive offload",		CMPL0 0, 0, intxflags, 1, CAND_EDIT },
+	{ "autoconf6", "IPv6 Autoconfigurable address", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intxflags_apply, .code = IFXF_AUTOCONF6 },
+	{ "autoconfprivacy",
+	  "Privacy addresses for IPv6 autoconf", CMPL0	/* XXX bkcompat */
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intxflags_apply, .code = IFXF_AUTOCONF6TEMP },
+	{ "temporary", "Temporary addresses for IPv6 autoconf", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intxflags_apply, .code = IFXF_AUTOCONF6TEMP },
+	{ "monitor", "Monitor mode for incoming traffic", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intxflags_apply, .code = IFXF_MONITOR },
+	{ "soii", "Stable IPv6 autoconf addresses (RFC 7217)", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intxflags_apply, .code = -IFXF_INET6_NOSOII },
+	{ "tcplro", "TCP large receive offload", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intxflags_apply, .code = IFXF_LRO },
 	{ "wgpeer",	"Wireguard peer config",		CMPL0 0, 0, intwgpeer, 1, CAND_EDIT },
 	{ "wgport",	"Wireguard UDP port",			CMPL0 0, 0, intwg, 1, CAND_EDIT },
 	{ "wgkey",	"Wireguard private key",		CMPL0 0, 0, intwg, 1, CAND_EDIT },
@@ -941,7 +1056,9 @@ struct intlist Intlist[] = {
 	{ "class",	"Preferred cell classes",		CMPL0 0, 0, intumb, 1, CAND_EDIT },
 	{ "roaming",	"Enable data roaming",			CMPL0 0, 0, intumb, 1, CAND_EDIT },
 	{ "interface",  interfacehelp,				CMPL(i) 0, 0, int_interface, 1, CAND_EDIT },
-	{ "shutdown",   "Shutdown interface",			CMPL0 0, 0, intflags, 1, CAND_EDIT },
+	{ "shutdown", "Shutdown interface", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intflags_apply, .code = -IFF_UP },
 	{ "show",	showhelp,				CMPL(ta) (char **)showlist, sizeof(Menu), 0, 0, CAND_RUN },
 	{ "who",	whohelp,				CMPL0 0, 0, 0, 0, CAND_RUN },
 	{ "verbose",	verbosehelp,				CMPL0 0, 0, 0, 1, CAND_RUN },
@@ -998,9 +1115,15 @@ struct intlist Bridgelist[] = {
 	{ "static",	"Static bridge address entry",		CMPL0 0, 0, brstatic, 1, CAND_EDIT },
 	{ "ifpriority",	"Spanning priority of a member on an 802.1D bridge",	CMPL0 0, 0, brpri, 1, CAND_EDIT },
 	{ "ifcost",	"Spanning tree path cost of a member on 802.1D bridge", CMPL0 0, 0, brpri, 1, CAND_EDIT },
-	{ "link",	"Link level options",			CMPL0 0, 0, intlink, 1, CAND_EDIT },
-	{ "txprio",     "Priority in 802.1Q headers (veb)",	CMPL0 0, 0, intmpls, 1, CAND_EDIT },
-	{ "rxprio",     "Source used for packet priority (veb)", CMPL0 0, 0, intmpls, 1, CAND_EDIT },
+	{ "link", "Link level options", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intlink_apply, .args = link_args },
+	{ "txprio", "Priority in 802.1Q headers (veb)", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intmpls_apply, .code = TXPRIO, .args = txprio_args },
+	{ "rxprio", "Source used for packet priority (veb)", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intmpls_apply, .code = RXPRIO, .args = rxprio_args },
 	{ "vnetid",	"Untagged VLAN of members added (veb)",	CMPL0 0, 0, intvnetid, 1, CAND_EDIT },
 	{ "protect",	"Configure protected bridge domains",	CMPL0 0, 0, brprotect, 1, CAND_EDIT },
 	{ "untagged",	"VLAN of a member's untagged frames (veb)",	CMPL0 0, 0, brvlan, 1, CAND_EDIT },
@@ -1010,7 +1133,9 @@ struct intlist Bridgelist[] = {
 	{ "pvlan-community", "Community VLAN of a private VLAN (veb)", CMPL0 0, 0, brpvlan, 1, CAND_EDIT },
 	{ "pvptags",	"Tag private VLANs with their primary (veb)",	CMPL0 0, 0, brport, 1, CAND_EDIT },
 	{ "interface",  interfacehelp,				CMPL(i) 0, 0, int_interface, 1, CAND_EDIT },
-	{ "shutdown",	"Shutdown bridge",			CMPL0 0, 0, intflags, 1, CAND_EDIT },
+	{ "shutdown", "Shutdown bridge", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intflags_apply, .code = -IFF_UP },
 	{ "show",	showhelp,				CMPL(ta) (char **)showlist, sizeof(Menu), 0, 0, CAND_RUN },
 	{ "who",	whohelp,				CMPL0 0, 0, 0, 0, CAND_RUN },
 	{ "verbose",	verbosehelp,				CMPL0 0, 0, 0, 1, CAND_RUN },
@@ -1400,12 +1525,6 @@ static const struct confcmd conf_if[] = {
 	{ "inet",	intip },
 	{ "ip",		intip },
 	{ "alias",	intip },
-	{ "autoconf4",	intxflags },
-	{ "group",	intgroup },
-	{ "rdomain",	intrdomain },
-	{ "link",	intlink },
-	{ "arp",	intflags },
-	{ "staticarp",	intflags },
 	{ "lladdr",	intlladdr },
 	{ "nwid",	intnwid },
 	{ "nwkey",	intnwkey },
@@ -1416,7 +1535,6 @@ static const struct confcmd conf_if[] = {
 	{ "wpaciphers",	intwpalist },
 	{ "wpagroupcipher", intwpalist },
 	{ "join",	intjoin },
-	{ "powersave",	intpowersave },
 	{ "txpower",	inttxpower },
 	{ "chan",	intchan },
 	{ "nwflag",	intnwflag },
@@ -1427,18 +1545,10 @@ static const struct confcmd conf_if[] = {
 	{ "pppoe",	intpppoe },
 	{ "tunnel",	inttunnel },
 	{ "tunneladdr",	inttunnel },
-	{ "tunneldomain",	intmpls },
 	{ "maxaddr",	intcache },
 	{ "timeout",	intcache },
 	{ "endpoint",	intendpoint },
-	{ "txprio",	intmpls },
-	{ "rxprio",	intmpls },
 	{ "vnetid",	intvnetid },
-	{ "vnetflowid",	intvnetflowid },
-	{ "parent",	intparent },
-	{ "patch",	intpatch },
-	{ "keepalive",	intkeepalive },
-	{ "mplslabel",	intmpls },
 	{ "pwe",	intpwe3 },
 	{ "syncdev",	intsyncdev },
 	{ "syncpeer",	intsyncpeer },
@@ -1452,18 +1562,9 @@ static const struct confcmd conf_if[] = {
 	{ "carppeer",	intcarp },
 	{ "balancing",	intcarp },
 	{ "pflow",	intpflow },
-	{ "debug",	intflags },
 	{ "dhcrelay",	intdhcrelay },
 	{ "dhcrelay6",	intdhcrelay6 },
-	{ "wol",	intxflags },
-	{ "mpls",	intxflags },
 	{ "inet6",	intip },
-	{ "autoconf6",	intxflags },
-	{ "autoconfprivacy",	intxflags },
-	{ "temporary",	intxflags },
-	{ "monitor",	intxflags },
-	{ "soii",	intxflags },
-	{ "tcplro",	intxflags },
 	{ "wgpeer",	intwgpeer },
 	{ "wgport",	intwg },
 	{ "wgkey",	intwg },
@@ -1476,7 +1577,6 @@ static const struct confcmd conf_if[] = {
 	{ "setpin",	intumb },
 	{ "class",	intumb },
 	{ "roaming",	intumb },
-	{ "shutdown",	intflags },
 };
 
 static const struct confcmd conf_bridge[] = {
@@ -1503,9 +1603,6 @@ static const struct confcmd conf_bridge[] = {
 	{ "static",	brstatic },
 	{ "ifpriority",	brpri },
 	{ "ifcost",	brpri },
-	{ "link",	intlink },
-	{ "txprio",	intmpls },
-	{ "rxprio",	intmpls },
 	{ "vnetid",	intvnetid },
 	{ "protect",	brprotect },
 	{ "untagged",	brvlan },
@@ -1514,7 +1611,6 @@ static const struct confcmd conf_bridge[] = {
 	{ "pvlan-isolated", brpvlan },
 	{ "pvlan-community", brpvlan },
 	{ "pvptags",	brport },
-	{ "shutdown",	intflags },
 };
 
 /*

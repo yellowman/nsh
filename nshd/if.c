@@ -950,6 +950,8 @@ intipusage(const char *cmdname, const char *msg)
 	printf("%% no %s [<address>[/netmask]]\n", cmdname);
 }
 
+static int xflags_set(int, int, char *, int, struct cand *);
+
 int
 intip(int argc, char **argv, ...)
 {
@@ -1087,18 +1089,7 @@ intip(int argc, char **argv, ...)
 			 * dhcpleased(8) should always be running and will
 			 * only take action once the autoconf4 flag is set.
 			 */
-			char *args[3] = { "no", "autoconf4", NULL };
-			char *args_set[2] = { "autoconf4", NULL };
-			char **argv_dhcp;
-			int argc_dhcp;
-			if (set) {
-				argv_dhcp = args_set;
-				argc_dhcp = nitems(args_set) - 1;
-			} else {
-				argv_dhcp = args;
-				argc_dhcp = nitems(args) - 1;
-			}
-			return intxflags(argc_dhcp, argv_dhcp, ifname,
+			return xflags_set(IFXF_AUTOCONF4, set, ifname,
 			    ifs, cand);
 		} else {
 			printf("%% cannot get DHCP leases because dhcpleased "
@@ -1108,20 +1099,8 @@ intip(int argc, char **argv, ...)
 	}
 
 	/* Enable IPv6 SLAAC with "inet6 autoconf" and disable it with "no". */
-	if (strcmp(cmdname, "inet6") == 0 && isprefix(argv[0], "autoconf")) {
-		char *args[3] = { "no", "autoconf6", NULL };
-		char *args_set[2] = { "autoconf6", NULL };
-		char **argv_xflags;
-		int argc_xflags;
-		if (set) {
-			argv_xflags = args_set;
-			argc_xflags = nitems(args_set) - 1;
-		} else {
-			argv_xflags = args;
-			argc_xflags = nitems(args) - 1;
-		}
-		return intxflags(argc_xflags, argv_xflags, ifname, ifs, cand);
-	}
+	if (strcmp(cmdname, "inet6") == 0 && isprefix(argv[0], "autoconf"))
+		return xflags_set(IFXF_AUTOCONF6, set, ifname, ifs, cand);
 
 	memset(&ip, 0, sizeof(ip));
 	parse_ip_pfx(argv[0], NO_NETMASK, &ip);
@@ -1599,46 +1578,23 @@ cand_patch(struct cand *cand, char *ifname, char *peer)
 }
 
 int
-intpatch(int argc, char **argv, ...)
+intpatch_apply(const struct argcmd *c, int set, const struct facts_value *v,
+    char *ifname, int ifs, struct cand *cand)
 {
-	int set;
 	struct ifreq ifr;
-	va_list ap;
-	struct cand *cand;
-	char *ifname;
-	int ifs;
+	char pair[IFNAMSIZ] = "";
 
-	va_start(ap, argv);
-	ifname = va_arg(ap, char *);
-	ifs = va_arg(ap, int);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
-
-	if (NO_ARG(argv[0])) {
-		set = 0;
-		argc--;
-		argv++;
-	} else
-		set = 1;
-
-	argc--;
-	argv++;
-
-	if ((set && argc != 1) || (!set && argc > 1)) {
-		printf("%% patch <pair interface>\n");
-		printf("%% no patch [pair interface]\n");
-		return -1;
-	}
-
+	if (set)
+		args_string(&v[0], pair, sizeof(pair));
 	if (cand != NULL)
-		return cand_patch(cand, ifname, set ? argv[0] : NULL);
+		return cand_patch(cand, ifname, set ? pair : NULL);
 
 	bzero(&ifr, sizeof(ifr));
 
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 	if (set) {
-		if ((ifr.ifr_index = if_nametoindex(argv[0])) == 0) {
-			printf("%% invalid interface %s\n", argv[0]);
+		if ((ifr.ifr_index = if_nametoindex(pair)) == 0) {
+			printf("%% invalid interface %s\n", pair);
 			return -1;
 		}
 	} else {
@@ -1692,52 +1648,15 @@ intmtu_apply(const struct argcmd *c, int set, const struct facts_value *v,
 }
 
 int
-intkeepalive(int argc, char **argv, ...)
+intkeepalive_apply(const struct argcmd *c, int set, const struct facts_value *v,
+    char *ifname, int ifs, struct cand *cand)
 {
 	struct ifkalivereq ikar;
-	int set;
-	const char *errmsg = NULL;
-	va_list ap;
-	struct cand *cand;
-	char *ifname;
-	int ifs;
-
-	va_start(ap, argv);
-	ifname = va_arg(ap, char *);
-	ifs = va_arg(ap, int);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
-
-	if (NO_ARG(argv[0])) {
-		set = 0;
-		argc--;
-		argv++;
-	} else
-		set = 1;
-
-	argc--;
-	argv++;
-
-	if ((!set && argc > 2) || (set && argc != 2)) {
-		printf("%% keepalive <period> <count>\n");
-		printf("%% no keepalive [period] [count]\n");
-		return -1;
-	}
 
 	bzero(&ikar, sizeof(ikar));
-
 	if (set) {
-		ikar.ikar_timeo = strtonum(argv[0], 1, 3600, &errmsg);
-		if (errmsg) {
-			printf("%% Invalid period %s: %s\n", argv[0], errmsg);
-			return -1;
-		}
-		/* the kernel takes at most 256 */
-		ikar.ikar_cnt = strtonum(argv[1], 2, 256, &errmsg);
-		if (errmsg) {
-			printf("%% Invalid count %s: %s\n", argv[1], errmsg);
-			return -1;
-		}
+		ikar.ikar_timeo = v[0].v.i;
+		ikar.ikar_cnt = v[1].v.i;
 	}
 
 	if (cand != NULL) {
@@ -1763,18 +1682,6 @@ intkeepalive(int argc, char **argv, ...)
 
 	return 0;
 }
-
-static struct mplsc {
-	char *name;
-	char *descr;
-	int type;
-} mplscs[] = {
-	{ "mplslabel",	"local mpls label", 	MPLSLABEL	},
-	{ "tunneldomain","rdomain",		TUNNELDOMAIN	},
-	{ "txprio",	"priority or packet|payload", 	TXPRIO	},
-	{ "rxprio",	"priority or packet|payload|outer", RXPRIO },
-	{ 0,		0,			0		}
-};
 
 /*
  * The drivers whose SIOCSTXHPRIO and SIOCSRXHPRIO refuse payload
@@ -1832,152 +1739,59 @@ cand_mpls(struct cand *cand, char *ifname, int type, int set, struct ifreq *ifr,
 
 /* from ifconfig.c */
 int
-intmpls(int argc, char **argv, ...)
+intmpls_apply(const struct argcmd *c, int set, const struct facts_value *v,
+    char *ifname, int ifs, struct cand *cand)
 {
-	int set;
 	size_t i;
 	unsigned long cmd;
 	struct ifreq ifr;
 	struct shim_hdr shim;
-	struct mplsc *x;
-	const char *errstr;
-	va_list ap;
-	struct cand *cand;
-	char *ifname;
-	int ifs;
-
-	va_start(ap, argv);
-	ifname = va_arg(ap, char *);
-	ifs = va_arg(ap, int);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
+	int type;
 
 	bzero(&ifr, sizeof(ifr));
-
+	bzero(&shim, sizeof(shim));
 	strlcpy(ifr.ifr_name, ifname, IFNAMSIZ);
-
-	if (NO_ARG(argv[0])) {
-		set = 0;
-		argc--;
-		argv++;
-	} else
-		set = 1;
-
-	x=(struct mplsc *) genget(argv[0], (char **)mplscs, sizeof(struct mplsc));
-	if (x == 0) {
-		printf("%% Internal error - Invalid argument %s\n", argv[0]);
-		return -1;
-	} else if (Ambiguous(x)) {
-		printf("%% Internal error - Ambiguous argument %s\n", argv[0]);
-		return -1;
-	}
-
-	argc--;
-	argv++;
-
-	if ((!set && argc > 1) || (set && argc != 1)) {
-		printf("%% %s <%s>\n", x->name, x->descr);
-		printf("%% no %s [%s]\n", x->name, x->descr);
-		return -1;
-	}
-
-	switch(x->type) {
+	type = c->code;
+	switch (type) {
 	case MPLSLABEL:
 		if (set) {
-			bzero(&shim, sizeof(shim));
 			ifr.ifr_data = (caddr_t)&shim;
-
-			/* the kernel keeps 0 to 15 for itself */
-			shim.shim_label = strtonum(argv[0],
-			    MPLS_LABEL_RESERVED_MAX + 1, MPLS_LABEL_MAX, &errstr);
-			if (errstr) {
-				printf("%% Invalid MPLS Label %s: %s\n",
-				    argv[0], errstr);
-				return -1;
-			}
+			shim.shim_label = v[0].v.i;
 			cmd = SIOCSETLABEL;
-		} else {
+		} else
 			cmd = SIOCDELLABEL;
-		}
 		break;
 	case TUNNELDOMAIN:
-		if (set) {
-			ifr.ifr_rdomainid =
-			    strtonum(argv[0], 0, RT_TABLEID_MAX, &errstr);
-			if (errstr) {
-				printf("%% intmpls: rdomain %s: %s\n", argv[0],
-				    errstr);
-				return -1;
-			}
-			/* SIOCSLIFPHYRTABLE needs the table (EINVAL) */
-			if (!rtable_there(ifr.ifr_rdomainid, cand))
-				return -1;
-		} else {
-			ifr.ifr_rdomainid = 0;
-		}
+		ifr.ifr_rdomainid = set ? v[0].v.i : 0;
+		/* SIOCSLIFPHYRTABLE needs the table (EINVAL) */
+		if (set && !rtable_there(ifr.ifr_rdomainid, cand))
+			return -1;
 		cmd = SIOCSLIFPHYRTABLE;
 		break;
 	case TXPRIO:
-		if (set) {
-			if (isprefix(argv[0], "packet"))
-				ifr.ifr_hdrprio = IF_HDRPRIO_PACKET;
-			else if (isprefix(argv[0], "payload"))
-				ifr.ifr_hdrprio = IF_HDRPRIO_PAYLOAD;
-			else {
-				ifr.ifr_hdrprio = strtonum(argv[0],
-				    IF_HDRPRIO_MIN, IF_HDRPRIO_MAX, &errstr);
-				if (errstr) {
-					printf("%% intmpls: txprio %s: %s\n",
-					    argv[0], errstr);
-					return -1;
-				}
-			}
-		} else {
-			ifr.ifr_hdrprio = default_txprio(ifname);
-		}
+		ifr.ifr_hdrprio = set ? v[0].v.i : default_txprio(ifname);
 		cmd = SIOCSTXHPRIO;
 		break;
-	case RXPRIO:
-		if (set) {
-			if (isprefix(argv[0], "packet"))
-				ifr.ifr_hdrprio = IF_HDRPRIO_PACKET;
-			else if (isprefix(argv[0], "payload"))
-				ifr.ifr_hdrprio = IF_HDRPRIO_PAYLOAD;
-			else if (isprefix(argv[0], "outer"))
-				ifr.ifr_hdrprio = IF_HDRPRIO_OUTER;
-			else {
-				ifr.ifr_hdrprio = strtonum(argv[0],
-				    IF_HDRPRIO_MIN, IF_HDRPRIO_MAX, &errstr);
-				if (errstr) {
-					printf("%% intmpls: rxprio %s: %s\n",
-					    argv[0], errstr);
-					return -1;
-				}
-			}
-		} else {
-			ifr.ifr_hdrprio = default_rxprio(ifname);
-		}
+	default:
+		ifr.ifr_hdrprio = set ? v[0].v.i : default_rxprio(ifname);
 		cmd = SIOCSRXHPRIO;
 		break;
-	default:
-		printf("%% intmpls: Internal error\n");
-		return -1;
 	}
 	if ((cmd == SIOCSTXHPRIO || cmd == SIOCSRXHPRIO) &&
 	    ifr.ifr_hdrprio == IF_HDRPRIO_PAYLOAD)
 		for (i = 0; i < nitems(l2hprios); i++)
 			if (isprefix((char *)l2hprios[i], ifname)) {
 				printf("%% %s takes no %s payload\n", ifname,
-				    x->name);
+				    c->name);
 				return -1;
 			}
 
 	if (cand != NULL) {
 		if (!cand_takes(ifname, cmd)) {
-			printf("%% %s not supported on %s\n", x->name, ifname);
+			printf("%% %s not supported on %s\n", c->name, ifname);
 			return -1;
 		}
-		return cand_mpls(cand, ifname, x->type, set, &ifr, &shim);
+		return cand_mpls(cand, ifname, type, set, &ifr, &shim);
 	}
 
 	if (ioctl_down(ifs, ifname, cmd, (caddr_t)&ifr) < 0) {
@@ -2539,78 +2353,42 @@ intllprio_apply(const struct argcmd *c, int set, const struct facts_value *v,
 }
 
 int
-intgroup(int argc, char **argv, ...)
+intgroup_apply(const struct argcmd *c, int set,
+    const struct facts_value *v, char *ifname, int ifs, struct cand *cand)
 {
-	int set, i, r = 0;
+	int i, n, r = 0;
 	struct ifgroupreq ifgr;
-	va_list ap;
-	struct cand *cand;
-	char *ifname;
-	int ifs;
+	char group[GROUP_NAMES][IFNAMSIZ], groups[GROUP_NAMES * IFNAMSIZ] = "";
 
-	va_start(ap, argv);
-	ifname = va_arg(ap, char *);
-	ifs = va_arg(ap, int);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
-
-	if (NO_ARG(argv[0])) {
-		set = 0;
-		argc--;
-		argv++;
-	} else
-		set = 1;
-
-	argc--;
-	argv++;
-
-	if (argc < 1) {
-		printf("%% group <group-name> [group-name ...]\n");
-		printf("%% no group <group-name> [group-name ...]\n");
-		return -1;
-	}
-
-	for (i = 0; i < argc; i++) {
-		/* Validate supplied argument(s) before applying them */
-		if (argv[i][0] == '\0') {
-			printf("%% A group name may not be empty\n");
-			return -1;
-		}
+	for (n = 0; n < GROUP_NAMES && v[n].type != FACT_NONE; n++)
+		args_string(&v[n], group[n], sizeof(group[n]));
+	for (i = 0; i < n; i++) {
 		/* the kernel keeps every interface in all, and egress */
-		if (set && (strcmp(argv[i], "all") == 0 ||
-		    strcmp(argv[i], "egress") == 0)) {
-			printf("%% The kernel keeps group %s\n", argv[i]);
+		if (set && (strcmp(group[i], "all") == 0 ||
+		    strcmp(group[i], "egress") == 0)) {
+			printf("%% The kernel keeps group %s\n", group[i]);
 			return -1;
 		}
-		if (isdigit((unsigned char)argv[i][strlen(argv[i]) - 1])) {
+		if (isdigit((unsigned char)group[i][strlen(group[i]) - 1])) {
 			printf("%% Group names may not end with a digit\n");
-			return -1;
-		}
-		if (strlen(argv[i]) >= IFNAMSIZ) {
-			printf("%% Group name too long (%s)\n", argv[i]);
 			return -1;
 		}
 	}
 
 	if (cand != NULL) {
-		char groups[1024];
-		size_t need = 0;
-
-		for (i = 0; i < argc; i++)
-			need += strlen(argv[i]) + 1;
-		if (need > sizeof(groups)) {
-			printf("%% Too many groups\n");
-			return -1;
+		for (i = 0; i < n; i++) {
+			if (i > 0)
+				strlcat(groups, " ", sizeof(groups));
+			strlcat(groups, group[i], sizeof(groups));
 		}
-		argvtostring(argc, argv, groups, sizeof(groups));
 		return cand_setting(cand, set ? ST_ON : ST_OFF,
 		    "group %s", groups);
 	}
 
-	for (i = 0; i < argc; i++) {
+	for (i = 0; i < n; i++) {
 		bzero(&ifgr, sizeof(ifgr));
 		strlcpy(ifgr.ifgr_name, ifname, IFNAMSIZ);
-		strlcpy(ifgr.ifgr_group, argv[i], IFNAMSIZ);
+		strlcpy(ifgr.ifgr_group, group[i], IFNAMSIZ);
 
 		if (ioctl(ifs, set ? SIOCAIFGROUP : SIOCDIFGROUP,
 		    (caddr_t)&ifgr) == -1) {
@@ -2656,46 +2434,18 @@ intrtlabel_apply(const struct argcmd *c, int set,
 }
 
 int
-intparent(int argc, char **argv, ...)
+intparent_apply(const struct argcmd *c, int set, const struct facts_value *v,
+    char *ifname, int ifs, struct cand *cand)
 {
-	int set;
 	unsigned long cmd;
 	struct if_parent ifp;
-	va_list ap;
-	struct cand *cand;
-	char *ifname;
-	int ifs;
-
-	va_start(ap, argv);
-	ifname = va_arg(ap, char *);
-	ifs = va_arg(ap, int);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
-
-	if (NO_ARG(argv[0])) {
-		set = 0;
-		argc--;
-		argv++;
-	} else
-		set = 1;
-
-	argc--;
-	argv++;
-
-	if ((set && argc != 1) || (!set && argc > 1)) {
-                printf("%% parent <parent interface>\n");
-                printf("%% no parent [parent interface]\n");
-                return -1;
-        }
+	char parent[IFNAMSIZ] = "";
 
 	bzero(&ifp, sizeof(ifp));
-
 	strlcpy(ifp.ifp_name, ifname, IFNAMSIZ);
-
-	if (set && strlcpy(ifp.ifp_parent, argv[0], sizeof(ifp.ifp_parent)) >=
-	    sizeof(ifp.ifp_parent)) {
-		printf("%% parent name too long\n");
-		return -1;
+	if (set) {
+		args_string(&v[0], parent, sizeof(parent));
+		strlcpy(ifp.ifp_parent, parent, sizeof(ifp.ifp_parent));
 	}
 
 	cmd = (set ? SIOCSIFPARENT : SIOCDIFPARENT);
@@ -2706,18 +2456,18 @@ intparent(int argc, char **argv, ...)
 		}
 		if (!set)
 			return cand_setting(cand, ST_DEFAULT, "parent");
-		if (strcmp(argv[0], ifname) == 0) {
+		if (strcmp(parent, ifname) == 0) {
 			printf("%% %s cannot be its own parent\n", ifname);
 			return -1;
 		}
-		if (!cand_hasif(cand, argv[0])) {
-			printf("%% interface %s not found\n", argv[0]);
+		if (!cand_hasif(cand, parent)) {
+			printf("%% interface %s not found\n", parent);
 			return -1;
 		}
 		/* a parent's TCP large receive offload goes off */
-		if (cand_ifsetting(cand, argv[0], ST_DEFAULT, "tcplro") == -1)
+		if (cand_ifsetting(cand, parent, ST_DEFAULT, "tcplro") == -1)
 			return -1;
-		return cand_setting(cand, ST_ON, "parent %s", argv[0]);
+		return cand_setting(cand, ST_ON, "parent %s", parent);
 	}
 	if (ioctl_down(ifs, ifname, cmd, &ifp) == -1) {
 		printf("%% intparent: SIOC%sIFPARENT: %s\n",
@@ -2768,43 +2518,11 @@ cand_ifflags(struct cand *cand, char *ifname, int value, int set)
 }
 
 int
-intflags(int argc, char **argv, ...)
+intflags_apply(const struct argcmd *c, int set,
+    const struct facts_value *v, char *ifname, int ifs, struct cand *cand)
 {
-	int set, value, flags, iftype;
-	va_list ap;
-	struct cand *cand;
-	char *ifname;
-	int ifs;
-
-	va_start(ap, argv);
-	ifname = va_arg(ap, char *);
-	ifs = va_arg(ap, int);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
-
-	if (NO_ARG(argv[0])) {
-		set = 0;
-		argv++;
-		argc--;
-	} else
-		set = 1;
-
-	if (isprefix(argv[0], "debug")) {
-		/* debug */
-		value = IFF_DEBUG;
-	} else if (isprefix(argv[0], "shutdown")) {
-		/* shutdown */
-		value = -IFF_UP;
-	} else if (isprefix(argv[0], "arp")) {
-		/* arp */
-		value = -IFF_NOARP;
-	} else if (isprefix(argv[0], "staticarp")) {
-		/* staticarp */
-		value = IFF_STATICARP;
-	} else {
-		printf("%% intflags: Internal error\n");
-		return -1;
-	}
+	/* a negative flag is one the command clears (shutdown clears IFF_UP) */
+	int value = c->code, flags, iftype;
 
 	/*
 	 * wg(4) sets IFF_NOARP by default and this should not be changed.
@@ -2972,58 +2690,22 @@ cand_ifxflags(struct cand *cand, char *ifname, int value, int set)
 	return 0;
 }
 
-int
-intxflags(int argc, char **argv, ...)
+/*
+ * Set an extended flag, or clear it. A negative one is a flag the kernel
+ * holds the other way: soii is on unless IFXF_INET6_NOSOII is
+ */
+static int
+xflags_set(int value, int set, char *ifname, int ifs, struct cand *cand)
 {
-	int set, value, flags;
-	va_list ap;
-	struct cand *cand;
-	char *ifname;
-	int ifs;
+	int flags;
 
-	va_start(ap, argv);
-	ifname = va_arg(ap, char *);
-	ifs = va_arg(ap, int);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
-
-	if (NO_ARG(argv[0])) {
-		set = 0;
-		argv++;
-		argc--;
-	} else
-		set = 1;
-
-	if (isprefix(argv[0], "autoconfprivacy")) {
-		value = IFXF_AUTOCONF6TEMP;
-	} else if (isprefix(argv[0], "temporary")) {
-		value = IFXF_AUTOCONF6TEMP;
-	} else if (isprefix(argv[0], "monitor")) {
-		value = IFXF_MONITOR;
-	} else if (isprefix(argv[0], "soii")) {
-		/* soii is on unless IFXF_INET6_NOSOII is */
-		value = -IFXF_INET6_NOSOII;
-	} else if (isprefix(argv[0], "tcplro")) {
-		value = IFXF_LRO;
-	} else if (isprefix(argv[0], "autoconf4")) {
+	if (value == IFXF_AUTOCONF4) {
 		if (cand != NULL)
 			return cand_autoconf4(cand, ifname, set);
 		/* Have "autoconf4" on pppoe(4) do the right thing. */
 		if (is_pppoe(ifname, ifs))
 			return run_ipcp(ifname, ifs, set, cand);
-
-		value = IFXF_AUTOCONF4;
-	} else if (isprefix(argv[0], "autoconf6")) {
-		value = IFXF_AUTOCONF6;
-	} else if (isprefix(argv[0], "mpls")) {
-		value = IFXF_MPLS;
-	} else if (isprefix(argv[0], "wol")) {
-		value = IFXF_WOL;
-	} else {
-		printf("%% intxflags: Internal error\n");
-		return -1;
 	}
-
 	if (cand != NULL)
 		return cand_ifxflags(cand, ifname, value, set);
 
@@ -3054,6 +2736,14 @@ intxflags(int argc, char **argv, ...)
 	return set_ifxflags(ifname, ifs, flags);
 }
 
+/* its row's code is the flag (commands.c) */
+int
+intxflags_apply(const struct argcmd *c, int set,
+    const struct facts_value *v, char *ifname, int ifs, struct cand *cand)
+{
+	return xflags_set(c->code, set, ifname, ifs, cand);
+}
+
 /* The link flags the candidate's link line sets */
 static int
 cand_linkflags(struct cand *cand)
@@ -3073,71 +2763,19 @@ cand_linkflags(struct cand *cand)
 }
 
 int
-intlink(int argc, char **argv, ...)
+intlink_apply(const struct argcmd *c, int set,
+    const struct facts_value *v, char *ifname, int ifs, struct cand *cand)
 {
-	const char *errmsg = NULL;
-	int set, i, flags, value = 0;
-	va_list ap;
-	struct cand *cand;
-	char *ifname;
-	int ifs;
-
-	va_start(ap, argv);
-	ifname = va_arg(ap, char *);
-	ifs = va_arg(ap, int);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
-
-	if (NO_ARG(argv[0])) {
-		set = 0;
-		argv++;
-		argc--;
-	} else
-		set = 1;
-
-	argv++;
-	argc--;
-
-	if ((set && argc < 1) || argc > 3) {
-		printf("%% link <012>\n");
-		printf("%% no link [012]\n");
-		return -1;
-	}
+	int flags, bits;
 
 	flags = cand != NULL ? cand_linkflags(cand) : get_ifflags(ifname, ifs);
-
-	if (!set && argc == 0) {
-		/*
-		 * just 'no link' was specified.  so we remove all flags
-		 */
-		flags &= ~IFF_LINK0 & ~IFF_LINK1 & ~IFF_LINK2;
-	} else
-	for (i = 0; i < argc; i++) {
-		int a;
-
-		a = strtonum(argv[i], 0, 2, &errmsg);
-		if (errmsg) {
-			printf("%% Invalid link flag %s: %s\n", argv[i],
-			    errmsg);
-			return -1;
-		}
-		switch(a) {
-		case 0:
-			value = IFF_LINK0;
-			break;
-		case 1:
-			value = IFF_LINK1;
-			break;
-		case 2:
-			value = IFF_LINK2;
-			break;
-		}
-
-		if (set)
-			flags |= value;
-		else
-			flags &= ~value;
-	}
+	/* "no link" with no flags clears every link flag */
+	bits = v[0].type != FACT_NONE ? v[0].v.i :
+	    IFF_LINK0 | IFF_LINK1 | IFF_LINK2;
+	if (set)
+		flags |= bits;
+	else
+		flags &= ~bits;
 
 	if (cand != NULL) {
 		if (!(flags & (IFF_LINK0|IFF_LINK1|IFF_LINK2)))
@@ -3210,48 +2848,13 @@ intnwid(int argc, char **argv, ...)
 }
 
 int
-intpowersave(int argc, char **argv, ...)
+intpowersave_apply(const struct argcmd *c, int set,
+    const struct facts_value *v, char *ifname, int ifs, struct cand *cand)
 {
-	const char *errmsg = NULL;
 	struct ieee80211_power power;
-	int  set, maxsleep;
-	va_list ap;
-	struct cand *cand;
-	char *ifname;
-	int ifs;
+	int maxsleep;
 
-	va_start(ap, argv);
-	ifname = va_arg(ap, char *);
-	ifs = va_arg(ap, int);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
-
-	if (NO_ARG(argv[0])) {
-		set = 0;
-		argv++;
-		argc--;
-	} else
-		set = 1;
-
-	argv++;
-	argc--;
-
- 	if (argc > 1) {
-		printf("%% powersave [milisec]\n");
-		printf("%% no powersave [milisec]\n");
-		return -1;
-	}
-
-	if (argc == 1) {
-		maxsleep = strtonum(argv[0], 0, 1000, &errmsg);
-		if (errmsg) {
-			printf("%% Power save invalid %s: %s\n", argv[0],
-			    errmsg);
-			return -1;
-		}
-	} else {
-		maxsleep = DEFAULT_POWERSAVE;
-	}
+	maxsleep = v[0].type != FACT_NONE ? v[0].v.i : DEFAULT_POWERSAVE;
 
 	if (cand != NULL)
 		return cand_powersave(cand, ifname, set, maxsleep);
@@ -3440,48 +3043,15 @@ intlladdr(int argc, char **argv, ...)
 }
 
 int
-intrdomain(int argc, char **argv, ...)
+intrdomain_apply(const struct argcmd *c, int set, const struct facts_value *v,
+    char *ifname, int ifs, struct cand *cand)
 {
-	int set, rdomain, unit, cur;
+	int unit, cur;
 	const char *errmsg = NULL;
 	struct ifreq ifr, cur_ifr;
 	char *l;
-	va_list ap;
-	struct cand *cand;
-	char *ifname;
-	int ifs; 
 
-	va_start(ap, argv);
-	ifname = va_arg(ap, char *);
-	ifs = va_arg(ap, int);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
-
-	if (NO_ARG(argv[0])) {
-		set = 0;
-		argv++;
-		argc--;
-	} else
-		set = 1;
-
-	argv++;
-	argc--;
-
-	if (set && argc < 1) {
-		printf("%% rdomain <routing domain number>\n");
-		printf("%% no rdomain\n");
-		return -1;
-	}
-	if (set) {
-		rdomain = strtonum(argv[0], 0, RT_TABLEID_MAX, &errmsg);
-		if (errmsg) {
-			printf("%% Routing domain %s invalid (%s)\n", argv[0], errmsg);
-			return -1;
-		}
-		ifr.ifr_rdomainid = rdomain;
-	}
-	else
-		ifr.ifr_rdomainid = 0;
+	ifr.ifr_rdomainid = set ? v[0].v.i : 0;
 	/*
 	 * Each rdomain has its own loopback, lo<rdomain>, which
 	 * if_setrdomain() keeps in it (EPERM)
@@ -3547,36 +3117,10 @@ intdesc_apply(const struct argcmd *c, int set, const struct facts_value *v,
 }
 
 int
-intvnetflowid(int argc, char **argv, ...)
+intvnetflowid_apply(const struct argcmd *c, int set,
+    const struct facts_value *v, char *ifname, int ifs, struct cand *cand)
 {
-	int set;
 	struct ifreq ifr;
-	va_list ap;
-	struct cand *cand;
-	char *ifname;
-	int ifs;
-
-	va_start(ap, argv);
-	ifname = va_arg(ap, char *);
-	ifs = va_arg(ap, int);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
-
-	if (NO_ARG(argv[0])) {
-		set = 0;
-		argv++;
-		argc--;
-	} else
-		set = 1;
-
- 	argv++;
-	argc--;
-
-	if (set && argc != 0) {
-		printf("%% vnetflowid\n");
-		printf("%% no vnetlowid\n");
-		return -1;
-	}
 
 	if (cand != NULL) {
 		if (!cand_takes(ifname, SIOCSVNETFLOWID)) {
