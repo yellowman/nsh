@@ -506,7 +506,7 @@ function workspace(name) {
 		if (!document.hidden)
 			interfaces();
 	}, LOOK);
-	pfShown(name === "security");
+	pfWatch(name === "security");
 	if (name === "terminal")
 		terminalShown();
 	if (name === "routing" || name === "security" || name === "services")

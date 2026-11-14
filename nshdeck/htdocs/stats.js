@@ -232,7 +232,7 @@ function pfLook() {
 }
 
 /* pf's panel looks while Security is shown (app.js's workspace()) */
-function pfShown(shown) {
+function pfWatch(shown) {
 	clearInterval(pflooker);
 	pflooker = null;
 	if (!shown)
