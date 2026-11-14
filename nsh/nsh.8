@@ -239,6 +239,25 @@ nsh(config)# pf disable
 %pf disabled
 .Ed
 .El
+.Ss The pager
+Output longer than the terminal is shown a page at a time, with
+.Ql ---(more\ 55%)---
+below it: how much of the output has been shown.
+At that prompt:
+.Bl -tag -width "Space, f, Page Down" -offset indent -compact
+.It Enter, j, Down
+one more line
+.It Space, f, Page Down
+the next page
+.It k, Up
+back one line
+.It b, Page Up
+back one page
+.It q
+stop
+.El
+.Pp
+Once the last line is shown, the pager ends.
 .Ss Prompts
 .Tg prompt
 .Tg privileged

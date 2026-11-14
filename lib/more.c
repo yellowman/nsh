@@ -27,9 +27,6 @@
 
 #include "externs.h"
 
-#define PAGERPROMPT	" --More-- "
-#define BACKOVERPROMPT	"\b\b\b\b\b\b\b\b\b\b          \b\b\b\b\b\b\b\b\b\b"
-
 int	nsh_cbreak(void);
 void	nsh_nocbreak(void);
 
@@ -38,18 +35,163 @@ static struct termios	oldtty;
 struct winsize winsize;
 
 /*
- * Display file
+ * The pager's file: where each line starts, so that any line can be
+ * shown again, going back as well as forward
+ */
+struct pages {
+	FILE	*f;
+	off_t	*at;		/* where each line starts */
+	size_t	 n;		/* lines */
+};
+
+enum { P_LINE, P_PAGE, P_BACKLINE, P_BACKPAGE, P_QUIT };
+
+/* rows the page has, above the prompt */
+static int
+page_rows(void)
+{
+	return (winsize.ws_row > 1 ? winsize.ws_row - 1 : 1);
+}
+
+/*
+ * Line l of p, printed if show is set; the rows it takes on the
+ * terminal, as long lines wrap
+ */
+static int
+page_line(struct pages *p, size_t l, int show)
+{
+	char	*input;
+	size_t	 s, wlen;
+	wchar_t	*ws = NULL;
+	int	 rows = 1, width;
+
+	if (fseeko(p->f, p->at[l], SEEK_SET) == -1 ||
+	    (input = fgetln(p->f, &s)) == NULL)
+		return (1);
+	input[s - 1] = '\0';
+	if (mbs2ws(&ws, &wlen, input) == 0) {
+		if ((width = wcswidth(ws, wcslen(ws))) == -1) {
+			free(ws);
+			ws = NULL;
+		} else
+			rows += width / winsize.ws_col;
+	} else
+		ws = NULL;
+	if (show) {
+		if (ws)
+			printf("%ls\n", ws);
+		else
+			printf("%s\n", input);
+	}
+	free(ws);
+	return (rows);
+}
+
+/* the first line of the page that ends before line end */
+static size_t
+page_top(struct pages *p, size_t end)
+{
+	int	rows = 0;
+
+	size_t	last = end;
+
+	while (end > 0 && (rows + page_line(p, end - 1, 0) <= page_rows() ||
+	    end == last))
+		rows += page_line(p, --end, 0);
+	return (end);
+}
+
+/*
+ * Lines from l printed until they fill rows, and at least one, so a
+ * line taller than the page is still shown; the line after the last
+ * one printed
+ */
+static size_t
+page_fill(struct pages *p, size_t l, int rows)
+{
+	size_t	first = l;
+	int	r;
+
+	while (l < p->n && ((r = page_line(p, l, 0)) <= rows || l == first)) {
+		page_line(p, l++, 1);
+		rows -= r;
+	}
+	return (l);
+}
+
+/* the page from line top, on a cleared screen */
+static size_t
+page_redraw(struct pages *p, size_t top)
+{
+	printf("\033[H\033[2J");
+	return (page_fill(p, top, page_rows()));
+}
+
+/* a key at the prompt, as what it asks the pager to do */
+static int
+page_key(void)
+{
+	int	c;
+
+	for (;;) {
+		switch (c = getchar()) {
+		case EOF:
+		case 'q':
+		case 'Q':
+			return (P_QUIT);
+		case '\r':
+		case '\n':
+		case 'j':
+		case CTRL('n'):
+			return (P_LINE);
+		case ' ':
+		case 'f':
+		case CTRL('f'):
+			return (P_PAGE);
+		case 'k':
+		case CTRL('p'):
+			return (P_BACKLINE);
+		case 'b':
+		case CTRL('b'):
+			return (P_BACKPAGE);
+		case '\033':
+			/* the arrows, and page up and down */
+			if (getchar() != '[')
+				break;
+			switch (getchar()) {
+			case 'A':
+				return (P_BACKLINE);
+			case 'B':
+				return (P_LINE);
+			case '5':
+				(void)getchar();
+				return (P_BACKPAGE);
+			case '6':
+				(void)getchar();
+				return (P_PAGE);
+			}
+			break;
+		}
+	}
+}
+
+/*
+ * Display file. A page at a time, with ---(more N%)--- below it: N is
+ * how much of the file has been shown. Enter, j or the down arrow shows
+ * one more line, and space, f or page down the next page; k or the up
+ * arrow goes back a line, and b or page up a page. q quits. Once the
+ * last line is shown, more returns
  */
 int
 more(char *fname)
 {
-	FILE   *f;
-	char   *input, c;
-	size_t	s, wlen;
-	int	i, nopager = 0;
-	wchar_t *ws = NULL;
+	struct pages	 p;
+	size_t		 s, end, top, nat = 0;
+	int		 k, len;
+	off_t		*at;
 
-	if ((f = fopen(fname, "r")) == NULL) {
+	memset(&p, 0, sizeof(p));
+	if ((p.f = fopen(fname, "r")) == NULL) {
 		if (errno == ENOENT)
 			printf ("%% File %s not found\n", fname);
 		else
@@ -58,63 +200,51 @@ more(char *fname)
 		return 0;
 	}
 
-	if (!interactive_mode || nsh_cbreak() < 0)
-		nopager = 1;
-
-	for (i = 0; (input = fgetln(f, &s)) != NULL; i++) {
-		int extra_rows = 0;
-
-		/*
-		 * We replace newline (or whatever was at the end of
-	         * the line) with NUL termination
-		 */
-		input[s - 1] = '\0';
-
-		/* Account for lines overflowing the terminal's width. */
-		if (mbs2ws(&ws, &wlen, input) == 0) {
-			int width = wcswidth(ws, wcslen(ws));
-			if (width == -1) { /* unprintable wide character */
-				free(ws);
-				ws = NULL;
-			} else
-				extra_rows = width / winsize.ws_col;
-		} else
-			ws = NULL;
-
-		if (!nopager && i + extra_rows >= (winsize.ws_row - 1)) {
-			for (;;) {
-				printf(PAGERPROMPT);
-				fflush(0);
-				c = getchar();
-				printf(BACKOVERPROMPT);
-				if (c == 'q')
-					goto quit;
-				if (c == '\r' || c == '\n' || c == 'j' ||
-				    c == CTRL('n')) {
-					i--; /* skip one line */
-					break;
-				}
-				if (c == ' ' || c == 'f' || c == CTRL('f')) {
-					i = 0; /* skip one page */
-					break;
-				}
+	/* where each line starts */
+	for (;;) {
+		if (p.n == nat) {
+			nat = nat ? nat * 2 : 1024;
+			if ((at = reallocarray(p.at, nat, sizeof(*at))) ==
+			    NULL) {
+				printf("%% more: %s\n", strerror(errno));
+				goto quit;
 			}
+			p.at = at;
 		}
-
-		if (ws) {
-			printf("%ls\n", ws);
-			free(ws);
-			ws = NULL;
-		} else
-			printf("%s\n", input);
-		i += extra_rows;
+		if ((p.at[p.n] = ftello(p.f)) == -1 ||
+		    fgetln(p.f, &s) == NULL)
+			break;
+		p.n++;
 	}
-quit:
-	if (!nopager)
-		nsh_nocbreak();
 
-	fclose(f);
-	free(ws);
+	if (!interactive_mode || nsh_cbreak() < 0) {
+		for (end = 0; end < p.n; end++)
+			page_line(&p, end, 1);
+		goto quit;
+	}
+
+	end = page_fill(&p, 0, page_rows());
+	while (end < p.n) {
+		len = printf("---(more %zu%%)---", end * 100 / p.n);
+		fflush(stdout);
+		k = page_key();
+		printf("\r%*s\r", len, "");
+		top = page_top(&p, end);
+		if (k == P_QUIT)
+			break;
+		if (k == P_LINE)
+			end = page_fill(&p, end, page_line(&p, end, 0));
+		else if (k == P_PAGE)
+			end = page_fill(&p, end, page_rows());
+		else if (k == P_BACKLINE && top > 0)
+			end = page_redraw(&p, top - 1);
+		else if (k == P_BACKPAGE && top > 0)
+			end = page_redraw(&p, page_top(&p, top));
+	}
+	nsh_nocbreak();
+quit:
+	fclose(p.f);
+	free(p.at);
 	return 1;
 }
 
