@@ -317,17 +317,18 @@ inttunnel(int argc, char **argv, ...)
 		return -1;
 	}
 
-	if (candidate)
-		return cand_tunnel(ifname, set, addr, src, srcport, dstip,
+	if (cand != NULL)
+		return cand_tunnel(cand, ifname, set, addr, src, srcport, dstip,
 		    rdomain, ttl, df, ecn);
 
 	if (set) {
 		/* if the addresses cannot be set, set nothing else */
 		if ((r = settunnel(ifs, ifname, src, srcport, dstip)) == -1)
 			return -1;
-		if (rdomain && settunnelrdomain(ifs, ifname, rdomain) == -1)
+		if (rdomain &&
+		    settunnelrdomain(ifs, ifname, rdomain, cand) == -1)
 			r = -1;
-		if (ttl && settunnelttl(ifs, ifname, ttl) == -1)
+		if (ttl && settunnelttl(ifs, ifname, ttl, cand) == -1)
 			r = -1;
 		/* df and ecn are off unless the command gives them */
 		if ((df || cand_takes(ifname, SIOCSLIFPHYDF)) &&
