@@ -46,7 +46,8 @@ afterinstall:
 	    ${.CURDIR}/htdocs/sheets.js ${.CURDIR}/htdocs/term.js \
 	    ${.CURDIR}/htdocs/stats.js \
 	    ${.CURDIR}/htdocs/style.css ${.CURDIR}/htdocs/favicon.svg \
-	    ${.CURDIR}/htdocs/favicon.png ${DESTDIR}${HTDOCS}
+	    ${.CURDIR}/htdocs/favicon.png ${.CURDIR}/htdocs/metal.svg \
+	    ${DESTDIR}${HTDOCS}
 	${INSTALL} -c -o root -g wheel -m 444 \
 	    ${.CURDIR}/htdocs/xterm/xterm.js ${.CURDIR}/htdocs/xterm/xterm.css \
 	    ${.CURDIR}/htdocs/xterm/addon-fit.js \

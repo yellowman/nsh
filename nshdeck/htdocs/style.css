@@ -617,56 +617,119 @@ main {
 	background: var(--warn);
 }
 
+/* a light on the box: a lens in a ring */
 .chassis .led {
 	width: .5385rem;
 	height: .5385rem;
-	background: #2c2f33;
-	box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .4);
+	background: radial-gradient(circle at 35% 30%, #4b5057, #1b1d20 62%);
+	box-shadow: 0 0 0 1px #000, 0 0 0 .1538rem rgba(255, 255, 255, .13);
 }
 
 .chassis .led.on {
-	background: #3ee07a;
-	box-shadow: 0 0 .4615rem #3ee07a;
+	background: radial-gradient(circle at 35% 30%, #f2fff6, #3ee07a 45%,
+	    #0c9a44);
+	box-shadow: 0 0 0 1px #000, 0 0 0 .1538rem rgba(255, 255, 255, .13),
+	    0 0 .6154rem .0769rem #3ee07a;
 }
 
 .chassis .led.warn {
-	background: #f5b13d;
-	box-shadow: 0 0 .4615rem #f5b13d;
+	background: radial-gradient(circle at 35% 30%, #fff8e8, #f5b13d 45%,
+	    #b56a05);
+	box-shadow: 0 0 0 1px #000, 0 0 0 .1538rem rgba(255, 255, 255, .13),
+	    0 0 .6154rem .0769rem #f5b13d;
 }
 
 /* the box's face: dark anodised metal, ears, a plate, the ports */
 
 .chassis {
+	position: relative;
 	display: grid;
 	grid-template-columns: 1.0769rem auto 1fr auto auto 1.0769rem;
 	align-items: stretch;
 	min-height: 9.2308rem;
-	border-radius: .3846rem;
+	border-radius: .4615rem;
+	/*
+	 * the face: dark brushed metal under a clear polish. On the polish,
+	 * the light from above, a band with a hard edge, and two streaks
+	 * across it, as a window's; under it the brushing's sheen, in two
+	 * soft bands, and the metal's grain (metal.svg)
+	 */
 	background:
-	    linear-gradient(180deg, rgba(255, 255, 255, .06), transparent 30%),
-	    repeating-linear-gradient(90deg, rgba(255, 255, 255, .012) 0 1px,
-	    transparent 1px .2308rem),
-	    linear-gradient(180deg, #2b2f35, #1b1e22);
-	border: 1px solid #0a0b0d;
-	box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08),
-	    0 1px 0 rgba(255, 255, 255, .03), 0 .6154rem 1.8462rem rgba(0, 0, 0, .35);
+	    radial-gradient(130% 5.3846rem at 50% -1.3846rem,
+	    rgba(255, 255, 255, .2), rgba(255, 255, 255, .06) 62%,
+	    transparent 62.6%),
+	    linear-gradient(112deg, transparent 30%,
+	    rgba(255, 255, 255, .075) 30.2%, rgba(255, 255, 255, .02) 37%,
+	    transparent 37.2%, transparent 40%, rgba(255, 255, 255, .05) 40.2%,
+	    rgba(255, 255, 255, .01) 43%, transparent 43.2%),
+	    linear-gradient(90deg, transparent 6%, rgba(255, 255, 255, .1) 19%,
+	    transparent 33%, transparent 54%, rgba(255, 255, 255, .08) 69%,
+	    transparent 84%),
+	    url(metal.svg),
+	    linear-gradient(180deg, #363b43, #191b1f 46%, #0b0c0e);
+	border: 1px solid #000;
+	/* its shadow on what it stands on, and its lights' glow there */
+	box-shadow: 0 1px 0 rgba(255, 255, 255, .06),
+	    0 .9231rem 1.3846rem -.4615rem rgba(0, 0, 0, .7),
+	    0 2rem 2.1538rem -1.5385rem rgba(34, 211, 238, .55);
 	color: #c8ced6;
 	overflow: hidden;
 }
 
-.ears {
+/*
+ * over all that is in it: the room's light, brighter at its top left
+ * and less at its ends, and its edges, bevelled and bright
+ */
+.chassis::before {
+	content: "";
+	position: absolute;
+	inset: 0;
+	z-index: 1;
+	border-radius: inherit;
 	background:
-	    radial-gradient(circle at 50% 22%, #0b0c0e .1923rem, #3b4048 .2308rem,
-	    transparent .3077rem),
-	    radial-gradient(circle at 50% 78%, #0b0c0e .1923rem, #3b4048 .2308rem,
-	    transparent .3077rem),
-	    linear-gradient(90deg, #24282d, #30353b);
-	border-right: 1px solid #0d0e10;
+	    radial-gradient(90% 150% at 26% -30%, rgba(255, 255, 255, .09),
+	    transparent 60%),
+	    radial-gradient(75% 140% at 50% 50%, transparent 62%,
+	    rgba(0, 0, 0, .3));
+	box-shadow: inset 0 1px 0 rgba(255, 255, 255, .75),
+	    inset 0 .1538rem 0 rgba(255, 255, 255, .16),
+	    inset 0 -1px 0 rgba(255, 255, 255, .3),
+	    inset 0 -.2308rem .2308rem rgba(0, 0, 0, .75),
+	    inset 1px 0 0 rgba(255, 255, 255, .22),
+	    inset -1px 0 0 rgba(255, 255, 255, .22);
+	pointer-events: none;
+}
+
+/* a strip of light along its foot, in nsh's colours */
+.chassis::after {
+	content: "";
+	position: absolute;
+	left: 1.6923rem;
+	right: 1.6923rem;
+	bottom: .1538rem;
+	height: .1538rem;
+	border-radius: .0769rem;
+	background: linear-gradient(90deg, transparent, #7dd3fc 12%,
+	    #22d3ee 45%, #34d399 88%, transparent);
+	box-shadow: 0 0 .4615rem #22d3ee, 0 0 1.2308rem rgba(34, 211, 238, .7);
+	pointer-events: none;
+}
+
+.ears {
+	/* steel, and in it socket screws, two to a rack unit */
+	background:
+	    radial-gradient(circle, #040405 0 .1rem, #f3f5f7 .1154rem,
+	    #9aa1aa .2rem, #4c5159 .2692rem, #000 .3077rem,
+	    rgba(0, 0, 0, .5) .3692rem, transparent .4308rem)
+	    0 0 / 100% 4.6154rem no-repeat round,
+	    url(metal.svg),
+	    linear-gradient(90deg, #646b74, #2b2f34 55%, #474d55);
+	border-right: 1px solid #000;
 }
 
 .ears:last-child {
 	border-right: 0;
-	border-left: 1px solid #0d0e10;
+	border-left: 1px solid #000;
 }
 
 /* an ear is the box's height, however many rows are in it */
@@ -684,16 +747,37 @@ main {
 	justify-content: center;
 	gap: .2308rem;
 	padding: 0 1.6923rem;
-	border-right: 1px solid rgba(0, 0, 0, .5);
-	box-shadow: 1px 0 0 rgba(255, 255, 255, .04);
+	border-right: 1px solid #000;
+	box-shadow: 1px 0 0 rgba(255, 255, 255, .1);
 	min-width: 12.9231rem;
 }
 
+/*
+ * the plate and the lights' panel: black glass, and on it the light from
+ * above, to a curved edge, and a streak
+ */
+.plate, .status {
+	background:
+	    linear-gradient(108deg, transparent 58%,
+	    rgba(255, 255, 255, .1) 58.4%, rgba(255, 255, 255, .02) 74%,
+	    transparent 74.4%),
+	    radial-gradient(170% 105% at 50% -58%, rgba(255, 255, 255, .24),
+	    rgba(255, 255, 255, .06) 70%, transparent 70.6%),
+	    linear-gradient(180deg, #15181c, #040506);
+}
+
+/* the maker's name, in chrome */
 .plate .brand {
-	font: 800 1.1538rem var(--sans);
-	letter-spacing: .14em;
+	width: fit-content;
+	font: 800 1.5385rem var(--sans);
+	letter-spacing: .16em;
 	text-transform: uppercase;
-	color: #e9edf2;
+	background: linear-gradient(180deg, #fff, #eef2f6 42%, #98a1ab 54%,
+	    #dde3e9 66%, #fff);
+	-webkit-background-clip: text;
+	background-clip: text;
+	color: transparent;
+	filter: drop-shadow(0 1px 0 #000);
 }
 
 .plate .model {
@@ -715,15 +799,57 @@ main {
 	flex-wrap: wrap;
 	align-items: center;
 	align-content: center;
-	gap: 1.0769rem 2rem;
-	padding: 1.0769rem 1.6923rem;
+	gap: 1.0769rem 1.5385rem;
+	padding: 1.0769rem 1.2308rem;
 	min-width: 0;
+	/* the vents: holes, each row half a step from the last */
+	background:
+	    radial-gradient(circle, #030304 0 .1154rem,
+	    rgba(255, 255, 255, .07) .1385rem, transparent .1692rem)
+	    0 0 / .5385rem .5385rem,
+	    radial-gradient(circle, #030304 0 .1154rem,
+	    rgba(255, 255, 255, .07) .1385rem, transparent .1692rem)
+	    .2692rem .2692rem / .5385rem .5385rem;
 }
 
+/* a driver's ports: a module, its plate held by two thumbscrews */
 .block {
+	position: relative;
 	display: grid;
 	gap: .4615rem;
 	min-width: 0;
+	padding: .6154rem 1.4615rem .3846rem;
+	border-radius: .2308rem;
+	background:
+	    linear-gradient(90deg, transparent, rgba(255, 255, 255, .07) 22%,
+	    transparent 46%, transparent 62%, rgba(255, 255, 255, .05) 80%,
+	    transparent),
+	    url(metal.svg),
+	    linear-gradient(180deg, #3a3f46, #23262b 55%, #191b1e);
+	box-shadow: inset 0 1px 0 rgba(255, 255, 255, .3),
+	    inset 0 -1px 0 rgba(0, 0, 0, .7), 0 0 0 1px #000,
+	    0 .2308rem .4615rem rgba(0, 0, 0, .55);
+}
+
+.block::before, .block::after {
+	content: "";
+	position: absolute;
+	top: calc(50% - .3462rem);
+	left: .3846rem;
+	width: .6923rem;
+	height: .6923rem;
+	border-radius: 50%;
+	background:
+	    linear-gradient(35deg, transparent 44%, rgba(0, 0, 0, .75) 45% 55%,
+	    transparent 56%),
+	    radial-gradient(circle at 35% 30%, #fff, #b4bbc4 35%, #5a616a 72%,
+	    #24272b);
+	box-shadow: 0 0 0 1px #000, 0 1px 1px 1px rgba(255, 255, 255, .12);
+}
+
+.block::after {
+	left: auto;
+	right: .3846rem;
 }
 
 /*
@@ -771,8 +897,9 @@ main {
 	font: 600 .6923rem var(--sans);
 	letter-spacing: .16em;
 	text-transform: uppercase;
-	color: #7c858f;
-	border-top: 1px solid #4a5059;
+	color: #a3acb6;
+	text-shadow: 0 1px 0 #000;
+	border-top: 1px solid #555c65;
 	padding-top: .2308rem;
 	text-align: center;
 }
@@ -783,11 +910,11 @@ main {
 	align-content: center;
 	gap: .6923rem 1.2308rem;
 	padding: 0 1.6923rem;
-	border-left: 1px solid rgba(0, 0, 0, .5);
-	box-shadow: inset 1px 0 0 rgba(255, 255, 255, .04);
+	border-left: 1px solid #000;
+	box-shadow: -1px 0 0 rgba(255, 255, 255, .1);
 	font: 600 .6923rem var(--sans);
 	letter-spacing: .14em;
-	color: #7c858f;
+	color: #aeb6bf;
 }
 
 .status span {
@@ -821,43 +948,73 @@ main {
  * an RJ45 cage: a dark recess, its latch notch at the bottom, and in its
  * top corners its lights, link on the left and activity on the right
  */
+/*
+ * an RJ45 jack: a shield of tinned steel, and in it the opening, its
+ * latch's notch at the bottom; at the back of that its eight contacts,
+ * and in its top corners its lights, link on the left and activity on
+ * the right
+ */
 .port .jack {
 	position: relative;
 	width: 3.2308rem;
-	height: 2.4615rem;
-	background: linear-gradient(180deg, #050607, #15171a);
-	border: 1px solid #000;
+	height: 2.6154rem;
 	border-radius: .1538rem;
-	box-shadow: inset 0 .1538rem .3077rem rgba(0, 0, 0, .9),
-	    0 1px 0 rgba(255, 255, 255, .07);
-	clip-path: polygon(0 0, 100% 0, 100% 78%, 68% 78%, 68% 100%,
-	    32% 100%, 32% 78%, 0 78%);
+	background: linear-gradient(180deg, #eef1f4, #a2a9b2 12%, #737b84 52%,
+	    #575e66 88%, #b0b7bf);
+	box-shadow: 0 0 0 1px #000, 0 .1538rem .2308rem rgba(0, 0, 0, .6),
+	    inset 0 0 0 1px rgba(255, 255, 255, .28);
+}
+
+.port .jack::before {
+	content: "";
+	position: absolute;
+	inset: .1923rem .1923rem .1154rem;
+	background: linear-gradient(180deg, #000, #08090a 55%, #1d2023);
+	clip-path: polygon(0 0, 100% 0, 100% 76%, 69% 76%, 69% 100%,
+	    31% 100%, 31% 76%, 0 76%);
+}
+
+.port .jack::after {
+	content: "";
+	position: absolute;
+	left: 24%;
+	right: 24%;
+	top: .8462rem;
+	height: .6154rem;
+	background:
+	    linear-gradient(180deg, transparent, rgba(0, 0, 0, .85)),
+	    repeating-linear-gradient(90deg, #f8dc84 0 1px, #8f6d1f 1px 2px,
+	    transparent 2px 12.5%);
 }
 
 .port .jack .led {
 	position: absolute;
-	top: .2308rem;
+	top: .2692rem;
 	width: .6154rem;
 	height: .3077rem;
 	border-radius: 1px;
+	background: linear-gradient(180deg, #33373c, #141618);
+	box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .6);
 }
 
 .port .jack .link {
-	left: .2308rem;
+	left: .3077rem;
 }
 
 .port .jack .act {
-	right: .2308rem;
+	right: .3077rem;
 }
 
 .port.on .jack .link, .port .jack .act.on {
-	background: #3ee07a;
-	box-shadow: 0 0 .4615rem #3ee07a;
+	background: radial-gradient(ellipse at 50% 30%, #f2fff6, #4dee88 45%,
+	    #0c9a44);
+	box-shadow: 0 0 .3077rem #3ee07a, 0 0 .9231rem rgba(62, 224, 122, .8);
 }
 
 .port.warn .jack .link {
-	background: #f5b13d;
-	box-shadow: 0 0 .4615rem #f5b13d;
+	background: radial-gradient(ellipse at 50% 30%, #fff8e8, #f7b84a 45%,
+	    #b56a05);
+	box-shadow: 0 0 .3077rem #f5b13d, 0 0 .9231rem rgba(245, 177, 61, .8);
 }
 
 /* traffic: a flicker, as a port's light does */
@@ -885,13 +1042,14 @@ main {
 }
 
 .port:hover .jack, .port:focus-visible .jack {
-	box-shadow: inset 0 .1538rem .3077rem rgba(0, 0, 0, .9),
-	    0 0 0 1px var(--accent);
+	box-shadow: 0 0 0 1px var(--accent), 0 0 .6154rem var(--accent),
+	    inset 0 0 0 1px rgba(255, 255, 255, .28);
 }
 
 .port .label {
 	font: .7692rem var(--mono);
-	color: #b9c1ca;
+	color: #eef2f6;
+	text-shadow: 0 1px 0 #000;
 }
 
 .port[aria-expanded=true] .label {
@@ -901,7 +1059,8 @@ main {
 
 .port .rate {
 	font: .6923rem var(--mono);
-	color: #6c747e;
+	color: #a3acb6;
+	text-shadow: 0 1px 0 #000;
 	min-height: .8462rem;
 }
 
@@ -929,12 +1088,18 @@ main {
 	padding: .6923rem 1.0769rem;
 	border-radius: .3077rem;
 	border: 1px solid #000;
+	/* its glass: the light on it, a corner's worth, then its lines */
 	background:
+	    linear-gradient(118deg, rgba(255, 255, 255, .17),
+	    rgba(255, 255, 255, .04) 26%, transparent 26.4%),
 	    repeating-linear-gradient(0deg, rgba(255, 255, 255, .025) 0 1px,
 	    transparent 1px .2308rem),
-	    radial-gradient(ellipse at 50% 0%, #0d1714, #040605 70%);
+	    radial-gradient(ellipse at 50% 0%, #0f1f1b, #030504 75%);
+	/* and round it a bezel, dark, with a bright edge */
 	box-shadow: inset 0 .1538rem .7692rem rgba(0, 0, 0, .9),
-	    0 1px 0 rgba(255, 255, 255, .07);
+	    0 0 0 .2308rem #121416, 0 0 0 .3077rem #6a727c,
+	    0 .1538rem 0 .3077rem rgba(255, 255, 255, .14),
+	    0 0 1.5385rem rgba(80, 240, 200, .14);
 	font: .8846rem/1.55 var(--mono);
 	color: #86f3d6;
 	text-shadow: 0 0 .4615rem rgba(80, 240, 200, .45);
