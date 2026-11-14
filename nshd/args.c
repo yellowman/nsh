@@ -336,11 +336,11 @@ arg_addr(const struct argcmd *c, const struct arg *f, char *w,
 }
 
 /*
- * Parse word w for argument f into v; a base64 word decodes into a's
+ * Parse word w for c's argument f into v; a base64 word decodes into a's
  * buffers. Returns 0, or -1 after printing an error.
  */
-static int
-arg_word(const struct argcmd *c, const struct arg *f, struct argvals *a,
+int
+args_word(const struct argcmd *c, const struct arg *f, struct argvals *a,
     char *w, struct facts_value *v)
 {
 	const struct argkey	*k;
@@ -604,12 +604,12 @@ arg_take(const struct argcmd *c, const struct arg *f, int set, int argc,
 			return 0;
 		}
 		*k += 2;
-		return arg_word(c, f, a, argv[*k - 1], &v[j * per]);
+		return args_word(c, f, a, argv[*k - 1], &v[j * per]);
 	}
 	/* a named argument's name ends this argument's words */
 	for (j = 0; j < arg_words(f) && *k < argc &&
 	    arg_name(c, argv[*k]) == NULL; j++, (*k)++)
-		if (arg_word(c, f, a, argv[*k], &v[j * per]) == -1)
+		if (args_word(c, f, a, argv[*k], &v[j * per]) == -1)
 			return -1;
 	if (j == 0 && !arg_opt(f, set))
 		return args_usage(c);
@@ -872,7 +872,8 @@ args_check(const struct argcmd *c, int set, const struct facts_template *t,
 				continue;
 			}
 			if (!taken || (j > 0 && v[s - per].type ==
-			    FACT_NONE) || !arg_value(c, a, &v[s]))
+			    FACT_NONE && !(a->flags & ARG_GAPS)) ||
+			    !arg_value(c, a, &v[s]))
 				return -1;
 		}
 	}

@@ -63,6 +63,7 @@
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
 #include <netinet/ip_carp.h>
+#include <net/if_pflow.h>
 #include <net/if_pppoe.h>
 #include <net/if_sppp.h>
 #include <net/if_trunk.h>
@@ -967,7 +968,12 @@ struct intlist Intlist[] = {
 	{ "staticarp", "Always use static ARP to find other hosts", CMPL0
 	  .nocmd = 1, .cand = CAND_EDIT,
 	  .apply = intflags_apply, .code = IFF_STATICARP },
-	{ "lladdr",	"Link Level (MAC) Address",		CMPL0 0, 0, intlladdr, 1, CAND_EDIT },
+	{ "lladdr", "Link Level (MAC) Address", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intlladdr_apply, .parse = intlladdr_parse,
+	  .args = ARGS{
+		{ "lladdr",	ARG_ADDR, 0, 0, ARG_LINK },
+		{ NULL } } },
 	{ "nwid", "802.11 network ID", CMPL0
 	  .nocmd = 1, .cand = CAND_EDIT,
 	  .apply = intnwid_apply,
@@ -1184,7 +1190,19 @@ struct intlist Intlist[] = {
 		{ "label",	ARG_NUM, MPLS_LABEL_RESERVED_MAX + 1,
 		    MPLS_LABEL_MAX, .help = "local mpls label" },
 		{ NULL } } },
-	{ "pwe",	"MPLS PWE3",				CMPL0 0, 0, intpwe3, 1, CAND_EDIT },
+	{ "pwe", "MPLS PWE3", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intpwe3_apply, .parse = intpwe3_parse,
+	  .args = ARGS{
+		{ "cw",		ARG_FLAG, 0, 0, ARG_NO },
+		{ "fat",	ARG_FLAG, 0, 0, ARG_NO },
+		{ "neighbor",	ARG_FLAG, 0, 0, ARG_NO },
+		{ "label",	ARG_NUM, MPLS_LABEL_RESERVED_MAX + 1,
+		    MPLS_LABEL_MAX, ARG_OPT,
+		  .help = "neighbor label" },
+		{ "address",	ARG_ADDR, 0, 0, ARG_OPT,
+		  .help = "neighbor ip" },
+		{ NULL } } },
 	{ "syncdev", "PFsync control message interface", CMPL(i)
 	  .nocmd = 1, .cand = CAND_EDIT,
 	  .apply = intsyncdev_apply,
@@ -1257,12 +1275,35 @@ struct intlist Intlist[] = {
 		{ "mode",	ARG_NUM, 1, 0, 0, balancing_keys,
 		  .help = "balancing mode" },
 		{ NULL } } },
-	{ "pflow",	"pflow data export",			CMPL0 0, 0, intpflow, 1, CAND_EDIT },
+	{ "pflow", "pflow data export", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intpflow_apply,
+	  .args = ARGS{
+		{ "sender",	ARG_ADDR, 0, 0, ARG_PORT | ARG_NAMED },
+		{ "receiver",	ARG_ADDR, 0, 0, ARG_PORT | ARG_NAMED },
+		{ "version",	ARG_NUM, PFLOW_PROTO_5, PFLOW_PROTO_MAX,
+		    ARG_NAMED | ARG_OPT },
+		{ NULL } } },
 	{ "debug", "Driver dependent debugging", CMPL0
 	  .nocmd = 1, .cand = CAND_EDIT,
 	  .apply = intflags_apply, .code = IFF_DEBUG },
-	{ "dhcrelay",	"DHCP Relay Agent",			CMPL0 0, 0, intdhcrelay, 1, CAND_EDIT },
-	{ "dhcrelay6",	"DHCPv6 Relay Agent",			CMPL0 0, 0, intdhcrelay6, 1, CAND_EDIT },
+	{ "dhcrelay", "DHCP Relay Agent", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intdhcrelay_apply,
+	  .args = ARGS{
+		{ "relayserver", ARG_ADDR, 0, 0,
+		    ARG_INET | ARG_NO | ARG_NOOPT },
+		{ NULL } } },
+	{ "dhcrelay6", "DHCPv6 Relay Agent", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intdhcrelay6_apply, .parse = intdhcrelay6_parse,
+	  .args = ARGS{
+		{ "interface",	ARG_WORD, 1, IFNAMSIZ - 1, ARG_NO | ARG_NOOPT,
+		    NULL, DHCRELAY6_DESTS },
+		{ "address",	ARG_ADDR, 0, 0,
+		    ARG_INET6 | ARG_NO | ARG_OPT | ARG_GAPS, NULL,
+		    DHCRELAY6_DESTS },
+		{ NULL } } },
 	{ "wol", "Wake On LAN", CMPL0
 	  .nocmd = 1, .cand = CAND_EDIT,
 	  .apply = intxflags_apply, .code = IFXF_WOL },
@@ -1850,13 +1891,8 @@ static const struct confcmd conf_if[] = {
 	{ "inet",	intip },
 	{ "ip",		intip },
 	{ "alias",	intip },
-	{ "lladdr",	intlladdr },
 	{ "media",	intmedia },
 	{ "mediaopt",	intmediaopt },
-	{ "pwe",	intpwe3 },
-	{ "pflow",	intpflow },
-	{ "dhcrelay",	intdhcrelay },
-	{ "dhcrelay6",	intdhcrelay6 },
 	{ "inet6",	intip },
 };
 

@@ -109,7 +109,7 @@ ieee80211.c	table	nwflags wpaakms wpaciphers wpagroupciphers
 if.c		scratch	get_linkstate.buf if_facts.ifdescr
 			if_facts.parent if_facts.ps if_facts.ssid
 if.c		table	intip6help intiphelp
-			intpwe3.pwe3opts ip6optlist l2hprios
+			ip6optlist l2hprios pwe3opts
 kernel.c	table	kcloners
 kfacts.c	process	kf
 kfacts.c	scratch	kf_lladdr.buf

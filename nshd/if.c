@@ -1411,7 +1411,7 @@ cand_pflow(struct cand *cand, char *ifname, int set, struct pflowreq *preq)
 	}
 	if (!set)
 		return cand_setting(cand, ST_DEFAULT, "pflow");
-	/* intpflow() has checked both addresses */
+	/* intpflow_apply() has checked both addresses */
 	pflow_addrstr(&preq->flowsrc, src);
 	pflow_addrstr(&preq->flowdst, dst);
 	if (preq->addrmask & PFLOW_MASK_VERSION)
@@ -1425,47 +1425,17 @@ cand_pflow(struct cand *cand, char *ifname, int set, struct pflowreq *preq)
 }
 
 /*
- * addr/port parsing lifted from sbin/ifconfig/ifconfig.c
+ * pflow: the sender's address and the receiver's address and port, each
+ * as "a.b.c.d:port" or "[v6addr]:port", and the version. "no pflow"
+ * takes none
  */
+
 int
-intpflow(int argc, char **argv, ...)
+intpflow_apply(const struct argcmd *c, int set, const struct facts_value *v,
+    char *ifname, int ifs, struct cand *cand)
 {
 	struct ifreq ifr;
 	struct pflowreq preq;
-	int set;
-	const char *errmsg = NULL;
-	va_list ap;
-	struct cand *cand;
-	char *ifname;
-	int ifs;
-
-	va_start(ap, argv);
-	ifname = va_arg(ap, char *);
-	ifs = va_arg(ap, int);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
-
-	if (NO_ARG(argv[0])) {
-		set = 0;
-		argc--;
-		argv++;
-	} else
-		set = 1;
-
-	argc--;
-	argv++;
-
-	/* convert to nopt() */
-	if ((set && argc < 4) || (set && argc == 5) || (set &&
-	    (argc == 4 || argc == 6) && (!isprefix(argv[0], "sender") ||
-	    !isprefix(argv[2], "receiver") ||
-	    (argc == 6 && !isprefix(argv[4], "version"))))) {
-		printf("%% pflow sender <x.x.x.x> receiver <x.x.x.x:port> "
-		    "[version 5|10]\n"
-		    "%% no pflow [sender x.x.x.x receiver x.x.x.x:port "
-		    "version 5|10]\n");
-		return -1;
-	}
 
 	bzero(&ifr, sizeof(ifr));
 	strlcpy(ifr.ifr_name, ifname, IFNAMSIZ);
@@ -1475,10 +1445,10 @@ intpflow(int argc, char **argv, ...)
 
 	preq.addrmask = PFLOW_MASK_SRCIP | PFLOW_MASK_DSTIP;
 	if (set) {
-		if (pflow_addr(argv[1], &preq.flowsrc) < 0)
-			return -1;
-		if (pflow_addr(argv[3], &preq.flowdst) < 0)
-			return -1;
+		args_sockaddr(&v[0], v[1].type != FACT_NONE ? v[1].v.i : 0,
+		    &preq.flowsrc);
+		args_sockaddr(&v[2], v[3].type != FACT_NONE ? v[3].v.i : 0,
+		    &preq.flowdst);
 		/*
 		 * pflow_set() opens no socket without a receiver address
 		 * and port, and sobind() refuses a sender of another
@@ -1497,23 +1467,17 @@ intpflow(int argc, char **argv, ...)
 			    " match\n");
 			return -1;
 		}
-		if (argc == 6) {
-			preq.version = strtonum(argv[5], 5, PFLOW_PROTO_MAX,
-			    &errmsg);
+		if (v[4].type != FACT_NONE) {
+			preq.version = v[4].v.i;
 			preq.addrmask |= PFLOW_MASK_VERSION;
-	                if (errmsg) {
-				printf("%% Invalid pflow version %s: %s\n",
-				    argv[5], errmsg);
-				return -1;
-			}
 			/* pflowioctl() takes these */
 			if (preq.version != PFLOW_PROTO_5 &&
 			    preq.version != PFLOW_PROTO_10) {
-				printf("%% Invalid pflow version %s: 5 or 10\n",
-				    argv[5]);
+				printf("%% Invalid pflow version %d: 5 or 10\n",
+				    preq.version);
 				return -1;
 			}
-                }
+		}
 	}
 
 	if (cand != NULL)
@@ -1907,100 +1871,45 @@ pwe3_ioctl(int ifs, char *ifname, unsigned long cmd, caddr_t arg)
 	return -1;
 }
 
+/*
+ * pwe: cw, fat, and the neighbor's label and address, in any order
+ * (intpwe3_parse()). A "no" line names what it takes away, and has no
+ * label or address
+ */
+static struct nopts pwe3opts[] = {
+	{ "cw",		no_arg,		'c' },
+	{ "fat",	no_arg,		'f' },
+	{ "neighbor",	req_2arg,	'n' },
+	{ NULL,		0,		0 }
+};
+
+/* pwe's words, as nopt() reads them, into its values */
 int
-intpwe3(int argc, char **argv, ...)
+intpwe3_parse(const struct argcmd *c, int argc, char **argv,
+    struct argvals *a)
 {
-	int set, ch, cw = -1, fat = -1, nei = 0;
-	const char *errstr;
-	struct ifreq ifr;
-	struct if_laddrreq req;
-	struct addrinfo *res;
-	struct sockaddr_mpls *smpls = (struct sockaddr_mpls *)&req.dstaddr;
-	va_list ap;
-	struct cand *cand;
-	char *ifname;
-	int ifs;
+	int ch;
 
-	va_start(ap, argv);
-	ifname = va_arg(ap, char *);
-	ifs = va_arg(ap, int);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
-
-	bzero(&ifr, sizeof(ifr));
-	bzero(&req, sizeof(req));
-
-	/* command options for 'pwe' */
-	static struct nopts pwe3opts[] = {
-		{ "cw",		no_arg,		'c' },
-		{ "fat",	no_arg,		'f' },
-		{ "neighbor",	req_2arg,	'n' },
-		{ NULL,		0,		0 }
-	};
-
-	if (NO_ARG(argv[0])) {
-		set = 0;
-		argc--;
-		argv++;
-	} else
-		set = 1;
-
-	argc--;
-	argv++;
-
-	/* usage? */
 	if (argc < 1) {
 		pwe3usage();
 		return -1;
 	}
-
-	strlcpy(ifr.ifr_name, ifname, IFNAMSIZ);
-	strlcpy(req.iflr_name, ifname, IFNAMSIZ);
-
-	/* parse all of it, then make each change */
 	noptind = 0;
 	while ((ch = nopt(argc, argv, pwe3opts)) != -1)
 		switch (ch) {
 		case 'c':	/* cw */
-			cw = set;
+			facts_i64(&a->v[0], 1);
 			break;
 		case 'f':	/* fat */
-			fat = set;
+			facts_i64(&a->v[1], 1);
 			break;
 		case 'n':	/* neighbor */
-			nei = 1;
-			if (!set)
-				break;
-			if (numeric_addrinfo(argv[noptind - 1], NULL,
-			    AF_UNSPEC, SOCK_DGRAM, &res) != 0) {
-				printf("%% neighbor %s is not an address\n",
-				    argv[noptind - 1]);
+			facts_i64(&a->v[2], 1);
+			if (a->set && (args_word(c, &c->args[4], a,
+			    argv[noptind - 1], &a->v[4]) == -1 ||
+			    args_word(c, &c->args[3], a, argv[noptind - 2],
+			    &a->v[3]) == -1))
 				return -1;
-			}
-			smpls->smpls_len = sizeof(*smpls);
-			smpls->smpls_family = AF_MPLS;
-			smpls->smpls_label = strtonum(argv[noptind - 2],
-			    (MPLS_LABEL_RESERVED_MAX + 1), MPLS_LABEL_MAX,
-			    &errstr);
-			if (errstr != NULL) {
-				printf("%% intpwe3: invalid label %s: %s\n",
-				    argv[noptind - 2], errstr);
-				freeaddrinfo(res);
-				return -1;
-			}
-			if (res->ai_addrlen > sizeof(req.addr)) {
-				printf("%% intpwe3: invalid address %s\n",
-				    argv[noptind - 1]);
-				freeaddrinfo(res);
-				return -1;
-			}
-			memcpy(&req.addr, res->ai_addr, res->ai_addrlen);
-			freeaddrinfo(res);
-			if (!pwe3_unicast(&req.addr)) {
-				printf("%% neighbor %s is not a unicast"
-				    " address\n", argv[noptind - 1]);
-				return -1;
-			}
 			break;
 		}
 
@@ -2012,6 +1921,47 @@ intpwe3(int argc, char **argv, ...)
 		printf("\n");
 		pwe3usage();
 		return -1;
+	}
+	return 0;
+}
+
+int
+intpwe3_apply(const struct argcmd *c, int set, const struct facts_value *v,
+    char *ifname, int ifs, struct cand *cand)
+{
+	int cw = -1, fat = -1, nei = v[2].type != FACT_NONE;
+	char host[NI_MAXHOST];
+	struct ifreq ifr;
+	struct if_laddrreq req;
+	struct sockaddr_mpls *smpls = (struct sockaddr_mpls *)&req.dstaddr;
+
+	bzero(&ifr, sizeof(ifr));
+	bzero(&req, sizeof(req));
+	strlcpy(ifr.ifr_name, ifname, IFNAMSIZ);
+	strlcpy(req.iflr_name, ifname, IFNAMSIZ);
+	if (v[0].type != FACT_NONE)
+		cw = set;
+	if (v[1].type != FACT_NONE)
+		fat = set;
+	if (nei && set) {
+		if (v[3].type == FACT_NONE || v[4].type == FACT_NONE) {
+			printf("%% pwe neighbor <neighbor label> "
+			    "<neighbor ip>\n");
+			return -1;
+		}
+		smpls->smpls_len = sizeof(*smpls);
+		smpls->smpls_family = AF_MPLS;
+		smpls->smpls_label = v[3].v.i;
+		args_sockaddr(&v[4], 0, &req.addr);
+		if (!pwe3_unicast(&req.addr)) {
+			if (getnameinfo((struct sockaddr *)&req.addr,
+			    req.addr.ss_len, host, sizeof(host), NULL, 0,
+			    NI_NUMERICHOST) != 0)
+				strlcpy(host, "?", sizeof(host));
+			printf("%% neighbor %s is not a unicast address\n",
+			    host);
+			return -1;
+		}
 	}
 
 	if (cand != NULL)
@@ -2035,61 +1985,34 @@ intpwe3(int argc, char **argv, ...)
 	return (0);
 }
 
+/* dhcrelay: the IPv4 address of the server to relay to */
+
 int
-intdhcrelay(int argc, char **argv, ...)
+intdhcrelay_apply(const struct argcmd *c, int set, const struct facts_value *v,
+    char *ifname, int ifs, struct cand *cand)
 {
 	char *cmd[] = { DHCRELAY, "-i", NULL, NULL, NULL };
-	int set, alen, r;
-	struct in_addr notused;
-	va_list ap;
-	struct cand *cand;
-	char *ifname;
+	char server[INET_ADDRSTRLEN];
+	int alen, r, given = v[0].type != FACT_NONE;
 
-	va_start(ap, argv);
-	ifname = va_arg(ap, char *);
-	(void)va_arg(ap, int);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
 	cmd[2] = ifname;
-
-	if (NO_ARG(argv[0])) {
-		set = 0;
-		argc--;
-		argv++;
-	} else
-		set = 1;
-
-	argc--;
-	argv++;
-
-	if ((!set && argc > 1) || (set && argc != 1)) {
-		printf("%% dhcrelay <relayserver>\n");
-		printf("%% no dhcrelay [relayserver]\n");
-		return -1;
-	}
-
-	if (argc) {
-		if (inet_pton(AF_INET, argv[0], &notused)) {
-			cmd[3] = argv[0];
-		} else {
-			printf("%% Not a valid IPv4 address: %s\n", argv[0]);
-			return -1;
-		}
+	if (given) {
+		inet_ntop(AF_INET, v[0].v.a.bytes, server, sizeof(server));
+		cmd[3] = server;
 	}
 
 	if (cand != NULL) {
 		char *l;
 
 		if (set)
-			return cand_setting(cand, ST_ON,
-			    "dhcrelay %s", argv[0]);
+			return cand_setting(cand, ST_ON, "dhcrelay %s", server);
 		if ((l = cand_line(cand, "dhcrelay", 0)) == NULL) {
 			printf("%% No relay configured for %s\n", ifname);
 			return -1;
 		}
 		l += strlen("dhcrelay ");
-		if (argc && strcmp(l, argv[0]) != 0) {
-			printf("%% Server expected: %s (not %s)\n", l, argv[0]);
+		if (given && strcmp(l, server) != 0) {
+			printf("%% Server expected: %s (not %s)\n", l, server);
 			return -1;
 		}
 		return cand_setting(cand, ST_DEFAULT, "dhcrelay");
@@ -2099,13 +2022,13 @@ intdhcrelay(int argc, char **argv, ...)
 		/* kept only once it runs */
 		if (cmdargs(DHCRELAY, cmd) != 0)
 			return -1;
-		if (flag_x("dhcrelay", ifname, DB_X_ENABLE, argv[0]) == -1)
+		if (flag_x("dhcrelay", ifname, DB_X_ENABLE, server) == -1)
 			return -1;
 	} else {
-		char server[24], argue[SIZE_CONF_TEMP];
+		char was[24], argue[SIZE_CONF_TEMP];
 		char *killcmd[] = { PKILL, "-xf", NULL, NULL };
 
-		if ((alen = conf_dhcrelay(ifname, server, sizeof(server))) < 1)
+		if ((alen = conf_dhcrelay(ifname, was, sizeof(was))) < 1)
 		{
 			if (alen == 0)
 				printf("%% No relay configured for %s\n",
@@ -2117,9 +2040,9 @@ intdhcrelay(int argc, char **argv, ...)
 		}
 
 		/* bail if dhcrelay not relaying to specified dhcp server */
-		if (argc && strcmp(server, argv[0]) != 0) {
-			printf("%% Server expected: %s (not %s)\n", server,
-			    argv[0]);
+		if (given && strcmp(was, server) != 0) {
+			printf("%% Server expected: %s (not %s)\n", was,
+			    server);
 			return -1;
 		}
 
@@ -2128,7 +2051,7 @@ intdhcrelay(int argc, char **argv, ...)
 
 		/* setup argument list as one argument for pkill -xf */
 		snprintf(argue, sizeof(argue), "%s %s %s %s", cmd[0], cmd[1],
-		    cmd[2], server);
+		    cmd[2], was);
 		killcmd[2] = argue;
 
 		/* pkill exits 1 if no dhcrelay was running */
@@ -2140,39 +2063,16 @@ intdhcrelay(int argc, char **argv, ...)
 }
 
 /*
- * Refuse a dhcrelay6 destination that dhcrelay6 would refuse: one that
- * is not an interface, or an IPv6 address, a % and an interface. Also
- * refuse an interface in another rdomain than ifname's, because the
- * relay's routing table cannot reach it.
+ * Refuse a dhcrelay6 destination, dest, whose interface, dev, is not
+ * there, or is in another rdomain than ifname's, because the relay's
+ * routing table cannot reach it.
  */
 static int
-dhcrelay6_dest(char *ifname, int ifs, char *dest, struct cand *cand)
+dhcrelay6_dest(char *ifname, int ifs, char *dest, char *dev, struct cand *cand)
 {
-	char addr[INET6_ADDRSTRLEN], *dev, *l;
-	struct in6_addr in6;
-	size_t len;
+	char *l;
 	int rd, devrd;
 
-	dev = dest;
-	if ((l = strchr(dest, '%')) != NULL) {
-		/* the address before the %, and the interface after it */
-		len = l - dest;
-		if (len < sizeof(addr)) {
-			memcpy(addr, dest, len);
-			addr[len] = '\0';
-		}
-		if (len >= sizeof(addr) || inet_pton(AF_INET6, addr,
-		    &in6) != 1) {
-			printf("%% %s: not an IPv6 address, a %% and an "
-			    "interface\n", dest);
-			return -1;
-		}
-		dev = l + 1;
-	} else if (inet_pton(AF_INET6, dest, &in6) == 1) {
-		printf("%% %s: an address needs a %% and the interface to "
-		    "send on\n", dest);
-		return -1;
-	}
 	if (cand != NULL) {
 		if (!cand_hasif(cand, dev)) {
 			printf("%% %s: no interface %s\n", dest, dev);
@@ -2205,49 +2105,92 @@ dhcrelay6_dest(char *ifname, int ifs, char *dest, struct cand *cand)
  * nsh starts it in the routing table of ifname's rdomain, and each
  * destination's interface must be in that rdomain too. Setting
  * dhcrelay6 again stops the relay that runs before it starts the new
- * one, so a commit can start it again after a new rdomain.
+ * one, so a commit can start it again after a new rdomain. Its values:
+ * each destination's interface, and the address of each that has one
+ * (intdhcrelay6_parse())
+ */
+
+/*
+ * dhcrelay6's destinations, which dhcrelay6 would refuse unless each is
+ * an interface, or an IPv6 address, a % and an interface
  */
 int
-intdhcrelay6(int argc, char **argv, ...)
+intdhcrelay6_parse(const struct argcmd *c, int argc, char **argv,
+    struct argvals *a)
 {
-	char *cmd[7 + DHCRELAY6_DESTS + 1] = { ROUTE, "-T", NULL, "exec",
-	    DHCRELAY6, "-i", NULL };
-	char *killcmd[] = { PKILL, "-xf", NULL, NULL };
-	char dests[DHCRELAY6_DESTS * 64], was[sizeof(dests)];
-	char argue[sizeof(dests) + 64], rd[16], *ifname, *l;
-	int set, ifs, i, r, rdomain;
-	va_list ap;
-	struct cand *cand;
+	char addr[INET6_ADDRSTRLEN], *l;
+	struct in6_addr in6;
+	size_t len;
+	int i;
 
-	va_start(ap, argv);
-	ifname = va_arg(ap, char *);
-	ifs = va_arg(ap, int);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
-
-	if (NO_ARG(argv[0])) {
-		set = 0;
-		argc--;
-		argv++;
-	} else
-		set = 1;
-	argc--;
-	argv++;
-
-	if ((set && argc < 1) || argc > DHCRELAY6_DESTS) {
+	if ((a->set && argc < 1) || argc > DHCRELAY6_DESTS) {
 		printf("%% dhcrelay6 <destination> [destination ...]\n");
 		printf("%% no dhcrelay6 [destination ...]\n");
 		printf("%% at most %d destinations\n", DHCRELAY6_DESTS);
 		return -1;
 	}
-	dests[0] = '\0';
 	for (i = 0; i < argc; i++) {
-		if (dhcrelay6_dest(ifname, ifs, argv[i], cand) == -1)
+		if ((l = strchr(argv[i], '%')) != NULL) {
+			/* the address before the %, and the interface after */
+			len = l - argv[i];
+			if (len < sizeof(addr)) {
+				memcpy(addr, argv[i], len);
+				addr[len] = '\0';
+			}
+			if (len >= sizeof(addr) || inet_pton(AF_INET6, addr,
+			    &in6) != 1) {
+				printf("%% %s: not an IPv6 address, a %% and "
+				    "an interface\n", argv[i]);
+				return -1;
+			}
+			facts_address(&a->v[DHCRELAY6_DESTS + i], FACT_INET6,
+			    &in6, sizeof(in6), 0);
+			l++;
+		} else if (inet_pton(AF_INET6, argv[i], &in6) == 1) {
+			printf("%% %s: an address needs a %% and the "
+			    "interface to send on\n", argv[i]);
 			return -1;
-		if (i > 0)
-			strlcat(dests, " ", sizeof(dests));
-		strlcat(dests, argv[i], sizeof(dests));
+		} else
+			l = argv[i];
+		if (args_word(c, &c->args[0], a, l, &a->v[i]) == -1)
+			return -1;
 	}
+	return 0;
+}
+
+int
+intdhcrelay6_apply(const struct argcmd *c, int set, const struct facts_value *v,
+    char *ifname, int ifs, struct cand *cand)
+{
+	char *cmd[7 + DHCRELAY6_DESTS + 1] = { ROUTE, "-T", NULL, "exec",
+	    DHCRELAY6, "-i", NULL };
+	char *killcmd[] = { PKILL, "-xf", NULL, NULL };
+	char dest[DHCRELAY6_DESTS][64], dests[sizeof(dest)], was[sizeof(dests)];
+	char argue[sizeof(dests) + 64], rd[16], dev[IFNAMSIZ];
+	char addr[INET6_ADDRSTRLEN], *l;
+	int i, n, r, rdomain;
+
+	dests[0] = '\0';
+	for (n = 0; n < DHCRELAY6_DESTS && v[n].type != FACT_NONE; n++) {
+		args_string(&v[n], dev, sizeof(dev));
+		if (v[DHCRELAY6_DESTS + n].type != FACT_NONE) {
+			inet_ntop(AF_INET6, v[DHCRELAY6_DESTS + n].v.a.bytes,
+			    addr, sizeof(addr));
+			snprintf(dest[n], sizeof(dest[n]), "%s%%%s", addr, dev);
+		} else
+			strlcpy(dest[n], dev, sizeof(dest[n]));
+		if (dhcrelay6_dest(ifname, ifs, dest[n], dev, cand) == -1)
+			return -1;
+		if (n > 0)
+			strlcat(dests, " ", sizeof(dests));
+		strlcat(dests, dest[n], sizeof(dests));
+	}
+	for (i = n; i < DHCRELAY6_DESTS; i++)
+		if (v[DHCRELAY6_DESTS + i].type != FACT_NONE) {
+			printf("%% dhcrelay6: an address without its "
+			    "interface\n");
+			return -1;
+		}
 
 	if (cand != NULL) {
 		if (set)
@@ -2257,7 +2200,7 @@ intdhcrelay6(int argc, char **argv, ...)
 			return -1;
 		}
 		l += strlen("dhcrelay6 ");
-		if (argc && strcmp(l, dests) != 0) {
+		if (n && strcmp(l, dests) != 0) {
 			printf("%% Destinations expected: %s (not %s)\n", l,
 			    dests);
 			return -1;
@@ -2267,7 +2210,7 @@ intdhcrelay6(int argc, char **argv, ...)
 
 	/* stop the relay that runs, if any */
 	if (conf_dhcrelay6(ifname, was, sizeof(was)) > 0) {
-		if (!set && argc && strcmp(was, dests) != 0) {
+		if (!set && n && strcmp(was, dests) != 0) {
 			printf("%% Destinations expected: %s (not %s)\n", was,
 			    dests);
 			return -1;
@@ -2296,8 +2239,8 @@ intdhcrelay6(int argc, char **argv, ...)
 	snprintf(rd, sizeof(rd), "%d", rdomain);
 	cmd[2] = rd;
 	cmd[6] = ifname;
-	for (i = 0; i < argc; i++)
-		cmd[7 + i] = argv[i];
+	for (i = 0; i < n; i++)
+		cmd[7 + i] = dest[i];
 	/* kept only once it runs */
 	if (cmdargs(ROUTE, cmd) != 0)
 		return -1;
@@ -2854,45 +2797,23 @@ intpowersave_apply(const struct argcmd *c, int set,
 
 /*
  * lladdr in configure private. conf_lladdr() prints the address only
- * when it differs from the one the interface had, which intlladdr() keeps
- * in the database when it first changes it. The kernel takes an address
- * only for an Ethernet interface, and no multicast address (EINVAL).
+ * when it differs from the one the interface had, which
+ * intlladdr_apply() keeps in the database when it first changes it. The
+ * kernel takes an address only for an Ethernet interface.
  */
 static int
-cand_lladdr(struct cand *cand, char *ifname, char *arg)
+cand_lladdr(struct cand *cand, char *ifname, struct ether_addr *ea)
 {
-	struct ether_addr *ea, eabuf;
 	char addr[sizeof("00:00:00:00:00:00")], *cur;
-	int i, same = 0;
+	int same = 0;
 
-	if (arg == NULL)
+	if (ea == NULL)
 		return cand_setting(cand, ST_DEFAULT, "lladdr");
 	if (cand_gettype(cand, ifname) != IFT_ETHER) {
 		printf("%% %s has no Ethernet address to set\n", ifname);
 		return -1;
 	}
-	if (isprefix(arg, "random")) {
-		arc4random_buf(&eabuf, sizeof(eabuf));
-		eabuf.ether_addr_octet[0] &= 0xfc;
-		ea = &eabuf;
-	} else if ((ea = ether_aton(arg)) == NULL) {
-		printf("%% MAC addresses are six hexadecimal fields, up to two"
-		    " digits each,\n%% separated with colons"
-		    " (1:23:45:ab:cd:ef)\n");
-		return -1;
-	}
-	if (ETHER_IS_MULTICAST(ea->ether_addr_octet)) {
-		printf("%% %s is a multicast address\n", arg);
-		return -1;
-	}
-	for (i = 0; i < ETHER_ADDR_LEN && ea->ether_addr_octet[i] == 0; i++)
-		;
-	if (i == ETHER_ADDR_LEN) {
-		printf("%% The configuration does not keep a zero lladdr\n");
-		return -1;
-	}
 	strlcpy(addr, ether_ntoa(ea), sizeof(addr));
-
 	if (kf_index(ifname) != 0)
 		same = (cur = kf_lladdr(ifname)) != NULL &&
 		    strcmp(cur, addr) == 0;
@@ -2901,41 +2822,64 @@ cand_lladdr(struct cand *cand, char *ifname, char *arg)
 	return cand_setting(cand, ST_ON, "lladdr %s", addr);
 }
 
+/*
+ * lladdr: a MAC address, or random, for which config makes one
+ * (intlladdr_parse()). "no lladdr" puts back the one the interface had
+ */
+
+/*
+ * lladdr's address, or a random one for random. The kernel takes no
+ * multicast address (EINVAL), and conf_lladdr() prints no zero one
+ */
 int
-intlladdr(int argc, char **argv, ...)
+intlladdr_parse(const struct argcmd *c, int argc, char **argv,
+    struct argvals *a)
 {
-	StringList *hwdaddr;
-	char *lladdr, llorig[sizeof("00:00:00:00:00:00") + 1];
-	struct ether_addr *addr;
-	struct ifreq ifr;
-	int set;
-	va_list ap;
-	struct cand *cand;
-	char *ifname;
-	int ifs;
+	struct ether_addr ea;
+	int i;
 
-	va_start(ap, argv);
-	ifname = va_arg(ap, char *);
-	ifs = va_arg(ap, int);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
-
-
-	if (NO_ARG(argv[0])) {
-		argv++;
-		argc--;
-		set = 0;
-	} else
-		set = 1;
-
-	if (set && argc < 2) {
+	if (a->set && argc < 1) {
 		printf ("%% lladdr <link level address|random>\n");
 		printf ("%% no lladdr\n");
 		return -1;
 	}
+	if (!a->set)
+		return 0;
+	if (isprefix(argv[0], "random")) {
+		arc4random_buf(&ea, sizeof(ea));
+		ea.ether_addr_octet[0] &= 0xfc;
+		facts_address(&a->v[0], FACT_LINK, &ea, sizeof(ea), 0);
+		return 0;
+	}
+	if (args_word(c, &c->args[0], a, argv[0], &a->v[0]) == -1)
+		return -1;
+	memcpy(&ea, a->v[0].v.a.bytes, sizeof(ea));
+	if (ETHER_IS_MULTICAST(ea.ether_addr_octet)) {
+		printf("%% %s is a multicast address\n", argv[0]);
+		return -1;
+	}
+	for (i = 0; i < ETHER_ADDR_LEN && ea.ether_addr_octet[i] == 0; i++)
+		;
+	if (i == ETHER_ADDR_LEN) {
+		printf("%% The configuration does not keep a zero lladdr\n");
+		return -1;
+	}
+	return 0;
+}
 
+int
+intlladdr_apply(const struct argcmd *c, int set, const struct facts_value *v,
+    char *ifname, int ifs, struct cand *cand)
+{
+	StringList *hwdaddr;
+	char *lladdr, llorig[sizeof("00:00:00:00:00:00") + 1];
+	struct ether_addr *addr, ea;
+	struct ifreq ifr;
+
+	if (set)
+		memcpy(&ea, v[0].v.a.bytes, sizeof(ea));
 	if (cand != NULL)
-		return cand_lladdr(cand, ifname, set ? argv[1] : NULL);
+		return cand_lladdr(cand, ifname, set ? &ea : NULL);
 
 	if ((lladdr = get_hwdaddr(ifname)) == NULL) {
 		printf("%% Failed to retrieve current link level address\n");
@@ -2973,27 +2917,12 @@ intlladdr(int argc, char **argv, ...)
 
 	/* At this point, llorig will always represent the booted lladdr */
 
-	if (set && isprefix(argv[1], "random")) {
-		struct ether_addr eabuf;
-
-		arc4random_buf(&eabuf, sizeof eabuf);
-		eabuf.ether_addr_octet[0] &= 0xfc;
-		addr = &eabuf;
-	} else {
-		addr = ether_aton(set ? argv[1] : llorig);
-		if (addr == NULL) {
-			if (set) {
-				printf("%% MAC addresses are six hexadecimal "
-				    "fields, up to two digits each,\n"
-				    " %% separated with colons"
-				    " (1:23:45:ab:cd:ef)\n");
-				return -1;
-			} else {
-				printf("%% database corrupted, unable to "
-				    " retrieve original lladdr\n");
-				return -1;
-			}
-		}
+	if (set)
+		addr = &ea;
+	else if ((addr = ether_aton(llorig)) == NULL) {
+		printf("%% database corrupted, unable to "
+		    " retrieve original lladdr\n");
+		return -1;
 	}
 
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));

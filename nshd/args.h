@@ -74,6 +74,9 @@
 #define ARG_BLANKS	0x200	/* the word may contain blanks, as a quoted
 				   word can */
 #define ARG_COMMAS	0x400	/* a set's keys in one word, between commas */
+#define ARG_GAPS	0x800	/* a list's values may be absent between
+				   others, as a command's parse function
+				   pairs them with another list's */
 
 #define ARGS_MAX	FACTS_FIELDS	/* values of a command, at most */
 #define ARGS_REST	1024	/* bytes of an ARG_REST field, at most */
@@ -175,12 +178,14 @@ args_applyfn	intcarp_apply, intcpass_apply, intcnode_apply, intcdev_apply;
 args_applyfn	intnwkey_apply, intwpakey_apply, intwpa_apply, intwpalist_apply,
 		intjoin_apply, intchan_apply, intnwflag_apply, inttxpower_apply;
 args_parsefn	intnwkey_parse, intwpakey_parse, intjoin_parse;
-args_applyfn	intpatch_apply, intmtu_apply, intkeepalive_apply, intmpls_apply,
-		intmetric_apply, intllprio_apply, intgroup_apply,
-		intrtlabel_apply, intparent_apply, intflags_apply,
-		intxflags_apply, intlink_apply, intnwid_apply,
-		intpowersave_apply, intrdomain_apply, intdesc_apply,
-		intvnetflowid_apply;
+args_applyfn	intpflow_apply, intpatch_apply, intmtu_apply,
+		intkeepalive_apply, intmpls_apply, intpwe3_apply,
+		intdhcrelay_apply, intdhcrelay6_apply, intmetric_apply,
+		intllprio_apply, intgroup_apply, intrtlabel_apply,
+		intparent_apply, intflags_apply, intxflags_apply, intlink_apply,
+		intnwid_apply, intpowersave_apply, intlladdr_apply,
+		intrdomain_apply, intdesc_apply, intvnetflowid_apply;
+args_parsefn	intpwe3_parse, intdhcrelay6_parse, intlladdr_parse;
 args_applyfn	intsyncdev_apply, intsyncpeer_apply, intmaxupd_apply;
 args_applyfn	intsppp_apply, intpppoe_apply;
 args_applyfn	inttrunkport_apply, inttrunkproto_apply, intlacp_apply;
@@ -197,6 +202,8 @@ const struct argcmd *conf_cmd(int, int, struct argcmd *);
 size_t	args_n(const struct argcmd *);
 const char *args_called(const struct arg *);
 int	args_parse(const struct argcmd *, int, char **, struct argvals *);
+int	args_word(const struct argcmd *, const struct arg *, struct argvals *,
+	    char *, struct facts_value *);
 const char *args_bytes(struct argvals *, const char *, const char *,
 	    size_t, struct facts_value *);
 int	args_each(const struct argcmd *, int, char **,
