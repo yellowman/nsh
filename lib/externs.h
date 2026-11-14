@@ -214,7 +214,6 @@ int conf_ordered(char *);
 /* the commands a configuration has (conf_cmd(), args.h) */
 int conf_find(int, char *, char **);
 int conf_line(int, int, char **, char *, int, struct cand *);
-int conf_run(int, int, int, char **, char *);
 struct facts_value;
 int conf_run_values(int, int, int, const struct facts_value *, char *);
 void conf_reading(int);

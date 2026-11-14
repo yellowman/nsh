@@ -169,9 +169,8 @@ static const struct {
 static int check(struct cnode *, struct cnode *);
 static int edits_make(struct script *, int);
 static int edits_line(FILE *, int, char *, int *, int *, char *);
-static int edit_put(FILE *, struct edit *, char **, int, char *, size_t);
+static int edit_put(FILE *, struct edit *, char *, size_t);
 static int edits_check(char *, size_t);
-static int edit_words(char *, size_t, char **, int);
 static int edit_args(FILE *, struct edit *, const struct argcmd *, int,
     char **);
 static int edit_typed(const struct argcmd *, struct edit *, char *, int,
@@ -879,7 +878,7 @@ edits_make(struct script *s, int skip)
 				e.row = rd;
 				rd = -1;
 				if (fclose(rf) == EOF ||
-				    edit_put(f, &e, NULL, 0, rules, rlen) == -1) {
+				    edit_put(f, &e, rules, rlen) == -1) {
 					rf = NULL;
 					goto done;
 				}
@@ -895,7 +894,7 @@ edits_make(struct script *s, int skip)
 		if (strcmp(l, "!") == 0) {
 			memset(&e, 0, sizeof(e));
 			e.kind = EDIT_END;
-			if (block != 0 && edit_put(f, &e, NULL, 0, NULL, 0) == -1)
+			if (block != 0 && edit_put(f, &e, NULL, 0) == -1)
 				goto done;
 			block = 0;
 			continue;
@@ -998,7 +997,7 @@ edits_line(FILE *f, int ctx, char *l, int *block, int *rd, char *head)
 		e.row = d;
 		e.act = act;
 		free(t);
-		return edit_put(f, &e, NULL, 0, NULL, 0);
+		return edit_put(f, &e, NULL, 0);
 	}
 	if (row == -1)
 		goto refused;
@@ -1010,8 +1009,7 @@ edits_line(FILE *f, int ctx, char *l, int *block, int *rd, char *head)
 	e.kind = ctx == CTX_TOP ? EDIT_TOP : ctx == CTX_IF ? EDIT_IF :
 	    EDIT_BRIDGE;
 	e.row = row;
-	if (c->apply != NULL ? edit_args(f, &e, c, n, w) == -1 :
-	    edit_put(f, &e, w + i + 1, n - i - 1, NULL, 0) == -1) {
+	if (edit_args(f, &e, c, n, w) == -1) {
 		free(t);
 		return -1;
 	}
@@ -1032,16 +1030,10 @@ refused:
 	return -1;
 }
 
-/* e, written to f, then n words, each with its NUL, or len bytes of text */
+/* e, written to f, then len bytes of text */
 static int
-edit_put(FILE *f, struct edit *e, char **words, int n, char *text,
-    size_t len)
+edit_put(FILE *f, struct edit *e, char *text, size_t len)
 {
-	int i;
-
-	if (words != NULL)
-		for (i = 0, len = 0; i < n; i++)
-			len += strlen(words[i]) + 1;
 	if (len > UINT32_MAX - sizeof(*e)) {
 		printf("%% commit: an edit too long\n");
 		return -1;
@@ -1049,9 +1041,6 @@ edit_put(FILE *f, struct edit *e, char **words, int n, char *text,
 	e->len = len;
 	if (fwrite(e, sizeof(*e), 1, f) != 1)
 		goto fail;
-	for (i = 0; words != NULL && i < n; i++)
-		if (fwrite(words[i], strlen(words[i]) + 1, 1, f) != 1)
-			goto fail;
 	if (text != NULL && len > 0 && fwrite(text, len, 1, f) != 1)
 		goto fail;
 	return 0;
@@ -1103,7 +1092,7 @@ edit_args_one(const struct argcmd *a, struct argvals *v, void *arg)
 	d->e->typed = 1;
 	d->e->no = !v->set;
 	if (r == 0)
-		r = edit_put(d->f, d->e, NULL, 0, buf, len);
+		r = edit_put(d->f, d->e, buf, len);
 	free(buf);
 	return r;
 }
@@ -1172,10 +1161,8 @@ edit_typed(const struct argcmd *c, struct edit *e, char *p, int ctx,
  * Check that buf (len bytes) holds edits that may run. Each record must
  * be complete, of a known kind, and name a command a configuration can
  * have, in the block where it belongs, or a daemon action a
- * configuration can have, with its words or rules complete. A line
- * whose command parses its arguments must carry parsed values; any
- * other line carries words. Returns 0 if so, else -1 after printing
- * why.
+ * configuration can have, with its rules complete. A line carries its
+ * parsed values. Returns 0 if so, else -1 after printing why.
  */
 static int
 edits_check(char *buf, size_t len)
@@ -1183,7 +1170,7 @@ edits_check(char *buf, size_t len)
 	const struct argcmd *c;
 	struct argcmd cmd;
 	struct edit e;
-	char *p, *w[NARGS];
+	char *p;
 	size_t off;
 	int block = 0, ctx;
 
@@ -1206,10 +1193,8 @@ edits_check(char *buf, size_t len)
 			if ((c = conf_cmd(CTX_TOP, e.row, &cmd)) == NULL ||
 			    (block != 0 && (block != CF_RTABLE ||
 			    (c->flags & (CF_IF | CF_BRIDGE | CF_RTABLE)))) ||
-			    (e.no && (c->flags & CF_NO) == 0) ||
-			    e.typed != (c->apply != NULL) || (e.typed ?
-			    edit_typed(c, &e, p, CTX_TOP, 0, NULL) :
-			    edit_words(p, e.len, w, NARGS - 2)) == -1)
+			    (e.no && (c->flags & CF_NO) == 0) || e.typed != 1 ||
+			    edit_typed(c, &e, p, CTX_TOP, 0, NULL) == -1)
 				goto bad;
 			if (!e.no && (c->flags & (CF_IF | CF_BRIDGE |
 			    CF_RTABLE)))
@@ -1221,9 +1206,8 @@ edits_check(char *buf, size_t len)
 			ctx = e.kind == EDIT_IF ? CTX_IF : CTX_BRIDGE;
 			if (block != (e.kind == EDIT_IF ? CF_IF : CF_BRIDGE) ||
 			    (c = conf_cmd(ctx, e.row, &cmd)) == NULL ||
-			    e.typed != (c->apply != NULL) || (e.typed ?
-			    edit_typed(c, &e, p, ctx, 0, NULL) :
-			    edit_words(p, e.len, w, NARGS - 2)) == -1)
+			    e.typed != 1 ||
+			    edit_typed(c, &e, p, ctx, 0, NULL) == -1)
 				goto bad;
 			break;
 		case EDIT_END:
@@ -1251,27 +1235,6 @@ bad:
 	printf("%% edits: the record at byte %zu is not one that may "
 	    "run\n", off);
 	return -1;
-}
-
-/*
- * The words of an edit, p's len bytes, each with its NUL, in argv, which
- * has room for max of them and a NULL: how many, or -1 if they are not
- * words, or would not fit
- */
-static int
-edit_words(char *p, size_t len, char **argv, int max)
-{
-	size_t off = 0, l;
-	int n = 0;
-
-	while (off < len) {
-		if ((l = strnlen(p + off, len - off)) == len - off || n >= max)
-			return -1;
-		argv[n++] = p + off;
-		off += l + 1;
-	}
-	argv[n] = NULL;
-	return n;
 }
 
 /* an rtable's head's record: its table */
@@ -1364,12 +1327,11 @@ edits_admin(struct script *s)
 static int
 edits_apply(char *buf, size_t len)
 {
-	const struct argcmd *c;
 	struct argcmd cmd;
 	struct edit e;
-	char *argv[NARGS + 1], *p, name[IFNAMSIZ] = "";
+	char *p, name[IFNAMSIZ] = "";
 	size_t off;
-	int ctx, n, rt = cli_rtable, failed = 0, r = 0;
+	int ctx, rt = cli_rtable, failed = 0, r = 0;
 
 	conf_reading(1);
 	for (off = 0; off < len; off += sizeof(e) + e.len) {
@@ -1381,17 +1343,8 @@ edits_apply(char *buf, size_t len)
 		case EDIT_BRIDGE:
 			ctx = e.kind == EDIT_TOP ? CTX_TOP : e.kind == EDIT_IF ?
 			    CTX_IF : CTX_BRIDGE;
-			c = conf_cmd(ctx, e.row, &cmd);
-			if (e.typed) {
-				r = edit_typed(c, &e, p, ctx, 1, name);
-				break;
-			}
-			n = 0;
-			if (e.no)
-				argv[n++] = "no";
-			argv[n++] = c->name;
-			n += edit_words(p, e.len, argv + n, NARGS - n);
-			r = conf_run(ctx, e.row, n, argv, name);
+			r = edit_typed(conf_cmd(ctx, e.row, &cmd), &e, p, ctx,
+			    1, name);
 			break;
 		case EDIT_END:
 			conf_block_end(rt);

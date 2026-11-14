@@ -115,7 +115,7 @@ static int	top_line(const Command *, struct cand *);
 static args_applyfn	ipcmd_apply, interface_apply, hostname_apply,
 			rtable_apply;
 static args_parsefn	ipcmd_parse, interface_parse;
-static int	conf_run_if(int, const struct argcmd *, int, char **, int,
+static int	conf_run_if(int, const struct argcmd *, int,
 		    const struct facts_value *, char *);
 static int	cand_leave(struct cand *);
 static int	cmdline_if(struct cand *);
@@ -2911,24 +2911,6 @@ conf_find(int ctx, char *word, char **daemon)
 }
 
 /*
- * Run row n of ctx's commands (conf_cmd()) with argv, as a commit runs a
- * line of its edits: at the top level a statement, and in an interface's
- * or a bridge's mode a line of name's block. Returns what the command
- * returns
- */
-int
-conf_run(int ctx, int n, int argc, char **argv, char *name)
-{
-	struct argcmd row;
-	const struct argcmd *c = conf_cmd(ctx, n, &row);
-
-	if (ctx != CTX_TOP)
-		return conf_run_if(ctx == CTX_BRIDGE, c, argc, argv, 0, NULL,
-		    name);
-	return (*c->handler)(argc, argv, NULL);
-}
-
-/*
  * Run a line of ctx's by the row of its command, on ifname if it is an
  * interface's or a bridge's: for a handler that has work of its own
  * before its line's arguments are read
@@ -2951,9 +2933,10 @@ conf_line(int ctx, int argc, char **argv, char *ifname, int ifs,
 }
 
 /*
- * Run the command at row n of ctx with values v, as conf_run() runs a
- * line: a statement, a block's head included, or an interface or bridge
- * command on name. set is 0 for "no".
+ * Run the command at row n of ctx's commands (conf_cmd()) with values v,
+ * as a commit runs a line of its edits: at the top level a statement, a
+ * block's head included, and in an interface's or a bridge's mode a line
+ * of name's block. set is 0 for "no".
  */
 int
 conf_run_values(int ctx, int n, int set, const struct facts_value *v,
@@ -2963,22 +2946,21 @@ conf_run_values(int ctx, int n, int set, const struct facts_value *v,
 	const struct argcmd *c = conf_cmd(ctx, n, &row);
 
 	if (ctx != CTX_TOP)
-		return conf_run_if(ctx == CTX_BRIDGE, c, 0, NULL, set, v, name);
+		return conf_run_if(ctx == CTX_BRIDGE, c, set, v, name);
 	/* a block's head creates a cloned interface, or with no, destroys it */
 	return c->apply(c, set, v, NULL, -1, NULL) == -1 ? -1 : 0;
 }
 
 /*
  * Run c, an interface command, or a bridge command if bridgeline, on
- * name in rtable 0, as interface mode runs a line. If v is not NULL,
- * the apply function of c's argcmd runs with values v, else c's handler
- * runs with argv. set is 0 for "no". name must exist, and must be a
- * bridge exactly when c is a bridge command. Returns 0, or -1 after
- * printing why c failed or did not run.
+ * name in rtable 0, as interface mode runs a line: the apply function of
+ * c's argcmd runs with values v. set is 0 for "no". name must exist, and
+ * must be a bridge exactly when c is a bridge command. Returns 0, or -1
+ * after printing why c failed or did not run.
  */
 static int
-conf_run_if(int bridgeline, const struct argcmd *c, int argc, char **argv,
-    int set, const struct facts_value *v, char *name)
+conf_run_if(int bridgeline, const struct argcmd *c, int set,
+    const struct facts_value *v, char *name)
 {
 	char ifn[IFNAMSIZ];
 	int ifs, isbridge, r = -1, rt = cli_rtable;
@@ -3002,10 +2984,7 @@ conf_run_if(int bridgeline, const struct argcmd *c, int argc, char **argv,
 	}
 	if (cli_rtable != 0 && nsh_setrtable(0) == 0)
 		cli_rtable = 0;
-	if (v != NULL)
-		r = c->apply(c, set, v, ifn, ifs, NULL) == -1 ? -1 : 0;
-	else
-		r = (*c->handler)(argc, argv, ifn, ifs, NULL) == -1 ? -1 : 0;
+	r = c->apply(c, set, v, ifn, ifs, NULL) == -1 ? -1 : 0;
 	if (rt != cli_rtable && nsh_setrtable(rt) == 0)
 		cli_rtable = rt;
 done:

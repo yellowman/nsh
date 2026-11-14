@@ -128,8 +128,6 @@ typedef int	args_parsefn(const struct argcmd *, int, char **,
 struct argcmd {
 	const char	*name;	/* the command's word */
 	int		 flags;	/* CF_* */
-	/* runs its words, where a commit's edit has them */
-	int		(*handler)(int, char **, ...);
 	args_applyfn	*apply;
 	int		 code;	/* which of apply's commands this is */
 	const struct arg *args;	/* NULL if it takes none */
