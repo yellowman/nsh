@@ -240,7 +240,6 @@ extern char prompt[128];
 extern char saved_prompt[sizeof(prompt)];
 
 int group (int, char **, ...);
-void gen_help(char **, char *, char *, int);
 int makeargv(void);
 int argsplit(char *, char **, size_t);
 extern size_t cursor_argc;
@@ -343,6 +342,7 @@ int pf_enabled(void);
 int isprefix(char *, char*);
 char **genget(char *, char **, int);
 int Ambiguous(void *);
+void gen_help(char **, char *, char *, int);
 
 /* sysctl.c */
 int sysctl_int(int[], int, int);

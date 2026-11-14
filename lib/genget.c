@@ -31,6 +31,7 @@
 
 #include <ctype.h>
 #include <stdio.h>
+#include <string.h>
 #include "externs.h"
 
 int isprefix(char *, char*);
@@ -95,4 +96,30 @@ int
 Ambiguous(void *s)
 {
 	return (char **)s == &ambiguous;
+}
+
+void
+gen_help(char **x, char *cmdprefix, char *descrsuffix, int szstruct)
+{
+	/* only for structures starting with char *name; char *help; !! */
+	char **y = x;
+	struct ghs *ghs;
+	int z = 0;
+
+	printf("%% Arguments may be abbreviated\n\n");
+
+	while (*y != 0) {
+		if (strlen(*y) > z)
+			z = strlen(*y);
+		y = (char **)((char *)y + szstruct);
+	}
+
+	while (*x != 0) {
+		ghs = (struct ghs *)x;
+		if (ghs->help)
+			printf("  %s %-*s %s %s\n", cmdprefix, z, *x,
+			    ghs->help, descrsuffix);
+		x = (char **)((char *)x + szstruct);
+	}
+	return;
 }
