@@ -29,114 +29,67 @@ answers the requests of a web page with what
 answers.
 .Xr httpd 8
 passes it the requests over FastCGI.
-The page has seven workspaces.
-The overview draws the device's ports as they appear on its front, each
-with a link light and an activity light.
-A device with more ports than fit in one row is drawn taller, its
-ports in rows of equal length.
-It also shows a readout of how many ports are up, the numbers of
-interfaces and addresses, and the last change.
-The logical interfaces appear in groups by kind, each with what it is on.
-Network, routing, security and services each run show commands and draw
-their output as tables.
-In network, an interface's settings can be changed and staged into the
-candidate as lines of configuration.
-Routing, security and services list their daemons, with a row for each
-routing table a daemon is in.
-Each row shows whether the configuration enables the daemon and whether
-it runs.
-For the chosen daemon, the workspace shows its rules as text, which can
-be changed and staged into the candidate as the daemon's edit command in
+A web user can do what that user's
 .Xr nsh 8
-does.
-Changes not yet staged remain until another daemon or routing table is
-chosen.
-For a daemon with no rules, it shows the command nsh starts the daemon
-with.
-In configure, except configure terminal, it shows what the candidate
-changes in the daemon.
-It also lists each of the last ten saved configurations that changed
-the daemon, with what each changed, and shows the daemon's live
-operations.
-For pf and bgpd, an editor under the table reads the rules' text and
-writes changes back into it.
-pf's editor shows its statements in order, with a form for each rule.
-bgpd's editor shows its peers, its networks and its filters.
-For each peer, it shows the peer's state from
-.Xr bgpctl 8 ,
-the prefixes the peer accepts and advertises, its last errors, the
-filters that apply to it, and its other settings in groups.
-For ospfd, ospf6d, eigrpd, ripd, ldpd and dvmrpd, an editor shows their
-interfaces and their global settings.
-For each interface, it shows the settings the interface sets and those
-it inherits from the blocks around it.
-Beside the editor are the neighbors and routes that their control
-programs show in routing table 0.
-For sshd, ntpd, sasyncd, rad, relayd, snmpd, ldapd, npppd, smtpd,
-ifstated, iked, dhcpd and the IPsec rules, an editor shows the
-statements of the rules as fields.
-A change rewrites only the words of the field it changes.
-The system and changes workspace has five topics.
-Changes is where configure is entered and lines of configuration are
-typed, as
-.Xr nsh 8
-accepts them, beside a view of the changes, the candidate, the running
-configuration or the saved configuration.
-History lists the saved configurations, any of which can be shown or
-loaded into the candidate.
-It also shows nshd's notices and the logs that are followed.
-Jobs and MOTD shows root's scheduled jobs and the message of the day, in
-the same way as the daemons.
-Live operations runs operations, and each is confirmed before it runs.
-Errors lists what nshd refused, and the strip shows how many.
-The terminal runs
-.Xr nsh 8
-as the user, and xterm.js draws it.
-Tab completes a line as in
-.Xr nsh 8 ,
-and ? lists what may come next.
-The page follows
-.Nm nshd Ns 's
-notices and logs as they arrive, counts down the time left to confirm
-an unconfirmed commit, and draws the interfaces again when they change.
-Its strip has Compare, Validate and Commit, which show the changes, run
-.Cm commit check ,
-and run
-.Cm commit .
-The strip also shows the generation of the running configuration, when
-and by whom it was saved, and the warnings that
-.Cm show rollback
-prints.
-In configure, it also shows how many objects the candidate changes.
-A\(mi and A+ in the strip make the page smaller or larger, and the
-browser keeps the choice.
-The page also grows with a window wider than 1440 pixels.
-While the overview or network is shown, the page requests the
-interfaces every 5 seconds.
-A port's activity light is on if the port counted packets since the
-last request.
-From the counters of two requests the page works out each interface's
-rates, in and out, and keeps five minutes of them, which the interface
-table draws as a small graph.
-An interface's errors and drops are marked when they rose since the
-last request, and the bar under a port is how full its line is.
-While security is shown, a readout as the overview's shows pf's states
-and its rates, from
-.Cm show statistics pf .
-The page alone keeps these rates: they begin when it is opened and are
-gone when it is closed.
-When the user logs out, or nshdeck reports that the login has ended,
-the page reloads, so that nothing the last user saw remains.
-Each user logs in with a name and password, which
+can do, and no more:
 .Nm nshd
-checks, and has the permissions of the user's login class (see
-.Cm login class
-in
-.Xr nsh 8 ) .
-root may not log in.
-.Pp
+checks the passwords and the permissions, and
 .Nm
-is privilege separated:
+checks neither.
+.Pp
+The options are as follows:
+.Bl -tag -width Ds
+.It Fl d
+Do not daemonize, and log to standard error.
+.It Fl s Ar socket
+The socket, instead of
+.Pa /var/www/run/nshdeck.sock .
+.It Fl v
+Produce more verbose output.
+.El
+.Sh SETUP
+.Nm
+needs the users _nshweb and _nshdeck, which may not be root or share a
+uid, and the group www, which
+.Xr httpd 8
+runs as.
+.Nm nshd
+looks up _nshweb only when it starts, so restart
+.Nm nshd
+after creating _nshweb; until then it refuses every login.
+.Pp
+The socket is owned by root and the group www, with mode 0660.
+In
+.Xr httpd.conf 5 ,
+with the page at
+.Pa https://router/nshdeck/ :
+.Bd -literal -offset indent
+server "router" {
+	listen on * tls port 443
+	tcp nodelay
+	connection max request body 3146752
+	location "/nshdeck/api/*" {
+		fastcgi socket "/run/nshdeck.sock"
+	}
+	location "/nshdeck/*" {
+		root "/htdocs"
+	}
+}
+.Ed
+.Pp
+Without
+.Cm tcp nodelay
+the terminal echoes what is typed in bursts, with pauses between them.
+.Sh PROCESSES
+.Bd -literal -offset indent
+  browser
+     |  https
+   httpd
+     |  FastCGI, nshdeck.sock
+   front ---- session ---- parent
+                 |            |  connects
+                 +--- nshd.sock, one connection for each user
+.Ed
 .Bl -tag -width "session"
 .It parent
 Starts as root, binds the socket, and starts the other two.
@@ -179,11 +132,166 @@ as the user and passes back its pseudo-terminal.
 If one of them ends,
 .Nm
 ends.
+.Sh LOGINS
+Each user logs in with a name and password, which
+.Nm nshd
+checks, and has the permissions of the user's login class (see
+.Cm login class
+in
+.Xr nsh 8 ) .
+root may not log in.
 .Pp
+After 5 failed logins in a row for a name, or from an address, logins
+for that name or from that address are refused for a second, without
+checking the password.
+Each further failure doubles the wait, up to 60 seconds.
+While
+.Nm nshd
+checks a login, another login for the same name or from the same
+address is refused, with a wait of 1 second, so each failure is counted
+before the next login is checked.
+The address is the client's address, as
+.Xr httpd 8
+gives it in REMOTE_ADDR.
+An IPv6 address counts as its /64.
+A login that succeeds resets the count for its name, and a count with
+no failure for 15 minutes starts again from zero.
+.Pp
+Behind a proxy, every client has the proxy's address, so one user's
+failures delay everyone.
+An address can only delay a login, never allow one.
+.Pp
+A user with no event stream or terminal open and no request for 30
+minutes is logged out.
+When the user logs out, or
+.Nm
+reports that the login has ended, the page reloads, so that nothing the
+last user saw remains.
+.Sh THE PAGE
+The page has seven workspaces, and a strip above them.
+.Ss Overview
+Draws the device's ports as they appear on its front, each with a link
+light and an activity light.
+A device with more ports than fit in one row is drawn taller, its
+ports in rows of equal length.
+A readout shows how many ports are up, the numbers of interfaces and
+addresses, and the last change.
+The logical interfaces appear in groups by kind, each with what it is
+on.
+.Ss Network
+Runs show commands and draws their output as tables.
+An interface's settings can be changed and staged into the candidate as
+lines of configuration.
+.Ss Routing, security and services
+Each lists its daemons, with a row for each routing table a daemon is
+in.
+A row shows whether the configuration enables the daemon and whether
+it runs.
+.Pp
+For the chosen daemon, the workspace shows its rules as text, which can
+be changed and staged into the candidate as the daemon's edit command in
+.Xr nsh 8
+does.
+Changes not yet staged remain until another daemon or routing table is
+chosen.
+For a daemon with no rules, it shows the command nsh starts the daemon
+with.
+.Pp
+In configure, except configure terminal, it shows what the candidate
+changes in the daemon.
+It also lists each of the last ten saved configurations that changed
+the daemon, with what each changed, and shows the daemon's live
+operations.
+.Pp
+Some daemons have an editor, which reads the rules' text and writes
+changes back into it.
+A change rewrites only the words of the field it changes.
+.Bl -tag -width Ds
+.It pf
+Its statements in order, with a form for each rule.
+.It bgpd
+Its peers, its networks and its filters.
+For each peer: its state from
+.Xr bgpctl 8 ,
+the prefixes it accepts and advertises, its last errors, the filters
+that apply to it, and its other settings in groups.
+.It ospfd, ospf6d, eigrpd, ripd, ldpd, dvmrpd
+Their interfaces and global settings.
+For each interface: the settings it sets and those it inherits from
+the blocks around it.
+Beside the editor are the neighbors and routes that their control
+programs show in routing table 0.
+.It sshd, ntpd, sasyncd, rad, relayd, snmpd, ldapd, npppd, smtpd, \
+ifstated, iked, dhcpd, the IPsec rules
+The statements of the rules, as fields.
+.El
+.Ss System and changes
+Has five topics.
+.Bl -tag -width "Live operations"
+.It Changes
+Where configure is entered and lines of configuration are typed, as
+.Xr nsh 8
+accepts them, beside a view of the changes, the candidate, the running
+configuration or the saved configuration.
+Tab completes a line, and ? lists what may come next.
+.It History
+The saved configurations, any of which can be shown or loaded into the
+candidate, with nshd's notices and the logs that are followed.
+.It Jobs and MOTD
+Root's scheduled jobs and the message of the day, in the same way as
+the daemons.
+.It Live operations
+Runs operations, each confirmed before it runs.
+.It Errors
+What nshd refused.
+The strip shows how many.
+.El
+.Ss Terminal
+Runs
+.Xr nsh 8
+as the user, and xterm.js draws it.
+.Ss The strip
+Has Compare, Validate and Commit, which show the changes, run
+.Cm commit check ,
+and run
+.Cm commit .
+It shows the generation of the running configuration, when and by whom
+it was saved, and the warnings that
+.Cm show rollback
+prints.
+In configure, it also shows how many objects the candidate changes.
+It counts down the time left to confirm an unconfirmed commit.
+.Pp
+A\(mi and A+ make the page smaller or larger, and the browser keeps the
+choice.
+The page also grows with a window wider than 1440 pixels.
+.Ss What the page keeps current
+The page follows
+.Nm nshd Ns 's
+notices and logs as they arrive, and draws the interfaces again when
+they change.
+.Pp
+While the overview or network is shown, the page requests the
+interfaces every 5 seconds.
+A port's activity light is on if the port counted packets since the
+last request.
+From the counters of two requests the page works out each interface's
+rates, in and out, and keeps five minutes of them, which the interface
+table draws as a small graph.
+An interface's errors and drops are marked when they rose since the
+last request, and the bar under a port is how full its line is.
+While security is shown, a readout as the overview's shows pf's states
+and its rates, from
+.Cm show statistics pf .
+.Pp
+The page alone keeps these rates: they begin when it is opened and are
+gone when it is closed.
+.Sh REQUESTS
 The last part of a request's path names it.
 A GET has its fields in its query, and a POST has them in a form body,
 of type application/x-www-form-urlencoded.
 Each field may be given only once.
+.Pp
 Every request except a stream,
 .Cm events
 or
@@ -195,6 +303,9 @@ Only
 own page can add it, because
 .Nm
 gives no other site permission to.
+A stream cannot carry the header, as the browser asks for it, and
+relies on the cookie alone.
+.Pp
 Every request except
 .Cm login
 needs the cookie that
@@ -209,24 +320,10 @@ and
 Logs the user in, and sets the cookie nshdeck, HttpOnly, Secure and
 SameSite=Strict, to a token of 32 random bytes.
 The answer has the user's name and permissions.
-After 5 failed logins in a row for a name, or from an address, logins
-for that name or from that address are refused for a second, without
-checking the password.
-Each further failure doubles the wait, up to 60 seconds.
-While
-.Nm nshd
-checks a login, another login for the same name or from the same
-address is refused, with a wait of 1 second, so each failure is counted
-before the next login is checked.
-The answer's
+A login that must wait is refused, and the answer's
 .Ar wait
-is the number of seconds left.
-The address is the client's address, as
-.Xr httpd 8
-gives it in REMOTE_ADDR.
-An IPv6 address counts as its /64.
-A login that succeeds resets the count for its name, and a count with
-no failure for 15 minutes starts again from zero.
+is the number of seconds left (see
+.Sx LOGINS ) .
 .It Cm logout
 POST.
 Logs the user out.
@@ -429,7 +526,7 @@ as nsh reads it.
 If more than 64 KB would then wait for nsh to read it, the request is
 refused with 503.
 .El
-.Pp
+.Sh ANSWERS
 Each answer except an event stream's is a JSON object.
 An answer from
 .Nm nshd
@@ -447,30 +544,46 @@ and
 It is sent with HTTP status 200, even when
 .Nm nshd
 refused the request.
+.Pp
 Other answers have an
 .Ar error
-and an HTTP status that says why: 400 for a field that is not accepted,
-parameters that cannot be read, or a body whose length is not its
-Content-Length; 401 when the user is not logged in or the login failed;
-403 for a request without the header; 404 for an unknown request, or a
+and an HTTP status that says why:
+.Bl -tag -width "XXX" -offset indent -compact
+.It 400
+a field that is not accepted, parameters that cannot be read, or a body
+whose length is not its Content-Length
+.It 401
+the user is not logged in, or the login failed
+.It 403
+a request without the header
+.It 404
+an unknown request, or a
 .Cm type
-to a terminal that does not exist; 405 for the wrong method; 413 for a
-body over 8192 bytes, or over 3 MB for
-.Cm setrules ;
-415 for a POST that is not a form; 429 for a login while its name or
-address must wait; 431 for parameters over 16384 bytes; and 503 when
+to a terminal that does not exist
+.It 405
+the wrong method
+.It 413
+a body over 8192 bytes, or over 3 MB for
+.Cm setrules
+.It 415
+a POST that is not a form
+.It 429
+a login while its name or address must wait
+.It 431
+parameters over 16384 bytes
+.It 503
 .Nm nshd
 does not answer, too many users are logged in, a user has too many
-requests waiting or too many terminals, or too many rules are arriving.
-.Pp
+requests waiting or too many terminals, or too many rules are arriving
+.El
+.Sh LIMITS
 A user's requests go to
 .Nm nshd
 one at a time, and at most 16 wait.
 A long answer is read from
 .Nm nshd
 only as fast as the client reads it.
-A user with no event stream or terminal open and no request for 30
-minutes is logged out.
+.Pp
 At most 64 users may be logged in, and
 .Nm
 accepts at most 128 connections.
@@ -478,50 +591,6 @@ It counts the failed logins of at most 512 names and addresses.
 It logs a login that fails or is refused at most once every 10 seconds
 for its name and address, and each log line says how many logins it did
 not log.
-Behind a proxy, every client has the proxy's address.
-.Pp
-.Nm
-needs the users _nshweb and _nshdeck, which may not be root or share a
-uid, and the group www, which
-.Xr httpd 8
-runs as.
-.Nm nshd
-looks up _nshweb only when it starts, so restart
-.Nm nshd
-after creating _nshweb; until then it refuses every login.
-The socket is owned by root and the group www, with mode 0660.
-In
-.Xr httpd.conf 5 ,
-with the page at
-.Pa https://router/nshdeck/ :
-.Bd -literal -offset indent
-server "router" {
-	listen on * tls port 443
-	tcp nodelay
-	connection max request body 3146752
-	location "/nshdeck/api/*" {
-		fastcgi socket "/run/nshdeck.sock"
-	}
-	location "/nshdeck/*" {
-		root "/htdocs"
-	}
-}
-.Ed
-.Pp
-Without
-.Cm tcp nodelay
-the terminal echoes what is typed in bursts, with pauses between them.
-.Pp
-The options are as follows:
-.Bl -tag -width Ds
-.It Fl d
-Do not daemonize, and log to standard error.
-.It Fl s Ar socket
-The socket, instead of
-.Pa /var/www/run/nshdeck.sock .
-.It Fl v
-Produce more verbose output.
-.El
 .Sh FILES
 .Bl -tag -width "/var/www/run/nshdeck.sockXX" -compact
 .It Pa /etc/rc.d/nshdeck
