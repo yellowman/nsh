@@ -14,7 +14,7 @@
 arp.c		process	rtmsg_arp.seq s
 arp.c		scratch	expire_time sdl_m sin_m
 arp.c		table	blank_sdl blank_sin ifp_m so_1mask
-bgpcommands.c	session	bgpd_socket_path
+bgpcommands.c	process	bgpd_socket_path
 bgpcommands.c	table	bgcs
 bridge.c	table	brds brlists brnames brper brps brpvnames brpvs brvals brvls brvper brvs
 candidate.c	session	cand cand_base cand_journal cand_nedits cand_nwas
@@ -26,8 +26,9 @@ carp.c		table	carp_bal_modes intcs
 client.c	process	nshd_config nshd_intr nshd_rtable sfd sib
 client.c	table	nshd_runs.progs show_log.logs
 cmdargs.c	process	child in_config
-commands.c	session	hname in_rc next_ifname rc_head whichlist
-commands.c	process	snapshot
+commands.c	session	ifname
+commands.c	process	hname snapshot
+commands.c	scratch	in_rc next_ifname rc_head
 commands.c	table	Bridgelist Bridgelist_nitems Intlist
 			Intlist_nitems ahtab arpdowntab arphelp
 			arptimeouttab bgphelp bridgehelp carploggingtab
@@ -102,10 +103,9 @@ editing.c	table	el_runs.funcs
 genget.c	process	ambiguous
 ieee80211.c	table	nwflags wpaakms wpaciphers wpagroupciphers
 			wpalists wpaprotos
-if.c		session	imrif imrsave
 if.c		scratch	get_linkstate.buf if_facts.ifdescr
 			if_facts.parent if_facts.ps if_facts.ssid
-if.c		table	if_sglobals intip6help intiphelp
+if.c		table	intip6help intiphelp
 			intpwe3.pwe3opts ip6optlist l2hprios mplscs
 kernel.c	table	kcloners
 kfacts.c	process	kf
@@ -123,13 +123,12 @@ kroute.c	scratch	ip_route.line_kroute lookup_kept
 kroute.c	table	hexlist
 loop.c		scratch	said
 loop.c		table	flushown ownif owntab
-main.c		session	cli_rtable config_mode verbose
-main.c		process	caught_sigwinch editing elc eli elp
+main.c		session	config_mode
+main.c		process	caught_sigwinch cli_rtable editing elc eli elp
 			ev histc histi interactive_mode nsh_env pid
-			toplevel
+			toplevel verbose
 main.c		table	vers
-makeargv.c	session	cursor_argc cursor_argo line margc margv
-			saveline
+makeargv.c	scratch	cursor_argc cursor_argo line margc margv saveline
 media.c		table	ifm_option_descriptions ifm_subtype_descriptions
 more.c		process	oldtty winsize
 ndp.c		process	rtmsg_ndp.seq rtsock
@@ -151,7 +150,7 @@ nshcmds.c	table	clearhelp commithelp confighelp dohelp
 passwd.c		table	login_builtin login_permtab
 ppp.c		table	intpppoe.authopts intsppp.authopts
 			intsppp.peeropts spppproto
-prompt.c	session	ifname prompt saved_prompt
+prompt.c	process	ifname prompt saved_prompt
 prompt.c	scratch	hbuf
 renderif.c	process	bridge_facts_init.states
 renderif.c	scratch	bridge_endpoint.buf umb_val2descr.sval
@@ -202,8 +201,8 @@ showfacts.c	process	facts_from facts_init.done
 showfacts.c	table	kind_message kinds message_fields
 sysctl.c	table	ddbsysctls ip6sysctls ipsysctls mplssysctls
 			pipexsysctls sysctls
-tables.c	session	bridge whichlist
-tables.c	process	built
+tables.c	session	bridge
+tables.c	process	built whichlist
 tables.c	scratch	cursor_pos
 tables.c	table	Bridgelist Bridgelist_nitems Intlist
 			Intlist_nitems cmdtab cmdtab_nitems kind_name

@@ -87,8 +87,8 @@
 #include "nshrows.h"
 
 char hname[HSIZE];
+char ifname[IFNAMSIZ];		/* the interface whose mode a session is in */
 char next_ifname[IFNAMSIZ];	/* switch interfaces in interface context */
-struct intlist *whichlist;
 
 static int in_rc;		/* a commit's edits run */
 static int rc_head;		/* and this one is a block's head */
@@ -96,8 +96,7 @@ static struct cnode *snapshot;	/* config's running configuration */
 
 /* globals of this file each session has a copy of (session.c) */
 struct sglobal commands_sglobals[] = {
-	SGLOBAL(hname), SGLOBAL(ifname), SGLOBAL(next_ifname),
-	SGLOBAL(whichlist), SGLOBAL(in_rc), SGLOBAL(rc_head),
+	SGLOBAL(ifname),
 	{ NULL }
 };
 
@@ -998,10 +997,10 @@ size_t Bridgelist_nitems = nitems(Bridgelist);
  *
  * For a line of configure (cmdline()), the mode is entered, and stays:
  * the global ifname buffer has the name of the interface being
- * configured, and whichlist its commands, so the lines that follow can
- * tell that an interface's mode is active, and whose. int_exit() leaves
- * it. With rc_head, for the head of a block in a commit's edits, it
- * only creates the interface, or with no, destroys it.
+ * configured, and bridge says whether it is a bridge, so the lines that
+ * follow can tell that an interface's mode is active, and whose.
+ * int_exit() leaves it. With rc_head, for the head of a block in a
+ * commit's edits, it only creates the interface, or with no, destroys it.
  */
 static int
 interface(int argc, char **argv, ...)
@@ -1106,18 +1105,8 @@ interface(int argc, char **argv, ...)
 		return 0;
 	}
 
-	if (candidate)
-		whichlist = bridge ? Bridgelist : Intlist;
-	else if (is_bridge(ifs, ifname)) {
-		/* whichlist also used by help, command completion code */
-		whichlist = Bridgelist;
-		bridge = 1;
-	} else {
-		whichlist = Intlist;
-		bridge = 0;
-	}
-
-	imr_init(ifname);
+	if (!candidate)
+		bridge = is_bridge(ifs, ifname);
 
 	/* the mode is entered, and stays (cmdline()) */
 	close(ifs);
@@ -1593,7 +1582,8 @@ cmdline_if(void)
 	int r;
 
 	if ((p = NO_ARG(margv[0]) ? margv[1] : margv[0]) != NULL)
-		i = (struct intlist *)genget(p, (char **)whichlist,
+		i = (struct intlist *)genget(p,
+		    (char **)(bridge ? Bridgelist : Intlist),
 		    sizeof(struct intlist));
 	if (Ambiguous(i)) {
 		printf("%% Ambiguous command\n");
@@ -1617,9 +1607,7 @@ cmdline_if(void)
 	    strcmp(next_ifname, ifname) != 0) {
 		strlcpy(ifname, next_ifname, sizeof(ifname));
 		memset(next_ifname, 0, sizeof(next_ifname));
-		imr_init(ifname);
 		bridge = cand_isbridge(ifname);
-		whichlist = bridge ? Bridgelist : Intlist;
 	}
 	return r;
 }
@@ -2234,7 +2222,6 @@ conf_run_if(int bridgeline, const struct confcmd *c, int argc, char **argv,
 		printf("%% %s is %sa bridge\n", ifname, bridge ? "" : "not ");
 		goto done;
 	}
-	imr_init(ifname);
 	if (cli_rtable != 0 && nsh_setrtable(0) == 0)
 		cli_rtable = 0;
 	r = (*c->handler)(argc, argv, ifname, ifs) == -1 ? -1 : 0;

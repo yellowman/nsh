@@ -383,7 +383,6 @@ int parse_ipv6(char *, struct in6_addr *);
 #define ROUNDMBPS(bps) ((float)bps == ((bps / 1000 / 1000) * 1000 * 1000))
 #define ROUNDKBPS(bps) ((float)bps == ((bps / 1000) * 1000))
 #define ROUNDKBYTES(bytes) ((float)bytes == ((bytes / 1024) * 1024))
-void imr_init(char *);
 int cand_upline(char *, int);
 int is_valid_ifname(char *);
 int plainword(const char *, const char *);

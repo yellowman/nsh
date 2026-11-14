@@ -59,9 +59,6 @@ nshd_why(void)
 {
 }
 
-/* configure here is config's own, never nshd's session */
-int nshd_config, nshd_rtable;
-
 /* system runs what nsh's code names, as root; config runs none */
 int
 nshd_runs(const char *cmd)

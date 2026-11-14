@@ -45,16 +45,16 @@
 #endif
 
 extern struct sglobal candidate_sglobals[], commands_sglobals[];
-extern struct sglobal if_sglobals[];
 
-/* globals of main.c, makeargv.c, prompt.c and bgpcommands.c */
+/*
+ * globals of main.c. With those of candidate.c and commands.c, a
+ * session keeps its mode and its candidate, and no more: a line and its
+ * words are read and run within one request, and config runs no
+ * commit's edits and no program. cli_rtable is the process's: a line
+ * of a candidate sets the candidate's table, cand_rtable
+ */
 static struct sglobal session_sglobals[] = {
-	SGLOBAL(cli_rtable), SGLOBAL(config_mode),
-	SGLOBAL(bridge), SGLOBAL(verbose),
-	SGLOBAL(line), SGLOBAL(saveline), SGLOBAL(margc), SGLOBAL(margv),
-	SGLOBAL(cursor_argc), SGLOBAL(cursor_argo),
-	SGLOBAL(prompt), SGLOBAL(saved_prompt),
-	SGLOBAL(bgpd_socket_path),
+	SGLOBAL(config_mode), SGLOBAL(bridge),
 	{ NULL }
 };
 
@@ -62,8 +62,7 @@ static int plan_text(struct plan *, int, struct cnode *);
 static int plan_script(struct plan *, struct cnode *, struct cnode *);
 
 static struct sglobal *sglobals[] = {
-	session_sglobals, candidate_sglobals, commands_sglobals,
-	if_sglobals
+	session_sglobals, candidate_sglobals, commands_sglobals
 };
 
 struct session_state {

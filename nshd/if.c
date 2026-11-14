@@ -68,24 +68,6 @@ int run_ipcp(char *, int, int);
 void pwe3usage(void);
 int show_vlan(int, int);
 
-static struct ifmpwreq imrsave;
-static char imrif[IFNAMSIZ];
-
-/* globals of this file each session has a copy of (session.c) */
-struct sglobal if_sglobals[] = {
-	SGLOBAL(imrsave), SGLOBAL(imrif),
-	{ NULL }
-};
-
-void
-imr_init(char *ifname)
-{
-	if (strcmp(ifname, imrif) == 0)
-			return;
-	strlcpy (imrif, ifname, IFNAMSIZ);
-	memset (&imrsave, 0, sizeof(imrsave));
-}
-
 const char *
 get_linkstate(int mt, int link_state)
 {
