@@ -52,7 +52,7 @@ function tconnect() {
 	if (tstream !== null)
 		return;
 	if (term === null) {
-		term = new Terminal({ cursorBlink: true, fontSize: 13,
+		term = new Terminal({ cursorBlink: true, fontSize: termPx(),
 		    fontFamily: getComputedStyle(document.body)
 		    .getPropertyValue("--mono").trim(), scrollback: 5000,
 		    theme: { background: "#0b0d10", foreground: "#d7dce2",
@@ -112,6 +112,21 @@ function tgone(why) {
 	tstate(why, "off");
 }
 
+/* the page's text size in pixels, which the terminal's follows */
+function termPx() {
+	return Math.round(parseFloat(getComputedStyle(document.documentElement)
+	    .fontSize));
+}
+
+/* the page's size changed (app.js): the terminal's text follows */
+function termSized() {
+	if (term === null)
+		return;
+	term.options.fontSize = termPx();
+	if (!$("ws-terminal").hidden)
+		termfit.fit();
+}
+
 /* the Terminal workspace, shown: its terminal, connected if it is not */
 function terminalShown() {
 	if (tstream === null)
@@ -127,8 +142,6 @@ document.addEventListener("DOMContentLoaded", function () {
 	$("term-end").addEventListener("click", function () {
 		tgone("disconnected");
 	});
-	window.addEventListener("resize", function () {
-		if (term !== null && !$("ws-terminal").hidden)
-			termfit.fit();
-	});
+	/* a wider window can mean larger text too (style.css) */
+	window.addEventListener("resize", termSized);
 });

@@ -1204,7 +1204,41 @@ function on(id, fn) {
 	});
 }
 
+/*
+ * The page's size, a step of ZOOMS, which the person chooses with A- and
+ * A+ and this browser keeps. 1 is the size the window gives (style.css)
+ */
+var ZOOMS = [.85, 1, 1.15, 1.3, 1.5, 1.75];
+
+function zoomTo(i) {
+	i = Math.max(0, Math.min(ZOOMS.length - 1, i));
+	document.documentElement.style.setProperty("--zoom", ZOOMS[i]);
+	$("smaller").disabled = i === 0;
+	$("larger").disabled = i === ZOOMS.length - 1;
+	try {
+		localStorage.setItem("nshdeck.zoom", String(ZOOMS[i]));
+	} catch (e) {
+		/* the size is kept for this page only */
+	}
+	termSized();
+	return i;
+}
+
 document.addEventListener("DOMContentLoaded", function () {
+	var z = 1;
+
+	try {
+		z = ZOOMS.indexOf(Number(localStorage.getItem("nshdeck.zoom")));
+	} catch (e) {
+		z = -1;
+	}
+	z = zoomTo(z === -1 ? 1 : z);
+	$("smaller").addEventListener("click", function () {
+		z = zoomTo(z - 1);
+	});
+	$("larger").addEventListener("click", function () {
+		z = zoomTo(z + 1);
+	});
 	/* as login(1) does, Enter after the name asks for the password */
 	$("login").user.addEventListener("keydown", function (e) {
 		if (e.key === "Enter") {

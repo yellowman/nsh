@@ -18,7 +18,7 @@
 	--warn: #ffb340;
 	--bad: #ff8f80;
 	--ring: inset 0 0 0 .5px #ffffff24, 0 .5px 1px #000;
-	--focus: 0 0 0 3px color-mix(in srgb, var(--accent) 45%, transparent);
+	--focus: 0 0 0 .2308rem color-mix(in srgb, var(--accent) 45%, transparent);
 	--mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono",
 	    monospace;
 	--sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
@@ -52,14 +52,32 @@
 	box-sizing: border-box;
 }
 
+/*
+ * Every size is in rem, a 13th of body's text. The text is 13px in a
+ * window up to 1440px wide, and grows with a wider window up to 21px, as
+ * on a large high-DPI screen; --zoom is the size the person chose with
+ * A- and A+ (app.js)
+ */
+html {
+	font-size: calc(var(--zoom, 1) * clamp(13px, calc(.29vw + 8.8px), 21px));
+}
+
 html, body {
 	margin: 0;
 	height: 100%;
 	background: var(--bg);
 	color: var(--text);
-	font: 13px/1.45 var(--sans);
 	font-variant-numeric: tabular-nums;
 	-webkit-font-smoothing: antialiased;
+}
+
+/*
+ * body's text, not html's: html's 1rem would be the browser's default.
+ * body is the container the breakpoints ask about (the end of this file)
+ */
+body {
+	font: 1rem/1.45 var(--sans);
+	container-type: inline-size;
 }
 
 [hidden] {
@@ -72,12 +90,12 @@ h1, h2, h3 {
 }
 
 h2 {
-	font-size: 14px;
+	font-size: 1.0769rem;
 	color: var(--text);
 }
 
 h3 {
-	font-size: 11.5px;
+	font-size: .8846rem;
 	color: var(--dim);
 }
 
@@ -87,7 +105,7 @@ h3 {
 
 .mono, pre, code, input.cli, .cliline span {
 	font-family: var(--mono);
-	font-size: 12px;
+	font-size: .9231rem;
 }
 
 /* controls: no borders, a hairline ring, as a native app's */
@@ -96,15 +114,15 @@ button, input, select {
 	color: var(--text);
 	background: var(--raise);
 	border: 0;
-	border-radius: 6px;
+	border-radius: .4615rem;
 	box-shadow: var(--ring);
-	padding: 4px 12px;
-	height: 28px;
+	padding: .3077rem .9231rem;
+	height: 2.1538rem;
 }
 
 input, select {
 	background: var(--field);
-	padding: 4px 9px;
+	padding: .3077rem .6923rem;
 }
 
 input:focus, select:focus, button:focus-visible {
@@ -146,7 +164,7 @@ input[type=checkbox] {
 }
 
 input.narrow {
-	width: 64px;
+	width: 4.9231rem;
 }
 
 input.nope {
@@ -163,68 +181,68 @@ input.nope {
 #login {
 	--stipple: repeating-conic-gradient(#000 0 25%, #fff 0 50%) 0 0 / 4px
 	    4px;
-	width: min(560px, calc(100vw - 32px));
+	width: min(43.0769rem, calc(100vw - 2.4615rem));
 	margin: 14vh auto 0;
-	border: 2px solid #000;
+	border: .1538rem solid #000;
 	background: #000;
 	color: #e5e5e5;
-	font: 15px/1.6 var(--mono);
+	font: 1.1538rem/1.6 var(--mono);
 }
 
 #login .titlebar {
 	display: flex;
 	align-items: center;
-	gap: 8px;
-	height: 28px;
-	padding: 0 5px;
+	gap: .6154rem;
+	height: 2.1538rem;
+	padding: 0 .3846rem;
 	background: #fff;
 	color: #000;
-	border-bottom: 2px solid #000;
+	border-bottom: .1538rem solid #000;
 }
 
 #login h1 {
-	font: 600 14px var(--mono);
+	font: 600 1.0769rem var(--mono);
 }
 
 #login .iconify, #login .resize {
 	position: relative;
-	width: 18px;
-	height: 18px;
-	border: 2px solid #000;
+	width: 1.3846rem;
+	height: 1.3846rem;
+	border: .1538rem solid #000;
 }
 
 #login .iconify::after {
 	content: "";
 	position: absolute;
-	inset: 3px;
+	inset: .2308rem;
 	background: #000;
 }
 
 #login .resize::after {
 	content: "";
 	position: absolute;
-	left: -2px;
-	bottom: -2px;
-	width: 10px;
-	height: 10px;
-	border: 2px solid #000;
+	left: -.1538rem;
+	bottom: -.1538rem;
+	width: .7692rem;
+	height: .7692rem;
+	border: .1538rem solid #000;
 }
 
 #login .stipple {
 	flex: 1;
-	height: 14px;
+	height: 1.0769rem;
 	background: var(--stipple);
 }
 
 #login .screen {
 	display: grid;
-	grid-template-columns: 14px 1fr;
+	grid-template-columns: 1.0769rem 1fr;
 }
 
 #login .scrollbar {
 	position: relative;
 	background: #fff;
-	border-right: 2px solid #000;
+	border-right: .1538rem solid #000;
 }
 
 #login .scrollbar::after {
@@ -233,25 +251,25 @@ input.nope {
 	left: 1px;
 	right: 1px;
 	bottom: 1px;
-	height: 44px;
+	height: 3.3846rem;
 	background: var(--stipple);
 }
 
 #login .tty {
-	padding: 16px 20px 18px;
+	padding: 1.2308rem 1.5385rem 1.3846rem;
 }
 
 #login .prompt, #login .ask {
 	background: linear-gradient(90deg, #7dd3fc, #22d3ee 45%, #34d399);
 	background-clip: text;
 	color: transparent;
-	filter: drop-shadow(0 0 6px rgb(34 211 238 / .45));
+	filter: drop-shadow(0 0 .4615rem rgb(34 211 238 / .45));
 }
 
 #login .prompt {
 	width: fit-content;
-	margin: 0 0 8px;
-	font-size: 20px;
+	margin: 0 0 .6154rem;
+	font-size: 1.5385rem;
 	font-weight: 700;
 }
 
@@ -312,8 +330,8 @@ input.nope {
 
 #deck {
 	display: grid;
-	grid-template-columns: 52px 1fr;
-	grid-template-rows: 44px 1fr;
+	grid-template-columns: 4rem 1fr;
+	grid-template-rows: 3.3846rem 1fr;
 	height: 100%;
 }
 
@@ -322,24 +340,24 @@ input.nope {
 	display: flex;
 	flex-direction: column;
 	align-items: center;
-	gap: 4px;
-	padding: 7px 0 10px;
+	gap: .3077rem;
+	padding: .5385rem 0 .7692rem;
 	background: var(--side);
 	border-right: 1px solid var(--line);
 }
 
 #rail .mark {
-	width: 30px;
-	height: 30px;
-	margin-bottom: 10px;
+	width: 2.3077rem;
+	height: 2.3077rem;
+	margin-bottom: .7692rem;
 }
 
 #rail button {
-	width: 36px;
-	height: 36px;
+	width: 2.7692rem;
+	height: 2.7692rem;
 	padding: 0;
 	border: 0;
-	border-radius: 6px;
+	border-radius: .4615rem;
 	background: transparent;
 	box-shadow: none;
 	color: var(--dim);
@@ -353,8 +371,8 @@ input.nope {
 }
 
 #rail svg {
-	width: 18px;
-	height: 18px;
+	width: 1.3846rem;
+	height: 1.3846rem;
 	fill: none;
 	stroke: currentColor;
 	stroke-width: 1.6;
@@ -369,18 +387,18 @@ input.nope {
 #strip {
 	display: flex;
 	align-items: center;
-	gap: 16px;
-	padding: 0 14px;
+	gap: 1.2308rem;
+	padding: 0 1.0769rem;
 	background: var(--panel);
 	border-bottom: 1px solid var(--line);
 	min-width: 0;
 }
 
 #strip .host, #strip .run, #strip .cand, #strip .actions,
-#strip .health {
+#strip .health, #strip .size {
 	display: flex;
 	align-items: center;
-	gap: 8px;
+	gap: .6154rem;
 	min-width: 0;
 }
 
@@ -388,13 +406,30 @@ input.nope {
 	flex: 1;
 }
 
+#strip .size {
+	gap: 0;
+}
+
+#strip .size button {
+	min-width: 2.3077rem;
+	font-weight: 600;
+}
+
+#strip .size button:first-child {
+	border-radius: .4615rem 0 0 .4615rem;
+}
+
+#strip .size button:last-child {
+	border-radius: 0 .4615rem .4615rem 0;
+}
+
 #hostname {
 	font-family: var(--mono);
-	font-size: 13px;
+	font-size: 1rem;
 }
 
 #who, #last-save {
-	font-size: 12px;
+	font-size: .9231rem;
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -402,10 +437,10 @@ input.nope {
 
 /* a label: a tinted pill */
 .tag {
-	font-size: 12px;
+	font-size: .9231rem;
 	font-weight: 500;
-	padding: 1px 8px;
-	border-radius: 5px;
+	padding: 1px .6154rem;
+	border-radius: .3846rem;
 	background: var(--select);
 	color: var(--dim);
 	white-space: nowrap;
@@ -433,7 +468,7 @@ button.tag.warn:hover {
 
 /* what an editor's statement or setting warns of, beside it */
 .structured .tag.warn {
-	margin-left: 8px;
+	margin-left: .6154rem;
 }
 
 main {
@@ -442,28 +477,28 @@ main {
 }
 
 .ws {
-	padding: 16px;
+	padding: 1.2308rem;
 	display: grid;
-	gap: 16px;
+	gap: 1.2308rem;
 	align-content: start;
 }
 
 .bar {
 	display: flex;
 	align-items: center;
-	gap: 8px;
+	gap: .6154rem;
 	flex-wrap: wrap;
-	min-height: 26px;
+	min-height: 2rem;
 }
 
 .bar h2 {
-	margin-right: 6px;
+	margin-right: .4615rem;
 }
 
 .inline {
 	display: flex;
 	align-items: center;
-	gap: 6px;
+	gap: .4615rem;
 	flex-wrap: wrap;
 	margin-left: auto;
 }
@@ -471,7 +506,7 @@ main {
 .inline label {
 	display: flex;
 	align-items: center;
-	gap: 5px;
+	gap: .3846rem;
 	color: var(--dim);
 }
 
@@ -497,8 +532,8 @@ main {
 
 .seg span {
 	display: block;
-	padding: 2px 11px;
-	line-height: 20px;
+	padding: .1538rem .8462rem;
+	line-height: 1.5385rem;
 	color: var(--dim);
 }
 
@@ -512,7 +547,7 @@ main {
 
 .seg input:checked + span {
 	color: var(--text);
-	box-shadow: inset 0 -2px 0 var(--accent);
+	box-shadow: inset 0 -.1538rem 0 var(--accent);
 }
 
 .seg input:focus-visible + span {
@@ -523,8 +558,8 @@ main {
 
 .led {
 	display: inline-block;
-	width: 8px;
-	height: 8px;
+	width: .6154rem;
+	height: .6154rem;
 	border-radius: 50%;
 	background: color-mix(in srgb, var(--faint) 45%, transparent);
 	flex: none;
@@ -539,48 +574,48 @@ main {
 }
 
 .chassis .led {
-	width: 7px;
-	height: 7px;
+	width: .5385rem;
+	height: .5385rem;
 	background: #2c2f33;
 	box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .4);
 }
 
 .chassis .led.on {
 	background: #3ee07a;
-	box-shadow: 0 0 6px #3ee07a;
+	box-shadow: 0 0 .4615rem #3ee07a;
 }
 
 .chassis .led.warn {
 	background: #f5b13d;
-	box-shadow: 0 0 6px #f5b13d;
+	box-shadow: 0 0 .4615rem #f5b13d;
 }
 
 /* the box's face: dark anodised metal, ears, a plate, the ports */
 
 .chassis {
 	display: grid;
-	grid-template-columns: 14px auto 1fr auto auto 14px;
+	grid-template-columns: 1.0769rem auto 1fr auto auto 1.0769rem;
 	align-items: stretch;
-	min-height: 120px;
-	border-radius: 5px;
+	min-height: 9.2308rem;
+	border-radius: .3846rem;
 	background:
 	    linear-gradient(180deg, rgba(255, 255, 255, .06), transparent 30%),
 	    repeating-linear-gradient(90deg, rgba(255, 255, 255, .012) 0 1px,
-	    transparent 1px 3px),
+	    transparent 1px .2308rem),
 	    linear-gradient(180deg, #2b2f35, #1b1e22);
 	border: 1px solid #0a0b0d;
 	box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08),
-	    0 1px 0 rgba(255, 255, 255, .03), 0 8px 24px rgba(0, 0, 0, .35);
+	    0 1px 0 rgba(255, 255, 255, .03), 0 .6154rem 1.8462rem rgba(0, 0, 0, .35);
 	color: #c8ced6;
 	overflow: hidden;
 }
 
 .ears {
 	background:
-	    radial-gradient(circle at 50% 22%, #0b0c0e 2.5px, #3b4048 3px,
-	    transparent 4px),
-	    radial-gradient(circle at 50% 78%, #0b0c0e 2.5px, #3b4048 3px,
-	    transparent 4px),
+	    radial-gradient(circle at 50% 22%, #0b0c0e .1923rem, #3b4048 .2308rem,
+	    transparent .3077rem),
+	    radial-gradient(circle at 50% 78%, #0b0c0e .1923rem, #3b4048 .2308rem,
+	    transparent .3077rem),
 	    linear-gradient(90deg, #24282d, #30353b);
 	border-right: 1px solid #0d0e10;
 }
@@ -594,29 +629,29 @@ main {
 	display: flex;
 	flex-direction: column;
 	justify-content: center;
-	gap: 3px;
-	padding: 0 22px;
+	gap: .2308rem;
+	padding: 0 1.6923rem;
 	border-right: 1px solid rgba(0, 0, 0, .5);
 	box-shadow: 1px 0 0 rgba(255, 255, 255, .04);
-	min-width: 168px;
+	min-width: 12.9231rem;
 }
 
 .plate .brand {
-	font: 800 15px var(--sans);
+	font: 800 1.1538rem var(--sans);
 	letter-spacing: .14em;
 	text-transform: uppercase;
 	color: #e9edf2;
 }
 
 .plate .model {
-	font: 12px var(--mono);
+	font: .9231rem var(--mono);
 	color: #aab3bd;
 }
 
 .plate .serial {
-	font: 10px var(--mono);
+	font: .7692rem var(--mono);
 	color: #6c747e;
-	max-width: 220px;
+	max-width: 16.9231rem;
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -627,28 +662,28 @@ main {
 	flex-wrap: wrap;
 	align-items: center;
 	align-content: center;
-	gap: 14px 26px;
-	padding: 14px 22px;
+	gap: 1.0769rem 2rem;
+	padding: 1.0769rem 1.6923rem;
 }
 
 .block {
 	display: grid;
-	gap: 6px;
+	gap: .4615rem;
 }
 
 .block .row {
 	display: flex;
-	gap: 6px;
+	gap: .4615rem;
 }
 
 /* the block's driver, silkscreened under a bracket */
 .block .silk {
-	font: 600 9px var(--sans);
+	font: 600 .6923rem var(--sans);
 	letter-spacing: .16em;
 	text-transform: uppercase;
 	color: #7c858f;
 	border-top: 1px solid #4a5059;
-	padding-top: 3px;
+	padding-top: .2308rem;
 	text-align: center;
 }
 
@@ -656,11 +691,11 @@ main {
 	display: grid;
 	grid-template-columns: repeat(2, auto);
 	align-content: center;
-	gap: 9px 16px;
-	padding: 0 22px;
+	gap: .6923rem 1.2308rem;
+	padding: 0 1.6923rem;
 	border-left: 1px solid rgba(0, 0, 0, .5);
 	box-shadow: inset 1px 0 0 rgba(255, 255, 255, .04);
-	font: 600 9px var(--sans);
+	font: 600 .6923rem var(--sans);
 	letter-spacing: .14em;
 	color: #7c858f;
 }
@@ -668,7 +703,7 @@ main {
 .status span {
 	display: flex;
 	align-items: center;
-	gap: 6px;
+	gap: .4615rem;
 }
 
 .led.blink {
@@ -686,8 +721,8 @@ main {
 	cursor: pointer;
 	display: grid;
 	justify-items: center;
-	gap: 3px;
-	width: 48px;
+	gap: .2308rem;
+	width: 3.6923rem;
 }
 
 /*
@@ -696,12 +731,12 @@ main {
  */
 .port .jack {
 	position: relative;
-	width: 42px;
-	height: 32px;
+	width: 3.2308rem;
+	height: 2.4615rem;
 	background: linear-gradient(180deg, #050607, #15171a);
 	border: 1px solid #000;
-	border-radius: 2px;
-	box-shadow: inset 0 2px 4px rgba(0, 0, 0, .9),
+	border-radius: .1538rem;
+	box-shadow: inset 0 .1538rem .3077rem rgba(0, 0, 0, .9),
 	    0 1px 0 rgba(255, 255, 255, .07);
 	clip-path: polygon(0 0, 100% 0, 100% 78%, 68% 78%, 68% 100%,
 	    32% 100%, 32% 78%, 0 78%);
@@ -709,28 +744,28 @@ main {
 
 .port .jack .led {
 	position: absolute;
-	top: 3px;
-	width: 8px;
-	height: 4px;
+	top: .2308rem;
+	width: .6154rem;
+	height: .3077rem;
 	border-radius: 1px;
 }
 
 .port .jack .link {
-	left: 3px;
+	left: .2308rem;
 }
 
 .port .jack .act {
-	right: 3px;
+	right: .2308rem;
 }
 
 .port.on .jack .link, .port .jack .act.on {
 	background: #3ee07a;
-	box-shadow: 0 0 6px #3ee07a;
+	box-shadow: 0 0 .4615rem #3ee07a;
 }
 
 .port.warn .jack .link {
 	background: #f5b13d;
-	box-shadow: 0 0 6px #f5b13d;
+	box-shadow: 0 0 .4615rem #f5b13d;
 }
 
 /* traffic: a flicker, as a port's light does */
@@ -758,12 +793,12 @@ main {
 }
 
 .port:hover .jack, .port:focus-visible .jack {
-	box-shadow: inset 0 2px 4px rgba(0, 0, 0, .9),
+	box-shadow: inset 0 .1538rem .3077rem rgba(0, 0, 0, .9),
 	    0 0 0 1px var(--accent);
 }
 
 .port .label {
-	font: 10px var(--mono);
+	font: .7692rem var(--mono);
 	color: #b9c1ca;
 }
 
@@ -773,9 +808,9 @@ main {
 }
 
 .port .rate {
-	font: 9px var(--mono);
+	font: .6923rem var(--mono);
 	color: #6c747e;
-	min-height: 11px;
+	min-height: .8462rem;
 }
 
 /* the readout: a display set in the box's face, its glass lit */
@@ -783,20 +818,20 @@ main {
 	align-self: center;
 	display: grid;
 	grid-template-columns: auto auto;
-	gap: 1px 16px;
-	margin: 0 20px;
-	padding: 9px 14px;
-	border-radius: 4px;
+	gap: 1px 1.2308rem;
+	margin: 0 1.5385rem;
+	padding: .6923rem 1.0769rem;
+	border-radius: .3077rem;
 	border: 1px solid #000;
 	background:
 	    repeating-linear-gradient(0deg, rgba(255, 255, 255, .025) 0 1px,
-	    transparent 1px 3px),
+	    transparent 1px .2308rem),
 	    radial-gradient(ellipse at 50% 0%, #0d1714, #040605 70%);
-	box-shadow: inset 0 2px 10px rgba(0, 0, 0, .9),
+	box-shadow: inset 0 .1538rem .7692rem rgba(0, 0, 0, .9),
 	    0 1px 0 rgba(255, 255, 255, .07);
-	font: 11.5px/1.55 var(--mono);
+	font: .8846rem/1.55 var(--mono);
 	color: #86f3d6;
-	text-shadow: 0 0 6px rgba(80, 240, 200, .45);
+	text-shadow: 0 0 .4615rem rgba(80, 240, 200, .45);
 	white-space: nowrap;
 }
 
@@ -815,9 +850,9 @@ main {
 /* a port's tray, below the front panel (relations.js) */
 .tray {
 	display: grid;
-	gap: 2px;
+	gap: .1538rem;
 	margin-top: -1px;
-	padding: 8px 12px 10px;
+	padding: .6154rem .9231rem .7692rem;
 	background: var(--panel);
 	border: 1px solid var(--line);
 }
@@ -827,45 +862,45 @@ main {
 }
 
 .tray h3 {
-	font: 600 13px var(--mono);
+	font: 600 1rem var(--mono);
 }
 
 .tray h4 {
-	margin: 6px 0 0;
-	font-size: 11.5px;
+	margin: .4615rem 0 0;
+	font-size: .8846rem;
 	font-weight: 500;
 	color: var(--dim);
 }
 
 /* a relation row: the relation, the other end and its sources */
 .rels {
-	padding: 4px 10px 8px;
+	padding: .3077rem .7692rem .6154rem;
 }
 
 .rel {
 	display: flex;
 	flex-wrap: wrap;
 	align-items: baseline;
-	gap: 2px 10px;
-	padding: 3px 0;
-	font-size: 12.5px;
+	gap: .1538rem .7692rem;
+	padding: .2308rem 0;
+	font-size: .9615rem;
 }
 
 .rel code {
-	font: 11.5px var(--mono);
+	font: .8846rem var(--mono);
 	color: var(--dim);
 }
 
 .rel .said {
 	margin-left: auto;
-	font-size: 11.5px;
+	font-size: .8846rem;
 	color: var(--faint);
 }
 
 button.goto {
 	height: auto;
 	padding: 0;
-	font: 12px var(--mono);
+	font: .9231rem var(--mono);
 	color: var(--accent);
 	background: none;
 	box-shadow: none;
@@ -878,35 +913,35 @@ button.goto:hover:not(:disabled) {
 
 .crumb {
 	margin: 0;
-	font: 12px var(--mono);
+	font: .9231rem var(--mono);
 	color: var(--dim);
 }
 
 .nothing {
 	margin: 0;
-	padding: 3px 0;
-	font-size: 12px;
+	padding: .2308rem 0;
+	font-size: .9231rem;
 	color: var(--faint);
 }
 
 .logical {
 	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-	gap: 12px;
+	grid-template-columns: repeat(auto-fill, minmax(23.0769rem, 1fr));
+	gap: .9231rem;
 	align-items: start;
 }
 
 .group {
 	background: var(--panel);
 	border: 1px solid var(--line);
-	padding: 6px;
+	padding: .4615rem;
 }
 
 .group h3 {
 	display: flex;
-	gap: 7px;
-	padding: 5px 8px 7px;
-	font-size: 12.5px;
+	gap: .5385rem;
+	padding: .3846rem .6154rem .5385rem;
+	font-size: .9615rem;
 	color: var(--text);
 }
 
@@ -919,13 +954,13 @@ button.goto:hover:not(:disabled) {
 	all: unset;
 	cursor: pointer;
 	display: grid;
-	grid-template-columns: 10px 70px 1fr auto;
+	grid-template-columns: .7692rem 5.3846rem 1fr auto;
 	align-items: center;
-	gap: 8px;
+	gap: .6154rem;
 	width: 100%;
 	box-sizing: border-box;
-	padding: 6px 8px;
-	border-radius: 6px;
+	padding: .4615rem .6154rem;
+	border-radius: .4615rem;
 }
 
 .lif:hover, .lif:focus-visible {
@@ -933,12 +968,12 @@ button.goto:hover:not(:disabled) {
 }
 
 .lif b {
-	font: 600 12px var(--mono);
+	font: 600 .9231rem var(--mono);
 }
 
 .lif .rel, .lif .addr {
 	color: var(--dim);
-	font: 11px var(--mono);
+	font: .8462rem var(--mono);
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -955,20 +990,20 @@ table.grid {
 
 .grid th {
 	text-align: left;
-	font-size: 11.5px;
+	font-size: .8846rem;
 	font-weight: 600;
 	color: var(--dim);
-	padding: 8px 10px 6px;
+	padding: .6154rem .7692rem .4615rem;
 	border-bottom: 1px solid var(--line);
 	white-space: nowrap;
 }
 
 .grid td {
-	padding: 5px 10px;
+	padding: .3846rem .7692rem;
 	border-bottom: 1px solid var(--line);
 	vertical-align: middle;
-	font-size: 12px;
-	line-height: 18px;
+	font-size: .9231rem;
+	line-height: 1.3846rem;
 }
 
 .grid tr:last-child td {
@@ -976,7 +1011,7 @@ table.grid {
 }
 
 .grid td.mono {
-	font: 12px var(--mono);
+	font: .9231rem var(--mono);
 }
 
 .grid td.num {
@@ -986,7 +1021,7 @@ table.grid {
 
 .grid td.descr {
 	width: 100%;
-	min-width: 140px;
+	min-width: 10.7692rem;
 }
 
 .pick td:not(.descr) {
@@ -994,7 +1029,7 @@ table.grid {
 }
 
 .grid td.type {
-	max-width: 110px;
+	max-width: 8.4615rem;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
@@ -1005,28 +1040,33 @@ table.grid {
 
 .netsplit {
 	display: grid;
-	grid-template-columns: minmax(0, 1fr) minmax(360px, 460px);
-	gap: 16px;
+	grid-template-columns: minmax(0, 1fr) minmax(27.6923rem, 35.3846rem);
+	gap: 1.2308rem;
 	align-items: start;
+}
+
+/* a table wider than its column, as with large text, scrolls in it */
+.netsplit > :first-child {
+	overflow-x: auto;
 }
 
 #inspector, .dinsp {
 	position: sticky;
 	top: 0;
-	max-height: calc(100vh - 80px);
+	max-height: calc(100vh - 6.1538rem);
 	overflow: auto;
-	gap: 10px;
+	gap: .7692rem;
 }
 
 .ihead {
 	display: flex;
 	align-items: center;
-	gap: 9px;
+	gap: .6923rem;
 	flex-wrap: wrap;
 }
 
 .ihead .iname {
-	font: 600 16px var(--mono);
+	font: 600 1.2308rem var(--mono);
 	letter-spacing: 0;
 	text-transform: none;
 	color: var(--text);
@@ -1034,14 +1074,14 @@ table.grid {
 
 #inspector .from, .dinsp .from {
 	margin: 0;
-	font-size: 12px;
+	font-size: .9231rem;
 }
 
 #inspector > label.dim {
 	display: flex;
 	align-items: center;
-	gap: 6px;
-	font-size: 12px;
+	gap: .4615rem;
+	font-size: .9231rem;
 }
 
 .igroup {
@@ -1051,17 +1091,17 @@ table.grid {
 
 .igroup summary {
 	display: flex;
-	gap: 10px;
+	gap: .7692rem;
 	align-items: baseline;
-	padding: 7px 10px;
+	padding: .5385rem .7692rem;
 	cursor: pointer;
 	font-weight: 600;
-	font-size: 12px;
+	font-size: .9231rem;
 	list-style-position: inside;
 }
 
 .igroup summary .count {
-	font: 400 11px var(--mono);
+	font: 400 .8462rem var(--mono);
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -1073,12 +1113,12 @@ table.grid {
 
 .field {
 	display: grid;
-	grid-template-columns: 128px minmax(0, 1fr);
-	gap: 3px 10px;
+	grid-template-columns: 9.8462rem minmax(0, 1fr);
+	gap: .2308rem .7692rem;
 	align-items: center;
-	padding: 7px 10px;
+	padding: .5385rem .7692rem;
 	border-bottom: 1px solid var(--line);
-	border-left: 2px solid transparent;
+	border-left: .1538rem solid transparent;
 }
 
 .field:last-child {
@@ -1092,7 +1132,7 @@ table.grid {
 
 .field label {
 	color: var(--dim);
-	font-size: 12px;
+	font-size: .9231rem;
 }
 
 .field input:not([type=checkbox]), .field select {
@@ -1107,15 +1147,15 @@ table.grid {
 .field .info {
 	grid-column: 2;
 	display: flex;
-	gap: 8px;
+	gap: .6154rem;
 	align-items: baseline;
-	font-size: 12px;
+	font-size: .9231rem;
 	line-height: 1.4;
 	color: var(--dim);
 }
 
 .field .info code {
-	font: 11.5px var(--mono);
+	font: .8846rem var(--mono);
 	color: var(--text);
 }
 
@@ -1123,10 +1163,10 @@ table.grid {
 button.what {
 	flex: none;
 	margin-left: auto;
-	width: 18px;
-	height: 18px;
+	width: 1.3846rem;
+	height: 1.3846rem;
 	padding: 0;
-	font: 600 11px var(--mono);
+	font: 600 .8462rem var(--mono);
 	color: var(--dim);
 	background: none;
 	border: 1px solid var(--line);
@@ -1141,21 +1181,21 @@ button.what[aria-expanded=true] {
 
 .field .def {
 	grid-column: 1 / -1;
-	padding: 8px 10px;
-	font-size: 12px;
+	padding: .6154rem .7692rem;
+	font-size: .9231rem;
 	line-height: 1.45;
 	background: var(--side);
 	border-left: 1px solid var(--accent);
 }
 
 .field .def p {
-	margin: 0 0 6px;
+	margin: 0 0 .4615rem;
 }
 
 .field .def dl {
 	display: grid;
 	grid-template-columns: max-content minmax(0, 1fr);
-	gap: 2px 12px;
+	gap: .1538rem .9231rem;
 	margin: 0;
 }
 
@@ -1172,7 +1212,7 @@ button.what[aria-expanded=true] {
 .addline {
 	display: flex;
 	flex-wrap: wrap;
-	gap: 6px;
+	gap: .4615rem;
 }
 
 /* a choice of what to add, wide enough to read */
@@ -1187,7 +1227,7 @@ button.what[aria-expanded=true] {
 .chips, .rows {
 	display: flex;
 	flex-wrap: wrap;
-	gap: 4px;
+	gap: .3077rem;
 	align-items: center;
 }
 
@@ -1199,11 +1239,11 @@ button.what[aria-expanded=true] {
 .chip {
 	display: inline-flex;
 	align-items: center;
-	gap: 4px;
-	padding: 1px 2px 1px 8px;
-	border-radius: 5px;
+	gap: .3077rem;
+	padding: 1px .1538rem 1px .6154rem;
+	border-radius: .3846rem;
 	background: var(--select);
-	font-size: 12px;
+	font-size: .9231rem;
 }
 
 .rows .chip {
@@ -1211,8 +1251,8 @@ button.what[aria-expanded=true] {
 }
 
 .chip button {
-	height: 18px;
-	padding: 0 5px;
+	height: 1.3846rem;
+	padding: 0 .3846rem;
 	background: transparent;
 	box-shadow: none;
 	color: var(--faint);
@@ -1224,17 +1264,17 @@ button.what[aria-expanded=true] {
 
 .chips input.add {
 	flex: 1;
-	min-width: 90px;
+	min-width: 6.9231rem;
 }
 
 pre.stanza {
-	max-height: 200px;
+	max-height: 15.3846rem;
 	min-height: 0;
 }
 
 .result {
-	font: 11px var(--mono);
-	padding: 2px 0;
+	font: .8462rem var(--mono);
+	padding: .1538rem 0;
 }
 
 .result.ok {
@@ -1252,17 +1292,17 @@ pre.stanza {
 /* a daemon's rules, as text */
 .daemons {
 	display: grid;
-	gap: 10px;
+	gap: .7692rem;
 }
 
 textarea.rules {
 	display: block;
-	width: calc(100% - 20px);
-	min-height: 260px;
-	margin: 10px;
-	padding: 8px 10px;
+	width: calc(100% - 1.5385rem);
+	min-height: 20rem;
+	margin: .7692rem;
+	padding: .6154rem .7692rem;
 	resize: vertical;
-	font: 12px/1.45 var(--mono);
+	font: .9231rem/1.45 var(--mono);
 	color: var(--text);
 	background: var(--field);
 	border: 1px solid var(--line);
@@ -1276,20 +1316,20 @@ textarea.rules:focus {
 }
 
 textarea.rules.edited {
-	box-shadow: inset 2px 0 0 var(--warn);
+	box-shadow: inset .1538rem 0 0 var(--warn);
 }
 
 /* the pf and bgpd editors under the daemons (editors.js) */
 .dmain {
 	display: grid;
-	gap: 16px;
+	gap: 1.2308rem;
 	align-content: start;
 	min-width: 0;
 }
 
 .structured {
 	display: grid;
-	gap: 10px;
+	gap: .7692rem;
 	min-width: 0;
 }
 
@@ -1308,12 +1348,12 @@ textarea.rules.edited {
 }
 
 .srules td.kind {
-	font: 11.5px var(--mono);
+	font: .8846rem var(--mono);
 	color: var(--faint);
 }
 
 .srules td.cmt {
-	font: 12px var(--mono);
+	font: .9231rem var(--mono);
 	color: var(--faint);
 }
 
@@ -1328,12 +1368,12 @@ textarea.rules.edited {
 }
 
 .srules tr.inner td:nth-child(2) {
-	padding-left: 26px;
+	padding-left: 2rem;
 }
 
 /* a rule's or a filter's action */
 .act {
-	font: 600 12px var(--mono);
+	font: 600 .9231rem var(--mono);
 }
 
 .act-pass {
@@ -1350,33 +1390,33 @@ textarea.rules.edited {
 
 /* the selected statement's form, in its own row below it */
 .pick tr.sform td, .pick tr.sform:hover td {
-	padding: 12px;
+	padding: .9231rem;
 	white-space: normal;
 	cursor: default;
 	background: var(--side);
 }
 
 .pick tr.sform td:first-child {
-	box-shadow: inset 2px 0 0 var(--accent);
+	box-shadow: inset .1538rem 0 0 var(--accent);
 }
 
 .sform h3, .speer h3, .flow h3 {
-	margin: 0 0 6px;
+	margin: 0 0 .4615rem;
 }
 
 .sform h3 {
-	margin-top: 12px;
+	margin-top: .9231rem;
 }
 
 .sform > td > .bar {
-	margin-top: 10px;
+	margin-top: .7692rem;
 	justify-content: flex-end;
 }
 
 /* a form's fields in hairline cells, two per row where they fit */
 .sfields {
 	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr));
+	grid-template-columns: repeat(auto-fill, minmax(min(26.1538rem, 100%), 1fr));
 	background: var(--panel);
 	border-top: 1px solid var(--line);
 	border-left: 1px solid var(--line);
@@ -1388,7 +1428,7 @@ textarea.rules.edited {
 }
 
 .sfields > .help {
-	padding: 10px;
+	padding: .7692rem;
 	border-bottom: 1px solid var(--line);
 	border-right: 1px solid var(--line);
 }
@@ -1396,7 +1436,7 @@ textarea.rules.edited {
 .field textarea.lines {
 	width: 100%;
 	min-width: 0;
-	padding: 4px 9px;
+	padding: .3077rem .6923rem;
 	resize: vertical;
 	color: var(--text);
 	background: var(--field);
@@ -1411,8 +1451,8 @@ textarea.rules.edited {
 /* a peer's form: its session, and its inbound and outbound filters */
 .speer {
 	display: grid;
-	gap: 12px;
-	padding: 12px;
+	gap: .9231rem;
+	padding: .9231rem;
 	background: var(--panel);
 	border: 1px solid var(--line);
 }
@@ -1423,26 +1463,26 @@ textarea.rules.edited {
 
 .flows {
 	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
-	gap: 10px;
+	grid-template-columns: repeat(auto-fit, minmax(min(23.0769rem, 100%), 1fr));
+	gap: .7692rem;
 }
 
 .flow {
 	display: grid;
-	gap: 6px;
+	gap: .4615rem;
 	align-content: start;
-	padding: 10px;
+	padding: .7692rem;
 	border: 1px solid var(--line);
 }
 
 .flow ol {
 	margin: 0;
-	padding-left: 24px;
-	font: 12px var(--mono);
+	padding-left: 1.8462rem;
+	font: .9231rem var(--mono);
 }
 
 .flow li + li {
-	margin-top: 3px;
+	margin-top: .2308rem;
 }
 
 .flow > .empty {
@@ -1451,33 +1491,33 @@ textarea.rules.edited {
 
 .igroup > .help, .igroup > .bar, .igroup > .cliline, .igroup > pre.term,
 .igroup > pre.cmd, .igroup > dl.args {
-	margin: 0 10px 10px;
+	margin: 0 .7692rem .7692rem;
 }
 
 /* a save in a daemon's history, opened for its changes */
 details.dsave {
-	margin: 0 10px 6px;
+	margin: 0 .7692rem .4615rem;
 	border-top: 1px solid var(--line);
 }
 
 details.dsave summary {
 	display: flex;
 	justify-content: space-between;
-	gap: 8px;
-	padding: 4px 0;
-	font-size: 12px;
+	gap: .6154rem;
+	padding: .3077rem 0;
+	font-size: .9231rem;
 	cursor: pointer;
 }
 
 details.dsave pre.term {
-	margin: 0 0 6px;
+	margin: 0 0 .4615rem;
 }
 
 /* the command nsh starts a daemon with, and what its arguments do */
 pre.cmd {
-	padding: 6px 8px;
+	padding: .4615rem .6154rem;
 	font-family: var(--mono);
-	font-size: 12px;
+	font-size: .9231rem;
 	white-space: pre-wrap;
 	overflow-wrap: anywhere;
 	background: var(--side);
@@ -1487,8 +1527,8 @@ pre.cmd {
 dl.args, dl.observed {
 	display: grid;
 	grid-template-columns: max-content minmax(0, 1fr);
-	gap: 2px 12px;
-	font-size: 12px;
+	gap: .1538rem .9231rem;
+	font-size: .9231rem;
 }
 
 dl.args dd, dl.observed dd {
@@ -1497,7 +1537,7 @@ dl.args dd, dl.observed dd {
 
 /* what bgpctl observed of a peer, apart from its settings */
 dl.observed {
-	margin: 0 0 10px;
+	margin: 0 0 .7692rem;
 }
 
 dl.observed dt {
@@ -1523,37 +1563,37 @@ button:disabled {
 }
 
 .pick tr.sel td:first-child {
-	box-shadow: inset 2px 0 0 var(--accent);
+	box-shadow: inset .1538rem 0 0 var(--accent);
 }
 
 /* shows, consoles and transcripts */
 
 .shows, .panel {
 	display: grid;
-	gap: 8px;
+	gap: .6154rem;
 	align-content: start;
 	min-width: 0;
 }
 
 .shows .out {
 	display: grid;
-	gap: 8px;
+	gap: .6154rem;
 }
 
 button.preset {
-	height: 22px;
-	padding: 0 9px;
-	font: 11.5px var(--mono);
+	height: 1.6923rem;
+	padding: 0 .6923rem;
+	font: .8846rem var(--mono);
 }
 
 .cliline {
 	display: flex;
 	align-items: center;
-	gap: 8px;
+	gap: .6154rem;
 	background: var(--field);
 	box-shadow: var(--ring);
-	border-radius: 6px;
-	padding: 0 0 0 9px;
+	border-radius: .4615rem;
+	padding: 0 0 0 .6923rem;
 }
 
 .cliline:focus-within {
@@ -1582,16 +1622,16 @@ button.preset {
 .cliline button {
 	box-shadow: none;
 	border-left: 1px solid var(--line);
-	border-radius: 0 6px 6px 0;
+	border-radius: 0 .4615rem .4615rem 0;
 }
 
 pre.term {
 	margin: 0;
-	padding: 10px 12px;
+	padding: .7692rem .9231rem;
 	background: var(--field);
 	border: 1px solid var(--line);
-	max-height: 340px;
-	min-height: 60px;
+	max-height: 26.1538rem;
+	min-height: 4.6154rem;
 	overflow: auto;
 	white-space: pre-wrap;
 	word-break: break-word;
@@ -1601,7 +1641,7 @@ pre.term {
 .help {
 	margin: 0;
 	max-width: 90ch;
-	font-size: 12px;
+	font-size: .9231rem;
 	color: var(--dim);
 }
 
@@ -1612,7 +1652,7 @@ pre.term {
 .empty {
 	display: none;
 	margin: 0;
-	padding: 10px 12px;
+	padding: .7692rem .9231rem;
 	border: 1px solid var(--line);
 	color: var(--dim);
 }
@@ -1626,7 +1666,7 @@ pre.term:empty, ul:empty, table.grid:empty {
 }
 
 pre.term.tall {
-	max-height: 520px;
+	max-height: 40rem;
 }
 
 .bar .fill {
@@ -1635,14 +1675,14 @@ pre.term.tall {
 
 .topic {
 	display: grid;
-	gap: 16px;
+	gap: 1.2308rem;
 }
 
 /* a diff: lines added green, taken away red, each on its own tint */
 pre.diff span {
 	display: block;
-	margin: 0 -12px;
-	padding: 0 12px;
+	margin: 0 -.9231rem;
+	padding: 0 .9231rem;
 }
 
 pre.diff .add {
@@ -1661,8 +1701,8 @@ pre.diff .hdr, pre.diff .msg {
 
 /* a row's arrow, which opens what it changed under it */
 button.twisty {
-	width: 20px;
-	height: 20px;
+	width: 1.5385rem;
+	height: 1.5385rem;
 	padding: 0;
 	background: none;
 	box-shadow: none;
@@ -1672,8 +1712,8 @@ button.twisty {
 button.twisty::before {
 	content: "";
 	display: inline-block;
-	width: 6px;
-	height: 6px;
+	width: .4615rem;
+	height: .4615rem;
 	border: solid currentColor;
 	border-width: 0 1.5px 1.5px 0;
 	transform: rotate(-45deg);
@@ -1685,7 +1725,7 @@ button.twisty[aria-expanded=true]::before {
 }
 
 .pick tr.changes td, .pick tr.changes:hover td {
-	padding: 0 10px 10px 36px;
+	padding: 0 .7692rem .7692rem 2.7692rem;
 	background: none;
 	cursor: default;
 }
@@ -1696,8 +1736,8 @@ button.twisty[aria-expanded=true]::before {
 
 .split {
 	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
-	gap: 16px;
+	grid-template-columns: repeat(auto-fit, minmax(29.2308rem, 1fr));
+	gap: 1.2308rem;
 }
 
 /* the terminal: a screen, dark whatever the page's colors are */
@@ -1712,8 +1752,8 @@ button.twisty[aria-expanded=true]::before {
 }
 
 #term {
-	min-height: 320px;
-	padding: 8px;
+	min-height: 24.6154rem;
+	padding: .6154rem;
 	overflow: hidden;
 	background: #0b0d10;
 	border: 1px solid var(--line);
@@ -1722,21 +1762,21 @@ button.twisty[aria-expanded=true]::before {
 .panel {
 	background: var(--panel);
 	border: 1px solid var(--line);
-	padding: 12px;
+	padding: .9231rem;
 }
 
 #notices {
 	list-style: none;
 	margin: 0;
 	padding: 0;
-	max-height: 140px;
+	max-height: 10.7692rem;
 	overflow: auto;
-	font: 11px var(--mono);
+	font: .8462rem var(--mono);
 	color: var(--dim);
 }
 
 #notices li {
-	padding: 2px 0;
+	padding: .1538rem 0;
 	border-bottom: 1px solid var(--line);
 }
 
@@ -1745,21 +1785,21 @@ button.twisty[aria-expanded=true]::before {
 #choices {
 	position: absolute;
 	z-index: 10;
-	max-height: 300px;
-	max-width: 640px;
+	max-height: 23.0769rem;
+	max-width: 49.2308rem;
 	overflow: auto;
 	background: var(--raise);
 	border: 1px solid var(--line);
-	padding: 4px;
+	padding: .3077rem;
 }
 
 .choice {
 	display: grid;
-	grid-template-columns: minmax(90px, auto) 1fr;
-	gap: 14px;
-	padding: 3px 8px;
+	grid-template-columns: minmax(6.9231rem, auto) 1fr;
+	gap: 1.0769rem;
+	padding: .2308rem .6154rem;
 	cursor: pointer;
-	font-size: 12px;
+	font-size: .9231rem;
 }
 
 .choice .w {
@@ -1794,8 +1834,8 @@ dialog {
 	background: var(--raise);
 	color: var(--text);
 	border: 1px solid var(--line);
-	padding: 20px;
-	width: 400px;
+	padding: 1.5385rem;
+	width: 30.7692rem;
 }
 
 dialog::backdrop {
@@ -1804,33 +1844,39 @@ dialog::backdrop {
 
 dialog form {
 	display: grid;
-	gap: 12px;
+	gap: .9231rem;
 }
 
 dialog label {
 	display: grid;
-	gap: 4px;
+	gap: .3077rem;
 	color: var(--dim);
 }
 
 dialog label.row {
 	display: flex;
 	align-items: center;
-	gap: 6px;
+	gap: .4615rem;
 }
 
 dialog p {
 	margin: 0;
-	font-size: 12px;
+	font-size: .9231rem;
 }
 
 dialog .actions {
 	display: flex;
 	justify-content: flex-end;
-	gap: 8px;
+	gap: .6154rem;
 }
 
-@media (max-width: 1100px) {
+/*
+ * The breakpoints are in em of body's text, which a container query
+ * reads, so they follow the text's size and A+ as the other sizes do; a
+ * media query's em is the browser's default. 84.6154em is 1100px of 13px
+ * text, and 55.3846em is 720px
+ */
+@container (max-width: 84.6154em) {
 	.netsplit {
 		grid-template-columns: minmax(0, 1fr);
 	}
@@ -1840,15 +1886,15 @@ dialog .actions {
 	}
 }
 
-@media (max-width: 720px) {
+@container (max-width: 55.3846em) {
 	#deck {
-		grid-template-columns: 44px 1fr;
+		grid-template-columns: 3.3846rem 1fr;
 	}
 	#strip .actions button:not(.primary), #who, #last-save {
 		display: none;
 	}
 	.chassis {
-		grid-template-columns: 10px 1fr 10px;
+		grid-template-columns: .7692rem 1fr .7692rem;
 	}
 	.plate, .status {
 		display: none;
@@ -1856,6 +1902,6 @@ dialog .actions {
 	.readout {
 		grid-area: 2 / 2;
 		justify-self: start;
-		margin: 0 0 14px 22px;
+		margin: 0 0 1.0769rem 1.6923rem;
 	}
 }
