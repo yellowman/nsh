@@ -23,653 +23,480 @@
 .Op Fl bdv
 .Sh DESCRIPTION
 .Nm
-reads the system's configuration for
-.Xr nsh 8 ,
-which requests it over a socket.
-It is privilege separated.
-The parent process, as root, binds the sockets, starts the children,
-and accepts each client of the read-write socket.
-Each child except system runs as a user of its own, so that no child can
-signal a child of another role or reach its files:
-.Bl -tag -width "frontend"
-.It show
-Four show processes, each as _nshshow in a
-.Xr chroot 2 ,
-answer the read-only socket.
-They answer only with what anyone may see: interfaces and their
-addresses, routes and route lookups, the ARP and neighbor tables,
-VLANs, bridges, the kernel statistics that need no root, the IPsec
-flows, the daemons that run, the version, who is logged in and the
-hostname.
-They send these as facts, which the client renders.
-A long answer delays only the show that makes it, and the show makes it
-only as the client reads it.
-A show has no pipe to the other children.
-It is not
-.Xr pledge 2 Ns d ,
-because no promise allows the interface ioctls that it uses.
-Each opens
-.Pa /var/run/utmp
-before its
-.Xr chroot 2 .
-.It frontend
-One for each client of the read-write socket, each as _nshfront in a
-.Xr chroot 2 ,
-in a process group of its own.
-Each client is a session, which sends one request at a time.
-The parent accepts the client, reads its uid and gid from its socket,
-and gives the session a number that it never uses again.
-It gives config a pipe to the session's frontend, and gives system a
-copy of the client's socket.
-Once both have taken the session, the parent starts the frontend with
-that pipe and the client's socket, and no other descriptor.
-config knows which session a message is for by the pipe it comes on, so
-a frontend can speak only for its own session.
-A frontend is
-.Xr pledge 2 Ns d
-to use only the descriptors it has and to pass on a terminal's pty, so
-it can signal no process outside its own process group.
-A frontend reads the lines its client sends, a line of configure and
-the lines of a stage, with nsh's command tables, in the mode config
-last told the session it is in.
-It sends config each line's edits: the row of its command, and the
-values its words parse to.
-config reads no word of such a line.
-It checks each edit as system checks a script's: its row is a command
-of the mode the session is in, one that edits the candidate, and its
-values are those the row's arguments take.
-A line that is none of the candidate's goes no further than the
-frontend, which answers it.
-A stage's line that is none is answered where the stage reaches it, and
-the lines after it are not read.
-In configure terminal the frontend also sends the line as typed, which
-config passes on in the notice of the line's commit.
-A frontend parses a show's words and an operation's the same way: into
-what the show asks, and into the operation's row and the values of its
-arguments.
-config passes them on to system, which checks them.
-A show nshd's system does not answer, and an operation's words that are
-none an operation takes, are answered by the frontend.
-A frontend holds no candidate, and has only what config sends its own
-client.
-A configuration that
-.Ic nsh -c
-loads is not read as lines: config keeps it as a candidate's text, as
-it keeps the running configuration, and the parser reads its lines when
-it is committed.
-When the client goes, its frontend ends, config drops the session, and
-the parent tells system to drop it too.
-system also checks each second that each session's client is still
-connected.
-When it finds one gone, or drops a session for another reason, the
-parent kills the session's frontend if it still runs, and config drops
-the session too.
-So a frontend that stays after its client has gone keeps the session
-for about a second at most.
-A frontend that ends, or sends config what it may not, ends only its
-session.
-config also drops a session that has 16 requests unfinished and makes
-another, since a client makes one request at a time and watches at most
-four logs.
-The parent takes at most 64 sessions at once, and closes a client past
-that.
-config takes at most 1024 requests unfinished from all sessions, and
-refuses a request past that.
-A request counts until system ends it, even after its session has
-ended.
-When a session ends, system ends each of its requests that waits for a
-commit and has not begun.
-A client with _nshweb's uid is the web configurator's session.
-Only that session may log in, as a user, with that user's password, and
-request the user's terminal.
-A login that is refused is answered only that it is incorrect, and
-system logs why, with the user's name.
-.It config
-Runs as _nshconf in a
-.Xr chroot 2 ,
-holds the sessions, and requests from system what they need.
-A session has the permissions of its user's login class (see
-.Cm login class
-in
-.Xr nsh 8 ) .
-config requests them from system at the session's hello.
-system answers for the uid of the session's client, which it reads from
-the client's socket (see system, below).
-config allows each request only with its permission: a show needs
-view, an operation operate, and configure, a commit, a rollback, a load
-or a daemon's rules configure.
-nsh checks exec, the permission to run programs, itself; config only
-reports whether the class has it.
-.Cm configure
-and
-.Cm configure exclusive
-also need admin, because their candidate is shared by every session in
-them.
-A session without admin sees no password hash of a
-.Cm login user
-line.
-The web configurator's session has no permissions until it logs in.
-It then becomes the session of the user it logged in as, with that
-user's uid and the permissions of the user's class.
-config checks a session's requests against the permissions the session
-has after its hello, or its login; system checks those it runs against
-the permissions of the user's class as it is then.
-A commit that changes login users or classes ends only a web
-configurator's session whose user can no longer log in, and a session
-whose hello config has not yet answered.
-Before its script runs, config lowers the permissions of each session
-that would lose one by it to those the session would have after, and
-nshd takes new sessions again once the commit ends.
-A session in
-.Cm configure
-or
-.Cm configure exclusive
-that loses admin may then only leave it.
-system stops each log it follows for the session that the session may
-no longer follow, and the session is told that the log has ended.
-A configuration that reaches the session after that comes without
-password hashes, also where the session asked for it before.
-What system has begun for the session otherwise runs to its end.
-nsh checks the exec and operate permissions of the programs it runs
-itself: it opens a session before each and reads that session's
-permissions, so a loss counts at the next program.
-A permission its class gains counts at once in system's checks, as for
-the admin lines of a commit, and in config's once the session connects
-again.
-The commit runs to its end, and
-.Cm show rollback
-says how it went.
-A rollback of an unconfirmed commit that changes login users or
-classes does the same before it runs, by the login lines it goes back
-to.
-system decides which commits and rollbacks change them, by comparing
-the login lines of the configuration before with those of the
-configuration after.
-It decides which sessions would lose a permission by comparing the
-permissions each session has now with those its user would have by the
-login lines after.
-Such a commit or rollback runs once config has lowered those sessions'
-permissions.
-If config has not done so within 10 seconds, system acts as it does
-when config exits, as below.
-Until the commit or rollback ends, a web login is refused, and the web
-configurator logs in again.
-A client whose session ended connects again, with the permissions its
-class has then.
-A session in
-.Cm configure private
-has a candidate of its own; the sessions in
-.Cm configure
-share one, and each sees what the others change in it.
-config edits a candidate a line at a time, with nsh's own commands, as
-they run in
-.Cm configure private .
-The running configuration, and the kernel state that the commands read,
-come from a snapshot that system takes when a session enters configure
-or shows its candidate.
-.Cm configure exclusive
-is
-.Cm configure
-while no other session changes the shared candidate or commits any
-candidate.
-It is refused while another session has it, or while another user has
-changes to the shared candidate that are not committed.
-Leaving it, or closing its session, discards the changes it did not
-commit.
-While a commit of the shared candidate runs, no other session changes
-it.
-Commits run one at a time, across all the sessions.
-config checks a commit against a snapshot.
-config then hands system the configuration the commit is based on and
-the configuration it wants, with the daemons' rules that it changes.
-system first tests the rules, and begins the commit only if every test
-passes.
-Then system runs the commit to its end: the parser makes its script,
-from the running configuration and the configuration wanted, and system
-records the commit and runs the script.
-system then checks that the running configuration is the candidate, and
-that no line of the script failed.
-If so, system saves the running configuration; if not, system runs a
-script that rolls the changes back, in a job of its own, and checks
-that the running configuration is again what it was.
-.Cm commit check
-stops after the tests, and after the parser has tried the script: a
-candidate it can make no script for fails the check.
-.Cm commit confirmed
-runs its script even if the candidate is the running configuration.
-If the running configuration is then the candidate, it stays in place,
-not saved, until the deadline; a commit that saves confirms it.
-A commit outside configure only has system save the running
-configuration.
-In
-.Cm configure terminal ,
-the session's candidate is made from the running configuration when
-each line arrives.
-Each line that changes the candidate is committed, but not saved;
-commit there saves the running configuration.
-.Ic nsh Fl c
-sends its configuration a part at a time.
-config makes it the session's own candidate, in place of the running
-configuration, and commits all of it or none of it.
-A session in configure, but not in
-.Cm configure terminal ,
-may set a daemon's rules for a routing table in its candidate, as the
-daemon's
-.Cm edit
-sets them.
-It sends the rules a part at a time, up to 1 MB in all, and it may also
-request them.
-.Cm rollback Ar N
-loads configuration
-.Ar N ,
-which system reads, into the candidate; rollback 0 loads the running
-configuration.
-Once system has begun a commit, the commit runs to its end even if its
-session ends.
-system begins it only while the session's client is still connected.
-A session with view may watch commits, and interfaces and routes.
-config then sends it unrequested notices between its replies to the
-session's requests.
-The notices report a commit saved, an unconfirmed commit with its
-minutes, a line of
-.Cm configure terminal
-committed, and
-.Cm configure exclusive
-entered or left, each with the user's uid.
-They also report an unconfirmed commit rolled back at its deadline, as
-system tells config.
-They report that interfaces or addresses changed, and which routing
-tables' routes changed, from a
-.Xr route 4
-socket that the parent opens for config, once a second at most.
-A session may also watch logs.
-system follows each log, and config sends the session the text that
-system reads from it as notices, until the session's watch drops the
-log.
-A client that completes and runs lines itself, as
+holds the system's configuration.
+It applies every change and answers every show for
 .Xr nsh 8
-does, may request nsh's command tables and the names of interfaces, groups,
-bridges and routing tables, if its session has view.
-Each row of the tables says how its command runs outside configure and
-in it.
-The session's frontend has the tables, and sends them once config
-answers that the session may ask.
-The names come from config's last snapshot; if there is none yet,
-config takes one first.
-config is
-.Xr pledge 2 Ns d
-to stdio, recvfd and sendfd.
-It reads no kernel state, opens no file and runs no program of its own,
-and refuses a line that would.
-It reads no line, and parses no words of a show or of an operation:
-the code that does refuses to run in config.
-.It system
-Runs as root, and reads the configuration from the kernel, the
-daemons and the saved configuration.
-Whoever started
-.Nm ,
-system has only the environment that
-.Xr rc 8
-gives,
-.Ev PATH
-.Pa /sbin:/bin:/usr/sbin:/usr/bin
 and
-.Ev HOME
-.Pa / ,
-with umask 022 and working directory
-.Pa / ,
-and the programs it runs have the same.
-Only system writes the saved configuration,
-.Pa /var/db/nsh/nshrc ;
-nsh's
-.Cm show startup-config
-requests it.
-It answers config and no one else.
-config names the session of each request it sends, and system acts on
-a request only while that session's client is still connected.
-system reads the uid it records, and whether a session is the web
-configurator's, itself: it calls
-.Xr getpeereid 2
-on the socket of the session's client, which the parent passes it.
-It answers config's request for a session's permissions from that uid
-too.
-A session whose client has closed its connection, or whose client's
-socket system does not have, has none.
-This shows which user a session's connection belongs to.
-It does not show what that user asked for: system trusts config to name
-the session a request came from.
-So a compromised config could act in the name of any connected client,
-but only as that client's login class allows.
-Once a session's client has closed its connection, system refuses each
-request of that session that it has not begun, whether or not the
-session's frontend is still there.
-An operation or a commit that system has begun can go on.
-system takes a session only while enough descriptors stay free for its
-own work: commits and the streams it runs.
-When it cannot, the session ends before it begins.
-system checks the permissions of that uid's login class itself, as
-config does: an operation needs operate, and a commit, its test and a
-save need configure.
-It also checks a login by the web configurator itself.
-The user must be named by a
-.Cm login user
-line and must not have uid 0.
-.Xr auth_usercheck 3
-checks the password, and
-.Xr auth_approval 3
-checks the account.
-These run in a child process of system's, in a process group of its
-own, so a slow authentication program delays nothing else that system
-does.
-At most four logins are checked at once, one for each session; another
-is refused until one ends.
-A check that takes more than 30 seconds fails, and system kills its
-process group; the check counts against the four until then.
-Once the check ends, system makes sure again that the session's client
-is still connected and that the user may still log in, and takes the
-permissions of the user's class as they are then.
-The session then acts as that user until it ends, and its commits
-record that user's uid.
-system starts such a session's terminal as
-.Xr login 1
-starts a shell: it opens a pty, and runs
-.Xr nsh 8
-on it as the user, with the user's groups and
-.Xr login.conf 5
-settings, in the user's home directory and a clean environment.
-system passes the pty to the session through config and frontend, and
-nsh exits when the session closes it.
-system runs an operation a session requests, such as
-.Cm flush routes
-or a daemon's action, if nsh's code accepts it as an operation.
-It runs the operation as root, in a child of its own, and streams its
-output as it streams a show's.
-A child of system also prints what a daemon's control program prints
-for a show, and the DHCP leases.
-system streams that output only as fast as the client reads it; the
-child, and its process group, are killed if the client disconnects
-first.
-The program is the one nsh's tables name for the show, never one a
-client names.
-The child runs it as _nshcheck, unless system lists it as a program that
-keeps root because it uses a daemon's control socket,
-.Pa /dev/pf
-or PF_KEY, which are root's.
-The child that prints the leases opens them, then becomes _nshcheck.
-A log a session watches is followed the same way.
-The child opens
-.Pa /var/log/daemon ,
-.Pa /var/log/messages
-or
-.Pa /var/log/authlog
-as root, then becomes _nshcheck.
-It prints the log's last lines, then each line as it arrives.
-When
-.Xr newsyslog 8
-rotates the log, a new child follows the new file.
-pf's log comes from
-.Xr tcpdump 8
-on
-.Xr pflog 4 ;
-tcpdump keeps root to open it, and gives up root itself.
-system checks that the session's class has view, and admin for
-authlog, as it checks an operation.
-A commit's script, its save, and each test of a daemon's rules run in a
-child of system.
-If the child runs past its time limit, it fails: its process group gets
-SIGTERM, then SIGKILL 10 seconds later, or 5 seconds later for a test.
-The limit is 900 seconds for a script, 300 for a save and 120 for a
-test.
-A script and a save run as root.
-The parser makes a commit's script as edits, and system runs the edits
-and never a script's text.
-config sends system no script, so the script a commit runs is the one
-that leads from the running configuration to the configuration wanted.
-Each edit names one of the commands a configuration has, by its place
-among them, with the line's words, or, for a command whose fields
-the parser reads from them, such as an interface's
-.Ic mtu
-or
-.Ic description ,
-with their values.
-A line takes an address in numeric form only, so
-.Nm
-sends no DNS query and reads no DNS answer.
-The command is a statement, an interface's or a bridge's line, the end
-of a block, a daemon's rules, the state a daemon is left in, or what
-follows its rules.
-A line of any other command, such as
-.Ic reboot ,
-.Ic ping
-or
-.Ic \&! ,
-or of a daemon's operation, such as smtp's
-.Cm remove ,
-has no edit.
-The parser reports each such line, and system refuses a commit that
-has one; the boot leaves each one out and reports it.
-system checks every edit before it runs any, and runs the script only
-if each edit names a command that exists, where it belongs, and each
-value has its field's type and is within its bounds.
-An edit that runs a daemon's program fails unless the program exits 0,
-and then leaves the daemon's state as it was.
-A disable's pkill may also exit 1, which says no such daemon runs.
-pf's enable and disable turn pf on and off with pf's ioctls, and
-succeed only if pf is then on or off.
-An edit that fails makes the script fail.
-A commit by a session without admin may keep a line that needs admin
-(see
-.Cm login class
-in
-.Xr nsh 8 )
-only as it was running before the commit.
-The parser checks such a commit's script before system records the
-commit, and a commit it refuses runs nothing.
-For such a session, the parser checks a test's rules for the same
-lines, judged against the running configuration, before the test
-runs.
-A test runs as _nshcheck, with its rules in a directory of their own;
-_nshcheck owns both.
-The tests of relayd, ldapd, npppd, sasyncd and sshd are the exceptions:
-they keep root, because these daemons read keys or secrets that their
-rules name.
-While a test, a script or a save runs, other requests wait, but streams
-go on.
-system keeps a record of a commit that has begun.
-The commit removes the record when it saves or is rolled back.
-A commit that does neither leaves the record, and the next commit
-reports what it left.
-While the record says a commit's changes were not saved, a commit may
-only save the running configuration or restore the configuration from
-before that commit.
-An unconfirmed commit also writes a record of its own.
-Its rollback configuration is what ran before the first unconfirmed
-commit.
-If the commit is rolled back, that record is restored to how it was
-before the commit.
-A commit that saves removes that record after the save succeeds.
-The deadline is the commit's minutes, counted from when the commit
-ends.
-After the deadline, system rolls the commit back, once every commit it
-began has ended and no script, save or test runs.
-It demotes carp by 128, runs a script that rolls the changes back, and
-promotes carp again once the running configuration matches the rollback
-configuration.
-If the rollback fails, or its script cannot start, system tries again
-5 seconds later, up to three attempts in all.
-Then the record says the rollback failed, and carp stays demoted
-until a commit saves.
-When
-.Nm
-starts, system finds any unconfirmed commit that an earlier run left,
-and rolls it back once its deadline has passed.
-A commit is refused if the running configuration is not the one it was
-planned from.
-system reads the running configuration itself as the commit begins,
-and an undo, or a rollback of an unconfirmed commit, goes back to what
-it read.
-system runs in a session of its own: when
-.Nm
-ends, the parent kills every process left in that session, and every
-process of _nshcheck's.
-.It journal
-Runs as _nshjournal in a
-.Xr chroot 2 .
-It stores the shared candidate, and the users who changed it, for
-config, in
-.Pa /var/db/nsh/journal ,
-which it opens before it enters the
-.Xr chroot 2 .
-config sends it the candidate each time the candidate changes.
-config answers the session that changed the candidate once journal has
-stored it, whole and synced to disk, or has reported that it did not.
-When
-.Nm
-starts, config loads what journal stored before any session enters
-.Cm configure .
-.It parser
-Runs as _nshparse in a
-.Xr chroot 2 ,
-and may only read and write what it was given.
-system starts a new one for each reading, so a parser keeps nothing
-from one reading to the next.
-It reads configuration text for system, which reads none of it itself:
-whether what runs is what a commit is based on, and what it wants; the
-login lines a commit changes; a commit's script, and the script that
-undoes a commit or rolls one back; the boot's plan; and how two
-configurations differ, for
-.Ic show diff-config
-and
-.Ic show rollback .
-For a session without admin, it checks the script of a commit and the
-rules of a test, against the running configuration, and says each line
-that needs admin.
-system passes on what the parser prints, takes its exit status as the
-verdict, and checks what it answers before using it.
-.El
-.Pp
-config and system, and config and journal, each talk on a pipe of
-their own.
-The parent makes the pipes before the children start, so each child
-knows who sent what it reads.
-system and each show also have a pipe to the parent.
-On system's, the parent sends each new session's client's socket and the
-pipe to its frontend, and accepts only system's word that a session
-ends, that config is to end, and that it has started.
-A show's pipe carries nothing: it closes when the parent or the show
-ends, and the other sees that.
-config and journal have no pipe to the parent.
-When the parent ends, system exits, config finds system's pipe closed
-and exits, and journal finds config's closed.
-The parent learns that a child has ended when it reaps it.
-.Pp
-If any child but a frontend exits, or sends the parent or a peer a
-message that it may not send,
-.Nm
-ends: the child's peers find their pipes closed and exit, and the parent
-kills the rest with
-.Dv SIGKILL .
-No child is started again.
-config is the exception: when config exits, or sends what it may not,
-system first finishes what it began, and then
-.Nm
-ends.
-First, system asks the parent to end config, which may still run, and
-the parent kills config, the frontends and every child but system with
-.Dv SIGKILL .
-What system finishes is a commit that it has begun, with its undo or
-its save, a rollback of an unconfirmed commit, or the boot, each within
-its own time limit.
-A commit that changes login users or classes, and still waits for
-config to lower or end sessions, ends as one undone, without running.
-A rollback that still waits so runs once the parent has reaped each
-child it killed, and says so.
-Until then
-.Nm
-takes no clients, and system takes no requests.
-system drops a commit it has not begun, such as one whose tests run.
-A signal to end
-.Nm
-still ends it at once.
-If
-.Nm
-ends while an unconfirmed commit waits, nothing rolls the commit back
-until
-.Nm
-is started again.
-This holds for an unconfirmed commit that system kept after config
-exited too.
-.Pp
-With
-.Fl b ,
-as rc starts it,
-.Nm
-boots.
-Before the parent and the shows accept clients, system makes the
-running configuration the saved one, as much of it as takes effect, as
-.Xr nsh 8
-.Fl i
-does.
-What the checks find is reported, and each daemon's rules are tested,
-and the boot goes on whatever they find.
-What system prints for the boot is logged.
-If a rollback of an unconfirmed commit runs as
-.Nm
-starts, the boot waits for it to end.
-.Nm
-returns once the boot is done, with 0 if the running configuration is
-then the saved configuration, else 1.
-The first time, when there is no saved configuration, system copies
-.Pa /etc/nshrc
-to the saved configuration.
-system keeps a record of the boot, which names the host boot that it is
-for.
-An
-.Nm
-started again during the same host boot runs the boot again only if the
-boot did not finish or failed.
-carp is demoted by 128 until the boot succeeds, or, if it fails, until a
-commit saves.
-A boot that succeeds removes the record of an unconfirmed commit,
-because the running configuration is then its rollback configuration.
-If
-.Nm
-ends during the boot, the boot does not finish, and the next
-.Nm
-started during the same host boot runs it again.
-.Pp
-Each child's
-.Xr chroot 2
-is its user's home directory.
-.Nm
-starts only if each user, and _nshcheck, exists, is not root, and has a
-uid of its own, and only if _nshweb, the web configurator's user, when
-it exists, is not root and has a uid of its own.
-.Pp
-Only root and the members of the group nshadmin may connect to the
-read-write socket.
-Every session there whose login class has view may see the running
-configuration.
-The read-only socket is for anyone.
-.Pp
-system does as root what config requests of it.
-So a compromised config may request anything that a session may, in a
-commit that a session requested: config is trusted as much as the users
-of the read-write socket are.
-After starting the children, the parent stays root only to stop
-system's leftover processes when
-.Nm
-ends.
+.Xr nshdeck 8 ,
+which reach it over two sockets and need no privilege.
+It is privilege separated: only one of its processes, system, runs as
+root and changes the host.
 .Pp
 The options are as follows:
 .Bl -tag -width Ds
 .It Fl b
-Boot, as above.
+Boot: make the running configuration the saved one before taking
+clients (see
+.Sx BOOT ) .
+.Xr rc.d 8
+starts
+.Nm
+with this option.
 .It Fl d
 Do not daemonize, and log to standard error.
 .It Fl v
 Produce more verbose output.
 .El
+.Sh PROCESSES
+.Bd -literal -offset indent
+  nsh, nshdeck                     anyone
+       |  nshd.sock                  |  nshd.ro.sock
+   frontend   one for each client   show   four
+       |
+    config ---- journal   the shared candidate
+       |
+    system ---- parser    one for each reading
+       |
+  kernel, daemons, saved configuration
+.Ed
+.Pp
+A request goes down this picture and gains no authority on the way:
+system acts on it by the permissions of the session it came from (see
+.Sx SESSIONS
+and
+.Sx PERMISSIONS ) .
+.Pp
+Each process except the parent and system runs as a user of its own, in
+a
+.Xr chroot 2
+that is the user's home directory, so no process can signal one of
+another role or reach its files.
+.Bl -tag -width "frontend"
+.It parent
+Root.
+Binds the sockets, starts the others, and accepts each client of the
+read-write socket.
+It reads nothing a client sends.
+.It show
+Four, as _nshshow.
+They answer the read-only socket, with what anyone may see.
+There are four so that one long answer holds up no other.
+A show is not
+.Xr pledge 2 Ns d :
+no promise allows the interface ioctls it uses.
+.It frontend
+One for each client of the read-write socket, as _nshfront, each in a
+process group of its own.
+It parses what its client sends and passes typed values to config.
+It holds no candidate.
+The frontends share one user, so each is
+.Xr pledge 2 Ns d
+to signal nothing outside its own process group.
+.It config
+As _nshconf,
+.Xr pledge 2 Ns d
+to stdio, recvfd and sendfd.
+It holds the sessions and their candidates (see
+.Sx CANDIDATES ) ,
+and requests from system what they need.
+It opens no file, runs no program and parses no words.
+.It system
+Root.
+It reads and changes the kernel, the daemons and the saved
+configuration (see
+.Sx COMMITS
+and
+.Sx PROGRAMS ) .
+It answers only config, and reads no configuration text.
+It runs in a session of its own: the programs it starts can outlive
+it, so when
+.Nm
+ends the parent kills what is left in that session, and every process
+of _nshcheck's.
+.It journal
+As _nshjournal.
+It stores the shared candidate for config, so the candidate outlives
+.Nm .
+.It parser
+As _nshparse,
+.Xr pledge 2 Ns d
+to stdio.
+system starts a new one for each reading of configuration text, so a
+parser keeps nothing from one reading to the next.
+.El
+.Pp
+Each pair of processes that talk has a pipe of its own, which the
+parent makes, so a pipe says who sent a message.
+A process has only the descriptors the parent placed for it.
+config and journal have no pipe to the parent: when the parent ends,
+system does, config finds system's pipe closed, and journal config's.
+.Pp
+.Nm
+starts only if each of these users, and _nshcheck, exists, is not root
+and has a uid of its own.
+.Sh SOCKETS
+.Bl -tag -width Ds
+.It Pa /var/run/nshd.sock
+The read-write socket, for root and the members of the group nshadmin.
+Each client is a session.
+.It Pa /var/run/nshd.ro.sock
+The read-only socket, for anyone.
+It answers interfaces and addresses, routes and route lookups, the ARP
+and neighbor tables, VLANs, bridges, the kernel statistics that need no
+root, the IPsec flows, the daemons that run, the version, who is logged
+in and the hostname.
+.El
+.Sh SESSIONS
+A session is one client of the read-write socket, with its frontend.
+It makes one request at a time.
+.Pp
+system reads who the client is from the client's socket, with
+.Xr getpeereid 2 .
+Nothing the client sends says who it is.
+.Pp
+config hears of a session only from system, once system has the
+client's socket.
+So config has no session that system cannot check.
+.Pp
+config names the session of each request, and system acts on a request
+only while that session's client is still connected.
+.Pp
+A session ends when its client goes.
+system checks each second that each client is still connected, so a
+frontend that stays after its client keeps the session for about a
+second at most.
+A session's number is never used again.
+.Pp
+What system has begun for a session, such as a commit, runs to its end
+after the session ends.
+What it has not begun is dropped.
+.Pp
+The limits are 64 sessions at once, 16 unfinished requests for one
+session, and 1024 for all.
+A session that asks a 17th is ended.
+A request counts until system ends it, even after its session has
+gone.
+.Sh PERMISSIONS
+A session has the permissions of its user's login class (see
+.Cm login class
+in
+.Xr nsh 8 ) .
+.Bl -column "configure" -offset indent
+.It view Ta a show, a watch, a log
+.It operate Ta an operation
+.It configure Ta Cm configure private , Cm configure terminal ,
+a commit, a rollback, a load, a daemon's rules
+.It admin Ta Cm configure
+and
+.Cm configure exclusive ,
+the admin lines, the password hashes, authlog
+.It exec Ta the programs nsh runs; nsh checks it
+.El
+.Pp
+config checks every request against the permissions the session has.
+system checks a commit, a save, a test, an operation and a log again,
+against the class as it is then.
+A session without admin is sent no password hash, and its commit may
+keep an admin line only as it runs already.
+.Pp
+A commit or a rollback that takes a permission from a session lowers
+that session first.
+system decides who loses what, from the login lines before and after.
+config lowers each such session, ends a web session whose user may no
+longer log in, and tells system, which then runs the change.
+Until the change ends,
+.Nm
+takes no new session and refuses web logins.
+If config has not answered within 10 seconds, system acts as it does
+when config ends (see
+.Sx FAILURE ) .
+.Pp
+A session that is lowered keeps what system had already begun for it,
+which runs to its end.
+Everything else follows the new class: a log it may no longer follow
+stops, a configuration that reaches it afterwards comes without
+password hashes even if it asked before, and a session in
+.Cm configure
+that lost admin may only leave.
+.Pp
+nsh opens a session before each program it runs and reads that
+session's permissions, so a lost exec or operate counts at the next
+program.
+A permission a class gains counts in system's checks at once, and in
+config's only once the session connects again.
+.Sh CANDIDATES
+A candidate is a copy of the configuration that a session's lines
+change.
+It starts from a snapshot of what runs, which system takes as the
+session enters configure, and again each time the candidate is shown.
+.Bl -tag -width Ds
+.It Cm configure private
+A candidate of the session's own.
+.It Cm configure
+One candidate that its sessions share.
+Each sees what the others change, and a commit commits all of it.
+journal stores it, and a change to it is answered once it is on disk.
+.It Cm configure exclusive
+The shared candidate, while no other session may change it or commit.
+It is refused while another user has uncommitted changes there.
+Leaving it discards what was not committed.
+.It Cm configure terminal
+A candidate made again from the running configuration for each line.
+A line that changes it is committed at once, and not saved.
+It is refused while a commit is unconfirmed, whose rollback would take
+the line back too.
+.El
+.Pp
+.Ic nsh Fl c
+sends a whole configuration, which is committed in place of the running
+one, all of it or none.
+.Cm rollback Ar N
+loads saved configuration
+.Ar N
+into the candidate.
+A session in configure may also set a daemon's rules in its candidate,
+up to 1 MB.
+.Sh COMMITS
+Commits run one at a time, for all sessions.
+.Bl -enum
+.It
+config checks the candidate, and sends system the configuration the
+commit is based on, the configuration it wants, and the daemons' rules
+it changes.
+It sends no script.
+.It
+system tests the rules.
+A commit a test refuses runs nothing.
+.It
+A parser makes the script that leads from what runs to what is wanted.
+system checks every edit of it before it runs any: each names a command
+a configuration has, where it belongs, with values of its fields' types
+and within their bounds.
+A line of a command that is no part of a configuration, such as
+.Ic reboot ,
+.Ic ping
+or
+.Ic \&! ,
+has no edit, and a commit with one is refused.
+.It
+system records the commit on disk, and runs the script.
+.It
+The commit took only if what runs is then what was wanted and no edit
+failed.
+If so, system saves the running configuration.
+If not, system undoes the script, back to what it read as the commit
+began.
+.El
+.Pp
+system begins a commit only while its session's client is still
+connected.
+Once begun, the commit runs to its end even if the session goes.
+.Pp
+An edit that runs a daemon's program fails unless the program exits 0,
+whatever it prints.
+A disable's pkill may also exit 1, for no such daemon ran.
+pf's enable and disable succeed only if pf is then on or off.
+.Pp
+.Cm commit check
+stops after the third step, so a candidate the parser can make no
+script for fails the check.
+A commit outside configure only saves the running configuration.
+A commit is refused if the running configuration is not the one it was
+planned from.
+.Pp
+A commit that neither saves nor is undone leaves its record, and the
+next commit reports what it left.
+While a record says a commit's changes were not saved, a commit may
+only save the running configuration or restore the one from before.
+.Pp
+A line takes an address in numeric form only:
+.Nm
+sends no DNS query.
+.Sh COMMIT CONFIRMED
+.Cm commit confirmed
+keeps the running configuration unsaved until its deadline, counted in
+minutes from when the commit ends.
+A commit that saves confirms it.
+Its script runs even if the candidate is what runs already, so the
+deadline is set.
+.Pp
+Its rollback configuration is on disk before anything is applied.
+It is what ran before the first unconfirmed commit, not the last: a
+second
+.Cm commit confirmed
+does not move what a rollback goes back to.
+.Pp
+After the deadline, system rolls back by itself, once no commit or job
+runs: a commit's undo could restore what the rollback removed.
+It demotes carp by 128, and promotes it again once the rollback
+configuration runs.
+.Pp
+A rollback that fails is tried again 5 seconds later, three times in
+all.
+Then carp stays demoted until a commit saves.
+.Pp
+When
+.Nm
+starts, system rolls back an unconfirmed commit whose deadline has
+passed.
+While
+.Nm
+does not run, nothing rolls it back.
+That holds too for a commit that system kept after config had ended.
+.Sh BOOT
+With
+.Fl b ,
+system makes the running configuration the saved one before
+.Nm
+takes clients.
+.Pp
+The boot runs once for each boot of the host, which its record names.
+An
+.Nm
+started again runs it again only if it did not finish or failed.
+.Pp
+A line that fails is reported and the rest still run: the boot undoes
+nothing.
+.Pp
+A rollback that is due as
+.Nm
+starts runs first.
+A boot that succeeds removes an unconfirmed commit's record, since what
+runs is then its rollback configuration.
+.Pp
+What the checks and the daemons' tests find is logged, and the boot
+goes on.
+.Pp
+carp is demoted by 128 until the boot succeeds, or, if it fails, until
+a commit saves.
+.Pp
+.Nm
+takes clients after a boot that failed too, so the configuration can be
+repaired.
+.Pp
+The process
+.Xr rc 8
+started returns 0 if the saved configuration then runs, else 1.
+.Pp
+The first time, when there is no saved configuration, system saves
+.Pa /etc/nshrc .
+.Sh PROGRAMS
+system runs each program in a child, in a process group of its own,
+with the environment
+.Xr rc 8
+gives.
+The program comes from nsh's tables, never from a request.
+.Pp
+A show's program, and a test of a daemon's rules, run as _nshcheck.
+The exceptions keep root: a program that uses a daemon's control
+socket,
+.Pa /dev/pf
+or PF_KEY, and the tests of relayd, ldapd, npppd, sasyncd and sshd,
+which read keys.
+.Pp
+A log and dhcpd's leases are opened as root and read as _nshcheck.
+pf's log comes from
+.Xr tcpdump 8 ,
+which is started as root because it gives up root itself.
+A log is followed across its rotation by
+.Xr newsyslog 8 .
+.Pp
+An operation, a commit's script and a save run as root.
+.Pp
+A show's output is sent only as fast as its client reads it, and its
+child is killed if the client goes.
+.Pp
+A job that runs past its limit fails.
+Its process group gets
+.Dv SIGTERM ,
+then
+.Dv SIGKILL :
+.Bl -column "a script" "900 seconds" -offset indent
+.It a script Ta 900 seconds
+.It a save Ta 300 seconds
+.It a test Ta 120 seconds
+.It a parser's reading Ta 60 seconds
+.It a web login's check Ta 30 seconds
+.El
+.Pp
+While a script, a save or a test runs, other requests wait, and streams
+go on.
+.Sh WEB SESSIONS
+A client with _nshweb's uid is
+.Xr nshdeck 8 .
+Its session has no permissions until it logs in, as a user, and then
+has that user's.
+.Pp
+The user must be named by a
+.Cm login user
+line and must not have uid 0.
+.Pp
+system checks the password with
+.Xr auth_usercheck 3
+and the account with
+.Xr auth_approval 3 ,
+in a child, at most four at once.
+.Pp
+After the check, system makes sure again that the client is still
+connected and that the user may still log in.
+.Pp
+A refused login is answered only that it is incorrect.
+system logs why.
+.Pp
+The session's commits record the user's uid, not _nshweb's.
+.Pp
+The session's terminal is
+.Xr nsh 8
+on a pty, which system starts as the user, as
+.Xr login 1
+starts a shell.
+.Sh WATCHING
+A session with view may watch commits,
+.Cm configure exclusive ,
+interfaces, addresses and routes, and config sends it a notice as each
+changes.
+It may also follow
+.Pa /var/log/daemon ,
+.Pa /var/log/messages ,
+pf's log and, with admin,
+.Pa /var/log/authlog .
+.Sh FAILURE
+Nothing is started again.
+.Bl -tag -width Ds
+.It A frontend ends, or sends what it may not
+Only its session ends.
+.It config ends, or sends what it may not
+.Nm
+takes no more clients, and the parent kills every process but system.
+system finishes what it began, within its time limits: a commit, with
+its undo or save, a rollback, or the boot.
+A commit that still waits for config to lower sessions does not run,
+and ends as one undone.
+Then
+.Nm
+ends.
+A signal to end
+.Nm
+still ends it at once.
+.It Another process ends, or sends what it may not
+.Nm
+ends.
+.It Nm No ends
+Private candidates and sessions are lost.
+The kernel's state, the saved configuration, the records and the shared
+candidate are kept.
+.El
+.Sh SECURITY
+system does as root what config requests, within the class of the
+session config names.
+The client's socket tells system which user a session belongs to.
+It does not tell system what that user asked for: system trusts config
+for that.
+So a compromised config can act in the name of any connected client,
+but only as that client's login class allows.
+A compromised frontend has its own session and nothing more.
+A parser holds no privilege, but its answers decide which configuration
+runs, and system checks what it answers before using it.
 .Sh FILES
 .Bl -tag -width "/var/run/nshd.ro.sockXX" -compact
 .It Pa /etc/nshrc
