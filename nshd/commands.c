@@ -104,8 +104,8 @@ static int	exitconfig(int, char **, ...);
 static int	rtable(int, char**, ...);
 static int	conf_run_if(int, const struct confcmd *, int, char **,
 		    char *);
-static int	cand_leave(void);
-static int	cmdline_if(void);
+static int	cand_leave(struct cand *);
+static int	cmdline_if(struct cand *);
 static int	wr_conf(char *);
 static int	sysctlhelp(int, char **, ...);
 static int	flush_pf(int, char **, ...);
@@ -474,6 +474,12 @@ ipcmd(int argc, char **argv, ...)
 	Menu *i;     /* pointer to current command */
 	struct sysctltab *stab;
 	int set, success = 0;
+	struct cand *cand;
+	va_list ap;
+
+	va_start(ap, argv);
+	cand = va_arg(ap, struct cand *);
+	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
 		argv++;
@@ -519,7 +525,7 @@ ipcmd(int argc, char **argv, ...)
 
 	if (i->handler)
 		success = (*i->handler)(set, &argv[1],
-		    (i->maxarg > 0) ? argv[2] : 0, stab->pf);
+		    (i->maxarg > 0) ? argv[2] : 0, stab->pf, cand);
 	return success;
 }
 
@@ -737,7 +743,7 @@ op_run(int argc, char **argv, int hide)
 		}
 		r = strcmp(i->name, "bssid") == 0 ?
 		    intbssid(argc - 2, argv + 2, argv[1], ifs) :
-		    intumb(argc - 2, argv + 2, argv[1], ifs);
+		    intumb(argc - 2, argv + 2, argv[1], ifs, NULL);
 		close(ifs);
 		return r;
 	}
@@ -1009,6 +1015,12 @@ interface(int argc, char **argv, ...)
 	char *tmp;
 	char *ifunit = NULL;
 	struct ifreq ifr;
+	struct cand *cand;
+	va_list ap;
+
+	va_start(ap, argv);
+	cand = va_arg(ap, struct cand *);
+	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
 		argv++;
@@ -1054,7 +1066,7 @@ interface(int argc, char **argv, ...)
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 
 	/* configure private asks the kernel only through kfacts.c */
-	if (candidate)
+	if (cand != NULL)
 		ifs = -1;
 	else if ((ifs = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
 		printf("%% socket failed: %s\n", strerror(errno));
@@ -1062,13 +1074,14 @@ interface(int argc, char **argv, ...)
 		return -1;
 	}
 
-	if (candidate && (r = cand_interface(set, ifname, &bridge)) != 0) {
+	if (cand != NULL &&
+	    (r = cand_interface(cand, set, ifname, &bridge)) != 0) {
 		ifname[0] = '\0';
 		close(ifs);
 		return r == -1 ? -1 : 0;
 	}
 
-	if (!candidate && !is_valid_ifname(ifname)) {
+	if (cand == NULL && !is_valid_ifname(ifname)) {
 		if (set == 0) {
 			printf("%% interface %s not found\n", ifname);
 			close(ifs);
@@ -1086,7 +1099,7 @@ interface(int argc, char **argv, ...)
 		}
 	}
 
-	if (!candidate && set == 0) {
+	if (cand == NULL && set == 0) {
 		r = 0;
 		if (ioctl(ifs, SIOCIFDESTROY, &ifr) == -1) {
 			printf("%% unable to remove interface %s: %s\n",
@@ -1105,7 +1118,7 @@ interface(int argc, char **argv, ...)
 		return 0;
 	}
 
-	if (!candidate)
+	if (cand == NULL)
 		bridge = is_bridge(ifs, ifname);
 
 	/* the mode is entered, and stays (cmdline()) */
@@ -1120,12 +1133,14 @@ int_interface(int argc, char **argv, ...)
 	char *new_ifname;
 	int set = 1, r;
 	va_list ap;
+	struct cand *cand;
 	char *old_ifname;
 	int ifs;
 
 	va_start(ap, argv);
 	old_ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 	
 	if (NO_ARG(argv[0])) {
@@ -1140,10 +1155,11 @@ int_interface(int argc, char **argv, ...)
 	}
 
 	new_ifname = argv[1];
-	if (candidate) {
+	if (cand != NULL) {
 		int isbridge;
 
-		if ((r = cand_interface(set, new_ifname, &isbridge)) == -1)
+		if ((r = cand_interface(cand, set, new_ifname,
+		    &isbridge)) == -1)
 			return -1;
 		if (r == 0)
 			strlcpy(next_ifname, new_ifname, sizeof(next_ifname));
@@ -1528,7 +1544,7 @@ getcmd(char *name)
  * printing why if none ran.
  */
 int
-cmdline(char *text)
+cmdline(char *text, struct cand *cand)
 {
 	Command *c;
 	char *p;
@@ -1544,7 +1560,7 @@ cmdline(char *text)
 	if (margv[0] == NULL)
 		return 0;
 	if (ifname[0] != '\0')
-		return cmdline_if();
+		return cmdline_if(cand);
 	if ((p = NO_ARG(margv[0]) ? margv[1] : margv[0]) == NULL ||
 	    (c = getcmd(p)) == 0) {
 		printf("%% Invalid command\n");
@@ -1562,20 +1578,23 @@ cmdline(char *text)
 		printf("%% Command requires configure mode\n");
 		return -1;
 	}
-	if ((c->needconfig || c->modh) && cand_refused(c->name, c->cand))
+	if ((c->needconfig || c->modh) &&
+	    cand_refused(cand->on ? cand : NULL, c->name, c->cand))
 		return -1;
 	if (c->cand != CAND_EDIT && c->handler != exitconfig) {
 		printf("%% %s is not through nshd's configure\n", c->name);
 		return -1;
 	}
+	if (c->handler == exitconfig)
+		return cmdexit(cand);
 	if (c->modh)
 		strlcpy(hname, c->name, HSIZE);
-	return (*c->handler)(margc, margv, 0);
+	return (*c->handler)(margc, margv, cand->on ? cand : NULL);
 }
 
 /* A line in an interface's mode, as interface()'s loop runs it */
 static int
-cmdline_if(void)
+cmdline_if(struct cand *cand)
 {
 	struct intlist *i = NULL;
 	char *p;
@@ -1593,13 +1612,14 @@ cmdline_if(void)
 		printf("%% Invalid command\n");
 		return -1;
 	}
-	if (cand_refused(i->name, i->cand))
+	if (cand_refused(cand->on ? cand : NULL, i->name, i->cand))
 		return -1;
 	if (i->cand != CAND_EDIT && i->handler != int_exit) {
 		printf("%% %s is not through nshd's configure\n", i->name);
 		return -1;
 	}
-	if ((r = (*i->handler)(margc, margv, ifname, -1)) == 1) {
+	if ((r = (*i->handler)(margc, margv, ifname, -1,
+	    cand->on ? cand : NULL)) == 1) {
 		ifname[0] = '\0';
 		return 0;
 	}
@@ -1607,7 +1627,7 @@ cmdline_if(void)
 	    strcmp(next_ifname, ifname) != 0) {
 		strlcpy(ifname, next_ifname, sizeof(ifname));
 		memset(next_ifname, 0, sizeof(next_ifname));
-		bridge = cand_isbridge(ifname);
+		bridge = cand_isbridge(cand, ifname);
 	}
 	return r;
 }
@@ -1660,12 +1680,17 @@ row_runs(char **table, int stlen, char *row, int *out, int *conf)
 
 /* Leave configure, from any mode, as exit does at the top */
 int
-cmdexit(void)
+cmdexit(struct cand *cand)
 {
-	char *argv[] = { "exit", NULL };
-
 	ifname[0] = '\0';
-	return exitconfig(1, argv);
+	if (!config_mode) {
+		printf("%% Configuration mode is already disabled\n");
+		return -1;
+	}
+	if (cand_leave(cand))
+		return -1;
+	config_mode = 0;
+	return 0;
 }
 
 /*
@@ -1674,6 +1699,13 @@ cmdexit(void)
 static int
 hostname(int argc, char **argv, ...)
 {
+	struct cand *cand;
+	va_list ap;
+
+	va_start(ap, argv);
+	cand = va_arg(ap, struct cand *);
+	va_end(ap);
+
 	argv++;
 	argc--;
 
@@ -1683,8 +1715,8 @@ hostname(int argc, char **argv, ...)
 	}
 
 	if (argc == 1) {
-		if (candidate)
-			return cand_setting(ST_ON, "hostname %s", *argv);
+		if (cand != NULL)
+			return cand_setting(cand, ST_ON, "hostname %s", *argv);
 		if (sethostname(*argv, strlen(*argv))) {
 			printf("%% sethostname: %s\n", strerror(errno));
 			return -1;
@@ -1764,6 +1796,12 @@ rtable(int argc, char **argv, ...)
 	const char *errstr;
 	char rtname[64];
 	StringList *resp;
+	struct cand *cand;
+	va_list ap;
+
+	va_start(ap, argv);
+	cand = va_arg(ap, struct cand *);
+	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
 		argv++;
@@ -1785,9 +1823,9 @@ rtable(int argc, char **argv, ...)
 		return -1;
 	}
 
-	if (candidate) {
+	if (cand != NULL) {
 		pos = argvtostring(argc - 2, argv + 2, rtname, sizeof(rtname));
-		return cand_rtable_set(set, table, pos ? rtname : NULL);
+		return cand_rtable_set(cand, set, table, pos ? rtname : NULL);
 	}
 
 	curtable = getrtable();
@@ -1909,44 +1947,41 @@ group(int argc, char **argv, ...)
 	return ret;
 }
 
+/*
+ * exit's row at the top level. This handler marks the row: cmdline()
+ * finds the row by it, and cmdexit() leaves configure, so nothing runs
+ * here
+ */
 static int
 exitconfig(int argc, char **argv, ...)
 {
-	if (!config_mode) {
-		printf ("%% Configuration mode is already disabled\n");
-		return -1;
-	}
-	if (cand_leave())
-		return -1;
-
-	config_mode = 0;
 	return 0;
 }
 
 int
-cand_refused(char *name, int cand)
+cand_refused(struct cand *cand, char *name, int how)
 {
-	if (!candidate || cand != CAND_NO)
+	if (cand == NULL || how != CAND_NO)
 		return 0;
 	printf("%% %s is not supported in configure private yet\n", name);
 	return 1;
 }
 
 static int
-cand_leave(void)
+cand_leave(struct cand *cand)
 {
 	/* a shared candidate stays for the sessions that share it */
-	if (cand_sharing) {
-		cand_detach();
+	if (cand_attached(cand)) {
+		cand_detach(cand);
 		return 0;
 	}
-	if (cand_changed()) {
+	if (cand_changed(cand)) {
 		printf("%% The candidate has uncommitted changes;"
 		    " 'rollback' discards them\n");
 		return 1;
 	}
-	if (candidate)
-		cand_end();
+	if (cand->on)
+		cand_end(cand);
 	return 0;
 }
 
@@ -2183,10 +2218,10 @@ conf_run(int ctx, int n, int argc, char **argv, char *name)
 	if (ctx != CTX_TOP)
 		return conf_run_if(ctx == CTX_BRIDGE, c, argc, argv, name);
 	if ((c->flags & (CF_IF | CF_BRIDGE)) == 0)
-		return (*c->handler)(argc, argv, 0);
+		return (*c->handler)(argc, argv, NULL);
 	/* a block's head creates a cloned interface, or with no, destroys it */
 	rc_head = 1;
-	r = (*c->handler)(argc, argv, 0);
+	r = (*c->handler)(argc, argv, NULL);
 	rc_head = 0;
 	return r;
 }
@@ -2224,7 +2259,7 @@ conf_run_if(int bridgeline, const struct confcmd *c, int argc, char **argv,
 	}
 	if (cli_rtable != 0 && nsh_setrtable(0) == 0)
 		cli_rtable = 0;
-	r = (*c->handler)(argc, argv, ifname, ifs) == -1 ? -1 : 0;
+	r = (*c->handler)(argc, argv, ifname, ifs, NULL) == -1 ? -1 : 0;
 	if (rt != cli_rtable && nsh_setrtable(rt) == 0)
 		cli_rtable = rt;
 done:

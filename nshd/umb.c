@@ -32,8 +32,8 @@
 void	umb_classes(char *, size_t, uint32_t);
 int	umb_parse_classes(const char *);
 int	umb_setpin(int, char *, const char *);
-int	umb_chgpin(int, char *, const char *, const char *);
-int	umb_puk(int, char *, const char *, const char *);
+int	umb_chgpin(int, char *, const char *, const char *, struct cand *);
+int	umb_puk(int, char *, const char *, const char *, struct cand *);
 int	umb_pinop(int, char *, int, int, const char *, const char *);
 int	umb_apn(int, char *, const char *);
 int	umb_setclass(int, char *, const char *);
@@ -41,10 +41,10 @@ int	umb_roaming(int, char *, int);
 void	conf_umb_pin(FILE *, char *);
 void	utf16_to_char(uint16_t *, int, char *, size_t);
 int	char_to_utf16(const char *, uint16_t *, size_t);
-static int cand_umb(char *, int, int, char *);
+static int cand_umb(struct cand *, char *, int, int, char *);
 static int umb_pinstate(int, char *);
 static int umb_unlocked(int, char *);
-static void umb_forgetpin(char *);
+static void umb_forgetpin(char *, struct cand *);
 static void umb_keeppin(char *, const char *);
 
 /* how long setpin and setpuk wait for the SIM to unlock, in seconds */
@@ -257,11 +257,12 @@ umb_setpin(int ifs, char *ifname, const char *pin)
  * does not show whether the change was made, so the stored PIN goes
  */
 int
-umb_chgpin(int ifs, char *ifname, const char *pin, const char *newpin)
+umb_chgpin(int ifs, char *ifname, const char *pin, const char *newpin,
+    struct cand *cand)
 {
 	if (umb_pinop(ifs, ifname, MBIM_PIN_OP_CHANGE, 0, pin, newpin) == -1)
 		return -1;
-	umb_forgetpin(ifname);
+	umb_forgetpin(ifname, cand);
 	return 0;
 }
 
@@ -271,7 +272,8 @@ umb_chgpin(int ifs, char *ifname, const char *pin, const char *newpin)
  * so it is not stored there.
  */
 int
-umb_puk(int ifs, char *ifname, const char *pin, const char *newpin)
+umb_puk(int ifs, char *ifname, const char *pin, const char *newpin,
+    struct cand *cand)
 {
 	switch (umb_pinstate(ifs, ifname)) {
 	case -1:
@@ -284,12 +286,12 @@ umb_puk(int ifs, char *ifname, const char *pin, const char *newpin)
 	}
 	if (umb_pinop(ifs, ifname, MBIM_PIN_OP_ENTER, 1, pin, newpin) == -1)
 		return -1;
-	umb_forgetpin(ifname);
+	umb_forgetpin(ifname, cand);
 	if (!umb_unlocked(ifs, ifname))
 		printf("%% The SIM of %s did not unlock within %d seconds;"
 		    " once it does, setpin stores the new PIN\n", ifname,
 		    UMB_PIN_WAIT);
-	else if (candidate)
+	else if (cand != NULL)
 		printf("%% The SIM of %s is unlocked. Configure private does"
 		    " not store the new PIN; enter it with setpin when the"
 		    " SIM next asks for it\n", ifname);
@@ -337,13 +339,13 @@ umb_unlocked(int ifs, char *ifname)
  * private from the candidate.
  */
 static void
-umb_forgetpin(char *ifname)
+umb_forgetpin(char *ifname, struct cand *cand)
 {
 	StringList *pin;
 
-	if (candidate) {
-		if (cand_line("setpin", 0) != NULL) {
-			cand_setting(ST_DEFAULT, "setpin");
+	if (cand != NULL) {
+		if (cand_line(cand, "setpin", 0) != NULL) {
+			cand_setting(cand, ST_DEFAULT, "setpin");
 			printf("%% The candidate's setpin line of %s is removed;"
 			    " commit and save, or boot enters the old PIN\n",
 			    ifname);
@@ -559,12 +561,14 @@ intumb(int argc, char **argv, ...)
 	int set, r;
 	struct umbc *x;
 	va_list ap;
+	struct cand *cand;
 	char *ifname;
 	int ifs;
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
@@ -630,8 +634,8 @@ intumb(int argc, char **argv, ...)
 			}
 
 	/* setpuk and chgpin act on the SIM, even in configure private */
-	if (candidate && x->type != UMB_PUK && x->type != UMB_CHGPIN)
-		return cand_umb(ifname, set, x->type, argv[0]);
+	if (cand != NULL && x->type != UMB_PUK && x->type != UMB_CHGPIN)
+		return cand_umb(cand, ifname, set, x->type, argv[0]);
 
 	switch(x->type) {
 	case UMB_APN:
@@ -652,17 +656,17 @@ intumb(int argc, char **argv, ...)
 
 	case UMB_PUK:
 		if (!set) {
-			r = umb_puk(ifs, ifname, NULL, NULL);
+			r = umb_puk(ifs, ifname, NULL, NULL, cand);
 		} else {
-			r = umb_puk(ifs, ifname, argv[0], argv[1]);
+			r = umb_puk(ifs, ifname, argv[0], argv[1], cand);
 		}
 		break;
 
 	case UMB_CHGPIN:
 		if (!set) {
-			r = umb_chgpin(ifs, ifname, NULL, NULL);
+			r = umb_chgpin(ifs, ifname, NULL, NULL, cand);
 		} else {
-			r = umb_chgpin(ifs, ifname, argv[0], argv[1]);
+			r = umb_chgpin(ifs, ifname, argv[0], argv[1], cand);
 		}
 		break;
 
@@ -694,7 +698,7 @@ intumb(int argc, char **argv, ...)
  * would print them once umb took them
  */
 static int
-cand_umb(char *ifname, int set, int type, char *arg)
+cand_umb(struct cand *cand, char *ifname, int set, int type, char *arg)
 {
 	static char *fn[] = { NULL, "umb_apn", "umb_pinop", NULL, NULL,
 	    "umb_setclass", "umb_roaming" };
@@ -702,34 +706,34 @@ cand_umb(char *ifname, int set, int type, char *arg)
 	size_t i;
 	int c;
 
-	if (cand_gettype(ifname) != IFT_MBIM) {
+	if (cand_gettype(cand, ifname) != IFT_MBIM) {
 		printf("%% %s: SIOCGUMBPARAM: %s\n", fn[type], strerror(ENOTTY));
 		return -1;
 	}
 	switch (type) {
 	case UMB_APN:
 		if (!set)
-			return cand_setting(ST_DEFAULT, "apn");
+			return cand_setting(cand, ST_DEFAULT, "apn");
 		if (strlen(arg) > UMB_APN_MAXLEN) {
 			printf("%% APN too long\n");
 			return -1;
 		}
-		return cand_setting(ST_ON, "apn %s", arg);
+		return cand_setting(cand, ST_ON, "apn %s", arg);
 	case UMB_PIN:
 		if (!set)
-			return cand_setting(ST_DEFAULT, "setpin");
+			return cand_setting(cand, ST_DEFAULT, "setpin");
 		if (strlen(arg) > MBIM_PIN_MAXLEN / 2) {
 			printf("%% PIN too long\n");
 			return -1;
 		}
-		return cand_setting(ST_ON, "setpin %s", arg);
+		return cand_setting(cand, ST_ON, "setpin %s", arg);
 	case UMB_CLASS:
 		if ((c = set ? umb_parse_classes(arg) : MBIM_DATACLASS_NONE) == -1)
 			return -1;
 		umb_classes(buf, sizeof(buf), c);
-		return cand_setting(ST_ON, "class %s", buf);
+		return cand_setting(cand, ST_ON, "class %s", buf);
 	case UMB_ROAMING:
-		return cand_setting(set ? ST_ON : ST_DEFAULT, "roaming");
+		return cand_setting(cand, set ? ST_ON : ST_DEFAULT, "roaming");
 	}
 	return 0;
 }

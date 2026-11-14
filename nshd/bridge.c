@@ -55,36 +55,37 @@
 #include "facts.h"
 #include "showfacts.h"
 
-int 	bridge_ifsetflag(int, char *, char *, u_int32_t);
-int 	bridge_ifclrflag(int, char *, char *, u_int32_t);
-int 	bridge_addaddr(int, char *, char *, char *);
-int 	bridge_deladdr(int, char *, char *);
-int 	bridge_maxaddr(int, char *, u_int32_t);
-int 	bridge_maxage(int, char *, u_int32_t);
-int 	bridge_priority(int, char *, u_int32_t);
-int 	bridge_fwddelay(int, char *, u_int32_t);
-int 	bridge_hellotime(int, char *, u_int32_t);
-int 	bridge_holdcnt(int, char *, u_int32_t);
-int 	bridge_ifprio(int, char *, char *, int);
-int 	bridge_ifcost(int, char *, char *, int);
-int 	bridge_timeout(int, char *, int);
+int 	bridge_ifsetflag(int, char *, char *, u_int32_t, struct cand *);
+int 	bridge_ifclrflag(int, char *, char *, u_int32_t, struct cand *);
+int 	bridge_addaddr(int, char *, char *, char *, struct cand *);
+int 	bridge_deladdr(int, char *, char *, struct cand *);
+int 	bridge_maxaddr(int, char *, u_int32_t, struct cand *);
+int 	bridge_maxage(int, char *, u_int32_t, struct cand *);
+int 	bridge_priority(int, char *, u_int32_t, struct cand *);
+int 	bridge_fwddelay(int, char *, u_int32_t, struct cand *);
+int 	bridge_hellotime(int, char *, u_int32_t, struct cand *);
+int 	bridge_holdcnt(int, char *, u_int32_t, struct cand *);
+int 	bridge_ifprio(int, char *, char *, int, struct cand *);
+int 	bridge_ifcost(int, char *, char *, int, struct cand *);
+int 	bridge_timeout(int, char *, int, struct cand *);
 int 	bridge_flush(int, char *);
 int 	bridge_flushall(int, char *);
-int 	bridge_add(int, char *, char *);
-int 	bridge_delete(int, char *, char *);
-int 	bridge_addspan(int, char *, char *);
-int 	bridge_delspan(int, char *, char *);
-int 	bridge_rule(int, char *, int, char **, int);
+int 	bridge_add(int, char *, char *, struct cand *);
+int 	bridge_delete(int, char *, char *, struct cand *);
+int 	bridge_addspan(int, char *, char *, struct cand *);
+int 	bridge_delspan(int, char *, char *, struct cand *);
+int 	bridge_rule(int, char *, int, char **, int, struct cand *);
 int 	bridge_flushrule(int, char *, char *);
 void 	bridge_badrule(int, char **, int, short);
 void 	bridge_showrule(struct ifbrlreq *, char *, FILE *);
 int 	bridge_confaddrs(int, char *, char *, FILE *);
-int	bridge_protect(const char *, int, const char *, const char *);
-int	bridge_unprotect(const char *, int, const char *);
+int	bridge_protect(const char *, int, const char *, const char *,
+    struct cand *);
+int	bridge_unprotect(const char *, int, const char *, struct cand *);
 void	brprotect_usage(void);
 int	show_bridge(char *);
-static int br_ioctl(int, u_long, void *);
-static int br_portname(int, char *);
+static int br_ioctl(int, u_long, void *, struct cand *);
+static int br_portname(int, char *, struct cand *);
 static int brvlan_parse(char *, u_int8_t *);
 static int bridge_addrvlan(char *, struct ether_addr *, u_int16_t *);
 static int bridge_confvaddrs(int, char *, char *, FILE *);
@@ -137,12 +138,14 @@ brport(int argc, char **argv, ...)
 	int set, i, e = 0, r = 0;
 	struct brc *x;
 	va_list ap;
+	struct cand *cand;
 	char *ifname;
 	int ifs;
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
@@ -183,7 +186,7 @@ brport(int argc, char **argv, ...)
 	}
 
 	for (i = 0; i < argc; i++) {
-		if (!br_portname(ifs, argv[i])) {
+		if (!br_portname(ifs, argv[i], cand)) {
 			printf("%% Invalid interface name %s\n", argv[i]);
 			r = -1;
 			continue;
@@ -192,68 +195,69 @@ brport(int argc, char **argv, ...)
 		case BRPORT_MEMBER:
 			if (set) {
 				/* adding a member activates a bridge */
-				if ((e = bridge_add(ifs, ifname, argv[i])) != 0)
+				if ((e = bridge_add(ifs, ifname, argv[i],
+				    cand)) != 0)
 					break;
-				if (candidate)
-					e = cand_upline(ifname, 1);
+				if (cand != NULL)
+					e = cand_upline(cand, ifname, 1);
 				else
 					e = set_ifflag(ifs, ifname, IFF_UP);
 			} else
-				e = bridge_delete(ifs, ifname, argv[i]);
+				e = bridge_delete(ifs, ifname, argv[i], cand);
 			break;
 		case BRPORT_SPAN:
 			if (set)
-				e = bridge_addspan(ifs, ifname, argv[i]);
+				e = bridge_addspan(ifs, ifname, argv[i], cand);
 			else
-				e = bridge_delspan(ifs, ifname, argv[i]);
+				e = bridge_delspan(ifs, ifname, argv[i], cand);
 			break;
 		case BRPORT_BLOCKNONIP:
 			if (set)
 				e = bridge_ifsetflag(ifs, ifname, argv[i],
-				    IFBIF_BLOCKNONIP);
+				    IFBIF_BLOCKNONIP, cand);
 			else
 				e = bridge_ifclrflag(ifs, ifname, argv[i],
-				    IFBIF_BLOCKNONIP);
+				    IFBIF_BLOCKNONIP, cand);
 			break;
 		case BRPORT_DISCOVER:
 			if (set)
 				e = bridge_ifsetflag(ifs, ifname, argv[i],
-				    IFBIF_DISCOVER);
+				    IFBIF_DISCOVER, cand);
 			else
 				e = bridge_ifclrflag(ifs, ifname, argv[i],
-				    IFBIF_DISCOVER);
+				    IFBIF_DISCOVER, cand);
 			break;
 		case BRPORT_LEARN:
 			if (set)
 				e = bridge_ifsetflag(ifs, ifname, argv[i],
-				    IFBIF_LEARNING);
+				    IFBIF_LEARNING, cand);
 			else
 				e = bridge_ifclrflag(ifs, ifname, argv[i],
-				    IFBIF_LEARNING);
+				    IFBIF_LEARNING, cand);
 			break;
 		case BRPORT_STP:
 			if (set)
 				e = bridge_ifsetflag(ifs, ifname, argv[i],
-				    IFBIF_STP);
+				    IFBIF_STP, cand);
 			else
 				e = bridge_ifclrflag(ifs, ifname, argv[i],
-				    IFBIF_STP);
+				    IFBIF_STP, cand);
 			break;
 		case BRPORT_PVPTAGS:
 			if (set)
 				e = bridge_ifsetflag(ifs, ifname, argv[i],
-				    IFBIF_PVLAN_PTAGS);
+				    IFBIF_PVLAN_PTAGS, cand);
 			else
 				e = bridge_ifclrflag(ifs, ifname, argv[i],
-				    IFBIF_PVLAN_PTAGS);
+				    IFBIF_PVLAN_PTAGS, cand);
 			break;
 		case BRPORT_FLAG:
 			if (set)
 				e = bridge_ifsetflag(ifs, ifname, argv[i],
-				    x->flag);
+				    x->flag, cand);
 			else
 				e = bridge_ifclrflag(ifs, ifname, argv[i],
-				    x->flag);
+				    x->flag, cand);
 			break;
 		}
 		if (e != 0)
@@ -290,12 +294,14 @@ brval(int argc, char **argv, ...)
 	const char *errmsg = NULL;
 	struct brc *x;
 	va_list ap;
+	struct cand *cand;
 	char *ifname;
 	int ifs;
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
@@ -336,15 +342,15 @@ brval(int argc, char **argv, ...)
 	switch(x->type) {
 	case BRVAL_MAXADDR:
 		if (set)
-			e = bridge_maxaddr(ifs, ifname, val);
+			e = bridge_maxaddr(ifs, ifname, val, cand);
 		else
-			e = bridge_maxaddr(ifs, ifname, DEFAULT_MAXADDR);
+			e = bridge_maxaddr(ifs, ifname, DEFAULT_MAXADDR, cand);
 		break;
 	case BRVAL_TIMEOUT:
 		if (set)
-			e = bridge_timeout(ifs, ifname, (int)val);
+			e = bridge_timeout(ifs, ifname, (int)val, cand);
 		else
-			e = bridge_timeout(ifs, ifname, DEFAULT_TIMEOUT);
+			e = bridge_timeout(ifs, ifname, DEFAULT_TIMEOUT, cand);
 		break;
 	case BRVAL_MAXAGE:
 		if (val > 0xff) {
@@ -352,9 +358,9 @@ brval(int argc, char **argv, ...)
 			return -1;
 		}
 		if (set)
-			e = bridge_maxage(ifs, ifname, val);
+			e = bridge_maxage(ifs, ifname, val, cand);
 		else
-			e = bridge_maxage(ifs, ifname, DEFAULT_MAXAGE);
+			e = bridge_maxage(ifs, ifname, DEFAULT_MAXAGE, cand);
 		break;
 	case BRVAL_FWDDELAY:
 		if (val > 0xff) {
@@ -362,9 +368,10 @@ brval(int argc, char **argv, ...)
 			return -1;
 		}
 		if (set)
-			e = bridge_fwddelay(ifs, ifname, val);
+			e = bridge_fwddelay(ifs, ifname, val, cand);
 		else
-			e = bridge_fwddelay(ifs, ifname, DEFAULT_FWDDELAY);
+			e = bridge_fwddelay(ifs, ifname,
+			    DEFAULT_FWDDELAY, cand);
 		break;
 	case BRVAL_HELLOTIME:
 		if (val > 0xff) {
@@ -372,9 +379,10 @@ brval(int argc, char **argv, ...)
 			return -1;
 		}
 		if (set)
-			e = bridge_hellotime(ifs, ifname, val);
+			e = bridge_hellotime(ifs, ifname, val, cand);
 		else
-			e = bridge_hellotime(ifs, ifname, DEFAULT_HELLOTIME);
+			e = bridge_hellotime(ifs, ifname,
+			    DEFAULT_HELLOTIME, cand);
 		break;
 	case BRVAL_PRIORITY:
 		if (val > 0xffff) {
@@ -382,9 +390,10 @@ brval(int argc, char **argv, ...)
 			return -1;
 		}
 		if (set)
-			e = bridge_priority(ifs, ifname, val);
+			e = bridge_priority(ifs, ifname, val, cand);
 		else
-			e = bridge_priority(ifs, ifname, DEFAULT_PRIORITY);
+			e = bridge_priority(ifs, ifname,
+			    DEFAULT_PRIORITY, cand);
 		break;
 	case BRVAL_HOLDCNT:
 		if (!cand_takes(ifname, SIOCBRDGSTXHC)) {
@@ -397,7 +406,8 @@ brval(int argc, char **argv, ...)
 			    kern_bstp_min_hold_count, kern_bstp_max_hold_count);
 			return -1;
 		}
-		e = bridge_holdcnt(ifs, ifname, set ? val : DEFAULT_HOLDCNT);
+		e = bridge_holdcnt(ifs, ifname,
+		    set ? val : DEFAULT_HOLDCNT, cand);
 		break;
 	}
 
@@ -410,12 +420,14 @@ brproto(int argc, char **argv, ...)
 {
 	struct ifbrparam bp;
 	va_list ap;
+	struct cand *cand;
 	char *ifname;
 	int ifs, set;
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
@@ -444,7 +456,7 @@ brproto(int argc, char **argv, ...)
 		printf("%% proto not supported on %s\n", ifname);
 		return -1;
 	}
-	if (br_ioctl(ifs, SIOCBRDGSPROTO, &bp) < 0) {
+	if (br_ioctl(ifs, SIOCBRDGSPROTO, &bp, cand) < 0) {
 		printf("%% unable to set proto: SIOCBRDGSPROTO: %s\n",
 		    strerror(errno));
 		return -1;
@@ -456,12 +468,14 @@ int
 brrule(int argc, char **argv, ...)
 {
 	va_list ap;
+	struct cand *cand;
 	char *ifname;
 	int ifs;
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
@@ -479,7 +493,7 @@ brrule(int argc, char **argv, ...)
 		return -1;
 	}
 
-	return bridge_rule(ifs, ifname, argc, argv, -1) == 0 ? 0 : -1;
+	return bridge_rule(ifs, ifname, argc, argv, -1, cand) == 0 ? 0 : -1;
 }
 
 int
@@ -487,12 +501,14 @@ brstatic(int argc, char **argv, ...)
 {
 	int set, e;
 	va_list ap;
+	struct cand *cand;
 	char *ifname;
 	int ifs;
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
@@ -516,16 +532,16 @@ brstatic(int argc, char **argv, ...)
 		return -1;
 	}
 
-	if (argv[1] && !br_portname(ifs, argv[1]))
+	if (argv[1] && !br_portname(ifs, argv[1], cand))
 	{
 		printf("%% invalid member: %s\n", argv[1]);
 		return -1;
 	}
 
 	if (set)
-		e = bridge_addaddr(ifs, ifname, argv[1], argv[0]);
+		e = bridge_addaddr(ifs, ifname, argv[1], argv[0], cand);
 	else
-		e = bridge_deladdr(ifs, ifname, argv[0]);
+		e = bridge_deladdr(ifs, ifname, argv[0], cand);
 
 	return e == 0 ? 0 : -1;
 }
@@ -546,12 +562,14 @@ brpri(int argc, char **argv, ...)
 	const char *errmsg = NULL;
 	struct brd *x;
 	va_list ap;
+	struct cand *cand;
 	char *ifname;
 	int ifs;
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
@@ -584,7 +602,7 @@ brpri(int argc, char **argv, ...)
 		return -1;
 	}
 
-	if (!br_portname(ifs, argv[0]))
+	if (!br_portname(ifs, argv[0], cand))
 	{
 		printf("%% invalid member name: %s\n", argv[0]);
 		return -1;
@@ -604,13 +622,14 @@ brpri(int argc, char **argv, ...)
 	switch(x->type) {
 	case BRPRI_IFPRIORITY:
 		if (set)
-			e = bridge_ifprio(ifs, ifname, argv[0], val);
+			e = bridge_ifprio(ifs, ifname, argv[0], val, cand);
 		else
-			e = bridge_ifprio(ifs, ifname, argv[0], DEFAULT_IFPRIORITY);
+			e = bridge_ifprio(ifs, ifname, argv[0],
+			    DEFAULT_IFPRIORITY, cand);
 	break;
 	case BRPRI_IFCOST:
 		/* 0 has the kernel work the cost out from the speed again */
-		e = bridge_ifcost(ifs, ifname, argv[0], val);
+		e = bridge_ifcost(ifs, ifname, argv[0], val, cand);
 	break;
 	}
 
@@ -717,13 +736,14 @@ flush_bridgerule(int argc, char **argv, ...)
  */
 
 int
-bridge_ifsetflag(int s, char *brdg, char *ifsname, u_int32_t flag)
+bridge_ifsetflag(int s, char *brdg, char *ifsname, u_int32_t flag,
+    struct cand *cand)
 {
 	struct ifbreq req;
 
 	strlcpy(req.ifbr_name, brdg, sizeof(req.ifbr_name));
 	strlcpy(req.ifbr_ifsname, ifsname, sizeof(req.ifbr_ifsname));
-	if (br_ioctl(s, SIOCBRDGGIFFLGS, (caddr_t)&req) < 0) {
+	if (br_ioctl(s, SIOCBRDGGIFFLGS, (caddr_t)&req, cand) < 0) {
 		if (errno == ESRCH)
 			printf("%% %s is not a member of %s\n", ifsname, brdg);
 		else
@@ -745,7 +765,7 @@ bridge_ifsetflag(int s, char *brdg, char *ifsname, u_int32_t flag)
 		return (EX_IOERR);
 	}
 
-	if (br_ioctl(s, SIOCBRDGSIFFLGS, (caddr_t)&req) < 0) {
+	if (br_ioctl(s, SIOCBRDGSIFFLGS, (caddr_t)&req, cand) < 0) {
 		printf("%% cannot set flags for %s on %s: %s\n", ifsname, brdg,
 		    strerror(errno));
 		return (EX_IOERR);
@@ -754,14 +774,15 @@ bridge_ifsetflag(int s, char *brdg, char *ifsname, u_int32_t flag)
 }
 
 int
-bridge_ifclrflag(int s, char *brdg, char *ifsname, u_int32_t flag)
+bridge_ifclrflag(int s, char *brdg, char *ifsname, u_int32_t flag,
+    struct cand *cand)
 {
 	struct ifbreq req;
 
 	strlcpy(req.ifbr_name, brdg, sizeof(req.ifbr_name));
 	strlcpy(req.ifbr_ifsname, ifsname, sizeof(req.ifbr_ifsname));
 
-	if (br_ioctl(s, SIOCBRDGGIFFLGS, (caddr_t)&req) < 0) {
+	if (br_ioctl(s, SIOCBRDGGIFFLGS, (caddr_t)&req, cand) < 0) {
 		if (errno == ESRCH)
 			printf("%% %s is not a member of %s\n", ifsname, brdg);
 		else
@@ -776,7 +797,7 @@ bridge_ifclrflag(int s, char *brdg, char *ifsname, u_int32_t flag)
 	}
 	req.ifbr_ifsflags &= ~flag;
 
-	if (br_ioctl(s, SIOCBRDGSIFFLGS, (caddr_t)&req) < 0) {
+	if (br_ioctl(s, SIOCBRDGSIFFLGS, (caddr_t)&req, cand) < 0) {
 		printf("%% cannot set flags for %s on %s: %s\n", ifsname, brdg,
 		    strerror(errno));
 		return (EX_IOERR);
@@ -1046,13 +1067,13 @@ found:
 }
 
 int
-bridge_add(int s, char *brdg, char *ifn)
+bridge_add(int s, char *brdg, char *ifn, struct cand *cand)
 {
 	struct ifbreq req;
 
 	strlcpy(req.ifbr_name, brdg, sizeof(req.ifbr_name));
 	strlcpy(req.ifbr_ifsname, ifn, sizeof(req.ifbr_ifsname));
-	if (br_ioctl(s, SIOCBRDGADD, &req) < 0) {
+	if (br_ioctl(s, SIOCBRDGADD, &req, cand) < 0) {
 		printf("%% cannot add member %s on %s: %s\n", ifn, brdg,
 			strerror(errno));
 		if (errno == EPERM)
@@ -1063,13 +1084,13 @@ bridge_add(int s, char *brdg, char *ifn)
 }
 
 int
-bridge_delete(int s, char *brdg, char *ifn)
+bridge_delete(int s, char *brdg, char *ifn, struct cand *cand)
 {
 	struct ifbreq req;
 
 	strlcpy(req.ifbr_name, (char *)brdg, sizeof(req.ifbr_name));
 	strlcpy(req.ifbr_ifsname, ifn, sizeof(req.ifbr_ifsname));
-	if (br_ioctl(s, SIOCBRDGDEL, &req) < 0) {
+	if (br_ioctl(s, SIOCBRDGDEL, &req, cand) < 0) {
 		printf("%% unable to delete member: SIOCBRDGDEL: %s\n",
 		    strerror(errno));
 		if (errno == EPERM)
@@ -1080,13 +1101,13 @@ bridge_delete(int s, char *brdg, char *ifn)
 }
 
 int
-bridge_addspan(int s, char *brdg, char *ifn)
+bridge_addspan(int s, char *brdg, char *ifn, struct cand *cand)
 {
 	struct ifbreq req;
 
 	strlcpy(req.ifbr_name, brdg, sizeof(req.ifbr_name));
 	strlcpy(req.ifbr_ifsname, ifn, sizeof(req.ifbr_ifsname));
-	if (br_ioctl(s, SIOCBRDGADDS, &req) < 0) {
+	if (br_ioctl(s, SIOCBRDGADDS, &req, cand) < 0) {
 		printf("%% cannot add span %s on %s: %s\n", ifn, brdg,
 		    strerror(errno));
 		if (errno == EPERM)
@@ -1097,13 +1118,13 @@ bridge_addspan(int s, char *brdg, char *ifn)
 }
 
 int
-bridge_delspan(int s, char *brdg, char *ifn)
+bridge_delspan(int s, char *brdg, char *ifn, struct cand *cand)
 {
 	struct ifbreq req;
 
 	strlcpy(req.ifbr_name, brdg, sizeof(req.ifbr_name));
 	strlcpy(req.ifbr_ifsname, ifn, sizeof(req.ifbr_ifsname));
-	if (br_ioctl(s, SIOCBRDGDELS, &req) < 0) {
+	if (br_ioctl(s, SIOCBRDGDELS, &req, cand) < 0) {
 		printf("%% cannot delete span %s on %s: %s\n", ifn, brdg,
 		    strerror(errno));
 		if (errno == EPERM)
@@ -1114,13 +1135,13 @@ bridge_delspan(int s, char *brdg, char *ifn)
 }
 
 int
-bridge_timeout(int s, char *brdg, int val)
+bridge_timeout(int s, char *brdg, int val, struct cand *cand)
 {
 	struct ifbrparam bp;
 
 	strlcpy(bp.ifbrp_name, brdg, sizeof(bp.ifbrp_name));
 	bp.ifbrp_ctime = val;
-	if (br_ioctl(s, SIOCBRDGSTO, (caddr_t)&bp) < 0) {
+	if (br_ioctl(s, SIOCBRDGSTO, (caddr_t)&bp, cand) < 0) {
 		printf("%% bridge_timeout: SIOCBRDGSTO: %s\n",
 		   strerror(errno));
 		return (EX_IOERR);
@@ -1129,13 +1150,13 @@ bridge_timeout(int s, char *brdg, int val)
 }
 
 int
-bridge_maxage(int s, char *brdg, u_int32_t val)
+bridge_maxage(int s, char *brdg, u_int32_t val, struct cand *cand)
 {
 	struct ifbrparam bp;
 
 	strlcpy(bp.ifbrp_name, brdg, sizeof(bp.ifbrp_name));
 	bp.ifbrp_maxage = val;
-	if (br_ioctl(s, SIOCBRDGSMA, (caddr_t)&bp) < 0) {
+	if (br_ioctl(s, SIOCBRDGSMA, (caddr_t)&bp, cand) < 0) {
 		printf("%% unable to set maxage: SIOCBRDGSMA: %s\n",
 		    strerror(errno));
 		return (EX_IOERR);
@@ -1145,13 +1166,13 @@ bridge_maxage(int s, char *brdg, u_int32_t val)
 }
 
 int
-bridge_priority(int s, char *brdg, u_int32_t val)
+bridge_priority(int s, char *brdg, u_int32_t val, struct cand *cand)
 {
 	struct ifbrparam bp;
 
 	strlcpy(bp.ifbrp_name, brdg, sizeof(bp.ifbrp_name));
 	bp.ifbrp_prio = val;
-	if (br_ioctl(s, SIOCBRDGSPRI, (caddr_t)&bp) < 0) {
+	if (br_ioctl(s, SIOCBRDGSPRI, (caddr_t)&bp, cand) < 0) {
 		printf("%% unable to set priority: SIOCBRDGSPRI: %s\n",
 		    strerror(errno));
 		return (EX_IOERR);
@@ -1160,13 +1181,13 @@ bridge_priority(int s, char *brdg, u_int32_t val)
 }
 
 int
-bridge_fwddelay(int s, char *brdg, u_int32_t val)
+bridge_fwddelay(int s, char *brdg, u_int32_t val, struct cand *cand)
 {
 	struct ifbrparam bp;
 
 	strlcpy(bp.ifbrp_name, brdg, sizeof(bp.ifbrp_name));
 	bp.ifbrp_fwddelay = val;
-	if (br_ioctl(s, SIOCBRDGSFD, (caddr_t)&bp) < 0) {
+	if (br_ioctl(s, SIOCBRDGSFD, (caddr_t)&bp, cand) < 0) {
 		printf("%% unable to set fwddelay: SIOCBRDGSFD: %s\n",
 		    strerror(errno));
 		return (EX_IOERR);
@@ -1176,13 +1197,13 @@ bridge_fwddelay(int s, char *brdg, u_int32_t val)
 }
 
 int
-bridge_hellotime(int s, char *brdg, u_int32_t val)
+bridge_hellotime(int s, char *brdg, u_int32_t val, struct cand *cand)
 {
 	struct ifbrparam bp;
 
 	strlcpy(bp.ifbrp_name, brdg, sizeof(bp.ifbrp_name));
 	bp.ifbrp_hellotime = val;
-	if (br_ioctl(s, SIOCBRDGSHT, (caddr_t)&bp) < 0) {
+	if (br_ioctl(s, SIOCBRDGSHT, (caddr_t)&bp, cand) < 0) {
 		printf("%% unable to set hellotime: SIOCBRDGSHT: %s\n",
 		    strerror(errno));
 		return (EX_IOERR);
@@ -1192,13 +1213,13 @@ bridge_hellotime(int s, char *brdg, u_int32_t val)
 }
 
 int
-bridge_holdcnt(int s, char *brdg, u_int32_t val)
+bridge_holdcnt(int s, char *brdg, u_int32_t val, struct cand *cand)
 {
 	struct ifbrparam bp;
 
 	strlcpy(bp.ifbrp_name, brdg, sizeof(bp.ifbrp_name));
 	bp.ifbrp_txhc = val;
-	if (br_ioctl(s, SIOCBRDGSTXHC, (caddr_t)&bp) < 0) {
+	if (br_ioctl(s, SIOCBRDGSTXHC, (caddr_t)&bp, cand) < 0) {
 		printf("%% unable to set holdcnt: SIOCBRDGSTXHC: %s\n",
 		    strerror(errno));
 		return (EX_IOERR);
@@ -1207,13 +1228,13 @@ bridge_holdcnt(int s, char *brdg, u_int32_t val)
 }
 
 int
-bridge_maxaddr(int s, char *brdg, u_int32_t val)
+bridge_maxaddr(int s, char *brdg, u_int32_t val, struct cand *cand)
 {
 	struct ifbrparam bp;
 
 	strlcpy(bp.ifbrp_name, brdg, sizeof(bp.ifbrp_name));
 	bp.ifbrp_csize = val;
-	if (br_ioctl(s, SIOCBRDGSCACHE, (caddr_t)&bp) < 0) {
+	if (br_ioctl(s, SIOCBRDGSCACHE, (caddr_t)&bp, cand) < 0) {
 		printf("%% unable to set maxaddr: SIOCBRDGSCACHE: %s\n",
 		    strerror(errno));
 		return (EX_IOERR);
@@ -1222,7 +1243,7 @@ bridge_maxaddr(int s, char *brdg, u_int32_t val)
 }
 
 int
-bridge_deladdr(int s, char *brdg, char *addr)
+bridge_deladdr(int s, char *brdg, char *addr, struct cand *cand)
 {
 	struct ifbvareq ifbva;
 	struct ifbareq ifba;
@@ -1237,12 +1258,12 @@ bridge_deladdr(int s, char *brdg, char *addr)
 		strlcpy(ifbva.ifbva_name, brdg, sizeof(ifbva.ifbva_name));
 		ifbva.ifbva_dst = ea;
 		ifbva.ifbva_vid = vlan;
-		r = br_ioctl(s, SIOCBRDGDVADDR, &ifbva);
+		r = br_ioctl(s, SIOCBRDGDVADDR, &ifbva, cand);
 	} else {
 		memset(&ifba, 0, sizeof(ifba));
 		strlcpy(ifba.ifba_name, brdg, sizeof(ifba.ifba_name));
 		ifba.ifba_dst = ea;
-		r = br_ioctl(s, SIOCBRDGDADDR, &ifba);
+		r = br_ioctl(s, SIOCBRDGDADDR, &ifba, cand);
 	}
 	if (r < 0) {
 		printf("%% unable to delete %s from %s\n", addr, brdg);
@@ -1253,7 +1274,7 @@ bridge_deladdr(int s, char *brdg, char *addr)
 }
 
 int
-bridge_ifprio(int s, char *brdg, char *ifname, int val)
+bridge_ifprio(int s, char *brdg, char *ifname, int val, struct cand *cand)
 {
 	struct ifbreq breq;
 
@@ -1262,7 +1283,7 @@ bridge_ifprio(int s, char *brdg, char *ifname, int val)
 
 	breq.ifbr_priority = val;
 
-	if (br_ioctl(s, SIOCBRDGSIFPRIO, (caddr_t)&breq) < 0) {
+	if (br_ioctl(s, SIOCBRDGSIFPRIO, (caddr_t)&breq, cand) < 0) {
 		printf("%% bridge_ifprio: SIOCBRDGSIFPRIO: %s\n",
 		    strerror(errno));
 		return (EX_IOERR);
@@ -1271,7 +1292,7 @@ bridge_ifprio(int s, char *brdg, char *ifname, int val)
 }
 
 int
-bridge_ifcost(int s, char *brdg, char *ifname, int val)
+bridge_ifcost(int s, char *brdg, char *ifname, int val, struct cand *cand)
 {
 	struct ifbreq breq;
 
@@ -1280,7 +1301,7 @@ bridge_ifcost(int s, char *brdg, char *ifname, int val)
 
 	breq.ifbr_path_cost = val;
 
-	if (br_ioctl(s, SIOCBRDGSIFCOST, (caddr_t)&breq) < 0) {
+	if (br_ioctl(s, SIOCBRDGSIFCOST, (caddr_t)&breq, cand) < 0) {
 		printf("%% bridge_ifcost: SIOCBRDGSIFCOST: %s\n",
 		    strerror(errno));
 		return (EX_IOERR);
@@ -1289,7 +1310,7 @@ bridge_ifcost(int s, char *brdg, char *ifname, int val)
 }
 
 int
-bridge_addaddr(int s, char *brdg, char *ifname, char *addr)
+bridge_addaddr(int s, char *brdg, char *ifname, char *addr, struct cand *cand)
 {
 	struct ifbvareq ifbva;
 	struct ifbareq ifba;
@@ -1308,14 +1329,14 @@ bridge_addaddr(int s, char *brdg, char *ifname, char *addr)
 		ifbva.ifbva_dst = ea;
 		ifbva.ifbva_vid = vlan;
 		ifbva.ifbva_flags = IFBAF_STATIC;
-		r = br_ioctl(s, SIOCBRDGSVADDR, &ifbva);
+		r = br_ioctl(s, SIOCBRDGSVADDR, &ifbva, cand);
 	} else {
 		memset(&ifba, 0, sizeof(ifba));
 		strlcpy(ifba.ifba_name, brdg, sizeof(ifba.ifba_name));
 		strlcpy(ifba.ifba_ifsname, ifname, sizeof(ifba.ifba_ifsname));
 		ifba.ifba_dst = ea;
 		ifba.ifba_flags = IFBAF_STATIC;
-		r = br_ioctl(s, SIOCBRDGSADDR, &ifba);
+		r = br_ioctl(s, SIOCBRDGSADDR, &ifba, cand);
 	}
 	if (r < 0) {
 		char tmp[128];
@@ -1679,7 +1700,8 @@ bridge_showrule(struct ifbrlreq *r, char *delim, FILE *output)
  *	{block|pass} {in|out|in/out} on {ifs} [src {mac}] [dst {mac}]
  */
 int
-bridge_rule(int s, char *brdg, int targc, char **targv, int ln)
+bridge_rule(int s, char *brdg, int targc, char **targv, int ln,
+    struct cand *cand)
 {
 	char **argv = targv;
 	int argc = targc;
@@ -1726,7 +1748,7 @@ bridge_rule(int s, char *brdg, int targc, char **targv, int ln)
 	argc--; argv++;
 
 	sec++; /* 4 */
-	if (argc == 0 || !(candidate ? cand_hasif(argv[0]) :
+	if (argc == 0 || !(cand != NULL ? cand_hasif(cand, argv[0]) :
 	    is_valid_ifname(argv[0])))
 		goto bad_rule;
 	strlcpy(rule.ifbr_ifsname, argv[0], sizeof(rule.ifbr_ifsname));
@@ -1779,7 +1801,7 @@ bridge_rule(int s, char *brdg, int targc, char **targv, int ln)
 		sec++;
 	}
 
-	if (br_ioctl(s, SIOCBRDGARL, &rule) < 0) {
+	if (br_ioctl(s, SIOCBRDGARL, &rule, cand) < 0) {
 		printf("%% unable to add rule: SIOCBRDGARL: %s\n",
 		    strerror(errno));
 		return (EX_IOERR);
@@ -1809,7 +1831,7 @@ bridge_badrule(int argc, char **argv, int ln, short sec)
 
 int
 bridge_protect(const char *ifname, int sock, const char *ifsname,
-    const char *val)
+    const char *val, struct cand *cand)
 {
 	struct ifbreq breq;
 	unsigned long v;
@@ -1837,7 +1859,7 @@ bridge_protect(const char *ifname, int sock, const char *ifsname,
 		str = strtok(NULL, ",");
 	}
 
-	if (br_ioctl(sock, SIOCBRDGSIFPROT, (caddr_t)&breq) == -1) {
+	if (br_ioctl(sock, SIOCBRDGSIFPROT, (caddr_t)&breq, cand) == -1) {
 		printf("%% protect %s %s: %s\n", ifsname, val, strerror(errno));
 		free(optlist);
 		return 1;
@@ -1848,7 +1870,8 @@ bridge_protect(const char *ifname, int sock, const char *ifsname,
 }
 
 int
-bridge_unprotect(const char *ifname, int sock, const char *ifsname)
+bridge_unprotect(const char *ifname, int sock, const char *ifsname,
+    struct cand *cand)
 {
 	struct ifbreq breq;
 
@@ -1857,7 +1880,7 @@ bridge_unprotect(const char *ifname, int sock, const char *ifsname)
 
 	breq.ifbr_protected = 0;
 
-	if (br_ioctl(sock, SIOCBRDGSIFPROT, (caddr_t)&breq) == -1) {
+	if (br_ioctl(sock, SIOCBRDGSIFPROT, (caddr_t)&breq, cand) == -1) {
 		printf("%% no protect %s: %s\n", ifsname, strerror(errno));
 		return 1;
 	}
@@ -1877,12 +1900,14 @@ brprotect(int argc, char **argv, ...)
 {
 	int set, e;
 	va_list ap;
+	struct cand *cand;
 	char *ifname;
 	int ifs;
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
@@ -1901,15 +1926,15 @@ brprotect(int argc, char **argv, ...)
 		}
 	}
 
-	if (!br_portname(ifs, argv[1])) {
+	if (!br_portname(ifs, argv[1], cand)) {
 		printf("%% Invalid interface name %s\n", argv[1]);
 		return -1;
 	}
 
 	if (set)
-		e = bridge_protect(ifname, ifs, argv[1], argv[2]);
+		e = bridge_protect(ifname, ifs, argv[1], argv[2], cand);
 	else
-		e = bridge_unprotect(ifname, ifs, argv[1]);
+		e = bridge_unprotect(ifname, ifs, argv[1], cand);
 	return e == 0 ? 0 : -1;
 }
 
@@ -1934,12 +1959,14 @@ brvlan(int argc, char **argv, ...)
 	struct brc *x;
 	const char *errmsg = NULL;
 	va_list ap;
+	struct cand *cand;
 	char *ifname;
 	int ifs, set, r;
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
@@ -1973,7 +2000,7 @@ brvlan(int argc, char **argv, ...)
 		printf("%% %s not supported on %s\n", x->name, ifname);
 		return -1;
 	}
-	if (!br_portname(ifs, argv[0])) {
+	if (!br_portname(ifs, argv[0], cand)) {
 		printf("%% invalid member name: %s\n", argv[0]);
 		return -1;
 	}
@@ -1997,7 +2024,7 @@ brvlan(int argc, char **argv, ...)
 				return -1;
 			}
 		}
-		r = br_ioctl(ifs, SIOCBRDGSPVID, &breq);
+		r = br_ioctl(ifs, SIOCBRDGSPVID, &breq, cand);
 	} else {
 		memset(&vm, 0, sizeof(vm));
 		strlcpy(vm.ifbrvm_name, ifname, sizeof(vm.ifbrvm_name));
@@ -2008,7 +2035,7 @@ brvlan(int argc, char **argv, ...)
 		/* no tagged with no VLANs leaves none */
 		vm.ifbrvm_op = set ? IFBRVM_OP_OR : argc == 2 ?
 		    IFBRVM_OP_ANDNOT : IFBRVM_OP_SET;
-		r = br_ioctl(ifs, SIOCBRDGSVMAP, &vm);
+		r = br_ioctl(ifs, SIOCBRDGSVMAP, &vm, cand);
 	}
 	if (r < 0) {
 		printf("%% %s %s: %s\n", x->name, argv[0],
@@ -2134,12 +2161,14 @@ brpvlan(int argc, char **argv, ...)
 	struct brc *x;
 	const char *errmsg = NULL;
 	va_list ap;
+	struct cand *cand;
 	char *ifname;
 	int ifs, set;
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
@@ -2182,7 +2211,7 @@ brpvlan(int argc, char **argv, ...)
 		printf("%% invalid VLAN: %s\n", errmsg);
 		return -1;
 	}
-	if (br_ioctl(ifs, set ? SIOCBRDGADDPV : SIOCBRDGDELPV, &pv) == 0)
+	if (br_ioctl(ifs, set ? SIOCBRDGADDPV : SIOCBRDGDELPV, &pv, cand) == 0)
 		return 0;
 	switch (errno) {
 	case EBUSY:
@@ -2524,7 +2553,8 @@ brcfg_static(struct brcfg *b, struct ether_addr *ea)
 	return -1;
 }
 
-static int brcfg_findbif(struct brcfg *, char *, struct brport **);
+static int brcfg_findbif(struct brcfg *, char *, struct brport **,
+    struct cand *);
 
 /* The VLAN a veb keeps an address in: a secondary VLAN's primary's */
 static u_int
@@ -2561,14 +2591,15 @@ brcfg_vstatic(struct brcfg *b, struct ether_addr *ea, u_int vlan)
  * VLAN: veb_add_addr(), veb_add_vid_addr() and etherbridge_add_addr()
  */
 static int
-brcfg_vaddr(struct brcfg *b, struct ether_addr *ea, u_int vlan, char *member)
+brcfg_vaddr(struct brcfg *b, struct ether_addr *ea, u_int vlan, char *member,
+    struct cand *cand)
 {
 	static const struct ether_addr any;
 	struct brport *p;
 	char text[64];
 	int e;
 
-	if ((e = brcfg_findbif(b, member, &p)) != 0)
+	if ((e = brcfg_findbif(b, member, &p, cand)) != 0)
 		return e;
 	if (vlan == EVL_VLID_NULL)
 		vlan = p->pvid;
@@ -2691,7 +2722,7 @@ done:
 
 /* The bridge brdg as the candidate's lines describe it */
 static int
-brcfg_cand(struct brcfg *b, char *brdg)
+brcfg_cand(struct brcfg *b, char *brdg, struct cand *cand)
 {
 	struct brport *p;
 	char line[1024], *l, *w, *ws;
@@ -2703,7 +2734,7 @@ brcfg_cand(struct brcfg *b, char *brdg)
 	/* a veb's new member takes its vnetid's VLAN, or none */
 	if ((b->vlans = cand_takes(brdg, SIOCBRDGSPVID)) != 0) {
 		b->dflt = default_vnetid(brdg);
-		if ((l = cand_line("vnetid", 0)) != NULL &&
+		if ((l = cand_line(cand, "vnetid", 0)) != NULL &&
 		    strncmp(l, "no ", 3) == 0)
 			b->dflt = IFBR_PVID_NONE;
 		else if (l != NULL)
@@ -2713,18 +2744,18 @@ brcfg_cand(struct brcfg *b, char *brdg)
 			goto bad;
 	}
 	for (i = 0; i <= HOLDCNT; i++)
-		b->val[i] = (l = cand_line(brvals[i].name, 0)) == NULL ?
+		b->val[i] = (l = cand_line(cand, brvals[i].name, 0)) == NULL ?
 		    brvals[i].def :
 		    strtol(l + strlen(brvals[i].name) + 1, NULL, 10);
 	b->proto = kern_bstp_protover;
-	if ((l = cand_line("proto", 0)) != NULL)
+	if ((l = cand_line(cand, "proto", 0)) != NULL)
 		b->proto = strcmp(l, "proto stp") == 0 ? BSTP_PROTO_STP :
 		    BSTP_PROTO_RSTP;
 
 	for (i = 0; i < nitems(brlists); i++) {
 		/* "no learning" is a learning line */
 		no = strncmp(brlists[i].name, "no ", 3) == 0 ? 3 : 0;
-		if ((l = cand_line(brlists[i].name + no, 0)) == NULL)
+		if ((l = cand_line(cand, brlists[i].name + no, 0)) == NULL)
 			continue;
 		strlcpy(line, l + strlen(brlists[i].name) + 1, sizeof(line));
 		for (ws = line; (w = strsep(&ws, " ")) != NULL; ) {
@@ -2752,7 +2783,7 @@ brcfg_cand(struct brcfg *b, char *brdg)
 
 	/* "ifpriority em0 64", "ifcost em0 2000", "protect em0 1,2" */
 	for (i = 0; i < nitems(brper); i++)
-		for (n = 0; (l = cand_line(brper[i], n)) != NULL; n++) {
+		for (n = 0; (l = cand_line(cand, brper[i], n)) != NULL; n++) {
 			strlcpy(line, l + strlen(brper[i]) + 1, sizeof(line));
 			ws = line;
 			if ((p = brcfg_member(b, strsep(&ws, " "))) == NULL ||
@@ -2773,7 +2804,8 @@ brcfg_cand(struct brcfg *b, char *brdg)
 	/* "pvlan 100", "pvlan-isolated 100 101", "pvlan-community 100 102" */
 	for (i = 0; i < nitems(brpvnames); i++)
 		for (n = 0; brpvnames[i] != NULL &&
-		    (l = cand_line((char *)brpvnames[i], n)) != NULL; n++) {
+		    (l = cand_line(cand, (char *)brpvnames[i],
+		        n)) != NULL; n++) {
 			strlcpy(line, l + strlen(brpvnames[i]) + 1,
 			    sizeof(line));
 			ws = line;
@@ -2786,7 +2818,7 @@ brcfg_cand(struct brcfg *b, char *brdg)
 				goto bad;
 		}
 	/* "untagged em0 5", "tagged em0 10,20-30" */
-	for (n = 0; (l = cand_line("untagged", n)) != NULL; n++) {
+	for (n = 0; (l = cand_line(cand, "untagged", n)) != NULL; n++) {
 		strlcpy(line, l + strlen("untagged "), sizeof(line));
 		ws = line;
 		if ((p = brcfg_member(b, strsep(&ws, " "))) == NULL ||
@@ -2801,17 +2833,17 @@ brcfg_cand(struct brcfg *b, char *brdg)
 		if (e != NULL)
 			goto bad;
 	}
-	for (n = 0; (l = cand_line("tagged", n)) != NULL; n++) {
+	for (n = 0; (l = cand_line(cand, "tagged", n)) != NULL; n++) {
 		strlcpy(line, l + strlen("tagged "), sizeof(line));
 		ws = line;
 		if ((p = brcfg_member(b, strsep(&ws, " "))) == NULL ||
 		    ws == NULL || brvlan_parse(ws, p->tagged) == -1)
 			goto bad;
 	}
-	for (n = 0; (l = cand_line("static", n)) != NULL; n++)
+	for (n = 0; (l = cand_line(cand, "static", n)) != NULL; n++)
 		if (brcfg_line(b, 0, l + strlen("static ")) == -1)
 			goto bad;
-	for (n = 0; (l = cand_line("rule", n)) != NULL; n++)
+	for (n = 0; (l = cand_line(cand, "rule", n)) != NULL; n++)
 		if (brcfg_line(b, 1, l + strlen("rule ")) == -1)
 			goto bad;
 	return 0;
@@ -2917,17 +2949,17 @@ conf_brcfg(FILE *output, int ifs, char *ifname)
 
 /* Adding name to the candidate's bridge brdg, as a span port with span */
 static int
-brcfg_add(struct brcfg *b, char *brdg, char *name, int span)
+brcfg_add(struct brcfg *b, char *brdg, char *name, int span, struct cand *cand)
 {
 	struct brport *p;
 
-	if (!cand_hasif(name))
+	if (!cand_hasif(cand, name))
 		return ENOENT;
-	if (cand_gettype(name) != IFT_ETHER)
+	if (cand_gettype(cand, name) != IFT_ETHER)
 		return EINVAL;
 	if ((p = brcfg_port(b, name, 0)) != NULL)
 		return (p->flags & IFBIF_SPAN) && !span ? EBUSY : EEXIST;
-	if (cand_listowner(brdg, "member", name) != NULL)
+	if (cand_listowner(cand, brdg, "member", name) != NULL)
 		return EBUSY;
 	if ((p = brcfg_port(b, name, 1)) == NULL)
 		return ENOMEM;
@@ -2950,9 +2982,9 @@ brcfg_time(struct brcfg *b, int i, int secs, int min, int max)
 
 /* find member name of the candidate's bridge, as bridge_findbif() does */
 static int
-brcfg_findbif(struct brcfg *b, char *name, struct brport **p)
+brcfg_findbif(struct brcfg *b, char *name, struct brport **p, struct cand *cand)
 {
-	if (!cand_hasif(name))
+	if (!cand_hasif(cand, name))
 		return ENOENT;
 	return (*p = brcfg_member(b, name)) == NULL ? ESRCH : 0;
 }
@@ -2996,7 +3028,7 @@ brcfg_rule(struct brcfg *b, struct ifbrlreq *req)
  * write the resulting bridge back to the candidate's lines
  */
 static int
-cand_bridge(u_long cmd, void *data)
+cand_bridge(struct cand *cand, u_long cmd, void *data)
 {
 	char *brdg = data;	/* each request starts with the bridge's name */
 	struct ifbreq *req = data;
@@ -3018,7 +3050,7 @@ cand_bridge(u_long cmd, void *data)
 		errno = ENOTTY;
 		return -1;
 	}
-	if (brcfg_cand(&b, brdg) == -1) {
+	if (brcfg_cand(&b, brdg, cand) == -1) {
 		e = EINVAL;
 		goto done;
 	}
@@ -3026,18 +3058,19 @@ cand_bridge(u_long cmd, void *data)
 	case SIOCBRDGADD:
 	case SIOCBRDGADDS:
 		e = brcfg_add(&b, brdg, req->ifbr_ifsname,
-		    cmd == SIOCBRDGADDS);
+		    cmd == SIOCBRDGADDS, cand);
 		/* a port's TCP large receive offload goes off */
-		if (e == 0 && cand_ifsetting(req->ifbr_ifsname, ST_DEFAULT,
+		if (e == 0 &&
+		    cand_ifsetting(cand, req->ifbr_ifsname, ST_DEFAULT,
 		    "tcplro") == -1)
 			e = EINVAL;
 		break;
 	case SIOCBRDGDEL:
-		if ((e = brcfg_findbif(&b, req->ifbr_ifsname, &p)) == 0)
+		if ((e = brcfg_findbif(&b, req->ifbr_ifsname, &p, cand)) == 0)
 			brcfg_del(&b, p);
 		break;
 	case SIOCBRDGDELS:
-		if (!cand_hasif(req->ifbr_ifsname))
+		if (!cand_hasif(cand, req->ifbr_ifsname))
 			e = ENOENT;
 		else if ((p = brcfg_port(&b, req->ifbr_ifsname, 0)) == NULL ||
 		    !(p->flags & IFBIF_SPAN))
@@ -3046,7 +3079,7 @@ cand_bridge(u_long cmd, void *data)
 			brcfg_del(&b, p);
 		break;
 	case SIOCBRDGGIFFLGS:
-		if ((e = brcfg_findbif(&b, req->ifbr_ifsname, &p)) == 0) {
+		if ((e = brcfg_findbif(&b, req->ifbr_ifsname, &p, cand)) == 0) {
 			req->ifbr_ifsflags = p->flags;
 			req->ifbr_protected = p->prot;
 		}
@@ -3056,7 +3089,7 @@ cand_bridge(u_long cmd, void *data)
 			e = EINVAL;
 			break;
 		}
-		if ((e = brcfg_findbif(&b, req->ifbr_ifsname, &p)) != 0)
+		if ((e = brcfg_findbif(&b, req->ifbr_ifsname, &p, cand)) != 0)
 			break;
 		/* a driver with no spanning tree has no ioctls for it */
 		if ((req->ifbr_ifsflags & IFBIF_STP) &&
@@ -3075,7 +3108,7 @@ cand_bridge(u_long cmd, void *data)
 			p->flags = req->ifbr_ifsflags;
 		break;
 	case SIOCBRDGSIFPROT:
-		if ((e = brcfg_findbif(&b, req->ifbr_ifsname, &p)) == 0)
+		if ((e = brcfg_findbif(&b, req->ifbr_ifsname, &p, cand)) == 0)
 			p->prot = req->ifbr_protected;
 		break;
 	case SIOCBRDGSPVID:
@@ -3085,7 +3118,8 @@ cand_bridge(u_long cmd, void *data)
 		if (pvid != IFBR_PVID_NONE && pvid != IFBR_PVID_DECLINE &&
 		    (pvid < EVL_VLID_MIN || pvid > EVL_VLID_MAX))
 			e = EINVAL;
-		else if ((e = brcfg_findbif(&b, req->ifbr_ifsname, &p)) != 0)
+		else if ((e = brcfg_findbif(&b, req->ifbr_ifsname, &p,
+		    cand)) != 0)
 			break;
 		/* a vport has a VLAN */
 		else if ((pvid == IFBR_PVID_NONE ||
@@ -3158,7 +3192,7 @@ cand_bridge(u_long cmd, void *data)
 			e = EINVAL;
 			break;
 		}
-		if ((e = brcfg_findbif(&b, vm->ifbrvm_ifsname, &p)) != 0)
+		if ((e = brcfg_findbif(&b, vm->ifbrvm_ifsname, &p, cand)) != 0)
 			break;
 		for (i = 0; i < (int)sizeof(p->tagged); i++)
 			if (vm->ifbrvm_op == IFBRVM_OP_SET)
@@ -3176,7 +3210,7 @@ cand_bridge(u_long cmd, void *data)
 			e = EINVAL;
 		else
 			e = brcfg_vaddr(&b, &bva->ifbva_dst, bva->ifbva_vid,
-			    bva->ifbva_ifsname);
+			    bva->ifbva_ifsname, cand);
 		break;
 	case SIOCBRDGDVADDR:
 		/* veb_del_vid_addr() */
@@ -3193,10 +3227,10 @@ cand_bridge(u_long cmd, void *data)
 		/* a veb's address is in the member's untagged VLAN */
 		if (b.vlans) {
 			e = brcfg_vaddr(&b, &ba->ifba_dst, EVL_VLID_NULL,
-			    ba->ifba_ifsname);
+			    ba->ifba_ifsname, cand);
 			break;
 		}
-		if ((e = brcfg_findbif(&b, ba->ifba_ifsname, &p)) != 0)
+		if ((e = brcfg_findbif(&b, ba->ifba_ifsname, &p, cand)) != 0)
 			break;
 		if ((i = brcfg_static(&b, &ba->ifba_dst)) != -1)
 			brcfg_delline(b.statics, &b.nstatics, i);
@@ -3222,7 +3256,8 @@ cand_bridge(u_long cmd, void *data)
 		    rl->ifbr_action != BRL_ACTION_PASS) ||
 		    !(rl->ifbr_flags & (BRL_FLAG_IN | BRL_FLAG_OUT)))
 			e = EINVAL;
-		else if ((e = brcfg_findbif(&b, rl->ifbr_ifsname, &p)) == 0)
+		else if ((e = brcfg_findbif(&b, rl->ifbr_ifsname, &p,
+		    cand)) == 0)
 			e = brcfg_rule(&b, rl);
 		break;
 	case SIOCBRDGSPRI:
@@ -3275,7 +3310,7 @@ cand_bridge(u_long cmd, void *data)
 		break;
 	case SIOCBRDGSIFPRIO:
 	case SIOCBRDGSIFCOST:
-		if ((e = brcfg_findbif(&b, req->ifbr_ifsname, &p)) != 0)
+		if ((e = brcfg_findbif(&b, req->ifbr_ifsname, &p, cand)) != 0)
 			break;
 		if (!(p->flags & IFBIF_STP))
 			e = EINVAL;
@@ -3300,7 +3335,7 @@ cand_bridge(u_long cmd, void *data)
 		goto done;
 	}
 	brcfg_print(f, &b);
-	if (fclose(f) == EOF || cand_putlines(brnames, nitems(brnames),
+	if (fclose(f) == EOF || cand_putlines(cand, brnames, nitems(brnames),
 	    buf) == -1)
 		e = ENOMEM;
 done:
@@ -3315,19 +3350,19 @@ done:
 
 /* Send a bridge ioctl to the kernel, or in configure private, the candidate */
 static int
-br_ioctl(int s, u_long cmd, void *data)
+br_ioctl(int s, u_long cmd, void *data, struct cand *cand)
 {
-	if (candidate)
-		return cand_bridge(cmd, data);
+	if (cand != NULL)
+		return cand_bridge(cand, cmd, data);
 	return ioctl(s, cmd, data);
 }
 
 /* Can name be a port of a bridge, as far as the kernel or candidate says? */
 static int
-br_portname(int ifs, char *name)
+br_portname(int ifs, char *name, struct cand *cand)
 {
-	if (candidate)
-		return cand_hasif(name) && !cand_isbridge(name);
+	if (cand != NULL)
+		return cand_hasif(cand, name) && !cand_isbridge(cand, name);
 	return is_valid_ifname(name) && !is_bridge(ifs, name);
 }
 

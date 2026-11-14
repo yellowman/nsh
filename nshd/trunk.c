@@ -46,8 +46,8 @@
 static struct trunk_protos tpr[] = TRUNK_PROTOS;
 
 static int in_list(char *, char *);
-static int cand_trunkport(char *, int, int, char **);
-static int cand_trunkproto(char *, int);
+static int cand_trunkport(struct cand *, char *, int, int, char **);
+static int cand_trunkproto(struct cand *, char *, int);
 
 /* Is word among the values of line, after its name? */
 static int
@@ -71,7 +71,7 @@ in_list(char *line, char *word)
  * messages, before any is added
  */
 static int
-cand_trunkport(char *ifname, int set, int argc, char **argv)
+cand_trunkport(struct cand *cand, char *ifname, int set, int argc, char **argv)
 {
 	char ports[1024], *l, *w, *p;
 	int i, busy, n = 0, aggr = strncmp(ifname, "aggr", strlen("aggr")) == 0;
@@ -80,7 +80,7 @@ cand_trunkport(char *ifname, int set, int argc, char **argv)
 		printf("%% %s not trunk\n", ifname);
 		return -1;
 	}
-	if ((l = cand_line("trunkport", 0)) != NULL) {
+	if ((l = cand_line(cand, "trunkport", 0)) != NULL) {
 		strlcpy(ports, l, sizeof(ports));
 		strtok_r(ports, " ", &p);
 		while ((w = strtok_r(NULL, " ", &p)) != NULL)
@@ -88,24 +88,28 @@ cand_trunkport(char *ifname, int set, int argc, char **argv)
 	}
 	for (i = 0; i < argc; i++) {
 		if (!set) {
-			if (!in_list(cand_line("trunkport", 0), argv[i])) {
+			if (!in_list(cand_line(cand, "trunkport", 0),
+			    argv[i])) {
 				printf("%% Port %s not part of %s\n", argv[i],
 				    ifname);
 				return -1;
 			}
 			continue;
 		}
-		if (!cand_hasif(argv[i]) || strcmp(argv[i], ifname) == 0) {
+		if (!cand_hasif(cand, argv[i]) ||
+		    strcmp(argv[i], ifname) == 0) {
 			printf("%% inttrunkport: SIOCSTRUNKPORT: %s\n",
 			    strerror(EINVAL));
 			return -1;
 		}
 		/* a port of any trunk, and for aggr of a bridge (EBUSY) */
-		busy = in_list(cand_line("trunkport", 0), argv[i]) ||
-		    cand_listowner(ifname, "trunkport", argv[i]) != NULL ||
-		    (aggr && cand_listowner(ifname, "member", argv[i]));
+		busy = in_list(cand_line(cand, "trunkport", 0), argv[i]) ||
+		    cand_listowner(cand, ifname, "trunkport",
+		        argv[i]) != NULL ||
+		    (aggr && cand_listowner(cand, ifname, "member", argv[i]));
 		/* trunk_port_create() checks the type after EBUSY */
-		if ((aggr || !busy) && cand_gettype(argv[i]) != IFT_ETHER) {
+		if ((aggr || !busy) &&
+		    cand_gettype(cand, argv[i]) != IFT_ETHER) {
 			printf("%% inttrunkport: SIOCSTRUNKPORT: %s\n",
 			    strerror(EPROTONOSUPPORT));
 			return -1;
@@ -122,7 +126,7 @@ cand_trunkport(char *ifname, int set, int argc, char **argv)
 		}
 	}
 	argvtostring(argc, argv, ports, sizeof(ports));
-	return cand_setting(set ? ST_ON : ST_OFF, "trunkport %s", ports);
+	return cand_setting(cand, set ? ST_ON : ST_OFF, "trunkport %s", ports);
 }
 
 /*
@@ -130,7 +134,7 @@ cand_trunkport(char *ifname, int set, int argc, char **argv)
  * driver's default, and aggr's only protocol, lacp, is its default
  */
 static int
-cand_trunkproto(char *ifname, int proto)
+cand_trunkproto(struct cand *cand, char *ifname, int proto)
 {
 	int i;
 
@@ -139,10 +143,10 @@ cand_trunkproto(char *ifname, int proto)
 		return -1;
 	}
 	if (proto == TRUNK_PROTO_DEFAULT || proto == TRUNK_PROTO_LACP)
-		return cand_setting(ST_DEFAULT, "trunkproto");
+		return cand_setting(cand, ST_DEFAULT, "trunkproto");
 	for (i = 0; tpr[i].tpr_proto != proto; i++)
 		;
-	return cand_setting(ST_ON, "trunkproto %s", tpr[i].tpr_name);
+	return cand_setting(cand, ST_ON, "trunkproto %s", tpr[i].tpr_name);
 }
 
 int
@@ -151,12 +155,14 @@ inttrunkport(int argc, char **argv, ...)
 	struct trunk_reqport rp;
 	int set, i, r = 0;
 	va_list ap;
+	struct cand *cand;
 	char *ifname;
 	int ifs;
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
@@ -175,8 +181,8 @@ inttrunkport(int argc, char **argv, ...)
 		return -1;
 	}
 
-	if (candidate)
-		return cand_trunkport(ifname, set, argc, argv);
+	if (cand != NULL)
+		return cand_trunkport(cand, ifname, set, argc, argv);
 
 	bzero(&rp, sizeof(rp));
 	strlcpy(rp.rp_ifname, ifname, sizeof(rp.rp_ifname));
@@ -236,12 +242,14 @@ inttrunkproto(int argc, char **argv, ...)
 	int i, set;
 	struct trunk_reqall ra;
 	va_list ap;
+	struct cand *cand;
 	char *ifname;
 	int ifs, aggr;
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 	aggr = strncmp(ifname, "aggr", strlen("aggr")) == 0;
 
@@ -292,8 +300,8 @@ inttrunkproto(int argc, char **argv, ...)
 		return -1;
 	}
 
-	if (candidate)
-		return cand_trunkproto(ifname, ra.ra_proto);
+	if (cand != NULL)
+		return cand_trunkproto(cand, ifname, ra.ra_proto);
 
 	if (ioctl(ifs, SIOCSTRUNK, &ra) != 0) {
 		switch(errno) {
@@ -321,12 +329,14 @@ intlacp(int argc, char **argv, ...)
 	struct trunk_opts to;
 	const char **vals;
 	va_list ap;
+	struct cand *cand;
 	char *ifname, *name;
 	int ifs, set, opt, dflt, value;
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
@@ -365,10 +375,10 @@ intlacp(int argc, char **argv, ...)
 		return -1;
 	}
 
-	if (candidate) {
+	if (cand != NULL) {
 		if (value == dflt)
-			return cand_setting(ST_DEFAULT, "%s", name);
-		return cand_setting(ST_ON, "%s %s", name, vals[value]);
+			return cand_setting(cand, ST_DEFAULT, "%s", name);
+		return cand_setting(cand, ST_ON, "%s %s", name, vals[value]);
 	}
 
 	memset(&to, 0, sizeof(to));

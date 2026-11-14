@@ -26,6 +26,7 @@
 
 #include <ctype.h>
 #include <limits.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -385,7 +386,7 @@ login_user_find(const char *name, char *class, size_t len, int *made)
 
 /* Is class a built-in one, or one the candidate has? If not, say so */
 static int
-login_cand_class(const char *class)
+login_cand_class(const char *class, struct cand *cand)
 {
 	char *l, word[64];
 	size_t j, i;
@@ -393,7 +394,7 @@ login_cand_class(const char *class)
 	for (j = 0; j < nitems(login_builtin); j++)
 		if (strcmp(class, login_builtin[j].name) == 0)
 			return 1;
-	for (i = 0; (l = cand_line("login", i)) != NULL; i++)
+	for (i = 0; (l = cand_line(cand, "login", i)) != NULL; i++)
 		if (sscanf(l, "login class %63s", word) == 1 &&
 		    strcmp(word, class) == 0)
 			return 1;
@@ -403,7 +404,7 @@ login_cand_class(const char *class)
 
 /* login class NAME [PERMISSION...], or no login class NAME */
 static int
-login_class(int set, int argc, char **argv)
+login_class(int set, int argc, char **argv, struct cand *cand)
 {
 	char perms[64], rec[128];
 	size_t j;
@@ -418,15 +419,17 @@ login_class(int set, int argc, char **argv)
 			return -1;
 		}
 	if (!set) {
-		if (candidate)
-			return cand_setting(ST_OFF, "login class %s", argv[2]);
+		if (cand != NULL)
+			return cand_setting(cand, ST_OFF,
+			    "login class %s", argv[2]);
 		return login_store("class", argv[2], NULL);
 	}
 	if ((p = login_words_perms(argc - 3, argv + 3)) == -1)
 		return -1;
 	login_perms_words(p, perms, sizeof(perms));
-	if (candidate)
-		return cand_setting(ST_ON, "login class %s%s", argv[2], perms);
+	if (cand != NULL)
+		return cand_setting(cand, ST_ON, "login class %s%s",
+		    argv[2], perms);
 	snprintf(rec, sizeof(rec), "class %s%s", argv[2], perms);
 	return login_store("class", argv[2], rec);
 }
@@ -470,7 +473,7 @@ login_make(char *name, char *hash)
 
 /* login user NAME class CLASS [password HASH], or no login user NAME */
 static int
-login_user(int set, int argc, char **argv)
+login_user(int set, int argc, char **argv, struct cand *cand)
 {
 	char *name = argv[2], *hash = NULL, class[64], rec[256];
 	char *mod[] = { USERMOD, "-p", NULL, name, NULL };
@@ -485,8 +488,9 @@ login_user(int set, int argc, char **argv)
 	if (!login_name_ok("user", name))
 		return -1;
 	if (!set) {
-		if (candidate)
-			return cand_setting(ST_OFF, "login user %s", name);
+		if (cand != NULL)
+			return cand_setting(cand, ST_OFF,
+			    "login user %s", name);
 		if ((found = login_user_find(name, class, sizeof(class),
 		    &made)) == -1)
 			return -1;
@@ -512,11 +516,11 @@ login_user(int set, int argc, char **argv)
 		if (!validate_cpass("blowfish", hash))
 			return -1;
 	}
-	if (candidate) {
-		if (!login_cand_class(argv[4]))
+	if (cand != NULL) {
+		if (!login_cand_class(argv[4], cand))
 			return -1;
-		return cand_setting(ST_ON, "login user %s class %s%s%s", name,
-		    argv[4], hash ? " password " : "", hash ? hash : "");
+		return cand_setting(cand, ST_ON, "login user %s class %s%s%s",
+		    name, argv[4], hash ? " password " : "", hash ? hash : "");
 	}
 
 	if ((found = login_user_find(name, class, sizeof(class), &made)) ==
@@ -564,6 +568,12 @@ loginset(int argc, char **argv, ...)
 {
 	char line[1024];
 	int i, set = 1;
+	struct cand *cand;
+	va_list ap;
+
+	va_start(ap, argv);
+	cand = va_arg(ap, struct cand *);
+	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
 		argv++;
@@ -573,7 +583,7 @@ loginset(int argc, char **argv, ...)
 	if (argc < 3)
 		return login_usage();
 	/* a commit by a session without admin is limited (admin_may()) */
-	if (!candidate) {
+	if (cand == NULL) {
 		line[0] = '\0';
 		for (i = 0; i < (set ? argc : 3); i++) {
 			if (i > 0)
@@ -587,9 +597,9 @@ loginset(int argc, char **argv, ...)
 		}
 	}
 	if (isprefix(argv[1], "class"))
-		return login_class(set, argc, argv);
+		return login_class(set, argc, argv, cand);
 	if (isprefix(argv[1], "user"))
-		return login_user(set, argc, argv);
+		return login_user(set, argc, argv, cand);
 	return login_usage();
 }
 

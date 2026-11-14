@@ -33,15 +33,19 @@
  * changed one since (cand_conflicts()); committing again keeps this
  * session's changes over the other's.
  *
- * nshd's configure uses a candidate that sessions share, struct
- * cand_shared.  A session takes it as its own while it runs a command
- * (session.c), and leaves it to the others when it leaves configure
- * (cand_detach()).  While another session holds it, nshd's config sets
- * cand_held, and no edit or rollback changes it.
+ * A candidate is a struct cand_state.  nshd's config has one for each
+ * session, and one that the sessions of configure share.  A session's
+ * struct cand points at its own and at the one its lines edit, and
+ * config passes it to what runs the session's request, down to the
+ * functions here.  A session attached to the shared one leaves it to
+ * the others when it leaves configure (cand_detach()).  While another
+ * session holds it, nshd's config sets cand_held, and no edit or
+ * rollback changes it.
  *
  * A command's table row (cand) says how it takes part.  A CAND_EDIT
- * handler checks 'candidate' and calls cand_setting() where it would
- * have changed the kernel, a CAND_RUN command runs as it always does,
+ * command's apply function is passed the candidate, and calls
+ * cand_setting() where it would have changed the kernel; passed none,
+ * it changes the kernel.  A CAND_RUN command runs as it always does,
  * and any other command is refused until its handler is converted.
  * cand_setting() says what the command did to a setting; the settings
  * table (settings.c) turns that into the edit.
@@ -69,15 +73,8 @@
 #include "kfacts.h"
 #include "session.h"
 
-int candidate;				/* configure private is on */
 int cand_rtable;			/* rtable for rtable settings, or 0 */
-int cand_sharing;			/* the candidate is a shared one */
 const char *cand_held;			/* why it may not change now, or NULL */
-
-static struct cnode *cand;		/* this session's view of it */
-static struct cjournal *cand_journal;	/* the changes it made */
-static struct cnode *cand_base;		/* what rollback N loaded, or NULL */
-static unsigned int cand_nedits;	/* number of edits and rollbacks */
 
 /* a top-level statement the journal changes, as it was before the change */
 struct cand_was {
@@ -85,35 +82,37 @@ struct cand_was {
 	int	 whole;		/* top is a statement, not a line name */
 	char	*image;		/* as conftree_write_stmt() wrote it */
 };
-static struct cand_was *cand_was;
-static size_t cand_nwas;
+
+/*
+ * A candidate: a session's own, or the one that sessions share. A
+ * session's struct cand (session.h) points at its own and at the one its
+ * lines edit
+ */
+struct cand_state {
+	struct cnode	*tree;		/* the session's view of it */
+	struct cnode	*base;		/* what rollback N loaded, or NULL */
+	struct cjournal	*journal;	/* the changes made to it */
+	struct cand_was	*was;
+	size_t		 nwas;
+	unsigned int	 nedits;	/* number of edits and rollbacks */
+};
 
 /* what a session keeps of this file (session.c) */
 struct sglobal candidate_sglobals[] = {
-	SGLOBAL(candidate), SGLOBAL(cand_rtable), SGLOBAL(cand),
-	SGLOBAL(cand_journal), SGLOBAL(cand_base), SGLOBAL(cand_was),
-	SGLOBAL(cand_nwas), SGLOBAL(cand_nedits), SGLOBAL(cand_sharing),
+	SGLOBAL(cand_rtable),
 	{ NULL }
 };
 
-/* a shared candidate, which each session loads into its globals */
-struct cand_shared {
-	struct cnode	*cand, *base;
-	struct cjournal	*journal;
-	struct cand_was	*was;
-	size_t		 nwas;
-	unsigned int	 nedits;
-};
-
-static int cand_record(char *, struct sedit *);
-static int cand_remember(char *, struct sedit *);
+static int cand_record(struct cand *, char *, struct sedit *);
+static int cand_remember(struct cand *, char *, struct sedit *);
 static char *cand_image(struct cnode *, char *, int);
-static void cand_forget(void);
-static int cand_rtblock(char *, size_t, int);
-static char *cand_rtcur(char *, size_t);
-static int cand_set(int, int, char *, char *);
+static void cand_forget(struct cand *);
+static int cand_rtblock(struct cand *, char *, size_t, int);
+static char *cand_rtcur(struct cand *, char *, size_t);
+static int cand_set(struct cand *, int, int, char *, char *);
 static void cand_block(char *, size_t, char *, int);
-static int cand_vsetting(char *, int, int, const char *, va_list);
+static int cand_vsetting(struct cand *, char *, int, int,
+    const char *, va_list);
 static const struct kcloner *cand_cloner(char *);
 static size_t cloner_namelen(char *);
 
@@ -122,67 +121,71 @@ static size_t cloner_namelen(char *);
  * or take the shared one as it is, if it has begun
  */
 int
-cand_begin(void)
+cand_begin(struct cand *cand)
 {
-	if (candidate)
+	if (cand->on)
 		return 0;
-	if (cand_journal == NULL) {
-		if ((cand = running_tree()) == NULL)
+	if (cand->cur->journal == NULL) {
+		if ((cand->cur->tree = running_tree()) == NULL)
 			return -1;
-		if ((cand_journal = cjournal_new()) == NULL) {
+		if ((cand->cur->journal = cjournal_new()) == NULL) {
 			printf("%% cand_begin: %s\n", strerror(errno));
-			conftree_free(cand);
-			cand = NULL;
+			conftree_free(cand->cur->tree);
+			cand->cur->tree = NULL;
 			return -1;
 		}
-	} else if (cand == NULL && cand_tree() == NULL)
+	} else if (cand->cur->tree == NULL && cand_tree(cand) == NULL)
 		return -1;
-	candidate = 1;
+	cand->on = 1;
 	cand_rtable = 0;
 	return 0;
 }
 
-/* A new shared candidate, not begun, or NULL with errno set */
-struct cand_shared *
-cand_shared_new(void)
+/* A new candidate, not begun, or NULL with errno set */
+struct cand_state *
+cand_new(void)
 {
-	return calloc(1, sizeof(struct cand_shared));
+	return calloc(1, sizeof(struct cand_state));
 }
 
-/* If in, load sh as this session's candidate; else save it back to sh */
+/* Attach cand's session to the shared candidate sh */
 void
-cand_share(struct cand_shared *sh, int in)
+cand_attach(struct cand *cand, struct cand_state *sh)
 {
-	if (in) {
-		cand = sh->cand;
-		cand_base = sh->base;
-		cand_journal = sh->journal;
-		cand_was = sh->was;
-		cand_nwas = sh->nwas;
-		cand_nedits = sh->nedits;
-	} else {
-		sh->cand = cand;
-		sh->base = cand_base;
-		sh->journal = cand_journal;
-		sh->was = cand_was;
-		sh->nwas = cand_nwas;
-		sh->nedits = cand_nedits;
-	}
+	cand->cur = sh;
+}
+
+/* Is cand's session attached to a shared candidate? */
+int
+cand_attached(struct cand *cand)
+{
+	return cand->cur != cand->own;
 }
 
 /* Leave the shared candidate, as it is, to the sessions that share it */
 void
-cand_detach(void)
+cand_detach(struct cand *cand)
 {
-	cand = NULL;
-	cand_base = NULL;
-	cand_journal = NULL;
-	cand_was = NULL;
-	cand_nwas = 0;
-	cand_nedits = 0;
-	candidate = 0;
+	cand->cur = cand->own;
+	cand->on = 0;
 	cand_rtable = 0;
-	cand_sharing = 0;
+}
+
+/* Free all that c holds: it is a candidate not begun again */
+static void
+cand_drop(struct cand_state *c)
+{
+	size_t i;
+
+	conftree_free(c->tree);
+	conftree_free(c->base);
+	cjournal_free(c->journal);
+	for (i = 0; i < c->nwas; i++) {
+		free(c->was[i].top);
+		free(c->was[i].image);
+	}
+	free(c->was);
+	memset(c, 0, sizeof(*c));
 }
 
 /*
@@ -190,7 +193,7 @@ cand_detach(void)
  * -1 if it could not, after saying why, with sh as it was
  */
 int
-cand_shared_renew(struct cand_shared *sh)
+cand_shared_renew(struct cand_state *sh)
 {
 	struct cnode *t;
 	struct cjournal *j;
@@ -202,18 +205,15 @@ cand_shared_renew(struct cand_shared *sh)
 		conftree_free(t);
 		return -1;
 	}
-	cand_share(sh, 1);
-	cand_end();
-	cand = t;
-	cand_journal = j;
-	cand_share(sh, 0);
-	cand_detach();
+	cand_drop(sh);
+	sh->tree = t;
+	sh->journal = j;
 	return 0;
 }
 
 /* Has the shared candidate sh changed? */
 int
-cand_shared_changed(struct cand_shared *sh)
+cand_shared_changed(struct cand_state *sh)
 {
 	return sh->journal != NULL &&
 	    (cjournal_len(sh->journal) > 0 || sh->base != NULL);
@@ -221,7 +221,7 @@ cand_shared_changed(struct cand_shared *sh)
 
 /* The number of edits and rollbacks made to sh since it began */
 unsigned int
-cand_shared_edits(struct cand_shared *sh)
+cand_shared_edits(struct cand_state *sh)
 {
 	return sh->nedits;
 }
@@ -235,7 +235,7 @@ cand_shared_edits(struct cand_shared *sh)
  * IMAGELENGTH", its name and its text. -1 if it could not be written
  */
 int
-cand_shared_write(struct cand_shared *sh, FILE *f)
+cand_shared_write(struct cand_state *sh, FILE *f)
 {
 	char *buf = NULL, *block, *line;
 	size_t len = 0, i;
@@ -290,7 +290,7 @@ cand_field(char **p, char *end, size_t len)
  * saying why, with sh as it was
  */
 int
-cand_shared_read(struct cand_shared *sh, char *text, size_t len)
+cand_shared_read(struct cand_state *sh, char *text, size_t len)
 {
 	struct cnode *base = NULL;
 	struct cjournal *j;
@@ -358,14 +358,11 @@ cand_shared_read(struct cand_shared *sh, char *text, size_t len)
 		} else
 			goto bad;
 	}
-	cand_share(sh, 1);
-	cand_end();
-	cand_base = base;
-	cand_journal = j;
-	cand_was = was;
-	cand_nwas = nwas;
-	cand_share(sh, 0);
-	cand_detach();
+	cand_drop(sh);
+	sh->base = base;
+	sh->journal = j;
+	sh->was = was;
+	sh->nwas = nwas;
 	return 0;
  bad:
 	printf("%% The shared candidate kept is not one\n");
@@ -381,26 +378,19 @@ cand_shared_read(struct cand_shared *sh, char *text, size_t len)
 
 /* Leave configure private, dropping the candidate. */
 void
-cand_end(void)
+cand_end(struct cand *cand)
 {
-	conftree_free(cand);
-	conftree_free(cand_base);
-	cjournal_free(cand_journal);
-	cand_forget();
-	cand = NULL;
-	cand_base = NULL;
-	cand_journal = NULL;
-	cand_nedits = 0;
-	candidate = 0;
+	cand_drop(cand->cur);
+	cand->on = 0;
 	cand_rtable = 0;
 }
 
 /* Has this session changed its candidate? */
 int
-cand_changed(void)
+cand_changed(struct cand *cand)
 {
-	return candidate &&
-	    (cjournal_len(cand_journal) > 0 || cand_base != NULL);
+	return cand->on &&
+	    (cjournal_len(cand->cur->journal) > 0 || cand->cur->base != NULL);
 }
 
 /*
@@ -411,20 +401,20 @@ cand_changed(void)
  * saying why if it could not, as a handler returns.
  */
 int
-cand_setting(int state, const char *fmt, ...)
+cand_setting(struct cand *cand, int state, const char *fmt, ...)
 {
 	va_list ap;
 	int r;
 
 	va_start(ap, fmt);
-	r = cand_vsetting(ifname, bridge, state, fmt, ap);
+	r = cand_vsetting(cand, ifname, bridge, state, fmt, ap);
 	va_end(ap);
 	return r;
 }
 
 /* cand_setting() for another interface, in the block the candidate has */
 int
-cand_ifsetting(char *name, int state, const char *fmt, ...)
+cand_ifsetting(struct cand *cand, char *name, int state, const char *fmt, ...)
 {
 	char head[sizeof("interface ") + IFNAMSIZ];
 	va_list ap;
@@ -432,7 +422,8 @@ cand_ifsetting(char *name, int state, const char *fmt, ...)
 
 	cand_block(head, sizeof(head), name, 1);
 	va_start(ap, fmt);
-	r = cand_vsetting(name, conftree_has(cand, head), state, fmt, ap);
+	r = cand_vsetting(cand, name, conftree_has(cand->cur->tree, head),
+	    state, fmt, ap);
 	va_end(ap);
 	return r;
 }
@@ -444,40 +435,41 @@ cand_ifsetting(char *name, int state, const char *fmt, ...)
  * at the top level
  */
 char *
-cand_line(char *name, size_t n)
+cand_line(struct cand *cand, char *name, size_t n)
 {
 	char block[sizeof("interface ") + IFNAMSIZ], rtblock[96];
 
 	if (ifname[0] == '\0') {
 		if (cand_rtable != 0 && setting_has(CTX_RTABLE, name) &&
-		    cand_rtblock(rtblock, sizeof(rtblock), cand_rtable) == 0)
-			return conftree_line(cand, rtblock, name, n);
-		return conftree_line(cand, NULL, name, n);
+		    cand_rtblock(cand, rtblock, sizeof(rtblock),
+		    cand_rtable) == 0)
+			return conftree_line(cand->cur->tree, rtblock, name, n);
+		return conftree_line(cand->cur->tree, NULL, name, n);
 	}
 	cand_block(block, sizeof(block), ifname, bridge);
-	return conftree_line(cand, block, name, n);
+	return conftree_line(cand->cur->tree, block, name, n);
 }
 
 /* cand_line() for another interface */
 char *
-cand_ifline(char *ifn, char *name, size_t n)
+cand_ifline(struct cand *cand, char *ifn, char *name, size_t n)
 {
 	char block[sizeof("interface ") + IFNAMSIZ];
 
 	cand_block(block, sizeof(block), ifn, 1);
-	if (!conftree_has(cand, block))
+	if (!conftree_has(cand->cur->tree, block))
 		cand_block(block, sizeof(block), ifn, 0);
-	return conftree_line(cand, block, name, n);
+	return conftree_line(cand->cur->tree, block, name, n);
 }
 
 /* The name of the n'th interface, from 0, in the candidate, or NULL */
 char *
-cand_ifname(size_t n)
+cand_ifname(struct cand *cand, size_t n)
 {
 	char *s;
 	size_t i;
 
-	for (i = 0; (s = conftree_stmt(cand, i)) != NULL; i++)
+	for (i = 0; (s = conftree_stmt(cand->cur->tree, i)) != NULL; i++)
 		if (strncmp(s, "interface ", strlen("interface ")) == 0 &&
 		    n-- == 0)
 			return s + strlen("interface ");
@@ -491,7 +483,7 @@ cand_ifname(size_t n)
  * line with "no" turns its setting off.  buf is changed.
  */
 int
-cand_putlines(char **names, size_t nnames, char *buf)
+cand_putlines(struct cand *cand, char **names, size_t nnames, char *buf)
 {
 	char **lines = NULL, **gone = NULL, **v, *l, *p;
 	size_t i, j, n, nlines = 0, ngone = 0;
@@ -509,11 +501,11 @@ cand_putlines(char **names, size_t nnames, char *buf)
 
 	for (i = 0; i < nlines; i++)
 		if (strncmp(lines[i], "no ", 3) == 0)
-			cand_setting(ST_OFF, "%s", lines[i] + 3);
+			cand_setting(cand, ST_OFF, "%s", lines[i] + 3);
 		else
-			cand_setting(ST_ON, "%s", lines[i]);
+			cand_setting(cand, ST_ON, "%s", lines[i]);
 	for (i = 0; i < nnames; i++)
-		for (n = 0; (l = cand_line(names[i], n)) != NULL; n++) {
+		for (n = 0; (l = cand_line(cand, names[i], n)) != NULL; n++) {
 			for (j = 0; j < nlines && strcmp(lines[j], l) != 0; j++)
 				;
 			if (j < nlines)
@@ -527,8 +519,8 @@ cand_putlines(char **names, size_t nnames, char *buf)
 			ngone++;
 		}
 	for (i = 0; i < ngone; i++)
-		cand_setting(ST_DEFAULT, "%s", strncmp(gone[i], "no ", 3) == 0 ?
-		    gone[i] + 3 : gone[i]);
+		cand_setting(cand, ST_DEFAULT, "%s",
+		    strncmp(gone[i], "no ", 3) == 0 ? gone[i] + 3 : gone[i]);
 	ret = 0;
 done:
 	for (i = 0; i < ngone; i++)
@@ -543,11 +535,11 @@ done:
  * its line with "no", or no line (ST_*)
  */
 int
-cand_state(char *name)
+cand_state(struct cand *cand, char *name)
 {
 	char *l;
 
-	if ((l = cand_line(name, 0)) == NULL)
+	if ((l = cand_line(cand, name, 0)) == NULL)
 		return ST_DEFAULT;
 	return strncmp(l, "no ", 3) == 0 ? ST_OFF : ST_ON;
 }
@@ -568,7 +560,7 @@ cand_getflags(char *name, int ifs)
 
 /* The if_type of an interface, from the kernel or its cloner */
 int
-cand_gettype(char *name)
+cand_gettype(struct cand *cand, char *name)
 {
 	const struct kcloner *kc;
 
@@ -579,7 +571,7 @@ cand_gettype(char *name)
 		 * of trunks before it adds them anywhere.
 		 */
 		if (kf_type(name) == IFT_IEEE8023ADLAG &&
-		    cand_listowner(name, "trunkport", name) == NULL)
+		    cand_listowner(cand, name, "trunkport", name) == NULL)
 			return IFT_ETHER;
 		return kf_type(name);
 	}
@@ -607,17 +599,17 @@ cand_takes(char *name, u_long cmd)
 
 /* Has the candidate an interface or bridge block for name? */
 int
-cand_hasif(char *name)
+cand_hasif(struct cand *cand, char *name)
 {
 	char head[sizeof("interface ") + IFNAMSIZ];
 
 	if (strlen(name) >= IFNAMSIZ)
 		return 0;
 	snprintf(head, sizeof(head), "interface %s", name);
-	if (conftree_has(cand, head))
+	if (conftree_has(cand->cur->tree, head))
 		return 1;
 	snprintf(head, sizeof(head), "bridge %s", name);
-	return conftree_has(cand, head);
+	return conftree_has(cand->cur->tree, head);
 }
 
 /*
@@ -625,13 +617,13 @@ cand_hasif(char *name)
  * called list with value among the words after its name, or NULL
  */
 char *
-cand_listowner(char *name, char *list, char *value)
+cand_listowner(struct cand *cand, char *name, char *list, char *value)
 {
 	static char owner[IFNAMSIZ];
 	char line[1024], *s, *ifn, *l, *w, *p;
 	size_t i, n;
 
-	for (i = 0; (s = conftree_stmt(cand, i)) != NULL; i++) {
+	for (i = 0; (s = conftree_stmt(cand->cur->tree, i)) != NULL; i++) {
 		if (strncmp(s, "interface ", strlen("interface ")) == 0)
 			ifn = s + strlen("interface ");
 		else if (strncmp(s, "bridge ", strlen("bridge ")) == 0)
@@ -640,8 +632,8 @@ cand_listowner(char *name, char *list, char *value)
 			continue;
 		if (strcmp(ifn, name) == 0)
 			continue;
-		for (n = 0; (l = conftree_line(cand, s, list, n)) != NULL;
-		    n++) {
+		for (n = 0; (l = conftree_line(cand->cur->tree, s, list,
+		    n)) != NULL; n++) {
 			strlcpy(line, l, sizeof(line));
 			strtok_r(line, " ", &p);
 			while ((w = strtok_r(NULL, " ", &p)) != NULL)
@@ -656,14 +648,14 @@ cand_listowner(char *name, char *list, char *value)
 
 /* The n'th line, from 0, of a daemon's rules stmt, or NULL */
 char *
-cand_rule(char *stmt, size_t n)
+cand_rule(struct cand *cand, char *stmt, size_t n)
 {
 	char rt[96], block[160];
 
-	if (cand_rtcur(rt, sizeof(rt)) == NULL)
-		return conftree_line(cand, stmt, NULL, n);
+	if (cand_rtcur(cand, rt, sizeof(rt)) == NULL)
+		return conftree_line(cand->cur->tree, stmt, NULL, n);
 	snprintf(block, sizeof(block), "%s\n%s", rt, stmt);
-	return conftree_line(cand, block, NULL, n);
+	return conftree_line(cand->cur->tree, block, NULL, n);
 }
 
 /*
@@ -671,21 +663,21 @@ cand_rule(char *stmt, size_t n)
  * rules stmt, an ordered statement; if n is 0, stmt is removed
  */
 int
-cand_setrules(char *stmt, char **lines, size_t n)
+cand_setrules(struct cand *cand, char *stmt, char **lines, size_t n)
 {
 	struct sedit e;
 	char rtbuf[96], block[160], *rt, *l;
 	size_t i;
 
-	if ((rt = cand_rtcur(rtbuf, sizeof(rtbuf))) != NULL)
+	if ((rt = cand_rtcur(cand, rtbuf, sizeof(rtbuf))) != NULL)
 		snprintf(block, sizeof(block), "%s\n%s", rt, stmt);
 	else
 		strlcpy(block, stmt, sizeof(block));
-	for (i = 0; i < n && (l = cand_rule(stmt, i)) != NULL &&
+	for (i = 0; i < n && (l = cand_rule(cand, stmt, i)) != NULL &&
 	    strcmp(l, lines[i]) == 0; i++)
 		;
-	if (i == n && cand_rule(stmt, n) == NULL &&
-	    (n > 0 || !conftree_has(cand, block)))
+	if (i == n && cand_rule(cand, stmt, n) == NULL &&
+	    (n > 0 || !conftree_has(cand->cur->tree, block)))
 		return 0;
 	for (i = 0; i < n; i++)
 		if (strlen(lines[i]) >= sizeof(e.line)) {
@@ -696,12 +688,12 @@ cand_setrules(char *stmt, char **lines, size_t n)
 	e.strict = 0;
 	e.op = CE_NOBLOCK;
 	strlcpy(e.line, stmt, sizeof(e.line));
-	if (cand_record(rt, &e) == -1)
+	if (cand_record(cand, rt, &e) == -1)
 		return -1;
 	e.op = CE_SEQ;
 	for (i = 0; i < n; i++) {
 		strlcpy(e.line, lines[i], sizeof(e.line));
-		if (cand_record(block, &e) == -1)
+		if (cand_record(cand, block, &e) == -1)
 			return -1;
 	}
 	return 0;
@@ -714,13 +706,13 @@ cand_setrules(char *stmt, char **lines, size_t n)
  * removed.  Table 0's settings are at the top level.
  */
 int
-cand_rtable_set(int set, int table, char *name)
+cand_rtable_set(struct cand *cand, int set, int table, char *name)
 {
 	char block[96], line[96];
 	struct sedit e;
 	int has;
 
-	has = cand_rtblock(block, sizeof(block), table) == 0;
+	has = cand_rtblock(cand, block, sizeof(block), table) == 0;
 	if (!set) {
 		if (table == 0) {
 			printf("%% cannot remove rtable %d\n", table);
@@ -730,7 +722,7 @@ cand_rtable_set(int set, int table, char *name)
 			printf("%% rtable %d is not in the candidate\n", table);
 			return -1;
 		}
-		if (cand_set(CTX_TOP, ST_OFF, NULL, block) == -1)
+		if (cand_set(cand, CTX_TOP, ST_OFF, NULL, block) == -1)
 			return -1;
 		cand_rtable = 0;
 		return 0;
@@ -742,7 +734,7 @@ cand_rtable_set(int set, int table, char *name)
 		else
 			snprintf(line, sizeof(line), "rtable %d", table);
 		if (!has) {
-			if (cand_set(CTX_TOP, ST_ON, NULL, line) == -1)
+			if (cand_set(cand, CTX_TOP, ST_ON, NULL, line) == -1)
 				return -1;
 		} else if (name != NULL && strcmp(block, line) != 0) {
 			/* renamed, with its lines */
@@ -750,7 +742,7 @@ cand_rtable_set(int set, int table, char *name)
 			e.keylen = 1;
 			e.strict = 0;
 			strlcpy(e.line, line, sizeof(e.line));
-			if (cand_record(block, &e) == -1)
+			if (cand_record(cand, block, &e) == -1)
 				return -1;
 		}
 	}
@@ -760,14 +752,14 @@ cand_rtable_set(int set, int table, char *name)
 
 /* The candidate's block for rtable table, in buf, or -1 if it has none */
 static int
-cand_rtblock(char *buf, size_t len, int table)
+cand_rtblock(struct cand *cand, char *buf, size_t len, int table)
 {
 	char key[32], *s;
 	size_t i;
 	int n;
 
 	n = snprintf(key, sizeof(key), "rtable %d", table);
-	for (i = 0; (s = conftree_stmt(cand, i)) != NULL; i++)
+	for (i = 0; (s = conftree_stmt(cand->cur->tree, i)) != NULL; i++)
 		if (strncmp(s, key, n) == 0 && (s[n] == '\0' || s[n] == ' ')) {
 			strlcpy(buf, s, len);
 			return 0;
@@ -781,10 +773,10 @@ cand_rtblock(char *buf, size_t len, int table)
  * kernel never destroys one. Else 0, after saying what makes one.
  */
 int
-rtable_there(int id)
+rtable_there(int id, struct cand *cand)
 {
 	if (id == 0 || kf_rtable(id) ||
-	    (candidate && conftree_makes_rtable(cand, id)))
+	    (cand != NULL && conftree_makes_rtable(cand->cur->tree, id)))
 		return 1;
 	printf("%% There is no rtable %d: an interface in rdomain %d, or a"
 	    " route in rtable %d, makes it\n", id, id, id);
@@ -793,18 +785,19 @@ rtable_there(int id)
 
 /* Has the candidate a block for rtable table? Table 0's is the top level */
 int
-cand_hasrtable(int table)
+cand_hasrtable(struct cand *cand, int table)
 {
 	char block[96];
 
-	return table == 0 || cand_rtblock(block, sizeof(block), table) == 0;
+	return table == 0 ||
+	    cand_rtblock(cand, block, sizeof(block), table) == 0;
 }
 
 /* The current rtable's block, in buf, or NULL if there is none */
 static char *
-cand_rtcur(char *buf, size_t len)
+cand_rtcur(struct cand *cand, char *buf, size_t len)
 {
-	if (cand_rtable == 0 || cand_rtblock(buf, len, cand_rtable) == -1)
+	if (cand_rtable == 0 || cand_rtblock(cand, buf, len, cand_rtable) == -1)
 		return NULL;
 	return buf;
 }
@@ -824,16 +817,16 @@ cand_ispppoe(char *name)
  * interface block and a cloner that makes bridges?
  */
 int
-cand_isbridge(char *name)
+cand_isbridge(struct cand *cand, char *name)
 {
 	char head[sizeof("interface ") + IFNAMSIZ];
 	const struct kcloner *kc;
 
 	snprintf(head, sizeof(head), "bridge %s", name);
-	if (conftree_has(cand, head))
+	if (conftree_has(cand->cur->tree, head))
 		return 1;
 	snprintf(head, sizeof(head), "interface %s", name);
-	return !conftree_has(cand, head) &&
+	return !conftree_has(cand->cur->tree, head) &&
 	    (kc = cand_cloner(name)) != NULL && kc->bridge;
 }
 
@@ -845,17 +838,17 @@ cand_isbridge(char *name)
  * -1 when it could not, after saying why.
  */
 int
-cand_interface(int set, char *name, int *isbridge)
+cand_interface(struct cand *cand, int set, char *name, int *isbridge)
 {
 	char head[sizeof("interface ") + IFNAMSIZ];
 	int new;
 
-	*isbridge = cand_isbridge(name);
+	*isbridge = cand_isbridge(cand, name);
 	snprintf(head, sizeof(head), "%s %s",
 	    *isbridge ? "bridge" : "interface", name);
 
 	if (!set) {
-		if (!conftree_has(cand, head)) {
+		if (!conftree_has(cand->cur->tree, head)) {
 			printf("%% interface %s not found\n", name);
 			return -1;
 		}
@@ -863,18 +856,20 @@ cand_interface(int set, char *name, int *isbridge)
 			printf("%% interface %s cannot be removed\n", name);
 			return -1;
 		}
-		return cand_set(CTX_TOP, ST_OFF, NULL, head) == -1 ? -1 : 1;
+		return cand_set(cand, CTX_TOP, ST_OFF, NULL,
+		    head) == -1 ? -1 : 1;
 	}
-	if ((new = !conftree_has(cand, head)) && !kf_valid(name) &&
+	if ((new = !conftree_has(cand->cur->tree, head)) && !kf_valid(name) &&
 	    !cand_cloneable(name)) {
 		printf("%% interface %s not found\n", name);
 		return -1;
 	}
-	if (cand_set(CTX_TOP, ST_ON, NULL, head) == -1)
+	if (cand_set(cand, CTX_TOP, ST_ON, NULL, head) == -1)
 		return -1;
 	/* a new veb has vnetid 1, as the kernel makes it */
-	if (new && default_vnetid(name) != 0 && cand_ifsetting(name, ST_ON,
-	    "vnetid %lld", default_vnetid(name)) == -1)
+	if (new && default_vnetid(name) != 0 &&
+	    cand_ifsetting(cand, name, ST_ON, "vnetid %lld",
+	    default_vnetid(name)) == -1)
 		return -1;
 	return 0;
 }
@@ -885,37 +880,37 @@ cand_interface(int set, char *name, int *isbridge)
  * the session's view, so the caller must not free it.
  */
 struct cnode *
-cand_tree(void)
+cand_tree(struct cand *cand)
 {
 	struct cnode *t;
 
-	if (cand_base == NULL)
+	if (cand->cur->base == NULL)
 		t = running_tree();
-	else if ((t = conftree_copy(cand_base)) == NULL)
+	else if ((t = conftree_copy(cand->cur->base)) == NULL)
 		printf("%% cand_tree: %s\n", strerror(errno));
 	if (t == NULL)
 		return NULL;
-	if (cjournal_replay(cand_journal, t) == -1) {
+	if (cjournal_replay(cand->cur->journal, t) == -1) {
 		printf("%% cand_tree: %s\n", strerror(errno));
 		conftree_free(t);
 		return NULL;
 	}
-	conftree_free(cand);
-	cand = t;
-	return cand;
+	conftree_free(cand->cur->tree);
+	cand->cur->tree = t;
+	return cand->cur->tree;
 }
 
 /* The candidate, written to f: -1 on error, after saying why */
 int
-cand_write(FILE *f)
+cand_write(struct cand *cand, FILE *f)
 {
 	struct cnode *t;
 
-	if (!candidate) {
+	if (!cand->on) {
 		printf("%% Not in configure\n");
 		return -1;
 	}
-	if ((t = cand_tree()) == NULL)
+	if ((t = cand_tree(cand)) == NULL)
 		return -1;
 	if (conftree_write(f, t) == -1 || fflush(f) == EOF) {
 		printf("%% cand_write: %s\n", strerror(errno));
@@ -931,7 +926,7 @@ cand_write(FILE *f)
  * saying why
  */
 int
-cand_restart(struct cnode *base, int n)
+cand_restart(struct cand *cand, struct cnode *base, int n)
 {
 	struct cnode *t;
 	struct cjournal *j;
@@ -955,14 +950,14 @@ cand_restart(struct cnode *base, int n)
 		conftree_free(base);
 		return -1;
 	}
-	conftree_free(cand);
-	conftree_free(cand_base);
-	cjournal_free(cand_journal);
-	cand_forget();
-	cand = t;
-	cand_base = base;
-	cand_journal = j;
-	cand_nedits++;
+	conftree_free(cand->cur->tree);
+	conftree_free(cand->cur->base);
+	cjournal_free(cand->cur->journal);
+	cand_forget(cand);
+	cand->cur->tree = t;
+	cand->cur->base = base;
+	cand->cur->journal = j;
+	cand->cur->nedits++;
 	if (n == 0)
 		printf("%% Candidate reset to the running configuration\n");
 	else if (n > 0)
@@ -983,8 +978,8 @@ cand_block(char *buf, size_t len, char *name, int isbridge)
  * current rtable's block if it is an rtable setting
  */
 static int
-cand_vsetting(char *name, int isbridge, int state, const char *fmt,
-    va_list ap)
+cand_vsetting(struct cand *cand, char *name, int isbridge, int state,
+    const char *fmt, va_list ap)
 {
 	char line[1024], block[sizeof("interface ") + IFNAMSIZ], rtblock[96];
 	int n;
@@ -996,19 +991,21 @@ cand_vsetting(char *name, int isbridge, int state, const char *fmt,
 	}
 	if (name[0] == '\0') {
 		if (cand_rtable != 0 && setting_has(CTX_RTABLE, line) &&
-		    cand_rtblock(rtblock, sizeof(rtblock), cand_rtable) == 0)
-			return cand_set(CTX_RTABLE, state, rtblock, line);
-		return cand_set(CTX_TOP, state, NULL, line);
+		    cand_rtblock(cand, rtblock, sizeof(rtblock),
+		    cand_rtable) == 0)
+			return cand_set(cand, CTX_RTABLE, state, rtblock, line);
+		return cand_set(cand, CTX_TOP, state, NULL, line);
 	}
 	cand_block(block, sizeof(block), name, isbridge);
-	return cand_set(isbridge ? CTX_BRIDGE : CTX_IF, state, block, line);
+	return cand_set(cand, isbridge ? CTX_BRIDGE : CTX_IF, state,
+	    block, line);
 }
 
 /*
  * Put line's setting in context ctx into state, in block or at the top level
  */
 static int
-cand_set(int ctx, int state, char *block, char *line)
+cand_set(struct cand *cand, int ctx, int state, char *block, char *line)
 {
 	struct sedit e;
 
@@ -1016,7 +1013,7 @@ cand_set(int ctx, int state, char *block, char *line)
 		printf("%% cand_set: no setting for \"%s\"\n", line);
 		return -1;
 	}
-	return cand_record(block, &e);
+	return cand_record(cand, block, &e);
 }
 
 /*
@@ -1024,7 +1021,7 @@ cand_set(int ctx, int state, char *block, char *line)
  * anything. A strict edit that changes nothing says so, and fails.
  */
 static int
-cand_record(char *block, struct sedit *e)
+cand_record(struct cand *cand, char *block, struct sedit *e)
 {
 	int r;
 
@@ -1032,11 +1029,11 @@ cand_record(char *block, struct sedit *e)
 		printf("%% %s\n", cand_held);
 		return -1;
 	}
-	if (cand_remember(block, e) == -1)
+	if (cand_remember(cand, block, e) == -1)
 		return -1;
 	errno = 0;
-	if ((r = conftree_edit(cand, e->op, block, e->line, e->keylen)) ==
-	    -1) {
+	if ((r = conftree_edit(cand->cur->tree, e->op, block, e->line,
+	    e->keylen)) == -1) {
 		/* conftree_edit() prints why, except when memory ran out */
 		if (errno == ENOMEM)
 			printf("%% cand_record: %s\n", strerror(errno));
@@ -1046,13 +1043,13 @@ cand_record(char *block, struct sedit *e)
 		printf("%% %s: not in the candidate\n", e->line);
 		return -1;
 	}
-	if (r == CE_CHANGED && cjournal_add(cand_journal, e->op, block,
+	if (r == CE_CHANGED && cjournal_add(cand->cur->journal, e->op, block,
 	    e->line, e->keylen) == -1) {
 		printf("%% cand_record: %s\n", strerror(errno));
 		return -1;
 	}
 	if (r == CE_CHANGED)
-		cand_nedits++;
+		cand->cur->nedits++;
 	return 0;
 }
 
@@ -1061,14 +1058,14 @@ cand_record(char *block, struct sedit *e)
  * except after rollback N.  -1 if it could not be kept, after saying why
  */
 static int
-cand_remember(char *block, struct sedit *e)
+cand_remember(struct cand *cand, char *block, struct sedit *e)
 {
 	struct cand_was *w;
 	char top[1024], *p = e->line;
 	int whole = 1;
 	size_t i;
 
-	if (cand_base != NULL)
+	if (cand->cur->base != NULL)
 		return 0;
 	if (block != NULL)
 		p = block;
@@ -1080,26 +1077,27 @@ cand_remember(char *block, struct sedit *e)
 	}
 	strlcpy(top, p, sizeof(top));
 	top[strcspn(top, whole ? "\n" : " ")] = '\0';
-	for (i = 0; i < cand_nwas; i++)
-		if (cand_was[i].whole == whole &&
-		    strcmp(cand_was[i].top, top) == 0)
+	for (i = 0; i < cand->cur->nwas; i++)
+		if (cand->cur->was[i].whole == whole &&
+		    strcmp(cand->cur->was[i].top, top) == 0)
 			return 0;
-	if ((w = reallocarray(cand_was, cand_nwas + 1, sizeof(*w))) == NULL) {
+	if ((w = reallocarray(cand->cur->was, cand->cur->nwas + 1,
+	    sizeof(*w))) == NULL) {
 		printf("%% cand_remember: %s\n", strerror(errno));
 		return -1;
 	}
-	cand_was = w;
-	w = &cand_was[cand_nwas];
+	cand->cur->was = w;
+	w = &cand->cur->was[cand->cur->nwas];
 	w->whole = whole;
 	if ((w->top = strdup(top)) == NULL) {
 		printf("%% cand_remember: %s\n", strerror(errno));
 		return -1;
 	}
-	if ((w->image = cand_image(cand, top, whole)) == NULL) {
+	if ((w->image = cand_image(cand->cur->tree, top, whole)) == NULL) {
 		free(w->top);
 		return -1;
 	}
-	cand_nwas++;
+	cand->cur->nwas++;
 	return 0;
 }
 
@@ -1132,45 +1130,45 @@ cand_image(struct cnode *t, char *top, int whole)
  * next commit keeps the candidate's changes over it
  */
 int
-cand_conflicts(struct cnode *now, int rebase)
+cand_conflicts(struct cand *cand, struct cnode *now, int rebase)
 {
 	char *image;
 	size_t i;
 	int n = 0;
 
-	for (i = 0; i < cand_nwas; i++) {
-		if ((image = cand_image(now, cand_was[i].top,
-		    cand_was[i].whole)) == NULL)
+	for (i = 0; i < cand->cur->nwas; i++) {
+		if ((image = cand_image(now, cand->cur->was[i].top,
+		    cand->cur->was[i].whole)) == NULL)
 			return -1;
-		if (strcmp(image, cand_was[i].image) == 0) {
+		if (strcmp(image, cand->cur->was[i].image) == 0) {
 			free(image);
 			continue;
 		}
 		printf("%% %s: another commit changed it after this "
-		    "candidate did\n", cand_was[i].top);
+		    "candidate did\n", cand->cur->was[i].top);
 		n++;
 		if (rebase) {
-			free(cand_was[i].image);
-			cand_was[i].image = image;
+			free(cand->cur->was[i].image);
+			cand->cur->was[i].image = image;
 		} else
 			free(image);
 	}
 	return n;
 }
 
-/* Free the saved copies of statements (cand_was) */
+/* Free the saved copies of statements (cand->cur->was) */
 static void
-cand_forget(void)
+cand_forget(struct cand *cand)
 {
 	size_t i;
 
-	for (i = 0; i < cand_nwas; i++) {
-		free(cand_was[i].top);
-		free(cand_was[i].image);
+	for (i = 0; i < cand->cur->nwas; i++) {
+		free(cand->cur->was[i].top);
+		free(cand->cur->was[i].image);
 	}
-	free(cand_was);
-	cand_was = NULL;
-	cand_nwas = 0;
+	free(cand->cur->was);
+	cand->cur->was = NULL;
+	cand->cur->nwas = 0;
 }
 
 /* The kernel's cloner for an interface called name, or NULL */

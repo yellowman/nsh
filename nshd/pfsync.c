@@ -35,23 +35,23 @@
 
 #define PFSYNC_MAXUPDATES 128
 
-static int pfsync_get(int, struct ifreq *);
-static int cand_getpfsync(char *, struct pfsyncreq *);
-static int cand_setpfsync(char *, struct pfsyncreq *);
+static int pfsync_get(int, struct ifreq *, struct cand *);
+static int cand_getpfsync(struct cand *, char *, struct pfsyncreq *);
+static int cand_setpfsync(struct cand *, char *, struct pfsyncreq *);
 
 /* Do SIOCGETPFSYNC, or in configure private, read the candidate */
 static int
-pfsync_get(int ifs, struct ifreq *ifr)
+pfsync_get(int ifs, struct ifreq *ifr, struct cand *cand)
 {
-	if (candidate)
-		return cand_getpfsync(ifr->ifr_name,
+	if (cand != NULL)
+		return cand_getpfsync(cand, ifr->ifr_name,
 		    (struct pfsyncreq *)ifr->ifr_data);
 	return ioctl(ifs, SIOCGETPFSYNC, (caddr_t)ifr);
 }
 
 /* SIOCGETPFSYNC in configure private: what conf_pfsync() printed */
 static int
-cand_getpfsync(char *ifname, struct pfsyncreq *preq)
+cand_getpfsync(struct cand *cand, char *ifname, struct pfsyncreq *preq)
 {
 	char *l, *w;
 	const char *errmsg;
@@ -63,13 +63,13 @@ cand_getpfsync(char *ifname, struct pfsyncreq *preq)
 	memset(preq, 0, sizeof(*preq));
 	preq->pfsyncr_syncpeer.s_addr = htonl(INADDR_PFSYNC_GROUP);
 	preq->pfsyncr_maxupdates = PFSYNC_MAXUPDATES;
-	if ((l = cand_line("syncdev", 0)) != NULL)
+	if ((l = cand_line(cand, "syncdev", 0)) != NULL)
 		strlcpy(preq->pfsyncr_syncdev, l + strlen("syncdev "),
 		    sizeof(preq->pfsyncr_syncdev));
-	if ((l = cand_line("syncpeer", 0)) != NULL)
+	if ((l = cand_line(cand, "syncpeer", 0)) != NULL)
 		inet_pton(AF_INET, l + strlen("syncpeer "),
 		    &preq->pfsyncr_syncpeer);
-	if ((l = cand_line("maxupd", 0)) != NULL) {
+	if ((l = cand_line(cand, "maxupd", 0)) != NULL) {
 		/* maxupd n [defer] */
 		l += strlen("maxupd ");
 		if ((w = strchr(l, ' ')) != NULL) {
@@ -89,7 +89,7 @@ cand_getpfsync(char *ifname, struct pfsyncreq *preq)
  * print of the result
  */
 static int
-cand_setpfsync(char *ifname, struct pfsyncreq *preq)
+cand_setpfsync(struct cand *cand, char *ifname, struct pfsyncreq *preq)
 {
 	int r = 0;
 
@@ -98,7 +98,7 @@ cand_setpfsync(char *ifname, struct pfsyncreq *preq)
 		return -1;
 	}
 	if (preq->pfsyncr_syncdev[0] != '\0' &&
-	    !cand_hasif(preq->pfsyncr_syncdev)) {
+	    !cand_hasif(cand, preq->pfsyncr_syncdev)) {
 		errno = ENXIO;
 		return -1;
 	}
@@ -106,21 +106,22 @@ cand_setpfsync(char *ifname, struct pfsyncreq *preq)
 		preq->pfsyncr_syncpeer.s_addr = htonl(INADDR_PFSYNC_GROUP);
 
 	if (preq->pfsyncr_syncdev[0] != '\0')
-		r |= cand_setting(ST_ON, "syncdev %s", preq->pfsyncr_syncdev);
+		r |= cand_setting(cand, ST_ON, "syncdev %s",
+		    preq->pfsyncr_syncdev);
 	else
-		r |= cand_setting(ST_DEFAULT, "syncdev");
+		r |= cand_setting(cand, ST_DEFAULT, "syncdev");
 	if (preq->pfsyncr_syncpeer.s_addr != htonl(INADDR_PFSYNC_GROUP))
-		r |= cand_setting(ST_ON, "syncpeer %s",
+		r |= cand_setting(cand, ST_ON, "syncpeer %s",
 		    inet_ntoa(preq->pfsyncr_syncpeer));
 	else
-		r |= cand_setting(ST_DEFAULT, "syncpeer");
+		r |= cand_setting(cand, ST_DEFAULT, "syncpeer");
 	if (preq->pfsyncr_maxupdates != PFSYNC_MAXUPDATES ||
 	    preq->pfsyncr_defer)
-		r |= cand_setting(ST_ON, "maxupd %d%s",
+		r |= cand_setting(cand, ST_ON, "maxupd %d%s",
 		    preq->pfsyncr_maxupdates,
 		    preq->pfsyncr_defer ? " defer" : "");
 	else
-		r |= cand_setting(ST_DEFAULT, "maxupd");
+		r |= cand_setting(cand, ST_DEFAULT, "maxupd");
 	return r;
 }
 
@@ -130,13 +131,13 @@ cand_setpfsync(char *ifname, struct pfsyncreq *preq)
  * the pfsync group, which is one. Returns 1 if dev can be the syncdev.
  */
 static int
-pfsync_mcast(int ifs, char *dev, struct in_addr peer)
+pfsync_mcast(int ifs, char *dev, struct in_addr peer, struct cand *cand)
 {
 	in_addr_t p = peer.s_addr == INADDR_ANY ?
 	    htonl(INADDR_PFSYNC_GROUP) : peer.s_addr;
 
 	if (dev[0] == '\0' || !IN_MULTICAST(ntohl(p)) ||
-	    ((candidate ? cand_getflags(dev, ifs) : get_ifflags(dev, ifs)) &
+	    ((cand != NULL ? cand_getflags(dev, ifs) : get_ifflags(dev, ifs)) &
 	    IFF_MULTICAST))
 		return 1;
 	printf("%% %s does not do multicast, which syncpeer %s needs\n", dev,
@@ -150,13 +151,13 @@ pfsync_mcast(int ifs, char *dev, struct in_addr peer)
  * change failed or it still has a syncdev.
  */
 static int
-pfsync_set(int ifs, struct ifreq *ifr)
+pfsync_set(int ifs, struct ifreq *ifr, struct cand *cand)
 {
 	struct pfsyncreq *preq = (struct pfsyncreq *)ifr->ifr_data;
 	int flags, ret, saved;
 
-	if (candidate)
-		return cand_setpfsync(ifr->ifr_name, preq);
+	if (cand != NULL)
+		return cand_setpfsync(cand, ifr->ifr_name, preq);
 	if ((ret = ioctl(ifs, SIOCSETPFSYNC, (caddr_t)ifr)) == 0 ||
 	    errno != EBUSY)
 		return ret;
@@ -182,12 +183,14 @@ intsyncdev(int argc, char **argv, ...)
 	struct pfsyncreq preq;
 	int set;
 	va_list ap;
+	struct cand *cand;
 	char *ifname;
 	int ifs;
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
@@ -215,13 +218,13 @@ intsyncdev(int argc, char **argv, ...)
 	ifr.ifr_data = (caddr_t) & preq;
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 
-	if (pfsync_get(ifs, &ifr) == -1) {
+	if (pfsync_get(ifs, &ifr, cand) == -1) {
 		printf("%% intsyncdev: SIOCGETPFSYNC: %s\n", strerror(errno));
 		return -1;
 	}
 
 	if (argv[0])
-		if (!(candidate ? cand_hasif(argv[0]) :
+		if (!(cand != NULL ? cand_hasif(cand, argv[0]) :
 		    is_valid_ifname(argv[0]))) {
 			printf("%% Interface not found: %s\n", argv[0]);
 			return -1;
@@ -233,10 +236,11 @@ intsyncdev(int argc, char **argv, ...)
 	else
 		bzero((char *) &preq.pfsyncr_syncdev,
 		      sizeof(preq.pfsyncr_syncdev));
-	if (!pfsync_mcast(ifs, preq.pfsyncr_syncdev, preq.pfsyncr_syncpeer))
+	if (!pfsync_mcast(ifs, preq.pfsyncr_syncdev,
+	    preq.pfsyncr_syncpeer, cand))
 		return -1;
 
-	if (pfsync_set(ifs, &ifr) == -1) {
+	if (pfsync_set(ifs, &ifr, cand) == -1) {
 		if (errno == ENOBUFS)
 			printf("%% Invalid synchronization interface: %s\n",
 			    argv[0]);
@@ -245,11 +249,11 @@ intsyncdev(int argc, char **argv, ...)
 			    strerror(errno));
 		return -1;
 	}
-	if (candidate) {
+	if (cand != NULL) {
 		/* syncdev raises it, and without one it is down */
 		if (set)
-			return cand_upline(ifname, 1);
-		return cand_setting(ST_ON, "shutdown");
+			return cand_upline(cand, ifname, 1);
+		return cand_setting(cand, ST_ON, "shutdown");
 	}
 	/* pfsync_up() needs the syncdev */
 	if (set && set_ifflag(ifs, ifname, IFF_UP) != 0)
@@ -265,12 +269,14 @@ intsyncpeer(int argc, char **argv, ...)
 	struct addrinfo *peerres;
 	int set, r = 0;
 	va_list ap;
+	struct cand *cand;
 	char *ifname;
 	int ifs;
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
@@ -298,7 +304,7 @@ intsyncpeer(int argc, char **argv, ...)
 	ifr.ifr_data = (caddr_t) &preq;
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 
-	if (pfsync_get(ifs, &ifr) == -1) {
+	if (pfsync_get(ifs, &ifr, cand) == -1) {
 			printf("%% intsyncpeer: SIOCGETPFSYNC: %s\n",
 			    strerror(errno));
 		return -1;
@@ -328,10 +334,11 @@ intsyncpeer(int argc, char **argv, ...)
 		printf("%% syncpeer cannot be the broadcast address\n");
 		return -1;
 	}
-	if (!pfsync_mcast(ifs, preq.pfsyncr_syncdev, preq.pfsyncr_syncpeer))
+	if (!pfsync_mcast(ifs, preq.pfsyncr_syncdev,
+	    preq.pfsyncr_syncpeer, cand))
 		return -1;
 
-	if (pfsync_set(ifs, &ifr) == -1) {
+	if (pfsync_set(ifs, &ifr, cand) == -1) {
 			printf("%% intsyncpeer: SIOCSETPFSYNC: %s\n",
 			    strerror(errno));
 		r = -1;
@@ -349,12 +356,14 @@ intmaxupd(int argc, char **argv, ...)
 	int set;
 	const char *errmsg = NULL;
 	va_list ap;
+	struct cand *cand;
 	char *ifname;
 	int ifs;
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
@@ -377,7 +386,7 @@ intmaxupd(int argc, char **argv, ...)
 	ifr.ifr_data = (caddr_t) & preq;
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 
-	if (pfsync_get(ifs, &ifr) == -1) {
+	if (pfsync_get(ifs, &ifr, cand) == -1) {
 		printf("%% intmaxupd: SIOCGETPFSYNC: %s\n", strerror(errno));
 		return -1;
 	}
@@ -397,7 +406,7 @@ intmaxupd(int argc, char **argv, ...)
 		preq.pfsyncr_defer = 0;
 	}
 
-	if (pfsync_set(ifs, &ifr) == -1) {
+	if (pfsync_set(ifs, &ifr, cand) == -1) {
 		if (errno == EINVAL)
 			printf("%% maxupd value out of range\n");
 		else

@@ -28,8 +28,20 @@ struct sglobal {
 };
 #define SGLOBAL(g)	{ #g, &(g), sizeof(g) }
 
-struct session_state;
 struct cnode;
+
+/*
+ * A session's candidate: its own, and the one its lines edit, which is
+ * its own or the one that sessions share. config has one for each
+ * session and passes it to what runs the session's request. What
+ * changes the host is passed none
+ */
+struct cand {
+	struct cand_state *own;
+	struct cand_state *cur;		/* own, or the shared one */
+	int		 on;		/* in configure: its lines edit cur */
+	unsigned char	*mem;		/* its globals' bytes (session.c) */
+};
 
 /* What a commit runs, from session_plan(), in the parts nshd sends */
 #define PLAN_EDITS	0	/* the script's edits, later the rollback's */
@@ -67,41 +79,40 @@ struct plan {
 
 extern int in_config;
 
-struct session_state	*session_new(void);
-void			 session_free(struct session_state *);
-void			 session_enter(struct session_state *);
-void			 session_leave(struct session_state *);
+struct cand		*session_new(void);
+void			 session_free(struct cand *);
+void			 session_enter(struct cand *);
+void			 session_leave(struct cand *);
 const struct sglobal	*session_global(size_t);
 int			 session_running(char *, size_t);
-struct cand_shared;
-int			 session_configure(struct session_state *,
-			    struct cand_shared *);
-struct cand_shared	*cand_shared_new(void);
-int			 cand_shared_renew(struct cand_shared *);
-int			 cand_shared_changed(struct cand_shared *);
-unsigned int		 cand_shared_edits(struct cand_shared *);
-int			 cand_shared_write(struct cand_shared *, FILE *);
-int			 cand_shared_read(struct cand_shared *, char *, size_t);
+struct cand_state;
+int			 session_configure(struct cand *, struct cand_state *);
+struct cand_state	*cand_new(void);
+int			 cand_shared_renew(struct cand_state *);
+int			 cand_shared_changed(struct cand_state *);
+unsigned int		 cand_shared_edits(struct cand_state *);
+int			 cand_shared_write(struct cand_state *, FILE *);
+int			 cand_shared_read(struct cand_state *, char *, size_t);
 extern const char	*cand_held;
-int			 session_line(struct session_state *, char *);
-int			 session_rules(struct session_state *, char *, int, int,
+int			 session_line(struct cand *, char *);
+int			 session_rules(struct cand *, char *, int, int,
 			    char *, size_t);
 /* nsh's command tables, sent as facts */
 struct facts_out;
 int			 cmplt_facts(struct facts_out *);
-int			 session_exit(struct session_state *);
-void			 session_mode(struct session_state *, int *, int *,
+int			 session_exit(struct cand *);
+void			 session_mode(struct cand *, int *, int *,
 			    char *, size_t, int *);
-int			 session_candidate(struct session_state *);
-int			 session_diff(struct session_state *);
-int			 session_plan(struct session_state *, int, int,
+int			 session_candidate(struct cand *);
+int			 session_diff(struct cand *);
+int			 session_plan(struct cand *, int, int,
 			    struct plan **);
 void			 session_tested(struct plan *, int, int);
 int			 session_logins(struct plan *);
 void			 plan_free(struct plan *);
 int			 session_boot_plan(char *, size_t, struct plan **);
-int			 session_renew(struct session_state *);
-int			 session_changed(struct session_state *);
-int			 session_load(struct session_state *, char *, size_t);
-int			 session_rollback(struct session_state *, char *,
+int			 session_renew(struct cand *);
+int			 session_changed(struct cand *);
+int			 session_load(struct cand *, char *, size_t);
+int			 session_rollback(struct cand *, char *,
 			    size_t, int);

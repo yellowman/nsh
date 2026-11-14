@@ -93,6 +93,7 @@
 
 #include <arpa/inet.h>
 
+#include <stdarg.h>
 #include <stdio.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -129,7 +130,7 @@ void conf_ndp(FILE *output, char *delim, int);
 void conf_ndp_entry(FILE *, char *, struct  rt_msghdr *);
 static void conf_ndp_line(FILE *, char *, struct sockaddr_in6 *,
     struct sockaddr_dl *, int);
-static int ndp_cand(const char *, struct sockaddr_dl *);
+static int ndp_cand(const char *, struct sockaddr_dl *, struct cand *);
 
 static int
 getsocket(void)
@@ -175,6 +176,12 @@ ndpset(int argc, char *argv[], ...)
 	char *eaddr, *host;
 	u_char *ea;
 	int set = 1, i;
+	struct cand *cand;
+	va_list ap;
+
+	va_start(ap, argv);
+	cand = va_arg(ap, struct cand *);
+	va_end(ap);
 
 	sdl_m = blank_sdl;
 	sin_m = blank_sin;
@@ -194,8 +201,8 @@ ndpset(int argc, char *argv[], ...)
 	}
 
 	if (!set) {
-		if (candidate)
-			return ndp_cand(argv[1], NULL);
+		if (cand != NULL)
+			return ndp_cand(argv[1], NULL, cand);
 		return ndpdelete(argv[1]);
 	}
 
@@ -207,7 +214,7 @@ ndpset(int argc, char *argv[], ...)
 		eaddr = NULL;
 	}
 
-	if (!candidate && getsocket() < 0)
+	if (cand == NULL && getsocket() < 0)
 		return -1;
 
 	if (parse_host(host, sin))
@@ -231,8 +238,8 @@ ndpset(int argc, char *argv[], ...)
 			return -1;
 		}
 	}
-	if (candidate)
-		return ndp_cand(host, &sdl_m);
+	if (cand != NULL)
+		return ndp_cand(host, &sdl_m, cand);
 
 	if (rtget_ndp(&sin, &sdl)) {
 		printf("%% RTM_GET(%s) failed\n", host);
@@ -273,7 +280,7 @@ overwrite:
  * host's entry, or with sdl NULL, remove host's line
  */
 static int
-ndp_cand(const char *host, struct sockaddr_dl *sdl)
+ndp_cand(const char *host, struct sockaddr_dl *sdl, struct cand *cand)
 {
 	struct sockaddr_in6 sin6 = blank_sin;
 	char *buf = NULL;
@@ -284,7 +291,7 @@ ndp_cand(const char *host, struct sockaddr_dl *sdl)
 	if (parse_host(host, &sin6))
 		return -1;
 	if (sdl == NULL)
-		return cand_setting(ST_OFF, "ndp %s", routename6(&sin6));
+		return cand_setting(cand, ST_OFF, "ndp %s", routename6(&sin6));
 	if (expire_time != 0) {
 		printf("%% temp entries are not saved in the configuration\n");
 		return -1;
@@ -300,7 +307,7 @@ ndp_cand(const char *host, struct sockaddr_dl *sdl)
 		return -1;
 	}
 	buf[len - 1] = '\0';
-	r = cand_setting(ST_ON, "%s", buf);
+	r = cand_setting(cand, ST_ON, "%s", buf);
 	free(buf);
 	return r;
 }

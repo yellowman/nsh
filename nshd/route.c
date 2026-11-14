@@ -14,6 +14,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#include <stdarg.h>
 #include <stdio.h>
 #include <ctype.h>
 #include <errno.h>
@@ -63,6 +64,12 @@ route(int argc, char **argv, ...)
 	struct rt_metrics rt_metrics;
 	char buf[INET6_ADDRSTRLEN];
 	int i, ch, inits = 0, flags = RTF_STATIC | RTF_MPATH;
+	struct cand *cand;
+	va_list ap;
+
+	va_start(ap, argv);
+	cand = va_arg(ap, struct cand *);
+	va_end(ap);
 
 	static struct nopts routeflags[] = {
 		{ "blackhole",	no_arg,		'b' },
@@ -249,7 +256,7 @@ route(int argc, char **argv, ...)
 	if (cmd == RTM_ADD && (flags & (RTF_BLACKHOLE|RTF_REJECT)))
 		flags |= RTF_GATEWAY;
 
-	if (candidate && cmd == RTM_ADD && rt_metrics.rmx_expire != 0) {
+	if (cand != NULL && cmd == RTM_ADD && rt_metrics.rmx_expire != 0) {
 		printf("%% an expiring route is not saved in the"
 		    " configuration\n");
 		return -1;
@@ -261,7 +268,7 @@ route(int argc, char **argv, ...)
 	 * Do the route...
 	 */
 	if (ip_route(&dest, gate.family ? &gate : NULL, cmd, flags,
-	    cli_rtable, rt_metrics, inits) != 0)
+	    cli_rtable, rt_metrics, inits, cand) != 0)
 		return -1;
 	return 0;
 }
@@ -274,7 +281,7 @@ route(int argc, char **argv, ...)
  * sets it.
  */
 int
-route_cand(struct rt_msghdr *rtm)
+route_cand(struct rt_msghdr *rtm, struct cand *cand)
 {
 	struct sockaddr *sa, *dst = NULL, *gate = NULL, *mask = NULL;
 	struct rtmsg m;
@@ -311,7 +318,7 @@ route_cand(struct rt_msghdr *rtm)
 			return -1;
 		}
 		/* refuse a duplicate, or a second route to d without MPATH */
-		for (n = 0; (l = cand_line("route", n)) != NULL; n++)
+		for (n = 0; (l = cand_line(cand, "route", n)) != NULL; n++)
 			if (isword(l, 1, d) && (!(rtm->rtm_flags & RTF_MPATH) ||
 			    isword(l, 2, g))) {
 				errno = EEXIST;
@@ -332,14 +339,14 @@ route_cand(struct rt_msghdr *rtm)
 			return -1;
 		}
 		buf[len - 1] = '\0';
-		i = cand_setting(ST_ON, "%s", buf);
+		i = cand_setting(cand, ST_ON, "%s", buf);
 		free(buf);
 		if (i == -1)
 			return -1;
 		break;
 	case RTM_DELETE:
 		/* without a gateway, only a route that is alone */
-		for (n = 0; (l = cand_line("route", n)) != NULL; n++)
+		for (n = 0; (l = cand_line(cand, "route", n)) != NULL; n++)
 			if (isword(l, 1, d) &&
 			    (gate == NULL || isword(l, 2, g)) && found++ == 0)
 				key = l;
@@ -347,7 +354,7 @@ route_cand(struct rt_msghdr *rtm)
 			errno = ESRCH;
 			return -1;
 		}
-		if (cand_setting(ST_OFF, "%s", key) == -1)
+		if (cand_setting(cand, ST_OFF, "%s", key) == -1)
 			return -1;
 		break;
 	default:

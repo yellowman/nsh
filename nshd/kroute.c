@@ -377,7 +377,7 @@ lookup_facts(struct facts_out *o, char *query, int table)
 		return (0);
 	lookup_kept = 0;
 	verbose = 0;	/* the request rtmsg() echoes is nsh's, not a fact */
-	ip_route(&dest, NULL, RTM_GET, RTF_UP, table, metrics, 0);
+	ip_route(&dest, NULL, RTM_GET, RTF_UP, table, metrics, 0, NULL);
 	verbose = v;
 	/* record it now that verbose is back, as nsh may render it at once */
 	if (lookup_kept)
@@ -397,7 +397,7 @@ lookup_facts(struct facts_out *o, char *query, int table)
  */
 int
 ip_route(ip_t *dest, ip_t *gate, u_short cmd, int flags, int tableid,
-    struct rt_metrics metrics, int inits)
+    struct rt_metrics metrics, int inits, struct cand *cand)
 {
 	int l;
 	int len = dest->bitlen;
@@ -473,7 +473,7 @@ ip_route(ip_t *dest, ip_t *gate, u_short cmd, int flags, int tableid,
 		return 1;
 		break;
 	}
-	if ((l = rtmsg(cmd, flags, 0, 0, tableid)) < 0) {
+	if ((l = rtmsg(cmd, flags, 0, 0, tableid, cand)) < 0) {
 		if (cmd == RTM_ADD && gate &&
 		    (errno == ESRCH || errno == ENETUNREACH))
 			printf("%% Gateway is unreachable: %s\n",
@@ -504,7 +504,7 @@ ip_route(ip_t *dest, ip_t *gate, u_short cmd, int flags, int tableid,
  * there is no error or we displayed the error message (get)
  */
 int
-rtmsg(int cmd, int flags, int proxy, int export, int tableid)
+rtmsg(int cmd, int flags, int proxy, int export, int tableid, struct cand *cand)
 {
 	static int seq;
 	struct rt_msghdr *rtm;
@@ -549,8 +549,8 @@ rtmsg(int cmd, int flags, int proxy, int export, int tableid)
 	if (verbose)
 		print_rtmsg(rtm);
 
-	if (candidate && cmd != RTM_GET)
-		return route_cand(rtm);
+	if (cand != NULL && cmd != RTM_GET)
+		return route_cand(rtm, cand);
 
 	if ((s = socket(PF_ROUTE, SOCK_RAW, 0)) < 0) {
 		printf("%% Unable to open routing socket: %s\n",

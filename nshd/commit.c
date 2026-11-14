@@ -791,7 +791,7 @@ script_make(struct cnode *from, struct cnode *to, struct script *s, int skip)
 int
 script_run(struct script *s)
 {
-	int i, save, rt, failed, cleared = 0;
+	int i, rt, failed, cleared = 0;
 
 	if (edits_check(s->edits, s->elen) == -1)
 		return -1;
@@ -806,10 +806,7 @@ script_run(struct script *s)
 		if (s->clears[i].keep && ctl_rules_clear(s->clears[i].name,
 		    s->clears[i].rtable, 1) == -1)
 			cleared = -1;
-	save = candidate;
-	candidate = 0;
 	failed = edits_apply(s->edits, s->elen);
-	candidate = save;
 	/* remove rules once the script has stopped the daemon */
 	for (i = 0; i < s->nclears; i++)
 		if (!s->clears[i].keep && ctl_rules_clear(s->clears[i].name,

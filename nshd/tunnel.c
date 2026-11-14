@@ -24,8 +24,8 @@
 #include "settings.h"
 
 int settunnel(int, char *, char *, char *, char *);
-int settunnelrdomain(int, char *, char *);
-int settunnelttl(int, char *, char *);
+int settunnelrdomain(int, char *, char *, struct cand *);
+int settunnelttl(int, char *, char *, struct cand *);
 int settunneldf(int, char *, int);
 int settunnelecn(int, char *, int);
 int setvnetid(int, char *, char *);
@@ -33,18 +33,18 @@ int delvnetid(int, char *);
 int deletetunnel(int, char *);
 void tunnelusage(int);
 static int vnetid_arg(char *, int64_t *);
-static int vnetid_range(char *, int64_t);
-static int cand_vnetid(char *, int, char *);
-static int tunnel_ttl(char *, char *);
+static int vnetid_range(char *, int64_t, struct cand *);
+static int cand_vnetid(struct cand *, char *, int, char *);
+static int tunnel_ttl(char *, char *, struct cand *);
 static int tunnel_startttl(char *);
-static int tunnel_rdomain(char *);
+static int tunnel_rdomain(char *, struct cand *);
 static int tunnel_addr(char *, char *, char *, char *, int *);
 static int tunnel_arg(char *, char *, size_t, char **);
 static int tunnel_mcast(char *);
 static int endpoint_arg(char *, char *, struct sockaddr_storage *, char *);
-static int cand_endpoint(char *, int);
-static int cand_tunnel(char *, int, int, char *, char *, char *, char *,
-    char *, int, int);
+static int cand_endpoint(struct cand *, char *, int);
+static int cand_tunnel(struct cand *, char *, int, int, char *, char *, char *,
+    char *, char *, int, int);
 
 /* tunnel, and tunneladdr, a tunnel's source with no destination */
 static char *tunnelcmds[] = { "tunnel", "tunneladdr", NULL };
@@ -100,12 +100,14 @@ intvnetid(int argc, char **argv, ...)
 {
 	int set;
 	va_list ap;
+	struct cand *cand;
 	char *ifname;
 	int ifs;
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
@@ -123,8 +125,8 @@ intvnetid(int argc, char **argv, ...)
 		printf("%% no vnetid [vnetid]\n");
 		return -1;
         }
-	if (candidate)
-		return cand_vnetid(ifname, set, argv[0]);
+	if (cand != NULL)
+		return cand_vnetid(cand, ifname, set, argv[0]);
 	if (set)
 		return setvnetid(ifs, ifname, argv[0]);
 	return delvnetid(ifs, ifname);
@@ -132,7 +134,7 @@ intvnetid(int argc, char **argv, ...)
 
 /* vnetid in configure private */
 static int
-cand_vnetid(char *ifname, int set, char *vnetida)
+cand_vnetid(struct cand *cand, char *ifname, int set, char *vnetida)
 {
 	int64_t vnetid;
 
@@ -148,10 +150,10 @@ cand_vnetid(char *ifname, int set, char *vnetida)
 		}
 		/* the kernel's vnetflowid goes with the vnetid */
 		if (cand_takes(ifname, SIOCSVNETFLOWID) &&
-		    cand_setting(ST_DEFAULT, "vnetflowid") == -1)
+		    cand_setting(cand, ST_DEFAULT, "vnetflowid") == -1)
 			return -1;
 		/* a veb keeps a line that says it has none */
-		return cand_setting(default_vnetid(ifname) != 0 ? ST_OFF :
+		return cand_setting(cand, default_vnetid(ifname) != 0 ? ST_OFF :
 		    ST_DEFAULT, "vnetid");
 	}
 	if (vnetid_arg(vnetida, &vnetid) == -1)
@@ -160,14 +162,14 @@ cand_vnetid(char *ifname, int set, char *vnetida)
 		printf("%% The configuration does not keep vnetid 0\n");
 		return -1;
 	}
-	if (vnetid_range(ifname, vnetid) == -1)
+	if (vnetid_range(ifname, vnetid, cand) == -1)
 		return -1;
-	return cand_setting(ST_ON, "vnetid %lld", vnetid);
+	return cand_setting(cand, ST_ON, "vnetid %lld", vnetid);
 }
 
 /* Does ifname's driver take vnetid? 0, or -1 after saying why not */
 static int
-vnetid_range(char *ifname, int64_t vnetid)
+vnetid_range(char *ifname, int64_t vnetid, struct cand *cand)
 {
 	const struct vnetidr *v;
 	long long max;
@@ -178,7 +180,7 @@ vnetid_range(char *ifname, int64_t vnetid)
 	if (v->name == NULL)
 		return 0;
 	max = v->max;
-	if (max > FLOWID_MAX && cand_line("vnetflowid", 0) != NULL)
+	if (max > FLOWID_MAX && cand_line(cand, "vnetflowid", 0) != NULL)
 		max = FLOWID_MAX;
 	if (vnetid < v->min || vnetid > max) {
 		printf("%% vnetid %lld out of range for %s: %lld to %lld\n",
@@ -194,12 +196,12 @@ vnetid_range(char *ifname, int64_t vnetid)
  * ID. 0, or -1 after saying why not.
  */
 int
-cand_vnetflowid(void)
+cand_vnetflowid(struct cand *cand)
 {
 	const char *errmsg = NULL;
 	char *l;
 
-	if ((l = cand_line("vnetid", 0)) != NULL)
+	if ((l = cand_line(cand, "vnetid", 0)) != NULL)
 		strtonum(l + strlen("vnetid "), 0, FLOWID_MAX, &errmsg);
 	if (l == NULL || errmsg != NULL) {
 		printf("%% vnetflowid needs a vnetid from 0 to %d\n",
@@ -231,12 +233,14 @@ inttunnel(int argc, char **argv, ...)
 	char sbuf[NI_MAXHOST + sizeof(":65535")];
 	char dbuf[NI_MAXHOST + sizeof(":65535")];
 	va_list ap;
+	struct cand *cand;
 	char *ifname;
 	int ifs;
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
@@ -377,8 +381,8 @@ inttunnel(int argc, char **argv, ...)
  * has one tunnel, so either line takes the other's place.
  */
 static int
-cand_tunnel(char *ifname, int set, int addr, char *src, char *srcport,
-    char *dstip, char *rdomain, char *ttla, int df, int ecn)
+cand_tunnel(struct cand *cand, char *ifname, int set, int addr, char *src,
+    char *srcport, char *dstip, char *rdomain, char *ttla, int df, int ecn)
 {
 	char s[NI_MAXHOST], d[NI_MAXHOST], line[1024], port[sizeof(":65535")];
 	char ttls[sizeof(" ttl copy")], *l, *w, *p;
@@ -391,9 +395,9 @@ cand_tunnel(char *ifname, int set, int addr, char *src, char *srcport,
 	}
 	if (!set) {
 		/* the kernel's tunnel goes, whichever line made it */
-		if (cand_setting(ST_DEFAULT, "tunneladdr") == -1)
+		if (cand_setting(cand, ST_DEFAULT, "tunneladdr") == -1)
 			return -1;
-		return cand_setting(ST_DEFAULT, "tunnel");
+		return cand_setting(cand, ST_DEFAULT, "tunnel");
 	}
 	if (src == NULL || (!addr && dstip == NULL)) {
 		tunnelusage(addr);
@@ -405,7 +409,7 @@ cand_tunnel(char *ifname, int set, int addr, char *src, char *srcport,
 			    ifname);
 			return -1;
 		}
-		if ((rdomainid = tunnel_rdomain(rdomain)) == -1)
+		if ((rdomainid = tunnel_rdomain(rdomain, cand)) == -1)
 			return -1;
 	}
 	if (ttla != NULL) {
@@ -413,7 +417,7 @@ cand_tunnel(char *ifname, int set, int addr, char *src, char *srcport,
 			printf("%% tunnel ttl not supported on %s\n", ifname);
 			return -1;
 		}
-		if ((ttl = tunnel_ttl(ifname, ttla)) == 0)
+		if ((ttl = tunnel_ttl(ifname, ttla, cand)) == 0)
 			return -1;
 	}
 	if (df && !cand_takes(ifname, SIOCSLIFPHYDF)) {
@@ -437,8 +441,8 @@ cand_tunnel(char *ifname, int set, int addr, char *src, char *srcport,
 		}
 	}
 
-	if (ttl == 0 && ((l = cand_line("tunnel", 0)) != NULL ||
-	    (l = cand_line("tunneladdr", 0)) != NULL)) {
+	if (ttl == 0 && ((l = cand_line(cand, "tunnel", 0)) != NULL ||
+	    (l = cand_line(cand, "tunneladdr", 0)) != NULL)) {
 		/* the ttl the kernel keeps */
 		strlcpy(line, l, sizeof(line));
 		for (w = strtok_r(line, " ", &p); w != NULL;
@@ -458,21 +462,22 @@ cand_tunnel(char *ifname, int set, int addr, char *src, char *srcport,
 		strlcpy(ttls, " ttl copy", sizeof(ttls));
 	else
 		snprintf(ttls, sizeof(ttls), " ttl %d", ttl);
-	if (cand_setting(ST_DEFAULT, addr ? "tunnel" : "tunneladdr") == -1)
+	if (cand_setting(cand, ST_DEFAULT,
+	    addr ? "tunnel" : "tunneladdr") == -1)
 		return -1;
 	if (addr)
-		r = cand_setting(ST_ON, "tunneladdr %s%s%s%s%s", s, port, ttls,
-		    ecn ? " ecn" : "", df ? " df" : "");
-	else
-		r = cand_setting(ST_ON, "tunnel %s%s %s%s%s%s", s, port, d,
+		r = cand_setting(cand, ST_ON, "tunneladdr %s%s%s%s%s", s, port,
 		    ttls, ecn ? " ecn" : "", df ? " df" : "");
+	else
+		r = cand_setting(cand, ST_ON, "tunnel %s%s %s%s%s%s", s, port,
+		    d, ttls, ecn ? " ecn" : "", df ? " df" : "");
 	if (r == -1)
 		return -1;
 	if (rdomain == NULL)
 		return 0;
 	if (rdomainid != 0)
-		return cand_setting(ST_ON, "tunneldomain %d", rdomainid);
-	return cand_setting(ST_DEFAULT, "tunneldomain");
+		return cand_setting(cand, ST_ON, "tunneldomain %d", rdomainid);
+	return cand_setting(cand, ST_DEFAULT, "tunneldomain");
 }
 
 /*
@@ -617,12 +622,14 @@ intcache(int argc, char **argv, ...)
 	const char *errmsg = NULL;
 	long long val;
 	va_list ap;
+	struct cand *cand;
 	char *ifname;
 	int ifs, set;
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
@@ -660,11 +667,11 @@ intcache(int argc, char **argv, ...)
 		}
 	}
 
-	if (candidate) {
+	if (cand != NULL) {
 		/* conf_cache() leaves out what the kernel starts with */
 		if (val == x->start)
-			return cand_setting(ST_DEFAULT, "%s", x->name);
-		return cand_setting(ST_ON, "%s %lld", x->name, val);
+			return cand_setting(cand, ST_DEFAULT, "%s", x->name);
+		return cand_setting(cand, ST_ON, "%s %lld", x->name, val);
 	}
 
 	memset(&bp, 0, sizeof(bp));
@@ -760,12 +767,14 @@ intendpoint(int argc, char **argv, ...)
 	struct ether_addr *ea;
 	char mac[sizeof("00:00:00:00:00:00")], ep[NI_MAXHOST];
 	va_list ap;
+	struct cand *cand;
 	char *ifname;
 	int ifs, set;
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
@@ -798,12 +807,13 @@ intendpoint(int argc, char **argv, ...)
 	if (set && endpoint_arg(ifname, argv[1], &ifba.ifba_dstsa, ep) == -1)
 		return -1;
 
-	if (candidate) {
+	if (cand != NULL) {
 		if (!set)
-			return cand_setting(ST_OFF, "endpoint %s", mac);
-		if (cand_endpoint(ifname, ifba.ifba_dstsa.ss_family) == -1)
+			return cand_setting(cand, ST_OFF, "endpoint %s", mac);
+		if (cand_endpoint(cand, ifname,
+		    ifba.ifba_dstsa.ss_family) == -1)
 			return -1;
-		return cand_setting(ST_ON, "endpoint %s %s", mac, ep);
+		return cand_setting(cand, ST_ON, "endpoint %s %s", mac, ep);
 	}
 
 	ifba.ifba_flags = IFBAF_STATIC;
@@ -871,7 +881,7 @@ endpoint_arg(char *ifname, char *arg, struct sockaddr_storage *ss, char *buf)
  * a multicast group as one. 0, or -1 after saying why not.
  */
 static int
-cand_endpoint(char *ifname, int af)
+cand_endpoint(struct cand *cand, char *ifname, int af)
 {
 	char line[1024], sbuf[NI_MAXHOST + sizeof(":65535")], *l, *p, *port;
 	char *src, *dst = NULL;
@@ -880,8 +890,8 @@ cand_endpoint(char *ifname, int af)
 
 	if (af == AF_LINK)
 		return 0;
-	if ((l = cand_line("tunneladdr", 0)) == NULL &&
-	    (l = cand_line("tunnel", 0)) == NULL) {
+	if ((l = cand_line(cand, "tunneladdr", 0)) == NULL &&
+	    (l = cand_line(cand, "tunnel", 0)) == NULL) {
 		printf("%% %s has no tunnel for an endpoint\n", ifname);
 		return -1;
 	}
@@ -915,7 +925,7 @@ cand_endpoint(char *ifname, int af)
 
 /* A tunnel's rdomain, or -1 after saying why not */
 static int
-tunnel_rdomain(char *rdomain)
+tunnel_rdomain(char *rdomain, struct cand *cand)
 {
 	const char *errmsg = NULL;
 	int rdomainid;
@@ -926,18 +936,19 @@ tunnel_rdomain(char *rdomain)
 		return -1;
 	}
 	/* SIOCSLIFPHYRTABLE needs the table (EINVAL) */
-	if (!rtable_there(rdomainid))
+	if (!rtable_there(rdomainid, cand))
 		return -1;
 	return rdomainid;
 }
 
 int
-settunnelrdomain(int ifs, char *ifname, char *rdomain)
+settunnelrdomain(int ifs, char *ifname, char *rdomain, struct cand *cand)
 {
 	int rdomainid;
 	struct ifreq ifr;
 
-	if (rdomain == NULL || (rdomainid = tunnel_rdomain(rdomain)) == -1)
+	if (rdomain == NULL ||
+	    (rdomainid = tunnel_rdomain(rdomain, cand)) == -1)
 		return -1;
 	bzero(&ifr, sizeof(ifr));
 	ifr.ifr_rdomainid = rdomainid;
@@ -979,13 +990,13 @@ tunnel_startttl(char *ifname)
  * after saying why not: a tunnel of Ethernet frames has no ttl to copy.
  */
 static int
-tunnel_ttl(char *ifname, char *ttla)
+tunnel_ttl(char *ifname, char *ttla, struct cand *cand)
 {
 	const char *errmsg = NULL;
 	int ttl;
 
 	if (strcmp(ttla, "copy") == 0) {
-		if (cand_gettype(ifname) == IFT_ETHER) {
+		if (cand_gettype(cand, ifname) == IFT_ETHER) {
 			printf("%% ttl copy not supported on %s\n", ifname);
 			return 0;
 		}
@@ -1000,12 +1011,12 @@ tunnel_ttl(char *ifname, char *ttla)
 }
 
 int
-settunnelttl(int ifs, char *ifname, char *ttla)
+settunnelttl(int ifs, char *ifname, char *ttla, struct cand *cand)
 {
 	int ttl;
 	struct ifreq ifr;
 
-	if (ttla == NULL || (ttl = tunnel_ttl(ifname, ttla)) == 0)
+	if (ttla == NULL || (ttl = tunnel_ttl(ifname, ttla, cand)) == 0)
 		return -1;
 
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));

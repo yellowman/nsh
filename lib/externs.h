@@ -33,6 +33,7 @@ extern int config_mode;		/* are we in comfig mode? */
 extern int bridge;		/* are we in bridge mode (or interface mode?) */
 extern pid_t pid;		/* process id of nsh */
 extern int cli_rtable;		/* environment rtable */
+struct cand;
 struct hashtable;
 extern struct hashtable *nsh_env;/* per-user session environment variables */
 
@@ -61,7 +62,7 @@ int nopt(int, char **, struct nopts *);
 
 /* ppp.c */
 int intsppp(int, char **, ...);
-int pppoe_ipcp(char *, int, int);
+int pppoe_ipcp(char *, int, int, struct cand *);
 int intpppoe(int, char **, ...);
 int is_pppoe(char *, int);
 #define NSH_PPPOE_IPADDR_IPCP 1
@@ -139,7 +140,7 @@ extern u_long rtm_inits;
 struct rtdump *getrtdump(int, int, int);
 void freertdump(struct rtdump *);
 int monitor(int, char **, ...);
-int rtmsg(int, int, int, int, int);
+int rtmsg(int, int, int, int, int, struct cand *);
 void flushroutes(int, int, int);
 void bprintf(FILE *, int, u_char *);
 #ifdef _NET_IF_DL_H_
@@ -196,9 +197,9 @@ void sigalarm(int);
 void command(void);
 int cmd_rest(int, char **);
 int argvtostring(int, char **, char *, int);
-int cmdline(char *);
-int cmdexit(void);
-int cand_refused(char *, int);
+int cmdline(char *, struct cand *);
+int cmdexit(struct cand *);
+int cand_refused(struct cand *, char *, int);
 void nshd_mode(int, char *, int);
 /* how a command runs, as nshd's CTL_COMMANDS rows say (row_runs()) */
 #define RUN_NSH		1	/* nsh runs it */
@@ -322,15 +323,15 @@ int intchan(int, char **, ...);
 int intnwflag(int, char **, ...);
 void conf_80211(FILE *, int, char *);
 int intjoin(int, char **, ...);
-int cand_join(char *, int, char *, char *, char *);
+int cand_join(struct cand *, char *, int, char *, char *, char *);
 void conf_join(FILE *, int, char *);
-uint64_t init_current_media(int, char *);
+uint64_t init_current_media(int, char *, struct cand *);
 int inttxpower(int, char **, ...);
-int cand_nwid(char *, u_int8_t *, int);
-int cand_wpakey(char *, char *, int);
-int cand_wpa(char *, int);
-int cand_wpalist(char *, int, u_int);
-int cand_powersave(char *, int, int);
+int cand_nwid(struct cand *, char *, u_int8_t *, int);
+int cand_wpakey(struct cand *, char *, char *, int);
+int cand_wpa(struct cand *, char *, int);
+int cand_wpalist(struct cand *, char *, int, u_int);
+int cand_powersave(struct cand *, char *, int, int);
 int intbssid(int, char **, ...);
 
 /* stats.c */
@@ -357,9 +358,10 @@ int show_route(char *, int);
 int is_ip_addr(char *);
 #ifdef _IP_T_
 void parse_ip_pfx(char *, int, ip_t *);
-int ip_route(ip_t *, ip_t *, u_short, int, int, struct rt_metrics, int inits);
+int ip_route(ip_t *, ip_t *, u_short, int, int, struct rt_metrics, int inits,
+    struct cand *);
 #endif
-int route_cand(struct rt_msghdr *);
+int route_cand(struct rt_msghdr *, struct cand *);
 int rtnameserver(int, char *[], int);
 #ifdef _NETINET6_IN6_H_
 int parse_ipv6(char *, struct in6_addr *);
@@ -380,7 +382,7 @@ int parse_ipv6(char *, struct in6_addr *);
 #define ROUNDMBPS(bps) ((float)bps == ((bps / 1000 / 1000) * 1000 * 1000))
 #define ROUNDKBPS(bps) ((float)bps == ((bps / 1000) * 1000))
 #define ROUNDKBYTES(bytes) ((float)bytes == ((bytes / 1024) * 1024))
-int cand_upline(char *, int);
+int cand_upline(struct cand *, char *, int);
 int is_valid_ifname(char *);
 int plainword(const char *, const char *);
 int show_int(int, char **, ...);
@@ -400,7 +402,7 @@ u_int32_t in4_brdaddr(u_int32_t, u_int32_t);
 extern struct ghs intiphelp[];
 extern struct ghs intip6help[];
 int intip(int, char **, ...);
-int intipcp(char *, int, int, char **);
+int intipcp(char *, int, int, char **, struct cand *);
 int intmtu(int, char **, ...);
 int intkeepalive(int, char **, ...);
 int intrdomain(int, char **, ...);
@@ -478,7 +480,7 @@ int get_physttl(int, char *);
 int get_physecn(int, char *);
 int get_physdf(int, char *);
 int64_t get_vnetid(int, char *);
-int cand_vnetflowid(void);
+int cand_vnetflowid(struct cand *);
 
 /* media.c */
 #define DEFAULT_MEDIA_TYPE	"autoselect"
@@ -717,47 +719,46 @@ int hashtable_foreach(struct hashtable *,
 #define CAND_RUN	1	/* runs as it does outside configure private */
 #define CAND_EDIT	2	/* its handler edits the candidate */
 struct cnode;
-extern int candidate;
-int cand_begin(void);
-void cand_end(void);
-int cand_changed(void);
-extern int cand_sharing;
-struct cand_shared;
-void cand_share(struct cand_shared *, int);
-void cand_detach(void);
-int cand_conflicts(struct cnode *, int);
-int cand_setting(int, const char *, ...)
-    __attribute__((__format__ (printf, 2, 3)));
-char *cand_line(char *, size_t);
-int cand_putlines(char **, size_t, char *);
-int cand_ifsetting(char *, int, const char *, ...)
+int cand_begin(struct cand *);
+void cand_end(struct cand *);
+int cand_changed(struct cand *);
+struct cand_state;
+void cand_attach(struct cand *, struct cand_state *);
+int cand_attached(struct cand *);
+void cand_detach(struct cand *);
+int cand_conflicts(struct cand *, struct cnode *, int);
+int cand_setting(struct cand *, int, const char *, ...)
     __attribute__((__format__ (printf, 3, 4)));
-char *cand_ifline(char *, char *, size_t);
-char *cand_ifname(size_t);
-int rtable_there(int);
-int pppoe_maxmtu(int, char *);
-int cand_state(char *);
+char *cand_line(struct cand *, char *, size_t);
+int cand_putlines(struct cand *, char **, size_t, char *);
+int cand_ifsetting(struct cand *, char *, int, const char *, ...)
+    __attribute__((__format__ (printf, 4, 5)));
+char *cand_ifline(struct cand *, char *, char *, size_t);
+char *cand_ifname(struct cand *, size_t);
+int rtable_there(int, struct cand *);
+int pppoe_maxmtu(int, char *, struct cand *);
+int cand_state(struct cand *, char *);
 int cand_getflags(char *, int);
-int cand_gettype(char *);
+int cand_gettype(struct cand *, char *);
 int cand_ispppoe(char *);
 int cand_takes(char *, u_long);
-int cand_hasif(char *);
-char *cand_listowner(char *, char *, char *);
-int cand_interface(int, char *, int *);
-int cand_isbridge(char *);
-struct cnode *cand_tree(void);
+int cand_hasif(struct cand *, char *);
+char *cand_listowner(struct cand *, char *, char *, char *);
+int cand_interface(struct cand *, int, char *, int *);
+int cand_isbridge(struct cand *, char *);
+struct cnode *cand_tree(struct cand *);
 int pr_cand_conf(int, char **, ...);
 int cand_rollback(int, char **, ...);
-int cand_restart(struct cnode *, int);
+int cand_restart(struct cand *, struct cnode *, int);
 extern int cand_rtable;
-int cand_rtable_set(int, int, char *);
-char *cand_rule(char *, size_t);
-int cand_setrules(char *, char **, size_t);
-int cand_hasrtable(int);
+int cand_rtable_set(struct cand *, int, int, char *);
+char *cand_rule(struct cand *, char *, size_t);
+int cand_setrules(struct cand *, char *, char **, size_t);
+int cand_hasrtable(struct cand *, int);
 struct cnode *running_tree(void);
 void running_set(struct cnode *);
 int cand_cloneable(char *);
-int cand_write(FILE *);
+int cand_write(struct cand *, FILE *);
 
 /* commit.c */
 #define MAXCLEARS	64

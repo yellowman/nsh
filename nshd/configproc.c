@@ -173,7 +173,7 @@ struct session {
 	uint32_t		 id;
 	uid_t			 uid;
 	gid_t			 gid;
-	struct session_state	*st;	/* nsh's state, once in configure */
+	struct cand		*st;	/* nsh's state, once in configure */
 	int			 want;	/* the configure it asked for */
 	int			 how;	/* the configure it is in, or 0 */
 	int			 waits;
@@ -277,7 +277,7 @@ static struct snapshot		*snap;
 static struct kfacts		*kf_now;	/* facts of the last snapshot */
 static struct commit		*commit;	/* the one running, or NULL */
 static int			 revoking;	/* login lines change */
-static struct cand_shared	*shared;	/* configure's candidate */
+static struct cand_state	*shared;	/* configure's candidate */
 static struct session		*exclusive;	/* in configure exclusive */
 static uid_t			*editors;	/* who changed shared since */
 static size_t			 neditors;
@@ -414,7 +414,7 @@ configproc(int debug, int verbose)
 
 	/* nsh's code here asks no kernel, opens no file, runs no program */
 	in_config = 1;
-	if ((shared = cand_shared_new()) == NULL)
+	if ((shared = cand_new()) == NULL)
 		fatal(NULL);
 
 	/* each session's pipe to its frontend comes from parent */

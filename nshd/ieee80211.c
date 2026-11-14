@@ -84,16 +84,16 @@
 
 static int cand_80211(char *, char *);
 static void nwkey_str(char *, size_t, char *);
-static int cand_nwkey(char *, struct ieee80211_nwkey *, char *);
-static int cand_txpower(char *, int);
-static int cand_nowpa(int);
-static int cand_wpaon(void);
+static int cand_nwkey(struct cand *, char *, struct ieee80211_nwkey *, char *);
+static int cand_txpower(struct cand *, char *, int);
+static int cand_nowpa(struct cand *, int);
+static int cand_wpaon(struct cand *);
 static u_int wpa_bits(int, char *);
 static void wpa_names(char *, size_t, int, u_int);
 static int wpa_default(int, u_int, u_int);
 static int wpa_keykind(char *);
 static int wpa_keypsk(char *, int, const u_int8_t *, size_t, u_int8_t *);
-static int station(int, char *);
+static int station(int, char *, struct cand *);
 static int joinrow(char *, char *);
 
 /* WPA's lists, by the names ifconfig gives them, in the order conf() prints */
@@ -242,12 +242,14 @@ intnwkey(int argc, char **argv, ...)
 	struct ieee80211_nwkey nwkey;
 	u_int8_t keybuf[IEEE80211_WEP_NKID][16];
 	va_list ap;
+	struct cand *cand;
 	char *ifname;
 	int ifs;
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
@@ -320,8 +322,8 @@ set_nwkey:
 		nwkey.i_key[i].i_keylen = 0;
 		nwkey.i_key[i].i_keydat = NULL;
 	}
-	if (candidate)
-		return cand_nwkey(ifname, &nwkey, set ? argv[0] : NULL);
+	if (cand != NULL)
+		return cand_nwkey(cand, ifname, &nwkey, set ? argv[0] : NULL);
 	(void) strlcpy(nwkey.i_name, ifname, sizeof(nwkey.i_name));
 	if (ioctl(ifs, SIOCS80211NWKEY, (caddr_t)&nwkey) == -1) {
 		printf("%% intnwkey: SIOCS80211NWKEY: %s\n", strerror(errno));
@@ -347,12 +349,14 @@ intwpakey(int argc, char **argv, ...)
 	struct ieee80211_nwid nwid;
 	struct ifreq ifr;
 	va_list ap;
+	struct cand *cand;
 	char *ifname;
 	int ifs, set, hex = 0;
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
@@ -373,8 +377,8 @@ intwpakey(int argc, char **argv, ...)
 	if (set && (hex = wpa_keykind(argv[0])) == -1)
 		return -1;
 
-	if (candidate)
-		return cand_wpakey(ifname, set ? argv[0] : NULL, hex);
+	if (cand != NULL)
+		return cand_wpakey(cand, ifname, set ? argv[0] : NULL, hex);
 
 	memset(&psk, 0, sizeof(psk));
 	if (set) {
@@ -428,12 +432,14 @@ intwpa(int argc, char **argv, ...)
 {
 	struct ieee80211_wpaparams wpa;
 	va_list ap;
+	struct cand *cand;
 	char *ifname;
 	int ifs, set;
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
@@ -448,8 +454,8 @@ intwpa(int argc, char **argv, ...)
 		printf("%% no wpa\n");
 		return -1;
 	}
-	if (candidate)
-		return cand_wpa(ifname, set);
+	if (cand != NULL)
+		return cand_wpa(cand, ifname, set);
 
 	memset(&wpa, 0, sizeof(wpa));
 	strlcpy(wpa.i_name, ifname, sizeof(wpa.i_name));
@@ -478,6 +484,7 @@ intwpalist(int argc, char **argv, ...)
 	struct ieee80211_wpaparams wpa;
 	const struct wpaname *wn;
 	va_list ap;
+	struct cand *cand;
 	char *ifname;
 	u_int bits = 0;
 	int ifs, set, which;
@@ -485,6 +492,7 @@ intwpalist(int argc, char **argv, ...)
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
@@ -512,8 +520,8 @@ intwpalist(int argc, char **argv, ...)
 		return -1;
 	}
 
-	if (candidate)
-		return cand_wpalist(ifname, which, bits);
+	if (cand != NULL)
+		return cand_wpalist(cand, ifname, which, bits);
 
 	memset(&wpa, 0, sizeof(wpa));
 	strlcpy(wpa.i_name, ifname, sizeof(wpa.i_name));
@@ -613,6 +621,7 @@ intjoin(int argc, char **argv, ...)
 	char nwid[IEEE80211_NWID_LEN * 2 + 8], *kind = NULL;
 	StringList *rows;
 	va_list ap;
+	struct cand *cand;
 	char *ifname;
 	size_t i;
 	int ifs, set, len, hex = 0;
@@ -620,6 +629,7 @@ intjoin(int argc, char **argv, ...)
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
@@ -674,13 +684,13 @@ intjoin(int argc, char **argv, ...)
 		join.i_nwkey.i_key[0].i_keydat = wepkey;
 	}
 	/* the kernel ignores join outside station mode */
-	if (set && !station(ifs, ifname)) {
+	if (set && !station(ifs, ifname, cand)) {
 		printf("%% join: %s is not in station mode\n", ifname);
 		return -1;
 	}
 
-	if (candidate)
-		return cand_join(ifname, set, nwid, kind, kind ? argv[2] :
+	if (cand != NULL)
+		return cand_join(cand, ifname, set, nwid, kind, kind ? argv[2] :
 		    NULL);
 
 	if (kind != NULL && strcmp(kind, "wpakey") == 0 &&
@@ -726,9 +736,9 @@ joinrow(char *row, char *nwid)
 
 /* Is the interface in station mode, as its media options say? */
 static int
-station(int ifs, char *ifname)
+station(int ifs, char *ifname, struct cand *cand)
 {
-	uint64_t media = init_current_media(ifs, ifname);
+	uint64_t media = init_current_media(ifs, ifname, cand);
 
 	return media != (uint64_t)-1 && (IFM_OPTIONS(media) &
 	    (IFM_IEEE80211_HOSTAP | IFM_IEEE80211_IBSS |
@@ -794,12 +804,14 @@ intchan(int argc, char **argv, ...)
 	const char *errstr;
 	char num[8];
 	va_list ap;
+	struct cand *cand;
 	char *ifname;
 	int ifs, set;
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
@@ -828,12 +840,12 @@ intchan(int argc, char **argv, ...)
 		}
 	}
 
-	if (candidate) {
+	if (cand != NULL) {
 		if (!cand_80211(ifname, "intchan: SIOCS80211CHANNEL"))
 			return -1;
 		if (!set)
-			return cand_setting(ST_DEFAULT, "chan");
-		return cand_setting(ST_ON, "chan %u", chan.i_channel);
+			return cand_setting(cand, ST_DEFAULT, "chan");
+		return cand_setting(cand, ST_ON, "chan %u", chan.i_channel);
 	}
 
 	if (ioctl(ifs, SIOCS80211CHANNEL, &chan) == -1) {
@@ -852,9 +864,9 @@ intchan(int argc, char **argv, ...)
 
 /* Is the interface in hostap mode, as its media options say? */
 static int
-hostap(int ifs, char *ifname)
+hostap(int ifs, char *ifname, struct cand *cand)
 {
-	uint64_t media = init_current_media(ifs, ifname);
+	uint64_t media = init_current_media(ifs, ifname, cand);
 
 	return media != (uint64_t)-1 &&
 	    (IFM_OPTIONS(media) & IFM_IEEE80211_HOSTAP) != 0;
@@ -870,6 +882,7 @@ intnwflag(int argc, char **argv, ...)
 	struct ifreq ifr;
 	char flags[256];
 	va_list ap;
+	struct cand *cand;
 	char *ifname;
 	u_int bits = 0;
 	size_t i;
@@ -878,6 +891,7 @@ intnwflag(int argc, char **argv, ...)
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
@@ -906,17 +920,19 @@ intnwflag(int argc, char **argv, ...)
 		printf("\n");
 		return -1;
 	}
-	if (set && (bits & IEEE80211_F_HOSTAPMASK) && !hostap(ifs, ifname)) {
+	if (set && (bits & IEEE80211_F_HOSTAPMASK) &&
+	    !hostap(ifs, ifname, cand)) {
 		printf("%% nwflag: hidenwid and nobridge need mediaopt "
 		    "hostap\n");
 		return -1;
 	}
 
-	if (candidate) {
+	if (cand != NULL) {
 		if (!cand_80211(ifname, "intnwflag: SIOCS80211FLAGS"))
 			return -1;
 		argvtostring(argc, argv, flags, sizeof(flags));
-		return cand_setting(set ? ST_ON : ST_OFF, "nwflag %s", flags);
+		return cand_setting(cand, set ? ST_ON : ST_OFF,
+		    "nwflag %s", flags);
 	}
 
 	memset(&ifr, 0, sizeof(ifr));
@@ -1086,12 +1102,14 @@ inttxpower(int argc, char **argv, ...)
 	struct ieee80211_txpower txpower;
 	short dbm, set;
 	va_list ap;
+	struct cand *cand;
 	char *ifname;
 	int ifs;
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
@@ -1128,8 +1146,8 @@ inttxpower(int argc, char **argv, ...)
 		txpower.i_mode = IEEE80211_TXPOWER_MODE_FIXED;
 	}
 
-	if (candidate)
-		return cand_txpower(ifname, txpower.i_val);
+	if (cand != NULL)
+		return cand_txpower(cand, ifname, txpower.i_val);
 
 	if (ioctl(ifs, SIOCS80211TXPOWER, (caddr_t)&txpower) == -1) {
 		printf("%% inttxpower: SIOCS80211TXPOWER failed: %s\n",
@@ -1221,60 +1239,61 @@ nwkey_str(char *buf, size_t len, char *key)
  * their lines go too.
  */
 int
-cand_nwid(char *ifname, u_int8_t *nwid, int len)
+cand_nwid(struct cand *cand, char *ifname, u_int8_t *nwid, int len)
 {
 	char str[IEEE80211_NWID_LEN * 2 + 8];
 
 	if (!cand_80211(ifname, "intnwid: SIOCS80211NWID"))
 		return -1;
 	make_string(str, sizeof(str), nwid, len);
-	if (cand_setting(ST_ON, "nwid %s", str) == -1 ||
-	    cand_setting(ST_DEFAULT, "nwkey") == -1)
+	if (cand_setting(cand, ST_ON, "nwid %s", str) == -1 ||
+	    cand_setting(cand, ST_DEFAULT, "nwkey") == -1)
 		return -1;
-	return cand_nowpa(1);
+	return cand_nowpa(cand, 1);
 }
 
 /* nwkey in configure private, as ieee80211_ioctl_setnwkeys() takes it */
 static int
-cand_nwkey(char *ifname, struct ieee80211_nwkey *nwkey, char *key)
+cand_nwkey(struct cand *cand, char *ifname, struct ieee80211_nwkey *nwkey,
+    char *key)
 {
 	char str[256];
 
 	if (!cand_80211(ifname, "intnwkey: SIOCS80211NWKEY"))
 		return -1;
 	if (nwkey->i_wepon == IEEE80211_NWKEY_OPEN)
-		return cand_setting(ST_DEFAULT, "nwkey");
+		return cand_setting(cand, ST_DEFAULT, "nwkey");
 	if (nwkey->i_defkid < 1 || nwkey->i_defkid > IEEE80211_WEP_NKID) {
 		printf("%% intnwkey: SIOCS80211NWKEY: %s\n", strerror(EINVAL));
 		return -1;
 	}
 	/* WEP turns WPA off */
-	if (cand_nowpa(1) == -1)
+	if (cand_nowpa(cand, 1) == -1)
 		return -1;
 	nwkey_str(str, sizeof(str), key);
-	return cand_setting(ST_ON, "nwkey %s", str);
+	return cand_setting(cand, ST_ON, "nwkey %s", str);
 }
 
 /* txpower in configure private: conf prints none for the maximum */
 static int
-cand_txpower(char *ifname, int dbm)
+cand_txpower(struct cand *cand, char *ifname, int dbm)
 {
 	if (!cand_80211(ifname, "inttxpower: SIOCS80211TXPOWER failed"))
 		return -1;
 	if (dbm == kern_txpower_max)
-		return cand_setting(ST_DEFAULT, "txpower");
-	return cand_setting(ST_ON, "txpower %d", dbm);
+		return cand_setting(cand, ST_DEFAULT, "txpower");
+	return cand_setting(cand, ST_ON, "txpower %d", dbm);
 }
 
 /* powersave in configure private */
 int
-cand_powersave(char *ifname, int set, int maxsleep)
+cand_powersave(struct cand *cand, char *ifname, int set, int maxsleep)
 {
 	if (!cand_80211(ifname, "intpowersave: SIOCG80211POWER"))
 		return -1;
 	if (!set)
-		return cand_setting(ST_DEFAULT, "powersave");
-	return cand_setting(ST_ON, "powersave %d", maxsleep);
+		return cand_setting(cand, ST_DEFAULT, "powersave");
+	return cand_setting(cand, ST_ON, "powersave %d", maxsleep);
 }
 
 /*
@@ -1282,28 +1301,28 @@ cand_powersave(char *ifname, int set, int maxsleep)
  * and wpa too
  */
 static int
-cand_nowpa(int key)
+cand_nowpa(struct cand *cand, int key)
 {
 	size_t i;
 
-	if (key && (cand_setting(ST_DEFAULT, "wpakey") == -1 ||
-	    cand_setting(ST_DEFAULT, "wpa") == -1))
+	if (key && (cand_setting(cand, ST_DEFAULT, "wpakey") == -1 ||
+	    cand_setting(cand, ST_DEFAULT, "wpa") == -1))
 		return -1;
 	for (i = 0; i < nitems(wpalists); i++)
-		if (cand_setting(ST_DEFAULT, "%s", wpalists[i].cmd) == -1)
+		if (cand_setting(cand, ST_DEFAULT, "%s", wpalists[i].cmd) == -1)
 			return -1;
 	return 0;
 }
 
 /* Is WPA on, as the candidate's wpakey and wpa lines say? */
 static int
-cand_wpaon(void)
+cand_wpaon(struct cand *cand)
 {
 	char *l;
 
-	if ((l = cand_line("wpa", 0)) != NULL)
+	if ((l = cand_line(cand, "wpa", 0)) != NULL)
 		return strcmp(l, "wpa") == 0;
-	return cand_line("wpakey", 0) != NULL;
+	return cand_line(cand, "wpakey", 0) != NULL;
 }
 
 /*
@@ -1311,24 +1330,24 @@ cand_wpaon(void)
  * with. A key turns WEP off and WPA on; no key turns WPA off.
  */
 int
-cand_wpakey(char *ifname, char *key, int hex)
+cand_wpakey(struct cand *cand, char *ifname, char *key, int hex)
 {
 	char str[256], *l;
 
 	if (!cand_80211(ifname, "intwpakey: SIOCS80211WPAPSK"))
 		return -1;
 	if (key == NULL)
-		return cand_nowpa(1);
-	if (!hex && ((l = cand_line("nwid", 0)) == NULL ||
+		return cand_nowpa(cand, 1);
+	if (!hex && ((l = cand_line(cand, "nwid", 0)) == NULL ||
 	    strcmp(l, "nwid \"\"") == 0)) {
 		printf("%% wpakey: nwid not set\n");
 		return -1;
 	}
-	if (cand_setting(ST_DEFAULT, "nwkey") == -1 ||
-	    cand_setting(ST_DEFAULT, "wpa") == -1)
+	if (cand_setting(cand, ST_DEFAULT, "nwkey") == -1 ||
+	    cand_setting(cand, ST_DEFAULT, "wpa") == -1)
 		return -1;
 	nwkey_str(str, sizeof(str), key);
-	return cand_setting(ST_ON, "wpakey %s", str);
+	return cand_setting(cand, ST_ON, "wpakey %s", str);
 }
 
 /*
@@ -1336,17 +1355,17 @@ cand_wpakey(char *ifname, char *key, int hex)
  * takes the lists away.
  */
 int
-cand_wpa(char *ifname, int set)
+cand_wpa(struct cand *cand, char *ifname, int set)
 {
-	int key = cand_line("wpakey", 0) != NULL;
+	int key = cand_line(cand, "wpakey", 0) != NULL;
 
 	if (!cand_80211(ifname, "intwpa: SIOCS80211WPAPARMS"))
 		return -1;
 	if (set)
-		return cand_setting(key ? ST_DEFAULT : ST_ON, "wpa");
-	if (cand_nowpa(0) == -1)
+		return cand_setting(cand, key ? ST_DEFAULT : ST_ON, "wpa");
+	if (cand_nowpa(cand, 0) == -1)
 		return -1;
-	return cand_setting(key ? ST_OFF : ST_DEFAULT, "wpa");
+	return cand_setting(cand, key ? ST_OFF : ST_DEFAULT, "wpa");
 }
 
 /*
@@ -1354,29 +1373,30 @@ cand_wpa(char *ifname, int set)
  * unless the kernel's default. A new wpaprotos takes the ciphers away.
  */
 int
-cand_wpalist(char *ifname, int which, u_int bits)
+cand_wpalist(struct cand *cand, char *ifname, int which, u_int bits)
 {
 	char str[128], *l;
 	u_int protos = 0;
 
 	if (!cand_80211(ifname, "intwpalist: SIOCS80211WPAPARMS"))
 		return -1;
-	if (!cand_wpaon()) {
+	if (!cand_wpaon(cand)) {
 		printf("%% wpa is off on %s: set wpakey or wpa first\n",
 		    ifname);
 		return -1;
 	}
 	if (which == WPA_PROTOS) {
 		protos = bits;
-		if (cand_setting(ST_DEFAULT, "wpaciphers") == -1 ||
-		    cand_setting(ST_DEFAULT, "wpagroupcipher") == -1)
+		if (cand_setting(cand, ST_DEFAULT, "wpaciphers") == -1 ||
+		    cand_setting(cand, ST_DEFAULT, "wpagroupcipher") == -1)
 			return -1;
-	} else if ((l = cand_line("wpaprotos", 0)) != NULL)
+	} else if ((l = cand_line(cand, "wpaprotos", 0)) != NULL)
 		protos = wpa_bits(WPA_PROTOS, l + strlen("wpaprotos "));
 	if (bits == 0 || wpa_default(which, bits, protos))
-		return cand_setting(ST_DEFAULT, "%s", wpalists[which].cmd);
+		return cand_setting(cand, ST_DEFAULT, "%s",
+		    wpalists[which].cmd);
 	wpa_names(str, sizeof(str), which, bits);
-	return cand_setting(ST_ON, "%s %s", wpalists[which].cmd, str);
+	return cand_setting(cand, ST_ON, "%s %s", wpalists[which].cmd, str);
 }
 
 /*
@@ -1501,16 +1521,17 @@ wpa_keypsk(char *key, int hex, const u_int8_t *nwid, size_t nwidlen,
  * as it was typed
  */
 int
-cand_join(char *ifname, int set, char *nwid, char *kind, char *key)
+cand_join(struct cand *cand, char *ifname, int set, char *nwid, char *kind,
+    char *key)
 {
 	char str[256];
 
 	if (!cand_80211(ifname, "intjoin: SIOCS80211JOIN"))
 		return -1;
 	if (!set)
-		return cand_setting(ST_DEFAULT, "join %s", nwid);
+		return cand_setting(cand, ST_DEFAULT, "join %s", nwid);
 	if (kind == NULL)
-		return cand_setting(ST_ON, "join %s", nwid);
+		return cand_setting(cand, ST_ON, "join %s", nwid);
 	nwkey_str(str, sizeof(str), key);
-	return cand_setting(ST_ON, "join %s %s %s", nwid, kind, str);
+	return cand_setting(cand, ST_ON, "join %s %s %s", nwid, kind, str);
 }

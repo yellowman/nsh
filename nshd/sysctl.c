@@ -210,12 +210,14 @@ ipsysctl(int set, char **cmd, ...)
 	struct ipsysctl *x;
 	struct sysctltab *stab;
 	va_list ap;
+	struct cand *cand;
 	char *arg;
 	int type;
 
 	va_start(ap, cmd);
 	arg = va_arg(ap, char *);
 	type = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
 	for (stab = sysctls; stab-> name != NULL; stab++)
@@ -249,17 +251,17 @@ ipsysctl(int set, char **cmd, ...)
 	} else
 		larg = x->def_larg;
 
-	if (candidate) {
+	if (cand != NULL) {
 		char line[128];
 
 		/* the line conf() would print; the sysctl is not set */
 		sysctl_line(line, sizeof(line), stab->name, x, larg);
 		if (line[0] == '\0')
-			return cand_setting(ST_DEFAULT, "%s %s", stab->name,
-			    x->name);
+			return cand_setting(cand, ST_DEFAULT, "%s %s",
+			    stab->name, x->name);
 		if (strncmp(line, "no ", 3) == 0)
-			return cand_setting(ST_OFF, "%s", line + 3);
-		return cand_setting(ST_ON, "%s", line);
+			return cand_setting(cand, ST_OFF, "%s", line + 3);
+		return cand_setting(cand, ST_ON, "%s", line);
 	}
 	if (sysctl_int(x->mib, larg, 0) == -1)
 		return -1;

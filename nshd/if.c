@@ -64,7 +64,7 @@ void pack_ifaliasreq(struct ifaliasreq *, ip_t *, struct in_addr *, char *);
 void pack_in6aliasreq(struct in6_aliasreq *, ip_t *, struct in6_addr *, char *);
 void ipv6ll_db_store(struct sockaddr_in6 *, struct sockaddr_in6 *, int, char *);
 void intipusage(const char *, const char *);
-int run_ipcp(char *, int, int);
+int run_ipcp(char *, int, int, struct cand *);
 void pwe3usage(void);
 int show_vlan(int, int);
 
@@ -773,12 +773,12 @@ cand_otherscope(struct in6_addr *a, char *ifname)
  * af is 0? An IPv6 address has a ':' and an IPv4 address has none.
  */
 static int
-cand_hasaddr(int af)
+cand_hasaddr(struct cand *cand, int af)
 {
 	char *l;
 	size_t n;
 
-	for (n = 0; (l = cand_line("inet", n)) != NULL; n++)
+	for (n = 0; (l = cand_line(cand, "inet", n)) != NULL; n++)
 		if (af == 0 || (strchr(l, ':') != NULL) == (af == AF_INET6))
 			return 1;
 	return 0;
@@ -793,37 +793,38 @@ cand_hasaddr(int af)
  * returns.
  */
 int
-cand_upline(char *ifname, int bringup)
+cand_upline(struct cand *cand, char *ifname, int bringup)
 {
 	if (cand_ispppoe(ifname))
-		return bringup ? cand_setting(ST_OFF, "shutdown") : 0;
-	if (!bringup && cand_state("shutdown") == ST_ON)
+		return bringup ? cand_setting(cand, ST_OFF, "shutdown") : 0;
+	if (!bringup && cand_state(cand, "shutdown") == ST_ON)
 		return 0;		/* down, and stays down */
-	if (cand_hasaddr(0) || cand_state("autoconf4") == ST_ON)
-		return cand_setting(ST_DEFAULT, "shutdown");
-	return cand_setting(ST_OFF, "shutdown");
+	if (cand_hasaddr(cand, 0) || cand_state(cand, "autoconf4") == ST_ON)
+		return cand_setting(cand, ST_DEFAULT, "shutdown");
+	return cand_setting(cand, ST_OFF, "shutdown");
 }
 
 /* no inet, no inet6 in configure private: remove every address of af */
 static int
-cand_noaf(char *ifname, int af)
+cand_noaf(struct cand *cand, char *ifname, int af)
 {
 	char line[1024], *l;
 	size_t n = 0;
 	int r = 0;
 
-	while ((l = cand_line("inet", n)) != NULL) {
+	while ((l = cand_line(cand, "inet", n)) != NULL) {
 		if ((strchr(l, ':') != NULL) != (af == AF_INET6)) {
 			n++;
 			continue;
 		}
 		strlcpy(line, l, sizeof(line));
-		if (cand_setting(ST_OFF, "%s", line) == -1)
+		if (cand_setting(cand, ST_OFF, "%s", line) == -1)
 			r = -1;
-		if ((l = cand_line("inet", n)) != NULL && strcmp(l, line) == 0)
+		if ((l = cand_line(cand, "inet", n)) != NULL &&
+		    strcmp(l, line) == 0)
 			n++;		/* it was not removed */
 	}
-	if (cand_upline(ifname, 0) == -1)
+	if (cand_upline(cand, ifname, 0) == -1)
 		r = -1;
 	return r;
 }
@@ -834,8 +835,8 @@ cand_noaf(char *ifname, int af)
  * address conf_ifaddr_dhcp() would not print, is refused here.
  */
 static int
-cand_ip(char *ifname, int set, int flags, ip_t *ip, int argc, char **argv,
-    char *msg, struct ip6opts *o)
+cand_ip(struct cand *cand, char *ifname, int set, int flags, ip_t *ip, int argc,
+    char **argv, char *msg, struct ip6opts *o)
 {
 	char addr[INET6_ADDRSTRLEN + IFNAMSIZ];
 	char dest[INET6_ADDRSTRLEN + IFNAMSIZ];
@@ -848,19 +849,20 @@ cand_ip(char *ifname, int set, int flags, ip_t *ip, int argc, char **argv,
 		return -1;
 	cand_addrstr(ip->family, &ip->addr, ifname, addr, sizeof(addr));
 	if (!set) {
-		if (cand_setting(ST_OFF, "inet %s", addr) == -1)
+		if (cand_setting(cand, ST_OFF, "inet %s", addr) == -1)
 			return -1;
-		return cand_upline(ifname, 0);
+		return cand_upline(cand, ifname, 0);
 	}
-	if (pppoe ? cand_state("autoconf4") != ST_OFF :
-	    ip->family == AF_INET && cand_state("autoconf4") == ST_ON) {
+	if (pppoe ? cand_state(cand, "autoconf4") != ST_OFF :
+	    ip->family == AF_INET && cand_state(cand, "autoconf4") == ST_ON) {
 		printf("%% %s takes its %saddresses from %s,"
 		    " set \"no autoconf4\" first\n", ifname,
 		    pppoe ? "" : "IPv4 ", pppoe ? "IPCP" : "DHCP");
 		return -1;
 	}
 	/* carpioctl() takes an address only once there is a carpdev (EINVAL) */
-	if (cand_takes(ifname, SIOCSVH) && cand_line("carpdev", 0) == NULL) {
+	if (cand_takes(ifname, SIOCSVH) &&
+	    cand_line(cand, "carpdev", 0) == NULL) {
 		printf("%% %s needs a carpdev before an address\n", ifname);
 		return -1;
 	}
@@ -878,13 +880,14 @@ cand_ip(char *ifname, int set, int flags, ip_t *ip, int argc, char **argv,
 			if (in4dest.s_addr != INADDR_ANY)
 				cand_addrstr(AF_INET, &in4dest, ifname, dest,
 				    sizeof(dest));
-			if (cand_setting(ST_ON, "inet %s%s%s", addr,
+			if (cand_setting(cand, ST_ON, "inet %s%s%s", addr,
 			    dest[0] ? " " : "", dest) == -1)
 				return -1;
 			break;
 		}
 		/* nor the broadcast address, which intip() checked */
-		if (cand_setting(ST_ON, "inet %s/%d", addr, ip->bitlen) == -1)
+		if (cand_setting(cand, ST_ON, "inet %s/%d", addr,
+		    ip->bitlen) == -1)
 			return -1;
 		break;
 	case AF_INET6:
@@ -907,8 +910,8 @@ cand_ip(char *ifname, int set, int flags, ip_t *ip, int argc, char **argv,
 		ip6_optstr(opts, sizeof(opts), o->anycast, o->vltime,
 		    o->pltime);
 		if (!(flags & IFF_POINTOPOINT)) {
-			if (cand_setting(ST_ON, "inet %s/%d%s", addr, bitlen,
-			    opts) == -1)
+			if (cand_setting(cand, ST_ON, "inet %s/%d%s", addr,
+			    bitlen, opts) == -1)
 				return -1;
 			break;
 		}
@@ -922,7 +925,7 @@ cand_ip(char *ifname, int set, int flags, ip_t *ip, int argc, char **argv,
 			    sizeof(dest));
 		}
 		/* conf_ifaddrs() prints no prefix length */
-		if (cand_setting(ST_ON, "inet %s%s%s%s", addr,
+		if (cand_setting(cand, ST_ON, "inet %s%s%s%s", addr,
 		    dest[0] ? " " : "", dest, opts) == -1)
 			return -1;
 		break;
@@ -930,7 +933,7 @@ cand_ip(char *ifname, int set, int flags, ip_t *ip, int argc, char **argv,
 		printf("%% unknown address family: %d\n", ip->family);
 		return -1;
 	}
-	return cand_upline(ifname, 1);
+	return cand_upline(cand, ifname, 1);
 }
 
 void
@@ -962,12 +965,14 @@ intip(int argc, char **argv, ...)
 	struct in6_addr in6dest;
 	struct in6_aliasreq ip6req;
 	va_list ap;
+	struct cand *cand;
 	char *ifname;
 	int ifs;
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
@@ -999,7 +1004,7 @@ intip(int argc, char **argv, ...)
 	argc--;
 	argv++;
 
-	flags = candidate ? cand_getflags(ifname, ifs) :
+	flags = cand != NULL ? cand_getflags(ifname, ifs) :
 	    get_ifflags(ifname, ifs);
 	if (flags & IFF_POINTOPOINT) {
 		argcmax = 2;
@@ -1029,8 +1034,8 @@ intip(int argc, char **argv, ...)
 		if (!set &&
 		    (strcmp(cmdname, "inet") == 0 ||
 		    strcmp(cmdname, "inet6") == 0)) {
-			if (candidate)
-				return cand_noaf(ifname,
+			if (cand != NULL)
+				return cand_noaf(cand, ifname,
 				    strcmp(cmdname, "inet6") == 0 ?
 				    AF_INET6 : AF_INET);
 			return intaf(ifname, ifs, argc0, argv0);
@@ -1040,7 +1045,7 @@ intip(int argc, char **argv, ...)
 		 * The inet6 command allows for enabling IPv6 link-local.
 		 */
 		if (set && strcmp(cmdname, "inet6") == 0) {
-			if (candidate) {
+			if (cand != NULL) {
 				printf("%% inet6 without an address is not"
 				    " saved in the configuration\n");
 				return -1;
@@ -1092,7 +1097,8 @@ intip(int argc, char **argv, ...)
 				argv_dhcp = args;
 				argc_dhcp = nitems(args) - 1;
 			}
-			return intxflags(argc_dhcp, argv_dhcp, ifname, ifs);
+			return intxflags(argc_dhcp, argv_dhcp, ifname,
+			    ifs, cand);
 		} else {
 			printf("%% cannot get DHCP leases because dhcpleased "
 			    "is not running\n");
@@ -1113,7 +1119,7 @@ intip(int argc, char **argv, ...)
 			argv_xflags = args;
 			argc_xflags = nitems(args) - 1;
 		}
-		return intxflags(argc_xflags, argv_xflags, ifname, ifs);
+		return intxflags(argc_xflags, argv_xflags, ifname, ifs, cand);
 	}
 
 	memset(&ip, 0, sizeof(ip));
@@ -1164,14 +1170,15 @@ intip(int argc, char **argv, ...)
 		return -1;
 	if (o.eui64) {
 		/* the link-local address the interface ID comes from */
-		if (!candidate && addaf(ifname, AF_INET6, ifs) == -1)
+		if (cand == NULL && addaf(ifname, AF_INET6, ifs) == -1)
 			return -1;
 		if (ip6_eui64(ifname, &ip.addr.in6) == -1)
 			return -1;
 	}
 
-	if (candidate)
-		return cand_ip(ifname, set, flags, &ip, argc, argv, msg, &o);
+	if (cand != NULL)
+		return cand_ip(cand, ifname, set, flags, &ip, argc,
+		    argv, msg, &o);
 
 	if (ip.bitlen == -1) {
 		/*
@@ -1264,7 +1271,7 @@ intip(int argc, char **argv, ...)
 }
 
 int
-intipcp(char *ifname, int ifs, int argc, char **argv)
+intipcp(char *ifname, int ifs, int argc, char **argv, struct cand *cand)
 {
 	int set;
 
@@ -1286,11 +1293,11 @@ intipcp(char *ifname, int ifs, int argc, char **argv)
 	else
 		db_insert_flag_x("pppoeipaddrmode", ifname, 0, 0, "static");
 
-	return pppoe_ipcp(ifname, ifs, set);
+	return pppoe_ipcp(ifname, ifs, set, cand);
 }
 
 int
-run_ipcp(char *ifname, int ifs, int set)
+run_ipcp(char *ifname, int ifs, int set, struct cand *cand)
 {
 	char *args[3] = { "no", "ipcp", NULL };
 	char *args_set[2] = { "ipcp", NULL };
@@ -1304,7 +1311,7 @@ run_ipcp(char *ifname, int ifs, int set)
 		argc_ipcp = nitems(args) - 1;
 	}
 
-	return intipcp(ifname, ifs, argc_ipcp, argv_ipcp);
+	return intipcp(ifname, ifs, argc_ipcp, argv_ipcp, cand);
 }
 
 void
@@ -1412,7 +1419,7 @@ pflow_valid(struct sockaddr_storage *ss, int port)
  * leaves out is the candidate's, or the kernel's default.
  */
 static int
-cand_pflow(char *ifname, int set, struct pflowreq *preq)
+cand_pflow(struct cand *cand, char *ifname, int set, struct pflowreq *preq)
 {
 	char src[PFLOW_ADDRSTRLEN], dst[PFLOW_ADDRSTRLEN], *l;
 	const char *errmsg;
@@ -1423,18 +1430,18 @@ cand_pflow(char *ifname, int set, struct pflowreq *preq)
 		return -1;
 	}
 	if (!set)
-		return cand_setting(ST_DEFAULT, "pflow");
+		return cand_setting(cand, ST_DEFAULT, "pflow");
 	/* intpflow() has checked both addresses */
 	pflow_addrstr(&preq->flowsrc, src);
 	pflow_addrstr(&preq->flowdst, dst);
 	if (preq->addrmask & PFLOW_MASK_VERSION)
 		version = preq->version;
-	else if ((l = cand_line("pflow", 0)) != NULL &&
+	else if ((l = cand_line(cand, "pflow", 0)) != NULL &&
 	    (l = strrchr(l, ' ')) != NULL)
 		version = strtonum(l + 1, PFLOW_PROTO_5, PFLOW_PROTO_MAX,
 		    &errmsg);
-	return cand_setting(ST_ON, "pflow sender %s receiver %s version %d",
-	    src, dst, version);
+	return cand_setting(cand, ST_ON,
+	    "pflow sender %s receiver %s version %d", src, dst, version);
 }
 
 /*
@@ -1448,12 +1455,14 @@ intpflow(int argc, char **argv, ...)
 	int set;
 	const char *errmsg = NULL;
 	va_list ap;
+	struct cand *cand;
 	char *ifname;
 	int ifs;
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
@@ -1527,8 +1536,8 @@ intpflow(int argc, char **argv, ...)
                 }
 	}
 
-	if (candidate)
-		return cand_pflow(ifname, set, &preq);
+	if (cand != NULL)
+		return cand_pflow(cand, ifname, set, &preq);
 
 	if (ioctl(ifs, SIOCSETPFLOW, (caddr_t)&ifr) == -1) {
 		printf("%% Unable to set pflow parameters: %s\n",
@@ -1547,7 +1556,7 @@ intpflow(int argc, char **argv, ...)
  * unpatches the old one.
  */
 static int
-cand_patch(char *ifname, char *peer)
+cand_patch(struct cand *cand, char *ifname, char *peer)
 {
 	char old[IFNAMSIZ], *l;
 
@@ -1560,7 +1569,7 @@ cand_patch(char *ifname, char *peer)
 			printf("%% %s cannot be patched to itself\n", ifname);
 			return -1;
 		}
-		if (!cand_hasif(peer)) {
+		if (!cand_hasif(cand, peer)) {
 			printf("%% interface %s not found\n", peer);
 			return -1;
 		}
@@ -1568,7 +1577,7 @@ cand_patch(char *ifname, char *peer)
 			printf("%% %s is not a pair interface\n", peer);
 			return -1;
 		}
-		if ((l = cand_ifline(peer, "patch", 0)) != NULL &&
+		if ((l = cand_ifline(cand, peer, "patch", 0)) != NULL &&
 		    strcmp(l + strlen("patch "), ifname) != 0) {
 			printf("%% %s is patched to %s\n", peer,
 			    l + strlen("patch "));
@@ -1576,16 +1585,16 @@ cand_patch(char *ifname, char *peer)
 		}
 	}
 	old[0] = '\0';
-	if ((l = cand_line("patch", 0)) != NULL)
+	if ((l = cand_line(cand, "patch", 0)) != NULL)
 		strlcpy(old, l + strlen("patch "), sizeof(old));
 	if (old[0] != '\0' && (peer == NULL || strcmp(old, peer) != 0) &&
-	    cand_ifsetting(old, ST_DEFAULT, "patch") == -1)
+	    cand_ifsetting(cand, old, ST_DEFAULT, "patch") == -1)
 		return -1;
 	if (peer == NULL)
-		return cand_setting(ST_DEFAULT, "patch");
-	if (cand_setting(ST_ON, "patch %s", peer) == -1)
+		return cand_setting(cand, ST_DEFAULT, "patch");
+	if (cand_setting(cand, ST_ON, "patch %s", peer) == -1)
 		return -1;
-	return cand_ifsetting(peer, ST_ON, "patch %s", ifname);
+	return cand_ifsetting(cand, peer, ST_ON, "patch %s", ifname);
 }
 
 int
@@ -1594,12 +1603,14 @@ intpatch(int argc, char **argv, ...)
 	int set;
 	struct ifreq ifr;
 	va_list ap;
+	struct cand *cand;
 	char *ifname;
 	int ifs;
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
@@ -1618,8 +1629,8 @@ intpatch(int argc, char **argv, ...)
 		return -1;
 	}
 
-	if (candidate)
-		return cand_patch(ifname, set ? argv[0] : NULL);
+	if (cand != NULL)
+		return cand_patch(cand, ifname, set ? argv[0] : NULL);
 
 	bzero(&ifr, sizeof(ifr));
 
@@ -1647,12 +1658,14 @@ intmtu(int argc, char **argv, ...)
 	int set, max;
 	const char *errmsg = NULL;
 	va_list ap;
+	struct cand *cand;
 	char *ifname;
 	int ifs;
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
@@ -1687,7 +1700,7 @@ intmtu(int argc, char **argv, ...)
 		ifr.ifr_mtu = default_mtu(ifname);
 	/* sppp takes 128 or more, and pppoe no more than its dev allows */
 	if (strncmp(ifname, "pppoe", strlen("pppoe")) == 0) {
-		max = pppoe_maxmtu(ifs, ifname);
+		max = pppoe_maxmtu(ifs, ifname, cand);
 		if (ifr.ifr_mtu < 128 || ifr.ifr_mtu > max) {
 			printf("%% %s takes an mtu of 128 to %d\n", ifname,
 			    max);
@@ -1695,10 +1708,10 @@ intmtu(int argc, char **argv, ...)
 		}
 	}
 
-	if (candidate) {
+	if (cand != NULL) {
 		if (conf_mtu_shown(ifname, ifr.ifr_mtu))
-			return cand_setting(ST_ON, "mtu %d", ifr.ifr_mtu);
-		return cand_setting(ST_DEFAULT, "mtu");
+			return cand_setting(cand, ST_ON, "mtu %d", ifr.ifr_mtu);
+		return cand_setting(cand, ST_DEFAULT, "mtu");
 	}
 
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
@@ -1717,12 +1730,14 @@ intkeepalive(int argc, char **argv, ...)
 	int set;
 	const char *errmsg = NULL;
 	va_list ap;
+	struct cand *cand;
 	char *ifname;
 	int ifs;
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
@@ -1757,15 +1772,15 @@ intkeepalive(int argc, char **argv, ...)
 		}
 	}
 
-	if (candidate) {
+	if (cand != NULL) {
 		if (!cand_takes(ifname, SIOCSETKALIVE)) {
 			printf("%% Keepalive not available on %s\n", ifname);
 			return -1;
 		}
 		if (set)
-			return cand_setting(ST_ON, "keepalive %d %d",
+			return cand_setting(cand, ST_ON, "keepalive %d %d",
 			    ikar.ikar_timeo, ikar.ikar_cnt);
-		return cand_setting(ST_DEFAULT, "keepalive");
+		return cand_setting(cand, ST_DEFAULT, "keepalive");
 	}
 
 	strlcpy(ikar.ikar_name, ifname, sizeof(ikar.ikar_name));
@@ -1810,42 +1825,42 @@ static const char *l2hprios[] = {
 
 /* A txprio or rxprio line, as conf_ifmetrics() prints it */
 static int
-cand_hdrprio(char *name, int prio, int def)
+cand_hdrprio(struct cand *cand, char *name, int prio, int def)
 {
 	if (prio == def)
-		return cand_setting(ST_DEFAULT, "%s", name);
+		return cand_setting(cand, ST_DEFAULT, "%s", name);
 	switch (prio) {
 	case IF_HDRPRIO_PACKET:
-		return cand_setting(ST_ON, "%s packet", name);
+		return cand_setting(cand, ST_ON, "%s packet", name);
 	case IF_HDRPRIO_PAYLOAD:
-		return cand_setting(ST_ON, "%s payload", name);
+		return cand_setting(cand, ST_ON, "%s payload", name);
 	case IF_HDRPRIO_OUTER:
-		return cand_setting(ST_ON, "%s outer", name);
+		return cand_setting(cand, ST_ON, "%s outer", name);
 	}
-	return cand_setting(ST_ON, "%s %d", name, prio);
+	return cand_setting(cand, ST_ON, "%s %d", name, prio);
 }
 
 /* intmpls() in configure private */
 static int
-cand_mpls(char *ifname, int type, int set, struct ifreq *ifr,
+cand_mpls(struct cand *cand, char *ifname, int type, int set, struct ifreq *ifr,
     struct shim_hdr *shim)
 {
 	switch (type) {
 	case MPLSLABEL:
 		if (set)
-			return cand_setting(ST_ON, "mplslabel %u",
+			return cand_setting(cand, ST_ON, "mplslabel %u",
 			    shim->shim_label);
-		return cand_setting(ST_DEFAULT, "mplslabel");
+		return cand_setting(cand, ST_DEFAULT, "mplslabel");
 	case TUNNELDOMAIN:
 		if (ifr->ifr_rdomainid != 0)
-			return cand_setting(ST_ON, "tunneldomain %d",
+			return cand_setting(cand, ST_ON, "tunneldomain %d",
 			    ifr->ifr_rdomainid);
-		return cand_setting(ST_DEFAULT, "tunneldomain");
+		return cand_setting(cand, ST_DEFAULT, "tunneldomain");
 	case TXPRIO:
-		return cand_hdrprio("txprio", ifr->ifr_hdrprio,
+		return cand_hdrprio(cand, "txprio", ifr->ifr_hdrprio,
 		    default_txprio(ifname));
 	case RXPRIO:
-		return cand_hdrprio("rxprio", ifr->ifr_hdrprio,
+		return cand_hdrprio(cand, "rxprio", ifr->ifr_hdrprio,
 		    default_rxprio(ifname));
 	}
 	printf("%% cand_mpls: Internal error\n");
@@ -1864,12 +1879,14 @@ intmpls(int argc, char **argv, ...)
 	struct mplsc *x;
 	const char *errstr;
 	va_list ap;
+	struct cand *cand;
 	char *ifname;
 	int ifs;
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
 	bzero(&ifr, sizeof(ifr));
@@ -1930,7 +1947,7 @@ intmpls(int argc, char **argv, ...)
 				return -1;
 			}
 			/* SIOCSLIFPHYRTABLE needs the table (EINVAL) */
-			if (!rtable_there(ifr.ifr_rdomainid))
+			if (!rtable_there(ifr.ifr_rdomainid, cand))
 				return -1;
 		} else {
 			ifr.ifr_rdomainid = 0;
@@ -1992,12 +2009,12 @@ intmpls(int argc, char **argv, ...)
 				return -1;
 			}
 
-	if (candidate) {
+	if (cand != NULL) {
 		if (!cand_takes(ifname, cmd)) {
 			printf("%% %s not supported on %s\n", x->name, ifname);
 			return -1;
 		}
-		return cand_mpls(ifname, x->type, set, &ifr, &shim);
+		return cand_mpls(cand, ifname, x->type, set, &ifr, &shim);
 	}
 
 	if (ioctl_down(ifs, ifname, cmd, (caddr_t)&ifr) < 0) {
@@ -2046,7 +2063,7 @@ pwe3usage(void)
  * nei, cw and fat are what intpwe3() parsed.
  */
 static int
-cand_pwe3(char *ifname, int set, int nei, int cw, int fat,
+cand_pwe3(struct cand *cand, char *ifname, int set, int nei, int cw, int fat,
     struct if_laddrreq *req)
 {
 	char line[1024], neighbor[sizeof(" neighbor 1048575 ") + NI_MAXHOST];
@@ -2062,7 +2079,7 @@ cand_pwe3(char *ifname, int set, int nei, int cw, int fat,
 	}
 
 	neighbor[0] = '\0';
-	if ((l = cand_line("pwe", 0)) != NULL) {
+	if ((l = cand_line(cand, "pwe", 0)) != NULL) {
 		/* pwe [neighbor label address] [cw] [fat] */
 		strlcpy(line, l, sizeof(line));
 		strtok_r(line, " ", &p);
@@ -2095,8 +2112,8 @@ cand_pwe3(char *ifname, int set, int nei, int cw, int fat,
 	}
 
 	if (neighbor[0] == '\0' && cw != 1 && fat != 1)
-		return cand_setting(ST_DEFAULT, "pwe");
-	return cand_setting(ST_ON, "pwe%s%s%s", neighbor,
+		return cand_setting(cand, ST_DEFAULT, "pwe");
+	return cand_setting(cand, ST_ON, "pwe%s%s%s", neighbor,
 	    cw == 1 ? " cw" : "", fat == 1 ? " fat" : "");
 }
 
@@ -2123,12 +2140,14 @@ intpwe3(int argc, char **argv, ...)
 	struct addrinfo *res;
 	struct sockaddr_mpls *smpls = (struct sockaddr_mpls *)&req.dstaddr;
 	va_list ap;
+	struct cand *cand;
 	char *ifname;
 	int ifs;
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
 	bzero(&ifr, sizeof(ifr));
@@ -2218,8 +2237,8 @@ intpwe3(int argc, char **argv, ...)
 		return -1;
 	}
 
-	if (candidate)
-		return cand_pwe3(ifname, set, nei, cw, fat, &req);
+	if (cand != NULL)
+		return cand_pwe3(cand, ifname, set, nei, cw, fat, &req);
 
 	if (nei && pwe3_ioctl(ifs, ifname, set ? SIOCSPWE3NEIGHBOR :
 	    SIOCDPWE3NEIGHBOR, (caddr_t)&req) == -1)
@@ -2246,10 +2265,13 @@ intdhcrelay(int argc, char **argv, ...)
 	int set, alen, r;
 	struct in_addr notused;
 	va_list ap;
+	struct cand *cand;
 	char *ifname;
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
+	(void)va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 	cmd[2] = ifname;
 
@@ -2278,12 +2300,13 @@ intdhcrelay(int argc, char **argv, ...)
 		}
 	}
 
-	if (candidate) {
+	if (cand != NULL) {
 		char *l;
 
 		if (set)
-			return cand_setting(ST_ON, "dhcrelay %s", argv[0]);
-		if ((l = cand_line("dhcrelay", 0)) == NULL) {
+			return cand_setting(cand, ST_ON,
+			    "dhcrelay %s", argv[0]);
+		if ((l = cand_line(cand, "dhcrelay", 0)) == NULL) {
 			printf("%% No relay configured for %s\n", ifname);
 			return -1;
 		}
@@ -2292,7 +2315,7 @@ intdhcrelay(int argc, char **argv, ...)
 			printf("%% Server expected: %s (not %s)\n", l, argv[0]);
 			return -1;
 		}
-		return cand_setting(ST_DEFAULT, "dhcrelay");
+		return cand_setting(cand, ST_DEFAULT, "dhcrelay");
 	}
 
 	if (set) {
@@ -2346,7 +2369,7 @@ intdhcrelay(int argc, char **argv, ...)
  * relay's routing table cannot reach it.
  */
 static int
-dhcrelay6_dest(char *ifname, int ifs, char *dest)
+dhcrelay6_dest(char *ifname, int ifs, char *dest, struct cand *cand)
 {
 	char addr[INET6_ADDRSTRLEN], *dev, *l;
 	struct in6_addr in6;
@@ -2373,14 +2396,14 @@ dhcrelay6_dest(char *ifname, int ifs, char *dest)
 		    "send on\n", dest);
 		return -1;
 	}
-	if (candidate) {
-		if (!cand_hasif(dev)) {
+	if (cand != NULL) {
+		if (!cand_hasif(cand, dev)) {
 			printf("%% %s: no interface %s\n", dest, dev);
 			return -1;
 		}
-		l = cand_line("rdomain", 0);
+		l = cand_line(cand, "rdomain", 0);
 		rd = l != NULL ? atoi(l + strlen("rdomain ")) : 0;
-		l = cand_ifline(dev, "rdomain", 0);
+		l = cand_ifline(cand, dev, "rdomain", 0);
 		devrd = l != NULL ? atoi(l + strlen("rdomain ")) : 0;
 	} else {
 		if (!is_valid_ifname(dev)) {
@@ -2417,10 +2440,12 @@ intdhcrelay6(int argc, char **argv, ...)
 	char argue[sizeof(dests) + 64], rd[16], *ifname, *l;
 	int set, ifs, i, r, rdomain;
 	va_list ap;
+	struct cand *cand;
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
@@ -2440,17 +2465,17 @@ intdhcrelay6(int argc, char **argv, ...)
 	}
 	dests[0] = '\0';
 	for (i = 0; i < argc; i++) {
-		if (dhcrelay6_dest(ifname, ifs, argv[i]) == -1)
+		if (dhcrelay6_dest(ifname, ifs, argv[i], cand) == -1)
 			return -1;
 		if (i > 0)
 			strlcat(dests, " ", sizeof(dests));
 		strlcat(dests, argv[i], sizeof(dests));
 	}
 
-	if (candidate) {
+	if (cand != NULL) {
 		if (set)
-			return cand_setting(ST_ON, "dhcrelay6 %s", dests);
-		if ((l = cand_line("dhcrelay6", 0)) == NULL) {
+			return cand_setting(cand, ST_ON, "dhcrelay6 %s", dests);
+		if ((l = cand_line(cand, "dhcrelay6", 0)) == NULL) {
 			printf("%% No DHCPv6 relay configured for %s\n", ifname);
 			return -1;
 		}
@@ -2460,7 +2485,7 @@ intdhcrelay6(int argc, char **argv, ...)
 			    dests);
 			return -1;
 		}
-		return cand_setting(ST_DEFAULT, "dhcrelay6");
+		return cand_setting(cand, ST_DEFAULT, "dhcrelay6");
 	}
 
 	/* stop the relay that runs, if any */
@@ -2511,12 +2536,14 @@ intmetric(int argc, char **argv, ...)
 	char *type;
 	const char *errmsg = NULL;
 	va_list ap;
+	struct cand *cand;
 	char *ifname;
 	int ifs;
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
@@ -2567,11 +2594,11 @@ intmetric(int argc, char **argv, ...)
 		return -1;
 	}
 
-	if (candidate) {
+	if (cand != NULL) {
 		if (ifr.ifr_metric != 0)
-			return cand_setting(ST_ON, "%s %d", type,
+			return cand_setting(cand, ST_ON, "%s %d", type,
 			    ifr.ifr_metric);
-		return cand_setting(ST_DEFAULT, "%s", type);
+		return cand_setting(cand, ST_DEFAULT, "%s", type);
 	}
 
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
@@ -2591,12 +2618,14 @@ intllprio(int argc, char **argv, ...)
 	int set;
 	const char *errmsg = NULL;
 	va_list ap;
+	struct cand *cand;
 	char *ifname;
 	int ifs;
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
@@ -2631,11 +2660,11 @@ intllprio(int argc, char **argv, ...)
 		return -1;
 	}
 
-	if (candidate) {
+	if (cand != NULL) {
 		if (ifr.ifr_llprio != default_llpriority(ifname))
-			return cand_setting(ST_ON, "llpriority %d",
+			return cand_setting(cand, ST_ON, "llpriority %d",
 			    ifr.ifr_llprio);
-		return cand_setting(ST_DEFAULT, "llpriority");
+		return cand_setting(cand, ST_DEFAULT, "llpriority");
 	}
 
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
@@ -2653,12 +2682,14 @@ intgroup(int argc, char **argv, ...)
 	int set, i, r = 0;
 	struct ifgroupreq ifgr;
 	va_list ap;
+	struct cand *cand;
 	char *ifname;
 	int ifs;
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
@@ -2699,7 +2730,7 @@ intgroup(int argc, char **argv, ...)
 		}
 	}
 
-	if (candidate) {
+	if (cand != NULL) {
 		char groups[1024];
 		size_t need = 0;
 
@@ -2710,7 +2741,8 @@ intgroup(int argc, char **argv, ...)
 			return -1;
 		}
 		argvtostring(argc, argv, groups, sizeof(groups));
-		return cand_setting(set ? ST_ON : ST_OFF, "group %s", groups);
+		return cand_setting(cand, set ? ST_ON : ST_OFF,
+		    "group %s", groups);
 	}
 
 	for (i = 0; i < argc; i++) {
@@ -2741,12 +2773,14 @@ intrtlabel(int argc, char **argv, ...)
 	int set;
 	struct ifreq ifr;
 	va_list ap;
+	struct cand *cand;
 	char *ifname;
 	int ifs;
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
@@ -2779,10 +2813,10 @@ intrtlabel(int argc, char **argv, ...)
 		ifr.ifr_data = (caddr_t)(const char *)"";
 	}
 
-	if (candidate) {
+	if (cand != NULL) {
 		if (set)
-			return cand_setting(ST_ON, "rtlabel %s", argv[0]);
-		return cand_setting(ST_DEFAULT, "rtlabel");
+			return cand_setting(cand, ST_ON, "rtlabel %s", argv[0]);
+		return cand_setting(cand, ST_DEFAULT, "rtlabel");
 	}
 
 	if (ioctl(ifs, SIOCSIFRTLABEL, &ifr) == -1) {
@@ -2800,12 +2834,14 @@ intparent(int argc, char **argv, ...)
 	unsigned long cmd;
 	struct if_parent ifp;
 	va_list ap;
+	struct cand *cand;
 	char *ifname;
 	int ifs;
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
@@ -2835,25 +2871,25 @@ intparent(int argc, char **argv, ...)
 	}
 
 	cmd = (set ? SIOCSIFPARENT : SIOCDIFPARENT);
-	if (candidate) {
+	if (cand != NULL) {
 		if (!cand_takes(ifname, cmd)) {
 			printf("%% parent not supported on %s\n", ifname);
 			return -1;
 		}
 		if (!set)
-			return cand_setting(ST_DEFAULT, "parent");
+			return cand_setting(cand, ST_DEFAULT, "parent");
 		if (strcmp(argv[0], ifname) == 0) {
 			printf("%% %s cannot be its own parent\n", ifname);
 			return -1;
 		}
-		if (!cand_hasif(argv[0])) {
+		if (!cand_hasif(cand, argv[0])) {
 			printf("%% interface %s not found\n", argv[0]);
 			return -1;
 		}
 		/* a parent's TCP large receive offload goes off */
-		if (cand_ifsetting(argv[0], ST_DEFAULT, "tcplro") == -1)
+		if (cand_ifsetting(cand, argv[0], ST_DEFAULT, "tcplro") == -1)
 			return -1;
-		return cand_setting(ST_ON, "parent %s", argv[0]);
+		return cand_setting(cand, ST_ON, "parent %s", argv[0]);
 	}
 	if (ioctl_down(ifs, ifname, cmd, &ifp) == -1) {
 		printf("%% intparent: SIOC%sIFPARENT: %s\n",
@@ -2869,35 +2905,35 @@ intparent(int argc, char **argv, ...)
  * print once the flag is set or cleared.
  */
 static int
-cand_ifflags(char *ifname, int value, int set)
+cand_ifflags(struct cand *cand, char *ifname, int value, int set)
 {
 	switch (value) {
 	case IFF_DEBUG:
-		return cand_setting(set ? ST_ON : ST_OFF, "debug");
+		return cand_setting(cand, set ? ST_ON : ST_OFF, "debug");
 	case IFF_STATICARP:
 		if (!set)
-			return cand_setting(ST_OFF, "staticarp");
+			return cand_setting(cand, ST_OFF, "staticarp");
 		/* static ARP turns ARP back on, as below */
-		if (cand_setting(ST_ON, "arp") == -1)
+		if (cand_setting(cand, ST_ON, "arp") == -1)
 			return -1;
-		return cand_setting(ST_ON, "staticarp");
+		return cand_setting(cand, ST_ON, "staticarp");
 	case -IFF_NOARP:
 		if (set)
-			return cand_setting(ST_ON, "arp");
+			return cand_setting(cand, ST_ON, "arp");
 		/* turning ARP off turns static ARP off too */
-		if (cand_setting(ST_OFF, "staticarp") == -1)
+		if (cand_setting(cand, ST_OFF, "staticarp") == -1)
 			return -1;
-		return cand_setting(ST_OFF, "arp");
+		return cand_setting(cand, ST_OFF, "arp");
 	case -IFF_UP:
 		if (set)
-			return cand_setting(ST_ON, "shutdown");
+			return cand_setting(cand, ST_ON, "shutdown");
 		/* pfsync_up() needs a syncdev (ENXIO) */
 		if (cand_takes(ifname, SIOCSETPFSYNC) &&
-		    cand_line("syncdev", 0) == NULL) {
+		    cand_line(cand, "syncdev", 0) == NULL) {
 			printf("%% %s needs a syncdev to come up\n", ifname);
 			return -1;
 		}
-		return cand_upline(ifname, 1);
+		return cand_upline(cand, ifname, 1);
 	}
 	printf("%% cand_ifflags: value internal error\n");
 	return -1;
@@ -2908,12 +2944,14 @@ intflags(int argc, char **argv, ...)
 {
 	int set, value, flags, iftype;
 	va_list ap;
+	struct cand *cand;
 	char *ifname;
 	int ifs;
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
@@ -2944,7 +2982,7 @@ intflags(int argc, char **argv, ...)
 	 * wg(4) sets IFF_NOARP by default and this should not be changed.
 	 * The kernel doesn't prevent this flag from being cleared (as of 7.2).
 	 */
-	iftype = candidate ? cand_gettype(ifname) :
+	iftype = cand != NULL ? cand_gettype(cand, ifname) :
 	    get_ifdata(ifname, IFDATA_IFTYPE);
 	if (iftype == IFT_WIREGUARD &&
 	    (value == -IFF_NOARP || value == IFF_STATICARP)) {
@@ -2952,8 +2990,8 @@ intflags(int argc, char **argv, ...)
 		return -1;
 	}
 
-	if (candidate)
-		return cand_ifflags(ifname, value, set);
+	if (cand != NULL)
+		return cand_ifflags(cand, ifname, value, set);
 
 	flags = get_ifflags(ifname, ifs);
 	/*
@@ -3026,25 +3064,25 @@ intaf(char *ifname, int ifs, int argc, char **argv)
  * means IPCP and is the default; there "no autoconf4" is a line too.
  */
 static int
-cand_autoconf4(char *ifname, int set)
+cand_autoconf4(struct cand *cand, char *ifname, int set)
 {
-	int pppoe = cand_ispppoe(ifname), was = cand_state("autoconf4");
+	int pppoe = cand_ispppoe(ifname), was = cand_state(cand, "autoconf4");
 
-	if (set && cand_hasaddr(pppoe ? 0 : AF_INET)) {
+	if (set && cand_hasaddr(cand, pppoe ? 0 : AF_INET)) {
 		printf("%% Remove the %saddresses of %s first\n",
 		    pppoe ? "" : "IPv4 ", ifname);
 		return -1;
 	}
 	if (pppoe)
-		return cand_setting(set ? ST_ON : ST_OFF, "autoconf4");
-	if (cand_setting(set ? ST_ON : ST_DEFAULT, "autoconf4") == -1)
+		return cand_setting(cand, set ? ST_ON : ST_OFF, "autoconf4");
+	if (cand_setting(cand, set ? ST_ON : ST_DEFAULT, "autoconf4") == -1)
 		return -1;
-	return cand_upline(ifname, set && was != ST_ON);
+	return cand_upline(cand, ifname, set && was != ST_ON);
 }
 
 /* intxflags() in configure private, for the flags conf_ifxflags() prints */
 static int
-cand_ifxflags(char *ifname, int value, int set)
+cand_ifxflags(struct cand *cand, char *ifname, int value, int set)
 {
 	char *name, *owner;
 	int was;
@@ -3073,8 +3111,10 @@ cand_ifxflags(char *ifname, int value, int set)
 			    "offload\n", ifname);
 			return -1;
 		}
-		if (set && ((owner = cand_listowner(ifname, "member",
-		    ifname)) != NULL || (owner = cand_listowner(ifname, "span",
+		if (set &&
+		    ((owner = cand_listowner(cand, ifname, "member",
+		    ifname)) != NULL ||
+		    (owner = cand_listowner(cand, ifname, "span",
 		    ifname)) != NULL)) {
 			printf("%% %s is a port of %s, which turns its TCP "
 			    "large receive offload off\n", ifname, owner);
@@ -3095,12 +3135,12 @@ cand_ifxflags(char *ifname, int value, int set)
 		printf("%% cand_ifxflags: value internal error\n");
 		return -1;
 	}
-	was = cand_state(name);
-	if (cand_setting(set ? ST_ON : ST_OFF, "%s", name) == -1)
+	was = cand_state(cand, name);
+	if (cand_setting(cand, set ? ST_ON : ST_OFF, "%s", name) == -1)
 		return -1;
 	if (set && was != ST_ON &&
 	    (value == IFXF_AUTOCONF6 || value == IFXF_AUTOCONF6TEMP))
-		return cand_upline(ifname, 1);
+		return cand_upline(cand, ifname, 1);
 	return 0;
 }
 
@@ -3109,12 +3149,14 @@ intxflags(int argc, char **argv, ...)
 {
 	int set, value, flags;
 	va_list ap;
+	struct cand *cand;
 	char *ifname;
 	int ifs;
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
@@ -3136,11 +3178,11 @@ intxflags(int argc, char **argv, ...)
 	} else if (isprefix(argv[0], "tcplro")) {
 		value = IFXF_LRO;
 	} else if (isprefix(argv[0], "autoconf4")) {
-		if (candidate)
-			return cand_autoconf4(ifname, set);
+		if (cand != NULL)
+			return cand_autoconf4(cand, ifname, set);
 		/* Have "autoconf4" on pppoe(4) do the right thing. */
 		if (is_pppoe(ifname, ifs))
-			return run_ipcp(ifname, ifs, set);
+			return run_ipcp(ifname, ifs, set, cand);
 
 		value = IFXF_AUTOCONF4;
 	} else if (isprefix(argv[0], "autoconf6")) {
@@ -3154,8 +3196,8 @@ intxflags(int argc, char **argv, ...)
 		return -1;
 	}
 
-	if (candidate)
-		return cand_ifxflags(ifname, value, set);
+	if (cand != NULL)
+		return cand_ifxflags(cand, ifname, value, set);
 
 	flags = get_ifxflags(ifname, ifs);
 	/* a pseudo interface would turn its parent's on: set that one */
@@ -3186,12 +3228,12 @@ intxflags(int argc, char **argv, ...)
 
 /* The link flags the candidate's link line sets */
 static int
-cand_linkflags(void)
+cand_linkflags(struct cand *cand)
 {
 	char line[sizeof("link 0 1 2")], *l, *w, *p;
 	int flags = 0;
 
-	if ((l = cand_line("link", 0)) == NULL)
+	if ((l = cand_line(cand, "link", 0)) == NULL)
 		return 0;
 	strlcpy(line, l, sizeof(line));
 	strtok_r(line, " ", &p);
@@ -3208,12 +3250,14 @@ intlink(int argc, char **argv, ...)
 	const char *errmsg = NULL;
 	int set, i, flags, value = 0;
 	va_list ap;
+	struct cand *cand;
 	char *ifname;
 	int ifs;
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
@@ -3232,7 +3276,7 @@ intlink(int argc, char **argv, ...)
 		return -1;
 	}
 
-	flags = candidate ? cand_linkflags() : get_ifflags(ifname, ifs);
+	flags = cand != NULL ? cand_linkflags(cand) : get_ifflags(ifname, ifs);
 
 	if (!set && argc == 0) {
 		/*
@@ -3267,10 +3311,10 @@ intlink(int argc, char **argv, ...)
 			flags &= ~value;
 	}
 
-	if (candidate) {
+	if (cand != NULL) {
 		if (!(flags & (IFF_LINK0|IFF_LINK1|IFF_LINK2)))
-			return cand_setting(ST_DEFAULT, "link");
-		return cand_setting(ST_ON, "link%s%s%s",
+			return cand_setting(cand, ST_DEFAULT, "link");
+		return cand_setting(cand, ST_ON, "link%s%s%s",
 		    flags & IFF_LINK0 ? " 0" : "",
 		    flags & IFF_LINK1 ? " 1" : "",
 		    flags & IFF_LINK2 ? " 2" : "");
@@ -3286,12 +3330,14 @@ intnwid(int argc, char **argv, ...)
 	struct ifreq ifr;
 	int set, len;
 	va_list ap;
+	struct cand *cand;
 	char *ifname;
 	int ifs;
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
@@ -3320,8 +3366,8 @@ intnwid(int argc, char **argv, ...)
 	} else
 		len = 0; /* nwid "" */
 
-	if (candidate)
-		return cand_nwid(ifname, nwid.i_nwid, len);
+	if (cand != NULL)
+		return cand_nwid(cand, ifname, nwid.i_nwid, len);
 
 	nwid.i_len = len;
 	ifr.ifr_data = (caddr_t)&nwid;
@@ -3342,12 +3388,14 @@ intpowersave(int argc, char **argv, ...)
 	struct ieee80211_power power;
 	int  set, maxsleep;
 	va_list ap;
+	struct cand *cand;
 	char *ifname;
 	int ifs;
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
@@ -3377,8 +3425,8 @@ intpowersave(int argc, char **argv, ...)
 		maxsleep = DEFAULT_POWERSAVE;
 	}
 
-	if (candidate)
-		return cand_powersave(ifname, set, maxsleep);
+	if (cand != NULL)
+		return cand_powersave(cand, ifname, set, maxsleep);
 
 	strlcpy(power.i_name, ifname, sizeof(power.i_name));
 
@@ -3407,15 +3455,15 @@ intpowersave(int argc, char **argv, ...)
  * only for an Ethernet interface, and no multicast address (EINVAL).
  */
 static int
-cand_lladdr(char *ifname, char *arg)
+cand_lladdr(struct cand *cand, char *ifname, char *arg)
 {
 	struct ether_addr *ea, eabuf;
 	char addr[sizeof("00:00:00:00:00:00")], *cur;
 	int i, same = 0;
 
 	if (arg == NULL)
-		return cand_setting(ST_DEFAULT, "lladdr");
-	if (cand_gettype(ifname) != IFT_ETHER) {
+		return cand_setting(cand, ST_DEFAULT, "lladdr");
+	if (cand_gettype(cand, ifname) != IFT_ETHER) {
 		printf("%% %s has no Ethernet address to set\n", ifname);
 		return -1;
 	}
@@ -3445,8 +3493,8 @@ cand_lladdr(char *ifname, char *arg)
 		same = (cur = kf_lladdr(ifname)) != NULL &&
 		    strcmp(cur, addr) == 0;
 	if (same)
-		return cand_setting(ST_DEFAULT, "lladdr");
-	return cand_setting(ST_ON, "lladdr %s", addr);
+		return cand_setting(cand, ST_DEFAULT, "lladdr");
+	return cand_setting(cand, ST_ON, "lladdr %s", addr);
 }
 
 int
@@ -3458,12 +3506,14 @@ intlladdr(int argc, char **argv, ...)
 	struct ifreq ifr;
 	int set;
 	va_list ap;
+	struct cand *cand;
 	char *ifname;
 	int ifs;
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
 
@@ -3480,8 +3530,8 @@ intlladdr(int argc, char **argv, ...)
 		return -1;
 	}
 
-	if (candidate)
-		return cand_lladdr(ifname, set ? argv[1] : NULL);
+	if (cand != NULL)
+		return cand_lladdr(cand, ifname, set ? argv[1] : NULL);
 
 	if ((lladdr = get_hwdaddr(ifname)) == NULL) {
 		printf("%% Failed to retrieve current link level address\n");
@@ -3569,12 +3619,14 @@ intrdomain(int argc, char **argv, ...)
 	struct ifreq ifr, cur_ifr;
 	char *l;
 	va_list ap;
+	struct cand *cand;
 	char *ifname;
 	int ifs; 
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
@@ -3609,8 +3661,8 @@ intrdomain(int argc, char **argv, ...)
 	unit = strncmp(ifname, "lo", 2) == 0 ?
 	    strtonum(ifname + 2, 0, RT_TABLEID_MAX, &errmsg) : -1;
 	if (unit != -1 && errmsg == NULL) {
-		if (candidate)
-			cur = (l = cand_line("rdomain", 0)) != NULL ?
+		if (cand != NULL)
+			cur = (l = cand_line(cand, "rdomain", 0)) != NULL ?
 			    atoi(l + strlen("rdomain ")) : 0;
 		else {
 			bzero(&cur_ifr, sizeof(cur_ifr));
@@ -3625,11 +3677,11 @@ intrdomain(int argc, char **argv, ...)
 			return -1;
 		}
 	}
-	if (candidate) {
+	if (cand != NULL) {
 		if (ifr.ifr_rdomainid > 0)
-			return cand_setting(ST_ON, "rdomain %d",
+			return cand_setting(cand, ST_ON, "rdomain %d",
 			    ifr.ifr_rdomainid);
-		return cand_setting(ST_DEFAULT, "rdomain");
+		return cand_setting(cand, ST_DEFAULT, "rdomain");
 	}
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 	if (ioctl(ifs, SIOCSIFRDOMAIN, &ifr) < 0) {
@@ -3648,12 +3700,14 @@ intdesc(int argc, char **argv, ...)
 	char desc[IFDESCRSIZE];
 	struct ifreq ifr;
 	va_list ap;
+	struct cand *cand;
 	char *ifname;
 	int ifs;
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
@@ -3682,10 +3736,11 @@ intdesc(int argc, char **argv, ...)
 	}
 	argvtostring(argc, argv, desc, sizeof(desc));
 
-	if (candidate) {
+	if (cand != NULL) {
 		if (set && desc[0] != '\0')
-			return cand_setting(ST_ON, "description %s", desc);
-		return cand_setting(ST_OFF, "description");
+			return cand_setting(cand, ST_ON,
+			    "description %s", desc);
+		return cand_setting(cand, ST_OFF, "description");
 	}
 
 	if (set)
@@ -3707,12 +3762,14 @@ intvnetflowid(int argc, char **argv, ...)
 	int set;
 	struct ifreq ifr;
 	va_list ap;
+	struct cand *cand;
 	char *ifname;
 	int ifs;
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
@@ -3731,14 +3788,14 @@ intvnetflowid(int argc, char **argv, ...)
 		return -1;
 	}
 
-	if (candidate) {
+	if (cand != NULL) {
 		if (!cand_takes(ifname, SIOCSVNETFLOWID)) {
 			printf("%% vnetflowid not supported on %s\n", ifname);
 			return -1;
 		}
-		if (set && cand_vnetflowid() == -1)
+		if (set && cand_vnetflowid(cand) == -1)
 			return -1;
-		return cand_setting(set ? ST_ON : ST_OFF, "vnetflowid");
+		return cand_setting(cand, set ? ST_ON : ST_OFF, "vnetflowid");
 	}
 
 	if (set)

@@ -52,15 +52,15 @@
 #include "showfacts.h"
 #include "kfacts.h"
 
-int process_media_commands(int, char *, uint64_t);
+int process_media_commands(int, char *, uint64_t, struct cand *);
 uint64_t get_media_subtype(uint64_t, const char *);
 uint64_t get_media_options(uint64_t, const char *);
 uint64_t lookup_media_word(const struct ifmedia_description *, uint64_t, const char *);
 void conf_print_media_word(FILE *, uint64_t);
 static int media_set(uint64_t);
 static void media_line(char *, size_t, uint64_t);
-static uint64_t cand_media(char *, uint64_t);
-static int cand_setmedia(int, char *, uint64_t);
+static uint64_t cand_media(struct cand *, char *, uint64_t);
+static int cand_setmedia(struct cand *, int, char *, uint64_t);
 
 static const struct ifmedia_description ifm_subtype_descriptions[] =
     IFM_SUBTYPE_DESCRIPTIONS;
@@ -75,12 +75,14 @@ intmedia(int argc, char **argv, ...)
 	uint64_t set, media_current, type, subtype, inst, options = 0;
 	char *opts = NULL;
 	va_list ap;
+	struct cand *cand;
 	char *ifname;
 	int ifs;
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
@@ -109,7 +111,7 @@ intmedia(int argc, char **argv, ...)
 		return -1;
 	}
 
-	media_current = init_current_media(ifs, ifname);
+	media_current = init_current_media(ifs, ifname, cand);
 
 	if (media_current == -1) {
 		if (errno == EINVAL)
@@ -148,7 +150,7 @@ intmedia(int argc, char **argv, ...)
 	/* Build the new media_current word */
 	media_current = IFM_MAKEWORD(type, subtype, options, inst);
 
-	return process_media_commands(ifs, ifname, media_current);
+	return process_media_commands(ifs, ifname, media_current, cand);
 }
 
 int
@@ -157,12 +159,14 @@ intmediaopt(int argc, char **argv, ...)
 	uint64_t media_current, mediaopt;
 	int set;
 	va_list ap;
+	struct cand *cand;
 	char *ifname;
 	int ifs;
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
 	if (NO_ARG(argv[0])) {
@@ -181,7 +185,7 @@ intmediaopt(int argc, char **argv, ...)
 		return -1;
 	}
 
-        media_current = init_current_media(ifs, ifname);
+        media_current = init_current_media(ifs, ifname, cand);
 
 	if (media_current == -1) {
 		if (errno == EINVAL)
@@ -206,16 +210,17 @@ intmediaopt(int argc, char **argv, ...)
 	else
 		media_current &= ~mediaopt;
 
-	return process_media_commands(ifs, ifname, media_current);
+	return process_media_commands(ifs, ifname, media_current, cand);
 }
 
 int
-process_media_commands(int s, char *name, uint64_t media_current)
+process_media_commands(int s, char *name, uint64_t media_current,
+    struct cand *cand)
 {
 	struct ifreq ifr;
 
-	if (candidate)
-		return cand_setmedia(s, name, media_current);
+	if (cand != NULL)
+		return cand_setmedia(cand, s, name, media_current);
 
 	(void) strlcpy(ifr.ifr_name, name, sizeof(ifr.ifr_name));
 	ifr.ifr_media = media_current;
@@ -229,7 +234,7 @@ process_media_commands(int s, char *name, uint64_t media_current)
 }
 
 uint64_t
-init_current_media(int s, char *ifname)
+init_current_media(int s, char *ifname, struct cand *cand)
 {
 	uint64_t media_current;
 
@@ -242,8 +247,8 @@ init_current_media(int s, char *ifname)
 		return -1;
 	}
 
-	if (candidate)
-		return cand_media(ifname, IFM_TYPE(media_current));
+	if (cand != NULL)
+		return cand_media(cand, ifname, IFM_TYPE(media_current));
 	return media_current;
 }
 
@@ -252,13 +257,13 @@ init_current_media(int s, char *ifname)
  * says the interface has: its media line, or autoselect
  */
 static uint64_t
-cand_media(char *ifname, uint64_t type)
+cand_media(struct cand *cand, char *ifname, uint64_t type)
 {
 	char line[256], *l, *p;
 	const char *errmsg;
 	uint64_t subtype, inst = 0, options = 0;
 
-	if ((l = cand_line("media", 0)) == NULL)
+	if ((l = cand_line(cand, "media", 0)) == NULL)
 		return IFM_MAKEWORD(type, IFM_AUTO, 0, 0);
 	/* media <subtype> [instance] [mediaopt <options>] */
 	strlcpy(line, l, sizeof(line));
@@ -282,7 +287,7 @@ cand_media(char *ifname, uint64_t type)
  * driver lists, and conf_media_status() prints it if it was set
  */
 static int
-cand_setmedia(int s, char *ifname, uint64_t word)
+cand_setmedia(struct cand *cand, int s, char *ifname, uint64_t word)
 {
 	uint64_t *list, cur;
 	char line[256];
@@ -303,12 +308,12 @@ cand_setmedia(int s, char *ifname, uint64_t word)
 	/* the kernel shows hidenwid and nobridge only in hostap mode */
 	if (IFM_TYPE(word) == IFM_IEEE80211 &&
 	    !(IFM_OPTIONS(word) & IFM_IEEE80211_HOSTAP) &&
-	    cand_setting(ST_OFF, "nwflag hidenwid nobridge") == -1)
+	    cand_setting(cand, ST_OFF, "nwflag hidenwid nobridge") == -1)
 		return -1;
 	if (!media_set(word))
-		return cand_setting(ST_DEFAULT, "media");
+		return cand_setting(cand, ST_DEFAULT, "media");
 	media_line(line, sizeof(line), word);
-	return cand_setting(ST_ON, "%s", line);
+	return cand_setting(cand, ST_ON, "%s", line);
 }
 
 uint64_t

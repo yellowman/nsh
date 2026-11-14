@@ -50,13 +50,14 @@ void pppoeusage(void);
 int pppoe_get_ifunit(char *);
 void conf_sppp_mh(FILE *, struct sauthreq *, char *, char *);
 static void sppp_line(char *, size_t, struct sauthreq *, char *, char *);
-static int cand_sppp(char *, int, int, struct sauthreq *, char *);
+static int cand_sppp(struct cand *, char *, int, int,
+    struct sauthreq *, char *);
 static void pppoe_line(char *, size_t, struct pppoediscparms *);
-static int pppoe_get(int, struct pppoediscparms *);
-static int pppoe_set(int, struct pppoediscparms *);
-static int pppoe_nodev(int, char *);
-static int pppoe_cand(struct pppoediscparms *);
-static int pppoe_isether(char *);
+static int pppoe_get(int, struct pppoediscparms *, struct cand *);
+static int pppoe_set(int, struct pppoediscparms *, struct cand *);
+static int pppoe_nodev(int, char *, struct cand *);
+static int pppoe_cand(struct pppoediscparms *, struct cand *);
+static int pppoe_isether(char *, struct cand *);
 
 /* options for 'proto' */
 static struct {
@@ -90,12 +91,14 @@ intsppp(int argc, char **argv, ...)
 	struct ifreq ifr;
 	int set, ch, i, cmd = 0;
 	va_list ap;
+	struct cand *cand;
 	char *ifname;
 	int ifs;
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
 	/* command options for 'auth' */
@@ -260,8 +263,9 @@ intsppp(int argc, char **argv, ...)
 		memset(&spa.secret, '\0', sizeof(spa.secret));
 	}
 
-	if (candidate)
-		return cand_sppp(ifname, set, cmd & __key, &spa, isc->name);
+	if (cand != NULL)
+		return cand_sppp(cand, ifname, set, cmd & __key, &spa,
+		    isc->name);
 
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 	if (ioctl(ifs, SIOCSSPPPPARAMS, &ifr) == -1) {
@@ -307,7 +311,8 @@ sppp_line(char *buf, size_t len, struct sauthreq *spa, char *key, char *pfx)
  * secret when given none, and intsppp() the key it stored.
  */
 static int
-cand_sppp(char *ifname, int set, int haskey, struct sauthreq *spa, char *pfx)
+cand_sppp(struct cand *cand, char *ifname, int set, int haskey,
+    struct sauthreq *spa, char *pfx)
 {
 	char line[1024], key[AUTHMAXLEN], *l, *p, *w;
 
@@ -317,11 +322,11 @@ cand_sppp(char *ifname, int set, int haskey, struct sauthreq *spa, char *pfx)
 		return -1;
 	}
 	if (!set)
-		return cand_setting(ST_DEFAULT, "%s", pfx);
+		return cand_setting(cand, ST_DEFAULT, "%s", pfx);
 	key[0] = '\0';
 	if (haskey)
 		strlcpy(key, (char *)spa->secret, sizeof(key));
-	else if ((l = cand_line(pfx, 0)) != NULL) {
+	else if ((l = cand_line(cand, pfx, 0)) != NULL) {
 		strlcpy(line, l, sizeof(line));
 		p = line;
 		strsep(&p, " ");
@@ -332,7 +337,7 @@ cand_sppp(char *ifname, int set, int haskey, struct sauthreq *spa, char *pfx)
 				strsep(&p, " ");
 	}
 	sppp_line(line, sizeof(line), spa, key, pfx);
-	return cand_setting(ST_ON, "%s", line);
+	return cand_setting(cand, ST_ON, "%s", line);
 }
 
 void
@@ -343,7 +348,7 @@ pppoeusage(void)
 }
 
 int
-pppoe_ipcp(char *ifname, int ifs, int set)
+pppoe_ipcp(char *ifname, int ifs, int set, struct cand *cand)
 {
 	int unit, flags, up, r = 0;
 	struct ifaliasreq ip4req;
@@ -407,7 +412,7 @@ pppoe_ipcp(char *ifname, int ifs, int set)
 	/* Wildcard IPv4 default route: 0.0.0.$(unit + 1) */
 	if (ip_route(&in4dest, &in4gate, set ? RTM_ADD : RTM_DELETE,
 	    RTF_STATIC | RTF_MPATH | RTF_GATEWAY | RTF_UP,
-	    cli_rtable, rt_metrics, 0) != 0)
+	    cli_rtable, rt_metrics, 0, cand) != 0)
 		r = -1;
 
 	if ((set || up) && set_ifflags(ifname, ifs, flags | IFF_UP) == -1)
@@ -422,12 +427,14 @@ intpppoe(int argc, char **argv, ...)
 	struct pppoediscparms parms;
 	int set, ch, dev = 0;
 	va_list ap;
+	struct cand *cand;
 	char *ifname;
 	int ifs;
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
 	/* command options for 'auth' */
@@ -458,7 +465,7 @@ intpppoe(int argc, char **argv, ...)
 	}
 
 	strlcpy(parms.ifname, ifname, sizeof(parms.ifname));
-	if (pppoe_get(ifs, &parms) == -1) {
+	if (pppoe_get(ifs, &parms, cand) == -1) {
 		printf("%% intpppoe: PPPOEGETPARMS: %s\n",
 		    strerror(errno));
 		return -1;
@@ -521,7 +528,7 @@ intpppoe(int argc, char **argv, ...)
 
 	/* PPPOESETPARMS drops the dev it had before refusing one */
 	if (set && parms.eth_ifname[0] != '\0' &&
-	    !pppoe_isether(parms.eth_ifname)) {
+	    !pppoe_isether(parms.eth_ifname, cand)) {
 		printf("%% intpppoe: PPPOESETPARMS: %s\n", strerror(ENXIO));
 		return -1;
 	}
@@ -533,8 +540,8 @@ intpppoe(int argc, char **argv, ...)
 		memset(&parms.eth_ifname, 0, sizeof(parms.eth_ifname));
 	}
 
-	if (pppoe_set(ifs, &parms) == -1 ||
-	    (!set && dev && pppoe_nodev(ifs, ifname) == -1)) {
+	if (pppoe_set(ifs, &parms, cand) == -1 ||
+	    (!set && dev && pppoe_nodev(ifs, ifname, cand) == -1)) {
 		printf("%% intpppoe: PPPOESETPARMS: %s\n", strerror(errno));
 		return -1;
 	}
@@ -557,14 +564,14 @@ pppoe_line(char *buf, size_t len, struct pppoediscparms *parms)
  * more than PPPOE_MAXMTU, or than its dev's hard mtu less PPPOE_OVERHEAD.
  */
 int
-pppoe_maxmtu(int ifs, char *ifname)
+pppoe_maxmtu(int ifs, char *ifname, struct cand *cand)
 {
 	struct pppoediscparms parms;
 	int hard, max = PPPOE_MAXMTU;
 
 	memset(&parms, 0, sizeof(parms));
 	strlcpy(parms.ifname, ifname, sizeof(parms.ifname));
-	if (pppoe_get(ifs, &parms) == 0 && parms.eth_ifname[0] != '\0' &&
+	if (pppoe_get(ifs, &parms, cand) == 0 && parms.eth_ifname[0] != '\0' &&
 	    (hard = kf_hardmtu(parms.eth_ifname)) != 0 &&
 	    hard - PPPOE_OVERHEAD < max)
 		max = hard - PPPOE_OVERHEAD;
@@ -573,17 +580,17 @@ pppoe_maxmtu(int ifs, char *ifname)
 
 /* PPPOEGETPARMS, or in configure private the candidate's pppoe line */
 static int
-pppoe_get(int ifs, struct pppoediscparms *parms)
+pppoe_get(int ifs, struct pppoediscparms *parms, struct cand *cand)
 {
 	char line[1024], *l, *p, *w, *v;
 
-	if (!candidate)
+	if (cand == NULL)
 		return ioctl(ifs, PPPOEGETPARMS, parms);
 	if (!cand_takes(parms->ifname, PPPOESETPARMS)) {
 		errno = ENOTTY;
 		return -1;
 	}
-	if ((l = cand_line("pppoe", 0)) == NULL)
+	if ((l = cand_line(cand, "pppoe", 0)) == NULL)
 		return 0;
 	strlcpy(line, l, sizeof(line));
 	p = line;
@@ -605,52 +612,52 @@ pppoe_get(int ifs, struct pppoediscparms *parms)
  * else, when given one that is no Ethernet interface (ENXIO).
  */
 static int
-pppoe_set(int ifs, struct pppoediscparms *parms)
+pppoe_set(int ifs, struct pppoediscparms *parms, struct cand *cand)
 {
 	struct pppoediscparms cur;
 	char *l;
 	int max;
 
-	if (!candidate)
+	if (cand == NULL)
 		return ioctl(ifs, PPPOESETPARMS, parms);
 	memset(&cur, 0, sizeof(cur));
 	strlcpy(cur.ifname, parms->ifname, sizeof(cur.ifname));
-	if (pppoe_get(ifs, &cur) == -1)
+	if (pppoe_get(ifs, &cur, cand) == -1)
 		return -1;
 	if (parms->eth_ifname[0] == '\0')
 		strlcpy(parms->eth_ifname, cur.eth_ifname,
 		    sizeof(parms->eth_ifname));
-	else if (!pppoe_isether(parms->eth_ifname)) {
+	else if (!pppoe_isether(parms->eth_ifname, cand)) {
 		memset(&cur.eth_ifname, 0, sizeof(cur.eth_ifname));
-		pppoe_cand(&cur);
+		pppoe_cand(&cur, cand);
 		errno = ENXIO;
 		return -1;
 	}
-	if (pppoe_cand(parms) == -1)
+	if (pppoe_cand(parms, cand) == -1)
 		return -1;
 	/* if_pppoe.c lowers the mtu to what the new dev allows */
-	max = pppoe_maxmtu(ifs, parms->ifname);
-	if ((l = cand_line("mtu", 0)) != NULL &&
+	max = pppoe_maxmtu(ifs, parms->ifname, cand);
+	if ((l = cand_line(cand, "mtu", 0)) != NULL &&
 	    atoi(l + strlen("mtu ")) > max) {
 		printf("%% The mtu of %s is now %d, the most %s allows\n",
 		    parms->ifname, max, parms->eth_ifname);
 		if (conf_mtu_shown(parms->ifname, max))
-			return cand_setting(ST_ON, "mtu %d", max);
-		return cand_setting(ST_DEFAULT, "mtu");
+			return cand_setting(cand, ST_ON, "mtu %d", max);
+		return cand_setting(cand, ST_DEFAULT, "mtu");
 	}
 	return 0;
 }
 
 /* The candidate's pppoe line for parms, or none */
 static int
-pppoe_cand(struct pppoediscparms *parms)
+pppoe_cand(struct pppoediscparms *parms, struct cand *cand)
 {
 	char line[1024];
 
 	if (!(*parms->eth_ifname | *parms->ac_name | *parms->service_name))
-		return cand_setting(ST_DEFAULT, "pppoe");
+		return cand_setting(cand, ST_DEFAULT, "pppoe");
 	pppoe_line(line, sizeof(line), parms);
-	return cand_setting(ST_ON, "%s", line);
+	return cand_setting(cand, ST_ON, "%s", line);
 }
 
 /*
@@ -659,14 +666,14 @@ pppoe_cand(struct pppoediscparms *parms)
  * never an interface
  */
 static int
-pppoe_nodev(int ifs, char *ifname)
+pppoe_nodev(int ifs, char *ifname, struct cand *cand)
 {
 	struct pppoediscparms parms;
 
 	memset(&parms, 0, sizeof(parms));
 	strlcpy(parms.ifname, ifname, sizeof(parms.ifname));
 	strlcpy(parms.eth_ifname, "-", sizeof(parms.eth_ifname));
-	if (pppoe_set(ifs, &parms) == 0)
+	if (pppoe_set(ifs, &parms, cand) == 0)
 		errno = EINVAL;
 	else if (errno == ENXIO)
 		return 0;
@@ -675,10 +682,11 @@ pppoe_nodev(int ifs, char *ifname)
 
 /* Is name an Ethernet interface, as PPPOESETPARMS wants for a dev? */
 static int
-pppoe_isether(char *name)
+pppoe_isether(char *name, struct cand *cand)
 {
-	if (candidate)
-		return cand_hasif(name) && cand_gettype(name) == IFT_ETHER;
+	if (cand != NULL)
+		return cand_hasif(cand, name) &&
+		    cand_gettype(cand, name) == IFT_ETHER;
 	return get_ifdata(name, IFDATA_IFTYPE) == IFT_ETHER;
 }
 

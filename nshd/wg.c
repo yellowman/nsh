@@ -30,7 +30,7 @@ int	setwgpeerpka(const char *);
 int	setwgport(const char *);
 
 int	setwgkey(const char *);
-int	setwgrtable(const char *);
+int	setwgrtable(const char *, struct cand *);
 
 int	unsetwgpeerpsk(void);
 int	unsetwgpeerall(void);
@@ -47,7 +47,7 @@ static void wg_unquote(char *, char *, size_t);
 static int wg_key(const char *, uint8_t *);
 static int wg_readaip(const char *, struct wg_aip_io *);
 static int wg_sameaip(struct wg_aip_io *, struct wg_aip_io *);
-static int wg_set(int, struct wg_data_io *);
+static int wg_set(int, struct wg_data_io *, struct cand *);
 
 /*
  * A wg interface as wg_ioctl_get() would list it: the kernel's, for
@@ -81,11 +81,12 @@ static int wgif_kernel(struct wgif *, struct wg_interface_io *);
 static int wgif_apply(struct wgif *, struct wg_interface_io *);
 static int wgif_line(struct wgif *, char *);
 static void wgif_print(FILE *, struct wgif *);
-static int cand_setwg(char *, struct wg_interface_io *);
-static int cand_wgif(struct wgif *);
-static int wgif_get(int, char *, struct wgif *);
-static int wgpeer_keepaips(int, char *, struct wg_aip_io *, size_t);
-static int wgpeer_exists(int, char *);
+static int cand_setwg(struct cand *, char *, struct wg_interface_io *);
+static int cand_wgif(struct cand *, struct wgif *);
+static int wgif_get(int, char *, struct wgif *, struct cand *);
+static int wgpeer_keepaips(int, char *, struct wg_aip_io *, size_t,
+    struct cand *);
+static int wgpeer_exists(int, char *, struct cand *);
 
 /*
  * WireGuard configuration
@@ -324,7 +325,7 @@ setwgkey(const char *private_b64)
 }
 
 int
-setwgrtable(const char *id)
+setwgrtable(const char *id, struct cand *cand)
 {
 	const char *errmsg = NULL;
 	if (ensurewginterface() < 0)
@@ -336,7 +337,7 @@ setwgrtable(const char *id)
 		return -1;
 	}
 	/* wg's socket needs the table to bind in (EINVAL) */
-	if (!rtable_there(wg_interface->i_rtable))
+	if (!rtable_there(wg_interface->i_rtable, cand))
 		return -1;
 	return 0;
 }
@@ -820,7 +821,7 @@ static char *wg_names[] = { "wgport", "wgrtable", "wgkey", "wgpeer" };
  * conf_wg() would print once the kernel had made the change
  */
 static int
-cand_setwg(char *name, struct wg_interface_io *wi)
+cand_setwg(struct cand *cand, char *name, struct wg_interface_io *wi)
 {
 	struct wgif w;
 	char *buf = NULL;
@@ -832,7 +833,7 @@ cand_setwg(char *name, struct wg_interface_io *wi)
 		errno = ENOTTY;
 		return -1;
 	}
-	if (cand_wgif(&w) == -1)
+	if (cand_wgif(cand, &w) == -1)
 		goto done;
 	if (wgif_apply(&w, wi) == -1)
 		goto done;
@@ -841,7 +842,7 @@ cand_setwg(char *name, struct wg_interface_io *wi)
 	wgif_print(f, &w);
 	if (fclose(f) == EOF)
 		goto done;
-	ret = cand_putlines(wg_names, nitems(wg_names), buf);
+	ret = cand_putlines(cand, wg_names, nitems(wg_names), buf);
 done:
 	free(buf);
 	wgif_free(&w);
@@ -850,14 +851,14 @@ done:
 
 /* w from the candidate's wg lines for the current interface */
 static int
-cand_wgif(struct wgif *w)
+cand_wgif(struct cand *cand, struct wgif *w)
 {
 	char *l;
 	size_t i, n;
 
 	memset(w, 0, sizeof(*w));
 	for (i = 0; i < nitems(wg_names); i++)
-		for (n = 0; (l = cand_line(wg_names[i], n)) != NULL; n++)
+		for (n = 0; (l = cand_line(cand, wg_names[i], n)) != NULL; n++)
 			if (wgif_line(w, l) == -1) {
 				printf("%% cand_wgif: cannot read \"%s\"\n", l);
 				errno = EINVAL;
@@ -871,13 +872,13 @@ cand_wgif(struct wgif *w)
  * the candidate's; the request wgdata holds is kept
  */
 static int
-wgif_get(int ifs, char *ifname, struct wgif *w)
+wgif_get(int ifs, char *ifname, struct wgif *w, struct cand *cand)
 {
 	struct wg_data_io req = wgdata;
 	int ret = -1;
 
-	if (candidate)
-		return cand_wgif(w);
+	if (cand != NULL)
+		return cand_wgif(cand, w);
 	memset(w, 0, sizeof(*w));
 	strlcpy(wgdata.wgd_name, ifname, sizeof(wgdata.wgd_name));
 	wgdata.wgd_size = 0;
@@ -896,14 +897,15 @@ wgif_get(int ifs, char *ifname, struct wgif *w)
  * cannot name some to remove.
  */
 static int
-wgpeer_keepaips(int ifs, char *ifname, struct wg_aip_io *drop, size_t ndrop)
+wgpeer_keepaips(int ifs, char *ifname, struct wg_aip_io *drop, size_t ndrop,
+    struct cand *cand)
 {
 	struct wgifpeer *p;
 	struct wgif w;
 	size_t i, j;
 	int ret = 0;
 
-	if (wgif_get(ifs, ifname, &w) == -1)
+	if (wgif_get(ifs, ifname, &w, cand) == -1)
 		return -1;
 	wg_peer->p_flags |= WG_PEER_REPLACE_AIPS;
 	if ((p = wgif_peer(&w, wg_peer->p_public, 0)) != NULL)
@@ -927,12 +929,12 @@ wgpeer_keepaips(int ifs, char *ifname, struct wg_aip_io *drop, size_t ndrop)
  * -1 on error
  */
 static int
-wgpeer_exists(int ifs, char *ifname)
+wgpeer_exists(int ifs, char *ifname, struct cand *cand)
 {
 	struct wgif w;
 	int r;
 
-	if (wgif_get(ifs, ifname, &w) == -1)
+	if (wgif_get(ifs, ifname, &w, cand) == -1)
 		return -1;
 	r = wgif_peer(&w, wg_peer->p_public, 0) != NULL;
 	wgif_free(&w);
@@ -941,10 +943,10 @@ wgpeer_exists(int ifs, char *ifname)
 
 /* SIOCSWG, or in configure private its change to the candidate */
 static int
-wg_set(int ifs, struct wg_data_io *wgd)
+wg_set(int ifs, struct wg_data_io *wgd, struct cand *cand)
 {
-	if (candidate)
-		return cand_setwg(wgd->wgd_name, wgd->wgd_interface);
+	if (cand != NULL)
+		return cand_setwg(cand, wgd->wgd_name, wgd->wgd_interface);
 	return ioctl(ifs, SIOCSWG, (caddr_t)wgd);
 }
 
@@ -970,12 +972,14 @@ intwg(int argc, char **argv, ...)
 	int set, r = -1;
 	struct wgc *x;
 	va_list ap;
+	struct cand *cand;
 	char *ifname;
 	int ifs;
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
 	/* freshen up at the NULL basin */
@@ -1043,14 +1047,14 @@ intwg(int argc, char **argv, ...)
 		break;
 
 	case WGRTABLE:
-		if (setwgrtable(set ? argv[0] : "0") < 0)
+		if (setwgrtable(set ? argv[0] : "0", cand) < 0)
 			goto wgerr;
 		break;
 	}
 
 	strlcpy(wgdata.wgd_name, ifname, sizeof(wgdata.wgd_name));
 
-	if (wg_set(ifs, &wgdata) == -1)
+	if (wg_set(ifs, &wgdata, cand) == -1)
 		printf("%% intwg: SIOCSWG: %s\n", strerror(errno));
 	else
 		r = 0;
@@ -1085,12 +1089,14 @@ intwgpeer(int argc, char **argv, ...)
 	size_t ndrop = 0;
 	int set, ch, k, r = -1;
 	va_list ap;
+	struct cand *cand;
 	char *ifname;
 	int ifs;
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
+	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
 	/* command options for 'wgpeer' */
@@ -1143,7 +1149,7 @@ intwgpeer(int argc, char **argv, ...)
 			/* change a peer, never add one */
 			wg_peer->p_flags |= WG_PEER_UPDATE;
 		/* the kernel ignores a change to a peer it does not have */
-		if (!set && (k = wgpeer_exists(ifs, ifname)) != 1) {
+		if (!set && (k = wgpeer_exists(ifs, ifname, cand)) != 1) {
 			if (k == 0)
 				printf("%% %s has no wgpeer %s\n", ifname,
 				    argv[0]);
@@ -1223,12 +1229,12 @@ intwgpeer(int argc, char **argv, ...)
 	}
 
 	/* "no wgpeer" takes what wgpeer does, and removes those */
-	if (ndrop > 0 && wgpeer_keepaips(ifs, ifname, drop, ndrop) == -1)
+	if (ndrop > 0 && wgpeer_keepaips(ifs, ifname, drop, ndrop, cand) == -1)
 		goto wgerr;
 
 	strlcpy(wgdata.wgd_name, ifname, sizeof(wgdata.wgd_name));
 
-	if (wg_set(ifs, &wgdata) == -1)
+	if (wg_set(ifs, &wgdata, cand) == -1)
 		printf("%% intwgpeer: SIOCSWG: %s\n", strerror(errno));
 	else
 		r = 0;

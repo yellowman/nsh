@@ -49,6 +49,7 @@
 #include <netdb.h>
 #include <errno.h>
 #include <err.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -75,7 +76,7 @@ void conf_arp_entry(FILE *, char *, struct sockaddr_dl *,
 	struct sockaddr_inarp *, struct rt_msghdr *);
 static int getsocket(void);
 int rtmsg_arp(int, int, int, int);
-static int arp_cand(const char *, struct ether_addr *, int);
+static int arp_cand(const char *, struct ether_addr *, int, struct cand *);
 
 static int s = -1;
 
@@ -169,6 +170,12 @@ arpset(int argc, char *argv[], ...)
 	char *eaddr, *host;
 	struct ether_addr *ea = NULL;
 	int flags = 0, set = 1, doing_proxy, export_only, i;
+	struct cand *cand;
+	va_list ap;
+
+	va_start(ap, argv);
+	cand = va_arg(ap, struct cand *);
+	va_end(ap);
 
 	sin = &sin_m;
 	rtm = &(m_rtmsg.m_rtm);
@@ -188,8 +195,8 @@ arpset(int argc, char *argv[], ...)
 	}
 
 	if (!set) {
-		if (candidate)
-			return arp_cand(argv[1], NULL, 0);
+		if (cand != NULL)
+			return arp_cand(argv[1], NULL, 0, cand);
 		return arpdelete(argv[1], NULL);
 	}
 
@@ -200,7 +207,7 @@ arpset(int argc, char *argv[], ...)
 		host = argv[1];
 		eaddr = NULL;
 	}
-	if (!candidate && getsocket() < 0)
+	if (cand == NULL && getsocket() < 0)
 		return -1;
 	sdl_m = blank_sdl;		/* struct copy */
 	sin_m = blank_sin;		/* struct copy */
@@ -244,8 +251,8 @@ arpset(int argc, char *argv[], ...)
 			return -1;
 		}
 	}
-	if (candidate)
-		return arp_cand(host, ea, flags);
+	if (cand != NULL)
+		return arp_cand(host, ea, flags, cand);
 
 tryagain:
 	if (rtget(&sin, &sdl, flags, doing_proxy, export_only)) {
@@ -294,7 +301,7 @@ overwrite:
  * host's entry, or with ea NULL, remove host's line
  */
 static int
-arp_cand(const char *host, struct ether_addr *ea, int flags)
+arp_cand(const char *host, struct ether_addr *ea, int flags, struct cand *cand)
 {
 	struct sockaddr_inarp sin = blank_sin;
 	struct sockaddr_dl sdl = blank_sdl;
@@ -307,7 +314,8 @@ arp_cand(const char *host, struct ether_addr *ea, int flags)
 	if (getinetaddr(host, &sin.sin_addr) == -1)
 		return -1;
 	if (ea == NULL)
-		return cand_setting(ST_OFF, "arp %s", inet_ntoa(sin.sin_addr));
+		return cand_setting(cand, ST_OFF, "arp %s",
+		    inet_ntoa(sin.sin_addr));
 	if (expire_time != 0) {
 		printf("%% temp entries are not saved in the configuration\n");
 		return -1;
@@ -327,7 +335,7 @@ arp_cand(const char *host, struct ether_addr *ea, int flags)
 		return -1;
 	}
 	buf[len - 1] = '\0';
-	r = cand_setting(ST_ON, "%s", buf);
+	r = cand_setting(cand, ST_ON, "%s", buf);
 	free(buf);
 	return r;
 }

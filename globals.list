@@ -17,8 +17,7 @@ arp.c		table	blank_sdl blank_sin ifp_m so_1mask
 bgpcommands.c	process	bgpd_socket_path
 bgpcommands.c	table	bgcs
 bridge.c	table	brds brlists brnames brper brps brpvnames brpvs brvals brvls brvper brvs
-candidate.c	session	cand cand_base cand_journal cand_nedits cand_nwas
-			cand_rtable cand_sharing cand_was candidate
+candidate.c	session	cand_rtable
 candidate.c	scratch	cand_held cand_listowner.owner
 candidate.c	table	candidate_sglobals
 carp.c		scratch	carp_facts.carpdev

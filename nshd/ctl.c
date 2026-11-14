@@ -63,16 +63,16 @@ int fill_tmpfile(char **, char *, char **);
 int acq_lock(char *);
 void rls_lock(int);
 static int ctl_exec(char *, char **, int);
-static int ctl_cand(struct daemons *, struct ctl *, char **);
+static int ctl_cand(struct daemons *, struct ctl *, char **, struct cand *);
 static int ctl_cand_takes(struct ctl *);
 static int ctl_isedit(struct ctl *);
 static int ctl_run(struct daemons *, struct ctl *, char **, char *);
 static struct ctl *ctl_actrow(struct daemons *, int);
-static int ctl_cand_test(struct daemons *, char *, char **);
+static int ctl_cand_test(struct daemons *, char *, char **, struct cand *);
 static int ctl_cand_stage(struct daemons *, char *, char *, char *,
-    size_t);
+    size_t, struct cand *);
 static void ctl_cand_unstage(char *, char *);
-static int ctl_cand_follow(struct daemons *, char *, int);
+static int ctl_cand_follow(struct daemons *, char *, int, struct cand *);
 static int admin_scan(struct daemons *, const char *, size_t, char **);
 static int admin_had(struct daemons *, int, char *);
 static const char *admin_in(int);
@@ -735,6 +735,12 @@ ctlhandler(int argc, char **argv, ...)
 	char **fillargs;
 	int rv = 0;
 	int r;
+	struct cand *cand;
+	va_list ap;
+
+	va_start(ap, argv);
+	cand = va_arg(ap, struct cand *);
+	va_end(ap);
 
 	/* loop daemon list to find table pointer */
 	daemons = (struct daemons *) genget(hname, (char **)ctl_daemons,
@@ -745,7 +751,7 @@ ctlhandler(int argc, char **argv, ...)
 	}
 
 	/* in configure private, ctl_cand() checks the table */
-	if (!candidate && cli_rtable > daemons->rtablemax) {
+	if (cand == NULL && cli_rtable > daemons->rtablemax) {
 		printf("%% Command %s not available via rtable %d\n",
 		    daemons->name, cli_rtable);
 		rv = -1;
@@ -780,7 +786,7 @@ ctlhandler(int argc, char **argv, ...)
 		goto done;
 	}
 
-	if (candidate && (r = ctl_cand(daemons, x, fillargs)) != 0) {
+	if (cand != NULL && (r = ctl_cand(daemons, x, fillargs, cand)) != 0) {
 		rv = r == -1 ? -1 : 0;
 		goto done;
 	}
@@ -1052,7 +1058,7 @@ ctl_op(char *daemon, char *action)
  * configure private.
  */
 static int
-ctl_cand(struct daemons *d, struct ctl *x, char **fillargs)
+ctl_cand(struct daemons *d, struct ctl *x, char **fillargs, struct cand *cand)
 {
 	struct daemons *c;
 	struct ctl *t;
@@ -1082,17 +1088,20 @@ ctl_cand(struct daemons *d, struct ctl *x, char **fillargs)
 	switch (x->flag_x) {
 	case DB_X_ENABLE:
 	case DB_X_ENABLE_DEFAULT:
-		if (cand_setting(ST_DEFAULT, "%s disable", c->name) == -1 ||
-		    cand_setting(ST_ON, "%s %s", c->name, enable) == -1)
+		if (cand_setting(cand, ST_DEFAULT, "%s disable",
+		    c->name) == -1 ||
+		    cand_setting(cand, ST_ON, "%s %s", c->name, enable) == -1)
 			return -1;
 		return 1;
 	case DB_X_DISABLE:
-		if (cand_setting(ST_DEFAULT, "%s %s", c->name, enable) == -1)
+		if (cand_setting(cand, ST_DEFAULT, "%s %s", c->name,
+		    enable) == -1)
 			return -1;
 		return 1;
 	case DB_X_DISABLE_ALWAYS:
-		if (cand_setting(ST_DEFAULT, "%s %s", c->name, enable) == -1 ||
-		    cand_setting(ST_ON, "%s disable", c->name) == -1)
+		if (cand_setting(cand, ST_DEFAULT, "%s %s", c->name,
+		    enable) == -1 ||
+		    cand_setting(cand, ST_ON, "%s disable", c->name) == -1)
 			return -1;
 		return 1;
 	}
@@ -1104,13 +1113,13 @@ ctl_cand(struct daemons *d, struct ctl *x, char **fillargs)
 	}
 	if (x->handler == install_crontab) {
 		/* crontab install follows the rules */
-		if (cand_rule(stmt, 0) == NULL) {
+		if (cand_rule(cand, stmt, 0) == NULL) {
 			printf("%% no %s in the candidate\n", stmt);
 			return -1;
 		}
 		return 1;
 	}
-	return ctl_cand_test(d, c->name, fillargs);
+	return ctl_cand_test(d, c->name, fillargs, cand);
 }
 
 /* Does configure private take x into the candidate? */
@@ -1163,7 +1172,8 @@ ctl_runs(struct ctl *x, int *out, int *conf)
  * edit does. 0, or -1 after saying why
  */
 int
-ctl_cand_rules(char *name, int rtable, int set, char *text, size_t len)
+ctl_cand_rules(char *name, int rtable, int set, char *text, size_t len,
+    struct cand *cand)
 {
 	struct daemons *d, *c;
 	struct ctl *x;
@@ -1189,7 +1199,7 @@ ctl_cand_rules(char *name, int rtable, int set, char *text, size_t len)
 		    rtable);
 		return -1;
 	}
-	if (!cand_hasrtable(rtable)) {
+	if (!cand_hasrtable(cand, rtable)) {
 		printf("%% rtable %d is not in the candidate\n", rtable);
 		return -1;
 	}
@@ -1200,7 +1210,7 @@ ctl_cand_rules(char *name, int rtable, int set, char *text, size_t len)
 	saved = cand_rtable;
 	cand_rtable = rtable;
 	if (!set) {
-		for (n = 0; (l = cand_rule(stmt, n)) != NULL; n++)
+		for (n = 0; (l = cand_rule(cand, stmt, n)) != NULL; n++)
 			printf("%s\n", l);
 		cand_rtable = saved;
 		return 0;
@@ -1216,9 +1226,9 @@ ctl_cand_rules(char *name, int rtable, int set, char *text, size_t len)
 		}
 		sl_add(lines, l);
 	}
-	if (r == 0 && (cand_setrules(stmt, lines->sl_str,
+	if (r == 0 && (cand_setrules(cand, stmt, lines->sl_str,
 	    lines->sl_cur) == -1 || ctl_cand_follow(d, c->name,
-	    lines->sl_cur > 0) == -1))
+	    lines->sl_cur > 0, cand) == -1))
 		r = -1;
 	sl_free(lines, 1);
 	cand_rtable = saved;
@@ -1230,18 +1240,18 @@ ctl_cand_rules(char *name, int rtable, int set, char *text, size_t len)
  * -1 when the test could not run, as T_EXEC outside configure private
  */
 static int
-ctl_cand_test(struct daemons *d, char *name, char **fillargs)
+ctl_cand_test(struct daemons *d, char *name, char **fillargs, struct cand *cand)
 {
 	char dir[] = "/tmp/nsh.XXXXXXXXXX", path[PATH_MAX], stmt[64];
 	char *args[NOPTFILL] = { NULL };
 	int ret;
 
 	snprintf(stmt, sizeof(stmt), "%s rules", name);
-	if (cand_rule(stmt, 0) == NULL) {
+	if (cand_rule(cand, stmt, 0) == NULL) {
 		printf("%% no %s in the candidate\n", stmt);
 		return -1;
 	}
-	if (ctl_cand_stage(d, stmt, dir, path, sizeof(path)) == -1)
+	if (ctl_cand_stage(d, stmt, dir, path, sizeof(path), cand) == -1)
 		return -1;
 	fill_tmpfile(fillargs, path, args);
 	ret = ctl_exec(args[0], args, CTL_EXIT0);
@@ -1256,7 +1266,7 @@ ctl_cand_test(struct daemons *d, char *name, char **fillargs)
  */
 static int
 ctl_cand_stage(struct daemons *d, char *stmt, char *dir, char *path,
-    size_t len)
+    size_t len, struct cand *cand)
 {
 	char *l;
 	size_t n;
@@ -1278,7 +1288,7 @@ ctl_cand_stage(struct daemons *d, char *stmt, char *dir, char *path,
 		rmdir(dir);
 		return -1;
 	}
-	for (n = 0; (l = cand_rule(stmt, n)) != NULL; n++)
+	for (n = 0; (l = cand_rule(cand, stmt, n)) != NULL; n++)
 		fprintf(f, "%s\n", l);
 	if (fclose(f) == EOF) {
 		printf("%% %s: %s\n", path, strerror(errno));
@@ -1397,12 +1407,12 @@ ctl_rules_args(char *name, char *dir, char *path, size_t len, char **args)
 
 /* The line conf prints after a daemon's rules: pf reload, crontab install */
 static int
-ctl_cand_follow(struct daemons *d, char *name, int rules)
+ctl_cand_follow(struct daemons *d, char *name, int rules, struct cand *cand)
 {
-	if (d->doreload && cand_setting(rules ? ST_ON : ST_DEFAULT,
+	if (d->doreload && cand_setting(cand, rules ? ST_ON : ST_DEFAULT,
 	    "%s reload", name) == -1)
 		return -1;
-	if (d->table == ctl_crontab && cand_setting(rules ? ST_ON :
+	if (d->table == ctl_crontab && cand_setting(cand, rules ? ST_ON :
 	    ST_DEFAULT, "%s install", name) == -1)
 		return -1;
 	return 0;

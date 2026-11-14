@@ -19,6 +19,7 @@
 #include <arpa/inet.h>
 
 #include <errno.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -70,6 +71,12 @@ int
 nameserverset(int argc, char *argv[], ...)
 {
 	int i, set = 1;
+	struct cand *cand;
+	va_list ap;
+
+	va_start(ap, argv);
+	cand = va_arg(ap, struct cand *);
+	va_end(ap);
 
 	if (argc < 2)
 		return nameserver_usage();
@@ -93,14 +100,14 @@ nameserverset(int argc, char *argv[], ...)
 		}
 	}
 
-	if (candidate) {
+	if (cand != NULL) {
 		char line[256] = "nameserver";
 
 		for (i = 1; set && i < argc; i++) {
 			strlcat(line, " ", sizeof(line));
 			strlcat(line, argv[i], sizeof(line));
 		}
-		return cand_setting(set ? ST_ON : ST_OFF, "%s", line);
+		return cand_setting(cand, set ? ST_ON : ST_OFF, "%s", line);
 	}
 
 	/*
