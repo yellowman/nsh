@@ -185,8 +185,9 @@ input.nope {
 #login {
 	--stipple: repeating-conic-gradient(#000 0 25%, #fff 0 50%) 0 0 / 4px
 	    4px;
-	width: min(43.0769rem, calc(100vw - 2.4615rem));
-	margin: 14vh auto 0;
+	width: fit-content;
+	max-width: calc(100vw - 2.4615rem);
+	margin: 10vh auto 0;
 	border: .1538rem solid #000;
 	background: #000;
 	color: #e5e5e5;
@@ -259,22 +260,22 @@ input.nope {
 	background: var(--stipple);
 }
 
+/* the terminal: 80 columns and 24 lines, as far as the window allows */
 #login .tty {
-	padding: 1.2308rem 1.5385rem 1.3846rem;
+	box-sizing: content-box;
+	width: 80ch;
+	max-width: calc(100vw - 7.6923rem);
+	height: calc(24 * 1.6em);
+	max-height: calc(100vh - 20vh - 6.1538rem);
+	padding: .6154rem .9231rem;
+	overflow: hidden;
 }
 
-#login .prompt, #login .ask {
+#login .ask {
 	background: linear-gradient(90deg, #7dd3fc, #22d3ee 45%, #34d399);
 	background-clip: text;
 	color: transparent;
 	filter: drop-shadow(0 0 .4615rem rgb(34 211 238 / .45));
-}
-
-#login .prompt {
-	width: fit-content;
-	margin: 0 0 .6154rem;
-	font-size: 1.5385rem;
-	font-weight: 700;
 }
 
 /* a field, and over it its cursor, and what a password echoes */
