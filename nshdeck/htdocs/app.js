@@ -499,12 +499,14 @@ function workspace(name) {
 	});
 	if (name === "overview" || name === "network")
 		interfaces();
-	/* the Overview looks again every so often, for its ports' traffic */
+	/* the Overview and Network look again every so often, for traffic */
 	clearInterval(looker);
-	looker = name !== "overview" ? null : setInterval(function () {
+	looker = name !== "overview" && name !== "network" ? null :
+	    setInterval(function () {
 		if (!document.hidden)
 			interfaces();
 	}, LOOK);
+	pfShown(name === "security");
 	if (name === "terminal")
 		terminalShown();
 	if (name === "routing" || name === "security" || name === "services")
@@ -561,7 +563,9 @@ function interfaces() {
 		ifs = of(j, "interface");
 		addrs = of(j, "address");
 		vhids = of(j, "carp-vhid");
+		sampled(ifs, Date.now());
 		faceplate();
+		trayRates();
 		readout();
 		logical();
 		iftable();
@@ -582,6 +586,7 @@ function port(name) {
 	p.appendChild(jack);
 	p.appendChild(el("span", name, "label"));
 	p.appendChild(el("span", null, "rate"));
+	p.appendChild(el("span", null, "util")).appendChild(el("i"));
 	p.setAttribute("aria-expanded", "false");
 	p.addEventListener("click", function () {
 		tray(name);
@@ -628,6 +633,8 @@ function tray(name) {
 			go(name);
 		});
 		box.appendChild(head);
+		box.appendChild(el("div")).id = "tray-rates";
+		trayRates();
 		box.appendChild(el("h4", "On this port"));
 		relRows(box, name, on, all, go);
 		box.appendChild(el("h4", "Linked to"));
@@ -636,6 +643,16 @@ function tray(name) {
 		}), all, go);
 		box.hidden = false;
 	});
+}
+
+/* the open tray's counters, as of the last look */
+function trayRates() {
+	var box = $("tray-rates");
+
+	if (box === null)
+		return;
+	box.textContent = "";
+	box.appendChild(rateLines($("tray").dataset.port));
 }
 
 /*
@@ -670,13 +687,17 @@ function faceplate() {
 	}
 	list.forEach(function (r) {
 		var p = jacks[r.name], n = Number(r["input-packets"] || 0) +
-		    Number(r["output-packets"] || 0);
+		    Number(r["output-packets"] || 0), u = utilisation(r);
 
 		p.className = "port " + state(r);
 		p.title = r.name + (r.description ? " — " +
 		    r.description : "") + "\n" + (r.link || "") +
 		    (addresses(r.name).length ? "\n" +
-		    addresses(r.name).join("\n") : "");
+		    addresses(r.name).join("\n") : "") + (u < 0 ? "" :
+		    "\n" + Math.round(u * 100) + "% of its line rate");
+		/* how full the line is, as a bar under the port */
+		p.querySelector(".util i").style.width = (u < 0 ? 0 :
+		    Math.round(u * 100)) + "%";
 		p.querySelector(".act").classList.toggle("on",
 		    packets[r.name] !== undefined && packets[r.name] !== n);
 		p.querySelector(".rate").textContent = rate(r);
@@ -758,8 +779,9 @@ function iftable() {
 	var t = $("if-table"), head = el("tr");
 
 	t.textContent = "";
-	["", "Interface", "Description", "Link", "Addresses", "MTU",
-	    "rdomain", "Type"].forEach(function (h) {
+	["", "Interface", "Description", "Link", "Addresses", "In bit/s",
+	    "Out bit/s", "5 min", "Errors", "MTU", "rdomain",
+	    "Type"].forEach(function (h) {
 		head.appendChild(el("th", h));
 	});
 	t.appendChild(head);
@@ -773,6 +795,7 @@ function iftable() {
 		tr.appendChild(el("td", r.description || "", "descr"));
 		tr.appendChild(el("td", r.link || ""));
 		tr.appendChild(el("td", addresses(r.name).join(" "), "mono"));
+		rateCells(tr, r.name);
 		tr.appendChild(el("td", r.mtu !== undefined ? r.mtu : "",
 		    "num"));
 		tr.appendChild(el("td", r.rdomain !== undefined ? r.rdomain :

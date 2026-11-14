@@ -109,10 +109,20 @@ In configure, it also shows how many objects the candidate changes.
 A\(mi and A+ in the strip make the page smaller or larger, and the
 browser keeps the choice.
 The page also grows with a window wider than 1440 pixels.
-While the overview is shown, the page requests the interfaces every 5
-seconds.
+While the overview or network is shown, the page requests the
+interfaces every 5 seconds.
 A port's activity light is on if the port counted packets since the
 last request.
+From the counters of two requests the page works out each interface's
+rates, in and out, and keeps five minutes of them, which the interface
+table draws as a small graph.
+An interface's errors and drops are marked when they rose since the
+last request, and the bar under a port is how full its line is.
+While security is shown, a readout as the overview's shows pf's states
+and its rates, from
+.Cm show statistics pf .
+The page alone keeps these rates: they begin when it is opened and are
+gone when it is closed.
 When the user logs out, or nshdeck reports that the login has ended,
 the page reloads, so that nothing the last user saw remains.
 Each user logs in with a name and password, which

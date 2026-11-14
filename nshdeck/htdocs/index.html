@@ -25,6 +25,7 @@
 <script src="sheets.js" defer></script>
 <script src="xterm/xterm.js" defer></script>
 <script src="xterm/addon-fit.js" defer></script>
+<script src="stats.js" defer></script>
 <script src="term.js" defer></script>
 </head>
 <body>
@@ -163,6 +164,7 @@
 </section>
 
 <section id="ws-security" class="ws" hidden>
+<dl class="readout wide" id="pf-meter" aria-label="pf's states and rates" hidden></dl>
 <div class="daemons" data-ws="security"></div>
 <div class="shows" data-presets="sadb|users"></div>
 </section>

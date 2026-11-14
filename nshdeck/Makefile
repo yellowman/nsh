@@ -44,6 +44,7 @@ afterinstall:
 	    ${.CURDIR}/htdocs/network.js \
 	    ${.CURDIR}/htdocs/editors.js ${.CURDIR}/htdocs/relations.js \
 	    ${.CURDIR}/htdocs/sheets.js ${.CURDIR}/htdocs/term.js \
+	    ${.CURDIR}/htdocs/stats.js \
 	    ${.CURDIR}/htdocs/style.css ${.CURDIR}/htdocs/favicon.svg \
 	    ${.CURDIR}/htdocs/favicon.png ${DESTDIR}${HTDOCS}
 	${INSTALL} -c -o root -g wheel -m 444 \

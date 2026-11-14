@@ -817,6 +817,20 @@ main {
 	min-height: .8462rem;
 }
 
+/* how full a port's line is: a bar under it, lit as far as that (stats.js) */
+.port .util {
+	width: 2.7692rem;
+	height: .1538rem;
+	background: #0d0e10;
+}
+
+.port .util i {
+	display: block;
+	height: 100%;
+	width: 0;
+	background: #3ee07a;
+}
+
 /* the readout: a display set in the box's face, its glass lit */
 .readout {
 	align-self: center;
@@ -846,6 +860,35 @@ main {
 }
 
 .readout dd {
+	margin: 0;
+}
+
+/* pf's readout, in Security (stats.js): the same glass, laid across */
+.readout.wide {
+	justify-self: start;
+	grid-template-columns: repeat(3, auto auto);
+	gap: 1px 1.2308rem;
+	margin: 0;
+}
+
+.readout[hidden] {
+	display: none;
+}
+
+/* a port's counters, in its tray (stats.js) */
+.counters {
+	display: grid;
+	grid-template-columns: auto 1fr;
+	gap: .0769rem .9231rem;
+	margin: .3077rem 0 .4615rem;
+	font: .9231rem var(--mono);
+}
+
+.counters dt {
+	color: var(--dim);
+}
+
+.counters dd {
 	margin: 0;
 }
 
@@ -1026,6 +1069,39 @@ table.grid {
 .grid td.num {
 	font-family: var(--mono);
 	text-align: right;
+}
+
+/* an interface's rates kept, as a graph: in, and out (stats.js) */
+.grid td.graph {
+	padding-top: 0;
+	padding-bottom: 0;
+}
+
+.spark {
+	display: block;
+	width: 5.5385rem;
+	height: 1.5385rem;
+}
+
+.spark polyline {
+	fill: none;
+	stroke-width: 1.2;
+	stroke-linejoin: round;
+	vector-effect: non-scaling-stroke;
+}
+
+.spark .in {
+	stroke: var(--accent);
+}
+
+.spark .out {
+	stroke: var(--on);
+}
+
+/* errors that rose since the last look */
+.grid td.rose {
+	color: var(--bad);
+	font-weight: 600;
 }
 
 .grid td.descr {
