@@ -34,7 +34,6 @@ int bridge, verbose, cli_rtable;
 int config_mode;
 pid_t pid;
 
-EditLine *elp;
 char *cursor_pos;
 
 /* nshd shows no manual */

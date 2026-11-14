@@ -33,8 +33,8 @@ SRCS+=	kernel.c commit.c facts.c showfacts.c autoconf.c session.c kfacts.c
 SRCS+=	renderif.c renderrt.c rendersys.c answer.c
 CLEANFILES+=compile.c
 
-LDADD=	-levent -lutil -ledit -ltermcap
-DPADD=	${LIBEVENT} ${LIBUTIL} ${LIBEDIT} ${LIBTERMCAP}
+LDADD=	-levent -lutil
+DPADD=	${LIBEVENT} ${LIBUTIL}
 
 .if make(static)
 NSH_SQLITE_LIBS!=/usr/bin/pkg-config --libs --static sqlite3

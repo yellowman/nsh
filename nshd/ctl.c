@@ -60,7 +60,6 @@ static int pf_set(int);
 
 /* subroutines */
 int fill_tmpfile(char **, char *, char **);
-int edit_file(char *, mode_t, char *, char **);
 int acq_lock(char *);
 void rls_lock(int);
 static int ctl_exec(char *, char **, int);
@@ -69,7 +68,6 @@ static int ctl_cand_takes(struct ctl *);
 static int ctl_isedit(struct ctl *);
 static int ctl_run(struct daemons *, struct ctl *, char **, char *);
 static struct ctl *ctl_actrow(struct daemons *, int);
-static int ctl_cand_edit(struct daemons *, char *, char **);
 static int ctl_cand_test(struct daemons *, char *, char **);
 static int ctl_cand_stage(struct daemons *, char *, char *, char *,
     size_t);
@@ -1098,9 +1096,12 @@ ctl_cand(struct daemons *d, struct ctl *x, char **fillargs)
 			return -1;
 		return 1;
 	}
-	if (ctl_isedit(x))
-		return ctl_cand_edit(d, c->name,
-		    x->type == T_HANDLER_TEST ? x->test_args : NULL);
+	if (ctl_isedit(x)) {
+		/* nsh edits the rules, and stages what the editor leaves */
+		printf("%% %s rules: not staged through nshd's configure "
+		    "private\n", c->name);
+		return -1;
+	}
 	if (x->handler == install_crontab) {
 		/* crontab install follows the rules */
 		if (cand_rule(stmt, 0) == NULL) {
@@ -1154,50 +1155,6 @@ ctl_runs(struct ctl *x, int *out, int *conf)
 	}
 	if (ctl_isedit(x))
 		*conf = RUN_RULES;
-}
-
-/*
- * edit in configure private: its rules for d, called name, which the
- * candidate takes even when their test fails, as outside configure
- * private: 1, or -1 when the edit or the test failed
- */
-static int
-ctl_cand_edit(struct daemons *d, char *name, char **test)
-{
-	char dir[] = "/tmp/nsh.XXXXXXXXXX", path[PATH_MAX], stmt[64];
-	char *args[NOPTFILL] = { NULL }, *line = NULL;
-	StringList *lines;
-	size_t size = 0;
-	ssize_t len;
-	FILE *f;
-	int ret;
-
-	snprintf(stmt, sizeof(stmt), "%s rules", name);
-	if (ctl_cand_stage(d, stmt, dir, path, sizeof(path)) == -1)
-		return -1;
-	if (test != NULL && fill_tmpfile(test, path, args) == 0)
-		test = NULL;	/* no test, as for inet */
-	ret = edit_file(path, d->mode, d->propername,
-	    test != NULL ? args : NULL);
-	if ((f = fopen(path, "r")) == NULL) {
-		printf("%% %s: %s\n", path, strerror(errno));
-		ctl_cand_unstage(dir, path);
-		return -1;
-	}
-	lines = sl_init();
-	while ((len = getline(&line, &size, f)) != -1) {
-		if (len > 0 && line[len - 1] == '\n')
-			line[len - 1] = '\0';
-		sl_add(lines, strdup(line));
-	}
-	fclose(f);
-	if (cand_setrules(stmt, lines->sl_str, lines->sl_cur) == -1 ||
-	    ctl_cand_follow(d, name, lines->sl_cur > 0) == -1)
-		ret = -1;
-	free(line);
-	sl_free(lines, 1);
-	ctl_cand_unstage(dir, path);
-	return ret == -1 ? -1 : 1;
 }
 
 /*
@@ -1508,59 +1465,15 @@ fill_tmpfile(char **fillargs, char *tmpfile, char **tmp_args)
 	return n;
 }
 
+/*
+ * edit, of the crontab, of the motd and of a daemon's rules: nsh runs the
+ * editor, and stages the rules it leaves. These mark the rows
+ * (ctl_isedit()), and nshd calls none of them
+ */
 int
 edit_crontab(int argc, char **argv, ...)
 {
-	char *name = argv[0];
-	char *crontab_argv[] = { CRONTAB, "-u", "root", "-l", NULL };
-	char tmpfile[PATH_MAX];
-	int found = 0, ret = -1;
-	struct daemons *daemons;
-	int fd = -1;
-
-	for (daemons = ctl_daemons; daemons->name != 0; daemons++)
-		if (strncmp(daemons->name, name, strlen(name)) == 0) {
-			found = 1;
-			break;
-		}
-
-	if (!found) {
-		printf("%% edit_crontab internal error\n");
-		return -1;
-	}
-
-	snprintf(tmpfile, sizeof(tmpfile), "%s.%d", daemons->tmpfile,
-	    cli_rtable);
-
-	fd = open(tmpfile, O_RDWR | O_EXCL);
-	if (fd == -1) {
-		if (errno != ENOENT) {
-			printf("%% open %s: %s\n", tmpfile, strerror(errno));
-			return -1;
-		}
-		fd = open(tmpfile, O_RDWR | O_CREAT | O_EXCL, daemons->mode);
-		if (fd == -1) {
-			printf("%% open %s: %s\n", tmpfile, strerror(errno));
-			return -1;
-		}
-
-		/* Populate temporary file with current crontab. */
-		if (cmdargs_output(CRONTAB, crontab_argv, fd, -1) != 0) {
-			printf("%% crontab -l command failed\n");
-			goto done;
-		}
-	}
-
-	if (edit_file(tmpfile, daemons->mode, daemons->propername, NULL) == 0) {
-		crontab_argv[3] = tmpfile;
-		if (cmdargs(CRONTAB, crontab_argv) != 0)
-			printf("%% failed to install crontab\n");
-		else
-			ret = 0;
-	}
-done:
-	close(fd);
-	return ret;
+	return 0;
 }
 
 int
@@ -1604,216 +1517,13 @@ install_crontab(int argc, char **argv, ...)
 int
 edit_motd(int argc, char **argv, ...)
 {
-	/* no test */
-	return call_editor(argc, argv, (char **)NULL);
+	return 0;
 }
 
 int
 call_editor(int argc, char **argv, ...)
 {
-	char *name = argv[0];
-	int found = 0;
-	char tmpfile[64];
-	struct daemons *daemons;
-	va_list ap;
-	char **args;
-
-	va_start(ap, argv);
-	args = va_arg(ap, char **);
-	va_end(ap);
-
-	for (daemons = ctl_daemons; daemons->name != 0; daemons++) {
-		if (strncmp(daemons->name, name, strlen(name)) == 0) {
-			found = 1;
-			break;
-		}
-	}
-
-	if (!found) {
-		printf("%% call_editor internal error\n");
-		return -1;
-	}
-
-	snprintf(tmpfile, sizeof(tmpfile), "%s.%d", daemons->tmpfile,
-	    cli_rtable);
-	return edit_file(tmpfile, daemons->mode, daemons->propername, args);
-}
-
-static int
-provide_example_config(char *filename)
-{
-	char *name;
-	char path[PATH_MAX];
-	char tmpprompt[sizeof(prompt)];
-	FILE *f = NULL, *example = NULL;
-	int ret = 0, n, num;
-	char linebuf[64];
-	struct stat sb;
-	size_t len, remain;
-
-	memset(tmpprompt, 0, sizeof(tmpprompt));
-
-	f = fopen(filename, "a+");
-	if (f == NULL)
-		return 0;
-
-	if (fstat(fileno(f), &sb) == -1)
-		goto done;
-	
-	if (sb.st_size != 0)
-		goto done;
-
-	name = basename(filename);
-	if (name == NULL)
-		goto done;
-	
-	n = snprintf(path, sizeof(path), "/etc/examples/%s", name);
-	if (n < 0 || (size_t)n >= sizeof(path))
-		goto done;
-
-	/* Snip off rdomain trailer at end of filename. */
-	len = strlen(path);
-	while (len > 0) {
-		if (path[len - 1] >= '0' && path[len - 1] <= '9') {
-			path[len - 1] = '\0';
-			len--;
-		} else {
-			if (path[len - 1] == '.') {
-				path[len - 1] = '\0';
-				len--;
-			}
-			break;
-		}
-	}
-	if (len == 0)
-		goto done;
-
-	example = fopen(path, "r");
-	if (example == NULL)
-		goto done;
-
-	if (fstat(fileno(example), &sb) == -1)
-		goto done;
-
-	if (sb.st_size == 0)
-		goto done;
-	
-	snprintf(tmpprompt, sizeof(tmpprompt),
-	    "%s is empty. Load an example config? [Y/n]\n", filename);
-	setprompt(tmpprompt);
-
-	for (;;) {
-		const char *buf;
-
-		if (!isatty(STDIN_FILENO) || elp == NULL) {
-			if (fgets(linebuf, sizeof(linebuf), stdin) == NULL) {
-				ret = -1;
-				goto done;
-			}
-			buf = linebuf;
-		} else if ((buf = el_gets(elp, &num)) == NULL) {
-			if (num == -1) {
-				ret = -1;
-				goto done;
-			}
-			/* EOF, e.g. ^X or ^D via exit_i() in editing.c */
-			goto done;
-		}
-
-		if (strcmp(buf, "\n") == 0 ||
-		    strcasecmp(buf, "yes\n") == 0 ||
-		    strcasecmp(buf, "y\n") == 0)
-			break;
-
-		if (strcasecmp(buf, "no\n") == 0 ||
-		    strcasecmp(buf, "n\n") == 0)
-			goto done;
-
-		printf("%% Please type \"yes\" or \"no\"\n");
-	}
-
-	remain = sb.st_size;
-	while (remain > 0) {
-		char buf[8192];
-		ssize_t r;
-		size_t w;
-
-		len = (remain < sizeof(buf) ? remain : sizeof(buf));
-		r = fread(buf, 1, len, example);
-		if (r != len) {
-			if (ferror(f)) {
-				printf("%% fread %s: %s\n",
-				    path, strerror(errno));
-			}
-			break;
-		}
-
-		w = fwrite(buf, 1, len, f);
-		if (w != len) {
-			if (ferror(f)) {
-				printf("%% fwrite %s: %s\n",
-				    filename, strerror(errno));
-			}
-			break;
-		}
-
-		remain -= len;
-	}
-done:
-	fclose(f);
-	if (tmpprompt[0] != '\0')
-		restoreprompt();
-	if (example)
-		fclose(example);
-	return ret;
-}
-
-/*
- * Edit tmpfile and test it with args: 0, or -1 if it could not, or the
- * editor or the test failed, which say why
- */
-int
-edit_file(char *tmpfile, mode_t mode, char *propername, char **args)
-{
-	char *editor;
-	int fd;
-	int ret = 0;
-	sig_t sigint;
-
-	/* acq lock, call editor, test config with cmd and args, release lock */
-	if ((editor = getenv("VISUAL")) == NULL) {
-		if ((editor = getenv("EDITOR")) == NULL)
-			editor = DEFAULT_EDITOR;
-	}
-	if ((fd = acq_lock(tmpfile)) > 0) {
-		char *argv[] = { editor, tmpfile, NULL };
-
-		/*
-		 * Temporarily disable command.c intr() handler to ensure
-		 * we tidy up the lock file when the user hits Ctrl-C at
-		 * at prompt.
-		 */
-		sigint = signal(SIGINT, SIG_IGN);
-
-		ret = provide_example_config(tmpfile);
-		if (ret == 0)
-			ret = cmdargs(editor, argv);
-		if (ret == 0 && chmod(tmpfile, mode) == -1) {
-			printf("%% chmod %o %s: %s\n",
-			    mode, tmpfile, strerror(errno));
-			ret = -1;
-		}
-		if (ret == 0 && args != NULL)
-			ret = cmdargs(args[0], args);
-		rls_lock(fd);
-		signal(SIGINT, sigint); /* Restore SIGINT handler. */
-	} else {
-		printf ("%% %s configuration is locked for editing\n",
-		    propername);
-		return -1;
-	}
-
-	return ret == 0 ? 0 : -1;
+	return 0;
 }
 
 /*
