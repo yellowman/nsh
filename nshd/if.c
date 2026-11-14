@@ -622,28 +622,42 @@ struct ip6opts {
 };
 
 /*
- * Read the options after an IPv6 address: anycast, eui64, and vltime
- * and pltime in seconds. An omitted pltime is the vltime, as
- * in6_update_ifa() refuses a pltime longer than the vltime. Returns 0,
- * or -1 after saying why not.
+ * inet, ip, alias and inet6: an address and its prefix length or mask,
+ * a destination or broadcast address, and an IPv6 address's options;
+ * or autoconf, and for IPv4 dhcp too; or with no and no address, every
+ * address of the family, for inet and inet6. Config reads an address as
+ * parse_ip_pfx() does, a link-local one with its scope in it
+ * (intip_parse())
+ */
+#define IP_ADDR		0
+#define IP_PREFIX	1
+#define IP_DEST		2
+#define IP_AUTOCONF	3
+#define IP_ANYCAST	4
+#define IP_EUI64	5
+#define IP_VLTIME	6
+#define IP_PLTIME	7
+
+/*
+ * Read the options after an IPv6 address into a's values: anycast,
+ * eui64, and vltime and pltime in seconds. Returns 0, or -1 after
+ * saying why not.
  */
 static int
-ip6_opts(int argc, char **argv, struct ip6opts *o)
+ip6_opts(int argc, char **argv, struct argvals *a)
 {
 	const char *errstr;
 	u_int32_t t;
-	int ch, pltime = 0;
+	int ch;
 
-	memset(o, 0, sizeof(*o));
-	o->vltime = o->pltime = ND6_INFINITE_LIFETIME;
 	noptind = 0;
 	while (noptind < argc && (ch = nopt(argc, argv, ip6optlist)) != -1) {
 		switch (ch) {
 		case 'a':
-			o->anycast = 1;
+			facts_i64(&a->v[IP_ANYCAST], 1);
 			break;
 		case 'e':
-			o->eui64 = 1;
+			facts_i64(&a->v[IP_EUI64], 1);
 			break;
 		case 'v':
 		case 'p':
@@ -658,23 +672,12 @@ ip6_opts(int argc, char **argv, struct ip6opts *o)
 				    "pltime", argv[noptind - 1], errstr);
 				return -1;
 			}
-			if (ch == 'v')
-				o->vltime = t;
-			else {
-				o->pltime = t;
-				pltime = 1;
-			}
+			facts_i64(&a->v[ch == 'v' ? IP_VLTIME : IP_PLTIME], t);
 			break;
 		}
 	}
 	if (noptind < argc) {
 		printf("%% %s: %s\n", nopterr, argv[noptind]);
-		return -1;
-	}
-	if (!pltime)
-		o->pltime = o->vltime;
-	if (o->pltime > o->vltime) {
-		printf("%% pltime must not be longer than vltime\n");
 		return -1;
 	}
 	return 0;
@@ -787,7 +790,7 @@ cand_hasaddr(struct cand *cand, int af)
 
 /*
  * The shutdown line, after the candidate's addresses change. An address
- * brings the interface up (intip()), as turning on autoconf4, autoconf6
+ * brings the interface up (intip_apply()), as turning on autoconf4, autoconf6
  * or temporary does (SIOCSIFXFLAGS). conf_ifflags() prints "no shutdown"
  * for an interface that is up only when no address line says so already,
  * and for pppoe always. -1 if the line could not be set, as a handler
@@ -831,19 +834,18 @@ cand_noaf(struct cand *cand, char *ifname, int af)
 }
 
 /*
- * intip() in configure private: the address line, as conf_ifaddrs()
+ * intip_apply() in configure private: the address line, as conf_ifaddrs()
  * prints it. What in_ioctl() or in6_update_ifa() would refuse, and an
  * address conf_ifaddr_dhcp() would not print, is refused here.
  */
 static int
-cand_ip(struct cand *cand, char *ifname, int set, int flags, ip_t *ip, int argc,
-    char **argv, char *msg, struct ip6opts *o)
+cand_ip(struct cand *cand, char *ifname, int set, int flags, ip_t *ip,
+    int hasdest, struct in_addr in4dest, struct in6_addr in6dest, char *msg,
+    struct ip6opts *o)
 {
 	char addr[INET6_ADDRSTRLEN + IFNAMSIZ];
 	char dest[INET6_ADDRSTRLEN + IFNAMSIZ];
 	char opts[sizeof(" anycast vltime 4294967295 pltime 4294967295")];
-	struct in_addr in4dest;
-	struct in6_addr in6dest;
 	int pppoe = cand_ispppoe(ifname), bitlen;
 
 	if (ip->family == AF_INET6 && cand_otherscope(&ip->addr.in6, ifname))
@@ -871,11 +873,6 @@ cand_ip(struct cand *cand, char *ifname, int set, int flags, ip_t *ip, int argc,
 
 	switch (ip->family) {
 	case AF_INET:
-		memset(&in4dest, 0, sizeof(in4dest));
-		if (argc == 2 && !inet_pton(AF_INET, argv[1], &in4dest)) {
-			printf("%% Invalid %s address\n", msg);
-			return -1;
-		}
 		if (flags & IFF_POINTOPOINT) {
 			/* conf_ifaddrs() prints no prefix length */
 			if (in4dest.s_addr != INADDR_ANY)
@@ -886,19 +883,14 @@ cand_ip(struct cand *cand, char *ifname, int set, int flags, ip_t *ip, int argc,
 				return -1;
 			break;
 		}
-		/* nor the broadcast address, which intip() checked */
+		/* nor the broadcast address, which intip_apply() checked */
 		if (cand_setting(cand, ST_ON, "inet %s/%d", addr,
 		    ip->bitlen) == -1)
 			return -1;
 		break;
 	case AF_INET6:
-		if (argc == 2 && !(flags & IFF_POINTOPOINT)) {
+		if (hasdest && !(flags & IFF_POINTOPOINT)) {
 			printf("%% An IPv6 address has no %s address\n", msg);
-			return -1;
-		}
-		memset(&in6dest, 0, sizeof(in6dest));
-		if (argc == 2 && parse_ipv6(argv[1], &in6dest) != 0) {
-			printf("%% Invalid destination address %s\n", argv[1]);
 			return -1;
 		}
 		if (cand_otherscope(&in6dest, ifname))
@@ -950,75 +942,16 @@ intipusage(const char *cmdname, const char *msg)
 	printf("%% no %s [<address>[/netmask]]\n", cmdname);
 }
 
-static int xflags_set(int, int, char *, int, struct cand *);
-
+/* An address line's words, as parse_ip_pfx() reads them, into a */
 int
-intip(int argc, char **argv, ...)
+intip_parse(const struct argcmd *c, int argc, char **argv,
+    struct argvals *a)
 {
-	int s, set, flags, argcmax, i, nopts, r = 0;
-	int argc0 = argc;
-	char **argv0 = argv;
-	char *msg, *cmdname, **optv;
+	struct in_addr in4;
+	struct in6_addr in6;
 	ip_t ip;
-	struct ip6opts o;
-	/* ipv4 structures */
-	struct in_addr in4dest;
-	struct ifaliasreq ip4req;
-	/* ipv6 structures */
-	struct in6_addr in6dest;
-	struct in6_aliasreq ip6req;
-	va_list ap;
-	struct cand *cand;
-	char *ifname;
-	int ifs;
-
-	va_start(ap, argv);
-	ifname = va_arg(ap, char *);
-	ifs = va_arg(ap, int);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
-
-	if (NO_ARG(argv[0])) {
-		set = 0;
-		argc--;
-		argv++;
-	} else
-		set = 1;
-
-	/*
-	 * We use this function for address and alias setup since they are
-	 * the same thing.
-	 */
-	if (isprefix(argv[0], "address")) {
-		cmdname = "address";
-	} else if (isprefix(argv[0], "alias")) {
-		cmdname = "alias";
-	} else if (isprefix(argv[0], "ip")) {
-		cmdname = "ip";
-	} else if (isprefix(argv[0], "inet")) {
-		cmdname = "inet";
-	} else if (isprefix(argv[0], "inet6")) {
-		cmdname = "inet6";
-	} else {
-		printf("%% intip: Internal error\n");
-		return -1;
-	}
-
-	argc--;
-	argv++;
-
-	flags = cand != NULL ? cand_getflags(ifname, ifs) :
-	    get_ifflags(ifname, ifs);
-	if (flags & IFF_POINTOPOINT) {
-		argcmax = 2;
-		msg = "destination";
-	} else if (flags & IFF_BROADCAST) {
-		argcmax = 2;
-		msg = "broadcast";
-	} else {
-		argcmax = 1;
-		msg = NULL;
-	}
+	char **optv;
+	int i, nopts;
 
 	/* options follow the address and a destination or broadcast address */
 	for (i = 1; i < argc; i++)
@@ -1029,50 +962,27 @@ intip(int argc, char **argv, ...)
 	optv = argv + argc - nopts;
 	argc -= nopts;
 
-	if (argc == 0) {
-		/*
-		 * The inet and inet6 commands allow for removing all
-		 * addresses in the corresponding address family.
-		 */
-		if (!set &&
-		    (strcmp(cmdname, "inet") == 0 ||
-		    strcmp(cmdname, "inet6") == 0)) {
-			if (cand != NULL)
-				return cand_noaf(cand, ifname,
-				    strcmp(cmdname, "inet6") == 0 ?
-				    AF_INET6 : AF_INET);
-			return intaf(ifname, ifs, argc0, argv0);
-		}
-
-		/*
-		 * The inet6 command allows for enabling IPv6 link-local.
-		 */
-		if (set && strcmp(cmdname, "inet6") == 0) {
-			if (cand != NULL) {
-				printf("%% inet6 without an address is not"
-				    " saved in the configuration\n");
-				return -1;
-			}
-			return intaf(ifname, ifs, argc0, argv0);
-		}
-
-		intipusage(cmdname, msg);
-		return -1;
-	} else if (argc < 1 || argc > argcmax) {
-		intipusage(cmdname, msg);
-		return -1;
-	}
-
 	/* ignore 'address' keyword, don't print error */
-	if (strcmp(cmdname, "ip") == 0 &&
+	if (c->code == ADDR_IP && argc > 0 &&
 	    (isprefix(argv[0], "address") && !isprefix(argv[0], "autoconf"))) {
 		argc--;
 		argv++;
 	}
 
-	if (nopts > 0 &&
-	    (isprefix(argv[0], "dhcp") || isprefix(argv[0], "autoconf"))) {
-		intipusage(cmdname, msg);
+	if (argc == 0) {
+		/*
+		 * The inet and inet6 commands allow for removing all
+		 * addresses in the corresponding address family, which
+		 * intip_apply() does, or says how it is used
+		 */
+		if (a->set && c->code == ADDR_INET6) {
+			printf("%% inet6 without an address is not"
+			    " saved in the configuration\n");
+			return -1;
+		}
+		return 0;
+	} else if (argc > 2) {
+		intipusage(c->name, NULL);
 		return -1;
 	}
 
@@ -1080,27 +990,13 @@ intip(int argc, char **argv, ...)
 	 * Enable IPv4 DHCP with any of the following commands:
 	 *   inet dhcp, ip dhcp, inet autoconf, ip autoconf
 	 * Disable IPv4 DHCP if "no" is given for any of these commands.
+	 * Enable IPv6 SLAAC with "inet6 autoconf" and disable it with "no".
 	 */
-	if (strcmp(cmdname, "inet6") != 0 &&
-	    (isprefix(argv[0], "dhcp") || isprefix(argv[0], "autoconf"))) {
-		if (kf_dhcpleased()) {
-			/*
-			 * dhclient(8) has gone away as of OpenBSD 7.2+.
-			 * dhcpleased(8) should always be running and will
-			 * only take action once the autoconf4 flag is set.
-			 */
-			return xflags_set(IFXF_AUTOCONF4, set, ifname,
-			    ifs, cand);
-		} else {
-			printf("%% cannot get DHCP leases because dhcpleased "
-			    "is not running\n");
-			return -1;
-		}
+	if ((c->code != ADDR_INET6 && isprefix(argv[0], "dhcp")) ||
+	    isprefix(argv[0], "autoconf")) {
+		facts_i64(&a->v[IP_AUTOCONF], 1);
+		return ip6_opts(nopts, optv, a);
 	}
-
-	/* Enable IPv6 SLAAC with "inet6 autoconf" and disable it with "no". */
-	if (strcmp(cmdname, "inet6") == 0 && isprefix(argv[0], "autoconf"))
-		return xflags_set(IFXF_AUTOCONF6, set, ifname, ifs, cand);
 
 	memset(&ip, 0, sizeof(ip));
 	parse_ip_pfx(argv[0], NO_NETMASK, &ip);
@@ -1110,9 +1006,122 @@ intip(int argc, char **argv, ...)
 		return -1;
 
 	/* The inet6 command is IPv6-only. */
-	if (strcmp(cmdname, "inet6") == 0 && ip.family != AF_INET6) {
+	if (c->code == ADDR_INET6 && ip.family != AF_INET6) {
 		printf("%% %s is not a valid IPv6 address\n", argv[0]);
 		return -1;
+	}
+	if (ip.family == AF_INET)
+		facts_address(&a->v[IP_ADDR], FACT_INET, &ip.addr.in, 4, 0);
+	else
+		facts_address(&a->v[IP_ADDR], FACT_INET6, &ip.addr.in6, 16, 0);
+	if (ip.bitlen != -1)
+		facts_i64(&a->v[IP_PREFIX], ip.bitlen);
+
+	if (argc == 2) {
+		if (inet_pton(AF_INET, argv[1], &in4) == 1)
+			facts_address(&a->v[IP_DEST], FACT_INET, &in4, 4, 0);
+		else if (parse_ipv6(argv[1], &in6) == 0)
+			facts_address(&a->v[IP_DEST], FACT_INET6, &in6, 16, 0);
+		else {
+			printf("%% Invalid destination address %s\n",
+			    argv[1]);
+			return -1;
+		}
+	}
+	return ip6_opts(nopts, optv, a);
+}
+
+static int xflags_set(int, int, char *, int, struct cand *);
+
+int
+intip_apply(const struct argcmd *c, int set, const struct facts_value *v,
+    char *ifname, int ifs, struct cand *cand)
+{
+	int s, flags, af, r = 0;
+	char *msg, addr[INET6_ADDRSTRLEN], brd[INET_ADDRSTRLEN];
+	ip_t ip;
+	struct ip6opts o;
+	/* ipv4 structures */
+	struct in_addr in4dest;
+	struct ifaliasreq ip4req;
+	/* ipv6 structures */
+	struct in6_addr in6dest;
+	struct in6_aliasreq ip6req;
+
+	flags = cand != NULL ? cand_getflags(ifname, ifs) :
+	    get_ifflags(ifname, ifs);
+	if (flags & IFF_POINTOPOINT)
+		msg = "destination";
+	else if (flags & IFF_BROADCAST)
+		msg = "broadcast";
+	else
+		msg = NULL;
+
+	if (v[IP_AUTOCONF].type != FACT_NONE) {
+		/* it takes no address's options */
+		if (v[IP_ANYCAST].type != FACT_NONE ||
+		    v[IP_EUI64].type != FACT_NONE ||
+		    v[IP_VLTIME].type != FACT_NONE ||
+		    v[IP_PLTIME].type != FACT_NONE) {
+			intipusage(c->name, msg);
+			return -1;
+		}
+		if (c->code == ADDR_INET6)
+			return xflags_set(IFXF_AUTOCONF6, set, ifname,
+			    ifs, cand);
+		/*
+		 * dhclient(8) has gone away as of OpenBSD 7.2+.
+		 * dhcpleased(8) should always be running and will
+		 * only take action once the autoconf4 flag is set.
+		 */
+		if (!kf_dhcpleased()) {
+			printf("%% cannot get DHCP leases because dhcpleased "
+			    "is not running\n");
+			return -1;
+		}
+		return xflags_set(IFXF_AUTOCONF4, set, ifname, ifs, cand);
+	}
+	if (v[IP_ADDR].type == FACT_NONE) {
+		/* no inet, no inet6: every address of the family */
+		if (set || (c->code != ADDR_INET && c->code != ADDR_INET6)) {
+			intipusage(c->name, msg);
+			return -1;
+		}
+		af = c->code == ADDR_INET6 ? AF_INET6 : AF_INET;
+		if (cand != NULL)
+			return cand_noaf(cand, ifname, af);
+		return removeaf(ifname, af, ifs);
+	}
+	if (v[IP_DEST].type != FACT_NONE && msg == NULL) {
+		intipusage(c->name, msg);
+		return -1;
+	}
+
+	memset(&ip, 0, sizeof(ip));
+	ip.family = v[IP_ADDR].v.a.family == FACT_INET ? AF_INET : AF_INET6;
+	memcpy(&ip.addr, v[IP_ADDR].v.a.bytes, v[IP_ADDR].v.a.len);
+	ip.bitlen = v[IP_PREFIX].type != FACT_NONE ? v[IP_PREFIX].v.i : -1;
+	inet_ntop(ip.family, &ip.addr, addr, sizeof(addr));
+	if (ip.family == AF_INET && ip.bitlen > 32) {
+		printf("%% Invalid bit length\n");
+		return -1;
+	}
+	memset(&in4dest, 0, sizeof(in4dest));
+	memset(&in6dest, 0, sizeof(in6dest));
+	if (v[IP_DEST].type != FACT_NONE) {
+		if (ip.family == AF_INET &&
+		    v[IP_DEST].v.a.family != FACT_INET) {
+			printf("%% Invalid %s address\n", msg);
+			return -1;
+		}
+		if (ip.family == AF_INET6 &&
+		    v[IP_DEST].v.a.family != FACT_INET6) {
+			printf("%% Invalid destination address\n");
+			return -1;
+		}
+		memcpy(ip.family == AF_INET ? (void *)&in4dest :
+		    (void *)&in6dest, v[IP_DEST].v.a.bytes,
+		    v[IP_DEST].v.a.len);
 	}
 
 	if (set && !(flags & IFF_POINTOPOINT) && ip.bitlen == -1) {
@@ -1125,29 +1134,43 @@ intip(int argc, char **argv, ...)
 	 * whatever is given (in_ifinit())
 	 */
 	if (set && ip.family == AF_INET && !(flags & IFF_POINTOPOINT)) {
-		struct in_addr brd;
-
 		if (ip.bitlen == 0) {
 			printf("%% An IPv4 prefix length must be 1 or more\n");
 			return -1;
 		}
-		if (argc == 2 && inet_pton(AF_INET, argv[1], &brd) == 1 &&
-		    ntohl(brd.s_addr) != in4_brdaddr(ip.addr.in.s_addr,
+		if (v[IP_DEST].type != FACT_NONE &&
+		    ntohl(in4dest.s_addr) != in4_brdaddr(ip.addr.in.s_addr,
 		    htonl(0xffffffffULL << (32 - ip.bitlen)))) {
+			inet_ntop(AF_INET, &in4dest, brd, sizeof(brd));
 			printf("%% %s is not the broadcast address of %s/%d\n",
-			    argv[1], argv[0], ip.bitlen);
+			    brd, addr, ip.bitlen);
 			return -1;
 		}
 	}
 
 	/* no takes them as well, and an eui64 address is one to delete */
-	if (nopts > 0 && ip.family != AF_INET6) {
+	if (ip.family != AF_INET6 && (v[IP_ANYCAST].type != FACT_NONE ||
+	    v[IP_EUI64].type != FACT_NONE || v[IP_VLTIME].type != FACT_NONE ||
+	    v[IP_PLTIME].type != FACT_NONE)) {
 		printf("%% anycast, eui64, vltime and pltime go with an IPv6"
 		    " address\n");
 		return -1;
 	}
-	if (ip6_opts(nopts, optv, &o) == -1)
+	/*
+	 * An omitted pltime is the vltime, as in6_update_ifa() refuses a
+	 * pltime longer than the vltime
+	 */
+	memset(&o, 0, sizeof(o));
+	o.anycast = v[IP_ANYCAST].type != FACT_NONE;
+	o.eui64 = v[IP_EUI64].type != FACT_NONE;
+	o.vltime = v[IP_VLTIME].type != FACT_NONE ? v[IP_VLTIME].v.i :
+	    ND6_INFINITE_LIFETIME;
+	o.pltime = v[IP_PLTIME].type != FACT_NONE ? v[IP_PLTIME].v.i :
+	    o.vltime;
+	if (o.pltime > o.vltime) {
+		printf("%% pltime must not be longer than vltime\n");
 		return -1;
+	}
 	if (o.eui64) {
 		/* the link-local address the interface ID comes from */
 		if (cand == NULL && addaf(ifname, AF_INET6, ifs) == -1)
@@ -1157,8 +1180,8 @@ intip(int argc, char **argv, ...)
 	}
 
 	if (cand != NULL)
-		return cand_ip(cand, ifname, set, flags, &ip, argc,
-		    argv, msg, &o);
+		return cand_ip(cand, ifname, set, flags, &ip,
+		    v[IP_DEST].type != FACT_NONE, in4dest, in6dest, msg, &o);
 
 	if (ip.bitlen == -1) {
 		/*
@@ -1177,11 +1200,6 @@ intip(int argc, char **argv, ...)
 
 	switch(ip.family) {
 	case AF_INET:
-		memset(&in4dest, 0, sizeof(in4dest));
-		if (argc == 2 && !inet_pton(AF_INET, argv[1], &in4dest)) {
-			printf("%% Invalid %s address\n", msg);
-			return -1;
-		}
 		memset(&ip4req, 0, sizeof(ip4req));
 		pack_ifaliasreq(&ip4req, &ip, &in4dest, ifname);
 		/* do it */
@@ -1192,11 +1210,6 @@ intip(int argc, char **argv, ...)
 		}
 		break;
 	case AF_INET6:
-		memset(&in6dest, 0, sizeof(in6dest));
-		if (argc == 2 && parse_ipv6(argv[1], &in6dest) != 0) {
-			printf("%% Invalid destination address %s\n", argv[1]);
-			return -1;
-		}
 		memset(&ip6req, 0, sizeof(ip6req));
 		pack_in6aliasreq(&ip6req, &ip, &in6dest, ifname);
 		ip6req.ifra_lifetime.ia6t_vltime = o.vltime;
@@ -2517,34 +2530,6 @@ intflags_apply(const struct argcmd *c, int set,
 		return -1;
 	}
 	return set_ifflags(ifname, ifs, flags);
-}
-
-int
-intaf(char *ifname, int ifs, int argc, char **argv)
-{
-	int set;
-
-	if (NO_ARG(argv[0])) {
-		set = 0;
-		argv++;
-		argc--;
-	} else
-		set = 1;
-
-	if (argc > 1) {
-		printf("%% Invalid argument\n");
-		return -1;
-	}
-
-	/* Do not use isprefix() here because it would always be ambiguous. */
-	if (strcmp(argv[0], "inet6") == 0)
-		return set ? addaf(ifname, AF_INET6, ifs) :
-		    removeaf(ifname, AF_INET6, ifs);
-	if (strcmp(argv[0], "inet") == 0)
-		return set ? addaf(ifname, AF_INET, ifs) :
-		    removeaf(ifname, AF_INET, ifs);
-	printf("%% intaf: unknown address family %s\n", argv[0]);
-	return -1;
 }
 
 /*

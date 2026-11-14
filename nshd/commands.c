@@ -63,6 +63,7 @@
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
 #include <netinet/ip_carp.h>
+#include <netinet6/nd6.h>
 #include <net/if_media.h>
 #include <net/if_pflow.h>
 #include <net/if_pppoe.h>
@@ -873,6 +874,21 @@ static const struct argkey link_keys[] = {
 static const struct argkey ttl_keys[] = { { "copy", -1 }, { NULL } };
 
 /* the arguments that several rows have */
+static const struct arg ip_args[] = {
+	{ "address",	ARG_ADDR, 0, 0, ARG_OPT | ARG_NO },
+	{ "prefixlen",	ARG_NUM, 0, 128, ARG_OPT | ARG_NO,
+	  .help = "prefix length" },
+	{ "destination", ARG_ADDR, 0, 0, ARG_OPT | ARG_NO },
+	{ "autoconf",	ARG_FLAG, 0, 0, ARG_NO },
+	{ "anycast",	ARG_FLAG, 0, 0, ARG_NO },
+	{ "eui64",	ARG_FLAG, 0, 0, ARG_NO },
+	{ "vltime",	ARG_NUM, 1, ND6_INFINITE_LIFETIME - 1,
+	    ARG_OPT | ARG_NO },
+	{ "pltime",	ARG_NUM, 0, ND6_INFINITE_LIFETIME - 1,
+	    ARG_OPT | ARG_NO },
+	{ NULL }
+};
+
 static const struct arg description_args[] = {
 	/* SIOCSIFDESCR refuses a longer one (ENAMETOOLONG) */
 	{ "text",	ARG_REST, 0, IFDESCRSIZE - 1,
@@ -907,9 +923,21 @@ static const struct arg vnetid_args[] = {
 
 struct intlist Intlist[] = {
 /* Interface mode commands */
-	{ "inet",	"IPv4/IPv6 addresses",			CMPL(h) (char **)intiphelp, sizeof(struct ghs), intip, 1, CAND_EDIT },
-	{ "ip",		"Alias for \"inet\" command",		CMPL(h) (char **)intiphelp, sizeof(struct ghs), intip, 1, CAND_EDIT },
-	{ "alias",	NULL, /* backwards compatibilty */	CMPL(h) (char **)intiphelp, sizeof(struct ghs), intip, 1, CAND_EDIT },
+	{ "inet", "IPv4/IPv6 addresses", CMPL(h)
+	  .table = (char **)intiphelp, .stlen = sizeof(struct ghs),
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intip_apply, .code = ADDR_INET, .parse = intip_parse,
+	  .args = ip_args },
+	{ "ip", "Alias for \"inet\" command", CMPL(h)
+	  .table = (char **)intiphelp, .stlen = sizeof(struct ghs),
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intip_apply, .code = ADDR_IP, .parse = intip_parse,
+	  .args = ip_args },
+	{ "alias", NULL, CMPL(h)	/* backwards compatibilty */
+	  .table = (char **)intiphelp, .stlen = sizeof(struct ghs),
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intip_apply, .code = ADDR_ALIAS, .parse = intip_parse,
+	  .args = ip_args },
 	{ "autoconf4", "IPv4 Autoconfigurable address (DHCP)", CMPL0
 	  .nocmd = 1, .cand = CAND_EDIT,
 	  .apply = intxflags_apply, .code = IFXF_AUTOCONF4 },
@@ -1324,7 +1352,11 @@ struct intlist Intlist[] = {
 	{ "mpls", "MPLS", CMPL0
 	  .nocmd = 1, .cand = CAND_EDIT,
 	  .apply = intxflags_apply, .code = IFXF_MPLS },
-	{ "inet6",	"IPv6 addresses",			CMPL(h) (char **)intip6help, sizeof(struct ghs), intip, 1, CAND_EDIT },
+	{ "inet6", "IPv6 addresses", CMPL(h)
+	  .table = (char **)intip6help, .stlen = sizeof(struct ghs),
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intip_apply, .code = ADDR_INET6, .parse = intip_parse,
+	  .args = ip_args },
 	{ "autoconf6", "IPv6 Autoconfigurable address", CMPL0
 	  .nocmd = 1, .cand = CAND_EDIT,
 	  .apply = intxflags_apply, .code = IFXF_AUTOCONF6 },
@@ -1899,13 +1931,6 @@ static const struct confcmd conf_top[] = {
 	{ "ddb",	ipcmd,		CF_NO },
 	{ "pipex",	ipcmd,		CF_NO },
 	{ "route",	route,		CF_NO },
-};
-
-static const struct confcmd conf_if[] = {
-	{ "inet",	intip },
-	{ "ip",		intip },
-	{ "alias",	intip },
-	{ "inet6",	intip },
 };
 
 static const struct confcmd conf_bridge[] = {
@@ -2613,11 +2638,8 @@ conf_cmd(int ctx, int n, struct argcmd *c)
 		return conf_words(conf_top, nitems(conf_top),
 		    cmdtab[n].name, c);
 	case CTX_IF:
-		if ((size_t)n >= nitems(Intlist) - 1)
-			return NULL;
-		if (int_cmd(&Intlist[n], c) != NULL)
-			return c;
-		return conf_words(conf_if, nitems(conf_if), Intlist[n].name, c);
+		return (size_t)n < nitems(Intlist) - 1 ?
+		    int_cmd(&Intlist[n], c) : NULL;
 	case CTX_BRIDGE:
 		if ((size_t)n >= nitems(Bridgelist) - 1)
 			return NULL;

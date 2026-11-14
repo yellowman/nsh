@@ -155,6 +155,7 @@ struct argvals {
  * the codes of the apply functions that serve several commands: carp.c's
  * are CARP_VHID and the rest (externs.h), and a flag's is the flag
  */
+enum { ADDR_INET, ADDR_IP, ADDR_ALIAS, ADDR_INET6 };	/* intip_apply() */
 enum { MPLSLABEL = 1, TUNNELDOMAIN, TXPRIO, RXPRIO };	/* intmpls_apply() */
 enum { IFMETRIC, IFPRIORITY };				/* intmetric_apply() */
 enum { TUNNEL_BOTH, TUNNEL_ADDR };			/* inttunnel_apply() */
@@ -185,14 +186,14 @@ args_applyfn	intcarp_apply, intcpass_apply, intcnode_apply, intcdev_apply;
 args_applyfn	intnwkey_apply, intwpakey_apply, intwpa_apply, intwpalist_apply,
 		intjoin_apply, intchan_apply, intnwflag_apply, inttxpower_apply;
 args_parsefn	intnwkey_parse, intwpakey_parse, intjoin_parse;
-args_applyfn	intpflow_apply, intpatch_apply, intmtu_apply,
+args_applyfn	intip_apply, intpflow_apply, intpatch_apply, intmtu_apply,
 		intkeepalive_apply, intmpls_apply, intpwe3_apply,
 		intdhcrelay_apply, intdhcrelay6_apply, intmetric_apply,
 		intllprio_apply, intgroup_apply, intrtlabel_apply,
 		intparent_apply, intflags_apply, intxflags_apply, intlink_apply,
 		intnwid_apply, intpowersave_apply, intlladdr_apply,
 		intrdomain_apply, intdesc_apply, intvnetflowid_apply;
-args_parsefn	intpwe3_parse, intdhcrelay6_parse, intlladdr_parse;
+args_parsefn	intip_parse, intpwe3_parse, intdhcrelay6_parse, intlladdr_parse;
 args_applyfn	intmedia_apply, intmediaopt_apply;
 args_parsefn	intmedia_parse, intmediaopt_parse;
 args_applyfn	intsyncdev_apply, intsyncpeer_apply, intmaxupd_apply;

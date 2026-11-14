@@ -28,7 +28,7 @@ commands.c	table	Bridgelist Bridgelist_nitems Intlist
 			carploggingtab
 			carppreempttab carptab cmdtab cmdtab2
 			cmdtab_nitems
-			conf_bridge conf_if conf_top
+			conf_bridge conf_top
 			crontabhelp ddbhelp ddbtab
 			defaultttltab defer_keys demotecountertab
 			description_args
@@ -42,7 +42,7 @@ commands.c	table	Bridgelist Bridgelist_nitems Intlist
 			ftpproxyhelp gretab grouphelp grouptab
 			hostnamehelp
 			ifstatehelp ikehelp inethelp interfacehelp
-			ip6help ip6tab ipcomptab iphelp ipiptab
+			ip6help ip6tab ip_args ipcomptab iphelp ipiptab
 			ipsecallocstab ipsecbytestab
 			ipsecexpireacquiretab ipsecfirstusetab ipsechelp
 			ipsecinvalidlifetab ipsecpfstab
