@@ -172,6 +172,13 @@ enum { WG_PORT, WG_KEY, WG_RTABLE };			/* intwg_apply() */
 #define JOIN_NWKEY	2
 #define WGPEER_AIPS	120	/* the most aips on one line, more than a
 				   1023 byte line can hold */
+/* media's subtypes and options, by their place in the kernel's lists */
+#define MEDIA_SUBTYPES	(sizeof((const struct ifmedia_description[]) \
+			    IFM_SUBTYPE_DESCRIPTIONS) / \
+			    sizeof(struct ifmedia_description) - 1)
+#define MEDIA_OPTS	((1LL << (sizeof((const struct ifmedia_description[]) \
+			    IFM_OPTION_DESCRIPTIONS) / \
+			    sizeof(struct ifmedia_description) - 1)) - 1)
 
 /* what the rows name: each file's apply and parse functions */
 args_applyfn	intcarp_apply, intcpass_apply, intcnode_apply, intcdev_apply;
@@ -186,6 +193,8 @@ args_applyfn	intpflow_apply, intpatch_apply, intmtu_apply,
 		intnwid_apply, intpowersave_apply, intlladdr_apply,
 		intrdomain_apply, intdesc_apply, intvnetflowid_apply;
 args_parsefn	intpwe3_parse, intdhcrelay6_parse, intlladdr_parse;
+args_applyfn	intmedia_apply, intmediaopt_apply;
+args_parsefn	intmedia_parse, intmediaopt_parse;
 args_applyfn	intsyncdev_apply, intsyncpeer_apply, intmaxupd_apply;
 args_applyfn	intsppp_apply, intpppoe_apply;
 args_applyfn	inttrunkport_apply, inttrunkproto_apply, intlacp_apply;

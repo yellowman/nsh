@@ -63,6 +63,7 @@
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
 #include <netinet/ip_carp.h>
+#include <net/if_media.h>
 #include <net/if_pflow.h>
 #include <net/if_pppoe.h>
 #include <net/if_sppp.h>
@@ -1059,8 +1060,21 @@ struct intlist Intlist[] = {
 		{ "flag",	ARG_BITS, 0, 0, ARG_NO, nwflags },
 		{ NULL } } },
 	{ "bssid",	"802.11 bss id",			CMPL0 0, 0, int_op, 1, CAND_RUN },
-	{ "media",	"Media type",				CMPL0 0, 0, intmedia, 1, CAND_EDIT },
-	{ "mediaopt",	"Media options",			CMPL0 0, 0, intmediaopt, 1, CAND_EDIT },
+	{ "media", "Media type", CMPL0
+	  .handler = intmedia, .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intmedia_apply, .parse = intmedia_parse,
+	  .args = ARGS{
+		{ "type",	ARG_NUM, 0,
+		    MEDIA_SUBTYPES - 1 },
+		{ "instance",	ARG_NUM, 0, IFM_INST_MAX, ARG_OPT | ARG_NO },
+		{ "mediaopt",	ARG_NUM, 0, MEDIA_OPTS, ARG_NAMED | ARG_OPT },
+		{ NULL } } },
+	{ "mediaopt", "Media options", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intmediaopt_apply, .parse = intmediaopt_parse,
+	  .args = ARGS{
+		{ "mediaopt",	ARG_NUM, 0, MEDIA_OPTS, ARG_NO | ARG_NOOPT },
+		{ NULL } } },
 	{ "auth", "PPP authentication", CMPL0
 	  .nocmd = 1, .cand = CAND_EDIT,
 	  .apply = intsppp_apply, .code = SPPPIOSMAUTH,
@@ -1891,8 +1905,6 @@ static const struct confcmd conf_if[] = {
 	{ "inet",	intip },
 	{ "ip",		intip },
 	{ "alias",	intip },
-	{ "media",	intmedia },
-	{ "mediaopt",	intmediaopt },
 	{ "inet6",	intip },
 };
 
@@ -2671,6 +2683,28 @@ conf_run(int ctx, int n, int argc, char **argv, char *name)
 		    name);
 	/* a block's head creates a cloned interface, or with no, destroys it */
 	return (*c->handler)(argc, argv, NULL);
+}
+
+/*
+ * Run a line of ctx's by the row of its command, on ifname if it is an
+ * interface's or a bridge's: for a handler that has work of its own
+ * before its line's arguments are read
+ */
+int
+conf_line(int ctx, int argc, char **argv, char *ifname, int ifs,
+    struct cand *cand)
+{
+	struct argcmd row;
+	const struct argcmd *c;
+	char *daemon;
+
+	c = conf_cmd(ctx, conf_find(ctx, argv[NO_ARG(argv[0]) && argc > 1],
+	    &daemon), &row);
+	if (c == NULL) {
+		printf("%% %s: internal failure\n", argv[0]);
+		return -1;
+	}
+	return args_run(c, argc, argv, ifname, ifs, cand);
 }
 
 /*

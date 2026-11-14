@@ -218,6 +218,7 @@ struct confcmd {
 	int	 flags;
 };
 int conf_find(int, char *, char **);
+int conf_line(int, int, char **, char *, int, struct cand *);
 int conf_run(int, int, int, char **, char *);
 struct facts_value;
 int conf_run_values(int, int, int, const struct facts_value *, char *);
@@ -464,7 +465,6 @@ int cand_vnetflowid(struct cand *);
 void media_supported(int, char *, char *, char *, FILE *);
 int phys_status(int, char *, char *, char *, int, int);
 int intmedia(int, char **, ...);
-int intmediaopt(int, char **, ...);
 int conf_media_status(FILE *, int, char *);
 struct ifmediareq;
 

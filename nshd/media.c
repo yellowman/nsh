@@ -51,6 +51,7 @@
 #include "facts.h"
 #include "showfacts.h"
 #include "kfacts.h"
+#include "args.h"
 
 int process_media_commands(int, char *, uint64_t, struct cand *);
 uint64_t get_media_subtype(uint64_t, const char *);
@@ -68,16 +69,81 @@ static const struct ifmedia_description ifm_subtype_descriptions[] =
 static const struct ifmedia_description ifm_option_descriptions[] =
     IFM_OPTION_DESCRIPTIONS;
 
+/*
+ * media and mediaopt name a subtype and options by the words of
+ * ifm_subtype_descriptions and ifm_option_descriptions, which config
+ * reads as those tables' indexes (media_index()): a subtype as its
+ * index, and options as a set of their indexes' bits. Their apply
+ * functions find what the indexes say for the interface's type
+ */
+
+/* The index of the description in desc that word names, or -1 */
+static int
+media_index(const struct ifmedia_description *desc, const char *word)
+{
+	int i;
+
+	for (i = 0; desc[i].ifmt_string != NULL; i++)
+		if (strcasecmp(desc[i].ifmt_string, word) == 0)
+			return i;
+	return -1;
+}
+
+/* options, between commas, as a set of their indexes' bits, into v */
+static int
+media_options_parse(const char *options, struct facts_value *v)
+{
+	char buf[256], *o, *p;
+	long long bits = 0;
+	int i;
+
+	if (strlcpy(buf, options, sizeof(buf)) >= sizeof(buf)) {
+		printf("%% get_media_options: too long: %s\n", options);
+		return -1;
+	}
+	for (o = strtok_r(buf, ",", &p); o != NULL;
+	    o = strtok_r(NULL, ",", &p)) {
+		if ((i = media_index(ifm_option_descriptions, o)) == -1) {
+			printf("%% get_media_options: unknown media option: "
+			    "%s\n", o);
+			return -1;
+		}
+		bits |= 1LL << i;
+	}
+	facts_i64(v, bits);
+	return 0;
+}
+
+/* The options of type that bits, a set of their indexes, says, or -1 */
+static uint64_t
+media_options(uint64_t type, long long bits)
+{
+	const struct ifmedia_description *desc;
+	uint64_t options = 0;
+	size_t i;
+
+	for (i = 0; i < nitems(ifm_option_descriptions) - 1; i++) {
+		if ((bits & (1LL << i)) == 0)
+			continue;
+		desc = &ifm_option_descriptions[i];
+		if (!IFM_TYPE_MATCH(desc->ifmt_word, type)) {
+			printf("%% get_media_options: unknown %s media option: "
+			    "%s\n", get_media_type_string(type),
+			    desc->ifmt_string);
+			return -1;
+		}
+		options |= IFM_OPTIONS(desc->ifmt_word);
+	}
+	return options;
+}
+
 int
 intmedia(int argc, char **argv, ...)
 {
-	const char *errmsg = NULL;
-	uint64_t set, media_current, type, subtype, inst, options = 0;
-	char *opts = NULL;
 	va_list ap;
 	struct cand *cand;
 	char *ifname;
-	int ifs;
+	int ifs, set, n;
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
@@ -85,31 +151,61 @@ intmedia(int argc, char **argv, ...)
 	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
-	if (NO_ARG(argv[0])) {
-		set = 0;
-		argc--;
-		argv++;
-	} else
-		set = 1;
+	/* with the media this interface supports */
+	set = !NO_ARG(argv[0]);
+	n = argc - (set ? 1 : 2);
+	if (n >= 3 && isprefix(argv[argc - 2], "mediaopt"))
+		n -= 2;
+	if ((set && (n < 1 || n > 2)) || (!set && n > 2)) {
+		printf("%% media <type> [instance] [mediaopt <options>]\n");
+		printf("%% no media [type] [instance] [mediaopt <options>]\n");
+		media_supported(ifs, ifname, "% ", "%   ", stdout);
+		return -1;
+	}
+	return conf_line(CTX_IF, argc, argv, ifname, ifs, cand);
+}
 
-	argv++;
-	argc--;
+/* media's words: its subtype, instance and options */
+int
+intmedia_parse(const struct argcmd *c, int argc, char **argv,
+    struct argvals *a)
+{
+	int i;
 
 	/*
 	 * A media word is taken whole, and some media are there only with
 	 * an option, 1000baseT only with full-duplex on most phys
 	 */
 	if (argc >= 3 && isprefix(argv[argc - 2], "mediaopt")) {
-		opts = argv[argc - 1];
+		if (a->set && media_options_parse(argv[argc - 1],
+		    &a->v[2]) == -1)
+			return -1;
 		argc -= 2;
 	}
-
-	if ((set && (argc < 1 || argc > 2)) || (!set && argc > 2)) {
+	if ((a->set && (argc < 1 || argc > 2)) || (!a->set && argc > 2)) {
 		printf("%% media <type> [instance] [mediaopt <options>]\n");
 		printf("%% no media [type] [instance] [mediaopt <options>]\n");
-		media_supported(ifs, ifname, "% ", "%   ", stdout);
 		return -1;
 	}
+	if (a->set) {
+		i = media_index(ifm_subtype_descriptions, argv[0]);
+		if (i == -1) {
+			printf("%% get_media_subtype: unknown media subtype: "
+			    "%s\n", argv[0]);
+			return -1;
+		}
+		facts_i64(&a->v[0], i);
+	}
+	if (argc == 2 && args_word(c, &c->args[1], a, argv[1], &a->v[1]) == -1)
+		return -1;
+	return 0;
+}
+
+int
+intmedia_apply(const struct argcmd *c, int set, const struct facts_value *v,
+    char *ifname, int ifs, struct cand *cand)
+{
+	uint64_t media_current, type, subtype, inst, options = 0;
 
 	media_current = init_current_media(ifs, ifname, cand);
 
@@ -123,28 +219,23 @@ intmedia(int argc, char **argv, ...)
 		return -1;
 	}
 
-	if (argc == 2) {
-		inst = strtonum(argv[1], 0, IFM_INST_MAX, &errmsg);
-		if (errmsg) {
-			printf("%% Invalid media instance: %s: %s\n", argv[1],
-			    errmsg);
-			return -1;
-		}
-	} else {
+	if (v[1].type != FACT_NONE)
+		inst = v[1].v.i;
+	else
 		inst = IFM_INST(media_current);
-	}
 
 	type = IFM_TYPE(media_current);
 	/* Look up the subtype */
 	if (set)
-		subtype = get_media_subtype(type, argv[0]);
+		subtype = get_media_subtype(type,
+		    ifm_subtype_descriptions[v[0].v.i].ifmt_string);
 	else
 		subtype = get_media_subtype(type, DEFAULT_MEDIA_TYPE);
 
 	if (subtype == -1)
 		return -1;
-	if (set && opts != NULL &&
-	    (options = get_media_options(type, opts)) == -1)
+	if (set && v[2].type != FACT_NONE &&
+	    (options = media_options(type, v[2].v.i)) == -1)
 		return -1;
 
 	/* Build the new media_current word */
@@ -153,37 +244,24 @@ intmedia(int argc, char **argv, ...)
 	return process_media_commands(ifs, ifname, media_current, cand);
 }
 
+/* mediaopt's options */
 int
-intmediaopt(int argc, char **argv, ...)
+intmediaopt_parse(const struct argcmd *c, int argc, char **argv,
+    struct argvals *a)
 {
-	uint64_t media_current, mediaopt;
-	int set;
-	va_list ap;
-	struct cand *cand;
-	char *ifname;
-	int ifs;
-
-	va_start(ap, argv);
-	ifname = va_arg(ap, char *);
-	ifs = va_arg(ap, int);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
-
-	if (NO_ARG(argv[0])) {
-		set = 0;
-		argc--;
-		argv++;
-	} else
-		set = 1;
-
-	argv++;
-	argc--;
-
-	if ((set && (argc != 1)) || (!set && (argc > 1))) {
+	if ((a->set && (argc != 1)) || (!a->set && (argc > 1))) {
 		printf("%% mediaopt <option>\n");
 		printf("%% no mediaopt [option]\n");
 		return -1;
 	}
+	return argc == 1 ? media_options_parse(argv[0], &a->v[0]) : 0;
+}
+
+int
+intmediaopt_apply(const struct argcmd *c, int set, const struct facts_value *v,
+    char *ifname, int ifs, struct cand *cand)
+{
+	uint64_t media_current, mediaopt;
 
         media_current = init_current_media(ifs, ifname, cand);
 
@@ -197,8 +275,8 @@ intmediaopt(int argc, char **argv, ...)
 		return -1;
 	}
 
-	if (argc == 1)
-		mediaopt = get_media_options(IFM_TYPE(media_current), argv[0]);
+	if (v[0].type != FACT_NONE)
+		mediaopt = media_options(IFM_TYPE(media_current), v[0].v.i);
 	else
 		mediaopt = IFM_OPTIONS(media_current);
 
