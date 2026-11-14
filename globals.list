@@ -13,7 +13,8 @@ arp.c		scratch	expire_time sdl_m sin_m
 arp.c		table	blank_sdl blank_sin ifp_m so_1mask
 bgpcommands.c	process	bgpd_socket_path
 bgpcommands.c	table	bgcs
-bridge.c	table	brds brlists brnames brper brps brpvnames brpvs brvals brvls brvper brvs
+bridge.c	table	brds brlists brnames brper brps brpvnames brpvs brvals
+			brvper brvs
 candidate.c	scratch	cand_listowner.owner
 carp.c		scratch	carp_facts.carpdev
 carp.c		table	carp_bal_modes
@@ -24,11 +25,12 @@ commands.c	process	hname snapshot
 commands.c	scratch	in_rc next_ifname
 commands.c	table	Bridgelist Bridgelist_nitems Intlist
 			Intlist_nitems ahtab arpdowntab arphelp
-			arptimeouttab balancing_keys bgphelp bridgehelp
-			brport_args brprotos carploggingtab
+			arptimeouttab balancing_keys bgphelp bractions brdirs
+			bridgehelp
+			brport_args brprotos brpvids brpvlan_args carploggingtab
 			carppreempttab carptab cmdtab cmdtab2
 			cmdtab_nitems
-			conf_bridge conf_top
+			conf_top
 			crontabhelp ddbhelp ddbtab
 			defaultttltab defer_keys demotecountertab
 			description_args

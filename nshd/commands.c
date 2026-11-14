@@ -828,6 +828,16 @@ static const struct argkey balancing_keys[] = {
 static const struct argkey brprotos[] = {
 	{ "stp", BSTP_PROTO_STP }, { "rstp", BSTP_PROTO_RSTP }, { NULL }
 };
+static const struct argkey bractions[] = {
+	{ "block", BRL_ACTION_BLOCK }, { "pass", BRL_ACTION_PASS }, { NULL }
+}, brdirs[] = {
+	{ "in", BRL_FLAG_IN }, { "out", BRL_FLAG_OUT },
+	{ "in/out", BRL_FLAG_IN | BRL_FLAG_OUT }, { NULL }
+};
+static const struct argkey brpvids[] = {
+	{ "passthrough", IFBR_PVID_DECLINE }, { "none", IFBR_PVID_NONE },
+	{ "default", EVL_VLID_NULL }, { NULL }
+};
 /* data class names, as umb_classes() prints them, plus 2g, 3g and 4g */
 static const struct argkey class_keys[] = {
 	{ "none", MBIM_DATACLASS_NONE }, { "GPRS", MBIM_DATACLASS_GPRS },
@@ -881,6 +891,12 @@ static const struct argkey ttl_keys[] = { { "copy", -1 }, { NULL } };
 static const struct arg brport_args[] = {
 	{ "interface",	ARG_WORD, 1, IFNAMSIZ - 1, ARG_NO, NULL,
 	    BRPORTS },
+	{ NULL }
+};
+
+static const struct arg brpvlan_args[] = {
+	{ "primary-vlan", ARG_NUM, EVL_VLID_MIN, EVL_VLID_MAX, ARG_NO },
+	{ "vlan",	ARG_NUM, EVL_VLID_MIN, EVL_VLID_MAX, ARG_NO },
 	{ NULL }
 };
 
@@ -1595,8 +1611,29 @@ struct intlist Bridgelist[] = {
 	{ "setenv",	setenvhelp,				CMPL(e) 0, 0, 0, 0, CAND_RUN },
 	{ "unsetenv",	unsetenvhelp,				CMPL(e) 0, 0, 0, 0, CAND_RUN },
 	{ "saveenv",	saveenvhelp,				CMPL0 0, 0, 0, 0, CAND_RUN },
-	{ "rule",	"Bridge layer 2 filtering rules",	CMPL0 0, 0, brrule, 0, CAND_EDIT },
-	{ "static",	"Static bridge address entry",		CMPL0 0, 0, brstatic, 1, CAND_EDIT },
+	{ "rule", "Bridge layer 2 filtering rules", CMPL0
+	  .cand = CAND_EDIT,
+	  .apply = brrule_apply,
+	  .args = ARGS{
+		{ "action",	ARG_NUM, 1, 0, 0, bractions },
+		{ "direction",	ARG_NUM, 1, 0, 0, brdirs },
+		{ "on",		ARG_WORD, 1, IFNAMSIZ - 1, ARG_NAMED },
+		{ "src",	ARG_ADDR, 0, 0,
+		    ARG_LINK | ARG_NAMED | ARG_OPT },
+		{ "dst",	ARG_ADDR, 0, 0,
+		    ARG_LINK | ARG_NAMED | ARG_OPT },
+		{ "tag",	ARG_WORD, 1, PF_TAG_NAME_SIZE - 1,
+		    ARG_NAMED | ARG_OPT },
+		{ NULL } } },
+	{ "static", "Static bridge address entry", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = brstatic_apply, .parse = brstatic_parse,
+	  .args = ARGS{
+		{ "address",	ARG_ADDR, 0, 0, ARG_LINK | ARG_NO },
+		{ "vlan",	ARG_NUM, EVL_VLID_MIN, EVL_VLID_MAX,
+		    ARG_OPT | ARG_NO },
+		{ "member",	ARG_WORD, 1, IFNAMSIZ - 1, ARG_NO | ARG_NOOPT },
+		{ NULL } } },
 	{ "ifpriority",
 	  "Spanning priority of a member on an 802.1D bridge", CMPL0
 	  .nocmd = 1, .cand = CAND_EDIT,
@@ -1625,12 +1662,41 @@ struct intlist Bridgelist[] = {
 	{ "vnetid", "Untagged VLAN of members added (veb)", CMPL0
 	  .nocmd = 1, .cand = CAND_EDIT,
 	  .apply = intvnetid_apply, .args = vnetid_args },
-	{ "protect",	"Configure protected bridge domains",	CMPL0 0, 0, brprotect, 1, CAND_EDIT },
-	{ "untagged",	"VLAN of a member's untagged frames (veb)",	CMPL0 0, 0, brvlan, 1, CAND_EDIT },
-	{ "tagged",	"VLANs a member carries tagged (veb)",	CMPL0 0, 0, brvlan, 1, CAND_EDIT },
-	{ "pvlan",	"Primary VLAN of a private VLAN (veb)",	CMPL0 0, 0, brpvlan, 1, CAND_EDIT },
-	{ "pvlan-isolated", "Isolated VLAN of a private VLAN (veb)", CMPL0 0, 0, brpvlan, 1, CAND_EDIT },
-	{ "pvlan-community", "Community VLAN of a private VLAN (veb)", CMPL0 0, 0, brpvlan, 1, CAND_EDIT },
+	{ "protect", "Configure protected bridge domains", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = brprotect_apply, .parse = brprotect_parse,
+	  .args = ARGS{
+		{ "member",	ARG_WORD, 1, IFNAMSIZ - 1, ARG_NO },
+		{ "domains",	ARG_NUM, 1, 0x7fffffff },
+		{ NULL } } },
+	{ "untagged", "VLAN of a member's untagged frames (veb)", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = brvlan_apply, .code = BRVLAN_UNTAGGED,
+	  .args = ARGS{
+		{ "member",	ARG_WORD, 1, IFNAMSIZ - 1, ARG_NO },
+		{ "vlan",	ARG_NUM, EVL_VLID_MIN, EVL_VLID_MAX, 0,
+		    brpvids },
+		{ NULL } } },
+	{ "tagged", "VLANs a member carries tagged (veb)", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = brvlan_apply, .code = BRVLAN_TAGGED, .parse = brtagged_parse,
+	  .args = ARGS{
+		{ "member",	ARG_WORD, 1, IFNAMSIZ - 1, ARG_NO },
+		{ "vlans",	ARG_BYTES, BRVLAN_MAP, BRVLAN_MAP,
+		    ARG_OPT | ARG_NO },
+		{ NULL } } },
+	{ "pvlan", "Primary VLAN of a private VLAN (veb)", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = brpvlan_apply,
+	  .args = ARGS{
+		{ "primary-vlan", ARG_NUM, EVL_VLID_MIN, EVL_VLID_MAX, ARG_NO },
+		{ NULL } } },
+	{ "pvlan-isolated", "Isolated VLAN of a private VLAN (veb)", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = brpvlan_apply, .args = brpvlan_args },
+	{ "pvlan-community", "Community VLAN of a private VLAN (veb)", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = brpvlan_apply, .args = brpvlan_args },
 	{ "pvptags", "Tag private VLANs with their primary (veb)", CMPL0
 	  .nocmd = 1, .cand = CAND_EDIT,
 	  .apply = brport_apply, .args = brport_args },
@@ -2021,17 +2087,6 @@ static const struct confcmd conf_top[] = {
 	{ "ddb",	ipcmd,		CF_NO },
 	{ "pipex",	ipcmd,		CF_NO },
 	{ "route",	route,		CF_NO },
-};
-
-static const struct confcmd conf_bridge[] = {
-	{ "rule",	brrule },
-	{ "static",	brstatic },
-	{ "protect",	brprotect },
-	{ "untagged",	brvlan },
-	{ "tagged",	brvlan },
-	{ "pvlan",	brpvlan },
-	{ "pvlan-isolated", brpvlan },
-	{ "pvlan-community", brpvlan },
 };
 
 /*
@@ -2709,12 +2764,8 @@ conf_cmd(int ctx, int n, struct argcmd *c)
 		return (size_t)n < nitems(Intlist) - 1 ?
 		    int_cmd(&Intlist[n], c) : NULL;
 	case CTX_BRIDGE:
-		if ((size_t)n >= nitems(Bridgelist) - 1)
-			return NULL;
-		if (int_cmd(&Bridgelist[n], c) != NULL)
-			return c;
-		return conf_words(conf_bridge, nitems(conf_bridge),
-		    Bridgelist[n].name, c);
+		return (size_t)n < nitems(Bridgelist) - 1 ?
+		    int_cmd(&Bridgelist[n], c) : NULL;
 	}
 	return NULL;
 }

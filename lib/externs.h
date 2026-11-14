@@ -433,14 +433,9 @@ int brport_one(char *);
 int set_ifflag(int, char *, short);
 int is_bridge(int, char *);
 int bridge_learns(int, char *);
-int brrule(int, char **, ...);
-int brstatic(int, char **, ...);
 int flush_bridgedyn(int , char **, ...);
 int flush_bridgeall(int, char **, ...);
 int flush_bridgerule(int, char **, ...);
-int brprotect(int, char **, ...);
-int brvlan(int, char **, ...);
-int brpvlan(int, char **, ...);
 int brvlan_gone(FILE *, const char *, char *, char *);
 int show_bridges(int, char **, ...);
 

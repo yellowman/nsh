@@ -58,8 +58,10 @@
 
 int 	bridge_ifsetflag(int, char *, char *, u_int32_t, struct cand *);
 int 	bridge_ifclrflag(int, char *, char *, u_int32_t, struct cand *);
-int 	bridge_addaddr(int, char *, char *, char *, struct cand *);
-int 	bridge_deladdr(int, char *, char *, struct cand *);
+int 	bridge_addaddr(int, char *, char *, struct ether_addr *, u_int16_t,
+    struct cand *);
+int 	bridge_deladdr(int, char *, struct ether_addr *, u_int16_t,
+    struct cand *);
 int 	bridge_maxaddr(int, char *, u_int32_t, struct cand *);
 int 	bridge_maxage(int, char *, u_int32_t, struct cand *);
 int 	bridge_priority(int, char *, u_int32_t, struct cand *);
@@ -75,20 +77,18 @@ int 	bridge_add(int, char *, char *, struct cand *);
 int 	bridge_delete(int, char *, char *, struct cand *);
 int 	bridge_addspan(int, char *, char *, struct cand *);
 int 	bridge_delspan(int, char *, char *, struct cand *);
-int 	bridge_rule(int, char *, int, char **, int, struct cand *);
 int 	bridge_flushrule(int, char *, char *);
-void 	bridge_badrule(int, char **, int, short);
 void 	bridge_showrule(struct ifbrlreq *, char *, FILE *);
 int 	bridge_confaddrs(int, char *, char *, FILE *);
-int	bridge_protect(const char *, int, const char *, const char *,
+int	bridge_protect(const char *, int, const char *, u_int32_t,
     struct cand *);
 int	bridge_unprotect(const char *, int, const char *, struct cand *);
-void	brprotect_usage(void);
 int	show_bridge(char *);
 static int br_ioctl(int, u_long, void *, struct cand *);
 static int br_portname(int, char *, struct cand *);
 static int brvlan_parse(char *, u_int8_t *);
 static int bridge_addrvlan(char *, struct ether_addr *, u_int16_t *);
+static void bridge_addrstr(char *, size_t, struct ether_addr *, u_int16_t);
 static int bridge_confvaddrs(int, char *, char *, FILE *);
 static void brvlan_print(FILE *, const u_int8_t *);
 
@@ -365,84 +365,114 @@ brproto_apply(const struct argcmd *c, int set, const struct facts_value *v,
 	return 0;
 }
 
+/*
+ * rule: a rule of a member's, its action, its direction, the member, and
+ * the source and destination addresses and tag it may have. Rules go in
+ * order, so no line takes one away
+ */
 int
-brrule(int argc, char **argv, ...)
+brrule_apply(const struct argcmd *c, int set, const struct facts_value *v,
+    char *ifname, int ifs, struct cand *cand)
 {
-	va_list ap;
-	struct cand *cand;
-	char *ifname;
-	int ifs;
+	struct ifbrlreq rule;
 
-	va_start(ap, argv);
-	ifname = va_arg(ap, char *);
-	ifs = va_arg(ap, int);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
-
-	if (NO_ARG(argv[0])) {
+	if (!set) {
 		printf("%% all rules for a member must be applied in order\n");
 		printf("%% use flush bridge-rules <bridge> <member>\n");
 		printf("%% to erase all rules on interface <member>\n");
 		return -1;
 	}
-
-	argv++;
-	argc--;
-
-	if (argc == 0) {
-		printf("%% rule {block | pass} {in | out | in/out} on <member> [{src} mac] [{dst} mac]\n");
+	memset(&rule, 0, sizeof(rule));
+	strlcpy(rule.ifbr_name, ifname, sizeof(rule.ifbr_name));
+	rule.ifbr_action = v[0].v.i;
+	rule.ifbr_flags = v[1].v.i;
+	args_string(&v[2], rule.ifbr_ifsname, sizeof(rule.ifbr_ifsname));
+	if (!(cand != NULL ? cand_hasif(cand, rule.ifbr_ifsname) :
+	    is_valid_ifname(rule.ifbr_ifsname))) {
+		printf("%% Invalid rule: no interface %s\n",
+		    rule.ifbr_ifsname);
 		return -1;
 	}
+	if (v[3].type != FACT_NONE) {
+		rule.ifbr_flags |= BRL_FLAG_SRCVALID;
+		memcpy(&rule.ifbr_src, v[3].v.a.bytes, sizeof(rule.ifbr_src));
+	}
+	if (v[4].type != FACT_NONE) {
+		rule.ifbr_flags |= BRL_FLAG_DSTVALID;
+		memcpy(&rule.ifbr_dst, v[4].v.a.bytes, sizeof(rule.ifbr_dst));
+	}
+	if (v[5].type != FACT_NONE)
+		args_string(&v[5], rule.ifbr_tagname,
+		    sizeof(rule.ifbr_tagname));
 
-	return bridge_rule(ifs, ifname, argc, argv, -1, cand) == 0 ? 0 : -1;
+	if (br_ioctl(ifs, SIOCBRDGARL, &rule, cand) < 0) {
+		printf("%% unable to add rule: SIOCBRDGARL: %s\n",
+		    strerror(errno));
+		return -1;
+	}
+	return 0;
 }
 
+/*
+ * static: a MAC address, on a veb with the VLAN it is in, and the member
+ * it is on, which "no static" may leave out (brstatic_parse())
+ */
+
+/* static's address and VLAN, as bridge_addrvlan() reads them */
 int
-brstatic(int argc, char **argv, ...)
+brstatic_parse(const struct argcmd *c, int argc, char **argv,
+    struct argvals *a)
 {
-	int set, e;
-	va_list ap;
-	struct cand *cand;
-	char *ifname;
-	int ifs;
+	struct ether_addr ea;
+	u_int16_t vlan;
 
-	va_start(ap, argv);
-	ifname = va_arg(ap, char *);
-	ifs = va_arg(ap, int);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
-
-	if (NO_ARG(argv[0])) {
-		set = 0;
-		argv++;
-		argc--;
-	} else
-		set = 1;
-	argv++;
-	argc--;
-
-	if ((set && argc != 2) || ((!set && argc < 1) || (!set && argc > 2))) {
+	if ((a->set && argc != 2) || (!a->set && (argc < 1 || argc > 2))) {
 		printf("%% static <mac address>[@vlan] <member>\n");
 		printf("%% no static <mac address>[@vlan] [member]\n");
 		return -1;
 	}
+	if (bridge_addrvlan(argv[0], &ea, &vlan) == -1)
+		return -1;
+	facts_address(&a->v[0], FACT_LINK, &ea, sizeof(ea), 0);
+	if (vlan != EVL_VLID_NULL)
+		facts_i64(&a->v[1], vlan);
+	if (argc == 2 &&
+	    args_word(c, &c->args[2], a, argv[1], &a->v[2]) == -1)
+		return -1;
+	return 0;
+}
+
+int
+brstatic_apply(const struct argcmd *c, int set, const struct facts_value *v,
+    char *ifname, int ifs, struct cand *cand)
+{
+	struct ether_addr ea;
+	char port[IFNAMSIZ];
+	u_int16_t vlan = v[1].type != FACT_NONE ? v[1].v.i : EVL_VLID_NULL;
+	int e;
+
+	memcpy(&ea, v[0].v.a.bytes, sizeof(ea));
 	/* a veb's addresses are each in a VLAN */
-	if (strchr(argv[0], '@') != NULL &&
-	    !cand_takes(ifname, SIOCBRDGSVADDR)) {
+	if (vlan != EVL_VLID_NULL && !cand_takes(ifname, SIOCBRDGSVADDR)) {
 		printf("%% static with a VLAN not supported on %s\n", ifname);
 		return -1;
 	}
-
-	if (argv[1] && !br_portname(ifs, argv[1], cand))
-	{
-		printf("%% invalid member: %s\n", argv[1]);
+	port[0] = '\0';
+	if (v[2].type != FACT_NONE) {
+		args_string(&v[2], port, sizeof(port));
+		if (!br_portname(ifs, port, cand)) {
+			printf("%% invalid member: %s\n", port);
+			return -1;
+		}
+	} else if (set) {
+		printf("%% static <mac address>[@vlan] <member>\n");
 		return -1;
 	}
 
 	if (set)
-		e = bridge_addaddr(ifs, ifname, argv[1], argv[0], cand);
+		e = bridge_addaddr(ifs, ifname, port, &ea, vlan, cand);
 	else
-		e = bridge_deladdr(ifs, ifname, argv[0], cand);
+		e = bridge_deladdr(ifs, ifname, &ea, vlan, cand);
 
 	return e == 0 ? 0 : -1;
 }
@@ -1112,29 +1142,28 @@ bridge_maxaddr(int s, char *brdg, u_int32_t val, struct cand *cand)
 }
 
 int
-bridge_deladdr(int s, char *brdg, char *addr, struct cand *cand)
+bridge_deladdr(int s, char *brdg, struct ether_addr *ea, u_int16_t vlan,
+    struct cand *cand)
 {
 	struct ifbvareq ifbva;
 	struct ifbareq ifba;
-	struct ether_addr ea;
-	u_int16_t vlan;
+	char addr[sizeof("00:00:00:00:00:00@4094")];
 	int r;
 
-	if (bridge_addrvlan(addr, &ea, &vlan) == -1)
-		return (EX_USAGE);
 	if (vlan != EVL_VLID_NULL) {
 		memset(&ifbva, 0, sizeof(ifbva));
 		strlcpy(ifbva.ifbva_name, brdg, sizeof(ifbva.ifbva_name));
-		ifbva.ifbva_dst = ea;
+		ifbva.ifbva_dst = *ea;
 		ifbva.ifbva_vid = vlan;
 		r = br_ioctl(s, SIOCBRDGDVADDR, &ifbva, cand);
 	} else {
 		memset(&ifba, 0, sizeof(ifba));
 		strlcpy(ifba.ifba_name, brdg, sizeof(ifba.ifba_name));
-		ifba.ifba_dst = ea;
+		ifba.ifba_dst = *ea;
 		r = br_ioctl(s, SIOCBRDGDADDR, &ifba, cand);
 	}
 	if (r < 0) {
+		bridge_addrstr(addr, sizeof(addr), ea, vlan);
 		printf("%% unable to delete %s from %s\n", addr, brdg);
 		return (EX_IOERR);
 	}
@@ -1179,23 +1208,21 @@ bridge_ifcost(int s, char *brdg, char *ifname, int val, struct cand *cand)
 }
 
 int
-bridge_addaddr(int s, char *brdg, char *ifname, char *addr, struct cand *cand)
+bridge_addaddr(int s, char *brdg, char *ifname, struct ether_addr *ea,
+    u_int16_t vlan, struct cand *cand)
 {
 	struct ifbvareq ifbva;
 	struct ifbareq ifba;
-	struct ether_addr ea;
-	u_int16_t vlan;
+	char addr[sizeof("00:00:00:00:00:00@4094")];
 	int r;
 
-	if (bridge_addrvlan(addr, &ea, &vlan) == -1)
-		return (EX_USAGE);
 	/* a veb takes no endpoint, which ifba_dstsa would be */
 	if (vlan != EVL_VLID_NULL) {
 		memset(&ifbva, 0, sizeof(ifbva));
 		strlcpy(ifbva.ifbva_name, brdg, sizeof(ifbva.ifbva_name));
 		strlcpy(ifbva.ifbva_ifsname, ifname,
 		    sizeof(ifbva.ifbva_ifsname));
-		ifbva.ifbva_dst = ea;
+		ifbva.ifbva_dst = *ea;
 		ifbva.ifbva_vid = vlan;
 		ifbva.ifbva_flags = IFBAF_STATIC;
 		r = br_ioctl(s, SIOCBRDGSVADDR, &ifbva, cand);
@@ -1203,13 +1230,14 @@ bridge_addaddr(int s, char *brdg, char *ifname, char *addr, struct cand *cand)
 		memset(&ifba, 0, sizeof(ifba));
 		strlcpy(ifba.ifba_name, brdg, sizeof(ifba.ifba_name));
 		strlcpy(ifba.ifba_ifsname, ifname, sizeof(ifba.ifba_ifsname));
-		ifba.ifba_dst = ea;
+		ifba.ifba_dst = *ea;
 		ifba.ifba_flags = IFBAF_STATIC;
 		r = br_ioctl(s, SIOCBRDGSADDR, &ifba, cand);
 	}
 	if (r < 0) {
 		char tmp[128];
 
+		bridge_addrstr(addr, sizeof(addr), ea, vlan);
 		snprintf(tmp, sizeof(tmp), "%% unable to add %s to %s: %s\n",
 		    addr, brdg, errno == ESRCH ? "no such member" :
 		    strerror(errno));
@@ -1248,6 +1276,19 @@ bridge_addrvlan(char *addr, struct ether_addr *ea, u_int16_t *vlan)
 	}
 	*ea = *e;
 	return 0;
+}
+
+/* ea, and "@vlan" with a VLAN, as a static line says them, into buf */
+static void
+bridge_addrstr(char *buf, size_t len, struct ether_addr *ea, u_int16_t vlan)
+{
+	char v[sizeof("@4094")];
+
+	strlcpy(buf, ether_ntoa(ea), len);
+	if (vlan != EVL_VLID_NULL) {
+		snprintf(v, sizeof(v), "@%u", vlan);
+		strlcat(buf, v, len);
+	}
 }
 
 /* brdg's members; -1 if a record failed */
@@ -1569,172 +1610,20 @@ bridge_showrule(struct ifbrlreq *r, char *delim, FILE *output)
  *	{block|pass} {in|out|in/out} on {ifs} [src {mac}] [dst {mac}]
  */
 int
-bridge_rule(int s, char *brdg, int targc, char **targv, int ln,
-    struct cand *cand)
-{
-	char **argv = targv;
-	int argc = targc;
-	struct ifbrlreq rule;
-	struct ether_addr *ea, *dea;
-	short sec;
-
-	if (argc == 0) {
-		printf("%% Invalid rule\n");
-		return (EX_USAGE);
-	}
-	rule.ifbr_tagname[0] = 0;
-	rule.ifbr_flags = 0;
-	rule.ifbr_action = 0;
-	strlcpy(rule.ifbr_name, brdg, sizeof(rule.ifbr_name));
-
-	sec = 1;
-	if (strcmp(argv[0], "block") == 0)
-		rule.ifbr_action = BRL_ACTION_BLOCK;
-	else if (strcmp(argv[0], "pass") == 0)
-		rule.ifbr_action = BRL_ACTION_PASS;
-	else
-		goto bad_rule;
-	argc--;	argv++;
-
-	sec++; /* 2 */
-	if (argc == 0) {
-		bridge_badrule(targc, targv, ln, sec);
-		return (EX_USAGE);
-	}
-	if (strcmp(argv[0], "in") == 0)
-		rule.ifbr_flags |= BRL_FLAG_IN;
-	else if (strcmp(argv[0], "out") == 0)
-		rule.ifbr_flags |= BRL_FLAG_OUT;
-	else if (strcmp(argv[0], "in/out") == 0)
-		rule.ifbr_flags |= BRL_FLAG_IN | BRL_FLAG_OUT;
-	else
-		goto bad_rule;
-	argc--; argv++;
-
-	sec++; /* 3 */
-	if (argc == 0 || strcmp(argv[0], "on"))
-		goto bad_rule;
-	argc--; argv++;
-
-	sec++; /* 4 */
-	if (argc == 0 || !(cand != NULL ? cand_hasif(cand, argv[0]) :
-	    is_valid_ifname(argv[0])))
-		goto bad_rule;
-	strlcpy(rule.ifbr_ifsname, argv[0], sizeof(rule.ifbr_ifsname));
-	argc--; argv++;
-
-	sec++; /* 5 */
-	while (argc) {
-		if (strcmp(argv[0], "dst") == 0) {
-			if (rule.ifbr_flags & BRL_FLAG_DSTVALID)
-				goto bad_rule;
-			rule.ifbr_flags |= BRL_FLAG_DSTVALID;
-			dea = &rule.ifbr_dst;
-		} else if (strcmp(argv[0], "src") == 0) {
-			if (rule.ifbr_flags & BRL_FLAG_SRCVALID)
-				goto bad_rule;
-			rule.ifbr_flags |= BRL_FLAG_SRCVALID;
-			dea = &rule.ifbr_src;
-		} else if (strcmp(argv[0], "tag") == 0) {
-			if (argc < 2) {
-				printf("%% missing tag name\n");
-				goto bad_rule;
-			}
-			if (rule.ifbr_tagname[0]) {
-				printf("%% tag already defined\n");
-				goto bad_rule;
-			}
-			if (strlcpy(rule.ifbr_tagname, argv[1],
-			    PF_TAG_NAME_SIZE) >= PF_TAG_NAME_SIZE) {
-				printf("%% tag name too long\n");
-				goto bad_rule;
-			}
-			dea = NULL;
-		} else
-			goto bad_rule;
-
-		argc--; argv++;
-		sec++;
-
-		if (argc == 0)
-			goto bad_rule;
-		if (dea != NULL) {
-			ea = ether_aton(argv[0]);
-			if (ea == NULL) {
-				printf("%% Invalid address: %s\n", argv[0]);
-				return (EX_USAGE);
-			}
-			bcopy(ea, dea, sizeof(*dea));
- 		}
-		argc--; argv++;
-		sec++;
-	}
-
-	if (br_ioctl(s, SIOCBRDGARL, &rule, cand) < 0) {
-		printf("%% unable to add rule: SIOCBRDGARL: %s\n",
-		    strerror(errno));
-		return (EX_IOERR);
-	}
-	return (0);
-
-bad_rule:
-	bridge_badrule(targc, targv, ln, sec);
-	return (EX_USAGE);
-}
-
-#define MAXRULEWORDS 8
-
-void
-bridge_badrule(int argc, char **argv, int ln, short sec)
-{
-	int i;
-
-	printf("%% Invalid rule: ");
-	if (ln != -1)
-		printf("%d: ", ln);
-	for (i = 0; i < argc; i++) {
-		printf("%s ", argv[i]);
-	}
-	printf(" (sec %i)\n", sec);
-}
-
-int
 bridge_protect(const char *ifname, int sock, const char *ifsname,
-    const char *val, struct cand *cand)
+    u_int32_t domains, struct cand *cand)
 {
 	struct ifbreq breq;
-	unsigned long v;
-	char *optlist, *str;
-	const char *errstr;
 
 	strlcpy(breq.ifbr_name, ifname, sizeof(breq.ifbr_name));
 	strlcpy(breq.ifbr_ifsname, ifsname, sizeof(breq.ifbr_ifsname));
-	breq.ifbr_protected = 0;
-
-	/* We muck with the string, so copy it. */
-	optlist = strdup(val);
-	if (optlist == NULL)
-		err(1, "strdup");
-
-	str = strtok(optlist, ",");
-	while (str != NULL) {
-		v = strtonum(str, 1, 31, &errstr);
-		if (errstr) {
-			printf("%% protected domain %s is %s\n", str, errstr);
-			free(optlist);
-			return 1;
-		}
-		breq.ifbr_protected |= (1 << (v - 1));
-		str = strtok(NULL, ",");
-	}
+	breq.ifbr_protected = domains;
 
 	if (br_ioctl(sock, SIOCBRDGSIFPROT, (caddr_t)&breq, cand) == -1) {
-		printf("%% protect %s %s: %s\n", ifsname, val, strerror(errno));
-		free(optlist);
+		printf("%% protect %s: %s\n", ifsname, strerror(errno));
 		return 1;
 	}
 
-	free(optlist);
 	return 0;
 }
 
@@ -1757,61 +1646,97 @@ bridge_unprotect(const char *ifname, int sock, const char *ifsname,
 	return 0;
 }
 
-void
-brprotect_usage(void)
+/*
+ * protect: a member and its protected domains, 1 to 31 between commas,
+ * as bits (brprotect_parse()). "no protect" takes the member alone
+ */
+
+int
+brprotect_parse(const struct argcmd *c, int argc, char **argv,
+    struct argvals *a)
 {
-	printf("%% protect <if> <domain-ids>\n");
-	printf("%% no protect <if> [domain-ids]\n");
+	char buf[128], *p, *str;
+	const char *errstr;
+	long long domains = 0, d;
+
+	if ((a->set && argc != 2) || (!a->set && argc != 1 && argc != 2)) {
+		printf("%% protect <if> <domain-ids>\n");
+		printf("%% no protect <if> [domain-ids]\n");
+		return -1;
+	}
+	if (args_word(c, &c->args[0], a, argv[0], &a->v[0]) == -1)
+		return -1;
+	if (!a->set)
+		return 0;
+	if (strlcpy(buf, argv[1], sizeof(buf)) >= sizeof(buf)) {
+		printf("%% protected domains %s are too long\n", argv[1]);
+		return -1;
+	}
+	for (str = strtok_r(buf, ",", &p); str != NULL;
+	    str = strtok_r(NULL, ",", &p)) {
+		d = strtonum(str, 1, 31, &errstr);
+		if (errstr) {
+			printf("%% protected domain %s is %s\n", str, errstr);
+			return -1;
+		}
+		domains |= 1LL << (d - 1);
+	}
+	facts_i64(&a->v[1], domains);
+	return 0;
 }
 
 int
-brprotect(int argc, char **argv, ...)
+brprotect_apply(const struct argcmd *c, int set, const struct facts_value *v,
+    char *ifname, int ifs, struct cand *cand)
 {
-	int set, e;
-	va_list ap;
-	struct cand *cand;
-	char *ifname;
-	int ifs;
+	char port[IFNAMSIZ];
+	int e;
 
-	va_start(ap, argv);
-	ifname = va_arg(ap, char *);
-	ifs = va_arg(ap, int);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
-
-	if (NO_ARG(argv[0])) {
-		set = 0;
-		argv++;
-		argc--;
-		if (argc != 2 && argc != 3) {
-			brprotect_usage();
-			return -1;
-		}
-	} else {
-		set = 1;
-		if (argc != 3) {
-			brprotect_usage();
-			return -1;
-		}
-	}
-
-	if (!br_portname(ifs, argv[1], cand)) {
-		printf("%% Invalid interface name %s\n", argv[1]);
+	args_string(&v[0], port, sizeof(port));
+	if (!br_portname(ifs, port, cand)) {
+		printf("%% Invalid interface name %s\n", port);
 		return -1;
 	}
 
 	if (set)
-		e = bridge_protect(ifname, ifs, argv[1], argv[2], cand);
+		e = bridge_protect(ifname, ifs, port, v[1].v.i, cand);
 	else
-		e = bridge_unprotect(ifname, ifs, argv[1], cand);
+		e = bridge_unprotect(ifname, ifs, port, cand);
 	return e == 0 ? 0 : -1;
 }
 
-static struct brc brvls[] = {
-	{ "untagged",	0 },
-	{ "tagged",	1 },
-	{ 0,		0 }
-};
+/*
+ * On a veb, untagged sets the VLAN of the frames a member sends and
+ * receives without a tag: a VLAN ID, passthrough, which hands them to
+ * the system instead, none, which drops them, or default, the veb's
+ * vnetid.  tagged adds the VLANs a member carries with a tag, and no
+ * tagged removes them, or with no VLANs, all of them.  if_veb.c
+ */
+
+/* tagged's member, and its VLANs as brvlan_parse() reads them */
+int
+brtagged_parse(const struct argcmd *c, int argc, char **argv,
+    struct argvals *a)
+{
+	if ((a->set && argc != 2) || (!a->set && (argc < 1 || argc > 2))) {
+		printf("%% tagged <member> <vlans>\n");
+		printf("%% no tagged <member> [vlans]\n");
+		return -1;
+	}
+	if (args_word(c, &c->args[0], a, argv[0], &a->v[0]) == -1)
+		return -1;
+	if (argc == 1)
+		return 0;
+	if (a->nbin >= ARGS_BINS) {
+		printf("%% too many values\n");
+		return -1;
+	}
+	memset(a->bin[a->nbin], 0, BRVLAN_MAP);
+	if (brvlan_parse(argv[1], a->bin[a->nbin]) == -1)
+		return -1;
+	facts_bytes(&a->v[1], a->bin[a->nbin++], BRVLAN_MAP);
+	return 0;
+}
 
 /*
  * On a veb, untagged sets the VLAN of the frames a member sends and
@@ -1821,93 +1746,44 @@ static struct brc brvls[] = {
  * tagged removes them, or with no VLANs, all of them.  if_veb.c
  */
 int
-brvlan(int argc, char **argv, ...)
+brvlan_apply(const struct argcmd *c, int set, const struct facts_value *v,
+    char *ifname, int ifs, struct cand *cand)
 {
 	struct ifbrvidmap vm;
 	struct ifbreq breq;
-	struct brc *x;
-	const char *errmsg = NULL;
-	va_list ap;
-	struct cand *cand;
-	char *ifname;
-	int ifs, set, r;
+	char port[IFNAMSIZ];
+	int r;
 
-	va_start(ap, argv);
-	ifname = va_arg(ap, char *);
-	ifs = va_arg(ap, int);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
-
-	if (NO_ARG(argv[0])) {
-		set = 0;
-		argv++;
-		argc--;
-	} else
-		set = 1;
-
-	x = (struct brc *) genget(argv[0], (char **)brvls, sizeof(struct brc));
-	if (x == 0 || Ambiguous(x)) {
-		printf("%% Internal error - Invalid argument %s\n", argv[0]);
-		return -1;
-	}
-
-	argv++;
-	argc--;
-
-	if ((set && argc != 2) || (!set && (argc < 1 || argc > 2))) {
-		if (x->type == 0) {
-			printf("%% untagged <member> <vlan|passthrough|none|"
-			    "default>\n");
-			printf("%% no untagged <member>\n");
-		} else {
-			printf("%% tagged <member> <vlans>\n");
-			printf("%% no tagged <member> [vlans]\n");
-		}
-		return -1;
-	}
 	if (!cand_takes(ifname, SIOCBRDGSPVID)) {
-		printf("%% %s not supported on %s\n", x->name, ifname);
+		printf("%% %s not supported on %s\n", c->name, ifname);
 		return -1;
 	}
-	if (!br_portname(ifs, argv[0], cand)) {
-		printf("%% invalid member name: %s\n", argv[0]);
+	args_string(&v[0], port, sizeof(port));
+	if (!br_portname(ifs, port, cand)) {
+		printf("%% invalid member name: %s\n", port);
 		return -1;
 	}
 
-	if (x->type == 0) {
+	if (c->code == BRVLAN_UNTAGGED) {
 		memset(&breq, 0, sizeof(breq));
 		strlcpy(breq.ifbr_name, ifname, sizeof(breq.ifbr_name));
-		strlcpy(breq.ifbr_ifsname, argv[0], sizeof(breq.ifbr_ifsname));
-		if (!set || strcmp(argv[1], "none") == 0)
-			breq.ifbr_pvid = IFBR_PVID_NONE;
-		else if (strcmp(argv[1], "passthrough") == 0)
-			breq.ifbr_pvid = IFBR_PVID_DECLINE;
-		else if (strcmp(argv[1], "default") == 0)
-			breq.ifbr_pvid = EVL_VLID_NULL;
-		else {
-			breq.ifbr_pvid = strtonum(argv[1], EVL_VLID_MIN,
-			    EVL_VLID_MAX, &errmsg);
-			if (errmsg) {
-				printf("%% invalid VLAN %s: %s\n", argv[1],
-				    errmsg);
-				return -1;
-			}
-		}
+		strlcpy(breq.ifbr_ifsname, port, sizeof(breq.ifbr_ifsname));
+		breq.ifbr_pvid = set ? v[1].v.i : IFBR_PVID_NONE;
 		r = br_ioctl(ifs, SIOCBRDGSPVID, &breq, cand);
 	} else {
 		memset(&vm, 0, sizeof(vm));
 		strlcpy(vm.ifbrvm_name, ifname, sizeof(vm.ifbrvm_name));
-		strlcpy(vm.ifbrvm_ifsname, argv[0],
-		    sizeof(vm.ifbrvm_ifsname));
-		if (argc == 2 && brvlan_parse(argv[1], vm.ifbrvm_map) == -1)
-			return -1;
+		strlcpy(vm.ifbrvm_ifsname, port, sizeof(vm.ifbrvm_ifsname));
+		if (v[1].type != FACT_NONE)
+			memcpy(vm.ifbrvm_map, v[1].v.str.s,
+			    sizeof(vm.ifbrvm_map));
 		/* no tagged with no VLANs leaves none */
-		vm.ifbrvm_op = set ? IFBRVM_OP_OR : argc == 2 ?
+		vm.ifbrvm_op = set ? IFBRVM_OP_OR : v[1].type != FACT_NONE ?
 		    IFBRVM_OP_ANDNOT : IFBRVM_OP_SET;
 		r = br_ioctl(ifs, SIOCBRDGSVMAP, &vm, cand);
 	}
 	if (r < 0) {
-		printf("%% %s %s: %s\n", x->name, argv[0],
+		printf("%% %s %s: %s\n", c->name, port,
 		    errno == ESRCH ? "not a member" : strerror(errno));
 		return -1;
 	}
@@ -2023,44 +1899,19 @@ static struct brc brpvs[] = {
  * number of community VLANs, whose members reach each other's too.
  * if_veb.c
  */
+
 int
-brpvlan(int argc, char **argv, ...)
+brpvlan_apply(const struct argcmd *c, int set, const struct facts_value *v,
+    char *ifname, int ifs, struct cand *cand)
 {
 	struct ifbrpvlan pv;
 	struct brc *x;
-	const char *errmsg = NULL;
-	va_list ap;
-	struct cand *cand;
-	char *ifname;
-	int ifs, set;
+	int primary = v[0].v.i, vlan = args_n(c) > 1 ? v[1].v.i : 0;
 
-	va_start(ap, argv);
-	ifname = va_arg(ap, char *);
-	ifs = va_arg(ap, int);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
-
-	if (NO_ARG(argv[0])) {
-		set = 0;
-		argv++;
-		argc--;
-	} else
-		set = 1;
-
-	x = (struct brc *) genget(argv[0], (char **)brpvs, sizeof(struct brc));
-	if (x == 0 || Ambiguous(x)) {
-		printf("%% Internal error - Invalid argument %s\n", argv[0]);
-		return -1;
-	}
-
-	argv++;
-	argc--;
-
-	if (argc != (x->type == IFBRPV_T_PRIMARY ? 1 : 2)) {
-		if (x->type == IFBRPV_T_PRIMARY)
-			printf("%% [no] pvlan <primary-vlan>\n");
-		else
-			printf("%% [no] %s <primary-vlan> <vlan>\n", x->name);
+	for (x = brpvs; x->name != NULL && strcmp(x->name, c->name) != 0; x++)
+		;
+	if (x->name == NULL) {
+		printf("%% Internal error - Invalid argument %s\n", c->name);
 		return -1;
 	}
 	if (!cand_takes(ifname, SIOCBRDGADDPV)) {
@@ -2071,36 +1922,29 @@ brpvlan(int argc, char **argv, ...)
 	memset(&pv, 0, sizeof(pv));
 	strlcpy(pv.ifbrpv_name, ifname, sizeof(pv.ifbrpv_name));
 	pv.ifbrpv_type = x->type;
-	pv.ifbrpv_primary = strtonum(argv[0], EVL_VLID_MIN, EVL_VLID_MAX,
-	    &errmsg);
-	if (errmsg == NULL && argc == 2)
-		pv.ifbrpv_secondary = strtonum(argv[1], EVL_VLID_MIN,
-		    EVL_VLID_MAX, &errmsg);
-	if (errmsg) {
-		printf("%% invalid VLAN: %s\n", errmsg);
-		return -1;
-	}
+	pv.ifbrpv_primary = primary;
+	pv.ifbrpv_secondary = vlan;
 	if (br_ioctl(ifs, set ? SIOCBRDGADDPV : SIOCBRDGDELPV, &pv, cand) == 0)
 		return 0;
 	switch (errno) {
 	case EBUSY:
 		if (set)
-			printf("%% %s: VLAN %s is a private VLAN already\n",
-			    x->name, argv[argc - 1]);
+			printf("%% %s: VLAN %d is a private VLAN already\n",
+			    x->name, args_n(c) > 1 ? vlan : primary);
 		else if (x->type == IFBRPV_T_PRIMARY)
-			printf("%% pvlan: %s has secondary VLANs\n", argv[0]);
+			printf("%% pvlan: %d has secondary VLANs\n", primary);
 		else
-			printf("%% %s: a member has VLAN %s\n", x->name,
-			    argv[1]);
+			printf("%% %s: a member has VLAN %d\n", x->name,
+			    vlan);
 		break;
 	case ENETUNREACH:
-		printf("%% %s: %s is no primary VLAN\n", x->name, argv[0]);
+		printf("%% %s: %d is no primary VLAN\n", x->name, primary);
 		break;
 	case EADDRINUSE:
-		printf("%% %s: a member has VLAN %s\n", x->name, argv[1]);
+		printf("%% %s: a member has VLAN %d\n", x->name, vlan);
 		break;
 	case EADDRNOTAVAIL:
-		printf("%% %s: %s has an isolated VLAN\n", x->name, argv[0]);
+		printf("%% %s: %d has an isolated VLAN\n", x->name, primary);
 		break;
 	case ESRCH:
 		printf("%% %s: no such private VLAN\n", x->name);
