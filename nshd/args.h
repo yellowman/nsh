@@ -42,10 +42,14 @@
 				   at most max bytes: FACT_STRING */
 #define ARG_BITS	4	/* one or more keywords, their values OR'ed
 				   together: FACT_I64 */
+#define ARG_ADDR	5	/* a numeric address, IPv4 or IPv6 unless the
+				   family flags say: FACT_ADDRESS */
 
 #define ARG_OPT		0x1	/* it may be left out */
 #define ARG_NO		0x2	/* parsed on a "no" line too */
 #define ARG_NOOPT	0x4	/* with no, it may be left out */
+#define ARG_INET	0x8	/* an IPv4 address */
+#define ARG_INET6	0x10	/* an IPv6 address */
 
 #define ARGS_MAX	32	/* values of a command, at most */
 #define ARGS_REST	1024	/* bytes of an ARG_REST field, at most */
@@ -60,7 +64,7 @@ struct arg {
 	const char	*name;	/* its facts field */
 	int		 type;
 	long long	 min, max;
-	int		 flags;	/* ARG_OPT, ARG_NO, ARG_NOOPT */
+	int		 flags;	/* ARG_OPT, ARG_NO, ARG_NOOPT, ARG_INET... */
 	const struct argkey *keys;	/* NULL, or ended by a NULL word */
 	int		 many;	/* values it holds, if more than 1 */
 	const char	*help;	/* what a usage calls it, if not its name */
@@ -114,11 +118,13 @@ enum { IFMETRIC, IFPRIORITY };				/* intmetric_apply() */
 				   goes as several (args_each()) */
 
 /* what the rows name: each file's apply functions */
+args_applyfn	intcarp_apply, intcpass_apply, intcnode_apply, intcdev_apply;
 args_applyfn	intpatch_apply, intmtu_apply, intkeepalive_apply, intmpls_apply,
 		intmetric_apply, intllprio_apply, intgroup_apply,
 		intrtlabel_apply, intparent_apply, intflags_apply,
 		intxflags_apply, intlink_apply, intpowersave_apply,
 		intrdomain_apply, intdesc_apply, intvnetflowid_apply;
+args_applyfn	intsyncdev_apply, intsyncpeer_apply, intmaxupd_apply;
 const struct argcmd *conf_cmd(int, int, struct argcmd *);
 size_t	args_n(const struct argcmd *);
 const char *args_called(const struct arg *);

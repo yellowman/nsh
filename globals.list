@@ -16,7 +16,7 @@ bgpcommands.c	table	bgcs
 bridge.c	table	brds brlists brnames brper brps brpvnames brpvs brvals brvls brvper brvs
 candidate.c	scratch	cand_listowner.owner
 carp.c		scratch	carp_facts.carpdev
-carp.c		table	carp_bal_modes intcs
+carp.c		table	carp_bal_modes
 client.c	process	nshd_config nshd_intr nshd_rtable sfd sib
 client.c	table	nshd_runs.progs show_log.logs
 cmdargs.c	process	child in_config
@@ -24,12 +24,14 @@ commands.c	process	hname snapshot
 commands.c	scratch	in_rc next_ifname
 commands.c	table	Bridgelist Bridgelist_nitems Intlist
 			Intlist_nitems ahtab arpdowntab arphelp
-			arptimeouttab bgphelp bridgehelp carploggingtab
+			arptimeouttab balancing_keys bgphelp bridgehelp
+			carploggingtab
 			carppreempttab carptab cmdtab cmdtab2
 			cmdtab_nitems
 			conf_bridge conf_if conf_top
 			crontabhelp ddbhelp ddbtab
-			defaultttltab demotecountertab description_args
+			defaultttltab defer_keys demotecountertab
+			description_args
 			dhcp6leasehelp
 			dhcphelp
 			directedbroadcaststab

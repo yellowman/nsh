@@ -61,6 +61,7 @@
 #include <net/if.h>
 #include <net/route.h>
 #include <netinet/in.h>
+#include <netinet/ip_carp.h>
 #include <netmpls/mpls.h>
 #include <arpa/inet.h>
 #include <limits.h>
@@ -806,6 +807,12 @@ static char interfacehelp[];
 extern struct ghs mantab[];
 
 /* the words arguments take, by the table of each */
+static const struct argkey balancing_keys[] = {
+	{ "none", CARP_BAL_NONE }, { "ip", CARP_BAL_IP },
+	{ "ip-stealth", CARP_BAL_IPSTEALTH },
+	{ "ip-unicast", CARP_BAL_IPUNICAST }, { NULL }
+};
+static const struct argkey defer_keys[] = { { "defer", 1 }, { NULL } };
 static const struct argkey txprio_keys[] = {
 	{ "packet", IF_HDRPRIO_PACKET }, { "payload", IF_HDRPRIO_PAYLOAD },
 	{ NULL }
@@ -998,17 +1005,78 @@ struct intlist Intlist[] = {
 		    MPLS_LABEL_MAX, .help = "local mpls label" },
 		{ NULL } } },
 	{ "pwe",	"MPLS PWE3",				CMPL0 0, 0, intpwe3, 1, CAND_EDIT },
-	{ "syncdev",	"PFsync control message interface",	CMPL(i) 0, 0, intsyncdev, 1, CAND_EDIT },
-	{ "syncpeer",	"PFsync peer address",			CMPL0 0, 0, intsyncpeer, 1, CAND_EDIT },
-	{ "maxupd", 	"PFsync max updates, defer first packet", CMPL0 0, 0, intmaxupd, 1, CAND_EDIT },
-	{ "vhid",	"CARP virtual host ID",			CMPL0 0, 0, intcarp, 1, CAND_EDIT },
-	{ "advbase",	"CARP advertisement interval",		CMPL0 0, 0, intcarp, 1, CAND_EDIT },
-	{ "advskew",	"CARP advertisement skew",		CMPL0 0, 0, intcarp, 1, CAND_EDIT },
-	{ "carppass",	"CARP passphrase",			CMPL0 0, 0, intcpass, 1, CAND_EDIT },
-	{ "carpdev",	"CARP device",				CMPL(i) 0, 0, intcdev, 1, CAND_EDIT },
-	{ "carpnode",	"CARP additional vhid/advskew",		CMPL0 0, 0, intcnode, 1, CAND_EDIT },
-	{ "carppeer",	"CARP peer",				CMPL0 0, 0, intcarp, 1, CAND_EDIT },
-	{ "balancing",	"CARP balancing mode",			CMPL0 0, 0, intcarp, 1, CAND_EDIT },
+	{ "syncdev", "PFsync control message interface", CMPL(i)
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intsyncdev_apply,
+	  .args = ARGS{
+		{ "if",		ARG_WORD, 1, IFNAMSIZ - 1 },
+		{ NULL } } },
+	{ "syncpeer", "PFsync peer address", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intsyncpeer_apply,
+	  .args = ARGS{
+		{ "peer",	ARG_ADDR, 0, 0, ARG_INET,
+		  .help = "IPv4 peer address" },
+		{ NULL } } },
+	{ "maxupd", "PFsync max updates, defer first packet", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intmaxupd_apply,
+	  .args = ARGS{
+		/* the kernel takes at most 255 */
+		{ "updates",	ARG_NUM, 0, 255, .help = "max pfsync updates" },
+		{ "defer",	ARG_NUM, 1, 0, ARG_OPT, defer_keys },
+		{ NULL } } },
+	{ "vhid", "CARP virtual host ID", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intcarp_apply, .code = CARP_VHID,
+	  .args = ARGS{
+		{ "id",		ARG_NUM, 1, 255 },
+		{ NULL } } },
+	{ "advbase", "CARP advertisement interval", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intcarp_apply, .code = CARP_ADVBASE,
+	  .args = ARGS{
+		{ "seconds",	ARG_NUM, 0, 254 },
+		{ NULL } } },
+	{ "advskew", "CARP advertisement skew", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intcarp_apply, .code = CARP_ADVSKEW,
+	  .args = ARGS{
+		{ "skew",	ARG_NUM, 0, 254 },
+		{ NULL } } },
+	{ "carppass", "CARP passphrase", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intcpass_apply,
+	  .args = ARGS{
+		{ "passphrase",	ARG_WORD, 0, CARP_KEY_LEN - 1 },
+		{ NULL } } },
+	{ "carpdev", "CARP device", CMPL(i)
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intcdev_apply,
+	  .args = ARGS{
+		{ "carpdev",	ARG_WORD, 1, IFNAMSIZ - 1 },
+		{ NULL } } },
+	{ "carpnode", "CARP additional vhid/advskew", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intcnode_apply,
+	  .args = ARGS{
+		{ "vhid",	ARG_NUM, 1, 255, ARG_NO },
+		/* carp_vhids_ioctl() refuses an advskew of 255 */
+		{ "advskew",	ARG_NUM, 0, 254, ARG_OPT | ARG_NO },
+		{ NULL } } },
+	{ "carppeer", "CARP peer", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intcarp_apply, .code = CARP_PEER,
+	  .args = ARGS{
+		{ "peer",	ARG_ADDR, 0, 0, ARG_INET },
+		{ NULL } } },
+	{ "balancing", "CARP balancing mode", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intcarp_apply, .code = CARP_BALANCING,
+	  .args = ARGS{
+		{ "mode",	ARG_NUM, 1, 0, 0, balancing_keys,
+		  .help = "balancing mode" },
+		{ NULL } } },
 	{ "pflow",	"pflow data export",			CMPL0 0, 0, intpflow, 1, CAND_EDIT },
 	{ "debug", "Driver dependent debugging", CMPL0
 	  .nocmd = 1, .cand = CAND_EDIT,
@@ -1550,17 +1618,6 @@ static const struct confcmd conf_if[] = {
 	{ "endpoint",	intendpoint },
 	{ "vnetid",	intvnetid },
 	{ "pwe",	intpwe3 },
-	{ "syncdev",	intsyncdev },
-	{ "syncpeer",	intsyncpeer },
-	{ "maxupd",	intmaxupd },
-	{ "vhid",	intcarp },
-	{ "advbase",	intcarp },
-	{ "advskew",	intcarp },
-	{ "carppass",	intcpass },
-	{ "carpdev",	intcdev },
-	{ "carpnode",	intcnode },
-	{ "carppeer",	intcarp },
-	{ "balancing",	intcarp },
 	{ "pflow",	intpflow },
 	{ "dhcrelay",	intdhcrelay },
 	{ "dhcrelay6",	intdhcrelay6 },

@@ -14,6 +14,10 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netdb.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -76,6 +80,19 @@ arg_key(const struct arg *f, const char *word)
 	k = (const struct argkey *)genget((char *)word, (char **)f->keys,
 	    sizeof(*k));
 	return Ambiguous((void *)k) ? NULL : k;
+}
+
+/* the address family f takes: AF_INET, AF_INET6, or AF_UNSPEC for either */
+static int
+arg_af(const struct arg *f)
+{
+	switch (f->flags & (ARG_INET | ARG_INET6)) {
+	case ARG_INET:
+		return AF_INET;
+	case ARG_INET6:
+		return AF_INET6;
+	}
+	return AF_UNSPEC;
 }
 
 /* may argument f be left out? set is 0 for a "no" line */
@@ -149,9 +166,31 @@ arg_word(const struct argcmd *c, const struct arg *f, char *w,
 {
 	const struct argkey	*k;
 	const char		*errstr;
+	struct addrinfo		*res;
+	struct sockaddr_in	*sin;
+	struct sockaddr_in6	*sin6;
 	long long		 n;
+	int			 af = arg_af(f);
 
 	switch (f->type) {
+	case ARG_ADDR:
+		if (numeric_addrinfo(w, NULL, af, 0, &res) != 0) {
+			printf("%% %s %s is not an %saddress\n",
+			    arg_label(c, f), w, af == AF_INET ? "IPv4 " :
+			    af == AF_INET6 ? "IPv6 " : "");
+			return -1;
+		}
+		if (res->ai_family == AF_INET) {
+			sin = (struct sockaddr_in *)res->ai_addr;
+			facts_address(v, FACT_INET, &sin->sin_addr,
+			    sizeof(sin->sin_addr), 0);
+		} else {
+			sin6 = (struct sockaddr_in6 *)res->ai_addr;
+			facts_address(v, FACT_INET6, &sin6->sin6_addr,
+			    sizeof(sin6->sin6_addr), sin6->sin6_scope_id);
+		}
+		freeaddrinfo(res);
+		return 0;
 	case ARG_NUM:
 		if ((k = arg_key(f, w)) != NULL) {
 			facts_i64(v, k->value);
@@ -381,6 +420,7 @@ args_kind(const struct argcmd *c, struct facts_kind *k,
 			f[n].name = c->args[i].name;
 			f[n].type = c->args[i].type == ARG_WORD ||
 			    c->args[i].type == ARG_REST ? FACT_STRING :
+			    c->args[i].type == ARG_ADDR ? FACT_ADDRESS :
 			    FACT_I64;
 			f[n].naming = FACT_PLAIN;
 			n++;
@@ -409,6 +449,12 @@ arg_value(const struct argcmd *c, const struct arg *f,
 		for (k = f->keys; k->word != NULL; k++)
 			bits |= k->value;
 		return v->v.i != 0 && (v->v.i & ~bits) == 0;
+	case ARG_ADDR:
+		if (v->v.a.family == FACT_INET)
+			return arg_af(f) != AF_INET6 && v->v.a.len == 4 &&
+			    v->v.a.scope == 0;
+		return v->v.a.family == FACT_INET6 && arg_af(f) != AF_INET &&
+		    v->v.a.len == 16;
 	}
 	if (v->v.str.len > (size_t)f->max || v->v.str.len < (size_t)f->min)
 		return 0;

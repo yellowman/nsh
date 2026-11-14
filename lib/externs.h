@@ -516,9 +516,6 @@ int admin_test(char *, char *, size_t);
 
 /* pfsync.c */
 #define PFSYNC_MAXUPDATES 128
-int intsyncdev(int, char **, ...);
-int intsyncpeer(int, char **, ...);
-int intmaxupd(int, char **, ...);
 int conf_pfsync(FILE *, int, char *);
 
 /* carp.c */
@@ -527,11 +524,7 @@ int conf_pfsync(FILE *, int, char *);
 #define CARP_VHID 2
 #define CARP_PEER 3
 #define CARP_BALANCING 4
-int intcarp(int, char **, ...);
-int intcpass(int, char **, ...);
-int intcnode(int, char **, ...);
 int conf_carp(FILE *, int, char *);
-int intcdev(int, char **, ...);
 int carplock(int);
 
 /* trunk.c */

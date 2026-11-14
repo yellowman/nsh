@@ -32,6 +32,8 @@
 #include <net/if_pfsync.h>
 #include "externs.h"
 #include "settings.h"
+#include "facts.h"
+#include "args.h"
 
 #define PFSYNC_MAXUPDATES 128
 
@@ -177,38 +179,15 @@ pfsync_set(int ifs, struct ifreq *ifr, struct cand *cand)
 }
 
 int
-intsyncdev(int argc, char **argv, ...)
+intsyncdev_apply(const struct argcmd *c, int set,
+    const struct facts_value *v, char *ifname, int ifs, struct cand *cand)
 {
 	struct ifreq ifr;
 	struct pfsyncreq preq;
-	int set;
-	va_list ap;
-	struct cand *cand;
-	char *ifname;
-	int ifs;
+	char dev[IFNAMSIZ] = "";
 
-	va_start(ap, argv);
-	ifname = va_arg(ap, char *);
-	ifs = va_arg(ap, int);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
-
-	if (NO_ARG(argv[0])) {
-		set = 0;
-		argc--;
-		argv++;
-	} else
-		set = 1;
-
-	argc--;
-	argv++;
-
-	if ((!set && argc > 1) || (set && argc != 1)) {
-		printf("%% syncdev <if>\n");
-		printf("%% no syncdev [if]\n");
-		return -1;
-	}
-
+	if (set)
+		args_string(&v[0], dev, sizeof(dev));
 	if (!isprefix("pfsync", ifname)) {
 		printf("%% syncdev is only for pfsync devices\n");
 		return -1;
@@ -223,19 +202,12 @@ intsyncdev(int argc, char **argv, ...)
 		return -1;
 	}
 
-	if (argv[0])
-		if (!(cand != NULL ? cand_hasif(cand, argv[0]) :
-		    is_valid_ifname(argv[0]))) {
-			printf("%% Interface not found: %s\n", argv[0]);
-			return -1;
-		}
-
-	if (set)
-		strlcpy(preq.pfsyncr_syncdev, argv[0],
-			sizeof(preq.pfsyncr_syncdev));
-	else
-		bzero((char *) &preq.pfsyncr_syncdev,
-		      sizeof(preq.pfsyncr_syncdev));
+	if (set &&
+	    !(cand != NULL ? cand_hasif(cand, dev) : is_valid_ifname(dev))) {
+		printf("%% Interface not found: %s\n", dev);
+		return -1;
+	}
+	strlcpy(preq.pfsyncr_syncdev, dev, sizeof(preq.pfsyncr_syncdev));
 	if (!pfsync_mcast(ifs, preq.pfsyncr_syncdev,
 	    preq.pfsyncr_syncpeer, cand))
 		return -1;
@@ -243,7 +215,7 @@ intsyncdev(int argc, char **argv, ...)
 	if (pfsync_set(ifs, &ifr, cand) == -1) {
 		if (errno == ENOBUFS)
 			printf("%% Invalid synchronization interface: %s\n",
-			    argv[0]);
+			    dev);
 		else
 			printf("%% intsyncdev: SIOCSETPFSYNC: %s\n",
 			    strerror(errno));
@@ -262,41 +234,15 @@ intsyncdev(int argc, char **argv, ...)
 }
 
 int
-intsyncpeer(int argc, char **argv, ...)
+intsyncpeer_apply(const struct argcmd *c, int set,
+    const struct facts_value *v, char *ifname, int ifs, struct cand *cand)
 {
 	struct ifreq ifr;
 	struct pfsyncreq preq;
-	struct addrinfo *peerres;
-	int set, r = 0;
-	va_list ap;
-	struct cand *cand;
-	char *ifname;
-	int ifs;
-
-	va_start(ap, argv);
-	ifname = va_arg(ap, char *);
-	ifs = va_arg(ap, int);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
-
-	if (NO_ARG(argv[0])) {
-		set = 0;
-		argc--;
-		argv++;
-	} else
-		set = 1;
-
-	argc--;
-	argv++;
+	int r = 0;
 
 	if (!isprefix("pfsync", ifname)) {
 		printf("%% syncpeer is only for pfsync devices\n");
-		return -1;
-	}
-
-	if ((!set && argc > 1) || (set && argc != 1)) {
-		printf("%% syncpeer <IPv4 peer address>\n");
-		printf("%% no syncpeer [IPv4 peer address]\n");
 		return -1;
 	}
 
@@ -310,25 +256,11 @@ intsyncpeer(int argc, char **argv, ...)
 		return -1;
 	}
 
-	if (set) {
-		if (numeric_addrinfo(argv[0], NULL, AF_INET, SOCK_DGRAM,
-		    &peerres) != 0) {
-			printf("%% syncpeer %s is not an IPv4 address\n",
-			    argv[0]);
-			return -1;
-		}
-
-		if (peerres->ai_addr->sa_family != AF_INET) {
-			printf("%% only IPv4 allowed for syncpeer\n");
-			freeaddrinfo(peerres);
-			return -1;
-		}
-		preq.pfsyncr_syncpeer.s_addr = ((struct sockaddr_in *)
-		    peerres->ai_addr)->sin_addr.s_addr;
-		freeaddrinfo(peerres);
-	} else {
+	if (set)
+		memcpy(&preq.pfsyncr_syncpeer, v[0].v.a.bytes,
+		    sizeof(preq.pfsyncr_syncpeer));
+	else
 		preq.pfsyncr_syncpeer.s_addr = 0;
-	}
 	/* pfsync_up() refuses it (EDESTADDRREQ) */
 	if (preq.pfsyncr_syncpeer.s_addr == INADDR_BROADCAST) {
 		printf("%% syncpeer cannot be the broadcast address\n");
@@ -348,40 +280,12 @@ intsyncpeer(int argc, char **argv, ...)
 }
 
 int
-intmaxupd(int argc, char **argv, ...)
+intmaxupd_apply(const struct argcmd *c, int set,
+    const struct facts_value *v, char *ifname, int ifs, struct cand *cand)
 {
 	struct ifreq ifr;
 	struct pfsyncreq preq;
-	u_int32_t val;
-	int set;
-	const char *errmsg = NULL;
-	va_list ap;
-	struct cand *cand;
-	char *ifname;
-	int ifs;
 
-	va_start(ap, argv);
-	ifname = va_arg(ap, char *);
-	ifs = va_arg(ap, int);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
-
-	if (NO_ARG(argv[0])) {
-		set = 0;
-		argc--;
-		argv++;
-	} else
-		set = 1;
-
-	argc--;
-	argv++;
-
-	if ((!set && argc > 2) || (set && (argc < 1 || argc > 2)) ||
-	    (set && argc == 2 && !isprefix(argv[1], "defer"))) {
-		printf("%% maxupd <max pfsync updates> [defer]\n");
-		printf("%% no maxupd [max pfsync updates] [defer]\n");
-		return -1;
-	}
 	bzero((char *) &preq, sizeof(struct pfsyncreq));
 	ifr.ifr_data = (caddr_t) & preq;
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
@@ -391,16 +295,8 @@ intmaxupd(int argc, char **argv, ...)
 		return -1;
 	}
 	if (set) {
-		errno = 0;
-		/* the kernel takes at most 255 */
-		val = strtonum(argv[0], 0, 255, &errmsg);
-		if (errmsg) {
-			printf("%% maxupd value out of range %s: %s\n", argv[0],
-			    errmsg);
-			return -1;
-		}
-		preq.pfsyncr_maxupdates = (int)val;
-		preq.pfsyncr_defer = argc == 2;
+		preq.pfsyncr_maxupdates = v[0].v.i;
+		preq.pfsyncr_defer = v[1].type != FACT_NONE;
 	} else {
 		preq.pfsyncr_maxupdates = PFSYNC_MAXUPDATES;
 		preq.pfsyncr_defer = 0;
