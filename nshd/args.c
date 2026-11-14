@@ -166,42 +166,53 @@ arg_many(const struct arg *f)
 	    f->many > 1;
 }
 
+/* Print f's placeholder in a usage, <kw1|kw2> if only keywords are valid */
+static void
+arg_what(const struct arg *f)
+{
+	const struct argkey	*k;
+
+	if (f->keys != NULL && f->type == ARG_NUM && f->min > f->max) {
+		printf("<");
+		for (k = f->keys; k->word != NULL; k++)
+			printf("%s%s", k != f->keys ? "|" : "", k->word);
+		printf(">");
+	} else
+		printf("<%s>", args_called(f));
+}
+
 /* Print f's part of a usage line; ignored is set if "no" ignores f */
 static void
 arg_usage(const struct arg *f, int set, int ignored)
 {
-	const struct argkey	*k;
-
 	if (f->type == ARG_FLAG) {
 		printf(" [%s]", f->name);
 		return;
 	}
 	if (arg_named(f)) {
-		printf(" [%s <%s>]", f->name, f->name);
+		printf(" [%s ", f->name);
+		arg_what(f);
+		printf("]");
 		return;
 	}
 	if (ignored) {
 		if (f->type != ARG_REST)
-			printf(" [%s%s]", args_called(f), arg_many(f) ? " ..." : "");
+			printf(" [%s%s]", args_called(f),
+			    arg_many(f) ? " ..." : "");
 		return;
 	}
 	if (arg_opt(f, set)) {
 		printf(" [%s%s]", args_called(f), arg_many(f) ? " ..." : "");
 		return;
 	}
-	if (f->keys != NULL && f->type == ARG_NUM && f->min > f->max) {
-		printf(" <");
-		for (k = f->keys; k->word != NULL; k++)
-			printf("%s%s", k != f->keys ? "|" : "", k->word);
-		printf(">");
-	} else
-		printf(" <%s>", args_called(f));
+	printf(" ");
+	arg_what(f);
 	if (arg_many(f))
 		printf(" [%s ...]", args_called(f));
 }
 
 /* Print the usage of c and of "no c". Returns -1. */
-static int
+int
 args_usage(const struct argcmd *c)
 {
 	size_t	 i;

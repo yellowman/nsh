@@ -68,9 +68,11 @@ commands.c	table	Bridgelist Bridgelist_nitems Intlist
 			vnetid_args wccptab class_keys clearhelp commithelp
 			confighelp
 			dohelp
-			editinghelp exithelp flushhelp halthelp helphelp
+			editinghelp exithelp flag_keys flushhelp halthelp
+			helphelp
 			loggerhelp manhelp nreboothelp ping6help pinghelp
-			powerdownhelp prots quithelp rollbackhelp rtablehelp
+			powerdownhelp proto_keys prots quithelp rollbackhelp
+			rtablehelp
 			saveenvhelp setenvhelp shellhelp showarptab showhelp
 			showlist showndptab showroutetab showvlantab sshhelp
 			stts telnethelp tracert6help tracerthelp trunkproto_keys
@@ -148,8 +150,7 @@ nshcmds.c	table	clearhelp commithelp confighelp dohelp
 			telnethelp tracert6help tracerthelp unsetenvhelp
 			verbosehelp whohelp
 passwd.c		table	login_builtin login_permtab
-ppp.c		table	intpppoe.authopts intsppp.authopts
-			intsppp.peeropts spppproto
+ppp.c		table	spppproto
 prompt.c	process	ifname prompt saved_prompt
 prompt.c	scratch	hbuf
 renderif.c	process	bridge_facts_init.states

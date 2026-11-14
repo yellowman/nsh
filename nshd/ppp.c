@@ -37,6 +37,8 @@
 #include "externs.h"
 #include "settings.h"
 #include "kfacts.h"
+#include "facts.h"
+#include "args.h"
 
 #define TYPESZ 16
 /* if_pppoe.c's PPPOE_OVERHEAD, the PPPoE header and PPP's protocol */
@@ -44,9 +46,6 @@
 /* and its PPPOE_MAXMTU, which is the kernel's PP_MAX_MRU */
 #define PPPOE_MAXMTU	2048
 
-void authusage(void);
-void peerusage(void);
-void pppoeusage(void);
 int pppoe_get_ifunit(char *);
 void conf_sppp_mh(FILE *, struct sauthreq *, char *, char *);
 static void sppp_line(char *, size_t, struct sauthreq *, char *, char *);
@@ -68,183 +67,47 @@ static struct {
 	{ "chap",	PPP_CHAP },
 };
 
-void
-authusage(void)
-{
-	printf("%% auth proto <pap|chap> name <name> key <key>\n");
-	printf("%% no auth\n");
-}
-
-void
-peerusage(void)	
-{
-        printf("%% peer proto <pap|chap> name <name> key <key>" \
-	    " [flag <callin|norechallenge>]\n");
-        printf("%% no peer\n");
-}
+/* auth's arguments, plus flag for peer; "no" removes the key too */
+/* indices into their values; flag's two values come last */
+#define SPPPV_PROTO	0
+#define SPPPV_NAME	1
+#define SPPPV_KEY	2
+#define SPPPV_FLAG	3
 
 /* auth proto, auth name, auth key, peer proto, peer name, peer key, peer flag */
 int
-intsppp(int argc, char **argv, ...)
+intsppp_apply(const struct argcmd *c, int set,
+    const struct facts_value *v, char *ifname, int ifs, struct cand *cand)
 {
 	struct sauthreq spa;
 	struct ifreq ifr;
-	int set, ch, i, cmd = 0;
-	va_list ap;
-	struct cand *cand;
-	char *ifname;
-	int ifs;
-
-	va_start(ap, argv);
-	ifname = va_arg(ap, char *);
-	ifs = va_arg(ap, int);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
-
-	/* command options for 'auth' */
-	static struct nopts authopts[] = {
-		{ "proto",	req_arg,	'p' },
-		{ "name",	req_arg,	'n' },
-		{ "key",	req_arg,	'k' },
-		{ NULL,		0,		0 }
-	};
-
-	/* command options for 'peer' */
-	static struct nopts peeropts[] = {
-		{ "proto",	req_arg,	'p' },
-		{ "name",	req_arg,	'n' },
-		{ "key",	req_arg,	'k' },
-		{ "flag",	req_arg,	'f' },
-		{ NULL,		0,		0 }
-	};
-
-	/* intsppp commands */
-	struct intspppcmd {
-		char *name;
-		int cmd;
-		void (*usage)();
-		struct nopts *nopts;
-	};
-	struct intspppcmd intspppcmds[] = {
-		{ "auth",	SPPPIOSMAUTH,	authusage,	authopts },
-		{ "peer",	SPPPIOSHAUTH,	peerusage,	peeropts },
-	};
-	struct intspppcmd *isc = NULL;
-
-	/* get rid of 'no' arg */
-	if (NO_ARG(argv[0])) {
-		set = 0;
-		argc--;
-		argv++;
-	} else
-		set = 1;
-
-	/* point to right intspppcmd */
-	for (i = 0; i < nitems(intspppcmds); i++) {
-		if (isprefix(argv[0], intspppcmds[i].name))
-			isc = &intspppcmds[i];
-	}
-	if (isc == NULL) {
-		printf("%% intsppp: Internal error\n");
-		return -1;
-	}
-
-	argc--;
-	argv++;
+	int i, haskey;
 
 	ifr.ifr_data = (caddr_t)&spa;
 
 	/* setup spa */
 	memset(&spa, 0, sizeof(spa));
-	spa.cmd = isc->cmd;
-
-	/* usage? */
-	if (argc < 1 && set) {
-		(*isc->usage)();
-		return -1;
-	}
-
-	/* parse */
-	noptind = 0;
-	while ((ch = nopt(argc, argv, isc->nopts)) != -1)
-		switch (ch) {
-#define	__proto 1<<0
-		case 'p':	/* proto */
-			cmd |= __proto;
-			if (!plainword("proto", argv[noptind - 1]))
-				return -1;
-			for (i = 0; i < nitems(spppproto); i++) {
-				if (isprefix(argv[noptind - 1],
-				    spppproto[i].name))
-					spa.proto = spppproto[i].type;
-			}
-			if (!spa.proto) {
-				printf("%% Unknown proto: %s\n",
-				    argv[noptind -1 ]);
-				return -1;
-			}
-			break;
-#define	__name	1<<1
-		case 'n':	/* name */
-			cmd |= __name;
-			if (!plainword("name", argv[noptind - 1]))
-				return -1;
-			if (strlcpy(spa.name, argv[noptind - 1],
-			    sizeof(spa.name)) >= sizeof(spa.name)) {
-				printf("%% Name too long (> %zu): %s\n",
-				    sizeof(spa.name), argv[noptind - 1]);
-				return -1;
-			}
-			break;
-#define	__key	1<<2
-		case 'k':	/* key */
-			cmd |= __key;
-			/* sppp_set_params() keeps the old secret for "" */
-			if (!plainword("key", argv[noptind - 1]))
-				return -1;
-			if (strlcpy(spa.secret, argv[noptind - 1],
-			    sizeof(spa.secret)) >= sizeof(spa.secret)) {
-				printf("%% Key too long (> %zu): %s\n",
-				    sizeof(spa.secret), argv[noptind - 1]);
-				return -1;
-			}
-			break;
-#define	__flag	1<<3
-		case 'f':	/* flag */
-			cmd |= __flag;
-			if (!plainword("flag", argv[noptind - 1]))
-				return -1;
-			if (isprefix(argv[noptind - 1], "callin")) {
-				spa.flags |= AUTHFLAG_NOCALLOUT;
-			} else if (isprefix(argv[noptind - 1],
-			    "norechallenge")) {
-				spa.flags |= AUTHFLAG_NORECHALLENGE;
-			} else {
-				printf("%% Unknown flag: %s\n",
-			    argv[noptind - 1]);
-				return -1;
-			}
-			break;
-		default:
-			printf("%% intsppp: nopt table error\n");
-			return -1;
-		}
-
-	if (argc - noptind != 0) {
-		/* leftover salmon */
-		printf("%% %s", nopterr);
-		if (argv[noptind])
-			printf(": %s", argv[noptind]);
-		printf("\n");
-		(*isc->usage)();
-		return -1;
-	}
+	spa.cmd = c->code;
 
 	/* sppp_set_params() takes proto 0 to remove all of it */
-	if (set && !(cmd & __proto)) {
-		(*isc->usage)();
-		return -1;
+	if (set && v[SPPPV_PROTO].type == FACT_NONE)
+		return args_usage(c);
+	if (set) {
+		spa.proto = v[SPPPV_PROTO].v.i;
+		if (v[SPPPV_NAME].type != FACT_NONE)
+			args_string(&v[SPPPV_NAME], (char *)spa.name,
+			    sizeof(spa.name));
+		if (v[SPPPV_KEY].type != FACT_NONE)
+			args_string(&v[SPPPV_KEY], (char *)spa.secret,
+			    sizeof(spa.secret));
+		for (i = 0; i < 2 && args_n(c) > 3; i++)
+			if (v[SPPPV_FLAG + i].type != FACT_NONE)
+				spa.flags |= v[SPPPV_FLAG + i].v.i;
 	}
+	/* sppp_set_params() keeps the old secret for "" */
+	if ((spa.name[0] != '\0' && !plainword("name", (char *)spa.name)) ||
+	    (spa.secret[0] != '\0' && !plainword("key", (char *)spa.secret)))
+		return -1;
 	/* only CHAP challenges again */
 	if (set && (spa.flags & AUTHFLAG_NORECHALLENGE) &&
 	    spa.proto != PPP_CHAP) {
@@ -253,31 +116,22 @@ intsppp(int argc, char **argv, ...)
 	}
 
 	/* and with no, the key goes too, whatever words follow */
-	if (argc < 1 || !set)
-		cmd = __proto | __name | __key | __flag;
-
-	if (!set) {
-		spa.proto = 0;
-		spa.flags = 0;
-		memset(&spa.name, '\0', sizeof(spa.name));
-		memset(&spa.secret, '\0', sizeof(spa.secret));
-	}
+	haskey = !set || v[SPPPV_KEY].type != FACT_NONE;
 
 	if (cand != NULL)
-		return cand_sppp(cand, ifname, set, cmd & __key, &spa,
-		    isc->name);
+		return cand_sppp(cand, ifname, set, haskey, &spa, c->name);
 
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 	if (ioctl(ifs, SIOCSSPPPPARAMS, &ifr) == -1) {
 		printf("%% intspppproto: SIOCSSPPPPARAMS: "
 		    "SPPPIOS%sAUTH: %s\n",
-		    isc->cmd == SPPPIOSMAUTH ? "M" : "H", strerror(errno));
+		    spa.cmd == SPPPIOSMAUTH ? "M" : "H", strerror(errno));
 		return -1;
 	}
-	if (cmd & __key) {
+	if (haskey) {
 		char type[TYPESZ];
 
-		snprintf(type, TYPESZ, "%skey", isc->name);
+		snprintf(type, TYPESZ, "%skey", c->name);
 		db_delete_flag_x_ctl(type, ifname, cli_rtable);
 		if (set) {
 			db_insert_flag_x(type, ifname, cli_rtable, DB_X_ENABLE,
@@ -338,13 +192,6 @@ cand_sppp(struct cand *cand, char *ifname, int set, int haskey,
 	}
 	sppp_line(line, sizeof(line), spa, key, pfx);
 	return cand_setting(cand, ST_ON, "%s", line);
-}
-
-void
-pppoeusage(void)
-{
-	printf("%% pppoe ac <access-concentrator> dev <ifname> svc <service>\n");
-	printf("%% no pppoe\n");
 }
 
 int
@@ -420,49 +267,23 @@ pppoe_ipcp(char *ifname, int ifs, int set, struct cand *cand)
 	return r;
 }
 
+/* "no pppoe" takes no arguments and clears them all */
+
 /* pppoe dev, pppoe svc, pppoe ac */
 int
-intpppoe(int argc, char **argv, ...)
+intpppoe_apply(const struct argcmd *c, int set,
+    const struct facts_value *v, char *ifname, int ifs, struct cand *cand)
 {
 	struct pppoediscparms parms;
-	int set, ch, dev = 0;
-	va_list ap;
-	struct cand *cand;
-	char *ifname;
-	int ifs;
-
-	va_start(ap, argv);
-	ifname = va_arg(ap, char *);
-	ifs = va_arg(ap, int);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
-
-	/* command options for 'auth' */
-	static struct nopts authopts[] = {
-		{ "ac",		req_arg,	'a' },
-		{ "dev",	req_arg,	'd' },
-		{ "svc",	req_arg,	's' },
-		{ NULL,		0,		0 }
-	};
-
-	if (NO_ARG(argv[0])) {
-		set = 0;
-		argc--;
-		argv++;
-	} else
-		set = 1;
-
-	argc--;
-	argv++;
+	int dev = 0;
 
 	/* setup spa */
 	memset(&parms, 0, sizeof(parms));
 
 	/* usage? */
- 	if (argc < 1 && set) {
-		pppoeusage();
-		return -1;
-	}
+	if (set && v[0].type == FACT_NONE && v[1].type == FACT_NONE &&
+	    v[2].type == FACT_NONE)
+		return args_usage(c);
 
 	strlcpy(parms.ifname, ifname, sizeof(parms.ifname));
 	if (pppoe_get(ifs, &parms, cand) == -1) {
@@ -471,59 +292,18 @@ intpppoe(int argc, char **argv, ...)
 		return -1;
 	}
 
-	/* parse */
-	noptind = 0;
-	while ((ch = nopt(argc, argv, authopts)) != -1)
-		switch (ch) {
-		case 'a':	/* ac */
-			if (!plainword("ac", argv[noptind - 1]))
-				return -1;
-			if (strlcpy(parms.ac_name, argv[noptind - 1],
-			    sizeof(parms.ac_name)) >=
-			    sizeof(parms.ac_name)) {
-				printf("%% access concentrator name too"
-				    " long (> %zu): %s\n",
-				    sizeof(parms.ac_name),
-				    argv[noptind - 1]);
-				return -1;
-			}
-			break;
-		case 'd':       /* dev */
-			if (strlcpy(parms.eth_ifname, argv[noptind - 1],
-			    sizeof(parms.eth_ifname)) >=
-			    sizeof(parms.eth_ifname)) {
-				printf("%% dev name too long (> %zu): %s\n",
-				    sizeof(parms.eth_ifname),
-				    argv[noptind - 1]);
-				return -1;
-			}
-			break;
-		case 's':	/* svc */
-			if (!plainword("svc", argv[noptind - 1]))
-				return -1;
-			if (strlcpy(parms.service_name,
-			    argv[noptind - 1],
-			    sizeof(parms.service_name)) >=
-			    sizeof(parms.service_name)) {
-				printf("%% service name too long (> %zu): %s\n",
-				    sizeof(parms.service_name),
-				    argv[noptind - 1]);
-				return -1;
-			}
-			break;
-		default:
-			printf("%% intpppoe: nopt table error\n");
+	if (set && v[0].type != FACT_NONE) {
+		args_string(&v[0], parms.ac_name, sizeof(parms.ac_name));
+		if (!plainword("ac", parms.ac_name))
 			return -1;
-		}
-
-	if (argc - noptind != 0) {
-		/* leftover salmon */
-		printf("%% %s", nopterr);
-		if (argv[noptind])
-			printf(": %s", argv[noptind]);
-		printf("\n");
-		pppoeusage();
-		return -1;
+	}
+	if (set && v[1].type != FACT_NONE)
+		args_string(&v[1], parms.eth_ifname, sizeof(parms.eth_ifname));
+	if (set && v[2].type != FACT_NONE) {
+		args_string(&v[2], parms.service_name,
+		    sizeof(parms.service_name));
+		if (!plainword("svc", parms.service_name))
+			return -1;
 	}
 
 	/* PPPOESETPARMS drops the dev it had before refusing one */

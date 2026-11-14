@@ -63,8 +63,11 @@
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
 #include <netinet/ip_carp.h>
+#include <net/if_pppoe.h>
+#include <net/if_sppp.h>
 #include <net/if_trunk.h>
 #include <net/if_wg.h>
+#include <net/ppp_defs.h>
 #include <netmpls/mpls.h>
 #include <dev/usb/mbim.h>
 #include <dev/usb/if_umb.h>
@@ -831,6 +834,13 @@ static const struct argkey class_keys[] = {
 	{ "4g", MBIM_DATACLASS_LTE }, { NULL }
 };
 static const struct argkey defer_keys[] = { { "defer", 1 }, { NULL } };
+static const struct argkey proto_keys[] = {
+	{ "pap", PPP_PAP }, { "chap", PPP_CHAP }, { NULL }
+};
+static const struct argkey flag_keys[] = {
+	{ "callin", AUTHFLAG_NOCALLOUT },
+	{ "norechallenge", AUTHFLAG_NORECHALLENGE }, { NULL }
+};
 /* the protocols that the kernel's TRUNK_PROTOS names, except its default */
 static const struct argkey trunkproto_keys[] = {
 	{ "roundrobin", TRUNK_PROTO_ROUNDROBIN },
@@ -978,9 +988,32 @@ struct intlist Intlist[] = {
 	{ "bssid",	"802.11 bss id",			CMPL0 0, 0, int_op, 1, CAND_RUN },
 	{ "media",	"Media type",				CMPL0 0, 0, intmedia, 1, CAND_EDIT },
 	{ "mediaopt",	"Media options",			CMPL0 0, 0, intmediaopt, 1, CAND_EDIT },
-	{ "auth",	"PPP authentication",			CMPL0 0, 0, intsppp, 1, CAND_EDIT },
-	{ "peer",	"PPP peer authentication",		CMPL0 0, 0, intsppp, 1, CAND_EDIT },
-	{ "pppoe",	"PPPoE settings",			CMPL0 0, 0, intpppoe, 1, CAND_EDIT },
+	{ "auth", "PPP authentication", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intsppp_apply, .code = SPPPIOSMAUTH,
+	  .args = ARGS{
+		{ "proto",	ARG_NUM, 1, 0, ARG_NAMED, proto_keys },
+		{ "name",	ARG_WORD, 1, AUTHMAXLEN - 1, ARG_NAMED },
+		{ "key",	ARG_WORD, 1, AUTHMAXLEN - 1, ARG_NAMED },
+		{ NULL } } },
+	/* auth's arguments, and flag */
+	{ "peer", "PPP peer authentication", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intsppp_apply, .code = SPPPIOSHAUTH,
+	  .args = ARGS{
+		{ "proto",	ARG_NUM, 1, 0, ARG_NAMED, proto_keys },
+		{ "name",	ARG_WORD, 1, AUTHMAXLEN - 1, ARG_NAMED },
+		{ "key",	ARG_WORD, 1, AUTHMAXLEN - 1, ARG_NAMED },
+		{ "flag",	ARG_NUM, 1, 0, ARG_NAMED, flag_keys, 2 },
+		{ NULL } } },
+	{ "pppoe", "PPPoE settings", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intpppoe_apply,
+	  .args = ARGS{
+		{ "ac",		ARG_WORD, 1, PPPOE_NAMELEN - 1, ARG_NAMED },
+		{ "dev",	ARG_WORD, 1, IFNAMSIZ - 1, ARG_NAMED },
+		{ "svc",	ARG_WORD, 1, PPPOE_NAMELEN - 1, ARG_NAMED },
+		{ NULL } } },
 	{ "tunnel", "Tunnel parameters", CMPL0
 	  .nocmd = 1, .cand = CAND_EDIT,
 	  .apply = inttunnel_apply, .code = TUNNEL_BOTH,
@@ -1765,9 +1798,6 @@ static const struct confcmd conf_if[] = {
 	{ "nwflag",	intnwflag },
 	{ "media",	intmedia },
 	{ "mediaopt",	intmediaopt },
-	{ "auth",	intsppp },
-	{ "peer",	intsppp },
-	{ "pppoe",	intpppoe },
 	{ "pwe",	intpwe3 },
 	{ "pflow",	intpflow },
 	{ "dhcrelay",	intdhcrelay },

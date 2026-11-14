@@ -160,6 +160,7 @@ args_applyfn	intpatch_apply, intmtu_apply, intkeepalive_apply, intmpls_apply,
 		intxflags_apply, intlink_apply, intpowersave_apply,
 		intrdomain_apply, intdesc_apply, intvnetflowid_apply;
 args_applyfn	intsyncdev_apply, intsyncpeer_apply, intmaxupd_apply;
+args_applyfn	intsppp_apply, intpppoe_apply;
 args_applyfn	inttrunkport_apply, inttrunkproto_apply, intlacp_apply;
 args_applyfn	intvnetid_apply, inttunnel_apply, intcache_apply,
 		intendpoint_apply;
@@ -173,6 +174,7 @@ int	args_each(const struct argcmd *, int, char **,
 	    int (*)(const struct argcmd *, struct argvals *, void *), void *);
 int	args_run(const struct argcmd *, int, char **, char *, int,
     struct cand *);
+int	args_usage(const struct argcmd *);
 void	args_kind(const struct argcmd *, struct facts_kind *,
 	    struct facts_field *);
 int	args_check(const struct argcmd *, int, const struct facts_template *,
