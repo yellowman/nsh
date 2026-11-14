@@ -40,6 +40,7 @@
  *	FACT_STRING		a string
  *	FACT_ADDRESS		u8 family, u8 length, its bytes, u32 scope
  *	FACT_TIME		i64 seconds, u32 nanoseconds
+ *	FACT_BYTES		u16 length and its bytes, binary
  */
 
 #ifndef FACTS_H
@@ -54,6 +55,7 @@
 #define FACT_STRING	3
 #define FACT_ADDRESS	4
 #define FACT_TIME	5
+#define FACT_BYTES	6	/* like FACT_STRING, but binary, as for keys */
 
 #define FACT_PLAIN	0	/* no names */
 #define FACT_BITS	1	/* names of bits */
@@ -151,6 +153,7 @@ int	facts_record(struct facts_out *, const struct facts_kind *,
 void	facts_u64(struct facts_value *, uint64_t);
 void	facts_i64(struct facts_value *, int64_t);
 void	facts_string(struct facts_value *, const char *);
+void	facts_bytes(struct facts_value *, const void *, size_t);
 void	facts_time(struct facts_value *, int64_t, uint32_t);
 void	facts_address(struct facts_value *, uint8_t, const void *, size_t,
 	    uint32_t);

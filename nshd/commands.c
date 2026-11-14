@@ -64,6 +64,7 @@
 #include <netinet/if_ether.h>
 #include <netinet/ip_carp.h>
 #include <net/if_trunk.h>
+#include <net/if_wg.h>
 #include <netmpls/mpls.h>
 #include <arpa/inet.h>
 #include <limits.h>
@@ -1173,10 +1174,43 @@ struct intlist Intlist[] = {
 	{ "tcplro", "TCP large receive offload", CMPL0
 	  .nocmd = 1, .cand = CAND_EDIT,
 	  .apply = intxflags_apply, .code = IFXF_LRO },
-	{ "wgpeer",	"Wireguard peer config",		CMPL0 0, 0, intwgpeer, 1, CAND_EDIT },
-	{ "wgport",	"Wireguard UDP port",			CMPL0 0, 0, intwg, 1, CAND_EDIT },
-	{ "wgkey",	"Wireguard private key",		CMPL0 0, 0, intwg, 1, CAND_EDIT },
-	{ "wgrtable",	"Wireguard routing table",		CMPL0 0, 0, intwg, 1, CAND_EDIT },
+	{ "wgpeer", "Wireguard peer config", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intwgpeer_apply,
+	  .args = ARGS{
+		{ "key",	ARG_B64, 0, WG_KEY_LEN, ARG_NO | ARG_NOOPT,
+		  .help = "public key" },
+		{ "endpoint",	ARG_ADDR, 0, 0, ARG_PORT | ARG_NAMED | ARG_NO },
+		{ "aip",	ARG_ADDR, 0, 0, ARG_PREFIX | ARG_NAMED | ARG_NO,
+		    NULL, WGPEER_AIPS },
+		{ "psk",	ARG_B64, 0, WG_KEY_LEN, ARG_NAMED | ARG_NO },
+		/* 43200 == 12h, reasonable for a 16 bit value */
+		{ "pka",	ARG_NUM, 0, 43200, ARG_NAMED | ARG_NO },
+#ifdef WG_PEER_SET_DESCRIPTION
+		/* the kernel would cut a longer description short */
+		{ "description", ARG_WORD, 0, IFDESCRSIZE - 1,
+		    ARG_NAMED | ARG_NO | ARG_BLANKS },
+#endif
+		{ NULL } } },
+	{ "wgport", "Wireguard UDP port", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intwg_apply, .code = WG_PORT,
+	  .args = ARGS{
+		{ "port",	ARG_NUM, 0, 65535, .help = "local port" },
+		{ NULL } } },
+	{ "wgkey", "Wireguard private key", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intwg_apply, .code = WG_KEY,
+	  .args = ARGS{
+		{ "key",	ARG_B64, 0, WG_KEY_LEN, ARG_OPT,
+		  .help = "private key" },
+		{ NULL } } },
+	{ "wgrtable", "Wireguard routing table", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intwg_apply, .code = WG_RTABLE,
+	  .args = ARGS{
+		{ "rtable",	ARG_NUM, 0, RT_TABLEID_MAX },
+		{ NULL } } },
 	{ "trunkport", "Add child interface(s) to trunk", CMPL0
 	  .nocmd = 1, .cand = CAND_EDIT,
 	  .apply = inttrunkport_apply,
@@ -1703,10 +1737,6 @@ static const struct confcmd conf_if[] = {
 	{ "dhcrelay",	intdhcrelay },
 	{ "dhcrelay6",	intdhcrelay6 },
 	{ "inet6",	intip },
-	{ "wgpeer",	intwgpeer },
-	{ "wgport",	intwg },
-	{ "wgkey",	intwg },
-	{ "wgrtable",	intwg },
 	{ "apn",	intumb },
 	{ "setpin",	intumb },
 	{ "class",	intumb },

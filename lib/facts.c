@@ -158,6 +158,10 @@ facts_record(struct facts_out *o, const struct facts_kind *k,
 		case FACT_STRING:
 			putstr(u, v[i].v.str.s, v[i].v.str.len);
 			break;
+		case FACT_BYTES:
+			put16(u, v[i].v.str.len);
+			put(u, v[i].v.str.s, v[i].v.str.len);
+			break;
 		case FACT_ADDRESS:
 			put8(u, v[i].v.a.family);
 			put8(u, v[i].v.a.len);
@@ -200,6 +204,15 @@ facts_string(struct facts_value *v, const char *s)
 	v->type = FACT_STRING;
 	v->v.str.s = s;
 	v->v.str.len = strlen(s);
+}
+
+/* Set v to the len bytes at p, binary; p must outlive the record */
+void
+facts_bytes(struct facts_value *v, const void *p, size_t len)
+{
+	v->type = FACT_BYTES;
+	v->v.str.s = p;
+	v->v.str.len = len;
 }
 
 void
@@ -338,7 +351,7 @@ template_read(struct reader *r, uint16_t id)
 		f->type = get8(r);
 		f->naming = get8(r);
 		f->nnames = get16(r);
-		if (r->bad || f->type == FACT_NONE || f->type > FACT_TIME ||
+		if (r->bad || f->type == FACT_NONE || f->type > FACT_BYTES ||
 		    f->naming > FACT_VALUES || (f->names = calloc(f->nnames ?
 		    f->nnames : 1, sizeof(*f->names))) == NULL) {
 			f->nnames = 0;
@@ -382,6 +395,11 @@ record_read(struct reader *r, const struct facts_template *t,
 			if ((v[i].v.str.s = get(r, n)) != NULL &&
 			    memchr(v[i].v.str.s, '\0', n) != NULL)
 				return (-1);
+			break;
+		case FACT_BYTES:
+			n = get16(r);
+			v[i].v.str.len = n;
+			v[i].v.str.s = get(r, n);
 			break;
 		case FACT_ADDRESS:
 			memset(&v[i].v.a, 0, sizeof(v[i].v.a));

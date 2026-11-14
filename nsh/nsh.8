@@ -6706,6 +6706,13 @@ has it turned off, and a bridge's port cannot have it turned on again.
 .Pp
 Configure or remove a wireguard peer with the peers publickey.
 The public-key is 32 bytes and base64-encoded.
+With
+.Cm no ,
+a public key and options remove those options from the peer, each
+given with its value as the configuration shows it;
+a public key alone removes the peer, and
+.Cm no wgpeer
+alone removes every peer.
 .Pp
 .Ic description Ar text
 sets a description of the peer.

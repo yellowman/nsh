@@ -213,5 +213,5 @@ utils.c		scratch	format_k.idx format_k.retarray
 version.c	table	kind_version version_fields
 wg.c		scratch	wg_aip wg_facts.public wg_interface wg_peer
 			wgdata
-wg.c		table	intwgpeer.wgpeeropts wg_names wgcs
+wg.c		table	wg_names
 who.c		process	utmpfd

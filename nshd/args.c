@@ -19,7 +19,9 @@
 #include <net/if.h>
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
+#include <arpa/inet.h>
 #include <netdb.h>
+#include <resolv.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -35,11 +37,14 @@ arg_words(const struct arg *f)
 	return f->many > 1 ? (size_t)f->many : 1;
 }
 
-/* the number of values f holds: two per word with ARG_PORT, else one */
+/*
+ * the number of values f holds: two per word with ARG_PORT or
+ * ARG_PREFIX, else one
+ */
 static size_t
 arg_vals(const struct arg *f)
 {
-	return arg_words(f) * ((f->flags & ARG_PORT) ? 2 : 1);
+	return arg_words(f) * ((f->flags & (ARG_PORT | ARG_PREFIX)) ? 2 : 1);
 }
 
 /* the number of c's arguments: its row ends them with one with no name */
@@ -141,6 +146,18 @@ arg_opt(const struct arg *f, int set)
 	return (f->flags & ARG_OPT) || (!set && (f->flags & ARG_NOOPT));
 }
 
+/* does c have a named argument that a "no" line parses? */
+static int
+args_named_no(const struct argcmd *c)
+{
+	size_t	 i;
+
+	for (i = 0; i < args_n(c); i++)
+		if (arg_named(&c->args[i]) && (c->args[i].flags & ARG_NO))
+			return 1;
+	return 0;
+}
+
 /* Print f's part of a usage line; ignored is set if "no" ignores f */
 static void
 arg_usage(const struct arg *f, int set, int ignored)
@@ -186,9 +203,12 @@ args_usage(const struct argcmd *c)
 	printf("%% %s", c->name);
 	for (i = 0; i < args_n(c); i++)
 		arg_usage(&c->args[i], 1, 0);
+	/* for "no", list only what it parses, if that includes named ones */
 	printf("\n%% no %s", c->name);
 	for (i = 0; i < args_n(c); i++)
-		arg_usage(&c->args[i], 0, (c->args[i].flags & ARG_NO) == 0);
+		if ((c->args[i].flags & ARG_NO) || !args_named_no(c))
+			arg_usage(&c->args[i], 0,
+			    (c->args[i].flags & ARG_NO) == 0);
 	printf("\n");
 	return -1;
 }
@@ -207,9 +227,11 @@ arg_printable(const struct argcmd *c, const struct arg *f, const char *w)
 }
 
 /*
- * Parse word w as an address for argument f into v. With ARG_PORT, an
- * IPv4 address may end in ":port", and the port goes in v[1]. Returns
- * 0, or -1 after printing an error.
+ * Parse word w as an address for argument f into v. With ARG_PORT, the
+ * address may end in a port, as "a.b.c.d:port" or "[v6addr]:port", and
+ * the port goes in v[1]. With ARG_PREFIX, it may end in "/length", as
+ * inet_net_pton() reads it, and the length goes in v[1]. Returns 0, or
+ * -1 after printing an error.
  */
 static int
 arg_addr(const struct argcmd *c, const struct arg *f, char *w,
@@ -219,6 +241,7 @@ arg_addr(const struct argcmd *c, const struct arg *f, char *w,
 	struct addrinfo		*res;
 	struct sockaddr_in	*sin;
 	struct sockaddr_in6	*sin6;
+	unsigned char		 a[16];
 	char			 buf[NI_MAXHOST], *port = NULL, *p;
 	const char		*errstr, *what;
 	int			 af, n;
@@ -236,7 +259,33 @@ arg_addr(const struct argcmd *c, const struct arg *f, char *w,
 	    AF_INET6 : AF_UNSPEC;
 	if (strlcpy(buf, w, sizeof(buf)) >= sizeof(buf))
 		goto bad;
-	if ((f->flags & ARG_PORT) && (p = strchr(buf, ':')) != NULL &&
+	if (f->flags & ARG_PREFIX) {
+		/* inet_net_pton() writes only the bytes the prefix covers */
+		memset(a, 0, sizeof(a));
+		if (arg_family(f, FACT_INET) &&
+		    (n = inet_net_pton(AF_INET, buf, a, 4)) != -1) {
+			facts_address(v, FACT_INET, a, 4, 0);
+			facts_i64(&v[1], n);
+			return 0;
+		}
+		if (arg_family(f, FACT_INET6) &&
+		    (n = inet_net_pton(AF_INET6, buf, a, 16)) != -1) {
+			facts_address(v, FACT_INET6, a, 16, 0);
+			facts_i64(&v[1], n);
+			return 0;
+		}
+		printf("%% %s %s is not %s and its prefix length\n",
+		    arg_label(c, f), w, what);
+		return -1;
+	}
+	if ((f->flags & ARG_PORT) && buf[0] == '[' &&
+	    ((p = strstr(buf, "]:")) != NULL ||
+	    (p = strchr(buf, ']')) == buf + strlen(buf) - 1)) {
+		if (p[1] == ':')
+			port = p + 2;
+		*p = '\0';
+		memmove(buf, buf + 1, strlen(buf));
+	} else if ((f->flags & ARG_PORT) && (p = strchr(buf, ':')) != NULL &&
 	    p == strrchr(buf, ':')) {
 		*p++ = '\0';
 		port = p;
@@ -268,10 +317,13 @@ arg_addr(const struct argcmd *c, const struct arg *f, char *w,
 	return -1;
 }
 
-/* Parse word w for argument f into v; 0, or -1 after printing an error */
+/*
+ * Parse word w for argument f into v; a base64 word decodes into a's
+ * buffers. Returns 0, or -1 after printing an error.
+ */
 static int
-arg_word(const struct argcmd *c, const struct arg *f, char *w,
-    struct facts_value *v)
+arg_word(const struct argcmd *c, const struct arg *f, struct argvals *a,
+    char *w, struct facts_value *v)
 {
 	const struct argkey	*k;
 	const char		*errstr;
@@ -280,6 +332,15 @@ arg_word(const struct argcmd *c, const struct arg *f, char *w,
 	switch (f->type) {
 	case ARG_ADDR:
 		return arg_addr(c, f, w, v);
+	case ARG_B64:
+		if (a->nbin >= ARGS_BINS || f->max >= ARGS_BIN ||
+		    b64_pton(w, a->bin[a->nbin], ARGS_BIN) != f->max) {
+			printf("%% %s is not a key of %lld bytes in base64\n",
+			    arg_label(c, f), f->max);
+			return -1;
+		}
+		facts_bytes(v, a->bin[a->nbin++], f->max);
+		return 0;
 	case ARG_NUM:
 		if ((k = arg_key(f, w)) != NULL) {
 			facts_i64(v, k->value);
@@ -348,15 +409,16 @@ args_ignored(const struct argcmd *c, size_t i)
 
 /*
  * Parse argument f's words, starting at argv[*k], into v, and advance
- * *k past them. For a named argument, argv[*k] is the word after its
- * name. set is 0 for a "no" line. Returns 0, or -1 after printing an
- * error.
+ * *k past them; a holds the buffers for ARG_REST and ARG_B64 values.
+ * For a named argument, argv[*k] is the word after its name. set is 0
+ * for a "no" line. Returns 0, or -1 after printing an error.
  */
 static int
 arg_take(const struct argcmd *c, const struct arg *f, int set, int argc,
-    char **argv, int *k, struct facts_value *v, char *rest)
+    char **argv, int *k, struct facts_value *v, struct argvals *a)
 {
 	const struct argkey	*key;
+	char			*rest = a->rest;
 	size_t			 j, len, per = arg_vals(f) / arg_words(f);
 	long long		 bits = 0;
 	int			 i;
@@ -409,12 +471,12 @@ arg_take(const struct argcmd *c, const struct arg *f, int set, int argc,
 			return 0;
 		}
 		*k += 2;
-		return arg_word(c, f, argv[*k - 1], &v[j * per]);
+		return arg_word(c, f, a, argv[*k - 1], &v[j * per]);
 	}
 	/* a named argument's name ends this argument's words */
 	for (j = 0; j < arg_words(f) && *k < argc &&
 	    arg_name(c, argv[*k]) == NULL; j++, (*k)++)
-		if (arg_word(c, f, argv[*k], &v[j * per]) == -1)
+		if (arg_word(c, f, a, argv[*k], &v[j * per]) == -1)
 			return -1;
 	if (j == 0 && !arg_opt(f, set))
 		return args_usage(c);
@@ -434,6 +496,7 @@ args_parse(const struct argcmd *c, int argc, char **argv, struct argvals *a)
 
 	memset(a->v, 0, sizeof(a->v));
 	a->rest[0] = '\0';
+	a->nbin = 0;
 	if (args_nvals(c) > ARGS_MAX) {
 		printf("%% %s: too many fields\n", c->name);
 		return -1;
@@ -454,22 +517,27 @@ args_parse(const struct argcmd *c, int argc, char **argv, struct argvals *a)
 		if (!a->set && !(f->flags & ARG_NO))
 			break;
 		if (arg_take(c, f, a->set, argc, argv, &k, &a->v[s],
-		    a->rest) == -1)
+		    a) == -1)
 			return -1;
 	}
-	/* for "no", the other arguments may be given, but are ignored */
-	if (!a->set) {
+	/*
+	 * A "no" line for a command with named arguments that "no" parses
+	 * reads those as usual. For other commands, the remaining arguments
+	 * may be given, but are ignored.
+	 */
+	if (!a->set && !args_named_no(c)) {
 		ignored = args_ignored(c, i);
 		return ignored != -1 && argc - k > ignored ? args_usage(c) : 0;
 	}
 	/* then the named arguments, in any order */
 	while (k < argc) {
-		if ((f = arg_name(c, argv[k])) == NULL)
+		if ((f = arg_name(c, argv[k])) == NULL ||
+		    (!a->set && !(f->flags & ARG_NO)))
 			return args_usage(c);
 		for (i = 0, s = 0; &c->args[i] != f; i++)
 			s += arg_vals(&c->args[i]);
 		if (arg_take(c, f, a->set, argc, argv, &k, &a->v[s],
-		    a->rest) == -1)
+		    a) == -1)
 			return -1;
 	}
 	return 0;
@@ -549,11 +617,12 @@ args_kind(const struct argcmd *c, struct facts_kind *k,
 		for (j = 0; j < arg_vals(a) && n < ARGS_MAX; j++) {
 			memset(&f[n], 0, sizeof(f[n]));
 			f[n].name = a->name;
-			/* a port follows its address */
-			f[n].type = a->type == ARG_WORD ||
-			    a->type == ARG_REST ? FACT_STRING :
-			    a->type == ARG_ADDR && ((a->flags & ARG_PORT) ==
-			    0 || j % 2 == 0) ? FACT_ADDRESS : FACT_I64;
+			/* a port or prefix length comes after its address */
+			f[n].type = a->type == ARG_B64 ? FACT_BYTES :
+			    a->type == ARG_WORD || a->type == ARG_REST ?
+			    FACT_STRING : a->type == ARG_ADDR &&
+			    ((a->flags & (ARG_PORT | ARG_PREFIX)) == 0 ||
+			    j % 2 == 0) ? FACT_ADDRESS : FACT_I64;
 			f[n].naming = FACT_PLAIN;
 			n++;
 		}
@@ -584,6 +653,8 @@ arg_value(const struct argcmd *c, const struct arg *f,
 		for (k = f->keys; k->word != NULL; k++)
 			bits |= k->value;
 		return v->v.i != 0 && (v->v.i & ~bits) == 0;
+	case ARG_B64:
+		return v->v.str.len == (size_t)f->max;
 	case ARG_ADDR:
 		if (!arg_family(f, v->v.a.family))
 			return 0;
@@ -597,7 +668,7 @@ arg_value(const struct argcmd *c, const struct arg *f,
 	for (j = 0; j < v->v.str.len; j++)
 		if ((unsigned char)v->v.str.s[j] < 0x20 ||
 		    v->v.str.s[j] == 0x7f || (v->v.str.s[j] == ' ' &&
-		    f->type == ARG_WORD))
+		    f->type == ARG_WORD && !(f->flags & ARG_BLANKS)))
 			return 0;
 	return 1;
 }
@@ -607,8 +678,8 @@ arg_value(const struct argcmd *c, const struct arg *f,
  * values one for one. Each argument that is parsed (always, or on a
  * "no" line if it has ARG_NO) must have its present values first, each
  * valid, and at least one unless it is optional; an ignored argument
- * has none. A port may be present only with its address. set is 0 for
- * a "no" line. Returns 0 if valid, else -1.
+ * has none. A port or prefix length may be present only with its
+ * address. set is 0 for a "no" line. Returns 0 if valid, else -1.
  */
 int
 args_check(const struct argcmd *c, int set, const struct facts_template *t,
@@ -635,10 +706,20 @@ args_check(const struct argcmd *c, int set, const struct facts_template *t,
 		taken = set || (a->flags & ARG_NO);
 		per = arg_vals(a) / arg_words(a);
 		for (j = 0; j < arg_words(a); j++, s += per) {
-			/* a port needs an IPv4 address, and fits in 16 bits */
-			if (per == 2 && v[s + 1].type != FACT_NONE &&
-			    (v[s].type == FACT_NONE || v[s].v.a.family !=
-			    FACT_INET || v[s + 1].v.i < 0 ||
+			/*
+			 * a port needs its address and fits in 16 bits; a
+			 * prefix length needs its address and is at most
+			 * the address's length in bits
+			 */
+			if (per == 2 && (a->flags & ARG_PREFIX) &&
+			    ((v[s].type == FACT_NONE) != (v[s + 1].type ==
+			    FACT_NONE) || (v[s + 1].type != FACT_NONE &&
+			    (v[s + 1].v.i < 0 || v[s + 1].v.i >
+			    v[s].v.a.len * 8))))
+				return -1;
+			if (per == 2 && (a->flags & ARG_PORT) &&
+			    v[s + 1].type != FACT_NONE &&
+			    (v[s].type == FACT_NONE || v[s + 1].v.i < 0 ||
 			    v[s + 1].v.i > 65535))
 				return -1;
 			if (v[s].type == FACT_NONE) {

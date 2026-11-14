@@ -27,9 +27,12 @@
  * Unnamed arguments come first, in order. Named arguments follow in any
  * order, each as its name and its value ("ttl 64"), or as its name
  * alone ("df"). One with ARG_OPT may be left out, and one may take
- * several words (many). A "no" line parses only the arguments with
- * ARG_NO, which come first; it may give the others, but they are
- * ignored and their values are absent.
+ * several words (many).
+ *
+ * A "no" line parses the unnamed arguments with ARG_NO, which come
+ * first. If the command has named arguments with ARG_NO, it then parses
+ * those, and nothing else may follow. Otherwise the other arguments may
+ * be given, but they are ignored and their values are absent.
  */
 
 #ifndef ARGS_H
@@ -48,6 +51,8 @@
 				   family flags say: FACT_ADDRESS */
 #define ARG_FLAG	6	/* a named argument with no value, such as
 				   "df": FACT_I64 1 when given */
+#define ARG_B64		7	/* a base64 word that decodes to exactly max
+				   bytes: FACT_BYTES */
 
 #define ARG_OPT		0x1	/* it may be left out */
 #define ARG_NO		0x2	/* parsed on a "no" line too */
@@ -55,13 +60,21 @@
 #define ARG_INET	0x8	/* an IPv4 address */
 #define ARG_INET6	0x10	/* an IPv6 address */
 #define ARG_LINK	0x20	/* a MAC address */
-#define ARG_PORT	0x40	/* an IPv4 address may end in ":port", kept
+#define ARG_PORT	0x40	/* an address may end in a port, as
+				   "a.b.c.d:port" or "[v6addr]:port", kept
 				   as a second value, FACT_I64, absent if
 				   none */
 #define ARG_NAMED	0x80	/* its word follows its name */
+#define ARG_PREFIX	0x100	/* an address may end in "/length", as
+				   inet_net_pton() reads it, kept as a
+				   second value, FACT_I64 */
+#define ARG_BLANKS	0x200	/* the word may contain blanks, as a quoted
+				   word can */
 
-#define ARGS_MAX	32	/* values of a command, at most */
+#define ARGS_MAX	FACTS_FIELDS	/* values of a command, at most */
 #define ARGS_REST	1024	/* bytes of an ARG_REST field, at most */
+#define ARGS_BINS	4	/* ARG_B64 fields of a command, at most */
+#define ARGS_BIN	64	/* an ARG_B64 value is shorter than this */
 
 /* a word an ARG_NUM or ARG_BITS field takes, and its value */
 struct argkey {
@@ -109,11 +122,16 @@ struct argcmd {
 #define CF_BRIDGE	0x4	/* a bridge's block */
 #define CF_RTABLE	0x8	/* an rtable's block */
 
-/* parsed values; strings point into argv, or into rest for ARG_REST */
+/*
+ * parsed values; strings point into argv, or into rest for ARG_REST,
+ * and base64 values into bin
+ */
 struct argvals {
 	int			 set;	/* 0 with no */
 	struct facts_value	 v[ARGS_MAX];
 	char			 rest[ARGS_REST];
+	unsigned char		 bin[ARGS_BINS][ARGS_BIN];
+	int			 nbin;
 };
 
 /*
@@ -123,10 +141,13 @@ struct argvals {
 enum { MPLSLABEL = 1, TUNNELDOMAIN, TXPRIO, RXPRIO };	/* intmpls_apply() */
 enum { IFMETRIC, IFPRIORITY };				/* intmetric_apply() */
 enum { TUNNEL_BOTH, TUNNEL_ADDR };			/* inttunnel_apply() */
+enum { WG_PORT, WG_KEY, WG_RTABLE };			/* intwg_apply() */
 
 /* limits the rows share with their files */
 #define GROUP_NAMES	16	/* group names to a record; a longer line
 				   goes as several (args_each()) */
+#define WGPEER_AIPS	120	/* the most aips on one line, more than a
+				   1023 byte line can hold */
 
 /* what the rows name: each file's apply functions */
 args_applyfn	intcarp_apply, intcpass_apply, intcnode_apply, intcdev_apply;
@@ -139,6 +160,7 @@ args_applyfn	intsyncdev_apply, intsyncpeer_apply, intmaxupd_apply;
 args_applyfn	inttrunkport_apply, inttrunkproto_apply, intlacp_apply;
 args_applyfn	intvnetid_apply, inttunnel_apply, intcache_apply,
 		intendpoint_apply;
+args_applyfn	intwg_apply, intwgpeer_apply;
 const struct argcmd *conf_cmd(int, int, struct argcmd *);
 size_t	args_n(const struct argcmd *);
 const char *args_called(const struct arg *);

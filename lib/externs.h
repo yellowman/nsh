@@ -660,8 +660,6 @@ int pflow_addrstr(struct sockaddr_storage *, char *);
 int pflow_status(int, int, char *, char *);
 
 /* wg.c */
-int intwg(int, char **, ...);
-int intwgpeer(int, char **, ...);
 void conf_wg(FILE *, int, char *);
 
 /* umb.c */
