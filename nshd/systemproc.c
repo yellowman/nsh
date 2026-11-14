@@ -71,9 +71,11 @@
  * for them, as config's requests wait while a job runs. A commit that a
  * test refused is not begun, nor is one that BEGIN asks only to test, as
  * commit check does, nor one with problems config found. system then
- * says the verdict, which counts those problems and the tests that
- * refused the commit, and BEGIN's answer is 0 if it passes. Otherwise
- * BEGIN runs the commit to its end. It writes the commit record and
+ * says the verdict, which counts those problems, the tests that
+ * refused the commit, and a script the parser cannot make, and BEGIN's
+ * answer is 0 if it passes. Otherwise BEGIN runs the commit to its end.
+ * The parser makes its script, from what runs to the configuration
+ * wanted: config sends none. system writes the commit record and
  * tells config that the commit is begun (BEGUN). If the commit changes
  * login users or classes, system has config lower the permissions of
  * each session that would lose one, end each that would lose its login
@@ -93,10 +95,11 @@
  * (parserproc.c): a new one for each reading, run in a job of its own
  * or from a job's child. It reads whether what runs is what a commit is
  * based on, and how a record's configurations read; which login lines a
- * commit changes, and to what; whether a script verifies; the script
- * that undoes a commit or rolls one back; the boot's plan; and how two
- * configurations differ. system checks what the parser answers before
- * it uses it, as it checks config's script: its edits before any runs.
+ * commit changes, and to what; a commit's script; whether a script
+ * verifies; the script that undoes a commit or rolls one back; the
+ * boot's plan; and how two configurations differ. system checks what
+ * the parser answers before it uses it: a script's edits before any
+ * runs.
  *
  * An apply, an undo, a save, a test and the parser's reading each run
  * as a job: a child of system in its own process group, whose output is
@@ -442,6 +445,8 @@ struct job {
 	int			 answer;	/* its answer's file, or -1 */
 	int			 after;		/* LOGINS: the job ended, */
 	int32_t			 after_status;	/* and how */
+	int			 bad;		/* a commit not begun: its */
+	int			 checking;	/* problems, and commit check */
 	struct confirm		 cf;		/* what a rollback's reads */
 	char			*back;		/* rollback configuration */
 	size_t			 backlen;
@@ -1171,10 +1176,11 @@ system_whole(uint32_t type, const void *data, size_t len)
 			return (-1);
 		memcpy(&bg, data, len);
 		return ((bg.checking != 0 && bg.checking != 1) || bg.bad < 0 ||
+		    (bg.sent != 0 && bg.sent != 1) ||
 		    bg.minutes < 0 || bg.minutes > NSHD_CONFIRMMAX ||
 		    (bg.unsaved != 0 && (bg.unsaved != 1 || bg.minutes != 0)) ||
 		    memchr(bg.comment, '\0', sizeof(bg.comment)) == NULL ?
-		    -1 : apply_whole(&bg.apply));
+		    -1 : 0);
 	case IMSG_SYS_SHOW:
 		if (len != sizeof(show))
 			return (-1);
@@ -1191,7 +1197,9 @@ system_whole(uint32_t type, const void *data, size_t len)
 		if (len < sizeof(c) || len - sizeof(c) > NSHD_TEXT)
 			return (-1);
 		memcpy(&c, data, sizeof(c));
-		return (c.part < 0 || c.part >= NSHD_PARTS ? -1 : 0);
+		/* config sends no script: the parser makes a commit's */
+		return (c.part <= NSHD_SCRIPT || c.part >= NSHD_PARTS ?
+		    -1 : 0);
 	case IMSG_SYS_SAVE:
 		if (len != sizeof(sv))
 			return (-1);
@@ -2498,12 +2506,13 @@ system_parts_free(void)
 
 /*
  * A commit begins, from the running configuration to the wanted one in
- * the parts sent: the record is made, unless one that a commit left
- * refuses it. config is told it is begun, and its script runs; then it
- * ends as BEGIN asked (system_job_end()). The answer is how it ended.
- * The commit's tests have run before this (system_test()). If one
- * refused, or BEGIN asks for only the tests, the answer is 0 and the
- * commit is not begun
+ * the parts sent: the parser makes its script, and the record is made,
+ * unless one that a commit left refuses it. config is told it is begun,
+ * and its script runs; then it ends as BEGIN asked (system_job_end()).
+ * The answer is how it ended. The commit's tests have run before this
+ * (system_test()). If one refused, or BEGIN asks for only the tests, the
+ * commit is not begun, and the answer is its verdict, which counts a
+ * script the parser cannot make
  */
 static void
 system_begin(uint32_t id, struct nshd_begin *bg)
@@ -2512,20 +2521,43 @@ system_begin(uint32_t id, struct nshd_begin *bg)
 	struct client	*cl;
 	struct begun	*b;
 	struct job	*j;
-	char		*runs;
-	size_t		 len;
-	int		 perms;
+	char		*runs, *facts;
+	size_t		 len, flen;
+	int		 perms, bad;
 
 	/* not begun: the verdict counts the tests that refused it too */
 	if (bg->checking || bg->bad > 0 || test_refused == id) {
-		system_parts_free();
-		system_printed(id, commit_verdict(bg->bad +
-		    (test_refused == id ? test_refusals : 0), bg->checking));
+		bad = bg->bad + (test_refused == id ? test_refusals : 0);
+		if (!bg->sent) {
+			system_parts_free();
+			system_printed(id, commit_verdict(bad, bg->checking));
+			return;
+		}
+		if ((runs = system_running(&len)) == NULL ||
+		    (facts = system_facts(&flen)) == NULL) {
+			free(runs);
+			system_parts_free();
+			system_printed(id, 1);
+			return;
+		}
+		j = system_parse_job(id, NSHD_PARSE_PLAN);
+		j->bad = bad;
+		j->checking = bg->checking;
+		j->keep[0] = runs;
+		j->keep[2] = facts;
+		system_parse_text(j, 0, runs, len);
+		system_parse_text(j, 1, parts[NSHD_WANT], partlen[NSHD_WANT]);
+		system_parse_text(j, 2, facts, flen);
+		system_parse(j);
 		return;
 	}
 	if ((b = begun = calloc(1, sizeof(*b))) == NULL)
 		fatal(NULL);
 	b->bg = *bg;
+	if (!bg->sent) {
+		printf("%% nshd: a commit without its configurations\n");
+		goto done;
+	}
 	if ((cl = client_whose(&bg->whose)) == NULL) {
 		printf("%% Commit refused: its client is gone\n");
 		goto done;
@@ -2561,9 +2593,11 @@ system_begin(uint32_t id, struct nshd_begin *bg)
 		fatal(NULL);
 	if (record_read(b->rec) == -1)
 		goto done;
-	/* the parser reads them, and a script of a session without admin */
+	if ((facts = system_facts(&flen)) == NULL)
+		goto done;
+	/* the parser reads them, and makes the commit's script */
 	j = system_parse_job(id, NSHD_PARSE_BEGIN);
-	j->parse.apply = bg->apply;
+	j->keep[5] = facts;
 	system_parse_text(j, 0, b->before, b->beforelen);
 	system_parse_text(j, 1, parts[NSHD_BEFORE], partlen[NSHD_BEFORE]);
 	system_parse_text(j, 2, parts[NSHD_WANT], partlen[NSHD_WANT]);
@@ -2572,11 +2606,10 @@ system_begin(uint32_t id, struct nshd_begin *bg)
 		system_parse_text(j, 3, b->rec->before, b->rec->beforelen);
 		system_parse_text(j, 4, b->rec->want, b->rec->wantlen);
 	}
-	if (!b->admin) {
+	system_parse_text(j, 5, facts, flen);
+	/* which a session without admin may not run with an admin line */
+	if (!b->admin)
 		j->parse.flags |= NSHD_PARSE_ADMIN;
-		system_parse_text(j, 5, parts[NSHD_SCRIPT],
-		    partlen[NSHD_SCRIPT]);
-	}
 	system_parse(j);
 	return;
  done:
@@ -2659,7 +2692,6 @@ system_begin_checked(uint32_t id, int ok)
 	system_said(id);
 	if (link_compose(&links[CONFIG], IMSG_SYS_BEGUN, id, NULL, 0) == -1)
 		fatal("%s", __func__);
-	b->apply = bg->apply;
 	/* one that changes login users or classes waits for config */
 	system_script(id, &b->apply, b->ans.logins);
 }
@@ -4005,6 +4037,12 @@ system_parsed(struct job *j, int32_t status)
 		system_begin_checked(j->id, status == 0 &&
 		    system_began(j) == 0);
 		break;
+	case NSHD_PARSE_PLAN:
+		/* a commit not begun: the parser said why it made no script */
+		system_parts_free();
+		system_printed(j->id, commit_verdict(j->bad + (status != 0),
+		    j->checking));
+		break;
 	case NSHD_PARSE_BACK:
 		if (status == 0 && parser_answer(j->answer, sizeof(b) +
 		    NSHD_LOGINS * sizeof(*l), &a, &len) == 0 &&
@@ -4043,30 +4081,50 @@ system_parsed(struct job *j, int32_t status)
 }
 
 /*
- * The parser's answer to BEGIN, j's, for the commit begun: 0 if it may
- * go on, else -1 after saying why, if the parser did not
+ * The parser's answer to BEGIN, j's, for the commit begun, with its
+ * script, which becomes the script's part: 0 if it may go on, else -1
+ * after saying why, if the parser did not
  */
 static int
 system_began(struct job *j)
 {
 	struct nshd_began	*ans = &begun->ans;
-	char			*a;
-	size_t			 len;
+	char			*a, *at;
+	size_t			 len, off = sizeof(*ans), ll;
 
 	if (parser_answer(j->answer, sizeof(*ans) + NSHD_LOGINS *
-	    sizeof(struct login_line), &a, &len) == -1)
+	    sizeof(struct login_line) + sizeof(begun->apply) +
+	    2 * (size_t)NSHD_PART, &a, &len) == -1)
 		return (-1);
 	if (len < sizeof(*ans))
 		goto bad;
 	memcpy(ans, a, sizeof(*ans));
-	if ((begun->logins = parsed_logins(a, len, sizeof(*ans),
+	ll = (size_t)ans->nlogins * sizeof(struct login_line);
+	if (ans->nlogins > NSHD_LOGINS ||
+	    len - off < ll + sizeof(begun->apply) ||
+	    len - off - ll - sizeof(begun->apply) != ans->elen ||
+	    (begun->logins = parsed_logins(a, off + ll, off,
 	    ans->nlogins)) == NULL)
 		goto bad;
 	begun->nlogins = ans->nlogins;
+	at = a + off + ll;
+	memcpy(&begun->apply, at, sizeof(begun->apply));
+	if (apply_whole(&begun->apply) == -1)
+		goto bad;
+	system_part_free(NSHD_SCRIPT);
+	if ((parts[NSHD_SCRIPT] = malloc(ans->elen + 1)) == NULL)
+		fatal(NULL);
+	memcpy(parts[NSHD_SCRIPT], at + sizeof(begun->apply), ans->elen);
+	partlen[NSHD_SCRIPT] = ans->elen;
 	free(a);
 	if (!ans->based) {
 		printf("%% Commit refused: what runs changed after the commit "
 		    "was planned. Commit again\n");
+		return (-1);
+	}
+	/* the parser said which lines have no script: a problem */
+	if (!ans->planned) {
+		commit_verdict(1, 0);
 		return (-1);
 	}
 	/* the parser said why */

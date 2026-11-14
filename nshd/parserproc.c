@@ -73,7 +73,7 @@ static int	parse_logins(char *, size_t, int);
 static void	parse_commit(char *, size_t, struct nshd_records *);
 static void	parse_confirm(char *, size_t, struct nshd_records *);
 static void	parse_bootrecord(char *, struct nshd_records *);
-static void	parse_clears(struct nshd_apply *, struct script *);
+static void	parse_clears(struct script *, struct nshd_apply *);
 
 static char	 parser_path[PATH_MAX];	/* this program, as system ran it */
 static int	 parser_debug, parser_verbose;
@@ -95,8 +95,7 @@ parserproc(int d, int v)
 		fatal("pledge");
 
 	memset(t, 0, sizeof(t));
-	if (parser_read(&p, sizeof(p)) == -1 ||
-	    p.apply.nclears < 0 || p.apply.nclears > NSHD_CLEARS)
+	if (parser_read(&p, sizeof(p)) == -1)
 		goto unread;
 	for (i = 0; i < NSHD_PARSE_TEXTS; i++) {
 		if (p.len[i] > NSHD_PART ||
@@ -159,18 +158,23 @@ parserproc(int d, int v)
 /*
  * BEGIN: whether now reads as what the commit is based on, whether it
  * changes login users or classes, how a record's configurations read,
- * and, with NSHD_PARSE_ADMIN, whether its script may run. Then the
- * login lines it wants, for system to see who would lose a permission
+ * and the script that makes now read as what it wants: whether it could
+ * be made and, with NSHD_PARSE_ADMIN, whether it may run. Then the
+ * login lines it wants, for system to see who would lose a permission,
+ * and the script
  */
 static int
 parse_begin(struct nshd_parse *p, char **t)
 {
 	struct nshd_began	 b;
+	struct nshd_apply	 a;
 	struct login_line	*l = NULL;
 	struct script		 sc;
 	int			 r = -1;
 
 	memset(&b, 0, sizeof(b));
+	memset(&a, 0, sizeof(a));
+	memset(&sc, 0, sizeof(sc));
 	b.admin = 1;
 	if ((b.based = commit_reads(t[0], p->len[0], t[1], p->len[1])) == -1 ||
 	    (b.logins = commit_logins(t[0], p->len[0], t[2],
@@ -181,23 +185,33 @@ parse_begin(struct nshd_parse *p, char **t)
 	    (b.wanted = commit_reads(t[0], p->len[0], t[4], p->len[4])) == -1 ||
 	    (b.back = commit_reads(t[3], p->len[3], t[2], p->len[2])) == -1))
 		return -1;
-	/* what is refused already, the parser need not check */
-	if (b.based && (p->flags & NSHD_PARSE_ADMIN)) {
-		memset(&sc, 0, sizeof(sc));
-		sc.edits = t[5];
-		sc.elen = p->len[5];
-		parse_clears(&p->apply, &sc);
-		admin_begin(1, t[0], p->len[0]);
-		b.admin = edits_admin(&sc) == 0;
+	/* what is refused already needs no script */
+	if (b.based) {
+		if (parse_facts(t[5], p->len[5]) == -1)
+			return -1;
+		b.planned = commit_plan(t[0], p->len[0], t[2], p->len[2],
+		    &sc) == 0;
+	}
+	if (b.planned) {
+		parse_clears(&sc, &a);
+		b.elen = sc.elen;
+		if (p->flags & NSHD_PARSE_ADMIN) {
+			admin_begin(1, t[0], p->len[0]);
+			b.admin = edits_admin(&sc) == 0;
+		}
 	}
 	/* those it wants, which login_perms_by() reads */
 	if (b.logins && login_lines(t[2], p->len[2], NSHD_LOGINS, &l,
 	    &b.nlogins) == -1)
-		return -1;
+		goto done;
 	if (parser_write(&b, sizeof(b)) == 0 &&
-	    parser_write(l, b.nlogins * sizeof(*l)) == 0)
+	    parser_write(l, b.nlogins * sizeof(*l)) == 0 &&
+	    parser_write(&a, sizeof(a)) == 0 &&
+	    parser_write(sc.edits, b.elen) == 0)
 		r = 0;
+ done:
 	free(l);
+	script_free(&sc);
 	return r;
 }
 
@@ -234,19 +248,12 @@ parse_plan(struct nshd_parse *p, char **t)
 {
 	struct nshd_apply	 a;
 	struct script		 sc;
-	int			 r = -1, i;
+	int			 r = -1;
 
 	if (parse_facts(t[2], p->len[2]) == -1 ||
 	    commit_plan(t[0], p->len[0], t[1], p->len[1], &sc) == -1)
 		return -1;
-	memset(&a, 0, sizeof(a));
-	for (i = 0; i < sc.nclears; i++) {
-		strlcpy(a.clears[i].name, sc.clears[i].name,
-		    sizeof(a.clears[i].name));
-		a.clears[i].rtable = sc.clears[i].rtable;
-		a.clears[i].keep = sc.clears[i].keep;
-	}
-	a.nclears = sc.nclears;
+	parse_clears(&sc, &a);
 	if (parser_write(&a, sizeof(a)) == 0 &&
 	    parser_write(sc.edits, sc.elen) == 0)
 		r = 0;
@@ -316,20 +323,20 @@ parse_facts(char *buf, size_t len)
 	return 0;
 }
 
-/* a's clears, into s */
+/* the clears of s, a script the parser made, into a, for system */
 static void
-parse_clears(struct nshd_apply *a, struct script *s)
+parse_clears(struct script *s, struct nshd_apply *a)
 {
 	int	 i;
 
-	for (i = 0; i < a->nclears; i++) {
-		a->clears[i].name[sizeof(a->clears[i].name) - 1] = '\0';
-		strlcpy(s->clears[i].name, a->clears[i].name,
-		    sizeof(s->clears[i].name));
-		s->clears[i].rtable = a->clears[i].rtable;
-		s->clears[i].keep = a->clears[i].keep;
+	memset(a, 0, sizeof(*a));
+	for (i = 0; i < s->nclears; i++) {
+		strlcpy(a->clears[i].name, s->clears[i].name,
+		    sizeof(a->clears[i].name));
+		a->clears[i].rtable = s->clears[i].rtable;
+		a->clears[i].keep = s->clears[i].keep;
 	}
-	s->nclears = a->nclears;
+	a->nclears = s->nclears;
 }
 
 /*

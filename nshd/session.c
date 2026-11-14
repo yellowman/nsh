@@ -21,7 +21,8 @@
  * request. So no session sees another's state, except a candidate that
  * sessions share. config uses this file to run configure private, and
  * configure, whose sessions share one candidate, a request at a time,
- * and plans their commits, which system runs.
+ * and checks their commits, which system's parser plans and system
+ * runs.
  */
 #include <sys/param.h>	/* MAXHOSTNAMELEN */
 #include <sys/socket.h>
@@ -282,9 +283,11 @@ session_candidate(struct cand *s)
  * its commit into *pp: as a handler returns, -1 when the candidate may
  * not become the running configuration or no plan could be made, after
  * saying why. Daemons' tests of rules are the plan's, which system
- * runs, and the verdict waits on them; with them, a plan is made when
- * checking too. A commit confirmed records the running configuration
- * and the candidate even if they are the same. A commit is refused once
+ * runs, and its script is system's parser's to make, from the running
+ * configuration and the candidate; the verdict waits on both, so a
+ * plan is made when checking too, unless there is neither. A commit
+ * confirmed records the running configuration and the candidate even
+ * if they are the same. A commit is refused once
  * if another commit has since changed what its candidate changes
  * (cand_conflicts())
  */
@@ -321,16 +324,19 @@ session_plan(struct cand *s, int checking, int confirmed,
 	p->ntests = commit_deferred(&p->tests);
 	p->checking = checking;
 	p->same = conftree_compare(NULL, p->was, p->want) == 0;
-	/* lines that are not configuration have no edits: a problem */
-	if ((!p->same || confirmed) && plan_script(p, p->was, p->want) == -1)
-		p->bad++;
-	if (p->ntests == 0 && commit_verdict(p->bad, checking) == -1)
+	/*
+	 * system's parser makes its script, from these: lines that are not
+	 * configuration have no edits, a problem the verdict counts, so
+	 * system says it
+	 */
+	p->sent = !p->same || confirmed;
+	if (!p->sent && p->ntests == 0 &&
+	    commit_verdict(p->bad, checking) == -1)
 		goto done;
-	if (!checking && (!p->same || confirmed) &&
-	    (plan_text(p, PLAN_BEFORE, p->was) == -1 ||
+	if (p->sent && (plan_text(p, PLAN_BEFORE, p->was) == -1 ||
 	    plan_text(p, PLAN_WANT, p->want) == -1))
 		goto done;
-	if (!checking || p->ntests > 0) {
+	if (p->sent || !checking || p->ntests > 0) {
 		*pp = p;
 		p = NULL;
 	}

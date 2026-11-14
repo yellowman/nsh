@@ -191,20 +191,22 @@ commit.
 While a commit of the shared candidate runs, no other session changes
 it.
 Commits run one at a time, across all the sessions.
-config plans a commit from a snapshot and checks it.
-config then hands the commit to system, with the daemons' rules that it
-changes.
+config checks a commit against a snapshot.
+config then hands system the configuration the commit is based on and
+the configuration it wants, with the daemons' rules that it changes.
 system first tests the rules, and begins the commit only if every test
 passes.
-Then system runs the commit to its end: it records the commit and
-runs its script.
+Then system runs the commit to its end: the parser makes its script,
+from the running configuration and the configuration wanted, and system
+records the commit and runs the script.
 system then checks that the running configuration is the candidate, and
 that no line of the script failed.
 If so, system saves the running configuration; if not, system runs a
 script that rolls the changes back, in a job of its own, and checks
 that the running configuration is again what it was.
 .Cm commit check
-stops after the tests.
+stops after the tests, and after the parser has tried the script: a
+candidate it can make no script for fails the check.
 .Cm commit confirmed
 runs its script even if the candidate is the running configuration.
 If the running configuration is then the candidate, it stays in place,
@@ -387,11 +389,13 @@ SIGTERM, then SIGKILL 10 seconds later, or 5 seconds later for a test.
 The limit is 900 seconds for a script, 300 for a save and 120 for a
 test.
 A script and a save run as root.
-config makes a commit's script into edits, and system runs the edits and
-never the script's text.
+The parser makes a commit's script as edits, and system runs the edits
+and never a script's text.
+config sends system no script, so the script a commit runs is the one
+that leads from the running configuration to the configuration wanted.
 Each edit names one of the commands a configuration has, by its place
 among them, with the line's words, or, for a command whose fields
-config reads from them, such as an interface's
+the parser reads from them, such as an interface's
 .Ic mtu
 or
 .Ic description ,
@@ -410,8 +414,8 @@ or
 or of a daemon's operation, such as smtp's
 .Cm remove ,
 has no edit.
-config refuses a commit with such a line and reports each one; the boot
-leaves each one out and reports it.
+The parser reports each such line, and system refuses a commit that
+has one; the boot leaves each one out and reports it.
 system checks every edit before it runs any, and runs the script only
 if each edit names a command that exists, where it belongs, and each
 value has its field's type and is within its bounds.
@@ -499,8 +503,9 @@ system starts a new one for each reading, so a parser keeps nothing
 from one reading to the next.
 It reads configuration text for system, which reads none of it itself:
 whether what runs is what a commit is based on, and what it wants; the
-login lines a commit changes; the script that undoes a commit or rolls
-one back; the boot's plan; and how two configurations differ, for
+login lines a commit changes; a commit's script, and the script that
+undoes a commit or rolls one back; the boot's plan; and how two
+configurations differ, for
 .Ic show diff-config
 and
 .Ic show rollback .

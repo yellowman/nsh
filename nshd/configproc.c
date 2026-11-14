@@ -72,12 +72,13 @@
  * candidate cannot be sent, or journal does not keep it, the session is
  * told.
  *
- * Commits run one at a time, for all sessions: config plans a commit from
- * a snapshot, then sends the whole commit (BEGIN), with the tests of the
- * daemons' rules it changes (TEST). system runs the tests first, and
- * says how each went. Then it runs the commit to its end: it records
- * it, says it is begun (BEGUN), runs its script and checks that what
- * runs is then the candidate. If it is, system saves the running
+ * Commits run one at a time, for all sessions: config checks a commit
+ * against a snapshot, then sends what it is based on and what it wants
+ * (BEGIN), with the tests of the daemons' rules it changes (TEST).
+ * system runs the tests first, and says how each went. Then it runs the
+ * commit to its end: its parser makes the script, and system records
+ * the commit, says it is begun (BEGUN), runs the script and checks that
+ * what runs is then the candidate. If it is, system saves the running
  * configuration; if not, it undoes the script. Before the script of a
  * commit that changes login users or classes, as before a rollback that
  * does, config lowers the permissions of the sessions that system says
@@ -87,7 +88,8 @@
  * system has begun a commit, it runs to its end if its session goes;
  * system does not begin it once the session's client has gone, nor once
  * a test refuses it. For commit check, and for a commit with problems
- * already, system only runs the tests, and says the verdict. commit
+ * already, system only runs the tests and has its parser try the
+ * script, and says the verdict. commit
  * confirmed passes its minutes to BEGIN, so system also keeps an
  * unconfirmed commit record, and runs its script even if it is empty;
  * then, if what runs is the candidate, the commit's record goes, and the
@@ -384,6 +386,7 @@ static void		 commit_snapshot(void);
 static void		 commit_ended(int32_t);
 static void		 commit_go(void);
 static int		 commit_part(int32_t, const char *, size_t);
+static int		 commit_parts(struct plan *);
 static void		 commit_saved(int);
 static void		 commit_save(void);
 static void		 commit_new(struct session *);
@@ -2705,8 +2708,12 @@ commit_go(void)
 	b.whose = commit->whose;
 	b.checking = p->checking;
 	b.bad = p->bad;
+	b.sent = p->sent;
 	if (p->checking || p->bad > 0) {
-		commit_request(COMMIT_BEGIN, IMSG_SYS_BEGIN, &b, sizeof(b));
+		/* whether its script can be made is system's to say */
+		if (commit_parts(p) == 0)
+			commit_request(COMMIT_BEGIN, IMSG_SYS_BEGIN, &b,
+			    sizeof(b));
 		return;
 	}
 	if (p->same && commit->minutes == 0) {
@@ -2730,17 +2737,28 @@ commit_go(void)
 		    "users needs the admin permission\n");
 		return;
 	}
-	if (commit_part(NSHD_SCRIPT, p->text[PLAN_EDITS],
-	    p->len[PLAN_EDITS]) == -1 || commit_part(NSHD_BEFORE,
-	    p->text[PLAN_BEFORE], p->len[PLAN_BEFORE]) == -1 ||
-	    commit_part(NSHD_WANT, p->text[PLAN_WANT],
-	    p->len[PLAN_WANT]) == -1)
+	if (commit_parts(p) == -1)
 		return;
 	b.minutes = commit->minutes;
 	b.unsaved = commit->terminal;
 	strlcpy(b.comment, commit->comment, sizeof(b.comment));
-	plan_clears(commit->plan, &b.apply);
 	commit_request(COMMIT_BEGIN, IMSG_SYS_BEGIN, &b, sizeof(b));
+}
+
+/*
+ * What the commit is based on and what it wants, to system, whose
+ * parser makes its script from them; -1 if one is too long
+ */
+static int
+commit_parts(struct plan *p)
+{
+	if (!p->sent)
+		return (0);
+	if (commit_part(NSHD_BEFORE, p->text[PLAN_BEFORE],
+	    p->len[PLAN_BEFORE]) == -1 || commit_part(NSHD_WANT,
+	    p->text[PLAN_WANT], p->len[PLAN_WANT]) == -1)
+		return (-1);
+	return (0);
 }
 
 /* a commit part, to system in chunks; -1 if too long, and the commit ends */

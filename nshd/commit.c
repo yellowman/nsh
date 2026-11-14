@@ -326,19 +326,19 @@ commit_verify(char *text, size_t len, char *want, size_t wantlen,
 }
 
 /*
- * The script, into s, that undoes a commit that did not take, or rolls
- * back an unconfirmed one: that makes the running configuration, text
- * now, read as was's text again. -1 if it could not be made, after
- * saying why, else 0
+ * The script, into s, that makes the running configuration, text now,
+ * read as want's text: a commit's, the undo of one that did not take,
+ * or the rollback of an unconfirmed one. -1 if it could not be made,
+ * after saying why, else 0
  */
 int
-commit_plan(char *text, size_t len, char *was, size_t waslen,
+commit_plan(char *text, size_t len, char *want, size_t wantlen,
     struct script *s)
 {
 	struct cnode *w, *now = NULL;
 	int ret = -1;
 
-	if ((w = conftree_mem(was, waslen, "the configuration before",
+	if ((w = conftree_mem(want, wantlen, "the configuration wanted",
 	    conf_mode, conf_ordered)) != NULL &&
 	    (now = conftree_mem(text, len, "the running configuration",
 	    conf_mode, conf_ordered)) != NULL)

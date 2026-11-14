@@ -65,7 +65,7 @@ struct nshd_perms {
 struct nshd_chunk {
 	int32_t		part;
 };
-#define NSHD_SCRIPT	0	/* the edits BEGIN runs */
+#define NSHD_SCRIPT	0	/* a script's edits: the parser's, not sent */
 #define NSHD_BEFORE	1	/* BEGIN: the config the commit is based on */
 #define NSHD_WANT	2	/* BEGIN's: the configuration wanted */
 #define NSHD_TEST	3	/* TEST's: the rules it tests */
@@ -129,20 +129,21 @@ struct nshd_apply {
 /*
  * config to system: run a session's commit, which system records,
  * applies and ends. minutes is for commit confirmed, unsaved for
- * configure terminal, and comment is saved with the commit. The parts
- * carry the commit's script, the configuration it is based on and the
- * configuration wanted. For commit check (checking), or if config
- * found problems (bad of them), system only runs the commit's tests
- * and reports the verdict
+ * configure terminal, and comment is saved with the commit. If sent,
+ * the parts carry the configuration it is based on and the
+ * configuration wanted, and the parser makes its script from what runs
+ * (NSHD_PARSE_BEGIN). For commit check (checking), or if config found
+ * problems (bad of them), system only runs the commit's tests, counts
+ * a script that cannot be made as a problem, and reports the verdict
  */
 struct nshd_begin {
 	struct nshd_whose whose;
 	int32_t		checking;
 	int32_t		bad;
+	int32_t		sent;
 	int32_t		minutes;
 	int32_t		unsaved;
 	char		comment[NSHD_COMMENT];
-	struct nshd_apply apply;
 };
 /*
  * system to the parser, on its standard input: what to read, then its
@@ -156,7 +157,6 @@ struct nshd_parse {
 	int32_t		flags;
 	uint32_t	len[NSHD_PARSE_TEXTS];
 	char		daemon[32];	/* the rules' daemon */
-	struct nshd_apply apply;	/* the script's clears */
 };
 /*
  * the kinds, each with its texts: "now" is what runs, as conf() prints
@@ -166,8 +166,9 @@ struct nshd_parse {
 				   without admin may not test them */
 #define NSHD_PARSE_BEGIN 3	/* now, what the commit is based on, what
 				   it wants, the record's before and want,
-				   and with NSHD_PARSE_ADMIN its script:
-				   struct nshd_began */
+				   facts: struct nshd_began, with the
+				   script that makes now read as what it
+				   wants */
 #define NSHD_PARSE_BACK	4	/* now, a rollback's configuration: struct
 				   nshd_back */
 #define NSHD_PARSE_VERIFY 5	/* now, what a script wanted: 1 if what
@@ -204,7 +205,10 @@ struct nshd_parse {
 
 #define NSHD_LOGINS	1024		/* login lines, at most */
 
-/* BEGIN's answer, then nlogins of struct login_line, what it wants */
+/*
+ * BEGIN's answer, then nlogins of struct login_line, what it wants, then
+ * its script: struct nshd_apply and elen bytes of edits
+ */
 struct nshd_began {
 	int32_t		based;		/* now reads as what it is based on */
 	int32_t		logins;		/* it changes login users or classes */
@@ -212,8 +216,10 @@ struct nshd_began {
 	int32_t		wanted;		/* now reads as the record's want */
 	int32_t		back;		/* the record's before reads as what
 					   it wants */
+	int32_t		planned;	/* its script could be made */
 	int32_t		admin;		/* its script may run */
 	uint32_t	nlogins;
+	uint32_t	elen;
 };
 
 /*

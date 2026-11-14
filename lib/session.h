@@ -37,7 +37,7 @@ struct cand {
 };
 
 /* What a commit runs, from session_plan(), in the parts nshd sends */
-#define PLAN_EDITS	0	/* the script's edits, later the rollback's */
+#define PLAN_EDITS	0	/* the boot's script's edits */
 #define PLAN_BEFORE	1	/* the running configuration, as text */
 #define PLAN_WANT	2	/* the candidate, as text */
 #define PLAN_PARTS	3
@@ -53,6 +53,9 @@ struct plan_test {
 
 struct plan {
 	int		 same;		/* the candidate is the running one */
+	int		 sent;		/* a commit's: before and want go to
+					   system, whose parser makes its
+					   script */
 	char		*text[PLAN_PARTS];
 	size_t		 len[PLAN_PARTS];
 	struct {
