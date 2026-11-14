@@ -1510,8 +1510,9 @@ getcmd(char *name)
  * mode. Otherwise run the command; interface or bridge enters its mode,
  * which stays for the following lines. Only commands that edit the
  * candidate run, and leaving a mode: nsh runs the rest, whose rows have
- * no handler here. Returns what the handler returns, or -1 after
- * printing why if none ran.
+ * no handler here. A line of a session outside configure is refused.
+ * Returns what the handler returns, or -1 after printing why if none
+ * ran.
  */
 int
 cmdline(char *text, struct cand *cand)
@@ -1529,6 +1530,10 @@ cmdline(char *text, struct cand *cand)
 	}
 	if (margv[0] == NULL)
 		return 0;
+	if (!cand->on) {
+		printf("%% Command requires configure mode\n");
+		return -1;
+	}
 	if (cand->ifname[0] != '\0')
 		return cmdline_if(cand);
 	if ((p = NO_ARG(margv[0]) ? margv[1] : margv[0]) == NULL ||
@@ -1544,12 +1549,7 @@ cmdline(char *text, struct cand *cand)
 		printf("%% Invalid command: %s %s\n", margv[0], margv[1]);
 		return -1;
 	}
-	if (c->needconfig != 0 && cand->config != 1) {
-		printf("%% Command requires configure mode\n");
-		return -1;
-	}
-	if ((c->needconfig || c->modh) &&
-	    cand_refused(cand->on ? cand : NULL, c->name, c->cand))
+	if ((c->needconfig || c->modh) && cand_refused(cand, c->name, c->cand))
 		return -1;
 	if (c->cand != CAND_EDIT && c->handler != exitconfig) {
 		printf("%% %s is not through nshd's configure\n", c->name);
@@ -1559,7 +1559,7 @@ cmdline(char *text, struct cand *cand)
 		return cmdexit(cand);
 	if (c->modh)
 		strlcpy(hname, c->name, HSIZE);
-	return (*c->handler)(margc, margv, cand->on ? cand : NULL);
+	return (*c->handler)(margc, margv, cand);
 }
 
 /* A line in an interface's mode, as interface()'s loop runs it */
@@ -1582,14 +1582,13 @@ cmdline_if(struct cand *cand)
 		printf("%% Invalid command\n");
 		return -1;
 	}
-	if (cand_refused(cand->on ? cand : NULL, i->name, i->cand))
+	if (cand_refused(cand, i->name, i->cand))
 		return -1;
 	if (i->cand != CAND_EDIT && i->handler != int_exit) {
 		printf("%% %s is not through nshd's configure\n", i->name);
 		return -1;
 	}
-	if ((r = (*i->handler)(margc, margv, cand->ifname, -1,
-	    cand->on ? cand : NULL)) == 1) {
+	if ((r = (*i->handler)(margc, margv, cand->ifname, -1, cand)) == 1) {
 		cand->ifname[0] = '\0';
 		return 0;
 	}
@@ -1653,14 +1652,7 @@ int
 cmdexit(struct cand *cand)
 {
 	cand->ifname[0] = '\0';
-	if (!cand->config) {
-		printf("%% Configuration mode is already disabled\n");
-		return -1;
-	}
-	if (cand_leave(cand))
-		return -1;
-	cand->config = 0;
-	return 0;
+	return cand_leave(cand) ? -1 : 0;
 }
 
 /*
@@ -1950,8 +1942,7 @@ cand_leave(struct cand *cand)
 		    " 'rollback' discards them\n");
 		return 1;
 	}
-	if (cand->on)
-		cand_end(cand);
+	cand_end(cand);
 	return 0;
 }
 

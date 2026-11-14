@@ -99,13 +99,9 @@ session_running(char *text, size_t len)
 int
 session_configure(struct cand *s, struct cand_state *sh)
 {
-	int r;
-
 	if (sh != NULL && !s->on)
 		cand_attach(s, sh);
-	if ((r = cand_begin(s)) == 0)
-		s->config = 1;
-	return r;
+	return cand_begin(s);
 }
 
 /* A configuration line, in s, as cmdline() runs it */
@@ -221,7 +217,7 @@ cmplt_facts(struct facts_out *o)
 int
 session_exit(struct cand *s)
 {
-	return s->config ? cmdexit(s) : 0;
+	return cmdexit(s);
 }
 
 /*
@@ -233,7 +229,7 @@ void
 session_mode(struct cand *s, int *in, int *rtable,
     char *ifn, size_t len, int *isbridge)
 {
-	*in = s->config && s->on;
+	*in = s->on;
 	*rtable = s->rtable;
 	strlcpy(ifn, s->ifname, len);
 	*isbridge = s->bridge;

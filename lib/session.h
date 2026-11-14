@@ -27,8 +27,7 @@ struct cnode;
 struct cand {
 	struct cand_state *own;
 	struct cand_state *cur;		/* own, or the shared one */
-	int		 config;	/* in configure */
-	int		 on;		/* its lines edit cur */
+	int		 on;		/* in configure: its lines edit cur */
 	int		 rtable;	/* the rtable its lines are for, or 0 */
 	int		 bridge;	/* ifname is a bridge */
 	char		 ifname[IFNAMSIZ];	/* the interface whose mode it
