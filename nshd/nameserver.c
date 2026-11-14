@@ -29,7 +29,6 @@
 int nameserver_usage(void);
 int nameserver4_valid(char *);
 int nameserver6_valid(char *);
-int resolvd_is_disabled(void);
 
 int
 nameserver_usage(void)
@@ -65,13 +64,6 @@ nameserver6_valid(char *addrstr)
 		return (0);
 	}
 	return (ret == 1);
-}
-
-int
-resolvd_is_disabled(void)
-{
-	int dbflag = db_select_flag_x_dbflag_rtable("ctl", "resolvd", 0);
-	return (dbflag == DB_X_DISABLE_ALWAYS); 
 }
 
 int

@@ -71,8 +71,6 @@ int arpdelete(const char *, const char *);
 int arpsearch(FILE *, char *, in_addr_t addr, int, void (*action)(FILE *,
 	char *, struct sockaddr_dl *sdl, struct sockaddr_inarp *sin,
 	struct rt_msghdr *rtm));
-void nuke_entry(struct sockaddr_dl *sdl,
-	struct sockaddr_inarp *sin, struct rt_msghdr *rtm);
 void conf_arp_entry(FILE *, char *, struct sockaddr_dl *,
 	struct sockaddr_inarp *, struct rt_msghdr *);
 static int getsocket(void);
@@ -501,19 +499,6 @@ arp_facts(struct facts_out *o, struct rtdump *rt, char **cur,
 		n++;
 	}
 	return (0);
-}
-
-/*
- * Nuke an arp entry
- */
-void
-nuke_entry(struct sockaddr_dl *sdl, struct sockaddr_inarp *sin,
-    struct rt_msghdr *rtm)
-{
-	char ip[20];
-
-	strlcpy(ip, inet_ntoa(sin->sin_addr), sizeof(ip));
-	arpdelete(ip, NULL);
 }
 
 /* -1 error */

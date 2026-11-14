@@ -41,68 +41,6 @@
 #include "externs.h"
 
 /*
- * string_index(string, array) - find string in array and return index
- */
-int
-string_index(char *string, char **array)
-{
-	int i = 0;
-
-	while (*array != NULL) {
-		if (strncmp(string, *array, strlen(string)) == 0)
-			return (i);
-		array++;
-		i++;
-	}
-	return (-1);
-}
-
-/*
- * format_time(seconds) - format number of seconds into a suitable display
- * that will fit within 6 characters.  Note that this routine builds its
- * string in a static area.  If it needs to be called more than once without
- * overwriting previous data, then we will need to adopt a technique similar
- * to the one used for format_k.
- */
-
-/*
- * Explanation: We want to keep the output within 6 characters.  For low
- * values we use the format mm:ss.  For values that exceed 999:59, we switch
- * to a format that displays hours and fractions:  hhh.tH.  For values that
- * exceed 999.9, we use hhhh.t and drop the "H" designator.  For values that
- * exceed 9999.9, we use "???".
- */
-
-char *
-format_time(time_t seconds)
-{
-	static char result[10];
-
-	/* sanity protection */
-	if (seconds < 0 || seconds > (99999l * 360l)) {
-		strlcpy(result, "   ???", sizeof result);
-	} else if (seconds >= (1000l * 60l)) {
-		/* alternate (slow) method displaying hours and tenths */
-		snprintf(result, sizeof(result), "%5.1fH",
-		    (double) seconds / (double) (60l * 60l));
-
-		/*
-		 * It is possible that the snprintf took more than 6
-		 * characters. If so, then the "H" appears as result[6].  If
-		 * not, then there is a \0 in result[6].  Either way, it is
-		 * safe to step on.
-		 */
-		result[6] = '\0';
-	} else {
-		/* standard method produces MMM:SS */
-		/* we avoid printf as must as possible to make this quick */
-		snprintf(result, sizeof(result), "%3d:%02d", (int)seconds / 60,
-		    (int)seconds % 60);
-	}
-	return (result);
-}
-
-/*
  * format_k(amt) - format a kilobyte memory value, returning a string
  * suitable for display.  Returns a pointer to a static
  * area that changes each call.  "amt" is converted to a

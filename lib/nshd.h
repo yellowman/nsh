@@ -523,7 +523,6 @@ void		 log_text(const char *, size_t);
 void		 child_start(const char *, int, int);
 void		 privdrop(enum nshd_proc);
 int		 proc_user(enum nshd_proc, uid_t *, gid_t *);
-int		 joined(enum nshd_proc, enum nshd_proc);
 void		 links_init(struct link *, size_t);
 int		 link_compose(struct link *, uint32_t, uint32_t, const void *,
 		    size_t);

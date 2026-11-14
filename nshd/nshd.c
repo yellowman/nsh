@@ -692,19 +692,6 @@ talks(enum nshd_proc p)
 	return (0);
 }
 
-/* whether a and b talk */
-int
-joined(enum nshd_proc a, enum nshd_proc b)
-{
-	size_t	 i;
-
-	for (i = 0; i < NPAIRS; i++)
-		if ((pairs[i].a == a && pairs[i].b == b) ||
-		    (pairs[i].a == b && pairs[i].b == a))
-			return (1);
-	return (0);
-}
-
 /* a pipe between a and b, each given its end */
 static void
 pair(struct child *a, struct child *b)

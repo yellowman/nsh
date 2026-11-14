@@ -70,12 +70,6 @@ cmdargs_output(char *cmd, char *arg[], int stdoutfd, int stderrfd)
 }
 
 int
-cmdargs_nowait(char *cmd, char *arg[], int pipefd)
-{
-	return cmdargs_output_setenv(cmd, arg, -1, -1, NULL, pipefd);
-}
-
-int
 cmdargs_output_setenv(char *cmd, char *arg[], int stdoutfd, int stderrfd,
     char **env, int pipefd)
 {
@@ -153,31 +147,6 @@ cmdargs_output_setenv(char *cmd, char *arg[], int stdoutfd, int stderrfd,
 	signal(SIGCHLD, sigchld);
 	signal(SIGALRM, SIG_DFL);
 	child = -1;
-
-	return status;
-}
-
-int
-cmdargs_wait_for_child(void)
-{
-	sig_t sigint, sigquit, sigchld;
-	int status = 127;
-
-	sigint = signal(SIGINT, SIG_IGN);
-	sigquit = signal(SIGQUIT, SIG_IGN);
-	sigchld = signal(SIGCHLD, SIG_DFL);
-
-	if (child != -1) {
-		signal(SIGALRM, sigalarm);
-		wait(&status);  /* Wait for cmd to complete */
-		if (WIFEXITED(status)) /* normal exit? */
-			status = WEXITSTATUS(status); /* exit code */
-		signal(SIGINT, sigint);
-		signal(SIGQUIT, sigquit);
-		signal(SIGCHLD, sigchld);
-		signal(SIGALRM, SIG_DFL);
-		child = -1;
-	}
 
 	return status;
 }

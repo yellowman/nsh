@@ -60,7 +60,6 @@
 #define TMPSIZ 1024	/* size of temp strings */
 #define ROUTEMTU 32768	/* common route MTU */
 
-void conf_db_single(FILE *, char *, char *, char *);
 int conf_ifaddrs(FILE *, char *, int, int);
 int conf_ifaddr_dhcp(FILE *, char *, int, int);
 void conf_lladdr(FILE *, char *);
@@ -636,24 +635,6 @@ islateif(char *ifname)
 			return 1;
 
 	return 0;
-}
-
-void
-conf_db_single(FILE *output, char *dbname, char *lookup, char *ifname)
-{
-	StringList *dbreturn;
-	dbreturn = sl_init();
-
-	if (db_select_flag_x_ctl(dbreturn, dbname, ifname) < 0) {
-		printf("%% conf_db_single %s database select failed\n", dbname);
-	}
-	if (dbreturn->sl_cur > 0) {
-		if (lookup == NULL)
-			fprintf(output, " %s\n", dbname);
-		else if (strcmp(dbreturn->sl_str[0], lookup) != 0)
-			fprintf(output, " %s %s\n", dbname, dbreturn->sl_str[0]);
-	}
-	sl_free(dbreturn, 1);
 }
 
 /*

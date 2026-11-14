@@ -1887,15 +1887,6 @@ rls_lock(int fd)
 	return;
 }
 
-void
-rmtemp(char *file)
-{
-	if (unlink(file) != 0)
-		if (errno != ENOENT)
-			printf("%% Unable to remove temporary file %s: %s\n",
-			    file, strerror(errno));
-}
-
 int
 start_dhcpd(int argc, char **argv, ...)
 {

@@ -58,12 +58,6 @@ log_setverbose(int v)
 	verbose = v;
 }
 
-int
-log_getverbose(void)
-{
-	return (verbose);
-}
-
 void
 logit(int pri, const char *fmt, ...)
 {

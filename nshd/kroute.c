@@ -68,7 +68,6 @@ struct	rtmsg m_rtmsg;
 int	rtm_addrs;
 u_long	rtm_inits;
 
-char	*mylink_ntoa(const struct sockaddr_dl *);
 
 
 /*
@@ -266,41 +265,6 @@ flushroutes(int af, int af2, int flush_verbose)
 	freertdump(rtdump);
 	close(s);
 	return;
-}
-
-static char hexlist[] = "0123456789abcdef";
-
-/* print 00:00:00:00:00:00 style, not if:00.00.00.00.00.00 */
-char *
-mylink_ntoa(const struct sockaddr_dl *sdl)
-{
-	static char obuf[64];
-	char *out = obuf;
-	int i;
-	u_char *in = (u_char *)LLADDR(sdl);
-	u_char *inlim = in + sdl->sdl_alen;
-	int firsttime = 1;
-
-	if (sdl->sdl_nlen) {
-		/* skip interface name */
-		out += sdl->sdl_nlen;
-	}
-	while (in < inlim) {
-		if (firsttime)
-			firsttime = 0;
-		else
-			*out++ = ':';
-		i = *in++;
-		if (i > 0xf) {
-			out[1] = hexlist[i & 0xf];
-			i >>= 4;
-			out[0] = hexlist[i];
-			out += 2;
-		} else
-			*out++ = hexlist[i];
-	}
-	*out = 0;
-	return (obuf);
 }
 
 int

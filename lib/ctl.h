@@ -80,7 +80,6 @@
 #define SIZE_CONF_TEMP 64
 int ctlhandler(int, char **, ...);
 int ctl_op(char *, char *);
-void rmtemp(char *);
 struct ctl {
         char *name;
         char *help;

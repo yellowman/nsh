@@ -118,9 +118,8 @@ kroute.c	process	rtmsg.seq
 kroute.c	scratch	ip_route.line_kroute lookup_kept
 			lookup_record.gwname lookup_record.ifpname
 			lookup_record.label lookup_v m_rtmsg
-			mylink_ntoa.obuf rt_metrics rtm_addrs rtm_inits
+			rt_metrics rtm_addrs rtm_inits
 			so_dst so_gate so_ifp so_mask
-kroute.c	table	hexlist
 loop.c		scratch	said
 loop.c		table	flushown ownif owntab
 main.c		session	config_mode
@@ -213,7 +212,6 @@ tunnel.c	table	cachecs tunnelcmds tunnelopts vnetidrs
 umb.c		table	cand_umb.fn umb_actstate umb_classalias
 			umb_dataclass umb_pktstate umbcs
 utils.c		scratch	format_k.idx format_k.retarray
-			format_time.result
 version.c	table	kind_version version_fields
 wg.c		scratch	wg_aip wg_facts.public wg_interface wg_peer
 			wgdata

@@ -143,7 +143,6 @@ int rtmsg(int, int, int, int, int);
 void flushroutes(int, int, int);
 void bprintf(FILE *, int, u_char *);
 #ifdef _NET_IF_DL_H_
-char *mylink_ntoa(const struct sockaddr_dl *);
 #endif
 extern char ifnetflags[];
 extern char routeflags[];
@@ -156,8 +155,6 @@ extern char metricnames[];
 int cmdargs_output_setenv(char *, char **, int, int, char **, int);
 int cmdargs_output(char *, char **, int, int);
 int cmdargs(char *, char **);
-int cmdargs_nowait(char *, char **, int);
-int cmdargs_wait_for_child(void);
 int nsh_setrtable(int);
 
 /* commands.c */
@@ -452,7 +449,6 @@ int bridge_member_search(int, char *);
 int brport_list(char *);
 int brport_one(char *);
 int set_ifflag(int, char *, short);
-int clr_ifflag(int, char *, short);
 int is_bridge(int, char *);
 int bridge_learns(int, char *);
 int brport(int, char **, ...);
@@ -611,8 +607,6 @@ void initedit(void);
 void endedit(void);
 
 /* utils.c */
-int string_index(char *, char **);
-char *format_time(time_t);
 char *format_k(uint64_t amt);
 
 /* client.c */
@@ -710,18 +704,13 @@ char **prot1_args(struct prot1 *, char **, int, char **, int);
 /* hashtable.c */
 struct hashtable;
 struct hashtable *hashtable_alloc(void);
-void hashtable_free(struct hashtable *);
 int hashtable_add(struct hashtable *, void *key, size_t keysize,
     void *value, size_t valsize);
-void *hashtable_get_keyptr(struct hashtable *, void *key, size_t keysize);
-void *hashtable_get_value(struct hashtable *, void *key, size_t keysize);
 int hashtable_remove(struct hashtable *, void **keyptr, void **value,
     size_t *valsize, void *key, size_t keysize);
-int hashtable_contains(struct hashtable *, void *key, size_t keysize);
 int hashtable_foreach(struct hashtable *,
     int (*cb)(void *, size_t, void *, size_t, void *),
     void *cb_arg);
-int hashtable_num_entries(struct hashtable *);
 
 /* candidate.c */
 #define CAND_NO		0	/* refused in configure private, for now */

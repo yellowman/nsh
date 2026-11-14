@@ -55,7 +55,6 @@
 #include "facts.h"
 #include "showfacts.h"
 
-int	clr_ifflag(int, char *, short);
 int 	bridge_ifsetflag(int, char *, char *, u_int32_t);
 int 	bridge_ifclrflag(int, char *, char *, u_int32_t);
 int 	bridge_addaddr(int, char *, char *, char *);
@@ -804,34 +803,6 @@ set_ifflag(int s, char *brdg, short f)
 	}
 
 	ifr.ifr_flags |= f;
-
-	if (ioctl(s, SIOCSIFFLAGS, (caddr_t)&ifr) < 0) {
-		printf("%% cannot set flags for %s: %s\n", brdg,
-		    strerror(errno));
-		if (errno == EPERM)
-			return (EX_NOPERM);
-		return (EX_IOERR);
-	}
-
-	return (0);
-}
-
-int
-clr_ifflag(int s, char *brdg, short f)
-{
-	struct ifreq ifr;
-
-	strlcpy(ifr.ifr_name, brdg, sizeof(ifr.ifr_name));
-
-	if (ioctl(s, SIOCGIFFLAGS, (caddr_t)&ifr) < 0) {
-		printf("%% cannot get flags for %s: %s\n", brdg,
-		    strerror(errno));
-		if (errno == EPERM)
-			return (EX_NOPERM);
-		return (EX_IOERR);
-	}
-
-	ifr.ifr_flags &= ~(f);
 
 	if (ioctl(s, SIOCSIFFLAGS, (caddr_t)&ifr) < 0) {
 		printf("%% cannot set flags for %s: %s\n", brdg,

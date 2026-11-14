@@ -78,24 +78,6 @@ hashtable_alloc(void)
 	return t;
 }
 
-void
-hashtable_free(struct hashtable *t)
-{
-	size_t i;
-	struct hashentry *e;
-
-	for (i = 0; i < t->nbuckets; i++) {
-		while (!STAILQ_EMPTY(&t->buckets[i])) {
-			e = STAILQ_FIRST(&t->buckets[i]);
-			STAILQ_REMOVE(&t->buckets[i], e, hashentry, entry);
-			free(e);
-		}
-	}
-	/* Storage for keys and values should be freed by caller. */
-	free(t->buckets);
-	free(t);
-}
-
 static int
 table_resize(struct hashtable *t, size_t nbuckets)
 {
@@ -195,35 +177,6 @@ hashtable_add(struct hashtable *t, void *key, size_t keysize,
 	return 0;
 }
 
-static struct hashentry *
-find_entry(struct hashtable *t, void *key, size_t keysize)
-{
-	uint64_t idx = entry_hash(t, key, keysize) % t->nbuckets;
-	struct hashbucket *bucket = &t->buckets[idx];
-	struct hashentry *e;
-
-	STAILQ_FOREACH(e, bucket, entry) {
-		if (e->keysize == keysize && memcmp(e->key, key, keysize) == 0)
-			return e;
-	}
-
-	return NULL;
-}
-
-void *
-hashtable_get_keyptr(struct hashtable *t, void *key, size_t keysize)
-{
-	struct hashentry *e = find_entry(t, key, keysize);
-	return e ? e->key : NULL;
-}
-
-void *
-hashtable_get_value(struct hashtable *t, void *key, size_t keysize)
-{
-	struct hashentry *e = find_entry(t, key, keysize);
-	return e ? e->value : NULL;
-}
-
 int
 hashtable_remove(struct hashtable *t, void **keyptr, void **value,
     size_t *valsize, void *key, size_t keysize)
@@ -266,13 +219,6 @@ hashtable_remove(struct hashtable *t, void **keyptr, void **value,
 }
 
 int
-hashtable_contains(struct hashtable *t, void *key, size_t keysize)
-{
-	struct hashentry *e = find_entry(t, key, keysize);
-	return e ? 1 : 0;
-}
-
-int
 hashtable_foreach(struct hashtable *t,
     int (*cb)(void *, size_t, void *, size_t, void *),
     void *cb_arg)
@@ -295,10 +241,4 @@ hashtable_foreach(struct hashtable *t,
 done:
 	t->flags &= ~HASHTABLE_F_TRAVERSAL;
 	return ret;
-}
-
-int
-hashtable_num_entries(struct hashtable *t)
-{
-	return t->nentries;
 }
