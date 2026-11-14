@@ -12,6 +12,7 @@
 	--faint: #98989d;
 	--select: #ffffff12;
 	--stripe: #ffffff0a;
+	--hover: #ffffff14;
 	--accent: #0a84ff;
 	--soft: #193356;
 	--soft-ink: #a9cdff;
@@ -40,6 +41,7 @@
 		--faint: #8e8e93;
 		--select: #0000000d;
 		--stripe: #00000008;
+		--hover: #0000000f;
 		--soft: #dae9fe;
 		--soft-ink: #1e579f;
 		--on: #248a3d;
@@ -1104,7 +1106,31 @@ table.grid {
 	cursor: pointer;
 	font-weight: 600;
 	font-size: .9231rem;
-	list-style-position: inside;
+	list-style: none;
+	background: var(--side);
+}
+
+.igroup summary::-webkit-details-marker {
+	display: none;
+}
+
+/* a section opens and shuts: its marker says which */
+.igroup summary::before {
+	content: "\25b8";
+	width: .6154rem;
+	color: var(--dim);
+}
+
+.igroup[open] summary::before {
+	content: "\25be";
+}
+
+.igroup summary:hover {
+	background: color-mix(in srgb, var(--accent) 10%, var(--side));
+}
+
+.igroup summary:hover::before {
+	color: var(--accent);
 }
 
 .igroup summary .count {
@@ -1566,7 +1592,27 @@ button:disabled {
 }
 
 .pick tr:hover td {
-	background: var(--raise);
+	background: var(--hover);
+}
+
+/* a row that opens what it names ends in a chevron */
+.pick tr:not(.inner, .sform, .changes) td:last-child {
+	position: relative;
+	padding-right: 1.8462rem;
+}
+
+.pick tr:not(.inner, .sform, .changes) td:last-child::after {
+	content: "\203a";
+	position: absolute;
+	right: .6154rem;
+	top: 50%;
+	transform: translateY(-50%);
+	font: 1.2308rem/1 var(--sans);
+	color: var(--faint);
+}
+
+.pick tr:hover td:last-child::after, .pick tr.sel td:last-child::after {
+	color: var(--accent);
 }
 
 .pick tr.sel td {
