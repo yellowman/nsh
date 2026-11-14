@@ -65,11 +65,11 @@
  * class of the user it logged in as. Its terminal, which system starts,
  * comes back as a pty, which config passes on.
  *
- * archive keeps the shared candidate, and who changed it, past config's
+ * journal keeps the shared candidate, and who changed it, past config's
  * end. config sends it each time it changes, and answers the session that
- * changed it once archive says whether it kept it. A config that starts
- * takes what archive kept before a session enters configure. If the
- * candidate cannot be sent, or archive does not keep it, the session is
+ * changed it once journal says whether it kept it. A config that starts
+ * takes what journal kept before a session enters configure. If the
+ * candidate cannot be sent, or journal does not keep it, the session is
  * told.
  *
  * Commits run one at a time, for all sessions: config plans a commit from
@@ -284,12 +284,12 @@ static uid_t			*editors;	/* who changed shared since */
 static size_t			 neditors;
 static unsigned int		 shared_edits;	/* its edits before a request */
 static char			 held[64];	/* why a candidate is held */
-static uint32_t			 keep_sent;	/* last KEEP sent to archive */
-static uint32_t			 keep_done;	/* last KEEP archive answered */
-static int			 keep_loaded;	/* archive's text was loaded */
+static uint32_t			 keep_sent;	/* last KEEP sent journal */
+static uint32_t			 keep_done;	/* last KEEP it answered */
+static int			 keep_loaded;	/* what it kept was loaded */
 static char			*loading;	/* that text, as it comes */
 static size_t			 loading_len;
-static int			 loading_past;	/* too big, or archive failed */
+static int			 loading_past;	/* too big, or it failed */
 static struct event		 rt_ev;		/* the routing socket, */
 static struct event		 rt_tm;		/* a timer for its notices, */
 static int			 rt_links;	/* and what it saw change */
@@ -313,8 +313,8 @@ static void		 front_sweep(int, short, void *);
 static void		 front_drop(struct front *);
 static void		 front_revoke(struct nshd_revoking *);
 static void		 config_dispatch_system(int, short, void *);
-static void		 config_dispatch_archive(int, short, void *);
-static void		 config_ready_archive(void);
+static void		 config_dispatch_journal(int, short, void *);
+static void		 config_ready_journal(void);
 static void		 config_show(uint32_t, struct nshd_show *);
 static void		 config_configure(uint32_t, struct nshd_configure *);
 static void		 config_line(uint32_t, struct nshd_line *);
@@ -397,8 +397,9 @@ static void		 request_free(struct request *);
 static struct link	 links[] = {
 #define SYSTEM		0
 	{ PROC_SYSTEM,	 config_dispatch_system },
-#define ARCHIVE		1
-	{ PROC_ARCHIVE,	 config_dispatch_archive, config_ready_archive },
+#define JOURNAL	1
+	{ PROC_JOURNAL, config_dispatch_journal,
+	    config_ready_journal },
 };
 
 void
@@ -2263,7 +2264,7 @@ editors_say(uid_t uid, const char *what)
 }
 
 /*
- * The shared candidate changed: send it, and who changed it, to archive
+ * The shared candidate changed: send it, and who changed it, to journal
  * to keep. Returns its KEEP's number, or 0 after saying why it could not
  * be sent
  */
@@ -2283,7 +2284,7 @@ shared_keep(void)
 }
 
 /*
- * Send archive the shared candidate to keep as KEEP seq, after a line of
+ * Send journal the shared candidate to keep as KEEP seq, after a line of
  * "editors" and the uid of each user who changed it. Returns -1, and logs
  * why, if it could not be sent
  */
@@ -2315,19 +2316,19 @@ shared_send(uint32_t seq)
 	}
 	for (i = 0; i < len; i += n) {
 		n = len - i < NSHD_TEXT ? len - i : NSHD_TEXT;
-		if (link_compose(&links[ARCHIVE], IMSG_ARC_TEXT, 0, buf + i,
+		if (link_compose(&links[JOURNAL], IMSG_STORE_TEXT, 0, buf + i,
 		    n) == -1)
 			fatal("%s", __func__);
 	}
 	free(buf);
-	if (link_compose(&links[ARCHIVE], IMSG_ARC_KEEP, 0, &k,
+	if (link_compose(&links[JOURNAL], IMSG_STORE_KEEP, 0, &k,
 	    sizeof(k)) == -1)
 		fatal("%s", __func__);
 	return (0);
 }
 
 /*
- * archive answered each KEEP up to seq, with warn if it did not keep
+ * journal answered each KEEP up to seq, with warn if it did not keep
  * them: each session that waited on one is answered, after warn
  */
 static void
@@ -2348,7 +2349,7 @@ shared_kept(uint32_t seq, const char *warn)
 }
 
 /*
- * What archive kept, taken as the shared candidate and who changed it,
+ * What journal kept, taken as the shared candidate and who changed it,
  * if it is one; then the sessions that wait may enter configure
  */
 static void
@@ -2385,7 +2386,7 @@ shared_load(void)
 	}
 	goto done;
  bad:
-	log_warnx("what archive kept is not a shared candidate");
+	log_warnx("what journal kept is not a shared candidate");
 	neditors = 0;
  done:
 	/* discard what nsh's code printed, such as why the text was bad */
@@ -2487,7 +2488,7 @@ config_snapshot_done(int32_t status)
 	TAILQ_FOREACH(sp, &sessions, entry) {
 		switch (sp->waits) {
 		case WAIT_CONFIGURE:
-			/* the shared candidate, once what archive kept is in */
+			/* the shared candidate, once what was kept is in */
 			if (sp->want != NSHD_PRIVATE && !keep_loaded)
 				continue;
 			r = config_enter(sp);
@@ -2923,12 +2924,12 @@ config_answer(uint32_t session, int32_t status, const char *fmt, ...)
 		fatal("%s", __func__);
 }
 
-/* archive's answers: what it kept, for config to take, or whether it kept */
+/* journal's answers: what it kept, for config to take, or whether it kept */
 static void
-config_dispatch_archive(int fd, short event, void *arg)
+config_dispatch_journal(int fd, short event, void *arg)
 {
 	struct imsgev		*iev = arg;
-	struct link		*l = &links[ARCHIVE];
+	struct link		*l = &links[JOURNAL];
 	struct imsg		 imsg;
 	struct ibuf		 b;
 	struct nshd_keep	 k;
@@ -2950,7 +2951,7 @@ config_dispatch_archive(int fd, short event, void *arg)
 		if (n == 0)
 			break;
 		switch (type = imsg_get_type(&imsg)) {
-		case IMSG_ARC_TEXT:
+		case IMSG_STORE_TEXT:
 			if (keep_loaded || imsg_get_ibuf(&imsg, &b) == -1)
 				goto bad;
 			if (ibuf_size(&b) > NSHD_KEEPMAX - loading_len) {
@@ -2965,7 +2966,7 @@ config_dispatch_archive(int fd, short event, void *arg)
 			    ibuf_size(&b));
 			loading_len += ibuf_size(&b);
 			break;
-		case IMSG_ARC_LOADED:
+		case IMSG_STORE_LOADED:
 			if (keep_loaded ||
 			    imsg_get_data(&imsg, &res, sizeof(res)) == -1)
 				goto bad;
@@ -2973,13 +2974,13 @@ config_dispatch_archive(int fd, short event, void *arg)
 				loading_past = 1;
 			shared_load();
 			break;
-		case IMSG_ARC_KEPT:
+		case IMSG_STORE_KEPT:
 			if (imsg_get_data(&imsg, &k, sizeof(k)) == -1 ||
 			    (int32_t)(k.seq - keep_done) <= 0 ||
 			    (int32_t)(k.seq - keep_sent) > 0)
 				goto bad;
-			shared_kept(k.seq, k.status == 0 ? NULL :
-			    "% nshd: archive did not keep the shared candidate\n");
+			shared_kept(k.seq, k.status == 0 ? NULL : "% nshd: "
+			    "journal did not keep the shared candidate\n");
 			break;
 		default:
 			goto bad;
@@ -2993,11 +2994,11 @@ config_dispatch_archive(int fd, short event, void *arg)
 	link_broken(l, "sent imsg %u, which it may not, or not whole", type);
 }
 
-/* archive's pipe is here: ask for what it kept */
+/* journal's pipe is here: ask for what it kept */
 static void
-config_ready_archive(void)
+config_ready_journal(void)
 {
-	if (link_compose(&links[ARCHIVE], IMSG_ARC_LOAD, 0, NULL, 0) == -1)
+	if (link_compose(&links[JOURNAL], IMSG_STORE_LOAD, 0, NULL, 0) == -1)
 		fatal("%s", __func__);
 }
 

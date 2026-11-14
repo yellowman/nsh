@@ -492,7 +492,7 @@ enum nshd_proc {
 	PROC_FRONTEND,
 	PROC_CONFIG,
 	PROC_SYSTEM,
-	PROC_ARCHIVE,
+	PROC_JOURNAL,
 	PROC_PARSER
 };
 
@@ -554,12 +554,12 @@ enum nshd_imsg {
 	IMSG_SYS_ROLLBACK_DIFF,	/* nshd_rollback: what configuration n changed */
 	IMSG_SYS_TEST,		/* nshd_test; back, nshd_result: how it went */
 
-	/* config and archive: the shared candidate, as text */
-	IMSG_ARC_TEXT,		/* its text, in either direction */
-	IMSG_ARC_KEEP,		/* config: nshd_keep; keep the text sent */
-	IMSG_ARC_KEPT,		/* archive: nshd_keep, and if it was kept */
-	IMSG_ARC_LOAD,		/* config: what was kept, as text, then LOADED */
-	IMSG_ARC_LOADED,	/* archive: nshd_result */
+	/* config and journal: the shared candidate, as text */
+	IMSG_STORE_TEXT,	/* its text, in either direction */
+	IMSG_STORE_KEEP,	/* config: nshd_keep; keep the text sent */
+	IMSG_STORE_KEPT,	/* journal: nshd_keep, and if it was kept */
+	IMSG_STORE_LOAD,	/* config: what was kept, text, then LOADED */
+	IMSG_STORE_LOADED,	/* journal: nshd_result */
 
 	/* config to system, answered as SYS_SHOW is */
 	IMSG_SYS_SAVED,		/* the saved configuration, as text */
@@ -630,12 +630,12 @@ struct imsgev {
 	short		 events;
 };
 
-/* config and archive: the sequence number of a KEEP, and its status */
+/* config and journal: the sequence number of a KEEP, and its status */
 struct nshd_keep {
 	uint32_t	seq;
 	int32_t		status;
 };
-#define NSHD_KEEPMAX	(16 * 1024 * 1024)	/* what archive keeps, at most */
+#define NSHD_KEEPMAX	(16 * 1024 * 1024)	/* most journal keeps */
 
 /* a child's peer, and the pipe between them, there as the child starts */
 struct link {
@@ -708,7 +708,7 @@ __dead void	 showproc(int, int, int);
 __dead void	 frontend(int, int);
 __dead void	 configproc(int, int);
 __dead void	 systemproc(int, int, int);
-__dead void	 archive(int, int);
+__dead void	 journal(int, int);
 __dead void	 parserproc(int, int);
 
 /* system's, and its children's, to run the parser (parserproc.c) */

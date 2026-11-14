@@ -15,11 +15,11 @@
  */
 
 /*
- * archive keeps, past config's end, the candidate that configure's
+ * journal keeps, past config's end, the candidate that configure's
  * sessions share, as config's text. It keeps it in a directory of its
- * own, NSHDB/archive, which it opens before chroot(2), so no other file
+ * own, NSHDB/journal, which it opens before chroot(2), so no other file
  * is in its reach. What config sends is kept whole, fsynced, or not at
- * all, and archive says which; when config asks, archive sends it what is
+ * all, and journal says which; when config asks, journal sends it what is
  * kept.
  */
 
@@ -42,30 +42,30 @@
 #include "stringlist.h"
 #include "externs.h"
 
-#define ARC_DIR		NSHDB "/archive"
-#define ARC_CAND	"candidate"
-#define ARC_TEMP	"candidate.new"
+#define STORE_DIR		NSHDB "/journal"
+#define STORE_CAND	"candidate"
+#define STORE_TEMP	"candidate.new"
 
-static int		 dir;		/* ARC_DIR */
+static int		 dir;		/* STORE_DIR */
 static char		*text;		/* to keep, as it comes */
 static size_t		 len;
 static int		 past;		/* past NSHD_KEEPMAX */
 
-static void	archive_dispatch_config(int, short, void *);
-static void	archive_clear(void);
-static void	archive_open(void);
-static int	archive_keep(void);
-static void	archive_load(void);
+static void	journal_dispatch_config(int, short, void *);
+static void	journal_clear(void);
+static void	journal_open(void);
+static int	journal_keep(void);
+static void	journal_load(void);
 
-static struct link	 config = { PROC_CONFIG, archive_dispatch_config };
+static struct link	 config = { PROC_CONFIG, journal_dispatch_config };
 
 /* d and v as child_start() takes them: nsh's externs.h has a verbose */
 void
-archive(int d, int v)
+journal(int d, int v)
 {
-	child_start("archive", d, v);
-	archive_open();
-	privdrop(PROC_ARCHIVE);
+	child_start("journal", d, v);
+	journal_open();
+	privdrop(PROC_JOURNAL);
 	/* its pipe to config is fd 3, and no descriptor comes after it */
 	if (pledge("stdio rpath wpath cpath", NULL) == -1)
 		fatal("pledge");
@@ -75,28 +75,28 @@ archive(int d, int v)
 	exit(0);
 }
 
-/* ARC_DIR, made and opened as root, for archive's user alone */
+/* STORE_DIR, made and opened as root, for journal's user alone */
 static void
-archive_open(void)
+journal_open(void)
 {
 	uid_t	 uid;
 	gid_t	 gid;
 
-	if (proc_user(PROC_ARCHIVE, &uid, &gid) == -1)
-		fatalx("archive has no user");
+	if (proc_user(PROC_JOURNAL, &uid, &gid) == -1)
+		fatalx("journal has no user");
 	if ((mkdir(NSHDB, 0700) == -1 && errno != EEXIST) ||
-	    (mkdir(ARC_DIR, 0700) == -1 && errno != EEXIST))
-		fatal("mkdir %s", ARC_DIR);
-	if ((dir = open(ARC_DIR, O_RDONLY | O_DIRECTORY | O_NOFOLLOW |
+	    (mkdir(STORE_DIR, 0700) == -1 && errno != EEXIST))
+		fatal("mkdir %s", STORE_DIR);
+	if ((dir = open(STORE_DIR, O_RDONLY | O_DIRECTORY | O_NOFOLLOW |
 	    O_CLOEXEC)) == -1)
-		fatal("open %s", ARC_DIR);
+		fatal("open %s", STORE_DIR);
 	if (fchown(dir, uid, gid) == -1 || fchmod(dir, 0700) == -1)
-		fatal("%s", ARC_DIR);
+		fatal("%s", STORE_DIR);
 }
 
 /* config's text, its requests to keep it, and to load what is kept */
 static void
-archive_dispatch_config(int fd, short event, void *arg)
+journal_dispatch_config(int fd, short event, void *arg)
 {
 	struct imsgev		*iev = arg;
 	struct imsg		 imsg;
@@ -119,7 +119,7 @@ archive_dispatch_config(int fd, short event, void *arg)
 		if (n == 0)
 			break;
 		switch (type = imsg_get_type(&imsg)) {
-		case IMSG_ARC_TEXT:
+		case IMSG_STORE_TEXT:
 			if (imsg_get_ibuf(&imsg, &b) == -1)
 				goto bad;
 			if (ibuf_size(&b) > NSHD_KEEPMAX - len) {
@@ -132,20 +132,20 @@ archive_dispatch_config(int fd, short event, void *arg)
 			memcpy(text + len, ibuf_data(&b), ibuf_size(&b));
 			len += ibuf_size(&b);
 			break;
-		case IMSG_ARC_KEEP:
+		case IMSG_STORE_KEEP:
 			if (imsg_get_data(&imsg, &k, sizeof(k)) == -1)
 				goto bad;
-			k.status = archive_keep();
+			k.status = journal_keep();
 			/* the next text begins another */
-			archive_clear();
-			if (link_compose(&config, IMSG_ARC_KEPT, 0, &k,
+			journal_clear();
+			if (link_compose(&config, IMSG_STORE_KEPT, 0, &k,
 			    sizeof(k)) == -1)
 				fatal("%s", __func__);
 			break;
-		case IMSG_ARC_LOAD:
+		case IMSG_STORE_LOAD:
 			if (imsg_get_len(&imsg) != 0)
 				goto bad;
-			archive_load();
+			journal_load();
 			break;
 		default:
 			goto bad;
@@ -162,7 +162,7 @@ archive_dispatch_config(int fd, short event, void *arg)
 
 /* the text config sent so far, dropped */
 static void
-archive_clear(void)
+journal_clear(void)
 {
 	free(text);
 	text = NULL;
@@ -172,7 +172,7 @@ archive_clear(void)
 
 /* keep the text config sent in place of the old: 0, or -1, logged */
 static int
-archive_keep(void)
+journal_keep(void)
 {
 	ssize_t	 n;
 	size_t	 done;
@@ -183,7 +183,7 @@ archive_keep(void)
 		    NSHD_KEEPMAX);
 		return (-1);
 	}
-	if ((fd = openat(dir, ARC_TEMP, O_WRONLY | O_CREAT | O_TRUNC |
+	if ((fd = openat(dir, STORE_TEMP, O_WRONLY | O_CREAT | O_TRUNC |
 	    O_NOFOLLOW | O_CLOEXEC, 0600)) == -1)
 		goto fail;
 	for (done = 0; done < len; done += n)
@@ -199,19 +199,20 @@ archive_keep(void)
 		close(fd);
 		goto fail;
 	}
-	if (close(fd) == -1 || renameat(dir, ARC_TEMP, dir, ARC_CAND) == -1 ||
+	if (close(fd) == -1 ||
+	    renameat(dir, STORE_TEMP, dir, STORE_CAND) == -1 ||
 	    fsync(dir) == -1)
 		goto fail;
 	return (0);
  fail:
-	log_warn("%s/%s", ARC_DIR, ARC_CAND);
-	unlinkat(dir, ARC_TEMP, 0);
+	log_warn("%s/%s", STORE_DIR, STORE_CAND);
+	unlinkat(dir, STORE_TEMP, 0);
 	return (-1);
 }
 
 /* what is kept, to config, then LOADED; no text if nothing is kept */
 static void
-archive_load(void)
+journal_load(void)
 {
 	struct nshd_result	 res = { 0 };
 	struct stat		 sb;
@@ -220,16 +221,16 @@ archive_load(void)
 	ssize_t			 n;
 	int			 fd;
 
-	if ((fd = openat(dir, ARC_CAND, O_RDONLY | O_NOFOLLOW |
+	if ((fd = openat(dir, STORE_CAND, O_RDONLY | O_NOFOLLOW |
 	    O_CLOEXEC)) == -1) {
 		if (errno != ENOENT) {
-			log_warn("%s/%s", ARC_DIR, ARC_CAND);
+			log_warn("%s/%s", STORE_DIR, STORE_CAND);
 			res.status = -1;
 		}
 		goto done;
 	}
 	if (fstat(fd, &sb) == -1 || sb.st_size > NSHD_KEEPMAX) {
-		log_warnx("%s/%s: not one to load", ARC_DIR, ARC_CAND);
+		log_warnx("%s/%s: not one to load", STORE_DIR, STORE_CAND);
 		res.status = -1;
 		close(fd);
 		goto done;
@@ -238,22 +239,23 @@ archive_load(void)
 		if ((n = read(fd, buf, sizeof(buf))) == -1 && errno == EINTR)
 			continue;
 		if (n == -1)
-			log_warn("%s/%s", ARC_DIR, ARC_CAND);
+			log_warn("%s/%s", STORE_DIR, STORE_CAND);
 		else if (n == 0)
-			log_warnx("%s/%s: shorter than it was", ARC_DIR,
-			    ARC_CAND);
+			log_warnx("%s/%s: shorter than it was", STORE_DIR,
+			    STORE_CAND);
 		if (n <= 0) {
 			res.status = -1;
 			break;
 		}
 		if (n > sb.st_size - sent)
 			n = sb.st_size - sent;
-		if (link_compose(&config, IMSG_ARC_TEXT, 0, buf, n) == -1)
+		if (link_compose(&config, IMSG_STORE_TEXT, 0, buf, n) == -1)
 			fatal("%s", __func__);
 		sent += n;
 	}
 	close(fd);
  done:
-	if (link_compose(&config, IMSG_ARC_LOADED, 0, &res, sizeof(res)) == -1)
+	if (link_compose(&config, IMSG_STORE_LOADED, 0, &res, sizeof(res)) ==
+	    -1)
 		fatal("%s", __func__);
 }

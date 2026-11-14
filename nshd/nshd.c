@@ -32,7 +32,7 @@
  *	config (-C)	_nshconf, chroot: sessions' state, what to ask system
  *	system (-Y)	root, a session of its own: reads and changes the
  *			kernel, the daemons and the saved configuration
- *	archive (-A)	_nsharc, chroot: what config keeps past its end
+ *	journal (-A)	_nshjournal, chroot: what config keeps past its end
  *	parser (-P)	_nshparse, chroot: started by system, a new one for
  *			each check, which reads text so system need not
  *
@@ -44,15 +44,15 @@
  * pledge(2) lets it signal nothing outside that group.
  *
  * Each pair of children that talk (config and system, config and
- * archive) has a pipe of its own, which parent makes, so each knows who
+ * journal) has a pipe of its own, which parent makes, so each knows who
  * sent what it reads. Each child starts with its descriptors in place,
  * from fd 3: for system and each show, a pipe to parent, which closes
  * when parent ends, and the child ends with it; then the pipe to each
  * of its peers. After these come the socket of a show, which no other
  * child has, and config's routing socket, which tells it what the
- * kernel changes. config and archive have no pipe to parent: when
+ * kernel changes. config and journal have no pipe to parent: when
  * parent ends, system does, config finds system's pipe closed, and
- * archive config's. parent learns of a child's end as it reaps it.
+ * journal config's. parent learns of a child's end as it reaps it.
  * A child has no other descriptor of parent's, and only system hears
  * anything from parent.
  *
@@ -148,7 +148,7 @@ static struct child {
 	{ PROC_SHOW,	 3, "show3",	"-S3",	"_nshshow" },
 	{ PROC_CONFIG,	 0, "config",	"-C",	"_nshconf" },
 	{ PROC_SYSTEM,	 0, "system",	"-Y",	NULL },
-	{ PROC_ARCHIVE,	 0, "archive",	"-A",	"_nsharc" },
+	{ PROC_JOURNAL,	 0, "journal",	"-A",	"_nshjournal" },
 };
 #define NPROC	(sizeof(children) / sizeof(children[0]))
 
@@ -218,7 +218,7 @@ main(int argc, char *argv[])
 	while ((c = getopt(argc, argv, "AbCdFPS:vY")) != -1) {
 		switch (c) {
 		case 'A':
-			role = PROC_ARCHIVE;
+			role = PROC_JOURNAL;
 			break;
 		case 'b':
 			booting = 1;
@@ -264,8 +264,8 @@ main(int argc, char *argv[])
 		configproc(opt_debug, opt_verbose);
 	case PROC_SYSTEM:
 		systemproc(opt_debug, opt_verbose, booting);
-	case PROC_ARCHIVE:
-		archive(opt_debug, opt_verbose);
+	case PROC_JOURNAL:
+		journal(opt_debug, opt_verbose);
 	case PROC_PARSER:
 		parserproc(opt_debug, opt_verbose);
 	case PROC_PARENT:
@@ -431,8 +431,8 @@ spawn_system(void)
 }
 
 /*
- * start the other children, once system has started. archive has its
- * pipe to config as fd 3; config has its pipes to system and to archive
+ * start the other children, once system has started. journal has its
+ * pipe to config as fd 3; config has its pipes to system and to journal
  * as fd 3 and 4, and its routing socket after them. Each show has the
  * read-only socket after its pipe to parent, as fd 4, and takes clients
  * on it at once; the socket listens first, so a client that comes
@@ -447,7 +447,7 @@ spawn_rest(void)
 	if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK,
 	    PF_UNSPEC, sp) == -1)
 		fatal("socketpair");
-	start(child(PROC_ARCHIVE, 0), sp[0], -1, -1);
+	start(child(PROC_JOURNAL, 0), sp[0], -1, -1);
 	start(child(PROC_CONFIG, 0), confd, sp[1], rtfd);
 	close(sp[0]);
 	close(sp[1]);
@@ -463,14 +463,14 @@ spawn_rest(void)
 
 /*
  * start c with a, b and d, each if not -1, as its descriptors from fd 3.
- * Before them comes its pipe to parent, unless c is config or archive,
+ * Before them comes its pipe to parent, unless c is config or journal,
  * which each have a peer's pipe to end by
  */
 static void
 start(struct child *c, int a, int b, int d)
 {
 	int	 sp[2], fds[CHILD_FDS] = { -1, a, b, d };
-	int	 piped = c->proc != PROC_CONFIG && c->proc != PROC_ARCHIVE;
+	int	 piped = c->proc != PROC_CONFIG && c->proc != PROC_JOURNAL;
 
 	if (piped) {
 		if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC |
@@ -659,7 +659,7 @@ start_child(const char *name, char *flag, int boot, const int *fds, int own)
  * c ended, or broke a rule, as fmt says: nshd ends with it. But when
  * config ends, system first finishes what it began (parent_drain()), and
  * nshd ends once system has; until then, parent ignores the others' ends.
- * archive's end ends config, which has a pipe to it, so it is config's
+ * journal's end ends config, which has a pipe to it, so it is config's
  * end that counts. system's end always ends nshd
  */
 static void
@@ -676,7 +676,7 @@ ended(struct child *c, const char *fmt, ...)
 	free(why);
 	if (c->proc == PROC_SYSTEM)
 		parent_shutdown(1, "nshd ends with it");
-	if (draining || c->proc == PROC_ARCHIVE)
+	if (draining || c->proc == PROC_JOURNAL)
 		return;
 	if (c->proc == PROC_CONFIG)
 		parent_drain();
@@ -862,7 +862,7 @@ parent_sig_handler(int sig, short event, void *arg)
 
 /*
  * system, once config's end has been asked for, hears that config and
- * every session have ended: config, the shows, the archive and every
+ * every session have ended: config, the shows, the journal and every
  * frontend have been reaped
  */
 static void

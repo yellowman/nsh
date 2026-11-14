@@ -472,20 +472,20 @@ system runs in a session of its own: when
 .Nm
 ends, the parent kills every process left in that session, and every
 process of _nshcheck's.
-.It archive
-Runs as _nsharc in a
+.It journal
+Runs as _nshjournal in a
 .Xr chroot 2 .
 It stores the shared candidate, and the users who changed it, for
 config, in
-.Pa /var/db/nsh/archive ,
+.Pa /var/db/nsh/journal ,
 which it opens before it enters the
 .Xr chroot 2 .
 config sends it the candidate each time the candidate changes.
-config answers the session that changed the candidate once archive has
+config answers the session that changed the candidate once journal has
 stored it, whole and synced to disk, or has reported that it did not.
 When
 .Nm
-starts, config loads what archive stored before any session enters
+starts, config loads what journal stored before any session enters
 .Cm configure .
 .It parser
 Runs as _nshparse in a
@@ -507,7 +507,7 @@ system passes on what the parser prints, takes its exit status as the
 verdict, and checks what it answers before using it.
 .El
 .Pp
-config and system, and config and archive, each talk on a pipe of
+config and system, and config and journal, each talk on a pipe of
 their own.
 The parent makes the pipes before the children start, so each child
 knows who sent what it reads.
@@ -517,9 +517,9 @@ pipe to its frontend, and accepts only system's word that a session
 ends, that config is to end, and that it has started.
 A show's pipe carries nothing: it closes when the parent or the show
 ends, and the other sees that.
-config and archive have no pipe to the parent.
+config and journal have no pipe to the parent.
 When the parent ends, system exits, config finds system's pipe closed
-and exits, and archive finds config's closed.
+and exits, and journal finds config's closed.
 The parent learns that a child has ended when it reaps it.
 .Pp
 If any child but a frontend exits, or sends the parent or a peer a
@@ -660,8 +660,8 @@ the commit record
 the record of an unconfirmed commit
 .It Pa /var/db/nsh/boot
 the record of the boot
-.It Pa /var/db/nsh/archive/candidate
-the shared candidate, as archive stores it
+.It Pa /var/db/nsh/journal/candidate
+the shared candidate, as journal stores it
 .El
 .Sh SEE ALSO
 .Xr nsh 8 ,

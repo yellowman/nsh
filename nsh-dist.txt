@@ -67,7 +67,7 @@
 /nshd/Makefile
 /nshd/answer.c
 /nshd/answer.h
-/nshd/archive.c
+/nshd/journal.c
 /nshd/arp.c
 /nshd/autoconf.c
 /nshd/bridge.c

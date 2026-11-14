@@ -146,12 +146,12 @@ The source code is in these directories:
 nshd must run for nsh to configure the system. Run these steps as root.
 
 1. Create nshd's users and the group nshadmin. nshd runs its show,
-   frontend, config, archive and parser processes as users of their
+   frontend, config, journal and parser processes as users of their
    own, and runs the programs that need no root as _nshcheck.
 
    ```shell
    groupadd nshadmin
-   for u in _nshshow _nshfront _nshconf _nsharc _nshparse _nshcheck; do
+   for u in _nshshow _nshfront _nshconf _nshjournal _nshparse _nshcheck; do
        useradd -L daemon -d /var/empty -s /sbin/nologin $u
    done
    ```
