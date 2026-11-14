@@ -485,6 +485,7 @@ with the page at
 .Bd -literal -offset indent
 server "router" {
 	listen on * tls port 443
+	tcp nodelay
 	connection max request body 3146752
 	location "/nshdeck/api/*" {
 		fastcgi socket "/run/nshdeck.sock"
@@ -494,6 +495,10 @@ server "router" {
 	}
 }
 .Ed
+.Pp
+Without
+.Cm tcp nodelay
+the terminal echoes what is typed in bursts, with pauses between them.
 .Pp
 The options are as follows:
 .Bl -tag -width Ds

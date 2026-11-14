@@ -297,6 +297,7 @@ nshdeck is optional. To configure the system from a web browser:
    ```
    server "router" {
        listen on * tls port 443
+       tcp nodelay
        connection max request body 3146752
        location "/nshdeck/api/*" {
            fastcgi socket "/run/nshdeck.sock"
@@ -306,6 +307,9 @@ nshdeck is optional. To configure the system from a web browser:
        }
    }
    ```
+
+   Without `tcp nodelay` the terminal echoes what is typed in bursts,
+   with pauses between them.
 
 4. Start httpd(8), and have rc(8) start it at each boot:
 
