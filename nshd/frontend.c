@@ -45,6 +45,7 @@
 
 #include "log.h"
 #include "nshd.h"
+#include "internal.h"
 #include "control.h"
 
 static uint32_t		 client;	/* the client's id, in control.c */

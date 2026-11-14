@@ -40,6 +40,7 @@
 
 #include "externs.h"
 #include "nshd.h"
+#include "internal.h"
 #include "facts.h"
 #include "showfacts.h"
 #include "showwords.h"

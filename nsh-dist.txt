@@ -85,6 +85,7 @@
 /nshd/frontend.c
 /nshd/ieee80211.c
 /nshd/if.c
+/nshd/internal.h
 /nshd/kernel.c
 /nshd/kfacts.c
 /nshd/kroute.c

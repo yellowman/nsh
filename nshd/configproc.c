@@ -152,6 +152,7 @@
 
 #include "log.h"
 #include "nshd.h"
+#include "internal.h"
 #include "facts.h"
 #include "args.h"
 #include "stringlist.h"

@@ -123,6 +123,7 @@
 
 #include "log.h"
 #include "nshd.h"
+#include "internal.h"
 #include "control.h"
 #include "facts.h"
 #include "showfacts.h"

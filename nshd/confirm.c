@@ -47,6 +47,7 @@
 #include <unistd.h>
 
 #include "nshd.h"
+#include "internal.h"
 #include "stringlist.h"
 #include "externs.h"
 

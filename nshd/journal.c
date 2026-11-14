@@ -39,6 +39,7 @@
 
 #include "log.h"
 #include "nshd.h"
+#include "internal.h"
 #include "stringlist.h"
 #include "externs.h"
 

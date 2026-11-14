@@ -38,6 +38,7 @@
 
 #include "log.h"
 #include "nshd.h"
+#include "internal.h"
 #include "control.h"
 
 #define	CONTROL_BACKLOG	5

@@ -276,6 +276,7 @@
 
 #include "log.h"
 #include "nshd.h"
+#include "internal.h"
 #include "stringlist.h"
 #include "externs.h"
 #include "ctl.h"
@@ -319,7 +320,7 @@
 #define BOOT_RECORD	NSHDB "/boot"
 
 #if NSHD_CLEARS != MAXCLEARS || NSHD_ROLLBACKS != ROLLBACKS
-#error "nshd.h's sizes are not nsh's"
+#error "nshd.h's or internal.h's sizes are not nsh's"
 #endif
 
 /*
@@ -3937,7 +3938,7 @@ system_health(int differs)
 }
 
 /*
- * A reading of the parser's for request id, kind as nshd.h says, to be
+ * A reading of the parser's for request id, kind as internal.h says, to be
  * given its texts (system_parse_text()), then started (system_parse())
  */
 static struct job *

@@ -53,6 +53,7 @@
 
 #include "log.h"
 #include "nshd.h"
+#include "internal.h"
 #include "externs.h"
 #include "facts.h"
 #include "kfacts.h"
