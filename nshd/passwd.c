@@ -721,29 +721,47 @@ login_perms_in(uid_t uid, int web, const char *conf, size_t len)
  * whether or not the password is right; its state says which. Then
  * auth_approval(3), which resets that state, must approve the account,
  * as login(1) requires: not expired, and not refused by its class.
- * Returns the uid, or -1 after printing "Login incorrect".
+ * Returns the uid, or -1 with *why set to the reason, for nshd's log.
  */
 int
-login_auth(char *name, char *password)
+login_auth(char *name, char *password, const char **why)
 {
-	auth_session_t *as = NULL;
+	auth_session_t *as;
 	struct passwd *pw;
 	char class[64];
-	int made, uid = -1;
+	int made, uid;
 
-	if (login_user_find(name, class, sizeof(class), &made) == 1 &&
-	    (pw = getpwnam(name)) != NULL && pw->pw_uid != 0) {
-		/* copy it before auth_*() read the password database again */
-		uid = pw->pw_uid;
-		if ((as = auth_usercheck(name, NULL, NULL, password)) == NULL ||
-		    (auth_getstate(as) & AUTH_ALLOW) == 0 ||
-		    auth_approval(as, NULL, name, NULL) <= 0)
-			uid = -1;
-		if (as != NULL)
-			auth_close(as);
+	switch (login_user_find(name, class, sizeof(class), &made)) {
+	case -1:
+		*why = "nshd could not read the login lines";
+		return -1;
+	case 0:
+		*why = "no login user line names it";
+		return -1;
 	}
-	if (uid == -1)
-		printf("%% Login incorrect\n");
+	if ((pw = getpwnam(name)) == NULL) {
+		*why = "it has no account";
+		return -1;
+	}
+	if (pw->pw_uid == 0) {
+		*why = "it is root";
+		return -1;
+	}
+	/* copy it before auth_*() read the password database again */
+	uid = pw->pw_uid;
+	if ((as = auth_usercheck(name, NULL, NULL, password)) == NULL) {
+		*why = "BSD auth could not check it";
+		return -1;
+	}
+	if ((auth_getstate(as) & AUTH_ALLOW) == 0) {
+		*why = "BSD auth rejected its password";
+		uid = -1;
+	} else if (auth_approval(as, NULL, name, NULL) <= 0) {
+		*why = "auth_approval(3) refused its account: expired, "
+		    "nologin, or its class";
+		uid = -1;
+	}
+	auth_close(as);
 	return uid;
 }
 

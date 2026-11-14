@@ -271,9 +271,8 @@
 #define AUTH_SECS	30	/* a web login's check, at most */
 #define GO_SECS		10	/* config's GO, for the job that waits */
 #define AUTH_GRACE	2	/* after SIGTERM, before SIGKILL */
-/* a web login's answer as login users or classes change */
-#define LOGIN_CHANGING	"% Login refused: login users or classes are " \
-			"changing. Log in again\n"
+/* reply to a refused web login; only nshd's log says why */
+#define LOGIN_INCORRECT	"% Login incorrect\n"
 /* descriptors kept free of sessions: streams, logins, commits, files */
 #define SYS_RESERVE	(SYS_STREAMS + SYS_AUTHS + 16)
 #define CLIENT_LOOK	1	/* seconds between looks at the clients */
@@ -452,6 +451,12 @@ struct client {
 	uid_t			 login;		/* as this uid */
 };
 
+/* what a web login's check sends back */
+struct auth_result {
+	int32_t			 uid;		/* a uid, or -1 */
+	char			 why[96];	/* if uid is -1, the reason */
+};
+
 /*
  * A web login being checked, in a child of its own (system_login()). It
  * counts until its child is reaped and its pipe is read to its end,
@@ -466,7 +471,7 @@ struct attempt {
 	pid_t			 pgid;		/* the child's process group */
 	int			 status;	/* the child's, once reaped */
 	int			 fd;		/* its result; -1 at its end */
-	int32_t			 uid;		/* the result: a uid, or -1 */
+	struct auth_result	 res;		/* the result */
 	size_t			 got;		/* bytes of it read */
 	int			 answered;
 	int			 killed;	/* its group's last signal */
@@ -531,6 +536,8 @@ static void	system_auth_stop(struct attempt *, const char *);
 static void	system_auth_reap(struct attempt *);
 static void	system_auth_done(struct attempt *);
 static void	system_auth_answer(struct attempt *);
+static void	system_refused(uint32_t, const char *, const char *, ...)
+		    __attribute__((__format__ (printf, 3, 4)));
 static void	system_terminal(uint32_t, struct nshd_systerm *);
 static __dead void system_term_child(int, struct passwd *);
 static int	system_whole(uint32_t, const void *, size_t);
@@ -877,7 +884,7 @@ client_drop(struct client *cl)
 	/* a login it began is not checked on */
 	TAILQ_FOREACH(a, &attempts, entry)
 		if (a->session == cl->session) {
-			system_auth_stop(a, "");
+			system_auth_stop(a, "its session ended");
 			break;
 		}
 	TAILQ_REMOVE(&clients, cl, entry);
@@ -1122,7 +1129,7 @@ system_request(uint32_t type, uint32_t id, const void *data, size_t len)
 			}
 		TAILQ_FOREACH(at, &attempts, entry)
 			if (at->id == id) {
-				system_auth_stop(at, "");
+				system_auth_stop(at, "config stopped it");
 				break;
 			}
 		break;
@@ -1507,18 +1514,17 @@ system_may(int perms, int need, const char *name)
 }
 
 /*
- * The web configurator's session logs in as a user a login user line
- * names, never root, if the password is the user's (login_auth()); the
- * session then acts as that user, and config takes the user's uid as the
- * session's. The answer is the permissions of the user's login class,
- * or -1, saying why. BSD auth may run programs that take their time, so
- * the check runs in a child of its own, at most AUTH_SECS seconds, and
- * is answered once it ends (system_auth_answer()). At most SYS_AUTHS
- * run at once, one for each session, and none waits for another. While
- * login users or classes change, a login is refused, as the session
- * would take its permissions from the login lines before the change;
- * those being checked as the change begins are stopped then
- * (system_revoking())
+ * Log in the web configurator's session as a user named by a login user
+ * line, never root, if the password is right (login_auth()). The
+ * session then acts as that user, and config takes the user's uid as
+ * the session's. The answer is the user's login class permissions, or
+ * -1 with "Login incorrect", and nshd's log says why. BSD auth may run
+ * slow programs, so the check runs in its own child for at most
+ * AUTH_SECS seconds, and is answered when it ends
+ * (system_auth_answer()). At most SYS_AUTHS checks run at once, one per
+ * session. While login users or classes are changing, logins are
+ * refused, because the session would get its permissions from the old
+ * login lines; checks already running are stopped (system_revoking()).
  */
 static void
 system_login(uint32_t id, struct nshd_syslogin *sl)
@@ -1529,37 +1535,45 @@ system_login(uint32_t id, struct nshd_syslogin *sl)
 	int			 fds[2], n = 0;
 
 	printed(NULL);
-	if ((cl = client_whose(&sl->whose)) == NULL || !cl->web) {
-		system_end(id, -1, "%% nshd: only the web configurator logs "
-		    "in\n");
+	if ((cl = client_whose(&sl->whose)) == NULL) {
+		system_refused(id, sl->login.name, "its session ended");
+		return;
+	}
+	if (!cl->web) {
+		system_refused(id, sl->login.name, "its session's uid is "
+		    "not %s's, as nshd looked it up when it started",
+		    NSHD_WEB_USER);
 		return;
 	}
 	if (revoking) {
-		system_end(id, -1, "%s", LOGIN_CHANGING);
+		system_refused(id, sl->login.name, "login users or classes "
+		    "are changing");
 		return;
 	}
 	TAILQ_FOREACH(a, &attempts, entry) {
 		if (a->session == sl->whose.session) {
-			system_end(id, -1, "%% nshd: this session's last login "
-			    "is still being checked\n");
+			system_refused(id, sl->login.name, "its session's "
+			    "last login is still being checked");
 			return;
 		}
 		n++;
 	}
 	if (n >= SYS_AUTHS) {
-		system_end(id, -1, "%% nshd: %d logins are being checked; "
-		    "try again soon\n", SYS_AUTHS);
+		system_refused(id, sl->login.name, "%d logins are being "
+		    "checked", SYS_AUTHS);
 		return;
 	}
 	if (pipe2(fds, O_CLOEXEC | O_NONBLOCK) == -1) {
-		system_end(id, -1, "%% nshd: pipe: %s\n", strerror(errno));
+		system_refused(id, sl->login.name, "pipe: %s",
+		    strerror(errno));
 		return;
 	}
 	if ((a = calloc(1, sizeof(*a))) == NULL)
 		fatal(NULL);
 	switch (a->pid = fork()) {
 	case -1:
-		system_end(id, -1, "%% nshd: fork: %s\n", strerror(errno));
+		system_refused(id, sl->login.name, "fork: %s",
+		    strerror(errno));
 		close(fds[0]);
 		close(fds[1]);
 		free(a);
@@ -1576,7 +1590,7 @@ system_login(uint32_t id, struct nshd_syslogin *sl)
 	a->session = sl->whose.session;
 	strlcpy(a->name, sl->login.name, sizeof(a->name));
 	a->fd = fds[0];
-	a->uid = -1;
+	a->res.uid = -1;
 	TAILQ_INSERT_TAIL(&attempts, a, entry);
 	event_set(&a->ev, a->fd, EV_READ | EV_PERSIST, system_auth_read, a);
 	event_add(&a->ev, NULL);
@@ -1585,18 +1599,18 @@ system_login(uint32_t id, struct nshd_syslogin *sl)
 }
 
 /*
- * The check of a web login, in its own process group, with nothing of
- * system's but fd, the pipe its result goes to: the login user line's
- * and the account's checks, and BSD auth's (login_auth()). The result is
- * the uid, or -1. BSD auth's programs inherit neither fd nor a signal
- * mask or handler of system's
+ * The child that checks a web login (login_auth()), in its own process
+ * group, keeping nothing of system's but fd, the pipe for its result:
+ * the uid, or -1 and the reason. BSD auth's programs inherit neither fd
+ * nor system's signal mask or handlers.
  */
 static __dead void
 system_auth_child(int fd, struct nshd_syslogin *sl)
 {
-	sigset_t	 none;
-	int32_t		 uid;
-	int		 null;
+	struct auth_result	 res;
+	sigset_t		 none;
+	const char		*why = NULL;
+	int			 null;
 
 	setpgid(0, 0);
 	signal(SIGINT, SIG_DFL);
@@ -1615,9 +1629,12 @@ system_auth_child(int fd, struct nshd_syslogin *sl)
 	    dup2(null, STDIN_FILENO) == -1 || dup2(null, STDOUT_FILENO) == -1)
 		_exit(1);
 	close(null);
-	uid = login_auth(sl->login.name, sl->login.password);
+	memset(&res, 0, sizeof(res));
+	res.uid = login_auth(sl->login.name, sl->login.password, &why);
 	explicit_bzero(sl, sizeof(*sl));
-	if (write(3, &uid, sizeof(uid)) != sizeof(uid))
+	if (why != NULL)
+		strlcpy(res.why, why, sizeof(res.why));
+	if (write(3, &res, sizeof(res)) != sizeof(res))
 		_exit(1);
 	_exit(0);
 }
@@ -1627,20 +1644,20 @@ static void
 system_auth_read(int fd, short event, void *arg)
 {
 	struct attempt	*a = arg;
-	char		 buf[sizeof(a->uid) + 1];
+	char		 buf[sizeof(a->res) + 1];
 	ssize_t		 n;
 
 	if ((n = read(a->fd, buf, sizeof(buf))) == -1 &&
 	    (errno == EINTR || errno == EAGAIN))
 		return;
-	if (n > 0 && a->got + n <= sizeof(a->uid)) {
-		memcpy((char *)&a->uid + a->got, buf, n);
+	if (n > 0 && a->got + n <= sizeof(a->res)) {
+		memcpy((char *)&a->res + a->got, buf, n);
 		a->got += n;
 		return;
 	}
 	/* its end, an error, or more than a result: no more is read */
 	if (n > 0)
-		system_auth_stop(a, "% Login incorrect\n");
+		system_auth_stop(a, "its check sent more than a result");
 	event_del(&a->ev);
 	close(a->fd);
 	a->fd = -1;
@@ -1658,8 +1675,7 @@ system_auth_late(int fd, short event, void *arg)
 	struct attempt	*a = arg;
 
 	if (!a->killed) {
-		system_auth_stop(a, "% nshd: the login took too long to "
-		    "check\n");
+		system_auth_stop(a, "its check took too long");
 		return;
 	}
 	/* the child may be gone, and a program it started not */
@@ -1675,18 +1691,19 @@ system_auth_late(int fd, short event, void *arg)
 }
 
 /*
- * The attempt ends now, failed, as msg says, if it is not answered yet:
- * its group is sent SIGTERM, and SIGKILL a grace later. It counts until
- * then, and until its child is reaped
+ * Refuse the attempt now for why, unless it was answered already, and
+ * send its process group SIGTERM, then SIGKILL after a grace period.
+ * It still counts toward SYS_AUTHS until then, and until its child is
+ * reaped.
  */
 static void
-system_auth_stop(struct attempt *a, const char *msg)
+system_auth_stop(struct attempt *a, const char *why)
 {
 	struct timeval	 tv = { AUTH_GRACE, 0 };
 
 	if (!a->answered) {
 		a->answered = 1;
-		system_end(a->id, -1, "%s", msg);
+		system_refused(a->id, a->name, "%s", why);
 	}
 	if (a->killed)
 		return;
@@ -1737,18 +1754,48 @@ system_auth_answer(struct attempt *a)
 	struct client		*cl;
 
 	a->answered = 1;
-	if (a->got != sizeof(a->uid) || a->uid <= 0 ||
-	    !WIFEXITED(a->status) || WEXITSTATUS(a->status) != 0 ||
-	    (cl = client_find(a->session)) == NULL || !client_there(cl) ||
-	    !cl->web || !login_may(a->name, a->uid)) {
-		system_end(a->id, -1, "%% Login incorrect\n");
+	if (a->got != sizeof(a->res) || !WIFEXITED(a->status) ||
+	    WEXITSTATUS(a->status) != 0 ||
+	    memchr(a->res.why, '\0', sizeof(a->res.why)) == NULL) {
+		system_refused(a->id, a->name, "its check did not finish");
+		return;
+	}
+	if (a->res.uid <= 0) {
+		system_refused(a->id, a->name, "%s", a->res.why);
+		return;
+	}
+	if ((cl = client_find(a->session)) == NULL || !client_there(cl) ||
+	    !cl->web) {
+		system_refused(a->id, a->name, "its session ended");
+		return;
+	}
+	if (!login_may(a->name, a->res.uid)) {
+		system_refused(a->id, a->name, "its login user line or "
+		    "account changed as it was checked");
 		return;
 	}
 	cl->logged = 1;
-	cl->login = a->uid;
-	lg.uid = a->uid;
+	cl->login = a->res.uid;
+	lg.uid = a->res.uid;
 	system_tell(IMSG_SYS_LOGGED, a->id, &lg, sizeof(lg));
-	system_end(a->id, login_perms(a->uid), NULL);
+	system_end(a->id, login_perms(a->res.uid), NULL);
+}
+
+/*
+ * Refuse web login request id for name: log why, and tell the session
+ * only "Login incorrect".
+ */
+static void
+system_refused(uint32_t id, const char *name, const char *fmt, ...)
+{
+	va_list	 ap;
+	char	 why[128];
+
+	va_start(ap, fmt);
+	vsnprintf(why, sizeof(why), fmt, ap);
+	va_end(ap);
+	log_warnx("web login of %s refused: %s", name, why);
+	system_end(id, -1, "%s", LOGIN_INCORRECT);
 }
 
 /*
@@ -2665,7 +2712,8 @@ system_revoking(uint32_t id, const char *after, size_t len)
 	revoking = rv.on = after != NULL;
 	if (after != NULL)
 		TAILQ_FOREACH(a, &attempts, entry)
-			system_auth_stop(a, LOGIN_CHANGING);
+			system_auth_stop(a, "login users or classes are "
+			    "changing");
 	/*
 	 * a rollback, id 0, ends no session: it takes back a commit, and
 	 * system's own checks read the class as it is then

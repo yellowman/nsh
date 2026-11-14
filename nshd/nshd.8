@@ -94,6 +94,8 @@ commit and has not begun.
 A client with _nshweb's uid is the web configurator's session.
 Only that session may log in, as a user, with that user's password, and
 request the user's terminal.
+A login that is refused is answered only that it is incorrect, and
+system logs why, with the user's name.
 .It config
 Runs as _nshconf in a
 .Xr chroot 2 ,
