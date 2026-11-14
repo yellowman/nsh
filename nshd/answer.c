@@ -104,8 +104,9 @@ done:
 }
 
 /*
- * Begin, for nshd's system, the show values ss ask, which config parsed
- * (facts_answer_pack()), or NULL if they ask none system answers
+ * Begin, for nshd's system, the show values ss ask, which the session's
+ * frontend parsed (facts_answer_pack()), or NULL if they ask none system
+ * answers
  */
 struct collection *
 facts_answer_take(const struct nshd_sysshow *ss)

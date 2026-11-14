@@ -717,8 +717,8 @@ static const struct arg flushverbose_args[] = {
  * daemon's action that runs a program and does not change its
  * configuration (daemon_cmd); an interface's bssid, setpuk and chgpin;
  * and a group's carp demotion counter, as group or no group sets it.
- * config parses nsh's words for one (op_parse()), and system checks the
- * values with args_check() and runs them (op_run())
+ * The session's frontend parses nsh's words for one (op_parse()), and
+ * system checks the values with args_check() and runs them (op_run())
  */
 enum { OP_REBOOT, OP_HALT, OP_POWERDOWN };	/* op_halt()'s */
 const struct argcmd ops[] = {

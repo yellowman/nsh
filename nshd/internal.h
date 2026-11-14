@@ -30,9 +30,9 @@
 #define NSHD_PART	(16 * 1024 * 1024)	/* a commit's part, at most */
 
 /*
- * config to system: a show that system answers, as config parsed its
- * words (facts_answer_pack()): what it asks, and the values it asks
- * with, where its kind has them
+ * config to system: a show that system answers, as the session's
+ * frontend parsed its words (facts_answer_pack()): what it asks, and
+ * the values it asks with, where its kind has them
  */
 #define NSHD_SHOWARGS	6	/* a program's words, at most */
 struct nshd_sysshow {
@@ -86,8 +86,10 @@ struct nshd_follow {
 };
 
 /*
- * config to system: an operation, as its row of ops[] and the values of
- * the row's arguments, a facts record; and the session that asked it
+ * An operation, as its row of ops[] and the values of the row's
+ * arguments, a facts record. A session's frontend parses nsh's words
+ * for it and sends it to config, which passes it on to system with the
+ * session that asked it
  */
 struct nshd_sysop {
 	struct nshd_whose whose;
@@ -335,6 +337,25 @@ struct nshd_edline {
 	uint32_t	len;		/* of its edits, which follow */
 };
 
+/*
+ * A session's frontend to config: a show, as the frontend parsed its
+ * words: what it asks. A rollback's configuration is n, and a show
+ * system answers with facts is ss, which config passes on
+ */
+struct nshd_frontshow {
+	int32_t		kind;		/* NSHD_SHOW_* */
+	int32_t		n;
+	struct nshd_sysshow ss;
+};
+#define NSHD_SHOW_FACTS		1	/* system answers it, with facts */
+#define NSHD_SHOW_CANDIDATE	2	/* the session's candidate */
+#define NSHD_SHOW_DIFF		3	/* how it differs from what runs */
+#define NSHD_SHOW_RUNNING	4	/* the running configuration */
+#define NSHD_SHOW_STARTUP	5	/* the saved one */
+#define NSHD_SHOW_ROLLBACKS	6	/* the configurations kept */
+#define NSHD_SHOW_ROLLBACK	7	/* configuration n of them */
+#define NSHD_SHOW_ROLLDIFF	8	/* what configuration n changed */
+
 enum nshd_proc {
 	PROC_PARENT,
 	PROC_SHOW,
@@ -452,7 +473,10 @@ enum nshd_procmsg {
 	 * frontend to config: nshd_edits, the lines of a LINE or a STAGE;
 	 * after the last part, config answers as it answers that request
 	 */
-	IMSG_FRONT_EDITS = 60
+	IMSG_FRONT_EDITS = 60,
+	/* frontend to config: a show and an operation, as it parsed them */
+	IMSG_FRONT_SHOW = 61,	/* nshd_frontshow; answered as a SHOW is */
+	IMSG_FRONT_OP = 62	/* nshd_sysop; answered as an OP is */
 };
 
 struct imsgev {

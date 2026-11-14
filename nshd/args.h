@@ -229,7 +229,7 @@ extern const struct argkey login_kinds[], login_permtab[], nwflags[];
 extern const struct argkey wpaprotos[], wpaakms[], wpaciphers[];
 extern const struct argkey wpagroupciphers[];
 
-/* the operations of nshd's system, which config parses the words of */
+/* the operations of nshd's system, whose words a frontend parses */
 extern const struct argcmd ops[];
 extern const size_t nops;
 int	op_parse(int, char **, struct argvals *, char *, size_t);

@@ -33,8 +33,11 @@
  * that is none of the candidate's goes no further: frontend answers it
  * itself, with what its reading printed. A stage's line that is none is
  * answered where the stage reaches it, as config says it has; the lines
- * after it are not read. frontend holds no candidate, and has only what
- * config sends its own client.
+ * after it are not read. frontend parses a show's words and an
+ * operation's the same way, into what the show asks and into the
+ * operation's row and values, and answers itself one that is neither.
+ * frontend holds no candidate, and has only what config sends its own
+ * client.
  *
  * When the client goes, frontend ends; config finds its pipe closed,
  * and parent tells system. When config closes its pipe, frontend ends
@@ -61,6 +64,9 @@
 #include "nshd.h"
 #include "internal.h"
 #include "control.h"
+#include "facts.h"
+#include "args.h"
+#include "answer.h"
 
 static uint32_t		 client;	/* the client's id, in control.c */
 static uid_t		 web_uid;	/* NSHD_WEB_USER's uid */
@@ -98,6 +104,8 @@ union frontend_request {
 
 static void	frontend_dispatch_config(int, short, void *);
 static void	frontend_answer(struct ctl_conn *, int32_t, int);
+static void	frontend_show(struct ctl_conn *, struct nshd_show *);
+static void	frontend_op(struct ctl_conn *, struct nshd_op *);
 static void	frontend_line(struct ctl_conn *, struct nshd_line *);
 static void	frontend_stage(struct ctl_conn *, struct nshd_stage *);
 static int	frontend_read(FILE *, char *, char *, int);
@@ -262,9 +270,13 @@ frontend_client(struct ctl_conn *c, struct imsg *imsg)
 		if (imsg_get_data(imsg, &show, sizeof(show)) == -1 ||
 		    memchr(show.words, '\0', sizeof(show.words)) == NULL)
 			return (-1);
-		if (link_compose(&links[CONFIG], IMSG_CTL_SHOW, c->id, &show,
-		    sizeof(show)) == -1)
-			fatal("%s", __func__);
+		frontend_show(c, &show);
+		return (0);
+	case IMSG_CTL_OP:
+		if (frontend_whole(imsg, &r) == -1)
+			return (-1);
+		frontend_op(c, &r.op);
+		explicit_bzero(&r, sizeof(r));
 		return (0);
 	case IMSG_CTL_COMMANDS:
 	case IMSG_CTL_NAMES:
@@ -297,7 +309,6 @@ frontend_client(struct ctl_conn *c, struct imsg *imsg)
 	case IMSG_CTL_EXIT:
 	case IMSG_CTL_COMMIT:
 	case IMSG_CTL_ROLLBACK:
-	case IMSG_CTL_OP:
 	case IMSG_CTL_LOAD:
 	case IMSG_CTL_RULES:
 	case IMSG_CTL_WATCH:
@@ -328,6 +339,96 @@ frontend_answer(struct ctl_conn *c, int32_t status, int mode)
 	    &res, sizeof(res)) == -1)
 		control_drop(c->id);
 	c->pending = 0;
+}
+
+/*
+ * A show: what its words ask, to config. One that asks for a rollback
+ * no configuration kept has, or that nshd's system does not answer, is
+ * answered here
+ */
+static void
+frontend_show(struct ctl_conn *c, struct nshd_show *show)
+{
+	struct nshd_frontshow	 fs;
+	const char		*errstr;
+	char			 num[16], *p;
+
+	memset(&fs, 0, sizeof(fs));
+	if (strcmp(show->words, "candidate-config") == 0)
+		fs.kind = NSHD_SHOW_CANDIDATE;
+	else if (strcmp(show->words, "diff-config") == 0)
+		fs.kind = NSHD_SHOW_DIFF;
+	else if (strcmp(show->words, "running-config") == 0)
+		fs.kind = NSHD_SHOW_RUNNING;
+	else if (strcmp(show->words, "startup-config") == 0)
+		fs.kind = NSHD_SHOW_STARTUP;
+	else if (strcmp(show->words, "rollback") == 0)
+		fs.kind = NSHD_SHOW_ROLLBACKS;
+	else if (strncmp(show->words, "rollback ", 9) == 0) {
+		/* rollback N, or rollback N diff, what N changed */
+		strlcpy(num, show->words + 9, sizeof(num));
+		fs.kind = NSHD_SHOW_ROLLBACK;
+		if ((p = strchr(num, ' ')) != NULL && strcmp(p, " diff") == 0) {
+			*p = '\0';
+			fs.kind = NSHD_SHOW_ROLLDIFF;
+		}
+		fs.n = strtonum(num, 0, NSHD_ROLLBACKS - 1, &errstr);
+		if (errstr != NULL) {
+			printf("%% rollback %s is %s\n", show->words + 9,
+			    errstr);
+			frontend_answer(c, 1, 0);
+			return;
+		}
+	} else if (facts_answer_pack(show->words, &fs.ss) != 0) {
+		printf("%% show %s: not answered by nshd\n", show->words);
+		frontend_answer(c, NSHD_ELSEWHERE, 0);
+		return;
+	} else
+		fs.kind = NSHD_SHOW_FACTS;
+	if (link_compose(&links[CONFIG], IMSG_FRONT_SHOW, c->id, &fs,
+	    sizeof(fs)) == -1)
+		fatal("%s", __func__);
+}
+
+/*
+ * An operation: its row of ops[] and the values nsh's words for it
+ * parse to, to config, which passes it on to system. One whose words
+ * are none an operation takes is answered here
+ */
+static void
+frontend_op(struct ctl_conn *c, struct nshd_op *op)
+{
+	struct nshd_sysop	 so;
+	struct argvals		 a;
+	char			*w[NSHD_LINE / 2], *p = op->line;
+	ssize_t			 len = -1;
+	int			 n = 0, row = -1;
+
+	memset(&so, 0, sizeof(so));
+	while (n < (int)(sizeof(w) / sizeof(w[0])) &&
+	    (w[n] = strsep(&p, " \t")) != NULL)
+		if (*w[n] != '\0')
+			n++;
+	if (n == 0 || p != NULL)
+		printf("%% nshd: an operation of no words, or too many\n");
+	else if ((row = op_parse(n, w, &a, so.ifname, sizeof(so.ifname))) !=
+	    -1)
+		len = args_record(&ops[row], &a, so.values,
+		    sizeof(so.values));
+	if (len == -1)
+		frontend_answer(c, 1, 0);
+	else {
+		so.rtable = op->rtable;
+		so.row = row;
+		so.set = a.set;
+		so.len = len;
+		if (link_compose(&links[CONFIG], IMSG_FRONT_OP, c->id, &so,
+		    sizeof(so)) == -1)
+			fatal("%s", __func__);
+	}
+	/* an operation can carry a PIN */
+	explicit_bzero(&so, sizeof(so));
+	explicit_bzero(&a, sizeof(a));
 }
 
 /*

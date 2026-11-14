@@ -52,17 +52,17 @@
  * as. A show's program runs as NSHD_CHECK_USER, except the programs
  * listed in root_programs, which keep root. dhcpd's leases file is
  * opened as root and copied as NSHD_CHECK_USER. A show comes as the
- * values config parsed from its words: its kind, and for a program,
- * its places in nsh's table, its routing table and the words for its
- * arguments. The program comes from the table; no request names a
- * path.
+ * values the session's frontend parsed from its words, which config
+ * passes on: its kind, and for a program, its places in nsh's table,
+ * its routing table and the words for its arguments. The program comes
+ * from the table; no request names a path.
  *
  * An operation, which a privileged session requests, comes as its row of
- * ops[] and the values config parsed for the row's arguments. system
- * checks them with args_check(), and refuses values the row does not
- * take. A stream's child runs the operation as root, in the client's
- * rtable, with nsh's own code, op_run(), and exits with the operation's
- * status.
+ * ops[] and the values the session's frontend parsed for the row's
+ * arguments. system checks them with args_check(), and refuses values
+ * the row does not take. A stream's child runs the operation as root,
+ * in the client's rtable, with nsh's own code, op_run(), and exits with
+ * the operation's status.
  *
  * config sends a commit's requests in order. First come the parts that
  * BEGIN and TEST use, sent in chunks. Each TEST runs a daemon's test of

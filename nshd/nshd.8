@@ -84,6 +84,12 @@ A stage's line that is none is answered where the stage reaches it, and
 the lines after it are not read.
 In configure terminal the frontend also sends the line as typed, which
 config passes on in the notice of the line's commit.
+A frontend parses a show's words and an operation's the same way: into
+what the show asks, and into the operation's row and the values of its
+arguments.
+config passes them on to system, which checks them.
+A show nshd's system does not answer, and an operation's words that are
+none an operation takes, are answered by the frontend.
 A frontend holds no candidate, and has only what config sends its own
 client.
 A configuration that

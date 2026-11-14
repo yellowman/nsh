@@ -70,9 +70,9 @@ struct nshd_result {
 #define NSHD_ELSEWHERE	2
 
 /*
- * an operation, in nsh's words, which config parses; system runs it as
- * root in the client's rtable and streams what it prints, and its status
- * is how it ended
+ * an operation, in nsh's words, which the session's frontend parses;
+ * system runs it as root in the client's rtable and streams what it
+ * prints, and its status is how it ended
  */
 struct nshd_op {
 	int32_t		rtable;

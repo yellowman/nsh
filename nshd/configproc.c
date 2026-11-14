@@ -35,7 +35,9 @@
  * frontend reads the lines its client sends, and config runs their
  * edits, each a command's row and its values, through nsh's code in
  * candidate mode, which checks them, and here asks no kernel, opens no
- * file and runs no program. config reads no word of a line. The running
+ * file and runs no program. config reads no word of a line, of a show
+ * or of an operation: the frontend parses those too, and config passes
+ * on what they ask, once it is whole as system takes it. The running
  * configuration and what the lines read of the kernel come from a
  * snapshot system takes when a session enters configure or shows its
  * candidate, kept for every session until the next.
@@ -162,7 +164,6 @@
 #include "stringlist.h"
 #include "kfacts.h"
 #include "session.h"
-#include "answer.h"
 
 #define SNAPSHOT_TEXT	(16 * 1024 * 1024)	/* most text in a snapshot */
 
@@ -323,7 +324,7 @@ static void		 front_revoke(struct nshd_revoking *);
 static void		 config_dispatch_system(int, short, void *);
 static void		 config_dispatch_journal(int, short, void *);
 static void		 config_ready_journal(void);
-static void		 config_show(uint32_t, struct nshd_show *);
+static void		 config_show(uint32_t, struct nshd_frontshow *);
 static void		 config_configure(uint32_t, struct nshd_configure *);
 static void		 config_edits(uint32_t, struct nshd_edits *);
 static int		 edits_lines(struct session *);
@@ -347,7 +348,7 @@ static void		 config_text(struct request *, int32_t);
 static int		 config_hides(struct session *);
 static int		 config_keeps(struct request *);
 static int		 config_may(uint32_t, uint32_t);
-static void		 config_op(uint32_t, struct nshd_op *);
+static void		 config_op(uint32_t, struct nshd_sysop *);
 static void		 config_watch(uint32_t, struct nshd_watch *);
 static void		 config_commands(uint32_t);
 static void		 config_names(uint32_t);
@@ -646,19 +647,19 @@ config_dispatch_front(int fd, short event, void *arg)
 	struct front		*f;
 	struct imsg		 imsg;
 	struct nshd_hello	 hello;
-	struct nshd_show	 show;
+	struct nshd_frontshow	 fs;
 	struct nshd_configure	 cf;
 	struct nshd_edits	 ed;
 	struct nshd_commit	 cm;
 	struct nshd_rollback	 rb;
-	struct nshd_op		 op;
+	struct nshd_sysop	 so;
 	struct nshd_load	 ld;
 	struct nshd_rules	 rl;
 	struct nshd_login	 lg;
 	struct nshd_watch	 w;
 	struct nshd_terminal	 tm;
 	uint32_t		 id, type;
-	int			 n;
+	int			 n, i;
 
 	TAILQ_FOREACH(f, &fronts, entry)
 		if (f->iev == iev)
@@ -694,12 +695,21 @@ config_dispatch_front(int fd, short event, void *arg)
 				goto bad;
 			config_hello(id);
 			break;
-		case IMSG_CTL_SHOW:
-			if (imsg_get_data(&imsg, &show, sizeof(show)) == -1 ||
-			    memchr(show.words, '\0', sizeof(show.words)) ==
+		case IMSG_FRONT_SHOW:
+			/* whole, as system takes what config passes on of it */
+			if (imsg_get_data(&imsg, &fs, sizeof(fs)) == -1 ||
+			    fs.kind < NSHD_SHOW_FACTS ||
+			    fs.kind > NSHD_SHOW_ROLLDIFF ||
+			    fs.n < 0 || fs.n >= NSHD_ROLLBACKS ||
+			    fs.ss.nargs < 0 || fs.ss.nargs > NSHD_SHOWARGS ||
+			    memchr(fs.ss.name, '\0', sizeof(fs.ss.name)) ==
 			    NULL)
 				goto bad;
-			config_show(id, &show);
+			for (i = 0; i < NSHD_SHOWARGS; i++)
+				if (memchr(fs.ss.args[i], '\0',
+				    sizeof(fs.ss.args[i])) == NULL)
+					goto bad;
+			config_show(id, &fs);
 			break;
 		case IMSG_CTL_CONFIGURE:
 			if (imsg_get_data(&imsg, &cf, sizeof(cf)) == -1)
@@ -733,11 +743,17 @@ config_dispatch_front(int fd, short event, void *arg)
 				goto bad;
 			config_rollback(id, &rb);
 			break;
-		case IMSG_CTL_OP:
-			if (imsg_get_data(&imsg, &op, sizeof(op)) == -1 ||
-			    memchr(op.line, '\0', sizeof(op.line)) == NULL)
+		case IMSG_FRONT_OP:
+			/* whole, as system takes it */
+			if (imsg_get_data(&imsg, &so, sizeof(so)) == -1 ||
+			    so.row < 0 || (size_t)so.row >= nops ||
+			    (so.set != 0 && so.set != 1) ||
+			    so.len > sizeof(so.values) ||
+			    memchr(so.ifname, '\0', sizeof(so.ifname)) ==
+			    NULL || ((ops[so.row].flags & CF_INIF) != 0) !=
+			    (so.ifname[0] != '\0'))
 				goto bad;
-			config_op(id, &op);
+			config_op(id, &so);
 			break;
 		case IMSG_CTL_LOAD:
 			if (imsg_get_data(&imsg, &ld, sizeof(ld)) == -1 ||
@@ -1021,69 +1037,56 @@ config_dispatch_system(int fd, short event, void *arg)
 }
 
 static void
-config_show(uint32_t session, struct nshd_show *show)
+config_show(uint32_t session, struct nshd_frontshow *fs)
 {
 	struct nshd_snapshot	 ns = { 0 };
-	struct nshd_rollback	 rb = { -1 };
-	struct nshd_sysshow	 ss;
+	struct nshd_rollback	 rb = { fs->n };
 	struct session		*sp;
 	struct request		*r;
-	const char		*errstr;
-	char			 num[16], *p;
 	uint32_t		 type = IMSG_SYS_SHOW;
-	const void		*data = &ss;
-	size_t			 len = sizeof(ss);
+	const void		*data = &fs->ss;
+	size_t			 len = sizeof(fs->ss);
 	int			 kind = REQ_ANSWER;
 
 	if ((sp = session_find(session)) == NULL) {
 		config_answer(session, 1, "%% nshd: hello first\n");
 		return;
 	}
-	if (strcmp(show->words, "candidate-config") == 0 ||
-	    strcmp(show->words, "diff-config") == 0) {
+	switch (fs->kind) {
+	case NSHD_SHOW_CANDIDATE:
+	case NSHD_SHOW_DIFF:
 		if (sp->st == NULL) {
 			config_answer(session, 1, "%% Not in configure\n");
 			return;
 		}
-		config_wait(sp, show->words[0] == 'c' ? WAIT_CANDIDATE :
-		    WAIT_DIFF);
+		config_wait(sp, fs->kind == NSHD_SHOW_CANDIDATE ?
+		    WAIT_CANDIDATE : WAIT_DIFF);
 		return;
-	}
-	if (strcmp(show->words, "running-config") == 0) {
+	case NSHD_SHOW_RUNNING:
 		type = IMSG_SYS_SNAPSHOT;
 		data = &ns;
 		len = sizeof(ns);
 		kind = REQ_TEXT;
-	} else if (strcmp(show->words, "startup-config") == 0) {
+		break;
+	case NSHD_SHOW_STARTUP:
 		type = IMSG_SYS_SAVED;
 		data = NULL;
 		len = 0;
 		kind = REQ_TEXT;
-	} else if (strcmp(show->words, "rollback") == 0) {
+		break;
+	case NSHD_SHOW_ROLLBACKS:
 		type = IMSG_SYS_ROLLBACK_LIST;
 		data = NULL;
 		len = 0;
-	} else if (strncmp(show->words, "rollback ", 9) == 0) {
-		/* rollback N, or rollback N diff, what N changed */
-		strlcpy(num, show->words + 9, sizeof(num));
-		type = IMSG_SYS_ROLLBACK_READ;
-		if ((p = strchr(num, ' ')) != NULL && strcmp(p, " diff") == 0) {
-			*p = '\0';
-			type = IMSG_SYS_ROLLBACK_DIFF;
-		}
-		rb.n = strtonum(num, 0, NSHD_ROLLBACKS - 1, &errstr);
-		if (errstr != NULL) {
-			config_answer(session, 1, "%% rollback %s is %s\n",
-			    show->words + 9, errstr);
-			return;
-		}
+		break;
+	case NSHD_SHOW_ROLLBACK:
+	case NSHD_SHOW_ROLLDIFF:
+		type = fs->kind == NSHD_SHOW_ROLLBACK ?
+		    IMSG_SYS_ROLLBACK_READ : IMSG_SYS_ROLLBACK_DIFF;
 		data = &rb;
 		len = sizeof(rb);
 		kind = REQ_TEXT;
-	} else if (facts_answer_pack(show->words, &ss) != 0) {
-		config_answer(session, NSHD_ELSEWHERE,
-		    "%% show %s: not answered by nshd\n", show->words);
-		return;
+		break;
 	}
 	if ((r = config_request(session, kind)) == NULL) {
 		config_answer(session, 1, "%s", REQ_REFUSED);
@@ -1645,12 +1648,12 @@ config_may(uint32_t session, uint32_t type)
 	    type == IMSG_CTL_READ || type == IMSG_CTL_LOGIN ||
 	    (sp = session_find(session)) == NULL)
 		return (1);
-	if (type == IMSG_CTL_SHOW || type == IMSG_CTL_WATCH ||
+	if (type == IMSG_FRONT_SHOW || type == IMSG_CTL_WATCH ||
 	    type == IMSG_CTL_COMMANDS || type == IMSG_CTL_NAMES ||
 	    type == IMSG_CTL_TERMINAL) {
 		need = NSHD_VIEW;
 		name = "view";
-	} else if (type == IMSG_CTL_OP) {
+	} else if (type == IMSG_FRONT_OP) {
 		need = NSHD_OPERATE;
 		name = "operate";
 	}
@@ -1764,51 +1767,28 @@ config_units(void *arg, const void *buf, size_t len)
 }
 
 /*
- * an operation, as nsh's words for it, which config parses into a row of
- * ops[] and its values (op_parse()): system checks the values, runs the
- * row and streams what it prints
+ * an operation, as the session's frontend parsed nsh's words for it,
+ * into a row of ops[] and its values (op_parse()): config says whose it
+ * is, and system checks the values, runs the row and streams what it
+ * prints
  */
 static void
-config_op(uint32_t session, struct nshd_op *op)
+config_op(uint32_t session, struct nshd_sysop *so)
 {
-	struct nshd_sysop	 so;
-	struct argvals		 a;
 	struct request		*r;
-	char			*w[NSHD_LINE / 2], *p = op->line;
-	ssize_t			 len = -1;
-	int			 n = 0, row = -1;
 
 	if (session_find(session) == NULL) {
 		config_answer(session, 1, "%% nshd: hello first\n");
-		return;
-	}
-	memset(&so, 0, sizeof(so));
-	while (n < (int)(sizeof(w) / sizeof(w[0])) &&
-	    (w[n] = strsep(&p, " \t")) != NULL)
-		if (*w[n] != '\0')
-			n++;
-	if (n == 0 || p != NULL)
-		printf("%% nshd: an operation of no words, or too many\n");
-	else if ((row = op_parse(n, w, &a, so.ifname, sizeof(so.ifname))) !=
-	    -1)
-		len = args_record(&ops[row], &a, so.values,
-		    sizeof(so.values));
-	if (len == -1) {
-		front_printed(session);
-		config_answer(session, 1, NULL);
 		return;
 	}
 	if ((r = config_request(session, REQ_ANSWER)) == NULL) {
 		config_answer(session, 1, "%s", REQ_REFUSED);
 		return;
 	}
-	so.whose.session = session;
-	so.rtable = op->rtable;
-	so.row = row;
-	so.set = a.set;
-	so.len = len;
-	if (link_compose(&links[SYSTEM], IMSG_SYS_OP, r->id, &so,
-	    sizeof(so)) == -1)
+	memset(&so->whose, 0, sizeof(so->whose));
+	so->whose.session = session;
+	if (link_compose(&links[SYSTEM], IMSG_SYS_OP, r->id, so,
+	    sizeof(*so)) == -1)
 		fatal("%s", __func__);
 }
 
