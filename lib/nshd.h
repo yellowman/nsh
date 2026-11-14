@@ -376,10 +376,8 @@ struct nshd_revoking {
 };
 
 enum nshd_imsg {
-	IMSG_NONE,
-
 	/* with clients, on either socket */
-	IMSG_CTL_HELLO,		/* nshd_hello; nshd_session back */
+	IMSG_CTL_HELLO = 1,	/* nshd_hello; nshd_session back */
 	IMSG_CTL_SHOW,		/* nshd_show; output or facts, then a result */
 	IMSG_CTL_OUTPUT,	/* text */
 	IMSG_CTL_RESULT,	/* nshd_result */
