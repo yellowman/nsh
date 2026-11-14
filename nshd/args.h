@@ -125,6 +125,8 @@ args_applyfn	intpatch_apply, intmtu_apply, intkeepalive_apply, intmpls_apply,
 		intxflags_apply, intlink_apply, intpowersave_apply,
 		intrdomain_apply, intdesc_apply, intvnetflowid_apply;
 args_applyfn	intsyncdev_apply, intsyncpeer_apply, intmaxupd_apply;
+args_applyfn	inttrunkport_apply, inttrunkproto_apply, intlacp_apply;
+args_applyfn	intvnetid_apply, intcache_apply;
 const struct argcmd *conf_cmd(int, int, struct argcmd *);
 size_t	args_n(const struct argcmd *);
 const char *args_called(const struct arg *);

@@ -49,7 +49,8 @@ commands.c	table	Bridgelist Bridgelist_nitems Intlist
 			ipsecsoftallocstab ipsecsoftbytestab
 			ipsecsoftfirstusetab ipsecsofttimeouttab
 			ipsectimeouttab iptab
-			ldaphelp ldphelp link_args link_keys lldphelp loginhelp
+			lacpmode_keys lacptimeout_keys ldaphelp ldphelp
+			link_args link_keys lldphelp loginhelp
 			maxqueuetab mforwardingtab motdhelp
 			mplshelp mplstab mtudisctab mtudisctimeouttab
 			multipathtab nameserverhelp ndphelp nppphelp
@@ -64,13 +65,15 @@ commands.c	table	Bridgelist Bridgelist_nitems Intlist
 			smtphelp snmphelp
 			sourceroutetab sshdhelp
 			tftphelp tftpproxyhelp
-			wccptab clearhelp commithelp confighelp dohelp
+			vnetid_args wccptab clearhelp commithelp confighelp
+			dohelp
 			editinghelp exithelp flushhelp halthelp helphelp
 			loggerhelp manhelp nreboothelp ping6help pinghelp
 			powerdownhelp prots quithelp rollbackhelp rtablehelp
 			saveenvhelp setenvhelp shellhelp showarptab showhelp
 			showlist showndptab showroutetab showvlantab sshhelp
-			stts telnethelp tracert6help tracerthelp txprio_args
+			stts telnethelp tracert6help tracerthelp trunkproto_keys
+			txprio_args
 			txprio_keys unsetenvhelp
 			verbosehelp whohelp
 commit.c	scratch	deferred ndeferred
@@ -202,7 +205,7 @@ tables.c	table	Bridgelist Bridgelist_nitems Intlist
 			Intlist_nitems cmdtab cmdtab_nitems kind_name
 			kind_row namefields nruns of rowfields runs
 trunk.c		scratch	trunk_facts.parent
-trunk.c		table	intlacp.modes intlacp.timeouts tpr
+trunk.c		table	tpr
 tunnel.c	table	cachecs tunnelcmds tunnelopts vnetidrs
 umb.c		table	cand_umb.fn umb_actstate umb_classalias
 			umb_dataclass umb_pktstate umbcs

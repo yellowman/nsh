@@ -22,19 +22,20 @@
 
 #include "externs.h"
 #include "settings.h"
+#include "facts.h"
+#include "args.h"
 
 int settunnel(int, char *, char *, char *, char *);
 int settunnelrdomain(int, char *, char *, struct cand *);
 int settunnelttl(int, char *, char *, struct cand *);
 int settunneldf(int, char *, int);
 int settunnelecn(int, char *, int);
-int setvnetid(int, char *, char *);
+int setvnetid(int, char *, int64_t);
 int delvnetid(int, char *);
 int deletetunnel(int, char *);
 void tunnelusage(int);
-static int vnetid_arg(char *, int64_t *);
 static int vnetid_range(char *, int64_t, struct cand *);
-static int cand_vnetid(struct cand *, char *, int, char *);
+static int cand_vnetid(struct cand *, char *, int, int64_t);
 static int tunnel_ttl(char *, char *, struct cand *);
 static int tunnel_startttl(char *);
 static int tunnel_rdomain(char *, struct cand *);
@@ -96,48 +97,20 @@ static struct nopts tunnelopts[] = {
 };
 
 int
-intvnetid(int argc, char **argv, ...)
+intvnetid_apply(const struct argcmd *c, int set,
+    const struct facts_value *v, char *ifname, int ifs, struct cand *cand)
 {
-	int set;
-	va_list ap;
-	struct cand *cand;
-	char *ifname;
-	int ifs;
-
-	va_start(ap, argv);
-	ifname = va_arg(ap, char *);
-	ifs = va_arg(ap, int);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
-
-	if (NO_ARG(argv[0])) {
-		set = 0;
-		argc--;
-		argv++;
-	} else
-		set = 1;
-
-	argc--;
-	argv++;
-
-	if ((set && argc != 1) || (!set && argc > 1)) {
-		printf("%% vnetid <vnetid>\n");
-		printf("%% no vnetid [vnetid]\n");
-		return -1;
-        }
 	if (cand != NULL)
-		return cand_vnetid(cand, ifname, set, argv[0]);
+		return cand_vnetid(cand, ifname, set, set ? v[0].v.i : 0);
 	if (set)
-		return setvnetid(ifs, ifname, argv[0]);
+		return setvnetid(ifs, ifname, v[0].v.i);
 	return delvnetid(ifs, ifname);
 }
 
 /* vnetid in configure private */
 static int
-cand_vnetid(struct cand *cand, char *ifname, int set, char *vnetida)
+cand_vnetid(struct cand *cand, char *ifname, int set, int64_t vnetid)
 {
-	int64_t vnetid;
-
 	if (!cand_takes(ifname, SIOCSVNETID)) {
 		printf("%% vnetid not supported on %s\n", ifname);
 		return -1;
@@ -156,8 +129,6 @@ cand_vnetid(struct cand *cand, char *ifname, int set, char *vnetida)
 		return cand_setting(cand, default_vnetid(ifname) != 0 ? ST_OFF :
 		    ST_DEFAULT, "vnetid");
 	}
-	if (vnetid_arg(vnetida, &vnetid) == -1)
-		return -1;
 	if (vnetid == 0) {
 		printf("%% The configuration does not keep vnetid 0\n");
 		return -1;
@@ -614,58 +585,22 @@ settunnel(int s, char *ifname, char *src, char *srcport, char *dstip)
 }
 
 /* maxaddr and timeout, on bpe, nvgre and vxlan */
+
 int
-intcache(int argc, char **argv, ...)
+intcache_apply(const struct argcmd *c, int set,
+    const struct facts_value *v, char *ifname, int ifs, struct cand *cand)
 {
 	const struct cachec *x;
 	struct ifbrparam bp;
-	const char *errmsg = NULL;
 	long long val;
-	va_list ap;
-	struct cand *cand;
-	char *ifname;
-	int ifs, set;
 
-	va_start(ap, argv);
-	ifname = va_arg(ap, char *);
-	ifs = va_arg(ap, int);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
-
-	if (NO_ARG(argv[0])) {
-		set = 0;
-		argc--;
-		argv++;
-	} else
-		set = 1;
-
-	x = (const struct cachec *)genget(argv[0], (char **)cachecs,
-	    sizeof(struct cachec));
-	if (x == 0 || Ambiguous((void *)x)) {
-		printf("%% Internal error - Invalid argument %s\n", argv[0]);
-		return -1;
-	}
-
-	argc--;
-	argv++;
-
-	if ((set && argc != 1) || (!set && argc > 1)) {
-		printf("%% %s <%lld-%lld>\n", x->name, x->min, x->max);
-		printf("%% no %s [%lld-%lld]\n", x->name, x->min, x->max);
-		return -1;
-	}
+	for (x = cachecs; strcmp(x->name, c->name) != 0; x++)
+		;
 	if (!cand_takes(ifname, x->set)) {
 		printf("%% %s not supported on %s\n", x->name, ifname);
 		return -1;
 	}
-	val = x->start;
-	if (set) {
-		val = strtonum(argv[0], x->min, x->max, &errmsg);
-		if (errmsg) {
-			printf("%% %s %s: %s\n", x->name, argv[0], errmsg);
-			return -1;
-		}
-	}
+	val = set ? v[0].v.i : x->start;
 
 	if (cand != NULL) {
 		/* conf_cache() leaves out what the kernel starts with */
@@ -1056,28 +991,11 @@ settunnelecn(int ifs, char *ifname, int ecn)
 	return 0;
 }
 
-/* Parse a vnetid into *vnetid; -1 after saying why not */
-static int
-vnetid_arg(char *vnetida, int64_t *vnetid)
-{
-	const char *errmsg = NULL;
-
-	*vnetid = strtonum(vnetida, 0, INT64_MAX, &errmsg);
-	if (errmsg) {
-		printf("%% vnetid %s out of range: %s\n", vnetida, errmsg);
-		return -1;
-	}
-	return 0;
-}
-
 int
-setvnetid(int ifs, char *ifname, char *vnetida)
+setvnetid(int ifs, char *ifname, int64_t vnetid)
 {
-	int64_t vnetid;
 	struct ifreq ifr;
 
-	if (vnetida == NULL || vnetid_arg(vnetida, &vnetid) == -1)
-		return -1;
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 	ifr.ifr_vnetid = vnetid;
 	if (ioctl_down(ifs, ifname, SIOCSVNETID, (caddr_t)&ifr) < 0) {

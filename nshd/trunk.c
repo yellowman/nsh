@@ -41,6 +41,7 @@
 #include "externs.h"
 #include "settings.h"
 #include "facts.h"
+#include "args.h"
 #include "showfacts.h"
 
 static struct trunk_protos tpr[] = TRUNK_PROTOS;
@@ -150,46 +151,26 @@ cand_trunkproto(struct cand *cand, char *ifname, int proto)
 }
 
 int
-inttrunkport(int argc, char **argv, ...)
+inttrunkport_apply(const struct argcmd *c, int set,
+    const struct facts_value *v, char *ifname, int ifs, struct cand *cand)
 {
 	struct trunk_reqport rp;
-	int set, i, r = 0;
-	va_list ap;
-	struct cand *cand;
-	char *ifname;
-	int ifs;
+	char port[TRUNK_MAX_PORTS][IFNAMSIZ], *ports[TRUNK_MAX_PORTS];
+	int i, n, r = 0;
 
-	va_start(ap, argv);
-	ifname = va_arg(ap, char *);
-	ifs = va_arg(ap, int);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
-
-	if (NO_ARG(argv[0])) {
-		set = 0;
-		argc--;
-		argv++;
-	} else
-		set = 1;
-
-	argc--;
-	argv++;
-
-	if ((!set && argc < 1) || (set && argc < 1)) {
-		printf("%% trunkport <ifname> [ifname ...]\n");
-		printf("%% no trunkport <ifname> [ifname ...]\n");
-		return -1;
+	for (n = 0; n < TRUNK_MAX_PORTS && v[n].type != FACT_NONE; n++) {
+		args_string(&v[n], port[n], sizeof(port[n]));
+		ports[n] = port[n];
 	}
-
 	if (cand != NULL)
-		return cand_trunkport(cand, ifname, set, argc, argv);
+		return cand_trunkport(cand, ifname, set, n, ports);
 
 	bzero(&rp, sizeof(rp));
 	strlcpy(rp.rp_ifname, ifname, sizeof(rp.rp_ifname));
 
-	for (i = 0; i < argc; i++) {
+	for (i = 0; i < n; i++) {
 		if (set) {
-			strlcpy(rp.rp_portname, argv[i],
+			strlcpy(rp.rp_portname, ports[i],
 			    sizeof(rp.rp_portname));
 			if (ioctl(ifs, SIOCSTRUNKPORT, &rp) < 0) {
 				switch(errno) {
@@ -199,11 +180,11 @@ inttrunkport(int argc, char **argv, ...)
 				case EBUSY:
 					printf("%% Failed (port %s already"
 					    " assigned to a trunk group)\n",
-					    argv[i]);
+					    ports[i]);
 					break;
 				case ENETDOWN:
 					printf("%% Failed (port %s is "
-					    "shutdown)\n", argv[i]);
+					    "shutdown)\n", ports[i]);
 					break;
 				default:
 					printf("%% inttrunkport:"
@@ -213,7 +194,7 @@ inttrunkport(int argc, char **argv, ...)
 				r = -1;
 			}
 		} else {
-			strlcpy(rp.rp_portname, argv[i],
+			strlcpy(rp.rp_portname, ports[i],
 			    sizeof(rp.rp_portname));
 			if (ioctl(ifs, SIOCSTRUNKDELPORT, &rp) < 0) {
 				switch(errno) {
@@ -222,7 +203,7 @@ inttrunkport(int argc, char **argv, ...)
 					break;
 				case ENOENT:
 					printf("%% Port %s not part of %s\n",
-					    argv[i], ifname);
+					    ports[i], ifname);
 					break;
 				default:
 					printf("%% inttrunkport:"
@@ -237,56 +218,17 @@ inttrunkport(int argc, char **argv, ...)
 }
 
 int
-inttrunkproto(int argc, char **argv, ...)
+inttrunkproto_apply(const struct argcmd *c, int set,
+    const struct facts_value *v, char *ifname, int ifs, struct cand *cand)
 {
-	int i, set;
 	struct trunk_reqall ra;
-	va_list ap;
-	struct cand *cand;
-	char *ifname;
-	int ifs, aggr;
-
-	va_start(ap, argv);
-	ifname = va_arg(ap, char *);
-	ifs = va_arg(ap, int);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
-	aggr = strncmp(ifname, "aggr", strlen("aggr")) == 0;
-
-	if (NO_ARG(argv[0])) {
-		set = 0;
-		argc--;
-		argv++;
-	} else
-		set = 1;
-
-	argc--;
-	argv++;
-
-	if ((!set && argc > 1) || (set && argc != 1)) {
-                printf("%% trunkproto <proto>\n");
-                printf("%% no trunkproto\n");
-		return -1;
-        }
+	int aggr = strncmp(ifname, "aggr", strlen("aggr")) == 0;
 
 	bzero(&ra, sizeof(ra));
 	strlcpy(ra.ra_ifname, ifname, sizeof(ra.ra_ifname));
-
-	if (set) {
-		for (i = 0; i < TRUNK_PROTO_MAX; ++i) {
-			if (isprefix(argv[0], (char *)tpr[i].tpr_name)) {
-				ra.ra_proto = tpr[i].tpr_proto;
-				break;
-			}
-		}
-		if (i == TRUNK_PROTO_MAX) {
-			printf("%% trunkproto <");
-			for (i = 0; i < TRUNK_PROTO_MAX; ++i)
-				printf("%s%s", i == 0 ? "" : "|", tpr[i].tpr_name);
-			printf(">\n");
-			return -1;
-		}
-	} else
+	if (set)
+		ra.ra_proto = v[0].v.i;
+	else
 		ra.ra_proto = aggr ? TRUNK_PROTO_LACP : TRUNK_PROTO_DEFAULT;
 
 	/*
@@ -322,54 +264,16 @@ inttrunkproto(int argc, char **argv, ...)
  * SIOCSTRUNKOPTS (EPROTONOSUPPORT).
  */
 int
-intlacp(int argc, char **argv, ...)
+intlacp_apply(const struct argcmd *c, int set,
+    const struct facts_value *v, char *ifname, int ifs, struct cand *cand)
 {
-	static const char *modes[] = { "passive", "active" };
-	static const char *timeouts[] = { "slow", "fast" };
 	struct trunk_opts to;
-	const char **vals;
-	va_list ap;
-	struct cand *cand;
-	char *ifname, *name;
-	int ifs, set, opt, dflt, value;
+	const struct argkey *k;
+	int opt, dflt, value;
 
-	va_start(ap, argv);
-	ifname = va_arg(ap, char *);
-	ifs = va_arg(ap, int);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
-
-	if (NO_ARG(argv[0])) {
-		set = 0;
-		argc--;
-		argv++;
-	} else
-		set = 1;
-
-	if (isprefix(argv[0], "lacpmode")) {
-		name = "lacpmode";
-		vals = modes;
-		opt = TRUNK_OPT_LACP_MODE;
-		dflt = 1;
-	} else {
-		name = "lacptimeout";
-		vals = timeouts;
-		opt = TRUNK_OPT_LACP_TIMEOUT;
-		dflt = 0;
-	}
-	argc--;
-	argv++;
-
-	value = dflt;
-	if (set && argc == 1)
-		for (value = 0; value < 2; value++)
-			if (isprefix(argv[0], (char *)vals[value]))
-				break;
-	if ((set && argc != 1) || (!set && argc > 1) || value == 2) {
-		printf("%% %s %s|%s\n", name, vals[1], vals[0]);
-		printf("%% no %s\n", name);
-		return -1;
-	}
+	opt = c->code;
+	dflt = opt == TRUNK_OPT_LACP_MODE;
+	value = set ? v[0].v.i : dflt;
 	if (strncmp(ifname, "aggr", strlen("aggr")) != 0) {
 		printf("%% %s is not an aggr interface\n", ifname);
 		return -1;
@@ -377,8 +281,10 @@ intlacp(int argc, char **argv, ...)
 
 	if (cand != NULL) {
 		if (value == dflt)
-			return cand_setting(cand, ST_DEFAULT, "%s", name);
-		return cand_setting(cand, ST_ON, "%s %s", name, vals[value]);
+			return cand_setting(cand, ST_DEFAULT, "%s", c->name);
+		for (k = c->args[0].keys; k->value != value; k++)
+			;
+		return cand_setting(cand, ST_ON, "%s %s", c->name, k->word);
 	}
 
 	memset(&to, 0, sizeof(to));
@@ -390,7 +296,8 @@ intlacp(int argc, char **argv, ...)
 	else
 		to.to_lacpopts.lacp_timeout = value;
 	if (ioctl(ifs, SIOCSTRUNKOPTS, &to) == -1) {
-		printf("%% %s: SIOCSTRUNKOPTS: %s\n", name, strerror(errno));
+		printf("%% %s: SIOCSTRUNKOPTS: %s\n", c->name,
+		    strerror(errno));
 		return -1;
 	}
 	return 0;

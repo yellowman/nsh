@@ -61,7 +61,9 @@
 #include <net/if.h>
 #include <net/route.h>
 #include <netinet/in.h>
+#include <netinet/if_ether.h>
 #include <netinet/ip_carp.h>
+#include <net/if_trunk.h>
 #include <netmpls/mpls.h>
 #include <arpa/inet.h>
 #include <limits.h>
@@ -813,6 +815,20 @@ static const struct argkey balancing_keys[] = {
 	{ "ip-unicast", CARP_BAL_IPUNICAST }, { NULL }
 };
 static const struct argkey defer_keys[] = { { "defer", 1 }, { NULL } };
+/* the protocols that the kernel's TRUNK_PROTOS names, except its default */
+static const struct argkey trunkproto_keys[] = {
+	{ "roundrobin", TRUNK_PROTO_ROUNDROBIN },
+	{ "failover", TRUNK_PROTO_FAILOVER }, { "lacp", TRUNK_PROTO_LACP },
+	{ "loadbalance", TRUNK_PROTO_LOADBALANCE },
+	{ "broadcast", TRUNK_PROTO_BROADCAST }, { "none", TRUNK_PROTO_NONE },
+	{ NULL }
+};
+static const struct argkey lacpmode_keys[] = {
+	{ "active", 1 }, { "passive", 0 }, { NULL }
+};
+static const struct argkey lacptimeout_keys[] = {
+	{ "fast", 1 }, { "slow", 0 }, { NULL }
+};
 static const struct argkey txprio_keys[] = {
 	{ "packet", IF_HDRPRIO_PACKET }, { "payload", IF_HDRPRIO_PAYLOAD },
 	{ NULL }
@@ -850,6 +866,11 @@ static const struct arg rxprio_args[] = {
 	{ "priority",	ARG_NUM, IF_HDRPRIO_MIN, IF_HDRPRIO_MAX, 0,
 	    rxprio_keys,
 	  .help = "priority or packet|payload|outer" },
+	{ NULL }
+};
+
+static const struct arg vnetid_args[] = {
+	{ "vnetid",	ARG_NUM, 0, INT64_MAX },
 	{ NULL }
 };
 
@@ -950,8 +971,18 @@ struct intlist Intlist[] = {
 	  .args = ARGS{
 		{ "rdomain",	ARG_NUM, 0, RT_TABLEID_MAX },
 		{ NULL } } },
-	{ "maxaddr",	"Maximum address cache size",		CMPL0 0, 0, intcache, 1, CAND_EDIT },
-	{ "timeout",	"Address cache timeout",		CMPL0 0, 0, intcache, 1, CAND_EDIT },
+	{ "maxaddr", "Maximum address cache size", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intcache_apply,
+	  .args = ARGS{
+		{ "maxaddr",	ARG_NUM, 1, 4096, .help = "1-4096" },
+		{ NULL } } },
+	{ "timeout", "Address cache timeout", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intcache_apply,
+	  .args = ARGS{
+		{ "timeout",	ARG_NUM, 8, 3600, .help = "8-3600" },
+		{ NULL } } },
 	{ "endpoint",	"Tunnel endpoint of a MAC address",	CMPL0 0, 0, intendpoint, 1, CAND_EDIT },
 	{ "txprio", "Priority in tunnel protocol headers", CMPL0
 	  .nocmd = 1, .cand = CAND_EDIT,
@@ -959,7 +990,9 @@ struct intlist Intlist[] = {
 	{ "rxprio", "Source used for packet priority", CMPL0
 	  .nocmd = 1, .cand = CAND_EDIT,
 	  .apply = intmpls_apply, .code = RXPRIO, .args = rxprio_args },
-	{ "vnetid",	"Virtual interface network identifier",	CMPL0 0, 0, intvnetid, 1, CAND_EDIT },
+	{ "vnetid", "Virtual interface network identifier", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intvnetid_apply, .args = vnetid_args },
 	{ "vnetflowid", "Use part of vnetid as flowid", CMPL0
 	  .nocmd = 1, .cand = CAND_EDIT,
 	  .apply = intvnetflowid_apply },
@@ -1113,10 +1146,31 @@ struct intlist Intlist[] = {
 	{ "wgport",	"Wireguard UDP port",			CMPL0 0, 0, intwg, 1, CAND_EDIT },
 	{ "wgkey",	"Wireguard private key",		CMPL0 0, 0, intwg, 1, CAND_EDIT },
 	{ "wgrtable",	"Wireguard routing table",		CMPL0 0, 0, intwg, 1, CAND_EDIT },
-	{ "trunkport",	"Add child interface(s) to trunk",	CMPL0 0, 0, inttrunkport, 1, CAND_EDIT },
-	{ "trunkproto",	"Define trunkproto",			CMPL0 0, 0, inttrunkproto, 1, CAND_EDIT },
-	{ "lacpmode",	"LACP mode of an aggr interface",	CMPL0 0, 0, intlacp, 1, CAND_EDIT },
-	{ "lacptimeout", "LACP timeout of an aggr interface",	CMPL0 0, 0, intlacp, 1, CAND_EDIT },
+	{ "trunkport", "Add child interface(s) to trunk", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = inttrunkport_apply,
+	  .args = ARGS{
+		{ "ifname",	ARG_WORD, 1, IFNAMSIZ - 1, ARG_NO, NULL,
+		    TRUNK_MAX_PORTS },
+		{ NULL } } },
+	{ "trunkproto", "Define trunkproto", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = inttrunkproto_apply,
+	  .args = ARGS{
+		{ "proto",	ARG_NUM, 1, 0, 0, trunkproto_keys },
+		{ NULL } } },
+	{ "lacpmode", "LACP mode of an aggr interface", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intlacp_apply, .code = TRUNK_OPT_LACP_MODE,
+	  .args = ARGS{
+		{ "mode",	ARG_NUM, 1, 0, 0, lacpmode_keys },
+		{ NULL } } },
+	{ "lacptimeout", "LACP timeout of an aggr interface", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intlacp_apply, .code = TRUNK_OPT_LACP_TIMEOUT,
+	  .args = ARGS{
+		{ "timeout",	ARG_NUM, 1, 0, 0, lacptimeout_keys },
+		{ NULL } } },
 	{ "apn",	"Access Point Name",			CMPL0 0, 0, intumb, 1, CAND_EDIT },
 	{ "setpin",	"Set SIM card PIN",			CMPL0 0, 0, intumb, 1, CAND_EDIT },
 	{ "setpuk",	"Set new SIM card PIN using PUK for validation", CMPL0 0, 0, int_op, 0, CAND_RUN },
@@ -1192,7 +1246,9 @@ struct intlist Bridgelist[] = {
 	{ "rxprio", "Source used for packet priority (veb)", CMPL0
 	  .nocmd = 1, .cand = CAND_EDIT,
 	  .apply = intmpls_apply, .code = RXPRIO, .args = rxprio_args },
-	{ "vnetid",	"Untagged VLAN of members added (veb)",	CMPL0 0, 0, intvnetid, 1, CAND_EDIT },
+	{ "vnetid", "Untagged VLAN of members added (veb)", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intvnetid_apply, .args = vnetid_args },
 	{ "protect",	"Configure protected bridge domains",	CMPL0 0, 0, brprotect, 1, CAND_EDIT },
 	{ "untagged",	"VLAN of a member's untagged frames (veb)",	CMPL0 0, 0, brvlan, 1, CAND_EDIT },
 	{ "tagged",	"VLANs a member carries tagged (veb)",	CMPL0 0, 0, brvlan, 1, CAND_EDIT },
@@ -1613,10 +1669,7 @@ static const struct confcmd conf_if[] = {
 	{ "pppoe",	intpppoe },
 	{ "tunnel",	inttunnel },
 	{ "tunneladdr",	inttunnel },
-	{ "maxaddr",	intcache },
-	{ "timeout",	intcache },
 	{ "endpoint",	intendpoint },
-	{ "vnetid",	intvnetid },
 	{ "pwe",	intpwe3 },
 	{ "pflow",	intpflow },
 	{ "dhcrelay",	intdhcrelay },
@@ -1626,10 +1679,6 @@ static const struct confcmd conf_if[] = {
 	{ "wgport",	intwg },
 	{ "wgkey",	intwg },
 	{ "wgrtable",	intwg },
-	{ "trunkport",	inttrunkport },
-	{ "trunkproto",	inttrunkproto },
-	{ "lacpmode",	intlacp },
-	{ "lacptimeout", intlacp },
 	{ "apn",	intumb },
 	{ "setpin",	intumb },
 	{ "class",	intumb },
@@ -1660,7 +1709,6 @@ static const struct confcmd conf_bridge[] = {
 	{ "static",	brstatic },
 	{ "ifpriority",	brpri },
 	{ "ifcost",	brpri },
-	{ "vnetid",	intvnetid },
 	{ "protect",	brprotect },
 	{ "untagged",	brvlan },
 	{ "tagged",	brvlan },

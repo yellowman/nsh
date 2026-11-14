@@ -464,8 +464,6 @@ int show_bridges(int, char **, ...);
 /* tunnel.c */
 #define VXLAN_PORT	4789	/* vxlan's UDP port, unless given another */
 int inttunnel(int, char **, ...);
-int intvnetid(int, char **, ...);
-int intcache(int, char **, ...);
 int intendpoint(int, char **, ...);
 void conf_cache(FILE *, int, char *);
 int get_physrtable(int, char *);
@@ -528,9 +526,6 @@ int conf_carp(FILE *, int, char *);
 int carplock(int);
 
 /* trunk.c */
-int inttrunkport(int, char **, ...);
-int inttrunkproto(int, char **, ...);
-int intlacp(int, char **, ...);
 int conf_trunk(FILE *output, int ifs, char *ifname);
 
 /* who.c */
