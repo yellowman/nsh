@@ -2789,48 +2789,21 @@ intlink_apply(const struct argcmd *c, int set,
 	return set_ifflags(ifname, ifs, flags);
 }
 
+/* nwid: the network ID, text or 0x and hex digits (get_string()) */
+
 int
-intnwid(int argc, char **argv, ...)
+intnwid_apply(const struct argcmd *c, int set, const struct facts_value *v,
+    char *ifname, int ifs, struct cand *cand)
 {
 	struct ieee80211_nwid nwid;
 	struct ifreq ifr;
-	int set, len;
-	va_list ap;
-	struct cand *cand;
-	char *ifname;
-	int ifs;
+	int len = 0;	/* no nwid: nwid "" */
 
-	va_start(ap, argv);
-	ifname = va_arg(ap, char *);
-	ifs = va_arg(ap, int);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
-
-	if (NO_ARG(argv[0])) {
-		set = 0;
-		argv++;
-		argc--;
-	} else
-		set = 1;
-
-	argv++;
-	argc--;
-
-	if ((set && argc != 1) || (!set && argc > 1)) {
-		printf("%% nwid <nwid>\n");
-		printf("%% no nwid [nwid]\n");
-		return -1;
-	}
-
-	len = sizeof(nwid.i_nwid);
-
+	memset(&nwid, 0, sizeof(nwid));
 	if (set) {
-		if (get_string(argv[0], NULL, nwid.i_nwid, &len) == NULL) {
-			printf("%% intnwid: bad input\n");
-			return -1;
-		}
-	} else
-		len = 0; /* nwid "" */
+		len = v[0].v.str.len;
+		memcpy(nwid.i_nwid, v[0].v.str.s, len);
+	}
 
 	if (cand != NULL)
 		return cand_nwid(cand, ifname, nwid.i_nwid, len);

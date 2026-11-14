@@ -53,6 +53,9 @@
 				   "df": FACT_I64 1 when given */
 #define ARG_B64		7	/* a base64 word that decodes to exactly max
 				   bytes: FACT_BYTES */
+#define ARG_BYTES	8	/* a word that get_string() reads, text or
+				   0x and hex digits, into min to max bytes:
+				   FACT_BYTES */
 
 #define ARG_OPT		0x1	/* it may be left out */
 #define ARG_NO		0x2	/* parsed on a "no" line too */
@@ -74,8 +77,9 @@
 
 #define ARGS_MAX	FACTS_FIELDS	/* values of a command, at most */
 #define ARGS_REST	1024	/* bytes of an ARG_REST field, at most */
-#define ARGS_BINS	4	/* ARG_B64 fields of a command, at most */
-#define ARGS_BIN	64	/* an ARG_B64 value is shorter than this */
+#define ARGS_BINS	4	/* ARG_B64 and ARG_BYTES fields of a command,
+				   at most */
+#define ARGS_BIN	64	/* such a value is shorter than this */
 
 /* a word an ARG_NUM or ARG_BITS field takes, and its value */
 struct argkey {
@@ -102,6 +106,7 @@ struct arg {
  * commands.c
  */
 struct argcmd;
+struct argvals;
 /*
  * run with the values on an interface; set is 0 for a "no" line. With a
  * candidate, the line edits it, and without one, changes the host
@@ -109,6 +114,13 @@ struct argcmd;
 struct cand;
 typedef int	args_applyfn(const struct argcmd *, int,
 		    const struct facts_value *, char *, int, struct cand *);
+/*
+ * parse the words after the command's, for a grammar the arguments
+ * cannot say, into the values they describe, which args_check() checks
+ * as it checks any; a->set is set. 0, or -1 after printing an error
+ */
+typedef int	args_parsefn(const struct argcmd *, int, char **,
+		    struct argvals *);
 struct argcmd {
 	const char	*name;	/* the command's word */
 	int		 flags;	/* CF_* */
@@ -117,6 +129,7 @@ struct argcmd {
 	args_applyfn	*apply;
 	int		 code;	/* which of apply's commands this is */
 	const struct arg *args;	/* NULL if it takes none */
+	args_parsefn	*parse;	/* NULL if the arguments say its grammar */
 };
 #define CF_NO		0x1	/* a top-level one takes no */
 #define CF_IF		0x2	/* it heads an interface's block */
@@ -149,16 +162,25 @@ enum { WG_PORT, WG_KEY, WG_RTABLE };			/* intwg_apply() */
 /* limits the rows share with their files */
 #define GROUP_NAMES	16	/* group names to a record; a longer line
 				   goes as several (args_each()) */
+#define WPA_PSKLEN	sizeof(((struct ieee80211_wpapsk *)0)->i_psk)
+#define NWKEY_LEN	16	/* a WEP key's length, at most */
+#define NWKEY_TEXT	200	/* and a key line's, as typed */
+#define JOIN_WPAKEY	1	/* the kinds of key a join line has */
+#define JOIN_NWKEY	2
 #define WGPEER_AIPS	120	/* the most aips on one line, more than a
 				   1023 byte line can hold */
 
-/* what the rows name: each file's apply functions */
+/* what the rows name: each file's apply and parse functions */
 args_applyfn	intcarp_apply, intcpass_apply, intcnode_apply, intcdev_apply;
+args_applyfn	intnwkey_apply, intwpakey_apply, intwpa_apply, intwpalist_apply,
+		intjoin_apply, intchan_apply, intnwflag_apply, inttxpower_apply;
+args_parsefn	intnwkey_parse, intwpakey_parse, intjoin_parse;
 args_applyfn	intpatch_apply, intmtu_apply, intkeepalive_apply, intmpls_apply,
 		intmetric_apply, intllprio_apply, intgroup_apply,
 		intrtlabel_apply, intparent_apply, intflags_apply,
-		intxflags_apply, intlink_apply, intpowersave_apply,
-		intrdomain_apply, intdesc_apply, intvnetflowid_apply;
+		intxflags_apply, intlink_apply, intnwid_apply,
+		intpowersave_apply, intrdomain_apply, intdesc_apply,
+		intvnetflowid_apply;
 args_applyfn	intsyncdev_apply, intsyncpeer_apply, intmaxupd_apply;
 args_applyfn	intsppp_apply, intpppoe_apply;
 args_applyfn	inttrunkport_apply, inttrunkproto_apply, intlacp_apply;
@@ -166,10 +188,17 @@ args_applyfn	intvnetid_apply, inttunnel_apply, intcache_apply,
 		intendpoint_apply;
 args_applyfn	intumb_apply;
 args_applyfn	intwg_apply, intwgpeer_apply;
+/* the words of arguments whose values their files alone know */
+extern const struct argkey nwflags[];
+extern const struct argkey wpaprotos[], wpaakms[], wpaciphers[];
+extern const struct argkey wpagroupciphers[];
+
 const struct argcmd *conf_cmd(int, int, struct argcmd *);
 size_t	args_n(const struct argcmd *);
 const char *args_called(const struct arg *);
 int	args_parse(const struct argcmd *, int, char **, struct argvals *);
+const char *args_bytes(struct argvals *, const char *, const char *,
+	    size_t, struct facts_value *);
 int	args_each(const struct argcmd *, int, char **,
 	    int (*)(const struct argcmd *, struct argvals *, void *), void *);
 int	args_run(const struct argcmd *, int, char **, char *, int,

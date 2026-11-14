@@ -68,6 +68,8 @@
 #include <net/if_trunk.h>
 #include <net/if_wg.h>
 #include <net/ppp_defs.h>
+#include <net80211/ieee80211.h>
+#include <net80211/ieee80211_ioctl.h>
 #include <netmpls/mpls.h>
 #include <dev/usb/mbim.h>
 #include <dev/usb/if_umb.h>
@@ -966,24 +968,90 @@ struct intlist Intlist[] = {
 	  .nocmd = 1, .cand = CAND_EDIT,
 	  .apply = intflags_apply, .code = IFF_STATICARP },
 	{ "lladdr",	"Link Level (MAC) Address",		CMPL0 0, 0, intlladdr, 1, CAND_EDIT },
-	{ "nwid",	"802.11 network ID",			CMPL0 0, 0, intnwid, 1, CAND_EDIT },
-	{ "nwkey",	"802.11 network key",			CMPL0 0, 0, intnwkey, 1, CAND_EDIT },
-	{ "wpakey",	"802.11 WPA passphrase or key",		CMPL0 0, 0, intwpakey, 1, CAND_EDIT },
-	{ "wpa",	"802.11 WPA, as for 802.1x",		CMPL0 0, 0, intwpa, 1, CAND_EDIT },
-	{ "wpaprotos",	"802.11 WPA protocols",			CMPL0 0, 0, intwpalist, 1, CAND_EDIT },
-	{ "wpaakms",	"802.11 WPA key management",		CMPL0 0, 0, intwpalist, 1, CAND_EDIT },
-	{ "wpaciphers",	"802.11 WPA pairwise ciphers",		CMPL0 0, 0, intwpalist, 1, CAND_EDIT },
-	{ "wpagroupcipher", "802.11 WPA group cipher",		CMPL0 0, 0, intwpalist, 1, CAND_EDIT },
-	{ "join",	"802.11 network to join when found",	CMPL0 0, 0, intjoin, 1, CAND_EDIT },
+	{ "nwid", "802.11 network ID", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intnwid_apply,
+	  .args = ARGS{
+		{ "nwid",	ARG_BYTES, 0, IEEE80211_NWID_LEN },
+		{ NULL } } },
+	{ "nwkey", "802.11 network key", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intnwkey_apply, .parse = intnwkey_parse,
+	  .args = ARGS{
+		{ "key",	ARG_WORD, 1, NWKEY_TEXT, ARG_BLANKS },
+		{ "persist",	ARG_NUM, 0, 2 },
+		{ "defkid",	ARG_NUM, 0, IEEE80211_WEP_NKID },
+		{ "keys",	ARG_BYTES, 0, NWKEY_LEN, ARG_OPT, NULL,
+		    IEEE80211_WEP_NKID },
+		{ NULL } } },
+	{ "wpakey", "802.11 WPA passphrase or key", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intwpakey_apply, .parse = intwpakey_parse,
+	  .args = ARGS{
+		{ "key",	ARG_WORD, 8, 2 + 2 * WPA_PSKLEN, ARG_BLANKS },
+		{ "psk",	ARG_BYTES, WPA_PSKLEN, WPA_PSKLEN, ARG_OPT },
+		{ NULL } } },
+	{ "wpa", "802.11 WPA, as for 802.1x", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intwpa_apply },
+	{ "wpaprotos", "802.11 WPA protocols", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intwpalist_apply,
+	  .args = ARGS{
+		{ "protos",	ARG_BITS, 0, 0, ARG_COMMAS, wpaprotos },
+		{ NULL } } },
+	{ "wpaakms", "802.11 WPA key management", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intwpalist_apply,
+	  .args = ARGS{
+		{ "akms",	ARG_BITS, 0, 0, ARG_COMMAS, wpaakms },
+		{ NULL } } },
+	{ "wpaciphers", "802.11 WPA pairwise ciphers", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intwpalist_apply,
+	  .args = ARGS{
+		{ "ciphers",	ARG_BITS, 0, 0, ARG_COMMAS, wpaciphers },
+		{ NULL } } },
+	{ "wpagroupcipher", "802.11 WPA group cipher", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intwpalist_apply,
+	  .args = ARGS{
+		{ "cipher",	ARG_NUM, 1, 0, 0, wpagroupciphers },
+		{ NULL } } },
+	{ "join", "802.11 network to join when found", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intjoin_apply, .parse = intjoin_parse,
+	  .args = ARGS{
+		{ "nwid",	ARG_BYTES, 0, IEEE80211_NWID_LEN, ARG_NO },
+		{ "kind",	ARG_NUM, JOIN_WPAKEY, JOIN_NWKEY, ARG_OPT },
+		{ "key",	ARG_WORD, 1, NWKEY_TEXT, ARG_OPT | ARG_BLANKS },
+		{ "psk",	ARG_BYTES, WPA_PSKLEN, WPA_PSKLEN, ARG_OPT },
+		{ "wepkey",	ARG_BYTES, 0, NWKEY_LEN, ARG_OPT },
+		{ NULL } } },
 	{ "powersave", "802.11 powersaving mode", CMPL0
 	  .nocmd = 1, .cand = CAND_EDIT,
 	  .apply = intpowersave_apply,
 	  .args = ARGS{
 		{ "milisec",	ARG_NUM, 0, 1000, ARG_OPT },
 		{ NULL } } },
-	{ "txpower",	"802.11 transmit power",		CMPL0 0, 0, inttxpower, 1, CAND_EDIT },
-	{ "chan",	"802.11 channel",			CMPL0 0, 0, intchan, 1, CAND_EDIT },
-	{ "nwflag",	"802.11 flags",				CMPL0 0, 0, intnwflag, 1, CAND_EDIT },
+	{ "txpower", "802.11 transmit power", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = inttxpower_apply,
+	  .args = ARGS{
+		{ "dBm",	ARG_NUM, INT16_MIN, INT16_MAX },
+		{ NULL } } },
+	{ "chan", "802.11 channel", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intchan_apply,
+	  .args = ARGS{
+		{ "chan",	ARG_NUM, 0, UINT16_MAX },
+		{ NULL } } },
+	{ "nwflag", "802.11 flags", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intnwflag_apply,
+	  .args = ARGS{
+		{ "flag",	ARG_BITS, 0, 0, ARG_NO, nwflags },
+		{ NULL } } },
 	{ "bssid",	"802.11 bss id",			CMPL0 0, 0, int_op, 1, CAND_RUN },
 	{ "media",	"Media type",				CMPL0 0, 0, intmedia, 1, CAND_EDIT },
 	{ "mediaopt",	"Media options",			CMPL0 0, 0, intmediaopt, 1, CAND_EDIT },
@@ -1783,18 +1851,6 @@ static const struct confcmd conf_if[] = {
 	{ "ip",		intip },
 	{ "alias",	intip },
 	{ "lladdr",	intlladdr },
-	{ "nwid",	intnwid },
-	{ "nwkey",	intnwkey },
-	{ "wpakey",	intwpakey },
-	{ "wpa",	intwpa },
-	{ "wpaprotos",	intwpalist },
-	{ "wpaakms",	intwpalist },
-	{ "wpaciphers",	intwpalist },
-	{ "wpagroupcipher", intwpalist },
-	{ "join",	intjoin },
-	{ "txpower",	inttxpower },
-	{ "chan",	intchan },
-	{ "nwflag",	intnwflag },
 	{ "media",	intmedia },
 	{ "mediaopt",	intmediaopt },
 	{ "pwe",	intpwe3 },
@@ -2466,6 +2522,7 @@ int_cmd(const struct intlist *i, struct argcmd *c)
 	c->apply = i->apply;
 	c->code = i->code;
 	c->args = i->args;
+	c->parse = i->parse;
 	return c;
 }
 

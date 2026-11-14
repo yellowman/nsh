@@ -20,6 +20,7 @@
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
 #include <arpa/inet.h>
+#include <ctype.h>
 #include <netdb.h>
 #include <resolv.h>
 #include <stdint.h>
@@ -358,6 +359,16 @@ arg_word(const struct argcmd *c, const struct arg *f, struct argvals *a,
 		}
 		facts_bytes(v, a->bin[a->nbin++], f->max);
 		return 0;
+	case ARG_BYTES:
+		if (f->max >= ARGS_BIN ||
+		    args_bytes(a, w, NULL, f->max, v) == NULL)
+			return -1;
+		if (v->v.str.len < (size_t)f->min) {
+			printf("%% %s is at least %lld bytes\n",
+			    arg_label(c, f), f->min);
+			return -1;
+		}
+		return 0;
 	case ARG_NUM:
 		if ((k = arg_key(f, w)) != NULL) {
 			facts_i64(v, k->value);
@@ -391,6 +402,88 @@ arg_word(const struct argcmd *c, const struct arg *f, struct argvals *a,
 		return 0;
 	}
 	return -1;
+}
+
+/*
+ * Up to *lenp bytes of val, text or 0x and hex digits, as ifconfig reads
+ * them, up to one of sep's characters if sep is not NULL, into buf, and
+ * how many into *lenp. Returns where it stopped, or NULL after printing
+ * why. Was ieee80211.c's
+ */
+static const char *
+get_string(const char *val, const char *sep, u_int8_t *buf, int *lenp)
+{
+	int len;
+	int hexstr;
+	u_int8_t *p;
+
+	len = *lenp;
+	p = buf;
+	hexstr = (val[0] == '0' && tolower((unsigned char)val[1]) == 'x');
+	if (hexstr)
+		val += 2;
+	for (;;) {
+		if (*val == '\0')
+			break;
+		if (sep != NULL && strchr(sep, *val) != NULL) {
+			val++;
+			break;
+		}
+		if (hexstr) {
+			if (!isxdigit((unsigned char)val[0]) ||
+			    !isxdigit((unsigned char)val[1])) {
+				printf("%% get_string: bad hexadecimal digits\n");
+				return NULL;
+			}
+		}
+		if (p >= buf + len) {
+			if (hexstr)
+				printf("%% get_string: hexadecimal digits too long\n");
+			else
+				printf("%% get_string: strings too long\n");
+			return NULL;
+		}
+		if (hexstr) {
+#define tohex(x)        (isdigit((unsigned char)(x)) ? (x) - '0' : \
+			    tolower((unsigned char)(x)) - 'a' + 10)
+			*p++ = (tohex(val[0]) << 4) | tohex(val[1]);
+#undef tohex
+			val += 2;
+		} else {
+			if (*val == '\\' &&
+			    sep != NULL && strchr(sep, *(val + 1)) != NULL)
+				val++;
+			*p++ = *val++;
+		}
+	}
+	len = p - buf;
+	if (len < *lenp)
+		memset(p, 0, *lenp - len);
+	*lenp = len;
+	return val;
+}
+
+/*
+ * Up to max bytes of w, as get_string() reads them, text or 0x and hex
+ * digits, up to one of sep's characters if sep is not NULL, into one of
+ * a's buffers, and into v. Returns where get_string() stopped, or NULL
+ * after printing why
+ */
+const char *
+args_bytes(struct argvals *a, const char *w, const char *sep, size_t max,
+    struct facts_value *v)
+{
+	const char	*end;
+	int		 len = max;
+
+	if (a->nbin >= ARGS_BINS || max >= ARGS_BIN) {
+		printf("%% too many values\n");
+		return NULL;
+	}
+	if ((end = get_string(w, sep, a->bin[a->nbin], &len)) == NULL)
+		return NULL;
+	facts_bytes(v, a->bin[a->nbin++], len);
+	return end;
 }
 
 /*
@@ -548,6 +641,8 @@ args_parse(const struct argcmd *c, int argc, char **argv, struct argvals *a)
 	}
 	argc--;
 	argv++;
+	if (c->parse != NULL)
+		return c->parse(c, argc, argv, a);
 	/* the unnamed arguments in order; for "no", only those with ARG_NO */
 	for (i = 0, s = 0; i < args_n(c); i++, s += n) {
 		f = &c->args[i];
@@ -658,7 +753,8 @@ args_kind(const struct argcmd *c, struct facts_kind *k,
 			memset(&f[n], 0, sizeof(f[n]));
 			f[n].name = a->name;
 			/* a port or prefix length comes after its address */
-			f[n].type = a->type == ARG_B64 ? FACT_BYTES :
+			f[n].type = a->type == ARG_B64 ||
+			    a->type == ARG_BYTES ? FACT_BYTES :
 			    a->type == ARG_WORD || a->type == ARG_REST ?
 			    FACT_STRING : a->type == ARG_ADDR &&
 			    ((a->flags & (ARG_PORT | ARG_PREFIX)) == 0 ||
@@ -699,6 +795,9 @@ arg_value(const struct argcmd *c, const struct arg *f,
 		return (v->v.i != 0 || none) && (v->v.i & ~bits) == 0;
 	case ARG_B64:
 		return v->v.str.len == (size_t)f->max;
+	case ARG_BYTES:
+		return v->v.str.len >= (size_t)f->min &&
+		    v->v.str.len <= (size_t)f->max;
 	case ARG_ADDR:
 		if (!arg_family(f, v->v.a.family))
 			return 0;

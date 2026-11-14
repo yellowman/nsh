@@ -247,6 +247,7 @@ extern size_t cursor_argo;
  */
 struct arg;
 struct argcmd;
+struct argvals;
 typedef struct cmd {
 	char *name;		/* command name */
 	char *help;		/* help string (NULL for no help) */
@@ -284,13 +285,16 @@ struct intlist {
 	/*
 	 * If config parses the command's line into values (nshd's
 	 * args.h): the function that applies them, a code that tells it
-	 * which of its commands this is, and the line's arguments, ended
-	 * by one with no name. Such a row needs no handler
+	 * which of its commands this is, the line's arguments, ended by
+	 * one with no name, and for a grammar the arguments cannot say,
+	 * the function that reads the line's words. Such a row needs no
+	 * handler
 	 */
 	int (*apply)(const struct argcmd *, int, const struct facts_value *,
 	    char *, int, struct cand *);
 	int code;
 	const struct arg *args;
+	int (*parse)(const struct argcmd *, int, char **, struct argvals *);
 };
 
 /* generic help /complt struct */
@@ -317,23 +321,14 @@ extern size_t Bridgelist_nitems;
 #define TXPOWER 3
 #define BSSID 4
 #define DEFAULT_POWERSAVE 100	/* 100 ms */
-const char *get_string(const char *, const char *, u_int8_t *, int *);
 void make_string(char *str, int, const u_int8_t *buf, int);
 int get_nwinfo(char *, char *, int, int);
 int get_nwpowersave(int, char *);
-int intnwkey(int, char **, ...);
-int intwpakey(int, char **, ...);
-int intwpa(int, char **, ...);
-int intwpalist(int, char **, ...);
 void conf_wpa(FILE *, int, char *);
-int intchan(int, char **, ...);
-int intnwflag(int, char **, ...);
 void conf_80211(FILE *, int, char *);
-int intjoin(int, char **, ...);
 int cand_join(struct cand *, char *, int, char *, char *, char *);
 void conf_join(FILE *, int, char *);
 uint64_t init_current_media(int, char *, struct cand *);
-int inttxpower(int, char **, ...);
 int cand_nwid(struct cand *, char *, u_int8_t *, int);
 int cand_wpakey(struct cand *, char *, char *, int);
 int cand_wpa(struct cand *, char *, int);
@@ -414,7 +409,6 @@ int intipcp(char *, int, int, char **, struct cand *);
 int intdhcrelay(int, char **, ...);
 int intdhcrelay6(int, char **, ...);
 int intaf(char *, int, int, char **);
-int intnwid(int, char **, ...);
 int intpflow(int, char **, ...);
 int intlladdr(int, char **, ...);
 int intpwe3(int, char **, ...);
