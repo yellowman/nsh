@@ -11,6 +11,7 @@
 	--dim: #cbcbce;
 	--faint: #98989d;
 	--select: #ffffff12;
+	--stripe: #ffffff0a;
 	--accent: #0a84ff;
 	--soft: #193356;
 	--soft-ink: #a9cdff;
@@ -38,6 +39,7 @@
 		--dim: #55555a;
 		--faint: #8e8e93;
 		--select: #0000000d;
+		--stripe: #00000008;
 		--soft: #dae9fe;
 		--soft-ink: #1e579f;
 		--on: #248a3d;
@@ -1010,6 +1012,11 @@ table.grid {
 	border-bottom: 0;
 }
 
+/* every other row shaded, so a wide row reads across */
+.grid tr:nth-child(odd) td {
+	background: var(--stripe);
+}
+
 .grid td.mono {
 	font: .9231rem var(--mono);
 }
@@ -1123,6 +1130,10 @@ table.grid {
 
 .field:last-child {
 	border-bottom: 0;
+}
+
+.field:nth-child(odd) {
+	background: var(--stripe);
 }
 
 .field.edited {
