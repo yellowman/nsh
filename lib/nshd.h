@@ -361,6 +361,9 @@ struct nshd_parse {
 #define NSHD_PARSE_BOOT	8	/* the saved configuration, now, facts:
 				   struct nshd_bootplan */
 #define NSHD_PARSE_DIFF	9	/* a, b, a head: 1 if b differs from a */
+#define NSHD_PARSE_RECORDS 10	/* the first bytes of the commit, confirm
+				   and boot records, each there as the
+				   flags say: struct nshd_records */
 
 #define NSHD_PARSE_ADMIN 0x1	/* BEGIN: check the script's admin lines */
 #define NSHD_PARSE_FAILED 0x2	/* VERIFY: a line of the script failed */
@@ -368,6 +371,9 @@ struct nshd_parse {
 #define NSHD_PARSE_HIDE	0x8	/* DIFF: each password hash hidden */
 #define NSHD_PARSE_QUIET 0x10	/* DIFF: only whether they differ */
 #define NSHD_PARSE_RECORD 0x20	/* BEGIN: there is a commit record */
+#define NSHD_PARSE_HAS_COMMIT 0x40	/* RECORDS: the commit record */
+#define NSHD_PARSE_HAS_CONFIRM 0x80	/* RECORDS: the confirm record */
+#define NSHD_PARSE_HAS_BOOT 0x100	/* RECORDS: the boot record */
 
 #define NSHD_LOGINS	1024		/* login lines, at most */
 
@@ -381,6 +387,41 @@ struct nshd_began {
 					   it wants */
 	int32_t		admin;		/* its script may run */
 	uint32_t	nlogins;
+};
+
+/*
+ * The records' head lines, as system writes them: each one's state, as
+ * the index of its name, then the commit record's uid, time and the
+ * lengths of its parts; the confirm record's id, deadline, attempts,
+ * whether carp is demoted for it and its configuration's length; and
+ * the boot record's boot time and whether carp is demoted for it
+ */
+#define NSHD_RECORD_STATES	{ "none", "applying", "unsaved" }
+#define NSHD_CONFIRM_STATES	{ "none", "waiting", "failed" }
+#define NSHD_CONFIRM_FORMAT	"%s %016llx %lld %d %d %zu"
+#define NSHD_BOOT_STATES	{ "none", "runs", "failed", "done" }
+
+/*
+ * RECORDS' answer: what each record's head line says, as the parser
+ * read it, and the line's length, with its newline. A state of 0 is
+ * a head line that is not one, or a record not there
+ */
+struct nshd_records {
+	int32_t		commit;
+	uint32_t	uid;
+	int64_t		when;
+	uint64_t	beforelen, wantlen;
+	uint64_t	commithead;
+	int32_t		confirm;
+	int32_t		attempts;
+	int32_t		demoted;
+	uint64_t	id;
+	int64_t		deadline;
+	uint64_t	backlen;
+	uint64_t	confirmhead;
+	int32_t		boot;
+	int32_t		bootdemoted;
+	int64_t		boottime;
 };
 
 /* BACK's answer */
@@ -652,6 +693,7 @@ struct plan;
 void		 plan_clears(struct plan *, struct nshd_apply *);
 
 /* confirm.c: the record of an unconfirmed commit */
+#define CONFIRM_RECORD	NSHDB "/confirm"
 enum { CONFIRM_NONE, CONFIRM_WAITING, CONFIRM_FAILED };
 struct confirm {
 	int		 state;
@@ -662,6 +704,7 @@ struct confirm {
 	char		*back;		/* the rollback configuration */
 	size_t		 backlen;
 };
+void		 confirm_kept(struct confirm *, size_t, int);
 int		 confirm_read(struct confirm *, int);
 int		 confirm_write(struct confirm *);
 int		 confirm_clear(void);

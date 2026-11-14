@@ -452,7 +452,7 @@ struct queued {
 
 /* the commit record: its state, who made it when, and the parts BEGIN took */
 enum { RECORD_NONE, RECORD_APPLYING, RECORD_UNSAVED };
-static const char *states[] = { "none", "applying", "unsaved" };
+static const char *states[] = NSHD_RECORD_STATES;
 struct record {
 	int			 state;
 	uid_t			 uid;
@@ -509,7 +509,7 @@ struct attempt {
 
 /* the boot record: the boot of the host it is for, how it went, carp */
 enum { BOOT_NONE, BOOT_RUNS, BOOT_FAILED, BOOT_DONE };
-static const char *boot_states[] = { "none", "runs", "failed", "done" };
+static const char *boot_states[] = NSHD_BOOT_STATES;
 struct boot {
 	int			 state;
 	long long		 when;		/* kern.boottime */
@@ -545,6 +545,22 @@ static TAILQ_HEAD(, client) clients = TAILQ_HEAD_INITIALIZER(clients);
 static struct event	 confirm_tm;	/* the deadline, or the next attempt */
 static struct event	 look_tm;	/* the next look at the clients */
 static time_t		 confirm_next;	/* earliest next rollback attempt */
+
+/*
+ * The commit and boot records as system last wrote them, or as the
+ * parser read their head lines as nshd started (records_read()), and
+ * the commit record's head line's length; or why one could not be read,
+ * EFTYPE if it is not a record. system reads only the commit record's
+ * parts again
+ */
+static struct record	 kept;
+static size_t		 kept_head;
+static int		 kept_error;
+static struct boot	 kept_boot;
+static int		 kept_boot_error;
+/* their first bytes as read, or why not */
+static char		 heads[3][RECORD_HEAD + 1];
+static int		 errors[3];
 
 static void	system_dispatch_parent(int, short, void *);
 static void	system_dispatch_config(int, short, void *);
@@ -665,6 +681,8 @@ static void	system_job_wait(struct job *);
 static void	system_go_late(int, short, void *);
 static void	system_job_done(void);
 static void	system_job_end(struct job *, int32_t);
+static void	records_start(void);
+static void	records_read(struct job *, int32_t);
 static int	record_read(struct record *);
 static int	record_write(struct record *);
 static int	record_clear(void);
@@ -724,8 +742,8 @@ systemproc(int debug, int v)
 	/* before any child: one that ends unwatched is never reaped */
 	signal_set(&ev_sigchld, SIGCHLD, system_sigchld, NULL);
 	signal_add(&ev_sigchld, NULL);
-	/* an unconfirmed commit that an earlier nshd left */
-	system_confirm(-1, 0, NULL);
+	/* the records an earlier nshd left, then a commit not confirmed */
+	records_start();
 	event_dispatch();
 	system_exit();
 }
@@ -3923,6 +3941,9 @@ system_parsed(struct job *j, int32_t status)
 		else
 			system_printed(j->id, status == -1);
 		break;
+	case NSHD_PARSE_RECORDS:
+		records_read(j, status);
+		break;
 	}
 }
 
@@ -4267,36 +4288,174 @@ system_job_free(struct job *j)
 	free(j);
 }
 
-/* the commit record into rec, RECORD_NONE if none: -1, saying why, if not */
+/*
+ * The first bytes of the commit, confirm and boot records an earlier
+ * nshd left, which the parser reads in a job, as nshd starts. Requests
+ * but a session's permissions and a login wait for it, and so does the
+ * boot
+ */
+static void
+records_start(void)
+{
+	static const char	*paths[] = { COMMIT_RECORD, CONFIRM_RECORD,
+				    BOOT_RECORD };
+	static const int	 there[] = { NSHD_PARSE_HAS_COMMIT,
+				    NSHD_PARSE_HAS_CONFIRM,
+				    NSHD_PARSE_HAS_BOOT };
+	/* the boot record's whole, and less than the others' heads */
+	static const size_t	 most[] = { RECORD_HEAD, RECORD_HEAD, 63 };
+	struct job		*j;
+	ssize_t			 n;
+	size_t			 got;
+	int			 fd, i;
+
+	j = system_parse_job(0, NSHD_PARSE_RECORDS);
+	for (i = 0; i < 3; i++) {
+		if ((fd = open(paths[i], O_RDONLY)) == -1) {
+			if (errno != ENOENT)
+				errors[i] = errno;
+			continue;
+		}
+		j->parse.flags |= there[i];
+		for (got = 0; got < most[i]; got += n)
+			if ((n = read(fd, heads[i] + got,
+			    most[i] - got)) <= 0) {
+				if (n == -1 && errno == EINTR) {
+					n = 0;
+					continue;
+				}
+				/* the others' is not a record */
+				if (n == -1 && i == 1)
+					errors[i] = errno;
+				break;
+			}
+		close(fd);
+		system_parse_text(j, i, heads[i], got);
+	}
+	system_parse(j);
+}
+
+/*
+ * The parser read the records' head lines, as status says: system keeps
+ * what each says, as it does what it writes. Then a commit not
+ * confirmed is due
+ */
+static void
+records_read(struct job *j, int32_t status)
+{
+	struct nshd_records	 r;
+	struct confirm		 cf;
+	char			*a = NULL;
+	size_t			 len;
+
+	memset(&r, 0, sizeof(r));
+	if (status != 0 || parser_answer(j->answer, sizeof(r), &a, &len) ==
+	    -1 || len != sizeof(r)) {
+		printf("%% nshd: the parser did not read the records\n");
+		/* each one there is not read */
+		if ((j->parse.flags & NSHD_PARSE_HAS_COMMIT) && !errors[0])
+			errors[0] = EIO;
+		if ((j->parse.flags & NSHD_PARSE_HAS_CONFIRM) && !errors[1])
+			errors[1] = EIO;
+		if ((j->parse.flags & NSHD_PARSE_HAS_BOOT) && !errors[2])
+			errors[2] = EIO;
+	} else
+		memcpy(&r, a, sizeof(r));
+	free(a);
+	printed_log();
+
+	memset(&kept, 0, sizeof(kept));
+	kept_error = errors[0];
+	if (kept_error == 0 && (j->parse.flags & NSHD_PARSE_HAS_COMMIT)) {
+		/* the parts' lengths are checked as they are read */
+		if ((r.commit != RECORD_APPLYING &&
+		    r.commit != RECORD_UNSAVED) || r.beforelen > NSHD_PART ||
+		    r.wantlen > NSHD_PART)
+			kept_error = EFTYPE;
+		else {
+			kept.state = r.commit;
+			kept.uid = r.uid;
+			kept.when = r.when;
+			kept.beforelen = r.beforelen;
+			kept.wantlen = r.wantlen;
+			kept_head = r.commithead;
+		}
+	}
+
+	memset(&cf, 0, sizeof(cf));
+	if (errors[1] == 0 && (j->parse.flags & NSHD_PARSE_HAS_CONFIRM)) {
+		if ((r.confirm != CONFIRM_WAITING &&
+		    r.confirm != CONFIRM_FAILED) || r.id == 0 ||
+		    r.deadline <= 0 || r.attempts < 0 ||
+		    (r.demoted != 0 && r.demoted != 1) ||
+		    r.backlen > NSHD_PART)
+			errors[1] = EFTYPE;
+		else {
+			cf.state = r.confirm;
+			cf.id = r.id;
+			cf.deadline = r.deadline;
+			cf.attempts = r.attempts;
+			cf.demoted = r.demoted;
+			cf.backlen = r.backlen;
+		}
+	}
+	confirm_kept(&cf, r.confirmhead, errors[1]);
+
+	memset(&kept_boot, 0, sizeof(kept_boot));
+	kept_boot_error = errors[2];
+	if (kept_boot_error == 0 && (j->parse.flags & NSHD_PARSE_HAS_BOOT)) {
+		if (r.boot < BOOT_RUNS || r.boot > BOOT_DONE ||
+		    (r.bootdemoted != 0 && r.bootdemoted != 1))
+			kept_boot_error = EFTYPE;
+		else {
+			kept_boot.state = r.boot;
+			kept_boot.when = r.boottime;
+			kept_boot.demoted = r.bootdemoted;
+		}
+	}
+	system_confirm(-1, 0, NULL);
+}
+
+/*
+ * The commit record into rec, RECORD_NONE if none, its parts read again:
+ * -1, saying why, if not
+ */
 static int
 record_read(struct record *rec)
 {
 	struct stat	 sb;
-	char		 state[16], *nl;
-	unsigned int	 uid;
-	long long	 when;
 	ssize_t		 n;
-	size_t		 got, head;
-	int		 fd, i;
+	size_t		 got, len;
+	int		 fd;
 
 	memset(rec, 0, sizeof(*rec));
-	if ((fd = open(COMMIT_RECORD, O_RDONLY)) == -1) {
-		if (errno == ENOENT)
-			return (0);
-		printf("%% nshd: %s: %s\n", COMMIT_RECORD, strerror(errno));
+	if (kept_error == EFTYPE) {
+		printf("%% nshd: %s is not a commit record\n", COMMIT_RECORD);
 		return (-1);
 	}
-	if (fstat(fd, &sb) == -1) {
-		printf("%% nshd: %s: %s\n", COMMIT_RECORD, strerror(errno));
-		close(fd);
+	if (kept_error != 0) {
+		printf("%% nshd: %s: %s\n", COMMIT_RECORD,
+		    strerror(kept_error));
 		return (-1);
 	}
-	if (sb.st_size > RECORD_HEAD + 2 * (off_t)NSHD_PART)
+	if (kept.state == RECORD_NONE)
+		return (0);
+	if ((fd = open(COMMIT_RECORD, O_RDONLY)) == -1 ||
+	    fstat(fd, &sb) == -1) {
+		printf("%% nshd: %s: %s\n", COMMIT_RECORD, strerror(errno));
+		if (fd != -1)
+			close(fd);
+		return (-1);
+	}
+	/* the parts after the head line, as system wrote them */
+	len = kept.beforelen + kept.wantlen;
+	if (sb.st_size != (off_t)(kept_head + len))
 		goto bad;
-	if ((rec->buf = malloc(sb.st_size + 1)) == NULL)
+	if ((rec->buf = malloc(len + 1)) == NULL)
 		fatal(NULL);
-	for (got = 0; got < (size_t)sb.st_size; got += n)
-		if ((n = read(fd, rec->buf + got, sb.st_size - got)) <= 0) {
+	for (got = 0; got < len; got += n)
+		if ((n = pread(fd, rec->buf + got, len - got,
+		    kept_head + got)) <= 0) {
 			if (n == -1 && errno == EINTR) {
 				n = 0;
 				continue;
@@ -4304,31 +4463,17 @@ record_read(struct record *rec)
 			goto bad;
 		}
 	close(fd);
-	fd = -1;
-	rec->buf[got] = '\0';
-	if ((nl = memchr(rec->buf, '\n', got < RECORD_HEAD ? got :
-	    RECORD_HEAD)) == NULL)
-		goto bad;
-	*nl = '\0';
-	head = nl - rec->buf + 1;
-	if (sscanf(rec->buf, "%15s %u %lld %zu %zu", state, &uid, &when,
-	    &rec->beforelen, &rec->wantlen) != 5 ||
-	    rec->beforelen > NSHD_PART || rec->wantlen > NSHD_PART ||
-	    head + rec->beforelen + rec->wantlen != got)
-		goto bad;
-	for (i = RECORD_APPLYING; i <= RECORD_UNSAVED; i++)
-		if (strcmp(state, states[i]) == 0)
-			rec->state = i;
-	if (rec->state == RECORD_NONE)
-		goto bad;
-	rec->uid = uid;
-	rec->when = when;
-	rec->before = rec->buf + head;
+	rec->buf[len] = '\0';
+	rec->state = kept.state;
+	rec->uid = kept.uid;
+	rec->when = kept.when;
+	rec->beforelen = kept.beforelen;
+	rec->wantlen = kept.wantlen;
+	rec->before = rec->buf;
 	rec->want = rec->before + rec->beforelen;
 	return (0);
  bad:
-	if (fd != -1)
-		close(fd);
+	close(fd);
 	printf("%% nshd: %s is not a commit record\n", COMMIT_RECORD);
 	record_free(rec);
 	return (-1);
@@ -4340,7 +4485,7 @@ record_write(struct record *rec)
 {
 	char	 tmp[] = COMMIT_RECORD ".XXXXXXXXXX";
 	FILE	*f;
-	int	 fd, r = 0;
+	int	 fd, head, r = 0;
 
 	if (mkdir(NSHDB, 0700) == -1 && errno != EEXIST) {
 		printf("%% nshd: mkdir %s: %s\n", NSHDB, strerror(errno));
@@ -4356,9 +4501,10 @@ record_write(struct record *rec)
 		unlink(tmp);
 		return (-1);
 	}
-	fprintf(f, "%s %u %lld %zu %zu\n", states[rec->state],
+	if ((head = fprintf(f, "%s %u %lld %zu %zu\n", states[rec->state],
 	    (unsigned int)rec->uid, (long long)rec->when, rec->beforelen,
-	    rec->wantlen);
+	    rec->wantlen)) < 0)
+		r = -1;
 	if (rec->beforelen > 0)
 		fwrite(rec->before, 1, rec->beforelen, f);
 	if (rec->wantlen > 0)
@@ -4372,6 +4518,10 @@ record_write(struct record *rec)
 		unlink(tmp);
 		return (-1);
 	}
+	kept = *rec;
+	kept.buf = kept.before = kept.want = NULL;
+	kept_head = head;
+	kept_error = 0;
 	return (db_sync());
 }
 
@@ -4379,12 +4529,15 @@ record_write(struct record *rec)
 static int
 record_clear(void)
 {
-	if (unlink(COMMIT_RECORD) == 0)
-		return (db_sync());
-	if (errno == ENOENT)
-		return (0);
-	printf("%% nshd: %s: %s\n", COMMIT_RECORD, strerror(errno));
-	return (-1);
+	int	 r;
+
+	if ((r = unlink(COMMIT_RECORD)) == -1 && errno != ENOENT) {
+		printf("%% nshd: %s: %s\n", COMMIT_RECORD, strerror(errno));
+		return (-1);
+	}
+	memset(&kept, 0, sizeof(kept));
+	kept_error = 0;
+	return (r == -1 ? 0 : db_sync());
 }
 
 static void
@@ -4402,29 +4555,17 @@ record_free(struct record *rec)
 static int
 boot_read(struct boot *b)
 {
-	char	 buf[64], state[16];
-	ssize_t	 n;
-	int	 fd, i;
-
 	memset(b, 0, sizeof(*b));
-	if ((fd = open(BOOT_RECORD, O_RDONLY)) == -1) {
-		if (errno == ENOENT)
-			return (0);
-		printf("%% nshd: %s: %s\n", BOOT_RECORD, strerror(errno));
+	if (kept_boot_error != 0 && kept_boot_error != EFTYPE) {
+		printf("%% nshd: %s: %s\n", BOOT_RECORD,
+		    strerror(kept_boot_error));
 		return (-1);
 	}
-	n = read(fd, buf, sizeof(buf) - 1);
-	close(fd);
-	buf[n > 0 ? n : 0] = '\0';
-	if (sscanf(buf, "%15s %lld %d", state, &b->when, &b->demoted) == 3 &&
-	    (b->demoted == 0 || b->demoted == 1))
-		for (i = BOOT_RUNS; i <= BOOT_DONE; i++)
-			if (strcmp(state, boot_states[i]) == 0)
-				b->state = i;
-	if (b->state == BOOT_NONE)
+	if (kept_boot_error == EFTYPE)
 		printf("%% nshd: %s is not a boot record\n", BOOT_RECORD);
-	if (b->state == BOOT_NONE || b->when != boot_time())
-		memset(b, 0, sizeof(*b));
+	else if (kept_boot.state != BOOT_NONE &&
+	    kept_boot.when == boot_time())
+		*b = kept_boot;
 	return (0);
 }
 
@@ -4456,6 +4597,8 @@ boot_write(struct boot *b)
 		unlink(tmp);
 		return (-1);
 	}
+	kept_boot = *b;
+	kept_boot_error = 0;
 	return (db_sync());
 }
 

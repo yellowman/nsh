@@ -29,7 +29,8 @@
  * one holds, the script that makes one read as another, the boot's
  * plan, and how two differ. And it checks what a session without admin
  * commits, against the running configuration (ctl.c's and passwd.c's
- * admin checks).
+ * admin checks). As nshd starts, it reads the head lines of the records
+ * system keeps.
  */
 
 #include <sys/types.h>
@@ -66,6 +67,10 @@ static int	parse_back(struct nshd_parse *, char **);
 static int	parse_plan(struct nshd_parse *, char **);
 static int	parse_boot(struct nshd_parse *, char **);
 static int	parse_facts(char *, size_t);
+static int	parse_records(struct nshd_parse *, char **);
+static void	parse_commit(char *, size_t, struct nshd_records *);
+static void	parse_confirm(char *, size_t, struct nshd_records *);
+static void	parse_bootrecord(char *, struct nshd_records *);
 static void	parse_clears(struct nshd_apply *, struct script *);
 
 static char	 parser_path[PATH_MAX];	/* this program, as system ran it */
@@ -129,6 +134,9 @@ parserproc(int d, int v)
 		r = commit_diff(t[0], p.len[0], t[1], p.len[1], t[2],
 		    (p.flags & NSHD_PARSE_HIDE) != 0,
 		    (p.flags & NSHD_PARSE_QUIET) != 0);
+		break;
+	case NSHD_PARSE_RECORDS:
+		r = parse_records(&p, t);
 		break;
 	default:
 		printf("%% nshd: the parser reads no kind %d\n", p.kind);
@@ -302,6 +310,109 @@ parse_clears(struct nshd_apply *a, struct script *s)
 		s->clears[i].keep = a->clears[i].keep;
 	}
 	s->nclears = a->nclears;
+}
+
+/*
+ * The head lines of the records system keeps, as system writes them
+ * (systemproc.c's record_write() and boot_write(), confirm.c's
+ * confirm_write()): t[0] the commit record's first bytes, t[1] the
+ * confirm record's and t[2] the boot record's, each there as p's flags
+ * say. struct nshd_records, the numbers as each line says them: system
+ * judges whether they are a record's
+ */
+static int
+parse_records(struct nshd_parse *p, char **t)
+{
+	struct nshd_records	 r;
+
+	memset(&r, 0, sizeof(r));
+	if (p->flags & NSHD_PARSE_HAS_COMMIT)
+		parse_commit(t[0], p->len[0], &r);
+	if (p->flags & NSHD_PARSE_HAS_CONFIRM)
+		parse_confirm(t[1], p->len[1], &r);
+	if (p->flags & NSHD_PARSE_HAS_BOOT)
+		parse_bootrecord(t[2], &r);
+	return (parser_write(&r, sizeof(r)));
+}
+
+/* STATE UID WHEN BEFORELEN WANTLEN, the commit record's, in text */
+static void
+parse_commit(char *text, size_t len, struct nshd_records *r)
+{
+	static const char	*states[] = NSHD_RECORD_STATES;
+	char			 state[16], *nl;
+	unsigned int		 uid;
+	long long		 when;
+	size_t			 before, want, i;
+
+	if ((nl = memchr(text, '\n', len)) == NULL)
+		return;
+	*nl = '\0';
+	if (sscanf(text, "%15s %u %lld %zu %zu", state, &uid, &when, &before,
+	    &want) != 5)
+		return;
+	for (i = 1; i < sizeof(states) / sizeof(states[0]); i++)
+		if (strcmp(state, states[i]) == 0)
+			r->commit = i;
+	r->uid = uid;
+	r->when = when;
+	r->beforelen = before;
+	r->wantlen = want;
+	r->commithead = nl - text + 1;
+}
+
+/*
+ * STATE ID DEADLINE ATTEMPTS DEMOTED LENGTH, the confirm record's, in
+ * text, exactly as NSHD_CONFIRM_FORMAT writes it
+ */
+static void
+parse_confirm(char *text, size_t len, struct nshd_records *r)
+{
+	static const char	*states[] = NSHD_CONFIRM_STATES;
+	char			 state[16], canon[128], *nl;
+	unsigned long long	 id;
+	long long		 deadline;
+	size_t			 back, i;
+	int			 attempts, demoted;
+
+	if ((nl = memchr(text, '\n', len)) == NULL)
+		return;
+	*nl = '\0';
+	if (sscanf(text, "%15s %llx %lld %d %d %zu", state, &id, &deadline,
+	    &attempts, &demoted, &back) != 6)
+		return;
+	snprintf(canon, sizeof(canon), NSHD_CONFIRM_FORMAT, state, id,
+	    deadline, attempts, demoted, back);
+	if (strcmp(canon, text) != 0)
+		return;
+	for (i = 1; i < sizeof(states) / sizeof(states[0]); i++)
+		if (strcmp(state, states[i]) == 0)
+			r->confirm = i;
+	r->id = id;
+	r->deadline = deadline;
+	r->attempts = attempts;
+	r->demoted = demoted;
+	r->backlen = back;
+	r->confirmhead = nl - text + 1;
+}
+
+/* STATE BOOTTIME DEMOTED, the boot record's, in text */
+static void
+parse_bootrecord(char *text, struct nshd_records *r)
+{
+	static const char	*states[] = NSHD_BOOT_STATES;
+	char			 state[16];
+	long long		 when;
+	size_t			 i;
+	int			 demoted;
+
+	if (sscanf(text, "%15s %lld %d", state, &when, &demoted) != 3)
+		return;
+	for (i = 1; i < sizeof(states) / sizeof(states[0]); i++)
+		if (strcmp(state, states[i]) == 0)
+			r->boot = i;
+	r->boottime = when;
+	r->bootdemoted = demoted;
 }
 
 /* len bytes of standard input into buf: 0, or -1 if it ended first */

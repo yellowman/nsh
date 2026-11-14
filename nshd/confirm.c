@@ -26,6 +26,10 @@
  * is how many rollbacks were begun, and DEMOTED is 1 while carp is
  * demoted for it. LENGTH is the configuration's length. Each is as
  * written here, or it is not a record.
+ *
+ * system writes the record, and reads it as it wrote it: the parser
+ * reads the head line once, as nshd starts (parserproc.c), and system
+ * keeps what it says. system reads only the configuration again.
  */
 
 #include <sys/types.h>
@@ -46,69 +50,78 @@
 #include "stringlist.h"
 #include "externs.h"
 
-#define CONFIRM_RECORD	NSHDB "/confirm"
 #define CONFIRM_HEAD	128	/* the head line, at most */
-#define HEAD_FORMAT	"%s %016llx %lld %d %d %zu"
 
-static const char *confirm_states[] = { "none", "waiting", "failed" };
+static const char *confirm_states[] = NSHD_CONFIRM_STATES;
+
+/*
+ * The record's head as system last wrote it, or as the parser read it,
+ * and the head line's length; or why it could not be read, EFTYPE if
+ * it is not a record. And why its configuration could not be read the
+ * last time, until it can
+ */
+static struct confirm	 kept;
+static size_t		 kept_head;
+static int		 kept_error;
+static int		 kept_unread;
 
 static int	readall(int, char *, size_t, off_t);
 static int	writeall(int, const char *, size_t);
 static int	dirsync(void);
 
 /*
- * The record into cf, with its configuration if whole, or state
- * CONFIRM_NONE if there is none: -1 if it cannot be read, errno EFTYPE
- * if it is not a record
+ * The record as the parser read its head as nshd started, its head line
+ * head bytes long, or error, why it could not be read
+ */
+void
+confirm_kept(struct confirm *cf, size_t head, int error)
+{
+	kept = *cf;
+	kept.back = NULL;
+	kept_head = head;
+	kept_error = error;
+	kept_unread = 0;
+}
+
+/*
+ * The record into cf, its head as system keeps it, with its
+ * configuration, read from the record, if whole; or state CONFIRM_NONE
+ * if there is none: -1 if it cannot be read, errno EFTYPE if it is not
+ * a record
  */
 int
 confirm_read(struct confirm *cf, int whole)
 {
 	struct stat		 sb;
-	char			 head[CONFIRM_HEAD + 1], canon[CONFIRM_HEAD];
-	char			 state[16], *nl;
-	unsigned long long	 id;
-	long long		 deadline;
-	size_t			 len;
-	int			 fd, i, serrno;
+	int			 fd, serrno;
 
 	memset(cf, 0, sizeof(*cf));
-	if ((fd = open(CONFIRM_RECORD, O_RDONLY | O_CLOEXEC)) == -1)
-		return (errno == ENOENT ? 0 : -1);
-	if (fstat(fd, &sb) == -1)
-		goto fail;
-	len = sb.st_size < CONFIRM_HEAD ? sb.st_size : CONFIRM_HEAD;
-	if (readall(fd, head, len, 0) == -1)
-		goto fail;
-	head[len] = '\0';
-	if ((nl = memchr(head, '\n', len)) == NULL)
-		goto bad;
-	*nl = '\0';
-	if (sscanf(head, "%15s %llx %lld %d %d %zu", state, &id, &deadline,
-	    &cf->attempts, &cf->demoted, &cf->backlen) != 6)
-		goto bad;
-	/* exactly as HEAD_FORMAT writes it */
-	snprintf(canon, sizeof(canon), HEAD_FORMAT, state, id, deadline,
-	    cf->attempts, cf->demoted, cf->backlen);
-	if (strcmp(canon, head) != 0 || id == 0 || deadline <= 0 ||
-	    cf->attempts < 0 || (cf->demoted != 0 &&
-	    cf->demoted != 1) || cf->backlen > NSHD_PART ||
-	    (nl - head) + 1 + (off_t)cf->backlen != sb.st_size)
-		goto bad;
-	for (i = CONFIRM_WAITING; i <= CONFIRM_FAILED; i++)
-		if (strcmp(state, confirm_states[i]) == 0)
-			cf->state = i;
-	if (cf->state == CONFIRM_NONE)
-		goto bad;
-	cf->id = id;
-	cf->deadline = deadline;
-	if (whole) {
-		if ((cf->back = malloc(cf->backlen + 1)) == NULL ||
-		    readall(fd, cf->back, cf->backlen, (nl - head) + 1) == -1)
-			goto fail;
-		cf->back[cf->backlen] = '\0';
+	if (kept_error != 0) {
+		errno = kept_error;
+		return (-1);
 	}
+	/* read again if asked for, or if it could not be the last time */
+	if (kept.state == CONFIRM_NONE || (!whole && kept_unread == 0)) {
+		*cf = kept;
+		return (0);
+	}
+	/* the configuration after the head line, as system wrote it */
+	if ((fd = open(CONFIRM_RECORD, O_RDONLY | O_CLOEXEC)) == -1) {
+		kept_unread = errno;
+		return (-1);
+	}
+	*cf = kept;
+	if ((cf->back = malloc(cf->backlen + 1)) == NULL ||
+	    readall(fd, cf->back, cf->backlen, kept_head) == -1 ||
+	    fstat(fd, &sb) == -1)
+		goto fail;
+	if ((off_t)(kept_head + kept.backlen) != sb.st_size)
+		goto bad;
+	cf->back[cf->backlen] = '\0';
 	close(fd);
+	kept_unread = 0;
+	if (!whole)
+		confirm_free(cf);
 	return (0);
  bad:
 	errno = EFTYPE;
@@ -117,7 +130,7 @@ confirm_read(struct confirm *cf, int whole)
 	close(fd);
 	confirm_free(cf);
 	cf->state = CONFIRM_NONE;
-	errno = serrno;
+	kept_unread = errno = serrno;
 	return (-1);
 }
 
@@ -128,7 +141,7 @@ confirm_write(struct confirm *cf)
 	char	 tmp[] = CONFIRM_RECORD ".XXXXXXXXXX", head[CONFIRM_HEAD];
 	int	 fd, len, serrno;
 
-	len = snprintf(head, sizeof(head), HEAD_FORMAT "\n",
+	len = snprintf(head, sizeof(head), NSHD_CONFIRM_FORMAT "\n",
 	    confirm_states[cf->state], (unsigned long long)cf->id,
 	    (long long)cf->deadline, cf->attempts, cf->demoted, cf->backlen);
 	if (mkdir(NSHDB, 0700) == -1 && errno != EEXIST)
@@ -145,6 +158,7 @@ confirm_write(struct confirm *cf)
 	fd = -1;
 	if (rename(tmp, CONFIRM_RECORD) == -1)
 		goto fail;
+	confirm_kept(cf, len, 0);
 	return (dirsync());
  fail:
 	serrno = errno;
@@ -159,9 +173,14 @@ confirm_write(struct confirm *cf)
 int
 confirm_clear(void)
 {
-	if (unlink(CONFIRM_RECORD) == -1)
-		return (errno == ENOENT ? 0 : -1);
-	return (dirsync());
+	struct confirm	 none;
+	int		 r;
+
+	if ((r = unlink(CONFIRM_RECORD)) == -1 && errno != ENOENT)
+		return (-1);
+	memset(&none, 0, sizeof(none));
+	confirm_kept(&none, 0, 0);
+	return (r == -1 ? 0 : dirsync());
 }
 
 void
