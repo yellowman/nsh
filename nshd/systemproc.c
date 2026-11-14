@@ -152,8 +152,9 @@
  * and starts a JOB_RECOVER job, which makes the running configuration
  * match the rollback configuration; then it promotes carp again. A
  * rollback that changes login users or classes first waits for config
- * to take no new session, as such a commit's script does, but ends
- * none. If the job fails or cannot start, system's timer tries again
+ * to lower or end the sessions that would lose a permission by it, and
+ * to take no new session, as such a commit's script does. If the job
+ * fails or cannot start, system's timer tries again
  * CONFIRM_RETRY seconds later, up to CONFIRM_ATTEMPTS attempts in all;
  * then the record is marked failed, and carp stays demoted. If the
  * record cannot be read or removed, the timer tries again too, and that
@@ -659,7 +660,8 @@ static void	system_unarm(void);
 static void	system_kept(void);
 static void	system_confirm(int, short, void *);
 static void	system_recover(struct confirm *);
-static void	system_recovering(struct confirm *, int, int);
+static void	system_recovering(struct confirm *, int, int,
+		    struct login_line *, uint32_t);
 static void	system_attempted(int);
 static void	confirm_retry(void);
 static void	system_taken(struct confirm *, const char *);
@@ -686,6 +688,7 @@ static void	system_parse_text(struct job *, int, char *, size_t);
 static void	system_parse(struct job *);
 static void	system_parsed(struct job *, int32_t);
 static int	system_began(struct job *);
+static struct login_line *parsed_logins(char *, size_t, size_t, uint32_t);
 static void	boot_parsed(struct job *, int32_t);
 static int	boot_planned(struct job *);
 static void	system_printed(uint32_t, int32_t);
@@ -2754,7 +2757,7 @@ system_recover(struct confirm *cf)
 	size_t		 len;
 
 	if ((runs = system_running(&len)) == NULL) {
-		system_recovering(cf, -1, 1);
+		system_recovering(cf, -1, 1, NULL, 0);
 		return;
 	}
 	j = system_parse_job(0, NSHD_PARSE_BACK);
@@ -2769,7 +2772,8 @@ system_recover(struct confirm *cf)
 /*
  * The rollback cf describes, as the parser read it: r 1 if what runs is
  * cf's rollback configuration, 0 if not, or -1 if it could not say;
- * logins 0 if they do not differ in login users or classes. If it is,
+ * logins 0 if they do not differ in login users or classes, else after
+ * holds the n login lines the rollback goes back to. If it is,
  * as when the previous system process stopped after its last attempt
  * succeeded, only clear the record. If every attempt is used, mark the
  * rollback failed. Otherwise demote carp unless that was done already,
@@ -2777,7 +2781,8 @@ system_recover(struct confirm *cf)
  * configuration.
  */
 static void
-system_recovering(struct confirm *cf, int r, int logins)
+system_recovering(struct confirm *cf, int r, int logins,
+    struct login_line *after, uint32_t n)
 {
 	struct job	*j;
 
@@ -2803,15 +2808,16 @@ system_recovering(struct confirm *cf, int r, int logins)
 	cf->back = NULL;
 	/*
 	 * one that changes login users or classes, or may, waits for config
-	 * to take no new session, if config is there; it ends none. As
-	 * nshd starts, config is not there yet, and no session is
+	 * to lower or end the sessions that would lose a permission by it,
+	 * as a commit's script does, if config is there. As nshd starts,
+	 * config is not there yet, and no session is
 	 */
 	if (logins == 0 || links[CONFIG].iev == NULL || !started) {
 		system_job(j);
 		return;
 	}
 	system_job_wait(j);
-	system_revoking(0, 1, NULL, 0);
+	system_revoking(0, 1, after, n);
 }
 
 /*
@@ -2904,7 +2910,9 @@ system_went(int failed)
  * rollback, 0. config lowers the permissions of each session that would
  * lose one, as its permissions now and those after differ, to those
  * after, ends each that would lose its login, takes no new one, and says
- * so (system_go()). A session not logged in has none to lose, so each
+ * so (system_go()). A rollback whose lines the parser could not read
+ * has none, so each session has the permissions of a user no line names.
+ * A session not logged in has none to lose, so each
  * login being checked is stopped, refused, and none begins until the
  * change ends (system_login()). Or, without on, they have changed
  */
@@ -2923,12 +2931,8 @@ system_revoking(uint32_t id, int on, struct login_line *after, uint32_t n)
 		TAILQ_FOREACH(a, &attempts, entry)
 			system_auth_stop(a, "login users or classes are "
 			    "changing");
-	/*
-	 * a rollback, id 0, ends no session: it takes back a commit, and
-	 * system's own checks read the class as it is then
-	 */
 	TAILQ_FOREACH(cl, &clients, entry) {
-		if (!on || id == 0 || rv.n == NSHD_SESSIONS)
+		if (!on || rv.n == NSHD_SESSIONS)
 			break;
 		/* a web session not logged in has no login to lose */
 		if (cl->web && !cl->logged)
@@ -3955,8 +3959,10 @@ static void
 system_parsed(struct job *j, int32_t status)
 {
 	struct nshd_back	 b;
+	struct login_line	*l = NULL;
 	char			*a = NULL;
 	size_t			 len;
+	uint32_t		 n = 0;
 	int			 there = -1, logins = 1;
 
 	switch (j->parse.kind) {
@@ -3973,15 +3979,22 @@ system_parsed(struct job *j, int32_t status)
 		    system_began(j) == 0);
 		break;
 	case NSHD_PARSE_BACK:
-		if (status == 0 && parser_answer(j->answer, sizeof(b), &a,
-		    &len) == 0 && len == sizeof(b)) {
+		if (status == 0 && parser_answer(j->answer, sizeof(b) +
+		    NSHD_LOGINS * sizeof(*l), &a, &len) == 0 &&
+		    len >= sizeof(b)) {
 			memcpy(&b, a, sizeof(b));
+			l = parsed_logins(a, len, sizeof(b), b.nlogins);
+		}
+		/* an answer that is not one says nothing, and has no line */
+		if (l != NULL) {
 			there = b.there != 0;
 			logins = b.logins != 0;
+			n = b.nlogins;
 		}
 		free(a);
 		printed_log();
-		system_recovering(&j->cf, there, logins);
+		system_recovering(&j->cf, there, logins, l, n);
+		free(l);
 		confirm_free(&j->cf);
 		break;
 	case NSHD_PARSE_BOOT:
@@ -4010,26 +4023,18 @@ static int
 system_began(struct job *j)
 {
 	struct nshd_began	*ans = &begun->ans;
-	struct login_line	*l;
 	char			*a;
-	size_t			 len, n;
+	size_t			 len;
 
-	if (parser_answer(j->answer, sizeof(*ans) + NSHD_LOGINS * sizeof(*l),
-	    &a, &len) == -1)
+	if (parser_answer(j->answer, sizeof(*ans) + NSHD_LOGINS *
+	    sizeof(struct login_line), &a, &len) == -1)
 		return (-1);
 	if (len < sizeof(*ans))
 		goto bad;
 	memcpy(ans, a, sizeof(*ans));
-	if (ans->nlogins > NSHD_LOGINS || len - sizeof(*ans) !=
-	    ans->nlogins * sizeof(*l))
+	if ((begun->logins = parsed_logins(a, len, sizeof(*ans),
+	    ans->nlogins)) == NULL)
 		goto bad;
-	if ((l = begun->logins = calloc(ans->nlogins + 1, sizeof(*l))) == NULL)
-		fatal(NULL);
-	memcpy(l, a + sizeof(*ans), ans->nlogins * sizeof(*l));
-	for (n = 0; n < ans->nlogins; n++) {
-		l[n].name[sizeof(l[n].name) - 1] = '\0';
-		l[n].class[sizeof(l[n].class) - 1] = '\0';
-	}
 	begun->nlogins = ans->nlogins;
 	free(a);
 	if (!ans->based) {
@@ -4043,6 +4048,28 @@ system_began(struct job *j)
 	printf("%% nshd: the parser's answer to BEGIN is not one\n");
 	free(a);
 	return (-1);
+}
+
+/*
+ * The n login lines after the first off bytes of a, a parser's answer of
+ * len bytes, each name ended; NULL if a does not hold that many
+ */
+static struct login_line *
+parsed_logins(char *a, size_t len, size_t off, uint32_t n)
+{
+	struct login_line	*l;
+	uint32_t		 i;
+
+	if (n > NSHD_LOGINS || len - off != n * sizeof(*l))
+		return (NULL);
+	if ((l = calloc(n + 1, sizeof(*l))) == NULL)
+		fatal(NULL);
+	memcpy(l, a + off, n * sizeof(*l));
+	for (i = 0; i < n; i++) {
+		l[i].name[sizeof(l[i].name) - 1] = '\0';
+		l[i].class[sizeof(l[i].class) - 1] = '\0';
+	}
+	return (l);
 }
 
 /* what nsh's code printed, to config, then how request id ended */

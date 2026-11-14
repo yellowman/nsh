@@ -200,17 +200,31 @@ parse_begin(struct nshd_parse *p, char **t)
 	return r;
 }
 
-/* BACK: whether now reads as the rollback's configuration */
+/*
+ * BACK: whether now reads as the rollback's configuration, and whether
+ * they differ in login users or classes. Then the login lines it goes
+ * back to, for system to see who would lose a permission
+ */
 static int
 parse_back(struct nshd_parse *p, char **t)
 {
 	struct nshd_back	 b;
+	struct login_line	*l = NULL;
+	int			 r = -1;
 
+	memset(&b, 0, sizeof(b));
 	if ((b.there = commit_reads(t[0], p->len[0], t[1], p->len[1])) == -1 ||
 	    (b.logins = commit_logins(t[0], p->len[0], t[1],
 	    p->len[1])) == -1)
 		return -1;
-	return parser_write(&b, sizeof(b));
+	if (b.logins && login_lines(t[1], p->len[1], NSHD_LOGINS, &l,
+	    &b.nlogins) == -1)
+		return -1;
+	if (parser_write(&b, sizeof(b)) == 0 &&
+	    parser_write(l, b.nlogins * sizeof(*l)) == 0)
+		r = 0;
+	free(l);
+	return r;
 }
 
 /* PLAN: the script that makes now read as what is wanted */

@@ -808,12 +808,8 @@ that loses admin may then only leave it, and
 .Nm
 allows the exec permission, which it checks itself, until it connects
 again.
-A rollback of an unconfirmed commit that changes them leaves every
-session running:
-a permission it takes away is refused at once where nshd checks the
-class as it runs a command, and everywhere once
-.Nm
-connects again.
+A rollback of an unconfirmed commit that changes them does the same,
+by the lines it goes back to.
 A permission its class gains counts at once where nshd checks the class
 as it runs a command, as for the admin lines of a commit, and everywhere
 once

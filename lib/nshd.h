@@ -433,11 +433,12 @@ struct nshd_records {
 	int64_t		boottime;
 };
 
-/* BACK's answer */
+/* BACK's answer, then nlogins of struct login_line, the configuration's */
 struct nshd_back {
 	int32_t		there;		/* now reads as the configuration */
 	int32_t		logins;		/* they differ in login users or
 					   classes */
+	uint32_t	nlogins;
 };
 
 /*

@@ -146,18 +146,16 @@ The commit runs to its end, and
 .Cm show rollback
 says how it went.
 A rollback of an unconfirmed commit that changes login users or
-classes leaves every session running, as it takes back a commit: a
-permission it
-takes away counts at once in system's checks, and in config's once the
-session connects again.
+classes does the same before it runs, by the login lines it goes back
+to.
 system decides which commits and rollbacks change them, by comparing
 the login lines of the configuration before with those of the
 configuration after.
 It decides which sessions would lose a permission by comparing the
 permissions each session has now with those its user would have by the
 login lines after.
-Such a commit runs once config has lowered those sessions' permissions,
-and a rollback once config says it takes no new session.
+Such a commit or rollback runs once config has lowered those sessions'
+permissions.
 If config has not done so within 10 seconds, system acts as it does
 when config exits, as below.
 Until the commit or rollback ends, a web login is refused, and the web
