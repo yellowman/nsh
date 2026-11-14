@@ -135,7 +135,7 @@ When run without any command line arguments,
 .Nm
 presents an interactive shell to the user.
 The user's login class decides what the user may do in it (see
-.Sx Prompts, login classes and permissions ) .
+.Sx Login classes and permissions ) .
 .Pp
 All
 .Nm
@@ -239,10 +239,9 @@ nsh(config)# pf disable
 %pf disabled
 .Ed
 .El
-.Ss Prompts, login classes and permissions
+.Ss Prompts
 .Tg prompt
 .Tg privileged
-.Ic Prompts
 The prompt is the machine's name, then the mode and routing table in
 parentheses, if there are any.
 It ends with
@@ -250,20 +249,20 @@ It ends with
 outside configure and
 .Ql #
 in configure, and a space.
-.Bl -dash
-.It
-e.g. the prompt outside configure, in configure private, and in an
-interface's mode
+Outside configure, in configure private, and in an interface's mode:
 .Bd -literal -offset indent
 firewall.example.com>
 firewall.example.com(config-private)#
 firewall.example.com(interface-em0)#
 .Ed
-.El
 .Pp
+In this manual's examples the machine is called nsh:
+.Bd -literal -offset indent
+nsh>
+.Ed
+.Ss Login classes and permissions
 .Tg class
 .Tg permission
-.Ic Login classes
 When
 .Xr nshd 8
 runs and the user may use its socket, as root and the group nshadmin
@@ -327,6 +326,7 @@ nshd shows the password hashes of
 .Cm login user
 lines, in a configuration, a diff or a commit notice, only to a session
 with admin.
+.Pp
 Admin is also needed to commit a change to what runs a command as root,
 reads a file as root, or decides who may log in:
 .Cm login class
@@ -356,12 +356,14 @@ daemon's rules with include.
 Each of these runs a command as root, reads a file it names, or has a
 daemon that starts as root write a file or make a socket where the
 line says.
+.Pp
 The check reads each line as the daemon's parser does.
 So it finds a word that a backslash hides in part, or a word spread
 over a line continued with a backslash, and it ignores a word in a
 comment.
 A commit without admin may keep such a line as it is in the running
 configuration.
+.Pp
 A user with admin can gain root through these lines, so give admin
 only to a user who may have root.
 .It Cm exec
@@ -379,9 +381,11 @@ and
 which need operate, and
 .Ic clear ,
 which anyone may run.
+.Pp
 .Nm
 checks exec itself, so exec limits only a user whose login shell is
 .Nm .
+.Pp
 Without exec,
 .Nm
 unbinds each key of the line editor that runs
@@ -408,7 +412,7 @@ line names, with that user's password, and has the
 permissions of the user's class, as when the user logs in with
 .Xr ssh 1 .
 It never logs in as root, or as any other account with uid 0.
-nshd allows a session only what its class allows.
+.Ss Without nshd
 Where nshd does not run, or the user may not use its read-write socket,
 .Nm
 has only the commands it runs itself, except those that need nshd's
@@ -417,33 +421,33 @@ Of the shows, it runs those that anyone may see, which nshd's read-only
 socket answers; where nshd does not run,
 .Ic show version
 is the only show that works.
-.Pp
+.Ss Configuration mode
 .Tg configure
 .Tg config
-.Ic Configuration mode
 The
 .Cm configure
 commands let a user change the system's configuration, as the user's
 class allows.
-.Bl -dash
-.It
-e.g. a user entering configure private on a system called
-hostname.nsh.org
+There are four, and a session leaves one before it enters another.
+.Bl -column "configure exclusive" "(config-exclusive)#" -offset indent
+.It Sy Command Ta Sy Prompt Ta Sy Candidate
+.It Cm configure private Ta (config-private)# Ta the session's own
+.It Cm configure Ta (config)# Ta shared by its sessions
+.It Cm configure exclusive Ta (config-exclusive)# Ta shared, and locked
+.It Cm configure terminal Ta (config-terminal)# Ta none: each line is committed at once
+.El
 .Bd -literal -offset indent
 % NSH v1.1
 hostname.nsh.org> configure private
 hostname.nsh.org(config-private)#
 .Ed
-.El
-.Pp
+.Ss configure private
 .Tg private
 .Cm configure private
 enters configuration mode with a candidate configuration that belongs
 to this session.
 The candidate starts as the running configuration, and supported
 commands change the candidate instead of the system.
-The prompt shows
-.Ql (config-private)# .
 Commands that do not support a candidate yet are refused with a message.
 A line takes an address in numeric form only, never a host name.
 Supported commands refuse what the kernel would refuse, and settings
@@ -469,7 +473,7 @@ saves it.
 To leave configuration mode, first commit the candidate's changes or
 discard them with
 .Cm rollback .
-.Pp
+.Ss What runs where
 .Cm configure private
 is part of
 .Nm Ns 's
@@ -496,6 +500,7 @@ The daemon's test runs at
 and
 .Cm commit check ,
 not as the editor exits.
+.Pp
 .Cm commit ,
 .Cm rollback ,
 .Cm show candidate-config
@@ -508,12 +513,13 @@ It keeps the deadline of a
 itself, whether or not
 .Nm
 still runs.
+.Pp
 An interrupt while nshd replies closes the session, so the session
 leaves configure private, and its candidate is lost.
 nshd finishes the request, and
 .Nm
 opens a new session when a command needs one.
-.Pp
+.Ss configure and configure exclusive
 .Tg exclusive
 .Cm configure
 is also a session with nshd, but all sessions in
@@ -523,21 +529,18 @@ Each session sees what the others change.
 A session that leaves configure leaves its changes for the others, and
 .Cm commit
 commits what all of them changed.
-The prompt shows
-.Ql (config)# .
 nshd keeps the shared candidate on disk, so it survives nshd stopping
 and starting again.
+.Pp
 .Cm configure exclusive
 is
 .Cm configure
 in which no other session may change the shared candidate or commit.
-The prompt shows
-.Ql (config-exclusive)# .
 It is refused while another session has it, or while another user has
 uncommitted changes to the shared candidate.
 The refusal names those users by uid.
 Leaving it discards the uncommitted changes.
-.Pp
+.Ss configure terminal
 .Tg terminal
 .Cm configure terminal
 is a session with nshd whose lines change the system as they are
@@ -546,8 +549,6 @@ nshd commits each line that changes the configuration at once, to the
 running configuration of that moment.
 The line is applied, checked, and undone if it does not take effect,
 but it is not saved.
-The prompt shows
-.Ql (config-terminal)# .
 There,
 .Cm commit
 saves the running configuration, and there is nothing to
@@ -557,18 +558,6 @@ A line is refused while another session commits or has
 and while a
 .Cm commit confirmed
 waits to be confirmed.
-A session in one configure mode leaves it before it enters another.
-.Pp
-For the purposes of this manual, any examples the machine is called
-.Nm
-.
-.Bl -dash
-.It
-E.g. the prompt appearing in examples in this manual
-.Bd -literal -offset indent
-nsh>
-.Ed
-.El
 .Sh INTERACTIVE COMMANDS
 .Tg help
 .Ic ? | help
@@ -754,7 +743,7 @@ Define a login class, a set of permissions:
 and
 .Cm exec
 (see
-.Sx Prompts, login classes and permissions ) .
+.Sx Login classes and permissions ) .
 Three classes are built in and cannot be changed:
 .Cm read-only
 has view,
@@ -2425,7 +2414,7 @@ Otherwise,
 .Nm
 refuses to reboot while there are unsaved changes.
 The command needs the operate permission (see
-.Sx Prompts, login classes and permissions ) .
+.Sx Login classes and permissions ) .
 .Bl -dash
 .It
 E.g. restart the system
