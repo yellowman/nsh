@@ -92,6 +92,8 @@
 #include <sys/proc.h>
 #include <sys/wait.h>
 
+#include <net/if.h>
+
 #include <err.h>
 #include <errno.h>
 #include <event.h>

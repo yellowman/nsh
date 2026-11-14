@@ -282,7 +282,7 @@ static struct session		*exclusive;	/* in configure exclusive */
 static uid_t			*editors;	/* who changed shared since */
 static size_t			 neditors;
 static unsigned int		 shared_edits;	/* its edits before a request */
-static char			 held[64];	/* cand_held's text, if held */
+static char			 held[64];	/* why a candidate is held */
 static uint32_t			 keep_sent;	/* last KEEP sent to archive */
 static uint32_t			 keep_done;	/* last KEEP archive answered */
 static int			 keep_loaded;	/* archive's text was loaded */
@@ -2210,7 +2210,7 @@ shared_hold(struct session *sp)
 		shared_edits = cand_shared_edits(shared);
 		return;
 	}
-	cand_held = held;
+	sp->st->held = held;
 }
 
 /*
@@ -2223,8 +2223,8 @@ shared_done(struct session *sp)
 	uid_t	*e;
 	size_t	 i;
 
-	if (cand_held != NULL) {
-		cand_held = NULL;
+	if (sp->st != NULL && sp->st->held != NULL) {
+		sp->st->held = NULL;
 		return;
 	}
 	if ((sp->how != NSHD_SHARED && sp->how != NSHD_EXCLUSIVE) ||

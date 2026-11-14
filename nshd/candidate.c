@@ -39,8 +39,9 @@
  * config passes it to what runs the session's request, down to the
  * functions here.  A session attached to the shared one leaves it to
  * the others when it leaves configure (cand_detach()).  While another
- * session holds it, nshd's config sets cand_held, and no edit or
- * rollback changes it.
+ * session holds it, nshd's config says why in the struct cand of a
+ * session that shares it (held), and no edit or rollback of that
+ * session's changes it.
  *
  * A command's table row (cand) says how it takes part.  A CAND_EDIT
  * command's apply function is passed the candidate, and calls
@@ -73,8 +74,6 @@
 #include "kfacts.h"
 #include "session.h"
 
-int cand_rtable;			/* rtable for rtable settings, or 0 */
-const char *cand_held;			/* why it may not change now, or NULL */
 
 /* a top-level statement the journal changes, as it was before the change */
 struct cand_was {
@@ -95,12 +94,6 @@ struct cand_state {
 	struct cand_was	*was;
 	size_t		 nwas;
 	unsigned int	 nedits;	/* number of edits and rollbacks */
-};
-
-/* what a session keeps of this file (session.c) */
-struct sglobal candidate_sglobals[] = {
-	SGLOBAL(cand_rtable),
-	{ NULL }
 };
 
 static int cand_record(struct cand *, char *, struct sedit *);
@@ -137,7 +130,6 @@ cand_begin(struct cand *cand)
 	} else if (cand->cur->tree == NULL && cand_tree(cand) == NULL)
 		return -1;
 	cand->on = 1;
-	cand_rtable = 0;
 	return 0;
 }
 
@@ -168,7 +160,7 @@ cand_detach(struct cand *cand)
 {
 	cand->cur = cand->own;
 	cand->on = 0;
-	cand_rtable = 0;
+	cand->rtable = 0;
 }
 
 /* Free all that c holds: it is a candidate not begun again */
@@ -382,7 +374,7 @@ cand_end(struct cand *cand)
 {
 	cand_drop(cand->cur);
 	cand->on = 0;
-	cand_rtable = 0;
+	cand->rtable = 0;
 }
 
 /* Has this session changed its candidate? */
@@ -407,7 +399,7 @@ cand_setting(struct cand *cand, int state, const char *fmt, ...)
 	int r;
 
 	va_start(ap, fmt);
-	r = cand_vsetting(cand, ifname, bridge, state, fmt, ap);
+	r = cand_vsetting(cand, cand->ifname, cand->bridge, state, fmt, ap);
 	va_end(ap);
 	return r;
 }
@@ -439,14 +431,14 @@ cand_line(struct cand *cand, char *name, size_t n)
 {
 	char block[sizeof("interface ") + IFNAMSIZ], rtblock[96];
 
-	if (ifname[0] == '\0') {
-		if (cand_rtable != 0 && setting_has(CTX_RTABLE, name) &&
+	if (cand->ifname[0] == '\0') {
+		if (cand->rtable != 0 && setting_has(CTX_RTABLE, name) &&
 		    cand_rtblock(cand, rtblock, sizeof(rtblock),
-		    cand_rtable) == 0)
+		    cand->rtable) == 0)
 			return conftree_line(cand->cur->tree, rtblock, name, n);
 		return conftree_line(cand->cur->tree, NULL, name, n);
 	}
-	cand_block(block, sizeof(block), ifname, bridge);
+	cand_block(block, sizeof(block), cand->ifname, cand->bridge);
 	return conftree_line(cand->cur->tree, block, name, n);
 }
 
@@ -724,7 +716,7 @@ cand_rtable_set(struct cand *cand, int set, int table, char *name)
 		}
 		if (cand_set(cand, CTX_TOP, ST_OFF, NULL, block) == -1)
 			return -1;
-		cand_rtable = 0;
+		cand->rtable = 0;
 		return 0;
 	}
 	if (table != 0) {
@@ -746,7 +738,7 @@ cand_rtable_set(struct cand *cand, int set, int table, char *name)
 				return -1;
 		}
 	}
-	cand_rtable = table;
+	cand->rtable = table;
 	return 0;
 }
 
@@ -797,7 +789,8 @@ cand_hasrtable(struct cand *cand, int table)
 static char *
 cand_rtcur(struct cand *cand, char *buf, size_t len)
 {
-	if (cand_rtable == 0 || cand_rtblock(cand, buf, len, cand_rtable) == -1)
+	if (cand->rtable == 0 ||
+	    cand_rtblock(cand, buf, len, cand->rtable) == -1)
 		return NULL;
 	return buf;
 }
@@ -931,8 +924,8 @@ cand_restart(struct cand *cand, struct cnode *base, int n)
 	struct cnode *t;
 	struct cjournal *j;
 
-	if (cand_held != NULL) {
-		printf("%% %s\n", cand_held);
+	if (cand->held != NULL) {
+		printf("%% %s\n", cand->held);
 		conftree_free(base);
 		return -1;
 	}
@@ -990,9 +983,9 @@ cand_vsetting(struct cand *cand, char *name, int isbridge, int state,
 		return -1;
 	}
 	if (name[0] == '\0') {
-		if (cand_rtable != 0 && setting_has(CTX_RTABLE, line) &&
+		if (cand->rtable != 0 && setting_has(CTX_RTABLE, line) &&
 		    cand_rtblock(cand, rtblock, sizeof(rtblock),
-		    cand_rtable) == 0)
+		    cand->rtable) == 0)
 			return cand_set(cand, CTX_RTABLE, state, rtblock, line);
 		return cand_set(cand, CTX_TOP, state, NULL, line);
 	}
@@ -1025,8 +1018,8 @@ cand_record(struct cand *cand, char *block, struct sedit *e)
 {
 	int r;
 
-	if (cand_held != NULL) {
-		printf("%% %s\n", cand_held);
+	if (cand->held != NULL) {
+		printf("%% %s\n", cand->held);
 		return -1;
 	}
 	if (cand_remember(cand, block, e) == -1)

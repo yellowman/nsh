@@ -87,18 +87,10 @@
 #include "nshrows.h"
 
 char hname[HSIZE];
-char ifname[IFNAMSIZ];		/* the interface whose mode a session is in */
 char next_ifname[IFNAMSIZ];	/* switch interfaces in interface context */
 
 static int in_rc;		/* a commit's edits run */
-static int rc_head;		/* and this one is a block's head */
 static struct cnode *snapshot;	/* config's running configuration */
-
-/* globals of this file each session has a copy of (session.c) */
-struct sglobal commands_sglobals[] = {
-	SGLOBAL(ifname),
-	{ NULL }
-};
 
 static int	exitconfig(int, char **, ...);
 static int	rtable(int, char**, ...);
@@ -1001,17 +993,19 @@ size_t Bridgelist_nitems = nitems(Bridgelist);
 /*
  * command handler for interface and bridge modes
  *
- * For a line of configure (cmdline()), the mode is entered, and stays:
- * the global ifname buffer has the name of the interface being
- * configured, and bridge says whether it is a bridge, so the lines that
- * follow can tell that an interface's mode is active, and whose.
- * int_exit() leaves it. With rc_head, for the head of a block in a
- * commit's edits, it only creates the interface, or with no, destroys it.
+ * For a line of configure (cmdline()), the candidate makes the
+ * interface's block, or with no removes it, and the session's mode is
+ * that interface's, and stays: cand has the name of the interface being
+ * configured, and whether it is a bridge, so the lines that follow can
+ * tell that an interface's mode is active, and whose. int_exit() leaves
+ * it. With no candidate, for the head of a block in a commit's edits, it
+ * only creates the interface, or with no, destroys it.
  */
 static int
 interface(int argc, char **argv, ...)
 {
-	int ifs, set = 1, r;
+	char ifn[IFNAMSIZ];
+	int ifs, set = 1, r = 0;
 	char *tmp;
 	char *ifunit = NULL;
 	struct ifreq ifr;
@@ -1044,86 +1038,62 @@ interface(int argc, char **argv, ...)
 		return -1;
 	}
 
-	strlcpy(ifname, tmp, IFNAMSIZ);
+	strlcpy(ifn, tmp, IFNAMSIZ);
 	if (ifunit) {
 		const char *errstr;
-		size_t len = strlen(ifname);
+		size_t len = strlen(ifn);
 		strtonum(ifunit, 0, INT_MAX, &errstr);
 		if (errstr) {
 			printf("%% interface unit %s is %s\n", ifunit, errstr);
-			ifname[0] = '\0';
 			return -1;
 		}
-		if (len > 0 && isdigit((unsigned char)(ifname[len - 1]))) {
+		if (len > 0 && isdigit((unsigned char)(ifn[len - 1]))) {
 			printf("%% interface unit %s is redundant\n", ifunit);
-			ifname[0] = '\0';
 			return -1;
 		}
-		strlcat(ifname, ifunit, sizeof(ifname));
+		strlcat(ifn, ifunit, sizeof(ifn));
 		printf("%% Using interface \"%s\", not \"%s %s\"\n",
-		    ifname, tmp, ifunit);
-	}
-	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
-
-	/* configure private asks the kernel only through kfacts.c */
-	if (cand != NULL)
-		ifs = -1;
-	else if ((ifs = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-		printf("%% socket failed: %s\n", strerror(errno));
-		ifname[0] = '\0';
-		return -1;
+		    ifn, tmp, ifunit);
 	}
 
-	if (cand != NULL &&
-	    (r = cand_interface(cand, set, ifname, &bridge)) != 0) {
-		ifname[0] = '\0';
-		close(ifs);
+	/* a line of configure: its block, and the session's mode */
+	if (cand != NULL) {
+		r = cand_interface(cand, set, ifn, &cand->bridge);
+		if (r == 0)
+			strlcpy(cand->ifname, ifn, sizeof(cand->ifname));
 		return r == -1 ? -1 : 0;
 	}
 
-	if (cand == NULL && !is_valid_ifname(ifname)) {
+	strlcpy(ifr.ifr_name, ifn, sizeof(ifr.ifr_name));
+	if ((ifs = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+		printf("%% socket failed: %s\n", strerror(errno));
+		return -1;
+	}
+
+	if (!is_valid_ifname(ifn)) {
 		if (set == 0) {
-			printf("%% interface %s not found\n", ifname);
+			printf("%% interface %s not found\n", ifn);
 			close(ifs);
 			return -1;
 		}
 		if (ioctl(ifs, SIOCIFCREATE, &ifr) == -1) {
 			if (errno == EINVAL)
-				printf("%% interface %s not found\n", ifname);
+				printf("%% interface %s not found\n", ifn);
 			else
 				printf("%% unable to create interface %s: %s\n",
-				    ifname, strerror(errno));
-			ifname[0] = '\0';
+				    ifn, strerror(errno));
 			close(ifs);
 			return -1;
 		}
 	}
 
-	if (cand == NULL && set == 0) {
-		r = 0;
-		if (ioctl(ifs, SIOCIFDESTROY, &ifr) == -1) {
-			printf("%% unable to remove interface %s: %s\n",
-			    ifname, strerror(errno));
-			r = -1;
-		}
-		ifname[0] = '\0';
-		close(ifs);
-		return r;
+	if (set == 0 && ioctl(ifs, SIOCIFDESTROY, &ifr) == -1) {
+		printf("%% unable to remove interface %s: %s\n", ifn,
+		    strerror(errno));
+		r = -1;
 	}
-
-	/* a block's head in a commit only creates a cloned interface */
-	if (rc_head) {
-		ifname[0] = '\0';
-		close(ifs);
-		return 0;
-	}
-
-	if (cand == NULL)
-		bridge = is_bridge(ifs, ifname);
-
-	/* the mode is entered, and stays (cmdline()) */
 	close(ifs);
-	return 0;
+	return r;
 }
 
 static int
@@ -1559,7 +1529,7 @@ cmdline(char *text, struct cand *cand)
 	}
 	if (margv[0] == NULL)
 		return 0;
-	if (ifname[0] != '\0')
+	if (cand->ifname[0] != '\0')
 		return cmdline_if(cand);
 	if ((p = NO_ARG(margv[0]) ? margv[1] : margv[0]) == NULL ||
 	    (c = getcmd(p)) == 0) {
@@ -1574,7 +1544,7 @@ cmdline(char *text, struct cand *cand)
 		printf("%% Invalid command: %s %s\n", margv[0], margv[1]);
 		return -1;
 	}
-	if (c->needconfig != 0 && config_mode != 1) {
+	if (c->needconfig != 0 && cand->config != 1) {
 		printf("%% Command requires configure mode\n");
 		return -1;
 	}
@@ -1602,7 +1572,7 @@ cmdline_if(struct cand *cand)
 
 	if ((p = NO_ARG(margv[0]) ? margv[1] : margv[0]) != NULL)
 		i = (struct intlist *)genget(p,
-		    (char **)(bridge ? Bridgelist : Intlist),
+		    (char **)(cand->bridge ? Bridgelist : Intlist),
 		    sizeof(struct intlist));
 	if (Ambiguous(i)) {
 		printf("%% Ambiguous command\n");
@@ -1618,16 +1588,16 @@ cmdline_if(struct cand *cand)
 		printf("%% %s is not through nshd's configure\n", i->name);
 		return -1;
 	}
-	if ((r = (*i->handler)(margc, margv, ifname, -1,
+	if ((r = (*i->handler)(margc, margv, cand->ifname, -1,
 	    cand->on ? cand : NULL)) == 1) {
-		ifname[0] = '\0';
+		cand->ifname[0] = '\0';
 		return 0;
 	}
 	if (i->handler == int_interface && next_ifname[0] != '\0' &&
-	    strcmp(next_ifname, ifname) != 0) {
-		strlcpy(ifname, next_ifname, sizeof(ifname));
+	    strcmp(next_ifname, cand->ifname) != 0) {
+		strlcpy(cand->ifname, next_ifname, sizeof(cand->ifname));
 		memset(next_ifname, 0, sizeof(next_ifname));
-		bridge = cand_isbridge(cand, ifname);
+		cand->bridge = cand_isbridge(cand, cand->ifname);
 	}
 	return r;
 }
@@ -1682,14 +1652,14 @@ row_runs(char **table, int stlen, char *row, int *out, int *conf)
 int
 cmdexit(struct cand *cand)
 {
-	ifname[0] = '\0';
-	if (!config_mode) {
+	cand->ifname[0] = '\0';
+	if (!cand->config) {
 		printf("%% Configuration mode is already disabled\n");
 		return -1;
 	}
 	if (cand_leave(cand))
 		return -1;
-	config_mode = 0;
+	cand->config = 0;
 	return 0;
 }
 
@@ -2213,17 +2183,11 @@ int
 conf_run(int ctx, int n, int argc, char **argv, char *name)
 {
 	const struct confcmd *c = conf_cmd(ctx, n);
-	int r;
 
 	if (ctx != CTX_TOP)
 		return conf_run_if(ctx == CTX_BRIDGE, c, argc, argv, name);
-	if ((c->flags & (CF_IF | CF_BRIDGE)) == 0)
-		return (*c->handler)(argc, argv, NULL);
 	/* a block's head creates a cloned interface, or with no, destroys it */
-	rc_head = 1;
-	r = (*c->handler)(argc, argv, NULL);
-	rc_head = 0;
-	return r;
+	return (*c->handler)(argc, argv, NULL);
 }
 
 /*
@@ -2236,34 +2200,32 @@ static int
 conf_run_if(int bridgeline, const struct confcmd *c, int argc, char **argv,
     char *name)
 {
-	int ifs, r = -1, rt = cli_rtable;
+	char ifn[IFNAMSIZ];
+	int ifs, isbridge, r = -1, rt = cli_rtable;
 
-	if (strlcpy(ifname, name, sizeof(ifname)) >= sizeof(ifname)) {
+	if (strlcpy(ifn, name, sizeof(ifn)) >= sizeof(ifn)) {
 		printf("%% interface name too long\n");
-		ifname[0] = '\0';
 		return -1;
 	}
 	if ((ifs = socket(AF_INET, SOCK_DGRAM, 0)) == -1) {
 		printf("%% socket failed: %s\n", strerror(errno));
-		ifname[0] = '\0';
 		return -1;
 	}
 	/* its block's head made it, if it could */
-	if (!is_valid_ifname(ifname)) {
-		printf("%% interface %s not found\n", ifname);
+	if (!is_valid_ifname(ifn)) {
+		printf("%% interface %s not found\n", ifn);
 		goto done;
 	}
-	if ((bridge = is_bridge(ifs, ifname)) != bridgeline) {
-		printf("%% %s is %sa bridge\n", ifname, bridge ? "" : "not ");
+	if ((isbridge = is_bridge(ifs, ifn)) != bridgeline) {
+		printf("%% %s is %sa bridge\n", ifn, isbridge ? "" : "not ");
 		goto done;
 	}
 	if (cli_rtable != 0 && nsh_setrtable(0) == 0)
 		cli_rtable = 0;
-	r = (*c->handler)(argc, argv, ifname, ifs, NULL) == -1 ? -1 : 0;
+	r = (*c->handler)(argc, argv, ifn, ifs, NULL) == -1 ? -1 : 0;
 	if (rt != cli_rtable && nsh_setrtable(rt) == 0)
 		cli_rtable = rt;
 done:
-	ifname[0] = '\0';
 	close(ifs);
 	return r;
 }

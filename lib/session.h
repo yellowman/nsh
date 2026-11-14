@@ -15,32 +15,26 @@
  */
 
 
-/*
- * A session's state: each global a handler reads or writes and keeps
- * from one request to the next (globals.list's session class). Each is
- * named in an SGLOBAL table of the file that has it, and held by the
- * session while it is not running (session.c)
- */
-struct sglobal {
-	const char	*name;
-	void		*addr;
-	size_t		 size;
-};
-#define SGLOBAL(g)	{ #g, &(g), sizeof(g) }
-
 struct cnode;
 
 /*
- * A session's candidate: its own, and the one its lines edit, which is
- * its own or the one that sessions share. config has one for each
- * session and passes it to what runs the session's request. What
+ * A session's candidate and its mode: its own candidate, the one its
+ * lines edit, which is its own or the one that sessions share, and
+ * where in it they go. config has one for each session and passes it to
+ * what runs the session's request, so no session has another's. What
  * changes the host is passed none
  */
 struct cand {
 	struct cand_state *own;
 	struct cand_state *cur;		/* own, or the shared one */
-	int		 on;		/* in configure: its lines edit cur */
-	unsigned char	*mem;		/* its globals' bytes (session.c) */
+	int		 config;	/* in configure */
+	int		 on;		/* its lines edit cur */
+	int		 rtable;	/* the rtable its lines are for, or 0 */
+	int		 bridge;	/* ifname is a bridge */
+	char		 ifname[IFNAMSIZ];	/* the interface whose mode it
+						   is in, or "" */
+	const char	*held;		/* why cur may not change now, or
+					   NULL */
 };
 
 /* What a commit runs, from session_plan(), in the parts nshd sends */
@@ -81,9 +75,6 @@ extern int in_config;
 
 struct cand		*session_new(void);
 void			 session_free(struct cand *);
-void			 session_enter(struct cand *);
-void			 session_leave(struct cand *);
-const struct sglobal	*session_global(size_t);
 int			 session_running(char *, size_t);
 struct cand_state;
 int			 session_configure(struct cand *, struct cand_state *);
@@ -93,7 +84,6 @@ int			 cand_shared_changed(struct cand_state *);
 unsigned int		 cand_shared_edits(struct cand_state *);
 int			 cand_shared_write(struct cand_state *, FILE *);
 int			 cand_shared_read(struct cand_state *, char *, size_t);
-extern const char	*cand_held;
 int			 session_line(struct cand *, char *);
 int			 session_rules(struct cand *, char *, int, int,
 			    char *, size_t);

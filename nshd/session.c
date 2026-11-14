@@ -16,11 +16,10 @@
 
 
 /*
- * Sessions, each running with its own state: session_enter() puts a
- * session's globals in place, and session_leave() keeps them and puts
- * back the process's, as they were before any session. So no session
- * sees another's state, except a candidate that sessions share. nshd's
- * config uses the rest of this file to run configure private, and
+ * Sessions, each with its own state: a struct cand, its candidate and
+ * its mode, which nshd's config passes to what runs the session's
+ * request. So no session sees another's state, except a candidate that
+ * sessions share. config uses this file to run configure private, and
  * configure, whose sessions share one candidate, a request at a time,
  * and plans their commits, which system runs.
  */
@@ -44,73 +43,22 @@
 #error "PLAN_CLEARS is not MAXCLEARS"
 #endif
 
-extern struct sglobal candidate_sglobals[], commands_sglobals[];
-
-/*
- * globals of main.c. With those of candidate.c and commands.c, a
- * session keeps its mode and its candidate, and no more: a line and its
- * words are read and run within one request, and config runs no
- * commit's edits and no program. cli_rtable is the process's: a line
- * of a candidate sets the candidate's table, cand_rtable
- */
-static struct sglobal session_sglobals[] = {
-	SGLOBAL(config_mode), SGLOBAL(bridge),
-	{ NULL }
-};
-
 static int plan_text(struct plan *, int, struct cnode *);
 static int plan_script(struct plan *, struct cnode *, struct cnode *);
 
-static struct sglobal *sglobals[] = {
-	session_sglobals, candidate_sglobals, commands_sglobals
-};
-
-/* the globals as the process had them before the first session */
-static unsigned char *fresh;
-static size_t total;
-
-/* The globals into mem if out, else mem into the globals */
-static void
-copy(unsigned char *mem, int out)
-{
-	struct sglobal *g;
-	size_t i;
-
-	for (i = 0; i < nitems(sglobals); i++)
-		for (g = sglobals[i]; g->name != NULL; g++) {
-			if (out)
-				memcpy(mem, g->addr, g->size);
-			else
-				memcpy(g->addr, mem, g->size);
-			mem += g->size;
-		}
-}
-
-/* A new session, as the process was before the first, or NULL with errno set */
+/* A new session, outside configure, or NULL with errno set */
 struct cand *
 session_new(void)
 {
 	struct cand *s;
-	const struct sglobal *g;
-	size_t i;
 
-	if (fresh == NULL) {
-		for (i = 0; (g = session_global(i)) != NULL; i++)
-			total += g->size;
-		if ((fresh = malloc(total)) == NULL)
-			return NULL;
-		copy(fresh, 1);
-	}
 	if ((s = calloc(1, sizeof(*s))) == NULL)
 		return NULL;
-	if ((s->mem = malloc(total)) == NULL ||
-	    (s->own = cand_new()) == NULL) {
-		free(s->mem);
+	if ((s->own = cand_new()) == NULL) {
 		free(s);
 		return NULL;
 	}
 	s->cur = s->own;
-	memcpy(s->mem, fresh, total);
 	return s;
 }
 
@@ -120,29 +68,11 @@ session_free(struct cand *s)
 {
 	if (s == NULL)
 		return;
-	session_enter(s);
 	if (cand_attached(s))
 		cand_detach(s);
 	cand_end(s);
-	session_leave(s);
 	free(s->own);
-	free(s->mem);
 	free(s);
-}
-
-/* s's globals in place */
-void
-session_enter(struct cand *s)
-{
-	copy(s->mem, 0);
-}
-
-/* save s's globals */
-void
-session_leave(struct cand *s)
-{
-	copy(s->mem, 1);
-	copy(fresh, 0);
 }
 
 /*
@@ -171,12 +101,10 @@ session_configure(struct cand *s, struct cand_state *sh)
 {
 	int r;
 
-	session_enter(s);
 	if (sh != NULL && !s->on)
 		cand_attach(s, sh);
 	if ((r = cand_begin(s)) == 0)
-		config_mode = 1;
-	session_leave(s);
+		s->config = 1;
 	return r;
 }
 
@@ -184,12 +112,7 @@ session_configure(struct cand *s, struct cand_state *sh)
 int
 session_line(struct cand *s, char *line)
 {
-	int r;
-
-	session_enter(s);
-	r = cmdline(line, s);
-	session_leave(s);
-	return r;
+	return cmdline(line, s);
 }
 
 /*
@@ -200,12 +123,7 @@ int
 session_rules(struct cand *s, char *daemon, int rtable, int set,
     char *text, size_t len)
 {
-	int r;
-
-	session_enter(s);
-	r = ctl_cand_rules(daemon, rtable, set, text, len, s);
-	session_leave(s);
-	return r;
+	return ctl_cand_rules(daemon, rtable, set, text, len, s);
 }
 
 /*
@@ -303,13 +221,7 @@ cmplt_facts(struct facts_out *o)
 int
 session_exit(struct cand *s)
 {
-	int r = 0;
-
-	session_enter(s);
-	if (config_mode)
-		r = cmdexit(s);
-	session_leave(s);
-	return r;
+	return s->config ? cmdexit(s) : 0;
 }
 
 /*
@@ -321,12 +233,10 @@ void
 session_mode(struct cand *s, int *in, int *rtable,
     char *ifn, size_t len, int *isbridge)
 {
-	session_enter(s);
-	*in = config_mode && s->on;
-	*rtable = cand_rtable;
-	strlcpy(ifn, ifname, len);
-	*isbridge = bridge;
-	session_leave(s);
+	*in = s->config && s->on;
+	*rtable = s->rtable;
+	strlcpy(ifn, s->ifname, len);
+	*isbridge = s->bridge;
 }
 
 /*
@@ -342,7 +252,6 @@ session_diff(struct cand *s)
 	FILE *f;
 	int n = -1;
 
-	session_enter(s);
 	if (!s->on) {
 		printf("%% Not in configure\n");
 		goto done;
@@ -362,7 +271,6 @@ session_diff(struct cand *s)
 		printf("--- running-config\n+++ candidate-config\n%s", buf);
 done:
 	free(buf);
-	session_leave(s);
 	return n == -1 ? -1 : 0;
 }
 
@@ -370,12 +278,7 @@ done:
 int
 session_candidate(struct cand *s)
 {
-	int r;
-
-	session_enter(s);
-	r = cand_write(s, stdout);
-	session_leave(s);
-	return r;
+	return cand_write(s, stdout);
 }
 
 /*
@@ -402,7 +305,6 @@ session_plan(struct cand *s, int checking, int confirmed,
 		printf("%% session_plan: %s\n", strerror(errno));
 		return -1;
 	}
-	session_enter(s);
 	if ((t = cand_tree(s)) == NULL)
 		goto done;
 	if ((p->want = conftree_copy(t)) == NULL) {
@@ -438,7 +340,6 @@ session_plan(struct cand *s, int checking, int confirmed,
 	}
 	r = 0;
 done:
-	session_leave(s);
 	plan_free(p);
 	return r;
 }
@@ -560,13 +461,8 @@ plan_script(struct plan *p, struct cnode *from, struct cnode *to)
 int
 session_renew(struct cand *s)
 {
-	int r;
-
-	session_enter(s);
 	cand_end(s);
-	r = cand_begin(s);
-	session_leave(s);
-	return r;
+	return cand_begin(s);
 }
 
 /*
@@ -578,29 +474,20 @@ int
 session_load(struct cand *s, char *text, size_t len)
 {
 	struct cnode *t;
-	int r;
 
 	if (len == 0)
 		return 0;
 	if ((t = conftree_mem(text, len, "the configuration loaded",
 	    conf_mode, conf_ordered)) == NULL)
 		return -1;
-	session_enter(s);
-	r = cand_restart(s, t, -1);
-	session_leave(s);
-	return r;
+	return cand_restart(s, t, -1);
 }
 
 /* Whether s's candidate differs from how it began */
 int
 session_changed(struct cand *s)
 {
-	int r;
-
-	session_enter(s);
-	r = cand_changed(s);
-	session_leave(s);
-	return r;
+	return cand_changed(s);
 }
 
 /*
@@ -612,28 +499,10 @@ session_rollback(struct cand *s, char *text, size_t len, int n)
 {
 	struct cnode *base = NULL;
 	char what[32];
-	int r;
 
 	snprintf(what, sizeof(what), "rollback %d", n);
 	if (n > 0 && (base = conftree_mem(text, len, what, conf_mode,
 	    conf_ordered)) == NULL)
 		return -1;
-	session_enter(s);
-	r = cand_restart(s, base, n);
-	session_leave(s);
-	return r;
-}
-
-/* The nth global a session keeps, or NULL */
-const struct sglobal *
-session_global(size_t n)
-{
-	struct sglobal *g;
-	size_t i;
-
-	for (i = 0; i < nitems(sglobals); i++)
-		for (g = sglobals[i]; g->name != NULL; g++)
-			if (n-- == 0)
-				return g;
-	return NULL;
+	return cand_restart(s, base, n);
 }

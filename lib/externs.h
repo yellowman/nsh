@@ -29,8 +29,8 @@ extern char *margv[NARGS];	/* makeargv() args */
 extern int verbose;		/* is verbose mode on? */
 extern int editing;		/* is command line editing mode on? */
 extern int interactive_mode;	/* are we in interactive mode? */
-extern int config_mode;		/* are we in comfig mode? */
-extern int bridge;		/* are we in bridge mode (or interface mode?) */
+extern int config_mode;		/* nsh's: are we in config mode? */
+extern int bridge;		/* nsh's: in bridge mode (or interface mode?) */
 extern pid_t pid;		/* process id of nsh */
 extern int cli_rtable;		/* environment rtable */
 struct cand;
@@ -750,7 +750,6 @@ struct cnode *cand_tree(struct cand *);
 int pr_cand_conf(int, char **, ...);
 int cand_rollback(int, char **, ...);
 int cand_restart(struct cand *, struct cnode *, int);
-extern int cand_rtable;
 int cand_rtable_set(struct cand *, int, int, char *);
 char *cand_rule(struct cand *, char *, size_t);
 int cand_setrules(struct cand *, char *, char **, size_t);

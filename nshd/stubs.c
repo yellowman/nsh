@@ -30,8 +30,7 @@
 #include "showfacts.h"
 
 char *vers = NSH_VERSION_STR;
-int bridge, verbose, cli_rtable;
-int config_mode;
+int verbose, cli_rtable;
 pid_t pid;
 
 char *cursor_pos;

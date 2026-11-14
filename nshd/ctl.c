@@ -1066,7 +1066,7 @@ ctl_cand(struct daemons *d, struct ctl *x, char **fillargs, struct cand *cand)
 	int rt, takes;
 
 	takes = ctl_cand_takes(x);
-	rt = takes ? cand_rtable : cli_rtable;
+	rt = takes ? cand->rtable : cli_rtable;
 	if (rt > d->rtablemax) {
 		printf("%% Command %s not available via rtable %d\n",
 		    d->name, rt);
@@ -1207,12 +1207,12 @@ ctl_cand_rules(char *name, int rtable, int set, char *text, size_t len,
 	for (c = ctl_daemons; c->table != d->table; c++)
 		;
 	snprintf(stmt, sizeof(stmt), "%s rules", c->name);
-	saved = cand_rtable;
-	cand_rtable = rtable;
+	saved = cand->rtable;
+	cand->rtable = rtable;
 	if (!set) {
 		for (n = 0; (l = cand_rule(cand, stmt, n)) != NULL; n++)
 			printf("%s\n", l);
-		cand_rtable = saved;
+		cand->rtable = saved;
 		return 0;
 	}
 	lines = sl_init();
@@ -1231,7 +1231,7 @@ ctl_cand_rules(char *name, int rtable, int set, char *text, size_t len,
 	    lines->sl_cur > 0, cand) == -1))
 		r = -1;
 	sl_free(lines, 1);
-	cand_rtable = saved;
+	cand->rtable = saved;
 	return r;
 }
 

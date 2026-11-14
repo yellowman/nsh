@@ -2,10 +2,7 @@
 # static as function.name), by file, and what it is. nsh-checks' globals
 # check fails on one not listed, or listed and gone.
 #
-#	session	a session's: in an SGLOBAL table (session.c), kept in its
-#		struct session_state and swapped by session_enter() and
-#		session_leave()
-#	process	the process's own, the same for every session
+#	process	the process's own
 #	scratch	written and read within one request
 #	table	initialized, and written by nothing, or only once for the
 #		process by what fills it in
@@ -17,22 +14,19 @@ arp.c		table	blank_sdl blank_sin ifp_m so_1mask
 bgpcommands.c	process	bgpd_socket_path
 bgpcommands.c	table	bgcs
 bridge.c	table	brds brlists brnames brper brps brpvnames brpvs brvals brvls brvper brvs
-candidate.c	session	cand_rtable
-candidate.c	scratch	cand_held cand_listowner.owner
-candidate.c	table	candidate_sglobals
+candidate.c	scratch	cand_listowner.owner
 carp.c		scratch	carp_facts.carpdev
 carp.c		table	carp_bal_modes intcs
 client.c	process	nshd_config nshd_intr nshd_rtable sfd sib
 client.c	table	nshd_runs.progs show_log.logs
 cmdargs.c	process	child in_config
-commands.c	session	ifname
 commands.c	process	hname snapshot
-commands.c	scratch	in_rc next_ifname rc_head
+commands.c	scratch	in_rc next_ifname
 commands.c	table	Bridgelist Bridgelist_nitems Intlist
 			Intlist_nitems ahtab arpdowntab arphelp
 			arptimeouttab bgphelp bridgehelp carploggingtab
 			carppreempttab carptab cmdtab cmdtab2
-			cmdtab_nitems commands_sglobals
+			cmdtab_nitems
 			conf_bridge conf_if conf_top
 			crontabhelp ddbhelp ddbtab
 			defaultttltab demotecountertab dhcp6leasehelp
@@ -121,8 +115,8 @@ kroute.c	scratch	ip_route.line_kroute lookup_kept
 			so_dst so_gate so_ifp so_mask
 loop.c		scratch	said
 loop.c		table	flushown ownif owntab
-main.c		session	config_mode
-main.c		process	caught_sigwinch cli_rtable editing elc eli elp
+main.c		process	caught_sigwinch cli_rtable config_mode editing elc eli
+			elp
 			ev histc histi interactive_mode nsh_env pid
 			toplevel verbose
 main.c		table	vers
@@ -191,16 +185,14 @@ rendersys.c	table	ah_fields carp_fields daemon_fields esp_fields
 			pf_fields pf_reasons pfsync_fields prioritynames
 			rt_fields sflag tcp_fields tcpstates udp_fields
 route.c		table	route.routeflags
-session.c	process	fresh total
-session.c	table	kind_row rowfields session_sglobals sglobals
+session.c	table	kind_row rowfields
 settings.c	table	bridge_settings contexts if_settings
 			rtable_settings top_settings
 showfacts.c	process	facts_from facts_init.done
 showfacts.c	table	kind_message kinds message_fields
 sysctl.c	table	ddbsysctls ip6sysctls ipsysctls mplssysctls
 			pipexsysctls sysctls
-tables.c	session	bridge
-tables.c	process	built whichlist
+tables.c	process	bridge built whichlist
 tables.c	scratch	cursor_pos
 tables.c	table	Bridgelist Bridgelist_nitems Intlist
 			Intlist_nitems cmdtab cmdtab_nitems kind_name
