@@ -236,6 +236,8 @@ A candidate of the session's own.
 One candidate that its sessions share.
 Each sees what the others change, and a commit commits all of it.
 journal stores it, and a change to it is answered once it is on disk.
+A change that journal cannot store fails, but stays in the candidate,
+and is stored with the next one journal can store.
 .It Cm configure exclusive
 The shared candidate, while no other session may change it or commit.
 It is refused while another user has uncommitted changes there.

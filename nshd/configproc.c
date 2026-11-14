@@ -137,6 +137,8 @@ struct session {
 	char			 rulesof[NSHD_DAEMON];	/* the daemon, or "" */
 	int			 rulesrt;	/* their rtable */
 	uint32_t		 keep;	/* the KEEP its answer waits for */
+	int			 keepedit;	/* 1 if for an edit, -1 if
+						   the edit's was not sent */
 	struct nshd_context	 held;	/* that answer: its context, */
 	int			 heldmode;	/* whether to send it, */
 	int			 heldr;		/* and how it ended */
@@ -2244,7 +2246,9 @@ shared_hold(struct session *sp)
 
 /*
  * After: if sp changed the shared candidate, sp's user is added to who
- * did, and the candidate is kept before sp is answered
+ * did, and the candidate is kept before sp is answered. An edit that
+ * journal does not keep is answered as failed (config_ran(),
+ * shared_kept())
  */
 static void
 shared_done(struct session *sp)
@@ -2273,6 +2277,7 @@ shared_done(struct session *sp)
 		}
 	}
 	sp->keep = shared_keep();
+	sp->keepedit = sp->keep == 0 ? -1 : 1;
 }
 
 /*
@@ -2364,20 +2369,29 @@ shared_send(uint32_t seq)
 
 /*
  * journal answered each KEEP up to seq, with warn if it did not keep
- * them: each session that waited on one is answered, after warn
+ * them: each session that waited on one is answered, after warn. An
+ * edit journal did not keep fails, and says the shared candidate has it
+ * still
  */
 static void
 shared_kept(uint32_t seq, const char *warn)
 {
 	struct session	*sp;
+	const char	*w;
 
 	keep_done = seq;
 	TAILQ_FOREACH(sp, &sessions, entry) {
 		if (sp->keep == 0 || (int32_t)(sp->keep - seq) > 0)
 			continue;
 		sp->keep = 0;
-		if (warn != NULL && front_text(sp->id, warn,
-		    strlen(warn)) == -1)
+		w = warn;
+		if (warn != NULL && sp->keepedit == 1) {
+			w = "% The shared candidate has the change, but "
+			    "journal did not keep it\n";
+			sp->heldr = -1;
+		}
+		sp->keepedit = 0;
+		if (w != NULL && front_text(sp->id, w, strlen(w)) == -1)
 			fatal("%s", __func__);
 		config_reply(sp, &sp->held, sp->heldr, sp->heldmode);
 	}
@@ -2610,6 +2624,9 @@ config_ran(struct session *sp, int r, int mode)
 	}
 	if (front_printed(sp->id) == -1)
 		r = -1;
+	/* an edit whose candidate could not be sent to journal failed */
+	if (sp->keepedit == -1)
+		r = -1;
 	/* a change to the shared candidate is answered once it is kept */
 	if (sp->keep != 0 && (int32_t)(sp->keep - keep_done) > 0) {
 		sp->held = c;
@@ -2618,6 +2635,7 @@ config_ran(struct session *sp, int r, int mode)
 		return;
 	}
 	sp->keep = 0;
+	sp->keepedit = 0;
 	config_reply(sp, &c, r, mode);
 }
 
