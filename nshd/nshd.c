@@ -21,74 +21,60 @@
 /*
  * nshd: the configuration, and the only thing that changes the kernel.
  *
- * parent binds the two sockets and starts the children, each running this
- * program again, by the path getexecpath(3) gives, with a flag for its
- * part:
+ * parent binds the two sockets and starts the children, each running
+ * this program again, by the path getexecpath(3) gives, with a flag for
+ * its part:
  *
- *	show (-Sn)	_nshshow, chroot: the read-only socket, SHOWS of
- *			them, n from 0, so one long answer holds up no other
- *	frontend (-F)	_nshfront, chroot: one for each client of the
- *			read-write socket, which reads that client's requests
- *	config (-C)	_nshconf, chroot: sessions' state, what to ask system
- *	system (-Y)	root, a session of its own: reads and changes the
- *			kernel, the daemons and the saved configuration
- *	journal (-A)	_nshjournal, chroot: what config keeps past its end
- *	parser (-P)	_nshparse, chroot: started by system, a new one for
- *			each check, which reads text so system need not
+ *	show (-Sn)	_nshshow, chroot: the read-only socket; SHOWS
+ *			of them, so one long answer holds up no other
+ *	frontend (-F)	_nshfront, chroot: one client's requests, parsed
+ *	config (-C)	_nshconf, chroot: the sessions and candidates
+ *	system (-Y)	root: the host, and the saved configuration
+ *	journal (-A)	_nshjournal, chroot: the shared candidate, kept
+ *	parser (-P)	_nshparse, chroot: started by system, one for
+ *			each reading of text
  *
- * Each role has a user of its own, so no child may signal a child of
- * another role, or reach its files; the group nshadmin may use the
- * read-write socket. system's helpers that need not be root run as
- * NSHD_CHECK_USER, whose uid is theirs alone too. The frontends share
- * their user, so each also has a process group of its own, and its
- * pledge(2) lets it signal nothing outside that group.
+ * parent:
  *
- * Each pair of children that talk (config and system, config and
- * journal) has a pipe of its own, which parent makes, so each knows who
- * sent what it reads. Each child starts with its descriptors in place,
- * from fd 3: for system and each show, a pipe to parent, which closes
- * when parent ends, and the child ends with it; then the pipe to each
- * of its peers. After these come the socket of a show, which no other
- * child has, and config's routing socket, which tells it what the
- * kernel changes. config and journal have no pipe to parent: when
- * parent ends, system does, config finds system's pipe closed, and
- * journal config's. parent learns of a child's end as it reaps it.
- * A child has no other descriptor of parent's, and only system hears
- * anything from parent.
+ * Starting (spawn_system(), started(), spawn_rest())
+ *	system starts alone. The rest start, and clients are taken,
+ *	once system says it has started, however a boot went. With -b,
+ *	the process rc started exits then: 0 if the boot went well, else
+ *	1.
  *
- * parent itself accepts each client of the read-write socket. The
- * client's session gets a number of its own, never used again, and a
- * frontend: parent gives system a copy of the client's socket, and then
- * a pipe to that frontend, and starts the frontend, with the pipe's
- * other end and the client's socket as fd 3 and 4, and nothing else.
- * system reads from the client's socket who the client is, and passes
- * the pipe on to config, with the session's number and the client's
- * uid. So config hears of a session only once system has it, knows it
- * by the pipe its word comes on, which only that session's frontend has,
- * and system watches the client's socket itself. Of what the children
- * send, parent reads only system's word: that a session ends, that
- * config is to end, and that it has started.
+ * Pipes (links_init(), child_start())
+ *	Each pair of children that talk has a pipe of its own, so a
+ *	pipe says who sent a message. A child has only the descriptors
+ *	parent placed for it, from fd 3.
  *
- * A child that ends, or that breaks a rule, ends nshd: its peers find
- * their pipes to it closed and end too, and parent ends the rest, with
- * system's helpers, which can outlive system. Nothing is started again.
- * config is the exception: when it ends, nshd takes no more clients,
- * parent kills every child but system, and system finishes what it
- * began; nshd ends when system exits.
- * A frontend is not such a child: when one ends, or breaks a rule, only
- * its session ends. config finds its pipe closed, or closes it, and
- * drops the session, and parent tells system to drop it too. When system
- * finds a session's client gone, parent kills the session's frontend,
- * and has config drop the session too.
- * If nshd ends while a commit is unconfirmed, the commit is rolled back
- * when nshd starts again and system finds its record.
+ *	config and journal have no pipe to parent. When parent ends,
+ *	system does; config finds system's pipe closed, and journal
+ *	config's.
  *
- * parent starts system alone. system reads its records, finishes what
- * an earlier nshd left, and, with -b, as rc starts nshd, boots: it
- * makes the running configuration the saved one. Once system says it
- * has started, however the boot went, parent starts the other children
- * and takes clients. rc waits for that: the process rc started exits
- * then, 0 if the boot went well, else 1, as it does if nshd ends before.
+ * A client (parent_accept(), front_gone())
+ *	parent accepts it, gives system a copy of its socket, and starts
+ *	its frontend, with the pipe to config as fd 3 and the client's
+ *	socket as fd 4. parent reads nothing a client sends.
+ *
+ *	system gets the client's socket before the frontend's pipe, so
+ *	config hears of a session only once system has its client. A
+ *	session's number is never used again.
+ *
+ *	The frontends share a user, so each also has a process group of
+ *	its own, and its pledge(2) lets it signal nothing outside it.
+ *
+ * What parent reads (parent_dispatch())
+ *	Only system's word: that it has started, that a session is
+ *	gone, and that config is to end.
+ *
+ * Endings (reaped(), parent_shutdown())
+ *	A frontend's end ends its session. Any other child's end ends
+ *	nshd; when that child is config, system first finishes what it
+ *	began. Nothing is started again.
+ *
+ *	system's helpers can outlive system, so parent kills what is
+ *	left in system's session, and every process of
+ *	NSHD_CHECK_USER's.
  */
 
 #include <sys/types.h>

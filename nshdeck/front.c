@@ -16,40 +16,32 @@
 
 /*
  * front: httpd's FastCGI connections, on the socket parent bound, fd 5.
- * Each connection is one request: front reads its records, then its
- * parameters, then its body, each under a limit of its own. It trusts
- * nothing httpd's parameters say about the client, since any process in
- * DECK_GROUP can write to the socket. It uses the client address httpd
- * passes, REMOTE_ADDR, only to count failed logins, so a false address
- * can delay a login but never allow one. It takes the request's
- * endpoint, the last part of its path; its fields, from the query of a
- * GET or the form body of a POST; and the cookie's token. Each field
- * must be one the endpoint takes, appear at most once, and be within its
- * bounds. A body is BODY_MAX bytes at most; a setrules body, which
- * carries a daemon's rules, may be RULES_BODY, and a stage's body, which
- * carries the lines to run, STAGE_BODY; no more than DECK_BIGS of those
- * two arrive at once. The rules or the lines go to session in parts,
- * before the request. A request must carry an X-Nshdeck header, to show
- * that it comes from nshdeck's page; a page of another site cannot send
- * it without asking first. Streams, of events or a terminal, need no
- * header, because the browser's EventSource asks for them and cannot
- * send it. The request goes to session as one message, zeroed first;
- * session's answer comes back to the connection as FastCGI records, and
- * the connection closes. Each time front has written to the client all
- * it was sent, it tells session (DECK_READ). session stops reading
- * nshd's answer while DECK_WINDOW of its messages are not yet written,
- * so a slow client delays only its own answer.
+ * It parses everything httpd sends and holds nothing of nshd's.
  *
- * An event stream stays open, a comment written to it each
- * DECK_KEEPALIVE seconds so httpd does not time it out. Its events wait
- * in front until all earlier data is written to the client, and then go
- * out together. front sends DECK_READ for a stream, as for an answer.
- * If more than DECK_UNREAD bytes wait, front drops the oldest events and
- * sends a "dropped" event in their place, so the page knows to ask again
- * for what it shows. A terminal's stream never comes to that: session
- * sends it only DECK_WINDOW messages front has not written. front takes
- * no more than DECK_CONNS connections, and a request that does not
- * arrive whole within DECK_ARRIVE seconds is closed.
+ * A request (front_record(), front_params(), front_fields())
+ *	One to a connection. Its records, parameters and body each have
+ *	a limit. Each field must be one the endpoint takes, once, within
+ *	its bounds. It goes to session as one message.
+ *
+ * What front trusts (front_request())
+ *	Nothing httpd says of the client: any process in DECK_GROUP can
+ *	write to the socket. The client's address only counts failed
+ *	logins. A request needs the X-Nshdeck header; a stream needs
+ *	only the cookie.
+ *
+ * Answers (front_stdout(), front_end())
+ *	session's answer goes back as FastCGI records. front tells
+ *	session each time the client has all it was sent (DECK_READ), so
+ *	a slow client delays only its own answer.
+ *
+ * Streams (front_event(), front_timer())
+ *	Stay open, with a comment each DECK_KEEPALIVE seconds. Past
+ *	DECK_UNREAD bytes waiting, the oldest events are dropped, and
+ *	the page is told.
+ *
+ * Limits (front_accept())
+ *	DECK_CONNS connections, DECK_ARRIVE seconds for a request to
+ *	come, DECK_BIGS large bodies at once.
  */
 
 #include <sys/types.h>

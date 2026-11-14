@@ -15,67 +15,51 @@
  */
 
 /*
- * commit: make the candidate the running configuration, and save it.
+ * commit: what makes one configuration into another, and what is kept
+ * of those that were saved.
  *
- * What differs between the running configuration and the candidate
- * becomes a script, lines as conf() prints them. First it removes
- * lines, in the reverse of the order conf() prints them, then it adds
- * lines, in that order, whatever order an interface's or a bridge's
- * lines were typed in (setting_rank()):
+ * Problems (commit_problems(), check())
+ *	What can be found before anything runs: an interface that is
+ *	not there, an id or an address twice, rules their test refuses.
+ *	A candidate with a problem is not committed.
  *
- *  * a line is removed with its "no" form, and "no x" with x, unless the
- *    candidate sets the same setting another way, with its own line;
- *  * a list loses the values the candidate's line does not have;
- *  * an interface's addresses are added again after a new rdomain,
- *    which removed them, and its dhcrelay6, which still runs in the
- *    old rdomain's routing table; its endpoints after a new tunnel,
- *    tunneladdr, tunneldomain, vnetid or parent, which removed them,
- *    and its WEP and WPA lines after a new nwid, which turned them off;
- *  * a cloned interface is removed whole, and a physical one line by
- *    line;
- *  * a daemon's state is removed with its disable, and its rules by
- *    removing the rules file;
- *  * a block's new lines are added under it, and a list's new values;
- *  * a daemon's rules are added whole, and what conf() prints after
- *    them, its reload or install, when they are new or it starts.
+ * The script (script_make(), removals(), additions())
+ *	Made from two configuration trees alone. It removes lines in the
+ *	reverse of conf()'s order, then adds lines in conf()'s order,
+ *	whatever order they were typed in.
  *
- * script_make() makes the script from the two trees alone, and its
- * edits from the script: each line becomes a record, with its words,
- * that names its command only by its place among the commands a
- * configuration has (conf_cmd(), ctl_act()). script_run() runs the
- * edits, so one process may make what another runs, and the code that
- * runs them reads no command's name: it runs the command at an edit's
- * place. A record that names no such place, or is where it does not
- * belong, stops all of them before any runs.
+ *	A line is removed with its "no" form, and "no x" with x, unless
+ *	the wanted configuration sets the same setting with a line of
+ *	its own. A list loses only the values the wanted line does not
+ *	have, and gains only its new ones.
  *
- * Then the running configuration must read as the candidate does, but
- * for a physical interface the candidate has no block for, which keeps
- * what its hardware has. If it does not, a script that restores the
- * configuration as it was undoes the commit, and the differences are
- * shown.
+ *	What a change removes on the way is added again. An interface's
+ *	addresses come back after a new rdomain, and its dhcrelay6,
+ *	which still ran in the old rdomain's routing table. Its
+ *	endpoints come back after a new tunnel, tunneladdr,
+ *	tunneldomain, vnetid or parent, and its WEP and WPA lines after
+ *	a new nwid.
  *
- * The last ROLLBACKS saved configurations are kept, for rollback N and
- * show rollback. Each records who saved it and the comment they gave,
- * on a line of its own that conftree_read() skips, and its generation
- * on the next. system keeps what those lines say: the parser reads them
- * as nshd starts (rollback_heads()), and system keeps those it writes.
+ *	A cloned interface is removed whole, and a physical one line by
+ *	line. A daemon's state is removed with its disable, and its
+ *	rules by removing the rules file; its rules are added whole,
+ *	with what conf() prints after them, its reload or install.
  *
- * commit check shows what it can find in advance that would keep the
- * candidate from being the running configuration: an interface a
- * line names that is not there, one in two trunks or bridges, a bridge
- * option for one not its member, an address twice in one rdomain, a
- * vlan or carp id twice on one interface, a daemon in an rtable nothing
- * makes, and daemon rules their test refuses. commit refuses a
- * candidate with any of them.
+ * Edits (edits_make(), edits_check(), edits_apply())
+ *	Each line of a script becomes an edit: a command's place in
+ *	nsh's tables, and its values. One process makes them and another
+ *	runs them, and the code that runs one reads no command's name.
+ *	All are checked before any runs.
  *
- * nshd's boot applies the saved configuration to the running one as
- * commit applies the candidate, and keeps every line that succeeds;
- * nothing is undone (session_boot_plan()).
+ * Whether it took (commit_verify(), differ())
+ *	What runs must then read as what was wanted, except a physical
+ *	interface the wanted configuration has no block for. The boot is
+ *	the exception: it keeps every line that succeeds, and undoes
+ *	nothing.
  *
- * commit confirmed does all that but save; unless a commit confirms it
- * first, at the deadline nshd's system rolls the running configuration
- * back to how it was before the first unconfirmed commit, as it undoes
- * a commit that did not take (commit_undo()).
+ * Saved configurations (saved_write(), rollback_keep())
+ *	The last ROLLBACKS, each with who saved it, the comment and its
+ *	generation on head lines of its own (rollback_heads()).
  */
 
 #include <sys/types.h>

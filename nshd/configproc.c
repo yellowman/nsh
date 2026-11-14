@@ -15,129 +15,67 @@
  */
 
 /*
- * config: the sessions, and what they ask of system. Each session comes
- * from system, which has it from parent, with its number, the uid of its
- * client, and a pipe to its frontend; config knows the session by that
- * pipe alone. Each
- * request to system has an id of its own; system's answers for it go to
- * the session that asked, if that session is still there, its facts
- * passed on unread. system learns, for each request it has sent output
- * for, when the session's client has read it all, so it may stream more;
- * and when the session is gone, so it stops streaming to it. A frontend
- * that closes its pipe, sends what it may not, or sends it wrong, ends
- * its session, and so does one whose session has FRONT_REQUESTS requests
- * unfinished and asks another. So system has at most that many of each
- * session's requests at once, and one step of a commit. Another peer
- * that sends what it may not, or sends it wrong, ends config, and nshd
- * with it.
+ * config: the sessions and their candidates, and what they ask of
+ * system. It holds no file and cannot touch the host.
  *
- * A session in configure has nsh's state of its own (session.c). Its
- * frontend reads the lines its client sends, and config runs their
- * edits, each a command's row and its values, through nsh's code in
- * candidate mode, which checks them, and here asks no kernel, opens no
- * file and runs no program. config reads no word of a line, of a show
- * or of an operation: the frontend parses those too, and config passes
- * on what they ask, once it is whole as system takes it. The running
- * configuration and what the lines read of the kernel come from a
- * snapshot system takes when a session enters configure or shows its
- * candidate, kept for every session until the next.
+ * A session (front_new(), config_dispatch_front())
+ *	Comes from system, with its client's uid and a pipe to its
+ *	frontend. config knows a session by that pipe alone. A frontend
+ *	that breaks a rule ends its own session; any other peer that
+ *	does ends nshd.
  *
- * configure private's candidate is the session's own; configure's is one
- * the sessions in configure share, and a commit of it commits what each
- * changed. configure exclusive is configure while no other session may
- * change the shared candidate or commit. While another session has it,
- * every mode but configure private is refused; configure exclusive is
- * also refused while another user's changes to the shared candidate are
- * not committed. Leaving configure exclusive discards what was not
- * committed. A commit of the shared candidate holds it, while it runs,
- * from the others' changes.
+ *	A session with FRONT_REQUESTS requests unfinished that asks
+ *	another is ended, so system never has more of one session's.
  *
- * A session has the permissions of its user's login class, which config
- * asks system for at the session's hello, by the session; system answers
- * for the uid of the session's client. Until they are in, the session may
- * only say hello, log in and go. A
- * show, a watch, the tables and names for completion, and a terminal need
- * view; an operation needs operate; configure private, configure
- * terminal, a commit, a rollback, a load and a daemon's rules need
- * configure. configure and configure exclusive need admin, as their
- * candidate is everyone's. exec is nsh's to check, as it runs a program:
- * config only tells it at hello. A session without admin sees no password
- * hash: config takes each out of the configuration it sends such a
- * session. system checks and runs an operation a session may ask, and
- * config passes it on. A session of the web configurator's has no
- * permissions until it logs in, as system checks it; then it has the
- * class of the user it logged in as. Its terminal, which system starts,
- * comes back as a pty, which config passes on.
+ * What a frontend sends (config_edits(), config_show(), config_op())
+ *	Typed values, never words: the frontend parsed them. config
+ *	checks each as system would, and applies edits to the session's
+ *	candidate, which asks no kernel and opens no file.
  *
- * journal keeps the shared candidate, and who changed it, past config's
- * end. config sends it each time it changes, and answers the session that
- * changed it once journal says whether it kept it. A config that starts
- * takes what journal kept before a session enters configure. If the
- * candidate cannot be sent, or journal does not keep it, the session is
- * told.
+ * Permissions (config_hello(), config_may(), front_revoke())
+ *	config's copy of the session's class, from system. It checks
+ *	every request against it, and lowers it when system says so. A
+ *	session without admin is sent no password hash (config_hides()).
  *
- * Commits run one at a time, for all sessions: config checks a commit
- * against a snapshot, then sends what it is based on and what it wants
- * (BEGIN), with the tests of the daemons' rules it changes (TEST).
- * system runs the tests first, and says how each went. Then it runs the
- * commit to its end: its parser makes the script, and system records
- * the commit, says it is begun (BEGUN), runs the script and checks that
- * what runs is then the candidate. If it is, system saves the running
- * configuration; if not, it undoes the script. Before the script of a
- * commit that changes login users or classes, as before a rollback that
- * does, config lowers the permissions of the sessions that system says
- * would lose one, ends those that would lose their login (REVOKING),
- * and says so (GO). BEGIN's answer is how the commit ended, and config
- * then takes a snapshot, for the candidate to start again from. Once
- * system has begun a commit, it runs to its end if its session goes;
- * system does not begin it once the session's client has gone, nor once
- * a test refuses it. For commit check, and for a commit with problems
- * already, system only runs the tests and has its parser try the
- * script, and says the verdict. commit
- * confirmed passes its minutes to BEGIN, so system also keeps an
- * unconfirmed commit record, and runs its script even if it is empty;
- * then, if what runs is the candidate, the commit's record goes, and the
- * running configuration stays until the deadline, not saved. A commit
- * that saves confirms it. A commit outside configure only saves the running
- * configuration (SAVE), as one that changes nothing does; check and
- * confirmed are configure's.
+ *	Until its permissions are in, a session may only say hello, log
+ *	in and go. exec is nsh's to check, as nsh runs the programs:
+ *	config only tells it at hello.
  *
- * configure terminal gives the session its own candidate, reset to the
- * running configuration from a new snapshot before each line. A line that
- * changes the candidate is committed but not saved, as BEGIN says, and
- * the commit record goes once what runs is the candidate. The line is
- * answered when its commit ends, and the candidate is then the running
- * configuration again. commit there saves the running configuration;
- * rollback has nothing to roll back.
+ * Candidates (config_configure(), shared_hold())
+ *	Private, shared, exclusive or terminal. journal keeps the shared
+ *	one (shared_send()): an edit of it is answered once journal has
+ *	it.
  *
- * A daemon's rules come to a session in configure a part at a time, and
- * become its candidate's rules, in the rtable asked for, as the daemon's
- * edit makes them; the session may ask for them too. configure terminal
- * takes none.
+ *	configure exclusive is refused while another user has
+ *	uncommitted changes in the shared candidate, so the lock never
+ *	discards another user's edits.
  *
- * A client that completes lines itself, as nsh's Tab does, asks for
- * two things, sent as facts: nsh's command tables, and the names of
- * interfaces, groups, bridges and routing tables.  The session's
- * frontend has the tables, and sends them once config answers that the
- * session may ask.  The names come from the last snapshot; if there is
- * none yet, config takes one first.
+ *	In configure terminal the candidate is made again from a new
+ *	snapshot before each line. It takes no daemon's rules, and
+ *	rollback there has nothing to roll back.
  *
- * nsh -c's configuration comes a part at a time, each answered, outside
- * configure. After the last, on a new snapshot, it becomes the session's
- * own candidate, in place of the running configuration, and is committed,
- * all of it or none; then the candidate goes.
+ * Requests to system (config_request(), config_dispatch_system())
+ *	Each has an id, and its answers go to the session that asked. A
+ *	snapshot is what runs, as system last read it (snapshot_take()),
+ *	kept for every session until the next is taken.
  *
- * A session may watch commits, configure exclusive, and interfaces,
- * addresses and routes, and config sends it a notice, unasked, as each
- * changes: a commit saved, confirmed or applied, as it ends; an
- * unconfirmed commit rolled back, as system says; configure exclusive
- * taken or left; and interfaces or addresses changed, and the rtables
- * whose routes did, which config reads from the routing socket parent
- * opened for it, fd 5, and says once a second at most. It may watch logs
- * too: system follows each, as a stream, whose text config sends as
- * notices until the watch drops the log or the stream ends, which config
- * says. A watch is answered once system has followed each log it adds, or
- * refused to.
+ * A commit (config_commit(), commit_request(), commit_ended())
+ *	One at a time. config checks the candidate and sends system the
+ *	two configurations and the tests. system does the rest, and its
+ *	answer is how the commit ended.
+ *
+ *	A commit outside configure, or one that changes nothing, only
+ *	saves what runs (SAVE). commit confirmed runs its script even if
+ *	it is empty, so there is a deadline.
+ *
+ *	nsh -c's configuration comes in parts outside configure, and is
+ *	committed in place of what runs, all of it or none.
+ *
+ * Notices (config_watch(), config_notice(), config_route())
+ *	What a session asked to watch: commits, the lock, interfaces
+ *	and routes, and logs. Routes and interfaces that change are read
+ *	from the routing socket parent opened, fd 5, and said once a
+ *	second at most.
  */
 
 #include <sys/types.h>

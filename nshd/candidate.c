@@ -15,41 +15,32 @@
  */
 
 /*
- * configure private: a candidate configuration for this session.
+ * A candidate: a copy of the configuration that a session's commands
+ * change instead of the kernel.
  *
- * In configure private, commands change a copy of the configuration
- * instead of the kernel.  The copy starts as the running configuration,
- * read into a conftree, and every change the session makes to it is
- * recorded in a journal.  Showing the candidate replays the journal on
- * a fresh copy of the running configuration, so what other sessions
- * changed since shows through, with this session's changes on top.
- * Each nsh session is its own process, so its candidate is private.
+ * What a candidate is (cand_new(), cand_tree())
+ *	The running configuration, as a conftree, and a journal of the
+ *	session's edits. Showing it replays the journal on what runs
+ *	now, so other sessions' commits show through.
  *
- * rollback N starts the copy over as configuration N, as it was saved
- * (ROLLBACK), and then nothing other sessions change shows through.
+ * Whose it is (cand_attach(), cand_detach())
+ *	config has one for each session, and one the sessions of
+ *	configure share. A session's struct cand points at its own and
+ *	at the one its lines edit.
  *
- * Each top-level statement the journal changes is kept as it was before
- * the journal first changed it.  A commit is refused if another commit
- * changed one since (cand_conflicts()); committing again keeps this
- * session's changes over the other's.
+ * How a command changes it (cand_setting(), cand_line())
+ *	A command's row says how it takes part (cand). A CAND_EDIT
+ *	command's apply function is passed the candidate, and calls
+ *	cand_setting() where it would have changed the kernel. The
+ *	settings table (settings.c) turns that into the edit.
  *
- * A candidate is a struct cand_state.  nshd's config has one for each
- * session, and one that the sessions of configure share.  A session's
- * struct cand points at its own and at the one its lines edit, and
- * config passes it to what runs the session's request, down to the
- * functions here.  A session attached to the shared one leaves it to
- * the others when it leaves configure (cand_detach()).  While another
- * session holds it, nshd's config says why in the struct cand of a
- * session that shares it (held), and no edit or rollback of that
- * session's changes it.
+ * Conflicts (cand_remember(), cand_conflicts())
+ *	Each top-level statement the journal changes is kept as it was
+ *	first. A commit is refused once if another commit changed one
+ *	since.
  *
- * A command's table row (cand) says how it takes part.  A CAND_EDIT
- * command's apply function is passed the candidate, and calls
- * cand_setting() where it would have changed the kernel; passed none,
- * it changes the kernel.  A CAND_RUN command runs as it always does,
- * and any other command is refused until its handler is converted.
- * cand_setting() says what the command did to a setting; the settings
- * table (settings.c) turns that into the edit.
+ * Starting over (cand_restart())
+ *	rollback N makes the copy configuration N, as it was saved.
  */
 
 #include <sys/types.h>

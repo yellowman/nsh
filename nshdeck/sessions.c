@@ -15,58 +15,45 @@
  */
 
 /*
- * session: the web users logged in, each with a connection to nshd,
- * which parent makes, and a token, which the user's cookie carries.
- * session does not trust what front sends: it checks that each message
- * is whole, each string ends with a NUL, and each number is in its
- * range.
+ * session: the web users logged in, each with a connection to nshd and
+ * a token, which the user's cookie carries. It trusts nothing front
+ * sends.
  *
- * For a login, session asks parent for a connection, sends nshd a hello,
- * and logs in; nshd's system process checks the login. nshd answers a
- * login that succeeds as it answers a hello, with the permissions of
- * the user's class, and session gives the user a token of 32 random
- * bytes in hex. Each request of
- * a user's goes to nshd on that user's connection, one at a time, the
- * rest waiting. session writes the answer as JSON, and never parses
- * JSON: the records of a show as they come, then what nshd printed, and
- * how it ended. While front has DECK_WINDOW messages of an answer not
- * yet written, session stops reading from nshd. When nshd's system
- * process says it does not answer a show, session asks nshd's shows
- * process instead, as nsh does, on a separate connection that parent
- * makes and that closes after the answer. A daemon's rules go to nshd
- * in parts, as nsh sends them, and are set with the last.
+ * What front sends (sessions_front(), request())
+ *	Checked whole: each message's size, each string's NUL, each
+ *	number's range.
  *
- * Failed logins are counted for each user name and for each client
- * address, the one httpd passes; an IPv6 address is counted by its /64.
- * After DECK_TRIES failures in a row, logins for that name or from that
- * address are refused, without asking nshd, for one second, and each
- * further failure doubles the wait, up to DECK_WAIT seconds. While nshd
- * checks a login, another for the same name or from the same address is
- * refused, so each failure is counted before the next login. A
- * successful login resets the count for its name. A count with no
- * failure for DECK_FORGET seconds starts over. Failed and refused
- * logins are logged at most once every DECK_QUIET seconds for each name
- * and address, and each log line says how many were not logged.
+ * A login (login(), logged(), failed())
+ *	nshd checks the password. A token is 32 random bytes, in hex.
  *
- * A user's event streams have nshd watch commits, interfaces and routes,
- * and the logs any of them follows. Each notice nshd sends goes to each
- * stream as an event, but a log's notices go only to the streams that
- * follow it. A user with no stream and no request for DECK_IDLE seconds
- * is logged out, as by a logout request. That closes the connection, so
- * nshd forgets the login and the user's candidate. If nshd closes the
- * connection, the user is logged out.
+ *	session counts failures by name and by address, an IPv6 address
+ *	by its /64, and delays a name or an address that keeps failing.
+ *	While nshd checks a login, another for the same name or from the
+ *	same address is refused, so each failure is counted before the
+ *	next try.
  *
- * session completes lines itself, in the user's mode, with nsh's code
- * (tables.c), as nsh's Tab does.  It asks nshd for nsh's command tables
- * once, and for the names of interfaces, groups, bridges and routing
- * tables on each completion.
+ * Requests (ask(), answered())
+ *	A user's requests go to nshd one at a time, on that user's
+ *	connection. session writes each answer as JSON and never parses
+ *	JSON. It stops reading nshd while front is DECK_WINDOW messages
+ *	behind.
  *
- * A user's terminal is nsh on a pty, which nshd starts as the user and
- * passes back on the user's connection. Its own stream carries what nsh
- * writes, in base64, as it comes, but no more than DECK_WINDOW messages
- * front has not written, so none is dropped; what the user types goes
- * to nsh as nsh takes it. The terminal, and nsh with it, ends when its
- * stream does, when nsh does, or when the user logs out.
+ *	A show nshd's system does not answer is asked of nshd's show
+ *	processes, on a connection of its own, as nsh does.
+ *
+ * Streams (noticed(), rewatch())
+ *	A user's event streams get nshd's notices. A log's notices go
+ *	only to the streams that follow that log.
+ *
+ * A terminal (terminal(), term_io(), typed())
+ *	nsh on a pty, which nshd starts as the user. It ends with its
+ *	stream, with nsh, or with the login.
+ *
+ * Endings (logout(), sessions_idle())
+ *	A user with no stream and no request for DECK_IDLE seconds is
+ *	logged out, and so is one whose connection nshd closes. Logging
+ *	out closes the connection, so nshd forgets the login and the
+ *	user's candidate.
  */
 
 #include <sys/types.h>

@@ -42,16 +42,11 @@
  *	dhcp leases			dhcpd's leases, as text, from
  *					system
  *
- * statistics pf, too, comes from system, as it needs /dev/pf. system
- * runs a program, or reads the leases, in a child of its own, and
- * streams what it prints as messages, as the client reads them.
+ * statistics pf, too, comes from system, as it needs /dev/pf.
  *
- * nshd's show processes and its system answer them a batch at a time,
- * as the client reads (nshd/answer.c). nsh asks nshd, and renders the
- * records as the text it printed before; where nshd does not run, nsh
- * answers only version itself. An interface's or a bridge's records come
- * before its own record, which ends them. What a collector prints, as
- * nsh's helpers always have, nshd sends as a message.
+ * nshd answers (nshd/answer.c), and nsh renders the records. An
+ * interface's or a bridge's records come before its own record, which
+ * ends them.
  */
 
 #include <sys/types.h>

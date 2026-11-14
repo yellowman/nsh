@@ -15,233 +15,137 @@
  */
 
 /*
- * The system process runs as root and uses nsh's own code to read and
- * change kernel state. It answers config's requests on their pipe, one
- * at a time and in order. It sends the running configuration as text;
- * the kernel state that configure private reads, as facts; the shows
- * that only root may run, as facts, with any text nsh's code prints
- * while running them; and the permissions of a uid's login class, which
- * config gives to that uid's session. A show's answer is small, so
- * system builds it whole and packs as many units into each message as
- * fit.
+ * system: the one process that changes the host. It runs as root, takes
+ * requests only from config, and reads no configuration text.
  *
- * A show of text, such as a program's output or the DHCP leases, may be
- * long, or may continue until it is stopped. A child of system prints
- * it, and system streams it to the client as messages, with at most
- * SYS_WINDOW messages the client has not read, while it answers other
- * requests. A stream ends when its child's output ends and the child is
- * reaped; when config reports that its session is gone, which kills the
- * child; or when system exits. A request that waits for a job to end, and
- * that config stops, ends without beginning. If config sends a request it
- * may not send, or a malformed one, system exits, and so does nshd.
+ * Requests (system_request())
+ *	One job runs at a time: a script, an undo, a save, a test, a
+ *	parser's reading or a rollback (system_job()). Requests wait for
+ *	it, in order. Only READ, STOP and PERMS do not wait, and streams
+ *	and web logins go on. A request config may not send ends nshd.
  *
- * A log that a session watches is also a stream, and it continues until
- * config stops it. system opens a log file as root, reads it as
- * NSHD_CHECK_USER starting from its last lines, and follows the new
- * file when newsyslog rotates it. The pf log comes from tcpdump on
- * pflog0, which system starts as root, because tcpdump drops root
- * itself. A log needs the view permission, and authlog also needs
- * admin; system checks these itself, as it does for an operation. No
- * request names a path.
+ *	A stream has at most SYS_WINDOW messages its client has not
+ *	read.
  *
- * system runs in a session of its own, which parent kills when system
- * exits. It sets the environment, umask and cwd that rc gives, so the
- * programs it runs get none of these from whoever started nshd. Each
- * stream's child leads its own process group, which is killed when the
- * stream stops. The kind of stream decides which user the child runs
- * as. A show's program runs as NSHD_CHECK_USER, except the programs
- * listed in root_programs, which keep root. dhcpd's leases file is
- * opened as root and copied as NSHD_CHECK_USER. A show comes as the
- * values the session's frontend parsed from its words, which config
- * passes on: its kind, and for a program, its places in nsh's table,
- * its routing table and the words for its arguments. The program comes
- * from the table; no request names a path.
+ * Whose a request is (client_socket(), system_whom())
+ *	parent passes each client's socket, and system asks the kernel
+ *	who is there. A request that changes something names its
+ *	session. system acts on it only while that client is connected,
+ *	and by the permissions of the login class it reads itself
+ *	(system_may()).
  *
- * An operation, which a privileged session requests, comes as its row of
- * ops[] and the values the session's frontend parsed for the row's
- * arguments. system checks them with args_check(), and refuses values
- * the row does not take. A stream's child runs the operation as root,
- * in the client's rtable, with nsh's own code, op_run(), and exits with
- * the operation's status.
+ *	config hears of a session only from system, after system has
+ *	the client's socket, so config has no session system cannot
+ *	check.
  *
- * config sends a commit's requests in order. First come the parts that
- * BEGIN and TEST use, sent in chunks. Each TEST runs a daemon's test of
- * its rules, in a job, and then tells config how it went. The TESTs come
- * before the BEGIN they are for, with its request id, and BEGIN waits
- * for them, as config's requests wait while a job runs. A commit that a
- * test refused is not begun, nor is one that BEGIN asks only to test, as
- * commit check does, nor one with problems config found. system then
- * says the verdict, which counts those problems, the tests that
- * refused the commit, and a script the parser cannot make, and BEGIN's
- * answer is 0 if it passes. Otherwise BEGIN runs the commit to its end.
- * The parser makes its script, from what runs to the configuration
- * wanted: config sends none. system writes the commit record and
- * tells config that the commit is begun (BEGUN). If the commit changes
- * login users or classes, system has config lower the permissions of
- * each session that would lose one, end each that would lose its login
- * (REVOKING), and take no new one, and waits until config says it has
- * (GO). Then system runs the script, and checks that what runs is then
- * the configuration wanted. If it is not, system undoes the script,
- * back to the running configuration it read at BEGIN, and removes the
- * record. If it is, system saves the running configuration and removes
- * the record. An unconfirmed commit is kept until its deadline instead,
- * and a configure terminal commit is kept without being saved; their
- * records go too. BEGIN's answer is how the commit ended. BEGIN refuses
- * such a configure terminal commit while an unconfirmed commit exists,
- * because rolling back the unconfirmed commit would roll it back too.
- * Outside a commit, SAVE saves the running configuration.
+ * A commit (system_begin())
+ *	Its tests, its record, REVOKING and GO if it changes logins, its
+ *	script, a check that what runs is what was wanted, and then a
+ *	save, a deadline or an undo. Once begun it runs to its end
+ *	without config.
  *
- * system reads no configuration text itself. The parser does
- * (parserproc.c): a new one for each reading, run in a job of its own
- * or from a job's child. It reads whether what runs is what a commit is
- * based on, and how a record's configurations read; which login lines a
- * commit changes, and to what; a commit's script; whether a script
- * verifies; the script that undoes a commit or rolls one back; the
- * boot's plan; and how two configurations differ. system checks what
- * the parser answers before it uses it: a script's edits before any
- * runs.
+ *	A commit record left behind is read by the next commit
+ *	(record_read()). It is applying, or unsaved. An unsaved one
+ *	refuses every commit but a save, or a commit back to what ran
+ *	before.
  *
- * An apply, an undo, a save, a test and the parser's reading each run
- * as a job: a child of system in its own process group, whose output is
- * sent as it arrives.
- * If a job runs past its time limit, its group gets SIGTERM, then
- * SIGKILL after a grace period, and the job fails. A test runs as
- * NSHD_CHECK_USER, with
- * its rules staged in a directory of its own. The daemons listed in
- * root_tests are exceptions: their tests keep root, and their rules are
- * root's. SAVE writes the running configuration to SAVED, whole and on
- * disk, and keeps it as rollback 0, one generation after the previous
- * rollback 0, unless it is the same as that one. While a job runs,
- * config's requests wait for it, except reports that a stream's client
- * read its messages, requests to stop a stream, and requests for a new
- * session's permissions.
+ *	A TEST that names no session is the boot's, and is refused
+ *	unless the boot runs.
  *
- * When config goes, or breaks a rule, or has not ended the sessions
- * system named GO_SECS seconds after system asked it to, system takes no
- * more of its requests and ends those that have not begun: the requests
- * that wait, streams, logins, and the tests of a commit not begun. What
- * it began goes on to its end, within each job's time limit: a commit,
- * with its undo or save, a rollback of an unconfirmed commit, or the
- * boot. A commit whose script waits for config to lower or end sessions
- * does not run, and ends as one undone. system asks parent to end config,
- * and a rollback that waits so runs once parent says that config and
- * every session have ended. It begins no rollback then, and logs what the
- * jobs print. Then system exits, and parent ends nshd. A commit kept
- * until its deadline leaves its unconfirmed commit record, which the
- * next system takes over.
+ * The parser (system_parse(), parserproc.c)
+ *	Reads every text and makes every script. system checks each
+ *	edit of a script before it runs any.
  *
- * The commit record, in NSHDB, outlives the commit that wrote it, and a
- * commit that does not finish leaves it behind. Its state is applying
- * if the commit neither saved nor rolled back, or unsaved if the commit
- * applied but the save failed. The next commit compares an applying
- * record with the running configuration and reports what the earlier
- * commit left. An unsaved record refuses the next commit, unless that
- * commit only saves the running configuration, or rolls back to the
- * configuration before the earlier commit.
+ *	For a session without admin, the parser judges a test's rules
+ *	against what runs before the test runs, as it judges the script.
  *
- * A commit with a confirmation deadline sends its minutes with BEGIN,
- * and BEGIN then also writes an unconfirmed commit record (confirm.c).
- * Its rollback configuration is what ran before the first unconfirmed
- * commit. A commit kept until its deadline leaves that record in place;
- * one undone restores the record that existed before BEGIN; one whose
- * undo failed leaves both records. A successful save confirms the
- * commit by removing its record.
+ * A confirmed commit (system_confirm(), confirm.c)
+ *	Its rollback configuration is on disk before anything is
+ *	applied. system rolls back at the deadline, and tries again if
+ *	that fails (system_recover()).
  *
- * The deadline is the given number of minutes after BEGIN, and is reset
- * to that many minutes once the commit is kept. After the
- * deadline, system rolls the commit back, but not while a begun commit
- * has not ended or a job runs, because that commit's undo could restore
- * what the rollback removed. system demotes carp, records the attempt,
- * and starts a JOB_RECOVER job, which makes the running configuration
- * match the rollback configuration; then it promotes carp again. A
- * rollback that changes login users or classes first waits for config
- * to lower or end the sessions that would lose a permission by it, and
- * to take no new session, as such a commit's script does. If the job
- * fails or cannot start, system's timer tries again
- * CONFIRM_RETRY seconds later, up to CONFIRM_ATTEMPTS attempts in all;
- * then the record is marked failed, and carp stays demoted. If the
- * record cannot be read or removed, the timer tries again too, and that
- * is not an attempt.
- * If the running configuration already matches
- * the rollback configuration, as after a reboot or a commit that never
- * ran, system only removes the record. When system starts, it takes
- * over an unconfirmed commit that a previous system process left, and
- * rolls it back at its deadline. BEGIN is refused if the running
- * configuration is not the one the commit was planned from, as when an
- * unconfirmed commit was rolled back in the meantime.
+ *	The rollback configuration is what ran before the first
+ *	unconfirmed commit, not before the last. A commit undone puts
+ *	the confirm record back as it was; one whose undo failed leaves
+ *	both records.
  *
- * system starts alone: parent starts config, and takes clients, once
- * system says it has started (STARTED). By then system has read its
- * records, a rollback due as it starts has ended, and, where parent
- * started it with -b, the boot is over. Until then there is no session,
- * so such a rollback waits for no one. The boot
- * begins once no job runs, so that a rollback of an unconfirmed commit
- * that runs as system starts ends first; no rollback begins while the
- * boot runs. The first time, system copies nsh's own NSHRC to the saved
- * configuration. It then writes the boot record, in NSHDB, which names
- * the host boot it is for by kern.boottime and says the boot is
- * running; then it demotes carp and records that too. A system process
- * restarted during the boot finds the record and does not demote carp
- * again. If this host boot is already done, the boot does not run
- * again. Otherwise system plans the boot from the
- * saved configuration and what runs, runs its tests and then its
- * script, each in a job, and the script says whether the running
- * configuration is then the saved configuration. If it is, the record
- * says the boot is done, carp is promoted if it was demoted for the
- * boot, and any unconfirmed commit record is removed. If not, the
- * record says the boot failed, and carp stays demoted until a commit
- * saves. Either way system has then started, and tells parent how the
- * boot went.
+ *	No rollback begins while a begun commit has not ended: the
+ *	commit's undo could restore what the rollback removed. For the
+ *	same reason a configure terminal commit is refused while a
+ *	commit is unconfirmed, as the rollback would take it back too.
  *
- * Each commit belongs to a session, and system learns whose it is from
- * the session's client. parent passes system each client's socket when
- * the client connects, and system asks the kernel who is at the other
- * end of the socket, and whether that is the web configurator. config
- * names the session of each request it sends for a client, and system
- * refuses the request unless that session's client is still connected.
- * The session is gone when system finds that its client has closed its
- * connection, which system checks each second, or when parent says its
- * frontend has ended. Then system tells config, which drops the
- * session, and parent, which kills the session's frontend if it still
- * runs. A new session's pipe to its frontend comes to system after its
- * client's socket, and system passes it on to config, with the client's
- * uid, so config hears of a session only once system has its client.
- * BEGIN, TEST and SAVE name the
- * session. The commit record stores the uid of BEGIN's session; from
- * then on the commit runs to its end, with no request from config. A
- * TEST for no session belongs to the boot, and is refused unless the
- * boot is running. system trusts config to
- * name the session a request came from: a compromised config could act
- * in the name of any connected client, but only as that client's login
- * class allows.
+ *	If what runs is already the rollback configuration, as after a
+ *	reboot, the rollback only removes the record. A record that
+ *	cannot be read is tried again, and that is not an attempt.
  *
- * system checks the permissions of the login class of that request's
- * uid itself, as config does. An operation needs operate; BEGIN, TEST
- * and SAVE need configure. A commit
- * by a session without admin may not change settings that need admin:
- * system keeps the running configuration when BEGIN accepts the commit,
- * and before it records the commit, a parser checks the script against
- * it (system_parse(), parserproc.c). system reads none of that text
- * itself. Login classes and users, root's crontab, and the
- * rules of inetd, ifstated and sshd need admin. So does a line in
- * smtpd's rules with mda, proc, a pipe, a table or a macro; in snmpd's
- * with a trap handle or a macro; in pf's with file or load; and in any
- * daemon's with include. Each of these runs a command as root, reads a
- * file as root, or decides who may log in. A TEST for such a session is
- * refused those lines too: a parser judges them against the running
- * configuration before the test runs.
+ * The boot (system_boot())
+ *	Once for each boot of the host, which the boot record names by
+ *	kern.boottime. carp stays demoted unless the saved configuration
+ *	then runs. Clients are taken either way.
  *
- * A web configurator session has no permissions until it logs in, and
- * only such a session may log in. system checks the user's password
- * itself (passwd.c's login_auth()), for a user that a login user line
- * names, never root. It keeps the uid the session logged in as until
- * the session is gone. The session then has the
- * permissions of that user's login class, and its commits are that
- * user's.
+ *	A system started again during the boot does not demote carp
+ *	again.
  *
- * A web session's terminal is nsh, which system starts on a pty as the
- * logged-in user, as login(1) would. system sends the pty to config,
- * which passes it on to the session. nsh exits when its pty is closed.
+ * Children (system_child(), system_job_child())
+ *	Each has a process group of its own, which is killed at its time
+ *	limit or when its stream stops. A show's program and a test run
+ *	as NSHD_CHECK_USER, except root_programs and root_tests. No
+ *	request names a path or a program.
+ *
+ *	A log and dhcpd's leases are opened as root and read as
+ *	NSHD_CHECK_USER. tcpdump is started as root, as it drops root
+ *	itself. A log is followed across newsyslog's rotation.
+ *
+ * A web session (system_login(), system_terminal())
+ *	Has no permissions until it logs in. system checks the password
+ *	in a child, and starts the session's terminal as that user. A
+ *	login is never root's, and the session keeps the uid it logged
+ *	in as until it is gone.
+ *
+ * config's end (config_gone())
+ *	system finishes what it began, ends what it did not, and exits.
+ *
+ *	A commit that waits for GO ends as one undone. A rollback that
+ *	waits runs once parent says that config and every session have
+ *	ended.
+ *
+ * What config sends (IMSG_SYS_*, internal.h), and what answers it:
+ *
+ *	SNAPSHOT	What runs: the configuration as text, and the
+ *			kernel state configure reads, as facts.
+ *	SHOW		A show only root may run: facts, or a stream.
+ *	OP		An operation, as its row of ops[] and values: a
+ *			stream, then how it ended.
+ *	FOLLOW		A log: FOLLOWING, then its text as it comes.
+ *	READ		The client has read what a request sent, so more
+ *			of its stream may go.
+ *	STOP		Stop a request: its stream, or its wait.
+ *	PERMS		A new session: its class's permissions.
+ *	LOGIN		A web login: LOGGED, then the permissions.
+ *	TERMINAL	A web session's terminal: its pty.
+ *	SCRIPT		A part of what a BEGIN or a TEST uses. No
+ *			answer.
+ *	TEST		Test a daemon's rules. It comes before the BEGIN
+ *			it is for, which waits for it.
+ *	BEGIN		A commit: the configuration it is based on, the
+ *			one it wants, and its minutes if confirmed.
+ *			system runs it to its end, and the answer is
+ *			how it ended.
+ *	GO		REVOKING is done: the sessions are lowered.
+ *	SAVE		Save what runs, outside a commit.
+ *	SAVED		The saved configuration, as text.
+ *	ROLLBACK_READ	Saved configuration N.
+ *	ROLLBACK_LIST	The saved configurations, for show rollback.
+ *	ROLLBACK_DIFF	What configuration N changed.
+ *
+ * What system sends:
+ *
+ *	TEXT, FACTS	An answer's output.
+ *	END		An answer's end, with its result.
+ *	BEGUN		BEGIN's commit is recorded, and begun.
+ *	REVOKING	Login users or classes are about to change:
+ *			which sessions lose what. system waits for GO.
+ *	NOTICE		Unasked: an unconfirmed commit was rolled back.
  */
 
 #include <sys/types.h>

@@ -15,35 +15,28 @@
  */
 
 /*
- * frontend: one client of the read-write socket, its session. parent
- * accepts the client, and starts a frontend for it with its pipe to
- * config as fd 3 and the client's socket as fd 4, which only this
- * frontend has. What the client sends goes to config, on their pipe;
- * config's answers go back to the client, with the notices config sends
- * unasked, and config learns each time the client has read all it was
- * sent. frontend checks that a message is one a client (or config) may
- * send, and is whole. config knows whose session this is by the pipe it
- * comes on, so frontend cannot speak for another session.
+ * frontend: one client of the read-write socket, its session. It parses
+ * what that client types, and holds no candidate.
  *
- * frontend reads the lines its client sends, a LINE's and a STAGE's,
- * with nsh's command tables (cmdline_edits()), in the mode config last
- * said the session is in, and sends config their edits: each command's
- * row, and the values its words parse to. config reads no word a client
- * typed; it checks the edits and runs them on the candidate. A line
- * that is none of the candidate's goes no further: frontend answers it
- * itself, with what its reading printed. A stage's line that is none is
- * answered where the stage reaches it, as config says it has; the lines
- * after it are not read. frontend parses a show's words and an
- * operation's the same way, into what the show asks and into the
- * operation's row and values, and answers itself one that is neither.
- * A client that completes lines itself asks for nsh's command tables:
- * frontend has them, and sends them once config says the session may
- * ask. frontend holds no candidate, and has only what config sends its
- * own client.
+ * Its two ends (frontend_client(), frontend_dispatch_config())
+ *	The client's socket, fd 4, and a pipe to config, fd 3, which
+ *	only this frontend has. config knows the session by that pipe,
+ *	so a frontend cannot speak for another session.
  *
- * When the client goes, frontend ends; config finds its pipe closed,
- * and parent tells system. When config closes its pipe, frontend ends
- * too.
+ * Lines (frontend_line(), frontend_stage(), frontend_edits())
+ *	Parsed here, with nsh's command tables, in the mode config last
+ *	said. config gets edits: a command's row and its values, never
+ *	words. A line that is none of the candidate's is answered here.
+ *
+ * Shows and operations (frontend_show(), frontend_op())
+ *	Parsed the same way, into what config passes on to system.
+ *
+ * The command tables (frontend_commands())
+ *	Sent to a client that completes lines itself, once config says
+ *	the session may ask.
+ *
+ * Endings (frontend_gone())
+ *	It ends when its client goes, or when config closes its pipe.
  */
 
 #include <sys/types.h>
