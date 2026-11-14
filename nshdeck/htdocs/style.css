@@ -651,26 +651,17 @@ main {
 	min-height: 9.2308rem;
 	border-radius: .4615rem;
 	/*
-	 * the face: dark brushed metal under a clear polish. On the polish,
-	 * the light from above, a band with a hard edge, and two streaks
-	 * across it, as a window's; under it the brushing's sheen, in two
+	 * the face: dark brushed metal, with the brushing's sheen, in two
 	 * soft bands, and the metal's grain (metal.svg)
 	 */
 	background:
-	    radial-gradient(130% 5.3846rem at 50% -1.3846rem,
-	    rgba(255, 255, 255, .2), rgba(255, 255, 255, .06) 62%,
-	    transparent 62.6%),
-	    linear-gradient(112deg, transparent 30%,
-	    rgba(255, 255, 255, .075) 30.2%, rgba(255, 255, 255, .02) 37%,
-	    transparent 37.2%, transparent 40%, rgba(255, 255, 255, .05) 40.2%,
-	    rgba(255, 255, 255, .01) 43%, transparent 43.2%),
 	    linear-gradient(90deg, transparent 6%, rgba(255, 255, 255, .1) 19%,
 	    transparent 33%, transparent 54%, rgba(255, 255, 255, .08) 69%,
 	    transparent 84%),
 	    url(metal.svg),
 	    linear-gradient(180deg, #363b43, #191b1f 46%, #0b0c0e);
 	border: 1px solid #000;
-	/* its shadow on what it stands on, and its lights' glow there */
+	/* its shadow, and under it the light of what is racked below */
 	box-shadow: 0 1px 0 rgba(255, 255, 255, .06),
 	    0 .9231rem 1.3846rem -.4615rem rgba(0, 0, 0, .7),
 	    0 2rem 2.1538rem -1.5385rem rgba(34, 211, 238, .55);
@@ -679,8 +670,9 @@ main {
 }
 
 /*
- * over all that is in it: the room's light, brighter at its top left
- * and less at its ends, and its edges, bevelled and bright
+ * over all that is in it: a light that crosses it once, and is then
+ * out of sight to its left; the room's light, brighter at its top left
+ * and less at its ends; and its edges, bevelled and bright
  */
 .chassis::before {
 	content: "";
@@ -689,6 +681,10 @@ main {
 	z-index: 1;
 	border-radius: inherit;
 	background:
+	    linear-gradient(105deg, transparent 12%,
+	    rgba(255, 255, 255, .5) 42%, transparent 56%,
+	    rgba(255, 255, 255, .2) 68%, transparent 80%)
+	    -80% 0 / 42% 100% no-repeat,
 	    radial-gradient(90% 150% at 26% -30%, rgba(255, 255, 255, .09),
 	    transparent 60%),
 	    radial-gradient(75% 140% at 50% 50%, transparent 62%,
@@ -702,7 +698,30 @@ main {
 	pointer-events: none;
 }
 
-/* a strip of light along its foot, in nsh's colours */
+/*
+ * the box, as it is first shown (app.js): the light crosses it, right
+ * to left, and is gone. Nothing is left on it that could not stay
+ */
+.chassis.lit::before {
+	animation: glint 1.7s .35s ease-in-out both;
+}
+
+@keyframes glint {
+	from {
+		background-position: 180% 0, 0 0, 0 0;
+	}
+	to {
+		background-position: -80% 0, 0 0, 0 0;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.chassis.lit::before {
+		animation: none;
+	}
+}
+
+/* along its foot, the light of what is racked below, in nsh's colours */
 .chassis::after {
 	content: "";
 	position: absolute;
@@ -754,17 +773,10 @@ main {
 	min-width: 12.9231rem;
 }
 
-/*
- * the plate and the lights' panel: black glass, and on it the light from
- * above, to a curved edge, and a streak
- */
+/* the plate and the lights' panel: black glass */
 .plate, .status {
 	background:
-	    linear-gradient(108deg, transparent 58%,
-	    rgba(255, 255, 255, .1) 58.4%, rgba(255, 255, 255, .02) 74%,
-	    transparent 74.4%),
-	    radial-gradient(170% 105% at 50% -58%, rgba(255, 255, 255, .24),
-	    rgba(255, 255, 255, .06) 70%, transparent 70.6%),
+	    linear-gradient(180deg, rgba(255, 255, 255, .08), transparent 38%),
 	    linear-gradient(180deg, #15181c, #040506);
 }
 
@@ -1090,10 +1102,8 @@ main {
 	padding: .6923rem 1.0769rem;
 	border-radius: .3077rem;
 	border: 1px solid #000;
-	/* its glass: the light on it, a corner's worth, then its lines */
+	/* its glass, and its lines */
 	background:
-	    linear-gradient(118deg, rgba(255, 255, 255, .17),
-	    rgba(255, 255, 255, .04) 26%, transparent 26.4%),
 	    repeating-linear-gradient(0deg, rgba(255, 255, 255, .025) 0 1px,
 	    transparent 1px .2308rem),
 	    radial-gradient(ellipse at 50% 0%, #0f1f1b, #030504 75%);

@@ -1220,6 +1220,8 @@ function loggedIn(j) {
 	follow();
 	host();
 	runState();
+	/* the light crosses the box as it is first shown (style.css) */
+	$("ports").parentNode.classList.add("lit");
 	workspace("overview");
 }
 
@@ -1367,6 +1369,11 @@ document.addEventListener("DOMContentLoaded", function () {
 	});
 	document.addEventListener("keydown", keys);
 	window.addEventListener("resize", chassisFit);
+	/* once: showing the Overview again does not send the light again */
+	$("ports").parentNode.addEventListener("animationend", function (e) {
+		if (e.animationName === "glint")
+			e.currentTarget.classList.remove("lit");
+	});
 	document.addEventListener("input", function (e) {
 		if (e.target === comp)
 			closeChoices();
