@@ -30,7 +30,6 @@ commands.c	table	Bridgelist Bridgelist_nitems Intlist
 			brport_args brprotos brpvids brpvlan_args carploggingtab
 			carppreempttab carptab cmdtab cmdtab2
 			cmdtab_nitems
-			conf_top
 			crontabhelp ddbhelp ddbtab
 			defaultttltab defer_keys demotecountertab
 			description_args
@@ -153,7 +152,7 @@ nshcmds.c	table	clearhelp commithelp confighelp dohelp
 			showndptab showroutetab showvlantab sshhelp stts
 			telnethelp tracert6help tracerthelp unsetenvhelp
 			verbosehelp whohelp
-passwd.c		table	login_builtin login_permtab
+passwd.c		table	login_builtin login_kinds login_permtab
 ppp.c		table	spppproto
 prompt.c	process	ifname prompt saved_prompt
 prompt.c	scratch	hbuf

@@ -1282,6 +1282,22 @@ edit_rtable(void *arg, const struct facts_template *t,
 	*(int *)arg = v[0].v.i;
 }
 
+/* what edit_login() checks: a login line, set or not, and the verdict */
+struct edit_admin {
+	int	 set, r;
+};
+
+/* a login line's record: may a session without admin run it? */
+static void
+edit_login(void *arg, const struct facts_template *t,
+    const struct facts_value *v)
+{
+	struct edit_admin	*x = arg;
+
+	if (login_admin(x->set, v) == -1)
+		x->r = -1;
+}
+
 /*
  * The parser's check of s, as script_run() would run it, in the commit
  * of a session without admin, against the running configuration before
@@ -1295,10 +1311,11 @@ edits_admin(struct script *s)
 	const struct argcmd *c;
 	struct argcmd cmd;
 	struct facts_in in;
+	struct edit_admin x;
 	struct edit e;
-	char *argv[NARGS + 1], *p;
+	char *p;
 	size_t off;
-	int i, n, rt = 0, r = 0;
+	int i, rt = 0, r = 0;
 
 	if (edits_check(s->edits, s->elen) == -1)
 		return -1;
@@ -1319,12 +1336,12 @@ edits_admin(struct script *s)
 			}
 			if (strcmp(c->name, "login") != 0)
 				break;
-			n = 0;
-			if (e.no)
-				argv[n++] = "no";
-			argv[n++] = c->name;
-			n += edit_words(p, e.len, argv + n, NARGS - n);
-			if (login_admin(n, argv) == -1)
+			x.set = !e.no;
+			x.r = 0;
+			facts_in_init(&in, edit_login, &x);
+			facts_read(&in, p, e.len);
+			facts_in_free(&in);
+			if (x.r == -1)
 				r = -1;
 			break;
 		case EDIT_END:

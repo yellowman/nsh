@@ -26,7 +26,6 @@
 
 #include <ctype.h>
 #include <limits.h>
-#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -39,6 +38,8 @@
 #include <sys/stat.h>
 #include "externs.h"
 #include "settings.h"
+#include "facts.h"
+#include "args.h"
 
 int validate_cpass(char *, char *);
 
@@ -125,16 +126,16 @@ validate_cpass(char *cipher, char *cpass)
  * outlives a reboot, as the accounts do.
  */
 
-static const struct {
-	char *name;
-	int perm;
-} login_permtab[] = {
+/* the permissions, and their words, which a login line's keys are too */
+const struct argkey login_permtab[] = {
 	{ "view",	LOGIN_VIEW },
 	{ "operate",	LOGIN_OPERATE },
 	{ "configure",	LOGIN_CONFIGURE },
 	{ "admin",	LOGIN_ADMIN },
 	{ "exec",	LOGIN_EXEC },
+	{ NULL }
 };
+#define LOGIN_NPERMS	(nitems(login_permtab) - 1)
 
 static const struct {
 	char *name;
@@ -191,15 +192,15 @@ login_words_perms(int n, char **words)
 	size_t j;
 
 	for (i = 0; i < n; i++) {
-		for (j = 0; j < nitems(login_permtab); j++)
-			if (isprefix(words[i], login_permtab[j].name))
+		for (j = 0; j < LOGIN_NPERMS; j++)
+			if (isprefix(words[i], (char *)login_permtab[j].word))
 				break;
-		if (j == nitems(login_permtab)) {
+		if (j == LOGIN_NPERMS) {
 			printf("%% login class: %s is not a permission\n",
 			    words[i]);
 			return -1;
 		}
-		perms |= login_permtab[j].perm;
+		perms |= login_permtab[j].value;
 	}
 	return perms;
 }
@@ -211,10 +212,10 @@ login_perms_words(int perms, char *buf, size_t len)
 	size_t j;
 
 	buf[0] = '\0';
-	for (j = 0; j < nitems(login_permtab); j++)
-		if (perms & login_permtab[j].perm) {
+	for (j = 0; j < LOGIN_NPERMS; j++)
+		if (perms & login_permtab[j].value) {
 			strlcat(buf, " ", len);
-			strlcat(buf, login_permtab[j].name, len);
+			strlcat(buf, login_permtab[j].word, len);
 		}
 }
 
@@ -339,7 +340,7 @@ login_store(const char *kind, const char *name, const char *rec)
 int
 login_class_perms(const char *class)
 {
-	char *lines[LOGIN_LINES], *w[nitems(login_permtab) + 3];
+	char *lines[LOGIN_LINES], *w[LOGIN_NPERMS + 3];
 	char *p, *q;
 	size_t j;
 	int i, n, nw, perms = -1;
@@ -402,36 +403,33 @@ login_cand_class(const char *class, struct cand *cand)
 	return 0;
 }
 
-/* login class NAME [PERMISSION...], or no login class NAME */
+/* login class NAME with permissions p, or no login class NAME */
 static int
-login_class(int set, int argc, char **argv, struct cand *cand)
+login_class(int set, char *name, int p, struct cand *cand)
 {
 	char perms[64], rec[128];
 	size_t j;
-	int p;
 
-	if (!login_name_ok("class", argv[2]))
+	if (!login_name_ok("class", name))
 		return -1;
 	for (j = 0; j < nitems(login_builtin); j++)
-		if (strcmp(argv[2], login_builtin[j].name) == 0) {
+		if (strcmp(name, login_builtin[j].name) == 0) {
 			printf("%% login class %s: a built-in class, which "
-			    "cannot be changed\n", argv[2]);
+			    "cannot be changed\n", name);
 			return -1;
 		}
 	if (!set) {
 		if (cand != NULL)
 			return cand_setting(cand, ST_OFF,
-			    "login class %s", argv[2]);
-		return login_store("class", argv[2], NULL);
+			    "login class %s", name);
+		return login_store("class", name, NULL);
 	}
-	if ((p = login_words_perms(argc - 3, argv + 3)) == -1)
-		return -1;
 	login_perms_words(p, perms, sizeof(perms));
 	if (cand != NULL)
 		return cand_setting(cand, ST_ON, "login class %s%s",
-		    argv[2], perms);
-	snprintf(rec, sizeof(rec), "class %s%s", argv[2], perms);
-	return login_store("class", argv[2], rec);
+		    name, perms);
+	snprintf(rec, sizeof(rec), "class %s%s", name, perms);
+	return login_store("class", name, rec);
 }
 
 /* useradd, usermod or userdel for name: 0 if it exited 0, else -1 */
@@ -473,9 +471,9 @@ login_make(char *name, char *hash)
 
 /* login user NAME class CLASS [password HASH], or no login user NAME */
 static int
-login_user(int set, int argc, char **argv, struct cand *cand)
+login_user(int set, char *name, char *uclass, char *hash, struct cand *cand)
 {
-	char *name = argv[2], *hash = NULL, class[64], rec[256];
+	char class[64], rec[256];
 	char *mod[] = { USERMOD, "-p", NULL, name, NULL };
 	char *del[] = { USERDEL, name, NULL };
 	struct passwd *pw;
@@ -499,13 +497,9 @@ login_user(int set, int argc, char **argv, struct cand *cand)
 			return -1;
 		return found ? login_store("user", name, NULL) : 0;
 	}
-	if ((argc != 5 && argc != 7) || !isprefix(argv[3], "class") ||
-	    (argc == 7 && !isprefix(argv[5], "password")))
-		return login_usage();
-	if (!login_name_ok("class", argv[4]))
+	if (!login_name_ok("class", uclass))
 		return -1;
-	if (argc == 7) {
-		hash = argv[6];
+	if (hash != NULL) {
 		/* nsh asks for it, and sends its hash in its place */
 		if (isprefix(hash, "plain-text-password")) {
 			printf("%% login user %s: give the password's "
@@ -517,10 +511,10 @@ login_user(int set, int argc, char **argv, struct cand *cand)
 			return -1;
 	}
 	if (cand != NULL) {
-		if (!login_cand_class(argv[4], cand))
+		if (!login_cand_class(uclass, cand))
 			return -1;
 		return cand_setting(cand, ST_ON, "login user %s class %s%s%s",
-		    name, argv[4], hash ? " password " : "", hash ? hash : "");
+		    name, uclass, hash ? " password " : "", hash ? hash : "");
 	}
 
 	if ((found = login_user_find(name, class, sizeof(class), &made)) ==
@@ -558,36 +552,67 @@ login_user(int set, int argc, char **argv, struct cand *cand)
 		}
 		made = 0;
 	}
-	snprintf(rec, sizeof(rec), "user %s %s %s", name, argv[4],
+	snprintf(rec, sizeof(rec), "user %s %s %s", name, uclass,
 	    made ? "made" : "found");
 	return login_store("user", name, rec);
 }
 
 /*
- * The parser's check of a login line, argv as loginset() gets it, in the
- * script of a session without admin (admin_may()): it may only set a
- * line that was running, and only remove one that was not. 0 if it may,
- * else -1 after saying why
+ * login class NAME [PERMISSION...], login user NAME class CLASS
+ * [password HASH], and their no forms, which take the name alone; as
+ * loginset() read them (login_parse())
+ */
+#define LOGIN_KIND	0
+#define LOGIN_NAME	1
+#define LOGIN_PERMS	2
+#define LOGIN_CLASS	3
+#define LOGIN_HASH	4
+#define LOGIN_OFCLASS	1	/* LOGIN_KIND's values */
+#define LOGIN_OFUSER	2
+const struct argkey login_kinds[] = {
+	{ "class", LOGIN_OFCLASS }, { "user", LOGIN_OFUSER }, { NULL }
+};
+
+/*
+ * The line login values v say, or with no, its key: what conf() prints
+ * for it, in line (len bytes)
+ */
+static void
+login_line(int set, const struct facts_value *v, char *line, size_t len)
+{
+	char name[32], class[32], hash[_PASSWORD_LEN + 1], perms[64];
+
+	args_string(&v[LOGIN_NAME], name, sizeof(name));
+	if (v[LOGIN_KIND].v.i == LOGIN_OFCLASS) {
+		login_perms_words(set && v[LOGIN_PERMS].type != FACT_NONE ?
+		    v[LOGIN_PERMS].v.i : 0, perms, sizeof(perms));
+		snprintf(line, len, "login class %s%s", name, perms);
+		return;
+	}
+	if (!set || v[LOGIN_CLASS].type == FACT_NONE) {
+		snprintf(line, len, "login user %s", name);
+		return;
+	}
+	args_string(&v[LOGIN_CLASS], class, sizeof(class));
+	hash[0] = '\0';
+	if (v[LOGIN_HASH].type != FACT_NONE)
+		args_string(&v[LOGIN_HASH], hash, sizeof(hash));
+	snprintf(line, len, "login user %s class %s%s%s", name, class,
+	    hash[0] != '\0' ? " password " : "", hash);
+}
+
+/*
+ * The parser's check of a login line, its values v, in the script of a
+ * session without admin (admin_may()): it may only set a line that was
+ * running, and only remove one that was not. 0 if it may, else -1 after
+ * saying why
  */
 int
-login_admin(int argc, char **argv)
+login_admin(int set, const struct facts_value *v)
 {
 	char line[1024];
-	int i, set = 1;
 
-	if (NO_ARG(argv[0])) {
-		argv++;
-		argc--;
-		set = 0;
-	}
-	if (argc < 3)
-		return 0;
-	line[0] = '\0';
-	for (i = 0; i < (set ? argc : 3); i++) {
-		if (i > 0)
-			strlcat(line, " ", sizeof(line));
-		strlcat(line, argv[i], sizeof(line));
-	}
+	login_line(set, v, line, sizeof(line));
 	if (admin_may(line, !set, 3))
 		return 0;
 	printf("%% Commit refused: changing login classes and users needs the "
@@ -595,30 +620,66 @@ login_admin(int argc, char **argv)
 	return -1;
 }
 
-/* login class, login user, or their no forms */
 int
-loginset(int argc, char **argv, ...)
+login_parse(const struct argcmd *c, int argc, char **argv,
+    struct argvals *a)
 {
-	int set = 1;
-	struct cand *cand;
-	va_list ap;
+	int p;
 
-	va_start(ap, argv);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
-
-	if (NO_ARG(argv[0])) {
-		argv++;
-		argc--;
-		set = 0;
-	}
-	if (argc < 3)
+	if (argc < 2)
 		return login_usage();
-	if (isprefix(argv[1], "class"))
-		return login_class(set, argc, argv, cand);
-	if (isprefix(argv[1], "user"))
-		return login_user(set, argc, argv, cand);
-	return login_usage();
+	if (isprefix(argv[0], "class"))
+		facts_i64(&a->v[LOGIN_KIND], LOGIN_OFCLASS);
+	else if (isprefix(argv[0], "user"))
+		facts_i64(&a->v[LOGIN_KIND], LOGIN_OFUSER);
+	else
+		return login_usage();
+	if (!login_name_ok(a->v[LOGIN_KIND].v.i == LOGIN_OFCLASS ? "class" :
+	    "user", argv[1]) ||
+	    args_word(c, &c->args[LOGIN_NAME], a, argv[1],
+	    &a->v[LOGIN_NAME]) == -1)
+		return -1;
+	if (!a->set)
+		return 0;
+	if (a->v[LOGIN_KIND].v.i == LOGIN_OFCLASS) {
+		if ((p = login_words_perms(argc - 2, argv + 2)) == -1)
+			return -1;
+		if (p != 0)
+			facts_i64(&a->v[LOGIN_PERMS], p);
+		return 0;
+	}
+	if ((argc != 4 && argc != 6) || !isprefix(argv[2], "class") ||
+	    (argc == 6 && !isprefix(argv[4], "password")))
+		return login_usage();
+	if (!login_name_ok("class", argv[3]) ||
+	    args_word(c, &c->args[LOGIN_CLASS], a, argv[3],
+	    &a->v[LOGIN_CLASS]) == -1)
+		return -1;
+	if (argc == 6 && args_word(c, &c->args[LOGIN_HASH], a, argv[5],
+	    &a->v[LOGIN_HASH]) == -1)
+		return -1;
+	return 0;
+}
+
+int
+login_apply(const struct argcmd *c, int set, const struct facts_value *v,
+    char *ifname, int ifs, struct cand *cand)
+{
+	char name[32], class[32], hash[_PASSWORD_LEN + 1];
+
+	args_string(&v[LOGIN_NAME], name, sizeof(name));
+	if (v[LOGIN_KIND].v.i == LOGIN_OFCLASS)
+		return login_class(set, name, v[LOGIN_PERMS].type !=
+		    FACT_NONE ? v[LOGIN_PERMS].v.i : 0, cand);
+	if (!set)
+		return login_user(0, name, NULL, NULL, cand);
+	class[0] = '\0';
+	if (v[LOGIN_CLASS].type != FACT_NONE)
+		args_string(&v[LOGIN_CLASS], class, sizeof(class));
+	if (v[LOGIN_HASH].type != FACT_NONE)
+		args_string(&v[LOGIN_HASH], hash, sizeof(hash));
+	return login_user(1, name, class, v[LOGIN_HASH].type != FACT_NONE ?
+	    hash : NULL, cand);
 }
 
 static int
@@ -690,7 +751,7 @@ login_lines(char *text, size_t len, uint32_t max, struct login_line **lp,
     uint32_t *np)
 {
 	struct login_line *l;
-	char *p, *end = text + len, *nl, *q, *s, *w[nitems(login_permtab) + 3];
+	char *p, *end = text + len, *nl, *q, *s, *w[LOGIN_NPERMS + 3];
 	char user[32], class[32];
 	uint32_t n = 0;
 	int nw;

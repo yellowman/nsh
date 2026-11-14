@@ -211,12 +211,7 @@ extern int in_config;
 int conf_mode(char *);
 int conf_ordered(char *);
 
-/* A command a configuration has that runs with its words (conf_cmd()) */
-struct confcmd {
-	char	*name;
-	int	(*handler)(int, char **, ...);
-	int	 flags;
-};
+/* the commands a configuration has (conf_cmd(), args.h) */
 int conf_find(int, char *, char **);
 int conf_line(int, int, char **, char *, int, struct cand *);
 int conf_run(int, int, int, char **, char *);
@@ -480,7 +475,6 @@ void print_media_word(uint64_t, int, int, FILE *);
 #define LOGIN_ADMIN	0x8
 #define LOGIN_EXEC	0x10
 #define LOGIN_ALL	0x1f
-int loginset(int, char **, ...);
 int login_class_perms(const char *);
 int login_perms(uid_t);
 /* a login class or user, as a configuration's line gives it */
@@ -507,7 +501,8 @@ int admin_may(char *, int, int);
 int admin_test(char *, char *, size_t);
 int admin_rules(int, int, char *, size_t);
 int admin_cleared(char *);
-int login_admin(int, char **);
+struct facts_value;
+int login_admin(int, const struct facts_value *);
 
 /* pfsync.c */
 #define PFSYNC_MAXUPDATES 128

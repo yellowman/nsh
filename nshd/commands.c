@@ -2048,7 +2048,18 @@ Command cmdtab[] = {
 	  .args = ARGS{
 		{ "hostname",	ARG_WORD, 1, MAXHOSTNAMELEN - 1 },
 		{ NULL } } },
-	{ "login",	loginhelp,	CMPL0 0, 0, loginset,		1, 1, 1, 0, CAND_EDIT },
+	{ "login", loginhelp, CMPL0
+	  .needsession = 1, .needconfig = 1, .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = login_apply, .parse = login_parse,
+	  .args = ARGS{
+		{ "kind",	ARG_NUM, 1, 0, ARG_NO, login_kinds,
+		  .help = "class|user" },
+		{ "name",	ARG_WORD, 1, 31, ARG_NO },
+		{ "permission",	ARG_BITS, 0, 0, ARG_OPT, login_permtab },
+		{ "class",	ARG_WORD, 1, 31, ARG_NAMED | ARG_OPT },
+		{ "password",	ARG_WORD, 1, _PASSWORD_LEN,
+		    ARG_NAMED | ARG_OPT },
+		{ NULL } } },
 	{ "interface", interfacehelp, CMPL(i)
 	  .needsession = 1, .needconfig = 1, .nocmd = 1, .modh = 1,
 	  .cand = CAND_EDIT,
@@ -2194,18 +2205,6 @@ Command cmdtab[] = {
 };
 
 size_t cmdtab_nitems = nitems(cmdtab);
-
-/*
- * The commands a configuration has that config does not parse: a
- * commit's edit has such a command's words, and conf_run() runs its
- * handler with them. conf_cmd() takes these, and the rows that have
- * their arguments, and nothing else. A top-level command takes no if
- * CF_NO says so, as its row in cmdtab does; any interface command can
- * take no
- */
-static const struct confcmd conf_top[] = {
-	{ "login",	loginset,	CF_NO },
-};
 
 /*
  * These commands escape ambiguous check and help listings
@@ -2771,27 +2770,6 @@ conf_ordered(char *line)
 }
 
 /*
- * c for the command called name, if t has it: t is a table of len
- * commands that run with their words. NULL if it has none of the name
- */
-static const struct argcmd *
-conf_words(const struct confcmd *t, size_t len, const char *name,
-    struct argcmd *c)
-{
-	size_t n;
-
-	for (n = 0; n < len; n++)
-		if (strcmp(t[n].name, name) == 0) {
-			memset(c, 0, sizeof(*c));
-			c->name = t[n].name;
-			c->flags = t[n].flags;
-			c->handler = t[n].handler;
-			return c;
-		}
-	return NULL;
-}
-
-/*
  * c, row i of an interface's or a bridge's mode (Intlist, Bridgelist),
  * as args.c takes a command, if config parses the row's line: the row
  * has the function that applies its values. NULL if it has none. Any
@@ -2871,11 +2849,10 @@ top_line(const Command *t, struct cand *cand)
 /*
  * Row n of ctx's table, cmdtab, Intlist or Bridgelist for CTX_TOP,
  * CTX_IF or CTX_BRIDGE, as c, if it is a command a configuration has:
- * one config parses (int_cmd(), top_cmd()), or one that runs with its words
- * still (conf_words()). NULL for any other row, and where there is no
- * such row. A commit's edits name a command by its row (commit.c), so a
- * commit runs no row that is not one of these: a daemon's, which ctl.c
- * handles (ctl_act()), is in none
+ * one config parses (int_cmd(), top_cmd()). NULL for any other row, and
+ * where there is no such row. A commit's edits name a command by its
+ * row (commit.c), so a commit runs no row that is not one of these: a
+ * daemon's, which ctl.c handles (ctl_act()), has no arguments here
  */
 const struct argcmd *
 conf_cmd(int ctx, int n, struct argcmd *c)
@@ -2884,12 +2861,8 @@ conf_cmd(int ctx, int n, struct argcmd *c)
 		return NULL;
 	switch (ctx) {
 	case CTX_TOP:
-		if ((size_t)n >= nitems(cmdtab) - 1)
-			return NULL;
-		if (top_cmd(&cmdtab[n], c) != NULL)
-			return c;
-		return conf_words(conf_top, nitems(conf_top),
-		    cmdtab[n].name, c);
+		return (size_t)n < nitems(cmdtab) - 1 ?
+		    top_cmd(&cmdtab[n], c) : NULL;
 	case CTX_IF:
 		return (size_t)n < nitems(Intlist) - 1 ?
 		    int_cmd(&Intlist[n], c) : NULL;
