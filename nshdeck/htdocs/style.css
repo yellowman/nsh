@@ -268,7 +268,22 @@ input.nope {
 	height: calc(24 * 1.6em);
 	max-height: calc(100vh - 20vh - 6.1538rem);
 	padding: .6154rem .9231rem;
-	overflow: hidden;
+	overflow-y: auto;
+	scrollbar-width: none;
+}
+
+#login .tty::-webkit-scrollbar {
+	display: none;
+}
+
+/* the logins tried before, as a terminal keeps them above the prompt */
+#login .past {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+#login .past .ask {
+	white-space: pre;
 }
 
 #login .ask {
@@ -306,6 +321,16 @@ input.nope {
 }
 
 #login .entry:focus-within .cursor {
+	display: block;
+}
+
+/* Password: is asked once a name is given, as login(1) asks it */
+#login:not(.asked) label:nth-of-type(2) {
+	display: none;
+}
+
+/* until the page has the focus, the cursor waits in the login field */
+#login:not(:focus-within) label:first-of-type .cursor {
 	display: block;
 }
 
@@ -348,11 +373,6 @@ input.nope {
 	color: inherit;
 	caret-color: transparent;
 	min-width: 0;
-}
-
-#login .error {
-	color: inherit;
-	min-height: 1.6em;
 }
 
 /* Enter logs in, so the button is there for that, and not seen */

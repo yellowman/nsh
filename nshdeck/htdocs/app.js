@@ -1234,7 +1234,7 @@ function loggedOut() {
 		location.reload();
 	else {
 		$("login").hidden = false;
-		$("login").user.focus();
+		loginPrompt();
 	}
 }
 
@@ -1269,6 +1269,55 @@ function starDrop(echo) {
 	echo.style.setProperty("--drop", (m.actualBoundingBoxAscent -
 	    m.actualBoundingBoxDescent - m.fontBoundingBoxAscent +
 	    m.fontBoundingBoxDescent) / 200 + "em");
+}
+
+/* at most this many lines of logins tried are kept above the prompt */
+var LOGINLINES = 240;
+
+/*
+ * A login tried, kept above a new prompt as a terminal keeps it: its
+ * name, its Password: line, and why it was refused; or, if why is
+ * null, an empty name, which only asks again
+ */
+function loginFailed(user, why) {
+	var past = $("login-past"), line = function (ask, text) {
+		var p = past.appendChild(el("div"));
+
+		if (ask !== null)
+			p.appendChild(el("span", ask, "ask"));
+		p.appendChild(document.createTextNode(text));
+	};
+
+	line("login:", " " + user);
+	if (why !== null) {
+		line("Password:", "");
+		line(null, why.replace(/^% /, ""));
+	}
+	while (past.children.length > LOGINLINES)
+		past.removeChild(past.firstChild);
+	loginPrompt();
+}
+
+/* a new login: prompt, at the bottom, with the cursor in it */
+function loginPrompt() {
+	var f = $("login"), tty = f.querySelector(".tty");
+
+	f.user.value = "";
+	f.password.value = "";
+	f.classList.remove("asked");
+	f.user.focus();
+	loginCursor(f.user);
+	loginCursor(f.password);
+	tty.scrollTop = tty.scrollHeight;
+}
+
+/* the login form's field in use, focused again if it lost the focus */
+function loginRefocus() {
+	var f = $("login");
+
+	if (document.activeElement !== f.user &&
+	    document.activeElement !== f.password)
+		(f.classList.contains("asked") ? f.password : f.user).focus();
 }
 
 /* a form's submit, handled by fn, without leaving the page */
@@ -1318,8 +1367,11 @@ document.addEventListener("DOMContentLoaded", function () {
 	});
 	/* as login(1) does, Enter after the name asks for the password */
 	$("login").user.addEventListener("keydown", function (e) {
+		if (e.key === "Enter" && e.target.value === "")
+			return;
 		if (e.key === "Enter") {
 			e.preventDefault();
+			$("login").classList.add("asked");
 			$("login").password.focus();
 		}
 	});
@@ -1339,16 +1391,32 @@ document.addEventListener("DOMContentLoaded", function () {
 		if (i !== null && i.form === $("login"))
 			loginCursor(i);
 	});
+	/*
+	 * a click in the terminal, or a key typed while nothing has the
+	 * focus, puts the cursor back where it was
+	 */
+	$("login").querySelector(".tty").addEventListener("mouseup",
+	    loginRefocus);
+	document.addEventListener("keydown", function () {
+		if (!$("login").hidden)
+			loginRefocus();
+	}, true);
 	on("login", function (f) {
-		ask("POST", "login", { user: f.user.value,
+		var user = f.user.value;
+
+		/* as login(1) does, an empty name asks again */
+		if (user === "") {
+			loginFailed("", null);
+			return;
+		}
+		ask("POST", "login", { user: user,
 		    password: f.password.value }).then(function (j) {
 			f.password.value = "";
 			loginCursor(f.password);
 			if (j.httpStatus !== 200) {
-				$("login-error").textContent = j.error;
+				loginFailed(user, j.error || "Login incorrect");
 				return;
 			}
-			$("login-error").textContent = "";
 			loggedIn(j);
 		});
 	});
