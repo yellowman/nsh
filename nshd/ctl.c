@@ -78,9 +78,9 @@ static int admin_had(struct daemons *, int, char *);
 static const char *admin_in(int);
 
 /*
- * While a commit runs (admin_begin()): whether its session lacks the
- * admin permission, the running configuration before it, and whether a
- * line was refused
+ * While the parser checks a commit or a test (admin_begin()): whether
+ * its session lacks the admin permission, the running configuration
+ * before it, and whether a line was refused
  */
 static int admin_limited;
 static struct cnode *admin_tree;
@@ -955,17 +955,16 @@ ctl_do(int d, int act)
 /*
  * Write text, len bytes, as daemon d's rules in cli_rtable: the lines of
  * a script's rules block, each written with a newline. 0, or -1 after
- * saying why. A commit without admin writes no line from the first that
- * needs it, and a file it wrote no line of stays as it was
+ * saying why. The parser has checked a script of a session without
+ * admin first (admin_rules())
  */
 int
 ctl_setrules(int d, char *text, size_t len)
 {
 	struct daemons *dm = &ctl_daemons[d];
 	char path[PATH_MAX], *t, *p, *l;
-	char *need = NULL;
 	FILE *f = NULL;
-	int r = 0, line = 0;
+	int r = 0;
 
 	if (cli_rtable > dm->rtablemax) {
 		printf("%% Command %s not available via rtable %d\n",
@@ -976,37 +975,12 @@ ctl_setrules(int d, char *text, size_t len)
 		printf("%% %s has no rules\n", dm->name);
 		return -1;
 	}
-	if (admin_limited && len > 0 && ADMIN_WHOLE(dm)) {
-		printf("%% Commit refused: changing %s's rules%s needs the admin "
-		    "permission\n", dm->name, admin_in(cli_rtable));
-		admin_refused = 1;
-		return -1;
-	}
-	if (admin_limited && !admin_refused &&
-	    admin_scan(dm, text, len, &need) == -1) {
-		printf("%% ctl_setrules: %s\n", strerror(errno));
-		admin_refused = 1;
-		return -1;
-	}
 	snprintf(path, sizeof(path), "%s.%d", dm->tmpfile, cli_rtable);
 	if ((t = p = strndup(text, len)) == NULL) {
 		printf("%% ctl_setrules: %s\n", strerror(errno));
-		free(need);
 		return -1;
 	}
 	while ((l = strsep(&p, "\n")) != NULL && (p != NULL || *l != '\0')) {
-		if (admin_limited && (admin_refused ||
-		    (need != NULL && need[line] &&
-		    !admin_had(dm, cli_rtable, l)))) {
-			if (!admin_refused)
-				printf("%% Commit refused: this line of %s's "
-				    "rules%s needs the admin permission: %s\n",
-				    dm->name, admin_in(cli_rtable), l);
-			admin_refused = 1;
-			r = -1;
-			break;
-		}
-		line++;
 		/* the file, made at its first line */
 		if (f == NULL) {
 			if ((f = fopen(path, "w")) == NULL) {
@@ -1022,6 +996,53 @@ ctl_setrules(int d, char *text, size_t len)
 	if (f != NULL && fclose(f) == EOF) {
 		printf("%% %s: %s\n", path, strerror(errno));
 		r = -1;
+	}
+	free(t);
+	return r;
+}
+
+/*
+ * The parser's check of a script's rules block for daemon d in rtable,
+ * text of len bytes, for a session without admin (admin_begin()): may
+ * it write them? A daemon whose rules need admin may not be given any,
+ * and no other may get a line that needs admin and was not running.
+ * After the first refusal, every later block is refused too, unsaid. 0
+ * if they may be written, else -1 after saying why
+ */
+int
+admin_rules(int d, int rtable, char *text, size_t len)
+{
+	struct daemons *dm = &ctl_daemons[d];
+	char *t, *p, *l, *need = NULL;
+	int r = 0, line = 0;
+
+	if (!admin_limited)
+		return 0;
+	if (admin_refused)
+		return -1;
+	if (len > 0 && ADMIN_WHOLE(dm)) {
+		printf("%% Commit refused: changing %s's rules%s needs the "
+		    "admin permission\n", dm->name, admin_in(rtable));
+		admin_refused = 1;
+		return -1;
+	}
+	if (admin_scan(dm, text, len, &need) == -1 ||
+	    (t = p = strndup(text, len)) == NULL) {
+		printf("%% admin_rules: %s\n", strerror(errno));
+		free(need);
+		admin_refused = 1;
+		return -1;
+	}
+	while ((l = strsep(&p, "\n")) != NULL && (p != NULL || *l != '\0')) {
+		if (need[line] && !admin_had(dm, rtable, l)) {
+			printf("%% Commit refused: this line of %s's rules%s "
+			    "needs the admin permission: %s\n", dm->name,
+			    admin_in(rtable), l);
+			admin_refused = 1;
+			r = -1;
+			break;
+		}
+		line++;
 	}
 	free(t);
 	free(need);
@@ -1355,11 +1376,6 @@ ctl_rules_clear(char *name, int rtableid, int keep)
 			break;
 	if (d->name == NULL || d->tmpfile == NULL)
 		return -1;
-	if (admin_limited && ADMIN_WHOLE(d)) {
-		printf("%% Commit refused: changing %s's rules needs the admin "
-		    "permission\n", d->name);
-		return -1;
-	}
 	snprintf(path, sizeof(path), "%s.%d", d->tmpfile, rtableid);
 	if (!keep) {
 		if (unlink(path) == -1 && errno != ENOENT) {
@@ -1537,9 +1553,10 @@ call_editor(int argc, char **argv, ...)
 }
 
 /*
- * A commit runs, until admin_end(). If limited, its session lacks the
- * admin permission, so it may set what needs admin only as it was
- * before: before, len bytes, the running configuration as it began
+ * The parser checks a commit or a test, until admin_end(). If limited,
+ * its session lacks the admin permission, so it may set what needs admin
+ * only as it was before: before, len bytes, the running configuration as
+ * the commit began
  */
 void
 admin_begin(int limited, char *before, size_t len)
@@ -1576,6 +1593,28 @@ admin_may(char *line, int no, int keylen)
 	if (no)
 		return !conftree_haskey(admin_tree, NULL, line, keylen);
 	return conftree_has(admin_tree, line);
+}
+
+/*
+ * May a commit without admin clear daemon name's rules (ctl_rules_clear())?
+ * Not those of a daemon whose rules need admin: 0 if it may, else -1
+ * after saying why
+ */
+int
+admin_cleared(char *name)
+{
+	struct daemons *d;
+
+	if (!admin_limited)
+		return 0;
+	for (d = ctl_daemons; d->name != NULL; d++)
+		if (strcmp(d->name, name) == 0)
+			break;
+	if (d->name == NULL || !ADMIN_WHOLE(d))
+		return 0;
+	printf("%% Commit refused: changing %s's rules needs the admin "
+	    "permission\n", d->name);
+	return -1;
 }
 
 /*

@@ -195,14 +195,16 @@
  * and SAVE need configure. A commit
  * by a session without admin may not change settings that need admin:
  * system keeps the running configuration when BEGIN accepts the commit,
- * and the commit's script checks its changes against it (ctl.c's
- * admin_begin()). Login classes and users, root's crontab, and the
+ * and before it records the commit, a parser checks the script against
+ * it (system_parse(), parserproc.c). system reads none of that text
+ * itself. Login classes and users, root's crontab, and the
  * rules of inetd, ifstated and sshd need admin. So does a line in
  * smtpd's rules with mda, proc, a pipe, a table or a macro; in snmpd's
  * with a trap handle or a macro; in pf's with file or load; and in any
  * daemon's with include. Each of these runs a command as root, reads a
  * file as root, or decides who may log in. A TEST for such a session is
- * refused those lines too, judged against the running configuration.
+ * refused those lines too: a parser judges them against the running
+ * configuration before the test runs.
  *
  * A web configurator session has no permissions until it logs in, and
  * only such a session may log in. system checks the user's password
@@ -299,15 +301,17 @@
 #endif
 
 /*
- * A job: an apply, a save, a test, a recover or an undo, and how long it
- * may run, then the grace between SIGTERM and SIGKILL. These are not measured;
- * each should be measured on OpenBSD with a full table
+ * A job: an apply, a save, a test, a recover, an undo or the parser's
+ * check, and how long it may run, then the grace between SIGTERM and
+ * SIGKILL. These are not measured; each should be measured on OpenBSD
+ * with a full table
  */
 #define JOB_APPLY	0
 #define JOB_SAVE	1
 #define JOB_TEST	2
 #define JOB_RECOVER	3
 #define JOB_UNDO	4
+#define JOB_PARSE	5
 static const struct {
 	const char	*what;
 	int		 secs;
@@ -318,6 +322,7 @@ static const struct {
 	{ "test",	120,	5 },	/* a validation: bgpd -n on a full table */
 	{ "recover",	900,	10 },	/* rollback of an unconfirmed commit */
 	{ "undo",	900,	10 },	/* rollback of a commit not taken */
+	{ "check",	60,	5 },	/* the parser's, of a full script */
 };
 
 /* rollback attempts for an unconfirmed commit, and seconds between them */
@@ -379,6 +384,7 @@ struct stream {
  * and the unconfirmed commit record it replaced
  */
 struct begun {
+	struct nshd_begin	 bg;		/* BEGIN, as config sent it */
 	uid_t			 uid;		/* its user's */
 	int			 admin;		/* its login class has admin */
 	int			 unsaved;	/* configure terminal's */
@@ -401,6 +407,9 @@ struct job {
 	int			 waits;		/* to start (system_go()) */
 	struct event		 ev, tm;
 	struct nshd_apply	*apply;
+	struct nshd_parse	 parse;		/* the parser's check */
+	char			*runs;		/* what runs, for a test's */
+	size_t			 runslen;
 	char			*back;		/* rollback configuration */
 	size_t			 backlen;
 	char			*want;		/* what an apply wants */
@@ -498,6 +507,8 @@ static uid_t		 check_uid;	/* NSHD_CHECK_USER's */
 static uid_t		 web_uid;	/* NSHD_WEB_USER's, */
 static int		 web_user;	/* if there is one */
 static gid_t		 check_gid;
+static char		 execpath[PATH_MAX];	/* nshd, which the parser is */
+static int		 sys_debug, sys_verbose;	/* -d and -v, for it */
 static struct job	*job;
 static pid_t		 terminals[SYS_TERMINALS];	/* nsh's pid, or 0 */
 static TAILQ_HEAD(, queued) queue = TAILQ_HEAD_INITIALIZER(queue);
@@ -608,7 +619,11 @@ static void	system_rollback(uint32_t, int, int);
 static void	system_health(void);
 static void	system_test(uint32_t, struct nshd_whose *, char *);
 static void	system_tested(uint32_t, int32_t);
-static int	system_admin_test(char *);
+static void	system_test_run(uint32_t, char *);
+static void	system_begin_checked(uint32_t, int);
+static void	system_parse(uint32_t, int, char *);
+static __dead void system_parse_child(struct job *);
+static void	system_parsed(struct job *, int32_t);
 static void	system_printed(uint32_t, int32_t);
 static struct job *system_job_new(uint32_t, int);
 static void	system_job(struct job *);
@@ -645,6 +660,11 @@ systemproc(int debug, int v)
 	child_start("system", debug, v);
 	if (setsid() == -1)
 		fatal("setsid");
+	/* the parser is this program again (system_parse_child()) */
+	if (getexecpath(execpath, sizeof(execpath)) == -1)
+		fatal("getexecpath");
+	sys_debug = debug;
+	sys_verbose = v;
 	/* rc's environment, umask and cwd, whoever started nshd */
 	environ = empty;
 	if (setenv("PATH", SYS_PATH, 1) == -1 || setenv("HOME", "/", 1) == -1)
@@ -1283,7 +1303,8 @@ config_gone(const char *fmt, ...)
 			killpg(s->pid, SIGKILL);
 	TAILQ_FOREACH(a, &attempts, entry)
 		killpg(a->pgid, SIGKILL);
-	if (job != NULL && job->kind == JOB_TEST && job->id != 0)
+	if (job != NULL && (job->kind == JOB_TEST || job->kind == JOB_PARSE) &&
+	    job->id != 0)
 		killpg(job->pgid, SIGKILL);
 	if (job != NULL && job->waits && job->kind == JOB_RECOVER)
 		evtimer_del(&job->tm);
@@ -2340,13 +2361,12 @@ system_parts_free(void)
 static void
 system_begin(uint32_t id, struct nshd_begin *bg)
 {
-	struct record	 rec, now;
 	struct confirm	 cf;
 	struct client	*cl;
 	struct begun	*b;
 	char		*runs;
 	size_t		 len;
-	int		 r, perms, logins = 0, wrote = 0, status = 1;
+	int		 r, perms;
 
 	/* not begun: the verdict counts the tests that refused it too */
 	if (bg->checking || bg->bad > 0 || test_refused == id) {
@@ -2355,9 +2375,9 @@ system_begin(uint32_t id, struct nshd_begin *bg)
 		    (test_refused == id ? test_refusals : 0), bg->checking));
 		return;
 	}
-	memset(&rec, 0, sizeof(rec));
 	if ((b = begun = calloc(1, sizeof(*b))) == NULL)
 		fatal(NULL);
+	b->bg = *bg;
 	if ((cl = client_whose(&bg->whose)) == NULL) {
 		printf("%% Commit refused: its client is gone\n");
 		goto done;
@@ -2366,8 +2386,6 @@ system_begin(uint32_t id, struct nshd_begin *bg)
 	if (!system_may(perms, LOGIN_CONFIGURE, "configure"))
 		goto done;
 	b->admin = (perms & LOGIN_ADMIN) != 0;
-	if (record_read(&rec) == -1)
-		goto done;
 	/* an unsaved commit would be rolled back with an unconfirmed one */
 	if (bg->unsaved) {
 		if (confirm_read(&cf, 0) == -1) {
@@ -2388,7 +2406,7 @@ system_begin(uint32_t id, struct nshd_begin *bg)
 	/*
 	 * Keep the running configuration as read here. The records store
 	 * it, an undo or rollback restores it, and for a session without
-	 * admin, the script checks admin settings against it.
+	 * admin, the parser checks the script against it.
 	 */
 	b->before = runs;
 	b->beforelen = len;
@@ -2399,6 +2417,39 @@ system_begin(uint32_t id, struct nshd_begin *bg)
 		    "was planned. Commit again\n");
 		goto done;
 	}
+	if (b->admin)
+		system_begin_checked(id, 1);
+	else
+		system_parse(id, NSHD_PARSE_SCRIPT, NULL);
+	return;
+ done:
+	system_ended();
+	system_parts_free();
+	system_printed(id, 1);
+}
+
+/*
+ * The commit begun for request id, once its script is checked: ok if it
+ * may run. It is recorded, and runs as BEGIN asked
+ */
+static void
+system_begin_checked(uint32_t id, int ok)
+{
+	struct record	 rec, now;
+	struct begun	*b = begun;
+	struct nshd_begin *bg = &b->bg;
+	int		 r, logins = 0, wrote = 0, status = 1;
+
+	memset(&rec, 0, sizeof(rec));
+	if (!ok)
+		goto done;
+	/* the parser ran in a job, while the client could go */
+	if (client_whose(&bg->whose) == NULL) {
+		printf("%% Commit refused: its client is gone\n");
+		goto done;
+	}
+	if (record_read(&rec) == -1)
+		goto done;
 	/* one that changes login users or classes waits for config */
 	if ((logins = commit_logins(b->before, b->beforelen,
 	    parts[NSHD_WANT], partlen[NSHD_WANT])) == -1)
@@ -2905,15 +2956,14 @@ system_unconfirm(void)
 /*
  * daemon name's test of its rules, the part sent, staged in a directory
  * of their own, in a job. It is the commit's or the boot's of request
- * id, and runs before its BEGIN or APPLY, which waits while a job runs
+ * id, and runs before its BEGIN or APPLY, which waits while a job runs.
+ * For a session without admin, the parser checks the rules first
  */
 static void
 system_test(uint32_t id, struct nshd_whose *whose, char *name)
 {
 	struct client	*cl = NULL;
-	struct job	*j;
-	size_t		 i;
-	int		 fd, perms = LOGIN_ALL;
+	int		 perms = LOGIN_ALL;
 
 	if (whose->session == 0 ? !booting :
 	    (cl = client_whose(whose)) == NULL) {
@@ -2924,12 +2974,25 @@ system_test(uint32_t id, struct nshd_whose *whose, char *name)
 	}
 	if (cl != NULL)
 		perms = system_whom(cl, NULL);
-	if (!system_may(perms, LOGIN_CONFIGURE, "configure") ||
-	    ((perms & LOGIN_ADMIN) == 0 && system_admin_test(name) == -1)) {
+	if (!system_may(perms, LOGIN_CONFIGURE, "configure")) {
 		system_part_free(NSHD_TEST);
 		system_tested(id, 1);
 		return;
 	}
+	if ((perms & LOGIN_ADMIN) == 0)
+		system_parse(id, NSHD_PARSE_RULES, name);
+	else
+		system_test_run(id, name);
+}
+
+/* daemon name's test, for request id, in a job, the rules checked */
+static void
+system_test_run(uint32_t id, char *name)
+{
+	struct job	*j;
+	size_t		 i;
+	int		 fd;
+
 	if (!ctl_rules_args(name, NULL, NULL, 0, NULL)) {
 		printf("%% nshd: %s's rules have no test\n", name);
 		system_part_free(NSHD_TEST);
@@ -3353,24 +3416,99 @@ system_health(void)
 }
 
 /*
- * A test of daemon name's rules, the part sent, for a session without
- * admin: -1, after saying why, if it has a line that needs admin and did
- * not run
+ * The parser's check for request id, in a job: kind says of what, the
+ * script of the commit begun or the test's rules for daemon name. What
+ * it prints goes to the session; system_parsed() takes its verdict
  */
-static int
-system_admin_test(char *name)
+static void
+system_parse(uint32_t id, int kind, char *name)
 {
-	char	*runs;
-	size_t	 len;
-	int	 r;
+	struct job	*j;
 
-	if ((runs = system_running(&len)) == NULL)
-		return (-1);
-	admin_begin(1, runs, len);
-	r = admin_test(name, parts[NSHD_TEST], partlen[NSHD_TEST]);
-	admin_end();
-	free(runs);
-	return (r);
+	j = system_job_new(id, JOB_PARSE);
+	j->parse.kind = kind;
+	if (name != NULL)
+		strlcpy(j->parse.daemon, name, sizeof(j->parse.daemon));
+	if (kind == NSHD_PARSE_SCRIPT)
+		j->parse.apply = begun->bg.apply;
+	else if ((j->runs = system_running(&j->runslen)) == NULL) {
+		system_job_end(j, -1);
+		return;
+	}
+	system_job(j);
+}
+
+/*
+ * The parser for j, in the job's child: the request and its text in a
+ * file no other process has, as its standard input, and its output to
+ * the job's pipe. The running configuration is what BEGIN read, or for
+ * a test, what ran as the check began. The parser is this program
+ * again, which keeps nothing of system's
+ */
+static __dead void
+system_parse_child(struct job *j)
+{
+	char	 path[] = "/tmp/nshparse.XXXXXXXXXX", *argv[5], *before, *text;
+	size_t	 beforelen, len;
+	int	 fd, argc = 0;
+
+	if (j->parse.kind == NSHD_PARSE_SCRIPT) {
+		before = begun->before;
+		beforelen = begun->beforelen;
+		text = parts[NSHD_SCRIPT];
+		len = partlen[NSHD_SCRIPT];
+	} else {
+		before = j->runs;
+		beforelen = j->runslen;
+		text = parts[NSHD_TEST];
+		len = partlen[NSHD_TEST];
+	}
+	j->parse.beforelen = beforelen;
+	j->parse.len = len;
+	if ((fd = mkstemp(path)) == -1 || unlink(path) == -1 ||
+	    write(fd, &j->parse, sizeof(j->parse)) != sizeof(j->parse) ||
+	    (beforelen > 0 && write(fd, before, beforelen) !=
+	    (ssize_t)beforelen) ||
+	    (len > 0 && write(fd, text, len) != (ssize_t)len) ||
+	    lseek(fd, 0, SEEK_SET) == -1 || dup2(fd, STDIN_FILENO) == -1) {
+		printf("%% nshd: what the parser checks: %s\n",
+		    strerror(errno));
+		fflush(stdout);
+		_exit(2);
+	}
+	closefrom(STDERR_FILENO + 1);
+	argv[argc++] = execpath;
+	argv[argc++] = "-P";
+	if (sys_debug)
+		argv[argc++] = "-d";
+	if (sys_verbose)
+		argv[argc++] = "-v";
+	argv[argc] = NULL;
+	fflush(stdout);
+	execv(execpath, argv);
+	printf("%% nshd: the parser: %s\n", strerror(errno));
+	fflush(stdout);
+	_exit(2);
+}
+
+/*
+ * j, the parser's check, ended as status says: 0 if what it checked may
+ * run. Then the test runs, or the commit is recorded and runs; else the
+ * test refuses the commit, or the commit is not begun
+ */
+static void
+system_parsed(struct job *j, int32_t status)
+{
+	if (j->parse.kind == NSHD_PARSE_RULES) {
+		if (status == 0)
+			system_test_run(j->id, j->parse.daemon);
+		else {
+			system_part_free(NSHD_TEST);
+			system_tested(j->id, 1);
+		}
+		return;
+	}
+	system_begin_checked(j->id, status == 0);
 }
 
 /* what nsh's code printed, to config, then how request id ended */
@@ -3467,16 +3605,12 @@ system_job_child(int fd, struct job *j)
 			sc.clears[i].keep = j->apply->clears[i].keep;
 		}
 		sc.nclears = j->apply->nclears;
-		/* without admin, what needs admin stays as it was running */
-		admin_begin(begun != NULL && !begun->admin, begun != NULL ?
-		    begun->before : NULL, begun != NULL ? begun->beforelen : 0);
 		/* -1, it could not run; 1, a line of it failed */
 		r = script_run(&sc);
 		/* then whether what runs is what was wanted; the boot's too */
 		r = commit_verify(j->want, j->wantlen, r != 0, begun == NULL);
 		break;
 	case JOB_UNDO:
-		admin_begin(!begun->admin, begun->before, begun->beforelen);
 		r = commit_undo(begun->before, begun->beforelen) == 0 ? 0 : 1;
 		break;
 	case JOB_SAVE:
@@ -3490,6 +3624,8 @@ system_job_child(int fd, struct job *j)
 		if (r == 0)
 			printf("%% Commit not confirmed: rolled back\n");
 		break;
+	case JOB_PARSE:
+		system_parse_child(j);
 	default:
 		if (!j->root)
 			system_drop();
@@ -3640,6 +3776,8 @@ system_job_end(struct job *j, int32_t status)
 		    status == 0 ? NSHD_SAVED : NSHD_UNSAVED);
 	else if (j->kind == JOB_TEST)
 		system_tested(j->id, status);
+	else if (j->kind == JOB_PARSE)
+		system_parsed(j, status);
 	else if (j->kind == JOB_APPLY)
 		boot_end(status == 0);
 	else {
@@ -3660,6 +3798,7 @@ system_job_free(struct job *j)
 		rmdir(j->dir);
 	free(j->want);
 	free(j->back);
+	free(j->runs);
 	free(j);
 }
 

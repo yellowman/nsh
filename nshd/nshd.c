@@ -33,6 +33,8 @@
  *	system (-Y)	root, a session of its own: reads and changes the
  *			kernel, the daemons and the saved configuration
  *	archive (-A)	_nsharc, chroot: what config keeps past its end
+ *	parser (-P)	_nshparse, chroot: started by system, a new one for
+ *			each check, which reads text so system need not
  *
  * Each role has a user of its own, so no child may signal a child of
  * another role, or reach its files; the group nshadmin may use the
@@ -228,7 +230,7 @@ main(int argc, char *argv[])
 	const char		*errstr;
 	int			 c, role = PROC_PARENT, instance = 0;
 
-	while ((c = getopt(argc, argv, "AbCdFS:vY")) != -1) {
+	while ((c = getopt(argc, argv, "AbCdFPS:vY")) != -1) {
 		switch (c) {
 		case 'A':
 			role = PROC_ARCHIVE;
@@ -244,6 +246,9 @@ main(int argc, char *argv[])
 			break;
 		case 'F':
 			role = PROC_FRONTEND;
+			break;
+		case 'P':
+			role = PROC_PARSER;
 			break;
 		case 'S':
 			role = PROC_SHOW;
@@ -276,6 +281,8 @@ main(int argc, char *argv[])
 		systemproc(opt_debug, opt_verbose);
 	case PROC_ARCHIVE:
 		archive(opt_debug, opt_verbose);
+	case PROC_PARSER:
+		parserproc(opt_debug, opt_verbose);
 	case PROC_PARENT:
 		break;
 	}
@@ -358,7 +365,7 @@ static void
 users(void)
 {
 	struct passwd	*pw;
-	uid_t		 uid[NPROC], front_uid;
+	uid_t		 uid[NPROC], front_uid, parse_uid;
 	size_t		 i, j;
 
 	for (i = 0; i < NPROC; i++) {
@@ -393,6 +400,18 @@ users(void)
 		if (children[i].user != NULL && uid[i] == front_uid)
 			errx(1, "%s and %s are one uid", children[i].user,
 			    FRONT_USER);
+	/* the parser's user */
+	if ((pw = getpwnam(NSHD_PARSE_USER)) == NULL)
+		errx(1, "unknown user %s", NSHD_PARSE_USER);
+	if ((parse_uid = pw->pw_uid) == 0)
+		errx(1, "%s is root", NSHD_PARSE_USER);
+	if (parse_uid == check_uid || parse_uid == front_uid)
+		errx(1, "%s and %s are one uid", NSHD_PARSE_USER,
+		    parse_uid == check_uid ? NSHD_CHECK_USER : FRONT_USER);
+	for (i = 0; i < NPROC; i++)
+		if (children[i].user != NULL && uid[i] == parse_uid)
+			errx(1, "%s and %s are one uid", children[i].user,
+			    NSHD_PARSE_USER);
 	/* the web configurator's user, if there is one, which is no role's */
 	if ((pw = getpwnam(NSHD_WEB_USER)) == NULL)
 		return;
@@ -403,6 +422,9 @@ users(void)
 		    NSHD_CHECK_USER);
 	if (pw->pw_uid == front_uid)
 		errx(1, "%s and %s are one uid", FRONT_USER, NSHD_WEB_USER);
+	if (pw->pw_uid == parse_uid)
+		errx(1, "%s and %s are one uid", NSHD_PARSE_USER,
+		    NSHD_WEB_USER);
 	for (i = 0; i < NPROC; i++)
 		if (children[i].user != NULL && uid[i] == pw->pw_uid)
 			errx(1, "%s and %s are one uid", children[i].user,
@@ -1169,7 +1191,8 @@ privdrop(enum nshd_proc proc)
 	struct passwd	*pw;
 	const char	*user;
 
-	user = proc == PROC_FRONTEND ? FRONT_USER : child(proc, 0)->user;
+	user = proc == PROC_FRONTEND ? FRONT_USER : proc == PROC_PARSER ?
+	    NSHD_PARSE_USER : child(proc, 0)->user;
 
 	if ((pw = getpwnam(user)) == NULL)
 		fatalx("unknown user %s", user);

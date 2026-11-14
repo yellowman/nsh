@@ -1266,6 +1266,63 @@ edit_words(char *p, size_t len, char **argv, int max)
 }
 
 /*
+ * The parser's check of s, as script_run() would run it, in the commit
+ * of a session without admin, against the running configuration before
+ * it (admin_begin()): a login line, a daemon's rules and a clear of them
+ * may change nothing that needs admin. 0 if the script may run, else -1
+ * after saying why
+ */
+int
+edits_admin(struct script *s)
+{
+	const struct argcmd *c;
+	struct argcmd cmd;
+	struct edit e;
+	char *argv[NARGS + 1], *p;
+	const char *errstr;
+	size_t off;
+	int i, n, rt = 0, r = 0;
+
+	if (edits_check(s->edits, s->elen) == -1)
+		return -1;
+	for (i = 0; i < s->nclears; i++)
+		if (admin_cleared(s->clears[i].name) == -1)
+			r = -1;
+	for (off = 0; off < s->elen; off += sizeof(e) + e.len) {
+		memcpy(&e, s->edits + off, sizeof(e));
+		p = s->edits + off + sizeof(e);
+		switch (e.kind) {
+		case EDIT_TOP:
+			c = conf_cmd(CTX_TOP, e.row, &cmd);
+			n = 0;
+			if (e.no)
+				argv[n++] = "no";
+			argv[n++] = c->name;
+			n += edit_words(p, e.len, argv + n, NARGS - n);
+			/* an rtable's block, whose rules are that rtable's */
+			if ((c->flags & CF_RTABLE) && !e.no) {
+				rt = strtonum(argv[1], 0, RT_TABLEID_MAX,
+				    &errstr);
+				if (errstr != NULL)
+					rt = 0;
+			}
+			if (strcmp(c->name, "login") == 0 &&
+			    login_admin(n, argv) == -1)
+				r = -1;
+			break;
+		case EDIT_END:
+			rt = 0;
+			break;
+		case EDIT_RULES:
+			if (admin_rules(e.row, rt, p, e.len) == -1)
+				r = -1;
+			break;
+		}
+	}
+	return r;
+}
+
+/*
  * Run buf's len bytes of edits (edits_check()): run the command at the
  * place each record names, with its words, write a daemon's rules, or
  * do a daemon action. 1 if one failed, else 0

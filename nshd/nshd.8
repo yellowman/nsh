@@ -423,9 +423,11 @@ A commit by a session without admin may keep a line that needs admin
 in
 .Xr nsh 8 )
 only as it was running before the commit.
-The script fails at such a change, and the commit is rolled back.
-For such a session, a test of a daemon's rules refuses the same lines,
-judged against the running configuration.
+The parser checks such a commit's script before system records the
+commit, and a commit it refuses runs nothing.
+For such a session, the parser checks a test's rules for the same
+lines, judged against the running configuration, before the test
+runs.
 A test runs as _nshcheck, with its rules in a directory of their own;
 _nshcheck owns both.
 The tests of relayd, ldapd, npppd, sasyncd and sshd are the exceptions:
@@ -485,6 +487,17 @@ When
 .Nm
 starts, config loads what archive stored before any session enters
 .Cm configure .
+.It parser
+Runs as _nshparse in a
+.Xr chroot 2 ,
+and may only read and write what it was given.
+system starts a new one for each check, so a parser keeps nothing from
+one check to the next.
+It reads text for system, which reads none of it itself: for a session
+without admin, the script of a commit and the rules of a test, against
+the running configuration, and says each line that needs admin.
+system passes on what the parser prints, and takes its exit status as
+the verdict.
 .El
 .Pp
 config and system, and config and archive, each talk on a pipe of

@@ -563,12 +563,43 @@ login_user(int set, int argc, char **argv, struct cand *cand)
 	return login_store("user", name, rec);
 }
 
+/*
+ * The parser's check of a login line, argv as loginset() gets it, in the
+ * script of a session without admin (admin_may()): it may only set a
+ * line that was running, and only remove one that was not. 0 if it may,
+ * else -1 after saying why
+ */
+int
+login_admin(int argc, char **argv)
+{
+	char line[1024];
+	int i, set = 1;
+
+	if (NO_ARG(argv[0])) {
+		argv++;
+		argc--;
+		set = 0;
+	}
+	if (argc < 3)
+		return 0;
+	line[0] = '\0';
+	for (i = 0; i < (set ? argc : 3); i++) {
+		if (i > 0)
+			strlcat(line, " ", sizeof(line));
+		strlcat(line, argv[i], sizeof(line));
+	}
+	if (admin_may(line, !set, 3))
+		return 0;
+	printf("%% Commit refused: changing login classes and users needs the "
+	    "admin permission\n");
+	return -1;
+}
+
 /* login class, login user, or their no forms */
 int
 loginset(int argc, char **argv, ...)
 {
-	char line[1024];
-	int i, set = 1;
+	int set = 1;
 	struct cand *cand;
 	va_list ap;
 
@@ -583,20 +614,6 @@ loginset(int argc, char **argv, ...)
 	}
 	if (argc < 3)
 		return login_usage();
-	/* a commit by a session without admin is limited (admin_may()) */
-	if (cand == NULL) {
-		line[0] = '\0';
-		for (i = 0; i < (set ? argc : 3); i++) {
-			if (i > 0)
-				strlcat(line, " ", sizeof(line));
-			strlcat(line, argv[i], sizeof(line));
-		}
-		if (!admin_may(line, !set, 3)) {
-			printf("%% Commit refused: changing login classes and "
-			    "users needs the admin permission\n");
-			return -1;
-		}
-	}
 	if (isprefix(argv[1], "class"))
 		return login_class(set, argc, argv, cand);
 	if (isprefix(argv[1], "user"))

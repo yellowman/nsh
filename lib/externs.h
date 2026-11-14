@@ -503,11 +503,17 @@ int login_auth(char *, char *, const char **);
 int login_may(const char *, uid_t);
 size_t login_hide(char *, size_t);
 void conf_login(FILE *);
-/* while a commit runs, whether its session lacks admin (ctl.c) */
+/*
+ * the parser's checks of what a session without admin commits, against
+ * the running configuration (ctl.c, passwd.c, commit.c)
+ */
 void admin_begin(int, char *, size_t);
 void admin_end(void);
 int admin_may(char *, int, int);
 int admin_test(char *, char *, size_t);
+int admin_rules(int, int, char *, size_t);
+int admin_cleared(char *);
+int login_admin(int, char **);
 
 /* pfsync.c */
 #define PFSYNC_MAXUPDATES 128
@@ -750,6 +756,7 @@ struct script {
 	} clears[MAXCLEARS];		/* daemon rules to empty or remove */
 	int nclears;
 };
+int edits_admin(struct script *);
 int commit(int, char **, ...);
 int pr_rollback(int, char **, ...);
 int rollback_keep(const char *, const char *, const char *);

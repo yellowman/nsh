@@ -272,7 +272,8 @@ else
 
                 #nshd's users, and the group nshadmin
                 groupinfo -e nshadmin || groupadd nshadmin
-                for u in _nshshow _nshfront _nshconf _nsharc _nshcheck; do
+                for u in _nshshow _nshfront _nshconf _nsharc _nshparse \
+                    _nshcheck; do
                         userinfo -e $u || useradd -L daemon -d /var/empty \
                             -s /sbin/nologin $u
                 done

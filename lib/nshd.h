@@ -24,6 +24,7 @@
 
 #define NSHD_GROUP	"nshadmin"	/* who may use the read-write socket */
 #define NSHD_CHECK_USER	"_nshcheck"	/* system's non-root helpers */
+#define NSHD_PARSE_USER	"_nshparse"	/* the parser, which reads for system */
 #define NSHD_WEB_USER	"_nshweb"	/* the web configurator's sessions */
 #define NSHD_SOCKET	"/var/run/nshd.sock"	/* 0660, group nshadmin */
 #define NSHD_RO_SOCKET	"/var/run/nshd.ro.sock"	/* 0666 */
@@ -299,6 +300,21 @@ struct nshd_begin {
 	char		comment[NSHD_COMMENT];
 	struct nshd_apply apply;
 };
+/*
+ * system to the parser, on its standard input: what to check, then
+ * beforelen bytes of the running configuration, and len bytes of a
+ * script's edits or of a daemon's rules (parserproc.c)
+ */
+struct nshd_parse {
+	int32_t		kind;		/* NSHD_PARSE_* */
+	uint32_t	beforelen;
+	uint32_t	len;
+	char		daemon[32];	/* the rules' daemon */
+	struct nshd_apply apply;	/* the script's clears */
+};
+#define NSHD_PARSE_SCRIPT 1	/* a commit's script, without admin */
+#define NSHD_PARSE_RULES 2	/* a test's rules, without admin */
+
 /* how a commit ended: BEGIN's answer, once BEGUN said it was begun */
 #define NSHD_SAVED	0	/* the candidate runs, saved */
 #define NSHD_KEPT	1	/* the candidate runs until its deadline */
@@ -356,7 +372,8 @@ enum nshd_proc {
 	PROC_FRONTEND,
 	PROC_CONFIG,
 	PROC_SYSTEM,
-	PROC_ARCHIVE
+	PROC_ARCHIVE,
+	PROC_PARSER
 };
 
 #define SHOWS		4	/* shows, which share the read-only socket */
@@ -564,5 +581,6 @@ __dead void	 frontend(int, int);
 __dead void	 configproc(int, int);
 __dead void	 systemproc(int, int);
 __dead void	 archive(int, int);
+__dead void	 parserproc(int, int);
 
 #endif /* NSHD_H */
