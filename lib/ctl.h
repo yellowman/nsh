@@ -107,6 +107,8 @@ int ctl_cand_rules(char *, int, int, char *, size_t, struct cand *);
 void ctl_runs(struct ctl *, int *, int *);
 #define CTL_ACT_FOLLOW	0x100	/* what follows a daemon's rules (ctl_act()) */
 #define CTL_ACT_RULES	0x200	/* its rules (ctl_takes()) */
+int ctl_parse(char *, int, char **, int *, int *);
+int ctl_cand_act(int, int, struct cand *);
 int ctl_daemon(char *);
 int ctl_act(int, char *);
 int ctl_takes(int, int);

@@ -726,76 +726,14 @@ flag_x(char *name, char *daemon, int dbflag, char *data)
 	return 0;
 }
 
-/* the main entry point into ctl.c from CLI */
+/*
+ * A daemon's command. This handler marks its rows: cmdline_edits() reads
+ * the line (ctl_parse()), so nothing runs here
+ */
 int
 ctlhandler(int argc, char **argv, ...)
 {
-	struct daemons *daemons;
-	struct ctl *x;
-	char tmpfile[PATH_MAX];
-	char *step_args[NOPTFILL] = { NULL, NULL, NULL, NULL, NULL, NULL };
-	char **fillargs;
-	int rv = 0;
-	int r;
-	struct cand *cand;
-	va_list ap;
-
-	va_start(ap, argv);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
-
-	/* loop daemon list to find table pointer */
-	daemons = (struct daemons *) genget(hname, (char **)ctl_daemons,
-	    sizeof(struct daemons));
-	if (daemons == NULL || Ambiguous(daemons)) {
-		printf("%% Internal error - Invalid argument %s\n", argv[1]);
-		return -1;
-	}
-
-	/* in configure private, ctl_cand() checks the table */
-	if (cand == NULL && cli_rtable > daemons->rtablemax) {
-		printf("%% Command %s not available via rtable %d\n",
-		    daemons->name, cli_rtable);
-		rv = -1;
-		goto done;
-	}
-
-	snprintf(table, sizeof(table), "-T%d", cli_rtable);
-	if (daemons->tmpfile)
-		snprintf(tmpfile, sizeof(tmpfile), "%s.%d", daemons->tmpfile,
-		    cli_rtable);
-
-	if (argc < 2 || argv[1][0] == '?') {
-		gen_help((char **)daemons->table, "", "", sizeof(struct ctl));
-		goto done;
-	}
-
-	x = (struct ctl *) genget(argv[1], (char **)daemons->table,
-	    sizeof(struct ctl));
-	if (x == NULL) {
-		printf("%% Invalid argument %s\n", argv[1]);
-		rv = -1;
-		goto done;
-	} else if (Ambiguous(x)) {
-		printf("%% Ambiguous argument %s\n", argv[1]);
-		rv = -1;
-		goto done;
-	}
-
-	fillargs = step_optreq(x->args, step_args, argc, argv, 2);
-	if (fillargs == NULL) {
-		rv = -1;
-		goto done;
-	}
-
-	if (cand != NULL && (r = ctl_cand(daemons, x, fillargs, cand)) != 0) {
-		rv = r == -1 ? -1 : 0;
-		goto done;
-	}
-
-	rv = ctl_run(daemons, x, fillargs, tmpfile);
-done:
-	return rv;
+	return 0;
 }
 
 /*
@@ -841,6 +779,78 @@ ctl_run(struct daemons *d, struct ctl *x, char **fillargs, char *tmpfile)
 	if (rv == 0 && x->flag_x != 0)
 		rv = flag_x("ctl", d->name, x->flag_x, NULL);
 	return rv;
+}
+
+/*
+ * A daemon's line in nshd's configure, as a session's frontend reads
+ * it: name's, with what it does in argv[1]. If the candidate takes the
+ * line, *dp and *actp name it for config, by the daemon's place and its
+ * row's (ctl_cand_act()). 1 if so, 0 after printing only the daemon's
+ * help, and -1 after printing why the line is none of the candidate's
+ */
+int
+ctl_parse(char *name, int argc, char **argv, int *dp, int *actp)
+{
+	struct daemons *d;
+	struct ctl *x;
+	char *step_args[NOPTFILL] = { NULL, NULL, NULL, NULL, NULL, NULL };
+
+	d = (struct daemons *)genget(name, (char **)ctl_daemons,
+	    sizeof(struct daemons));
+	if (d == NULL || Ambiguous(d)) {
+		printf("%% Internal error - Invalid argument %s\n", argv[1]);
+		return -1;
+	}
+	if (argc < 2 || argv[1][0] == '?') {
+		gen_help((char **)d->table, "", "", sizeof(struct ctl));
+		return 0;
+	}
+	x = (struct ctl *)genget(argv[1], (char **)d->table,
+	    sizeof(struct ctl));
+	if (x == NULL) {
+		printf("%% Invalid argument %s\n", argv[1]);
+		return -1;
+	} else if (Ambiguous(x)) {
+		printf("%% Ambiguous argument %s\n", argv[1]);
+		return -1;
+	}
+	if (step_optreq(x->args, step_args, argc, argv, 2) == NULL)
+		return -1;
+	if (!ctl_cand_takes(x)) {
+		printf("%% %s %s is not through nshd's configure\n", d->name,
+		    x->name);
+		return -1;
+	}
+	*dp = d - ctl_daemons;
+	*actp = x - d->table;
+	return 1;
+}
+
+/*
+ * The line ctl_parse() named, in configure private: row act of daemon
+ * d's table, which must be one the candidate takes. 0, or -1 after
+ * saying why
+ */
+int
+ctl_cand_act(int d, int act, struct cand *cand)
+{
+	struct daemons *dm;
+	int n;
+
+	for (n = 0; ctl_daemons[n].name != NULL; n++)
+		;
+	if (d < 0 || d >= n)
+		goto none;
+	dm = &ctl_daemons[d];
+	for (n = 0; dm->table[n].name != NULL; n++)
+		;
+	if (act < 0 || act >= n || !ctl_cand_takes(&dm->table[act]))
+		goto none;
+	return ctl_cand(dm, &dm->table[act], dm->table[act].args, cand) == -1 ?
+	    -1 : 0;
+none:
+	printf("%% nshd: no line of a daemon's that the candidate takes\n");
+	return -1;
 }
 
 /* The place in ctl_daemons of the daemon called name, or -1 */

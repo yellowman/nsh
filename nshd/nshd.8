@@ -69,6 +69,28 @@ A frontend is
 .Xr pledge 2 Ns d
 to use only the descriptors it has and to pass on a terminal's pty, so
 it can signal no process outside its own process group.
+A frontend reads the lines its client sends, a line of configure and
+the lines of a stage, with nsh's command tables, in the mode config
+last told the session it is in.
+It sends config each line's edits: the row of its command, and the
+values its words parse to.
+config reads no word of such a line.
+It checks each edit as system checks a script's: its row is a command
+of the mode the session is in, one that edits the candidate, and its
+values are those the row's arguments take.
+A line that is none of the candidate's goes no further than the
+frontend, which answers it.
+A stage's line that is none is answered where the stage reaches it, and
+the lines after it are not read.
+In configure terminal the frontend also sends the line as typed, which
+config passes on in the notice of the line's commit.
+A frontend holds no candidate, and has only what config sends its own
+client.
+A configuration that
+.Ic nsh -c
+loads is not read as lines: config keeps it as a candidate's text, as
+it keeps the running configuration, and the parser reads its lines when
+it is committed.
 When the client goes, its frontend ends, config drops the session, and
 the parent tells system to drop it too.
 system also checks each second that each session's client is still

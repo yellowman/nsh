@@ -37,8 +37,6 @@ struct cand;
 struct hashtable;
 extern struct hashtable *nsh_env;/* per-user session environment variables */
 
-#define HSIZE	64
-extern char hname[HSIZE];	/* prefix name to mode handler */
 
 #ifdef _HISTEDIT_H_
 extern HistEvent ev;		/* ev */
@@ -195,9 +193,11 @@ void sigalarm(int);
 void command(void);
 int cmd_rest(int, char **);
 int argvtostring(int, char **, char *, int);
-int cmdline(char *, struct cand *);
+int cmdline_edits(char *, char *, int, FILE *);
+int cmdline_run(char *, size_t, struct cand *);
 int cmdexit(struct cand *);
-int cand_refused(struct cand *, char *, int);
+/* a handler's: its work before its line's arguments is done; they are next */
+#define LINE_ARGS	2
 void nshd_mode(int, char *, int);
 /* how a command runs, as nshd's CTL_COMMANDS rows say (row_runs()) */
 #define RUN_NSH		1	/* nsh runs it */
@@ -213,7 +213,6 @@ int conf_ordered(char *);
 
 /* the commands a configuration has (conf_cmd(), args.h) */
 int conf_find(int, char *, char **);
-int conf_line(int, int, char **, char *, int, struct cand *);
 struct facts_value;
 int conf_run_values(int, int, int, const struct facts_value *, char *);
 void conf_reading(int);
@@ -256,7 +255,7 @@ typedef struct cmd {
 	int modh;		/* Does it start a block? 2 for an rtable */
 	int cand;		/* What it does in configure private (CAND_*) */
 	/*
-	 * If config parses the command's line into values (nshd's
+	 * If the command's line is parsed into values (nshd's
 	 * args.h): the function that applies them, a code that tells it
 	 * which of its commands this is, the line's arguments, ended by
 	 * one with no name, and for a grammar the arguments cannot say,
@@ -290,7 +289,7 @@ struct intlist {
 	int (*handler)(int, char **, ...);       /* Routine to perform */
 	int nocmd;		/* Can we specify 'no ...command...'? */
 	int cand;		/* What it does in configure private (CAND_*) */
-	/* as a Command's: what config parses the line with, if it does */
+	/* as a Command's: what the line is parsed with, if it is */
 	int (*apply)(const struct argcmd *, int, const struct facts_value *,
 	    char *, int, struct cand *);
 	int code;
@@ -750,6 +749,40 @@ struct script {
 	} clears[MAXCLEARS];		/* daemon rules to empty or remove */
 	int nclears;
 };
+/*
+ * An edit. Each record is this header followed by len bytes: for a
+ * line, the values its command's arguments parse to (an argcmd in its
+ * row, args.h), as a facts template and record; for a daemon's rules,
+ * their lines, each ending in a newline. A script holds the first six
+ * kinds (commit.c). A line of nshd's configure, as a session's frontend
+ * parsed it for config, holds any but EDIT_RULES (cmdline_edits())
+ */
+struct edit {
+	uint8_t		kind;		/* EDIT_* */
+	uint8_t		no;		/* 1 if the line starts with "no" */
+	uint8_t		typed;		/* 1 if the bytes are parsed values */
+	uint16_t	row;		/* command row, or daemon index */
+	int32_t		act;		/* what the daemon does (ctl_act()),
+					   or EDIT_ACT's row of its table */
+	uint32_t	len;
+};
+#define EDIT_TOP	1	/* a top-level statement, CTX_TOP's */
+#define EDIT_IF		2	/* a line of an interface's block, CTX_IF's */
+#define EDIT_BRIDGE	3	/* a line of a bridge's block, CTX_BRIDGE's */
+#define EDIT_END	4	/* a block's end */
+#define EDIT_RULES	5	/* a daemon's rules */
+#define EDIT_DAEMON	6	/* a daemon's state, or what follows its
+				   rules */
+#define EDIT_LEAVE	7	/* a session's: leave configure */
+#define EDIT_ACT	8	/* a session's: a daemon's line, by its row */
+struct argcmd;
+struct facts_value;
+typedef int edit_runfn(const struct argcmd *, int,
+	    const struct facts_value *, void *);
+int edit_put(FILE *, struct edit *, char *, size_t);
+int edit_args(FILE *, struct edit *, const struct argcmd *, int, char **);
+int edit_values(const struct argcmd *, const struct edit *, char *,
+	    edit_runfn *, void *);
 int edits_admin(struct script *);
 int commit(int, char **, ...);
 int pr_rollback(int, char **, ...);

@@ -31,9 +31,11 @@
  * that sends what it may not, or sends it wrong, ends config, and nshd
  * with it.
  *
- * A session in configure has nsh's state of its own (session.c), and
- * config runs its lines through nsh's code in candidate mode, which here
- * asks no kernel, opens no file and runs no program. The running
+ * A session in configure has nsh's state of its own (session.c). Its
+ * frontend reads the lines its client sends, and config runs their
+ * edits, each a command's row and its values, through nsh's code in
+ * candidate mode, which checks them, and here asks no kernel, opens no
+ * file and runs no program. config reads no word of a line. The running
  * configuration and what the lines read of the kernel come from a
  * snapshot system takes when a session enters configure or shows its
  * candidate, kept for every session until the next.
@@ -182,7 +184,10 @@ struct session {
 	int			 want;	/* the configure it asked for */
 	int			 how;	/* the configure it is in, or 0 */
 	int			 waits;
-	char			 line[NSHD_LINE];	/* configure terminal's */
+	char			*edits;	/* a request's lines, as they come */
+	size_t			 editslen;
+	char			 line[NSHD_LINE];	/* configure terminal's
+							   line, as typed */
 	char			*load;	/* nsh -c's text, as it comes */
 	size_t			 loadlen;
 	char			 loaded[NSHD_COMMENT];	/* its comment */
@@ -320,9 +325,13 @@ static void		 config_dispatch_journal(int, short, void *);
 static void		 config_ready_journal(void);
 static void		 config_show(uint32_t, struct nshd_show *);
 static void		 config_configure(uint32_t, struct nshd_configure *);
-static void		 config_line(uint32_t, struct nshd_line *);
-static void		 config_stage(uint32_t, struct nshd_stage *);
-static int		 config_staged(struct session *, const char *);
+static void		 config_edits(uint32_t, struct nshd_edits *);
+static int		 edits_lines(struct session *);
+static void		 edits_drop(struct session *);
+static void		 config_line(struct session *);
+static int		 config_line_run(struct session *);
+static void		 config_stage(struct session *, const char *);
+static int		 config_staged(struct session *, size_t *);
 static int		 config_staging(struct session *, const char *);
 static void		 config_exit(uint32_t);
 static void		 config_commit(uint32_t, struct nshd_commit *);
@@ -639,8 +648,7 @@ config_dispatch_front(int fd, short event, void *arg)
 	struct nshd_hello	 hello;
 	struct nshd_show	 show;
 	struct nshd_configure	 cf;
-	struct nshd_line	 line;
-	struct nshd_stage	 sg;
+	struct nshd_edits	 ed;
 	struct nshd_commit	 cm;
 	struct nshd_rollback	 rb;
 	struct nshd_op		 op;
@@ -674,7 +682,9 @@ config_dispatch_front(int fd, short event, void *arg)
 		}
 		if (n == 0)
 			break;
-		if (!config_may(id, type = imsg_get_type(&imsg))) {
+		/* a request in parts is answered once, with its last */
+		type = imsg_get_type(&imsg);
+		if (type != IMSG_FRONT_EDITS && !config_may(id, type)) {
 			imsg_free(&imsg);
 			continue;
 		}
@@ -696,21 +706,16 @@ config_dispatch_front(int fd, short event, void *arg)
 				goto bad;
 			config_configure(id, &cf);
 			break;
-		case IMSG_CTL_LINE:
-			if (imsg_get_data(&imsg, &line, sizeof(line)) == -1 ||
-			    memchr(line.line, '\0', sizeof(line.line)) == NULL)
+		case IMSG_FRONT_EDITS:
+			if (imsg_get_data(&imsg, &ed, sizeof(ed)) == -1 ||
+			    (ed.last != 0 && ed.last != 1) ||
+			    (ed.stage != 0 && ed.stage != 1) ||
+			    memchr(ed.ifname, '\0', sizeof(ed.ifname)) ==
+			    NULL || (ed.stage && ed.ifname[0] == '\0') ||
+			    memchr(ed.label, '\0', sizeof(ed.label)) == NULL ||
+			    ed.len < 0 || (size_t)ed.len > sizeof(ed.bytes))
 				goto bad;
-			config_line(id, &line);
-			break;
-		case IMSG_CTL_STAGE:
-			if (imsg_get_data(&imsg, &sg, sizeof(sg)) == -1 ||
-			    (sg.bridge != 0 && sg.bridge != 1) ||
-			    sg.ifname[0] == '\0' || memchr(sg.ifname, '\0',
-			    sizeof(sg.ifname)) == NULL ||
-			    sg.len < 0 || sg.len > NSHD_TEXT ||
-			    memchr(sg.text, '\0', sg.len) != NULL)
-				goto bad;
-			config_stage(id, &sg);
+			config_edits(id, &ed);
 			break;
 		case IMSG_CTL_EXIT:
 			if (imsg_get_len(&imsg) != 0)
@@ -1126,88 +1131,189 @@ config_configure(uint32_t session, struct nshd_configure *cf)
 	config_wait(sp, WAIT_CONFIGURE);
 }
 
+/*
+ * A part of a request's lines, a LINE's or a STAGE's, as the session's
+ * frontend read them: kept, and after the last, run, and answered as
+ * the request is. config reads no line a client sent: it has their
+ * edits, which nsh's code checks as it runs them (cmdline_run())
+ */
+static void
+config_edits(uint32_t session, struct nshd_edits *ed)
+{
+	struct session	*sp, *in;
+	char		*p;
+
+	if ((sp = session_find(session)) != NULL &&
+	    sp->waits == WAIT_TERMINAL) {
+		if (ed->last)
+			config_answer(session, 1, "%% nshd: a line came "
+			    "before the last was answered\n");
+		return;
+	}
+	if (sp != NULL && (size_t)ed->len > NSHD_EDITS - sp->editslen) {
+		edits_drop(sp);
+		if (ed->last)
+			config_answer(session, 1, "%% nshd: a request's lines "
+			    "past %d bytes of edits\n", NSHD_EDITS);
+		return;
+	}
+	if (sp != NULL && ed->len > 0) {
+		if ((p = realloc(sp->edits, sp->editslen + ed->len)) == NULL)
+			fatal("%s", __func__);
+		memcpy(p + sp->editslen, ed->bytes, ed->len);
+		sp->edits = p;
+		sp->editslen += ed->len;
+	}
+	if (!ed->last)
+		return;
+	if (!config_may(session, IMSG_FRONT_EDITS) ||
+	    (in = config_private(session)) == NULL) {
+		if (sp != NULL)
+			edits_drop(sp);
+		return;
+	}
+	if (ed->stage)
+		config_stage(in, ed->ifname);
+	else {
+		strlcpy(in->line, ed->label, sizeof(in->line));
+		config_line(in);
+	}
+}
+
+/*
+ * How many lines the session's frontend sent, if they are whole: each
+ * struct nshd_edline, then the edits it says it has, none if it is
+ * refused. 0 if they are not, or there is none
+ */
+static int
+edits_lines(struct session *sp)
+{
+	struct nshd_edline	 el;
+	size_t			 off;
+	int			 n = 0;
+
+	for (off = 0; off < sp->editslen; off += sizeof(el) + el.len) {
+		if (sp->editslen - off < sizeof(el))
+			return (0);
+		memcpy(&el, sp->edits + off, sizeof(el));
+		if ((el.refused != 0 && el.refused != 1) ||
+		    (el.refused && el.len != 0) ||
+		    el.len > sp->editslen - off - sizeof(el))
+			return (0);
+		n++;
+	}
+	return (n);
+}
+
+/* the lines the session's frontend sent, dropped */
+static void
+edits_drop(struct session *sp)
+{
+	free(sp->edits);
+	sp->edits = NULL;
+	sp->editslen = 0;
+}
+
 /* a line, in the session's mode, as nsh runs it */
 static void
-config_line(uint32_t session, struct nshd_line *line)
+config_line(struct session *sp)
 {
-	struct session	*sp;
-	int		 r;
+	int	 r;
 
-	if ((sp = config_private(session)) == NULL)
-		return;
 	/* in configure terminal, run it once a snapshot is in */
 	if (sp->how == NSHD_TERMINAL) {
-		strlcpy(sp->line, line->line, sizeof(sp->line));
 		config_wait(sp, WAIT_TERMINAL);
 		return;
 	}
 	shared_hold(sp);
-	r = session_line(sp->st, line->line);
+	r = config_line_run(sp);
 	shared_done(sp);
 	config_ran(sp, r, 1);
 }
 
+/* the session's line: its edits, run in its mode, as a handler returns */
+static int
+config_line_run(struct session *sp)
+{
+	struct nshd_edline	 el;
+	int			 r = -1;
+
+	if (edits_lines(sp) == 1)
+		memcpy(&el, sp->edits, sizeof(el));
+	if (edits_lines(sp) != 1 || el.refused)
+		printf("%% nshd: a line's edits are not whole\n");
+	else
+		r = session_edits(sp->st, sp->edits + sizeof(el), el.len);
+	edits_drop(sp);
+	return (r);
+}
+
 /*
- * A stage, into the session's candidate: the lines of its text, run in
- * the mode of the interface or bridge it names until one fails, then
- * out of that mode. A line may leave the mode itself; then no more
- * lines run, nor the exit, and the stage fails if any line was left.
+ * A stage, into the session's candidate: its lines' edits, the first
+ * those of the line that enters the mode of ifname, the interface or
+ * bridge it is for, then those of its text, run in that mode until one
+ * fails, then out of that mode. A line may leave the mode itself; then
+ * no more lines run, nor the exit, and the stage fails if any line was
+ * left. A line the frontend refused fails where the stage reaches it.
  * Each line's output is followed by STAGED, which says how it went. The
  * stage changes the shared candidate as one edit, and is answered as a
  * line is
  */
 static void
-config_stage(uint32_t session, struct nshd_stage *sg)
+config_stage(struct session *sp, const char *ifname)
 {
-	struct session	*sp;
-	char		 head[NSHD_LINE], text[NSHD_TEXT + 1], *line, *next;
-	int		 r;
+	size_t	 off = 0;
+	int	 r = -1;
 
-	if ((sp = config_private(session)) == NULL)
-		return;
 	if (sp->how == NSHD_TERMINAL) {
-		config_answer(session, 1, "%% configure terminal has no "
+		edits_drop(sp);
+		config_answer(sp->id, 1, "%% configure terminal has no "
 		    "candidate to stage into; each line is committed\n");
 		return;
 	}
-	snprintf(head, sizeof(head), "%s %s", sg->bridge ? "bridge" :
-	    "interface", sg->ifname);
-	memcpy(text, sg->text, sg->len);
-	text[sg->len] = '\0';
 	shared_hold(sp);
-	if ((r = config_staged(sp, head)) == 0) {
-		for (line = text; r == 0 && line != NULL &&
-		    config_staging(sp, sg->ifname); line = next) {
-			if ((next = strchr(line, '\n')) != NULL)
-				*next++ = '\0';
-			if (*line != '\0')
-				r = config_staged(sp, line);
-		}
-		if (config_staging(sp, sg->ifname)) {
-			if (config_staged(sp, "exit") == -1)
+	if (edits_lines(sp) == 0)
+		printf("%% nshd: a stage's edits are not whole\n");
+	else if ((r = config_staged(sp, &off)) == 0) {
+		while (r == 0 && off < sp->editslen &&
+		    config_staging(sp, ifname))
+			r = config_staged(sp, &off);
+		if (config_staging(sp, ifname)) {
+			if (config_staged(sp, NULL) == -1)
 				r = -1;
-		} else if (line != NULL)
+		} else if (off < sp->editslen)
 			r = -1;
 	}
 	shared_done(sp);
+	edits_drop(sp);
 	config_ran(sp, r, 1);
 }
 
-/* a line of a stage, run in the session's mode: its output, then STAGED */
+/*
+ * A line of a stage, run in the session's mode: the line at *off of
+ * those the session's frontend sent (edits_lines()), or with no off,
+ * the exit that leaves the stage's mode. Then its output, and STAGED.
+ * The frontend, which read the line, names it to the client; config
+ * names its exit. A line the frontend refused has no edits, and fails
+ */
 static int
-config_staged(struct session *sp, const char *line)
+config_staged(struct session *sp, size_t *off)
 {
+	struct nshd_edline	 el;
 	struct nshd_staged	 sd;
-	char			 buf[NSHD_LINE];
 	int			 r = -1;
 
 	memset(&sd, 0, sizeof(sd));
-	strlcpy(sd.line, line, sizeof(sd.line));
-	if (strlcpy(buf, line, sizeof(buf)) >= sizeof(buf))
-		printf("%% nshd: a line is longer than %d bytes\n",
-		    NSHD_LINE - 1);
-	else
-		r = session_line(sp->st, buf);
+	if (off == NULL) {
+		strlcpy(sd.line, "exit", sizeof(sd.line));
+		r = session_end(sp->st);
+	} else {
+		memcpy(&el, sp->edits + *off, sizeof(el));
+		*off += sizeof(el);
+		if (!el.refused)
+			r = session_edits(sp->st, sp->edits + *off, el.len);
+		*off += el.len;
+	}
 	if (front_printed(sp->id) == -1)
 		r = -1;
 	sd.status = r == -1 ? -1 : 0;
@@ -1953,16 +2059,20 @@ config_terminal(struct session *sp)
 	if (commit != NULL) {
 		printf("%% Refused: uid %u commits now\n",
 		    (unsigned int)commit->uid);
+		edits_drop(sp);
 		return (-1);
 	}
 	if (exclusive != NULL) {
 		printf("%% Refused: uid %u has configure exclusive\n",
 		    (unsigned int)exclusive->uid);
+		edits_drop(sp);
 		return (-1);
 	}
-	if (session_renew(sp->st) == -1)
+	if (session_renew(sp->st) == -1) {
+		edits_drop(sp);
 		return (-1);
-	r = session_line(sp->st, sp->line);
+	}
+	r = config_line_run(sp);
 	if (!session_changed(sp->st))
 		return (r);
 	commit_new(sp);
@@ -2562,6 +2672,7 @@ config_snapshot_lost(const char *msg)
 	TAILQ_FOREACH(sp, &sessions, entry)
 		if (sp->waits != WAIT_NONE) {
 			sp->waits = WAIT_NONE;
+			edits_drop(sp);
 			config_answer(sp->id, 1, "%s", msg);
 		}
 	if (commit != NULL && commit->waits)
@@ -3138,6 +3249,7 @@ session_gone(struct session *sp)
 		commit->session = 0;
 	TAILQ_REMOVE(&sessions, sp, entry);
 	session_free(sp->st);
+	free(sp->edits);
 	free(sp->load);
 	free(sp->rules);
 	free(sp);

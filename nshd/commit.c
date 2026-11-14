@@ -136,28 +136,6 @@ struct claims {
 	size_t n;
 };
 
-/*
- * A script's edits. Each record is this header followed by len bytes:
- * for a line, its words after the command and any "no", each ending in
- * a NUL; for a line whose command parses its arguments (an argcmd in
- * its row, args.h), the parsed values instead, as a facts template and
- * record; for a daemon's rules, their lines, each ending in a newline.
- */
-struct edit {
-	uint8_t		kind;		/* EDIT_* */
-	uint8_t		no;		/* 1 if the line starts with "no" */
-	uint8_t		typed;		/* 1 if the bytes are parsed values */
-	uint16_t	row;		/* command row, or daemon index */
-	int32_t		act;		/* what the daemon does (ctl_act()) */
-	uint32_t	len;
-};
-#define EDIT_TOP	1	/* a top-level statement, CTX_TOP's */
-#define EDIT_IF		2	/* a line of an interface's block, CTX_IF's */
-#define EDIT_BRIDGE	3	/* a line of a bridge's block, CTX_BRIDGE's */
-#define EDIT_END	4	/* a block's end */
-#define EDIT_RULES	5	/* a daemon's rules */
-#define EDIT_DAEMON	6	/* a daemon's state, or what follows its rules */
-
 /* in nshd's config, the rule tests check() saves for the system process */
 static struct plan_test *deferred;
 static int ndeferred;
@@ -174,10 +152,7 @@ static const struct {
 static int check(struct cnode *, struct cnode *);
 static int edits_make(struct script *, int);
 static int edits_line(FILE *, int, char *, int *, int *, char *);
-static int edit_put(FILE *, struct edit *, char *, size_t);
 static int edits_check(char *, size_t);
-static int edit_args(FILE *, struct edit *, const struct argcmd *, int,
-    char **);
 static int edit_typed(const struct argcmd *, struct edit *, char *, int,
     int, char *);
 static int edits_apply(char *, size_t);
@@ -1035,7 +1010,7 @@ refused:
 }
 
 /* e, written to f, then len bytes of text */
-static int
+int
 edit_put(FILE *f, struct edit *e, char *text, size_t len)
 {
 	if (len > UINT32_MAX - sizeof(*e)) {
@@ -1107,7 +1082,7 @@ edit_args_one(const struct argcmd *a, struct argvals *v, void *arg)
  * goes as several edits (args_each()). Returns 0, or -1 after printing
  * an error.
  */
-static int
+int
 edit_args(FILE *f, struct edit *e, const struct argcmd *a, int n, char **w)
 {
 	struct edit_dest	 d = { f, e };
@@ -1118,8 +1093,9 @@ edit_args(FILE *f, struct edit *e, const struct argcmd *a, int n, char **w)
 /* state for edit_record(): check a typed edit, and maybe run it */
 struct edit_values {
 	const struct argcmd	*c;
-	int			 ctx, row, set, run, n, r;
-	char			*name;
+	int			 set, n, r;
+	edit_runfn		*run;
+	void			*arg;
 };
 
 static void
@@ -1131,34 +1107,61 @@ edit_record(void *arg, const struct facts_template *t,
 	x->n++;
 	if (args_check(x->c, x->set, t, v) == -1)
 		x->r = -1;
-	else if (x->run) {
-		x->r = conf_run_values(x->ctx, x->row, x->set, v, x->name);
-		/* a block's head: the interface its lines are for */
-		if (x->ctx == CTX_TOP && x->set &&
-		    (x->c->flags & (CF_IF | CF_BRIDGE)))
-			args_string(&v[0], x->name, IFNAMSIZ);
-	}
+	else if (x->run != NULL)
+		x->r = x->run(x->c, x->set, v, x->arg);
 }
 
 /*
- * Check the values of typed edit e (len bytes at p) against the
- * arguments of c, the command at e's row of ctx, with args_check(). If
- * run is set, also run the command with them on name. Returns 0, or -1
- * if the values are invalid or the command failed.
+ * Check the values of typed edit e (its len bytes at p) against the
+ * arguments of c, the command at e's row, with args_check(): it holds
+ * one record, of values the command takes. Then run has them, if not
+ * NULL. Returns 0, or what run returns, or -1 if the values are invalid
  */
-static int
-edit_typed(const struct argcmd *c, struct edit *e, char *p, int ctx,
-    int run, char *name)
+int
+edit_values(const struct argcmd *c, const struct edit *e, char *p,
+    edit_runfn *run, void *arg)
 {
 	struct facts_in		 in;
-	struct edit_values	 x = { c, ctx, e->row, !e->no, run, 0, 0,
-				    name };
+	struct edit_values	 x = { c, !e->no, 0, 0, run, arg };
 
 	facts_in_init(&in, edit_record, &x);
 	if (facts_read(&in, p, e->len) == -1)
 		x.r = -1;
 	facts_in_free(&in);
 	return x.n == 1 ? x.r : -1;
+}
+
+/* where edit_ran() runs a script's edit: its row of ctx, on name */
+struct edit_on {
+	int	 ctx, row;
+	char	*name;
+};
+
+static int
+edit_ran(const struct argcmd *c, int set, const struct facts_value *v,
+    void *arg)
+{
+	struct edit_on	*on = arg;
+	int		 r;
+
+	r = conf_run_values(on->ctx, on->row, set, v, on->name);
+	/* a block's head: the interface its lines are for */
+	if (on->ctx == CTX_TOP && set && (c->flags & (CF_IF | CF_BRIDGE)))
+		args_string(&v[0], on->name, IFNAMSIZ);
+	return r;
+}
+
+/*
+ * edit_values() of e, a script's, the command at its row of ctx: if run
+ * is set, the command also runs with the values, on name
+ */
+static int
+edit_typed(const struct argcmd *c, struct edit *e, char *p, int ctx,
+    int run, char *name)
+{
+	struct edit_on	 on = { ctx, e->row, name };
+
+	return edit_values(c, e, p, run ? edit_ran : NULL, &on);
 }
 
 /*

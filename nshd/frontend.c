@@ -21,10 +21,20 @@
  * frontend has. What the client sends goes to config, on their pipe;
  * config's answers go back to the client, with the notices config sends
  * unasked, and config learns each time the client has read all it was
- * sent. frontend checks only that a message is one a client (or config)
- * may send, and is whole; it reads no configuration. config knows whose
- * session this is by the pipe it comes on, so frontend cannot speak for
- * another session.
+ * sent. frontend checks that a message is one a client (or config) may
+ * send, and is whole. config knows whose session this is by the pipe it
+ * comes on, so frontend cannot speak for another session.
+ *
+ * frontend reads the lines its client sends, a LINE's and a STAGE's,
+ * with nsh's command tables (cmdline_edits()), in the mode config last
+ * said the session is in, and sends config their edits: each command's
+ * row, and the values its words parse to. config reads no word a client
+ * typed; it checks the edits and runs them on the candidate. A line
+ * that is none of the candidate's goes no further: frontend answers it
+ * itself, with what its reading printed. A stage's line that is none is
+ * answered where the stage reaches it, as config says it has; the lines
+ * after it are not read. frontend holds no candidate, and has only what
+ * config sends its own client.
  *
  * When the client goes, frontend ends; config finds its pipe closed,
  * and parent tells system. When config closes its pipe, frontend ends
@@ -35,14 +45,18 @@
 #include <sys/queue.h>
 #include <sys/socket.h>
 
+#include <net/if.h>
+
 #include <event.h>
 #include <imsg.h>
 #include <pwd.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
+#include "externs.h"
 #include "log.h"
 #include "nshd.h"
 #include "internal.h"
@@ -51,6 +65,20 @@
 static uint32_t		 client;	/* the client's id, in control.c */
 static uid_t		 web_uid;	/* NSHD_WEB_USER's uid */
 static int		 web_user;	/* NSHD_WEB_USER exists */
+static struct nshd_context ctx;		/* the session's mode, as config last
+					   said it */
+
+/*
+ * The stage the client waits on: the line that enters its mode and the
+ * lines of its text that were read, for the answers that name them
+ */
+static struct {
+	char	 head[NSHD_LINE];
+	char	 text[NSHD_TEXT + 1];	/* each line, ending in a NUL */
+	int	 n;			/* the lines read: head is the first */
+	int	 refused;		/* the last of them is none */
+	int	 seen;			/* answers passed on */
+} stage;
 
 /* a client's request, as config takes it */
 union frontend_request {
@@ -69,6 +97,13 @@ union frontend_request {
 };
 
 static void	frontend_dispatch_config(int, short, void *);
+static void	frontend_answer(struct ctl_conn *, int32_t, int);
+static void	frontend_line(struct ctl_conn *, struct nshd_line *);
+static void	frontend_stage(struct ctl_conn *, struct nshd_stage *);
+static int	frontend_read(FILE *, char *, char *, int);
+static void	frontend_edits(struct ctl_conn *, struct nshd_edits *,
+		    char *, size_t);
+static void	frontend_staged(struct ctl_conn *, struct nshd_staged *);
 static int	frontend_client(struct ctl_conn *, struct imsg *);
 static void	frontend_gone(struct ctl_conn *);
 static int	frontend_written(struct ctl_conn *);
@@ -80,15 +115,17 @@ static struct link	 links[] = {
 };
 
 void
-frontend(int debug, int verbose)
+frontend(int d, int v)
 {
 	struct passwd	*pw;
 
-	child_start("frontend", debug, verbose);
+	child_start("frontend", d, v);
 	if ((pw = getpwnam(NSHD_WEB_USER)) != NULL) {
 		web_uid = pw->pw_uid;
 		web_user = 1;
 	}
+	/* what reading a line prints is the client's */
+	capture_stdout();
 	privdrop(PROC_FRONTEND);
 
 	/* a terminal's pty comes from config, to go to the client */
@@ -115,6 +152,7 @@ frontend_dispatch_config(int fd, short event, void *arg)
 {
 	struct imsgev		*iev = arg;
 	struct ctl_conn		*c;
+	struct nshd_staged	 sd;
 	struct imsg		 imsg;
 	struct ibuf		 b;
 	uint32_t		 type;
@@ -133,17 +171,41 @@ frontend_dispatch_config(int fd, short event, void *arg)
 		if (n == 0)
 			break;
 		switch (type = imsg_get_type(&imsg)) {
+		case IMSG_CTL_STAGED:
+			/* a stage's line, which frontend names */
+			if (imsg_get_data(&imsg, &sd, sizeof(sd)) == -1) {
+				imsg_free(&imsg);
+				link_broken(&links[CONFIG], "sent a line's "
+				    "answer not whole");
+				return;
+			}
+			if ((c = control_connbyid(client)) != NULL)
+				frontend_staged(c, &sd);
+			break;
+		case IMSG_CTL_CONTEXT:
+			/* the mode the client's next line is read in */
+			if (imsg_get_data(&imsg, &ctx, sizeof(ctx)) == -1) {
+				imsg_free(&imsg);
+				link_broken(&links[CONFIG], "sent a context "
+				    "not whole");
+				return;
+			}
+			ctx.ifname[sizeof(ctx.ifname) - 1] = '\0';
+			if (control_reply(client, type, &ctx,
+			    sizeof(ctx)) == -1)
+				control_drop(client);
+			break;
 		case IMSG_CTL_HELLO:
 		case IMSG_CTL_RESULT:
-			/* the request's end */
+			/* the request's end, and its stage's */
 			if ((c = control_connbyid(client)) != NULL)
 				c->pending = 0;
+			printed_text(NULL, IMSG_CTL_OUTPUT, 0, 0);
+			memset(&stage, 0, sizeof(stage));
 			/* FALLTHROUGH */
 		case IMSG_CTL_OUTPUT:
 		case IMSG_CTL_FACTS:
-		case IMSG_CTL_CONTEXT:
 		case IMSG_CTL_NOTICE:
-		case IMSG_CTL_STAGED:
 			if (imsg_get_ibuf(&imsg, &b) == -1)
 				fatal("%s", __func__);
 			if (control_reply(client, type, ibuf_data(&b),
@@ -213,6 +275,18 @@ frontend_client(struct ctl_conn *c, struct imsg *imsg)
 		    NULL, 0) == -1)
 			fatal("%s", __func__);
 		return (0);
+	case IMSG_CTL_LINE:
+		if (frontend_whole(imsg, &r) == -1)
+			return (-1);
+		frontend_line(c, &r.line);
+		explicit_bzero(&r, sizeof(r));
+		return (0);
+	case IMSG_CTL_STAGE:
+		if (frontend_whole(imsg, &r) == -1)
+			return (-1);
+		frontend_stage(c, &r.stage);
+		explicit_bzero(&r, sizeof(r));
+		return (0);
 	case IMSG_CTL_LOGIN:
 	case IMSG_CTL_TERMINAL:
 		/* only the web configurator may send these */
@@ -220,8 +294,6 @@ frontend_client(struct ctl_conn *c, struct imsg *imsg)
 			return (-1);
 		/* FALLTHROUGH */
 	case IMSG_CTL_CONFIGURE:
-	case IMSG_CTL_LINE:
-	case IMSG_CTL_STAGE:
 	case IMSG_CTL_EXIT:
 	case IMSG_CTL_COMMIT:
 	case IMSG_CTL_ROLLBACK:
@@ -239,6 +311,196 @@ frontend_client(struct ctl_conn *c, struct imsg *imsg)
 	default:
 		return (-1);
 	}
+}
+
+/*
+ * A request frontend answers itself, as it goes no further: what
+ * reading it printed, the session's mode, if mode is set, and status
+ */
+static void
+frontend_answer(struct ctl_conn *c, int32_t status, int mode)
+{
+	struct nshd_result	 res = { status };
+
+	if (printed_text(&c->iev, IMSG_CTL_OUTPUT, 0, 0) == -1 ||
+	    (mode && control_reply(c->id, IMSG_CTL_CONTEXT, &ctx,
+	    sizeof(ctx)) == -1) || control_reply(c->id, IMSG_CTL_RESULT,
+	    &res, sizeof(res)) == -1)
+		control_drop(c->id);
+	c->pending = 0;
+}
+
+/*
+ * A line: its edits, to config, which answers it. One that has none,
+ * because it is none of the candidate's, is empty or only asked for
+ * help, is answered here, with what reading it printed, the session's
+ * mode, and a result. Outside configure, config says so
+ */
+static void
+frontend_line(struct ctl_conn *c, struct nshd_line *l)
+{
+	struct nshd_edits	 ed;
+	struct nshd_edline	 el;
+	FILE			*f;
+	char			*buf = NULL;
+	size_t			 len = 0;
+	int			 r = 0;
+
+	memset(&ed, 0, sizeof(ed));
+	if ((f = open_memstream(&buf, &len)) == NULL)
+		fatal("%s", __func__);
+	if (ctx.mode != 0) {
+		memset(&el, 0, sizeof(el));
+		fwrite(&el, sizeof(el), 1, f);
+		r = cmdline_edits(l->line, ctx.ifname, ctx.bridge, f);
+	}
+	if (fclose(f) == EOF)
+		fatal("%s", __func__);
+	if (ctx.mode != 0 && (r == -1 || len == sizeof(el)))
+		frontend_answer(c, r == -1 ? -1 : 0, 1);
+	else {
+		if (ctx.mode != 0) {
+			el.len = len - sizeof(el);
+			memcpy(buf, &el, sizeof(el));
+		}
+		/* a line of configure terminal is named as it is committed */
+		if (ctx.mode == NSHD_TERMINAL)
+			strlcpy(ed.label, l->line, sizeof(ed.label));
+		/* what reading it printed comes before what running it does */
+		if (printed_text(&c->iev, IMSG_CTL_OUTPUT, 0, 0) == -1)
+			control_drop(c->id);
+		frontend_edits(c, &ed, buf, len);
+	}
+	free(buf);
+}
+
+/*
+ * A stage: the line that enters its interface's mode, read in the
+ * session's mode, then the lines of its text, read in that interface's,
+ * to config, which runs them and answers each. The first line that is
+ * none of the candidate's is sent as refused, and what reading it
+ * printed waits here for config's answer to it (frontend_staged()); the
+ * lines after it are not read, as none would run
+ */
+static void
+frontend_stage(struct ctl_conn *c, struct nshd_stage *sg)
+{
+	struct nshd_edits	 ed;
+	FILE			*f;
+	char			 text[NSHD_TEXT + 1];
+	char			*buf = NULL, *l, *next, *to = stage.text;
+	size_t			 len = 0;
+
+	memset(&ed, 0, sizeof(ed));
+	memset(&stage, 0, sizeof(stage));
+	ed.stage = 1;
+	strlcpy(ed.ifname, sg->ifname, sizeof(ed.ifname));
+	if ((f = open_memstream(&buf, &len)) == NULL)
+		fatal("%s", __func__);
+	if (ctx.mode != 0 && ctx.mode != NSHD_TERMINAL) {
+		snprintf(stage.head, sizeof(stage.head), "%s %s",
+		    sg->bridge ? "bridge" : "interface", sg->ifname);
+		stage.n = 1;
+		stage.refused = frontend_read(f, stage.head, ctx.ifname,
+		    ctx.bridge) == -1;
+		memcpy(text, sg->text, sg->len);
+		text[sg->len] = '\0';
+		for (l = text; !stage.refused && l != NULL; l = next) {
+			if ((next = strchr(l, '\n')) != NULL)
+				*next++ = '\0';
+			if (*l == '\0')
+				continue;
+			to += strlcpy(to, l, sizeof(stage.text) -
+			    (to - stage.text)) + 1;
+			stage.n++;
+			stage.refused = frontend_read(f, l, sg->ifname,
+			    sg->bridge) == -1;
+		}
+	}
+	if (fclose(f) == EOF)
+		fatal("%s", __func__);
+	/* what reading the refused line printed waits for its answer */
+	if (!stage.refused && printed_text(&c->iev, IMSG_CTL_OUTPUT, 0,
+	    0) == -1)
+		control_drop(c->id);
+	frontend_edits(c, &ed, buf, len);
+	explicit_bzero(text, sizeof(text));
+	free(buf);
+}
+
+/*
+ * text, a line read into f as a stage's, in the mode of interface ifn,
+ * or at the top level if that is "": -1 if refused, which f says
+ */
+static int
+frontend_read(FILE *f, char *text, char *ifn, int isbridge)
+{
+	struct nshd_edline	 el;
+	FILE			*m;
+	char			*buf = NULL;
+	size_t			 len = 0;
+	int			 r;
+
+	if ((m = open_memstream(&buf, &len)) == NULL)
+		fatal("%s", __func__);
+	r = cmdline_edits(text, ifn, isbridge, m);
+	if (fclose(m) == EOF)
+		fatal("%s", __func__);
+	memset(&el, 0, sizeof(el));
+	el.refused = r == -1;
+	el.len = r == -1 ? 0 : len;
+	fwrite(&el, sizeof(el), 1, f);
+	fwrite(buf, 1, el.len, f);
+	free(buf);
+	return (r);
+}
+
+/* a request's lines, buf's len bytes, to config, in as many parts as fit */
+static void
+frontend_edits(struct ctl_conn *c, struct nshd_edits *ed, char *buf,
+    size_t len)
+{
+	size_t	 n;
+
+	do {
+		n = len < sizeof(ed->bytes) ? len : sizeof(ed->bytes);
+		memcpy(ed->bytes, buf, n);
+		ed->len = n;
+		buf += n;
+		len -= n;
+		ed->last = len == 0;
+		if (link_compose(&links[CONFIG], IMSG_FRONT_EDITS, c->id, ed,
+		    sizeof(*ed)) == -1)
+			fatal("%s", __func__);
+	} while (len > 0);
+	explicit_bzero(ed, sizeof(*ed));
+}
+
+/*
+ * config's answer to a line of the stage, to the client, with the line
+ * it is for, by its place: config names only the exit it adds. Before
+ * the answer to the line refused here goes what reading it printed
+ */
+static void
+frontend_staged(struct ctl_conn *c, struct nshd_staged *sd)
+{
+	char	*l;
+	int	 i;
+
+	sd->line[sizeof(sd->line) - 1] = '\0';
+	if (sd->line[0] == '\0' && stage.seen < stage.n) {
+		l = stage.head;
+		for (i = 1; i <= stage.seen; i++)
+			l = i == 1 ? stage.text : l + strlen(l) + 1;
+		strlcpy(sd->line, l, sizeof(sd->line));
+		if (++stage.seen == stage.n && stage.refused &&
+		    printed_text(&c->iev, IMSG_CTL_OUTPUT, 0, 0) == -1) {
+			control_drop(c->id);
+			return;
+		}
+	}
+	if (control_reply(c->id, IMSG_CTL_STAGED, sd, sizeof(*sd)) == -1)
+		control_drop(c->id);
 }
 
 /* the client gone: frontend ends, and config and system drop the session */
@@ -283,9 +545,11 @@ frontend_whole(struct imsg *imsg, union frontend_request *r)
 	case IMSG_CTL_STAGE:
 		if (imsg_get_data(imsg, &r->stage, sizeof(r->stage)) == -1 ||
 		    (r->stage.bridge != 0 && r->stage.bridge != 1) ||
+		    r->stage.ifname[0] == '\0' ||
 		    memchr(r->stage.ifname, '\0',
 		    sizeof(r->stage.ifname)) == NULL ||
-		    r->stage.len < 0 || r->stage.len > NSHD_TEXT)
+		    r->stage.len < 0 || r->stage.len > NSHD_TEXT ||
+		    memchr(r->stage.text, '\0', r->stage.len) != NULL)
 			return (-1);
 		return (sizeof(r->stage));
 	case IMSG_CTL_EXIT:

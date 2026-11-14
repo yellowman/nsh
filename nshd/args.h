@@ -17,12 +17,13 @@
 /*
  * Parsing of interface commands' arguments.
  *
- * Each command's row (struct argcmd) lists its arguments (struct arg). config
- * parses a configuration line's words into typed values with
- * args_parse(), and a commit sends system those values, as a facts
- * record, instead of the words. system checks them with args_check()
- * and passes them to the command's apply function, so system never
- * parses text.
+ * Each command's row (struct argcmd) lists its arguments (struct arg).
+ * args_parse() parses a configuration line's words into typed values:
+ * a session's frontend for a line its client sends, and the parser for
+ * a line of a script. What runs the line has those values, as a facts
+ * record, instead of the words: config, on a candidate, and system, as
+ * a script's edit. Each checks them with args_check() and passes them
+ * to the command's apply function, so neither parses the line's text.
  *
  * Unnamed arguments come first, in order. Named arguments follow in any
  * order, each as its name and its value ("ttl 64"), or as its name
@@ -105,7 +106,7 @@ struct arg {
 #define ARGS	(const struct arg[])
 
 /*
- * A command config parses, as args.c takes one: what conf_cmd() makes
+ * A command whose line is parsed, as args.c takes one: what conf_cmd() makes
  * of its row in its mode's table (cmdtab, Intlist, Bridgelist), or a
  * row of the operations (ops[]), in commands.c
  */
@@ -244,8 +245,6 @@ const char *args_bytes(struct argvals *, const char *, const char *,
 	    size_t, struct facts_value *);
 int	args_each(const struct argcmd *, int, char **,
 	    int (*)(const struct argcmd *, struct argvals *, void *), void *);
-int	args_run(const struct argcmd *, int, char **, char *, int,
-    struct cand *);
 int	args_usage(const struct argcmd *);
 void	args_kind(const struct argcmd *, struct facts_kind *,
 	    struct facts_field *);

@@ -311,6 +311,30 @@ struct nshd_newsession {
 	uint32_t		uid;
 };
 
+/*
+ * A session's frontend to config: the lines of a request, as the
+ * frontend read them (cmdline_edits()), a part at a time, which config
+ * runs after the last. The parts' bytes hold each line as struct
+ * nshd_edline and then its edits. A LINE has one line. A STAGE has the
+ * line that enters ifname's mode, then its own; a line of its text that
+ * the frontend refused has no edits, and says so. In configure
+ * terminal, label is the line as typed: config sends it in the notice
+ * of the line's commit, and reads nothing of it
+ */
+#define NSHD_EDITS	(1024 * 1024)	/* a request's lines, at most */
+struct nshd_edits {
+	int32_t		last;
+	int32_t		stage;		/* 1 for a STAGE's lines */
+	char		ifname[NSHD_IFNAME];	/* the stage's interface */
+	char		label[NSHD_LINE];
+	int32_t		len;		/* of bytes */
+	char		bytes[NSHD_TEXT];
+};
+struct nshd_edline {
+	int32_t		refused;	/* 1 if the frontend refused it */
+	uint32_t	len;		/* of its edits, which follow */
+};
+
 enum nshd_proc {
 	PROC_PARENT,
 	PROC_SHOW,
@@ -422,7 +446,13 @@ enum nshd_procmsg {
 	 * end; parent to system, once it has: config and every session
 	 * have ended
 	 */
-	IMSG_CONFIG_END = 59
+	IMSG_CONFIG_END = 59,
+
+	/*
+	 * frontend to config: nshd_edits, the lines of a LINE or a STAGE;
+	 * after the last part, config answers as it answers that request
+	 */
+	IMSG_FRONT_EDITS = 60
 };
 
 struct imsgev {

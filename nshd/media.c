@@ -141,14 +141,12 @@ int
 intmedia(int argc, char **argv, ...)
 {
 	va_list ap;
-	struct cand *cand;
 	char *ifname;
 	int ifs, set, n;
 
 	va_start(ap, argv);
 	ifname = va_arg(ap, char *);
 	ifs = va_arg(ap, int);
-	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
 	/* with the media this interface supports */
@@ -162,7 +160,7 @@ intmedia(int argc, char **argv, ...)
 		media_supported(ifs, ifname, "% ", "%   ", stdout);
 		return -1;
 	}
-	return conf_line(CTX_IF, argc, argv, ifname, ifs, cand);
+	return LINE_ARGS;
 }
 
 /* media's words: its subtype, instance and options */

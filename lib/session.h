@@ -86,7 +86,8 @@ int			 cand_shared_changed(struct cand_state *);
 unsigned int		 cand_shared_edits(struct cand_state *);
 int			 cand_shared_write(struct cand_state *, FILE *);
 int			 cand_shared_read(struct cand_state *, char *, size_t);
-int			 session_line(struct cand *, char *);
+int			 session_edits(struct cand *, char *, size_t);
+int			 session_end(struct cand *);
 int			 session_rules(struct cand *, char *, int, int,
 			    char *, size_t);
 /* nsh's command tables, sent as facts */

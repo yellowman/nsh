@@ -105,11 +105,25 @@ session_configure(struct cand *s, struct cand_state *sh)
 	return cand_begin(s);
 }
 
-/* A configuration line, in s, as cmdline() runs it */
+/*
+ * A configuration line's edits, as the session's frontend read them, in
+ * s, as cmdline_run() runs them
+ */
 int
-session_line(struct cand *s, char *line)
+session_edits(struct cand *s, char *buf, size_t len)
 {
-	return cmdline(line, s);
+	return cmdline_run(buf, len, s);
+}
+
+/* Leave the mode of an interface or a bridge, in s, as its exit does */
+int
+session_end(struct cand *s)
+{
+	struct edit e;
+
+	memset(&e, 0, sizeof(e));
+	e.kind = EDIT_END;
+	return session_edits(s, (char *)&e, sizeof(e));
 }
 
 /*

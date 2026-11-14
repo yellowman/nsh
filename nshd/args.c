@@ -714,34 +714,6 @@ args_each(const struct argcmd *c, int argc, char **argv,
 	return r;
 }
 
-/*
- * the interface that args_run() runs each record of values on, and the
- * candidate the line edits, or NULL
- */
-struct args_on {
-	char	*ifname;
-	int	 ifs;
-	struct cand *cand;
-};
-
-static int
-args_apply(const struct argcmd *c, struct argvals *a, void *arg)
-{
-	struct args_on	*on = arg;
-
-	return c->apply(c, a->set, a->v, on->ifname, on->ifs, on->cand);
-}
-
-/* Parse line argv for c and run c's apply function on ifname */
-int
-args_run(const struct argcmd *c, int argc, char **argv, char *ifname, int ifs,
-    struct cand *cand)
-{
-	struct args_on	 on = { ifname, ifs, cand };
-
-	return args_each(c, argc, argv, args_apply, &on);
-}
-
 /* Describe c's values as a facts kind in k, one field in f per value */
 void
 args_kind(const struct argcmd *c, struct facts_kind *k,

@@ -103,15 +103,14 @@
 #define RUNS(f)	NULL
 #include "nshrows.h"
 
-char hname[HSIZE];
-char next_ifname[IFNAMSIZ];	/* switch interfaces in interface context */
-
 static int in_rc;		/* a commit's edits run */
 static struct cnode *snapshot;	/* config's running configuration */
 
 static int	exitconfig(int, char **, ...);
-static int	int_line(const struct intlist *, char *, int, struct cand *);
-static int	top_line(const Command *, struct cand *);
+static int	cmdline_if_edits(char *, int, FILE *);
+static edit_runfn	line_ran, ifline_ran, head_ran;
+static const struct argcmd *int_cmd(const struct intlist *, struct argcmd *);
+static const struct argcmd *top_cmd(const Command *, struct argcmd *);
 static args_applyfn	ipcmd_apply, flush_ip_routes, flush_arp_cache,
 			flush_ndp_cache, flush_line, flush_pf, op_halt, op_diff,
 			op_crontab, demote_apply, interface_apply,
@@ -121,7 +120,7 @@ static args_parsefn	ipcmd_parse, flush_pf_parse, demote_parse,
 static int	conf_run_if(int, const struct argcmd *, int,
 		    const struct facts_value *, char *);
 static int	cand_leave(struct cand *);
-static int	cmdline_if(struct cand *);
+static int	cmdline_if(void);
 static int	sysctlhelp(int, char **, ...);
 static int	flush_op(int, char **, ...);
 static Menu	*flush_find(char *);
@@ -499,12 +498,6 @@ ipcmd(int argc, char **argv, ...)
 {
 	struct sysctltab *stab;
 	int n = NO_ARG(argv[0]) ? 1 : 0;
-	struct cand *cand;
-	va_list ap;
-
-	va_start(ap, argv);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
 
 	/*
 	 * Find ourself in the great divide
@@ -524,7 +517,7 @@ ipcmd(int argc, char **argv, ...)
 		sysctlhelp(0, NULL, NULL, stab->pf);
 		return 0;
 	}
-	return conf_line(CTX_TOP, argc, argv, NULL, -1, cand);
+	return LINE_ARGS;
 }
 
 /* the sysctl's word, and its value */
@@ -1907,15 +1900,14 @@ interface_parse(const struct argcmd *c, int argc, char **argv,
 }
 
 /*
- * command handler for interface and bridge modes
+ * interface and bridge: the mode of an interface or a bridge
  *
- * For a line of configure (cmdline()), the candidate makes the
+ * For a line of configure, in config, the candidate makes the
  * interface's block, or with no removes it, and the session's mode is
  * that interface's, and stays: cand has the name of the interface being
- * configured, and whether it is a bridge, so the lines that follow can
- * tell that an interface's mode is active, and whose. int_exit() leaves
- * it. With no candidate, for the head of a block in a commit's edits, it
- * only creates the interface, or with no, destroys it.
+ * configured, and whether it is a bridge. With no candidate, for the
+ * head of a block in a commit's edits, it only creates the interface,
+ * or with no, destroys it.
  */
 static int
 interface_apply(const struct argcmd *c, int set, const struct facts_value *v,
@@ -1967,78 +1959,15 @@ interface_apply(const struct argcmd *c, int set, const struct facts_value *v,
 	return r;
 }
 
+/*
+ * In an interface's mode, the interface line. This handler marks its
+ * rows: cmdline_if_edits() reads the line as the top level's, so nothing
+ * runs here
+ */
 static int
 int_interface(int argc, char **argv, ...)
 {
-	struct ifreq ifr;
-	char *new_ifname;
-	int set = 1, r;
-	va_list ap;
-	struct cand *cand;
-	char *old_ifname;
-	int ifs;
-
-	va_start(ap, argv);
-	old_ifname = va_arg(ap, char *);
-	ifs = va_arg(ap, int);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
-	
-	if (NO_ARG(argv[0])) {
-		argv++;
-		argc--;
-		set = 0;
-	}
-
-	if (argc != 2) {
-		printf("%% usage: [no] interface <ifname>\n");
-		return -1;
-	}
-
-	new_ifname = argv[1];
-	if (cand != NULL) {
-		int isbridge;
-
-		if ((r = cand_interface(cand, set, new_ifname,
-		    &isbridge)) == -1)
-			return -1;
-		if (r == 0)
-			strlcpy(next_ifname, new_ifname, sizeof(next_ifname));
-		/* if this mode's interface was removed, leave the mode */
-		return !set && strcmp(old_ifname, new_ifname) == 0;
-	}
-	if (!is_valid_ifname(new_ifname)) {
-		if (set == 0) {
-			printf("%% interface %s not found\n", new_ifname);
-			return -1;
-		}
-		strlcpy(ifr.ifr_name, new_ifname, sizeof(ifr.ifr_name));
-		if (ioctl(ifs, SIOCIFCREATE, &ifr) == -1) {
-			if (errno == EINVAL)
-				printf("%% interface %s not found\n", new_ifname);
-			else
-				printf("%% unable to create interface %s: %s\n",
-				    new_ifname, strerror(errno));
-			return -1;
-		}
-		strlcpy(next_ifname, new_ifname, sizeof(next_ifname));
-		return 0; /* do not leave interface context */
-	}
-
-	if (set == 0) {
-		strlcpy(ifr.ifr_name, new_ifname, sizeof(ifr.ifr_name));
-		if (ioctl(ifs, SIOCIFDESTROY, &ifr) == -1) {
-			printf("%% unable to remove interface %s: %s\n",
-			    new_ifname, strerror(errno));
-			return -1;
-		}
-		if (strcmp(old_ifname, new_ifname) == 0)
-			return 1; /* leave interface context */
-		return 0; /* do not leave interface context */
-	}
-
-	strlcpy(next_ifname, new_ifname, sizeof(next_ifname));
-	return 0; /* do not leave interface context */
+	return 0;
 }
 
 static int
@@ -2307,20 +2236,27 @@ getcmd(char *name)
 }
 
 /*
- * Run one line, as a terminal gives it, in configure private. In an
- * interface's mode, run the interface command; int_exit() leaves the
- * mode. Otherwise run the command; interface or bridge enters its mode,
- * which stays for the following lines. Only commands that edit the
- * candidate run, and leaving a mode: nsh runs the rest, whose rows have
- * no handler here. A line of a session outside configure is refused.
- * Returns what the handler returns, or -1 after printing why if none
- * ran.
+ * Read one line of nshd's configure, as a terminal gives it, into its
+ * edits, written to f: the row of its command and the values its words
+ * parse to, which cmdline_run() runs. A session's frontend reads it, in
+ * the mode config last told it the session is in: at the top level of
+ * configure, or with ifn not "", in the mode of that interface, a
+ * bridge's if isbridge. config runs it, so the words a client sends are
+ * read in that client's own process. In an interface's
+ * mode the line is one of that mode's, and exit leaves the mode; at the
+ * top level it is a command that edits the candidate, or exit, which
+ * leaves configure. Returns 0 after writing the line's edits, none for
+ * an empty line or one that only printed help, or -1 after printing why
+ * the line is none of the candidate's.
  */
 int
-cmdline(char *text, struct cand *cand)
+cmdline_edits(char *text, char *ifn, int isbridge, FILE *f)
 {
+	struct argcmd row;
+	struct edit e;
 	Command *c;
 	char *p;
+	int d, act, r;
 
 	if (strlcpy(line, text, sizeof(line)) >= sizeof(line)) {
 		printf("%% Input exceeds permitted length\n");
@@ -2332,12 +2268,8 @@ cmdline(char *text, struct cand *cand)
 	}
 	if (margv[0] == NULL)
 		return 0;
-	if (!cand->on) {
-		printf("%% Command requires configure mode\n");
-		return -1;
-	}
-	if (cand->ifname[0] != '\0')
-		return cmdline_if(cand);
+	if (ifn[0] != '\0')
+		return cmdline_if_edits(ifn, isbridge, f);
 	if ((p = NO_ARG(margv[0]) ? margv[1] : margv[0]) == NULL ||
 	    (c = getcmd(p)) == 0) {
 		printf("%% Invalid command\n");
@@ -2351,30 +2283,53 @@ cmdline(char *text, struct cand *cand)
 		printf("%% Invalid command: %s %s\n", margv[0], margv[1]);
 		return -1;
 	}
-	if ((c->needconfig || c->modh) && cand_refused(cand, c->name, c->cand))
+	if ((c->needconfig || c->modh) && c->cand == CAND_NO) {
+		printf("%% %s is not supported in configure private yet\n",
+		    c->name);
 		return -1;
+	}
 	if (c->cand != CAND_EDIT && c->handler != exitconfig) {
 		printf("%% %s is not through nshd's configure\n", c->name);
 		return -1;
 	}
-	if (c->handler == exitconfig)
-		return cmdexit(cand);
-	if (c->modh)
-		strlcpy(hname, c->name, HSIZE);
-	return top_line(c, cand);
+	memset(&e, 0, sizeof(e));
+	if (c->handler == exitconfig) {
+		e.kind = EDIT_LEAVE;
+		return edit_put(f, &e, NULL, 0);
+	}
+	if (c->handler == ctlhandler) {
+		if ((r = ctl_parse(c->name, margc, margv, &d, &act)) != 1)
+			return r;
+		e.kind = EDIT_ACT;
+		e.row = d;
+		e.act = act;
+		return edit_put(f, &e, NULL, 0);
+	}
+	if (top_cmd(c, &row) == NULL) {
+		printf("%% %s: internal failure\n", c->name);
+		return -1;
+	}
+	/* a handler has work of its own before its line's arguments */
+	if (c->handler != NULL &&
+	    (r = (*c->handler)(margc, margv, 0)) != LINE_ARGS)
+		return r;
+	e.kind = EDIT_TOP;
+	e.row = c - cmdtab;
+	return edit_args(f, &e, &row, margc, margv);
 }
 
-/* A line in an interface's mode, as interface()'s loop runs it */
+/* cmdline_edits() of a line in an interface's or a bridge's mode */
 static int
-cmdline_if(struct cand *cand)
+cmdline_if_edits(char *ifn, int isbridge, FILE *f)
 {
-	struct intlist *i = NULL;
+	struct intlist *list = isbridge ? Bridgelist : Intlist, *i = NULL;
+	struct argcmd row;
+	struct edit e;
 	char *p;
-	int r;
+	int n, r;
 
 	if ((p = NO_ARG(margv[0]) ? margv[1] : margv[0]) != NULL)
-		i = (struct intlist *)genget(p,
-		    (char **)(cand->bridge ? Bridgelist : Intlist),
+		i = (struct intlist *)genget(p, (char **)list,
 		    sizeof(struct intlist));
 	if (Ambiguous(i)) {
 		printf("%% Ambiguous command\n");
@@ -2384,23 +2339,188 @@ cmdline_if(struct cand *cand)
 		printf("%% Invalid command\n");
 		return -1;
 	}
-	if (cand_refused(cand, i->name, i->cand))
+	if (i->cand == CAND_NO) {
+		printf("%% %s is not supported in configure private yet\n",
+		    i->name);
 		return -1;
+	}
 	if (i->cand != CAND_EDIT && i->handler != int_exit) {
 		printf("%% %s is not through nshd's configure\n", i->name);
 		return -1;
 	}
-	if ((r = int_line(i, cand->ifname, -1, cand)) == 1) {
-		cand->ifname[0] = '\0';
+	memset(&e, 0, sizeof(e));
+	if (i->handler == int_exit) {
+		e.kind = EDIT_END;
+		return edit_put(f, &e, NULL, 0);
+	}
+	if (i->handler == int_interface) {
+		/* another interface's mode: the top level's interface line */
+		if (margc - (NO_ARG(margv[0]) ? 1 : 0) != 2) {
+			printf("%% usage: [no] interface <ifname>\n");
+			return -1;
+		}
+		for (n = 0; cmdtab[n].apply != interface_apply ||
+		    cmdtab[n].code != CF_IF; n++)
+			;
+		e.kind = EDIT_TOP;
+		e.row = n;
+		return edit_args(f, &e, top_cmd(&cmdtab[n], &row), margc,
+		    margv);
+	}
+	if (int_cmd(i, &row) == NULL) {
+		printf("%% %s: internal failure\n", i->name);
+		return -1;
+	}
+	if (i->handler != NULL &&
+	    (r = (*i->handler)(margc, margv, ifn, -1)) != LINE_ARGS)
+		return r;
+	e.kind = isbridge ? EDIT_BRIDGE : EDIT_IF;
+	e.row = i - list;
+	return edit_args(f, &e, &row, margc, margv);
+}
+
+/*
+ * Run a line's edits (cmdline_edits()), buf's len bytes, in configure
+ * private, as nsh runs the line they were read from. In an interface's
+ * mode, an edit runs that mode's command on the interface, the end of a
+ * block leaves the mode, and an interface line goes to that interface's
+ * mode; at the top level, an edit runs its command, interface or bridge
+ * enters its mode, which stays for the following lines, and leaving
+ * leaves configure. The edits come from a session's frontend, which
+ * read them in the mode config last told it. So each is checked before
+ * it runs: it is whole, the session is in configure, it is of a kind a
+ * line has, its row a command of the mode the session is in now that
+ * edits the candidate, and its values those the row's arguments take
+ * (args_check()). Returns 0, or -1 after printing why if one failed or
+ * may not run; none after that one runs.
+ */
+int
+cmdline_run(char *buf, size_t len, struct cand *cand)
+{
+	const struct argcmd *c;
+	struct argcmd cmd;
+	struct intlist *list;
+	struct edit e;
+	char *p;
+	size_t off;
+	int r = 0;
+
+	for (off = 0; off < len && r != -1; off += sizeof(e) + e.len) {
+		if (len - off < sizeof(e))
+			goto bad;
+		memcpy(&e, buf + off, sizeof(e));
+		p = buf + off + sizeof(e);
+		if (e.len > len - off - sizeof(e) || e.no > 1)
+			goto bad;
+		if (!cand->on) {
+			printf("%% Command requires configure mode\n");
+			return -1;
+		}
+		switch (e.kind) {
+		case EDIT_TOP:
+			if ((c = conf_cmd(CTX_TOP, e.row, &cmd)) == NULL ||
+			    cmdtab[e.row].cand != CAND_EDIT || e.typed != 1 ||
+			    (e.no && (c->flags & CF_NO) == 0))
+				goto bad;
+			if (cand->ifname[0] != '\0') {
+				if (c->apply != interface_apply ||
+				    c->code != CF_IF)
+					goto bad;
+				r = edit_values(c, &e, p, head_ran, cand);
+				break;
+			}
+			r = edit_values(c, &e, p, line_ran, cand);
+			break;
+		case EDIT_IF:
+		case EDIT_BRIDGE:
+			list = e.kind == EDIT_IF ? Intlist : Bridgelist;
+			if (cand->ifname[0] == '\0' ||
+			    list != (cand->bridge ? Bridgelist : Intlist) ||
+			    (c = conf_cmd(e.kind == EDIT_IF ? CTX_IF :
+			    CTX_BRIDGE, e.row, &cmd)) == NULL ||
+			    list[e.row].cand != CAND_EDIT || e.typed != 1)
+				goto bad;
+			if ((r = edit_values(c, &e, p, ifline_ran,
+			    cand)) == 1) {
+				cand->ifname[0] = '\0';
+				r = 0;
+			}
+			break;
+		case EDIT_END:
+			if (cand->ifname[0] == '\0' || e.len != 0)
+				goto bad;
+			cand->ifname[0] = '\0';
+			break;
+		case EDIT_LEAVE:
+			if (cand->ifname[0] != '\0' || e.len != 0)
+				goto bad;
+			r = cmdexit(cand);
+			break;
+		case EDIT_ACT:
+			if (cand->ifname[0] != '\0' || e.len != 0)
+				goto bad;
+			r = ctl_cand_act(e.row, e.act, cand);
+			break;
+		default:
+			goto bad;
+		}
+	}
+	return r == -1 ? -1 : 0;
+bad:
+	printf("%% nshd: the edit at byte %zu is no line of the session's "
+	    "mode\n", off);
+	return -1;
+}
+
+/*
+ * cmdline_run()'s edit, run: a command of the top level, in the
+ * candidate of the session whose line it is
+ */
+static int
+line_ran(const struct argcmd *c, int set, const struct facts_value *v,
+    void *arg)
+{
+	struct cand *cand = arg;
+
+	return c->apply(c, set, v, NULL, -1, cand);
+}
+
+/* and a command of the mode of the interface the session is in */
+static int
+ifline_ran(const struct argcmd *c, int set, const struct facts_value *v,
+    void *arg)
+{
+	struct cand *cand = arg;
+
+	return c->apply(c, set, v, cand->ifname, -1, cand);
+}
+
+/*
+ * An interface line in an interface's mode: the candidate has its
+ * block, and the mode is that interface's from now on; with no, the
+ * block is removed, which leaves the mode if it is this one's
+ */
+static int
+head_ran(const struct argcmd *c, int set, const struct facts_value *v,
+    void *arg)
+{
+	struct cand *cand = arg;
+	char name[IFNAMSIZ];
+	int isbridge;
+
+	args_string(&v[0], name, sizeof(name));
+	if (cand_interface(cand, set, name, &isbridge) == -1)
+		return -1;
+	if (!set) {
+		if (strcmp(cand->ifname, name) == 0)
+			cand->ifname[0] = '\0';
 		return 0;
 	}
-	if (i->handler == int_interface && next_ifname[0] != '\0' &&
-	    strcmp(next_ifname, cand->ifname) != 0) {
-		strlcpy(cand->ifname, next_ifname, sizeof(cand->ifname));
-		memset(next_ifname, 0, sizeof(next_ifname));
-		cand->bridge = cand_isbridge(cand, cand->ifname);
+	if (strcmp(cand->ifname, name) != 0) {
+		strlcpy(cand->ifname, name, sizeof(cand->ifname));
+		cand->bridge = isbridge;
 	}
-	return r;
+	return 0;
 }
 
 /*
@@ -2462,16 +2582,9 @@ cmdexit(struct cand *cand)
 static int
 hostname(int argc, char **argv, ...)
 {
-	struct cand *cand;
-	va_list ap;
-
-	va_start(ap, argv);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
-
 	if (argc == 1)
 		return facts_show(stdout, "hostname");
-	return conf_line(CTX_TOP, argc, argv, NULL, -1, cand);
+	return LINE_ARGS;
 }
 
 static int
@@ -2624,19 +2737,14 @@ rtable_apply(const struct argcmd *c, int set, const struct facts_value *v,
 }
 
 /*
- * Group attribute command.
+ * group's row, an operation of nshd's system (row_runs()). nsh asks
+ * nshd's system for it itself, so nothing runs here
  */
 int
 group(int argc, char **argv, ...)
 {
-	struct cand *cand;
-	va_list ap;
-
-	va_start(ap, argv);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
-
-	return args_run(&ops[op_find("group", 0)], argc, argv, NULL, -1, cand);
+	printf("%% group is an operation of nshd's system\n");
+	return -1;
 }
 
 /* the group's name, carpdemote, and maybe a counter: 1 if it has none */
@@ -2696,23 +2804,14 @@ demote_apply(const struct argcmd *c, int set, const struct facts_value *v,
 }
 
 /*
- * exit's row at the top level. This handler marks the row: cmdline()
- * finds the row by it, and cmdexit() leaves configure, so nothing runs
- * here
+ * exit's row at the top level. This handler marks the row:
+ * cmdline_edits() reads the line, and cmdexit() leaves configure, so
+ * nothing runs here
  */
 static int
 exitconfig(int argc, char **argv, ...)
 {
 	return 0;
-}
-
-int
-cand_refused(struct cand *cand, char *name, int how)
-{
-	if (cand == NULL || how != CAND_NO)
-		return 0;
-	printf("%% %s is not supported in configure private yet\n", name);
-	return 1;
 }
 
 static int
@@ -2865,8 +2964,8 @@ conf_ordered(char *line)
 
 /*
  * c, row i of an interface's or a bridge's mode (Intlist, Bridgelist),
- * as args.c takes a command, if config parses the row's line: the row
- * has the function that applies its values. NULL if it has none. Any
+ * as args.c takes a command, if the row's line is parsed into values:
+ * the row has the function that applies them. NULL if it has none. Any
  * line of these modes can take no
  */
 static const struct argcmd *
@@ -2908,42 +3007,9 @@ top_cmd(const Command *t, struct argcmd *c)
 }
 
 /*
- * Run the line in margv by row i of an interface's or a bridge's mode:
- * its handler, or with none, as the row's arguments say
- */
-static int
-int_line(const struct intlist *i, char *ifname, int ifs, struct cand *cand)
-{
-	struct argcmd c;
-
-	if (i->handler != NULL)
-		return (*i->handler)(margc, margv, ifname, ifs, cand);
-	if (int_cmd(i, &c) == NULL) {
-		printf("%% %s: internal failure\n", i->name);
-		return -1;
-	}
-	return args_run(&c, margc, margv, ifname, ifs, cand);
-}
-
-/* int_line() for row t of the top level */
-static int
-top_line(const Command *t, struct cand *cand)
-{
-	struct argcmd c;
-
-	if (t->handler != NULL)
-		return (*t->handler)(margc, margv, cand);
-	if (top_cmd(t, &c) == NULL) {
-		printf("%% %s: internal failure\n", t->name);
-		return -1;
-	}
-	return args_run(&c, margc, margv, NULL, -1, cand);
-}
-
-/*
  * Row n of ctx's table, cmdtab, Intlist or Bridgelist for CTX_TOP,
  * CTX_IF or CTX_BRIDGE, as c, if it is a command a configuration has:
- * one config parses (int_cmd(), top_cmd()). NULL for any other row, and
+ * one whose line is parsed (int_cmd(), top_cmd()). NULL for any other row, and
  * where there is no such row. A commit's edits name a command by its
  * row (commit.c), so a commit runs no row that is not one of these: a
  * daemon's, which ctl.c handles (ctl_act()), has no arguments here
@@ -3002,28 +3068,6 @@ conf_find(int ctx, char *word, char **daemon)
 	} else
 		return -1;
 	return conf_cmd(ctx, n, &c) != NULL ? n : -1;
-}
-
-/*
- * Run a line of ctx's by the row of its command, on ifname if it is an
- * interface's or a bridge's: for a handler that has work of its own
- * before its line's arguments are read
- */
-int
-conf_line(int ctx, int argc, char **argv, char *ifname, int ifs,
-    struct cand *cand)
-{
-	struct argcmd row;
-	const struct argcmd *c;
-	char *daemon;
-
-	c = conf_cmd(ctx, conf_find(ctx, argv[NO_ARG(argv[0]) && argc > 1],
-	    &daemon), &row);
-	if (c == NULL) {
-		printf("%% %s: internal failure\n", argv[0]);
-		return -1;
-	}
-	return args_run(c, argc, argv, ifname, ifs, cand);
 }
 
 /*
