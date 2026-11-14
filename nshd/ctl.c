@@ -22,6 +22,7 @@
 #include <errno.h>
 #include <ctype.h>
 #include <libgen.h>
+#include <limits.h>
 #include <histedit.h>
 #include <stdarg.h>
 #include <sys/signal.h>
@@ -36,6 +37,7 @@
 #include <net/pfvar.h>
 #include "externs.h"
 #include "facts.h"
+#include "args.h"
 #include "showfacts.h"
 #include "editing.h"
 #include "ctl.h"
@@ -1068,6 +1070,94 @@ ctl_op(char *daemon, char *action)
 	if (x == NULL || Ambiguous(x))
 		return 0;
 	return x->type == T_EXEC && x->flag_x == 0;
+}
+
+/*
+ * An action ctl_op() takes, as one of the operations of nshd's system:
+ * the daemon's row of ctl_daemons, the action's row of the daemon's
+ * table, and the words the action's program takes
+ */
+
+/* the daemon's word, the action's, and the words for its program */
+int
+daemon_parse(const struct argcmd *c, int argc, char **argv,
+    struct argvals *a)
+{
+	struct daemons *d;
+	struct ctl *x;
+	char *args[NOPTFILL];
+	int i;
+
+	if (argc < 2 || !ctl_op(argv[0], argv[1])) {
+		printf("%% %s: not an operation nshd runs\n",
+		    argc > 0 ? argv[0] : c->name);
+		return -1;
+	}
+	d = (struct daemons *)genget(argv[0], (char **)ctl_daemons,
+	    sizeof(struct daemons));
+	x = (struct ctl *)genget(argv[1], (char **)d->table,
+	    sizeof(struct ctl));
+	if (step_optreq(x->args, args, argc, argv, 2) == NULL)
+		return -1;
+	facts_i64(&a->v[0], d - ctl_daemons);
+	facts_i64(&a->v[1], x - d->table);
+	for (i = 2; i < argc; i++)
+		if (args_word(c, &c->args[2], a, argv[i], &a->v[i]) == -1)
+			return -1;
+	return 0;
+}
+
+/*
+ * The action, as ctlhandler() runs it outside configure private; or
+ * refused if the values name no action ctl_op() takes
+ */
+int
+daemon_apply(const struct argcmd *c, int set, const struct facts_value *v,
+    char *ifname, int ifs, struct cand *cand)
+{
+	struct daemons *d;
+	struct ctl *x;
+	char words[NOPTFILL - 1][sizeof(line)], tmpfile[PATH_MAX];
+	char *argv[NOPTFILL + 2], *step_args[NOPTFILL] = { NULL };
+	char **fillargs;
+	int argc, n;
+
+	for (n = 0; ctl_daemons[n].name != NULL; n++)
+		;
+	if (v[0].v.i >= n) {
+		printf("%% nshd: no daemon %lld\n", (long long)v[0].v.i);
+		return -1;
+	}
+	d = &ctl_daemons[v[0].v.i];
+	for (n = 0; d->table[n].name != NULL; n++)
+		;
+	x = v[1].v.i < n ? &d->table[v[1].v.i] : NULL;
+	if (x == NULL || x->type != T_EXEC || x->flag_x != 0) {
+		printf("%% nshd: %s has no operation %lld\n", d->name,
+		    (long long)v[1].v.i);
+		return -1;
+	}
+	if (cli_rtable > d->rtablemax) {
+		printf("%% Command %s not available via rtable %d\n",
+		    d->name, cli_rtable);
+		return -1;
+	}
+	argv[0] = d->name;
+	argv[1] = x->name;
+	for (argc = 2; argc < NOPTFILL + 1 && v[argc].type != FACT_NONE;
+	    argc++) {
+		args_string(&v[argc], words[argc - 2], sizeof(words[0]));
+		argv[argc] = words[argc - 2];
+	}
+	argv[argc] = NULL;
+	snprintf(table, sizeof(table), "-T%d", cli_rtable);
+	if (d->tmpfile)
+		snprintf(tmpfile, sizeof(tmpfile), "%s.%d", d->tmpfile,
+		    cli_rtable);
+	if ((fillargs = step_optreq(x->args, step_args, argc, argv, 2)) ==
+	    NULL)
+		return -1;
+	return ctl_run(d, x, fillargs, tmpfile);
 }
 
 /*

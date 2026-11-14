@@ -536,18 +536,18 @@ brpri_apply(const struct argcmd *c, int set, const struct facts_value *v,
 }
 
 /*
- * flush wrappers here
+ * flush's operations on a bridge (ops[]): flush bridge-dyn and bridge-all
+ * name the bridge, and flush bridge-rule a member too
  */
+
 int
-flush_bridgedyn(int argc, char **argv, ...)
+flush_bridgedyn(const struct argcmd *c, int set, const struct facts_value *v,
+    char *ifname, int unused, struct cand *cand)
 {
-	va_list ap;
-	char *brdg;
+	char brdg[IFNAMSIZ];
 	int ifs, e;
 
-	va_start(ap, argv);
-	brdg = va_arg(ap, char *);
-	va_end (ap);
+	args_string(&v[0], brdg, sizeof(brdg));
 
 	ifs = socket(AF_INET, SOCK_DGRAM, 0);
 	if (ifs < 0) {
@@ -568,15 +568,13 @@ flush_bridgedyn(int argc, char **argv, ...)
 }
 
 int
-flush_bridgeall(int argc, char **argv, ...)
+flush_bridgeall(const struct argcmd *c, int set, const struct facts_value *v,
+    char *ifname, int unused, struct cand *cand)
 {
-	va_list ap;
-	char *brdg;
+	char brdg[IFNAMSIZ];
 	int ifs, e;
 
-	va_start(ap, argv);
-	brdg = va_arg(ap, char *);
-	va_end(ap);
+	args_string(&v[0], brdg, sizeof(brdg));
 
 	ifs = socket(AF_INET, SOCK_DGRAM, 0);
 	if (ifs < 0) {
@@ -597,16 +595,14 @@ flush_bridgeall(int argc, char **argv, ...)
 }
 
 int
-flush_bridgerule(int argc, char **argv, ...)
+flush_bridgerule(const struct argcmd *c, int set, const struct facts_value *v,
+    char *ifname, int unused, struct cand *cand)
 {
-	va_list ap;
-	char *brdg, *member;
+	char brdg[IFNAMSIZ], member[IFNAMSIZ];
 	int ifs, e;
 
-	va_start(ap, argv);
-	brdg = va_arg(ap, char *);
-	member = va_arg(ap, char *);
-	va_end(ap);
+	args_string(&v[0], brdg, sizeof(brdg));
+	args_string(&v[1], member, sizeof(member));
 
 	ifs = socket(AF_INET, SOCK_DGRAM, 0);
 	if (ifs < 0) {

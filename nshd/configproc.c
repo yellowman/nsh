@@ -152,6 +152,7 @@
 #include "log.h"
 #include "nshd.h"
 #include "facts.h"
+#include "args.h"
 #include "stringlist.h"
 #include "kfacts.h"
 #include "session.h"
@@ -1673,24 +1674,50 @@ config_units(void *arg, const void *buf, size_t len)
 		fatal("%s", __func__);
 }
 
-/* an operation, which system checks, runs and streams */
+/*
+ * an operation, as nsh's words for it, which config parses into a row of
+ * ops[] and its values (op_parse()): system checks the values, runs the
+ * row and streams what it prints
+ */
 static void
 config_op(uint32_t session, struct nshd_op *op)
 {
 	struct nshd_sysop	 so;
+	struct argvals		 a;
 	struct request		*r;
+	char			*w[NSHD_LINE / 2], *p = op->line;
+	ssize_t			 len = -1;
+	int			 n = 0, row = -1;
 
 	if (session_find(session) == NULL) {
 		config_answer(session, 1, "%% nshd: hello first\n");
+		return;
+	}
+	memset(&so, 0, sizeof(so));
+	while (n < (int)(sizeof(w) / sizeof(w[0])) &&
+	    (w[n] = strsep(&p, " \t")) != NULL)
+		if (*w[n] != '\0')
+			n++;
+	if (n == 0 || p != NULL)
+		printf("%% nshd: an operation of no words, or too many\n");
+	else if ((row = op_parse(n, w, &a, so.ifname, sizeof(so.ifname))) !=
+	    -1)
+		len = args_record(&ops[row], &a, so.values,
+		    sizeof(so.values));
+	if (len == -1) {
+		front_printed(session);
+		config_answer(session, 1, NULL);
 		return;
 	}
 	if ((r = config_request(session, REQ_ANSWER)) == NULL) {
 		config_answer(session, 1, "%s", REQ_REFUSED);
 		return;
 	}
-	memset(&so, 0, sizeof(so));
 	so.whose.session = session;
-	so.op = *op;
+	so.rtable = op->rtable;
+	so.row = row;
+	so.set = a.set;
+	so.len = len;
 	if (link_compose(&links[SYSTEM], IMSG_SYS_OP, r->id, &so,
 	    sizeof(so)) == -1)
 		fatal("%s", __func__);

@@ -1021,46 +1021,18 @@ inttxpower_apply(const struct argcmd *c, int set, const struct facts_value *v,
 	return 0;
 }
 
+/* bssid: the access point to use, or with no, any */
+
 int
-intbssid(int argc, char **argv, ...)
+bssid_apply(const struct argcmd *c, int set, const struct facts_value *v,
+    char *ifname, int ifs, struct cand *cand)
 {
 	struct ieee80211_bssid bssid;
-	struct ether_addr *ea;
-	short set;
-	va_list ap;
-	char *ifname;
-	int ifs;
 
-	va_start(ap, argv);
-	ifname = va_arg(ap, char *);
-	ifs = va_arg(ap, int);
-	va_end(ap);
-
-	if (NO_ARG(argv[0])) {
-		set = 0;
-		argv++;
-		argc--;
-	} else
-		set = 1;
-
-	argv++;
-	argc--;
-
-	if ((set && argc != 1) || (!set && argc > 1)) {
-		printf("%% bssid <xx:xx:xx:xx:xx:xx>\n");
-		printf("%% no bssid       (auto-select)\n");
-		return -1;
-	}
-
-	if (set) {
-		ea = ether_aton(argv[0]);
-		if (ea == NULL) {
-			printf("%% Invalid bssid\n");
-			return -1;
-		}
-		memcpy(&bssid.i_bssid, ea->ether_addr_octet,
+	if (set)
+		memcpy(&bssid.i_bssid, v[0].v.a.bytes,
 		    sizeof(bssid.i_bssid));
-	} else
+	else
 		memset(&bssid.i_bssid, 0, sizeof(bssid.i_bssid));
 
 	strlcpy(bssid.i_name, ifname, sizeof(bssid.i_name));

@@ -22,7 +22,7 @@ client.c	process	nshd_config nshd_intr nshd_rtable sfd sib
 client.c	table	nshd_runs.progs show_log.logs
 cmdargs.c	process	child in_config
 commands.c	process	hname snapshot
-commands.c	scratch	in_rc next_ifname
+commands.c	scratch	in_rc next_ifname op_hide
 commands.c	table	Bridgelist Bridgelist_nitems Intlist
 			Intlist_nitems ahtab arpdowntab arphelp
 			arptimeouttab balancing_keys bgphelp bractions brdirs
@@ -39,7 +39,7 @@ commands.c	table	Bridgelist Bridgelist_nitems Intlist
 			dvmrphelp eigrphelp
 			encdebugtab esptab espudpencapporttab
 			espudpencaptab etheriptab
-			flushlist flushtab forwardingtab fpfs
+			flushlist flushtab flushverbose_args forwardingtab fpfs
 			ftpproxyhelp gretab grouphelp grouptab
 			hostnamehelp
 			ifstatehelp ikehelp inethelp interface_args
@@ -71,7 +71,8 @@ commands.c	table	Bridgelist Bridgelist_nitems Intlist
 			vnetid_args wccptab class_keys clearhelp commithelp
 			confighelp
 			dohelp
-			editinghelp exithelp flag_keys flushhelp halthelp
+			editinghelp exithelp flag_keys flushbridge_args
+			flushhelp halthelp
 			helphelp
 			loggerhelp manhelp nreboothelp ping6help pinghelp
 			powerdownhelp proto_keys prots quithelp rollbackhelp
@@ -81,7 +82,7 @@ commands.c	table	Bridgelist Bridgelist_nitems Intlist
 			stts telnethelp tracert6help tracerthelp trunkproto_keys
 			ttl_keys txprio_args
 			txprio_keys unsetenvhelp
-			verbosehelp whohelp
+			verbosehelp ops whohelp
 commit.c	scratch	deferred ndeferred
 commit.c	table	ifrefs
 complete.c	process	cmplt_remote complete_nocmd.nocmdtab
@@ -213,7 +214,7 @@ trunk.c		scratch	trunk_facts.parent
 trunk.c		table	tpr
 tunnel.c	table	cachecs vnetidrs
 umb.c		table	cand_umb.fn umb_actstate
-			umb_dataclass umb_ops umb_pktstate
+			umb_dataclass umb_pktstate
 utils.c		scratch	format_k.idx format_k.retarray
 version.c	table	kind_version version_fields
 wg.c		scratch	wg_aip wg_facts.public wg_interface wg_peer

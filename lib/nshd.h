@@ -76,8 +76,9 @@ struct nshd_result {
 #define NSHD_ELSEWHERE	2
 
 /*
- * an operation, in nsh's words; system runs it as root in the client's
- * rtable and streams what it prints, and its status is how it ended
+ * an operation, in nsh's words, which config parses; system runs it as
+ * root in the client's rtable and streams what it prints, and its status
+ * is how it ended
  */
 struct nshd_op {
 	int32_t		rtable;
@@ -249,10 +250,18 @@ struct nshd_follow {
 	int32_t		log;
 };
 
-/* config to system: an operation, and the session that asked it */
+/*
+ * config to system: an operation, as its row of ops[] and the values of
+ * the row's arguments, a facts record; and the session that asked it
+ */
 struct nshd_sysop {
 	struct nshd_whose whose;
-	struct nshd_op	 op;
+	int32_t		rtable;
+	int32_t		row;		/* in ops[] */
+	int32_t		set;		/* 0 for "no" */
+	char		ifname[NSHD_IFNAME];	/* an interface's operation's */
+	uint32_t	len;		/* of values */
+	char		values[2 * NSHD_LINE];
 };
 
 /* config to system: a login, and the session that asked it */

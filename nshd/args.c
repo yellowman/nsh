@@ -771,6 +771,48 @@ args_kind(const struct argcmd *c, struct facts_kind *k,
 	k->nfields = n;
 }
 
+/* where args_record() writes */
+struct args_buf {
+	char	*p;
+	size_t	 len, size;
+	int	 full;
+};
+
+static void
+args_emit(void *arg, const void *p, size_t len)
+{
+	struct args_buf	*b = arg;
+
+	if (b->full || len > b->size - b->len) {
+		b->full = 1;
+		return;
+	}
+	memcpy(b->p + b->len, p, len);
+	b->len += len;
+}
+
+/*
+ * a's values for c, as a facts record after its template, into buf
+ * (size bytes): their length, or -1 after saying they do not fit
+ */
+ssize_t
+args_record(const struct argcmd *c, const struct argvals *a, void *buf,
+    size_t size)
+{
+	struct facts_field	 f[ARGS_MAX];
+	struct facts_kind	 k;
+	struct facts_out	 o;
+	struct args_buf		 b = { buf, 0, size, 0 };
+
+	args_kind(c, &k, f);
+	facts_out_init(&o, args_emit, &b);
+	if (facts_record(&o, &k, a->v) == -1 || b.full) {
+		printf("%% %s: its values do not fit\n", c->name);
+		return -1;
+	}
+	return b.len;
+}
+
 /* is present value v valid for argument f? */
 static int
 arg_value(const struct argcmd *c, const struct arg *f,

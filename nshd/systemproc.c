@@ -55,11 +55,12 @@
  * arguments come from nsh's table for the show's words; no request
  * names a path.
  *
- * An operation, which a privileged session requests, is given as nsh's
- * words for it. op_allowed() accepts or refuses the words, and prints
- * why it refuses. A stream's child runs the operation as root, in the
- * client's rtable, with nsh's own code, op_run(), and exits with the
- * operation's status.
+ * An operation, which a privileged session requests, comes as its row of
+ * ops[] and the values config parsed for the row's arguments. system
+ * checks them with args_check(), and refuses values the row does not
+ * take. A stream's child runs the operation as root, in the client's
+ * rtable, with nsh's own code, op_run(), and exits with the operation's
+ * status.
  *
  * config sends a commit's requests in order. First come the parts that
  * BEGIN and TEST use, sent in chunks. Each TEST runs a daemon's test of
@@ -268,6 +269,7 @@
 #include "externs.h"
 #include "ctl.h"
 #include "facts.h"
+#include "args.h"
 #include "kfacts.h"
 #include "showfacts.h"
 #include "answer.h"
@@ -277,7 +279,6 @@
 #define SYS_BATCH	256	/* records made before what is printed is sent */
 #define SYS_STREAMS	16	/* streams at once, at most */
 #define SYS_WINDOW	16	/* messages a stream sends its client unread */
-#define SYS_OPWORDS	32	/* an operation's words, at most */
 #define SYS_TERMINALS	64	/* web logins' terminals at once, at most */
 #define SYS_AUTHS	4	/* web logins checked at once, at most */
 #define AUTH_SECS	30	/* a web login's check, at most */
@@ -1058,8 +1059,12 @@ system_whole(uint32_t type, const void *data, size_t len)
 		if (len != sizeof(so))
 			return (-1);
 		memcpy(&so, data, len);
-		return (memchr(so.op.line, '\0', sizeof(so.op.line)) == NULL ?
-		    -1 : 0);
+		/* an interface's operation names one, and no other does */
+		return (so.row < 0 || (size_t)so.row >= nops ||
+		    (so.set != 0 && so.set != 1) || so.len > sizeof(so.values) ||
+		    memchr(so.ifname, '\0', sizeof(so.ifname)) == NULL ||
+		    ((ops[so.row].flags & CF_INIF) != 0) !=
+		    (so.ifname[0] != '\0') ? -1 : 0);
 	case IMSG_SYS_ROLLBACK_LIST:
 	case IMSG_SYS_SAVED:
 		return (len == 0 ? 0 : -1);
@@ -1469,16 +1474,38 @@ system_show(uint32_t id, char *words)
 	system_end(id, more != 0, NULL);
 }
 
+/* an operation's values, for system_op() and its stream's child */
+struct op_values {
+	struct nshd_sysop	*so;
+	int			 ok;
+	struct facts_value	 v[ARGS_MAX];
+};
+static struct op_values	*op_next;	/* the operation a child runs */
+
+/* a record of an operation's values, kept if its row takes them */
+static void
+op_record(void *arg, const struct facts_template *t,
+    const struct facts_value *v)
+{
+	struct op_values	*x = arg;
+
+	if (args_check(&ops[x->so->row], x->so->set, t, v) == 0) {
+		memcpy(x->v, v, t->nfields * sizeof(*v));
+		x->ok = 1;
+	}
+}
+
 /*
- * An operation, run by a stream's child if op_allowed() takes its words,
- * or refused, saying why
+ * An operation, run by a stream's child if its row takes its values, or
+ * refused, saying why
  */
 static void
 system_op(uint32_t id, struct nshd_sysop *so)
 {
 	struct client	*cl;
-	char		*argv[SYS_OPWORDS + 1], *p = so->op.line;
-	int		 argc = 0, perms;
+	struct facts_in	 in;
+	struct op_values x;
+	int		 perms;
 
 	printed(NULL);
 	if ((cl = client_whose(&so->whose)) == NULL) {
@@ -1491,22 +1518,21 @@ system_op(uint32_t id, struct nshd_sysop *so)
 		system_printed(id, 1);
 		return;
 	}
-	while (argc < SYS_OPWORDS &&
-	    (argv[argc] = strsep(&p, " \t")) != NULL)
-		if (*argv[argc] != '\0')
-			argc++;
-	if (p != NULL) {
-		system_end(id, 1, "%% nshd: an operation of more than %d "
-		    "words\n", SYS_OPWORDS);
+	memset(&x, 0, sizeof(x));
+	x.so = so;
+	facts_in_init(&in, op_record, &x);
+	if (facts_read(&in, so->values, so->len) == -1)
+		x.ok = 0;
+	facts_in_free(&in);
+	if (!x.ok) {
+		system_end(id, 1, "%% nshd: %s: values it does not take\n",
+		    ops[so->row].name);
 		return;
 	}
-	argv[argc] = NULL;
-	if (argc == 0 || !op_allowed(argc, argv)) {
-		system_printed(id, 1);
-		return;
-	}
+	op_next = &x;
 	system_stream(id, (perms & LOGIN_ADMIN) != 0 ? SYS_OPERATION :
-	    SYS_OPERATION_HIDDEN, argv, so->op.rtable);
+	    SYS_OPERATION_HIDDEN, NULL, so->rtable);
+	op_next = NULL;
 }
 
 /*
@@ -2061,7 +2087,7 @@ system_child(int fd, int op, char **argv, int table)
 	size_t	 n;
 	FILE	*f;
 	sigset_t none;
-	int	 null, argc, r, lfd, tries;
+	int	 null, r, lfd, tries;
 
 	setpgid(0, 0);
 	/* restore the default signal handling, which a program expects */
@@ -2093,9 +2119,8 @@ system_child(int fd, int op, char **argv, int table)
 			_exit(1);
 		}
 		cli_rtable = table;
-		for (argc = 0; argv[argc] != NULL; argc++)
-			;
-		r = op_run(argc, argv, op == SYS_OPERATION_HIDDEN);
+		r = op_run(op_next->so->row, op_next->so->set, op_next->v,
+		    op_next->so->ifname, op == SYS_OPERATION_HIDDEN);
 		fflush(stdout);
 		_exit(r == -1 ? 1 : r);
 	case FACTS_LEASES:

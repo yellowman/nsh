@@ -106,8 +106,8 @@ struct arg {
 
 /*
  * A command config parses, as args.c takes one: what conf_cmd() makes
- * of its row in its mode's table (cmdtab, Intlist, Bridgelist), in
- * commands.c
+ * of its row in its mode's table (cmdtab, Intlist, Bridgelist), or a
+ * row of the operations (ops[]), in commands.c
  */
 struct argcmd;
 struct argvals;
@@ -138,6 +138,7 @@ struct argcmd {
 #define CF_BRIDGE	0x4	/* a bridge's block */
 #define CF_RTABLE	0x8	/* an rtable's block */
 #define CF_SET		0x10	/* it only sets: its usage has no "no" line */
+#define CF_INIF		0x20	/* an operation of an interface's */
 
 /*
  * parsed values; strings point into argv, or into rest for ARG_REST,
@@ -188,12 +189,15 @@ enum { WG_PORT, WG_KEY, WG_RTABLE };			/* intwg_apply() */
 /* what the rows name: each file's apply and parse functions */
 args_applyfn	arpentry_apply;
 args_applyfn	brport_apply, brval_apply, brproto_apply, brrule_apply,
-		brstatic_apply, brpri_apply, brprotect_apply, brvlan_apply,
-		brpvlan_apply;
+		brstatic_apply, brpri_apply, flush_bridgedyn, flush_bridgeall,
+		flush_bridgerule, brprotect_apply, brvlan_apply, brpvlan_apply;
 args_parsefn	brstatic_parse, brprotect_parse, brtagged_parse;
 args_applyfn	intcarp_apply, intcpass_apply, intcnode_apply, intcdev_apply;
+args_applyfn	daemon_apply;
+args_parsefn	daemon_parse;
 args_applyfn	intnwkey_apply, intwpakey_apply, intwpa_apply, intwpalist_apply,
-		intjoin_apply, intchan_apply, intnwflag_apply, inttxpower_apply;
+		intjoin_apply, intchan_apply, intnwflag_apply, inttxpower_apply,
+		bssid_apply;
 args_parsefn	intnwkey_parse, intwpakey_parse, intjoin_parse;
 args_applyfn	intip_apply, intpflow_apply, intpatch_apply, intmtu_apply,
 		intkeepalive_apply, intmpls_apply, intpwe3_apply,
@@ -224,6 +228,12 @@ extern const struct argkey login_kinds[], login_permtab[], nwflags[];
 extern const struct argkey wpaprotos[], wpaakms[], wpaciphers[];
 extern const struct argkey wpagroupciphers[];
 
+/* the operations of nshd's system, which config parses the words of */
+extern const struct argcmd ops[];
+extern const size_t nops;
+int	op_parse(int, char **, struct argvals *, char *, size_t);
+int	op_run(int, int, const struct facts_value *, char *, int);
+
 const struct argcmd *conf_cmd(int, int, struct argcmd *);
 size_t	args_n(const struct argcmd *);
 const char *args_called(const struct arg *);
@@ -241,6 +251,8 @@ void	args_kind(const struct argcmd *, struct facts_kind *,
 	    struct facts_field *);
 int	args_check(const struct argcmd *, int, const struct facts_template *,
 	    const struct facts_value *);
+ssize_t	args_record(const struct argcmd *, const struct argvals *, void *,
+	    size_t);
 void	args_string(const struct facts_value *, char *, size_t);
 struct sockaddr_storage;
 int	args_sockaddr(const struct facts_value *, int,

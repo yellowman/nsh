@@ -482,6 +482,8 @@ char_to_utf16(const char *in, uint16_t *out, size_t outlen)
 	}
 }
 
+/* setpuk and chgpin are operations of nshd's system (ops[]) */
+
 int
 intumb_apply(const struct argcmd *c, int set,
     const struct facts_value *v, char *ifname, int ifs, struct cand *cand)
@@ -543,40 +545,6 @@ intumb_apply(const struct argcmd *c, int set,
 		r = umb_roaming(ifs, ifname, set);
 	}
 	return r;
-}
-
-/*
- * setpuk and chgpin, as operations nshd's system runs: it has their
- * words, which their arguments here say how to read
- */
-static const struct argcmd umb_ops[] = {
-	{ "setpuk", .apply = intumb_apply, .code = UMBCMD_PUK,
-	  .args = ARGS{
-		{ "puk",	ARG_WORD, 1, MBIM_PIN_MAXLEN / 2 },
-		{ "newpin",	ARG_WORD, 1, MBIM_PIN_MAXLEN / 2 },
-		{ NULL } } },
-	{ "chgpin", .apply = intumb_apply, .code = UMBCMD_CHGPIN,
-	  .args = ARGS{
-		{ "oldpin",	ARG_WORD, 1, MBIM_PIN_MAXLEN / 2 },
-		{ "newpin",	ARG_WORD, 1, MBIM_PIN_MAXLEN / 2 },
-		{ NULL } } },
-};
-
-int
-intumb(int argc, char **argv, ...)
-{
-	char *ifname, *w = argv[NO_ARG(argv[0]) && argc > 1];
-	va_list ap;
-	struct cand *cand;
-	int ifs;
-
-	va_start(ap, argv);
-	ifname = va_arg(ap, char *);
-	ifs = va_arg(ap, int);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
-	return args_run(&umb_ops[isprefix(w, "chgpin") != 0], argc, argv,
-	    ifname, ifs, cand);
 }
 
 /*

@@ -112,21 +112,18 @@ static struct cnode *snapshot;	/* config's running configuration */
 static int	exitconfig(int, char **, ...);
 static int	int_line(const struct intlist *, char *, int, struct cand *);
 static int	top_line(const Command *, struct cand *);
-static args_applyfn	ipcmd_apply, interface_apply, hostname_apply,
-			rtable_apply;
-static args_parsefn	ipcmd_parse, interface_parse;
+static args_applyfn	ipcmd_apply, flush_ip_routes, flush_arp_cache,
+			flush_ndp_cache, flush_line, flush_pf, op_halt, op_diff,
+			op_crontab, demote_apply, interface_apply,
+			hostname_apply, rtable_apply;
+static args_parsefn	ipcmd_parse, flush_pf_parse, demote_parse,
+			interface_parse;
 static int	conf_run_if(int, const struct argcmd *, int,
 		    const struct facts_value *, char *);
 static int	cand_leave(struct cand *);
 static int	cmdline_if(struct cand *);
 static int	sysctlhelp(int, char **, ...);
-static int	flush_pf(int, char **, ...);
-static int	flush_help(int, char **, ...);
-static int	flush_line(int, char **, ...);
-static int	flush_ip_routes(int, char **, ...);
-static int	flush_arp_cache(int, char **, ...);
-static int	flush_ndp_cache(int, char **, ...);
-static int	flush_run(int, char **);
+static int	flush_op(int, char **, ...);
 static Menu	*flush_find(char *);
 static int	int_op(int, char **, ...);
 static struct intlist *int_op_find(int, char **);
@@ -648,20 +645,26 @@ struct ghs flushtab[] = {
 
 Menu flushlist[] = {
 	{ "routes",	"IP routes", CMPL(h) (char **)flushtab,
-	    sizeof(struct ghs), 0, 1, flush_ip_routes },
+	    sizeof(struct ghs), 0, 1, flush_op },
 	{ "arp",	"ARP cache", CMPL(h) (char **)flushtab,
-	    sizeof(struct ghs), 0, 1, flush_arp_cache },
-	{ "ndp",	"NDP cache", CMPL0 0, 0, 0, 0, flush_ndp_cache },
-	{ "line",	"Active user", CMPL0 0, 0, 1, 1, flush_line },
-	{ "bridge-dyn",	"Dynamically learned bridge addresses", CMPL0 0, 0, 1, 1, flush_bridgedyn },
-	{ "bridge-all",	"Dynamic and static bridge addresses", CMPL0 0, 0, 1, 1, flush_bridgeall },
-	{ "bridge-rule", "Layer 2 filter rules for a bridge member port", CMPL0 0, 0, 2, 2, flush_bridgerule },
-	{ "pf",		"pf NAT/filter/queue rules, states, tables", CMPL(t) (char**)fpfs, sizeof(struct fpf), 0, 1, flush_pf },
+	    sizeof(struct ghs), 0, 1, flush_op },
+	{ "ndp",	"NDP cache", CMPL0 0, 0, 0, 0, flush_op },
+	{ "line",	"Active user", CMPL0 0, 0, 1, 1, flush_op },
+	{ "bridge-dyn",	"Dynamically learned bridge addresses", CMPL0 0, 0, 1, 1, flush_op },
+	{ "bridge-all",	"Dynamic and static bridge addresses", CMPL0 0, 0, 1, 1, flush_op },
+	{ "bridge-rule", "Layer 2 filter rules for a bridge member port", CMPL0 0, 0, 2, 2, flush_op },
+	{ "pf",		"pf NAT/filter/queue rules, states, tables", CMPL(t) (char**)fpfs, sizeof(struct fpf), 0, 1, flush_op },
 	{ "history",	"Command history",	CMPL0 0, 0, 0, 0, 0 },
 	{ "?",		"Options",		CMPL0 0, 0, 0, 0, 0 },
 	{ "help",	0,			CMPL0 0, 0, 0, 0, 0 },
 	{ 0, 0, 0, 0, 0 }
 };
+
+/*
+ * flush's operations: each row of flushlist with flush_op is one of
+ * ops[], called "flush" and its name
+ */
+/* fpfs's row; with none, flush pf's help */
 
 /* flush's entry for word, or NULL */
 static Menu *
@@ -673,150 +676,249 @@ flush_find(char *word)
 	return f == 0 || Ambiguous(f) ? NULL : f;
 }
 
-/* run a flush command */
+/*
+ * flush's rows that are operations of nshd's system (row_runs()). nsh
+ * asks nshd's system for them itself, so nothing runs here
+ */
 static int
-flush_run(int argc, char **argv)
+flush_op(int argc, char **argv, ...)
 {
-	Menu *f;
-
-	if (argc < 2) {
-		flush_help(argc, argv);
-		return 0;
-	}
-
-	/*
-	 * Validate flush argument
-	 */
-	f = (Menu *) genget(argv[1], (char **)flushlist, sizeof(Menu));
-	if (f == 0) {
-		printf("%% Invalid argument %s\n", argv[1]);
-		return -1;
-	} else if (Ambiguous(f)) {
-		printf("%% Ambiguous argument %s\n", argv[1]);
-		return -1;
-	}
-	if (((f->minarg + 2) > argc) || ((f->maxarg + 2) < argc)) {
-		printf("%% Wrong argument%s to 'flush %s' command.\n",
-		    argc <= 2 ? "" : "s", f->name);
-		return -1;
-	}
-	if (f->handler &&
-	    (*f->handler)(0, NULL, (f->maxarg > 0) ? argv[2] : 0,
-	    (f->maxarg > 1) ? argv[3] : 0) == -1)
-		return -1;
-
-	return 0;
+	printf("%% flush is an operation of nshd's system\n");
+	return -1;
 }
 
 static int
-flush_line(int argc, char **argv, ...)
+flush_line(const struct argcmd *c, int set, const struct facts_value *v,
+    char *ifname, int ifs, struct cand *cand)
 {
-	va_list ap;
-	char *line;
-	char * args[5] = { PKILL, "-9", "-t", /* line */ NULL, NULL };
+	char tty[sizeof(line)];
+	char * args[5] = { PKILL, "-9", "-t", tty, NULL };
 	int r;
 
-	va_start(ap, argv);
-	line = va_arg(ap, char *);
-	va_end(ap);
-
-	args[3] = line;
+	args_string(&v[0], tty, sizeof(tty));
 	/* pkill exits 1 if no process ran on the line */
 	r = cmdargs(PKILL, args);
 	return r == -1 || r > 1 ? -1 : 0;
 }
 
 /*
- * The operations nshd's system runs, as root, for a privileged session:
- * flush, except help and history, which nsh runs and whose rows have no
- * handler; reboot, halt and powerdown, which nsh
- * has the user confirm first; diff-config, of the saved configuration
- * against the running one; crontab, root's crontab; a daemon's action
- * that runs a program and does not change its configuration; an
- * interface's bssid, setpuk and chgpin; and a group's carp demotion
- * counter, as group or no group sets it. Each is its first word, as nsh
- * names it, and the words after it as typed. 1 if argv is one, or 0
- * after saying it is not.
+ * reboot, halt and powerdown, which nsh has the user confirm first;
+ * diff-config, of the saved configuration against the running one; and
+ * crontab, root's crontab
  */
-int
-op_allowed(int argc, char **argv)
-{
-	Menu *f;
+static int op_hide;		/* diff-config hides each password hash */
 
-	if (argc == 1 && (strcmp(argv[0], "reboot") == 0 ||
-	    strcmp(argv[0], "halt") == 0 ||
-	    strcmp(argv[0], "powerdown") == 0 ||
-	    strcmp(argv[0], "diff-config") == 0 ||
-	    strcmp(argv[0], "crontab") == 0))
-		return 1;
-	if (argc >= 2 && strcmp(argv[0], "flush") == 0 &&
-	    (f = flush_find(argv[1])) != NULL && f->handler != NULL)
-		return 1;
-	if (argc >= 3 && strcmp(argv[0], "interface") == 0 &&
-	    strlen(argv[1]) < IFNAMSIZ && int_op_find(argc - 2, argv + 2))
-		return 1;
-	if (argc >= 2 && ctl_op(argv[0], argv[1]))
-		return 1;
-	if (strcmp(argv[0], "group") == 0 || (argc >= 2 &&
-	    strcmp(argv[0], "no") == 0 && strcmp(argv[1], "group") == 0))
-		return 1;
-	printf("%% %s: not an operation nshd runs\n", argv[0]);
-	return 0;
+static const struct arg flushbridge_args[] = {
+	{ "bridge",	ARG_WORD, 1, IFNAMSIZ - 1 },
+	{ NULL }
+};
+
+static const struct arg flushverbose_args[] = {
+	{ "verbose",	ARG_FLAG },
+	{ NULL }
+};
+
+/*
+ * The operations nshd's system runs, as root, for a privileged session:
+ * those above; flush, except help and history, which nsh runs; a
+ * daemon's action that runs a program and does not change its
+ * configuration (daemon_cmd); an interface's bssid, setpuk and chgpin;
+ * and a group's carp demotion counter, as group or no group sets it.
+ * config parses nsh's words for one (op_parse()), and system checks the
+ * values with args_check() and runs them (op_run())
+ */
+enum { OP_REBOOT, OP_HALT, OP_POWERDOWN };	/* op_halt()'s */
+const struct argcmd ops[] = {
+	{ "reboot", .flags = CF_SET, .apply = op_halt, .code = OP_REBOOT },
+	{ "halt", .flags = CF_SET, .apply = op_halt, .code = OP_HALT },
+	{ "powerdown", .flags = CF_SET, .apply = op_halt,
+	  .code = OP_POWERDOWN },
+	{ "diff-config", .flags = CF_SET, .apply = op_diff },
+	{ "crontab", .flags = CF_SET, .apply = op_crontab },
+	{ "flush routes", .flags = CF_SET, .apply = flush_ip_routes,
+	  .args = flushverbose_args },
+	{ "flush arp", .flags = CF_SET, .apply = flush_arp_cache,
+	  .args = flushverbose_args },
+	{ "flush ndp", .flags = CF_SET, .apply = flush_ndp_cache },
+	{ "flush line", .flags = CF_SET, .apply = flush_line,
+	  .args = ARGS{
+		{ "line",	ARG_WORD, 1, sizeof(line) - 1 },
+		{ NULL } } },
+	{ "flush bridge-dyn", .flags = CF_SET, .apply = flush_bridgedyn,
+	  .args = flushbridge_args },
+	{ "flush bridge-all", .flags = CF_SET, .apply = flush_bridgeall,
+	  .args = flushbridge_args },
+	{ "flush bridge-rule", .flags = CF_SET, .apply = flush_bridgerule,
+	  .args = ARGS{
+		{ "bridge",	ARG_WORD, 1, IFNAMSIZ - 1 },
+		{ "member",	ARG_WORD, 1, IFNAMSIZ - 1 },
+		{ NULL } } },
+	{ "flush pf", .flags = CF_SET, .apply = flush_pf,
+	  .parse = flush_pf_parse,
+	  .args = ARGS{
+		{ "pf",		ARG_NUM, 0, nitems(fpfs) - 2, ARG_OPT },
+		{ NULL } } },
+	{ "bssid", .flags = CF_INIF, .apply = bssid_apply,
+	  .args = ARGS{
+		{ "bssid",	ARG_ADDR, 0, 0, ARG_LINK },
+		{ NULL } } },
+	{ "setpuk", .flags = CF_INIF | CF_SET, .apply = intumb_apply,
+	  .code = UMBCMD_PUK,
+	  .args = ARGS{
+		{ "puk",	ARG_WORD, 1, MBIM_PIN_MAXLEN / 2 },
+		{ "newpin",	ARG_WORD, 1, MBIM_PIN_MAXLEN / 2 },
+		{ NULL } } },
+	{ "chgpin", .flags = CF_INIF | CF_SET, .apply = intumb_apply,
+	  .code = UMBCMD_CHGPIN,
+	  .args = ARGS{
+		{ "oldpin",	ARG_WORD, 1, MBIM_PIN_MAXLEN / 2 },
+		{ "newpin",	ARG_WORD, 1, MBIM_PIN_MAXLEN / 2 },
+		{ NULL } } },
+	{ "group", .apply = demote_apply, .parse = demote_parse,
+	  .args = ARGS{
+		{ "group",	ARG_WORD, 1, IFNAMSIZ - 1, ARG_NO },
+		{ "carpdemote",	ARG_NUM, 0, 128, ARG_OPT | ARG_NO },
+		{ NULL } } },
+	{ "daemon", .flags = CF_SET, .apply = daemon_apply,
+	  .parse = daemon_parse,
+	  .args = ARGS{
+		{ "daemon",	ARG_NUM, 0, INT_MAX },
+		{ "action",	ARG_NUM, 0, INT_MAX },
+		{ "words",	ARG_WORD, 1, sizeof(line) - 1, ARG_OPT, NULL,
+		    NOPTFILL - 1 },
+		{ NULL } } },
+};
+const size_t nops = nitems(ops);
+
+/* The row of ops[] called name, an interface's if inif; nops if none */
+static size_t
+op_find(const char *name, int inif)
+{
+	size_t row;
+
+	for (row = 0; row < nops; row++)
+		if (((ops[row].flags & CF_INIF) != 0) == inif &&
+		    strcmp(ops[row].name, name) == 0)
+			break;
+	return row;
 }
 
 /*
- * Run an operation op_allowed() takes; return as a handler does, but
- * OP_DIFFERS from diff-config if the configurations differ. With hide,
- * for a session that sees no password hash, diff-config hides each one
+ * Parse nsh's words for an operation, w (n of them), into a with the
+ * arguments of the row of ops[] that runs it, and an interface's
+ * operation's interface into ifname (len bytes). Each is its first
+ * word, as nsh names it, and the words after it as typed. The row, or
+ * -1 after saying why not
  */
 int
-op_run(int argc, char **argv, int hide)
+op_parse(int n, char **w, struct argvals *a, char *ifname, size_t len)
 {
-	struct daemons *d;
 	struct intlist *i;
-	char *rb[] = { REBOOT, NULL }, *ht[] = { HALT, NULL, NULL };
-	char *cr[] = { CRONTAB, "-l", "-u", "root", NULL };
-	int ifs, r;
+	Menu *f;
+	char *dw[NARGS + 1], fname[32], **argv = w;
+	const char *name = w[0];
+	int argc = n, inif = 0;
+	size_t row;
 
-	if (strcmp(argv[0], "flush") == 0)
-		return flush_run(argc, argv);
-	if (strcmp(argv[0], "reboot") == 0)
-		return cmdargs(rb[0], rb) == 0 ? 0 : -1;
-	if (strcmp(argv[0], "halt") == 0 || strcmp(argv[0], "powerdown") == 0) {
-		if (argv[0][0] == 'p')
-			ht[1] = "-p";
-		return cmdargs(ht[0], ht) == 0 ? 0 : -1;
-	}
-	if (strcmp(argv[0], "diff-config") == 0)
-		return (r = saved_diff(hide)) == 1 ? OP_DIFFERS : r;
-	if (strcmp(argv[0], "crontab") == 0) {
-		printf("%% To view crontab syntax documentation in NSH, "
-		    "run: !man 5 crontab\n\n");
-		fflush(stdout);
-		if (cmdargs(cr[0], cr) != 0) {
-			printf("%% crontab command failed\n");
+	ifname[0] = '\0';
+	if (n >= 3 && strcmp(w[0], "interface") == 0 &&
+	    (i = int_op_find(n - 2, w + 2)) != NULL) {
+		if (strlcpy(ifname, w[1], len) >= len) {
+			printf("%% interface name too long\n");
 			return -1;
 		}
-		return 0;
+		name = i->name;
+		inif = 1;
+		argc = n - 2;
+		argv = w + 2;
+	} else if (n >= 2 && strcmp(w[0], "flush") == 0 &&
+	    (f = flush_find(w[1])) != NULL && f->handler == flush_op) {
+		snprintf(fname, sizeof(fname), "flush %s", f->name);
+		name = fname;
+		argc = n - 1;
+		argv = w + 1;
+	} else if (n >= 2 && strcmp(w[0], "no") == 0 &&
+	    strcmp(w[1], "group") == 0)
+		name = "group";
+	else if (n >= 2 && n <= NARGS && ctl_op(w[0], w[1])) {
+		/* daemon_cmd takes the daemon's word and the action's */
+		dw[0] = "daemon";
+		memcpy(dw + 1, w, n * sizeof(*w));
+		name = dw[0];
+		argc = n + 1;
+		argv = dw;
 	}
-	if (strcmp(argv[0], "interface") == 0) {
-		i = int_op_find(argc - 2, argv + 2);
-		if ((ifs = socket(AF_INET, SOCK_DGRAM, 0)) == -1) {
-			printf("%% socket: %s\n", strerror(errno));
-			return -1;
-		}
-		r = strcmp(i->name, "bssid") == 0 ?
-		    intbssid(argc - 2, argv + 2, argv[1], ifs) :
-		    intumb(argc - 2, argv + 2, argv[1], ifs, NULL);
+	if ((row = op_find(name, inif)) == nops) {
+		printf("%% %s: not an operation nshd runs\n", w[0]);
+		return -1;
+	}
+	if (args_parse(&ops[row], argc, argv, a) == -1)
+		return -1;
+	return row;
+}
+
+/*
+ * Run the row of ops[] with values v, which args_check() takes for it
+ * (set is 0 for "no"), on interface ifname if it is an interface's. As
+ * the row's apply function returns, OP_DIFFERS from diff-config if the
+ * configurations differ. With hide, for a session that sees no password
+ * hash, diff-config hides each one
+ */
+int
+op_run(int row, int set, const struct facts_value *v, char *ifname,
+    int hide)
+{
+	const struct argcmd *o = &ops[row];
+	int inif = (o->flags & CF_INIF) != 0;
+	int ifs = -1, r;
+
+	op_hide = hide;
+	if (inif && (ifs = socket(AF_INET, SOCK_DGRAM, 0)) == -1) {
+		printf("%% socket: %s\n", strerror(errno));
+		return -1;
+	}
+	r = o->apply(o, set, v, inif ? ifname : NULL, ifs, NULL);
+	if (ifs != -1)
 		close(ifs);
-		return r;
+	return r;
+}
+
+static int
+op_halt(const struct argcmd *c, int set, const struct facts_value *v,
+    char *ifname, int ifs, struct cand *cand)
+{
+	char *rb[] = { REBOOT, NULL }, *ht[] = { HALT, NULL, NULL };
+
+	if (c->code == OP_REBOOT)
+		return cmdargs(rb[0], rb) == 0 ? 0 : -1;
+	if (c->code == OP_POWERDOWN)
+		ht[1] = "-p";
+	return cmdargs(ht[0], ht) == 0 ? 0 : -1;
+}
+
+static int
+op_diff(const struct argcmd *c, int set, const struct facts_value *v,
+    char *ifname, int ifs, struct cand *cand)
+{
+	int r;
+
+	return (r = saved_diff(op_hide)) == 1 ? OP_DIFFERS : r;
+}
+
+static int
+op_crontab(const struct argcmd *c, int set, const struct facts_value *v,
+    char *ifname, int ifs, struct cand *cand)
+{
+	char *cr[] = { CRONTAB, "-l", "-u", "root", NULL };
+
+	printf("%% To view crontab syntax documentation in NSH, "
+	    "run: !man 5 crontab\n\n");
+	fflush(stdout);
+	if (cmdargs(cr[0], cr) != 0) {
+		printf("%% crontab command failed\n");
+		return -1;
 	}
-	if (strcmp(argv[0], "group") == 0 || strcmp(argv[0], "no") == 0)
-		return group(argc, argv);
-	d = (struct daemons *)genget(argv[0], (char **)ctl_daemons,
-	    sizeof(struct daemons));
-	strlcpy(hname, d->name, sizeof(hname));
-	return ctlhandler(argc, argv, NULL);
+	return 0;
 }
 
 /*
@@ -843,27 +945,6 @@ int_op_find(int argc, char **argv)
 	i = (struct intlist *)genget(w, (char **)Intlist,
 	    sizeof(struct intlist));
 	return i == 0 || Ambiguous(i) || i->handler != int_op ? NULL : i;
-}
-
-static int
-flush_help(int argc, char **argv, ...)
-{
-	Menu *f;
-	u_int z = 0;
-
-	printf("%% Commands may be abbreviated.\n");
-	printf("%% 'flush' commands are:\n\n");
-
-	for (f = flushlist; f->name; f++) {
-		if (strlen(f->name) > z)
-			z = strlen(f->name);
-	}
-
-	for (f = flushlist; f->name; f++) {
-		if (f->help)
-			printf("  %-*s  %s\n", z, f->name, f->help);
-	}
-	return 0;
 }
 
 /*
@@ -2548,45 +2629,58 @@ rtable_apply(const struct argcmd *c, int set, const struct facts_value *v,
 int
 group(int argc, char **argv, ...)
 {
-	int counter = 1, set, ifs, ret = 0;
-	const char *errstr;
-	struct ifgroupreq ifgr;
+	struct cand *cand;
+	va_list ap;
 
-	if (NO_ARG(argv[0])) {
-		argv++;
-		argc--;
-		set = 0;
-	} else
-		set = 1;
+	va_start(ap, argv);
+	cand = va_arg(ap, struct cand *);
+	va_end(ap);
 
-	if (argc < 3 || argc > 4 || !isprefix(argv[2], "carpdemote")) {
+	return args_run(&ops[op_find("group", 0)], argc, argv, NULL, -1, cand);
+}
+
+/* the group's name, carpdemote, and maybe a counter: 1 if it has none */
+static int
+demote_parse(const struct argcmd *c, int argc, char **argv,
+    struct argvals *a)
+{
+	if (argc < 2 || argc > 3 || !isprefix(argv[1], "carpdemote")) {
 		printf("%% group <group-name> carpdemote [demotion-counter]\n");
 		printf("%% no group <group-name> carpdemote [demotion-counter]\n");
 		return -1;
 	}
+	if (args_word(c, &c->args[0], a, argv[0], &a->v[0]) == -1)
+		return -1;
+	if (argc == 3 &&
+	    args_word(c, &c->args[1], a, argv[2], &a->v[1]) == -1)
+		return -1;
+	return 0;
+}
 
-	if (argc == 4) {
-		counter = strtonum(argv[3], 0, 128, &errstr);
-		if (errstr) {
-			printf("%% invalid carp demotion: %s\n", errstr);
-			return -1;
-		}
-	}
+static int
+demote_apply(const struct argcmd *c, int set, const struct facts_value *v,
+    char *ifname, int ifs, struct cand *cand)
+{
+	int counter = 1, s, ret = 0;
+	struct ifgroupreq ifgr;
 
-	ifs = socket(AF_INET, SOCK_DGRAM, 0);
-	if (ifs < 0) {
+	if (v[1].type != FACT_NONE)
+		counter = v[1].v.i;
+
+	s = socket(AF_INET, SOCK_DGRAM, 0);
+	if (s < 0) {
 		printf("%% group: socket: %s\n", strerror(errno));
 
 		return -1;
 	}
 
 	bzero(&ifgr, sizeof(ifgr));
-	strlcpy(ifgr.ifgr_name, argv[1], sizeof(ifgr.ifgr_name));
+	args_string(&v[0], ifgr.ifgr_name, sizeof(ifgr.ifgr_name));
 
 	/* the kernel adds the counter to the group's */
 	ifgr.ifgr_attrib.ifg_carp_demoted = set ? counter : -counter;
 
-	if (ioctl(ifs, SIOCSIFGATTR, (caddr_t)&ifgr) == -1) {
+	if (ioctl(s, SIOCSIFGATTR, (caddr_t)&ifgr) == -1) {
 		if (errno == ENOENT)
 			printf("%% group %s does not exist\n", ifgr.ifgr_name);
 		else if (errno == EINVAL)
@@ -2596,7 +2690,7 @@ group(int argc, char **argv, ...)
 			printf("%% group: SIOCSIFGATTR: %s\n", strerror(errno));
 		ret = -1;
 	}
-	close(ifs);
+	close(s);
 
 	return ret;
 }
@@ -2642,29 +2736,17 @@ cand_leave(struct cand *cand)
  * pf toilet flusher
  */
 static int
-flush_pf(int argc, char **argv, ...)
+flush_pf(const struct argcmd *c, int set, const struct facts_value *v,
+    char *ifname, int ifs, struct cand *cand)
 {
 	struct fpf *x;
-	va_list ap;
-	char *arg;
 
-	va_start(ap, argv);
-	arg = va_arg(ap, char *);
-	va_end(ap);
-
-	if (!arg || arg[0] == '?') {
+	if (v[0].type == FACT_NONE) {
 		gen_help((char **)fpfs, "flush pf", "flush",
 		    sizeof(struct fpf));
 		return 0;
 	}
-	x = (struct fpf *) genget(arg, (char **)fpfs, sizeof(struct fpf));
-	if (x == 0) {
-		printf("%% Invalid argument %s\n", arg);
-		return -1;
-	} else if (Ambiguous(x)) {
-		printf("%% Ambiguous argument %s\n", arg);
-		return -1;
-	}
+	x = &fpfs[v[0].v.i];
 
 	{
 		char *argv[] = { x->cmd, x->arg, NULL };
@@ -2672,41 +2754,53 @@ flush_pf(int argc, char **argv, ...)
 	}
 }
 
+/* flush pf's word, as its row of fpfs; none, or ?, for help */
+static int
+flush_pf_parse(const struct argcmd *c, int argc, char **argv,
+    struct argvals *a)
+{
+	struct fpf *x;
+
+	if (argc > 1)
+		return args_usage(c);
+	if (argc == 0 || argv[0][0] == '?')
+		return 0;
+	x = (struct fpf *) genget(argv[0], (char **)fpfs, sizeof(struct fpf));
+	if (x == 0) {
+		printf("%% Invalid argument %s\n", argv[0]);
+		return -1;
+	} else if (Ambiguous(x)) {
+		printf("%% Ambiguous argument %s\n", argv[0]);
+		return -1;
+	}
+	facts_i64(&a->v[0], x - fpfs);
+	return 0;
+}
+
 /*
  * Flush wrappers
  */
 static int
-flush_ip_routes(int argc, char **argv, ...)
+flush_ip_routes(const struct argcmd *c, int set, const struct facts_value *v,
+    char *ifname, int ifs, struct cand *cand)
 {
-	va_list ap;
-	char *verbose_arg;
-
-	va_start(ap, argv);
-	verbose_arg = va_arg(ap, char *);
-	va_end(ap);
-
-	flushroutes(AF_INET, AF_INET, verbose_arg != NULL);
+	flushroutes(AF_INET, AF_INET, v[0].type != FACT_NONE);
 
 	return 0;
 }
 
 static int
-flush_arp_cache(int argc, char **argv, ...)
+flush_arp_cache(const struct argcmd *c, int set, const struct facts_value *v,
+    char *ifname, int ifs, struct cand *cand)
 {
-	va_list ap;
-	char *verbose_arg;
-
-	va_start(ap, argv);
-	verbose_arg = va_arg(ap, char *);
-	va_end(ap);
-
-	flushroutes(AF_INET, AF_LINK, verbose_arg != NULL);
+	flushroutes(AF_INET, AF_LINK, v[0].type != FACT_NONE);
 
 	return 0;
 }
 
 static int
-flush_ndp_cache(int argc, char **argv, ...)
+flush_ndp_cache(const struct argcmd *c, int set, const struct facts_value *v,
+    char *ifname, int ifs, struct cand *cand)
 {
 	ndpflush();
 	return 0;

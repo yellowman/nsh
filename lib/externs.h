@@ -335,8 +335,6 @@ int cand_wpakey(struct cand *, char *, char *, int);
 int cand_wpa(struct cand *, char *, int);
 int cand_wpalist(struct cand *, char *, int, u_int);
 int cand_powersave(struct cand *, char *, int, int);
-int intbssid(int, char **, ...);
-int intumb(int, char **, ...);
 
 /* stats.c */
 char *plural(int);
@@ -434,9 +432,6 @@ int brport_one(char *);
 int set_ifflag(int, char *, short);
 int is_bridge(int, char *);
 int bridge_learns(int, char *);
-int flush_bridgedyn(int , char **, ...);
-int flush_bridgeall(int, char **, ...);
-int flush_bridgerule(int, char **, ...);
 int brvlan_gone(FILE *, const char *, char *, char *);
 int show_bridges(int, char **, ...);
 
@@ -752,8 +747,6 @@ char *saved_read(size_t *);
 int parser_diff(char *, size_t, char *, size_t, char *, int);
 /* operations, which nshd's system runs */
 #define OP_DIFFERS	3	/* an operation's status: what it compared differs */
-int op_allowed(int, char **);
-int op_run(int, char **, int);
 int saved_text(FILE *);
 int saved_first(void);
 int commit_problems(struct cnode *, struct cnode *);
