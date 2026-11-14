@@ -475,8 +475,10 @@ button.tag.warn:hover {
 	margin-left: .6154rem;
 }
 
+/* room for its scrollbar always, so that nothing moves when it comes */
 main {
 	overflow: auto;
+	scrollbar-gutter: stable;
 	min-width: 0;
 }
 
