@@ -123,7 +123,10 @@ validate_cpass(char *cipher, char *cpass)
  *
  * NSHLOGIN holds the running classes and users, one per line, as
  * "class NAME PERMISSION..." and "user NAME CLASS made|found". It
- * outlives a reboot, as the accounts do.
+ * outlives a reboot, as the accounts do. system keeps what its lines
+ * say: the parser reads them as nshd starts (login_file()), system
+ * keeps what it writes, and the job of a script that writes them gives
+ * system the lines it wrote (login_answer()).
  */
 
 /* the permissions, and their words, which a login line's keys are too */
@@ -146,7 +149,12 @@ static const struct {
 	{ "super-user",	LOGIN_ALL },
 };
 
-#define LOGIN_LINES	1024	/* NSHLOGIN holds at most this many lines */
+/*
+ * NSHLOGIN's lines, as system keeps them (login_kept()), or -1 if they
+ * could not be read
+ */
+static struct login_rec logins[LOGIN_LINES];
+static int nlogins;
 
 static int
 login_usage(void)
@@ -219,92 +227,50 @@ login_perms_words(int perms, char *buf, size_t len)
 		}
 }
 
-/* Read NSHLOGIN's lines into lines[], each allocated: the count, or -1 */
+/* The index of the line of the user, or of the class, name, or -1 */
 static int
-login_load(char **lines, int max)
+login_index(int user, const char *name)
 {
-	FILE *f;
-	char buf[1024];
-	int n = 0;
-
-	if ((f = fopen(NSHLOGIN, "r")) == NULL) {
-		if (errno == ENOENT)
-			return 0;
-		printf("%% %s: %s\n", NSHLOGIN, strerror(errno));
-		return -1;
-	}
-	while (fgets(buf, sizeof(buf), f) != NULL) {
-		buf[strcspn(buf, "\n")] = '\0';
-		if (buf[0] == '\0')
-			continue;
-		if (n == max || (lines[n] = strdup(buf)) == NULL) {
-			printf("%% %s: %s\n", NSHLOGIN, n == max ?
-			    "too many lines" : strerror(errno));
-			break;
-		}
-		n++;
-	}
-	if (ferror(f) || !feof(f)) {
-		if (ferror(f))
-			printf("%% %s: %s\n", NSHLOGIN, strerror(errno));
-		fclose(f);
-		while (n > 0)
-			free(lines[--n]);
-		return -1;
-	}
-	fclose(f);
-	return n;
-}
-
-static void
-login_unload(char **lines, int n)
-{
-	while (n > 0)
-		free(lines[--n]);
-}
-
-/* The index in lines of the kind line for name, or -1 */
-static int
-login_index(char **lines, int n, const char *kind, const char *name)
-{
-	size_t k = strlen(kind), m = strlen(name);
 	int i;
 
-	for (i = 0; i < n; i++)
-		if (strncmp(lines[i], kind, k) == 0 && lines[i][k] == ' ' &&
-		    strncmp(lines[i] + k + 1, name, m) == 0 &&
-		    (lines[i][k + 1 + m] == ' ' ||
-		    lines[i][k + 1 + m] == '\0'))
+	for (i = 0; i < nlogins; i++)
+		if (logins[i].user == user && strcmp(logins[i].name, name) == 0)
 			return i;
 	return -1;
 }
 
 /*
- * Set the kind line for name in NSHLOGIN to rec, or remove it if rec is
- * NULL. The file is written whole and renamed into place, so a reader
- * sees either the old file or the new one. Returns 0, or -1 on error
- * after printing why
+ * Set the line of the user, or of the class, name to rec, or remove it
+ * if rec is NULL, and write NSHLOGIN's lines. The file is written whole
+ * and renamed into place, so a reader sees either the old file or the
+ * new one. Returns 0, or -1 on error after printing why
  */
 static int
-login_store(const char *kind, const char *name, const char *rec)
+login_store(int user, const char *name, struct login_rec *rec)
 {
-	char *lines[LOGIN_LINES], tmp[] = NSHLOGIN ".XXXXXXXXXX";
+	struct login_rec *l = NULL;
+	char tmp[] = NSHLOGIN ".XXXXXXXXXX", perms[64];
 	FILE *f;
 	int fd, i, n, r = -1;
 
-	if ((n = login_load(lines, nitems(lines))) == -1)
+	if (nlogins == -1) {
+		printf("%% %s: it could not be read\n", NSHLOGIN);
 		return -1;
-	if ((i = login_index(lines, n, kind, name)) != -1) {
-		free(lines[i]);
-		lines[i] = lines[--n];
 	}
+	if ((l = calloc(LOGIN_LINES, sizeof(*l))) == NULL) {
+		printf("%% %s: %s\n", NSHLOGIN, strerror(errno));
+		return -1;
+	}
+	memcpy(l, logins, nlogins * sizeof(*l));
+	n = nlogins;
+	if ((i = login_index(user, name)) != -1)
+		l[i] = l[--n];
 	if (rec != NULL) {
-		if (n == nitems(lines) || (lines[n] = strdup(rec)) == NULL) {
-			printf("%% %s: %s\n", NSHLOGIN, n == nitems(lines) ?
-			    "too many lines" : strerror(errno));
+		if (n == LOGIN_LINES) {
+			printf("%% %s: too many lines\n", NSHLOGIN);
 			goto done;
 		}
-		n++;
+		l[n++] = *rec;
 	}
 	if ((fd = mkstemp(tmp)) == -1) {
 		printf("%% %s: %s\n", tmp, strerror(errno));
@@ -317,7 +283,13 @@ login_store(const char *kind, const char *name, const char *rec)
 		goto done;
 	}
 	for (i = 0; i < n; i++)
-		fprintf(f, "%s\n", lines[i]);
+		if (l[i].user)
+			fprintf(f, "user %s %s %s\n", l[i].name, l[i].class,
+			    l[i].made ? "made" : "found");
+		else {
+			login_perms_words(l[i].perms, perms, sizeof(perms));
+			fprintf(f, "class %s%s\n", l[i].name, perms);
+		}
 	if (fflush(f) == EOF || fsync(fd) == -1) {
 		printf("%% %s: %s\n", tmp, strerror(errno));
 		fclose(f);
@@ -330,36 +302,112 @@ login_store(const char *kind, const char *name, const char *rec)
 		unlink(tmp);
 		goto done;
 	}
+	memcpy(logins, l, n * sizeof(*l));
+	nlogins = n;
 	r = 0;
  done:
-	login_unload(lines, n);
+	free(l);
 	return r;
+}
+
+/*
+ * The parser's reading of NSHLOGIN's text, len bytes, into l, at most
+ * LOGIN_LINES of them: each class's permissions, -1 if its words are
+ * not ones, and each user's class, and whether nshd made its account.
+ * text's newlines become NULs. How many lines, or -1 if too many
+ */
+int
+login_file(char *text, size_t len, struct login_rec *l)
+{
+	char *p, *end = text + len, *nl, *q, *s, *w[LOGIN_NPERMS + 3];
+	char user[32], class[64], how[8];
+	int n = 0, nw;
+
+	for (p = text; p < end; p = nl + 1) {
+		if ((nl = memchr(p, '\n', end - p)) == NULL)
+			nl = end;
+		*nl = '\0';
+		if (*p == '\0')
+			continue;
+		if (n == LOGIN_LINES)
+			return -1;
+		memset(&l[n], 0, sizeof(l[n]));
+		if (sscanf(p, "user %31s %63s %7s", user, class, how) == 3) {
+			l[n].user = 1;
+			strlcpy(l[n].name, user, sizeof(l[n].name));
+			strlcpy(l[n].class, class, sizeof(l[n].class));
+			l[n++].made = strcmp(how, "made") == 0;
+		} else if (strncmp(p, "class ", 6) == 0) {
+			nw = 0;
+			for (q = p + 6; nw < (int)nitems(w) &&
+			    (s = strsep(&q, " ")) != NULL; )
+				w[nw++] = s;
+			if (nw < 1 || strlen(w[0]) >= sizeof(l[n].name))
+				continue;
+			strlcpy(l[n].name, w[0], sizeof(l[n].name));
+			l[n++].perms = q == NULL ?
+			    login_words_perms(nw - 1, w + 1) : -1;
+		}
+	}
+	return n;
+}
+
+/*
+ * l, n of NSHLOGIN's lines, as the parser read them as nshd started, or
+ * as a script's job wrote them, kept: 0, or -1 if they are not lines
+ * system writes, which are kept as lines that could not be read; and
+ * n -1 for lines that could not be read
+ */
+int
+login_kept(struct login_rec *l, int n)
+{
+	int i;
+
+	nlogins = -1;
+	if (n < -1 || n > LOGIN_LINES)
+		return -1;
+	for (i = 0; i < n; i++)
+		if ((l[i].user != 0 && l[i].user != 1) ||
+		    (l[i].made != 0 && l[i].made != 1) ||
+		    l[i].perms < -1 || l[i].perms > LOGIN_ALL ||
+		    memchr(l[i].name, '\0', sizeof(l[i].name)) == NULL ||
+		    memchr(l[i].class, '\0', sizeof(l[i].class)) == NULL)
+			return -1;
+	if (n > 0)
+		memcpy(logins, l, n * sizeof(*l));
+	nlogins = n;
+	return 0;
+}
+
+/*
+ * In a script's job, the lines it leaves, which system keeps when the
+ * job ends: their count, then each, to fd. 0, or -1
+ */
+int
+login_answer(int fd)
+{
+	int32_t n = nlogins;
+
+	if (write(fd, &n, sizeof(n)) != sizeof(n) || (n > 0 &&
+	    write(fd, logins, n * sizeof(logins[0])) !=
+	    (ssize_t)(n * sizeof(logins[0]))))
+		return -1;
+	return 0;
 }
 
 /* A class's permissions, built in or from NSHLOGIN, or -1 */
 int
 login_class_perms(const char *class)
 {
-	char *lines[LOGIN_LINES], *w[LOGIN_NPERMS + 3];
-	char *p, *q;
 	size_t j;
-	int i, n, nw, perms = -1;
+	int i;
 
 	for (j = 0; j < nitems(login_builtin); j++)
 		if (strcmp(class, login_builtin[j].name) == 0)
 			return login_builtin[j].perms;
-	if ((n = login_load(lines, nitems(lines))) == -1)
+	if ((i = login_index(0, class)) == -1)
 		return -1;
-	if ((i = login_index(lines, n, "class", class)) != -1) {
-		nw = 0;
-		for (p = lines[i]; nw < (int)nitems(w) &&
-		    (q = strsep(&p, " ")) != NULL; )
-			w[nw++] = q;
-		if (nw >= 2 && p == NULL)
-			perms = login_words_perms(nw - 2, w + 2);
-	}
-	login_unload(lines, n);
-	return perms;
+	return logins[i].perms;
 }
 
 /*
@@ -370,19 +418,15 @@ login_class_perms(const char *class)
 static int
 login_user_find(const char *name, char *class, size_t len, int *made)
 {
-	char *lines[LOGIN_LINES], c[64], how[8];
-	int i, n, r = 0;
+	int i;
 
-	if ((n = login_load(lines, nitems(lines))) == -1)
+	if (nlogins == -1)
 		return -1;
-	if ((i = login_index(lines, n, "user", name)) != -1 &&
-	    sscanf(lines[i], "user %*s %63s %7s", c, how) == 2) {
-		strlcpy(class, c, len);
-		*made = strcmp(how, "made") == 0;
-		r = 1;
-	}
-	login_unload(lines, n);
-	return r;
+	if ((i = login_index(1, name)) == -1)
+		return 0;
+	strlcpy(class, logins[i].class, len);
+	*made = logins[i].made;
+	return 1;
 }
 
 /* Is class a built-in one, or one the candidate has? If not, say so */
@@ -407,7 +451,8 @@ login_cand_class(const char *class, struct cand *cand)
 static int
 login_class(int set, char *name, int p, struct cand *cand)
 {
-	char perms[64], rec[128];
+	struct login_rec rec;
+	char perms[64];
 	size_t j;
 
 	if (!login_name_ok("class", name))
@@ -422,14 +467,16 @@ login_class(int set, char *name, int p, struct cand *cand)
 		if (cand != NULL)
 			return cand_setting(cand, ST_OFF,
 			    "login class %s", name);
-		return login_store("class", name, NULL);
+		return login_store(0, name, NULL);
 	}
 	login_perms_words(p, perms, sizeof(perms));
 	if (cand != NULL)
 		return cand_setting(cand, ST_ON, "login class %s%s",
 		    name, perms);
-	snprintf(rec, sizeof(rec), "class %s%s", name, perms);
-	return login_store("class", name, rec);
+	memset(&rec, 0, sizeof(rec));
+	strlcpy(rec.name, name, sizeof(rec.name));
+	rec.perms = p;
+	return login_store(0, name, &rec);
 }
 
 /* useradd, usermod or userdel for name: 0 if it exited 0, else -1 */
@@ -473,7 +520,8 @@ login_make(char *name, char *hash)
 static int
 login_user(int set, char *name, char *uclass, char *hash, struct cand *cand)
 {
-	char class[64], rec[256];
+	struct login_rec rec;
+	char class[64];
 	char *mod[] = { USERMOD, "-p", NULL, name, NULL };
 	char *del[] = { USERDEL, name, NULL };
 	struct passwd *pw;
@@ -495,7 +543,7 @@ login_user(int set, char *name, char *uclass, char *hash, struct cand *cand)
 		if (found && made && getpwnam(name) != NULL &&
 		    login_run(name, USERDEL, del) == -1)
 			return -1;
-		return found ? login_store("user", name, NULL) : 0;
+		return found ? login_store(1, name, NULL) : 0;
 	}
 	if (!login_name_ok("class", uclass))
 		return -1;
@@ -552,9 +600,12 @@ login_user(int set, char *name, char *uclass, char *hash, struct cand *cand)
 		}
 		made = 0;
 	}
-	snprintf(rec, sizeof(rec), "user %s %s %s", name, uclass,
-	    made ? "made" : "found");
-	return login_store("user", name, rec);
+	memset(&rec, 0, sizeof(rec));
+	rec.user = 1;
+	strlcpy(rec.name, name, sizeof(rec.name));
+	strlcpy(rec.class, uclass, sizeof(rec.class));
+	rec.made = made;
+	return login_store(1, name, &rec);
 }
 
 /*
@@ -682,10 +733,15 @@ login_apply(const struct argcmd *c, int set, const struct facts_value *v,
 	    hash : NULL, cand);
 }
 
+/* classes before users, each by name */
 static int
 login_cmp(const void *a, const void *b)
 {
-	return strcmp(*(char * const *)a, *(char * const *)b);
+	const struct login_rec *x = a, *y = b;
+
+	if (x->user != y->user)
+		return x->user - y->user;
+	return strcmp(x->name, y->name);
 }
 
 /*
@@ -696,26 +752,31 @@ login_cmp(const void *a, const void *b)
 void
 conf_login(FILE *output)
 {
-	char *lines[LOGIN_LINES], name[64], class[64], how[8];
+	struct login_rec *l;
 	struct passwd *pw;
-	int i, n;
+	char perms[64];
+	int i;
 
-	if ((n = login_load(lines, nitems(lines))) <= 0)
+	if (nlogins <= 0)
 		return;
-	qsort(lines, n, sizeof(lines[0]), login_cmp);
-	for (i = 0; i < n; i++) {
-		if (strncmp(lines[i], "class ", 6) == 0)
-			fprintf(output, "login %s\n", lines[i]);
-		else if (sscanf(lines[i], "user %63s %63s %7s", name, class,
-		    how) == 3) {
-			fprintf(output, "login user %s class %s", name, class);
-			if (strcmp(how, "made") == 0 &&
-			    (pw = getpwnam_shadow(name)) != NULL)
-				fprintf(output, " password %s", pw->pw_passwd);
-			fprintf(output, "\n");
+	if ((l = calloc(nlogins, sizeof(*l))) == NULL)
+		return;
+	memcpy(l, logins, nlogins * sizeof(*l));
+	qsort(l, nlogins, sizeof(*l), login_cmp);
+	for (i = 0; i < nlogins; i++) {
+		if (!l[i].user) {
+			login_perms_words(l[i].perms == -1 ? 0 : l[i].perms,
+			    perms, sizeof(perms));
+			fprintf(output, "login class %s%s\n", l[i].name, perms);
+			continue;
 		}
+		fprintf(output, "login user %s class %s", l[i].name,
+		    l[i].class);
+		if (l[i].made && (pw = getpwnam_shadow(l[i].name)) != NULL)
+			fprintf(output, " password %s", pw->pw_passwd);
+		fprintf(output, "\n");
 	}
-	login_unload(lines, n);
+	free(l);
 }
 
 /*

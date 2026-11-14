@@ -364,9 +364,14 @@ struct nshd_parse {
 #define NSHD_PARSE_RECORDS 10	/* the first bytes of the commit, confirm
 				   and boot records, each there as the
 				   flags say, and of each configuration
-				   kept (rollback_slots()): struct
-				   nshd_records, then ROLLBACKS of struct
-				   rollback_head */
+				   kept (rollback_slots()), and NSHLOGIN's
+				   text: struct nshd_records, then
+				   ROLLBACKS of struct rollback_head, then
+				   a count of struct login_rec and each,
+				   or -1 if too many */
+#define NSHD_PARSE_LOGINS 11	/* NSHLOGIN's text, if the flags say it
+				   is there: the count and each, as
+				   RECORDS answers them */
 
 #define NSHD_PARSE_ADMIN 0x1	/* BEGIN: check the script's admin lines */
 #define NSHD_PARSE_FAILED 0x2	/* VERIFY: a line of the script failed */
@@ -377,6 +382,7 @@ struct nshd_parse {
 #define NSHD_PARSE_HAS_COMMIT 0x40	/* RECORDS: the commit record */
 #define NSHD_PARSE_HAS_CONFIRM 0x80	/* RECORDS: the confirm record */
 #define NSHD_PARSE_HAS_BOOT 0x100	/* RECORDS: the boot record */
+#define NSHD_PARSE_HAS_LOGINS 0x200	/* RECORDS, LOGINS: NSHLOGIN */
 
 #define NSHD_LOGINS	1024		/* login lines, at most */
 

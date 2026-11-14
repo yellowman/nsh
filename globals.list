@@ -154,6 +154,7 @@ nshcmds.c	table	clearhelp commithelp confighelp dohelp
 			showndptab showroutetab showvlantab sshhelp stts
 			telnethelp tracert6help tracerthelp unsetenvhelp
 			verbosehelp whohelp
+passwd.c	process	logins nlogins
 passwd.c		table	login_builtin login_kinds login_permtab
 ppp.c		table	spppproto
 prompt.c	process	ifname prompt saved_prompt

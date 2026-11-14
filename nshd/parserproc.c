@@ -68,6 +68,7 @@ static int	parse_plan(struct nshd_parse *, char **);
 static int	parse_boot(struct nshd_parse *, char **);
 static int	parse_facts(char *, size_t);
 static int	parse_records(struct nshd_parse *, char **);
+static int	parse_logins(char *, size_t, int);
 static void	parse_commit(char *, size_t, struct nshd_records *);
 static void	parse_confirm(char *, size_t, struct nshd_records *);
 static void	parse_bootrecord(char *, struct nshd_records *);
@@ -137,6 +138,10 @@ parserproc(int d, int v)
 		break;
 	case NSHD_PARSE_RECORDS:
 		r = parse_records(&p, t);
+		break;
+	case NSHD_PARSE_LOGINS:
+		r = parse_logins(t[0], p.len[0],
+		    (p.flags & NSHD_PARSE_HAS_LOGINS) != 0);
 		break;
 	default:
 		printf("%% nshd: the parser reads no kind %d\n", p.kind);
@@ -319,7 +324,8 @@ parse_clears(struct nshd_apply *a, struct script *s)
  * confirm record's and t[2] the boot record's, each there as p's flags
  * say. struct nshd_records, the numbers as each line says them: system
  * judges whether they are a record's. Then those of each configuration
- * kept, in t[3] (commit.c's rollback_heads())
+ * kept, in t[3] (commit.c's rollback_heads()), and NSHLOGIN's lines, in
+ * t[4] if p's flags say it is there
  */
 static int
 parse_records(struct nshd_parse *p, char **t)
@@ -337,9 +343,33 @@ parse_records(struct nshd_parse *p, char **t)
 		parse_bootrecord(t[2], &r);
 	if (p->len[3] == ROLLBACKS * ROLLBACK_SLOT)
 		rollback_heads(t[3], h);
-	if (parser_write(&r, sizeof(r)) == -1)
+	if (parser_write(&r, sizeof(r)) == -1 ||
+	    parser_write(h, sizeof(h)) == -1)
 		return (-1);
-	return (parser_write(h, sizeof(h)));
+	/* and NSHLOGIN's lines */
+	return (parse_logins(t[4], p->len[4],
+	    (p->flags & NSHD_PARSE_HAS_LOGINS) != 0));
+}
+
+/*
+ * NSHLOGIN's lines, in text if it is there: how many, or -1 if too many
+ * (passwd.c's login_file()), then each
+ */
+static int
+parse_logins(char *text, size_t len, int there)
+{
+	struct login_rec	*l;
+	int32_t			 n = 0;
+	int			 ret;
+
+	if ((l = calloc(LOGIN_LINES, sizeof(*l))) == NULL)
+		return (-1);
+	if (there)
+		n = login_file(text, len, l);
+	ret = parser_write(&n, sizeof(n)) == -1 || (n > 0 &&
+	    parser_write(l, n * sizeof(*l)) == -1) ? -1 : 0;
+	free(l);
+	return (ret);
 }
 
 /* STATE UID WHEN BEFORELEN WANTLEN, the commit record's, in text */

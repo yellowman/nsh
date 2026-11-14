@@ -478,6 +478,18 @@ struct login_line {
 	char name[32];
 	char class[32];			/* a user's */
 };
+/* a line of NSHLOGIN's, as the parser reads it (login_file()) */
+#define LOGIN_LINES	1024		/* NSHLOGIN holds at most this many */
+struct login_rec {
+	int32_t user;			/* 1 a user's, 0 a class's */
+	int32_t perms;			/* a class's, or -1 if not ones */
+	int32_t made;			/* a user's: nshd made its account */
+	char name[32];
+	char class[64];			/* a user's */
+};
+int login_file(char *, size_t, struct login_rec *);
+int login_kept(struct login_rec *, int);
+int login_answer(int);
 int login_words_perms(int, char **);
 int login_lines(char *, size_t, uint32_t, struct login_line **, uint32_t *);
 int login_perms_by(uid_t, int, struct login_line *, uint32_t);

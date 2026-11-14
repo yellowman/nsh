@@ -428,6 +428,8 @@ struct job {
 	char			*text[NSHD_PARSE_TEXTS];	/* its texts, */
 	char			*keep[NSHD_PARSE_TEXTS];	/* those it frees */
 	int			 answer;	/* its answer's file, or -1 */
+	int			 after;		/* LOGINS: the job ended, */
+	int32_t			 after_status;	/* and how */
 	struct confirm		 cf;		/* what a rollback's reads */
 	char			*back;		/* rollback configuration */
 	size_t			 backlen;
@@ -563,6 +565,11 @@ static char		 heads[3][RECORD_HEAD + 1];
 static int		 errors[3];
 /* and those of each configuration kept */
 static char		 slots[ROLLBACKS * ROLLBACK_SLOT];
+/* NSHLOGIN's error, if it could not be read, and the reading not done */
+static int		 logins_error;
+/* a job changed NSHLOGIN, perhaps, and it could not be read again */
+static int		 logins_lost;
+static int		 records_unread;
 
 static void	system_dispatch_parent(int, short, void *);
 static void	system_dispatch_config(int, short, void *);
@@ -685,6 +692,10 @@ static void	system_job_done(void);
 static void	system_job_end(struct job *, int32_t);
 static void	records_start(void);
 static void	records_read(struct job *, int32_t);
+static char	*file_read(int, size_t, size_t *);
+static int	logins_answered(struct job *);
+static void	logins_reread(struct job *, int32_t);
+static void	logins_read(struct job *, int32_t);
 static int	record_read(struct record *);
 static int	record_write(struct record *);
 static int	record_clear(void);
@@ -878,11 +889,12 @@ system_dispatch_config(int fd, short event, void *arg)
 		/*
 		 * what a stream's client read, stopping a stream, a new
 		 * session's permissions, a login, and GO for the job that
-		 * waits do not wait
+		 * waits do not wait; a session's permissions and a login
+		 * wait only for the parser to read NSHLOGIN as nshd starts
 		 */
 		if (type == IMSG_SYS_READ || type == IMSG_SYS_STOP ||
-		    type == IMSG_SYS_PERMS || type == IMSG_SYS_LOGIN ||
-		    type == IMSG_SYS_GO ||
+		    ((type == IMSG_SYS_PERMS || type == IMSG_SYS_LOGIN) &&
+		    !records_unread) || type == IMSG_SYS_GO ||
 		    (job == NULL && TAILQ_EMPTY(&queue)))
 			r = system_request(type, id, data, len);
 		else
@@ -1290,7 +1302,7 @@ system_unqueue(uint32_t id)
 	TAILQ_FOREACH_SAFE(q, &queue, entry, next)
 		if (q->id == id) {
 			TAILQ_REMOVE(&queue, q, entry);
-			free(q);
+			freezero(q, sizeof(*q) + q->len);
 			found = 1;
 		}
 	if (found)
@@ -1302,13 +1314,26 @@ system_unqueue(uint32_t id)
 static void
 system_drain(void)
 {
-	struct queued	*q;
+	struct queued	*q, *next;
 	int		 r;
 
+	/* a session's permissions and a login, once NSHLOGIN is read */
+	TAILQ_FOREACH_SAFE(q, &queue, entry, next) {
+		if (records_unread || (q->type != IMSG_SYS_PERMS &&
+		    q->type != IMSG_SYS_LOGIN))
+			continue;
+		TAILQ_REMOVE(&queue, q, entry);
+		r = system_request(q->type, q->id, q->data, q->len);
+		freezero(q, sizeof(*q) + q->len);
+		if (r == -1) {
+			config_gone("sent a part past %d bytes", NSHD_PART);
+			return;
+		}
+	}
 	while (job == NULL && (q = TAILQ_FIRST(&queue)) != NULL) {
 		TAILQ_REMOVE(&queue, q, entry);
 		r = system_request(q->type, q->id, q->data, q->len);
-		free(q);
+		freezero(q, sizeof(*q) + q->len);
 		if (r == -1) {
 			config_gone("sent a part past %d bytes", NSHD_PART);
 			return;
@@ -3946,6 +3971,9 @@ system_parsed(struct job *j, int32_t status)
 	case NSHD_PARSE_RECORDS:
 		records_read(j, status);
 		break;
+	case NSHD_PARSE_LOGINS:
+		logins_read(j, status);
+		break;
 	}
 }
 
@@ -4021,9 +4049,17 @@ static void
 system_job(struct job *j)
 {
 	struct timeval	 tv = { jobs[j->kind].secs, 0 };
+	char		 path[] = "/tmp/nshanswer.XXXXXXXXXX";
 	int		 fds[2];
 
 	fflush(stdout);
+	/* a script's job answers NSHLOGIN's lines, as it leaves them */
+	if ((j->kind == JOB_APPLY || j->kind == JOB_UNDO ||
+	    j->kind == JOB_RECOVER) && ((j->answer = mkstemp(path)) == -1 ||
+	    unlink(path) == -1)) {
+		printf("%% nshd: %s: %s\n", path, strerror(errno));
+		goto fail;
+	}
 	if (pipe2(fds, O_CLOEXEC) == -1) {
 		printf("%% nshd: pipe: %s\n", strerror(errno));
 		goto fail;
@@ -4074,9 +4110,14 @@ system_job_child(int fd, struct job *j)
 	    (null = open(_PATH_DEVNULL, O_RDONLY)) == -1 ||
 	    dup2(null, STDIN_FILENO) == -1)
 		_exit(2);
-	/* the parser's answer, which it writes to descriptor 3 */
-	if (j->kind == JOB_PARSE) {
-		if (dup2(j->answer, STDERR_FILENO + 1) == -1)
+	/*
+	 * the parser's answer, which it writes to descriptor 3, or a
+	 * script's, which no program it runs has
+	 */
+	if (j->answer != -1) {
+		if (dup2(j->answer, STDERR_FILENO + 1) == -1 ||
+		    (j->kind != JOB_PARSE && fcntl(STDERR_FILENO + 1,
+		    F_SETFD, FD_CLOEXEC) == -1))
 			_exit(2);
 		j->answer = STDERR_FILENO + 1;
 		closefrom(STDERR_FILENO + 2);
@@ -4117,6 +4158,8 @@ system_job_child(int fd, struct job *j)
 		r = -1;
 		break;
 	}
+	if (j->answer != -1 && login_answer(j->answer) == -1)
+		r = -1;
 	fflush(stdout);
 	_exit(r == -1 ? 2 : r);
 }
@@ -4243,9 +4286,16 @@ system_job_end(struct job *j, int32_t status)
 
 	if (j->kind == JOB_SAVE && status == 0)
 		rollback_keep(SAVED, j->who, j->comment);
+	if (j->answer != -1 && j->kind != JOB_PARSE &&
+	    logins_answered(j) == -1) {
+		/* NSHLOGIN is read again before anything goes on */
+		logins_reread(j, status);
+		system_job_free(j);
+		return;
+	}
 	if (j->kind == JOB_RECOVER) {
 		printed_log();
-		system_attempted(status == 0);
+		system_attempted(status == 0 && !logins_lost);
 	} else if (j->kind == JOB_APPLY && begun != NULL && status != 0) {
 		/* what was printed goes to config before the undo's */
 		system_said(j->id);
@@ -4254,7 +4304,9 @@ system_job_end(struct job *j, int32_t status)
 	} else if (j->kind == JOB_APPLY && begun != NULL)
 		system_took(j->id);
 	else if (j->kind == JOB_UNDO)
-		system_finish(j->id, status == 0 ? NSHD_UNDONE : NSHD_LEFT);
+		/* with NSHLOGIN unread, what runs is not known */
+		system_finish(j->id, status == 0 && !logins_lost ?
+		    NSHD_UNDONE : NSHD_LEFT);
 	else if (j->kind == JOB_SAVE && begun != NULL)
 		system_finish(j->id, system_saved(status == 0) == 0 &&
 		    status == 0 ? NSHD_SAVED : NSHD_UNSAVED);
@@ -4263,7 +4315,7 @@ system_job_end(struct job *j, int32_t status)
 	else if (j->kind == JOB_PARSE)
 		system_parsed(j, status);
 	else if (j->kind == JOB_APPLY)
-		boot_end(status == 0);
+		boot_end(status == 0 && !logins_lost);
 	else {
 		if (j->kind == JOB_SAVE && system_saved(status == 0) == -1)
 			status = -1;
@@ -4337,7 +4389,51 @@ records_start(void)
 	}
 	rollback_slots(slots);
 	system_parse_text(j, 3, slots, sizeof(slots));
+	/* and NSHLOGIN, whole */
+	records_unread = 1;
+	if ((fd = open(NSHLOGIN, O_RDONLY)) == -1) {
+		if (errno != ENOENT)
+			logins_error = errno;
+	} else {
+		if ((j->keep[4] = file_read(fd, NSHD_PART, &got)) == NULL)
+			logins_error = errno;
+		else {
+			j->parse.flags |= NSHD_PARSE_HAS_LOGINS;
+			system_parse_text(j, 4, j->keep[4], got);
+		}
+		close(fd);
+	}
 	system_parse(j);
+}
+
+/* fd's text, at most max bytes, and how long: NULL, errno set, if not */
+static char *
+file_read(int fd, size_t max, size_t *len)
+{
+	char	*text;
+	ssize_t	 n;
+	size_t	 got;
+
+	if ((text = malloc(max + 1)) == NULL)
+		fatal(NULL);
+	for (got = 0; got <= max; got += n)
+		if ((n = read(fd, text + got, max + 1 - got)) <= 0) {
+			if (n == -1 && errno == EINTR) {
+				n = 0;
+				continue;
+			}
+			if (n == 0)
+				break;
+			free(text);
+			return (NULL);
+		}
+	if (got > max) {
+		free(text);
+		errno = EFBIG;
+		return (NULL);
+	}
+	*len = got;
+	return (text);
 }
 
 /*
@@ -4352,11 +4448,13 @@ records_read(struct job *j, int32_t status)
 	struct rollback_head	 h[ROLLBACKS];
 	struct confirm		 cf;
 	char			*a = NULL;
-	size_t			 len;
+	size_t			 len, at = sizeof(r) + sizeof(h);
+	int32_t			 n = -1;
 
 	memset(&r, 0, sizeof(r));
-	if (status != 0 || parser_answer(j->answer, sizeof(r) + sizeof(h),
-	    &a, &len) == -1 || len != sizeof(r) + sizeof(h)) {
+	if (status != 0 || parser_answer(j->answer, at + sizeof(n) +
+	    LOGIN_LINES * sizeof(struct login_rec), &a, &len) == -1 ||
+	    len < at + sizeof(n)) {
 		printf("%% nshd: the parser did not read the records\n");
 		/* each one there is not read */
 		if ((j->parse.flags & NSHD_PARSE_HAS_COMMIT) && !errors[0])
@@ -4365,6 +4463,8 @@ records_read(struct job *j, int32_t status)
 			errors[1] = EIO;
 		if ((j->parse.flags & NSHD_PARSE_HAS_BOOT) && !errors[2])
 			errors[2] = EIO;
+		if ((j->parse.flags & NSHD_PARSE_HAS_LOGINS) && !logins_error)
+			logins_error = EIO;
 	} else {
 		memcpy(&r, a, sizeof(r));
 		memcpy(h, a + sizeof(r), sizeof(h));
@@ -4372,7 +4472,21 @@ records_read(struct job *j, int32_t status)
 		if (rollback_heads_kept(h) == -1)
 			printf("%% nshd: the parser's reading of the "
 			    "configurations kept is not one\n");
+		memcpy(&n, a + at, sizeof(n));
+		at += sizeof(n);
 	}
+	/* NSHLOGIN's lines, or none, or lines that could not be read */
+	if (logins_error != 0)
+		n = -1;
+	else if (!(j->parse.flags & NSHD_PARSE_HAS_LOGINS))
+		n = 0;
+	if ((n > 0 && len != at + n * sizeof(struct login_rec)) ||
+	    login_kept(n > 0 ? (struct login_rec *)(a + at) : NULL, n) == -1) {
+		printf("%% nshd: the parser's reading of %s is not one\n",
+		    NSHLOGIN);
+		login_kept(NULL, -1);
+	}
+	records_unread = 0;
 	free(a);
 	printed_log();
 
@@ -4426,6 +4540,97 @@ records_read(struct job *j, int32_t status)
 		}
 	}
 	system_confirm(-1, 0, NULL);
+}
+
+/*
+ * NSHLOGIN's lines as j, a script's job, left them, which system keeps.
+ * -1 if the job ended before it said: it may have changed the file
+ */
+static int
+logins_answered(struct job *j)
+{
+	char	*a;
+	size_t	 len;
+	int32_t	 n;
+
+	if (parser_answer(j->answer, sizeof(n) + LOGIN_LINES *
+	    sizeof(struct login_rec), &a, &len) == -1 || len == 0) {
+		free(a);
+		return (-1);
+	}
+	if (len < sizeof(n))
+		n = -2;
+	else
+		memcpy(&n, a, sizeof(n));
+	if ((n > 0 && len != sizeof(n) + n * sizeof(struct login_rec)) ||
+	    login_kept((struct login_rec *)(a + sizeof(n)), n) == -1) {
+		printf("%% nshd: the lines of %s the job left are not lines\n",
+		    NSHLOGIN);
+		login_kept(NULL, -1);
+	}
+	free(a);
+	logins_lost = 0;
+	return (0);
+}
+
+/*
+ * j, a script's job, ended as status says and did not say how it left
+ * NSHLOGIN. system's lines are not the file's until the parser has read
+ * it again, in a job; then j's end goes on (logins_read())
+ */
+static void
+logins_reread(struct job *j, int32_t status)
+{
+	struct job	*r;
+	size_t		 got;
+	int		 fd;
+
+	login_kept(NULL, -1);
+	logins_lost = 1;
+	r = system_parse_job(j->id, NSHD_PARSE_LOGINS);
+	r->after = j->kind;
+	r->after_status = status;
+	if ((fd = open(NSHLOGIN, O_RDONLY)) == -1) {
+		/* with no file there are no lines */
+		if (errno == ENOENT)
+			logins_lost = 0;
+	} else {
+		if ((r->keep[0] = file_read(fd, NSHD_PART, &got)) != NULL) {
+			r->parse.flags |= NSHD_PARSE_HAS_LOGINS;
+			system_parse_text(r, 0, r->keep[0], got);
+			logins_lost = 0;
+		}
+		close(fd);
+	}
+	system_parse(r);
+}
+
+/*
+ * The parser's reading of NSHLOGIN, j's, after a job that did not say
+ * how it left it; that job's end goes on, as one that answered
+ */
+static void
+logins_read(struct job *j, int32_t status)
+{
+	struct job	*f;
+	char		*a = NULL;
+	size_t		 len = 0;
+	int32_t		 n = -1;
+
+	if (!logins_lost && status == 0 && parser_answer(j->answer,
+	    sizeof(n) + LOGIN_LINES * sizeof(struct login_rec), &a,
+	    &len) != -1 && len >= sizeof(n))
+		memcpy(&n, a, sizeof(n));
+	if (n < 0 || (n > 0 && len != sizeof(n) + n *
+	    sizeof(struct login_rec)) || login_kept(n > 0 ?
+	    (struct login_rec *)(a + sizeof(n)) : NULL, n) == -1) {
+		printf("%% nshd: %s could not be read again\n", NSHLOGIN);
+		login_kept(NULL, -1);
+		logins_lost = 1;
+	}
+	free(a);
+	f = system_job_new(j->id, j->after);
+	system_job_end(f, j->after_status);
 }
 
 /*
