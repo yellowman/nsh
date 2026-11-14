@@ -301,6 +301,8 @@ config is
 to stdio, recvfd and sendfd.
 It reads no kernel state, opens no file and runs no program of its own,
 and refuses a line that would.
+It reads no line, and parses no words of a show or of an operation:
+the code that does refuses to run in config.
 .It system
 Runs as root, and reads the configuration from the kernel, the
 daemons and the saved configuration.

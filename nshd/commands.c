@@ -93,6 +93,7 @@
 #include "showfacts.h"
 #include "session.h"
 #include "commands.h"
+#include "log.h"
 #include "nshcmds.h"
 
 /*
@@ -801,7 +802,7 @@ op_find(const char *name, int inif)
  * arguments of the row of ops[] that runs it, and an interface's
  * operation's interface into ifname (len bytes). Each is its first
  * word, as nsh names it, and the words after it as typed. The row, or
- * -1 after saying why not
+ * -1 after saying why not. nshd's config parses no operation.
  */
 int
 op_parse(int n, char **w, struct argvals *a, char *ifname, size_t len)
@@ -814,6 +815,10 @@ op_parse(int n, char **w, struct argvals *a, char *ifname, size_t len)
 	size_t row;
 
 	ifname[0] = '\0';
+	if (in_config) {
+		log_warnx("config parses no operation");
+		return -1;
+	}
 	if (n >= 3 && strcmp(w[0], "interface") == 0 &&
 	    (i = int_op_find(n - 2, w + 2)) != NULL) {
 		if (strlcpy(ifname, w[1], len) >= len) {
@@ -2247,7 +2252,7 @@ getcmd(char *name)
  * top level it is a command that edits the candidate, or exit, which
  * leaves configure. Returns 0 after writing the line's edits, none for
  * an empty line or one that only printed help, or -1 after printing why
- * the line is none of the candidate's.
+ * the line is none of the candidate's. nshd's config reads no line.
  */
 int
 cmdline_edits(char *text, char *ifn, int isbridge, FILE *f)
@@ -2258,6 +2263,10 @@ cmdline_edits(char *text, char *ifn, int isbridge, FILE *f)
 	char *p;
 	int d, act, r;
 
+	if (in_config) {
+		log_warnx("config reads no line");
+		return -1;
+	}
 	if (strlcpy(line, text, sizeof(line)) >= sizeof(line)) {
 		printf("%% Input exceeds permitted length\n");
 		return -1;

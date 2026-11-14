@@ -73,16 +73,17 @@ facts_answer_begin(char *words)
 
 /*
  * For config, the show words ask of nshd's system, as values in ss: 0,
- * or NSHD_ELSEWHERE if system does not answer it
+ * or NSHD_ELSEWHERE if system does not answer it. A session's frontend
+ * parses them: nshd's config parses no show
  */
 int
 facts_answer_pack(char *words, struct nshd_sysshow *ss)
 {
-	struct facts_answer	*a;
+	struct facts_answer	*a = NULL;
 	int			 i, r = NSHD_ELSEWHERE;
 
 	memset(ss, 0, sizeof(*ss));
-	if ((a = facts_answer(words)) == NULL ||
+	if (in_config || (a = facts_answer(words)) == NULL ||
 	    (a->where & FACTS_SYSTEM) == 0)
 		goto done;
 	ss->type = a->type;
