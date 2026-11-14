@@ -54,6 +54,7 @@
 #include "kernel.h"
 #include "facts.h"
 #include "showfacts.h"
+#include "args.h"
 
 int 	bridge_ifsetflag(int, char *, char *, u_int32_t, struct cand *);
 int 	bridge_ifclrflag(int, char *, char *, u_int32_t, struct cand *);
@@ -132,44 +133,23 @@ static struct brc brps[] = {
 	{ 0,		0 }
 };
 
+/*
+ * A member's lines: each names members, BRPORTS to a record, and a
+ * longer line goes as several (args_each())
+ */
+
 int
-brport(int argc, char **argv, ...)
+brport_apply(const struct argcmd *c, int set, const struct facts_value *v,
+    char *ifname, int ifs, struct cand *cand)
 {
-	int set, i, e = 0, r = 0;
+	char port[IFNAMSIZ];
+	int i, e = 0, r = 0;
 	struct brc *x;
-	va_list ap;
-	struct cand *cand;
-	char *ifname;
-	int ifs;
 
-	va_start(ap, argv);
-	ifname = va_arg(ap, char *);
-	ifs = va_arg(ap, int);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
-
-	if (NO_ARG(argv[0])) {
-		set = 0;
-		argv++;
-		argc--;
-	} else
-		set = 1;
-
-	x = (struct brc *) genget(argv[0], (char **)brps, sizeof(struct brc));
-	if (x == 0) {
-		printf("%% Internal error - Invalid argument %s\n", argv[0]);
-		return -1;
-	} else if (Ambiguous(x)) {
-		printf("%% Internal error - Ambiguous argument %s\n", argv[0]);
-		return -1;
-	}
-
-	argv++;
-	argc--;
-
-	if (argc == 0) {
-		printf("%% %s <if> [if]...\n", x->name);
-		printf("%% no %s <if> [if]...\n", x->name);
+	for (x = brps; x->name != NULL && strcmp(x->name, c->name) != 0; x++)
+		;
+	if (x->name == NULL) {
+		printf("%% Internal error - Invalid argument %s\n", c->name);
 		return -1;
 	}
 	/* a veb's private VLANs, and locked */
@@ -185,9 +165,10 @@ brport(int argc, char **argv, ...)
 		return -1;
 	}
 
-	for (i = 0; i < argc; i++) {
-		if (!br_portname(ifs, argv[i], cand)) {
-			printf("%% Invalid interface name %s\n", argv[i]);
+	for (i = 0; i < BRPORTS && v[i].type != FACT_NONE; i++) {
+		args_string(&v[i], port, sizeof(port));
+		if (!br_portname(ifs, port, cand)) {
+			printf("%% Invalid interface name %s\n", port);
 			r = -1;
 			continue;
 		}
@@ -195,7 +176,7 @@ brport(int argc, char **argv, ...)
 		case BRPORT_MEMBER:
 			if (set) {
 				/* adding a member activates a bridge */
-				if ((e = bridge_add(ifs, ifname, argv[i],
+				if ((e = bridge_add(ifs, ifname, port,
 				    cand)) != 0)
 					break;
 				if (cand != NULL)
@@ -203,60 +184,60 @@ brport(int argc, char **argv, ...)
 				else
 					e = set_ifflag(ifs, ifname, IFF_UP);
 			} else
-				e = bridge_delete(ifs, ifname, argv[i], cand);
+				e = bridge_delete(ifs, ifname, port, cand);
 			break;
 		case BRPORT_SPAN:
 			if (set)
-				e = bridge_addspan(ifs, ifname, argv[i], cand);
+				e = bridge_addspan(ifs, ifname, port, cand);
 			else
-				e = bridge_delspan(ifs, ifname, argv[i], cand);
+				e = bridge_delspan(ifs, ifname, port, cand);
 			break;
 		case BRPORT_BLOCKNONIP:
 			if (set)
-				e = bridge_ifsetflag(ifs, ifname, argv[i],
+				e = bridge_ifsetflag(ifs, ifname, port,
 				    IFBIF_BLOCKNONIP, cand);
 			else
-				e = bridge_ifclrflag(ifs, ifname, argv[i],
+				e = bridge_ifclrflag(ifs, ifname, port,
 				    IFBIF_BLOCKNONIP, cand);
 			break;
 		case BRPORT_DISCOVER:
 			if (set)
-				e = bridge_ifsetflag(ifs, ifname, argv[i],
+				e = bridge_ifsetflag(ifs, ifname, port,
 				    IFBIF_DISCOVER, cand);
 			else
-				e = bridge_ifclrflag(ifs, ifname, argv[i],
+				e = bridge_ifclrflag(ifs, ifname, port,
 				    IFBIF_DISCOVER, cand);
 			break;
 		case BRPORT_LEARN:
 			if (set)
-				e = bridge_ifsetflag(ifs, ifname, argv[i],
+				e = bridge_ifsetflag(ifs, ifname, port,
 				    IFBIF_LEARNING, cand);
 			else
-				e = bridge_ifclrflag(ifs, ifname, argv[i],
+				e = bridge_ifclrflag(ifs, ifname, port,
 				    IFBIF_LEARNING, cand);
 			break;
 		case BRPORT_STP:
 			if (set)
-				e = bridge_ifsetflag(ifs, ifname, argv[i],
+				e = bridge_ifsetflag(ifs, ifname, port,
 				    IFBIF_STP, cand);
 			else
-				e = bridge_ifclrflag(ifs, ifname, argv[i],
+				e = bridge_ifclrflag(ifs, ifname, port,
 				    IFBIF_STP, cand);
 			break;
 		case BRPORT_PVPTAGS:
 			if (set)
-				e = bridge_ifsetflag(ifs, ifname, argv[i],
+				e = bridge_ifsetflag(ifs, ifname, port,
 				    IFBIF_PVLAN_PTAGS, cand);
 			else
-				e = bridge_ifclrflag(ifs, ifname, argv[i],
+				e = bridge_ifclrflag(ifs, ifname, port,
 				    IFBIF_PVLAN_PTAGS, cand);
 			break;
 		case BRPORT_FLAG:
 			if (set)
-				e = bridge_ifsetflag(ifs, ifname, argv[i],
+				e = bridge_ifsetflag(ifs, ifname, port,
 				    x->flag, cand);
 			else
-				e = bridge_ifclrflag(ifs, ifname, argv[i],
+				e = bridge_ifclrflag(ifs, ifname, port,
 				    x->flag, cand);
 			break;
 		}
@@ -286,57 +267,21 @@ static struct brc brvs[] = {
         { 0,            0 }
 };
 
+/* a bridge's values: what "no" sets is the default */
+
 int
-brval(int argc, char **argv, ...)
+brval_apply(const struct argcmd *c, int set, const struct facts_value *v,
+    char *ifname, int ifs, struct cand *cand)
 {
-	int set, e = 0;
-	u_int32_t val = 0;
-	const char *errmsg = NULL;
+	u_int32_t val = set ? v[0].v.i : 0;
+	int e = 0;
 	struct brc *x;
-	va_list ap;
-	struct cand *cand;
-	char *ifname;
-	int ifs;
 
-	va_start(ap, argv);
-	ifname = va_arg(ap, char *);
-	ifs = va_arg(ap, int);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
-
-	if (NO_ARG(argv[0])) {
-		set = 0;
-		argv++;
-		argc--;
-	} else
-		set = 1;
-
-	x = (struct brc *) genget(argv[0], (char **)brvs, sizeof(struct brc));
-	if (x == 0) {
-		printf("%% Internal error - Invalid argument %s\n", argv[0]);
+	for (x = brvs; x->name != NULL && strcmp(x->name, c->name) != 0; x++)
+		;
+	if (x->name == NULL) {
+		printf("%% Internal error - Invalid argument %s\n", c->name);
 		return -1;
-	} else if (Ambiguous(x)) {
-		printf("%% Internal error - Ambiguous argument %s\n", argv[0]);
-		return -1;
-	}
-
-	argv++;
-	argc--;
-
-	if ((set && argc != 1) || (!set && argc > 1)) {
-		printf("%% %s <val>\n", x->name);
-		printf("%% no %s [val]\n", x->name);
-		return -1;
-	}
-
-	if (set) {
-		errno = 0;
-		val = strtonum(argv[0], 0, UINT32_MAX, &errmsg);
-		if (errmsg) {
-			printf("%% invalid %s argument %s: %s\n", x->name,
-			    argv[0], errmsg);
-			return -1;
-		}
 	}
 
 	switch(x->type) {
@@ -353,20 +298,12 @@ brval(int argc, char **argv, ...)
 			e = bridge_timeout(ifs, ifname, DEFAULT_TIMEOUT, cand);
 		break;
 	case BRVAL_MAXAGE:
-		if (val > 0xff) {
-			printf("%% maxage too large\n");
-			return -1;
-		}
 		if (set)
 			e = bridge_maxage(ifs, ifname, val, cand);
 		else
 			e = bridge_maxage(ifs, ifname, DEFAULT_MAXAGE, cand);
 		break;
 	case BRVAL_FWDDELAY:
-		if (val > 0xff) {
-			printf("%% fwddelay too large\n");
-			return -1;
-		}
 		if (set)
 			e = bridge_fwddelay(ifs, ifname, val, cand);
 		else
@@ -374,10 +311,6 @@ brval(int argc, char **argv, ...)
 			    DEFAULT_FWDDELAY, cand);
 		break;
 	case BRVAL_HELLOTIME:
-		if (val > 0xff) {
-			printf("%% hellotime too large\n");
-			return -1;
-		}
 		if (set)
 			e = bridge_hellotime(ifs, ifname, val, cand);
 		else
@@ -385,10 +318,6 @@ brval(int argc, char **argv, ...)
 			    DEFAULT_HELLOTIME, cand);
 		break;
 	case BRVAL_PRIORITY:
-		if (val > 0xffff) {
-			printf("%% priority too large\n");
-			return -1;
-		}
 		if (set)
 			e = bridge_priority(ifs, ifname, val, cand);
 		else
@@ -416,42 +345,14 @@ brval(int argc, char **argv, ...)
 
 /* proto stp|rstp: the protocol of a bridge's spanning tree */
 int
-brproto(int argc, char **argv, ...)
+brproto_apply(const struct argcmd *c, int set, const struct facts_value *v,
+    char *ifname, int ifs, struct cand *cand)
 {
 	struct ifbrparam bp;
-	va_list ap;
-	struct cand *cand;
-	char *ifname;
-	int ifs, set;
-
-	va_start(ap, argv);
-	ifname = va_arg(ap, char *);
-	ifs = va_arg(ap, int);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
-
-	if (NO_ARG(argv[0])) {
-		set = 0;
-		argv++;
-		argc--;
-	} else
-		set = 1;
-	argv++;
-	argc--;
 
 	memset(&bp, 0, sizeof(bp));
 	strlcpy(bp.ifbrp_name, ifname, sizeof(bp.ifbrp_name));
-	if (!set && argc <= 1)
-		bp.ifbrp_proto = kern_bstp_protover;
-	else if (argc == 1 && isprefix(argv[0], "stp"))
-		bp.ifbrp_proto = BSTP_PROTO_STP;
-	else if (argc == 1 && isprefix(argv[0], "rstp"))
-		bp.ifbrp_proto = BSTP_PROTO_RSTP;
-	else {
-		printf("%% proto stp|rstp\n");
-		printf("%% no proto\n");
-		return -1;
-	}
+	bp.ifbrp_proto = set ? v[0].v.i : kern_bstp_protover;
 	if (!cand_takes(ifname, SIOCBRDGSPROTO)) {
 		printf("%% proto not supported on %s\n", ifname);
 		return -1;
@@ -554,82 +455,50 @@ static struct brd brds[] = {
 	{ 0,			0,		0 }
 };
 
+/*
+ * A member's spanning tree priority and cost; "no" takes the member
+ * alone, and sets the default
+ */
+
 int
-brpri(int argc, char **argv, ...)
+brpri_apply(const struct argcmd *c, int set, const struct facts_value *v,
+    char *ifname, int ifs, struct cand *cand)
 {
-	int set, e = 0;
-	long long val = 0;
-	const char *errmsg = NULL;
+	char port[IFNAMSIZ];
+	long long val = set ? v[1].v.i : 0;
+	int e = 0;
 	struct brd *x;
-	va_list ap;
-	struct cand *cand;
-	char *ifname;
-	int ifs;
 
-	va_start(ap, argv);
-	ifname = va_arg(ap, char *);
-	ifs = va_arg(ap, int);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
-
-	if (NO_ARG(argv[0])) {
-		set = 0;
-		argv++;
-		argc--;
-	} else
-		set = 1;
-
-	x = (struct brd *) genget(argv[0], (char **)brds, sizeof(struct brd));
-	if (x == 0) {
-		printf("%% Internal error - Invalid argument %s\n", argv[0]);
-		return -1;
-	} else if (Ambiguous(x)) {
-		printf("%% Internal error - Ambiguous argument %s\n", argv[0]);
+	for (x = brds; x->name != NULL && strcmp(x->name, c->name) != 0; x++)
+		;
+	if (x->name == NULL) {
+		printf("%% Internal error - Invalid argument %s\n", c->name);
 		return -1;
 	}
-
-	argv++;
-	argc--;
-
-	/*
-	 * the ifpriority value is ignored for 'no ifpriority' but
-	 * we allow it anyways to retain compatibility with the
-	 * set form of this command
-	 */
-	if ((set && argc != 2) || (!set && (argc < 1 || argc > 2))) {
-		printf("%% %s <member> <%s>\n", x->name, x->descr);
-		printf("%% no %s <member> [%s]\n", x->name, x->descr);
-		return -1;
-	}
-
-	if (!br_portname(ifs, argv[0], cand))
+	args_string(&v[0], port, sizeof(port));
+	if (!br_portname(ifs, port, cand))
 	{
-		printf("%% invalid member name: %s\n", argv[0]);
+		printf("%% invalid member name: %s\n", port);
 		return -1;
 	}
 
-	/* ifbr_priority is a byte; the kernel takes the cost as an int */
-	if (set) {
-		val = strtonum(argv[1], 0, x->type == BRPRI_IFPRIORITY ?
-		    0xff : kern_bstp_max_path_cost, &errmsg);
-		if (errmsg) {
-			printf("%% invalid %s %s: %s\n", x->descr, argv[1],
-			    errmsg);
-			return -1;
-		}
+	/* the kernel takes the cost as an int */
+	if (x->type == BRPRI_IFCOST && val > kern_bstp_max_path_cost) {
+		printf("%% invalid %s %lld: too large\n", x->descr, val);
+		return -1;
 	}
 
 	switch(x->type) {
 	case BRPRI_IFPRIORITY:
 		if (set)
-			e = bridge_ifprio(ifs, ifname, argv[0], val, cand);
+			e = bridge_ifprio(ifs, ifname, port, val, cand);
 		else
-			e = bridge_ifprio(ifs, ifname, argv[0],
+			e = bridge_ifprio(ifs, ifname, port,
 			    DEFAULT_IFPRIORITY, cand);
 	break;
 	case BRPRI_IFCOST:
 		/* 0 has the kernel work the cost out from the speed again */
-		e = bridge_ifcost(ifs, ifname, argv[0], val, cand);
+		e = bridge_ifcost(ifs, ifname, port, val, cand);
 	break;
 	}
 

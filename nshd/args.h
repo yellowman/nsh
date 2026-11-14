@@ -166,6 +166,7 @@ enum { WG_PORT, WG_KEY, WG_RTABLE };			/* intwg_apply() */
 /* limits the rows share with their files */
 #define GROUP_NAMES	16	/* group names to a record; a longer line
 				   goes as several (args_each()) */
+#define BRPORTS		16	/* and a bridge's members */
 #define WPA_PSKLEN	sizeof(((struct ieee80211_wpapsk *)0)->i_psk)
 #define NWKEY_LEN	16	/* a WEP key's length, at most */
 #define NWKEY_TEXT	200	/* and a key line's, as typed */
@@ -182,6 +183,7 @@ enum { WG_PORT, WG_KEY, WG_RTABLE };			/* intwg_apply() */
 			    sizeof(struct ifmedia_description) - 1)) - 1)
 
 /* what the rows name: each file's apply and parse functions */
+args_applyfn	brport_apply, brval_apply, brproto_apply, brpri_apply;
 args_applyfn	intcarp_apply, intcpass_apply, intcnode_apply, intcdev_apply;
 args_applyfn	intnwkey_apply, intwpakey_apply, intwpa_apply, intwpalist_apply,
 		intjoin_apply, intchan_apply, intnwflag_apply, inttxpower_apply;

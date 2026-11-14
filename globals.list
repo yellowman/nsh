@@ -25,7 +25,7 @@ commands.c	scratch	in_rc next_ifname
 commands.c	table	Bridgelist Bridgelist_nitems Intlist
 			Intlist_nitems ahtab arpdowntab arphelp
 			arptimeouttab balancing_keys bgphelp bridgehelp
-			carploggingtab
+			brport_args brprotos carploggingtab
 			carppreempttab carptab cmdtab cmdtab2
 			cmdtab_nitems
 			conf_bridge conf_top

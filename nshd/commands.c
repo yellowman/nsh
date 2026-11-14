@@ -64,6 +64,7 @@
 #include <netinet/if_ether.h>
 #include <netinet/ip_carp.h>
 #include <netinet6/nd6.h>
+#include <net/if_bridge.h>
 #include <net/if_media.h>
 #include <net/if_pflow.h>
 #include <net/if_pppoe.h>
@@ -824,6 +825,9 @@ static const struct argkey balancing_keys[] = {
 	{ "ip-stealth", CARP_BAL_IPSTEALTH },
 	{ "ip-unicast", CARP_BAL_IPUNICAST }, { NULL }
 };
+static const struct argkey brprotos[] = {
+	{ "stp", BSTP_PROTO_STP }, { "rstp", BSTP_PROTO_RSTP }, { NULL }
+};
 /* data class names, as umb_classes() prints them, plus 2g, 3g and 4g */
 static const struct argkey class_keys[] = {
 	{ "none", MBIM_DATACLASS_NONE }, { "GPRS", MBIM_DATACLASS_GPRS },
@@ -874,6 +878,12 @@ static const struct argkey link_keys[] = {
 static const struct argkey ttl_keys[] = { { "copy", -1 }, { NULL } };
 
 /* the arguments that several rows have */
+static const struct arg brport_args[] = {
+	{ "interface",	ARG_WORD, 1, IFNAMSIZ - 1, ARG_NO, NULL,
+	    BRPORTS },
+	{ NULL }
+};
+
 static const struct arg ip_args[] = {
 	{ "address",	ARG_ADDR, 0, 0, ARG_OPT | ARG_NO },
 	{ "prefixlen",	ARG_NUM, 0, 128, ARG_OPT | ARG_NO,
@@ -1491,25 +1501,89 @@ struct intlist Bridgelist[] = {
 	{ "description", "Bridge description", CMPL0
 	  .nocmd = 1, .cand = CAND_EDIT,
 	  .apply = intdesc_apply, .args = description_args },
-	{ "member",	"Bridge member(s)",			CMPL(i) 0, 0, brport, 1, CAND_EDIT },
-	{ "span",	"Bridge spanning port(s)",		CMPL(i) 0, 0, brport, 1, CAND_EDIT },
-	{ "blocknonip",	"Block non-IP traffic forwarding on member(s)",		CMPL0 0, 0, brport, 1, CAND_EDIT },
-	{ "discover",	"Mark member(s) as discovery port(s)",	CMPL0 0, 0, brport, 1, CAND_EDIT },
-	{ "learning",	"Mark member(s) as learning port(s)",	CMPL0 0, 0, brport, 1, CAND_EDIT },
-	{ "stp",	"Enable 802.1D spanning tree protocol on member(s)",	CMPL0 0, 0, brport, 1, CAND_EDIT },
-	{ "edge",	"Mark STP member(s) as edge ports",	CMPL0 0, 0, brport, 1, CAND_EDIT },
-	{ "autoedge",	"Detect whether STP member(s) are edge ports",	CMPL0 0, 0, brport, 1, CAND_EDIT },
-	{ "ptp",	"Mark STP member(s) as point-to-point links",	CMPL0 0, 0, brport, 1, CAND_EDIT },
-	{ "autoptp",	"Detect whether STP member(s) are point-to-point",	CMPL0 0, 0, brport, 1, CAND_EDIT },
-	{ "locked",	"Accept only cached source addresses on member(s) (veb)",	CMPL0 0, 0, brport, 1, CAND_EDIT },
-	{ "maxaddr",	"Maximum address cache size",		CMPL0 0, 0, brval, 1, CAND_EDIT },
-	{ "timeout",	"Address cache timeout",		CMPL0 0, 0, brval, 1, CAND_EDIT },
-	{ "maxage",	"Time for 802.1D configuration to remain valid",	CMPL0 0, 0, brval, 1, CAND_EDIT },
-	{ "fwddelay",	"Time before bridge begins forwarding packets",		CMPL0 0, 0, brval, 1, CAND_EDIT },
-	{ "hellotime",	"802.1D configuration packet broadcast interval",	CMPL0 0, 0, brval, 1, CAND_EDIT },
-	{ "priority",	"Spanning priority for all members on an 802.1D bridge",CMPL0 0, 0, brval, 1, CAND_EDIT },
-	{ "holdcnt",	"Spanning tree packets sent before rate limiting",	CMPL0 0, 0, brval, 1, CAND_EDIT },
-	{ "proto",	"Spanning tree protocol, stp or rstp",	CMPL0 0, 0, brproto, 1, CAND_EDIT },
+	{ "member", "Bridge member(s)", CMPL(i)
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = brport_apply, .args = brport_args },
+	{ "span", "Bridge spanning port(s)", CMPL(i)
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = brport_apply, .args = brport_args },
+	{ "blocknonip", "Block non-IP traffic forwarding on member(s)", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = brport_apply, .args = brport_args },
+	{ "discover", "Mark member(s) as discovery port(s)", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = brport_apply, .args = brport_args },
+	{ "learning", "Mark member(s) as learning port(s)", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = brport_apply, .args = brport_args },
+	{ "stp", "Enable 802.1D spanning tree protocol on member(s)", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = brport_apply, .args = brport_args },
+	{ "edge", "Mark STP member(s) as edge ports", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = brport_apply, .args = brport_args },
+	{ "autoedge", "Detect whether STP member(s) are edge ports", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = brport_apply, .args = brport_args },
+	{ "ptp", "Mark STP member(s) as point-to-point links", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = brport_apply, .args = brport_args },
+	{ "autoptp", "Detect whether STP member(s) are point-to-point", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = brport_apply, .args = brport_args },
+	{ "locked",
+	  "Accept only cached source addresses on member(s) (veb)", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = brport_apply, .args = brport_args },
+	{ "maxaddr", "Maximum address cache size", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = brval_apply,
+	  .args = ARGS{
+		{ "maxaddr",	ARG_NUM, 0, UINT32_MAX },
+		{ NULL } } },
+	{ "timeout", "Address cache timeout", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = brval_apply,
+	  .args = ARGS{
+		{ "timeout",	ARG_NUM, 0, INT_MAX },
+		{ NULL } } },
+	{ "maxage", "Time for 802.1D configuration to remain valid", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = brval_apply,
+	  .args = ARGS{
+		{ "maxage",	ARG_NUM, 0, 0xff },
+		{ NULL } } },
+	{ "fwddelay", "Time before bridge begins forwarding packets", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = brval_apply,
+	  .args = ARGS{
+		{ "fwddelay",	ARG_NUM, 0, 0xff },
+		{ NULL } } },
+	{ "hellotime", "802.1D configuration packet broadcast interval", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = brval_apply,
+	  .args = ARGS{
+		{ "hellotime",	ARG_NUM, 0, 0xff },
+		{ NULL } } },
+	{ "priority",
+	  "Spanning priority for all members on an 802.1D bridge", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = brval_apply,
+	  .args = ARGS{
+		{ "priority",	ARG_NUM, 0, 0xffff },
+		{ NULL } } },
+	{ "holdcnt", "Spanning tree packets sent before rate limiting", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = brval_apply,
+	  .args = ARGS{
+		{ "holdcnt",	ARG_NUM, 0, UINT32_MAX },
+		{ NULL } } },
+	{ "proto", "Spanning tree protocol, stp or rstp", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = brproto_apply,
+	  .args = ARGS{
+		{ "proto",	ARG_NUM, 1, 0, 0, brprotos },
+		{ NULL } } },
 	{ "ping",	pinghelp,				CMPL0 0, 0, 0, 0, CAND_RUN },
 	{ "ping6",	ping6help,				CMPL0 0, 0, 0, 0, CAND_RUN },
 	{ "traceroute", tracerthelp,				CMPL0 0, 0, 0, 0, CAND_RUN },
@@ -1523,8 +1597,22 @@ struct intlist Bridgelist[] = {
 	{ "saveenv",	saveenvhelp,				CMPL0 0, 0, 0, 0, CAND_RUN },
 	{ "rule",	"Bridge layer 2 filtering rules",	CMPL0 0, 0, brrule, 0, CAND_EDIT },
 	{ "static",	"Static bridge address entry",		CMPL0 0, 0, brstatic, 1, CAND_EDIT },
-	{ "ifpriority",	"Spanning priority of a member on an 802.1D bridge",	CMPL0 0, 0, brpri, 1, CAND_EDIT },
-	{ "ifcost",	"Spanning tree path cost of a member on 802.1D bridge", CMPL0 0, 0, brpri, 1, CAND_EDIT },
+	{ "ifpriority",
+	  "Spanning priority of a member on an 802.1D bridge", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = brpri_apply,
+	  .args = ARGS{
+		{ "member",	ARG_WORD, 1, IFNAMSIZ - 1, ARG_NO },
+		{ "priority",	ARG_NUM, 0, 0xff },
+		{ NULL } } },
+	{ "ifcost",
+	  "Spanning tree path cost of a member on 802.1D bridge", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = brpri_apply,
+	  .args = ARGS{
+		{ "member",	ARG_WORD, 1, IFNAMSIZ - 1, ARG_NO },
+		{ "cost",	ARG_NUM, 0, UINT32_MAX },
+		{ NULL } } },
 	{ "link", "Link level options", CMPL0
 	  .nocmd = 1, .cand = CAND_EDIT,
 	  .apply = intlink_apply, .args = link_args },
@@ -1543,7 +1631,9 @@ struct intlist Bridgelist[] = {
 	{ "pvlan",	"Primary VLAN of a private VLAN (veb)",	CMPL0 0, 0, brpvlan, 1, CAND_EDIT },
 	{ "pvlan-isolated", "Isolated VLAN of a private VLAN (veb)", CMPL0 0, 0, brpvlan, 1, CAND_EDIT },
 	{ "pvlan-community", "Community VLAN of a private VLAN (veb)", CMPL0 0, 0, brpvlan, 1, CAND_EDIT },
-	{ "pvptags",	"Tag private VLANs with their primary (veb)",	CMPL0 0, 0, brport, 1, CAND_EDIT },
+	{ "pvptags", "Tag private VLANs with their primary (veb)", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = brport_apply, .args = brport_args },
 	{ "interface",  interfacehelp,				CMPL(i) 0, 0, int_interface, 1, CAND_EDIT },
 	{ "shutdown", "Shutdown bridge", CMPL0
 	  .nocmd = 1, .cand = CAND_EDIT,
@@ -1934,36 +2024,14 @@ static const struct confcmd conf_top[] = {
 };
 
 static const struct confcmd conf_bridge[] = {
-	{ "member",	brport },
-	{ "span",	brport },
-	{ "blocknonip",	brport },
-	{ "discover",	brport },
-	{ "learning",	brport },
-	{ "stp",	brport },
-	{ "edge",	brport },
-	{ "autoedge",	brport },
-	{ "ptp",	brport },
-	{ "autoptp",	brport },
-	{ "locked",	brport },
-	{ "maxaddr",	brval },
-	{ "timeout",	brval },
-	{ "maxage",	brval },
-	{ "fwddelay",	brval },
-	{ "hellotime",	brval },
-	{ "priority",	brval },
-	{ "holdcnt",	brval },
-	{ "proto",	brproto },
 	{ "rule",	brrule },
 	{ "static",	brstatic },
-	{ "ifpriority",	brpri },
-	{ "ifcost",	brpri },
 	{ "protect",	brprotect },
 	{ "untagged",	brvlan },
 	{ "tagged",	brvlan },
 	{ "pvlan",	brpvlan },
 	{ "pvlan-isolated", brpvlan },
 	{ "pvlan-community", brpvlan },
-	{ "pvptags",	brport },
 };
 
 /*
