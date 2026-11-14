@@ -2064,8 +2064,28 @@ Command cmdtab[] = {
 		{ "name",	ARG_REST, 1, 63, ARG_OPT },
 		{ NULL } } },
 	{ "group",	grouphelp,	CMPL(gth) (char **)grouptab, sizeof(Menu), group, 1, 1, 1, 0, CAND_RUN },
-	{ "arp",	arphelp,	CMPL0 0, 0, arpset,		1, 1, 1, 0, CAND_EDIT },
-	{ "ndp",	ndphelp,	CMPL0 0, 0, ndpset,		1, 1, 1, 0, CAND_EDIT },
+	{ "arp", arphelp, CMPL0
+	  .needsession = 1, .needconfig = 1, .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = arpentry_apply,
+	  .args = ARGS{
+		{ "address",	ARG_ADDR, 0, 0, ARG_INET | ARG_NO,
+		  .help = "inet addr" },
+		{ "lladdr",	ARG_ADDR, 0, 0, ARG_LINK,
+		  .help = "ether addr" },
+		{ "flags",	ARG_BITS, 0, 0, ARG_OPT, arpentry_keys,
+		  .help = "temp|permanent|pub" },
+		{ NULL } } },
+	{ "ndp", ndphelp, CMPL0
+	  .needsession = 1, .needconfig = 1, .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = ndpentry_apply,
+	  .args = ARGS{
+		{ "address",	ARG_ADDR, 0, 0, ARG_INET6 | ARG_NO,
+		  .help = "inet6 addr" },
+		{ "lladdr",	ARG_ADDR, 0, 0, ARG_LINK,
+		  .help = "ether addr" },
+		{ "flags",	ARG_BITS, 0, 0, ARG_OPT, ndpentry_keys,
+		  .help = "temp|proxy" },
+		{ NULL } } },
 	{ "nameserver", nameserverhelp, CMPL0
 	  .needsession = 1, .needconfig = 1, .nocmd = 1, .cand = CAND_EDIT,
 	  .apply = nameserver_apply,
@@ -2174,8 +2194,6 @@ size_t cmdtab_nitems = nitems(cmdtab);
  */
 static const struct confcmd conf_top[] = {
 	{ "login",	loginset,	CF_NO },
-	{ "arp",	arpset,		CF_NO },
-	{ "ndp",	ndpset,		CF_NO },
 	{ "route",	route,		CF_NO },
 };
 

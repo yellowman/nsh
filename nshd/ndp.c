@@ -93,7 +93,6 @@
 
 #include <arpa/inet.h>
 
-#include <stdarg.h>
 #include <stdio.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -107,6 +106,7 @@
 #include "settings.h"
 #include "facts.h"
 #include "showfacts.h"
+#include "args.h"
 
 /* packing rule for routing socket */
 #define ROUNDUP(a) \
@@ -115,22 +115,29 @@
 
 static int rtsock = -1;
 
-char host_buf[NI_MAXHOST];		/* getnameinfo() */
 
 static int getsocket(void);
-int parse_host(const char *, struct sockaddr_in6 *);
-int ndpset(int, char **, ...);
-int ndpdelete(const char *);
+int ndpdelete(const struct sockaddr_in6 *);
 void ndpflush(void);
 static struct in6_nbrinfo *getnbrinfo(struct in6_addr *, int);
-int ndp_ether_aton(const char *, u_char *);
 int rtmsg_ndp(int);
 int rtget_ndp(struct sockaddr_in6 **, struct sockaddr_dl **);
 void conf_ndp(FILE *output, char *delim, int);
 void conf_ndp_entry(FILE *, char *, struct  rt_msghdr *);
 static void conf_ndp_line(FILE *, char *, struct sockaddr_in6 *,
     struct sockaddr_dl *, int);
-static int ndp_cand(const char *, struct sockaddr_dl *, struct cand *);
+static int ndp_cand(const struct sockaddr_in6 *, struct sockaddr_dl *,
+    struct cand *);
+
+/*
+ * ndp: an IPv6 address, and to set its entry, a MAC address and the
+ * entry's options
+ */
+#define NDP_TEMP	0x1
+#define NDP_PROXY	0x2
+const struct argkey ndpentry_keys[] = {
+	{ "temp", NDP_TEMP }, { "proxy", NDP_PROXY }, { NULL }
+};
 
 static int
 getsocket(void)
@@ -164,82 +171,46 @@ static struct	sockaddr_dl ifp_m = { sizeof(ifp_m), AF_LINK };
 static time_t	expire_time;
 static int	flags;
 
-/*
- * Set an individual neighbor cache entry
- */
 int
-ndpset(int argc, char *argv[], ...)
+ndpentry_apply(const struct argcmd *c, int set, const struct facts_value *v,
+    char *ifname, int ifs, struct cand *cand)
 {
 	struct sockaddr_in6 *sin = &sin_m;
 	struct sockaddr_dl *sdl;
 	struct rt_msghdr *rtm = &(m_rtmsg.m_rtm);
-	char *eaddr, *host;
-	u_char *ea;
-	int set = 1, i;
-	struct cand *cand;
-	va_list ap;
-
-	va_start(ap, argv);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
+	struct sockaddr_storage ss;
+	char host[NI_MAXHOST];
+	long long opt = v[2].type != FACT_NONE ? v[2].v.i : 0;
 
 	sdl_m = blank_sdl;
 	sin_m = blank_sin;
-
-	if (NO_ARG(argv[0])) {
-		set = 0;
-		argc--;
-		argv++;
-	}
-
-	if (argc < (set ? 3 : 2) || argc > 5) {
-		printf("%% %s <inet6 addr> <ether addr> [temp] [proxy]\n",
-		    argv[0]);
-		printf("%% no %s <inet6 addr> [<ether addr> [temp] [proxy]]\n",
-		    argv[0]);
-		return -1;
-	}
-
+	args_sockaddr(&v[0], 0, &ss);
+	getnameinfo((struct sockaddr *)&ss, ss.ss_len, host, sizeof(host),
+	    NULL, 0, NI_NUMERICHOST);
 	if (!set) {
 		if (cand != NULL)
-			return ndp_cand(argv[1], NULL, cand);
-		return ndpdelete(argv[1]);
-	}
-
-	if (argc >= 3) {
-		host = argv[1];
-		eaddr = argv[2];
-	} else {
-		host = argv[1];
-		eaddr = NULL;
+			return ndp_cand((struct sockaddr_in6 *)&ss, NULL, cand);
+		return ndpdelete((struct sockaddr_in6 *)&ss);
 	}
 
 	if (cand == NULL && getsocket() < 0)
 		return -1;
 
-	if (parse_host(host, sin))
-		return -1;
-	ea = (u_char *)LLADDR(&sdl_m);
-	if (ndp_ether_aton(eaddr, ea) != 0)
-		return -1;
+	*sin = *(struct sockaddr_in6 *)&ss;
+	memcpy(LLADDR(&sdl_m), v[1].v.a.bytes, 6);
 	sdl_m.sdl_alen = 6;
 	expire_time = 0;
 	flags = 0;
-	for (i = 3; i < argc; i++) {
-		if (isprefix(argv[i], "temp")) {
-			struct timeval now;
+	if (opt & NDP_TEMP) {
+		struct timeval now;
 
-			gettimeofday(&now, 0);
-			expire_time = now.tv_sec + 20 * 60;
-		} else if (isprefix(argv[i], "proxy")) {
-			flags |= RTF_ANNOUNCE;
-		} else {
-			printf("%% invalid parameter: %s\n", argv[i]);
-			return -1;
-		}
+		gettimeofday(&now, 0);
+		expire_time = now.tv_sec + 20 * 60;
 	}
+	if (opt & NDP_PROXY)
+		flags |= RTF_ANNOUNCE;
 	if (cand != NULL)
-		return ndp_cand(host, &sdl_m, cand);
+		return ndp_cand(sin, &sdl_m, cand);
 
 	if (rtget_ndp(&sin, &sdl)) {
 		printf("%% RTM_GET(%s) failed\n", host);
@@ -280,16 +251,15 @@ overwrite:
  * host's entry, or with sdl NULL, remove host's line
  */
 static int
-ndp_cand(const char *host, struct sockaddr_dl *sdl, struct cand *cand)
+ndp_cand(const struct sockaddr_in6 *addr, struct sockaddr_dl *sdl,
+    struct cand *cand)
 {
-	struct sockaddr_in6 sin6 = blank_sin;
+	struct sockaddr_in6 sin6 = *addr;
 	char *buf = NULL;
 	size_t len;
 	FILE *f;
 	int r;
 
-	if (parse_host(host, &sin6))
-		return -1;
 	if (sdl == NULL)
 		return cand_setting(cand, ST_OFF, "ndp %s", routename6(&sin6));
 	if (expire_time != 0) {
@@ -302,7 +272,7 @@ ndp_cand(const char *host, struct sockaddr_dl *sdl, struct cand *cand)
 	}
 	conf_ndp_line(f, "ndp ", &sin6, sdl, flags);
 	if (fclose(f) == EOF || len == 0) {
-		printf("%% ndp_cand: no line for %s\n", host);
+		printf("%% ndp_cand: no line for %s\n", routename6(&sin6));
 		free(buf);
 		return -1;
 	}
@@ -316,17 +286,18 @@ ndp_cand(const char *host, struct sockaddr_dl *sdl, struct cand *cand)
  * Delete a neighbor cache entry
  */
 int
-ndpdelete(const char *host)
+ndpdelete(const struct sockaddr_in6 *addr)
 {
 	struct sockaddr_in6 *sin = &sin_m;
 	struct rt_msghdr *rtm = &m_rtmsg.m_rtm;
 	struct sockaddr_dl *sdl;
+	char host[NI_MAXHOST];
 
+	getnameinfo((const struct sockaddr *)addr, addr->sin6_len, host,
+	    sizeof(host), NULL, 0, NI_NUMERICHOST);
 	if (getsocket() < 0)
 		return -1;
-	sin_m = blank_sin;
-	if (parse_host(host, sin))
-		return -1;
+	sin_m = *addr;
 	if (rtget_ndp(&sin, &sdl)) {
 		printf("%% RTM_GET(%s) failed\n", host);
 		return -1;
@@ -448,10 +419,8 @@ ndpflush(void)
 
 		if (IN6_IS_ADDR_MULTICAST(&sin->sin6_addr))
 			continue;
-		getnameinfo((struct sockaddr *)sin, sin->sin6_len, host_buf,
-		    sizeof(host_buf), NULL, 0, NI_NUMERICHOST);
 		if (rtm->rtm_flags & RTF_CLONED)
-			ndpdelete(host_buf);
+			ndpdelete(sin);
 	}
 
 	free(buf);
@@ -540,25 +509,6 @@ getnbrinfo(struct in6_addr *addr, int ifindex)
 
 	close(s);
 	return &nbi;
-}
-
-int
-ndp_ether_aton(const char *a, u_char *n)
-{
-	int i, j, o[6];
-
-	i = sscanf(a, "%x:%x:%x:%x:%x:%x", &o[0], &o[1], &o[2],
-	    &o[3], &o[4], &o[5]);
-	for (j = 0; i == 6 && j < 6; j++)
-		if ((u_int)o[j] > 0xff)
-			i = 0;
-	if (i != 6) {
-		printf("%% ndp_ether_aton: invalid Ethernet address '%s'\n", a);
-		return (1);
-	}
-	for (i = 0; i < 6; i++)
-		n[i] = o[i];
-	return (0);
 }
 
 int

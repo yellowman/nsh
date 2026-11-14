@@ -188,6 +188,7 @@ enum { WG_PORT, WG_KEY, WG_RTABLE };			/* intwg_apply() */
 			    sizeof(struct ifmedia_description) - 1)) - 1)
 
 /* what the rows name: each file's apply and parse functions */
+args_applyfn	arpentry_apply;
 args_applyfn	brport_apply, brval_apply, brproto_apply, brrule_apply,
 		brstatic_apply, brpri_apply, brprotect_apply, brvlan_apply,
 		brpvlan_apply;
@@ -207,6 +208,7 @@ args_parsefn	intip_parse, intpwe3_parse, intdhcrelay6_parse, intlladdr_parse;
 args_applyfn	intmedia_apply, intmediaopt_apply;
 args_parsefn	intmedia_parse, intmediaopt_parse;
 args_applyfn	nameserver_apply;
+args_applyfn	ndpentry_apply;
 args_applyfn	intsyncdev_apply, intsyncpeer_apply, intmaxupd_apply;
 args_applyfn	intsppp_apply, intpppoe_apply;
 args_applyfn	inttrunkport_apply, inttrunkproto_apply, intlacp_apply;
@@ -215,6 +217,7 @@ args_applyfn	intvnetid_apply, inttunnel_apply, intcache_apply,
 args_applyfn	intumb_apply;
 args_applyfn	intwg_apply, intwgpeer_apply;
 /* the words of arguments whose values their files alone know */
+extern const struct argkey arpentry_keys[], ndpentry_keys[];
 extern const struct argkey nwflags[];
 extern const struct argkey wpaprotos[], wpaakms[], wpaciphers[];
 extern const struct argkey wpagroupciphers[];

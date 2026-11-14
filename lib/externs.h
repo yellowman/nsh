@@ -530,7 +530,6 @@ int conf_trunk(FILE *output, int ifs, char *ifname);
 int who(int, char **, ...);
 
 /* arp.c */
-int arpset(int, char **, ...);
 struct in_addr;
 struct addrinfo;
 int numeric_addrinfo(const char *, const char *, int, int,
@@ -542,9 +541,8 @@ struct sockaddr_dl;
 char *ether_str(struct sockaddr_dl *);
 
 /* ndp.c */
-int ndpset(int, char **, ...);
-int ndpdelete(const char *);
 struct sockaddr_in6;
+int ndpdelete(const struct sockaddr_in6 *);
 int parse_host(const char *, struct sockaddr_in6 *);
 void ndpflush(void);
 void conf_ndp(FILE *output, char *delim, int);
