@@ -55,6 +55,7 @@
 #include "ctl.h"
 #include "settings.h"
 #include "facts.h"
+#include "args.h"
 #include "showfacts.h"
 #include "kfacts.h"
 #include "session.h"
@@ -1652,37 +1653,11 @@ intpatch(int argc, char **argv, ...)
 }
 
 int
-intmtu(int argc, char **argv, ...)
+intmtu_apply(const struct argcmd *c, int set, const struct facts_value *v,
+    char *ifname, int ifs, struct cand *cand)
 {
 	struct ifreq ifr;
-	int set, max;
-	const char *errmsg = NULL;
-	va_list ap;
-	struct cand *cand;
-	char *ifname;
-	int ifs;
-
-	va_start(ap, argv);
-	ifname = va_arg(ap, char *);
-	ifs = va_arg(ap, int);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
-
-	if (NO_ARG(argv[0])) {
-		set = 0;
-		argc--;
-		argv++;
-	} else
-		set = 1;
-
-	argc--;
-	argv++;
-
-	if ((!set && argc > 1) || (set && argc != 1)) {
-		printf("%% mtu <mtu>\n");
-		printf("%% no mtu [mtu]\n");
-		return -1;
-	}
+	int max;
 
 	/* nor has a default to go back to */
 	if (default_mtu(ifname) == MTU_IGNORE) {
@@ -1690,14 +1665,7 @@ intmtu(int argc, char **argv, ...)
 		    ifname);
 		return -1;
 	}
-	if (set) {
-		ifr.ifr_mtu = strtonum(argv[0], 1, INT_MAX, &errmsg);
-		if (errmsg) {
-			printf("%% Invalid MTU %s: %s\n", argv[0], errmsg);
-			return -1;
-		}
-	} else
-		ifr.ifr_mtu = default_mtu(ifname);
+	ifr.ifr_mtu = set ? v[0].v.i : default_mtu(ifname);
 	/* sppp takes 128 or more, and pppoe no more than its dev allows */
 	if (strncmp(ifname, "pppoe", strlen("pppoe")) == 0) {
 		max = pppoe_maxmtu(ifs, ifname, cand);
@@ -1795,11 +1763,6 @@ intkeepalive(int argc, char **argv, ...)
 
 	return 0;
 }
-
-#define MPLSLABEL 1
-#define TUNNELDOMAIN 2
-#define TXPRIO 3
-#define RXPRIO 4
 
 static struct mplsc {
 	char *name;
@@ -2528,82 +2491,23 @@ intdhcrelay6(int argc, char **argv, ...)
 }
 
 int
-intmetric(int argc, char **argv, ...)
+intmetric_apply(const struct argcmd *c, int set, const struct facts_value *v,
+    char *ifname, int ifs, struct cand *cand)
 {
 	struct ifreq ifr;
-	int set, max;
-	unsigned long theioctl;
-	char *type;
-	const char *errmsg = NULL;
-	va_list ap;
-	struct cand *cand;
-	char *ifname;
-	int ifs;
 
-	va_start(ap, argv);
-	ifname = va_arg(ap, char *);
-	ifs = va_arg(ap, int);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
-
-	if (NO_ARG(argv[0])) {
-		set = 0;
-		argc--;
-		argv++;
-	} else
-		set = 1;
-
-	if (isprefix(argv[0], "metric")) {
-		type = "metric";
-		max = INT_MAX;
-		theioctl = SIOCSIFMETRIC;
-	} else if (isprefix(argv[0], "priority")) {
-		type = "priority";
-		max = 15;
-		theioctl = SIOCSIFPRIORITY;
-	} else {
-		printf("%% intmetric internal failure\n");
-		return -1;
-	}
-
-	argc--;
-	argv++;
-
-	if ((!set && argc > 1) || (set && argc != 1)) {
-		printf("%% %s <%s>\n", type, type);
-		printf("%% no %s [%s]\n", type, type);
-		return -1;
-	}
-
-	if (set) {
-		int num;
-
-		num = strtonum(argv[0], 0, max, &errmsg);
-		if (errmsg) {
-			printf("%% Invalid %s %s: %s\n", type, argv[0],
-			    errmsg);
-			return -1;
-		}
-		ifr.ifr_metric = num;
-	} else {
-		ifr.ifr_metric = 0;
-	}
-
-	if (errmsg) {
-		printf("%% Invalid %s %s: %s\n", type, argv[0], errmsg);
-		return -1;
-	}
-
+	ifr.ifr_metric = set ? v[0].v.i : 0;
 	if (cand != NULL) {
 		if (ifr.ifr_metric != 0)
-			return cand_setting(cand, ST_ON, "%s %d", type,
+			return cand_setting(cand, ST_ON, "%s %d", c->name,
 			    ifr.ifr_metric);
-		return cand_setting(cand, ST_DEFAULT, "%s", type);
+		return cand_setting(cand, ST_DEFAULT, "%s", c->name);
 	}
 
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
-	if (ioctl(ifs, theioctl, (caddr_t)&ifr) < 0) {
-		printf("%% intmetric: SIOCSIF%s: %s\n", type,
+	if (ioctl(ifs, c->code == IFPRIORITY ? SIOCSIFPRIORITY : SIOCSIFMETRIC,
+	    (caddr_t)&ifr) < 0) {
+		printf("%% intmetric: SIOCSIF%s: %s\n", c->name,
 		    strerror(errno));
 		return -1;
 	}
@@ -2612,54 +2516,12 @@ intmetric(int argc, char **argv, ...)
 }
 
 int
-intllprio(int argc, char **argv, ...)
+intllprio_apply(const struct argcmd *c, int set, const struct facts_value *v,
+    char *ifname, int ifs, struct cand *cand)
 {
 	struct ifreq ifr;
-	int set;
-	const char *errmsg = NULL;
-	va_list ap;
-	struct cand *cand;
-	char *ifname;
-	int ifs;
 
-	va_start(ap, argv);
-	ifname = va_arg(ap, char *);
-	ifs = va_arg(ap, int);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
-
-	if (NO_ARG(argv[0])) {
-		set = 0;
-		argc--;
-		argv++;
-	} else
-		set = 1;
-
-	if ((!set && argc > 2) || (set && argc != 2)) {
-		printf("%% llpriority <priority>\n");
-		printf("%% no llpriority [priority]\n");
-		return -1;
-	}
-
-	if (set) {
-		int num;
-
-		num = strtonum(argv[1], IFQ_MINPRIO, IFQ_MAXPRIO, &errmsg);
-		if (errmsg) {
-			printf("%% Invalid llpriority %s: %s\n", argv[1],
-			    errmsg);
-			return -1;
-		}
-		ifr.ifr_llprio = num;
-	} else {
-		ifr.ifr_llprio = default_llpriority(ifname);
-	}
-
-	if (errmsg) {
-		printf("%% Invalid llpriority %s: %s\n", argv[1], errmsg);
-		return -1;
-	}
-
+	ifr.ifr_llprio = set ? v[0].v.i : default_llpriority(ifname);
 	if (cand != NULL) {
 		if (ifr.ifr_llprio != default_llpriority(ifname))
 			return cand_setting(cand, ST_ON, "llpriority %d",
@@ -2768,57 +2630,23 @@ intgroup(int argc, char **argv, ...)
 }
 
 int
-intrtlabel(int argc, char **argv, ...)
+intrtlabel_apply(const struct argcmd *c, int set,
+    const struct facts_value *v, char *ifname, int ifs, struct cand *cand)
 {
-	int set;
 	struct ifreq ifr;
-	va_list ap;
-	struct cand *cand;
-	char *ifname;
-	int ifs;
+	char label[RTLABEL_LEN] = "";
 
-	va_start(ap, argv);
-	ifname = va_arg(ap, char *);
-	ifs = va_arg(ap, int);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
-
-	if (NO_ARG(argv[0])) {
-		set = 0;
-		argc--;
-		argv++;
-	} else
-		set = 1;
-
-	argc--;
-	argv++;
-
-	bzero(&ifr, sizeof(ifr));
-
-	strlcpy(ifr.ifr_name, ifname, IFNAMSIZ);
-
-	if (set) {
-		if (argc < 1) {
-			printf("%% rtlabel <route-label>\n");
-			printf("%% no rtlabel [route-label]\n");
-			return -1;
-		}
-		if (strlen(argv[0]) >= RTLABEL_LEN) {
-			printf("%% label too long (max %d char)\n",
-			    RTLABEL_LEN - 1);
-			return -1;
-		}
-		ifr.ifr_data = (caddr_t)argv[0];
-	} else {
-		ifr.ifr_data = (caddr_t)(const char *)"";
-	}
-
+	if (set)
+		args_string(&v[0], label, sizeof(label));
 	if (cand != NULL) {
 		if (set)
-			return cand_setting(cand, ST_ON, "rtlabel %s", argv[0]);
+			return cand_setting(cand, ST_ON, "rtlabel %s", label);
 		return cand_setting(cand, ST_DEFAULT, "rtlabel");
 	}
 
+	bzero(&ifr, sizeof(ifr));
+	strlcpy(ifr.ifr_name, ifname, IFNAMSIZ);
+	ifr.ifr_data = (caddr_t)label;
 	if (ioctl(ifs, SIOCSIFRTLABEL, &ifr) == -1) {
 		printf("%% intrtlabel: SIOCSIFRTLABEL: %s\n", strerror(errno));
 		return -1;
@@ -3693,49 +3521,14 @@ intrdomain(int argc, char **argv, ...)
 }
 
 int
-intdesc(int argc, char **argv, ...)
+intdesc_apply(const struct argcmd *c, int set, const struct facts_value *v,
+    char *ifname, int ifs, struct cand *cand)
 {
-	int set, i;
-	size_t len;
-	char desc[IFDESCRSIZE];
+	char desc[IFDESCRSIZE] = "";
 	struct ifreq ifr;
-	va_list ap;
-	struct cand *cand;
-	char *ifname;
-	int ifs;
 
-	va_start(ap, argv);
-	ifname = va_arg(ap, char *);
-	ifs = va_arg(ap, int);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
-
-	if (NO_ARG(argv[0])) {
-		set = 0;
-		argv++;
-		argc--;
-	} else
-		set = 1;
-
-	argv++;
-	argc--;
-
-	if (set && argc < 1) {
-		printf("%% description <text of description>\n");
-		printf("%% no description\n");
-		return -1;
-	}
-
-	/* SIOCSIFDESCR refuses a longer description (ENAMETOOLONG) */
-	for (i = 0, len = 0; set && i < argc; i++)
-		len += strlen(argv[i]) + (i > 0);
-	if (len >= sizeof(desc)) {
-		printf("%% description can be at most %zu bytes\n",
-		    sizeof(desc) - 1);
-		return -1;
-	}
-	argvtostring(argc, argv, desc, sizeof(desc));
-
+	if (set)
+		args_string(&v[0], desc, sizeof(desc));
 	if (cand != NULL) {
 		if (set && desc[0] != '\0')
 			return cand_setting(cand, ST_ON,
@@ -3743,10 +3536,7 @@ intdesc(int argc, char **argv, ...)
 		return cand_setting(cand, ST_OFF, "description");
 	}
 
-	if (set)
-		ifr.ifr_data = (caddr_t)&desc;
-	else
-		ifr.ifr_data = (caddr_t)"";
+	ifr.ifr_data = (caddr_t)&desc;
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 	if (ioctl(ifs, SIOCSIFDESCR, &ifr) < 0) {
 		printf("%% intdesc: SIOCSIFDESCR: %s\n", strerror(errno));

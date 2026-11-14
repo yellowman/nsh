@@ -29,7 +29,8 @@ commands.c	table	Bridgelist Bridgelist_nitems Intlist
 			cmdtab_nitems
 			conf_bridge conf_if conf_top
 			crontabhelp ddbhelp ddbtab
-			defaultttltab demotecountertab dhcp6leasehelp
+			defaultttltab demotecountertab description_args
+			dhcp6leasehelp
 			dhcphelp
 			directedbroadcaststab
 			dvmrphelp eigrphelp

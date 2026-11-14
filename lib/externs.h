@@ -213,19 +213,16 @@ extern int in_config;
 int conf_mode(char *);
 int conf_ordered(char *);
 
-/* A command a configuration has (conf_cmd()) */
+/* A command a configuration has that runs with its words (conf_cmd()) */
 struct confcmd {
 	char	*name;
 	int	(*handler)(int, char **, ...);
 	int	 flags;
 };
-#define CF_NO		0x1	/* a top-level one takes no */
-#define CF_IF		0x2	/* it heads an interface's block */
-#define CF_BRIDGE	0x4	/* a bridge's block */
-#define CF_RTABLE	0x8	/* an rtable's block */
-const struct confcmd *conf_cmd(int, int);
 int conf_find(int, char *, char **);
 int conf_run(int, int, int, char **, char *);
+struct facts_value;
+int conf_run_values(int, int, int, const struct facts_value *, char *);
 void conf_reading(int);
 void conf_block_end(int);
 void conf_settle(void);
@@ -250,6 +247,8 @@ extern size_t cursor_argo;
  * A command's handler returns 0 when it did what was asked, -1 when it
  * did not, having said why, and 1 to leave the mode it runs in
  */
+struct arg;
+struct argcmd;
 typedef struct cmd {
 	char *name;		/* command name */
 	char *help;		/* help string (NULL for no help) */
@@ -284,6 +283,16 @@ struct intlist {
 	int (*handler)(int, char **, ...);       /* Routine to perform */
 	int nocmd;		/* Can we specify 'no ...command...'? */
 	int cand;		/* What it does in configure private (CAND_*) */
+	/*
+	 * If config parses the command's line into values (nshd's
+	 * args.h): the function that applies them, a code that tells it
+	 * which of its commands this is, and the line's arguments, ended
+	 * by one with no name. Such a row needs no handler
+	 */
+	int (*apply)(const struct argcmd *, int, const struct facts_value *,
+	    char *, int, struct cand *);
+	int code;
+	const struct arg *args;
 };
 
 /* generic help /complt struct */
@@ -403,24 +412,19 @@ extern struct ghs intiphelp[];
 extern struct ghs intip6help[];
 int intip(int, char **, ...);
 int intipcp(char *, int, int, char **, struct cand *);
-int intmtu(int, char **, ...);
 int intkeepalive(int, char **, ...);
 int intrdomain(int, char **, ...);
 int intdhcrelay(int, char **, ...);
 int intdhcrelay6(int, char **, ...);
-int intmetric(int, char **, ...);
-int intllprio(int, char **, ...);
 int intflags(int, char **, ...);
 int intxflags(int, char **, ...);
 int intaf(char *, int, int, char **);
 int intlink(int, char **, ...);
 int intnwid(int, char **, ...);
 int intpowersave(int, char **, ...);
-int intdesc(int, char **, ...);
 int intpflow(int, char **, ...);
 int intlladdr(int, char **, ...);
 int intgroup(int, char **, ...);
-int intrtlabel(int, char **, ...);
 int intparent(int, char **, ...);
 int intpatch(int, char **, ...);
 int intmpls(int, char **, ...);

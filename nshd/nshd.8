@@ -384,7 +384,12 @@ A script and a save run as root.
 config makes a commit's script into edits, and system runs the edits and
 never the script's text.
 Each edit names one of the commands a configuration has, by its place
-among them, with the line's words.
+among them, with the line's words, or, for a command whose fields
+config reads from them, such as an interface's
+.Ic mtu
+or
+.Ic description ,
+with their values.
 A line takes an address in numeric form only, so
 .Nm
 sends no DNS query and reads no DNS answer.
@@ -402,7 +407,8 @@ has no edit.
 config refuses a commit with such a line and reports each one; the boot
 leaves each one out and reports it.
 system checks every edit before it runs any, and runs the script only
-if each edit names a command that exists, where it belongs.
+if each edit names a command that exists, where it belongs, and each
+value has its field's type and is within its bounds.
 An edit that runs a daemon's program fails unless the program exits 0,
 and then leaves the daemon's state as it was.
 A disable's pkill may also exit 1, which says no such daemon runs.

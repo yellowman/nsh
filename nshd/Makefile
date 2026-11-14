@@ -30,6 +30,7 @@ SRCS+=	trunk.c who.c stringlist.c utils.c sqlite3.c ppp.c
 SRCS+=	nopt.c pflow.c wg.c nameserver.c ndp.c umb.c cmdargs.c ctlargs.c
 SRCS+=	makeargv.c conftree.c candidate.c settings.c
 SRCS+=	kernel.c commit.c facts.c showfacts.c autoconf.c session.c kfacts.c
+SRCS+=	args.c
 SRCS+=	renderif.c renderrt.c rendersys.c answer.c
 CLEANFILES+=compile.c
 

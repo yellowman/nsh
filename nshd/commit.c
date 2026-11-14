@@ -98,6 +98,8 @@
 #include "settings.h"
 #include "kfacts.h"
 #include "session.h"
+#include "facts.h"
+#include "args.h"
 
 
 struct commit {
@@ -130,14 +132,16 @@ struct claims {
 };
 
 /*
- * A script's edits: records, each this head and len bytes after it. For
- * a line, the bytes are its words after its command's name and any "no",
- * each ending in a NUL; for a daemon's rules, their lines, each ending in
- * a newline
+ * A script's edits. Each record is this header followed by len bytes:
+ * for a line, its words after the command and any "no", each ending in
+ * a NUL; for a line whose command parses its arguments (an argcmd in
+ * its row, args.h), the parsed values instead, as a facts template and
+ * record; for a daemon's rules, their lines, each ending in a newline.
  */
 struct edit {
 	uint8_t		kind;		/* EDIT_* */
 	uint8_t		no;		/* 1 if the line starts with "no" */
+	uint8_t		typed;		/* 1 if the bytes are parsed values */
 	uint16_t	row;		/* command row, or daemon index */
 	int32_t		act;		/* what the daemon does (ctl_act()) */
 	uint32_t	len;
@@ -168,6 +172,10 @@ static int edits_line(FILE *, int, char *, int *, int *, char *);
 static int edit_put(FILE *, struct edit *, char **, int, char *, size_t);
 static int edits_check(char *, size_t);
 static int edit_words(char *, size_t, char **, int);
+static int edit_args(FILE *, struct edit *, const struct argcmd *, int,
+    char **);
+static int edit_typed(const struct argcmd *, struct edit *, char *, int,
+    int, char *);
 static int edits_apply(char *, size_t);
 static int check_if(struct cnode *, char *, char *, struct claims *);
 static int check_ports(struct cnode *, char *, char *, char *,
@@ -950,7 +958,8 @@ done:
 static int
 edits_line(FILE *f, int ctx, char *l, int *block, int *rd, char *head)
 {
-	const struct confcmd *c = NULL;
+	const struct argcmd *c = NULL;
+	struct argcmd cmd;
 	struct edit e;
 	char *t, *w[NARGS], *daemon;
 	int n, i, d, row, act;
@@ -989,7 +998,7 @@ edits_line(FILE *f, int ctx, char *l, int *block, int *rd, char *head)
 	}
 	if (row == -1)
 		goto refused;
-	c = conf_cmd(ctx, row);
+	c = conf_cmd(ctx, row, &cmd);
 	if (ctx == CTX_TOP && ((e.no && (c->flags & CF_NO) == 0) ||
 	    (*block == CF_RTABLE && (c->flags & (CF_IF | CF_BRIDGE |
 	    CF_RTABLE)) != 0)))
@@ -997,7 +1006,8 @@ edits_line(FILE *f, int ctx, char *l, int *block, int *rd, char *head)
 	e.kind = ctx == CTX_TOP ? EDIT_TOP : ctx == CTX_IF ? EDIT_IF :
 	    EDIT_BRIDGE;
 	e.row = row;
-	if (edit_put(f, &e, w + i + 1, n - i - 1, NULL, 0) == -1) {
+	if (c->apply != NULL ? edit_args(f, &e, c, n, w) == -1 :
+	    edit_put(f, &e, w + i + 1, n - i - 1, NULL, 0) == -1) {
 		free(t);
 		return -1;
 	}
@@ -1046,20 +1056,113 @@ fail:
 	return -1;
 }
 
+/* facts output callback: write the encoded units to f */
+static void
+edit_emit(void *f, const void *p, size_t len)
+{
+	fwrite(p, len, 1, f);
+}
+
 /*
- * Are buf's len bytes edits that may run? Each record must be whole, of
- * a known kind, and name a command a configuration has, in the block
- * where it belongs, or a daemon action a configuration can have, with
- * its words or rules whole. 0 if so, else -1 after saying why
+ * Parse line w (n words) with a's arguments (args_parse()) and write it
+ * to f as edit e, carrying the parsed values. Returns 0, or -1 after
+ * printing an error.
+ */
+static int
+edit_args(FILE *f, struct edit *e, const struct argcmd *a, int n, char **w)
+{
+	struct facts_field	 fl[ARGS_MAX];
+	struct facts_kind	 k;
+	struct facts_out	 o;
+	struct argvals		 v;
+	FILE			*m;
+	char			*buf = NULL;
+	size_t			 len = 0;
+	int			 r = -1;
+
+	if (args_parse(a, n, w, &v) == -1)
+		return -1;
+	if ((m = open_memstream(&buf, &len)) == NULL) {
+		printf("%% commit: %s\n", strerror(errno));
+		return -1;
+	}
+	args_kind(a, &k, fl);
+	facts_out_init(&o, edit_emit, m);
+	if (facts_record(&o, &k, v.v) == -1)
+		printf("%% commit: %s: its values do not fit\n", a->name);
+	else
+		r = 0;
+	if (fclose(m) == EOF && r == 0) {
+		printf("%% commit: %s\n", strerror(errno));
+		r = -1;
+	}
+	e->typed = 1;
+	e->no = !v.set;
+	if (r == 0)
+		r = edit_put(f, e, NULL, 0, buf, len);
+	free(buf);
+	return r;
+}
+
+/* state for edit_record(): check a typed edit, and maybe run it */
+struct edit_values {
+	const struct argcmd	*c;
+	int			 ctx, row, set, run, n, r;
+	char			*name;
+};
+
+static void
+edit_record(void *arg, const struct facts_template *t,
+    const struct facts_value *v)
+{
+	struct edit_values	*x = arg;
+
+	x->n++;
+	if (args_check(x->c, x->set, t, v) == -1)
+		x->r = -1;
+	else if (x->run)
+		x->r = conf_run_values(x->ctx, x->row, x->set, v, x->name);
+}
+
+/*
+ * Check the values of typed edit e (len bytes at p) against the
+ * arguments of c, the command at e's row of ctx, with args_check(). If
+ * run is set, also run the command with them on name. Returns 0, or -1
+ * if the values are invalid or the command failed.
+ */
+static int
+edit_typed(const struct argcmd *c, struct edit *e, char *p, int ctx,
+    int run, char *name)
+{
+	struct facts_in		 in;
+	struct edit_values	 x = { c, ctx, e->row, !e->no, run, 0, 0,
+				    name };
+
+	facts_in_init(&in, edit_record, &x);
+	if (facts_read(&in, p, e->len) == -1)
+		x.r = -1;
+	facts_in_free(&in);
+	return x.n == 1 ? x.r : -1;
+}
+
+/*
+ * Check that buf (len bytes) holds edits that may run. Each record must
+ * be complete, of a known kind, and name a command a configuration can
+ * have, in the block where it belongs, or a daemon action a
+ * configuration can have, with its words or rules complete. A line
+ * whose command parses its arguments must carry parsed values; any
+ * other line carries words. Returns 0 if so, else -1 after printing
+ * why.
  */
 static int
 edits_check(char *buf, size_t len)
 {
-	const struct confcmd *c;
+	const struct argcmd *c;
+	struct argcmd cmd;
 	struct edit e;
 	char *p, *w[NARGS];
 	size_t off;
-	int block = 0, n;
+	int block = 0, n, ctx;
 
 	for (off = 0; off < len; off += sizeof(e) + e.len) {
 		if (len - off < sizeof(e)) {
@@ -1072,11 +1175,12 @@ edits_check(char *buf, size_t len)
 			printf("%% edits: a record cut short\n");
 			return -1;
 		}
-		if (e.no > 1)
+		if (e.no > 1 || (e.typed && e.kind != EDIT_IF &&
+		    e.kind != EDIT_BRIDGE))
 			goto bad;
 		switch (e.kind) {
 		case EDIT_TOP:
-			if ((c = conf_cmd(CTX_TOP, e.row)) == NULL ||
+			if ((c = conf_cmd(CTX_TOP, e.row, &cmd)) == NULL ||
 			    (block != 0 && (block != CF_RTABLE ||
 			    (c->flags & (CF_IF | CF_BRIDGE | CF_RTABLE)))) ||
 			    (e.no && (c->flags & CF_NO) == 0) ||
@@ -1091,10 +1195,12 @@ edits_check(char *buf, size_t len)
 			break;
 		case EDIT_IF:
 		case EDIT_BRIDGE:
+			ctx = e.kind == EDIT_IF ? CTX_IF : CTX_BRIDGE;
 			if (block != (e.kind == EDIT_IF ? CF_IF : CF_BRIDGE) ||
-			    conf_cmd(e.kind == EDIT_IF ? CTX_IF : CTX_BRIDGE,
-			    e.row) == NULL ||
-			    edit_words(p, e.len, w, NARGS - 2) == -1)
+			    (c = conf_cmd(ctx, e.row, &cmd)) == NULL ||
+			    e.typed != (c->apply != NULL) || (e.typed ?
+			    edit_typed(c, &e, p, ctx, 0, NULL) :
+			    edit_words(p, e.len, w, NARGS - 2)) == -1)
 				goto bad;
 			break;
 		case EDIT_END:
@@ -1153,7 +1259,8 @@ edit_words(char *p, size_t len, char **argv, int max)
 static int
 edits_apply(char *buf, size_t len)
 {
-	const struct confcmd *c;
+	const struct argcmd *c;
+	struct argcmd cmd;
 	struct edit e;
 	char *argv[NARGS + 1], *p, name[IFNAMSIZ] = "";
 	size_t off;
@@ -1169,7 +1276,11 @@ edits_apply(char *buf, size_t len)
 		case EDIT_BRIDGE:
 			ctx = e.kind == EDIT_TOP ? CTX_TOP : e.kind == EDIT_IF ?
 			    CTX_IF : CTX_BRIDGE;
-			c = conf_cmd(ctx, e.row);
+			c = conf_cmd(ctx, e.row, &cmd);
+			if (e.typed) {
+				r = edit_typed(c, &e, p, ctx, 1, name);
+				break;
+			}
 			n = 0;
 			if (e.no)
 				argv[n++] = "no";

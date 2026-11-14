@@ -73,6 +73,7 @@
 #include "conftree.h"
 #include "settings.h"
 #include "facts.h"
+#include "args.h"
 #include "showfacts.h"
 #include "session.h"
 #include "commands.h"
@@ -94,8 +95,9 @@ static struct cnode *snapshot;	/* config's running configuration */
 
 static int	exitconfig(int, char **, ...);
 static int	rtable(int, char**, ...);
-static int	conf_run_if(int, const struct confcmd *, int, char **,
-		    char *);
+static int	int_line(const struct intlist *, char *, int, struct cand *);
+static int	conf_run_if(int, const struct argcmd *, int, char **, int,
+		    const struct facts_value *, char *);
 static int	cand_leave(struct cand *);
 static int	cmdline_if(struct cand *);
 static int	wr_conf(char *);
@@ -802,20 +804,55 @@ static char crontabhelp[];
 static char interfacehelp[];
 extern struct ghs mantab[];
 
+/* the arguments that several rows have */
+static const struct arg description_args[] = {
+	/* SIOCSIFDESCR refuses a longer one (ENAMETOOLONG) */
+	{ "text",	ARG_REST, 0, IFDESCRSIZE - 1,
+	  .help = "text of description" },
+	{ NULL }
+};
+
 struct intlist Intlist[] = {
 /* Interface mode commands */
 	{ "inet",	"IPv4/IPv6 addresses",			CMPL(h) (char **)intiphelp, sizeof(struct ghs), intip, 1, CAND_EDIT },
 	{ "ip",		"Alias for \"inet\" command",		CMPL(h) (char **)intiphelp, sizeof(struct ghs), intip, 1, CAND_EDIT },
 	{ "alias",	NULL, /* backwards compatibilty */	CMPL(h) (char **)intiphelp, sizeof(struct ghs), intip, 1, CAND_EDIT },
 	{ "autoconf4",  "IPv4 Autoconfigurable address (DHCP)",	CMPL0 0, 0, intxflags, 1, CAND_EDIT },
-	{ "description", "Interface description",		CMPL0 0, 0, intdesc, 1, CAND_EDIT },
+	{ "description", "Interface description", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intdesc_apply, .args = description_args },
 	{ "group",	"Interface group",			CMPL0 0, 0, intgroup, 1, CAND_EDIT },
 	{ "rdomain",	"Interface routing domain",		CMPL0 0, 0, intrdomain, 1, CAND_EDIT },
-	{ "rtlabel",	"Interface route labels",		CMPL0 0, 0, intrtlabel, 1, CAND_EDIT },
-	{ "priority",	"Data packet priority",			CMPL0 0, 0, intmetric, 1, CAND_EDIT },
-	{ "llpriority",	"Link Level packet priority",		CMPL0 0, 0, intllprio, 1, CAND_EDIT },
-	{ "mtu",	"Maximum Transmission Unit",		CMPL0 0, 0, intmtu, 1, CAND_EDIT },
-	{ "metric",	"Routing metric",			CMPL0 0, 0, intmetric, 1, CAND_EDIT },
+	{ "rtlabel", "Interface route labels", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intrtlabel_apply,
+	  .args = ARGS{
+		{ "route-label", ARG_WORD, 0, RTLABEL_LEN - 1 },
+		{ NULL } } },
+	{ "priority", "Data packet priority", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intmetric_apply, .code = IFPRIORITY,
+	  .args = ARGS{
+		{ "priority",	ARG_NUM, 0, 15 },
+		{ NULL } } },
+	{ "llpriority", "Link Level packet priority", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intllprio_apply,
+	  .args = ARGS{
+		{ "priority",	ARG_NUM, IFQ_MINPRIO, IFQ_MAXPRIO },
+		{ NULL } } },
+	{ "mtu", "Maximum Transmission Unit", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intmtu_apply,
+	  .args = ARGS{
+		{ "mtu",	ARG_NUM, 1, INT_MAX },
+		{ NULL } } },
+	{ "metric", "Routing metric", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intmetric_apply, .code = IFMETRIC,
+	  .args = ARGS{
+		{ "metric",	ARG_NUM, 0, INT_MAX },
+		{ NULL } } },
 	{ "link",	"Link level options",			CMPL0 0, 0, intlink, 1, CAND_EDIT },
 	{ "arp",	"Address Resolution Protocol",		CMPL0 0, 0, intflags, 1, CAND_EDIT },
 	{ "staticarp",	"Always use static ARP to find other hosts",CMPL0 0, 0, intflags, 1, CAND_EDIT },
@@ -924,7 +961,9 @@ size_t Intlist_nitems = nitems(Intlist);
 
 struct intlist Bridgelist[] = {
 /* Bridge mode commands */
-	{ "description", "Bridge description",			CMPL0 0, 0, intdesc, 1, CAND_EDIT },
+	{ "description", "Bridge description", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intdesc_apply, .args = description_args },
 	{ "member",	"Bridge member(s)",			CMPL(i) 0, 0, brport, 1, CAND_EDIT },
 	{ "span",	"Bridge spanning port(s)",		CMPL(i) 0, 0, brport, 1, CAND_EDIT },
 	{ "blocknonip",	"Block non-IP traffic forwarding on member(s)",		CMPL0 0, 0, brport, 1, CAND_EDIT },
@@ -1333,12 +1372,12 @@ Command cmdtab[] = {
 size_t cmdtab_nitems = nitems(cmdtab);
 
 /*
- * The commands a configuration has, and nothing else: a commit's edits
- * name them by their place here (commit.c), so a commit runs no command
- * that is not one of them. The tables cover the top level, except
- * daemons, which ctl.c handles (ctl_act()); interface mode; and bridge
- * mode. A top-level command takes no if CF_NO says so, as its row in
- * cmdtab does; any interface command can take no
+ * The commands a configuration has that config does not parse: a
+ * commit's edit has such a command's words, and conf_run() runs its
+ * handler with them. conf_cmd() takes these, and the rows that have
+ * their arguments, and nothing else. A top-level command takes no if
+ * CF_NO says so, as its row in cmdtab does; any interface command can
+ * take no
  */
 static const struct confcmd conf_top[] = {
 	{ "hostname",	hostname,	0 },
@@ -1362,14 +1401,8 @@ static const struct confcmd conf_if[] = {
 	{ "ip",		intip },
 	{ "alias",	intip },
 	{ "autoconf4",	intxflags },
-	{ "description",	intdesc },
 	{ "group",	intgroup },
 	{ "rdomain",	intrdomain },
-	{ "rtlabel",	intrtlabel },
-	{ "priority",	intmetric },
-	{ "llpriority",	intllprio },
-	{ "mtu",	intmtu },
-	{ "metric",	intmetric },
 	{ "link",	intlink },
 	{ "arp",	intflags },
 	{ "staticarp",	intflags },
@@ -1447,7 +1480,6 @@ static const struct confcmd conf_if[] = {
 };
 
 static const struct confcmd conf_bridge[] = {
-	{ "description",	intdesc },
 	{ "member",	brport },
 	{ "span",	brport },
 	{ "blocknonip",	brport },
@@ -1588,7 +1620,7 @@ cmdline_if(struct cand *cand)
 		printf("%% %s is not through nshd's configure\n", i->name);
 		return -1;
 	}
-	if ((r = (*i->handler)(margc, margv, cand->ifname, -1, cand)) == 1) {
+	if ((r = int_line(i, cand->ifname, -1, cand)) == 1) {
 		cand->ifname[0] = '\0';
 		return 0;
 	}
@@ -2098,32 +2130,98 @@ conf_ordered(char *line)
 }
 
 /*
- * Row n of the commands a configuration has in ctx, CTX_TOP, CTX_IF or
- * CTX_BRIDGE, or NULL if there is no such row
+ * c for the command called name, if t has it: t is a table of len
+ * commands that run with their words. NULL if it has none of the name
  */
-const struct confcmd *
-conf_cmd(int ctx, int n)
+static const struct argcmd *
+conf_words(const struct confcmd *t, size_t len, const char *name,
+    struct argcmd *c)
 {
-	const struct confcmd *t;
-	size_t len;
+	size_t n;
 
+	for (n = 0; n < len; n++)
+		if (strcmp(t[n].name, name) == 0) {
+			memset(c, 0, sizeof(*c));
+			c->name = t[n].name;
+			c->flags = t[n].flags;
+			c->handler = t[n].handler;
+			return c;
+		}
+	return NULL;
+}
+
+/*
+ * c, row i of an interface's or a bridge's mode (Intlist, Bridgelist),
+ * as args.c takes a command, if config parses the row's line: the row
+ * has the function that applies its values. NULL if it has none. Any
+ * line of these modes can take no
+ */
+static const struct argcmd *
+int_cmd(const struct intlist *i, struct argcmd *c)
+{
+	if (i->apply == NULL)
+		return NULL;
+	memset(c, 0, sizeof(*c));
+	c->name = i->name;
+	c->apply = i->apply;
+	c->code = i->code;
+	c->args = i->args;
+	return c;
+}
+
+/*
+ * Run the line in margv by row i of an interface's or a bridge's mode:
+ * its handler, or with none, as the row's arguments say
+ */
+static int
+int_line(const struct intlist *i, char *ifname, int ifs, struct cand *cand)
+{
+	struct argcmd c;
+
+	if (i->handler != NULL)
+		return (*i->handler)(margc, margv, ifname, ifs, cand);
+	if (int_cmd(i, &c) == NULL) {
+		printf("%% %s: internal failure\n", i->name);
+		return -1;
+	}
+	return args_run(&c, margc, margv, ifname, ifs, cand);
+}
+
+/*
+ * Row n of ctx's table, cmdtab, Intlist or Bridgelist for CTX_TOP,
+ * CTX_IF or CTX_BRIDGE, as c, if it is a command a configuration has:
+ * one config parses (int_cmd()), or one that runs with its words
+ * still (conf_words()). NULL for any other row, and where there is no
+ * such row. A commit's edits name a command by its row (commit.c), so a
+ * commit runs no row that is not one of these: a daemon's, which ctl.c
+ * handles (ctl_act()), is in none
+ */
+const struct argcmd *
+conf_cmd(int ctx, int n, struct argcmd *c)
+{
+	if (n < 0)
+		return NULL;
 	switch (ctx) {
 	case CTX_TOP:
-		t = conf_top;
-		len = nitems(conf_top);
-		break;
+		if ((size_t)n >= nitems(cmdtab) - 1)
+			return NULL;
+		return conf_words(conf_top, nitems(conf_top),
+		    cmdtab[n].name, c);
 	case CTX_IF:
-		t = conf_if;
-		len = nitems(conf_if);
-		break;
+		if ((size_t)n >= nitems(Intlist) - 1)
+			return NULL;
+		if (int_cmd(&Intlist[n], c) != NULL)
+			return c;
+		return conf_words(conf_if, nitems(conf_if), Intlist[n].name, c);
 	case CTX_BRIDGE:
-		t = conf_bridge;
-		len = nitems(conf_bridge);
-		break;
-	default:
-		return NULL;
+		if ((size_t)n >= nitems(Bridgelist) - 1)
+			return NULL;
+		if (int_cmd(&Bridgelist[n], c) != NULL)
+			return c;
+		return conf_words(conf_bridge, nitems(conf_bridge),
+		    Bridgelist[n].name, c);
 	}
-	return n >= 0 && (size_t)n < len ? &t[n] : NULL;
+	return NULL;
 }
 
 /*
@@ -2135,10 +2233,9 @@ conf_cmd(int ctx, int n)
 int
 conf_find(int ctx, char *word, char **daemon)
 {
-	const struct confcmd *c;
-	struct intlist *i;
+	struct intlist *i, *list;
+	struct argcmd c;
 	Command *t;
-	char *name;
 	int n;
 
 	if (ctx == CTX_TOP) {
@@ -2148,20 +2245,20 @@ conf_find(int ctx, char *word, char **daemon)
 			*daemon = t->name;
 			return -2;
 		}
-		name = t->name;
+		/* one of cmdtab2's is no configuration's command */
+		if (t < cmdtab || t >= cmdtab + nitems(cmdtab))
+			return -1;
+		n = t - cmdtab;
 	} else if (ctx == CTX_IF || ctx == CTX_BRIDGE) {
-		i = (struct intlist *)genget(word, (char **)(ctx == CTX_IF ?
-		    Intlist : Bridgelist), sizeof(struct intlist));
+		list = ctx == CTX_IF ? Intlist : Bridgelist;
+		i = (struct intlist *)genget(word, (char **)list,
+		    sizeof(struct intlist));
 		if (i == NULL || Ambiguous(i))
 			return -1;
-		name = i->name;
+		n = i - list;
 	} else
 		return -1;
-	/* each name appears only once in its table */
-	for (n = 0; (c = conf_cmd(ctx, n)) != NULL; n++)
-		if (strcmp(c->name, name) == 0)
-			return n;
-	return -1;
+	return conf_cmd(ctx, n, &c) != NULL ? n : -1;
 }
 
 /*
@@ -2173,23 +2270,41 @@ conf_find(int ctx, char *word, char **daemon)
 int
 conf_run(int ctx, int n, int argc, char **argv, char *name)
 {
-	const struct confcmd *c = conf_cmd(ctx, n);
+	struct argcmd row;
+	const struct argcmd *c = conf_cmd(ctx, n, &row);
 
 	if (ctx != CTX_TOP)
-		return conf_run_if(ctx == CTX_BRIDGE, c, argc, argv, name);
+		return conf_run_if(ctx == CTX_BRIDGE, c, argc, argv, 0, NULL,
+		    name);
 	/* a block's head creates a cloned interface, or with no, destroys it */
 	return (*c->handler)(argc, argv, NULL);
 }
 
 /*
- * Run c, an interface command or, with bridgeline, a bridge command,
- * with argv on name in rtable 0, as interface mode runs a line. name
- * must exist, and must be a bridge only if c is a bridge command.
- * Returns 0, or -1 if c failed or did not run, after printing why
+ * Run the command at row n of ctx (an interface or bridge command) on
+ * name with values v, as conf_run() runs a line. set is 0 for "no".
+ */
+int
+conf_run_values(int ctx, int n, int set, const struct facts_value *v,
+    char *name)
+{
+	struct argcmd row;
+
+	return conf_run_if(ctx == CTX_BRIDGE, conf_cmd(ctx, n, &row), 0, NULL,
+	    set, v, name);
+}
+
+/*
+ * Run c, an interface command, or a bridge command if bridgeline, on
+ * name in rtable 0, as interface mode runs a line. If v is not NULL,
+ * the apply function of c's argcmd runs with values v, else c's handler
+ * runs with argv. set is 0 for "no". name must exist, and must be a
+ * bridge exactly when c is a bridge command. Returns 0, or -1 after
+ * printing why c failed or did not run.
  */
 static int
-conf_run_if(int bridgeline, const struct confcmd *c, int argc, char **argv,
-    char *name)
+conf_run_if(int bridgeline, const struct argcmd *c, int argc, char **argv,
+    int set, const struct facts_value *v, char *name)
 {
 	char ifn[IFNAMSIZ];
 	int ifs, isbridge, r = -1, rt = cli_rtable;
@@ -2213,7 +2328,10 @@ conf_run_if(int bridgeline, const struct confcmd *c, int argc, char **argv,
 	}
 	if (cli_rtable != 0 && nsh_setrtable(0) == 0)
 		cli_rtable = 0;
-	r = (*c->handler)(argc, argv, ifn, ifs, NULL) == -1 ? -1 : 0;
+	if (v != NULL)
+		r = c->apply(c, set, v, ifn, ifs, NULL) == -1 ? -1 : 0;
+	else
+		r = (*c->handler)(argc, argv, ifn, ifs, NULL) == -1 ? -1 : 0;
 	if (rt != cli_rtable && nsh_setrtable(rt) == 0)
 		cli_rtable = rt;
 done:
