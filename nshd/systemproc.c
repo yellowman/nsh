@@ -233,8 +233,7 @@
 /*
  * A job: an apply, a save, a test, a recover, an undo or the parser's
  * check, and how long it may run, then the grace between SIGTERM and
- * SIGKILL. These are not measured; each should be measured on OpenBSD
- * with a full table
+ * SIGKILL
  */
 #define JOB_APPLY	0
 #define JOB_SAVE	1

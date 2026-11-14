@@ -1112,7 +1112,8 @@ nsh(config)# ip carp
 Enable or disable logging of carp state change, bad packets and other errors
 in the system kernel.
 carp-log may be set to a value between 0 and 7 corresponding with standard
-syslog(3) priorities.
+.Xr syslog 3
+priorities.
 The default value is 2, which limits logging to changes in CARP state.
 .Bd -literal -offset indent
 nsh(config)# ip carp-log 7
@@ -1895,7 +1896,10 @@ addresses, or remove it.
 Set the interface routing priority to a value in the range of 0 to 15 with
 smaller numbers being better.
 The default priority of an interface is 0, except for IEEE 802.11 wireless
-interfaces (priority 4), umb(4) interfaces (priority 6), and carp(4)
+interfaces (priority 4),
+.Xr umb 4
+interfaces (priority 6), and
+.Xr carp 4
 interfaces (priority 15).
 The default priority of newly connected routes (routes created by
 configuring an IP address on an interface) is calculated by adding 4
@@ -2311,7 +2315,9 @@ with full-duplex.
 Entering media without an argument diplays help for the media settings
 available for the interface.
 .Pp
-E.g. show media settings supported by an intel pro 1000 em(4) interface
+E.g. show media settings supported by an intel pro 1000
+.Xr em 4
+interface
 .Pp
 nsh(interface-em0)media
 .Pp
@@ -3053,8 +3059,9 @@ The aggregation algoritim record for longer than 30 seconds.
 The packet size and thus the maximum number of flows is controlled by the
 mtu of the inteface the flows are exported via.
 .Pp
-There is a one-to-one correspondence between packets seen by bpf(4) on
-the pflow interface and packets sent out to the flow receiver.
+There is a one-to-one correspondence between packets seen by
+.Xr bpf 4
+on the pflow interface and packets sent out to the flow receiver.
 I.e. if a packet with 30 flows on pflow, then the same 30 flows were sent out
 to the receiver.
 .Pp

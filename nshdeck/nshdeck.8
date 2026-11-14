@@ -207,22 +207,25 @@ Some daemons have an editor, which reads the rules' text and writes
 changes back into it.
 A change rewrites only the words of the field it changes.
 .Bl -tag -width Ds
-.It pf
+.It Xr pf.conf 5
 Its statements in order, with a form for each rule.
-.It bgpd
+.It Xr bgpd.conf 5
 Its peers, its networks and its filters.
 For each peer: its state from
 .Xr bgpctl 8 ,
 the prefixes it accepts and advertises, its last errors, the filters
 that apply to it, and its other settings in groups.
-.It ospfd, ospf6d, eigrpd, ripd, ldpd, dvmrpd
+.It Xr ospfd.conf 5 , Xr ospf6d.conf 5 , Xr eigrpd.conf 5 , Xr ripd.conf 5 , \
+Xr ldpd.conf 5 , Xr dvmrpd.conf 5
 Their interfaces and global settings.
 For each interface: the settings it sets and those it inherits from
 the blocks around it.
 Beside the editor are the neighbors and routes that their control
 programs show in routing table 0.
-.It sshd, ntpd, sasyncd, rad, relayd, snmpd, ldapd, npppd, smtpd, \
-ifstated, iked, dhcpd, the IPsec rules
+.It Xr sshd_config 5 , Xr ntpd.conf 5 , Xr sasyncd.conf 5 , Xr rad.conf 5 , \
+Xr relayd.conf 5 , Xr snmpd.conf 5 , Xr ldapd.conf 5 , Xr npppd.conf 5 , \
+Xr smtpd.conf 5 , Xr ifstated.conf 5 , Xr iked.conf 5 , Xr dhcpd.conf 5 , \
+Xr ipsec.conf 5
 The statements of the rules, as fields.
 .El
 .Ss System and changes
@@ -280,7 +283,9 @@ rates, in and out, and keeps five minutes of them, which the interface
 table draws as a small graph.
 An interface's errors and drops are marked when they rose since the
 last request, and the bar under a port is how full its line is.
-While security is shown, a readout as the overview's shows pf's states
+While security is shown, a readout as the overview's shows
+.Xr pf 4 Ns 's
+states
 and its rates, from
 .Cm show statistics pf .
 .Pp

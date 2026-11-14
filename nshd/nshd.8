@@ -294,8 +294,11 @@ Once begun, the commit runs to its end even if the session goes.
 .Pp
 An edit that runs a daemon's program fails unless the program exits 0,
 whatever it prints.
-A disable's pkill may also exit 1, for no such daemon ran.
-pf's enable and disable succeed only if pf is then on or off.
+A disable's
+.Xr pkill 1
+may also exit 1, for no such daemon ran.
+.Xr pf 4 Ns 's
+enable and disable succeed only if pf is then on or off.
 .Pp
 .Cm commit check
 stops after the third step, so a candidate the parser can make no
@@ -328,7 +331,9 @@ does not move what a rollback goes back to.
 .Pp
 After the deadline, system rolls back by itself, once no commit or job
 runs: a commit's undo could restore what the rollback removed.
-It demotes carp by 128, and promotes it again once the rollback
+It demotes
+.Xr carp 4
+by 128, and promotes it again once the rollback
 configuration runs.
 .Pp
 A rollback that fails is tried again 5 seconds later, three times in
