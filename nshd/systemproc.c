@@ -529,6 +529,7 @@ static int	client_there(struct client *);
 static int	system_whom(struct client *, uid_t *);
 static int	system_perms(uint32_t);
 static void	system_login(uint32_t, struct nshd_syslogin *);
+static pid_t	system_fork(void);
 static __dead void system_auth_child(int, struct nshd_syslogin *);
 static void	system_auth_read(int, short, void *);
 static void	system_auth_late(int, short, void *);
@@ -1570,7 +1571,7 @@ system_login(uint32_t id, struct nshd_syslogin *sl)
 	}
 	if ((a = calloc(1, sizeof(*a))) == NULL)
 		fatal(NULL);
-	switch (a->pid = fork()) {
+	switch (a->pid = system_fork()) {
 	case -1:
 		system_refused(id, sl->login.name, "fork: %s",
 		    strerror(errno));
@@ -1596,6 +1597,26 @@ system_login(uint32_t id, struct nshd_syslogin *sl)
 	event_add(&a->ev, NULL);
 	evtimer_set(&a->tm, system_auth_late, a);
 	evtimer_add(&a->tm, &tv);
+}
+
+/*
+ * fork(), with every signal blocked in the child. Until the child puts
+ * back the default handlers, it has system's, which pass a signal on to
+ * system's event loop: a SIGTERM sent to the child, such as the one that
+ * stops a login's check, would end system. So each child unblocks
+ * signals once it has put back the default handlers
+ */
+static pid_t
+system_fork(void)
+{
+	sigset_t	 all, was;
+	pid_t		 forked;
+
+	sigfillset(&all);
+	sigprocmask(SIG_BLOCK, &all, &was);
+	if ((forked = fork()) != 0)
+		sigprocmask(SIG_SETMASK, &was, NULL);
+	return (forked);
 }
 
 /*
@@ -1843,7 +1864,7 @@ system_terminal(uint32_t id, struct nshd_systerm *st)
 	if (fcntl(pty, F_SETFD, FD_CLOEXEC) == -1 ||
 	    fcntl(tty, F_SETFD, FD_CLOEXEC) == -1)
 		fatal("%s: fcntl", __func__);
-	if ((nsh = fork()) == -1) {
+	if ((nsh = system_fork()) == -1) {
 		system_end(id, -1, "%% nshd: fork: %s\n", strerror(errno));
 		close(pty);
 		close(tty);
@@ -1968,7 +1989,7 @@ system_stream_child(struct stream *s, int op, char **argv, int table)
 		system_end(s->id, 1, "%% nshd: pipe: %s\n", strerror(errno));
 		return (-1);
 	}
-	switch (s->pid = fork()) {
+	switch (s->pid = system_fork()) {
 	case -1:
 		system_end(s->id, 1, "%% nshd: fork: %s\n", strerror(errno));
 		close(fds[0]);
@@ -1994,6 +2015,7 @@ system_child(int fd, int op, char **argv, int table)
 	char	 buf[8192];
 	size_t	 n;
 	FILE	*f;
+	sigset_t none;
 	int	 null, argc, r, lfd, tries;
 
 	setpgid(0, 0);
@@ -2003,6 +2025,8 @@ system_child(int fd, int op, char **argv, int table)
 	signal(SIGCHLD, SIG_DFL);
 	signal(SIGPIPE, SIG_DFL);
 	signal(SIGHUP, SIG_DFL);
+	sigemptyset(&none);
+	sigprocmask(SIG_SETMASK, &none, NULL);
 	if (dup2(fd, STDOUT_FILENO) == -1 || dup2(fd, STDERR_FILENO) == -1 ||
 	    (null = open(_PATH_DEVNULL, O_RDONLY)) == -1 ||
 	    dup2(null, STDIN_FILENO) == -1)
@@ -3384,7 +3408,7 @@ system_job(struct job *j)
 		printf("%% nshd: pipe: %s\n", strerror(errno));
 		goto fail;
 	}
-	switch (j->pid = fork()) {
+	switch (j->pid = system_fork()) {
 	case -1:
 		printf("%% nshd: fork: %s\n", strerror(errno));
 		close(fds[0]);
@@ -3414,6 +3438,7 @@ static __dead void
 system_job_child(int fd, struct job *j)
 {
 	struct script	 sc;
+	sigset_t	 none;
 	int		 i, null, r;
 
 	setpgid(0, 0);
@@ -3423,6 +3448,8 @@ system_job_child(int fd, struct job *j)
 	signal(SIGCHLD, SIG_DFL);
 	signal(SIGPIPE, SIG_DFL);
 	signal(SIGHUP, SIG_DFL);
+	sigemptyset(&none);
+	sigprocmask(SIG_SETMASK, &none, NULL);
 	if (dup2(fd, STDOUT_FILENO) == -1 || dup2(fd, STDERR_FILENO) == -1 ||
 	    (null = open(_PATH_DEVNULL, O_RDONLY)) == -1 ||
 	    dup2(null, STDIN_FILENO) == -1)
