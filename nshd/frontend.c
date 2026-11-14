@@ -36,8 +36,10 @@
  * after it are not read. frontend parses a show's words and an
  * operation's the same way, into what the show asks and into the
  * operation's row and values, and answers itself one that is neither.
- * frontend holds no candidate, and has only what config sends its own
- * client.
+ * A client that completes lines itself asks for nsh's command tables:
+ * frontend has them, and sends them once config says the session may
+ * ask. frontend holds no candidate, and has only what config sends its
+ * own client.
  *
  * When the client goes, frontend ends; config finds its pipe closed,
  * and parent tells system. When config closes its pipe, frontend ends
@@ -106,6 +108,8 @@ static void	frontend_dispatch_config(int, short, void *);
 static void	frontend_answer(struct ctl_conn *, int32_t, int);
 static void	frontend_show(struct ctl_conn *, struct nshd_show *);
 static void	frontend_op(struct ctl_conn *, struct nshd_op *);
+static void	frontend_commands(struct ctl_conn *, struct imsg *);
+static void	frontend_units(void *, const void *, size_t);
 static void	frontend_line(struct ctl_conn *, struct nshd_line *);
 static void	frontend_stage(struct ctl_conn *, struct nshd_stage *);
 static int	frontend_read(FILE *, char *, char *, int);
@@ -203,8 +207,15 @@ frontend_dispatch_config(int fd, short event, void *arg)
 			    sizeof(ctx)) == -1)
 				control_drop(client);
 			break;
-		case IMSG_CTL_HELLO:
 		case IMSG_CTL_RESULT:
+			/* the command tables, which config allowed */
+			if ((c = control_connbyid(client)) != NULL &&
+			    c->pending == IMSG_CTL_COMMANDS) {
+				frontend_commands(c, &imsg);
+				break;
+			}
+			/* FALLTHROUGH */
+		case IMSG_CTL_HELLO:
 			/* the request's end, and its stage's */
 			if ((c = control_connbyid(client)) != NULL)
 				c->pending = 0;
@@ -257,7 +268,7 @@ frontend_client(struct ctl_conn *c, struct imsg *imsg)
 
 	if (c->pending)
 		return (-1);
-	c->pending = 1;
+	c->pending = imsg_get_type(imsg);
 	switch (imsg_get_type(imsg)) {
 	case IMSG_CTL_HELLO:
 		if (imsg_get_data(imsg, &hello, sizeof(hello)) == -1)
@@ -280,7 +291,11 @@ frontend_client(struct ctl_conn *c, struct imsg *imsg)
 		return (0);
 	case IMSG_CTL_COMMANDS:
 	case IMSG_CTL_NAMES:
-		/* completion's tables and names: these carry no data */
+		/*
+		 * completion's tables and names: these carry no data.
+		 * config has the names, and says whether the session
+		 * may have the tables (frontend_commands())
+		 */
 		if (imsg_get_len(imsg) != 0)
 			return (-1);
 		if (link_compose(&links[CONFIG], imsg_get_type(imsg), c->id,
@@ -339,6 +354,45 @@ frontend_answer(struct ctl_conn *c, int32_t status, int mode)
 	    &res, sizeof(res)) == -1)
 		control_drop(c->id);
 	c->pending = 0;
+}
+
+/*
+ * nsh's command tables, as facts, to the client, and then the result
+ * with which config answered the request: config has checked that the
+ * session may ask, and frontend has the tables. A result that refuses
+ * is passed on as it is
+ */
+static void
+frontend_commands(struct ctl_conn *c, struct imsg *imsg)
+{
+	struct units		 u = { frontend_units, c };
+	struct nshd_result	 res;
+	struct facts_out	 o;
+
+	if (imsg_get_data(imsg, &res, sizeof(res)) == -1) {
+		link_broken(&links[CONFIG], "sent a result not whole");
+		return;
+	}
+	if (res.status == 0) {
+		facts_out_init(&o, units_emit, &u);
+		if (cmplt_facts(&o) == -1) {
+			printf("%% nshd: the command tables could not be "
+			    "sent\n");
+			res.status = 1;
+		}
+		units_flush(&u);
+	}
+	frontend_answer(c, res.status, 0);
+}
+
+/* Facts units for the client arg, as one message. */
+static void
+frontend_units(void *arg, const void *buf, size_t len)
+{
+	struct ctl_conn	*c = arg;
+
+	if (control_reply(c->id, IMSG_CTL_FACTS, buf, len) == -1)
+		control_drop(c->id);
 }
 
 /*

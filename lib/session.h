@@ -90,9 +90,6 @@ int			 session_edits(struct cand *, char *, size_t);
 int			 session_end(struct cand *);
 int			 session_rules(struct cand *, char *, int, int,
 			    char *, size_t);
-/* nsh's command tables, sent as facts */
-struct facts_out;
-int			 cmplt_facts(struct facts_out *);
 int			 session_exit(struct cand *);
 void			 session_mode(struct cand *, int *, int *,
 			    char *, size_t, int *);

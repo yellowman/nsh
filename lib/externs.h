@@ -207,6 +207,9 @@ void nshd_mode(int, char *, int);
 #define RUN_CONFIGURE	5	/* refused: it needs configure */
 #define RUN_UNSUPPORTED	6	/* refused: nshd's configure cannot run it */
 void row_runs(char **, int, char *, int *, int *);
+/* nsh's command tables, sent as facts */
+struct facts_out;
+int cmplt_facts(struct facts_out *);
 extern int in_config;
 int conf_mode(char *);
 int conf_ordered(char *);

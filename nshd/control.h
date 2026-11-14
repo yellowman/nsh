@@ -21,7 +21,7 @@ struct ctl_conn {
 	uint32_t		 id;
 	uid_t			 uid;
 	gid_t			 gid;
-	int			 pending;	/* a request not answered */
+	int			 pending;	/* the request not answered: its type */
 	void			*arg;		/* what its handler keeps */
 };
 

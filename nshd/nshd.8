@@ -292,6 +292,8 @@ does, may request nsh's command tables and the names of interfaces, groups,
 bridges and routing tables, if its session has view.
 Each row of the tables says how its command runs outside configure and
 in it.
+The session's frontend has the tables, and sends them once config
+answers that the session may ask.
 The names come from config's last snapshot; if there is none yet,
 config takes one first.
 config is

@@ -115,10 +115,12 @@
  * edit makes them; the session may ask for them too. configure terminal
  * takes none.
  *
- * A client that completes lines itself, as nsh's Tab does, asks config
- * for two things, sent as facts: nsh's command tables, and the names of
- * interfaces, groups, bridges and routing tables.  The names come from
- * the last snapshot; if there is none yet, config takes one first.
+ * A client that completes lines itself, as nsh's Tab does, asks for
+ * two things, sent as facts: nsh's command tables, and the names of
+ * interfaces, groups, bridges and routing tables.  The session's
+ * frontend has the tables, and sends them once config answers that the
+ * session may ask.  The names come from the last snapshot; if there is
+ * none yet, config takes one first.
  *
  * nsh -c's configuration comes a part at a time, each answered, outside
  * configure. After the last, on a new snapshot, it becomes the session's
@@ -1673,28 +1675,17 @@ config_may(uint32_t session, uint32_t type)
 	return (1);
 }
 
-/* Send nsh's command tables to the session as facts, then a result. */
+/*
+ * nsh's command tables, which the session may ask for (config_may()):
+ * its frontend has them, and sends them ahead of this result
+ */
 static void
 config_commands(uint32_t session)
 {
-	struct session		*sp;
-	struct units		 u = { config_units };
-	struct facts_out	 o;
-	int			 r;
-
-	if ((sp = session_find(session)) == NULL) {
+	if (session_find(session) == NULL)
 		config_answer(session, 1, "%% nshd: hello first\n");
-		return;
-	}
-	u.arg = sp;
-	facts_out_init(&o, units_emit, &u);
-	r = cmplt_facts(&o);
-	units_flush(&u);
-	if (r == -1)
-		config_answer(sp->id, 1, "%% nshd: the command tables "
-		    "could not be sent\n");
 	else
-		config_answer(sp->id, 0, NULL);
+		config_answer(session, 0, NULL);
 }
 
 /* Send the names for completion, once there is a snapshot to read. */

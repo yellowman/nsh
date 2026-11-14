@@ -52,7 +52,7 @@ commands.c	table	Bridgelist Bridgelist_nitems Intlist
 			ipsecsoftallocstab ipsecsoftbytestab
 			ipsecsoftfirstusetab ipsecsofttimeouttab
 			ipsectimeouttab iptab
-			lacpmode_keys lacptimeout_keys ldaphelp ldphelp
+			kind_row lacpmode_keys lacptimeout_keys ldaphelp ldphelp
 			link_args link_keys lldphelp loginhelp
 			maxqueuetab mforwardingtab motdhelp
 			mplshelp mplstab mtudisctab mtudisctimeouttab
@@ -76,7 +76,7 @@ commands.c	table	Bridgelist Bridgelist_nitems Intlist
 			helphelp
 			loggerhelp manhelp nreboothelp ping6help pinghelp
 			powerdownhelp proto_keys prots quithelp rollbackhelp
-			rtablehelp
+			rowfields rtablehelp
 			saveenvhelp setenvhelp shellhelp showarptab showhelp
 			showlist showndptab showroutetab showvlantab sshhelp
 			stts telnethelp tracert6help tracerthelp trunkproto_keys
@@ -200,7 +200,6 @@ rendersys.c	table	ah_fields carp_fields daemon_fields esp_fields
 			pf_fields pf_reasons pfsync_fields prioritynames
 			rt_fields sflag tcp_fields tcpstates udp_fields
 route.c		table	route_keys route_parse.routeflags
-session.c	table	kind_row rowfields
 settings.c	table	bridge_settings contexts if_settings
 			rtable_settings top_settings
 showfacts.c	process	facts_from facts_init.done
