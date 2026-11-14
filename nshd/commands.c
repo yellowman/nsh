@@ -840,6 +840,8 @@ static const struct argkey rxprio_keys[] = {
 static const struct argkey link_keys[] = {
 	{ "0", IFF_LINK0 }, { "1", IFF_LINK1 }, { "2", IFF_LINK2 }, { NULL }
 };
+/* "ttl copy" copies each packet's own ttl */
+static const struct argkey ttl_keys[] = { { "copy", -1 }, { NULL } };
 
 /* the arguments that several rows have */
 static const struct arg description_args[] = {
@@ -963,8 +965,29 @@ struct intlist Intlist[] = {
 	{ "auth",	"PPP authentication",			CMPL0 0, 0, intsppp, 1, CAND_EDIT },
 	{ "peer",	"PPP peer authentication",		CMPL0 0, 0, intsppp, 1, CAND_EDIT },
 	{ "pppoe",	"PPPoE settings",			CMPL0 0, 0, intpppoe, 1, CAND_EDIT },
-	{ "tunnel",	"Tunnel parameters",			CMPL0 0, 0, inttunnel, 1, CAND_EDIT },
-	{ "tunneladdr",	"Tunnel source, with no destination",	CMPL0 0, 0, inttunnel, 1, CAND_EDIT },
+	{ "tunnel", "Tunnel parameters", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = inttunnel_apply, .code = TUNNEL_BOTH,
+	  .args = ARGS{
+		{ "src",	ARG_ADDR, 0, 0, ARG_PORT,
+		  .help = "src ip[:port]" },
+		{ "dest",	ARG_ADDR, 0, 0, ARG_PORT, .help = "dest ip" },
+		{ "rdomain",	ARG_NUM, 0, RT_TABLEID_MAX, ARG_NAMED },
+		{ "ttl",	ARG_NUM, 1, 255, ARG_NAMED, ttl_keys },
+		{ "df",		ARG_FLAG },
+		{ "ecn",	ARG_FLAG },
+		{ NULL } } },
+	{ "tunneladdr", "Tunnel source, with no destination", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = inttunnel_apply, .code = TUNNEL_ADDR,
+	  .args = ARGS{
+		{ "src",	ARG_ADDR, 0, 0, ARG_PORT,
+		  .help = "src ip[:port]" },
+		{ "rdomain",	ARG_NUM, 0, RT_TABLEID_MAX, ARG_NAMED },
+		{ "ttl",	ARG_NUM, 1, 255, ARG_NAMED, ttl_keys },
+		{ "df",		ARG_FLAG },
+		{ "ecn",	ARG_FLAG },
+		{ NULL } } },
 	{ "tunneldomain", "Tunnel routing domain for transit", CMPL0
 	  .nocmd = 1, .cand = CAND_EDIT,
 	  .apply = intmpls_apply, .code = TUNNELDOMAIN,
@@ -983,7 +1006,15 @@ struct intlist Intlist[] = {
 	  .args = ARGS{
 		{ "timeout",	ARG_NUM, 8, 3600, .help = "8-3600" },
 		{ NULL } } },
-	{ "endpoint",	"Tunnel endpoint of a MAC address",	CMPL0 0, 0, intendpoint, 1, CAND_EDIT },
+	{ "endpoint", "Tunnel endpoint of a MAC address", CMPL0
+	  .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = intendpoint_apply,
+	  .args = ARGS{
+		{ "lladdr",	ARG_ADDR, 0, 0, ARG_LINK | ARG_NO,
+		  .help = "mac address" },
+		{ "endpoint",	ARG_ADDR, 0, 0,
+		    ARG_INET | ARG_INET6 | ARG_LINK },
+		{ NULL } } },
 	{ "txprio", "Priority in tunnel protocol headers", CMPL0
 	  .nocmd = 1, .cand = CAND_EDIT,
 	  .apply = intmpls_apply, .code = TXPRIO, .args = txprio_args },
@@ -1667,9 +1698,6 @@ static const struct confcmd conf_if[] = {
 	{ "auth",	intsppp },
 	{ "peer",	intsppp },
 	{ "pppoe",	intpppoe },
-	{ "tunnel",	inttunnel },
-	{ "tunneladdr",	inttunnel },
-	{ "endpoint",	intendpoint },
 	{ "pwe",	intpwe3 },
 	{ "pflow",	intpflow },
 	{ "dhcrelay",	intdhcrelay },

@@ -16,7 +16,9 @@
 
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <net/if.h>
 #include <netinet/in.h>
+#include <netinet/if_ether.h>
 #include <netdb.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -26,11 +28,18 @@
 #include "facts.h"
 #include "args.h"
 
-/* the number of values argument f holds */
+/* the number of words argument f takes */
+static size_t
+arg_words(const struct arg *f)
+{
+	return f->many > 1 ? (size_t)f->many : 1;
+}
+
+/* the number of values f holds: two per word with ARG_PORT, else one */
 static size_t
 arg_vals(const struct arg *f)
 {
-	return f->many > 1 ? (size_t)f->many : 1;
+	return arg_words(f) * ((f->flags & ARG_PORT) ? 2 : 1);
 }
 
 /* the number of c's arguments: its row ends them with one with no name */
@@ -53,6 +62,13 @@ args_nvals(const struct argcmd *c)
 	for (i = 0; i < args_n(c); i++)
 		n += arg_vals(&c->args[i]);
 	return n;
+}
+
+/* is f a named argument, such as "ttl 64" or "df"? */
+static int
+arg_named(const struct arg *f)
+{
+	return f->type == ARG_FLAG || (f->flags & ARG_NAMED);
 }
 
 /* what a usage calls f: its help, or its name */
@@ -82,17 +98,40 @@ arg_key(const struct arg *f, const char *word)
 	return Ambiguous((void *)k) ? NULL : k;
 }
 
-/* the address family f takes: AF_INET, AF_INET6, or AF_UNSPEC for either */
-static int
-arg_af(const struct arg *f)
+/* c's named argument called word, or the only one word abbreviates */
+static const struct arg *
+arg_name(const struct argcmd *c, const char *word)
 {
-	switch (f->flags & (ARG_INET | ARG_INET6)) {
-	case ARG_INET:
-		return AF_INET;
-	case ARG_INET6:
-		return AF_INET6;
+	const struct arg	*f, *found = NULL;
+	int			 n;
+
+	if (*word == '\0')
+		return NULL;
+	/* as genget() finds a word, among the named ones alone */
+	for (f = c->args; f != NULL && f->name != NULL; f++) {
+		if (!arg_named(f) ||
+		    (n = isprefix((char *)word, (char *)f->name)) == 0)
+			continue;
+		if (n < 0)
+			return f;
+		if (found != NULL)
+			return NULL;
+		found = f;
 	}
-	return AF_UNSPEC;
+	return found;
+}
+
+/* may f be an address of family af (FACT_INET, FACT_INET6, FACT_LINK)? */
+static int
+arg_family(const struct arg *f, int af)
+{
+	int	 fl = f->flags & (ARG_INET | ARG_INET6 | ARG_LINK);
+
+	if (fl == 0)
+		fl = ARG_INET | ARG_INET6;
+	return (af == FACT_INET && (fl & ARG_INET)) ||
+	    (af == FACT_INET6 && (fl & ARG_INET6)) ||
+	    (af == FACT_LINK && (fl & ARG_LINK));
 }
 
 /* may argument f be left out? set is 0 for a "no" line */
@@ -108,6 +147,14 @@ arg_usage(const struct arg *f, int set, int ignored)
 {
 	const struct argkey	*k;
 
+	if (f->type == ARG_FLAG) {
+		printf(" [%s]", f->name);
+		return;
+	}
+	if (arg_named(f)) {
+		printf(" [%s <%s>]", f->name, f->name);
+		return;
+	}
 	if (ignored) {
 		if (f->type != ARG_REST)
 			printf(" [%s%s]", args_called(f), f->type == ARG_BITS ||
@@ -159,27 +206,43 @@ arg_printable(const struct argcmd *c, const struct arg *f, const char *w)
 	return 1;
 }
 
-/* Parse word w for argument f into v; 0, or -1 after printing an error */
+/*
+ * Parse word w as an address for argument f into v. With ARG_PORT, an
+ * IPv4 address may end in ":port", and the port goes in v[1]. Returns
+ * 0, or -1 after printing an error.
+ */
 static int
-arg_word(const struct argcmd *c, const struct arg *f, char *w,
+arg_addr(const struct argcmd *c, const struct arg *f, char *w,
     struct facts_value *v)
 {
-	const struct argkey	*k;
-	const char		*errstr;
+	struct ether_addr	*ea;
 	struct addrinfo		*res;
 	struct sockaddr_in	*sin;
 	struct sockaddr_in6	*sin6;
-	long long		 n;
-	int			 af = arg_af(f);
+	char			 buf[NI_MAXHOST], *port = NULL, *p;
+	const char		*errstr, *what;
+	int			 af, n;
 
-	switch (f->type) {
-	case ARG_ADDR:
-		if (numeric_addrinfo(w, NULL, af, 0, &res) != 0) {
-			printf("%% %s %s is not an %saddress\n",
-			    arg_label(c, f), w, af == AF_INET ? "IPv4 " :
-			    af == AF_INET6 ? "IPv6 " : "");
-			return -1;
-		}
+	if (arg_family(f, FACT_LINK) && (ea = ether_aton(w)) != NULL) {
+		facts_address(v, FACT_LINK, ea, sizeof(*ea), 0);
+		return 0;
+	}
+	what = !arg_family(f, FACT_INET) && !arg_family(f, FACT_INET6) ?
+	    "a MAC address" : arg_family(f, FACT_LINK) ?
+	    "an address or a MAC address" : !arg_family(f, FACT_INET6) ?
+	    "an IPv4 address" : !arg_family(f, FACT_INET) ?
+	    "an IPv6 address" : "an address";
+	af = !arg_family(f, FACT_INET6) ? AF_INET : !arg_family(f, FACT_INET) ?
+	    AF_INET6 : AF_UNSPEC;
+	if (strlcpy(buf, w, sizeof(buf)) >= sizeof(buf))
+		goto bad;
+	if ((f->flags & ARG_PORT) && (p = strchr(buf, ':')) != NULL &&
+	    p == strrchr(buf, ':')) {
+		*p++ = '\0';
+		port = p;
+	}
+	if ((arg_family(f, FACT_INET) || arg_family(f, FACT_INET6)) &&
+	    numeric_addrinfo(buf, NULL, af, 0, &res) == 0) {
 		if (res->ai_family == AF_INET) {
 			sin = (struct sockaddr_in *)res->ai_addr;
 			facts_address(v, FACT_INET, &sin->sin_addr,
@@ -190,7 +253,33 @@ arg_word(const struct argcmd *c, const struct arg *f, char *w,
 			    sizeof(sin6->sin6_addr), sin6->sin6_scope_id);
 		}
 		freeaddrinfo(res);
-		return 0;
+		if (port == NULL)
+			return 0;
+		n = strtonum(port, 0, 65535, &errstr);
+		if (errstr == NULL) {
+			facts_i64(&v[1], n);
+			return 0;
+		}
+		printf("%% Invalid port %s: %s\n", port, errstr);
+		return -1;
+	}
+ bad:
+	printf("%% %s %s is not %s\n", arg_label(c, f), w, what);
+	return -1;
+}
+
+/* Parse word w for argument f into v; 0, or -1 after printing an error */
+static int
+arg_word(const struct argcmd *c, const struct arg *f, char *w,
+    struct facts_value *v)
+{
+	const struct argkey	*k;
+	const char		*errstr;
+	long long		 n;
+
+	switch (f->type) {
+	case ARG_ADDR:
+		return arg_addr(c, f, w, v);
 	case ARG_NUM:
 		if ((k = arg_key(f, w)) != NULL) {
 			facts_i64(v, k->value);
@@ -226,38 +315,49 @@ arg_word(const struct argcmd *c, const struct arg *f, char *w,
 	return -1;
 }
 
-/* the most words arguments i and after can take, or -1 for no limit */
+/*
+ * the most words that the named arguments, and arguments i and after,
+ * can take, or -1 for no limit
+ */
 static int
 args_ignored(const struct argcmd *c, size_t i)
 {
 	const struct arg	*f;
 	const struct argkey	*k;
+	size_t			 j;
 	int			 n = 0;
 
-	for (; i < args_n(c); i++) {
-		f = &c->args[i];
+	for (j = 0; j < args_n(c); j++) {
+		f = &c->args[j];
+		if (j < i && !arg_named(f))
+			continue;
 		if (f->type == ARG_REST)
 			return -1;
-		if (f->type == ARG_BITS)
+		if (f->type == ARG_FLAG)
+			n++;
+		else if (arg_named(f))
+			n += 2 * arg_words(f);
+		else if (f->type == ARG_BITS)
 			for (k = f->keys; k->word != NULL; k++)
 				n++;
 		else
-			n += arg_vals(f);
+			n += arg_words(f);
 	}
 	return n;
 }
 
 /*
  * Parse argument f's words, starting at argv[*k], into v, and advance
- * *k past them. set is 0 for a "no" line. Returns 0, or -1 after
- * printing an error.
+ * *k past them. For a named argument, argv[*k] is the word after its
+ * name. set is 0 for a "no" line. Returns 0, or -1 after printing an
+ * error.
  */
 static int
 arg_take(const struct argcmd *c, const struct arg *f, int set, int argc,
     char **argv, int *k, struct facts_value *v, char *rest)
 {
 	const struct argkey	*key;
-	size_t			 j, len;
+	size_t			 j, len, per = arg_vals(f) / arg_words(f);
 	long long		 bits = 0;
 	int			 i;
 
@@ -283,7 +383,7 @@ arg_take(const struct argcmd *c, const struct arg *f, int set, int argc,
 		*k = argc;
 		return 0;
 	case ARG_BITS:
-		for (; *k < argc; (*k)++) {
+		for (; *k < argc && arg_name(c, argv[*k]) == NULL; (*k)++) {
 			if ((key = arg_key(f, argv[*k])) == NULL) {
 				printf("%% Invalid %s %s\n", arg_label(c, f),
 				    argv[*k]);
@@ -296,8 +396,25 @@ arg_take(const struct argcmd *c, const struct arg *f, int set, int argc,
 		facts_i64(v, bits);
 		return 0;
 	}
-	for (j = 0; j < arg_vals(f) && *k < argc; j++, (*k)++)
-		if (arg_word(c, f, argv[*k], &v[j]) == -1)
+	if (arg_named(f)) {
+		for (j = 0; j < arg_words(f) && v[j * per].type != FACT_NONE;
+		    j++)
+			;
+		if (j == arg_words(f) || (f->type != ARG_FLAG &&
+		    *k + 1 >= argc))
+			return args_usage(c);
+		if (f->type == ARG_FLAG) {
+			facts_i64(&v[j], 1);
+			(*k)++;
+			return 0;
+		}
+		*k += 2;
+		return arg_word(c, f, argv[*k - 1], &v[j * per]);
+	}
+	/* a named argument's name ends this argument's words */
+	for (j = 0; j < arg_words(f) && *k < argc &&
+	    arg_name(c, argv[*k]) == NULL; j++, (*k)++)
+		if (arg_word(c, f, argv[*k], &v[j * per]) == -1)
 			return -1;
 	if (j == 0 && !arg_opt(f, set))
 		return args_usage(c);
@@ -328,10 +445,12 @@ args_parse(const struct argcmd *c, int argc, char **argv, struct argvals *a)
 	}
 	argc--;
 	argv++;
-	/* parse the arguments in order; for "no", only those with ARG_NO */
+	/* the unnamed arguments in order; for "no", only those with ARG_NO */
 	for (i = 0, s = 0; i < args_n(c); i++, s += n) {
 		f = &c->args[i];
 		n = arg_vals(f);
+		if (arg_named(f))
+			continue;
 		if (!a->set && !(f->flags & ARG_NO))
 			break;
 		if (arg_take(c, f, a->set, argc, argv, &k, &a->v[s],
@@ -343,7 +462,17 @@ args_parse(const struct argcmd *c, int argc, char **argv, struct argvals *a)
 		ignored = args_ignored(c, i);
 		return ignored != -1 && argc - k > ignored ? args_usage(c) : 0;
 	}
-	return k < argc ? args_usage(c) : 0;
+	/* then the named arguments, in any order */
+	while (k < argc) {
+		if ((f = arg_name(c, argv[k])) == NULL)
+			return args_usage(c);
+		for (i = 0, s = 0; &c->args[i] != f; i++)
+			s += arg_vals(&c->args[i]);
+		if (arg_take(c, f, a->set, argc, argv, &k, &a->v[s],
+		    a->rest) == -1)
+			return -1;
+	}
+	return 0;
 }
 
 /*
@@ -412,19 +541,23 @@ void
 args_kind(const struct argcmd *c, struct facts_kind *k,
     struct facts_field *f)
 {
-	size_t	 i, j, n = 0;
+	const struct arg	*a;
+	size_t			 i, j, n = 0;
 
-	for (i = 0; i < args_n(c); i++)
-		for (j = 0; j < arg_vals(&c->args[i]) && n < ARGS_MAX; j++) {
+	for (i = 0; i < args_n(c); i++) {
+		a = &c->args[i];
+		for (j = 0; j < arg_vals(a) && n < ARGS_MAX; j++) {
 			memset(&f[n], 0, sizeof(f[n]));
-			f[n].name = c->args[i].name;
-			f[n].type = c->args[i].type == ARG_WORD ||
-			    c->args[i].type == ARG_REST ? FACT_STRING :
-			    c->args[i].type == ARG_ADDR ? FACT_ADDRESS :
-			    FACT_I64;
+			f[n].name = a->name;
+			/* a port follows its address */
+			f[n].type = a->type == ARG_WORD ||
+			    a->type == ARG_REST ? FACT_STRING :
+			    a->type == ARG_ADDR && ((a->flags & ARG_PORT) ==
+			    0 || j % 2 == 0) ? FACT_ADDRESS : FACT_I64;
 			f[n].naming = FACT_PLAIN;
 			n++;
 		}
+	}
 	k->name = c->name;
 	k->fields = f;
 	k->nfields = n;
@@ -445,16 +578,19 @@ arg_value(const struct argcmd *c, const struct arg *f,
 			if (v->v.i == k->value)
 				return 1;
 		return v->v.i >= f->min && v->v.i <= f->max;
+	case ARG_FLAG:
+		return v->v.i == 1;
 	case ARG_BITS:
 		for (k = f->keys; k->word != NULL; k++)
 			bits |= k->value;
 		return v->v.i != 0 && (v->v.i & ~bits) == 0;
 	case ARG_ADDR:
-		if (v->v.a.family == FACT_INET)
-			return arg_af(f) != AF_INET6 && v->v.a.len == 4 &&
-			    v->v.a.scope == 0;
-		return v->v.a.family == FACT_INET6 && arg_af(f) != AF_INET &&
-		    v->v.a.len == 16;
+		if (!arg_family(f, v->v.a.family))
+			return 0;
+		if (v->v.a.family == FACT_INET6)
+			return v->v.a.len == 16;
+		return v->v.a.scope == 0 && v->v.a.len ==
+		    (v->v.a.family == FACT_INET ? 4 : 6);
 	}
 	if (v->v.str.len > (size_t)f->max || v->v.str.len < (size_t)f->min)
 		return 0;
@@ -471,7 +607,8 @@ arg_value(const struct argcmd *c, const struct arg *f,
  * values one for one. Each argument that is parsed (always, or on a
  * "no" line if it has ARG_NO) must have its present values first, each
  * valid, and at least one unless it is optional; an ignored argument
- * has none. set is 0 for a "no" line. Returns 0 if valid, else -1.
+ * has none. A port may be present only with its address. set is 0 for
+ * a "no" line. Returns 0 if valid, else -1.
  */
 int
 args_check(const struct argcmd *c, int set, const struct facts_template *t,
@@ -480,7 +617,7 @@ args_check(const struct argcmd *c, int set, const struct facts_template *t,
 	struct facts_field	 f[ARGS_MAX];
 	struct facts_kind	 k;
 	const struct arg	*a;
-	size_t			 i, j, s;
+	size_t			 i, j, s, per;
 	int			 taken;
 
 	if (args_nvals(c) > ARGS_MAX)
@@ -496,14 +633,22 @@ args_check(const struct argcmd *c, int set, const struct facts_template *t,
 	for (i = 0, s = 0; i < args_n(c); i++) {
 		a = &c->args[i];
 		taken = set || (a->flags & ARG_NO);
-		for (j = 0; j < arg_vals(a); j++, s++) {
+		per = arg_vals(a) / arg_words(a);
+		for (j = 0; j < arg_words(a); j++, s += per) {
+			/* a port needs an IPv4 address, and fits in 16 bits */
+			if (per == 2 && v[s + 1].type != FACT_NONE &&
+			    (v[s].type == FACT_NONE || v[s].v.a.family !=
+			    FACT_INET || v[s + 1].v.i < 0 ||
+			    v[s + 1].v.i > 65535))
+				return -1;
 			if (v[s].type == FACT_NONE) {
-				if (taken && j == 0 && !arg_opt(a, set))
+				if (taken && j == 0 && !arg_named(a) &&
+				    !arg_opt(a, set))
 					return -1;
 				continue;
 			}
-			if (!taken || (j > 0 && v[s - 1].type == FACT_NONE) ||
-			    !arg_value(c, a, &v[s]))
+			if (!taken || (j > 0 && v[s - per].type ==
+			    FACT_NONE) || !arg_value(c, a, &v[s]))
 				return -1;
 		}
 	}
@@ -518,4 +663,37 @@ args_string(const struct facts_value *v, char *buf, size_t len)
 
 	memcpy(buf, v->v.str.s, n);
 	buf[n] = '\0';
+}
+
+/*
+ * Fill ss from address value v (IPv4 or IPv6) and port. Returns the
+ * address family, or AF_UNSPEC if v is not such an address.
+ */
+int
+args_sockaddr(const struct facts_value *v, int port,
+    struct sockaddr_storage *ss)
+{
+	struct sockaddr_in	*sin = (struct sockaddr_in *)ss;
+	struct sockaddr_in6	*sin6 = (struct sockaddr_in6 *)ss;
+
+	memset(ss, 0, sizeof(*ss));
+	if (v->type != FACT_ADDRESS)
+		return AF_UNSPEC;
+	if (v->v.a.family == FACT_INET) {
+		sin->sin_len = sizeof(*sin);
+		sin->sin_family = AF_INET;
+		sin->sin_port = htons(port);
+		memcpy(&sin->sin_addr, v->v.a.bytes, sizeof(sin->sin_addr));
+		return AF_INET;
+	}
+	if (v->v.a.family == FACT_INET6) {
+		sin6->sin6_len = sizeof(*sin6);
+		sin6->sin6_family = AF_INET6;
+		sin6->sin6_port = htons(port);
+		memcpy(&sin6->sin6_addr, v->v.a.bytes,
+		    sizeof(sin6->sin6_addr));
+		sin6->sin6_scope_id = v->v.a.scope;
+		return AF_INET6;
+	}
+	return AF_UNSPEC;
 }

@@ -24,9 +24,11 @@
  * and passes them to the command's apply function, so system never
  * parses text.
  *
- * Arguments come in order. One with ARG_OPT may be left out, and one
- * may take several words (many). A "no" line parses only the arguments
- * with ARG_NO, which come first; it may give the others, but they are
+ * Unnamed arguments come first, in order. Named arguments follow in any
+ * order, each as its name and its value ("ttl 64"), or as its name
+ * alone ("df"). One with ARG_OPT may be left out, and one may take
+ * several words (many). A "no" line parses only the arguments with
+ * ARG_NO, which come first; it may give the others, but they are
  * ignored and their values are absent.
  */
 
@@ -44,12 +46,19 @@
 				   together: FACT_I64 */
 #define ARG_ADDR	5	/* a numeric address, IPv4 or IPv6 unless the
 				   family flags say: FACT_ADDRESS */
+#define ARG_FLAG	6	/* a named argument with no value, such as
+				   "df": FACT_I64 1 when given */
 
 #define ARG_OPT		0x1	/* it may be left out */
 #define ARG_NO		0x2	/* parsed on a "no" line too */
 #define ARG_NOOPT	0x4	/* with no, it may be left out */
 #define ARG_INET	0x8	/* an IPv4 address */
 #define ARG_INET6	0x10	/* an IPv6 address */
+#define ARG_LINK	0x20	/* a MAC address */
+#define ARG_PORT	0x40	/* an IPv4 address may end in ":port", kept
+				   as a second value, FACT_I64, absent if
+				   none */
+#define ARG_NAMED	0x80	/* its word follows its name */
 
 #define ARGS_MAX	32	/* values of a command, at most */
 #define ARGS_REST	1024	/* bytes of an ARG_REST field, at most */
@@ -61,10 +70,11 @@ struct argkey {
 };
 
 struct arg {
-	const char	*name;	/* its facts field */
+	const char	*name;	/* its facts field, and its word on the line
+				   if it is named */
 	int		 type;
 	long long	 min, max;
-	int		 flags;	/* ARG_OPT, ARG_NO, ARG_NOOPT, ARG_INET... */
+	int		 flags;	/* ARG_OPT, ARG_NO, ARG_NAMED, ARG_INET... */
 	const struct argkey *keys;	/* NULL, or ended by a NULL word */
 	int		 many;	/* values it holds, if more than 1 */
 	const char	*help;	/* what a usage calls it, if not its name */
@@ -112,6 +122,7 @@ struct argvals {
  */
 enum { MPLSLABEL = 1, TUNNELDOMAIN, TXPRIO, RXPRIO };	/* intmpls_apply() */
 enum { IFMETRIC, IFPRIORITY };				/* intmetric_apply() */
+enum { TUNNEL_BOTH, TUNNEL_ADDR };			/* inttunnel_apply() */
 
 /* limits the rows share with their files */
 #define GROUP_NAMES	16	/* group names to a record; a longer line
@@ -126,7 +137,8 @@ args_applyfn	intpatch_apply, intmtu_apply, intkeepalive_apply, intmpls_apply,
 		intrdomain_apply, intdesc_apply, intvnetflowid_apply;
 args_applyfn	intsyncdev_apply, intsyncpeer_apply, intmaxupd_apply;
 args_applyfn	inttrunkport_apply, inttrunkproto_apply, intlacp_apply;
-args_applyfn	intvnetid_apply, intcache_apply;
+args_applyfn	intvnetid_apply, inttunnel_apply, intcache_apply,
+		intendpoint_apply;
 const struct argcmd *conf_cmd(int, int, struct argcmd *);
 size_t	args_n(const struct argcmd *);
 const char *args_called(const struct arg *);
@@ -140,5 +152,8 @@ void	args_kind(const struct argcmd *, struct facts_kind *,
 int	args_check(const struct argcmd *, int, const struct facts_template *,
 	    const struct facts_value *);
 void	args_string(const struct facts_value *, char *, size_t);
+struct sockaddr_storage;
+int	args_sockaddr(const struct facts_value *, int,
+	    struct sockaddr_storage *);
 
 #endif /* ARGS_H */

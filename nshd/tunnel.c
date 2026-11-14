@@ -25,30 +25,27 @@
 #include "facts.h"
 #include "args.h"
 
-int settunnel(int, char *, char *, char *, char *);
-int settunnelrdomain(int, char *, char *, struct cand *);
-int settunnelttl(int, char *, char *, struct cand *);
+int settunnel(int, char *, struct sockaddr_storage *,
+    struct sockaddr_storage *);
+int settunnelrdomain(int, char *, int);
+int settunnelttl(int, char *, int);
 int settunneldf(int, char *, int);
 int settunnelecn(int, char *, int);
 int setvnetid(int, char *, int64_t);
 int delvnetid(int, char *);
 int deletetunnel(int, char *);
-void tunnelusage(int);
 static int vnetid_range(char *, int64_t, struct cand *);
 static int cand_vnetid(struct cand *, char *, int, int64_t);
-static int tunnel_ttl(char *, char *, struct cand *);
 static int tunnel_startttl(char *);
-static int tunnel_rdomain(char *, struct cand *);
-static int tunnel_addr(char *, char *, char *, char *, int *);
+static int tunnel_name(struct sockaddr_storage *, char *, int *);
 static int tunnel_arg(char *, char *, size_t, char **);
-static int tunnel_mcast(char *);
-static int endpoint_arg(char *, char *, struct sockaddr_storage *, char *);
+static int tunnel_mcast(struct sockaddr_storage *);
+static int endpoint_value(char *, const struct facts_value *,
+    struct sockaddr_storage *, char *);
 static int cand_endpoint(struct cand *, char *, int);
-static int cand_tunnel(struct cand *, char *, int, int, char *, char *, char *,
-    char *, char *, int, int);
+static int cand_tunnel(struct cand *, char *, int, int,
+    struct sockaddr_storage *, struct sockaddr_storage *, int, int, int, int);
 
-/* tunnel, and tunneladdr, a tunnel's source with no destination */
-static char *tunnelcmds[] = { "tunnel", "tunneladdr", NULL };
 
 /*
  * maxaddr and timeout: how many addresses bpe, nvgre and vxlan learn,
@@ -87,14 +84,6 @@ static const struct vnetidr {
 	{ NULL,		0,	0 }
 };
 #define FLOWID_MAX	16777215
-
-static struct nopts tunnelopts[] = {
-	{ "rdomain",	req_arg,	'r' },
-	{ "ttl",	req_arg,	't' },
-	{ "df",		no_arg,		'd' },
-	{ "ecn",	no_arg,		'e' },
-	{ NULL,		0,		0   },
-};
 
 int
 intvnetid_apply(const struct argcmd *c, int set,
@@ -182,163 +171,104 @@ cand_vnetflowid(struct cand *cand)
 	return 0;
 }
 
-void
-tunnelusage(int addr)
-{
-	if (addr) {
-		printf("%% tunneladdr <src ip>[:port] [ttl <ttl>] [df]"
-		    " [ecn]\n");
-		printf("%% no tunneladdr [src ip] [ttl <ttl>] [df] [ecn]\n");
-		return;
-	}
-	printf("%% tunnel <src ip>[:port] <dest ip> [ttl <ttl>] [df] [ecn]\n");
-	printf("%% no tunnel [src ip] [dest ip] [ttl <ttl>] [df] [ecn]\n");
-}
+/* tunneladdr sets only a tunnel's source, with no destination */
 
+/*
+ * Apply tunnel or tunneladdr. The values are the source and its port,
+ * the destination and its port, then rdomain, ttl, df and ecn;
+ * tunneladdr has no destination. Older versions of nsh wrote a vxlan's
+ * port on the destination, so that port is used as the source's.
+ */
 int
-inttunnel(int argc, char **argv, ...)
+inttunnel_apply(const struct argcmd *c, int set,
+    const struct facts_value *v, char *ifname, int ifs, struct cand *cand)
 {
-	int set, addr, ch, df = 0, ecn = 0, r;
-	char **c, *src = NULL, *rdomain = NULL, *ttl = NULL;
-	char *srcport = NULL, *dstip = NULL, *dstport = NULL;
-	char sbuf[NI_MAXHOST + sizeof(":65535")];
-	char dbuf[NI_MAXHOST + sizeof(":65535")];
-	va_list ap;
-	struct cand *cand;
-	char *ifname;
-	int ifs;
+	struct sockaddr_storage src, dst;
+	int addr = c->code == TUNNEL_ADDR, o = addr ? 2 : 4;
+	int sport = -1, rdomain = -1, ttl = 0, df, ecn, r;
 
-	va_start(ap, argv);
-	ifname = va_arg(ap, char *);
-	ifs = va_arg(ap, int);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
-
-	if (NO_ARG(argv[0])) {
-		set = 0;
-		argc--;
-		argv++;
-	} else
-		set = 1;
-
-	c = (char **)genget(argv[0], tunnelcmds, sizeof(char *));
-	if (c == 0 || Ambiguous(c)) {
-		printf("%% Internal error - Invalid argument %s\n", argv[0]);
-		return -1;
+	if (!set) {
+		if (cand != NULL)
+			return cand_tunnel(cand, ifname, 0, addr, NULL, NULL,
+			    -1, 0, 0, 0);
+		return deletetunnel(ifs, ifname);
 	}
-	addr = c == &tunnelcmds[1];
-
-	argc--;
-	argv++;
-
-	if (set && argc < (addr ? 1 : 2)) {
-		tunnelusage(addr);
-		return -1;
-	}
-
-	if (argc > 0 && tunnel_arg(argv[0], sbuf, sizeof(sbuf), &srcport)) {
-		src = sbuf;
-		argc--;
-		argv++;
-	}
-	if (!addr && argc > 0 &&
-	    tunnel_arg(argv[0], dbuf, sizeof(dbuf), &dstport)) {
-		dstip = dbuf;
-		argc--;
-		argv++;
-	}
-	/* older versions of nsh wrote vxlan's port on the destination */
-	if (dstport != NULL) {
-		if (srcport != NULL) {
+	if (v[1].type != FACT_NONE)
+		sport = v[1].v.i;
+	if (!addr && v[3].type != FACT_NONE) {
+		if (sport != -1) {
 			printf("%% a tunnel has one port, on its source\n");
 			return -1;
 		}
-		srcport = dstport;
+		sport = v[3].v.i;
 	}
-	if (srcport != NULL && !isprefix("vxlan", ifname)) {
+	if (sport != -1 && !isprefix("vxlan", ifname)) {
 		printf("%% only vxlan takes a port\n");
 		return -1;
 	}
 	/* mgre's tunnel has no destination, and only vxlan's may have both */
-	if (set && addr && !isprefix("mgre", ifname) &&
-	    !isprefix("vxlan", ifname)) {
+	if (addr && !isprefix("mgre", ifname) && !isprefix("vxlan", ifname)) {
 		printf("%% tunneladdr not supported on %s\n", ifname);
 		return -1;
 	}
-	if (set && !addr && isprefix("mgre", ifname)) {
+	if (!addr && isprefix("mgre", ifname)) {
 		printf("%% %s has no destination: use tunneladdr\n", ifname);
 		return -1;
 	}
+	args_sockaddr(&v[0], sport == -1 ? 0 : sport, &src);
+	if (!addr)
+		args_sockaddr(&v[2], 0, &dst);
 	/*
 	 * A source is one host. A destination is a multicast group on
 	 * nvgre, either on vxlan, and one host on the others.
 	 */
-	if (set && src != NULL && tunnel_mcast(src) == 1) {
+	if (tunnel_mcast(&src)) {
 		printf("%% a tunnel's source cannot be a multicast group\n");
 		return -1;
 	}
-	if (set && dstip != NULL && isprefix("nvgre", ifname) &&
-	    tunnel_mcast(dstip) == 0) {
+	if (!addr && isprefix("nvgre", ifname) && !tunnel_mcast(&dst)) {
 		printf("%% %s's destination must be a multicast group\n",
 		    ifname);
 		return -1;
 	}
-	if (set && dstip != NULL && !isprefix("nvgre", ifname) &&
-	    !isprefix("vxlan", ifname) && tunnel_mcast(dstip) == 1) {
+	if (!addr && !isprefix("nvgre", ifname) &&
+	    !isprefix("vxlan", ifname) && tunnel_mcast(&dst)) {
 		printf("%% %s's destination cannot be a multicast group\n",
 		    ifname);
 		return -1;
 	}
-
-	noptind = 0;
-	while ((ch = nopt(argc, argv, tunnelopts)) != -1)
-		switch(ch) {
-		case 'r':
-			rdomain = argv[noptind - 1];
-			break;
-		case 't':
-			ttl = argv[noptind - 1];
-			break;
-		case 'd':
-			df = 1;
-			break;
-		case 'e':
-			ecn = 1;
-			break;
-		}
-
-	if (argc - noptind != 0) {
-		/* leftover salmon */
-		printf("%% %s", nopterr);
-		if (argv[noptind])
-			printf(": %s", argv[noptind]);
-		printf("\n");
-		tunnelusage(addr);
+	if (v[o].type != FACT_NONE)
+		rdomain = v[o].v.i;
+	if (v[o + 1].type != FACT_NONE)
+		ttl = v[o + 1].v.i;
+	df = v[o + 2].type != FACT_NONE;
+	ecn = v[o + 3].type != FACT_NONE;
+	/* SIOCSLIFPHYRTABLE needs the table (EINVAL) */
+	if (rdomain != -1 && !rtable_there(rdomain, cand))
+		return -1;
+	if (ttl == -1 && cand_gettype(cand, ifname) == IFT_ETHER) {
+		printf("%% ttl copy not supported on %s\n", ifname);
 		return -1;
 	}
 
 	if (cand != NULL)
-		return cand_tunnel(cand, ifname, set, addr, src, srcport, dstip,
-		    rdomain, ttl, df, ecn);
+		return cand_tunnel(cand, ifname, 1, addr, &src,
+		    addr ? NULL : &dst, rdomain, ttl, df, ecn);
 
-	if (set) {
-		/* if the addresses cannot be set, set nothing else */
-		if ((r = settunnel(ifs, ifname, src, srcport, dstip)) == -1)
-			return -1;
-		if (rdomain &&
-		    settunnelrdomain(ifs, ifname, rdomain, cand) == -1)
-			r = -1;
-		if (ttl && settunnelttl(ifs, ifname, ttl, cand) == -1)
-			r = -1;
-		/* df and ecn are off unless the command gives them */
-		if ((df || cand_takes(ifname, SIOCSLIFPHYDF)) &&
-		    settunneldf(ifs, ifname, df) == -1)
-			r = -1;
-		if ((ecn || cand_takes(ifname, SIOCSLIFPHYECN)) &&
-		    settunnelecn(ifs, ifname, ecn) == -1)
-			r = -1;
-	} else
-		r = deletetunnel(ifs, ifname);
+	/* if the addresses cannot be set, set nothing else */
+	if ((r = settunnel(ifs, ifname, &src, addr ? NULL : &dst)) == -1)
+		return -1;
+	if (rdomain != -1 && settunnelrdomain(ifs, ifname, rdomain) == -1)
+		r = -1;
+	if (ttl != 0 && settunnelttl(ifs, ifname, ttl) == -1)
+		r = -1;
+	/* df and ecn are off unless the command gives them */
+	if ((df || cand_takes(ifname, SIOCSLIFPHYDF)) &&
+	    settunneldf(ifs, ifname, df) == -1)
+		r = -1;
+	if ((ecn || cand_takes(ifname, SIOCSLIFPHYECN)) &&
+	    settunnelecn(ifs, ifname, ecn) == -1)
+		r = -1;
 	return r;
 }
 
@@ -353,13 +283,14 @@ inttunnel(int argc, char **argv, ...)
  * has one tunnel, so either line takes the other's place.
  */
 static int
-cand_tunnel(struct cand *cand, char *ifname, int set, int addr, char *src,
-    char *srcport, char *dstip, char *rdomain, char *ttla, int df, int ecn)
+cand_tunnel(struct cand *cand, char *ifname, int set, int addr,
+    struct sockaddr_storage *src, struct sockaddr_storage *dst, int rdomain,
+    int ttl, int df, int ecn)
 {
 	char s[NI_MAXHOST], d[NI_MAXHOST], line[1024], port[sizeof(":65535")];
 	char ttls[sizeof(" ttl copy")], *l, *w, *p;
 	const char *errmsg;
-	int af, daf, sport, ttl = 0, rdomainid = 0, r;
+	int sport, r;
 
 	if (!cand_takes(ifname, set ? SIOCSLIFPHYADDR : SIOCDIFPHYADDR)) {
 		printf("%% tunnel not supported on %s\n", ifname);
@@ -371,26 +302,14 @@ cand_tunnel(struct cand *cand, char *ifname, int set, int addr, char *src,
 			return -1;
 		return cand_setting(cand, ST_DEFAULT, "tunnel");
 	}
-	if (src == NULL || (!addr && dstip == NULL)) {
-		tunnelusage(addr);
+	if (rdomain != -1 && !cand_takes(ifname, SIOCSLIFPHYRTABLE)) {
+		printf("%% cannot set tunnel rdomain on %s interface\n",
+		    ifname);
 		return -1;
 	}
-	if (rdomain != NULL) {
-		if (!cand_takes(ifname, SIOCSLIFPHYRTABLE)) {
-			printf("%% cannot set tunnel rdomain on %s interface\n",
-			    ifname);
-			return -1;
-		}
-		if ((rdomainid = tunnel_rdomain(rdomain, cand)) == -1)
-			return -1;
-	}
-	if (ttla != NULL) {
-		if (!cand_takes(ifname, SIOCSLIFPHYTTL)) {
-			printf("%% tunnel ttl not supported on %s\n", ifname);
-			return -1;
-		}
-		if ((ttl = tunnel_ttl(ifname, ttla, cand)) == 0)
-			return -1;
+	if (ttl != 0 && !cand_takes(ifname, SIOCSLIFPHYTTL)) {
+		printf("%% tunnel ttl not supported on %s\n", ifname);
+		return -1;
 	}
 	if (df && !cand_takes(ifname, SIOCSLIFPHYDF)) {
 		printf("%% tunnel df not supported on %s\n", ifname);
@@ -400,13 +319,12 @@ cand_tunnel(struct cand *cand, char *ifname, int set, int addr, char *src,
 		printf("%% tunnel ecn not supported on %s\n", ifname);
 		return -1;
 	}
-	if ((af = tunnel_addr("source", src, srcport, s, &sport)) == 0)
+	if (tunnel_name(src, s, &sport) == -1)
 		return -1;
 	if (!addr) {
-		if ((daf = tunnel_addr("destination", dstip, NULL, d,
-		    NULL)) == 0)
+		if (tunnel_name(dst, d, NULL) == -1)
 			return -1;
-		if (af != daf) {
+		if (src->ss_family != dst->ss_family) {
 			printf("%% source and destination address families"
 			    " do not match\n");
 			return -1;
@@ -445,10 +363,10 @@ cand_tunnel(struct cand *cand, char *ifname, int set, int addr, char *src,
 		    d, ttls, ecn ? " ecn" : "", df ? " df" : "");
 	if (r == -1)
 		return -1;
-	if (rdomain == NULL)
+	if (rdomain == -1)
 		return 0;
-	if (rdomainid != 0)
-		return cand_setting(cand, ST_ON, "tunneldomain %d", rdomainid);
+	if (rdomain != 0)
+		return cand_setting(cand, ST_ON, "tunneldomain %d", rdomain);
 	return cand_setting(cand, ST_DEFAULT, "tunneldomain");
 }
 
@@ -472,97 +390,53 @@ tunnel_arg(char *arg, char *buf, size_t len, char **port)
 	return is_ip_addr(buf);
 }
 
-/* Is address ip a multicast group? 1 if it is, 0 if not, -1 if no address */
+/* Is ss's address a multicast group? 1 if it is, else 0 */
 static int
-tunnel_mcast(char *ip)
+tunnel_mcast(struct sockaddr_storage *ss)
 {
-	struct addrinfo *res;
-	int mcast;
-
-	if (numeric_addrinfo(ip, NULL, AF_UNSPEC, 0, &res) != 0)
-		return -1;
-	if (res->ai_family == AF_INET)
-		mcast = IN_MULTICAST(ntohl(((struct sockaddr_in *)
-		    res->ai_addr)->sin_addr.s_addr));
-	else
-		mcast = IN6_IS_ADDR_MULTICAST(&((struct sockaddr_in6 *)
-		    res->ai_addr)->sin6_addr);
-	freeaddrinfo(res);
-	return mcast != 0;
+	if (ss->ss_family == AF_INET)
+		return IN_MULTICAST(ntohl(((struct sockaddr_in *)
+		    ss)->sin_addr.s_addr)) != 0;
+	return IN6_IS_ADDR_MULTICAST(&((struct sockaddr_in6 *)
+	    ss)->sin6_addr) != 0;
 }
 
 /*
- * A tunnel address as conf_tunnel() prints it, in buf (NI_MAXHOST), and
- * if portp, its port. Returns its family, or 0 after saying why not.
+ * Write tunnel address ss to buf (NI_MAXHOST) as conf_tunnel() prints
+ * it, and its port to *portp if portp is not NULL. Returns 0, or -1
+ * after printing an error.
  */
 static int
-tunnel_addr(char *what, char *ip, char *port, char *buf, int *portp)
+tunnel_name(struct sockaddr_storage *ss, char *buf, int *portp)
 {
-	struct addrinfo *res;
-	int ecode, af;
-
-	if ((ecode = numeric_addrinfo(ip, port, AF_UNSPEC, 0, &res)) != 0) {
-		printf("%% unable to parse %s address string: %s\n", what,
-		    gai_strerror(ecode));
-		return 0;
-	}
-	af = res->ai_family;
 	if (portp != NULL)
-		*portp = ntohs(af == AF_INET6 ?
-		    ((struct sockaddr_in6 *)res->ai_addr)->sin6_port :
-		    ((struct sockaddr_in *)res->ai_addr)->sin_port);
-	ecode = getnameinfo(res->ai_addr, res->ai_addrlen, buf, NI_MAXHOST,
-	    NULL, 0, NI_NUMERICHOST);
-	freeaddrinfo(res);
-	if (ecode != 0) {
-		printf("%% %s address %s: %s\n", what, ip, gai_strerror(ecode));
-		return 0;
+		*portp = ntohs(ss->ss_family == AF_INET6 ?
+		    ((struct sockaddr_in6 *)ss)->sin6_port :
+		    ((struct sockaddr_in *)ss)->sin_port);
+	if (getnameinfo((struct sockaddr *)ss, ss->ss_len, buf, NI_MAXHOST,
+	    NULL, 0, NI_NUMERICHOST) != 0) {
+		printf("%% tunnel address: getnameinfo failure\n");
+		return -1;
 	}
-	return af;
+	return 0;
 }
 
 int
-settunnel(int s, char *ifname, char *src, char *srcport, char *dstip)
+settunnel(int s, char *ifname, struct sockaddr_storage *src,
+    struct sockaddr_storage *dst)
 {
-	struct addrinfo *srcres, *dstres = NULL;
-	int ecode, r = -1;
 	struct if_laddrreq req;
 
-	if ((ecode = numeric_addrinfo(src, srcport, AF_UNSPEC, 0,
-	    &srcres)) != 0) {
-		printf("%% unable to parse source address string: %s\n",
-		     gai_strerror(ecode));
-		return -1;
-	}
-
-	/* tunneladdr gives no destination */
-	if (dstip != NULL &&
-	    (ecode = numeric_addrinfo(dstip, NULL, AF_UNSPEC, 0,
-	    &dstres)) != 0) {
-		printf("%% unable to parse destination address string: %s\n",
-		     gai_strerror(ecode));
-		freeaddrinfo(srcres);
-		return -1;
-	}
-
-	if (dstres != NULL &&
-	    srcres->ai_addr->sa_family != dstres->ai_addr->sa_family) {
+	if (dst != NULL && src->ss_family != dst->ss_family) {
 		printf(
 		    "%% source and destination address families do not match\n");
-		goto end;
+		return -1;
 	}
-
-	if (srcres->ai_addrlen > sizeof(req.addr) ||
-	    (dstres != NULL && dstres->ai_addrlen > sizeof(req.dstaddr))) {
-		printf("%% invalid sockaddr\n");
-		goto end;
-	}
-
 	bzero(&req, sizeof(req));
 	(void) strlcpy(req.iflr_name, ifname, sizeof(req.iflr_name));
-	memcpy(&req.addr, srcres->ai_addr, srcres->ai_addrlen);
-	if (dstres != NULL)
-		memcpy(&req.dstaddr, dstres->ai_addr, dstres->ai_addrlen);
+	memcpy(&req.addr, src, src->ss_len);
+	if (dst != NULL)
+		memcpy(&req.dstaddr, dst, dst->ss_len);
 	else {
 		/* no destination, as the kernel gives it */
 		req.dstaddr.ss_len = 2;
@@ -575,14 +449,9 @@ settunnel(int s, char *ifname, char *src, char *srcport, char *dstip)
 		else
 			printf("%% settunnel: SIOCSLIFPHYADDR: %s\n",
 			    strerror(errno));
-	} else
-		r = 0;
-
- end:
-	freeaddrinfo(srcres);
-	if (dstres != NULL)
-		freeaddrinfo(dstres);
-	return r;
+		return -1;
+	}
+	return 0;
 }
 
 /* maxaddr and timeout, on bpe, nvgre and vxlan */
@@ -690,57 +559,26 @@ conf_cache(FILE *output, int ifs, char *ifname)
 	free(buf);
 }
 
-/*
- * endpoint: a static entry of the addresses bpe, nvgre and vxlan learn,
- * the tunnel endpoint where a MAC address is. nvgre's and vxlan's are
- * hosts of the tunnel's family, and bpe's are the MAC addresses of
- * backbone bridges.
- */
+/* "no endpoint" takes only the MAC address */
+
 int
-intendpoint(int argc, char **argv, ...)
+intendpoint_apply(const struct argcmd *c, int set,
+    const struct facts_value *v, char *ifname, int ifs, struct cand *cand)
 {
 	struct ifbareq ifba;
-	struct ether_addr *ea;
+	struct ether_addr ea;
 	char mac[sizeof("00:00:00:00:00:00")], ep[NI_MAXHOST];
-	va_list ap;
-	struct cand *cand;
-	char *ifname;
-	int ifs, set;
 
-	va_start(ap, argv);
-	ifname = va_arg(ap, char *);
-	ifs = va_arg(ap, int);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
-
-	if (NO_ARG(argv[0])) {
-		set = 0;
-		argc--;
-		argv++;
-	} else
-		set = 1;
-
-	argc--;
-	argv++;
-
-	if ((set && argc != 2) || (!set && (argc < 1 || argc > 2))) {
-		printf("%% endpoint <mac address> <endpoint>\n");
-		printf("%% no endpoint <mac address> [endpoint]\n");
-		return -1;
-	}
 	if (!cand_takes(ifname, SIOCBRDGSADDR)) {
 		printf("%% endpoint not supported on %s\n", ifname);
 		return -1;
 	}
-	if ((ea = ether_aton(argv[0])) == NULL) {
-		printf("%% Invalid MAC address %s\n", argv[0]);
-		return -1;
-	}
-	strlcpy(mac, ether_ntoa(ea), sizeof(mac));
+	memcpy(&ea, v[0].v.a.bytes, sizeof(ea));
+	strlcpy(mac, ether_ntoa(&ea), sizeof(mac));
 	memset(&ifba, 0, sizeof(ifba));
 	strlcpy(ifba.ifba_name, ifname, sizeof(ifba.ifba_name));
-	memcpy(&ifba.ifba_dst, ea, sizeof(ifba.ifba_dst));
-	if (set && endpoint_arg(ifname, argv[1], &ifba.ifba_dstsa, ep) == -1)
+	memcpy(&ifba.ifba_dst, &ea, sizeof(ifba.ifba_dst));
+	if (set && endpoint_value(ifname, &v[1], &ifba.ifba_dstsa, ep) == -1)
 		return -1;
 
 	if (cand != NULL) {
@@ -761,51 +599,49 @@ intendpoint(int argc, char **argv, ...)
 }
 
 /*
- * An endpoint as a command gives it: on bpe, a MAC address, else one
- * host's address. Fills in ss, and buf (NI_MAXHOST) as conf_cache()
- * prints it. -1 after saying why not.
+ * Convert endpoint value v for ifname to a sockaddr in ss and to text in
+ * buf (NI_MAXHOST). A bpe endpoint is a MAC address; others are a host
+ * address. Returns 0, or -1 after printing an error.
  */
 static int
-endpoint_arg(char *ifname, char *arg, struct sockaddr_storage *ss, char *buf)
+endpoint_value(char *ifname, const struct facts_value *v,
+    struct sockaddr_storage *ss, char *buf)
 {
 	struct sockaddr_dl *sdl = (struct sockaddr_dl *)ss;
 	struct sockaddr_in *sin = (struct sockaddr_in *)ss;
 	struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)ss;
-	struct ether_addr *ea;
-	struct addrinfo *res;
+	struct ether_addr ea;
 
 	memset(ss, 0, sizeof(*ss));
-	if (isprefix("bpe", ifname)) {
-		if ((ea = ether_aton(arg)) == NULL) {
-			printf("%% Invalid MAC address %s\n", arg);
-			return -1;
-		}
+	if ((isprefix("bpe", ifname) != 0) != (v->v.a.family == FACT_LINK)) {
+		printf("%% %s's endpoint is %s\n", ifname,
+		    isprefix("bpe", ifname) ? "a MAC address" :
+		    "one host's address");
+		return -1;
+	}
+	if (v->v.a.family == FACT_LINK) {
+		memcpy(&ea, v->v.a.bytes, sizeof(ea));
 		sdl->sdl_len = sizeof(*sdl);
 		sdl->sdl_family = AF_LINK;
 		sdl->sdl_type = IFT_ETHER;
 		sdl->sdl_alen = ETHER_ADDR_LEN;
-		memcpy(LLADDR(sdl), ea, ETHER_ADDR_LEN);
-		strlcpy(buf, ether_ntoa(ea), NI_MAXHOST);
+		memcpy(LLADDR(sdl), &ea, ETHER_ADDR_LEN);
+		strlcpy(buf, ether_ntoa(&ea), NI_MAXHOST);
 		return 0;
 	}
-	if (numeric_addrinfo(arg, NULL, AF_UNSPEC, 0, &res) != 0) {
-		printf("%% endpoint %s is not an address\n", arg);
+	args_sockaddr(v, 0, ss);
+	if (getnameinfo((struct sockaddr *)ss, ss->ss_len, buf, NI_MAXHOST,
+	    NULL, 0, NI_NUMERICHOST) != 0) {
+		printf("%% endpoint: getnameinfo failure\n");
 		return -1;
 	}
-	memcpy(ss, res->ai_addr, MIN(res->ai_addrlen, sizeof(*ss)));
-	freeaddrinfo(res);
 	if ((ss->ss_family == AF_INET &&
 	    (sin->sin_addr.s_addr == INADDR_ANY ||
 	    IN_MULTICAST(ntohl(sin->sin_addr.s_addr)))) ||
 	    (ss->ss_family == AF_INET6 &&
 	    (IN6_IS_ADDR_UNSPECIFIED(&sin6->sin6_addr) ||
 	    IN6_IS_ADDR_MULTICAST(&sin6->sin6_addr)))) {
-		printf("%% endpoint %s is not one host\n", arg);
-		return -1;
-	}
-	if (getnameinfo((struct sockaddr *)ss, ss->ss_len, buf, NI_MAXHOST,
-	    NULL, 0, NI_NUMERICHOST) != 0) {
-		printf("%% endpoint %s: getnameinfo failure\n", arg);
+		printf("%% endpoint %s is not one host\n", buf);
 		return -1;
 	}
 	return 0;
@@ -821,6 +657,7 @@ cand_endpoint(struct cand *cand, char *ifname, int af)
 {
 	char line[1024], sbuf[NI_MAXHOST + sizeof(":65535")], *l, *p, *port;
 	char *src, *dst = NULL;
+	struct sockaddr_storage ss;
 	struct addrinfo *res;
 	int saf, mcast;
 
@@ -849,8 +686,12 @@ cand_endpoint(struct cand *cand, char *ifname, int af)
 	}
 	if (dst == NULL || !isprefix("vxlan", ifname))
 		return 0;
-	if ((mcast = tunnel_mcast(dst)) == -1)
+	/* the candidate's own tunnel line, as cand_tunnel() wrote it */
+	if (numeric_addrinfo(dst, NULL, AF_UNSPEC, 0, &res) != 0)
 		return -1;
+	memcpy(&ss, res->ai_addr, MIN(res->ai_addrlen, sizeof(ss)));
+	freeaddrinfo(res);
+	mcast = tunnel_mcast(&ss);
 	if (!mcast) {
 		printf("%% %s has one destination: an endpoint needs"
 		    " tunneladdr or a multicast destination\n", ifname);
@@ -859,33 +700,11 @@ cand_endpoint(struct cand *cand, char *ifname, int af)
 	return 0;
 }
 
-/* A tunnel's rdomain, or -1 after saying why not */
-static int
-tunnel_rdomain(char *rdomain, struct cand *cand)
-{
-	const char *errmsg = NULL;
-	int rdomainid;
-
-	rdomainid = strtonum(rdomain, 0, RT_TABLEID_MAX, &errmsg);
-	if (errmsg) {
-		printf("%% invalid routing domain id %s: %s\n", rdomain, errmsg);
-		return -1;
-	}
-	/* SIOCSLIFPHYRTABLE needs the table (EINVAL) */
-	if (!rtable_there(rdomainid, cand))
-		return -1;
-	return rdomainid;
-}
-
 int
-settunnelrdomain(int ifs, char *ifname, char *rdomain, struct cand *cand)
+settunnelrdomain(int ifs, char *ifname, int rdomainid)
 {
-	int rdomainid;
 	struct ifreq ifr;
 
-	if (rdomain == NULL ||
-	    (rdomainid = tunnel_rdomain(rdomain, cand)) == -1)
-		return -1;
 	bzero(&ifr, sizeof(ifr));
 	ifr.ifr_rdomainid = rdomainid;
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
@@ -920,40 +739,10 @@ tunnel_startttl(char *ifname)
 	return IPDEFTTL;
 }
 
-/*
- * A tunnel's ttl, 1 to 255 as the kernel takes it, or -1 for copy, which
- * copies the ttl of the IP packets a gif, gre or mgre tunnel carries. 0
- * after saying why not: a tunnel of Ethernet frames has no ttl to copy.
- */
-static int
-tunnel_ttl(char *ifname, char *ttla, struct cand *cand)
-{
-	const char *errmsg = NULL;
-	int ttl;
-
-	if (strcmp(ttla, "copy") == 0) {
-		if (cand_gettype(cand, ifname) == IFT_ETHER) {
-			printf("%% ttl copy not supported on %s\n", ifname);
-			return 0;
-		}
-		return -1;
-	}
-	ttl = strtonum(ttla, 1, 0xff, &errmsg);
-	if (errmsg) {
-		printf("%% Invalid ttl %s: %s\n", ttla, errmsg);
-		return 0;
-	}
-	return ttl;
-}
-
 int
-settunnelttl(int ifs, char *ifname, char *ttla, struct cand *cand)
+settunnelttl(int ifs, char *ifname, int ttl)
 {
-	int ttl;
 	struct ifreq ifr;
-
-	if (ttla == NULL || (ttl = tunnel_ttl(ifname, ttla, cand)) == 0)
-		return -1;
 
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 	ifr.ifr_ttl = ttl;
