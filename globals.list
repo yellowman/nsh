@@ -44,7 +44,8 @@ commands.c	table	Bridgelist Bridgelist_nitems Intlist
 			ftpproxyhelp gretab grouphelp grouptab
 			hostnamehelp
 			ifstatehelp ikehelp inethelp interfacehelp
-			ip6help ip6tab ip_args ipcomptab iphelp ipiptab
+			ip6help ip6tab ip_args ipcmd_args ipcomptab iphelp
+			ipiptab
 			ipsecallocstab ipsecbytestab
 			ipsecexpireacquiretab ipsecfirstusetab ipsechelp
 			ipsecinvalidlifetab ipsecpfstab

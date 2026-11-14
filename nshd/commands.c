@@ -112,6 +112,9 @@ static struct cnode *snapshot;	/* config's running configuration */
 static int	exitconfig(int, char **, ...);
 static int	rtable(int, char**, ...);
 static int	int_line(const struct intlist *, char *, int, struct cand *);
+static int	top_line(const Command *, struct cand *);
+static args_applyfn	ipcmd_apply, hostname_apply;
+static args_parsefn	ipcmd_parse;
 static int	conf_run_if(int, const struct argcmd *, int, char **, int,
 		    const struct facts_value *, char *);
 static int	cand_leave(struct cand *);
@@ -387,102 +390,119 @@ struct ghs defaultttltab[] = {
 };
 
 Menu iptab[] = {
-	{ "arptimeout",	"Seconds for ARP entries to remain in cache",	CMPL(h) (char **)arptimeouttab, sizeof(struct ghs), 1, 1, ipsysctl },
-	{ "arpdown",	"Seconds before resending unanswered ARP requests", CMPL(h) (char **)arpdowntab, sizeof(struct ghs), 1, 1, ipsysctl },
-	{ "carp",	"Allow CARP",			CMPL(h) (char **)carptab, sizeof(struct ghs), 0, 0, ipsysctl },
-	{ "carp-log",	"CARP Logging Priority",	CMPL(h) (char **)carploggingtab, sizeof(struct ghs), 1, 1, ipsysctl },
-	{ "carp-preempt", "CARP Virtual Host Preemption", CMPL(h) (char **)carppreempttab, sizeof(struct ghs), 0, 0, ipsysctl },
-	{ "forwarding",	"Enable IPv4 Forwarding",	CMPL(h) (char **)forwardingtab, sizeof(struct ghs), 0, 0, ipsysctl },
-	{ "mforwarding", "Enable IPv4 Multicast Forwarding", CMPL(h) (char **)mforwardingtab, sizeof(struct ghs), 0, 0, ipsysctl },
-	{ "ipip",	"Allow IP-in-IP Encapsulation", CMPL(h) (char **)ipiptab, sizeof(struct ghs), 0, 0, ipsysctl },
-	{ "gre",	"Allow Generic Route Encapsulation", CMPL(h) (char **)gretab, sizeof(struct ghs), 0, 0, ipsysctl },
-	{ "wccp",	"Allow Web Cache Control Protocol", CMPL(h) (char **)wccptab, sizeof(struct ghs), 0, 0, ipsysctl },
-	{ "etherip",	"Allow Ether-IP Encapsulation",	CMPL(h) (char **)etheriptab, sizeof(struct ghs), 0, 0, ipsysctl },
-	{ "ipcomp",	"Allow IP Compression",		CMPL(h) (char **)ipcomptab, sizeof(struct ghs), 0, 0, ipsysctl },
-	{ "esp",	"Allow Encapsulated Security Payload", CMPL(h) (char **)esptab, sizeof(struct ghs), 0, 0, ipsysctl },
-	{ "esp-udpencap","Allow ESP encapsulation within UDP", CMPL(h) (char **)espudpencaptab, sizeof(struct ghs), 0, 0, ipsysctl },
-	{ "esp-udpencap-port","UDP port number for encapsulation", CMPL(h) (char **)espudpencapporttab, sizeof(struct ghs), 1, 1, ipsysctl },
-	{ "ah",		"Allow Authentication Header",	CMPL(h) (char**)ahtab, sizeof(struct ghs), 0, 0, ipsysctl },
-	{ "sourceroute", "Process Loose/Strict Source Route Options", CMPL(h) (char**)sourceroutetab, sizeof(struct ghs), 0, 1, ipsysctl },
-	{ "encdebug",	"Enable if_enc debugging",	CMPL(h) (char **)encdebugtab, sizeof(struct ghs), 0, 0, ipsysctl },
-	{ "send-redirects", "Send ICMP redirects",	CMPL(h) (char **)sendredirectstab, sizeof(struct ghs), 0, 0, ipsysctl },
-	{ "directed-broadcast", "Allow directed broadcasts", CMPL(h) (char **)directedbroadcaststab, sizeof(struct ghs), 0, 0, ipsysctl },
-	{ "multipath",	"Multipath routing",		CMPL(h) (char **)multipathtab, sizeof(struct ghs), 0, 0, ipsysctl },
-	{ "maxqueue", "Maximum unassembled IP fragments in the fragment queue", CMPL(h) (char **)maxqueuetab, sizeof(struct ghs), 1, 1, ipsysctl  },
-	{ "mtudisc", "Enable Path MTU Discovery",       CMPL(h) (char **)mtudisctab, sizeof(struct ghs), 0, 0, ipsysctl },
-	{ "mtudisctimeout", "Timeout in seconds for routes added by Path MTU discovery engine", CMPL(h) (char **)mtudisctimeouttab, sizeof(struct ghs), 1, 1, ipsysctl },
-	{ "ipsec-timeout", "Seconds after a SA is established before it will expire", CMPL(h) (char **)ipsectimeouttab, sizeof(struct ghs), 1, 1, ipsysctl },
-	{ "ipsec-soft-timeout", "Seconds after a SA is established before being renegotiated", CMPL(h) (char **)ipsecsofttimeouttab, sizeof(struct ghs), 1, 1, ipsysctl },
-	{ "ipsec-allocs", "Maximum IPSEC flows that can use a SA before it expires", CMPL(h) (char **)ipsecallocstab, sizeof(struct ghs), 1, 1, ipsysctl },
-	{ "ipsec-soft-allocs", "Maximum IPSEC flows a SA uses before renegotiation", CMPL(h) (char **)ipsecsoftallocstab, sizeof(struct ghs), 1, 1, ipsysctl },
-	{ "ipsec-bytes", "Maximum bytes processed by a security association before it expires", CMPL(h) (char **)ipsecbytestab, sizeof(struct ghs), 1, 1, ipsysctl },
-	{ "ipsec-soft-bytes", "Maximum bytes a SA processes before renegotiation", CMPL(h) (char **)ipsecsoftbytestab, sizeof(struct ghs), 1, 1, ipsysctl },
-	{ "ipsec-expire-acquire", "Seconds the kernel allows to dynamically acquire SAs before a request", CMPL(h) (char **)ipsecexpireacquiretab, sizeof(struct ghs), 1, 1, ipsysctl },
-	{ "ipsec-firstuse", "Seconds after security association is first used before it expires", CMPL(h) (char **)ipsecfirstusetab, sizeof(struct ghs), 1, 1, ipsysctl },
-	{ "ipsec-soft-firstuse", "Seconds after a SA is first used before it is sent for renegotiation", CMPL(h) (char **)ipsecsoftfirstusetab, sizeof(struct ghs), 1, 1, ipsysctl },
-	{ "ipsec-invalid-life", "Lifetime of Embryonic SAs in seconds", CMPL(h) (char **)ipsecinvalidlifetab, sizeof(struct ghs), 1, 1, ipsysctl },
-	{ "ipsec-pfs", "Enables Perfect Forward Secrecy when establishing SAs", CMPL(h) (char **)ipsecpfstab, sizeof(struct ghs), 0, 0, ipsysctl },
-	{ "portfirst", "Minimum registered port number for TCP/UDP port allocation", CMPL(h) (char **)portfirsttab, sizeof(struct ghs), 1, 1, ipsysctl },
-	{ "porthifirst", "Minimum dynamic/private port number for TCP/UDP port allocation", CMPL(h) (char **)porthifirsttab, sizeof(struct ghs), 1, 1, ipsysctl },
-	{ "porthilast", "Maximum dynamic/private port number for TCP/UDP port allocation", CMPL(h) (char **)porthilasttab, sizeof(struct ghs), 1, 1, ipsysctl },
-	{ "portlast", "Maximum registered port number for TCP/UDP port allocation", CMPL(h) (char **)portlasttab, sizeof(struct ghs), 1, 1, ipsysctl },
+	{ "arptimeout",	"Seconds for ARP entries to remain in cache",	CMPL(h) (char **)arptimeouttab, sizeof(struct ghs), 1, 1 },
+	{ "arpdown",	"Seconds before resending unanswered ARP requests", CMPL(h) (char **)arpdowntab, sizeof(struct ghs), 1, 1 },
+	{ "carp",	"Allow CARP",			CMPL(h) (char **)carptab, sizeof(struct ghs), 0, 0 },
+	{ "carp-log",	"CARP Logging Priority",	CMPL(h) (char **)carploggingtab, sizeof(struct ghs), 1, 1 },
+	{ "carp-preempt", "CARP Virtual Host Preemption", CMPL(h) (char **)carppreempttab, sizeof(struct ghs), 0, 0 },
+	{ "forwarding",	"Enable IPv4 Forwarding",	CMPL(h) (char **)forwardingtab, sizeof(struct ghs), 0, 0 },
+	{ "mforwarding", "Enable IPv4 Multicast Forwarding", CMPL(h) (char **)mforwardingtab, sizeof(struct ghs), 0, 0 },
+	{ "ipip",	"Allow IP-in-IP Encapsulation", CMPL(h) (char **)ipiptab, sizeof(struct ghs), 0, 0 },
+	{ "gre",	"Allow Generic Route Encapsulation", CMPL(h) (char **)gretab, sizeof(struct ghs), 0, 0 },
+	{ "wccp",	"Allow Web Cache Control Protocol", CMPL(h) (char **)wccptab, sizeof(struct ghs), 0, 0 },
+	{ "etherip",	"Allow Ether-IP Encapsulation",	CMPL(h) (char **)etheriptab, sizeof(struct ghs), 0, 0 },
+	{ "ipcomp",	"Allow IP Compression",		CMPL(h) (char **)ipcomptab, sizeof(struct ghs), 0, 0 },
+	{ "esp",	"Allow Encapsulated Security Payload", CMPL(h) (char **)esptab, sizeof(struct ghs), 0, 0 },
+	{ "esp-udpencap","Allow ESP encapsulation within UDP", CMPL(h) (char **)espudpencaptab, sizeof(struct ghs), 0, 0 },
+	{ "esp-udpencap-port","UDP port number for encapsulation", CMPL(h) (char **)espudpencapporttab, sizeof(struct ghs), 1, 1 },
+	{ "ah",		"Allow Authentication Header",	CMPL(h) (char**)ahtab, sizeof(struct ghs), 0, 0 },
+	{ "sourceroute", "Process Loose/Strict Source Route Options", CMPL(h) (char**)sourceroutetab, sizeof(struct ghs), 0, 1 },
+	{ "encdebug",	"Enable if_enc debugging",	CMPL(h) (char **)encdebugtab, sizeof(struct ghs), 0, 0 },
+	{ "send-redirects", "Send ICMP redirects",	CMPL(h) (char **)sendredirectstab, sizeof(struct ghs), 0, 0 },
+	{ "directed-broadcast", "Allow directed broadcasts", CMPL(h) (char **)directedbroadcaststab, sizeof(struct ghs), 0, 0 },
+	{ "multipath",	"Multipath routing",		CMPL(h) (char **)multipathtab, sizeof(struct ghs), 0, 0 },
+	{ "maxqueue", "Maximum unassembled IP fragments in the fragment queue", CMPL(h) (char **)maxqueuetab, sizeof(struct ghs), 1, 1 },
+	{ "mtudisc", "Enable Path MTU Discovery",       CMPL(h) (char **)mtudisctab, sizeof(struct ghs), 0, 0 },
+	{ "mtudisctimeout", "Timeout in seconds for routes added by Path MTU discovery engine", CMPL(h) (char **)mtudisctimeouttab, sizeof(struct ghs), 1, 1 },
+	{ "ipsec-timeout", "Seconds after a SA is established before it will expire", CMPL(h) (char **)ipsectimeouttab, sizeof(struct ghs), 1, 1 },
+	{ "ipsec-soft-timeout", "Seconds after a SA is established before being renegotiated", CMPL(h) (char **)ipsecsofttimeouttab, sizeof(struct ghs), 1, 1 },
+	{ "ipsec-allocs", "Maximum IPSEC flows that can use a SA before it expires", CMPL(h) (char **)ipsecallocstab, sizeof(struct ghs), 1, 1 },
+	{ "ipsec-soft-allocs", "Maximum IPSEC flows a SA uses before renegotiation", CMPL(h) (char **)ipsecsoftallocstab, sizeof(struct ghs), 1, 1 },
+	{ "ipsec-bytes", "Maximum bytes processed by a security association before it expires", CMPL(h) (char **)ipsecbytestab, sizeof(struct ghs), 1, 1 },
+	{ "ipsec-soft-bytes", "Maximum bytes a SA processes before renegotiation", CMPL(h) (char **)ipsecsoftbytestab, sizeof(struct ghs), 1, 1 },
+	{ "ipsec-expire-acquire", "Seconds the kernel allows to dynamically acquire SAs before a request", CMPL(h) (char **)ipsecexpireacquiretab, sizeof(struct ghs), 1, 1 },
+	{ "ipsec-firstuse", "Seconds after security association is first used before it expires", CMPL(h) (char **)ipsecfirstusetab, sizeof(struct ghs), 1, 1 },
+	{ "ipsec-soft-firstuse", "Seconds after a SA is first used before it is sent for renegotiation", CMPL(h) (char **)ipsecsoftfirstusetab, sizeof(struct ghs), 1, 1 },
+	{ "ipsec-invalid-life", "Lifetime of Embryonic SAs in seconds", CMPL(h) (char **)ipsecinvalidlifetab, sizeof(struct ghs), 1, 1 },
+	{ "ipsec-pfs", "Enables Perfect Forward Secrecy when establishing SAs", CMPL(h) (char **)ipsecpfstab, sizeof(struct ghs), 0, 0 },
+	{ "portfirst", "Minimum registered port number for TCP/UDP port allocation", CMPL(h) (char **)portfirsttab, sizeof(struct ghs), 1, 1 },
+	{ "porthifirst", "Minimum dynamic/private port number for TCP/UDP port allocation", CMPL(h) (char **)porthifirsttab, sizeof(struct ghs), 1, 1 },
+	{ "porthilast", "Maximum dynamic/private port number for TCP/UDP port allocation", CMPL(h) (char **)porthilasttab, sizeof(struct ghs), 1, 1 },
+	{ "portlast", "Maximum registered port number for TCP/UDP port allocation", CMPL(h) (char **)portlasttab, sizeof(struct ghs), 1, 1 },
 #ifdef notyet
-	{ "default-mtu", "Default interface MTU",	CMPL(h) (char **)defaultmtutab, sizeof(struct ghs), 1, 1, ipsysctl },
+	{ "default-mtu", "Default interface MTU",	CMPL(h) (char **)defaultmtutab, sizeof(struct ghs), 1, 1 },
 #endif
-	{ "default-ttl", "Default IP packet TTL",	CMPL(h) (char **)defaultttltab, sizeof(struct ghs), 1, 1, ipsysctl },
+	{ "default-ttl", "Default IP packet TTL",	CMPL(h) (char **)defaultttltab, sizeof(struct ghs), 1, 1 },
 	{ "?",		"Options",			CMPL0 0, 0, 0, 0, sysctlhelp },
 	{ 0, 0, 0, 0, 0, 0, 0, 0 }
 };
 
 Menu ip6tab[] = {
-	{ "auto_flowlabel", "Fill the IPv6 flowlabel field to help intermediate routers identify packet flows", CMPL0 0, 0, 0, 0, ipsysctl },
-	{ "dad_count", "Configures the number of IPv6 D.A.D. probe packets", CMPL0 0, 0, 1, 1, ipsysctl },
-	{ "defmcasthlim", "The default hop limit value for an IPv6 multicast packet sourced by the system", CMPL0 0, 0, 1, 1, ipsysctl },
-	{ "forwarding", "Enable IPv6 Forwarding",       CMPL0 0, 0, 0, 0, ipsysctl },
-	{ "hdrnestlimit", "The number of IPv6 extension headers permitted on incoming IPv6 packets", CMPL0 0, 0, 1, 1, ipsysctl },
-	{ "hoplimit", "The default hop limit for IPv6 unicast packet sourced by the system", CMPL0 0, 0, 1, 1, ipsysctl },
-	{ "log_interval", "Configures the amount of logs generated by the IPv6 packet forwarding engine", CMPL0 0, 0, 1, 1, ipsysctl },
-	{ "maxdynroutes", "Max IPv6 Dyn Routes",        CMPL0 0, 0, 1, 1, ipsysctl },
-	{ "maxfragpackets", "The maximum number of fragmented packets the system will accept", CMPL0 0, 0, 1, 1, ipsysctl },
-	{ "maxfrags", "The maximum number of fragments the node will accept", CMPL0 0, 0, 1, 1, ipsysctl },
-	{ "mforwarding", "Enable IPv6 Multicast Forwarding", CMPL0 0, 0, 0, 0, ipsysctl },
-	{ "mtudisctimeout", "Seconds after which a route added by the Path MTU Discovery engine will time out", CMPL0 0, 0, 1, 1, ipsysctl },
-	{ "multicast_mtudisc", "Enables ICMPv6 too big messages when machine is an IPv6 multicast router", CMPL0 0, 0, 0, 0, ipsysctl },
-	{ "multipath",  "Multipath routing",            CMPL0 0, 0, 0, 0, ipsysctl },
-	{ "neighborgcthresh", "Maximum number of entries in neighbor cache", CMPL0 0, 0, 1, 1, ipsysctl },
-	{ "send-redirect", "Enables sending ICMPv6 redirects by the system", CMPL0 0, 0, 0, 0, ipsysctl },
+	{ "auto_flowlabel", "Fill the IPv6 flowlabel field to help intermediate routers identify packet flows", CMPL0 0, 0, 0, 0 },
+	{ "dad_count", "Configures the number of IPv6 D.A.D. probe packets", CMPL0 0, 0, 1, 1 },
+	{ "defmcasthlim", "The default hop limit value for an IPv6 multicast packet sourced by the system", CMPL0 0, 0, 1, 1 },
+	{ "forwarding", "Enable IPv6 Forwarding",       CMPL0 0, 0, 0, 0 },
+	{ "hdrnestlimit", "The number of IPv6 extension headers permitted on incoming IPv6 packets", CMPL0 0, 0, 1, 1 },
+	{ "hoplimit", "The default hop limit for IPv6 unicast packet sourced by the system", CMPL0 0, 0, 1, 1 },
+	{ "log_interval", "Configures the amount of logs generated by the IPv6 packet forwarding engine", CMPL0 0, 0, 1, 1 },
+	{ "maxdynroutes", "Max IPv6 Dyn Routes",        CMPL0 0, 0, 1, 1 },
+	{ "maxfragpackets", "The maximum number of fragmented packets the system will accept", CMPL0 0, 0, 1, 1 },
+	{ "maxfrags", "The maximum number of fragments the node will accept", CMPL0 0, 0, 1, 1 },
+	{ "mforwarding", "Enable IPv6 Multicast Forwarding", CMPL0 0, 0, 0, 0 },
+	{ "mtudisctimeout", "Seconds after which a route added by the Path MTU Discovery engine will time out", CMPL0 0, 0, 1, 1 },
+	{ "multicast_mtudisc", "Enables ICMPv6 too big messages when machine is an IPv6 multicast router", CMPL0 0, 0, 0, 0 },
+	{ "multipath",  "Multipath routing",            CMPL0 0, 0, 0, 0 },
+	{ "neighborgcthresh", "Maximum number of entries in neighbor cache", CMPL0 0, 0, 1, 1 },
+	{ "send-redirect", "Enables sending ICMPv6 redirects by the system", CMPL0 0, 0, 0, 0 },
 	{ "?",          "Help",                         CMPL0 0, 0, 0, 0, sysctlhelp },
 	{ 0, 0, 0, 0, 0, 0, 0, 0 }
 };
 
 Menu mplstab[] = {
-	{ "ttl",	"MPLS ttl",			CMPL0 0, 0, 1, 1, ipsysctl },
-	{ "mapttl-ip",	"MPLS mapttl IPv4",		CMPL0 0, 0, 0, 1, ipsysctl },
-	{ "mapttl-ip6",	"MPLS mapttl IPv6",		CMPL0 0, 0, 0, 1, ipsysctl },
+	{ "ttl",	"MPLS ttl",			CMPL0 0, 0, 1, 1 },
+	{ "mapttl-ip",	"MPLS mapttl IPv4",		CMPL0 0, 0, 0, 1 },
+	{ "mapttl-ip6",	"MPLS mapttl IPv6",		CMPL0 0, 0, 0, 1 },
 	{ "?",		"Help",				CMPL0 0, 0, 0, 0, sysctlhelp },
 	{ 0, 0, 0, 0, 0, 0, 0, 0 }
 };
 
 Menu ddbtab[] = {
-	{ "panic",	"DDB panic",			CMPL0 0, 0, 0, 0, ipsysctl },
-	{ "console",	"DDB console",			CMPL0 0, 0, 0, 0, ipsysctl },
-	{ "log",	"DDB log",			CMPL0 0, 0, 0, 0, ipsysctl },
+	{ "panic",	"DDB panic",			CMPL0 0, 0, 0, 0 },
+	{ "console",	"DDB console",			CMPL0 0, 0, 0, 0 },
+	{ "log",	"DDB log",			CMPL0 0, 0, 0, 0 },
 	{ "?",		"Help",				CMPL0 0, 0, 0, 0, sysctlhelp },
 	{ 0, 0, 0, 0, 0, 0, 0, 0 }
 };
 
 Menu pipextab[] = {
-	{ "enable",	"PIPEX enable",			CMPL0 0, 0, 0, 0, ipsysctl },
+	{ "enable",	"PIPEX enable",			CMPL0 0, 0, 0, 0 },
 	{ "?",		"Help",				CMPL0 0, 0, 0, 0, sysctlhelp },
 	{ 0, 0, 0, 0, 0, 0, 0, 0 }
 };
 
+/*
+ * ip, ip6, mpls, ddb and pipex: a sysctl of the table the line's word
+ * names, as its index there, and its value, if it takes one
+ * (ipcmd_parse())
+ */
+
+/* The table of sysctls c is for */
+static struct sysctltab *
+ipcmd_tab(const struct argcmd *c)
+{
+	struct sysctltab *stab;
+
+	for (stab = sysctls; stab->name != NULL &&
+	    strcmp(stab->name, c->name) != 0; stab++)
+		;
+	return stab;
+}
+
 static int
 ipcmd(int argc, char **argv, ...)
 {
-	Menu *i;     /* pointer to current command */
 	struct sysctltab *stab;
-	int set, success = 0;
+	int n = NO_ARG(argv[0]) ? 1 : 0;
 	struct cand *cand;
 	va_list ap;
 
@@ -490,52 +510,88 @@ ipcmd(int argc, char **argv, ...)
 	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
-	if (NO_ARG(argv[0])) {
-		argv++;
-		argc--;
-		set = 0;
-	} else
-		set = 1;
-
 	/*
 	 * Find ourself in the great divide
 	 */
-	stab = (struct sysctltab *)genget(argv[0], (char **)sysctls,
+	stab = (struct sysctltab *)genget(argv[n], (char **)sysctls,
 	    sizeof(struct sysctltab));
         if (stab == 0) {
-                printf("%% Invalid argument %s\n", argv[0]);
+                printf("%% Invalid argument %s\n", argv[n]);
                 return -1;
         } else if (Ambiguous(stab)) {
-                printf("%% Ambiguous argument %s\n", argv[0]);
+                printf("%% Ambiguous argument %s\n", argv[n]);
                 return -1;
         }
 
-	if (argc < 2) {
+	/* with no sysctl, or "?", the table's help */
+	if (argc < n + 2 || strcmp(argv[n + 1], "?") == 0) {
 		sysctlhelp(0, NULL, NULL, stab->pf);
 		return 0;
 	}
+	return conf_line(CTX_TOP, argc, argv, NULL, -1, cand);
+}
 
+/* the sysctl's word, and its value */
+static int
+ipcmd_parse(const struct argcmd *c, int argc, char **argv,
+    struct argvals *a)
+{
+	struct sysctltab *stab = ipcmd_tab(c);
+	struct ipsysctl *x;
+	Menu *i;
+
+	if (argc < 1) {
+		sysctlhelp(0, NULL, NULL, stab->pf);
+		return -1;
+	}
 	/*
 	 * Validate ip argument
 	 */
-        i = (Menu *)genget(argv[1], (char **)stab->table, sizeof(Menu));
+        i = (Menu *)genget(argv[0], (char **)stab->table, sizeof(Menu));
 	if (i == 0) {
-		printf("%% Invalid argument %s\n", argv[1]);
+		printf("%% Invalid argument %s\n", argv[0]);
 		return -1;
 	} else if (Ambiguous(i)) {
-		printf("%% Ambiguous argument %s\n", argv[1]);
+		printf("%% Ambiguous argument %s\n", argv[0]);
 		return -1;
 	}
-	if (((i->minarg + 2) > argc) || ((i->maxarg + 2) < argc)) {
+	if (((i->minarg + 1) > argc) || ((i->maxarg + 1) < argc)) {
 		printf("%% Wrong argument%s to '%s %s' command.\n",
-		    argc <= 2 ? "" : "s", argv[0], i->name);
+		    argc <= 1 ? "" : "s", c->name, i->name);
 		return -1;
 	}
+	x = (struct ipsysctl *)genget(i->name, (char **)stab->sysctl,
+	    sizeof(struct ipsysctl));
+	if (x == 0 || Ambiguous(x)) {
+		printf("%% Invalid argument %s\n", argv[0]);
+		return -1;
+	}
+	facts_i64(&a->v[0], x - stab->sysctl);
+	/* a "no" line's value is ignored */
+	if (argc == 2 && a->set &&
+	    args_word(c, &c->args[1], a, argv[1], &a->v[1]) == -1)
+		return -1;
+	return 0;
+}
 
-	if (i->handler)
-		success = (*i->handler)(set, &argv[1],
-		    (i->maxarg > 0) ? argv[2] : 0, stab->pf, cand);
-	return success;
+static int
+ipcmd_apply(const struct argcmd *c, int set, const struct facts_value *v,
+    char *ifname, int ifs, struct cand *cand)
+{
+	struct sysctltab *stab = ipcmd_tab(c);
+	struct ipsysctl *x;
+	int n;
+
+	for (x = stab->sysctl, n = 0; x->name != NULL && n < v[0].v.i; x++)
+		n++;
+	if (x->name == NULL) {
+		printf("%% %s has no sysctl %lld\n", c->name,
+		    (long long)v[0].v.i);
+		return -1;
+	}
+	/* a sysctl set with no value is on */
+	return ipsysctl_set(stab, x, !set ? x->def_larg :
+	    v[1].type != FACT_NONE ? v[1].v.i : 1, cand);
 }
 
 static int
@@ -897,6 +953,12 @@ static const struct arg brport_args[] = {
 static const struct arg brpvlan_args[] = {
 	{ "primary-vlan", ARG_NUM, EVL_VLID_MIN, EVL_VLID_MAX, ARG_NO },
 	{ "vlan",	ARG_NUM, EVL_VLID_MIN, EVL_VLID_MAX, ARG_NO },
+	{ NULL }
+};
+
+static const struct arg ipcmd_args[] = {
+	{ "sysctl",	ARG_NUM, 0, 255, ARG_NO },
+	{ "value",	ARG_NUM, 0, INT_MAX, ARG_OPT },
 	{ NULL }
 };
 
@@ -1983,21 +2045,47 @@ Menu grouptab[] = {
 
 #define ssctl sizeof(struct ctl)
 Command cmdtab[] = {
-	{ "hostname",	hostnamehelp,	CMPL0 0, 0, hostname,		1, 1, 0, 0, CAND_EDIT },
+	{ "hostname", hostnamehelp, CMPL0
+	  .handler = hostname, .needsession = 1, .needconfig = 1,
+	  .cand = CAND_EDIT,
+	  .apply = hostname_apply,
+	  .args = ARGS{
+		{ "hostname",	ARG_WORD, 1, MAXHOSTNAMELEN - 1 },
+		{ NULL } } },
 	{ "login",	loginhelp,	CMPL0 0, 0, loginset,		1, 1, 1, 0, CAND_EDIT },
 	{ "interface",	interfacehelp,	CMPL(i) 0, 0, interface,	1, 1, 1, 1, CAND_EDIT },
 	{ "rtable",	rtablehelp,	CMPL(rh) (char **)rtabletab, sizeof(struct ghs), rtable,	0, 0, 1, 2, CAND_EDIT },
 	{ "group",	grouphelp,	CMPL(gth) (char **)grouptab, sizeof(Menu), group, 1, 1, 1, 0, CAND_RUN },
 	{ "arp",	arphelp,	CMPL0 0, 0, arpset,		1, 1, 1, 0, CAND_EDIT },
 	{ "ndp",	ndphelp,	CMPL0 0, 0, ndpset,		1, 1, 1, 0, CAND_EDIT },
-	{ "nameserver",	nameserverhelp,	CMPL0 0, 0, nameserverset,	1, 1, 1, 0, CAND_EDIT },
+	{ "nameserver", nameserverhelp, CMPL0
+	  .needsession = 1, .needconfig = 1, .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = nameserver_apply,
+	  .args = ARGS{
+		{ "address",	ARG_ADDR, 0, 0, 0, NULL, NAMESERVERS },
+		{ NULL } } },
 	{ "bridge",	bridgehelp,	CMPL(i) 0, 0, interface,	1, 1, 1, 1, CAND_EDIT },
 	{ "show",	showhelp,	CMPL(ta) (char **)showlist, sizeof(Menu), 0,	0, 0, 0, 0 },
-	{ "ip",		iphelp,		CMPL(ta) (char **)iptab, sizeof(Menu), ipcmd,		1, 1, 1, 0, CAND_EDIT },
-	{ "ip6",	ip6help,	CMPL(ta) (char **)ip6tab, sizeof(Menu), ipcmd,		1, 1, 1, 0, CAND_EDIT },
-	{ "mpls",	mplshelp,	CMPL(ta) (char **)mplstab, sizeof(Menu), ipcmd,		1, 1, 1, 0, CAND_EDIT },
-	{ "ddb",	ddbhelp,	CMPL(ta) (char **)ddbtab, sizeof(Menu), ipcmd,		1, 1, 1, 0, CAND_EDIT },
-	{ "pipex",	pipexhelp,	CMPL(ta) (char **)pipextab, sizeof(Menu), ipcmd,	1, 1, 1, 0, CAND_EDIT },
+	{ "ip", iphelp, CMPL(ta)
+	  .table = (char **)iptab, .stlen = sizeof(Menu), .handler = ipcmd,
+	  .needsession = 1, .needconfig = 1, .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = ipcmd_apply, .parse = ipcmd_parse, .args = ipcmd_args },
+	{ "ip6", ip6help, CMPL(ta)
+	  .table = (char **)ip6tab, .stlen = sizeof(Menu), .handler = ipcmd,
+	  .needsession = 1, .needconfig = 1, .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = ipcmd_apply, .parse = ipcmd_parse, .args = ipcmd_args },
+	{ "mpls", mplshelp, CMPL(ta)
+	  .table = (char **)mplstab, .stlen = sizeof(Menu), .handler = ipcmd,
+	  .needsession = 1, .needconfig = 1, .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = ipcmd_apply, .parse = ipcmd_parse, .args = ipcmd_args },
+	{ "ddb", ddbhelp, CMPL(ta)
+	  .table = (char **)ddbtab, .stlen = sizeof(Menu), .handler = ipcmd,
+	  .needsession = 1, .needconfig = 1, .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = ipcmd_apply, .parse = ipcmd_parse, .args = ipcmd_args },
+	{ "pipex", pipexhelp, CMPL(ta)
+	  .table = (char **)pipextab, .stlen = sizeof(Menu), .handler = ipcmd,
+	  .needsession = 1, .needconfig = 1, .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = ipcmd_apply, .parse = ipcmd_parse, .args = ipcmd_args },
 	{ "flush",	flushhelp,	CMPL(ta) (char **)flushlist, sizeof(Menu), 0,	1, 0, 0, 0 },
 	{ "clear",      clearhelp,      CMPL0 0, 0, 0,              0, 0, 0, 0 },
 	{ "route",	routehelp,	CMPL0 0, 0, route,		1, 1, 1, 0, CAND_EDIT },
@@ -2073,19 +2161,12 @@ size_t cmdtab_nitems = nitems(cmdtab);
  * take no
  */
 static const struct confcmd conf_top[] = {
-	{ "hostname",	hostname,	0 },
 	{ "login",	loginset,	CF_NO },
 	{ "interface",	interface,	CF_NO | CF_IF },
 	{ "rtable",	rtable,		CF_NO | CF_RTABLE },
 	{ "arp",	arpset,		CF_NO },
 	{ "ndp",	ndpset,		CF_NO },
-	{ "nameserver",	nameserverset,	CF_NO },
 	{ "bridge",	interface,	CF_NO | CF_BRIDGE },
-	{ "ip",		ipcmd,		CF_NO },
-	{ "ip6",	ipcmd,		CF_NO },
-	{ "mpls",	ipcmd,		CF_NO },
-	{ "ddb",	ipcmd,		CF_NO },
-	{ "pipex",	ipcmd,		CF_NO },
 	{ "route",	route,		CF_NO },
 };
 
@@ -2163,7 +2244,7 @@ cmdline(char *text, struct cand *cand)
 		return cmdexit(cand);
 	if (c->modh)
 		strlcpy(hname, c->name, HSIZE);
-	return (*c->handler)(margc, margv, cand);
+	return top_line(c, cand);
 }
 
 /* A line in an interface's mode, as interface()'s loop runs it */
@@ -2259,9 +2340,8 @@ cmdexit(struct cand *cand)
 	return cand_leave(cand) ? -1 : 0;
 }
 
-/*
- * Hostname command.
- */
+/* hostname: with a name, set it, and without one, show it */
+
 static int
 hostname(int argc, char **argv, ...)
 {
@@ -2272,24 +2352,25 @@ hostname(int argc, char **argv, ...)
 	cand = va_arg(ap, struct cand *);
 	va_end(ap);
 
-	argv++;
-	argc--;
+	if (argc == 1)
+		return facts_show(stdout, "hostname");
+	return conf_line(CTX_TOP, argc, argv, NULL, -1, cand);
+}
 
-	if (argc > 1) {
-		printf("%% Invalid arguments\n");
+static int
+hostname_apply(const struct argcmd *c, int set, const struct facts_value *v,
+    char *ifname, int ifs, struct cand *cand)
+{
+	char name[MAXHOSTNAMELEN];
+
+	args_string(&v[0], name, sizeof(name));
+	if (cand != NULL)
+		return cand_setting(cand, ST_ON, "hostname %s", name);
+	if (sethostname(name, strlen(name))) {
+		printf("%% sethostname: %s\n", strerror(errno));
 		return -1;
 	}
-
-	if (argc == 1) {
-		if (cand != NULL)
-			return cand_setting(cand, ST_ON, "hostname %s", *argv);
-		if (sethostname(*argv, strlen(*argv))) {
-			printf("%% sethostname: %s\n", strerror(errno));
-			return -1;
-		}
-		return 0;
-	}
-	return facts_show(stdout, "hostname");
+	return 0;
 }
 
 int
@@ -2723,6 +2804,30 @@ int_cmd(const struct intlist *i, struct argcmd *c)
 }
 
 /*
+ * int_cmd() for row t of cmdtab: it takes no if its row says so, and it
+ * heads a block if its row starts one, an rtable's, or the one its code
+ * names, an interface's or a bridge's
+ */
+static const struct argcmd *
+top_cmd(const Command *t, struct argcmd *c)
+{
+	if (t->apply == NULL)
+		return NULL;
+	memset(c, 0, sizeof(*c));
+	c->name = t->name;
+	c->flags = t->nocmd ? CF_NO : CF_SET;
+	if (t->modh == 2)
+		c->flags |= CF_RTABLE;
+	else if (t->modh)
+		c->flags |= t->code;
+	c->apply = t->apply;
+	c->code = t->code;
+	c->args = t->args;
+	c->parse = t->parse;
+	return c;
+}
+
+/*
  * Run the line in margv by row i of an interface's or a bridge's mode:
  * its handler, or with none, as the row's arguments say
  */
@@ -2740,10 +2845,25 @@ int_line(const struct intlist *i, char *ifname, int ifs, struct cand *cand)
 	return args_run(&c, margc, margv, ifname, ifs, cand);
 }
 
+/* int_line() for row t of the top level */
+static int
+top_line(const Command *t, struct cand *cand)
+{
+	struct argcmd c;
+
+	if (t->handler != NULL)
+		return (*t->handler)(margc, margv, cand);
+	if (top_cmd(t, &c) == NULL) {
+		printf("%% %s: internal failure\n", t->name);
+		return -1;
+	}
+	return args_run(&c, margc, margv, NULL, -1, cand);
+}
+
 /*
  * Row n of ctx's table, cmdtab, Intlist or Bridgelist for CTX_TOP,
  * CTX_IF or CTX_BRIDGE, as c, if it is a command a configuration has:
- * one config parses (int_cmd()), or one that runs with its words
+ * one config parses (int_cmd(), top_cmd()), or one that runs with its words
  * still (conf_words()). NULL for any other row, and where there is no
  * such row. A commit's edits name a command by its row (commit.c), so a
  * commit runs no row that is not one of these: a daemon's, which ctl.c
@@ -2758,6 +2878,8 @@ conf_cmd(int ctx, int n, struct argcmd *c)
 	case CTX_TOP:
 		if ((size_t)n >= nitems(cmdtab) - 1)
 			return NULL;
+		if (top_cmd(&cmdtab[n], c) != NULL)
+			return c;
 		return conf_words(conf_top, nitems(conf_top),
 		    cmdtab[n].name, c);
 	case CTX_IF:
@@ -2849,17 +2971,21 @@ conf_line(int ctx, int argc, char **argv, char *ifname, int ifs,
 }
 
 /*
- * Run the command at row n of ctx (an interface or bridge command) on
- * name with values v, as conf_run() runs a line. set is 0 for "no".
+ * Run the command at row n of ctx with values v, as conf_run() runs a
+ * line: a statement, or an interface or bridge command on name. set is
+ * 0 for "no".
  */
 int
 conf_run_values(int ctx, int n, int set, const struct facts_value *v,
     char *name)
 {
 	struct argcmd row;
+	const struct argcmd *c = conf_cmd(ctx, n, &row);
 
-	return conf_run_if(ctx == CTX_BRIDGE, conf_cmd(ctx, n, &row), 0, NULL,
-	    set, v, name);
+	if (ctx == CTX_TOP)
+		return c->apply(c, set, v, NULL, -1, NULL) == -1 ? -1 :
+		    0;
+	return conf_run_if(ctx == CTX_BRIDGE, c, 0, NULL, set, v, name);
 }
 
 /*

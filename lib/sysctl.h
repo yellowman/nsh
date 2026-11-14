@@ -34,6 +34,7 @@ struct sysctltab {
 };
 
 extern struct sysctltab sysctls[];
+int ipsysctl_set(struct sysctltab *, struct ipsysctl *, int32_t, struct cand *);
 extern struct ipsysctl ipsysctls[];
 extern struct ipsysctl ip6sysctls[];
 extern struct ipsysctl mplssysctls[];

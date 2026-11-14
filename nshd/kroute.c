@@ -578,65 +578,20 @@ rtmsg(int cmd, int flags, int proxy, int export, int tableid, struct cand *cand)
 }
 
 int
-rtnameserver(int argc, char *argv[], int tableid)
+rtnameserver(char *if_name, struct in_addr *ns4, size_t ns4_count,
+    struct in6_addr *ns6, size_t ns6_count, int tableid)
 {
 	struct rt_msghdr         rtm;
 	struct sockaddr_rtdns    rtdns;
 	struct iovec             iov[3];
-	struct addrinfo	*res;
-	struct in_addr           ns4[5];
-	struct in6_addr          ns6[5];
-	size_t			 ns4_count = 0, ns6_count = 0;
 	long			 pad = 0;
 	unsigned int		 if_index;
 	int			 error = 0, iovcnt = 0, padlen, i, s;
-	char			*if_name, buf[INET6_ADDRSTRLEN];
-
-	if (argc <= 0) {
-		printf("%% rtnameserver: no interface name provided\n");
-		return (1);
-	}
-
-	if_name = *argv;
-	argc--;
-	argv++;
+	char			 buf[INET6_ADDRSTRLEN];
 
 	if ((if_index = if_nametoindex(if_name)) == 0) {
 		printf("%% rtnameserver: unknown interface: %s\n", if_name);
 		return (1);
-	}
-
-#ifndef nitems
-#define nitems(_a)      (sizeof((_a)) / sizeof((_a)[0]))
-#endif
-
-	for (; argc > 0 && ns4_count + ns6_count < 5; argc--, argv++) {
-		error = numeric_addrinfo(*argv, NULL, AF_UNSPEC, SOCK_STREAM,
-		    &res);
-		if (error) {
-			printf("%% rtnameserver: %s\n", gai_strerror(error));
-			continue;
-		}
-		if (res == NULL) {
-			printf("%% rtnameserver: %s: unknown\n", *argv);
-			continue;
-		}
-
-		switch (res->ai_addr->sa_family) {
-		case AF_INET:
-			memcpy(&ns4[ns4_count++],
-			    &((struct sockaddr_in *)res->ai_addr)->sin_addr,
-			    sizeof(struct in_addr));
-			break;
-		case AF_INET6:
-			memcpy(&ns6[ns6_count++],
-			    &((struct sockaddr_in6 *)res->ai_addr)->sin6_addr,
-			    sizeof(struct in6_addr));
-			break;
-		default:
-			break;
-		}
-		freeaddrinfo(res);
 	}
 
 	if (verbose) {

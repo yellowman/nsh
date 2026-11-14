@@ -19,93 +19,45 @@
 #include <arpa/inet.h>
 
 #include <errno.h>
-#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 
 #include "stringlist.h"
 #include "externs.h"
 #include "settings.h"
+#include "facts.h"
+#include "args.h"
 
-int nameserver_usage(void);
-int nameserver4_valid(char *);
-int nameserver6_valid(char *);
 
-int
-nameserver_usage(void)
-{
-	printf("%% nameserver IP-address1 [IP-address2 ... IP-address5]\n");
-	printf("%% no nameserver [IP-address1 ... IP-address5]\n");
-	return (-1);
-}
+/* nameserver: up to NAMESERVERS addresses; "no nameserver" takes none */
 
 int
-nameserver4_valid(char *addrstr)
+nameserver_apply(const struct argcmd *c, int set, const struct facts_value *v,
+    char *ifname, int ifs, struct cand *cand)
 {
-	struct in_addr addr4;
-	int ret;
+	struct in_addr ns4[NAMESERVERS];
+	struct in6_addr ns6[NAMESERVERS];
+	char addr[NAMESERVERS][INET6_ADDRSTRLEN];
+	size_t n4 = 0, n6 = 0;
+	int i, n;
 
-	ret = inet_pton(AF_INET, addrstr, &addr4);
-	if (ret == -1) {
-		printf("%% inet_pton: %s", strerror(errno));
-		return (0);
-	}
-	return (ret == 1);
-}
-
-int
-nameserver6_valid(char *addrstr)
-{
-	struct in6_addr addr6;
-	int ret;
-
-	ret = inet_pton(AF_INET6, addrstr, &addr6);
-	if (ret == -1) {
-		printf("%% inet_pton: %s", strerror(errno));
-		return (0);
-	}
-	return (ret == 1);
-}
-
-int
-nameserverset(int argc, char *argv[], ...)
-{
-	int i, set = 1;
-	struct cand *cand;
-	va_list ap;
-
-	va_start(ap, argv);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
-
-	if (argc < 2)
-		return nameserver_usage();
-
-	if (NO_ARG(argv[0])) {
-		argv++;
-		argc--;
-		if (argc > 6)
-			return nameserver_usage();
-		set = 0;
-	} else {
-		if (argc > 6)
-			return nameserver_usage();
-
-		for (i = 1; i < argc; i++) {
-			if (!nameserver4_valid(argv[i]) &&
-			    !nameserver6_valid(argv[i])) {
-				printf("%% invalid address: %s\n", argv[i]);
-				return -1;
-			}
+	for (n = 0; set && n < NAMESERVERS && v[n].type != FACT_NONE; n++)
+		if (v[n].v.a.family == FACT_INET) {
+			memcpy(&ns4[n4++], v[n].v.a.bytes, sizeof(*ns4));
+			inet_ntop(AF_INET, v[n].v.a.bytes, addr[n],
+			    sizeof(addr[n]));
+		} else {
+			memcpy(&ns6[n6++], v[n].v.a.bytes, sizeof(*ns6));
+			inet_ntop(AF_INET6, v[n].v.a.bytes, addr[n],
+			    sizeof(addr[n]));
 		}
-	}
 
 	if (cand != NULL) {
 		char line[256] = "nameserver";
 
-		for (i = 1; set && i < argc; i++) {
+		for (i = 0; i < n; i++) {
 			strlcat(line, " ", sizeof(line));
-			strlcat(line, argv[i], sizeof(line));
+			strlcat(line, addr[i], sizeof(line));
 		}
 		return cand_setting(cand, set ? ST_ON : ST_OFF, "%s", line);
 	}
@@ -121,18 +73,15 @@ nameserverset(int argc, char *argv[], ...)
 		return -1;
 	}
 
-	if (set) {
-		for (i = 1; i < argc; i++) {
-			if (db_insert_nameserver(argv[i]) < 0) {
-				printf("%% nameservers db insertion error\n");
-				return -1;
-			}
+	for (i = 0; i < n; i++) {
+		if (db_insert_nameserver(addr[i]) < 0) {
+			printf("%% nameservers db insertion error\n");
+			return -1;
 		}
 	}
 
-	argv[0] = "lo0";
 	/* "no nameserver" proposes none, whatever addresses it was given */
-	if (rtnameserver(set ? argc : 1, argv, 0 /* always use rtable 0 */))
+	if (rtnameserver("lo0", ns4, n4, ns6, n6, 0 /* always rtable 0 */))
 		return (-1);
 	return (0);
 }

@@ -139,6 +139,7 @@ struct argcmd {
 #define CF_IF		0x2	/* it heads an interface's block */
 #define CF_BRIDGE	0x4	/* a bridge's block */
 #define CF_RTABLE	0x8	/* an rtable's block */
+#define CF_SET		0x10	/* it only sets: its usage has no "no" line */
 
 /*
  * parsed values; strings point into argv, or into rest for ARG_REST,
@@ -175,6 +176,7 @@ enum { WG_PORT, WG_KEY, WG_RTABLE };			/* intwg_apply() */
 #define NWKEY_TEXT	200	/* and a key line's, as typed */
 #define JOIN_WPAKEY	1	/* the kinds of key a join line has */
 #define JOIN_NWKEY	2
+#define NAMESERVERS	5
 #define WGPEER_AIPS	120	/* the most aips on one line, more than a
 				   1023 byte line can hold */
 /* media's subtypes and options, by their place in the kernel's lists */
@@ -204,6 +206,7 @@ args_applyfn	intip_apply, intpflow_apply, intpatch_apply, intmtu_apply,
 args_parsefn	intip_parse, intpwe3_parse, intdhcrelay6_parse, intlladdr_parse;
 args_applyfn	intmedia_apply, intmediaopt_apply;
 args_parsefn	intmedia_parse, intmediaopt_parse;
+args_applyfn	nameserver_apply;
 args_applyfn	intsyncdev_apply, intsyncpeer_apply, intmaxupd_apply;
 args_applyfn	intsppp_apply, intpppoe_apply;
 args_applyfn	inttrunkport_apply, inttrunkproto_apply, intlacp_apply;

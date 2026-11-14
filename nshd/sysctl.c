@@ -202,55 +202,11 @@ struct ipsysctl pipexsysctls[] = {
 { 0, { 0, 0, 0, 0, 0, 0 }, 0, 0 }
 };
 
+/* Set sysctl x of stab to larg, or in configure private, its line */
 int
-ipsysctl(int set, char **cmd, ...)
+ipsysctl_set(struct sysctltab *stab, struct ipsysctl *x, int32_t larg,
+    struct cand *cand)
 {
-	int32_t larg;
-	const char *errmsg = NULL;
-	struct ipsysctl *x;
-	struct sysctltab *stab;
-	va_list ap;
-	struct cand *cand;
-	char *arg;
-	int type;
-
-	va_start(ap, cmd);
-	arg = va_arg(ap, char *);
-	type = va_arg(ap, int);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
-
-	for (stab = sysctls; stab-> name != NULL; stab++)
-		if(stab->pf == type)
-			break;
-	if (stab->pf != type) {
-		printf("%% table lookup failed (%d)\n", type);
-		return -1;
-	}
-
-	x = (struct ipsysctl *) genget(*cmd, (char **)stab->sysctl,
-	    sizeof(struct ipsysctl));
-	if (x == 0) {
-		printf("%% Invalid argument %s\n", *cmd);
-		return -1;
-	} else if (Ambiguous(x)) {
-		printf("%% Ambiguous argument %s\n", *cmd);
-		return -1;
-	}
-
-	if (set) {
-		if (arg) {
-			larg = strtonum(arg, 0, INT_MAX, &errmsg);
-			if (errmsg) {
-				printf("%% Invalid argument %s: %s\n", arg,
-				    errmsg);
-				return -1;
-			}
-		} else
-			larg = 1;
-	} else
-		larg = x->def_larg;
-
 	if (cand != NULL) {
 		char line[128];
 

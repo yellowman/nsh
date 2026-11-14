@@ -1193,18 +1193,21 @@ edits_check(char *buf, size_t len)
 			printf("%% edits: a record cut short\n");
 			return -1;
 		}
-		if (e.no > 1 || (e.typed && e.kind != EDIT_IF &&
-		    e.kind != EDIT_BRIDGE))
+		if (e.no > 1 || (e.typed && e.kind != EDIT_TOP &&
+		    e.kind != EDIT_IF && e.kind != EDIT_BRIDGE))
 			goto bad;
 		switch (e.kind) {
 		case EDIT_TOP:
+			n = 0;
 			if ((c = conf_cmd(CTX_TOP, e.row, &cmd)) == NULL ||
 			    (block != 0 && (block != CF_RTABLE ||
 			    (c->flags & (CF_IF | CF_BRIDGE | CF_RTABLE)))) ||
 			    (e.no && (c->flags & CF_NO) == 0) ||
-			    (n = edit_words(p, e.len, w, NARGS - 2)) == -1 ||
-			    ((c->flags & (CF_IF | CF_BRIDGE | CF_RTABLE)) &&
-			    n == 0))
+			    e.typed != (c->apply != NULL) || (e.typed ?
+			    edit_typed(c, &e, p, CTX_TOP, 0, NULL) :
+			    (n = edit_words(p, e.len, w, NARGS - 2))) == -1 ||
+			    (!e.typed && (c->flags & (CF_IF | CF_BRIDGE |
+			    CF_RTABLE)) && n == 0))
 				goto bad;
 			if (!e.no && (c->flags & (CF_IF | CF_BRIDGE |
 			    CF_RTABLE)))

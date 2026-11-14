@@ -212,7 +212,7 @@ arg_usage(const struct arg *f, int set, int ignored)
 		printf(" [%s ...]", args_called(f));
 }
 
-/* Print the usage of c and of "no c". Returns -1. */
+/* Print the usage of c, and of "no c" unless c only sets. Returns -1. */
 int
 args_usage(const struct argcmd *c)
 {
@@ -221,8 +221,11 @@ args_usage(const struct argcmd *c)
 	printf("%% %s", c->name);
 	for (i = 0; i < args_n(c); i++)
 		arg_usage(&c->args[i], 1, 0);
+	printf("\n");
+	if (c->flags & CF_SET)
+		return -1;
 	/* for "no", list only what it parses, if that includes named ones */
-	printf("\n%% no %s", c->name);
+	printf("%% no %s", c->name);
 	for (i = 0; i < args_n(c); i++)
 		if ((c->args[i].flags & ARG_NO) || !args_named_no(c))
 			arg_usage(&c->args[i], 0,

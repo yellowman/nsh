@@ -261,6 +261,19 @@ typedef struct cmd {
 	int nocmd;		/* Can we specify 'no ...command...'? */
 	int modh;		/* Does it start a block? 2 for an rtable */
 	int cand;		/* What it does in configure private (CAND_*) */
+	/*
+	 * If config parses the command's line into values (nshd's
+	 * args.h): the function that applies them, a code that tells it
+	 * which of its commands this is, the line's arguments, ended by
+	 * one with no name, and for a grammar the arguments cannot say,
+	 * the function that reads the line's words. Such a row needs no
+	 * handler
+	 */
+	int (*apply)(const struct argcmd *, int, const struct facts_value *,
+	    char *, int, struct cand *);
+	int code;
+	const struct arg *args;
+	int (*parse)(const struct argcmd *, int, char **, struct argvals *);
 } Command;
 
 typedef struct menu {
@@ -283,14 +296,7 @@ struct intlist {
 	int (*handler)(int, char **, ...);       /* Routine to perform */
 	int nocmd;		/* Can we specify 'no ...command...'? */
 	int cand;		/* What it does in configure private (CAND_*) */
-	/*
-	 * If config parses the command's line into values (nshd's
-	 * args.h): the function that applies them, a code that tells it
-	 * which of its commands this is, the line's arguments, ended by
-	 * one with no name, and for a grammar the arguments cannot say,
-	 * the function that reads the line's words. Such a row needs no
-	 * handler
-	 */
+	/* as a Command's: what config parses the line with, if it does */
 	int (*apply)(const struct argcmd *, int, const struct facts_value *,
 	    char *, int, struct cand *);
 	int code;
@@ -351,7 +357,6 @@ void gen_help(char **, char *, char *, int);
 
 /* sysctl.c */
 int sysctl_int(int[], int, int);
-int ipsysctl(int, char **, ...);
 void conf_sysctls(FILE *);
 
 /* route.c */
@@ -366,7 +371,10 @@ int ip_route(ip_t *, ip_t *, u_short, int, int, struct rt_metrics, int inits,
     struct cand *);
 #endif
 int route_cand(struct rt_msghdr *, struct cand *);
-int rtnameserver(int, char *[], int);
+struct in_addr;
+struct in6_addr;
+int rtnameserver(char *, struct in_addr *, size_t, struct in6_addr *, size_t,
+    int);
 #ifdef _NETINET6_IN6_H_
 int parse_ipv6(char *, struct in6_addr *);
 #endif
@@ -542,7 +550,6 @@ void ndpflush(void);
 void conf_ndp(FILE *output, char *delim, int);
 
 /* nameserver.c */
-int nameserverset(int, char **, ...);
 void conf_nameserver(FILE *);
 
 /* more.c */
