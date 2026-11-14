@@ -110,11 +110,11 @@ static int in_rc;		/* a commit's edits run */
 static struct cnode *snapshot;	/* config's running configuration */
 
 static int	exitconfig(int, char **, ...);
-static int	rtable(int, char**, ...);
 static int	int_line(const struct intlist *, char *, int, struct cand *);
 static int	top_line(const Command *, struct cand *);
-static args_applyfn	ipcmd_apply, hostname_apply;
-static args_parsefn	ipcmd_parse;
+static args_applyfn	ipcmd_apply, interface_apply, hostname_apply,
+			rtable_apply;
+static args_parsefn	ipcmd_parse, interface_parse;
 static int	conf_run_if(int, const struct argcmd *, int, char **, int,
 		    const struct facts_value *, char *);
 static int	cand_leave(struct cand *);
@@ -132,7 +132,6 @@ static int	int_op(int, char **, ...);
 static struct intlist *int_op_find(int, char **);
 static int	int_exit(int, char **, ...);
 static int	hostname(int, char **, ...);
-static int	interface(int, char **, ...);
 static int	int_interface(int, char **, ...);
 
 static struct fpf {
@@ -962,6 +961,12 @@ static const struct arg ipcmd_args[] = {
 	{ NULL }
 };
 
+static const struct arg interface_args[] = {
+	{ "name",	ARG_WORD, 1, IFNAMSIZ - 1, ARG_NO,
+	  .help = "interface name" },
+	{ NULL }
+};
+
 static const struct arg ip_args[] = {
 	{ "address",	ARG_ADDR, 0, 0, ARG_OPT | ARG_NO },
 	{ "prefixlen",	ARG_NUM, 0, 128, ARG_OPT | ARG_NO,
@@ -1785,6 +1790,42 @@ struct intlist Bridgelist[] = {
 size_t Bridgelist_nitems = nitems(Bridgelist);
 
 /*
+ * interface and bridge: the interface's name, also with no
+ * (interface_parse())
+ */
+
+/*
+ * The interface's name, or as some network switches take it, its name
+ * and unit: interface em 0
+ */
+static int
+interface_parse(const struct argcmd *c, int argc, char **argv,
+    struct argvals *a)
+{
+	const char *errstr;
+	size_t len;
+
+	if (argc != 1 && argc != 2)
+		return args_usage(c);
+	if (argc == 1)
+		return args_word(c, &c->args[0], a, argv[0], &a->v[0]);
+	strtonum(argv[1], 0, INT_MAX, &errstr);
+	if (errstr) {
+		printf("%% interface unit %s is %s\n", argv[1], errstr);
+		return -1;
+	}
+	len = strlen(argv[0]);
+	if (len > 0 && isdigit((unsigned char)(argv[0][len - 1]))) {
+		printf("%% interface unit %s is redundant\n", argv[1]);
+		return -1;
+	}
+	snprintf(a->rest, sizeof(a->rest), "%s%s", argv[0], argv[1]);
+	printf("%% Using interface \"%s\", not \"%s %s\"\n", a->rest,
+	    argv[0], argv[1]);
+	return args_word(c, &c->args[0], a, a->rest, &a->v[0]);
+}
+
+/*
  * command handler for interface and bridge modes
  *
  * For a line of configure (cmdline()), the candidate makes the
@@ -1796,68 +1837,23 @@ size_t Bridgelist_nitems = nitems(Bridgelist);
  * only creates the interface, or with no, destroys it.
  */
 static int
-interface(int argc, char **argv, ...)
+interface_apply(const struct argcmd *c, int set, const struct facts_value *v,
+    char *name, int s, struct cand *cand)
 {
 	char ifn[IFNAMSIZ];
-	int ifs, set = 1, r = 0;
-	char *tmp;
-	char *ifunit = NULL;
 	struct ifreq ifr;
-	struct cand *cand;
-	va_list ap;
-
-	va_start(ap, argv);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
-
-	if (NO_ARG(argv[0])) {
-		argv++;
-		argc--;
-		set = 0;
-	}
-	if (argc == 3) {
-		/*
-		 * Allow "interface-name interface-number" as some
-		 * network switches do: interface em 0
-		 */
-		ifunit = argv[2];
-	} else if (argc != 2) {
-		printf("%% [no] interface <interface name>\n");
-		return -1;
-	}
-	tmp = argv[1];
-
-	if (strlen(tmp) > IFNAMSIZ-1) {
-		printf("%% interface name too long\n");
-		return -1;
-	}
-
-	strlcpy(ifn, tmp, IFNAMSIZ);
-	if (ifunit) {
-		const char *errstr;
-		size_t len = strlen(ifn);
-		strtonum(ifunit, 0, INT_MAX, &errstr);
-		if (errstr) {
-			printf("%% interface unit %s is %s\n", ifunit, errstr);
-			return -1;
-		}
-		if (len > 0 && isdigit((unsigned char)(ifn[len - 1]))) {
-			printf("%% interface unit %s is redundant\n", ifunit);
-			return -1;
-		}
-		strlcat(ifn, ifunit, sizeof(ifn));
-		printf("%% Using interface \"%s\", not \"%s %s\"\n",
-		    ifn, tmp, ifunit);
-	}
+	int ifs, r = 0;
 
 	/* a line of configure: its block, and the session's mode */
 	if (cand != NULL) {
-		r = cand_interface(cand, set, ifn, &cand->bridge);
-		if (r == 0)
-			strlcpy(cand->ifname, ifn, sizeof(cand->ifname));
+		args_string(&v[0], cand->ifname, sizeof(cand->ifname));
+		r = cand_interface(cand, set, cand->ifname, &cand->bridge);
+		if (r != 0)
+			cand->ifname[0] = '\0';
 		return r == -1 ? -1 : 0;
 	}
 
+	args_string(&v[0], ifn, sizeof(ifn));
 	strlcpy(ifr.ifr_name, ifn, sizeof(ifr.ifr_name));
 	if ((ifs = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
 		printf("%% socket failed: %s\n", strerror(errno));
@@ -2053,8 +2049,20 @@ Command cmdtab[] = {
 		{ "hostname",	ARG_WORD, 1, MAXHOSTNAMELEN - 1 },
 		{ NULL } } },
 	{ "login",	loginhelp,	CMPL0 0, 0, loginset,		1, 1, 1, 0, CAND_EDIT },
-	{ "interface",	interfacehelp,	CMPL(i) 0, 0, interface,	1, 1, 1, 1, CAND_EDIT },
-	{ "rtable",	rtablehelp,	CMPL(rh) (char **)rtabletab, sizeof(struct ghs), rtable,	0, 0, 1, 2, CAND_EDIT },
+	{ "interface", interfacehelp, CMPL(i)
+	  .needsession = 1, .needconfig = 1, .nocmd = 1, .modh = 1,
+	  .cand = CAND_EDIT,
+	  .apply = interface_apply, .code = CF_IF, .parse = interface_parse,
+	  .args = interface_args },
+	{ "rtable", rtablehelp, CMPL(rh)
+	  .table = (char **)rtabletab, .stlen = sizeof(struct ghs), .nocmd = 1,
+	  .modh = 2, .cand = CAND_EDIT,
+	  .apply = rtable_apply,
+	  .args = ARGS{
+		{ "id",		ARG_NUM, 0, RT_TABLEID_MAX, ARG_NO,
+		  .help = "table id" },
+		{ "name",	ARG_REST, 1, 63, ARG_OPT },
+		{ NULL } } },
 	{ "group",	grouphelp,	CMPL(gth) (char **)grouptab, sizeof(Menu), group, 1, 1, 1, 0, CAND_RUN },
 	{ "arp",	arphelp,	CMPL0 0, 0, arpset,		1, 1, 1, 0, CAND_EDIT },
 	{ "ndp",	ndphelp,	CMPL0 0, 0, ndpset,		1, 1, 1, 0, CAND_EDIT },
@@ -2064,7 +2072,11 @@ Command cmdtab[] = {
 	  .args = ARGS{
 		{ "address",	ARG_ADDR, 0, 0, 0, NULL, NAMESERVERS },
 		{ NULL } } },
-	{ "bridge",	bridgehelp,	CMPL(i) 0, 0, interface,	1, 1, 1, 1, CAND_EDIT },
+	{ "bridge", bridgehelp, CMPL(i)
+	  .needsession = 1, .needconfig = 1, .nocmd = 1, .modh = 1,
+	  .cand = CAND_EDIT,
+	  .apply = interface_apply, .code = CF_BRIDGE, .parse = interface_parse,
+	  .args = interface_args },
 	{ "show",	showhelp,	CMPL(ta) (char **)showlist, sizeof(Menu), 0,	0, 0, 0, 0 },
 	{ "ip", iphelp, CMPL(ta)
 	  .table = (char **)iptab, .stlen = sizeof(Menu), .handler = ipcmd,
@@ -2162,11 +2174,8 @@ size_t cmdtab_nitems = nitems(cmdtab);
  */
 static const struct confcmd conf_top[] = {
 	{ "login",	loginset,	CF_NO },
-	{ "interface",	interface,	CF_NO | CF_IF },
-	{ "rtable",	rtable,		CF_NO | CF_RTABLE },
 	{ "arp",	arpset,		CF_NO },
 	{ "ndp",	ndpset,		CF_NO },
-	{ "bridge",	interface,	CF_NO | CF_BRIDGE },
 	{ "route",	route,		CF_NO },
 };
 
@@ -2436,44 +2445,21 @@ rtable_enter(int table)
 	return 0;
 }
 
+/* rtable: the table, and with a name, the table's name */
+
 static int
-rtable(int argc, char **argv, ...)
+rtable_apply(const struct argcmd *c, int set, const struct facts_value *v,
+    char *ifname, int ifs, struct cand *cand)
 {
-	int table, set, pos, found, curtable;
-	const char *errstr;
-	char rtname[64];
+	int table = v[0].v.i, pos, found, curtable;
+	char rtname[64] = "";
 	StringList *resp;
-	struct cand *cand;
-	va_list ap;
 
-	va_start(ap, argv);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
-
-	if (NO_ARG(argv[0])) {
-		argv++;
-		argc--;
-		set = 0;
-	} else {
-		set = 1;
-	}
-
-	if (argc < 2) {
-		printf("%% rtable <table id> [name]\n");
-		printf("%% no rtable <table id>\n");
-		return -1;
-	}
-
-	table = strtonum(argv[1], 0, RT_TABLEID_MAX, &errstr);
-	if (errstr) {
-		printf("%% invalid table id: %s\n", errstr);
-		return -1;
-	}
-
-	if (cand != NULL) {
-		pos = argvtostring(argc - 2, argv + 2, rtname, sizeof(rtname));
+	if (v[1].type != FACT_NONE)
+		args_string(&v[1], rtname, sizeof(rtname));
+	pos = rtname[0] != '\0';
+	if (cand != NULL)
 		return cand_rtable_set(cand, set, table, pos ? rtname : NULL);
-	}
 
 	curtable = getrtable();
 	if (cli_rtable != curtable) {
@@ -2482,12 +2468,6 @@ rtable(int argc, char **argv, ...)
 		    "This is probably a bug in nsh, please report it.\n",
 		    cli_rtable, curtable);
 	}
-
-	argc -= 2;
-	argv += 2;
-
-	/* Convert any remaining argv (name) back to string */
-	pos = argvtostring(argc, argv, rtname, sizeof(rtname));
 
 	resp = sl_init();
 	if (db_select_rtables_rtable(resp, table) < 0)
@@ -2931,9 +2911,9 @@ conf_find(int ctx, char *word, char **daemon)
 
 /*
  * Run row n of ctx's commands (conf_cmd()) with argv, as a commit runs a
- * line of its edits: at the top level a statement, a block's head
- * included, and in an interface's or a bridge's mode a line of name's
- * block. Returns what the command returns
+ * line of its edits: at the top level a statement, and in an interface's
+ * or a bridge's mode a line of name's block. Returns what the command
+ * returns
  */
 int
 conf_run(int ctx, int n, int argc, char **argv, char *name)
@@ -2944,7 +2924,6 @@ conf_run(int ctx, int n, int argc, char **argv, char *name)
 	if (ctx != CTX_TOP)
 		return conf_run_if(ctx == CTX_BRIDGE, c, argc, argv, 0, NULL,
 		    name);
-	/* a block's head creates a cloned interface, or with no, destroys it */
 	return (*c->handler)(argc, argv, NULL);
 }
 
@@ -2972,8 +2951,8 @@ conf_line(int ctx, int argc, char **argv, char *ifname, int ifs,
 
 /*
  * Run the command at row n of ctx with values v, as conf_run() runs a
- * line: a statement, or an interface or bridge command on name. set is
- * 0 for "no".
+ * line: a statement, a block's head included, or an interface or bridge
+ * command on name. set is 0 for "no".
  */
 int
 conf_run_values(int ctx, int n, int set, const struct facts_value *v,
@@ -2982,10 +2961,10 @@ conf_run_values(int ctx, int n, int set, const struct facts_value *v,
 	struct argcmd row;
 	const struct argcmd *c = conf_cmd(ctx, n, &row);
 
-	if (ctx == CTX_TOP)
-		return c->apply(c, set, v, NULL, -1, NULL) == -1 ? -1 :
-		    0;
-	return conf_run_if(ctx == CTX_BRIDGE, c, 0, NULL, set, v, name);
+	if (ctx != CTX_TOP)
+		return conf_run_if(ctx == CTX_BRIDGE, c, 0, NULL, set, v, name);
+	/* a block's head creates a cloned interface, or with no, destroys it */
+	return c->apply(c, set, v, NULL, -1, NULL) == -1 ? -1 : 0;
 }
 
 /*

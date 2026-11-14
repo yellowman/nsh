@@ -43,7 +43,8 @@ commands.c	table	Bridgelist Bridgelist_nitems Intlist
 			flushlist flushtab forwardingtab fpfs
 			ftpproxyhelp gretab grouphelp grouptab
 			hostnamehelp
-			ifstatehelp ikehelp inethelp interfacehelp
+			ifstatehelp ikehelp inethelp interface_args
+			interfacehelp
 			ip6help ip6tab ip_args ipcmd_args ipcomptab iphelp
 			ipiptab
 			ipsecallocstab ipsecbytestab

@@ -1138,8 +1138,13 @@ edit_record(void *arg, const struct facts_template *t,
 	x->n++;
 	if (args_check(x->c, x->set, t, v) == -1)
 		x->r = -1;
-	else if (x->run)
+	else if (x->run) {
 		x->r = conf_run_values(x->ctx, x->row, x->set, v, x->name);
+		/* a block's head: the interface its lines are for */
+		if (x->ctx == CTX_TOP && x->set &&
+		    (x->c->flags & (CF_IF | CF_BRIDGE)))
+			args_string(&v[0], x->name, IFNAMSIZ);
+	}
 }
 
 /*
@@ -1180,7 +1185,7 @@ edits_check(char *buf, size_t len)
 	struct edit e;
 	char *p, *w[NARGS];
 	size_t off;
-	int block = 0, n, ctx;
+	int block = 0, ctx;
 
 	for (off = 0; off < len; off += sizeof(e) + e.len) {
 		if (len - off < sizeof(e)) {
@@ -1198,16 +1203,13 @@ edits_check(char *buf, size_t len)
 			goto bad;
 		switch (e.kind) {
 		case EDIT_TOP:
-			n = 0;
 			if ((c = conf_cmd(CTX_TOP, e.row, &cmd)) == NULL ||
 			    (block != 0 && (block != CF_RTABLE ||
 			    (c->flags & (CF_IF | CF_BRIDGE | CF_RTABLE)))) ||
 			    (e.no && (c->flags & CF_NO) == 0) ||
 			    e.typed != (c->apply != NULL) || (e.typed ?
 			    edit_typed(c, &e, p, CTX_TOP, 0, NULL) :
-			    (n = edit_words(p, e.len, w, NARGS - 2))) == -1 ||
-			    (!e.typed && (c->flags & (CF_IF | CF_BRIDGE |
-			    CF_RTABLE)) && n == 0))
+			    edit_words(p, e.len, w, NARGS - 2)) == -1)
 				goto bad;
 			if (!e.no && (c->flags & (CF_IF | CF_BRIDGE |
 			    CF_RTABLE)))
@@ -1272,6 +1274,14 @@ edit_words(char *p, size_t len, char **argv, int max)
 	return n;
 }
 
+/* an rtable's head's record: its table */
+static void
+edit_rtable(void *arg, const struct facts_template *t,
+    const struct facts_value *v)
+{
+	*(int *)arg = v[0].v.i;
+}
+
 /*
  * The parser's check of s, as script_run() would run it, in the commit
  * of a session without admin, against the running configuration before
@@ -1284,9 +1294,9 @@ edits_admin(struct script *s)
 {
 	const struct argcmd *c;
 	struct argcmd cmd;
+	struct facts_in in;
 	struct edit e;
 	char *argv[NARGS + 1], *p;
-	const char *errstr;
 	size_t off;
 	int i, n, rt = 0, r = 0;
 
@@ -1301,20 +1311,20 @@ edits_admin(struct script *s)
 		switch (e.kind) {
 		case EDIT_TOP:
 			c = conf_cmd(CTX_TOP, e.row, &cmd);
+			/* an rtable's block, whose rules are that rtable's */
+			if ((c->flags & CF_RTABLE) && !e.no) {
+				facts_in_init(&in, edit_rtable, &rt);
+				facts_read(&in, p, e.len);
+				facts_in_free(&in);
+			}
+			if (strcmp(c->name, "login") != 0)
+				break;
 			n = 0;
 			if (e.no)
 				argv[n++] = "no";
 			argv[n++] = c->name;
 			n += edit_words(p, e.len, argv + n, NARGS - n);
-			/* an rtable's block, whose rules are that rtable's */
-			if ((c->flags & CF_RTABLE) && !e.no) {
-				rt = strtonum(argv[1], 0, RT_TABLEID_MAX,
-				    &errstr);
-				if (errstr != NULL)
-					rt = 0;
-			}
-			if (strcmp(c->name, "login") == 0 &&
-			    login_admin(n, argv) == -1)
+			if (login_admin(n, argv) == -1)
 				r = -1;
 			break;
 		case EDIT_END:
@@ -1365,10 +1375,6 @@ edits_apply(char *buf, size_t len)
 			argv[n++] = c->name;
 			n += edit_words(p, e.len, argv + n, NARGS - n);
 			r = conf_run(ctx, e.row, n, argv, name);
-			/* a block's head: the interface its lines are for */
-			if (ctx == CTX_TOP && !e.no &&
-			    (c->flags & (CF_IF | CF_BRIDGE)))
-				strlcpy(name, argv[1], sizeof(name));
 			break;
 		case EDIT_END:
 			conf_block_end(rt);
