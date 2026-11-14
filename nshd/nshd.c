@@ -1437,6 +1437,32 @@ printed_text(struct imsgev *iev, uint32_t type, uint32_t id, int hide)
 	return (r);
 }
 
+#if FACTS_UNIT != 16000
+#error "struct units' buf is not FACTS_UNIT"
+#endif
+
+/* A unit of facts for arg's reader, a struct units, which keeps it. */
+void
+units_emit(void *arg, const void *buf, size_t len)
+{
+	struct units	*u = arg;
+
+	if (u->len + len > sizeof(u->buf))
+		units_flush(u);
+	memcpy(u->buf + u->len, buf, len);
+	u->len += len;
+}
+
+/* The units u keeps, to its reader, as one message. */
+void
+units_flush(struct units *u)
+{
+	if (u->len == 0)
+		return;
+	u->send(u->arg, u->buf, u->len);
+	u->len = 0;
+}
+
 /* text no client asked for, logged a line at a time */
 void
 log_text(const char *text, size_t len)

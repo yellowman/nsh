@@ -294,8 +294,6 @@ static struct event		 rt_tm;		/* a timer for its notices, */
 static int			 rt_links;	/* and what it saw change */
 static int			 rt_all;
 static uint8_t			 rt_tables[RT_TABLEID_MAX + 1];
-static uint8_t			 units[FACTS_UNIT];	/* facts to send */
-static size_t			 nunits;		/* bytes in units */
 
 static struct imsgev	*iev_parent;
 static TAILQ_HEAD(, front)	 fronts = TAILQ_HEAD_INITIALIZER(fronts);
@@ -342,8 +340,7 @@ static void		 config_watch(uint32_t, struct nshd_watch *);
 static void		 config_commands(uint32_t);
 static void		 config_names(uint32_t);
 static void		 config_named(struct session *);
-static void		 config_emit(void *, const void *, size_t);
-static void		 config_flush(struct session *);
+static void		 config_units(void *, const void *, size_t);
 static void		 config_notice(int, int, uid_t, int, const char *);
 static void		 config_notice_to(uint32_t, int, uid_t, int,
 			    const char *, size_t);
@@ -1588,6 +1585,7 @@ static void
 config_commands(uint32_t session)
 {
 	struct session		*sp;
+	struct units		 u = { config_units };
 	struct facts_out	 o;
 	int			 r;
 
@@ -1595,9 +1593,10 @@ config_commands(uint32_t session)
 		config_answer(session, 1, "%% nshd: hello first\n");
 		return;
 	}
-	facts_out_init(&o, config_emit, sp);
+	u.arg = sp;
+	facts_out_init(&o, units_emit, &u);
 	r = cmplt_facts(&o);
-	config_flush(sp);
+	units_flush(&u);
 	if (r == -1)
 		config_answer(sp->id, 1, "%% nshd: the command tables "
 		    "could not be sent\n");
@@ -1636,12 +1635,13 @@ config_named(struct session *sp)
 	static char		*of[] = { "interface", "group", "bridge",
 				    "rtable" };
 	struct facts_value	 v[sizeof(namefields) / sizeof(namefields[0])];
+	struct units		 u = { config_units, sp };
 	struct facts_out	 o;
 	StringList		*sl;
 	size_t			 i, j;
 	int			 r = 0;
 
-	facts_out_init(&o, config_emit, sp);
+	facts_out_init(&o, units_emit, &u);
 	for (i = 0; i < sizeof(of) / sizeof(of[0]) && r == 0; i++) {
 		if ((sl = sl_init()) == NULL)
 			fatal("%s", __func__);
@@ -1655,7 +1655,7 @@ config_named(struct session *sp)
 		}
 		sl_free(sl, 1);
 	}
-	config_flush(sp);
+	units_flush(&u);
 	if (r == -1)
 		config_answer(sp->id, 1, "%% nshd: the names could not be "
 		    "sent\n");
@@ -1663,29 +1663,14 @@ config_named(struct session *sp)
 		config_answer(sp->id, 0, NULL);
 }
 
-/*
- * Queue a unit of facts for the session arg.  Send the queue first if
- * the unit would not fit.
- */
+/* facts units for the session arg, as one message */
 static void
-config_emit(void *arg, const void *buf, size_t len)
+config_units(void *arg, const void *buf, size_t len)
 {
-	if (nunits + len > sizeof(units))
-		config_flush(arg);
-	memcpy(units + nunits, buf, len);
-	nunits += len;
-}
+	struct session	*sp = arg;
 
-/* Send the queued units to sp as one message. */
-static void
-config_flush(struct session *sp)
-{
-	if (nunits == 0)
-		return;
-	if (front_compose(sp->id, IMSG_CTL_FACTS, units,
-	    nunits) == -1)
+	if (front_compose(sp->id, IMSG_CTL_FACTS, buf, len) == -1)
 		fatal("%s", __func__);
-	nunits = 0;
 }
 
 /* an operation, which system checks, runs and streams */

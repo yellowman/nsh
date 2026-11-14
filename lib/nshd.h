@@ -520,6 +520,19 @@ int		 printed_text(struct imsgev *, uint32_t, uint32_t, int);
 size_t		 login_hide(char *, size_t);	/* passwd.c's */
 void		 printed_log(void);
 void		 log_text(const char *, size_t);
+/*
+ * Facts for one reader, not yet sent: as many of a struct facts_out's
+ * units as fit one message (units_emit()), which send() takes with arg.
+ * units_flush() has send() take those kept
+ */
+struct units {
+	void		(*send)(void *, const void *, size_t);
+	void		*arg;
+	size_t		 len;
+	uint8_t		 buf[16000];	/* FACTS_UNIT */
+};
+void		 units_emit(void *, const void *, size_t);
+void		 units_flush(struct units *);
 void		 child_start(const char *, int, int);
 void		 privdrop(enum nshd_proc);
 int		 proc_user(enum nshd_proc, uid_t *, gid_t *);

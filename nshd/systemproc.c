@@ -484,8 +484,9 @@ struct boot {
 };
 
 static struct imsgev	*iev_parent;
-static uint8_t		 units[FACTS_UNIT];	/* not yet sent */
-static size_t		 nunits;
+static void	system_units(void *, const void *, size_t);
+/* facts for a request, kept until its message is full or it flushes */
+static struct units	 units = { system_units };
 static TAILQ_HEAD(, stream) streams = TAILQ_HEAD_INITIALIZER(streams);
 static int		 nstreams;
 static uid_t		 check_uid;	/* NSHD_CHECK_USER's */
@@ -549,8 +550,6 @@ static void	system_op(uint32_t, struct nshd_sysop *);
 static int	system_may(int, int, const char *);
 static void	system_end(uint32_t, int32_t, const char *, ...)
 		    __attribute__((__format__ (printf, 3, 4)));
-static void	system_emit(void *, const void *, size_t);
-static void	system_flush(uint32_t);
 static int	system_stream(uint32_t, int, char **, int);
 static int	system_stream_child(struct stream *, int, char **, int);
 static void	system_follow(uint32_t, struct nshd_follow *);
@@ -1367,10 +1366,11 @@ system_snapshot(uint32_t id, int facts)
 			log_warn("%s: kfacts_scan", __func__);
 			r.status = -1;
 		} else {
-			facts_out_init(&o, system_emit, &id);
+			units.arg = &id;
+			facts_out_init(&o, units_emit, &units);
 			if (kfacts_emit(&o, k) == -1)
 				r.status = -1;
-			system_flush(id);
+			units_flush(&units);
 			kfacts_free(k);
 		}
 	}
@@ -1393,12 +1393,13 @@ system_show(uint32_t id, char *words)
 		    "%% show %s: not answered by nshd\n", words);
 		return;
 	}
-	facts_out_init(&o, system_emit, &id);
+	units.arg = &id;
+	facts_out_init(&o, units_emit, &units);
 	if ((op = facts_streams(a, &argv, &table)) != 0) {
 		/* -1: words cannot fill the program's arguments; send why */
 		if (op == -1) {
 			printed(&o);
-			system_flush(id);
+			units_flush(&units);
 			system_end(id, 1, NULL);
 		} else
 			system_stream(id, op, argv, table);
@@ -1411,7 +1412,7 @@ system_show(uint32_t id, char *words)
 			more = -1;
 	}
 	facts_answer_end(a);
-	system_flush(id);
+	units_flush(&units);
 	system_end(id, more != 0, NULL);
 }
 
@@ -1867,27 +1868,14 @@ system_end(uint32_t id, int32_t status, const char *fmt, ...)
 	system_tell(IMSG_SYS_END, id, &r, sizeof(r));
 }
 
-/* a unit of facts, for request *arg, kept until a message is full */
+/* facts units for request *arg, to config, as one message */
 static void
-system_emit(void *arg, const void *buf, size_t len)
+system_units(void *arg, const void *buf, size_t len)
 {
 	uint32_t	*id = arg;
 
-	if (nunits + len > sizeof(units))
-		system_flush(*id);
-	memcpy(units + nunits, buf, len);
-	nunits += len;
-}
-
-/* the units kept, to config, as one message */
-static void
-system_flush(uint32_t id)
-{
-	if (nunits == 0)
-		return;
-	if (link_compose(&links[CONFIG], IMSG_SYS_FACTS, id, units, nunits) == -1)
+	if (link_compose(&links[CONFIG], IMSG_SYS_FACTS, *id, buf, len) == -1)
 		fatal("%s", __func__);
-	nunits = 0;
 }
 
 /*
@@ -1913,7 +1901,7 @@ system_stream(uint32_t id, int op, char **argv, int table)
 	if (op == SYS_LOG)
 		s->log = argv[0];
 	s->window = SYS_WINDOW;
-	facts_out_init(&s->o, system_emit, &s->id);
+	facts_out_init(&s->o, units_emit, &units);
 	if (system_stream_child(s, op, argv, table) == -1) {
 		free(s);
 		return (-1);
@@ -2115,6 +2103,7 @@ system_stream_read(int fd, short event, void *arg)
 			return;
 		log_warn("%s: read", __func__);
 	}
+	units.arg = &s->id;
 	if (n > 0 && s->text) {
 		if (imsg_text(links[CONFIG].iev, IMSG_SYS_TEXT, s->id, buf,
 		    n) == -1)
@@ -2123,7 +2112,7 @@ system_stream_read(int fd, short event, void *arg)
 		log_warnx("%s: a message of %zd bytes", __func__, n);
 		n = -1;
 	}
-	system_flush(s->id);
+	units_flush(&units);
 	if (n == -1)
 		system_stream_stop(s);
 	else if (n == 0) {
