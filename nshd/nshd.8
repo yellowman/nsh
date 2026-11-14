@@ -137,6 +137,11 @@ A session in
 or
 .Cm configure exclusive
 that loses admin may then only leave it.
+system stops each log it follows for the session that the session may
+no longer follow, and the session is told that the log has ended.
+A configuration that reaches the session after that comes without
+password hashes, also where the session asked for it before.
+What system has begun for the session otherwise runs to its end.
 nsh checks the exec permission itself, from the permissions the session
 had after its hello, until it connects again.
 A permission its class gains counts at once in system's checks, as for

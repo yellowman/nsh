@@ -333,6 +333,7 @@ static void		 config_logged(struct request *, int32_t);
 static void		 config_pty(uint32_t, struct nshd_terminal *);
 static void		 config_text(struct request *, int32_t);
 static int		 config_hides(struct session *);
+static int		 config_keeps(struct request *);
 static int		 config_may(uint32_t, uint32_t);
 static void		 config_op(uint32_t, struct nshd_op *);
 static void		 config_watch(uint32_t, struct nshd_watch *);
@@ -859,7 +860,7 @@ config_dispatch_system(int fd, short event, void *arg)
 					fatal("%s", __func__);
 				break;
 			}
-			if (r->kind == REQ_ROLLBACK || r->kind == REQ_TEXT) {
+			if (config_keeps(r)) {
 				if (type != IMSG_SYS_TEXT)
 					goto bad;
 				if (ibuf_size(&b) > NSHD_PART - r->len) {
@@ -1075,9 +1076,6 @@ config_show(uint32_t session, struct nshd_show *show)
 		    "%% show %s: not answered by nshd\n", show->words);
 		return;
 	}
-	/* the whole text is collected only to take its hashes out */
-	if (kind == REQ_TEXT && !config_hides(sp))
-		kind = REQ_ANSWER;
 	if ((r = config_request(session, kind)) == NULL) {
 		config_answer(session, 1, "%s", REQ_REFUSED);
 		return;
@@ -1480,8 +1478,9 @@ config_pty(uint32_t session, struct nshd_terminal *tm)
 }
 
 /*
- * The configuration's text system gave, for a session without admin,
- * with each password hash taken out, and how it went
+ * A configuration's text from system ended: what config kept of it, for
+ * a session that sees no password hash, with each taken out, and how it
+ * went
  */
 static void
 config_text(struct request *r, int32_t status)
@@ -1504,6 +1503,19 @@ static int
 config_hides(struct session *sp)
 {
 	return (sp != NULL && (sp->perms & NSHD_ADMIN) == 0);
+}
+
+/*
+ * Does config keep r's text until it ends? It keeps a rollback's, to
+ * load it, and a configuration's for a session that sees no password
+ * hash, to take each out. The session's permissions as the text comes
+ * say which, so one that lost admin after it asked sees none
+ */
+static int
+config_keeps(struct request *r)
+{
+	return (r->kind == REQ_ROLLBACK || (r->kind == REQ_TEXT &&
+	    config_hides(session_find(r->session))));
 }
 
 /*

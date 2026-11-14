@@ -392,6 +392,8 @@ struct stream {
 	int			 window;	/* messages it may still send */
 	int			 stopped;
 	int			 op;		/* an operation (either kind) */
+	uint32_t		 session;	/* a log's follower, else 0 */
+	int			 need;		/* permissions to follow it */
 	char			*log;		/* log file followed, or NULL */
 	int			 text;		/* text, not facts: a log's */
 	int			 status;	/* how its child ended */
@@ -621,7 +623,7 @@ static void	system_op(uint32_t, struct nshd_sysop *);
 static int	system_may(int, int, const char *);
 static void	system_end(uint32_t, int32_t, const char *, ...)
 		    __attribute__((__format__ (printf, 3, 4)));
-static int	system_stream(uint32_t, int, char **, int);
+static struct stream *system_stream(uint32_t, int, char **, int);
 static int	system_stream_child(struct stream *, int, char **, int);
 static void	system_follow(uint32_t, struct nshd_follow *);
 static int	system_tail(int, const char *);
@@ -631,6 +633,7 @@ static void	system_drop(void);
 static void	system_stream_read(int, short, void *);
 static void	system_stream_more(uint32_t);
 static void	system_stream_stop(struct stream *);
+static void	system_unfollow(uint32_t, int);
 static void	system_stream_done(struct stream *);
 static void	system_sigchld(int, short, void *);
 static int	system_chunk(const unsigned char *, size_t);
@@ -1611,7 +1614,8 @@ system_op(uint32_t id, struct nshd_sysop *so)
 /*
  * A log, followed as a stream for a session whose class may read it:
  * FOLLOWING once it begins, then its text until it is stopped; or
- * refused, saying why
+ * refused, saying why. The stream keeps whose it is and the permissions
+ * it needs, so it ends if the session loses one (system_unfollow())
  */
 static void
 system_follow(uint32_t id, struct nshd_follow *f)
@@ -1619,8 +1623,9 @@ system_follow(uint32_t id, struct nshd_follow *f)
 	char		*argv[] = { TCPDUMP, "-l", "-n", "-e", "-ttt", "-i",
 			    "pflog0", NULL };
 	struct client	*cl;
+	struct stream	*s;
 	size_t		 i;
-	int		 perms, r;
+	int		 perms, admin = f->log == NSHD_WATCH_AUTHLOG;
 
 	printed(NULL);
 	if ((cl = client_whose(&f->whose)) == NULL) {
@@ -1629,8 +1634,7 @@ system_follow(uint32_t id, struct nshd_follow *f)
 	}
 	perms = system_whom(cl, NULL);
 	if (!system_may(perms, LOGIN_VIEW, "view") ||
-	    (f->log == NSHD_WATCH_AUTHLOG &&
-	    !system_may(perms, LOGIN_ADMIN, "admin"))) {
+	    (admin && !system_may(perms, LOGIN_ADMIN, "admin"))) {
 		system_printed(id, 1);
 		return;
 	}
@@ -1639,11 +1643,15 @@ system_follow(uint32_t id, struct nshd_follow *f)
 	if (logs[i].path != NULL) {
 		argv[0] = logs[i].path;
 		argv[1] = NULL;
-		r = system_stream(id, SYS_LOG, argv, 0);
+		s = system_stream(id, SYS_LOG, argv, 0);
 	} else
-		r = system_stream(id, FACTS_PROGRAM, argv, 0);
-	if (r == 0 && link_compose(&links[CONFIG], IMSG_SYS_FOLLOWING, id,
-	    NULL, 0) == -1)
+		s = system_stream(id, FACTS_PROGRAM, argv, 0);
+	if (s == NULL)
+		return;
+	s->session = cl->session;
+	s->need = admin ? LOGIN_VIEW | LOGIN_ADMIN : LOGIN_VIEW;
+	if (link_compose(&links[CONFIG], IMSG_SYS_FOLLOWING, id, NULL,
+	    0) == -1)
 		fatal("%s", __func__);
 }
 
@@ -2091,10 +2099,10 @@ system_units(void *arg, const void *buf, size_t len)
 }
 
 /*
- * op's text, which a child prints, streamed to request id's client: 0,
- * or -1, after saying why, if it could not begin
+ * op's text, which a child prints, streamed to request id's client: the
+ * stream, or NULL, after saying why, if it could not begin
  */
-static int
+static struct stream *
 system_stream(uint32_t id, int op, char **argv, int table)
 {
 	struct stream	*s;
@@ -2102,7 +2110,7 @@ system_stream(uint32_t id, int op, char **argv, int table)
 	if (nstreams == SYS_STREAMS) {
 		system_end(id, 1, "%% nshd: %d shows already stream\n",
 		    SYS_STREAMS);
-		return (-1);
+		return (NULL);
 	}
 	if ((s = calloc(1, sizeof(*s))) == NULL)
 		fatal(NULL);
@@ -2116,11 +2124,11 @@ system_stream(uint32_t id, int op, char **argv, int table)
 	facts_out_init(&s->o, units_emit, &units);
 	if (system_stream_child(s, op, argv, table) == -1) {
 		free(s);
-		return (-1);
+		return (NULL);
 	}
 	TAILQ_INSERT_TAIL(&streams, s, entry);
 	nstreams++;
-	return (0);
+	return (s);
 }
 
 /* s's child, which prints op's text: 0, or -1 after saying why */
@@ -2369,6 +2377,22 @@ system_stream_stop(struct stream *s)
 		s->fd = -1;
 	}
 	system_stream_done(s);
+}
+
+/*
+ * Stop each log followed for session that perms no longer allow it to
+ * follow. Each ends as any stream stopped does, and config then tells
+ * the session that the log has ended. Where perms is -1, the session
+ * ends, and config stops all it asked for
+ */
+static void
+system_unfollow(uint32_t session, int perms)
+{
+	struct stream	*s, *next;
+
+	TAILQ_FOREACH_SAFE(s, &streams, entry, next)
+		if (s->session == session && (s->need & ~perms) != 0)
+			system_stream_stop(s);
 }
 
 /* end s, with how it went, once its output ends and its child is reaped */
@@ -2912,7 +2936,8 @@ system_went(int failed)
  * after, ends each that would lose its login, takes no new one, and says
  * so (system_go()). A rollback whose lines the parser could not read
  * has none, so each session has the permissions of a user no line names.
- * A session not logged in has none to lose, so each
+ * A log followed for a session that those after no longer allow it to
+ * follow is stopped. A session not logged in has none to lose, so each
  * login being checked is stopped, refused, and none begins until the
  * change ends (system_login()). Or, without on, they have changed
  */
@@ -2942,6 +2967,7 @@ system_revoking(uint32_t id, int on, struct login_line *after, uint32_t n)
 		if (then == -1 || (now & ~then) != 0) {
 			rv.sessions[rv.n] = cl->session;
 			rv.perms[rv.n++] = then;
+			system_unfollow(cl->session, then);
 		}
 	}
 	system_tell(IMSG_SYS_REVOKING, id, &rv, sizeof(rv));
