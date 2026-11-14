@@ -2604,12 +2604,15 @@ system_begin_checked(uint32_t id, int ok)
  * deadline minutes from now. Its rollback configuration is what ran
  * before the first unconfirmed commit that still waits, or else before
  * this one. Keep the previous record, to restore if this commit is
- * rolled back. Returns -1 on error, after printing why.
+ * rolled back. Returns -1 on error, after printing why. A record in
+ * place whose directory is not synced is the record all the same, so
+ * the commit goes on
  */
 static int
 system_arm(int minutes)
 {
 	struct confirm		 cf;
+	int			 r;
 
 	if (confirm_read(&begun->prev, 1) == -1) {
 		printf("%% nshd: the record of a commit not confirmed: %s\n",
@@ -2627,11 +2630,14 @@ system_arm(int minutes)
 		arc4random_buf(&cf.id, sizeof(cf.id));
 	while (cf.id == 0);
 	cf.deadline = time(NULL) + minutes * 60;
-	if (confirm_write(&cf) == -1) {
+	if ((r = confirm_write(&cf)) == -1) {
 		printf("%% nshd: the record of a commit not confirmed: %s\n",
 		    strerror(errno));
 		return (-1);
 	}
+	if (r == 1)
+		printf("%% nshd: the record of a commit not confirmed is "
+		    "written, but not synced: %s\n", strerror(errno));
 	begun->minutes = minutes;
 	return (0);
 }
@@ -2657,7 +2663,7 @@ system_kept(void)
 		return;
 	}
 	cf.deadline = time(NULL) + begun->minutes * 60;
-	if (confirm_write(&cf) == -1)
+	if (confirm_write(&cf) != 0)
 		printf("%% nshd: the record of a commit not confirmed: %s\n",
 		    strerror(errno));
 	confirm_free(&cf);
@@ -2757,7 +2763,7 @@ system_recovering(struct confirm *cf, int r, int logins,
 	if (!cf->demoted && carplock(128) == 1)
 		cf->demoted = 1;
 	cf->attempts++;
-	if (confirm_write(cf) == -1)
+	if (confirm_write(cf) != 0)
 		logit(LOG_CRIT, "the record of a commit not confirmed: %s",
 		    strerror(errno));
 	printed_log();
@@ -2920,7 +2926,7 @@ static void
 system_failed(struct confirm *cf)
 {
 	cf->state = CONFIRM_FAILED;
-	if (confirm_write(cf) == -1)
+	if (confirm_write(cf) != 0)
 		logit(LOG_CRIT, "the record of a commit not confirmed: %s",
 		    strerror(errno));
 	logit(LOG_CRIT, "commit not confirmed: not rolled back after %d "

@@ -135,7 +135,11 @@ confirm_read(struct confirm *cf, int whole)
 	return (-1);
 }
 
-/* cf written as the record, whole or not at all, and synced: -1 if not */
+/*
+ * cf written as the record, whole or not at all: 0 if it is synced, 1 if
+ * it is in place but the directory could not be synced, or -1 if it is
+ * not written; errno says why
+ */
 int
 confirm_write(struct confirm *cf)
 {
@@ -160,7 +164,7 @@ confirm_write(struct confirm *cf)
 	if (rename(tmp, CONFIRM_RECORD) == -1)
 		goto fail;
 	confirm_kept(cf, len, 0);
-	return (dirsync());
+	return (dirsync() == -1 ? 1 : 0);
  fail:
 	serrno = errno;
 	if (fd != -1)
