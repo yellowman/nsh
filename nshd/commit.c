@@ -269,7 +269,7 @@ int
 commit_back(struct cnode *back, struct cnode *was)
 {
 	if (differ(NULL, back, was) == 0) {
-		printf("%% The running configuration is as it was\n");
+		printf("%% The running configuration reverted back\n");
 		return 0;
 	}
 	printf("%% The running configuration differs from how it was\n");
