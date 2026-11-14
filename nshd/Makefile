@@ -24,13 +24,13 @@ SRCS=	nshd.c control.c log.c showproc.c frontend.c configproc.c
 SRCS+=	systemproc.c archive.c stubs.c confirm.c
 # nsh's own, which system runs
 SRCS+=	arp.c compile.c genget.c commands.c bgpcommands.c stats.c kroute.c
-SRCS+=	ctl.c show.c if.c version.c route.c conf.c complete.c editing.c ieee80211.c
+SRCS+=	ctl.c show.c if.c version.c route.c conf.c ieee80211.c
 SRCS+=	bridge.c tunnel.c media.c sysctl.c passwd.c pfsync.c carp.c
-SRCS+=	trunk.c who.c more.c stringlist.c utils.c sqlite3.c ppp.c prompt.c
-SRCS+=	nopt.c pflow.c wg.c nameserver.c ndp.c umb.c utf8.c cmdargs.c ctlargs.c
-SRCS+=	helpcommands.c makeargv.c hashtable.c conftree.c candidate.c settings.c
+SRCS+=	trunk.c who.c stringlist.c utils.c sqlite3.c ppp.c prompt.c
+SRCS+=	nopt.c pflow.c wg.c nameserver.c ndp.c umb.c cmdargs.c ctlargs.c
+SRCS+=	helpcommands.c makeargv.c conftree.c candidate.c settings.c
 SRCS+=	kernel.c commit.c facts.c showfacts.c autoconf.c session.c kfacts.c
-SRCS+=	renderif.c renderrt.c rendersys.c nshcmds.c answer.c
+SRCS+=	renderif.c renderrt.c rendersys.c answer.c
 CLEANFILES+=compile.c
 
 LDADD=	-levent -lutil -ledit -ltermcap

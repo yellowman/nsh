@@ -31,41 +31,18 @@
 
 char *vers = NSH_VERSION_STR;
 int bridge, verbose, cli_rtable;
-int editing, interactive_mode, config_mode;
+int config_mode;
 pid_t pid;
 
-History *histi, *histc;
-HistEvent ev;
-EditLine *elc, *eli, *elp;
+EditLine *elp;
 char *cursor_pos;
-
-struct hashtable *nsh_env;
-volatile sig_atomic_t caught_sigwinch;
 
 /* nshd shows no manual */
 struct ghs mantab[] = {
 	{ NULL, NULL, NULL, NULL, 0 }
 };
 
-void
-intr(void)
-{
-}
-
-/* nsh's loop runs the rest of a do line */
-int
-cmd_rest(int argc, char **argv)
-{
-	return -1;
-}
-
 /* nshd does not ask itself, and is not a session of its own */
-int
-nshd_show(char *words)
-{
-	return 0;
-}
-
 int
 nshd_facts(int rw, char *words, struct facts_in *in)
 {
@@ -83,13 +60,6 @@ nshd_why(void)
 {
 }
 
-/* a log is followed by system, for a client */
-int
-show_log(int argc, char **argv, ...)
-{
-	return -1;
-}
-
 /* configure here is config's own, never nshd's session */
 int nshd_config, nshd_rtable;
 
@@ -100,62 +70,3 @@ nshd_runs(const char *cmd)
 	return 1;
 }
 
-int
-nshd_execs(void)
-{
-	return 1;
-}
-
-int
-nshd_configure(int how)
-{
-	return -1;
-}
-
-const char *
-nshd_cname(void)
-{
-	return "configure";
-}
-
-int
-nshd_line(char *text)
-{
-	return -1;
-}
-
-int
-nshd_exit(void)
-{
-	return -1;
-}
-
-int
-nshd_commit(int check, int minutes, char *comment)
-{
-	return -1;
-}
-
-int
-nshd_rollback(int n)
-{
-	return -1;
-}
-
-int
-nshd_cshow(char *words)
-{
-	return -1;
-}
-
-int
-nshd_show_if(const char *name)
-{
-	return -1;
-}
-
-int
-nshd_rules(char *daemon, int rtable, int set, char *path)
-{
-	return -1;
-}

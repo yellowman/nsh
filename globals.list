@@ -67,7 +67,14 @@ commands.c	table	Bridgelist Bridgelist_nitems Intlist
 			smtphelp snmphelp
 			sourceroutetab sshdhelp
 			tftphelp tftpproxyhelp
-			wccptab
+			wccptab clearhelp commithelp confighelp dohelp
+			editinghelp exithelp flushhelp halthelp helphelp
+			loggerhelp manhelp nreboothelp ping6help pinghelp
+			powerdownhelp prots quithelp rollbackhelp rtablehelp
+			saveenvhelp setenvhelp shellhelp showarptab showhelp
+			showlist showndptab showroutetab showvlantab sshhelp
+			stts telnethelp tracert6help tracerthelp unsetenvhelp
+			verbosehelp whohelp
 commit.c	scratch	deferred ndeferred
 commit.c	table	ifrefs
 complete.c	process	cmplt_remote complete_nocmd.nocmdtab

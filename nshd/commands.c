@@ -78,6 +78,14 @@
 #include "commands.h"
 #include "nshcmds.h"
 
+/*
+ * The rows and help of nsh's own commands, which the tables here name
+ * for a client that completes lines. nsh runs them: a row of them has
+ * no handler here
+ */
+#define RUNS(f)	NULL
+#include "nshrows.h"
+
 char hname[HSIZE];
 char next_ifname[IFNAMSIZ];	/* switch interfaces in interface context */
 struct intlist *whichlist;
@@ -580,9 +588,9 @@ Menu flushlist[] = {
 	{ "bridge-all",	"Dynamic and static bridge addresses", CMPL0 0, 0, 1, 1, flush_bridgeall },
 	{ "bridge-rule", "Layer 2 filter rules for a bridge member port", CMPL0 0, 0, 2, 2, flush_bridgerule },
 	{ "pf",		"pf NAT/filter/queue rules, states, tables", CMPL(t) (char**)fpfs, sizeof(struct fpf), 0, 1, flush_pf },
-	{ "history",	"Command history",	CMPL0 0, 0, 0, 0, flush_history },
-	{ "?",		"Options",		CMPL0 0, 0, 0, 0, flush_help },
-	{ "help",	0,			CMPL0 0, 0, 0, 0, flush_help },
+	{ "history",	"Command history",	CMPL0 0, 0, 0, 0, 0 },
+	{ "?",		"Options",		CMPL0 0, 0, 0, 0, 0 },
+	{ "help",	0,			CMPL0 0, 0, 0, 0, 0 },
 	{ 0, 0, 0, 0, 0 }
 };
 
@@ -651,7 +659,8 @@ flush_line(int argc, char **argv, ...)
 
 /*
  * The operations nshd's system runs, as root, for a privileged session:
- * flush, except help and history; reboot, halt and powerdown, which nsh
+ * flush, except help and history, which nsh runs and whose rows have no
+ * handler; reboot, halt and powerdown, which nsh
  * has the user confirm first; diff-config, of the saved configuration
  * against the running one; crontab, root's crontab; a daemon's action
  * that runs a program and does not change its configuration; an
@@ -672,8 +681,7 @@ op_allowed(int argc, char **argv)
 	    strcmp(argv[0], "crontab") == 0))
 		return 1;
 	if (argc >= 2 && strcmp(argv[0], "flush") == 0 &&
-	    (f = flush_find(argv[1])) != NULL && f->handler != flush_help &&
-	    f->handler != flush_history)
+	    (f = flush_find(argv[1])) != NULL && f->handler != NULL)
 		return 1;
 	if (argc >= 3 && strcmp(argv[0], "interface") == 0 &&
 	    strlen(argv[1]) < IFNAMSIZ && int_op_find(argc - 2, argv + 2))
@@ -846,17 +854,17 @@ struct intlist Intlist[] = {
 	{ "vnetflowid",	"Use part of vnetid as flowid",		CMPL0 0, 0, intvnetflowid, 1, CAND_EDIT },
 	{ "parent",	"Parent interface",			CMPL(i) 0, 0, intparent, 1, CAND_EDIT },
 	{ "patch",	"Pair interface",			CMPL(i) 0, 0, intpatch, 1, CAND_EDIT },
-	{ "ping",	pinghelp,				CMPL0 0, 0, int_ping, 0, CAND_RUN },
-	{ "ping6",	ping6help,				CMPL0 0, 0, int_ping6, 0, CAND_RUN },
-	{ "traceroute", tracerthelp,				CMPL0 0, 0, int_traceroute, 0, CAND_RUN },
-	{ "traceroute6", tracert6help,				CMPL0 0, 0, int_traceroute6, 0, CAND_RUN },
-	{ "ssh",	sshhelp,				CMPL0 0, 0, int_ssh, 0, CAND_RUN },
-	{ "telnet",	telnethelp,				CMPL0 0, 0, int_telnet,	0, CAND_RUN },
-	{ "logger",     loggerhelp,                             CMPL0 0, 0, int_logger, 0, CAND_RUN },
-	{ "do",		dohelp,					CMPL(c) 0, 0, int_do, 0, CAND_RUN },
-	{ "setenv",	setenvhelp,				CMPL(e) 0, 0, int_setenv, 0, CAND_RUN },
-	{ "unsetenv",	unsetenvhelp,				CMPL(e) 0, 0, int_unsetenv, 0, CAND_RUN },
-	{ "saveenv",	saveenvhelp,				CMPL0 0, 0, int_saveenv, 0, CAND_RUN },
+	{ "ping",	pinghelp,				CMPL0 0, 0, 0, 0, CAND_RUN },
+	{ "ping6",	ping6help,				CMPL0 0, 0, 0, 0, CAND_RUN },
+	{ "traceroute", tracerthelp,				CMPL0 0, 0, 0, 0, CAND_RUN },
+	{ "traceroute6", tracert6help,				CMPL0 0, 0, 0, 0, CAND_RUN },
+	{ "ssh",	sshhelp,				CMPL0 0, 0, 0, 0, CAND_RUN },
+	{ "telnet",	telnethelp,				CMPL0 0, 0, 0,	0, CAND_RUN },
+	{ "logger",     loggerhelp,                             CMPL0 0, 0, 0, 0, CAND_RUN },
+	{ "do",		dohelp,					CMPL(c) 0, 0, 0, 0, CAND_RUN },
+	{ "setenv",	setenvhelp,				CMPL(e) 0, 0, 0, 0, CAND_RUN },
+	{ "unsetenv",	unsetenvhelp,				CMPL(e) 0, 0, 0, 0, CAND_RUN },
+	{ "saveenv",	saveenvhelp,				CMPL0 0, 0, 0, 0, CAND_RUN },
 	{ "keepalive",	"GRE tunnel keepalive",			CMPL0 0, 0, intkeepalive, 1, CAND_EDIT },
 	{ "mplslabel",	"MPLS local label",			CMPL0 0, 0, intmpls, 1, CAND_EDIT },
 	{ "pwe",	"MPLS PWE3",				CMPL0 0, 0, intpwe3, 1, CAND_EDIT },
@@ -900,15 +908,15 @@ struct intlist Intlist[] = {
 	{ "roaming",	"Enable data roaming",			CMPL0 0, 0, intumb, 1, CAND_EDIT },
 	{ "interface",  interfacehelp,				CMPL(i) 0, 0, int_interface, 1, CAND_EDIT },
 	{ "shutdown",   "Shutdown interface",			CMPL0 0, 0, intflags, 1, CAND_EDIT },
-	{ "show",	showhelp,				CMPL(ta) (char **)showlist, sizeof(Menu), int_show, 0, CAND_RUN },
-	{ "who",	whohelp,				CMPL0 0, 0, int_who, 0, CAND_RUN },
-	{ "verbose",	verbosehelp,				CMPL0 0, 0, int_doverbose, 1, CAND_RUN },
-	{ "editing",	editinghelp,				CMPL0 0, 0, int_doediting, 1, CAND_RUN },
-	{ "clear",	clearhelp,				CMPL0 0, 0, int_clear, 0, CAND_RUN },
-	{ "!",		shellhelp,				CMPL0 0, 0, int_shell, 0, CAND_RUN },
-        { "?",		"Options",				CMPL0 0, 0, int_help, 0, CAND_RUN },
-	{ "manual",	manhelp,				CMPL(H) (char **)mantab, sizeof(struct ghs), int_manual, 0, CAND_RUN },
-        { "help",	0,					CMPL0 0, 0, int_help, 0, CAND_RUN },
+	{ "show",	showhelp,				CMPL(ta) (char **)showlist, sizeof(Menu), 0, 0, CAND_RUN },
+	{ "who",	whohelp,				CMPL0 0, 0, 0, 0, CAND_RUN },
+	{ "verbose",	verbosehelp,				CMPL0 0, 0, 0, 1, CAND_RUN },
+	{ "editing",	editinghelp,				CMPL0 0, 0, 0, 1, CAND_RUN },
+	{ "clear",	clearhelp,				CMPL0 0, 0, 0, 0, CAND_RUN },
+	{ "!",		shellhelp,				CMPL0 0, 0, 0, 0, CAND_RUN },
+        { "?",		"Options",				CMPL0 0, 0, 0, 0, CAND_RUN },
+	{ "manual",	manhelp,				CMPL(H) (char **)mantab, sizeof(struct ghs), 0, 0, CAND_RUN },
+        { "help",	0,					CMPL0 0, 0, 0, 0, CAND_RUN },
 	{ "exit",	"Leave interface config mode and return to global config mode ",
 								CMPL0 0, 0, int_exit, 0, CAND_RUN },
 
@@ -939,17 +947,17 @@ struct intlist Bridgelist[] = {
 	{ "priority",	"Spanning priority for all members on an 802.1D bridge",CMPL0 0, 0, brval, 1, CAND_EDIT },
 	{ "holdcnt",	"Spanning tree packets sent before rate limiting",	CMPL0 0, 0, brval, 1, CAND_EDIT },
 	{ "proto",	"Spanning tree protocol, stp or rstp",	CMPL0 0, 0, brproto, 1, CAND_EDIT },
-	{ "ping",	pinghelp,				CMPL0 0, 0, int_ping, 0, CAND_RUN },
-	{ "ping6",	ping6help,				CMPL0 0, 0, int_ping6, 0, CAND_RUN },
-	{ "traceroute", tracerthelp,				CMPL0 0, 0, int_traceroute, 0, CAND_RUN },
-	{ "traceroute6", tracert6help,				CMPL0 0, 0, int_traceroute6, 0, CAND_RUN },
-	{ "ssh",	sshhelp,				CMPL0 0, 0, int_ssh, 0, CAND_RUN },
-	{ "telnet",	telnethelp,				CMPL0 0, 0, int_telnet,	0, CAND_RUN },
-	{ "logger",     loggerhelp,                             CMPL0 0, 0, int_logger, 0, CAND_RUN },
-	{ "do",		dohelp,					CMPL(c) 0, 0, int_do, 0, CAND_RUN },
-	{ "setenv",	setenvhelp,				CMPL(e) 0, 0, int_setenv, 0, CAND_RUN },
-	{ "unsetenv",	unsetenvhelp,				CMPL(e) 0, 0, int_unsetenv, 0, CAND_RUN },
-	{ "saveenv",	saveenvhelp,				CMPL0 0, 0, int_saveenv, 0, CAND_RUN },
+	{ "ping",	pinghelp,				CMPL0 0, 0, 0, 0, CAND_RUN },
+	{ "ping6",	ping6help,				CMPL0 0, 0, 0, 0, CAND_RUN },
+	{ "traceroute", tracerthelp,				CMPL0 0, 0, 0, 0, CAND_RUN },
+	{ "traceroute6", tracert6help,				CMPL0 0, 0, 0, 0, CAND_RUN },
+	{ "ssh",	sshhelp,				CMPL0 0, 0, 0, 0, CAND_RUN },
+	{ "telnet",	telnethelp,				CMPL0 0, 0, 0,	0, CAND_RUN },
+	{ "logger",     loggerhelp,                             CMPL0 0, 0, 0, 0, CAND_RUN },
+	{ "do",		dohelp,					CMPL(c) 0, 0, 0, 0, CAND_RUN },
+	{ "setenv",	setenvhelp,				CMPL(e) 0, 0, 0, 0, CAND_RUN },
+	{ "unsetenv",	unsetenvhelp,				CMPL(e) 0, 0, 0, 0, CAND_RUN },
+	{ "saveenv",	saveenvhelp,				CMPL0 0, 0, 0, 0, CAND_RUN },
 	{ "rule",	"Bridge layer 2 filtering rules",	CMPL0 0, 0, brrule, 0, CAND_EDIT },
 	{ "static",	"Static bridge address entry",		CMPL0 0, 0, brstatic, 1, CAND_EDIT },
 	{ "ifpriority",	"Spanning priority of a member on an 802.1D bridge",	CMPL0 0, 0, brpri, 1, CAND_EDIT },
@@ -967,17 +975,17 @@ struct intlist Bridgelist[] = {
 	{ "pvptags",	"Tag private VLANs with their primary (veb)",	CMPL0 0, 0, brport, 1, CAND_EDIT },
 	{ "interface",  interfacehelp,				CMPL(i) 0, 0, int_interface, 1, CAND_EDIT },
 	{ "shutdown",	"Shutdown bridge",			CMPL0 0, 0, intflags, 1, CAND_EDIT },
-	{ "show",	showhelp,				CMPL(ta) (char **)showlist, sizeof(Menu), int_show, 0, CAND_RUN },
-	{ "who",	whohelp,				CMPL0 0, 0, int_who, 0, CAND_RUN },
-	{ "verbose",	verbosehelp,				CMPL0 0, 0, int_doverbose, 1, CAND_RUN },
-	{ "editing",	editinghelp,				CMPL0 0, 0, int_doediting, 1, CAND_RUN },
-	{ "clear",	clearhelp,				CMPL0 0, 0, int_clear, 0, CAND_RUN },
-	{ "!",		shellhelp,				CMPL0 0, 0, int_shell, 0, CAND_RUN },
+	{ "show",	showhelp,				CMPL(ta) (char **)showlist, sizeof(Menu), 0, 0, CAND_RUN },
+	{ "who",	whohelp,				CMPL0 0, 0, 0, 0, CAND_RUN },
+	{ "verbose",	verbosehelp,				CMPL0 0, 0, 0, 1, CAND_RUN },
+	{ "editing",	editinghelp,				CMPL0 0, 0, 0, 1, CAND_RUN },
+	{ "clear",	clearhelp,				CMPL0 0, 0, 0, 0, CAND_RUN },
+	{ "!",		shellhelp,				CMPL0 0, 0, 0, 0, CAND_RUN },
 
 /* Help commands */
-	{ "?",		"Options",				CMPL0 0, 0, int_help, 0, CAND_RUN },
-	{ "manual",	manhelp,				CMPL(H) (char **)mantab, sizeof(struct ghs), int_manual, 0, CAND_RUN },
-	{ "help",	0,					CMPL0 0, 0, int_help, 0, CAND_RUN },
+	{ "?",		"Options",				CMPL0 0, 0, 0, 0, CAND_RUN },
+	{ "manual",	manhelp,				CMPL(H) (char **)mantab, sizeof(struct ghs), 0, 0, CAND_RUN },
+	{ "help",	0,					CMPL0 0, 0, 0, 0, CAND_RUN },
 	{ "exit",	"Leave bridge config mode and return to global config mode ",
 								CMPL0 0, 0, int_exit, 0, CAND_RUN },
 	{ 0, 0, 0, 0, 0, 0 }
@@ -1277,14 +1285,14 @@ Command cmdtab[] = {
 	{ "ndp",	ndphelp,	CMPL0 0, 0, ndpset,		1, 1, 1, 0, CAND_EDIT },
 	{ "nameserver",	nameserverhelp,	CMPL0 0, 0, nameserverset,	1, 1, 1, 0, CAND_EDIT },
 	{ "bridge",	bridgehelp,	CMPL(i) 0, 0, interface,	1, 1, 1, 1, CAND_EDIT },
-	{ "show",	showhelp,	CMPL(ta) (char **)showlist, sizeof(Menu), showcmd,	0, 0, 0, 0 },
+	{ "show",	showhelp,	CMPL(ta) (char **)showlist, sizeof(Menu), 0,	0, 0, 0, 0 },
 	{ "ip",		iphelp,		CMPL(ta) (char **)iptab, sizeof(Menu), ipcmd,		1, 1, 1, 0, CAND_EDIT },
 	{ "ip6",	ip6help,	CMPL(ta) (char **)ip6tab, sizeof(Menu), ipcmd,		1, 1, 1, 0, CAND_EDIT },
 	{ "mpls",	mplshelp,	CMPL(ta) (char **)mplstab, sizeof(Menu), ipcmd,		1, 1, 1, 0, CAND_EDIT },
 	{ "ddb",	ddbhelp,	CMPL(ta) (char **)ddbtab, sizeof(Menu), ipcmd,		1, 1, 1, 0, CAND_EDIT },
 	{ "pipex",	pipexhelp,	CMPL(ta) (char **)pipextab, sizeof(Menu), ipcmd,	1, 1, 1, 0, CAND_EDIT },
-	{ "flush",	flushhelp,	CMPL(ta) (char **)flushlist, sizeof(Menu), flushcmd,	1, 0, 0, 0 },
-	{ "clear",      clearhelp,      CMPL0 0, 0, clear,              0, 0, 0, 0 },
+	{ "flush",	flushhelp,	CMPL(ta) (char **)flushlist, sizeof(Menu), 0,	1, 0, 0, 0 },
+	{ "clear",      clearhelp,      CMPL0 0, 0, 0,              0, 0, 0, 0 },
 	{ "route",	routehelp,	CMPL0 0, 0, route,		1, 1, 1, 0, CAND_EDIT },
 	{ "pf",		pfhelp,		CMPL(t) (char **)ctl_pf, ssctl, ctlhandler,	1, 1, 0, 1, CAND_EDIT },
 	{ "ospf",	ospfhelp,	CMPL(t) (char **)ctl_ospf, ssctl, ctlhandler,	1, 1, 0, 1, CAND_EDIT },
@@ -1317,33 +1325,33 @@ Command cmdtab[] = {
 	{ "crontab",    crontabhelp,    CMPL(t) (char **)ctl_crontab, ssctl, ctlhandler,    1, 1, 0, 1, CAND_EDIT },
 	{ "scheduler",  crontabhelp,    CMPL(t) (char **)ctl_crontab, ssctl, ctlhandler,    1, 1, 0, 1, CAND_EDIT },
 	{ "inet",	inethelp,	CMPL(t) (char **)ctl_inet, ssctl, ctlhandler,	1, 1, 0, 1, CAND_EDIT },
-	{ "ping",	pinghelp,	CMPL0 0, 0, ping,		0, 0, 0, 0 },
-	{ "ping6",	ping6help,	CMPL0 0, 0, ping6,		0, 0, 0, 0 },
-	{ "traceroute", tracerthelp,	CMPL0 0, 0, traceroute,		0, 0, 0, 0 },
-	{ "traceroute6", tracert6help,  CMPL0 0, 0, traceroute6,	 0, 0, 0, 0 },
-	{ "ssh",	sshhelp,	CMPL0 0, 0, ssh,		0, 0, 0, 0 },
-	{ "telnet",	telnethelp,	CMPL0 0, 0, telnet,		0, 0, 0, 0 },
-	{ "reboot",	nreboothelp,	CMPL0 0, 0, nreboot,		1, 0, 0, 0 },
-	{ "logger",     loggerhelp,     CMPL0 0, 0, logger,             0, 0, 0, 0 },
-	{ "halt",	halthelp,	CMPL0 0, 0, halt,		1, 0, 0, 0 },
-	{ "powerdown",	powerdownhelp,	CMPL0 0, 0, powerdown,		1, 0, 0, 0 },
-	{ "verbose",	verbosehelp,	CMPL0 0, 0, doverbose,		0, 0, 1, 0 },
-	{ "editing",	editinghelp,	CMPL0 0, 0, doediting,		0, 0, 1, 0 },
-	{ "configure",	confighelp,	CMPL0 0, 0, doconfig,		1, 0, 1, 0 },
-	{ "commit",	commithelp,	CMPL0 0, 0, commit,		1, 0, 0, 0, CAND_RUN },
-	{ "rollback",	rollbackhelp,	CMPL0 0, 0, cand_rollback,	1, 1, 0, 0, CAND_RUN },
-	{ "who",	whohelp,	CMPL0 0, 0, who,		0, 0, 0, 0 },
-	{ "no",		0,		CMPL(c) 0, 0, nocmd,		0, 0, 0, 0 },
-	{ "do",		dohelp,		CMPL(c) 0, 0, docmd,		0, 0, 0, 0 },
-	{ "setenv",	setenvhelp,	CMPL(E) 0, 0, setenvcmd,	0, 0, 0, 0 },
-	{ "unsetenv",	unsetenvhelp,	CMPL(e) 0, 0, unsetenvcmd,	0, 0, 0, 0 },
-	{ "saveenv",	saveenvhelp,	CMPL0 0, 0, saveenvcmd,		0, 0, 0, 0 },
-	{ "!",		shellhelp,	CMPL0 0, 0, shell,		1, 0, 0, 0 },
-	{ "?",		helphelp,	CMPL(c) 0, 0, help,		0, 0, 0, 0 },
-	{ "manual",	manhelp,	CMPL(H) (char **)mantab, sizeof(struct ghs), manual,0, 0, 0, 0 },
+	{ "ping",	pinghelp,	CMPL0 0, 0, 0,		0, 0, 0, 0 },
+	{ "ping6",	ping6help,	CMPL0 0, 0, 0,		0, 0, 0, 0 },
+	{ "traceroute", tracerthelp,	CMPL0 0, 0, 0,		0, 0, 0, 0 },
+	{ "traceroute6", tracert6help,  CMPL0 0, 0, 0,	 0, 0, 0, 0 },
+	{ "ssh",	sshhelp,	CMPL0 0, 0, 0,		0, 0, 0, 0 },
+	{ "telnet",	telnethelp,	CMPL0 0, 0, 0,		0, 0, 0, 0 },
+	{ "reboot",	nreboothelp,	CMPL0 0, 0, 0,		1, 0, 0, 0 },
+	{ "logger",     loggerhelp,     CMPL0 0, 0, 0,             0, 0, 0, 0 },
+	{ "halt",	halthelp,	CMPL0 0, 0, 0,		1, 0, 0, 0 },
+	{ "powerdown",	powerdownhelp,	CMPL0 0, 0, 0,		1, 0, 0, 0 },
+	{ "verbose",	verbosehelp,	CMPL0 0, 0, 0,		0, 0, 1, 0 },
+	{ "editing",	editinghelp,	CMPL0 0, 0, 0,		0, 0, 1, 0 },
+	{ "configure",	confighelp,	CMPL0 0, 0, 0,		1, 0, 1, 0 },
+	{ "commit",	commithelp,	CMPL0 0, 0, 0,		1, 0, 0, 0, CAND_RUN },
+	{ "rollback",	rollbackhelp,	CMPL0 0, 0, 0,	1, 1, 0, 0, CAND_RUN },
+	{ "who",	whohelp,	CMPL0 0, 0, 0,		0, 0, 0, 0 },
+	{ "no",		0,		CMPL(c) 0, 0, 0,		0, 0, 0, 0 },
+	{ "do",		dohelp,		CMPL(c) 0, 0, 0,		0, 0, 0, 0 },
+	{ "setenv",	setenvhelp,	CMPL(E) 0, 0, 0,	0, 0, 0, 0 },
+	{ "unsetenv",	unsetenvhelp,	CMPL(e) 0, 0, 0,	0, 0, 0, 0 },
+	{ "saveenv",	saveenvhelp,	CMPL0 0, 0, 0,		0, 0, 0, 0 },
+	{ "!",		shellhelp,	CMPL0 0, 0, 0,		1, 0, 0, 0 },
+	{ "?",		helphelp,	CMPL(c) 0, 0, 0,		0, 0, 0, 0 },
+	{ "manual",	manhelp,	CMPL(H) (char **)mantab, sizeof(struct ghs), 0,0, 0, 0, 0 },
 	{ "exit",	exithelp,	CMPL0 0, 0, exitconfig,		1, 0, 0, 0 },
-	{ "quit",	quithelp,	CMPL0 0, 0, quit,		0, 0, 0, 0 },
-	{ "help",	0,		CMPL(c) 0, 0, help,		0, 0, 0, 0 },
+	{ "quit",	quithelp,	CMPL0 0, 0, 0,		0, 0, 0, 0 },
+	{ "help",	0,		CMPL(c) 0, 0, 0,		0, 0, 0, 0 },
 	{ 0,		0,		CMPL0 0, 0, 0,			0, 0, 0, 0 }
 };
 
@@ -1507,7 +1515,7 @@ static const struct confcmd conf_bridge[] = {
  */
 
 static Command  cmdtab2[] = {
-	{ "reload",     nreboothelp,    CMPL0 0, 0, nreboot,            1, 0, 0, 0 },
+	{ "reload",     nreboothelp,    CMPL0 0, 0, 0,            1, 0, 0, 0 },
 	{ 0,		0,		CMPL0 0, 0, 0,		0, 0, 0, 0 }
 };
 
@@ -1525,9 +1533,10 @@ getcmd(char *name)
  * Run one line, as a terminal gives it, in configure private. In an
  * interface's mode, run the interface command; int_exit() leaves the
  * mode. Otherwise run the command; interface or bridge enters its mode,
- * which stays for the following lines. In nshd's config process, allow
- * only commands that edit the candidate, and leaving a mode. Returns
- * what the handler returns, or -1 after printing why if none ran.
+ * which stays for the following lines. Only commands that edit the
+ * candidate run, and leaving a mode: nsh runs the rest, whose rows have
+ * no handler here. Returns what the handler returns, or -1 after
+ * printing why if none ran.
  */
 int
 cmdline(char *text)
@@ -1566,7 +1575,7 @@ cmdline(char *text)
 	}
 	if ((c->needconfig || c->modh) && cand_refused(c->name, c->cand))
 		return -1;
-	if (in_config && c->cand != CAND_EDIT && c->handler != exitconfig) {
+	if (c->cand != CAND_EDIT && c->handler != exitconfig) {
 		printf("%% %s is not through nshd's configure\n", c->name);
 		return -1;
 	}
@@ -1596,7 +1605,7 @@ cmdline_if(void)
 	}
 	if (cand_refused(i->name, i->cand))
 		return -1;
-	if (in_config && i->cand != CAND_EDIT && i->handler != int_exit) {
+	if (i->cand != CAND_EDIT && i->handler != int_exit) {
 		printf("%% %s is not through nshd's configure\n", i->name);
 		return -1;
 	}
@@ -1655,7 +1664,7 @@ row_runs(char **table, int stlen, char *row, int *out, int *conf)
 			*conf = RUN_UNSUPPORTED;
 	} else if (table == (char **)flushlist) {
 		f = (Menu *)row;
-		if (f->handler != flush_help && f->handler != flush_history)
+		if (f->handler != NULL)
 			*out = *conf = RUN_OP;
 	} else if (stlen == sizeof(struct ctl))
 		ctl_runs((struct ctl *)row, out, conf);
@@ -1694,7 +1703,7 @@ hostname(int argc, char **argv, ...)
 		}
 		return 0;
 	}
-	return show_hostname(0, NULL);
+	return facts_show(stdout, "hostname");
 }
 
 int
