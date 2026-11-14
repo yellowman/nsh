@@ -804,11 +804,24 @@ A session in
 .Cm configure
 or
 .Cm configure exclusive
-that loses admin may then only leave it, a log it follows that it
-may no longer follow ends, and
+that loses admin may then only leave it, and a log it follows that it
+may no longer follow ends.
 .Nm
-allows the exec permission, which it checks itself, until it connects
-again.
+asks nshd for the user's permissions before each program it runs, so a
+lost exec or operate permission counts at the next program.
+The line editor's keys stay as
+.Nm
+bound them until the editor starts again or a bind runs.
+So a user who loses exec while
+.Nm
+runs can still use a key bound to
+.Cm vi-histedit
+or
+.Cm ed-command
+until then.
+End that user's
+.Nm
+to take the keys away at once: the next one starts without them.
 A rollback of an unconfirmed commit that changes them does the same,
 by the lines it goes back to.
 A permission its class gains counts at once where nshd checks the class
