@@ -343,9 +343,19 @@ a line of
 .Cm smtp
 rules with mda, proc, a pipe, a table or a macro; a line of
 .Cm snmp
-rules with a trap handle or a macro; a line of
+rules with a trap handle, agentx or a macro; a line of
 .Cm pf
-rules with file or load; and a line of any daemon's rules with include.
+rules with file or load; a line of
+.Cm bgp
+rules with dump or socket; a line of
+.Cm relay
+rules with socket, except tcp's socket buffer; a line of
+.Cm ldap
+rules that listens on a socket's path, or on a macro; and a line of any
+daemon's rules with include.
+Each of these runs a command as root, reads a file it names, or has a
+daemon that starts as root write a file or make a socket where the
+line says.
 The check reads each line as the daemon's parser does.
 So it finds a word that a backslash hides in part, or a word spread
 over a line continued with a backslash, and it ignores a word in a

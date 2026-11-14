@@ -75,7 +75,9 @@ static int ctl_cand_stage(struct daemons *, char *, char *, char *,
     size_t, struct cand *);
 static void ctl_cand_unstage(char *, char *);
 static int ctl_cand_follow(struct daemons *, char *, int, struct cand *);
+struct lx_stmt;
 static int admin_scan(struct daemons *, const char *, size_t, char **);
+static void lx_word(struct daemons *, const char *, int, struct lx_stmt *);
 static int admin_had(struct daemons *, int, char *);
 static const char *admin_in(int);
 
@@ -100,11 +102,17 @@ static int admin_refused;
 /*
  * The words that make a line of a daemon's rules need admin, matched in
  * any case: for the daemon's table, or with NULL for any daemon. Each
- * runs a command as root, or reads a file it names
+ * runs a command as root, reads a file it names, or has the daemon,
+ * which starts as root, write where the line says: a file, or a socket
+ * it makes. A word with path needs admin only in a line that also has
+ * a word starting with /, or a macro, which may hold one. A word with
+ * an other needs none where that word, bare, is the next
  */
 static const struct {
 	struct ctl	*table;
 	const char	*word;
+	int		 path;
+	const char	*other;
 } admin_words[] = {
 	{ ctl_smtp,	"mda" },	/* runs a command */
 	{ ctl_smtp,	"proc" },	/* proc, proc-exec */
@@ -117,7 +125,20 @@ static const struct {
 	{ ctl_snmp,	"=" },
 	{ ctl_pf,	"file" },	/* a table's file */
 	{ ctl_pf,	"load" },	/* an anchor's file */
+	{ ctl_bgp,	"dump" },	/* writes the file it names */
+	{ ctl_bgp,	"socket" },	/* makes the socket it names */
+	{ ctl_snmp,	"agentx" },	/* a socket, its owner and mode */
+	{ ctl_relay,	"socket", 0, "buffer" },	/* not tcp's */
+	{ ctl_ldap,	"listen", 1 },	/* on a socket's path */
 	{ NULL,		"include" },	/* rules from a file */
+};
+
+/* a statement of a daemon's rules, as lx_word() has read it so far */
+struct lx_stmt {
+	int		 hit;	/* it needs admin */
+	int		 path;	/* it does if it has a path */
+	int		 macro;	/* it has a macro */
+	const char	*other;	/* it does unless this bare word is next */
 };
 
 /* master daemon list */
@@ -1830,21 +1851,37 @@ lx_getc(struct lexin *x)
 	return c;
 }
 
-/* 1 if tok, the token the lexer built, has a word that needs admin for d */
-static int
-lx_word(struct daemons *d, const char *tok)
+/*
+ * tok, the token the lexer built, bare if it was not quoted, as the next
+ * of statement st of d's rules: whether it has a word that needs admin
+ * for d, or is what such a word before it waits for
+ */
+static void
+lx_word(struct daemons *d, const char *tok, int bare, struct lx_stmt *st)
 {
 	size_t i;
 
+	if (st->other != NULL) {
+		if (!bare || strcmp(tok, st->other) != 0)
+			st->hit = 1;
+		st->other = NULL;
+	}
+	if (st->path && tok[0] == '/')
+		st->hit = 1;
 	for (i = 0; i < sizeof(admin_words) / sizeof(admin_words[0]); i++) {
 		if (admin_words[i].table != NULL &&
 		    admin_words[i].table != d->table)
 			continue;
 		/* a NULL table, as for include, means every daemon */
-		if (strcasestr(tok, admin_words[i].word) != NULL)
-			return 1;
+		if (strcasestr(tok, admin_words[i].word) == NULL)
+			continue;
+		if (admin_words[i].path)
+			st->path = 1;
+		else if (admin_words[i].other != NULL)
+			st->other = admin_words[i].other;
+		else
+			st->hit = 1;
 	}
-	return 0;
 }
 
 #define LX_INSTR(c) \
@@ -1856,9 +1893,10 @@ static int
 admin_scan(struct daemons *d, const char *text, size_t len, char **needp)
 {
 	struct lexin x = { .s = text, .len = len, .line = 1 };
+	struct lx_stmt st = { 0 };
 	char buf[8192], *need;
 	size_t i, nlines = 1;
-	int c, next, quotec, first = 0, hit = 0;
+	int c, next, quotec, first = 0;
 
 	for (i = 0; i < len; i++)
 		if (text[i] == '\n')
@@ -1879,8 +1917,8 @@ admin_scan(struct daemons *d, const char *text, size_t len, char **needp)
 		if (c == '$') {			/* a macro: the $ is a word */
 			if (!first)
 				first = tokline;
-			if (lx_word(d, "$"))
-				hit = 1;
+			st.macro = 1;
+			lx_word(d, "$", 1, &st);
 			while ((c = lx_getc(&x)) != EOF &&
 			    (isalnum(c) || c == '_'))
 				;		/* read the macro's name */
@@ -1914,14 +1952,14 @@ admin_scan(struct daemons *d, const char *text, size_t len, char **needp)
 			*p = '\0';
 			if (!first)
 				first = tokline;
-			if (lx_word(d, buf))	/* catches | inside a string */
-				hit = 1;
+			lx_word(d, buf, 0, &st);  /* catches | inside a string */
 			continue;
 		}
 		if (c == '-' || isdigit(c)) {	/* a number, never a word */
 			while ((c = lx_getc(&x)) != EOF && isdigit(c))
 				;
 			lx_unget(&x, c);
+			lx_word(d, "", 1, &st);
 			if (!first)
 				first = tokline;
 			continue;
@@ -1935,17 +1973,18 @@ admin_scan(struct daemons *d, const char *text, size_t len, char **needp)
 			*p = '\0';
 			if (!first)
 				first = tokline;
-			if (lx_word(d, buf))
-				hit = 1;
+			lx_word(d, buf, 1, &st);
 			continue;
 		}
 		if (c == '\n' || c == EOF) {	/* end of the statement */
-			if (hit && first > 0)
+			if (st.other != NULL || (st.path && st.macro))
+				st.hit = 1;
+			if (st.hit && first > 0)
 				for (i = (size_t)first - 1;
 				    i < (size_t)x.line && i < nlines; i++)
 					need[i] = 1;
 			first = 0;
-			hit = 0;
+			memset(&st, 0, sizeof(st));
 			if (c == EOF)
 				break;
 			x.line++;
@@ -1956,8 +1995,7 @@ admin_scan(struct daemons *d, const char *text, size_t len, char **needp)
 			first = tokline;
 		buf[0] = c;
 		buf[1] = '\0';
-		if (lx_word(d, buf))
-			hit = 1;
+		lx_word(d, buf, 1, &st);
 	}
 
 	*needp = need;
