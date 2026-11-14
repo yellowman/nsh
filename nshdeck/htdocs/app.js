@@ -685,6 +685,7 @@ function faceplate() {
 			    port(r.name));
 		});
 	}
+	chassisFit();
 	list.forEach(function (r) {
 		var p = jacks[r.name], n = Number(r["input-packets"] || 0) +
 		    Number(r["output-packets"] || 0), u = utilisation(r);
@@ -703,6 +704,23 @@ function faceplate() {
 		p.querySelector(".rate").textContent = rate(r);
 		packets[r.name] = n;
 	});
+}
+
+/*
+ * The box is taller if its ports do not fit in one row beside its plate
+ * and readout: they go under those, the box's width (style.css). Asked
+ * again when the ports, the window or the page's size change
+ */
+function chassisFit() {
+	var box = $("ports").parentNode, rows = {};
+
+	if ($("ws-overview").hidden)
+		return;
+	box.classList.remove("tall");
+	Object.keys(jacks).forEach(function (n) {
+		rows[jacks[n].offsetTop] = true;
+	});
+	box.classList.toggle("tall", Object.keys(rows).length > 1);
 }
 
 /* the readout on the box's face: its ports, interfaces and addresses */
@@ -1259,6 +1277,7 @@ function zoomTo(i) {
 		/* the size is kept for this page only */
 	}
 	termSized();
+	chassisFit();
 	return i;
 }
 
@@ -1328,6 +1347,7 @@ document.addEventListener("DOMContentLoaded", function () {
 		topic(e.target.value);
 	});
 	document.addEventListener("keydown", keys);
+	window.addEventListener("resize", chassisFit);
 	document.addEventListener("input", function (e) {
 		if (e.target === comp)
 			closeChoices();
