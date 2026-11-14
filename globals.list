@@ -28,7 +28,6 @@ client.c	table	nshd_runs.progs show_log.logs
 cmdargs.c	process	child in_config
 commands.c	session	hname in_rc next_ifname rc_head whichlist
 commands.c	process	snapshot
-commands.c	scratch	oneline
 commands.c	table	Bridgelist Bridgelist_nitems Intlist
 			Intlist_nitems ahtab arpdowntab arphelp
 			arptimeouttab bgphelp bridgehelp carploggingtab

@@ -84,7 +84,6 @@ struct intlist *whichlist;
 
 static int in_rc;		/* a commit's edits run */
 static int rc_head;		/* and this one is a block's head */
-static int oneline;		/* run by cmdline(); a mode stays entered */
 static struct cnode *snapshot;	/* config's running configuration */
 
 /* globals of this file each session has a copy of (session.c) */
@@ -112,8 +111,6 @@ static int	flush_run(int, char **);
 static Menu	*flush_find(char *);
 static int	int_op(int, char **, ...);
 static struct intlist *int_op_find(int, char **);
-static int	is_bad_input(const char *, size_t);
-static int	read_command_line(EditLine *, History *);
 static int	int_exit(int, char **, ...);
 static int	hostname(int, char **, ...);
 static int	interface(int, char **, ...);
@@ -988,79 +985,15 @@ struct intlist Bridgelist[] = {
 
 size_t Bridgelist_nitems = nitems(Bridgelist);
 
-static int
-is_bad_input(const char *buf, size_t num)
-{
-	int i;
-
-	if (num >= sizeof(line)) {
-		printf("%% Input exceeds permitted length\n");
-		return 1;
-	}
-
-	for (i = 0; i < num; i++) {
-		if (!isprint((unsigned char)buf[i])) {
-			printf("%% Input contains bad character\n");
-			return 1;
-		}
-	}
-
-	return 0;
-}
-
-/*
- * Try to read a non-empty command into the global line buffer.
- * Return -1 upon error from el_gets().
- * If successful, enter the command into editing history and
- * return the amount of characters read.
- * The Enter key by itself has no effect.
- * Return 0 if EOF or ".." is read.
- * Do not add ".." to editing history.
- */
-static int
-read_command_line(EditLine *el, History *hist)
-{
-	const char *buf;
-	int num;
-
-	do {
-		num = 0;
-		if ((buf = el_gets(el, &num)) == NULL) {
-			if (num == -1)
-				return -1;
-			/* EOF, e.g. ^X or ^D via exit_i() in editing.c */
-			return 0;
-		}
-		while (num > 0 && isspace((unsigned char)buf[num - 1]))
-			num--;
-		if (is_bad_input(buf, num))
-			continue;
-	} while (num == 0); /* Enter key */
-
-	if (num == 2 && strncmp(buf, "..", num) == 0)
-		return 0;
-
-	memcpy(line, buf, (size_t)num);
-	line[num] = '\0';
-	history(hist, &ev, H_ENTER, buf);
-	return num;
-}
-
 /*
  * command handler for interface and bridge modes
  *
- * acts as a loop for human keyboard user. With rc_head, for the head of
- * a block in a commit's edits, it only creates the interface, or with
- * no, destroys it.
- *
- * if a function returns to interface() with a 1, interface() will break
- * the user back to command() mode.
- *
- * While this function is active the global ifname buffer contains the
- * name of the interface being configured.
- * Ensure that the ifname buffer gets cleared on exit. This allows nested
- * commands to tell whether a interface/bridge context is active, and which
- * interface/bridge is being configured.
+ * For a line of configure (cmdline()), the mode is entered, and stays:
+ * the global ifname buffer has the name of the interface being
+ * configured, and whichlist its commands, so the lines that follow can
+ * tell that an interface's mode is active, and whose. int_exit() leaves
+ * it. With rc_head, for the head of a block in a commit's edits, it
+ * only creates the interface, or with no, destroys it.
  */
 static int
 interface(int argc, char **argv, ...)
@@ -1068,7 +1001,6 @@ interface(int argc, char **argv, ...)
 	int ifs, set = 1, r;
 	char *tmp;
 	char *ifunit = NULL;
-	struct intlist *i;	/* pointer to current command */
 	struct ifreq ifr;
 
 	if (NO_ARG(argv[0])) {
@@ -1179,109 +1111,7 @@ interface(int argc, char **argv, ...)
 
 	imr_init(ifname);
 
-	/* a line at a time (cmdline()): the mode is entered, and stays */
-	if (oneline) {
-		close(ifs);
-		return 0;
-	}
-
-	/* human at the keyboard or commands on stdin */
-	for (;;) {
-		char *margp;
-
-		if (editing && !isatty(STDIN_FILENO))
-			endedit();
-		if (!editing) {
-			/* command line editing disabled */
-			if (interactive_mode)
-				printf("%s", iprompt());
-			if (fgets(line, sizeof(line), stdin) == NULL) {
-				if (feof(stdin) || ferror(stdin)) {
-					if (interactive_mode)
-						printf("\n");
-					ifname[0] = '\0';
-					close(ifs);
-					return 0;
-				}
-				break;
-			}
-			if (line[0] == '\0')
-				break;
-		} else {
-			int num;
-
-			cursor_pos = NULL;
-			num = read_command_line(eli, histi);
-			if (num == 0)
-				break;
-			if (num == -1) {
-				printf("%% Input error: %s\n",
-				    strerror(errno));
-				ifname[0] = '\0';
-				close(ifs);
-				return -1;
-			}
-		}
-
-		if (makeargv() == -1) {
-			printf("%% Too many words\n");
-			continue;
-		}
-		if (margv[0] == 0)
-			break;
-		if (NO_ARG(margv[0]))
-			margp = margv[1];
-		else
-			margp = margv[0];
-		i = (struct intlist *) genget(margp, (char **)
-		    whichlist, sizeof(struct intlist));
-		if (Ambiguous(i)) {
-			printf("%% Ambiguous command\n");
-		} else if (i == 0) {
-			int val = 1;
-
-			if (editing)
-				val = el_burrito(eli, margc, margv);
-			if (val)
-				printf("%% Invalid command\n");
-		} else if (cand_refused(i->name, i->cand)) {
-			/* cand_refused() said why */
-		} else {
-			int save_cli_rtable = cli_rtable;
-			int ret;
-
-			/* Run the handler in the default routing domain. */
-			if (cli_rtable != 0 && nsh_setrtable(0) == 0)
-				cli_rtable = 0;
-
-			ret = (*i->handler)(margc, margv, ifname, ifs);
-
-			if (cli_rtable != save_cli_rtable &&
-			    nsh_setrtable(save_cli_rtable) == 0)
-				cli_rtable = save_cli_rtable;
-
-			if (ret == 1)
-				break;
-		}
-
-		if (i && i->handler == int_interface && next_ifname[0] != '\0' &&
-		    strcmp(next_ifname, ifname) != 0) {
-			strlcpy(ifname, next_ifname, sizeof(ifname));
-			memset(next_ifname, 0, sizeof(next_ifname));
-			strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
-			imr_init(ifname);
-			if (candidate ? cand_isbridge(ifname) :
-			    is_bridge(ifs, ifname)) {
-				whichlist = Bridgelist;
-				bridge = 1;
-			} else {
-				whichlist = Intlist;
-				bridge = 0;
-			}
-		}
-	}
-
-	ifname[0] = '\0';
+	/* the mode is entered, and stays (cmdline()) */
 	close(ifs);
 	return 0;
 }
@@ -1704,7 +1534,6 @@ cmdline(char *text)
 {
 	Command *c;
 	char *p;
-	int r;
 
 	if (strlcpy(line, text, sizeof(line)) >= sizeof(line)) {
 		printf("%% Input exceeds permitted length\n");
@@ -1743,10 +1572,7 @@ cmdline(char *text)
 	}
 	if (c->modh)
 		strlcpy(hname, c->name, HSIZE);
-	oneline = 1;
-	r = (*c->handler)(margc, margv, 0);
-	oneline = 0;
-	return r;
+	return (*c->handler)(margc, margv, 0);
 }
 
 /* A line in an interface's mode, as interface()'s loop runs it */
