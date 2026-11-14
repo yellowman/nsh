@@ -498,7 +498,16 @@ void print_media_word(uint64_t, int, int, FILE *);
 int loginset(int, char **, ...);
 int login_class_perms(const char *);
 int login_perms(uid_t);
-int login_perms_in(uid_t, int, const char *, size_t);
+/* a login class or user, as a configuration's line gives it */
+struct login_line {
+	int32_t user;			/* 1 a user's, 0 a class's */
+	int32_t perms;			/* a class's, or -1 if not ones */
+	char name[32];
+	char class[32];			/* a user's */
+};
+int login_words_perms(int, char **);
+int login_lines(char *, size_t, uint32_t, struct login_line **, uint32_t *);
+int login_perms_by(uid_t, int, struct login_line *, uint32_t);
 int login_auth(char *, char *, const char **);
 int login_may(const char *, uid_t);
 size_t login_hide(char *, size_t);
@@ -762,7 +771,9 @@ int pr_rollback(int, char **, ...);
 int rollback_keep(const char *, const char *, const char *);
 int saved_write(void);
 int saved_diff(int);
-int saved_differs(void);
+char *saved_read(size_t *);
+/* how two configurations differ, as the parser says (parserproc.c) */
+int parser_diff(char *, size_t, char *, size_t, char *, int);
 /* operations, which nshd's system runs */
 #define OP_DIFFERS	3	/* an operation's status: what it compared differs */
 int op_allowed(int, char **);
@@ -781,10 +792,12 @@ int commit_booted(struct cnode *, struct cnode *);
 int commit_reads(char *, size_t, char *, size_t);
 int logins_differ(struct cnode *, struct cnode *);
 int commit_logins(char *, size_t, char *, size_t);
-int commit_verify(char *, size_t, int, int);
-int commit_undo(char *, size_t);
+int commit_verify(char *, size_t, char *, size_t, int, int);
+int commit_plan(char *, size_t, char *, size_t, struct script *);
+int commit_undone(char *, size_t, char *, size_t);
+int commit_diff(char *, size_t, char *, size_t, char *, int, int);
 int rollback_text(int, FILE *);
-int rollback_diff(int, FILE *);
+int rollback_texts(int, char **, size_t *, char **, size_t *);
 void rollback_list(FILE *);
 int script_make(struct cnode *, struct cnode *, struct script *, int);
 int script_run(struct script *);

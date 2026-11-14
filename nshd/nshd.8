@@ -491,13 +491,20 @@ starts, config loads what archive stored before any session enters
 Runs as _nshparse in a
 .Xr chroot 2 ,
 and may only read and write what it was given.
-system starts a new one for each check, so a parser keeps nothing from
-one check to the next.
-It reads text for system, which reads none of it itself: for a session
-without admin, the script of a commit and the rules of a test, against
-the running configuration, and says each line that needs admin.
-system passes on what the parser prints, and takes its exit status as
-the verdict.
+system starts a new one for each reading, so a parser keeps nothing
+from one reading to the next.
+It reads configuration text for system, which reads none of it itself:
+whether what runs is what a commit is based on, and what it wants; the
+login lines a commit changes; the script that undoes a commit or rolls
+one back; the boot's plan; and how two configurations differ, for
+.Ic show diff-config
+and
+.Ic show rollback .
+For a session without admin, it checks the script of a commit and the
+rules of a test, against the running configuration, and says each line
+that needs admin.
+system passes on what the parser prints, takes its exit status as the
+verdict, and checks what it answers before using it.
 .El
 .Pp
 config and system, and config and archive, each talk on a pipe of

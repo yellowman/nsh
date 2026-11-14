@@ -110,7 +110,6 @@ static int	conf_run_if(int, const struct argcmd *, int, char **, int,
 		    const struct facts_value *, char *);
 static int	cand_leave(struct cand *);
 static int	cmdline_if(struct cand *);
-static int	wr_conf(char *);
 static int	sysctlhelp(int, char **, ...);
 static int	flush_pf(int, char **, ...);
 static int	flush_help(int, char **, ...);
@@ -2334,26 +2333,6 @@ flush_pf(int argc, char **argv, ...)
 }
 
 /*
- * Save configuration
- */
-int
-wr_conf(char *fname)
-{
-	FILE *rchandle;
-	int fd;
-
-	/* its secrets are never for others to read, not even at first */
-	if ((fd = open(fname, O_WRONLY | O_CREAT | O_TRUNC, 0640)) == -1)
-		return 0;
-	if (fchmod(fd, 0640) == -1 || (rchandle = fdopen(fd, "w")) == NULL) {
-		close(fd);
-		return 0;
-	}
-	conf(rchandle);
-	return fclose(rchandle) != EOF;
-}
-
-/*
  * Flush wrappers
  */
 static int
@@ -2702,27 +2681,12 @@ running_set(struct cnode *t)
 struct cnode *
 running_tree(void)
 {
-	char path[PATH_MAX];
 	struct cnode *t = NULL;
-	int fd;
 
-	if (snapshot != NULL) {
-		if ((t = conftree_copy(snapshot)) == NULL)
-			printf("%% running_tree: %s\n", strerror(errno));
-		return t;
-	}
-
-	if (strlcpy(path, "/tmp/nshrc.XXXXXXXX", sizeof(path)) >= sizeof(path))
-		return NULL;
-	if ((fd = mkstemp(path)) == -1) {
-		printf("%% mkstemp %s: %s\n", path, strerror(errno));
-		return NULL;
-	}
-	if (wr_conf(path))
-		t = conftree_read(path, conf_mode, conf_ordered);
-	else
-		printf("%% Couldn't generate configuration\n");
-	unlink(path);
-	close(fd);
+	if (snapshot == NULL)
+		printf("%% running_tree: no snapshot of the running "
+		    "configuration\n");
+	else if ((t = conftree_copy(snapshot)) == NULL)
+		printf("%% running_tree: %s\n", strerror(errno));
 	return t;
 }

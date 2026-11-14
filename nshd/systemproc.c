@@ -86,8 +86,18 @@
  * because rolling back the unconfirmed commit would roll it back too.
  * Outside a commit, SAVE saves the running configuration.
  *
- * An apply, an undo, a save and a test each run as a job: a child of
- * system in its own process group, whose output is sent as it arrives.
+ * system reads no configuration text itself. The parser does
+ * (parserproc.c): a new one for each reading, run in a job of its own
+ * or from a job's child. It reads whether what runs is what a commit is
+ * based on, and how a record's configurations read; which login lines a
+ * commit changes, and to what; whether a script verifies; the script
+ * that undoes a commit or rolls one back; the boot's plan; and how two
+ * configurations differ. system checks what the parser answers before
+ * it uses it, as it checks config's script: its edits before any runs.
+ *
+ * An apply, an undo, a save, a test and the parser's reading each run
+ * as a job: a child of system in its own process group, whose output is
+ * sent as it arrives.
  * If a job runs past its time limit, its group gets SIGTERM, then
  * SIGKILL after a grace period, and the job fails. A test runs as
  * NSHD_CHECK_USER, with
@@ -322,7 +332,7 @@ static const struct {
 	{ "test",	120,	5 },	/* a validation: bgpd -n on a full table */
 	{ "recover",	900,	10 },	/* rollback of an unconfirmed commit */
 	{ "undo",	900,	10 },	/* rollback of a commit not taken */
-	{ "check",	60,	5 },	/* the parser's, of a full script */
+	{ "check",	60,	5 },	/* the parser's, of a full configuration */
 };
 
 /* rollback attempts for an unconfirmed commit, and seconds between them */
@@ -392,6 +402,10 @@ struct begun {
 	struct nshd_apply	 apply;		/* its script's clears */
 	char			*before;	/* running config at BEGIN */
 	size_t			 beforelen;
+	struct record		*rec;		/* the commit record then */
+	struct nshd_began	 ans;		/* the parser's reading of it */
+	struct login_line	*logins;	/* those it wants, if it */
+	uint32_t		 nlogins;	/* changes them */
 	int			 minutes;	/* commit confirmed's, else 0 */
 	struct confirm		 prev;		/* the record before, if so */
 };
@@ -407,9 +421,11 @@ struct job {
 	int			 waits;		/* to start (system_go()) */
 	struct event		 ev, tm;
 	struct nshd_apply	*apply;
-	struct nshd_parse	 parse;		/* the parser's check */
-	char			*runs;		/* what runs, for a test's */
-	size_t			 runslen;
+	struct nshd_parse	 parse;		/* the parser's reading */
+	char			*text[NSHD_PARSE_TEXTS];	/* its texts, */
+	char			*keep[NSHD_PARSE_TEXTS];	/* those it frees */
+	int			 answer;	/* its answer's file, or -1 */
+	struct confirm		 cf;		/* what a rollback's reads */
 	char			*back;		/* rollback configuration */
 	size_t			 backlen;
 	char			*want;		/* what an apply wants */
@@ -507,8 +523,6 @@ static uid_t		 check_uid;	/* NSHD_CHECK_USER's */
 static uid_t		 web_uid;	/* NSHD_WEB_USER's, */
 static int		 web_user;	/* if there is one */
 static gid_t		 check_gid;
-static char		 execpath[PATH_MAX];	/* nshd, which the parser is */
-static int		 sys_debug, sys_verbose;	/* -d and -v, for it */
 static struct job	*job;
 static pid_t		 terminals[SYS_TERMINALS];	/* nsh's pid, or 0 */
 static TAILQ_HEAD(, queued) queue = TAILQ_HEAD_INITIALIZER(queue);
@@ -608,22 +622,35 @@ static void	system_unarm(void);
 static void	system_kept(void);
 static void	system_confirm(int, short, void *);
 static void	system_recover(struct confirm *);
+static void	system_recovering(struct confirm *, int, int);
 static void	system_attempted(int);
 static void	confirm_retry(void);
 static void	system_taken(struct confirm *, const char *);
 static void	system_failed(struct confirm *);
 static void	system_went(int);
-static void	system_revoking(uint32_t, const char *, size_t);
+static void	system_revoking(uint32_t, int, struct login_line *,
+		    uint32_t);
 static char	*system_running(size_t *);
+static char	*child_running(size_t *);
+static char	*system_facts(size_t *);
+static void	system_facts_emit(void *, const void *, size_t);
+static int	system_verify(char *, size_t, int, int);
+static int	system_undo(char *, size_t);
+static void	system_clears(struct nshd_apply *, struct script *);
 static void	system_rollback(uint32_t, int, int);
-static void	system_health(void);
+static void	system_listed(uint32_t, int);
+static void	system_health(int);
 static void	system_test(uint32_t, struct nshd_whose *, char *);
 static void	system_tested(uint32_t, int32_t);
 static void	system_test_run(uint32_t, char *);
 static void	system_begin_checked(uint32_t, int);
-static void	system_parse(uint32_t, int, char *);
-static __dead void system_parse_child(struct job *);
+static struct job *system_parse_job(uint32_t, int);
+static void	system_parse_text(struct job *, int, char *, size_t);
+static void	system_parse(struct job *);
 static void	system_parsed(struct job *, int32_t);
+static int	system_began(struct job *);
+static void	boot_parsed(struct job *, int32_t);
+static int	boot_planned(struct job *);
 static void	system_printed(uint32_t, int32_t);
 static struct job *system_job_new(uint32_t, int);
 static void	system_job(struct job *);
@@ -660,11 +687,8 @@ systemproc(int debug, int v)
 	child_start("system", debug, v);
 	if (setsid() == -1)
 		fatal("setsid");
-	/* the parser is this program again (system_parse_child()) */
-	if (getexecpath(execpath, sizeof(execpath)) == -1)
-		fatal("getexecpath");
-	sys_debug = debug;
-	sys_verbose = v;
+	/* the parser is this program again (parser_exec()) */
+	parser_init(debug, v);
 	/* rc's environment, umask and cwd, whoever started nshd */
 	environ = empty;
 	if (setenv("PATH", SYS_PATH, 1) == -1 || setenv("HOME", "/", 1) == -1)
@@ -2364,9 +2388,10 @@ system_begin(uint32_t id, struct nshd_begin *bg)
 	struct confirm	 cf;
 	struct client	*cl;
 	struct begun	*b;
+	struct job	*j;
 	char		*runs;
 	size_t		 len;
-	int		 r, perms;
+	int		 perms;
 
 	/* not begun: the verdict counts the tests that refused it too */
 	if (bg->checking || bg->bad > 0 || test_refused == id) {
@@ -2402,25 +2427,34 @@ system_begin(uint32_t id, struct nshd_begin *bg)
 	/* the running configuration, which the commit must be planned from */
 	if ((runs = system_running(&len)) == NULL)
 		goto done;
-	r = commit_reads(runs, len, parts[NSHD_BEFORE], partlen[NSHD_BEFORE]);
 	/*
 	 * Keep the running configuration as read here. The records store
-	 * it, an undo or rollback restores it, and for a session without
-	 * admin, the parser checks the script against it.
+	 * it, an undo or rollback restores it, and the parser reads the
+	 * commit against it.
 	 */
 	b->before = runs;
 	b->beforelen = len;
-	if (r == -1)
+	if ((b->rec = calloc(1, sizeof(*b->rec))) == NULL)
+		fatal(NULL);
+	if (record_read(b->rec) == -1)
 		goto done;
-	if (r == 0) {
-		printf("%% Commit refused: what runs changed after the commit "
-		    "was planned. Commit again\n");
-		goto done;
+	/* the parser reads them, and a script of a session without admin */
+	j = system_parse_job(id, NSHD_PARSE_BEGIN);
+	j->parse.apply = bg->apply;
+	system_parse_text(j, 0, b->before, b->beforelen);
+	system_parse_text(j, 1, parts[NSHD_BEFORE], partlen[NSHD_BEFORE]);
+	system_parse_text(j, 2, parts[NSHD_WANT], partlen[NSHD_WANT]);
+	if (b->rec->state != RECORD_NONE) {
+		j->parse.flags |= NSHD_PARSE_RECORD;
+		system_parse_text(j, 3, b->rec->before, b->rec->beforelen);
+		system_parse_text(j, 4, b->rec->want, b->rec->wantlen);
 	}
-	if (b->admin)
-		system_begin_checked(id, 1);
-	else
-		system_parse(id, NSHD_PARSE_SCRIPT, NULL);
+	if (!b->admin) {
+		j->parse.flags |= NSHD_PARSE_ADMIN;
+		system_parse_text(j, 5, parts[NSHD_SCRIPT],
+		    partlen[NSHD_SCRIPT]);
+	}
+	system_parse(j);
 	return;
  done:
 	system_ended();
@@ -2429,18 +2463,18 @@ system_begin(uint32_t id, struct nshd_begin *bg)
 }
 
 /*
- * The commit begun for request id, once its script is checked: ok if it
- * may run. It is recorded, and runs as BEGIN asked
+ * The commit begun for request id, once the parser has read it: ok if
+ * it may run. It is recorded, and runs as BEGIN asked
  */
 static void
 system_begin_checked(uint32_t id, int ok)
 {
-	struct record	 rec, now;
+	struct record	 now, *rec;
 	struct begun	*b = begun;
 	struct nshd_begin *bg = &b->bg;
-	int		 r, logins = 0, wrote = 0, status = 1;
+	int		 wrote = 0, status = 1;
 
-	memset(&rec, 0, sizeof(rec));
+	rec = b->rec;
 	if (!ok)
 		goto done;
 	/* the parser ran in a job, while the client could go */
@@ -2448,43 +2482,28 @@ system_begin_checked(uint32_t id, int ok)
 		printf("%% Commit refused: its client is gone\n");
 		goto done;
 	}
-	if (record_read(&rec) == -1)
-		goto done;
-	/* one that changes login users or classes waits for config */
-	if ((logins = commit_logins(b->before, b->beforelen,
-	    parts[NSHD_WANT], partlen[NSHD_WANT])) == -1)
-		goto done;
-	if (rec.state == RECORD_APPLYING) {
+	if (rec->state == RECORD_APPLYING) {
 		/* report what it left, judged by the running configuration */
-		if ((r = commit_reads(b->before, b->beforelen, rec.before,
-		    rec.beforelen)) == -1)
-			goto done;
-		if (r) {
+		if (b->ans.none) {
 			printf("%% The commit %s did not finish, and changed "
-			    "nothing\n", record_by(&rec));
+			    "nothing\n", record_by(rec));
 		} else {
-			if ((r = commit_reads(b->before, b->beforelen,
-			    rec.want, rec.wantlen)) == -1)
-				goto done;
 			printf("%% The commit %s did not finish: what runs is "
-			    "%s, and is not saved\n", record_by(&rec), r ?
-			    "what it wanted" : "neither what it wanted nor "
-			    "what was");
-			rec.state = RECORD_UNSAVED;
-			if (record_write(&rec) == -1)
+			    "%s, and is not saved\n", record_by(rec),
+			    b->ans.wanted ? "what it wanted" : "neither what "
+			    "it wanted nor what was");
+			rec->state = RECORD_UNSAVED;
+			if (record_write(rec) == -1)
 				goto done;
 		}
 	}
-	if (rec.state == RECORD_UNSAVED) {
+	if (rec->state == RECORD_UNSAVED) {
 		/* allowed only if it rolls back to before that commit */
-		if ((r = commit_reads(rec.before, rec.beforelen,
-		    parts[NSHD_WANT], partlen[NSHD_WANT])) == -1)
-			goto done;
-		if (!r) {
+		if (!b->ans.back) {
 			printf("%% Commit refused: what the commit %s changed is "
 			    "not saved. Commit with no changes to save it, or "
 			    "commit the configuration before it\n",
-			    record_by(&rec));
+			    record_by(rec));
 			goto done;
 		}
 	} else {
@@ -2508,7 +2527,6 @@ system_begin_checked(uint32_t id, int ok)
 	strlcpy(b->comment, bg->comment, sizeof(b->comment));
 	status = 0;
  done:
-	record_free(&rec);
 	if (status != 0) {
 		system_ended();
 		system_parts_free();
@@ -2519,7 +2537,8 @@ system_begin_checked(uint32_t id, int ok)
 	if (link_compose(&links[CONFIG], IMSG_SYS_BEGUN, id, NULL, 0) == -1)
 		fatal("%s", __func__);
 	b->apply = bg->apply;
-	system_script(id, &b->apply, logins);
+	/* one that changes login users or classes waits for config */
+	system_script(id, &b->apply, b->ans.logins);
 }
 
 /*
@@ -2628,12 +2647,9 @@ system_confirm(int fd, short event, void *arg)
 }
 
 /*
- * Roll back the commit cf describes. If the running configuration
- * already matches cf's rollback configuration, as when the previous
- * system process stopped after its last attempt succeeded, only clear
- * the record. If every attempt is used, mark the rollback failed.
- * Otherwise demote carp unless that was done already, record the
- * attempt, and start a job that applies the rollback configuration.
+ * Roll back the commit cf describes: first the parser reads what runs
+ * against cf's rollback configuration, in a job, which takes cf's
+ * (system_recovering())
  */
 static void
 system_recover(struct confirm *cf)
@@ -2641,13 +2657,35 @@ system_recover(struct confirm *cf)
 	struct job	*j;
 	char		*runs;
 	size_t		 len;
-	int		 r = -1, logins = 1;
 
-	if ((runs = system_running(&len)) != NULL) {
-		r = commit_reads(runs, len, cf->back, cf->backlen);
-		logins = commit_logins(runs, len, cf->back, cf->backlen);
+	if ((runs = system_running(&len)) == NULL) {
+		system_recovering(cf, -1, 1);
+		return;
 	}
-	free(runs);
+	j = system_parse_job(0, NSHD_PARSE_BACK);
+	j->cf = *cf;
+	cf->back = NULL;
+	j->keep[0] = runs;
+	system_parse_text(j, 0, runs, len);
+	system_parse_text(j, 1, j->cf.back, j->cf.backlen);
+	system_parse(j);
+}
+
+/*
+ * The rollback cf describes, as the parser read it: r 1 if what runs is
+ * cf's rollback configuration, 0 if not, or -1 if it could not say;
+ * logins 0 if they do not differ in login users or classes. If it is,
+ * as when the previous system process stopped after its last attempt
+ * succeeded, only clear the record. If every attempt is used, mark the
+ * rollback failed. Otherwise demote carp unless that was done already,
+ * record the attempt, and start a job that applies the rollback
+ * configuration.
+ */
+static void
+system_recovering(struct confirm *cf, int r, int logins)
+{
+	struct job	*j;
+
 	if (r == 1) {
 		system_taken(cf, "what runs is what it goes back to");
 		return;
@@ -2677,7 +2715,7 @@ system_recover(struct confirm *cf)
 		return;
 	}
 	system_job_wait(j);
-	system_revoking(0, j->back, j->backlen);
+	system_revoking(0, 1, NULL, 0);
 }
 
 /*
@@ -2694,7 +2732,7 @@ system_attempted(int ok)
 	int		 serrno;
 
 	if (revoking)
-		system_revoking(0, NULL, 0);
+		system_revoking(0, 0, NULL, 0);
 	if (confirm_read(&cf, 1) == -1) {
 		serrno = errno;
 		logit(LOG_CRIT, "the record of a commit not confirmed: %s",
@@ -2765,17 +2803,17 @@ system_went(int failed)
 }
 
 /*
- * To config: login users or classes are about to change to those of
- * after, len bytes, by request id's commit, or by a rollback, 0. config
- * lowers the permissions of each session that would lose one, as its
- * permissions now and those after differ, to those after, ends each that
- * would lose its login, takes no new one, and says so
- * (system_go()). A session not logged in has none to lose, so each login
- * being checked is stopped, refused, and none begins until the change
- * ends (system_login()). Or, with after NULL, they have changed
+ * To config, with on: login users or classes are about to change to
+ * after's n, as the parser read them, by request id's commit, or by a
+ * rollback, 0. config lowers the permissions of each session that would
+ * lose one, as its permissions now and those after differ, to those
+ * after, ends each that would lose its login, takes no new one, and says
+ * so (system_go()). A session not logged in has none to lose, so each
+ * login being checked is stopped, refused, and none begins until the
+ * change ends (system_login()). Or, without on, they have changed
  */
 static void
-system_revoking(uint32_t id, const char *after, size_t len)
+system_revoking(uint32_t id, int on, struct login_line *after, uint32_t n)
 {
 	struct nshd_revoking	 rv;
 	struct client		*cl;
@@ -2784,8 +2822,8 @@ system_revoking(uint32_t id, const char *after, size_t len)
 	int			 now, then;
 
 	memset(&rv, 0, sizeof(rv));
-	revoking = rv.on = after != NULL;
-	if (after != NULL)
+	revoking = rv.on = on;
+	if (on)
 		TAILQ_FOREACH(a, &attempts, entry)
 			system_auth_stop(a, "login users or classes are "
 			    "changing");
@@ -2794,13 +2832,13 @@ system_revoking(uint32_t id, const char *after, size_t len)
 	 * system's own checks read the class as it is then
 	 */
 	TAILQ_FOREACH(cl, &clients, entry) {
-		if (after == NULL || id == 0 || rv.n == NSHD_SESSIONS)
+		if (!on || id == 0 || rv.n == NSHD_SESSIONS)
 			break;
 		/* a web session not logged in has no login to lose */
 		if (cl->web && !cl->logged)
 			continue;
 		now = system_whom(cl, &uid);
-		then = login_perms_in(uid, cl->web, after, len);
+		then = login_perms_by(uid, cl->web, after, n);
 		if (then == -1 || (now & ~then) != 0) {
 			rv.sessions[rv.n] = cl->session;
 			rv.perms[rv.n++] = then;
@@ -2848,6 +2886,177 @@ system_running(size_t *len)
 }
 
 /*
+ * In a job's child: the running configuration, as conf() writes it, or
+ * NULL after saying why
+ */
+static char *
+child_running(size_t *len)
+{
+	FILE	*f;
+	char	*buf = NULL;
+
+	*len = 0;
+	if ((f = open_memstream(&buf, len)) == NULL) {
+		printf("%% nshd: the running configuration: %s\n",
+		    strerror(errno));
+		return (NULL);
+	}
+	conf(f);
+	if (fclose(f) == EOF) {
+		printf("%% nshd: the running configuration: %s\n",
+		    strerror(errno));
+		free(buf);
+		return (NULL);
+	}
+	return (buf);
+}
+
+/*
+ * The kernel's facts that a plan's checks read, as a snapshot sends
+ * them, for the parser; or NULL after saying why
+ */
+static char *
+system_facts(size_t *len)
+{
+	struct facts_out	 o;
+	struct kfacts		*k;
+	FILE			*f;
+	char			*buf = NULL;
+	int			 r;
+
+	*len = 0;
+	if ((k = kfacts_scan()) == NULL) {
+		printf("%% nshd: the kernel's facts: %s\n", strerror(errno));
+		return (NULL);
+	}
+	if ((f = open_memstream(&buf, len)) == NULL) {
+		printf("%% nshd: the kernel's facts: %s\n", strerror(errno));
+		kfacts_free(k);
+		return (NULL);
+	}
+	facts_out_init(&o, system_facts_emit, f);
+	r = kfacts_emit(&o, k);
+	kfacts_free(k);
+	if (fclose(f) == EOF || r == -1) {
+		printf("%% nshd: the kernel's facts could not be written\n");
+		free(buf);
+		return (NULL);
+	}
+	return (buf);
+}
+
+static void
+system_facts_emit(void *arg, const void *buf, size_t len)
+{
+	fwrite(buf, 1, len, arg);
+}
+
+/*
+ * In an apply's job, once its script ran, failed if a line of it
+ * failed: whether what runs is want's text, as the parser reads it, as
+ * the boot judges it if boot. 0 if so, 1 if not, after the parser says
+ * what did not take, or -1 after saying why it could not say
+ */
+static int
+system_verify(char *want, size_t wantlen, int failed, int boot)
+{
+	struct nshd_parse	 p;
+	char			*t[NSHD_PARSE_TEXTS] = { NULL }, *now;
+	size_t			 len;
+	int			 r;
+
+	if ((now = child_running(&len)) == NULL)
+		return (-1);
+	memset(&p, 0, sizeof(p));
+	p.kind = NSHD_PARSE_VERIFY;
+	p.flags = (failed ? NSHD_PARSE_FAILED : 0) |
+	    (boot ? NSHD_PARSE_BOOTS : 0);
+	t[0] = now;
+	p.len[0] = len;
+	t[1] = want;
+	p.len[1] = wantlen;
+	r = parser_call(&p, t, 0, NULL, NULL);
+	free(now);
+	return (r);
+}
+
+/*
+ * In an undo's or a rollback's job: make the running configuration read
+ * as was's text again, by the script the parser makes from what runs.
+ * Whether it does, as the parser reads it, decides, not how the script
+ * went: 0 if so, 1 if not, or -1 after saying why it could not say
+ */
+static int
+system_undo(char *was, size_t waslen)
+{
+	struct nshd_parse	 p;
+	struct nshd_apply	 a;
+	struct script		 sc;
+	char			*t[NSHD_PARSE_TEXTS] = { NULL };
+	char			*ans = NULL, *now, *facts = NULL;
+	size_t			 len, flen, alen;
+	int			 r = -1;
+
+	if ((now = child_running(&len)) == NULL ||
+	    (facts = system_facts(&flen)) == NULL)
+		goto done;
+	memset(&p, 0, sizeof(p));
+	p.kind = NSHD_PARSE_PLAN;
+	t[0] = now;
+	p.len[0] = len;
+	t[1] = was;
+	p.len[1] = waslen;
+	t[2] = facts;
+	p.len[2] = flen;
+	if (parser_call(&p, t, sizeof(a) + 2 * NSHD_PART, &ans, &alen) != 0)
+		goto done;
+	if (alen < sizeof(a)) {
+		printf("%% nshd: the parser's plan is cut short\n");
+		goto done;
+	}
+	memcpy(&a, ans, sizeof(a));
+	if (apply_whole(&a) == -1) {
+		printf("%% nshd: the parser's plan clears what none may\n");
+		goto done;
+	}
+	memset(&sc, 0, sizeof(sc));
+	sc.edits = ans + sizeof(a);
+	sc.elen = alen - sizeof(a);
+	system_clears(&a, &sc);
+	/* script_run() checks the edits before any runs */
+	script_run(&sc);
+	free(now);
+	if ((now = child_running(&len)) == NULL)
+		goto done;
+	p.kind = NSHD_PARSE_UNDONE;
+	t[0] = now;
+	p.len[0] = len;
+	t[2] = NULL;
+	p.len[2] = 0;
+	r = parser_call(&p, t, 0, NULL, NULL);
+ done:
+	free(ans);
+	free(now);
+	free(facts);
+	return (r);
+}
+
+/* a's clears, which apply_whole() checked, into s */
+static void
+system_clears(struct nshd_apply *a, struct script *s)
+{
+	int	 i;
+
+	for (i = 0; i < a->nclears; i++) {
+		strlcpy(s->clears[i].name, a->clears[i].name,
+		    sizeof(s->clears[i].name));
+		s->clears[i].rtable = a->clears[i].rtable;
+		s->clears[i].keep = a->clears[i].keep;
+	}
+	s->nclears = a->nclears;
+}
+
+/*
  * Start a job that runs the commit's script, then checks that the
  * running configuration is the one wanted. If it is not, an undo job
  * restores the configuration read at BEGIN (system_job_end()). If
@@ -2868,7 +3077,7 @@ system_script(uint32_t id, struct nshd_apply *a, int revoke)
 	system_part_free(NSHD_BEFORE);
 	if (revoke) {
 		system_job_wait(j);
-		system_revoking(id, j->want, j->wantlen);
+		system_revoking(id, 1, begun->logins, begun->nlogins);
 		return;
 	}
 	system_job(j);
@@ -2963,6 +3172,9 @@ static void
 system_test(uint32_t id, struct nshd_whose *whose, char *name)
 {
 	struct client	*cl = NULL;
+	struct job	*j;
+	char		*runs;
+	size_t		 len;
 	int		 perms = LOGIN_ALL;
 
 	if (whose->session == 0 ? !booting :
@@ -2979,10 +3191,21 @@ system_test(uint32_t id, struct nshd_whose *whose, char *name)
 		system_tested(id, 1);
 		return;
 	}
-	if ((perms & LOGIN_ADMIN) == 0)
-		system_parse(id, NSHD_PARSE_RULES, name);
-	else
+	if (perms & LOGIN_ADMIN) {
 		system_test_run(id, name);
+		return;
+	}
+	/* the parser checks them against what runs as the check begins */
+	j = system_parse_job(id, NSHD_PARSE_RULES);
+	strlcpy(j->parse.daemon, name, sizeof(j->parse.daemon));
+	if ((runs = system_running(&len)) == NULL) {
+		system_job_end(j, -1);
+		return;
+	}
+	j->keep[0] = runs;
+	system_parse_text(j, 0, runs, len);
+	system_parse_text(j, 1, parts[NSHD_TEST], partlen[NSHD_TEST]);
+	system_parse(j);
 }
 
 /* daemon name's test, for request id, in a job, the rules checked */
@@ -3101,9 +3324,13 @@ static void
 system_ended(void)
 {
 	if (revoking)
-		system_revoking(0, NULL, 0);
+		system_revoking(0, 0, NULL, 0);
 	confirm_free(&begun->prev);
 	free(begun->before);
+	if (begun->rec != NULL)
+		record_free(begun->rec);
+	free(begun->rec);
+	free(begun->logins);
 	free(begun);
 	begun = NULL;
 }
@@ -3194,19 +3421,20 @@ system_boot(void)
 /*
  * The boot, once parent says nshd boots and no job runs. Its record is
  * made; if it cannot be, the boot runs all the same, and is reported as
- * failed. The boot is planned here, from the saved configuration and
- * what runs, and what checks find is said. Then its tests run, each in
- * a job of its own, and then its script, in a job (boot_next()). What
- * checks and tests find does not stop it. What nsh's code and the jobs
- * print is logged
+ * failed. The parser plans it, in a job, from the saved configuration,
+ * what runs and the kernel's facts, and says what checks find
+ * (boot_parsed()). Then its tests run, each in a job of its own, and
+ * then its script, in a job (boot_next()). What checks and tests find
+ * does not stop it. What nsh's code and the jobs print is logged
  */
 static void
 boot_start(void)
 {
-	FILE	*f;
-	char	*saved = NULL;
-	size_t	 len = 0;
-	int	 r;
+	struct job	*j;
+	FILE		*f;
+	char		*saved = NULL, *runs = NULL, *facts = NULL;
+	size_t		 len = 0, rlen, flen;
+	int		 r;
 
 	if ((r = system_boot()) == 1) {
 		booting = 0;
@@ -3219,17 +3447,121 @@ boot_start(void)
 	r = saved_text(f);
 	if (fclose(f) == EOF)
 		fatal("%s", __func__);
-	if (r == 0 && session_boot_plan(saved, len, &boot_plan) == 0 &&
-	    !boot_plan->same) {
-		printed_log();
-		system_parts_free();
-		parts[NSHD_WANT] = saved;
-		partlen[NSHD_WANT] = len;
-		boot_next();
+	/* logged now: reading what runs drops what was said */
+	printed_log();
+	if (r != 0 || (runs = system_running(&rlen)) == NULL ||
+	    (facts = system_facts(&flen)) == NULL) {
+		free(saved);
+		free(runs);
+		boot_end(0);
 		return;
 	}
-	free(saved);
-	boot_end(r == 0 && boot_plan != NULL);
+	j = system_parse_job(0, NSHD_PARSE_BOOT);
+	j->keep[0] = saved;
+	j->keep[1] = runs;
+	j->keep[2] = facts;
+	system_parse_text(j, 0, saved, len);
+	system_parse_text(j, 1, runs, rlen);
+	system_parse_text(j, 2, facts, flen);
+	system_parse(j);
+}
+
+/*
+ * The boot's plan, j's answer, as status says: it runs, unless what runs
+ * is the saved configuration already, or the parser could not plan it
+ */
+static void
+boot_parsed(struct job *j, int32_t status)
+{
+	if (status != 0 || boot_planned(j) == -1) {
+		boot_end(0);
+		return;
+	}
+	if (boot_plan->same) {
+		boot_end(1);
+		return;
+	}
+	printed_log();
+	system_parts_free();
+	parts[NSHD_WANT] = j->keep[0];
+	partlen[NSHD_WANT] = j->parse.len[0];
+	j->keep[0] = NULL;
+	boot_next();
+}
+
+/*
+ * The parser's answer to BOOT, j's, as the boot's plan: 0, or -1 after
+ * saying why it is not one
+ */
+static int
+boot_planned(struct job *j)
+{
+	struct nshd_bootplan	 b;
+	struct nshd_boottest	 bt;
+	struct plan		*p;
+	struct plan_test	*t;
+	char			*a, *at;
+	size_t			 len, left;
+	uint32_t		 i;
+	int			 k;
+
+	if (parser_answer(j->answer, sizeof(b) + 3 * (size_t)NSHD_PART,
+	    &a, &len) == -1)
+		return (-1);
+	if ((p = calloc(1, sizeof(*p))) == NULL)
+		fatal(NULL);
+	if (len < sizeof(b))
+		goto bad;
+	memcpy(&b, a, sizeof(b));
+	if (apply_whole(&b.apply) == -1 || b.ntests > NSHD_TESTS)
+		goto bad;
+	if ((p->tests = calloc(b.ntests + 1, sizeof(*p->tests))) == NULL)
+		fatal(NULL);
+	at = a + sizeof(b);
+	left = len - sizeof(b);
+	for (i = 0; i < b.ntests; i++) {
+		if (left < sizeof(bt))
+			goto bad;
+		memcpy(&bt, at, sizeof(bt));
+		at += sizeof(bt);
+		left -= sizeof(bt);
+		if (bt.len > left)
+			goto bad;
+		t = &p->tests[p->ntests++];
+		bt.name[sizeof(bt.name) - 1] = '\0';
+		bt.label[sizeof(bt.label) - 1] = '\0';
+		strlcpy(t->name, bt.name, sizeof(t->name));
+		if ((t->label = strdup(bt.label)) == NULL ||
+		    (t->text = malloc(bt.len + 1)) == NULL)
+			fatal(NULL);
+		memcpy(t->text, at, bt.len);
+		t->len = bt.len;
+		at += bt.len;
+		left -= bt.len;
+	}
+	if (left != b.elen)
+		goto bad;
+	if ((p->text[PLAN_EDITS] = malloc(b.elen + 1)) == NULL)
+		fatal(NULL);
+	memcpy(p->text[PLAN_EDITS], at, b.elen);
+	p->len[PLAN_EDITS] = b.elen;
+	for (k = 0; k < b.apply.nclears; k++) {
+		strlcpy(p->clears[k].name, b.apply.clears[k].name,
+		    sizeof(p->clears[k].name));
+		p->clears[k].rtable = b.apply.clears[k].rtable;
+		p->clears[k].keep = b.apply.clears[k].keep;
+	}
+	p->nclears = b.apply.nclears;
+	p->same = b.same != 0;
+	p->boot = 1;
+	free(a);
+	boot_plan = p;
+	return (0);
+ bad:
+	printf("%% nshd: the parser's answer to BOOT is not a plan\n");
+	plan_free(p);
+	free(a);
+	return (-1);
 }
 
 /* the boot's next test, in a job, or once its tests have run, its script */
@@ -3344,27 +3676,57 @@ boot_saved(void)
 }
 
 /*
- * configuration n as it was saved, or with diff, what it changed, or
- * with n -1, the list of them, or with -2, the saved configuration
+ * configuration n as it was saved, or with diff, what it changed, as
+ * the parser says, or with n -1, the list of them, once the parser has
+ * said whether what runs is saved (system_listed()), or with -2, the
+ * saved configuration
  */
 static void
 system_rollback(uint32_t id, int n, int diff)
 {
-	char	*buf = NULL;
-	size_t	 len = 0;
-	FILE	*f;
-	int	 r = 0;
+	struct job	*j;
+	char		*buf = NULL, *old, *new, *head;
+	size_t		 len = 0, oldlen, newlen;
+	FILE		*f;
+	int		 r = 0;
 
+	if (n == -1 || diff) {
+		j = system_parse_job(id, NSHD_PARSE_DIFF);
+		if (n == -1) {
+			j->parse.flags = NSHD_PARSE_QUIET;
+			old = NULL;
+			if ((new = system_running(&newlen)) == NULL ||
+			    (old = saved_read(&oldlen)) == NULL) {
+				free(new);
+				system_job_free(j);
+				system_listed(id, -1);
+				return;
+			}
+			head = NULL;
+		} else {
+			if ((r = rollback_texts(n, &old, &oldlen, &new,
+			    &newlen)) != 1) {
+				system_job_free(j);
+				system_printed(id, r == -1);
+				return;
+			}
+			if (asprintf(&head, "--- rollback %d\n+++ rollback "
+			    "%d\n", n + 1, n) == -1)
+				fatal("%s", __func__);
+		}
+		j->keep[0] = old;
+		j->keep[1] = new;
+		j->keep[2] = head;
+		system_parse_text(j, 0, old, oldlen);
+		system_parse_text(j, 1, new, newlen);
+		system_parse_text(j, 2, head, head != NULL ? strlen(head) : 0);
+		system_parse(j);
+		return;
+	}
 	if ((f = open_memstream(&buf, &len)) == NULL)
 		fatal("%s", __func__);
-	if (n == -1) {
-		system_health();
-		rollback_list(f);
-	}
-	else if (n == -2)
+	if (n == -2)
 		r = saved_text(f);
-	else if (diff)
-		r = rollback_diff(n, f);
 	else
 		r = rollback_text(n, f);
 	if (fclose(f) == EOF)
@@ -3379,20 +3741,46 @@ system_rollback(uint32_t id, int n, int diff)
 }
 
 /*
- * What is wrong with the running configuration, said before the list of
- * rollbacks: that it is not the saved configuration, a commit that did
- * not finish or is not saved, a boot that failed, a commit that was not
- * confirmed and could not be rolled back, and a commit record that
- * cannot be read
+ * The list of rollbacks, for request id, once the parser has said
+ * whether what runs differs from the saved configuration: differs 1 if
+ * so, or 0, or -1 if it could not say
  */
 static void
-system_health(void)
+system_listed(uint32_t id, int differs)
+{
+	char	*buf = NULL;
+	size_t	 len = 0;
+	FILE	*f;
+
+	if ((f = open_memstream(&buf, &len)) == NULL)
+		fatal("%s", __func__);
+	system_health(differs);
+	rollback_list(f);
+	if (fclose(f) == EOF)
+		fatal("%s", __func__);
+	/* first what nsh's code printed, then the text */
+	system_said(id);
+	if (imsg_text(links[CONFIG].iev, IMSG_SYS_TEXT, id, buf, len) == -1)
+		fatal("%s", __func__);
+	free(buf);
+	system_end(id, 0, NULL);
+}
+
+/*
+ * What is wrong with the running configuration, said before the list of
+ * rollbacks: that it is not the saved configuration, if differs, a
+ * commit that did not finish or is not saved, a boot that failed, a
+ * commit that was not confirmed and could not be rolled back, and a
+ * commit record that cannot be read
+ */
+static void
+system_health(int differs)
 {
 	struct record	 rec;
 	struct boot	 b;
 	struct confirm	 cf;
 
-	if (saved_differs() == 1)
+	if (differs == 1)
 		printf("%% What runs is not the saved configuration\n");
 	if (begun == NULL && record_read(&rec) == 0) {
 		if (rec.state == RECORD_APPLYING)
@@ -3416,22 +3804,40 @@ system_health(void)
 }
 
 /*
- * The parser's check for request id, in a job: kind says of what, the
- * script of the commit begun or the test's rules for daemon name. What
- * it prints goes to the session; system_parsed() takes its verdict
+ * A reading of the parser's for request id, kind as nshd.h says, to be
+ * given its texts (system_parse_text()), then started (system_parse())
  */
-static void
-system_parse(uint32_t id, int kind, char *name)
+static struct job *
+system_parse_job(uint32_t id, int kind)
 {
 	struct job	*j;
 
 	j = system_job_new(id, JOB_PARSE);
 	j->parse.kind = kind;
-	if (name != NULL)
-		strlcpy(j->parse.daemon, name, sizeof(j->parse.daemon));
-	if (kind == NSHD_PARSE_SCRIPT)
-		j->parse.apply = begun->bg.apply;
-	else if ((j->runs = system_running(&j->runslen)) == NULL) {
+	return (j);
+}
+
+/* j's text i, len bytes, which must last until j starts */
+static void
+system_parse_text(struct job *j, int i, char *text, size_t len)
+{
+	j->text[i] = text;
+	j->parse.len[i] = len;
+}
+
+/*
+ * j, the parser's reading, in a job: the parser is the job's child
+ * (parser_exec()), its answer in a file that only it and system have.
+ * What it prints goes to the session, or is logged; system_parsed()
+ * takes its answer
+ */
+static void
+system_parse(struct job *j)
+{
+	char	 path[] = "/tmp/nshanswer.XXXXXXXXXX";
+
+	if ((j->answer = mkstemp(path)) == -1 || unlink(path) == -1) {
+		printf("%% nshd: the parser's answer: %s\n", strerror(errno));
 		system_job_end(j, -1);
 		return;
 	}
@@ -3439,76 +3845,95 @@ system_parse(uint32_t id, int kind, char *name)
 }
 
 /*
- * The parser for j, in the job's child: the request and its text in a
- * file no other process has, as its standard input, and its output to
- * the job's pipe. The running configuration is what BEGIN read, or for
- * a test, what ran as the check began. The parser is this program
- * again, which keeps nothing of system's
- */
-static __dead void
-system_parse_child(struct job *j)
-{
-	char	 path[] = "/tmp/nshparse.XXXXXXXXXX", *argv[5], *before, *text;
-	size_t	 beforelen, len;
-	int	 fd, argc = 0;
-
-	if (j->parse.kind == NSHD_PARSE_SCRIPT) {
-		before = begun->before;
-		beforelen = begun->beforelen;
-		text = parts[NSHD_SCRIPT];
-		len = partlen[NSHD_SCRIPT];
-	} else {
-		before = j->runs;
-		beforelen = j->runslen;
-		text = parts[NSHD_TEST];
-		len = partlen[NSHD_TEST];
-	}
-	j->parse.beforelen = beforelen;
-	j->parse.len = len;
-	if ((fd = mkstemp(path)) == -1 || unlink(path) == -1 ||
-	    write(fd, &j->parse, sizeof(j->parse)) != sizeof(j->parse) ||
-	    (beforelen > 0 && write(fd, before, beforelen) !=
-	    (ssize_t)beforelen) ||
-	    (len > 0 && write(fd, text, len) != (ssize_t)len) ||
-	    lseek(fd, 0, SEEK_SET) == -1 || dup2(fd, STDIN_FILENO) == -1) {
-		printf("%% nshd: what the parser checks: %s\n",
-		    strerror(errno));
-		fflush(stdout);
-		_exit(2);
-	}
-	closefrom(STDERR_FILENO + 1);
-	argv[argc++] = execpath;
-	argv[argc++] = "-P";
-	if (sys_debug)
-		argv[argc++] = "-d";
-	if (sys_verbose)
-		argv[argc++] = "-v";
-	argv[argc] = NULL;
-	fflush(stdout);
-	execv(execpath, argv);
-	printf("%% nshd: the parser: %s\n", strerror(errno));
-	fflush(stdout);
-	_exit(2);
-}
-
-/*
- * j, the parser's check, ended as status says: 0 if what it checked may
- * run. Then the test runs, or the commit is recorded and runs; else the
- * test refuses the commit, or the commit is not begun
+ * j, the parser's reading, ended as status says: 0 or 1, as its kind
+ * says, or -1 if it could not read. What waits on it goes on
  */
 static void
 system_parsed(struct job *j, int32_t status)
 {
-	if (j->parse.kind == NSHD_PARSE_RULES) {
+	struct nshd_back	 b;
+	char			*a = NULL;
+	size_t			 len;
+	int			 there = -1, logins = 1;
+
+	switch (j->parse.kind) {
+	case NSHD_PARSE_RULES:
 		if (status == 0)
 			system_test_run(j->id, j->parse.daemon);
 		else {
 			system_part_free(NSHD_TEST);
 			system_tested(j->id, 1);
 		}
-		return;
+		break;
+	case NSHD_PARSE_BEGIN:
+		system_begin_checked(j->id, status == 0 &&
+		    system_began(j) == 0);
+		break;
+	case NSHD_PARSE_BACK:
+		if (status == 0 && parser_answer(j->answer, sizeof(b), &a,
+		    &len) == 0 && len == sizeof(b)) {
+			memcpy(&b, a, sizeof(b));
+			there = b.there != 0;
+			logins = b.logins != 0;
+		}
+		free(a);
+		printed_log();
+		system_recovering(&j->cf, there, logins);
+		confirm_free(&j->cf);
+		break;
+	case NSHD_PARSE_BOOT:
+		boot_parsed(j, status);
+		break;
+	case NSHD_PARSE_DIFF:
+		if (j->parse.flags & NSHD_PARSE_QUIET)
+			system_listed(j->id, status);
+		else
+			system_printed(j->id, status == -1);
+		break;
 	}
-	system_begin_checked(j->id, status == 0);
+}
+
+/*
+ * The parser's answer to BEGIN, j's, for the commit begun: 0 if it may
+ * go on, else -1 after saying why, if the parser did not
+ */
+static int
+system_began(struct job *j)
+{
+	struct nshd_began	*ans = &begun->ans;
+	struct login_line	*l;
+	char			*a;
+	size_t			 len, n;
+
+	if (parser_answer(j->answer, sizeof(*ans) + NSHD_LOGINS * sizeof(*l),
+	    &a, &len) == -1)
+		return (-1);
+	if (len < sizeof(*ans))
+		goto bad;
+	memcpy(ans, a, sizeof(*ans));
+	if (ans->nlogins > NSHD_LOGINS || len - sizeof(*ans) !=
+	    ans->nlogins * sizeof(*l))
+		goto bad;
+	if ((l = begun->logins = calloc(ans->nlogins + 1, sizeof(*l))) == NULL)
+		fatal(NULL);
+	memcpy(l, a + sizeof(*ans), ans->nlogins * sizeof(*l));
+	for (n = 0; n < ans->nlogins; n++) {
+		l[n].name[sizeof(l[n].name) - 1] = '\0';
+		l[n].class[sizeof(l[n].class) - 1] = '\0';
+	}
+	begun->nlogins = ans->nlogins;
+	free(a);
+	if (!ans->based) {
+		printf("%% Commit refused: what runs changed after the commit "
+		    "was planned. Commit again\n");
+		return (-1);
+	}
+	/* the parser said why */
+	return (ans->admin ? 0 : -1);
+ bad:
+	printf("%% nshd: the parser's answer to BEGIN is not one\n");
+	free(a);
+	return (-1);
 }
 
 /* what nsh's code printed, to config, then how request id ended */
@@ -3531,6 +3956,7 @@ system_job_new(uint32_t id, int kind)
 	j->id = id;
 	j->kind = kind;
 	j->fd = -1;
+	j->answer = -1;
 	return (j);
 }
 
@@ -3577,7 +4003,7 @@ system_job_child(int fd, struct job *j)
 {
 	struct script	 sc;
 	sigset_t	 none;
-	int		 i, null, r;
+	int		 null, r;
 
 	setpgid(0, 0);
 	/* the default signal handling nsh's code and its programs expect */
@@ -3592,26 +4018,27 @@ system_job_child(int fd, struct job *j)
 	    (null = open(_PATH_DEVNULL, O_RDONLY)) == -1 ||
 	    dup2(null, STDIN_FILENO) == -1)
 		_exit(2);
-	closefrom(STDERR_FILENO + 1);
+	/* the parser's answer, which it writes to descriptor 3 */
+	if (j->kind == JOB_PARSE) {
+		if (dup2(j->answer, STDERR_FILENO + 1) == -1)
+			_exit(2);
+		j->answer = STDERR_FILENO + 1;
+		closefrom(STDERR_FILENO + 2);
+	} else
+		closefrom(STDERR_FILENO + 1);
 	switch (j->kind) {
 	case JOB_APPLY:
 		memset(&sc, 0, sizeof(sc));
 		sc.edits = parts[NSHD_SCRIPT];
 		sc.elen = partlen[NSHD_SCRIPT];
-		for (i = 0; i < j->apply->nclears; i++) {
-			strlcpy(sc.clears[i].name, j->apply->clears[i].name,
-			    sizeof(sc.clears[i].name));
-			sc.clears[i].rtable = j->apply->clears[i].rtable;
-			sc.clears[i].keep = j->apply->clears[i].keep;
-		}
-		sc.nclears = j->apply->nclears;
+		system_clears(j->apply, &sc);
 		/* -1, it could not run; 1, a line of it failed */
 		r = script_run(&sc);
 		/* then whether what runs is what was wanted; the boot's too */
-		r = commit_verify(j->want, j->wantlen, r != 0, begun == NULL);
+		r = system_verify(j->want, j->wantlen, r != 0, begun == NULL);
 		break;
 	case JOB_UNDO:
-		r = commit_undo(begun->before, begun->beforelen) == 0 ? 0 : 1;
+		r = system_undo(begun->before, begun->beforelen) == 0 ? 0 : 1;
 		break;
 	case JOB_SAVE:
 		if ((r = saved_write()))
@@ -3620,12 +4047,12 @@ system_job_child(int fd, struct job *j)
 		break;
 	case JOB_RECOVER:
 		/* a rollback is an undo, to the rollback configuration */
-		r = commit_undo(j->back, j->backlen) == 0 ? 0 : 1;
+		r = system_undo(j->back, j->backlen) == 0 ? 0 : 1;
 		if (r == 0)
 			printf("%% Commit not confirmed: rolled back\n");
 		break;
 	case JOB_PARSE:
-		system_parse_child(j);
+		parser_exec(&j->parse, j->text, j->answer);
 	default:
 		if (!j->root)
 			system_drop();
@@ -3792,13 +4219,18 @@ system_job_end(struct job *j, int32_t status)
 static void
 system_job_free(struct job *j)
 {
+	int	 i;
+
 	if (j->path[0] != '\0')
 		unlink(j->path);
 	if (j->dir[0] != '\0')
 		rmdir(j->dir);
+	if (j->answer != -1)
+		close(j->answer);
+	for (i = 0; i < NSHD_PARSE_TEXTS; i++)
+		free(j->keep[i]);
 	free(j->want);
 	free(j->back);
-	free(j->runs);
 	free(j);
 }
 

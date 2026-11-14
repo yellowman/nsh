@@ -188,7 +188,6 @@ static int ifthere(struct cnode *, char *);
 static int inwords(char *, char *);
 static char *claim(struct claims *, char *, char *);
 static int problem(const char *, ...);
-static int apply(struct cnode *, struct cnode *);
 static int removals(struct commit *, char *, char *, int, const char *);
 static int additions(struct commit *, char *, char *, int, const char *);
 static int unset(struct commit *, char *, int, int, const char *, char *);
@@ -216,7 +215,7 @@ static int ifblock(char *, char *, size_t);
 static int clear(struct commit *, char *, int, int);
 static int samefile(const char *, char *);
 static unsigned long long rollback_gen(int);
-static struct cnode *saved_tree(void);
+static char *file_text(const char *, size_t *);
 static int copyfile(const char *, char *, char *);
 static int syncdir(const char *);
 static int sub_begin(struct commit *, struct sub *);
@@ -294,19 +293,21 @@ commit_booted(struct cnode *now, struct cnode *want)
 
 /*
  * After a commit's script ran, failed if a line of it failed: 0 if the
- * running configuration reads as want's text and no line failed; else
- * 1, after saying what did not take; or -1, after saying why, if either
- * could not be read. With boot, as nshd's boot judges it
+ * running configuration, text now, reads as want's text and no line
+ * failed; else 1, after saying what did not take; or -1, after saying
+ * why, if either could not be read. With boot, as nshd's boot judges it
  */
 int
-commit_verify(char *want, size_t wantlen, int failed, int boot)
+commit_verify(char *text, size_t len, char *want, size_t wantlen,
+    int failed, int boot)
 {
 	struct cnode *w, *now = NULL;
 	int ret = -1;
 
 	if ((w = conftree_mem(want, wantlen, "the configuration wanted",
 	    conf_mode, conf_ordered)) != NULL &&
-	    (now = running_tree()) != NULL) {
+	    (now = conftree_mem(text, len, "the running configuration",
+	    conf_mode, conf_ordered)) != NULL) {
 		if (boot)
 			ret = commit_booted(now, w) == -1 || failed;
 		else if (!failed && commit_took(now, w))
@@ -322,26 +323,46 @@ commit_verify(char *want, size_t wantlen, int failed, int boot)
 }
 
 /*
- * Undo a commit that did not take, or roll back an unconfirmed one: make
- * the running configuration read as was's text again. Whether it does
- * decides, not how the script went: 0 if so, after saying so; else -1,
- * after saying how it differs or why it could not be read
+ * The script, into s, that undoes a commit that did not take, or rolls
+ * back an unconfirmed one: that makes the running configuration, text
+ * now, read as was's text again. -1 if it could not be made, after
+ * saying why, else 0
  */
 int
-commit_undo(char *was, size_t waslen)
+commit_plan(char *text, size_t len, char *was, size_t waslen,
+    struct script *s)
 {
-	struct cnode *w, *now = NULL, *after = NULL;
+	struct cnode *w, *now = NULL;
 	int ret = -1;
 
 	if ((w = conftree_mem(was, waslen, "the configuration before",
 	    conf_mode, conf_ordered)) != NULL &&
-	    (now = running_tree()) != NULL) {
-		apply(now, w);
-		if ((after = running_tree()) != NULL)
-			ret = commit_back(after, w);
-	}
-	conftree_free(after);
+	    (now = conftree_mem(text, len, "the running configuration",
+	    conf_mode, conf_ordered)) != NULL)
+		ret = script_make(now, w, s, 0);
 	conftree_free(now);
+	conftree_free(w);
+	return ret;
+}
+
+/*
+ * Once that script ran: whether the running configuration, text after,
+ * reads as was's text again. Whether it does decides, not how the
+ * script went: 0 if so, after saying so; else -1, after saying how it
+ * differs or why it could not be read
+ */
+int
+commit_undone(char *text, size_t len, char *was, size_t waslen)
+{
+	struct cnode *w, *after = NULL;
+	int ret = -1;
+
+	if ((w = conftree_mem(was, waslen, "the configuration before",
+	    conf_mode, conf_ordered)) != NULL &&
+	    (after = conftree_mem(text, len, "the running configuration",
+	    conf_mode, conf_ordered)) != NULL)
+		ret = commit_back(after, w);
+	conftree_free(after);
 	conftree_free(w);
 	return ret;
 }
@@ -739,23 +760,6 @@ problem(const char *fmt, ...)
 	va_end(ap);
 	printf("\n");
 	return 1;
-}
-
-/*
- * Make the running configuration, from, read as to: -1 if the script
- * could not run, 1 if a line of it failed, else 0
- */
-static int
-apply(struct cnode *from, struct cnode *to)
-{
-	struct script s;
-	int ret;
-
-	if (script_make(from, to, &s, 0) == -1)
-		return -1;
-	ret = script_run(&s);
-	script_free(&s);
-	return ret;
 }
 
 /*
@@ -2162,69 +2166,128 @@ saved_text(FILE *out)
 /*
  * show diff-config outside configure, as nshd's system shows it: how the
  * running configuration differs from SAVED, or from an empty one if there
- * is none, printed block by block to stdout, with each password hash
- * removed if hide. 1 if they differ, 0 if not, -1 if either cannot be
- * read, after saying why
+ * is none, printed block by block to stdout by the parser, with each
+ * password hash hidden if hide. 1 if they differ, 0 if not, -1 if either
+ * cannot be read, after saying why
  */
 int
 saved_diff(int hide)
 {
-	struct cnode *saved, *now = NULL;
+	char *saved, *now = NULL;
+	size_t slen, nlen = 0;
+	FILE *f;
+	int r = -1;
+
+	if ((saved = saved_read(&slen)) == NULL)
+		return -1;
+	if ((f = open_memstream(&now, &nlen)) == NULL) {
+		printf("%% saved_diff: %s\n", strerror(errno));
+		free(saved);
+		return -1;
+	}
+	conf(f);
+	if (fclose(f) == EOF)
+		printf("%% saved_diff: %s\n", strerror(errno));
+	else
+		r = parser_diff(saved, slen, now, nlen,
+		    "--- startup-config\n+++ running-config\n", hide);
+	free(saved);
+	free(now);
+	return r;
+}
+
+/*
+ * How b, blen bytes of configuration text, differs from a: block by
+ * block, after head, printed, with each password hash hidden if hide,
+ * or nothing if quiet. 1 if they differ, 0 if not, -1 if either cannot
+ * be read, after saying why
+ */
+int
+commit_diff(char *a, size_t alen, char *b, size_t blen, char *head,
+    int hide, int quiet)
+{
+	struct cnode *x, *y = NULL;
 	char *buf = NULL;
 	size_t len = 0;
-	FILE *out = stdout;
+	FILE *out;
 	int n = -1;
 
-	saved = saved_tree();
-	if (saved != NULL && (now = running_tree()) != NULL &&
-	    (n = conftree_compare(NULL, saved, now)) > 0) {
-		/* buffer the whole diff, to remove the hashes */
-		if (hide && (out = open_memstream(&buf, &len)) == NULL) {
-			printf("%% saved_diff: %s\n", strerror(errno));
-			n = -1;
-		} else {
-			fprintf(out, "--- startup-config\n+++ running-config\n");
-			n = conftree_compare(out, saved, now);
-		}
-		if (out != NULL && out != stdout) {
-			if (fclose(out) == EOF) {
-				printf("%% saved_diff: %s\n", strerror(errno));
-				n = -1;
-			} else
-				fwrite(buf, 1, login_hide(buf, len), stdout);
-			free(buf);
-		}
+	if ((x = conftree_mem(a, alen, "a configuration", conf_mode,
+	    conf_ordered)) == NULL ||
+	    (y = conftree_mem(b, blen, "a configuration", conf_mode,
+	    conf_ordered)) == NULL ||
+	    (n = conftree_compare(NULL, x, y)) <= 0 || quiet)
+		goto done;
+	/* buffered whole, to hide the hashes */
+	if ((out = open_memstream(&buf, &len)) == NULL) {
+		printf("%% commit_diff: %s\n", strerror(errno));
+		n = -1;
+		goto done;
 	}
-	conftree_free(saved);
-	conftree_free(now);
+	fputs(head, out);
+	n = conftree_compare(out, x, y);
+	if (fclose(out) == EOF) {
+		printf("%% commit_diff: %s\n", strerror(errno));
+		n = -1;
+	} else
+		fwrite(buf, 1, hide ? login_hide(buf, len) : len, stdout);
+	free(buf);
+ done:
+	conftree_free(x);
+	conftree_free(y);
 	return n == -1 ? -1 : n > 0;
 }
 
 /*
- * Does the running configuration differ from the saved one, as
- * saved_diff() compares them? 1 if it does, 0 if not, -1 if either
- * cannot be read, after saying why
+ * The saved configuration's text, SAVED's, or an empty one if none, and
+ * its length in *len; or NULL after saying why
  */
-int
-saved_differs(void)
+char *
+saved_read(size_t *len)
 {
-	struct cnode *saved, *now = NULL;
-	int n = -1;
+	char *empty;
 
-	if ((saved = saved_tree()) != NULL && (now = running_tree()) != NULL)
-		n = conftree_compare(NULL, saved, now);
-	conftree_free(saved);
-	conftree_free(now);
-	return n == -1 ? -1 : n > 0;
+	if (access(SAVED, R_OK) == -1 && errno == ENOENT) {
+		*len = 0;
+		if ((empty = strdup("")) == NULL)
+			printf("%% %s: %s\n", SAVED, strerror(errno));
+		return empty;
+	}
+	return file_text(SAVED, len);
 }
 
-/* the saved configuration, SAVED, or an empty one if none, or NULL */
-static struct cnode *
-saved_tree(void)
+/* file's text, its length in *len: NULL if it cannot be read, saying why */
+static char *
+file_text(const char *file, size_t *len)
 {
-	if (access(SAVED, R_OK) == -1 && errno == ENOENT)
-		return conftree_read("/dev/null", conf_mode, conf_ordered);
-	return conftree_read(SAVED, conf_mode, conf_ordered);
+	char buf[BUFSIZ], *text = NULL;
+	FILE *f, *m;
+	size_t n;
+	int ok;
+
+	*len = 0;
+	if ((f = fopen(file, "r")) == NULL) {
+		printf("%% %s: %s\n", file, strerror(errno));
+		return NULL;
+	}
+	if ((m = open_memstream(&text, len)) == NULL) {
+		printf("%% %s: %s\n", file, strerror(errno));
+		fclose(f);
+		return NULL;
+	}
+	while ((n = fread(buf, 1, sizeof(buf), f)) > 0)
+		if (fwrite(buf, 1, n, m) != n)
+			break;
+	ok = !ferror(f) && !ferror(m);
+	fclose(f);
+	if (fclose(m) == EOF)
+		ok = 0;
+	if (!ok) {
+		printf("%% %s: %s\n", file, strerror(errno));
+		free(text);
+		return NULL;
+	}
+	return text;
 }
 
 /* dir's entries, synced to disk: -1 if not, after saying why */
@@ -2345,38 +2408,35 @@ rollback_text(int n, FILE *out)
 }
 
 /*
- * What configuration n changed from the one saved before it, n + 1,
- * block by block as show diff-config shows it, to out, or nothing if
- * it changed nothing; a note is printed if n + 1 is not kept. -1 if
- * either cannot be read, after saying why
+ * What configuration n changed from the one saved before it, n + 1, as
+ * texts for the parser to compare: 1 with both, 0 if n + 1 is not kept,
+ * after saying so, or -1 if either cannot be read, after saying why
  */
 int
-rollback_diff(int n, FILE *out)
+rollback_texts(int n, char **old, size_t *oldlen, char **new,
+    size_t *newlen)
 {
-	char old[PATH_MAX], new[PATH_MAX];
-	struct cnode *a = NULL, *b = NULL;
-	int r = -1;
+	char a[PATH_MAX], b[PATH_MAX];
 
-	snprintf(new, sizeof(new), ROLLBACK, n);
-	snprintf(old, sizeof(old), ROLLBACK, n + 1);
-	if (access(new, R_OK) == -1) {
+	*old = *new = NULL;
+	snprintf(b, sizeof(b), ROLLBACK, n);
+	snprintf(a, sizeof(a), ROLLBACK, n + 1);
+	if (access(b, R_OK) == -1) {
 		printf("%% rollback %d: %s\n", n, strerror(errno));
 		return -1;
 	}
-	if (access(old, R_OK) == -1 && errno == ENOENT) {
+	if (access(a, R_OK) == -1 && errno == ENOENT) {
 		printf("%% No configuration saved before rollback %d is kept\n",
 		    n);
 		return 0;
 	}
-	if ((a = conftree_read(old, conf_mode, conf_ordered)) != NULL &&
-	    (b = conftree_read(new, conf_mode, conf_ordered)) != NULL &&
-	    (r = conftree_compare(NULL, a, b)) > 0) {
-		fprintf(out, "--- rollback %d\n+++ rollback %d\n", n + 1, n);
-		r = conftree_compare(out, a, b);
+	if ((*old = file_text(a, oldlen)) == NULL ||
+	    (*new = file_text(b, newlen)) == NULL) {
+		free(*old);
+		*old = NULL;
+		return -1;
 	}
-	conftree_free(a);
-	conftree_free(b);
-	return r == -1 ? -1 : 0;
+	return 1;
 }
 
 /*

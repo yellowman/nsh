@@ -301,19 +301,85 @@ struct nshd_begin {
 	struct nshd_apply apply;
 };
 /*
- * system to the parser, on its standard input: what to check, then
- * beforelen bytes of the running configuration, and len bytes of a
- * script's edits or of a daemon's rules (parserproc.c)
+ * system to the parser, on its standard input: what to read, then its
+ * texts, len[0] bytes, then len[1] and on (parserproc.c). What the
+ * parser finds it prints; what it answers it writes to descriptor 3.
+ * Its exit status is 0, 1 as each kind says, or 2 if it could not read
  */
+#define NSHD_PARSE_TEXTS 6
 struct nshd_parse {
 	int32_t		kind;		/* NSHD_PARSE_* */
-	uint32_t	beforelen;
-	uint32_t	len;
+	int32_t		flags;
+	uint32_t	len[NSHD_PARSE_TEXTS];
 	char		daemon[32];	/* the rules' daemon */
 	struct nshd_apply apply;	/* the script's clears */
 };
-#define NSHD_PARSE_SCRIPT 1	/* a commit's script, without admin */
-#define NSHD_PARSE_RULES 2	/* a test's rules, without admin */
+/*
+ * the kinds, each with its texts: "now" is what runs, as conf() prints
+ * it; "facts" are the kernel's, as a snapshot sends them
+ */
+#define NSHD_PARSE_RULES 2	/* now, a test's rules: 1 if a session
+				   without admin may not test them */
+#define NSHD_PARSE_BEGIN 3	/* now, what the commit is based on, what
+				   it wants, the record's before and want,
+				   and with NSHD_PARSE_ADMIN its script:
+				   struct nshd_began */
+#define NSHD_PARSE_BACK	4	/* now, a rollback's configuration: struct
+				   nshd_back */
+#define NSHD_PARSE_VERIFY 5	/* now, what a script wanted: 1 if what
+				   runs is not it */
+#define NSHD_PARSE_PLAN	6	/* now, what is wanted, facts: struct
+				   nshd_apply, then the edits */
+#define NSHD_PARSE_UNDONE 7	/* now, what an undo wanted: 1 if what
+				   runs is not it */
+#define NSHD_PARSE_BOOT	8	/* the saved configuration, now, facts:
+				   struct nshd_bootplan */
+#define NSHD_PARSE_DIFF	9	/* a, b, a head: 1 if b differs from a */
+
+#define NSHD_PARSE_ADMIN 0x1	/* BEGIN: check the script's admin lines */
+#define NSHD_PARSE_FAILED 0x2	/* VERIFY: a line of the script failed */
+#define NSHD_PARSE_BOOTS 0x4	/* VERIFY: as the boot judges it */
+#define NSHD_PARSE_HIDE	0x8	/* DIFF: each password hash hidden */
+#define NSHD_PARSE_QUIET 0x10	/* DIFF: only whether they differ */
+#define NSHD_PARSE_RECORD 0x20	/* BEGIN: there is a commit record */
+
+#define NSHD_LOGINS	1024		/* login lines, at most */
+
+/* BEGIN's answer, then nlogins of struct login_line, what it wants */
+struct nshd_began {
+	int32_t		based;		/* now reads as what it is based on */
+	int32_t		logins;		/* it changes login users or classes */
+	int32_t		none;		/* now reads as the record's before */
+	int32_t		wanted;		/* now reads as the record's want */
+	int32_t		back;		/* the record's before reads as what
+					   it wants */
+	int32_t		admin;		/* its script may run */
+	uint32_t	nlogins;
+};
+
+/* BACK's answer */
+struct nshd_back {
+	int32_t		there;		/* now reads as the configuration */
+	int32_t		logins;		/* they differ in login users or
+					   classes */
+};
+
+/*
+ * BOOT's answer: the plan, its clears, then ntests of struct
+ * nshd_boottest, each with its len bytes of rules, then elen of edits
+ */
+struct nshd_bootplan {
+	int32_t		same;		/* now reads as the saved one */
+	uint32_t	ntests;
+	uint32_t	elen;
+	struct nshd_apply apply;
+};
+struct nshd_boottest {
+	char		name[32];	/* the daemon */
+	char		label[512];	/* the line, and its block */
+	uint32_t	len;
+};
+#define NSHD_TESTS	1024		/* a boot's tests, at most */
 
 /* how a commit ended: BEGIN's answer, once BEGUN said it was begun */
 #define NSHD_SAVED	0	/* the candidate runs, saved */
@@ -582,5 +648,12 @@ __dead void	 configproc(int, int);
 __dead void	 systemproc(int, int);
 __dead void	 archive(int, int);
 __dead void	 parserproc(int, int);
+
+/* system's, and its children's, to run the parser (parserproc.c) */
+void		 parser_init(int, int);
+__dead void	 parser_exec(struct nshd_parse *, char **, int);
+int		 parser_answer(int, size_t, char **, size_t *);
+int		 parser_call(struct nshd_parse *, char **, size_t, char **,
+		    size_t *);
 
 #endif /* NSHD_H */

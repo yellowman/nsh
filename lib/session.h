@@ -99,7 +99,8 @@ int			 session_plan(struct cand *, int, int,
 void			 session_tested(struct plan *, int, int);
 int			 session_logins(struct plan *);
 void			 plan_free(struct plan *);
-int			 session_boot_plan(char *, size_t, struct plan **);
+int			 session_boot_plan(char *, size_t, char *, size_t,
+			    struct plan **);
 int			 session_renew(struct cand *);
 int			 session_changed(struct cand *);
 int			 session_load(struct cand *, char *, size_t);

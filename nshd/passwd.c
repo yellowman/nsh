@@ -184,7 +184,7 @@ login_name_ok(const char *what, const char *name)
 }
 
 /* The permissions that words names, as a class's line gives them, or -1 */
-static int
+int
 login_words_perms(int n, char **words)
 {
 	int i, perms = 0;
@@ -679,57 +679,86 @@ login_perms(uid_t uid)
 }
 
 /*
- * The permissions uid would have by the login lines of configuration
- * text conf, len bytes, as login_perms() gives those of the running
- * lines. -1 if conf cannot be read, or if no line names the user of a
+ * The login lines of configuration text, len bytes, as the parser reads
+ * them for system, into *lp, at most max of them, and how many into
+ * *np: each user's class, and each class's permissions, or -1 if its
+ * words are not permissions. text's newlines become NULs. 0, or -1
+ * after saying why
+ */
+int
+login_lines(char *text, size_t len, uint32_t max, struct login_line **lp,
+    uint32_t *np)
+{
+	struct login_line *l;
+	char *p, *end = text + len, *nl, *q, *s, *w[nitems(login_permtab) + 3];
+	char user[32], class[32];
+	uint32_t n = 0;
+	int nw;
+
+	if ((l = calloc(max + 1, sizeof(*l))) == NULL) {
+		printf("%% login_lines: %s\n", strerror(errno));
+		return -1;
+	}
+	for (p = text; p < end && n < max; p = nl + 1) {
+		if ((nl = memchr(p, '\n', end - p)) == NULL)
+			nl = end;
+		*nl = '\0';
+		if (sscanf(p, "login user %31s class %31s", user,
+		    class) == 2) {
+			l[n].user = 1;
+			strlcpy(l[n].name, user, sizeof(l[n].name));
+			strlcpy(l[n].class, class, sizeof(l[n].class));
+			n++;
+		} else if (strncmp(p, "login class ", 12) == 0) {
+			nw = 0;
+			for (q = p + 12; nw < (int)nitems(w) &&
+			    (s = strsep(&q, " ")) != NULL; )
+				w[nw++] = s;
+			if (nw < 1 || q != NULL ||
+			    strlen(w[0]) >= sizeof(l[n].name))
+				continue;
+			strlcpy(l[n].name, w[0], sizeof(l[n].name));
+			l[n++].perms = login_words_perms(nw - 1, w + 1);
+		}
+	}
+	*lp = l;
+	*np = n;
+	return 0;
+}
+
+/*
+ * The permissions uid would have by the n login lines of after, as the
+ * parser reads a configuration's, as login_perms() gives those of the
+ * running lines: those of the class the user's last line names, built
+ * in or by its line, else view alone. -1 if no line names the user of a
  * session of the web configurator's, web, which could not log in, so
  * that a class with no permissions is not taken for no login
  */
 int
-login_perms_in(uid_t uid, int web, const char *conf, size_t len)
+login_perms_by(uid_t uid, int web, struct login_line *after, uint32_t n)
 {
 	struct passwd *pw;
-	char *text, *end, *p, *next, *q, *s, *w[nitems(login_permtab) + 3];
-	char user[32], class[32], c[32];
+	const char *class = NULL;
+	uint32_t i;
 	size_t j;
-	int nw, perms = -1;
 
 	if (uid == 0)
 		return LOGIN_ALL;
 	if ((pw = getpwuid(uid)) == NULL)
 		return web ? -1 : LOGIN_VIEW;
-	if ((text = malloc(len + 1)) == NULL)
-		return -1;
-	memcpy(text, conf, len);
-	text[len] = '\0';
-	end = text + len;
-	for (p = text; p < end; p++)
-		if (*p == '\n')
-			*p = '\0';
-	class[0] = '\0';
-	for (p = text; p < end; p += strlen(p) + 1)
-		if (sscanf(p, "login user %31s class %31s", user, c) == 2 &&
-		    strcmp(user, pw->pw_name) == 0)
-			strlcpy(class, c, sizeof(class));
+	for (i = 0; i < n; i++)
+		if (after[i].user && strcmp(after[i].name, pw->pw_name) == 0)
+			class = after[i].class;
+	if (class == NULL)
+		return web ? -1 : LOGIN_VIEW;
 	for (j = 0; j < nitems(login_builtin); j++)
 		if (strcmp(class, login_builtin[j].name) == 0)
-			perms = login_builtin[j].perms;
-	for (p = text; class[0] != '\0' && perms == -1 && p < end;
-	    p = next) {
-		next = p + strlen(p) + 1;
-		if (strncmp(p, "login class ", 12) != 0)
-			continue;
-		nw = 0;
-		for (q = p + 12; nw < (int)nitems(w) &&
-		    (s = strsep(&q, " ")) != NULL; )
-			w[nw++] = s;
-		if (nw >= 1 && q == NULL && strcmp(w[0], class) == 0)
-			perms = login_words_perms(nw - 1, w + 1);
-	}
-	free(text);
-	if (class[0] == '\0' && web)
-		return -1;
-	return perms == -1 ? LOGIN_VIEW : perms;
+			return login_builtin[j].perms;
+	for (i = 0; i < n; i++)
+		if (!after[i].user && strcmp(after[i].name, class) == 0)
+			return after[i].perms == -1 ? LOGIN_VIEW :
+			    after[i].perms;
+	return LOGIN_VIEW;
 }
 
 /*

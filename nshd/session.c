@@ -356,14 +356,15 @@ session_logins(struct plan *p)
 }
 
 /*
- * The boot's plan: the running configuration, the last snapshot's, made
- * to read as text, the saved configuration, as far as it succeeds. What
- * check finds is printed, and the daemons' tests of rules are the
- * plan's, but neither keeps it from running: -1 if it could not be
- * made, after saying why
+ * The boot's plan, in the parser: the running configuration, text now,
+ * made to read as text, the saved configuration, as far as it
+ * succeeds. What check finds is printed, and the daemons' tests of
+ * rules are the plan's, but neither keeps it from running: -1 if it
+ * could not be made, after saying why
  */
 int
-session_boot_plan(char *text, size_t len, struct plan **pp)
+session_boot_plan(char *text, size_t len, char *now, size_t nowlen,
+    struct plan **pp)
 {
 	struct plan *p;
 
@@ -374,7 +375,8 @@ session_boot_plan(char *text, size_t len, struct plan **pp)
 	}
 	if ((p->want = conftree_mem(text, len, "the saved configuration",
 	    conf_mode, conf_ordered)) == NULL ||
-	    (p->was = running_tree()) == NULL) {
+	    (p->was = conftree_mem(now, nowlen, "the running configuration",
+	    conf_mode, conf_ordered)) == NULL) {
 		plan_free(p);
 		return -1;
 	}
