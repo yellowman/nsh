@@ -197,7 +197,7 @@ rendersys.c	table	ah_fields carp_fields daemon_fields esp_fields
 			login_fields mb_fields mbtypes pf_fcounters
 			pf_fields pf_reasons pfsync_fields prioritynames
 			rt_fields sflag tcp_fields tcpstates udp_fields
-route.c		table	route.routeflags
+route.c		table	route_keys route_parse.routeflags
 session.c	table	kind_row rowfields
 settings.c	table	bridge_settings contexts if_settings
 			rtable_settings top_settings

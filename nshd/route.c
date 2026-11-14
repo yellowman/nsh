@@ -14,7 +14,6 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include <stdarg.h>
 #include <stdio.h>
 #include <ctype.h>
 #include <errno.h>
@@ -34,6 +33,7 @@
 #include "settings.h"
 #include "facts.h"
 #include "showfacts.h"
+#include "args.h"
 
 #define ASSUME_NETMASK 1
 
@@ -53,23 +53,54 @@ routeusage(void)
 	printf("%% no route <destination>[/netmask] [gateway] [flags]\n");
 }
 
-int
-route(int argc, char **argv, ...)
+/*
+ * route: a destination with its prefix length, a gateway, and the
+ * route's flags, expire and mtu, which route_parse() reads as route()
+ * did
+ */
+#define RT_BLACKHOLE	0x001
+#define RT_CLONING	0x002
+#define RT_IFACE	0x004
+#define RT_LLINFO	0x008
+#define RT_NOMPATH	0x010
+#define RT_NOSTATIC	0x020
+#define RT_PROTO1	0x040
+#define RT_PROTO2	0x080
+#define RT_REJECT	0x100
+const struct argkey route_keys[] = {
+	{ "blackhole", RT_BLACKHOLE }, { "cloning", RT_CLONING },
+	{ "iface", RT_IFACE }, { "llinfo", RT_LLINFO },
+	{ "nompath", RT_NOMPATH }, { "nostatic", RT_NOSTATIC },
+	{ "proto1", RT_PROTO1 }, { "proto2", RT_PROTO2 },
+	{ "reject", RT_REJECT }, { NULL }
+};
+#define RT_DEST		0	/* and its prefix length, 1 */
+#define RT_GATE		2
+#define RT_FLAGS	3
+#define RT_EXPIRE	4
+#define RT_MTU		5
+
+/* ip, as an address value in v */
+static void
+route_value(struct facts_value *v, ip_t *ip)
 {
-	u_short cmd = 0;
+	if (ip->family == AF_INET)
+		facts_address(v, FACT_INET, &ip->addr.in, 4, 0);
+	else
+		facts_address(v, FACT_INET6, &ip->addr.in6, 16, 0);
+}
+
+int
+route_parse(const struct argcmd *c, int argc, char **argv,
+    struct argvals *a)
+{
 	u_int32_t net;
 	ip_t dest, gate;
 	struct in_addr tmp;
 	struct in6_addr tmp6;
-	struct rt_metrics rt_metrics;
 	char buf[INET6_ADDRSTRLEN];
-	int i, ch, inits = 0, flags = RTF_STATIC | RTF_MPATH;
-	struct cand *cand;
-	va_list ap;
-
-	va_start(ap, argv);
-	cand = va_arg(ap, struct cand *);
-	va_end(ap);
+	long long bits = 0;
+	int i, ch;
 
 	static struct nopts routeflags[] = {
 		{ "blackhole",	no_arg,		'b' },
@@ -86,22 +117,11 @@ route(int argc, char **argv, ...)
 		{ NULL,		0,		0   }
 	};
 
-	if (NO_ARG(argv[0])) {
-		cmd = RTM_DELETE; 
-		argc--;
-		argv++;
-	} else
-		cmd = RTM_ADD;
-
-	argc--;
-	argv++;
-
 	if (argc < 1) {
 		routeusage();
 		return -1;
 	}
 
-	memset(&rt_metrics, 0, sizeof(rt_metrics));
 	memset(&gate, 0, sizeof(ip_t));
 	memset(&dest, 0, sizeof(ip_t));
 
@@ -136,71 +156,64 @@ route(int argc, char **argv, ...)
 			return -1;
 		}
 
-		flags |= RTF_GATEWAY;
 		argc--;
 		argv++;
-	} else if (cmd == RTM_ADD) {
+	} else if (a->set) {
 		printf("%% No gateway specified\n");
 		return -1;
 	}
 
 	noptind = 0;
 	if (argc >= 1) {
-		long long relative_expire;
-
 		/* parse flags */
 		while ((ch = nopt(argc, argv, routeflags)) != -1) {
 			switch (ch) {
 			const char *errmsg = NULL;
 
 			case 'b':	/* blackhole */
-				flags |= RTF_BLACKHOLE;
+				bits |= RT_BLACKHOLE;
 				break;
 			case 'c':	/* cloning */
-				flags |= RTF_CLONING;
+				bits |= RT_CLONING;
 				break;
 			case 'e':	/* expire */
-				relative_expire = strtonum(
-				    argv[noptind - 1], 0, INT_MAX, &errmsg);
+				facts_i64(&a->v[RT_EXPIRE], strtonum(
+				    argv[noptind - 1], 0, INT_MAX, &errmsg));
 				if (errmsg) {
 					printf("%% Invalid expire %s: %s\n",
 					    argv[noptind - 1], errmsg);
 					return -1;
 				}
-				rt_metrics.rmx_expire = relative_expire ?
-				    relative_expire + time(NULL) : 0;
-				inits |= RTV_EXPIRE;
 				break;
 			case 'i':	/* iface */
-				flags &= ~RTF_GATEWAY;
+				bits |= RT_IFACE;
 				break;
 			case 'l':	/* llinfo */
-				flags |= RTF_LLINFO;
+				bits |= RT_LLINFO;
 				break;
 			case 'u':	/* nompath */
-				flags &= ~RTF_MPATH;
+				bits |= RT_NOMPATH;
 				break;
 			case 'm':	/* mtu */
-				rt_metrics.rmx_mtu = strtonum(
-				    argv[noptind - 1], 64, 65536, &errmsg);
+				facts_i64(&a->v[RT_MTU], strtonum(
+				    argv[noptind - 1], 64, 65536, &errmsg));
 				if (errmsg) {
 					printf("%% Invalid route mtu %s: %s\n",
 					    argv[noptind - 1], errmsg);
 					return -1;
 				}
-				inits |= RTV_MTU;
 				break;
 			case 'n':	/* nostatic */
-				flags &= ~RTF_STATIC;
+				bits |= RT_NOSTATIC;
 				break;
 			case '1':	/* proto1 */
-				flags |= RTF_PROTO1;
+				bits |= RT_PROTO1;
 				break;
 			case '2':	/* proto2 */
-				flags |= RTF_PROTO2;
+				bits |= RT_PROTO2;
 				break;
 			case 'r':	/* reject */
-				flags |= RTF_REJECT;
+				bits |= RT_REJECT;
 				break;
 			default:
 				printf("%% route: nopt table error\n");
@@ -246,6 +259,70 @@ route(int argc, char **argv, ...)
 	default:
 		printf("%% unknown destination address family %d\n", dest.family);
 		return -1;
+	}
+
+	route_value(&a->v[RT_DEST], &dest);
+	facts_i64(&a->v[RT_DEST + 1], dest.bitlen);
+	if (gate.family != 0)
+		route_value(&a->v[RT_GATE], &gate);
+	if (bits != 0)
+		facts_i64(&a->v[RT_FLAGS], bits);
+	return 0;
+}
+
+/* the address in value v, as ip */
+static void
+route_ip(const struct facts_value *v, ip_t *ip)
+{
+	ip->family = v->v.a.family == FACT_INET ? AF_INET : AF_INET6;
+	memcpy(&ip->addr, v->v.a.bytes, v->v.a.len);
+}
+
+int
+route_apply(const struct argcmd *c, int set, const struct facts_value *v,
+    char *ifname, int ifs, struct cand *cand)
+{
+	u_short cmd = set ? RTM_ADD : RTM_DELETE;
+	ip_t dest, gate;
+	struct rt_metrics rt_metrics;
+	long long bits = v[RT_FLAGS].type != FACT_NONE ? v[RT_FLAGS].v.i : 0;
+	int inits = 0, flags = RTF_STATIC | RTF_MPATH;
+
+	memset(&rt_metrics, 0, sizeof(rt_metrics));
+	memset(&gate, 0, sizeof(ip_t));
+	memset(&dest, 0, sizeof(ip_t));
+	route_ip(&v[RT_DEST], &dest);
+	dest.bitlen = v[RT_DEST + 1].v.i;
+	if (v[RT_GATE].type != FACT_NONE) {
+		route_ip(&v[RT_GATE], &gate);
+		flags |= RTF_GATEWAY;
+	}
+	if (bits & RT_BLACKHOLE)
+		flags |= RTF_BLACKHOLE;
+	if (bits & RT_CLONING)
+		flags |= RTF_CLONING;
+	if (bits & RT_IFACE)
+		flags &= ~RTF_GATEWAY;
+	if (bits & RT_LLINFO)
+		flags |= RTF_LLINFO;
+	if (bits & RT_NOMPATH)
+		flags &= ~RTF_MPATH;
+	if (bits & RT_NOSTATIC)
+		flags &= ~RTF_STATIC;
+	if (bits & RT_PROTO1)
+		flags |= RTF_PROTO1;
+	if (bits & RT_PROTO2)
+		flags |= RTF_PROTO2;
+	if (bits & RT_REJECT)
+		flags |= RTF_REJECT;
+	if (v[RT_EXPIRE].type != FACT_NONE) {
+		rt_metrics.rmx_expire = v[RT_EXPIRE].v.i ?
+		    v[RT_EXPIRE].v.i + time(NULL) : 0;
+		inits |= RTV_EXPIRE;
+	}
+	if (v[RT_MTU].type != FACT_NONE) {
+		rt_metrics.rmx_mtu = v[RT_MTU].v.i;
+		inits |= RTV_MTU;
 	}
 
 	/*

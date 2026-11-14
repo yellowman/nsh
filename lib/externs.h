@@ -362,7 +362,6 @@ void conf_sysctls(FILE *);
 /* route.c */
 #define NO_NETMASK 0
 #define ASSUME_NETMASK 1
-int route(int, char**, ...);
 int show_route(char *, int);
 int is_ip_addr(char *);
 #ifdef _IP_T_

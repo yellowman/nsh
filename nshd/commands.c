@@ -2120,7 +2120,18 @@ Command cmdtab[] = {
 	  .apply = ipcmd_apply, .parse = ipcmd_parse, .args = ipcmd_args },
 	{ "flush",	flushhelp,	CMPL(ta) (char **)flushlist, sizeof(Menu), 0,	1, 0, 0, 0 },
 	{ "clear",      clearhelp,      CMPL0 0, 0, 0,              0, 0, 0, 0 },
-	{ "route",	routehelp,	CMPL0 0, 0, route,		1, 1, 1, 0, CAND_EDIT },
+	{ "route", routehelp, CMPL0
+	  .needsession = 1, .needconfig = 1, .nocmd = 1, .cand = CAND_EDIT,
+	  .apply = route_apply, .parse = route_parse,
+	  .args = ARGS{
+		{ "destination", ARG_ADDR, 0, 0, ARG_PREFIX | ARG_NO },
+		{ "gateway",	ARG_ADDR, 0, 0, ARG_NO | ARG_NOOPT },
+		{ "flags",	ARG_BITS, 0, 0, ARG_OPT | ARG_NO, route_keys },
+		{ "expire",	ARG_NUM, 0, INT_MAX,
+		    ARG_NAMED | ARG_OPT | ARG_NO },
+		{ "mtu",	ARG_NUM, 64, 65536,
+		    ARG_NAMED | ARG_OPT | ARG_NO },
+		{ NULL } } },
 	{ "pf",		pfhelp,		CMPL(t) (char **)ctl_pf, ssctl, ctlhandler,	1, 1, 0, 1, CAND_EDIT },
 	{ "ospf",	ospfhelp,	CMPL(t) (char **)ctl_ospf, ssctl, ctlhandler,	1, 1, 0, 1, CAND_EDIT },
 	{ "ospf6",	ospf6help,	CMPL(t) (char **)ctl_ospf6, ssctl, ctlhandler,	1, 1, 0, 1, CAND_EDIT },
@@ -2194,7 +2205,6 @@ size_t cmdtab_nitems = nitems(cmdtab);
  */
 static const struct confcmd conf_top[] = {
 	{ "login",	loginset,	CF_NO },
-	{ "route",	route,		CF_NO },
 };
 
 /*

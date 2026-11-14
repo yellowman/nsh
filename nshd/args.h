@@ -211,13 +211,15 @@ args_applyfn	nameserver_apply;
 args_applyfn	ndpentry_apply;
 args_applyfn	intsyncdev_apply, intsyncpeer_apply, intmaxupd_apply;
 args_applyfn	intsppp_apply, intpppoe_apply;
+args_applyfn	route_apply;
+args_parsefn	route_parse;
 args_applyfn	inttrunkport_apply, inttrunkproto_apply, intlacp_apply;
 args_applyfn	intvnetid_apply, inttunnel_apply, intcache_apply,
 		intendpoint_apply;
 args_applyfn	intumb_apply;
 args_applyfn	intwg_apply, intwgpeer_apply;
 /* the words of arguments whose values their files alone know */
-extern const struct argkey arpentry_keys[], ndpentry_keys[];
+extern const struct argkey arpentry_keys[], ndpentry_keys[], route_keys[];
 extern const struct argkey nwflags[];
 extern const struct argkey wpaprotos[], wpaakms[], wpaciphers[];
 extern const struct argkey wpagroupciphers[];
