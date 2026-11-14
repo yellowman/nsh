@@ -526,7 +526,8 @@ login_user(int set, int argc, char **argv, struct cand *cand)
 	if ((found = login_user_find(name, class, sizeof(class), &made)) ==
 	    -1)
 		return -1;
-	if ((pw = getpwnam(name)) == NULL) {
+	/* getpwnam() gives "*" for the hash, which is compared below */
+	if ((pw = getpwnam_shadow(name)) == NULL) {
 		if (hash == NULL) {
 			printf("%% login user %s: no such account, and no "
 			    "password to make it with\n", name);
@@ -610,9 +611,9 @@ login_cmp(const void *a, const void *b)
 }
 
 /*
- * The running login lines, sorted, so the classes come before the
- * users; a user whose account nshd made with its password, as the
- * account has it now
+ * Print the running login lines, sorted so that classes come before
+ * users. For an account nshd made, the line includes its password
+ * hash, which only getpwnam_shadow() gives.
  */
 void
 conf_login(FILE *output)
@@ -631,7 +632,7 @@ conf_login(FILE *output)
 		    how) == 3) {
 			fprintf(output, "login user %s class %s", name, class);
 			if (strcmp(how, "made") == 0 &&
-			    (pw = getpwnam(name)) != NULL)
+			    (pw = getpwnam_shadow(name)) != NULL)
 				fprintf(output, " password %s", pw->pw_passwd);
 			fprintf(output, "\n");
 		}
