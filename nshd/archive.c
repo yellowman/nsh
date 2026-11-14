@@ -46,13 +46,11 @@
 #define ARC_CAND	"candidate"
 #define ARC_TEMP	"candidate.new"
 
-static struct imsgev	*iev_parent;
 static int		 dir;		/* ARC_DIR */
 static char		*text;		/* to keep, as it comes */
 static size_t		 len;
 static int		 past;		/* past NSHD_KEEPMAX */
 
-static void	archive_dispatch_parent(int, short, void *);
 static void	archive_dispatch_config(int, short, void *);
 static void	archive_clear(void);
 static void	archive_open(void);
@@ -68,15 +66,12 @@ archive(int d, int v)
 	child_start("archive", d, v);
 	archive_open();
 	privdrop(PROC_ARCHIVE);
-	if (pledge("stdio rpath wpath cpath recvfd", NULL) == -1)
-		fatal("pledge");
-
-	if ((iev_parent = imsgev_new(3, archive_dispatch_parent, 0)) == NULL)
-		fatal(NULL);
-	links_init(&config, 1);
-	/* its pipe to config is here, and no descriptor comes after it */
+	/* its pipe to config is fd 4, and no descriptor comes after it */
 	if (pledge("stdio rpath wpath cpath", NULL) == -1)
 		fatal("pledge");
+
+	parent_watch();
+	links_init(&config, 1);
 	event_dispatch();
 	exit(0);
 }
@@ -98,33 +93,6 @@ archive_open(void)
 		fatal("open %s", ARC_DIR);
 	if (fchown(dir, uid, gid) == -1 || fchmod(dir, 0700) == -1)
 		fatal("%s", ARC_DIR);
-}
-
-static void
-archive_dispatch_parent(int fd, short event, void *arg)
-{
-	struct imsgev	*iev = arg;
-	struct imsg	 imsg;
-	int		 n;
-
-	if (imsgev_io(iev, event) == -1)
-		exit(0);
-
-	for (;;) {
-		if ((n = imsgbuf_get(&iev->ibuf, &imsg)) == -1)
-			fatal("imsgbuf_get");
-		if (n == 0)
-			break;
-		switch (imsg_get_type(&imsg)) {
-		case IMSG_STARTUP:
-			break;
-		default:
-			log_debug("%s: unexpected imsg %u", __func__,
-			    imsg_get_type(&imsg));
-		}
-		imsg_free(&imsg);
-	}
-	imsg_event_add(iev);
 }
 
 /* config's text, its requests to keep it, and to load what is kept */

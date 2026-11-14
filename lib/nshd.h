@@ -29,7 +29,7 @@
 #define NSHD_SOCKET	"/var/run/nshd.sock"	/* 0660, group nshadmin */
 #define NSHD_RO_SOCKET	"/var/run/nshd.ro.sock"	/* 0666 */
 
-#define NSHD_VERSION	8	/* protocol version of clients and nshd */
+#define NSHD_VERSION	9	/* protocol version of clients and nshd */
 #define NSHD_TEXT	8192	/* text in one message, at most */
 #define NSHD_WORDS	256	/* a show's words, at most */
 #define NSHD_LINE	1024	/* a line of configuration, with its NUL */
@@ -477,20 +477,6 @@ struct nshd_test {
 	char		name[32];
 };
 
-/* parent to a child: a peer's pipe; instance tells the shows apart */
-struct nshd_child {
-	int32_t			proc;
-	int32_t			instance;
-};
-
-/*
- * parent to a child, once it may start: whether nshd boots, which system
- * does; until it is done, the shows wait for LISTEN
- */
-struct nshd_startup {
-	int32_t			boot;
-};
-
 /*
  * parent to config and system: a new session, with the pipe to its
  * frontend; to config, with the uid and gid of its client, which parent
@@ -544,8 +530,6 @@ enum nshd_imsg {
 
 	/* between nshd's processes */
 	IMSG_SESSION,		/* parent to config: nshd_newsession, a pipe */
-	IMSG_STARTUP,		/* parent to a child: nshd_startup */
-	IMSG_PEER,		/* parent to a child: nshd_child, its pipe */
 	IMSG_SYS_SNAPSHOT,	/* config to system: the running configuration */
 	IMSG_SYS_TEXT,		/* system to config: text */
 	IMSG_SYS_END,		/* system to config: nshd_result */
@@ -584,9 +568,11 @@ enum nshd_imsg {
 	/* config to system, answered as SYS_SHOW is */
 	IMSG_SYS_SAVED,		/* the saved configuration, as text */
 
-	/* the end of the boot, and what follows it */
-	IMSG_BOOTED,		/* system to parent: nshd_result of the boot */
-	IMSG_LISTEN,		/* parent to each show: take clients */
+	/*
+	 * system to parent, once: it has started, and with -b, the
+	 * nshd_result of the boot
+	 */
+	IMSG_STARTED,
 
 	/* with clients, on the read-write socket, and config to system */
 	IMSG_SYS_PERMS,		/* nshd_perms: result is the permissions */
@@ -654,7 +640,7 @@ struct nshd_keep {
 };
 #define NSHD_KEEPMAX	(16 * 1024 * 1024)	/* what archive keeps, at most */
 
-/* a child's peer, and the pipe between them, from parent */
+/* a child's peer, and the pipe between them, there as the child starts */
 struct link {
 	enum nshd_proc	 proc;
 	void		(*handler)(int, short, void *);
@@ -694,6 +680,7 @@ void		 child_start(const char *, int, int);
 void		 privdrop(enum nshd_proc);
 int		 proc_user(enum nshd_proc, uid_t *, gid_t *);
 void		 links_init(struct link *, size_t);
+void		 parent_watch(void);
 int		 link_compose(struct link *, uint32_t, uint32_t, const void *,
 		    size_t);
 void		 link_broken(struct link *, const char *, ...)
@@ -723,7 +710,7 @@ void		 confirm_free(struct confirm *);
 __dead void	 showproc(int, int, int);
 __dead void	 frontend(int, int);
 __dead void	 configproc(int, int);
-__dead void	 systemproc(int, int);
+__dead void	 systemproc(int, int, int);
 __dead void	 archive(int, int);
 __dead void	 parserproc(int, int);
 

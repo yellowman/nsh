@@ -64,9 +64,6 @@ struct answer {
 	int			 failed;
 };
 
-static struct imsgev	*iev_parent;
-
-static void	show_dispatch_parent(int, short, void *);
 static void	show_listen(void);
 static int	show_client(struct ctl_conn *, struct imsg *);
 static int	show_answer(uint32_t, int32_t, const char *);
@@ -89,49 +86,13 @@ showproc(int debug, int verbose, int instance)
 		log_warn("%s", _PATH_UTMP);
 	privdrop(PROC_SHOW);
 
-	if ((iev_parent = imsgev_new(3, show_dispatch_parent, 0)) == NULL)
-		fatal(NULL);
+	parent_watch();
+	show_listen();
 	event_dispatch();
 	exit(0);
 }
 
-static void
-show_dispatch_parent(int fd, short event, void *arg)
-{
-	struct imsgev		*iev = arg;
-	struct imsg		 imsg;
-	struct nshd_startup	 st;
-	int			 n;
-
-	if (imsgev_io(iev, event) == -1)
-		exit(0);
-
-	for (;;) {
-		if ((n = imsgbuf_get(&iev->ibuf, &imsg)) == -1)
-			fatal("imsgbuf_get");
-		if (n == 0)
-			break;
-		switch (imsg_get_type(&imsg)) {
-		/* take clients at once, or once the boot is done */
-		case IMSG_STARTUP:
-			if (imsg_get_data(&imsg, &st, sizeof(st)) == -1)
-				fatalx("parent sent a startup show cannot read");
-			if (!st.boot)
-				show_listen();
-			break;
-		case IMSG_LISTEN:
-			show_listen();
-			break;
-		default:
-			log_debug("%s: unexpected imsg %u", __func__,
-			    imsg_get_type(&imsg));
-		}
-		imsg_free(&imsg);
-	}
-	imsg_event_add(iev);
-}
-
-/* take clients on its socket, fd 4, from parent */
+/* take clients on its socket, fd 4, which parent set to listen */
 static void
 show_listen(void)
 {

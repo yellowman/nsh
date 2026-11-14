@@ -166,7 +166,11 @@
  * configuration is not the one the commit was planned from, as when an
  * unconfirmed commit was rolled back in the meantime.
  *
- * When parent says that nshd starts with -b, system boots. The boot
+ * system starts alone: parent starts config, and takes clients, once
+ * system says it has started (STARTED). By then system has read its
+ * records, a rollback due as it starts has ended, and, where parent
+ * started it with -b, the boot is over. Until then there is no session,
+ * so such a rollback waits for no one. The boot
  * begins once no job runs, so that a rollback of an unconfirmed commit
  * that runs as system starts ends first; no rollback begins while the
  * boot runs. The first time, system copies nsh's own NSHRC to the saved
@@ -174,15 +178,16 @@
  * the host boot it is for by kern.boottime and says the boot is
  * running; then it demotes carp and records that too. A system process
  * restarted during the boot finds the record and does not demote carp
- * again. If this host boot is already done, system tells parent so, and
- * the boot does not run again. Otherwise system plans the boot from the
+ * again. If this host boot is already done, the boot does not run
+ * again. Otherwise system plans the boot from the
  * saved configuration and what runs, runs its tests and then its
  * script, each in a job, and the script says whether the running
  * configuration is then the saved configuration. If it is, the record
  * says the boot is done, carp is promoted if it was demoted for the
  * boot, and any unconfirmed commit record is removed. If not, the
  * record says the boot failed, and carp stays demoted until a commit
- * saves. Then system tells parent that the boot is done (BOOTED).
+ * saves. Either way system has then started, and tells parent how the
+ * boot went.
  *
  * Each commit belongs to a session, and system learns whose it is from
  * the session's client. parent passes system each client's socket when
@@ -538,6 +543,7 @@ static uint32_t		 test_refused;	/* the request a test refused, */
 static int		 test_refusals;	/* and how many of its tests did */
 static int		 revoking;	/* login lines change: logins refused */
 static int		 booting;	/* the boot runs, or waits for a job */
+static int		 started;	/* parent was told, and starts config */
 static struct plan	*boot_plan;	/* the boot's, once it is made */
 static int		 boot_test;	/* the next of its tests */
 static int		 boot_unrecorded; /* its record could not be made */
@@ -565,11 +571,10 @@ static char		 heads[3][RECORD_HEAD + 1];
 static int		 errors[3];
 /* and those of each configuration kept */
 static char		 slots[ROLLBACKS * ROLLBACK_SLOT];
-/* NSHLOGIN's error, if it could not be read, and the reading not done */
+/* NSHLOGIN's error, if it could not be read */
 static int		 logins_error;
 /* a job changed NSHLOGIN, perhaps, and it could not be read again */
 static int		 logins_lost;
-static int		 records_unread;
 
 static void	system_dispatch_parent(int, short, void *);
 static void	system_dispatch_config(int, short, void *);
@@ -639,7 +644,7 @@ static int	system_boot(void);
 static void	boot_start(void);
 static void	boot_next(void);
 static void	boot_end(int);
-static void	boot_told(int32_t);
+static void	system_started(int32_t);
 static int	system_booted(int);
 static void	boot_saved(void);
 static int	boot_read(struct boot *);
@@ -711,7 +716,7 @@ static struct link	 links[] = {
 };
 
 void
-systemproc(int debug, int v)
+systemproc(int debug, int v, int boot)
 {
 	extern char		**environ;
 	static char		*empty[] = { NULL };
@@ -757,22 +762,27 @@ systemproc(int debug, int v)
 	signal_add(&ev_sigchld, NULL);
 	/* the records an earlier nshd left, then a commit not confirmed */
 	records_start();
+	/* the boot waits for a rollback that runs */
+	booting = boot;
+	if (booting && job == NULL)
+		boot_start();
+	if (!booting && job == NULL)
+		system_started(0);
 	event_dispatch();
 	system_exit();
 }
 
 /*
- * parent's word that system may start, and whether nshd boots; each new
- * session, with its client's socket; each session whose frontend has
- * ended; and, once config is gone, that config and every session have
- * ended, which starts a rollback that waits for that
+ * parent's word of each new session, with its client's socket; of each
+ * session whose frontend has ended; and, once config is gone, that
+ * config and every session have ended, which starts a rollback that
+ * waits for that
  */
 static void
 system_dispatch_parent(int fd, short event, void *arg)
 {
 	struct imsgev		*iev = arg;
 	struct imsg		 imsg;
-	struct nshd_startup	 st;
 	struct nshd_newsession	 ns;
 	struct nshd_taken	 t;
 	struct client		*cl;
@@ -814,17 +824,9 @@ system_dispatch_parent(int fd, short event, void *arg)
 				fatal("%s", __func__);
 			continue;
 		}
-		if (type != IMSG_STARTUP ||
-		    imsg_get_data(&imsg, &st, sizeof(st)) == -1) {
-			log_warnx("parent sent imsg %u, which it may not",
-			    imsg_get_type(&imsg));
-			system_exit();
-		}
-		imsg_free(&imsg);
-		/* the boot waits for a rollback that runs */
-		booting = st.boot;
-		if (booting && job == NULL)
-			boot_start();
+		log_warnx("parent sent imsg %u, which it may not",
+		    imsg_get_type(&imsg));
+		system_exit();
 	}
 	imsg_event_add(iev);
 }
@@ -889,12 +891,11 @@ system_dispatch_config(int fd, short event, void *arg)
 		/*
 		 * what a stream's client read, stopping a stream, a new
 		 * session's permissions, a login, and GO for the job that
-		 * waits do not wait; a session's permissions and a login
-		 * wait only for the parser to read NSHLOGIN as nshd starts
+		 * waits do not wait
 		 */
 		if (type == IMSG_SYS_READ || type == IMSG_SYS_STOP ||
-		    ((type == IMSG_SYS_PERMS || type == IMSG_SYS_LOGIN) &&
-		    !records_unread) || type == IMSG_SYS_GO ||
+		    type == IMSG_SYS_PERMS || type == IMSG_SYS_LOGIN ||
+		    type == IMSG_SYS_GO ||
 		    (job == NULL && TAILQ_EMPTY(&queue)))
 			r = system_request(type, id, data, len);
 		else
@@ -1302,7 +1303,7 @@ system_unqueue(uint32_t id)
 	TAILQ_FOREACH_SAFE(q, &queue, entry, next)
 		if (q->id == id) {
 			TAILQ_REMOVE(&queue, q, entry);
-			freezero(q, sizeof(*q) + q->len);
+			free(q);
 			found = 1;
 		}
 	if (found)
@@ -1314,26 +1315,13 @@ system_unqueue(uint32_t id)
 static void
 system_drain(void)
 {
-	struct queued	*q, *next;
+	struct queued	*q;
 	int		 r;
 
-	/* a session's permissions and a login, once NSHLOGIN is read */
-	TAILQ_FOREACH_SAFE(q, &queue, entry, next) {
-		if (records_unread || (q->type != IMSG_SYS_PERMS &&
-		    q->type != IMSG_SYS_LOGIN))
-			continue;
-		TAILQ_REMOVE(&queue, q, entry);
-		r = system_request(q->type, q->id, q->data, q->len);
-		freezero(q, sizeof(*q) + q->len);
-		if (r == -1) {
-			config_gone("sent a part past %d bytes", NSHD_PART);
-			return;
-		}
-	}
 	while (job == NULL && (q = TAILQ_FIRST(&queue)) != NULL) {
 		TAILQ_REMOVE(&queue, q, entry);
 		r = system_request(q->type, q->id, q->data, q->len);
-		freezero(q, sizeof(*q) + q->len);
+		free(q);
 		if (r == -1) {
 			config_gone("sent a part past %d bytes", NSHD_PART);
 			return;
@@ -2786,9 +2774,10 @@ system_recovering(struct confirm *cf, int r, int logins)
 	cf->back = NULL;
 	/*
 	 * one that changes login users or classes, or may, waits for config
-	 * to take no new session, if config is there; it ends none
+	 * to take no new session, if config is there; it ends none. As
+	 * nshd starts, config is not there yet, and no session is
 	 */
-	if (logins == 0 || links[CONFIG].iev == NULL) {
+	if (logins == 0 || links[CONFIG].iev == NULL || !started) {
 		system_job(j);
 		return;
 	}
@@ -3516,7 +3505,6 @@ boot_start(void)
 
 	if ((r = system_boot()) == 1) {
 		booting = 0;
-		boot_told(0);
 		return;
 	}
 	boot_unrecorded = r == -1;
@@ -3680,20 +3668,28 @@ boot_end(int ok)
 	boot_plan = NULL;
 	booting = 0;
 	if (boot_unrecorded)
-		boot_told(1);
+		system_started(1);
 	else
-		boot_told(system_booted(ok) == 0 && ok ? 0 : 1);
+		system_started(system_booted(ok) == 0 && ok ? 0 : 1);
 }
 
-/* parent told the boot is over, status 0 if it went well */
+/*
+ * system has started: its records are read, no job runs, and with -b
+ * the boot is over, status 0 if it went well. parent is told, once,
+ * and then starts config and takes clients; until then there is no
+ * session
+ */
 static void
-boot_told(int32_t status)
+system_started(int32_t status)
 {
 	struct nshd_result	 res;
 
+	if (started)
+		return;
+	started = 1;
 	printed_log();
 	res.status = status;
-	if (imsg_compose_event(iev_parent, IMSG_BOOTED, 0, 0, -1, &res,
+	if (imsg_compose_event(iev_parent, IMSG_STARTED, 0, 0, -1, &res,
 	    sizeof(res)) == -1)
 		fatal("%s", __func__);
 }
@@ -4263,6 +4259,8 @@ system_job_done(void)
 	/* the boot that waited on a rollback */
 	if (booting && boot_plan == NULL && job == NULL)
 		boot_start();
+	if (!booting && job == NULL)
+		system_started(0);
 	/*
 	 * first roll back an unconfirmed commit that is due; once config
 	 * is gone, system only finishes what it began
@@ -4390,7 +4388,6 @@ records_start(void)
 	rollback_slots(slots);
 	system_parse_text(j, 3, slots, sizeof(slots));
 	/* and NSHLOGIN, whole */
-	records_unread = 1;
 	if ((fd = open(NSHLOGIN, O_RDONLY)) == -1) {
 		if (errno != ENOENT)
 			logins_error = errno;
@@ -4486,7 +4483,6 @@ records_read(struct job *j, int32_t status)
 		    NSHLOGIN);
 		login_kept(NULL, -1);
 	}
-	records_unread = 0;
 	free(a);
 	printed_log();
 

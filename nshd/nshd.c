@@ -45,12 +45,12 @@
  *
  * Each pair of children that talk (config and system, config and
  * archive) has a pipe of its own, which parent makes, so each knows who
- * sent what it reads. Each child has a pipe to parent, as fd 3, which
- * tells it when it may start. One with peers also has a pipe from parent,
- * as fd 4, which gives it each peer's pipe before it starts, and is
- * closed then. After these come the socket of a show, which no other
- * child has, and config's routing socket, which tells it what the kernel
- * changes. A child has no other descriptor of parent's.
+ * sent what it reads. Each child starts with its descriptors in place:
+ * its pipe to parent as fd 3, which closes when parent ends, and then
+ * the pipe to each of its peers. After these come the socket of a show,
+ * which no other child has, and config's routing socket, which tells it
+ * what the kernel changes. A child has no other descriptor of parent's,
+ * and a show and archive hear nothing from parent.
  *
  * parent itself accepts each client of the read-write socket, and reads
  * from the client's socket who the client is. The client's session gets
@@ -63,7 +63,7 @@
  * on, which only that session's frontend has, and system watches the
  * client's socket itself. Of what the children send, parent reads only
  * that they have taken a session, system's word that a session ends,
- * and system's word that the boot is done.
+ * and system's word that it has started.
  *
  * A child that ends, or that breaks a rule, ends nshd: its peers find
  * their pipes to it closed and end too, and parent ends the rest, with
@@ -79,10 +79,11 @@
  * If nshd ends while a commit is unconfirmed, the commit is rolled back
  * when nshd starts again and system finds its record.
  *
- * With -b, as rc starts it, nshd boots: system makes the running
- * configuration the saved one, while parent and the shows hold their
- * sockets, and they take clients once system says the boot is done. rc
- * waits for it: the process rc started exits
+ * parent starts system alone. system reads its records, finishes what
+ * an earlier nshd left, and, with -b, as rc starts nshd, boots: it
+ * makes the running configuration the saved one. Once system says it
+ * has started, however the boot went, parent starts the other children
+ * and takes clients. rc waits for that: the process rc started exits
  * then, 0 if the boot went well, else 1, as it does if nshd ends before.
  */
 
@@ -135,8 +136,6 @@ static struct child {
 	char		*user;		/* chrooted to its home, or root */
 	pid_t		 pid;
 	struct imsgev	*iev;		/* its pipe to parent, fd 3 */
-	struct imsgbuf	 out;		/* its peers' pipes, fd 4 */
-	int		 hasout;
 } children[] = {
 	/* SHOWS show processes */
 	{ PROC_SHOW,	 0, "show0",	"-S0",	"_nshshow" },
@@ -149,13 +148,7 @@ static struct child {
 };
 #define NPROC	(sizeof(children) / sizeof(children[0]))
 
-/* the children that talk, each pair on a pipe of its own */
-static const struct pair {
-	enum nshd_proc	 a, b;
-} pairs[] = {
-	{ PROC_CONFIG,	 PROC_SYSTEM },
-	{ PROC_CONFIG,	 PROC_ARCHIVE },
-};
+#define CHILD_FDS	4	/* a child's descriptors from parent, at most */
 
 /*
  * A session on the read-write socket: until config and system have both
@@ -172,13 +165,13 @@ static struct front {
 #define TAKEN_SYSTEM	0x2
 static uint32_t		 session_last;	/* the last session's number */
 static struct event	 ev_accept, ev_pause;
-#define NPAIRS	(sizeof(pairs) / sizeof(pairs[0]))
 
 static void		 parent_sig_handler(int, short, void *);
 static void		 parent_dispatch(int, short, void *);
-static void		 spawn_all(void);
-static void		 start(struct child *, int);
-static pid_t		 start_child(const char *, char *, int, int, int,
+static void		 spawn_system(void);
+static void		 spawn_rest(void);
+static void		 start(struct child *, int, int, int);
+static pid_t		 start_child(const char *, char *, int, const int *,
 			    int);
 static void		 parent_listen(void);
 static void		 parent_accept(int, short, void *);
@@ -186,10 +179,6 @@ static void		 front_taken(struct child *, struct nshd_taken *);
 static void		 front_start(struct front *);
 static void		 front_free(struct front *);
 static void		 front_gone(uint32_t);
-static int		 talks(enum nshd_proc);
-static void		 pair(struct child *, struct child *);
-static void		 tell(struct child *, struct child *, int);
-static int		 out_open(struct child *);
 static void		 ended(struct child *, const char *, ...)
 			    __attribute__((__format__ (printf, 2, 3)));
 static void		 parent_drain(void);
@@ -201,13 +190,15 @@ static void		 parent_ended(void);
 static struct child	*child(enum nshd_proc, int);
 static void		 users(void);
 static void		 daemon_boot(void);
-static void		 booted(int32_t);
+static void		 started(int32_t);
 static __dead void	 parent_shutdown(int, const char *);
 static __dead void	 usage(void);
 
 static char		 execpath[PATH_MAX];	/* this program, which children run */
 static int		 opt_debug, opt_verbose, rwfd, rofd, rtfd;
-static int		 booting;	/* -b, until system says it is done */
+static int		 confd;		/* config's end of its pipe to system */
+static int		 starting = 1;	/* until system says it has started */
+static int		 booting;	/* -b: rc waits for the boot's end */
 static int		 draining;	/* config ended: system finishes */
 static int		 ending;	/* system waits for config's end */
 static int		 boot_fd = -1;	/* to the process rc started, or -1 */
@@ -278,7 +269,7 @@ main(int argc, char *argv[])
 	case PROC_CONFIG:
 		configproc(opt_debug, opt_verbose);
 	case PROC_SYSTEM:
-		systemproc(opt_debug, opt_verbose);
+		systemproc(opt_debug, opt_verbose, booting);
 	case PROC_ARCHIVE:
 		archive(opt_debug, opt_verbose);
 	case PROC_PARSER:
@@ -303,7 +294,7 @@ main(int argc, char *argv[])
 	else if (!opt_debug && daemon(0, 0) == -1)
 		err(1, "daemon");
 
-	/* sockets for frontend and the shows, passed when they start */
+	/* sockets for frontend and the shows, there as they start */
 	if ((rwfd = control_init(NSHD_SOCKET, 0660, gr->gr_gid)) == -1)
 		fatalx("cannot open %s", NSHD_SOCKET);
 	if ((rofd = control_init(NSHD_RO_SOCKET, 0666, gr->gr_gid)) == -1)
@@ -327,11 +318,7 @@ main(int argc, char *argv[])
 	signal_add(&ev_sigchld, NULL);
 	signal(SIGPIPE, SIG_IGN);
 
-	spawn_all();
-	close(rofd);
-	close(rtfd);
-	if (!booting)
-		parent_listen();
+	spawn_system();
 
 	/*
 	 * clients, their sessions' pipes passed to config and system, and
@@ -432,57 +419,70 @@ users(void)
 }
 
 /*
- * start each child, with its pipe to parent and its peers' pipes there
- * before it starts; then tell each it may
+ * start system, alone, with its pipe to config as fd 4: config's end
+ * waits for config, which starts once system has (spawn_rest())
  */
 static void
-spawn_all(void)
+spawn_system(void)
 {
-	struct nshd_startup	 st;
-	size_t			 i;
-	int			 out[NPROC];
-
-	for (i = 0; i < NPROC; i++)
-		out[i] = out_open(&children[i]);
-	for (i = 0; i < NPAIRS; i++)
-		pair(child(pairs[i].a, 0), child(pairs[i].b, 0));
-	for (i = 0; i < NPROC; i++)
-		start(&children[i], out[i]);
-
-	memset(&st, 0, sizeof(st));
-	st.boot = booting;
-	for (i = 0; i < NPROC; i++)
-		if (imsg_compose_event(children[i].iev, IMSG_STARTUP, 0, 0,
-		    -1, &st, sizeof(st)) == -1)
-			fatal("%s: startup", children[i].name);
-}
-
-/* start c with its pipe to parent, after giving it its peers' pipes */
-static void
-start(struct child *c, int out)
-{
-	int	 sp[2], fd = -1;
+	int	 sp[2];
 
 	if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK,
 	    PF_UNSPEC, sp) == -1)
 		fatal("socketpair");
-	if (c->proc == PROC_SHOW)
-		fd = rofd;
-	else if (c->proc == PROC_CONFIG)
-		fd = rtfd;
-	if (c->hasout) {
-		if (imsgbuf_flush(&c->out) == -1)
-			fatal("%s: its peers' pipes", c->name);
-		imsgbuf_clear(&c->out);
-		close(c->out.fd);
-		c->hasout = 0;
-	}
-	if ((c->pid = start_child(c->name, c->flag, sp[1], out, fd, 0)) ==
-	    -1)
+	start(child(PROC_SYSTEM, 0), sp[0], -1, -1);
+	close(sp[0]);
+	confd = sp[1];
+}
+
+/*
+ * start the other children, once system has started. archive has its
+ * pipe to config as fd 4; config has its pipes to system and to archive
+ * as fd 4 and 5, and its routing socket after them. Each show has the
+ * read-only socket as fd 4, and takes clients on it at once; the socket
+ * listens first, so a client that comes before a show is ready waits
+ * for one
+ */
+static void
+spawn_rest(void)
+{
+	size_t	 i;
+	int	 sp[2];
+
+	if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK,
+	    PF_UNSPEC, sp) == -1)
+		fatal("socketpair");
+	start(child(PROC_ARCHIVE, 0), sp[0], -1, -1);
+	start(child(PROC_CONFIG, 0), confd, sp[1], rtfd);
+	close(sp[0]);
+	close(sp[1]);
+	close(confd);
+	close(rtfd);
+	if (listen(rofd, 5) == -1)
+		fatal("cannot listen on %s", NSHD_RO_SOCKET);
+	for (i = 0; i < NPROC; i++)
+		if (children[i].proc == PROC_SHOW)
+			start(&children[i], rofd, -1, -1);
+	close(rofd);
+}
+
+/*
+ * start c with its pipe to parent as fd 3, and a, b and d, each if not
+ * -1, as the descriptors after it
+ */
+static void
+start(struct child *c, int a, int b, int d)
+{
+	int	 sp[2], fds[CHILD_FDS] = { -1, a, b, d };
+
+	if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK,
+	    PF_UNSPEC, sp) == -1)
+		fatal("socketpair");
+	fds[0] = sp[1];
+	if ((c->pid = start_child(c->name, c->flag,
+	    c->proc == PROC_SYSTEM && booting, fds, 0)) == -1)
 		fatal("cannot fork");
 	close(sp[1]);
-	if (out != -1)
-		close(out);
 	/* config and system get each session's pipes on theirs */
 	if ((c->iev = imsgev_new(sp[0], parent_dispatch,
 	    c->proc == PROC_CONFIG || c->proc == PROC_SYSTEM)) == NULL)
@@ -607,10 +607,10 @@ front_taken(struct child *c, struct nshd_taken *t)
 static void
 front_start(struct front *f)
 {
+	int	 fds[CHILD_FDS] = { f->fds[0], f->fds[1], -1, -1 };
 	size_t	 i;
 
-	if ((f->pid = start_child("frontend", "-F", f->fds[0], f->fds[1],
-	    -1, 1)) == -1) {
+	if ((f->pid = start_child("frontend", "-F", 0, fds, 1)) == -1) {
 		log_warn("session %u: fork", f->session);
 		front_free(f);
 		return;
@@ -658,15 +658,15 @@ front_free(struct front *f)
 }
 
 /*
- * The child name, run with flag, with a, b and c as fd 3 and the next,
- * each if not -1; with own, in a process group of its own. -1 if it
- * cannot be started
+ * The child name, run with flag, and with -b if boot, with those of fds
+ * that are not -1 as fd 3 and the next; with own, in a process group of
+ * its own. -1 if it cannot be started
  */
 static pid_t
-start_child(const char *name, char *flag, int a, int b, int c, int own)
+start_child(const char *name, char *flag, int boot, const int *fds, int own)
 {
-	char	*argv[6];
-	int	 fds[3] = { a, b, c };
+	char	*argv[7];
+	int	 fd[CHILD_FDS];
 	int	 argc = 0, i, n = 3;
 	pid_t	 pid;
 
@@ -681,19 +681,22 @@ start_child(const char *name, char *flag, int a, int b, int c, int own)
 
 	if (own && setsid() == -1)
 		fatal("%s: setsid", name);
-	/* above 5 first, so none lands on another's place */
-	for (i = 0; i < 3; i++)
-		if (fds[i] != -1 &&
-		    (fds[i] = fcntl(fds[i], F_DUPFD_CLOEXEC, 6)) == -1)
+	/* above their places first, so none lands on another's place */
+	for (i = 0; i < CHILD_FDS; i++)
+		if ((fd[i] = fds[i]) != -1 &&
+		    (fd[i] = fcntl(fd[i], F_DUPFD_CLOEXEC, 3 + CHILD_FDS)) ==
+		    -1)
 			fatal("%s: its descriptors", name);
-	for (i = 0; i < 3; i++)
-		if (fds[i] != -1 && dup2(fds[i], n++) == -1)
+	for (i = 0; i < CHILD_FDS; i++)
+		if (fd[i] != -1 && dup2(fd[i], n++) == -1)
 			fatal("%s: its descriptors", name);
 	/* and none of parent's others, whether or not they close on exec */
 	closefrom(n);
 
 	argv[argc++] = execpath;
 	argv[argc++] = flag;
+	if (boot)
+		argv[argc++] = "-b";
 	if (opt_debug)
 		argv[argc++] = "-d";
 	if (opt_verbose)
@@ -702,63 +705,6 @@ start_child(const char *name, char *flag, int a, int b, int c, int own)
 
 	execv(execpath, argv);
 	fatal("execv");
-}
-
-/* whether p talks to any other child */
-static int
-talks(enum nshd_proc p)
-{
-	size_t	 i;
-
-	for (i = 0; i < NPAIRS; i++)
-		if (pairs[i].a == p || pairs[i].b == p)
-			return (1);
-	return (0);
-}
-
-/* a pipe between a and b, each given its end */
-static void
-pair(struct child *a, struct child *b)
-{
-	int	 sp[2];
-
-	if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK,
-	    PF_UNSPEC, sp) == -1)
-		fatal("socketpair");
-	tell(a, b, sp[0]);
-	tell(b, a, sp[1]);
-}
-
-/* to c, the pipe fd to its peer p */
-static void
-tell(struct child *c, struct child *p, int fd)
-{
-	struct nshd_child	 ch;
-
-	memset(&ch, 0, sizeof(ch));
-	ch.proc = p->proc;
-	ch.instance = p->instance;
-	if (imsg_compose(&c->out, IMSG_PEER, 0, 0, fd, &ch, sizeof(ch)) ==
-	    -1)
-		fatal("%s: %s's pipe", c->name, p->name);
-}
-
-/* the pipe from parent to c, if it has peers: c's end of it, or -1 */
-static int
-out_open(struct child *c)
-{
-	int	 sp[2];
-
-	if (!talks(c->proc))
-		return (-1);
-	if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK,
-	    PF_UNSPEC, sp) == -1)
-		fatal("socketpair");
-	if (imsgbuf_init(&c->out, sp[0]) == -1)
-		fatal(NULL);
-	imsgbuf_allow_fdpass(&c->out);
-	c->hasout = 1;
-	return (sp[1]);
 }
 
 /*
@@ -803,7 +749,7 @@ parent_drain(void)
 
 	draining = 1;
 	log_warnx("system finishes what it began, and then nshd ends");
-	if (!booting) {
+	if (!starting) {
 		event_del(&ev_accept);
 		evtimer_del(&ev_pause);
 	}
@@ -993,7 +939,7 @@ parent_ended(void)
 /*
  * c's word on its pipe to parent: config's or system's that it took a
  * session, or did not, system's that a session ends, system's that
- * config is to end, and system's word, once, that the boot is done.
+ * config is to end, and system's word, once, that it has started.
  * Anything else, or the pipe closed, ends nshd
  */
 static void
@@ -1054,8 +1000,8 @@ parent_dispatch(int fd, short event, void *arg)
 			front_gone(session);
 			continue;
 		}
-		if (imsg_get_type(&imsg) != IMSG_BOOTED ||
-		    c->proc != PROC_SYSTEM || !booting ||
+		if (imsg_get_type(&imsg) != IMSG_STARTED ||
+		    c->proc != PROC_SYSTEM || !starting ||
 		    imsg_get_data(&imsg, &res, sizeof(res)) == -1) {
 			ended(c, "sent imsg %u, which it may not",
 			    imsg_get_type(&imsg));
@@ -1063,7 +1009,7 @@ parent_dispatch(int fd, short event, void *arg)
 			return;
 		}
 		imsg_free(&imsg);
-		booted(res.status);
+		started(res.status);
 	}
 	imsg_event_add(iev);
 }
@@ -1109,22 +1055,20 @@ daemon_boot(void)
 }
 
 /*
- * the boot is done, as status says it went: tell rc, tell the shows to
- * take clients, and take them on the read-write socket
+ * system has started: start the other children, and take clients on the
+ * read-write socket. With -b, status says how the boot went, which rc
+ * is told; clients are taken however it went
  */
 static void
-booted(int32_t status)
+started(int32_t status)
 {
-	size_t	 i;
 	char	 c = status == 0 ? '0' : '1';
 
-	booting = 0;
-	for (i = 0; i < NPROC; i++)
-		if (children[i].proc == PROC_SHOW &&
-		    imsg_compose_event(children[i].iev, IMSG_LISTEN, 0, 0, -1,
-		    NULL, 0) == -1)
-			fatal("%s: listen", children[i].name);
+	starting = 0;
+	spawn_rest();
 	parent_listen();
+	if (!booting)
+		return;
 	if (status == 0)
 		log_info("booted");
 	else
@@ -1219,73 +1163,51 @@ proc_user(enum nshd_proc proc, uid_t *uid, gid_t *gid)
 	return (0);
 }
 
-static struct link	*links;
-static size_t		 nlinks;
-
-static void		 link_take(struct imsg *);
+static void		 parent_gone(int, short, void *);
 
 /*
- * A child's n peers, in l, each with its pipe from parent on fd 4, where
- * parent wrote them all before the child started. fd 4 is closed once
- * they are taken, and then each link's ready() is called
+ * A child's n peers, in l: the pipe to each is there as the child
+ * starts, in l's order, as fd 4 and the next. Then each link's ready()
+ * is called
  */
 void
 links_init(struct link *l, size_t n)
 {
-	struct pollfd	 pfd;
-	struct imsgbuf	 ibuf;
-	struct imsg	 imsg;
-	size_t		 have = 0;
-	int		 r;
+	size_t	 i;
 
-	links = l;
-	nlinks = n;
-	if (imsgbuf_init(&ibuf, 4) == -1)
-		fatal(NULL);
-	imsgbuf_allow_fdpass(&ibuf);
-	while (have < n) {
-		if ((r = imsgbuf_get(&ibuf, &imsg)) == -1)
-			fatal("%s", __func__);
-		if (r > 0) {
-			link_take(&imsg);
-			imsg_free(&imsg);
-			have++;
-			continue;
-		}
-		pfd.fd = 4;
-		pfd.events = POLLIN;
-		if (poll(&pfd, 1, -1) == -1)
-			fatal("%s: poll", __func__);
-		if ((r = imsgbuf_read(&ibuf)) == -1)
-			fatal("%s", __func__);
-		if (r == 0)
-			fatalx("%s: parent's pipe closed", __func__);
-	}
-	imsgbuf_clear(&ibuf);
-	close(4);
-	for (have = 0; have < n; have++)
-		if (l[have].ready != NULL)
-			l[have].ready();
+	for (i = 0; i < n; i++)
+		if ((l[i].iev = imsgev_new(4 + i, l[i].handler, 0)) == NULL)
+			fatal(NULL);
+	for (i = 0; i < n; i++)
+		if (l[i].ready != NULL)
+			l[i].ready();
 }
 
-/* a peer's pipe, taken once: a second is fatal */
-static void
-link_take(struct imsg *imsg)
+/*
+ * For a child that hears nothing from parent: its pipe to parent, fd 3,
+ * closes when parent ends, and the child ends with it
+ */
+void
+parent_watch(void)
 {
-	struct nshd_child	 ch;
-	struct link		*l = NULL;
-	size_t			 i;
-	int			 fd;
+	static struct event	 ev;
 
-	if (imsg_get_type(imsg) == IMSG_PEER &&
-	    imsg_get_data(imsg, &ch, sizeof(ch)) == 0)
-		for (i = 0; i < nlinks; i++)
-			if ((int)links[i].proc == ch.proc)
-				l = &links[i];
-	if (l == NULL || l->iev != NULL || (fd = imsg_get_fd(imsg)) == -1)
-		fatalx("%s: bad imsg %u", __func__, imsg_get_type(imsg));
-	if ((l->iev = imsgev_new(fd, l->handler, 0)) == NULL)
-		fatal(NULL);
+	event_set(&ev, 3, EV_READ | EV_PERSIST, parent_gone, NULL);
+	event_add(&ev, NULL);
+}
+
+static void
+parent_gone(int fd, short event, void *arg)
+{
+	char	 c;
+	ssize_t	 n;
+
+	if ((n = read(fd, &c, 1)) == -1 && (errno == EAGAIN ||
+	    errno == EINTR))
+		return;
+	if (n > 0)
+		fatalx("parent sent what it may not");
+	exit(0);
 }
 
 /* to l's peer */

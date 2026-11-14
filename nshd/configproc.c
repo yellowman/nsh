@@ -124,7 +124,7 @@
  * unconfirmed commit rolled back, as system says; configure exclusive
  * taken or left; and interfaces or addresses changed, and the rtables
  * whose routes did, which config reads from the routing socket parent
- * opened for it, fd 5, and says once a second at most. It may watch logs
+ * opened for it, fd 6, and says once a second at most. It may watch logs
  * too: system follows each, as a stream, whose text config sends as
  * notices until the watch drops the log or the stream ends, which config
  * says. A watch is answered once system has followed each log it adds, or
@@ -423,10 +423,11 @@ configproc(int debug, int verbose)
 	if ((iev_parent = imsgev_new(3, config_dispatch_parent, 1)) == NULL)
 		fatal(NULL);
 	links_init(links, sizeof(links) / sizeof(links[0]));
-	/* its peers' pipes are here; a terminal's pty passes through */
+	/* a terminal's pty passes through */
 	imsgbuf_allow_fdpass(&links[SYSTEM].iev->ibuf);
 	evtimer_set(&front_tm, front_sweep, NULL);
-	event_set(&rt_ev, 5, EV_READ | EV_PERSIST, config_route, NULL);
+	/* the routing socket comes after its peers' pipes */
+	event_set(&rt_ev, 6, EV_READ | EV_PERSIST, config_route, NULL);
 	event_add(&rt_ev, NULL);
 	evtimer_set(&rt_tm, config_routed, NULL);
 	event_dispatch();
@@ -434,15 +435,14 @@ configproc(int debug, int verbose)
 }
 
 /*
- * parent's word that config may start; each new session, with its pipe
- * to its frontend; and that a session ends
+ * parent's word of each new session, with its pipe to its frontend, and
+ * that a session ends
  */
 static void
 config_dispatch_parent(int fd, short event, void *arg)
 {
 	struct imsgev		*iev = arg;
 	struct imsg		 imsg;
-	struct nshd_startup	 st;
 	struct nshd_newsession	 ns;
 	struct front		*f;
 	int			 n, pfd;
@@ -469,11 +469,8 @@ config_dispatch_parent(int fd, short event, void *arg)
 			imsg_free(&imsg);
 			continue;
 		}
-		if (imsg_get_type(&imsg) != IMSG_STARTUP ||
-		    imsg_get_data(&imsg, &st, sizeof(st)) == -1)
-			fatalx("parent sent imsg %u, which it may not",
-			    imsg_get_type(&imsg));
-		imsg_free(&imsg);
+		fatalx("parent sent imsg %u, which it may not",
+		    imsg_get_type(&imsg));
 	}
 	imsg_event_add(iev);
 }
