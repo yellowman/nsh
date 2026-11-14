@@ -276,6 +276,13 @@ nshdeck is optional. To configure the system from a web browser:
    useradd -L daemon -d /var/empty -s /sbin/nologin _nshdeck
    ```
 
+   nshd looks up _nshweb only when it starts, so restart it; until
+   then it refuses every login:
+
+   ```shell
+   rcctl restart nshd
+   ```
+
 2. Have rc(8) start nshdeck at each boot:
 
    ```shell

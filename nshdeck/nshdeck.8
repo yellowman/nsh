@@ -470,6 +470,10 @@ needs the users _nshweb and _nshdeck, which may not be root or share a
 uid, and the group www, which
 .Xr httpd 8
 runs as.
+.Nm nshd
+looks up _nshweb only when it starts, so restart
+.Nm nshd
+after creating _nshweb; until then it refuses every login.
 The socket is owned by root and the group www, with mode 0660.
 In
 .Xr httpd.conf 5 ,
