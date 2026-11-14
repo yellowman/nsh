@@ -1,5 +1,3 @@
-.\"     $OpenBSD: nsh.8,v 1.2.3 2024/09/17 17:57:00 UTC chrisc $
-.\"
 .\" Copyright (c) 2002-2024 Chris Cappuccio.  All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
@@ -456,7 +454,7 @@ There are four, and a session leaves one before it enters another.
 .It Cm configure terminal Ta (config-terminal)# Ta none: each line is committed at once
 .El
 .Bd -literal -offset indent
-% NSH v1.1
+% NSH v1.9.0
 hostname.nsh.org> configure private
 hostname.nsh.org(config-private)#
 .Ed
@@ -6479,7 +6477,7 @@ NSH was compiled, the system's uptime, the system, CPU and memory, and
 the version of the running kernel.
 .Bd -literal -offset indent
 nsh> show version
-% NSH v1.1
+% NSH v1.9.0
 Compiled 03-Apr-22 06:03 by _pbuild@amd64-1.ports.openbsd.org
 uptime: 1 day, 2 hours, 17 minutes
 system: OpenBSD/amd64 version 7.1

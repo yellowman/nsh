@@ -60,9 +60,6 @@ and bgpnsh(8). To read nsh's manual page from the system shell:
 man nsh
 ```
 
-The manual page is also on the project's wiki:
-[https://github.com/yellowman/nsh/wiki/NSH-1.2.x-Manual-Page](https://github.com/yellowman/nsh/wiki/NSH-1.2.x-Manual-Page)
-
 ### Manual pages from within nsh
 
 nsh's `manual` command shows nsh's manual page. With a term, such as a
