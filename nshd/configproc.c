@@ -731,7 +731,8 @@ config_dispatch_front(int fd, short event, void *arg)
 		case IMSG_CTL_TERMINAL:
 			if (imsg_get_data(&imsg, &tm, sizeof(tm)) == -1 ||
 			    tm.rows < 1 || tm.rows > NSHD_TERMSIZE ||
-			    tm.cols < 1 || tm.cols > NSHD_TERMSIZE)
+			    tm.cols < 1 || tm.cols > NSHD_TERMSIZE ||
+			    tm.rtable < -1 || tm.rtable > RT_TABLEID_MAX)
 				goto bad;
 			config_pty(id, &tm);
 			break;

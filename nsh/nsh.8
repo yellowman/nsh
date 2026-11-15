@@ -32,6 +32,7 @@
 .Nm nsh
 .Op Fl v
 .Op Fl c Ar config-script-file
+.Op Fl T Ar rtable
 .Sh DESCRIPTION
 .Nm
 is a command interpreter intended for both interactive and shell script use.
@@ -100,6 +101,16 @@ The options are as follows:
 .Bl -tag -width Ds
 .It Fl v
 Produce verbose output
+.It Fl T Ar rtable
+Begin with
+.Nm Ns 's
+commands in routing table
+.Ar rtable ,
+as
+.Ic rtable
+chooses one;
+.Nm
+itself stays in the routing table it starts in.
 .It Fl c Ar config-script-file
 Replace the running configuration with the one in
 .Ar config-script-file ,

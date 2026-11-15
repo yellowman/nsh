@@ -456,7 +456,10 @@ The session's terminal is
 .Xr nsh 8
 on a pty, which system starts as the user, as
 .Xr login 1
-starts a shell.
+starts a shell, with
+.Fl T
+and the routing table the terminal is asked for, if it is asked for
+one.
 .Sh WATCHING
 A session with view may watch commits,
 .Cm configure exclusive ,

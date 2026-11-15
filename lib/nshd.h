@@ -25,7 +25,7 @@
 #define NSHD_SOCKET	"/var/run/nshd.sock"	/* 0660, group nshadmin */
 #define NSHD_RO_SOCKET	"/var/run/nshd.ro.sock"	/* 0666 */
 
-#define NSHD_VERSION	12	/* protocol version of clients and nshd */
+#define NSHD_VERSION	13	/* protocol version of clients and nshd */
 #define NSHD_TEXT	8192	/* text in one message, at most */
 #define NSHD_WORDS	256	/* a show's words, at most */
 #define NSHD_LINE	1024	/* a line of configuration, with its NUL */
@@ -149,11 +149,16 @@ struct nshd_login {
 	char		password[NSHD_PASSWORD];
 };
 
-/* a web login's terminal: nsh, as the login's user, on a pty this size */
+/*
+ * a web login's terminal: nsh, as the login's user, on a pty this size,
+ * its commands in routing table rtable, as nsh -T chooses it, or, if
+ * rtable is -1, in the login's own table
+ */
 #define NSHD_TERMSIZE	1000	/* its rows or columns, at most */
 struct nshd_terminal {
 	int32_t		rows;
 	int32_t		cols;
+	int32_t		rtable;
 };
 
 /*

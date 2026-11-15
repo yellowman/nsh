@@ -350,7 +350,10 @@ sessions_front(int fd, short event, void *arg)
 		id = imsg_get_id(&imsg);
 		switch (imsg_get_type(&imsg)) {
 		case DECK_REQUEST:
-			/* every use of n fits in 0 to 255 */
+			/*
+			 * every use of n fits in 0 to 255, or is a
+			 * terminal's -1, the login's own table
+			 */
 			if (imsg_get_data(&imsg, &r, sizeof(r)) == -1 ||
 			    r.kind < DECK_LOGIN || r.kind > DECK_STAGE ||
 			    (incoming.len > 0 && (incoming.id != id ||
@@ -363,7 +366,8 @@ sessions_front(int fd, short event, void *arg)
 			    NULL ||
 			    memchr(r.comment, '\0', sizeof(r.comment)) ==
 			    NULL || memchr(r.daemon, '\0', sizeof(r.daemon)) ==
-			    NULL || r.n < 0 || r.n > 255 ||
+			    NULL || r.n < (r.kind == DECK_TERMINAL ? -1 : 0) ||
+			    r.n > 255 ||
 			    r.minutes < 0 || r.minutes > NSHD_CONFIRMMAX ||
 			    (r.check != 0 && r.check != 1) ||
 			    (r.logs & ~NSHD_WATCH_LOGS) != 0 ||
@@ -1097,6 +1101,7 @@ next(struct user *u)
 		memset(&tm, 0, sizeof(tm));
 		tm.rows = p->r.rows > 0 ? p->r.rows : 24;
 		tm.cols = p->r.cols > 0 ? p->r.cols : 80;
+		tm.rtable = p->r.n;
 		ask(u, IMSG_CTL_TERMINAL, &tm, sizeof(tm));
 		break;
 	case DECK_RULES:

@@ -12,6 +12,8 @@ var termfit = null;	/* its fit addon, which sizes it to its box */
 var tstream = null;	/* the terminal's stream, while it is open */
 var tnumber = 0;	/* its number, once nshdeck says it */
 var typing = "";	/* typed, not yet sent */
+var ttable = null;	/* the table the terminal's nsh began in, if the page */
+			/* was focused on one as it opened */
 var sending = false;	/* a type request not yet answered */
 
 /* the terminal's state, in words, its light, and its buttons */
@@ -75,12 +77,16 @@ function tconnect() {
 	termfit.fit();
 	tnumber = 0;
 	typing = "";
+	/* nsh begins in the table the page is focused on, as nsh -T does */
+	ttable = table;
 	tstream = new EventSource("api/terminal?rows=" + term.rows +
-	    "&cols=" + term.cols);
+	    "&cols=" + term.cols + (ttable === null ? "" : "&rtable=" +
+	    ttable));
 	tstate("starting nsh", "warn");
 	tstream.addEventListener("terminal", function (e) {
 		tnumber = JSON.parse(e.data).n;
-		tstate("nsh, terminal " + tnumber, "on");
+		tstate("nsh, terminal " + tnumber + (ttable === null ? "" :
+		    ", rtable " + ttable), "on");
 		term.focus();
 	});
 	tstream.addEventListener("out", function (e) {

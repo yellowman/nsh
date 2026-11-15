@@ -303,7 +303,10 @@ the ports of other tables are dimmed; Network lists the table's
 interfaces, routing table and static routes; each workspace of daemons
 lists the table's row of each daemon that may run in it, so that pf and
 the others that run only in table 0 are listed only there; a show is
-answered in it, as at nsh's prompt; and an operation runs in it.
+answered in it, as at nsh's prompt; an operation runs in it; and a
+terminal opened then begins in it, as
+.Ic nsh Fl T
+does, and stays there when the page leaves the table.
 In configure, a line typed in Changes enters the table first, as
 .Cm rtable
 at nsh's configure prompt does, unless the session is in it or in an
@@ -547,7 +550,11 @@ GET, with
 .Ar rows
 and
 .Ar cols ,
-each from 1 to 1000; they are 24 and 80 if not given.
+each from 1 to 1000; they are 24 and 80 if not given; and
+.Ar rtable ,
+the routing table nsh's commands begin in, as with
+.Ic nsh Fl T ;
+without it, they begin in the user's own.
 Opens a terminal:
 .Nm nshd
 starts

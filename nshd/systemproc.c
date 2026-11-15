@@ -516,7 +516,7 @@ static void	system_auth_answer(struct attempt *);
 static void	system_refused(uint32_t, const char *, const char *, ...)
 		    __attribute__((__format__ (printf, 3, 4)));
 static void	system_terminal(uint32_t, struct nshd_systerm *);
-static __dead void system_term_child(int, struct passwd *);
+static __dead void system_term_child(int, struct passwd *, int);
 static int	system_whole(uint32_t, const void *, size_t);
 static int	apply_whole(struct nshd_apply *);
 static int	system_request(uint32_t, uint32_t, const void *, size_t);
@@ -1075,7 +1075,9 @@ system_whole(uint32_t type, const void *data, size_t len)
 			return (-1);
 		memcpy(&st, data, len);
 		return (st.size.rows < 1 || st.size.rows > NSHD_TERMSIZE ||
-		    st.size.cols < 1 || st.size.cols > NSHD_TERMSIZE ? -1 : 0);
+		    st.size.cols < 1 || st.size.cols > NSHD_TERMSIZE ||
+		    st.size.rtable < -1 || st.size.rtable > RT_TABLEID_MAX ?
+		    -1 : 0);
 	case IMSG_SYS_SNAPSHOT:
 		return (len == sizeof(struct nshd_snapshot) ? 0 : -1);
 	case IMSG_SYS_BEGIN:
@@ -1940,7 +1942,7 @@ system_terminal(uint32_t id, struct nshd_systerm *st)
 		return;
 	}
 	if (nsh == 0)
-		system_term_child(tty, pw);
+		system_term_child(tty, pw, st->size.rtable);
 	close(tty);
 	terminals[i] = nsh;
 	if (imsg_compose_event(links[CONFIG].iev, IMSG_SYS_TERMINAL, id, 0,
@@ -1949,13 +1951,17 @@ system_terminal(uint32_t id, struct nshd_systerm *st)
 	system_end(id, 0, NULL);
 }
 
-/* nsh, as pw's user, on tty, as login(1) starts a shell */
+/*
+ * nsh, as pw's user, on tty, as login(1) starts a shell; its commands in
+ * routing table rtable, as nsh -T chooses it, unless rtable is -1
+ */
 static __dead void
-system_term_child(int tty, struct passwd *pw)
+system_term_child(int tty, struct passwd *pw, int rtable)
 {
 	extern char	**environ;
 	static char	*empty[] = { NULL };
-	char		*argv[] = { "-nsh", NULL };
+	char		 table[16];
+	char		*argv[] = { "-nsh", NULL, NULL, NULL };
 	sigset_t	 none;
 
 	/* restore the default signal handling, which a program expects */
@@ -1979,6 +1985,11 @@ system_term_child(int tty, struct passwd *pw)
 		_exit(1);
 	if (chdir(pw->pw_dir) == -1 && chdir("/") == -1)
 		_exit(1);
+	if (rtable != -1) {
+		snprintf(table, sizeof(table), "%d", rtable);
+		argv[1] = "-T";
+		argv[2] = table;
+	}
 	execv(NSH_SHELL, argv);
 	_exit(1);
 }

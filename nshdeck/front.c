@@ -166,7 +166,7 @@ static const struct endpoint {
 	{ "rollback",	DECK_ROLLBACK,	1, F_N },
 	{ "op",		DECK_OP,	1, F_LINE | F_RTABLE },
 	{ "complete",	DECK_COMPLETE,	0, F_LINE | F_HELP },
-	{ "terminal",	DECK_TERMINAL,	0, F_ROWS | F_COLS },
+	{ "terminal",	DECK_TERMINAL,	0, F_ROWS | F_COLS | F_RTABLE },
 	{ "type",	DECK_TYPE,	1, F_TERMINAL | F_KEYS | F_ROWS |
 	    F_COLS },
 	{ "events",	DECK_EVENTS,	0, F_LOGS },
@@ -694,6 +694,9 @@ front_fields(const char *form, int fields, struct deck_request *r,
 		}
 		explicit_bzero(value, sizeof(value));
 	}
+	/* a terminal's table, or -1, the login's own, if it was not given */
+	if (r->kind == DECK_TERMINAL && (seen & F_RTABLE) == 0)
+		r->n = -1;
 	/* the running configuration, if what was not given */
 	if ((fields & F_WHAT) && (seen & F_WHAT) == 0)
 		strlcpy(r->text, "running-config", sizeof(r->text));

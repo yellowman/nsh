@@ -157,17 +157,20 @@ int
 main(int argc, char *argv[])
 {
 	int top, ch, cflag = 0;
-	char rc[PATH_MAX];
+	char rc[PATH_MAX], *table = NULL;
 
 	setlocale(LC_CTYPE, "");
 
 	pid = getpid();
 
-	while ((ch = getopt(argc, argv, "c:v")) != -1)
+	while ((ch = getopt(argc, argv, "c:T:v")) != -1)
 		switch (ch) {
 		case 'c':
 			cflag = 1;
 			strlcpy(rc, optarg, PATH_MAX);
+			break;
+		case 'T':
+			table = optarg;
 			break;
 		case 'v':
 			verbose = 1;
@@ -194,6 +197,9 @@ main(int argc, char *argv[])
 	}
 
 	cli_rtable = getrtable();
+	/* -T: the table nsh's commands begin in, as rtable N chooses it */
+	if (table != NULL)
+		(void)cli_setrtable(table);
 
 	if (cflag) {
 		/* the file's configuration, which nshd loads and commits */
@@ -225,9 +231,11 @@ main(int argc, char *argv[])
 void
 usage(void)
 {
-	fprintf(stderr, "usage: %s [-v] [-c rcfile]\n", getprogname());
+	fprintf(stderr, "usage: %s [-v] [-c rcfile] [-T rtable]\n",
+	    getprogname());
 	fprintf(stderr, "           -v indicates verbose operation\n");
 	fprintf(stderr, "           -c rcfile loads commands from rcfile\n");
+	fprintf(stderr, "           -T rtable runs commands in rtable\n");
 	exit(1);
 }
 
