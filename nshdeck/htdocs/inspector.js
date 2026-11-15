@@ -2,7 +2,7 @@
  * inspector.js: an interface's settings, in Network, as nshd's
  * configuration has them: the candidate's in configure, else the running
  * configuration's. What was changed is staged into the candidate as
- * nsh's lines, entering configure private first if not in configure
+ * nsh's lines, entering configure first if not in configure
  */
 "use strict";
 
@@ -435,7 +435,7 @@ function keepEdits(into, sent, edited) {
 
 /*
  * lines into the candidate, in the interface's mode, as one stage
- * request, entering configure private first if not in configure. Then,
+ * request, entering configure first if not in configure. Then,
  * if no other inspection was asked for and no route opened meanwhile,
  * the interface is inspected again, keeping the edits made while the
  * lines ran, and the lines' results are shown with it
@@ -445,11 +445,8 @@ function staged(lines) {
 	var sent = JSON.parse(JSON.stringify(insp.now));
 	var head = (insp.bridge ? "bridge " : "interface ") + name;
 	var results = [];
-	var p = Promise.resolve();
+	var p = entering();
 
-	if (!cur || cur.mode === 0)
-		p = configure("configure", { mode: "private" },
-		    "configure private");
 	/*
 	 * the lines, as one request: nshd runs them in the interface's
 	 * mode, stops at the first that fails, and runs nothing else of

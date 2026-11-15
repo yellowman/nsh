@@ -382,8 +382,8 @@ function netRouteForm() {
 }
 
 /*
- * the route's lines into the candidate, entering configure private if
- * not in configure; then the routes again, and, if the form is still
+ * the route's lines into the candidate, entering configure if not in
+ * configure; then the routes again, and, if the form is still
  * open, the route as it now is, with the edits made while the lines ran
  */
 function netRouteStage() {
@@ -392,9 +392,7 @@ function netRouteStage() {
 
 	if (!lines.length)
 		return p;
-	if (!cur || cur.mode === 0)
-		p = configure("configure", { mode: "private" },
-		    "configure private");
+	p = entering();
 	lines.forEach(function (l) {
 		p = p.then(function () {
 			return configure("line", { line: l },

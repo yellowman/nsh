@@ -178,6 +178,8 @@ A readout shows how many ports are up, the numbers of interfaces and
 addresses, and the last change.
 The logical interfaces appear in groups by kind, each with what it is
 on.
+At its foot are the user's name and what each of the user's permissions
+allows.
 .Ss Network
 Runs show commands and draws what they answer to be read: a time as
 how long ago it was, a size in kilobytes to terabytes, a span in days
@@ -237,10 +239,14 @@ The statements of the rules, as fields.
 Has five topics.
 .Bl -tag -width "Live operations"
 .It Changes
-Where configure is entered and lines of configuration are typed, as
+Where the mode of configure is chosen and lines of configuration are
+typed, as
 .Xr nsh 8
 accepts them, beside a view of the changes, the candidate, the running
 configuration or the saved configuration.
+The page enters configure as the user logs in: the shared candidate for
+a user with the admin permission, else a candidate of the user's own.
+What the page changes anywhere goes into it.
 Tab completes a line, and ? lists what may come next.
 .It History
 The saved configurations, any of which can be shown or loaded into the
@@ -263,15 +269,15 @@ Has Compare, Validate and Commit, which show the changes, run
 .Cm commit check ,
 and run
 .Cm commit .
-It shows the generation of the running configuration, when and by whom
-it was saved, and the warnings that
+It shows the warnings that
 .Cm show rollback
-prints.
-In configure, it also shows how many objects the candidate changes.
-It counts down the time left to confirm an unconfirmed commit.
+prints, how many objects the candidate changes when it changes any, and
+the time left to confirm an unconfirmed commit.
+System's topics show the generation of the running configuration, and
+when and by whom it was saved.
 .Pp
-A\(mi and A+ make the page smaller or larger, and the browser keeps the
-choice.
+A\(mi and A+, above Log out, make the page smaller or larger, and the
+browser keeps the choice.
 The page also grows with a window wider than 1440 pixels.
 .Ss What the page keeps current
 The page follows

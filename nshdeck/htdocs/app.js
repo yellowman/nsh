@@ -162,22 +162,6 @@ function of(j, kind) {
 	});
 }
 
-/* where the user is in configure, in words */
-function where(ctx) {
-	var modes = ["", "private", "shared", "exclusive", "terminal"];
-	var s;
-
-	if (!ctx || ctx.mode === 0)
-		return "";
-	s = "configure " + (modes[ctx.mode] || ctx.mode);
-	if (ctx.interface)
-		s += ", " + (ctx.bridge ? "bridge " : "interface ") +
-		    ctx.interface;
-	if (ctx.rtable)
-		s += ", rtable " + ctx.rtable;
-	return s;
-}
-
 /* nsh's prompt for the context, as cprompt() and iprompt() make it */
 function nshprompt(ctx) {
 	var modes = ["", "config-private", "config", "config-exclusive",
@@ -194,14 +178,11 @@ function nshprompt(ctx) {
 }
 
 function context(j) {
-	var w, f = $("configure-form");
+	var f = $("configure-form");
 
 	if (j.context === undefined)
 		return;
 	cur = j.context;
-	w = where(j.context);
-	$("where").textContent = w || "not in configure";
-	$("where").classList.toggle("on", w !== "");
 	$("prompt").textContent = nshprompt(cur);
 	changes(j.context.mode !== 0);
 	/* the Changes topic, as the session is now */
@@ -211,8 +192,6 @@ function context(j) {
 	$("enter").disabled = cur.mode !== 0;
 	$("exit").disabled = cur.mode === 0;
 	$("discard").disabled = cur.mode === 0 || cur.mode === 4;
-	$("line-form").line.placeholder = cur.mode === 0 ?
-	    "Enter configure first" : "";
 	$("mode-help").textContent = MODES[f.mode.value];
 	loadable();
 	if (!$("ws-system").hidden && !$("topic-changes").hidden)
@@ -439,10 +418,10 @@ function changes(inConfigure) {
 	ask("GET", "config", { what: "diff" }).then(function (j) {
 		var n = objects(said(j));
 
-		tag.textContent = n === 0 ? "no changes" : n === 1 ?
-		    "1 object changed" : n + " objects changed";
-		tag.classList.toggle("on", n > 0);
-		tag.hidden = false;
+		tag.textContent = n === 1 ? "1 object changed" : n +
+		    " objects changed";
+		tag.classList.add("on");
+		tag.hidden = n === 0;
 		$("led-cfg").className = n > 0 ? "led warn" : "led on";
 	});
 }
@@ -1048,6 +1027,59 @@ function configure(name, fields, asked) {
 	});
 }
 
+/*
+ * The session in configure, in the mode chosen in System's Changes, if it
+ * is not in configure already: as the user logs in, and before a change.
+ * Only a refusal shows in the transcript
+ */
+function entering() {
+	var mode = $("configure-form").mode.value, asked = "configure " + mode;
+
+	if (cur && cur.mode !== 0)
+		return Promise.resolve();
+	return ask("POST", "configure", { mode: mode }).then(function (j) {
+		if (j.ok) {
+			context(j);
+			refused(asked, j);
+		} else
+			transcript(asked, j);
+		return j;
+	});
+}
+
+/* what each permission allows, as nsh(8) says */
+var GRANTS = [
+	["view", "View", "Every show, the configuration included"],
+	["operate", "Operate", "Operations, such as flush, reboot and a " +
+	    "daemon's actions, and ping and traceroute"],
+	["configure", "Configure", "A candidate of your own, commit and " +
+	    "rollback"],
+	["admin", "Admin", "The shared candidate, and changes to what runs " +
+	    "as root or decides who may log in"],
+	["exec", "Exec", "Programs nsh runs as you, such as ssh and an " +
+	    "editor"]
+];
+
+/* the user and what their permissions allow, at the Overview's foot */
+function access(user, perms) {
+	var s = sheetOf("Your access"), h = s.querySelector("header");
+	var dl = el("dl", null, "fields grants");
+
+	h.insertBefore(avatarOf(user), h.firstChild);
+	h.querySelector("h3").textContent = user;
+	h.appendChild(el("span", "what your login class allows", "count"));
+	GRANTS.forEach(function (g) {
+		var on = perms.indexOf(g[0]) !== -1;
+
+		dl.appendChild(el("dt", g[1], on ? "on" : "off"));
+		dl.appendChild(el("dd", on ? g[2] : "Not allowed", on ? "" :
+		    "dim"));
+	});
+	s.appendChild(dl);
+	$("access").textContent = "";
+	$("access").appendChild(s);
+}
+
 /* an unconfirmed commit's deadline, counted down in the strip */
 function confirmBy(minutes) {
 	var tag = $("deadline");
@@ -1168,7 +1200,22 @@ function host() {
 }
 
 function loggedIn(j) {
-	$("who").textContent = j.user + " · " + j.perms.join(" ");
+	var f = $("configure-form"), admin = j.perms.indexOf("admin") !== -1;
+
+	$("who").textContent = j.user;
+	access(j.user, j.perms);
+	/*
+	 * into configure: the shared candidate, which needs admin, else a
+	 * candidate of the user's own
+	 */
+	f.mode.value = admin ? "shared" : "private";
+	f.querySelectorAll("[value=shared], [value=exclusive]").forEach(
+	    function (i) {
+		i.disabled = !admin;
+	});
+	$("mode-help").textContent = MODES[f.mode.value];
+	if (admin || j.perms.indexOf("configure") !== -1)
+		entering();
 	$("login").hidden = true;
 	$("deck").hidden = false;
 	follow();
@@ -1439,7 +1486,7 @@ document.addEventListener("DOMContentLoaded", function () {
 	$("configure-form").addEventListener("change", function (e) {
 		$("mode-help").textContent = MODES[e.target.value];
 	});
-	$("mode-help").textContent = MODES.private;
+	$("mode-help").textContent = MODES.shared;
 	on("configure-form", function (f) {
 		configure("configure", { mode: f.mode.value },
 		    "configure " + f.mode.value);
@@ -1461,8 +1508,10 @@ document.addEventListener("DOMContentLoaded", function () {
 	on("line-form", function (f) {
 		var line = f.line.value;
 
-		configure("line", { line: line }, $("prompt").textContent +
-		    line).then(function (j) {
+		entering().then(function () {
+			return configure("line", { line: line },
+			    $("prompt").textContent + line);
+		}).then(function (j) {
 			if (j.ok)
 				f.line.value = "";
 		});

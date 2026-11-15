@@ -459,8 +459,7 @@ input.nope {
 	min-width: 0;
 }
 
-#strip .host, #strip .run, #strip .cand, #strip .actions,
-#strip .health, #strip .size {
+#strip .host, #strip .cand, #strip .actions, #strip .health, .run {
 	display: flex;
 	align-items: center;
 	gap: .6154rem;
@@ -471,21 +470,21 @@ input.nope {
 	flex: 1;
 }
 
-#strip .size {
-	gap: 0;
+/* the running configuration's generation and last save, in System's bar */
+.run {
+	margin-left: auto;
 }
 
-#strip .size button {
-	min-width: 2.3077rem;
-	font-weight: 600;
+/* the text's size, in the rail, above Log out */
+#rail .size {
+	display: grid;
+	gap: .1538rem;
+	margin-bottom: .3077rem;
 }
 
-#strip .size button:first-child {
-	border-radius: .4615rem 0 0 .4615rem;
-}
-
-#strip .size button:last-child {
-	border-radius: 0 .4615rem .4615rem 0;
+#rail .size button {
+	height: 2rem;
+	font: 600 .8462rem var(--sans);
 }
 
 #hostname {
@@ -2212,6 +2211,33 @@ button:disabled {
 
 .sheet .grid th.num {
 	text-align: right;
+}
+
+/* the user's access, at the Overview's foot (app.js) */
+#access .sheet header {
+	align-items: center;
+}
+
+#access .grants dt.on::before {
+	content: "\2713";
+	display: inline-block;
+	width: 1.2308rem;
+	color: var(--on);
+}
+
+#access .grants dt.off {
+	color: var(--faint);
+}
+
+#access .grants dt.off::before {
+	content: "\2013";
+	display: inline-block;
+	width: 1.2308rem;
+}
+
+#access .grants dt.on {
+	color: var(--text);
+	font-weight: 600;
 }
 
 @media (prefers-color-scheme: light) {

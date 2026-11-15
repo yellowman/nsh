@@ -75,6 +75,10 @@
 <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="14" rx="1"/><path d="M7 9l3 2.5-3 2.5"/><path d="M12 14h5"/><path d="M9 21h6"/></svg>
 </button>
 <span class="fill"></span>
+<div class="size">
+<button type="button" id="larger" title="Larger text" aria-label="Larger text">A+</button>
+<button type="button" id="smaller" title="Smaller text" aria-label="Smaller text">A&minus;</button>
+</div>
 <button type="button" id="logout" title="Log out" aria-label="Log out">
 <svg viewBox="0 0 24 24"><path d="M10 4H5v16h5"/><path d="M14 8l4 4-4 4"/><path d="M18 12H9"/></svg>
 </button>
@@ -86,20 +90,11 @@
 <strong id="hostname">nshd</strong>
 <span class="dim" id="who"></span>
 </div>
-<div class="run" id="run" hidden>
-<span class="tag" id="gen"></span>
-<span class="dim" id="last-save"></span>
-<span class="health" id="health"></span>
-</div>
 <div class="cand">
-<span class="tag" id="where">not in configure</span>
+<span class="health" id="health"></span>
 <span class="tag" id="changes" hidden></span>
 <button type="button" class="tag warn" id="errors" hidden></button>
 <span class="tag warn" id="deadline" hidden></span>
-</div>
-<div class="size">
-<button type="button" id="smaller" title="Smaller text" aria-label="Smaller text">A&minus;</button>
-<button type="button" id="larger" title="Larger text" aria-label="Larger text">A+</button>
 </div>
 <div class="actions">
 <button type="button" id="compare">Compare</button>
@@ -135,6 +130,7 @@
 </div>
 <div class="tray" id="tray" hidden></div>
 <div class="logical" id="logical"></div>
+<div id="access"></div>
 </section>
 
 <section id="ws-network" class="ws" hidden>
@@ -183,6 +179,10 @@
 <label><input type="radio" name="topic" value="live"><span>Live operations</span></label>
 <label><input type="radio" name="topic" value="errors"><span>Errors</span></label>
 </div>
+<div class="run" id="run" hidden>
+<span class="tag" id="gen"></span>
+<span class="dim" id="last-save"></span>
+</div>
 </div>
 
 <div class="topic" id="topic-changes">
@@ -191,8 +191,8 @@
 <div class="bar"><h2>Candidate</h2>
 <form id="configure-form" class="inline">
 <div class="seg" role="radiogroup" aria-label="Configure mode">
-<label><input type="radio" name="mode" value="private" checked><span>private</span></label>
-<label><input type="radio" name="mode" value="shared"><span>shared</span></label>
+<label><input type="radio" name="mode" value="private"><span>private</span></label>
+<label><input type="radio" name="mode" value="shared" checked><span>shared</span></label>
 <label><input type="radio" name="mode" value="exclusive"><span>exclusive</span></label>
 <label><input type="radio" name="mode" value="terminal"><span>terminal</span></label>
 </div>

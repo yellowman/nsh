@@ -722,21 +722,19 @@ function drefresh() {
 }
 
 /*
- * the edits, into the candidate, entering configure private if not in
- * configure: whether it is enabled, as nsh's line, in its rtable's mode;
+ * the edits, into the candidate, entering configure if not in configure:
+ * whether it is enabled, as nsh's line, in its rtable's mode;
  * its rules, as its edit in nsh sets them; then the daemon is drawn
  * again, with how each went
  */
 function dstage() {
 	var d = dinsp.def, rt = dinsp.rt, ws = dinsp.ws, results = [];
-	var lines = [], text = dinsp.now.rules, p = Promise.resolve();
+	var lines = [], text = dinsp.now.rules, p;
 	var s = dinsp, on = dinsp.now.enabled;
 
 	if (on !== dinsp.was.enabled)
 		lines.push(d.name + (on ? " enable" : " disable"));
-	if (!cur || cur.mode === 0)
-		p = configure("configure", { mode: "private" },
-		    "configure private");
+	p = entering();
 	/* an rtable's block, which its rules need too */
 	if (rt !== 0)
 		lines = ["rtable " + rt].concat(lines, ["exit"]);
