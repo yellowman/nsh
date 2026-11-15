@@ -27,6 +27,12 @@ var chosen = -1;		/* the saved configuration History shows */
 var pending = null;		/* the operation that waits to be confirmed */
 var pendingOut = null;		/* where its output goes */
 var errs = [];			/* what nshd refused, the newest first */
+/*
+ * The routing table the page is focused on, as nsh's rtable N, or null
+ * for every table: the page then shows that table's (inTable()). This
+ * tab keeps it for its next page, until the user logs out
+ */
+var table = null;
 
 /* what each configure mode is */
 var MODES = {
@@ -510,6 +516,86 @@ function flag(r, f) {
 	return Array.isArray(r.flags) && r.flags.indexOf(f) !== -1;
 }
 
+/* is interface r in the table the page is focused on, if it is */
+function inTable(r) {
+	return table === null || Number(r.rdomain || 0) === table;
+}
+
+/* show words that name a routing table, naming the focused one */
+function tableWords(w) {
+	return table === null ? w : w.replace(/^(route inet6?|arp|ndp) \d+$/,
+	    "$1 " + table);
+}
+
+/*
+ * The tables the user may focus on: 0, each the interfaces are in and
+ * each the configuration names, with its name
+ */
+function tableChoices() {
+	var pick = $("table-pick"), names = {};
+
+	names[0] = "";
+	ifs.forEach(function (r) {
+		names[Number(r.rdomain || 0)] = "";
+	});
+	if (netConf !== null)
+		netRtables(netConf).forEach(function (t) {
+			names[t.rt] = t.name;
+		});
+	if (table !== null && names[table] === undefined)
+		names[table] = "";
+	pick.textContent = "";
+	pick.appendChild(el("option", "all")).value = "";
+	Object.keys(names).map(Number).sort(function (a, b) {
+		return a - b;
+	}).forEach(function (n) {
+		pick.appendChild(el("option", n + (names[n] ? " " + names[n] :
+		    ""))).value = String(n);
+	});
+	pick.value = table === null ? "" : String(table);
+	$("table-what").textContent = table === null ? "" : "rtable " +
+	    table + (names[table] ? " · " + names[table] : "");
+}
+
+/*
+ * Focus the page on routing table n, or on every table if n is null: a
+ * bar above the page and a frame around it say so, and what the page
+ * shows is drawn again
+ */
+function focusTable(n) {
+	table = n;
+	try {
+		if (n === null)
+			sessionStorage.removeItem("nshdeck.table");
+		else
+			sessionStorage.setItem("nshdeck.table", String(n));
+	} catch (e) {
+		/* kept for this page only */
+	}
+	$("deck").classList.toggle("focused", n !== null);
+	$("tablebar").hidden = n === null;
+	tableChoices();
+	/* what the inspector shows of another table goes */
+	if ((selected !== "" && !netInTable(selected)) ||
+	    (netRoute !== null && n !== null && netRoute.now.rt !== n)) {
+		selected = "";
+		insp = null;
+		netRoute = null;
+		iasked++;
+		$("inspector").textContent = "";
+		$("inspector").appendChild(el("p", "Choose an interface.",
+		    "dim"));
+	}
+	document.querySelectorAll(".preset[data-words]").forEach(function (b) {
+		b.textContent = tableWords(b.dataset.words);
+	});
+	faceplate();
+	readout();
+	logical();
+	iftable();
+	netDraw();
+}
+
 /* off: down; warn: up, with no link; on: up, and running */
 function state(r) {
 	if (!flag(r, "UP"))
@@ -546,6 +632,7 @@ function interfaces() {
 		addrs = of(j, "address");
 		vhids = of(j, "carp-vhid");
 		sampled(ifs, Date.now());
+		tableChoices();
 		faceplate();
 		trayRates();
 		readout();
@@ -672,7 +759,9 @@ function faceplate() {
 		var p = jacks[r.name], n = Number(r["input-packets"] || 0) +
 		    Number(r["output-packets"] || 0), u = utilisation(r);
 
-		p.className = "port " + state(r);
+		/* a port in another table is there, and not chosen */
+		p.className = "port " + state(r) + (inTable(r) ? "" : " out");
+		p.disabled = !inTable(r);
 		p.title = r.name + (r.description ? " — " +
 		    r.description : "") + "\n" + (r.link || "") +
 		    (addresses(r.name).length ? "\n" +
@@ -744,19 +833,26 @@ function chassisFit() {
 	box.classList.toggle("tall", Object.keys(rows).length > 1);
 }
 
-/* the readout on the box's face: its ports, interfaces and addresses */
+/*
+ * the readout on the box's face: its ports, interfaces and addresses, in
+ * the table the page is focused on
+ */
 function readout() {
-	var ports = ifs.filter(physical);
-	var v4 = addrs.filter(function (a) {
+	var mine = ifs.filter(inTable), ports = mine.filter(physical);
+	var names = mine.map(function (r) {
+		return r.name;
+	}), as = addrs.filter(function (a) {
+		return names.indexOf(a.interface) !== -1;
+	}), v4 = as.filter(function (a) {
 		return a.address && a.address.indexOf(":") === -1;
 	}).length;
 
 	$("r-ports").textContent = ports.filter(function (r) {
 		return state(r) === "on";
 	}).length + " of " + ports.length + " up";
-	$("r-ifs").textContent = ifs.length + ", " + (ifs.length -
+	$("r-ifs").textContent = mine.length + ", " + (mine.length -
 	    ports.length) + " logical";
-	$("r-addrs").textContent = v4 + " IPv4, " + (addrs.length - v4) +
+	$("r-addrs").textContent = v4 + " IPv4, " + (as.length - v4) +
 	    " IPv6";
 }
 
@@ -771,7 +867,7 @@ function logical() {
 		var list = ifs.filter(function (r) {
 			var d = driver(r.name);
 
-			if (seen[r.name] || (g.drivers === null ?
+			if (seen[r.name] || !inTable(r) || (g.drivers === null ?
 			    PSEUDO.indexOf(d) === -1 :
 			    g.drivers.indexOf(d) === -1))
 				return false;
@@ -826,7 +922,7 @@ function iftable() {
 		head.appendChild(el("th", h, "spare"));
 	});
 	t.appendChild(head);
-	ifs.forEach(function (r) {
+	ifs.filter(inTable).forEach(function (r) {
 		var tr = el("tr", null, r.name === selected ? "sel" : "");
 		var led = el("td"), type = el("td", r.type || "", "type spare");
 
@@ -851,7 +947,8 @@ function iftable() {
 		});
 		t.appendChild(tr);
 	});
-	$("net-count").textContent = ifs.length + " interfaces";
+	$("net-count").textContent = ifs.filter(inTable).length +
+	    " interfaces";
 	netFit();
 }
 
@@ -870,12 +967,13 @@ function shows(div) {
 
 	bar.appendChild(el("h2", "Show"));
 	div.dataset.presets.split("|").forEach(function (w) {
-		var b = el("button", w, "preset");
+		var b = el("button", tableWords(w), "preset");
 
 		b.type = "button";
+		b.dataset.words = w;
 		b.addEventListener("click", function () {
-			input.value = w;
-			show(w, out);
+			input.value = tableWords(w);
+			show(input.value, out);
 		});
 		bar.appendChild(b);
 	});
@@ -1259,6 +1357,7 @@ function host() {
 
 function loggedIn(j) {
 	var f = $("configure-form"), admin = j.perms.indexOf("admin") !== -1;
+	var n;
 
 	$("who").textContent = j.user;
 	access(j.user, j.perms);
@@ -1276,6 +1375,14 @@ function loggedIn(j) {
 		entering();
 	$("login").hidden = true;
 	$("deck").hidden = false;
+	/* the table this tab was focused on, before the page was reloaded */
+	try {
+		n = sessionStorage.getItem("nshdeck.table");
+	} catch (e) {
+		n = null;
+	}
+	if (n !== null && /^\d+$/.test(n) && Number(n) <= 255)
+		focusTable(Number(n));
 	follow();
 	host();
 	runState();
@@ -1289,6 +1396,12 @@ function loggedIn(j) {
  * instead, so that nothing the last user saw remains.
  */
 function loggedOut() {
+	/* the next user's page is focused on no table */
+	try {
+		sessionStorage.removeItem("nshdeck.table");
+	} catch (e) {
+		/* nothing was kept */
+	}
 	if (!$("deck").hidden)
 		location.reload();
 	else {
@@ -1490,6 +1603,13 @@ document.addEventListener("DOMContentLoaded", function () {
 		});
 	});
 	document.querySelectorAll(".shows").forEach(shows);
+	$("table-pick").addEventListener("change", function (e) {
+		focusTable(e.target.value === "" ? null :
+		    Number(e.target.value));
+	});
+	$("leave").addEventListener("click", function () {
+		focusTable(null);
+	});
 	document.querySelectorAll(".daemons").forEach(daemonsBox);
 	document.querySelectorAll("#inspector, .dinsp").forEach(stickWhileFits);
 	ops();

@@ -51,6 +51,12 @@
 
 <div id="deck" hidden>
 
+<div id="tablebar" hidden>
+<strong id="table-what"></strong>
+<span class="dim">The page shows this routing table, as nsh does after rtable.</span>
+<button type="button" id="leave">Leave</button>
+</div>
+
 <nav id="rail" aria-label="Workspaces">
 <img class="mark" src="favicon.svg" alt="">
 <button type="button" data-ws="overview" title="Overview" aria-label="Overview" class="on">
@@ -89,6 +95,7 @@
 <span class="led" id="live" title="Notices"></span>
 <strong id="hostname">nshd</strong>
 <span class="dim" id="who"></span>
+<label class="dim pick-table">rtable <select id="table-pick" aria-label="Routing table"><option value="">all</option></select></label>
 </div>
 <div class="cand">
 <span class="health" id="health"></span>

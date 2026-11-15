@@ -98,6 +98,7 @@ function netLoad() {
 	return ask("GET", "config", { what: cur && cur.mode !== 0 ?
 	    "candidate" : "running" }).then(function (j) {
 		netConf = said(j);
+		tableChoices();
 		netDraw();
 	});
 }
@@ -128,9 +129,22 @@ function netSettings(name) {
 	return settings(b ? b.lines : [], defs);
 }
 
+/*
+ * is interface name in the table the page is focused on: by its
+ * rdomain, as show interface reports it or else the configuration sets
+ */
+function netInTable(name) {
+	var r = ifs.find(function (x) {
+		return x.name === name;
+	});
+
+	return inTable(r || { rdomain: netSettings(name).rdomain });
+}
+
 /* section s's table, a row an interface, each opening its inspector */
 function netTable(box, s) {
-	var names = netNames(s.drivers), t = el("table", null, "grid pick");
+	var names = netNames(s.drivers).filter(netInTable);
+	var t = el("table", null, "grid pick");
 	var head = el("tr");
 
 	box.appendChild(el("h3", s.title));
@@ -283,11 +297,18 @@ function netGrid(head, rows, sel, pick) {
  * then the static routes, each opening its form; and a New route button
  */
 function netRoutesDraw(box) {
-	var routes = netRoutes(netConf);
+	var routes = netRoutes(netConf).filter(function (r) {
+		return table === null || r.rt === table;
+	}), tables = netRtables(netConf).filter(function (t) {
+		return table === null || t.rt === table;
+	});
 
+	/* the focused table, though the configuration names it not */
+	if (table !== null && !tables.length)
+		tables = [{ rt: table, name: "" }];
 	box.appendChild(el("h3", "Routing tables"));
 	box.appendChild(netGrid(["Table", "Name", "Interfaces",
-	    "Static routes"], netRtables(netConf).map(function (t) {
+	    "Static routes"], tables.map(function (t) {
 		return [t.rt, t.name, ifs.filter(function (r) {
 			return (r.rdomain || 0) === t.rt;
 		}).length, routes.filter(function (r) {
@@ -322,7 +343,7 @@ function netRouteOpen(r) {
 	insp = null;
 	iasked++;
 	iftable();
-	netRoute = { was: r, now: Object.assign({ rt: 0, dest: "",
+	netRoute = { was: r, now: Object.assign({ rt: table || 0, dest: "",
 	    gate: "", flags: "" }, r), results: [] };
 	netDraw();
 	netRouteForm();
