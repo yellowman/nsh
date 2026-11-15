@@ -211,15 +211,17 @@
 
 /*
  * kinds of stream, besides a show's (FACTS_*): an operation's output, a
- * log file, or a log file followed again after it was rotated; and an
+ * log file, or a log file followed again after it was rotated; an
  * operation's output for a session that may not see password hashes,
- * with any hash it prints removed
+ * with any hash it prints removed; and a log file from more of its past
  */
 #define SYS_OPERATION	3
 #define SYS_LOG		4
 #define SYS_LOG_AGAIN	5
 #define SYS_OPERATION_HIDDEN 6
+#define SYS_LOG_PAST	7
 #define LOG_TAIL	2048	/* a log's last bytes, printed first */
+#define LOG_PAST	65536	/* or these, for SYS_LOG_PAST */
 #define LOG_TURNED	4	/* child's exit status: the log was rotated */
 #define LOG_WAIT	10	/* half seconds to wait for a rotated log */
 #define COMMIT_RECORD	NSHDB "/commit"
@@ -535,7 +537,7 @@ static void	system_end(uint32_t, int32_t, const char *, ...)
 static struct stream *system_stream(uint32_t, int, char **, int);
 static int	system_stream_child(struct stream *, int, char **, int);
 static void	system_follow(uint32_t, struct nshd_follow *);
-static int	system_tail(int, const char *);
+static int	system_tail(int, const char *, off_t);
 static __dead void system_child(int, int, char **, int);
 static int	system_root(const char *);
 static void	system_drop(void);
@@ -1053,6 +1055,8 @@ system_whole(uint32_t type, const void *data, size_t len)
 		if (len != sizeof(f))
 			return (-1);
 		memcpy(&f, data, len);
+		if (f.past != 0 && f.past != 1)
+			return (-1);
 		for (i = 0; i < (int)(sizeof(logs) / sizeof(logs[0])); i++)
 			if (f.log == logs[i].log)
 				return (0);
@@ -1555,7 +1559,8 @@ system_follow(uint32_t id, struct nshd_follow *f)
 	if (logs[i].path != NULL) {
 		argv[0] = logs[i].path;
 		argv[1] = NULL;
-		s = system_stream(id, SYS_LOG, argv, 0);
+		s = system_stream(id, f->past ? SYS_LOG_PAST : SYS_LOG,
+		    argv, 0);
 	} else
 		s = system_stream(id, FACTS_PROGRAM, argv, 0);
 	if (s == NULL)
@@ -2028,9 +2033,9 @@ system_stream(uint32_t id, int op, char **argv, int table)
 		fatal(NULL);
 	s->id = id;
 	s->op = op == SYS_OPERATION || op == SYS_OPERATION_HIDDEN;
-	s->text = op == SYS_LOG || (op == FACTS_PROGRAM &&
+	s->text = op == SYS_LOG || op == SYS_LOG_PAST || (op == FACTS_PROGRAM &&
 	    strcmp(argv[0], TCPDUMP) == 0);
-	if (op == SYS_LOG)
+	if (op == SYS_LOG || op == SYS_LOG_PAST)
 		s->log = argv[0];
 	s->window = SYS_WINDOW;
 	facts_out_init(&s->o, units_emit, &units);
@@ -2132,6 +2137,7 @@ system_child(int fd, int op, char **argv, int table)
 		fclose(f);
 		break;
 	case SYS_LOG:
+	case SYS_LOG_PAST:
 	case SYS_LOG_AGAIN:
 		/* open as root, read as NSHD_CHECK_USER; wait for a new log */
 		for (tries = 0; (lfd = open(argv[0], O_RDONLY)) == -1 &&
@@ -2143,7 +2149,8 @@ system_child(int fd, int op, char **argv, int table)
 			break;
 		}
 		system_drop();
-		r = system_tail(lfd, argv[0]);
+		r = system_tail(lfd, argv[0], op == SYS_LOG_PAST ? LOG_PAST :
+		    LOG_TAIL);
 		fflush(stdout);
 		_exit(r);
 	}
@@ -2152,12 +2159,13 @@ system_child(int fd, int op, char **argv, int table)
 }
 
 /*
- * fd, the log at path: its last lines, then each as it comes, until path
- * names another file, as newsyslog leaves it; then LOG_TURNED, once the
- * rest of fd is read; or 1 if fd cannot be read or the output written
+ * fd, the log at path: its lines in its last tail bytes, then each as it
+ * comes, until path names another file, as newsyslog leaves it; then
+ * LOG_TURNED, once the rest of fd is read; or 1 if fd cannot be read or
+ * the output written
  */
 static int
-system_tail(int fd, const char *path)
+system_tail(int fd, const char *path, off_t tail)
 {
 	struct timespec	 nap = { 0, 500000000 };
 	struct stat	 st, now;
@@ -2168,7 +2176,7 @@ system_tail(int fd, const char *path)
 
 	if (fstat(fd, &st) == -1)
 		return (1);
-	off = st.st_size > LOG_TAIL ? st.st_size - LOG_TAIL : 0;
+	off = st.st_size > tail ? st.st_size - tail : 0;
 	if (lseek(fd, off, SEEK_SET) == -1)
 		return (1);
 	/* from the first whole line */

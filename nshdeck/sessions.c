@@ -1392,7 +1392,8 @@ noticed(struct user *u, struct ibuf *b)
 /*
  * What u's streams want nshd to watch, if that changed, asked ahead of
  * u's other requests: commits and routes while any stream is open, and
- * the logs any of them follows
+ * the logs any of them follows, each from more of its past than nsh
+ * shows, for the page to scroll back through
  */
 static void
 rewatch(struct user *u)
@@ -1402,7 +1403,8 @@ rewatch(struct user *u)
 	int		 want = 0;
 
 	TAILQ_FOREACH(s, &u->streams, entry)
-		want |= NSHD_WATCH_COMMITS | NSHD_WATCH_ROUTING | s->logs;
+		want |= NSHD_WATCH_COMMITS | NSHD_WATCH_ROUTING |
+		    NSHD_WATCH_PAST | s->logs;
 	if (want == u->watch || u->watching || u->state != U_READY)
 		return;
 	if ((p = calloc(1, sizeof(*p))) == NULL)

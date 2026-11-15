@@ -467,6 +467,10 @@ It may also follow
 .Pa /var/log/messages ,
 pf's log and, with admin,
 .Pa /var/log/authlog .
+A log file followed begins with the lines in its last 2 kilobytes, or
+its last 64 if the watch asks for more of its past, as
+.Xr nshdeck 8
+does.
 .Sh FAILURE
 Nothing is started again.
 .Bl -tag -width Ds

@@ -25,7 +25,7 @@
 #define NSHD_SOCKET	"/var/run/nshd.sock"	/* 0660, group nshadmin */
 #define NSHD_RO_SOCKET	"/var/run/nshd.ro.sock"	/* 0666 */
 
-#define NSHD_VERSION	10	/* protocol version of clients and nshd */
+#define NSHD_VERSION	11	/* protocol version of clients and nshd */
 #define NSHD_TEXT	8192	/* text in one message, at most */
 #define NSHD_WORDS	256	/* a show's words, at most */
 #define NSHD_LINE	1024	/* a line of configuration, with its NUL */
@@ -175,8 +175,9 @@ struct nshd_watch {
 #define NSHD_WATCH_MESSAGES	0x8	/* /var/log/messages */
 #define NSHD_WATCH_AUTHLOG	0x10	/* /var/log/authlog, with admin */
 #define NSHD_WATCH_PFLOG	0x20	/* pf's logged packets, as tcpdump */
+#define NSHD_WATCH_PAST		0x40	/* a log's last 64 KB first, not 2 */
 #define NSHD_WATCH_LOGS		0x3c
-#define NSHD_WATCH_ALL		0x3f
+#define NSHD_WATCH_ALL		0x7f
 
 /* a notice, then its text, if it has one, of NSHD_TEXT at most */
 struct nshd_notice {

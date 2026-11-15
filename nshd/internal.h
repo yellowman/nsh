@@ -79,10 +79,14 @@ struct nshd_whose {
 	uint32_t	session;
 };
 
-/* config to system: follow a log, named by its watch bit, for a session */
+/*
+ * config to system: follow a log, named by its watch bit, for a session;
+ * with past 1, from more of its past (NSHD_WATCH_PAST)
+ */
 struct nshd_follow {
 	struct nshd_whose whose;
 	int32_t		log;
+	int32_t		past;
 };
 
 /*

@@ -1766,6 +1766,7 @@ config_watch(uint32_t session, struct nshd_watch *w)
 			memset(&f, 0, sizeof(f));
 			f.whose.session = session;
 			f.log = log;
+			f.past = (w->what & NSHD_WATCH_PAST) != 0;
 			if (link_compose(&links[SYSTEM], IMSG_SYS_FOLLOW, r->id,
 			    &f, sizeof(f)) == -1)
 				fatal("%s", __func__);
