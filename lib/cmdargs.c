@@ -151,6 +151,14 @@ cmdargs_output_setenv(char *cmd, char *arg[], int stdoutfd, int stderrfd,
 	return status;
 }
 
+/* say that routing table rtableid is not there, and how to make it */
+void
+rtable_missing(int rtableid)
+{
+	printf("%% rtable %d not initialised\n", rtableid);
+	printf("%% set rdomain %d and an IP address on an interface to initalise the rtable\n", rtableid);
+}
+
 int
 nsh_setrtable(int rtableid)
 {
@@ -163,8 +171,7 @@ nsh_setrtable(int rtableid)
 		ret = errno;
 		switch(errno) {
 		case EINVAL:
-			printf("%% rtable %d not initialised\n", rtableid);
-			printf("%% set rdomain %d and an IP address on an interface to initalise the rtable\n", rtableid);
+			rtable_missing(rtableid);
 			break;
 		case EPERM:
 			printf("%% Privileged required\n");

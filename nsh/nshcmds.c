@@ -1697,6 +1697,17 @@ monitor(int argc, char **argv, ...)
 		    strerror(errno));
 		return -1;
 	}
+	/*
+	 * The socket has nsh's own table, as it was when it was opened:
+	 * the kernel sends it the messages of nsh's commands' table instead
+	 */
+	if (setsockopt(s, AF_ROUTE, ROUTE_TABLEFILTER, &cli_rtable,
+	    sizeof(cli_rtable)) == -1) {
+		printf("%% Unable to filter the routing socket: %s\n",
+		    strerror(errno));
+		close(s);
+		return -1;
+	}
 	saveverbose = verbose;
 	verbose = 1;
 

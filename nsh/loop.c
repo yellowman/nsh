@@ -54,6 +54,7 @@
 #include <sys/param.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/sysctl.h>
 #include <net/if.h>
 #include <net/route.h>
 #include <netinet/in.h>
@@ -526,9 +527,6 @@ nsh_exit(int argc, char **argv, ...)
 static int
 nsh_rtable(int argc, char **argv, ...)
 {
-	const char *errstr;
-	int table;
-
 	if (NO_ARG(argv[0]) || argc > 2) {
 		printf("%% Command requires configure mode\n");
 		return -1;
@@ -537,14 +535,46 @@ nsh_rtable(int argc, char **argv, ...)
 		printf("%% rtable <table id>\n");
 		return -1;
 	}
-	table = strtonum(argv[1], 0, RT_TABLEID_MAX, &errstr);
+	return cli_setrtable(argv[1]);
+}
+
+/*
+ * The routing table s names, if the kernel has it, as the one nsh's
+ * commands are in: the table nsh asks nshd in, whose bgpd socket it
+ * names, and in which each program it starts runs. nsh itself stays in
+ * the table it started in, so that any user may choose another, or
+ * choose it again. 0; or -1, after saying why, with nsh's table as it
+ * was
+ */
+int
+cli_setrtable(const char *s)
+{
+	struct rt_tableinfo	 info;
+	const char		*errstr;
+	size_t			 len = sizeof(info);
+	int			 mib[6], table;
+
+	table = strtonum(s, 0, RT_TABLEID_MAX, &errstr);
 	if (errstr) {
 		printf("%% invalid table id: %s\n", errstr);
 		return -1;
 	}
-	if (nsh_setrtable(table))
+	/* as route(8)'s gettable() asks the kernel */
+	mib[0] = CTL_NET;
+	mib[1] = PF_ROUTE;
+	mib[2] = 0;
+	mib[3] = 0;
+	mib[4] = NET_RT_TABLE;
+	mib[5] = table;
+	if (sysctl(mib, 6, &info, &len, NULL, 0) == -1) {
+		if (errno == ENOENT)
+			rtable_missing(table);
+		else
+			printf("%% rtable %d: %s\n", table, strerror(errno));
 		return -1;
+	}
 	cli_rtable = table;
+	init_bgpd_socket_path(table);
 	return 0;
 }
 

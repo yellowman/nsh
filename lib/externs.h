@@ -33,6 +33,7 @@ extern int config_mode;		/* nsh's: are we in config mode? */
 extern int bridge;		/* nsh's: in bridge mode (or interface mode?) */
 extern pid_t pid;		/* process id of nsh */
 extern int cli_rtable;		/* environment rtable */
+int cli_setrtable(const char *);
 struct cand;
 struct hashtable;
 extern struct hashtable *nsh_env;/* per-user session environment variables */
@@ -153,6 +154,7 @@ int cmdargs_output_setenv(char *, char **, int, int, char **, int);
 int cmdargs_output(char *, char **, int, int);
 int cmdargs(char *, char **);
 int nsh_setrtable(int);
+void rtable_missing(int);
 
 /* commands.c */
 extern pid_t child;

@@ -1586,6 +1586,16 @@ nsh(config-rtable 3)# sshd enable
 .Pp
 The rtable command also lets a user whose login class has operate run
 ping and traceroute in the respective route domain / VRF.
+It chooses the routing table that
+.Nm
+asks
+.Xr nshd 8
+for shows and operations in, and in which each program
+.Nm
+starts runs;
+.Nm
+itself stays in the routing table it started in, so any user may
+choose another, or go back.
 .Bd -literal -offset indent
 nsh> rtable 3
 nsh(rtable 3)> ping 10.255.0.10
