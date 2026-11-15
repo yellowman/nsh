@@ -575,6 +575,14 @@ function focusTable(n) {
 	$("deck").classList.toggle("focused", n !== null);
 	$("tablebar").hidden = n === null;
 	tableChoices();
+	/* an operation runs in the table */
+	$("op-form").rtable.value = n === null ? "0" : String(n);
+	$("op-form").rtable.disabled = n !== null;
+	/* a line typed with the page focused on no table is the top level's */
+	if (n === null && cur && cur.mode !== 0 && !cur.interface &&
+	    (cur.rtable || 0) !== 0)
+		configure("line", { line: "rtable 0" },
+		    $("prompt").textContent + "rtable 0");
 	/* what the inspector shows of another table goes */
 	if ((selected !== "" && !netInTable(selected)) ||
 	    (netRoute !== null && n !== null && netRoute.now.rt !== n)) {
@@ -1178,6 +1186,22 @@ function configure(name, fields, asked) {
 }
 
 /*
+ * In configure, a line typed goes into the routing table the page is
+ * focused on, as after rtable N at nsh's configure prompt: the table is
+ * entered first, unless the session is in it or in an interface. Table
+ * 0's lines are the top level's
+ */
+function intoTable() {
+	var rt = table === null ? 0 : table;
+
+	if (table === null || !cur || cur.mode === 0 || cur.interface ||
+	    (cur.rtable || 0) === rt)
+		return Promise.resolve();
+	return configure("line", { line: "rtable " + rt },
+	    $("prompt").textContent + "rtable " + rt);
+}
+
+/*
  * The session in configure, in the mode chosen in System's Changes, if it
  * is not in configure already: as the user logs in, and before a change.
  * Only a refusal shows in the transcript
@@ -1694,7 +1718,7 @@ document.addEventListener("DOMContentLoaded", function () {
 	on("line-form", function (f) {
 		var line = f.line.value;
 
-		entering().then(function () {
+		entering().then(intoTable).then(function () {
 			return configure("line", { line: line },
 			    $("prompt").textContent + line);
 		}).then(function (j) {
