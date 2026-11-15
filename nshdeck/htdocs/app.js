@@ -807,14 +807,16 @@ function iftable() {
 
 	t.textContent = "";
 	["", "Interface", "Description", "Link", "Addresses", "In bit/s",
-	    "Out bit/s", "5 min", "Errors", "MTU", "rdomain",
-	    "Type"].forEach(function (h) {
+	    "Out bit/s", "5 min", "Errors"].forEach(function (h) {
 		head.appendChild(el("th", h));
+	});
+	["MTU", "rdomain", "Type"].forEach(function (h) {
+		head.appendChild(el("th", h, "spare"));
 	});
 	t.appendChild(head);
 	ifs.forEach(function (r) {
 		var tr = el("tr", null, r.name === selected ? "sel" : "");
-		var led = el("td"), type = el("td", r.type || "", "type");
+		var led = el("td"), type = el("td", r.type || "", "type spare");
 
 		led.appendChild(el("i", null, "led " + state(r)));
 		tr.appendChild(led);
@@ -824,9 +826,9 @@ function iftable() {
 		tr.appendChild(el("td", addresses(r.name).join(" "), "mono"));
 		rateCells(tr, r.name);
 		tr.appendChild(el("td", r.mtu !== undefined ? r.mtu : "",
-		    "num"));
+		    "num spare"));
 		tr.appendChild(el("td", r.rdomain !== undefined ? r.rdomain :
-		    "", "num"));
+		    "", "num spare"));
 		/* the type may be cut short: its title shows it all */
 		type.title = r.type || "";
 		tr.appendChild(type);
@@ -838,6 +840,7 @@ function iftable() {
 		t.appendChild(tr);
 	});
 	$("net-count").textContent = ifs.length + " interfaces";
+	netFit();
 }
 
 function show(words, out) {
@@ -1383,6 +1386,7 @@ function zoomTo(i) {
 	}
 	termSized();
 	chassisFit();
+	netFit();
 	return i;
 }
 
@@ -1474,6 +1478,7 @@ document.addEventListener("DOMContentLoaded", function () {
 	});
 	document.addEventListener("keydown", keys);
 	window.addEventListener("resize", chassisFit);
+	window.addEventListener("resize", netFit);
 	/* once: showing the Overview again does not send the light again */
 	$("ports").parentNode.addEventListener("animationend", function (e) {
 		if (e.animationName === "glint")

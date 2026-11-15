@@ -193,6 +193,10 @@ bridges, DHCP leases, IPsec flows, logins and versions have views of
 their own.
 An interface's settings can be changed and staged into the candidate as
 lines of configuration.
+When the table of interfaces is too wide to fit beside the chosen
+interface's settings, it leaves out each interface's MTU, routing domain
+and type, which the settings' header shows; if it is still too wide,
+the settings go under it.
 .Ss Routing, security and services
 Each lists its daemons, with a row for each routing table a daemon is
 in.

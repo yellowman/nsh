@@ -345,7 +345,10 @@ function inspector(key) {
 	box.textContent = "";
 	head.appendChild(el("i", null, "led " + (r.flags ? state(r) : "")));
 	head.appendChild(el("h2", insp.name, "iname"));
-	head.appendChild(el("span", [r.type, r.link, rate(r)].filter(
+	/* the table leaves out the MTU, rdomain and type when it is narrow */
+	head.appendChild(el("span", [r.type, r.link, rate(r),
+	    r.mtu !== undefined ? "MTU " + r.mtu : "",
+	    r.rdomain !== undefined ? "rdomain " + r.rdomain : ""].filter(
 	    Boolean).join(" · "), "dim"));
 	box.appendChild(head);
 	insp.crumb = box.appendChild(el("p", null, "crumb"));

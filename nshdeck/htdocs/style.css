@@ -1415,9 +1415,25 @@ table.grid {
 	align-items: start;
 }
 
-/* a table wider than its column, as with large text, scrolls in it */
+/*
+ * a table too wide for its column leaves out what the inspector shows,
+ * and then puts the inspector under it (netFit()); one wider than the
+ * page, as with very large text, scrolls in its column
+ */
 .netsplit > :first-child {
 	overflow-x: auto;
+}
+
+#if-table.narrow .spare {
+	display: none;
+}
+
+.netsplit.stacked {
+	grid-template-columns: minmax(0, 1fr);
+}
+
+.netsplit.stacked > #inspector {
+	position: static;
 }
 
 /*

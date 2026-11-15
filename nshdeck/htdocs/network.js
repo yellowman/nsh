@@ -168,8 +168,36 @@ function netTable(box, s) {
 	box.appendChild(t);
 }
 
-/* the section chosen: the interfaces' table, or the others' tables */
+/*
+ * Network's tables and the inspector, as wide as the tables fit: beside
+ * it with every column; beside it without each interface's MTU, rdomain
+ * and type, which the inspector shows for the interface chosen; or with
+ * the inspector under them, as in a narrow window. Only the page
+ * scrolls. Asked again when the tables, the window or the page's size
+ * change
+ */
+function netFit() {
+	var t = $("if-table"), col = t.parentNode, split = col.parentNode;
+	var fits = function (narrow, stacked) {
+		t.classList.toggle("narrow", narrow);
+		split.classList.toggle("stacked", stacked);
+		return col.scrollWidth <= col.clientWidth;
+	};
+
+	if ($("ws-network").hidden)
+		return;
+	fits(false, false) || fits(true, false) || fits(false, true) ||
+	    fits(true, true);
+}
+
+/* the section chosen, drawn and fitted beside the inspector */
 function netDraw() {
+	netSection();
+	netFit();
+}
+
+/* the section chosen: the interfaces' table, or the others' tables */
+function netSection() {
 	var box = $("net-other");
 
 	$("if-table").hidden = netTopic !== "ports";

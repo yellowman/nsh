@@ -212,7 +212,7 @@ function dtable(ws) {
 	var c = dchosen[ws];
 
 	t.textContent = "";
-	["", "Daemon", "What", "Rtable", "Configured", "Rules",
+	["", "Daemon", "What", "Rtable", "Enabled", "Config",
 	    "Observed"].forEach(function (h) {
 		head.appendChild(el("th", h));
 	});
@@ -244,7 +244,7 @@ function dtable(ws) {
 			tr.appendChild(el("td", d.name, "mono"));
 			tr.appendChild(el("td", d.label, "descr"));
 			tr.appendChild(el("td", String(rt), "num"));
-			tr.appendChild(el("td", cf.enabled ? "enabled" : ""));
+			tr.appendChild(el("td", cf.enabled ? "yes" : ""));
 			tr.appendChild(cf.rules ? el("td", cf.rules.length +
 			    (cf.rules.length === 1 ? " line" : " lines")) :
 			    el("td", d.runs ? d.runs.split(" ").slice(1).join(
