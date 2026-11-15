@@ -254,6 +254,7 @@ static void	 j_fmt(struct jbuf *, const char *, ...)
 static void	 j_who(struct jbuf *, struct user *);
 static int	 j_flush(struct jbuf *, uint32_t);
 static void	 j_answer(struct user *);
+static void	 j_fields(struct user *);
 static void	 failed(const char *, const char *);
 static void	 fail_key(const char *, char *, size_t);
 static struct fail *fail_find(int, const char *);
@@ -1245,7 +1246,10 @@ answered(struct user *u, int32_t status)
 			if (p->lines.len > 0)
 				j_raw(&u->j, p->lines.p, p->lines.len);
 		}
-		J(&u->j, "],\"output\":");
+		J(&u->j, "]");
+		if (p->r.kind == DECK_SHOW)
+			j_fields(u);
+		J(&u->j, ",\"output\":");
 		j_str(&u->j, u->out, u->outlen);
 		if (u->hasctx) {
 			j_fmt(&u->j, ",\"context\":{\"mode\":%d,"
@@ -1965,6 +1969,58 @@ j_answer(struct user *u)
 	head(u->cur->id, 200, 0, NULL, 0);
 	u->headed = 1;
 	J(&u->j, "{\"records\":[");
+}
+
+/*
+ * After a show's records, each kind they had: its fields in order, and
+ * what each holds, as the page reads it
+ */
+static void
+j_fields(struct user *u)
+{
+	const struct facts_template	*t;
+	const struct facts_tfield	*f;
+	const char			*is;
+	size_t				 i, k;
+	int				 first = 1;
+
+	J(&u->j, ",\"fields\":{");
+	for (i = 0; i < FACTS_KINDS; i++) {
+		if ((t = u->in.t[i]) == NULL)
+			continue;
+		if (!first)
+			J(&u->j, ",");
+		first = 0;
+		j_str(&u->j, t->kind, strlen(t->kind));
+		J(&u->j, ":{");
+		for (k = 0; k < t->nfields; k++) {
+			f = &t->fields[k];
+			switch (f->type) {
+			case FACT_U64:
+				is = f->naming == FACT_BITS ? "names" :
+				    f->naming == FACT_VALUES ? "name" :
+				    "number";
+				break;
+			case FACT_I64:
+				is = "number";
+				break;
+			case FACT_ADDRESS:
+				is = "address";
+				break;
+			case FACT_TIME:
+				is = "time";
+				break;
+			default:
+				is = "text";
+			}
+			if (k > 0)
+				J(&u->j, ",");
+			j_str(&u->j, f->name, strlen(f->name));
+			j_fmt(&u->j, ":\"%s\"", is);
+		}
+		J(&u->j, "}");
+	}
+	J(&u->j, "}");
 }
 
 /* j sent to front for id, in messages that fit, and emptied; their number */

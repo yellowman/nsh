@@ -179,7 +179,12 @@ addresses, and the last change.
 The logical interfaces appear in groups by kind, each with what it is
 on.
 .Ss Network
-Runs show commands and draws their output as tables.
+Runs show commands and draws what they answer to be read: a time as
+how long ago it was, a size in kilobytes to terabytes, a span in days
+and hours, and each field's name in words.
+The interfaces, addresses, routes, ARP and neighbor entries, VLANs,
+bridges, DHCP leases, IPsec flows, logins and versions have views of
+their own.
 An interface's settings can be changed and staged into the candidate as
 lines of configuration.
 .Ss Routing, security and services
@@ -357,7 +362,10 @@ show processes, as
 does.
 The answer has the records
 .Nm nshd
-sent, each an object with its kind and fields.
+sent, each an object with its kind and fields, and
+.Ar fields :
+for each kind, its fields in order, and what each holds: text, a
+number, a name, names, an address, or a time, in seconds since 1970.
 .It Cm config
 GET, with
 .Ar what :

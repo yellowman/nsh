@@ -44,7 +44,7 @@ afterinstall:
 	    ${.CURDIR}/htdocs/network.js \
 	    ${.CURDIR}/htdocs/editors.js ${.CURDIR}/htdocs/relations.js \
 	    ${.CURDIR}/htdocs/sheets.js ${.CURDIR}/htdocs/term.js \
-	    ${.CURDIR}/htdocs/stats.js \
+	    ${.CURDIR}/htdocs/stats.js ${.CURDIR}/htdocs/views.js \
 	    ${.CURDIR}/htdocs/style.css ${.CURDIR}/htdocs/favicon.svg \
 	    ${.CURDIR}/htdocs/favicon.png ${.CURDIR}/htdocs/metal.svg \
 	    ${DESTDIR}${HTDOCS}

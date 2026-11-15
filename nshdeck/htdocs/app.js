@@ -831,55 +831,9 @@ function iftable() {
 	$("net-count").textContent = ifs.length + " interfaces";
 }
 
-/* records, a table for each kind, a column for each field any has */
-function tables(records, into) {
-	var kinds = {}, order = [];
-
-	into.textContent = "";
-	records.forEach(function (r) {
-		if (r.kind === "message") {
-			into.appendChild(el("pre", r.text, "term"));
-			return;
-		}
-		if (!kinds[r.kind]) {
-			kinds[r.kind] = [];
-			order.push(r.kind);
-		}
-		kinds[r.kind].push(r);
-	});
-	order.forEach(function (k) {
-		var cols = [], table = el("table", null, "grid"),
-		    tr = el("tr");
-
-		kinds[k].forEach(function (r) {
-			Object.keys(r).forEach(function (c) {
-				if (c !== "kind" && cols.indexOf(c) === -1)
-					cols.push(c);
-			});
-		});
-		into.appendChild(el("h3", k + " · " + kinds[k].length));
-		cols.forEach(function (c) {
-			tr.appendChild(el("th", c));
-		});
-		table.appendChild(tr);
-		kinds[k].forEach(function (r) {
-			var row = el("tr");
-
-			cols.forEach(function (c) {
-				var v = r[c];
-
-				row.appendChild(el("td", v === undefined ? "" :
-				    Array.isArray(v) ? v.join(" ") : String(v)));
-			});
-			table.appendChild(row);
-		});
-		into.appendChild(table);
-	});
-}
-
 function show(words, out) {
 	return ask("GET", "show", { words: words }).then(function (j) {
-		tables(j.records || [], out);
+		showDrawn(j, out);
 		if (said(j) !== "")
 			out.appendChild(el("pre", said(j), "term"));
 	});
