@@ -686,6 +686,20 @@ function faceplate() {
 }
 
 /*
+ * The page is the one thing that scrolls. An inspector stays in view as
+ * it scrolls while the inspector fits in the page's view, and scrolls
+ * with the page when it is taller (style.css)
+ */
+function stickWhileFits(box) {
+	var main = document.querySelector("main"), fit = function () {
+		box.classList.toggle("tall", box.offsetHeight > main.clientHeight);
+	};
+
+	new ResizeObserver(fit).observe(box);
+	new ResizeObserver(fit).observe(main);
+}
+
+/*
  * The box is taller if its ports do not fit in one row beside its plate
  * and readout: they go under those, the box's width (style.css). Asked
  * again when the ports, the window or the page's size change
@@ -1432,6 +1446,7 @@ document.addEventListener("DOMContentLoaded", function () {
 	});
 	document.querySelectorAll(".shows").forEach(shows);
 	document.querySelectorAll(".daemons").forEach(daemonsBox);
+	document.querySelectorAll("#inspector, .dinsp").forEach(stickWhileFits);
 	ops();
 	$("topics").addEventListener("change", function (e) {
 		topic(e.target.value);

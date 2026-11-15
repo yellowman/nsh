@@ -1420,12 +1420,23 @@ table.grid {
 	overflow-x: auto;
 }
 
+/*
+ * the page is the one thing that scrolls: an inspector stays in view
+ * while it fits, and one taller scrolls with the page (stickWhileFits)
+ */
 #inspector, .dinsp {
 	position: sticky;
 	top: 0;
-	max-height: calc(100vh - 6.1538rem);
-	overflow: auto;
 	gap: .7692rem;
+}
+
+#inspector.tall, .dinsp.tall {
+	position: static;
+}
+
+/* what a command printed, under the daemons and in the inspectors, whole */
+.daemons pre.term, #inspector pre.term {
+	max-height: none;
 }
 
 .ihead {
@@ -1697,19 +1708,21 @@ pre.stanza {
 	gap: .7692rem;
 }
 
+/* as tall as its text (edFit), long lines wrapped: it never scrolls */
 textarea.rules {
 	display: block;
 	width: 100%;
-	min-height: 32rem;
+	min-height: 12rem;
 	margin: 0;
 	padding: .6154rem .7692rem;
-	resize: vertical;
+	resize: none;
 	font: .9231rem/1.45 var(--mono);
 	color: var(--text);
 	background: var(--field);
 	border: 1px solid var(--line);
-	white-space: pre;
-	overflow: auto;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	overflow: hidden;
 }
 
 textarea.rules:focus {
@@ -1741,6 +1754,19 @@ textarea.rules.edited {
 
 .structured .bar .help {
 	flex: 1 1 40ch;
+}
+
+/*
+ * an editor's tables wrap long values, as a rule's addresses and ports,
+ * so that they fit beside the inspector and nothing scrolls sideways
+ */
+.structured .pick td {
+	white-space: normal;
+}
+
+/* but a rule's action, as "pass quick", stays on one line */
+.structured .pick td:has(> .act) {
+	white-space: nowrap;
 }
 
 /* a rule's number, and the kind of a row that is not a rule */
@@ -2553,7 +2579,6 @@ dialog .actions {
 	}
 	#inspector, .dinsp {
 		position: static;
-		max-height: none;
 	}
 }
 

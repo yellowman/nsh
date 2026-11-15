@@ -150,6 +150,30 @@ function edBar(box, title, name, tabs, chosen, change) {
 	return null;
 }
 
+/*
+ * a text box as tall as its text, lines wrapped, so that the page
+ * scrolls and the box does not: again as it is typed in, and as its
+ * width changes the wrapping
+ */
+function edFit(area) {
+	var main = document.querySelector("main"), w = -1, fit = function () {
+		var top = main.scrollTop;
+
+		area.style.height = "auto";
+		area.style.height = area.scrollHeight + area.offsetHeight -
+		    area.clientHeight + "px";
+		main.scrollTop = top;
+	};
+
+	area.addEventListener("input", fit);
+	new ResizeObserver(function () {
+		if (area.clientWidth !== w) {
+			w = area.clientWidth;
+			fit();
+		}
+	}).observe(area);
+}
+
 /* the inspected daemon's rules or config, whole, as text in box */
 function edRules(box) {
 	var area = el("textarea", null, "rules");
@@ -160,6 +184,7 @@ function edRules(box) {
 	    edWord(dinsp.def.name).toLowerCase());
 	area.classList.toggle("edited", dinsp.now.rules !== dinsp.was.rules);
 	box.appendChild(area);
+	edFit(area);
 	box.appendChild(el("p", "Stage puts this text in the candidate; " +
 	    "Validate tests it.", "help"));
 	area.addEventListener("input", function () {
