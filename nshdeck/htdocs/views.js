@@ -414,16 +414,14 @@ function stateOf(word, light) {
 }
 
 /*
- * when a neighbor entry expires: in how long, or, with no time, that
- * it is static (STATIC among its flags) or permanent, as arp(8) and
- * ndp(8) say
+ * when a neighbor entry expires: in how long, or, with no time, none,
+ * which is the word show arp or show ndp prints for it
  */
-function expiresOf(r) {
+function expiresOf(r, none) {
 	var e = Number(r.expire || 0), now = Date.now() / 1000, x;
 
 	if (!e)
-		return el("span", named(r, "flags", "STATIC") ? "Static" :
-		    "Permanent", "dim");
+		return el("span", none, "dim");
 	if (e <= now)
 		return el("span", "Expired", "dim");
 	x = el("span", "in " + spanWords(Math.ceil(e - now)));
@@ -503,9 +501,15 @@ function drawArp(recs, into) {
 	    ["Address", function (r) { return r.address; }, "mono"],
 	    ["MAC address", macOf, "mono"],
 	    ["Interface", function (r) { return r.interface; }],
-	    ["Expires", expiresOf],
+	    ["Expires", function (r) {
+		/* RTF_PERMANENT_ARP is PROTO3, as show arp reads it */
+		if (named(r, "flags", "PROTO3") || named(r, "flags", "LOCAL"))
+			return el("span", "Permanent", "dim");
+		return expiresOf(r, "Static");
+	    }],
 	    ["", function (r) {
-		return chipsOf([r.proxy ? "proxy" : "",
+		return chipsOf([named(r, "flags", "LOCAL") ? "local" : "",
+		    r.proxy ? "proxy" : "",
 		    named(r, "flags", "PROTO2") ? "published" : ""]);
 	    }]], recs, into);
 }
@@ -524,9 +528,11 @@ function drawNdp(recs, into) {
 		return r.state === undefined ? null :
 		    stateOf(String(r.state), NDSTATES[r.state] || "");
 	    }],
-	    ["Expires", expiresOf],
+	    ["Expires", function (r) { return expiresOf(r, "Permanent"); }],
 	    ["", function (r) {
-		return chipsOf([r.router ? "router" : ""]);
+		return chipsOf([named(r, "flags", "LOCAL") ? "local" : "",
+		    r.router ? "router" : "",
+		    named(r, "flags", "PROTO2") ? "published" : ""]);
 	    }]], recs, into);
 }
 
@@ -534,6 +540,7 @@ function drawNdp(recs, into) {
 var ROUTEWORDS = { GATEWAY: "", HOST: "host", REJECT: "reject",
     DYNAMIC: "redirect", MODIFIED: "modified", CLONING: "cloning",
     LLINFO: "neighbor", STATIC: "static", PROTO1: "", PROTO2: "",
+    PROTO3: "", MPATH: "multipath", MPLS: "MPLS", BFD: "BFD",
     UP: "", DONE: "", MASK_PRESENT: "" };
 
 /* a routing table, as route(8) reads it */
