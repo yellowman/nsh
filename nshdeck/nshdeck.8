@@ -169,6 +169,10 @@ reports that the login has ended, the page reloads, so that nothing the
 last user saw remains.
 .Sh THE PAGE
 The page has seven workspaces, and a strip above them.
+Each workspace but the terminal scrolls as a whole, and nothing in it
+scrolls by itself.
+A log that is followed, and the transcript of the lines typed, keep
+their newest line in view as it comes, while it is in view.
 .Ss Overview
 Draws the device's ports as they appear on its front, each with a link
 light and an activity light.
@@ -204,9 +208,8 @@ Changes not yet staged remain until another daemon or routing table is
 chosen.
 For a daemon with no rules, it shows the command nsh starts the daemon
 with.
-The workspace scrolls as a whole: the text is as tall as its lines, and
-the daemon's settings beside it stay in view while they fit in the
-window.
+The text is as tall as its lines, and the daemon's settings beside it
+stay in view while they fit in the window.
 .Pp
 In configure, except configure terminal, it shows what the candidate
 changes in the daemon.

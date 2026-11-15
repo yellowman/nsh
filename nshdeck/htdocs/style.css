@@ -1434,10 +1434,6 @@ table.grid {
 	position: static;
 }
 
-/* what a command printed, under the daemons and in the inspectors, whole */
-.daemons pre.term, #inspector pre.term {
-	max-height: none;
-}
 
 .ihead {
 	display: flex;
@@ -1677,7 +1673,6 @@ button.what[aria-expanded=true] {
 }
 
 pre.stanza {
-	max-height: 15.3846rem;
 	min-height: 0;
 }
 
@@ -2322,14 +2317,16 @@ button.preset {
 	border-radius: 0 .4615rem .4615rem 0;
 }
 
+/*
+ * what a command printed, whole: the page is the one thing that scrolls,
+ * and its lines wrap
+ */
 pre.term {
 	margin: 0;
 	padding: .7692rem .9231rem;
 	background: var(--field);
 	border: 1px solid var(--line);
-	max-height: 26.1538rem;
 	min-height: 4.6154rem;
-	overflow: auto;
 	white-space: pre-wrap;
 	word-break: break-word;
 }
@@ -2360,10 +2357,6 @@ pre.term:empty, ul:empty, table.grid:empty {
 
 :empty + .empty {
 	display: block;
-}
-
-pre.term.tall {
-	max-height: 40rem;
 }
 
 .bar .fill {
@@ -2466,8 +2459,6 @@ button.twisty[aria-expanded=true]::before {
 	list-style: none;
 	margin: 0;
 	padding: 0;
-	max-height: 10.7692rem;
-	overflow: auto;
 	font: .8462rem var(--mono);
 	color: var(--dim);
 }

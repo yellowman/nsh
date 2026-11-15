@@ -700,6 +700,22 @@ function stickWhileFits(box) {
 }
 
 /*
+ * change, which makes the page longer above box's end: if that end was
+ * in view, the page scrolls to keep it there, as a log or the transcript
+ * once scrolled itself; if the page was scrolled away, it stays
+ */
+function followEnd(box, change) {
+	var main = document.querySelector("main");
+	var m = main.getBoundingClientRect(), r = box.getBoundingClientRect();
+	var was = r.height && r.bottom >= m.top && r.bottom <= m.bottom + 1;
+
+	change();
+	r = box.getBoundingClientRect();
+	if (was && r.bottom > m.bottom)
+		main.scrollTop += r.bottom - m.bottom;
+}
+
+/*
  * The box is taller if its ports do not fit in one row beside its plate
  * and readout: they go under those, the box's width (style.css). Asked
  * again when the ports, the window or the page's size change
@@ -974,8 +990,10 @@ function keys(e) {
 function transcript(asked, j) {
 	var t = $("transcript");
 
-	t.textContent += asked + "\n" + said(j);
-	t.scrollTop = t.scrollHeight;
+	/* the line typed in stays in view under what it said */
+	followEnd($("line-form"), function () {
+		t.textContent += asked + "\n" + said(j);
+	});
 	context(j);
 	refused(asked, j);
 }
@@ -1140,7 +1158,9 @@ function follow() {
 	});
 	/* this page fell behind and lost events: interfaces asked again */
 	stream.addEventListener("dropped", function () {
-		$("log").textContent += "[some lines were dropped]\n";
+		followEnd($("log"), function () {
+			$("log").textContent += "[some lines were dropped]\n";
+		});
 		noticed({ kind: "dropped", text: "some events were dropped" });
 		interfaces();
 	});
@@ -1150,8 +1170,9 @@ function follow() {
 
 		if (lines.length > LOGLINES)
 			lines = lines.slice(lines.length - LOGLINES);
-		log.textContent = lines.join("\n");
-		log.scrollTop = log.scrollHeight;
+		followEnd(log, function () {
+			log.textContent = lines.join("\n");
+		});
 	});
 }
 
