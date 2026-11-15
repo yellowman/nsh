@@ -54,7 +54,7 @@ char
 	helphelp[] =	"Print help information",
 	manhelp[] =	"Display the NSH manual";
 
-/* kernel statistics, each shown from the facts "statistics <name>" */
+/* kernel statistics, each shown from the facts "kernel <name>" asks */
 static struct stt {
 	char *name;
 	char *help;

@@ -216,6 +216,29 @@ parse_ipv6(char *arg, struct in6_addr *addr)
 void
 parse_ip_pfx(char *arg, int type, ip_t *argip)
 {
+	switch (ip_pfx_read(arg, type, argip)) {
+	case PFX_ADDRESS:
+		printf("%% %s is not an IPv4 or IPv6 address\n", arg);
+		break;
+	case PFX_MASK:
+		printf("%% Invalid mask specified\n");
+		break;
+	case PFX_BITS:
+		printf("%% Invalid bit length\n");
+		break;
+	case PFX_TYPE:
+		printf("%% parse_ip: Internal error\n");
+		break;
+	}
+}
+
+/*
+ * arg as parse_ip_pfx() reads it, into argip, printing nothing: 0, or
+ * why it is no address, which parse_ip_pfx() prints
+ */
+int
+ip_pfx_read(char *arg, int type, ip_t *argip)
+{
 	struct in_addr mask;
 	char *q, *s;
 
@@ -228,8 +251,7 @@ parse_ip_pfx(char *arg, int type, ip_t *argip)
 		argip->family = AF_INET6;
 	} else {
 		argip->family = 0;
-		printf("%% %s is not an IPv4 or IPv6 address\n", arg);
-		return;
+		return PFX_ADDRESS;
 	}
 	if (q) {
 		s = q + 1;
@@ -237,9 +259,8 @@ parse_ip_pfx(char *arg, int type, ip_t *argip)
 			mask.s_addr = ntohl(mask.s_addr);
 			/* a mask's ones come first */
 			if ((~mask.s_addr & (~mask.s_addr + 1)) != 0) {
-				printf("%% Invalid mask specified\n");
 				argip->family = 0;
-				return;
+				return PFX_MASK;
 			}
 			argip->bitlen = mask.s_addr ? 33 - ffs(mask.s_addr) : 0;
 		} else {
@@ -250,14 +271,12 @@ parse_ip_pfx(char *arg, int type, ip_t *argip)
 				    argip->bitlen > 128) ||
 				    (argip->family == AF_INET &&
 				    argip->bitlen > 32)) {
-					printf("%% Invalid bit length\n");
 					argip->family = 0;
-					return;
+					return PFX_BITS;
 				}
 			} else {
-				printf("%% Invalid mask specified\n");
 				argip->family = 0;
-				return;
+				return PFX_MASK;
 			}
 		}
 	} else {
@@ -273,12 +292,11 @@ parse_ip_pfx(char *arg, int type, ip_t *argip)
 			argip->bitlen = argip->family == AF_INET ? 32 : 128;
 			break;
 		default:
-			printf("%% parse_ip: Internal error\n");
 			argip->family = 0;
-			break;
+			return PFX_TYPE;
 		}
 	}
-	return;
+	return 0;
 }
 
 /*

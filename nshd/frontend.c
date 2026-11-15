@@ -44,6 +44,7 @@
 #include <sys/socket.h>
 
 #include <net/if.h>
+#include <net/route.h>
 
 #include <event.h>
 #include <imsg.h>
@@ -272,7 +273,8 @@ frontend_client(struct ctl_conn *c, struct imsg *imsg)
 		return (0);
 	case IMSG_CTL_SHOW:
 		if (imsg_get_data(imsg, &show, sizeof(show)) == -1 ||
-		    memchr(show.words, '\0', sizeof(show.words)) == NULL)
+		    memchr(show.words, '\0', sizeof(show.words)) == NULL ||
+		    show.rtable < 0 || show.rtable > RT_TABLEID_MAX)
 			return (-1);
 		frontend_show(c, &show);
 		return (0);
@@ -389,9 +391,9 @@ frontend_units(void *arg, const void *buf, size_t len)
 }
 
 /*
- * A show: what its words ask, to config. One that asks for a rollback
- * no configuration kept has, or that nshd's system does not answer, is
- * answered here
+ * A show: what its words ask in its routing table, to config. One that
+ * asks for a rollback no configuration kept has, or that nshd's system
+ * does not answer, is answered here
  */
 static void
 frontend_show(struct ctl_conn *c, struct nshd_show *show)
@@ -426,7 +428,8 @@ frontend_show(struct ctl_conn *c, struct nshd_show *show)
 			frontend_answer(c, 1, 0);
 			return;
 		}
-	} else if (facts_answer_pack(show->words, &fs.ss) != 0) {
+	} else if (facts_answer_pack(show->words, show->rtable,
+	    &fs.ss) != 0) {
 		printf("%% show %s: not answered by nshd\n", show->words);
 		frontend_answer(c, NSHD_ELSEWHERE, 0);
 		return;

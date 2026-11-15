@@ -33,14 +33,15 @@ struct facts_answer {
 	enum answer_type	 type;
 	int			 where;		/* who answers */
 	char			*copy;		/* the words, split */
-	char			*w[4 + NOPTFILL - 1];
+	/* at most a daemon's show's two words and its program's */
+	char			*w[2 + NOPTFILL - 1];
 	int			 n;
 	struct prot1		*prog;		/* the show a program makes */
 	char			*args[NOPTFILL];	/* and its arguments */
 	char			 name[IFNAMSIZ];	/* one interface */
 	int			 detail;	/* interface detail */
 	int			 af;
-	int			 table;
+	int			 table;		/* the routing table asked */
 	int			 one;		/* arp, ndp: one address */
 	struct in_addr		 in;
 	struct sockaddr_in6	 sin6;

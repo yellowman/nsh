@@ -59,7 +59,7 @@ int		 fhas(struct frec *, int);
 extern int	 facts_from;	/* what this process answers */
 
 /* what to answer: a show's words (showwords.h), as nsh and nshd read them */
-struct facts_answer *facts_answer(char *);
+struct facts_answer *facts_answer(char *, int);
 void		 facts_answer_free(struct facts_answer *);
 int		 facts_show(FILE *, const char *, ...)
 		    __attribute__((__format__ (printf, 2, 3)));
@@ -214,7 +214,7 @@ void	 if_typenames(struct facts_field *);
 int	 sdl_build(struct frec *, int, int, int, struct sockaddr_storage *);
 void	 facts_sdl(struct facts_value *, struct facts_value *, char *, size_t,
 	    struct sockaddr *);
-int	 nshd_facts(int, char *, struct facts_in *);
+int	 nshd_facts(int, char *, int, struct facts_in *);
 int	 nshd_op(const char *, int, struct facts_in *);
 int	 route_facts(struct facts_out *, struct rtdump *, char **, int, int);
 void	 route_render(struct frec *, int *);

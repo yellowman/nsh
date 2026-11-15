@@ -2,7 +2,7 @@
  * stats.js: what the counters nshd sends say of now. An interface's
  * rates are the difference between two looks at show interface, kept
  * for a few minutes and drawn as a small graph; its errors are marked
- * when they rose. pf's states and rates, from show statistics pf, are
+ * when they rose. pf's states and rates, from show kernel pf, are
  * on a readout in Security, as the Overview's. All of it is kept in
  * this page alone, and is gone with it
  */
@@ -172,7 +172,7 @@ function utilisation(r) {
 }
 
 /*
- * pf's panel, the readout's kind, from show statistics pf: its states
+ * pf's panel, the readout's kind, from show kernel pf: its states
  * now, and its rates since the look before, which the first look lacks
  */
 function pfDraw(r, now) {
@@ -220,7 +220,7 @@ function pfDraw(r, now) {
 
 /* pf's panel, looked at now; hidden if nshd does not say */
 function pfLook() {
-	return ask("GET", "show", { words: "statistics pf" }).then(
+	return ask("GET", "show", { words: "kernel pf" }).then(
 	    function (j) {
 		var r = of(j, "pf_stats");
 

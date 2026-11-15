@@ -782,7 +782,9 @@ sessions_ro(int fd, short event, void *arg)
 				    "nshdeck knows");
 				return;
 			}
+			/* the show nshd's system was asked, in its table */
 			memset(&sh, 0, sizeof(sh));
+			sh.rtable = u->cur->r.n;
 			strlcpy(sh.words, u->cur->r.text, sizeof(sh.words));
 			pipe_compose(&u->ro, IMSG_CTL_SHOW, 0, -1, &sh,
 			    sizeof(sh));
@@ -1049,6 +1051,9 @@ next(struct user *u)
 	case DECK_SHOW:
 	case DECK_CONFIG:
 		memset(&sh, 0, sizeof(sh));
+		/* a show's routing table, as the page asked; a config's, 0 */
+		if (p->r.kind == DECK_SHOW)
+			sh.rtable = p->r.n;
 		strlcpy(sh.words, p->r.text, sizeof(sh.words));
 		ask(u, IMSG_CTL_SHOW, &sh, sizeof(sh));
 		break;

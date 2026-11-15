@@ -15,34 +15,39 @@
  */
 
 /*
- * The shows that answer with facts. A request is words:
+ * The shows that answer with facts. A request is the words that follow
+ * show at nsh's prompt, and a routing table: route, route6, arp, ndp and
+ * a daemon's show answer in it. An address is numeric:
  *
  *	interface [name] [detail]	every interface, or one; with
  *					detail, what show interface
  *					prints only when verbose
- *	route inet|inet6 table		a routing table
- *	lookup address table		the route the kernel would use
- *	arp table [address]		the ARP table, or one entry
- *	ndp table [address]		the neighbor cache, or one entry
+ *	route [address[/length]]	the IPv4 routes, or the route the
+ *					kernel would use
+ *	route6 [address[/length]]	the IPv6 routes, or that route
+ *	arp [address]			the ARP table, or one entry
+ *	ndp [address]			the neighbor cache, or one entry
  *	vlan [tag [tag]]		VLANs: all, one tag, or a range
  *	bridge [name]			bridges, or one
- *	statistics group		a group of kernel statistics
+ *	kernel group			a group of kernel statistics
  *	version				nsh and system versions, boot time
  *	users				who is logged in
  *	daemons				the daemons nsh starts, and which
  *					run, in which routing tables
  *	hostname			the host's name
- *	ip [inet|inet6]			every address, and, from system,
- *					what configured each IPv4 one
+ *	ip|inet|inet6			every address, or every IPv4 or
+ *					IPv6 one, and, from system, what
+ *					configured each IPv4 one
  *	autoconf [name]			what dhcpleased and slaacd know,
  *					from system
  *	sadb				the SPD's IPsec flows
- *	program table prot sub [arg...]	what show prot sub runs, as
- *					text, from system
+ *	prot sub [arg...]		a daemon's show, such as bgp
+ *					summary: what its program prints,
+ *					as text, from system
  *	dhcp leases			dhcpd's leases, as text, from
  *					system
  *
- * statistics pf, too, comes from system, as it needs /dev/pf.
+ * kernel pf, too, comes from system, as it needs /dev/pf.
  *
  * nshd answers (nshd/answer.c), and nsh renders the records. An
  * interface's or a bridge's records come before its own record, which
@@ -71,6 +76,7 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "ip.h"
 #include "externs.h"
 #include "facts.h"
 #include "showfacts.h"
@@ -330,15 +336,6 @@ frec_next(struct frecs *rs, struct frec *r, const struct facts_kind *k)
 }
 
 static int
-answer_table(struct facts_answer *a, const char *w)
-{
-	const char	*errstr;
-
-	a->table = strtonum(w, 0, RT_TABLEID_MAX, &errstr);
-	return (errstr ? -1 : 0);
-}
-
-static int
 answer_tag(int *tag, const char *w)
 {
 	const char	*errstr;
@@ -347,16 +344,23 @@ answer_tag(int *tag, const char *w)
 	return (errstr ? -1 : 0);
 }
 
-/* what words ask, or NULL if they ask nothing a show answers */
+/*
+ * What words ask, as they follow show at nsh's prompt, in routing table
+ * table; or NULL if they ask nothing a show answers. An address is
+ * numeric
+ */
 struct facts_answer *
-facts_answer(char *words)
+facts_answer(char *words, int table)
 {
 	struct facts_answer	*a;
 	struct addrinfo		*res;
-	char			*p, *last, **w;
+	ip_t			 dest;
+	char			 query[INET6_ADDRSTRLEN + 5], *p, *last, **w;
 	int			 n;
 
 	facts_init();
+	if (table < 0 || table > RT_TABLEID_MAX)
+		return (NULL);
 	if ((a = calloc(1, sizeof(*a))) == NULL)
 		return (NULL);
 	if ((a->copy = strdup(words)) == NULL)
@@ -369,6 +373,7 @@ facts_answer(char *words)
 	}
 	w = a->w;
 	n = a->n;
+	a->table = table;
 	a->start = a->end = -1;
 	a->where = FACTS_SHOW;
 	if (n == 0)
@@ -382,34 +387,24 @@ facts_answer(char *words)
 		if (n == 3 || (n == 2 && strlcpy(a->name, w[1],
 		    sizeof(a->name)) >= sizeof(a->name)))
 			goto bad;
-	} else if (n == 3 && strcmp(w[0], "route") == 0) {
-		a->type = ANS_ROUTE;
-		if (strcmp(w[1], "inet") == 0)
-			a->af = AF_INET;
-		else if (strcmp(w[1], "inet6") == 0)
-			a->af = AF_INET6;
-		else
+	} else if (n <= 2 && (strcmp(w[0], "route") == 0 ||
+	    strcmp(w[0], "route6") == 0)) {
+		/* the table's routes, or a lookup of an address in it */
+		a->type = n == 1 ? ANS_ROUTE : ANS_LOOKUP;
+		a->af = strcmp(w[0], "route6") == 0 ? AF_INET6 : AF_INET;
+		if (n == 2 && (strlcpy(query, w[1], sizeof(query)) >=
+		    sizeof(query) || ip_pfx_read(query, NO_NETMASK,
+		    &dest) != 0))
 			goto bad;
-		if (answer_table(a, w[2]) == -1)
-			goto bad;
-	} else if (n == 3 && strcmp(w[0], "lookup") == 0) {
-		a->type = ANS_LOOKUP;
-		if (strlen(w[1]) >= INET6_ADDRSTRLEN + 5 ||
-		    answer_table(a, w[2]) == -1)
-			goto bad;
-	} else if ((n == 2 || n == 3) && strcmp(w[0], "arp") == 0) {
+	} else if (n <= 2 && strcmp(w[0], "arp") == 0) {
 		a->type = ANS_ARP;
-		if (answer_table(a, w[1]) == -1)
+		if (n == 2 && inet_pton(AF_INET, w[1], &a->in) != 1)
 			goto bad;
-		if (n == 3 && inet_pton(AF_INET, w[2], &a->in) != 1)
-			goto bad;
-		a->one = n == 3;
-	} else if ((n == 2 || n == 3) && strcmp(w[0], "ndp") == 0) {
+		a->one = n == 2;
+	} else if (n <= 2 && strcmp(w[0], "ndp") == 0) {
 		a->type = ANS_NDP;
-		if (answer_table(a, w[1]) == -1)
-			goto bad;
-		if (n == 3) {
-			if (numeric_addrinfo(w[2], NULL, AF_INET6, 0, &res) != 0)
+		if (n == 2) {
+			if (numeric_addrinfo(w[1], NULL, AF_INET6, 0, &res) != 0)
 				goto bad;
 			memcpy(&a->sin6, res->ai_addr, sizeof(a->sin6));
 			freeaddrinfo(res);
@@ -422,21 +417,17 @@ facts_answer(char *words)
 			goto bad;
 	} else if (n <= 2 && strcmp(w[0], "bridge") == 0)
 		a->type = ANS_BRIDGE;
-	else if (n == 2 && strcmp(w[0], "statistics") == 0) {
+	else if (n == 2 && strcmp(w[0], "kernel") == 0) {
 		a->type = ANS_STATISTICS;
 		if ((a->stats = stats_group(w[1])) == NULL)
 			goto bad;
 		a->where = stats_where(a->stats);
-	} else if (n <= 2 && strcmp(w[0], "ip") == 0) {
+	} else if (n == 1 && (strcmp(w[0], "ip") == 0 ||
+	    strcmp(w[0], "inet") == 0 || strcmp(w[0], "inet6") == 0)) {
 		a->type = ANS_IP;
 		a->where = FACTS_SHOW | FACTS_SYSTEM;
-		a->af = AF_UNSPEC;
-		if (n == 2 && strcmp(w[1], "inet") == 0)
-			a->af = AF_INET;
-		else if (n == 2 && strcmp(w[1], "inet6") == 0)
-			a->af = AF_INET6;
-		else if (n == 2)
-			goto bad;
+		a->af = strcmp(w[0], "inet") == 0 ? AF_INET :
+		    strcmp(w[0], "inet6") == 0 ? AF_INET6 : AF_UNSPEC;
 	} else if (n <= 2 && strcmp(w[0], "autoconf") == 0) {
 		a->type = ANS_AUTOCONF;
 		a->where = FACTS_SYSTEM;
@@ -445,13 +436,7 @@ facts_answer(char *words)
 			goto bad;
 	} else if (n == 1 && strcmp(w[0], "sadb") == 0)
 		a->type = ANS_SADB;
-	else if (n >= 4 && strcmp(w[0], "program") == 0) {
-		a->type = ANS_PROGRAM;
-		a->where = FACTS_SYSTEM;
-		if (answer_table(a, w[1]) == -1 ||
-		    (a->prog = prot1_find(w[2], w[3])) == NULL)
-			goto bad;
-	} else if (n == 2 && strcmp(w[0], "dhcp") == 0 &&
+	else if (n == 2 && strcmp(w[0], "dhcp") == 0 &&
 	    strcmp(w[1], "leases") == 0) {
 		a->type = ANS_LEASES;
 		a->where = FACTS_SYSTEM;
@@ -465,7 +450,11 @@ facts_answer(char *words)
 	}
 	else if (n == 1 && strcmp(w[0], "hostname") == 0)
 		a->type = ANS_HOSTNAME;
-	else
+	else if (n >= 2 && (a->prog = prot1_find(w[0], w[1])) != NULL) {
+		/* a daemon's, such as bgp summary: its program answers */
+		a->type = ANS_PROGRAM;
+		a->where = FACTS_SYSTEM;
+	} else
 		goto bad;
 	if ((a->where & facts_from) == 0)
 		goto bad;
@@ -633,8 +622,7 @@ prot1_run(char *prot, char *sub, int argc, char **argv, char **args)
 			return (-1);
 		}
 	}
-	return (facts_show(stdout, "program %d %s %s%s", cli_rtable, prot,
-	    sub, words));
+	return (facts_show(stdout, "%s %s%s", prot, sub, words));
 }
 
 /* a record of a quiet operation: nothing is printed */
@@ -667,8 +655,9 @@ facts_op(const char *text, int rtable, int quiet)
 }
 
 /*
- * The words fmt makes, asked of nshd's system where it may answer and
- * this user may ask it, else of nshd's shows, and rendered to out.
+ * The words fmt makes, in nsh's routing table, asked of nshd's system
+ * where it may answer and this user may ask it, else of nshd's shows,
+ * and rendered to out.
  * Where nshd does not run, nsh answers version itself, and says why for
  * the rest. "interface status" renders interfaces as show interface
  * status does. 0, or -1 after printing why the show failed
@@ -700,7 +689,7 @@ facts_show(FILE *out, const char *fmt, ...)
 		rd.status = 1;
 		w = "interface";
 	}
-	if ((a = facts_answer(w)) == NULL) {
+	if ((a = facts_answer(w, cli_rtable)) == NULL) {
 		printf("%% show %s: not a show nsh knows\n", w);
 		free(words);
 		return (-1);
@@ -710,9 +699,9 @@ facts_show(FILE *out, const char *fmt, ...)
 	rd.type = a->type;
 	r = -1;
 	if (a->where & FACTS_SYSTEM)
-		r = nshd_facts(1, w, &in);
+		r = nshd_facts(1, w, a->table, &in);
 	if (r == -1 && (a->where & FACTS_SHOW))
-		r = nshd_facts(0, w, &in);
+		r = nshd_facts(0, w, a->table, &in);
 	if (r == -1 && a->type == ANS_VERSION) {
 		/* where nshd does not run, nsh tells its own version */
 		facts_out_init(&o, render_emit, &in);
@@ -730,10 +719,10 @@ facts_show(FILE *out, const char *fmt, ...)
 	switch (a->type) {
 	case ANS_ARP:
 		if (a->one && rd.count == 0)
-			arp_noentry(a->w[2]);
+			arp_noentry(a->w[1]);
 		break;
 	case ANS_NDP:
-		ndp_end(rd.failed, a->one && rd.count == 0 ? a->w[2] : NULL);
+		ndp_end(rd.failed, a->one && rd.count == 0 ? a->w[1] : NULL);
 		break;
 	case ANS_VLAN:
 		if (r == 1 && rd.count == 0)

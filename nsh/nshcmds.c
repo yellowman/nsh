@@ -1186,10 +1186,10 @@ pr_routes(int argc, char **argv, ...)
 	switch(argc) {
 	case 2:
 		/* show primary routing table */
-		return facts_show(stdout, "route inet %d", cli_rtable);
+		return facts_show(stdout, "route");
 	case 3:
 		/* show a specific route */
-		return show_route(argv[2], cli_rtable);
+		return show_route(argv[2]);
 	}
 
 	return 0;
@@ -1201,10 +1201,10 @@ pr_routes6(int argc, char **argv, ...)
 	switch(argc) {
 	case 2:
 		/* show primary routing table */
-		return facts_show(stdout, "route inet6 %d", cli_rtable);
+		return facts_show(stdout, "route6");
 	case 3:
 		/* show a specific route */
-		return show_route(argv[2], cli_rtable);
+		return show_route(argv[2]);
 	}
 
 	return 0;
@@ -1218,13 +1218,12 @@ pr_arp(int argc, char **argv, ...)
 	switch(argc) {
 	case 2:
 		/* show arp table */
-		return facts_show(stdout, "arp %d", cli_rtable);
+		return facts_show(stdout, "arp");
 	case 3:
 		/* specific address */
 		if (getinetaddr(argv[2], &in) == -1)
 			return -1;
-		return facts_show(stdout, "arp %d %s", cli_rtable,
-		    inet_ntoa(in));
+		return facts_show(stdout, "arp %s", inet_ntoa(in));
 	}
 	return 0;
 }
@@ -1237,12 +1236,12 @@ pr_ndp(int argc, char **argv, ...)
 	switch(argc) {
 	case 2:
 		/* show ndp table */
-		return facts_show(stdout, "ndp %d", cli_rtable);
+		return facts_show(stdout, "ndp");
 	case 3:
 		/* specific address */
 		if (parse_host(argv[2], &sin6))
 			return -1;
-		return facts_show(stdout, "ndp %d %s", cli_rtable, argv[2]);
+		return facts_show(stdout, "ndp %s", argv[2]);
 	}
 	return 0;
 }
@@ -1271,7 +1270,7 @@ pr_kernel(int argc, char **argv, ...)
 		printf("%% Ambiguous argument %s\n", argv[2]);
 		return -1;
 	}
-	return facts_show(stdout, "statistics %s", x->name);
+	return facts_show(stdout, "kernel %s", x->name);
 }
 
 static int
@@ -1437,9 +1436,9 @@ int
 show_ip(int argc, char **argv, ...)
 {
 	if (strcmp(argv[1], "inet") == 0)
-		return facts_show(stdout, "ip inet");
+		return facts_show(stdout, "inet");
 	if (strcmp(argv[1], "inet6") == 0)
-		return facts_show(stdout, "ip inet6");
+		return facts_show(stdout, "inet6");
 	return facts_show(stdout, "ip");
 }
 
@@ -1747,15 +1746,24 @@ monitor(int argc, char **argv, ...)
 	return 0;
 }
 
-/* show route address: asked of nshd, and rendered here */
+/*
+ * show route address: asked of nshd, and rendered here. The address is
+ * read from a copy, which parse_ip_pfx() cuts at its prefix length
+ */
 int
-show_route(char *arg, int tableid)
+show_route(char *arg)
 {
 	ip_t dest;
+	char *copy;
 
+	if ((copy = strdup(arg)) == NULL) {
+		printf("%% show_route: %s\n", strerror(errno));
+		return -1;
+	}
 	memset(&dest, 0, sizeof(ip_t));
-	parse_ip_pfx(arg, NO_NETMASK, &dest);
+	parse_ip_pfx(copy, NO_NETMASK, &dest);
+	free(copy);
 	if (dest.family == 0)
 		return -1;
-	return facts_show(stdout, "lookup %s %d", arg, tableid);
+	return facts_show(stdout, "route %s", arg);
 }

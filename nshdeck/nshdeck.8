@@ -302,8 +302,8 @@ The Overview's readout and logical interfaces are then the table's, and
 the ports of other tables are dimmed; Network lists the table's
 interfaces, routing table and static routes; each workspace of daemons
 lists the table's row of each daemon that may run in it, so that pf and
-the others that run only in table 0 are listed only there; the presets
-of the shows that take a table name it; and an operation runs in it.
+the others that run only in table 0 are listed only there; a show is
+answered in it, as at nsh's prompt; and an operation runs in it.
 In configure, a line typed in Changes enters the table first, as
 .Cm rtable
 at nsh's configure prompt does, unless the session is in it or in an
@@ -334,7 +334,7 @@ While security is shown, a readout as the overview's shows
 .Xr pf 4 Ns 's
 states
 and its rates, from
-.Cm show statistics pf .
+.Cm show kernel pf .
 .Pp
 The page alone keeps these rates: they begin when it is opened and are
 gone when it is closed.
@@ -388,12 +388,17 @@ Answers with the user's name and permissions.
 .It Cm show
 GET, with
 .Ar words ,
-the words of a show command in
+the words that follow
+.Cm show
+in
 .Xr nsh 8 ,
 such as
-.Ql interface
+.Ql route
 or
-.Ql route inet 0 .
+.Ql bgp summary ,
+and the
+.Ar rtable
+to answer them in, or 0.
 session sends the show to
 .Nm nshd Ns 's
 system process.

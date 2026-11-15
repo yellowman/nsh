@@ -356,10 +356,16 @@ void conf_sysctls(FILE *);
 /* route.c */
 #define NO_NETMASK 0
 #define ASSUME_NETMASK 1
-int show_route(char *, int);
+/* why ip_pfx_read() found no address */
+#define PFX_ADDRESS 1	/* not an IPv4 or IPv6 address */
+#define PFX_MASK 2	/* a mask or length it cannot read */
+#define PFX_BITS 3	/* a length longer than the address */
+#define PFX_TYPE 4	/* a type it does not know */
+int show_route(char *);
 int is_ip_addr(char *);
 #ifdef _IP_T_
 void parse_ip_pfx(char *, int, ip_t *);
+int ip_pfx_read(char *, int, ip_t *);
 int ip_route(ip_t *, ip_t *, u_short, int, int, struct rt_metrics, int inits,
     struct cand *);
 #endif

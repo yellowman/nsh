@@ -56,15 +56,18 @@ struct collection {
 	int			 done;
 };
 
-/* a collection for words, or NULL if nshd does not answer them here */
+/*
+ * a collection for words in routing table table, or NULL if nshd does
+ * not answer them here
+ */
 struct collection *
-facts_answer_begin(char *words)
+facts_answer_begin(char *words, int table)
 {
 	struct collection	*c;
 
 	if ((c = calloc(1, sizeof(*c))) == NULL)
 		return (NULL);
-	if ((c->a = facts_answer(words)) == NULL) {
+	if ((c->a = facts_answer(words, table)) == NULL) {
 		free(c);
 		return (NULL);
 	}
@@ -72,18 +75,18 @@ facts_answer_begin(char *words)
 }
 
 /*
- * For config, the show words ask of nshd's system, as values in ss: 0,
- * or NSHD_ELSEWHERE if system does not answer it. A session's frontend
- * parses them: nshd's config parses no show
+ * For config, the show words ask of nshd's system in routing table
+ * table, as values in ss: 0, or NSHD_ELSEWHERE if system does not answer
+ * it. A session's frontend parses them: nshd's config parses no show
  */
 int
-facts_answer_pack(char *words, struct nshd_sysshow *ss)
+facts_answer_pack(char *words, int table, struct nshd_sysshow *ss)
 {
 	struct facts_answer	*a = NULL;
 	int			 i, r = NSHD_ELSEWHERE;
 
 	memset(ss, 0, sizeof(*ss));
-	if (in_config || (a = facts_answer(words)) == NULL ||
+	if (in_config || (a = facts_answer(words, table)) == NULL ||
 	    (a->where & FACTS_SYSTEM) == 0)
 		goto done;
 	ss->type = a->type;
@@ -93,9 +96,9 @@ facts_answer_pack(char *words, struct nshd_sysshow *ss)
 	if (a->type == ANS_PROGRAM) {
 		ss->table = a->table;
 		ss->prot = prot1_place(a->prog, &ss->sub);
-		ss->nargs = a->n - 4;
+		ss->nargs = a->n - 2;
 		for (i = 0; i < ss->nargs; i++)
-			strlcpy(ss->args[i], a->w[4 + i], sizeof(ss->args[i]));
+			strlcpy(ss->args[i], a->w[2 + i], sizeof(ss->args[i]));
 	}
 	strlcpy(ss->name, a->name, sizeof(ss->name));
 	r = 0;
@@ -145,9 +148,9 @@ facts_answer_take(const struct nshd_sysshow *ss)
 			goto bad;
 		memcpy(a->copy, ss->args, sizeof(ss->args));
 		a->table = ss->table;
-		a->n = 4 + ss->nargs;
+		a->n = 2 + ss->nargs;
 		for (i = 0; i < ss->nargs; i++)
-			if (*(a->w[4 + i] = a->copy + i * NSHD_WORDS) == '\0')
+			if (*(a->w[2 + i] = a->copy + i * NSHD_WORDS) == '\0')
 				goto bad;
 		break;
 	case ANS_LEASES:
@@ -277,7 +280,7 @@ facts_streams(struct collection *c, char ***argv, int *table)
 
 	switch (a->type) {
 	case ANS_PROGRAM:
-		if ((*argv = prot1_args(a->prog, a->args, a->n - 4, a->w + 4,
+		if ((*argv = prot1_args(a->prog, a->args, a->n - 2, a->w + 2,
 		    a->table)) == NULL)
 			return (-1);
 		*table = a->table;

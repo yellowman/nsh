@@ -25,7 +25,7 @@
 #define NSHD_SOCKET	"/var/run/nshd.sock"	/* 0660, group nshadmin */
 #define NSHD_RO_SOCKET	"/var/run/nshd.ro.sock"	/* 0666 */
 
-#define NSHD_VERSION	11	/* protocol version of clients and nshd */
+#define NSHD_VERSION	12	/* protocol version of clients and nshd */
 #define NSHD_TEXT	8192	/* text in one message, at most */
 #define NSHD_WORDS	256	/* a show's words, at most */
 #define NSHD_LINE	1024	/* a line of configuration, with its NUL */
@@ -56,8 +56,13 @@ struct nshd_session {
 	int32_t		perms;
 };
 
-/* what to show, as the show command names it */
+/*
+ * what to show: the words that follow show at nsh's prompt, such as
+ * "route" or "bgp summary", answered in routing table rtable. No word
+ * names a table, and a show that takes none ignores it
+ */
 struct nshd_show {
+	int32_t		rtable;
 	char		words[NSHD_WORDS];
 };
 

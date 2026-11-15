@@ -276,6 +276,7 @@ nshd_show(char *words)
 	}
 
 	memset(&show, 0, sizeof(show));
+	show.rtable = cli_rtable;
 	if (strlcpy(show.words, words, sizeof(show.words)) >=
 	    sizeof(show.words)) {
 		printf("%% show %s: too long\n", words);
@@ -460,18 +461,20 @@ done:
 }
 
 /*
- * show words, as nshd answers them through nshd_ask(): on the read-write
- * socket, where its system answers, if rw, else on the read-only socket,
- * where its show processes do. -1 if nsh could not connect to nshd,
- * else 1 if the show was answered and 0 if not.
+ * show words in routing table rtable, as nshd answers them through
+ * nshd_ask(): on the read-write socket, where its system answers, if rw,
+ * else on the read-only socket, where its show processes do. -1 if nsh
+ * could not connect to nshd, else 1 if the show was answered and 0 if
+ * not.
  */
 int
-nshd_facts(int rw, char *words, struct facts_in *in)
+nshd_facts(int rw, char *words, int rtable, struct facts_in *in)
 {
 	struct nshd_show	 show;
 	int32_t			 status;
 
 	memset(&show, 0, sizeof(show));
+	show.rtable = rtable;
 	if (strlcpy(show.words, words, sizeof(show.words)) >=
 	    sizeof(show.words)) {
 		printf("%% show %s: too long\n", words);
@@ -674,6 +677,7 @@ nshd_cshow(char *words)
 		return (-1);
 	}
 	memset(&show, 0, sizeof(show));
+	show.rtable = cli_rtable;
 	strlcpy(show.words, words, sizeof(show.words));
 	r = nshd_request(IMSG_CTL_SHOW, &show, sizeof(show), f);
 	if (fclose(f) == EOF)
@@ -880,6 +884,7 @@ nshd_show_if(const char *name)
 		return (-1);
 	}
 	memset(&show, 0, sizeof(show));
+	show.rtable = cli_rtable;
 	strlcpy(show.words, "running-config", sizeof(show.words));
 	r = nshd_request(IMSG_CTL_SHOW, &show, sizeof(show), f);
 	snprintf(head[0], sizeof(head[0]), "interface %s\n", name);

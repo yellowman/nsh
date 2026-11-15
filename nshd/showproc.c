@@ -35,6 +35,8 @@
 #include <sys/queue.h>
 #include <sys/socket.h>
 
+#include <net/route.h>
+
 #include <event.h>
 #include <fcntl.h>
 #include <imsg.h>
@@ -68,7 +70,7 @@ struct answer {
 static void	show_listen(void);
 static int	show_client(struct ctl_conn *, struct imsg *);
 static int	show_answer(uint32_t, int32_t, const char *);
-static int	show_facts(struct ctl_conn *, char *);
+static int	show_facts(struct ctl_conn *, char *, int);
 static int	show_more(struct ctl_conn *);
 static int	show_result(struct ctl_conn *, int32_t);
 static void	show_gone(struct ctl_conn *);
@@ -123,9 +125,10 @@ show_client(struct ctl_conn *c, struct imsg *imsg)
 		return (control_reply(c->id, IMSG_CTL_HELLO, &s, sizeof(s)));
 	case IMSG_CTL_SHOW:
 		if (imsg_get_data(imsg, &show, sizeof(show)) == -1 ||
-		    memchr(show.words, '\0', sizeof(show.words)) == NULL)
+		    memchr(show.words, '\0', sizeof(show.words)) == NULL ||
+		    show.rtable < 0 || show.rtable > RT_TABLEID_MAX)
 			return (-1);
-		return (show_facts(c, show.words));
+		return (show_facts(c, show.words, show.rtable));
 	default:
 		return (-1);
 	}
@@ -143,9 +146,12 @@ show_answer(uint32_t id, int32_t status, const char *text)
 	return (control_reply(id, IMSG_CTL_RESULT, &r, sizeof(r)));
 }
 
-/* begin the facts words ask for, or say that nshd does not answer them */
+/*
+ * begin the facts words ask for in routing table table, or say that
+ * nshd does not answer them
+ */
 static int
-show_facts(struct ctl_conn *c, char *words)
+show_facts(struct ctl_conn *c, char *words, int table)
 {
 	struct answer		*an;
 	char			*out;
@@ -153,7 +159,7 @@ show_facts(struct ctl_conn *c, char *words)
 
 	if ((an = calloc(1, sizeof(*an))) == NULL)
 		fatal("%s", __func__);
-	if ((an->a = facts_answer_begin(words)) == NULL) {
+	if ((an->a = facts_answer_begin(words, table)) == NULL) {
 		free(an);
 		if (asprintf(&out, "%% show %s: not answered by nshd\n",
 		    words) == -1)

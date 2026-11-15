@@ -521,12 +521,6 @@ function inTable(r) {
 	return table === null || Number(r.rdomain || 0) === table;
 }
 
-/* show words that name a routing table, naming the focused one */
-function tableWords(w) {
-	return table === null ? w : w.replace(/^(route inet6?|arp|ndp) \d+$/,
-	    "$1 " + table);
-}
-
 /*
  * The tables the user may focus on: 0, each the interfaces are in and
  * each the configuration names, with its name
@@ -594,9 +588,6 @@ function focusTable(n) {
 		$("inspector").appendChild(el("p", "Choose an interface.",
 		    "dim"));
 	}
-	document.querySelectorAll(".preset[data-words]").forEach(function (b) {
-		b.textContent = tableWords(b.dataset.words);
-	});
 	faceplate();
 	readout();
 	logical();
@@ -965,8 +956,10 @@ function iftable() {
 	netFit();
 }
 
+/* a show's words, as at nsh's prompt, in the table the page is focused on */
 function show(words, out) {
-	return ask("GET", "show", { words: words }).then(function (j) {
+	return ask("GET", "show", { words: words, rtable: table === null ? 0 :
+	    table }).then(function (j) {
 		showDrawn(j, out);
 		if (said(j) !== "")
 			out.appendChild(el("pre", said(j), "term"));
@@ -980,12 +973,11 @@ function shows(div) {
 
 	bar.appendChild(el("h2", "Show"));
 	div.dataset.presets.split("|").forEach(function (w) {
-		var b = el("button", tableWords(w), "preset");
+		var b = el("button", w, "preset");
 
 		b.type = "button";
-		b.dataset.words = w;
 		b.addEventListener("click", function () {
-			input.value = tableWords(w);
+			input.value = w;
 			show(input.value, out);
 		});
 		bar.appendChild(b);

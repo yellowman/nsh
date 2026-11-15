@@ -157,7 +157,7 @@ static const struct endpoint {
 	{ "login",	DECK_LOGIN,	1, F_USER | F_PASSWORD },
 	{ "logout",	DECK_LOGOUT,	1, 0 },
 	{ "whoami",	DECK_WHOAMI,	0, 0 },
-	{ "show",	DECK_SHOW,	0, F_WORDS },
+	{ "show",	DECK_SHOW,	0, F_WORDS | F_RTABLE },
 	{ "config",	DECK_CONFIG,	0, F_WHAT | F_N },
 	{ "configure",	DECK_CONFIGURE,	1, F_MODE },
 	{ "line",	DECK_LINE,	1, F_LINE },

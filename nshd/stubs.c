@@ -42,7 +42,7 @@ struct ghs mantab[] = {
 
 /* nshd does not ask itself, and is not a session of its own */
 int
-nshd_facts(int rw, char *words, struct facts_in *in)
+nshd_facts(int rw, char *words, int rtable, struct facts_in *in)
 {
 	return -1;
 }
