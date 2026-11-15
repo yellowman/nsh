@@ -201,13 +201,16 @@ function context(j) {
 /* System's topic, shown */
 function topic(name) {
 	$("topics").querySelector("[value=" + name + "]").checked = true;
-	["changes", "history", "jobs", "live", "errors"].forEach(function (t) {
+	["changes", "history", "logs", "jobs", "live",
+	    "errors"].forEach(function (t) {
 		$("topic-" + t).hidden = t !== name;
 	});
 	if (name === "changes")
 		view();
 	else if (name === "history")
 		saved();
+	else if (name === "logs")
+		toEnd($("log"));
 	else if (name === "jobs")
 		daemons("system");
 }
@@ -710,9 +713,18 @@ function followEnd(box, change) {
 	var was = r.height && r.bottom >= m.top && r.bottom <= m.bottom + 1;
 
 	change();
-	r = box.getBoundingClientRect();
-	if (was && r.bottom > m.bottom)
-		main.scrollTop += r.bottom - m.bottom;
+	if (was)
+		toEnd(box);
+}
+
+/* the page scrolled down until box's end is in view, if it is below */
+function toEnd(box) {
+	var main = document.querySelector("main");
+	var below = box.getBoundingClientRect().bottom -
+	    main.getBoundingClientRect().bottom;
+
+	if (below > 0)
+		main.scrollTop += below;
 }
 
 /*
@@ -1135,7 +1147,10 @@ function confirmBy(minutes) {
 	}, 1000);
 }
 
-/* the event stream, following the logs checked */
+/*
+ * the event stream, following the logs checked, each from its past
+ * again: what the log showed goes
+ */
 function follow() {
 	var logs = [];
 
@@ -1145,6 +1160,7 @@ function follow() {
 	});
 	if (stream)
 		stream.close();
+	$("log").textContent = "";
 	stream = new EventSource("api/events" + (logs.length ?
 	    "?logs=" + logs.join(",") : ""));
 	stream.onopen = function () {
@@ -1170,12 +1186,16 @@ function follow() {
 	stream.addEventListener("log", function (e) {
 		var d = JSON.parse(e.data), log = $("log");
 		var lines = (log.textContent + d.text).split("\n");
+		var first = log.textContent === "";
 
 		if (lines.length > LOGLINES)
 			lines = lines.slice(lines.length - LOGLINES);
 		followEnd(log, function () {
 			log.textContent = lines.join("\n");
 		});
+		/* a log's past, as it begins: its newest line in view */
+		if (first)
+			toEnd(log);
 	});
 }
 

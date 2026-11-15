@@ -175,6 +175,7 @@
 <div class="seg" id="topics" role="radiogroup" aria-label="Topic">
 <label><input type="radio" name="topic" value="changes" checked><span>Changes</span></label>
 <label><input type="radio" name="topic" value="history"><span>History</span></label>
+<label><input type="radio" name="topic" value="logs"><span>Logs</span></label>
 <label><input type="radio" name="topic" value="jobs"><span>Jobs &amp; MOTD</span></label>
 <label><input type="radio" name="topic" value="live"><span>Live operations</span></label>
 <label><input type="radio" name="topic" value="errors"><span>Errors</span></label>
@@ -245,13 +246,15 @@
 <p class="empty">Choose a saved configuration to see it here.</p>
 </div>
 </div>
-<div class="split">
 <div class="panel">
 <div class="bar"><h2>Activity</h2></div>
 <p class="help">Commits, confirmed commits, configure exclusive, and interface and route changes, as they happen.</p>
 <ul id="notices"></ul>
 <p class="empty">Nothing yet since this page opened.</p>
 </div>
+</div>
+
+<div class="topic" id="topic-logs" hidden>
 <div class="panel">
 <div class="bar"><h2>Logs</h2>
 <form id="events-form" class="inline">
@@ -261,10 +264,9 @@
 <button>Follow</button>
 </form>
 </div>
-<p class="help">Check logs, then Follow.</p>
+<p class="help">Check logs, then Follow. A log file shows its last 64 kilobytes first, and its newest line is at the foot.</p>
 <pre id="log" class="term"></pre>
 <p class="empty">No log followed.</p>
-</div>
 </div>
 </div>
 
