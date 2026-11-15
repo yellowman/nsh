@@ -1,10 +1,10 @@
 /*
  * daemons.js: the daemons nsh starts, each in its workspace, a row for
  * each routing table it is in: whether the configuration enables it,
- * its rules, and whether it runs. The inspector shows the chosen
- * daemon's rules as text, staged into the candidate as its edit in nsh
- * sets them, whether it is enabled, as nsh's line, and its actions, each
- * a live operation
+ * its rules, and whether it runs. The inspector shows whether the chosen
+ * daemon is enabled, as nsh's line, and its actions, each a live
+ * operation, and stages its rules, which the editor under the table
+ * shows (editors.js), into the candidate as its edit in nsh sets them
  */
 "use strict";
 
@@ -441,7 +441,7 @@ function dinspector() {
 	var d = dinsp.def, box = document.querySelector(".daemons[data-ws=" +
 	    dinsp.ws + "] .dinsp");
 	var head = el("div", null, "ihead"), ob = running(d.name, dinsp.rt);
-	var det, row, input, area, out, form, line, bar = el("div", null, "bar");
+	var det, row, input, out, form, line, bar = el("div", null, "bar");
 	var revert = el("button", "Revert"), check = el("button", "Validate");
 	var stage = el("button", "Stage", "primary");
 
@@ -484,26 +484,7 @@ function dinspector() {
 		});
 	}
 
-	if (d.rules) {
-		det = dgroup(box, "Rules", true);
-		dinsp.count = det.querySelector(".count");
-		area = el("textarea", null, "rules");
-		area.value = dinsp.now.rules;
-		area.spellcheck = false;
-		area.setAttribute("aria-label", d.name + "'s rules");
-		area.classList.toggle("edited", dinsp.now.rules !==
-		    dinsp.was.rules);
-		det.appendChild(area);
-		det.appendChild(el("p", "Stage puts them in the candidate; " +
-		    "Validate tests them.", "help"));
-		area.addEventListener("input", function () {
-			dinsp.now.rules = area.value;
-			area.classList.toggle("edited", area.value !==
-			    dinsp.was.rules);
-			drefresh();
-			structuredLater();
-		});
-	} else if (d.runs) {
+	if (!d.rules && d.runs) {
 		det = dgroup(box, "Command", true);
 		det.appendChild(el("pre", d.runs, "cmd"));
 		row = el("dl", null, "args");
@@ -578,6 +559,8 @@ function dinspector() {
 		});
 	});
 	stage.addEventListener("click", dstage);
+	/* the lines the rules gain and lose, wherever they were edited */
+	dinsp.count = bar.appendChild(el("span", null, "dim count"));
 	bar.appendChild(revert);
 	bar.appendChild(check);
 	bar.appendChild(stage);

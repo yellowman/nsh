@@ -195,8 +195,9 @@ in.
 A row shows whether the configuration enables the daemon and whether
 it runs.
 .Pp
-For the chosen daemon, the workspace shows its rules as text, which can
-be changed and staged into the candidate as the daemon's edit command in
+For the chosen daemon, the workspace shows its rules under the list, as
+text, which can be changed and staged into the candidate as the daemon's
+edit command in
 .Xr nsh 8
 does.
 Changes not yet staged remain until another daemon or routing table is
@@ -210,8 +211,10 @@ It also lists each of the last ten saved configurations that changed
 the daemon, with what each changed, and shows the daemon's live
 operations.
 .Pp
-Some daemons have an editor, which reads the rules' text and writes
-changes back into it.
+Some daemons have an editor, in tabs, which reads the rules' text and
+writes changes back into it.
+Its last tab shows the whole text: Rules for pf, Config for the
+others.
 A change rewrites only the words of the field it changes.
 .Bl -tag -width Ds
 .It Xr pf.conf 5

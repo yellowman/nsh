@@ -1687,6 +1687,10 @@ pre.stanza {
 	justify-content: flex-end;
 }
 
+.dinsp > .bar .count {
+	margin-right: auto;
+}
+
 /* a daemon's rules, as text */
 .daemons {
 	display: grid;
@@ -1695,9 +1699,9 @@ pre.stanza {
 
 textarea.rules {
 	display: block;
-	width: calc(100% - 1.5385rem);
-	min-height: 20rem;
-	margin: .7692rem;
+	width: 100%;
+	min-height: 32rem;
+	margin: 0;
 	padding: .6154rem .7692rem;
 	resize: vertical;
 	font: .9231rem/1.45 var(--mono);

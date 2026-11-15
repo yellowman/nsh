@@ -7,14 +7,15 @@
  * and Match sections, and another daemon's as the statements of each of
  * its tabs. Each is read from the rules' text with pfconf.js,
  * bgpdconf.js, routeconf.js, sshconf.js or stmtconf.js, and each change
- * is written back into that text, which the inspector's Rules box shows
- * and Stage stages. The text is the only source: anything typed in it
- * is read again here.
+ * is written back into that text, which each editor's last tab shows
+ * whole, and which Stage stages: Rules for pf, Config for the others.
+ * The text is the only source: anything typed in it is read again here.
+ * A daemon with rules and no editor has its text alone.
  */
 "use strict";
 
 var ed = null;		/* the daemon the editor shows, and its selection */
-var edLater = null;	/* a redraw for when typing in the text stops */
+var edText = false;	/* whether the editors show their text */
 
 /* the views of pf's statements */
 var PF_SHOW = [["all", "All"], ["filter", "Filtering"],
@@ -55,13 +56,13 @@ var BGP_FIELDS = [
 	["down", "check"]
 ];
 
-/* the inspector's Rules text box, or null if it is not drawn */
+/* the rules' text box, or null if it is not drawn */
 function rulesArea() {
 	return document.querySelector(".daemons[data-ws=" + dinsp.ws +
-	    "] .dinsp textarea.rules");
+	    "] .structured textarea.rules");
 }
 
-/* set the rules to text, in the inspector's text box and its line count */
+/* set the rules to text, in their text box and the line count */
 function rulesNow(text) {
 	var area = rulesArea();
 
@@ -73,25 +74,29 @@ function rulesNow(text) {
 	drefresh();
 }
 
-/*
- * redraw the editor of the inspected daemon from its rules, and not
- * again once typing in the text stops
- */
+/* redraw the rules of the inspected daemon: its editor, or its text */
 function structured() {
-	var box;
+	var box, bar;
 
-	clearTimeout(edLater);
 	document.querySelectorAll(".structured").forEach(function (b) {
 		b.textContent = "";
 	});
-	if (!dinsp || (dinsp.def.name !== "pf" && dinsp.def.name !== "bgp" &&
-	    dinsp.def.name !== "sshd" && !RT_DAEMONS[dinsp.def.name] &&
-	    !SV_DAEMONS[dinsp.def.name])) {
+	if (!dinsp || !dinsp.def.rules) {
 		ed = null;
 		return;
 	}
 	box = document.querySelector(".daemons[data-ws=" + dinsp.ws +
 	    "] .structured");
+	if (dinsp.def.name !== "pf" && dinsp.def.name !== "bgp" &&
+	    dinsp.def.name !== "sshd" && !RT_DAEMONS[dinsp.def.name] &&
+	    !SV_DAEMONS[dinsp.def.name]) {
+		ed = null;
+		bar = el("div", null, "bar");
+		bar.appendChild(el("h2", dinsp.def.label));
+		box.appendChild(bar);
+		edRules(box);
+		return;
+	}
 	if (!ed || ed.daemon !== dinsp.def.name || ed.rt !== dinsp.rt)
 		ed = { daemon: dinsp.def.name, rt: dinsp.rt, sel: -1,
 		    show: "all", tab: dinsp.def.name === "bgp" ? "peers" :
@@ -113,10 +118,56 @@ function structured() {
 		svEditor(box);
 }
 
-/* redraw the editor once the text has not changed for a moment */
-function structuredLater() {
-	clearTimeout(edLater);
-	edLater = setTimeout(structured, 400);
+/* what the daemon's text is called, as nsh calls it: pf's are rules */
+function edWord(name) {
+	return name === "pf" ? "Rules" : "Config";
+}
+
+/*
+ * an editor's bar, in box: its title, its tabs and, last, its text in
+ * place of the editor (edWord). It is returned to take the editor's
+ * buttons, or, with the text chosen and drawn, null. Back from the
+ * text, the tab it left is as it was left.
+ */
+function edBar(box, title, name, tabs, chosen, change) {
+	var bar = el("div", null, "bar");
+
+	bar.appendChild(el("h2", title));
+	bar.appendChild(edSegs(name, tabs.concat([["text",
+	    edWord(dinsp.def.name)]]), edText ? "text" : chosen,
+	    function (v) {
+		edText = v === "text";
+		if (edText || v === chosen)
+			structured();
+		else
+			change(v);
+	}));
+	bar.appendChild(el("span", null, "fill"));
+	box.appendChild(bar);
+	if (!edText)
+		return bar;
+	edRules(box);
+	return null;
+}
+
+/* the inspected daemon's rules or config, whole, as text in box */
+function edRules(box) {
+	var area = el("textarea", null, "rules");
+
+	area.value = dinsp.now.rules;
+	area.spellcheck = false;
+	area.setAttribute("aria-label", dinsp.def.name + " " +
+	    edWord(dinsp.def.name).toLowerCase());
+	area.classList.toggle("edited", dinsp.now.rules !== dinsp.was.rules);
+	box.appendChild(area);
+	box.appendChild(el("p", "Stage puts this text in the candidate; " +
+	    "Validate tests it.", "help"));
+	area.addEventListener("input", function () {
+		dinsp.now.rules = area.value;
+		area.classList.toggle("edited", area.value !==
+		    dinsp.was.rules);
+		drefresh();
+	});
 }
 
 /*
@@ -244,17 +295,17 @@ function pfDone() {
 
 /* draw pf's editor: a row per statement, and a form for the selected one */
 function pfEditor(box) {
-	var doc = pfParse(dinsp.now.rules), bar = el("div", null, "bar");
+	var doc = pfParse(dinsp.now.rules), bar;
 	var t = el("table", null, "grid pick srules"), head = el("tr"), n = 0;
 	var last = -1, help;
 
 	ed.doc = doc;
-	bar.appendChild(el("h2", "pf's rules"));
-	bar.appendChild(edSegs("pfshow", PF_SHOW, ed.show, function (v) {
+	if ((bar = edBar(box, "pf rules", "pfshow", PF_SHOW, ed.show,
+	    function (v) {
 		ed.show = v;
 		structured();
-	}));
-	bar.appendChild(el("span", null, "fill"));
+	})) === null)
+		return;
 	doc.stmts.forEach(function (s, i) {
 		if (s.kind === "rule" || s.kind === "anchor")
 			last = i;
@@ -279,7 +330,6 @@ function pfEditor(box) {
 			ed.sel = at + 1;
 			pfDone();
 		}));
-	box.appendChild(bar);
 	help = el("p", "The last rule that matches decides, unless one is " +
 	    "quick. ", "help");
 	help.appendChild(edManual("pf.conf(5)"));
@@ -473,7 +523,7 @@ function bgpDetail(a) {
 
 /* draw bgpd's editor: AS and router ID, then peers, networks or filters */
 function bgpEditor(box) {
-	var doc = bgpParse(dinsp.now.rules), bar = el("div", null, "bar");
+	var doc = bgpParse(dinsp.now.rules);
 	var grid = el("div", null, "sfields");
 	var as = doc.nodes.find(function (n) {
 		return n.kind === "as";
@@ -497,15 +547,13 @@ function bgpEditor(box) {
 	};
 
 	ed.doc = doc;
-	bar.appendChild(el("h2", "bgpd"));
-	bar.appendChild(edSegs("bgptab", [["peers", "Peers"], ["networks",
+	if (edBar(box, "bgpd", "bgptab", [["peers", "Peers"], ["networks",
 	    "Networks"], ["filters", "Filters"]], ed.tab, function (v) {
 		ed.tab = v;
 		ed.sel = -1;
 		structured();
-	}));
-	bar.appendChild(el("span", null, "fill"));
-	box.appendChild(bar);
+	}) === null)
+		return;
 	regField(grid, "bgp.as", edControl("as", "text", as ? bgpRest(as) :
 	    "", top("as", "AS")));
 	regField(grid, "bgp.router-id", edControl("rid", "text", rid ?
@@ -962,18 +1010,17 @@ function rtState() {
  */
 function rtEditor(box) {
 	var d = RT_DAEMONS[ed.daemon], doc = bgpParse(dinsp.now.rules,
-	    d.blocks), bar = el("div", null, "bar"), live = ed.live;
+	    d.blocks), bar, live = ed.live;
 
 	ed.doc = doc;
-	bar.appendChild(el("h2", d.prog));
-	bar.appendChild(edSegs("rttab", [["interfaces", "Interfaces"],
+	if ((bar = edBar(box, d.prog, "rttab", [["interfaces", "Interfaces"],
 	    ["neighbors", "Neighbors"], ["routes", d.routes === "lib" ?
 	    "Labels" : "Routes"], ["global", "Global"]], ed.tab, function (v) {
 		ed.tab = v;
 		ed.sel = -1;
 		structured();
-	}));
-	bar.appendChild(el("span", null, "fill"));
+	})) === null)
+		return;
 	if (dinsp.rt !== 0)
 		bar.appendChild(el("span", "Live state is shown for rtable 0 " +
 		    "only", "dim"));
@@ -985,7 +1032,6 @@ function rtEditor(box) {
 		    "State from " + d.ctl, "dim"));
 		bar.appendChild(edButton("Ask again", rtState));
 	}
-	box.appendChild(bar);
 	if (ed.tab === "neighbors")
 		rtLiveTable(box, d.nbrs, live && live.nbrs, "No neighbors");
 	else if (ed.tab === "routes")
@@ -1171,23 +1217,21 @@ function rtGlobalTab(box, doc, d) {
 /* draw a Security or Services daemon's editor: the tab chosen */
 function svEditor(box) {
 	var d = SV_DAEMONS[ed.daemon], doc = bgpParse(dinsp.now.rules,
-	    d.blocks), bar = el("div", null, "bar");
+	    d.blocks);
 	var t = d.tabs.find(function (x) {
 		return x.id === ed.tab;
 	}) || d.tabs[0];
 
 	ed.doc = doc;
-	bar.appendChild(el("h2", d.prog));
-	bar.appendChild(edSegs("svtab", d.tabs.map(function (x) {
+	if (edBar(box, d.prog, "svtab", d.tabs.map(function (x) {
 		return [x.id, x.label];
 	}), t.id, function (v) {
 		ed.tab = v;
 		ed.sel = -1;
 		ed.add = "";
 		structured();
-	}));
-	bar.appendChild(el("span", null, "fill"));
-	box.appendChild(bar);
+	}) === null)
+		return;
 	if (t.show)
 		svShowTab(box, t);
 	if (t.single)
@@ -1420,21 +1464,19 @@ function sshDone(doc) {
 
 /* draw sshd's editor: the tab chosen */
 function sshEditor(box) {
-	var doc = sshParse(dinsp.now.rules), bar = el("div", null, "bar");
+	var doc = sshParse(dinsp.now.rules);
 	var t = SSH_TABS.find(function (x) {
 		return x.id === ed.tab;
 	}) || SSH_TABS[0];
 
-	bar.appendChild(el("h2", "sshd"));
-	bar.appendChild(edSegs("sshtab", SSH_TABS.map(function (x) {
+	if (edBar(box, "sshd", "sshtab", SSH_TABS.map(function (x) {
 		return [x.id, x.label];
 	}), t.id, function (v) {
 		ed.tab = v;
 		ed.sel = -1;
 		structured();
-	}));
-	bar.appendChild(el("span", null, "fill"));
-	box.appendChild(bar);
+	}) === null)
+		return;
 	if (t.keys)
 		sshKeys(box, doc, t.keys);
 	if (t.lines)
