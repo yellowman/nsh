@@ -43,7 +43,9 @@
  *
  * Streams (noticed(), rewatch())
  *	A user's event streams get nshd's notices. A log's notices go
- *	only to the streams that follow that log.
+ *	only to the streams that follow that log. The last DECK_PAST
+ *	bytes of each log the user follows are kept, and a stream that
+ *	begins to follow it begins with them.
  *
  * A terminal (terminal(), term_io(), typed())
  *	nsh on a pty, which nshd starts as the user. It ends with its
@@ -97,6 +99,9 @@
 					/* which is 4096 bytes in base64 */
 #define DECK_TYPED	(64 * 1024)	/* what was typed to a terminal, */
 					/* not yet written to it, at most */
+#define DECK_PAST	(64 * 1024)	/* a log's text kept for a new */
+					/* stream, at most */
+#define DECK_LOGS	4		/* the logs a stream may follow */
 
 /* a literal, to JSON j */
 #define J(j, s)		j_raw((j), (s), sizeof(s) - 1)
@@ -131,6 +136,12 @@ struct stream {
 	TAILQ_ENTRY(stream)	 entry;
 	uint32_t		 id;
 	int			 logs;		/* NSHD_WATCH_* it follows */
+};
+
+/* a log's text, its last DECK_PAST bytes, from the start of a line */
+struct past {
+	char			*text;
+	size_t			 len;
 };
 
 /* how far a terminal is: asked of nshd, or running */
@@ -178,6 +189,7 @@ struct user {
 	struct rows		*cmplt;		/* what a completion has read */
 	int			 naming;	/* its names were asked for */
 	TAILQ_HEAD(, stream)	 streams;
+	struct past		 past[DECK_LOGS];	/* of each log followed */
 	TAILQ_HEAD(, terminal)	 terms;
 	int			 nterms;
 	int			 watch;		/* what nshd was asked to watch */
@@ -186,6 +198,9 @@ struct user {
 };
 
 static TAILQ_HEAD(, user)	 users = TAILQ_HEAD_INITIALIZER(users);
+/* the logs, in the order of their watch bits, from NSHD_WATCH_DAEMON */
+static const char		*lognames[DECK_LOGS] = { "daemon", "messages",
+				    "authlog", "pflog" };
 static int			 nusers;
 static struct deck_pipe		 toparent, tofront;
 static struct {
@@ -231,6 +246,9 @@ static void	 unshown(struct user *, const char *);
 static void	 ro_close(struct user *);
 static struct deck_pipe *answering(struct user *);
 static void	 noticed(struct user *, struct ibuf *);
+static void	 log_event(uint32_t, size_t, const void *, size_t);
+static void	 past_add(struct past *, const void *, size_t);
+static void	 past_free(struct past *);
 static void	 rewatch(struct user *);
 static void	 terminal(uint32_t, struct user *);
 static struct terminal *term_find(uint32_t, struct user **);
@@ -408,6 +426,7 @@ request(uint32_t id, struct deck_request *r)
 	struct user	*u;
 	struct pending	*p;
 	struct stream	*s;
+	size_t		 i;
 
 	if (r->kind == DECK_LOGIN) {
 		login(id, r);
@@ -437,6 +456,11 @@ request(uint32_t id, struct deck_request *r)
 		s->logs = r->logs;
 		TAILQ_INSERT_TAIL(&u->streams, s, entry);
 		head(id, 200, 1, NULL, 0);
+		/* a log nshd follows already begins with what is kept of it */
+		for (i = 0; i < DECK_LOGS; i++)
+			if ((s->logs & (NSHD_WATCH_DAEMON << i)) &&
+			    u->past[i].len > 0)
+				log_event(id, i, u->past[i].text, u->past[i].len);
 		rewatch(u);
 		return;
 	case DECK_TERMINAL:
@@ -1357,36 +1381,93 @@ noticed(struct user *u, struct ibuf *b)
 	static const char	*kinds[] = { "", "commit", "confirmed",
 				    "applied", "back", "lock", "unlock",
 				    "links", "routes", "log", "logend" };
-	static const char	*logs[] = { "daemon", "messages", "authlog",
-				    "pflog" };
 	struct nshd_notice	 nt;
 	struct stream		*s;
 	struct jbuf		 j = { NULL, 0, 0 };
-	size_t			 i;
+	size_t			 i = 0;
 	int			 log = 0;
 
 	if (ibuf_get(b, &nt, sizeof(nt)) == -1 || nt.kind < 1 ||
 	    nt.kind >= (int)(sizeof(kinds) / sizeof(kinds[0])))
 		return;
-	if (nt.kind == NSHD_NOTICE_LOG || nt.kind == NSHD_NOTICE_LOGEND)
+	if (nt.kind == NSHD_NOTICE_LOG || nt.kind == NSHD_NOTICE_LOGEND) {
 		log = nt.n;
+		for (i = 0; i < DECK_LOGS &&
+		    log != (NSHD_WATCH_DAEMON << i); i++)
+			;
+		if (i == DECK_LOGS)
+			return;
+		/*
+		 * kept, while nshd is asked to follow it, for a stream that
+		 * begins to follow it; none once it ends, as when the user
+		 * may no longer follow it
+		 */
+		if (nt.kind == NSHD_NOTICE_LOGEND)
+			past_free(&u->past[i]);
+		else if (u->watch & log)
+			past_add(&u->past[i], ibuf_data(b), ibuf_size(b));
+	}
 	TAILQ_FOREACH(s, &u->streams, entry) {
 		if (log != 0 && (s->logs & log) == 0)
 			continue;
-		j_fmt(&j, "event: %s\ndata: {\"kind\":\"%s\"",
-		    nt.kind == NSHD_NOTICE_LOG ? "log" : "notice",
+		if (nt.kind == NSHD_NOTICE_LOG) {
+			log_event(s->id, i, ibuf_data(b), ibuf_size(b));
+			continue;
+		}
+		j_fmt(&j, "event: notice\ndata: {\"kind\":\"%s\"",
 		    kinds[nt.kind]);
-		if (log != 0) {
-			for (i = 0; i < sizeof(logs) / sizeof(logs[0]); i++)
-				if (log == (NSHD_WATCH_DAEMON << i))
-					j_fmt(&j, ",\"log\":\"%s\"", logs[i]);
-		} else
+		if (log != 0)
+			j_fmt(&j, ",\"log\":\"%s\"", lognames[i]);
+		else
 			j_fmt(&j, ",\"uid\":%u,\"n\":%d", nt.uid, nt.n);
 		J(&j, ",\"text\":");
 		j_str(&j, ibuf_data(b), ibuf_size(b));
 		J(&j, "}\n\n");
 		j_flush(&j, s->id);
 	}
+}
+
+/* text of log i, as an event, to stream id */
+static void
+log_event(uint32_t id, size_t i, const void *text, size_t len)
+{
+	struct jbuf	 j = { NULL, 0, 0 };
+
+	j_fmt(&j, "event: log\ndata: {\"kind\":\"log\",\"log\":\"%s\"",
+	    lognames[i]);
+	J(&j, ",\"text\":");
+	j_str(&j, text, len);
+	J(&j, "}\n\n");
+	j_flush(&j, id);
+}
+
+/* text added to a log's past, of which the last DECK_PAST bytes stay */
+static void
+past_add(struct past *p, const void *text, size_t len)
+{
+	char	*nl;
+	size_t	 over;
+
+	if ((p->text = realloc(p->text, p->len + len)) == NULL)
+		fatal(NULL);
+	memcpy(p->text + p->len, text, len);
+	p->len += len;
+	if (p->len <= DECK_PAST)
+		return;
+	/* from the first line that begins in the last DECK_PAST bytes */
+	over = p->len - DECK_PAST;
+	nl = memchr(p->text + over - 1, '\n', p->len - over + 1);
+	over = nl == NULL ? p->len : (size_t)(nl + 1 - p->text);
+	memmove(p->text, p->text + over, p->len - over);
+	p->len -= over;
+}
+
+static void
+past_free(struct past *p)
+{
+	free(p->text);
+	p->text = NULL;
+	p->len = 0;
 }
 
 /*
@@ -1400,6 +1481,7 @@ rewatch(struct user *u)
 {
 	struct stream	*s;
 	struct pending	*p;
+	size_t		 i;
 	int		 want = 0;
 
 	TAILQ_FOREACH(s, &u->streams, entry)
@@ -1409,6 +1491,10 @@ rewatch(struct user *u)
 		return;
 	if ((p = calloc(1, sizeof(*p))) == NULL)
 		fatal(NULL);
+	/* a log no longer followed keeps nothing: nshd sends it again */
+	for (i = 0; i < DECK_LOGS; i++)
+		if (u->watch & ~want & (NSHD_WATCH_DAEMON << i))
+			past_free(&u->past[i]);
 	p->r.logs = want;
 	u->watch = want;
 	u->watching = 1;
@@ -2065,6 +2151,7 @@ user_free(struct user *u)
 {
 	struct pending	*p;
 	struct stream	*s;
+	size_t		 i;
 
 	/* a terminal's request ends with the terminal */
 	if (u->cur != NULL && u->cur->r.kind == DECK_TERMINAL)
@@ -2097,6 +2184,8 @@ user_free(struct user *u)
 		pipe_compose(&tofront, DECK_END, s->id, -1, NULL, 0);
 		free(s);
 	}
+	for (i = 0; i < DECK_LOGS; i++)
+		past_free(&u->past[i]);
 	if (u->hasnshd)
 		pipe_close(&u->nshd);
 	ro_close(u);
