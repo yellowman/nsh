@@ -195,8 +195,10 @@ function daemons(ws) {
 	return Promise.all([ask("GET", "config", { what: candidate() ?
 	    "candidate" : "running" }), ask("GET", "show",
 	    { words: "daemons" })]).then(function (a) {
-		var c = dchosen[ws];
+		var c;
 
+		dforget(ws);
+		c = dchosen[ws];
 		dconf = daemonConf(said(a[0]));
 		dfacts = of(a[1], "daemon");
 		dtable(ws);
@@ -205,7 +207,32 @@ function daemons(ws) {
 	});
 }
 
-/* ws's daemons, a row for each rtable each is in, configured or running */
+/*
+ * ws's daemon chosen in a table other than the one the page is focused
+ * on is chosen no longer: its settings and its editor go
+ */
+function dforget(ws) {
+	var c = dchosen[ws], box;
+
+	if (!c || table === null || c.rt === table)
+		return;
+	box = document.querySelector(".daemons[data-ws=" + ws + "]");
+	delete dchosen[ws];
+	if (dinsp && dinsp.ws === ws) {
+		dinsp = null;
+		dasked++;
+	}
+	box.querySelector(".dinsp").textContent = "";
+	box.querySelector(".dinsp").appendChild(el("p", "Choose a daemon.",
+	    "dim"));
+	box.querySelector(".structured").textContent = "";
+}
+
+/*
+ * ws's daemons, a row for each rtable each is in, configured or running;
+ * or, with the page focused on a table, a row for that table of each that
+ * may run in it, as in nsh after rtable
+ */
 function dtable(ws) {
 	var box = document.querySelector(".daemons[data-ws=" + ws + "]");
 	var t = box.querySelector("table"), head = el("tr"), n = 0;
@@ -218,16 +245,17 @@ function dtable(ws) {
 	});
 	t.appendChild(head);
 	DAEMONS.filter(function (d) {
-		return d.ws === ws;
+		return d.ws === ws && (table === null || table === 0 || d.rt);
 	}).forEach(function (d) {
-		var rts = [0];
+		var rts = [table === null ? 0 : table];
 
 		Object.keys(dconf).concat(dfacts.map(function (r) {
 			return r.daemon + " " + r.rtable;
 		})).forEach(function (k) {
 			var w = k.split(" "), rt = Number(w[1]);
 
-			if (w[0] === d.name && rts.indexOf(rt) === -1)
+			if (table === null && w[0] === d.name &&
+			    rts.indexOf(rt) === -1)
 				rts.push(rt);
 		});
 		rts.sort(function (a, b) {

@@ -594,6 +594,11 @@ function focusTable(n) {
 	logical();
 	iftable();
 	netDraw();
+	/* a workspace of daemons on screen shows the table's */
+	document.querySelectorAll(".daemons").forEach(function (d) {
+		if (d.offsetParent !== null)
+			daemons(d.dataset.ws);
+	});
 }
 
 /* off: down; warn: up, with no link; on: up, and running */
