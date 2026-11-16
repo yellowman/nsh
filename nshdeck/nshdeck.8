@@ -558,13 +558,16 @@ does not close it.
 If the browser falls more than 1 MB behind, the oldest events not yet
 sent to it are dropped, and a dropped event is sent in their place, so
 that the page requests again what it shows.
+.It Cm reserve
+POST.
+Reserves a terminal, and starts nothing: the answer has
+.Ar channel ,
+a number none of the login's terminals had before.
+A reserved terminal not opened within 30 seconds ends.
 .It Cm open
 POST, with
-.Ar request ,
-a name the page gives this open, of 1 to 32 letters, digits,
-.Ql -
-and
-.Ql _ ;
+.Ar channel ,
+a reserved one;
 .Ar rows
 and
 .Ar cols ,
@@ -573,33 +576,33 @@ each from 1 to 1000, which are 24 and 80 if not given; and
 the routing table nsh's commands begin in, as with
 .Ic nsh Fl T ;
 without it, they begin in the user's own.
-Opens a terminal:
+Opens the terminal on that channel:
 .Nm nshd
 starts
 .Xr nsh 8
 on a pseudo-terminal, as the user.
 The answer has
-.Ar channel ,
-a number none of the login's terminals had before, and
+.Ar channel
+and
 .Ar label ,
 .Dq nsh 1
 to
 .Dq nsh 4 .
-An open with the same
-.Ar request
-and fields, among the user's last 16, is answered with the same
-channel, and opens no other terminal; with other fields, it is refused
-with 409.
+The same open again is answered the same way, and starts nothing; with
+other fields, it is refused with 409.
+An open of a channel never reserved is refused with 404, and of one
+closed, or whose terminal has ended and is gone, with 410; neither
+starts anything.
 A terminal that has no stream 30 seconds after its open ends.
-A user may have at most 4 terminals.
+A user may have at most 4 terminals, those reserved too.
 .It Cm terminal
 GET, with
 .Ar channel .
 The stream of events, like that of
 .Cm events ,
 of the terminal on that channel.
-A terminal has one stream; another is refused with 409, and the stream
-opens no terminal.
+A terminal has one stream once it is opened; another, or one before,
+is refused with 409, and the stream opens no terminal.
 A ready event, with
 .Ar channel ,
 .Ar label
@@ -646,8 +649,11 @@ again.
 .It Cm close
 POST, with
 .Ar channel .
-Ends the terminal on that channel, and its stream; a channel whose
-terminal has ended is closed already.
+Ends the terminal on that channel and its stream, whether it is
+reserved, opening or running; an open of it not yet asked of
+.Nm nshd
+is not asked.
+A channel whose terminal has ended is closed already.
 .El
 .Sh ANSWERS
 Each answer except an event stream's is a JSON object.
@@ -686,18 +692,22 @@ or
 .Cm type
 for a terminal that does not exist or does not yet run, as for a
 .Cm type ;
+or an
+.Cm open
 or a
 .Cm close
-of a channel never opened
+of a channel never reserved
+.It 405
+the wrong method
 .It 409
 an
 .Cm open
-with a
-.Ar request
-that opened another terminal, a second stream of a terminal, or a
-frame typed out of its sequence
-.It 405
-the wrong method
+asked again with other fields, a stream of a terminal not yet opened
+or a second one, or a frame typed out of its sequence
+.It 410
+an
+.Cm open
+of a channel closed, or whose terminal has ended and is gone
 .It 413
 a body over 8192 bytes, or over 3 MB for
 .Cm setrules

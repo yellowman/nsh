@@ -34,7 +34,6 @@
 #define DECK_WINDOW	16		/* an answer's messages front has */
 					/* not written, at most */
 #define DECK_TERMINALS	4		/* a user's terminals, at most */
-#define DECK_OPENID	33		/* an open's request, its NUL too */
 
 /* what a request asks */
 enum deck_kind {
@@ -57,7 +56,8 @@ enum deck_kind {
 	DECK_SETRULES,
 	DECK_STAGE,
 	DECK_OPEN,
-	DECK_CLOSE
+	DECK_CLOSE,
+	DECK_RESERVE
 };
 
 /*
@@ -72,8 +72,7 @@ struct deck_request {
 	char		text[NSHD_LINE];	/* a user's name, a show's */
 						/* words, a line, an */
 						/* operation, a configuration, */
-						/* a typed frame, in base64, */
-						/* an open's request */
+						/* a typed frame, in base64 */
 	char		password[NSHD_PASSWORD];
 	char		comment[NSHD_COMMENT];
 	char		daemon[NSHD_DAEMON];	/* whose rules */

@@ -147,7 +147,6 @@ struct params {
 #define F_TEXT		0x40000
 #define F_IFNAME	0x80000
 #define F_BRIDGE	0x100000
-#define F_REQUEST	0x200000
 #define F_CHANNEL	0x400000
 #define F_SEQ		0x800000
 static const struct endpoint {
@@ -168,7 +167,8 @@ static const struct endpoint {
 	{ "rollback",	DECK_ROLLBACK,	1, F_N },
 	{ "op",		DECK_OP,	1, F_LINE | F_RTABLE },
 	{ "complete",	DECK_COMPLETE,	0, F_LINE | F_HELP },
-	{ "open",	DECK_OPEN,	1, F_REQUEST | F_ROWS | F_COLS |
+	{ "reserve",	DECK_RESERVE,	1, 0 },
+	{ "open",	DECK_OPEN,	1, F_CHANNEL | F_ROWS | F_COLS |
 	    F_RTABLE },
 	{ "terminal",	DECK_TERMINAL,	0, F_CHANNEL },
 	{ "type",	DECK_TYPE,	1, F_CHANNEL | F_SEQ | F_DATA |
@@ -662,7 +662,7 @@ front_fields(const char *form, int fields, struct deck_request *r,
 		{ "check", F_CHECK }, { "minutes", F_MINUTES },
 		{ "comment", F_COMMENT }, { "logs", F_LOGS },
 		{ "help", F_HELP }, { "data", F_DATA }, { "rows", F_ROWS },
-		{ "cols", F_COLS }, { "request", F_REQUEST },
+		{ "cols", F_COLS },
 		{ "channel", F_CHANNEL }, { "seq", F_SEQ },
 		{ "daemon", F_DAEMON }, { "text", F_TEXT },
 		{ "interface", F_IFNAME }, { "bridge", F_BRIDGE },
@@ -700,9 +700,9 @@ front_fields(const char *form, int fields, struct deck_request *r,
 		}
 		explicit_bzero(value, sizeof(value));
 	}
-	/* an open names its request; and a terminal's table, or -1, the */
+	/* an open names its channel; and a terminal's table, or -1, the */
 	/* login's own, if it was not given */
-	if (r->kind == DECK_OPEN && (seen & F_REQUEST) == 0)
+	if (r->kind == DECK_OPEN && (seen & F_CHANNEL) == 0)
 		return (-1);
 	/* a frame typed has its sequence */
 	if (r->kind == DECK_TYPE && (seen & F_SEQ) == 0)
@@ -804,14 +804,6 @@ front_field(int f, const char *v, struct deck_request *r)
 	case F_HELP:
 		r->n = strtonum(v, 0, 1, &errstr);
 		return (errstr == NULL ? 0 : -1);
-	case F_REQUEST:
-		/* the page's name for an open: letters, digits, - and _ */
-		if (v[0] == '\0' || strlen(v) >= DECK_OPENID ||
-		    strspn(v, "abcdefghijklmnopqrstuvwxyz"
-		    "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-") != strlen(v))
-			return (-1);
-		strlcpy(r->text, v, sizeof(r->text));
-		return (0);
 	case F_CHANNEL:
 		r->channel = strtonum(v, 1, INT32_MAX, &errstr);
 		return (errstr == NULL ? 0 : -1);
@@ -941,6 +933,7 @@ front_head(struct conn *c, struct deck_head *h)
 		{ 200, "OK" }, { 400, "Bad Request" },
 		{ 401, "Unauthorized" }, { 403, "Forbidden" },
 		{ 404, "Not Found" }, { 405, "Method Not Allowed" },
+		{ 409, "Conflict" }, { 410, "Gone" },
 		{ 413, "Payload Too Large" },
 		{ 415, "Unsupported Media Type" },
 		{ 429, "Too Many Requests" },

@@ -99,10 +99,9 @@
 					/* which is 4096 bytes in base64 */
 #define DECK_TYPED	(64 * 1024)	/* what was typed to a terminal, */
 					/* not yet written to it, at most */
-#define DECK_OPENS	16		/* a user's last opens, kept for a */
-					/* request asked again */
 #define DECK_FOLLOW	30		/* seconds a terminal waits for its */
-					/* stream before it ends */
+					/* open, then its stream, before it */
+					/* ends */
 #define DECK_FRAME	750		/* a frame's bytes typed, at most: */
 					/* 1000 characters of base64 */
 #define DECK_PAST	(64 * 1024)	/* a log's text kept for a new */
@@ -151,8 +150,11 @@ struct past {
 	size_t			 len;
 };
 
-/* how far a terminal is: asked of nshd, running, or ended unfollowed */
-enum { TS_ASKED, TS_RUNS, TS_ENDED };
+/*
+ * how far a terminal is: reserved, asked of nshd, running, or ended
+ * unfollowed
+ */
+enum { TS_RESERVED, TS_ASKED, TS_RUNS, TS_ENDED };
 
 /*
  * a terminal of a user's: its channel, which no other of the login's
@@ -165,6 +167,8 @@ struct terminal {
 	uint32_t		 id;		/* id of its stream, or 0 */
 	int			 n;		/* its label's number, nsh n */
 	int			 rtable;	/* nsh's first table, or -1 */
+	int32_t			 rows;		/* its open's size */
+	int32_t			 cols;
 	int			 state;
 	int			 pty;		/* or -1 */
 	struct event		 ev;
@@ -179,15 +183,6 @@ struct terminal {
 	int			 lastlen;
 	int32_t			 lastrows;	/* and size */
 	int32_t			 lastcols;
-};
-
-/* an open a user asked, kept so that it can be asked again */
-struct opened {
-	char			 request[DECK_OPENID];
-	int32_t			 rows;
-	int32_t			 cols;
-	int32_t			 rtable;
-	uint32_t		 channel;	/* 0: none kept here */
 };
 
 struct user {
@@ -222,8 +217,6 @@ struct user {
 	TAILQ_HEAD(, terminal)	 terms;
 	int			 nterms;
 	uint32_t		 channels;	/* the last channel given */
-	struct opened		 opens[DECK_OPENS];
-	int			 nextopen;	/* opens' oldest */
 	int			 watch;		/* what nshd was asked to watch */
 	int			 watching;	/* a watch waits */
 	time_t			 used;
@@ -282,6 +275,7 @@ static void	 log_event(uint32_t, size_t, const void *, size_t);
 static void	 past_add(struct past *, const void *, size_t);
 static void	 past_free(struct past *);
 static void	 rewatch(struct user *);
+static void	 reserved(uint32_t, struct user *);
 static void	 opened(uint32_t, struct user *, struct deck_request *);
 static void	 followed(uint32_t, struct user *, struct deck_request *);
 static void	 closed(uint32_t, struct user *, struct deck_request *);
@@ -392,7 +386,7 @@ sessions_front(int fd, short event, void *arg)
 			 * terminal's -1, the login's own table
 			 */
 			if (imsg_get_data(&imsg, &r, sizeof(r)) == -1 ||
-			    r.kind < DECK_LOGIN || r.kind > DECK_CLOSE ||
+			    r.kind < DECK_LOGIN || r.kind > DECK_RESERVE ||
 			    (incoming.len > 0 && (incoming.id != id ||
 			    (r.kind != DECK_SETRULES &&
 			    r.kind != DECK_STAGE))) ||
@@ -503,6 +497,9 @@ request(uint32_t id, struct deck_request *r)
 			    u->past[i].len > 0)
 				log_event(id, i, u->past[i].text, u->past[i].len);
 		rewatch(u);
+		return;
+	case DECK_RESERVE:
+		reserved(id, u);
 		return;
 	case DECK_OPEN:
 		opened(id, u, r);
@@ -1551,50 +1548,74 @@ rewatch(struct user *u)
 }
 
 /*
- * An open of u's: a terminal on a channel that none of u's had before,
- * answered at once, and nshd asked for its nsh. The same request again
- * is answered with the same channel, whether it runs yet or not, and
- * none is opened; a request asking again with other fields is refused.
- * A terminal that no stream follows within DECK_FOLLOW seconds ends
+ * A reservation of u's: a terminal on a channel that none of u's had
+ * before, which nothing runs in until an open of that channel. It holds
+ * one of u's DECK_TERMINALS, and ends if it is not opened within
+ * DECK_FOLLOW seconds
+ */
+static void
+reserved(uint32_t id, struct user *u)
+{
+	struct timeval	 tv = { DECK_FOLLOW, 0 };
+	struct terminal	*t;
+
+	if (u->nterms == DECK_TERMINALS) {
+		reply(id, 503, "{\"error\":\"too many terminals\"}");
+		return;
+	}
+	if ((t = calloc(1, sizeof(*t))) == NULL)
+		fatal(NULL);
+	t->u = u;
+	t->channel = ++u->channels;
+	t->state = TS_RESERVED;
+	t->pty = -1;
+	evtimer_set(&t->follow, term_unfollowed, t);
+	evtimer_add(&t->follow, &tv);
+	TAILQ_INSERT_TAIL(&u->terms, t, entry);
+	u->nterms++;
+	reply(id, 200, "{\"ok\":true,\"channel\":%u}", t->channel);
+}
+
+/*
+ * An open of the terminal u reserved on the channel r names: nshd is
+ * asked for its nsh, and the open answered at once. The same open again
+ * is answered the same way, whatever its nsh has done since, and asks
+ * nshd for nothing; one with other fields is refused. An open of a
+ * channel never reserved, or whose terminal has ended and is gone, opens
+ * nothing. A terminal that no stream follows within DECK_FOLLOW seconds
+ * of its open ends
  */
 static void
 opened(uint32_t id, struct user *u, struct deck_request *r)
 {
 	struct timeval	 tv = { DECK_FOLLOW, 0 };
 	struct terminal	*t, *o;
-	struct opened	*k;
 	struct pending	*p;
-	int		 i, n;
+	int		 n;
 
-	for (i = 0; i < DECK_OPENS; i++) {
-		k = &u->opens[i];
-		if (k->channel == 0 || strcmp(k->request, r->text) != 0)
-			continue;
-		if (k->rows != r->rows || k->cols != r->cols ||
-		    k->rtable != r->n) {
-			reply(id, 409, "{\"error\":\"that request opened "
-			    "another terminal\"}");
-			return;
-		}
-		if ((t = term_channel(u, k->channel)) == NULL) {
-			reply(id, 200, "{\"ok\":true,\"channel\":%u,"
-			    "\"ended\":true}", k->channel);
-			return;
-		}
-		reply(id, 200, "{\"ok\":true,\"channel\":%u,\"label\":"
-		    "\"nsh %d\"}", t->channel, t->n);
+	if ((t = term_channel(u, r->channel)) == NULL) {
+		if ((uint32_t)r->channel > u->channels)
+			reply(id, 404, "{\"error\":\"no such terminal\"}");
+		else
+			reply(id, 410, "{\"error\":\"the terminal is "
+			    "closed\"}");
 		return;
 	}
-	if (u->nterms == DECK_TERMINALS) {
-		reply(id, 503, "{\"error\":\"too many terminals\"}");
+	if (t->state != TS_RESERVED) {
+		if (t->rows != r->rows || t->cols != r->cols ||
+		    t->rtable != r->n)
+			reply(id, 409, "{\"error\":\"the terminal was opened "
+			    "with other fields\"}");
+		else
+			reply(id, 200, "{\"ok\":true,\"channel\":%u,"
+			    "\"label\":\"nsh %d\"}", t->channel, t->n);
 		return;
 	}
 	if (u->nqueue == DECK_QUEUE) {
 		reply(id, 503, "{\"error\":\"too many requests waiting\"}");
 		return;
 	}
-	if ((t = calloc(1, sizeof(*t))) == NULL ||
-	    (p = calloc(1, sizeof(*p))) == NULL)
+	if ((p = calloc(1, sizeof(*p))) == NULL)
 		fatal(NULL);
 	/* its label: the lowest number none of u's terminals has */
 	for (n = 1; n <= DECK_TERMINALS; n++) {
@@ -1604,23 +1625,12 @@ opened(uint32_t id, struct user *u, struct deck_request *r)
 		if (o == NULL)
 			break;
 	}
-	t->u = u;
-	t->channel = ++u->channels;
 	t->n = n;
 	t->rtable = r->n;
+	t->rows = r->rows;
+	t->cols = r->cols;
 	t->state = TS_ASKED;
-	t->pty = -1;
-	evtimer_set(&t->follow, term_unfollowed, t);
 	evtimer_add(&t->follow, &tv);
-	TAILQ_INSERT_TAIL(&u->terms, t, entry);
-	u->nterms++;
-	k = &u->opens[u->nextopen];
-	u->nextopen = (u->nextopen + 1) % DECK_OPENS;
-	strlcpy(k->request, r->text, sizeof(k->request));
-	k->rows = r->rows;
-	k->cols = r->cols;
-	k->rtable = r->n;
-	k->channel = t->channel;
 	/* asked of nshd as u's requests are, by no client of front's */
 	p->channel = t->channel;
 	p->r = *r;
@@ -1644,6 +1654,10 @@ followed(uint32_t id, struct user *u, struct deck_request *r)
 		reply(id, 404, "{\"error\":\"no such terminal\"}");
 		return;
 	}
+	if (t->state == TS_RESERVED) {
+		reply(id, 409, "{\"error\":\"the terminal is not open\"}");
+		return;
+	}
 	if (t->id != 0) {
 		reply(id, 409, "{\"error\":\"the terminal has its stream\"}");
 		return;
@@ -1658,8 +1672,9 @@ followed(uint32_t id, struct user *u, struct deck_request *r)
 }
 
 /*
- * The terminal r names, closed: its nsh ends, and its stream with it.
- * A channel of u's that has ended already is closed
+ * The terminal r names, closed, whether it is reserved, opening or
+ * running, and its stream with it. A channel of u's that has ended
+ * already is closed
  */
 static void
 closed(uint32_t id, struct user *u, struct deck_request *r)
@@ -1839,7 +1854,16 @@ static void
 term_end(struct user *u, struct terminal *t, const char *why)
 {
 	struct jbuf	 j = { NULL, 0, 0 };
+	struct pending	*p;
 
+	/* its open, if nshd is not yet asked for it, is not asked */
+	TAILQ_FOREACH(p, &u->queue, entry)
+		if (p->r.kind == DECK_OPEN && p->channel == t->channel) {
+			TAILQ_REMOVE(&u->queue, p, entry);
+			u->nqueue--;
+			pending_free(p);
+			break;
+		}
 	if (why != NULL && t->id != 0) {
 		J(&j, "event: end\ndata: {\"text\":");
 		j_str(&j, why, strlen(why));

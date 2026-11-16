@@ -1,7 +1,8 @@
 /*
  * term.js: terminals, each nsh on a pty, which nshdeck runs for the user
- * logged in (nshdeck(8)'s open, terminal, type and close), each in a tab
- * of its own. An open asks for one, and is answered with its channel;
+ * logged in (nshdeck(8)'s reserve, open, terminal, type and close), each
+ * in a tab of its own. A reservation asks for its channel, and an open
+ * of the channel starts its nsh;
  * xterm.js draws it; what nsh writes comes on the channel's event
  * stream, in base64; and what is typed goes, as its bytes, in frames,
  * one at a time, each with its sequence, and the same frame again until
@@ -84,7 +85,7 @@ function tpost(t, f) {
 					tpost(t, f);
 			}, 250);
 		else
-			tgone(t, j.error || "typed into a terminal gone");
+			tend(t, j.error || "typed into a terminal gone");
 	}, function () {
 		setTimeout(function () {
 			if (t.frame === f)
@@ -99,24 +100,17 @@ function tbytes(t, b) {
 	tsend(t);
 }
 
-/* a name for an open, which the page gives it again if it asks again */
-function topenid() {
-	var b = new Uint32Array(2);
-
-	crypto.getRandomValues(b);
-	return b[0].toString(36) + b[1].toString(36);
-}
-
 /*
- * An open of fields, asked again, with the same name, as many as tries
- * times, if its answer was lost: nshdeck answers that with the same
- * channel, so a lost answer opens no second nsh
+ * Request name with fields, asked again as it was, as many as tries
+ * times, if its answer was lost: an open asked again is answered as it
+ * was and starts nothing, and a reservation whose answer was lost ends
+ * unopened
  */
-function topen(fields, tries) {
-	return ask("POST", "open", fields).catch(function (e) {
+function tretry(name, fields, tries) {
+	return ask("POST", name, fields).catch(function (e) {
 		if (tries <= 1)
 			throw e;
-		return topen(fields, tries - 1);
+		return tretry(name, fields, tries - 1);
 	});
 }
 
@@ -215,7 +209,12 @@ function tfit(t) {
 	t.fit.fit();
 }
 
-/* an nsh opened in tab t, if none runs or is opening there */
+/*
+ * An nsh in tab t, if none runs or is opening there: a channel reserved,
+ * and then opened. Once the channel is reserved, closing the tab closes
+ * it, as a refusal does; a tab closed before that closes it when it
+ * comes
+ */
 function tconnect(t) {
 	var fields;
 
@@ -228,25 +227,39 @@ function tconnect(t) {
 	t.frame = null;
 	/* nsh begins in the table the page is focused on, as nsh -T does */
 	t.table = table;
-	fields = { request: topenid(), rows: t.term.rows, cols: t.term.cols };
+	fields = { rows: t.term.rows, cols: t.term.cols };
 	if (t.table !== null)
 		fields.rtable = t.table;
 	t.opening = true;
 	tstate(t, "starting nsh", "warn");
-	topen(fields, 3).then(function (j) {
+	tretry("reserve", {}, 3).then(function (j) {
+		if (j.ok && !t.closed) {
+			t.channel = fields.channel = j.channel;
+			return tretry("open", fields, 3);
+		}
+		if (j.ok)
+			tclosing(j.channel);
+		return j;
+	}).then(function (j) {
 		t.opening = false;
-		/* closed meanwhile: what it opened ends now */
-		if (t.closed) {
-			if (j.ok && !j.ended)
-				tclosing(j.channel);
-		} else if (j.ok && !j.ended)
+		if (t.closed)
+			return;
+		if (j.ok)
 			tfollow(t, j.channel);
-		else
-			tstate(t, j.ended ? "nsh ended" : j.error, "off");
+		else {
+			if (t.channel !== 0)
+				tclosing(t.channel);
+			t.channel = 0;
+			tstate(t, j.error, "off");
+		}
 	}, function () {
 		t.opening = false;
-		if (!t.closed)
-			tstate(t, "nshdeck did not answer", "off");
+		if (t.closed)
+			return;
+		if (t.channel !== 0)
+			tclosing(t.channel);
+		t.channel = 0;
+		tstate(t, "nshdeck did not answer", "off");
 	});
 }
 
@@ -287,7 +300,7 @@ function tfollow(t, c) {
 	/* EventSource would ask again, which follows no terminal now */
 	s.onerror = function () {
 		if (t.stream === s)
-			tgone(t, "disconnected");
+			tend(t, "disconnected");
 	};
 }
 
@@ -319,11 +332,14 @@ function tclosing(c) {
 	});
 }
 
-/* tab t's nsh, ended: its channel closed, and its stream */
-function tend(t) {
+/*
+ * tab t's nsh, ended by the page, as why says: its channel closed, as
+ * its stream is, so that nshdeck need not notice the stream's end
+ */
+function tend(t, why) {
 	if (t.channel !== 0)
 		tclosing(t.channel);
-	tgone(t, "disconnected");
+	tgone(t, why);
 }
 
 /* tab t closed, its nsh ended: what comes for it later is dropped */
@@ -331,7 +347,7 @@ function tclose(t) {
 	var i = tabs.indexOf(t);
 
 	t.closed = true;
-	tend(t);
+	tend(t, "closed");
 	t.term.dispose();
 	t.tab.remove();
 	t.panel.remove();
@@ -375,7 +391,7 @@ document.addEventListener("DOMContentLoaded", function () {
 	});
 	$("term-end").addEventListener("click", function () {
 		if (tab !== null)
-			tend(tab);
+			tend(tab, "disconnected");
 	});
 	/* the arrow keys move between the tabs */
 	$("term-tabs").addEventListener("keydown", function (e) {
