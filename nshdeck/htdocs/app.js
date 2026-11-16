@@ -22,6 +22,7 @@ var hostname = "nsh";		/* the host's name, for the prompt */
 var LOOK = 5000;		/* how often the Overview looks at traffic, ms */
 var looker = null;
 var jacks = {};			/* each port's button, by its name */
+var linked = [];		/* what the open tray's interface is linked to */
 var packets = {};		/* each port's packets, at the last look */
 var chosen = -1;		/* the saved configuration History shows */
 var pending = null;		/* the operation that waits to be confirmed */
@@ -654,13 +655,16 @@ function port(name) {
 	var p = el("button"), jack = el("span", null, "jack");
 
 	p.type = "button";
+	p.dataset.name = name;
+	p.setAttribute("aria-expanded", String($("tray").dataset.name ===
+	    name));
+	p.toggleAttribute("data-linked", linked.indexOf(name) !== -1);
 	jack.appendChild(el("i", null, "led link"));
 	jack.appendChild(el("i", null, "led act"));
 	p.appendChild(jack);
 	p.appendChild(el("span", name, "label"));
 	p.appendChild(el("span", null, "rate"));
 	p.appendChild(el("span", null, "util")).appendChild(el("i"));
-	p.setAttribute("aria-expanded", "false");
 	p.addEventListener("click", function () {
 		tray(name);
 	});
@@ -668,56 +672,67 @@ function port(name) {
 }
 
 /*
- * Open or close a port's tray under the ports. It has the port's
- * counters and a graph of its rates, and lists the interfaces on the
- * port and what the port belongs to, from the running configuration and
- * show interface. Choosing the open port again closes it.
+ * Open or close the tray of interface name, a port or a logical
+ * interface, under the ports. It has the interface's counters and a graph
+ * of its rates; what the interface is linked to, in the running
+ * configuration and show interface, is outlined as it is, where the page
+ * draws it. Choosing the open interface again closes it.
  */
 function tray(name) {
-	var box = $("tray");
+	var box = $("tray"), shut = box.dataset.name === name;
 
-	Object.keys(jacks).forEach(function (n) {
-		jacks[n].setAttribute("aria-expanded", String(n === name &&
-		    box.dataset.port !== name));
+	document.querySelectorAll("#ports .port, #logical .lif").forEach(
+	    function (b) {
+		b.setAttribute("aria-expanded", String(b.dataset.name === name &&
+		    !shut));
 	});
-	if (box.dataset.port === name) {
-		box.dataset.port = "";
+	trayLinks([]);
+	if (shut) {
+		box.dataset.name = "";
 		box.hidden = true;
 		return Promise.resolve();
 	}
-	box.dataset.port = name;
+	box.dataset.name = name;
 	return ask("GET", "config", { what: "running" }).then(function (j) {
 		var all = relEdges(said(j)), head = el("div", null, "bar"), now;
-		var go = function (n) {
-			selected = n;
-			workspace("network");
-		};
-		var on = relOf(all, name).filter(function (e) {
-			return e.to === name && (e.type === "parent-link" ||
-			    e.type === "carp-underlay");
-		});
 
-		if (box.dataset.port !== name)
+		if (box.dataset.name !== name)
 			return;
 		box.textContent = "";
 		head.appendChild(el("h3", name));
 		head.appendChild(el("span", null, "fill"));
 		head.appendChild(el("button", "Inspect")).addEventListener(
 		    "click", function () {
-			go(name);
+			selected = name;
+			workspace("network");
 		});
 		box.appendChild(head);
 		now = box.appendChild(el("div", null, "now"));
 		now.appendChild(el("div")).id = "tray-rates";
 		graphMake(now, name);
 		trayRates();
-		box.appendChild(el("h4", "On this port"));
-		relRows(box, name, on, all, go);
-		box.appendChild(el("h4", "Linked to"));
-		relRows(box, name, relOf(all, name).filter(function (e) {
-			return on.indexOf(e) === -1;
-		}), all, go);
+		trayLinks(relOf(all, name).map(function (e) {
+			return e.from === name ? e.to : e.from;
+		}));
 		box.hidden = false;
+		/* chosen below it, out of view, the tray is scrolled to */
+		if (box.getBoundingClientRect().top <
+		    document.querySelector("main").getBoundingClientRect().top)
+			box.scrollIntoView();
+	});
+}
+
+/*
+ * the interfaces names says the open tray's is linked to: each one the
+ * page draws, a port or a logical interface, is outlined as the
+ * interface chosen is
+ */
+function trayLinks(names) {
+	linked = names;
+	document.querySelectorAll("#ports .port, #logical .lif").forEach(
+	    function (b) {
+		b.toggleAttribute("data-linked", linked.indexOf(
+		    b.dataset.name) !== -1);
 	});
 }
 
@@ -728,7 +743,7 @@ function trayRates() {
 	if (box === null)
 		return;
 	box.textContent = "";
-	box.appendChild(rateLines($("tray").dataset.port));
+	box.appendChild(rateLines($("tray").dataset.name));
 	graphDraw();
 }
 
@@ -903,13 +918,17 @@ function logical() {
 			var row = el("button", null, "lif");
 
 			row.type = "button";
+			row.dataset.name = x[0];
+			row.setAttribute("aria-expanded", String(
+			    $("tray").dataset.name === x[0]));
+			row.toggleAttribute("data-linked", linked.indexOf(
+			    x[0]) !== -1);
 			row.appendChild(el("i", null, "led " + x[1]));
 			row.appendChild(el("b", x[0]));
 			row.appendChild(el("span", x[2], "rel"));
 			row.appendChild(el("span", x[3], "addr"));
 			row.addEventListener("click", function () {
-				selected = x[0];
-				workspace("network");
+				tray(x[0]);
 			});
 			box.appendChild(row);
 		});

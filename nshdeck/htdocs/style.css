@@ -1101,13 +1101,16 @@ main {
 	opacity: .65;
 }
 
-/* a port pointed at or chosen: its jack's edge lights, and nothing else */
+/*
+ * a port pointed at or chosen, or linked to the interface chosen: its
+ * jack's edge lights, and nothing else
+ */
 button.port:hover:not(:disabled), button.port:active:not(:disabled) {
 	background: none;
 }
 
 .port:hover:not(:disabled) .jack, .port:focus-visible .jack,
-.port[aria-expanded=true] .jack {
+.port[aria-expanded=true] .jack, .port[data-linked] .jack {
 	box-shadow: 0 0 0 1px var(--accent), 0 0 .6154rem var(--accent),
 	    inset 0 0 0 1px rgba(255, 255, 255, .28);
 }
@@ -1513,6 +1516,11 @@ button.goto:hover:not(:disabled) {
 
 .lif:hover, .lif:focus-visible {
 	background: var(--select);
+}
+
+/* the logical interface chosen, and those linked to the one chosen */
+.lif[aria-expanded=true], .lif[data-linked] {
+	box-shadow: 0 0 0 1px var(--accent), 0 0 .6154rem var(--accent);
 }
 
 .lif b {
