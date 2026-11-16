@@ -2297,31 +2297,16 @@ button:disabled {
 	text-align: right;
 }
 
-/* the user's access, at the Overview's foot (app.js) */
-#access .sheet header {
-	align-items: center;
+/* the user and their permissions, at the Overview's foot (app.js) */
+#access {
+	margin: 0;
+	font-size: .9231rem;
+	color: var(--dim);
 }
 
-#access .grants dt.on::before {
-	content: "\2713";
-	display: inline-block;
-	width: 1.2308rem;
-	color: var(--on);
-}
-
-#access .grants dt.off {
-	color: var(--faint);
-}
-
-#access .grants dt.off::before {
-	content: "\2013";
-	display: inline-block;
-	width: 1.2308rem;
-}
-
-#access .grants dt.on {
-	color: var(--text);
+#access b {
 	font-weight: 600;
+	color: var(--text);
 }
 
 @media (prefers-color-scheme: light) {

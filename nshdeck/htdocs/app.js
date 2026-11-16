@@ -1215,35 +1215,33 @@ function entering() {
 
 /* what each permission allows, as nsh(8) says */
 var GRANTS = [
-	["view", "View", "Every show, the configuration included"],
-	["operate", "Operate", "Operations, such as flush, reboot and a " +
-	    "daemon's actions, and ping and traceroute"],
-	["configure", "Configure", "A candidate of your own, commit and " +
-	    "rollback"],
-	["admin", "Admin", "The shared candidate, and changes to what runs " +
-	    "as root or decides who may log in"],
-	["exec", "Exec", "Programs nsh runs as you, such as ssh and an " +
-	    "editor"]
+	["view", "Every show, the configuration included"],
+	["operate", "Operations, such as flush, reboot and a daemon's " +
+	    "actions, and ping and traceroute"],
+	["configure", "A candidate of your own, commit and rollback"],
+	["admin", "The shared candidate, and changes to what runs as root " +
+	    "or decides who may log in"],
+	["exec", "Programs nsh runs as you, such as ssh and an editor"]
 ];
 
-/* the user and what their permissions allow, at the Overview's foot */
+/*
+ * the user and their permissions, in a line at the Overview's foot; each
+ * permission's title says what it allows
+ */
 function access(user, perms) {
-	var s = sheetOf("Your access"), h = s.querySelector("header");
-	var dl = el("dl", null, "fields grants");
-
-	h.insertBefore(avatarOf(user), h.firstChild);
-	h.querySelector("h3").textContent = user;
-	h.appendChild(el("span", "what your login class allows", "count"));
-	GRANTS.forEach(function (g) {
-		var on = perms.indexOf(g[0]) !== -1;
-
-		dl.appendChild(el("dt", g[1], on ? "on" : "off"));
-		dl.appendChild(el("dd", on ? g[2] : "Not allowed", on ? "" :
-		    "dim"));
+	var p = $("access"), mine = GRANTS.filter(function (g) {
+		return perms.indexOf(g[0]) !== -1;
 	});
-	s.appendChild(dl);
-	$("access").textContent = "";
-	$("access").appendChild(s);
+
+	p.textContent = "";
+	p.appendChild(el("b", user));
+	p.appendChild(document.createTextNode(mine.length ? " has " :
+	    " has no permissions"));
+	mine.forEach(function (g, i) {
+		if (i)
+			p.appendChild(document.createTextNode(", "));
+		p.appendChild(el("span", g[0])).title = g[1];
+	});
 }
 
 /* an unconfirmed commit's deadline, counted down in the strip */
