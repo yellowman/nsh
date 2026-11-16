@@ -1,10 +1,10 @@
 /*
  * stats.js: what the counters nshd sends say of now. An interface's
  * rates are the difference between two looks at show interface, kept
- * for a few minutes and drawn as a small graph; its errors are marked
- * when they rose. pf's states and rates, from show kernel pf, are
- * on a readout in Security, as the Overview's. All of it is kept in
- * this page alone, and is gone with it
+ * for a few minutes and drawn as a small graph, and in the tray as a
+ * larger one; its errors are marked when they rose. pf's states and
+ * rates, from show kernel pf, are on a readout in Security, as the
+ * Overview's. All of it is kept in this page alone, and is gone with it
  */
 "use strict";
 
@@ -19,6 +19,14 @@ var SVG = "http://www.w3.org/2000/svg";
 var COUNTERS = ["input-bytes", "output-bytes", "input-packets",
     "output-packets", "input-errors", "output-errors", "input-drops",
     "collisions"];
+
+/* each rate kept: the counter it is of, and what one counted is worth */
+var RATE_OF = {
+	ibps: ["input-bytes", 8], obps: ["output-bytes", 8],
+	ipps: ["input-packets", 1], opps: ["output-packets", 1],
+	ierrs: ["input-errors", 1], oerrs: ["output-errors", 1],
+	idrops: ["input-drops", 1], colls: ["collisions", 1]
+};
 
 function svg(tag, attrs) {
 	var e = document.createElementNS(SVG, tag);
@@ -50,9 +58,9 @@ function bps(n) {
 
 /*
  * The interfaces' counters at a look, list, taken at now, in
- * milliseconds: each one's rates since the look before, added to what
- * is kept of it. An interface whose counter fell was made again, and
- * has no rate for this look
+ * milliseconds: each one's rates since the look before, a second, with
+ * when, added to what is kept of it. An interface whose counter fell
+ * was made again, and has no rate for this look
  */
 function sampled(list, now) {
 	var next = {};
@@ -69,16 +77,12 @@ function sampled(list, now) {
 		    rose: false, rate: null };
 		if (p && !fell && now > p.t) {
 			dt = (now - p.t) / 1000;
-			s.rate = {
-			    ibps: (c["input-bytes"] - p.c["input-bytes"]) * 8 /
-				dt,
-			    obps: (c["output-bytes"] - p.c["output-bytes"]) *
-				8 / dt,
-			    ipps: (c["input-packets"] -
-				p.c["input-packets"]) / dt,
-			    opps: (c["output-packets"] -
-				p.c["output-packets"]) / dt
-			};
+			s.rate = { t: now };
+			Object.keys(RATE_OF).forEach(function (k) {
+				var n = RATE_OF[k][0];
+
+				s.rate[k] = (c[n] - p.c[n]) * RATE_OF[k][1] / dt;
+			});
 			s.rose = c["input-errors"] > p.c["input-errors"] ||
 			    c["output-errors"] > p.c["output-errors"] ||
 			    c["input-drops"] > p.c["input-drops"];
@@ -160,6 +164,397 @@ function rateLines(name) {
 	row("Drops", s.c["input-drops"] + " in");
 	row("Collisions", String(s.c.collisions));
 	return dl;
+}
+
+/*
+ * The tray's graph: an interface's rates kept, of the choice of GRAPHS
+ * chosen, over the last five minutes, the newest look at its right.
+ * Pointed at, or chosen and moved with the arrow keys, it says each of
+ * its rates at a look. Its plot and its tip are made once, so that a
+ * look draws the lines again and leaves the graph chosen as it was
+ */
+var GRAPHS = [
+	{ name: "Throughput", unit: "bit/s", lines: [["In", "ibps"],
+	    ["Out", "obps"]] },
+	{ name: "Packets", unit: "packets/s", lines: [["In", "ipps"],
+	    ["Out", "opps"]] },
+	{ name: "Errors", unit: "errors/s", lines: [["In", "ierrs"],
+	    ["Out", "oerrs"]] },
+	{ name: "Drops", unit: "drops/s", lines: [["In", "idrops"]] },
+	{ name: "Collisions", unit: "collisions/s", lines: [["Collisions",
+	    "colls"]] }
+];
+var SPAN = KEPT * LOOK;	/* the time the graph spans, ms */
+var graphOf = 0;	/* the choice of GRAPHS shown */
+var graphX = null;	/* where the graph is pointed at, or null */
+var graphAt = null;	/* what it drew last: its looks, where, and more */
+var graphSize = null;	/* its plot's size, watched */
+
+/*
+ * n, a rate of graph g, as text: a few figures, with no ".0", and with
+ * unit, its unit
+ */
+function graphFigure(n, g, unit) {
+	var s = n > 0 && n < 10 ? [String(Number(n.toPrecision(2))), ""] :
+	    scaled(n);
+
+	s[0] = s[0].replace(/\.0$/, "");
+
+	if (!unit)
+		return s[0] + s[1];
+	return g.unit === "bit/s" ? s[0] + " " + s[1] + g.unit : s[0] + s[1] +
+	    " " + g.unit;
+}
+
+/* a scale for rates up to max: a round top, and the step of its rules */
+function graphScale(max) {
+	var e, f, step;
+
+	if (!(max > 0))
+		return { top: 1, step: 1 };
+	e = Math.pow(10, Math.floor(Math.log10(max / 4)));
+	f = max / 4 / e;
+	step = (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * e;
+	return { top: Math.ceil(max / step - 1e-9) * step, step: step };
+}
+
+/*
+ * A path through pts, [x, y] by rising x: straight between two, and
+ * through more a curve that rises or falls only where they do, so that
+ * it never shows a rate no look counted (d3's monotone curve, Steffen's
+ * slopes)
+ */
+function graphPath(pts) {
+	var n = pts.length, t = [], d, i, h0, h1, s0, s1;
+	var at = function (p) {
+		return p[0].toFixed(1) + "," + p[1].toFixed(1);
+	};
+	var sign = function (x) {
+		return x < 0 ? -1 : 1;
+	};
+
+	if (n < 3)
+		return n ? "M" + pts.map(at).join("L") : "";
+	for (i = 1; i < n - 1; i++) {
+		h0 = pts[i][0] - pts[i - 1][0];
+		h1 = pts[i + 1][0] - pts[i][0];
+		s0 = (pts[i][1] - pts[i - 1][1]) / h0;
+		s1 = (pts[i + 1][1] - pts[i][1]) / h1;
+		t[i] = (sign(s0) + sign(s1)) * Math.min(Math.abs(s0),
+		    Math.abs(s1), .5 * Math.abs((s0 * h1 + s1 * h0) /
+		    (h0 + h1))) || 0;
+	}
+	t[0] = (3 * (pts[1][1] - pts[0][1]) / (pts[1][0] - pts[0][0]) - t[1]) /
+	    2;
+	t[n - 1] = (3 * (pts[n - 1][1] - pts[n - 2][1]) / (pts[n - 1][0] -
+	    pts[n - 2][0]) - t[n - 2]) / 2;
+	d = "M" + at(pts[0]);
+	for (i = 1; i < n; i++) {
+		h0 = (pts[i][0] - pts[i - 1][0]) / 3;
+		d += "C" + at([pts[i - 1][0] + h0, pts[i - 1][1] + h0 *
+		    t[i - 1]]) + " " + at([pts[i][0] - h0, pts[i][1] - h0 *
+		    t[i]]) + " " + at(pts[i]);
+	}
+	return d;
+}
+
+/* a time of day, as hours, minutes and seconds */
+function graphClock(t) {
+	var d = new Date(t);
+
+	return [d.getHours(), d.getMinutes(), d.getSeconds()].map(
+	    function (n) {
+		return String(n).padStart(2, "0");
+	}).join(":");
+}
+
+/*
+ * The tray's graph for interface name, made in into: the choice of what
+ * it shows, the keys of its lines with their newest rates, and its plot
+ */
+function graphMake(into, name) {
+	var box = el("div", null, "graph"), bar = el("div", null, "graph-bar");
+	var seg = el("div", null, "seg"), plot = el("div", null, "plot");
+	var chart = svg("svg", { role: "img", tabindex: "0" });
+
+	seg.setAttribute("role", "radiogroup");
+	seg.setAttribute("aria-label", "What the graph shows");
+	GRAPHS.forEach(function (g, i) {
+		var l = el("label"), r = el("input");
+
+		r.type = "radio";
+		r.name = "graph";
+		r.value = String(i);
+		r.checked = i === graphOf;
+		l.appendChild(r);
+		l.appendChild(el("span", g.name));
+		seg.appendChild(l);
+	});
+	seg.addEventListener("change", function (e) {
+		graphOf = Number(e.target.value);
+		graphDraw();
+	});
+	bar.appendChild(seg);
+	bar.appendChild(el("span", null, "keys"));
+	plot.dataset.name = name;
+	plot.id = "graph-plot";
+	plot.appendChild(chart);
+	plot.appendChild(el("div", null, "tip")).hidden = true;
+	plot.addEventListener("pointermove", function (e) {
+		graphX = e.clientX - plot.getBoundingClientRect().left;
+		graphPoint();
+	});
+	plot.addEventListener("pointerleave", function () {
+		graphX = null;
+		graphPoint();
+	});
+	chart.addEventListener("focus", function () {
+		if (graphX === null && graphAt !== null &&
+		    graphAt.looks.length)
+			graphX = graphAt.looks[graphAt.looks.length - 1].x;
+		graphPoint();
+	});
+	chart.addEventListener("blur", function () {
+		graphX = null;
+		graphPoint();
+	});
+	chart.addEventListener("keydown", function (e) {
+		var i = graphNearest(), last;
+
+		if (i === -1 || ["ArrowLeft", "ArrowRight", "Home",
+		    "End"].indexOf(e.key) === -1)
+			return;
+		last = graphAt.looks.length - 1;
+		i = e.key === "Home" ? 0 : e.key === "End" ? last :
+		    Math.max(0, Math.min(last, i + (e.key === "ArrowLeft" ?
+		    -1 : 1)));
+		graphX = graphAt.looks[i].x;
+		graphPoint();
+		e.preventDefault();
+	});
+	box.appendChild(bar);
+	box.appendChild(plot);
+	into.appendChild(box);
+	if (graphSize !== null)
+		graphSize.disconnect();
+	graphSize = new ResizeObserver(function () {
+		graphDraw();
+	});
+	graphSize.observe(plot);
+	graphX = null;
+	graphAt = null;
+}
+
+/* the look graphX is nearest, of those drawn, or -1 */
+function graphNearest() {
+	var best = -1;
+
+	if (graphX === null || graphAt === null)
+		return -1;
+	graphAt.looks.forEach(function (p, i) {
+		if (best === -1 || Math.abs(p.x - graphX) <
+		    Math.abs(graphAt.looks[best].x - graphX))
+			best = i;
+	});
+	return best;
+}
+
+/*
+ * The tray's graph drawn again, from its interface's rates kept: a rule
+ * for each step of its scale, the minutes, and a line for each of its
+ * rates, over a wash of its color, ending in a dot at the newest look
+ */
+function graphDraw() {
+	var plot = $("graph-plot"), g = GRAPHS[graphOf], s, keys, chart;
+	var rem, w, h, l, r, top, foot, sc, max = 0, looks = [], first, end;
+	var x, y, v, k, defs, clip, lines, label;
+
+	if (plot === null)
+		return;
+	s = seen[plot.dataset.name];
+	keys = plot.parentNode.querySelector(".keys");
+	chart = plot.querySelector("svg");
+	rem = parseFloat(getComputedStyle(document.documentElement).fontSize);
+	w = plot.clientWidth;
+	h = plot.clientHeight;
+	/* a tray not yet shown has no size: it is drawn once it is shown */
+	if (!w || !h)
+		return;
+	l = 3.6923 * rem;
+	r = .9231 * rem;
+	top = .6154 * rem;
+	foot = h - 1.6923 * rem;
+	if (s && s.hist.length) {
+		end = s.hist[s.hist.length - 1].t;
+		first = s.hist.findIndex(function (e) {
+			return e.t >= end - SPAN;
+		});
+		looks = s.hist.slice(Math.max(0, first - 1));
+	}
+	looks.forEach(function (e) {
+		g.lines.forEach(function (ln) {
+			max = Math.max(max, e[ln[1]]);
+		});
+	});
+	sc = graphScale(max);
+	x = function (t) {
+		return l + (t - end + SPAN) / SPAN * (w - l - r);
+	};
+	y = function (n) {
+		return top + (1 - n / sc.top) * (foot - top);
+	};
+	chart.textContent = "";
+	chart.setAttribute("viewBox", "0 0 " + w + " " + h);
+	defs = chart.appendChild(svg("defs", {}));
+	["in", "out"].forEach(function (c) {
+		var wash = defs.appendChild(svg("linearGradient", {
+		    id: "graph-" + c, x1: 0, y1: 0, x2: 0, y2: 1 }));
+
+		wash.appendChild(svg("stop", { offset: 0, "class": c,
+		    "stop-opacity": .16 }));
+		wash.appendChild(svg("stop", { offset: 1, "class": c,
+		    "stop-opacity": 0 }));
+	});
+	clip = defs.appendChild(svg("clipPath", { id: "graph-clip" }));
+	clip.appendChild(svg("rect", { x: l, y: top - 2, width: w - l - r,
+	    height: foot - top + 4 }));
+
+	/* the scale's rules, and their rates */
+	for (k = 0; k * sc.step <= sc.top * (1 + 1e-9) && looks.length; k++) {
+		v = Math.round(y(k * sc.step)) + .5;
+		chart.appendChild(svg("line", { x1: l, x2: w - r, y1: v, y2: v,
+		    "class": "rule" }));
+		chart.appendChild(svg("text", { x: l - .4615 * rem, y: v +
+		    .3077 * rem, "class": "tick", "text-anchor": "end" }))
+		    .textContent = graphFigure(k * sc.step, g, false);
+	}
+	/* a minute's rule, each minute back from the newest look */
+	for (k = 1; k * 60000 < SPAN && looks.length; k++) {
+		v = Math.round(x(end - k * 60000)) + .5;
+		chart.appendChild(svg("line", { x1: v, x2: v, y1: top, y2: foot,
+		    "class": "rule minute" }));
+	}
+	chart.appendChild(svg("text", { x: l, y: h - .3846 * rem,
+	    "class": "tick" })).textContent = Math.round(SPAN / 60000) +
+	    " min ago";
+	chart.appendChild(svg("text", { x: w - r, y: h - .3846 * rem,
+	    "class": "tick", "text-anchor": "end" })).textContent = "now";
+	if (!looks.length) {
+		chart.appendChild(svg("line", { x1: l, x2: w - r, y1: foot + .5,
+		    y2: foot + .5, "class": "rule" }));
+		chart.appendChild(svg("text", { x: (l + w - r) / 2, y: (top +
+		    foot) / 2, "class": "empty", "text-anchor": "middle" }))
+		    .textContent = s ? "Rates come with the next look." :
+		    plot.dataset.name + " has no counters.";
+	}
+
+	/* each rate's wash, and then its line, the first rate's last */
+	lines = g.lines.map(function (ln, i) {
+		return { label: ln[0], key: ln[1], c: i ? "out" : "in",
+		    pts: looks.map(function (e) {
+			return [x(e.t), y(e[ln[1]])];
+		}) };
+	}).reverse();
+	k = chart.appendChild(svg("g", { "clip-path": "url(#graph-clip)" }));
+	lines.forEach(function (ln) {
+		if (ln.pts.length > 1)
+			k.appendChild(svg("path", { d: graphPath(ln.pts) + "L" +
+			    ln.pts[ln.pts.length - 1][0].toFixed(1) + "," +
+			    foot + "L" + ln.pts[0][0].toFixed(1) + "," + foot +
+			    "Z", fill: "url(#graph-" + ln.c + ")" }));
+	});
+	lines.forEach(function (ln) {
+		k.appendChild(svg("path", { d: graphPath(ln.pts),
+		    "class": "line " + ln.c }));
+	});
+	lines.forEach(function (ln) {
+		var p = ln.pts[ln.pts.length - 1];
+
+		if (p)
+			chart.appendChild(svg("circle", { cx: p[0], cy: p[1],
+			    r: 4, "class": "dot " + ln.c }));
+	});
+	lines.reverse();
+
+	/* where it is pointed at: a hairline, and a dot on each line */
+	k = chart.appendChild(svg("g", { "class": "cross",
+	    visibility: "hidden" }));
+	k.appendChild(svg("line", { y1: top, y2: foot }));
+	lines.forEach(function (ln) {
+		k.appendChild(svg("circle", { r: 4, "class": "dot " + ln.c }));
+	});
+
+	/* the keys, each with its newest rate */
+	keys.textContent = "";
+	lines.forEach(function (ln) {
+		var key = keys.appendChild(el("span"));
+		var e = looks[looks.length - 1];
+
+		key.appendChild(el("i", null, ln.c));
+		key.appendChild(document.createTextNode(ln.label));
+		key.appendChild(el("b", e ? graphFigure(e[ln.key], g, true) :
+		    "–"));
+	});
+	label = plot.dataset.name + ", " + g.name.toLowerCase() +
+	    " over the last " + Math.round(SPAN / 60000) + " minutes";
+	chart.setAttribute("aria-label", looks.length ? label + ": " +
+	    lines.map(function (ln) {
+		return ln.label + " " + graphFigure(looks[looks.length - 1][
+		    ln.key], g, true) + " now, at most " + graphFigure(Math.max.
+		    apply(null, looks.map(function (e) {
+			return e[ln.key];
+		})), g, true);
+	}).join("; ") : label + ": none yet");
+	/* the looks drawn: the one before the five minutes is not */
+	graphAt = { g: g, lines: lines, looks: looks.map(function (e) {
+		return { t: e.t, x: x(e.t), e: e };
+	}).filter(function (p) {
+		return p.x >= l;
+	}), y: y, top: top };
+	graphPoint();
+}
+
+/*
+ * The look the graph is pointed at, if it is: a hairline at it, a dot
+ * where each line crosses it, and in a tip, when it was and its rates
+ */
+function graphPoint() {
+	var plot = $("graph-plot"), i = graphNearest(), cross, tip, p, row;
+
+	if (plot === null)
+		return;
+	cross = plot.querySelector(".cross");
+	tip = plot.querySelector(".tip");
+	if (cross === null)
+		return;
+	if (i === -1) {
+		cross.setAttribute("visibility", "hidden");
+		tip.hidden = true;
+		return;
+	}
+	p = graphAt.looks[i];
+	cross.firstChild.setAttribute("x1", Math.round(p.x) + .5);
+	cross.firstChild.setAttribute("x2", Math.round(p.x) + .5);
+	graphAt.lines.forEach(function (ln, j) {
+		var dot = cross.childNodes[j + 1];
+
+		dot.setAttribute("cx", p.x);
+		dot.setAttribute("cy", graphAt.y(p.e[ln.key]));
+	});
+	cross.setAttribute("visibility", "visible");
+	tip.textContent = "";
+	tip.appendChild(el("div", graphClock(p.t), "when"));
+	graphAt.lines.forEach(function (ln) {
+		row = tip.appendChild(el("div"));
+		row.appendChild(el("i", null, ln.c));
+		row.appendChild(el("b", graphFigure(p.e[ln.key], graphAt.g,
+		    true)));
+		row.appendChild(document.createTextNode(ln.label));
+	});
+	tip.hidden = false;
+	tip.style.top = graphAt.top + "px";
+	tip.style.left = (p.x + 12 + tip.offsetWidth > plot.clientWidth ?
+	    p.x - 12 - tip.offsetWidth : p.x + 12) + "px";
 }
 
 /* how full r's line is, 0 to 1, by the busier direction, or -1 */

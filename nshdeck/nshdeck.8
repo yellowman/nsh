@@ -182,6 +182,11 @@ A readout shows how many ports are up, the numbers of interfaces and
 addresses, and the last change.
 The logical interfaces appear in groups by kind, each with what it is
 on.
+Choosing a port opens a tray with its counters, a graph of its last
+five minutes, and what it is linked to.
+The graph shows throughput, packets, errors, drops or collisions, in
+and out; pointed at, or moved along with the arrow keys, it says when
+each request was and the rates since the one before.
 At its foot, one line names the user and the user's permissions.
 .Ss Network
 Runs show commands and draws what they answer to be read: a time as
@@ -329,7 +334,7 @@ A port's activity light is on if the port counted packets since the
 last request.
 From the counters of two requests the page works out each interface's
 rates, in and out, and keeps five minutes of them, which the interface
-table draws as a small graph.
+table draws as a small graph and a port's tray as a larger one.
 An interface's errors and drops are marked when they rose since the
 last request, and the bar under a port is how full its line is.
 While security is shown, a readout as the overview's shows

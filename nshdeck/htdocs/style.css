@@ -20,6 +20,8 @@
 	--warn: #ffb340;
 	--bad: #ff8f80;
 	--table: #9476b7;	/* the routing table the page is focused on */
+	--in: #3987e5;		/* an interface's rates in, drawn (stats.js) */
+	--out: #d95926;		/* and out */
 	--ring: inset 0 0 0 .5px #ffffff24, 0 .5px 1px #000;
 	--focus: 0 0 0 .2308rem color-mix(in srgb, var(--accent) 45%, transparent);
 	--mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono",
@@ -49,6 +51,8 @@
 		--warn: #c93400;
 		--bad: #d70015;
 		--table: #7955a0;
+		--in: #2a78d6;
+		--out: #eb6834;
 		--ring: inset 0 0 0 .5px #00000029, 0 .5px 1.5px #0000001a;
 		color-scheme: light;
 	}
@@ -1205,6 +1209,189 @@ button.port:hover:not(:disabled), button.port:active:not(:disabled) {
 	margin: 0;
 }
 
+/*
+ * An interface's counters, and its graph: the graph's choices above its
+ * plot, and the counters level with the plot, as they are its data. In
+ * a narrow tray, the counters are above the graph
+ */
+.tray .now {
+	display: grid;
+	grid-template-columns: max-content minmax(0, 1fr);
+	grid-template-areas: ". bar" "counters plot";
+	gap: .6154rem 2.4615rem;
+	align-items: start;
+	margin: .3077rem 0 .4615rem;
+}
+
+@container (max-width: 640px) {
+	.tray .now {
+		grid-template-columns: minmax(0, 1fr);
+		grid-template-areas: "counters" "bar" "plot";
+	}
+}
+
+#tray-rates {
+	grid-area: counters;
+}
+
+.tray .now .counters {
+	margin: 0;
+}
+
+/*
+ * The tray's graph of an interface's rates (stats.js): what it shows,
+ * the keys of its lines, and its plot, in which a tip follows the
+ * pointer. Its lines are 2 pixels, over a wash of their color; its rules
+ * are hairlines of the page's. Its parts are laid out as the tray's
+ */
+.graph {
+	display: contents;
+}
+
+.graph-bar {
+	grid-area: bar;
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: .4615rem 1.2308rem;
+}
+
+.graph .keys {
+	display: flex;
+	flex-wrap: wrap;
+	gap: .3077rem 1.2308rem;
+	margin-left: auto;
+	font-size: .9231rem;
+	color: var(--dim);
+}
+
+.graph .keys b {
+	margin-left: .4615rem;
+	font-weight: 600;
+	color: var(--text);
+}
+
+/* a line's key: a short stroke of its color */
+.graph .keys i, .graph .tip i {
+	display: inline-block;
+	width: .9231rem;
+	height: .1538rem;
+	margin-right: .4615rem;
+	vertical-align: middle;
+	border-radius: 1px;
+	background: var(--in);
+}
+
+.graph i.out {
+	background: var(--out);
+}
+
+.graph .plot {
+	grid-area: plot;
+	position: relative;
+	height: 13.8462rem;
+}
+
+.graph svg {
+	display: block;
+	width: 100%;
+	height: 100%;
+}
+
+.graph svg:focus {
+	outline: none;
+}
+
+.graph svg:focus-visible {
+	outline: 1px solid var(--accent);
+	outline-offset: .1538rem;
+}
+
+.graph .rule {
+	stroke: var(--line);
+	shape-rendering: crispEdges;
+}
+
+.graph .tick, .graph .empty {
+	font: .7692rem var(--mono);
+	fill: var(--faint);
+}
+
+.graph .empty {
+	font: .9231rem var(--sans);
+}
+
+.graph .line {
+	fill: none;
+	stroke-width: 2;
+	stroke-linejoin: round;
+	stroke-linecap: round;
+}
+
+.graph .line.in {
+	stroke: var(--in);
+}
+
+.graph .line.out {
+	stroke: var(--out);
+}
+
+.graph stop.in {
+	stop-color: var(--in);
+}
+
+.graph stop.out {
+	stop-color: var(--out);
+}
+
+/* a dot on a line, ringed with the page so that it stands off the line */
+.graph .dot {
+	stroke: var(--panel);
+	stroke-width: 2;
+}
+
+.graph .dot.in {
+	fill: var(--in);
+}
+
+.graph .dot.out {
+	fill: var(--out);
+}
+
+.graph .cross line {
+	stroke: var(--faint);
+	shape-rendering: crispEdges;
+}
+
+.graph .tip {
+	position: absolute;
+	z-index: 1;
+	display: grid;
+	gap: .1538rem;
+	padding: .4615rem .6923rem;
+	background: var(--raise);
+	box-shadow: var(--ring), 0 .3077rem .9231rem rgba(0, 0, 0, .35);
+	font-size: .8462rem;
+	color: var(--dim);
+	white-space: nowrap;
+	pointer-events: none;
+}
+
+.graph .tip[hidden] {
+	display: none;
+}
+
+.graph .tip .when {
+	font-family: var(--mono);
+	color: var(--faint);
+}
+
+.graph .tip b {
+	margin-right: .4615rem;
+	font-weight: 600;
+	color: var(--text);
+}
+
 /* the logical interfaces, grouped */
 
 /* a port's tray, below the front panel (relations.js) */
@@ -1215,6 +1402,7 @@ button.port:hover:not(:disabled), button.port:active:not(:disabled) {
 	padding: .6154rem .9231rem .7692rem;
 	background: var(--panel);
 	border: 1px solid var(--line);
+	container-type: inline-size;
 }
 
 .tray[hidden] {
@@ -1404,11 +1592,11 @@ table.grid {
 }
 
 .spark .in {
-	stroke: var(--accent);
+	stroke: var(--in);
 }
 
 .spark .out {
-	stroke: var(--on);
+	stroke: var(--out);
 }
 
 /* errors that rose since the last look */

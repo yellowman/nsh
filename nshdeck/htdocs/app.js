@@ -668,9 +668,10 @@ function port(name) {
 }
 
 /*
- * Open or close a port's tray under the ports. It lists the interfaces on
- * the port and what the port belongs to, from the running configuration
- * and show interface. Choosing the open port again closes it.
+ * Open or close a port's tray under the ports. It has the port's
+ * counters and a graph of its rates, and lists the interfaces on the
+ * port and what the port belongs to, from the running configuration and
+ * show interface. Choosing the open port again closes it.
  */
 function tray(name) {
 	var box = $("tray");
@@ -686,7 +687,7 @@ function tray(name) {
 	}
 	box.dataset.port = name;
 	return ask("GET", "config", { what: "running" }).then(function (j) {
-		var all = relEdges(said(j)), head = el("div", null, "bar");
+		var all = relEdges(said(j)), head = el("div", null, "bar"), now;
 		var go = function (n) {
 			selected = n;
 			workspace("network");
@@ -706,7 +707,9 @@ function tray(name) {
 			go(name);
 		});
 		box.appendChild(head);
-		box.appendChild(el("div")).id = "tray-rates";
+		now = box.appendChild(el("div", null, "now"));
+		now.appendChild(el("div")).id = "tray-rates";
+		graphMake(now, name);
 		trayRates();
 		box.appendChild(el("h4", "On this port"));
 		relRows(box, name, on, all, go);
@@ -718,7 +721,7 @@ function tray(name) {
 	});
 }
 
-/* the open tray's counters, as of the last look */
+/* the open tray's counters and graph, as of the last look */
 function trayRates() {
 	var box = $("tray-rates");
 
@@ -726,6 +729,7 @@ function trayRates() {
 		return;
 	box.textContent = "";
 	box.appendChild(rateLines($("tray").dataset.port));
+	graphDraw();
 }
 
 /*
