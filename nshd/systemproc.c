@@ -361,6 +361,7 @@ struct job {
 	char			 comment[NSHD_COMMENT];
 	char			*args[NOPTFILL];	/* a test's */
 	int			 root;
+	int			 op;		/* an operation's test */
 	char			 dir[PATH_MAX];	/* its rules, removed after */
 	char			 path[PATH_MAX];
 };
@@ -595,7 +596,9 @@ static void	system_listed(uint32_t, int);
 static void	system_health(int);
 static void	system_test(uint32_t, struct nshd_whose *, char *);
 static void	system_tested(uint32_t, int32_t);
-static void	system_test_run(uint32_t, char *);
+static void	system_test_run(uint32_t, char *, int);
+static void	system_test_ended(uint32_t, int, int32_t);
+static void	system_check(uint32_t, int, int);
 static void	system_begin_checked(uint32_t, int);
 static struct job *system_parse_job(uint32_t, int);
 static void	system_parse_text(struct job *, int, char *, size_t);
@@ -1521,6 +1524,12 @@ system_op(uint32_t id, struct nshd_sysop *so)
 	if (!x.ok) {
 		system_end(id, 1, "%% nshd: %s: values it does not take\n",
 		    ops[so->row].name);
+		return;
+	}
+	/* a test of what the last commit wrote runs as a commit's does */
+	if (ops[so->row].apply == daemon_apply &&
+	    ctl_tests(x.v[0].v.i, x.v[1].v.i)) {
+		system_check(id, x.v[0].v.i, so->rtable);
 		return;
 	}
 	op_next = &x;
@@ -3288,7 +3297,7 @@ system_test(uint32_t id, struct nshd_whose *whose, char *name)
 		return;
 	}
 	if (perms & LOGIN_ADMIN) {
-		system_test_run(id, name);
+		system_test_run(id, name, 0);
 		return;
 	}
 	/* the parser checks them against what runs as the check begins */
@@ -3304,9 +3313,12 @@ system_test(uint32_t id, struct nshd_whose *whose, char *name)
 	system_parse(j);
 }
 
-/* daemon name's test, for request id, in a job, the rules checked */
+/*
+ * daemon name's test, for request id, in a job, the rules checked: a
+ * commit's, or with op, operation id's
+ */
 static void
-system_test_run(uint32_t id, char *name)
+system_test_run(uint32_t id, char *name, int op)
 {
 	struct job	*j;
 	size_t		 i;
@@ -3315,10 +3327,11 @@ system_test_run(uint32_t id, char *name)
 	if (!ctl_rules_args(name, NULL, NULL, 0, NULL)) {
 		printf("%% nshd: %s's rules have no test\n", name);
 		system_part_free(NSHD_TEST);
-		system_tested(id, 1);
+		system_test_ended(id, op, 1);
 		return;
 	}
 	j = system_job_new(id, JOB_TEST);
+	j->op = op;
 	for (i = 0; i < sizeof(root_tests) / sizeof(root_tests[0]); i++)
 		if (strcmp(name, root_tests[i]) == 0)
 			j->root = 1;
@@ -3349,7 +3362,44 @@ system_test_run(uint32_t id, char *name)
  fail:
 	system_job_free(j);
 	system_part_free(NSHD_TEST);
-	system_tested(id, -1);
+	system_test_ended(id, op, -1);
+}
+
+/* request id's test ended as status says: a commit's, or with op, an op's */
+static void
+system_test_ended(uint32_t id, int op, int32_t status)
+{
+	if (op)
+		system_printed(id, status);
+	else
+		system_tested(id, status);
+}
+
+/*
+ * Operation id, daemon d's test of the rules the last commit wrote for
+ * rtable: system reads them, as root, and tests them in a job, as it
+ * tests a commit's (system_test_run()); the job's end answers it
+ */
+static void
+system_check(uint32_t id, int d, int rtable)
+{
+	char	 path[PATH_MAX], *name;
+	int	 fd;
+
+	if ((name = ctl_tested(d, rtable, path, sizeof(path))) == NULL) {
+		system_printed(id, 1);
+		return;
+	}
+	if ((fd = open(path, O_RDONLY)) == -1 ||
+	    (parts[NSHD_TEST] = file_read(fd, NSHD_RULES,
+	    &partlen[NSHD_TEST])) == NULL) {
+		system_end(id, 1, "%% nshd: %s: %s\n", path, strerror(errno));
+		if (fd != -1)
+			close(fd);
+		return;
+	}
+	close(fd);
+	system_test_run(id, name, 1);
 }
 
 /*
@@ -3964,7 +4014,7 @@ system_parsed(struct job *j, int32_t status)
 	switch (j->parse.kind) {
 	case NSHD_PARSE_RULES:
 		if (status == 0)
-			system_test_run(j->id, j->parse.daemon);
+			system_test_run(j->id, j->parse.daemon, 0);
 		else {
 			system_part_free(NSHD_TEST);
 			system_tested(j->id, 1);
@@ -4387,7 +4437,7 @@ system_job_end(struct job *j, int32_t status)
 		system_finish(j->id, system_saved(status == 0) == 0 &&
 		    status == 0 ? NSHD_SAVED : NSHD_UNSAVED);
 	else if (j->kind == JOB_TEST)
-		system_tested(j->id, status);
+		system_test_ended(j->id, j->op, status);
 	else if (j->kind == JOB_PARSE)
 		system_parsed(j, status);
 	else if (j->kind == JOB_APPLY)

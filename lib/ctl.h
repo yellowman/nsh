@@ -44,6 +44,7 @@
 #define NPPPD           "/usr/sbin/npppd"
 #define NPPPCTL         "/usr/sbin/npppctl"
 #define RESOLVD         "/sbin/resolvd"
+#define VMD             "/usr/sbin/vmd"
 #ifndef DHCPLEASES
 #define DHCPLEASES      "/var/db/dhcpd.leases"
 #endif
@@ -104,6 +105,8 @@ struct ctl {
 int ctl_line(char *, char *, size_t);
 int ctl_rules_clear(char *, int, int);
 int ctl_rules_args(char *, char *, char *, size_t, char **);
+int ctl_tests(int, int);
+char *ctl_tested(int, int, char *, size_t);
 int ctl_cand_rules(char *, int, int, char *, size_t, struct cand *);
 void ctl_runs(struct ctl *, int *, int *);
 #define CTL_ACT_FOLLOW	0x100	/* what follows a daemon's rules (ctl_act()) */
@@ -119,6 +122,8 @@ int ctl_setrules(int, char *, size_t, int);
 #define T_HANDLER       1
 #define T_HANDLER_TEST  2
 #define T_EXEC          3
+/* system runs its edit's test, of the rules the last commit wrote */
+#define T_TEST          4
 struct daemons {
         char *name;
         char *propername;
@@ -156,6 +161,7 @@ struct daemons {
 #define SSHDCONF_TEMP   "/var/run/sshd.conf"
 #define SMTPCONF_TEMP   "/var/run/smtpd.conf"
 #define LDAPCONF_TEMP   "/var/run/ldapd.conf"
+#define VMCONF_TEMP     "/var/run/vm.conf"
 #define IFSTATECONF_TEMP "/var/run/ifstated.conf"
 #define MOTD_TEMP "/var/run/motd"
 #define CRONTAB_TEMP     "/var/run/crontab"
@@ -217,6 +223,7 @@ extern struct ctl ctl_tftp[];
 extern struct ctl ctl_dns[];
 extern struct ctl ctl_inet[];
 extern struct ctl ctl_ldap[];
+extern struct ctl ctl_vmd[];
 extern struct ctl ctl_motd[];
 extern struct ctl ctl_crontab[];
 extern struct ctl ctl_resolv[];

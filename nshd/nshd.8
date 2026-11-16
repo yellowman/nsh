@@ -394,7 +394,8 @@ with the environment
 gives.
 The program comes from nsh's tables, never from a request.
 .Pp
-A show's program, and a test of a daemon's rules, run as _nshcheck.
+A show's program, and a test of a daemon's rules, a commit's or vmd's
+check-config, run as _nshcheck.
 The exceptions keep root: a program that uses a daemon's control
 socket,
 .Pa /dev/pf
@@ -408,7 +409,7 @@ which is started as root because it gives up root itself.
 A log is followed across its rotation by
 .Xr newsyslog 8 .
 .Pp
-An operation, a commit's script and a save run as root.
+Any other operation, a commit's script and a save run as root.
 .Pp
 A show's output is sent only as fast as its client reads it, and its
 child is killed if the client goes.

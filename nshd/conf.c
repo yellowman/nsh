@@ -246,6 +246,7 @@ static const struct {
 	{ CONF_CTL,	"tftp",		NULL },
 	{ CONF_CTL,	"inet",		NULL },
 	{ CONF_CTL,	"sshd",		NULL },
+	{ CONF_CTL,	"vmd",		NULL },
 	{ CONF_FUNC,	NULL,		conf_crontab },
 	{ CONF_FUNC,	NULL,		conf_rtables },
 	{ CONF_SEP,	NULL,		NULL },

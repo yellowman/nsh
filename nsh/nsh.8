@@ -369,9 +369,10 @@ lines; root's
 .Cm crontab ;
 the rules of
 .Cm inet ,
-.Cm ifstate
+.Cm ifstate ,
+.Cm sshd
 and
-.Cm sshd ;
+.Cm vmd ;
 a line of
 .Cm smtp
 rules with mda, proc, a pipe, a table or a macro; a line of
@@ -4574,6 +4575,40 @@ daemon can be edited with
 .Cm edit
 command, the syntax is documented in
 .Xr sshd_config 5 .
+.Pp
+.Tg vmd
+.Ic vmd
+.Op Cm \&? | edit | check-config
+.Pp
+Configure
+.Xr vmd 8 ,
+which runs virtual machines.
+The host has one vmd, in routing table 0, and the syntax of its
+configuration is documented in
+.Xr vm.conf 5 .
+.Pp
+.Cm edit
+edits the candidate's rules, as
+.Ic pf edit
+does, and
+.Cm commit
+writes them to
+.Pa /var/run/vm.conf.0 ,
+mode 0600, once vmd -n, run as _nshcheck, has tested them.
+The test starts no VM.
+It looks up each disk and kernel path the rules name, so a path that
+_nshcheck cannot reach fails the test; nshd does not test it again as
+root.
+Changing vmd's rules needs the admin permission.
+.Pp
+.Cm check-config
+tests the rules that the last
+.Cm commit
+wrote, in the same way.
+It is an operation, which needs the operate permission, in configure
+too.
+.Pp
+nshd does not yet start, stop or reload vmd.
 .Pp
 .Tg ntpd
 .Tg ntp

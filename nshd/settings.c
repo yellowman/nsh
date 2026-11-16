@@ -86,6 +86,7 @@ static const struct setting top_settings[] = {
 	{ "tftp",		S_ENTRY,	2 },
 	{ "inet",		S_ENTRY,	2 },
 	{ "sshd",		S_ENTRY,	2 },
+	{ "vmd",		S_ENTRY,	2 },
 	{ "crontab",		S_ENTRY,	2 },
 	{ "rtable",		S_BLOCK },
 	{ "nameserver",		S_VALUE },

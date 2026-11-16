@@ -89,12 +89,14 @@ static int admin_refused;
 
 /*
  * The daemons whose rules need admin to change at all: root's crontab,
- * inetd's and ifstated's, which run commands as root, and sshd's,
- * which decides who logs in as root
+ * inetd's and ifstated's, which run commands as root, sshd's, which
+ * decides who logs in as root, and vmd's, whose disks vmd opens as root
+ * to read and write, and which give each VM to its owner
  */
 #define ADMIN_WHOLE(d)	((d)->table == ctl_crontab || \
 			    (d)->table == ctl_inet || \
-			    (d)->table == ctl_ifstate || (d)->table == ctl_sshd)
+			    (d)->table == ctl_ifstate || \
+			    (d)->table == ctl_sshd || (d)->table == ctl_vmd)
 
 /*
  * The words that make a line of a daemon's rules need admin, matched in
@@ -167,6 +169,7 @@ struct daemons ctl_daemons[] = {
 { "inet",	"Inet",	ctl_inet,	INETCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
 { "smtp",	"SMTP",	ctl_smtp,	SMTPCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
 { "ldap",	"LDAP",	ctl_ldap,	LDAPCONF_TEMP,	0600, 0, RT_TABLEID_MAX },
+{ "vmd",	"VMD",	ctl_vmd,	VMCONF_TEMP,	0600, 0, 0 },
 { "motd",        "MOTD",  ctl_motd,        MOTD_TEMP,0644, 0, 0 },
 { "crontab",	"crontab",  ctl_crontab, CRONTAB_TEMP, 0600, 0, 0 },
 { "scheduler",	"scheduler",  ctl_crontab, CRONTAB_TEMP, 0600, 0, 0 },
@@ -728,6 +731,21 @@ struct ctl ctl_ldap[] = {
 };
 
 /*
+ * vmd, one for the host, in routing table 0. Its rules need admin
+ * (ADMIN_WHOLE()). vmd -n tests them as NSHD_CHECK_USER, and starts no
+ * VM, for a commit and for check-config alike. nshd neither starts nor
+ * stops vmd
+ */
+struct ctl ctl_vmd[] = {
+	{ "edit",           "edit, test and stage VMD config",
+	    { "vmd", NULL }, { VMD, "-nf", REQTEMP, NULL },
+	    call_editor, 0, T_HANDLER_TEST },
+	{ "check-config",   "test the VMD config the last commit wrote",
+	    { NULL }, { NULL }, NULL, 0, T_TEST },
+	{ NULL, NULL, { NULL }, { NULL }, NULL, 0, 0 }
+};
+
+/*
  * flag to other nsh sessions or nsh conf() that actions have been taken,
  * in routing table table
  */
@@ -1105,7 +1123,7 @@ ctl_op(char *daemon, char *action)
 	x = (struct ctl *)genget(action, (char **)d->table, sizeof(struct ctl));
 	if (x == NULL || Ambiguous(x))
 		return 0;
-	return x->type == T_EXEC && x->flag_x == 0;
+	return (x->type == T_EXEC || x->type == T_TEST) && x->flag_x == 0;
 }
 
 /*
@@ -1273,6 +1291,9 @@ ctl_cand_takes(struct ctl *x)
 	case DB_X_DISABLE_ALWAYS:
 		return 1;
 	}
+	/* a test system runs is an operation, in configure too */
+	if (x->type == T_TEST)
+		return 0;
 	return ctl_isedit(x) || x->handler == install_crontab ||
 	    strcmp(x->name, "check-config") == 0 ||
 	    strcmp(x->name, "config-test") == 0;
@@ -1297,7 +1318,7 @@ void
 ctl_runs(struct ctl *x, int *out, int *conf)
 {
 	*out = *conf = 0;
-	if (x->type == T_EXEC && x->flag_x == 0) {
+	if ((x->type == T_EXEC || x->type == T_TEST) && x->flag_x == 0) {
 		*out = RUN_OP;
 		if (!ctl_cand_takes(x))
 			*conf = RUN_OP;
@@ -1538,6 +1559,43 @@ ctl_rules_args(char *name, char *dir, char *path, size_t len, char **args)
 		fill_tmpfile(x->test_args, path, args);
 	}
 	return 1;
+}
+
+/*
+ * Is row act of daemon d's table a test that system runs, of the rules
+ * the last commit wrote, as it runs a commit's (T_TEST)? 1 if so, else 0
+ */
+int
+ctl_tests(int d, int act)
+{
+	int n;
+
+	for (n = 0; ctl_daemons[n].name != NULL; n++)
+		;
+	if (d < 0 || d >= n)
+		return 0;
+	for (n = 0; ctl_daemons[d].table[n].name != NULL; n++)
+		;
+	return act >= 0 && act < n && ctl_daemons[d].table[act].type == T_TEST;
+}
+
+/*
+ * For daemon d's test (ctl_tests()) in rtable: its name, and in path,
+ * len bytes at most, the file of the rules the last commit wrote; or
+ * NULL, after saying why d is not in rtable
+ */
+char *
+ctl_tested(int d, int rtable, char *path, size_t len)
+{
+	struct daemons *dm = &ctl_daemons[d];
+
+	if (rtable > dm->rtablemax) {
+		printf("%% Command %s not available via rtable %d\n",
+		    dm->name, rtable);
+		return NULL;
+	}
+	snprintf(path, len, "%s.%d", dm->tmpfile, rtable);
+	return dm->name;
 }
 
 /* The line conf prints after a daemon's rules: pf reload, crontab install */

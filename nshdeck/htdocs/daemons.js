@@ -83,6 +83,8 @@ var DAEMONS = [
 	    "schedule-all"] },
 	{ name: "ldap", ws: "services", label: "LDAP directory (ldapd)",
 	    rt: 1, rules: 1, enable: 1, ops: ["log", "compact", "index"] },
+	{ name: "vmd", ws: "services", label: "Virtual machines (vmd)",
+	    rules: 1, ops: [] },
 	{ name: "ifstate", ws: "services", label: "Link-state automation " +
 	    "(ifstated)", rt: 1, rules: 1, enable: 1, ops: [] },
 	{ name: "crontab", ws: "system", label: "Root's scheduled jobs, " +
