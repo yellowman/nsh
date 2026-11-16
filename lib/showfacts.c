@@ -655,7 +655,7 @@ facts_op(const char *text, int rtable, int quiet)
 }
 
 /*
- * The words fmt makes, in nsh's routing table, asked of nshd's system
+ * The show of words, in routing table table, asked of nshd's system
  * where it may answer and this user may ask it, else of nshd's shows,
  * and rendered to out.
  * Where nshd does not run, nsh answers version itself, and says why for
@@ -663,23 +663,14 @@ facts_op(const char *text, int rtable, int quiet)
  * status does. 0, or -1 after printing why the show failed
  */
 int
-facts_show(FILE *out, const char *fmt, ...)
+facts_show_table(FILE *out, char *words, int table)
 {
 	struct facts_answer	*a;
 	struct facts_out	 o;
 	struct facts_in		 in;
 	struct render		 rd;
-	va_list			 ap;
-	char			*words, *w;
+	char			*w;
 	int			 r;
-
-	va_start(ap, fmt);
-	r = vasprintf(&words, fmt, ap);
-	va_end(ap);
-	if (r == -1) {
-		printf("%% facts_show: %s\n", strerror(errno));
-		return (-1);
-	}
 
 	memset(&rd, 0, sizeof(rd));
 	TAILQ_INIT(&rd.block);
@@ -689,9 +680,8 @@ facts_show(FILE *out, const char *fmt, ...)
 		rd.status = 1;
 		w = "interface";
 	}
-	if ((a = facts_answer(w, cli_rtable)) == NULL) {
+	if ((a = facts_answer(w, table)) == NULL) {
 		printf("%% show %s: not a show nsh knows\n", w);
-		free(words);
 		return (-1);
 	}
 	facts_in_init(&in, render_record, &rd);
@@ -747,6 +737,5 @@ done:
 	block_free(&rd.block);
 	facts_answer_free(a);
 	facts_in_free(&in);
-	free(words);
 	return (r == 1 ? 0 : -1);
 }

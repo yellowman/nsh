@@ -100,6 +100,13 @@ quit(int argc, char **argv, ...)
 	return 0;
 }
 
+/* cmd, multiple args, in the routing table bgpnsh is in */
+int
+cmdargs(char *cmd, char *arg[])
+{
+	return cmdargs_table(cmd, arg, cli_rtable);
+}
+
 Command cmdtab[] = {
 	{ "show",	"Show system information",
 	    CMPL(ta) (char **)showlist, sizeof(Menu), showcmd,	0, 0, 0, 0 },

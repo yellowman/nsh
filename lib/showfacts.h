@@ -61,8 +61,10 @@ extern int	 facts_from;	/* what this process answers */
 /* what to answer: a show's words (showwords.h), as nsh and nshd read them */
 struct facts_answer *facts_answer(char *, int);
 void		 facts_answer_free(struct facts_answer *);
+/* facts_show_table() of the words fmt makes, in nsh's table (client.c) */
 int		 facts_show(FILE *, const char *, ...)
 		    __attribute__((__format__ (printf, 2, 3)));
+int		 facts_show_table(FILE *, char *, int);
 int		 facts_op(const char *, int, int);
 
 /* each kind of record, shared by what makes it and what renders it */

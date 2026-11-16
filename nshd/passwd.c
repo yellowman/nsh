@@ -479,11 +479,14 @@ login_class(int set, char *name, int p, struct cand *cand)
 	return login_store(0, name, &rec);
 }
 
-/* useradd, usermod or userdel for name: 0 if it exited 0, else -1 */
+/*
+ * useradd, usermod or userdel for name, which no routing table changes:
+ * 0 if it exited 0, else -1
+ */
 static int
 login_run(char *name, char *cmd, char **args)
 {
-	if (cmdargs(cmd, args) != 0) {
+	if (cmdargs_table(cmd, args, 0) != 0) {
 		printf("%% login user %s: %s failed\n", name, cmd);
 		return -1;
 	}

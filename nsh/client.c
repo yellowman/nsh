@@ -44,6 +44,7 @@
 #include <imsg.h>
 #include <poll.h>
 #include <signal.h>
+#include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -484,6 +485,26 @@ nshd_facts(int rw, char *words, int rtable, struct facts_in *in)
 	    &status) == -1)
 		return (-1);
 	return (status == 0);
+}
+
+/* the show of the words fmt makes, in the routing table nsh is in */
+int
+facts_show(FILE *out, const char *fmt, ...)
+{
+	va_list	 ap;
+	char	*words;
+	int	 r;
+
+	va_start(ap, fmt);
+	r = vasprintf(&words, fmt, ap);
+	va_end(ap);
+	if (r == -1) {
+		printf("%% facts_show: %s\n", strerror(errno));
+		return (-1);
+	}
+	r = facts_show_table(out, words, cli_rtable);
+	free(words);
+	return (r);
 }
 
 /*

@@ -2035,7 +2035,7 @@ intdhcrelay_apply(const struct argcmd *c, int set, const struct facts_value *v,
 
 	if (set) {
 		/* kept only once it runs */
-		if (cmdargs(DHCRELAY, cmd) != 0)
+		if (cmdargs_table(DHCRELAY, cmd, rtable) != 0)
 			return -1;
 		if (flag_x("dhcrelay", ifname, DB_X_ENABLE, server,
 		    rtable) == -1)
@@ -2072,7 +2072,7 @@ intdhcrelay_apply(const struct argcmd *c, int set, const struct facts_value *v,
 		killcmd[2] = argue;
 
 		/* pkill exits 1 if no dhcrelay was running */
-		r = cmdargs(PKILL, killcmd);
+		r = cmdargs_table(PKILL, killcmd, rtable);
 		if (r == -1 || r > 1)
 			return -1;
 	}
@@ -2237,7 +2237,7 @@ intdhcrelay6_apply(const struct argcmd *c, int set, const struct facts_value *v,
 		    ifname, was);
 		killcmd[2] = argue;
 		/* pkill exits 1 if no dhcrelay6 was running */
-		r = cmdargs(PKILL, killcmd);
+		r = cmdargs_table(PKILL, killcmd, rtable);
 		if (r == -1 || r > 1)
 			return -1;
 		if (flag_x("dhcrelay6", ifname, DB_X_REMOVE, NULL,
@@ -2260,7 +2260,7 @@ intdhcrelay6_apply(const struct argcmd *c, int set, const struct facts_value *v,
 	for (i = 0; i < n; i++)
 		cmd[7 + i] = dest[i];
 	/* kept only once it runs */
-	if (cmdargs(ROUTE, cmd) != 0)
+	if (cmdargs_table(ROUTE, cmd, rtable) != 0)
 		return -1;
 	return flag_x("dhcrelay6", ifname, DB_X_ENABLE, dests, rtable);
 }

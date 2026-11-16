@@ -690,7 +690,7 @@ flush_line(const struct argcmd *c, int set, const struct facts_value *v,
 
 	args_string(&v[0], tty, sizeof(tty));
 	/* pkill exits 1 if no process ran on the line */
-	r = cmdargs(PKILL, args);
+	r = cmdargs_table(PKILL, args, rtable);
 	return r == -1 || r > 1 ? -1 : 0;
 }
 
@@ -887,10 +887,10 @@ op_halt(const struct argcmd *c, int set, const struct facts_value *v,
 	char *rb[] = { REBOOT, NULL }, *ht[] = { HALT, NULL, NULL };
 
 	if (c->code == OP_REBOOT)
-		return cmdargs(rb[0], rb) == 0 ? 0 : -1;
+		return cmdargs_table(rb[0], rb, rtable) == 0 ? 0 : -1;
 	if (c->code == OP_POWERDOWN)
 		ht[1] = "-p";
-	return cmdargs(ht[0], ht) == 0 ? 0 : -1;
+	return cmdargs_table(ht[0], ht, rtable) == 0 ? 0 : -1;
 }
 
 static int
@@ -911,7 +911,7 @@ op_crontab(const struct argcmd *c, int set, const struct facts_value *v,
 	printf("%% To view crontab syntax documentation in NSH, "
 	    "run: !man 5 crontab\n\n");
 	fflush(stdout);
-	if (cmdargs(cr[0], cr) != 0) {
+	if (cmdargs_table(cr[0], cr, rtable) != 0) {
 		printf("%% crontab command failed\n");
 		return -1;
 	}
@@ -2906,7 +2906,7 @@ flush_pf(const struct argcmd *c, int set, const struct facts_value *v,
 
 	{
 		char *argv[] = { x->cmd, x->arg, NULL };
-		return cmdargs(x->cmd, argv) == 0 ? 0 : -1;
+		return cmdargs_table(x->cmd, argv, rtable) == 0 ? 0 : -1;
 	}
 }
 

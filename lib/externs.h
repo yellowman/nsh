@@ -32,7 +32,7 @@ extern int interactive_mode;	/* are we in interactive mode? */
 extern int config_mode;		/* nsh's: are we in config mode? */
 extern int bridge;		/* nsh's: in bridge mode (or interface mode?) */
 extern pid_t pid;		/* process id of nsh */
-extern int cli_rtable;		/* environment rtable */
+extern int cli_rtable;		/* nsh's routing table; nshd has none */
 int cli_setrtable(const char *);
 struct cand;
 struct hashtable;
@@ -151,8 +151,8 @@ extern char metricnames[];
 
 /* cmdargs.c */
 int cmdargs_output_setenv(char *, char **, int, int, char **, int, int);
-int cmdargs_output(char *, char **, int, int);
 int cmdargs_table(char *, char **, int);
+/* cmdargs_table() in cli_rtable: nsh's main.c, and bgpnsh's */
 int cmdargs(char *, char **);
 int nsh_setrtable(int);
 void rtable_missing(int);

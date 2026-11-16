@@ -2127,7 +2127,6 @@ system_child(int fd, int op, char **argv, int table)
 			fflush(stdout);
 			_exit(1);
 		}
-		cli_rtable = table;
 		r = op_run(op_next->so->row, op_next->so->set, op_next->v,
 		    op_next->so->ifname, op == SYS_OPERATION_HIDDEN, table);
 		fflush(stdout);

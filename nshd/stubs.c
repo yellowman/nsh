@@ -30,7 +30,7 @@
 #include "showfacts.h"
 
 char *vers = NSH_VERSION_STR;
-int verbose, cli_rtable;
+int verbose;
 pid_t pid;
 
 char *cursor_pos;
@@ -65,3 +65,22 @@ nshd_runs(const char *cmd)
 	return 1;
 }
 
+/*
+ * nsh runs a program, and shows, in its own routing table. nshd has no
+ * table of its own: its code runs a program in the table it is given
+ * (cmdargs_table()), and it does not ask itself for a show
+ * (nshd_facts()), so one shows nothing here
+ */
+int
+cmdargs(char *cmd, char *arg[])
+{
+	printf("%% %s: nshd runs a program only in a table it is given\n",
+	    cmd);
+	return -1;
+}
+
+int
+facts_show(FILE *out, const char *fmt, ...)
+{
+	return -1;
+}

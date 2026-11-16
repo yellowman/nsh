@@ -45,32 +45,13 @@ sigalarm(int blahfart)
 }
 
 /*
- * cmd, multiple args
+ * cmd, multiple args, in routing table rtable
  *
  * If no error occurs then return the program's exit code (>= 0).
  * Return 127, as ksh(1) does, if the program could not be run, after
  * printing why. Return -1 if fork fails, after printing why, or if the
  * program was terminated in an abnormal way, such as by a signal.
  */
-int
-cmdargs(char *cmd, char *arg[])
-{
-	return cmdargs_output(cmd, arg, -1, -1);
-}
-
-/*
- * cmd, multiple args, capture stdout and stderr output
- *
- * Returns what cmdargs() returns.
- */
-int
-cmdargs_output(char *cmd, char *arg[], int stdoutfd, int stderrfd)
-{
-	return cmdargs_output_setenv(cmd, arg, stdoutfd, stderrfd, NULL, 0,
-	    cli_rtable);
-}
-
-/* cmd, multiple args, in routing table rtable; as cmdargs() returns */
 int
 cmdargs_table(char *cmd, char *arg[], int rtable)
 {

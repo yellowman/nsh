@@ -244,3 +244,10 @@ intr(void)
 {
 	longjmp(toplevel, 1);
 }
+
+/* cmd, multiple args, in the routing table nsh is in */
+int
+cmdargs(char *cmd, char *arg[])
+{
+	return cmdargs_table(cmd, arg, cli_rtable);
+}
