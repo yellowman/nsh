@@ -140,7 +140,7 @@ struct params {
 #define F_COMMENT	0x400
 #define F_LOGS		0x800
 #define F_HELP		0x1000
-#define F_KEYS		0x2000
+#define F_DATA		0x2000
 #define F_ROWS		0x4000
 #define F_COLS		0x8000
 #define F_DAEMON	0x20000
@@ -149,6 +149,7 @@ struct params {
 #define F_BRIDGE	0x100000
 #define F_REQUEST	0x200000
 #define F_CHANNEL	0x400000
+#define F_SEQ		0x800000
 static const struct endpoint {
 	const char	*name;
 	int		 kind;
@@ -170,8 +171,8 @@ static const struct endpoint {
 	{ "open",	DECK_OPEN,	1, F_REQUEST | F_ROWS | F_COLS |
 	    F_RTABLE },
 	{ "terminal",	DECK_TERMINAL,	0, F_CHANNEL },
-	{ "type",	DECK_TYPE,	1, F_CHANNEL | F_KEYS | F_ROWS |
-	    F_COLS },
+	{ "type",	DECK_TYPE,	1, F_CHANNEL | F_SEQ | F_DATA |
+	    F_ROWS | F_COLS },
 	{ "close",	DECK_CLOSE,	1, F_CHANNEL },
 	{ "events",	DECK_EVENTS,	0, F_LOGS },
 	{ "rules",	DECK_RULES,	0, F_DAEMON | F_RTABLE },
@@ -660,9 +661,9 @@ front_fields(const char *form, int fields, struct deck_request *r,
 		{ "mode", F_MODE }, { "line", F_LINE }, { "rtable", F_RTABLE },
 		{ "check", F_CHECK }, { "minutes", F_MINUTES },
 		{ "comment", F_COMMENT }, { "logs", F_LOGS },
-		{ "help", F_HELP }, { "keys", F_KEYS }, { "rows", F_ROWS },
+		{ "help", F_HELP }, { "data", F_DATA }, { "rows", F_ROWS },
 		{ "cols", F_COLS }, { "request", F_REQUEST },
-		{ "channel", F_CHANNEL },
+		{ "channel", F_CHANNEL }, { "seq", F_SEQ },
 		{ "daemon", F_DAEMON }, { "text", F_TEXT },
 		{ "interface", F_IFNAME }, { "bridge", F_BRIDGE },
 	};
@@ -702,6 +703,9 @@ front_fields(const char *form, int fields, struct deck_request *r,
 	/* an open names its request; and a terminal's table, or -1, the */
 	/* login's own, if it was not given */
 	if (r->kind == DECK_OPEN && (seen & F_REQUEST) == 0)
+		return (-1);
+	/* a frame typed has its sequence */
+	if (r->kind == DECK_TYPE && (seen & F_SEQ) == 0)
 		return (-1);
 	if (r->kind == DECK_OPEN && (seen & F_RTABLE) == 0)
 		r->n = -1;
@@ -750,9 +754,12 @@ front_field(int f, const char *v, struct deck_request *r)
 	case F_WORDS:
 		return (strlcpy(r->text, v, NSHD_WORDS) >= NSHD_WORDS ? -1 : 0);
 	case F_LINE:
-	case F_KEYS:
+	case F_DATA:		/* base64, which sessions decodes */
 		return (strlcpy(r->text, v, sizeof(r->text)) >=
 		    sizeof(r->text) ? -1 : 0);
+	case F_SEQ:
+		r->seq = strtonum(v, 1, INT32_MAX, &errstr);
+		return (errstr == NULL ? 0 : -1);
 	case F_IFNAME:
 		return (v[0] == '\0' || strlcpy(r->text, v, NSHD_IFNAME) >=
 		    NSHD_IFNAME ? -1 : 0);

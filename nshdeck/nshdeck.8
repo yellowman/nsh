@@ -613,18 +613,28 @@ The terminal ends when its stream ends, when
 ends, when it is closed, or when the user logs out.
 .It Cm type
 POST, with
-.Ar channel ,
-.Ar keys ,
-what was typed in its terminal, up to 1023 bytes, and
+.Ar channel ;
+.Ar seq ,
+the frame's sequence, from 1;
+.Ar data ,
+bytes typed in its terminal, up to 750, in base64; and
 .Ar rows
 and
 .Ar cols ,
 for its new size.
-What was typed is written to
+The frame after the last one taken is taken: its bytes are written to
 .Xr nsh 8
-as nsh reads it.
-If more than 64 KB would then wait for nsh to read it, the request is
-refused with 503.
+as nsh reads it, and the answer has
+.Ar ack ,
+its sequence.
+The last frame taken, sent again as it was, is answered the same way
+and not written again; another frame with its sequence, or one out of
+sequence, is refused with 409, and
+.Ar ack
+says the last one taken.
+If more than 64 KB would then wait for nsh to read it, the frame is
+refused with 503 and none of it is taken, so that it can be sent
+again.
 .It Cm close
 POST, with
 .Ar channel .
@@ -676,7 +686,8 @@ an
 .Cm open
 with a
 .Ar request
-that opened another terminal, or a second stream of a terminal
+that opened another terminal, a second stream of a terminal, or a
+frame typed out of its sequence
 .It 405
 the wrong method
 .It 413

@@ -72,7 +72,7 @@ struct deck_request {
 	char		text[NSHD_LINE];	/* a user's name, a show's */
 						/* words, a line, an */
 						/* operation, a configuration, */
-						/* keys typed in a terminal, */
+						/* a typed frame, in base64, */
 						/* an open's request */
 	char		password[NSHD_PASSWORD];
 	char		comment[NSHD_COMMENT];
@@ -83,6 +83,7 @@ struct deck_request {
 					/* completion's help or a stage's */
 					/* bridge */
 	int32_t		channel;	/* a terminal's */
+	int32_t		seq;		/* a frame's sequence */
 	int32_t		minutes;	/* minutes for commit confirmed */
 	int32_t		check;		/* commit check */
 	int32_t		logs;		/* the logs events follow, as */

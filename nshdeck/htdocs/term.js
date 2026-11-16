@@ -3,8 +3,8 @@
  * logged in (nshdeck(8)'s open, terminal and type). An open asks for
  * it, and is answered with its channel; xterm.js draws it; what nsh
  * writes comes on the channel's event stream, in base64; and what is
- * typed goes in type requests, one at a time, in order, and again a
- * little later if nsh has not yet taken what came before
+ * typed goes, as its bytes, in frames, one at a time, each with its
+ * sequence, and the same frame again until nshdeck takes it
  */
 "use strict";
 
@@ -13,10 +13,13 @@ var termfit = null;	/* its fit addon, which sizes it to its box */
 var tstream = null;	/* the terminal's stream, while it is open */
 var tchannel = 0;	/* its channel, once nshdeck says it runs */
 var topening = false;	/* an open asked, not yet answered */
-var typing = "";	/* typed, not yet sent */
 var ttable = null;	/* the table the terminal's nsh began in, if the page */
 			/* was focused on one as it opened */
-var sending = false;	/* a type request not yet answered */
+var TFRAME = 750;	/* a frame's bytes, at most */
+var typed = [];		/* bytes typed, not yet in a frame, as Uint8Arrays */
+var tsize = null;	/* a size not yet in a frame */
+var tseq = 0;		/* the last frame nshdeck took */
+var tframe = null;	/* the frame sent, not yet taken */
 
 /* the terminal's state, in words, its light, and its buttons */
 function tstate(text, led) {
@@ -26,29 +29,68 @@ function tstate(text, led) {
 	$("term-end").disabled = tstream === null;
 }
 
-/* what was typed, sent 300 characters at most, to fit 1023 bytes of UTF-8 */
+/*
+ * The next frame: TFRAME of the bytes typed at most, a character's
+ * bytes split between two frames if they come so, and the size, if it
+ * changed; one frame at a time, the one after the last one taken
+ */
 function tsend() {
-	var n = Math.min(typing.length, 300), keys;
+	var b = new Uint8Array(TFRAME), n = 0, k, s = "", i;
 
-	if (sending || tchannel === 0 || n === 0)
+	if (tframe !== null || tchannel === 0 ||
+	    (typed.length === 0 && tsize === null))
 		return;
-	/* not half of a character that takes two UTF-16 units */
-	if (n < typing.length && /[\uD800-\uDBFF]/.test(typing[n - 1]))
-		n--;
-	keys = typing.slice(0, n);
-	typing = typing.slice(n);
-	sending = true;
-	ask("POST", "type", { channel: tchannel, keys: keys }).then(
-	    function (j) {
-		sending = false;
-		if (j.httpStatus === 503 && tchannel !== 0) {
-			typing = keys + typing;
-			setTimeout(tsend, 250);
-		} else
+	while (typed.length > 0 && n < TFRAME) {
+		k = Math.min(typed[0].length, TFRAME - n);
+		b.set(typed[0].subarray(0, k), n);
+		n += k;
+		typed[0] = typed[0].subarray(k);
+		if (typed[0].length === 0)
+			typed.shift();
+	}
+	for (i = 0; i < n; i++)
+		s += String.fromCharCode(b[i]);
+	tframe = { channel: tchannel, seq: tseq + 1, data: btoa(s) };
+	if (tsize !== null) {
+		tframe.rows = tsize.rows;
+		tframe.cols = tsize.cols;
+		tsize = null;
+	}
+	tpost(tframe);
+}
+
+/*
+ * frame f, sent; and sent again as it was if nsh has no room for it yet,
+ * or if its answer was lost, which nshdeck answers without taking it
+ * twice
+ */
+function tpost(f) {
+	ask("POST", "type", f).then(function (j) {
+		if (tframe !== f)
+			return;
+		if (j.ok) {
+			tseq = f.seq;
+			tframe = null;
 			tsend();
+		} else if (j.httpStatus === 503)
+			setTimeout(function () {
+				if (tframe === f)
+					tpost(f);
+			}, 250);
+		else
+			tgone(j.error || "typed into a terminal gone");
 	}, function () {
-		sending = false;
+		setTimeout(function () {
+			if (tframe === f)
+				tpost(f);
+		}, 1000);
 	});
+}
+
+/* bytes typed, from xterm.js, to be sent */
+function tbytes(b) {
+	typed.push(b);
+	tsend();
 }
 
 /* a name for an open, which the page gives it again if it asks again */
@@ -88,20 +130,26 @@ function tconnect() {
 		termfit = new FitAddon.FitAddon();
 		term.loadAddon(termfit);
 		term.open($("term"));
+		/* text as UTF-8, a NUL too; and bytes as they are */
 		term.onData(function (d) {
-			/* a NUL cannot be sent */
-			typing += d.replace(/\0/g, "");
-			tsend();
+			tbytes(new TextEncoder().encode(d));
+		});
+		term.onBinary(function (d) {
+			tbytes(Uint8Array.from(d, function (c) {
+				return c.charCodeAt(0);
+			}));
 		});
 		term.onResize(function (s) {
-			if (tchannel !== 0)
-				ask("POST", "type", { channel: tchannel,
-				    keys: "", rows: s.rows, cols: s.cols });
+			tsize = { rows: s.rows, cols: s.cols };
+			tsend();
 		});
 	}
 	termfit.fit();
 	tchannel = 0;
-	typing = "";
+	typed = [];
+	tsize = null;
+	tseq = 0;
+	tframe = null;
 	/* nsh begins in the table the page is focused on, as nsh -T does */
 	ttable = table;
 	fields = { request: topenid(), rows: term.rows, cols: term.cols };
@@ -157,7 +205,8 @@ function tgone(why) {
 	tstream.close();
 	tstream = null;
 	tchannel = 0;
-	typing = "";
+	typed = [];
+	tframe = null;
 	why = why.trim();
 	term.write("\r\n\x1b[2m[" + why + "]\x1b[0m\r\n");
 	tstate(why, "off");

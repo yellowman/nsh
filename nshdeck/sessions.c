@@ -103,6 +103,8 @@
 					/* request asked again */
 #define DECK_FOLLOW	30		/* seconds a terminal waits for its */
 					/* stream before it ends */
+#define DECK_FRAME	750		/* a frame's bytes typed, at most: */
+					/* 1000 characters of base64 */
 #define DECK_PAST	(64 * 1024)	/* a log's text kept for a new */
 					/* stream, at most */
 #define DECK_LOGS	4		/* the logs a stream may follow */
@@ -172,6 +174,11 @@ struct terminal {
 	char			*typed;		/* not yet written to nsh */
 	size_t			 typedlen;
 	char			*why;		/* why it ended, unfollowed */
+	int32_t			 seq;		/* the last frame taken: its */
+	u_char			 last[DECK_FRAME];	/* sequence, bytes */
+	int			 lastlen;
+	int32_t			 lastrows;	/* and size */
+	int32_t			 lastcols;
 };
 
 /* an open a user asked, kept so that it can be asked again */
@@ -397,7 +404,7 @@ sessions_front(int fd, short event, void *arg)
 			    memchr(r.comment, '\0', sizeof(r.comment)) ==
 			    NULL || memchr(r.daemon, '\0', sizeof(r.daemon)) ==
 			    NULL || r.n < (r.kind == DECK_OPEN ? -1 : 0) ||
-			    r.n > 255 || r.channel < 0 ||
+			    r.n > 255 || r.channel < 0 || r.seq < 0 ||
 			    r.minutes < 0 || r.minutes > NSHD_CONFIRMMAX ||
 			    (r.check != 0 && r.check != 1) ||
 			    (r.logs & ~NSHD_WATCH_LOGS) != 0 ||
@@ -1856,32 +1863,58 @@ term_end(struct user *u, struct terminal *t, const char *why)
 }
 
 /*
- * What u typed in the terminal r names, to write to nsh; and its new
- * size, if r has one
+ * A frame of what u typed in the terminal r names: its bytes, which r
+ * has in base64, to write to nsh, and its new size, if r has one. The
+ * frame after the last one taken is taken, and answered with its
+ * sequence; the last one taken, sent again as it was, is answered again
+ * and not written again; any other is refused, and the answer says the
+ * last taken. A frame nsh has no room for is refused with 503, and none
+ * of it taken, so it can be sent again
  */
 static void
 typed(uint32_t id, struct user *u, struct deck_request *r)
 {
 	struct terminal	*t;
 	struct winsize	 ws;
-	size_t		 len = strlen(r->text);
+	u_char		 buf[DECK_FRAME];
 	char		*p;
+	int		 len;
 
 	if ((t = term_channel(u, r->channel)) == NULL ||
 	    t->state != TS_RUNS) {
 		reply(id, 404, "{\"error\":\"no such terminal\"}");
 		return;
 	}
+	if ((len = b64_pton(r->text, buf, sizeof(buf))) == -1) {
+		reply(id, 400, "{\"error\":\"data that is not base64, or "
+		    "more than %d bytes\"}", DECK_FRAME);
+		return;
+	}
+	if (r->seq == t->seq && len == t->lastlen &&
+	    memcmp(buf, t->last, len) == 0 && r->rows == t->lastrows &&
+	    r->cols == t->lastcols) {
+		explicit_bzero(buf, sizeof(buf));
+		reply(id, 200, "{\"ok\":true,\"ack\":%d}", t->seq);
+		return;
+	}
+	if (r->seq != t->seq + 1) {
+		explicit_bzero(buf, sizeof(buf));
+		reply(id, 409, "{\"error\":\"%s\",\"ack\":%d}",
+		    r->seq == t->seq ? "another frame was taken with that "
+		    "sequence" : "a frame out of its sequence", t->seq);
+		return;
+	}
 	if (t->typedlen + len > DECK_TYPED) {
+		explicit_bzero(buf, sizeof(buf));
 		reply(id, 503, "{\"error\":\"nsh has not taken what was "
-		    "typed\"}");
+		    "typed\",\"ack\":%d}", t->seq);
 		return;
 	}
 	if (len > 0) {
 		if ((p = realloc(t->typed, t->typedlen + len)) == NULL)
 			fatal(NULL);
 		t->typed = p;
-		memcpy(t->typed + t->typedlen, r->text, len);
+		memcpy(t->typed + t->typedlen, buf, len);
 		t->typedlen += len;
 	}
 	if (r->rows > 0 && r->cols > 0) {
@@ -1891,9 +1924,14 @@ typed(uint32_t id, struct user *u, struct deck_request *r)
 		if (ioctl(t->pty, TIOCSWINSZ, &ws) == -1)
 			log_warn("%s: TIOCSWINSZ", u->name);
 	}
+	t->seq = r->seq;
+	memcpy(t->last, buf, len);
+	t->lastlen = len;
+	t->lastrows = r->rows;
+	t->lastcols = r->cols;
+	explicit_bzero(buf, sizeof(buf));
 	term_event(t);
-	head(id, 200, 0, NULL, 0);
-	reply(id, 0, "{\"ok\":true}");
+	reply(id, 200, "{\"ok\":true,\"ack\":%d}", t->seq);
 }
 
 /* front's client for id is gone: its request, waiting or answered */
