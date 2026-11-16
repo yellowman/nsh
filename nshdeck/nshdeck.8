@@ -285,7 +285,15 @@ The strip shows how many.
 .Ss Terminal
 Runs
 .Xr nsh 8
-as the user, and xterm.js draws it.
+as the user, each in a tab of its own, and xterm.js draws it.
+Shown with no tab, it opens one;
+.Sq +
+opens another, in the table the page is focused on, and
+.Sq \(mu
+ends a tab's nsh and closes the tab.
+Each nsh runs, and keeps what it wrote, while another is shown.
+A tab whose nsh has ended keeps what it wrote, and Connect starts
+another nsh in it.
 .Ss The strip
 Has Compare, Validate and Commit, which show the changes, run
 .Cm commit check ,

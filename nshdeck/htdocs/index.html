@@ -310,13 +310,18 @@
 
 <section id="ws-terminal" class="ws" hidden>
 <div class="bar"><h2>Terminal</h2>
+<div id="term-tabs" role="tablist" aria-label="Terminals"></div>
+<button type="button" id="term-new" aria-label="Another nsh"
+    title="Another nsh, in the table the page is focused on">+</button>
 <span class="led" id="term-led"></span>
 <span class="dim" id="term-state">not connected</span>
 <span class="fill"></span>
+<span class="inline">
 <button type="button" id="term-connect" class="primary">Connect</button>
 <button type="button" id="term-end" disabled>Disconnect</button>
+</span>
 </div>
-<div id="term"></div>
+<div id="term"><p id="term-none" hidden>No nsh is open: + opens one.</p></div>
 </section>
 
 </main>

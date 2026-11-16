@@ -2667,11 +2667,86 @@ button.twisty[aria-expanded=true]::before {
 }
 
 #term {
+	display: grid;
 	min-height: 24.6154rem;
 	padding: .6154rem;
 	overflow: hidden;
 	background: #0b0d10;
 	border: 1px solid var(--line);
+}
+
+/* the tab shown fills the screen */
+.tpanel {
+	min-width: 0;
+	min-height: 0;
+}
+
+#term-none {
+	margin: auto;
+	color: #8b9098;
+}
+
+/*
+ * the terminals' tabs, on a track as a segmented control's choices are,
+ * the one shown underlined: each with its light, its label and its close
+ */
+#term-tabs {
+	display: inline-flex;
+	flex-wrap: wrap;
+	border: 1px solid var(--line);
+}
+
+#term-tabs:empty {
+	display: none;
+}
+
+.ttab {
+	display: flex;
+	align-items: center;
+}
+
+.ttab + .ttab {
+	border-left: 1px solid var(--line);
+}
+
+.ttab:has(> [aria-selected=true]) {
+	box-shadow: inset 0 -.1538rem 0 var(--accent);
+}
+
+.ttab button {
+	display: flex;
+	align-items: center;
+	gap: .4615rem;
+	height: auto;
+	padding: .1538rem .3077rem .1538rem .8462rem;
+	line-height: 1.5385rem;
+	font-weight: inherit;
+	color: var(--dim);
+	background: none;
+	border-radius: 0;
+	box-shadow: none;
+}
+
+.ttab button[aria-selected=true] {
+	color: var(--text);
+}
+
+.ttab .tclose {
+	padding: .1538rem .6154rem .1538rem .3077rem;
+}
+
+.ttab button:hover:not(:disabled) {
+	color: var(--text);
+	background: var(--select);
+}
+
+.ttab button:focus-visible {
+	box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+#term-new {
+	padding: 0 .7692rem;
+	font-size: 1.2308rem;
 }
 
 .panel {
