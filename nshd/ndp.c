@@ -114,14 +114,15 @@
 #define ADVANCE(x, n) (x += ROUNDUP((n)->sa_len))
 
 static int rtsock = -1;
+static int rtsock_table = -1;	/* the routing table rtsock hears */
 
 
-static int getsocket(void);
-int ndpdelete(const struct sockaddr_in6 *);
-void ndpflush(void);
+static int getsocket(int);
+int ndpdelete(const struct sockaddr_in6 *, int);
+void ndpflush(int);
 static struct in6_nbrinfo *getnbrinfo(struct in6_addr *, int);
-int rtmsg_ndp(int);
-int rtget_ndp(struct sockaddr_in6 **, struct sockaddr_dl **);
+int rtmsg_ndp(int, int);
+int rtget_ndp(struct sockaddr_in6 **, struct sockaddr_dl **, int);
 void conf_ndp(FILE *output, char *delim, int);
 void conf_ndp_entry(FILE *, char *, struct  rt_msghdr *);
 static void conf_ndp_line(FILE *, char *, struct sockaddr_in6 *,
@@ -139,26 +140,24 @@ const struct argkey ndpentry_keys[] = {
 	{ "temp", NDP_TEMP }, { "proxy", NDP_PROXY }, { NULL }
 };
 
+/* the routing socket, which hears routing table table only */
 static int
-getsocket(void)
+getsocket(int table)
 {
-	socklen_t len = sizeof(cli_rtable);
-
-	if (rtsock >= 0)
-		return rtsock;
-	rtsock = socket(AF_ROUTE, SOCK_RAW, 0);
-	if (rtsock == -1) {
+	if (rtsock == -1 && (rtsock = socket(AF_ROUTE, SOCK_RAW, 0)) == -1) {
 		printf("%% routing socket: %s\n", strerror(errno));
 		return -1;
 	}
-	if (setsockopt(rtsock, AF_ROUTE, ROUTE_TABLEFILTER, &cli_rtable,
-	    len) == -1) {
-		printf("%% ROUTE_TABLEFILTER: %s\n", strerror(errno));
-		close(rtsock);
-		rtsock = -1;
-		return -1;
+	if (rtsock_table != table) {
+		if (setsockopt(rtsock, AF_ROUTE, ROUTE_TABLEFILTER, &table,
+		    sizeof(table)) == -1) {
+			printf("%% ROUTE_TABLEFILTER: %s\n", strerror(errno));
+			close(rtsock);
+			rtsock = rtsock_table = -1;
+			return -1;
+		}
+		rtsock_table = table;
 	}
-
 	return rtsock;
 }
 
@@ -190,10 +189,10 @@ ndpentry_apply(const struct argcmd *c, int set, const struct facts_value *v,
 	if (!set) {
 		if (cand != NULL)
 			return ndp_cand((struct sockaddr_in6 *)&ss, NULL, cand);
-		return ndpdelete((struct sockaddr_in6 *)&ss);
+		return ndpdelete((struct sockaddr_in6 *)&ss, cli_rtable);
 	}
 
-	if (cand == NULL && getsocket() < 0)
+	if (cand == NULL && getsocket(cli_rtable) < 0)
 		return -1;
 
 	*sin = *(struct sockaddr_in6 *)&ss;
@@ -212,7 +211,7 @@ ndpentry_apply(const struct argcmd *c, int set, const struct facts_value *v,
 	if (cand != NULL)
 		return ndp_cand(sin, &sdl_m, cand);
 
-	if (rtget_ndp(&sin, &sdl)) {
+	if (rtget_ndp(&sin, &sdl, cli_rtable)) {
 		printf("%% RTM_GET(%s) failed\n", host);
 		return -1;
 	}
@@ -243,7 +242,7 @@ overwrite:
 	}
 	sdl_m.sdl_type = sdl->sdl_type;
 	sdl_m.sdl_index = sdl->sdl_index;
-	return (rtmsg_ndp(RTM_ADD));
+	return (rtmsg_ndp(RTM_ADD, cli_rtable));
 }
 
 /*
@@ -283,10 +282,10 @@ ndp_cand(const struct sockaddr_in6 *addr, struct sockaddr_dl *sdl,
 }
 
 /*
- * Delete a neighbor cache entry
+ * Delete a neighbor cache entry of routing table table
  */
 int
-ndpdelete(const struct sockaddr_in6 *addr)
+ndpdelete(const struct sockaddr_in6 *addr, int table)
 {
 	struct sockaddr_in6 *sin = &sin_m;
 	struct rt_msghdr *rtm = &m_rtmsg.m_rtm;
@@ -295,10 +294,10 @@ ndpdelete(const struct sockaddr_in6 *addr)
 
 	getnameinfo((const struct sockaddr *)addr, addr->sin6_len, host,
 	    sizeof(host), NULL, 0, NI_NUMERICHOST);
-	if (getsocket() < 0)
+	if (getsocket(table) < 0)
 		return -1;
 	sin_m = *addr;
-	if (rtget_ndp(&sin, &sdl)) {
+	if (rtget_ndp(&sin, &sdl, table)) {
 		printf("%% RTM_GET(%s) failed\n", host);
 		return -1;
 	}
@@ -323,7 +322,7 @@ delete:
 		printf("%% cannot locate %s\n", host);
 		return -1;
 	}
-	if (rtmsg_ndp(RTM_DELETE) == -1)
+	if (rtmsg_ndp(RTM_DELETE, table) == -1)
 		return -1;
 	printf("%% %s deleted\n", host);
 
@@ -331,10 +330,10 @@ delete:
 }
 
 /*
- * Flush the neighbor cache of what the kernel cloned
+ * Flush routing table table's neighbor cache of what the kernel cloned
  */
 void
-ndpflush(void)
+ndpflush(int table)
 {
 	int mib[7];
 	size_t needed;
@@ -350,7 +349,7 @@ ndpflush(void)
 	mib[3] = AF_INET6;
 	mib[4] = NET_RT_FLAGS;
 	mib[5] = RTF_LLINFO;
-	mib[6] = cli_rtable;
+	mib[6] = table;
 	while (1) {
 		char *p;
 		if (sysctl(mib, 7, NULL, &needed, NULL, 0) == -1) {
@@ -420,7 +419,7 @@ ndpflush(void)
 		if (IN6_IS_ADDR_MULTICAST(&sin->sin6_addr))
 			continue;
 		if (rtm->rtm_flags & RTF_CLONED)
-			ndpdelete(sin);
+			ndpdelete(sin, table);
 	}
 
 	free(buf);
@@ -511,8 +510,9 @@ getnbrinfo(struct in6_addr *addr, int ifindex)
 	return &nbi;
 }
 
+/* cmd in routing table table, on getsocket()'s socket for it */
 int
-rtmsg_ndp(int cmd)
+rtmsg_ndp(int cmd, int table)
 {
 	static int seq;
 	struct rt_msghdr *rtm = &m_rtmsg.m_rtm;
@@ -525,7 +525,7 @@ rtmsg_ndp(int cmd)
 	bzero((char *)&m_rtmsg, sizeof(m_rtmsg));
 	rtm->rtm_flags = flags;
 	rtm->rtm_version = RTM_VERSION;
-	rtm->rtm_tableid = cli_rtable;
+	rtm->rtm_tableid = table;
 
 	switch (cmd) {
 	default:
@@ -602,7 +602,7 @@ doit:
 }
 
 int
-rtget_ndp(struct sockaddr_in6 **sinp, struct sockaddr_dl **sdlp)
+rtget_ndp(struct sockaddr_in6 **sinp, struct sockaddr_dl **sdlp, int table)
 {
 	struct rt_msghdr *rtm = &(m_rtmsg.m_rtm);
 	struct sockaddr_in6 *sin = NULL;
@@ -611,7 +611,7 @@ rtget_ndp(struct sockaddr_in6 **sinp, struct sockaddr_dl **sdlp)
 	char *cp;
 	unsigned int i;
 
-	if (rtmsg_ndp(RTM_GET) < 0)
+	if (rtmsg_ndp(RTM_GET, table) < 0)
 		return (1);
 
 	if (rtm->rtm_addrs) {

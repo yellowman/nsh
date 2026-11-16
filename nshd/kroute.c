@@ -140,7 +140,7 @@ freertdump(struct rtdump *rtdump)
  * sockaddrs match requested address families
  */
 void
-flushroutes(int af, int af2, int flush_verbose)
+flushroutes(int af, int af2, int flush_verbose, int table)
 {
 	int rlen, seqno, s;
 	char *next;
@@ -156,7 +156,7 @@ flushroutes(int af, int af2, int flush_verbose)
 	}
 
 	shutdown(s, 0); /* Don't want to read back our messages */
-	rtdump = getrtdump(af, 0, cli_rtable);
+	rtdump = getrtdump(af, 0, table);
 	if (rtdump == NULL) {
 		close(s);
 		return;

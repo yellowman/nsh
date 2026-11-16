@@ -8,7 +8,7 @@
 #		process by what fills it in
 #
 # file		class	names
-arp.c		process	rtmsg_arp.seq s
+arp.c		process	rtmsg_arp.seq s stable
 arp.c		scratch	expire_time sdl_m sin_m
 arp.c		table	arpentry_keys blank_sdl blank_sin ifp_m so_1mask
 bgpcommands.c	process	bgpd_socket_path
@@ -138,7 +138,7 @@ main.c		table	vers
 makeargv.c	scratch	cursor_argc cursor_argo line margc margv saveline
 media.c		table	ifm_option_descriptions ifm_subtype_descriptions
 more.c		process	oldtty winsize
-ndp.c		process	rtmsg_ndp.seq rtsock
+ndp.c		process	rtmsg_ndp.seq rtsock rtsock_table
 ndp.c		scratch	conf_ndp_entry.nbi expire_time flags
 			getnbrinfo.nbi rtget_ndp.ksin sdl_m
 			sin_m

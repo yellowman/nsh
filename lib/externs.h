@@ -138,7 +138,7 @@ struct rtdump *getrtdump(int, int, int);
 void freertdump(struct rtdump *);
 int monitor(int, char **, ...);
 int rtmsg(int, int, int, int, int, struct cand *);
-void flushroutes(int, int, int);
+void flushroutes(int, int, int, int);
 void bprintf(FILE *, int, u_char *);
 #ifdef _NET_IF_DL_H_
 #endif
@@ -552,9 +552,9 @@ char *ether_str(struct sockaddr_dl *);
 
 /* ndp.c */
 struct sockaddr_in6;
-int ndpdelete(const struct sockaddr_in6 *);
+int ndpdelete(const struct sockaddr_in6 *, int);
 int parse_host(const char *, struct sockaddr_in6 *);
-void ndpflush(void);
+void ndpflush(int);
 void conf_ndp(FILE *output, char *delim, int);
 
 /* nameserver.c */

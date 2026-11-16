@@ -67,18 +67,20 @@
 	((a) > 0 ? (1 + (((a) - 1) | (sizeof(long) - 1))) : sizeof(long))
 #define ADVANCE(x, n) (x += ROUNDUP((n)->sa_len))
 
-int rtget(struct sockaddr_inarp **, struct sockaddr_dl **, int, int, int);
-int arpdelete(struct in_addr);
+int rtget(struct sockaddr_inarp **, struct sockaddr_dl **, int, int, int,
+	int);
+int arpdelete(struct in_addr, int);
 int arpsearch(FILE *, char *, in_addr_t addr, int, void (*action)(FILE *,
 	char *, struct sockaddr_dl *sdl, struct sockaddr_inarp *sin,
 	struct rt_msghdr *rtm));
 void conf_arp_entry(FILE *, char *, struct sockaddr_dl *,
 	struct sockaddr_inarp *, struct rt_msghdr *);
-static int getsocket(void);
-int rtmsg_arp(int, int, int, int);
+static int getsocket(int);
+int rtmsg_arp(int, int, int, int, int);
 static int arp_cand(struct in_addr, struct ether_addr *, int, struct cand *);
 
 static int s = -1;
+static int stable = -1;	/* the routing table s hears */
 
 extern int h_errno;
 
@@ -87,25 +89,25 @@ extern int h_errno;
 #define F_FILESET	3
 #define F_DELETE	4
 
+/* the routing socket, which hears routing table table only */
 static int
-getsocket(void)
+getsocket(int table)
 {
-	socklen_t len = sizeof(cli_rtable);
-
-	if (s >= 0)
-		return s;
-	s = socket(PF_ROUTE, SOCK_RAW, 0);
-	if (s < 0) {
+	if (s == -1 && (s = socket(PF_ROUTE, SOCK_RAW, 0)) == -1) {
 		printf("%% getsocket: socket: %s\n", strerror(errno));
-		return s;
-	}
-	if (setsockopt(s, PF_ROUTE, ROUTE_TABLEFILTER, &cli_rtable, len) < 0) {
-		printf("%% getsocket: setsockopt: %s\n", strerror(errno));
-		close(s);
-		s = -1;
 		return -1;
 	}
-
+	if (stable != table) {
+		if (setsockopt(s, PF_ROUTE, ROUTE_TABLEFILTER, &table,
+		    sizeof(table)) == -1) {
+			printf("%% getsocket: setsockopt: %s\n",
+			    strerror(errno));
+			close(s);
+			s = stable = -1;
+			return -1;
+		}
+		stable = table;
+	}
 	return s;
 }
 
@@ -117,7 +119,7 @@ static time_t			expire_time;
 
 int
 rtget(struct sockaddr_inarp **sinp, struct sockaddr_dl **sdlp,
-    int flags, int doing_proxy, int export_only)
+    int flags, int doing_proxy, int export_only, int table)
 {
 	struct rt_msghdr *rtm = &(m_rtmsg.m_rtm);
 	struct sockaddr_inarp *sin = NULL;
@@ -126,7 +128,7 @@ rtget(struct sockaddr_inarp **sinp, struct sockaddr_dl **sdlp,
 	char *cp;
 	unsigned int i;
 
-	if (rtmsg_arp(RTM_GET, flags, doing_proxy, export_only) < 0)
+	if (rtmsg_arp(RTM_GET, flags, doing_proxy, export_only, table) < 0)
 		return (1);
 
 	if (rtm->rtm_addrs) {
@@ -188,13 +190,13 @@ arpentry_apply(const struct argcmd *c, int set, const struct facts_value *v,
 	if (!set) {
 		if (cand != NULL)
 			return arp_cand(in, NULL, 0, cand);
-		return arpdelete(in);
+		return arpdelete(in, cli_rtable);
 	}
 	if ((opt & ARP_TEMP) && (opt & ARP_PERMANENT)) {
 		printf("%% temp or permanent, not both\n");
 		return -1;
 	}
-	if (cand == NULL && getsocket() < 0)
+	if (cand == NULL && getsocket(cli_rtable) < 0)
 		return -1;
 	sdl_m = blank_sdl;		/* struct copy */
 	sin_m = blank_sin;		/* struct copy */
@@ -220,7 +222,7 @@ arpentry_apply(const struct argcmd *c, int set, const struct facts_value *v,
 		return arp_cand(in, &ea, flags, cand);
 
 tryagain:
-	if (rtget(&sin, &sdl, flags, doing_proxy, export_only)) {
+	if (rtget(&sin, &sdl, flags, doing_proxy, export_only, cli_rtable)) {
 		printf("%% %s\n", host);
 		return -1;
 	}
@@ -258,7 +260,8 @@ overwrite:
 	}
 	sdl_m.sdl_type = sdl->sdl_type;
 	sdl_m.sdl_index = sdl->sdl_index;
-	return (rtmsg_arp(RTM_ADD, flags, doing_proxy, export_only));
+	return (rtmsg_arp(RTM_ADD, flags, doing_proxy, export_only,
+	    cli_rtable));
 }
 
 /*
@@ -305,10 +308,10 @@ arp_cand(struct in_addr in, struct ether_addr *ea, int flags, struct cand *cand)
 }
 
 /*
- * Delete an arp entry
+ * Delete an arp entry of routing table table
  */
 int
-arpdelete(struct in_addr in)
+arpdelete(struct in_addr in, int table)
 {
 	struct sockaddr_inarp *sin;
 	struct rt_msghdr *rtm;
@@ -320,12 +323,12 @@ arpdelete(struct in_addr in)
 	rtm = &m_rtmsg.m_rtm;
 
 	inet_ntop(AF_INET, &in, host, sizeof(host));
-	if (getsocket() < 0)
+	if (getsocket(table) < 0)
 		return -1;
 	sin_m = blank_sin;		/* struct copy */
 	sin->sin_addr = in;
 tryagain:
-	if (rtget(&sin, &sdl, 0, doing_proxy, export_only)) {
+	if (rtget(&sin, &sdl, 0, doing_proxy, export_only, table)) {
 		printf("%% %s\n", host);
 		return -1;
 	}
@@ -358,7 +361,7 @@ delete:
 		printf("%% cannot locate %s\n", host);
 		return -1;
 	}
-	if (rtmsg_arp(RTM_DELETE, 0, doing_proxy, export_only)) {
+	if (rtmsg_arp(RTM_DELETE, 0, doing_proxy, export_only, table)) {
 		printf("%% delete failure: %s\n", strerror(errno));
 		return -1;
 	}
@@ -472,9 +475,9 @@ arp_facts(struct facts_out *o, struct rtdump *rt, char **cur,
 	return (0);
 }
 
-/* -1 error */
+/* cmd in routing table table, on getsocket()'s socket for it: -1 error */
 int
-rtmsg_arp(int cmd, int flags, int doing_proxy, int export_only)
+rtmsg_arp(int cmd, int flags, int doing_proxy, int export_only, int table)
 {
 	static int seq;
 	struct rt_msghdr *rtm;
@@ -491,7 +494,7 @@ rtmsg_arp(int cmd, int flags, int doing_proxy, int export_only)
 	rtm->rtm_flags = flags;
 	rtm->rtm_version = RTM_VERSION;
 	rtm->rtm_hdrlen = sizeof(*rtm);
-	rtm->rtm_tableid = cli_rtable;
+	rtm->rtm_tableid = table;
 
 	switch (cmd) {
 	default:

@@ -2983,7 +2983,7 @@ static int
 flush_ip_routes(const struct argcmd *c, int set, const struct facts_value *v,
     char *ifname, int ifs, struct cand *cand)
 {
-	flushroutes(AF_INET, AF_INET, v[0].type != FACT_NONE);
+	flushroutes(AF_INET, AF_INET, v[0].type != FACT_NONE, cli_rtable);
 
 	return 0;
 }
@@ -2992,7 +2992,7 @@ static int
 flush_arp_cache(const struct argcmd *c, int set, const struct facts_value *v,
     char *ifname, int ifs, struct cand *cand)
 {
-	flushroutes(AF_INET, AF_LINK, v[0].type != FACT_NONE);
+	flushroutes(AF_INET, AF_LINK, v[0].type != FACT_NONE, cli_rtable);
 
 	return 0;
 }
@@ -3001,7 +3001,7 @@ static int
 flush_ndp_cache(const struct argcmd *c, int set, const struct facts_value *v,
     char *ifname, int ifs, struct cand *cand)
 {
-	ndpflush();
+	ndpflush(cli_rtable);
 	return 0;
 }
 
