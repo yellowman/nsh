@@ -1036,6 +1036,8 @@ config_show(uint32_t session, struct nshd_frontshow *fs)
 		return;
 	}
 	/* system answers the rest; a show comes as the values it asks */
+	memset(&fs->ss.whose, 0, sizeof(fs->ss.whose));
+	fs->ss.whose.session = session;
 	if (link_compose(&links[SYSTEM], type, r->id, data, len) == -1)
 		fatal("%s", __func__);
 }

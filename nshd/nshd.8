@@ -403,6 +403,14 @@ or PF_KEY, and the tests of relayd, ldapd, npppd, sasyncd and sshd,
 which read keys.
 .Pp
 A log and dhcpd's leases are opened as root and read as _nshcheck.
+.Pp
+.Cm show vmd status
+asks
+.Xr vmd 8
+on its control socket from a child that runs as the session's user, so
+the socket decides whether that user may ask.
+The child sends its answer to system as records, and system passes on
+only VMs and messages.
 pf's log comes from
 .Xr tcpdump 8 ,
 which is started as root because it gives up root itself.

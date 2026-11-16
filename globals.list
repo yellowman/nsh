@@ -105,7 +105,7 @@ ctl.c		table	ctl_bgp ctl_crontab ctl_daemons ctl_dhcp
 			ctl_sasync ctl_smtp ctl_snmp
 			ctl_sshd ctl_tftp ctl_tftpproxy ctl_vmd admin_words
 ctlargs.c	table	dhcs dvcs eics ikcs iscs ldcs lics os6cs oscs
-			pfcs rics rlcs smcs systatcs
+			pfcs rics rlcs smcs systatcs vmcs
 editing.c	process	complete.word
 editing.c	table	el_runs.funcs
 genget.c	process	ambiguous
@@ -196,9 +196,11 @@ rendersys.c	table	ah_fields carp_fields daemon_fields esp_fields
 			facilitynames groups hostname_fields icmp_fields
 			icmpnames igmp_fields ip_fields ipcomp_fields
 			ipip_fields kind_daemon kind_hostname kind_login
+			kind_vm
 			login_fields mb_fields mbtypes pf_fcounters
 			pf_fields pf_reasons pfsync_fields prioritynames
 			rt_fields sflag tcp_fields tcpstates udp_fields
+			vm_fields vm_states
 route.c		table	route_keys route_parse.routeflags
 settings.c	table	bridge_settings contexts if_settings
 			rtable_settings top_settings

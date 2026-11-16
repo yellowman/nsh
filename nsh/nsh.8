@@ -4968,7 +4968,7 @@ nsh(config-private)# commit
 .Ic show
 .Op hostname | interface | autoconf | ip | inet | inet6 | route | route6\
  | sadb | arp | ndp | vlan | bridge | kernel | bgp | ospf | ospf6 | pf\
- | eigrp | rip | ldp | ike | ipsec | dvmrp | relay | dhcp | smtp | ldap\
+ | eigrp | rip | ldp | ike | ipsec | dvmrp | relay | dhcp | smtp | ldap | vmd\
  | monitor | log | system-stats | version | users | daemons | crontab\
  | scheduler | running-config | startup-config | active-config\
  | diff-config | candidate-config | rollback | environment |\&? | help
@@ -5010,6 +5010,7 @@ nsh> show
   dhcp              DHCP server
   smtp              SMTP server
   ldap              LDAP server
+  vmd               Virtual machines
   monitor           Monitor routing/arp table changes
   log               Follow daemon, messages, authlog or pflog, until ^C
   system-stats      System, firewall and kernel statistics
@@ -5038,7 +5039,7 @@ as
 .Cm show bgp
 or
 .Cm show pf ,
-and reads the DHCP leases.
+reads the DHCP leases, and asks vmd for its VMs.
 Their output is not paged, and Control-C stops it.
 Without a session,
 .Nm
@@ -5793,6 +5794,23 @@ Dynamic Host Configuration Protocol (DHCP) daemon.
 Display statistics from
 .Xr ldapd 8
 Lightweight Directory Access Protocol (LDAP) daemon.
+.Pp
+.Tg vmd
+.Ic show vmd Cm status
+.Op Ar vm
+.Pp
+Display each virtual machine
+.Xr vmd 8
+has, or the one
+.Ar vm
+names by its id or its name, in the columns of
+.Xr vmctl 8 Ns 's
+.Cm status ,
+but its tty.
+.Xr nshd 8
+asks vmd on its control socket as the session's user, so the socket's
+owner and group decide who may see the VMs, as for vmctl.
+It needs the view permission.
 .Pp
 .Ic show monitor
 .Pp

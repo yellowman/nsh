@@ -215,11 +215,11 @@
  * operation's output for a session that may not see password hashes,
  * with any hash it prints removed; and a log file from more of its past
  */
-#define SYS_OPERATION	3
-#define SYS_LOG		4
-#define SYS_LOG_AGAIN	5
-#define SYS_OPERATION_HIDDEN 6
-#define SYS_LOG_PAST	7
+#define SYS_OPERATION	4
+#define SYS_LOG		5
+#define SYS_LOG_AGAIN	6
+#define SYS_OPERATION_HIDDEN 7
+#define SYS_LOG_PAST	8
 #define LOG_TAIL	2048	/* a log's last bytes, printed first */
 #define LOG_PAST	65536	/* or these, for SYS_LOG_PAST */
 #define LOG_TURNED	4	/* child's exit status: the log was rotated */
@@ -292,7 +292,11 @@ static const struct {
 	{ NSHD_WATCH_PFLOG,	NULL },
 };
 
-/* a stream: text a child prints, sent to its client as messages */
+/*
+ * a stream: text a child prints, sent to its client as messages; or,
+ * for show vmd status, units, each after its length, whose records
+ * system makes again
+ */
 struct stream {
 	TAILQ_ENTRY(stream)	 entry;
 	uint32_t		 id;		/* the request */
@@ -300,7 +304,7 @@ struct stream {
 	int			 fd;		/* its output, or -1 at its end */
 	int			 window;	/* messages it may still send */
 	int			 stopped;
-	int			 op;		/* an operation (either kind) */
+	int			 exits;		/* its status is its child's */
 	uint32_t		 session;	/* a log's follower, else 0 */
 	int			 need;		/* permissions to follow it */
 	char			*log;		/* log file followed, or NULL */
@@ -308,6 +312,10 @@ struct stream {
 	int			 status;	/* how its child ended */
 	struct event		 ev;
 	struct facts_out	 o;
+	uint8_t			*unit;		/* units, not text: one, */
+	size_t			 have;		/* its bytes read so far, */
+	int			 bad;		/* a record it may not send, */
+	struct facts_in		 in;		/* and the child's templates */
 };
 
 /* the job running, which a child of system's runs, and what it takes */
@@ -538,13 +546,18 @@ static void	system_end(uint32_t, int32_t, const char *, ...)
 static struct stream *system_stream(uint32_t, int, char **, int);
 static int	system_stream_child(struct stream *, int, char **, int);
 static void	system_follow(uint32_t, struct nshd_follow *);
+static void	system_vmd(uint32_t, struct nshd_whose *, char *);
 static int	system_tail(int, const char *, off_t);
 static __dead void system_child(int, int, char **, int);
 static int	system_root(const char *);
 static void	system_drop(void);
 static void	system_stream_read(int, short, void *);
+static void	system_stream_units(struct stream *);
+static void	system_stream_record(void *, const struct facts_template *,
+		    const struct facts_value *);
 static void	system_stream_more(uint32_t);
 static void	system_stream_stop(struct stream *);
+static void	system_stream_free(struct stream *);
 static void	system_unfollow(uint32_t, int);
 static void	system_stream_done(struct stream *);
 static void	system_sigchld(int, short, void *);
@@ -1456,7 +1469,9 @@ system_show(uint32_t id, struct nshd_sysshow *ss)
 			printed(&o);
 			units_flush(&units);
 			system_end(id, 1, NULL);
-		} else
+		} else if (op == FACTS_VMD)
+			system_vmd(id, &ss->whose, argv[0]);
+		else
 			system_stream(id, op, argv, table);
 		facts_answer_end(a);
 		return;
@@ -1478,6 +1493,7 @@ struct op_values {
 	struct facts_value	 v[ARGS_MAX];
 };
 static struct op_values	*op_next;	/* the operation a child runs */
+static struct passwd	*vmd_as;	/* whom show vmd status's child is */
 
 /* a record of an operation's values, kept if its row takes them */
 static void
@@ -1581,6 +1597,35 @@ system_follow(uint32_t id, struct nshd_follow *f)
 	if (link_compose(&links[CONFIG], IMSG_SYS_FOLLOWING, id, NULL,
 	    0) == -1)
 		fatal("%s", __func__);
+}
+
+/*
+ * show vmd status, for a session whose class may view: vmd's answer to
+ * the session's user, asked by a child that is that user (vmdfacts.c),
+ * so vmd's control socket decides whether the user may ask; or refused,
+ * saying why. vm names one VM, or is NULL for each
+ */
+static void
+system_vmd(uint32_t id, struct nshd_whose *w, char *vm)
+{
+	char		*argv[] = { vm, NULL };
+	struct client	*cl;
+	uid_t		 uid;
+
+	if ((cl = client_whose(w)) == NULL) {
+		system_end(id, 1, "%% nshd: this show's client is gone\n");
+		return;
+	}
+	if (!system_may(system_whom(cl, &uid), LOGIN_VIEW, "view")) {
+		system_printed(id, 1);
+		return;
+	}
+	if ((vmd_as = getpwuid(uid)) == NULL) {
+		system_end(id, 1, "%% nshd: no user %u\n", uid);
+		return;
+	}
+	system_stream(id, FACTS_VMD, argv, 0);
+	vmd_as = NULL;
 }
 
 /* Does perms have need? 1 if so, else 0, after saying name is missing */
@@ -2052,15 +2097,21 @@ system_stream(uint32_t id, int op, char **argv, int table)
 	if ((s = calloc(1, sizeof(*s))) == NULL)
 		fatal(NULL);
 	s->id = id;
-	s->op = op == SYS_OPERATION || op == SYS_OPERATION_HIDDEN;
+	s->exits = op == SYS_OPERATION || op == SYS_OPERATION_HIDDEN ||
+	    op == FACTS_VMD;
 	s->text = op == SYS_LOG || op == SYS_LOG_PAST || (op == FACTS_PROGRAM &&
 	    strcmp(argv[0], TCPDUMP) == 0);
 	if (op == SYS_LOG || op == SYS_LOG_PAST)
 		s->log = argv[0];
 	s->window = SYS_WINDOW;
 	facts_out_init(&s->o, units_emit, &units);
+	if (op == FACTS_VMD) {
+		if ((s->unit = malloc(2 + FACTS_UNIT)) == NULL)
+			fatal(NULL);
+		facts_in_init(&s->in, system_stream_record, s);
+	}
 	if (system_stream_child(s, op, argv, table) == -1) {
-		free(s);
+		system_stream_free(s);
 		return (NULL);
 	}
 	TAILQ_INSERT_TAIL(&streams, s, entry);
@@ -2140,6 +2191,9 @@ system_child(int fd, int op, char **argv, int table)
 		    op_next->so->ifname, op == SYS_OPERATION_HIDDEN, table);
 		fflush(stdout);
 		_exit(r == -1 ? 1 : r);
+	case FACTS_VMD:
+		/* records, not text, as the session's user */
+		_exit(vmd_facts(vmd_as, argv[0]));
 	case FACTS_LEASES:
 		/* dhcpd's leases file, mode 0640 */
 		if ((f = fopen(DHCPLEASES, "r")) == NULL) {
@@ -2259,6 +2313,10 @@ system_stream_read(int fd, short event, void *arg)
 	char		 buf[NSHD_TEXT];
 	ssize_t		 n;
 
+	if (s->unit != NULL) {
+		system_stream_units(s);
+		return;
+	}
 	if ((n = read(s->fd, buf, sizeof(buf))) == -1) {
 		if (errno == EINTR || errno == EAGAIN)
 			return;
@@ -2283,6 +2341,94 @@ system_stream_read(int fd, short event, void *arg)
 		system_stream_done(s);
 	} else if (--s->window == 0)
 		event_del(&s->ev);
+}
+
+/*
+ * What a units stream's child sent: a unit's length, then the unit,
+ * each read to its end, and then each record in the unit, made again as
+ * system's. The stream stops, saying why, if the child sends anything
+ * else
+ */
+static void
+system_stream_units(struct stream *s)
+{
+	size_t	 len = 0, want;
+	ssize_t	 n;
+
+	if (s->have >= 2)
+		len = s->unit[0] << 8 | s->unit[1];
+	want = s->have < 2 ? 2 - s->have : 2 + len - s->have;
+	if ((n = read(s->fd, s->unit + s->have, want)) == -1) {
+		if (errno == EINTR || errno == EAGAIN)
+			return;
+		log_warn("%s: read", __func__);
+		system_stream_stop(s);
+		return;
+	}
+	if (n == 0 && s->have == 0) {
+		event_del(&s->ev);
+		close(s->fd);
+		s->fd = -1;
+		system_stream_done(s);
+		return;
+	}
+	if (n == 0)
+		goto bad;
+	s->have += n;
+	if (s->have < 2)
+		return;
+	len = s->unit[0] << 8 | s->unit[1];
+	if (len == 0 || len > FACTS_UNIT)
+		goto bad;
+	if (s->have < 2 + len)
+		return;
+	s->have = 0;
+	units.arg = &s->id;
+	if (facts_read(&s->in, s->unit + 2, len) == -1 || s->bad)
+		goto bad;
+	units_flush(&units);
+	if (--s->window == 0)
+		event_del(&s->ev);
+	return;
+ bad:
+	units.arg = &s->id;
+	facts_message(&s->o, "%% nshd: what vmd's helper sent cannot be "
+	    "read\n");
+	units_flush(&units);
+	system_stream_stop(s);
+}
+
+/*
+ * A record a units stream's child sent, made again as system's if it
+ * is of a kind the child may send: a VM, or a message
+ */
+static void
+system_stream_record(void *arg, const struct facts_template *t,
+    const struct facts_value *v)
+{
+	struct stream		*s = arg;
+	const struct facts_kind	*k;
+	struct facts_value	 again[VM_NFIELDS];	/* a message has 1 */
+	int			 map[VM_NFIELDS];
+	size_t			 i;
+
+	if (strcmp(t->kind, kind_vm.name) == 0)
+		k = &kind_vm;
+	else if (strcmp(t->kind, kind_message.name) == 0)
+		k = &kind_message;
+	else {
+		s->bad = 1;
+		return;
+	}
+	facts_bind(t, k, map);
+	for (i = 0; i < k->nfields; i++) {
+		if (map[i] == -1)
+			again[i].type = FACT_NONE;
+		else
+			again[i] = v[map[i]];
+	}
+	if (facts_record(&s->o, k, again) == -1)
+		s->bad = 1;
 }
 
 /* request id's client read all it was sent: its stream may send more */
@@ -2316,6 +2462,17 @@ system_stream_stop(struct stream *s)
 		s->fd = -1;
 	}
 	system_stream_done(s);
+}
+
+/* s, and a units stream's unit and templates */
+static void
+system_stream_free(struct stream *s)
+{
+	if (s->unit != NULL) {
+		facts_in_free(&s->in);
+		free(s->unit);
+	}
+	free(s);
 }
 
 /*
@@ -2352,15 +2509,15 @@ system_stream_done(struct stream *s)
 		/* it said why, and ended the request */
 		TAILQ_REMOVE(&streams, s, entry);
 		nstreams--;
-		free(s);
+		system_stream_free(s);
 		return;
 	}
-	/* an operation's status is how its child ended */
-	system_end(s->id, s->stopped ? 1 : !s->op ? 0 :
+	/* an operation's status, or vmd's, is how its child ended */
+	system_end(s->id, s->stopped ? 1 : !s->exits ? 0 :
 	    WIFEXITED(s->status) ? WEXITSTATUS(s->status) : 1, NULL);
 	TAILQ_REMOVE(&streams, s, entry);
 	nstreams--;
-	free(s);
+	system_stream_free(s);
 }
 
 /*

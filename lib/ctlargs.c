@@ -186,6 +186,12 @@ struct prot1 dhcs[] = {
 	{ 0, 0, { 0 } }
 };
 
+/* show vmd's words: vmd answers them itself, not a program */
+struct prot1 vmcs[] = {
+	{ "status",	"each VM, or one, and its state", { 0 } },
+	{ 0, 0, { 0 } }
+};
+
 struct prot1 ldcs[] = {
 	{ "stats",	"statistics counters",
 	    { LDAPCTL, "stats", NULL } },

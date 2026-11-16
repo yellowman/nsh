@@ -30,12 +30,22 @@
 #define NSHD_PART	(16 * 1024 * 1024)	/* a commit's part, at most */
 
 /*
+ * config to system: the session a request is for, as frontend reported
+ * it; or session 0, for the boot
+ */
+struct nshd_whose {
+	uint32_t	session;
+};
+
+/*
  * config to system: a show that system answers, as the session's
  * frontend parsed its words (facts_answer_pack()): what it asks, and
- * the values it asks with, where its kind has them
+ * the values it asks with, where its kind has them; and whose show it
+ * is, which config says
  */
 #define NSHD_SHOWARGS	6	/* a program's words, at most */
 struct nshd_sysshow {
+	struct nshd_whose whose;
 	int32_t		type;		/* enum answer_type */
 	int32_t		af;		/* ip: a family, or AF_UNSPEC */
 	int32_t		stats;		/* statistics: the group's place */
@@ -70,14 +80,6 @@ struct nshd_chunk {
 #define NSHD_WANT	2	/* BEGIN's: the configuration wanted */
 #define NSHD_TEST	3	/* TEST's: the rules it tests */
 #define NSHD_PARTS	4
-
-/*
- * config to system: the session a request is for, as frontend reported
- * it; or session 0, for the boot
- */
-struct nshd_whose {
-	uint32_t	session;
-};
 
 /*
  * config to system: follow a log, named by its watch bit, for a session;

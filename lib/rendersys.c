@@ -170,6 +170,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <util.h>
 #include "externs.h"
 #include "facts.h"
 #include "showfacts.h"
@@ -1377,6 +1378,75 @@ void
 hostname_render(struct frec *r)
 {
 	printf("%s\n", fs(r, HOST_NAME) != NULL ? fs(r, HOST_NAME) : "");
+}
+
+/* a VM, as vmd says, with its state as vmctl names it */
+static const struct facts_name vm_states[] = {
+	{ VMS_STOPPED,	"stopped" },
+	{ VMS_RUNNING,	"running" },
+	{ VMS_PAUSED,	"paused" },
+	{ VMS_STOPPING,	"stopping" },
+	{ VMS_WAITING,	"waiting" },
+	{ VMS_UNKNOWN,	"unknown" },
+};
+static struct facts_field vm_fields[] = {
+	[VM_ID] =	{ "id",		FACT_U64 },
+	[VM_NAME] =	{ "name",	FACT_STRING },
+	[VM_STATE] =	{ "state",	FACT_U64, FACT_VALUES, vm_states,
+			    nitems(vm_states) },
+	[VM_PID] =	{ "pid",	FACT_U64 },
+	[VM_VCPUS] =	{ "vcpus",	FACT_U64 },
+	[VM_MEMORY] =	{ "memory",	FACT_U64 },
+	[VM_USED] =	{ "used",	FACT_U64 },
+	[VM_UID] =	{ "uid",	FACT_U64 },
+	[VM_OWNER] =	{ "owner",	FACT_STRING },
+	[VM_GID] =	{ "gid",	FACT_U64 },
+	[VM_GROUP] =	{ "group",	FACT_STRING },
+};
+struct facts_kind kind_vm = { "vm", vm_fields, VM_NFIELDS };
+
+/*
+ * a VM, as show vmd status prints it, with the headings before the
+ * first: its columns are vmctl status's, but its tty
+ */
+void
+vms_render(struct frec *r, int n)
+{
+	const struct facts_value *v;
+	char maxmem[FMT_SCALED_STRSIZE] = "-", curmem[FMT_SCALED_STRSIZE] = "-";
+	char proc[16] = "-", owner[64], group[32] = "";
+	const char *s;
+
+	if (n == 0)
+		printf("%5s %5s %5s %7s %7s %12s %8s %s\n", "ID", "PID",
+		    "VCPUS", "MAXMEM", "CURMEM", "OWNER", "STATE", "NAME");
+	if ((v = FV(r, VM_MEMORY, FACT_U64)) != NULL &&
+	    fmt_scaled(v->v.u, maxmem) != 0)
+		strlcpy(maxmem, "?", sizeof(maxmem));
+	if ((v = FV(r, VM_USED, FACT_U64)) != NULL &&
+	    fmt_scaled(v->v.u, curmem) != 0)
+		strlcpy(curmem, "?", sizeof(curmem));
+	if ((v = FV(r, VM_PID, FACT_U64)) != NULL)
+		snprintf(proc, sizeof(proc), "%llu",
+		    (unsigned long long)v->v.u);
+	if ((s = fs(r, VM_OWNER)) != NULL)
+		strlcpy(owner, s, sizeof(owner));
+	else
+		snprintf(owner, sizeof(owner), "%llu",
+		    (unsigned long long)fu(r, VM_UID, 0));
+	if ((s = fs(r, VM_GROUP)) != NULL)
+		snprintf(group, sizeof(group), ":%s", s);
+	else if ((v = FV(r, VM_GID, FACT_U64)) != NULL)
+		snprintf(group, sizeof(group), ":%llu",
+		    (unsigned long long)v->v.u);
+	strlcat(owner, group, sizeof(owner));
+	v = FV(r, VM_STATE, FACT_U64);
+	printf("%5llu %5s %5llu %7s %7s %12s %8s %s\n",
+	    (unsigned long long)fu(r, VM_ID, 0), proc,
+	    (unsigned long long)fu(r, VM_VCPUS, 0), maxmem, curmem, owner,
+	    v != NULL && v->v.u < nitems(vm_states) ?
+	    vm_states[v->v.u].name : "unknown",
+	    fs(r, VM_NAME) != NULL ? fs(r, VM_NAME) : "?");
 }
 
 /* a daemon nsh starts, and whether it runs, in a routing table */

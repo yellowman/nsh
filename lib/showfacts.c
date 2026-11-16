@@ -65,6 +65,7 @@
 #include <netinet/if_ether.h>
 #include <arpa/inet.h>
 
+#include <ctype.h>
 #include <errno.h>
 #include <limits.h>
 #include <netdb.h>
@@ -95,7 +96,7 @@ static struct facts_kind *kinds[] = {
 	&kind_login, &kind_hostname, &kind_ip, &kind_dhcplease,
 	&kind_dhcproute, &kind_dhcpns, &kind_slaacif, &kind_slaacra,
 	&kind_slaacprefix, &kind_slaacrdns, &kind_slaacaddr, &kind_slaacdfr,
-	&kind_slaacdns, &kind_flow, &kind_daemon
+	&kind_slaacdns, &kind_flow, &kind_daemon, &kind_vm
 };
 
 int	facts_from = FACTS_SHOW | FACTS_SYSTEM;
@@ -450,6 +451,14 @@ facts_answer(char *words, int table)
 	}
 	else if (n == 1 && strcmp(w[0], "hostname") == 0)
 		a->type = ANS_HOSTNAME;
+	else if ((n == 2 || n == 3) && strcmp(w[0], "vmd") == 0 &&
+	    strcmp(w[1], "status") == 0) {
+		/* vmd's answer, which nshd's system asks as the user */
+		a->type = ANS_VMD;
+		a->where = FACTS_SYSTEM;
+		if (n == 3 && !vm_named(w[2]))
+			goto bad;
+	}
 	else if (n >= 2 && (a->prog = prot1_find(w[0], w[1])) != NULL) {
 		/* a daemon's, such as bgp summary: its program answers */
 		a->type = ANS_PROGRAM;
@@ -462,6 +471,23 @@ facts_answer(char *words, int table)
 bad:
 	facts_answer_free(a);
 	return (NULL);
+}
+
+/*
+ * Is s a VM, as show vmd status names one: an id, or a name vmd takes,
+ * of at most VM_NAMELEN - 1 letters, digits, '.', '-' and '_', the first
+ * a letter or a digit? 1 if so
+ */
+int
+vm_named(const char *s)
+{
+	size_t	 i;
+
+	for (i = 0; s[i] != '\0'; i++)
+		if (i == VM_NAMELEN - 1 || !(isalnum((unsigned char)s[i]) ||
+		    (i > 0 && strchr(".-_", s[i]) != NULL)))
+			return (0);
+	return (i > 0);
 }
 
 /* what facts_answer() made */
@@ -565,6 +591,8 @@ render_record(void *arg, const struct facts_template *t,
 		users_render(r, rd->count++);
 	else if (r->k == &kind_daemon)
 		daemons_render(r, rd->count++);
+	else if (r->k == &kind_vm)
+		vms_render(r, rd->count++);
 	else if (r->k == &kind_version)
 		version_render(r);
 	else if (r->k == &kind_hostname)
@@ -729,6 +757,10 @@ facts_show_table(FILE *out, char *words, int table)
 	case ANS_SADB:
 		if (r == 1 && rd.count == 0)
 			printf("%% SADB empty\n");
+		break;
+	case ANS_VMD:
+		if (r == 1 && rd.count == 0)
+			printf("%% vmd has no VMs\n");
 		break;
 	default:
 		break;

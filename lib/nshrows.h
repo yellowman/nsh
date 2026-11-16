@@ -151,6 +151,8 @@ Menu showlist[] = {
 	{ "dhcp",	"DHCP server",		CMPL(ta) (char **)dhcs, sizeof(struct prot1), 0, 1, RUNS(pr_dhcp) },
 	{ "smtp",	"SMTP server",		CMPL(ta) (char **)smcs, sizeof(struct prot1), 0, 1, RUNS(pr_prot1) },
 	{ "ldap",	"LDAP server",		CMPL(ta) (char **)ldcs, sizeof(struct prot1), 0, 1, RUNS(pr_prot1) },
+	{ "vmd",	"Virtual machines",	CMPL(ta) (char **)vmcs,
+	    sizeof(struct prot1), 0, 2, RUNS(pr_vmd) },
 	{ "monitor",	"Monitor routing/arp table changes", CMPL0 0, 0, 0, 0, RUNS(monitor) },
 	{ "log",	"Follow daemon, messages, authlog or pflog, until ^C", CMPL0 0, 0, 1, 1, RUNS(show_log) },
 	{ "system-stats",	"System, firewall and kernel statistics", CMPL(ta) (char **)systatcs, sizeof(struct prot1), 0, 3, RUNS(pr_prot1) },

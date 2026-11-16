@@ -32,9 +32,13 @@ struct collection *facts_answer_take(const struct nshd_sysshow *);
 int		 facts_more(struct collection *, struct facts_out *, int);
 void		 facts_answer_end(struct collection *);
 
-/* what nshd's system streams, from a child: a program, or dhcpd's leases */
+/*
+ * what nshd's system streams, from a child: a program, dhcpd's leases,
+ * or vmd's answer, as facts
+ */
 #define FACTS_PROGRAM	1
 #define FACTS_LEASES	2
+#define FACTS_VMD	3
 int		 facts_streams(struct collection *, char ***, int *);
 
 #endif /* ANSWER_H */

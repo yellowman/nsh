@@ -100,6 +100,7 @@ static int	pr_ndp(int, char **, ...);
 static int	pr_sadb(int, char **, ...);
 static int	pr_kernel(int, char **, ...);
 static int	pr_dhcp(int, char **, ...);
+static int	pr_vmd(int, char **, ...);
 static int	pr_conf(int, char **, ...);
 static int	pr_s_conf(int, char **, ...);
 static int	pr_a_conf(int, char **, ...);
@@ -1285,6 +1286,23 @@ pr_dhcp(int argc, char **argv, ...)
 	}
 	printf("%% show dhcp leases\n");
 	return -1;
+}
+
+/* show vmd status, of each VM or of one: as vmd answers the user */
+static int
+pr_vmd(int argc, char **argv, ...)
+{
+	if (argc < 3 || argc > 4 || argv[2][0] == '?' ||
+	    !isprefix(argv[2], "status") || (argc == 4 && argv[3][0] == '?')) {
+		printf("%% show vmd status [VM]\n");
+		return -1;
+	}
+	if (argc == 4 && !vm_named(argv[3])) {
+		printf("%% not a VM's id or name: %s\n", argv[3]);
+		return -1;
+	}
+	return facts_show(stdout, "vmd status%s%s", argc == 4 ? " " : "",
+	    argc == 4 ? argv[3] : "");
 }
 
 static int

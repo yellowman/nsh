@@ -32,6 +32,7 @@ struct sockaddr;
 struct sockaddr_storage;
 struct in_addr;
 struct sockaddr_in6;
+struct passwd;
 
 /* a record kept for rendering, bound to the kind nsh knows it as */
 struct frec {
@@ -87,7 +88,7 @@ extern struct facts_kind kind_ip, kind_dhcplease, kind_dhcproute;
 extern struct facts_kind kind_dhcpns, kind_slaacif, kind_slaacra;
 extern struct facts_kind kind_slaacprefix, kind_slaacrdns, kind_slaacaddr;
 extern struct facts_kind kind_slaacdfr, kind_slaacdns, kind_flow;
-extern struct facts_kind kind_daemon;
+extern struct facts_kind kind_daemon, kind_vm;
 
 enum { MSG_TEXT };
 
@@ -195,6 +196,13 @@ enum { LOGIN_USER, LOGIN_LINE, LOGIN_TIME, LOGIN_HOST, LOGIN_NFIELDS };
 enum { DAEMON_NAME, DAEMON_PROGRAM, DAEMON_RTABLE, DAEMON_RUNNING,
     DAEMON_PROCS, DAEMON_NFIELDS };
 
+/* a VM, as vmd says, in one of the states vmctl names */
+enum { VM_ID, VM_NAME, VM_STATE, VM_PID, VM_VCPUS, VM_MEMORY, VM_USED,
+    VM_UID, VM_OWNER, VM_GID, VM_GROUP, VM_NFIELDS };
+enum { VMS_STOPPED, VMS_RUNNING, VMS_PAUSED, VMS_STOPPING, VMS_WAITING,
+    VMS_UNKNOWN };
+#define VM_NAMELEN	64	/* a VM's name, VMM_MAX_NAME_LEN with its NUL */
+
 enum { FLOW_SRC, FLOW_SRCMASK, FLOW_SRCPORT, FLOW_DST, FLOW_DSTMASK,
 	FLOW_DSTPORT, FLOW_PROTO, FLOW_PEER, FLOW_SATYPE, FLOW_TYPE,
 	FLOW_DIRECTION, FLOW_NFIELDS };
@@ -278,6 +286,9 @@ void	 users_render(struct frec *, int);
 void	 users_end(int);
 int	 daemons_facts(struct facts_out *, int);
 void	 daemons_render(struct frec *, int);
+int	 vm_named(const char *);
+int	 vmd_facts(struct passwd *, const char *);
+void	 vms_render(struct frec *, int);
 int	 hostname_facts(struct facts_out *);
 void	 hostname_render(struct frec *);
 int	 ip_facts(struct facts_out *, int, int);

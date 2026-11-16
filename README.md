@@ -41,7 +41,7 @@ dhcrelay6, dvmrpd, eigrpd, ftp-proxy, ifstated, inetd, iked, ipsecctl
 and isakmpd, ldapd, ldpd, lldpd, npppd, ntpd, ospfd, ospf6d, pf, rad,
 relayd, resolvd, ripd, sasyncd, slaacd, smtpd, snmpd, sshd, tftpd and
 tftp-proxy. nsh also keeps the message of the day, /etc/motd, and
-vmd's rules, though it does not yet start vmd.
+vmd's rules, and shows vmd's VMs, though it does not yet start vmd.
 
 ---
 

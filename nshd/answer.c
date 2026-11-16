@@ -96,6 +96,8 @@ facts_answer_pack(char *words, int table, struct nshd_sysshow *ss)
 	if (a->type == ANS_PROGRAM) {
 		ss->table = a->table;
 		ss->prot = prot1_place(a->prog, &ss->sub);
+	}
+	if (a->type == ANS_PROGRAM || a->type == ANS_VMD) {
 		ss->nargs = a->n - 2;
 		for (i = 0; i < ss->nargs; i++)
 			strlcpy(ss->args[i], a->w[2 + i], sizeof(ss->args[i]));
@@ -155,6 +157,16 @@ facts_answer_take(const struct nshd_sysshow *ss)
 		break;
 	case ANS_LEASES:
 	case ANS_DAEMONS:
+		break;
+	case ANS_VMD:
+		/* a VM, if one is named, which system checks again */
+		if (ss->nargs < 0 || ss->nargs > 1 || (ss->nargs == 1 &&
+		    (memchr(ss->args[0], '\0', sizeof(ss->args[0])) == NULL ||
+		    !vm_named(ss->args[0]) ||
+		    (a->copy = strdup(ss->args[0])) == NULL)))
+			goto bad;
+		a->n = 2 + ss->nargs;
+		a->w[2] = a->copy;
 		break;
 	default:
 		goto bad;
@@ -258,6 +270,7 @@ facts_more(struct collection *c, struct facts_out *o, int budget)
 		break;
 	case ANS_PROGRAM:
 	case ANS_LEASES:
+	case ANS_VMD:
 		/* nshd's system streams them from a child (facts_streams()) */
 		r = -1;
 		break;
@@ -267,9 +280,10 @@ facts_more(struct collection *c, struct facts_out *o, int budget)
 }
 
 /*
- * Whether c's show is text nshd's system streams from a child, and
+ * Whether c's show is what nshd's system streams from a child, and
  * which: FACTS_PROGRAM, with the program and its arguments (c's) in
- * *argv and its routing table in *table, or FACTS_LEASES. 0 if it is
+ * *argv and its routing table in *table; FACTS_LEASES; or FACTS_VMD,
+ * vmd's answer, with the VM asked for, if one is, in *argv. 0 if it is
  * not, or -1, after printing why, if c's words do not fill the
  * program's arguments
  */
@@ -287,6 +301,10 @@ facts_streams(struct collection *c, char ***argv, int *table)
 		return (FACTS_PROGRAM);
 	case ANS_LEASES:
 		return (FACTS_LEASES);
+	case ANS_VMD:
+		*argv = a->w + 2;
+		*table = 0;
+		return (FACTS_VMD);
 	default:
 		return (0);
 	}

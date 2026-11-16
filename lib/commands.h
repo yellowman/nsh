@@ -31,6 +31,7 @@ void init_bgpd_socket_path(int);
 extern struct prot prots[];
 extern struct prot1 bgcs[], oscs[], os6cs[], pfcs[], eics[], rics[], ikcs[];
 extern struct prot1 iscs[], lics[], dvcs[], rlcs[], smcs[], ldcs[], dhcs[];
+extern struct prot1 vmcs[];
 extern struct prot1 systatcs[];
 int show_help(int, char **, ...);
 Command *getcmd(char *);
