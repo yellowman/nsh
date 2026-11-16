@@ -174,7 +174,7 @@ const struct argkey arpentry_keys[] = {
 
 int
 arpentry_apply(const struct argcmd *c, int set, const struct facts_value *v,
-    char *ifname, int ifs, struct cand *cand)
+    char *ifname, int ifs, struct cand *cand, int rtable)
 {
 	struct sockaddr_inarp *sin = &sin_m;
 	struct sockaddr_dl *sdl;
@@ -190,13 +190,13 @@ arpentry_apply(const struct argcmd *c, int set, const struct facts_value *v,
 	if (!set) {
 		if (cand != NULL)
 			return arp_cand(in, NULL, 0, cand);
-		return arpdelete(in, cli_rtable);
+		return arpdelete(in, rtable);
 	}
 	if ((opt & ARP_TEMP) && (opt & ARP_PERMANENT)) {
 		printf("%% temp or permanent, not both\n");
 		return -1;
 	}
-	if (cand == NULL && getsocket(cli_rtable) < 0)
+	if (cand == NULL && getsocket(rtable) < 0)
 		return -1;
 	sdl_m = blank_sdl;		/* struct copy */
 	sin_m = blank_sin;		/* struct copy */
@@ -222,7 +222,7 @@ arpentry_apply(const struct argcmd *c, int set, const struct facts_value *v,
 		return arp_cand(in, &ea, flags, cand);
 
 tryagain:
-	if (rtget(&sin, &sdl, flags, doing_proxy, export_only, cli_rtable)) {
+	if (rtget(&sin, &sdl, flags, doing_proxy, export_only, rtable)) {
 		printf("%% %s\n", host);
 		return -1;
 	}
@@ -261,7 +261,7 @@ overwrite:
 	sdl_m.sdl_type = sdl->sdl_type;
 	sdl_m.sdl_index = sdl->sdl_index;
 	return (rtmsg_arp(RTM_ADD, flags, doing_proxy, export_only,
-	    cli_rtable));
+	    rtable));
 }
 
 /*

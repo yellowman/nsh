@@ -77,7 +77,8 @@ static struct {
 /* auth proto, auth name, auth key, peer proto, peer name, peer key, peer flag */
 int
 intsppp_apply(const struct argcmd *c, int set,
-    const struct facts_value *v, char *ifname, int ifs, struct cand *cand)
+    const struct facts_value *v, char *ifname, int ifs, struct cand *cand,
+    int rtable)
 {
 	struct sauthreq spa;
 	struct ifreq ifr;
@@ -132,9 +133,9 @@ intsppp_apply(const struct argcmd *c, int set,
 		char type[TYPESZ];
 
 		snprintf(type, TYPESZ, "%skey", c->name);
-		db_delete_flag_x_ctl(type, ifname, cli_rtable);
+		db_delete_flag_x_ctl(type, ifname, rtable);
 		if (set) {
-			db_insert_flag_x(type, ifname, cli_rtable, DB_X_ENABLE,
+			db_insert_flag_x(type, ifname, rtable, DB_X_ENABLE,
 			    spa.secret);
 		}
 	}
@@ -195,7 +196,7 @@ cand_sppp(struct cand *cand, char *ifname, int set, int haskey,
 }
 
 int
-pppoe_ipcp(char *ifname, int ifs, int set, struct cand *cand)
+pppoe_ipcp(char *ifname, int ifs, int set, struct cand *cand, int rtable)
 {
 	int unit, flags, up, r = 0;
 	struct ifaliasreq ip4req;
@@ -259,7 +260,7 @@ pppoe_ipcp(char *ifname, int ifs, int set, struct cand *cand)
 	/* Wildcard IPv4 default route: 0.0.0.$(unit + 1) */
 	if (ip_route(&in4dest, &in4gate, set ? RTM_ADD : RTM_DELETE,
 	    RTF_STATIC | RTF_MPATH | RTF_GATEWAY | RTF_UP,
-	    cli_rtable, rt_metrics, 0, cand) != 0)
+	    rtable, rt_metrics, 0, cand) != 0)
 		r = -1;
 
 	if ((set || up) && set_ifflags(ifname, ifs, flags | IFF_UP) == -1)
@@ -272,7 +273,8 @@ pppoe_ipcp(char *ifname, int ifs, int set, struct cand *cand)
 /* pppoe dev, pppoe svc, pppoe ac */
 int
 intpppoe_apply(const struct argcmd *c, int set,
-    const struct facts_value *v, char *ifname, int ifs, struct cand *cand)
+    const struct facts_value *v, char *ifname, int ifs, struct cand *cand,
+    int rtable)
 {
 	struct pppoediscparms parms;
 	int dev = 0;

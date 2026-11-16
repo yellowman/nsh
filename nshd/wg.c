@@ -943,7 +943,8 @@ wg_set(int ifs, struct wg_data_io *wgd, struct cand *cand)
 
 int
 intwg_apply(const struct argcmd *c, int set,
-    const struct facts_value *v, char *ifname, int ifs, struct cand *cand)
+    const struct facts_value *v, char *ifname, int ifs, struct cand *cand,
+    int rtable)
 {
 	uint8_t key[WG_KEY_LEN];
 	int r = -1;
@@ -1001,7 +1002,8 @@ wgerr:
 
 int
 intwgpeer_apply(const struct argcmd *c, int set,
-    const struct facts_value *v, char *ifname, int ifs, struct cand *cand)
+    const struct facts_value *v, char *ifname, int ifs, struct cand *cand,
+    int rtable)
 {
 	struct sockaddr_storage ss;
 	struct wg_aip_io *drop = NULL;

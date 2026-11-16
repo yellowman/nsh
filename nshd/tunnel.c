@@ -87,7 +87,8 @@ static const struct vnetidr {
 
 int
 intvnetid_apply(const struct argcmd *c, int set,
-    const struct facts_value *v, char *ifname, int ifs, struct cand *cand)
+    const struct facts_value *v, char *ifname, int ifs, struct cand *cand,
+    int rtable)
 {
 	if (cand != NULL)
 		return cand_vnetid(cand, ifname, set, set ? v[0].v.i : 0);
@@ -181,7 +182,8 @@ cand_vnetflowid(struct cand *cand)
  */
 int
 inttunnel_apply(const struct argcmd *c, int set,
-    const struct facts_value *v, char *ifname, int ifs, struct cand *cand)
+    const struct facts_value *v, char *ifname, int ifs, struct cand *cand,
+    int rtable)
 {
 	struct sockaddr_storage src, dst;
 	int addr = c->code == TUNNEL_ADDR, o = addr ? 2 : 4;
@@ -458,7 +460,8 @@ settunnel(int s, char *ifname, struct sockaddr_storage *src,
 
 int
 intcache_apply(const struct argcmd *c, int set,
-    const struct facts_value *v, char *ifname, int ifs, struct cand *cand)
+    const struct facts_value *v, char *ifname, int ifs, struct cand *cand,
+    int rtable)
 {
 	const struct cachec *x;
 	struct ifbrparam bp;
@@ -563,7 +566,8 @@ conf_cache(FILE *output, int ifs, char *ifname)
 
 int
 intendpoint_apply(const struct argcmd *c, int set,
-    const struct facts_value *v, char *ifname, int ifs, struct cand *cand)
+    const struct facts_value *v, char *ifname, int ifs, struct cand *cand,
+    int rtable)
 {
 	struct ifbareq ifba;
 	struct ether_addr ea;

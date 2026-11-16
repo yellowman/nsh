@@ -714,7 +714,7 @@ login_parse(const struct argcmd *c, int argc, char **argv,
 
 int
 login_apply(const struct argcmd *c, int set, const struct facts_value *v,
-    char *ifname, int ifs, struct cand *cand)
+    char *ifname, int ifs, struct cand *cand, int rtable)
 {
 	char name[32], class[32], hash[_PASSWORD_LEN + 1];
 

@@ -152,7 +152,8 @@ cand_trunkproto(struct cand *cand, char *ifname, int proto)
 
 int
 inttrunkport_apply(const struct argcmd *c, int set,
-    const struct facts_value *v, char *ifname, int ifs, struct cand *cand)
+    const struct facts_value *v, char *ifname, int ifs, struct cand *cand,
+    int rtable)
 {
 	struct trunk_reqport rp;
 	char port[TRUNK_MAX_PORTS][IFNAMSIZ], *ports[TRUNK_MAX_PORTS];
@@ -219,7 +220,8 @@ inttrunkport_apply(const struct argcmd *c, int set,
 
 int
 inttrunkproto_apply(const struct argcmd *c, int set,
-    const struct facts_value *v, char *ifname, int ifs, struct cand *cand)
+    const struct facts_value *v, char *ifname, int ifs, struct cand *cand,
+    int rtable)
 {
 	struct trunk_reqall ra;
 	int aggr = strncmp(ifname, "aggr", strlen("aggr")) == 0;
@@ -265,7 +267,8 @@ inttrunkproto_apply(const struct argcmd *c, int set,
  */
 int
 intlacp_apply(const struct argcmd *c, int set,
-    const struct facts_value *v, char *ifname, int ifs, struct cand *cand)
+    const struct facts_value *v, char *ifname, int ifs, struct cand *cand,
+    int rtable)
 {
 	struct trunk_opts to;
 	const struct argkey *k;

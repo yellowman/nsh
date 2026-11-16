@@ -280,7 +280,7 @@ route_ip(const struct facts_value *v, ip_t *ip)
 
 int
 route_apply(const struct argcmd *c, int set, const struct facts_value *v,
-    char *ifname, int ifs, struct cand *cand)
+    char *ifname, int ifs, struct cand *cand, int rtable)
 {
 	u_short cmd = set ? RTM_ADD : RTM_DELETE;
 	ip_t dest, gate;
@@ -345,7 +345,7 @@ route_apply(const struct argcmd *c, int set, const struct facts_value *v,
 	 * Do the route...
 	 */
 	if (ip_route(&dest, gate.family ? &gate : NULL, cmd, flags,
-	    cli_rtable, rt_metrics, inits, cand) != 0)
+	    rtable, rt_metrics, inits, cand) != 0)
 		return -1;
 	return 0;
 }

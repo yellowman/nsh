@@ -33,7 +33,7 @@
 
 int
 nameserver_apply(const struct argcmd *c, int set, const struct facts_value *v,
-    char *ifname, int ifs, struct cand *cand)
+    char *ifname, int ifs, struct cand *cand, int rtable)
 {
 	struct in_addr ns4[NAMESERVERS];
 	struct in6_addr ns6[NAMESERVERS];

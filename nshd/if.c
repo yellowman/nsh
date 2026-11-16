@@ -65,7 +65,7 @@ void pack_ifaliasreq(struct ifaliasreq *, ip_t *, struct in_addr *, char *);
 void pack_in6aliasreq(struct in6_aliasreq *, ip_t *, struct in6_addr *, char *);
 void ipv6ll_db_store(struct sockaddr_in6 *, struct sockaddr_in6 *, int, char *);
 void intipusage(const char *, const char *);
-int run_ipcp(char *, int, int, struct cand *);
+int run_ipcp(char *, int, int, struct cand *, int);
 void pwe3usage(void);
 int show_vlan(int, int);
 
@@ -1031,11 +1031,11 @@ intip_parse(const struct argcmd *c, int argc, char **argv,
 	return ip6_opts(nopts, optv, a);
 }
 
-static int xflags_set(int, int, char *, int, struct cand *);
+static int xflags_set(int, int, char *, int, struct cand *, int);
 
 int
 intip_apply(const struct argcmd *c, int set, const struct facts_value *v,
-    char *ifname, int ifs, struct cand *cand)
+    char *ifname, int ifs, struct cand *cand, int rtable)
 {
 	int s, flags, af, r = 0;
 	char *msg, addr[INET6_ADDRSTRLEN], brd[INET_ADDRSTRLEN];
@@ -1068,7 +1068,7 @@ intip_apply(const struct argcmd *c, int set, const struct facts_value *v,
 		}
 		if (c->code == ADDR_INET6)
 			return xflags_set(IFXF_AUTOCONF6, set, ifname,
-			    ifs, cand);
+			    ifs, cand, rtable);
 		/*
 		 * dhclient(8) has gone away as of OpenBSD 7.2+.
 		 * dhcpleased(8) should always be running and will
@@ -1079,7 +1079,8 @@ intip_apply(const struct argcmd *c, int set, const struct facts_value *v,
 			    "is not running\n");
 			return -1;
 		}
-		return xflags_set(IFXF_AUTOCONF4, set, ifname, ifs, cand);
+		return xflags_set(IFXF_AUTOCONF4, set, ifname, ifs, cand,
+		    rtable);
 	}
 	if (v[IP_ADDR].type == FACT_NONE) {
 		/* no inet, no inet6: every address of the family */
@@ -1264,7 +1265,8 @@ intip_apply(const struct argcmd *c, int set, const struct facts_value *v,
 }
 
 int
-intipcp(char *ifname, int ifs, int argc, char **argv, struct cand *cand)
+intipcp(char *ifname, int ifs, int argc, char **argv, struct cand *cand,
+    int rtable)
 {
 	int set;
 
@@ -1286,11 +1288,11 @@ intipcp(char *ifname, int ifs, int argc, char **argv, struct cand *cand)
 	else
 		db_insert_flag_x("pppoeipaddrmode", ifname, 0, 0, "static");
 
-	return pppoe_ipcp(ifname, ifs, set, cand);
+	return pppoe_ipcp(ifname, ifs, set, cand, rtable);
 }
 
 int
-run_ipcp(char *ifname, int ifs, int set, struct cand *cand)
+run_ipcp(char *ifname, int ifs, int set, struct cand *cand, int rtable)
 {
 	char *args[3] = { "no", "ipcp", NULL };
 	char *args_set[2] = { "ipcp", NULL };
@@ -1304,7 +1306,7 @@ run_ipcp(char *ifname, int ifs, int set, struct cand *cand)
 		argc_ipcp = nitems(args) - 1;
 	}
 
-	return intipcp(ifname, ifs, argc_ipcp, argv_ipcp, cand);
+	return intipcp(ifname, ifs, argc_ipcp, argv_ipcp, cand, rtable);
 }
 
 void
@@ -1445,7 +1447,7 @@ cand_pflow(struct cand *cand, char *ifname, int set, struct pflowreq *preq)
 
 int
 intpflow_apply(const struct argcmd *c, int set, const struct facts_value *v,
-    char *ifname, int ifs, struct cand *cand)
+    char *ifname, int ifs, struct cand *cand, int rtable)
 {
 	struct ifreq ifr;
 	struct pflowreq preq;
@@ -1556,7 +1558,7 @@ cand_patch(struct cand *cand, char *ifname, char *peer)
 
 int
 intpatch_apply(const struct argcmd *c, int set, const struct facts_value *v,
-    char *ifname, int ifs, struct cand *cand)
+    char *ifname, int ifs, struct cand *cand, int rtable)
 {
 	struct ifreq ifr;
 	char pair[IFNAMSIZ] = "";
@@ -1587,7 +1589,7 @@ intpatch_apply(const struct argcmd *c, int set, const struct facts_value *v,
 
 int
 intmtu_apply(const struct argcmd *c, int set, const struct facts_value *v,
-    char *ifname, int ifs, struct cand *cand)
+    char *ifname, int ifs, struct cand *cand, int rtable)
 {
 	struct ifreq ifr;
 	int max;
@@ -1626,7 +1628,7 @@ intmtu_apply(const struct argcmd *c, int set, const struct facts_value *v,
 
 int
 intkeepalive_apply(const struct argcmd *c, int set, const struct facts_value *v,
-    char *ifname, int ifs, struct cand *cand)
+    char *ifname, int ifs, struct cand *cand, int rtable)
 {
 	struct ifkalivereq ikar;
 
@@ -1717,7 +1719,7 @@ cand_mpls(struct cand *cand, char *ifname, int type, int set, struct ifreq *ifr,
 /* from ifconfig.c */
 int
 intmpls_apply(const struct argcmd *c, int set, const struct facts_value *v,
-    char *ifname, int ifs, struct cand *cand)
+    char *ifname, int ifs, struct cand *cand, int rtable)
 {
 	size_t i;
 	unsigned long cmd;
@@ -1940,7 +1942,7 @@ intpwe3_parse(const struct argcmd *c, int argc, char **argv,
 
 int
 intpwe3_apply(const struct argcmd *c, int set, const struct facts_value *v,
-    char *ifname, int ifs, struct cand *cand)
+    char *ifname, int ifs, struct cand *cand, int rtable)
 {
 	int cw = -1, fat = -1, nei = v[2].type != FACT_NONE;
 	char host[NI_MAXHOST];
@@ -2002,7 +2004,7 @@ intpwe3_apply(const struct argcmd *c, int set, const struct facts_value *v,
 
 int
 intdhcrelay_apply(const struct argcmd *c, int set, const struct facts_value *v,
-    char *ifname, int ifs, struct cand *cand)
+    char *ifname, int ifs, struct cand *cand, int rtable)
 {
 	char *cmd[] = { DHCRELAY, "-i", NULL, NULL, NULL };
 	char server[INET_ADDRSTRLEN];
@@ -2036,7 +2038,7 @@ intdhcrelay_apply(const struct argcmd *c, int set, const struct facts_value *v,
 		if (cmdargs(DHCRELAY, cmd) != 0)
 			return -1;
 		if (flag_x("dhcrelay", ifname, DB_X_ENABLE, server,
-		    cli_rtable) == -1)
+		    rtable) == -1)
 			return -1;
 	} else {
 		char was[24], argue[SIZE_CONF_TEMP];
@@ -2061,7 +2063,7 @@ intdhcrelay_apply(const struct argcmd *c, int set, const struct facts_value *v,
 		}
 
 		if (flag_x("dhcrelay", ifname, DB_X_REMOVE, NULL,
-		    cli_rtable) == -1)
+		    rtable) == -1)
 			return -1;
 
 		/* setup argument list as one argument for pkill -xf */
@@ -2175,7 +2177,7 @@ intdhcrelay6_parse(const struct argcmd *c, int argc, char **argv,
 
 int
 intdhcrelay6_apply(const struct argcmd *c, int set, const struct facts_value *v,
-    char *ifname, int ifs, struct cand *cand)
+    char *ifname, int ifs, struct cand *cand, int rtable)
 {
 	char *cmd[7 + DHCRELAY6_DESTS + 1] = { ROUTE, "-T", NULL, "exec",
 	    DHCRELAY6, "-i", NULL };
@@ -2239,7 +2241,7 @@ intdhcrelay6_apply(const struct argcmd *c, int set, const struct facts_value *v,
 		if (r == -1 || r > 1)
 			return -1;
 		if (flag_x("dhcrelay6", ifname, DB_X_REMOVE, NULL,
-		    cli_rtable) == -1)
+		    rtable) == -1)
 			return -1;
 	} else if (!set) {
 		printf("%% No DHCPv6 relay configured for %s\n", ifname);
@@ -2260,12 +2262,12 @@ intdhcrelay6_apply(const struct argcmd *c, int set, const struct facts_value *v,
 	/* kept only once it runs */
 	if (cmdargs(ROUTE, cmd) != 0)
 		return -1;
-	return flag_x("dhcrelay6", ifname, DB_X_ENABLE, dests, cli_rtable);
+	return flag_x("dhcrelay6", ifname, DB_X_ENABLE, dests, rtable);
 }
 
 int
 intmetric_apply(const struct argcmd *c, int set, const struct facts_value *v,
-    char *ifname, int ifs, struct cand *cand)
+    char *ifname, int ifs, struct cand *cand, int rtable)
 {
 	struct ifreq ifr;
 
@@ -2290,7 +2292,7 @@ intmetric_apply(const struct argcmd *c, int set, const struct facts_value *v,
 
 int
 intllprio_apply(const struct argcmd *c, int set, const struct facts_value *v,
-    char *ifname, int ifs, struct cand *cand)
+    char *ifname, int ifs, struct cand *cand, int rtable)
 {
 	struct ifreq ifr;
 
@@ -2313,7 +2315,8 @@ intllprio_apply(const struct argcmd *c, int set, const struct facts_value *v,
 
 int
 intgroup_apply(const struct argcmd *c, int set,
-    const struct facts_value *v, char *ifname, int ifs, struct cand *cand)
+    const struct facts_value *v, char *ifname, int ifs, struct cand *cand,
+    int rtable)
 {
 	int i, n, r = 0;
 	struct ifgroupreq ifgr;
@@ -2368,7 +2371,8 @@ intgroup_apply(const struct argcmd *c, int set,
 
 int
 intrtlabel_apply(const struct argcmd *c, int set,
-    const struct facts_value *v, char *ifname, int ifs, struct cand *cand)
+    const struct facts_value *v, char *ifname, int ifs, struct cand *cand,
+    int rtable)
 {
 	struct ifreq ifr;
 	char label[RTLABEL_LEN] = "";
@@ -2394,7 +2398,7 @@ intrtlabel_apply(const struct argcmd *c, int set,
 
 int
 intparent_apply(const struct argcmd *c, int set, const struct facts_value *v,
-    char *ifname, int ifs, struct cand *cand)
+    char *ifname, int ifs, struct cand *cand, int rtable)
 {
 	unsigned long cmd;
 	struct if_parent ifp;
@@ -2478,7 +2482,8 @@ cand_ifflags(struct cand *cand, char *ifname, int value, int set)
 
 int
 intflags_apply(const struct argcmd *c, int set,
-    const struct facts_value *v, char *ifname, int ifs, struct cand *cand)
+    const struct facts_value *v, char *ifname, int ifs, struct cand *cand,
+    int rtable)
 {
 	/* a negative flag is one the command clears (shutdown clears IFF_UP) */
 	int value = c->code, flags, iftype;
@@ -2626,7 +2631,8 @@ cand_ifxflags(struct cand *cand, char *ifname, int value, int set)
  * holds the other way: soii is on unless IFXF_INET6_NOSOII is
  */
 static int
-xflags_set(int value, int set, char *ifname, int ifs, struct cand *cand)
+xflags_set(int value, int set, char *ifname, int ifs, struct cand *cand,
+    int rtable)
 {
 	int flags;
 
@@ -2635,7 +2641,7 @@ xflags_set(int value, int set, char *ifname, int ifs, struct cand *cand)
 			return cand_autoconf4(cand, ifname, set);
 		/* Have "autoconf4" on pppoe(4) do the right thing. */
 		if (is_pppoe(ifname, ifs))
-			return run_ipcp(ifname, ifs, set, cand);
+			return run_ipcp(ifname, ifs, set, cand, rtable);
 	}
 	if (cand != NULL)
 		return cand_ifxflags(cand, ifname, value, set);
@@ -2670,9 +2676,10 @@ xflags_set(int value, int set, char *ifname, int ifs, struct cand *cand)
 /* its row's code is the flag (commands.c) */
 int
 intxflags_apply(const struct argcmd *c, int set,
-    const struct facts_value *v, char *ifname, int ifs, struct cand *cand)
+    const struct facts_value *v, char *ifname, int ifs, struct cand *cand,
+    int rtable)
 {
-	return xflags_set(c->code, set, ifname, ifs, cand);
+	return xflags_set(c->code, set, ifname, ifs, cand, rtable);
 }
 
 /* The link flags the candidate's link line sets */
@@ -2695,7 +2702,8 @@ cand_linkflags(struct cand *cand)
 
 int
 intlink_apply(const struct argcmd *c, int set,
-    const struct facts_value *v, char *ifname, int ifs, struct cand *cand)
+    const struct facts_value *v, char *ifname, int ifs, struct cand *cand,
+    int rtable)
 {
 	int flags, bits;
 
@@ -2724,7 +2732,7 @@ intlink_apply(const struct argcmd *c, int set,
 
 int
 intnwid_apply(const struct argcmd *c, int set, const struct facts_value *v,
-    char *ifname, int ifs, struct cand *cand)
+    char *ifname, int ifs, struct cand *cand, int rtable)
 {
 	struct ieee80211_nwid nwid;
 	struct ifreq ifr;
@@ -2753,7 +2761,8 @@ intnwid_apply(const struct argcmd *c, int set, const struct facts_value *v,
 
 int
 intpowersave_apply(const struct argcmd *c, int set,
-    const struct facts_value *v, char *ifname, int ifs, struct cand *cand)
+    const struct facts_value *v, char *ifname, int ifs, struct cand *cand,
+    int rtable)
 {
 	struct ieee80211_power power;
 	int maxsleep;
@@ -2857,7 +2866,7 @@ intlladdr_parse(const struct argcmd *c, int argc, char **argv,
 
 int
 intlladdr_apply(const struct argcmd *c, int set, const struct facts_value *v,
-    char *ifname, int ifs, struct cand *cand)
+    char *ifname, int ifs, struct cand *cand, int rtable)
 {
 	StringList *hwdaddr;
 	char *lladdr, llorig[sizeof("00:00:00:00:00:00") + 1];
@@ -2934,7 +2943,7 @@ intlladdr_apply(const struct argcmd *c, int set, const struct facts_value *v,
 
 int
 intrdomain_apply(const struct argcmd *c, int set, const struct facts_value *v,
-    char *ifname, int ifs, struct cand *cand)
+    char *ifname, int ifs, struct cand *cand, int rtable)
 {
 	int unit, cur;
 	const char *errmsg = NULL;
@@ -2982,7 +2991,7 @@ intrdomain_apply(const struct argcmd *c, int set, const struct facts_value *v,
 
 int
 intdesc_apply(const struct argcmd *c, int set, const struct facts_value *v,
-    char *ifname, int ifs, struct cand *cand)
+    char *ifname, int ifs, struct cand *cand, int rtable)
 {
 	char desc[IFDESCRSIZE] = "";
 	struct ifreq ifr;
@@ -3008,7 +3017,8 @@ intdesc_apply(const struct argcmd *c, int set, const struct facts_value *v,
 
 int
 intvnetflowid_apply(const struct argcmd *c, int set,
-    const struct facts_value *v, char *ifname, int ifs, struct cand *cand)
+    const struct facts_value *v, char *ifname, int ifs, struct cand *cand,
+    int rtable)
 {
 	struct ifreq ifr;
 

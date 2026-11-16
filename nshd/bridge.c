@@ -140,7 +140,7 @@ static struct brc brps[] = {
 
 int
 brport_apply(const struct argcmd *c, int set, const struct facts_value *v,
-    char *ifname, int ifs, struct cand *cand)
+    char *ifname, int ifs, struct cand *cand, int rtable)
 {
 	char port[IFNAMSIZ];
 	int i, e = 0, r = 0;
@@ -271,7 +271,7 @@ static struct brc brvs[] = {
 
 int
 brval_apply(const struct argcmd *c, int set, const struct facts_value *v,
-    char *ifname, int ifs, struct cand *cand)
+    char *ifname, int ifs, struct cand *cand, int rtable)
 {
 	u_int32_t val = set ? v[0].v.i : 0;
 	int e = 0;
@@ -346,7 +346,7 @@ brval_apply(const struct argcmd *c, int set, const struct facts_value *v,
 /* proto stp|rstp: the protocol of a bridge's spanning tree */
 int
 brproto_apply(const struct argcmd *c, int set, const struct facts_value *v,
-    char *ifname, int ifs, struct cand *cand)
+    char *ifname, int ifs, struct cand *cand, int rtable)
 {
 	struct ifbrparam bp;
 
@@ -372,7 +372,7 @@ brproto_apply(const struct argcmd *c, int set, const struct facts_value *v,
  */
 int
 brrule_apply(const struct argcmd *c, int set, const struct facts_value *v,
-    char *ifname, int ifs, struct cand *cand)
+    char *ifname, int ifs, struct cand *cand, int rtable)
 {
 	struct ifbrlreq rule;
 
@@ -444,7 +444,7 @@ brstatic_parse(const struct argcmd *c, int argc, char **argv,
 
 int
 brstatic_apply(const struct argcmd *c, int set, const struct facts_value *v,
-    char *ifname, int ifs, struct cand *cand)
+    char *ifname, int ifs, struct cand *cand, int rtable)
 {
 	struct ether_addr ea;
 	char port[IFNAMSIZ];
@@ -492,7 +492,7 @@ static struct brd brds[] = {
 
 int
 brpri_apply(const struct argcmd *c, int set, const struct facts_value *v,
-    char *ifname, int ifs, struct cand *cand)
+    char *ifname, int ifs, struct cand *cand, int rtable)
 {
 	char port[IFNAMSIZ];
 	long long val = set ? v[1].v.i : 0;
@@ -542,7 +542,7 @@ brpri_apply(const struct argcmd *c, int set, const struct facts_value *v,
 
 int
 flush_bridgedyn(const struct argcmd *c, int set, const struct facts_value *v,
-    char *ifname, int unused, struct cand *cand)
+    char *ifname, int unused, struct cand *cand, int rtable)
 {
 	char brdg[IFNAMSIZ];
 	int ifs, e;
@@ -569,7 +569,7 @@ flush_bridgedyn(const struct argcmd *c, int set, const struct facts_value *v,
 
 int
 flush_bridgeall(const struct argcmd *c, int set, const struct facts_value *v,
-    char *ifname, int unused, struct cand *cand)
+    char *ifname, int unused, struct cand *cand, int rtable)
 {
 	char brdg[IFNAMSIZ];
 	int ifs, e;
@@ -596,7 +596,7 @@ flush_bridgeall(const struct argcmd *c, int set, const struct facts_value *v,
 
 int
 flush_bridgerule(const struct argcmd *c, int set, const struct facts_value *v,
-    char *ifname, int unused, struct cand *cand)
+    char *ifname, int unused, struct cand *cand, int rtable)
 {
 	char brdg[IFNAMSIZ], member[IFNAMSIZ];
 	int ifs, e;
@@ -1683,7 +1683,7 @@ brprotect_parse(const struct argcmd *c, int argc, char **argv,
 
 int
 brprotect_apply(const struct argcmd *c, int set, const struct facts_value *v,
-    char *ifname, int ifs, struct cand *cand)
+    char *ifname, int ifs, struct cand *cand, int rtable)
 {
 	char port[IFNAMSIZ];
 	int e;
@@ -1743,7 +1743,7 @@ brtagged_parse(const struct argcmd *c, int argc, char **argv,
  */
 int
 brvlan_apply(const struct argcmd *c, int set, const struct facts_value *v,
-    char *ifname, int ifs, struct cand *cand)
+    char *ifname, int ifs, struct cand *cand, int rtable)
 {
 	struct ifbrvidmap vm;
 	struct ifbreq breq;
@@ -1898,7 +1898,7 @@ static struct brc brpvs[] = {
 
 int
 brpvlan_apply(const struct argcmd *c, int set, const struct facts_value *v,
-    char *ifname, int ifs, struct cand *cand)
+    char *ifname, int ifs, struct cand *cand, int rtable)
 {
 	struct ifbrpvlan pv;
 	struct brc *x;

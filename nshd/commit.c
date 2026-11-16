@@ -138,7 +138,7 @@ static int edits_make(struct script *, int);
 static int edits_line(FILE *, int, char *, int *, int *, char *);
 static int edits_check(char *, size_t);
 static int edit_typed(const struct argcmd *, struct edit *, char *, int,
-    int, char *);
+    int, char *, int *);
 static int edits_apply(char *, size_t);
 static int check_if(struct cnode *, char *, char *, struct claims *);
 static int check_ports(struct cnode *, char *, char *, char *,
@@ -765,16 +765,10 @@ script_make(struct cnode *from, struct cnode *to, struct script *s, int skip)
 int
 script_run(struct script *s)
 {
-	int i, rt, failed, cleared = 0;
+	int i, failed, cleared = 0;
 
 	if (edits_check(s->edits, s->elen) == -1)
 		return -1;
-	/* from table 0, as nshrc at boot, whatever the session's table */
-	if ((rt = cli_rtable) != 0) {
-		if (nsh_setrtable(0) != 0)
-			return -1;
-		cli_rtable = 0;
-	}
 	/* empty rules before the script starts a daemon on them */
 	for (i = 0; i < s->nclears; i++)
 		if (s->clears[i].keep && ctl_rules_clear(s->clears[i].name,
@@ -786,8 +780,6 @@ script_run(struct script *s)
 		if (!s->clears[i].keep && ctl_rules_clear(s->clears[i].name,
 		    s->clears[i].rtable, 0) == -1)
 			cleared = -1;
-	if (cli_rtable != rt && nsh_setrtable(rt) == 0)
-		cli_rtable = rt;
 	return failed || cleared == -1;
 }
 
@@ -1115,10 +1107,14 @@ edit_values(const struct argcmd *c, const struct edit *e, char *p,
 	return x.n == 1 ? x.r : -1;
 }
 
-/* where edit_ran() runs a script's edit: its row of ctx, on name */
+/*
+ * where edit_ran() runs a script's edit: its row of ctx, on name, in the
+ * routing table of the block it is in, *table
+ */
 struct edit_on {
 	int	 ctx, row;
 	char	*name;
+	int	*table;
 };
 
 static int
@@ -1128,22 +1124,29 @@ edit_ran(const struct argcmd *c, int set, const struct facts_value *v,
 	struct edit_on	*on = arg;
 	int		 r;
 
-	r = conf_run_values(on->ctx, on->row, set, v, on->name);
-	/* a block's head: the interface its lines are for */
+	r = conf_run_values(on->ctx, on->row, set, v, on->name, *on->table);
+	/*
+	 * a block's head: the interface its lines are for, or the routing
+	 * table they run in. The kernel need not have the table yet: a
+	 * route among the lines makes it (RTM_ADD does)
+	 */
 	if (on->ctx == CTX_TOP && set && (c->flags & (CF_IF | CF_BRIDGE)))
 		args_string(&v[0], on->name, IFNAMSIZ);
+	if (on->ctx == CTX_TOP && set && (c->flags & CF_RTABLE) && r == 0)
+		*on->table = v[0].v.i;
 	return r;
 }
 
 /*
  * edit_values() of e, a script's, the command at its row of ctx: if run
- * is set, the command also runs with the values, on name
+ * is set, the command also runs with the values, on name, in routing
+ * table *table
  */
 static int
 edit_typed(const struct argcmd *c, struct edit *e, char *p, int ctx,
-    int run, char *name)
+    int run, char *name, int *table)
 {
-	struct edit_on	 on = { ctx, e->row, name };
+	struct edit_on	 on = { ctx, e->row, name, table };
 
 	return edit_values(c, e, p, run ? edit_ran : NULL, &on);
 }
@@ -1185,7 +1188,7 @@ edits_check(char *buf, size_t len)
 			    (block != 0 && (block != CF_RTABLE ||
 			    (c->flags & (CF_IF | CF_BRIDGE | CF_RTABLE)))) ||
 			    (e.no && (c->flags & CF_NO) == 0) || e.typed != 1 ||
-			    edit_typed(c, &e, p, CTX_TOP, 0, NULL) == -1)
+			    edit_typed(c, &e, p, CTX_TOP, 0, NULL, NULL) == -1)
 				goto bad;
 			if (!e.no && (c->flags & (CF_IF | CF_BRIDGE |
 			    CF_RTABLE)))
@@ -1198,7 +1201,7 @@ edits_check(char *buf, size_t len)
 			if (block != (e.kind == EDIT_IF ? CF_IF : CF_BRIDGE) ||
 			    (c = conf_cmd(ctx, e.row, &cmd)) == NULL ||
 			    e.typed != 1 ||
-			    edit_typed(c, &e, p, ctx, 0, NULL) == -1)
+			    edit_typed(c, &e, p, ctx, 0, NULL, NULL) == -1)
 				goto bad;
 			break;
 		case EDIT_END:
@@ -1322,9 +1325,12 @@ edits_apply(char *buf, size_t len)
 	struct edit e;
 	char *p, name[IFNAMSIZ] = "";
 	size_t off;
-	int ctx, rt = cli_rtable, failed = 0, r = 0;
+	int ctx, table = 0, failed = 0, r = 0;
 
-	conf_reading(1);
+	/*
+	 * lines run in table 0, as at boot, whatever the session's table,
+	 * and an rtable block's lines in the block's table (edit_ran())
+	 */
 	for (off = 0; off < len; off += sizeof(e) + e.len) {
 		memcpy(&e, buf + off, sizeof(e));
 		p = buf + off + sizeof(e);
@@ -1335,24 +1341,22 @@ edits_apply(char *buf, size_t len)
 			ctx = e.kind == EDIT_TOP ? CTX_TOP : e.kind == EDIT_IF ?
 			    CTX_IF : CTX_BRIDGE;
 			r = edit_typed(conf_cmd(ctx, e.row, &cmd), &e, p, ctx,
-			    1, name);
+			    1, name, &table);
 			break;
 		case EDIT_END:
-			conf_block_end(rt);
+			table = 0;
 			r = 0;
 			break;
 		case EDIT_RULES:
-			r = ctl_setrules(e.row, p, e.len, cli_rtable);
+			r = ctl_setrules(e.row, p, e.len, table);
 			break;
 		case EDIT_DAEMON:
-			r = ctl_do(e.row, e.act, cli_rtable);
+			r = ctl_do(e.row, e.act, table);
 			break;
 		}
 		if (r == -1)
 			failed = 1;
-		conf_settle();
 	}
-	conf_reading(0);
 	return failed;
 }
 

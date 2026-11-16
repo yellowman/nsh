@@ -172,7 +172,7 @@ static int	flags;
 
 int
 ndpentry_apply(const struct argcmd *c, int set, const struct facts_value *v,
-    char *ifname, int ifs, struct cand *cand)
+    char *ifname, int ifs, struct cand *cand, int rtable)
 {
 	struct sockaddr_in6 *sin = &sin_m;
 	struct sockaddr_dl *sdl;
@@ -189,10 +189,10 @@ ndpentry_apply(const struct argcmd *c, int set, const struct facts_value *v,
 	if (!set) {
 		if (cand != NULL)
 			return ndp_cand((struct sockaddr_in6 *)&ss, NULL, cand);
-		return ndpdelete((struct sockaddr_in6 *)&ss, cli_rtable);
+		return ndpdelete((struct sockaddr_in6 *)&ss, rtable);
 	}
 
-	if (cand == NULL && getsocket(cli_rtable) < 0)
+	if (cand == NULL && getsocket(rtable) < 0)
 		return -1;
 
 	*sin = *(struct sockaddr_in6 *)&ss;
@@ -211,7 +211,7 @@ ndpentry_apply(const struct argcmd *c, int set, const struct facts_value *v,
 	if (cand != NULL)
 		return ndp_cand(sin, &sdl_m, cand);
 
-	if (rtget_ndp(&sin, &sdl, cli_rtable)) {
+	if (rtget_ndp(&sin, &sdl, rtable)) {
 		printf("%% RTM_GET(%s) failed\n", host);
 		return -1;
 	}
@@ -242,7 +242,7 @@ overwrite:
 	}
 	sdl_m.sdl_type = sdl->sdl_type;
 	sdl_m.sdl_index = sdl->sdl_index;
-	return (rtmsg_ndp(RTM_ADD, cli_rtable));
+	return (rtmsg_ndp(RTM_ADD, rtable));
 }
 
 /*

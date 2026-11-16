@@ -22,7 +22,7 @@ client.c	process	nshd_config nshd_intr nshd_rtable sfd sib
 client.c	table	nshd_runs.progs show_log.logs
 cmdargs.c	process	child in_config
 commands.c	process	snapshot
-commands.c	scratch	in_rc op_hide
+commands.c	scratch	op_hide
 commands.c	table	Bridgelist Bridgelist_nitems Intlist
 			Intlist_nitems ahtab arpdowntab arphelp
 			arptimeouttab balancing_keys bgphelp bractions brdirs

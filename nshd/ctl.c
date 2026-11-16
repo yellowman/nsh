@@ -1149,14 +1149,14 @@ daemon_parse(const struct argcmd *c, int argc, char **argv,
  */
 int
 daemon_apply(const struct argcmd *c, int set, const struct facts_value *v,
-    char *ifname, int ifs, struct cand *cand)
+    char *ifname, int ifs, struct cand *cand, int rtable)
 {
 	struct daemons *d;
 	struct ctl *x;
 	char words[NOPTFILL - 1][sizeof(line)];
 	char *argv[NOPTFILL + 2], *step_args[NOPTFILL] = { NULL };
 	char **fillargs;
-	int argc, n, table = cli_rtable;
+	int argc, n;
 
 	for (n = 0; ctl_daemons[n].name != NULL; n++)
 		;
@@ -1173,9 +1173,9 @@ daemon_apply(const struct argcmd *c, int set, const struct facts_value *v,
 		    (long long)v[1].v.i);
 		return -1;
 	}
-	if (table > d->rtablemax) {
+	if (rtable > d->rtablemax) {
 		printf("%% Command %s not available via rtable %d\n",
-		    d->name, table);
+		    d->name, rtable);
 		return -1;
 	}
 	argv[0] = d->name;
@@ -1189,7 +1189,7 @@ daemon_apply(const struct argcmd *c, int set, const struct facts_value *v,
 	if ((fillargs = step_optreq(x->args, step_args, argc, argv, 2)) ==
 	    NULL)
 		return -1;
-	return ctl_run(d, x, fillargs, table);
+	return ctl_run(d, x, fillargs, rtable);
 }
 
 /*
@@ -1206,17 +1206,14 @@ ctl_cand(struct daemons *d, struct ctl *x, char **fillargs, struct cand *cand)
 	struct daemons *c;
 	struct ctl *t;
 	char *enable = "enable", stmt[64];
-	int rt, takes;
 
-	takes = ctl_cand_takes(x);
-	rt = takes ? cand->rtable : cli_rtable;
-	if (rt > d->rtablemax) {
+	if (!ctl_cand_takes(x))
+		return 0;
+	if (cand->rtable > d->rtablemax) {
 		printf("%% Command %s not available via rtable %d\n",
-		    d->name, rt);
+		    d->name, cand->rtable);
 		return -1;
 	}
-	if (!takes)
-		return 0;
 	/* the name conf gives it: scheduler is crontab */
 	for (c = ctl_daemons; c->table != d->table; c++)
 		;

@@ -180,7 +180,8 @@ pfsync_set(int ifs, struct ifreq *ifr, struct cand *cand)
 
 int
 intsyncdev_apply(const struct argcmd *c, int set,
-    const struct facts_value *v, char *ifname, int ifs, struct cand *cand)
+    const struct facts_value *v, char *ifname, int ifs, struct cand *cand,
+    int rtable)
 {
 	struct ifreq ifr;
 	struct pfsyncreq preq;
@@ -235,7 +236,8 @@ intsyncdev_apply(const struct argcmd *c, int set,
 
 int
 intsyncpeer_apply(const struct argcmd *c, int set,
-    const struct facts_value *v, char *ifname, int ifs, struct cand *cand)
+    const struct facts_value *v, char *ifname, int ifs, struct cand *cand,
+    int rtable)
 {
 	struct ifreq ifr;
 	struct pfsyncreq preq;
@@ -281,7 +283,8 @@ intsyncpeer_apply(const struct argcmd *c, int set,
 
 int
 intmaxupd_apply(const struct argcmd *c, int set,
-    const struct facts_value *v, char *ifname, int ifs, struct cand *cand)
+    const struct facts_value *v, char *ifname, int ifs, struct cand *cand,
+    int rtable)
 {
 	struct ifreq ifr;
 	struct pfsyncreq preq;

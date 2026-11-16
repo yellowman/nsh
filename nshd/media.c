@@ -201,7 +201,7 @@ intmedia_parse(const struct argcmd *c, int argc, char **argv,
 
 int
 intmedia_apply(const struct argcmd *c, int set, const struct facts_value *v,
-    char *ifname, int ifs, struct cand *cand)
+    char *ifname, int ifs, struct cand *cand, int rtable)
 {
 	uint64_t media_current, type, subtype, inst, options = 0;
 
@@ -257,7 +257,7 @@ intmediaopt_parse(const struct argcmd *c, int argc, char **argv,
 
 int
 intmediaopt_apply(const struct argcmd *c, int set, const struct facts_value *v,
-    char *ifname, int ifs, struct cand *cand)
+    char *ifname, int ifs, struct cand *cand, int rtable)
 {
 	uint64_t media_current, mediaopt;
 

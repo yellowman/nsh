@@ -114,11 +114,13 @@ struct argcmd;
 struct argvals;
 /*
  * run with the values on an interface; set is 0 for a "no" line. With a
- * candidate, the line edits it, and without one, changes the host
+ * candidate, the line edits it, and without one, changes the host. The
+ * last is the routing table the line runs in
  */
 struct cand;
 typedef int	args_applyfn(const struct argcmd *, int,
-		    const struct facts_value *, char *, int, struct cand *);
+		    const struct facts_value *, char *, int, struct cand *,
+		    int);
 /*
  * parse the words after the command's, for a grammar the arguments
  * cannot say, into the values they describe, which args_check() checks
@@ -233,7 +235,7 @@ extern const struct argkey wpagroupciphers[];
 extern const struct argcmd ops[];
 extern const size_t nops;
 int	op_parse(int, char **, struct argvals *, char *, size_t);
-int	op_run(int, int, const struct facts_value *, char *, int);
+int	op_run(int, int, const struct facts_value *, char *, int, int);
 
 const struct argcmd *conf_cmd(int, int, struct argcmd *);
 size_t	args_n(const struct argcmd *);

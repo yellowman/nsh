@@ -285,7 +285,8 @@ cand_setvh(struct cand *cand, int ifs, char *ifname, struct carpreq *r)
 
 int
 intcarp_apply(const struct argcmd *c, int set,
-    const struct facts_value *v, char *ifname, int ifs, struct cand *cand)
+    const struct facts_value *v, char *ifname, int ifs, struct cand *cand,
+    int rtable)
 {
 	struct ifreq ifr;
 	struct carpreq creq;
@@ -343,7 +344,8 @@ intcarp_apply(const struct argcmd *c, int set,
 
 int
 intcpass_apply(const struct argcmd *c, int set,
-    const struct facts_value *v, char *ifname, int ifs, struct cand *cand)
+    const struct facts_value *v, char *ifname, int ifs, struct cand *cand,
+    int rtable)
 {
 	struct ifreq ifr;
 	struct carpreq creq;
@@ -372,7 +374,8 @@ intcpass_apply(const struct argcmd *c, int set,
 
 int
 intcnode_apply(const struct argcmd *c, int set,
-    const struct facts_value *v, char *ifname, int ifs, struct cand *cand)
+    const struct facts_value *v, char *ifname, int ifs, struct cand *cand,
+    int rtable)
 {
 	struct ifreq ifr;
 	struct carpreq creq;
@@ -522,7 +525,8 @@ carp_facts(struct facts_out *o, int s, char *ifname, struct facts_value *ifv)
 
 int
 intcdev_apply(const struct argcmd *c, int set,
-    const struct facts_value *v, char *ifname, int ifs, struct cand *cand)
+    const struct facts_value *v, char *ifname, int ifs, struct cand *cand,
+    int rtable)
 {
 	struct ifreq ifr;
 	struct carpreq creq;

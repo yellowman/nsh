@@ -104,7 +104,6 @@
 #define RUNS(f)	NULL
 #include "nshrows.h"
 
-static int in_rc;		/* a commit's edits run */
 static struct cnode *snapshot;	/* config's running configuration */
 
 static int	exitconfig(int, char **, ...);
@@ -566,7 +565,7 @@ ipcmd_parse(const struct argcmd *c, int argc, char **argv,
 
 static int
 ipcmd_apply(const struct argcmd *c, int set, const struct facts_value *v,
-    char *ifname, int ifs, struct cand *cand)
+    char *ifname, int ifs, struct cand *cand, int rtable)
 {
 	struct sysctltab *stab = ipcmd_tab(c);
 	struct ipsysctl *x;
@@ -683,7 +682,7 @@ flush_op(int argc, char **argv, ...)
 
 static int
 flush_line(const struct argcmd *c, int set, const struct facts_value *v,
-    char *ifname, int ifs, struct cand *cand)
+    char *ifname, int ifs, struct cand *cand, int rtable)
 {
 	char tty[sizeof(line)];
 	char * args[5] = { PKILL, "-9", "-t", tty, NULL };
@@ -864,7 +863,7 @@ op_parse(int n, char **w, struct argvals *a, char *ifname, size_t len)
  */
 int
 op_run(int row, int set, const struct facts_value *v, char *ifname,
-    int hide)
+    int hide, int rtable)
 {
 	const struct argcmd *o = &ops[row];
 	int inif = (o->flags & CF_INIF) != 0;
@@ -875,7 +874,7 @@ op_run(int row, int set, const struct facts_value *v, char *ifname,
 		printf("%% socket: %s\n", strerror(errno));
 		return -1;
 	}
-	r = o->apply(o, set, v, inif ? ifname : NULL, ifs, NULL);
+	r = o->apply(o, set, v, inif ? ifname : NULL, ifs, NULL, rtable);
 	if (ifs != -1)
 		close(ifs);
 	return r;
@@ -883,7 +882,7 @@ op_run(int row, int set, const struct facts_value *v, char *ifname,
 
 static int
 op_halt(const struct argcmd *c, int set, const struct facts_value *v,
-    char *ifname, int ifs, struct cand *cand)
+    char *ifname, int ifs, struct cand *cand, int rtable)
 {
 	char *rb[] = { REBOOT, NULL }, *ht[] = { HALT, NULL, NULL };
 
@@ -896,7 +895,7 @@ op_halt(const struct argcmd *c, int set, const struct facts_value *v,
 
 static int
 op_diff(const struct argcmd *c, int set, const struct facts_value *v,
-    char *ifname, int ifs, struct cand *cand)
+    char *ifname, int ifs, struct cand *cand, int rtable)
 {
 	int r;
 
@@ -905,7 +904,7 @@ op_diff(const struct argcmd *c, int set, const struct facts_value *v,
 
 static int
 op_crontab(const struct argcmd *c, int set, const struct facts_value *v,
-    char *ifname, int ifs, struct cand *cand)
+    char *ifname, int ifs, struct cand *cand, int rtable)
 {
 	char *cr[] = { CRONTAB, "-l", "-u", "root", NULL };
 
@@ -1916,7 +1915,7 @@ interface_parse(const struct argcmd *c, int argc, char **argv,
  */
 static int
 interface_apply(const struct argcmd *c, int set, const struct facts_value *v,
-    char *name, int s, struct cand *cand)
+    char *name, int s, struct cand *cand, int rtable)
 {
 	char ifn[IFNAMSIZ];
 	struct ifreq ifr;
@@ -2491,7 +2490,7 @@ line_ran(const struct argcmd *c, int set, const struct facts_value *v,
 {
 	struct cand *cand = arg;
 
-	return c->apply(c, set, v, NULL, -1, cand);
+	return c->apply(c, set, v, NULL, -1, cand, cand->rtable);
 }
 
 /* and a command of the mode of the interface the session is in */
@@ -2501,7 +2500,7 @@ ifline_ran(const struct argcmd *c, int set, const struct facts_value *v,
 {
 	struct cand *cand = arg;
 
-	return c->apply(c, set, v, cand->ifname, -1, cand);
+	return c->apply(c, set, v, cand->ifname, -1, cand, cand->rtable);
 }
 
 /*
@@ -2689,7 +2688,7 @@ hostname(int argc, char **argv, ...)
 
 static int
 hostname_apply(const struct argcmd *c, int set, const struct facts_value *v,
-    char *ifname, int ifs, struct cand *cand)
+    char *ifname, int ifs, struct cand *cand, int rtable)
 {
 	char name[MAXHOSTNAMELEN];
 
@@ -2743,36 +2742,13 @@ argvtostring(int argc, char **argv, char *string, int strlen)
 	return i;
 }
 
-/*
- * Move to table.  While a commit's edits run, a table the kernel does
- * not have yet takes its block's lines all the same: a route among them
- * makes the table (RTM_ADD does), and the process moves into it then
- * (conf_settle())
- */
-static int
-rtable_enter(int table)
-{
-	if (in_rc && getrtable() != table) {
-		if (setrtable(table) == 0)
-			init_bgpd_socket_path(table);
-		else if (errno != EINVAL)
-			return nsh_setrtable(table);
-		cli_rtable = table;
-		return 0;
-	}
-	if (nsh_setrtable(table))
-		return 1;
-	cli_rtable = table;
-	return 0;
-}
-
 /* rtable: the table, and with a name, the table's name */
 
 static int
 rtable_apply(const struct argcmd *c, int set, const struct facts_value *v,
-    char *ifname, int ifs, struct cand *cand)
+    char *ifname, int ifs, struct cand *cand, int rtable)
 {
-	int table = v[0].v.i, pos, found, curtable;
+	int table = v[0].v.i, pos, found;
 	char rtname[64] = "";
 	StringList *resp;
 
@@ -2782,14 +2758,6 @@ rtable_apply(const struct argcmd *c, int set, const struct facts_value *v,
 	if (cand != NULL)
 		return cand_rtable_set(cand, set, table, pos ? rtname : NULL);
 
-	curtable = getrtable();
-	if (cli_rtable != curtable) {
-		printf("%% WARNING: nsh process rtable is out of sync "
-		    "(want %d, have %d); "
-		    "This is probably a bug in nsh, please report it.\n",
-		    cli_rtable, curtable);
-	}
-
 	resp = sl_init();
 	if (db_select_rtables_rtable(resp, table) < 0)
 		printf("%% rtable select error\n");
@@ -2798,7 +2766,7 @@ rtable_apply(const struct argcmd *c, int set, const struct facts_value *v,
 
 	if (set && (found && !pos)) {
 		/* Table found, skip database action */
-		return rtable_enter(table) ? -1 : 0;
+		return 0;
 	}
 	if (!set) {
 		if (!found) {
@@ -2811,26 +2779,15 @@ rtable_apply(const struct argcmd *c, int set, const struct facts_value *v,
 		}
 	} else if (table == 0)  {
 		/* Do not add the kernel's default rtable 0 to the database. */
-		if (nsh_setrtable(0))
-			return -1;
-		cli_rtable = 0;
 		return 0;
 	}
 	if (db_delete_rtables_rtable(table) < 0) {
 		printf("%% rtable db removal error\n");
 		return -1;
 	}
-	if (set) {
-		if (db_insert_rtables(table, rtname) < 0) {
-			printf("%% rtable db insertion error\n");
-			return -1;
-		}
-		if (rtable_enter(table))
-			return -1;
-	} else {
-		if (nsh_setrtable(0))
-			return -1;
-		cli_rtable = 0;
+	if (set && db_insert_rtables(table, rtname) < 0) {
+		printf("%% rtable db insertion error\n");
+		return -1;
 	}
 
 	return 0;
@@ -2867,7 +2824,7 @@ demote_parse(const struct argcmd *c, int argc, char **argv,
 
 static int
 demote_apply(const struct argcmd *c, int set, const struct facts_value *v,
-    char *ifname, int ifs, struct cand *cand)
+    char *ifname, int ifs, struct cand *cand, int rtable)
 {
 	int counter = 1, s, ret = 0;
 	struct ifgroupreq ifgr;
@@ -2936,7 +2893,7 @@ cand_leave(struct cand *cand)
  */
 static int
 flush_pf(const struct argcmd *c, int set, const struct facts_value *v,
-    char *ifname, int ifs, struct cand *cand)
+    char *ifname, int ifs, struct cand *cand, int rtable)
 {
 	struct fpf *x;
 
@@ -2981,27 +2938,27 @@ flush_pf_parse(const struct argcmd *c, int argc, char **argv,
  */
 static int
 flush_ip_routes(const struct argcmd *c, int set, const struct facts_value *v,
-    char *ifname, int ifs, struct cand *cand)
+    char *ifname, int ifs, struct cand *cand, int rtable)
 {
-	flushroutes(AF_INET, AF_INET, v[0].type != FACT_NONE, cli_rtable);
+	flushroutes(AF_INET, AF_INET, v[0].type != FACT_NONE, rtable);
 
 	return 0;
 }
 
 static int
 flush_arp_cache(const struct argcmd *c, int set, const struct facts_value *v,
-    char *ifname, int ifs, struct cand *cand)
+    char *ifname, int ifs, struct cand *cand, int rtable)
 {
-	flushroutes(AF_INET, AF_LINK, v[0].type != FACT_NONE, cli_rtable);
+	flushroutes(AF_INET, AF_LINK, v[0].type != FACT_NONE, rtable);
 
 	return 0;
 }
 
 static int
 flush_ndp_cache(const struct argcmd *c, int set, const struct facts_value *v,
-    char *ifname, int ifs, struct cand *cand)
+    char *ifname, int ifs, struct cand *cand, int rtable)
 {
-	ndpflush(cli_rtable);
+	ndpflush(rtable);
 	return 0;
 }
 
@@ -3173,12 +3130,12 @@ conf_find(int ctx, char *word, char **daemon)
 /*
  * Run the command at row n of ctx's commands (conf_cmd()) with values v,
  * as a commit runs a line of its edits: at the top level a statement, a
- * block's head included, and in an interface's or a bridge's mode a line
- * of name's block. set is 0 for "no".
+ * block's head included, in routing table rtable, and in an interface's
+ * or a bridge's mode a line of name's block. set is 0 for "no".
  */
 int
 conf_run_values(int ctx, int n, int set, const struct facts_value *v,
-    char *name)
+    char *name, int rtable)
 {
 	struct argcmd row;
 	const struct argcmd *c = conf_cmd(ctx, n, &row);
@@ -3186,7 +3143,7 @@ conf_run_values(int ctx, int n, int set, const struct facts_value *v,
 	if (ctx != CTX_TOP)
 		return conf_run_if(ctx == CTX_BRIDGE, c, set, v, name);
 	/* a block's head creates a cloned interface, or with no, destroys it */
-	return c->apply(c, set, v, NULL, -1, NULL) == -1 ? -1 : 0;
+	return c->apply(c, set, v, NULL, -1, NULL, rtable) == -1 ? -1 : 0;
 }
 
 /*
@@ -3201,7 +3158,7 @@ conf_run_if(int bridgeline, const struct argcmd *c, int set,
     const struct facts_value *v, char *name)
 {
 	char ifn[IFNAMSIZ];
-	int ifs, isbridge, r = -1, rt = cli_rtable;
+	int ifs, isbridge, r = -1;
 
 	if (strlcpy(ifn, name, sizeof(ifn)) >= sizeof(ifn)) {
 		printf("%% interface name too long\n");
@@ -3220,39 +3177,10 @@ conf_run_if(int bridgeline, const struct argcmd *c, int set,
 		printf("%% %s is %sa bridge\n", ifn, isbridge ? "" : "not ");
 		goto done;
 	}
-	if (cli_rtable != 0 && nsh_setrtable(0) == 0)
-		cli_rtable = 0;
-	r = c->apply(c, set, v, ifn, ifs, NULL) == -1 ? -1 : 0;
-	if (rt != cli_rtable && nsh_setrtable(rt) == 0)
-		cli_rtable = rt;
+	r = c->apply(c, set, v, ifn, ifs, NULL, 0) == -1 ? -1 : 0;
 done:
 	close(ifs);
 	return r;
-}
-
-/* Mark that a commit's edits are running (on) or have finished */
-void
-conf_reading(int on)
-{
-	in_rc = on;
-	if (on)
-		init_bgpd_socket_path(cli_rtable);
-}
-
-/* A block of a commit's edits ended: return to routing table rt */
-void
-conf_block_end(int rt)
-{
-	if (cli_rtable != rt && nsh_setrtable(rt) == 0)
-		cli_rtable = rt;
-}
-
-/* An edit ran: the process goes in the table it left */
-void
-conf_settle(void)
-{
-	if (cli_rtable != getrtable() && setrtable(cli_rtable) == 0)
-		init_bgpd_socket_path(cli_rtable);
 }
 
 /*

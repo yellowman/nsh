@@ -486,7 +486,8 @@ char_to_utf16(const char *in, uint16_t *out, size_t outlen)
 
 int
 intumb_apply(const struct argcmd *c, int set,
-    const struct facts_value *v, char *ifname, int ifs, struct cand *cand)
+    const struct facts_value *v, char *ifname, int ifs, struct cand *cand,
+    int rtable)
 {
 	char w0[UMB_APN_MAXLEN + 1] = "", w1[MBIM_PIN_MAXLEN / 2 + 1] = "";
 	size_t i;

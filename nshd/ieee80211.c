@@ -240,7 +240,7 @@ intnwkey_parse(const struct argcmd *c, int argc, char **argv,
 
 int
 intnwkey_apply(const struct argcmd *c, int set, const struct facts_value *v,
-    char *ifname, int ifs, struct cand *cand)
+    char *ifname, int ifs, struct cand *cand, int rtable)
 {
 	struct ieee80211_nwkey nwkey;
 	u_int8_t keybuf[IEEE80211_WEP_NKID][NWKEY_LEN];
@@ -312,7 +312,7 @@ intwpakey_parse(const struct argcmd *c, int argc, char **argv,
 
 int
 intwpakey_apply(const struct argcmd *c, int set, const struct facts_value *v,
-    char *ifname, int ifs, struct cand *cand)
+    char *ifname, int ifs, struct cand *cand, int rtable)
 {
 	struct ieee80211_wpaparams wpa;
 	struct ieee80211_wpapsk psk;
@@ -383,7 +383,7 @@ intwpakey_apply(const struct argcmd *c, int set, const struct facts_value *v,
 
 int
 intwpa_apply(const struct argcmd *c, int set, const struct facts_value *v,
-    char *ifname, int ifs, struct cand *cand)
+    char *ifname, int ifs, struct cand *cand, int rtable)
 {
 	struct ieee80211_wpaparams wpa;
 
@@ -414,7 +414,7 @@ intwpa_apply(const struct argcmd *c, int set, const struct facts_value *v,
  */
 int
 intwpalist_apply(const struct argcmd *c, int set, const struct facts_value *v,
-    char *ifname, int ifs, struct cand *cand)
+    char *ifname, int ifs, struct cand *cand, int rtable)
 {
 	struct ieee80211_wpaparams wpa;
 	u_int bits = set ? v[0].v.i : 0;
@@ -564,7 +564,7 @@ intjoin_parse(const struct argcmd *c, int argc, char **argv,
 
 int
 intjoin_apply(const struct argcmd *c, int set, const struct facts_value *v,
-    char *ifname, int ifs, struct cand *cand)
+    char *ifname, int ifs, struct cand *cand, int rtable)
 {
 	struct ieee80211_join join;
 	u_int8_t wepkey[NWKEY_LEN];
@@ -733,7 +733,7 @@ conf_join(FILE *output, int ifs, char *ifname)
 
 int
 intchan_apply(const struct argcmd *c, int set, const struct facts_value *v,
-    char *ifname, int ifs, struct cand *cand)
+    char *ifname, int ifs, struct cand *cand, int rtable)
 {
 	struct ieee80211chanreq chan;
 	char num[8];
@@ -796,7 +796,7 @@ const struct argkey nwflags[] = {
 
 int
 intnwflag_apply(const struct argcmd *c, int set, const struct facts_value *v,
-    char *ifname, int ifs, struct cand *cand)
+    char *ifname, int ifs, struct cand *cand, int rtable)
 {
 	struct ifreq ifr;
 	char flags[256];
@@ -988,7 +988,7 @@ get_nwinfo(char *ifname, char *str, int str_len, int type)
 
 int
 inttxpower_apply(const struct argcmd *c, int set, const struct facts_value *v,
-    char *ifname, int ifs, struct cand *cand)
+    char *ifname, int ifs, struct cand *cand, int rtable)
 {
 	struct ieee80211_txpower txpower;
 
@@ -1025,7 +1025,7 @@ inttxpower_apply(const struct argcmd *c, int set, const struct facts_value *v,
 
 int
 bssid_apply(const struct argcmd *c, int set, const struct facts_value *v,
-    char *ifname, int ifs, struct cand *cand)
+    char *ifname, int ifs, struct cand *cand, int rtable)
 {
 	struct ieee80211_bssid bssid;
 

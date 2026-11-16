@@ -2129,7 +2129,7 @@ system_child(int fd, int op, char **argv, int table)
 		}
 		cli_rtable = table;
 		r = op_run(op_next->so->row, op_next->so->set, op_next->v,
-		    op_next->so->ifname, op == SYS_OPERATION_HIDDEN);
+		    op_next->so->ifname, op == SYS_OPERATION_HIDDEN, table);
 		fflush(stdout);
 		_exit(r == -1 ? 1 : r);
 	case FACTS_LEASES:

@@ -60,7 +60,7 @@ extern char *nopterr;
 int nopt(int, char **, struct nopts *);
 
 /* ppp.c */
-int pppoe_ipcp(char *, int, int, struct cand *);
+int pppoe_ipcp(char *, int, int, struct cand *, int);
 int is_pppoe(char *, int);
 #define NSH_PPPOE_IPADDR_IPCP 1
 #define NSH_PPPOE_IPADDR_STATIC 2
@@ -220,10 +220,8 @@ int conf_ordered(char *);
 /* the commands a configuration has (conf_cmd(), args.h) */
 int conf_find(int, char *, char **);
 struct facts_value;
-int conf_run_values(int, int, int, const struct facts_value *, char *);
-void conf_reading(int);
-void conf_block_end(int);
-void conf_settle(void);
+int conf_run_values(int, int, int, const struct facts_value *, char *,
+    int);
 
 
 /* prompt.c */
@@ -269,7 +267,7 @@ typedef struct cmd {
 	 * handler
 	 */
 	int (*apply)(const struct argcmd *, int, const struct facts_value *,
-	    char *, int, struct cand *);
+	    char *, int, struct cand *, int);
 	int code;
 	const struct arg *args;
 	int (*parse)(const struct argcmd *, int, char **, struct argvals *);
@@ -297,7 +295,7 @@ struct intlist {
 	int cand;		/* What it does in configure private (CAND_*) */
 	/* as a Command's: what the line is parsed with, if it is */
 	int (*apply)(const struct argcmd *, int, const struct facts_value *,
-	    char *, int, struct cand *);
+	    char *, int, struct cand *, int);
 	int code;
 	const struct arg *args;
 	int (*parse)(const struct argcmd *, int, char **, struct argvals *);
@@ -415,7 +413,7 @@ u_int32_t in4_netaddr(u_int32_t, u_int32_t);
 u_int32_t in4_brdaddr(u_int32_t, u_int32_t);
 extern struct ghs intiphelp[];
 extern struct ghs intip6help[];
-int intipcp(char *, int, int, char **, struct cand *);
+int intipcp(char *, int, int, char **, struct cand *, int);
 int addaf(char *, int, int);
 int removeaf(char *, int, int);
 int check_daemon_control_socket(const char *);
