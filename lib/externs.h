@@ -150,8 +150,9 @@ extern char metricnames[];
 /* ctl.c declarations moved to ctl.h */
 
 /* cmdargs.c */
-int cmdargs_output_setenv(char *, char **, int, int, char **, int);
+int cmdargs_output_setenv(char *, char **, int, int, char **, int, int);
 int cmdargs_output(char *, char **, int, int);
+int cmdargs_table(char *, char **, int);
 int cmdargs(char *, char **);
 int nsh_setrtable(int);
 void rtable_missing(int);

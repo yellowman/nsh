@@ -66,12 +66,21 @@ cmdargs(char *cmd, char *arg[])
 int
 cmdargs_output(char *cmd, char *arg[], int stdoutfd, int stderrfd)
 {
-	return cmdargs_output_setenv(cmd, arg, stdoutfd, stderrfd, NULL, 0);
+	return cmdargs_output_setenv(cmd, arg, stdoutfd, stderrfd, NULL, 0,
+	    cli_rtable);
 }
 
+/* cmd, multiple args, in routing table rtable; as cmdargs() returns */
+int
+cmdargs_table(char *cmd, char *arg[], int rtable)
+{
+	return cmdargs_output_setenv(cmd, arg, -1, -1, NULL, 0, rtable);
+}
+
+/* the program in routing table rtable, which its child moves into */
 int
 cmdargs_output_setenv(char *cmd, char *arg[], int stdoutfd, int stderrfd,
-    char **env, int pipefd)
+    char **env, int pipefd, int rtable)
 {
 	sig_t sigint, sigquit, sigchld;
 	int status = -1;
@@ -101,7 +110,7 @@ cmdargs_output_setenv(char *cmd, char *arg[], int stdoutfd, int stderrfd,
 			signal(SIGINT, SIG_DFL);
 			signal(SIGCHLD, SIG_DFL);
 
-			if (nsh_setrtable(cli_rtable))
+			if (nsh_setrtable(rtable))
 				_exit(127);
 
 			if (stdoutfd != -1) {

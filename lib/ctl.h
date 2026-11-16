@@ -77,6 +77,7 @@
 #define REQ     (void *)2
 #define IFNAME  (void *)3
 #define REQTEMP (void *)4                                                       
+#define TABLEOPT (void *)5	/* pkill's -T, with the daemon's table */
 #define SIZE_CONF_TEMP 64
 int ctlhandler(int, char **, ...);
 int ctl_op(char *, char *);
@@ -112,8 +113,8 @@ int ctl_cand_act(int, int, struct cand *);
 int ctl_daemon(char *);
 int ctl_act(int, char *);
 int ctl_takes(int, int);
-int ctl_do(int, int);
-int ctl_setrules(int, char *, size_t);
+int ctl_do(int, int, int);
+int ctl_setrules(int, char *, size_t, int);
 
 #define T_HANDLER       1
 #define T_HANDLER_TEST  2
@@ -219,4 +220,4 @@ extern struct ctl ctl_ldap[];
 extern struct ctl ctl_motd[];
 extern struct ctl ctl_crontab[];
 extern struct ctl ctl_resolv[];
-int flag_x(char *, char *, int, char *);
+int flag_x(char *, char *, int, char *, int);

@@ -94,7 +94,7 @@ conf.c		table	confrows confwords defllpriority defmtus
 			defprios intconf_rows rtflags
 conftree.c	table	was_bridge.was
 ctl.c		scratch	admin_in.in admin_limited admin_refused
-			admin_tree table
+			admin_tree
 ctl.c		table	ctl_bgp ctl_crontab ctl_daemons ctl_dhcp
 			ctl_dhcp6lease
 			ctl_dvmrp ctl_eigrp ctl_ftpproxy ctl_ifstate

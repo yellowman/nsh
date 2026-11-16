@@ -46,9 +46,6 @@
 #include "session.h"
 #include "conftree.h"
 
-/* table variable (for pkill usage) */
-static char table[16];
-
 /* service routines, used as handlers in struct ctl */
 int edit_crontab(int, char **, ...);
 int install_crontab(int, char **, ...);
@@ -64,11 +61,11 @@ static int pf_set(int);
 int fill_tmpfile(char **, char *, char **);
 int acq_lock(char *);
 void rls_lock(int);
-static int ctl_exec(char *, char **, int);
+static int ctl_exec(char *, char **, int, int);
 static int ctl_cand(struct daemons *, struct ctl *, char **, struct cand *);
 static int ctl_cand_takes(struct ctl *);
 static int ctl_isedit(struct ctl *);
-static int ctl_run(struct daemons *, struct ctl *, char **, char *);
+static int ctl_run(struct daemons *, struct ctl *, char **, int);
 static struct ctl *ctl_actrow(struct daemons *, int);
 static int ctl_cand_test(struct daemons *, char *, char **, struct cand *);
 static int ctl_cand_stage(struct daemons *, char *, char *, char *,
@@ -218,7 +215,7 @@ struct ctl ctl_ospf[] = {
 	    { OSPFD, "-f", REQTEMP, NULL }, { NULL }, NULL, DB_X_ENABLE,
 	    T_EXEC },
 	{ "disable",       "disable OSPFd daemon",
-	    { PKILL, table, "ospfd", NULL }, { NULL }, NULL, DB_X_DISABLE,
+	    { PKILL, TABLEOPT, "ospfd", NULL }, { NULL }, NULL, DB_X_DISABLE,
 	    T_EXEC, CTL_NOMATCH },
 	{ "edit",          "edit, test and stage OSPFd config",
 	    { "ospf", NULL },
@@ -242,7 +239,7 @@ struct ctl ctl_ospf6[] = {
 	    { OSPF6D, "-f", REQTEMP, NULL }, { NULL }, NULL, DB_X_ENABLE,
 	    T_EXEC },
 	{ "disable",        "disable OSPF6d OSPFv3 daemon",
-	    { PKILL, table, "ospf6d", NULL }, { NULL }, NULL, DB_X_DISABLE,
+	    { PKILL, TABLEOPT, "ospf6d", NULL }, { NULL }, NULL, DB_X_DISABLE,
 	    T_EXEC, CTL_NOMATCH },
 	{ "edit",           "edit, test and stage OSPF6d config",
 	    { "ospf6", NULL }, { OSPF6D, "-nf", REQTEMP, NULL },
@@ -264,7 +261,7 @@ struct ctl ctl_eigrp[] = {
 	    { EIGRPD, "-f", REQTEMP, NULL }, { NULL }, NULL, DB_X_ENABLE,
 	    T_EXEC },
 	{ "disable",        "disable EIGRPd daemon",
-	    { PKILL, table, "eigrpd", NULL }, { NULL }, NULL, DB_X_DISABLE,
+	    { PKILL, TABLEOPT, "eigrpd", NULL }, { NULL }, NULL, DB_X_DISABLE,
 	    T_EXEC, CTL_NOMATCH },
 	{ "edit",           "edit, test and stage EIGRPd config",
 	    { "eigrp", NULL }, { EIGRPD, "-nf", REQTEMP, NULL },
@@ -312,7 +309,7 @@ struct ctl ctl_rip[] = {
 	    { RIPD, "-f", REQTEMP, NULL }, { NULL }, NULL, DB_X_ENABLE,
 	    T_EXEC },
 	{ "disable",         "disable RIPd daemon",
-	    { PKILL, table, "ripd", NULL }, { NULL }, NULL, DB_X_DISABLE,
+	    { PKILL, TABLEOPT, "ripd", NULL }, { NULL }, NULL, DB_X_DISABLE,
 	    T_EXEC, CTL_NOMATCH },
 	{ "edit",            "edit, test and stage RIPd config",
 	    { "rip", NULL }, { RIPD, "-nf", REQTEMP, NULL },
@@ -356,7 +353,7 @@ struct ctl ctl_ipsec[] = {
 	{ "enable",         "enable isakmpd IKEv1 daemon",
 	    { ISAKMPD, "-Kv", NULL }, { NULL }, NULL, DB_X_ENABLE, T_EXEC },
 	{ "disable",        "disable isakmpd IKEv1 daemon",
-	    { PKILL, table, "isakmpd", NULL }, { NULL }, NULL, DB_X_DISABLE,
+	    { PKILL, TABLEOPT, "isakmpd", NULL }, { NULL }, NULL, DB_X_DISABLE,
 	    T_EXEC, CTL_NOMATCH },
 	{ "edit",           "edit, test and stage isakmpd config",   
 	    { "ipsec", NULL }, { IPSECCTL, "-nf", REQTEMP, NULL },
@@ -376,7 +373,7 @@ struct ctl ctl_ike[] = {
 	    { IKED, "-f", REQTEMP, NULL }, { NULL }, NULL, DB_X_ENABLE,
 	    T_EXEC },
 	{ "disable",        "disable IKEv2 daemon",
-	    { PKILL, table, "iked", NULL }, { NULL }, NULL, DB_X_DISABLE,
+	    { PKILL, TABLEOPT, "iked", NULL }, { NULL }, NULL, DB_X_DISABLE,
 	    T_EXEC, CTL_NOMATCH },
 	{ "active",         "force IKE active mode",
 	    { IKECTL, "active", NULL }, { NULL }, NULL, 0, T_EXEC },
@@ -406,7 +403,7 @@ struct ctl ctl_dvmrp[] = {
 	    { DVMRPD, "-f", REQTEMP, NULL }, { NULL }, NULL, DB_X_ENABLE,
 	    T_EXEC },
 	{ "disable",       "disable DVMRPd daemon",   
-	    { PKILL, table, "dvmrpd", NULL }, { NULL }, NULL, DB_X_DISABLE,
+	    { PKILL, TABLEOPT, "dvmrpd", NULL }, { NULL }, NULL, DB_X_DISABLE,
 	    T_EXEC, CTL_NOMATCH },
 	{ "edit",          "edit,test and stage DVMRPd config",
 	    { "dvmrp",  NULL }, { DVMRPD, "-nf", REQTEMP, NULL },
@@ -477,7 +474,7 @@ struct ctl ctl_ifstate[] = {
 	    { IFSTATED, "-f", REQTEMP, NULL }, { NULL }, NULL, DB_X_ENABLE,
 	    T_EXEC },
 	{ "disable",        "disable ifstated daemon",
-	    { PKILL, table, "ifstated", NULL }, { NULL }, NULL, DB_X_DISABLE,
+	    { PKILL, TABLEOPT, "ifstated", NULL }, { NULL }, NULL, DB_X_DISABLE,
 	    T_EXEC, CTL_NOMATCH },
 	{ "edit",           "edit, test and stage ifstated config",
 	    { "ifstate", NULL }, { IFSTATED, "-nf", REQTEMP, NULL },
@@ -493,7 +490,7 @@ struct ctl ctl_sasync[] = {
 	    { SASYNCD, "-c", REQTEMP, NULL }, { NULL }, NULL, DB_X_ENABLE,
 	    T_EXEC },
 	{ "disable",      "disable SAsyncd daemon",
-	    { PKILL, table, "sasyncd", NULL }, { NULL }, NULL, DB_X_DISABLE,
+	    { PKILL, TABLEOPT, "sasyncd", NULL }, { NULL }, NULL, DB_X_DISABLE,
 	    T_EXEC, CTL_NOMATCH },
 	{ "edit",         "edit, test and stage SAsyncd config",
 	    { "sasync", NULL }, { SASYNCD, "-nvvc", REQTEMP, NULL },
@@ -509,7 +506,7 @@ struct ctl ctl_nppp[] = {
 	    { NPPPD, "-f", REQTEMP, NULL }, { NULL }, NULL, DB_X_ENABLE,
 	    T_EXEC },
 	{ "disable",	    "disable nNPPPd daemon",
-	    { PKILL, table, "npppd", NULL }, { NULL }, NULL, DB_X_DISABLE,
+	    { PKILL, TABLEOPT, "npppd", NULL }, { NULL }, NULL, DB_X_DISABLE,
 	    T_EXEC, CTL_NOMATCH },
 	{ "clear",	    "disconnect nPPPd sessions",
 	    { NPPPCTL, "clear", REQ, OPT, OPT, NULL }, { NULL }, NULL, 0,
@@ -534,7 +531,7 @@ struct ctl ctl_dhcp[] = {
 	    { DHCPD, "-c", REQTEMP, "-l", DHCPLEASES, NULL }, { NULL },
 	    start_dhcpd, DB_X_ENABLE, T_HANDLER },
 	{ "disable",       "disable DHCPd daemon",
-	    { PKILL, table, "dhcpd", NULL }, { NULL }, NULL,
+	    { PKILL, TABLEOPT, "dhcpd", NULL }, { NULL }, NULL,
 	    DB_X_DISABLE, T_EXEC, CTL_NOMATCH },
 	{ "edit",          "edit,test and stage DHCPd config",
 	    { "dhcp", NULL }, { DHCPD, "-nc", REQTEMP, NULL }, call_editor, 0,
@@ -554,7 +551,7 @@ struct ctl ctl_snmp[] = {
 	    { SNMPD, "-f", REQTEMP, NULL }, { NULL }, NULL, DB_X_ENABLE,
 	    T_EXEC },
 	{ "disable",       "disable OpenSNMPD daemon",
-	    { PKILL, table, "snmpd", NULL }, { NULL }, NULL, DB_X_DISABLE,
+	    { PKILL, TABLEOPT, "snmpd", NULL }, { NULL }, NULL, DB_X_DISABLE,
 	    T_EXEC, CTL_NOMATCH },
 	{ "edit",          "edit,test and stage OpenSNMPD config",
 	    { "snmp", NULL }, { SNMPD, "-nf", REQTEMP, NULL },
@@ -570,7 +567,7 @@ struct ctl ctl_sshd[] = {
 	    { SSHD, "-f", REQTEMP, NULL }, { NULL }, NULL, DB_X_ENABLE,
 	    T_EXEC },
 	{ "disable",         "disable OpenSSHD daemon",
-	    { PKILL, table, "-f", SSHD, "-f", REQTEMP, NULL }, { NULL }, NULL,
+	    { PKILL, TABLEOPT, "-f", SSHD, "-f", REQTEMP, NULL }, { NULL }, NULL,
 	    DB_X_DISABLE, T_EXEC, CTL_NOMATCH },
 	{ "edit",            "edit, test and stage OpenSSHD config",
 	    { "sshd", NULL }, { SSHD, "-tf", REQTEMP, NULL }, call_editor, 0,
@@ -602,7 +599,7 @@ struct ctl ctl_relay[] = {
 	    { RELAYD, "-f", REQTEMP, NULL }, { NULL }, NULL, DB_X_ENABLE,
 	    T_EXEC },
         { "disable",	      "disable load balancing relayd daemon",
-	    { PKILL, table, "relayd", NULL }, { NULL }, NULL, DB_X_DISABLE,
+	    { PKILL, TABLEOPT, "relayd", NULL }, { NULL }, NULL, DB_X_DISABLE,
 	    T_EXEC, CTL_NOMATCH },
         { "edit",             "edit, test and stage relayd config",
 	    { "relay", NULL }, { RELAYD, "-nf", REQTEMP, NULL },
@@ -633,7 +630,7 @@ struct ctl ctl_smtp[] = {
 	    { SMTPD, "-f", REQTEMP, NULL }, { NULL }, NULL, DB_X_ENABLE,
 	    T_EXEC },
 	{ "disable",       "disable OpenSMTPD daemon",
-	    { PKILL, table, "smtpd", NULL }, { NULL }, NULL, DB_X_DISABLE,
+	    { PKILL, TABLEOPT, "smtpd", NULL }, { NULL }, NULL, DB_X_DISABLE,
 	    T_EXEC, CTL_NOMATCH },
 	{ "edit",          "edit,test and stage OpenSMTPD config",
 	    { "smtp", NULL }, { SMTPD, "-nf", REQTEMP, NULL },
@@ -659,7 +656,7 @@ struct ctl ctl_ftpproxy[] = {
 	    { FTPPROXY, "-D", "2", NULL }, { NULL }, NULL, DB_X_ENABLE,
 	    T_EXEC },
 	{ "disable",	"disable ftp proxy daemon",
-	    { PKILL, table, "ftp-proxy", NULL }, { NULL }, NULL, DB_X_DISABLE,
+	    { PKILL, TABLEOPT, "ftp-proxy", NULL }, { NULL }, NULL, DB_X_DISABLE,
 	    T_EXEC, CTL_NOMATCH },
 	{ NULL, NULL, { NULL }, { NULL }, NULL, 0, 0 }
 };
@@ -670,7 +667,7 @@ struct ctl ctl_tftpproxy[] = {
 	    { TFTPPROXY, "-v", "-l", "127.0.0.1", NULL }, { NULL }, NULL,
 	    DB_X_ENABLE, T_EXEC },
 	{ "disable",    "disable TFTP proxy daemon",
-	    { PKILL, table, "tftp-proxy", NULL }, { NULL }, NULL,
+	    { PKILL, TABLEOPT, "tftp-proxy", NULL }, { NULL }, NULL,
 	    DB_X_DISABLE, T_EXEC, CTL_NOMATCH },
 	{ NULL, NULL, { NULL }, { NULL }, NULL, 0, 0 }
 };
@@ -681,7 +678,7 @@ struct ctl ctl_tftp[] = {
 	   { TFTPD, "-l", "127.0.0.1", "/tftpboot", NULL }, { NULL }, NULL,
 	   DB_X_ENABLE, T_EXEC },
 	{ "disable",	"disable TFTPd daemon",
-	   { PKILL, table, "tftpd", NULL }, { NULL }, NULL, DB_X_DISABLE,
+	   { PKILL, TABLEOPT, "tftpd", NULL }, { NULL }, NULL, DB_X_DISABLE,
 	   T_EXEC, CTL_NOMATCH },
 	{ NULL, NULL, { NULL }, { NULL }, NULL, 0, 0 }
 };
@@ -701,7 +698,7 @@ struct ctl ctl_inet[] = {
 	{ "enable",     "enable inetd daemon",
 	    { INETD, REQTEMP, NULL }, { NULL }, NULL, DB_X_ENABLE, T_EXEC },
 	{ "disable",    "disable inetd daemon",
-	    { PKILL, table, "inetd", NULL }, { NULL }, NULL, DB_X_DISABLE,
+	    { PKILL, TABLEOPT, "inetd", NULL }, { NULL }, NULL, DB_X_DISABLE,
 	    T_EXEC, CTL_NOMATCH },
 	{ "edit",       "edit inetd superserver config",
 	    { "inet", NULL, NULL }, { NULL }, call_editor, 0, T_HANDLER_TEST },
@@ -714,7 +711,7 @@ struct ctl ctl_ldap[] = {
 	    { LDAPD, "-f", REQTEMP, NULL }, { NULL }, NULL, DB_X_ENABLE,
 	    T_EXEC },
 	{ "disable",        "disable LDAPd daemon",
-	    { PKILL, table, "ldapd", NULL }, { NULL }, NULL, DB_X_DISABLE,
+	    { PKILL, TABLEOPT, "ldapd", NULL }, { NULL }, NULL, DB_X_DISABLE,
 	    T_EXEC, CTL_NOMATCH },
 	{ "edit",           "edit, test and stage LDAPd config",
 	    { "ldap", NULL }, { LDAPD, "-nf", REQTEMP, NULL },
@@ -730,17 +727,20 @@ struct ctl ctl_ldap[] = {
 	{ NULL, NULL, { NULL }, { NULL }, NULL, 0, 0 }
 };
 
-/* flag to other nsh sessions or nsh conf() that actions have been taken */
+/*
+ * flag to other nsh sessions or nsh conf() that actions have been taken,
+ * in routing table table
+ */
 int
-flag_x(char *name, char *daemon, int dbflag, char *data)
+flag_x(char *name, char *daemon, int dbflag, char *data, int table)
 {
-	if (db_delete_flag_x_ctl(name, daemon, cli_rtable) < 0) {
+	if (db_delete_flag_x_ctl(name, daemon, table) < 0) {
 		printf("%% database delete failure ctl ctl\n");
 		return -1;
 	}
 	if (dbflag == DB_X_REMOVE)
 		return 0;
-	if (db_insert_flag_x(name, daemon, cli_rtable, dbflag, data) < 0) {
+	if (db_insert_flag_x(name, daemon, table, dbflag, data) < 0) {
 		printf("%% database insert failure ctl ctl\n");
 		return -1;
 	}
@@ -758,15 +758,24 @@ ctlhandler(int argc, char **argv, ...)
 }
 
 /*
- * Run x, of daemon d's table, with fillargs and its file tmpfile, and
- * keep the state x leaves d in: as x's handler or program returns
+ * Run x, of daemon d's table, in routing table table, with fillargs,
+ * d's file of that table and pkill's -T for it, and keep the state x
+ * leaves d in: as x's handler or program returns. A handler is passed
+ * the table after its arguments
  */
 static int
-ctl_run(struct daemons *d, struct ctl *x, char **fillargs, char *tmpfile)
+ctl_run(struct daemons *d, struct ctl *x, char **fillargs, int table)
 {
 	char *tmp_args[NOPTFILL] = { NULL, NULL, NULL, NULL, NULL, NULL };
-	int nargs, rv = 0;
+	char tmpfile[PATH_MAX] = "", topt[16];
+	int i, nargs, rv = 0;
 
+	if (d->tmpfile)
+		snprintf(tmpfile, sizeof(tmpfile), "%s.%d", d->tmpfile, table);
+	snprintf(topt, sizeof(topt), "-T%d", table);
+	for (i = 0; i < NOPTFILL && fillargs[i] != NULL; i++)
+		if (fillargs[i] == TABLEOPT)
+			fillargs[i] = topt;
 	switch(x->type) {
 		/* fill_tmpfile will return 0 if tmpfile or args are NULL */
 	case T_HANDLER:
@@ -774,7 +783,7 @@ ctl_run(struct daemons *d, struct ctl *x, char **fillargs, char *tmpfile)
 		nargs = fill_tmpfile(fillargs, tmpfile, tmp_args);
 		/* bump NOPTFILL when adding more arguments */
 		if (nargs < NOPTFILL) {
-			rv = (*x->handler)(nargs, tmp_args);
+			rv = (*x->handler)(nargs, tmp_args, table);
 		} else {
 			printf("%% handler %s %s requires too many "
 			    "arguments: %d\n", d->name, x->name, nargs);
@@ -791,14 +800,14 @@ ctl_run(struct daemons *d, struct ctl *x, char **fillargs, char *tmpfile)
 	case T_EXEC:
 		/* command to execute via execv syscall, fill main args */
 		if (fill_tmpfile(fillargs, tmpfile, tmp_args))
-			rv = ctl_exec(tmp_args[0], tmp_args, x->ok);
+			rv = ctl_exec(tmp_args[0], tmp_args, x->ok, table);
 		else
-			rv = ctl_exec(fillargs[0], fillargs, x->ok);
+			rv = ctl_exec(fillargs[0], fillargs, x->ok, table);
 	break;
 	}
 
 	if (rv == 0 && x->flag_x != 0)
-		rv = flag_x("ctl", d->name, x->flag_x, NULL);
+		rv = flag_x("ctl", d->name, x->flag_x, NULL, table);
 	return rv;
 }
 
@@ -959,56 +968,52 @@ ctl_takes(int d, int act)
 }
 
 /*
- * Have daemon d do act (ctl_takes()), in cli_rtable, as ctlhandler()
- * runs its line, and return what that returns
+ * Have daemon d do act (ctl_takes()), in routing table table, as
+ * ctlhandler() runs its line, and return what that returns
  */
 int
-ctl_do(int d, int act)
+ctl_do(int d, int act, int table)
 {
 	struct daemons *dm = &ctl_daemons[d];
 	struct ctl *x = ctl_actrow(dm, act);
-	char tmpfile[PATH_MAX] = "", *argv[] = { dm->name, x->name, NULL };
+	char *argv[] = { dm->name, x->name, NULL };
 	char *step_args[NOPTFILL] = { NULL, NULL, NULL, NULL, NULL, NULL };
 	char **fillargs;
 
-	if (cli_rtable > dm->rtablemax) {
+	if (table > dm->rtablemax) {
 		printf("%% Command %s not available via rtable %d\n",
-		    dm->name, cli_rtable);
+		    dm->name, table);
 		return -1;
 	}
-	snprintf(table, sizeof(table), "-T%d", cli_rtable);
-	if (dm->tmpfile)
-		snprintf(tmpfile, sizeof(tmpfile), "%s.%d", dm->tmpfile,
-		    cli_rtable);
 	if ((fillargs = step_optreq(x->args, step_args, 2, argv, 2)) == NULL)
 		return -1;
-	return ctl_run(dm, x, fillargs, tmpfile);
+	return ctl_run(dm, x, fillargs, table);
 }
 
 /*
- * Write text, len bytes, as daemon d's rules in cli_rtable: the lines of
- * a script's rules block, each written with a newline. 0, or -1 after
- * saying why. The parser has checked a script of a session without
+ * Write text, len bytes, as daemon d's rules in routing table table: the
+ * lines of a script's rules block, each written with a newline. 0, or -1
+ * after saying why. The parser has checked a script of a session without
  * admin first (admin_rules())
  */
 int
-ctl_setrules(int d, char *text, size_t len)
+ctl_setrules(int d, char *text, size_t len, int table)
 {
 	struct daemons *dm = &ctl_daemons[d];
 	char path[PATH_MAX], *t, *p, *l;
 	FILE *f = NULL;
 	int r = 0;
 
-	if (cli_rtable > dm->rtablemax) {
+	if (table > dm->rtablemax) {
 		printf("%% Command %s not available via rtable %d\n",
-		    dm->name, cli_rtable);
+		    dm->name, table);
 		return -1;
 	}
 	if (dm->tmpfile == NULL) {
 		printf("%% %s has no rules\n", dm->name);
 		return -1;
 	}
-	snprintf(path, sizeof(path), "%s.%d", dm->tmpfile, cli_rtable);
+	snprintf(path, sizeof(path), "%s.%d", dm->tmpfile, table);
 	if ((t = p = strndup(text, len)) == NULL) {
 		printf("%% ctl_setrules: %s\n", strerror(errno));
 		return -1;
@@ -1148,10 +1153,10 @@ daemon_apply(const struct argcmd *c, int set, const struct facts_value *v,
 {
 	struct daemons *d;
 	struct ctl *x;
-	char words[NOPTFILL - 1][sizeof(line)], tmpfile[PATH_MAX];
+	char words[NOPTFILL - 1][sizeof(line)];
 	char *argv[NOPTFILL + 2], *step_args[NOPTFILL] = { NULL };
 	char **fillargs;
-	int argc, n;
+	int argc, n, table = cli_rtable;
 
 	for (n = 0; ctl_daemons[n].name != NULL; n++)
 		;
@@ -1168,9 +1173,9 @@ daemon_apply(const struct argcmd *c, int set, const struct facts_value *v,
 		    (long long)v[1].v.i);
 		return -1;
 	}
-	if (cli_rtable > d->rtablemax) {
+	if (table > d->rtablemax) {
 		printf("%% Command %s not available via rtable %d\n",
-		    d->name, cli_rtable);
+		    d->name, table);
 		return -1;
 	}
 	argv[0] = d->name;
@@ -1181,14 +1186,10 @@ daemon_apply(const struct argcmd *c, int set, const struct facts_value *v,
 		argv[argc] = words[argc - 2];
 	}
 	argv[argc] = NULL;
-	snprintf(table, sizeof(table), "-T%d", cli_rtable);
-	if (d->tmpfile)
-		snprintf(tmpfile, sizeof(tmpfile), "%s.%d", d->tmpfile,
-		    cli_rtable);
 	if ((fillargs = step_optreq(x->args, step_args, argc, argv, 2)) ==
 	    NULL)
 		return -1;
-	return ctl_run(d, x, fillargs, tmpfile);
+	return ctl_run(d, x, fillargs, table);
 }
 
 /*
@@ -1396,7 +1397,7 @@ ctl_cand_test(struct daemons *d, char *name, char **fillargs, struct cand *cand)
 	if (ctl_cand_stage(d, stmt, dir, path, sizeof(path), cand) == -1)
 		return -1;
 	fill_tmpfile(fillargs, path, args);
-	ret = ctl_exec(args[0], args, CTL_EXIT0);
+	ret = ctl_exec(args[0], args, CTL_EXIT0, cand->rtable);
 	ctl_cand_unstage(dir, path);
 	return ret == -1 ? -1 : 1;
 }
@@ -1556,16 +1557,17 @@ ctl_cand_follow(struct daemons *d, char *name, int rules, struct cand *cand)
 }
 
 /*
- * Run a daemon's program: 0 if it exits 0, or exits 1 when ok is
- * CTL_NOMATCH; else -1. cmdargs() says why a program could not run,
- * and this says the status of one that exited otherwise.
+ * Run a daemon's program in routing table table: 0 if it exits 0, or
+ * exits 1 when ok is CTL_NOMATCH; else -1. cmdargs_table() says why a
+ * program could not run, and this says the status of one that exited
+ * otherwise.
  */
 static int
-ctl_exec(char *cmd, char **args, int ok)
+ctl_exec(char *cmd, char **args, int ok, int table)
 {
 	int r;
 
-	r = cmdargs(cmd, args);
+	r = cmdargs_table(cmd, args, table);
 	if (r == 0 || (r == 1 && ok == CTL_NOMATCH))
 		return 0;
 	if (r != -1 && r != 127)
@@ -1573,15 +1575,22 @@ ctl_exec(char *cmd, char **args, int ok)
 	return -1;
 }
 
+/* dhcpd's restart, in the routing table after argv */
 int
 restart_dhcpd(int argc, char **argv, ...)
 {
-	char *argv_pkill[] = { PKILL, table, "dhcpd", NULL };
+	char topt[16], *argv_pkill[] = { PKILL, topt, "dhcpd", NULL };
+	va_list ap;
+	int table;
 
-	if (ctl_exec(argv_pkill[0], argv_pkill, CTL_NOMATCH) == -1)
+	va_start(ap, argv);
+	table = va_arg(ap, int);
+	va_end(ap);
+	snprintf(topt, sizeof(topt), "-T%d", table);
+	if (ctl_exec(argv_pkill[0], argv_pkill, CTL_NOMATCH, table) == -1)
 		return -1;
 	sleep(1);
-	return start_dhcpd(argc, argv);
+	return start_dhcpd(argc, argv, table);
 }
 
 /*
@@ -1623,14 +1632,20 @@ edit_crontab(int argc, char **argv, ...)
 	return 0;
 }
 
+/* crontab's install, of the routing table after argv */
 int
 install_crontab(int argc, char **argv, ...)
 {
 	char *name = argv[0];
 	char *crontab_argv[] = { CRONTAB, "-u", "root", NULL, NULL };
 	char tmpfile[PATH_MAX];
-	int fd, found = 0;
+	int fd, found = 0, table;
 	struct daemons *daemons;
+	va_list ap;
+
+	va_start(ap, argv);
+	table = va_arg(ap, int);
+	va_end(ap);
 
 	for (daemons = ctl_daemons; daemons->name != 0; daemons++)
 		if (strncmp(daemons->name, name, strlen(name)) == 0) {
@@ -1643,8 +1658,7 @@ install_crontab(int argc, char **argv, ...)
 		return -1;
 	}
 
-	snprintf(tmpfile, sizeof(tmpfile), "%s.%d", daemons->tmpfile,
-	    cli_rtable);
+	snprintf(tmpfile, sizeof(tmpfile), "%s.%d", daemons->tmpfile, table);
 
 	if ((fd = acq_lock(tmpfile)) <= 0) {
 		printf("%% %s configuration is locked for editing\n",
@@ -1652,7 +1666,7 @@ install_crontab(int argc, char **argv, ...)
 		return -1;
 	}
 	crontab_argv[3] = tmpfile;
-	if (cmdargs(CRONTAB, crontab_argv) != 0) {
+	if (cmdargs_table(CRONTAB, crontab_argv, table) != 0) {
 		printf("%% failed to install crontab\n");
 		rls_lock(fd);
 		return -1;
@@ -2074,14 +2088,20 @@ rls_lock(int fd)
 	return;
 }
 
+/* dhcpd, in the routing table after argv */
 int
 start_dhcpd(int argc, char **argv, ...)
 {
 	struct if_nameindex *ifn_list, *ifnp;
 	char **dhcpd_args = NULL;
 	size_t niface = 0;
-	int ifs = -1, i, ret = -1;
+	int ifs = -1, i, ret = -1, table;
 	char leasedb[PATH_MAX];
+	va_list ap;
+
+	va_start(ap, argv);
+	table = va_arg(ap, int);
+	va_end(ap);
 
 	/*
 	 * For rdomains other than zero dhcpd(8) expects a list of
@@ -2113,7 +2133,7 @@ start_dhcpd(int argc, char **argv, ...)
 			continue;
 
 		rdomain = get_rdomain(ifs, ifnp->if_name);
-		if (rdomain == cli_rtable)
+		if (rdomain == table)
 			niface++;
 	}
 
@@ -2128,9 +2148,9 @@ start_dhcpd(int argc, char **argv, ...)
 	dhcpd_args[i++] = argv[1]; /* -c */
 	dhcpd_args[i++] = argv[2]; /* dhcpd.conf */
 	dhcpd_args[i++] = argv[3]; /* -l */
-	if (cli_rtable != 0) {
+	if (table != 0) {
 		snprintf(leasedb, sizeof(leasedb), "%s.%d",
-		    argv[4], cli_rtable);
+		    argv[4], table);
 		dhcpd_args[i++] = leasedb; /* rdomain's leasedb */
 	} else 
 		dhcpd_args[i++] = argv[4]; /* default leasedb */
@@ -2145,12 +2165,12 @@ start_dhcpd(int argc, char **argv, ...)
 			continue;
 
 		rdomain = get_rdomain(ifs, ifnp->if_name);
-		if (rdomain == cli_rtable)
+		if (rdomain == table)
 			dhcpd_args[i++] = ifnp->if_name;
 	}
 	dhcpd_args[i] = NULL;
 
-	ret = ctl_exec(argv[0], dhcpd_args, CTL_EXIT0);
+	ret = ctl_exec(argv[0], dhcpd_args, CTL_EXIT0, table);
 done:
 	if (ifs != -1)
 		close(ifs);

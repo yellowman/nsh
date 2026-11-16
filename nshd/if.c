@@ -2035,7 +2035,8 @@ intdhcrelay_apply(const struct argcmd *c, int set, const struct facts_value *v,
 		/* kept only once it runs */
 		if (cmdargs(DHCRELAY, cmd) != 0)
 			return -1;
-		if (flag_x("dhcrelay", ifname, DB_X_ENABLE, server) == -1)
+		if (flag_x("dhcrelay", ifname, DB_X_ENABLE, server,
+		    cli_rtable) == -1)
 			return -1;
 	} else {
 		char was[24], argue[SIZE_CONF_TEMP];
@@ -2059,7 +2060,8 @@ intdhcrelay_apply(const struct argcmd *c, int set, const struct facts_value *v,
 			return -1;
 		}
 
-		if (flag_x("dhcrelay", ifname, DB_X_REMOVE, NULL) == -1)
+		if (flag_x("dhcrelay", ifname, DB_X_REMOVE, NULL,
+		    cli_rtable) == -1)
 			return -1;
 
 		/* setup argument list as one argument for pkill -xf */
@@ -2236,7 +2238,8 @@ intdhcrelay6_apply(const struct argcmd *c, int set, const struct facts_value *v,
 		r = cmdargs(PKILL, killcmd);
 		if (r == -1 || r > 1)
 			return -1;
-		if (flag_x("dhcrelay6", ifname, DB_X_REMOVE, NULL) == -1)
+		if (flag_x("dhcrelay6", ifname, DB_X_REMOVE, NULL,
+		    cli_rtable) == -1)
 			return -1;
 	} else if (!set) {
 		printf("%% No DHCPv6 relay configured for %s\n", ifname);
@@ -2257,7 +2260,7 @@ intdhcrelay6_apply(const struct argcmd *c, int set, const struct facts_value *v,
 	/* kept only once it runs */
 	if (cmdargs(ROUTE, cmd) != 0)
 		return -1;
-	return flag_x("dhcrelay6", ifname, DB_X_ENABLE, dests);
+	return flag_x("dhcrelay6", ifname, DB_X_ENABLE, dests, cli_rtable);
 }
 
 int

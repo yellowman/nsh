@@ -1342,10 +1342,10 @@ edits_apply(char *buf, size_t len)
 			r = 0;
 			break;
 		case EDIT_RULES:
-			r = ctl_setrules(e.row, p, e.len);
+			r = ctl_setrules(e.row, p, e.len, cli_rtable);
 			break;
 		case EDIT_DAEMON:
-			r = ctl_do(e.row, e.act);
+			r = ctl_do(e.row, e.act, cli_rtable);
 			break;
 		}
 		if (r == -1)
