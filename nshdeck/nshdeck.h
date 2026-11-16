@@ -34,6 +34,7 @@
 #define DECK_WINDOW	16		/* an answer's messages front has */
 					/* not written, at most */
 #define DECK_TERMINALS	4		/* a user's terminals, at most */
+#define DECK_OPENID	33		/* an open's request, its NUL too */
 
 /* what a request asks */
 enum deck_kind {
@@ -54,7 +55,9 @@ enum deck_kind {
 	DECK_EVENTS,
 	DECK_RULES,
 	DECK_SETRULES,
-	DECK_STAGE
+	DECK_STAGE,
+	DECK_OPEN,
+	DECK_CLOSE
 };
 
 /*
@@ -69,15 +72,17 @@ struct deck_request {
 	char		text[NSHD_LINE];	/* a user's name, a show's */
 						/* words, a line, an */
 						/* operation, a configuration, */
-						/* keys typed in a terminal */
+						/* keys typed in a terminal, */
+						/* an open's request */
 	char		password[NSHD_PASSWORD];
 	char		comment[NSHD_COMMENT];
 	char		daemon[NSHD_DAEMON];	/* whose rules */
-	int32_t		n;		/* rollback's n, an operation's */
-					/* or rules' rtable, configure */
-					/* mode, 1 for a completion's */
-					/* help or a stage's bridge, or */
-					/* a terminal's number */
+	int32_t		n;		/* rollback's n, an operation's, */
+					/* rules' or a terminal's rtable, */
+					/* configure mode, or 1 for a */
+					/* completion's help or a stage's */
+					/* bridge */
+	int32_t		channel;	/* a terminal's */
 	int32_t		minutes;	/* minutes for commit confirmed */
 	int32_t		check;		/* commit check */
 	int32_t		logs;		/* the logs events follow, as */

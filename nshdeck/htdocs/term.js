@@ -1,16 +1,18 @@
 /*
  * term.js: a terminal, nsh on a pty, which nshdeck runs for the user
- * logged in (nshdeck(8)'s terminal and type). xterm.js draws it; what
- * nsh writes comes on the terminal's own event stream, in base64; and
- * what is typed goes in type requests, one at a time, in order, and
- * again a little later if nsh has not yet taken what came before
+ * logged in (nshdeck(8)'s open, terminal and type). An open asks for
+ * it, and is answered with its channel; xterm.js draws it; what nsh
+ * writes comes on the channel's event stream, in base64; and what is
+ * typed goes in type requests, one at a time, in order, and again a
+ * little later if nsh has not yet taken what came before
  */
 "use strict";
 
 var term = null;	/* xterm.js's terminal, once it is drawn */
 var termfit = null;	/* its fit addon, which sizes it to its box */
 var tstream = null;	/* the terminal's stream, while it is open */
-var tnumber = 0;	/* its number, once nshdeck says it */
+var tchannel = 0;	/* its channel, once nshdeck says it runs */
+var topening = false;	/* an open asked, not yet answered */
 var typing = "";	/* typed, not yet sent */
 var ttable = null;	/* the table the terminal's nsh began in, if the page */
 			/* was focused on one as it opened */
@@ -20,7 +22,7 @@ var sending = false;	/* a type request not yet answered */
 function tstate(text, led) {
 	$("term-state").textContent = text;
 	$("term-led").className = "led " + led;
-	$("term-connect").disabled = tstream !== null;
+	$("term-connect").disabled = tstream !== null || topening;
 	$("term-end").disabled = tstream === null;
 }
 
@@ -28,7 +30,7 @@ function tstate(text, led) {
 function tsend() {
 	var n = Math.min(typing.length, 300), keys;
 
-	if (sending || tnumber === 0 || n === 0)
+	if (sending || tchannel === 0 || n === 0)
 		return;
 	/* not half of a character that takes two UTF-16 units */
 	if (n < typing.length && /[\uD800-\uDBFF]/.test(typing[n - 1]))
@@ -36,10 +38,10 @@ function tsend() {
 	keys = typing.slice(0, n);
 	typing = typing.slice(n);
 	sending = true;
-	ask("POST", "type", { terminal: tnumber, keys: keys }).then(
+	ask("POST", "type", { channel: tchannel, keys: keys }).then(
 	    function (j) {
 		sending = false;
-		if (j.httpStatus === 503 && tnumber !== 0) {
+		if (j.httpStatus === 503 && tchannel !== 0) {
 			typing = keys + typing;
 			setTimeout(tsend, 250);
 		} else
@@ -49,9 +51,32 @@ function tsend() {
 	});
 }
 
-/* the terminal, drawn the first time, and an nsh started for it */
+/* a name for an open, which the page gives it again if it asks again */
+function topenid() {
+	var b = new Uint32Array(2);
+
+	crypto.getRandomValues(b);
+	return b[0].toString(36) + b[1].toString(36);
+}
+
+/*
+ * An open of fields, asked again, with the same name, as many as tries
+ * times, if its answer was lost: nshdeck answers that with the same
+ * channel, so a lost answer opens no second nsh
+ */
+function topen(fields, tries) {
+	return ask("POST", "open", fields).catch(function (e) {
+		if (tries <= 1)
+			throw e;
+		return topen(fields, tries - 1);
+	});
+}
+
+/* the terminal, drawn the first time, and an nsh opened for it */
 function tconnect() {
-	if (tstream !== null)
+	var fields;
+
+	if (tstream !== null || topening)
 		return;
 	if (term === null) {
 		term = new Terminal({ cursorBlink: true, fontSize: termPx(),
@@ -69,24 +94,44 @@ function tconnect() {
 			tsend();
 		});
 		term.onResize(function (s) {
-			if (tnumber !== 0)
-				ask("POST", "type", { terminal: tnumber,
+			if (tchannel !== 0)
+				ask("POST", "type", { channel: tchannel,
 				    keys: "", rows: s.rows, cols: s.cols });
 		});
 	}
 	termfit.fit();
-	tnumber = 0;
+	tchannel = 0;
 	typing = "";
 	/* nsh begins in the table the page is focused on, as nsh -T does */
 	ttable = table;
-	tstream = new EventSource("api/terminal?rows=" + term.rows +
-	    "&cols=" + term.cols + (ttable === null ? "" : "&rtable=" +
-	    ttable));
+	fields = { request: topenid(), rows: term.rows, cols: term.cols };
+	if (ttable !== null)
+		fields.rtable = ttable;
+	topening = true;
 	tstate("starting nsh", "warn");
-	tstream.addEventListener("terminal", function (e) {
-		tnumber = JSON.parse(e.data).n;
-		tstate("nsh, terminal " + tnumber + (ttable === null ? "" :
-		    ", rtable " + ttable), "on");
+	topen(fields, 3).then(function (j) {
+		topening = false;
+		if (j.ok && !j.ended)
+			tfollow(j.channel);
+		else
+			tstate(j.ended ? "nsh ended" : j.error, "off");
+	}, function () {
+		topening = false;
+		tstate("nshdeck did not answer", "off");
+	});
+}
+
+/* the stream of the terminal on channel c: what its nsh writes */
+function tfollow(c) {
+	tstream = new EventSource("api/terminal?channel=" + c);
+	tstate("starting nsh", "warn");
+	tstream.addEventListener("ready", function (e) {
+		var r = JSON.parse(e.data);
+
+		tchannel = r.channel;
+		tstate(r.label + (ttable === null ? "" : ", rtable " + ttable),
+		    "on");
+		tsend();
 		term.focus();
 	});
 	tstream.addEventListener("out", function (e) {
@@ -111,7 +156,7 @@ function tgone(why) {
 		return;
 	tstream.close();
 	tstream = null;
-	tnumber = 0;
+	tchannel = 0;
 	typing = "";
 	why = why.trim();
 	term.write("\r\n\x1b[2m[" + why + "]\x1b[0m\r\n");

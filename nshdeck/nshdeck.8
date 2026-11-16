@@ -550,12 +550,17 @@ does not close it.
 If the browser falls more than 1 MB behind, the oldest events not yet
 sent to it are dropped, and a dropped event is sent in their place, so
 that the page requests again what it shows.
-.It Cm terminal
-GET, with
+.It Cm open
+POST, with
+.Ar request ,
+a name the page gives this open, of 1 to 32 letters, digits,
+.Ql -
+and
+.Ql _ ;
 .Ar rows
 and
 .Ar cols ,
-each from 1 to 1000; they are 24 and 80 if not given; and
+each from 1 to 1000, which are 24 and 80 if not given; and
 .Ar rtable ,
 the routing table nsh's commands begin in, as with
 .Ic nsh Fl T ;
@@ -565,11 +570,36 @@ Opens a terminal:
 starts
 .Xr nsh 8
 on a pseudo-terminal, as the user.
-The answer is a stream of events, like that of
-.Cm events .
-First comes a terminal event, with
-.Ar n ,
-the terminal's number, from 1 to 4.
+The answer has
+.Ar channel ,
+a number none of the login's terminals had before, and
+.Ar label ,
+.Dq nsh 1
+to
+.Dq nsh 4 .
+An open with the same
+.Ar request
+and fields, among the user's last 16, is answered with the same
+channel, and opens no other terminal; with other fields, it is refused
+with 409.
+A terminal that has no stream 30 seconds after its open ends.
+A user may have at most 4 terminals.
+.It Cm terminal
+GET, with
+.Ar channel .
+The stream of events, like that of
+.Cm events ,
+of the terminal on that channel.
+A terminal has one stream; another is refused with 409, and the stream
+opens no terminal.
+A ready event, with
+.Ar channel ,
+.Ar label
+and
+.Ar rtable ,
+which is -1 for the user's own, comes once
+.Xr nsh 8
+runs.
 Then out events carry what
 .Xr nsh 8
 writes, in base64, as it arrives.
@@ -580,14 +610,12 @@ The stream is sent only as fast as the browser reads it, and nothing
 in it is dropped.
 The terminal ends when its stream ends, when
 .Xr nsh 8
-ends, or when the user logs out.
-A user may have at most 4 terminals.
+ends, when it is closed, or when the user logs out.
 .It Cm type
 POST, with
-.Ar terminal ,
-its number,
+.Ar channel ,
 .Ar keys ,
-what was typed in it, up to 1023 bytes, and
+what was typed in its terminal, up to 1023 bytes, and
 .Ar rows
 and
 .Ar cols ,
@@ -597,6 +625,11 @@ What was typed is written to
 as nsh reads it.
 If more than 64 KB would then wait for nsh to read it, the request is
 refused with 503.
+.It Cm close
+POST, with
+.Ar channel .
+Ends the terminal on that channel, and its stream; a channel whose
+terminal has ended is closed already.
 .El
 .Sh ANSWERS
 Each answer except an event stream's is a JSON object.
@@ -629,9 +662,21 @@ the user is not logged in, or the login failed
 .It 403
 a request without the header
 .It 404
-an unknown request, or a
+an unknown request; a
+.Cm terminal
+or
 .Cm type
-to a terminal that does not exist
+for a terminal that does not exist or does not yet run, as for a
+.Cm type ;
+or a
+.Cm close
+of a channel never opened
+.It 409
+an
+.Cm open
+with a
+.Ar request
+that opened another terminal, or a second stream of a terminal
 .It 405
 the wrong method
 .It 413

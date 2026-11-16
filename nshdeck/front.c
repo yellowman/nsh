@@ -143,11 +143,12 @@ struct params {
 #define F_KEYS		0x2000
 #define F_ROWS		0x4000
 #define F_COLS		0x8000
-#define F_TERMINAL	0x10000
 #define F_DAEMON	0x20000
 #define F_TEXT		0x40000
 #define F_IFNAME	0x80000
 #define F_BRIDGE	0x100000
+#define F_REQUEST	0x200000
+#define F_CHANNEL	0x400000
 static const struct endpoint {
 	const char	*name;
 	int		 kind;
@@ -166,9 +167,12 @@ static const struct endpoint {
 	{ "rollback",	DECK_ROLLBACK,	1, F_N },
 	{ "op",		DECK_OP,	1, F_LINE | F_RTABLE },
 	{ "complete",	DECK_COMPLETE,	0, F_LINE | F_HELP },
-	{ "terminal",	DECK_TERMINAL,	0, F_ROWS | F_COLS | F_RTABLE },
-	{ "type",	DECK_TYPE,	1, F_TERMINAL | F_KEYS | F_ROWS |
+	{ "open",	DECK_OPEN,	1, F_REQUEST | F_ROWS | F_COLS |
+	    F_RTABLE },
+	{ "terminal",	DECK_TERMINAL,	0, F_CHANNEL },
+	{ "type",	DECK_TYPE,	1, F_CHANNEL | F_KEYS | F_ROWS |
 	    F_COLS },
+	{ "close",	DECK_CLOSE,	1, F_CHANNEL },
 	{ "events",	DECK_EVENTS,	0, F_LOGS },
 	{ "rules",	DECK_RULES,	0, F_DAEMON | F_RTABLE },
 	{ "setrules",	DECK_SETRULES,	1, F_DAEMON | F_RTABLE | F_TEXT },
@@ -657,7 +661,8 @@ front_fields(const char *form, int fields, struct deck_request *r,
 		{ "check", F_CHECK }, { "minutes", F_MINUTES },
 		{ "comment", F_COMMENT }, { "logs", F_LOGS },
 		{ "help", F_HELP }, { "keys", F_KEYS }, { "rows", F_ROWS },
-		{ "cols", F_COLS }, { "terminal", F_TERMINAL },
+		{ "cols", F_COLS }, { "request", F_REQUEST },
+		{ "channel", F_CHANNEL },
 		{ "daemon", F_DAEMON }, { "text", F_TEXT },
 		{ "interface", F_IFNAME }, { "bridge", F_BRIDGE },
 	};
@@ -694,8 +699,11 @@ front_fields(const char *form, int fields, struct deck_request *r,
 		}
 		explicit_bzero(value, sizeof(value));
 	}
-	/* a terminal's table, or -1, the login's own, if it was not given */
-	if (r->kind == DECK_TERMINAL && (seen & F_RTABLE) == 0)
+	/* an open names its request; and a terminal's table, or -1, the */
+	/* login's own, if it was not given */
+	if (r->kind == DECK_OPEN && (seen & F_REQUEST) == 0)
+		return (-1);
+	if (r->kind == DECK_OPEN && (seen & F_RTABLE) == 0)
 		r->n = -1;
 	/* the running configuration, if what was not given */
 	if ((fields & F_WHAT) && (seen & F_WHAT) == 0)
@@ -789,8 +797,16 @@ front_field(int f, const char *v, struct deck_request *r)
 	case F_HELP:
 		r->n = strtonum(v, 0, 1, &errstr);
 		return (errstr == NULL ? 0 : -1);
-	case F_TERMINAL:
-		r->n = strtonum(v, 1, DECK_TERMINALS, &errstr);
+	case F_REQUEST:
+		/* the page's name for an open: letters, digits, - and _ */
+		if (v[0] == '\0' || strlen(v) >= DECK_OPENID ||
+		    strspn(v, "abcdefghijklmnopqrstuvwxyz"
+		    "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-") != strlen(v))
+			return (-1);
+		strlcpy(r->text, v, sizeof(r->text));
+		return (0);
+	case F_CHANNEL:
+		r->channel = strtonum(v, 1, INT32_MAX, &errstr);
 		return (errstr == NULL ? 0 : -1);
 	case F_ROWS:
 		r->rows = strtonum(v, 1, NSHD_TERMSIZE, &errstr);
