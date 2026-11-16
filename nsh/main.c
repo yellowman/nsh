@@ -197,9 +197,12 @@ main(int argc, char *argv[])
 	}
 
 	cli_rtable = getrtable();
-	/* -T: the table nsh's commands begin in, as rtable N chooses it */
-	if (table != NULL)
-		(void)cli_setrtable(table);
+	/*
+	 * -T: the table nsh's commands begin in, as rtable N chooses it;
+	 * if it cannot be chosen, nsh, which says why, ends
+	 */
+	if (table != NULL && cli_setrtable(table) == -1)
+		exit(1);
 
 	if (cflag) {
 		/* the file's configuration, which nshd loads and commits */
