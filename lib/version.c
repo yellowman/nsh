@@ -25,6 +25,7 @@
 #include <sys/socket.h>
 #include <net/if.h>
 #include <netinet/in.h>
+#include <machine/cpu.h>
 #include "externs.h"
 #include "facts.h"
 #include "showfacts.h"
@@ -42,6 +43,7 @@ static struct facts_field version_fields[] = {
 	[VER_CPU] =		{ "cpu",		FACT_STRING },
 	[VER_MEMORY] =		{ "memory",		FACT_U64 },
 	[VER_KERNEL] =		{ "kernel",		FACT_STRING },
+	[VER_VMMODE] =		{ "vmmode",		FACT_STRING },
 };
 struct facts_kind kind_version = { "version", version_fields,
     VER_NFIELDS };
@@ -52,12 +54,38 @@ version(int argc, char **argv, ...)
 	return facts_show(stdout, "version");
 }
 
+/*
+ * machdep.vmmode, the kernel's word for how this machine runs: "host",
+ * or in a VM, "guest" or the guest's memory encryption, such as SEV.
+ * Into buf, or "" where the kernel has no such word, as on all but amd64
+ */
+void
+vmmode(char *buf, size_t len)
+{
+#ifdef CPU_VMMODE
+	int mib[2] = { CTL_MACHDEP, CPU_VMMODE };
+
+	if (sysctl(mib, 2, buf, &len, NULL, 0) == 0 &&
+	    memchr(buf, '\0', len) != NULL)
+		return;
+#endif
+	buf[0] = '\0';
+}
+
+/* Does mode, vmmode()'s word, say this machine is a VM guest? */
+int
+vm_guest(const char *mode)
+{
+	return mode[0] != '\0' && strcmp(mode, "host") != 0;
+}
+
 int
 version_facts(struct facts_out *o)
 {
 	struct facts_value v[VER_NFIELDS];
 	char cpubuf[1024];
 	char kernver[1024];
+	char mode[16];
 	struct timeval boottime;
 	struct utsname un;
 	size_t len;
@@ -109,6 +137,9 @@ version_facts(struct facts_out *o)
 	facts_string(&v[VER_CPU], cpubuf);
 	facts_u64(&v[VER_MEMORY], physmem);
 	facts_string(&v[VER_KERNEL], kernver);
+	vmmode(mode, sizeof(mode));
+	if (mode[0] != '\0')
+		facts_string(&v[VER_VMMODE], mode);
 	return facts_record(o, &kind_version, v);
 }
 

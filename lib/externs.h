@@ -425,6 +425,8 @@ void intr(void);
 
 /* version.c */
 int version(int, char **, ...);
+void vmmode(char *, size_t);
+int vm_guest(const char *);
 
 /* compile.c */
 extern char compiled[], compiledby[], compiledon[], compilehost[];

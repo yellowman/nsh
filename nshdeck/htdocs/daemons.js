@@ -100,6 +100,7 @@ var DHISTORY = 10;	/* how many saves a daemon's history looks back */
 var DIFFPAIRS = 1000000;	/* line pairs a diff compares, at most */
 var dinsp = null;	/* the daemon inspected, its settings, and edits */
 var dasked = 0;		/* inspections asked; the last is drawn */
+var dguest = false;	/* machdep.vmmode says a VM guest (host()) */
 
 /*
  * a workspace's daemons: a table, the rules editor under it (editors.js),
@@ -247,7 +248,9 @@ function dtable(ws) {
 	});
 	t.appendChild(head);
 	DAEMONS.filter(function (d) {
-		return d.ws === ws && (table === null || table === 0 || d.rt);
+		/* OpenBSD supports no VM inside a VM: a guest has no vmd */
+		return d.ws === ws && (table === null || table === 0 || d.rt) &&
+		    !(dguest && d.name === "vmd");
 	}).forEach(function (d) {
 		var rts = [table === null ? 0 : table];
 

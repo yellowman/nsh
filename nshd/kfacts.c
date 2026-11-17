@@ -21,8 +21,9 @@
  * other: an interface's index, flags, type and capabilities, whether it
  * is 802.11, the link-level address it came with, its link-local
  * address, its media and the media its driver lists; the cloners, the
- * routing tables that exist, and whether dhcpleased answers.
- * kfacts_scan() reads all of them, for system to send.
+ * routing tables that exist, whether dhcpleased answers, and the word
+ * machdep.vmmode has. kfacts_scan() reads all of them, for system to
+ * send.
  */
 
 #include <sys/types.h>
@@ -355,6 +356,22 @@ kf_dhcpleased(void)
 }
 
 /*
+ * Is this machine a VM guest, as machdep.vmmode says (vm_guest())? The
+ * kernel's word if so, such as "guest" or "SEV", else NULL
+ */
+const char *
+kf_vmguest(void)
+{
+	static char mode[sizeof(kf->vmmode)];
+
+	if (kf != NULL)
+		strlcpy(mode, kf->vmmode, sizeof(mode));
+	else
+		vmmode(mode, sizeof(mode));
+	return vm_guest(mode) ? mode : NULL;
+}
+
+/*
  * Add the names of one kind (KF_*) that completion lists to sl, each in
  * its own allocation.  Return 0, or -1 on error; most errors are
  * printed.  From a snapshot, the bridges are the interfaces of type
@@ -486,6 +503,7 @@ kfacts_scan(void)
 	for (i = 0; i < (int)sizeof(k->rtables); i++)
 		k->rtables[i] = k_rtable(i);
 	k->dhcpleased = dhcpleased_is_running();
+	vmmode(k->vmmode, sizeof(k->vmmode));
 	freeifaddrs(ifap);
 	if_freenameindex(ifn);
 	close(s);
@@ -684,6 +702,7 @@ static const struct facts_kind kind_rtable = { "krtable", krfields,
 
 static const struct facts_field kdfields[] = {
 	{ "dhcpleased",	FACT_U64 },
+	{ "vmmode",	FACT_STRING },
 };
 static const struct facts_kind kind_daemons = { "kdaemons", kdfields,
 	nitems(kdfields) };
@@ -753,6 +772,8 @@ kfacts_emit(struct facts_out *o, struct kfacts *k)
 	}
 	memset(v, 0, sizeof(v));
 	facts_u64(&v[0], k->dhcpleased);
+	if (k->vmmode[0] != '\0')
+		facts_string(&v[1], k->vmmode);
 	return facts_record(o, &kind_daemons, v);
 }
 
@@ -870,6 +891,9 @@ kfacts_record(void *arg, const struct facts_template *t,
 		facts_bind(t, &kind_daemons, map);
 		if ((f = facts_get(v, map, 0, FACT_U64)) != NULL)
 			k->dhcpleased = f->v.u != 0;
+		if ((f = facts_get(v, map, 1, FACT_STRING)) != NULL &&
+		    kf_str(f, k->vmmode, sizeof(k->vmmode)) == -1)
+			goto bad;
 	} else
 		goto bad;
 	return;

@@ -1390,10 +1390,18 @@ function host() {
 		}
 	});
 	ask("GET", "show", { words: "version" }).then(function (j) {
-		var m = of(j, "message");
+		var m = of(j, "message"), v = of(j, "version");
 
 		$("plate-ver").textContent = j.ok && m.length ?
 		    m[0].text.split("\n")[0] : "";
+		/*
+		 * a VM guest's daemons have no vmd (daemons.js). nshdeck
+		 * answers a user's requests one at a time, in order, and
+		 * this is asked as the user logs in, so the daemons are
+		 * drawn after it
+		 */
+		dguest = v.length > 0 && v[0].vmmode !== undefined &&
+		    v[0].vmmode !== "host";
 	});
 }
 

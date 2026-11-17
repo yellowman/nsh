@@ -207,6 +207,11 @@ Each lists its daemons, with a row for each routing table a daemon is
 in.
 A row shows whether the configuration enables the daemon and whether
 it runs.
+On a VM guest, as
+.Va machdep.vmmode
+says, services has no row for
+.Xr vmd 8 ,
+which OpenBSD does not support there.
 .Pp
 For the chosen daemon, the workspace shows its rules under the list, as
 text, which can be changed and staged into the candidate as the daemon's

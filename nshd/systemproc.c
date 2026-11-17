@@ -1600,10 +1600,10 @@ system_follow(uint32_t id, struct nshd_follow *f)
 }
 
 /*
- * show vmd status, for a session whose class may view: vmd's answer to
- * the session's user, asked by a child that is that user (vmdfacts.c),
- * so vmd's control socket decides whether the user may ask; or refused,
- * saying why. vm names one VM, or is NULL for each
+ * show vmd status, for a session whose class may view, on a host: vmd's
+ * answer to the session's user, asked by a child that is that user
+ * (vmdfacts.c), so vmd's control socket decides whether the user may
+ * ask; or refused, saying why. vm names one VM, or is NULL for each
  */
 static void
 system_vmd(uint32_t id, struct nshd_whose *w, char *vm)
@@ -1616,7 +1616,8 @@ system_vmd(uint32_t id, struct nshd_whose *w, char *vm)
 		system_end(id, 1, "%% nshd: this show's client is gone\n");
 		return;
 	}
-	if (!system_may(system_whom(cl, &uid), LOGIN_VIEW, "view")) {
+	if (!system_may(system_whom(cl, &uid), LOGIN_VIEW, "view") ||
+	    ctl_guest("vmd")) {
 		system_printed(id, 1);
 		return;
 	}

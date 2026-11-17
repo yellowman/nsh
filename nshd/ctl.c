@@ -45,6 +45,7 @@
 #include "settings.h"
 #include "session.h"
 #include "conftree.h"
+#include "kfacts.h"
 
 /* service routines, used as handlers in struct ctl */
 int edit_crontab(int, char **, ...);
@@ -734,7 +735,7 @@ struct ctl ctl_ldap[] = {
  * vmd, one for the host, in routing table 0. Its rules need admin
  * (ADMIN_WHOLE()). vmd -n tests them as NSHD_CHECK_USER, and starts no
  * VM, for a commit and for check-config alike. nshd neither starts nor
- * stops vmd
+ * stops vmd, and refuses it on a VM guest (ctl_guest())
  */
 struct ctl ctl_vmd[] = {
 	{ "edit",           "edit, test and stage VMD config",
@@ -899,6 +900,23 @@ ctl_cand_act(int d, int act, struct cand *cand)
 none:
 	printf("%% nshd: no line of a daemon's that the candidate takes\n");
 	return -1;
+}
+
+/*
+ * vmd on a VM guest, where OpenBSD supports no VM: 1 if daemon name is
+ * vmd and machdep.vmmode says this machine is a guest, after saying
+ * so, else 0
+ */
+int
+ctl_guest(const char *name)
+{
+	const char *mode;
+
+	if (strcmp(name, "vmd") != 0 || (mode = kf_vmguest()) == NULL)
+		return 0;
+	printf("%% vmd: this machine is a VM guest (machdep.vmmode is %s), "
+	    "and OpenBSD does not support VMs inside a VM\n", mode);
+	return 1;
 }
 
 /* The place in ctl_daemons of the daemon called name, or -1 */
@@ -1349,6 +1367,8 @@ ctl_cand_rules(char *name, int rtable, int set, char *text, size_t len,
 		printf("%% %s: no such daemon\n", name);
 		return -1;
 	}
+	if (ctl_guest(d->name))
+		return -1;
 	for (x = d->table; x->name != NULL && !ctl_isedit(x); x++)
 		;
 	if (x->name == NULL) {
@@ -1582,13 +1602,15 @@ ctl_tests(int d, int act)
 /*
  * For daemon d's test (ctl_tests()) in rtable: its name, and in path,
  * len bytes at most, the file of the rules the last commit wrote; or
- * NULL, after saying why d is not in rtable
+ * NULL, after saying why d is not in rtable, or not on a VM guest
  */
 char *
 ctl_tested(int d, int rtable, char *path, size_t len)
 {
 	struct daemons *dm = &ctl_daemons[d];
 
+	if (ctl_guest(dm->name))
+		return NULL;
 	if (rtable > dm->rtablemax) {
 		printf("%% Command %s not available via rtable %d\n",
 		    dm->name, rtable);

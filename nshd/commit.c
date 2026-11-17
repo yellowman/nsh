@@ -20,8 +20,9 @@
  *
  * Problems (commit_problems(), check())
  *	What can be found before anything runs: an interface that is
- *	not there, an id or an address twice, rules their test refuses.
- *	A candidate with a problem is not committed.
+ *	not there, an id or an address twice, rules their test refuses,
+ *	vmd's rules on a VM guest. A candidate with a problem is not
+ *	committed.
  *
  * The script (script_make(), removals(), additions())
  *	Made from two configuration trees alone. It removes lines in the
@@ -586,7 +587,10 @@ check_rules(struct cnode *was, struct cnode *want, char *block)
 		}
 		snprintf(label, sizeof(label), "%s%s%s", block != NULL ?
 		    block : "", block != NULL ? ", " : "", l);
-		if (j > 0 && rules_test(name, lines, j, label) == -1)
+		/* a VM guest's vmd is refused, and not tested */
+		if (j > 0 && ctl_guest(name))
+			bad++;
+		else if (j > 0 && rules_test(name, lines, j, label) == -1)
 			bad += commit_refused_by(label, name);
 		free(tp);
 	}

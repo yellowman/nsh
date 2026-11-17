@@ -4610,6 +4610,22 @@ too.
 .Pp
 nshd does not yet start, stop or reload vmd.
 .Pp
+OpenBSD does not support VMs inside a VM.
+On a VM guest, where
+.Va machdep.vmmode
+says anything but host, nshd refuses vmd:
+.Cm edit
+and
+.Cm check-config
+say why, and a
+.Cm commit
+that adds or changes vmd's rules is refused.
+At boot, such rules are a problem that nshd logs, and the boot goes
+on.
+Where the kernel has no
+.Va machdep.vmmode ,
+as on arm64, nshd offers vmd as it does on a host.
+.Pp
 .Tg ntpd
 .Tg ntp
 .Ic ntp
@@ -5810,7 +5826,9 @@ but its tty.
 .Xr nshd 8
 asks vmd on its control socket as the session's user, so the socket's
 owner and group decide who may see the VMs, as for vmctl.
-It needs the view permission.
+It needs the view permission, and is refused on a VM guest, as
+.Ic vmd
+is.
 .Pp
 .Ic show monitor
 .Pp

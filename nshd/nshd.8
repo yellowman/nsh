@@ -411,6 +411,10 @@ on its control socket from a child that runs as the session's user, so
 the socket decides whether that user may ask.
 The child sends its answer to system as records, and system passes on
 only VMs and messages.
+On a VM guest, as
+.Va machdep.vmmode
+says, system starts no child for it, nor for vmd's check-config, and
+says why.
 pf's log comes from
 .Xr tcpdump 8 ,
 which is started as root because it gives up root itself.

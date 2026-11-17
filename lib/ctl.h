@@ -114,6 +114,7 @@ void ctl_runs(struct ctl *, int *, int *);
 int ctl_parse(char *, int, char **, int *, int *);
 int ctl_cand_act(int, int, struct cand *);
 int ctl_daemon(char *);
+int ctl_guest(const char *);
 int ctl_act(int, char *);
 int ctl_takes(int, int);
 int ctl_do(int, int, int);

@@ -51,6 +51,7 @@ struct kfacts {
 	size_t		 ngroups;
 	unsigned char	 rtables[256];	/* 1 for each table that exists */
 	int		 dhcpleased;	/* its control socket answers */
+	char		 vmmode[16];	/* machdep.vmmode's word, or "" */
 	int		 failed;	/* kfacts_record() could not keep one */
 };
 
@@ -71,6 +72,7 @@ int		 kf_media(int, char *, uint64_t *, uint64_t **, size_t *);
 int		 kf_cloner(char *, size_t);
 int		 kf_rtable(int);
 int		 kf_dhcpleased(void);
+const char	*kf_vmguest(void);
 
 /* the kinds of names kf_names() lists for completion */
 #define KF_IFS		0	/* the interfaces */
